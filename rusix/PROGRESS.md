@@ -69,3 +69,8 @@ and scheduler-text placement preserved. Four new contract cases cover every
 entry point, saturation, zero/positive timeouts and unlinking; the strict core
 inventory is 16. Compilation and runtime verification are pending. Injected
 signals, I/O-accounting inspection and deadline races need further coverage.
+
+First wait-engine comparison build at `d016a02c1164` stopped in the new test
+harness: `i32` does not implement `Into<isize>`. Replaced three C-int return
+conversions with explicit C-long casts; no production-policy change. Failed
+logs remain in `linux-out/lts-wait-c-001`; retry pending.

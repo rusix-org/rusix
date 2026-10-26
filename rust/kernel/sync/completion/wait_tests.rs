@@ -73,9 +73,9 @@ impl Wait {
                     bindings::wait_for_completion_io(raw);
                     0
                 }
-                Self::Interruptible => bindings::wait_for_completion_interruptible(raw).into(),
-                Self::Killable => bindings::wait_for_completion_killable(raw).into(),
-                Self::State(state) => bindings::wait_for_completion_state(raw, state).into(),
+                Self::Interruptible => bindings::wait_for_completion_interruptible(raw) as c_long,
+                Self::Killable => bindings::wait_for_completion_killable(raw) as c_long,
+                Self::State(state) => bindings::wait_for_completion_state(raw, state) as c_long,
                 Self::Timeout => bindings::wait_for_completion_timeout(raw, timeout) as c_long,
                 Self::IoTimeout => bindings::wait_for_completion_io_timeout(raw, timeout) as c_long,
                 Self::InterruptibleTimeout => {
