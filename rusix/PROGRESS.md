@@ -205,3 +205,18 @@ the root cleared by `__mt_destroy`. Corrected that fixture name only; kernel
 policy is unchanged. Session 50219 exited 2 before any VM or Rust-side build.
 `linux-out/mm-release-initial-evidence` retains 70 text records and 505 partial
 artifact hashes; it contains no completed kernel claim. A fresh retry is pending.
+
+### MM-release pointer-ABI diagnostic correction
+
+At `42318e69e5f2`, C built cleanly and passed combined80, core67 and release4
+KUnit cases plus pinned postchecks. Rust emitted 33 `improper_ctypes` warnings
+for empty `sched_statistics` reached through foreign pointers. The owned build
+was stopped with status137 before a Rust VM. The 188-record
+`linux-out/mm-release-warnings-evidence` archive retains both outcomes and raw
+artifact hashes.
+
+The reviewed correction adds only a documented local exception on the manual
+extern block: all aggregates cross as pointers, including the work callback;
+scalar results retain their C ABI. No Rust layout access or by-value aggregate
+is involved, and the global diagnostic gate remains strict. Kernel policy is
+unchanged. A new paired retry remains required.
