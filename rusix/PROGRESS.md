@@ -121,3 +121,13 @@ exact thin-member identity and compares extracted bytes; six real-archiver
 regressions and ten selection cases pass. No candidate guest has run, and the
 Rust kernel was not built. Fresh paired verification and attributable
 allocation-failure tests remain required. [Contract and remaining C boundaries](experiments/task-construction/README.md).
+
+At `0af2d8b944b2`, the C kernel passes all five userspace cases and postchecks.
+Rust task construction compiled with 36 `improper_ctypes` diagnostics caused by
+GNU empty `sched_statistics` nested inside `task_struct` when SCHEDSTATS is off.
+The remaining Rust build was stopped (137), with no Rust guest execution;
+`linux-out/task-construction-warnings-evidence` retains both results. A local
+lint exception now documents the reviewed pointer-only ABI, matching canonical
+C prototypes without reading layout or passing aggregates by value. Configuration
+and the global warning gate are unchanged. Fresh compilation and paired runtime
+checks remain required.
