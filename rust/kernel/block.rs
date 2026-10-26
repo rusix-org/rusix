@@ -2,6 +2,8 @@
 
 //! Types for working with the block layer.
 
+pub mod bio;
+pub mod bio_disk;
 pub mod mq;
 
 /// Bit mask for masking out [`SECTOR_SIZE`].

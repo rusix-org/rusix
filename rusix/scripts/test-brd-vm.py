@@ -36,6 +36,24 @@ def accept_console(console, qemu_exit):
     return {"status": "PASS", "cases": list(CASES), "qemu_exit": qemu_exit}
 
 
+def validate_selection(profile, selection, config):
+    """Bind the requested implementation to its build proof and resolved config."""
+    if profile not in ("brd", "brd-rust"):
+        raise ValueError("The BRD build profile is required")
+    implementation = "brd-c" if profile == "brd" else "brd-rust"
+    if selection != f"implementation={implementation}":
+        raise ValueError("Build evidence does not identify the selected BRD implementation")
+    settings = set(config.splitlines())
+    if ("CONFIG_RUSIX_BRD_RUST=y" in settings) != (implementation == "brd-rust"):
+        raise ValueError("Resolved configuration contradicts BRD selection")
+    for name in REQUIRED_CONFIG:
+        if f"CONFIG_{name}=y" not in settings:
+            raise ValueError(f"Missing required CONFIG_{name}=y")
+    if "CONFIG_KUNIT=y" in settings:
+        raise ValueError("BRD profile must disable KUnit to isolate contract execution")
+    return implementation
+
+
 def first_line(path):
     lines = path.read_text().splitlines()
     return lines[0] if lines else ""
@@ -120,19 +138,12 @@ def run(args, paths, evidence):
         raise ValueError("Source changed during the kernel build")
     if (build_evidence / "source-after.status").read_bytes():
         raise ValueError("Source was dirty after the kernel build")
-    if (build_evidence / "profile.txt").read_text().strip() != "brd":
-        raise ValueError("The BRD build profile is required")
-    if first_line(build_evidence / "selection.log") != "implementation=brd-c":
-        raise ValueError("Build evidence does not identify the pinned C BRD")
+    profile = (build_evidence / "profile.txt").read_text().strip()
+    implementation = validate_selection(
+        profile, first_line(build_evidence / "selection.log"), config.read_text())
     check_hashes(build_evidence / "build.sha256", [kernel, config])
     if (build_evidence / "config").read_bytes() != config.read_bytes():
         raise ValueError("Resolved configuration differs from build evidence")
-    settings = set(config.read_text().splitlines())
-    for name in REQUIRED_CONFIG:
-        if f"CONFIG_{name}=y" not in settings:
-            raise ValueError(f"Missing required CONFIG_{name}=y")
-    if "CONFIG_KUNIT=y" in settings:
-        raise ValueError("BRD profile must disable KUnit to isolate contract execution")
 
     artifacts = paths.output / "builds" / f"brd-vm-{args.label}"
     artifacts.mkdir(parents=True, exist_ok=False)
@@ -167,8 +178,8 @@ def run(args, paths, evidence):
                     paths.project / "scripts/with-local-tools.sh",
                     paths.project / "scripts/repo-paths.sh"]
     metadata = {
-        "source_revision": revision, "implementation": "brd-c",
-        "scope": "C BRD userspace block contract; not Rust BRD or complete Phase 1",
+        "source_revision": revision, "implementation": implementation,
+        "scope": "Six-case userspace block contract",
         "sources": {str(p.relative_to(paths.source)): digest(p) for p in source_files},
         "artifacts": {str(p): digest(p) for p in (image, init, initramfs)},
         "config_sha256": digest(config),

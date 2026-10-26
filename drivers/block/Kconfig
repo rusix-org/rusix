@@ -240,6 +240,13 @@ config BLK_DEV_RAM
 	  Most normal users won't need the RAM disk functionality, and can
 	  thus say N here.
 
+config RUSIX_BRD_RUST
+	bool "Rust RAM block driver implementation"
+	depends on BLK_DEV_RAM=y && RUST && 64BIT
+	help
+	  Select the experimental Rust implementation of the RAM block driver.
+	  Built-in only while module lifetime validation remains outstanding.
+
 config BLK_DEV_RAM_COUNT
 	int "Default number of RAM disks"
 	default "16"

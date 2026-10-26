@@ -165,3 +165,28 @@ The ordinary userspace/ext4 workload, built-in/module x86_64 and arm64 matrix,
 controlled performance measurements, pinned environment/CI and a chosen upstream-fix port remain required,
 with the 1a/1b split defined in [PHASE1.md](PHASE1.md). Neither this
 design nor six passing baseline tests would complete any of those broader gates.
+
+## LTS implementation candidate
+
+The initial implementation lives in `drivers/block/brd_rust.rs` and its `store`
+module. `RUSIX_BRD_RUST` selects it for built-in 64-bit configurations; the original
+C source remains unchanged. `block::bio` owns completion and bounded segments;
+`block::bio_disk` retains typed state through final disk release. The sparse store
+uses Arc-owned, zeroed pages, conditional insertion and per-page locking.
+
+The generic xarray addition wraps the LTS's existing `__xa_insert`: importing the
+entry/preload proposal would also import unrelated allocator machinery. NOIO uses
+a synchronous closure with a private save/restore guard, avoiding an escaping
+async guard. These are local adaptations, not upstream-approved interfaces.
+
+Executing C boundaries are explicitly retained: block-core allocation/publication,
+xarray and lock/page primitives, debugfs, parameter metadata and inline wrappers.
+Bio payload copies/zeroing use C highmem primitives because externally mutable
+userspace pages cannot safely become ordinary Rust references. No helper implements
+BRD request policy or sparse-store ownership. Removing these boundaries requires
+migration of their owning core abstractions.
+
+Negative/overflowing `max_part` inputs currently return EINVAL to avoid unsafe
+normalization states. This is a provisional invalid-input exception requiring
+baseline investigation and contract review, not a claim of full parameter parity.
+Built-in operation is the only selectable mode until module lifetime is audited.

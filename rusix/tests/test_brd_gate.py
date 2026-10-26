@@ -73,6 +73,50 @@ class GateTests(unittest.TestCase):
         self.check_rejected(self.lines[:-1] + ["RUSIX_BRD_SUCCESS cases="])
 
 
+class SelectionTests(unittest.TestCase):
+    def config(self, rust=False):
+        lines = [f"CONFIG_{name}=y" for name in runner.REQUIRED_CONFIG]
+        lines += ["CONFIG_RUSIX_BRD_RUST=y" if rust else
+                  "# CONFIG_RUSIX_BRD_RUST is not set", "# CONFIG_KUNIT is not set"]
+        return "\n".join(lines)
+
+    def test_each_implementation_requires_matching_profile_and_configuration(self):
+        for profile, implementation, rust in (("brd", "brd-c", False),
+                                               ("brd-rust", "brd-rust", True)):
+            with self.subTest(profile=profile):
+                self.assertEqual(runner.validate_selection(
+                    profile, f"implementation={implementation}", self.config(rust)),
+                    implementation)
+                with self.assertRaises(ValueError):
+                    runner.validate_selection(profile, f"implementation={implementation}",
+                                              self.config(not rust))
+                other = "brd-c" if rust else "brd-rust"
+                with self.assertRaises(ValueError):
+                    runner.validate_selection(profile, f"implementation={other}",
+                                              self.config(rust))
+
+    def test_invalid_profile_and_selection(self):
+        for profile, selection in (("kunit", "implementation=brd-c"),
+                                   ("server", "implementation=brd-rust"),
+                                   ("brd", ""), ("brd", "implementation=brd-c extra")):
+            with self.subTest(profile=profile, selection=selection):
+                with self.assertRaises(ValueError):
+                    runner.validate_selection(profile, selection, self.config())
+
+    def test_each_required_builtin_option_is_enforced(self):
+        for name in runner.REQUIRED_CONFIG:
+            for replacement in ("", f"CONFIG_{name}=m"):
+                with self.subTest(name=name, replacement=replacement):
+                    config = self.config().replace(f"CONFIG_{name}=y", replacement)
+                    with self.assertRaises(ValueError):
+                        runner.validate_selection("brd", "implementation=brd-c", config)
+
+    def test_kunit_is_not_allowed_in_contract_guest(self):
+        with self.assertRaises(ValueError):
+            runner.validate_selection("brd-rust", "implementation=brd-rust",
+                                      self.config(True) + "\nCONFIG_KUNIT=y")
+
+
 class InputTests(unittest.TestCase):
     def test_build_evidence_requires_matching_hashes(self):
         with tempfile.TemporaryDirectory(prefix="rusix-brd-hashes-") as directory:

@@ -9,12 +9,12 @@ if [[ ${1:-} == --profile ]]; then
     shift 2
 fi
 case "$profile" in
-    kunit|brd|server) ;;
-    *) echo 'Profile must be kunit, brd or server.' >&2; exit 2 ;;
+    kunit|brd|brd-rust|server) ;;
+    *) echo 'Profile must be kunit, brd, brd-rust or server.' >&2; exit 2 ;;
 esac
 config="$RUSIX_PROJECT/configs/x86_64-$profile.config"
 if [[ $# != 1 || ! "$1" =~ ^[a-zA-Z0-9_-]+$ ]]; then
-    echo 'Usage: bash rusix/scripts/build-kernel.sh [--profile kunit|brd|server] BUILD_NAME' >&2
+    echo 'Usage: bash rusix/scripts/build-kernel.sh [--profile kunit|brd|brd-rust|server] BUILD_NAME' >&2
     exit 2
 fi
 name=$1
@@ -91,6 +91,30 @@ if [[ "$profile" == brd ]]; then
         sha256sum "$RUSIX_SOURCE/drivers/block/brd.c" "$out/drivers/block/brd.o"
     } > "$evidence/selection.log"
 fi
+if [[ "$profile" == brd-rust ]]; then
+    git -C "$RUSIX_SOURCE" diff --exit-code \
+        2926d88bb7fc4608fd942453d929c39e4e5ec006 -- drivers/block/brd.c \
+        > "$evidence/brd-reference.diff"
+    bash "$RUSIX_PROJECT/scripts/with-local-tools.sh" llvm-ar t \
+        "$out/drivers/block/built-in.a" > "$evidence/block-archive.txt"
+    grep -E '(^|/)brd_rust\.o$' "$evidence/block-archive.txt" > "$evidence/brd-objects.txt"
+    bash "$RUSIX_PROJECT/scripts/with-local-tools.sh" llvm-nm --defined-only --demangle \
+        "$out/vmlinux" > "$evidence/kernel-symbols.tmp"
+    if grep -Eq ' brd_submit_bio$' "$evidence/kernel-symbols.tmp"; then
+        echo 'C BRD submission remains linked in the Rust profile.' >&2; exit 1;
+    fi
+    grep -E 'brd.*Device.*Operations.*submit' "$evidence/kernel-symbols.tmp" \
+        > "$evidence/brd-symbols.txt"
+    rm -- "$evidence/kernel-symbols.tmp"
+    {
+        echo 'implementation=brd-rust'
+        cat "$evidence/brd-objects.txt" "$evidence/brd-symbols.txt"
+        sha256sum "$RUSIX_SOURCE/drivers/block/brd_rust.rs" \
+            "$RUSIX_SOURCE/drivers/block/brd_rust/store.rs" \
+            "$out/drivers/block/brd_rust.o" "$out/drivers/block/brd_rust/params.o"
+    } > "$evidence/selection.log"
+fi
+
 git -C "$RUSIX_SOURCE" status --porcelain > "$evidence/source-after.status"
 git -C "$RUSIX_SOURCE" rev-parse HEAD > "$evidence/source-after.commit"
 if [[ -s "$evidence/source-after.status" || $(cat "$evidence/source-after.commit") != "$source_commit" ]]; then

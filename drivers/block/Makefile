@@ -19,6 +19,9 @@ obj-$(CONFIG_ATARI_FLOPPY)	+= ataflop.o
 obj-$(CONFIG_AMIGA_Z2RAM)	+= z2ram.o
 obj-$(CONFIG_N64CART)		+= n64cart.o
 obj-$(CONFIG_BLK_DEV_RAM)	+= brd.o
+ifeq ($(CONFIG_RUSIX_BRD_RUST),y)
+brd-y := brd_rust.o brd_rust/params.o
+endif
 obj-$(CONFIG_BLK_DEV_LOOP)	+= loop.o
 obj-$(CONFIG_SUNVDC)		+= sunvdc.o
 

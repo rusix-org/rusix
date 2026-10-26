@@ -50,13 +50,16 @@ firmware=()
 if [[ -f "$RUSIX_TOOLS_ROOT/usr/share/qemu/qboot.rom" ]]; then
     firmware=(-L "$RUSIX_TOOLS_ROOT/usr/share/qemu" -bios qboot.rom)
 fi
+# Select the unchanged upstream math-int_sqrt and added compatibility suite.
+# Other Rust framework suites include an intentionally disabled test on the LTS
+# baseline; excluding unrelated suites keeps the strict no-skips math gate.
 # With system packages only, let QEMU find its own firmware at its default path.
 command=(bash "$RUSIX_PROJECT/scripts/with-local-tools.sh" timeout --kill-after=5s 180s
     qemu-system-x86_64 -accel "$accel" -cpu "$cpu" -m 512M -smp 1
     "${firmware[@]}"
     -display none -serial stdio -monitor none -nic none -no-reboot
     -kernel "$build/arch/x86/boot/bzImage"
-    -append 'console=ttyS0 kunit.enable=1 kunit.autorun=1 kunit_shutdown=reboot panic=-1')
+    -append 'console=ttyS0 kunit.enable=1 kunit.autorun=1 kunit.filter_glob=*sqrt* kunit_shutdown=reboot panic=-1')
 printf '%q ' "${command[@]}" > "$run/command.sh"
 printf '\n' >> "$run/command.sh"
 bash "$RUSIX_PROJECT/scripts/with-local-tools.sh" qemu-system-x86_64 --version > "$run/qemu-version.txt"

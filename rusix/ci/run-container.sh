@@ -4,13 +4,13 @@
 set -euo pipefail
 source "$(dirname -- "${BASH_SOURCE[0]}")/../scripts/repo-paths.sh"
 if [[ $# != 3 ]]; then
-    echo 'Usage: bash rusix/ci/run-container.sh IMAGE OUTPUT_DIRECTORY kunit|brd|server' >&2
+    echo 'Usage: bash rusix/ci/run-container.sh IMAGE OUTPUT_DIRECTORY kunit|brd|brd-rust|server' >&2
     exit 2
 fi
 image=$1
 output=$(realpath -m -- "$2")
 profile=$3
-case "$profile" in kunit|brd|server) ;; *) echo 'Profile must be kunit, brd or server.' >&2; exit 2 ;; esac
+case "$profile" in kunit|brd|brd-rust|server) ;; *) echo 'Profile must be kunit, brd, brd-rust or server.' >&2; exit 2 ;; esac
 case "$output/" in
     "$RUSIX_SOURCE/"*) echo 'Container output must be outside the source checkout.' >&2; exit 2 ;;
 esac
