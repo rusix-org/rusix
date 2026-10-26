@@ -37,7 +37,8 @@ linked until explicit removal. Compiled-object records retain state/flag barrier
 calls and their x86 primitives; runtime tests are not a universal ordering proof.
 
 In progress on `rusix/wait-bit`: ten bit-wait definitions are implemented and
-paired tests are being integrated; build/runtime verification is pending. The
+paired tests are integrated. The first build exposed a core/kernel C-long type
+mismatch in shared arithmetic; correction and matched reruns are pending. The
 [bit-wait record](experiments/wait-bit/README.md) owns their contracts. Next are
 locked interruptible waits and promotion into the declared server target.
 The [wait record](experiments/wait/README.md) owns mixed-access and lifetime

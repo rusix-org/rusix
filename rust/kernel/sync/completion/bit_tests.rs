@@ -273,7 +273,7 @@ mod tests {
     }
     #[test]
     fn production_deadline_arithmetic_matches_c_across_wrap() {
-        use core::ffi::c_ulong;
+        use crate::ffi::c_ulong;
         let max = c_ulong::MAX;
         let half = (1 as c_ulong) << (c_ulong::BITS - 1);
         for (now, deadline) in [
