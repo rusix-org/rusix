@@ -9,12 +9,12 @@ if [[ ${1:-} == --profile ]]; then
     shift 2
 fi
 case "$profile" in
-    kunit|brd) ;;
-    *) echo 'Profile must be kunit or brd.' >&2; exit 2 ;;
+    kunit|brd|server) ;;
+    *) echo 'Profile must be kunit, brd or server.' >&2; exit 2 ;;
 esac
 config="$RUSIX_PROJECT/configs/x86_64-$profile.config"
 if [[ $# != 1 || ! "$1" =~ ^[a-zA-Z0-9_-]+$ ]]; then
-    echo 'Usage: bash rusix/scripts/build-kernel.sh [--profile kunit|brd] BUILD_NAME' >&2
+    echo 'Usage: bash rusix/scripts/build-kernel.sh [--profile kunit|brd|server] BUILD_NAME' >&2
     exit 2
 fi
 name=$1
@@ -45,6 +45,13 @@ bash "$RUSIX_PROJECT/scripts/with-local-tools.sh" make -C "$RUSIX_SOURCE" O="$ou
     KCONFIG_ALLCONFIG="$config" allnoconfig \
     > "$evidence/config.log" 2>&1
 while IFS= read -r setting; do
+    if [[ "$setting" =~ ^#\ (CONFIG_[A-Z0-9_]+)\ is\ not\ set$ ]]; then
+        if grep -q "^${BASH_REMATCH[1]}=" "$out/.config"; then
+            echo "Kconfig enabled excluded setting: ${BASH_REMATCH[1]}" >&2
+            exit 1
+        fi
+        continue
+    fi
     [[ "$setting" == CONFIG_*=* ]] || continue
     if ! grep -qxF "$setting" "$out/.config"; then
         echo "Kconfig did not retain requested setting: $setting" >&2
@@ -90,5 +97,8 @@ if [[ -s "$evidence/source-after.status" || $(cat "$evidence/source-after.commit
     echo 'Source changed during the build; its result is not verified.' >&2
     exit 1
 fi
-sha256sum "$out/.config" "$out/arch/x86/boot/bzImage" > "$evidence/build.sha256"
+sha256sum "$out/.config" "$out/arch/x86/boot/bzImage" "$out/vmlinux" > "$evidence/build.sha256"
+if grep -qx 'CONFIG_VMLINUX_MAP=y' "$out/.config"; then
+    sha256sum "$out/vmlinux.map" >> "$evidence/build.sha256"
+fi
 echo "Built $out/arch/x86/boot/bzImage"

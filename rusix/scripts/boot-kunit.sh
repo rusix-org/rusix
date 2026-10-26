@@ -2,6 +2,12 @@
 # Boot a built kernel in a bounded VM and parse its real serial output.
 set -euo pipefail
 source "$(dirname -- "${BASH_SOURCE[0]}")/repo-paths.sh"
+accel=${RUSIX_QEMU_ACCEL:-tcg}
+case "$accel" in
+    tcg) cpu=max ;;
+    kvm) cpu=host ;;
+    *) echo 'RUSIX_QEMU_ACCEL must be tcg or kvm.' >&2; exit 2 ;;
+esac
 baseline=()
 if [[ ${1:-} == --baseline ]]; then
     baseline=(--baseline)
@@ -46,7 +52,7 @@ if [[ -f "$RUSIX_TOOLS_ROOT/usr/share/qemu/qboot.rom" ]]; then
 fi
 # With system packages only, let QEMU find its own firmware at its default path.
 command=(bash "$RUSIX_PROJECT/scripts/with-local-tools.sh" timeout --kill-after=5s 180s
-    qemu-system-x86_64 -accel tcg -cpu max -m 512M -smp 1
+    qemu-system-x86_64 -accel "$accel" -cpu "$cpu" -m 512M -smp 1
     "${firmware[@]}"
     -display none -serial stdio -monitor none -nic none -no-reboot
     -kernel "$build/arch/x86/boot/bzImage"

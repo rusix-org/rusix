@@ -4,6 +4,7 @@
 import argparse
 import hashlib
 import json
+import os
 from pathlib import Path
 import re
 import shlex
@@ -103,6 +104,9 @@ def source_state(source):
 
 
 def run(args, paths, evidence):
+    accel = os.environ.get("RUSIX_QEMU_ACCEL", "tcg")
+    if accel not in ("tcg", "kvm"):
+        raise ValueError("RUSIX_QEMU_ACCEL must be tcg or kvm")
     revision = source_state(paths.source)
     build = args.build.resolve()
     build_evidence = args.build_evidence.resolve()
@@ -171,7 +175,8 @@ def run(args, paths, evidence):
     }
     (evidence / "inputs.json").write_text(json.dumps(metadata, indent=2) + "\n")
     command = wrapper + ["timeout", "--kill-after=5s", "180s", "qemu-system-x86_64",
-                         "-accel", "tcg", "-cpu", "max", "-m", "512M", "-smp", "2"]
+                         "-accel", accel, "-cpu", "host" if accel == "kvm" else "max",
+                         "-m", "512M", "-smp", "2"]
     firmware = paths.tools / "usr/share/qemu"
     if (firmware / "qboot.rom").is_file():
         command += ["-L", str(firmware), "-bios", "qboot.rom"]
