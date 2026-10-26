@@ -1,57 +1,41 @@
-# LTS integration worktree
+# rusix progress
 
-Branch `rusix/lts-6.18` starts at signed Linux 6.18.58,
-`2926d88bb7fc4608fd942453d929c39e4e5ec006`. The tag signature verifies against
-kernel.org's documented Greg Kroah-Hartman fingerprint. Published `rusix/main`
-remains the previously verified source until integration checks pass.
+**Phase 1a: Rust BRD works in the x86_64 block-contract VM; ordinary ext4
+verification is running.** Most of the kernel remains C. The integration branch
+`rusix/lts-6.18` uses signed Linux 6.18.58 (`2926d88bb7fc`); published main
+remains on its previously verified source pending transition checks. Hosted CI
+is disabled; all current tests run locally.
 
-Project tooling and the Rust square-root port were replayed without importing
-newer upstream Makefiles. Original LTS square-root implementation/tests match the
-previous engineering source byte-for-byte. BRD differs in legacy parameter parsing;
-the same six-case probe must be rerun. Removed the unavailable newer
-`FUTEX_ROBUST_UNLOCK` optimization from the server fragment.
+Implemented: approximately 1,200 lines of Rust across BRD driver/store and
+bio/disk interfaces, plus conditional xarray insertion and synchronous NOIO
+scope. [BRD.md](docs/BRD.md) owns contracts, remaining C boundaries and the
+provisional invalid-parameter exception. No subsystem divergence point is declared.
 
-Current work: build/verify this LTS baseline in a separate worktree while the
-Rust BRD implementation is developed here. Local tests only; hosted CI remains
-disabled. See [ADR 0002](docs/adr/0002.md), [BRD design](docs/BRD.md), and
-[prior evidence](docs/evidence/container-verification/manifest.json).
+| Check | Result and evidence |
+| --- | --- |
+| LTS provenance and math | Signed tag verified; 24 required math cases pass. An initial unfiltered run correctly failed on an intentionally skipped upstream demonstration test. [Evidence](docs/evidence/lts-baseline/manifest.json). |
+| C/Rust BRD block contract | Six cases pass on each implementation. Identical probe ELF/tool image; configurations differ only by Rust selection. [Comparison](docs/evidence/brd-rust-initial/comparison.json). |
+| Rust selection | Full kernel at `aa6da498a` links Rust submission and excludes C BRD submission. [Evidence](docs/evidence/brd-rust-initial/manifest.json). |
+| Ownership and policy | Nine in-kernel tests pass, zero skips: insertion ownership, discard lifetime/accounting, NOIO nesting and parameters. [Evidence](docs/evidence/brd-ownership/manifest.json). |
+| Ordinary userspace/ext4 | Pinned fixture image, static Rust supervisor, ordinary Debian utilities, deterministic staging and strict gate implemented. C baseline kernel is building; paired guest results pending. [Fixture](tests/brd-ext4/README.md), [tool evidence](docs/evidence/ext4-fixture/manifest.json). |
+| Early core scouting | Completion boundary/ownership experiment and five host tests pass, including pinned Rust 1.85.1. Five original-C kernel contract tests are written, execution pending. [Experiment](experiments/completion/README.md). |
 
-Implemented candidate: approximately 1,200 lines of Rust across BRD driver/store
-and bio/disk abstractions, plus conditional xarray insertion and synchronous NOIO
-scope. Nine new in-kernel tests cover store lifetime, insertion ownership, NOIO
-nesting and parameters. Targeted compilation passes in the pinned container after correcting a queue-field
-width, cleanup captures, and encoding nonzero minor spacing. The full kernel builds and passes all six unchanged VM contract cases; source
-review includes independent ownership review.
+Last completed declared-target measurement: x86_64 server configuration at
+engineering source `4dd0b2c9f`, executable C **5,993,765 bytes**, Rust **151,830
+bytes**, unknown **0**. This predates the LTS transition and Rust BRD; rerunning
+the selected Rust LTS server profile is pending. Counts include inherited Rust
+infrastructure and are not a completion percentage.
+[Full measurement](docs/evidence/container-verification/manifest.json).
 
-LTS local KUnit attempt `linux-out/lts-kunit-001` built and booted: 46 passed,
-one intentionally disabled upstream demonstration test skipped. The strict gate
-correctly rejected the run. Isolate the required math suites with the existing
-KUnit suite filter without changing upstream tests or accepting skips. The filtered replay passed all 24 required math cases. The fresh C BRD
-baseline passed all six cases in `linux-out/lts-brd-c-001`.
-[Recorded LTS evidence](docs/evidence/lts-baseline/manifest.json) keeps both the
-unfiltered failure and passing scoped replay.
+Next: finish paired ext4 execution, run completion baseline kernel tests, measure
+the LTS server target, review remaining Phase 1a gaps, then publish the explicit
+baseline transition while preserving main history. arm64, module lifetime,
+expanded fault/concurrency stress and performance budgets remain Phase 1b.
+See [ADR 0002](docs/adr/0002.md) and [delivery gates](docs/PHASE1.md).
 
-Candidate `f1bf14f5c` is frozen in a separate worktree for compilation. The early
-[completion experiment](experiments/completion/README.md) identifies C layout,
-IRQ, cancellation and scheduler obligations; five host ownership-model tests pass.
-It is groundwork for the post-BRD kernel spike, not kernel-runtime evidence.
-
-The first full Rust BRD build at `aa6da498a` passed all six unchanged cases in
-`linux-out/lts-brd-rust-001`; [evidence](docs/evidence/brd-rust-initial/manifest.json)
-records the linked Rust submission symbol and absence of C submission.
-Targeted compile attempts (including failures and an eliminated objtool warning)
-are retained in `linux-out/lts-brd-rust-dev/logs/attempts.json`.
-
-The ordinary ext4 fixture has a static Rust PID1 and pinned Debian utilities.
-Its image builds with an exact package inventory, and Rust 1.85.1 produces a
-static x86_64 init. Six ordered filesystem cases and a strict runner are ready;
-guest execution remains pending. The separate BRD ownership KUnit profile has
-nine required cases; all nine now pass in the actual kernel with zero skips.
-[Ownership evidence](docs/evidence/brd-ownership/manifest.json) records the run.
-
-The [initial C/Rust comparison](docs/evidence/brd-rust-initial/comparison.json)
-uses byte-identical probe executables and the same tool image. Resolved configs
-differ only by Rust BRD selection; both run the six cases without skipped tests.
-
-Five completion C-contract kernel tests are now written but not yet executed;
-the separate host ownership model also passes with pinned Rust 1.85.1.
+Local raw outputs live under `linux-out/`: `lts-kunit-001`, `lts-brd-c-001`,
+`lts-brd-rust-001`, `lts-brd-kunit-001`, and `lts-ext4-c-001`. Initial compiler
+failures and the eliminated objtool warning remain in
+`lts-brd-rust-dev/logs/attempts.json`; linked evidence preserves failed VM/gate
+attempts alongside passes. Historical engineering results remain attributed to
+their original commits in the [verification index](docs/VERIFICATION.md).
