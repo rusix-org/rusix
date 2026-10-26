@@ -1,0 +1,62 @@
+make: Entering directory '/src'
+make[1]: Entering directory '/out/builds/ci-completion-c'
+  SYNC    include/config/auto.conf
+  GEN     Makefile
+  GEN     Makefile
+  DESCEND objtool
+  CALL    /src/scripts/checksyscalls.sh
+  INSTALL libsubcmd_headers
+  BINDGEN rust/bindings/bindings_helpers_generated.rs
+  CC      rust/helpers/helpers.o
+  EXPORTS rust/exports_helpers_generated.h
+  RUSTC L rust/bindings.o
+  EXPORTS rust/exports_bindings_generated.h
+  RUSTC L rust/kernel.o
+error[E0277]: the trait bound `isize: From<i32>` is not satisfied
+  --> /src/rust/kernel/sync/completion/wait_tests.rs:76:89
+   |
+76 |                 Self::Interruptible => bindings::wait_for_completion_interruptible(raw).into(),
+   |                                                                                         ^^^^ the trait `From<i32>` is not implemented for `isize`
+   |
+   = help: the following other types implement trait `From<T>`:
+             `isize` implements `From<bool>`
+             `isize` implements `From<i16>`
+             `isize` implements `From<i8>`
+             `isize` implements `From<u8>`
+   = note: required for `i32` to implement `Into<isize>`
+
+error[E0277]: the trait bound `isize: From<i32>` is not satisfied
+  --> /src/rust/kernel/sync/completion/wait_tests.rs:77:79
+   |
+77 |                 Self::Killable => bindings::wait_for_completion_killable(raw).into(),
+   |                                                                               ^^^^ the trait `From<i32>` is not implemented for `isize`
+   |
+   = help: the following other types implement trait `From<T>`:
+             `isize` implements `From<bool>`
+             `isize` implements `From<i16>`
+             `isize` implements `From<i8>`
+             `isize` implements `From<u8>`
+   = note: required for `i32` to implement `Into<isize>`
+
+error[E0277]: the trait bound `isize: From<i32>` is not satisfied
+  --> /src/rust/kernel/sync/completion/wait_tests.rs:78:87
+   |
+78 |                 Self::State(state) => bindings::wait_for_completion_state(raw, state).into(),
+   |                                                                                       ^^^^ the trait `From<i32>` is not implemented for `isize`
+   |
+   = help: the following other types implement trait `From<T>`:
+             `isize` implements `From<bool>`
+             `isize` implements `From<i16>`
+             `isize` implements `From<i8>`
+             `isize` implements `From<u8>`
+   = note: required for `i32` to implement `Into<isize>`
+
+error: aborting due to 3 previous errors
+
+For more information about this error, try `rustc --explain E0277`.
+make[3]: *** [/src/rust/Makefile:569: rust/kernel.o] Error 1
+make[2]: *** [/src/Makefile:1316: prepare] Error 2
+make[1]: *** [/src/Makefile:248: __sub-make] Error 2
+make[1]: Leaving directory '/out/builds/ci-completion-c'
+make: *** [Makefile:248: __sub-make] Error 2
+make: Leaving directory '/src'

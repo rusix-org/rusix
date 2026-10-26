@@ -74,3 +74,12 @@ First wait-engine comparison build at `d016a02c1164` stopped in the new test
 harness: `i32` does not implement `Into<isize>`. Replaced three C-int return
 conversions with explicit C-long casts; no production-policy change. Failed
 logs remain in `linux-out/lts-wait-c-001`; retry pending.
+
+Wait source `a910df12a5b7` passes 25 combined and 16 isolated tests on each
+implementation, but emitted ten Rust declaration/visibility warnings.
+[Initial evidence](docs/evidence/completion-wait-initial/manifest.json) retains
+both those logs and the first compile failure. Private Rust visibility and an
+opaque pointer at the private swait ABI address the warnings without suppression.
+The option now excludes modules and four driver configurations with incompatible
+plain counter accesses; current tested profiles already exclude all of them.
+A clean paired retry is pending.

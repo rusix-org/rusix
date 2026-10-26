@@ -10,7 +10,7 @@
 use core::ptr::addr_of_mut;
 use kernel::{
     bindings,
-    ffi::{c_int, c_long, c_uint, c_ulong},
+    ffi::{c_int, c_long, c_uint, c_ulong, c_void},
     sync::atomic::{Atomic, Relaxed},
     types::{NotThreadSafe, Opaque},
 };
@@ -18,12 +18,14 @@ use pin_init::stack_pin_init;
 
 // Private scheduler declaration at kernel/sched/sched.h in the pinned baseline.
 // The implementation is a linked builtin; no public header or symbol export is
-// needed by this builtin Rust implementation.
+// needed by this builtin Rust implementation. The C waiter parameter is
+// struct swait_queue *. Use an opaque pointer only at this private ABI boundary:
+// x86_64 object-pointer representations match and the cast preserves provenance.
+// The actual pinned allocation remains bindings::swait_queue. No struct crosses
+// by value; this avoids recursively treating task_struct's configuration-empty
+// sched_statistics member as a by-value FFI type.
 unsafe extern "C" {
-    fn __prepare_to_swait(
-        queue: *mut bindings::swait_queue_head,
-        waiter: *mut bindings::swait_queue,
-    );
+    fn __prepare_to_swait(queue: *mut bindings::swait_queue_head, waiter: *mut c_void);
 }
 
 type ScheduleAction = unsafe extern "C" fn(c_long) -> c_long;
@@ -180,7 +182,7 @@ unsafe fn wait_for_common(
             // SAFETY: queue and pinned waiter remain initialized/live. This task
             // owns queue.lock; the waiter is either self-linked or already on
             // this queue. The primitive records current and enrolls only once.
-            unsafe { __prepare_to_swait(queue, waiter.get()) };
+            unsafe { __prepare_to_swait(queue, waiter.get().cast()) };
             // SAFETY: The state is the original C caller's requested wait state;
             // it is published while holding the lock, retaining debug/trace hooks.
             unsafe { bindings::__set_current_state(state) };
@@ -229,7 +231,7 @@ unsafe fn wait_for_common(
 // SAFETY: Selection excludes the matching C body; pointer/void ABI is unchanged.
 #[unsafe(no_mangle)]
 #[unsafe(link_section = ".sched.text")]
-pub unsafe extern "C" fn wait_for_completion(completion: *mut bindings::completion) {
+unsafe extern "C" fn wait_for_completion(completion: *mut bindings::completion) {
     // SAFETY: Caller provides the shared contract; these are the baseline action,
     // infinite timeout and uninterruptible state.
     unsafe {
@@ -251,7 +253,7 @@ pub unsafe extern "C" fn wait_for_completion(completion: *mut bindings::completi
 // SAFETY: Matching C body is excluded; pointer/unsigned-long ABI is preserved.
 #[unsafe(no_mangle)]
 #[unsafe(link_section = ".sched.text")]
-pub unsafe extern "C" fn wait_for_completion_timeout(
+unsafe extern "C" fn wait_for_completion_timeout(
     completion: *mut bindings::completion,
     timeout: c_ulong,
 ) -> c_ulong {
@@ -275,7 +277,7 @@ pub unsafe extern "C" fn wait_for_completion_timeout(
 // SAFETY: Matching C body is excluded; pointer/void ABI is preserved.
 #[unsafe(no_mangle)]
 #[unsafe(link_section = ".sched.text")]
-pub unsafe extern "C" fn wait_for_completion_io(completion: *mut bindings::completion) {
+unsafe extern "C" fn wait_for_completion_io(completion: *mut bindings::completion) {
     // SAFETY: Caller provides the shared contract; the I/O scheduler preserves
     // the original accounting with an infinite uninterruptible timeout.
     unsafe {
@@ -296,7 +298,7 @@ pub unsafe extern "C" fn wait_for_completion_io(completion: *mut bindings::compl
 // SAFETY: Matching C body is excluded; pointer/unsigned-long ABI is preserved.
 #[unsafe(no_mangle)]
 #[unsafe(link_section = ".sched.text")]
-pub unsafe extern "C" fn wait_for_completion_io_timeout(
+unsafe extern "C" fn wait_for_completion_io_timeout(
     completion: *mut bindings::completion,
     timeout: c_ulong,
 ) -> c_ulong {
@@ -321,7 +323,7 @@ pub unsafe extern "C" fn wait_for_completion_io_timeout(
 // SAFETY: Matching C body is excluded; pointer/int ABI is preserved.
 #[unsafe(no_mangle)]
 #[unsafe(link_section = ".sched.text")]
-pub unsafe extern "C" fn wait_for_completion_interruptible(
+unsafe extern "C" fn wait_for_completion_interruptible(
     completion: *mut bindings::completion,
 ) -> c_int {
     // SAFETY: Caller provides the shared contract; the state/action match C.
@@ -349,7 +351,7 @@ pub unsafe extern "C" fn wait_for_completion_interruptible(
 // SAFETY: Matching C body is excluded; pointer/unsigned-long/long ABI is preserved.
 #[unsafe(no_mangle)]
 #[unsafe(link_section = ".sched.text")]
-pub unsafe extern "C" fn wait_for_completion_interruptible_timeout(
+unsafe extern "C" fn wait_for_completion_interruptible_timeout(
     completion: *mut bindings::completion,
     timeout: c_ulong,
 ) -> c_long {
@@ -372,9 +374,7 @@ pub unsafe extern "C" fn wait_for_completion_interruptible_timeout(
 // SAFETY: Matching C body is excluded; pointer/int ABI is preserved.
 #[unsafe(no_mangle)]
 #[unsafe(link_section = ".sched.text")]
-pub unsafe extern "C" fn wait_for_completion_killable(
-    completion: *mut bindings::completion,
-) -> c_int {
+unsafe extern "C" fn wait_for_completion_killable(completion: *mut bindings::completion) -> c_int {
     // SAFETY: Caller provides the shared contract; state distinguishes fatal
     // signals exactly through the retained C signal_pending_state primitive.
     let result = unsafe {
@@ -401,7 +401,7 @@ pub unsafe extern "C" fn wait_for_completion_killable(
 // SAFETY: Matching C body is excluded; pointer/unsigned-int/int ABI is preserved.
 #[unsafe(no_mangle)]
 #[unsafe(link_section = ".sched.text")]
-pub unsafe extern "C" fn wait_for_completion_state(
+unsafe extern "C" fn wait_for_completion_state(
     completion: *mut bindings::completion,
     state: c_uint,
 ) -> c_int {
@@ -425,7 +425,7 @@ pub unsafe extern "C" fn wait_for_completion_state(
 // SAFETY: Matching C body is excluded; pointer/unsigned-long/long ABI is preserved.
 #[unsafe(no_mangle)]
 #[unsafe(link_section = ".sched.text")]
-pub unsafe extern "C" fn wait_for_completion_killable_timeout(
+unsafe extern "C" fn wait_for_completion_killable_timeout(
     completion: *mut bindings::completion,
     timeout: c_ulong,
 ) -> c_long {

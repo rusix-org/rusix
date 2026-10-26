@@ -1,0 +1,52 @@
+make: Entering directory '/src'
+make[1]: Entering directory '/out/builds/ci-completion-c'
+  GEN     Makefile
+  DESCEND objtool
+  CALL    /src/scripts/checksyscalls.sh
+  INSTALL libsubcmd_headers
+  RUSTC L rust/kernel.o
+  EXPORTS rust/exports_kernel_generated.h
+  GEN     usr/initramfs_data.cpio
+  COPY    usr/initramfs_inc_data
+  AS      usr/initramfs_data.o
+  UPD     init/utsversion-tmp.h
+  CC      init/version.o
+  AR      usr/built-in.a
+  AR      init/built-in.a
+  CC      kernel/sched/build_utility.o
+  CC      rust/exports.o
+  AR      rust/built-in.a
+  AR      kernel/sched/built-in.a
+  AR      kernel/built-in.a
+  RUSTC     drivers/block/brd_rust.o
+  AR      drivers/block/built-in.a
+  AR      drivers/built-in.a
+  AR      built-in.a
+  AR      vmlinux.a
+  LD      vmlinux.o
+  MODPOST vmlinux.symvers
+  UPD     include/generated/utsversion.h
+  CC      init/version-timestamp.o
+  LD      vmlinux.unstripped
+  NM      System.map
+  SORTTAB vmlinux.unstripped
+  OBJCOPY vmlinux
+  GEN     modules.builtin.modinfo
+  GEN     modules.builtin
+  CC      arch/x86/boot/version.o
+  VOFFSET arch/x86/boot/compressed/../voffset.h
+  OBJCOPY arch/x86/boot/compressed/vmlinux.bin
+  GZIP    arch/x86/boot/compressed/vmlinux.bin.gz
+  CC      arch/x86/boot/compressed/misc.o
+  MKPIGGY arch/x86/boot/compressed/piggy.S
+  AS      arch/x86/boot/compressed/piggy.o
+  LD      arch/x86/boot/compressed/vmlinux
+  ZOFFSET arch/x86/boot/zoffset.h
+  OBJCOPY arch/x86/boot/vmlinux.bin
+  AS      arch/x86/boot/header.o
+  LD      arch/x86/boot/setup.elf
+  OBJCOPY arch/x86/boot/setup.bin
+  BUILD   arch/x86/boot/bzImage
+Kernel: arch/x86/boot/bzImage is ready  (#1)
+make[1]: Leaving directory '/out/builds/ci-completion-c'
+make: Leaving directory '/src'
