@@ -9,6 +9,6 @@ contracts, Rust safety expectations, upstream conventions, and review evidence.
 This is a Linux-derived kernel project; most inherited Linux documentation and
 licensing still apply. Do not substitute a generic Cargo workflow.
 
-Source publication is currently held under the
-[initial publication gate](rusix/docs/PUBLICATION.md). Repository creation alone
-does not authorize pushing files, commits, tags, or releases.
+The [initial publication record](rusix/docs/PUBLICATION.md) defines the verified
+first-layer scope and its remaining limitations. A passing helper migration is
+not a production release or a complete Rust kernel.

@@ -1,0 +1,34 @@
+/usr/bin/make
+/usr/bin/gcc
+/usr/bin/clang
+/home/aaron/code/rusix/publication-check/.tools/root/usr/bin/ld.lld
+/usr/bin/llvm-ar
+/usr/bin/llvm-nm
+/usr/bin/llvm-objcopy
+/usr/bin/llvm-objdump
+/usr/bin/llvm-readelf
+/usr/bin/llvm-strip
+/home/aaron/.cargo/bin/rustc
+/home/aaron/.cargo/bin/cargo
+/home/aaron/.cargo/bin/rustfmt
+/home/aaron/code/rusix/publication-check/.tools/root/usr/bin/bindgen
+/usr/bin/flex
+/usr/bin/bison
+/home/aaron/code/rusix/publication-check/.tools/root/usr/bin/bc
+/usr/bin/cpio
+/usr/bin/perl
+/usr/bin/python3
+/usr/bin/pkg-config
+/usr/bin/pahole
+/home/aaron/code/rusix/publication-check/.tools/root/usr/bin/qemu-system-x86_64
+rustc 1.99.0 (b940084d7 2026-09-28)
+binary: rustc
+commit-hash: b940084d7eb6a299eb4bfeb8e34901bc051e7ac4
+commit-date: 2026-09-28
+host: x86_64-unknown-linux-gnu
+release: 1.99.0
+LLVM version: 23.1.1
+KVM unavailable: use QEMU software emulation (-accel tcg).
+make: Entering directory '/home/aaron/code/rusix/publication-check/linux'
+Rust is available!
+make: Leaving directory '/home/aaron/code/rusix/publication-check/linux'

@@ -1,48 +1,62 @@
-# Initial source publication gate
+# Initial source publication record
 
-**Status: HOLD — do not push yet.** Aaron requested this hold on 2026-10-25.
+**Status: readiness checks passed; first source push authorized and pending.**
 
-The public repository `https://github.com/rusix-org/rusix` was created empty at
-Aaron's request. It is `origin` for the local Linux-derived repository; the
-original Linux remote remains `upstream`. GitHub reported public visibility,
-`isEmpty=true`, and no default branch after creation. No code has been pushed.
+Aaron clarified on 2026-10-25 that the existing kernel build and passing tests
+are a sufficient initial layer if the docs are ready. Module/export/CRC, fallback,
+other architecture, userspace, and performance checks remain disclosed follow-up
+work; they are not additional prerequisites for this first source publication.
+This clarification supersedes the earlier stricter checklist in this document.
 
-Creating a public repository and publishing source are separate actions. Do not
-bypass the hold by creating files/commits through an API, pushing a different
-branch, uploading a release, or publishing artifacts elsewhere. Continue local
-implementation, verification, documentation, and commits.
+## Repository and scope
 
-## Required before the first push
+The destination is `https://github.com/rusix-org/rusix`, remote `origin`. GitHub
+verified `isFork=true`, parent `torvalds/linux`, and public visibility. Linux is
+still remote `upstream`; the inherited `master` branch is kept distinct from
+`rusix/main`. No changes are pushed to upstream.
 
-Aaron's conditions are an initial working layer and updated documentation and
-contribution guidelines. The following are the concrete readiness checks for the
-initial kernel migration layer; they do not shrink the overall rewrite objective.
+The first public layer contains a real Rust integer-square-root implementation
+selected in Rust-enabled kernels, preserved upstream tests, added compatibility
+checks, recorded C/Rust comparison evidence, and project/contributor guidance.
+Most Linux implementation remains C. This is an experimental source milestone,
+not a production release, complete rewrite, or full compatibility claim.
 
-- [x] Pinned Linux-derived history and actual Rust replacement in a kernel path.
-- [x] Clean committed C/Rust comparison, preserved upstream tests, added boundary
-  coverage, and captured x86_64 VM evidence for the first replacement.
-- [ ] Complete the first layer's remaining module/export/CRC and fallback checks,
-  or explicitly resolve the initial release scope with Aaron rather than quietly
-  declaring unfinished verification complete.
-- [x] Accepted architectural direction documented and linked from project guidance.
-- [ ] Public-facing repository entry point and contributor guide accurately
-  explain layout, build/test commands, dependencies, review expectations, current
-  limitations, attribution, and upstream maintenance.
-- [ ] Reproduce the contributor path from a fresh checkout of the intended
-  publication revision. Distinguish tested platforms from unsupported setups.
-- [ ] Review project-facing docs, migration inventory, and progress against
-  current evidence. Inherited Linux documentation remains attributed upstream;
-  rusix changes and limits must be clear.
-- [ ] Audit the intended first-push history/artifacts for correct provenance,
-  licenses, unintended binaries, credentials/private data, and misleading claims.
-  Resolve the initial shallow checkout's history/publication requirements.
-- [ ] Record the exact publication candidate, readiness results, and remaining
-  limitations here before the hold can be considered satisfied.
+The initial empty standalone repository was retained under
+`rusix-org/rusix-empty-placeholder` after GitHub rejected deletion for missing
+`delete_repo` permission. Aaron approved replacing that empty repository with
+this fork. The placeholder contains no rusix source; it may be deleted manually
+by an organization administrator. No broader authentication scope was requested.
 
-No gate is satisfied merely by planning it, creating an empty repository, or
-writing a passing-looking checklist. Cite the actual commands/results. There is
-no hosted CI or public source review yet; do not claim otherwise.
+## Readiness evidence
 
-The current hold is Aaron's explicit instruction, not a tool approval failure.
-If the meaning of the initial working layer needs to change, obtain clarification
-before publishing. Never treat this document as authorization to waive a condition.
+- Verified C/Rust kernel comparison: `docs/VERIFICATION.md` and its raw evidence.
+  Both kernels pass 26 KUnit cases with identical configurations; original tests
+  are unchanged and the linked Rust implementation is confirmed.
+- Accepted direction: `docs/ARCHITECTURE.md`, linked from project instructions.
+- Contributor guide and source-tree entry points are prepared. Independent review
+  checked their setup paths, local links, scope, and limitations; the discovered
+  workspace-root checkpatch path was corrected.
+- Fresh-checkout reproduction passed against source revision `9047da37a`.
+  Restoration follows the contributor guide in an independent Git worktree;
+  tools are shared from the same verified host installation, not claimed as a
+  portable or hermetic SDK. Preflight, three native host tests, and nine gate
+  regression tests pass. The fresh kernel builds and boots with 26/26 KUnit cases
+  passing and the strict result gate satisfied. Evidence is under
+  `docs/evidence/publication-check/`. Publication changes after this revision are
+  documentation and evidence only; the kernel implementation is unchanged.
+- The GitHub fork retains the Linux repository network and full public ancestry.
+  The local checkout remains shallow. A full-history fetch was deliberately
+  stopped after the fork made it unnecessary for this push; Git connectivity
+  verification passed. Future historical investigation may deepen local history.
+- Reviewed 77 project-added historical blobs through `9047da37a`: no unexpected
+  binary/large artifacts or known credential-pattern matches; inherited license
+  files and upstream README are unchanged. This is a bounded repository hygiene
+  check, not a formal security/license audit. Final documentation changes are
+  checked separately for links, whitespace, and accurate scope.
+- There is no hosted CI or independent human-maintainer approval claim. The exact
+  first-push revision and GitHub verification will be recorded after success.
+
+No results are inferred from plans. The first push must preserve upstream history,
+include only reviewed project changes, and accurately expose the remaining work.
+The exact first-push commit and remote verification will be recorded after the
+operation succeeds.

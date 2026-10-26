@@ -6,18 +6,18 @@ Read [architecture decision 0001](docs/ARCHITECTURE.md), [AGENTS.md](AGENTS.md),
 before choosing work. Build toward complete Rust subsystems; preserve required
 boundaries while replacing unnecessary C conventions inside those subsystems.
 
-**Publication is currently held.** Aaron requested `rusix-org/rusix` as the public
-repository, but no source push is permitted until the first working layer and
-its documentation/contribution guidelines are ready. Repository creation alone
-does not lift that hold. The clone instructions below apply after source is
-published; they are not evidence that the remote already contains these files.
+The initial public scope is the built and tested integer-square-root migration,
+not a completed Rust kernel or production release. Aaron accepted that layer for
+the first source push once documentation is ready; module/export and broader
+architecture checks remain follow-up work. See [PUBLICATION.md](docs/PUBLICATION.md)
+for the readiness record and [PROGRESS.md](PROGRESS.md) for current limitations.
 
 ## Set up the workspace
 
 The kernel Git repository must currently be named `linux/` inside a separate
 workspace. Project scripts, configuration, and documents are tracked in its
 `rusix/` directory, with working copies in the parent workspace. From a new,
-empty directory on disk (not `/tmp`), after publication:
+empty directory on disk (not `/tmp`):
 
 ```sh
 mkdir rusix-work
@@ -143,7 +143,7 @@ Before requesting review, run relevant format/style checks and
 rustfmt --check linux/lib/math/int_sqrt_rust.rs tests/int_sqrt_host.rs
 ```
 
-Use the pinned kernel's coding guidelines and `scripts/checkpatch.pl` for changed
+Use the pinned kernel's coding guidelines and `linux/scripts/checkpatch.pl` for changed
 kernel code. Explain intentional warnings; do not suppress them merely to obtain
 a clean report. Include these items in the patch or PR description:
 
@@ -159,7 +159,7 @@ Do not commit binaries, tool installations, unrelated generated output, secrets,
 or incidental local files. Preserve selected verification artifacts deliberately,
 including their hashes and provenance, rather than uploading entire build trees.
 
-After publication opens, propose focused work and submit small patches or PRs
+Propose focused work and submit small patches or PRs
 against `rusix/main` through your own contribution branch/fork. Kernel-upstream
 maintainers are not automatically rusix reviewers; do not send project-specific
 work to them without an upstream submission plan. Human contributors remain

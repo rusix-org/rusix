@@ -41,12 +41,14 @@ directories and virtual machines for verification.
   Root copies are authoritative; edit them, then sync before committing.
 - Work on a `rusix/*` branch. Keep upstream remote named `upstream` and never
   push to it. Publishing remote `origin` is the public
-  `https://github.com/rusix-org/rusix.git`, created at Aaron's request.
-  **Publication hold:** do not push commits, branches, tags, source files, or
-  releases until the initial working layer is verified and project documentation
-  and contribution guidelines are updated. Follow `docs/PUBLICATION.md`; creating
-  the empty repository does not lift this hold. Do not rewrite history or discard
-  someone else's changes.
+  `https://github.com/rusix-org/rusix.git`, created as a GitHub fork of `torvalds/linux` at Aaron's request.
+  Aaron clarified that the existing kernel build and passing tests suffice for
+  the first source push once documentation and contribution guidance are ready.
+  Module/export and broader architecture checks remain disclosed follow-up work,
+  not first-push blockers. Follow `docs/PUBLICATION.md` and verify its readiness
+  evidence before the first push. No production release or complete-rewrite claim
+  is authorized by this milestone. Do not rewrite history or discard someone
+  else's changes.
 - Use small, reviewable migrations. Separate mechanical translation, interface
   changes, and algorithm changes. Retain attribution and SPDX identifiers.
 - Pin and record toolchain versions and configurations. Explain upstream

@@ -9,10 +9,12 @@ The actual kernel repository is `linux/`, branch `rusix/main`, based on upstream
 commit `21a7f44fd0765fcc5194130b28767786eba1d1e7`. Linux's license files,
 attribution, and source remain in that repository. The public repository is
 [rusix-org/rusix](https://github.com/rusix-org/rusix), configured as `origin`;
-Linux remains the `upstream` remote. The GitHub repository is currently empty:
-source publication is held until the initial working layer and contributor
-documentation are ready. See [the publication gate](docs/PUBLICATION.md).
-The local checkout is shallow.
+it is a GitHub fork of `torvalds/linux`, which remains the `upstream` remote.
+The initial public scope is the built and tested integer-square-root layer,
+with further module and architecture checks explicitly outstanding. See
+[the publication record](docs/PUBLICATION.md) for scope and readiness evidence.
+The original local checkout remains shallow; the GitHub fork retains Linux's
+upstream ancestry. This limits local historical inspection, not the public lineage.
 
 Start with [PROGRESS.md](PROGRESS.md) for current evidence and unfinished work,
 [AGENTS.md](AGENTS.md) for contribution/agent requirements, and

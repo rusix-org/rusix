@@ -1,0 +1,397 @@
+{
+  "base": "21a7f44fd0765fcc5194130b28767786eba1d1e7",
+  "audited_tip": "9047da37ac748390a4d9e18f0be69d92f67ab655",
+  "project_blobs_checked": 77,
+  "largest_blob_bytes": 43962,
+  "binary_or_large_artifacts": 0,
+  "credential_pattern_matches": 0,
+  "inherited_license_files_and_readme_unchanged": true,
+  "scope": "Project-added historical blobs only; heuristic credential patterns are not a formal security or license audit.",
+  "blobs": [
+    {
+      "oid": "4a90afe56a6db4d28b49ddfbc99e5f237140c5bc",
+      "path": "AGENTS.md",
+      "bytes": 15
+    },
+    {
+      "oid": "45005d21bc5e658b149be5e122663a718ecea427",
+      "path": "CONTRIBUTING.md",
+      "bytes": 681
+    },
+    {
+      "oid": "b8142bf3db9dcaf1d21807a0a6ba3982e8553f99",
+      "path": "README.md",
+      "bytes": 1673
+    },
+    {
+      "oid": "231040346793547d3b64b4280cdeaa0399cf84e8",
+      "path": "lib/math/Makefile",
+      "bytes": 478
+    },
+    {
+      "oid": "f58538a7edb73ebddcfe70dee61cd521c999e1b6",
+      "path": "lib/math/int_sqrt_exports.c",
+      "bytes": 249
+    },
+    {
+      "oid": "1e8c1edfb6e660d3ddaf6ee5ba5a2c47a7836e24",
+      "path": "lib/math/int_sqrt_rust.rs",
+      "bytes": 1946
+    },
+    {
+      "oid": "3680bdf40c0aa2d6aca2a114a69520a960df2c5c",
+      "path": "lib/math/tests/Makefile",
+      "bytes": 558
+    },
+    {
+      "oid": "0b7855a1cc8d6b1f97c80ec9b148729066e8ae8b",
+      "path": "lib/math/tests/int_sqrt_rusix_kunit.c",
+      "bytes": 4650
+    },
+    {
+      "oid": "4424e03a8d61fb5b29698c76005e3cb30b30594d",
+      "path": "rusix/AGENTS.md",
+      "bytes": 7814
+    },
+    {
+      "oid": "846ff229b9615d4710c8f09c89fe9a1b2288a156",
+      "path": "rusix/CONTRIBUTING.md",
+      "bytes": 9029
+    },
+    {
+      "oid": "db915262ef576998eadd3a001e9bb03b6c5559b4",
+      "path": "rusix/PROGRESS.md",
+      "bytes": 8711
+    },
+    {
+      "oid": "1175aa99e4a47f9659835e209f394c10a7fe9f3a",
+      "path": "rusix/README.md",
+      "bytes": 3164
+    },
+    {
+      "oid": "9e7324071d8c58b98fecff8ffafbeec9dcd806d6",
+      "path": "rusix/configs/x86_64-kunit.config",
+      "bytes": 288
+    },
+    {
+      "oid": "c96b8ab48f3545c69aa7ed0e90a9cd730dd1c3e7",
+      "path": "rusix/docs/ARCHITECTURE.md",
+      "bytes": 7275
+    },
+    {
+      "oid": "cf2a4a3e2a7121585c35e15845e2bfa8f700955c",
+      "path": "rusix/docs/ASSISTANCE.md",
+      "bytes": 2158
+    },
+    {
+      "oid": "b0f7cd9de5b33bd957aebc8525e47527ad8dff71",
+      "path": "rusix/docs/MIGRATIONS.md",
+      "bytes": 4433
+    },
+    {
+      "oid": "402aaac7cc67741daef3c58c65c6136ffa53be01",
+      "path": "rusix/docs/PUBLICATION.md",
+      "bytes": 2938
+    },
+    {
+      "oid": "20eb2d7b61395966c905f85cf24ab53b97fe34b3",
+      "path": "rusix/docs/ROADMAP.md",
+      "bytes": 3646
+    },
+    {
+      "oid": "4d6a07315cccc441db3a35e62719a5f45ca9431c",
+      "path": "rusix/docs/TOOLCHAIN.md",
+      "bytes": 3668
+    },
+    {
+      "oid": "0070e98277dd4c8652ca9885ebff810707415c54",
+      "path": "rusix/docs/VERIFICATION.md",
+      "bytes": 4240
+    },
+    {
+      "oid": "0e093cc264ee9543f34f91b0abeb2444cc7838c6",
+      "path": "rusix/docs/evidence/.gitattributes",
+      "bytes": 177
+    },
+    {
+      "oid": "74cfe80c50909438afd69c46d94b0e4d7474ed9e",
+      "path": "rusix/docs/evidence/int-sqrt/c-reviewed/boot/command.sh",
+      "bytes": 429
+    },
+    {
+      "oid": "954724b4f496973010720a80c1022435a284aa41",
+      "path": "rusix/docs/evidence/int-sqrt/c-reviewed/boot/mode.txt",
+      "bytes": 10
+    },
+    {
+      "oid": "65a053276c13285f259faf9eed00abbf00d64083",
+      "path": "rusix/docs/evidence/int-sqrt/c-reviewed/boot/qemu-version.txt",
+      "bytes": 101
+    },
+    {
+      "oid": "f4999bd40e3437b672342a4f9c244dcb6e0eb50b",
+      "path": "rusix/docs/evidence/int-sqrt/c-reviewed/boot/scripts.sha256",
+      "bytes": 234
+    },
+    {
+      "oid": "573541ac9702dd3969c9bc859d2b91ec1f7e6e56",
+      "path": "rusix/docs/evidence/int-sqrt/c-reviewed/build/build.exit",
+      "bytes": 2
+    },
+    {
+      "oid": "4d31fa1ba25d1f9c7d9bb933e81de6cb086ccc6f",
+      "path": "rusix/docs/evidence/int-sqrt/c-reviewed/build/build.log",
+      "bytes": 1608
+    },
+    {
+      "oid": "8283925f35f283a4283be5735e29a1800c5d0dbe",
+      "path": "rusix/docs/evidence/int-sqrt/c-reviewed/build/build.sha256",
+      "bytes": 240
+    },
+    {
+      "oid": "849ec8114b50423453a278ae4e3b98c91f063514",
+      "path": "rusix/docs/evidence/int-sqrt/c-reviewed/build/config",
+      "bytes": 43962
+    },
+    {
+      "oid": "aa63adcb6b2eb7633e3ed4b294f5e7b5bef0ba52",
+      "path": "rusix/docs/evidence/int-sqrt/c-reviewed/build/config.log",
+      "bytes": 275
+    },
+    {
+      "oid": "c246c1d6b8e10ae7a3bd5ab07a17262af4b0a18a",
+      "path": "rusix/docs/evidence/int-sqrt/c-reviewed/build/environment.log",
+      "bytes": 385
+    },
+    {
+      "oid": "9362b85d787301923b24c76fa85113f1299b26e0",
+      "path": "rusix/docs/evidence/int-sqrt/c-reviewed/console.log",
+      "bytes": 8045
+    },
+    {
+      "oid": "b30aa24c6b24c42576411bc99480b8e425d5d5c6",
+      "path": "rusix/docs/evidence/int-sqrt/c-reviewed/gate.log",
+      "bytes": 70
+    },
+    {
+      "oid": "202ade470461992f3bf9c4eaada754f28b1c3bdf",
+      "path": "rusix/docs/evidence/int-sqrt/c-reviewed/inputs.sha256",
+      "bytes": 240
+    },
+    {
+      "oid": "8736ec00657135762737663cfd0b7c1284623f62",
+      "path": "rusix/docs/evidence/int-sqrt/c-reviewed/kunit.json",
+      "bytes": 7694
+    },
+    {
+      "oid": "9f65f66c39a14145e00d69f64fea1e9e4d146f92",
+      "path": "rusix/docs/evidence/int-sqrt/int-sqrt-host-i686-fixed.log",
+      "bytes": 685
+    },
+    {
+      "oid": "5bdf1889cb1e42e111a55d789e45404bca525056",
+      "path": "rusix/docs/evidence/int-sqrt/int-sqrt-host-i686-qemu.log",
+      "bytes": 334
+    },
+    {
+      "oid": "f410a65b682c31ac7fb936d82888aeb12564e9ce",
+      "path": "rusix/docs/evidence/int-sqrt/int-sqrt-host-i686.log",
+      "bytes": 6915
+    },
+    {
+      "oid": "16320d8ada8613772ed2be56c30bfdc15200fd42",
+      "path": "rusix/docs/evidence/int-sqrt/int-sqrt-host.log",
+      "bytes": 191
+    },
+    {
+      "oid": "b6cb9b8652058be22cd16dcc17b3c0514dcc47ee",
+      "path": "rusix/docs/evidence/int-sqrt/link-evidence.txt",
+      "bytes": 603
+    },
+    {
+      "oid": "f6ca6d5df9007b9b822bcef85a094e06e73a4d6f",
+      "path": "rusix/docs/evidence/int-sqrt/manifest.json",
+      "bytes": 4293
+    },
+    {
+      "oid": "be065aeff67841dfdcac87e658c5871db4d7b5b6",
+      "path": "rusix/docs/evidence/int-sqrt/rust-reviewed/build/build.log",
+      "bytes": 1524
+    },
+    {
+      "oid": "65195f80ee3d79bf68083041ece54590cf5185d3",
+      "path": "rusix/docs/evidence/int-sqrt/rust-reviewed/build/build.sha256",
+      "bytes": 240
+    },
+    {
+      "oid": "f832527dbc2eb2a372b35ec1768fa334519a29fb",
+      "path": "rusix/docs/evidence/int-sqrt/rust-reviewed/build/environment.log",
+      "bytes": 385
+    },
+    {
+      "oid": "467838a5b79d4552ae205ee9fb45e2fb783c9494",
+      "path": "rusix/docs/evidence/int-sqrt/rust-reviewed/console.log",
+      "bytes": 8045
+    },
+    {
+      "oid": "e1ad780e96fd8aa1e8bfb05bdd7876a627b869ae",
+      "path": "rusix/docs/evidence/int-sqrt/rust-reviewed/inputs.sha256",
+      "bytes": 240
+    },
+    {
+      "oid": "2b837ce20eda7c170dbadc0c80ba938e2811bbf7",
+      "path": "rusix/docs/packages.lock",
+      "bytes": 3469
+    },
+    {
+      "oid": "ca09293f08c8986a2d6e06e45545e509a4394107",
+      "path": "rusix/scripts/boot-kunit.sh",
+      "bytes": 3414
+    },
+    {
+      "oid": "7d5d6eb0a3009b58d4d8dd18d46f32cb129dbda7",
+      "path": "rusix/scripts/build-kernel.sh",
+      "bytes": 2351
+    },
+    {
+      "oid": "f638ceaaca4175723f8c7dc50718cf3e050ed01b",
+      "path": "rusix/scripts/check-toolchain.sh",
+      "bytes": 1106
+    },
+    {
+      "oid": "eedfa830fcfd172060c5db6cbcc61745a304dae3",
+      "path": "rusix/scripts/install-local-tools.py",
+      "bytes": 1543
+    },
+    {
+      "oid": "f680835afdc31da469812c0e06a455c385ee9ce2",
+      "path": "rusix/scripts/sync-project-docs.sh",
+      "bytes": 1338
+    },
+    {
+      "oid": "1fc95b8bf04b7e0a24a35acfa53262efd1d2f93b",
+      "path": "rusix/scripts/test-int-sqrt-host.py",
+      "bytes": 3388
+    },
+    {
+      "oid": "9acb0422a8456022d56040b3bb4430388c2a177e",
+      "path": "rusix/scripts/validate-kunit-results.py",
+      "bytes": 3886
+    },
+    {
+      "oid": "e415c5441f596baec7a8594d189bf40fbc5cd3ed",
+      "path": "rusix/scripts/with-local-tools.sh",
+      "bytes": 354
+    },
+    {
+      "oid": "d842caa51ddd3a6e77ce9def7de0ccff331322bd",
+      "path": "rusix/tests/int_sqrt_host.rs",
+      "bytes": 2942
+    },
+    {
+      "oid": "75f80e87f13c05efeaeba3c007cf1bed15e87ef3",
+      "path": "rusix/tests/module-smoke/Makefile",
+      "bytes": 66
+    },
+    {
+      "oid": "224fb4bff823bf5f20c4939b6a9f9a0952ada4b0",
+      "path": "rusix/tests/module-smoke/README.md",
+      "bytes": 3598
+    },
+    {
+      "oid": "ce049279018e560c9b8fee07978f7a046c03055d",
+      "path": "rusix/tests/module-smoke/init.rs",
+      "bytes": 6987
+    },
+    {
+      "oid": "c9494864337689c98164920d15a62ee173d20f4f",
+      "path": "rusix/tests/module-smoke/int_sqrt_probe.c",
+      "bytes": 1715
+    },
+    {
+      "oid": "38c2756867b61629c62be0924cbcae77a9ae8e7c",
+      "path": "rusix/tests/test_kunit_gate.py",
+      "bytes": 2973
+    },
+    {
+      "oid": "bcf5db4ac68aa8d02e7f547bfd9d1336cf117302",
+      "path": "rusix/AGENTS.md",
+      "bytes": 6252
+    },
+    {
+      "oid": "aa3a0601f9b62ba7df6d6d923b862cb6328be5ed",
+      "path": "rusix/PROGRESS.md",
+      "bytes": 6038
+    },
+    {
+      "oid": "731edad792706e9feee3360972b003aa4daf28e1",
+      "path": "rusix/README.md",
+      "bytes": 2591
+    },
+    {
+      "oid": "c539ce8dc7025c91ba3b0182750ee94a5e365d94",
+      "path": "rusix/docs/MIGRATIONS.md",
+      "bytes": 2201
+    },
+    {
+      "oid": "7abcaa0e9654b43ae6686ce5f8c4abaaca5c2af5",
+      "path": "rusix/docs/ROADMAP.md",
+      "bytes": 3072
+    },
+    {
+      "oid": "b5674ae580398287be68e1215326b090fd8e39c7",
+      "path": "rusix/scripts/sync-project-docs.sh",
+      "bytes": 1011
+    },
+    {
+      "oid": "c23184d7505b5ed2d5d6e42340a4b3030f9a56e8",
+      "path": "rusix/PROGRESS.md",
+      "bytes": 5723
+    },
+    {
+      "oid": "db47511d48758a83078d50906497fc96cfa05218",
+      "path": "rusix/docs/MIGRATIONS.md",
+      "bytes": 2057
+    },
+    {
+      "oid": "ff3f80001c35a89bf70689dd7037e72efde5638c",
+      "path": "rusix/scripts/sync-project-docs.sh",
+      "bytes": 852
+    },
+    {
+      "oid": "7dfbe2e56372c200b6978e0346ad5e11c0f9a9dc",
+      "path": "rusix/AGENTS.md",
+      "bytes": 5098
+    },
+    {
+      "oid": "d4d41c1d0d22dcc0f68bf0618b782ba0ea24f980",
+      "path": "rusix/PROGRESS.md",
+      "bytes": 4476
+    },
+    {
+      "oid": "54595226ccb751142417e0cf5296fc67b4baa4d8",
+      "path": "rusix/docs/TOOLCHAIN.md",
+      "bytes": 1610
+    },
+    {
+      "oid": "d371cd3dff1b08c261862e388ed2a4cf05e5ba0b",
+      "path": "rusix/scripts/check-toolchain.sh",
+      "bytes": 1106
+    },
+    {
+      "oid": "741330963c7813b486094d9a342a1e9bd37be1ef",
+      "path": "rusix/scripts/sync-project-docs.sh",
+      "bytes": 514
+    },
+    {
+      "oid": "5a3313004859418b66ffd2f7f017ca4066ec44e0",
+      "path": "rusix/PROGRESS.md",
+      "bytes": 3418
+    },
+    {
+      "oid": "5aaaa1913fdb292aee910ccdb12466c1dfcaff4d",
+      "path": "rusix/scripts/sync-project-docs.sh",
+      "bytes": 536
+    }
+  ]
+}

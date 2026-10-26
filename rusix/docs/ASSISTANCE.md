@@ -11,7 +11,9 @@ instructions and progress tracking, preservation of upstream tests, and a base
 that outside contributors can scrutinize. Aaron then accepted Linux-compatible
 external behavior with Rust-native internals and incremental subsystem migration.
 He authorized parallel agents for independent work. The public repository was
-created at his request, with source publication explicitly held pending readiness.
+created at his request, with source publication initially held pending readiness. Aaron later clarified
+that the existing built/tested kernel layer is sufficient once docs are ready,
+and approved using a GitHub-recognized Linux fork.
 
 ## Assistance used
 
@@ -30,8 +32,9 @@ probe. The module fixture's compilation and source review are not runtime result
 
 Executed tests and limitations are recorded in `VERIFICATION.md`, `PROGRESS.md`,
 and the archived evidence. Tools included Git, rustc/rustfmt, Clang/LLVM, kernel
-Kbuild/KUnit, QEMU, Python harnesses, and kernel checkpatch. GitHub CLI created
-only the empty public repository; no source was pushed.
+Kbuild/KUnit, QEMU, Python harnesses, and kernel checkpatch. GitHub CLI initially created an empty public repository, then created the
+authorized Linux fork after retaining the empty placeholder under another name.
+The publication record tracks source-push readiness and results separately.
 
 Agent agreement is not independent human approval. No human DCO certification
 has been added by the agents. Before public submission, the human submitter must

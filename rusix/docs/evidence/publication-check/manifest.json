@@ -1,0 +1,35 @@
+{
+  "source_revision": "9047da37a",
+  "scope": "Fresh independent worktree plus contributor workspace restoration on the same host; tools reused from installed .tools; no portability claim.",
+  "results": {
+    "kernel_build_exit": 0,
+    "kernel_tests_passed": 26,
+    "native_host_tests_passed": 3,
+    "gate_regression_tests_passed": 9
+  },
+  "files": {
+    "build/build.exit": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+    "build/build.log": "376595dda3d9b13d3e6a407a1fca850a19089d4705488a8b0ca9ea5d348d03e5",
+    "build/build.sha256": "9d1c113fb7ee8cdda28c7f58fb21dcce8ef3f5be225a66e9c5d465386d2a52ac",
+    "build/config": "bc328a6fae98e2ad8eb03cda9b58c61db680cf10c489303afbf4ac4a3632d29a",
+    "build/config.log": "28ece339baa472b4efbd93ec0dc806a4c9789b740988ddb28557ec73eb651389",
+    "build/environment.log": "641d73214f0e518bf6e1dfb738f0439ca5e717d1252c08b3944d7e49f5fc5eb5",
+    "gate-tests.log": "d9d734ee1c2de67b748aeef1c4126433aa438ad8375ca953916f12b1df11414d",
+    "history-audit.json": "f1c10fe3b753a37115be16b0b21f52e04f02cc90c430f098e3cac847a3984c3a",
+    "host-tests.log": "5947862b22c3d6ec6beb115ae9d7178bac6fbe96095b9083066b33f39e005506",
+    "preflight.log": "50784c6411af08386f8fc86e368a5d06fea1175dd582d0152d13e2d365a2c8db",
+    "publication-001-boot.run/command.sh": "c42100e8d39775b894937dab5d2433e135c96a408ef6456a2f7d559b6eb12fe6",
+    "publication-001-boot.run/mode.txt": "40cef42f146406268fce98d2a44ba598a28c7fcabe3b4491f6461b557ee34d7d",
+    "publication-001-boot.run/qemu-version.txt": "b34bfa179fb1f64e0e13e43edf32c12ce2ee54296f4095938aabb083eda9dc97",
+    "publication-001-boot.run/scripts.sha256": "54ce316fc751b42e55b4b16a6a5c0813bc6bb1ac6dea5e3ab174814244417a7b",
+    "publication-001-console.log": "2255b9d2ac1087543ba0981a511677a00adf92abe82f3f2b104d9f187e7ab21c",
+    "publication-001-gate.exit": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+    "publication-001-gate.log": "ad43f24569e2b282db013c63b870c0a44c621937c14c7b43e1ff268fc170ef65",
+    "publication-001-inputs.sha256": "d21c9bbeefd8e288cf8be1febbe10e5ea76094397b9879d5149ab15d8610377f",
+    "publication-001-kunit.json": "1e26452e39438254f6cee314d11bde6a2f1f2d8f1543c0b9b4a96e5f00814520",
+    "publication-001-parse.exit": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+    "publication-001-parse.log": "6af6926193e64a7fb1e306e683688fbdd37e8e6465def149f61bb1deb415228c",
+    "publication-001-qemu.exit": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+    "publication-command.log": "68ed60db84cde24b87028e38ef657a27b8b40ff8cbaaad44adc2b6059eb6e79f"
+  }
+}

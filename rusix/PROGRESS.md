@@ -22,9 +22,10 @@ all executing C as unfinished migration work. See `docs/ARCHITECTURE.md` (decisi
 - Linux Makefile reports 7.3.0 during the 7.4 merge window. History is shallow.
 - Actual Git repository: `linux/`; root `.git` is a protected placeholder.
   Root docs/scripts are canonical and synchronized into tracked `linux/rusix/`.
-- Public GitHub repository `https://github.com/rusix-org/rusix` created at Aaron's
-  request and verified public/empty. `origin` points there; `upstream` still points
-  to Linux. **No source pushed:** publication held per `docs/PUBLICATION.md`.
+- Public GitHub repository `https://github.com/rusix-org/rusix` is now a verified
+  fork of `torvalds/linux`. `origin` points there; `upstream` still points to Linux.
+  Aaron accepted the existing built/tested layer for first publication once docs
+  are ready. Readiness checks pass; source push is pending. See `docs/PUBLICATION.md`.
 - No host kernel installation or host module loading.
 - Build with two jobs on disk under `builds/`; QEMU TCG uses one CPU/512 MiB.
 - Rust 1.99.0 (LLVM 23.1.1), Clang/LLD 23.1.3, bindgen 0.73.2, QEMU 11.1.2.
@@ -139,3 +140,25 @@ to exercise the existing unrestricted export. It has not yet been built as a
 module or executed in a VM. Keep that distinction explicit. GCD/LCM source
 investigation identified a coherent next cluster and its architecture-dependent
 dispatch constraint; recorded in `docs/MIGRATIONS.md`.
+
+### 2026-10-25 — First-publication scope clarified and reproduced
+
+Aaron explicitly accepted the existing kernel build and passing tests as a
+sufficient first layer if documentation is ready; module/export/CRC and fallback
+checks remain follow-up work rather than additional first-push prerequisites.
+Independent doc review confirmed the recorded 26/26 C/Rust results and found one
+contributor path error (`linux/scripts/checkpatch.pl`), now fixed.
+
+Aaron approved a GitHub-recognized Linux fork. Deletion of the empty standalone
+repository failed because the CLI token lacks `delete_repo`; it was retained as
+`rusix-org/rusix-empty-placeholder`. Created `rusix-org/rusix` as a public fork
+and verified parent `torvalds/linux`. Local remotes and commits are intact.
+
+Reproduced the documented restoration/build/test workflow from an independent
+clean worktree at `9047da37a`, using the same host tool installation: preflight,
+3 native host tests, 9 gate tests, a fresh kernel build, and 26 VM tests all pass.
+Raw evidence is archived in `docs/evidence/publication-check/`. Audited project
+history and retained upstream license/README content. The local full-history
+fetch was deliberately stopped after the GitHub fork preserved public ancestry;
+the local repository remains shallow and passes Git connectivity checks.
+First source push is the next action; broader rewrite work remains incomplete.
