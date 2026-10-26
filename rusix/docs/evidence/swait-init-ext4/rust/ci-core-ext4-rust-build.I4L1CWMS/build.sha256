@@ -1,0 +1,3 @@
+cafe71edc0273681a025dbfa4f894ae2187c1789795691d3eb504f16c359affc  /out/builds/ci-core-ext4-rust/.config
+2290e2d7422d31f43c2eac44ffb6c4df57ec856f108191b60000d761c17fdb04  /out/builds/ci-core-ext4-rust/arch/x86/boot/bzImage
+53ba5e987fd10d6d7c5b0b8db374e1169aa3b2a8dc6da5988b6623df1c1ade29  /out/builds/ci-core-ext4-rust/vmlinux

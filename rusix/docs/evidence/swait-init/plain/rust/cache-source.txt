@@ -1,0 +1,1 @@
+Kernel-only cache from /home/aaron/code/rusix/linux-out/lts-swait-init-plain-rust-001; original C config refusal retained (no compilation or guest run); Rust001 not started.

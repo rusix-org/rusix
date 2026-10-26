@@ -1,0 +1,2 @@
+/out/builds/ci-completion-plain-rust/drivers/block/brd_rust.o
+/out/builds/ci-completion-plain-rust/drivers/block/brd_rust/params.o

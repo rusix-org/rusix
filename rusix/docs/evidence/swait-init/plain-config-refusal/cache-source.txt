@@ -1,0 +1,1 @@
+Kernel cache from /home/aaron/code/rusix/linux-out/lts-swait-wrappers-c-001; renamed to new plain profile. Config resolution/rebuild required; originals retained.

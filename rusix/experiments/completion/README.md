@@ -1,16 +1,19 @@
 # Completion and swait core migration
 
 Linux 6.18.58 (`2926d88bb7fc4608fd942453d929c39e4e5ec006`) is the behavior
-reference. All fourteen completion.c entry points and nine swait.c operations
-have opt-in Rust implementations. At `e7b7b9a94103`, both implementations pass
-29 core cases plus nine BRD cases, then 29 isolated core cases with lock/list/sleep
-checks enabled. [Instrumented evidence](../../docs/evidence/swait-wrappers/manifest.json).
-The same source passes nine ordinary-userspace storage boots per implementation.
-[Ext4 evidence](../../docs/evidence/swait-wrappers-ext4/manifest.json).
+reference. All fourteen completion.c entry points and all ten swait.c entry points
+have opt-in Rust implementations. Debug verification at `61882366fe7e` and
+nondebug verification at `9bba720b206b` each pass 30 core cases plus nine BRD
+cases, then 30 isolated core cases, on both C/Rust kernels. The only source
+change between them corrects the plain-profile DEBUG_KERNEL menu request;
+production and test code are identical. [Evidence](../../docs/evidence/swait-init/manifest.json).
+At `9bba720b206b`, both kernels also pass nine ordinary-userspace storage boots.
+[Ext4 evidence](../../docs/evidence/swait-init-ext4/manifest.json).
 
 `CONFIG_RUSIX_COMPLETION_RUST` defaults off and requires Rust/x86_64 builtins.
 The four driver families with incompatible plain counter access are excluded by
-Kconfig. Use the local `completion-c`/`completion-rust` and
+Kconfig. Use the local `completion-c`/`completion-rust`,
+`completion-plain-c`/`completion-plain-rust` and
 `core-ext4-c`/`core-ext4-rust` profiles; [execution policy](../../ci/README.md).
 No subsystem divergence point is declared.
 
@@ -46,7 +49,7 @@ Every exit restores task state and unlinks before stack storage disappears.
 Preserve signal/timeout race order, positive timeout success of at least one jiffy,
 signed returns and I/O accounting. All nine entries retain `.sched.text` placement.
 
-[`swait_rust.rs`](../../../kernel/sched/swait_rust.rs) implements four shared
+[`swait_rust.rs`](../../../kernel/sched/swait_rust.rs) implements the initializer, four shared
 locked primitives and five outer wrappers. They preserve FIFO enrollment/removal,
 not CPU execution order. Wake precedes unlink; unlink is the final waiter access:
 a generic finisher may observe self-links and free its stack before the waker
@@ -64,10 +67,17 @@ the original C consumer macro determines condition precedence. Finish restores
 RUNNING before `list_empty_careful`, then locks and deletes without a second check.
 C macro adapters preserve marked pointer accesses, list validation and state hooks.
 
+The initializer preserves raw-lock setup, then caller class/name installation,
+then final-address self-links. Two C macro adapters retain configuration-specific
+raw-lock initialization and LD_WAIT_SPIN. Lockdep metadata follows its registration
+and lifetime rules and can outlive individual queues; without lockdep its supplied
+key/name are unused. Plain self-link stores require exclusive quiescent storage
+and subsequent synchronized publication, not merely an address to a live queue.
+
 ## Verification and remaining coverage
 
 The strict `rusix_completion_*` inventory has five contract, eight layout,
-four wait, four signal and eight swait cases:
+four wait, four signal and nine swait cases:
 
 - Counter/token/saturation/broadcast behavior, layout and pinned C-visible storage.
 - All blocking entry points on presignals/broadcast; timed zero/positive exits.
@@ -78,6 +88,8 @@ four wait, four signal and eight swait cases:
 - Fresh/enrolled pending-signal removal preserves a distinct task state and IRQs.
 - Generic interruptible error versus condition becoming true after prepare.
 - Initial broadcast batch removal and a separately enrolled post-return waiter.
+- Initializer self-links, raw locking and IRQ preservation; exact caller key/name
+  and LD_WAIT_SPIN with lockdep, ignored null metadata arguments without it.
 
 Workers own pinned Arcs and use finite deadlines. Successful stopped-thread creation
 transfers one Arc to its callback and retains a task reference before wakeup;
@@ -88,7 +100,7 @@ retain ownership until return. KUnit-only C observation helpers are absent from
 ordinary userspace/server builds.
 
 Required gates reject missing, duplicate, skipped or failed cases. Symbol/archive
-checks prove all fourteen completion and nine swait definitions come from the
+checks prove all fourteen completion and ten swait definitions come from the
 selected objects, and verify scheduler text placement. Instrumented profiles enable
 BUG, lockdep/raw-lock nesting, atomic-sleep, DEBUG_LIST and LIST_HARDENED. Earlier
 minimal profiles lacked BUG and did not establish the same assertion coverage.
@@ -103,13 +115,13 @@ errors and warnings resolved before the passing pairs.
 
 ## Remaining C and next ownership step
 
-C still executes queue/completion initialization/reset, raw-lock and lockdep
+C still executes inline completion initialization/reset, raw-lock and lockdep
 macros, list/state/LKMM adapters, task wakeup, scheduler/timer/signal primitives
-and generic consumer macros. Next translate the swait initializer while preserving
-raw-lock class/name and LD_WAIT_SPIN in debug/nondebug configurations. Its
-constructor needs exclusive quiescent storage and synchronized publication; that
-argument cannot justify unmarked writes on live queues. Then retire adapters as
-Rust owns the corresponding primitives and callers. Preserve upstream tests,
+and generic consumer macros. Next migrate generic wait.c callback traversal and
+wake wrappers, retaining a cached successor and never accessing a waiter after
+its callback: callbacks may unlink/free themselves before returning. Mixed C
+flag accesses need a separate audit before Rust can access them directly. Retire
+adapters as Rust owns their primitives and callers. Preserve upstream tests,
 including `test-ww_mutex`, and the declared configuration bounds.
 
 `model.rs` remains a host-only standard-library ownership model: five tests cover
@@ -117,14 +129,3 @@ accounting, saturation, quiescent reset, abandoned storage and concurrent consum
 [Historical host evidence](../../docs/evidence/completion-host/manifest.json).
 It provides no kernel layout, IRQ, LKMM or blocking-wait proof. Run it with
 `rustc --edition=2021 --test -D warnings`, writing the binary outside the source tree.
-
-## Initializer migration under verification
-
-`__init_swait_queue_head` now has a Rust-selected body. It preserves raw-lock
-initialization, then caller class/name installation, then final-address self-links.
-Two C macro adapters retain debug/nondebug raw-lock behavior and LD_WAIT_SPIN.
-Lockdep metadata follows its registration/lifetime rules, potentially outliving
-an individual queue. Without lockdep, supplied key/name pointers are not read.
-Plain Rust initialization stores require exclusive quiescent storage and later
-synchronized publication; this does not license plain stores on live queues.
-The tenth-symbol gate covers selection. Paired runtime verification is pending.

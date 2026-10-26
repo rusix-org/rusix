@@ -9,8 +9,8 @@ boundaries. [The roadmap](docs/ROADMAP.md) orders that work.
 
 **Phase 1a remains in progress; most kernel code is still C.** The baseline is
 **Linux 6.18.58 LTS**. Rust BRD passes paired block and ordinary-userspace ext4
-tests. All fourteen completion.c entry points and nine shared/generic swait
-operations have opt-in Rust implementations, verified by instrumented C/Rust
+tests. All fourteen completion.c and ten swait.c entry points have opt-in Rust
+implementations, verified by instrumented C/Rust
 comparisons and ordinary ext4 integration.
 [PROGRESS.md](PROGRESS.md) links exact source/configuration evidence and remaining
 gates, including BRD parameter behavior and the C queue/scheduler dependencies.
