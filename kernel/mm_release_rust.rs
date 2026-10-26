@@ -10,6 +10,12 @@
 
 use kernel::bindings::{mm_struct, work_struct};
 
+// The pinned bindgen MM/work types can reach GNU empty sched_statistics.
+// The observed lint concerns that nested type, but all aggregates in this block
+// cross only as raw pointers (including the callback's work_struct pointer).
+// Scalar results are C bool or void; no foreign aggregate crosses by value or
+// has its layout read by Rust. Keep this audited ABI exception local.
+#[allow(improper_ctypes)]
 unsafe extern "C" {
     fn rusix_mm_release_might_sleep();
     fn rusix_mm_release_users_dec(mm: *mut mm_struct) -> bool;

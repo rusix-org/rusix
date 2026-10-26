@@ -223,3 +223,9 @@ shared child's emitted code contains inline syscalls, without libc/helper calls
 or TLS accesses. Both binaries remain non-executable files on the host.
 [Compile evidence](docs/evidence/mm-copy-fixtures/manifest.json) records this
 limited result; neither binary nor the MM-copy kernel has been run.
+
+The inherited MM-release extern block now includes the reviewed pointer-only
+FFI annotation from `cfc899021ac6`. It responds to 33 actual nested GNU-empty-type
+warnings in the release build at `42318e69e5f2`; the kernel policy is unchanged.
+That run passed C80/67/4 but no Rust VM. This candidate still requires its own
+clean kernel build and paired VM tests.
