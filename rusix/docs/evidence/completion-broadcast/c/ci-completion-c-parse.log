@@ -1,0 +1,35 @@
+[07:03:24] ============================================================
+[07:03:24] =============== rusix_noio_scope (1 subtest) ===============
+[07:03:24] [PASSED] nested_scopes_restore_task_policy_on_error
+[07:03:24] ================ [PASSED] rusix_noio_scope =================
+[07:03:24] ========== rusix_completion_contract (5 subtests) ==========
+[07:03:24] [PASSED] initial_state_has_no_token
+[07:03:24] [PASSED] presignals_are_consumed_once_each
+[07:03:24] [PASSED] broadcast_persists_until_quiescent_reset
+[07:03:24] [PASSED] zero_timeout_reports_completion_and_consumes_token
+[07:03:24] [PASSED] signal_saturates_instead_of_wrapping
+[07:03:24] ============ [PASSED] rusix_completion_contract ============
+[07:03:24] =========== rusix_completion_layout (5 subtests) ===========
+[07:03:24] [PASSED] c_operations_share_pinned_rust_owned_storage
+[07:03:24] [PASSED] worker_handoff_observes_published_value
+[07:03:24] [PASSED] two_workers_consume_exactly_two_tokens
+[07:03:24] [PASSED] broadcast_serves_two_workers_and_late_waiters
+[07:03:24] [PASSED] timed_out_worker_unlinks_before_late_signal
+[07:03:24] ============= [PASSED] rusix_completion_layout =============
+[07:03:24] ============= rusix_xarray_insert (2 subtests) =============
+[07:03:24] [PASSED] occupied_insert_returns_owner_without_replacing
+[07:03:24] [PASSED] array_drop_releases_inserted_owner
+[07:03:24] =============== [PASSED] rusix_xarray_insert ===============
+[07:03:24] =============== rusix_brd_store (3 subtests) ===============
+[07:03:24] [PASSED] lookup_and_repeated_insert_preserve_page
+[07:03:24] [PASSED] discard_keeps_inflight_page_alive_and_reinsert_is_independent
+[07:03:24] [PASSED] discard_excludes_end_and_is_idempotent
+[07:03:24] ================= [PASSED] rusix_brd_store =================
+[07:03:24] ============== rusix_brd_policy (3 subtests) ===============
+[07:03:24] [PASSED] minor_count_preserves_defined_normalization
+[07:03:24] [PASSED] invalid_minor_normalization_is_rejected
+[07:03:24] [PASSED] legacy_size_retains_prefix_and_wrapping_semantics
+[07:03:24] ================ [PASSED] rusix_brd_policy =================
+[07:03:24] ============================================================
+[07:03:24] Testing complete. Ran 19 tests: passed: 19
+[07:03:24] Test results stored in /out/logs/ci-completion-c-kunit.json

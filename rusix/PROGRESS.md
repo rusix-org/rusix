@@ -37,15 +37,15 @@ The paired core builds at `7effedcbb1bf` report no compiler/objtool diagnostics.
 Rust completion remains off by default: IRQ-context checks, broader integration
 and the rest of completion/wait-queue/scheduler ownership remain unfinished.
 
-Current branch `rusix/completion-broadcast` adds opt-in Rust `complete_all()`
-and a tenth core case requiring two enrolled waiters to wake before their
-timeouts, then verifying persistent broadcast state for late waiters. Production
-logic and the bounded test have been reviewed; paired compilation/runtime are
-pending. A KUnit-only C queue-inspection helper is temporary and absent from
-the server target. The assertion helper's nonempty lockdep configuration still
-needs separate verification.
+On `rusix/completion-broadcast`, Rust now also implements `complete_all()`.
+C and Rust each pass ten core cases plus nine BRD cases at `abec6b9cd125`,
+with exclusive symbol selection and no compiler/objtool diagnostics. The new
+broadcast case observes two queued waiters and requires prompt wakeup, then
+checks late waits. [Paired evidence](docs/evidence/completion-broadcast/manifest.json).
+The queue-inspection helper is KUnit-only and excluded from the server target.
 
-Next: verify the broadcast slice, then resolve the remaining Phase 1a parameter/adapter and review gates; extend
+Next: migrate current-CPU signaling and the common wait engine, then the
+lockless counter checks; resolve the remaining Phase 1a parameter/adapter and review gates; extend
 core IRQ-context and integration coverage. arm64, module lifetime, expanded fault/concurrency stress and
 performance budgets remain Phase 1b.
 See [ADR 0002](docs/adr/0002.md) and [delivery gates](docs/PHASE1.md).

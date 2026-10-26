@@ -1,0 +1,6 @@
+/out/builds/ci-completion-c/kernel/sched/build_utility.o
+0000000000002a40 T complete
+0000000000002ab0 T complete_all
+/out/builds/ci-completion-c/vmlinux
+ffffffff81284dd0 T complete
+ffffffff81284e40 T complete_all

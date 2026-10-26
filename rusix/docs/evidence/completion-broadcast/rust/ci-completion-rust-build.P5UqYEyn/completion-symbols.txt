@@ -1,0 +1,6 @@
+/out/builds/ci-completion-rust/kernel/sched/completion_rust.o
+0000000000000010 T complete
+0000000000000060 T complete_all
+/out/builds/ci-completion-rust/vmlinux
+ffffffff81288f50 T complete
+ffffffff81288fa0 T complete_all

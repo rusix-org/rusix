@@ -1,0 +1,12 @@
+implementation=completion-rust
+/out/builds/ci-completion-rust/kernel/sched/completion_rust.o
+/out/builds/ci-completion-rust/kernel/sched/completion_rust.o
+0000000000000010 T complete
+0000000000000060 T complete_all
+/out/builds/ci-completion-rust/vmlinux
+ffffffff81288f50 T complete
+ffffffff81288fa0 T complete_all
+96ab49063a7545ec8c82ec8ec2e59b230453167632cf537b996a464f346bd5c1  /src/kernel/sched/completion.c
+7a9536c067e47616f127bfa020417071dd3fc82cc5f3680de22fa319ca9d80e7  /out/builds/ci-completion-rust/kernel/sched/completion_rust.o
+ed53fff52b941a843ba69bf4eddbd9b5d52c8d00fa041641df2c911f8c7faf98  /src/kernel/sched/completion_rust.rs
+eeadd24d9c3af06ea88ac3b23c5b2de0684572aad447d24c2351eee886d52e49  /src/rust/helpers/raw_spinlock.c

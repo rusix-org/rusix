@@ -1,0 +1,103 @@
+{
+    "name": "KUnit Test Group",
+    "sub_groups": [
+        {
+            "name": "rusix_completion_contract",
+            "sub_groups": [],
+            "test_cases": [
+                {
+                    "name": "initial_state_has_no_token",
+                    "status": "PASS"
+                },
+                {
+                    "name": "presignals_are_consumed_once_each",
+                    "status": "PASS"
+                },
+                {
+                    "name": "broadcast_persists_until_quiescent_reset",
+                    "status": "PASS"
+                },
+                {
+                    "name": "zero_timeout_reports_completion_and_consumes_token",
+                    "status": "PASS"
+                },
+                {
+                    "name": "signal_saturates_instead_of_wrapping",
+                    "status": "PASS"
+                }
+            ],
+            "misc": {
+                "tests": 5,
+                "passed": 5,
+                "failed": 0,
+                "crashed": 0,
+                "skipped": 0,
+                "errors": 0
+            },
+            "arch": "",
+            "defconfig": "",
+            "build_environment": "",
+            "lab_name": null,
+            "kernel": null,
+            "job": null,
+            "git_branch": "kselftest"
+        },
+        {
+            "name": "rusix_completion_layout",
+            "sub_groups": [],
+            "test_cases": [
+                {
+                    "name": "c_operations_share_pinned_rust_owned_storage",
+                    "status": "PASS"
+                },
+                {
+                    "name": "worker_handoff_observes_published_value",
+                    "status": "PASS"
+                },
+                {
+                    "name": "two_workers_consume_exactly_two_tokens",
+                    "status": "PASS"
+                },
+                {
+                    "name": "broadcast_serves_two_workers_and_late_waiters",
+                    "status": "PASS"
+                },
+                {
+                    "name": "timed_out_worker_unlinks_before_late_signal",
+                    "status": "PASS"
+                }
+            ],
+            "misc": {
+                "tests": 5,
+                "passed": 5,
+                "failed": 0,
+                "crashed": 0,
+                "skipped": 0,
+                "errors": 0
+            },
+            "arch": "",
+            "defconfig": "",
+            "build_environment": "",
+            "lab_name": null,
+            "kernel": null,
+            "job": null,
+            "git_branch": "kselftest"
+        }
+    ],
+    "test_cases": [],
+    "misc": {
+        "tests": 10,
+        "passed": 10,
+        "failed": 0,
+        "crashed": 0,
+        "skipped": 0,
+        "errors": 0
+    },
+    "arch": "",
+    "defconfig": "",
+    "build_environment": "",
+    "lab_name": null,
+    "kernel": null,
+    "job": null,
+    "git_branch": "kselftest"
+}

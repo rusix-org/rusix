@@ -1,0 +1,1 @@
+Copied object cache from lts-completion-rust-002; original retained. Source and configuration are revalidated.

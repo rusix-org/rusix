@@ -1,0 +1,1 @@
+Copied object cache from lts-completion-c-004; original retained. Source and configuration are revalidated.

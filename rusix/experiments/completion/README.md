@@ -1,18 +1,12 @@
 # Completion ownership and partial core migration
 
 Linux 6.18.58 (`2926d88bb7fc4608fd942453d929c39e4e5ec006`) remains the
-behavior reference. The opt-in Rust `complete()` builds, links exclusively and
-passes all nine core cases on q35 against C at `7effedcbb1bf`, including all
-three worker cases. [Paired evidence](../../docs/evidence/completion-paired/manifest.json).
-`CONFIG_RUSIX_COMPLETION_RUST` defaults off and requires Rust/x86_64. Local
-`completion-c` and `completion-rust` build profiles select the comparison paths.
+behavior reference. Opt-in Rust `complete()` and `complete_all()` build, link
+exclusively and pass all ten core cases against C on q35 at `abec6b9cd125`.
+[Paired broadcast evidence](../../docs/evidence/completion-broadcast/manifest.json).
+`CONFIG_RUSIX_COMPLETION_RUST` defaults off and requires Rust/x86_64;
+`completion-c` and `completion-rust` are the local comparison profiles.
 This is neither a completed subsystem nor a declared divergence point.
-
-The current broadcast branch additionally translates `complete_all()` into Rust
-and requires a tenth case: two observed queued waiters must finish promptly after
-one broadcast, and late waits must remain successful. This extension awaits
-paired compilation/runtime. Its KUnit-only queue count takes the existing raw
-lock, performs no completion policy and is excluded from the server target.
 
 ## Implementation and remaining boundary
 
@@ -29,10 +23,9 @@ No Rust reference covers the containing concurrently mutable C object. Raw field
 projection and scoped atomic access preserve the existing storage/alias boundary;
 callers must keep initialized, pinned storage alive until the final lock release.
 
-C still owns initialization/reset, `complete_all`, `complete_on_current_cpu`,
+C still owns initialization/reset, `complete_on_current_cpu`,
 try-wait/status operations, all blocking/timed/interruptible wait loops, swait
-queues, scheduler wakeups, and task/timer/signal integration. Two C helpers expose
-existing raw-spin IRQ-save/restore primitives; LKMM atomic helpers remain C too.
+queues, scheduler wakeups, and task/timer/signal integration. Raw-spin and lockdep macro helpers, plus LKMM atomic helpers, remain C.
 Replace those boundaries only with reviewed Rust scheduler/locking/atomic
 interfaces. Preserve FIFO enrollment (not task execution order), saturation,
 timeout success of at least one jiffy, interrupt errors and race ordering.
@@ -44,10 +37,10 @@ stack callback lifetime, while `__kthread_create_on_node` requires ownership
 handoff or a second wait after interruption. A timeout alone never permits freeing
 callback storage. `completion_done` is not proof of producer/waiter quiescence.
 
-## Kernel verification: nine current cases
+## Kernel verification: ten current cases
 
 Select `kunit.filter_glob=rusix_completion_*`. The strict current inventory is
-five `rusix_completion_contract` cases plus four `rusix_completion_layout` cases:
+five `rusix_completion_contract` cases plus five `rusix_completion_layout` cases:
 
 - Initial empty state, pre-signal consumption, persistent broadcast/reset,
   zero-timeout return/consumption, and saturation.
@@ -56,6 +49,9 @@ five `rusix_completion_contract` cases plus four `rusix_completion_layout` cases
 - `worker_handoff_observes_published_value`: single completion and LKMM payload
   publication; pre-signaling is allowed, blocked wakeup is not guaranteed.
 - `two_workers_consume_exactly_two_tokens`: concurrent waiters and two signals.
+- `broadcast_serves_two_workers_and_late_waiters`: a KUnit-only helper counts
+  two enrolled waiters under the queue lock; both must finish before worker
+  timeouts, and late waits remain successful. The helper is absent from server builds.
 - `timed_out_worker_unlinks_before_late_signal`: positive timeout followed by a
   late signal consumed exactly once.
 
@@ -65,7 +61,8 @@ Their final notification acknowledges data access, not callback exit; retained
 Arc ownership protects late callbacks. VM timeout bounds scheduler failure.
 Missing, duplicate, skipped or failing cases reject a run. FIFO execution,
 interruptible cancellation, deadline races, IRQ-context checks, lockdep/KASAN,
-arm64 and Rust-completion-selected ext4 integration remain gaps.
+arm64, the nonempty `PROVE_RAW_LOCK_NESTING` assertion branch, and
+Rust-completion-selected ext4 integration remain gaps.
 BRD ownership has a separate nine-case inventory.
 
 **Historical evidence:** the original five contract cases and one layout case
@@ -88,7 +85,11 @@ rustc --edition=2021 --test -D warnings rusix/experiments/completion/model.rs \
 ../lts-integration-out/experiments/completion/model-test
 ```
 
-Next: verify paired symbol selection and the ten-case broadcast extension, then extend Rust
-counting/wait-loop control with pinned waiter unlink on every return path. Queue
-ownership and scheduler integration follow; Rust-native endpoints require retiring
-C embedding/access. Preserve upstream tests, including `test-ww_mutex`, unchanged.
+Next: migrate `complete_on_current_cpu`, then the common wait engine and its
+entry points, followed by `try_wait_for_completion` and `completion_done`.
+Remove concurrent unmarked C counter writes before introducing lockless Rust
+atomic references; the existing locked proof cannot justify those references.
+Waiters need pinned stack storage and guaranteed unlink under the queue lock on
+every exit. Preserve timeout/signal race order, IRQ transitions and I/O accounting.
+Queue ownership and scheduler integration follow; Rust-native endpoints require
+retiring C embedding/access. Preserve upstream `test-ww_mutex` unchanged.
