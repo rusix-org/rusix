@@ -1,0 +1,12 @@
+{
+  "name": "count_0_max_1",
+  "rd_nr": 0,
+  "rd_size": 4096,
+  "max_part": 1,
+  "requested_max_part": 1,
+  "options": [
+    "brd.rd_nr=0",
+    "brd.rd_size=4096",
+    "brd.max_part=1"
+  ]
+}

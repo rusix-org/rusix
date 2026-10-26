@@ -1,0 +1,26 @@
+implementation=swait-c
+/out/builds/ci-brd-ext4-rust/kernel/sched/build_utility.o
+/out/builds/ci-brd-ext4-rust/kernel/sched/build_utility.o
+0000000000002c30 T __init_swait_queue_head
+0000000000002d90 T __prepare_to_swait
+0000000000002ee0 T __finish_swait
+0000000000002c50 T swake_up_locked
+0000000000002b70 T swake_up_all_locked
+0000000000002c90 T swake_up_one
+0000000000002cf0 T swake_up_all
+0000000000002dd0 T prepare_to_swait_exclusive
+0000000000002e30 T prepare_to_swait_event
+0000000000002f20 T finish_swait
+/out/builds/ci-brd-ext4-rust/vmlinux
+ffffffff812945a0 T __init_swait_queue_head
+ffffffff81294700 T __prepare_to_swait
+ffffffff81294850 T __finish_swait
+ffffffff812945c0 T swake_up_locked
+ffffffff812944e0 T swake_up_all_locked
+ffffffff81294600 T swake_up_one
+ffffffff81294660 T swake_up_all
+ffffffff81294740 T prepare_to_swait_exclusive
+ffffffff812947a0 T prepare_to_swait_event
+ffffffff81294890 T finish_swait
+7a4b16a13ac282ea4335cc33e5779c6208734a9b0d1f6ca547cf28d327f9a3f8  /src/kernel/sched/swait.c
+357b43377f317c5c0b890b6083286a3382a9ed6cac50120593c8f31d7208e954  /out/builds/ci-brd-ext4-rust/kernel/sched/build_utility.o

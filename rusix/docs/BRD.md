@@ -32,11 +32,9 @@ validation, including capacity bounds and operation filtering. Inspect
 `block/fops.c`, `block/blk-core.c`, `include/linux/bio.h`, and
 `include/linux/blkdev.h` when defining the submission abstraction.
 
-Pinned `brd_init` ignores individual `brd_alloc` errors while creating the initial
-devices. Capture this behavior under allocation injection before deciding whether
-to change it. Initialization fixes must be explicit semantic changes, not hidden
-inside translation. Likewise, inspect each registration/debugfs failure path;
-copying its control flow alone does not establish sound Rust ownership.
+Rust preserves `brd_init`'s ignored per-device preallocation errors. Failed
+reservations are removed, allowing later on-demand retry; allocation-injection
+coverage remains separate from this source-level cleanup argument.
 
 ## Shared block contract probe
 
@@ -96,9 +94,13 @@ work informed this adaptation; its allocator dependencies are described below.
 
 For a transfer, release the index lock before acquiring the slot lock. Hold the
 slot lock only across the bounded page access; never allocate or acquire the
-index lock while holding it. Prove callback interrupt/preemption contexts before
-choosing plain `SpinLock` versus an interrupt-safe variant. A spinlock is not a
-sleeping mutex, but its permitted contexts still matter, including RT builds.
+index lock while holding it. Plain locks are justified for the declared built-in,
+non-RT block/ext4 stack: `submit_bio_noacct` requires sleepable context, and the
+block, iomap/ext4, buffer/JBD2 and discard callers submit from tasks. Neither
+store nor page locks have IRQ-side users; debugfs count reads are process-context
+operations. NOWAIT changes allocation policy, not submission context. Completion
+runs after both guards are gone. New stacked-driver or RT configurations require
+another context audit.
 
 Discard removes the index Arc and decrements the indexed-page counter while
 holding the index lock. In-flight Arc owners keep the detached page alive; a later
@@ -111,31 +113,42 @@ The slot introduces an additional allocation, Arc operations and lock contention
 Measure these costs against the Phase 1 memory/performance budget and inject
 failure at both page and metadata allocations. Do not assume the budget passes.
 
-## Unsafe boundaries still requiring proof
+## Reviewed unsafe boundaries
 
-The slot lock can exclude overlapping accesses to the private backing page.
-It does **not** by itself make a bio buffer exclusive or race-free. Direct I/O
-can pin userspace pages that userspace can still access (`block/fops.c`). The
-existing `Page::read_raw` and `write_raw` use `copy_nonoverlapping`; their raw
-pointer arguments do not waive Rust's validity, overlap or race requirements.
-A borrowed bio page's lifetime is therefore insufficient justification for making
-an exclusive slice or performing an ordinary Rust copy. Review a transfer
-primitive appropriate for concurrently accessible bio memory, prove backing/bio
-non-aliasing or handle aliases, and keep mappings scoped to the executing task.
-No safe bio-copy API should be exposed until these conditions are established.
+`block::bio::SubmittedBio` owns one completion obligation, not an extra bio
+reference. Its raw constructor requires valid pinned vectors and exclusive
+iterator/status access. A segment borrow prevents advancement or completion;
+checked transfers fit both payload and backing pages. Completion sets the local
+completed flag before `bio_endio` and never accesses the bio afterward. Ordinary
+Rust early returns complete with I/O error; panic is not an unwind guarantee.
 
-The implementation adds these transitional interfaces:
+The backing pages are private, Arc-retained and locked; they are never exposed as
+bio payloads or user mappings. Bio payloads can remain user-mapped and concurrently
+accessible. Transfers therefore use the C highmem copy/zero primitives, with
+bounded ranges and reverse-order local unmapping, without creating Rust payload
+references or slices. This deliberately retains the kernel's C memory-access
+boundary rather than claiming ordinary Rust copies are valid for that memory.
 
-- Bio-based disk registration with matching queue limits, major/minor policy,
-  parameters, on-demand discovery, initialization rollback and deregistration.
-  `block::bio_disk` uses `__blk_alloc_disk`; the inherited mq builder uses
-  `__blk_mq_alloc_disk` and would change the submission model.
-- A submitted-bio abstraction with validated segment iteration, bounded advance,
-  status mapping and exactly-once completion. Completion must consume access to
-  the bio; device state must outlive every callback and cleanup path.
-- The conditional xarray operation and allocation scope above, plus a reviewed
-  backing/bio transfer abstraction. C helpers may expose inline/macro boundaries;
-  driver ownership, data-path decisions and lifecycle policy belong in Rust.
+`block::bio_disk` uses `__blk_alloc_disk`, retaining bio-based submission. It
+installs typed state before publication, including early partition-scan I/O.
+In pinned `block/genhd.c`, all registration errors precede `add_disk_final`,
+which sets `GD_ADDED` and cannot return failure. Failure guards therefore release
+one foreign Arc and the initial disk reference; final release cannot also call
+`free_disk` on that failed registration. On success the initial reference protects
+the infallible guard handoff. Each submission clones its own state Arc before
+calling driver code. `del_gendisk` drains submissions before `put_disk`; final
+`free_disk` consumes the disk's foreign Arc, while other retained owners may live
+longer. This does not permit synchronous self-teardown inside a completion.
+
+Registry construction reserves a number under its mutex, builds outside it, and
+re-finds that number before installation or rollback. Duplicate probes can see
+an unfinished reservation, as in C. Major-registration failure clears the global
+Arc; optional debugfs failure does not reject a registered disk. Pinned
+`blk_probe_dev` holds `major_names_lock` through the callback, so unregistering
+the major excludes probes before clearing the registry and dropping registrations
+outside its mutex. Debugfs entries are removed before their retained state drops.
+These source arguments cover the selected built-in paths; ordinary VM shutdown
+does not exercise `RustBrd::drop` or prove module unloading.
 
 ## Upstream work to evaluate first
 
@@ -156,26 +169,29 @@ authorship and review context, and test any adaptation rather than assuming an
 unmerged series is sound. Generic interfaces should be suitable for upstream
 review even though this project's long-term direction is governed by ADR 0002.
 
-## Remaining verification
+## Verification and remaining scope
 
-[Paired q35 verification](evidence/brd-q35/manifest.json) at `9d1c1ca5dd` passes
-block6, ext4 six cases, six parameter/on-demand boots and partition5 (including
-clipped writes). Each fixture archive is identical across C/Rust; configs differ
-only in BRD selection. This historical evidence predates the selected parameter
-correction below and does not retire the remaining C boundaries.
-Phase 1b adds paired allocation injection and deterministic NOWAIT errors,
-overlapping I/O/discard lifetimes, memory pressure, initialization failure,
-busy removal and repeated module load/use/unload. Use
-supported memory instrumentation and lockdep with demonstrated coverage.
+[Parameter-owner verification](evidence/brd-parameter-owner/manifest.json) at
+`a39d03eb165b1731f1fff904e9ea8f368521aecd` passes the corrected-C/Rust standard
+matrix: 32 boots each, including 29 parameter/default/legacy/duplicate-option
+boots, the shared block probe, ordinary ext4/consumer workload and partition
+probe. Linked metadata/scalar ownership checks accompany the Rust results.
+[SYSFS-disabled verification](evidence/brd-parameter-owner-nosysfs/manifest.json)
+at the same source passes a full kernel build, metadata proof, absence of
+parameter-lock calls, and 76 combined/67 isolated core KUnit cases. It does not
+add a SYSFS-disabled userspace matrix.
 
-Expanded architecture/module coverage and controlled performance remain
-subject to the 1a/1b split in [PHASE1.md](PHASE1.md).
-Hosted CI is disabled by execution policy; these local results do not complete
-those broader gates.
+[Earlier q35 verification](evidence/brd-q35/manifest.json) at `9d1c1ca5dd`
+predates the selected parameter correction; its results remain attributable to
+that source. Phase 1b adds paired allocation injection, deterministic NOWAIT
+errors, overlapping I/O/discard lifetimes, memory pressure, initialization
+failure, busy removal and module lifetime validation. Expanded architecture and
+controlled performance follow [PHASE1.md](PHASE1.md). These source reviews and
+local results do not declare Phase 1a completion or subsystem divergence.
 
-## LTS implementation candidate
+## Implementation and retained core boundaries
 
-The initial implementation lives in `drivers/block/brd_rust.rs` and its `store`
+The implementation lives in `drivers/block/brd_rust.rs` and its `store`
 module. `RUSIX_BRD_RUST` selects it for built-in 64-bit configurations; the original
 C source remains unchanged. `block::bio` owns completion and bounded segments;
 `block::bio_disk` retains typed state through final disk release. The sparse store
@@ -187,7 +203,8 @@ a synchronous closure with a private save/restore guard, avoiding an escaping
 async guard. These are local adaptations, not upstream-approved interfaces.
 
 Executing C boundaries are explicitly retained: block-core allocation/publication,
-xarray and lock/page primitives, debugfs, parameter metadata and inline wrappers.
+xarray and lock/page primitives, debugfs, generic parameter parsers/mutexes and
+inline wrappers.
 Bio payload copies/zeroing use C highmem primitives because externally mutable
 userspace pages cannot safely become ordinary Rust references. No helper implements
 BRD request policy or sparse-store ownership. Removing these boundaries requires
@@ -195,7 +212,12 @@ migration of their owning core abstractions.
 
 [ADR 0003](adr/0003.md) owns the accepted invalid-geometry correction. Rust
 implements that ordering; [paired evidence](evidence/brd-parameter-fix/manifest.json)
-verifies the correction. Parameter storage, metadata and lock adapters remain C.
+verifies the correction. `drivers/block/brd_rust/params.rs` now owns the three
+parameter scalars, parameter records, module metadata and built-in legacy setup
+record/callback. The canonical built-in-init binding is generated separately
+without changing ordinary module bindings. Rust calls standard C parameter ops
+and the generic parameter mutex directly; `brd_rust/params.c` remains an unlinked
+reference. The owner evidence above verifies these linked ownership boundaries.
 The [selected-fix record](../reference/brd-parameter-fix/README.md) preserves the
 original upstream proposal and strict source/patch/output hashes. Its generated
 C oracle is separately selected; `drivers/block/brd.c` remains pristine.

@@ -26,14 +26,13 @@ when the declared target and export mechanism no longer require them.
 
 ## RAM-backed block driver
 
-**Paired x86_64 q35 BRD verification passes** at `9d1c1ca5dd`:
-[manifest](evidence/brd-q35/manifest.json) records block6, ext4 six cases, six
-parameter boots and partition5, with identical fixtures and only driver selection
-differing between configs. Nine ownership tests also pass. The negative-parameter
-exception is replaced by [ADR 0003](adr/0003.md) at `ff6ac4a5d732`: fixed C and
-Rust each pass 29 boots, including 26 parameter variants
-([evidence](evidence/brd-parameter-fix/manifest.json)). Parameter storage/metadata
-and other residual C boundaries remain.
+**Builtin x86_64 BRD policy, sparse store and parameter metadata are Rust-owned.**
+At `a39d03eb165b`, [paired evidence](evidence/brd-parameter-owner/manifest.json)
+and the [SYSFS=n gate](evidence/brd-parameter-owner-nosysfs/manifest.json) verify
+selection, metadata and the declared workloads. The BRD-specific C adapter is
+unlinked; generic parameter, block/page, xarray and lock services remain C.
+[ADR 0003](adr/0003.md) owns the invalid-geometry correction. No divergence point
+is declared; broader architecture/module assurance remains open.
 The driver/store live in `drivers/block/brd_rust.rs` and `brd_rust/store.rs`;
 `rust/kernel/block/{bio,bio_disk}.rs` provide transitional interfaces.
 Six x86_64 SMP baseline cases: [manifest](evidence/lts-baseline/manifest.json). [BRD.md](BRD.md) owns the pinned

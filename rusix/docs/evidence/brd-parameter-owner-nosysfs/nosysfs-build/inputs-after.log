@@ -1,0 +1,4 @@
+/out/builds/brd-owner-nosysfs/.config: OK
+/out/builds/brd-owner-nosysfs/arch/x86/boot/bzImage: OK
+/out/builds/brd-owner-nosysfs/vmlinux: OK
+/out/builds/brd-owner-nosysfs/drivers/block/brd_rust.o: OK

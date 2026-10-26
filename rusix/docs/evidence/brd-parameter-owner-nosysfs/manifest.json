@@ -1,0 +1,224 @@
+{
+  "archive_entrypoint": "/home/aaron/code/rusix/linux-out/archive-brd-owner-nosysfs.py",
+  "binding_artifacts": {
+    "/out/builds/brd-owner-nosysfs/rust/bindings/.builtin_init_generated.rs.cmd": "590145296813b71037afca88d6e3e717717128af808fae04687b4b570ee8d424",
+    "/out/builds/brd-owner-nosysfs/rust/bindings/builtin_init_generated.rs": "4974026f49a4c94cd4b8f9dd620f7d08bc823ae6d0e233f5e860c4536b7444e4"
+  },
+  "boots": [
+    {
+      "cases": 76,
+      "command": [
+        "bash",
+        "/src/rusix/scripts/with-local-tools.sh",
+        "timeout",
+        "--kill-after=5s",
+        "180s",
+        "qemu-system-x86_64",
+        "-machine",
+        "q35",
+        "-accel",
+        "kvm",
+        "-cpu",
+        "qemu64",
+        "-m",
+        "512M",
+        "-smp",
+        "2",
+        "-display",
+        "none",
+        "-serial",
+        "stdio",
+        "-monitor",
+        "none",
+        "-nic",
+        "none",
+        "-no-reboot",
+        "-kernel",
+        "/out/builds/brd-owner-nosysfs/arch/x86/boot/bzImage",
+        "-append",
+        "console=ttyS0 kunit.enable=1 kunit.autorun=1 kunit.filter_glob=rusix_* kunit_shutdown=reboot panic=-1"
+      ],
+      "mode": "brd",
+      "qemu_version_sha256": "d5e1ae8dd845009e27fe1cab4612650fd6a774c76bff3d06e929069de043f7f5"
+    },
+    {
+      "cases": 67,
+      "command": [
+        "bash",
+        "/src/rusix/scripts/with-local-tools.sh",
+        "timeout",
+        "--kill-after=5s",
+        "180s",
+        "qemu-system-x86_64",
+        "-machine",
+        "q35",
+        "-accel",
+        "kvm",
+        "-cpu",
+        "qemu64",
+        "-m",
+        "512M",
+        "-smp",
+        "2",
+        "-display",
+        "none",
+        "-serial",
+        "stdio",
+        "-monitor",
+        "none",
+        "-nic",
+        "none",
+        "-no-reboot",
+        "-kernel",
+        "/out/builds/brd-owner-nosysfs/arch/x86/boot/bzImage",
+        "-append",
+        "console=ttyS0 kunit.enable=1 kunit.autorun=1 kunit.filter_glob=rusix_completion_* kunit_shutdown=reboot panic=-1"
+      ],
+      "mode": "completion",
+      "qemu_version_sha256": "d5e1ae8dd845009e27fe1cab4612650fd6a774c76bff3d06e929069de043f7f5"
+    }
+  ],
+  "build_artifacts": {
+    "/out/builds/brd-owner-nosysfs/.config": "c912f3b1c71e8a5e2f34ab4a39dfd9e6173e1971ebde633323e5ab8061d4b42e",
+    "/out/builds/brd-owner-nosysfs/arch/x86/boot/bzImage": "25ec7ef43dddebb126d33cccbe786f62b2f5e336cdbf2e2025337abdca741ec8",
+    "/out/builds/brd-owner-nosysfs/drivers/block/brd_rust.o": "2ca50b356488434b1a3af210e396793799edd997a12458731c524f52ec708005",
+    "/out/builds/brd-owner-nosysfs/vmlinux": "10e34b7ad697702f7d929a8534712915a977e5f831068b4333ba0f3b7b812a5a"
+  },
+  "dependency_sha256": {
+    "/home/aaron/code/rusix/linux-brd-owner/rusix/scripts/boot-kunit.sh": "d10984ca5aa7be2b3d99af56590e7fa33bf4d14fb700910554893aca6b138b83",
+    "/home/aaron/code/rusix/linux-brd-owner/rusix/scripts/measure-kernel-languages.py": "3e54ad9ce0f81cf07b8f18d2cc507261cfdef0fcb943d354a1b72daf826c758c",
+    "/home/aaron/code/rusix/linux-brd-owner/rusix/scripts/rusix_paths.py": "15158c8c33e303341ef523c8317da73fb3f008908b8bfa53611d13bc87c94cae",
+    "/home/aaron/code/rusix/linux-brd-owner/rusix/scripts/validate-brd-kunit.py": "1350025c9c9abda4e287e6cda85140639ccbc660ffcaecdab7a0634ec0fc24cb",
+    "/home/aaron/code/rusix/linux-brd-owner/rusix/scripts/validate-completion-kunit.py": "0467f463f2bbfd05d7fcec46123dccd869ced22b86c4a8d6f9a71acd705ecdef",
+    "/home/aaron/code/rusix/linux-brd-owner/rusix/scripts/verify-brd-parameter-owner.py": "aac92a77ea4cea06f9cf1e79d869b7aa06cb752c0b73d437898ca40d33112488",
+    "/home/aaron/code/rusix/linux-out/archive-brd-owner-nosysfs.py": "37798c3c5f76eb49feabfd86f06cf976c4b4d5a5755d63b6ce5836db4a75a284",
+    "/home/aaron/code/rusix/linux-out/archive-wait-owner-server.py": "4e97070c6e91425e24a21e47fe087d96747babb5084842ea7349dc9db94dba52",
+    "/home/aaron/code/rusix/linux-out/brd-owner-nosysfs-draft/inner.sh": "7c3024ea9d50e94238834013b3532574b5b8d84579ebe26a876e6736257b391f",
+    "/home/aaron/code/rusix/linux-out/brd-owner-nosysfs-draft/run.sh": "3811587fbaf9ad381f6395b422ccf38cdc5f45187fa056e2c60ac7e12770c39d"
+  },
+  "derivation": {
+    "base_profile": "completion-rust",
+    "request": "scripts/config --disable SYSFS; make olddefconfig",
+    "resolved_differences": {
+      "CONFIG_KERNFS": [
+        "y",
+        "n"
+      ],
+      "CONFIG_SYSFS": [
+        "y",
+        "n"
+      ]
+    },
+    "sha256": {
+      "before.config": "5bb3736c41141fbead0e278ba2560c13aa3dbc888859cb6839ede2541f5673f4",
+      "canonical.config": "39b1072ee1faf6413b4802b67ee4597892f36178c197f16c42cbe1620e3b8de0",
+      "config": "c912f3b1c71e8a5e2f34ab4a39dfd9e6173e1971ebde633323e5ab8061d4b42e",
+      "requested.config": "fd7e7bbea66fb8f3bbe3aad3cb7d034f9e82b0d244296f51a8d3dce70aa25777"
+    }
+  },
+  "limitations": [
+    "No sysfs userspace behavior, ext4/partition workloads, module unload or full core ELF selection proof.",
+    "Not a complete-kernel compatibility or architecture claim."
+  ],
+  "ownership": {
+    "objects": [
+      {
+        "file": "/out/builds/brd-owner-nosysfs/drivers/block/brd_rust.o",
+        "legacy_setup_count": 1,
+        "modinfo": "verified",
+        "parameter_names": [
+          "brd.max_part",
+          "brd.rd_nr",
+          "brd.rd_size"
+        ],
+        "scalar_symbols": [
+          "rusix_brd_rd_nr",
+          "rd_size",
+          "rusix_brd_max_part"
+        ]
+      },
+      {
+        "file": "/out/builds/brd-owner-nosysfs/vmlinux",
+        "legacy_setup_count": 1,
+        "modinfo": "discarded by final linker",
+        "parameter_names": [
+          "brd.max_part",
+          "brd.rd_nr",
+          "brd.rd_size"
+        ],
+        "scalar_symbols": [
+          "rusix_brd_rd_nr",
+          "rd_size",
+          "rusix_brd_max_part"
+        ]
+      }
+    ],
+    "scope": "ELF ownership/metadata, not runtime behavior",
+    "status": "PASS"
+  },
+  "raw_build_log_sha256": "5e705cb8aaf5a2183c5efdf86f859b3592744f515c5bd14c232f26ed31361b3e",
+  "raw_logs": "/home/aaron/code/rusix/linux-out/lts-brd-owner-nosysfs-001/logs",
+  "scope": "Supplemental SYSFS=n BRD parameter ownership and KUnit only",
+  "sha256": {
+    "brd-owner-nosysfs-combined-boot.run/command.sh": "55c5f081b3369567cb0dbcebce5f9567ddc569ab2c66fdf6802c687c4789a7a4",
+    "brd-owner-nosysfs-combined-boot.run/inputs-after.log": "6eb4124bbf74dea70cfea02be4264fa119cd472bf411d7e8987f917178b6f372",
+    "brd-owner-nosysfs-combined-boot.run/mode.txt": "9b53610e4e595ff044b33d3eea7cfb74f631765fe4b20b728dffb4690d441416",
+    "brd-owner-nosysfs-combined-boot.run/qemu-version.txt": "d5e1ae8dd845009e27fe1cab4612650fd6a774c76bff3d06e929069de043f7f5",
+    "brd-owner-nosysfs-combined-boot.run/scripts.sha256": "c0f2104fc5a1398c6c72053d1d59bedd6a3751084c837d9f9a1c9904c733001f",
+    "brd-owner-nosysfs-combined-console.log": "e088e33c6faa8bae0c1d757dfd59b29974d5ed4c9241bc5ee113ac4f0e419b8b",
+    "brd-owner-nosysfs-combined-gate.exit": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+    "brd-owner-nosysfs-combined-gate.log": "8ee163f4285123ca59a5549de755a558b1a6c9bc7fd5acf9aa76e786dfce1630",
+    "brd-owner-nosysfs-combined-inputs.sha256": "6c586357301da7d784fc0b897b0a6bee991d1c1e2a894be4c561963c19bda563",
+    "brd-owner-nosysfs-combined-kunit.json": "8d7b0c4330f9f8245ef70a55b7fc4eafa31f00a36db55b30642eb8be0f8b0cd4",
+    "brd-owner-nosysfs-combined-parse.exit": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+    "brd-owner-nosysfs-combined-parse.log": "af354fecc312b2a6f1dc5b60e61897586af152a136cfb76e6f8094d5fa35081b",
+    "brd-owner-nosysfs-combined-qemu.exit": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+    "brd-owner-nosysfs-core-boot.run/command.sh": "849f2c91b011d56d1f516b2c06e9ab4c53ee302bdd3a512e86671ce42402c9cf",
+    "brd-owner-nosysfs-core-boot.run/inputs-after.log": "6eb4124bbf74dea70cfea02be4264fa119cd472bf411d7e8987f917178b6f372",
+    "brd-owner-nosysfs-core-boot.run/mode.txt": "a4b444e7f35f2aa161f3e9d0ceb0a5c3626283f3047f72a368b5878ecdf86d11",
+    "brd-owner-nosysfs-core-boot.run/qemu-version.txt": "d5e1ae8dd845009e27fe1cab4612650fd6a774c76bff3d06e929069de043f7f5",
+    "brd-owner-nosysfs-core-boot.run/scripts.sha256": "819ed56f4bf1c63e06772c781b01115f3463830c09b34a5c997f554b7cf72669",
+    "brd-owner-nosysfs-core-console.log": "0760012d3308eecf0f0ed3a144707c8c7813525198669be0146ffbc6df0b3561",
+    "brd-owner-nosysfs-core-gate.exit": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+    "brd-owner-nosysfs-core-gate.log": "81669debb0e3046b2a6de97b9698f47e655cac6d817a88f7db53862ced94c2d2",
+    "brd-owner-nosysfs-core-inputs.sha256": "6c586357301da7d784fc0b897b0a6bee991d1c1e2a894be4c561963c19bda563",
+    "brd-owner-nosysfs-core-kunit.json": "08f1457f3ce4414883788349d24f746dff3c7fe4278ce53e6cf92c136e37a2ed",
+    "brd-owner-nosysfs-core-parse.exit": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+    "brd-owner-nosysfs-core-parse.log": "b2cd14dea0b8a7d86e3d8ac83b1014583d97c4242e0e21f4d4eb4ef9134fd3b0",
+    "brd-owner-nosysfs-core-qemu.exit": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+    "container-image-id.txt": "4fa0dc77d9271d09e8b83e114b9f527a9394f63e7c281506c63948e3feaa2b39",
+    "container.exit": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+    "container.log": "7dfd4d5e9a8ca61a0c2b3c70ca584a7fcb6cbbda283190e869c24c3551c8aad2",
+    "launch-source.commit": "038b76240cf5cc5a01f1204b58af647645420974f5c9a183cd0dc294c207e7df",
+    "launcher-after.log": "b3ac3ad3a5cdeaa9891eecffc5adde7e8442321e61bc0e26fe0a9dd28b1ddebd",
+    "launcher.sha256": "ac8c4a354542f1e3155429590b65a5589b8a2db214469ea424797beffc3fbfac",
+    "launcher/inner.sh": "7c3024ea9d50e94238834013b3532574b5b8d84579ebe26a876e6736257b391f",
+    "launcher/run.sh": "3811587fbaf9ad381f6395b422ccf38cdc5f45187fa056e2c60ac7e12770c39d",
+    "nosysfs-build/base-config.log": "e0b6b2accf78663f2dc246214f25f84046e945105bf068c3f39ed70202b4ef72",
+    "nosysfs-build/before.config": "5bb3736c41141fbead0e278ba2560c13aa3dbc888859cb6839ede2541f5673f4",
+    "nosysfs-build/block-archive.txt": "c557ee087d9fd35c291bbfd5a24c578577572f9a9d1e0a31742bebc1fbbe2586",
+    "nosysfs-build/brd-objects.txt": "c557ee087d9fd35c291bbfd5a24c578577572f9a9d1e0a31742bebc1fbbe2586",
+    "nosysfs-build/brd-parameter-owner.json": "fccc10efa74627e1f52ecc8913360e3d953f3fb17a89343027d52977105d52be",
+    "nosysfs-build/brd-undefined.txt": "82ce4ff1736e7e7d2eb4154fcea1c14ce67ac84c190780b6a15321025ead20f4",
+    "nosysfs-build/build.exit": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+    "nosysfs-build/build.sha256": "bfa427bc83f2b7f831487c91a8c8ca06c40a3a1965e0f719b24549c5547f0b54",
+    "nosysfs-build/builtin-binding-files.txt": "e5e67c0b17967066f0af6677c0575909af356a0587f7c87caf6211f99e4b2a33",
+    "nosysfs-build/builtin-bindings.sha256": "b0da0730d0e8f5e50888d59053255031b58b81554e1a46166de118091e7b8405",
+    "nosysfs-build/canonical.config": "39b1072ee1faf6413b4802b67ee4597892f36178c197f16c42cbe1620e3b8de0",
+    "nosysfs-build/config": "c912f3b1c71e8a5e2f34ab4a39dfd9e6173e1971ebde633323e5ab8061d4b42e",
+    "nosysfs-build/derivation.json": "dc62c1ff5d1f69c2887ff4e38fc7a1426139f313df04132636c40f9ee634438a",
+    "nosysfs-build/inputs-after.log": "3046e82273643f65ee43486613e06613205d742447861f466eac44451bed600f",
+    "nosysfs-build/olddefconfig.log": "bb20891f3af5c1bedb3d717190bc9435c6e9ee78b8d7bfa55721b4e32507de85",
+    "nosysfs-build/packages.lock": "9ef7ec5334805f1896c6990c60937d2244f71982b9a06b8a6248f352f8e9cf19",
+    "nosysfs-build/preflight.log": "522bfec88879b99be12257c198c7a766083b39d8973342c36615e9b29e9d1d7c",
+    "nosysfs-build/requested.config": "fd7e7bbea66fb8f3bbe3aad3cb7d034f9e82b0d244296f51a8d3dce70aa25777",
+    "nosysfs-build/source-after.commit": "038b76240cf5cc5a01f1204b58af647645420974f5c9a183cd0dc294c207e7df",
+    "nosysfs-build/source-after.status": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "nosysfs-build/source.commit": "038b76240cf5cc5a01f1204b58af647645420974f5c9a183cd0dc294c207e7df",
+    "nosysfs-build/toolchain.log": "c6f34500a39cbbff3c2a10d9f85c76a7399e918c72c166fe90da89178e1db5bf",
+    "nosysfs-result.txt": "a6425accfc44f2adf8e76985fc813fe5de5969cbe5df1aa0390c6b2a48c7dd70",
+    "nosysfs.exit": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+  },
+  "source": "a39d03eb165b1731f1fff904e9ea8f368521aecd",
+  "status": "PASS"
+}

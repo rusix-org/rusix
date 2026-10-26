@@ -1,0 +1,12 @@
+{
+  "name": "duplicate_rd_nr",
+  "rd_nr": 0,
+  "rd_size": 4096,
+  "max_part": 1,
+  "options": [
+    "brd.rd_nr=2",
+    "brd.rd_size=4096",
+    "brd.max_part=1",
+    "brd.rd_nr=0"
+  ]
+}

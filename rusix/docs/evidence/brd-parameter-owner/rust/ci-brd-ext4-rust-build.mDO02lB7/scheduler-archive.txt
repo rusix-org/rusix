@@ -1,0 +1,4 @@
+/out/builds/ci-brd-ext4-rust/kernel/sched/core.o
+/out/builds/ci-brd-ext4-rust/kernel/sched/fair.o
+/out/builds/ci-brd-ext4-rust/kernel/sched/build_policy.o
+/out/builds/ci-brd-ext4-rust/kernel/sched/build_utility.o

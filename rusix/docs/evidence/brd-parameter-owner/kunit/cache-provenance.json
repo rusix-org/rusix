@@ -1,0 +1,19 @@
+{
+  "status": "PREPARED_NOT_RUN",
+  "source": "/home/aaron/code/rusix/linux-out/lts-brd-owner-kunit-001/builds/ci-completion-rust",
+  "source_revision": "2048c42d90960fbb54df73daf98c3c58fead5a17",
+  "source_status": "FAILED_BUILD_EXIT_2_NO_VM",
+  "scope": "Kernel-only incremental cache from failed build. Existing kernel image/map are historical cache artifacts, not evidence for failed source. All build/VM proof regenerated; no logs or fixtures copied.",
+  "copy_method": "cp -a --reflink=auto",
+  "destination_profile": "completion-rust",
+  "runtime_container_image": "sha256:0e0cfd724bde5c2a81cee61210c2a14a66ea72f679e1308125825e0463c67937",
+  "runtime_source_mount": "/home/aaron/code/rusix/linux-brd-owner",
+  "copied_artifact_sha256": {
+    "builds/ci-completion-rust/.config": "5bb3736c41141fbead0e278ba2560c13aa3dbc888859cb6839ede2541f5673f4",
+    "builds/ci-completion-rust/arch/x86/boot/bzImage": "d895ed51201afb4ab9f5f0a9f345a58964fb2c651640b3f352bcd655f3cc20a1",
+    "builds/ci-completion-rust/vmlinux": "7a500aff5054e4ca6969b51aa45fba5137882c8cf51eb18ad2205d4af8489626",
+    "builds/ci-completion-rust/vmlinux.map": "ac85aa30e108a4fdfcbff714c83daabdd33b69b9221a107e171082d83a3da30f"
+  },
+  "failed_build_log_sha256": "4a96fb855de533c7f8f61558571884ccf59efe67988ffe3abe20454a5f692774",
+  "parent_cache_record_sha256": "e07b93a5629488b1f64c41dc6dbee17dfc160d995a947f6d9a40d2555493077b"
+}

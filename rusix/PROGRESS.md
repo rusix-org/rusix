@@ -54,12 +54,24 @@ partitions. Identical fixtures exercise preallocated and on-demand disks,
 geometry and I/O. The same source passes 70 combined KUnit cases (nine BRD +
 61 core), then 61 isolated core cases. [Evidence](docs/evidence/brd-parameter-fix/manifest.json).
 The imported patch is an upstream proposal; acceptance/merge is unverified.
-Pristine Linux C and historical evidence remain intact. Parameter storage and
-metadata remain C-owned, and the lock adapters still execute C in this checkpoint.
+Pristine Linux C and historical evidence remain intact.
+
+At `a39d03eb165b`, Rust also owns the three BRD parameter scalars, parameter
+records, module information and legacy setup metadata. The BRD-specific C
+adapter object and lock wrappers are unlinked. Fixed C and Rust each pass
+32 boots: 29 parameter variants (including duplicate assignments), block,
+ext4/consumer integration and partitions. Exact sysfs names/modes and numeric
+getters are checked. The same source passes 76 combined and 67 isolated core
+cases, with object and linked-kernel metadata proofs.
+[Evidence](docs/evidence/brd-parameter-owner/manifest.json).
+A separate SYSFS=n kernel retains debug/core settings, removes parameter-lock
+calls from BRD, and passes ownership checks plus the same 76/67 KUnit cases.
+[Supplemental evidence](docs/evidence/brd-parameter-owner-nosysfs/manifest.json).
+Generic parameter parsers/getters, mutexes and block/page services remain C.
 
 The [wait-table ownership record](experiments/wait-owner/README.md) covers the
-new storage boundary and six collision/constructor tests. Next verify BRD
-parameter metadata ownership, then RCU list and sync policy. Those development
+new storage boundary and six collision/constructor tests. Next verify the
+implemented RCU callback-list and sync policy translations; their development
 branches have no kernel/runtime verification yet.
 The [bit-wait record](experiments/wait-bit/README.md) and
 [generic wait record](experiments/wait/README.md) own their contracts.
@@ -67,8 +79,9 @@ Standalone untimed bit_wait/io scheduling, stop/park, repeated latch races,
 socket/futex consumer integration and POLLFREE races remain unverified.
 Forced diagnostic failures, detached-batch races, untimed signal paths, deadline
 races and broader IRQ coverage remain open. arm64, modules, expanded fault stress
-and performance budgets remain Phase 1b. Phase 1a still needs parameter adapters
-removed and review gates completed; [BRD.md](docs/BRD.md).
+and performance budgets remain Phase 1b. The [BRD review](docs/BRD.md) records
+the scoped lifecycle and unsafe-boundary disposition; Phase 1a has no declared
+subsystem divergence point yet.
 
 Failures are retained, including the [bit-wait FFI type mismatch](docs/evidence/wait-bit/manifest.json),
 the [wake pointer-conversion compile error](docs/evidence/wait-wake/manifest.json),
@@ -87,14 +100,7 @@ retains that failure. KUnit-scoped assertions and checked arithmetic removed the
 warning in all eight completed builds at `ae62f42b6f58`. Signal traps now preserve
 cancellation failure; a local probe verified exit statuses 0, 7, 143 and 130.
 
-BRD parameter storage/metadata ownership is implemented on
-`rusix/brd-parameter-owner`, with 29 parameter boot cases prepared. Source review
-and all twelve host gate suites pass; the metadata verifier also passed checks
-against historical C-generated ELF and rejected five deliberate mutations.
-[Contract and gates](experiments/brd-parameters/README.md); kernel verification
-is pending and does not inherit results from the normalization-only change.
-
-The first parameter-owner build at `2048c42d9096` stopped before VM tests: the
-generated setup field is `str_`, and three address-of expressions emitted
-unnecessary-unsafe warnings. [Failure evidence](docs/evidence/brd-parameter-owner-initial/manifest.json)
-retains the actual binding and diagnostics. Source corrections await a fresh run.
+The initial parameter-owner build at `2048c42d9096` failed before VM execution
+on a generated field name and three unnecessary-unsafe warnings. The corrected
+`a39d03eb165b` builds have no compiler/objtool diagnostics.
+[Retained failure](docs/evidence/brd-parameter-owner-initial/manifest.json).

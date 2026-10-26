@@ -17,7 +17,8 @@ core behavior and blocked worker handoffs, ordinary ext4, poll/epoll and
 blocking eventfd/timerfd consumers.
 The declared x86_64 server selects this Rust core and passes matched local userspace tests.
 [PROGRESS.md](PROGRESS.md) links exact source/configuration evidence and remaining
-gates, including BRD parameter behavior and the C queue/scheduler dependencies.
+gates. BRD parameter storage and metadata are also Rust-owned; generic C
+services and the queue/scheduler dependencies remain tracked rewrite work.
 
 The pinned baseline transition preserves earlier main history. Historical
 results retain their original source identities. Hosted CI is disabled and manual-only under the

@@ -1,0 +1,20 @@
+{
+  "request": "scripts/config --disable SYSFS; make olddefconfig",
+  "base_profile": "completion-rust",
+  "resolved_differences": {
+    "CONFIG_KERNFS": [
+      "y",
+      "n"
+    ],
+    "CONFIG_SYSFS": [
+      "y",
+      "n"
+    ]
+  },
+  "sha256": {
+    "canonical.config": "39b1072ee1faf6413b4802b67ee4597892f36178c197f16c42cbe1620e3b8de0",
+    "before.config": "5bb3736c41141fbead0e278ba2560c13aa3dbc888859cb6839ede2541f5673f4",
+    "requested.config": "fd7e7bbea66fb8f3bbe3aad3cb7d034f9e82b0d244296f51a8d3dce70aa25777",
+    "config": "c912f3b1c71e8a5e2f34ab4a39dfd9e6173e1971ebde633323e5ab8061d4b42e"
+  }
+}

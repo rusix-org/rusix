@@ -1,0 +1,6 @@
+Build evidence: /out/logs/ci-brd-ext4-fixed-c-build.hnJp1JYl
+Built /out/builds/ci-brd-ext4-fixed-c/arch/x86/boot/bzImage
+brd-c-parameter-fix contract: 6 cases passed; evidence /out/logs/ci-brd-ext4-fixed-c-brd.run
+Ext4 brd-c-parameter-fix: six ext4, four wake and two locked cases passed; evidence /out/logs/ci-brd-ext4-fixed-c-ext4.run
+brd-c-parameter-fix parameters: 29 variants passed; evidence /out/logs/ci-brd-ext4-fixed-c-brd-fixed-parameters.run
+brd-c-parameter-fix partitions: 1 variants passed; evidence /out/logs/ci-brd-ext4-fixed-c-brd-partitions.run

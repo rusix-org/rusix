@@ -1,0 +1,36 @@
+{
+  "status": "PASS",
+  "scope": "ELF ownership/metadata, not runtime behavior",
+  "objects": [
+    {
+      "file": "/out/builds/brd-owner-nosysfs/drivers/block/brd_rust.o",
+      "parameter_names": [
+        "brd.max_part",
+        "brd.rd_nr",
+        "brd.rd_size"
+      ],
+      "scalar_symbols": [
+        "rusix_brd_rd_nr",
+        "rd_size",
+        "rusix_brd_max_part"
+      ],
+      "legacy_setup_count": 1,
+      "modinfo": "verified"
+    },
+    {
+      "file": "/out/builds/brd-owner-nosysfs/vmlinux",
+      "parameter_names": [
+        "brd.max_part",
+        "brd.rd_nr",
+        "brd.rd_size"
+      ],
+      "scalar_symbols": [
+        "rusix_brd_rd_nr",
+        "rd_size",
+        "rusix_brd_max_part"
+      ],
+      "legacy_setup_count": 1,
+      "modinfo": "discarded by final linker"
+    }
+  ]
+}

@@ -1,0 +1,1 @@
+PASS: SYSFS=n full kernel, BRD ELF ownership/no-lock-call proof, combined and isolated KUnit; no sysfs userspace claim.
