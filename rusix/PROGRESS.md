@@ -42,7 +42,9 @@ Locked interruptible wait migration is in progress on `rusix/wait-locked`.
 The two Rust definitions and exact spinlock IRQ adapters pass source review;
 four dedicated-worker cases and two blocking userspace consumer tests are
 implemented and reviewed. Their host acceptance-gate tests pass.
-No build or runtime result is claimed yet. The ordinary-lock watchdog must run
+The guest fixture compiles without diagnostics in the pinned container at
+`c2cf1011bb`; kernel compilation and runtime parity are still pending.
+The ordinary-lock watchdog must run
 in process context so it cannot interrupt a holder and deadlock on the same
 queue lock. [Migration contract](experiments/wait-locked/README.md).
 
