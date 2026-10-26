@@ -184,3 +184,34 @@ after review of its typed aggregate pointers and `c_int`/`c_ulong` values, inclu
 four declarations carrying `task_struct` pointers. This is an audited consequence
 of the observed task diagnostic, not a claim of MM compilation. MM release's
 extern block is unchanged; no blanket suppression was added.
+
+### Fork MM copy candidate
+
+This branch adds default-off Rust `dup_mm`/`copy_mm` sequencing and rollback,
+requiring the existing Rust MM construction/release options. Shared-MM users
+references, null-MM kernel-thread handling and partial-duplication cleanup retain
+the original ordering, including uprobe unlock asymmetry. C mapping duplication
+and typed foreign/subsystem operations remain explicit unfinished dependencies.
+Original C restoration, formatting and source checks are recorded in
+`linux-out/mm-copy-source-001`; no MM-copy kernel has been compiled or booted.
+Next establish actual linked selection and paired copy/share/failure coverage.
+[Ownership and remaining C](experiments/mm-copy/README.md).
+
+MM-copy preprocessing and object/linked proof tooling is implemented, including
+archive payload hashes and callback section metadata, but has not inspected a
+compiled MM-copy kernel. Twelve copy-selection and eight historical release
+gate tests pass; the historical release checker still rejects the additional
+copy insertion. Shared-MM guest fixtures and independent source review are complete; compilation
+and VM execution remain pending.
+Separately, source `00c4ef1c1903` passed all five C/Rust MM-construction VM cases;
+its 307-record evidence archive and 25 raw artifact hashes passed independent
+audit. That ancestor result does not verify this MM-copy candidate.
+
+The candidate now includes exact C/Rust build routing and three guarded ordinary
+consumers: true CLONE_VM write/exit, CLONE_VM followed by exec detachment, and
+private-fork COW. The shared child uses a separate guarded stack and raw syscalls;
+parent storage is reclaimed only after reap. Root and independent review cover
+the source/proof/fixture contracts. All 22 host scripts (229 cases) pass with
+unchanged inputs in `linux-out/mm-copy-host-001`. These checks do not establish
+compiled or runtime behavior. The branch also inherits the reviewed release
+callback-ELF proof fix and the pinned `mtree_empty` fixture correction.

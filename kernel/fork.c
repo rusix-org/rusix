@@ -1050,11 +1050,13 @@ static void mmap_init_lock(struct mm_struct *mm)
 extern struct mm_struct *rusix_mm_init(struct mm_struct *mm, struct task_struct *p,
 				     struct user_namespace *user_ns);
 
+#ifndef CONFIG_RUSIX_MM_COPY_RUST
 static struct mm_struct *mm_init(struct mm_struct *mm, struct task_struct *p,
 				struct user_namespace *user_ns)
 {
 	return rusix_mm_init(mm, p, user_ns);
 }
+#endif /* !CONFIG_RUSIX_MM_COPY_RUST */
 #else
 static struct mm_struct *mm_init(struct mm_struct *mm, struct task_struct *p,
 	struct user_namespace *user_ns)
@@ -1508,6 +1510,15 @@ void exec_mm_release(struct task_struct *tsk, struct mm_struct *mm)
  *
  * Return: the duplicated mm or NULL on failure.
  */
+#ifdef CONFIG_RUSIX_MM_COPY_RUST
+#include "mm_copy_impl.h"
+extern int rusix_copy_mm(u64 clone_flags, struct task_struct *tsk);
+
+static int copy_mm(u64 clone_flags, struct task_struct *tsk)
+{
+	return rusix_copy_mm(clone_flags, tsk);
+}
+#else
 static struct mm_struct *dup_mm(struct task_struct *tsk,
 				struct mm_struct *oldmm)
 {
@@ -1586,6 +1597,8 @@ static int copy_mm(u64 clone_flags, struct task_struct *tsk)
 	sched_mm_cid_fork(tsk);
 	return 0;
 }
+
+#endif /* CONFIG_RUSIX_MM_COPY_RUST */
 
 static int copy_fs(u64 clone_flags, struct task_struct *tsk)
 {

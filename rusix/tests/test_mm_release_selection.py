@@ -3,6 +3,7 @@
 import importlib.util
 from pathlib import Path
 import sys
+import subprocess
 import unittest
 ROOT=Path(__file__).resolve().parents[2]
 sys.path.insert(0,str(ROOT/'rusix/scripts'))
@@ -13,7 +14,8 @@ c=importlib.util.module_from_spec(spec);spec.loader.exec_module(c)
 
 class Selection(unittest.TestCase):
     def test_full_pinned_reconstruction(self):
-        text=(ROOT/'kernel/fork.c').read_text();m.original_policy(text)
+        text=subprocess.check_output(['git','show','261575d0a60d42025318ef384b88a8e5ccd37cb1:kernel/fork.c'],cwd=ROOT,text=True);m.original_policy(text)
+        with self.assertRaises(ValueError):m.original_policy((ROOT/'kernel/fork.c').read_text())
         for bad in (text+'\n',text.replace('exit_mmap(mm);','exit_mmap(NULL);'),text.replace('EXPORT_SYMBOL_GPL(mmput);',''),text.replace('#include "mm_release_impl.h"','#include "other.h"')):
             with self.assertRaises(ValueError):m.original_policy(bad)
         with self.assertRaises(ValueError):m.mm.original_policy(text)
@@ -62,6 +64,28 @@ class Selection(unittest.TestCase):
         for bad in (address,call,address.replace('leaq','callq')+call,address.replace('PC32','PLT32')+call,address+call.replace('callq','movq'),address.replace('-0x4','+0x4')+call,address.replace('<mmput_async>','<unrelated>')+call):
             with self.assertRaises(ValueError):m.registration(bad,name,True)
         m.registration(address.replace(name,'mmput_async_fn'),'mmput_async_fn',False)
+
+    def test_section_relative_callback_exact_elf_identity(self):
+        import copy
+        name='mmput_async_fn'
+        metadata=[{'FileSummary':{'Format':'elf64-x86-64','Arch':'x86_64'},
+          'Sections':[{'Section':{'Index':2,'Name':{'Name':'.text'},'Type':{'Value':1},'Flags':{'Value':6},'Size':0x2000}}],
+          'Symbols':[{'Symbol':{'Name':{'Name':name},'Type':{'Value':2},'Size':12,'Value':0x1550,'Section':{'Value':2}}},
+                     {'Symbol':{'Name':{'Name':'.text'},'Type':{'Value':3},'Size':0,'Value':0,'Section':{'Value':2}}}]}]
+        absolute='000014a0 <mmput_async>:\n 150b: movq $0, 0x840(%r14)\n 1512: R_X86_64_32S .text+0x1550\n'
+        m.registration(absolute,name,False,metadata)
+        m.registration(absolute.replace('32S .text+0x1550','64 .text+0x1550'),name,False,metadata)
+        m.registration(absolute.replace('movq $0, 0x840(%r14)','leaq 0(%rip), %rsi').replace('32S .text+0x1550','PC32 .text+0x154c'),name,False,metadata)
+        for bad in (absolute.replace('1550','1540'),absolute.replace('1550','1551'),absolute.replace('.text+','.other+'),absolute.replace('32S','PC32'),absolute.replace('32S','PLT32'),absolute.replace('movq','callq'),absolute.replace('$0','%rax'),absolute.replace('32S .text+0x1550','PC32 .text+0x154c'),absolute+absolute.split('\n',1)[1]):
+            with self.assertRaises(ValueError):m.registration(bad,name,False,metadata)
+        for change in ('wrong_index','duplicate_symbol','duplicate_section','nonexec','nonsized'):
+            bad=copy.deepcopy(metadata)
+            if change=='wrong_index':bad[0]['Symbols'][0]['Symbol']['Section']['Value']=3
+            if change=='duplicate_symbol':bad[0]['Symbols'].append(copy.deepcopy(bad[0]['Symbols'][1]))
+            if change=='duplicate_section':bad[0]['Sections'].append(copy.deepcopy(bad[0]['Sections'][0]))
+            if change=='nonexec':bad[0]['Sections'][0]['Section']['Flags']['Value']=2
+            if change=='nonsized':bad[0]['Symbols'][0]['Symbol']['Size']=0
+            with self.assertRaises(ValueError):m.registration(absolute,name,False,bad)
 
     def test_archive_and_input_identity(self):
         base='fork.o\ntask_construction_rust.o\nmm_construction_rust.o\nmm_release_test.o\n'

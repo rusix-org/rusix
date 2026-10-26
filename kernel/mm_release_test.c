@@ -131,7 +131,7 @@ static int release_worker(void *p)
 	 * leaves map_count/total_vm stale: inspect the destroyed tree instead. */
 	f->result[10] = atomic_read(&mm->mm_users);
 	f->result[11] = atomic_read(&mm->mm_count);
-	f->result[12] = mt_empty(&mm->mm_mt);
+	f->result[12] = mtree_empty(&mm->mm_mt);
 	f->result[13] = mm->pgd != NULL;
 	f->result[14] = mm->rss_stat[0].counters != NULL;
 	if (f->result[10] || f->result[11] != 1 || !f->result[12] ||

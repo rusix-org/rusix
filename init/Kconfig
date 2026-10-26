@@ -2258,3 +2258,13 @@ config RUSIX_MM_RELEASE_TEST
 	help
 	  Run real MM reference and mapping release cases in retained workers.
 	  Enable for both C and Rust release comparison kernels only.
+
+config RUSIX_MM_COPY_RUST
+	bool "Rusix Rust fork address-space copy transaction"
+	depends on RUSIX_MM_CONSTRUCTION_RUST && RUSIX_MM_RELEASE_RUST
+	default n
+	help
+	  Select Rust dup_mm/copy_mm sequencing, sharing and staged failure
+	  cleanup. Inherits the existing built-in x86_64 constructor exclusions.
+	  Mapping duplication, foreign field accesses, subsystem and atomic
+	  operations remain C. Original C transaction remains the default oracle.

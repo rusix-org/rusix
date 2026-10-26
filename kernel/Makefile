@@ -215,3 +215,5 @@ obj-$(CONFIG_RUSIX_MM_CONSTRUCTION_RUST) += mm_construction_rust.o
 obj-$(CONFIG_RUSIX_MM_RELEASE_RUST) += mm_release_rust.o
 
 obj-$(CONFIG_RUSIX_MM_RELEASE_TEST) += mm_release_test.o
+
+obj-$(CONFIG_RUSIX_MM_COPY_RUST) += mm_copy_rust.o

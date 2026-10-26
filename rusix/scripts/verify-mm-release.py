@@ -119,7 +119,46 @@ def callback(text,rust):
     return real[0][2]
 
 
-def registration(disassembly,callback_name,rust):
+def callback_sections(metadata, callback_name):
+    """Resolve a function and its section symbols by actual ELF section index."""
+    if not isinstance(metadata,list) or len(metadata)!=1:
+        raise ValueError('Expected exactly one ELF metadata record')
+    obj=metadata[0]
+    if obj['FileSummary']['Format']!='elf64-x86-64' or obj['FileSummary']['Arch']!='x86_64':
+        raise ValueError('Unsupported callback ELF architecture')
+    symbols=[entry['Symbol'] for entry in obj['Symbols']]
+    callbacks=[sym for sym in symbols if sym['Name']['Name']==callback_name]
+    if len(callbacks)!=1:raise ValueError('Missing/ambiguous ELF callback symbol')
+    cb=callbacks[0]
+    if cb['Type']['Value']!=2 or cb['Size']<=0:raise ValueError('Callback is not a sized ELF function')
+    sections=[entry['Section'] for entry in obj['Sections']]
+    matches=[sec for sec in sections if sec['Index']==cb['Section']['Value']]
+    if len(matches)!=1:raise ValueError('Callback section index is ambiguous')
+    sec=matches[0]
+    if sec['Type']['Value']!=1 or not sec['Flags']['Value'] & 4 or not 0<=cb['Value']<cb['Value']+cb['Size']<=sec['Size']:
+        raise ValueError('Callback lies outside executable section')
+    aliases={}
+    for sym in symbols:
+        if sym['Type']['Value']!=3 or sym['Section']['Value']!=sec['Index']:
+            continue
+        name=sym['Name']['Name']
+        if not name or len([other for other in symbols if other['Name']['Name']==name])!=1:
+            raise ValueError('Ambiguous relocation section symbol')
+        if len([other for other in sections if other['Name']['Name']==name])!=1 or name!=sec['Name']['Name']:
+            raise ValueError('Section name/index identity differs')
+        if sym['Value']!=0:raise ValueError('Unsupported nonzero ELF section symbol')
+        aliases[name]=cb['Value']
+    if not aliases:raise ValueError('Missing callback section symbol')
+    return aliases
+
+
+def materializes_callback(instruction, kind):
+    if kind=='PC32':
+        return re.search(r'\bleaq?\b',instruction) and '%rip' in instruction
+    return re.search(r'\bmov[a-z]*\s+\$',instruction)
+
+
+def registration(disassembly,callback_name,rust,metadata=None):
     # Require a code relocation that materializes the callback address, not a
     # name in debug data or a direct call of the callback. Rust then transfers
     # the work callback through the canonical work-init adapter.
@@ -127,21 +166,31 @@ def registration(disassembly,callback_name,rust):
     bodies=[blocks[i+1] for i in range(1,len(blocks),2) if blocks[i]=='mmput_async']
     if len(bodies)!=1:raise ValueError('Missing/duplicate mmput_async disassembly')
     disassembly=bodies[0]
-    previous='';found=False;init=False
+    sections=callback_sections(metadata,callback_name) if metadata is not None else {}
+    previous='';found=0;init=False
     for row in disassembly.splitlines():
         if 'R_X86_64_' in row:
             if re.search(r'\s'+re.escape(callback_name)+r'(?:-0x4|\+0x[0-9a-f]+)?\s*$',row):
                 valid_pc=re.search(r'R_X86_64_PC32\s+'+re.escape(callback_name)+r'-0x4\s*$',row)
                 valid_abs=re.search(r'R_X86_64_(?:32S|64)\s+'+re.escape(callback_name)+r'(?:\+0x0)?\s*$',row)
-                if not (valid_pc or valid_abs) or not re.search(r'\b(?:lea[q]?|mov[a-z]*)\b',previous):
+                if not (valid_pc or valid_abs) or not materializes_callback(previous,'PC32' if valid_pc else 'ABS'):
                     raise ValueError('Callback address lacks executable materialization')
-                found=True
+                found+=1
+            relocation=re.search(r'R_X86_64_(PC32|32S|64)\s+(\S+?)((?:[+-]0x[0-9a-f]+)?)\s*$',row)
+            if relocation and relocation[2] in sections:
+                kind,section,raw_addend=relocation.groups()
+                addend=int(raw_addend,16) if raw_addend else 0
+                resolved=addend+(4 if kind=='PC32' else 0)
+                if resolved==sections[section]:
+                    if not materializes_callback(previous,kind):
+                        raise ValueError('Section callback address lacks executable materialization')
+                    found+=1
             if 'rusix_mm_release_work_init' in row:
                 if not re.search(r'R_X86_64_PLT32\s+rusix_mm_release_work_init(?:-0x4)?\s*$',row) or not re.search(r'\b(?:callq?|jmpq?)\b',previous):
                     raise ValueError('Work-init adapter is not an executable call')
                 init=True
         elif re.match(r'^\s*[0-9a-f]+:',row):previous=row
-    if not found or init!=rust:raise ValueError('Missing callback registration proof')
+    if found!=1 or init!=rust:raise ValueError('Missing callback registration proof')
 
 
 def archive_members(text,rust):
@@ -199,7 +248,8 @@ def verify(args):
         if obj!=owner and 'mmput_async_fn' in symbols[obj]:raise ValueError('Callback in alternate object')
     forkdis=run('mm-release-fork-disassembly.txt',['llvm-objdump','-dr',str(build/'kernel/fork.o')]);mm.check_relocations(forkdis,True)
     dis=run('mm-release-policy-disassembly.txt',['llvm-objdump','-dr',str(build/f'kernel/{owner}.o')])
-    registration(dis,cb,rust)
+    metadata=json.loads(run('mm-release-policy-elf.json',['llvm-readobj','--elf-output-style=JSON','--sections','--symbols',str(build/f'kernel/{owner}.o')]))
+    registration(dis,cb,rust,metadata)
     if rust:
         # Every declared typed primitive is defined once by fork.c and survives
         # into the image; no similarly named object may satisfy a missing ABI.

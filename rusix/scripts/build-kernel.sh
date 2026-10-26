@@ -9,15 +9,15 @@ if [[ ${1:-} == --profile ]]; then
     shift 2
 fi
 case "$profile" in
-    kunit|brd|brd-fixed-c|brd-rust|brd-kunit|brd-ext4-c|brd-ext4-fixed-c|brd-ext4-rust|core-ext4-c|core-ext4-rust|completion-c|completion-rust|completion-plain-c|completion-plain-rust|server|server-c|task-construction-c|task-construction-rust|mm-construction-c|mm-construction-rust|mm-release-c|mm-release-rust) ;;
-    *) echo 'Profile must be kunit, brd, brd-fixed-c, brd-rust, brd-kunit, brd-ext4-c, brd-ext4-fixed-c, brd-ext4-rust, core-ext4-c, core-ext4-rust, completion-c, completion-rust, completion-plain-c, completion-plain-rust, server, server-c, task-construction-c, task-construction-rust, mm-construction-c, mm-construction-rust, mm-release-c or mm-release-rust.' >&2; exit 2 ;;
+    kunit|brd|brd-fixed-c|brd-rust|brd-kunit|brd-ext4-c|brd-ext4-fixed-c|brd-ext4-rust|core-ext4-c|core-ext4-rust|completion-c|completion-rust|completion-plain-c|completion-plain-rust|server|server-c|task-construction-c|task-construction-rust|mm-construction-c|mm-construction-rust|mm-release-c|mm-release-rust|mm-copy-c|mm-copy-rust) ;;
+    *) echo 'Profile must be kunit, brd, brd-fixed-c, brd-rust, brd-kunit, brd-ext4-c, brd-ext4-fixed-c, brd-ext4-rust, core-ext4-c, core-ext4-rust, completion-c, completion-rust, completion-plain-c, completion-plain-rust, server, server-c, task-construction-c, task-construction-rust, mm-construction-c, mm-construction-rust, mm-release-c, mm-release-rust, mm-copy-c or mm-copy-rust.' >&2; exit 2 ;;
 esac
 config="$RUSIX_PROJECT/configs/x86_64-$profile.config"
 if [[ "$profile" == server-c ]]; then
     config="$RUSIX_PROJECT/configs/x86_64-server.config"
 fi
 if [[ $# != 1 || ! "$1" =~ ^[a-zA-Z0-9_-]+$ ]]; then
-    echo 'Usage: bash rusix/scripts/build-kernel.sh [--profile kunit|brd|brd-fixed-c|brd-rust|brd-kunit|brd-ext4-c|brd-ext4-fixed-c|brd-ext4-rust|core-ext4-c|core-ext4-rust|completion-c|completion-rust|completion-plain-c|completion-plain-rust|server|server-c|task-construction-c|task-construction-rust|mm-construction-c|mm-construction-rust|mm-release-c|mm-release-rust] BUILD_NAME' >&2
+    echo 'Usage: bash rusix/scripts/build-kernel.sh [--profile kunit|brd|brd-fixed-c|brd-rust|brd-kunit|brd-ext4-c|brd-ext4-fixed-c|brd-ext4-rust|core-ext4-c|core-ext4-rust|completion-c|completion-rust|completion-plain-c|completion-plain-rust|server|server-c|task-construction-c|task-construction-rust|mm-construction-c|mm-construction-rust|mm-release-c|mm-release-rust|mm-copy-c|mm-copy-rust] BUILD_NAME' >&2
     exit 2
 fi
 name=$1
@@ -93,6 +93,11 @@ if [[ "$profile" == mm-release-c || "$profile" == mm-release-rust ]]; then
     python3 "$RUSIX_PROJECT/scripts/verify-mm-release.py" config \
         --profile "$profile" --config "$out/.config" --source "$RUSIX_SOURCE" \
         > "$evidence/mm-release-config-before.json"
+fi
+if [[ "$profile" == mm-copy-c || "$profile" == mm-copy-rust ]]; then
+    python3 "$RUSIX_PROJECT/scripts/verify-mm-copy.py" config \
+        --profile "$profile" --config "$out/.config" --source "$RUSIX_SOURCE" \
+        > "$evidence/mm-copy-config-before.json"
 fi
 if [[ "$profile" == server || "$profile" == server-c ]]; then
     python3 "$RUSIX_PROJECT/scripts/server_target.py" verify \
@@ -177,7 +182,7 @@ PYBRDCOMMAND
         fi
     } > "$evidence/selection.log"
 fi
-if [[ "$profile" == brd-rust || "$profile" == brd-kunit || "$profile" == brd-ext4-rust || "$profile" == core-ext4-c || "$profile" == core-ext4-rust || "$profile" == completion-c || "$profile" == completion-rust || "$profile" == completion-plain-c || "$profile" == completion-plain-rust || "$profile" == server || "$profile" == server-c || "$profile" == task-construction-c || "$profile" == task-construction-rust || "$profile" == mm-construction-c || "$profile" == mm-construction-rust || "$profile" == mm-release-c || "$profile" == mm-release-rust ]]; then
+if [[ "$profile" == brd-rust || "$profile" == brd-kunit || "$profile" == brd-ext4-rust || "$profile" == core-ext4-c || "$profile" == core-ext4-rust || "$profile" == completion-c || "$profile" == completion-rust || "$profile" == completion-plain-c || "$profile" == completion-plain-rust || "$profile" == server || "$profile" == server-c || "$profile" == task-construction-c || "$profile" == task-construction-rust || "$profile" == mm-construction-c || "$profile" == mm-construction-rust || "$profile" == mm-release-c || "$profile" == mm-release-rust || "$profile" == mm-copy-c || "$profile" == mm-copy-rust ]]; then
     git -C "$RUSIX_SOURCE" diff --exit-code \
         2926d88bb7fc4608fd942453d929c39e4e5ec006 -- drivers/block/brd.c \
         > "$evidence/brd-reference.diff"
@@ -598,6 +603,17 @@ if [[ "$profile" == mm-release-c || "$profile" == mm-release-rust ]]; then
         "$RUSIX_PROJECT/scripts/verify-mm-release.py" objects \
         --profile "$profile" --source "$RUSIX_SOURCE" --build "$out" \
         --evidence "$evidence" > "$evidence/mm-release-selection.json"
+fi
+if [[ "$profile" == mm-copy-c || "$profile" == mm-copy-rust ]]; then
+    python3 "$RUSIX_PROJECT/scripts/verify-mm-copy.py" config \
+        --profile "$profile" --config "$out/.config" --source "$RUSIX_SOURCE" \
+        > "$evidence/mm-copy-config-after.json"
+    python3 "$RUSIX_PROJECT/scripts/preprocess-mm-copy.py" \
+        --build "$out" --evidence "$evidence"
+    bash "$RUSIX_PROJECT/scripts/with-local-tools.sh" python3 \
+        "$RUSIX_PROJECT/scripts/verify-mm-copy.py" objects \
+        --profile "$profile" --source "$RUSIX_SOURCE" --build "$out" \
+        --evidence "$evidence" > "$evidence/mm-copy-selection.json"
 fi
 
 git -C "$RUSIX_SOURCE" status --porcelain > "$evidence/source-after.status"
