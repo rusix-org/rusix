@@ -114,3 +114,19 @@ lock acquisition itself is not a hard time bound, and the VM has a watchdog.
 Finite tests supplement, rather than prove, the barrier contract. WOKEN, blocked
 bit-waits, locked interruptible consumers, PREEMPT_RT and POLLFREE races remain
 outside this verification.
+
+## WOKEN migration in progress
+
+The three WOKEN entries are implemented on the topic branch, pending local parity
+gates. wait_woken preserves the full state-store barrier before reading its latch,
+short-circuits stop/park inspection when already latched, restores RUNNING, then
+clears WOKEN with the original C store/full-barrier primitive. Wake callbacks keep
+the full barrier before the C flag OR even if default_wake_function returns zero.
+The bit callback matches address and bit, ignoring timeout; mismatch has no flag
+or wake side effects. These entries retain membership until explicit removal.
+
+Two C adapters preserve the mixed flag RMW/barrier sequences. Removing them needs
+a reviewed Rust LKMM implementation or ownership eliminating the mixed accesses.
+The tests must allow concurrent relatching after a wait clears WOKEN, and cleanup
+must supply a valid matching bit key. Stop/park, socket/futex consumer integration
+and universal lost-wakeup proof remain separate coverage.

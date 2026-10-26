@@ -77,3 +77,53 @@ u32 rust_helper_wait_lifecycle_blocked(void *task)
 {
 	return rusix_wait_lifecycle_blocked(task);
 }
+
+/* WOKEN protocol consumers use separate storage and condition publication. */
+void *rusix_wait_woken_test_alloc(unsigned int mode);
+void rusix_wait_woken_test_free(void *data);
+void rusix_wait_woken_test_run(void *data, unsigned int timeout_ms);
+u32 rusix_wait_woken_test_members(void *data);
+void rusix_wait_woken_test_publish(void *data);
+void rusix_wait_woken_test_probe(void *data, unsigned int command, s64 *out);
+void rusix_wait_woken_test_abort(void *data);
+void rusix_wait_woken_test_result(void *data, s64 *out);
+
+void * rust_helper_wait_woken_test_alloc(unsigned int mode)
+{
+	return rusix_wait_woken_test_alloc(mode);
+}
+
+void rust_helper_wait_woken_test_free(void *data)
+{
+	rusix_wait_woken_test_free(data);
+}
+
+void rust_helper_wait_woken_test_run(void *data, unsigned int timeout_ms)
+{
+	rusix_wait_woken_test_run(data, timeout_ms);
+}
+
+u32 rust_helper_wait_woken_test_members(void *data)
+{
+	return rusix_wait_woken_test_members(data);
+}
+
+void rust_helper_wait_woken_test_publish(void *data)
+{
+	rusix_wait_woken_test_publish(data);
+}
+
+void rust_helper_wait_woken_test_probe(void *data, unsigned int command, s64 *out)
+{
+	rusix_wait_woken_test_probe(data, command, out);
+}
+
+void rust_helper_wait_woken_test_abort(void *data)
+{
+	rusix_wait_woken_test_abort(data);
+}
+
+void rust_helper_wait_woken_test_result(void *data, s64 *out)
+{
+	rusix_wait_woken_test_result(data, out);
+}

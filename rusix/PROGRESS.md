@@ -37,8 +37,9 @@ timeout cleanup and repeated preparation. Scheduler samples establish state at
 observation, not causation by a later wake. Callbacks retain fixture ownership
 through return; completion acknowledgment is not a thread join.
 
-Next migrate the WOKEN handshake and bit-wait policy, then locked interruptible
-waits with blocked consumers. The [wait record](experiments/wait/README.md) owns
+In progress on `rusix/wait-woken`: three WOKEN wait/callback entries are
+implemented, with blocked-consumer tests being integrated. They are not yet
+build/runtime verified. Next are bit-wait policy and locked interruptible waits. The [wait record](experiments/wait/README.md) owns
 mixed-access and lifetime contracts. WOKEN/bit-wait handoffs and POLLFREE races
 remain unverified.
 Forced diagnostic failures, detached-batch races, untimed signal paths, deadline

@@ -65,3 +65,16 @@ void rust_helper_wait_list_del_init_careful(struct list_head *entry)
 	/* Release self-link pairs with the acquire list_empty_careful in finish. */
 	list_del_init_careful(entry);
 }
+
+void rust_helper_wait_clear_woken_mb(struct wait_queue_entry *entry)
+{
+	/* Original B: C read/clear plus store-and-full-barrier, not fetch_and. */
+	smp_store_mb(entry->flags, entry->flags & ~WQ_FLAG_WOKEN);
+}
+
+void rust_helper_wait_set_woken_after_mb(struct wait_queue_entry *entry)
+{
+	/* Original C: full barrier precedes the C non-atomic flags RMW. */
+	smp_mb();
+	entry->flags |= WQ_FLAG_WOKEN;
+}

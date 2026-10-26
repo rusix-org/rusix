@@ -270,8 +270,9 @@ config RUSIX_COMPLETION_RUST
 	help
 	  Select Rust implementations of all completion.c and swait.c entry points
 	  and generic wait.c initialization, enrollment, prepare/finish,
-	  autoremove callback and seven wake wrappers. Entry initialization,
-	  other callback implementations and the wait_woken protocol remain C.
+	  autoremove callback, WOKEN protocol and seven wake wrappers.
+	  Entry initialization and locked interruptible wait iterations remain C.
+	  WOKEN flag barriers/updates retain their exact C primitives.
 	  Generic swait consumers also use these policies. C completion layout
 	  and initialization/reset, raw locks, marked list
 	  operations and scheduler task wakeup remain.

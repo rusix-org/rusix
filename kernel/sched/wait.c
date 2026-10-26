@@ -476,6 +476,7 @@ EXPORT_SYMBOL(autoremove_wake_function);
  * }						smp_mb(); // C
  * remove_wait_queue(&wq_head, &wait);		wq_entry->flags |= WQ_FLAG_WOKEN;
  */
+#ifndef CONFIG_RUSIX_COMPLETION_RUST
 long wait_woken(struct wait_queue_entry *wq_entry, unsigned mode, long timeout)
 {
 	/*
@@ -499,8 +500,10 @@ long wait_woken(struct wait_queue_entry *wq_entry, unsigned mode, long timeout)
 
 	return timeout;
 }
+#endif
 EXPORT_SYMBOL(wait_woken);
 
+#ifndef CONFIG_RUSIX_COMPLETION_RUST
 int woken_wake_function(struct wait_queue_entry *wq_entry, unsigned mode, int sync, void *key)
 {
 	/* Pairs with the smp_store_mb() in wait_woken(). */
@@ -509,8 +512,10 @@ int woken_wake_function(struct wait_queue_entry *wq_entry, unsigned mode, int sy
 
 	return default_wake_function(wq_entry, mode, sync, key);
 }
+#endif
 EXPORT_SYMBOL(woken_wake_function);
 
+#ifndef CONFIG_RUSIX_COMPLETION_RUST
 int woken_wake_bit_function(struct wait_queue_entry *wq_entry, unsigned mode, int sync, void *arg)
 {
 	struct wait_bit_key *key = __var_wake_key(wq_entry, arg);
@@ -523,4 +528,5 @@ int woken_wake_bit_function(struct wait_queue_entry *wq_entry, unsigned mode, in
 
 	return default_wake_function(wq_entry, mode, sync, key);
 }
+#endif
 EXPORT_SYMBOL(woken_wake_bit_function);

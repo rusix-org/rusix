@@ -3,7 +3,8 @@
 
 //! Initialization, enrollment, prepare/finish and wake policy over C-visible queues.
 //!
-//! Entry initialization, other callbacks, scheduler wakes and spinlocks remain C.
+//! Entry initialization, locked wait iterations, scheduler wakes and spinlocks
+//! remain C. WOKEN ordering primitives also retain their exact C operations.
 //! Flag updates/snapshots retain the baseline C mixed-access boundary;
 //! this module does not expose a safe Rust API for generic wait entry ownership.
 
@@ -528,4 +529,81 @@ pub unsafe extern "C" fn autoremove_wake_function(
         unsafe { bindings::wait_list_del_init_careful(addr_of_mut!((*entry).entry)) };
     }
     ret
+}
+
+/// # Safety
+/// Current task owns this initialized/pinned wait entry and retains it across
+/// sleep and final flag clear. Existing C add/remove and callback protocol owns
+/// concurrent flag accesses; no Rust reference overlays that shared field.
+/// Caller is in sleepable context with no queue/raw lock held and provides the
+/// original schedule_timeout mode/timeout contract. Queue lifetime is external.
+// SAFETY: the same Kconfig selection excludes the matching C body and retains
+// its export. c_long preserves the target C timeout/return ABI.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn wait_woken(
+    entry: *mut bindings::wait_queue_entry,
+    mode: c_uint,
+    mut timeout: c_long,
+) -> c_long {
+    // SAFETY: current task is live; full barrier A precedes flag observation.
+    unsafe { bindings::swait_set_current_state(mode) };
+    // SAFETY: entry remains live, C owns mixed-access flags. Preserve C short
+    // circuit: a latched wake skips both stop/park query and scheduler call.
+    if unsafe { bindings::wait_entry_flags(entry) } & bindings::WQ_FLAG_WOKEN == 0
+        && !unsafe { bindings::kthread_should_stop_or_park() }
+    {
+        // SAFETY: caller supplies sleepable context, valid mode/timeout and
+        // retains entry while asleep. Scheduler returns remaining timeout.
+        timeout = unsafe { bindings::schedule_timeout(timeout) };
+    }
+    // SAFETY: restores this task's state without a new full barrier.
+    unsafe { bindings::__set_current_state(bindings::TASK_RUNNING) };
+    // SAFETY: caller retains entry; C owns exact mixed-access RMW/store-barrier B
+    // paired with wake callback barrier C, preserving unrelated flag bits.
+    unsafe { bindings::wait_clear_woken_mb(entry) };
+    timeout
+}
+
+/// # Safety
+/// Entry is live under caller's queue/wake protocol; private identifies a live
+/// task accepted by default_wake_function. Waiter retains entry through callback
+/// exclusion/removal. Concurrent WOKEN accesses follow the existing C protocol.
+// SAFETY: the same Kconfig selection excludes the matching C body and retains
+// its export. The signature matches the generated wait_queue_func_t C ABI.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn woken_wake_function(
+    entry: *mut bindings::wait_queue_entry,
+    mode: c_uint,
+    sync: c_int,
+    key: *mut c_void,
+) -> c_int {
+    // SAFETY: entry retained; helper preserves full barrier C BEFORE C flags RMW.
+    unsafe { bindings::wait_set_woken_after_mb(entry) };
+    // SAFETY: caller provides original task/mode/flags/key contract. No entry
+    // access follows scheduler callback. This callback does not unlink entry.
+    unsafe { bindings::default_wake_function(entry, mode, sync, key) }
+}
+
+/// # Safety
+/// Same wake contract as woken_wake_function; entry MUST be the wq_entry member
+/// of a live wait_bit_queue_entry. arg points to a live wait_bit_key, not null;
+/// key fields remain valid through matching and scheduler callback.
+// SAFETY: the same Kconfig selection excludes the matching C body and retains
+// its export. The signature matches the generated wait_queue_func_t C ABI.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn woken_wake_bit_function(
+    entry: *mut bindings::wait_queue_entry,
+    mode: c_uint,
+    sync: c_int,
+    arg: *mut c_void,
+) -> c_int {
+    // SAFETY: caller supplies containing bit-wait object and valid input key;
+    // existing C matcher compares flags address plus bit_nr, not timeout.
+    let key = unsafe { bindings::__var_wake_key(entry, arg) };
+    if key.is_null() {
+        return 0;
+    }
+    // SAFETY: matched key remains live; shared implementation preserves barrier
+    // C before WOKEN update and forwards the matcher-returned key unchanged.
+    unsafe { woken_wake_function(entry, mode, sync, key.cast()) }
 }

@@ -4,6 +4,7 @@
 #include <linux/slab.h>
 #include <linux/limits.h>
 #include <linux/wait.h>
+#include <linux/wait_bit.h>
 
 /* Private test bridge; keep scheduler-internal declarations out of bindings. */
 int rusix_wait_test_run(unsigned int scenario, unsigned int wrapper,
@@ -667,4 +668,199 @@ void rusix_wait_lifecycle_result(void *data, unsigned int index, s64 *out)
 	out[2] = slot->detail;
 	out[3] = slot->running;
 	out[4] = slot->selflinked;
+}
+
+/* WOKEN protocol consumers use separate storage and condition publication. */
+void *rusix_wait_woken_test_alloc(unsigned int mode);
+void rusix_wait_woken_test_free(void *data);
+void rusix_wait_woken_test_run(void *data, unsigned int timeout_ms);
+u32 rusix_wait_woken_test_members(void *data);
+void rusix_wait_woken_test_publish(void *data);
+void rusix_wait_woken_test_probe(void *data, unsigned int command, s64 *out);
+void rusix_wait_woken_test_abort(void *data);
+void rusix_wait_woken_test_result(void *data, s64 *out);
+struct woken_case {
+	wait_queue_head_t queue;
+	struct wait_bit_queue_entry bit; /* real container even for ordinary mode */
+	unsigned long word, other_word;
+	u32 condition, abort, payload;
+	unsigned int mode; /* 0 prelatched, 1 zero, 2 blocked, 3 expiry, 4 bit */
+	long remaining;
+	u32 callback_result, flags_after, running, linked_before_remove, poisoned;
+	u32 payload_seen;
+	unsigned long voluntary_delta;
+};
+
+/* Call before publication. The entry itself is initialized by its callback
+ * because private=current must name the dedicated consumer, not controller.
+ */
+static void woken_init(struct woken_case *test, unsigned int mode)
+{
+	memset(test, 0, sizeof(*test));
+	init_waitqueue_head(&test->queue);
+	test->mode = mode;
+	test->bit.key.flags = &test->word;
+	test->bit.key.bit_nr = 3;
+	test->bit.key.timeout = 123;
+}
+
+void rusix_wait_woken_test_run(void *data, unsigned int timeout_ms)
+{
+	struct woken_case *test = data;
+	long timeout = msecs_to_jiffies(timeout_ms);
+	wait_queue_entry_t *entry = &test->bit.wq_entry;
+	unsigned long flags, before, deadline = jiffies + timeout, now;
+	long remaining = timeout;
+
+	init_waitqueue_entry(entry, current);
+	entry->func = test->mode == 4 ? woken_wake_bit_function : woken_wake_function;
+	entry->flags = 0x100; /* unrelated flag bit preserved by WOKEN clear */
+	add_wait_queue(&test->queue, entry);
+	if (test->mode == 0) {
+		spin_lock_irqsave(&test->queue.lock, flags);
+		/* Current is RUNNING: default wake returns zero but latches WOKEN. */
+		test->callback_result = woken_wake_function(entry, TASK_INTERRUPTIBLE, 0, NULL);
+		spin_unlock_irqrestore(&test->queue.lock, flags);
+		before = READ_ONCE(current->nvcsw);
+		remaining = wait_woken(entry, TASK_INTERRUPTIBLE, timeout);
+		test->voluntary_delta = READ_ONCE(current->nvcsw) - before;
+	} else if (test->mode == 1) {
+		remaining = wait_woken(entry, TASK_INTERRUPTIBLE, 0);
+	} else {
+		/* Predicate is separate from the latch; spurious wake must not succeed.
+		 * One absolute deadline prevents repeated wakeups extending lifetime.
+		 */
+		while (!smp_load_acquire(&test->condition) && !READ_ONCE(test->abort)) {
+			now = jiffies;
+			if (time_after_eq(now, deadline)) {
+				remaining = 0;
+				break;
+			}
+			remaining = wait_woken(entry, TASK_INTERRUPTIBLE, deadline - now);
+		}
+		if (smp_load_acquire(&test->condition))
+			test->payload_seen = READ_ONCE(test->payload);
+	}
+	test->remaining = remaining;
+	test->running = READ_ONCE(current->__state) == TASK_RUNNING;
+	/* Queue lock excludes controller callbacks during these observations.
+	 * WOKEN does NOT autoremove: both links must still connect queue/entry.
+	 */
+	spin_lock_irqsave(&test->queue.lock, flags);
+	test->flags_after = READ_ONCE(entry->flags);
+	test->linked_before_remove = test->queue.head.next == &entry->entry &&
+		test->queue.head.prev == &entry->entry &&
+		entry->entry.next == &test->queue.head && entry->entry.prev == &test->queue.head;
+	spin_unlock_irqrestore(&test->queue.lock, flags);
+	remove_wait_queue(&test->queue, entry);
+	test->poisoned = entry->entry.next == LIST_POISON1 && entry->entry.prev == LIST_POISON2;
+	/* Rust completion publication follows function return, then no C access. */
+}
+
+/* Bit commands use real, live key objects and addresses. Return raw callback
+ * result/flag observations; Rust supplies expected values, not C policy oracle.
+ * Require enrollment + blocked observations before invocation. Local key lives
+ * throughout synchronous callback, which never retains it.
+ */
+void rusix_wait_woken_test_probe(void *data, unsigned int command, s64 *out)
+{
+	struct woken_case *test = data;
+	struct wait_bit_key key = {
+		.flags = &test->word, .bit_nr = 3, .timeout = 999,
+	};
+	unsigned long flags;
+
+	if (command == 0)
+		key.flags = &test->other_word;
+	if (command == 1)
+		key.bit_nr = 4;
+	if (command == 2) {
+		WRITE_ONCE(test->payload, 0x5678);
+		smp_store_release(&test->condition, 1);
+	}
+	spin_lock_irqsave(&test->queue.lock, flags);
+	/* Independent observer samples can race startup/expiry. Do not call into
+	 * an uninitialized or detached entry even on a failed controller path.
+	 */
+	if (test->queue.head.next != &test->bit.wq_entry.entry ||
+	    test->queue.head.prev != &test->bit.wq_entry.entry) {
+		out[0] = -ENOENT;
+		out[1] = 0;
+		spin_unlock_irqrestore(&test->queue.lock, flags);
+		return;
+	}
+	out[0] = woken_wake_bit_function(&test->bit.wq_entry, TASK_INTERRUPTIBLE, 0, &key);
+	out[1] = READ_ONCE(test->bit.wq_entry.flags);
+	spin_unlock_irqrestore(&test->queue.lock, flags);
+	/* Do NOT require WOKEN set in command2's out[1]: an awakened worker can
+	 * already clear it outside queue.lock. Mismatch commands expect unchanged.
+	 */
+}
+
+void rusix_wait_woken_test_publish(void *data)
+{
+	struct woken_case *test = data;
+	WRITE_ONCE(test->payload, 0x1234);
+	smp_store_release(&test->condition, 1);
+	__wake_up(&test->queue, TASK_INTERRUPTIBLE, 0, NULL);
+}
+
+void rusix_wait_woken_test_abort(void *data)
+{
+	struct woken_case *test = data;
+	struct wait_bit_key key = { .flags = &test->word, .bit_nr = 3 };
+
+	WRITE_ONCE(test->abort, 1);
+	/* Bit callback must never receive NULL, including failure cleanup. The
+	 * ordinary callback ignores this real key. Latch closes wake-before-sleep.
+	 */
+	__wake_up(&test->queue, TASK_NORMAL, 0, &key);
+	/* Rust additionally wake_up_process on its retained task reference. */
+}
+
+void *rusix_wait_woken_test_alloc(unsigned int mode)
+{
+	struct woken_case *test = kmalloc(sizeof(*test), GFP_KERNEL);
+
+	if (test)
+		woken_init(test, mode);
+	return test;
+}
+
+void rusix_wait_woken_test_free(void *data)
+{
+	kfree(data);
+}
+
+u32 rusix_wait_woken_test_members(void *data)
+{
+	struct woken_case *test = data;
+	struct list_head *node;
+	unsigned long flags;
+	u32 count = 0;
+
+	spin_lock_irqsave(&test->queue.lock, flags);
+	list_for_each(node, &test->queue.head) {
+		if (node != &test->bit.wq_entry.entry || ++count > 1) {
+			count = 2;
+			break;
+		}
+	}
+	spin_unlock_irqrestore(&test->queue.lock, flags);
+	return count;
+}
+
+/* Read only after callback completion: no C writes follow publication. */
+void rusix_wait_woken_test_result(void *data, s64 *out)
+{
+	struct woken_case *test = data;
+
+	out[0] = test->remaining;
+	out[1] = test->callback_result;
+	out[2] = test->flags_after;
+	out[3] = test->running;
+	out[4] = test->linked_before_remove;
+	out[5] = test->poisoned;
+	out[6] = test->payload_seen;
+	out[7] = test->voluntary_delta;
 }
