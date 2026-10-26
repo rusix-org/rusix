@@ -1,0 +1,1 @@
+bash /home/aaron/code/rusix/linux/rusix/scripts/with-local-tools.sh gcc -static -pthread -O2 -Wall -Wextra -Werror /home/aaron/code/rusix/linux/rusix/tests/brd-contract/probe.c -o /home/aaron/code/rusix/linux-out/builds/brd-vm-brd-c-001/init

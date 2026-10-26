@@ -1,0 +1,7 @@
+make: Entering directory '/home/aaron/code/rusix/linux'
+make[1]: Entering directory '/home/aaron/code/rusix/builds/baseline'
+#
+# No change to .config
+#
+make[1]: Leaving directory '/home/aaron/code/rusix/builds/baseline'
+make: Leaving directory '/home/aaron/code/rusix/linux'

@@ -1,0 +1,6 @@
+Manual selection check: llvm-ar t lib/math/built-in.a and llvm-nm --defined-only vmlinux
+/home/aaron/code/rusix/relocation-check-out/builds/clean/lib/math/int_sqrt_rust.o
+/home/aaron/code/rusix/relocation-check-out/builds/clean/lib/math/int_sqrt_exports.o
+/home/aaron/code/rusix/relocation-check-out/builds/clean/lib/math/tests/int_sqrt_kunit.o
+/home/aaron/code/rusix/relocation-check-out/builds/clean/lib/math/tests/int_sqrt_rusix_kunit.o
+ffffffff812293e0 T int_sqrt

@@ -1,0 +1,8 @@
+{
+  "scope": "Local KVM qemu64 boot replay; no rebuild. Kernel source differs from runner source.",
+  "kernel_source_revision": "4dd0b2c9f5d1724fe654c60c9baa23f7ce1e04d2",
+  "runner_source_revision": "41f9d1ce2da93fa0573fce86fcf088a4081fd2f9",
+  "source_artifact_directory": "/home/aaron/code/rusix/linux-out/hosted-ci-40265430492/rusix-kunit-40265430492-1",
+  "bzImage_sha256": "7ce4ccb8906b81b1f1dcbc5e7cd3fcbcff282da4395825ef8a635839230a2747",
+  "config_sha256": "064dace1b5a72c868f31952335821c57ebebdf4d15c048fc3712a55e0b69c6a9"
+}

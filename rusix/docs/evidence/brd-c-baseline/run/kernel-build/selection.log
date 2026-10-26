@@ -1,0 +1,5 @@
+implementation=brd-c
+/home/aaron/code/rusix/linux-out/builds/brd-c/drivers/block/brd.o
+ffffffff812a4fa0 t brd_submit_bio
+f99c712d0fe944cc6efa3674b118e33cd52ee1cd1abf9a71b42814383c21d135  /home/aaron/code/rusix/linux/drivers/block/brd.c
+d0c8da9ec5a69d0c94905ac6e071c0f94401a9368e1c9a8290d1be153ea84951  /home/aaron/code/rusix/linux-out/builds/brd-c/drivers/block/brd.o

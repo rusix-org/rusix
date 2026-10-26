@@ -1,0 +1,17 @@
+Command: llvm-ar t builds/baseline/lib/math/built-in.a
+builds/baseline/lib/math/div64.o
+builds/baseline/lib/math/gcd.o
+builds/baseline/lib/math/lcm.o
+builds/baseline/lib/math/int_log.o
+builds/baseline/lib/math/int_pow.o
+builds/baseline/lib/math/reciprocal_div.o
+builds/baseline/lib/math/int_sqrt_rust.o
+builds/baseline/lib/math/int_sqrt_exports.o
+builds/baseline/lib/math/tests/int_sqrt_kunit.o
+builds/baseline/lib/math/tests/int_sqrt_rusix_kunit.o
+
+Command: llvm-nm --undefined-only builds/baseline/lib/math/int_sqrt_rust.o
+(empty output)
+
+Defined vmlinux int_sqrt symbols:
+ffffffff812293e0 T int_sqrt
