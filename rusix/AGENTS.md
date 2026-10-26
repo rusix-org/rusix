@@ -58,6 +58,10 @@ directories and virtual machines for verification.
 - For each migration, add meaningful boundary and differential tests against
   the upstream behavior. Include failure and concurrency tests where relevant.
   Verify symbol/build integration and boot/runtime behavior as applicable.
+- Preserve the existing upstream test suite unchanged as a compatibility gate.
+  Run baseline C and replacement Rust against the same tests/configuration.
+  Add missing coverage separately; do not weaken expectations to fit a rewrite.
+  Passing tests establishes tested behavior, never complete absence of bugs.
 - Never equate compilation with correctness, host tests with kernel execution,
   or a successful VM boot with full Linux compatibility.
 
@@ -72,7 +76,9 @@ directories and virtual machines for verification.
   results or mark an unexecuted command as verified.
 - Document missing dependencies precisely. Prefer project-local tools where
   practical; do not change global toolchain defaults to satisfy a local build.
-- No sub-agent delegation unless explicitly requested by the user.
+- Aaron authorizes parallel sub-agents for independent work. Assign clear file
+  ownership or read-only review tasks; serialize builds in each output directory
+  and integration edits. Use independent review for nontrivial migrations.
 
 ## Living progress ledger
 
@@ -83,3 +89,14 @@ session entries. Keep it concise by linking longer evidence under `docs/` or
 to completed. Mark work as planned, implemented/unverified, verified (with scope),
 or blocked. Completion means the original objective is implemented and verified,
 not merely that the current milestone passed.
+
+## External review and contributors
+
+Aaron expects heavy scrutiny and wants outside developers to be able to join.
+Treat every initial migration as a public-review candidate: small diffs, preserved
+attribution, reproducible commands, precise behavior contracts, and explicit
+limitations. Record the source revision, resolved config, compiler versions, and
+raw runtime evidence behind verification claims. A reviewer must be able to
+reproduce a result without relying on chat history. Keep upstream tests unchanged
+and added tests visibly separate. Document residual C, untested architectures,
+and known gaps prominently; do not market an early experiment as a finished OS.

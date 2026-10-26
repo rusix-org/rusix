@@ -2,7 +2,7 @@
 # Read-only checks; does not install tools or change the default toolchain.
 set -euo pipefail
 root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
-if [[ ! -d "$root/linux/.git" && -d "$root/../../linux/.git" ]]; then
+if [[ ! -e "$root/linux/.git" && -e "$root/../../linux/.git" ]]; then
     root=$(cd -- "$root/../.." && pwd)
 fi
 missing=0
