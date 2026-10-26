@@ -38,11 +38,19 @@ safety obligations. [Probe instructions](../tests/brd-contract/README.md) reprod
 that baseline; [Phase 1](PHASE1.md) defines replacement gates. Existing mq APIs
 and upstream rnull are not substitutes for the bio-based stateful BRD contract.
 
-## Next core boundary
+## Completion: opt-in partial core migration
 
-After BRD, investigate completion ownership and wait/wakeup as specified in
-[the roadmap](ROADMAP.md). GCD/LCM remain unimplemented, deferred investigations;
-they are not migration progress or the next implementation target.
+[`complete()`](../../kernel/sched/completion_rust.rs) has an opt-in Rust
+translation (`0e7d592fed`, default off, x86_64). Local `completion-c`/`completion-rust`
+profiles support comparison; compilation, exclusive-symbol linking and paired
+runtime verification remain pending. C still owns layout/init/reset, other
+completion operations, wait loops, raw locks, swait and scheduler integration.
+The scoped kernel LKMM atomic counter shares the existing raw lock with C writers;
+no Rust reference covers the enclosing mutable C object.
 
-The [completion ownership experiment](../experiments/completion/README.md) maps
-that core boundary and tests a host ownership model; kernel replacement is pending.
+The [ownership experiment](../experiments/completion/README.md) owns the contract,
+remaining dependencies and current nine-case inventory: five behavior cases,
+one layout case and three worker cases. Historical six-case i440fx evidence does
+not cover those workers or Rust selection. No completed subsystem or divergence
+point is claimed. GCD/LCM remain deferred; [the roadmap](ROADMAP.md) prioritizes
+this ownership/wait-wakeup boundary after BRD.
