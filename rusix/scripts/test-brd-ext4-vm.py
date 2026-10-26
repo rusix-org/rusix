@@ -39,7 +39,7 @@ TOOL_PATH = "/usr/sbin:/usr/bin:/sbin:/bin"
 def accept_console(console, qemu_exit):
     if qemu_exit != 0:
         raise ValueError(f"QEMU failed or timed out: exit {qemu_exit}")
-    if re.search(r"(?i:\b(?:warning|BUG)\b)|Oops:|Kernel panic|CPU feature dependency check failure|ACPI (?:BIOS )?(?:Error|Exception|Warning)|ACPI: Unable to load|EXT4-fs error|Buffer I/O error|I/O error, dev", console):
+    if re.search(r"(?i:\bwarning\b)|\bBUG\b|Oops:|Kernel panic|CPU feature dependency check failure|ACPI (?:BIOS )?(?:Error|Exception|Warning)|ACPI: Unable to load|EXT4-fs error|Buffer I/O error|I/O error, dev", console):
         raise ValueError("Kernel warning, oops, BUG, or panic in console")
     expected = ["RUSIX_EXT4_START"] + [f"RUSIX_EXT4_PASS {case}" for case in CASES]
     expected += ["RUSIX_EXT4_SUCCESS cases=6"]

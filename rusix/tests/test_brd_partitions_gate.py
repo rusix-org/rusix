@@ -22,6 +22,11 @@ class PartitionTests(unittest.TestCase):
         self.config = "\n".join(f"CONFIG_{name}=y" for name in runner.common.REQUIRED_CONFIG)
         self.config += "\nCONFIG_SYSFS=y\nCONFIG_MSDOS_PARTITION=y\nCONFIG_BLK_DEV_RAM_COUNT=1\nCONFIG_BLK_DEV_RAM_SIZE=65536\n"
 
+    def test_informational_pci_bug_reporting_hint_is_not_a_fault(self):
+        hint = 'PCI: Using host bridge windows from ACPI; if necessary, use "pci=nocrs" and report a bug'
+        result = runner.accept_console("\n".join([hint] + self.lines), 0)
+        self.assertEqual(result["status"], "PASS")
+
     def test_acpi_diagnostics_even_after_success(self):
         for diagnostic in ("ACPI Error: AE_NOT_FOUND", "ACPI Warning: invalid table",
                            "ACPI BIOS Error (bug): Could not resolve symbol",

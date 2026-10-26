@@ -21,6 +21,11 @@ class GateTests(unittest.TestCase):
         self.lines = ["RUSIX_EXT4_START"] + [f"RUSIX_EXT4_PASS {case}" for case in runner.CASES]
         self.lines += ["RUSIX_EXT4_SUCCESS cases=6"]
 
+    def test_informational_pci_bug_reporting_hint_is_not_a_fault(self):
+        hint = 'PCI: Using host bridge windows from ACPI; if necessary, use "pci=nocrs" and report a bug'
+        result = runner.accept_console("\n".join([hint] + self.lines), 0)
+        self.assertEqual(result["status"], "PASS")
+
     def test_acpi_diagnostics_even_after_success(self):
         for diagnostic in ("ACPI Error: AE_NOT_FOUND", "ACPI Warning: invalid table",
                            "ACPI BIOS Error (bug): Could not resolve symbol",

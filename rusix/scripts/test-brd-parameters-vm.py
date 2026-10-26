@@ -45,7 +45,7 @@ def accept_console(console, qemu_exit, mode="normal"):
     cases = CASES if mode == "normal" else HIGH_POSITIVE_CASES
     if qemu_exit != 0:
         raise ValueError(f"QEMU failed or timed out: exit {qemu_exit}")
-    if re.search(r"(?i:\b(?:warning|BUG)\b)|Oops:|Kernel panic|CPU feature dependency check failure|ACPI (?:BIOS )?(?:Error|Exception|Warning)|ACPI: Unable to load|Buffer I/O error|I/O error, dev", console):
+    if re.search(r"(?i:\bwarning\b)|\bBUG\b|Oops:|Kernel panic|CPU feature dependency check failure|ACPI (?:BIOS )?(?:Error|Exception|Warning)|ACPI: Unable to load|Buffer I/O error|I/O error, dev", console):
         raise ValueError("Kernel diagnostic in parameter guest")
     expected = ["RUSIX_BRD_PARAMETERS_START"]
     expected += [f"RUSIX_BRD_PARAMETERS_PASS {case}" for case in cases]

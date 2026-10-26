@@ -41,7 +41,7 @@ def validate_selection(profile, selection, config):
 def accept_console(console, qemu_exit):
     if qemu_exit != 0:
         raise ValueError(f"QEMU failed or timed out: exit {qemu_exit}")
-    if re.search(r"(?i:\b(?:warning|BUG)\b)|Oops:|Kernel panic|CPU feature dependency check failure|ACPI (?:BIOS )?(?:Error|Exception|Warning)|ACPI: Unable to load|Buffer I/O error|I/O error, dev", console):
+    if re.search(r"(?i:\bwarning\b)|\bBUG\b|Oops:|Kernel panic|CPU feature dependency check failure|ACPI (?:BIOS )?(?:Error|Exception|Warning)|ACPI: Unable to load|Buffer I/O error|I/O error, dev", console):
         raise ValueError("Kernel diagnostic in partition guest")
     expected = ["RUSIX_BRD_PARTITIONS_START"]
     expected += [f"RUSIX_BRD_PARTITIONS_PASS {case}" for case in CASES]
