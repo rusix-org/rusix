@@ -271,7 +271,8 @@ config RUSIX_COMPLETION_RUST
 	  Select Rust implementations of all completion.c and swait.c entry points
 	  and generic wait.c initialization, enrollment, prepare/finish,
 	  autoremove callback, WOKEN protocol and seven wake wrappers.
-	  Entry initialization and locked interruptible wait iterations use Rust.
+	  Generic entry initialization remains C; locked interruptible wait
+	  iterations use Rust.
 	  Rust also owns the bit/variable wait table, initialization, hashing,
 	  key matching, dispatch, wait loops/actions and stack wrappers.
 	  Bit primitives and ordinary lock/IRQ adapters remain C.
