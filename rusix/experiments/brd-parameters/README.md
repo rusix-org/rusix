@@ -10,6 +10,12 @@ C scalar widths, alignment and externally referenced names. Private opaque
 storage exposes no safe references across C access. The existing C parameter
 operations still parse and print values; this migration does not redesign them.
 
+The inspected [upstream parameter API](https://github.com/torvalds/linux/blob/21a7f44fd0765fcc5194130b28767786eba1d1e7/rust/kernel/module_param.rs)
+uses SetOnce, rejects repeated assignments and has no sysfs getter. Its metadata
+wrapper pattern is useful, but importing that storage/parser contract would
+change BRD behavior. This migration keeps its wrapper private and retains the
+original parameter operations; no upstream acceptance is claimed.
+
 Three naturally aligned `__param` records preserve builtin `brd.` names, null
 module owner, permissions 0444, level -1, flags zero and the original int/ulong
 operations. Six module-information strings and the legacy `ramdisk_size=` setup
