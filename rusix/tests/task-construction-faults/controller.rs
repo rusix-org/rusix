@@ -322,7 +322,7 @@ fn collect_attempt(label: &str, nth: u32, events: &Events) -> io::Result<()> {
 fn run() -> io::Result<()> {
     // SAFETY: getppid takes no pointers and only reads process identity.
     if unsafe { getppid() } != 1
-        || fs::read_to_string("/proc/1/comm")? != "rusix-fault-init\n"
+        || fs::read_to_string("/proc/1/comm")? != "rusix-faultinit\n"
         || fs::read_to_string("/proc/cmdline")?
             .split_whitespace()
             .filter(|x| *x == "rusix.task_faults=1")

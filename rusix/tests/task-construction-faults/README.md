@@ -1,16 +1,15 @@
 # Constructor allocation-failure candidate
 
-**Uncompiled and unexecuted.** This is a capture/parser candidate, not accepted
-failure coverage. The existing production transaction at policy base
+**Uncompiled and unexecuted.** The paired diagnostic pipeline is implemented,
+but has no accepted runtime failure coverage. The existing production transaction at policy base
 `8fd3defabb841083192cd1d9c4eb1cde83027579` is unchanged. Separate
 `x86_64-task-construction-fault-{c,rust}.config` fragments add diagnostic-only
-fault injection and tracing. The normal server remains DEBUG_FS=n. Existing
-build/VM routing does not yet accept these profiles.
+fault injection and tracing. The normal server remains DEBUG_FS=n. The fault profiles use separate build/VM routing; ordinary task profiles retain
+their original gates.
 
 `controller.rs` is intended for the pinned static Rust toolchain; `worker.c` for
-static x86_64 GCC. Neither may run on the host. A future PID1 must mount proc,
-sysfs, debugfs and tracefs, set comm `rusix-fault-init`, then directly spawn the
-controller. Exact cmdline token `rusix.task_faults=1` is required. Controller
+static x86_64 GCC. Neither may run on the host. The guarded `init.rs` mounts proc, sysfs, debugfs and tracefs, sets
+comm `rusix-faultinit`, then directly spawns the controller. Exact cmdline token `rusix.task_faults=1` is required. Controller
 requires parent PID1; worker separately checks token/name. Worker path is
 `/fault-worker`; the reviewed calibration packet's TSV is `/calibration.tsv`.
 Python is host-only: no Python guest/rootfs is introduced.
@@ -45,8 +44,9 @@ readbacks or partial setup fail closed. No live stack cache is flushed.
 
 ## Calibration is a prerequisite, not supplied proof by assertion
 
-There is intentionally no fabricated calibration file. Generation from the actual
-fault-profile build and first diagnostic boot remains pending. TSV fields are
+There is intentionally no fabricated calibration file. `generate-task-fault-calibration.py` derives candidate sites from the actual
+fault-profile ELF. Ambiguous/missing sites stop before boot. The uninjected
+guest attempt must independently demonstrate both selected callsite frames. TSV fields are
 schema=1, policy_base, build_source (the future fault commit), implementation,
 notes_hex, range_symbol, range_start, range_end, slab_frame and stack_frame.
 Fields are tab separated. Source base and actual build source are distinct.
@@ -78,10 +78,12 @@ of all possible parent-stack accesses or a proof of no leaks.
 
 ## Remaining integration and limits
 
-Pending: pinned compilation; real event-schema/callsite calibration; explicit
-fault-profile build/selection/config proof routing; guarded VM init and artifact
-transport/extraction; whole-console/terminal-status/cleanup gate; paired C/Rust
-VM runs and real fault-site results. No packet may be fabricated to bypass these.
+Pending: pinned compilation, actual linked-site discovery and event-schema
+validation, paired C/Rust VM runs and real fault-site results. No packet may be
+fabricated to bypass these. The runner now binds build selection/config/source,
+ELF notes and static fixture identity; decodes an exact 97-artifact inventory;
+rejects kernel diagnostics and incomplete cleanup/PID1 status; and rechecks all
+source, kernel and guest inputs after execution.
 The parser CLI's PASS means only captured-record attribution after ELF checks;
 it is not sufficient for accepting a run without the external VM/source gates.
 
@@ -92,6 +94,35 @@ compiled or runtime behavior. `PROGRESS.md` records the current evidence level.
 
 Calibration requires constructor-chain frame owners and a unique qualifying
 allocator call in each owner; ambiguous inlined sites fail until instruction
-arguments/source mapping can distinguish them. The future VM launcher must use
-`nokaslr`: current exact linked/live address checks reject relocation. Each capture
+arguments/source mapping can distinguish them. The VM launcher explicitly uses
+`nokaslr`: exact linked/live address checks reject relocation. Each capture
 label must match its requested fail-nth value and use a distinct worker PID.
+
+
+## Local paired execution (pending)
+
+Run the diagnostic C profile first, then Rust, with the same pinned fixture image
+and build resources. Each uses `test-task-faults-vm.py BUILD LABEL
+--build-evidence PROOF`; fresh labels are mandatory. The build proof must come
+from `task-construction-fault-c` or `task-construction-fault-rust` at the exact
+current clean commit. Both run the same uninjected control, task-slab nth1 and
+stack nth1..16 sweep. Then run `compare-task-fault-runs.py --c C_RUN_EVIDENCE --rust
+RUST_RUN_EVIDENCE`. It rechecks captured attribution, linked calibration and
+artifact hashes, and requires identical source/guest/tool/image identities with
+only the constructor selector differing in resolved configs. Retain original
+build and fixture output paths until this check finishes. When C and Rust ran in
+separate containers mounted at `/out`, pass `--c-output-root C_HOST_OUTPUT
+--rust-output-root RUST_HOST_OUTPUT --source-root CHECKOUT` to the comparator,
+using the pinned LLVM tools through `with-local-tools.sh`. Only `/out` and `/src`
+are remapped; all artifact hashes are still verified. The pair gate also requires
+identical compiled init/controller/worker binaries, exact QEMU arguments and both
+resolved diagnostic configs. Calibration and initramfs bytes appropriately differ.
+
+The runner generates calibration before compiling fixtures, preserving unsupported
+compiler-form failures. KVM is required; the guest has two CPUs, 512 MiB, no NIC,
+and a 300-second timeout with a five-second kill grace. The controller restores
+owned fault knobs and removes its tracing state before emitting capture completion;
+PID1 emits its terminal marker only after successful controller exit. Worker
+failures, missing artifacts, trace/probe loss, absent attributable stack failure,
+or an expired VM timeout cannot pass. Eleven additional synthetic host tests cover
+callsite discovery and transport strictness, including the 15-byte task-name guard.

@@ -49,6 +49,27 @@ class Selection(unittest.TestCase):
         with self.assertRaises(ValueError): m.check_config('server', configs[0], target)
         with self.assertRaises(ValueError): m.compare(configs[0], configs[1] | {'CONFIG_SMP':'n'})
 
+    def test_fault_profiles_preserve_target_with_explicit_debugfs_override(self):
+        target = m.config_values((ROOT/'rusix/configs/x86_64-server.config').read_text())
+        configs = []
+        for side in ('c', 'rust'):
+            profile = 'task-construction-fault-' + side
+            config = m.config_values((ROOT/f'rusix/configs/x86_64-{profile}.config').read_text())
+            config.update(CONFIG_X86_64='y', CONFIG_THREAD_INFO_IN_TASK='y')
+            m.check_config(profile, config, target)
+            configs.append(config)
+            for key in m.FAULT_REQUIRED:
+                with self.assertRaises(ValueError):
+                    m.check_config(profile, config | {'CONFIG_'+key: 'n'}, target)
+            for key in ('MODULES', 'VMAP_STACK', 'KASAN', 'KUNIT', 'BPF_SYSCALL'):
+                with self.assertRaises(ValueError):
+                    m.check_config(profile, config | {'CONFIG_'+key: 'y'}, target)
+            with self.assertRaises(ValueError):
+                m.check_config('task-construction-'+side, config, target)
+        self.assertEqual(m.compare(*configs), [m.SELECTOR])
+        with self.assertRaises(ValueError):
+            m.compare(configs[0], configs[1] | {'CONFIG_FAILSLAB': 'n'})
+
     def test_duplicate_config_rejected(self):
         with self.assertRaises(ValueError): m.config_values('CONFIG_SMP=y\nCONFIG_SMP=y\n')
 

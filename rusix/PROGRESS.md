@@ -117,13 +117,17 @@ and the bounded guest runner are ready for kernel verification. No candidate
 kernel has been compiled or booted. Attributable allocation-failure tests remain
 required. [Contract and remaining C boundaries](experiments/task-construction/README.md).
 
-### Task-construction allocation failures (capture candidate)
+### Task-construction allocation failures (unverified pipeline)
 
 On `rusix/task-construction-faults`, production policy remains the frozen `8fd3`
 constructor. Separate diagnostic configs, guarded static-Rust controller/C raw
-fork worker and host trace/ELF parser are implemented. Thirteen synthetic parser
-regressions pass; nothing has been compiled or executed in a VM. Actual linked
-callsite calibration, fault-profile routing, guest transport and external runtime
-gates remain pending. Capture completion is not failure-test PASS. The
+fork worker, PID1, actual-ELF calibration generator and bounded VM runner are
+implemented. Thirteen synthetic parser regressions and eleven discovery/transport
+regressions pass; nothing has been compiled or executed in a VM. Diagnostic
+routing preserves ordinary task gates. Root and independent source reviews pass;
+a combined 46-case host run and exact input hashes are retained in
+`linux-out/task-fault-combined-host-001`. Actual compiled-site discovery, event
+schema calibration and paired runtime attribution remain pending. Capture
+completion alone is not failure-test PASS. The
 [fixture contract](tests/task-construction-faults/README.md) distinguishes intended
 slab/stack attribution from unobserved parent-stack accesses and broader cleanup.

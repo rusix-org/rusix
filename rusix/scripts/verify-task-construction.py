@@ -13,7 +13,13 @@ from saved_clang_command import command
 SELECTOR = 'CONFIG_RUSIX_TASK_CONSTRUCTION_RUST'
 BRIDGE = 'rusix_dup_task_struct'
 PINNED_FORK_SHA256 = '781790e8e6af86e7ded38bbcffa8e631eac7c43f03a3337021cba06610682802'
-PROFILES = {'task-construction-c': False, 'task-construction-rust': True}
+PROFILES = {'task-construction-c': False, 'task-construction-rust': True,
+            'task-construction-fault-c': False, 'task-construction-fault-rust': True}
+FAULT_PROFILES = frozenset(('task-construction-fault-c', 'task-construction-fault-rust'))
+FAULT_REQUIRED = ('FAULT_INJECTION', 'FAILSLAB', 'FAIL_PAGE_ALLOC',
+                  'FAULT_INJECTION_DEBUG_FS', 'FAULT_INJECTION_STACKTRACE_FILTER',
+                  'STACKTRACE', 'KPROBES', 'KPROBE_EVENTS', 'TRACING',
+                  'KALLSYMS', 'KALLSYMS_ALL', 'DEBUG_FS')
 EXCLUDED = ('MODULES', 'PREEMPT_RT', 'VMAP_STACK', 'SHADOW_CALL_STACK', 'KASAN',
             'KMSAN', 'KCSAN', 'MEM_ALLOC_PROFILING', 'KUNIT', 'DEBUG_FS')
 REQUIRED = ('RUST', 'X86_64', 'THREAD_INFO_IN_TASK', 'SMP', 'RUSIX_COMPLETION_RUST',
@@ -42,13 +48,19 @@ def check_config(profile, values, target):
         raise ValueError('Unknown constructor profile')
     if values.get(SELECTOR) != ('y' if PROFILES[profile] else 'n'):
         raise ValueError('Missing/wrong explicit constructor selector')
-    for name in REQUIRED:
+    fault = profile in FAULT_PROFILES
+    for name in REQUIRED + (FAULT_REQUIRED if fault else ()):
         if values.get('CONFIG_'+name) != 'y':
             raise ValueError('Missing constructor dependency: '+name)
     for name in EXCLUDED:
+        if fault and name == 'DEBUG_FS':
+            continue
         if values.get('CONFIG_'+name, 'n') != 'n':
             raise ValueError('Unsupported constructor setting: '+name)
     for key, value in target.items():
+        # Only the explicitly diagnostic profiles override this target exclusion.
+        if fault and key == 'CONFIG_DEBUG_FS':
+            value = 'y'
         if values.get(key, 'n') != value:
             raise ValueError('Declared server target drift: '+key)
 

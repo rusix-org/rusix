@@ -104,7 +104,7 @@ def classify(worker, trace, calibration, stats, probes):
         return {'classification':'other-page-failure','pid':pid,'nth':nth}
     need(len(allocations) == len(frees) == 1, 'Need one task allocation and matching rollback free')
     ptr = field(allocations[0],'ptr')
-    need(not zero(ptr) and field(frees[0],'ptr') == ptr, 'Task slab rollback identity mismatch')
+    need(re.fullmatch(r'(?:0x)?[0-9a-f]{8,16}',ptr) and not zero(ptr) and field(frees[0],'ptr') == ptr, 'Task slab rollback identity mismatch or unavailable pointer')
     alloc_index = next(i for i,r in enumerate(rows) if r['body'] == allocations[0])
     free_index = next(i for i,r in enumerate(rows) if r['body'] == frees[0])
     returns = [i for i,r in enumerate(rows) if r['body'].startswith('pages_result:') and field(r['body'],'order') == '2' and zero(field(r['body'],'result'))]
@@ -162,7 +162,7 @@ def callsite_proof(symbols, disassembly, calibration):
     return True
 
 
-def load_reviewed_calibration(path):
+def load_reviewed_calibration(path, remap=lambda p: p):
     def unique(pairs):
         result={}
         for key,value in pairs:
@@ -178,6 +178,7 @@ def load_reviewed_calibration(path):
         need(set(item) == {'path','sha256'}, 'Calibration hash schema')
         p = Path(item['path'])
         if not p.is_absolute(): p = path.parent / p
+        p = remap(p)
         need(hashlib.sha256(p.read_bytes()).hexdigest() == item['sha256'], 'Calibration input changed')
         inputs[key]=p
     rows=[line.split('\t') for line in inputs['calibration.tsv'].read_text().splitlines()]

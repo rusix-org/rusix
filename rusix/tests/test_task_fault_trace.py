@@ -13,7 +13,7 @@ def row(body):return f' worker-123 [001] .... 1.000000: {body}\n'
 def interval(body):return row('tracing_mark_write: ARM')+body+row('tracing_mark_write: DISARM')
 def stack(frame):return row('<stack trace>')+' => '+frame+'\n'
 def slab():return interval(row('slab_decision: result=-12')+stack(CAL['slab_frame'])+row('kmem_cache_alloc: ptr=0000000000000000 name=task_struct'))
-def pages(frame=None):return interval(row('kmem_cache_alloc: ptr=abc name=task_struct')+row('page_decision: order=2 injected=1')+stack(frame or CAL['stack_frame'])+row('pages_result: order=2 result=0x0')+row('kmem_cache_free: ptr=abc name=task_struct'))
+def pages(frame=None):return interval(row('kmem_cache_alloc: ptr=0000000000000abc name=task_struct')+row('page_decision: order=2 injected=1')+stack(frame or CAL['stack_frame'])+row('pages_result: order=2 result=0x0')+row('kmem_cache_free: ptr=0000000000000abc name=task_struct'))
 WORK='RESULT pid=123 nth=1 ret=-1 errno=12 remaining=0 child_status=0 retry_status=0'
 def check(trace,worker=WORK):return m.classify(worker,trace,CAL,STATS,PROBES)
 class Gate(unittest.TestCase):
@@ -23,7 +23,7 @@ class Gate(unittest.TestCase):
  def test_other_failure_not_stack_coverage(self):
   self.assertEqual(check(pages('slab_refill+0x5/0x20'))['classification'],'other-page-failure')
  def test_site_and_rollback_identity(self):
-  for text in [slab().replace(CAL['slab_frame'],'elsewhere+0x5/0x20'),pages().replace('kmem_cache_free: ptr=abc','kmem_cache_free: ptr=def'),pages().replace('result=0x0','result=0xabc'),pages().replace('order=2','order=1')]:
+  for text in [slab().replace(CAL['slab_frame'],'elsewhere+0x5/0x20'),pages().replace('kmem_cache_free: ptr=0000000000000abc','kmem_cache_free: ptr=0000000000000def'),pages().replace('result=0x0','result=0xabc'),pages().replace('order=2','order=1'),pages().replace('0000000000000abc','(ptrval)')]:
    with self.assertRaises(ValueError):check(text)
  def test_strict_loss_and_misses(self):
   for stats,probes in [(STATS[:1]+['overrun: 1\ncommit overrun: 0\ndropped events: 0\n'],PROBES),(STATS,PROBES.replace('10 0','10 1')),(['']*2,PROBES),(STATS,PROBES+'page_decision 0 0\n')]:
