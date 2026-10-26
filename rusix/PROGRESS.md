@@ -260,3 +260,10 @@ extern annotation and the same narrowly scoped declaration annotation for the
 new mapping policy: aggregate values cross only as raw pointers, while scalars
 retain C types. Rust policy and global warning gates are unchanged. Actual clean
 compilation remains required, as does attributable partial-allocation rollback.
+
+At `e758dac059466f4db1552913a94be1a94a618546`, both seven-case guest binaries
+compiled cleanly as static x86-64 ELFs. Root and independent audits checked
+source/binary hashes, non-executable host modes and the shared child's emitted
+code (inline syscalls, no helper calls or TLS access). The
+[compile evidence](docs/evidence/dup-mmap-fixtures/manifest.json) contains 20 text
+records. No guest binary or mapping-duplication candidate kernel was executed.

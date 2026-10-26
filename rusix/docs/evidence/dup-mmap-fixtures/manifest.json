@@ -1,0 +1,30 @@
+{
+  "status": "PASS",
+  "source": "e758dac059466f4db1552913a94be1a94a618546",
+  "controller_session": 2236,
+  "scope": "Pinned static guest compilation and child-code inspection; no binary execution",
+  "files": {
+    "check.py": "e507440641e75574f8d9303fbedc0764a09a5adb2ab0c6278a5f7904c7951ebd",
+    "child-disassembly.exit": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+    "child-disassembly.log": "cd17b3ff62bed4661a1194d0f9d3b80b28bef651a0cb3d816dca7e38d4f3c4ca",
+    "gcc-version.exit": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+    "gcc-version.log": "4dc9a4e32fd9e06d42fb307688c59d6d889f0ff90ce034cbefed21b0d451fd81",
+    "init-compile.exit": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+    "init-compile.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "init-elf.exit": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+    "init-elf.log": "d69802d253d2d740cbdd136b6c5d6ba673b5b7a5b2e86750243cdb0b84d80d29",
+    "objdump-version.exit": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+    "objdump-version.log": "aff897e4c6a85eef803f6dc0ed4a813e66726aa1ca6f3afc23280f1d655f32da",
+    "probe-compile.exit": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+    "probe-compile.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "probe-elf.exit": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+    "probe-elf.log": "45d5d333b4165c02d7d9bce0ccdb6b24294888da818fb6fee9722d70a44beeb2",
+    "readelf-version.exit": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+    "readelf-version.log": "a87e30813b76f838a61852bc2943afbe4a26ba28a4b2728efb9481b50f02aff8",
+    "result.json": "bee81719d2048b4d04bd554d626826553baaf934bb51a11157a89e0114fbaee8",
+    "rustc-version.exit": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+    "rustc-version.log": "6661789050175828fe81cbba4e3bd5817751f51884bb3f5baaa7919bc01caa88"
+  },
+  "raw": "/home/aaron/code/rusix/linux-out/dup-mmap-fixture-compile-001",
+  "independent_audit": "Sources/ELF hashes, static x86-64, mode0644, exactchilddisassembly nohelpercalls/TLS"
+}

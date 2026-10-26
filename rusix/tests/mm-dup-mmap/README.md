@@ -1,7 +1,8 @@
 # VMA duplication consumers
 
-Guarded static guest fixtures only. Source implementation is complete; compile
-and paired VM verification remain pending. Never execute these binaries on the
+Guarded static guest fixtures only. Static guest compilation and emitted child-code inspection passed at
+`e758dac05946`; paired kernel/VM verification remains pending.
+[Compile evidence](../../docs/evidence/dup-mmap-fixtures/manifest.json). Never execute these binaries on the
 host or in a container. Both profiles retain Rust task construction, MM
 construction/release and MM copying. Only `CONFIG_RUSIX_DUP_MMAP_RUST` differs;
 KUnit is disabled. Partial allocation-failure coverage remains separate.
