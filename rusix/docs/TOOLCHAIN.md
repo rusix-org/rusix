@@ -1,81 +1,61 @@
-# Bootstrap toolchain
+# Build and test environment
 
-On Aaron's Arch/Omarchy laptop, existing Clang/LLVM and rustup provide most tools.
-Install missing packages without changing the host kernel or Rust defaults:
+The pinned container is being established in [`rusix/ci`](../ci/README.md).
+Its Dockerfile pins a Debian amd64 base digest, dated package snapshot, Rust and
+Rust source, LLVM and bindgen versions. The container/CI instructions own exact
+pins and invocation. Until a successful run is recorded, treat the environment
+as implemented but unverified; neither a Dockerfile nor a workflow means CI is green.
+Independent-machine bit-identical builds are deferred under [ADR 0002](adr/0002.md).
 
-```sh
-sudo pacman -S --needed rust-bindgen lld bc qemu-system-x86
-rustup component add rust-src
-bash rusix/scripts/check-toolchain.sh
-```
+## Recorded bootstrap host
 
-Do not use `pacman -Sy` alone to refresh package metadata: avoid a partial system
-upgrade. If packages cannot be downloaded or dependency versions conflict,
-investigate before making broader system changes.
+Existing evidence uses x86_64 Arch/Omarchy: Rust 1.99.0 with `rust-src`,
+Clang/LLD 23.1.3, bindgen 0.73.2 and QEMU 11.1.2. These results use the
+`21a7f44fd076` engineering source, not the pending Linux 6.18.58 transition.
+Revalidate toolchain requirements against each adopted source revision.
 
-The pinned Linux source requires bindgen >= 0.71.1, LLVM >= 17.0.1 and, for
-x86_64, rustc >= 1.85.0 (`scripts/min-tool-version.sh`). Those minima alone
-do not prove compatibility; `make LLVM=1 rustavailable`, a complete kernel build,
-and runtime verification are separate gates.
+Host dependencies include a C compiler/static libc for the BRD probe, LLVM tools,
+Rust, bindgen/libclang, Make, flex/bison, bc, Python 3.11+, Perl, development
+libraries, QEMU/firmware, and shell tools such as `flock`, `timeout` and
+`sha256sum`. Preflight checks executables, Rust source and `make rustavailable`;
+it does not certify compilation or runtime behavior.
 
-`check-toolchain.sh` reports missing executable dependencies and Rust source,
-then runs upstream's availability check. It does not prove a kernel builds or
-boots. Capture its output with `set -o pipefail` if piping to `tee`.
-
-Initial rustc: 1.99.0 (b940084d7 2026-09-28); Clang: 23.1.3. Preserve exact
-versions with build evidence. Keep build outputs on disk outside the source tree,
-use `O=` for kernel output, and start at `-j2`. KVM was not exposed in the initial
-environment; QEMU's TCG software emulator is the fallback.
-
-Run commands from the repository root. Project documents and scripts under
-`rusix/` are canonical; no parent workspace or synchronization step is required.
-Output defaults to the sibling `<checkout-name>-out` directory. To use another
-on-disk location, export `RUSIX_OUTPUT_ROOT`; to reuse an extracted tool tree,
-export `RUSIX_TOOLS_ROOT` (default: `$RUSIX_OUTPUT_ROOT/.tools/root`). Relative
-overrides resolve against the caller's current directory.
-
-## Local installation without sudo
-
-The system install required an interactive password. The missing packages and
-their dependencies were instead extracted into a local tool tree, using the
-existing system package database's SHA-256 digests. No package hooks were run and
-no system package state was changed. `rusix/docs/packages.lock` records the resolved
-names, versions, hashes, and download URLs. This depends on the host's existing
-libraries and is not a portable hermetic toolchain.
-
-The installer reads the tracked manifest directly, caches packages under
-`$RUSIX_OUTPUT_ROOT/.tools/packages`, and extracts to `RUSIX_TOOLS_ROOT`. It does
-not provide the host compiler, rustup toolchain, or all host libraries.
-
-To reproduce on a compatible Arch host:
-
-```sh
-python3 rusix/scripts/install-local-tools.py
+```bash
 bash rusix/scripts/with-local-tools.sh bash rusix/scripts/check-toolchain.sh
 ```
 
-Run build commands through `bash rusix/scripts/with-local-tools.sh COMMAND ...`.
-The boot script supplies the firmware directory from `RUSIX_TOOLS_ROOT` when
-local firmware is present; otherwise QEMU uses its system defaults.
-Preflight and `qemu-system-x86_64 --version` both succeeded after extraction;
-the upstream Rust availability check reports `Rust is available!`.
+The wrapper prepends an existing local tool tree and otherwise uses `PATH`.
+Output/tool overrides and build commands are in [CONTRIBUTING.md](../CONTRIBUTING.md).
+Use disk output outside source, initially two build jobs. VM acceleration is an
+explicit recorded input; TCG remains the fallback when KVM is unavailable.
 
-For the 32-bit helper ABI checks, install the i686 Rust target and provide a
-32-bit userspace runtime. The pinned local package manifest includes lib32-glibc
-and lib32-gcc-libs; the harness uses their local startup objects and loader.
-`qemu-i386-static` was already installed on this host. Run explicitly:
+## Historical local package extraction
 
-```sh
-rustup target add i686-unknown-linux-gnu
-bash rusix/scripts/with-local-tools.sh python3 rusix/scripts/test-int-sqrt-host.py --32-bit --runner=qemu-i386
+`packages.lock` records packages extracted to the bootstrap host's local tree
+without hooks, sudo or system package-state changes. This recipe depends on
+compatible Arch host libraries and is not a portable SDK:
+
+```bash
+python3 rusix/scripts/install-local-tools.py
 ```
 
-This is 32-bit userspace emulation, not kernel/architecture validation. The native
-mode also runs on hosts permitting 32-bit syscalls; this sandbox rejects them.
-No automatic fallback hides native execution failures.
+The installer checks SHA-256 digests, caches under
+`$RUSIX_OUTPUT_ROOT/.tools/packages` and extracts to `RUSIX_TOOLS_ROOT`.
+It does not supply all host libraries or the Rust compiler. Avoid system-wide
+changes or changing global Rust defaults merely to satisfy a project build.
 
-Recorded kernel builds require a clean committed source tree. Each build creates
-a fresh `logs/NAME-build.*` directory under `RUSIX_OUTPUT_ROOT`. Each VM boot
-requires an unused evidence label. The strict JSON gate
-requires all 21 original square-root cases and all three x86_64 compatibility
-cases to pass; `--baseline` permits the original kernel without the added suite.
+## Optional 32-bit helper checks
+
+Install the i686 Rust target and provide a 32-bit runtime. The historical package
+lock includes lib32-glibc/lib32-gcc-libs; `qemu-i386-static` is an additional host
+dependency. Explicit emulation avoids hiding a native-execution failure:
+
+```bash
+rustup target add i686-unknown-linux-gnu
+bash rusix/scripts/with-local-tools.sh python3 rusix/scripts/test-int-sqrt-host.py \
+  --32-bit --runner=qemu-i386
+```
+
+This is helper ABI coverage in userspace, not a 32-bit kernel boot or an expansion
+of the declared kernel target. Preserve versions, resolved configuration, source
+identity, exit codes and failure logs with every recorded build/run.

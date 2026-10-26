@@ -1,140 +1,76 @@
 # rusix agent instructions
 
-## Objective and authority
+## Authority and resumption
 
-Fork Linux and progressively replace its kernel implementation with Rust, then
-migrate the remaining operating-system components one at a time. Preserve this
-objective across sessions. A Rust module, demonstration kernel, or Rust-enabled
-Linux build is a milestone, never evidence that the rewrite is complete.
+[ADR 0002](docs/adr/0002.md) is the accepted architecture and completion contract;
+[ADR 0001](docs/adr/0001.md) remains historical context where not superseded.
+Do not redefine completion around the current driver or test milestone.
+The kernel rewrite is authorized; host kernel changes, hardware installation,
+unrelated services and production deployment are not.
 
-Architecture decision 0001 in `docs/ARCHITECTURE.md` is accepted by Aaron:
-Linux-compatible external behavior, Rust-native internals, incremental migration.
-Preserve behavior at required boundaries; do not freeze C implementation details
-inside Rust. Work toward complete Rust subsystems and remove obsolete adapters.
-Retained upstream C references are allowed; executing C remains tracked migration
-work. Changes to these commitments require an explicit superseding decision.
+At session start, read `PROGRESS.md`, the accepted ADR, `docs/ROADMAP.md`, and
+relevant migration records. Inspect Git status, source and actual artifacts.
+Revalidate a process handle before treating work as running or stopped. Pick
+an executable dependency toward the rewrite, not unrelated scaffolding.
 
-The published helper is Phase 0 bootstrap. `docs/PHASE1.md` defines the next
-engineering target and mandatory exit gates; do not label helper accumulation or
-tooling alone Phase 1 completion. Prioritize a canonical repository, reproducible
-environment, automated provenance/selection checks, and the selected complete
-stateful component. `docs/AUDIT-PHASE0.md` records deficiencies to address.
+## Repository and collaboration
 
-Aaron's global instructions continue to apply. The requested Linux/Rust rewrite
-authorizes work on this project's kernel; it does not authorize changes to the
-host kernel, unrelated backends, services, homelab, or production systems.
-Ask before installing or booting rusix on physical hardware. Use isolated build
-directories and virtual machines for verification.
+- Tracked `rusix/` is authoritative. Paths here are relative to that directory
+  unless stated otherwise. Do not restore outer copies over tracked files.
+- Use `rusix/*` branches. `origin` is `https://github.com/rusix-org/rusix.git`;
+  `upstream` is Linux and must never receive our pushes. Preserve others' work
+  and published history.
+- Tools resolve the checkout themselves. Outputs default to sibling
+  `<checkout-name>-out`; override with `RUSIX_OUTPUT_ROOT`. Local tools default
+  to `$RUSIX_OUTPUT_ROOT/.tools/root`; override with `RUSIX_TOOLS_ROOT`.
+  Relative overrides resolve against the invoking directory.
+- Parallel agents are authorized. Assign clear file ownership, serialize shared
+  builds/edits, and use independent review for nontrivial migrations.
+- Build on disk outside source and `/tmp`, initially with `-j2`. Check resources.
+  Bound VM memory/time. Never execute guest init probes, load experimental
+  modules, alter the bootloader, or install the kernel on the host.
 
-## Resume protocol
+## Implementation and unsafe-code discipline
 
-1. Read `PROGRESS.md`, `docs/ARCHITECTURE.md`, `docs/ROADMAP.md`, and relevant
-   local instructions.
-2. Inspect actual Git status, diffs, source, and existing build/test artifacts.
-   Treat ledger claims as pointers to evidence, not as evidence themselves.
-3. Revalidate any recorded process before restarting work. Never assume a lock
-   file means a process is alive or an observation timeout means it died.
-4. Select the next dependency toward the real rewrite. Record any changed scope
-   or assumptions. Do not replace hard migration work with unrelated tooling.
-5. Update `PROGRESS.md` after meaningful work and before ending a session.
+Before editing, inspect the pinned C implementation, callers, Kconfig/Kbuild,
+upstream tests and existing Rust interfaces. Record the preserved contract:
+ABI/errors, overflow, allocation/context, locking, lifetime and architecture.
+Check Rust-for-Linux branches and mailing-list work before introducing generic
+bio, disk, xarray, allocation or similar abstractions; record applicable prior
+work and review concerns. Prefer reusable, upstream-reviewable APIs.
 
-## Repository and provenance
+Prefer safe Rust. Each unsafe operation needs a specific invariant and evidence
+that ownership, callers, synchronization and context uphold it. Raw pointers do
+not waive aliasing or data-race requirements. Do not expose safe APIs until their
+boundary conditions are established. Separate translation, semantic changes and
+redesign in reviewable commits. Inventory executing C/FFI and adapter removal
+criteria; prove the Rust path is selected in the linked/running kernel.
 
-- The Git checkout is the Linux-derived source repository, regardless of its
-  directory name. Keep upstream history and license notices. Record the exact
-  starting commit and source remote.
-- Tracked `rusix/` is the authoritative project documentation, tooling, tests,
-  and configuration. Paths in this guide are relative to `rusix/` unless stated
-  otherwise. Edit tracked files directly; never synchronize outer workspace
-  copies over them. The old synchronization script deliberately refuses to run.
-- Scripts resolve the source checkout themselves. Outputs default to the sibling
-  `<checkout-name>-out`; `RUSIX_OUTPUT_ROOT` overrides that location. Local tools
-  default to `$RUSIX_OUTPUT_ROOT/.tools/root`; `RUSIX_TOOLS_ROOT` overrides it.
-  Relative overrides resolve against the invoking working directory.
-- Work on a `rusix/*` branch. Keep upstream remote named `upstream` and never
-  push to it. Publishing remote `origin` is the public
-  `https://github.com/rusix-org/rusix.git`, created as a GitHub fork of `torvalds/linux` at Aaron's request.
-  Aaron clarified that the existing kernel build and passing tests suffice for
-  the first source push once documentation and contribution guidance are ready.
-  Module/export and broader architecture checks remain disclosed follow-up work,
-  not first-push blockers. Follow `docs/PUBLICATION.md` and verify its readiness
-  evidence before the first push. No production release or complete-rewrite claim
-  is authorized by this milestone. Do not rewrite history or discard someone
-  else's changes.
-- Use small, reviewable migrations. Separate mechanical translation, interface
-  changes, and algorithm changes. Retain attribution and SPDX identifiers.
-- Pin and record toolchain versions and configurations. Explain upstream
-  rebases and conflicts; never silently change the baseline to make tests pass.
-- Integrate upstream updates on a separate integration branch, assess semantic
-  changes in migrated code and its callers, and restore Rust parity before
-  promotion to `rusix/main`. Follow `docs/ARCHITECTURE.md`; a clean merge is not
-  sufficient evidence. Preserve upstream tests for each pinned snapshot.
+Apply the ADR's selected-fix policy and subsystem divergence records. Do not
+resume automatic whole-tree rebases or merge reference C back into a divergent
+Rust subsystem. Baseline changes and behavioral departures require decisions
+and fresh verification.
 
-## Migration requirements
+## Verification and records
 
-- Before editing, read existing C implementation, callers, Kconfig/Kbuild,
-  tests, and pinned upstream Rust interfaces. Prefer established interfaces.
-- Define behavior to preserve: ABI, error values, integer overflow, allocation,
-  concurrency, locking, interrupt context, lifetime, and architecture assumptions.
-- Integrate Rust into the real kernel build and execution path. A parallel
-  implementation that is never selected does not count as migrated.
-- Keep compatibility with Linux userspace and supported hardware explicit.
-  Start verification with x86_64 in a VM; do not claim other architectures work
-  until tested. Assembly and unavoidable hardware/FFI boundaries must be tracked.
-- Use safe Rust where possible. Each unsafe block must explain its safety
-  invariant and why callers, ownership, and synchronization uphold it. Avoid
-  unchecked pointer conversions or panics in kernel paths.
-- Transitional C is allowed during migration, but inventory it and retain a
-  concrete replacement/removal criterion. Do not label wrappers as rewrites.
-- For each migration, add meaningful boundary and differential tests against
-  the upstream behavior. Include failure and concurrency tests where relevant.
-  Verify symbol/build integration and boot/runtime behavior as applicable.
-- Preserve the existing upstream test suite unchanged as a compatibility gate.
-  Run baseline C and replacement Rust against the same tests/configuration.
-  Add missing coverage separately; do not weaken expectations to fit a rewrite.
-  Passing tests establishes tested behavior, never complete absence of bugs.
-- Never equate compilation with correctness, host tests with kernel execution,
-  or a successful VM boot with full Linux compatibility.
+Preserve baseline upstream tests unchanged; add missing differential, boundary,
+failure and concurrency coverage. Compare C/Rust under matching relevant inputs.
+Required gates reject missing, skipped, duplicate and failed cases. Compilation,
+host checks and VM execution prove different scopes; no narrow result establishes
+full compatibility or absence of bugs.
 
-## Resource and verification discipline
+Record exact source/config/tool versions, commands, status, selection evidence
+and raw results, retaining failures and unexplained warnings. Never mark an
+unexecuted check or pending CI run green. Keep host-specific and LTS results
+separate; pinning inputs is not proof of bit-identical reproduction.
 
-- Build outside the source checkout on disk, never in `/tmp`. Use modest parallelism
-  (initially `-j2`) on this laptop and inspect available memory/disk first.
-- Never modify the host bootloader or load an experimental kernel module on the
-  host as part of routine testing. Bound VM memory and execution time.
-- Record exact commands, exit status, relevant versions/configuration, and log
-  locations. Preserve failed results as well as successes. Do not fabricate
-  results or mark an unexecuted command as verified.
-- Document missing dependencies precisely. Prefer project-local tools where
-  practical; do not change global toolchain defaults to satisfy a local build.
-- Aaron authorizes parallel sub-agents for independent work. Assign clear file
-  ownership or read-only review tasks; serialize builds in each output directory
-  and integration edits. Use independent review for nontrivial migrations.
+Update `PROGRESS.md` after meaningful work and before ending a session, linking
+detailed evidence and the migration record. Keep the baseline, implemented work,
+verified scope, blockers and next actions explicit. Do not erase unresolved
+failures or replace evidence with plans.
 
-## Living progress ledger
-
-`PROGRESS.md` must contain the baseline, current milestone, implemented work,
-verification evidence, blockers, next executable actions, and chronological
-session entries. Keep it concise by linking longer evidence under `docs/` or
-`rusix/`. Never erase unresolved failures or silently promote planned work
-to completed. Mark work as planned, implemented/unverified, verified (with scope),
-or blocked. Completion means the original objective is implemented and verified,
-not merely that the current milestone passed.
-
-## External review and contributors
-
-Aaron expects heavy scrutiny and wants outside developers to be able to join.
-Treat every initial migration as a public-review candidate: small diffs, preserved
-attribution, reproducible commands, precise behavior contracts, and explicit
-limitations. Record the source revision, resolved config, compiler versions, and
-raw runtime evidence behind verification claims. A reviewer must be able to
-reproduce a result without relying on chat history. Keep upstream tests unchanged
-and added tests visibly separate. Document residual C, untested architectures,
-and known gaps prominently; do not market an early experiment as a finished OS.
-
-The source-tree `AGENTS.md` points to this tracked guide. Also follow the
-inherited `Documentation/process/coding-assistants.rst` and
-`Documentation/process/generated-content.rst` guidance (paths relative to
-the Git root), including its rule that AI agents must not add human
-Signed-off-by certification. Keep the upstream README and process documents
-intact; project-specific guidance supplements them.
+Preserve Linux licensing, attribution and SPDX notices. Follow the Git-root
+`Documentation/process/coding-assistants.rst`, `generated-content.rst`, coding
+and submission guidance. Disclose substantial generated content. Agents must
+not add human Signed-off-by certification or represent agent review as human
+maintainer approval. See `CONTRIBUTING.md` for reproduction and review requirements.

@@ -1,21 +1,12 @@
 # Contributing to rusix
 
-rusix aims for Linux-compatible external behavior and Rust-native internals.
-Read [architecture decision 0001](docs/ARCHITECTURE.md), [AGENTS.md](AGENTS.md),
-[PROGRESS.md](PROGRESS.md), and the [migration inventory](docs/MIGRATIONS.md)
-before choosing work. Build toward complete Rust subsystems; preserve required
-boundaries while replacing unnecessary C conventions inside those subsystems.
+Read [ADR 0002](docs/adr/0002.md), [current progress](PROGRESS.md) and the relevant
+[migration record](docs/MIGRATIONS.md). The ADR owns compatibility/divergence
+policy; [AGENTS.md](AGENTS.md) owns execution and unsafe-code requirements.
 
-The initial public scope is the built and tested integer-square-root migration,
-not a completed Rust kernel or production release. Aaron accepted that layer for
-the first source push once documentation is ready; module/export and broader
-architecture checks remain follow-up work. See [PUBLICATION.md](docs/PUBLICATION.md)
-for the readiness record and [PROGRESS.md](PROGRESS.md) for current limitations.
+## Checkout and tools
 
-## Set up the repository
-
-Clone on disk, outside `/tmp`. Choose a checkout path without spaces or colons,
-as required by upstream Kbuild; the directory need not be named `linux`:
+Use disk storage, outside `/tmp`, with no spaces or colons in the checkout path:
 
 ```bash
 git clone --branch rusix/main https://github.com/rusix-org/rusix.git rusix
@@ -24,54 +15,30 @@ git remote add upstream https://github.com/torvalds/linux.git
 git switch -c rusix/your-topic
 ```
 
-All commands below run from the checkout root. Project documents, scripts,
-configuration, and tests are canonical tracked files under `rusix/`; edit them
-directly. No copy or synchronization step is needed. The source-root `AGENTS.md`
-points to `rusix/AGENTS.md`. Never push to the Linux `upstream` remote.
+Commands below run from this Git root. Edit tracked `rusix/` directly; no parent
+copies or synchronization. Outputs default to sibling `<checkout-name>-out`.
+`RUSIX_OUTPUT_ROOT` overrides output; `RUSIX_TOOLS_ROOT` overrides extracted
+local tools (default `$RUSIX_OUTPUT_ROOT/.tools/root`). Relative overrides resolve
+against the invoking directory. Worktrees need separate output directories.
+Never push to the Linux `upstream` remote.
 
-Builds, logs, temporary files, and extracted tools default to a sibling directory
-named `<checkout-name>-out` (`../rusix-out` in this example). Set
-`RUSIX_OUTPUT_ROOT` to override this location and `RUSIX_TOOLS_ROOT` to override
-the extracted tools directory (default: `$RUSIX_OUTPUT_ROOT/.tools/root`).
-Relative overrides resolve against your current directory. Keep generated output
-outside the source checkout, on disk rather than `/tmp`.
+See [TOOLCHAIN.md](docs/TOOLCHAIN.md) for host requirements and
+[the container instructions](ci/README.md) for the pinned environment under
+validation. A container definition is not evidence of a successful hosted run.
+Differential tests require the pinned source commit to be available locally;
+shallow clones may need more history.
 
-Git worktrees are supported; each worktree gets its own default output directory.
-Preserve other contributors' changes and do not share an output directory between
-concurrent worktrees. The original development checkout was shallow; differential
-tests require the pinned upstream commit recorded in `rusix/PROGRESS.md` to be
-available locally.
-
-## Toolchain and first checks
-
-The currently exercised environment is x86_64 Linux, using LLVM and Rust, with
-QEMU TCG for VM execution. Other hosts and distributions are not yet verified.
-See [TOOLCHAIN.md](docs/TOOLCHAIN.md) and the pinned kernel's
-`Documentation/rust/quick-start.rst` for requirements. Expect GNU Make, a
-host C compiler, the LLVM tools, Rust and `rust-src`, bindgen/libclang, flex,
-bison, bc, cpio, Python, Perl, development libraries, and QEMU with firmware.
-The scripts also use standard shell tools including `flock`, `timeout`, and
-`sha256sum`.
-
-Use suitable distribution packages or an explicitly configured local toolchain.
-The `.tools` extraction recipe and `rusix/docs/packages.lock` were resolved against
-Aaron's Arch/Omarchy host libraries; they are **not** a portable SDK or container
-image. Do not install those packages blindly on another distribution. The local
-installer requires Python 3.11 or newer. Keep toolchain changes project-local
-where practical, and record exact versions rather than only minimum versions.
+## Reproduce the current checks
 
 ```bash
 bash rusix/scripts/with-local-tools.sh bash rusix/scripts/check-toolchain.sh
 python3 rusix/tests/test_kunit_gate.py
+python3 rusix/tests/test_repo_paths.py
+python3 rusix/tests/test_brd_gate.py
 bash rusix/scripts/with-local-tools.sh python3 rusix/scripts/test-int-sqrt-host.py
 ```
 
-The wrapper uses local tools if present and otherwise falls through to `PATH`.
-Passing the preflight or host tests does not prove that a kernel builds or boots.
-The optional i686 userspace checks require additional tools described in
-`rusix/docs/TOOLCHAIN.md`; they do not establish a 32-bit kernel boot.
-
-After committing your source changes locally, build and boot:
+After recording source changes in a local commit, build and boot the KUnit profile:
 
 ```bash
 bash rusix/scripts/build-kernel.sh review
@@ -79,88 +46,63 @@ source rusix/scripts/repo-paths.sh
 bash rusix/scripts/boot-kunit.sh "$RUSIX_OUTPUT_ROOT/builds/review" review-001
 ```
 
-The recorded build requires a clean kernel Git tree and checks that its commit
-and clean state are unchanged after compilation. A local work-in-progress commit
-makes the exact candidate reproducible; it is not permission to publish it. The build
-uses two jobs. The VM uses one emulated CPU, 512 MiB RAM, no network, and a
-180-second timeout. Builds generate fresh evidence directories; every boot needs
-a new label such as `review-002`. Do not run two builds in the same output tree.
+For the C BRD contract, build its profile and pass the exact evidence directory
+printed by the build (replace `REPLACE` below):
 
-Keep failures, timeouts, and warnings in the evidence. Never load experimental
-modules on the host, change its bootloader, or install the test kernel as part of
-routine verification. Module/runtime, broader configuration, and architecture
-checks remain explicitly scoped in `PROGRESS.md`; an unexecuted fixture or absent
-CI job must not be presented as a passing check.
+```bash
+bash rusix/scripts/build-kernel.sh --profile brd review-brd
+python3 rusix/scripts/test-brd-vm.py "$RUSIX_OUTPUT_ROOT/builds/review-brd" brd-001 \
+  --build-evidence "$RUSIX_OUTPUT_ROOT/logs/review-brd-build.REPLACE"
+```
 
-## Implement a migration
+Recorded builds require clean committed source. Each build reserves fresh logs;
+each VM attempt needs a new label. Builds use two jobs; VMs are bounded to
+512 MiB and 180 seconds, with no network and one CPU for KUnit or two for BRD.
+The BRD runner compiles a static guest probe; never execute it on the host.
+Do not load experimental modules or alter the host bootloader/kernel.
 
-Before coding, record the upstream revision, reference files, callers,
-configuration/build rules, current tests, and the intended subsystem outcome.
-Specify ABI/layout, error and overflow behavior, ownership/lifetime, allocation,
-locking, interrupt context, and architecture assumptions where applicable.
+Current results belong to the engineering baseline, not the pending 6.18.58
+transition. Preserve failed results and warnings. Preflight, host tests and VM
+checks establish different scopes; consult the evidence before claiming parity.
 
-Keep the C boundary as small as necessary. Prefer safe Rust and existing kernel
-Rust abstractions. Every unsafe operation needs a concrete safety invariant and
-an explanation of how callers, ownership, and synchronization uphold it. Separate
-mechanical translation, algorithm changes, and internal API redesign into
-reviewable commits.
+## Migration and review
 
-Preserve upstream tests unchanged for the pinned snapshot. Add independent
-boundary, differential, concurrency, and failure-path coverage as needed; do not
-weaken expectations or skip cases to make a rewrite pass. Compare C and Rust
-under the same relevant configuration and tests, then prove the linked kernel
-actually selects Rust. Include workload and performance evidence when the change
-can affect those properties. Compilation, host tests, and VM tests prove different
-things; state which were run and which remain unverified.
+Before implementation, inspect the reference C, callers, Kconfig/Kbuild and tests.
+Specify behavior and ownership/context assumptions; check existing upstream Rust
+APIs and mailing-list proposals before introducing new abstractions. Separate
+translation, intentional behavior changes and redesign. Preserve baseline tests,
+add meaningful missing coverage, run paired C/Rust checks and prove Rust selection.
+Record retained C and adapter removal criteria. Apply the ADR's selected-fix and
+divergence rules rather than automatic whole-tree rebases.
 
-Retain upstream C source/history for comparison. Executing fallbacks and export
-shims remain tracked migration work, with explicit removal criteria. Integrate
-upstream changes on a separate `rusix/integration/*` branch and reestablish Rust
-parity before promotion. A conflict-free merge does not prove semantic parity.
+Keep patches focused and submit against `rusix/main`. A review description needs:
 
-## Attribution, commits, and review
+- The concrete behavior change and preserved contract.
+- Exact source/config/tool identities, commands, raw results and limitations.
+- Unsafe invariants, selected implementation, retained C and unfinished gates.
 
-Keep the kernel's `COPYING`, `LICENSES/`, original attribution, and applicable
-SPDX identifiers intact. Follow the existing kernel licensing rules in
-`Documentation/process/license-rules.rst`; translation does not erase the
-source's provenance. For kernel patches, read the existing sign-off procedure
-and Developer's Certificate of Origin in
-`Documentation/process/submitting-patches.rst`. Use your own authorship
-and `git commit -s` only when you can make that certification; do not invent
-another person's sign-off or review approval.
-
-Disclose substantial tool-generated content and tool-assisted findings in patch
-descriptions, following `Documentation/process/generated-content.rst` and
-`Documentation/process/coding-assistants.rst`. AI agents must not add
-Signed-off-by tags. A human submitter must review the work and make any DCO
-certification themselves. The initial project's assistance record is in
-[ASSISTANCE.md](docs/ASSISTANCE.md).
-
-Before requesting review, run relevant format/style checks and
-`git diff --check`. For example, the current Rust helper uses:
+Update `PROGRESS.md` and the migration record. Do not commit installed tools,
+build trees, binaries or incidental local files; archive selected evidence with
+hashes. Run relevant formatting/style checks and `git diff --check`. For the
+current Rust helper:
 
 ```bash
 rustfmt --check lib/math/int_sqrt_rust.rs rusix/tests/int_sqrt_host.rs
 ```
 
-Use the pinned kernel's coding guidelines and `scripts/checkpatch.pl` for changed
-kernel code. Explain intentional warnings; do not suppress them merely to obtain
-a clean report. Include these items in the patch or PR description:
+Use `scripts/checkpatch.pl` for changed kernel code. Explain intentional warnings.
+Upstream maintainers are not automatically rusix reviewers; upstream submission
+requires its own relevant, reviewable patch plan.
 
-- The existing behavior, resulting behavior, and preserved boundary contract.
-- Exact base/candidate commits, resolved configuration, tools, commands, and
-  relevant raw logs/results, including failures and limitations.
-- Original tests retained, added coverage, actual link/runtime evidence, and
-  architecture/workload/performance scope.
-- Unsafe invariants, remaining C/FFI, upstream changes, and unfinished gates.
+## Licensing and authorship
 
-Update `rusix/PROGRESS.md` and the affected migration record with evidence, not intent.
-Do not commit binaries, tool installations, unrelated generated output, secrets,
-or incidental local files. Preserve selected verification artifacts deliberately,
-including their hashes and provenance, rather than uploading entire build trees.
+Preserve `COPYING`, `LICENSES/`, SPDX identifiers and original attribution. Follow
+`Documentation/process/license-rules.rst` and `submitting-patches.rst`.
+Human contributors use their own authorship and `git commit -s` only when they
+can certify the DCO; never invent another person's approval or sign-off.
 
-Propose focused work and submit small patches or PRs
-against `rusix/main` through your own contribution branch/fork. Kernel-upstream
-maintainers are not automatically rusix reviewers; do not send project-specific
-work to them without an upstream submission plan. Human contributors remain
-responsible for understanding, testing, and reviewing AI-assisted changes.
+Disclose substantial generated content and tool-assisted findings under
+`Documentation/process/generated-content.rst` and `coding-assistants.rst`.
+Agents must not add human Signed-off-by certification. Human submitters remain
+responsible for understanding, reviewing and testing assisted work; see
+[ASSISTANCE.md](docs/ASSISTANCE.md).

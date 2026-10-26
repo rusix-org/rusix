@@ -73,13 +73,14 @@ The existing pieces support the outline:
 Allocate the page and slot outside locks. The page uses NOIO/NOWAIT with
 `__GFP_ZERO | __GFP_HIGHMEM`; slot metadata uses NOIO/NOWAIT **without HIGHMEM**,
 which is invalid for kmalloc-like allocations. The public Rust flag set currently
-omits typed `GFP_NOIO`; add that narrow allocation interface before using it.
+omits typed `GFP_NOIO`. Upstream has proposed scoped allocation policies instead;
+review that work and its safety objections before choosing the interface.
 
 A new xarray insert-if-absent operation is required. `Guard::store` can release
 the lock while allocating and replaces any existing value, so lookup followed by
 store can destroy a concurrent writer's insertion. The pinned
 `__xa_insert` already supplies conditional insertion through `__xa_cmpxchg_raw`
-and is present in generated bindings. Prefer a narrow `Guard::insert` returning
+and is present in generated bindings. One local candidate is a narrow `Guard::insert` returning
 `Result<(), StoreError<T>>`: transfer candidate ownership on success and return
 it on any error, including `EBUSY`. It may release/reacquire the lock to allocate
 but returns with the guard held. BRD can borrow and clone the winner on `EBUSY`
@@ -87,7 +88,8 @@ before releasing that guard. Never reconstruct an owned Arc from an entry still
 owned by the array. A generic `EBUSY` must not imply `get().is_some()`: reserved
 entries reject insertion but appear empty to normal lookup. BRD uses
 `AllocKind::Alloc` with no reservations. Preserve the foreign-pointer alignment
-and ownership rules of the existing abstraction.
+and ownership rules of the existing abstraction. Audit upstream entry/preload
+work below before implementing this alternative.
 
 For a transfer, release the index lock before acquiring the slot lock. Hold the
 slot lock only across the bounded page access; never allocate or acquire the
@@ -132,6 +134,25 @@ The remaining enabling interfaces are substantive:
   backing/bio transfer abstraction. C helpers may expose inline/macro boundaries;
   driver ownership, data-path decisions and lifecycle policy belong in Rust.
 
+## Upstream work to evaluate first
+
+Checked 2026-10-25. The upstream `rust-next` head matches our engineering pin.
+The following are proposals/author branches, not claims of merged approval:
+
+| Need | Existing work | Required review |
+| --- | --- | --- |
+| Conditional xarray insertion | [Entry/preload v5, 12 patches, 2026-09-02](https://lore.kernel.org/r/20260902-xarray-entry-send-v5-0-d18adae40708@kernel.org) | Allocation/sheaf dependencies, lock-drop semantics and whether the entry API covers BRD without a competing local API. |
+| NOIO policy | [Task-scoped allocation v2, 2026-06-05](https://lists.openwall.net/linux-kernel/2026/06/05/1016) supersedes the flag-only proposal | [Review objections](https://lists.openwall.net/linux-kernel/2026/06/06/240) include generator/async lifetime and LIFO safety. |
+| Bio/page access | [rnull completion v2, 83 patches, 2026-06-09](https://patchew.org/linux/20260609-rnull-v6-19-rc5-send-v2-0-82c7404542e2@kernel.org/) and [SafePage v2](https://lists.openwall.net/linux-kernel/2026/06/05/1251) | Transfer races/aliasing, ownership and dependencies. Bio iteration there serves mq requests; it does not establish non-MQ disk registration. |
+
+The author's `rnull-v7.1-rc2` tree was inspected at
+`5e0226dac3526872d23c0b1a771ccd0502852b6b`. Its block API exports `bio`,
+`mq`, `badblocks` and `error`; no bio-based disk builder was found. Compare the
+applicable patches against the adopted LTS before importing them. Preserve
+authorship and review context, and test any adaptation rather than assuming an
+unmerged series is sound. Generic interfaces should be suitable for upstream
+review even though this project's long-term direction is governed by ADR 0002.
+
 ## Remaining verification
 
 Before calling this a migrated driver, add paired C/Rust coverage for allocation
@@ -141,6 +162,6 @@ initialization failure, busy removal and repeated module load/use/unload. Use
 supported memory instrumentation and lockdep with demonstrated coverage.
 
 The ordinary userspace/ext4 workload, built-in/module x86_64 and arm64 matrix,
-controlled performance measurements, reproducible environment/CI and an upstream
-semantic-change rehearsal remain separate mandatory Phase 1 gates. Neither this
+controlled performance measurements, pinned environment/CI and a chosen upstream-fix port remain required,
+with the 1a/1b split defined in [PHASE1.md](PHASE1.md). Neither this
 design nor six passing baseline tests would complete any of those broader gates.

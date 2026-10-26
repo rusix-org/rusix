@@ -1,52 +1,17 @@
 # Tool-assisted development record
 
-The initial rusix work is AI-assisted and has not yet received outside human
-maintainer review. This record supports the inherited Linux generated-content
-guidance; it is not a sign-off, license certification, or substitute for review.
+Codex and parallel agents produced the initial Rust square-root translation,
+supplementary tests, build/verification tooling and project documentation. Agents
+cross-reviewed arithmetic/ABI behavior, export selection, path/provenance gates,
+the VM-only module fixture, and the C BRD probe/ownership proposal. Upstream
+source, licensing and attribution remain attached to the work.
 
-## Scope and instructions
+Executed checks and limitations are recorded in [PROGRESS.md](../PROGRESS.md),
+[VERIFICATION.md](VERIFICATION.md) and archived evidence. Design discussion,
+compilation and agent agreement are not runtime evidence or outside human review.
+No human DCO certification has been added by agents.
 
-Aaron requested a Linux fork progressively rewritten into Rust, strong project
-instructions and progress tracking, preservation of upstream tests, and a base
-that outside contributors can scrutinize. Aaron then accepted Linux-compatible
-external behavior with Rust-native internals and incremental subsystem migration.
-He authorized parallel agents for independent work. The public repository was
-created at his request, with source publication initially held pending readiness. Aaron later clarified
-that the existing built/tested kernel layer is sufficient once docs are ready,
-and approved using a GitHub-recognized Linux fork.
-
-## Assistance used
-
-Codex produced the initial Rust integer-square-root translation, supplementary
-tests, build/verification scripts, and project documentation, while inspecting
-the pinned Linux source and preserving its attribution. Sub-agents independently
-reviewed arithmetic/ABI behavior, module export selection, and verification
-tooling. Review findings led to additional 32-bit tests, stricter result gates,
-immutable evidence handling, and clearer source/configuration provenance.
-
-Later sub-agent tasks investigated the GCD/LCM dependency cluster, drafted the
-contributor guide, and prepared/reviewed a VM-only Rust init plus C module ABI
-probe. The module fixture's compilation and source review are not runtime results.
-
-Repository-native tooling was implemented with separate shell, Python, and
-documentation agents, then independently reviewed. The review corrected the
-checkout-name guarantee to respect upstream Kbuild path restrictions.
-
-The BRD baseline probe, runner, and ownership design were developed with separate
-Codex agents and cross-reviewed. They establish preparation for the driver
-replacement; test outcomes are recorded separately from design proposals.
-
-## Verification and responsibility
-
-Executed tests and limitations are recorded in `VERIFICATION.md`, `PROGRESS.md`,
-and the archived evidence. Tools included Git, rustc/rustfmt, Clang/LLVM, kernel
-Kbuild/KUnit, QEMU, Python harnesses, and kernel checkpatch. GitHub CLI initially created an empty public repository, then created the
-authorized Linux fork after retaining the empty placeholder under another name.
-The first source push followed the documented readiness checks; GitHub verified
-the resulting branch SHA and default branch. The publication record tracks the
-exact source-push result separately from runtime verification.
-
-Agent agreement is not independent human approval. No human DCO certification
-has been added by the agents. Before public submission, the human submitter must
-understand and review the work, follow the inherited contribution/licensing
-requirements, and disclose relevant assistance in submission descriptions.
+Follow the Git-root `Documentation/process/generated-content.rst` and
+`coding-assistants.rst`: disclose substantial generated content and findings in
+patch descriptions. Human submitters remain responsible for understanding,
+reviewing, testing and certifying their contributions.

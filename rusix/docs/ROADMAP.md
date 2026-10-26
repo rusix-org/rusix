@@ -1,77 +1,53 @@
 # rusix roadmap
 
-The target is a Linux-derived operating system whose kernel implementation is
-rewritten in Rust, followed by incremental migration of its remaining components.
-Linux itself is the kernel; userspace selection is a separate project decision.
-No claim of full rewrite or distribution completeness is justified at bootstrap.
+[ADR 0002](adr/0002.md) defines the accepted target, compatibility baseline and
+subsystem divergence policy. This roadmap orders implementation; it does not
+expand or narrow that contract. Actual state is in [PROGRESS.md](../PROGRESS.md).
 
-Accepted direction: [architecture decision 0001](ARCHITECTURE.md). Preserve
-Linux-compatible external behavior; use Rust-native internal designs and migrate
-incrementally toward complete subsystems. Required C interfaces are transitional
-boundaries, not a permanent architecture constraint.
+## Phase 0 — Integration bootstrap
 
-The published helper is **Phase 0 bootstrap**, not Phase 1 completion. Historical
-M0/M1 labels below are bootstrap checkpoints. The exact next-phase target is in
-[PHASE1.md](PHASE1.md); current deficiencies are in [AUDIT-PHASE0.md](AUDIT-PHASE0.md).
+Retain the verified Rust square-root replacement, original tests, added parity
+checks and source evidence. The C BRD probe establishes the next component's
+baseline. These are foundations, not a completed Rust kernel.
 
-## Phase 0 checkpoint M0 — Reproducible upstream foundation
+## Phase 1a — Working Rust storage component
 
-Obtain and pin upstream Linux, retain licensing/history, create a rusix branch,
-and record toolchain requirements. Establish a small x86_64 configuration with
-Rust enabled, build it, and boot it in an isolated VM with captured console logs.
-Success requires repeatable commands, exact revision/config, and observed boot.
+Transition deliberately to the accepted LTS baseline, inventory any newer Rust
+infrastructure, pin a container toolchain and establish CI. Implement complete
+BRD behavior on x86_64, with paired C/Rust tests and ordinary Linux userspace
+performing verified ext4 I/O. Basic error, ownership and concurrency correctness
+are required. [PHASE1.md](PHASE1.md) lists the gates.
 
-## Phase 0 checkpoint M1 — First actual C-to-Rust kernel replacement
+## Phase 1b — Expanded validation
 
-Choose a bounded existing kernel implementation after inspecting its callers and
-build rules. Specify the preserved semantics and replace the active implementation
-with Rust. Test against upstream C, including edge cases, compile the linked
-kernel, and exercise the implementation in a VM. Record remaining C/FFI costs.
-First migration: integer square root; see `MIGRATIONS.md` and `VERIFICATION.md`
-for actual evidence and outstanding gates.
+Add arm64, expanded failure/concurrency stress and instrumentation, and measured
+performance/memory budgets. Port one selected upstream fix with its regression
+test instead of rehearsing whole-tree rebases. Independent-machine bit-identical
+builds are deferred; recorded pinned inputs are required now.
 
-## Phase 1 — Migration base and complete Rust RAM-backed block driver
+## Early core work — Completion ownership and wait/wakeup
 
-Deliver a self-contained checkout, pinned reproducible environment, continuous
-parity checks, and a complete Rust BRD implementation exercised by ordinary Linux
-userspace. All `PHASE1.md` gates must pass. The existing stateless helper and
-KUnit-only boot do not satisfy this phase.
+Immediately after BRD, produce an executable `struct completion` ownership and
+wait/wakeup spike. Inventory embedded C uses, lifetime and ordering constraints,
+and the temporary boundary needed while C callers remain. Do not assume that a
+C-accessed layout can change. Use its results to validate this dependency order:
 
-## Phase 2 — Repeatable subsystem migration
+1. Synchronization, completion/wait queues and RCU ownership.
+2. Task/thread lifecycle, scheduling and timer dependencies.
+3. Page ownership, allocation, faults and virtual-memory management.
+4. VFS/ext4 and required pseudo-filesystems; virtio block transport.
+5. Network core/protocols and virtio network transport.
 
-Inventory C and assembly by subsystem and dependencies. Migrate foundational
-helpers and drivers, then memory management, scheduling, synchronization, VFS,
-networking, security, and architecture support in dependency order. Each unit
-needs explicit behavioral contracts, rollback boundaries, integration tests, and
-performance checks. Reassess order as evidence exposes dependency constraints.
-Track removed C execution paths, not just Rust line counts.
-Each migration should advance a coherent subsystem. Once related components are
-Rust, replace unnecessary internal C interfaces with Rust-native abstractions.
+These are dependency candidates to refine through source inspection, not a
+promise that whole subsystems can be replaced independently. Every completed
+subsystem gets a divergence record and removes obsolete C adapters. Track linked
+C contributions and unknown/generated contributions alongside behavior coverage;
+do not substitute more leaf drivers or Rust line counts for reducing the C core.
 
-## Phase 3 — Rust kernel completeness and compatibility
+## Complete target kernel, then userspace
 
-Audit every retained C implementation and assembly boundary. Demonstrate boot,
-userspace ABI compatibility, filesystem/network behavior, concurrency correctness,
-security invariants, and workload performance across a declared hardware matrix.
-Any executing C fallback or shim remains visibly incomplete runtime migration
-work. Upstream C retained solely as uncompiled reference material is allowed.
-Define unavoidable assembly boundaries with Aaron rather than silently treating
-an architecture shim as fully Rust.
-
-## Phase 4 — Remaining OS components
-
-Inventory the chosen userspace/distribution: init, device management, libc/runtime,
-utilities, shell, networking services, package/build tooling, and other included
-components. Agree the distribution boundary and compatibility requirements before
-claiming this phase is fully specified. Migrate each included component to Rust
-with end-to-end system tests and licensing/provenance records.
-
-## Decision rules
-
-- Keep the Linux fork as the implementation base; a separate toy kernel does not
-  satisfy the objective.
-- Use existing upstream Rust infrastructure, expanding it when necessary for
-  actual replacements. An enabling change must identify the migration it enables.
-- Keep a working baseline and measure regressions; do not hide missing behavior
-  by disabling required subsystems or weakening tests.
-- These milestones organize the full objective; they do not redefine completion.
+Audit all code required by the declared configurations. Verify their system,
+compatibility, isolation and performance contracts, and inventory necessary
+assembly separately. Executing C fallbacks/shims remain unfinished implementation.
+After the target kernel is complete, agree the userspace/distribution inventory
+and migrate those components with pinned interfaces and end-to-end tests.
