@@ -864,6 +864,15 @@ void set_task_stack_end_magic(struct task_struct *tsk)
 	*stackend = STACK_END_MAGIC;	/* for overflow detection */
 }
 
+#ifdef CONFIG_RUSIX_TASK_CONSTRUCTION_RUST
+#include "task_construction_impl.h"
+extern struct task_struct *rusix_dup_task_struct(struct task_struct *orig, int node);
+
+static struct task_struct *dup_task_struct(struct task_struct *orig, int node)
+{
+	return rusix_dup_task_struct(orig, node);
+}
+#else
 static struct task_struct *dup_task_struct(struct task_struct *orig, int node)
 {
 	struct task_struct *tsk;
@@ -975,6 +984,7 @@ free_tsk:
 	free_task_struct(tsk);
 	return NULL;
 }
+#endif /* CONFIG_RUSIX_TASK_CONSTRUCTION_RUST */
 
 __cacheline_aligned_in_smp DEFINE_SPINLOCK(mmlist_lock);
 

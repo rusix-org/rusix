@@ -104,3 +104,15 @@ The initial parameter-owner build at `2048c42d9096` failed before VM execution
 on a generated field name and three unnecessary-unsafe warnings. The corrected
 `a39d03eb165b` builds have no compiler/objtool diagnostics.
 [Retained failure](docs/evidence/brd-parameter-owner-initial/manifest.json).
+
+### Task construction candidate
+
+This separate branch translates the complete private `dup_task_struct` sequence
+into Rust: task/stack acquisition, staged rollback, ordered initialization and
+handoff to C `copy_process`. The original C body is preserved. Source review,
+formatting and 15 host gate scripts (166 cases) pass. The five-case userspace
+probe and Rust PID1 compile as static binaries in the pinned container; neither
+was executed. Matching C/Rust profiles, actual dispatch/linked selection proof
+and the bounded guest runner are ready for kernel verification. No candidate
+kernel has been compiled or booted. Attributable allocation-failure tests remain
+required. [Contract and remaining C boundaries](experiments/task-construction/README.md).

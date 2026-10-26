@@ -214,6 +214,20 @@ class LanguageTests(unittest.TestCase):
         self.assertEqual(sections[".text"].size, 4)
         self.assertEqual(sections[".bss"].size, 8192)
         self.assertIsNone(sections[".bss"].content_sha256)
+        # C relocatable objects may repeat section names (e.g. function-prefix
+        # metadata). Index mode retains both identities; named measurement stays
+        # strict so its linker-map interpretation cannot silently lose one.
+        repeated = bytearray(prefix + table)
+        struct.pack_into("<I", repeated, 96 + 2 * 64, 1)
+        path.write_bytes(repeated)
+        with self.assertRaises(ValueError):
+            measure.elf_sections(path)
+        indexed = measure.elf_sections(path, indexed=True)
+        self.assertEqual(indexed[1].name, indexed[2].name)
+        self.assertEqual((indexed[1].size, indexed[2].size), (4, 8192))
+        path.write_bytes(repeated[:-1])
+        with self.assertRaises(ValueError):
+            measure.elf_sections(path, indexed=True)
         path.write_bytes((prefix + table)[:-1])
         with self.assertRaises(ValueError):
             measure.elf_sections(path)

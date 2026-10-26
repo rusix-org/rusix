@@ -9,15 +9,15 @@ if [[ ${1:-} == --profile ]]; then
     shift 2
 fi
 case "$profile" in
-    kunit|brd|brd-fixed-c|brd-rust|brd-kunit|brd-ext4-c|brd-ext4-fixed-c|brd-ext4-rust|core-ext4-c|core-ext4-rust|completion-c|completion-rust|completion-plain-c|completion-plain-rust|server|server-c) ;;
-    *) echo 'Profile must be kunit, brd, brd-fixed-c, brd-rust, brd-kunit, brd-ext4-c, brd-ext4-fixed-c, brd-ext4-rust, core-ext4-c, core-ext4-rust, completion-c, completion-rust, completion-plain-c, completion-plain-rust, server or server-c.' >&2; exit 2 ;;
+    kunit|brd|brd-fixed-c|brd-rust|brd-kunit|brd-ext4-c|brd-ext4-fixed-c|brd-ext4-rust|core-ext4-c|core-ext4-rust|completion-c|completion-rust|completion-plain-c|completion-plain-rust|server|server-c|task-construction-c|task-construction-rust) ;;
+    *) echo 'Profile must be kunit, brd, brd-fixed-c, brd-rust, brd-kunit, brd-ext4-c, brd-ext4-fixed-c, brd-ext4-rust, core-ext4-c, core-ext4-rust, completion-c, completion-rust, completion-plain-c, completion-plain-rust, server, server-c, task-construction-c or task-construction-rust.' >&2; exit 2 ;;
 esac
 config="$RUSIX_PROJECT/configs/x86_64-$profile.config"
 if [[ "$profile" == server-c ]]; then
     config="$RUSIX_PROJECT/configs/x86_64-server.config"
 fi
 if [[ $# != 1 || ! "$1" =~ ^[a-zA-Z0-9_-]+$ ]]; then
-    echo 'Usage: bash rusix/scripts/build-kernel.sh [--profile kunit|brd|brd-fixed-c|brd-rust|brd-kunit|brd-ext4-c|brd-ext4-fixed-c|brd-ext4-rust|core-ext4-c|core-ext4-rust|completion-c|completion-rust|completion-plain-c|completion-plain-rust|server|server-c] BUILD_NAME' >&2
+    echo 'Usage: bash rusix/scripts/build-kernel.sh [--profile kunit|brd|brd-fixed-c|brd-rust|brd-kunit|brd-ext4-c|brd-ext4-fixed-c|brd-ext4-rust|core-ext4-c|core-ext4-rust|completion-c|completion-rust|completion-plain-c|completion-plain-rust|server|server-c|task-construction-c|task-construction-rust] BUILD_NAME' >&2
     exit 2
 fi
 name=$1
@@ -74,6 +74,11 @@ elif grep -qx 'CONFIG_RUSIX_BRD_C_PARAMETER_FIX=y' "$out/.config"; then
     echo 'Fixed C oracle selected outside its explicit verification profile.' >&2; exit 1
 fi
 cp "$out/.config" "$evidence/config"
+if [[ "$profile" == task-construction-c || "$profile" == task-construction-rust ]]; then
+    python3 "$RUSIX_PROJECT/scripts/verify-task-construction.py" config \
+        --profile "$profile" --config "$out/.config" --source "$RUSIX_SOURCE" \
+        > "$evidence/task-config-before.json"
+fi
 if [[ "$profile" == server || "$profile" == server-c ]]; then
     python3 "$RUSIX_PROJECT/scripts/server_target.py" verify \
         --source "$RUSIX_PROJECT/configs/x86_64-server.config" --profile "$profile" \
@@ -157,7 +162,7 @@ PYBRDCOMMAND
         fi
     } > "$evidence/selection.log"
 fi
-if [[ "$profile" == brd-rust || "$profile" == brd-kunit || "$profile" == brd-ext4-rust || "$profile" == core-ext4-c || "$profile" == core-ext4-rust || "$profile" == completion-c || "$profile" == completion-rust || "$profile" == completion-plain-c || "$profile" == completion-plain-rust || "$profile" == server || "$profile" == server-c ]]; then
+if [[ "$profile" == brd-rust || "$profile" == brd-kunit || "$profile" == brd-ext4-rust || "$profile" == core-ext4-c || "$profile" == core-ext4-rust || "$profile" == completion-c || "$profile" == completion-rust || "$profile" == completion-plain-c || "$profile" == completion-plain-rust || "$profile" == server || "$profile" == server-c || "$profile" == task-construction-c || "$profile" == task-construction-rust ]]; then
     git -C "$RUSIX_SOURCE" diff --exit-code \
         2926d88bb7fc4608fd942453d929c39e4e5ec006 -- drivers/block/brd.c \
         > "$evidence/brd-reference.diff"
@@ -545,6 +550,18 @@ rm -- "$evidence/wait-bit-symbols.tmp" "$evidence/wait-bit-current.txt"
             "$out/rust/bindings/bindings_generated.rs"
     fi
 } > "$evidence/wait-bit-selection.log"
+
+if [[ "$profile" == task-construction-c || "$profile" == task-construction-rust ]]; then
+    python3 "$RUSIX_PROJECT/scripts/verify-task-construction.py" config \
+        --profile "$profile" --config "$out/.config" --source "$RUSIX_SOURCE" \
+        > "$evidence/task-config-after.json"
+    python3 "$RUSIX_PROJECT/scripts/preprocess-task-construction.py" \
+        --build "$out" --evidence "$evidence"
+    bash "$RUSIX_PROJECT/scripts/with-local-tools.sh" python3 \
+        "$RUSIX_PROJECT/scripts/verify-task-construction.py" objects \
+        --profile "$profile" --source "$RUSIX_SOURCE" --build "$out" \
+        --evidence "$evidence" > "$evidence/task-selection.json"
+fi
 
 git -C "$RUSIX_SOURCE" status --porcelain > "$evidence/source-after.status"
 git -C "$RUSIX_SOURCE" rev-parse HEAD > "$evidence/source-after.commit"

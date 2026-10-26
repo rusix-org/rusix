@@ -2207,3 +2207,17 @@ config ARCH_HAS_SYNC_CORE_BEFORE_USERMODE
 # <asm/syscall_wrapper.h>.
 config ARCH_HAS_SYSCALL_WRAPPER
 	def_bool n
+
+config RUSIX_TASK_CONSTRUCTION_RUST
+	bool "Rusix Rust partial task construction transaction"
+	depends on RUST && X86_64 && THREAD_INFO_IN_TASK && !MODULES
+	depends on !PREEMPT_RT && !VMAP_STACK && !SHADOW_CALL_STACK
+	depends on !KASAN && !KMSAN && !KCSAN && !MEM_ALLOC_PROFILING
+	default n
+	help
+	  Select Rust sequencing and staged rollback for dup_task_struct.
+	  Architecture copy, task/stack allocation, field/bit primitives and
+	  subsystem initialization remain C; later copy_process is unchanged.
+	  VMAP stacks are excluded pending allocator caller-address handling.
+	  This does not give Rust ownership of live tasks or task_struct layout.
+	  Leave disabled for the original C comparison implementation.

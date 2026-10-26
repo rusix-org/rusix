@@ -5,8 +5,8 @@ set -euo pipefail
 source "$(dirname -- "${BASH_SOURCE[0]}")/../scripts/repo-paths.sh"
 profile=${1:-}
 case "$profile" in
-    kunit|brd|brd-fixed-c|brd-rust|brd-kunit|brd-ext4-c|brd-ext4-fixed-c|brd-ext4-rust|core-ext4-c|core-ext4-rust|completion-c|completion-rust|completion-plain-c|completion-plain-rust|server|server-c) ;;
-    *) echo 'Usage: bash rusix/ci/run.sh kunit|brd|brd-fixed-c|brd-rust|brd-kunit|brd-ext4-c|brd-ext4-fixed-c|brd-ext4-rust|core-ext4-c|core-ext4-rust|completion-c|completion-rust|completion-plain-c|completion-plain-rust|server|server-c' >&2; exit 2 ;;
+    kunit|brd|brd-fixed-c|brd-rust|brd-kunit|brd-ext4-c|brd-ext4-fixed-c|brd-ext4-rust|core-ext4-c|core-ext4-rust|completion-c|completion-rust|completion-plain-c|completion-plain-rust|server|server-c|task-construction-c|task-construction-rust) ;;
+    *) echo 'Usage: bash rusix/ci/run.sh kunit|brd|brd-fixed-c|brd-rust|brd-kunit|brd-ext4-c|brd-ext4-fixed-c|brd-ext4-rust|core-ext4-c|core-ext4-rust|completion-c|completion-rust|completion-plain-c|completion-plain-rust|server|server-c|task-construction-c|task-construction-rust' >&2; exit 2 ;;
 esac
 mkdir -p "$RUSIX_OUTPUT_ROOT/logs" "$RUSIX_OUTPUT_ROOT/tmp"
 export TMPDIR="$RUSIX_OUTPUT_ROOT/tmp"
@@ -74,6 +74,14 @@ elif [[ "$profile" == brd-ext4-c || "$profile" == brd-ext4-fixed-c || "$profile"
     python3 "$RUSIX_PROJECT/scripts/$parameter_runner" \
         "$RUSIX_OUTPUT_ROOT/builds/ci-$profile" "ci-$profile" --build-evidence "${evidence[0]}"
     python3 "$RUSIX_PROJECT/scripts/test-brd-partitions-vm.py" \
+        "$RUSIX_OUTPUT_ROOT/builds/ci-$profile" "ci-$profile" --build-evidence "${evidence[0]}"
+elif [[ "$profile" == task-construction-c || "$profile" == task-construction-rust ]]; then
+    shopt -s nullglob
+    evidence=("$RUSIX_OUTPUT_ROOT"/logs/ci-$profile-build.*)
+    [[ ${#evidence[@]} == 1 ]] || {
+        echo 'Expected one task construction build evidence directory.' >&2; exit 1;
+    }
+    python3 "$RUSIX_PROJECT/scripts/test-task-construction-vm.py" \
         "$RUSIX_OUTPUT_ROOT/builds/ci-$profile" "ci-$profile" --build-evidence "${evidence[0]}"
 else
     shopt -s nullglob

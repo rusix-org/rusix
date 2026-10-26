@@ -37,7 +37,7 @@ def sha256(path):
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
-def elf_sections(path):
+def elf_sections(path, *, indexed=False):
     """Read section identities directly, without depending on readelf formatting."""
     data = path.read_bytes()
     if len(data) < 64 or data[:6] != b"\x7fELF\x02\x01":
@@ -55,18 +55,18 @@ def elf_sections(path):
     strings_header = headers[strings_index]
     strings = data[strings_header[4]:strings_header[4] + strings_header[5]]
     sections = {}
-    for name_index, kind, flags, address, file_offset, size, *_ in headers[1:]:
+    for section_index, (name_index, kind, flags, address, file_offset, size, *_) in enumerate(headers[1:], 1):
         if name_index >= len(strings) or b"\0" not in strings[name_index:]:
             raise ValueError("Invalid ELF section name")
         name = strings[name_index:strings.index(b"\0", name_index)].decode()
-        if name in sections:
+        if not indexed and name in sections:
             raise ValueError(f"Duplicate ELF section name: {name}")
         content_hash = None
         if kind != 8:  # SHT_NOBITS consumes memory, but has no file payload.
             if file_offset + size > len(data):
                 raise ValueError(f"Truncated section: {name}")
             content_hash = hashlib.sha256(data[file_offset:file_offset + size]).hexdigest()
-        sections[name] = Section(name, address, size, flags, kind, content_hash)
+        sections[section_index if indexed else name] = Section(name, address, size, flags, kind, content_hash)
     return sections
 
 
