@@ -268,9 +268,9 @@ config RUSIX_COMPLETION_RUST
 	depends on MTD_ONENAND = n && MT7601U = n && SCSI_IPR = n && SGI_GRU = n
 	default n
 	help
-	  Select Rust implementations of all completion.c entry points and nine
-	  swait enrollment/wakeup policies. Generic swait consumers also
-	  use those policies. C layout/initialization, raw locks, marked list
+	  Select Rust implementations of all completion.c and swait.c entry points.
+	  Generic swait consumers also use these policies. C completion layout
+	  and initialization/reset, raw locks, marked list
 	  operations and scheduler task wakeup remain.
 	  This is an experimental partial core migration, not a replacement of
 	  the completion subsystem. Verified only with the declared built-in VM

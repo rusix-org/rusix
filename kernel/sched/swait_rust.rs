@@ -1,16 +1,16 @@
 // SPDX-License-Identifier: GPL-2.0
-// Rust translation of nine Linux 6.18.58 swait.c queue-policy entry points.
+// Rust translation of ten Linux 6.18.58 swait.c entry points.
 
 //! Queue enrollment, removal and wake policy over the temporary C list layout.
 //!
-//! Queue initialization, raw locks, marked list mutation and scheduler task wakeup
-//! still execute C. This builtin implementation replaces the nine matching C
-//! bodies together; C consumer macros retain their existing wait-loop policy.
+//! Raw locks, lockdep, marked list mutation and scheduler task wakeup still
+//! execute C. This builtin implementation replaces the ten matching C bodies
+//! together; C consumer macros retain their existing wait-loop policy.
 
 use core::ptr::{addr_of, addr_of_mut};
 use kernel::{
     bindings,
-    ffi::{c_int, c_long, c_uint, c_ulong, c_void},
+    ffi::{c_char, c_int, c_long, c_uint, c_ulong, c_void},
     types::{NotThreadSafe, Opaque},
 };
 use pin_init::stack_pin_init;
@@ -23,6 +23,51 @@ use pin_init::stack_pin_init;
 // the cast preserves the live task pointer's address and provenance.
 unsafe extern "C" {
     fn try_to_wake_up(task: *mut c_void, state: c_uint, wake_flags: c_int) -> c_int;
+}
+
+/// Initializes a simple wait queue at its final address.
+///
+/// # Safety
+///
+/// `queue` is aligned writable storage for a `struct swait_queue_head`. The caller
+/// has exclusive access to that storage: no held lock, enrolled waiter, in-flight
+/// operation or concurrent observer may remain from a prior initialization.
+/// The queue must remain at this address while initialized and usable. Callers
+/// must publish it with the synchronization required by its consumers, after this
+/// function returns. The storage need not already contain initialized Rust values.
+/// When lockdep is enabled, `name` and `key` must satisfy the pinned C lockdep
+/// lifetime/registration rules (normal macro callers supply a static string and
+/// static key). Class metadata may outlive an individual queue. Disabled lockdep
+/// does not dereference these arguments.
+///
+/// `key` is the C lock_class_key object pointer, represented opaquely because the
+/// C type is empty without lockdep. Only a pointer crosses the x86_64 ABI; this
+/// cast preserves its address/provenance without forming a Rust reference.
+// SAFETY: Conditional C selection excludes the original body and preserves its
+// export record. The C key parameter is struct lock_class_key *; c_void keeps
+// that object-pointer ABI without exposing configuration-empty fields by value.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn __init_swait_queue_head(
+    queue: *mut bindings::swait_queue_head,
+    name: *const c_char,
+    key: *mut c_void,
+) {
+    // SAFETY: exclusive writable queue storage is provided by the caller. The
+    // macro initializes the raw lock for this architecture/configuration without
+    // reading an assumed initialized Rust queue, preserving debug lock checks.
+    unsafe { bindings::swait_raw_lock_init(queue) };
+    // SAFETY: the preceding operation initialized the raw lock fields read by
+    // lockdep. Caller supplies the original C name/key validity and lifetime;
+    // the helper preserves no-op handling in configurations without lockdep.
+    unsafe { bindings::swait_lock_class(queue, name, key.cast()) };
+    // SAFETY: raw projection does not reference uninitialized queue contents.
+    // Both list links are written at their final address under exclusive access.
+    // No reader can race these stores; publication happens only after return.
+    unsafe {
+        let head = addr_of_mut!((*queue).task_list);
+        addr_of_mut!((*head).next).write(head);
+        addr_of_mut!((*head).prev).write(head);
+    }
 }
 
 /// Enrolls the current task once, preserving FIFO list order.

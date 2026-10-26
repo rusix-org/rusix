@@ -31,9 +31,11 @@ linker/padding **2,107,049**, unknown **0**.
 migration, includes inherited Rust infrastructure, and is neither a completion
 percentage nor server runtime evidence. That target selects Rust BRD/C completion.
 
-Next: migrate swait initialization with raw-lock class/name and debug/nondebug
-checks, then reduce C lock/list/scheduler dependencies. A reviewed, unbuilt draft
-is staged outside Git at `linux-out/swait-init-draft`; it is not current source.
+Working branch `rusix/swait-init` translates the remaining swait initializer,
+preserving raw-lock initialization and caller lock-class metadata through two
+macro adapters. The strict inventory now includes 30 core cases. Paired debug, non-debug and
+ordinary-userspace verification is pending.
+Next reduce C core wait-queue policy and lock/list/scheduler dependencies.
 Forced diagnostic failures, detached-batch races, untimed signal paths, deadline
 races and broader IRQ coverage remain open. arm64, modules, expanded fault stress
 and performance budgets remain Phase 1b. Phase 1a still needs the provisional BRD

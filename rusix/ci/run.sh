@@ -5,8 +5,8 @@ set -euo pipefail
 source "$(dirname -- "${BASH_SOURCE[0]}")/../scripts/repo-paths.sh"
 profile=${1:-}
 case "$profile" in
-    kunit|brd|brd-rust|brd-kunit|brd-ext4-c|brd-ext4-rust|core-ext4-c|core-ext4-rust|completion-c|completion-rust|server) ;;
-    *) echo 'Usage: bash rusix/ci/run.sh kunit|brd|brd-rust|brd-kunit|brd-ext4-c|brd-ext4-rust|core-ext4-c|core-ext4-rust|completion-c|completion-rust|server' >&2; exit 2 ;;
+    kunit|brd|brd-rust|brd-kunit|brd-ext4-c|brd-ext4-rust|core-ext4-c|core-ext4-rust|completion-c|completion-rust|completion-plain-c|completion-plain-rust|server) ;;
+    *) echo 'Usage: bash rusix/ci/run.sh kunit|brd|brd-rust|brd-kunit|brd-ext4-c|brd-ext4-rust|core-ext4-c|core-ext4-rust|completion-c|completion-rust|completion-plain-c|completion-plain-rust|server' >&2; exit 2 ;;
 esac
 mkdir -p "$RUSIX_OUTPUT_ROOT/logs" "$RUSIX_OUTPUT_ROOT/tmp"
 export TMPDIR="$RUSIX_OUTPUT_ROOT/tmp"
@@ -36,7 +36,7 @@ bash "$RUSIX_PROJECT/scripts/build-kernel.sh" --profile "$profile" "ci-$profile"
 if [[ "$profile" == kunit ]]; then
     bash "$RUSIX_PROJECT/scripts/boot-kunit.sh" \
         "$RUSIX_OUTPUT_ROOT/builds/ci-kunit" ci-kunit
-elif [[ "$profile" == brd-kunit || "$profile" == completion-c || "$profile" == completion-rust ]]; then
+elif [[ "$profile" == brd-kunit || "$profile" == completion-c || "$profile" == completion-rust || "$profile" == completion-plain-c || "$profile" == completion-plain-rust ]]; then
     bash "$RUSIX_PROJECT/scripts/boot-kunit.sh" --brd \
         "$RUSIX_OUTPUT_ROOT/builds/ci-$profile" "ci-$profile"
     bash "$RUSIX_PROJECT/scripts/boot-kunit.sh" --completion \

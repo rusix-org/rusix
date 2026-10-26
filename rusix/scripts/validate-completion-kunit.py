@@ -16,6 +16,7 @@ spec.loader.exec_module(common)
 # Independent of live Rust source so removing a test does not weaken this gate.
 SUITES = {
     "rusix_completion_swait": (
+        "initializer_preserves_caller_class_links_and_irq_state",
         "empty_wake_preserves_initialized_queue",
         "repeated_prepare_keeps_single_enrollment_and_finish_restores_state",
         "queued_wake_removes_fifo_head_before_second_waiter",

@@ -4,6 +4,7 @@
  */
 #include "sched.h"
 
+#ifndef CONFIG_RUSIX_COMPLETION_RUST
 void __init_swait_queue_head(struct swait_queue_head *q, const char *name,
 			     struct lock_class_key *key)
 {
@@ -11,6 +12,7 @@ void __init_swait_queue_head(struct swait_queue_head *q, const char *name,
 	lockdep_set_class_and_name(&q->lock, key, name);
 	INIT_LIST_HEAD(&q->task_list);
 }
+#endif
 EXPORT_SYMBOL(__init_swait_queue_head);
 
 /*

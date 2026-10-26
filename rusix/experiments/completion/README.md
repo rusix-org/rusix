@@ -117,3 +117,14 @@ accounting, saturation, quiescent reset, abandoned storage and concurrent consum
 [Historical host evidence](../../docs/evidence/completion-host/manifest.json).
 It provides no kernel layout, IRQ, LKMM or blocking-wait proof. Run it with
 `rustc --edition=2021 --test -D warnings`, writing the binary outside the source tree.
+
+## Initializer migration under verification
+
+`__init_swait_queue_head` now has a Rust-selected body. It preserves raw-lock
+initialization, then caller class/name installation, then final-address self-links.
+Two C macro adapters retain debug/nondebug raw-lock behavior and LD_WAIT_SPIN.
+Lockdep metadata follows its registration/lifetime rules, potentially outliving
+an individual queue. Without lockdep, supplied key/name pointers are not read.
+Plain Rust initialization stores require exclusive quiescent storage and later
+synchronized publication; this does not license plain stores on live queues.
+The tenth-symbol gate covers selection. Paired runtime verification is pending.

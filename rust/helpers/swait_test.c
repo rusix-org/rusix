@@ -110,3 +110,55 @@ long rust_helper_swait_test_condition_after_prepare(struct swait_queue_head *que
 	return swait_event_interruptible_timeout_exclusive(*queue,
 						   ++*evaluations > 1, timeout);
 }
+
+/* Static caller metadata outlives lockdep classes, including freed fixtures. */
+#ifdef CONFIG_LOCKDEP
+static struct lock_class_key swait_test_keys[2];
+static const char swait_test_names[2][24] = { "swait-test-first", "swait-test-second" };
+#endif
+
+/* Constructor test adapter; no replacement initialization policy. */
+unsigned int rust_helper_swait_test_init_class(struct swait_queue_head *queue,
+					     unsigned int class, bool disabled)
+{
+	unsigned long flags;
+	bool before = irqs_disabled();
+	unsigned int result;
+
+	local_save_flags(flags);
+	if (disabled)
+		local_irq_disable();
+#ifdef CONFIG_LOCKDEP
+	__init_swait_queue_head(queue, swait_test_names[class], &swait_test_keys[class]);
+#else
+	/* Neither empty C keys nor disabled lockdep metadata are dereferenced. */
+	__init_swait_queue_head(queue, NULL, NULL);
+#endif
+	result = irqs_disabled() == (disabled || before) ? 1U : 0;
+	/* Restore even if a broken initializer changed the enabled entry mode. */
+	local_irq_restore(flags);
+	if (irqs_disabled() == before)
+		result |= 2U;
+	return result;
+}
+
+/* Caller owns an initialized quiescent queue; class is zero or one. A zero
+ * result explicitly means metadata is unavailable, not that it was tested.
+ */
+unsigned int rust_helper_swait_test_class(struct swait_queue_head *queue,
+					 unsigned int class)
+{
+#ifdef CONFIG_LOCKDEP
+	unsigned int result = 8U;
+
+	if (queue->lock.dep_map.key == &swait_test_keys[class])
+		result |= 1U;
+	if (queue->lock.dep_map.name == swait_test_names[class])
+		result |= 2U;
+	if (queue->lock.dep_map.wait_type_inner == LD_WAIT_SPIN)
+		result |= 4U;
+	return result;
+#else
+	return 0;
+#endif
+}

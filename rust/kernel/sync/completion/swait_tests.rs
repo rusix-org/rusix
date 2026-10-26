@@ -45,6 +45,18 @@ impl Queue {
         })
     }
 
+    fn new_class(class: u32, disabled: bool, observed: &Atomic<u32>) -> impl PinInit<Self> + '_ {
+        pin_init!(Self {
+            inner <- Opaque::ffi_init(move |p| {
+                // SAFETY: Exclusive final pinned storage; private callers use
+                // class 0/1. C retains static metadata and restores local IRQs
+                // before returning. No allocation or sleep in the adapter.
+                let state = unsafe { bindings::swait_test_init_class(p, class, disabled) };
+                observed.store(state, Relaxed);
+            }),
+        })
+    }
+
     fn raw(&self) -> *mut bindings::swait_queue_head {
         self.inner.get()
     }
@@ -446,6 +458,48 @@ fn observe_count(queue: &Queue, count: u32) -> bool {
 #[macros::kunit_tests(rusix_completion_swait)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn initializer_preserves_caller_class_links_and_irq_state() -> Result {
+        for disabled in [false, true] {
+            let observed = Atomic::new(0u32);
+            let first = Arc::pin_init(Queue::new_class(0, disabled, &observed), GFP_KERNEL)?;
+            let first_irq = observed.load(Relaxed);
+            let same = Arc::pin_init(Queue::new_class(0, disabled, &observed), GFP_KERNEL)?;
+            let same_irq = observed.load(Relaxed);
+            let distinct = Arc::pin_init(Queue::new_class(1, disabled, &observed), GFP_KERNEL)?;
+            let distinct_irq = observed.load(Relaxed);
+            for (queue, class) in [(&first, 0), (&same, 0), (&distinct, 1)] {
+                // SAFETY: Private initialized quiescent queue and class 0/1.
+                // Metadata is immutable; no operation changes its lock class.
+                let metadata = unsafe { bindings::swait_test_class(queue.raw(), class) };
+                // SAFETY: Observation only of current task's local IRQ context.
+                let before = unsafe { bindings::swait_test_irqs_disabled() };
+                let snapshot;
+                let during;
+                {
+                    let _guard = queue.lock();
+                    // SAFETY: Initialized queue lock held; no waiter pointers.
+                    snapshot = unsafe {
+                        bindings::swait_test_snapshot_locked(queue.raw(), null_mut(), null_mut())
+                    };
+                    // SAFETY: Current-context observation under the lock.
+                    during = unsafe { bindings::swait_test_irqs_disabled() };
+                }
+                // SAFETY: Observation after the guard restored incoming flags.
+                let after = unsafe { bindings::swait_test_irqs_disabled() };
+                assert_eq!(snapshot, 1 << 11);
+                assert_ne!(during, 0);
+                assert_eq!(before, after);
+                // Non-lockdep configurations explicitly have no metadata proof.
+                assert_eq!(metadata, if cfg!(CONFIG_LOCKDEP) { 15 } else { 0 });
+            }
+            assert_eq!(first_irq, 3);
+            assert_eq!(same_irq, 3);
+            assert_eq!(distinct_irq, 3);
+        }
+        Ok(())
+    }
 
     #[test]
     fn empty_wake_preserves_initialized_queue() -> Result {
