@@ -10,6 +10,12 @@
 use core::ptr::null_mut;
 use kernel::{bindings::task_struct, ffi::c_int};
 
+// task_struct contains GNU empty structs (for example sched_statistics when
+// SCHEDSTATS=n). Every aggregate in this block crosses the ABI only as a raw
+// pointer; no layout, field, or by-value aggregate is used by Rust. The canonical
+// C prototypes retain task_struct pointer types. Keep this exception local to
+// these reviewed declarations, as in the generated bindings crate.
+#[allow(improper_ctypes)]
 unsafe extern "C" {
     static rusix_task_numa_no_node: c_int;
     fn rusix_task_fork_node(orig: *mut task_struct) -> c_int;
