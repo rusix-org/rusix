@@ -13,6 +13,7 @@ Current work and remaining gates: [progress](../PROGRESS.md), [Phase 1](PHASE1.m
 | [Rust BRD](evidence/brd-rust-initial/manifest.json) | Selected Rust implementation passes the identical six-case block probe. |
 | [BRD ownership](evidence/brd-ownership/manifest.json) | Nine in-kernel policy/ownership cases, zero skips. |
 | [Ordinary ext4](evidence/brd-ext4/manifest.json) | Six cases each on C/Rust, same source and byte-identical userspace initramfs. |
+| [Rust completion waits](evidence/completion-wait/manifest.json) | Three signaling and nine blocking wait entry points selected exclusively; C/Rust each pass 16 core and nine BRD cases on q35/KVM, no compiler warnings. |
 | [Rust completion signaling](evidence/completion-current-cpu/manifest.json) | All three signaling entry points selected exclusively; C/Rust each pass 12 core and nine BRD cases on q35/KVM. |
 | [Completion scouting](evidence/completion-kernel/manifest.json) | Five C behavior tests and one Rust-owned/C-visible layout test pass; no production core replacement. |
 

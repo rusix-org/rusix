@@ -1,0 +1,34 @@
+{
+  "status": "REVIEWED_TARGET_INVENTORY",
+  "source_scanned": "a910df12a5b7365f2806f8ebdc97d5c85744baa8",
+  "scope": "Historical completion and server dependency sets: 3131/3758 C/header paths,107/127 textual done-member lines. Manual classification found no external completion counter accesses in those sets beyond completion.c/completion.h; Rust test direct accesses separately reviewed as quiescent.",
+  "findings": {
+    "MTD_ONENAND": [
+      "drivers/mtd/onenand/onenand_base.c:638",
+      "drivers/mtd/onenand/onenand_samsung.c:581"
+    ],
+    "MT7601U": [
+      "drivers/net/wireless/mediatek/mt7601u/mcu.c:132"
+    ],
+    "SCSI_IPR": [
+      "drivers/scsi/ipr.c:5162"
+    ],
+    "SGI_GRU": [
+      "drivers/misc/sgi-gru/grukservices.c:1093",
+      "drivers/misc/sgi-gru/grufault.c:482"
+    ]
+  },
+  "disposition": "RUSIX_COMPLETION_RUST excludes each driver family (=n, including module exclusion) and MODULES. These plain counter reads do not have a demonstrated completion-lock synchronization proof against Rust stores.",
+  "limitations": "Textual inventory is not a whole-tree semantic proof. Dependency sets conservatively include cached/host command records. Input metadata distinguishes built source from later scanned source. No alias/type/macro or indirect bytewise proof; initialization/reset still require caller quiescence.",
+  "reproduce": "python3 audit.py --repo <kernel-checkout> --output-root <linux-out> --write-dir <new-directory>; source commit defaults to the recorded scan; historical .cmd caches must exist.",
+  "sha256": {
+    "audit.py": "bebb72cda03fa8eee67d85670a0b1b392bfbb00df84951029c3a6b97fcb6b1af",
+    "completion-counter-audit-inputs.json": "992727c0e6f40b649c0eb4a18b286592cbb10ace20465e042bf1eeeaa8d7b505",
+    "lts-broadcast-rust-001-dependencies.sha256": "cbf94638e05dabb97dbe967bb84ddf7e6e737e53fc5f6d8c06e5c4f042bea99b",
+    "lts-broadcast-rust-001-dependencies.txt": "d290a9b5841ad71dc0114b10c87082a6edbb2ef23db611afa228cccc0530ba61",
+    "lts-broadcast-rust-001-done-audit.txt": "6d5bfb0932e9c1cdb588a85afeb00e2b8d2f7cf9e9d2cf8e8387769c729ebc1f",
+    "lts-server-003-dependencies.sha256": "f780d621789aa7d0ad673b02fdbe1905454b7953c9f034159de0e0b15f9ce5da",
+    "lts-server-003-dependencies.txt": "fa0bae99ef4c1f3f63f25b29b71c4deb005515678d729af027bf69eece2c6feb",
+    "lts-server-003-done-audit.txt": "a4412e1a46455ba46c1c6f131f3e73830f9b7475a24ca72d1558296dd8ae7777"
+  }
+}

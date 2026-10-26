@@ -1,0 +1,107 @@
+arch/x86/kernel/apic/io_apic.c:1266:printk(KERN_INFO ".................................... done.\n");
+arch/x86/lib/msr-smp.c:157:complete(&rv->done);
+arch/x86/lib/msr-smp.c:176:init_completion(&rv.done);
+arch/x86/lib/msr-smp.c:181:wait_for_completion(&rv.done);
+block/blk-mq.c:1488:complete(&wait->done);
+block/blk-mq.c:1524:.done = COMPLETION_INITIALIZER_ONSTACK(wait.done),
+block/blk-mq.c:1538:blk_rq_poll_completion(rq, &wait.done);
+block/blk-mq.c:1540:blk_wait_io(&wait.done);
+block/blk-rq-qos.c:38:if (rqos->ops->done)
+block/blk-rq-qos.c:39:rqos->ops->done(rqos, rq);
+fs/fs-writeback.c:171:struct wb_completion *done = work->done;
+fs/fs-writeback.c:189:if (work->done)
+fs/fs-writeback.c:190:atomic_inc(&work->done->cnt);
+fs/fs-writeback.c:207:* Wait for one or more work items issued to @bdi with their ->done field
+fs/fs-writeback.c:1127:work->done = &fallback_work_done;
+fs/fs-writeback.c:1207:work->done = done;
+fs/fs-writeback.c:2822:.done			= &done,
+fs/fs-writeback.c:2901:.done		= &done,
+fs/fs_pin.c:17:pin->done = 1;
+fs/fs_pin.c:40:if (likely(!p->done)) {
+fs/fs_pin.c:41:p->done = -1;
+fs/fs_pin.c:47:if (p->done > 0) {
+fs/fs_pin.c:63:if (p->done > 0) {
+fs/namei.c:735:do_delayed_call(&last->done);
+fs/namei.c:736:clear_delayed_call(&last->done);
+fs/namei.c:1093:do_delayed_call(&last->done);
+fs/namei.c:1918:clear_delayed_call(&last->done);
+fs/namei.c:1951:res = get(NULL, inode, &last->done);
+fs/namei.c:1953:res = get(link->dentry, inode, &last->done);
+fs/namei.c:1955:res = get(link->dentry, inode, &last->done);
+include/linux/backing-dev-defs.h:73:* ->done should be set to a wb_completion defined using the following
+include/linux/bvec.h:204:iter_all->done = 0;
+include/linux/bvec.h:215:if (iter_all->done) {
+include/linux/bvec.h:223:bvec->bv_len - iter_all->done);
+include/linux/bvec.h:224:iter_all->done += bv->bv_len;
+include/linux/bvec.h:226:if (iter_all->done == bvec->bv_len) {
+include/linux/bvec.h:228:iter_all->done = 0;
+include/linux/completion.h:86:x->done = 0;
+include/linux/completion.h:99:x->done = 0;
+include/linux/shrinker.h:147:complete(&shrinker->done);
+include/trace/events/rcu.h:819:__entry->done = done;
+include/trace/events/rcu.h:824:__entry->done)
+kernel/kthread.c:394:done = xchg(&create->done, NULL);
+kernel/kthread.c:459:struct completion *done = xchg(&create->done, NULL);
+kernel/kthread.c:487:create->done = &done;
+kernel/kthread.c:510:if (xchg(&create->done, NULL))
+kernel/kthread.c:1279:complete(&fwork->done);
+kernel/kthread.c:1292:COMPLETION_INITIALIZER_ONSTACK(fwork.done),
+kernel/kthread.c:1316:wait_for_completion(&fwork.done);
+kernel/kthread.c:1529:COMPLETION_INITIALIZER_ONSTACK(fwork.done),
+kernel/kthread.c:1533:wait_for_completion(&fwork.done);
+kernel/sched/completion.c:31:if (x->done != UINT_MAX)
+kernel/sched/completion.c:32:x->done++;
+kernel/sched/completion.c:87:x->done = UINT_MAX;
+kernel/sched/completion.c:99:if (!x->done) {
+kernel/sched/completion.c:112:} while (!x->done && timeout);
+kernel/sched/completion.c:114:if (!x->done)
+kernel/sched/completion.c:117:if (x->done != UINT_MAX)
+kernel/sched/completion.c:118:x->done--;
+kernel/sched/completion.c:342:* Since x->done will need to be locked only
+kernel/sched/completion.c:343:* in the non-blocking case, we check x->done
+kernel/sched/completion.c:347:if (!READ_ONCE(x->done))
+kernel/sched/completion.c:351:if (!x->done)
+kernel/sched/completion.c:353:else if (x->done != UINT_MAX)
+kernel/sched/completion.c:354:x->done--;
+kernel/sched/completion.c:373:if (!READ_ONCE(x->done))
+kernel/sched/completion.c:377:* If ->done, we need to wait for complete() to release ->wait.lock
+kernel/sched/core.c:2644:complete_all(&pending->done);
+kernel/sched/core.c:2960:complete_all(&pending->done);
+kernel/sched/core.c:2970:init_completion(&my_pending.done);
+kernel/sched/core.c:3047:complete_all(&pending->done);
+kernel/sched/core.c:3050:wait_for_completion(&pending->done);
+kernel/sched/idle.c:400:WRITE_ONCE(it->done, 1);
+kernel/sched/idle.c:426:it.done = 0;
+kernel/sched/idle.c:432:while (!READ_ONCE(it.done))
+kernel/smp.c:1123:complete(&sscs->done);
+kernel/smp.c:1129:.done = COMPLETION_INITIALIZER_ONSTACK(sscs.done),
+kernel/smp.c:1141:wait_for_completion(&sscs.done);
+kernel/stop_machine.c:102:else if (work->done)
+kernel/stop_machine.c:103:cpu_stop_signal_done(work->done);
+kernel/stop_machine.c:140:struct cpu_stop_work work = { .fn = fn, .arg = arg, .done = &done, .caller = _RET_IP_ };
+kernel/stop_machine.c:351:.done = &done,
+kernel/stop_machine.c:412:work->done = done;
+kernel/stop_machine.c:505:struct cpu_stop_done *done = work->done;
+kernel/unwind/user.c:12:for (unwind_user_start(state); !(state)->done; unwind_user_next(state))
+kernel/unwind/user.c:94:if (state->done)
+kernel/unwind/user.c:115:state->done = true;
+kernel/unwind/user.c:126:state->done = true;
+kernel/unwind/user.c:138:state->done = true;
+kernel/workqueue.c:2049:complete(&pwq->wq->first_flusher->done);
+kernel/workqueue.c:3734:complete(&dead_work->done);
+kernel/workqueue.c:3759:init_completion(&dead_work.done);
+kernel/workqueue.c:3766:wait_for_completion(&dead_work.done);
+kernel/workqueue.c:3816:complete(&barr->done);
+kernel/workqueue.c:3866:init_completion_map(&barr->done, &target->lockdep_map);
+kernel/workqueue.c:3976:complete(&wq->first_flusher->done);
+kernel/workqueue.c:4025:.done = COMPLETION_INITIALIZER_ONSTACK_MAP(this_flusher.done, (*wq->lockdep_map)),
+kernel/workqueue.c:4083:wait_for_completion(&this_flusher.done);
+kernel/workqueue.c:4113:complete(&next->done);
+kernel/workqueue.c:4311:while (!try_wait_for_completion(&barr.done)) {
+kernel/workqueue.c:4327:wait_for_completion(&barr.done);
+mm/rmap.c:2298:.done = folio_not_mapped,
+mm/rmap.c:2632:.done = folio_not_mapped,
+mm/rmap.c:2885:if (rwc->done && rwc->done(folio))
+mm/rmap.c:2948:if (rwc->done && rwc->done(folio))
+mm/shrinker.c:760:init_completion(&shrinker->done);
+mm/shrinker.c:795:wait_for_completion(&shrinker->done);

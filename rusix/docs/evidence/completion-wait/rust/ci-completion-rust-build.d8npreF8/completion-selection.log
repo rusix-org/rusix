@@ -1,0 +1,35 @@
+implementation=completion-rust
+/out/builds/ci-completion-rust/kernel/sched/completion_rust.o
+/out/builds/ci-completion-rust/kernel/sched/completion_rust.o
+0000000000000020 T complete
+00000000000000d0 T complete_all
+0000000000000070 T complete_on_current_cpu
+0000000000000110 T wait_for_completion
+0000000000000130 T wait_for_completion_timeout
+0000000000000150 T wait_for_completion_io
+0000000000000170 T wait_for_completion_io_timeout
+0000000000000190 T wait_for_completion_interruptible
+00000000000001d0 T wait_for_completion_interruptible_timeout
+00000000000001f0 T wait_for_completion_killable
+0000000000000270 T wait_for_completion_killable_timeout
+0000000000000230 T wait_for_completion_state
+/out/builds/ci-completion-rust/vmlinux
+ffffffff81288ee0 T complete
+ffffffff81288f90 T complete_all
+ffffffff81288f30 T complete_on_current_cpu
+ffffffff814cb500 T wait_for_completion
+ffffffff814cb520 T wait_for_completion_timeout
+ffffffff814cb540 T wait_for_completion_io
+ffffffff814cb560 T wait_for_completion_io_timeout
+ffffffff814cb580 T wait_for_completion_interruptible
+ffffffff814cb5c0 T wait_for_completion_interruptible_timeout
+ffffffff814cb5e0 T wait_for_completion_killable
+ffffffff814cb660 T wait_for_completion_killable_timeout
+ffffffff814cb620 T wait_for_completion_state
+5bd52d7a3ca9ebedb7bb9a9a0d2fd9af84048f165e95d41d9e9fefaded2e811d  /src/kernel/sched/completion.c
+95fe0a76dbd2c7f9e865bb601ebf919b4f26bca98f07a809f0e583eb44064d5d  /out/builds/ci-completion-rust/kernel/sched/completion_rust.o
+e592e1e9b3d230322e4771e96799c191cb1144e30f688182838a79927a3c3680  /src/kernel/sched/completion_rust.rs
+6a583fddf8e8c2fc83b5491efb9b54be536c00ebe48e3855e3eb2cef4eac1ac5  /src/kernel/sched/completion_rust/wait.rs
+43aa0c2925b4c9467e13dc42f75916fc8facfbb8a307584c267bc28294fb5ffa  /src/rust/helpers/raw_spinlock.c
+fa27056e5312f586421048ca287065e92c9d61a689eaecbe5c4de2fc9b6bc89d  /src/rust/helpers/signal.c
+15e7455b02a67c0783f5e655ece3300d476075702f1ac7acf6f24519a8703e91  /src/rust/helpers/task.c
