@@ -218,3 +218,13 @@ The test reuses this host's tools via `RUSIX_TOOLS_ROOT`, not a clean-worker
 installation. Independent review found no tooling regression and corrected the
 checkout-path claim: Kbuild disallows spaces and colons.
 This closes a tooling defect, not the remaining Phase 1 driver/environment gates.
+
+### 2026-10-25 — BRD C baseline preparation
+
+Inspected the unchanged pinned C RAM-disk driver and its Rust API dependencies.
+Added an x86_64 SMP BRD build profile and explicit C source/object/symbol selection
+evidence. A VM-only static userspace probe and strict runner are being reviewed
+for geometry, sparse reads, page-boundary writes, partial-edge discard, competing
+first insertion, and settled allocation accounting. Configuration preflight
+retains all requested settings. Runtime results are pending; this is test
+infrastructure for the C baseline, not a Rust driver or complete userspace system.

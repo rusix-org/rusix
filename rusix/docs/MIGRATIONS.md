@@ -52,6 +52,9 @@ Current evidence: see `VERIFICATION.md` for clean committed C/Rust comparison,
 
 Status: contract/API investigation only; no Rust BRD replacement implemented.
 See `PHASE1.md` for the complete target, behavior inventory and exit gates.
+Contract and proposed ownership design: [BRD.md](BRD.md).
+VM baseline probe: [test instructions](../tests/brd-contract/README.md).
+
 Reference: `drivers/block/brd.c`, `include/linux/bio.h`, `include/linux/blkdev.h`,
 and the existing Rust block/page/xarray APIs. The bio-based C driver cannot be
 treated as a drop-in user of the existing Rust blk-mq disk abstraction. Upstream

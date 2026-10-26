@@ -32,6 +32,10 @@ Repository-native tooling was implemented with separate shell, Python, and
 documentation agents, then independently reviewed. The review corrected the
 checkout-name guarantee to respect upstream Kbuild path restrictions.
 
+The BRD baseline probe, runner, and ownership design were developed with separate
+Codex agents and cross-reviewed. They establish preparation for the driver
+replacement; test outcomes are recorded separately from design proposals.
+
 ## Verification and responsibility
 
 Executed tests and limitations are recorded in `VERIFICATION.md`, `PROGRESS.md`,
