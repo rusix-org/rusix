@@ -80,7 +80,7 @@ all executing C as unfinished migration work. See `docs/ARCHITECTURE.md` (decisi
   `e87d0bc14` both pass 26/26 VM tests and the strict acceptance gate with identical
   configurations. Source differs only in Kbuild selection. Raw evidence and hashes
   are archived under `docs/evidence/int-sqrt/`; images/configs are in `artifacts/`.
-- No userspace boot, module loading/export-runtime test, 32-bit kernel boot,
+- No ordinary userspace/ext4 workload, module loading/export-runtime test, 32-bit kernel boot,
   other architecture/hardware test, performance benchmark, or full parity claim.
 
 ## Known failures and warnings
@@ -101,8 +101,9 @@ all executing C as unfinished migration work. See `docs/ARCHITECTURE.md` (decisi
    repository-native tooling passed the renamed-worktree build/test workflow.
 2. Establish project CI and bind expected implementation/source/configuration to
    tested images. Retain existing proof; do not accept passing C tests as Rust proof.
-3. Establish the BRD C contract/workload baseline and review bio/non-MQ and page
-   ownership design before the complete Rust driver implementation.
+3. Implement and kernel-test Rust xarray insert-if-absent ownership, then the
+   bio/non-MQ and backing-page interfaces needed by the complete Rust BRD driver.
+   Extend the verified C baseline with failure/lifecycle/filesystem workloads.
 4. Incorporate prepared module/export/CRC checks into the declared Phase 1 matrix,
    followed by its lifecycle, failure, architecture and performance gates.
 5. Continue broader subsystem migration after proving this coherent layer; most
@@ -223,8 +224,26 @@ This closes a tooling defect, not the remaining Phase 1 driver/environment gates
 
 Inspected the unchanged pinned C RAM-disk driver and its Rust API dependencies.
 Added an x86_64 SMP BRD build profile and explicit C source/object/symbol selection
-evidence. A VM-only static userspace probe and strict runner are being reviewed
+evidence. A VM-only static userspace probe and strict runner were cross-reviewed
 for geometry, sparse reads, page-boundary writes, partial-edge discard, competing
 first insertion, and settled allocation accounting. Configuration preflight
-retains all requested settings. Runtime results are pending; this is test
-infrastructure for the C baseline, not a Rust driver or complete userspace system.
+retains all requested settings. Source `976e2de80` builds successfully; all six
+contract cases pass in QEMU TCG with two CPUs and 512 MiB. The test performs 64
+barrier-coordinated competing-insertion rounds. Exact ordered markers, no kernel
+fault diagnostics, matching build/image/config hashes, selected C object/symbol,
+and clean source before/after were verified. All 15 runner regressions, nine
+existing KUnit gate regressions, and six path regressions pass. The C probe has
+zero checkpatch errors/warnings. The build retains the previously observed
+upstream unused `Flags::from_raw` warning.
+
+Evidence: `docs/evidence/brd-c-baseline/manifest.json`; local image/init/initramfs
+remain under `linux-out/builds/brd-vm-brd-c-001` in this workspace. No host module,
+device write, mount or reboot was performed. This is test infrastructure for the
+C baseline, not a Rust driver or complete ordinary userspace system. Host static
+libc/tools were reused; clean-worker reproducibility remains open.
+
+The next Rust enabling change can wrap existing `__xa_insert`, already exposed
+in bindings, instead of adding a C helper. Preserve the losing candidate on
+`EBUSY`/allocation failure and retain the winner under the xarray guard. Reserved
+entries require explicit semantics. Bio-buffer data-race/alias safety remains a
+separate unresolved design obligation; see `docs/BRD.md`.

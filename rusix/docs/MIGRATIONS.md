@@ -50,7 +50,9 @@ Current evidence: see `VERIFICATION.md` for clean committed C/Rust comparison,
 
 ## Phase 1 component: RAM-backed block driver
 
-Status: contract/API investigation only; no Rust BRD replacement implemented.
+Status: six-case C baseline verified on x86_64 SMP; Rust ownership/API design
+reviewed as a proposal, with unresolved obligations. No Rust BRD replacement
+implemented. Evidence: [baseline manifest](evidence/brd-c-baseline/manifest.json).
 See `PHASE1.md` for the complete target, behavior inventory and exit gates.
 Contract and proposed ownership design: [BRD.md](BRD.md).
 VM baseline probe: [test instructions](../tests/brd-contract/README.md).

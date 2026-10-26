@@ -1,11 +1,10 @@
 # BRD migration contract and ownership proposal
 
-**Status: design and C baseline test development; no Rust BRD implementation.**
+**Status: initial C baseline verified; Rust design only, no Rust BRD implementation.**
 The reference is `drivers/block/brd.c` at upstream
 `21a7f44fd0765fcc5194130b28767786eba1d1e7`. Paths below are relative to the
-Git root. The six-case VM probe is being prepared; this document does not claim
-that it has passed. Runtime results belong in `rusix/PROGRESS.md` and archived
-evidence. The full required outcome remains [Phase 1](PHASE1.md).
+Git root. The six-case VM probe passed at project source `976e2de80`; see the
+[baseline evidence](evidence/brd-c-baseline/manifest.json) and `rusix/PROGRESS.md`. The full required outcome remains [Phase 1](PHASE1.md).
 
 ## Behavior to preserve
 
@@ -78,13 +77,17 @@ omits typed `GFP_NOIO`; add that narrow allocation interface before using it.
 
 A new xarray insert-if-absent operation is required. `Guard::store` can release
 the lock while allocating and replaces any existing value, so lookup followed by
-store can destroy a concurrent writer's insertion. Wrap the pinned
-`__xa_cmpxchg(..., NULL, candidate, flags)` contract instead. It also may release
-and reacquire the lock, but repeats the conditional insertion. Represent inserted,
-existing and error outcomes without losing ownership of the candidate. On an
-existing outcome, retain the winner while the guard is held. Never reconstruct an
-owned Arc from a pointer whose ownership remains in the array. Preserve alignment,
-error-pointer and reserved-entry rules if this becomes a general XArray method.
+store can destroy a concurrent writer's insertion. The pinned
+`__xa_insert` already supplies conditional insertion through `__xa_cmpxchg_raw`
+and is present in generated bindings. Prefer a narrow `Guard::insert` returning
+`Result<(), StoreError<T>>`: transfer candidate ownership on success and return
+it on any error, including `EBUSY`. It may release/reacquire the lock to allocate
+but returns with the guard held. BRD can borrow and clone the winner on `EBUSY`
+before releasing that guard. Never reconstruct an owned Arc from an entry still
+owned by the array. A generic `EBUSY` must not imply `get().is_some()`: reserved
+entries reject insertion but appear empty to normal lookup. BRD uses
+`AllocKind::Alloc` with no reservations. Preserve the foreign-pointer alignment
+and ownership rules of the existing abstraction.
 
 For a transfer, release the index lock before acquiring the slot lock. Hold the
 slot lock only across the bounded page access; never allocate or acquire the
