@@ -30,7 +30,8 @@ impl Drop for IrqRestore {
         // initialized raw lock. It has not been unlocked; no operation moves
         // execution to another task/CPU while the raw lock is held. `flags` is
         // the saved IRQ state from that acquisition. The C caller keeps the
-        // containing completion alive through this function's return.
+        // containing completion alive through the final lock release. No access
+        // to that storage occurs after unlock.
         unsafe { bindings::raw_spin_unlock_irqrestore(self.lock, self.flags) };
     }
 }
@@ -40,7 +41,7 @@ impl Drop for IrqRestore {
 /// # Safety
 ///
 /// `completion` must point to initialized, immovable C completion storage which
-/// remains alive through return. Concurrent operations must follow the existing
+/// remains alive through the final lock release. Concurrent operations must follow the existing
 /// C completion contract: `done` updates and queue mutation hold `wait.lock`,
 /// and initialization/reinitialization requires external quiescence. This call
 /// must not recursively acquire the same raw lock. These are the C API's existing
