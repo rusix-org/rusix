@@ -9,6 +9,7 @@ import re
 
 PROFILES = {
     'rcu-batch-c': True, 'rcu-batch-plain-c': True,
+    'rcu-batch-rust': True, 'rcu-batch-plain-rust': True,
     'rcu-list-c': False, 'rcu-list-rust': True,
     'rcu-list-plain-c': False, 'rcu-list-plain-rust': True,
     'rcu-list-ext4-c': False, 'rcu-list-ext4-rust': True,

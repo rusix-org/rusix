@@ -124,19 +124,28 @@ scope; these new profiles have not been built or booted. Next freeze the reviewe
 tooling revision, run serial paired integration guests and refresh the declared
 server language inventory before considering promotion.
 
-### Tree RCU batch C-first fixtures (development)
+### Tree RCU callback-batch transaction (development)
 
-On `rusix/rcu-batch`, six new cases exercise the unchanged C batch through a
-private-descriptor test hook and real retained callback workers. Explicit local
-`rcu-batch-c` / `rcu-batch-plain-c` profiles retain Rust BRD, core and RCU lists;
-strict gates require 92 combined, 67 isolated core, ten list and six batch cases.
-No Rust batch policy or runtime result is claimed. The original `tree.c` bytes
-outside the approved test-only hook region match the pinned source hash.
+On `rusix/rcu-batch`, the default-off Rust implementation now owns extraction,
+pinned detached-chain dispatch, budget decisions and reinsertion/accounting.
+Callback heads are not accessed after invocation; total counts remain retained
+until commit. C keeps per-CPU storage and typed access/IRQ/BH/clock/debug
+primitives. The original C function bodies and C-first test region remain intact.
+The [contract](experiments/rcu-batch/CONTRACT.md) owns the boundary and removal path.
 
-All 17 host test scripts, shell syntax and diff checks pass. Exact input hashes
-and per-script logs are retained locally in
-`linux-out/rcu-batch-baseline-host-001/manifest.json`; this is host/source evidence,
-not kernel compilation or VM proof. The [contract](experiments/rcu-batch/CONTRACT.md)
-records ownership, timeout retention and the pending deterministic partial-budget
-and CPU-hotplug coverage. Next commit the reviewed fixture baseline, run the C
-profiles locally, then independently review the full Rust batch transaction.
+Six cases cover private-descriptor accounting/time boundaries and real retained
+callback consumers. Paired local debug/plain profiles require 92 combined,
+67 isolated core, ten list and six batch cases. The fixture baseline `6f240ef01d`
+has 17 passing host scripts plus syntax/diff checks, recorded locally in
+`linux-out/rcu-batch-baseline-host-001/manifest.json`. The later production
+translation has independent source review and format/diff/input-hash records in
+`linux-out/rcu-batch-source-review-001`; it has **not been compiled or booted**.
+A fresh run of all 17 host scripts (172 cases), formatting and shell checks also
+passes at the final source snapshot; `linux-out/rcu-batch-host-001/manifest.json`
+records its exact inputs. Kernel and runtime gates remain pending.
+
+Next freeze the reviewed implementation, run C before Rust debug/plain pairs,
+prove linked selection and exercise ordinary filesystem/server consumers.
+Partial-budget reinsertion, explicit `rcutree.use_softirq=0` callback-thread runs
+and CPU-hotplug coverage remain pending; neither mode is silently excluded from
+production policy. No full RCU ownership or subsystem divergence is declared.

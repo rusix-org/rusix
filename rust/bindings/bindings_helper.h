@@ -75,6 +75,7 @@
 #include <linux/random.h>
 #include <linux/rcu_segcblist.h>
 #include <linux/refcount.h>
+#include <linux/rusix_rcu_batch.h>
 #include <linux/regulator/consumer.h>
 #include <linux/rusix_wait_bit_types.h>
 #include <linux/sched.h>

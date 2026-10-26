@@ -25,6 +25,16 @@ config RUSIX_RCU_LIST_TEST
 	  Intended for local VM verification profiles.
 
 
+config RUSIX_RCU_BATCH_RUST
+	bool "Rusix Rust Tree RCU callback-batch policy"
+	depends on RUST && X86_64 && SMP && TREE_RCU && RUSIX_RCU_LIST_RUST
+	depends on !MODULES && !PREEMPT_RT && !RCU_NOCB_CPU && !RCU_BOOST
+	default n
+	help
+	  Select Rust ownership of the detached callback batch and its complete
+	  dispatch/accounting transaction. C retains per-CPU RCU state and access
+	  primitives. CPU hotplug remains enabled by the declared configuration.
+
 config RUSIX_RCU_BATCH_TEST
 	bool "Rusix C-first Tree RCU batch fixtures"
 	depends on KUNIT && RUST && X86_64 && SMP && !MODULES
@@ -33,7 +43,7 @@ config RUSIX_RCU_BATCH_TEST
 	default n
 	help
 	  Test private batch accounting and retained real RCU callback consumers.
-	  This enables fixtures only; the batch implementation remains C.
+	  These shared fixtures exercise either selected batch implementation.
 
 config TREE_RCU
 	bool

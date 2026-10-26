@@ -23,3 +23,4 @@ endif
 obj-$(CONFIG_RUSIX_RCU_LIST_TEST) += rcu_list_test.o
 
 obj-$(CONFIG_RUSIX_RCU_BATCH_TEST) += rcu_batch_test.o
+obj-$(CONFIG_RUSIX_RCU_BATCH_RUST) += rcu_batch_rust.o

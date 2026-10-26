@@ -2509,6 +2509,23 @@ rcu_check_quiescent_state(struct rcu_data *rdp)
 	rcu_report_qs_rdp(rdp);
 }
 
+#ifdef CONFIG_RUSIX_RCU_BATCH_RUST
+#include "rcu_batch_ffi_impl.h"
+
+static void rcu_do_batch(struct rcu_data *rdp)
+{
+	rusix_rcu_do_batch(rdp);
+}
+
+#ifdef CONFIG_RUSIX_RCU_BATCH_TEST
+/* The same Rust predicate serves production and the C-first boundary oracle. */
+static bool rcu_do_batch_check_time(long count, long tlimit,
+				    bool jlimit_check, unsigned long jlimit)
+{
+	return rusix_rcu_batch_check_time(count, tlimit, jlimit_check, jlimit);
+}
+#endif
+#else
 /* Return true if callback-invocation time limit exceeded. */
 static bool rcu_do_batch_check_time(long count, long tlimit,
 				    bool jlimit_check, unsigned long jlimit)
@@ -2672,6 +2689,8 @@ static void rcu_do_batch(struct rcu_data *rdp)
 
 	tick_dep_clear_task(current, TICK_DEP_BIT_RCU);
 }
+
+#endif /* CONFIG_RUSIX_RCU_BATCH_RUST */
 
 #ifdef CONFIG_RUSIX_RCU_BATCH_TEST
 #include "rcu_batch_test.h"

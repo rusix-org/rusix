@@ -9,15 +9,15 @@ if [[ ${1:-} == --profile ]]; then
     shift 2
 fi
 case "$profile" in
-    kunit|brd|brd-fixed-c|brd-rust|brd-kunit|brd-ext4-c|brd-ext4-fixed-c|brd-ext4-rust|core-ext4-c|core-ext4-rust|completion-c|completion-rust|completion-plain-c|completion-plain-rust|rcu-batch-c|rcu-batch-plain-c|rcu-list-c|rcu-list-rust|rcu-list-plain-c|rcu-list-plain-rust|rcu-list-ext4-c|rcu-list-ext4-rust|rcu-list-server-c|rcu-list-server-rust|server|server-c) ;;
-    *) echo 'Profile must be kunit, brd, brd-fixed-c, brd-rust, brd-kunit, brd-ext4-c, brd-ext4-fixed-c, brd-ext4-rust, core-ext4-c, core-ext4-rust, completion-c, completion-rust, completion-plain-c, completion-plain-rust, rcu-batch-c, rcu-batch-plain-c, rcu-list-c, rcu-list-rust, rcu-list-plain-c, rcu-list-plain-rust, rcu-list-ext4-c, rcu-list-ext4-rust, rcu-list-server-c, rcu-list-server-rust, server or server-c.' >&2; exit 2 ;;
+    kunit|brd|brd-fixed-c|brd-rust|brd-kunit|brd-ext4-c|brd-ext4-fixed-c|brd-ext4-rust|core-ext4-c|core-ext4-rust|completion-c|completion-rust|completion-plain-c|completion-plain-rust|rcu-batch-c|rcu-batch-rust|rcu-batch-plain-c|rcu-batch-plain-rust|rcu-list-c|rcu-list-rust|rcu-list-plain-c|rcu-list-plain-rust|rcu-list-ext4-c|rcu-list-ext4-rust|rcu-list-server-c|rcu-list-server-rust|server|server-c) ;;
+    *) echo 'Profile must be kunit, brd, brd-fixed-c, brd-rust, brd-kunit, brd-ext4-c, brd-ext4-fixed-c, brd-ext4-rust, core-ext4-c, core-ext4-rust, completion-c, completion-rust, completion-plain-c, completion-plain-rust, rcu-batch-c, rcu-batch-rust, rcu-batch-plain-c, rcu-batch-plain-rust, rcu-list-c, rcu-list-rust, rcu-list-plain-c, rcu-list-plain-rust, rcu-list-ext4-c, rcu-list-ext4-rust, rcu-list-server-c, rcu-list-server-rust, server or server-c.' >&2; exit 2 ;;
 esac
 config="$RUSIX_PROJECT/configs/x86_64-$profile.config"
 if [[ "$profile" == server-c || "$profile" == rcu-list-server-* ]]; then
     config="$RUSIX_PROJECT/configs/x86_64-server.config"
 fi
 if [[ $# != 1 || ! "$1" =~ ^[a-zA-Z0-9_-]+$ ]]; then
-    echo 'Usage: bash rusix/scripts/build-kernel.sh [--profile kunit|brd|brd-fixed-c|brd-rust|brd-kunit|brd-ext4-c|brd-ext4-fixed-c|brd-ext4-rust|core-ext4-c|core-ext4-rust|completion-c|completion-rust|completion-plain-c|completion-plain-rust|rcu-batch-c|rcu-batch-plain-c|rcu-list-c|rcu-list-rust|rcu-list-plain-c|rcu-list-plain-rust|rcu-list-ext4-c|rcu-list-ext4-rust|rcu-list-server-c|rcu-list-server-rust|server|server-c] BUILD_NAME' >&2
+    echo 'Usage: bash rusix/scripts/build-kernel.sh [--profile kunit|brd|brd-fixed-c|brd-rust|brd-kunit|brd-ext4-c|brd-ext4-fixed-c|brd-ext4-rust|core-ext4-c|core-ext4-rust|completion-c|completion-rust|completion-plain-c|completion-plain-rust|rcu-batch-c|rcu-batch-rust|rcu-batch-plain-c|rcu-batch-plain-rust|rcu-list-c|rcu-list-rust|rcu-list-plain-c|rcu-list-plain-rust|rcu-list-ext4-c|rcu-list-ext4-rust|rcu-list-server-c|rcu-list-server-rust|server|server-c] BUILD_NAME' >&2
     exit 2
 fi
 name=$1
@@ -233,17 +233,32 @@ if [[ "$profile" == rcu-list-* || "$profile" == rcu-batch-* ]]; then
         > "$evidence/rcu-list-inputs.sha256"
 fi
 
-if [[ "$profile" == rcu-batch-c || "$profile" == rcu-batch-plain-c ]]; then
+if [[ "$profile" == rcu-batch-c || "$profile" == rcu-batch-rust || "$profile" == rcu-batch-plain-c || "$profile" == rcu-batch-plain-rust ]]; then
     bash "$RUSIX_PROJECT/scripts/with-local-tools.sh" llvm-nm --defined-only \
         "$out/kernel/rcu/tree.o" > "$evidence/rcu-batch-tree-symbols.txt"
     bash "$RUSIX_PROJECT/scripts/with-local-tools.sh" llvm-nm --defined-only \
         "$out/kernel/rcu/rcu_batch_test.o" > "$evidence/rcu-batch-fixture-symbols.txt"
     bash "$RUSIX_PROJECT/scripts/with-local-tools.sh" llvm-nm --defined-only \
         "$out/vmlinux" > "$evidence/rcu-batch-kernel-symbols.txt"
+    python3 "$RUSIX_PROJECT/scripts/preprocess-rcu-batch.py" \
+        --build "$out" --evidence "$evidence"
+    bash "$RUSIX_PROJECT/scripts/with-local-tools.sh" llvm-objdump -dr \
+        "$out/kernel/rcu/tree.o" > "$evidence/rcu-batch-tree-disassembly.txt"
+    if grep -qx 'CONFIG_RUSIX_RCU_BATCH_RUST=y' "$out/.config"; then
+        bash "$RUSIX_PROJECT/scripts/with-local-tools.sh" llvm-nm --defined-only \
+            "$out/kernel/rcu/rcu_batch_rust.o" > "$evidence/rcu-batch-rust-symbols.txt"
+    fi
     python3 "$RUSIX_PROJECT/scripts/verify-rcu-batch-selection.py" objects \
         --profile "$profile" --config "$out/.config" --evidence "$evidence" \
-        --source "$RUSIX_SOURCE/kernel/rcu/tree.c" > "$evidence/rcu-batch-selection.json"
+        --source "$RUSIX_SOURCE/kernel/rcu/tree.c" --preprocessed "$out/kernel/rcu/tree.i" \
+        > "$evidence/rcu-batch-selection.json"
     sha256sum "$out/kernel/rcu/tree.o" "$out/kernel/rcu/rcu_batch_test.o" \
+        "$out/kernel/rcu/.tree.o.cmd" "$out/kernel/rcu/tree.i" \
+        "$evidence/rcu-batch-preprocess.json" \
+        "$RUSIX_SOURCE/include/linux/rusix_rcu_batch.h" \
+        "$RUSIX_SOURCE/kernel/rcu/rcu_batch_ffi_impl.h" \
+        "$RUSIX_SOURCE/kernel/rcu/rcu_batch_rust.rs" \
+        "$RUSIX_PROJECT/scripts/preprocess-rcu-batch.py" \
         "$RUSIX_SOURCE/kernel/rcu/tree.c" "$RUSIX_SOURCE/kernel/rcu/tree.h" \
         "$RUSIX_SOURCE/kernel/rcu/rcu_batch_test.c" "$RUSIX_SOURCE/kernel/rcu/rcu_batch_test.h" \
         "$RUSIX_SOURCE/rust/helpers/rcu_batch_test.c" \
@@ -256,6 +271,9 @@ if [[ "$profile" == rcu-batch-c || "$profile" == rcu-batch-plain-c ]]; then
         "$RUSIX_PROJECT/scripts/verify-rcu-batch-selection.py" \
         "$RUSIX_PROJECT/scripts/verify-rcu-list-selection.py" \
         > "$evidence/rcu-batch-inputs.sha256"
+    if grep -qx 'CONFIG_RUSIX_RCU_BATCH_RUST=y' "$out/.config"; then
+        sha256sum "$out/kernel/rcu/rcu_batch_rust.o" >> "$evidence/rcu-batch-inputs.sha256"
+    fi
 fi
 
 # Bind completion selection to the linked scheduler archive and defining object.
