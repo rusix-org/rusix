@@ -1,8 +1,9 @@
 # MM sharing and duplication consumers
 
 Guest-only static fixtures. Never execute either binary on the host or in a
-container. Source implementation only: compilation and paired VM execution are
-pending. The two ordinary profiles retain Rust task construction, MM construction
+container. Static compilation and child-code inspection passed at `b5bb24438c36`;
+paired kernel/VM execution is pending.
+[Compile evidence](../../docs/evidence/mm-copy-fixtures/manifest.json). The two ordinary profiles retain Rust task construction, MM construction
 and MM release; only `CONFIG_RUSIX_MM_COPY_RUST` differs. No KUnit is enabled.
 
 PID1 mounts proc, requires exactly one `rusix.mm_copy_probe=1` cmdline token,

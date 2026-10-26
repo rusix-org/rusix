@@ -1,0 +1,96 @@
+
+/out/probe:     file format elf64-x86-64
+
+
+Disassembly of section .init:
+
+Disassembly of section .plt:
+
+Disassembly of section .text:
+
+0000000000401cb0 <shared_child>:
+  401cb0:	f3 0f 7e 05 78 31 0a 	movq   0xa3178(%rip),%xmm0        # 4a4e30 <cases.0+0x30>
+  401cb7:	00 
+  401cb8:	4c 8b 07             	mov    (%rdi),%r8
+  401cbb:	c6 44 24 c7 52       	movb   $0x52,-0x39(%rsp)
+  401cc0:	49 89 f9             	mov    %rdi,%r9
+  401cc3:	48 c7 44 24 e8 00 00 	movq   $0x0,-0x18(%rsp)
+  401cca:	00 00 
+  401ccc:	48 8d 05 92 93 07 00 	lea    0x79392(%rip),%rax        # 47b065 <__rseq_flags+0x61>
+  401cd3:	48 c7 44 24 d0 00 00 	movq   $0x0,-0x30(%rsp)
+  401cda:	00 00 
+  401cdc:	66 48 0f 6e c8       	movq   %rax,%xmm1
+  401ce1:	48 8d 05 8a 93 07 00 	lea    0x7938a(%rip),%rax        # 47b072 <__rseq_flags+0x6e>
+  401ce8:	48 89 44 24 c8       	mov    %rax,-0x38(%rsp)
+  401ced:	66 0f 6c c1          	punpcklqdq %xmm1,%xmm0
+  401cf1:	0f 29 44 24 d8       	movaps %xmm0,-0x28(%rsp)
+  401cf6:	41 8b 00             	mov    (%r8),%eax
+  401cf9:	85 c0                	test   %eax,%eax
+  401cfb:	0f 85 dc 00 00 00    	jne    401ddd <shared_child+0x12d>
+  401d01:	41 80 78 04 12       	cmpb   $0x12,0x4(%r8)
+  401d06:	0f 85 d1 00 00 00    	jne    401ddd <shared_child+0x12d>
+  401d0c:	41 80 78 43 34       	cmpb   $0x34,0x43(%r8)
+  401d11:	0f 85 c6 00 00 00    	jne    401ddd <shared_child+0x12d>
+  401d17:	41 c6 40 04 56       	movb   $0x56,0x4(%r8)
+  401d1c:	ba 01 00 00 00       	mov    $0x1,%edx
+  401d21:	48 8d 74 24 c7       	lea    -0x39(%rsp),%rsi
+  401d26:	41 c6 40 43 78       	movb   $0x78,0x43(%r8)
+  401d2b:	48 89 d0             	mov    %rdx,%rax
+  401d2e:	41 c7 00 01 00 00 00 	movl   $0x1,(%r8)
+  401d35:	48 63 7f 08          	movslq 0x8(%rdi),%rdi
+  401d39:	0f 05                	syscall
+  401d3b:	48 89 c2             	mov    %rax,%rdx
+  401d3e:	48 83 f8 01          	cmp    $0x1,%rax
+  401d42:	0f 85 84 00 00 00    	jne    401dcc <shared_child+0x11c>
+  401d48:	45 31 d2             	xor    %r10d,%r10d
+  401d4b:	49 63 79 0c          	movslq 0xc(%r9),%rdi
+  401d4f:	4c 89 d0             	mov    %r10,%rax
+  401d52:	0f 05                	syscall
+  401d54:	48 83 f8 01          	cmp    $0x1,%rax
+  401d58:	75 72                	jne    401dcc <shared_child+0x11c>
+  401d5a:	80 7c 24 c7 47       	cmpb   $0x47,-0x39(%rsp)
+  401d5f:	75 6b                	jne    401dcc <shared_child+0x11c>
+  401d61:	41 8b 00             	mov    (%r8),%eax
+  401d64:	83 f8 02             	cmp    $0x2,%eax
+  401d67:	0f 85 81 00 00 00    	jne    401dee <shared_child+0x13e>
+  401d6d:	41 80 78 05 9a       	cmpb   $0x9a,0x5(%r8)
+  401d72:	75 7a                	jne    401dee <shared_child+0x13e>
+  401d74:	41 c6 40 43 bc       	movb   $0xbc,0x43(%r8)
+  401d79:	c7 05 4d 73 0a 00 99 	movl   $0x9999,0xa734d(%rip)        # 4a90d0 <fresh_image>
+  401d80:	99 00 00 
+  401d83:	41 c7 00 03 00 00 00 	movl   $0x3,(%r8)
+  401d8a:	41 8b 41 10          	mov    0x10(%r9),%eax
+  401d8e:	85 c0                	test   %eax,%eax
+  401d90:	74 28                	je     401dba <shared_child+0x10a>
+  401d92:	48 8d 74 24 d8       	lea    -0x28(%rsp),%rsi
+  401d97:	48 8d 54 24 c8       	lea    -0x38(%rsp),%rdx
+  401d9c:	b8 3b 00 00 00       	mov    $0x3b,%eax
+  401da1:	48 8b 7c 24 d8       	mov    -0x28(%rsp),%rdi
+  401da6:	0f 05                	syscall
+  401da8:	b8 3c 00 00 00       	mov    $0x3c,%eax
+  401dad:	bf 0e 00 00 00       	mov    $0xe,%edi
+  401db2:	4c 89 d6             	mov    %r10,%rsi
+  401db5:	4c 89 d2             	mov    %r10,%rdx
+  401db8:	0f 05                	syscall
+  401dba:	b8 3c 00 00 00       	mov    $0x3c,%eax
+  401dbf:	bf 25 00 00 00       	mov    $0x25,%edi
+  401dc4:	4c 89 d6             	mov    %r10,%rsi
+  401dc7:	4c 89 d2             	mov    %r10,%rdx
+  401dca:	0f 05                	syscall
+  401dcc:	31 f6                	xor    %esi,%esi
+  401dce:	b8 3c 00 00 00       	mov    $0x3c,%eax
+  401dd3:	bf 0c 00 00 00       	mov    $0xc,%edi
+  401dd8:	48 89 f2             	mov    %rsi,%rdx
+  401ddb:	0f 05                	syscall
+  401ddd:	31 f6                	xor    %esi,%esi
+  401ddf:	b8 3c 00 00 00       	mov    $0x3c,%eax
+  401de4:	bf 0b 00 00 00       	mov    $0xb,%edi
+  401de9:	48 89 f2             	mov    %rsi,%rdx
+  401dec:	0f 05                	syscall
+  401dee:	31 f6                	xor    %esi,%esi
+  401df0:	b8 3c 00 00 00       	mov    $0x3c,%eax
+  401df5:	bf 0d 00 00 00       	mov    $0xd,%edi
+  401dfa:	48 89 f2             	mov    %rsi,%rdx
+  401dfd:	0f 05                	syscall
+
+Disassembly of section .fini:

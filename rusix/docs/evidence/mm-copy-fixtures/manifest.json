@@ -1,0 +1,30 @@
+{
+  "status": "PASS",
+  "source": "b5bb24438c365a8279dee6b33095853377c3ba55",
+  "controller_session": 29814,
+  "scope": "Pinned static guest compilation and emitted shared-child code inspection; binaries never executed",
+  "files": {
+    "check.py": "6a7849ada06997acdd68fe689e7c920693339643f9dafd963fa3e4478d98822d",
+    "child-disassembly.exit": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+    "child-disassembly.log": "dc2fe0e4b7a18ad14191c40b57c5c2d41490abe57f31075faa6a08687b2ff884",
+    "gcc-version.exit": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+    "gcc-version.log": "4dc9a4e32fd9e06d42fb307688c59d6d889f0ff90ce034cbefed21b0d451fd81",
+    "init-compile.exit": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+    "init-compile.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "init-elf.exit": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+    "init-elf.log": "b5b1ca36d094b90f2f8d671e8d96c169adf223c144343495bbac44a13b750843",
+    "objdump-version.exit": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+    "objdump-version.log": "aff897e4c6a85eef803f6dc0ed4a813e66726aa1ca6f3afc23280f1d655f32da",
+    "probe-compile.exit": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+    "probe-compile.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "probe-elf.exit": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+    "probe-elf.log": "03bbaa09eac4386ba5b69a2fda60cd55d7485f90ea9b33f53f4797e46f6c91f3",
+    "readelf-version.exit": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+    "readelf-version.log": "a87e30813b76f838a61852bc2943afbe4a26ba28a4b2728efb9481b50f02aff8",
+    "result.json": "0ede22a9024916437673108d7c73d0ebb3eadc3237983d691aa2d6a15f5d38cc",
+    "rustc-version.exit": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+    "rustc-version.log": "6661789050175828fe81cbba4e3bd5817751f51884bb3f5baaa7919bc01caa88"
+  },
+  "raw": "/home/aaron/code/rusix/linux-out/mm-copy-fixture-compile-001",
+  "independent_audit": "Source/artifact hashes, static x86-64 ELF and exact child disassembly inspected; no library calls or TLS accesses in child"
+}

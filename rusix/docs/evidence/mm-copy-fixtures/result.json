@@ -1,0 +1,81 @@
+{
+  "status": "PASS",
+  "scope": "Pinned static guest compilation only; binaries never executed",
+  "source": "b5bb24438c365a8279dee6b33095853377c3ba55",
+  "image": "sha256:c02eb3929889b3f0cc035d57a02c844e0c74c71d24fbda1311249faeb8257f63",
+  "commands": {
+    "rustc-version": [
+      "/usr/bin/rustc",
+      "--version"
+    ],
+    "gcc-version": [
+      "/usr/bin/gcc",
+      "--version"
+    ],
+    "readelf-version": [
+      "/usr/bin/readelf",
+      "--version"
+    ],
+    "objdump-version": [
+      "/usr/bin/objdump",
+      "--version"
+    ],
+    "init-compile": [
+      "/usr/bin/rustc",
+      "--edition",
+      "2021",
+      "--target",
+      "x86_64-unknown-linux-gnu",
+      "-C",
+      "target-feature=+crt-static",
+      "-C",
+      "panic=abort",
+      "-C",
+      "opt-level=2",
+      "/src/rusix/tests/mm-copy/init.rs",
+      "-o",
+      "/out/init"
+    ],
+    "probe-compile": [
+      "/usr/bin/gcc",
+      "-std=gnu11",
+      "-O2",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-static",
+      "/src/rusix/tests/mm-copy/probe.c",
+      "-o",
+      "/out/probe"
+    ],
+    "init-elf": [
+      "/usr/bin/readelf",
+      "-h",
+      "-l",
+      "-d",
+      "/out/init"
+    ],
+    "probe-elf": [
+      "/usr/bin/readelf",
+      "-h",
+      "-l",
+      "-d",
+      "/out/probe"
+    ],
+    "child-disassembly": [
+      "/usr/bin/objdump",
+      "-d",
+      "--disassemble=shared_child",
+      "/out/probe"
+    ]
+  },
+  "sources": {
+    "/src/rusix/tests/mm-copy/init.rs": "29cdb682080e8a1b9464bdeeb1b71e2c588cc936d605b561b5ec156147f66bc5",
+    "/src/rusix/tests/mm-copy/probe.c": "a5a4624be5448b31ab33f3d207efe8dce31a43528efb23f073976756739a7d0b",
+    "/src/rusix/tests/mm-copy/README.md": "f1302ed45605d31b079f3ddd46024feabc7355414c287f1ae681721b9992f587"
+  },
+  "artifacts": {
+    "init": "6b469014103c6fbde9970f8875019519b76935ec0d6a12809d83c989493e253c",
+    "probe": "83cfcc4de6e6796724221e6eea8a05c5dbd4a983a10661329c654f038bf40054"
+  }
+}

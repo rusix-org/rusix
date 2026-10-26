@@ -215,3 +215,11 @@ the source/proof/fixture contracts. All 22 host scripts (229 cases) pass with
 unchanged inputs in `linux-out/mm-copy-host-001`. These checks do not establish
 compiled or runtime behavior. The branch also inherits the reviewed release
 callback-ELF proof fix and the pinned `mtree_empty` fixture correction.
+
+At source `b5bb24438c365a8279dee6b33095853377c3ba55`, the MM-copy PID1 and
+probe compiled as static x86-64 ELFs in the pinned image with no diagnostics.
+Root and independent inspection bound source/binary hashes and verified the
+shared child's emitted code contains inline syscalls, without libc/helper calls
+or TLS accesses. Both binaries remain non-executable files on the host.
+[Compile evidence](docs/evidence/mm-copy-fixtures/manifest.json) records this
+limited result; neither binary nor the MM-copy kernel has been run.
