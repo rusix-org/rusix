@@ -26,7 +26,12 @@ chmod 640 payload
 ln payload hardlink
 truncate -s 1048576 sparse
 dd if=/expected/payload of=sparse bs=4096 seek=8 count=4 conv=notrunc status=none
-sync
+sync payload sparse
+# Exercise ext4 direct I/O separately from buffered file writes.
+dd if=/expected/payload of=direct bs=4096 oflag=direct conv=fsync status=none
+dd if=direct of=/expected/direct-read bs=4096 iflag=direct status=none
+cmp /expected/payload /expected/direct-read
+rm direct
 sha256sum -c /expected/SHA256SUMS
 [ "$(stat -c %a payload)" = 640 ] || fail mode
 [ "$(stat -c %h payload)" = 2 ] || fail links
@@ -50,7 +55,7 @@ printf 'temporary\n' > remove-me
 rm remove-me
 [ "$(stat -c %h renamed)" = 1 ] || fail surviving-link
 sha256sum -c /expected/FINAL.sha256
-sync
+sync renamed sparse
 printf 'RUSIX_EXT4_PASS mutate\n'
 cd /
 umount -n /mnt/test

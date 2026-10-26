@@ -1,7 +1,8 @@
 # Ordinary ext4 userspace fixture
 
 **Implemented; VM execution pending.** This is separate from the unchanged
-six-case direct-I/O BRD contract. Run the same staged rootfs and workload against
+six-case direct-I/O BRD contract. Buffered writes, per-file fsync, aligned direct reads/writes and remount checks
+exercise the same staged rootfs and workload against
 C and Rust BRD kernels. Never execute `init` or `workload.sh` on the host or as
 container PID 1: the workload formats and writes `/dev/ram0`.
 

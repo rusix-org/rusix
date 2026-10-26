@@ -89,3 +89,24 @@ pinned waiter/IRQ-safe lock interface, not more host model features.
 Local execution on 2026-10-25: `rustc 1.99.0 (b940084d7 2026-09-28)`,
 compile exit 0; five tests passed, zero failed/ignored/filtered. This is a host
 toolchain observation, separate from the pinned kernel/container toolchain.
+
+## C baseline kernel contract suite
+
+Implemented, **compilation and VM execution pending**: the test-only
+`rusix_completion_contract` module appended to
+`rust/kernel/sync/completion.rs` calls the original C implementation through
+pinned Rust-owned storage. Exact five-case inventory:
+
+- `initial_state_has_no_token`
+- `presignals_are_consumed_once_each`
+- `broadcast_persists_until_quiescent_reset`
+- `zero_timeout_reports_completion_and_consumes_token`
+- `signal_saturates_instead_of_wrapping`
+
+Reset/saturation use direct counter writes only while the test is the sole user,
+with no outstanding waiter or producer; queue layout is untouched. Zero-timeout
+waits exercise the C return contract without an unbounded worker. No production
+API was added. Worker handoff, FIFO, interruption and timeout races still need
+bounded kernel fixtures with proven teardown; these five tests do not cover them.
+Use the exact suite filter `kunit.filter_glob=rusix_completion_contract` for its
+own baseline result. Existing BRD ownership gates retain their separate inventory.
