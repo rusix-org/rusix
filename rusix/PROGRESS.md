@@ -18,7 +18,7 @@ provisional invalid-parameter exception. No subsystem divergence point is declar
 | Rust selection | Full kernel at `aa6da498a` links Rust submission and excludes C BRD submission. [Evidence](docs/evidence/brd-rust-initial/manifest.json). |
 | Ownership and policy | Nine in-kernel tests pass, zero skips: insertion ownership, discard lifetime/accounting, NOIO nesting and parameters. [Evidence](docs/evidence/brd-ownership/manifest.json). |
 | Ordinary userspace/ext4 | Pinned fixture image, static Rust supervisor, ordinary Debian utilities, deterministic staging and strict gate implemented. C and Rust each pass all six filesystem cases using an identical initramfs and source commit. [Paired evidence](docs/evidence/brd-ext4/manifest.json). [Fixture](tests/brd-ext4/README.md), [tool evidence](docs/evidence/ext4-fixture/manifest.json). |
-| Early core scouting | Completion boundary/ownership experiment and five host tests pass, including pinned Rust 1.85.1. Five original-C kernel contract tests are written, execution pending. [Experiment](experiments/completion/README.md). |
+| Early core scouting | Five original-C behavior tests and one Rust-owned/C-visible layout test pass in the kernel. [Kernel evidence](docs/evidence/completion-kernel/manifest.json). Five host ownership-model tests also pass. [Experiment](experiments/completion/README.md). |
 
 Last completed declared-target measurement: x86_64 server configuration at
 engineering source `4dd0b2c9f`, executable C **5,993,765 bytes**, Rust **151,830
@@ -27,8 +27,8 @@ the selected Rust LTS server profile is pending. Counts include inherited Rust
 infrastructure and are not a completion percentage.
 [Full measurement](docs/evidence/container-verification/manifest.json).
 
-Next: run completion baseline/layout kernel tests, measure
-the LTS server target, review remaining Phase 1a gaps, then publish the explicit
+Next: measure the LTS server target (building), verify parameter/on-demand
+behavior with paired guest probes, review remaining Phase 1a gaps, then publish the explicit
 baseline transition while preserving main history. arm64, module lifetime,
 expanded fault/concurrency stress and performance budgets remain Phase 1b.
 See [ADR 0002](docs/adr/0002.md) and [delivery gates](docs/PHASE1.md).

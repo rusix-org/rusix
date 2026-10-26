@@ -125,3 +125,8 @@ The same five host cases also pass with pinned container Rust 1.85.1;
 Use `boot-kunit.sh --completion` and its six-case gate once a KUnit kernel
 containing both suites is built. Kernel execution of the layout spike remains
 pending; successful host tests do not establish kernel layout compatibility.
+
+Executed x86_64 kernel result: five behavior cases plus the Rust-owned layout
+case pass, zero skips; the combined run also passes all nine BRD cases.
+[Evidence and exact source](../../docs/evidence/completion-kernel/manifest.json).
+The build reused a copied KUnit object cache; original artifacts were retained.

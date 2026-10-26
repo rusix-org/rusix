@@ -1,0 +1,31 @@
+[05:12:55] ============================================================
+[05:12:55] =============== rusix_noio_scope (1 subtest) ===============
+[05:12:55] [PASSED] nested_scopes_restore_task_policy_on_error
+[05:12:55] ================ [PASSED] rusix_noio_scope =================
+[05:12:55] ========== rusix_completion_contract (5 subtests) ==========
+[05:12:55] [PASSED] initial_state_has_no_token
+[05:12:55] [PASSED] presignals_are_consumed_once_each
+[05:12:55] [PASSED] broadcast_persists_until_quiescent_reset
+[05:12:55] [PASSED] zero_timeout_reports_completion_and_consumes_token
+[05:12:55] [PASSED] signal_saturates_instead_of_wrapping
+[05:12:55] ============ [PASSED] rusix_completion_contract ============
+[05:12:55] =========== rusix_completion_layout (1 subtest) ============
+[05:12:55] [PASSED] c_operations_share_pinned_rust_owned_storage
+[05:12:55] ============= [PASSED] rusix_completion_layout =============
+[05:12:55] ============= rusix_xarray_insert (2 subtests) =============
+[05:12:55] [PASSED] occupied_insert_returns_owner_without_replacing
+[05:12:55] [PASSED] array_drop_releases_inserted_owner
+[05:12:55] =============== [PASSED] rusix_xarray_insert ===============
+[05:12:55] =============== rusix_brd_store (3 subtests) ===============
+[05:12:55] [PASSED] lookup_and_repeated_insert_preserve_page
+[05:12:55] [PASSED] discard_keeps_inflight_page_alive_and_reinsert_is_independent
+[05:12:55] [PASSED] discard_excludes_end_and_is_idempotent
+[05:12:55] ================= [PASSED] rusix_brd_store =================
+[05:12:55] ============== rusix_brd_policy (3 subtests) ===============
+[05:12:55] [PASSED] minor_count_preserves_defined_normalization
+[05:12:55] [PASSED] invalid_minor_normalization_is_rejected
+[05:12:55] [PASSED] legacy_size_retains_prefix_and_wrapping_semantics
+[05:12:55] ================ [PASSED] rusix_brd_policy =================
+[05:12:55] ============================================================
+[05:12:55] Testing complete. Ran 15 tests: passed: 15
+[05:12:55] Test results stored in /out/logs/ci-brd-kunit-kunit.json

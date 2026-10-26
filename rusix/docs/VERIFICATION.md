@@ -13,6 +13,7 @@ Current work and remaining gates: [progress](../PROGRESS.md), [Phase 1](PHASE1.m
 | [Rust BRD](evidence/brd-rust-initial/manifest.json) | Selected Rust implementation passes the identical six-case block probe. |
 | [BRD ownership](evidence/brd-ownership/manifest.json) | Nine in-kernel policy/ownership cases, zero skips. |
 | [Ordinary ext4](evidence/brd-ext4/manifest.json) | Six cases each on C/Rust, same source and byte-identical userspace initramfs. |
+| [Completion scouting](evidence/completion-kernel/manifest.json) | Five C behavior tests and one Rust-owned/C-visible layout test pass; no production core replacement. |
 
 Use [contributor commands](../CONTRIBUTING.md) for new runs. Historical commands
 and warnings remain in the linked records. Module/CRC, other architectures,
