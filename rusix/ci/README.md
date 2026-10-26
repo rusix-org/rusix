@@ -89,3 +89,7 @@ Additional local profiles on the LTS integration branch:
 
 `run-container.sh` records the inspected image ID and passes it to the ext4
 runner. These profiles are local execution paths; they do not enable hosted jobs.
+
+The disabled hosted definition has one explicitly selected profile per manual
+dispatch, defaulting to `brd-rust`; there is no automatic multi-job matrix.
+Enabling or dispatching it still requires the explicit request described above.
