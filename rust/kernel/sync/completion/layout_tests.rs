@@ -100,4 +100,100 @@ mod tests {
         // No producer or queued waiter exists when the allocation is freed.
         Ok(())
     }
+
+    // Use the existing upstream wrapper for concurrent tests. The exploratory
+    // Layout deliberately remains !Send/!Sync and is never shared with workers.
+    #[pin_data]
+    struct Handoff {
+        #[pin]
+        ready: super::super::Completion,
+        #[pin]
+        event: super::super::Completion,
+        #[pin]
+        finished: super::super::Completion,
+        value: crate::sync::atomic::Atomic<u32>,
+    }
+
+    impl Handoff {
+        fn new() -> impl PinInit<Self> {
+            pin_init!(Self {
+                ready <- super::super::Completion::new(),
+                event <- super::super::Completion::new(),
+                finished <- super::super::Completion::new(),
+                value: crate::sync::atomic::Atomic::new(0),
+            })
+        }
+    }
+
+    fn wait_bounded(completion: &super::super::Completion, milliseconds: u32) -> bool {
+        // SAFETY: Only the KUnit task and an ordinary unbound workqueue worker
+        // call this helper, with IRQs enabled and no held locks. The borrowed
+        // Completion is initialized/pinned and its Arc owner lives until return.
+        // C removes its stack waiter on every timeout/success exit. No pointer
+        // escapes, and a nonzero finite timeout bounds scheduler waiting.
+        unsafe {
+            bindings::wait_for_completion_timeout(
+                completion.as_raw(),
+                crate::time::msecs_to_jiffies(milliseconds.into()),
+            ) != 0
+        }
+    }
+
+    #[test]
+    fn worker_handoff_observes_published_value() -> Result {
+        use crate::sync::{atomic::Relaxed, Arc};
+
+        let state = Arc::pin_init(Handoff::new(), GFP_KERNEL)?;
+        let worker = state.clone();
+        crate::workqueue::system_unbound().try_spawn(GFP_KERNEL, move || {
+            worker.ready.complete_all();
+            // The producer may win the enqueue race. Both pre-signaled and
+            // queued-wakeup outcomes must preserve the same publication rule.
+            let value = if wait_bounded(&worker.event, 5000) {
+                worker.value.load(Relaxed)
+            } else {
+                0
+            };
+            worker.value.store(value.wrapping_add(1), Relaxed);
+            worker.finished.complete_all();
+            // The closure retains its Arc through return, including if the
+            // test timed out/dropped its own Arc. No borrowed stack state exists.
+        })?;
+        let ready = wait_bounded(&state.ready, 10000);
+        state.value.store(0x1234, Relaxed);
+        state.event.complete_all();
+        let finished = wait_bounded(&state.finished, 10000);
+        assert!(ready);
+        assert!(finished);
+        assert_eq!(state.value.load(Relaxed), 0x1235);
+        Ok(())
+    }
+
+    #[test]
+    fn timed_out_worker_unlinks_before_late_signal() -> Result {
+        use crate::sync::{atomic::Relaxed, Arc};
+
+        let state = Arc::pin_init(Handoff::new(), GFP_KERNEL)?;
+        let worker = state.clone();
+        crate::workqueue::system_unbound().try_spawn(GFP_KERNEL, move || {
+            // No producer signals event until this bounded wait has returned.
+            // Thus this case exercises actual positive-timeout queue enrollment,
+            // unlike a handshake whose producer could signal before enrollment.
+            let completed = wait_bounded(&worker.event, 20);
+            worker.value.store(if completed { 2 } else { 1 }, Relaxed);
+            worker.finished.complete_all();
+        })?;
+        assert!(wait_bounded(&state.finished, 10000));
+        assert_eq!(state.value.load(Relaxed), 1);
+        // SAFETY: The initialized completion remains pinned in our Arc. The
+        // worker's wait has returned before it signals finished, so its stack
+        // waiter is gone. These nonblocking calls retain no pointer. A lingering
+        // callback epilogue owns a separate Arc and no longer accesses event.
+        unsafe {
+            bindings::complete(state.event.as_raw());
+            assert!(bindings::try_wait_for_completion(state.event.as_raw()));
+            assert!(!bindings::try_wait_for_completion(state.event.as_raw()));
+        }
+        Ok(())
+    }
 }

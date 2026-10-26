@@ -1,8 +1,10 @@
 # Completion ownership spike
 
-Status: **host contract experiment, not a kernel replacement**. Baseline Linux
-6.18.58 (`2926d88bb7fc4608fd942453d929c39e4e5ec006`). No runtime source or
-upstream tests are changed. This does not establish a subsystem divergence point.
+Status: **kernel contract/layout tests and a host ownership model**. Baseline
+Linux 6.18.58 (`2926d88bb7fc4608fd942453d929c39e4e5ec006`). The initial six
+kernel cases passed on x86_64 i440fx; q35 verification is pending. Two added
+worker tests are implemented but not compiled or executed. Production completion
+behavior and upstream tests remain unchanged; no subsystem is declared migrated.
 
 ## Inspected boundary
 
@@ -42,9 +44,9 @@ that C can concurrently access. Preserve READ_ONCE-style observations, lock
 serialization, IRQ-save/restore behavior, lockdep annotations and scheduler memory
 ordering. Ordinary Rust atomics or a host mutex are not evidence of LKMM parity.
 
-## Proposed first kernel slice (not implemented)
+## Migration dependencies
 
-1. Build a differential KUnit contract suite against the unchanged C functions:
+1. Extend the implemented C baseline/layout tests into a differential suite:
    pre-signals, token exhaustion/saturation, broadcast, FIFO enrollment, timed and
    interrupted waits, completion at timeout, cancellation and quiescent reuse.
    Use controlled worker handshakes, and validate lockdep/KASAN runs in VMs.
@@ -83,8 +85,8 @@ rustc --edition=2021 --test -D warnings rusix/experiments/completion/model.rs \
 ../lts-integration-out/experiments/completion/model-test
 ```
 
-The next evidence needed is the C-side kernel contract suite and review of the
-pinned waiter/IRQ-safe lock interface, not more host model features.
+Next: execute the worker cases and review the pinned waiter/IRQ-safe lock
+interface before attempting Rust completion control flow.
 
 Local execution on 2026-10-25: `rustc 1.99.0 (b940084d7 2026-09-28)`,
 compile exit 0; five tests passed, zero failed/ignored/filtered. This is a host
@@ -92,8 +94,7 @@ toolchain observation, separate from the pinned kernel/container toolchain.
 
 ## C baseline kernel contract suite
 
-Implemented, **compilation and VM execution pending**: the test-only
-`rusix_completion_contract` module appended to
+The test-only `rusix_completion_contract` module in
 `rust/kernel/sync/completion.rs` calls the original C implementation through
 pinned Rust-owned storage. Exact five-case inventory:
 
@@ -106,27 +107,47 @@ pinned Rust-owned storage. Exact five-case inventory:
 Reset/saturation use direct counter writes only while the test is the sole user,
 with no outstanding waiter or producer; queue layout is untouched. Zero-timeout
 waits exercise the C return contract without an unbounded worker. No production
-API was added. Worker handoff, FIFO, interruption and timeout races still need
-bounded kernel fixtures with proven teardown; these five tests do not cover them.
-The separate `rusix_completion_layout` suite requires one case,
+API was added. These five cases do not cover worker handoff, FIFO, interruption
+or timeout races.
+The initial `rusix_completion_layout` case is
 `c_operations_share_pinned_rust_owned_storage`: a Rust-owned `repr(C)` layout
 with compile-time size, alignment and field-offset checks is initialized and
 operated on by the original C completion functions. Rust reads/resets its counter
 only while quiescent. This is a storage interoperability spike, not a replacement
 implementation, concurrent waiter test, or proof for other configurations.
 
-Use `kunit.filter_glob=rusix_completion_*` to select both suites. The completion
-gate requires all five C behavior cases and the one layout case, separately
-identified; missing, duplicate, skipped or failing cases reject the result.
-Existing BRD ownership gates retain their separate nine-case inventory.
+Two additional kernel cases in that suite are implemented, pending compilation
+and execution:
 
-The same five host cases also pass with pinned container Rust 1.85.1;
+- `worker_handoff_observes_published_value`: a safe unbound workqueue closure and
+  test task exchange notifications and a Relaxed LKMM atomic payload through C
+  completions. Pre-signaling is allowed; deterministic blocked wakeup is not claimed.
+- `timed_out_worker_unlinks_before_late_signal`: a worker waits with a positive
+  timeout on an unsignaled completion, reports its return, then a late signal is
+  consumed once by the test task. This exercises enrollment/timeout teardown.
+
+Concurrent cases use the existing upstream `Completion` wrapper, not the private
+single-task `Layout`. Safe workqueue closure ownership and kernel Arc pin every
+completion until its last user returns. Waits are finite (20 ms/5 s for workers,
+10 s for observers). A test timeout may leave a scheduled worker with its own
+Arc; no callback borrows KUnit stack storage or performs assertions. The finished
+notification acknowledges the final data access, not workqueue callback exit;
+there is no bounded join API here. Thus no queue-wide flush or unsafe lifetime
+extension is used. External VM timeout still bounds scheduler failure. FIFO,
+interruptible cancellation and completion-at-deadline races remain untested.
+
+Use `kunit.filter_glob=rusix_completion_*` to select both suites. The recorded
+six-case gate/result below covers the original five C behavior cases and one
+layout case. The new worker cases require a reviewed eight-case inventory before
+recording a new result; missing, duplicate, skipped or failing cases must reject.
+BRD ownership tests retain their separate nine-case inventory.
+
+## Recorded verification
+
+The five host cases also pass with pinned container Rust 1.85.1:
 [recorded output](../../docs/evidence/completion-host/manifest.json).
-Use `boot-kunit.sh --completion` and its six-case gate once a KUnit kernel
-containing both suites is built. Kernel execution of the layout spike remains
-pending; successful host tests do not establish kernel layout compatibility.
-
-Executed x86_64 kernel result: five behavior cases plus the Rust-owned layout
-case pass, zero skips; the combined run also passes all nine BRD cases.
-[Evidence and exact source](../../docs/evidence/completion-kernel/manifest.json).
-The build reused a copied KUnit object cache; original artifacts were retained.
+The original six x86_64 kernel cases passed with zero skips on i440fx, alongside
+all nine BRD cases: [evidence and source](../../docs/evidence/completion-kernel/manifest.json).
+That build reused a copied KUnit object cache and retained original artifacts.
+It does not verify the two new worker cases or q35. Host results do not establish
+kernel layout or scheduling behavior.

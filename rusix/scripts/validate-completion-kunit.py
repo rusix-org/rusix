@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-2.0-only
-"""Require five C completion-contract cases and one Rust-owned layout spike."""
+"""Require completion behavior, Rust-owned layout, and bounded worker cases."""
 import argparse
 import importlib.util
 import json
@@ -22,7 +22,11 @@ SUITES = {
         "zero_timeout_reports_completion_and_consumes_token",
         "signal_saturates_instead_of_wrapping",
     ),
-    "rusix_completion_layout": ("c_operations_share_pinned_rust_owned_storage",),
+    "rusix_completion_layout": (
+        "c_operations_share_pinned_rust_owned_storage",
+        "worker_handoff_observes_published_value",
+        "timed_out_worker_unlinks_before_late_signal",
+    ),
 }
 
 
