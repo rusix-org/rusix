@@ -146,7 +146,7 @@ fn run() -> io::Result<()> {
     ram0.sync_all()?;
     // SAFETY: BLKRRPART takes no pointer argument. This live whole-disk fd
     // belongs to the authorized guest; no partition fd has been opened yet.
-    if unsafe { ioctl(ram0.as_raw_fd(), 0x125f) } != 0 {
+    if unsafe { ioctl(ram0.as_raw_fd(), 0x125f, 0 as c_ulong) } != 0 {
         return Err(io::Error::last_os_error());
     }
     println!("RUSIX_BRD_PARTITIONS_PASS discovery");
@@ -180,6 +180,18 @@ fn run() -> io::Result<()> {
         buffer.0[..512].iter().all(|b| *b == 0x72) && buffer.0[512..].iter().all(|b| *b == 0xcc),
         "cross-end read contents",
     )?;
+    // Pinned blkdev_write_iter truncates the iterator at the device end.
+    // Distinct halves make an accidental write into the trailing guard visible.
+    let mut crossing = Buffer([0x48; 1024]);
+    crossing.0[512..].fill(0xb7);
+    check(
+        partition.write_at(&crossing.0, LENGTH - 512)? == 512,
+        "cross-end write length",
+    )?;
+    read_sector(&partition, LENGTH - 512, 0x48)?;
+    read_sector(&ram0, START + LENGTH - 512, 0x48)?;
+    read_sector(&ram0, START - 512, 0x29)?;
+    read_sector(&ram0, START + LENGTH, 0x91)?;
     for offset in [LENGTH, LENGTH + 512] {
         check(
             partition.read_at(&mut buffer.0[..512], offset)? == 0,
@@ -193,7 +205,7 @@ fn run() -> io::Result<()> {
     }
     read_sector(&ram0, START - 512, 0x29)?;
     read_sector(&ram0, START + LENGTH, 0x91)?;
-    read_sector(&partition, LENGTH - 512, 0x72)?;
+    read_sector(&partition, LENGTH - 512, 0x48)?;
     println!("RUSIX_BRD_PARTITIONS_PASS boundaries");
     for offset in [
         0,

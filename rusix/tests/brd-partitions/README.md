@@ -22,8 +22,10 @@ then `SUCCESS cases=5`:
 3. `translation`: partition first/last-sector writes appear at whole-disk
    offsets; a whole-disk write appears inside the partition; adjacent guard
    sectors remain unchanged.
-4. `boundaries`: crossing read clips, reads at/beyond partition end return EOF,
-   writes there return ENOSPC; last/adjacent sectors remain intact.
+4. `boundaries`: crossing reads and writes clip to the final sector; the write
+   updates that sector through both views without changing adjacent guards.
+   Reads at/beyond partition end return EOF and writes there return ENOSPC,
+   leaving the newly written last sector and adjacent guards intact.
 5. `independent_disk`: corresponding ram1 sectors remain zero, its later write
    leaves ram0p1 unchanged, and the original MBR survives all operations.
 
