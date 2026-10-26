@@ -138,6 +138,35 @@ def archive_members(text, rust):
         raise ValueError('Unexpected alternative constructor object')
 
 
+def archive_member_hash(archive, member, object_path):
+    """Bind the selected regular payload or canonical Kbuild thin reference."""
+    with archive.open('rb') as stream:
+        magic = stream.read(8)
+    if magic == b'!<thin>\n':
+        listed = Path(member)
+        if not listed.is_absolute():
+            listed = archive.parent / listed
+        if listed.resolve() != object_path.resolve():
+            raise ValueError('Thin archive references a different object: '+member)
+        # llvm-ar t expands thin paths, but pP matches the stored relative name.
+        # These Kbuild objects live beside built-in.a. Other storage forms fail
+        # closed rather than accepting a same-basename object elsewhere.
+        if object_path.parent.resolve() != archive.parent.resolve():
+            raise ValueError('Selected thin object is outside its archive directory')
+        token = object_path.name
+    elif magic == b'!<arch>\n':
+        token = member
+    else:
+        raise ValueError('Unrecognized archive format')
+    extracted = subprocess.run(['llvm-ar', 'pP', str(archive), token], capture_output=True)
+    if extracted.returncode or extracted.stderr:
+        raise ValueError('Archive extraction failed: '+extracted.stderr.decode(errors='replace'))
+    result = hashlib.sha256(extracted.stdout).hexdigest()
+    if result != digest(object_path):
+        raise ValueError('Archive member differs from selected object: '+member)
+    return result
+
+
 def verify(args):
     source, build, evidence = args.source.resolve(), args.build.resolve(), args.evidence.resolve()
     rust = PROFILES[args.profile]
@@ -175,10 +204,7 @@ def verify(args):
     member_hashes = {}
     for object_path in ([fork, obj] if rust else [fork]):
         member = next(row for row in members.splitlines() if Path(row).name == object_path.name)
-        extracted = subprocess.run(['llvm-ar', 'p', str(archive), member], check=True, capture_output=True)
-        if extracted.stderr or hashlib.sha256(extracted.stdout).hexdigest() != digest(object_path):
-            raise ValueError('Archive member differs from selected object: '+member)
-        member_hashes[member] = digest(object_path)
+        member_hashes[member] = archive_member_hash(archive, member, object_path)
     check_relocations(run('task-fork-disassembly.txt', ['llvm-objdump', '-dr', str(fork)]), rust)
     bridge_definition(run('task-fork-symbols.txt', ['llvm-nm', '--defined-only', str(fork)]), False)
     bridge_definition(run('task-kernel-symbols.txt', ['llvm-nm', '--defined-only', str(image)]), rust)
