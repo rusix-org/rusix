@@ -57,6 +57,8 @@ elif [[ "$profile" == brd-ext4-c || "$profile" == brd-ext4-rust ]]; then
     [[ ${#evidence[@]} == 1 ]] || {
         echo "Expected one ext4 build evidence directory." >&2; exit 1;
     }
+    python3 "$RUSIX_PROJECT/scripts/test-brd-vm.py" \
+        "$RUSIX_OUTPUT_ROOT/builds/ci-$profile" "ci-$profile" --build-evidence "${evidence[0]}"
     python3 "$RUSIX_PROJECT/scripts/test-brd-ext4-vm.py" \
         "$RUSIX_OUTPUT_ROOT/builds/ci-$profile" "ci-$profile" --build-evidence "${evidence[0]}"
     python3 "$RUSIX_PROJECT/scripts/test-brd-parameters-vm.py" \

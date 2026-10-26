@@ -82,7 +82,9 @@ class SelectionTests(unittest.TestCase):
 
     def test_each_implementation_requires_matching_profile_and_configuration(self):
         for profile, implementation, rust in (("brd", "brd-c", False),
-                                               ("brd-rust", "brd-rust", True)):
+                                               ("brd-rust", "brd-rust", True),
+                                               ("brd-ext4-c", "brd-c", False),
+                                               ("brd-ext4-rust", "brd-rust", True)):
             with self.subTest(profile=profile):
                 self.assertEqual(runner.validate_selection(
                     profile, f"implementation={implementation}", self.config(rust)),

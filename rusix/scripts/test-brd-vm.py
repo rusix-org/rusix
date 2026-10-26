@@ -38,9 +38,10 @@ def accept_console(console, qemu_exit):
 
 def validate_selection(profile, selection, config):
     """Bind the requested implementation to its build proof and resolved config."""
-    if profile not in ("brd", "brd-rust"):
-        raise ValueError("The BRD build profile is required")
-    implementation = "brd-c" if profile == "brd" else "brd-rust"
+    implementation = {"brd": "brd-c", "brd-rust": "brd-rust",
+                      "brd-ext4-c": "brd-c", "brd-ext4-rust": "brd-rust"}.get(profile)
+    if implementation is None:
+        raise ValueError("A BRD or ext4 build profile is required")
     if selection != f"implementation={implementation}":
         raise ValueError("Build evidence does not identify the selected BRD implementation")
     settings = set(config.splitlines())
