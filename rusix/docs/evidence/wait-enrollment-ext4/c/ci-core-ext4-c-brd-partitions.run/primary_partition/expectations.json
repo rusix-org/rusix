@@ -1,0 +1,6 @@
+{
+  "name": "primary_partition",
+  "rd_nr": 2,
+  "rd_size": 4096,
+  "max_part": 4
+}

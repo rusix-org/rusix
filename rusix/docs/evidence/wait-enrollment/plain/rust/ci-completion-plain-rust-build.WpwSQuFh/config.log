@@ -1,0 +1,8 @@
+make: Entering directory '/src'
+make[1]: Entering directory '/out/builds/ci-completion-plain-rust'
+  GEN     Makefile
+#
+# No change to .config
+#
+make[1]: Leaving directory '/out/builds/ci-completion-plain-rust'
+make: Leaving directory '/src'

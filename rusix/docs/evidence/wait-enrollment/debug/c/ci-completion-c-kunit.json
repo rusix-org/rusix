@@ -1,0 +1,423 @@
+{
+    "name": "KUnit Test Group",
+    "sub_groups": [
+        {
+            "name": "rusix_noio_scope",
+            "sub_groups": [],
+            "test_cases": [
+                {
+                    "name": "nested_scopes_restore_task_policy_on_error",
+                    "status": "PASS"
+                }
+            ],
+            "misc": {
+                "tests": 1,
+                "passed": 1,
+                "failed": 0,
+                "crashed": 0,
+                "skipped": 0,
+                "errors": 0
+            },
+            "arch": "",
+            "defconfig": "",
+            "build_environment": "",
+            "lab_name": null,
+            "kernel": null,
+            "job": null,
+            "git_branch": "kselftest"
+        },
+        {
+            "name": "rusix_completion_contract",
+            "sub_groups": [],
+            "test_cases": [
+                {
+                    "name": "initial_state_has_no_token",
+                    "status": "PASS"
+                },
+                {
+                    "name": "presignals_are_consumed_once_each",
+                    "status": "PASS"
+                },
+                {
+                    "name": "broadcast_persists_until_quiescent_reset",
+                    "status": "PASS"
+                },
+                {
+                    "name": "zero_timeout_reports_completion_and_consumes_token",
+                    "status": "PASS"
+                },
+                {
+                    "name": "signal_saturates_instead_of_wrapping",
+                    "status": "PASS"
+                }
+            ],
+            "misc": {
+                "tests": 5,
+                "passed": 5,
+                "failed": 0,
+                "crashed": 0,
+                "skipped": 0,
+                "errors": 0
+            },
+            "arch": "",
+            "defconfig": "",
+            "build_environment": "",
+            "lab_name": null,
+            "kernel": null,
+            "job": null,
+            "git_branch": "kselftest"
+        },
+        {
+            "name": "rusix_completion_layout",
+            "sub_groups": [],
+            "test_cases": [
+                {
+                    "name": "c_operations_share_pinned_rust_owned_storage",
+                    "status": "PASS"
+                },
+                {
+                    "name": "current_cpu_signal_counts_and_saturates",
+                    "status": "PASS"
+                },
+                {
+                    "name": "worker_handoff_observes_published_value",
+                    "status": "PASS"
+                },
+                {
+                    "name": "current_cpu_signal_wakes_enrolled_worker",
+                    "status": "PASS"
+                },
+                {
+                    "name": "two_workers_consume_exactly_two_tokens",
+                    "status": "PASS"
+                },
+                {
+                    "name": "competing_try_waiters_consume_one_token",
+                    "status": "PASS"
+                },
+                {
+                    "name": "broadcast_serves_two_workers_and_late_waiters",
+                    "status": "PASS"
+                },
+                {
+                    "name": "timed_out_worker_unlinks_before_late_signal",
+                    "status": "PASS"
+                }
+            ],
+            "misc": {
+                "tests": 8,
+                "passed": 8,
+                "failed": 0,
+                "crashed": 0,
+                "skipped": 0,
+                "errors": 0
+            },
+            "arch": "",
+            "defconfig": "",
+            "build_environment": "",
+            "lab_name": null,
+            "kernel": null,
+            "job": null,
+            "git_branch": "kselftest"
+        },
+        {
+            "name": "rusix_completion_wait",
+            "sub_groups": [],
+            "test_cases": [
+                {
+                    "name": "all_wait_entries_consume_presignaled_token",
+                    "status": "PASS"
+                },
+                {
+                    "name": "all_wait_entries_preserve_broadcast_sentinel",
+                    "status": "PASS"
+                },
+                {
+                    "name": "all_timed_entries_distinguish_zero_timeout_states",
+                    "status": "PASS"
+                },
+                {
+                    "name": "all_timed_entries_unlink_after_positive_timeout",
+                    "status": "PASS"
+                }
+            ],
+            "misc": {
+                "tests": 4,
+                "passed": 4,
+                "failed": 0,
+                "crashed": 0,
+                "skipped": 0,
+                "errors": 0
+            },
+            "arch": "",
+            "defconfig": "",
+            "build_environment": "",
+            "lab_name": null,
+            "kernel": null,
+            "job": null,
+            "git_branch": "kselftest"
+        },
+        {
+            "name": "rusix_completion_signal",
+            "sub_groups": [],
+            "test_cases": [
+                {
+                    "name": "pending_signals_interrupt_timed_waits",
+                    "status": "PASS"
+                },
+                {
+                    "name": "enrolled_waits_wake_for_signals",
+                    "status": "PASS"
+                },
+                {
+                    "name": "presignaled_token_wins_over_pending_signal",
+                    "status": "PASS"
+                },
+                {
+                    "name": "killable_wait_ignores_nonfatal_pending_signal",
+                    "status": "PASS"
+                }
+            ],
+            "misc": {
+                "tests": 4,
+                "passed": 4,
+                "failed": 0,
+                "crashed": 0,
+                "skipped": 0,
+                "errors": 0
+            },
+            "arch": "",
+            "defconfig": "",
+            "build_environment": "",
+            "lab_name": null,
+            "kernel": null,
+            "job": null,
+            "git_branch": "kselftest"
+        },
+        {
+            "name": "rusix_completion_swait",
+            "sub_groups": [],
+            "test_cases": [
+                {
+                    "name": "initializer_preserves_caller_class_links_and_irq_state",
+                    "status": "PASS"
+                },
+                {
+                    "name": "empty_wake_preserves_initialized_queue",
+                    "status": "PASS"
+                },
+                {
+                    "name": "repeated_prepare_keeps_single_enrollment_and_finish_restores_state",
+                    "status": "PASS"
+                },
+                {
+                    "name": "queued_wake_removes_fifo_head_before_second_waiter",
+                    "status": "PASS"
+                },
+                {
+                    "name": "generic_swait_event_observes_condition_and_unlinks",
+                    "status": "PASS"
+                },
+                {
+                    "name": "generic_swait_timeout_unlinks_before_late_wake",
+                    "status": "PASS"
+                },
+                {
+                    "name": "pending_prepare_event_unlinks_without_changing_state_or_irqs",
+                    "status": "PASS"
+                },
+                {
+                    "name": "generic_signal_error_and_post_prepare_condition_precedence",
+                    "status": "PASS"
+                },
+                {
+                    "name": "generic_broadcast_removes_initial_batch_and_leaves_late_waiter",
+                    "status": "PASS"
+                }
+            ],
+            "misc": {
+                "tests": 9,
+                "passed": 9,
+                "failed": 0,
+                "crashed": 0,
+                "skipped": 0,
+                "errors": 0
+            },
+            "arch": "",
+            "defconfig": "",
+            "build_environment": "",
+            "lab_name": null,
+            "kernel": null,
+            "job": null,
+            "git_branch": "kselftest"
+        },
+        {
+            "name": "rusix_completion_wake",
+            "sub_groups": [],
+            "test_cases": [
+                {
+                    "name": "exclusive_budget_uses_callback_success_not_return_magnitude",
+                    "status": "PASS"
+                },
+                {
+                    "name": "exclusive_accounting_uses_flags_from_before_callback",
+                    "status": "PASS"
+                },
+                {
+                    "name": "callbacks_can_retire_current_for_each_return_path",
+                    "status": "PASS"
+                },
+                {
+                    "name": "all_wrappers_forward_arguments_and_preserve_irq_context",
+                    "status": "PASS"
+                },
+                {
+                    "name": "null_sync_wrappers_preserve_irq_context",
+                    "status": "PASS"
+                },
+                {
+                    "name": "enrollment_preserves_priority_prefix_lifo_and_exclusive_tail",
+                    "status": "PASS"
+                },
+                {
+                    "name": "priority_exclusive_rejects_only_priority_at_head",
+                    "status": "PASS"
+                },
+                {
+                    "name": "removal_poisons_links_and_allows_readdition",
+                    "status": "PASS"
+                },
+                {
+                    "name": "constructor_preserves_caller_class_links_and_irq_context",
+                    "status": "PASS"
+                }
+            ],
+            "misc": {
+                "tests": 9,
+                "passed": 9,
+                "failed": 0,
+                "crashed": 0,
+                "skipped": 0,
+                "errors": 0
+            },
+            "arch": "",
+            "defconfig": "",
+            "build_environment": "",
+            "lab_name": null,
+            "kernel": null,
+            "job": null,
+            "git_branch": "kselftest"
+        },
+        {
+            "name": "rusix_xarray_insert",
+            "sub_groups": [],
+            "test_cases": [
+                {
+                    "name": "occupied_insert_returns_owner_without_replacing",
+                    "status": "PASS"
+                },
+                {
+                    "name": "array_drop_releases_inserted_owner",
+                    "status": "PASS"
+                }
+            ],
+            "misc": {
+                "tests": 2,
+                "passed": 2,
+                "failed": 0,
+                "crashed": 0,
+                "skipped": 0,
+                "errors": 0
+            },
+            "arch": "",
+            "defconfig": "",
+            "build_environment": "",
+            "lab_name": null,
+            "kernel": null,
+            "job": null,
+            "git_branch": "kselftest"
+        },
+        {
+            "name": "rusix_brd_store",
+            "sub_groups": [],
+            "test_cases": [
+                {
+                    "name": "lookup_and_repeated_insert_preserve_page",
+                    "status": "PASS"
+                },
+                {
+                    "name": "discard_keeps_inflight_page_alive_and_reinsert_is_independent",
+                    "status": "PASS"
+                },
+                {
+                    "name": "discard_excludes_end_and_is_idempotent",
+                    "status": "PASS"
+                }
+            ],
+            "misc": {
+                "tests": 3,
+                "passed": 3,
+                "failed": 0,
+                "crashed": 0,
+                "skipped": 0,
+                "errors": 0
+            },
+            "arch": "",
+            "defconfig": "",
+            "build_environment": "",
+            "lab_name": null,
+            "kernel": null,
+            "job": null,
+            "git_branch": "kselftest"
+        },
+        {
+            "name": "rusix_brd_policy",
+            "sub_groups": [],
+            "test_cases": [
+                {
+                    "name": "minor_count_preserves_defined_normalization",
+                    "status": "PASS"
+                },
+                {
+                    "name": "invalid_minor_normalization_is_rejected",
+                    "status": "PASS"
+                },
+                {
+                    "name": "legacy_size_retains_prefix_and_wrapping_semantics",
+                    "status": "PASS"
+                }
+            ],
+            "misc": {
+                "tests": 3,
+                "passed": 3,
+                "failed": 0,
+                "crashed": 0,
+                "skipped": 0,
+                "errors": 0
+            },
+            "arch": "",
+            "defconfig": "",
+            "build_environment": "",
+            "lab_name": null,
+            "kernel": null,
+            "job": null,
+            "git_branch": "kselftest"
+        }
+    ],
+    "test_cases": [],
+    "misc": {
+        "tests": 48,
+        "passed": 48,
+        "failed": 0,
+        "crashed": 0,
+        "skipped": 0,
+        "errors": 0
+    },
+    "arch": "",
+    "defconfig": "",
+    "build_environment": "",
+    "lab_name": null,
+    "kernel": null,
+    "job": null,
+    "git_branch": "kselftest"
+}

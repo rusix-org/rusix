@@ -2,7 +2,7 @@
 
 **Rust BRD passes x86_64 block and ordinary-userspace ext4 contracts;
 all fourteen completion entry points and all ten swait.c entry points have verified
-opt-in Rust implementations; seven generic wake wrappers now pass parity too.** Most of the kernel remains C. Linux 6.18.58
+opt-in Rust implementations; thirteen generic wait entries now pass parity too.** Most of the kernel remains C. Linux 6.18.58
 (`2926d88bb7fc`) is the behavioral baseline. Hosted CI remains disabled;
 verification runs locally. No subsystem divergence point is declared.
 
@@ -13,11 +13,12 @@ target; [Phase 1](docs/PHASE1.md) owns delivery gates.
 | --- | --- |
 | LTS provenance/math | Signed tag verified; all 24 required math cases pass on q35, zero skips. [Math](docs/evidence/math-q35/manifest.json), [provenance](docs/evidence/lts-baseline/manifest.json). |
 | Storage parity | At `9d1c1ca5dd`, C/Rust BRD each pass block6, ext4 userspace6, six parameter variants and partition5. Four identical guest fixtures; configs differ only by BRD selection. [Evidence](docs/evidence/brd-q35/manifest.json). |
-| Core and shared queue policy | At `df5d5cb7f2c0`, C/Rust debug and plain pairs each pass 44 combined (35 core + nine BRD), then 35 isolated core on q35/KVM SMP2. All 14 completion, 10 swait and seven generic wake definitions link exclusively. Zero skips or compiler/objtool diagnostics. [Evidence](docs/evidence/wait-wake/manifest.json). |
-| Ordinary-userspace integration | Same source, Rust BRD in both; only core selection differs. Both pass nine block/ext4/parameter/partition boots. Ext4 boot requires six filesystem and four pipe/poll/epoll/eventfd cases. Identical fixtures; no compiler diagnostics. KUnit disabled. [Evidence](docs/evidence/wait-wake-ext4/manifest.json). |
+| Core and shared queue policy | At `fe458e05562e`, C/Rust debug and plain pairs each pass 48 combined (39 core + nine BRD), then 39 isolated core on q35/KVM SMP2. All 14 completion, 10 swait and 13 generic wait definitions link exclusively. Zero skips or compiler/objtool diagnostics. [Evidence](docs/evidence/wait-enrollment/manifest.json). |
+| Ordinary-userspace integration | Same source, Rust BRD in both; only core selection differs. Both pass nine block/ext4/parameter/partition boots, including six filesystem and four pipe/poll/epoll/eventfd cases. Identical fixtures; no compiler diagnostics. [Evidence](docs/evidence/wait-enrollment-ext4/manifest.json). |
 
 Rust implements BRD/store and bio/disk interfaces, conditional xarray insertion,
-NOIO scope, completion/swait policy and generic callback wake traversal.
+NOIO scope, completion/swait policy and generic wait initialization, enrollment,
+removal and callback traversal.
 The [core migration record](experiments/completion/README.md) owns storage,
 locking/lifetime contracts, test inventory and remaining C boundaries. Selection
 remains default-off and builtin-only; known incompatible counter-access drivers
@@ -31,12 +32,13 @@ linker/padding **2,107,049**, unknown **0**.
 migration, includes inherited Rust infrastructure, and is neither a completion
 percentage nor server runtime evidence. That target selects Rust BRD/C completion.
 
-Working branch `rusix/wait-enrollment` adds six generic queue initialization,
-enrollment and removal functions in Rust. Priority ordering, rejection side
-effects, removal poisoning and lock-class tests bring the strict core inventory
-to 39; paired runtime verification is pending. The [wait migration record](experiments/wait/README.md)
-owns callback lifetime and mixed flag-access boundaries. Real blocked wait-event
-and wait-bit handoffs and POLLFREE races remain unverified.
+Next migrate prepare/finish and automatic-removal policy with real worker tests.
+An unbuilt lifecycle draft is staged at `linux-out/wait-lifecycle-draft`; a task
+state alone or enrollment is insufficient proof of descheduling. Single scheduler
+observations still require external deadlines/watchdogs; they cannot establish
+causation by a later wake. The [wait record](experiments/wait/README.md) owns the
+mixed-access and lifetime contracts. Blocked wait-event/wait-bit handoffs and
+POLLFREE races remain unverified.
 Forced diagnostic failures, detached-batch races, untimed signal paths, deadline
 races and broader IRQ coverage remain open. arm64, modules, expanded fault stress
 and performance budgets remain Phase 1b. Phase 1a still needs the provisional BRD

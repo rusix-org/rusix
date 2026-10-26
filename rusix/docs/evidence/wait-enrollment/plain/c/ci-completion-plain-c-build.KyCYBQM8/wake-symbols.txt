@@ -1,0 +1,28 @@
+/out/builds/ci-completion-plain-c/kernel/sched/build_utility.o
+0000000000003530 T __init_waitqueue_head
+0000000000003550 T add_wait_queue
+00000000000035a0 T add_wait_queue_exclusive
+00000000000035e0 T add_wait_queue_priority
+0000000000003630 T add_wait_queue_priority_exclusive
+00000000000036a0 T remove_wait_queue
+0000000000003230 T __wake_up
+00000000000036f0 T __wake_up_on_current_cpu
+0000000000003760 T __wake_up_locked
+00000000000037c0 T __wake_up_locked_key
+0000000000003810 T __wake_up_sync_key
+0000000000003890 T __wake_up_locked_sync_key
+00000000000038f0 T __wake_up_sync
+/out/builds/ci-completion-plain-c/vmlinux
+ffffffff812882a0 T __init_waitqueue_head
+ffffffff812882c0 T add_wait_queue
+ffffffff81288310 T add_wait_queue_exclusive
+ffffffff81288350 T add_wait_queue_priority
+ffffffff812883a0 T add_wait_queue_priority_exclusive
+ffffffff81288410 T remove_wait_queue
+ffffffff81287fa0 T __wake_up
+ffffffff81288460 T __wake_up_on_current_cpu
+ffffffff812884d0 T __wake_up_locked
+ffffffff81288530 T __wake_up_locked_key
+ffffffff81288580 T __wake_up_sync_key
+ffffffff81288600 T __wake_up_locked_sync_key
+ffffffff81288660 T __wake_up_sync
