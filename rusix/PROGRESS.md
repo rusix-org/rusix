@@ -83,3 +83,9 @@ Bit/variable wait-table ownership and six new tests are implemented and reviewed
 on `rusix/wait-bit-owner`; ten host gate suites pass.
 The [ownership contract](experiments/wait-owner/README.md) records the intended
 storage and ordering boundaries. Kernel builds and runtime results remain pending.
+
+The first ownership build at `c962147e88f1` was stopped on a test-helper
+objtool warning before VM execution. [Evidence](docs/evidence/wait-owner-initial/manifest.json)
+retains the diagnostic and interrupted status. KUnit-scoped assertions and
+checked arithmetic replace those panic paths; rerun verification is pending.
+CI signal traps now preserve cancellation failure in the status file.

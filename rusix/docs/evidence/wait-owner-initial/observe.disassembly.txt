@@ -1,0 +1,137 @@
+
+/home/aaron/code/rusix/linux-out/wait-owner-debug-c-001-stopped-evidence/kernel.o:	file format elf64-x86-64
+
+Disassembly of section .text:
+
+00000000000067f0 <_RNvNtNtNtCsb5MLIFMWygY_6kernel4sync10completion11owner_tests7observe>:
+    67f0: 53                           	pushq	%rbx
+    67f1: 48 83 ec 70                  	subq	$0x70, %rsp
+    67f5: 48 89 fb                     	movq	%rdi, %rbx
+    67f8: 48 c7 44 24 38 00 00 00 00   	movq	$0x0, 0x38(%rsp)
+    6801: 48 c7 44 24 30 00 00 00 00   	movq	$0x0, 0x30(%rsp)
+    680a: 48 c7 44 24 28 00 00 00 00   	movq	$0x0, 0x28(%rsp)
+    6813: 48 c7 44 24 20 00 00 00 00   	movq	$0x0, 0x20(%rsp)
+    681c: 48 c7 44 24 18 00 00 00 00   	movq	$0x0, 0x18(%rsp)
+    6825: 48 c7 44 24 10 00 00 00 00   	movq	$0x0, 0x10(%rsp)
+    682e: 48 8d 44 24 10               	leaq	0x10(%rsp), %rax
+    6833: 48 89 f7                     	movq	%rsi, %rdi
+    6836: 89 d6                        	movl	%edx, %esi
+    6838: 89 ca                        	movl	%ecx, %edx
+    683a: 48 89 c1                     	movq	%rax, %rcx
+    683d: e8 00 00 00 00               	callq	0x6842 <_RNvNtNtNtCsb5MLIFMWygY_6kernel4sync10completion11owner_tests7observe+0x52>
+		000000000000683e:  R_X86_64_PLT32	rust_helper_owner_hash_observe-0x4
+    6842: 48 8b 4c 24 10               	movq	0x10(%rsp), %rcx
+    6847: 48 81 f9 00 01 00 00         	cmpq	$0x100, %rcx            # imm = 0x100
+    684e: 0f 83 c0 00 00 00            	jae	0x6914 <_RNvNtNtNtCsb5MLIFMWygY_6kernel4sync10completion11owner_tests7observe+0x124>
+    6854: 48 8b 44 24 20               	movq	0x20(%rsp), %rax
+    6859: 48 8b 54 24 28               	movq	0x28(%rsp), %rdx
+    685e: 48 0f af ca                  	imulq	%rdx, %rcx
+    6862: 48 01 c1                     	addq	%rax, %rcx
+    6865: 0f 82 c1 00 00 00            	jb	0x692c <_RNvNtNtNtCsb5MLIFMWygY_6kernel4sync10completion11owner_tests7observe+0x13c>
+    686b: 48 89 4c 24 08               	movq	%rcx, 0x8(%rsp)
+    6870: 48 39 4c 24 18               	cmpq	%rcx, 0x18(%rsp)
+    6875: 0f 85 bd 00 00 00            	jne	0x6938 <_RNvNtNtNtCsb5MLIFMWygY_6kernel4sync10completion11owner_tests7observe+0x148>
+    687b: 48 83 fa 50                  	cmpq	$0x50, %rdx
+    687f: 0f 85 d9 00 00 00            	jne	0x695e <_RNvNtNtNtCsb5MLIFMWygY_6kernel4sync10completion11owner_tests7observe+0x16e>
+    6885: 48 83 7c 24 30 08            	cmpq	$0x8, 0x30(%rsp)
+    688b: 0f 85 f5 00 00 00            	jne	0x6986 <_RNvNtNtNtCsb5MLIFMWygY_6kernel4sync10completion11owner_tests7observe+0x196>
+    6891: 48 89 c1                     	movq	%rax, %rcx
+    6894: 48 83 e1 07                  	andq	$0x7, %rcx
+    6898: 48 89 4c 24 08               	movq	%rcx, 0x8(%rsp)
+    689d: 0f 85 0b 01 00 00            	jne	0x69ae <_RNvNtNtNtCsb5MLIFMWygY_6kernel4sync10completion11owner_tests7observe+0x1be>
+    68a3: 48 8b 4c 24 38               	movq	0x38(%rsp), %rcx
+    68a8: 48 85 c9                     	testq	%rcx, %rcx
+    68ab: 0f 84 4d 01 00 00            	je	0x69fe <_RNvNtNtNtCsb5MLIFMWygY_6kernel4sync10completion11owner_tests7observe+0x20e>
+    68b1: 48 89 c2                     	movq	%rax, %rdx
+    68b4: 48 09 ca                     	orq	%rcx, %rdx
+    68b7: 48 c1 ea 20                  	shrq	$0x20, %rdx
+    68bb: 74 07                        	je	0x68c4 <_RNvNtNtNtCsb5MLIFMWygY_6kernel4sync10completion11owner_tests7observe+0xd4>
+    68bd: 31 d2                        	xorl	%edx, %edx
+    68bf: 48 f7 f1                     	divq	%rcx
+    68c2: eb 04                        	jmp	0x68c8 <_RNvNtNtNtCsb5MLIFMWygY_6kernel4sync10completion11owner_tests7observe+0xd8>
+    68c4: 31 d2                        	xorl	%edx, %edx
+    68c6: f7 f1                        	divl	%ecx
+    68c8: 48 89 54 24 08               	movq	%rdx, 0x8(%rsp)
+    68cd: 48 85 d2                     	testq	%rdx, %rdx
+    68d0: 0f 85 00 01 00 00            	jne	0x69d6 <_RNvNtNtNtCsb5MLIFMWygY_6kernel4sync10completion11owner_tests7observe+0x1e6>
+    68d6: 48 8b 44 24 38               	movq	0x38(%rsp), %rax
+    68db: 48 89 43 28                  	movq	%rax, 0x28(%rbx)
+    68df: 48 8b 44 24 30               	movq	0x30(%rsp), %rax
+    68e4: 48 89 43 20                  	movq	%rax, 0x20(%rbx)
+    68e8: 48 8b 44 24 28               	movq	0x28(%rsp), %rax
+    68ed: 48 89 43 18                  	movq	%rax, 0x18(%rbx)
+    68f1: 48 8b 44 24 20               	movq	0x20(%rsp), %rax
+    68f6: 48 89 43 10                  	movq	%rax, 0x10(%rbx)
+    68fa: 48 8b 44 24 10               	movq	0x10(%rsp), %rax
+    68ff: 48 8b 4c 24 18               	movq	0x18(%rsp), %rcx
+    6904: 48 89 4b 08                  	movq	%rcx, 0x8(%rbx)
+    6908: 48 89 03                     	movq	%rax, (%rbx)
+    690b: 48 89 d8                     	movq	%rbx, %rax
+    690e: 48 83 c4 70                  	addq	$0x70, %rsp
+    6912: 5b                           	popq	%rbx
+    6913: c3                           	retq
+    6914: be 1e 00 00 00               	movl	$0x1e, %esi
+    6919: 48 c7 c7 00 00 00 00         	movq	$0x0, %rdi
+		000000000000691c:  R_X86_64_32S	.rodata+0x4bc8
+    6920: 48 c7 c2 00 00 00 00         	movq	$0x0, %rdx
+		0000000000006923:  R_X86_64_32S	.rodata+0x4c18
+    6927: e8 00 00 00 00               	callq	0x692c <_RNvNtNtNtCsb5MLIFMWygY_6kernel4sync10completion11owner_tests7observe+0x13c>
+		0000000000006928:  R_X86_64_PLT32	_RNvNtCs2lKf6AS60Zg_4core9panicking5panic-0x4
+    692c: 48 c7 c7 00 00 00 00         	movq	$0x0, %rdi
+		000000000000692f:  R_X86_64_32S	.rodata+0x4cc0
+    6933: e8 00 00 00 00               	callq	0x6938 <_RNvNtNtNtCsb5MLIFMWygY_6kernel4sync10completion11owner_tests7observe+0x148>
+		0000000000006934:  R_X86_64_PLT32	_RNvNtCs2lKf6AS60Zg_4core6option13unwrap_failed-0x4
+    6938: 48 c7 44 24 40 00 00 00 00   	movq	$0x0, 0x40(%rsp)
+    6941: 48 8d 74 24 18               	leaq	0x18(%rsp), %rsi
+    6946: 48 8d 54 24 08               	leaq	0x8(%rsp), %rdx
+    694b: 48 8d 4c 24 40               	leaq	0x40(%rsp), %rcx
+    6950: 31 ff                        	xorl	%edi, %edi
+    6952: 49 c7 c0 00 00 00 00         	movq	$0x0, %r8
+		0000000000006955:  R_X86_64_32S	.rodata+0x4c30
+    6959: e8 00 00 00 00               	callq	0x695e <_RNvNtNtNtCsb5MLIFMWygY_6kernel4sync10completion11owner_tests7observe+0x16e>
+		000000000000695a:  R_X86_64_PLT32	_RINvNtCs2lKf6AS60Zg_4core9panicking13assert_failedjjEB4_-0x4
+    695e: 48 c7 44 24 40 00 00 00 00   	movq	$0x0, 0x40(%rsp)
+    6967: 48 8d 74 24 28               	leaq	0x28(%rsp), %rsi
+    696c: 48 8d 4c 24 40               	leaq	0x40(%rsp), %rcx
+    6971: 31 ff                        	xorl	%edi, %edi
+    6973: 48 c7 c2 00 00 00 00         	movq	$0x0, %rdx
+		0000000000006976:  R_X86_64_32S	.rodata.cst8+0x10
+    697a: 49 c7 c0 00 00 00 00         	movq	$0x0, %r8
+		000000000000697d:  R_X86_64_32S	.rodata+0x4c48
+    6981: e8 00 00 00 00               	callq	0x6986 <_RNvNtNtNtCsb5MLIFMWygY_6kernel4sync10completion11owner_tests7observe+0x196>
+		0000000000006982:  R_X86_64_PLT32	_RINvNtCs2lKf6AS60Zg_4core9panicking13assert_failedjjEB4_-0x4
+    6986: 48 c7 44 24 40 00 00 00 00   	movq	$0x0, 0x40(%rsp)
+    698f: 48 8d 74 24 30               	leaq	0x30(%rsp), %rsi
+    6994: 48 8d 4c 24 40               	leaq	0x40(%rsp), %rcx
+    6999: 31 ff                        	xorl	%edi, %edi
+    699b: 48 c7 c2 00 00 00 00         	movq	$0x0, %rdx
+		000000000000699e:  R_X86_64_32S	.rodata.cst8+0x18
+    69a2: 49 c7 c0 00 00 00 00         	movq	$0x0, %r8
+		00000000000069a5:  R_X86_64_32S	.rodata+0x4c60
+    69a9: e8 00 00 00 00               	callq	0x69ae <_RNvNtNtNtCsb5MLIFMWygY_6kernel4sync10completion11owner_tests7observe+0x1be>
+		00000000000069aa:  R_X86_64_PLT32	_RINvNtCs2lKf6AS60Zg_4core9panicking13assert_failedjjEB4_-0x4
+    69ae: 48 c7 44 24 40 00 00 00 00   	movq	$0x0, 0x40(%rsp)
+    69b7: 48 8d 74 24 08               	leaq	0x8(%rsp), %rsi
+    69bc: 48 8d 4c 24 40               	leaq	0x40(%rsp), %rcx
+    69c1: 31 ff                        	xorl	%edi, %edi
+    69c3: 48 c7 c2 00 00 00 00         	movq	$0x0, %rdx
+		00000000000069c6:  R_X86_64_32S	.rodata.cst8+0x8
+    69ca: 49 c7 c0 00 00 00 00         	movq	$0x0, %r8
+		00000000000069cd:  R_X86_64_32S	.rodata+0x4c78
+    69d1: e8 00 00 00 00               	callq	0x69d6 <_RNvNtNtNtCsb5MLIFMWygY_6kernel4sync10completion11owner_tests7observe+0x1e6>
+		00000000000069d2:  R_X86_64_PLT32	_RINvNtCs2lKf6AS60Zg_4core9panicking13assert_failedjjEB4_-0x4
+    69d6: 48 c7 44 24 40 00 00 00 00   	movq	$0x0, 0x40(%rsp)
+    69df: 48 8d 74 24 08               	leaq	0x8(%rsp), %rsi
+    69e4: 48 8d 4c 24 40               	leaq	0x40(%rsp), %rcx
+    69e9: 31 ff                        	xorl	%edi, %edi
+    69eb: 48 c7 c2 00 00 00 00         	movq	$0x0, %rdx
+		00000000000069ee:  R_X86_64_32S	.rodata.cst8+0x8
+    69f2: 49 c7 c0 00 00 00 00         	movq	$0x0, %r8
+		00000000000069f5:  R_X86_64_32S	.rodata+0x4ca8
+    69f9: e8 00 00 00 00               	callq	0x69fe <_RNvNtNtNtCsb5MLIFMWygY_6kernel4sync10completion11owner_tests7observe+0x20e>
+		00000000000069fa:  R_X86_64_PLT32	_RINvNtCs2lKf6AS60Zg_4core9panicking13assert_failedjjEB4_-0x4
+    69fe: 48 c7 c7 00 00 00 00         	movq	$0x0, %rdi
+		0000000000006a01:  R_X86_64_32S	.rodata+0x4c90
+    6a05: e8 00 00 00 00               	callq	0x6a0a <_RNvNtNtNtCsb5MLIFMWygY_6kernel4sync10completion11owner_tests7observe+0x21a>
+		0000000000006a06:  R_X86_64_PLT32	_RNvNtNtCs2lKf6AS60Zg_4core9panicking11panic_const23panic_const_rem_by_zero-0x4
+    6a0a: 66 0f 1f 44 00 00            	nopw	(%rax,%rax)

@@ -11,6 +11,9 @@ esac
 mkdir -p "$RUSIX_OUTPUT_ROOT/logs" "$RUSIX_OUTPUT_ROOT/tmp"
 export TMPDIR="$RUSIX_OUTPUT_ROOT/tmp"
 trap 'printf "%s\n" "$?" > "$RUSIX_OUTPUT_ROOT/logs/ci.exit"' EXIT
+# Preserve signal failure in the status file as well as the container exit.
+trap 'exit 143' TERM
+trap 'exit 130' INT
 cp /opt/rusix/packages.lock /opt/rusix/toolchain.log "$RUSIX_OUTPUT_ROOT/logs/"
 export KBUILD_BUILD_TIMESTAMP
 KBUILD_BUILD_TIMESTAMP=$(git -C "$RUSIX_SOURCE" show -s --format=%cD HEAD)

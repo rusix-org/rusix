@@ -1,0 +1,29 @@
+{
+  "status": "PREPARED_NOT_RUN",
+  "source": "/home/aaron/code/rusix/linux-out/lts-wait-locked-debug-c-001/builds/ci-completion-c",
+  "source_profile": "completion-c",
+  "source_revision": "5234e2809e9bbaf59ac600bd59500b0614bee639",
+  "source_build_evidence": "/home/aaron/code/rusix/linux-out/lts-wait-locked-debug-c-001/logs/ci-completion-c-build.7RBznae3",
+  "source_terminal_status": {
+    "logs/ci.exit": "0",
+    "logs/ci-completion-c-build.7RBznae3/build.exit": "0",
+    "logs/ci-completion-c-qemu.exit": "0",
+    "logs/ci-completion-c-parse.exit": "0",
+    "logs/ci-completion-c-gate.exit": "0",
+    "logs/ci-completion-c-completion-qemu.exit": "0",
+    "logs/ci-completion-c-completion-parse.exit": "0",
+    "logs/ci-completion-c-completion-gate.exit": "0"
+  },
+  "source_build_hash_records_sha256": "c801a6096e520e7c35d54d76bf46b5e49e73de1daf8d2b4213df28a0d8cab801",
+  "copied_artifact_sha256": {
+    "builds/ci-completion-c/.config": "897f77cccc0bbbdd54b4831252514cd61f5afcb71a0c824324e6e15914f8805e",
+    "builds/ci-completion-c/arch/x86/boot/bzImage": "e6e5724b0635536a164d15fe0fd25c1f0ff46d15fc207d4003760d2be9bedcb3",
+    "builds/ci-completion-c/vmlinux": "4a705a20877692787769efefae4c9343245a100fa684f8b0a6061cb46907e3fe",
+    "builds/ci-completion-c/vmlinux.map": "ce7b4d8fe7f7dd77489b0190aabaa97dd76be1008d96f540710bb9291d0bd517"
+  },
+  "copy_method": "cp -a --reflink=auto; recorded artifacts verified before and after copy",
+  "destination_profile": "completion-c",
+  "runtime_source_mount": "/home/aaron/code/rusix/linux-wait-owner",
+  "runtime_container_image": "sha256:0e0cfd724bde5c2a81cee61210c2a14a66ea72f679e1308125825e0463c67937",
+  "scope": "Kernel-only cache, not wait-owner evidence; no guest fixtures, logs, prior success markers or host build outputs copied."
+}

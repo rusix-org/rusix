@@ -1,7 +1,9 @@
 # Bit and variable wait-table ownership
 
 Status: implementation and six tests reviewed; ten host gate suites pass.
-Kernel build and runtime verification remain pending.
+Kernel build and runtime verification remain pending. The first C-comparison
+build at `c962147e88f1` was stopped on an objtool warning in a test helper;
+no VM tests ran. [Initial evidence](../../docs/evidence/wait-owner-initial/manifest.json).
 This follows the verified locked-wait slice. The reference remains Linux 6.18.58
 `kernel/sched/wait_bit.c`; no subsystem divergence is declared.
 
@@ -58,3 +60,9 @@ Raw locks, lockdep, marked-list access, bit atomics, task state/scheduling and
 remaining caller structures still execute C. Removing table ownership from C
 does not remove those dependencies. arm64, PREEMPT_RT, table redesign and broader
 wake-race stress remain separate work.
+
+The warning exposed ordinary panic assertions outside the KUnit macro's scope.
+Helpers now use KUnit assertions, checked arithmetic and fallible indexing.
+Rerun compilation must confirm the diagnostic is gone. Cancellation also exposed
+an EXIT-only status trap recording zero while Docker exited 143; explicit signal
+traps now preserve failure. A local trap probe verified statuses 0, 7, 143 and 130.

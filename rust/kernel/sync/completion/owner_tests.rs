@@ -186,82 +186,88 @@ fn spawn(case: &Arc<Case>, slot: usize) -> Result<TaskRef> {
     Ok(task)
 }
 
-fn observe(address: c_ulong, bit: c_int, variable: bool) -> [c_ulong; 6] {
-    let mut out = [0; 6];
-    // SAFETY: Identity-only hash API; fabricated addresses are never dereferenced
-    // or passed to wake. Output is exclusive local memory; table initialized at boot.
-    unsafe { bindings::owner_hash_observe(address, bit, variable, out.as_mut_ptr()) };
-    assert!(out[0] < 256);
-    assert_eq!(out[1], out[2].checked_add(out[0] * out[3]).unwrap());
-    assert_eq!(out[3], core::mem::size_of::<bindings::wait_queue_head>());
-    assert_eq!(out[4], core::mem::align_of::<bindings::wait_queue_head>());
-    assert_eq!(out[1] % out[4], 0);
-    assert_eq!(out[2] % out[5], 0);
-    out
-}
-
-fn collision_case(flags_a: u32, flags_b: u32, cancel: bool) -> Result {
-    let case = Case::new(0, flags_a, flags_b)?;
-    let start = Instant::<Monotonic>::now();
-    let first = spawn(&case, 0)?;
-    let first_blocked = case.blocked(&first, 1);
-    let second = match spawn(&case, 1) {
-        Ok(task) => task,
-        Err(error) => {
-            case.cleanup(&[(0, &first)]);
-            return Err(error);
-        }
-    };
-    let second_blocked = case.blocked(&second, 3);
-    let both_blocked = case.blocked(&first, 3);
-    if cancel {
-        // SAFETY: Both words remain valid, abort is marked before matching wakes.
-        unsafe { bindings::owner_abort(case.context.0) };
-    } else {
-        case.publish(0, 0x1234);
-    }
-    let first_done = case.wait(0, 1000);
-    // A fresh blocked/member sample establishes a distinct remaining predicate,
-    // not absence of a spurious wake/re-enrollment. The synchronous callback
-    // probe independently tests key filtering while retaining the queue lock.
-    let remaining_blocked = cancel || case.blocked(&second, 2);
-    if !cancel {
-        case.publish(1, 0x5678);
-    }
-    let second_done = case.wait(1, 1000);
-    let members = case.members();
-    let elapsed = start.elapsed().as_millis();
-    let cleaned = case.cleanup(&[(0, &first), (1, &second)]);
-    // SAFETY: Read each result only after its own acknowledgment; callbacks make
-    // no C-field accesses afterwards. Their Arcs still protect the return gap.
-    let a = if first_done {
-        unsafe { case.result(0) }
-    } else {
-        [-1; 4]
-    };
-    // SAFETY: Same per-slot acknowledgment/lifetime requirement for second result.
-    let b = if second_done {
-        unsafe { case.result(1) }
-    } else {
-        [-1; 4]
-    };
-    drop((first, second));
-    assert!(first_blocked && second_blocked && both_blocked && remaining_blocked);
-    assert!(first_done && second_done && cleaned && elapsed < 5000);
-    assert_eq!(members, 0); // Only own nodes: says nothing about foreign users.
-    if cancel {
-        assert_eq!(a, [-(bindings::ECANCELED as i64), 0, 1, 1]);
-        assert_eq!(b, [-(bindings::ECANCELED as i64), 0, 1, 1]);
-    } else {
-        assert_eq!(a, [1, 0x1234, 1, 1]);
-        assert_eq!(b, [1, 0x5678, 1, 1]);
-    }
-    Ok(())
-}
-
 #[macros::kunit_tests(rusix_completion_wait_owner)]
 mod tests {
     use super::*;
+
+    fn observe(address: c_ulong, bit: c_int, variable: bool) -> Result<[c_ulong; 6]> {
+        let mut out = [0; 6];
+        // SAFETY: Identity-only hash API; fabricated addresses are never dereferenced
+        // or passed to wake. Output is exclusive local memory; table initialized at boot.
+        unsafe { bindings::owner_hash_observe(address, bit, variable, out.as_mut_ptr()) };
+        assert!(out[0] < 256);
+        // Propagate malformed observations before arithmetic or caller indexing;
+        // failed oracles must fail the test, never panic the kernel.
+        if out[0] >= 256 {
+            return Err(EINVAL);
+        }
+        let offset = out[0].checked_mul(out[3]).ok_or(EINVAL)?;
+        assert_eq!(out[1], out[2].checked_add(offset).ok_or(EINVAL)?);
+        assert_eq!(out[3], core::mem::size_of::<bindings::wait_queue_head>());
+        assert_eq!(out[4], core::mem::align_of::<bindings::wait_queue_head>());
+        assert_eq!(out[1].checked_rem(out[4]).ok_or(EINVAL)?, 0);
+        assert_eq!(out[2].checked_rem(out[5]).ok_or(EINVAL)?, 0);
+        Ok(out)
+    }
+
+    fn collision_case(flags_a: u32, flags_b: u32, cancel: bool) -> Result {
+        let case = Case::new(0, flags_a, flags_b)?;
+        let start = Instant::<Monotonic>::now();
+        let first = spawn(&case, 0)?;
+        let first_blocked = case.blocked(&first, 1);
+        let second = match spawn(&case, 1) {
+            Ok(task) => task,
+            Err(error) => {
+                case.cleanup(&[(0, &first)]);
+                return Err(error);
+            }
+        };
+        let second_blocked = case.blocked(&second, 3);
+        let both_blocked = case.blocked(&first, 3);
+        if cancel {
+            // SAFETY: Both words remain valid, abort is marked before matching wakes.
+            unsafe { bindings::owner_abort(case.context.0) };
+        } else {
+            case.publish(0, 0x1234);
+        }
+        let first_done = case.wait(0, 1000);
+        // A fresh blocked/member sample establishes a distinct remaining predicate,
+        // not absence of a spurious wake/re-enrollment. The synchronous callback
+        // probe independently tests key filtering while retaining the queue lock.
+        let remaining_blocked = cancel || case.blocked(&second, 2);
+        if !cancel {
+            case.publish(1, 0x5678);
+        }
+        let second_done = case.wait(1, 1000);
+        let members = case.members();
+        let elapsed = start.elapsed().as_millis();
+        let cleaned = case.cleanup(&[(0, &first), (1, &second)]);
+        // SAFETY: Read each result only after its own acknowledgment; callbacks make
+        // no C-field accesses afterwards. Their Arcs still protect the return gap.
+        let a = if first_done {
+            unsafe { case.result(0) }
+        } else {
+            [-1; 4]
+        };
+        // SAFETY: Same per-slot acknowledgment/lifetime requirement for second result.
+        let b = if second_done {
+            unsafe { case.result(1) }
+        } else {
+            [-1; 4]
+        };
+        drop((first, second));
+        assert!(first_blocked && second_blocked && both_blocked && remaining_blocked);
+        assert!(first_done && second_done && cleaned && elapsed < 5000);
+        assert_eq!(members, 0); // Only own nodes: says nothing about foreign users.
+        if cancel {
+            assert_eq!(a, [-(bindings::ECANCELED as i64), 0, 1, 1]);
+            assert_eq!(b, [-(bindings::ECANCELED as i64), 0, 1, 1]);
+        } else {
+            assert_eq!(a, [1, 0x1234, 1, 1]);
+            assert_eq!(b, [1, 0x5678, 1, 1]);
+        }
+        Ok(())
+    }
 
     #[test]
     fn original_hash_oracle_covers_all_heads_and_shared_class() -> Result {
@@ -270,9 +276,9 @@ mod tests {
         let shift = if c_ulong::BITS == 32 { 5 } else { 6 };
         let wraps = (1 as c_ulong) << (c_ulong::BITS - shift);
         for address in [0, 1, max, high, wraps - 1, wraps, wraps + 1] {
-            observe(address, 0, true);
+            observe(address, 0, true)?;
             for bit in [c_int::MIN, -65, -1, 0, 1, 31, 32, 63, 64, 65, c_int::MAX] {
-                observe(address, bit, false);
+                observe(address, bit, false)?;
             }
         }
         for variable in [false, true] {
@@ -282,10 +288,11 @@ mod tests {
             }
             let mut covered = 0;
             for address in 0..65536 as c_ulong {
-                let out = observe(address, 3, variable);
+                let out = observe(address, 3, variable)?;
                 let index = out[0] as usize;
-                if first[index].is_none() {
-                    first[index] = Some(address);
+                let entry = first.get_mut(index).ok_or(EINVAL)?;
+                if entry.is_none() {
+                    *entry = Some(address);
                     covered += 1;
                 }
                 if covered == 256 {
@@ -294,14 +301,14 @@ mod tests {
             }
             assert_eq!(covered, 256);
             for (index, address) in first.iter().enumerate() {
-                let out = observe(address.unwrap(), 3, variable);
+                let address = address.ok_or(EINVAL)?;
+                let out = observe(address, 3, variable)?;
                 assert_eq!(out[0] as usize, index);
-                assert_eq!(observe(address.unwrap(), 3, variable)[1], out[1]);
+                assert_eq!(observe(address, 3, variable)?[1], out[1]);
                 if variable {
                     // SAFETY: Independently checked lookup names this valid head;
                     // helper takes one lock at a time, without list emptiness claims.
-                    let metadata =
-                        unsafe { bindings::owner_head_observe(address.unwrap(), index as u32) };
+                    let metadata = unsafe { bindings::owner_head_observe(address, index as u32) };
                     assert_eq!(metadata, if cfg!(CONFIG_LOCKDEP) { 0x100 } else { 0 });
                 }
             }
