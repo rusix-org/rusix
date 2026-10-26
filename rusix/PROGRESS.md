@@ -46,8 +46,12 @@ The ordinary ext4 fixture has a static Rust PID1 and pinned Debian utilities.
 Its image builds with an exact package inventory, and Rust 1.85.1 produces a
 static x86_64 init. Six ordered filesystem cases and a strict runner are ready;
 guest execution remains pending. The separate BRD ownership KUnit profile has
-nine required cases; its acceptance-gate regression tests pass, kernel run pending.
+nine required cases; all nine now pass in the actual kernel with zero skips.
+[Ownership evidence](docs/evidence/brd-ownership/manifest.json) records the run.
 
 The [initial C/Rust comparison](docs/evidence/brd-rust-initial/comparison.json)
 uses byte-identical probe executables and the same tool image. Resolved configs
 differ only by Rust BRD selection; both run the six cases without skipped tests.
+
+Five completion C-contract kernel tests are now written but not yet executed;
+the separate host ownership model also passes with pinned Rust 1.85.1.
