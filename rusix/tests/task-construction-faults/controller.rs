@@ -32,7 +32,7 @@ fn put(path: impl AsRef<Path>, value: impl AsRef<[u8]>) -> io::Result<()> {
 }
 fn load_calibration() -> io::Result<BTreeMap<String, String>> {
     let raw = fs::read_to_string("/calibration.tsv")?;
-    let mut map = BTreeMap::new();
+    let mut map: BTreeMap<String, String> = BTreeMap::new();
     for line in raw.lines() {
         let (key, value) = line
             .split_once('\t')

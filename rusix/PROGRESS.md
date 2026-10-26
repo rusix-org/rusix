@@ -123,7 +123,7 @@ On `rusix/task-construction-faults`, production policy remains the frozen `8fd3`
 constructor. Separate diagnostic configs, guarded static-Rust controller/C raw
 fork worker, PID1, actual-ELF calibration generator and bounded VM runner are
 implemented. Thirteen synthetic parser regressions and eleven discovery/transport
-regressions pass; nothing has been compiled or executed in a VM. Diagnostic
+regressions pass; no fault kernel or guest execution is verified. Diagnostic
 routing preserves ordinary task gates. Root and independent source reviews pass;
 a combined 46-case host run and exact input hashes are retained in
 `linux-out/task-fault-combined-host-001`. Actual compiled-site discovery, event
@@ -131,3 +131,11 @@ schema calibration and paired runtime attribution remain pending. Capture
 completion alone is not failure-test PASS. The
 [fixture contract](tests/task-construction-faults/README.md) distinguishes intended
 slab/stack attribution from unobserved parent-stack accesses and broader cleanup.
+
+Pinned fixture compile check at `a2d0eef199fa` retained a failure in
+`linux-out/constructor-fixtures-compile-001`: the fault PID1 compiled as static
+ELF, then Rust 1.85 rejected the controller with E0282 on its untyped BTreeMap.
+Worker and MM fixtures were not reached. The controller now declares
+`BTreeMap<String, String>` explicitly; formatting and the 13 trace/11 pipeline
+host cases pass. Compiler retry remains pending; the original failed output is
+unchanged. This is a fixture type fix, not kernel or runtime evidence.
