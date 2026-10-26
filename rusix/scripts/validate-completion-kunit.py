@@ -26,6 +26,7 @@ SUITES = {
         "c_operations_share_pinned_rust_owned_storage",
         "worker_handoff_observes_published_value",
         "two_workers_consume_exactly_two_tokens",
+        "broadcast_serves_two_workers_and_late_waiters",
         "timed_out_worker_unlinks_before_late_signal",
     ),
 }

@@ -229,6 +229,64 @@ mod tests {
     }
 
     #[test]
+    fn broadcast_serves_two_workers_and_late_waiters() -> Result {
+        use crate::sync::{atomic::Relaxed, Arc};
+
+        let event = Arc::pin_init(super::super::Completion::new(), GFP_KERNEL)?;
+        let first = Arc::pin_init(Handoff::new(), GFP_KERNEL)?;
+        let second = Arc::pin_init(Handoff::new(), GFP_KERNEL)?;
+        for state in [&first, &second] {
+            let worker = state.clone();
+            let worker_event = event.clone();
+            crate::workqueue::system_unbound().try_spawn(GFP_KERNEL, move || {
+                worker.ready.complete_all();
+                let completed = wait_bounded(&worker_event, 10000);
+                worker.value.store(if completed { 1 } else { 2 }, Relaxed);
+                worker.finished.complete_all();
+                // Independent Arc ownership keeps all state alive through return,
+                // including partial spawn failure or timeout in the KUnit task.
+                // No worker borrows test-stack storage or performs assertions.
+            })?;
+        }
+        // Observe actual enrollment, not just a worker's pre-wait handshake.
+        // The helper holds the same IRQ-safe raw lock as completion operations,
+        // reads only the queue, and caps traversal at three entries. No assertion
+        // or sleep occurs while it holds the lock.
+        let mut enrolled = false;
+        for _ in 0..100 {
+            // SAFETY: Our Arc pins initialized storage; the helper borrows it
+            // only during this call and serializes traversal against all waiters.
+            let count = unsafe { bindings::completion_waiter_count(event.as_raw()) };
+            if count == 2 {
+                enrolled = true;
+                break;
+            }
+            crate::time::delay::fsleep(crate::time::Delta::from_millis(10));
+        }
+        // Signal even if enrollment failed, allowing any extant worker to leave.
+        // One broadcast must promptly release both queued workers. Observers
+        // expire well before the workers' ten-second timeout, so noticing MAX
+        // only at their timeout cannot substitute for a missing wakeup.
+        event.complete_all();
+        let finished_first = wait_bounded(&first.finished, 1000);
+        let finished_second = wait_bounded(&second.finished, 1000);
+        assert!(enrolled);
+        assert!(finished_first);
+        assert!(finished_second);
+        assert_eq!(first.value.load(Relaxed), 1);
+        assert_eq!(second.value.load(Relaxed), 1);
+        // SAFETY: This Arc pins initialized completion storage. The completed
+        // workers no longer access event; these nonblocking calls retain no
+        // pointer. Neither late successful wait may consume the broadcast state.
+        let late_first = unsafe { bindings::try_wait_for_completion(event.as_raw()) };
+        // SAFETY: The same pinned allocation and non-retaining call invariant hold.
+        let late_second = unsafe { bindings::try_wait_for_completion(event.as_raw()) };
+        assert!(late_first);
+        assert!(late_second);
+        Ok(())
+    }
+
+    #[test]
     fn timed_out_worker_unlinks_before_late_signal() -> Result {
         use crate::sync::{atomic::Relaxed, Arc};
 

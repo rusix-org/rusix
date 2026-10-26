@@ -71,6 +71,7 @@ EXPORT_SYMBOL(complete);
  * @x. Also note that the function completion_done() can not be used
  * to know if there are still waiters after complete_all() has been called.
  */
+#ifndef CONFIG_RUSIX_COMPLETION_RUST
 void complete_all(struct completion *x)
 {
 	unsigned long flags;
@@ -82,6 +83,7 @@ void complete_all(struct completion *x)
 	swake_up_all_locked(&x->wait);
 	raw_spin_unlock_irqrestore(&x->wait.lock, flags);
 }
+#endif
 EXPORT_SYMBOL(complete_all);
 
 static inline long __sched

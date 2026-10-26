@@ -21,6 +21,9 @@
 #include "build_bug.c"
 #include "clk.c"
 #include "completion.c"
+#ifdef CONFIG_KUNIT
+#include "completion_test.c"
+#endif
 #include "cpu.c"
 #include "cpufreq.c"
 #include "cpumask.c"

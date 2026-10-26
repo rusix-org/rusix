@@ -138,13 +138,15 @@ fi
 for item in "$completion_object" "$out/vmlinux"; do
     bash "$RUSIX_PROJECT/scripts/with-local-tools.sh" llvm-nm --defined-only "$item" \
         > "$evidence/completion-symbols.tmp"
-    awk '$2 == "T" && $3 == "complete" { print }' "$evidence/completion-symbols.tmp" \
-        > "$evidence/completion-current.txt"
-    [[ $(wc -l < "$evidence/completion-current.txt") == 1 ]] || {
-        echo "Expected one global complete definition in $item" >&2; exit 1;
-    }
     printf '%s\n' "$item" >> "$evidence/completion-symbols.txt"
-    cat "$evidence/completion-current.txt" >> "$evidence/completion-symbols.txt"
+    for symbol in complete complete_all; do
+        awk -v symbol="$symbol" '$2 == "T" && $3 == symbol { print }' \
+            "$evidence/completion-symbols.tmp" > "$evidence/completion-current.txt"
+        [[ $(wc -l < "$evidence/completion-current.txt") == 1 ]] || {
+            echo "Expected one global $symbol definition in $item" >&2; exit 1;
+        }
+        cat "$evidence/completion-current.txt" >> "$evidence/completion-symbols.txt"
+    done
 done
 rm -- "$evidence/completion-symbols.tmp" "$evidence/completion-current.txt"
 {

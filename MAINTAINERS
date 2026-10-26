@@ -22539,6 +22539,7 @@ F:	lib/math/int_sqrt_rust.rs
 F:	rusix/
 F:	rust/helpers/alloc_scope.c
 F:	rust/helpers/bio.c
+F:	rust/helpers/completion_test.c
 F:	rust/helpers/raw_spinlock.c
 F:	rust/kernel/block/bio.rs
 F:	rust/kernel/block/bio_disk.rs

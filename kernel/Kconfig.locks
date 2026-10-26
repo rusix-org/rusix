@@ -261,12 +261,12 @@ config MMIOWB
 	depends on SMP
 
 config RUSIX_COMPLETION_RUST
-	bool "Rusix Rust implementation of complete()"
+	bool "Rusix Rust completion signal operations"
 	depends on RUST && X86_64
 	default n
 	help
-	  Select the Rust implementation of the complete() counting and wakeup
-	  entry point. The existing C completion layout, other completion
+	  Select Rust implementations of complete() and complete_all() counting
+	  and wakeup entry points. The existing C completion layout, other
 	  operations, raw lock primitives and scheduler wait queues remain.
 	  This is an experimental partial core migration, not a replacement of
 	  the completion subsystem. Leave disabled for the C comparison build.

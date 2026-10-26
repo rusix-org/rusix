@@ -8,6 +8,12 @@ three worker cases. [Paired evidence](../../docs/evidence/completion-paired/mani
 `completion-c` and `completion-rust` build profiles select the comparison paths.
 This is neither a completed subsystem nor a declared divergence point.
 
+The current broadcast branch additionally translates `complete_all()` into Rust
+and requires a tenth case: two observed queued waiters must finish promptly after
+one broadcast, and late waits must remain successful. This extension awaits
+paired compilation/runtime. Its KUnit-only queue count takes the existing raw
+lock, performs no completion policy and is excluded from the server target.
+
 ## Implementation and remaining boundary
 
 [`completion_rust.rs`](../../../kernel/sched/completion_rust.rs) preserves the C
@@ -82,7 +88,7 @@ rustc --edition=2021 --test -D warnings rusix/experiments/completion/model.rs \
 ../lts-integration-out/experiments/completion/model-test
 ```
 
-Next: verify paired symbol selection and all nine kernel cases, then extend Rust
+Next: verify paired symbol selection and the ten-case broadcast extension, then extend Rust
 counting/wait-loop control with pinned waiter unlink on every return path. Queue
 ownership and scheduler integration follow; Rust-native endpoints require retiring
 C embedding/access. Preserve upstream tests, including `test-ww_mutex`, unchanged.
