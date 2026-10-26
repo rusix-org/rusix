@@ -6,9 +6,10 @@
 //! Completion storage, wait queues and scheduler wakeups retain their existing
 //! C implementation. No allocation, initialization or layout change occurs here.
 
-use core::{ffi::c_ulong, ptr::addr_of_mut};
+use core::ptr::addr_of_mut;
 use kernel::{
     bindings,
+    ffi::c_ulong,
     sync::atomic::{Atomic, Relaxed},
     types::NotThreadSafe,
 };
