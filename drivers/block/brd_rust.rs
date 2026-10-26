@@ -18,6 +18,8 @@ use kernel::{
     sync::{Arc, Mutex},
 };
 
+#[path = "brd_rust/params.rs"]
+mod params;
 #[path = "brd_rust/store.rs"]
 mod store;
 use store::Store;
@@ -38,32 +40,6 @@ const MAX_PARTITIONS: u32 = 256;
 const SECTOR_SHIFT: u32 = 9;
 const PAGE_SECTORS: u64 = (PAGE_SIZE >> SECTOR_SHIFT) as u64;
 
-extern "C" {
-    static mut rusix_brd_rd_nr: c_int;
-    static mut rd_size: c_ulong;
-    static mut rusix_brd_max_part: c_int;
-    fn rusix_brd_params_lock();
-    fn rusix_brd_params_unlock();
-}
-
-struct ParameterGuard;
-
-impl ParameterGuard {
-    fn lock() -> Self {
-        // SAFETY: This wrapper uses this module's own parameter lock. The
-        // matching guard unlocks it; module init runs in sleepable context.
-        unsafe { rusix_brd_params_lock() };
-        Self
-    }
-}
-
-impl Drop for ParameterGuard {
-    fn drop(&mut self) {
-        // SAFETY: This guard owns the parameter lock taken by `lock`.
-        unsafe { rusix_brd_params_unlock() };
-    }
-}
-
 #[derive(Clone, Copy)]
 struct Parameters {
     preallocate: c_int,
@@ -73,15 +49,14 @@ struct Parameters {
 
 impl Parameters {
     fn read() -> Result<Self> {
-        let _guard = ParameterGuard::lock();
-        // SAFETY: Kernel parameter parsing and sysfs readers use the same
-        // lock. Parameters are read-only after initialization (mode 0444).
-        let (preallocate, size, requested) =
-            unsafe { (rusix_brd_rd_nr, rd_size, rusix_brd_max_part) };
+        // SAFETY: Builtin driver initialization is sleepable. Boot parsing has
+        // finished; with SYSFS=n this remains exclusive prepublication access.
+        let guard = unsafe { params::Guard::lock() };
+        let (preallocate, size, requested) = guard.snapshot();
         let minors = NonZeroU32::new(normalize_minors(requested)?).ok_or(EINVAL)?;
-        // SAFETY: The parameter lock excludes sysfs readers during this
-        // initialization-time update; later driver accesses use this snapshot.
-        unsafe { rusix_brd_max_part = minors.get() as c_int };
+        // Preserve initialization-time normalization publication under the same
+        // generic parameter mutex as C setters and sysfs readers.
+        guard.set_max_part(minors.get() as c_int);
         Ok(Self {
             preallocate,
             // The C expression multiplies unsigned long before converting to
@@ -156,7 +131,7 @@ unsafe extern "C" fn rusix_brd_legacy_size(value: *mut c_char) -> c_int {
     let value = unsafe { CStr::from_char_ptr(value) };
     // SAFETY: Legacy boot parsing runs before the driver or sysfs parameter
     // readers are published, so this write cannot race another access.
-    unsafe { rd_size = legacy_size(value.as_bytes()) };
+    unsafe { params::legacy_write_size(legacy_size(value.as_bytes())) };
     1
 }
 

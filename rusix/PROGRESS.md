@@ -86,3 +86,10 @@ test-helper objtool warning. [Evidence](docs/evidence/wait-owner-initial/manifes
 retains that failure. KUnit-scoped assertions and checked arithmetic removed the
 warning in all eight completed builds at `ae62f42b6f58`. Signal traps now preserve
 cancellation failure; a local probe verified exit statuses 0, 7, 143 and 130.
+
+BRD parameter storage/metadata ownership is implemented on
+`rusix/brd-parameter-owner`, with 29 parameter boot cases prepared. Source review
+and all twelve host gate suites pass; the metadata verifier also passed checks
+against historical C-generated ELF and rejected five deliberate mutations.
+[Contract and gates](experiments/brd-parameters/README.md); kernel verification
+is pending and does not inherit results from the normalization-only change.

@@ -12,6 +12,9 @@ obj-$(CONFIG_RUST) += helpers/helpers.o
 CFLAGS_REMOVE_helpers/helpers.o = -Wmissing-prototypes -Wmissing-declarations
 
 always-$(CONFIG_RUST) += bindings/bindings_generated.rs bindings/bindings_helpers_generated.rs
+# BRD is builtin-only. Generate its init record type separately from the normal
+# module-context bindings; never change MODULE semantics for existing headers.
+always-$(CONFIG_RUSIX_BRD_RUST) += bindings/builtin_init_generated.rs
 obj-$(CONFIG_RUST) += bindings.o pin_init.o kernel.o
 always-$(CONFIG_RUST) += exports_helpers_generated.h \
     exports_bindings_generated.h exports_kernel_generated.h
@@ -372,6 +375,21 @@ $(obj)/bindings/bindings_generated.rs: $(src)/bindings/bindings_helper.h \
     $(src)/bindgen_parameters FORCE
 	$(call if_changed_dep,bindgen)
 
+# init.h hides obs_kernel_param when MODULE is defined. The ordinary bindgen
+# command intentionally defines it, so use an independent, narrowly allowlisted
+# translation unit with canonical init.h instead of changing global bindings or
+# copying a C layout. Final -UMODULE also overrides an inherited C flag.
+quiet_cmd_bindgen_builtin_init = BINDGEN $@
+      cmd_bindgen_builtin_init = \
+	$(BINDGEN) $< --rust-target 1.68 \
+		--use-core --with-derive-default --ctypes-prefix ffi --no-layout-tests \
+		--no-debug '.*' --allowlist-type '^obs_kernel_param$$' \
+		--allowlist-function '^$$' --allowlist-var '^$$' \
+		-o $@ -- $(bindgen_c_flags_final) -UMODULE
+
+$(obj)/bindings/builtin_init_generated.rs: $(src)/bindings/builtin_init_helper.h FORCE
+	$(call if_changed_dep,bindgen_builtin_init)
+
 $(obj)/uapi/uapi_generated.rs: private bindgen_target_flags = \
     $(shell grep -Ev '^#|^$$' $(src)/bindgen_parameters)
 $(obj)/uapi/uapi_generated.rs: $(src)/uapi/uapi_helper.h \
@@ -553,6 +571,11 @@ $(obj)/bindings.o: $(src)/bindings/lib.rs \
     $(obj)/bindings/bindings_generated.rs \
     $(obj)/bindings/bindings_helpers_generated.rs FORCE
 	+$(call if_changed_rule,rustc_library)
+
+ifeq ($(CONFIG_RUSIX_BRD_RUST),y)
+# Append after the original rule so its $< remains bindings/lib.rs.
+$(obj)/bindings.o: $(obj)/bindings/builtin_init_generated.rs
+endif
 
 $(obj)/uapi.o: private rustc_target_flags = --extern ffi --extern pin_init
 $(obj)/uapi.o: private skip_gendwarfksyms = 1

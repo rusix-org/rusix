@@ -54,8 +54,8 @@ class FixedParametersTests(unittest.TestCase):
         requested = [-2147483648, -1, 0, 1, 2, 3, 128, 129, 256, 257, 1073741824, 2147483647]
         effective = [1, 1, 1, 1, 2, 4, 128, 256, 256, 256, 256, 256]
         variants = runner.variants(self.config)
-        self.assertEqual(len(variants), 26)
-        self.assertEqual(len({v["name"] for v in variants}), 26)
+        self.assertEqual(len(variants), 29)
+        self.assertEqual(len({v["name"] for v in variants}), 29)
         for count, rows in ((0, variants[:12]), (2, variants[12:24])):
             self.assertEqual([v["requested_max_part"] for v in rows], requested)
             self.assertEqual([v["max_part"] for v in rows], effective)
@@ -70,7 +70,7 @@ class FixedParametersTests(unittest.TestCase):
                     self.assertEqual(sum(t.startswith(prefix) for t in tokens), 1)
 
     def test_unchanged_default_and_legacy_boot_inputs(self):
-        defaults, legacy = runner.variants(self.config)[24:]
+        defaults, legacy = runner.variants(self.config)[24:26]
         self.assertEqual(defaults, {"name": "defaults", "rd_nr": 1, "rd_size": 65536,
                                     "max_part": 1, "options": []})
         self.assertEqual((legacy["name"], legacy["rd_nr"], legacy["rd_size"], legacy["max_part"]),
@@ -86,6 +86,25 @@ class FixedParametersTests(unittest.TestCase):
                        self.config.replace("SIZE=65536", "SIZE=1")):
             with self.assertRaises(ValueError):
                 runner.variants(config)
+
+    def test_duplicate_parameters_keep_order_and_last_literal_value(self):
+        rows = runner.variants(self.config)[26:]
+        expected = [
+            ("duplicate_rd_nr", "rd_nr", ["2", "0"], (0, 4096, 1)),
+            ("duplicate_rd_size", "rd_size", ["65536", "4096"], (1, 4096, 1)),
+            ("duplicate_max_part", "max_part", ["257", "3"], (1, 4096, 4)),
+        ]
+        self.assertEqual(len(rows), len(expected))
+        for row, (name, parameter, values, result) in zip(rows, expected):
+            self.assertEqual(row["name"], name)
+            self.assertEqual(tuple(row[k] for k in ("rd_nr", "rd_size", "max_part")), result)
+            tokens = runner.command_line(row).split()
+            prefix = f"brd.{parameter}="
+            self.assertEqual([t.removeprefix(prefix) for t in tokens if t.startswith(prefix)], values)
+            for key in ("rd_nr", "rd_size", "max_part"):
+                self.assertEqual(sum(t.startswith(f"brd.{key}=") for t in tokens),
+                                 2 if key == parameter else 1)
+                self.assertEqual(tokens.count(f"rusix.expect_{key}={row[key]}"), 1)
 
     def test_fixed_and_rust_selection_are_exclusive(self):
         for profile, impl, flag in (("brd-fixed-c", "brd-c-parameter-fix", "RUSIX_BRD_C_PARAMETER_FIX"),

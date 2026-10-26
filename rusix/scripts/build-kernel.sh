@@ -164,6 +164,12 @@ if [[ "$profile" == brd-rust || "$profile" == brd-kunit || "$profile" == brd-ext
     bash "$RUSIX_PROJECT/scripts/with-local-tools.sh" llvm-ar t \
         "$out/drivers/block/built-in.a" > "$evidence/block-archive.txt"
     grep -E '(^|/)brd_rust\.o$' "$evidence/block-archive.txt" > "$evidence/brd-objects.txt"
+    [[ $(wc -l < "$evidence/brd-objects.txt") == 1 ]] || {
+        echo 'Expected exactly one Rust BRD archive object.' >&2; exit 1;
+    }
+    if grep -Eq '(^|/)(brd\.o|brd_parameter_fixed\.o|brd_rust/params\.o)$' "$evidence/block-archive.txt"; then
+        echo 'C BRD or parameter adapter object remains selected.' >&2; exit 1;
+    fi
     bash "$RUSIX_PROJECT/scripts/with-local-tools.sh" llvm-nm --defined-only --demangle \
         "$out/vmlinux" > "$evidence/kernel-symbols.tmp"
     if grep -Eq ' brd_submit_bio$' "$evidence/kernel-symbols.tmp"; then
@@ -172,12 +178,23 @@ if [[ "$profile" == brd-rust || "$profile" == brd-kunit || "$profile" == brd-ext
     grep -E 'brd.*Device.*Operations.*submit' "$evidence/kernel-symbols.tmp" \
         > "$evidence/brd-symbols.txt"
     rm -- "$evidence/kernel-symbols.tmp"
+    python3 "$RUSIX_PROJECT/scripts/verify-brd-parameter-owner.py" \
+        --object "$out/drivers/block/brd_rust.o" --vmlinux "$out/vmlinux" \
+        --config "$out/.config" > "$evidence/brd-parameter-ownership.json"
     {
         echo 'implementation=brd-rust'
-        cat "$evidence/brd-objects.txt" "$evidence/brd-symbols.txt"
+        cat "$evidence/brd-objects.txt" "$evidence/brd-symbols.txt" \
+            "$evidence/brd-parameter-ownership.json"
         sha256sum "$RUSIX_SOURCE/drivers/block/brd_rust.rs" \
             "$RUSIX_SOURCE/drivers/block/brd_rust/store.rs" \
-            "$out/drivers/block/brd_rust.o" "$out/drivers/block/brd_rust/params.o"
+            "$RUSIX_SOURCE/drivers/block/brd_rust/params.rs" \
+            "$RUSIX_SOURCE/rust/bindings/builtin_init_helper.h" \
+            "$RUSIX_SOURCE/rust/bindings/lib.rs" "$RUSIX_SOURCE/rust/Makefile" \
+            "$RUSIX_PROJECT/scripts/verify-brd-parameter-owner.py" \
+            "$RUSIX_PROJECT/scripts/measure-kernel-languages.py" \
+            "$out/rust/bindings/builtin_init_generated.rs" \
+            "$out/rust/bindings/.builtin_init_generated.rs.cmd" \
+            "$out/rust/bindings/bindings_generated.rs" "$out/drivers/block/brd_rust.o"
     } > "$evidence/selection.log"
 fi
 

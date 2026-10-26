@@ -172,7 +172,23 @@ fn run(cmdline: &str, log: &mut File) -> io::Result<()> {
         count <= 32 && (4096..=65536).contains(&size) && [1, 2, 4, 128, 256].contains(&spacing),
         "unsupported fixture expectations",
     )?;
+    let parameter_dir = "/sys/module/brd/parameters";
+    let mut parameter_names = fs::read_dir(parameter_dir)?
+        .map(|entry| entry.map(|entry| entry.file_name()))
+        .collect::<io::Result<Vec<_>>>()?;
+    parameter_names.sort();
+    check(
+        parameter_names == ["max_part", "rd_nr", "rd_size"],
+        "parameter name inventory mismatch",
+    )?;
     for (name, value) in [("rd_nr", count), ("rd_size", size), ("max_part", spacing)] {
+        // Observe permissions directly: guest root's successful/failed open is
+        // not a substitute for the registered module parameter mode contract.
+        let metadata = fs::symlink_metadata(format!("{parameter_dir}/{name}"))?;
+        check(
+            metadata.is_file() && metadata.mode() & 0o7777 == 0o444,
+            "module parameter type or permissions mismatch",
+        )?;
         check(
             sys_number(&format!("/sys/module/brd/parameters/{name}"))? == value,
             "module parameter mismatch",

@@ -20,7 +20,7 @@ obj-$(CONFIG_AMIGA_Z2RAM)	+= z2ram.o
 obj-$(CONFIG_N64CART)		+= n64cart.o
 obj-$(CONFIG_BLK_DEV_RAM)	+= brd.o
 ifeq ($(CONFIG_RUSIX_BRD_RUST),y)
-brd-y := brd_rust.o brd_rust/params.o
+brd-y := brd_rust.o
 else ifeq ($(CONFIG_RUSIX_BRD_C_PARAMETER_FIX),y)
 # Separate selected-fix oracle; pristine brd.c remains the baseline source.
 brd-y := brd_parameter_fixed.o

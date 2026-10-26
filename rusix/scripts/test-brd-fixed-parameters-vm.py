@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-2.0-only
-"""Run a static BRD parameter fixture in 26 fresh, bounded VM boots."""
+"""Run a static BRD parameter fixture in 29 fresh, bounded VM boots."""
 import argparse
 import importlib.util
 import json
@@ -77,6 +77,14 @@ def variants(config):
                 {"name": "defaults", "rd_nr": count, "rd_size": size, "max_part": 1, "options": []},
                 {"name": "legacy_octal", "rd_nr": 1, "rd_size": 4096, "max_part": 1,
                  "options": ["brd.rd_nr=1", "ramdisk_size=010000", "brd.max_part=1"]},
+                # kernel/params.c parse_args walks next_arg in order; parse_one
+                # invokes int/ulong setters for every occurrence before brd init.
+                {"name": "duplicate_rd_nr", "rd_nr": 0, "rd_size": 4096, "max_part": 1,
+                 "options": ["brd.rd_nr=2", "brd.rd_size=4096", "brd.max_part=1", "brd.rd_nr=0"]},
+                {"name": "duplicate_rd_size", "rd_nr": 1, "rd_size": 4096, "max_part": 1,
+                 "options": ["brd.rd_nr=1", "brd.rd_size=65536", "brd.max_part=1", "brd.rd_size=4096"]},
+                {"name": "duplicate_max_part", "rd_nr": 1, "rd_size": 4096, "max_part": 4,
+                 "options": ["brd.rd_nr=1", "brd.rd_size=4096", "brd.max_part=257", "brd.max_part=3"]},
             ]
 
 
@@ -162,7 +170,7 @@ def run(args, paths, evidence):
     metadata = {
         "source_revision": revision, "implementation": implementation, "profile": profile,
         "contract": "ADR 0003 approved BRD parameter normalization",
-        "scope": "26 boot variants of ADR 0003 approved BRD parameter and I/O contract",
+        "scope": "29 boot variants of ADR 0003 approved BRD parameter and I/O contract",
         "sources": {str(p.relative_to(paths.source)): digest(p) for p in source_files},
         "artifacts": {str(p): digest(p) for p in (image, init, initramfs)},
         "config_sha256": digest(config),

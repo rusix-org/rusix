@@ -73,3 +73,13 @@ mod bindings_helper {
 }
 
 pub use bindings_raw::*;
+
+// Canonical init-only types are generated in a separate !MODULE translation
+// unit. Keep its narrow namespace independent from ordinary module bindings.
+#[cfg(CONFIG_RUSIX_BRD_RUST)]
+pub mod builtin_init {
+    include!(concat!(
+        env!("OBJTREE"),
+        "/rust/bindings/builtin_init_generated.rs"
+    ));
+}
