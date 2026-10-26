@@ -31,6 +31,6 @@ See [COPYING](COPYING) and [LICENSES](LICENSES/) for the inherited license terms
 preserve per-file SPDX identifiers and attribution.
 
 Build and test tools run directly from this checkout under `rusix/scripts/`.
-The checkout may have any name; generated output defaults to a sibling directory
+The checkout may have any Kbuild-compatible name; generated output defaults to a sibling directory
 named `<checkout-name>-out`. Follow the contributor setup instructions for this
 Linux-derived build. Test experimental kernels in isolated VMs.

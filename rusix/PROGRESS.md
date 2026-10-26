@@ -97,8 +97,8 @@ all executing C as unfinished migration work. See `docs/ARCHITECTURE.md` (decisi
 
 ## Next actions
 
-1. Make the tracked repository canonical and relocatable; remove mandatory
-   parent-workspace mirroring, then supply a pinned independent build environment.
+1. Supply a pinned independent build environment and verify on clean workers;
+   repository-native tooling passed the renamed-worktree build/test workflow.
 2. Establish project CI and bind expected implementation/source/configuration to
    tested images. Retain existing proof; do not accept passing C tests as Rust proof.
 3. Establish the BRD C contract/workload baseline and review bio/non-MQ and page
@@ -202,9 +202,19 @@ claimed. This changes the work priority, not the full rewrite objective.
 ### 2026-10-25 — Repository-native tooling
 
 Project sources now live directly in tracked `rusix/`; parent mirroring is retired.
-Shared shell/Python path resolution supports arbitrary checkout names, Git
+Shared shell/Python path resolution supports renamed checkouts, Git
 worktrees, and caller-relative output/tool overrides. Build outputs default to a
 sibling directory. Installer reads the tracked package manifest. Documentation
 and the host harness use repository-native paths. Shell path fixtures passed;
-full relocation/build verification is pending in this entry until results follow.
+native (3) and i686 emulated (5) differential tests plus gate (9) and path (6)
+regressions passed in a separate `relocation-check` worktree at `ed5bb5239`.
+A fresh x86_64 kernel build succeeded and all 26 VM tests passed. Build evidence
+confirms the source commit and clean state remained unchanged. Manual archive/
+symbol inspection confirms the Rust square-root object remains selected.
+Logs, configuration, hashes, and result manifest: `docs/evidence/repository-layout/`.
+The upstream unused `Flags::from_raw` warning also appears in the earlier
+publication build; it is not introduced by this tooling change.
+The test reuses this host's tools via `RUSIX_TOOLS_ROOT`, not a clean-worker
+installation. Independent review found no tooling regression and corrected the
+checkout-path claim: Kbuild disallows spaces and colons.
 This closes a tooling defect, not the remaining Phase 1 driver/environment gates.

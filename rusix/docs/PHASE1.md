@@ -49,7 +49,7 @@ alone do not satisfy it. All gates are currently open at their full scope.
 
 | Gate | Required codebase state |
 | --- | --- |
-| P1-01: canonical repository | A fresh clone with any directory name builds/tests without copying files into its parent or depending on Aaron's home directory. Project docs/configs/scripts/tests have one tracked source of truth. Standard Kbuild remains the kernel build system. |
+| P1-01: canonical repository | A fresh clone with any Kbuild-compatible directory name builds/tests without copying files into its parent or depending on Aaron's home directory. Project docs/configs/scripts/tests have one tracked source of truth. Standard Kbuild remains the kernel build system. |
 | P1-02: reproducible environment | Compiler, Rust source, bindgen, dependencies, QEMU and test-rootfs inputs are pinned and independently installable on a clean Linux worker. Two clean workers reproduce kernel/initramfs hashes with timestamp, identity, path and configuration inputs controlled. Caches are optional. |
 | P1-03: complete driver | Rust implements BRD reads/writes, zero-filled holes, discard, capacity/partitions, parameters/aliases, on-demand creation, accounting, initialization rollback and teardown. Built-in and module forms work. Rust-native internals have documented ownership and synchronization. |
 | P1-04: useful system | Pinned ordinary Linux userspace boots, creates/mounts ext4 on the Rust RAM disk, runs integrity-checked buffered/direct I/O where supported, creates/renames/fsyncs files, unmounts/remounts, verifies contents and runs filesystem consistency checks. RAM loss on unload/reboot is expected; durable storage is not claimed. |

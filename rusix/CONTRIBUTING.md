@@ -14,7 +14,8 @@ for the readiness record and [PROGRESS.md](PROGRESS.md) for current limitations.
 
 ## Set up the repository
 
-Clone on disk, outside `/tmp`. The checkout name is your choice:
+Clone on disk, outside `/tmp`. Choose a checkout path without spaces or colons,
+as required by upstream Kbuild; the directory need not be named `linux`:
 
 ```bash
 git clone --branch rusix/main https://github.com/rusix-org/rusix.git rusix

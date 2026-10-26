@@ -13,7 +13,7 @@ Sources: `lib/math/int_sqrt.c`, `include/linux/math.h`,
 `lib/math/tests/int_sqrt_kunit.c`, `lib/math/Makefile`.
 Rust implementation: `lib/math/int_sqrt_rust.rs`. Transitional export metadata:
 `lib/math/int_sqrt_exports.c`. Added checks: `lib/math/tests/int_sqrt_rusix_kunit.c`
-and `tests/int_sqrt_host.rs` (workspace; tracked under `rusix/tests/`).
+and `rusix/tests/int_sqrt_host.rs`.
 
 Contract: return floor(sqrt(x)) for every unsigned-long value, preserving the
 `unsigned long int_sqrt(unsigned long)` C ABI and non-GPL-only export. On 32-bit

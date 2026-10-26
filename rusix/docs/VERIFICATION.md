@@ -21,6 +21,9 @@ The only source difference between these two commits is the seven-line Kbuild
 selection: CONFIG_RUST selects the Rust object and C export-metadata shim, while
 non-Rust configurations retain the original C implementation.
 
+These are historical commands for those revisions; use
+[the contributor guide](../CONTRIBUTING.md) for current repository-native commands.
+
 For each source revision, with its workspace copies restored from `linux/rusix/`,
 the commands were:
 

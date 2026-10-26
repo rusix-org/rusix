@@ -43,7 +43,7 @@ by an organization administrator. No broader authentication scope was requested.
   checked their setup paths, local links, scope, and limitations; the discovered
   workspace-root checkpatch path was corrected.
 - Fresh-checkout reproduction passed against source revision `9047da37a`.
-  Restoration follows the contributor guide in an independent Git worktree;
+  Restoration followed the contributor guide at that revision in an independent Git worktree;
   tools are shared from the same verified host installation, not claimed as a
   portable or hermetic SDK. Preflight, three native host tests, and nine gate
   regression tests pass. The fresh kernel builds and boots with 26/26 KUnit cases

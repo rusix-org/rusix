@@ -28,6 +28,10 @@ Later sub-agent tasks investigated the GCD/LCM dependency cluster, drafted the
 contributor guide, and prepared/reviewed a VM-only Rust init plus C module ABI
 probe. The module fixture's compilation and source review are not runtime results.
 
+Repository-native tooling was implemented with separate shell, Python, and
+documentation agents, then independently reviewed. The review corrected the
+checkout-name guarantee to respect upstream Kbuild path restrictions.
+
 ## Verification and responsibility
 
 Executed tests and limitations are recorded in `VERIFICATION.md`, `PROGRESS.md`,

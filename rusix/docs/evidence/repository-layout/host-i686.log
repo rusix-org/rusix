@@ -1,0 +1,11 @@
+Execution: qemu-i386 userspace emulation (not a 32-bit kernel boot)
+
+running 5 tests
+test boundaries ... ok
+test int_sqrt64_boundaries ... ok
+test small_domain ... ok
+test full_width_corpus ... ok
+test int_sqrt64_full_width_corpus ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.25s
+

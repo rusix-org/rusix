@@ -36,7 +36,7 @@ upstream C may remain as uncompiled reference material.
 
 Project documents, configuration, tests, and tools are maintained directly under
 `rusix/` in this repository. Run these commands from the checkout root; no parent
-workspace or copied files are required. The checkout may have any name, including
+workspace or copied files are required. The checkout may have any Kbuild-compatible name, including
 when using a Git worktree. Do not run an unreviewed kernel on your host.
 
 Install/check tools following [docs/TOOLCHAIN.md](docs/TOOLCHAIN.md), then:

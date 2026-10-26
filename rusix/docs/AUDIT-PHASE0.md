@@ -48,3 +48,11 @@ The surrounding C block layer/filesystem/allocator remain explicit dependencies.
 Immediate priorities are repository-native tooling, a reproducible environment
 and implementation-selection checks, then the C baseline contract/workloads and
 reviewed ownership design. More disconnected helper ports do not close these gaps.
+
+## Remediation update
+
+Repository-native tooling at `ed5bb5239` removes the parent mirror requirement.
+A fresh renamed Git worktree built and passed 26 VM tests using tracked scripts
+and default sibling output. Host/path/gate tests also passed; see
+[evidence](evidence/repository-layout/manifest.json). Existing tools were reused,
+so the independent-environment and reproducibility findings remain open.
