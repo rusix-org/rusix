@@ -72,7 +72,7 @@ Arc ownership protects late callbacks. VM timeout bounds scheduler failure.
 Missing, duplicate, skipped or failing cases reject a run. FIFO execution,
 untimed signal paths, deadline races, IRQ-context checks, lockdep/KASAN,
 arm64, the nonempty `PROVE_RAW_LOCK_NESTING` assertion branch, and
-Rust-completion-selected ext4 integration remain gaps.
+instrumented integration remain gaps.
 BRD ownership has a separate nine-case inventory.
 
 **Historical evidence:** the original five contract cases and one layout case
@@ -99,8 +99,7 @@ Current-CPU signaling now uses the shared Rust counting path and a private
 immutable C `int` initialized from `WF_CURRENT_CPU`; this four-byte data bridge
 keeps the scheduler macro authoritative until Rust owns that boundary.
 
-Next: verify ordinary-userspace ext4 with Rust completions, then migrate swait
-queue policy and its generic consumers. The status pair removed remaining
+Next: migrate swait queue policy and its generic consumers. The status pair removed remaining
 concurrent plain C counter writes before introducing lockless Rust references.
 Waiters need pinned stack storage and guaranteed unlink under the queue lock on
 every exit. Preserve timeout/signal race order, IRQ transitions and I/O accounting.
@@ -156,3 +155,13 @@ Deletion must be the final waiter access because generic `finish_swait` can
 observe self-links and release stack storage without acquiring the queue lock.
 Scheduler wakeup still precedes deletion. List primitives and task wakeup remain
 explicit dependencies until their own ownership migration.
+
+## Ordinary-userspace integration
+
+[Paired core/ext4 evidence](../../docs/evidence/completion-ext4/manifest.json)
+at `3df316f9971f` uses Rust BRD in both kernels, with only C/Rust completion
+selection differing. Both pass block and ordinary Debian ext4 operations,
+six parameter boots and partition checks. Four fixture archives are byte-identical;
+all fourteen symbols and blocking scheduler-text placement are verified. This
+extends the focused core tests without implying a full-kernel rewrite, arm64
+support or a measured performance budget.

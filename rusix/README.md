@@ -7,14 +7,12 @@ boundaries. [The roadmap](docs/ROADMAP.md) orders that work.
 
 ## Current status
 
-**Phase 1a implementation and verification are in progress.** Most kernel code
-remains C. This branch is based on **Linux 6.18.58 LTS**. Its required math
-compatibility tests pass. [Paired x86_64 q35 evidence](docs/evidence/brd-q35/manifest.json)
-at `9d1c1ca5dd` covers C/Rust BRD block6, ordinary ext4 six cases, six parameter
-boots and five partition cases, with identical fixture archives and only BRD
-selection differing in configuration. Nine Rust ownership tests also pass.
-Negative-parameter behavior, remaining C parameter/interface code and core
-integration gaps prevent a Phase 1a completion claim; see [PROGRESS.md](PROGRESS.md).
+**Phase 1a remains in progress; most kernel code is still C.** The baseline is
+**Linux 6.18.58 LTS**. Rust BRD passes paired block and ordinary-userspace ext4
+tests. All fourteen completion.c entry points now have opt-in Rust implementations,
+verified by paired core/signal tests and ordinary ext4 integration.
+[PROGRESS.md](PROGRESS.md) links exact source/configuration evidence and remaining
+gates, including BRD parameter behavior and the C queue/scheduler dependencies.
 
 The pinned baseline transition preserves earlier main history. Historical
 results retain their original source identities. Hosted CI is disabled and manual-only under the

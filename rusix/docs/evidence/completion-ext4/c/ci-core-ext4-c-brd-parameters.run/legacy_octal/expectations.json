@@ -1,0 +1,11 @@
+{
+  "name": "legacy_octal",
+  "rd_nr": 1,
+  "rd_size": 4096,
+  "max_part": 1,
+  "options": [
+    "brd.rd_nr=1",
+    "ramdisk_size=010000",
+    "brd.max_part=1"
+  ]
+}

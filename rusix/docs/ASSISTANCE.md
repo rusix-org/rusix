@@ -1,7 +1,7 @@
 # Tool-assisted development record
 
 Codex and parallel agents produced the Rust square-root and BRD implementations,
-transitional bio/disk/xarray/NOIO interfaces, completion ownership experiments,
+transitional bio/disk/xarray/NOIO interfaces, completion policy and ownership work,
 guest fixtures, build/verification tooling and documentation. Agents cross-reviewed
 ownership, unsafe boundaries, parameter semantics and test/provenance gates.
 Upstream source, licensing and attribution remain attached to the work.

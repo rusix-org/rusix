@@ -34,3 +34,11 @@ verifies BRD, ext4, parameters and partitions; subsequent implementation changes
 only correct the opt-in completion FFI type. [Current target inventory](evidence/lts-target/manifest.json)
 records linked C/Rust contributions. Phase 1a remains in progress and hosted CI
 remains disabled; see the progress ledger for unfinished gates.
+
+The next core checkpoint translates all fourteen completion.c entry points.
+[Core/signal parity](evidence/completion-status/manifest.json) verifies 21 cases
+per implementation; [ordinary ext4 integration](evidence/completion-ext4/manifest.json)
+verifies matching Rust-BRD kernels differing only in completion selection.
+The option stays experimental/default-off, with C queue/scheduler dependencies
+and configuration bounds recorded in the migration record. Hosted execution
+remains disabled; this checkpoint adds local integration profiles only.

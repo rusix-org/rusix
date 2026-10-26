@@ -1,0 +1,77 @@
+{
+  "status": "PASS",
+  "variants": [
+    {
+      "status": "PASS",
+      "cases": [
+        "parameters",
+        "initial_devices",
+        "on_demand",
+        "independent_io",
+        "capacity"
+      ],
+      "qemu_exit": 0,
+      "variant": "defaults"
+    },
+    {
+      "status": "PASS",
+      "cases": [
+        "parameters",
+        "initial_devices",
+        "on_demand",
+        "independent_io",
+        "capacity"
+      ],
+      "qemu_exit": 0,
+      "variant": "on_demand"
+    },
+    {
+      "status": "PASS",
+      "cases": [
+        "parameters",
+        "initial_devices",
+        "on_demand",
+        "independent_io",
+        "capacity"
+      ],
+      "qemu_exit": 0,
+      "variant": "spacing_roundup"
+    },
+    {
+      "status": "PASS",
+      "cases": [
+        "parameters",
+        "initial_devices",
+        "on_demand",
+        "independent_io",
+        "capacity"
+      ],
+      "qemu_exit": 0,
+      "variant": "spacing_clamp"
+    },
+    {
+      "status": "PASS",
+      "cases": [
+        "parameters",
+        "initial_devices",
+        "on_demand",
+        "independent_io",
+        "capacity"
+      ],
+      "qemu_exit": 0,
+      "variant": "legacy_octal"
+    },
+    {
+      "status": "PASS",
+      "cases": [
+        "parameters",
+        "major_registered",
+        "initial_devices",
+        "open_enxio",
+        "final_devices"
+      ],
+      "qemu_exit": 0,
+      "variant": "spacing_high_positive"
+    }
+  ]
+}

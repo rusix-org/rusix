@@ -5,9 +5,9 @@ opt-in Rust completion entry points pass paired core and signal tests.**
 Most of the kernel remains C. Linux 6.18.58 (`2926d88bb7fc`) is the behavioral
 baseline. Hosted CI remains disabled; current verification runs locally.
 
-The published foundation is `rusix/main` at `e479bce68c45`. Additional core work
-is committed on `rusix/completion-broadcast`, not yet published. No subsystem
-divergence point is declared. [ADR 0002](docs/adr/0002.md) owns the target and
+Public development lives on `rusix/main`; the pinned foundation at
+`e479bce68c45` preserves earlier history. No subsystem divergence point is declared.
+[ADR 0002](docs/adr/0002.md) owns the target and
 [Phase 1](docs/PHASE1.md) owns delivery gates.
 
 | Check | Verified result |
@@ -17,9 +17,9 @@ divergence point is declared. [ADR 0002](docs/adr/0002.md) owns the target and
 | Ordinary userspace | Pinned Debian shell/coreutils/e2fsprogs perform mkfs, buffered/direct I/O, fsync, rename/unlink, remount verification and offline fsck. [Fixture](tests/brd-ext4/README.md). |
 | Core migration | At `afaedde2732b`, C/Rust each pass 21 core cases plus nine BRD cases, then 21 isolated core cases on q35/KVM SMP2. All fourteen completion entry points link exclusively; wait addresses remain in scheduler text. Zero skips and no compiler/objtool diagnostics. [Evidence](docs/evidence/completion-status/manifest.json). |
 
-Implemented Rust includes approximately 1,200 lines across BRD/store and bio/disk
-interfaces, conditional xarray insertion/NOIO scope, and completion signaling
-and blocking wait policy. The latter uses pinned stack waiters and scoped LKMM
+Rust implements BRD/store and bio/disk interfaces, conditional xarray
+insertion/NOIO scope, and all fourteen completion.c entry points. The latter uses pinned stack waiters and scoped
+LKMM
 accesses while retaining C queue/scheduler primitives. Its
 [migration record](experiments/completion/README.md) owns contracts, test inventory
 and remaining boundaries. It remains off by default and restricted to builtins,
@@ -34,8 +34,8 @@ or server runtime result. That target selects Rust BRD and C completion.
 
 Remaining Phase 1a work includes the provisional BRD invalid-parameter exception,
 parameter adapters and review gates; [BRD.md](docs/BRD.md) owns those details.
-For core work, next verify ordinary-userspace ext4 with Rust completions, then
-move queue policy into Rust while preserving list/scheduler contracts. IRQ/debug
+For core work, next move queue policy into Rust while preserving
+list/scheduler contracts and covering generic swait consumers. IRQ/debug
 instrumentation, untimed signal paths, deadline races, queue ownership
 and scheduler integration remain unfinished. arm64, modules, expanded fault stress
 and performance budgets remain Phase 1b.
@@ -52,5 +52,7 @@ The latest pair verifies pending/enrolled interruption on dedicated threads,
 token precedence over pending signals, killable waits ignoring nonfatal signals,
 and competing try-wait consumers. A first test-only allocation-error conversion
 failure is retained in the [status evidence](docs/evidence/completion-status/manifest.json).
-Current integration work adds local ext4 profiles with Rust BRD in both kernels
-and only the completion implementation changed; runtime verification is pending.
+[Core/ext4 integration](docs/evidence/completion-ext4/manifest.json) now passes
+at `3df316f9971f`: both kernels use Rust BRD and byte-identical fixtures; only
+completion selection differs. Each passes all nine block/ext4/parameter/partition
+boots, with no compiler diagnostics. KUnit is disabled in those userspace guests.

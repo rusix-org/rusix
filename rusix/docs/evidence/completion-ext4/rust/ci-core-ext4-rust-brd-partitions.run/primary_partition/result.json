@@ -1,0 +1,12 @@
+{
+  "status": "PASS",
+  "cases": [
+    "discovery",
+    "geometry",
+    "translation",
+    "boundaries",
+    "independent_disk"
+  ],
+  "qemu_exit": 0,
+  "variant": "primary_partition"
+}
