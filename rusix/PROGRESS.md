@@ -79,6 +79,7 @@ Raw logs/binaries remain in `linux-out/<run>`; manifests record source/config/to
 identities and hashes. [Verification index](docs/VERIFICATION.md) preserves earlier
 milestones without attributing their results to newer source.
 
-Bit/variable wait-table ownership is being implemented on `rusix/wait-bit-owner`.
+Bit/variable wait-table ownership and six new tests are implemented and reviewed
+on `rusix/wait-bit-owner`; ten host gate suites pass.
 The [ownership contract](experiments/wait-owner/README.md) records the intended
-storage and ordering boundaries. No build or runtime result is claimed yet.
+storage and ordering boundaries. Kernel builds and runtime results remain pending.

@@ -1,6 +1,7 @@
 # Bit and variable wait-table ownership
 
-Status: implementation and tests in progress; no build or runtime verification yet.
+Status: implementation and six tests reviewed; ten host gate suites pass.
+Kernel build and runtime verification remain pending.
 This follows the verified locked-wait slice. The reference remains Linux 6.18.58
 `kernel/sched/wait_bit.c`; no subsystem divergence is declared.
 
