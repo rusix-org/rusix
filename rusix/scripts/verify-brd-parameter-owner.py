@@ -41,9 +41,9 @@ def require(condition, message):
 
 
 class Elf:
-    def __init__(self, path):
+    def __init__(self, path, *, indexed_sections=False):
         # Reuse existing ELF64/x86_64/section extent validation.
-        self.sections = measurement.elf_sections(path)
+        self.sections = measurement.elf_sections(path, indexed=indexed_sections)
         self.data = path.read_bytes()
         header = struct.unpack_from("<16sHHIQQQIHHHHHH", self.data)
         self.relocatable = header[1] == 1
@@ -52,7 +52,11 @@ class Elf:
                         for i in range(header[12])]
         strings = self.section_data(header[13])
         self.names = [self.cstring(strings, row[0]) for row in self.headers]
-        self.indices = {name: index for index, name in enumerate(self.names)}
+        # Only unambiguous names support name lookup. Relocatable C objects can
+        # legitimately repeat patchable-function sections; symbol/relocation
+        # access below identifies them by section index instead.
+        self.indices = {name: index for index, name in enumerate(self.names)
+                        if self.names.count(name) == 1}
         self.symbols = []
         tables = {}
         for index, section in enumerate(self.headers):
@@ -149,6 +153,7 @@ class Elf:
 
     def record_range(self, section, start=None, end=None):
         if self.relocatable:
+            require(section in self.indices, f"Missing or ambiguous metadata section: {section}")
             index = self.indices[section]
             return index, 0, self.headers[index][5]
         first, last = self.symbol(start)['address'], self.symbol(end)['address']
@@ -158,7 +163,7 @@ class Elf:
 
 
 def verify(path, initial):
-    elf = Elf(path)
+    elf = Elf(path, indexed_sections=True)
     require(not any(s['name'] in WRAPPERS and s['section'] for s in elf.symbols),
             "BRD-specific C parameter wrappers still defined")
     scalars = {}
@@ -198,6 +203,7 @@ def verify(path, initial):
     require(set(found) == set(EXPECTED), "Missing BRD parameter records")
 
     # vmlinux normally discards .modinfo; the defining Rust object must retain it.
+    require(elf.names.count('.modinfo') <= 1, 'Ambiguous modinfo sections')
     if '.modinfo' in elf.indices:
         entries = [s for s in elf.section_data(elf.indices['.modinfo']).split(b'\0')
                    if s.startswith(b'brd.parm')]

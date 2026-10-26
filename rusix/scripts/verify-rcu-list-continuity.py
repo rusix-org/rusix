@@ -14,11 +14,12 @@ rusix/ci/run-container.sh rusix/scripts/server_target.py
 rusix/scripts/verify-rcu-list-selection.py rusix/scripts/test-brd-vm.py
 rusix/scripts/test-brd-ext4-vm.py rusix/scripts/test-brd-fixed-parameters-vm.py
 rusix/scripts/test-brd-partitions-vm.py rusix/experiments/rcu-lists/README.md
-rusix/PROGRESS.md'''.split())
+rusix/PROGRESS.md rusix/scripts/measure-kernel-languages.py
+rusix/scripts/verify-brd-parameter-owner.py rusix/tests/test_kernel_languages.py'''.split())
 ADDED = frozenset('''rusix/configs/x86_64-rcu-list-ext4-c.config
 rusix/configs/x86_64-rcu-list-ext4-rust.config
 rusix/scripts/verify-rcu-list-continuity.py
-rusix/tests/test_rcu_list_integration.py'''.split())
+rusix/tests/test_rcu_list_integration.py rusix/tests/test_brd_owner_elf.py'''.split())
 KUNIT_PROFILES = ('rcu-list-c', 'rcu-list-rust', 'rcu-list-plain-c', 'rcu-list-plain-rust')
 
 

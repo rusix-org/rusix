@@ -123,3 +123,11 @@ Host regressions and independent source review are the current verification
 scope; these new profiles have not been built or booted. Next freeze the reviewed
 tooling revision, run serial paired integration guests and refresh the declared
 server language inventory before considering promotion.
+
+At `a536e5425997`, both RCU-list ext4 profiles pass 32 VM boots each. The
+server C build then stopped before boot: the ownership verifier rejected valid
+repeated `__patchable_function_entries` sections. The failure is retained in
+`linux-out/rcu-list-server-initial-evidence/manifest.json`; no server runtime
+result is claimed. The tooling fix uses section-index identities while requiring
+unique named parameter/setup/modinfo metadata. Kernel sources are unchanged;
+fresh integration verification remains pending.
