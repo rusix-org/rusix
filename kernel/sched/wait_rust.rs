@@ -72,7 +72,7 @@ unsafe fn wake_common(
     while node != head {
         // SAFETY: a non-head member is embedded in a live wait_queue_entry.
         let current =
-            unsafe { kernel::container_of!(node, bindings::wait_queue_entry, entry) }.cast_mut();
+            unsafe { kernel::container_of!(node, bindings::wait_queue_entry, entry) };
         // SAFETY: cache successor before callback, which can retire current.
         let next = unsafe { addr_of!((*node).next).read() };
         // SAFETY: preserves baseline flag load in C, including existing C-side
