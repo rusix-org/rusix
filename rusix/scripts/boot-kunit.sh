@@ -96,10 +96,12 @@ if [[ $status != 0 ]]; then
     tail -40 "$RUSIX_OUTPUT_ROOT/logs/$label-console.log" >&2
     exit "$status"
 fi
-if grep -Eq 'CPU feature dependency check failure|ACPI (BIOS )?(Error|Exception|Warning)|ACPI: Unable to load' "$RUSIX_OUTPUT_ROOT/logs/$label-console.log"; then
-    echo 'Guest CPU or ACPI initialization diagnostics were reported.' >&2
+if grep -Eq '\b(WARNING|BUG)\b|Oops:|Kernel panic|CPU feature dependency check failure|ACPI (BIOS )?(Error|Exception|Warning)|ACPI: Unable to load' "$RUSIX_OUTPUT_ROOT/logs/$label-console.log"; then
+    echo 'Guest kernel fault, warning, CPU or ACPI diagnostics were reported.' >&2
     exit 1
 fi
+sha256sum -c "$RUSIX_OUTPUT_ROOT/logs/$label-inputs.sha256" \
+    > "$run/inputs-after.log"
 set +e
 python3 "$RUSIX_SOURCE/tools/testing/kunit/kunit.py" parse \
     "$RUSIX_OUTPUT_ROOT/logs/$label-console.log" --json="$RUSIX_OUTPUT_ROOT/logs/$label-kunit.json" \
