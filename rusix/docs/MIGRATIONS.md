@@ -1,8 +1,8 @@
 # Kernel migration inventory
 
 [ADR 0002](adr/0002.md) governs contracts, divergence and removal of executing C.
-No subsystem divergence point has been declared. Existing evidence uses
-`21a7f44fd0765fcc5194130b28767786eba1d1e7`; the LTS transition remains pending.
+No subsystem divergence point has been declared. New integration work uses the
+pinned Linux 6.18.58 baseline; earlier evidence retains its recorded source.
 
 ## Integer square root
 
@@ -26,9 +26,11 @@ when the declared target and export mechanism no longer require them.
 
 ## RAM-backed block driver
 
-**C baseline verified; Rust driver not implemented.** Six x86_64 SMP cases:
-[manifest](evidence/brd-c-baseline/manifest.json). [BRD.md](BRD.md) owns the pinned
-C contract, proposed ownership design, upstream API research and unresolved
+**LTS C baseline verified; Rust candidate compiling and entering VM verification.**
+The driver/store live in `drivers/block/brd_rust.rs` and `brd_rust/store.rs`;
+`rust/kernel/block/{bio,bio_disk}.rs` provide transitional interfaces.
+Six x86_64 SMP baseline cases: [manifest](evidence/lts-baseline/manifest.json). [BRD.md](BRD.md) owns the pinned
+C contract, implemented ownership design, upstream API research and unresolved
 safety obligations. [Probe instructions](../tests/brd-contract/README.md) reproduce
 that baseline; [Phase 1](PHASE1.md) defines replacement gates. Existing mq APIs
 and upstream rnull are not substitutes for the bio-based stateful BRD contract.
@@ -38,3 +40,6 @@ and upstream rnull are not substitutes for the bio-based stateful BRD contract.
 After BRD, investigate completion ownership and wait/wakeup as specified in
 [the roadmap](ROADMAP.md). GCD/LCM remain unimplemented, deferred investigations;
 they are not migration progress or the next implementation target.
+
+The [completion ownership experiment](../experiments/completion/README.md) maps
+that core boundary and tests a host ownership model; kernel replacement is pending.

@@ -7,16 +7,17 @@ boundaries. [The roadmap](docs/ROADMAP.md) orders that work.
 
 ## Current status
 
-**Phase 0 bootstrap; Phase 1a is in progress.** Most kernel implementation remains
-C. The Rust integer-square-root replacement has recorded C/Rust comparisons;
-a six-case SMP VM probe now establishes the C RAM-disk driver's initial contract.
-There is no Rust BRD driver or completed ordinary-userspace/ext4 workload yet.
+**Phase 1a implementation and verification are in progress.** Most kernel code
+remains C. This branch is based on **Linux 6.18.58 LTS**. Its required math
+compatibility tests and six-case C BRD baseline pass in local VMs. A built-in
+Rust BRD implementation now compiles; its full-kernel/VM checks are underway.
+Ordinary-userspace ext4 and ownership test fixtures are implemented, with their
+runtime results tracked in [PROGRESS.md](PROGRESS.md).
 
-The engineering source remains `21a7f44fd0765fcc5194130b28767786eba1d1e7`.
-The accepted target is **Linux 6.18.58 LTS**; transition and verification are
-pending. Existing results, including the BRD run at `976e2de80`, do not certify
-that LTS baseline. The pinned container passes local verification. Hosted CI is
-disabled and manual-only under the [execution policy](ci/README.md).
+The published main branch remains on its earlier verified source until this
+transition passes review gates. Historical results retain their original source
+identities. Hosted CI is disabled and manual-only under the
+[execution policy](ci/README.md).
 
 - [Progress and evidence](PROGRESS.md)
 - [Migration inventory](docs/MIGRATIONS.md) and [BRD contract/design](docs/BRD.md)
@@ -25,7 +26,7 @@ disabled and manual-only under the [execution policy](ci/README.md).
 - [Toolchain](docs/TOOLCHAIN.md) and [agent instructions](AGENTS.md)
 - [Publication record](docs/PUBLICATION.md) and [development assistance](docs/ASSISTANCE.md)
 
-The working branch is `rusix/main` in
+The integration branch is `rusix/lts-6.18`; published work is on `rusix/main` in
 [rusix-org/rusix](https://github.com/rusix-org/rusix). Edit tracked files directly;
 no parent workspace or document synchronization is required. Experimental kernels
 and probes run in isolated VMs, not on the host.
