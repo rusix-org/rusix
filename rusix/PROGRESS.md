@@ -54,8 +54,11 @@ Full local logs and binaries live under `linux-out/<run>`; committed manifests
 record source/config/tool identities and retained failures. Historical results
 remain attributed to their commits in the [verification index](docs/VERIFICATION.md).
 
-Current working slice: Rust `complete_on_current_cpu()` shares the counting
-signal implementation and reads the pinned scheduler flag from immutable C data.
-Two new tests cover counting/saturation and an observed queued-worker wakeup;
-local build/runtime verification is pending. The required core inventory is now
-12 cases. Prior ten-case results above remain attributed to their tested source.
+Rust `complete_on_current_cpu()` now also passes its paired local gates at
+`7b78a56b5aa8`: 12 core cases and nine BRD cases per implementation, then 12
+isolated core cases, zero skips and no compiler/objtool diagnostics. All three
+signaling symbols are verified in their selected defining object and kernel.
+[Current-CPU evidence](docs/evidence/completion-current-cpu/manifest.json).
+Queued wakeup tests now bound total elapsed time before the worker deadline,
+closing a false-pass possibility under a delayed producer. The next production
+slice is the common blocking wait engine and its nine entry points.

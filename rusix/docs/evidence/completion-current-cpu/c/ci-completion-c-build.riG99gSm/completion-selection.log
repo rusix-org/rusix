@@ -1,0 +1,12 @@
+implementation=completion-c
+/out/builds/ci-completion-c/kernel/sched/build_utility.o
+/out/builds/ci-completion-c/kernel/sched/build_utility.o
+0000000000002a40 T complete
+0000000000002ab0 T complete_all
+00000000000029c0 T complete_on_current_cpu
+/out/builds/ci-completion-c/vmlinux
+ffffffff81284dd0 T complete
+ffffffff81284e40 T complete_all
+ffffffff81284d50 T complete_on_current_cpu
+d6247325949406a7e61b6dc1683203b91bf1f3620e2a0c549cadab323b74e535  /src/kernel/sched/completion.c
+863bfc85cc04eb6fc79dfba31721b25a55a77c9f2fd45f49d203b07790b926de  /out/builds/ci-completion-c/kernel/sched/build_utility.o

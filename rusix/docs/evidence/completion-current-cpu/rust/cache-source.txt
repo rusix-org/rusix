@@ -1,0 +1,2 @@
+/home/aaron/code/rusix/linux-out/lts-broadcast-rust-001/builds
+Copied cache preserving symlinks; original retained. New source and config will be checked.

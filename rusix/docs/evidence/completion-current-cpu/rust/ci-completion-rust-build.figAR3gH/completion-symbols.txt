@@ -1,0 +1,8 @@
+/out/builds/ci-completion-rust/kernel/sched/completion_rust.o
+0000000000000010 T complete
+00000000000000c0 T complete_all
+0000000000000060 T complete_on_current_cpu
+/out/builds/ci-completion-rust/vmlinux
+ffffffff81288ed0 T complete
+ffffffff81288f80 T complete_all
+ffffffff81288f20 T complete_on_current_cpu

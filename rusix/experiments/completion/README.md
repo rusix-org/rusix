@@ -1,9 +1,9 @@
 # Completion ownership and partial core migration
 
 Linux 6.18.58 (`2926d88bb7fc4608fd942453d929c39e4e5ec006`) remains the
-behavior reference. Opt-in Rust `complete()` and `complete_all()` build, link
-exclusively and pass all ten core cases against C on q35 at `abec6b9cd125`.
-[Paired broadcast evidence](../../docs/evidence/completion-broadcast/manifest.json).
+behavior reference. Opt-in Rust `complete()`, `complete_all()` and `complete_on_current_cpu()`
+build, link exclusively and pass all twelve core cases against C on q35 at
+`7b78a56b5aa8`. [Paired evidence](../../docs/evidence/completion-current-cpu/manifest.json).
 `CONFIG_RUSIX_COMPLETION_RUST` defaults off and requires Rust/x86_64;
 `completion-c` and `completion-rust` are the local comparison profiles.
 This is neither a completed subsystem nor a declared divergence point.
@@ -41,8 +41,8 @@ callback storage. `completion_done` is not proof of producer/waiter quiescence.
 
 Select `kunit.filter_glob=rusix_completion_*`. The strict current inventory is
 five `rusix_completion_contract` cases plus seven `rusix_completion_layout` cases.
-The two current-CPU cases are implemented with local build/runtime validation
-pending; the archived broadcast source passed the prior ten-case inventory:
+All twelve pass on both implementations; the prior broadcast archive covers
+its historical ten-case inventory:
 
 - Current-CPU signal counting/saturation and an observed enrolled-worker wakeup.
 - Initial empty state, pre-signal consumption, persistent broadcast/reset,
@@ -92,7 +92,7 @@ Current-CPU signaling now uses the shared Rust counting path and a private
 immutable C `int` initialized from `WF_CURRENT_CPU`; this four-byte data bridge
 keeps the scheduler macro authoritative until Rust owns that boundary.
 
-Next: verify current-CPU signaling, then migrate the common wait engine and its
+Next: migrate the common wait engine and its
 entry points, followed by `try_wait_for_completion` and `completion_done`.
 Remove concurrent unmarked C counter writes before introducing lockless Rust
 atomic references; the existing locked proof cannot justify those references.
