@@ -27,7 +27,7 @@ CASES = ("discovery", "geometry", "translation", "boundaries", "independent_disk
 
 
 def validate_selection(profile, selection, config, core_selection=None):
-    mapped = {"brd": "brd", "brd-rust": "brd-rust",
+    mapped = {"brd-fixed-c": "brd-fixed-c", "brd-ext4-fixed-c": "brd-fixed-c", "brd": "brd", "brd-rust": "brd-rust",
               "brd-ext4-c": "brd", "brd-ext4-rust": "brd-rust",
               "core-ext4-c": "core-ext4-c", "core-ext4-rust": "core-ext4-rust"}.get(profile)
     if mapped is None:

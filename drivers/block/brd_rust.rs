@@ -92,26 +92,20 @@ impl Parameters {
     }
 }
 
+// ADR 0003 deliberately corrects invalid geometry from the pinned baseline.
+// Normalize before rounding so neither negative inputs nor high positive inputs
+// can wrap into zero/negative minor counts. Parameter parsing/storage is unchanged.
 fn normalize_minors(requested: c_int) -> Result<u32> {
-    let mut value = if requested == 0 { 1 } else { requested };
-    if MINOR_COUNT % (value as u32) != 0 {
-        let bits = u32::BITS - (value as u32).leading_zeros();
-        value = (1u64 << bits) as c_int;
-    }
-    // On the declared 64-bit targets, negative inputs narrow 1UL << 32 to
-    // zero. The C probe would subsequently divide by zero; retain a guard at
-    // that undefined-behavior boundary rather than introducing a Rust panic.
-    if value == 0 {
-        return Err(EINVAL);
-    }
-    // Positive inputs >= 2^30 narrow 1UL << 31 to INT_MIN. C's comparison
-    // here is signed, so they must NOT be clamped or rejected at initialization.
-    // Preserve their bit pattern: parameter sysfs reads INT_MIN, major 1 remains
-    // registered, and the probe's unsigned divisor is 0x80000000. Disk creation
-    // rejects that out-of-range minor count, so opens fail with ENXIO.
+    let mut value = if requested <= 0 { 1 } else { requested };
     if value > MAX_PARTITIONS as c_int {
         pr_info!("max_part can't exceed {}, resetting it\n", MAX_PARTITIONS);
         value = MAX_PARTITIONS as c_int;
+    }
+    // value is now in 1..=256. Preserve the baseline divisor/power-of-two
+    // rounding rule; the shift cannot overflow or yield invalid disk geometry.
+    if MINOR_COUNT % (value as u32) != 0 {
+        let bits = u32::BITS - (value as u32).leading_zeros();
+        value = (1u64 << bits) as c_int;
     }
     Ok(value as u32)
 }
@@ -430,7 +424,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn minor_count_preserves_defined_normalization() {
+    fn minor_count_applies_approved_normalization() {
         for (input, expected) in [
             (0, 1),
             (1, 1),
@@ -443,21 +437,20 @@ mod tests {
             (257, 256),
             (1 << 20, 256),
             ((1 << 30) - 1, 256),
-            (1 << 30, 1u32 << 31),
-            ((1 << 30) + 1, 1u32 << 31),
-            (c_int::MAX, 1u32 << 31),
+            (1 << 30, 256),
+            ((1 << 30) + 1, 256),
+            (c_int::MAX, 256),
         ] {
             assert_eq!(normalize_minors(input), Ok(expected));
         }
     }
 
     #[test]
-    fn invalid_minor_normalization_is_rejected() {
-        // Negative inputs normalize to zero on the declared 64-bit targets;
-        // C's on-demand path then has undefined division-by-zero behavior.
-        // This guard does not reject the defined high-positive normalization.
-        for input in [-1, -2, c_int::MIN] {
-            assert_eq!(normalize_minors(input), Err(EINVAL));
+    fn nonpositive_minor_count_becomes_one() {
+        // Selected fix: both initialization and on-demand probes receive valid
+        // geometry, including inputs formerly rejected by provisional Rust.
+        for input in [0, -1, -2, c_int::MIN] {
+            assert_eq!(normalize_minors(input), Ok(1));
         }
     }
 

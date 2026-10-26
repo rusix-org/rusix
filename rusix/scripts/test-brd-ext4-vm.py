@@ -57,7 +57,7 @@ def accept_console(console, qemu_exit):
 
 
 def validate_selection(profile, selection, config, core_selection=None):
-    expected = {"brd-ext4-c": "brd-c", "brd-ext4-rust": "brd-rust",
+    expected = {"brd-ext4-fixed-c": "brd-c-parameter-fix", "brd-ext4-c": "brd-c", "brd-ext4-rust": "brd-rust",
                 "core-ext4-c": "brd-rust", "core-ext4-rust": "brd-rust",
                 "server": "brd-rust", "server-c": "brd-rust"}.get(profile)
     if expected is None or selection != f"implementation={expected}":
@@ -66,8 +66,7 @@ def validate_selection(profile, selection, config, core_selection=None):
     for name in REQUIRED_CONFIG:
         if f"CONFIG_{name}=y" not in settings:
             raise ValueError(f"Missing required CONFIG_{name}=y")
-    if ("CONFIG_RUSIX_BRD_RUST=y" in settings) != (expected == "brd-rust"):
-        raise ValueError("Resolved configuration contradicts BRD selection")
+    _common.validate_brd_choice(expected, config)
     if "CONFIG_KUNIT=y" in settings:
         raise ValueError("Ext4 guests must disable KUnit")
     _common.validate_core_selection(profile, config, core_selection)

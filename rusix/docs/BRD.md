@@ -5,9 +5,9 @@ Reference: `drivers/block/brd.c` at Linux 6.18.58,
 Git root. [Progress](../PROGRESS.md) records executed checks;
 [Phase 1](PHASE1.md) defines delivery gates.
 
-[ADR 0003](adr/0003.md) amends invalid `max_part` normalization. Its implementation
-and paired verification are pending separately; the reference table below
-records the pinned behavior and does not claim the correction has shipped.
+[ADR 0003](adr/0003.md) amends invalid `max_part` normalization. Implementation and a separate patched-C oracle are present; paired runtime
+verification is pending. The reference table below records pinned behavior;
+the accepted correction is identified separately.
 
 ## Behavior to preserve
 
@@ -160,8 +160,8 @@ review even though this project's long-term direction is governed by ADR 0002.
 [Paired q35 verification](evidence/brd-q35/manifest.json) at `9d1c1ca5dd` passes
 block6, ext4 six cases, six parameter/on-demand boots and partition5 (including
 clipped writes). Each fixture archive is identical across C/Rust; configs differ
-only in BRD selection. This does not resolve the negative-parameter exception
-below or retire the remaining C boundaries.
+only in BRD selection. This historical evidence predates the selected parameter
+correction below and does not retire the remaining C boundaries.
 Phase 1b adds paired allocation injection and deterministic NOWAIT errors,
 overlapping I/O/discard lifetimes, memory pressure, initialization failure,
 busy removal and repeated module load/use/unload. Use
@@ -192,16 +192,13 @@ userspace pages cannot safely become ordinary Rust references. No helper impleme
 BRD request policy or sparse-store ownership. Removing these boundaries requires
 migration of their owning core abstractions.
 
-On the declared 64-bit targets, positive `max_part` inputs from 2^30 through
-INT_MAX preserve the pinned narrowing to INT_MIN, signed clamp comparison,
-parameter sysfs value and major registration. Their unsigned probe divisor is
-0x80000000; disk creation rejects the minor count, and opening ram0 returns
-ENXIO. The paired q35 high-positive guest case verifies these observations;
-it avoids the C failure path's dangling debugfs counter.
-Negative inputs instead narrow to zero in C, producing a zero divisor in its
-on-demand probe. Rust retains an initialization-time EINVAL guard for this
-undefined-behavior boundary. That guard also changes pre-fault initialization
-observations; this narrow exception remains disclosed rather than being called
-full negative-parameter parity. Values outside the `int` parser range continue
-to use the shared C parameter parser's existing rejection behavior.
+[ADR 0003](adr/0003.md) owns the accepted invalid-geometry correction. Rust
+implements that ordering; paired fixed-C/Rust runtime verification is pending.
+The [selected-fix record](../reference/brd-parameter-fix/README.md) preserves the
+original upstream proposal and strict source/patch/output hashes. Its generated
+C oracle is separately selected; `drivers/block/brd.c` remains pristine.
+Historical high-positive INT_MIN/ENXIO evidence remains valid for its recorded
+source, but that behavior is no longer the current contract. The earlier Rust
+negative-input EINVAL exception is replaced by the approved normalization.
+Out-of-range `int` strings still use the unchanged generic parameter parser.
 Built-in operation is the only selectable mode until module lifetime is audited.

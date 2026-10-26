@@ -9,15 +9,15 @@ if [[ ${1:-} == --profile ]]; then
     shift 2
 fi
 case "$profile" in
-    kunit|brd|brd-rust|brd-kunit|brd-ext4-c|brd-ext4-rust|core-ext4-c|core-ext4-rust|completion-c|completion-rust|completion-plain-c|completion-plain-rust|server|server-c) ;;
-    *) echo 'Profile must be kunit, brd, brd-rust, brd-kunit, brd-ext4-c, brd-ext4-rust, core-ext4-c, core-ext4-rust, completion-c, completion-rust, completion-plain-c, completion-plain-rust, server or server-c.' >&2; exit 2 ;;
+    kunit|brd|brd-fixed-c|brd-rust|brd-kunit|brd-ext4-c|brd-ext4-fixed-c|brd-ext4-rust|core-ext4-c|core-ext4-rust|completion-c|completion-rust|completion-plain-c|completion-plain-rust|server|server-c) ;;
+    *) echo 'Profile must be kunit, brd, brd-fixed-c, brd-rust, brd-kunit, brd-ext4-c, brd-ext4-fixed-c, brd-ext4-rust, core-ext4-c, core-ext4-rust, completion-c, completion-rust, completion-plain-c, completion-plain-rust, server or server-c.' >&2; exit 2 ;;
 esac
 config="$RUSIX_PROJECT/configs/x86_64-$profile.config"
 if [[ "$profile" == server-c ]]; then
     config="$RUSIX_PROJECT/configs/x86_64-server.config"
 fi
 if [[ $# != 1 || ! "$1" =~ ^[a-zA-Z0-9_-]+$ ]]; then
-    echo 'Usage: bash rusix/scripts/build-kernel.sh [--profile kunit|brd|brd-rust|brd-kunit|brd-ext4-c|brd-ext4-rust|core-ext4-c|core-ext4-rust|completion-c|completion-rust|completion-plain-c|completion-plain-rust|server|server-c] BUILD_NAME' >&2
+    echo 'Usage: bash rusix/scripts/build-kernel.sh [--profile kunit|brd|brd-fixed-c|brd-rust|brd-kunit|brd-ext4-c|brd-ext4-fixed-c|brd-ext4-rust|core-ext4-c|core-ext4-rust|completion-c|completion-rust|completion-plain-c|completion-plain-rust|server|server-c] BUILD_NAME' >&2
     exit 2
 fi
 name=$1
@@ -66,6 +66,13 @@ while IFS= read -r setting; do
         exit 1
     fi
 done < "$config"
+# A fixed-C oracle must be explicitly selected; it cannot masquerade as baseline.
+if [[ "$profile" == brd-fixed-c || "$profile" == brd-ext4-fixed-c ]]; then
+    grep -qx 'CONFIG_RUSIX_BRD_C_PARAMETER_FIX=y' "$out/.config" || exit 1
+    if grep -qx 'CONFIG_RUSIX_BRD_RUST=y' "$out/.config"; then exit 1; fi
+elif grep -qx 'CONFIG_RUSIX_BRD_C_PARAMETER_FIX=y' "$out/.config"; then
+    echo 'Fixed C oracle selected outside its explicit verification profile.' >&2; exit 1
+fi
 cp "$out/.config" "$evidence/config"
 if [[ "$profile" == server || "$profile" == server-c ]]; then
     python3 "$RUSIX_PROJECT/scripts/server_target.py" verify \
@@ -82,14 +89,52 @@ if [[ $status != 0 ]]; then
     tail -40 "$evidence/build.log" >&2
     exit "$status"
 fi
-if [[ "$profile" == brd || "$profile" == brd-ext4-c ]]; then
-    # This profile currently establishes the unchanged C driver baseline.
+if [[ "$profile" == brd || "$profile" == brd-ext4-c || "$profile" == brd-fixed-c || "$profile" == brd-ext4-fixed-c ]]; then
+    # The pristine reference gate applies even when a separate fixed oracle is built.
     git -C "$RUSIX_SOURCE" diff --exit-code \
         2926d88bb7fc4608fd942453d929c39e4e5ec006 -- drivers/block/brd.c \
         > "$evidence/brd-reference.diff"
+    brd_impl=brd-c
+    brd_object=brd.o
+    oracle="$RUSIX_PROJECT/reference/brd-parameter-fix"
+    if [[ "$profile" == brd-fixed-c || "$profile" == brd-ext4-fixed-c ]]; then
+        brd_impl=brd-c-parameter-fix
+        brd_object=brd_parameter_fixed.o
+        python3 "$RUSIX_PROJECT/scripts/generate-brd-parameter-oracle.py" \
+            --source "$RUSIX_SOURCE/drivers/block/brd.c" --manifest "$oracle/manifest.json" \
+            --output "$out/drivers/block/brd_parameter_fixed.c" --check \
+            > "$evidence/brd-oracle-verification.log"
+        cp "$oracle/manifest.json" "$evidence/brd-oracle-manifest.json"
+        python3 - "$out" <<'PYBRDCOMMAND'
+import re
+import sys
+from pathlib import Path
+build = Path(sys.argv[1])
+command = (build / 'drivers/block/.brd_parameter_fixed.o.cmd').read_text()
+name = re.findall(r'-DKBUILD_MODNAME=([^ ]+)', command.splitlines()[0])
+if len(name) != 1 or name[0].strip("'").replace(chr(92), '') != '"brd"':
+    raise SystemExit('Fixed C oracle lost the exact brd parameter prefix')
+sources = re.findall(r'^source_[^ ]+ := (.+)$', command, re.MULTILINE)
+if len(sources) != 1:
+    raise SystemExit('Missing/duplicate fixed C oracle compilation source')
+source = Path(sources[0])
+if not source.is_absolute():
+    source = build / source
+if source.resolve() != (build / 'drivers/block/brd_parameter_fixed.c').resolve():
+    raise SystemExit('Fixed C oracle object compiled a different source')
+PYBRDCOMMAND
+        cp "$out/drivers/block/.brd_parameter_fixed.o.cmd" "$evidence/brd-oracle-command.cmd"
+    fi
     bash "$RUSIX_PROJECT/scripts/with-local-tools.sh" llvm-ar t \
         "$out/drivers/block/built-in.a" > "$evidence/block-archive.txt"
-    grep -E '(^|/)brd\.o$' "$evidence/block-archive.txt" > "$evidence/brd-objects.txt"
+    grep -Fx "$out/drivers/block/$brd_object" "$evidence/block-archive.txt" > "$evidence/brd-objects.txt"
+    [[ $(wc -l < "$evidence/brd-objects.txt") == 1 ]] || {
+        echo 'Expected exactly one selected C BRD archive object.' >&2; exit 1;
+    }
+    if grep -E '(^|/)(brd\.o|brd_parameter_fixed\.o|brd_rust([/.]|$))' "$evidence/block-archive.txt" \
+        | grep -Fvx "$out/drivers/block/$brd_object"; then
+        echo 'Unexpected BRD implementation in C oracle archive.' >&2; exit 1;
+    fi
     bash "$RUSIX_PROJECT/scripts/with-local-tools.sh" llvm-nm --defined-only \
         "$out/vmlinux" > "$evidence/kernel-symbols.tmp"
     if grep -q 'brd_rust' "$evidence/kernel-symbols.tmp"; then
@@ -102,9 +147,14 @@ if [[ "$profile" == brd || "$profile" == brd-ext4-c ]]; then
         echo 'Expected exactly one C BRD submission symbol.' >&2; exit 1;
     }
     {
-        echo 'implementation=brd-c'
+        printf 'implementation=%s\n' "$brd_impl"
         cat "$evidence/brd-objects.txt" "$evidence/brd-symbols.txt"
-        sha256sum "$RUSIX_SOURCE/drivers/block/brd.c" "$out/drivers/block/brd.o"
+        sha256sum "$RUSIX_SOURCE/drivers/block/brd.c" "$out/drivers/block/$brd_object"
+        if [[ "$brd_impl" == brd-c-parameter-fix ]]; then
+            sha256sum "$RUSIX_PROJECT/scripts/generate-brd-parameter-oracle.py" \
+                "$oracle/manifest.json" "$oracle/baseline.patch" "$oracle/upstream-proposal.patch" \
+                "$out/drivers/block/brd_parameter_fixed.c" "$out/drivers/block/.brd_parameter_fixed.o.cmd"
+        fi
     } > "$evidence/selection.log"
 fi
 if [[ "$profile" == brd-rust || "$profile" == brd-kunit || "$profile" == brd-ext4-rust || "$profile" == core-ext4-c || "$profile" == core-ext4-rust || "$profile" == completion-c || "$profile" == completion-rust || "$profile" == completion-plain-c || "$profile" == completion-plain-rust || "$profile" == server || "$profile" == server-c ]]; then

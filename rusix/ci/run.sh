@@ -5,8 +5,8 @@ set -euo pipefail
 source "$(dirname -- "${BASH_SOURCE[0]}")/../scripts/repo-paths.sh"
 profile=${1:-}
 case "$profile" in
-    kunit|brd|brd-rust|brd-kunit|brd-ext4-c|brd-ext4-rust|core-ext4-c|core-ext4-rust|completion-c|completion-rust|completion-plain-c|completion-plain-rust|server|server-c) ;;
-    *) echo 'Usage: bash rusix/ci/run.sh kunit|brd|brd-rust|brd-kunit|brd-ext4-c|brd-ext4-rust|core-ext4-c|core-ext4-rust|completion-c|completion-rust|completion-plain-c|completion-plain-rust|server|server-c' >&2; exit 2 ;;
+    kunit|brd|brd-fixed-c|brd-rust|brd-kunit|brd-ext4-c|brd-ext4-fixed-c|brd-ext4-rust|core-ext4-c|core-ext4-rust|completion-c|completion-rust|completion-plain-c|completion-plain-rust|server|server-c) ;;
+    *) echo 'Usage: bash rusix/ci/run.sh kunit|brd|brd-fixed-c|brd-rust|brd-kunit|brd-ext4-c|brd-ext4-fixed-c|brd-ext4-rust|core-ext4-c|core-ext4-rust|completion-c|completion-rust|completion-plain-c|completion-plain-rust|server|server-c' >&2; exit 2 ;;
 esac
 mkdir -p "$RUSIX_OUTPUT_ROOT/logs" "$RUSIX_OUTPUT_ROOT/tmp"
 export TMPDIR="$RUSIX_OUTPUT_ROOT/tmp"
@@ -32,6 +32,11 @@ for test in "$RUSIX_PROJECT"/tests/test_*.py; do
     name=$(basename "$test" .py)
     python3 "$test" > "$RUSIX_OUTPUT_ROOT/logs/$name.log" 2>&1
 done
+# Only pristine C profiles exercise the historical parameter contract.
+parameter_runner=test-brd-fixed-parameters-vm.py
+if [[ "$profile" == brd || "$profile" == brd-ext4-c ]]; then
+    parameter_runner=test-brd-parameters-vm.py
+fi
 bash "$RUSIX_PROJECT/scripts/build-kernel.sh" --profile "$profile" "ci-$profile"
 if [[ "$profile" == kunit ]]; then
     bash "$RUSIX_PROJECT/scripts/boot-kunit.sh" \
@@ -41,7 +46,7 @@ elif [[ "$profile" == brd-kunit || "$profile" == completion-c || "$profile" == c
         "$RUSIX_OUTPUT_ROOT/builds/ci-$profile" "ci-$profile"
     bash "$RUSIX_PROJECT/scripts/boot-kunit.sh" --completion \
         "$RUSIX_OUTPUT_ROOT/builds/ci-$profile" "ci-$profile-completion"
-elif [[ "$profile" == brd || "$profile" == brd-rust ]]; then
+elif [[ "$profile" == brd || "$profile" == brd-fixed-c || "$profile" == brd-rust ]]; then
     shopt -s nullglob
     evidence=("$RUSIX_OUTPUT_ROOT"/logs/ci-$profile-build.*)
     [[ ${#evidence[@]} == 1 ]] || {
@@ -49,11 +54,11 @@ elif [[ "$profile" == brd || "$profile" == brd-rust ]]; then
     }
     python3 "$RUSIX_PROJECT/scripts/test-brd-vm.py" \
         "$RUSIX_OUTPUT_ROOT/builds/ci-$profile" "ci-$profile" --build-evidence "${evidence[0]}"
-    python3 "$RUSIX_PROJECT/scripts/test-brd-parameters-vm.py" \
+    python3 "$RUSIX_PROJECT/scripts/$parameter_runner" \
         "$RUSIX_OUTPUT_ROOT/builds/ci-$profile" "ci-$profile" --build-evidence "${evidence[0]}"
     python3 "$RUSIX_PROJECT/scripts/test-brd-partitions-vm.py" \
         "$RUSIX_OUTPUT_ROOT/builds/ci-$profile" "ci-$profile" --build-evidence "${evidence[0]}"
-elif [[ "$profile" == brd-ext4-c || "$profile" == brd-ext4-rust || "$profile" == core-ext4-c || "$profile" == core-ext4-rust ]]; then
+elif [[ "$profile" == brd-ext4-c || "$profile" == brd-ext4-fixed-c || "$profile" == brd-ext4-rust || "$profile" == core-ext4-c || "$profile" == core-ext4-rust ]]; then
     shopt -s nullglob
     evidence=("$RUSIX_OUTPUT_ROOT"/logs/ci-$profile-build.*)
     [[ ${#evidence[@]} == 1 ]] || {
@@ -63,7 +68,7 @@ elif [[ "$profile" == brd-ext4-c || "$profile" == brd-ext4-rust || "$profile" ==
         "$RUSIX_OUTPUT_ROOT/builds/ci-$profile" "ci-$profile" --build-evidence "${evidence[0]}"
     python3 "$RUSIX_PROJECT/scripts/test-brd-ext4-vm.py" \
         "$RUSIX_OUTPUT_ROOT/builds/ci-$profile" "ci-$profile" --build-evidence "${evidence[0]}"
-    python3 "$RUSIX_PROJECT/scripts/test-brd-parameters-vm.py" \
+    python3 "$RUSIX_PROJECT/scripts/$parameter_runner" \
         "$RUSIX_OUTPUT_ROOT/builds/ci-$profile" "ci-$profile" --build-evidence "${evidence[0]}"
     python3 "$RUSIX_PROJECT/scripts/test-brd-partitions-vm.py" \
         "$RUSIX_OUTPUT_ROOT/builds/ci-$profile" "ci-$profile" --build-evidence "${evidence[0]}"

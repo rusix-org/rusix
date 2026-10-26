@@ -9,8 +9,8 @@ from pathlib import Path
 # Independent inventory: deleting or renaming source tests must not weaken this gate.
 SUITES = {
     "rusix_brd_policy": (
-        "minor_count_preserves_defined_normalization",
-        "invalid_minor_normalization_is_rejected",
+        "minor_count_applies_approved_normalization",
+        "nonpositive_minor_count_becomes_one",
         "legacy_size_retains_prefix_and_wrapping_semantics",
     ),
     "rusix_brd_store": (

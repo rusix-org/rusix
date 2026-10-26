@@ -36,8 +36,9 @@ all `rusix/tests/test_*.py` regressions before building one kernel:
 | Profile | Checks using that kernel |
 | --- | --- |
 | `kunit` | 21 upstream square-root cases and three compatibility cases |
-| `brd` / `brd-rust` | Six block contract cases, six parameter/on-demand boots and five partition cases against C / Rust BRD |
-| `brd-ext4-c` / `brd-ext4-rust` | The same block and parameter checks, plus six ordinary-userspace ext4 cases; requires the [fixture image](../tests/brd-ext4/README.md) with e2fsprogs |
+| `brd` / `brd-ext4-c` | Pristine C baseline: block, historical six parameter/on-demand boots and partition checks; the ext4 profile also runs ordinary userspace. |
+| `brd-fixed-c` / `brd-rust` | ADR 0003 patched-C oracle / Rust: six block cases, 26 parameter/default/legacy boots and five partition cases. |
+| `brd-ext4-fixed-c` / `brd-ext4-rust` | The approved-fix block and parameter checks, plus six ordinary-userspace ext4 cases; requires the [fixture image](../tests/brd-ext4/README.md) with e2fsprogs |
 | `brd-kunit` | Nine required BRD ownership/policy cases, then a separate boot requiring the current [completion contract inventory](../experiments/completion/README.md) |
 | `completion-c` / `completion-rust` | The same BRD/core tests, paired with original C / opt-in Rust completion entry points; archive/object/symbol evidence verifies selection; BUG, lockdep/raw-lock nesting, atomic-sleep and list validation enabled |
 | `completion-plain-c` / `completion-plain-rust` | Same required BRD/core inventory without lockdep, debug raw locks or list instrumentation; BUG remains enabled. Local profiles exercise configuration-dependent ABI and initialization. |
@@ -124,3 +125,10 @@ an inventory or tool-version assertion to obtain a passing build.
 The disabled hosted definition has one explicitly selected profile per manual
 dispatch, defaulting to `brd-rust`; there is no automatic multi-job matrix.
 Enabling or dispatching it still requires the explicit request described above.
+
+
+The ADR 0003 C oracle is local-test-only and default-off. Its generated source
+is checked against the pristine baseline, original proposal, coordinate-adapted
+patch and expected output hashes. Selection proof records the actual generated
+object and `brd` parameter prefix. Historical C parameter gates remain separate;
+Rust and fixed-C profiles use the [approved-fix fixture](../tests/brd-fixed-parameters/README.md).

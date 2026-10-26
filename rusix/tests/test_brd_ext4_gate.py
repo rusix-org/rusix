@@ -23,6 +23,19 @@ class GateTests(unittest.TestCase):
         self.lines += [f"RUSIX_LOCKED_PASS {case}" for case in runner.LOCKED_CASES]
         self.lines += ["RUSIX_EXT4_SUCCESS cases=6"]
 
+    def test_selected_fix_c_profile_and_selector_are_required_together(self):
+        base = "\n".join(f"CONFIG_{name}=y" for name in runner.REQUIRED_CONFIG)
+        fixed = base + "\nCONFIG_RUSIX_BRD_C_PARAMETER_FIX=y\n"
+        self.assertEqual(runner.validate_selection("brd-ext4-fixed-c", "implementation=brd-c-parameter-fix", fixed),
+                         "brd-c-parameter-fix")
+        for profile, proof, bad in (
+                ("brd-ext4-fixed-c", "implementation=brd-c-parameter-fix", base),
+                ("brd-ext4-c", "implementation=brd-c", fixed),
+                ("brd-ext4-fixed-c", "implementation=brd-c", fixed),
+                ("brd-ext4-fixed-c", "implementation=brd-c-parameter-fix", fixed + "CONFIG_RUSIX_BRD_RUST=y\n")):
+            with self.assertRaises(ValueError):
+                runner.validate_selection(profile, proof, bad)
+
     def test_informational_pci_bug_reporting_hint_is_not_a_fault(self):
         hint = 'PCI: Using host bridge windows from ACPI; if necessary, use "pci=nocrs" and report a bug'
         result = runner.accept_console("\n".join([hint] + self.lines), 0)

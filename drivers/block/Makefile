@@ -21,6 +21,16 @@ obj-$(CONFIG_N64CART)		+= n64cart.o
 obj-$(CONFIG_BLK_DEV_RAM)	+= brd.o
 ifeq ($(CONFIG_RUSIX_BRD_RUST),y)
 brd-y := brd_rust.o brd_rust/params.o
+else ifeq ($(CONFIG_RUSIX_BRD_C_PARAMETER_FIX),y)
+# Separate selected-fix oracle; pristine brd.c remains the baseline source.
+brd-y := brd_parameter_fixed.o
+brd-oracle-dir := $(srctree)/rusix/reference/brd-parameter-fix
+brd-oracle-generator := $(srctree)/rusix/scripts/generate-brd-parameter-oracle.py
+quiet_cmd_brd_oracle = GEN     $@
+      cmd_brd_oracle = python3 $(brd-oracle-generator) --source $(src)/brd.c --manifest $(brd-oracle-dir)/manifest.json --output $@
+$(obj)/brd_parameter_fixed.c: $(src)/brd.c $(brd-oracle-generator) $(brd-oracle-dir)/manifest.json $(brd-oracle-dir)/baseline.patch $(brd-oracle-dir)/upstream-proposal.patch FORCE
+	$(call if_changed,brd_oracle)
+targets += brd_parameter_fixed.c
 endif
 obj-$(CONFIG_BLK_DEV_LOOP)	+= loop.o
 obj-$(CONFIG_SUNVDC)		+= sunvdc.o

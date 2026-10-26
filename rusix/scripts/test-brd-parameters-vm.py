@@ -28,11 +28,9 @@ HIGH_POSITIVE_CASES = ("parameters", "major_registered", "initial_devices", "ope
 
 
 def validate_selection(profile, selection, config, core_selection=None):
-    mapped = {"brd": "brd", "brd-rust": "brd-rust",
-              "brd-ext4-c": "brd", "brd-ext4-rust": "brd-rust",
-              "core-ext4-c": "core-ext4-c", "core-ext4-rust": "core-ext4-rust"}.get(profile)
+    mapped = {"brd": "brd", "brd-ext4-c": "brd"}.get(profile)
     if mapped is None:
-        raise ValueError("A C or Rust BRD contract/ext4 profile is required")
+        raise ValueError("Historical parameters require a pristine C BRD profile")
     implementation = common.validate_selection(mapped, selection, config, core_selection)
     for name in ("SYSFS", "BLOCK_LEGACY_AUTOLOAD"):
         if f"CONFIG_{name}=y" not in config.splitlines():

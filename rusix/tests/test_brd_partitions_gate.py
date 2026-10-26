@@ -16,6 +16,19 @@ spec.loader.exec_module(runner)
 
 
 class PartitionTests(unittest.TestCase):
+    def test_selected_fix_c_profile_and_selector_are_required_together(self):
+        base = self.config
+        fixed = base + "\nCONFIG_RUSIX_BRD_C_PARAMETER_FIX=y\n"
+        self.assertEqual(runner.validate_selection("brd-ext4-fixed-c", "implementation=brd-c-parameter-fix", fixed),
+                         "brd-c-parameter-fix")
+        for profile, proof, bad in (
+                ("brd-ext4-fixed-c", "implementation=brd-c-parameter-fix", base),
+                ("brd-ext4-c", "implementation=brd-c", fixed),
+                ("brd-ext4-fixed-c", "implementation=brd-c", fixed),
+                ("brd-ext4-fixed-c", "implementation=brd-c-parameter-fix", fixed + "CONFIG_RUSIX_BRD_RUST=y\n")):
+            with self.assertRaises(ValueError):
+                runner.validate_selection(profile, proof, bad)
+
     def test_core_profiles_require_completion_config_and_symbol_proof(self):
         for suffix in ("c", "rust"):
             profile = f"core-ext4-{suffix}"

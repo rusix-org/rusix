@@ -46,11 +46,14 @@ and the blocking userspace consumers above. A process-context watchdog preserves
 the ordinary-lock IRQ contract; sampled blocked-state evidence does not prove
 all wake races. [Migration contract](experiments/wait-locked/README.md).
 
-[ADR 0003](docs/adr/0003.md) accepts the selected BRD parameter correction.
-Implementation and paired verification are pending separately on
-`rusix/brd-parameter-fix`; this checkpoint retains the previously verified
-parameter behavior. Historical high-positive INT_MIN/ENXIO results remain valid
-for their recorded source, not the corrected contract.
+[ADR 0003](docs/adr/0003.md) accepts a targeted BRD correction: nonpositive
+max_part becomes 1 and values above 256 clamp before rounding. Implementation
+and a separate generated patched-C oracle are ready for kernel verification;
+26 boundary/default/legacy boots per implementation are required. Host gates
+pass. The guest compiles with pinned Rust 1.85.1 at `625e26be5c`; the committed
+oracle inputs regenerate the expected C hash at `5f8704e4c1`. These checks do not
+execute the kernel: paired VM results are pending. Pristine Linux C and
+historical evidence remain intact. Parameter ownership is a separate migration.
 
 Next verify the approved BRD parameter fix, then transfer bit-wait table
 ownership and BRD parameter metadata into Rust as separate changes. The

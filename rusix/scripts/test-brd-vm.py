@@ -36,9 +36,22 @@ def accept_console(console, qemu_exit):
     return {"status": "PASS", "cases": list(CASES), "qemu_exit": qemu_exit}
 
 
+def validate_brd_choice(implementation, config):
+    """Keep the pristine C, selected-fix C and Rust contracts distinct."""
+    for name, enabled in (("RUSIX_BRD_RUST", implementation == "brd-rust"),
+                          ("RUSIX_BRD_C_PARAMETER_FIX", implementation == "brd-c-parameter-fix")):
+        entries = [line for line in config.splitlines()
+                   if line.startswith(f"CONFIG_{name}=") or line == f"# CONFIG_{name} is not set"]
+        allowed = [f"CONFIG_{name}=y"] if enabled else [f"# CONFIG_{name} is not set"]
+        if entries != allowed and not (not enabled and not entries):
+            raise ValueError(f"Resolved configuration contradicts {name} selection")
+
+
 def validate_selection(profile, selection, config, core_selection=None):
     """Bind the requested implementation to its build proof and resolved config."""
     implementation = {"brd": "brd-c", "brd-rust": "brd-rust",
+                      "brd-fixed-c": "brd-c-parameter-fix",
+                      "brd-ext4-fixed-c": "brd-c-parameter-fix",
                       "brd-ext4-c": "brd-c", "brd-ext4-rust": "brd-rust",
                       "core-ext4-c": "brd-rust", "core-ext4-rust": "brd-rust"}.get(profile)
     if implementation is None:
@@ -46,8 +59,7 @@ def validate_selection(profile, selection, config, core_selection=None):
     if selection != f"implementation={implementation}":
         raise ValueError("Build evidence does not identify the selected BRD implementation")
     settings = set(config.splitlines())
-    if ("CONFIG_RUSIX_BRD_RUST=y" in settings) != (implementation == "brd-rust"):
-        raise ValueError("Resolved configuration contradicts BRD selection")
+    validate_brd_choice(implementation, config)
     for name in REQUIRED_CONFIG:
         if f"CONFIG_{name}=y" not in settings:
             raise ValueError(f"Missing required CONFIG_{name}=y")

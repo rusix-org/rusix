@@ -16,27 +16,6 @@ spec.loader.exec_module(runner)
 
 
 class ParameterTests(unittest.TestCase):
-    def test_core_profiles_require_completion_config_and_symbol_proof(self):
-        for suffix in ("c", "rust"):
-            profile = f"core-ext4-{suffix}"
-            setting = ("CONFIG_RUSIX_COMPLETION_RUST=y" if suffix == "rust" else
-                       "# CONFIG_RUSIX_COMPLETION_RUST is not set")
-            config = (self.config + "CONFIG_RUSIX_BRD_RUST=y\n") + "\n# CONFIG_MODULES is not set\n" + setting
-            proof = f"implementation=completion-{suffix}"
-            self.assertEqual(runner.validate_selection(profile, "implementation=brd-rust",
-                                                       config, proof), "brd-rust")
-            for wrong in (None, "", "implementation=completion-" + ("c" if suffix == "rust" else "rust")):
-                with self.subTest(profile=profile, proof=wrong):
-                    with self.assertRaises(ValueError):
-                        runner.validate_selection(profile, "implementation=brd-rust", config, wrong)
-            for wrong_config in (config.replace(setting, ""), config + "\nCONFIG_MODULES=y",
-                                 config.replace("# CONFIG_MODULES is not set", ""),
-                                 config + "\n" + setting):
-                with self.assertRaises(ValueError):
-                    runner.validate_selection(profile, "implementation=brd-rust", wrong_config, proof)
-            with self.assertRaises(ValueError):
-                runner.validate_selection(profile, "implementation=brd-c", config, proof)
-
     def setUp(self):
         self.lines = ["RUSIX_BRD_PARAMETERS_START"]
         self.lines += [f"RUSIX_BRD_PARAMETERS_PASS {case}" for case in runner.CASES]
@@ -108,15 +87,14 @@ class ParameterTests(unittest.TestCase):
         for status in (1, 124, 137, -9):
             self.reject(self.lines, status)
 
-    def test_selection_supports_both_driver_profiles_only(self):
-        for profile, rust in (("brd", False), ("brd-rust", True),
-                              ("brd-ext4-c", False), ("brd-ext4-rust", True)):
-            impl = "brd-rust" if rust else "brd-c"
-            config = self.config + ("CONFIG_RUSIX_BRD_RUST=y\n" if rust else "")
-            self.assertEqual(runner.validate_selection(profile, f"implementation={impl}", config), impl)
-            with self.assertRaises(ValueError):
-                runner.validate_selection(profile, "implementation=wrong", config)
-        for profile in ("server", "kunit", "brd-kunit"):
+    def test_only_pristine_c_profiles_retain_historical_expectations(self):
+        for profile in ("brd", "brd-ext4-c"):
+            self.assertEqual(runner.validate_selection(profile, "implementation=brd-c", self.config), "brd-c")
+            for flag in ("RUSIX_BRD_RUST", "RUSIX_BRD_C_PARAMETER_FIX"):
+                with self.assertRaises(ValueError):
+                    runner.validate_selection(profile, "implementation=brd-c", self.config + f"CONFIG_{flag}=y\n")
+        for profile in ("brd-rust", "brd-ext4-rust", "core-ext4-c", "core-ext4-rust",
+                        "brd-fixed-c", "brd-ext4-fixed-c", "server", "kunit", "brd-kunit"):
             with self.assertRaises(ValueError):
                 runner.validate_selection(profile, "implementation=brd-c", self.config)
 

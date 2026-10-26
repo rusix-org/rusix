@@ -247,6 +247,16 @@ config RUSIX_BRD_RUST
 	  Select the experimental Rust implementation of the RAM block driver.
 	  Built-in only while module lifetime validation remains outstanding.
 
+config RUSIX_BRD_C_PARAMETER_FIX
+	bool "Patched C BRD parameter oracle for ADR 0003"
+	depends on BLK_DEV_RAM=y && !RUSIX_BRD_RUST
+	default n
+	help
+	  Build the separately identified C comparison for the approved max_part
+	  correction from the hash-verified pinned source plus selected patch.
+	  This is a test oracle, not the unchanged Linux baseline. The default C
+	  implementation still builds pristine brd.c. Built-in only.
+
 config BLK_DEV_RAM_COUNT
 	int "Default number of RAM disks"
 	default "16"
