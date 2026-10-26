@@ -28,15 +28,26 @@ infrastructure and is not a completion percentage; it establishes build/link
 composition, not server runtime. The newly enabled legacy block-autoload option
 requires an updated measurement.
 
-Current validation: the first q35 replay exposed ACPI initialization errors and
-an on-demand device failure from missing PCI/legacy block-autoload configuration.
-Its otherwise passing block/ext4 markers are insufficient for acceptance. The
-failed attempt remains in `lts-ext4-c-002`; corrected configs and gates now reject
-ACPI diagnostics. A fresh recorded C replay is running before the matching Rust
-replay. Next: finish those paired parameter/on-demand probes, rerun core tests on
-q35, record the updated server measurement, and review remaining Phase 1a gaps
-before publishing the baseline transition. arm64, module lifetime, expanded
-fault/concurrency stress and performance budgets remain Phase 1b.
+Current validation: at `22f1000b28`, C passes q35 block/ext4, all six
+parameter variants and partition I/O. Rust passes q35 block/ext4 and the default
+parameter boot; its next boot was rejected when shutdown printk split a serial
+marker. The guest now drains the console before reboot; paired replays are
+running at `13f851e005`, also adding clipped partition-write coverage. Earlier
+q35 failures preserve the missing PCI/autoload findings (`lts-ext4-c-002`),
+an overbroad diagnostic matcher (`lts-ext4-c-003`), and serial interleaving
+(`lts-ext4-rust-004`). No failed run is promoted to a pass.
+
+The first production core slice is implemented but unverified: opt-in Rust
+`complete()`, disabled by default, retains the C layout and raw-lock/wakeup
+boundaries. Local `completion-c` / `completion-rust` profiles require linked
+selection evidence and nine core cases, including bounded worker handoff,
+concurrent token consumption and timeout cleanup. Independent agent review found
+no blocker; compilation/runtime and IRQ-context coverage remain pending.
+
+Next: finish paired q35 storage probes, execute paired core tests, update the
+server measurement and review Phase 1a gaps before publishing the baseline
+transition. arm64, module lifetime, expanded fault/concurrency stress and
+performance budgets remain Phase 1b.
 See [ADR 0002](docs/adr/0002.md) and [delivery gates](docs/PHASE1.md).
 
 Local raw outputs live under `linux-out/`: `lts-kunit-001`, `lts-brd-c-001`,
