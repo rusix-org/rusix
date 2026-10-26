@@ -261,16 +261,17 @@ config MMIOWB
 	depends on SMP
 
 config RUSIX_COMPLETION_RUST
-	bool "Rusix Rust completion operations"
+	bool "Rusix Rust completion and swait policy"
 	depends on RUST && X86_64 && !MODULES
 	# These drivers access completion.done without the completion lock/READ_ONCE.
 	# Their plain accesses cannot share the Rust LKMM atomic-reference contract.
 	depends on MTD_ONENAND = n && MT7601U = n && SCSI_IPR = n && SGI_GRU = n
 	default n
 	help
-	  Select Rust implementations of all completion.c entry points. The C
-	  completion layout, initialization, raw locks and scheduler wait queues
-	  remain.
+	  Select Rust implementations of all completion.c entry points and four
+	  shared swait enrollment/wakeup policies. Generic swait consumers also
+	  use those policies. C layout/initialization, raw locks, marked list
+	  operations, outer swait wrappers and scheduler task wakeup remain.
 	  This is an experimental partial core migration, not a replacement of
 	  the completion subsystem. Verified only with the declared built-in VM
 	  profiles; external plain counter accesses require separate review.

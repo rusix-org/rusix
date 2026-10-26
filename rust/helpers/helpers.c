@@ -61,6 +61,12 @@
 #include "signal.c"
 #include "slab.c"
 #include "spinlock.c"
+#ifdef CONFIG_RUSIX_COMPLETION_RUST
+#include "swait.c"
+#endif
+#ifdef CONFIG_KUNIT
+#include "swait_test.c"
+#endif
 #include "sync.c"
 #include "task.c"
 #include "time.c"

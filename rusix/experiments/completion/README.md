@@ -165,3 +165,19 @@ six parameter boots and partition checks. Four fixture archives are byte-identic
 all fourteen symbols and blocking scheduler-text placement are verified. This
 extends the focused core tests without implying a full-kernel rewrite, arm64
 support or a measured performance budget.
+
+## Shared swait policy under verification
+
+The working slice replaces `__prepare_to_swait`, `__finish_swait`,
+`swake_up_locked` and `swake_up_all_locked`. C list adapters retain marked pointer
+accesses and hardening/debug validation; initialization, outer generic wrappers,
+raw locking and scheduler task wakeup remain C. This also affects generic swait
+consumers, so five dedicated cases check empty wake/IRQ restoration, repeated
+enrollment/state restoration, structural FIFO removal, the original C condition
+macro, and timeout cleanup before a late wake. No CPU execution order is claimed.
+
+The current completion comparison profiles enable `BUG`, `PROVE_LOCKING`,
+`PROVE_RAW_LOCK_NESTING`, `DEBUG_ATOMIC_SLEEP`, `DEBUG_LIST` and `LIST_HARDENED`.
+Explicit `BUG=y` matters: without it, the baseline WARN macros can be silent.
+The new 26-case inventory and instrumented profiles are pending verification;
+prior 21-case and ordinary-userspace results remain attributed above.

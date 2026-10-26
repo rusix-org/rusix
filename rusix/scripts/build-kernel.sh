@@ -183,6 +183,43 @@ rm -- "$evidence/completion-symbols.tmp" "$evidence/completion-current.txt"
     fi
 } > "$evidence/completion-selection.log"
 
+# The selected swait slice shares the completion option but has its own object.
+if [[ "$completion_impl" == rust ]]; then
+    swait_object="$out/kernel/sched/swait_rust.o"
+    grep -E '(^|/)swait_rust\.o$' "$evidence/scheduler-archive.txt" \
+        > "$evidence/swait-objects.txt"
+else
+    swait_object="$out/kernel/sched/build_utility.o"
+    if grep -Eq '(^|/)swait_rust\.o$' "$evidence/scheduler-archive.txt"; then
+        echo 'Rust swait object linked in C selection.' >&2; exit 1;
+    fi
+    grep -E '(^|/)build_utility\.o$' "$evidence/scheduler-archive.txt" \
+        > "$evidence/swait-objects.txt"
+fi
+for item in "$swait_object" "$out/vmlinux"; do
+    bash "$RUSIX_PROJECT/scripts/with-local-tools.sh" llvm-nm --defined-only "$item" \
+        > "$evidence/swait-symbols.tmp"
+    printf '%s\n' "$item" >> "$evidence/swait-symbols.txt"
+    for symbol in __prepare_to_swait __finish_swait swake_up_locked swake_up_all_locked; do
+        awk -v symbol="$symbol" '$2 == "T" && $3 == symbol { print }' \
+            "$evidence/swait-symbols.tmp" > "$evidence/swait-current.txt"
+        [[ $(wc -l < "$evidence/swait-current.txt") == 1 ]] || {
+            echo "Expected one global $symbol definition in $item" >&2; exit 1;
+        }
+        cat "$evidence/swait-current.txt" >> "$evidence/swait-symbols.txt"
+    done
+done
+rm -- "$evidence/swait-symbols.tmp" "$evidence/swait-current.txt"
+{
+    printf 'implementation=swait-%s\n' "$completion_impl"
+    cat "$evidence/swait-objects.txt" "$evidence/swait-symbols.txt"
+    sha256sum "$RUSIX_SOURCE/kernel/sched/swait.c" "$swait_object"
+    if [[ "$completion_impl" == rust ]]; then
+        sha256sum "$RUSIX_SOURCE/kernel/sched/swait_rust.rs" \
+            "$RUSIX_SOURCE/rust/helpers/swait.c"
+    fi
+} > "$evidence/swait-selection.log"
+
 git -C "$RUSIX_SOURCE" status --porcelain > "$evidence/source-after.status"
 git -C "$RUSIX_SOURCE" rev-parse HEAD > "$evidence/source-after.commit"
 if [[ -s "$evidence/source-after.status" || $(cat "$evidence/source-after.commit") != "$source_commit" ]]; then

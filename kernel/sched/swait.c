@@ -19,6 +19,7 @@ EXPORT_SYMBOL(__init_swait_queue_head);
  * If for some reason it would return 0, that means the previously waiting
  * task is already running, so it will observe condition true (or has already).
  */
+#ifndef CONFIG_RUSIX_COMPLETION_RUST
 void swake_up_locked(struct swait_queue_head *q, int wake_flags)
 {
 	struct swait_queue *curr;
@@ -30,6 +31,7 @@ void swake_up_locked(struct swait_queue_head *q, int wake_flags)
 	try_to_wake_up(curr->task, TASK_NORMAL, wake_flags);
 	list_del_init(&curr->task_list);
 }
+#endif
 EXPORT_SYMBOL(swake_up_locked);
 
 /*
@@ -39,11 +41,13 @@ EXPORT_SYMBOL(swake_up_locked);
  * It is intentionally different from swake_up_all() to allow usage from
  * hard interrupt context and interrupt disabled regions.
  */
+#ifndef CONFIG_RUSIX_COMPLETION_RUST
 void swake_up_all_locked(struct swait_queue_head *q)
 {
 	while (!list_empty(&q->task_list))
 		swake_up_locked(q, 0);
 }
+#endif
 
 void swake_up_one(struct swait_queue_head *q)
 {
@@ -82,12 +86,14 @@ void swake_up_all(struct swait_queue_head *q)
 }
 EXPORT_SYMBOL(swake_up_all);
 
+#ifndef CONFIG_RUSIX_COMPLETION_RUST
 void __prepare_to_swait(struct swait_queue_head *q, struct swait_queue *wait)
 {
 	wait->task = current;
 	if (list_empty(&wait->task_list))
 		list_add_tail(&wait->task_list, &q->task_list);
 }
+#endif
 
 void prepare_to_swait_exclusive(struct swait_queue_head *q, struct swait_queue *wait, int state)
 {
@@ -123,12 +129,14 @@ long prepare_to_swait_event(struct swait_queue_head *q, struct swait_queue *wait
 }
 EXPORT_SYMBOL(prepare_to_swait_event);
 
+#ifndef CONFIG_RUSIX_COMPLETION_RUST
 void __finish_swait(struct swait_queue_head *q, struct swait_queue *wait)
 {
 	__set_current_state(TASK_RUNNING);
 	if (!list_empty(&wait->task_list))
 		list_del_init(&wait->task_list);
 }
+#endif
 
 void finish_swait(struct swait_queue_head *q, struct swait_queue *wait)
 {

@@ -18,9 +18,7 @@ Public development lives on `rusix/main`; the pinned foundation at
 | Core migration | At `afaedde2732b`, C/Rust each pass 21 core cases plus nine BRD cases, then 21 isolated core cases on q35/KVM SMP2. All fourteen completion entry points link exclusively; wait addresses remain in scheduler text. Zero skips and no compiler/objtool diagnostics. [Evidence](docs/evidence/completion-status/manifest.json). |
 
 Rust implements BRD/store and bio/disk interfaces, conditional xarray
-insertion/NOIO scope, and all fourteen completion.c entry points. The latter uses pinned stack waiters and scoped
-LKMM
-accesses while retaining C queue/scheduler primitives. Its
+insertion/NOIO scope, and all fourteen completion.c entry points. The latter uses pinned stack waiters and scoped LKMM accesses while retaining C queue/scheduler primitives. Its
 [migration record](experiments/completion/README.md) owns contracts, test inventory
 and remaining boundaries. It remains off by default and restricted to builtins,
 with known incompatible external counter-access drivers excluded.
@@ -56,3 +54,9 @@ failure is retained in the [status evidence](docs/evidence/completion-status/man
 at `3df316f9971f`: both kernels use Rust BRD and byte-identical fixtures; only
 completion selection differs. Each passes all nine block/ext4/parameter/partition
 boots, with no compiler diagnostics. KUnit is disabled in those userspace guests.
+
+Working branch `rusix/swait-policy` adds Rust enrollment/removal and one/all-wake
+policy for four shared swait functions. Five generic queue cases bring the strict
+core inventory to 26. The paired completion profiles now explicitly enable BUG,
+lockdep/raw-lock nesting, atomic-sleep and list validation; earlier profiles did
+not exercise these assertion paths. Build/runtime verification is pending.
