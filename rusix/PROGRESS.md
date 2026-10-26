@@ -35,7 +35,10 @@ marker. The guest now drains the console before reboot; paired replays are
 running at `13f851e005`, also adding clipped partition-write coverage. Earlier
 q35 failures preserve the missing PCI/autoload findings (`lts-ext4-c-002`),
 an overbroad diagnostic matcher (`lts-ext4-c-003`), and serial interleaving
-(`lts-ext4-rust-004`). No failed run is promoted to a pass.
+(`lts-ext4-rust-004`). A later C replay exposed interleaving during device
+autoload too; fixtures now emit markers as single kernel log records. The
+[failed-attempt archive](docs/evidence/q35-bringup/manifest.json) retains those
+findings. No failed run is promoted to a pass.
 
 The first production core slice is implemented but unverified: opt-in Rust
 `complete()`, disabled by default, retains the C layout and raw-lock/wakeup
