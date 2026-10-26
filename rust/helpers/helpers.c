@@ -91,3 +91,7 @@
 #endif
 #include "workqueue.c"
 #include "xarray.c"
+
+#ifdef CONFIG_RUSIX_RCU_BATCH_TEST
+#include "rcu_batch_test.c"
+#endif

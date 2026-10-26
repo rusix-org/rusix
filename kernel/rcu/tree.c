@@ -2673,6 +2673,94 @@ static void rcu_do_batch(struct rcu_data *rdp)
 	tick_dep_clear_task(current, TICK_DEP_BIT_RCU);
 }
 
+#ifdef CONFIG_RUSIX_RCU_BATCH_TEST
+#include "rcu_batch_test.h"
+
+/* Test boundary only: the original production batch above remains unchanged.
+ * No environment overrides, global queue resets or alternate callback loop.
+ */
+int rusix_rcubatch_private(struct rcu_head **heads, u32 nr, void **private_rdp,
+                         bool *retained, s64 *out)
+{
+	struct rcu_data *rdp;
+	u32 i;
+	int ret = 0;
+
+	*retained = false;
+	*private_rdp = NULL;
+	if (IS_ENABLED(CONFIG_RCU_NOCB_CPU) || IS_ENABLED(CONFIG_RCU_BOOST) ||
+	    IS_ENABLED(CONFIG_PREEMPT_RT) || nr > 3)
+		return -EOPNOTSUPP;
+	lockdep_assert_cpus_held();
+	rdp = kzalloc(sizeof(*rdp), GFP_KERNEL);
+	if (!rdp)
+		return -ENOMEM;
+	rcu_segcblist_init(&rdp->cblist);
+	rdp->blimit = DEFAULT_RCU_BLIMIT;
+	rdp->rcu_cpu_kthread_status = RCU_KTHREAD_OFFCPU;
+	/* All remaining observed fields start zero: invocation/forcing counters,
+	 * qlen trigger, callback-thread pointer and CPU-work flag. No rcu_node is
+	 * accessed by this transaction in the supported non-offloaded mode.
+	 */
+	for (i = 0; i < nr; i++) {
+		if (debug_rcu_head_queue(heads[i])) {
+			while (i)
+				debug_rcu_head_unqueue(heads[--i]);
+			kfree(rdp);
+			return -EINVAL;
+		}
+		rcu_segcblist_enqueue(&rdp->cblist, heads[i]);
+	}
+	rcu_segcblist_accelerate(&rdp->cblist, 1);
+	rcu_segcblist_advance(&rdp->cblist, 1);
+	*private_rdp = rdp;
+	local_bh_disable();
+	rcu_do_batch(rdp);
+	local_bh_enable();
+	out[0] = rcu_segcblist_n_cbs(&rdp->cblist);
+	out[1] = rcu_segcblist_n_segment_cbs(&rdp->cblist);
+	out[2] = rdp->n_cbs_invoked;
+	out[3] = rcu_segcblist_empty(&rdp->cblist);
+	/* Preserve a broken implementation's reachable callback storage, and make
+	 * that refusal visible. The worker owns its fixture until this completes.
+	 */
+	if (out[0] || out[1] || !out[3])
+		ret = -EIO;
+	for (i = 0; i < nr; i++)
+		if (READ_ONCE(heads[i]->func))
+			ret = -EIO;
+	if (ret) {
+		*retained = true;
+		return ret;
+	}
+	*private_rdp = NULL;
+	kfree(rdp);
+	return 0;
+}
+
+bool rusix_rcubatch_private_accounting(void *private_rdp, u32 expected)
+{
+	struct rcu_data *rdp = private_rdp;
+
+	/* Synchronous private callback; no other thread accesses this descriptor.
+	 * The original batch must retain the total count during detached dispatch.
+	 */
+	return rdp && rcu_segcblist_empty(&rdp->cblist) &&
+	       rcu_segcblist_n_cbs(&rdp->cblist) == expected;
+}
+
+void rusix_rcubatch_time_samples(s64 *out)
+{
+	/* Actual production predicate. No artificial clock or task-state writes.
+	 * The final case expects a monotonic boot clock later than one nanosecond.
+	 */
+	out[0] = rcu_do_batch_check_time(32, 0, false, 0);
+	out[1] = rcu_do_batch_check_time(31, 1, false, 0);
+	out[2] = rcu_do_batch_check_time(32, LONG_MAX, false, 0);
+	out[3] = rcu_do_batch_check_time(32, 1, false, 0);
+}
+#endif
+
 /*
  * This function is invoked from each scheduling-clock interrupt,
  * and checks to see if this CPU is in a non-context-switch quiescent

@@ -123,3 +123,20 @@ Host regressions and independent source review are the current verification
 scope; these new profiles have not been built or booted. Next freeze the reviewed
 tooling revision, run serial paired integration guests and refresh the declared
 server language inventory before considering promotion.
+
+### Tree RCU batch C-first fixtures (development)
+
+On `rusix/rcu-batch`, six new cases exercise the unchanged C batch through a
+private-descriptor test hook and real retained callback workers. Explicit local
+`rcu-batch-c` / `rcu-batch-plain-c` profiles retain Rust BRD, core and RCU lists;
+strict gates require 92 combined, 67 isolated core, ten list and six batch cases.
+No Rust batch policy or runtime result is claimed. The original `tree.c` bytes
+outside the approved test-only hook region match the pinned source hash.
+
+All 17 host test scripts, shell syntax and diff checks pass. Exact input hashes
+and per-script logs are retained locally in
+`linux-out/rcu-batch-baseline-host-001/manifest.json`; this is host/source evidence,
+not kernel compilation or VM proof. The [contract](experiments/rcu-batch/CONTRACT.md)
+records ownership, timeout retention and the pending deterministic partial-budget
+and CPU-hotplug coverage. Next commit the reviewed fixture baseline, run the C
+profiles locally, then independently review the full Rust batch transaction.

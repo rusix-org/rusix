@@ -16,6 +16,18 @@ required=(KUNIT INT_SQRT_KUNIT_TEST SERIAL_8250_CONSOLE)
 cpus=1
 case "${1:-}" in
     --baseline) baseline=(--baseline); mode=baseline; shift ;;
+    --rcu-batch|--rcu-batch-combined)
+        mode=${1#--}
+        filter='rusix_rcu_batch'
+        if [[ "$mode" == rcu-batch-combined ]]; then
+            baseline=(--combined)
+            filter='rusix_*'
+        fi
+        gate=validate-rcu-batch-kunit.py
+        required=(KUNIT RUST SMP TREE_RCU TREE_SRCU RUSIX_BRD_RUST RUSIX_COMPLETION_RUST RUSIX_RCU_LIST_RUST RUSIX_RCU_LIST_TEST RUSIX_RCU_BATCH_TEST SERIAL_8250_CONSOLE)
+        cpus=2
+        shift
+        ;;
     --rcu-combined)
         baseline=(--combined)
         mode=rcu-combined
@@ -27,7 +39,7 @@ case "${1:-}" in
         ;;
     --rcu-list)
         mode=rcu-list
-        filter='rusix_rcu_*'
+        filter='rusix_rcu_list'
         gate=validate-rcu-kunit.py
         required=(KUNIT RUST SMP TREE_RCU TREE_SRCU RUSIX_RCU_LIST_TEST SERIAL_8250_CONSOLE)
         cpus=2
@@ -51,7 +63,7 @@ case "${1:-}" in
         ;;
 esac
 if [[ $# != 2 || ! "$2" =~ ^[a-zA-Z0-9_-]+$ ]]; then
-    echo 'Usage: bash rusix/scripts/boot-kunit.sh [--baseline|--brd|--completion|--rcu-list|--rcu-combined] BUILD_DIRECTORY EVIDENCE_LABEL' >&2
+    echo 'Usage: bash rusix/scripts/boot-kunit.sh [--baseline|--brd|--completion|--rcu-list|--rcu-combined|--rcu-batch|--rcu-batch-combined] BUILD_DIRECTORY EVIDENCE_LABEL' >&2
     exit 2
 fi
 build=$(cd -- "$1" && pwd)
@@ -82,11 +94,14 @@ fi
 printf '%s\n' "$mode" > "$run/mode.txt"
 sha256sum "$RUSIX_PROJECT/scripts/boot-kunit.sh" "$RUSIX_PROJECT/scripts/$gate" \
     > "$run/scripts.sha256"
-if [[ "$mode" == completion || "$mode" == rcu-list || "$mode" == rcu-combined ]]; then
+if [[ "$mode" == completion || "$mode" == rcu-list || "$mode" == rcu-combined || "$mode" == rcu-batch* ]]; then
     sha256sum "$RUSIX_PROJECT/scripts/validate-brd-kunit.py" >> "$run/scripts.sha256"
 fi
-if [[ "$mode" == rcu-list || "$mode" == rcu-combined ]]; then
+if [[ "$mode" == rcu-list || "$mode" == rcu-combined || "$mode" == rcu-batch* ]]; then
     sha256sum "$RUSIX_PROJECT/scripts/validate-completion-kunit.py" >> "$run/scripts.sha256"
+fi
+if [[ "$mode" == rcu-batch* ]]; then
+    sha256sum "$RUSIX_PROJECT/scripts/validate-rcu-kunit.py" >> "$run/scripts.sha256"
 fi
 sha256sum "$build/arch/x86/boot/bzImage" "$build/.config" > "$RUSIX_OUTPUT_ROOT/logs/$label-inputs.sha256"
 firmware=()
