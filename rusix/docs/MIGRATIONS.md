@@ -43,9 +43,10 @@ and upstream rnull are not substitutes for the bio-based stateful BRD contract.
 
 [`complete()`](../../kernel/sched/completion_rust.rs) has an opt-in Rust
 translation (`0e7d592fed`, default off, x86_64). Local `completion-c`/`completion-rust`
-profiles support comparison. The C-selected q35 run passes all nine completion
-cases (also alongside nine BRD ownership cases); Rust-selected build/link/runtime
-verification is still in progress. See PROGRESS for current run identities. C still owns layout/init/reset, other
+profiles pass all nine completion cases on each implementation, also alongside
+nine BRD ownership cases, on q35. Linked object/symbol checks verify selection.
+[Paired evidence](evidence/completion-paired/manifest.json) records source and
+remaining coverage gaps. C still owns layout/init/reset, other
 completion operations, wait loops, raw locks, swait and scheduler integration.
 The scoped kernel LKMM atomic counter shares the existing raw lock with C writers;
 no Rust reference covers the enclosing mutable C object.

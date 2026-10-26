@@ -34,15 +34,14 @@ diagnostic-matcher and serial-interleaving failures remain in the
 [bringup archive](docs/evidence/q35-bringup/manifest.json). Guest markers now
 use atomic kernel log records; acceptance still requires exact ordered cases.
 
-Opt-in Rust `complete()` is implemented and independently agent-reviewed, with
-C layout/raw-lock/wakeup boundaries retained and default selection off. The
-expanded C baseline passes all nine completion cases and nine BRD cases on q35
-at the same source (`lts-completion-c-003`), with no compiler/objtool diagnostics.
-The Rust-selected full kernel is building; linked selection and runtime results
-remain pending. IRQ-context coverage and broader integration remain unverified.
+Opt-in Rust `complete()` now builds and passes the same nine core cases as C
+on q35 at `7effedcbb1bf`; each also passes all nine BRD ownership cases. Linked
+archive/object/symbol checks prove exclusive selection, and neither build reports
+compiler/objtool diagnostics. [Paired core evidence](docs/evidence/completion-paired/manifest.json).
+Default selection remains off: IRQ-context checks, broader integration and the
+rest of completion/wait-queue/scheduler ownership remain unfinished.
 
-Next: finish paired core tests, update the
-server measurement and review Phase 1a gaps before publishing the baseline
+Next: finish the refreshed target measurement and math replay and review Phase 1a gaps before publishing the baseline
 transition. arm64, module lifetime, expanded fault/concurrency stress and
 performance budgets remain Phase 1b.
 See [ADR 0002](docs/adr/0002.md) and [delivery gates](docs/PHASE1.md).

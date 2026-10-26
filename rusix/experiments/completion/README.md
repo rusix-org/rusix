@@ -1,8 +1,9 @@
 # Completion ownership and partial core migration
 
 Linux 6.18.58 (`2926d88bb7fc4608fd942453d929c39e4e5ec006`) remains the
-behavior reference. Commit `0e7d592fed` implements an opt-in Rust `complete()`;
-**compile, exclusive-symbol linking and paired runtime verification are pending**.
+behavior reference. The opt-in Rust `complete()` builds, links exclusively and
+passes all nine core cases on q35 against C at `7effedcbb1bf`, including all
+three worker cases. [Paired evidence](../../docs/evidence/completion-paired/manifest.json).
 `CONFIG_RUSIX_COMPLETION_RUST` defaults off and requires Rust/x86_64. Local
 `completion-c` and `completion-rust` build profiles select the comparison paths.
 This is neither a completed subsystem nor a declared divergence point.
@@ -52,12 +53,13 @@ five `rusix_completion_contract` cases plus four `rusix_completion_layout` cases
 - `timed_out_worker_unlinks_before_late_signal`: positive timeout followed by a
   late signal consumed exactly once.
 
-The three worker cases and Rust-selected path await paired execution. Workers use
+Workers use
 pinned Arc-owned upstream wrappers, finite waits and no borrowed KUnit stack.
 Their final notification acknowledges data access, not callback exit; retained
 Arc ownership protects late callbacks. VM timeout bounds scheduler failure.
 Missing, duplicate, skipped or failing cases reject a run. FIFO execution,
-interruptible cancellation, deadline races, lockdep/KASAN and arm64 remain gaps.
+interruptible cancellation, deadline races, IRQ-context checks, lockdep/KASAN,
+arm64 and Rust-completion-selected ext4 integration remain gaps.
 BRD ownership has a separate nine-case inventory.
 
 **Historical evidence:** the original five contract cases and one layout case
