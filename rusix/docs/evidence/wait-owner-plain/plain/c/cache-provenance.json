@@ -1,0 +1,29 @@
+{
+  "status": "PREPARED_NOT_RUN",
+  "source": "/home/aaron/code/rusix/linux-out/lts-wait-locked-plain-c-001/builds/ci-completion-plain-c",
+  "source_profile": "completion-plain-c",
+  "source_revision": "5234e2809e9bbaf59ac600bd59500b0614bee639",
+  "source_build_evidence": "/home/aaron/code/rusix/linux-out/lts-wait-locked-plain-c-001/logs/ci-completion-plain-c-build.eF3ZEzTT",
+  "source_terminal_status": {
+    "logs/ci-completion-plain-c-qemu.exit": "0",
+    "logs/ci-completion-plain-c-parse.exit": "0",
+    "logs/ci-completion-plain-c-gate.exit": "0",
+    "logs/ci-completion-plain-c-completion-qemu.exit": "0",
+    "logs/ci-completion-plain-c-completion-parse.exit": "0",
+    "logs/ci-completion-plain-c-completion-gate.exit": "0",
+    "logs/ci.exit": "0",
+    "logs/ci-completion-plain-c-build.eF3ZEzTT/build.exit": "0"
+  },
+  "source_build_hash_records_sha256": "b8c84ab0def04cad2b9939681bfe78c97724b39f73e567038978daf5b33c19cb",
+  "copied_artifact_sha256": {
+    "builds/ci-completion-plain-c/.config": "05dabbe3a7cf0f47d34a607d42c469fae6affba73fa22e84524b1cb9da90f10e",
+    "builds/ci-completion-plain-c/arch/x86/boot/bzImage": "ab7ba0ad9757563cacb5991c162393442c28e2e4ec6168156e3b4f7932b7d762",
+    "builds/ci-completion-plain-c/vmlinux": "3ecc9803040b946cbabfc30aa9a92c6e2900c3c10584577ef046405a6343b6cc",
+    "builds/ci-completion-plain-c/vmlinux.map": "4dc5b5f75cb7867745bd23cb9611646aad54e58d8bdf075cebb45f012516c6cb"
+  },
+  "copy_method": "cp -a --reflink=auto; recorded artifacts verified before and after copy",
+  "destination_profile": "completion-plain-c",
+  "runtime_source_mount": "/home/aaron/code/rusix/linux-wait-owner",
+  "runtime_container_image": "sha256:0e0cfd724bde5c2a81cee61210c2a14a66ea72f679e1308125825e0463c67937",
+  "scope": "Kernel-only cache, not wait-owner evidence. No guest fixtures, VM logs, prior success markers or host build outputs copied; current source gates determine runtime inventory."
+}

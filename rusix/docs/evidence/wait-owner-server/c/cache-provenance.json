@@ -1,0 +1,27 @@
+{
+  "status": "PREPARED_NOT_RUN",
+  "source": "/home/aaron/code/rusix/linux-out/lts-wait-locked-server-c-001/builds/ci-server-c",
+  "source_profile": "server-c",
+  "source_revision": "5234e2809e9bbaf59ac600bd59500b0614bee639",
+  "source_build_evidence": "/home/aaron/code/rusix/linux-out/lts-wait-locked-server-c-001/logs/ci-server-c-build.DNhEPIBs",
+  "source_terminal_status": {
+    "logs/ci.exit": "0",
+    "logs/ci-server-c-build.DNhEPIBs/build.exit": "0",
+    "logs/ci-server-c-ext4.run/compile.exit": "0",
+    "logs/ci-server-c-ext4.run/qemu.exit": "0",
+    "logs/ci-server-c-ext4.run/runner.exit": "0",
+    "logs/ci-server-c-ext4.run/kernel-build/build.exit": "0"
+  },
+  "source_build_hash_records_sha256": "3b9f825e343b19f0fe2ec6cd3edc54ad091077b00479563c3d4d50e5f2434534",
+  "copied_artifact_sha256": {
+    "builds/ci-server-c/.config": "3ba80afb1dd3aa8a98271c280b198ebc64623fc733fd1af90cc268cee29de674",
+    "builds/ci-server-c/arch/x86/boot/bzImage": "4c3eee87468a42ca3fa0123b225d16e5fb9ee7efefea9413d2cb5bc4b45929cd",
+    "builds/ci-server-c/vmlinux": "bf82011638c7255aa8cedf5158914e40a733adb08c81e6a92406282d7922b6a4",
+    "builds/ci-server-c/vmlinux.map": "3dd63ab296dceb5a9b50237b7a7f3c4cca2f6551031a00345d75179369c640a6"
+  },
+  "copy_method": "cp -a --reflink=auto; recorded artifacts verified before and after copy",
+  "destination_profile": "server-c",
+  "runtime_source_mount": "/home/aaron/code/rusix/linux-wait-owner",
+  "runtime_container_image": "sha256:c02eb3929889b3f0cc035d57a02c844e0c74c71d24fbda1311249faeb8257f63",
+  "scope": "Kernel-only cache, not wait-owner evidence. No guest fixtures, VM logs, prior success markers or host build outputs copied; current source gates determine runtime inventory."
+}

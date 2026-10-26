@@ -1,0 +1,12 @@
+{
+  "name": "count_2_max_129",
+  "rd_nr": 2,
+  "rd_size": 4096,
+  "max_part": 256,
+  "requested_max_part": 129,
+  "options": [
+    "brd.rd_nr=2",
+    "brd.rd_size=4096",
+    "brd.max_part=129"
+  ]
+}

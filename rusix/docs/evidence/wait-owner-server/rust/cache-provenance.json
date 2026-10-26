@@ -1,0 +1,27 @@
+{
+  "status": "PREPARED_NOT_RUN",
+  "source": "/home/aaron/code/rusix/linux-out/lts-wait-locked-server-rust-001/builds/ci-server",
+  "source_profile": "server",
+  "source_revision": "5234e2809e9bbaf59ac600bd59500b0614bee639",
+  "source_build_evidence": "/home/aaron/code/rusix/linux-out/lts-wait-locked-server-rust-001/logs/ci-server-build.oKeb9C3z",
+  "source_terminal_status": {
+    "logs/ci.exit": "0",
+    "logs/ci-server-build.oKeb9C3z/build.exit": "0",
+    "logs/ci-server-ext4.run/compile.exit": "0",
+    "logs/ci-server-ext4.run/qemu.exit": "0",
+    "logs/ci-server-ext4.run/runner.exit": "0",
+    "logs/ci-server-ext4.run/kernel-build/build.exit": "0"
+  },
+  "source_build_hash_records_sha256": "b2211d60579151ed407bc17ce8924e7123152ea051e45d36b2430dd8cd4ac4f7",
+  "copied_artifact_sha256": {
+    "builds/ci-server/.config": "e8cee23bd5c24281a674ed9b2391c1c717103ddb615c59349cd737939544d928",
+    "builds/ci-server/arch/x86/boot/bzImage": "202bf9f7a93b4778d365264285dad4b3b25dc0d1d4fdd8be38fe46617d560be9",
+    "builds/ci-server/vmlinux": "891a7e9f00556a64750f0088ec60551ac1c8020f54de154d7659892b38102ed3",
+    "builds/ci-server/vmlinux.map": "c38da7cd43d0b57cf798bca692538a7fac3d2cb4b9080879d5df6033f25f6903"
+  },
+  "copy_method": "cp -a --reflink=auto; recorded artifacts verified before and after copy",
+  "destination_profile": "server",
+  "runtime_source_mount": "/home/aaron/code/rusix/linux-wait-owner",
+  "runtime_container_image": "sha256:c02eb3929889b3f0cc035d57a02c844e0c74c71d24fbda1311249faeb8257f63",
+  "scope": "Kernel-only cache, not wait-owner evidence. No guest fixtures, VM logs, prior success markers or host build outputs copied; current source gates determine runtime inventory."
+}

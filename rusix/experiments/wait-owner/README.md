@@ -1,11 +1,16 @@
 # Bit and variable wait-table ownership
 
-Status: implementation and six tests reviewed; ten host gate suites pass.
-Kernel build and runtime verification remain pending. The first C-comparison
-build at `c962147e88f1` was stopped on an objtool warning in a test helper;
-no VM tests ran. [Initial evidence](../../docs/evidence/wait-owner-initial/manifest.json).
-This follows the verified locked-wait slice. The reference remains Linux 6.18.58
-`kernel/sched/wait_bit.c`; no subsystem divergence is declared.
+Verified at `ae62f42b6f585fcbcdcff84e0763412609f36ccd`: C/Rust debug and
+plain pairs each pass 76 combined cases (67 core + nine BRD), then 67 isolated
+core cases. Both ordinary-userspace implementations pass 29 boots each; both
+declared server implementations pass twelve userspace cases each.
+[Debug evidence](../../docs/evidence/wait-owner-debug/manifest.json),
+[plain evidence](../../docs/evidence/wait-owner-plain/manifest.json),
+[ext4/storage evidence](../../docs/evidence/wait-owner-ext4/manifest.json),
+[server evidence](../../docs/evidence/wait-owner-server/manifest.json).
+Final builds and boots have no compiler, objtool or runtime diagnostics.
+The reference remains Linux 6.18.58 `kernel/sched/wait_bit.c`; no subsystem
+divergence is declared.
 
 Rust owns the permanent 256-head table, its shared lockdep key and boot
 initialization, hash lookup, variable-entry construction and bit/variable wake
@@ -39,7 +44,7 @@ no initialized self-linked object may be moved. Padding is not a test contract.
 
 ## Gates and remaining boundaries
 
-Selection must prove all seventeen definitions in the selected object and linked
+Selection checks prove all seventeen definitions in the selected object and linked
 image, retain the eight scheduler sections, and establish table size/alignment,
 permanent writable storage and init-text placement. Lockdep key storage checks
 apply only when lockdep is configured. Pinned Clang builds do not enable GCC
@@ -53,16 +58,19 @@ variable waiters. Six new cases bring the required inventory to 67 core tests
 they do not exclude a spurious wake followed by re-enrollment. Direct callback
 probes separately test key filtering. Worker deadlines, retained task/fixture
 ownership and bounded controller waits contain failures; the VM watchdog remains the last bound on a
-stuck kernel. Debug/plain C/Rust pairs, ordinary userspace and the declared server
-pair must pass before promotion. Record actual results here after execution.
+stuck kernel. The completed matrix above covers debug/plain C/Rust pairs,
+ordinary userspace and the declared server without expanding those race claims.
 
 Raw locks, lockdep, marked-list access, bit atomics, task state/scheduling and
 remaining caller structures still execute C. Removing table ownership from C
 does not remove those dependencies. arm64, PREEMPT_RT, table redesign and broader
 wake-race stress remain separate work.
 
-The warning exposed ordinary panic assertions outside the KUnit macro's scope.
-Helpers now use KUnit assertions, checked arithmetic and fallible indexing.
-Rerun compilation must confirm the diagnostic is gone. Cancellation also exposed
-an EXIT-only status trap recording zero while Docker exited 143; explicit signal
-traps now preserve failure. A local trap probe verified statuses 0, 7, 143 and 130.
+The first C-comparison build at `c962147e88f1` was stopped on an objtool
+warning in a test helper; no VM tests ran. The warning exposed ordinary panic
+assertions outside the KUnit macro's scope. KUnit assertions, checked arithmetic
+and fallible indexing resolved it in the final builds. The interrupted attempt
+remains in the [initial failure archive](../../docs/evidence/wait-owner-initial/manifest.json).
+Cancellation also exposed an EXIT-only status trap recording zero while Docker
+exited 143; explicit signal traps now preserve failure. A local trap probe
+verified statuses 0, 7, 143 and 130.

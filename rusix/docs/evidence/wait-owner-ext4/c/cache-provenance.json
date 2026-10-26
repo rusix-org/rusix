@@ -1,0 +1,43 @@
+{
+  "status": "PREPARED_NOT_RUN",
+  "source": "/home/aaron/code/rusix/linux-out/lts-wait-locked-ext4-c-001/builds/ci-core-ext4-c",
+  "source_profile": "core-ext4-c",
+  "source_revision": "5234e2809e9bbaf59ac600bd59500b0614bee639",
+  "source_build_evidence": "/home/aaron/code/rusix/linux-out/lts-wait-locked-ext4-c-001/logs/ci-core-ext4-c-build.8MNWMWSd",
+  "source_terminal_status": {
+    "logs/ci.exit": "0",
+    "logs/ci-core-ext4-c-build.8MNWMWSd/build.exit": "0",
+    "logs/ci-core-ext4-c-brd.run/compile.exit": "0",
+    "logs/ci-core-ext4-c-brd.run/qemu.exit": "0",
+    "logs/ci-core-ext4-c-brd.run/runner.exit": "0",
+    "logs/ci-core-ext4-c-ext4.run/compile.exit": "0",
+    "logs/ci-core-ext4-c-ext4.run/qemu.exit": "0",
+    "logs/ci-core-ext4-c-ext4.run/runner.exit": "0",
+    "logs/ci-core-ext4-c-brd-parameters.run/compile.exit": "0",
+    "logs/ci-core-ext4-c-brd-parameters.run/runner.exit": "0",
+    "logs/ci-core-ext4-c-brd-partitions.run/compile.exit": "0",
+    "logs/ci-core-ext4-c-brd-partitions.run/runner.exit": "0",
+    "logs/ci-core-ext4-c-brd-partitions.run/kernel-build/build.exit": "0",
+    "logs/ci-core-ext4-c-brd-partitions.run/primary_partition/qemu.exit": "0",
+    "logs/ci-core-ext4-c-brd-parameters.run/kernel-build/build.exit": "0",
+    "logs/ci-core-ext4-c-brd-parameters.run/defaults/qemu.exit": "0",
+    "logs/ci-core-ext4-c-brd-parameters.run/on_demand/qemu.exit": "0",
+    "logs/ci-core-ext4-c-brd-parameters.run/spacing_roundup/qemu.exit": "0",
+    "logs/ci-core-ext4-c-brd-parameters.run/spacing_clamp/qemu.exit": "0",
+    "logs/ci-core-ext4-c-brd-parameters.run/legacy_octal/qemu.exit": "0",
+    "logs/ci-core-ext4-c-brd-parameters.run/spacing_high_positive/qemu.exit": "0",
+    "logs/ci-core-ext4-c-ext4.run/kernel-build/build.exit": "0",
+    "logs/ci-core-ext4-c-brd.run/kernel-build/build.exit": "0"
+  },
+  "source_build_hash_records_sha256": "dc38f97e12b64a236c43b84dc4f0e1d3a0456ae746ae05b71c054a9d0e368266",
+  "copied_artifact_sha256": {
+    "builds/ci-core-ext4-c/.config": "647e551e9a2e9dd70e26b4066607e45274e786de274727a9fa8e3a33ac61d220",
+    "builds/ci-core-ext4-c/arch/x86/boot/bzImage": "7c7ee8db7c0e6445b0f43d7a01e636c53fb6efb0bc06384b5284e705a8daf9a4",
+    "builds/ci-core-ext4-c/vmlinux": "ae90e01fe008d648dd39f345c36741a3d11735de4723db53d0a83dbf21bc7c83"
+  },
+  "copy_method": "cp -a --reflink=auto; recorded artifacts verified before and after copy",
+  "destination_profile": "core-ext4-c",
+  "runtime_source_mount": "/home/aaron/code/rusix/linux-wait-owner",
+  "runtime_container_image": "sha256:c02eb3929889b3f0cc035d57a02c844e0c74c71d24fbda1311249faeb8257f63",
+  "scope": "Kernel-only cache, not wait-owner evidence. No guest fixtures, VM logs, prior success markers or host build outputs copied; current source gates determine runtime inventory."
+}

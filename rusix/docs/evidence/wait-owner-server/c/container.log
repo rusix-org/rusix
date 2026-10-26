@@ -1,0 +1,23 @@
+Build evidence: /out/logs/ci-server-c-build.uJkJExMl
+Built /out/builds/ci-server-c/arch/x86/boot/bzImage
+Ext4 brd-rust: six ext4, four wake and two locked cases passed; evidence /out/logs/ci-server-c-ext4.run
+{
+  "total_bytes": 8050737,
+  "bytes": {
+    "c": 5753409,
+    "rust": 145115,
+    "assembly": 45104,
+    "generated": 28,
+    "unknown": 0,
+    "padding_or_linker_script": 2107081
+  },
+  "percent": {
+    "c": 71.464376,
+    "rust": 1.802506,
+    "assembly": 0.560247,
+    "generated": 0.000348,
+    "unknown": 0.0,
+    "padding_or_linker_script": 26.172523
+  }
+}
+Wrote /out/logs/languages.json

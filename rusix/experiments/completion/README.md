@@ -2,7 +2,14 @@
 
 Linux 6.18.58 (`2926d88bb7fc4608fd942453d929c39e4e5ec006`) is the behavior
 reference. All fourteen completion.c entry points and all ten swait.c entry points
-have opt-in Rust implementations. Debug verification at `61882366fe7e` and
+have opt-in Rust implementations. The latest shared-core verification at
+`ae62f42b6f585fcbcdcff84e0763412609f36ccd` passes 67 isolated core and 76
+combined cases on both C/Rust debug and plain kernels. The
+[wait-table ownership record](../wait-owner/README.md) links the full matrix,
+including ordinary-userspace and server verification, and records remaining
+primitive dependencies.
+
+The earlier completion/swait milestone's debug verification at `61882366fe7e` and
 nondebug verification at `9bba720b206b` each pass 30 core cases plus nine BRD
 cases, then 30 isolated core cases, on both C/Rust kernels. The only source
 change between them corrects the plain-profile DEBUG_KERNEL menu request;
@@ -78,9 +85,10 @@ and subsequent synchronized publication, not merely an address to a live queue.
 
 The completion/swait portion has five contract, eight layout,
 four wait, four signal and nine swait cases. Eighteen
-[generic wait cases](../wait/README.md), including lifecycle and WOKEN
-workers, plus nine [bit-wait cases](../wait-bit/README.md), bring the strict
-`rusix_completion_*` inventory to 57:
+[generic wait cases](../wait/README.md), including lifecycle and WOKEN workers,
+nine [bit-wait cases](../wait-bit/README.md), four locked-wait cases and six
+[wait-table ownership cases](../wait-owner/README.md) bring the strict
+`rusix_completion_*` inventory to 67:
 
 - Counter/token/saturation/broadcast behavior, layout and pinned C-visible storage.
 - All blocking entry points on presignals/broadcast; timed zero/positive exits.
@@ -122,8 +130,10 @@ C still executes inline completion initialization/reset, raw-lock and lockdep
 macros, list/state/LKMM adapters, task wakeup, scheduler/timer/signal primitives
 and generic consumer macros. Generic wait initialization/enrollment/removal and wake traversal now have
 verified Rust replacements; the [wake record](../wait/README.md) owns their
-callback-lifetime and mixed-flag-access contracts. Prepare/finish and callback policy, then
-primitive ownership follow. Preserve upstream tests, including `test-ww_mutex`,
+callback-lifetime and mixed-flag-access contracts. Prepare/finish, callback and
+bit-wait policy, and permanent wait-table ownership also have verified Rust
+implementations; the linked migration records define their boundaries. Primitive
+ownership remains unfinished. Preserve upstream tests, including `test-ww_mutex`,
 and the declared configuration bounds.
 
 `model.rs` remains a host-only standard-library ownership model: five tests cover

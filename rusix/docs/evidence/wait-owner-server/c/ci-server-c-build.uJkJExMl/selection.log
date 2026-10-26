@@ -1,0 +1,8 @@
+implementation=brd-rust
+/out/builds/ci-server-c/drivers/block/brd_rust.o
+ffffffff815b3c00 T <brd_rust::Device as kernel::block::bio_disk::Operations>::submit
+ffffffff815b3bf0 T __pfx__RNvXs2_Cs2gwu2fDreIg_8brd_rustNtB5_6DeviceNtNtNtCsb5MLIFMWygY_6kernel5block8bio_disk10Operations6submit
+3f30a7b11b6514c3448310d8fae75e3c094257ce31e24d8629535bb8e94cf1b1  /src/drivers/block/brd_rust.rs
+cae39a89754ba8eae43b5e952152a105e00d10116052a0a8facfd571ec2d7c0e  /src/drivers/block/brd_rust/store.rs
+618384cf3fd8619d14aad61f2a27d36fe052a49e2aaab9a6e341d7930c544966  /out/builds/ci-server-c/drivers/block/brd_rust.o
+72bd668ed63d62dcd00e7c0b86744f66624500c47d492b73841f6e001fe09bac  /out/builds/ci-server-c/drivers/block/brd_rust/params.o

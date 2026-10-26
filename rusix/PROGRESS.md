@@ -2,7 +2,7 @@
 
 **Rust BRD passes x86_64 block and ordinary-userspace ext4 contracts;
 all fourteen completion entry points and all ten swait.c entry points have verified
-opt-in Rust implementations; twenty-three generic wait and ten bit-wait entries now pass parity too.** Most of the kernel remains C. Linux 6.18.58
+opt-in Rust implementations; twenty-three generic wait and seventeen bit-wait entries pass parity, with the shared wait table owned by Rust.** Most of the kernel remains C. Linux 6.18.58
 (`2926d88bb7fc`) is the behavioral baseline. Hosted CI remains disabled;
 verification runs locally. No subsystem divergence point is declared.
 
@@ -13,29 +13,29 @@ target; [Phase 1](docs/PHASE1.md) owns delivery gates.
 | --- | --- |
 | LTS provenance/math | Signed tag verified; all 24 required math cases pass on q35, zero skips. [Math](docs/evidence/math-q35/manifest.json), [provenance](docs/evidence/lts-baseline/manifest.json). |
 | Storage parity | At `9d1c1ca5dd`, C/Rust BRD each pass block6, ext4 userspace6, six parameter variants and partition5. Four identical guest fixtures; configs differ only by BRD selection. [Evidence](docs/evidence/brd-q35/manifest.json). |
-| Core and shared queue policy | At `5234e2809e9b`, C/Rust debug and plain pairs each pass 70 combined (61 core + nine BRD), then 61 isolated core on q35/KVM SMP2. All 14 completion, 10 swait, 23 generic wait and 10 bit-wait definitions link exclusively. Zero skips or compiler/objtool diagnostics. [Evidence](docs/evidence/wait-locked/manifest.json). |
-| Ordinary-userspace integration | Same source, Rust BRD in both; only core selection differs. Both pass nine block/ext4/parameter/partition boots, including six filesystem, four poll/epoll and two blocking eventfd/timerfd read cases. Identical fixtures; no compiler diagnostics. [Evidence](docs/evidence/wait-locked-ext4/manifest.json). |
+| Core and wait-table ownership | At `ae62f42b6f58`, C/Rust debug and plain pairs each pass 76 combined (67 core + nine BRD), then 67 isolated core on q35/KVM SMP2. All 14 completion, 10 swait, 23 generic wait and 17 bit-wait definitions link exclusively. Table placement/alignment and init lifetime are checked. Zero skips or compiler/objtool diagnostics. [Debug](docs/evidence/wait-owner-debug/manifest.json), [plain](docs/evidence/wait-owner-plain/manifest.json). |
+| Ordinary-userspace integration | Same source, Rust BRD in both; only core selection differs. Both pass 29 boots: 26 approved parameter variants, block, ext4/consumers and partitions. The ext4 run covers six filesystem, four poll/epoll and two blocking eventfd/timerfd read cases. Identical fixtures; no compiler diagnostics. [Evidence](docs/evidence/wait-owner-ext4/manifest.json). |
 
 Rust implements BRD/store and bio/disk interfaces, conditional xarray insertion,
 NOIO scope, completion/swait policy and generic wait initialization, enrollment,
 prepare/finish, removal, callback traversal, WOKEN handshake, locked interruptible
-iterations and bit-wait policy.
+iterations, bit-wait policy and the permanent bit/variable wait table.
 The [core migration record](experiments/completion/README.md) owns storage,
 locking/lifetime contracts, test inventory and remaining C boundaries. Selection
 remains default-off and builtin-only; known incompatible counter-access drivers
 are excluded.
 
-The declared x86_64 server selects the verified Rust core. At `5234e2809e9b`,
+The declared x86_64 server selects the verified Rust core. At `ae62f42b6f58`,
 it and the derived C-core comparison each pass six ext4, four poll/epoll and two
 blocking eventfd/timerfd read cases on q35/KVM SMP2. Resolved configs differ only
 by core selection; fixtures, container and VM parameters match. Both complete
-without compiler/objtool diagnostics. [Evidence](docs/evidence/wait-locked-server/manifest.json).
+without compiler/objtool diagnostics. [Evidence](docs/evidence/wait-owner-server/manifest.json).
 
-Same-build executable contributions for the Rust-core server: C **5,747,110
-bytes**, Rust **152,114**, assembly **45,104**, generated **28**, linker/padding
-**2,107,085**, unknown **0**; total **8,051,441**. Its C-core comparison contains
-C **5,753,409** and Rust **145,083**, total **8,050,673**, also zero unknown bytes.
-C decreases by 6,299 bytes and Rust increases by 7,031. This includes inherited
+Same-build executable contributions for the Rust-core server: C **5,746,278
+bytes**, Rust **152,850**, assembly **45,104**, generated **28**, linker/padding
+**2,107,053**, unknown **0**; total **8,051,313**. Its C-core comparison contains
+C **5,753,409** and Rust **145,115**, total **8,050,737**, also zero unknown bytes.
+C decreases by 7,131 bytes and Rust increases by 7,735. This includes inherited
 Rust support; linked bytes are not a completion percentage. Networking is
 configured but not runtime-tested here; ext4 runs on BRD, not virtio block.
 [Local commands](ci/README.md) reproduce the target and derived comparison;
@@ -57,8 +57,10 @@ The imported patch is an upstream proposal; acceptance/merge is unverified.
 Pristine Linux C and historical evidence remain intact. Parameter storage and
 metadata remain C-owned, and the lock adapters still execute C in this checkpoint.
 
-Next transfer bit-wait table ownership and BRD parameter metadata into Rust as
-separate changes; their development branches have no verified runtime result yet.
+The [wait-table ownership record](experiments/wait-owner/README.md) covers the
+new storage boundary and six collision/constructor tests. Next verify BRD
+parameter metadata ownership, then RCU list and sync policy. Those development
+branches have no kernel/runtime verification yet.
 The [bit-wait record](experiments/wait-bit/README.md) and
 [generic wait record](experiments/wait/README.md) own their contracts.
 Standalone untimed bit_wait/io scheduling, stop/park, repeated latch races,
@@ -79,13 +81,8 @@ Raw logs/binaries remain in `linux-out/<run>`; manifests record source/config/to
 identities and hashes. [Verification index](docs/VERIFICATION.md) preserves earlier
 milestones without attributing their results to newer source.
 
-Bit/variable wait-table ownership and six new tests are implemented and reviewed
-on `rusix/wait-bit-owner`; ten host gate suites pass.
-The [ownership contract](experiments/wait-owner/README.md) records the intended
-storage and ordering boundaries. Kernel builds and runtime results remain pending.
-
-The first ownership build at `c962147e88f1` was stopped on a test-helper
-objtool warning before VM execution. [Evidence](docs/evidence/wait-owner-initial/manifest.json)
-retains the diagnostic and interrupted status. KUnit-scoped assertions and
-checked arithmetic replace those panic paths; rerun verification is pending.
-CI signal traps now preserve cancellation failure in the status file.
+The first ownership build at `c962147e88f1` was stopped before VM execution on a
+test-helper objtool warning. [Evidence](docs/evidence/wait-owner-initial/manifest.json)
+retains that failure. KUnit-scoped assertions and checked arithmetic removed the
+warning in all eight completed builds at `ae62f42b6f58`. Signal traps now preserve
+cancellation failure; a local probe verified exit statuses 0, 7, 143 and 130.

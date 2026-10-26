@@ -1,0 +1,50 @@
+implementation=wait-bit-c
+/out/builds/ci-completion-c/kernel/sched/build_utility.o
+/out/builds/ci-completion-c/kernel/sched/build_utility.o
+0000000000003840 T __var_wake_key
+0000000000003420 T wake_bit_function
+0000000000000bd0 T __wait_on_bit
+0000000000000de0 T __wait_on_bit_lock
+0000000000001000 T bit_wait
+0000000000001050 T bit_wait_io
+00000000000010a0 T bit_wait_timeout
+0000000000000cb0 T out_of_line_wait_on_bit
+0000000000000d40 T out_of_line_wait_on_bit_timeout
+0000000000000f70 T out_of_line_wait_on_bit_lock
+0000000000000400 T wait_bit_init
+00000000000033f0 T bit_waitqueue
+0000000000003810 T __var_waitqueue
+0000000000003730 T __wake_up_bit
+0000000000003790 T wake_up_bit
+0000000000003860 T init_wait_var_entry
+0000000000003910 T wake_up_var
+/out/builds/ci-completion-c/vmlinux
+ffffffff812a9c50 T __var_wake_key
+ffffffff812a9830 T wake_bit_function
+ffffffff815aaca0 T __wait_on_bit
+ffffffff815aaeb0 T __wait_on_bit_lock
+ffffffff815ab0d0 T bit_wait
+ffffffff815ab120 T bit_wait_io
+ffffffff815ab170 T bit_wait_timeout
+ffffffff815aad80 T out_of_line_wait_on_bit
+ffffffff815aae10 T out_of_line_wait_on_bit_timeout
+ffffffff815ab040 T out_of_line_wait_on_bit_lock
+ffffffff81a8fbe0 T wait_bit_init
+ffffffff812a9800 T bit_waitqueue
+ffffffff812a9c20 T __var_waitqueue
+ffffffff812a9b40 T __wake_up_bit
+ffffffff812a9ba0 T wake_up_bit
+ffffffff812a9c70 T init_wait_var_entry
+ffffffff812a9d20 T wake_up_var
+__wait_on_bit object=.sched.text address=ffffffff815aaca0 sched-range=[ffffffff815a9380,ffffffff815b3a9a)
+__wait_on_bit_lock object=.sched.text address=ffffffff815aaeb0 sched-range=[ffffffff815a9380,ffffffff815b3a9a)
+bit_wait object=.sched.text address=ffffffff815ab0d0 sched-range=[ffffffff815a9380,ffffffff815b3a9a)
+bit_wait_io object=.sched.text address=ffffffff815ab120 sched-range=[ffffffff815a9380,ffffffff815b3a9a)
+bit_wait_timeout object=.sched.text address=ffffffff815ab170 sched-range=[ffffffff815a9380,ffffffff815b3a9a)
+out_of_line_wait_on_bit object=.sched.text address=ffffffff815aad80 sched-range=[ffffffff815a9380,ffffffff815b3a9a)
+out_of_line_wait_on_bit_timeout object=.sched.text address=ffffffff815aae10 sched-range=[ffffffff815a9380,ffffffff815b3a9a)
+out_of_line_wait_on_bit_lock object=.sched.text address=ffffffff815ab040 sched-range=[ffffffff815a9380,ffffffff815b3a9a)
+/out/builds/ci-completion-c/kernel/sched/build_utility.o: table=bit_wait_table section=.data..cacheline_aligned address=0 size=20480 alignment=64 head-size=80; init=400 section=.init.text
+/out/builds/ci-completion-c/vmlinux: table=bit_wait_table section=.data address=ffffffff81807180 size=20480 alignment=64 head-size=80; init=ffffffff81a8fbe0 section=.init.text
+a6f8e9df1d28cbd396a2e844350cb7d8f1f6294f08989c3077d71e5bc753fbd9  /src/kernel/sched/wait_bit.c
+4762ed8d14e461f60f6eda8e499c3a1c829de46f92f41d6ae44b3f26e6a7f256  /out/builds/ci-completion-c/kernel/sched/build_utility.o

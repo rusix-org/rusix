@@ -52,8 +52,10 @@ current test inventory, evidence and remaining dependencies. The
 prepare/finish and wake-callback policy; the [bit-wait record](../experiments/wait-bit/README.md)
 covers bit acquisition and stack-waiter ownership. The
 [locked-wait record](../experiments/wait-locked/README.md) covers the two
-interruptible iterations and blocking consumers. Selection remains
+interruptible iterations and blocking consumers. The
+[wait-table ownership record](../experiments/wait-owner/README.md) covers the
+Rust-owned permanent table, initialization and bit/variable wake dispatch. Selection remains
 default-off in Kconfig and enabled by the declared x86_64 server target, with
-[matched target evidence](evidence/wait-locked-server/manifest.json). No subsystem
+[matched target evidence](evidence/wait-owner-server/manifest.json). No subsystem
 divergence point is declared. GCD/LCM remain
 deferred; [the roadmap](ROADMAP.md) prioritizes this core boundary after BRD.

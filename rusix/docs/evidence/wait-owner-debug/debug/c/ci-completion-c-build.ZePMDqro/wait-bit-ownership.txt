@@ -1,0 +1,2 @@
+/out/builds/ci-completion-c/kernel/sched/build_utility.o: table=bit_wait_table section=.data..cacheline_aligned address=0 size=20480 alignment=64 head-size=80; init=400 section=.init.text
+/out/builds/ci-completion-c/vmlinux: table=bit_wait_table section=.data address=ffffffff81807180 size=20480 alignment=64 head-size=80; init=ffffffff81a8fbe0 section=.init.text

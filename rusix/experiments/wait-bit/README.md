@@ -1,6 +1,12 @@
 # Bit-wait migration
 
-Ten Linux 6.18.58 wait_bit.c definitions pass matched verification at
+All seventeen Linux 6.18.58 wait_bit.c definitions now have verified Rust
+implementations at `ae62f42b6f585fcbcdcff84e0763412609f36ccd`, including the
+permanent wait table and variable-wait dispatch. The
+[ownership record](../wait-owner/README.md) owns the new storage contract and
+completed debug/plain, ordinary-userspace and server matrix.
+
+The initial ten-function policy slice passed matched verification at
 `4e487a43f0a9`. C/Rust debug and plain pairs each pass 66 combined cases
 (57 core + nine BRD), then 57 isolated core; the same source passes nine storage/
 userspace boots per implementation with identical fixtures.
@@ -60,9 +66,10 @@ through return. Acquisition and owner-hold phases each have a finite deadline;
 their budgets add. Controller success deadlines prevent natural expiry from
 imitating handoff. External VM watchdogs detect broken kernel operations.
 
-Hash table/selection/initialization, wake dispatch, variable-entry construction,
-bit-operation/marked-jiffies adapters, scheduler and I/O accounting remain C.
-Removing adapters requires reviewed Rust primitives or ownership eliminating
+Hash table storage/selection/initialization, wake dispatch and variable-entry
+construction moved to Rust in the subsequent [ownership slice](../wait-owner/README.md).
+Bit-operation/marked-jiffies adapters, raw locking, scheduler and I/O accounting
+remain C. Removing adapters requires reviewed Rust primitives or ownership eliminating
 mixed access. Untimed action scheduling, broad signal/deadline races, PREEMPT_RT,
 arm64, modules and performance require separate evidence. Existing ext4 calls
 these interfaces through buffer/JBD2 paths; source reachability alone does not
