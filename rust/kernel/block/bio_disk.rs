@@ -58,7 +58,7 @@ pub struct DiskConfig {
     /// Maximum hardware discard sectors (zero disables discard).
     pub max_discard_sectors: u32,
     /// Maximum discard segments.
-    pub max_discard_segments: u32,
+    pub max_discard_segments: u16,
     /// Submissions always finish in their submitting context.
     pub synchronous: bool,
     /// Driver supports nonblocking submission.
