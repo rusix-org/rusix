@@ -7,5 +7,5 @@ fi
 test -d "$root/linux/.git" || { echo 'Linux checkout is missing' >&2; exit 1; }
 mkdir -p "$root/linux/rusix/docs" "$root/linux/rusix/scripts"
 cp "$root/AGENTS.md" "$root/PROGRESS.md" "$root/linux/rusix/"
-cp "$root/docs/ROADMAP.md" "$root/linux/rusix/docs/"
-cp "$root/scripts/sync-project-docs.sh" "$root/linux/rusix/scripts/"
+cp "$root/docs/"*.md "$root/linux/rusix/docs/"
+cp "$root/scripts/"*.sh "$root/linux/rusix/scripts/"

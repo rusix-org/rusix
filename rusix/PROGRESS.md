@@ -48,6 +48,17 @@ kernel build and isolated VM boot. See `docs/ROADMAP.md` for the full scope.
   https://docs.kernel.org/rust/quick-start.html . Source checkout and its own
   requirements remain authoritative for the selected revision.
 - No kernel replacement, kernel build, or VM boot verified yet.
+- Tool installation authorized by Aaron. `rustup component add rust-src`
+  completed with exit 0 for the existing stable toolchain.
+- `sudo -n pacman -S --needed --noconfirm rust-bindgen lld bc qemu-system-x86`
+  failed with `sudo: a password is required`. Asked Aaron to run the package
+  command locally; system packages remain pending, not installed.
+- `/dev/kvm` absent in this environment; plan to use QEMU TCG if still absent
+  at VM startup. LLVM utilities, GCC, Python, Perl and pkg-config are present.
+- Initial governance documents committed in `linux/` as `68709bf59`.
+- Both shell scripts pass `bash -n`. `bash scripts/check-toolchain.sh` exits 1,
+  correctly reporting the four missing system tools and confirming Rust source
+  is now present. Its upstream Rust check still fails on absent bindgen.
 
 ## Next executable actions
 
@@ -67,3 +78,7 @@ upstream SHA. Aaron requested strong project instructions and an evolving progre
 document; created both and a full-scope roadmap. Bootstrap is in progress; no
 rewrite success is claimed. The first Rust availability check identified missing
 bindgen; no experimental code has been loaded onto the host.
+
+Added a read-only toolchain preflight and installation notes. Installed rust-src;
+remaining system tools require an interactive sudo invocation by Aaron. This is
+a dependency-installation blocker, not evidence that kernel migration is complete.
