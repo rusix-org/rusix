@@ -1,0 +1,3 @@
+Build evidence: /out/logs/ci-mm-construction-rust-build.PqcbHVog
+Built /out/builds/ci-mm-construction-rust/arch/x86/boot/bzImage
+MM construction rust: five cases passed; evidence /out/logs/ci-mm-construction-rust-mm-construction.run

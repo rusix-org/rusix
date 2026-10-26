@@ -1,0 +1,1 @@
+bash /src/rusix/scripts/with-local-tools.sh python3 /src/rusix/scripts/verify-mm-construction.py objects --profile mm-construction-rust --source /src --build /out/builds/ci-mm-construction-rust --evidence /out/logs/ci-mm-construction-rust-mm-construction.run/kernel-build

@@ -1,0 +1,4 @@
+/out/builds/ci-mm-construction-c/kernel/sched/wait_bit_rust.o: table=_RNvCsh9aDLyLKkIG_13wait_bit_rust14BIT_WAIT_TABLE section=.data..cacheline_aligned address=0 size=20480 alignment=64 head-size=80; init=10 section=.init.text
+/out/builds/ci-mm-construction-c/kernel/sched/wait_bit_rust.o: key=_RNvCsh9aDLyLKkIG_13wait_bit_rust14BIT_WAIT_CLASS section=.bss address=0 size=16
+/out/builds/ci-mm-construction-c/vmlinux: table=_RNvCsh9aDLyLKkIG_13wait_bit_rust14BIT_WAIT_TABLE section=.data address=ffffffff81e07180 size=20480 alignment=64 head-size=80; init=ffffffff8218dcc0 section=.init.text
+/out/builds/ci-mm-construction-c/vmlinux: key=_RNvCsh9aDLyLKkIG_13wait_bit_rust14BIT_WAIT_CLASS section=.bss address=ffffffff822eeac0 size=16

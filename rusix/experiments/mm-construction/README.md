@@ -1,6 +1,8 @@
 # Address-space construction transaction
 
-Status: source candidate, **not compiled or runtime-verified**. Reference:
+Status: paired x86_64 kernels passed five ordinary userspace cases at
+`00c4ef1c190349a671a2a72ce4736c6bfb58210e`. Allocation-failure and wider integration
+coverage remain pending. [Evidence](../../docs/evidence/mm-construction/manifest.json). Reference:
 Linux 6.18.58 `kernel/fork.c:mm_alloc/mm_init` at
 `2926d88bb7fc4608fd942453d929c39e4e5ec006`. No subsystem divergence is declared.
 The default-off `RUSIX_MM_CONSTRUCTION_RUST` selects the complete Rust allocation,
@@ -82,13 +84,16 @@ then dup_mmap and full copy_process/exec/destruction transactions. This slice
 reduces executing construction policy; it does not establish Rust mm storage
 ownership or complete the memory subsystem.
 
-## Evidence still required
+## Verification and remaining coverage
 
-Prove linked allocation/initializer selection and literal preserved C source;
-run matched kernels through boot/text-poking, fresh exec, repeated fork/private
-mapping changes and reap, mmap/munmap, CLONE_VM contrast and private futex use.
+Actual preprocessing, archive payloads and linked symbols prove selection, with
+the original C restored exactly. Both kernels passed anonymous COW, child mapping
+lifetime after parent unmap, 32 fork/exec/reap iterations and both MDWE inheritance
+cases with matching fixtures. No compiler or objtool diagnostics were reported.
+CLONE_VM contrast, explicit private futex consumers and broader ordinary
+ext4/server integration still require execution.
 Fault cases must attribute actual mm_struct, PGD and RSS per-CPU allocation
 failures to built callsites, preserve parent state and succeed on retry. A page
 fault sweep need not reach a cached per-CPU allocator; ENOMEM alone is not stage
 proof. Optional lifecycle profiles and synthetic error branches require separate
-evidence. No compilation, guest or failure-path result is reported here.
+evidence. The five successful consumer cases do not prove allocation-failure paths.

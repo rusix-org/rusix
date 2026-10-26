@@ -1,6 +1,7 @@
 # MM construction guest consumers
 
-Source candidate only: twelve host gate tests pass; no guest compilation or VM execution yet. These five
+C and Rust kernels at `00c4ef1c1903` each passed these five cases with matching
+static fixtures and pinned tools. [Evidence](../../docs/evidence/mm-construction/manifest.json). These five
 ordinary-userspace cases exercise successful constructor paths; they do not
 provide allocation-failure coverage or establish ownership of live address spaces.
 

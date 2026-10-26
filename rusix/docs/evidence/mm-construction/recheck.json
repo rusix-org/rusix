@@ -1,0 +1,23 @@
+{
+  "command": [
+    "/usr/bin/python3",
+    "-B",
+    "/home/aaron/code/rusix/linux-out/mm-construction-verification-draft/check-results.py"
+  ],
+  "status": 0,
+  "result": {
+    "status": "PASS",
+    "source": "00c4ef1c190349a671a2a72ce4736c6bfb58210e",
+    "different_settings": [
+      "CONFIG_RUSIX_MM_CONSTRUCTION_RUST"
+    ],
+    "cases": [
+      "anonymous_private_fork_cow",
+      "child_mapping_survives_parent_unmap",
+      "repeated_fork_exec_reap",
+      "mdwe_inherited_fork_exec",
+      "mdwe_no_inherit_fork_exec"
+    ],
+    "scope": "Five ordinary address-space/COW/exec/MDWE consumers; no allocation-failure coverage"
+  }
+}

@@ -1,0 +1,13 @@
+{
+  "status": "PASS",
+  "cases": [
+    "anonymous_private_fork_cow",
+    "child_mapping_survives_parent_unmap",
+    "repeated_fork_exec_reap",
+    "mdwe_inherited_fork_exec",
+    "mdwe_no_inherit_fork_exec"
+  ],
+  "qemu_exit": 0,
+  "implementation": "rust",
+  "source_revision": "00c4ef1c190349a671a2a72ce4736c6bfb58210e"
+}

@@ -1,0 +1,18 @@
+{
+  "rusix/scripts/preprocess-mm-construction.py": "b7d27d065bdd044c93aedbfd614fc985d35bde710af8af5affca880f3dc894d3",
+  "rusix/scripts/preprocess-task-construction.py": "3f6f3ba4cf0da1c0fff2a4c34c3a1e1106fa480e92ae2e73d500131b92612a90",
+  "rusix/scripts/rusix_paths.py": "15158c8c33e303341ef523c8317da73fb3f008908b8bfa53611d13bc87c94cae",
+  "rusix/scripts/saved_clang_command.py": "764e866c68a8943c3d3f680065c0c2d0a112f33f4be6b0828a21410a9823d37d",
+  "rusix/scripts/server_target.py": "357f1680a766deee25a75f56470f1a6223a9429326efd2089efc7ac5ee484eed",
+  "rusix/scripts/test-brd-ext4-vm.py": "88763b1373acc90f26859bc84b570291ee7fef97482b79107e1078cbe6e97947",
+  "rusix/scripts/test-brd-vm.py": "3487a725c1b62a1d4546da84120717a94f86a74fb475577a7582f3e47b53530d",
+  "rusix/scripts/test-mm-construction-vm.py": "f7c518cf2e7ec65119f0026bdb216bf58233cb0e9cd86c47ef113ca75f478096",
+  "rusix/scripts/test-task-construction-vm.py": "edf7fe487d6996d143afc6e845a6fe8d4d09165f45d270dfb2e49edb653a04f1",
+  "rusix/scripts/verify-mm-construction.py": "1d1b912b20b66049f2f87cdbfb4076692c2a7bda3d6e85b23a88363c0438ab96",
+  "rusix/scripts/verify-task-construction.py": "d0e6ed1c8e41a2de44da68328f660210da9ce88771aed86a505b3e246c3eb0f8",
+  "rusix/scripts/with-local-tools.sh": "b47051d02fd2eb024dedc91f4a0c2cf071529d018a8ae246678bbb568069ffd0",
+  "rusix/tests/brd-ext4/ext4-packages.lock": "30a6ea7af0307248c70192e2ec793e655084c4f65a788a5d6c367412ab9e39e7",
+  "rusix/tests/mm-construction/README.md": "415bd4e641e0821377f97123a2728f2d7c3347479ff703efc1c7071509f08f35",
+  "rusix/tests/mm-construction/init.rs": "c30d708fc2ea67c8cb1ef83365fae2452b4d6851c862f383e47c8e34a88e61f8",
+  "rusix/tests/mm-construction/probe.c": "d127b0772602b4f8ea42e3dfb08376dfacc75472f73baf28e8f21d80608f1381"
+}

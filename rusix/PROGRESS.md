@@ -128,8 +128,8 @@ on both), strict source/preprocessor/linked-object selection gates and five
 userspace cases covering COW, parent unmap, repeated exec and MDWE inheritance.
 Independent fixture review and 40 host gate cases pass; fixture sources are
 recorded before compilation and checked again afterward. Local input hashes
-and logs are in `linux-out/mm-construction-host-001`. The MM kernel has not been compiled or booted; guest compilation is recorded below. Actual linked selection,
-paired VM behavior and attributable allocation failures remain unverified. Early boot and
+and logs are in `linux-out/mm-construction-host-001`. Initial source-only checks preceded the paired kernel result recorded below.
+Attributable allocation failures remain unverified. Early boot and
 PGD/per-CPU counter observers prohibit exclusive whole-mm references.
 [Ownership contract and remaining C](experiments/mm-construction/README.md).
 
@@ -163,3 +163,19 @@ after review of its typed aggregate pointers and `c_int`/`c_ulong` values, inclu
 four declarations carrying `task_struct` pointers. This is an audited consequence
 of the observed task diagnostic, not a claim of MM compilation. MM release's
 extern block is unchanged; no blanket suppression was added.
+
+### MM construction: paired ordinary userspace verified
+
+At `00c4ef1c190349a671a2a72ce4736c6bfb58210e`, both C and Rust kernels built
+without compiler/objtool diagnostics and passed all five exact cases: anonymous
+private COW, child mapping after parent unmap, 32 fork/exec/reap iterations, and
+MDWE inheritance with and without NO_INHERIT. Both retain Rust task construction.
+Actual preprocessing, archive bytes and linked definitions prove MM selection;
+configs differ only by that selector, with identical static fixtures and pinned
+tools/image. Session 15626 and every build/VM/postcheck ended zero.
+
+The [307-record archive](docs/evidence/mm-construction/manifest.json) and 25 raw
+artifact hashes passed root and independent rechecks. This checkpoint records
+that tested source, not runtime coverage of later documentation commits.
+Attributable allocation failures, broader consumers, optional lifecycles and
+arm64 remain pending; the candidate is not promoted to main.
