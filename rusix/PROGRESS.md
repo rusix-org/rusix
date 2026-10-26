@@ -137,5 +137,19 @@ Pinned fixture compile check at `a2d0eef199fa` retained a failure in
 ELF, then Rust 1.85 rejected the controller with E0282 on its untyped BTreeMap.
 Worker and MM fixtures were not reached. The controller now declares
 `BTreeMap<String, String>` explicitly; formatting and the 13 trace/11 pipeline
-host cases pass. Compiler retry remains pending; the original failed output is
+host cases pass. The successful compiler retry is recorded below; the original failed output is
 unchanged. This is a fixture type fix, not kernel or runtime evidence.
+
+### Constructor verification tooling update
+
+Pinned static fixture compilation passed for all five binaries: fault init,
+controller and worker at `15c7e563fa4b`, and MM init and probe at `0fd31f0fde17`.
+`linux-out/constructor-fixtures-compile-002` records compiler commands, static
+ELF checks and source identities; the earlier compile failure remains in `001`.
+No fixture was executed and this establishes no kernel, VM or fault-calibration
+result. The reviewed archive payload/path fix from `0af2d8b944b2` is inherited
+here, including real thin/regular archive regression tests; it does not change
+constructor policy.
+
+All 52 archive, selection, guest-gate and fault-gate host cases pass.
+Logs and exact inputs: `linux-out/constructor-archive-propagation-host-001/linux-task-faults`.
