@@ -20,13 +20,13 @@ provisional invalid-parameter exception. No subsystem divergence point is declar
 | Ordinary userspace | Pinned Debian shell/coreutils/e2fsprogs perform mkfs, buffered/direct I/O, fsync, rename/unlink, remount verification and offline fsck. [Fixture](tests/brd-ext4/README.md), [tool provenance](docs/evidence/ext4-fixture/manifest.json). |
 | Early core scouting | Five original-C behavior tests and one Rust-owned/C-visible layout test pass in the kernel. [Kernel evidence](docs/evidence/completion-kernel/manifest.json). Five host ownership-model tests also pass. [Experiment](experiments/completion/README.md). |
 
-Last completed LTS x86_64 server measurement at `57820ea1ec`: executable
-C **5,753,137 bytes**, Rust **145,083**, assembly **45,104**, generated **28**,
-linker/padding **2,107,065**, unknown **0**. Raw report:
-[archived measurement](docs/evidence/lts-server-initial/manifest.json). This includes inherited Rust
-infrastructure and is not a completion percentage; it establishes build/link
-composition, not server runtime. The newly enabled legacy block-autoload option
-requires an updated measurement.
+Declared x86_64 server measurement at `7effedcbb1bf`: executable C
+**5,753,281 bytes**, Rust **145,083**, assembly **45,104**, generated **28**,
+linker/padding **2,107,049**, unknown **0**.
+[Full target measurement](docs/evidence/lts-target/manifest.json).
+This includes inherited Rust infrastructure and is not a completion percentage;
+it establishes build/link composition, not server runtime. Rust BRD and legacy
+block-autoload are selected; experimental Rust completion is not.
 
 Latest storage comparison: `9d1c1ca5dd`, local `lts-ext4-c-006` and
 `lts-ext4-rust-006`, nine q35 boots per implementation. Prior configuration,
@@ -41,7 +41,7 @@ compiler/objtool diagnostics. [Paired core evidence](docs/evidence/completion-pa
 Default selection remains off: IRQ-context checks, broader integration and the
 rest of completion/wait-queue/scheduler ownership remain unfinished.
 
-Next: finish the refreshed target measurement and math replay and review Phase 1a gaps before publishing the baseline
+Next: finish the math replay and review Phase 1a gaps before publishing the baseline
 transition. arm64, module lifetime, expanded fault/concurrency stress and
 performance budgets remain Phase 1b.
 See [ADR 0002](docs/adr/0002.md) and [delivery gates](docs/PHASE1.md).
