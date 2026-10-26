@@ -46,6 +46,7 @@ preserves C-visible storage while moving completion policy into Rust.
 The [ownership experiment](../experiments/completion/README.md) owns the contract,
 current test inventory, evidence and remaining dependencies. The
 [generic wait record](../experiments/wait/README.md) covers shared enrollment,
-prepare/finish and wake-callback policy. Selection remains
+prepare/finish and wake-callback policy; the [bit-wait record](../experiments/wait-bit/README.md)
+covers bit acquisition and stack-waiter ownership. Selection remains
 default-off on x86_64; no subsystem divergence point is declared. GCD/LCM remain
 deferred; [the roadmap](ROADMAP.md) prioritizes this core boundary after BRD.

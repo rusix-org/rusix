@@ -1,0 +1,4 @@
+{
+  "source": "/home/aaron/code/rusix/linux-out/lts-wait-bit-debug-c-001/builds/ci-completion-c",
+  "scope": "Kernel-only cache; C001 failed at Rust test compilation, Rust001 was not started. New source reruns both."
+}

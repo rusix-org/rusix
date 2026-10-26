@@ -1,0 +1,10 @@
+/out/builds/ci-completion-rust/kernel/sched/core.o
+/out/builds/ci-completion-rust/kernel/sched/fair.o
+/out/builds/ci-completion-rust/kernel/sched/build_policy.o
+/out/builds/ci-completion-rust/kernel/sched/build_utility.o
+/out/builds/ci-completion-rust/kernel/sched/completion_rust.o
+/out/builds/ci-completion-rust/kernel/sched/swait_rust.o
+/out/builds/ci-completion-rust/kernel/sched/wait_rust.o
+/out/builds/ci-completion-rust/kernel/sched/wait_bit_rust.o
+/out/builds/ci-completion-rust/kernel/sched/wait_test.o
+/out/builds/ci-completion-rust/kernel/sched/wait_bit_test.o

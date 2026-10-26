@@ -1,0 +1,4 @@
+5bb3736c41141fbead0e278ba2560c13aa3dbc888859cb6839ede2541f5673f4  /out/builds/ci-completion-rust/.config
+9b27200a39317a26714871819d7345f5af422c4fe18002270db4395de2e8d60b  /out/builds/ci-completion-rust/arch/x86/boot/bzImage
+0c4e01728dda86e1e7c57fc63576a656b38ff3469d74c0476901503f17f361f9  /out/builds/ci-completion-rust/vmlinux
+ba49a88b3acc55f356b97a3efcda62d7ef871813b5a6e32cd960dd97069ba8da  /out/builds/ci-completion-rust/vmlinux.map

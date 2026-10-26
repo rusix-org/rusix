@@ -1,0 +1,32 @@
+
+/out/builds/ci-core-ext4-rust/kernel/sched/wait_bit_rust.o:	file format elf64-x86-64
+
+SYMBOL TABLE:
+0000000000000000 l    df *ABS*	0000000000000000 wait_bit_rust.c7bb87e3388ee2a4-cgu.0
+00000000000001d0 l     F .sched.text	000000000000015e _RNvCsh9aDLyLKkIG_13wait_bit_rust15with_bit_waiter
+0000000000000000 l    d  .text	0000000000000000 .text
+0000000000000000 l    d  .sched.text	0000000000000000 .sched.text
+0000000000000000         *UND*	0000000000000000 rust_helper_wait_bit_test
+0000000000000000         *UND*	0000000000000000 autoremove_wake_function
+0000000000000000 g     F .sched.text	000000000000007e __wait_on_bit
+0000000000000000         *UND*	0000000000000000 prepare_to_wait
+0000000000000000         *UND*	0000000000000000 rust_helper_wait_bit_test_acquire
+0000000000000000         *UND*	0000000000000000 finish_wait
+0000000000000080 g     F .sched.text	0000000000000091 __wait_on_bit_lock
+0000000000000000         *UND*	0000000000000000 prepare_to_wait_exclusive
+0000000000000000         *UND*	0000000000000000 rust_helper_wait_bit_test_and_set
+0000000000000120 g     F .sched.text	0000000000000027 bit_wait
+0000000000000000         *UND*	0000000000000000 schedule
+0000000000000000         *UND*	0000000000000000 rust_helper_get_current
+0000000000000000         *UND*	0000000000000000 rust_helper_signal_pending_state
+0000000000000150 g     F .sched.text	0000000000000027 bit_wait_io
+0000000000000000         *UND*	0000000000000000 io_schedule
+0000000000000180 g     F .sched.text	000000000000004b bit_wait_timeout
+0000000000000000         *UND*	0000000000000000 rust_helper_wait_bit_jiffies
+0000000000000000         *UND*	0000000000000000 schedule_timeout
+0000000000000000         *UND*	0000000000000000 bit_waitqueue
+0000000000000330 g     F .sched.text	0000000000000012 out_of_line_wait_on_bit
+0000000000000350 g     F .sched.text	0000000000000018 out_of_line_wait_on_bit_timeout
+0000000000000370 g     F .sched.text	0000000000000012 out_of_line_wait_on_bit_lock
+0000000000000000 g     F .text	0000000000000017 __var_wake_key
+0000000000000020 g     F .text	0000000000000056 wake_bit_function

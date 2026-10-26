@@ -36,7 +36,7 @@ does not protect all flag accesses:
 wait_woken modifies WOKEN outside it. Direct Rust ownership or atomic references
 need a separate mixed-access audit. Scheduler wake ordering remains in the C
 scheduler. Raw-spinlock adapters are not substitutes for spinlock_t.
-Default/wait-bit callbacks, entry initialization,
+Default wake callback, entry initialization,
 locked interruptible iteration and __wake_up_pollfree remain C. Real epoll
 POLLFREE can release a waiter's last
 protection before its callback returns; ordinary close tests do not prove this race.
@@ -44,8 +44,8 @@ protection before its callback returns; ordinary close tests do not prove this r
 ## Gates and scope
 
 Nine `rusix_completion_wake`, five lifecycle and four WOKEN cases join the strict
-core inventory (48 total), so both combined and isolated core boots must execute
-them. The synchronous wake fixture
+core inventory, now 57 with nine [bit-wait cases](../wait-bit/README.md), so
+both combined and isolated core boots must execute them. The synchronous wake fixture
 configures inputs and records observations; Rust uses literal expected results.
 It covers mixed exclusivity/order, zero/negative/positive callback returns,
 zero/negative/INT_MIN budgets, pre-callback flag mutation, self-unlink/free, all
@@ -66,8 +66,9 @@ blocked during notification, POLLFREE races, EPOLLEXCLUSIVE fairness, CFI, modul
 other-architecture or exhaustive callback compatibility. Existing ext4 cases stay
 required. Missing/duplicate/reordered/failing/skipped markers reject the whole run.
 
-Next migrate bit-wait and locked interruptible policy, with blocked
-consumers, then retire adapters with their ownership boundaries. Keep unchanged
+The [bit-wait record](../wait-bit/README.md) covers its selected Rust policy.
+Next migrate locked interruptible policy with blocked consumers, then retire
+adapters with their ownership boundaries. Keep unchanged
 upstream tests and explicit configuration limits.
 
 ## Enrollment and constructor contract
@@ -114,9 +115,9 @@ Scheduler-locked samples require expected state, off-CPU and off-runqueue status
 Separately protected membership is not an atomic cross-lock snapshot or proof of
 later wake causation. Polling and worker loops have finite deadlines; scheduler
 lock acquisition itself is not a hard time bound, and the VM has a watchdog.
-Finite tests supplement, rather than prove, the barrier contract. Blocked
-bit-wait acquisition loops, locked interruptible consumers, PREEMPT_RT and
-POLLFREE races remain outside this verification.
+Finite tests supplement, rather than prove, the barrier contract. Locked
+interruptible consumers, PREEMPT_RT and POLLFREE races remain outside this
+verification. Bit-wait coverage is recorded separately.
 
 ## WOKEN handshake
 

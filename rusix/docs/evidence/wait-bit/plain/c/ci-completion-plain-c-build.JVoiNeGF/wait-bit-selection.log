@@ -1,0 +1,34 @@
+implementation=wait-bit-c
+/out/builds/ci-completion-plain-c/kernel/sched/build_utility.o
+/out/builds/ci-completion-plain-c/kernel/sched/build_utility.o
+00000000000033c0 T __var_wake_key
+0000000000002fc0 T wake_bit_function
+0000000000000330 T __wait_on_bit
+0000000000000560 T __wait_on_bit_lock
+0000000000000750 T bit_wait
+00000000000007a0 T bit_wait_io
+00000000000007f0 T bit_wait_timeout
+0000000000000430 T out_of_line_wait_on_bit
+00000000000004c0 T out_of_line_wait_on_bit_timeout
+00000000000006c0 T out_of_line_wait_on_bit_lock
+/out/builds/ci-completion-plain-c/vmlinux
+ffffffff81288130 T __var_wake_key
+ffffffff81287d30 T wake_bit_function
+ffffffff814ecba0 T __wait_on_bit
+ffffffff814ecdd0 T __wait_on_bit_lock
+ffffffff814ecfc0 T bit_wait
+ffffffff814ed010 T bit_wait_io
+ffffffff814ed060 T bit_wait_timeout
+ffffffff814ecca0 T out_of_line_wait_on_bit
+ffffffff814ecd30 T out_of_line_wait_on_bit_timeout
+ffffffff814ecf30 T out_of_line_wait_on_bit_lock
+__wait_on_bit object=.sched.text address=ffffffff814ecba0 sched-range=[ffffffff814ebf10,ffffffff814f1571)
+__wait_on_bit_lock object=.sched.text address=ffffffff814ecdd0 sched-range=[ffffffff814ebf10,ffffffff814f1571)
+bit_wait object=.sched.text address=ffffffff814ecfc0 sched-range=[ffffffff814ebf10,ffffffff814f1571)
+bit_wait_io object=.sched.text address=ffffffff814ed010 sched-range=[ffffffff814ebf10,ffffffff814f1571)
+bit_wait_timeout object=.sched.text address=ffffffff814ed060 sched-range=[ffffffff814ebf10,ffffffff814f1571)
+out_of_line_wait_on_bit object=.sched.text address=ffffffff814ecca0 sched-range=[ffffffff814ebf10,ffffffff814f1571)
+out_of_line_wait_on_bit_timeout object=.sched.text address=ffffffff814ecd30 sched-range=[ffffffff814ebf10,ffffffff814f1571)
+out_of_line_wait_on_bit_lock object=.sched.text address=ffffffff814ecf30 sched-range=[ffffffff814ebf10,ffffffff814f1571)
+a815f92eec5144fc4bb0e53d4db745daafe31be6826d1fa79a2021a9c9d17a00  /src/kernel/sched/wait_bit.c
+fcc4cc29d391b8891645f9e7c170ee4fb9130dc8f7ffcc7a15adaa8d84f49c30  /out/builds/ci-completion-plain-c/kernel/sched/build_utility.o

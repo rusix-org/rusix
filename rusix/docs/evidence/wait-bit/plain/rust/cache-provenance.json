@@ -1,0 +1,4 @@
+{
+  "source": "/home/aaron/code/rusix/linux-out/lts-wait-woken-plain-rust-001/builds/ci-completion-plain-rust",
+  "scope": "Kernel build cache only; all guest fixtures rebuilt from new committed source."
+}

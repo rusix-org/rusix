@@ -1,0 +1,533 @@
+{
+  "status": "PASS",
+  "source": "4e487a43f0a9c849b3cb3a8c67f4a30b60cfd8d0",
+  "scope": "Ten bit-wait,21 generic wait,10 swait plus14 completion entries selected in Rust vs C, Rust BRD in both. Each kernel passes nine ordinary-userspace/block/parameter/partition boots; ext4 boot requires six filesystem and four pipe/poll/epoll/eventfd cases. KUnit disabled.",
+  "comparison": {
+    "c": {
+      "brd": {
+        "status": "PASS",
+        "cases": [
+          "geometry",
+          "sparse_read",
+          "crossing_write",
+          "discard_edges",
+          "concurrent_insert",
+          "accounting"
+        ],
+        "qemu_exit": 0
+      },
+      "ext4": {
+        "status": "PASS",
+        "cases": [
+          "mkfs",
+          "initial_write",
+          "remount_read",
+          "mutate",
+          "final_read",
+          "fsck"
+        ],
+        "wake_cases": [
+          "pipe_poll",
+          "epoll_pipe_eventfd",
+          "epoll_oneshot_rearm",
+          "epoll_del_close"
+        ],
+        "qemu_exit": 0,
+        "implementation": "brd-rust"
+      },
+      "brd-parameters": {
+        "status": "PASS",
+        "variants": [
+          {
+            "status": "PASS",
+            "cases": [
+              "parameters",
+              "initial_devices",
+              "on_demand",
+              "independent_io",
+              "capacity"
+            ],
+            "qemu_exit": 0,
+            "variant": "defaults"
+          },
+          {
+            "status": "PASS",
+            "cases": [
+              "parameters",
+              "initial_devices",
+              "on_demand",
+              "independent_io",
+              "capacity"
+            ],
+            "qemu_exit": 0,
+            "variant": "on_demand"
+          },
+          {
+            "status": "PASS",
+            "cases": [
+              "parameters",
+              "initial_devices",
+              "on_demand",
+              "independent_io",
+              "capacity"
+            ],
+            "qemu_exit": 0,
+            "variant": "spacing_roundup"
+          },
+          {
+            "status": "PASS",
+            "cases": [
+              "parameters",
+              "initial_devices",
+              "on_demand",
+              "independent_io",
+              "capacity"
+            ],
+            "qemu_exit": 0,
+            "variant": "spacing_clamp"
+          },
+          {
+            "status": "PASS",
+            "cases": [
+              "parameters",
+              "initial_devices",
+              "on_demand",
+              "independent_io",
+              "capacity"
+            ],
+            "qemu_exit": 0,
+            "variant": "legacy_octal"
+          },
+          {
+            "status": "PASS",
+            "cases": [
+              "parameters",
+              "major_registered",
+              "initial_devices",
+              "open_enxio",
+              "final_devices"
+            ],
+            "qemu_exit": 0,
+            "variant": "spacing_high_positive"
+          }
+        ]
+      },
+      "brd-partitions": {
+        "status": "PASS",
+        "variants": [
+          {
+            "status": "PASS",
+            "cases": [
+              "discovery",
+              "geometry",
+              "translation",
+              "boundaries",
+              "independent_disk"
+            ],
+            "qemu_exit": 0,
+            "variant": "primary_partition"
+          }
+        ]
+      }
+    },
+    "rust": {
+      "brd": {
+        "status": "PASS",
+        "cases": [
+          "geometry",
+          "sparse_read",
+          "crossing_write",
+          "discard_edges",
+          "concurrent_insert",
+          "accounting"
+        ],
+        "qemu_exit": 0
+      },
+      "ext4": {
+        "status": "PASS",
+        "cases": [
+          "mkfs",
+          "initial_write",
+          "remount_read",
+          "mutate",
+          "final_read",
+          "fsck"
+        ],
+        "wake_cases": [
+          "pipe_poll",
+          "epoll_pipe_eventfd",
+          "epoll_oneshot_rearm",
+          "epoll_del_close"
+        ],
+        "qemu_exit": 0,
+        "implementation": "brd-rust"
+      },
+      "brd-parameters": {
+        "status": "PASS",
+        "variants": [
+          {
+            "status": "PASS",
+            "cases": [
+              "parameters",
+              "initial_devices",
+              "on_demand",
+              "independent_io",
+              "capacity"
+            ],
+            "qemu_exit": 0,
+            "variant": "defaults"
+          },
+          {
+            "status": "PASS",
+            "cases": [
+              "parameters",
+              "initial_devices",
+              "on_demand",
+              "independent_io",
+              "capacity"
+            ],
+            "qemu_exit": 0,
+            "variant": "on_demand"
+          },
+          {
+            "status": "PASS",
+            "cases": [
+              "parameters",
+              "initial_devices",
+              "on_demand",
+              "independent_io",
+              "capacity"
+            ],
+            "qemu_exit": 0,
+            "variant": "spacing_roundup"
+          },
+          {
+            "status": "PASS",
+            "cases": [
+              "parameters",
+              "initial_devices",
+              "on_demand",
+              "independent_io",
+              "capacity"
+            ],
+            "qemu_exit": 0,
+            "variant": "spacing_clamp"
+          },
+          {
+            "status": "PASS",
+            "cases": [
+              "parameters",
+              "initial_devices",
+              "on_demand",
+              "independent_io",
+              "capacity"
+            ],
+            "qemu_exit": 0,
+            "variant": "legacy_octal"
+          },
+          {
+            "status": "PASS",
+            "cases": [
+              "parameters",
+              "major_registered",
+              "initial_devices",
+              "open_enxio",
+              "final_devices"
+            ],
+            "qemu_exit": 0,
+            "variant": "spacing_high_positive"
+          }
+        ]
+      },
+      "brd-partitions": {
+        "status": "PASS",
+        "variants": [
+          {
+            "status": "PASS",
+            "cases": [
+              "discovery",
+              "geometry",
+              "translation",
+              "boundaries",
+              "independent_disk"
+            ],
+            "qemu_exit": 0,
+            "variant": "primary_partition"
+          }
+        ]
+      }
+    }
+  },
+  "identical_fixture_sha256": {
+    "brd": "d66359172ae093fab64a4612c7759cae1252397bee8ff8d061b0280f854c29e2",
+    "ext4": "e82952f93ae532c61fa5298e0ac86f41b7c83504854f8a2d2833dd9cdbafe1e7",
+    "brd-parameters": "e97144cddfebfe87962a2c9610e0462fd2ba50b63b14798116ef98e7f46c6acd",
+    "brd-partitions": "f44124ba7bba3f459baba71721d0a3f53c9df1867acee478b46d539528fb6c0a"
+  },
+  "config_difference": "Only CONFIG_RUSIX_COMPLETION_RUST",
+  "builds": "No compiler/objtool diagnostics; source clean through builds. Kernel-only cache copies; full outputs linux-out/lts-wait-bit-ext4-{c,rust}-001.",
+  "limitations": "No arm64, module, performance or exhaustive race coverage. C completion initialization/reset, raw-lock/lockdep/list/state adapters, scheduler and generic wait macros remain.",
+  "sha256": {
+    "c/cache-provenance.json": "fcf0326a82add7a47ef1f84e8e97c57d5e717cac9770aec4da24b8f22e3987e3",
+    "c/ci-core-ext4-c-brd-parameters.run/compile-command.sh": "a01a4da2781b7daa160bdd8ca9072b32c269413891e7fb2b91dc9730804b0a9f",
+    "c/ci-core-ext4-c-brd-parameters.run/compile.exit": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+    "c/ci-core-ext4-c-brd-parameters.run/compile.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "c/ci-core-ext4-c-brd-parameters.run/compiler-version.log": "c83055917220fd33844f4118a5a9bc8cd7ecf9761ce5f6fbc3edb8b1bc93db12",
+    "c/ci-core-ext4-c-brd-parameters.run/config": "647e551e9a2e9dd70e26b4066607e45274e786de274727a9fa8e3a33ac61d220",
+    "c/ci-core-ext4-c-brd-parameters.run/defaults/command.sh": "a4e527a5edd8d010beb939f30aa0cb69da5df7873f62c93bfb4435fe44f87707",
+    "c/ci-core-ext4-c-brd-parameters.run/defaults/console.log": "abab391d4f84a1bf216d70ad398b7f4906f30ecd43a8c00c0bd173cf6f5e299b",
+    "c/ci-core-ext4-c-brd-parameters.run/defaults/expectations.json": "a9d8f95355c4b88e5054a3886405e34109f14f32ea378a71370435854af39dbc",
+    "c/ci-core-ext4-c-brd-parameters.run/defaults/qemu.exit": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+    "c/ci-core-ext4-c-brd-parameters.run/defaults/result.json": "91200ee6aff3b15e17d217b8d1a52b7d91be0106edddae8d8926b17f677623d6",
+    "c/ci-core-ext4-c-brd-parameters.run/init-elf.log": "46ca326115567788490986ca8d8b385c24960f51ff04484e092ca44a31e22039",
+    "c/ci-core-ext4-c-brd-parameters.run/inputs.json": "18e22251cb228d51f654071fbf1521763ea68cb7129b50b04bc2ef345150175a",
+    "c/ci-core-ext4-c-brd-parameters.run/legacy_octal/command.sh": "c239dbf7bc28a35736dd08f001d532aec8d0da4d9e0e1ed4171833928c3afd4e",
+    "c/ci-core-ext4-c-brd-parameters.run/legacy_octal/console.log": "2df554dcd10b6e631f2dc705b7508adc473732307a747c211df669f298453840",
+    "c/ci-core-ext4-c-brd-parameters.run/legacy_octal/expectations.json": "b88cfc697dc9537be848caa6939ad2bbc6e0062279f39aa9054100057753d6c9",
+    "c/ci-core-ext4-c-brd-parameters.run/legacy_octal/qemu.exit": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+    "c/ci-core-ext4-c-brd-parameters.run/legacy_octal/result.json": "641766a474ac6e20d3f6aebfab5f14089f3ae560fd8fb0cc4ab3c549d5effcdc",
+    "c/ci-core-ext4-c-brd-parameters.run/on_demand/command.sh": "df73f8115477cd2491a70626bd1f8dc9c87dd2aeaed3655abbc52ef7b5066b8e",
+    "c/ci-core-ext4-c-brd-parameters.run/on_demand/console.log": "d2791107ca0ba7944dc047cbb3b96cef8d9e95589ab8090b470eed29b258ae85",
+    "c/ci-core-ext4-c-brd-parameters.run/on_demand/expectations.json": "87e847de2dd20e37e2a51e0a508004a791b47fef6aabe8654cc8a1bd6ee9a158",
+    "c/ci-core-ext4-c-brd-parameters.run/on_demand/qemu.exit": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+    "c/ci-core-ext4-c-brd-parameters.run/on_demand/result.json": "ce10725aa14ba83a04af07cebb962be10ca74baeda3fec6374228ab9fa906c1c",
+    "c/ci-core-ext4-c-brd-parameters.run/qemu-version.log": "d5e1ae8dd845009e27fe1cab4612650fd6a774c76bff3d06e929069de043f7f5",
+    "c/ci-core-ext4-c-brd-parameters.run/result.json": "8cc7727cc5e526114cc635a9c79bb5de95e720535e9301f73b57a8dd9d32ca4c",
+    "c/ci-core-ext4-c-brd-parameters.run/runner.exit": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+    "c/ci-core-ext4-c-brd-parameters.run/spacing_clamp/command.sh": "12e41bf86ac61d01b77fff285f2a080fdf3da472974a362ef50fc7a5edd9c290",
+    "c/ci-core-ext4-c-brd-parameters.run/spacing_clamp/console.log": "5eb2eb06c8c4c5a4a4d26956505506be1a01384fa18687a6334d3331e22d9452",
+    "c/ci-core-ext4-c-brd-parameters.run/spacing_clamp/expectations.json": "6005fe843c91e52f1f271ae308a93ebf51077bb0c116e2ee3d2fbe28ce4fff11",
+    "c/ci-core-ext4-c-brd-parameters.run/spacing_clamp/qemu.exit": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+    "c/ci-core-ext4-c-brd-parameters.run/spacing_clamp/result.json": "99b0e331c6f69314416ba4d205db43214d907a4a48d6014825f4dc9b44624695",
+    "c/ci-core-ext4-c-brd-parameters.run/spacing_high_positive/command.sh": "e1eece30a4ecceab3ec5e9808239221a341bac8b9aa1b17006e8d1ada8c4635d",
+    "c/ci-core-ext4-c-brd-parameters.run/spacing_high_positive/console.log": "bff5a081810ac711cee5d173348ee3afeb3c64e2db0b07d23a216753b91f3140",
+    "c/ci-core-ext4-c-brd-parameters.run/spacing_high_positive/expectations.json": "077e3eef56b92c3e4bec3dac838d2a68158156debe89b51d652ea88be1851216",
+    "c/ci-core-ext4-c-brd-parameters.run/spacing_high_positive/qemu.exit": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+    "c/ci-core-ext4-c-brd-parameters.run/spacing_high_positive/result.json": "0ffc50457f3560bde959269e5419a10d5ba2846345555ad0066579c07297889a",
+    "c/ci-core-ext4-c-brd-parameters.run/spacing_roundup/command.sh": "840da0b548eaf8d5d1df6f80a23bab3973938eedb5ce68d9dff743b51a3ee810",
+    "c/ci-core-ext4-c-brd-parameters.run/spacing_roundup/console.log": "d0e619033f3b8db294d26f62498cafc2a25fc4152f1888402f96294a5a8db353",
+    "c/ci-core-ext4-c-brd-parameters.run/spacing_roundup/expectations.json": "430ed470f42e8cc144a5b3ff24f67a0943460a1d052c6d73ae2dcf4894d2e78d",
+    "c/ci-core-ext4-c-brd-parameters.run/spacing_roundup/qemu.exit": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+    "c/ci-core-ext4-c-brd-parameters.run/spacing_roundup/result.json": "b737912d5f7c5be1d1afa1fd5bdc48687141859f1d585fabdc17fc45bbcb3b19",
+    "c/ci-core-ext4-c-brd-partitions.run/compile-command.sh": "470f5105b1d38d804190a440e0091a62a4a86334313ce1bc323ee3bc9f6ce741",
+    "c/ci-core-ext4-c-brd-partitions.run/compile.exit": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+    "c/ci-core-ext4-c-brd-partitions.run/compile.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "c/ci-core-ext4-c-brd-partitions.run/compiler-version.log": "c83055917220fd33844f4118a5a9bc8cd7ecf9761ce5f6fbc3edb8b1bc93db12",
+    "c/ci-core-ext4-c-brd-partitions.run/config": "647e551e9a2e9dd70e26b4066607e45274e786de274727a9fa8e3a33ac61d220",
+    "c/ci-core-ext4-c-brd-partitions.run/init-elf.log": "649cd7bb08603d7b9387f1aeeab5a9ef257217cff736b7b14326f328d8ce3fb5",
+    "c/ci-core-ext4-c-brd-partitions.run/inputs.json": "340403fd6527eb320e2f8839e61143aaac8ecb720e0bad20b610095b6f0d5b0b",
+    "c/ci-core-ext4-c-brd-partitions.run/primary_partition/command.sh": "a4206fabeedcf3f52139171c7926bfb2f6aa73569db77dc731af20f4e0fc4025",
+    "c/ci-core-ext4-c-brd-partitions.run/primary_partition/console.log": "bdb5662aed8df0d2cbbb7b20c980c34f2269adeec0fab1763f8be4569d8490c3",
+    "c/ci-core-ext4-c-brd-partitions.run/primary_partition/expectations.json": "d34878e52eabd53d58fea844d04c9451849cd780db791c1c68fafeb88c98ad3f",
+    "c/ci-core-ext4-c-brd-partitions.run/primary_partition/qemu.exit": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+    "c/ci-core-ext4-c-brd-partitions.run/primary_partition/result.json": "1f14cac37dd7895a4d1d9e7cb197e271663a4d4cf538bb0c5ce1aeda21758940",
+    "c/ci-core-ext4-c-brd-partitions.run/qemu-version.log": "d5e1ae8dd845009e27fe1cab4612650fd6a774c76bff3d06e929069de043f7f5",
+    "c/ci-core-ext4-c-brd-partitions.run/result.json": "cc954770773789077769680c3475f301c15c712d2948dc4ad428996a53515c54",
+    "c/ci-core-ext4-c-brd-partitions.run/runner.exit": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+    "c/ci-core-ext4-c-brd.run/command.sh": "504357f75811715b489acabd1b2156df803a9e0d1d0df42d4177928152c4fbda",
+    "c/ci-core-ext4-c-brd.run/compile-command.sh": "3d5eff2f1bd24784b2b7fb98e700f5d254c8a9b4b696cd456322d2af4955cc36",
+    "c/ci-core-ext4-c-brd.run/compile.exit": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+    "c/ci-core-ext4-c-brd.run/compile.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "c/ci-core-ext4-c-brd.run/compiler-version.log": "4dc9a4e32fd9e06d42fb307688c59d6d889f0ff90ce034cbefed21b0d451fd81",
+    "c/ci-core-ext4-c-brd.run/config": "647e551e9a2e9dd70e26b4066607e45274e786de274727a9fa8e3a33ac61d220",
+    "c/ci-core-ext4-c-brd.run/console.log": "1d7b7434369e542fa0fb706d3409711a32065585080492f85b7ad5d668799fb0",
+    "c/ci-core-ext4-c-brd.run/init-elf.log": "0354713ce1b035af411e4fd9c22cb42e8bd9cf0f211a3f934ca9894bd7e62946",
+    "c/ci-core-ext4-c-brd.run/inputs.json": "196902a5645fbb337c8e3c5d8dc5528be67f870fa35e5af7a5472f22bee7dbcb",
+    "c/ci-core-ext4-c-brd.run/qemu-version.log": "d5e1ae8dd845009e27fe1cab4612650fd6a774c76bff3d06e929069de043f7f5",
+    "c/ci-core-ext4-c-brd.run/qemu.exit": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+    "c/ci-core-ext4-c-brd.run/result.json": "d980b4195e75a3c87cd036cce9d47f603028ddd91cf1bf55b0b78fbaa11ded0c",
+    "c/ci-core-ext4-c-brd.run/runner.exit": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+    "c/ci-core-ext4-c-build.Vb5qE2z8/block-archive.txt": "cee1a8e1790fdc7a470e22313e6d70a30a42ec30b2c4e4a6aab27f21b85aecf0",
+    "c/ci-core-ext4-c-build.Vb5qE2z8/brd-objects.txt": "221a05a8f81be5462661ccaedf37b6408e2ade1ef6f94efe3c7cc65c9ccfed46",
+    "c/ci-core-ext4-c-build.Vb5qE2z8/brd-reference.diff": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "c/ci-core-ext4-c-build.Vb5qE2z8/brd-symbols.txt": "1ecfd8f7d02ef99699837933239a913b54c27715396428e9b402094e5fbd67ce",
+    "c/ci-core-ext4-c-build.Vb5qE2z8/build.exit": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+    "c/ci-core-ext4-c-build.Vb5qE2z8/build.sha256": "fe207befa2aa55954fcb59ed00983ac091824e479cadaa3aee1e9b9302263b9d",
+    "c/ci-core-ext4-c-build.Vb5qE2z8/completion-objects.txt": "540c9804bee4c96c9c914e3e58c7954c93157c94da4d20a45bd13d773492d436",
+    "c/ci-core-ext4-c-build.Vb5qE2z8/completion-selection.log": "cf40a3894a5af274fb6c71cc9704ecbd31df9c293de5fd72547fd3587aceb6bb",
+    "c/ci-core-ext4-c-build.Vb5qE2z8/completion-symbols.txt": "d6cd288c850517cb858b3c7946a4a5c082f89c97e6736662c850075fb02fb330",
+    "c/ci-core-ext4-c-build.Vb5qE2z8/completion-wait-sections.txt": "68daf12972ddc7cfac1061444fc43b5826587a9bb0ceb1de41cd0e67c0e10891",
+    "c/ci-core-ext4-c-build.Vb5qE2z8/config": "647e551e9a2e9dd70e26b4066607e45274e786de274727a9fa8e3a33ac61d220",
+    "c/ci-core-ext4-c-build.Vb5qE2z8/config.log": "ccd43a6f82bc8690f09d727269b05d111b72694e3c5d8c8c4c9646107ceb8522",
+    "c/ci-core-ext4-c-build.Vb5qE2z8/environment.log": "d8b253b80e923c89da669e5f244299f713aa299929d9a883ddeda3b34e955ff5",
+    "c/ci-core-ext4-c-build.Vb5qE2z8/profile.txt": "fe72c54c92a61dc96b730037ca10e190f7cb7de07e64d6ef02e972200ee461ed",
+    "c/ci-core-ext4-c-build.Vb5qE2z8/scheduler-archive.txt": "7726dd89b89c2f508be0bf7f71b302b17758292fa27623eb2fcbf43b2df5124d",
+    "c/ci-core-ext4-c-build.Vb5qE2z8/selection.log": "3b7338eab9bcf704f207ac78e28fe7abf4ec456940a28784f88c507c436e733f",
+    "c/ci-core-ext4-c-build.Vb5qE2z8/source-after.commit": "67824bfef17dc2964fe2dc1bdb1cf84b33b7923e01de966e17ada5a172da7e4c",
+    "c/ci-core-ext4-c-build.Vb5qE2z8/source-after.status": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "c/ci-core-ext4-c-build.Vb5qE2z8/swait-objects.txt": "540c9804bee4c96c9c914e3e58c7954c93157c94da4d20a45bd13d773492d436",
+    "c/ci-core-ext4-c-build.Vb5qE2z8/swait-selection.log": "59dae8998014e8f9f6c51ace1c53b4871df049c2f3e9faddf91d64bc154b5ca2",
+    "c/ci-core-ext4-c-build.Vb5qE2z8/swait-symbols.txt": "3549ee5d373fe285c9dd1a9c57da59acbf432ece501aa8c9d00b230586ff11d2",
+    "c/ci-core-ext4-c-build.Vb5qE2z8/wait-bit-object-sections.txt": "5e414285fd314f0fcb8303e3fa8b1397f86648bb85b9d82e931f21879a078823",
+    "c/ci-core-ext4-c-build.Vb5qE2z8/wait-bit-objects.txt": "540c9804bee4c96c9c914e3e58c7954c93157c94da4d20a45bd13d773492d436",
+    "c/ci-core-ext4-c-build.Vb5qE2z8/wait-bit-scheduler-sections.txt": "4402d53bf9dcc2bf16ff6afdf5b43d3cb7e1f2b306014bb223a867ec56a25dec",
+    "c/ci-core-ext4-c-build.Vb5qE2z8/wait-bit-selection.log": "95e1ea9340adb423ee010ae934317ef71b1ef545da854ad8c695bac15ab8e7af",
+    "c/ci-core-ext4-c-build.Vb5qE2z8/wait-bit-symbols.txt": "38bd755945e754e35edfa83b860e1a65207f2ceba7f8f0c8c63c3703f0a30d81",
+    "c/ci-core-ext4-c-build.Vb5qE2z8/wake-objects.txt": "540c9804bee4c96c9c914e3e58c7954c93157c94da4d20a45bd13d773492d436",
+    "c/ci-core-ext4-c-build.Vb5qE2z8/wake-selection.log": "23a6654c8d91ec2603e07a73e7f8f1beb5150ba2ccce349b840842b9bb97af22",
+    "c/ci-core-ext4-c-build.Vb5qE2z8/wake-symbols.txt": "e6e96ab3d2d0eaf74cbe193303b0abcc5d274338abdc8cb90bcdb06ff54898a6",
+    "c/ci-core-ext4-c-ext4.run/command.sh": "5bfaf1a36e2c6f44c557021c3cfd5fc80f40ac3eb02d535843ae76b38e325370",
+    "c/ci-core-ext4-c-ext4.run/compile-command.sh": "cf170ff0df483f48247a3f4624329a2b0c30f46b0c08ccbf72e4479124b73bcb",
+    "c/ci-core-ext4-c-ext4.run/compile.exit": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+    "c/ci-core-ext4-c-ext4.run/compile.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "c/ci-core-ext4-c-ext4.run/console.log": "f5682ce8fa8efcffa6434cdc011b5dd01d94ff570e713edec9da8dd61ad190ec",
+    "c/ci-core-ext4-c-ext4.run/container-image-id.txt": "6e8bf4e568c9bd0809bea944afb49f09c2647d954e520a2226b03ec688353545",
+    "c/ci-core-ext4-c-ext4.run/init-elf.log": "e33623fcaf20ae7e07cdf50c0b0b8089796d482febff6d5ed1a21626d834fe3f",
+    "c/ci-core-ext4-c-ext4.run/inputs.json": "7dd829d6016d6f870bc8489e9a0de8433661bb311ee7cff0f25aa80453231232",
+    "c/ci-core-ext4-c-ext4.run/qemu-version.log": "d5e1ae8dd845009e27fe1cab4612650fd6a774c76bff3d06e929069de043f7f5",
+    "c/ci-core-ext4-c-ext4.run/qemu.exit": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+    "c/ci-core-ext4-c-ext4.run/result.json": "c02dcf216d6dcc5a4d9d9c81f5e1616eb2be86e08c1afa2268822ecfc7567f7e",
+    "c/ci-core-ext4-c-ext4.run/rootfs-elf.json": "1e49e1f22e92b6004d68fea5605b396c00e949e3358ad02ac1109a3fdcaaea82",
+    "c/ci-core-ext4-c-ext4.run/rootfs-files.json": "f0f0542ff0bcacccd5549b97ea0bbd0d32480bb51cabd789f78e970b030f0834",
+    "c/ci-core-ext4-c-ext4.run/rootfs-packages.lock": "30a6ea7af0307248c70192e2ec793e655084c4f65a788a5d6c367412ab9e39e7",
+    "c/ci-core-ext4-c-ext4.run/runner.exit": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+    "c/ci-core-ext4-c-ext4.run/rustc-version.log": "c83055917220fd33844f4118a5a9bc8cd7ecf9761ce5f6fbc3edb8b1bc93db12",
+    "c/ci-inputs.log": "38c88496f2de49b51ff907c745ef2daca0961d751078fe39cabeb0bf78aa16b0",
+    "c/ci.exit": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+    "c/container-image-id.txt": "6e8bf4e568c9bd0809bea944afb49f09c2647d954e520a2226b03ec688353545",
+    "c/host-native.log": "5947862b22c3d6ec6beb115ae9d7178bac6fbe96095b9083066b33f39e005506",
+    "c/packages.lock": "9ef7ec5334805f1896c6990c60937d2244f71982b9a06b8a6248f352f8e9cf19",
+    "c/preflight.log": "522bfec88879b99be12257c198c7a766083b39d8973342c36615e9b29e9d1d7c",
+    "c/test_brd_ext4_gate.log": "0b487dd197331c02512202319dd6e3bcc9b246f43271f82cc2097443075db78f",
+    "c/test_brd_gate.log": "d5557644f94799de88d5d3e1ec5519779a563f8d5e3635a321aad5a9ce276076",
+    "c/test_brd_kunit_gate.log": "ddbc5bf15c26bf2c15a86c04aa1c4eb9dbb31a4d245c800b95a5282be426a476",
+    "c/test_brd_parameters_gate.log": "4c36b42d0c0aac9cb059f13f02b307b6ea5e30373f1e16b77ebbe954a54cc573",
+    "c/test_brd_partitions_gate.log": "4c3b3b2f85f7f81206f2731efca1a5c61f58b2f6c54d820b4003b988757b84ec",
+    "c/test_completion_kunit_gate.log": "c0a234441cecc9937a09c7cbc31cee2a9774cd3f1dce8048b17104e7e417c7f1",
+    "c/test_kernel_languages.log": "d5c42298542e8087193ca809f6dfcba308030c868c5e717efbc32ab0ad47b9de",
+    "c/test_kunit_gate.log": "d9d734ee1c2de67b748aeef1c4126433aa438ad8375ca953916f12b1df11414d",
+    "c/test_repo_paths.log": "47542e2db8ae86476f42731772f9e7593974943ea781933ad40731daa2fd6852",
+    "c/toolchain.log": "c6f34500a39cbbff3c2a10d9f85c76a7399e918c72c166fe90da89178e1db5bf",
+    "rust/cache-provenance.json": "221c557f5a7aba23f8f34cde393f91fd490d2197f1510b5dc1049c4dd70529e6",
+    "rust/ci-core-ext4-rust-brd-parameters.run/compile-command.sh": "b3f51319ae96b3c701116d377a02bd657c2a1ce203f17f68b9c2a39e79752547",
+    "rust/ci-core-ext4-rust-brd-parameters.run/compile.exit": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+    "rust/ci-core-ext4-rust-brd-parameters.run/compile.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "rust/ci-core-ext4-rust-brd-parameters.run/compiler-version.log": "c83055917220fd33844f4118a5a9bc8cd7ecf9761ce5f6fbc3edb8b1bc93db12",
+    "rust/ci-core-ext4-rust-brd-parameters.run/config": "cafe71edc0273681a025dbfa4f894ae2187c1789795691d3eb504f16c359affc",
+    "rust/ci-core-ext4-rust-brd-parameters.run/defaults/command.sh": "2268700e8ac5af3b5c4ba26f9740720429077ea4c9ff53642d208816af7dcce4",
+    "rust/ci-core-ext4-rust-brd-parameters.run/defaults/console.log": "9754dc2e4d8593bf506ae22e499146edd586e2f8dc76fbdb06950933ef85fa01",
+    "rust/ci-core-ext4-rust-brd-parameters.run/defaults/expectations.json": "a9d8f95355c4b88e5054a3886405e34109f14f32ea378a71370435854af39dbc",
+    "rust/ci-core-ext4-rust-brd-parameters.run/defaults/qemu.exit": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+    "rust/ci-core-ext4-rust-brd-parameters.run/defaults/result.json": "91200ee6aff3b15e17d217b8d1a52b7d91be0106edddae8d8926b17f677623d6",
+    "rust/ci-core-ext4-rust-brd-parameters.run/init-elf.log": "46ca326115567788490986ca8d8b385c24960f51ff04484e092ca44a31e22039",
+    "rust/ci-core-ext4-rust-brd-parameters.run/inputs.json": "27f77522c6b49b76c8beecbda9ceb65726b574395f19805203c5e7c4d542c698",
+    "rust/ci-core-ext4-rust-brd-parameters.run/legacy_octal/command.sh": "6378c70303141f9ee5101a7585291a78417a2ae6cff2b88d4e5075522fadce8d",
+    "rust/ci-core-ext4-rust-brd-parameters.run/legacy_octal/console.log": "136e7cf08ab74e5a8e13d3f3e629b06ef1b1ff06805b38bc22dcec275d0656e3",
+    "rust/ci-core-ext4-rust-brd-parameters.run/legacy_octal/expectations.json": "b88cfc697dc9537be848caa6939ad2bbc6e0062279f39aa9054100057753d6c9",
+    "rust/ci-core-ext4-rust-brd-parameters.run/legacy_octal/qemu.exit": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+    "rust/ci-core-ext4-rust-brd-parameters.run/legacy_octal/result.json": "641766a474ac6e20d3f6aebfab5f14089f3ae560fd8fb0cc4ab3c549d5effcdc",
+    "rust/ci-core-ext4-rust-brd-parameters.run/on_demand/command.sh": "de0197899f9663345e11c48f0a4ddac245c07d2bb947872ed18b6c55732a6ccf",
+    "rust/ci-core-ext4-rust-brd-parameters.run/on_demand/console.log": "7d72be13c1398cdfbd0d98064fe15a6f08f84fb1353962f0546e6c7dc77a4260",
+    "rust/ci-core-ext4-rust-brd-parameters.run/on_demand/expectations.json": "87e847de2dd20e37e2a51e0a508004a791b47fef6aabe8654cc8a1bd6ee9a158",
+    "rust/ci-core-ext4-rust-brd-parameters.run/on_demand/qemu.exit": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+    "rust/ci-core-ext4-rust-brd-parameters.run/on_demand/result.json": "ce10725aa14ba83a04af07cebb962be10ca74baeda3fec6374228ab9fa906c1c",
+    "rust/ci-core-ext4-rust-brd-parameters.run/qemu-version.log": "d5e1ae8dd845009e27fe1cab4612650fd6a774c76bff3d06e929069de043f7f5",
+    "rust/ci-core-ext4-rust-brd-parameters.run/result.json": "8cc7727cc5e526114cc635a9c79bb5de95e720535e9301f73b57a8dd9d32ca4c",
+    "rust/ci-core-ext4-rust-brd-parameters.run/runner.exit": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+    "rust/ci-core-ext4-rust-brd-parameters.run/spacing_clamp/command.sh": "f3ee0d84c2bf5bde1a90bdf62b2e5c9480793e51d74a0633d4df791c48467553",
+    "rust/ci-core-ext4-rust-brd-parameters.run/spacing_clamp/console.log": "d3e59f39435b8c78ddf4e53c078b9f4d0fa296ad078c044a1f1b9e2b788edd4c",
+    "rust/ci-core-ext4-rust-brd-parameters.run/spacing_clamp/expectations.json": "6005fe843c91e52f1f271ae308a93ebf51077bb0c116e2ee3d2fbe28ce4fff11",
+    "rust/ci-core-ext4-rust-brd-parameters.run/spacing_clamp/qemu.exit": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+    "rust/ci-core-ext4-rust-brd-parameters.run/spacing_clamp/result.json": "99b0e331c6f69314416ba4d205db43214d907a4a48d6014825f4dc9b44624695",
+    "rust/ci-core-ext4-rust-brd-parameters.run/spacing_high_positive/command.sh": "5cda4c891479e9edad4fd85631f17c2c25468a51e3c2f055b2d0648862dfe255",
+    "rust/ci-core-ext4-rust-brd-parameters.run/spacing_high_positive/console.log": "82bddf56fc1f8bcb67a04ccf308275bda9b235f353ae64f0528f5c2c297a01ed",
+    "rust/ci-core-ext4-rust-brd-parameters.run/spacing_high_positive/expectations.json": "077e3eef56b92c3e4bec3dac838d2a68158156debe89b51d652ea88be1851216",
+    "rust/ci-core-ext4-rust-brd-parameters.run/spacing_high_positive/qemu.exit": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+    "rust/ci-core-ext4-rust-brd-parameters.run/spacing_high_positive/result.json": "0ffc50457f3560bde959269e5419a10d5ba2846345555ad0066579c07297889a",
+    "rust/ci-core-ext4-rust-brd-parameters.run/spacing_roundup/command.sh": "a7b4798cf9998b6c9438ddb54fb3d3153de3cc3c0257f828508bb681626c43b4",
+    "rust/ci-core-ext4-rust-brd-parameters.run/spacing_roundup/console.log": "4eb728210ccaf9e91b19105b4e663e93fa9411f755fbd8f9fff50d66814fffa8",
+    "rust/ci-core-ext4-rust-brd-parameters.run/spacing_roundup/expectations.json": "430ed470f42e8cc144a5b3ff24f67a0943460a1d052c6d73ae2dcf4894d2e78d",
+    "rust/ci-core-ext4-rust-brd-parameters.run/spacing_roundup/qemu.exit": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+    "rust/ci-core-ext4-rust-brd-parameters.run/spacing_roundup/result.json": "b737912d5f7c5be1d1afa1fd5bdc48687141859f1d585fabdc17fc45bbcb3b19",
+    "rust/ci-core-ext4-rust-brd-partitions.run/compile-command.sh": "3d92ec6b5a68bc33ba2f0c79c58f6a48dc89ee5d72ad966360b709f250880603",
+    "rust/ci-core-ext4-rust-brd-partitions.run/compile.exit": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+    "rust/ci-core-ext4-rust-brd-partitions.run/compile.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "rust/ci-core-ext4-rust-brd-partitions.run/compiler-version.log": "c83055917220fd33844f4118a5a9bc8cd7ecf9761ce5f6fbc3edb8b1bc93db12",
+    "rust/ci-core-ext4-rust-brd-partitions.run/config": "cafe71edc0273681a025dbfa4f894ae2187c1789795691d3eb504f16c359affc",
+    "rust/ci-core-ext4-rust-brd-partitions.run/init-elf.log": "649cd7bb08603d7b9387f1aeeab5a9ef257217cff736b7b14326f328d8ce3fb5",
+    "rust/ci-core-ext4-rust-brd-partitions.run/inputs.json": "6d1c7858ef4d2de36597ece272073dbd49c51367cb61259fb4b258d0d47e5bba",
+    "rust/ci-core-ext4-rust-brd-partitions.run/primary_partition/command.sh": "93b54ba00424b86154bc46720ed2719321536677ec875ca454d5f83fb1259356",
+    "rust/ci-core-ext4-rust-brd-partitions.run/primary_partition/console.log": "5b22830fdf40d5b7fbdb1e4a0d69ad60e693c039eded25bb38e336fbb461de35",
+    "rust/ci-core-ext4-rust-brd-partitions.run/primary_partition/expectations.json": "d34878e52eabd53d58fea844d04c9451849cd780db791c1c68fafeb88c98ad3f",
+    "rust/ci-core-ext4-rust-brd-partitions.run/primary_partition/qemu.exit": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+    "rust/ci-core-ext4-rust-brd-partitions.run/primary_partition/result.json": "1f14cac37dd7895a4d1d9e7cb197e271663a4d4cf538bb0c5ce1aeda21758940",
+    "rust/ci-core-ext4-rust-brd-partitions.run/qemu-version.log": "d5e1ae8dd845009e27fe1cab4612650fd6a774c76bff3d06e929069de043f7f5",
+    "rust/ci-core-ext4-rust-brd-partitions.run/result.json": "cc954770773789077769680c3475f301c15c712d2948dc4ad428996a53515c54",
+    "rust/ci-core-ext4-rust-brd-partitions.run/runner.exit": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+    "rust/ci-core-ext4-rust-brd.run/command.sh": "4a74e7ee7c58296c5beb8771ed45234e72f8d95c08df1c9fc85d8417568f6fad",
+    "rust/ci-core-ext4-rust-brd.run/compile-command.sh": "a4e370e6656b4b40ea9cc3363862c6f6b3882005ac30ab2ec8b3283c9f35d31c",
+    "rust/ci-core-ext4-rust-brd.run/compile.exit": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+    "rust/ci-core-ext4-rust-brd.run/compile.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "rust/ci-core-ext4-rust-brd.run/compiler-version.log": "4dc9a4e32fd9e06d42fb307688c59d6d889f0ff90ce034cbefed21b0d451fd81",
+    "rust/ci-core-ext4-rust-brd.run/config": "cafe71edc0273681a025dbfa4f894ae2187c1789795691d3eb504f16c359affc",
+    "rust/ci-core-ext4-rust-brd.run/console.log": "d09ddc81b622011dbaddde0714a3a3b7c1d908db115c701ce699c6793cb5edfb",
+    "rust/ci-core-ext4-rust-brd.run/init-elf.log": "0354713ce1b035af411e4fd9c22cb42e8bd9cf0f211a3f934ca9894bd7e62946",
+    "rust/ci-core-ext4-rust-brd.run/inputs.json": "1c9782551b0cb12bc158764e8f2410d72ad4581eea90837a62d17c6b1be67eb3",
+    "rust/ci-core-ext4-rust-brd.run/qemu-version.log": "d5e1ae8dd845009e27fe1cab4612650fd6a774c76bff3d06e929069de043f7f5",
+    "rust/ci-core-ext4-rust-brd.run/qemu.exit": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+    "rust/ci-core-ext4-rust-brd.run/result.json": "d980b4195e75a3c87cd036cce9d47f603028ddd91cf1bf55b0b78fbaa11ded0c",
+    "rust/ci-core-ext4-rust-brd.run/runner.exit": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+    "rust/ci-core-ext4-rust-build.D9qto0KZ/block-archive.txt": "4901e98c508989566893255c8da46103ad61ec8af586dd39541384731b50a2b1",
+    "rust/ci-core-ext4-rust-build.D9qto0KZ/brd-objects.txt": "468e7f6bfb34f9fae925dc3e15f939bad6e17231f65f35d05d3646cfeda0839d",
+    "rust/ci-core-ext4-rust-build.D9qto0KZ/brd-reference.diff": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "rust/ci-core-ext4-rust-build.D9qto0KZ/brd-symbols.txt": "8115157782d23d868443a4e97719bf7bca1615ea073c253fd8542303c05b58fc",
+    "rust/ci-core-ext4-rust-build.D9qto0KZ/build.exit": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+    "rust/ci-core-ext4-rust-build.D9qto0KZ/build.sha256": "a63ddf2fe3686fc03fe3ce2cd2b449409205006d94987c43c15214ea414459c0",
+    "rust/ci-core-ext4-rust-build.D9qto0KZ/completion-objects.txt": "36f314f104363f7e9a1d151056524aea403650efc645ed6b3cfe1e204f08ca72",
+    "rust/ci-core-ext4-rust-build.D9qto0KZ/completion-selection.log": "446e96e0b0a9144f6cc219fa6eb6f9bee4398e5dcbd1e6ef4f678dacd0fda98c",
+    "rust/ci-core-ext4-rust-build.D9qto0KZ/completion-symbols.txt": "2dadc5c445c40f87351ec7e7852f9a6fbe17c988e8388230af279089f10baffa",
+    "rust/ci-core-ext4-rust-build.D9qto0KZ/completion-wait-sections.txt": "badfeace5c49aeca4d857725fdbff8936d2b8fdff2b053ee7ea7ea437b4808d4",
+    "rust/ci-core-ext4-rust-build.D9qto0KZ/config": "cafe71edc0273681a025dbfa4f894ae2187c1789795691d3eb504f16c359affc",
+    "rust/ci-core-ext4-rust-build.D9qto0KZ/config.log": "f4b5ee1f1e067b267369fc1afade304e47d6add49ef26b6fcdd765f3bf4c124d",
+    "rust/ci-core-ext4-rust-build.D9qto0KZ/environment.log": "d8b253b80e923c89da669e5f244299f713aa299929d9a883ddeda3b34e955ff5",
+    "rust/ci-core-ext4-rust-build.D9qto0KZ/profile.txt": "f2da35ecbd69d24b145ea82153ad4816bb5395b0ddd974d6fdcf043582d47d62",
+    "rust/ci-core-ext4-rust-build.D9qto0KZ/scheduler-archive.txt": "544e843fdebeb4e30ef13fd533f456c6f517e32bb9a6f9621a4c0354c0caee1b",
+    "rust/ci-core-ext4-rust-build.D9qto0KZ/selection.log": "31755ab78793dad81e51d69abc2c71135f9d87273ba29c490ff41aebbb18786e",
+    "rust/ci-core-ext4-rust-build.D9qto0KZ/source-after.commit": "67824bfef17dc2964fe2dc1bdb1cf84b33b7923e01de966e17ada5a172da7e4c",
+    "rust/ci-core-ext4-rust-build.D9qto0KZ/source-after.status": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "rust/ci-core-ext4-rust-build.D9qto0KZ/swait-objects.txt": "95df658a929e73d59c40c89aa6f1465ef9618946250c943846b8aafd844c3870",
+    "rust/ci-core-ext4-rust-build.D9qto0KZ/swait-selection.log": "cd141b2899d0912c560a97e00bbfed5c7a436f5a225d03787c1cc9e26f2e345d",
+    "rust/ci-core-ext4-rust-build.D9qto0KZ/swait-symbols.txt": "d6c7405e1e306cf94dd2b295dcafe0ca2408a700f360c75b817413fd66d2126a",
+    "rust/ci-core-ext4-rust-build.D9qto0KZ/wait-bit-c-symbols.txt": "70992c96b59fcbcd759226a27aec12e0d393d7a7a37c44e1e050cc4b95f61c72",
+    "rust/ci-core-ext4-rust-build.D9qto0KZ/wait-bit-object-sections.txt": "fc7d4d0d29b631b46bbe2b8df99d8be32562cd53488e8eafb203355a2a82b5db",
+    "rust/ci-core-ext4-rust-build.D9qto0KZ/wait-bit-objects.txt": "c19b6d3f51dc9b2d2bd6ab297fb0f6d2726ffadc3c273c904320656205768097",
+    "rust/ci-core-ext4-rust-build.D9qto0KZ/wait-bit-scheduler-sections.txt": "75557502775d6fb1aeee1f30dd3279378d3bbcde7f19f9bcfcb8342d8e654955",
+    "rust/ci-core-ext4-rust-build.D9qto0KZ/wait-bit-selection.log": "ced9a0cb27af6f3e31f095da5b35b3136a3119c1b27e42ccaf60af542bbe4d29",
+    "rust/ci-core-ext4-rust-build.D9qto0KZ/wait-bit-symbols.txt": "8f04d5e492d5c40c41da10b8303ebe56af9da6db2ee1bc1f3d816076a55a7e89",
+    "rust/ci-core-ext4-rust-build.D9qto0KZ/wake-objects.txt": "474c6f1a5084b2a656616dca5ba49c48b5f6bc1a3d39397ed53b2d2df6e7960a",
+    "rust/ci-core-ext4-rust-build.D9qto0KZ/wake-selection.log": "bed5775ca5aac0b9369451e8805bdbc97e18742ad4f20ae207723bb826dad133",
+    "rust/ci-core-ext4-rust-build.D9qto0KZ/wake-symbols.txt": "4186b6001861cf497ce40cf084dbc19892a927792b8e59752c56d4ebc64779ba",
+    "rust/ci-core-ext4-rust-ext4.run/command.sh": "38a4ebcc760f063782c1b370cd444b5df1b0ce6ab5ea105ccdb7b2ec13cd6f46",
+    "rust/ci-core-ext4-rust-ext4.run/compile-command.sh": "4a63cd416e30da7f368fc246d6626649f5ddc67d3457c1ad48f03c5ac6f20c9a",
+    "rust/ci-core-ext4-rust-ext4.run/compile.exit": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+    "rust/ci-core-ext4-rust-ext4.run/compile.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "rust/ci-core-ext4-rust-ext4.run/console.log": "0b1bcca3ffead25dc1cbbc6c843645ef13dadea7691762d0428c02ae0b33efc4",
+    "rust/ci-core-ext4-rust-ext4.run/container-image-id.txt": "6e8bf4e568c9bd0809bea944afb49f09c2647d954e520a2226b03ec688353545",
+    "rust/ci-core-ext4-rust-ext4.run/init-elf.log": "e33623fcaf20ae7e07cdf50c0b0b8089796d482febff6d5ed1a21626d834fe3f",
+    "rust/ci-core-ext4-rust-ext4.run/inputs.json": "8250ca760c1a391ee6f0e2e45861ae4fe1534946964399e010a037471806794c",
+    "rust/ci-core-ext4-rust-ext4.run/qemu-version.log": "d5e1ae8dd845009e27fe1cab4612650fd6a774c76bff3d06e929069de043f7f5",
+    "rust/ci-core-ext4-rust-ext4.run/qemu.exit": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+    "rust/ci-core-ext4-rust-ext4.run/result.json": "c02dcf216d6dcc5a4d9d9c81f5e1616eb2be86e08c1afa2268822ecfc7567f7e",
+    "rust/ci-core-ext4-rust-ext4.run/rootfs-elf.json": "2029af104cfd159ad835720a9187b4fbdc498e7b2c73e28d37f871e5f74f57a4",
+    "rust/ci-core-ext4-rust-ext4.run/rootfs-files.json": "8defca4815df3669462e63eaa3428e49096660c8a1d151560ed334c6aa32180e",
+    "rust/ci-core-ext4-rust-ext4.run/rootfs-packages.lock": "30a6ea7af0307248c70192e2ec793e655084c4f65a788a5d6c367412ab9e39e7",
+    "rust/ci-core-ext4-rust-ext4.run/runner.exit": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+    "rust/ci-core-ext4-rust-ext4.run/rustc-version.log": "c83055917220fd33844f4118a5a9bc8cd7ecf9761ce5f6fbc3edb8b1bc93db12",
+    "rust/ci-inputs.log": "6a184c8d5d177952cd7f1c2964bdb86a44757bbce01e04a9d5ccb8e97d973dcc",
+    "rust/ci.exit": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+    "rust/container-image-id.txt": "6e8bf4e568c9bd0809bea944afb49f09c2647d954e520a2226b03ec688353545",
+    "rust/host-native.log": "5947862b22c3d6ec6beb115ae9d7178bac6fbe96095b9083066b33f39e005506",
+    "rust/packages.lock": "9ef7ec5334805f1896c6990c60937d2244f71982b9a06b8a6248f352f8e9cf19",
+    "rust/preflight.log": "522bfec88879b99be12257c198c7a766083b39d8973342c36615e9b29e9d1d7c",
+    "rust/test_brd_ext4_gate.log": "0b487dd197331c02512202319dd6e3bcc9b246f43271f82cc2097443075db78f",
+    "rust/test_brd_gate.log": "2b390ad0ecc0187ae4c9907c4b66fcd5cf984adc11b10becfdaa3a91cfef8ccd",
+    "rust/test_brd_kunit_gate.log": "ddbc5bf15c26bf2c15a86c04aa1c4eb9dbb31a4d245c800b95a5282be426a476",
+    "rust/test_brd_parameters_gate.log": "4c36b42d0c0aac9cb059f13f02b307b6ea5e30373f1e16b77ebbe954a54cc573",
+    "rust/test_brd_partitions_gate.log": "4c3b3b2f85f7f81206f2731efca1a5c61f58b2f6c54d820b4003b988757b84ec",
+    "rust/test_completion_kunit_gate.log": "b16c2d37f8720077a281358023a1ae49c385415ecb8a4149a4a55f0a91241625",
+    "rust/test_kernel_languages.log": "d4be35de3d82250986690334669c4d88ae35b2993f723c16c8c675d6299bc32e",
+    "rust/test_kunit_gate.log": "d9d734ee1c2de67b748aeef1c4126433aa438ad8375ca953916f12b1df11414d",
+    "rust/test_repo_paths.log": "d534807ac1f18abe6722dc7b3c3bfb08ab27210558cc517ede1fab6b5b75f146",
+    "rust/toolchain.log": "c6f34500a39cbbff3c2a10d9f85c76a7399e918c72c166fe90da89178e1db5bf"
+  }
+}

@@ -1,0 +1,22 @@
+/out/builds/ci-completion-rust/kernel/sched/wait_bit_rust.o
+0000000000000000 T __var_wake_key
+0000000000000020 T wake_bit_function
+0000000000000000 T __wait_on_bit
+0000000000000080 T __wait_on_bit_lock
+0000000000000120 T bit_wait
+0000000000000150 T bit_wait_io
+0000000000000180 T bit_wait_timeout
+0000000000000330 T out_of_line_wait_on_bit
+0000000000000350 T out_of_line_wait_on_bit_timeout
+0000000000000370 T out_of_line_wait_on_bit_lock
+/out/builds/ci-completion-rust/vmlinux
+ffffffff812ade00 T __var_wake_key
+ffffffff812ade20 T wake_bit_function
+ffffffff815a3eb0 T __wait_on_bit
+ffffffff815a3f30 T __wait_on_bit_lock
+ffffffff815a3fd0 T bit_wait
+ffffffff815a4000 T bit_wait_io
+ffffffff815a4030 T bit_wait_timeout
+ffffffff815a41e0 T out_of_line_wait_on_bit
+ffffffff815a4200 T out_of_line_wait_on_bit_timeout
+ffffffff815a4220 T out_of_line_wait_on_bit_lock
