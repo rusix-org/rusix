@@ -259,3 +259,14 @@ config ARCH_HAS_MMIOWB
 config MMIOWB
 	def_bool y if ARCH_HAS_MMIOWB
 	depends on SMP
+
+config RUSIX_COMPLETION_RUST
+	bool "Rusix Rust implementation of complete()"
+	depends on RUST && X86_64
+	default n
+	help
+	  Select the Rust implementation of the complete() counting and wakeup
+	  entry point. The existing C completion layout, other completion
+	  operations, raw lock primitives and scheduler wait queues remain.
+	  This is an experimental partial core migration, not a replacement of
+	  the completion subsystem. Leave disabled for the C comparison build.

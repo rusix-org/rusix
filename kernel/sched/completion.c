@@ -47,10 +47,12 @@ void complete_on_current_cpu(struct completion *x)
  * If this function wakes up a task, it executes a full memory barrier before
  * accessing the task state.
  */
+#ifndef CONFIG_RUSIX_COMPLETION_RUST
 void complete(struct completion *x)
 {
 	complete_with_flags(x, 0);
 }
+#endif
 EXPORT_SYMBOL(complete);
 
 /**

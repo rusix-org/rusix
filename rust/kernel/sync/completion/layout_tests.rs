@@ -161,11 +161,58 @@ mod tests {
         })?;
         let ready = wait_bounded(&state.ready, 10000);
         state.value.store(0x1234, Relaxed);
-        state.event.complete_all();
+        // SAFETY: The initialized event is pinned in state, whose Arc remains
+        // live through both worker and producer access. complete retains no pointer.
+        unsafe { bindings::complete(state.event.as_raw()) };
         let finished = wait_bounded(&state.finished, 10000);
         assert!(ready);
         assert!(finished);
         assert_eq!(state.value.load(Relaxed), 0x1235);
+        Ok(())
+    }
+
+    #[test]
+    fn two_workers_consume_exactly_two_tokens() -> Result {
+        use crate::sync::{atomic::Relaxed, Arc};
+
+        // Each worker has independently owned result/finished storage. Only the
+        // event is shared; no closure borrows this task's stack or KUnit context.
+        let event = Arc::pin_init(super::super::Completion::new(), GFP_KERNEL)?;
+        let first = Arc::pin_init(Handoff::new(), GFP_KERNEL)?;
+        let second = Arc::pin_init(Handoff::new(), GFP_KERNEL)?;
+        for state in [&first, &second] {
+            let worker = state.clone();
+            let worker_event = event.clone();
+            crate::workqueue::system_unbound().try_spawn(GFP_KERNEL, move || {
+                worker.ready.complete_all();
+                let consumed = wait_bounded(&worker_event, 5000);
+                worker.value.store(if consumed { 1 } else { 2 }, Relaxed);
+                worker.finished.complete_all();
+                // On timeout or partial spawn failure these Arcs still own all
+                // accessed storage until the bounded callback has returned.
+            })?;
+        }
+        let ready_first = wait_bounded(&first.ready, 10000);
+        let ready_second = wait_bounded(&second.ready, 10000);
+        // SAFETY: The initialized event stays pinned in an Arc held by this
+        // task and each worker. These calls retain no pointer. Enrollment may
+        // race the signals; both queued and pre-signaled paths must conserve
+        // two tokens, with one consumed by each worker. No FIFO order is claimed.
+        unsafe {
+            bindings::complete(event.as_raw());
+            bindings::complete(event.as_raw());
+        }
+        let finished_first = wait_bounded(&first.finished, 10000);
+        let finished_second = wait_bounded(&second.finished, 10000);
+        assert!(ready_first);
+        assert!(ready_second);
+        assert!(finished_first);
+        assert!(finished_second);
+        assert_eq!(first.value.load(Relaxed), 1);
+        assert_eq!(second.value.load(Relaxed), 1);
+        // SAFETY: The Arc pins initialized state; this nonblocking operation
+        // retains no pointer. Workers no longer access event after finished.
+        assert!(!unsafe { bindings::try_wait_for_completion(event.as_raw()) });
         Ok(())
     }
 

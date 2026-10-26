@@ -25,6 +25,7 @@ SUITES = {
     "rusix_completion_layout": (
         "c_operations_share_pinned_rust_owned_storage",
         "worker_handoff_observes_published_value",
+        "two_workers_consume_exactly_two_tokens",
         "timed_out_worker_unlinks_before_late_signal",
     ),
 }

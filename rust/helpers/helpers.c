@@ -45,6 +45,9 @@
 #include "poll.c"
 #include "processor.c"
 #include "property.c"
+#ifdef CONFIG_RUSIX_COMPLETION_RUST
+#include "raw_spinlock.c"
+#endif
 #include "rbtree.c"
 #include "rcu.c"
 #include "refcount.c"
