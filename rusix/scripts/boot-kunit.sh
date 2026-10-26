@@ -96,8 +96,8 @@ if [[ $status != 0 ]]; then
     tail -40 "$RUSIX_OUTPUT_ROOT/logs/$label-console.log" >&2
     exit "$status"
 fi
-if grep -q 'CPU feature dependency check failure' "$RUSIX_OUTPUT_ROOT/logs/$label-console.log"; then
-    echo 'Guest CPU feature dependencies are inconsistent.' >&2
+if grep -Eq 'CPU feature dependency check failure|ACPI (BIOS )?(Error|Exception|Warning)|ACPI: Unable to load' "$RUSIX_OUTPUT_ROOT/logs/$label-console.log"; then
+    echo 'Guest CPU or ACPI initialization diagnostics were reported.' >&2
     exit 1
 fi
 set +e

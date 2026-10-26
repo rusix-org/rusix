@@ -21,6 +21,14 @@ class GateTests(unittest.TestCase):
         self.lines = [f"RUSIX_BRD_PASS {case}" for case in runner.CASES]
         self.lines.append("RUSIX_BRD_SUCCESS cases=6")
 
+    def test_acpi_diagnostics_even_after_success(self):
+        for diagnostic in ("ACPI Error: AE_NOT_FOUND", "ACPI Warning: invalid table",
+                           "ACPI BIOS Error (bug): Could not resolve symbol",
+                           "ACPI BIOS Warning: invalid table", "ACPI Exception: AE_ERROR",
+                           "ACPI: Unable to load the System Description Tables"):
+            with self.subTest(diagnostic=diagnostic):
+                self.check_rejected(self.lines + [diagnostic])
+
     def check_rejected(self, lines, exit_code=0):
         with self.assertRaises(ValueError):
             runner.accept_console("\n".join(lines), exit_code)

@@ -20,7 +20,15 @@ class ParameterTests(unittest.TestCase):
         self.lines += [f"RUSIX_BRD_PARAMETERS_PASS {case}" for case in runner.CASES]
         self.lines += ["RUSIX_BRD_PARAMETERS_SUCCESS cases=5"]
         self.config = "\n".join(f"CONFIG_{name}=y" for name in runner.common.REQUIRED_CONFIG)
-        self.config += "\nCONFIG_SYSFS=y\nCONFIG_BLK_DEV_RAM_COUNT=1\nCONFIG_BLK_DEV_RAM_SIZE=65536\n"
+        self.config += "\nCONFIG_SYSFS=y\nCONFIG_BLOCK_LEGACY_AUTOLOAD=y\nCONFIG_BLK_DEV_RAM_COUNT=1\nCONFIG_BLK_DEV_RAM_SIZE=65536\n"
+
+    def test_acpi_diagnostics_even_after_success(self):
+        for diagnostic in ("ACPI Error: AE_NOT_FOUND", "ACPI Warning: invalid table",
+                           "ACPI BIOS Error (bug): Could not resolve symbol",
+                           "ACPI BIOS Warning: invalid table", "ACPI Exception: AE_ERROR",
+                           "ACPI: Unable to load the System Description Tables"):
+            with self.subTest(diagnostic=diagnostic):
+                self.reject(self.lines + [diagnostic])
 
     def reject(self, lines, status=0):
         with self.assertRaises(ValueError):
@@ -43,7 +51,8 @@ class ParameterTests(unittest.TestCase):
     def test_fail_skip_fault_or_nonzero_exit(self):
         for line in ("RUSIX_BRD_PARAMETERS_FAIL test", "RUSIX_BRD_PARAMETERS_SKIP test",
                      "WARNING: kernel", "BUG: bad", "Oops: bad", "Kernel panic",
-                     "CPU feature dependency check failure", "Buffer I/O error"):
+                     "CPU feature dependency check failure", "ACPI Error: AE_BAD_PARAMETER",
+                      "ACPI BIOS Error: missing handler", "Buffer I/O error"):
             self.reject(self.lines + [line])
         for status in (1, 124, 137, -9):
             self.reject(self.lines, status)
@@ -59,8 +68,14 @@ class ParameterTests(unittest.TestCase):
         for profile in ("server", "kunit", "brd-kunit"):
             with self.assertRaises(ValueError):
                 runner.validate_selection(profile, "implementation=brd-c", self.config)
-        with self.assertRaises(ValueError):
-            runner.validate_selection("brd", "implementation=brd-c", self.config.replace("CONFIG_SYSFS=y", ""))
+
+    def test_sysfs_and_legacy_autoload_are_independently_required(self):
+        for name in ("SYSFS", "BLOCK_LEGACY_AUTOLOAD"):
+            for replacement in ("", f"CONFIG_{name}=m", f"# CONFIG_{name} is not set"):
+                with self.subTest(name=name, replacement=replacement):
+                    config = self.config.replace(f"CONFIG_{name}=y", replacement)
+                    with self.assertRaises(ValueError):
+                        runner.validate_selection("brd", "implementation=brd-c", config)
 
     def test_five_boot_inputs_and_expected_normalization(self):
         variants = runner.variants(self.config)

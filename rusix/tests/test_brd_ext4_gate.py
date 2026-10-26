@@ -21,6 +21,14 @@ class GateTests(unittest.TestCase):
         self.lines = ["RUSIX_EXT4_START"] + [f"RUSIX_EXT4_PASS {case}" for case in runner.CASES]
         self.lines += ["RUSIX_EXT4_SUCCESS cases=6"]
 
+    def test_acpi_diagnostics_even_after_success(self):
+        for diagnostic in ("ACPI Error: AE_NOT_FOUND", "ACPI Warning: invalid table",
+                           "ACPI BIOS Error (bug): Could not resolve symbol",
+                           "ACPI BIOS Warning: invalid table", "ACPI Exception: AE_ERROR",
+                           "ACPI: Unable to load the System Description Tables"):
+            with self.subTest(diagnostic=diagnostic):
+                self.rejected(self.lines + [diagnostic])
+
     def rejected(self, lines, status=0):
         with self.assertRaises(ValueError):
             runner.accept_console("\n".join(lines), status)
@@ -43,7 +51,8 @@ class GateTests(unittest.TestCase):
     def test_fail_skip_unknown_and_kernel_fault_after_success(self):
         for extra in ("RUSIX_EXT4_FAIL reboot", "RUSIX_EXT4_SKIP fsck", "RUSIX_EXT4_PASS unknown",
                       "WARNING: CPU: 0", "BUG: page", "Oops: bad", "Kernel panic",
-                      "CPU feature dependency check failure", "EXT4-fs warning (device ram0)",
+                      "CPU feature dependency check failure", "ACPI Error: AE_BAD_PARAMETER",
+                      "ACPI BIOS Error: missing handler", "EXT4-fs warning (device ram0)",
                       "EXT4-fs error (device ram0)", "Buffer I/O error on dev ram0"):
             with self.subTest(extra=extra):
                 self.rejected(self.lines + [extra])

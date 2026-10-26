@@ -32,15 +32,16 @@ def validate_selection(profile, selection, config):
     if mapped is None:
         raise ValueError("A C or Rust BRD contract/ext4 profile is required")
     implementation = common.validate_selection(mapped, selection, config)
-    if "CONFIG_SYSFS=y" not in config.splitlines():
-        raise ValueError("Parameter contract requires CONFIG_SYSFS=y")
+    for name in ("SYSFS", "BLOCK_LEGACY_AUTOLOAD"):
+        if f"CONFIG_{name}=y" not in config.splitlines():
+            raise ValueError(f"Parameter contract requires CONFIG_{name}=y")
     return implementation
 
 
 def accept_console(console, qemu_exit):
     if qemu_exit != 0:
         raise ValueError(f"QEMU failed or timed out: exit {qemu_exit}")
-    if re.search(r"(?i:\b(?:warning|BUG)\b)|Oops:|Kernel panic|CPU feature dependency check failure|Buffer I/O error|I/O error, dev", console):
+    if re.search(r"(?i:\b(?:warning|BUG)\b)|Oops:|Kernel panic|CPU feature dependency check failure|ACPI (?:BIOS )?(?:Error|Exception|Warning)|ACPI: Unable to load|Buffer I/O error|I/O error, dev", console):
         raise ValueError("Kernel diagnostic in parameter guest")
     expected = ["RUSIX_BRD_PARAMETERS_START"]
     expected += [f"RUSIX_BRD_PARAMETERS_PASS {case}" for case in CASES]
