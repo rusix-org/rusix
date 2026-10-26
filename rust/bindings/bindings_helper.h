@@ -75,6 +75,7 @@
 #include <linux/random.h>
 #include <linux/refcount.h>
 #include <linux/regulator/consumer.h>
+#include <linux/rusix_wait_bit_types.h>
 #include <linux/sched.h>
 #include <linux/security.h>
 #include <linux/slab.h>

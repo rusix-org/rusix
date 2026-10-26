@@ -1,10 +1,11 @@
 // SPDX-License-Identifier: GPL-2.0-only
-// Rust translation of Linux 6.18.58 wait-bit loops, actions and stack wrappers.
+// Rust translation of Linux 6.18.58 bit/variable wait ownership and policy.
 
 //! Bit/variable key matching and wait policy over C-visible pinned waiters.
 //!
-//! Hash queues, variable-wait initialization, bit operations, jiffies reads and
-//! scheduler primitives remain C. No Rust reference overlays a shared C bitmap.
+//! Rust owns the permanent hash table and its boot initialization as well as
+//! wait/wake policy. Lock/lockdep, marked list access, bit operations, jiffies
+//! reads and scheduler primitives remain C. Shared bitmaps are never borrowed.
 
 use core::ptr::{addr_of, addr_of_mut, null_mut};
 use kernel::{
@@ -303,4 +304,200 @@ pub unsafe extern "C" fn out_of_line_wait_on_bit_lock(
 ) -> c_int {
     // SAFETY: caller supplies writable bitmap and correct bit-lock protocol.
     unsafe { with_bit_waiter(word, bit, action, mode, None, true) }
+}
+
+#[cfg(not(all(target_arch = "x86_64", target_pointer_width = "64")))]
+compile_error!("wait table hash translation currently requires x86_64");
+#[cfg(CONFIG_HAVE_ARCH_HASH)]
+compile_error!("wait table hash requires a new audit for architecture overrides");
+
+#[repr(transparent)]
+struct WaitTable(Opaque<bindings::rusix_wait_bit_table>);
+// SAFETY: permanent storage; only boot's single wait_bit_init writes before
+// publication. Afterwards each head is accessed under its original spinlock,
+// except list_empty's original marked observation. No safe mutable access or
+// reference to the heads is exposed. All entry points have unsafe C contracts.
+unsafe impl Sync for WaitTable {}
+
+// SAFETY: configured alignment comes from the bindgen type; keep baseline
+// permanent writable cacheline section (not init data or ro_after_init).
+#[unsafe(link_section = ".data..cacheline_aligned")]
+static BIT_WAIT_TABLE: WaitTable = WaitTable(Opaque::zeroed());
+
+#[repr(transparent)]
+struct WaitTableClass(Opaque<bindings::lock_class_key>);
+// SAFETY: permanent lockdep key storage; lockdep owns and synchronizes use.
+// Never read through a Rust reference; not an initialized Rust lock object.
+unsafe impl Sync for WaitTableClass {}
+static BIT_WAIT_CLASS: WaitTableClass = WaitTableClass(Opaque::zeroed());
+const BIT_WAIT_NAME: &[u8] = b"bit_wait_table + i\0";
+const TABLE_SIZE: usize = 256;
+const _: () = assert!(
+    core::mem::align_of::<WaitTable>() == bindings::RUSIX_WAIT_BIT_TABLE_ALIGNMENT as usize
+);
+const _: () = assert!(
+    core::mem::size_of::<WaitTable>()
+        == TABLE_SIZE * core::mem::size_of::<bindings::wait_queue_head>()
+);
+
+// x86_64 has no HAVE_ARCH_HASH override. Keep exact modulo-2^64 multiply and
+// unsigned high-eight-bit selection; do not mask signed bit into [0,63].
+fn table_hash(value: c_ulong) -> usize {
+    (value.wrapping_mul(0x61c8_8646_80b5_83eb) >> 56) as usize
+}
+
+/// # Safety
+/// Only single boot initialization may use uninitialized storage. All other
+/// callers require completed wait_bit_init. index must be below TABLE_SIZE.
+unsafe fn table_head(index: usize) -> *mut bindings::wait_queue_head {
+    // SAFETY: permanent Opaque storage is aligned for its bindgen shell; raw
+    // projection never creates an array/head reference over C-visible memory.
+    let first = unsafe { addr_of_mut!((*BIT_WAIT_TABLE.0.get()).heads) }
+        .cast::<bindings::wait_queue_head>();
+    // SAFETY: index contract keeps pointer within the 256-element array.
+    unsafe { first.add(index) }
+}
+
+/// # Safety
+/// Called once by sched_init before any wait table use or secondary users.
+/// Must never reinitialize live queues; no allocation or sleep is permitted.
+// SAFETY: original non-exported C definition is excluded, exact void ABI and
+// __init section retained. Key/name deliberately outlive freed init text.
+#[unsafe(no_mangle)]
+#[unsafe(link_section = ".init.text")]
+#[cold]
+pub unsafe extern "C" fn wait_bit_init() {
+    for i in 0..TABLE_SIZE {
+        // SAFETY: boot exclusively owns each still-unpublished head at final
+        // address. One shared permanent key/name matches the single original
+        // macro expansion; ordinary spinlock init stays in its existing adapter.
+        unsafe {
+            bindings::__init_waitqueue_head(
+                table_head(i),
+                BIT_WAIT_NAME.as_ptr().cast(),
+                BIT_WAIT_CLASS.0.get(),
+            );
+        }
+    }
+}
+
+/// # Safety
+/// Initialization completed. Identity conversion does not dereference word;
+/// use of the returned queue/waiters must obey their generic wait contracts.
+// SAFETY: exclude matching C body, retain original C export unchanged.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn bit_waitqueue(
+    word: *mut c_ulong,
+    bit: c_int,
+) -> *mut bindings::wait_queue_head {
+    let value = (word as c_ulong).wrapping_shl(6) | (bit as c_ulong);
+    // SAFETY: high-eight-bit hash is always in 0..256; table initialized.
+    unsafe { table_head(table_hash(value)) }
+}
+
+/// # Safety
+/// Same initialized-table/returned-queue contract as bit_waitqueue.
+// SAFETY: exclude matching C definition; retain export and exact pointer ABI.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn __var_waitqueue(var: *mut c_void) -> *mut bindings::wait_queue_head {
+    // SAFETY: hash is in bounds; no dereference of the identity address.
+    unsafe { table_head(table_hash(var as c_ulong)) }
+}
+
+/// # Safety
+/// Queue and word identity live for dispatch. Caller supplies original
+/// condition-publication/full-barrier protocol, and valid bitmap when a matching
+/// bit callback can inspect it. For bit=-1 variable callbacks do not read bitmap.
+// SAFETY: matching C body excluded, original exported ABI unchanged.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn __wake_up_bit(
+    q: *mut bindings::wait_queue_head,
+    word: *mut c_ulong,
+    bit: c_int,
+) {
+    let mut key = bindings::wait_bit_key {
+        flags: word,
+        bit_nr: bit,
+        timeout: 0,
+    };
+    // SAFETY: baseline waitqueue_active is exactly !list_empty(&q->head).
+    // Reuse marked C list read; Rust never reads links concurrently directly.
+    if unsafe { bindings::swait_list_empty(addr_of!((*q).head)) } == 0 {
+        // SAFETY: key remains live until synchronous callback traversal returns;
+        // callbacks may not retain it. Queue lock is owned by __wake_up. Ignore
+        // wake count, as original void API does. No post-callback entry access.
+        unsafe {
+            bindings::__wake_up(
+                q,
+                bindings::TASK_NORMAL,
+                1,
+                (&mut key as *mut bindings::wait_bit_key).cast(),
+            )
+        };
+    }
+}
+
+/// # Safety
+/// __wake_up_bit contract, including caller-provided ordering, applies.
+// SAFETY: matching C body excluded; original export retained.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn wake_up_bit(word: *mut c_ulong, bit: c_int) {
+    // SAFETY: hash lookup is initialized; caller owns bit publication protocol.
+    unsafe { __wake_up_bit(bit_waitqueue(word, bit), word, bit) };
+}
+
+/// # Safety
+/// __var_wake_key and autoremove callback contracts; entry belongs to a retained
+/// variable waiter under its queue lock, arg is a synchronous live wake key.
+unsafe extern "C" fn var_wake_function(
+    entry: *mut bindings::wait_queue_entry,
+    mode: c_uint,
+    sync: c_int,
+    arg: *mut c_void,
+) -> c_int {
+    // SAFETY: identity fields stable under callback contract; no bitmap load.
+    let key = unsafe { __var_wake_key(entry, arg) };
+    if key.is_null() {
+        return 0;
+    }
+    // SAFETY: retained task and locked membership; do not touch entry after
+    // autoremove, which may release its owner's final lifetime protection.
+    unsafe { bindings::autoremove_wake_function(entry, mode, sync, key.cast()) }
+}
+
+/// # Safety
+/// Caller owns writable final-address storage, no waiter/observer/old membership
+/// remains. Initializing task is current; var identity outlives enrollment.
+/// Publish only after return; never move storage while its self-links are live.
+// SAFETY: matching C body/callback excluded; original exported ABI retained.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn init_wait_var_entry(
+    waiter: *mut bindings::wait_bit_queue_entry,
+    var: *mut c_void,
+    flags: c_int,
+) {
+    // SAFETY: exclusive unpublished storage. Initialize all semantic fields,
+    // including C omitted aggregate members, and self-links at final address.
+    // Padding is not observable initialization evidence and is never read.
+    unsafe {
+        addr_of_mut!((*waiter).key.flags).write(var.cast());
+        addr_of_mut!((*waiter).key.bit_nr).write(-1);
+        addr_of_mut!((*waiter).key.timeout).write(0);
+        addr_of_mut!((*waiter).wq_entry.flags).write(flags as c_uint);
+        addr_of_mut!((*waiter).wq_entry.private).write(bindings::get_current().cast());
+        addr_of_mut!((*waiter).wq_entry.func).write(Some(var_wake_function));
+        let node = addr_of_mut!((*waiter).wq_entry.entry);
+        addr_of_mut!((*node).next).write(node);
+        addr_of_mut!((*node).prev).write(node);
+    }
+}
+
+/// # Safety
+/// Variable condition publication/barrier and live identity contracts of
+/// wake_up_var apply; this function supplies no missing publication barrier.
+// SAFETY: matching C body excluded; original export retained.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn wake_up_var(var: *mut c_void) {
+    // SAFETY: initialized queue, variable key identity, no bitmap dereference.
+    unsafe { __wake_up_bit(__var_waitqueue(var), var.cast(), -1) };
 }

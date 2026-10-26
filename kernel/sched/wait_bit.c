@@ -7,6 +7,7 @@
  * The implementation of the wait_bit*() and related waiting APIs:
  */
 
+#ifndef CONFIG_RUSIX_COMPLETION_RUST
 #define WAIT_TABLE_BITS 8
 #define WAIT_TABLE_SIZE (1 << WAIT_TABLE_BITS)
 
@@ -19,6 +20,7 @@ wait_queue_head_t *bit_waitqueue(unsigned long *word, int bit)
 
 	return bit_wait_table + hash_long(val, WAIT_TABLE_BITS);
 }
+#endif
 EXPORT_SYMBOL(bit_waitqueue);
 
 #ifndef CONFIG_RUSIX_COMPLETION_RUST
@@ -133,6 +135,7 @@ int __sched out_of_line_wait_on_bit_lock(unsigned long *word, int bit,
 #endif
 EXPORT_SYMBOL(out_of_line_wait_on_bit_lock);
 
+#ifndef CONFIG_RUSIX_COMPLETION_RUST
 void __wake_up_bit(struct wait_queue_head *wq_head, unsigned long *word, int bit)
 {
 	struct wait_bit_key key = __WAIT_BIT_KEY_INITIALIZER(word, bit);
@@ -140,6 +143,7 @@ void __wake_up_bit(struct wait_queue_head *wq_head, unsigned long *word, int bit
 	if (waitqueue_active(wq_head))
 		__wake_up(wq_head, TASK_NORMAL, 1, &key);
 }
+#endif
 EXPORT_SYMBOL(__wake_up_bit);
 
 /**
@@ -167,16 +171,20 @@ EXPORT_SYMBOL(__wake_up_bit);
  * cleared are guaranteed to be visible after the matching wait_on_bit()
  * completes.
  */
+#ifndef CONFIG_RUSIX_COMPLETION_RUST
 void wake_up_bit(unsigned long *word, int bit)
 {
 	__wake_up_bit(bit_waitqueue(word, bit), word, bit);
 }
+#endif
 EXPORT_SYMBOL(wake_up_bit);
 
+#ifndef CONFIG_RUSIX_COMPLETION_RUST
 wait_queue_head_t *__var_waitqueue(void *p)
 {
 	return bit_wait_table + hash_ptr(p, WAIT_TABLE_BITS);
 }
+#endif
 EXPORT_SYMBOL(__var_waitqueue);
 
 #ifndef CONFIG_RUSIX_COMPLETION_RUST
@@ -194,6 +202,7 @@ struct wait_bit_key *__var_wake_key(struct wait_queue_entry *wq_entry, void *arg
 }
 #endif
 
+#ifndef CONFIG_RUSIX_COMPLETION_RUST
 static int var_wake_function(struct wait_queue_entry *wq_entry, unsigned int mode,
 			     int sync, void *arg)
 {
@@ -219,6 +228,7 @@ void init_wait_var_entry(struct wait_bit_queue_entry *wbq_entry, void *var, int 
 		},
 	};
 }
+#endif
 EXPORT_SYMBOL(init_wait_var_entry);
 
 /**
@@ -251,10 +261,12 @@ EXPORT_SYMBOL(init_wait_var_entry);
  * variable was updated are guaranteed to be visible after the matching
  * wait_var_event() completes.
  */
+#ifndef CONFIG_RUSIX_COMPLETION_RUST
 void wake_up_var(void *var)
 {
 	__wake_up_bit(__var_waitqueue(var), var, -1);
 }
+#endif
 EXPORT_SYMBOL(wake_up_var);
 
 #ifndef CONFIG_RUSIX_COMPLETION_RUST
@@ -297,6 +309,7 @@ __sched int bit_wait_timeout(struct wait_bit_key *word, int mode)
 #endif
 EXPORT_SYMBOL_GPL(bit_wait_timeout);
 
+#ifndef CONFIG_RUSIX_COMPLETION_RUST
 void __init wait_bit_init(void)
 {
 	int i;
@@ -304,3 +317,4 @@ void __init wait_bit_init(void)
 	for (i = 0; i < WAIT_TABLE_SIZE; i++)
 		init_waitqueue_head(bit_wait_table + i);
 }
+#endif

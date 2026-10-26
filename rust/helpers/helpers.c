@@ -81,6 +81,7 @@
 #include "wait_bit_test.c"
 #include "wait_policy_test.c"
 #include "wait_locked_test.c"
+#include "wait_owner_test.c"
 #endif
 #include "workqueue.c"
 #include "xarray.c"

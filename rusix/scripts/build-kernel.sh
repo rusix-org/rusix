@@ -327,10 +327,12 @@ rm -- "$evidence/wake-symbols.tmp" "$evidence/wake-current.txt"
     fi
 } > "$evidence/wake-selection.log"
 
-# Wait-bit policy has ten selected definitions, including its private matcher.
+# Wait-bit ownership/policy has seventeen named definitions, including init.
 bit_symbols=(__var_wake_key wake_bit_function __wait_on_bit __wait_on_bit_lock
     bit_wait bit_wait_io bit_wait_timeout out_of_line_wait_on_bit
-    out_of_line_wait_on_bit_timeout out_of_line_wait_on_bit_lock)
+    out_of_line_wait_on_bit_timeout out_of_line_wait_on_bit_lock
+    wait_bit_init bit_waitqueue __var_waitqueue __wake_up_bit wake_up_bit
+    init_wait_var_entry wake_up_var)
 bit_sched_symbols=(__wait_on_bit __wait_on_bit_lock bit_wait bit_wait_io bit_wait_timeout
     out_of_line_wait_on_bit out_of_line_wait_on_bit_timeout out_of_line_wait_on_bit_lock)
 if [[ "$completion_impl" == rust ]]; then
@@ -392,16 +394,138 @@ for name in sys.argv[3:]:
         raise SystemExit(f'{name} outside linked scheduler text: {address:x}')
     print(f'{name} object=.sched.text address={address:x} sched-range=[{start:x},{end:x})')
 PYBITSECTIONS
+# Inspect real ELF storage/sections in both configurations. The !LOCKDEP key can
+# be zero-sized/eliminated, so only debug configurations require key storage.
+python3 - "$bit_object" "$out/vmlinux" "$out/kernel/sched/build_utility.o" \
+    "$out/.config" "$out/rust/bindings/bindings_generated.rs" "$completion_impl" \
+    > "$evidence/wait-bit-ownership.txt" <<'PYBITOWNER'
+import re
+import struct
+import sys
+from pathlib import Path
+
+class Elf:
+    def __init__(self, path):
+        self.path = path
+        self.data = Path(path).read_bytes()
+        if self.data[:6] != b'\x7fELF\x02\x01' or struct.unpack_from('<H', self.data, 18)[0] != 62:
+            raise SystemExit('Wait-bit storage proof requires x86_64 little-endian ELF64')
+        offset = struct.unpack_from('<Q', self.data, 40)[0]
+        stride, count, names = struct.unpack_from('<HHH', self.data, 58)
+        if stride != 64 or not count or names >= count:
+            raise SystemExit('Unsupported ELF section table')
+        self.sections = [struct.unpack_from('<IIQQQQIIQQ', self.data, offset + i * stride)
+                         for i in range(count)]
+        name_section = self.sections[names]
+        name_data = self.data[name_section[4]:name_section[4] + name_section[5]]
+        self.section_names = [self.string(name_data, section[0]) for section in self.sections]
+        self.symbols = []
+        for section in self.sections:
+            if section[1] != 2:  # SHT_SYMTAB, not dynsym duplicates.
+                continue
+            if section[9] != 24 or section[5] % 24:
+                raise SystemExit('Unexpected ELF symbol stride')
+            strings = self.sections[section[6]]
+            strings = self.data[strings[4]:strings[4] + strings[5]]
+            for pos in range(section[4], section[4] + section[5], 24):
+                name, info, _, index, address, size = struct.unpack_from('<IBBHQQ', self.data, pos)
+                if index:
+                    self.symbols.append(dict(name=self.string(strings, name), kind=info & 15,
+                                             index=index, address=address, size=size))
+
+    @staticmethod
+    def string(data, offset):
+        return data[offset:data.index(b'\0', offset)].decode()
+
+    def one(self, predicate, description):
+        found = [symbol for symbol in self.symbols if predicate(symbol)]
+        if len(found) != 1:
+            raise SystemExit(f'{self.path}: expected one {description}, found {len(found)}')
+        return found[0]
+
+    def named(self, name):
+        return self.one(lambda symbol: symbol['name'] == name, name)
+
+    def section(self, symbol):
+        index = symbol['index']
+        if index >= len(self.sections):
+            raise SystemExit(f'No real section for {symbol["name"]}')
+        return self.section_names[index], self.sections[index]
+
+selected, linked, alternative = [Elf(path) for path in sys.argv[1:4]]
+config = Path(sys.argv[4]).read_text().splitlines()
+bindings = Path(sys.argv[5]).read_text()
+implementation = sys.argv[6]
+def constant(name):
+    values = re.findall(r'pub const ' + name + r': [^=]+ = ([0-9]+);', bindings)
+    if len(values) != 1:
+        raise SystemExit(f'Missing/duplicate generated C layout constant {name}')
+    return int(values[0])
+
+alignment = constant('RUSIX_WAIT_BIT_TABLE_ALIGNMENT')
+head_size = constant('RUSIX_WAIT_BIT_HEAD_SIZE')
+if alignment <= 0 or alignment & (alignment - 1) or head_size <= 0:
+    raise SystemExit('Invalid generated C table layout')
+init_start = linked.named('__init_begin')['address']
+init_end = linked.named('__init_end')['address']
+if init_start >= init_end:
+    raise SystemExit('Invalid linked init interval')
+for elf in (selected, linked):
+    initializer = elf.named('wait_bit_init')
+    section_name, section = elf.section(initializer)
+    if section_name != '.init.text' or initializer['kind'] != 2 or not section[2] & 4:
+        raise SystemExit('wait_bit_init must be executable .init.text')
+    if elf is linked and not init_start <= initializer['address'] < init_end:
+        raise SystemExit('Linked wait_bit_init lies outside init memory')
+    rust = implementation == 'rust'
+    table = elf.one(lambda symbol: symbol['kind'] == 1 and
+                    (('BIT_WAIT_TABLE' in symbol['name']) if rust else
+                     symbol['name'] == 'bit_wait_table'), 'selected wait table')
+    table_section, table_header = elf.section(table)
+    if table['size'] != 256 * head_size or table['address'] % alignment:
+        raise SystemExit('Wait table size/address disagrees with configured C layout')
+    if not table_header[2] & 1 or table_header[8] < alignment:
+        raise SystemExit('Wait table must be writable and cacheline aligned')
+    if elf is selected and table_section != '.data..cacheline_aligned':
+        raise SystemExit('Defining wait table lost baseline cacheline data section')
+    if table_section.startswith('.init') or (elf is linked and
+            table['address'] < init_end and table['address'] + table['size'] > init_start):
+        raise SystemExit('Wait table must survive init memory reclamation')
+    if rust and any(symbol['name'] == 'bit_wait_table' for symbol in elf.symbols):
+        raise SystemExit('C wait table remains in Rust selection')
+    if not rust and any('BIT_WAIT_TABLE' in symbol['name'] for symbol in elf.symbols):
+        raise SystemExit('Rust wait table remains in C selection')
+    print(f'{elf.path}: table={table["name"]} section={table_section} '
+          f'address={table["address"]:x} size={table["size"]} alignment={alignment} '
+          f'head-size={head_size}; init={initializer["address"]:x} section={section_name}')
+    if rust and 'CONFIG_LOCKDEP=y' in config:
+        key = elf.one(lambda symbol: symbol['kind'] == 1 and
+                      'BIT_WAIT_CLASS' in symbol['name'], 'permanent lockdep key')
+        key_section, key_header = elf.section(key)
+        if not key['size'] or not key_header[2] & 1 or key_section.startswith('.init'):
+            raise SystemExit('Lockdep key must have permanent writable storage')
+        if elf is linked and key['address'] < init_end and key['address'] + key['size'] > init_start:
+            raise SystemExit('Lockdep key overlaps init memory')
+        print(f'{elf.path}: key={key["name"]} section={key_section} '
+              f'address={key["address"]:x} size={key["size"]}')
+if implementation == 'rust' and any(symbol['name'] in ('bit_wait_table', 'var_wake_function')
+                                    for symbol in alternative.symbols):
+    raise SystemExit('C wait-bit storage/private callback remains selected')
+if 'CONFIG_LOCKDEP=y' not in config:
+    print('LOCKDEP=n: no storage or distinct identity required for empty key type')
+PYBITOWNER
 rm -- "$evidence/wait-bit-symbols.tmp" "$evidence/wait-bit-current.txt"
 {
     printf 'implementation=wait-bit-%s\n' "$completion_impl"
     cat "$evidence/wait-bit-objects.txt" "$evidence/wait-bit-symbols.txt" \
-        "$evidence/wait-bit-scheduler-sections.txt"
+        "$evidence/wait-bit-scheduler-sections.txt" "$evidence/wait-bit-ownership.txt"
     sha256sum "$RUSIX_SOURCE/kernel/sched/wait_bit.c" "$bit_object"
     if [[ "$completion_impl" == rust ]]; then
         sha256sum "$RUSIX_SOURCE/kernel/sched/wait_bit_rust.rs" \
             "$RUSIX_SOURCE/kernel/sched/wait_bit_rust/time.rs" \
-            "$RUSIX_SOURCE/rust/helpers/wait_bit_policy.c"
+            "$RUSIX_SOURCE/rust/helpers/wait_bit_policy.c" \
+            "$RUSIX_SOURCE/include/linux/rusix_wait_bit_types.h" \
+            "$out/rust/bindings/bindings_generated.rs"
     fi
 } > "$evidence/wait-bit-selection.log"
 

@@ -263,3 +263,6 @@ mod bit_tests;
 
 #[cfg(CONFIG_KUNIT = "y")]
 mod locked_tests;
+
+#[cfg(CONFIG_KUNIT = "y")]
+mod owner_tests;

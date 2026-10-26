@@ -15,6 +15,14 @@ spec.loader.exec_module(common)
 
 # Independent of live Rust source so removing a test does not weaken this gate.
 SUITES = {
+    "rusix_completion_wait_owner": (
+        "original_hash_oracle_covers_all_heads_and_shared_class",
+        "variable_constructor_and_callback_preserve_identity_and_flags",
+        "normal_collision_preserves_distinct_predicates",
+        "exclusive_collision_preserves_unmatched_waiter",
+        "mixed_collision_orders_preserve_key_filtering",
+        "blocked_collision_abort_detaches_both_owned_entries",
+    ),
     "rusix_completion_wait_locked": (
         "pending_iteration_preserves_lock_state_irq_and_enrollment",
         "original_macro_distinguishes_initial_condition_from_pending_error",

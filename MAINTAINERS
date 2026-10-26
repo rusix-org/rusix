@@ -22533,12 +22533,14 @@ B:	https://github.com/rusix-org/rusix/issues
 T:	git https://github.com/rusix-org/rusix.git rusix/main
 F:	drivers/block/brd_rust.rs
 F:	drivers/block/brd_rust/
+F:	include/linux/rusix_wait_bit_types.h
 F:	kernel/sched/completion_rust.rs
 F:	kernel/sched/completion_rust/
 F:	kernel/sched/swait_rust.rs
 F:	kernel/sched/wait_bit_rust.rs
 F:	kernel/sched/wait_bit_rust/
 F:	kernel/sched/wait_bit_test.c
+F:	kernel/sched/wait_owner_test.c
 F:	kernel/sched/wait_rust.rs
 F:	kernel/sched/wait_test.c
 F:	lib/math/int_sqrt_exports.c
@@ -22553,6 +22555,7 @@ F:	rust/helpers/swait.c
 F:	rust/helpers/swait_test.c
 F:	rust/helpers/wait_bit_policy.c
 F:	rust/helpers/wait_bit_test.c
+F:	rust/helpers/wait_owner_test.c
 F:	rust/helpers/wait_policy.c
 F:	rust/helpers/wait_policy_test.c
 F:	rust/kernel/block/bio.rs

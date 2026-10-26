@@ -43,5 +43,5 @@ obj-$(CONFIG_RUSIX_COMPLETION_RUST) += completion_rust.o swait_rust.o wait_rust.
 
 # Callback and dedicated-worker fixtures only in Rust-enabled KUnit kernels.
 ifeq ($(CONFIG_RUST)$(CONFIG_KUNIT),yy)
-obj-y += wait_test.o wait_bit_test.o wait_locked_test.o
+obj-y += wait_test.o wait_bit_test.o wait_locked_test.o wait_owner_test.o
 endif

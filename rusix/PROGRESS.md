@@ -78,3 +78,7 @@ the [plain-profile configuration refusal](docs/evidence/swait-init/manifest.json
 Raw logs/binaries remain in `linux-out/<run>`; manifests record source/config/tool
 identities and hashes. [Verification index](docs/VERIFICATION.md) preserves earlier
 milestones without attributing their results to newer source.
+
+Bit/variable wait-table ownership is being implemented on `rusix/wait-bit-owner`.
+The [ownership contract](experiments/wait-owner/README.md) records the intended
+storage and ordering boundaries. No build or runtime result is claimed yet.
