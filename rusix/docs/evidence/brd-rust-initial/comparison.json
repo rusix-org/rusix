@@ -1,0 +1,11 @@
+{
+  "c_source": "bb84c91162ac2cba49d98f690ed069cece1f84dc",
+  "rust_source": "aa6da498a",
+  "same_probe_elf_sha256": "64ded8d0bf3dcb9b2cd5616a88498ccbaa37b12bf6e524fb63e778057d92a4a4",
+  "only_resolved_config_addition": "CONFIG_RUSIX_BRD_RUST=y",
+  "container_image": "sha256:0e0cfd724bde5c2a81cee61210c2a14a66ea72f679e1308125825e0463c67937",
+  "cases": 6,
+  "c_result": "PASS",
+  "rust_result": "PASS",
+  "scope": "same userspace executable and relevant config; source commits differ by Rust implementation and tooling, not same-commit differential"
+}

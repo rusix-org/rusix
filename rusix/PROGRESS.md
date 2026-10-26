@@ -47,3 +47,7 @@ Its image builds with an exact package inventory, and Rust 1.85.1 produces a
 static x86_64 init. Six ordered filesystem cases and a strict runner are ready;
 guest execution remains pending. The separate BRD ownership KUnit profile has
 nine required cases; its acceptance-gate regression tests pass, kernel run pending.
+
+The [initial C/Rust comparison](docs/evidence/brd-rust-initial/comparison.json)
+uses byte-identical probe executables and the same tool image. Resolved configs
+differ only by Rust BRD selection; both run the six cases without skipped tests.
