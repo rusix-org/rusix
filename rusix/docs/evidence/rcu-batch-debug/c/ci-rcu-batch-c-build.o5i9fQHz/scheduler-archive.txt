@@ -1,0 +1,12 @@
+/out/builds/ci-rcu-batch-c/kernel/sched/core.o
+/out/builds/ci-rcu-batch-c/kernel/sched/fair.o
+/out/builds/ci-rcu-batch-c/kernel/sched/build_policy.o
+/out/builds/ci-rcu-batch-c/kernel/sched/build_utility.o
+/out/builds/ci-rcu-batch-c/kernel/sched/completion_rust.o
+/out/builds/ci-rcu-batch-c/kernel/sched/swait_rust.o
+/out/builds/ci-rcu-batch-c/kernel/sched/wait_rust.o
+/out/builds/ci-rcu-batch-c/kernel/sched/wait_bit_rust.o
+/out/builds/ci-rcu-batch-c/kernel/sched/wait_test.o
+/out/builds/ci-rcu-batch-c/kernel/sched/wait_bit_test.o
+/out/builds/ci-rcu-batch-c/kernel/sched/wait_locked_test.o
+/out/builds/ci-rcu-batch-c/kernel/sched/wait_owner_test.o

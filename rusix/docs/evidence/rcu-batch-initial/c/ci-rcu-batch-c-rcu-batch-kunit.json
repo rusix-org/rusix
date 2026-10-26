@@ -1,0 +1,70 @@
+{
+    "name": "KUnit Test Group",
+    "sub_groups": [
+        {
+            "name": "rusix_rcu_batch",
+            "sub_groups": [],
+            "test_cases": [
+                {
+                    "name": "private_empty_and_fifo_accounting",
+                    "status": "PASS"
+                },
+                {
+                    "name": "private_time_check_boundaries",
+                    "status": "PASS"
+                },
+                {
+                    "name": "held_reader_payload_before_barrier",
+                    "status": "PASS"
+                },
+                {
+                    "name": "self_free_callback_final_access",
+                    "status": "PASS"
+                },
+                {
+                    "name": "self_requeue_once_before_second_barrier",
+                    "status": "PASS"
+                },
+                {
+                    "name": "flood_exact_once_before_barrier",
+                    "status": "PASS"
+                },
+                {
+                    "name": "softirq_count_budget_reinserts_done_before_pending",
+                    "status": "PASS"
+                }
+            ],
+            "misc": {
+                "tests": 7,
+                "passed": 7,
+                "failed": 0,
+                "crashed": 0,
+                "skipped": 0,
+                "errors": 0
+            },
+            "arch": "",
+            "defconfig": "",
+            "build_environment": "",
+            "lab_name": null,
+            "kernel": null,
+            "job": null,
+            "git_branch": "kselftest"
+        }
+    ],
+    "test_cases": [],
+    "misc": {
+        "tests": 7,
+        "passed": 7,
+        "failed": 0,
+        "crashed": 0,
+        "skipped": 0,
+        "errors": 0
+    },
+    "arch": "",
+    "defconfig": "",
+    "build_environment": "",
+    "lab_name": null,
+    "kernel": null,
+    "job": null,
+    "git_branch": "kselftest"
+}

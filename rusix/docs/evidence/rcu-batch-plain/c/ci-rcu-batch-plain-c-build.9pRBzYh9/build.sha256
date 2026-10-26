@@ -1,0 +1,4 @@
+968abef3bf3dcbadd204fa3526b55c70ac3584d3dc33b2298267d4bd6eb44c10  /out/builds/ci-rcu-batch-plain-c/.config
+3afc08d9c5d5dc2fef2aa364744341dfe8c22a8789d2d520b8b6edc2af72b9c1  /out/builds/ci-rcu-batch-plain-c/arch/x86/boot/bzImage
+34965c53d3512e7ff1b6398722e329e0f0e7dd93d2ba3f20f2ba7bf0f5d5db1c  /out/builds/ci-rcu-batch-plain-c/vmlinux
+666657bab6ef09a34f4b5b9532df7e2db55815998625d0ab86d5d2f52111221e  /out/builds/ci-rcu-batch-plain-c/vmlinux.map

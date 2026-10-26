@@ -1,0 +1,1 @@
+/out/builds/ci-rcu-batch-plain-c/kernel/sched/wait_rust.o

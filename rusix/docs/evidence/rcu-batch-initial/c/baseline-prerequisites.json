@@ -1,0 +1,22 @@
+{
+  "status": "PASS",
+  "target_source": "0dd58fb714bee86d7df7bd177cc2cde371615a95",
+  "baseline_evidence": [
+    {
+      "suite": "debug",
+      "source": "c4e7efcf22b659bab2d82f2d9892cf2215aea58f",
+      "manifest": "/home/aaron/code/rusix/linux-out/rcu-list-debug-evidence/manifest.json",
+      "manifest_sha256": "362bc1b6c1bb3993f4832d488f409e1aaee08da671ec4847198c38c15d6c3ff6",
+      "rust_cache_candidate": "/home/aaron/code/rusix/linux-out/lts-rcu-list-debug-rust-001"
+    },
+    {
+      "suite": "plain",
+      "source": "c4e7efcf22b659bab2d82f2d9892cf2215aea58f",
+      "manifest": "/home/aaron/code/rusix/linux-out/rcu-list-plain-evidence/manifest.json",
+      "manifest_sha256": "f3260fb2f983694f417e47e852a62dca4f7ee8ad38f0a4ceb1b7f46d600cd80f",
+      "rust_cache_candidate": "/home/aaron/code/rusix/linux-out/lts-rcu-list-plain-rust-001"
+    }
+  ],
+  "cache_check": false,
+  "completed": null
+}

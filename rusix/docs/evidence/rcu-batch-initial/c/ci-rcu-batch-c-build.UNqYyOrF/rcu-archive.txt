@@ -1,0 +1,7 @@
+/out/builds/ci-rcu-batch-c/kernel/rcu/update.o
+/out/builds/ci-rcu-batch-c/kernel/rcu/sync.o
+/out/builds/ci-rcu-batch-c/kernel/rcu/srcutree.o
+/out/builds/ci-rcu-batch-c/kernel/rcu/tree.o
+/out/builds/ci-rcu-batch-c/kernel/rcu/rcu_segcblist_rust.o
+/out/builds/ci-rcu-batch-c/kernel/rcu/rcu_list_test.o
+/out/builds/ci-rcu-batch-c/kernel/rcu/rcu_batch_test.o

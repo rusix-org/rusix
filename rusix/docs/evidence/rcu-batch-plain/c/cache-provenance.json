@@ -1,0 +1,112 @@
+{
+  "status": "PREPARED_NOT_RUN",
+  "target_source": "4520760843e9ba1c7177aec466d3e4b85093a3d2",
+  "target_profile": "rcu-batch-plain-c",
+  "seed_output": "/home/aaron/code/rusix/linux-out/lts-rcu-list-plain-rust-001",
+  "seed_source": "c4e7efcf22b659bab2d82f2d9892cf2215aea58f",
+  "seed_terminal_status": {
+    "container.exit": "0",
+    "ci.exit": "0",
+    "build.exit": "0"
+  },
+  "copied_artifact_sha256": {
+    "builds/ci-rcu-batch-plain-c/.config": "9175e39c06baeb83f3caa231c53ba09c26eea96cd428a7afe51668248f176253",
+    "builds/ci-rcu-batch-plain-c/arch/x86/boot/bzImage": "4602d925047f0ef37b1a1a6c0c05d73d3cd1e2af25ea4607abffcd92dee25783",
+    "builds/ci-rcu-batch-plain-c/vmlinux": "1227ea1e2accac4e92132f9b37b4f27aaa278a64fcfd5cf84d0ba8aa9e1433d5",
+    "builds/ci-rcu-batch-plain-c/vmlinux.map": "5222cc99eeab45bcdfc87f1ae15b7671add00dcc30d17c0c8d4c6290b4b695c4"
+  },
+  "source_delta_invalidation": {
+    "source_delta": [
+      "A\tinclude/linux/rusix_rcu_batch.h",
+      "M\tkernel/rcu/Kconfig",
+      "M\tkernel/rcu/Makefile",
+      "A\tkernel/rcu/rcu_batch_ffi_impl.h",
+      "A\tkernel/rcu/rcu_batch_rust.rs",
+      "A\tkernel/rcu/rcu_batch_test.c",
+      "A\tkernel/rcu/rcu_batch_test.h",
+      "M\tkernel/rcu/tree.c",
+      "M\trusix/PROGRESS.md",
+      "M\trusix/ci/run-container.sh",
+      "M\trusix/ci/run.sh",
+      "A\trusix/configs/x86_64-rcu-batch-c.config",
+      "A\trusix/configs/x86_64-rcu-batch-plain-c.config",
+      "A\trusix/configs/x86_64-rcu-batch-plain-rust.config",
+      "A\trusix/configs/x86_64-rcu-batch-rust.config",
+      "A\trusix/configs/x86_64-rcu-list-ext4-c.config",
+      "A\trusix/configs/x86_64-rcu-list-ext4-rust.config",
+      "A\trusix/experiments/rcu-batch/CONTRACT.md",
+      "M\trusix/experiments/rcu-lists/README.md",
+      "M\trusix/scripts/boot-kunit.sh",
+      "M\trusix/scripts/build-kernel.sh",
+      "A\trusix/scripts/preprocess-rcu-batch.py",
+      "M\trusix/scripts/server_target.py",
+      "M\trusix/scripts/test-brd-ext4-vm.py",
+      "M\trusix/scripts/test-brd-fixed-parameters-vm.py",
+      "M\trusix/scripts/test-brd-partitions-vm.py",
+      "M\trusix/scripts/test-brd-vm.py",
+      "A\trusix/scripts/validate-rcu-batch-kunit.py",
+      "A\trusix/scripts/verify-rcu-batch-selection.py",
+      "A\trusix/scripts/verify-rcu-list-continuity.py",
+      "M\trusix/scripts/verify-rcu-list-selection.py",
+      "A\trusix/tests/test_rcu_batch_kunit_gate.py",
+      "A\trusix/tests/test_rcu_batch_selection.py",
+      "A\trusix/tests/test_rcu_list_integration.py",
+      "M\trust/bindings/bindings_helper.h",
+      "M\trust/helpers/helpers.c",
+      "A\trust/helpers/rcu_batch_test.c",
+      "M\trust/kernel/sync/rcu.rs",
+      "A\trust/kernel/sync/rcu/batch_tests.rs"
+    ],
+    "removed": {
+      "kernel/rcu/tree.o": {
+        "sha256": "fcddc8f1dc31af4efe59c57a1db73c4f90e50b958193d9623ad77097f821e881",
+        "mtime_ns": 1793044846687295753
+      },
+      "kernel/rcu/.tree.o.cmd": {
+        "sha256": "7cad96963c72187ddb1287d310a96a682452e9da01371236ffa8454646853217",
+        "mtime_ns": 1793044846701295369
+      },
+      "rust/helpers/helpers.o": {
+        "sha256": "51c0c2c2a6906f99a6d33d5ad42fb7ff93080a33f583324c3024e4e174148894",
+        "mtime_ns": 1793044725963874354
+      },
+      "rust/helpers/.helpers.o.cmd": {
+        "sha256": "c6c6289e129ec991491f92b9f3483756007530b04cb03c5467d94331d7b0a718",
+        "mtime_ns": 1793044725975873970
+      },
+      "rust/kernel.o": {
+        "sha256": "d01b558d3427d235b9d0b6f0a5a1713c58677e000dde5b7ae911e20112c38cd3",
+        "mtime_ns": 1793044762933719140
+      },
+      "rust/.kernel.o.cmd": {
+        "sha256": "e53394fe9f378014f99902ea9cc38540fc52c3499db23b81bc0304434912219a",
+        "mtime_ns": 1793044762940718927
+      },
+      "rust/bindings/bindings_generated.rs": {
+        "sha256": "decad7acdf1eb2f21631f6d48614b30b54420f4c2d6b845d7163bdec776a3e10",
+        "mtime_ns": 1793044721946003321
+      },
+      "rust/bindings/.bindings_generated.rs.cmd": {
+        "sha256": "b1df8cc351e6a109974b4982fd1698720172ad34b981fad6d34adf3c07f9b8de",
+        "mtime_ns": 1793044721969002581
+      },
+      "rust/bindings/bindings_helpers_generated.rs": {
+        "sha256": "cf50a3662d356a84e107a6e8425bc4d9ded7a666cf57644c6d8314c488f4ee37",
+        "mtime_ns": 1793044723900940486
+      },
+      "rust/bindings/.bindings_helpers_generated.rs.cmd": {
+        "sha256": "acc6fef5ac217d3fdd7da25ebeb6bf1fbc5eeae49f38aba16b3cd5658e0093e4",
+        "mtime_ns": 1793044723911940133
+      },
+      "rust/bindings/builtin_init_generated.rs": {
+        "sha256": "4974026f49a4c94cd4b8f9dd620f7d08bc823ae6d0e233f5e860c4536b7444e4",
+        "mtime_ns": 1793044724087934484
+      },
+      "rust/bindings/.builtin_init_generated.rs.cmd": {
+        "sha256": "590145296813b71037afca88d6e3e717717128af808fae04687b4b570ee8d424",
+        "mtime_ns": 1793044724095934227
+      }
+    },
+    "reason": "Candidate modified sources predate seed objects; force tree/helper/bindgen/kernel regeneration without touching source"
+  }
+}

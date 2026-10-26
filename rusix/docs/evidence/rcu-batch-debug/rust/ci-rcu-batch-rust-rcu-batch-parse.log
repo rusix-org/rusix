@@ -1,0 +1,13 @@
+[21:54:34] ============================================================
+[21:54:34] =============== rusix_rcu_batch (7 subtests) ===============
+[21:54:34] [PASSED] private_empty_and_fifo_accounting
+[21:54:34] [PASSED] private_time_check_boundaries
+[21:54:34] [PASSED] held_reader_payload_before_barrier
+[21:54:34] [PASSED] self_free_callback_final_access
+[21:54:34] [PASSED] self_requeue_once_before_second_barrier
+[21:54:34] [PASSED] flood_exact_once_before_barrier
+[21:54:34] [PASSED] softirq_count_budget_reinserts_done_before_pending
+[21:54:34] ================= [PASSED] rusix_rcu_batch =================
+[21:54:34] ============================================================
+[21:54:34] Testing complete. Ran 7 tests: passed: 7
+[21:54:34] Test results stored in /out/logs/ci-rcu-batch-rust-rcu-batch-kunit.json

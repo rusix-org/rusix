@@ -1,0 +1,60 @@
+{
+  "status": "PASS",
+  "target_source": "4520760843e9ba1c7177aec466d3e4b85093a3d2",
+  "baseline_evidence": [
+    {
+      "suite": "debug",
+      "source": "c4e7efcf22b659bab2d82f2d9892cf2215aea58f",
+      "manifest": "/home/aaron/code/rusix/linux-out/rcu-list-debug-evidence/manifest.json",
+      "manifest_sha256": "362bc1b6c1bb3993f4832d488f409e1aaee08da671ec4847198c38c15d6c3ff6",
+      "rust_cache_candidate": "/home/aaron/code/rusix/linux-out/lts-rcu-list-debug-rust-001"
+    },
+    {
+      "suite": "plain",
+      "source": "c4e7efcf22b659bab2d82f2d9892cf2215aea58f",
+      "manifest": "/home/aaron/code/rusix/linux-out/rcu-list-plain-evidence/manifest.json",
+      "manifest_sha256": "f3260fb2f983694f417e47e852a62dca4f7ee8ad38f0a4ceb1b7f46d600cd80f",
+      "rust_cache_candidate": "/home/aaron/code/rusix/linux-out/lts-rcu-list-plain-rust-001"
+    }
+  ],
+  "cache_check": false,
+  "completed": {
+    "profile": "rcu-batch-plain-rust",
+    "cases": [
+      93,
+      67,
+      10,
+      7
+    ],
+    "dispatch": {
+      "status": "PASS",
+      "implementation": "rust",
+      "fixture": "rcu_batch_test.o",
+      "original_tree_sha256": "e44083c2f67df3a0de8f08a7a59d42c7d854d283c66b7e481b64a9fc36f2ef73",
+      "definitions": [
+        "rusix_rcubatch_private",
+        "rusix_rcubatch_private_accounting",
+        "rusix_rcubatch_time_samples",
+        "rusix_rcubatch_budget_create",
+        "rusix_rcubatch_budget_step",
+        "rusix_rcubatch_budget_detached",
+        "rusix_rcubatch_budget_drain",
+        "rusix_rcubatch_start",
+        "rusix_rcubatch_wait",
+        "rusix_rcubatch_result",
+        "rusix_rcubatch_put",
+        "rusix_rcu_do_batch",
+        "rusix_rcu_batch_check_time"
+      ],
+      "compiled_policy": "Rust-only forwarding bodies and executable bridge relocations",
+      "scope": "Source/preprocessor/object/linked selection; runtime acceptance is separate"
+    },
+    "build_sha256": {
+      "/out/builds/ci-rcu-batch-plain-rust/.config": "0fc4a877702205a532574d360a386d851708e138c9333f9540966bcdb823816a",
+      "/out/builds/ci-rcu-batch-plain-rust/arch/x86/boot/bzImage": "8aac8d30dffb01abf849a379f4a81f131dea53c7b9f3cf6743bf751e97cc2d7d",
+      "/out/builds/ci-rcu-batch-plain-rust/vmlinux": "a13ac2fe713b156d7f5c406f8f9af29630653edef168eb385cee20ecbfd95301",
+      "/out/builds/ci-rcu-batch-plain-rust/vmlinux.map": "cafdb24b129a618472f8d5d831e0faadb6de837e04362f2a2ae82028cfa26df5"
+    },
+    "scope": "Completed KUnit/debug-or-plain proof only; no integration or hotplug claim"
+  }
+}

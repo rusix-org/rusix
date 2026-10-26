@@ -1,0 +1,4 @@
+d6b4b08b0fe853840517d695bfed90d95166710d8cc5b3aeafd4242b0d9c4da3  /out/builds/ci-rcu-batch-rust/.config
+1aa659a3218613a26f46d89f83d053560f99bb966226da768832ebe89bd97e01  /out/builds/ci-rcu-batch-rust/arch/x86/boot/bzImage
+dbc90e20fd5c341f7318314dbadc9ade76579ab72a98c0d947a0b81af73bd47a  /out/builds/ci-rcu-batch-rust/vmlinux
+460876f013954ff7c3f092e8f985be8c38eaa05ebb7276432aef19aacd730fb7  /out/builds/ci-rcu-batch-rust/vmlinux.map

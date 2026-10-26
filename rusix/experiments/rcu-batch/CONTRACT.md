@@ -1,8 +1,9 @@
 # Tree RCU callback-batch ownership contract
 
-Status: the full Rust batch transaction and paired debug/plain routing are
-implemented, source-reviewed and **unbuilt**. No runtime or linked-selection
-result is claimed. `RUSIX_RCU_BATCH_RUST` is default-off; deselection retains the
+Status: at `4520760843e9`, all four C/Rust debug/plain kernels pass
+93 combined, 67 core, ten list and seven batch cases, with actual linked-selection
+proofs. [Progress and evidence](../../PROGRESS.md) record the tested scope.
+Ordinary consumers, callback-thread execution and hotplug stress remain pending. `RUSIX_RCU_BATCH_RUST` is default-off; deselection retains the
 literal Linux 6.18.58 `rcu_do_batch` and `rcu_do_batch_check_time` bodies. Both
 sides retain Rust BRD, core and RCU lists.
 
@@ -89,23 +90,17 @@ that RCU has an intrinsic finite timeout.
 
 ## Remaining work before migration acceptance
 
-The C-first fixture baseline is committed as `6f240ef01d`; its recorded 17 host
-script results belong to that baseline, not to the later production translation.
-The production source review records preservation of the C bodies/test region,
-Rust formatting, diff checks and exact input hashes in the local
-`linux-out/rcu-batch-source-review-001` record. It is not compilation evidence.
+The four C/Rust debug/plain runs at `4520760843e9` pass 93 combined cases
+(seven batch, 67 core, ten list, nine BRD) plus isolated controls, matching
+configurations and actual tree-object call/selected-definition proofs.
+Follow with ordinary filesystem/server consumers and a separate
+`rcutree.use_softirq=0` runtime pair; normal softirq execution cannot establish
+callback-thread behavior. CPU-hotplug runtime coverage remains pending. The
+retained C caller protocol supplies the hotplug lifetime argument, not a new
+hotplug test result. This worktree does not depend on the separate
+RCU-sync/perCPU/file-owner candidates.
 
-Run C before Rust for both debug/plain profiles. Require 92 combined cases
-(6 batch + 67 core + 10 list + 9 BRD), isolated controls, matching configurations
-and actual tree-object call/selected-definition proof. Follow with ordinary
-filesystem/server consumers and a separate `rcutree.use_softirq=0` runtime pair;
-normal softirq execution cannot establish callback-thread behavior. Deterministic
-partial-budget exits/reinsertion and CPU-hotplug runtime coverage remain pending.
-The retained C caller protocol supplies the hotplug lifetime argument, not a new
-hotplug test result. No dependency on uncompiled RCU-sync/perCPU/file-owner
-branches is introduced by this worktree.
-
-## Count-budget softirq fixture (implemented, unexecuted)
+## Count-budget softirq fixture (verified in all four local runs)
 
 `softirq_count_budget_reinserts_done_before_pending` creates a private descriptor
 with blimit1, two DONE heads and one PENDING head. Setup checks normalized global

@@ -1,0 +1,45 @@
+Build evidence: /out/logs/ci-rcu-batch-rust-build.gDzlwzG2
+{
+  "profile": "rcu-batch-rust",
+  "configuration": "PASS"
+}
+  CC      arch/x86/kernel/apic/ipi.o
+  CC      arch/x86/mm/mmap.o
+  CC      arch/x86/kernel/apic/vector.o
+  CC      arch/x86/mm/pgtable.o
+  CC      arch/x86/kernel/apic/init.o
+  CC      arch/x86/mm/physaddr.o
+  CC      arch/x86/kernel/apic/hw_nmi.o
+  CC      arch/x86/mm/tlb.o
+  CC      arch/x86/kernel/apic/io_apic.o
+  CC      arch/x86/mm/cpu_entry_area.o
+  CC      arch/x86/kernel/apic/msi.o
+  CC      arch/x86/mm/maccess.o
+  CC      arch/x86/mm/pgprot.o
+  CC      arch/x86/kernel/apic/apic_flat_64.o
+  CC      arch/x86/mm/pat/set_memory.o
+  CC      arch/x86/kernel/apic/probe_64.o
+  AR      arch/x86/kernel/apic/built-in.a
+  CC      arch/x86/kernel/trace_clock.o
+  CC      arch/x86/kernel/trace.o
+  CC      arch/x86/mm/pat/memtype.o
+  CC      arch/x86/kernel/hpet.o
+  CC      arch/x86/kernel/amd_nb.o
+  AR      arch/x86/mm/pat/built-in.a
+  AR      arch/x86/mm/built-in.a
+  CC      arch/x86/virt/svm/cmdline.o
+  AR      arch/x86/virt/svm/built-in.a
+  AR      arch/x86/virt/built-in.a
+  CC      arch/x86/kernel/amd_node.o
+  CC      arch/x86/kernel/perf_regs.o
+  CC      arch/x86/kernel/unwind_orc.o
+  CC      arch/x86/kernel/mmconf-fam10h_64.o
+  CC      arch/x86/kernel/vsmp_64.o
+  LDS     arch/x86/kernel/vmlinux.lds
+  AR      arch/x86/kernel/built-in.a
+  AR      arch/x86/built-in.a
+make[2]: *** [/src/Makefile:2050: .] Error 2
+make[1]: *** [/src/Makefile:248: __sub-make] Error 2
+make[1]: Leaving directory '/out/builds/ci-rcu-batch-rust'
+make: *** [Makefile:248: __sub-make] Error 2
+make: Leaving directory '/src'

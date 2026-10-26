@@ -105,24 +105,10 @@ on a generated field name and three unnecessary-unsafe warnings. The corrected
 `a39d03eb165b` builds have no compiler/objtool diagnostics.
 [Retained failure](docs/evidence/brd-parameter-owner-initial/manifest.json).
 
-RCU callback-list policy translates all 25 definitions on `rusix/rcu-callback-lists`.
-Ten new cases cover literal list transitions and real RCU/SRCU consumers; the
-strict gates require 86 combined or ten isolated RCU cases. Fourteen host gate
-scripts pass; kernel compilation and C/Rust VM parity remain unexecuted.
-The [contract](experiments/rcu-lists/README.md) records shared C access/order
-primitives and the subsequent storage-ownership work.
-
-### RCU-list production integration tooling (development)
-
-Added explicit ext4/server C/Rust RCU-list profiles with Rust BRD/core on both
-sides and fixtures disabled, production selection checks, guest proof validation,
-and exact ancestry/change-boundary verification for retaining older KUnit evidence
-under its original source identity. Kernel policy, KUnit fixtures and existing
-configuration fragments are unchanged. See the [migration record](experiments/rcu-lists/README.md#production-integration-profiles).
-Host regressions and independent source review are the current verification
-scope; these new profiles have not been built or booted. Next freeze the reviewed
-tooling revision, run serial paired integration guests and refresh the declared
-server language inventory before considering promotion.
+The batch prerequisite RCU-list source at `c4e7efcf22b6` passes paired C/Rust
+debug/plain KUnit runs (86 combined, 67 core, ten list). Their original archives
+are identified and hashed by the batch evidence below. Production integration
+results from the separate public branch are not attributed to this batch source.
 
 ### Tree RCU callback-batch transaction (development)
 
@@ -134,33 +120,24 @@ primitives. The original C production function bodies remain intact; test-only h
 separate from the policy.
 The [contract](experiments/rcu-batch/CONTRACT.md) owns the boundary and removal path.
 
-Seven cases cover private-descriptor accounting/time boundaries, real retained
-callback consumers and a real tasklet count-budget exit. The seventh fixture
-uses two DONE callbacks and one PENDING callback, checks partial reinsertion
-before pending work, and includes a self-freeing first callback. Paired local
-debug/plain profiles require 93 combined, 67 isolated core, ten list and seven
-batch cases. The fixture baseline `6f240ef01d`
-has 17 passing host scripts plus syntax/diff checks, recorded locally in
-`linux-out/rcu-batch-baseline-host-001/manifest.json`. The later production
-translation has independent source review and format/diff/input-hash records in
-`linux-out/rcu-batch-source-review-001`; it has **not been compiled or booted**.
-A fresh run of all 17 host scripts (172 cases), formatting and shell checks also
-passes at production snapshot `fdc12796e743`; `linux-out/rcu-batch-host-001/manifest.json`
-records its exact inputs. Kernel and runtime gates remain pending.
+At `4520760843e9`, all four local C/Rust debug/plain kernels pass 93 combined,
+67 isolated core, ten list and seven batch cases. Actual preprocessing, object
+and linked-symbol proofs confirm selection; each pair differs only by the batch
+selector. Rust BRD/core/list remain selected on both sides. The seven cases cover
+private accounting/time boundaries, real retained callbacks, self-free/requeue,
+and a tasklet count-budget exit with partial DONE reinsertion before PENDING.
+[Debug evidence](docs/evidence/rcu-batch-debug/manifest.json) and
+[plain evidence](docs/evidence/rcu-batch-plain/manifest.json) retain the tested
+source identity. Root and independent audits rehashed all 538 archived records
+and the original linked kernel artifacts. Later documentation commits do not
+change the attribution of these results.
 
-Next freeze the reviewed implementation, run C before Rust debug/plain pairs,
-prove linked selection and exercise ordinary filesystem/server consumers.
-The seventh-fixture source has independent review; a fresh host record in
-`linux-out/rcu-batch-budget-host-001/manifest.json` covers all 17 scripts,
-formatting, shell checks and complete input hashes. Partial-budget runtime
-verification, explicit `rcutree.use_softirq=0` callback-thread runs and CPU-hotplug
-coverage remain pending; neither mode is silently excluded from
-production policy. No full RCU ownership or subsystem divergence is declared.
+The initial `0dd58fb714be` attempt passed C debug but Rust compilation failed
+on ten calls to eight private list APIs absent from public bindgen. Explicit
+canonical declarations fixed that build failure. Its 174 records remain in the
+[initial failure archive](docs/evidence/rcu-batch-initial/manifest.json).
 
-The initial batch matrix at `0dd58fb714be` passed all 93 combined, 67 core,
-ten list and seven batch cases on the C debug kernel. Rust debug compilation
-then failed on ten calls to eight list APIs absent from the public bindgen
-header; no Rust guest or plain pair ran. The 174-record failure archive remains
-`linux-out/rcu-batch-initial-evidence`. Explicit declarations now match the
-private canonical C header without changing policy. Host checks pass; a fresh
-paired matrix is required before claiming Rust runtime verification.
+Ordinary filesystem/server integration, explicit `rcutree.use_softirq=0`
+callback-thread runs, CPU-hotplug stress, arm64 and performance remain pending.
+Next run ordinary consumers with the same production implementation. No full
+RCU ownership or subsystem divergence is declared.
