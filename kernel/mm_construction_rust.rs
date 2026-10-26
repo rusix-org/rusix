@@ -14,6 +14,12 @@ use kernel::{
     ffi::{c_int, c_ulong},
 };
 
+// task_struct contains GNU empty structs (including sched_statistics when
+// SCHEDSTATS=n). All aggregate parameters and results in this block are raw
+// pointers; only c_int/c_ulong values cross by value. Canonical C prototypes
+// retain these typed pointers, and Rust does not access their foreign layout.
+// Keep this pointer-only ABI exception local to the reviewed declarations.
+#[allow(improper_ctypes)]
 unsafe extern "C" {
     static rusix_mm_mdwe_no_inherit: c_ulong;
     static rusix_mm_mdwe_clear: c_ulong;

@@ -167,3 +167,20 @@ rejection of release additions. A separate release gate now reconstructs all
 three migrations while preserving the strict historical constructor gate; the
 203-case run above passes.
 Logs and exact inputs: `linux-out/constructor-archive-propagation-host-001/linux-mm-release`.
+
+### Task constructor pointer-ABI diagnostic fix
+
+Historical task source `0af2d8b944b2` passes all five C userspace cases and
+postchecks. Its Rust build emitted 36 `improper_ctypes` warnings for GNU empty
+`sched_statistics` nested in `task_struct`, then was stopped (137); no Rust
+guest ran. `linux-out/task-construction-warnings-evidence` retains these results.
+This branch inherits the exact reviewed task declaration annotation from
+`eec5ae3ecd7b`: a local pointer-only FFI lint exception, with no policy, layout,
+configuration or global warning-gate change. These historical results do not
+verify this branch's kernel; fresh build and runtime checks remain pending.
+
+The MM constructor's manual extern block has the same narrowly scoped exception
+after review of its typed aggregate pointers and `c_int`/`c_ulong` values, including
+four declarations carrying `task_struct` pointers. This is an audited consequence
+of the observed task diagnostic, not a claim of MM compilation. MM release's
+extern block is unchanged; no blanket suppression was added.
