@@ -1,6 +1,6 @@
 # Ordinary ext4 userspace fixture
 
-**Implemented; VM execution pending.** This is separate from the unchanged
+**C and Rust VM runs pass.** See the [paired evidence](../../docs/evidence/brd-ext4/manifest.json). This is separate from the unchanged
 six-case direct-I/O BRD contract. Buffered writes, per-file fsync, aligned direct reads/writes and remount checks
 exercise the same staged rootfs and workload against
 C and Rust BRD kernels. Never execute `init` or `workload.sh` on the host or as
