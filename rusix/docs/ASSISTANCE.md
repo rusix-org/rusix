@@ -1,10 +1,10 @@
 # Tool-assisted development record
 
-Codex and parallel agents produced the initial Rust square-root translation,
-supplementary tests, build/verification tooling and project documentation. Agents
-cross-reviewed arithmetic/ABI behavior, export selection, path/provenance gates,
-the VM-only module fixture, and the C BRD probe/ownership proposal. Upstream
-source, licensing and attribution remain attached to the work.
+Codex and parallel agents produced the Rust square-root and BRD implementations,
+transitional bio/disk/xarray/NOIO interfaces, completion ownership experiments,
+guest fixtures, build/verification tooling and documentation. Agents cross-reviewed
+ownership, unsafe boundaries, parameter semantics and test/provenance gates.
+Upstream source, licensing and attribution remain attached to the work.
 
 Executed checks and limitations are recorded in [PROGRESS.md](../PROGRESS.md),
 [VERIFICATION.md](VERIFICATION.md) and archived evidence. Design discussion,
