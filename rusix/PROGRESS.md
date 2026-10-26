@@ -243,3 +243,20 @@ pass; actual retained pinned compiler records parse correctly, with the fork
 argv unchanged (`linux-out/mm-mmap-command-host-001`). No compiler was invoked
 by that check. Seven-case mapping fixtures are being prepared separately;
 ordinary consumers will not certify partial-allocation rollback.
+
+### Mapping duplication verification pipeline
+
+The candidate now has paired profiles, both fork and mmap preprocessing, actual
+archive/object/linked selection proofs, local build routing and seven guarded
+userspace consumers. Root and independent source review cover production, proof
+and fixture contracts. All 25 host scripts (254 cases) pass with unchanged inputs
+in `linux-out/dup-mmap-host-001`. The initramfs supplies a private `/work` mount
+point; tests cover DONTFORK, WIPEONFORK through two generations, file mappings and
+the existing shared-MM/exec/COW cases. No candidate kernel or guest has run.
+
+The release build at `42318e69e5f2` established a nested GNU empty-type lint
+through `mm_struct` pointers. This branch carries its reviewed pointer-only
+extern annotation and the same narrowly scoped declaration annotation for the
+new mapping policy: aggregate values cross only as raw pointers, while scalars
+retain C types. Rust policy and global warning gates are unchanged. Actual clean
+compilation remains required, as does attributable partial-allocation rollback.

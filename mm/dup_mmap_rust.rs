@@ -13,6 +13,12 @@ use kernel::{
     ffi::{c_int, c_ulong, c_void},
 };
 
+// MM and related bindgen pointees can reach GNU empty sched_statistics, as
+// observed in the release build. This block passes aggregate types only through
+// raw pointers, including the opaque context; values are c_int/c_ulong/bool.
+// Rust neither passes foreign aggregates by value nor reads their layout.
+// Keep the pointer-only ABI exception local to these reviewed declarations.
+#[allow(improper_ctypes)]
 unsafe extern "C" {
     static rusix_dup_dontcopy: c_ulong;
     static rusix_dup_account: c_ulong;
