@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-2.0
-#[path = "../linux/lib/math/int_sqrt_rust.rs"]
+#[path = "../../lib/math/int_sqrt_rust.rs"]
 mod replacement;
 
 unsafe extern "C" {

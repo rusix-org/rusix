@@ -30,7 +30,7 @@ original [README](README). rusix-specific documentation lives under `rusix/`.
 See [COPYING](COPYING) and [LICENSES](LICENSES/) for the inherited license terms;
 preserve per-file SPDX identifiers and attribution.
 
-The development tools currently expect a workspace containing this checkout as
-`linux/`. Follow the contributor setup instructions rather than assuming a
-standalone Cargo project. Test experimental kernels in isolated VMs, not on the
-host machine.
+Build and test tools run directly from this checkout under `rusix/scripts/`.
+The checkout may have any name; generated output defaults to a sibling directory
+named `<checkout-name>-out`. Follow the contributor setup instructions for this
+Linux-derived build. Test experimental kernels in isolated VMs.

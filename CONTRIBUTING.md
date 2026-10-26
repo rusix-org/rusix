@@ -4,7 +4,7 @@ Start with the [rusix contributor guide](rusix/CONTRIBUTING.md),
 [accepted architecture](rusix/docs/ARCHITECTURE.md), and
 [current progress](rusix/PROGRESS.md).
 
-The guide documents the workspace layout, reproducible checks, compatibility
+The guide documents the repository layout, reproducible checks, compatibility
 contracts, Rust safety expectations, upstream conventions, and review evidence.
 This is a Linux-derived kernel project; most inherited Linux documentation and
 licensing still apply. Do not substitute a generic Cargo workflow.

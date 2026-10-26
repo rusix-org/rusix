@@ -40,11 +40,17 @@ directories and virtual machines for verification.
 
 ## Repository and provenance
 
-- `linux/` is the Linux-derived Git repository. Keep upstream history and
-  license notices. Record the exact starting commit and source remote.
-- Root documents govern the project and live outside the kernel source tree.
-  Keep versioned copies in `linux/rusix/` using `scripts/sync-project-docs.sh`.
-  Root copies are authoritative; edit them, then sync before committing.
+- The Git checkout is the Linux-derived source repository, regardless of its
+  directory name. Keep upstream history and license notices. Record the exact
+  starting commit and source remote.
+- Tracked `rusix/` is the authoritative project documentation, tooling, tests,
+  and configuration. Paths in this guide are relative to `rusix/` unless stated
+  otherwise. Edit tracked files directly; never synchronize outer workspace
+  copies over them. The old synchronization script deliberately refuses to run.
+- Scripts resolve the source checkout themselves. Outputs default to the sibling
+  `<checkout-name>-out`; `RUSIX_OUTPUT_ROOT` overrides that location. Local tools
+  default to `$RUSIX_OUTPUT_ROOT/.tools/root`; `RUSIX_TOOLS_ROOT` overrides it.
+  Relative overrides resolve against the invoking working directory.
 - Work on a `rusix/*` branch. Keep upstream remote named `upstream` and never
   push to it. Publishing remote `origin` is the public
   `https://github.com/rusix-org/rusix.git`, created as a GitHub fork of `torvalds/linux` at Aaron's request.
@@ -92,7 +98,7 @@ directories and virtual machines for verification.
 
 ## Resource and verification discipline
 
-- Build under this workspace on disk, never in `/tmp`. Use modest parallelism
+- Build outside the source checkout on disk, never in `/tmp`. Use modest parallelism
   (initially `-j2`) on this laptop and inspect available memory/disk first.
 - Never modify the host bootloader or load an experimental kernel module on the
   host as part of routine testing. Bound VM memory and execution time.
@@ -110,7 +116,7 @@ directories and virtual machines for verification.
 `PROGRESS.md` must contain the baseline, current milestone, implemented work,
 verification evidence, blockers, next executable actions, and chronological
 session entries. Keep it concise by linking longer evidence under `docs/` or
-`linux/rusix/`. Never erase unresolved failures or silently promote planned work
+`rusix/`. Never erase unresolved failures or silently promote planned work
 to completed. Mark work as planned, implemented/unverified, verified (with scope),
 or blocked. Completion means the original objective is implemented and verified,
 not merely that the current milestone passed.
@@ -126,9 +132,9 @@ reproduce a result without relying on chat history. Keep upstream tests unchange
 and added tests visibly separate. Document residual C, untested architectures,
 and known gaps prominently; do not market an early experiment as a finished OS.
 
-The source-tree `AGENTS.md` points to this synchronized guide. Also follow the
-inherited `linux/Documentation/process/coding-assistants.rst` and
-`linux/Documentation/process/generated-content.rst` guidance (paths relative to
-the outer workspace), including its rule that AI agents must not add human
+The source-tree `AGENTS.md` points to this tracked guide. Also follow the
+inherited `Documentation/process/coding-assistants.rst` and
+`Documentation/process/generated-content.rst` guidance (paths relative to
+the Git root), including its rule that AI agents must not add human
 Signed-off-by certification. Keep the upstream README and process documents
 intact; project-specific guidance supplements them.

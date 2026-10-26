@@ -2,23 +2,20 @@
 """Extract packages pinned by pacman's existing database into the workspace.
 
 No package hooks, system installation, database refresh, or sudo invocation.
-Run pacman -Sp --print-format '%n %v %h %l' ... > .tools/packages.lock first.
+The reviewed package lock is tracked at rusix/docs/packages.lock.
 """
 import hashlib
-from pathlib import Path
 import subprocess
 import urllib.request
 
-root = Path(__file__).resolve().parent.parent
-if not (root / "linux/.git").exists():
-    root = root.parent.parent
-if not (root / "linux/.git").exists():
-    raise SystemExit("Linux checkout is missing")
-cache = root / ".tools/packages"
-dest = root / ".tools/root"
+from rusix_paths import resolve_paths
+
+paths = resolve_paths()
+cache = paths.output / ".tools/packages"
+dest = paths.tools
 cache.mkdir(parents=True, exist_ok=True)
 dest.mkdir(parents=True, exist_ok=True)
-for line in (root / ".tools/packages.lock").read_text().splitlines():
+for line in (paths.project / "docs/packages.lock").read_text().splitlines():
     name, version, digest, url = line.split()
     if not url.startswith("https://") or len(digest) != 64:
         raise ValueError(f"Invalid package manifest entry: {name}")

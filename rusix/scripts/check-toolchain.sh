@@ -1,10 +1,7 @@
 #!/usr/bin/env bash
 # Read-only checks; does not install tools or change the default toolchain.
 set -euo pipefail
-root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
-if [[ ! -e "$root/linux/.git" && -e "$root/../../linux/.git" ]]; then
-    root=$(cd -- "$root/../.." && pwd)
-fi
+source "$(dirname -- "${BASH_SOURCE[0]}")/repo-paths.sh"
 missing=0
 for tool in make gcc clang ld.lld llvm-ar llvm-nm llvm-objcopy llvm-objdump \
     llvm-readelf llvm-strip rustc cargo rustfmt bindgen flex bison bc cpio \
@@ -25,7 +22,7 @@ fi
 if [[ ! -r /dev/kvm || ! -w /dev/kvm ]]; then
     echo 'KVM unavailable: use QEMU software emulation (-accel tcg).'
 fi
-if ! make -C "$root/linux" LLVM=1 rustavailable; then
+if ! make -C "$RUSIX_SOURCE" LLVM=1 rustavailable; then
     missing=1
 fi
 exit "$missing"

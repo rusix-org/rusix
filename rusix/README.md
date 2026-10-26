@@ -5,9 +5,9 @@ in Rust, followed by migration of the remaining operating-system components.
 It is at **Phase 0: integration bootstrap**. It is not ready for installation on
 physical hardware, and no claim of full feature parity is made.
 
-The actual kernel repository is `linux/`, branch `rusix/main`, based on upstream
+The kernel repository uses branch `rusix/main`, based on upstream
 commit `21a7f44fd0765fcc5194130b28767786eba1d1e7`. Linux's license files,
-attribution, and source remain in that repository. The public repository is
+attribution, and source remain at the repository root. The public repository is
 [rusix-org/rusix](https://github.com/rusix-org/rusix), configured as `origin`;
 it is a GitHub fork of `torvalds/linux`, which remains the `upstream` remote.
 The initial public scope is the built and tested integer-square-root layer,
@@ -32,27 +32,34 @@ Linux-compatible externally, Rust-native internally, migrating incrementally
 toward complete Rust subsystems. C compatibility boundaries are temporary;
 upstream C may remain as uncompiled reference material.
 
-## Workspace and reproduction
+## Repository and reproduction
 
-The root workspace's `.git` is a protected environment placeholder. Project
-documents and scripts are therefore versioned under `linux/rusix/`, while their
-canonical working copies live here. If you receive only the kernel repository,
-place it at `WORKSPACE/linux/` and copy `linux/rusix/` contents into `WORKSPACE/`.
-Do not run an unreviewed kernel on your host.
+Project documents, configuration, tests, and tools are maintained directly under
+`rusix/` in this repository. Run these commands from the checkout root; no parent
+workspace or copied files are required. The checkout may have any name, including
+when using a Git worktree. Do not run an unreviewed kernel on your host.
 
 Install/check tools following [docs/TOOLCHAIN.md](docs/TOOLCHAIN.md), then:
 
-```sh
-bash scripts/with-local-tools.sh bash scripts/check-toolchain.sh
-python3 scripts/test-int-sqrt-host.py
-bash scripts/build-kernel.sh review
-bash scripts/boot-kunit.sh builds/review review
+```bash
+bash rusix/scripts/with-local-tools.sh bash rusix/scripts/check-toolchain.sh
+bash rusix/scripts/with-local-tools.sh python3 rusix/scripts/test-int-sqrt-host.py
+# Record source changes in a local commit before the recorded kernel build.
+bash rusix/scripts/build-kernel.sh review
+source rusix/scripts/repo-paths.sh
+bash rusix/scripts/boot-kunit.sh "$RUSIX_OUTPUT_ROOT/builds/review" review-001
 ```
 
-The build uses two jobs and stores output on disk under `builds/`. The VM uses
-512 MiB RAM, one emulated CPU, no network interface, and a 180-second timeout.
-Logs and result JSON go under `logs/`. Commands in this section describe the
-verification workflow; consult `PROGRESS.md` to see which have actually passed.
+Output defaults to a sibling directory named `<checkout-name>-out`. Set
+`RUSIX_OUTPUT_ROOT` to choose another on-disk location; set `RUSIX_TOOLS_ROOT`
+to reuse an existing extracted tool tree (default: `$RUSIX_OUTPUT_ROOT/.tools/root`).
+Relative overrides resolve against the caller's current directory. Keep output
+outside the source checkout and use separate output directories for worktrees.
+
+The build uses two jobs. The VM uses 512 MiB RAM, one emulated CPU, no network
+interface, and a 180-second timeout. Build trees and logs go under `builds/` and
+`logs/` within the output root. Commands here describe the verification workflow;
+consult `PROGRESS.md` for completed checks and their scope.
 
 ## Review standard
 
@@ -63,6 +70,6 @@ runtime results, retained C, and unverified behavior. A successful narrow test
 does not establish an entire subsystem's compatibility or absence of defects.
 
 Keep patches small enough to review. Avoid mixing translations with algorithm
-changes. Follow upstream kernel coding, licensing, and safety conventions. Before
-committing, run `bash scripts/sync-project-docs.sh` and review the resulting diff
-inside `linux/`. Do not commit local tools, generated build trees, or binaries.
+changes. Follow upstream kernel coding, licensing, and safety conventions. Edit
+the tracked files directly and review `git diff` before committing.
+Do not commit local tools, generated build trees, or binaries.

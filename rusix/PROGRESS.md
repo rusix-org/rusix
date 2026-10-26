@@ -23,15 +23,18 @@ all executing C as unfinished migration work. See `docs/ARCHITECTURE.md` (decisi
 - Upstream: `https://github.com/torvalds/linux.git`, remote `upstream`, commit
   `21a7f44fd0765fcc5194130b28767786eba1d1e7`; local branch `rusix/main`.
 - Linux Makefile reports 7.3.0 during the 7.4 merge window. History is shallow.
-- Actual Git repository: `linux/`; root `.git` is a protected placeholder.
-  Root docs/scripts are canonical and synchronized into tracked `linux/rusix/`.
+- Tracked `rusix/` inside the Git checkout is canonical. The local checkout
+  happens to be named `linux/`; scripts do not require that name or a parent
+  workspace. The former document synchronization command is retired.
 - Public GitHub repository `https://github.com/rusix-org/rusix` is now a verified
   fork of `torvalds/linux`. `origin` points there; `upstream` still points to Linux.
   Aaron accepted the existing built/tested layer for first publication once docs
   are ready. The first source push succeeded at `5520dd71e`; `rusix/main` is the
   default branch and issues are enabled. See `docs/PUBLICATION.md`.
 - No host kernel installation or host module loading.
-- Build with two jobs on disk under `builds/`; QEMU TCG uses one CPU/512 MiB.
+- Build with two jobs on disk outside the source checkout; QEMU TCG uses one
+  CPU/512 MiB. Outputs default to sibling `<checkout-name>-out`, overridable
+  with `RUSIX_OUTPUT_ROOT`; local tools accept `RUSIX_TOOLS_ROOT`.
 - Rust 1.99.0 (LLVM 23.1.1), Clang/LLD 23.1.3, bindgen 0.73.2, QEMU 11.1.2.
   Rust source and i686 target are installed; default toolchain is unchanged.
 - Missing system packages were extracted into `.tools/root` with SHA-256 checks
@@ -195,3 +198,13 @@ results was identified. The proposed engineering slice is a complete Rust BRD
 driver, with explicit bio/non-MQ/page-lifetime work and measurable exit gates.
 `docs/PHASE1.md` defines the desired codebase; no BRD code or Phase 1 success is
 claimed. This changes the work priority, not the full rewrite objective.
+
+### 2026-10-25 — Repository-native tooling
+
+Project sources now live directly in tracked `rusix/`; parent mirroring is retired.
+Shared shell/Python path resolution supports arbitrary checkout names, Git
+worktrees, and caller-relative output/tool overrides. Build outputs default to a
+sibling directory. Installer reads the tracked package manifest. Documentation
+and the host harness use repository-native paths. Shell path fixtures passed;
+full relocation/build verification is pending in this entry until results follow.
+This closes a tooling defect, not the remaining Phase 1 driver/environment gates.

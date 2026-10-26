@@ -12,76 +12,75 @@ the first source push once documentation is ready; module/export and broader
 architecture checks remain follow-up work. See [PUBLICATION.md](docs/PUBLICATION.md)
 for the readiness record and [PROGRESS.md](PROGRESS.md) for current limitations.
 
-## Set up the workspace
+## Set up the repository
 
-The kernel Git repository must currently be named `linux/` inside a separate
-workspace. Project scripts, configuration, and documents are tracked in its
-`rusix/` directory, with working copies in the parent workspace. From a new,
-empty directory on disk (not `/tmp`):
+Clone on disk, outside `/tmp`. The checkout name is your choice:
 
-```sh
-mkdir rusix-work
-cd rusix-work
-git clone --branch rusix/main https://github.com/rusix-org/rusix.git linux
-git -C linux remote add upstream https://github.com/torvalds/linux.git
-cp -a linux/rusix/AGENTS.md linux/rusix/README.md \
-  linux/rusix/PROGRESS.md linux/rusix/CONTRIBUTING.md .
-cp -a linux/rusix/docs linux/rusix/scripts linux/rusix/configs linux/rusix/tests .
-git -C linux switch -c rusix/your-topic
+```bash
+git clone --branch rusix/main https://github.com/rusix-org/rusix.git rusix
+cd rusix
+git remote add upstream https://github.com/torvalds/linux.git
+git switch -c rusix/your-topic
 ```
 
-These commands copy only project files; they do not copy `.git`, local tools, or
-generated build trees. Do not repeat restoration over uncommitted workspace
-edits. The initial development checkout was shallow; verify the pinned upstream
-commit recorded in `PROGRESS.md` is available before running differential tests.
-Never push to the Linux `upstream` remote.
+All commands below run from the checkout root. Project documents, scripts,
+configuration, and tests are canonical tracked files under `rusix/`; edit them
+directly. No copy or synchronization step is needed. The source-root `AGENTS.md`
+points to `rusix/AGENTS.md`. Never push to the Linux `upstream` remote.
 
-All commands below run from the workspace root. Source changes go in `linux/`.
-Edit the workspace copies of project documents/scripts/configuration/tests, then
-run `bash scripts/sync-project-docs.sh` to update their tracked copies. Inspect
-the resulting diff before committing. `builds/`, `.tools/`, and `logs/` belong
-outside the kernel repository. Preserve other contributors' changes and use a
-separate workspace/output directory for concurrent work.
+Builds, logs, temporary files, and extracted tools default to a sibling directory
+named `<checkout-name>-out` (`../rusix-out` in this example). Set
+`RUSIX_OUTPUT_ROOT` to override this location and `RUSIX_TOOLS_ROOT` to override
+the extracted tools directory (default: `$RUSIX_OUTPUT_ROOT/.tools/root`).
+Relative overrides resolve against your current directory. Keep generated output
+outside the source checkout, on disk rather than `/tmp`.
+
+Git worktrees are supported; each worktree gets its own default output directory.
+Preserve other contributors' changes and do not share an output directory between
+concurrent worktrees. The original development checkout was shallow; differential
+tests require the pinned upstream commit recorded in `rusix/PROGRESS.md` to be
+available locally.
 
 ## Toolchain and first checks
 
 The currently exercised environment is x86_64 Linux, using LLVM and Rust, with
 QEMU TCG for VM execution. Other hosts and distributions are not yet verified.
 See [TOOLCHAIN.md](docs/TOOLCHAIN.md) and the pinned kernel's
-`linux/Documentation/rust/quick-start.rst` for requirements. Expect GNU Make, a
+`Documentation/rust/quick-start.rst` for requirements. Expect GNU Make, a
 host C compiler, the LLVM tools, Rust and `rust-src`, bindgen/libclang, flex,
 bison, bc, cpio, Python, Perl, development libraries, and QEMU with firmware.
 The scripts also use standard shell tools including `flock`, `timeout`, and
 `sha256sum`.
 
 Use suitable distribution packages or an explicitly configured local toolchain.
-The `.tools` extraction recipe and `docs/packages.lock` were resolved against
+The `.tools` extraction recipe and `rusix/docs/packages.lock` were resolved against
 Aaron's Arch/Omarchy host libraries; they are **not** a portable SDK or container
 image. Do not install those packages blindly on another distribution. The local
 installer requires Python 3.11 or newer. Keep toolchain changes project-local
 where practical, and record exact versions rather than only minimum versions.
 
-```sh
-bash scripts/with-local-tools.sh bash scripts/check-toolchain.sh
-python3 tests/test_kunit_gate.py
-bash scripts/with-local-tools.sh python3 scripts/test-int-sqrt-host.py
+```bash
+bash rusix/scripts/with-local-tools.sh bash rusix/scripts/check-toolchain.sh
+python3 rusix/tests/test_kunit_gate.py
+bash rusix/scripts/with-local-tools.sh python3 rusix/scripts/test-int-sqrt-host.py
 ```
 
 The wrapper uses local tools if present and otherwise falls through to `PATH`.
 Passing the preflight or host tests does not prove that a kernel builds or boots.
 The optional i686 userspace checks require additional tools described in
-`TOOLCHAIN.md`; they do not establish a 32-bit kernel boot.
+`rusix/docs/TOOLCHAIN.md`; they do not establish a 32-bit kernel boot.
 
-After syncing and committing your source changes locally, build and boot:
+After committing your source changes locally, build and boot:
 
-```sh
-bash scripts/build-kernel.sh review
-bash scripts/boot-kunit.sh builds/review review-001
+```bash
+bash rusix/scripts/build-kernel.sh review
+source rusix/scripts/repo-paths.sh
+bash rusix/scripts/boot-kunit.sh "$RUSIX_OUTPUT_ROOT/builds/review" review-001
 ```
 
-The recorded build requires a clean kernel Git tree and matching workspace/
-tracked configuration and build script. A local work-in-progress commit makes
-the exact candidate reproducible; it is not permission to publish it. The build
+The recorded build requires a clean kernel Git tree and checks that its commit
+and clean state are unchanged after compilation. A local work-in-progress commit
+makes the exact candidate reproducible; it is not permission to publish it. The build
 uses two jobs. The VM uses one emulated CPU, 512 MiB RAM, no network, and a
 180-second timeout. Builds generate fresh evidence directories; every boot needs
 a new label such as `review-002`. Do not run two builds in the same output tree.
@@ -122,28 +121,28 @@ parity before promotion. A conflict-free merge does not prove semantic parity.
 
 Keep the kernel's `COPYING`, `LICENSES/`, original attribution, and applicable
 SPDX identifiers intact. Follow the existing kernel licensing rules in
-`linux/Documentation/process/license-rules.rst`; translation does not erase the
+`Documentation/process/license-rules.rst`; translation does not erase the
 source's provenance. For kernel patches, read the existing sign-off procedure
 and Developer's Certificate of Origin in
-`linux/Documentation/process/submitting-patches.rst`. Use your own authorship
+`Documentation/process/submitting-patches.rst`. Use your own authorship
 and `git commit -s` only when you can make that certification; do not invent
 another person's sign-off or review approval.
 
 Disclose substantial tool-generated content and tool-assisted findings in patch
-descriptions, following `linux/Documentation/process/generated-content.rst` and
-`linux/Documentation/process/coding-assistants.rst`. AI agents must not add
+descriptions, following `Documentation/process/generated-content.rst` and
+`Documentation/process/coding-assistants.rst`. AI agents must not add
 Signed-off-by tags. A human submitter must review the work and make any DCO
 certification themselves. The initial project's assistance record is in
 [ASSISTANCE.md](docs/ASSISTANCE.md).
 
 Before requesting review, run relevant format/style checks and
-`git -C linux diff --check`. For example, the current Rust helper uses:
+`git diff --check`. For example, the current Rust helper uses:
 
-```sh
-rustfmt --check linux/lib/math/int_sqrt_rust.rs tests/int_sqrt_host.rs
+```bash
+rustfmt --check lib/math/int_sqrt_rust.rs rusix/tests/int_sqrt_host.rs
 ```
 
-Use the pinned kernel's coding guidelines and `linux/scripts/checkpatch.pl` for changed
+Use the pinned kernel's coding guidelines and `scripts/checkpatch.pl` for changed
 kernel code. Explain intentional warnings; do not suppress them merely to obtain
 a clean report. Include these items in the patch or PR description:
 
@@ -154,7 +153,7 @@ a clean report. Include these items in the patch or PR description:
   architecture/workload/performance scope.
 - Unsafe invariants, remaining C/FFI, upstream changes, and unfinished gates.
 
-Update `PROGRESS.md` and the affected migration record with evidence, not intent.
+Update `rusix/PROGRESS.md` and the affected migration record with evidence, not intent.
 Do not commit binaries, tool installations, unrelated generated output, secrets,
 or incidental local files. Preserve selected verification artifacts deliberately,
 including their hashes and provenance, rather than uploading entire build trees.

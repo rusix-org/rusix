@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """Differential host checks against actual pinned upstream C source."""
-from pathlib import Path
 import argparse
 import subprocess
+
+from rusix_paths import resolve_paths
 
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument("--32-bit", dest="target32", action="store_true",
@@ -13,14 +14,12 @@ args = parser.parse_args()
 if args.runner == "qemu-i386" and not args.target32:
     parser.error("--runner=qemu-i386 requires --32-bit")
 
-root = Path(__file__).resolve().parent.parent
-if not (root / "linux/.git").exists():
-    root = root.parent.parent
-out = root / "builds" / ("int-sqrt-host-i686" if args.target32 else "int-sqrt-host")
+paths = resolve_paths()
+out = paths.output / "builds" / ("int-sqrt-host-i686" if args.target32 else "int-sqrt-host")
 out.mkdir(parents=True, exist_ok=True)
 baseline = "21a7f44fd0765fcc5194130b28767786eba1d1e7"
 source = subprocess.check_output(
-    ["git", "-C", str(root / "linux"), "show", f"{baseline}:lib/math/int_sqrt.c"],
+    ["git", "-C", str(paths.source), "show", f"{baseline}:lib/math/int_sqrt.c"],
     text=True,
 )
 # Replace only kernel header dependencies and rename the symbol. Preserve the
@@ -43,7 +42,7 @@ rust_linker = []
 test_runner = []
 if args.target32:
     rust_linker = ["-Clinker=clang", "-Clink-arg=-Wl,-m,elf_i386"]
-    local_root = root / ".tools/root"
+    local_root = paths.tools
     local_lib32 = local_root / "usr/lib32"
     if (local_lib32 / "Scrt1.o").exists():
         # clang needs the 32-bit startup objects as well as the libraries.
@@ -62,7 +61,7 @@ else:
 subprocess.run(["clang", *clang_target, "-O2", "-Wall", "-Werror", "-c", str(out / "reference.c"),
                 "-o", str(out / "reference.o")], check=True)
 subprocess.run(["rustc", *rust_target, *rust_linker, "--edition=2021", "--test", "-Copt-level=2",
-                "-Coverflow-checks=yes", str(root / "tests/int_sqrt_host.rs"),
+                "-Coverflow-checks=yes", str(paths.project / "tests/int_sqrt_host.rs"),
                 "-C", f"link-arg={out / 'reference.o'}", "-o", str(out / "tests")],
                check=True)
 subprocess.run([*test_runner, str(out / "tests")], check=True)

@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
-root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
-if [[ ! -e "$root/linux/.git" && -e "$root/../../linux/.git" ]]; then
-    root=$(cd -- "$root/../.." && pwd)
+source "$(dirname -- "${BASH_SOURCE[0]}")/repo-paths.sh"
+if [[ -d "$RUSIX_TOOLS_ROOT/usr/bin" ]]; then
+    export PATH="$RUSIX_TOOLS_ROOT/usr/bin:$PATH"
 fi
-export PATH="$root/.tools/root/usr/bin:$PATH"
-export LD_LIBRARY_PATH="$root/.tools/root/usr/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+if [[ -d "$RUSIX_TOOLS_ROOT/usr/lib" ]]; then
+    export LD_LIBRARY_PATH="$RUSIX_TOOLS_ROOT/usr/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+fi
 exec "$@"

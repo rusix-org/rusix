@@ -13,17 +13,18 @@ Do not change it to a GPL-compatible tag merely to make the fixture pass.
 
 ## Build the Rust init
 
-From the workspace root:
+From the Git checkout root (the runner is still pending verification):
 
 ```sh
-mkdir -p builds/module-fixture
+source rusix/scripts/repo-paths.sh
+mkdir -p "$RUSIX_OUTPUT_ROOT/builds/module-fixture"
 rustc --edition=2021 --target x86_64-unknown-linux-gnu \
   -C opt-level=2 -C panic=abort -C relocation-model=static \
   -C link-arg=-nostartfiles -C link-arg=-static \
   -C link-arg=-Wl,--build-id=none \
-  tests/module-smoke/init.rs -o builds/module-fixture/init
-llvm-readelf -h -l builds/module-fixture/init
-llvm-nm --undefined-only builds/module-fixture/init
+  rusix/tests/module-smoke/init.rs -o "$RUSIX_OUTPUT_ROOT/builds/module-fixture/init"
+llvm-readelf -h -l "$RUSIX_OUTPUT_ROOT/builds/module-fixture/init"
+llvm-nm --undefined-only "$RUSIX_OUTPUT_ROOT/builds/module-fixture/init"
 ```
 
 The result must be an x86_64 static ELF executable with no interpreter and no
@@ -45,11 +46,11 @@ Stage the `Makefile` and `int_sqrt_probe.c` in an output directory to keep gener
 module files out of source control, then invoke Kbuild's external module target:
 
 ```sh
-mkdir -p builds/module-fixture/module
-cp tests/module-smoke/Makefile tests/module-smoke/int_sqrt_probe.c \
-  builds/module-fixture/module/
-bash scripts/with-local-tools.sh make -C linux \
-  O="$PWD/builds/MODULE_KERNEL" M="$PWD/builds/module-fixture/module" LLVM=1 modules
+mkdir -p "$RUSIX_OUTPUT_ROOT/builds/module-fixture/module"
+cp rusix/tests/module-smoke/Makefile rusix/tests/module-smoke/int_sqrt_probe.c \
+  "$RUSIX_OUTPUT_ROOT/builds/module-fixture/module/"
+bash rusix/scripts/with-local-tools.sh make -C "$RUSIX_SOURCE" \
+  O="$RUSIX_OUTPUT_ROOT/builds/MODULE_KERNEL" M="$RUSIX_OUTPUT_ROOT/builds/module-fixture/module" LLVM=1 modules
 ```
 
 Replace `MODULE_KERNEL` with the actual completed kernel output directory.
