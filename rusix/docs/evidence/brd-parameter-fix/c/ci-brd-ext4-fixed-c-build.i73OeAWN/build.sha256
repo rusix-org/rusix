@@ -1,0 +1,3 @@
+a67312d2ca6993ef3802abe3e6bf8e8b4ff2af9bc110b3560709d2d213399f0c  /out/builds/ci-brd-ext4-fixed-c/.config
+b0e37facbeeda3d7ab5375c25a69b88592dabf61556e66a5826dc846c5fe9fa5  /out/builds/ci-brd-ext4-fixed-c/arch/x86/boot/bzImage
+826e5d77b1bcd2c2c2b5b1809142ffc96fb5c9e240aeee46abf6fcab69f81bf9  /out/builds/ci-brd-ext4-fixed-c/vmlinux

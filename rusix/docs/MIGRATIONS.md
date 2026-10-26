@@ -30,8 +30,10 @@ when the declared target and export mechanism no longer require them.
 [manifest](evidence/brd-q35/manifest.json) records block6, ext4 six cases, six
 parameter boots and partition5, with identical fixtures and only driver selection
 differing between configs. Nine ownership tests also pass. The negative-parameter
-exception is addressed by accepted [ADR 0003](adr/0003.md), pending separate
-implementation/verification; residual C boundaries remain.
+exception is replaced by [ADR 0003](adr/0003.md) at `ff6ac4a5d732`: fixed C and
+Rust each pass 29 boots, including 26 parameter variants
+([evidence](evidence/brd-parameter-fix/manifest.json)). Parameter storage/metadata
+and other residual C boundaries remain.
 The driver/store live in `drivers/block/brd_rust.rs` and `brd_rust/store.rs`;
 `rust/kernel/block/{bio,bio_disk}.rs` provide transitional interfaces.
 Six x86_64 SMP baseline cases: [manifest](evidence/lts-baseline/manifest.json). [BRD.md](BRD.md) owns the pinned

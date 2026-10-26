@@ -1,0 +1,11 @@
+implementation=brd-c-parameter-fix
+/out/builds/ci-brd-ext4-fixed-c/drivers/block/brd_parameter_fixed.o
+ffffffff8155ca00 t brd_submit_bio
+f3f113666045b1c76f97bec85a1bd519d1c1c633f2e6fdf20ce0c3e927fca685  /src/drivers/block/brd.c
+0e74acf8d836e980619dddcd2729c889075c49ac278135d5c9416085cf378fd5  /out/builds/ci-brd-ext4-fixed-c/drivers/block/brd_parameter_fixed.o
+6487f5eed9be849a23867fed24938647fe7d40a95364829f7dff3d1b1d39ce7b  /src/rusix/scripts/generate-brd-parameter-oracle.py
+413457c95a27d9bbeb6b76198d2815de2f196960ab7ed9957de6d06517fa35ed  /src/rusix/reference/brd-parameter-fix/manifest.json
+641729c077939e3eb882b37f1f7fb497bcdefba1b550fbbe1a1376150c5e03a3  /src/rusix/reference/brd-parameter-fix/baseline.patch
+d1ffbd05ff8ec9fb9ab39a48feca8e9c65131a567725e22812ccd4c17b78ebb0  /src/rusix/reference/brd-parameter-fix/upstream-proposal.patch
+9e2ec4f3144cf9888dae65c29ed44fd3148e9c2a5ca97e70174bad4c61848836  /out/builds/ci-brd-ext4-fixed-c/drivers/block/brd_parameter_fixed.c
+6b4ee543259bc21ccc739023ccc5dacc15ebee0a277377864f30ecd03e952a1e  /out/builds/ci-brd-ext4-fixed-c/drivers/block/.brd_parameter_fixed.o.cmd

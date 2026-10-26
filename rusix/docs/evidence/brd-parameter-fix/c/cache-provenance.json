@@ -1,0 +1,43 @@
+{
+  "source": "/home/aaron/code/rusix/linux-out/lts-ext4-c-006/builds/ci-brd-ext4-c",
+  "source_profile": "brd-ext4-c",
+  "source_revision": "9d1c1ca5dd2a837a7690f032be0c696bb10832ac",
+  "source_build_evidence": "/home/aaron/code/rusix/linux-out/lts-ext4-c-006/logs/ci-brd-ext4-c-build.wG8Ss2HT",
+  "source_terminal_status": {
+    "logs/ci.exit": "0",
+    "logs/ci-brd-ext4-c-build.wG8Ss2HT/build.exit": "0",
+    "logs/ci-brd-ext4-c-brd.run/compile.exit": "0",
+    "logs/ci-brd-ext4-c-brd.run/qemu.exit": "0",
+    "logs/ci-brd-ext4-c-brd.run/runner.exit": "0",
+    "logs/ci-brd-ext4-c-ext4.run/compile.exit": "0",
+    "logs/ci-brd-ext4-c-ext4.run/qemu.exit": "0",
+    "logs/ci-brd-ext4-c-ext4.run/runner.exit": "0",
+    "logs/ci-brd-ext4-c-brd-parameters.run/compile.exit": "0",
+    "logs/ci-brd-ext4-c-brd-parameters.run/runner.exit": "0",
+    "logs/ci-brd-ext4-c-brd-partitions.run/compile.exit": "0",
+    "logs/ci-brd-ext4-c-brd-partitions.run/runner.exit": "0",
+    "logs/ci-brd-ext4-c-brd-partitions.run/kernel-build/build.exit": "0",
+    "logs/ci-brd-ext4-c-brd-partitions.run/primary_partition/qemu.exit": "0",
+    "logs/ci-brd-ext4-c-brd-parameters.run/kernel-build/build.exit": "0",
+    "logs/ci-brd-ext4-c-brd-parameters.run/defaults/qemu.exit": "0",
+    "logs/ci-brd-ext4-c-brd-parameters.run/on_demand/qemu.exit": "0",
+    "logs/ci-brd-ext4-c-brd-parameters.run/spacing_roundup/qemu.exit": "0",
+    "logs/ci-brd-ext4-c-brd-parameters.run/spacing_clamp/qemu.exit": "0",
+    "logs/ci-brd-ext4-c-brd-parameters.run/legacy_octal/qemu.exit": "0",
+    "logs/ci-brd-ext4-c-brd-parameters.run/spacing_high_positive/qemu.exit": "0",
+    "logs/ci-brd-ext4-c-ext4.run/kernel-build/build.exit": "0",
+    "logs/ci-brd-ext4-c-brd.run/kernel-build/build.exit": "0"
+  },
+  "source_build_hash_records_sha256": "0fc30b0bea93266f26a83f9166cbc9284f7cf3fecf49eeb0dceb4d7aa4fbb675",
+  "copied_artifact_sha256": {
+    "builds/ci-brd-ext4-fixed-c/.config": "bf562962ae943935b43e1a0e93bc7ca77e8d04c3c76d2ace9141f327802cf25a",
+    "builds/ci-brd-ext4-fixed-c/arch/x86/boot/bzImage": "08278318fa62354617d2c905273c4bb2ae3ed331713857df38b878d0759cdee5",
+    "builds/ci-brd-ext4-fixed-c/vmlinux": "c8dbd192e6044d18eb8d265544a91a27faaed013cb58c7dc01389b714d099b2a"
+  },
+  "copy_method": "cp -a --reflink=auto; every recorded build artifact rehashed after copy",
+  "scope": "Kernel-only cache from completed passing run; not BRD selected-fix verification. No guest fixtures, VM evidence, host build outputs or prior success markers copied.",
+  "runtime_source_mount": "/home/aaron/code/rusix/linux-brd-fix",
+  "destination_profile": "brd-ext4-fixed-c",
+  "runtime_container_image": "sha256:c02eb3929889b3f0cc035d57a02c844e0c74c71d24fbda1311249faeb8257f63",
+  "status": "PREPARED_NOT_RUN"
+}

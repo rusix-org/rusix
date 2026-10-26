@@ -13,6 +13,7 @@ Current work and remaining gates: [progress](../PROGRESS.md), [Phase 1](PHASE1.m
 | [Rust BRD](evidence/brd-rust-initial/manifest.json) | Selected Rust implementation passes the identical six-case block probe. |
 | [BRD ownership](evidence/brd-ownership/manifest.json) | Nine in-kernel policy/ownership cases, zero skips. |
 | [Ordinary ext4](evidence/brd-ext4/manifest.json) | Six cases each on C/Rust, same source and byte-identical userspace initramfs. |
+| [BRD selected parameter fix](evidence/brd-parameter-fix/manifest.json) | At `ff6ac4a5d732`, separately generated fixed C and Rust each pass 29 boots: 26 parameter variants, block, ext4/consumers and partitions. Same-source KUnit passes 70 combined and 61 isolated core cases. ADR 0003 changes invalid geometry; upstream proposal acceptance is unverified. |
 | [Locked interruptible waits](evidence/wait-locked/manifest.json) | At `5234e2809e9b`, 23 generic wait definitions selected; C/Rust debug and plain pairs each pass 61 core + nine BRD, then 61 isolated core cases. Four dedicated-worker cases cover both lock variants. |
 | [Locked waits/ext4](evidence/wait-locked-ext4/manifest.json) | Same source passes nine boots each, including six ext4, four poll/epoll and two blocking eventfd/timerfd read cases with identical fixtures. |
 | [Locked waits/server](evidence/wait-locked-server/manifest.json) | Exact declared target pair passes the twelve ext4/consumer cases; only core selection differs. Same-build executable inventories have zero unknown bytes. |

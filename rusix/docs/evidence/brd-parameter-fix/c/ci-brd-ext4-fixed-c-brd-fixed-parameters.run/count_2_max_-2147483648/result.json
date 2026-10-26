@@ -1,0 +1,13 @@
+{
+  "status": "PASS",
+  "cases": [
+    "parameters",
+    "major_registered",
+    "initial_devices",
+    "on_demand_mapping",
+    "independent_io",
+    "capacity"
+  ],
+  "qemu_exit": 0,
+  "variant": "count_2_max_-2147483648"
+}

@@ -1,0 +1,13 @@
+{
+  "schema": 1,
+  "contract": "adr-0003",
+  "baseline_commit": "2926d88bb7fc4608fd942453d929c39e4e5ec006",
+  "baseline_path": "drivers/block/brd.c",
+  "baseline_sha256": "f3f113666045b1c76f97bec85a1bd519d1c1c633f2e6fdf20ce0c3e927fca685",
+  "proposal_sha256": "d1ffbd05ff8ec9fb9ab39a48feca8e9c65131a567725e22812ccd4c17b78ebb0",
+  "patch_sha256": "641729c077939e3eb882b37f1f7fb497bcdefba1b550fbbe1a1376150c5e03a3",
+  "hunk_line_offset": 1,
+  "output_sha256": "9e2ec4f3144cf9888dae65c29ed44fd3148e9c2a5ca97e70174bad4c61848836",
+  "output_name": "brd_parameter_fixed.c",
+  "implementation": "brd-c-parameter-fix"
+}

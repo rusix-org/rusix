@@ -30,6 +30,9 @@ do not duplicate it here or replace BRD with a data-discarding null driver.
 | Performance and memory | Controlled paired sequential/random/mixed I/O, discard and sparse allocation. Initial thresholds: throughput at least 90% of C, p99 latency at most 110%, populated-store memory at most 110%. Pin the protocol and measure baseline variance first. TCG timing is not production performance evidence. |
 | Selected-fix maintenance | Review one relevant upstream fix, port its behavior deliberately into a migrated Rust component and demonstrate the regression test. Record relevance/disposition; no whole-tree rebase requirement. |
 
+The selected-fix exercise is verified; [ADR 0003](adr/0003.md) records its
+contract and evidence. Other gates remain independently required.
+
 Bit-identical kernel/initramfs output on two independent workers is deferred.
 Pinned inputs and recorded provenance remain mandatory. Budget changes or
 behavioral departures require recorded decisions; do not weaken tests silently.

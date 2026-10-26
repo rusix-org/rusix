@@ -1,0 +1,22 @@
+/out/builds/ci-brd-ext4-fixed-c/kernel/sched/build_utility.o
+00000000000033c0 T __var_wake_key
+0000000000002fc0 T wake_bit_function
+0000000000000330 T __wait_on_bit
+0000000000000560 T __wait_on_bit_lock
+0000000000000750 T bit_wait
+00000000000007a0 T bit_wait_io
+00000000000007f0 T bit_wait_timeout
+0000000000000430 T out_of_line_wait_on_bit
+00000000000004c0 T out_of_line_wait_on_bit_timeout
+00000000000006c0 T out_of_line_wait_on_bit_lock
+/out/builds/ci-brd-ext4-fixed-c/vmlinux
+ffffffff81294d30 T __var_wake_key
+ffffffff81294930 T wake_bit_function
+ffffffff81592040 T __wait_on_bit
+ffffffff81592270 T __wait_on_bit_lock
+ffffffff81592460 T bit_wait
+ffffffff815924b0 T bit_wait_io
+ffffffff81592500 T bit_wait_timeout
+ffffffff81592140 T out_of_line_wait_on_bit
+ffffffff815921d0 T out_of_line_wait_on_bit_timeout
+ffffffff815923d0 T out_of_line_wait_on_bit_lock

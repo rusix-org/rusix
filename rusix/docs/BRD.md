@@ -5,8 +5,9 @@ Reference: `drivers/block/brd.c` at Linux 6.18.58,
 Git root. [Progress](../PROGRESS.md) records executed checks;
 [Phase 1](PHASE1.md) defines delivery gates.
 
-[ADR 0003](adr/0003.md) amends invalid `max_part` normalization. Implementation and a separate patched-C oracle are present; paired runtime
-verification is pending. The reference table below records pinned behavior;
+[ADR 0003](adr/0003.md) amends invalid `max_part` normalization. Rust and the
+separate patched-C oracle pass paired runtime verification at `ff6ac4a5d732`
+([evidence](evidence/brd-parameter-fix/manifest.json)). The reference table below records pinned behavior;
 the accepted correction is identified separately.
 
 ## Behavior to preserve
@@ -167,8 +168,8 @@ overlapping I/O/discard lifetimes, memory pressure, initialization failure,
 busy removal and repeated module load/use/unload. Use
 supported memory instrumentation and lockdep with demonstrated coverage.
 
-Expanded architecture/module coverage, controlled performance and a chosen
-upstream-fix port remain subject to the 1a/1b split in [PHASE1.md](PHASE1.md).
+Expanded architecture/module coverage and controlled performance remain
+subject to the 1a/1b split in [PHASE1.md](PHASE1.md).
 Hosted CI is disabled by execution policy; these local results do not complete
 those broader gates.
 
@@ -193,7 +194,8 @@ BRD request policy or sparse-store ownership. Removing these boundaries requires
 migration of their owning core abstractions.
 
 [ADR 0003](adr/0003.md) owns the accepted invalid-geometry correction. Rust
-implements that ordering; paired fixed-C/Rust runtime verification is pending.
+implements that ordering; [paired evidence](evidence/brd-parameter-fix/manifest.json)
+verifies the correction. Parameter storage, metadata and lock adapters remain C.
 The [selected-fix record](../reference/brd-parameter-fix/README.md) preserves the
 original upstream proposal and strict source/patch/output hashes. Its generated
 C oracle is separately selected; `drivers/block/brd.c` remains pristine.

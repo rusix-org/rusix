@@ -46,25 +46,27 @@ and the blocking userspace consumers above. A process-context watchdog preserves
 the ordinary-lock IRQ contract; sampled blocked-state evidence does not prove
 all wake races. [Migration contract](experiments/wait-locked/README.md).
 
-[ADR 0003](docs/adr/0003.md) accepts a targeted BRD correction: nonpositive
-max_part becomes 1 and values above 256 clamp before rounding. Implementation
-and a separate generated patched-C oracle are ready for kernel verification;
-26 boundary/default/legacy boots per implementation are required. Host gates
-pass. The guest compiles with pinned Rust 1.85.1 at `625e26be5c`; the committed
-oracle inputs regenerate the expected C hash at `5f8704e4c1`. These checks do not
-execute the kernel: paired VM results are pending. Pristine Linux C and
-historical evidence remain intact. Parameter ownership is a separate migration.
+[ADR 0003](docs/adr/0003.md)'s selected BRD correction is verified at
+`ff6ac4a5d732`: nonpositive max_part becomes 1 and values above 256 clamp before
+rounding. The separately selected generated patched-C oracle and Rust BRD each
+pass 29 boots: 26 parameter variants, block, ext4/consumer integration and
+partitions. Identical fixtures exercise preallocated and on-demand disks,
+geometry and I/O. The same source passes 70 combined KUnit cases (nine BRD +
+61 core), then 61 isolated core cases. [Evidence](docs/evidence/brd-parameter-fix/manifest.json).
+The imported patch is an upstream proposal; acceptance/merge is unverified.
+Pristine Linux C and historical evidence remain intact. Parameter storage and
+metadata remain C-owned, and the lock adapters still execute C in this checkpoint.
 
-Next verify the approved BRD parameter fix, then transfer bit-wait table
-ownership and BRD parameter metadata into Rust as separate changes. The
-[bit-wait record](experiments/wait-bit/README.md) and [generic wait record](experiments/wait/README.md) own their contracts.
+Next transfer bit-wait table ownership and BRD parameter metadata into Rust as
+separate changes; their development branches have no verified runtime result yet.
+The [bit-wait record](experiments/wait-bit/README.md) and
+[generic wait record](experiments/wait/README.md) own their contracts.
 Standalone untimed bit_wait/io scheduling, stop/park, repeated latch races,
 socket/futex consumer integration and POLLFREE races remain unverified.
 Forced diagnostic failures, detached-batch races, untimed signal paths, deadline
 races and broader IRQ coverage remain open. arm64, modules, expanded fault stress
-and performance budgets remain Phase 1b. Phase 1a still needs the approved BRD
-parameter correction verified, parameter adapters removed and review gates
-completed; [BRD.md](docs/BRD.md).
+and performance budgets remain Phase 1b. Phase 1a still needs parameter adapters
+removed and review gates completed; [BRD.md](docs/BRD.md).
 
 Failures are retained, including the [bit-wait FFI type mismatch](docs/evidence/wait-bit/manifest.json),
 the [wake pointer-conversion compile error](docs/evidence/wait-wake/manifest.json),
