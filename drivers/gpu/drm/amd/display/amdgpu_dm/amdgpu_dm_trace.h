@@ -57,8 +57,9 @@ DECLARE_EVENT_CLASS(amdgpu_dc_reg_template,
 				   *count = *count + 1;
 		    ),
 
-		    TP_printk("reg=0x%08x, value=0x%08x",
-			      __entry->reg, __entry->value)
+		    TP_printk("reg=0x%08lx, value=0x%08lx",
+			      (unsigned long)__entry->reg,
+			      (unsigned long)__entry->value)
 );
 
 DEFINE_EVENT(amdgpu_dc_reg_template, amdgpu_dc_rreg,
@@ -75,10 +76,10 @@ TRACE_EVENT(amdgpu_dc_performance,
 		const char *func, unsigned int line),
 	TP_ARGS(read_count, write_count, last_read, last_write, func, line),
 	TP_STRUCT__entry(
-			__field(unsigned long, reads)
-			__field(unsigned long, writes)
-			__field(unsigned long, read_delta)
-			__field(unsigned long, write_delta)
+			__field(uint32_t, reads)
+			__field(uint32_t, writes)
+			__field(uint32_t, read_delta)
+			__field(uint32_t, write_delta)
 			__string(func, func)
 			__field(uint32_t, line)
 			),
@@ -92,9 +93,12 @@ TRACE_EVENT(amdgpu_dc_performance,
 			*last_read = read_count;
 			*last_write = write_count;
 			),
-	TP_printk("%s:%u reads=%08lu (%08lu total), writes=%08lu (%08lu total)",
-		  __get_str(func), __entry->line, __entry->read_delta,
-		  __entry->reads, __entry->write_delta, __entry->writes)
+	TP_printk("%s:%d reads=%08ld (%08ld total), writes=%08ld (%08ld total)",
+			__get_str(func), __entry->line,
+			(unsigned long)__entry->read_delta,
+			(unsigned long)__entry->reads,
+			(unsigned long)__entry->write_delta,
+			(unsigned long)__entry->writes)
 );
 
 TRACE_EVENT(amdgpu_dm_connector_atomic_check,
@@ -104,7 +108,7 @@ TRACE_EVENT(amdgpu_dm_connector_atomic_check,
 	    TP_STRUCT__entry(
 			     __field(uint32_t, conn_id)
 			     __field(const struct drm_connector_state *, conn_state)
-			     __field(const struct drm_atomic_commit *, state)
+			     __field(const struct drm_atomic_state *, state)
 			     __field(const struct drm_crtc_commit *, commit)
 			     __field(uint32_t, crtc_id)
 			     __field(uint32_t, best_encoder_id)
@@ -159,7 +163,7 @@ TRACE_EVENT(amdgpu_dm_crtc_atomic_check,
 	    TP_ARGS(state),
 
 	    TP_STRUCT__entry(
-			     __field(const struct drm_atomic_commit *, state)
+			     __field(const struct drm_atomic_state *, state)
 			     __field(const struct drm_crtc_state *, crtc_state)
 			     __field(const struct drm_crtc_commit *, commit)
 			     __field(uint32_t, crtc_id)
@@ -225,7 +229,7 @@ DECLARE_EVENT_CLASS(amdgpu_dm_plane_state_template,
 			     __field(uint32_t, plane_id)
 			     __field(enum drm_plane_type, plane_type)
 			     __field(const struct drm_plane_state *, plane_state)
-			     __field(const struct drm_atomic_commit *, state)
+			     __field(const struct drm_atomic_state *, state)
 			     __field(uint32_t, crtc_id)
 			     __field(uint32_t, fb_id)
 			     __field(uint32_t, fb_format)
@@ -310,52 +314,56 @@ DEFINE_EVENT(amdgpu_dm_plane_state_template, amdgpu_dm_atomic_update_cursor,
 	     TP_PROTO(const struct drm_plane_state *state),
 	     TP_ARGS(state));
 
-DECLARE_EVENT_CLASS(amdgpu_dm_atomic_state_template,
-		    TP_PROTO(const struct drm_atomic_commit *state),
-		    TP_ARGS(state),
-		    TP_STRUCT__entry(__field(const struct drm_atomic_commit *, state)
-				     __field(bool, allow_modeset)
-				     __field(bool, legacy_cursor_update)
-				     __field(bool, async_update)
-				     __field(bool, duplicated)
-				     __field(int, num_connector)
-				     __field(int, num_private_objs)
-		    ),
-		    TP_fast_assign(__entry->state = state;
-				   __entry->allow_modeset = state->allow_modeset;
-				   __entry->legacy_cursor_update = state->legacy_cursor_update;
-				   __entry->async_update = state->async_update;
-				   __entry->duplicated = state->duplicated;
-				   __entry->num_connector = state->num_connector;
-				   __entry->num_private_objs = state->num_private_objs;
-		    ),
-		    TP_printk("state=%p allow_modeset=%d legacy_cursor_update=%d "
-			      "async_update=%d duplicated=%d num_connector=%d "
-			      "num_private_objs=%d",
-			      __entry->state, __entry->allow_modeset,
-			      __entry->legacy_cursor_update, __entry->async_update,
-			      __entry->duplicated, __entry->num_connector,
-			      __entry->num_private_objs)
+TRACE_EVENT(amdgpu_dm_atomic_state_template,
+	    TP_PROTO(const struct drm_atomic_state *state),
+	    TP_ARGS(state),
+
+	    TP_STRUCT__entry(
+			     __field(const struct drm_atomic_state *, state)
+			     __field(bool, allow_modeset)
+			     __field(bool, legacy_cursor_update)
+			     __field(bool, async_update)
+			     __field(bool, duplicated)
+			     __field(int, num_connector)
+			     __field(int, num_private_objs)
+	    ),
+
+	    TP_fast_assign(
+			   __entry->state = state;
+			   __entry->allow_modeset = state->allow_modeset;
+			   __entry->legacy_cursor_update = state->legacy_cursor_update;
+			   __entry->async_update = state->async_update;
+			   __entry->duplicated = state->duplicated;
+			   __entry->num_connector = state->num_connector;
+			   __entry->num_private_objs = state->num_private_objs;
+	    ),
+
+	    TP_printk("state=%p allow_modeset=%d legacy_cursor_update=%d "
+		      "async_update=%d duplicated=%d num_connector=%d "
+		      "num_private_objs=%d",
+		      __entry->state, __entry->allow_modeset, __entry->legacy_cursor_update,
+		      __entry->async_update, __entry->duplicated, __entry->num_connector,
+		      __entry->num_private_objs)
 );
 
 DEFINE_EVENT(amdgpu_dm_atomic_state_template, amdgpu_dm_atomic_commit_tail_begin,
-	     TP_PROTO(const struct drm_atomic_commit *state),
+	     TP_PROTO(const struct drm_atomic_state *state),
 	     TP_ARGS(state));
 
 DEFINE_EVENT(amdgpu_dm_atomic_state_template, amdgpu_dm_atomic_commit_tail_finish,
-	     TP_PROTO(const struct drm_atomic_commit *state),
+	     TP_PROTO(const struct drm_atomic_state *state),
 	     TP_ARGS(state));
 
 DEFINE_EVENT(amdgpu_dm_atomic_state_template, amdgpu_dm_atomic_check_begin,
-	     TP_PROTO(const struct drm_atomic_commit *state),
+	     TP_PROTO(const struct drm_atomic_state *state),
 	     TP_ARGS(state));
 
 TRACE_EVENT(amdgpu_dm_atomic_check_finish,
-	    TP_PROTO(const struct drm_atomic_commit *state, int res),
+	    TP_PROTO(const struct drm_atomic_state *state, int res),
 	    TP_ARGS(state, res),
 
 	    TP_STRUCT__entry(
-			     __field(const struct drm_atomic_commit *, state)
+			     __field(const struct drm_atomic_state *, state)
 			     __field(int, res)
 			     __field(bool, async_update)
 			     __field(bool, allow_modeset)
@@ -505,7 +513,6 @@ TRACE_EVENT(amdgpu_dm_dc_clocks_state,
 	    TP_fast_assign(
 			   __entry->dispclk_khz = clk->dispclk_khz;
 			   __entry->dppclk_khz = clk->dppclk_khz;
-			   __entry->disp_dpp_voltage_level_khz = clk->disp_dpp_voltage_level_khz;
 			   __entry->dcfclk_khz = clk->dcfclk_khz;
 			   __entry->socclk_khz = clk->socclk_khz;
 			   __entry->dcfclk_deep_sleep_khz = clk->dcfclk_deep_sleep_khz;
@@ -515,6 +522,7 @@ TRACE_EVENT(amdgpu_dm_dc_clocks_state,
 			   __entry->p_state_change_support = clk->p_state_change_support;
 			   __entry->prev_p_state_change_support = clk->prev_p_state_change_support;
 			   __entry->pwr_state = clk->pwr_state;
+			   __entry->prev_p_state_change_support = clk->prev_p_state_change_support;
 			   __entry->dtm_level = clk->dtm_level;
 			   __entry->max_supported_dppclk_khz = clk->max_supported_dppclk_khz;
 			   __entry->max_supported_dispclk_khz = clk->max_supported_dispclk_khz;
@@ -524,8 +532,8 @@ TRACE_EVENT(amdgpu_dm_dc_clocks_state,
 	    TP_printk("dispclk_khz=%d dppclk_khz=%d disp_dpp_voltage_level_khz=%d dcfclk_khz=%d socclk_khz=%d "
 		      "dcfclk_deep_sleep_khz=%d fclk_khz=%d phyclk_khz=%d "
 		      "dramclk_khz=%d p_state_change_support=%d "
-		      "prev_p_state_change_support=%d pwr_state=%d dtm_level=%d "
-		      "max_supported_dppclk_khz=%d max_supported_dispclk_khz=%d "
+		      "prev_p_state_change_support=%d pwr_state=%d prev_p_state_change_support=%d "
+		      "dtm_level=%d max_supported_dppclk_khz=%d max_supported_dispclk_khz=%d "
 		      "bw_dppclk_khz=%d bw_dispclk_khz=%d ",
 		      __entry->dispclk_khz,
 		      __entry->dppclk_khz,
@@ -539,6 +547,7 @@ TRACE_EVENT(amdgpu_dm_dc_clocks_state,
 		      __entry->p_state_change_support,
 		      __entry->prev_p_state_change_support,
 		      __entry->pwr_state,
+		      __entry->prev_p_state_change_support,
 		      __entry->dtm_level,
 		      __entry->max_supported_dppclk_khz,
 		      __entry->max_supported_dispclk_khz,
@@ -637,20 +646,20 @@ TRACE_EVENT(dcn_fpu,
 
 	    TP_STRUCT__entry(
 			     __field(bool, begin)
-			     __string(function, function)
+			     __field(const char *, function)
 			     __field(int, line)
 			     __field(int, recursion_depth)
 	    ),
 	    TP_fast_assign(
 			   __entry->begin = begin;
-			   __assign_str(function);
+			   __entry->function = function;
 			   __entry->line = line;
 			   __entry->recursion_depth = recursion_depth;
 	    ),
 	    TP_printk("%s: recursion_depth: %d: %s()+%d:",
 		      __entry->begin ? "begin" : "end",
 		      __entry->recursion_depth,
-		      __get_str(function),
+		      __entry->function,
 		      __entry->line
 	    )
 );
@@ -660,7 +669,7 @@ TRACE_EVENT(dcn_optc_lock_unlock_state,
 	    TP_ARGS(optc_state, instance, lock, function, line),
 
 	    TP_STRUCT__entry(
-			     __string(function, function)
+			     __field(const char *, function)
 			     __field(int, instance)
 			     __field(bool, lock)
 			     __field(int, line)
@@ -678,7 +687,7 @@ TRACE_EVENT(dcn_optc_lock_unlock_state,
 			     __field(int, vready_offset)
 	    ),
 	    TP_fast_assign(
-			   __assign_str(function);
+			   __entry->function = function;
 			   __entry->instance = instance;
 			   __entry->lock = lock;
 			   __entry->line = line;
@@ -693,14 +702,14 @@ TRACE_EVENT(dcn_optc_lock_unlock_state,
 			   __entry->vstartup_start = optc_state->vstartup_start;
 			   __entry->vupdate_offset = optc_state->vupdate_offset;
 			   __entry->vupdate_width = optc_state->vupdate_width;
-			   __entry->vready_offset = optc_state->vready_offset;
+			   __entry->vready_offset = optc_state->vupdate_offset;
 	    ),
 	    TP_printk("%s: %s()+%d: optc_instance=%d opp_count=%d max_h_total=%d max_v_total=%d "
 		      "min_h_blank=%d min_h_sync_width=%d min_v_sync_width=%d min_v_blank=%d "
 		      "min_v_blank_interlace=%d vstartup_start=%d vupdate_offset=%d vupdate_width=%d "
 		      "vready_offset=%d",
 		      __entry->lock ? "Lock" : "Unlock",
-		      __get_str(function),
+		      __entry->function,
 		      __entry->line,
 		      __entry->instance,
 		      __entry->opp_count,
@@ -743,69 +752,6 @@ TRACE_EVENT(amdgpu_dm_brightness,
 		  (__entry->ac) ? "AC" : "DC"
 	)
 );
-
-TRACE_EVENT(amdgpu_dm_ism_commit,
-	TP_PROTO(
-		int active_vblank_irq_count,
-		bool vblank_enabled,
-		bool allow_panel_sso
-	),
-	TP_ARGS(
-		active_vblank_irq_count,
-		vblank_enabled,
-		allow_panel_sso
-	),
-	TP_STRUCT__entry(
-		__field(int, active_vblank_irq_count)
-		__field(bool, vblank_enabled)
-		__field(bool, allow_panel_sso)
-	),
-	TP_fast_assign(
-		__entry->active_vblank_irq_count = active_vblank_irq_count;
-		__entry->vblank_enabled = vblank_enabled;
-		__entry->allow_panel_sso = allow_panel_sso;
-	),
-	TP_printk(
-		"active_vblank_irq_count=%d vblank_enabled=%d allow_panel_sso=%d",
-		__entry->active_vblank_irq_count,
-		__entry->vblank_enabled,
-		__entry->allow_panel_sso
-	)
-);
-
-TRACE_EVENT(amdgpu_dm_ism_event,
-	TP_PROTO(
-		int crtc_id,
-		const char *prev_state,
-		const char *curr_state,
-		const char *event
-	),
-	TP_ARGS(
-		crtc_id,
-		prev_state,
-		curr_state,
-		event
-	),
-	TP_STRUCT__entry(
-		__field(int, crtc_id)
-		__string(prev_state, prev_state)
-		__string(curr_state, curr_state)
-		__string(event, event)
-	),
-	TP_fast_assign(
-		__entry->crtc_id = crtc_id;
-		__assign_str(prev_state);
-		__assign_str(curr_state);
-		__assign_str(event);
-	),
-	TP_printk(
-		"[CRTC %d] %s -> %s on event %s",
-		__entry->crtc_id,
-		__get_str(prev_state),
-		__get_str(curr_state),
-		__get_str(event))
-);
-
 
 #endif /* _AMDGPU_DM_TRACE_H_ */
 

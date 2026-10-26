@@ -196,9 +196,7 @@ static uint32_t smu_v11_0_i2c_poll_tx_status(struct i2c_adapter *control)
 
 	if (REG_GET_FIELD(reg, CKSVII2C_IC_INTR_STAT, R_TX_ABRT) == 1) {
 		reg_c_tx_abrt_source = RREG32_SOC15(SMUIO, 0, mmCKSVII2C_IC_TX_ABRT_SOURCE);
-		drm_info(adev_to_drm(adev),
-			 "TX was terminated, IC_TX_ABRT_SOURCE val is:%x",
-			 reg_c_tx_abrt_source);
+		DRM_INFO("TX was terminated, IC_TX_ABRT_SOURCE val is:%x", reg_c_tx_abrt_source);
 
 		/* Check for stop due to NACK */
 		if (REG_GET_FIELD(reg_c_tx_abrt_source,
@@ -771,7 +769,7 @@ bool smu_v11_0_i2c_test_bus(struct i2c_adapter *control)
 	uint8_t data[6] = {0xf, 0, 0xde, 0xad, 0xbe, 0xef};
 
 
-	drm_info(adev_to_drm(adev), "Begin");
+	DRM_INFO("Begin");
 
 	if (!smu_v11_0_i2c_bus_lock(control)) {
 		DRM_ERROR("Failed to lock the bus!.");
@@ -790,7 +788,7 @@ bool smu_v11_0_i2c_test_bus(struct i2c_adapter *control)
 	smu_v11_0_i2c_bus_unlock(control);
 
 
-	drm_info(adev_to_drm(adev), "End");
+	DRM_INFO("End");
 	return true;
 }
 #endif

@@ -97,14 +97,13 @@ void amdgpu_bios_release(struct amdgpu_device *adev)
  * part of the system bios.  On boot, the system bios puts a
  * copy of the igp rom at the start of vram if a discrete card is
  * present.
- * For SR-IOV, if dynamic critical region is not enabled,
- * the vbios image is also put at the start of VRAM in the VF.
+ * For SR-IOV, the vbios image is also put in VRAM in the VF.
  */
 static bool amdgpu_read_bios_from_vram(struct amdgpu_device *adev)
 {
-	uint8_t __iomem *bios = NULL;
+	uint8_t __iomem *bios;
 	resource_size_t vram_base;
-	u32 size = 256U * 1024U; /* ??? */
+	resource_size_t size = 256 * 1024; /* ??? */
 
 	if (!(adev->flags & AMD_IS_APU))
 		if (amdgpu_device_need_post(adev))
@@ -116,83 +115,18 @@ static bool amdgpu_read_bios_from_vram(struct amdgpu_device *adev)
 
 	adev->bios = NULL;
 	vram_base = pci_resource_start(adev->pdev, 0);
-
-	adev->bios = kmalloc(size, GFP_KERNEL);
-	if (!adev->bios)
+	bios = ioremap_wc(vram_base, size);
+	if (!bios)
 		return false;
 
-	/* For SRIOV with dynamic critical region is enabled,
-	 * the vbios image is put at a dynamic offset of VRAM in the VF.
-	 * If dynamic critical region is disabled, follow the existing logic as on baremetal.
-	 */
-	if (amdgpu_sriov_vf(adev) && adev->virt.is_dynamic_crit_regn_enabled) {
-		if (amdgpu_virt_get_dynamic_data_info(adev,
-				AMD_SRIOV_MSG_VBIOS_IMG_TABLE_ID, adev->bios, &size)) {
-			amdgpu_bios_release(adev);
-			return false;
-		}
-	} else {
-		bios = ioremap_wc(vram_base, size);
-		if (!bios) {
-			amdgpu_bios_release(adev);
-			return false;
-		}
-
-		memcpy_fromio(adev->bios, bios, size);
+	adev->bios = kmalloc(size, GFP_KERNEL);
+	if (!adev->bios) {
 		iounmap(bios);
+		return false;
 	}
-
 	adev->bios_size = size;
-
-	if (!check_atom_bios(adev, size)) {
-		amdgpu_bios_release(adev);
-		return false;
-	}
-
-	return true;
-}
-
-static bool amdgpu_read_bios_from_spm(struct amdgpu_device *adev)
-{
-	u64 spm_base, spm_size;
-	void *bios = NULL;
-	u32 size = 256U * 1024U; /* ??? */
-	int r;
-
-	if (!amdgpu_virt_vram_is_spm(adev))
-		return false;
-
-	r = amdgpu_acpi_find_gpu_memory_in_srat(adev, &spm_base, &spm_size);
-	if (r)
-		return false;
-
-	adev->bios = kmalloc(size, GFP_KERNEL);
-	if (!adev->bios)
-		return false;
-
-	/* For SRIOV with dynamic critical region is enabled,
-	 * the vbios image is put at a dynamic offset of VRAM in the VF.
-	 * If dynamic critical region is disabled, read it from SPM.
-	 */
-	if (amdgpu_sriov_vf(adev) && adev->virt.is_dynamic_crit_regn_enabled) {
-		if (amdgpu_virt_get_dynamic_data_info(adev,
-						      AMD_SRIOV_MSG_VBIOS_IMG_TABLE_ID,
-						      adev->bios, &size)) {
-			amdgpu_bios_release(adev);
-			return false;
-		}
-	} else {
-		bios = memremap(spm_base, size, MEMREMAP_WB);
-		if (!bios) {
-			amdgpu_bios_release(adev);
-			return false;
-		}
-
-		memcpy(adev->bios, bios, size);
-		memunmap(bios);
-	}
-
-	adev->bios_size = size;
+	memcpy_fromio(adev->bios, bios, size);
+	iounmap(bios);
 
 	if (!check_atom_bios(adev, size)) {
 		amdgpu_bios_release(adev);
@@ -346,14 +280,8 @@ static int amdgpu_atrm_call(acpi_handle atrm_handle, uint8_t *bios,
 	}
 
 	obj = (union acpi_object *)buffer.pointer;
-	if (!obj || obj->type != ACPI_TYPE_BUFFER) {
-		DRM_ERROR("ATRM returned an invalid object\n");
-		kfree(buffer.pointer);
-		return -EINVAL;
-	}
-
-	len = min_t(size_t, obj->buffer.length, len);
-	memcpy(bios+offset, obj->buffer.pointer, len);
+	memcpy(bios+offset, obj->buffer.pointer, obj->buffer.length);
+	len = obj->buffer.length;
 	kfree(buffer.pointer);
 	return len;
 }
@@ -577,11 +505,6 @@ static bool amdgpu_get_bios_dgpu(struct amdgpu_device *adev)
 
 	if (amdgpu_acpi_vfct_bios(adev)) {
 		dev_info(adev->dev, "Fetched VBIOS from VFCT\n");
-		goto success;
-	}
-
-	if (amdgpu_read_bios_from_spm(adev)) {
-		dev_info(adev->dev, "Fetched VBIOS from SPM\n");
 		goto success;
 	}
 

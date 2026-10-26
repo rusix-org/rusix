@@ -273,15 +273,6 @@ static const struct snd_pcm_ops n64audio_pcm_ops = {
 	.close =	n64audio_pcm_close,
 };
 
-static void n64audio_free(struct snd_card *card)
-{
-	struct n64audio *priv = card->private_data;
-
-	if (priv->ring_base)
-		dma_free_coherent(card->dev, 32 * 1024, priv->ring_base,
-				  priv->ring_base_dma);
-}
-
 /*
  * The target device is embedded and RAM-constrained. We save RAM
  * by initializing in __init code that gets dropped late in boot.
@@ -289,14 +280,14 @@ static void n64audio_free(struct snd_card *card)
  */
 static int __init n64audio_probe(struct platform_device *pdev)
 {
-	struct snd_card *card __free(snd_card_free) = NULL;
+	struct snd_card *card;
 	struct snd_pcm *pcm;
 	struct n64audio *priv;
 	int err, irq;
 
-	err = snd_devm_card_new(&pdev->dev, SNDRV_DEFAULT_IDX1,
-				SNDRV_DEFAULT_STR1,
-				THIS_MODULE, sizeof(*priv), &card);
+	err = snd_card_new(&pdev->dev, SNDRV_DEFAULT_IDX1,
+			   SNDRV_DEFAULT_STR1,
+			   THIS_MODULE, sizeof(*priv), &card);
 	if (err < 0)
 		return err;
 
@@ -305,24 +296,29 @@ static int __init n64audio_probe(struct platform_device *pdev)
 	spin_lock_init(&priv->chan.lock);
 
 	priv->card = card;
-	card->private_free = n64audio_free;
 
 	priv->ring_base = dma_alloc_coherent(card->dev, 32 * 1024, &priv->ring_base_dma,
-					     GFP_KERNEL);
-	if (!priv->ring_base)
-		return -ENOMEM;
+					     GFP_DMA|GFP_KERNEL);
+	if (!priv->ring_base) {
+		err = -ENOMEM;
+		goto fail_card;
+	}
 
 	priv->mi_reg_base = devm_platform_ioremap_resource(pdev, 0);
-	if (IS_ERR(priv->mi_reg_base))
-		return PTR_ERR(priv->mi_reg_base);
+	if (IS_ERR(priv->mi_reg_base)) {
+		err = PTR_ERR(priv->mi_reg_base);
+		goto fail_dma_alloc;
+	}
 
 	priv->ai_reg_base = devm_platform_ioremap_resource(pdev, 1);
-	if (IS_ERR(priv->ai_reg_base))
-		return PTR_ERR(priv->ai_reg_base);
+	if (IS_ERR(priv->ai_reg_base)) {
+		err = PTR_ERR(priv->ai_reg_base);
+		goto fail_dma_alloc;
+	}
 
 	err = snd_pcm_new(card, "N64 Audio", 0, 1, 0, &pcm);
 	if (err < 0)
-		return err;
+		goto fail_dma_alloc;
 
 	pcm->private_data = priv;
 	strscpy(pcm->name, "N64 Audio");
@@ -335,19 +331,28 @@ static int __init n64audio_probe(struct platform_device *pdev)
 	strscpy(card->longname, "N64 Audio");
 
 	irq = platform_get_irq(pdev, 0);
-	if (irq < 0)
-		return -EINVAL;
-
+	if (irq < 0) {
+		err = -EINVAL;
+		goto fail_dma_alloc;
+	}
 	if (devm_request_irq(&pdev->dev, irq, n64audio_isr,
-				IRQF_SHARED, "N64 Audio", priv))
-		return -EBUSY;
+				IRQF_SHARED, "N64 Audio", priv)) {
+		err = -EBUSY;
+		goto fail_dma_alloc;
+	}
 
 	err = snd_card_register(card);
 	if (err < 0)
-		return err;
+		goto fail_dma_alloc;
 
-	card = NULL; /* probe succeeded, don't release as error */
 	return 0;
+
+fail_dma_alloc:
+	dma_free_coherent(card->dev, 32 * 1024, priv->ring_base, priv->ring_base_dma);
+
+fail_card:
+	snd_card_free(card);
+	return err;
 }
 
 static struct platform_driver n64audio_driver = {

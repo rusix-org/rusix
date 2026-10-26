@@ -25,7 +25,7 @@ extern __always_inline unsigned long native_save_fl(void)
 	 */
 	asm volatile("# __raw_save_flags\n\t"
 		     "pushf ; pop %0"
-		     : ASM_OUTPUT_RM (flags)
+		     : "=rm" (flags)
 		     : /* no input */
 		     : "memory");
 
@@ -77,7 +77,7 @@ static __always_inline void native_local_irq_restore(unsigned long flags)
 #endif
 
 #ifndef CONFIG_PARAVIRT
-#ifndef __ASSEMBLER__
+#ifndef __ASSEMBLY__
 /*
  * Used in the idle loop; sti takes one instruction cycle
  * to complete:
@@ -95,12 +95,12 @@ static __always_inline void halt(void)
 {
 	native_halt();
 }
-#endif /* __ASSEMBLER__ */
-#else
-#include <asm/paravirt.h>
+#endif /* __ASSEMBLY__ */
 #endif /* CONFIG_PARAVIRT */
 
-#ifndef CONFIG_PARAVIRT_XXL
+#ifdef CONFIG_PARAVIRT_XXL
+#include <asm/paravirt.h>
+#else
 #ifndef __ASSEMBLER__
 #include <linux/types.h>
 

@@ -13,6 +13,7 @@
 #include <linux/gpio/driver.h>
 #include <linux/io.h>
 #include <linux/mfd/ocelot.h>
+#include <linux/mod_devicetable.h>
 #include <linux/module.h>
 #include <linux/platform_device.h>
 #include <linux/property.h>
@@ -263,17 +264,19 @@ static int sgpio_single_shot(struct sgpio_priv *priv)
 	 * setting.
 	 * After the manual burst, reenable the auto repeat mode again.
 	 */
-	guard(mutex)(&priv->poll_lock);
+	mutex_lock(&priv->poll_lock);
 	ret = regmap_update_bits(priv->regs, addr, single_shot | auto_repeat,
 				 single_shot);
 	if (ret)
-		return ret;
+		goto out;
 
 	ret = regmap_read_poll_timeout(priv->regs, addr, ctrl,
 				       !(ctrl & single_shot), 100, 60000);
 
 	/* reenable auto repeat mode even if there was an error */
 	ret2 = regmap_update_bits(priv->regs, addr, auto_repeat, auto_repeat);
+out:
+	mutex_unlock(&priv->poll_lock);
 
 	return ret ?: ret2;
 }

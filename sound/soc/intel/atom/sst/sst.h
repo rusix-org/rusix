@@ -182,7 +182,7 @@ struct sst_block {
  * @pcm_substream : PCM substream
  * @period_elapsed : PCM period elapsed callback
  * @sfreq : stream sampling freq
- * @cumm_bytes : cumulative bytes decoded
+ * @cumm_bytes : cummulative bytes decoded
  */
 struct stream_info {
 	unsigned int		status;

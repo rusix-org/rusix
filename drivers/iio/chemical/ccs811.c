@@ -484,8 +484,10 @@ static int ccs811_probe(struct i2c_client *client)
 						IRQF_TRIGGER_FALLING |
 						IRQF_ONESHOT,
 						"ccs811_irq", indio_dev);
-		if (ret)
+		if (ret) {
+			dev_err(&client->dev, "irq request error %d\n", -ret);
 			goto err_poweroff;
+		}
 
 		data->drdy_trig = devm_iio_trigger_alloc(&client->dev,
 							 "%s-dev%d",
@@ -550,8 +552,8 @@ static void ccs811_remove(struct i2c_client *client)
 }
 
 static const struct i2c_device_id ccs811_id[] = {
-	{ .name = "ccs811" },
-	{ }
+	{ "ccs811" },
+	{	}
 };
 MODULE_DEVICE_TABLE(i2c, ccs811_id);
 

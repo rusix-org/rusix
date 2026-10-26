@@ -49,16 +49,14 @@ static int cpufreq_set(struct cpufreq_policy *policy, unsigned int freq)
 
 static ssize_t show_speed(struct cpufreq_policy *policy, char *buf)
 {
-	struct userspace_policy *userspace = policy->governor_data;
-
-	return sprintf(buf, "%u\n", userspace->setspeed);
+	return sprintf(buf, "%u\n", policy->cur);
 }
 
 static int cpufreq_userspace_policy_init(struct cpufreq_policy *policy)
 {
 	struct userspace_policy *userspace;
 
-	userspace = kzalloc_obj(*userspace);
+	userspace = kzalloc(sizeof(*userspace), GFP_KERNEL);
 	if (!userspace)
 		return -ENOMEM;
 

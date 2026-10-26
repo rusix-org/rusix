@@ -68,7 +68,6 @@ struct ll_device {
 	struct gpio_desc *enable_gpio;
 	struct clk *ext_clk;
 	bdaddr_t bdaddr;
-	bool broken_enhanced_setup;
 };
 
 struct ll_struct {
@@ -115,7 +114,7 @@ static int ll_open(struct hci_uart *hu)
 
 	BT_DBG("hu %p", hu);
 
-	ll = kzalloc_obj(*ll);
+	ll = kzalloc(sizeof(*ll), GFP_KERNEL);
 	if (!ll)
 		return -ENOMEM;
 
@@ -629,7 +628,7 @@ static int ll_setup(struct hci_uart *hu)
 		gpiod_set_value_cansleep(lldev->enable_gpio, 0);
 		msleep(5);
 		gpiod_set_value_cansleep(lldev->enable_gpio, 1);
-		msleep(100);
+		mdelay(100);
 		err = serdev_device_wait_for_cts(serdev, true, 200);
 		if (err) {
 			bt_dev_err(hu->hdev, "Failed to get CTS");
@@ -658,10 +657,6 @@ static int ll_setup(struct hci_uart *hu)
 		if (err)
 			hci_set_quirk(hu->hdev, HCI_QUIRK_INVALID_BDADDR);
 	}
-
-	if (lldev->broken_enhanced_setup)
-		hci_set_quirk(hu->hdev,
-			      HCI_QUIRK_BROKEN_ENHANCED_SETUP_SYNC_CONN);
 
 	/* Operational speed if any */
 	if (hu->oper_speed)
@@ -716,11 +711,6 @@ static int hci_ti_probe(struct serdev_device *serdev)
 
 	of_property_read_u32(serdev->dev.of_node, "max-speed", &max_speed);
 	hci_uart_set_speeds(hu, 115200, max_speed);
-
-	if (of_device_is_compatible(serdev->dev.of_node, "ti,wl1831-st") ||
-	    of_device_is_compatible(serdev->dev.of_node, "ti,wl1835-st") ||
-	    of_device_is_compatible(serdev->dev.of_node, "ti,wl1837-st"))
-		lldev->broken_enhanced_setup = true;
 
 	/* optional BD address from nvram */
 	bdaddr_cell = nvmem_cell_get(&serdev->dev, "bd-address");

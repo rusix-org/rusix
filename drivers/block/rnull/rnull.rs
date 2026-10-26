@@ -10,20 +10,17 @@ use kernel::{
         self,
         mq::{
             self,
-            gen_disk::{
-                self,
-                GenDisk, //
-            },
-            Operations,
-            TagSet, //
-        }, //
+            gen_disk::{self, GenDisk},
+            Operations, TagSet,
+        },
     },
+    error::Result,
+    pr_info,
     prelude::*,
-    sync::{
-        aref::ARef,
-        Arc, //
-    }, //
+    sync::Arc,
+    types::ARef,
 };
+use pin_init::PinInit;
 
 module! {
     type: NullBlkModule,

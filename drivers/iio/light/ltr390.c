@@ -10,6 +10,12 @@
  *
  * Datasheet:
  *   https://optoelectronics.liteon.com/upload/download/DS86-2015-0004/LTR-390UV_Final_%20DS_V1%201.pdf
+ *
+ * TODO:
+ *   - Support for configurable gain and resolution
+ *   - Sensor suspend/resume support
+ *   - Add support for reading the ALS
+ *   - Interrupt support
  */
 
 #include <linux/bitfield.h>
@@ -95,7 +101,7 @@ enum ltr390_meas_rate {
 struct ltr390_data {
 	struct regmap *regmap;
 	struct i2c_client *client;
-	/* Protects device from simultaneous reads */
+	/* Protects device from simulataneous reads */
 	struct mutex lock;
 	enum ltr390_mode mode;
 	int gain;
@@ -154,16 +160,16 @@ static int ltr390_register_read(struct ltr390_data *data, u8 register_address)
 {
 	struct device *dev = &data->client->dev;
 	int ret;
-	u8 receive_buffer[3];
+	u8 recieve_buffer[3];
 
-	ret = regmap_bulk_read(data->regmap, register_address, receive_buffer,
-			       sizeof(receive_buffer));
+	ret = regmap_bulk_read(data->regmap, register_address, recieve_buffer,
+			       sizeof(recieve_buffer));
 	if (ret) {
 		dev_err(dev, "failed to read measurement data");
 		return ret;
 	}
 
-	return get_unaligned_le24(receive_buffer);
+	return get_unaligned_le24(recieve_buffer);
 }
 
 static int ltr390_set_mode(struct ltr390_data *data, enum ltr390_mode mode)
@@ -832,7 +838,8 @@ static int ltr390_probe(struct i2c_client *client)
 						"ltr390_thresh_event",
 						indio_dev);
 		if (ret)
-			return ret;
+			return dev_err_probe(dev, ret,
+					     "request irq (%d) failed\n", client->irq);
 	}
 
 	ret = ltr390_pm_init(data);
@@ -882,7 +889,7 @@ static const struct dev_pm_ops ltr390_pm_ops = {
 };
 
 static const struct i2c_device_id ltr390_id[] = {
-	{ .name = "ltr390" },
+	{ "ltr390" },
 	{ }
 };
 MODULE_DEVICE_TABLE(i2c, ltr390_id);

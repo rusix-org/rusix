@@ -10,11 +10,14 @@
 #include <linux/err.h>
 #include <linux/fs.h>
 #include <linux/module.h>
+#include <linux/mod_devicetable.h>
 #include <linux/platform_device.h>
 
 #include "coresight-etm-perf.h"
 #include "coresight-priv.h"
 #include "ultrasoc-smb.h"
+
+DEFINE_CORESIGHT_DEVLIST(sink_devs, "ultra_smb");
 
 #define ULTRASOC_SMB_DSM_UUID	"82ae1283-7f6a-4cbe-aa06-53e8fb24db18"
 
@@ -210,11 +213,10 @@ static void smb_enable_sysfs(struct coresight_device *csdev)
 	coresight_set_mode(csdev, CS_MODE_SYSFS);
 }
 
-static int smb_enable_perf(struct coresight_device *csdev,
-			   struct coresight_path *path)
+static int smb_enable_perf(struct coresight_device *csdev, void *data)
 {
 	struct smb_drv_data *drvdata = dev_get_drvdata(csdev->dev.parent);
-	struct perf_output_handle *handle = path->handle;
+	struct perf_output_handle *handle = data;
 	struct cs_buffers *buf = etm_perf_sink_config(handle);
 	pid_t pid;
 
@@ -238,7 +240,7 @@ static int smb_enable_perf(struct coresight_device *csdev,
 }
 
 static int smb_enable(struct coresight_device *csdev, enum cs_mode mode,
-		      struct coresight_path *path)
+		      void *data)
 {
 	struct smb_drv_data *drvdata = dev_get_drvdata(csdev->dev.parent);
 	int ret = 0;
@@ -259,7 +261,7 @@ static int smb_enable(struct coresight_device *csdev, enum cs_mode mode,
 		smb_enable_sysfs(csdev);
 		break;
 	case CS_MODE_PERF:
-		ret = smb_enable_perf(csdev, path);
+		ret = smb_enable_perf(csdev, data);
 		break;
 	default:
 		ret = -EINVAL;
@@ -476,7 +478,7 @@ static int smb_register_sink(struct platform_device *pdev,
 	desc.pdata = pdata;
 	desc.dev = &pdev->dev;
 	desc.groups = smb_sink_groups;
-	desc.name = coresight_alloc_device_name("ultra_smb", &pdev->dev);
+	desc.name = coresight_alloc_device_name(&sink_devs, &pdev->dev);
 	if (!desc.name) {
 		dev_err(&pdev->dev, "Failed to alloc coresight device name");
 		return -ENOMEM;

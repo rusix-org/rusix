@@ -300,7 +300,7 @@ static int pc300_pci_init_one(struct pci_dev *pdev,
 		return i;
 	}
 
-	card = kzalloc_obj(card_t);
+	card = kzalloc(sizeof(card_t), GFP_KERNEL);
 	if (!card) {
 		pci_release_regions(pdev);
 		pci_disable_device(pdev);
@@ -461,11 +461,15 @@ static int pc300_pci_init_one(struct pci_dev *pdev,
 }
 
 static const struct pci_device_id pc300_pci_tbl[] = {
-	{ PCI_VDEVICE(CYCLADES, PCI_DEVICE_ID_PC300_RX_1) },
-	{ PCI_VDEVICE(CYCLADES, PCI_DEVICE_ID_PC300_RX_2) },
-	{ PCI_VDEVICE(CYCLADES, PCI_DEVICE_ID_PC300_TE_1) },
-	{ PCI_VDEVICE(CYCLADES, PCI_DEVICE_ID_PC300_TE_2) },
-	{ }
+	{ PCI_VENDOR_ID_CYCLADES, PCI_DEVICE_ID_PC300_RX_1, PCI_ANY_ID,
+	  PCI_ANY_ID, 0, 0, 0 },
+	{ PCI_VENDOR_ID_CYCLADES, PCI_DEVICE_ID_PC300_RX_2, PCI_ANY_ID,
+	  PCI_ANY_ID, 0, 0, 0 },
+	{ PCI_VENDOR_ID_CYCLADES, PCI_DEVICE_ID_PC300_TE_1, PCI_ANY_ID,
+	  PCI_ANY_ID, 0, 0, 0 },
+	{ PCI_VENDOR_ID_CYCLADES, PCI_DEVICE_ID_PC300_TE_2, PCI_ANY_ID,
+	  PCI_ANY_ID, 0, 0, 0 },
+	{ 0, }
 };
 
 static struct pci_driver pc300_pci_driver = {

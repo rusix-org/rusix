@@ -14,13 +14,7 @@ use crate::{
     cpumask,
     device::{Bound, Device},
     devres,
-    error::{
-        code::*,
-        from_result,
-        to_result,
-        Result,
-        VTABLE_DEFAULT_ERROR, //
-    },
+    error::{code::*, from_err_ptr, from_result, to_result, Result, VTABLE_DEFAULT_ERROR},
     ffi::{c_char, c_ulong},
     prelude::*,
     types::ForeignOwnable,
@@ -35,10 +29,7 @@ use core::{
     marker::PhantomData,
     ops::{Deref, DerefMut},
     pin::Pin,
-    ptr::{
-        self,
-        NonNull, //
-    },
+    ptr,
 };
 
 use macros::vtable;
@@ -415,7 +406,6 @@ impl TableBuilder {
 /// ```
 /// use kernel::cpufreq::{DEFAULT_TRANSITION_LATENCY_NS, Policy};
 ///
-/// #[allow(clippy::double_parens, reason = "False positive before 1.92.0")]
 /// fn update_policy(policy: &mut Policy) {
 ///     policy
 ///         .set_dvfs_possible_from_any_cpu(true)
@@ -696,13 +686,12 @@ struct PolicyCpu<'a>(&'a mut Policy);
 impl<'a> PolicyCpu<'a> {
     fn from_cpu(cpu: CpuId) -> Result<Self> {
         // SAFETY: It is safe to call `cpufreq_cpu_get` for any valid CPU.
-        let ptr =
-            NonNull::new(unsafe { bindings::cpufreq_cpu_get(u32::from(cpu)) }).ok_or(ENODEV)?;
+        let ptr = from_err_ptr(unsafe { bindings::cpufreq_cpu_get(u32::from(cpu)) })?;
 
         Ok(Self(
-            // SAFETY: `ptr` is non-NULL and `cpufreq_cpu_get()` took a reference on it, so it is
-            // valid for writing and remains valid for the lifetime of the returned reference.
-            unsafe { Policy::from_raw_mut(ptr.as_ptr()) },
+            // SAFETY: The `ptr` is guaranteed to be valid and remains valid for the lifetime of
+            // the returned reference.
+            unsafe { Policy::from_raw_mut(ptr) },
         ))
     }
 }
@@ -807,13 +796,7 @@ pub trait Driver {
     }
 
     /// Driver's `adjust_perf` callback.
-    fn adjust_perf(
-        _policy: &mut Policy,
-        _min_perf: usize,
-        _target_perf: usize,
-        _max_perf: usize,
-        _capacity: usize,
-    ) {
+    fn adjust_perf(_policy: &mut Policy, _min_perf: usize, _target_perf: usize, _capacity: usize) {
         build_error!(VTABLE_DEFAULT_ERROR)
     }
 
@@ -864,6 +847,7 @@ pub trait Driver {
 /// ```
 /// use kernel::{
 ///     cpufreq,
+///     c_str,
 ///     device::{Core, Device},
 ///     macros::vtable,
 ///     of, platform,
@@ -876,7 +860,7 @@ pub trait Driver {
 ///
 /// #[vtable]
 /// impl cpufreq::Driver for SampleDriver {
-///     const NAME: &'static CStr = c"cpufreq-sample";
+///     const NAME: &'static CStr = c_str!("cpufreq-sample");
 ///     const FLAGS: u16 = cpufreq::flags::NEED_INITIAL_FREQ_CHECK | cpufreq::flags::IS_COOLING_DEV;
 ///     const BOOST_ENABLED: bool = true;
 ///
@@ -911,15 +895,14 @@ pub trait Driver {
 ///
 /// impl platform::Driver for SampleDriver {
 ///     type IdInfo = ();
-///     type Data<'bound> = Self;
 ///     const OF_ID_TABLE: Option<of::IdTable<Self::IdInfo>> = None;
 ///
-///     fn probe<'bound>(
-///         pdev: &'bound platform::Device<Core<'_>>,
-///         _id_info: Option<&'bound Self::IdInfo>,
-///     ) -> impl PinInit<Self, Error> + 'bound {
+///     fn probe(
+///         pdev: &platform::Device<Core>,
+///         _id_info: Option<&Self::IdInfo>,
+///     ) -> Result<Pin<KBox<Self>>> {
 ///         cpufreq::Registration::<SampleDriver>::new_foreign_owned(pdev.as_ref())?;
-///         Ok(Self {})
+///         Ok(KBox::new(Self {}, GFP_KERNEL)?.into())
 ///     }
 /// }
 /// ```
@@ -1286,13 +1269,12 @@ impl<T: Driver> Registration<T> {
         ptr: *mut bindings::cpufreq_policy,
         min_perf: c_ulong,
         target_perf: c_ulong,
-        max_perf: c_ulong,
         capacity: c_ulong,
     ) {
         // SAFETY: The `ptr` is guaranteed to be valid by the contract with the C code for the
         // lifetime of `policy`.
         let policy = unsafe { Policy::from_raw_mut(ptr) };
-        T::adjust_perf(policy, min_perf, target_perf, max_perf, capacity);
+        T::adjust_perf(policy, min_perf, target_perf, capacity);
     }
 
     /// Driver's `get_intermediate` callback.

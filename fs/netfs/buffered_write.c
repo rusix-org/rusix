@@ -10,6 +10,7 @@
 #include <linux/mm.h>
 #include <linux/pagemap.h>
 #include <linux/slab.h>
+#include <linux/pagevec.h>
 #include "internal.h"
 
 /*
@@ -17,7 +18,7 @@
  * as possible to hold as much of the remaining length as possible in one go.
  */
 static struct folio *netfs_grab_folio_for_write(struct address_space *mapping,
-						uoff_t pos, size_t part)
+						loff_t pos, size_t part)
 {
 	pgoff_t index = pos / PAGE_SIZE;
 	fgf_t fgp_flags = FGP_WRITEBEGIN;
@@ -35,9 +36,9 @@ static struct folio *netfs_grab_folio_for_write(struct address_space *mapping,
  * the values actually are.
  */
 void netfs_update_i_size(struct netfs_inode *ctx, struct inode *inode,
-			 uoff_t pos, size_t copied)
+			 loff_t pos, size_t copied)
 {
-	uoff_t i_size, end = pos + copied;
+	loff_t i_size, end = pos + copied;
 	blkcnt_t add;
 	size_t gap;
 
@@ -54,6 +55,9 @@ void netfs_update_i_size(struct netfs_inode *ctx, struct inode *inode,
 	i_size = i_size_read(inode);
 	if (end > i_size) {
 		i_size_write(inode, end);
+#if IS_ENABLED(CONFIG_FSCACHE)
+		fscache_update_cookie(ctx->cache, NULL, &end);
+#endif
 
 		gap = SECTOR_SIZE - (i_size & (SECTOR_SIZE - 1));
 		if (copied > gap) {
@@ -88,20 +92,50 @@ ssize_t netfs_perform_write(struct kiocb *iocb, struct iov_iter *iter,
 	struct inode *inode = file_inode(file);
 	struct address_space *mapping = inode->i_mapping;
 	struct netfs_inode *ctx = netfs_inode(inode);
-	struct folio *folio = NULL;
+	struct writeback_control wbc = {
+		.sync_mode	= WB_SYNC_NONE,
+		.for_sync	= true,
+		.nr_to_write	= LONG_MAX,
+		.range_start	= iocb->ki_pos,
+		.range_end	= iocb->ki_pos + iter->count,
+	};
+	struct netfs_io_request *wreq = NULL;
+	struct folio *folio = NULL, *writethrough = NULL;
 	unsigned int bdp_flags = (iocb->ki_flags & IOCB_NOWAIT) ? BDP_ASYNC : 0;
-	ssize_t written = 0, ret;
-	uoff_t pos = iocb->ki_pos;
+	ssize_t written = 0, ret, ret2;
+	loff_t pos = iocb->ki_pos;
 	size_t max_chunk = mapping_max_folio_size(mapping);
 	bool maybe_trouble = false;
 
-	netfs_stat(&netfs_n_wh_buffered_write);
+	if (unlikely(iocb->ki_flags & (IOCB_DSYNC | IOCB_SYNC))
+	    ) {
+		wbc_attach_fdatawrite_inode(&wbc, mapping->host);
+
+		ret = filemap_write_and_wait_range(mapping, pos, pos + iter->count);
+		if (ret < 0) {
+			wbc_detach_inode(&wbc);
+			goto out;
+		}
+
+		wreq = netfs_begin_writethrough(iocb, iter->count);
+		if (IS_ERR(wreq)) {
+			wbc_detach_inode(&wbc);
+			ret = PTR_ERR(wreq);
+			wreq = NULL;
+			goto out;
+		}
+		if (!is_sync_kiocb(iocb))
+			wreq->iocb = iocb;
+		netfs_stat(&netfs_n_wh_writethrough);
+	} else {
+		netfs_stat(&netfs_n_wh_buffered_write);
+	}
 
 	do {
 		enum netfs_folio_trace trace;
 		struct netfs_folio *finfo;
 		struct netfs_group *group;
-		uoff_t fpos;
+		unsigned long long fpos;
 		size_t flen;
 		size_t offset;	/* Offset into pagecache folio */
 		size_t part;	/* Bytes to write to folio */
@@ -192,7 +226,7 @@ ssize_t netfs_perform_write(struct kiocb *iocb, struct iov_iter *iter,
 		 * server would just return a block of zeros or a short read if
 		 * we try to read it.
 		 */
-		if (fpos >= netfs_read_zero_point(inode)) {
+		if (fpos >= ctx->zero_point) {
 			folio_zero_segment(folio, 0, offset);
 			copied = copy_folio_from_iter_atomic(folio, offset, part, iter);
 			if (unlikely(copied == 0))
@@ -276,7 +310,7 @@ ssize_t netfs_perform_write(struct kiocb *iocb, struct iov_iter *iter,
 				goto mark_uptodate;
 			}
 
-			finfo = kzalloc_obj(*finfo);
+			finfo = kzalloc(sizeof(*finfo), GFP_KERNEL);
 			if (!finfo) {
 				iov_iter_revert(iter, copied);
 				ret = -ENOMEM;
@@ -357,8 +391,15 @@ ssize_t netfs_perform_write(struct kiocb *iocb, struct iov_iter *iter,
 		pos += copied;
 		written += copied;
 
-		folio_mark_dirty(folio);
-		folio_unlock(folio);
+		if (likely(!wreq)) {
+			folio_mark_dirty(folio);
+			folio_unlock(folio);
+		} else {
+			netfs_advance_writethrough(wreq, &wbc, folio, copied,
+						   offset + copied == flen,
+						   &writethrough);
+			/* Folio unlocked */
+		}
 	retry:
 		folio_put(folio);
 		folio = NULL;
@@ -378,6 +419,15 @@ out:
 		set_bit(NETFS_ICTX_MODIFIED_ATTR, &ctx->flags);
 		if (unlikely(ctx->ops->post_modify))
 			ctx->ops->post_modify(inode);
+	}
+
+	if (unlikely(wreq)) {
+		ret2 = netfs_end_writethrough(wreq, &wbc, writethrough);
+		wbc_detach_inode(&wbc);
+		if (ret2 == -EIOCBQUEUED)
+			return ret2;
+		if (ret == 0 && ret2 < 0)
+			ret = ret2;
 	}
 
 	iocb->ki_pos += written;
@@ -530,7 +580,7 @@ vm_fault_t netfs_page_mkwrite(struct vm_fault *vmf, struct netfs_group *netfs_gr
 		folio_unlock(folio);
 		err = filemap_fdatawrite_range(mapping,
 					       folio_pos(folio),
-					       folio_next_pos(folio));
+					       folio_pos(folio) + folio_size(folio));
 		switch (err) {
 		case 0:
 			ret = VM_FAULT_RETRY;

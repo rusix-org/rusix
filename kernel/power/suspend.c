@@ -344,17 +344,10 @@ MODULE_PARM_DESC(pm_test_delay,
 static int suspend_test(int level)
 {
 #ifdef CONFIG_PM_DEBUG
-	int i;
-
 	if (pm_test_level == level) {
 		pr_info("suspend debug: Waiting for %d second(s).\n",
 				pm_test_delay);
-		for (i = 0; i < pm_test_delay && !pm_wakeup_pending(); i++) {
-			if (level > TEST_CORE)
-				msleep(1000);
-			else
-				mdelay(1000);
-		}
+		mdelay(pm_test_delay * 1000);
 		return 1;
 	}
 #endif /* !CONFIG_PM_DEBUG */
@@ -596,11 +589,7 @@ static int enter_state(suspend_state_t state)
 
 	if (sync_on_suspend_enabled) {
 		trace_suspend_resume(TPS("sync_filesystems"), 0, true);
-
-		error = pm_sleep_fs_sync();
-		if (error)
-			goto Unlock;
-
+		ksys_sync_helper();
 		trace_suspend_resume(TPS("sync_filesystems"), 0, false);
 	}
 

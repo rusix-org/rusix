@@ -35,8 +35,10 @@
 #include <linux/errno.h>
 #include <linux/slab.h>
 #include <linux/tty.h>
+#include <linux/tty_driver.h>
 #include <linux/tty_flip.h>
 #include <linux/module.h>
+#include <linux/uaccess.h>
 #include <linux/unaligned.h>
 #include <linux/usb.h>
 #include <linux/usb/serial.h>
@@ -187,7 +189,7 @@ static int klsi_105_port_probe(struct usb_serial_port *port)
 {
 	struct klsi_105_private *priv;
 
-	priv = kmalloc_obj(*priv);
+	priv = kmalloc(sizeof(*priv), GFP_KERNEL);
 	if (!priv)
 		return -ENOMEM;
 
@@ -376,7 +378,7 @@ static void klsi_105_set_termios(struct tty_struct *tty,
 	unsigned long flags;
 	speed_t baud;
 
-	cfg = kmalloc_obj(*cfg);
+	cfg = kmalloc(sizeof(*cfg), GFP_KERNEL);
 	if (!cfg)
 		return;
 

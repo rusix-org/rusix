@@ -336,7 +336,7 @@ struct nvdimm_bus *nvdimm_bus_register(struct device *parent,
 	struct nvdimm_bus *nvdimm_bus;
 	int rc;
 
-	nvdimm_bus = kzalloc_obj(*nvdimm_bus);
+	nvdimm_bus = kzalloc(sizeof(*nvdimm_bus), GFP_KERNEL);
 	if (!nvdimm_bus)
 		return NULL;
 	INIT_LIST_HEAD(&nvdimm_bus->list);
@@ -737,7 +737,7 @@ int nvdimm_bus_create_ndctl(struct nvdimm_bus *nvdimm_bus)
 	struct device *dev;
 	int rc;
 
-	dev = kzalloc_obj(*dev);
+	dev = kzalloc(sizeof(*dev), GFP_KERNEL);
 	if (!dev)
 		return -ENOMEM;
 	device_initialize(dev);

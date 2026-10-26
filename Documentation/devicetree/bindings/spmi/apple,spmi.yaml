@@ -7,7 +7,7 @@ $schema: http://devicetree.org/meta-schemas/core.yaml#
 title: Apple SPMI controller
 
 maintainers:
-  - Sasha Finkelstein <k@chaosmail.tech>
+  - Sasha Finkelstein <fnkl.kernel@gmail.com>
 
 description: A SPMI controller present on most Apple SoCs
 

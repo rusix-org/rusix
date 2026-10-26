@@ -13,7 +13,7 @@
 #include <linux/iio/sysfs.h>
 #include <linux/interrupt.h>
 #include <linux/irq.h>
-#include <linux/property.h>
+#include <linux/mod_devicetable.h>
 #include <linux/regmap.h>
 #include <linux/regulator/consumer.h>
 #include <linux/unaligned.h>
@@ -82,7 +82,6 @@
 #define ADXL367_SAMPLES_L_MASK		GENMASK(7, 0)
 
 #define ADXL367_REG_INT1_MAP		0x2A
-#define ADXL367_REG_INT2_MAP		0x2B
 #define ADXL367_INT_INACT_MASK		BIT(5)
 #define ADXL367_INT_ACT_MASK		BIT(4)
 #define ADXL367_INT_FIFO_WATERMARK_MASK	BIT(2)
@@ -169,8 +168,6 @@ struct adxl367_state {
 
 	enum adxl367_odr	odr;
 	enum adxl367_range	range;
-
-	u8		int_map_reg;
 
 	unsigned int	act_threshold;
 	unsigned int	act_time_ms;
@@ -370,7 +367,8 @@ static int adxl367_set_act_interrupt_en(struct adxl367_state *st,
 {
 	unsigned int mask = adxl367_act_int_mask_tbl[act];
 
-	return regmap_assign_bits(st->regmap, st->int_map_reg, mask, en);
+	return regmap_update_bits(st->regmap, ADXL367_REG_INT1_MAP,
+				  mask, en ? mask : 0);
 }
 
 static int adxl367_get_act_interrupt_en(struct adxl367_state *st,
@@ -381,7 +379,7 @@ static int adxl367_get_act_interrupt_en(struct adxl367_state *st,
 	unsigned int val;
 	int ret;
 
-	ret = regmap_read(st->regmap, st->int_map_reg, &val);
+	ret = regmap_read(st->regmap, ADXL367_REG_INT1_MAP, &val);
 	if (ret)
 		return ret;
 
@@ -404,8 +402,9 @@ static int adxl367_set_act_en(struct adxl367_state *st,
 static int adxl367_set_fifo_watermark_interrupt_en(struct adxl367_state *st,
 						   bool en)
 {
-	return regmap_assign_bits(st->regmap, st->int_map_reg,
-				  ADXL367_INT_FIFO_WATERMARK_MASK, en);
+	return regmap_update_bits(st->regmap, ADXL367_REG_INT1_MAP,
+				  ADXL367_INT_FIFO_WATERMARK_MASK,
+				  en ? ADXL367_INT_FIFO_WATERMARK_MASK : 0);
 }
 
 static int adxl367_get_fifo_mode(struct adxl367_state *st,
@@ -633,7 +632,8 @@ static int adxl367_set_odr(struct iio_dev *indio_dev, enum adxl367_odr odr)
 static int adxl367_set_temp_adc_en(struct adxl367_state *st, unsigned int reg,
 				   bool en)
 {
-	return regmap_assign_bits(st->regmap, reg, ADXL367_ADC_EN_MASK, en);
+	return regmap_update_bits(st->regmap, reg, ADXL367_ADC_EN_MASK,
+				  en ? ADXL367_ADC_EN_MASK : 0);
 }
 
 static int adxl367_set_temp_adc_reg_en(struct adxl367_state *st,
@@ -787,13 +787,6 @@ static bool adxl367_push_fifo_data(struct iio_dev *indio_dev, u8 status,
 
 	if (!FIELD_GET(ADXL367_STATUS_FIFO_FULL_MASK, status))
 		return false;
-
-	if (fifo_entries > ADXL367_FIFO_SIZE) {
-		dev_err_ratelimited(st->dev,
-				    "FIFO entry count %u exceeds FIFO size %u\n",
-				    fifo_entries, ADXL367_FIFO_SIZE);
-		return true;
-	}
 
 	fifo_entries -= fifo_entries % st->fifo_set_size;
 
@@ -1434,36 +1427,6 @@ static int adxl367_setup(struct adxl367_state *st)
 	return adxl367_set_measure_en(st, true);
 }
 
-static int adxl367_set_int_map_reg(struct adxl367_state *st, int irq)
-{
-	int ret;
-
-	/*
-	 * Route the mappings to whichever of INT1/INT2 is named in the
-	 * interrupt-names property. -EINVAL (property absent) and -ENODATA
-	 * (name not listed) are not errors; anything else is.
-	 */
-	ret = fwnode_irq_get_byname(dev_fwnode(st->dev), "INT1");
-	if (ret > 0) {
-		st->int_map_reg = ADXL367_REG_INT1_MAP;
-		return ret;
-	}
-	if (ret != -ENODATA && ret != -EINVAL)
-		return ret;
-
-	ret = fwnode_irq_get_byname(dev_fwnode(st->dev), "INT2");
-	if (ret > 0) {
-		st->int_map_reg = ADXL367_REG_INT2_MAP;
-		return ret;
-	}
-	if (ret != -ENODATA && ret != -EINVAL)
-		return ret;
-
-	/* No INT1/INT2 named: default to INT1 and the bus interrupt. */
-	st->int_map_reg = ADXL367_REG_INT1_MAP;
-	return irq;
-}
-
 int adxl367_probe(struct device *dev, const struct adxl367_ops *ops,
 		  void *context, struct regmap *regmap, int irq)
 {
@@ -1482,9 +1445,7 @@ int adxl367_probe(struct device *dev, const struct adxl367_ops *ops,
 	st->context = context;
 	st->ops = ops;
 
-	ret = devm_mutex_init(dev, &st->lock);
-	if (ret)
-		return ret;
+	mutex_init(&st->lock);
 
 	indio_dev->channels = adxl367_channels;
 	indio_dev->num_channels = ARRAY_SIZE(adxl367_channels);
@@ -1492,11 +1453,6 @@ int adxl367_probe(struct device *dev, const struct adxl367_ops *ops,
 	indio_dev->name = "adxl367";
 	indio_dev->info = &adxl367_info;
 	indio_dev->modes = INDIO_DIRECT_MODE;
-
-	ret = adxl367_set_int_map_reg(st, irq);
-	if (ret < 0)
-		return dev_err_probe(st->dev, ret, "Failed to get interrupt\n");
-	irq = ret;
 
 	ret = devm_regulator_bulk_get_enable(st->dev,
 					     ARRAY_SIZE(regulator_names),
@@ -1529,7 +1485,7 @@ int adxl367_probe(struct device *dev, const struct adxl367_ops *ops,
 					adxl367_irq_handler, IRQF_ONESHOT,
 					indio_dev->name, indio_dev);
 	if (ret)
-		return ret;
+		return dev_err_probe(st->dev, ret, "Failed to request irq\n");
 
 	return devm_iio_device_register(dev, indio_dev);
 }

@@ -2068,7 +2068,7 @@ int r100_cs_parse(struct radeon_cs_parser *p)
 	struct r100_cs_track *track;
 	int r;
 
-	track = kzalloc_obj(*track);
+	track = kzalloc(sizeof(*track), GFP_KERNEL);
 	if (!track)
 		return -ENOMEM;
 	r100_cs_track_clear(p->rdev, track);

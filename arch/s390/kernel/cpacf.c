@@ -3,7 +3,8 @@
  * Copyright IBM Corp. 2024
  */
 
-#define pr_fmt(fmt) "cpacf: " fmt
+#define KMSG_COMPONENT "cpacf"
+#define pr_fmt(fmt) KMSG_COMPONENT ": " fmt
 
 #include <linux/cpu.h>
 #include <linux/device.h>

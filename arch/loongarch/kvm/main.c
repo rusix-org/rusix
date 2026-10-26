@@ -5,7 +5,6 @@
 
 #include <linux/err.h>
 #include <linux/module.h>
-#include <linux/mod_devicetable.h>
 #include <linux/kvm_host.h>
 #include <asm/cacheflush.h>
 #include <asm/cpufeature.h>
@@ -193,14 +192,6 @@ static void kvm_init_gcsr_flag(void)
 	set_gcsr_sw_flag(LOONGARCH_CSR_PERFCNTR2);
 	set_gcsr_sw_flag(LOONGARCH_CSR_PERFCTRL3);
 	set_gcsr_sw_flag(LOONGARCH_CSR_PERFCNTR3);
-
-	if (cpu_has_msgint) {
-		set_gcsr_hw_flag(LOONGARCH_CSR_IPR);
-		set_gcsr_hw_flag(LOONGARCH_CSR_ISR0);
-		set_gcsr_hw_flag(LOONGARCH_CSR_ISR1);
-		set_gcsr_hw_flag(LOONGARCH_CSR_ISR2);
-		set_gcsr_hw_flag(LOONGARCH_CSR_ISR3);
-	}
 }
 
 static void kvm_update_vpid(struct kvm_vcpu *vcpu, int cpu)
@@ -218,17 +209,14 @@ static void kvm_update_vpid(struct kvm_vcpu *vcpu, int cpu)
 		++vpid; /* vpid 0 reserved for root */
 
 		/* start new vpid cycle */
-		if (!cpu_has_guestid)
-			kvm_flush_tlb_all();
-		else
-			kvm_flush_tlb_all_stage1();
+		kvm_flush_tlb_all();
 	}
 
 	context->vpid_cache = vpid;
 	vcpu->arch.vpid = vpid;
 }
 
-static void __kvm_check_vpid(struct kvm_vcpu *vcpu)
+void kvm_check_vpid(struct kvm_vcpu *vcpu)
 {
 	int cpu;
 	bool migrated;
@@ -256,6 +244,7 @@ static void __kvm_check_vpid(struct kvm_vcpu *vcpu)
 		kvm_update_vpid(vcpu, cpu);
 		trace_kvm_vpid_change(vcpu, vcpu->arch.vpid);
 		vcpu->cpu = cpu;
+		kvm_clear_request(KVM_REQ_TLB_FLUSH_GPA, vcpu);
 
 		/*
 		 * LLBCTL is a separated guest CSR register from host, a general
@@ -274,67 +263,11 @@ static void __kvm_check_vpid(struct kvm_vcpu *vcpu)
 		 * memory with new address is changed on other VCPUs.
 		 */
 		set_gcsr_llbctl(CSR_LLBCTL_WCLLB);
-
-		/* Restore GSTAT(0x50).vpid */
-		vpid = (vcpu->arch.vpid & vpid_mask) << CSR_GSTAT_GID_SHIFT;
-		change_csr_gstat(vpid_mask << CSR_GSTAT_GID_SHIFT, vpid);
-	}
-}
-
-static void kvm_update_vmid(struct kvm_vcpu *vcpu, int cpu)
-{
-	unsigned long vmid;
-	struct kvm_context *context;
-
-	context = per_cpu_ptr(vcpu->kvm->arch.vmcs, cpu);
-	vmid = context->vmid_cache + 1;
-	if (!(vmid & vpid_mask)) {
-		/* finish round of vmid loop */
-		if (unlikely(!vmid))
-			vmid = vpid_mask + 1;
-
-		++vmid; /* vmid 0 reserved for root */
-
-		/* start new vmid cycle */
-		kvm_flush_tlb_all_stage2();
 	}
 
-	context->vmid_cache = vmid;
-	vcpu->kvm->arch.vmid[cpu] = vmid;
-}
-
-static void __kvm_check_vmid(struct kvm_vcpu *vcpu)
-{
-	int cpu;
-	unsigned long ver, old, vmid;
-
-	/* On CPUs like Loongson-3A5000, vmid must be the same as vpid */
-	if (!cpu_has_guestid) {
-		vmid = vcpu->arch.vpid & vpid_mask;
-		if (vcpu->arch.tgid != vmid) {
-			vcpu->arch.tgid = vcpu->arch.vpid & vpid_mask;
-			kvm_clear_request(KVM_REQ_TLB_FLUSH_GPA, vcpu);
-		}
-		return;
-	}
-
-	cpu = smp_processor_id();
-	if (cpumask_test_and_clear_cpu(cpu, &vcpu->kvm->arch.tlb_flush_pending))
-		vcpu->kvm->arch.vmid[cpu] = 0;
-
-	/* Check if our vmid is of an older version */
-	ver = vcpu->kvm->arch.vmid[cpu] & ~vpid_mask;
-	old = this_cpu_ptr(vcpu->kvm->arch.vmcs)->vmid_cache & ~vpid_mask;
-	if (ver != old)
-		kvm_update_vmid(vcpu, cpu);
-
-	vcpu->arch.tgid = vcpu->kvm->arch.vmid[cpu] & vpid_mask;
-}
-
-void kvm_check_vpid(struct kvm_vcpu *vcpu)
-{
-	__kvm_check_vpid(vcpu);
-	__kvm_check_vmid(vcpu);
+	/* Restore GSTAT(0x50).vpid */
+	vpid = (vcpu->arch.vpid & vpid_mask) << CSR_GSTAT_GID_SHIFT;
+	change_csr_gstat(vpid_mask << CSR_GSTAT_GID_SHIFT, vpid);
 }
 
 void kvm_init_vmcs(struct kvm *kvm)
@@ -358,7 +291,7 @@ int kvm_arch_enable_virtualization_cpu(void)
 	write_csr_gcfg(0);
 	write_csr_gstat(0);
 	write_csr_gintc(0);
-	clear_csr_gtlbc(CSR_GTLBC_TOTI | CSR_GTLBC_USETGID | CSR_GTLBC_USES2TGID);
+	clear_csr_gtlbc(CSR_GTLBC_USETGID | CSR_GTLBC_TOTI);
 
 	/*
 	 * Enable virtualization features granting guest direct control of
@@ -381,8 +314,6 @@ int kvm_arch_enable_virtualization_cpu(void)
 
 	/* Enable using TGID  */
 	set_csr_gtlbc(CSR_GTLBC_USETGID);
-	if (cpu_has_guestid)
-		set_csr_gtlbc(CSR_GTLBC_USES2TGID);
 	kvm_debug("GCFG:%lx GSTAT:%lx GINTC:%lx GTLBC:%lx",
 		  read_csr_gcfg(), read_csr_gstat(), read_csr_gintc(), read_csr_gtlbc());
 
@@ -401,7 +332,7 @@ void kvm_arch_disable_virtualization_cpu(void)
 	write_csr_gcfg(0);
 	write_csr_gstat(0);
 	write_csr_gintc(0);
-	clear_csr_gtlbc(CSR_GTLBC_TOTI | CSR_GTLBC_USETGID | CSR_GTLBC_USES2TGID);
+	clear_csr_gtlbc(CSR_GTLBC_USETGID | CSR_GTLBC_TOTI);
 
 	/* Flush any remaining guest TLB entries */
 	kvm_flush_tlb_all();
@@ -418,7 +349,7 @@ static int kvm_loongarch_env_init(void)
 		return -ENOMEM;
 	}
 
-	kvm_loongarch_ops = kzalloc_obj(*kvm_loongarch_ops);
+	kvm_loongarch_ops = kzalloc(sizeof(*kvm_loongarch_ops), GFP_KERNEL);
 	if (!kvm_loongarch_ops) {
 		free_percpu(vmcs);
 		vmcs = NULL;
@@ -436,62 +367,30 @@ static int kvm_loongarch_env_init(void)
 	for_each_possible_cpu(cpu) {
 		context = per_cpu_ptr(vmcs, cpu);
 		context->vpid_cache = vpid_mask + 1;
-		context->vmid_cache = vpid_mask + 1;
 		context->last_vcpu = NULL;
 	}
 
 	kvm_init_gcsr_flag();
-	kvm_register_perf_callbacks();
+	kvm_register_perf_callbacks(NULL);
 
 	/* Register LoongArch IPI interrupt controller interface. */
 	ret = kvm_loongarch_register_ipi_device();
 	if (ret)
-		goto err_env;
+		return ret;
 
 	/* Register LoongArch EIOINTC interrupt controller interface. */
 	ret = kvm_loongarch_register_eiointc_device();
 	if (ret)
-		goto err_ipi;
+		return ret;
 
 	/* Register LoongArch PCH-PIC interrupt controller interface. */
 	ret = kvm_loongarch_register_pch_pic_device();
-	if (ret)
-		goto err_eiointc;
-
-	/* Register LoongArch DMSINTC interrupt contrroller interface */
-	if (cpu_has_msgint) {
-		ret = kvm_loongarch_register_dmsintc_device();
-		if (ret)
-			goto err_pch_pic;
-	}
-
-	return 0;
-
-err_pch_pic:
-	kvm_loongarch_unregister_pch_pic_device();
-err_eiointc:
-	kvm_loongarch_unregister_eiointc_device();
-err_ipi:
-	kvm_loongarch_unregister_ipi_device();
-err_env:
-	kvm_unregister_perf_callbacks();
-	kfree(kvm_loongarch_ops);
-	kvm_loongarch_ops = NULL;
-	free_percpu(vmcs);
-	vmcs = NULL;
 
 	return ret;
 }
 
 static void kvm_loongarch_env_exit(void)
 {
-	if (cpu_has_msgint)
-		kvm_loongarch_unregister_dmsintc_device();
-
-	kvm_loongarch_unregister_pch_pic_device();
-	kvm_loongarch_unregister_eiointc_device();
-	kvm_loongarch_unregister_ipi_device();
-
 	if (vmcs)
 		free_percpu(vmcs);
 

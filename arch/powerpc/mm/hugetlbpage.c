@@ -104,14 +104,17 @@ void __init pseries_add_gpage(u64 addr, u64 page_size, unsigned long number_of_p
 	}
 }
 
-static __init void *pseries_alloc_bootmem_huge_page(struct hstate *hstate)
+static int __init pseries_alloc_bootmem_huge_page(struct hstate *hstate)
 {
-	void *m;
+	struct huge_bootmem_page *m;
 	if (nr_gpages == 0)
-		return NULL;
+		return 0;
 	m = phys_to_virt(gpage_freearray[--nr_gpages]);
 	gpage_freearray[nr_gpages] = 0;
-	return m;
+	list_add(&m->list, &huge_boot_pages[0]);
+	m->hstate = hstate;
+	m->flags = 0;
+	return 1;
 }
 
 bool __init hugetlb_node_alloc_supported(void)
@@ -121,7 +124,7 @@ bool __init hugetlb_node_alloc_supported(void)
 #endif
 
 
-void *__init arch_alloc_bootmem_huge_page(struct hstate *h, int nid)
+int __init alloc_bootmem_huge_page(struct hstate *h, int nid)
 {
 
 #ifdef CONFIG_PPC_BOOK3S_64
@@ -197,15 +200,18 @@ static int __init hugetlbpage_init(void)
 
 arch_initcall(hugetlbpage_init);
 
-unsigned int __init arch_hugetlb_cma_order(void)
+void __init gigantic_hugetlb_cma_reserve(void)
 {
+	unsigned long order = 0;
+
 	if (radix_enabled())
-		return PUD_SHIFT - PAGE_SHIFT;
+		order = PUD_SHIFT - PAGE_SHIFT;
 	else if (!firmware_has_feature(FW_FEATURE_LPAR) && mmu_psize_defs[MMU_PAGE_16G].shift)
 		/*
 		 * For pseries we do use ibm,expected#pages for reserving 16G pages.
 		 */
-		return mmu_psize_to_shift(MMU_PAGE_16G) - PAGE_SHIFT;
+		order = mmu_psize_to_shift(MMU_PAGE_16G) - PAGE_SHIFT;
 
-	return 0;
+	if (order)
+		hugetlb_cma_reserve(order);
 }

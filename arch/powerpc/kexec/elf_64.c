@@ -79,10 +79,6 @@ static void *elf64_load(struct kimage *image, char *kernel_buf,
 			goto out;
 		}
 
-		ret = crash_load_dm_crypt_keys(image);
-		if (ret)
-			goto out;
-
 		/* Setup cmdline for kdump kernel case */
 		modified_cmdline = setup_kdump_cmdline(image, cmdline,
 						       cmdline_len);
@@ -93,8 +89,6 @@ static void *elf64_load(struct kimage *image, char *kernel_buf,
 		}
 		cmdline = modified_cmdline;
 	}
-
-	kexec_dprintk("Command line: %s", cmdline ? cmdline : "");
 
 	if (initrd != NULL) {
 		kbuf.buffer = initrd;

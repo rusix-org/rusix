@@ -48,10 +48,9 @@ void wxvf_remove(struct pci_dev *pdev)
 	struct wx *wx = pci_get_drvdata(pdev);
 	struct net_device *netdev;
 
+	cancel_work_sync(&wx->service_task);
 	netdev = wx->netdev;
 	unregister_netdev(netdev);
-	timer_shutdown_sync(&wx->service_timer);
-	cancel_work_sync(&wx->service_task);
 	kfree(wx->vfinfo);
 	kfree(wx->rss_key);
 	kfree(wx->mac_table);
@@ -269,7 +268,7 @@ static void wxvf_irq_enable(struct wx *wx)
 	wr32(wx, WX_VXIMC, wx->eims_enable_mask);
 }
 
-void wxvf_up_complete(struct wx *wx)
+static void wxvf_up_complete(struct wx *wx)
 {
 	/* Always set the carrier off */
 	netif_carrier_off(wx->netdev);
@@ -324,7 +323,7 @@ err_reset:
 }
 EXPORT_SYMBOL(wxvf_open);
 
-void wxvf_down(struct wx *wx)
+static void wxvf_down(struct wx *wx)
 {
 	struct net_device *netdev = wx->netdev;
 

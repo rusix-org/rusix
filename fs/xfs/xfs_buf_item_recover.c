@@ -3,7 +3,7 @@
  * Copyright (c) 2000-2006 Silicon Graphics, Inc.
  * All Rights Reserved.
  */
-#include "xfs_platform.h"
+#include "xfs.h"
 #include "xfs_fs.h"
 #include "xfs_shared.h"
 #include "xfs_format.h"
@@ -90,7 +90,7 @@ xlog_add_buffer_cancelled(
 		return false;
 	}
 
-	bcp = kmalloc_obj(struct xfs_buf_cancel, GFP_KERNEL | __GFP_NOFAIL);
+	bcp = kmalloc(sizeof(struct xfs_buf_cancel), GFP_KERNEL | __GFP_NOFAIL);
 	bcp->bc_blkno = blkno;
 	bcp->bc_len = len;
 	bcp->bc_refcount = 1;
@@ -448,6 +448,7 @@ xlog_recover_validate_buf_type(
 	if (bp->b_ops) {
 		struct xfs_buf_log_item	*bip;
 
+		bp->b_flags |= _XBF_LOGRECOVERY;
 		xfs_buf_item_init(bp, mp);
 		bip = bp->b_log_item;
 		bip->bli_item.li_lsn = current_lsn;
@@ -1121,6 +1122,7 @@ xlog_recover_buf_commit_pass2(
 			xfs_buf_lock(rtsb_bp);
 			xfs_buf_hold(rtsb_bp);
 			xfs_update_rtsb(rtsb_bp, bp);
+			rtsb_bp->b_flags |= _XBF_LOGRECOVERY;
 			xfs_buf_delwri_queue(rtsb_bp, buffer_list);
 			xfs_buf_relse(rtsb_bp);
 		}
@@ -1162,6 +1164,7 @@ out_writebuf:
 		error = xfs_bwrite(bp);
 	} else {
 		ASSERT(bp->b_mount == mp);
+		bp->b_flags |= _XBF_LOGRECOVERY;
 		xfs_buf_delwri_queue(bp, buffer_list);
 	}
 
@@ -1202,7 +1205,8 @@ xlog_alloc_buf_cancel_table(
 
 	ASSERT(log->l_buf_cancel_table == NULL);
 
-	p = kmalloc_objs(struct list_head, XLOG_BC_TABLE_SIZE);
+	p = kmalloc_array(XLOG_BC_TABLE_SIZE, sizeof(struct list_head),
+			  GFP_KERNEL);
 	if (!p)
 		return -ENOMEM;
 

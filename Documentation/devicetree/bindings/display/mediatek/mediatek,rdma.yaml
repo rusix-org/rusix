@@ -36,7 +36,6 @@ properties:
           - enum:
               - mediatek,mt7623-disp-rdma
               - mediatek,mt2712-disp-rdma
-              - mediatek,mt8167-disp-rdma
           - const: mediatek,mt2701-disp-rdma
       - items:
           - enum:
@@ -65,7 +64,9 @@ properties:
       - description: RDMA Clock
 
   iommus:
-    maxItems: 1
+    description:
+      This property should point to the respective IOMMU block with master port as argument,
+      see Documentation/devicetree/bindings/iommu/mediatek,iommu.yaml for details.
 
   mediatek,rdma-fifo-size:
     description:

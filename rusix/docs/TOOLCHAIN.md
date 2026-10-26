@@ -2,9 +2,8 @@
 
 [The pinned container guide](../ci/README.md) owns tool versions, package pins,
 commands and local-only execution policy. It replaces reliance on laptop tools.
-Local BRD build/runtime passed at `41f9d1ce2`; the KUnit kernel from `4dd0b2c9f`
-passed replay with runner `41f9d1ce2`. These engineering-baseline results do not
-verify the pending 6.18.58 transition; see [progress](../PROGRESS.md).
+Executed LTS and historical engineering results are indexed in
+[verification](VERIFICATION.md); current work is in [progress](../PROGRESS.md).
 
 For an existing host setup, `check-toolchain.sh` checks executables, Rust source
 and upstream availability, not build/runtime correctness. Commands and path

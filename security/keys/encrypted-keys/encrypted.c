@@ -13,7 +13,6 @@
 
 #include <linux/uaccess.h>
 #include <linux/module.h>
-#include <linux/hex.h>
 #include <linux/init.h>
 #include <linux/slab.h>
 #include <linux/parser.h>
@@ -344,9 +343,9 @@ static int get_derived_key(u8 *derived_key, enum derived_key_type key_type,
 		return -ENOMEM;
 
 	if (key_type)
-		strscpy(derived_buf, "AUTH_KEY", HASH_SIZE);
+		strcpy(derived_buf, "AUTH_KEY");
 	else
-		strscpy(derived_buf, "ENC_KEY", HASH_SIZE);
+		strcpy(derived_buf, "ENC_KEY");
 
 	memcpy(derived_buf + strlen(derived_buf) + 1, master_key,
 	       master_keylen);
@@ -804,7 +803,7 @@ static int encrypted_instantiate(struct key *key,
 	size_t datalen = prep->datalen;
 	int ret;
 
-	if (datalen == 0 || datalen > 32767 || !prep->data)
+	if (datalen <= 0 || datalen > 32767 || !prep->data)
 		return -EINVAL;
 
 	datablob = kmalloc(datalen + 1, GFP_KERNEL);
@@ -865,7 +864,7 @@ static int encrypted_update(struct key *key, struct key_preparsed_payload *prep)
 
 	if (key_is_negative(key))
 		return -ENOKEY;
-	if (datalen == 0 || datalen > 32767 || !prep->data)
+	if (datalen <= 0 || datalen > 32767 || !prep->data)
 		return -EINVAL;
 
 	buf = kmalloc(datalen + 1, GFP_KERNEL);

@@ -5,7 +5,7 @@
 
 #include <asm/cpucap-defs.h>
 
-#ifndef __ASSEMBLER__
+#ifndef __ASSEMBLY__
 #include <linux/types.h>
 /*
  * Check whether a cpucap is possible at compiletime.
@@ -19,6 +19,8 @@ cpucap_is_possible(const unsigned int cap)
 			   "cap must be < ARM64_NCAPS");
 
 	switch (cap) {
+	case ARM64_HAS_PAN:
+		return IS_ENABLED(CONFIG_ARM64_PAN);
 	case ARM64_HAS_EPAN:
 		return IS_ENABLED(CONFIG_ARM64_EPAN);
 	case ARM64_SVE:
@@ -58,16 +60,14 @@ cpucap_is_possible(const unsigned int cap)
 		return IS_ENABLED(CONFIG_ARM64_ERRATUM_2658417);
 	case ARM64_WORKAROUND_CAVIUM_23154:
 		return IS_ENABLED(CONFIG_CAVIUM_ERRATUM_23154);
-	case ARM64_WORKAROUND_DISABLE_CNP:
-		return IS_ENABLED(CONFIG_ARM64_WORKAROUND_DISABLE_CNP);
-	case ARM64_WORKAROUND_REPEAT_TLBI_SYNC:
-		return IS_ENABLED(CONFIG_ARM64_WORKAROUND_REPEAT_TLBI_SYNC);
+	case ARM64_WORKAROUND_NVIDIA_CARMEL_CNP:
+		return IS_ENABLED(CONFIG_NVIDIA_CARMEL_CNP_ERRATUM);
+	case ARM64_WORKAROUND_REPEAT_TLBI:
+		return IS_ENABLED(CONFIG_ARM64_WORKAROUND_REPEAT_TLBI);
 	case ARM64_WORKAROUND_SPECULATIVE_SSBS:
 		return IS_ENABLED(CONFIG_ARM64_ERRATUM_3194386);
 	case ARM64_WORKAROUND_4193714:
 		return IS_ENABLED(CONFIG_ARM64_ERRATUM_4193714);
-	case ARM64_WORKAROUND_NXP_ERR050104:
-		return IS_ENABLED(CONFIG_NXP_IMX8QM_ERRATUM_ERR050104);
 	case ARM64_MPAM:
 		/*
 		 * KVM MPAM support doesn't rely on the host kernel supporting MPAM.
@@ -75,12 +75,10 @@ cpucap_is_possible(const unsigned int cap)
 		return true;
 	case ARM64_HAS_PMUV3:
 		return IS_ENABLED(CONFIG_HW_PERF_EVENTS);
-	case ARM64_HAS_LSUI:
-		return IS_ENABLED(CONFIG_ARM64_LSUI);
 	}
 
 	return true;
 }
-#endif /* __ASSEMBLER__ */
+#endif /* __ASSEMBLY__ */
 
 #endif /* __ASM_CPUCAPS_H */

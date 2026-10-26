@@ -7,10 +7,10 @@
 #include <linux/kernel.h>
 #include <linux/limits.h>
 #include <linux/math.h>
+#include <linux/mod_devicetable.h>
 #include <linux/module.h>
 #include <linux/moduleparam.h>
 #include <linux/platform_device.h>
-#include <linux/stringify.h>
 #include <linux/time64.h>
 #include <linux/watchdog.h>
 #include <asm/papr-watchdog.h>
@@ -27,18 +27,18 @@ static const unsigned long pseries_wdt_action[] = {
 static unsigned int action = WATCHDOG_ACTION;
 module_param(action, uint, 0444);
 MODULE_PARM_DESC(action, "Action taken when watchdog expires (default="
-		 __stringify(WATCHDOG_ACTION) ")");
+		 __MODULE_STRING(WATCHDOG_ACTION) ")");
 
 static bool nowayout = WATCHDOG_NOWAYOUT;
 module_param(nowayout, bool, 0444);
 MODULE_PARM_DESC(nowayout, "Watchdog cannot be stopped once started (default="
-		 __stringify(WATCHDOG_NOWAYOUT) ")");
+		 __MODULE_STRING(WATCHDOG_NOWAYOUT) ")");
 
 #define WATCHDOG_TIMEOUT 60
 static unsigned int timeout = WATCHDOG_TIMEOUT;
 module_param(timeout, uint, 0444);
 MODULE_PARM_DESC(timeout, "Initial watchdog timeout in seconds (default="
-		 __stringify(WATCHDOG_TIMEOUT) ")");
+		 __MODULE_STRING(WATCHDOG_TIMEOUT) ")");
 
 struct pseries_wdt {
 	struct watchdog_device wd;

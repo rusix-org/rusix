@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0
 /*
- * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
+ * Copyright (c) 2022-2025 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/auxiliary_bus.h>
@@ -438,7 +438,7 @@ static unsigned long uaudio_get_iova(unsigned long *curr_iova,
 		}
 	}
 
-	info = kzalloc_obj(*info);
+	info = kzalloc(sizeof(*info), GFP_KERNEL);
 	if (!info) {
 		iova = 0;
 		goto done;
@@ -1050,6 +1050,8 @@ static int uaudio_transfer_buffer_setup(struct snd_usb_substream *subs,
 	u32 len = xfer_buf_len;
 	bool dma_coherent;
 	dma_addr_t xfer_buf_dma_sysdev;
+	u32 remainder;
+	u32 mult;
 	int ret;
 
 	dma_coherent = dev_is_dma_coherent(subs->dev->bus->sysdev);
@@ -1058,7 +1060,10 @@ static int uaudio_transfer_buffer_setup(struct snd_usb_substream *subs,
 	if (!len)
 		len = PAGE_SIZE;
 
-	len = PAGE_ALIGN(len);
+	mult = len / PAGE_SIZE;
+	remainder = len % PAGE_SIZE;
+	len = mult * PAGE_SIZE;
+	len += remainder ? PAGE_SIZE : 0;
 
 	if (len > MAX_XFER_BUFF_LEN) {
 		dev_err(uaudio_qdev->data->dev,
@@ -1143,7 +1148,7 @@ uaudio_endpoint_setup(struct snd_usb_substream *subs,
 	ret = xhci_sideband_add_endpoint(uadev[card_num].sb, ep);
 	if (ret < 0) {
 		dev_err(&subs->dev->dev,
-			"failed to add data ep to sec intr: %d\n", ret);
+			"failed to add data ep to sec intr\n");
 		ret = -ENODEV;
 		goto exit;
 	}
@@ -1151,7 +1156,7 @@ uaudio_endpoint_setup(struct snd_usb_substream *subs,
 	sgt = xhci_sideband_get_endpoint_buffer(uadev[card_num].sb, ep);
 	if (!sgt) {
 		dev_err(&subs->dev->dev,
-			"failed to get data ep ring address: %d\n", ret);
+			"failed to get data ep ring address\n");
 		ret = -ENODEV;
 		goto remove_ep;
 	}
@@ -1463,8 +1468,9 @@ static int prepare_qmi_response(struct snd_usb_substream *subs,
 		init_waitqueue_head(&uadev[card_num].disconnect_wq);
 		uadev[card_num].num_intf =
 			subs->dev->config->desc.bNumInterfaces;
-		uadev[card_num].info = kzalloc_objs(struct intf_info,
-						    uadev[card_num].num_intf);
+		uadev[card_num].info = kcalloc(uadev[card_num].num_intf,
+					       sizeof(struct intf_info),
+					       GFP_KERNEL);
 		if (!uadev[card_num].info) {
 			ret = -ENOMEM;
 			goto unmap_er;
@@ -1728,7 +1734,7 @@ static struct qmi_msg_handler uaudio_stream_req_handlers = {
  */
 static int qc_usb_audio_offload_init_qmi_dev(void)
 {
-	uaudio_qdev = kzalloc_obj(*uaudio_qdev);
+	uaudio_qdev = kzalloc(sizeof(*uaudio_qdev), GFP_KERNEL);
 	if (!uaudio_qdev)
 		return -ENOMEM;
 
@@ -1768,7 +1774,7 @@ static int qc_usb_audio_offload_fill_avail_pcms(struct snd_usb_audio *chip,
 			break;
 	}
 
-	return idx;
+	return -1;
 }
 
 /**
@@ -1800,7 +1806,7 @@ static void qc_usb_audio_offload_probe(struct snd_usb_audio *chip)
 	guard(mutex)(&qdev_mutex);
 	guard(mutex)(&chip->mutex);
 	if (!uadev[chip->card->number].chip) {
-		sdev = kzalloc_obj(*sdev);
+		sdev = kzalloc(sizeof(*sdev), GFP_KERNEL);
 		if (!sdev)
 			return;
 
@@ -1955,11 +1961,11 @@ static int qc_usb_audio_probe(struct auxiliary_device *auxdev,
 	struct uaudio_qmi_svc *svc;
 	int ret;
 
-	svc = kzalloc_obj(*svc);
+	svc = kzalloc(sizeof(*svc), GFP_KERNEL);
 	if (!svc)
 		return -ENOMEM;
 
-	svc->uaudio_svc_hdl = kzalloc_obj(*svc->uaudio_svc_hdl);
+	svc->uaudio_svc_hdl = kzalloc(sizeof(*svc->uaudio_svc_hdl), GFP_KERNEL);
 	if (!svc->uaudio_svc_hdl) {
 		ret = -ENOMEM;
 		goto free_svc;
@@ -1988,7 +1994,6 @@ static int qc_usb_audio_probe(struct auxiliary_device *auxdev,
 release_qmi:
 	qc_usb_audio_cleanup_qmi_dev();
 	qmi_handle_release(svc->uaudio_svc_hdl);
-	kfree(svc->uaudio_svc_hdl);
 free_svc:
 	kfree(svc);
 
@@ -2013,7 +2018,6 @@ static void qc_usb_audio_remove(struct auxiliary_device *auxdev)
 	qc_usb_audio_cleanup_qmi_dev();
 
 	qmi_handle_release(svc->uaudio_svc_hdl);
-	kfree(svc->uaudio_svc_hdl);
 	kfree(svc);
 	uaudio_svc = NULL;
 }

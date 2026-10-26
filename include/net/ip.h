@@ -268,8 +268,8 @@ static inline u8 ip_sendmsg_scope(const struct inet_sock *inet,
 }
 
 /* datagram.c */
-int __ip4_datagram_connect(struct sock *sk, struct sockaddr_unsized *uaddr, int addr_len);
-int ip4_datagram_connect(struct sock *sk, struct sockaddr_unsized *uaddr, int addr_len);
+int __ip4_datagram_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len);
+int ip4_datagram_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len);
 
 void ip4_datagram_release_cb(struct sock *sk);
 
@@ -591,13 +591,6 @@ static inline void ip_select_ident_segs(struct net *net, struct sk_buff *skb,
 {
 	struct iphdr *iph = ip_hdr(skb);
 
-	/* RFC 6864: the IPv4 ID of atomic datagrams has no meaning.
-	 * DF packets without ignore_df can not be fragmented.
-	 */
-	if ((iph->frag_off & htons(IP_DF)) && !skb->ignore_df) {
-		iph->id = 0;
-		return;
-	}
 	/* We had many attacks based on IPID, use the private
 	 * generator as much as we can.
 	 */
@@ -612,13 +605,17 @@ static inline void ip_select_ident_segs(struct net *net, struct sk_buff *skb,
 			val = atomic_read(&inet_sk(sk)->inet_id);
 			atomic_set(&inet_sk(sk)->inet_id, val + segs);
 		} else {
-			val = atomic_fetch_add(segs, &inet_sk(sk)->inet_id);
+			val = atomic_add_return(segs, &inet_sk(sk)->inet_id);
 		}
 		iph->id = htons(val);
 		return;
 	}
-	/* Unfortunately we need the big hammer to get a suitable IPID */
-	__ip_select_ident(net, iph, segs);
+	if ((iph->frag_off & htons(IP_DF)) && !skb->ignore_df) {
+		iph->id = 0;
+	} else {
+		/* Unfortunately we need the big hammer to get a suitable IPID */
+		__ip_select_ident(net, iph, segs);
+	}
 }
 
 static inline void ip_select_ident(struct net *net, struct sk_buff *skb,
@@ -726,6 +723,14 @@ static __inline__ void inet_reset_saddr(struct sock *sk)
 #endif
 }
 
+#endif
+
+#if IS_MODULE(CONFIG_IPV6)
+#define EXPORT_IPV6_MOD(X) EXPORT_SYMBOL(X)
+#define EXPORT_IPV6_MOD_GPL(X) EXPORT_SYMBOL_GPL(X)
+#else
+#define EXPORT_IPV6_MOD(X)
+#define EXPORT_IPV6_MOD_GPL(X)
 #endif
 
 static inline unsigned int ipv4_addr_hash(__be32 ip)

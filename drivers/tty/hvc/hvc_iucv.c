@@ -9,7 +9,8 @@
  *
  * Author(s):	Hendrik Brueckner <brueckner@linux.vnet.ibm.com>
  */
-#define pr_fmt(fmt) "hvc_iucv: " fmt
+#define KMSG_COMPONENT		"hvc_iucv"
+#define pr_fmt(fmt)		KMSG_COMPONENT ": " fmt
 
 #include <linux/types.h>
 #include <linux/slab.h>
@@ -1050,7 +1051,7 @@ static int __init hvc_iucv_alloc(int id, unsigned int is_console)
 	char name[9];
 	int rc;
 
-	priv = kzalloc_obj(struct hvc_iucv_private);
+	priv = kzalloc(sizeof(struct hvc_iucv_private), GFP_KERNEL);
 	if (!priv)
 		return -ENOMEM;
 
@@ -1060,7 +1061,7 @@ static int __init hvc_iucv_alloc(int id, unsigned int is_console)
 	INIT_DELAYED_WORK(&priv->sndbuf_work, hvc_iucv_sndbuf_work);
 	init_waitqueue_head(&priv->sndbuf_waitq);
 
-	priv->sndbuf = kzalloc(PAGE_SIZE, GFP_KERNEL);
+	priv->sndbuf = (void *) get_zeroed_page(GFP_KERNEL);
 	if (!priv->sndbuf) {
 		kfree(priv);
 		return -ENOMEM;
@@ -1103,7 +1104,7 @@ static int __init hvc_iucv_alloc(int id, unsigned int is_console)
 out_error_dev:
 	hvc_remove(priv->hvc);
 out_error_hvc:
-	kfree(priv->sndbuf);
+	free_page((unsigned long) priv->sndbuf);
 	kfree(priv);
 
 	return rc;
@@ -1116,7 +1117,7 @@ static void __init hvc_iucv_destroy(struct hvc_iucv_private *priv)
 {
 	hvc_remove(priv->hvc);
 	device_unregister(priv->dev);
-	kfree(priv->sndbuf);
+	free_page((unsigned long) priv->sndbuf);
 	kfree(priv);
 }
 
@@ -1343,7 +1344,7 @@ static int __init hvc_iucv_init(void)
 		}
 	}
 
-	hvc_iucv_buffer_cache = kmem_cache_create("hvc_iucv",
+	hvc_iucv_buffer_cache = kmem_cache_create(KMSG_COMPONENT,
 					   sizeof(struct iucv_tty_buffer),
 					   0, 0, NULL);
 	if (!hvc_iucv_buffer_cache) {

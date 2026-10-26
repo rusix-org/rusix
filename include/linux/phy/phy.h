@@ -53,15 +53,6 @@ enum phy_media {
 	PHY_MEDIA_DAC,
 };
 
-enum phy_ufs_state {
-	PHY_UFS_HIBERN8_ENTER,
-	PHY_UFS_HIBERN8_EXIT,
-};
-
-union phy_notify {
-	enum phy_ufs_state ufs_state;
-};
-
 /**
  * union phy_configure_opts - Opaque generic phy configuration
  *
@@ -92,7 +83,6 @@ union phy_configure_opts {
  * @set_speed: set the speed of the phy (optional)
  * @reset: resetting the phy
  * @calibrate: calibrate the phy
- * @notify_phystate: notify and configure the phy for a particular state
  * @release: ops to be performed while the consumer relinquishes the PHY
  * @owner: the module owner containing the ops
  */
@@ -142,7 +132,6 @@ struct phy_ops {
 	int	(*connect)(struct phy *phy, int port);
 	int	(*disconnect)(struct phy *phy, int port);
 
-	int	(*notify_phystate)(struct phy *phy, union phy_notify state);
 	void	(*release)(struct phy *phy);
 	struct module *owner;
 };
@@ -243,7 +232,7 @@ static inline void *phy_get_drvdata(struct phy *phy)
 #if IS_ENABLED(CONFIG_GENERIC_PHY)
 int phy_pm_runtime_get(struct phy *phy);
 int phy_pm_runtime_get_sync(struct phy *phy);
-void phy_pm_runtime_put(struct phy *phy);
+int phy_pm_runtime_put(struct phy *phy);
 int phy_pm_runtime_put_sync(struct phy *phy);
 int phy_init(struct phy *phy);
 int phy_exit(struct phy *phy);
@@ -266,7 +255,6 @@ int phy_reset(struct phy *phy);
 int phy_calibrate(struct phy *phy);
 int phy_notify_connect(struct phy *phy, int port);
 int phy_notify_disconnect(struct phy *phy, int port);
-int phy_notify_state(struct phy *phy, union phy_notify state);
 static inline int phy_get_bus_width(struct phy *phy)
 {
 	return phy->attrs.bus_width;
@@ -284,8 +272,6 @@ struct phy *devm_of_phy_optional_get(struct device *dev, struct device_node *np,
 				     const char *con_id);
 struct phy *devm_of_phy_get_by_index(struct device *dev, struct device_node *np,
 				     int index);
-struct phy *phy_get_by_of_node(struct device_node *np);
-struct phy *devm_phy_get_by_of_node(struct device *dev, struct device_node *np);
 void of_phy_put(struct phy *phy);
 void phy_put(struct device *dev, struct phy *phy);
 void devm_phy_put(struct device *dev, struct phy *phy);
@@ -326,8 +312,11 @@ static inline int phy_pm_runtime_get_sync(struct phy *phy)
 	return -ENOSYS;
 }
 
-static inline void phy_pm_runtime_put(struct phy *phy)
+static inline int phy_pm_runtime_put(struct phy *phy)
 {
+	if (!phy)
+		return 0;
+	return -ENOSYS;
 }
 
 static inline int phy_pm_runtime_put_sync(struct phy *phy)
@@ -423,13 +412,6 @@ static inline int phy_notify_disconnect(struct phy *phy, int index)
 	return -ENOSYS;
 }
 
-static inline int phy_notify_state(struct phy *phy, union phy_notify state)
-{
-	if (!phy)
-		return 0;
-	return -ENOSYS;
-}
-
 static inline int phy_configure(struct phy *phy,
 				union phy_configure_opts *opts)
 {
@@ -491,17 +473,6 @@ static inline struct phy *devm_of_phy_optional_get(struct device *dev,
 static inline struct phy *devm_of_phy_get_by_index(struct device *dev,
 						   struct device_node *np,
 						   int index)
-{
-	return ERR_PTR(-ENOSYS);
-}
-
-static inline struct phy *phy_get_by_of_node(struct device_node *np)
-{
-	return ERR_PTR(-ENOSYS);
-}
-
-static inline struct phy *devm_phy_get_by_of_node(struct device *dev,
-						  struct device_node *np)
 {
 	return ERR_PTR(-ENOSYS);
 }

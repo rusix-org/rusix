@@ -374,7 +374,7 @@ int main(int argc, char *argv[])
 	}
 
 	if (options.daemonize && daemon(0, 0)) {
-		ERROR("Failed to daemonize: %m\n");
+		ERROR("Failed to daemonize: %p\n");
 		return THERMAL_ENGINE_DAEMON_ERROR;
 	}
 

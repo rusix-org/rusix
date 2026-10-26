@@ -286,9 +286,11 @@ static int mixel_lvds_phy_reset(struct device *dev)
 
 	regmap_write(priv->regmap, PHY_CTRL, CTRL_RESET_VAL);
 
-	pm_runtime_put_sync(dev);
+	ret = pm_runtime_put(dev);
+	if (ret < 0)
+		dev_err(dev, "failed to put PM runtime: %d\n", ret);
 
-	return 0;
+	return ret;
 }
 
 static struct phy *mixel_lvds_phy_xlate(struct device *dev,

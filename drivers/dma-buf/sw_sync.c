@@ -8,7 +8,6 @@
 #include <linux/file.h>
 #include <linux/fs.h>
 #include <linux/uaccess.h>
-#include <linux/panic.h>
 #include <linux/slab.h>
 #include <linux/sync_file.h>
 
@@ -101,7 +100,7 @@ static struct sync_timeline *sync_timeline_create(const char *name)
 {
 	struct sync_timeline *obj;
 
-	obj = kzalloc_obj(*obj);
+	obj = kzalloc(sizeof(*obj), GFP_KERNEL);
 	if (!obj)
 		return NULL;
 
@@ -156,12 +155,12 @@ static void timeline_fence_release(struct dma_fence *fence)
 	struct sync_timeline *parent = dma_fence_parent(fence);
 	unsigned long flags;
 
-	dma_fence_lock_irqsave(fence, flags);
+	spin_lock_irqsave(fence->lock, flags);
 	if (!list_empty(&pt->link)) {
 		list_del(&pt->link);
 		rb_erase(&pt->node, &parent->pt_tree);
 	}
-	dma_fence_unlock_irqrestore(fence, flags);
+	spin_unlock_irqrestore(fence->lock, flags);
 
 	sync_timeline_put(parent);
 	dma_fence_free(fence);
@@ -179,7 +178,7 @@ static void timeline_fence_set_deadline(struct dma_fence *fence, ktime_t deadlin
 	struct sync_pt *pt = dma_fence_to_sync_pt(fence);
 	unsigned long flags;
 
-	dma_fence_lock_irqsave(fence, flags);
+	spin_lock_irqsave(fence->lock, flags);
 	if (test_bit(SW_SYNC_HAS_DEADLINE_BIT, &fence->flags)) {
 		if (ktime_before(deadline, pt->deadline))
 			pt->deadline = deadline;
@@ -187,7 +186,7 @@ static void timeline_fence_set_deadline(struct dma_fence *fence, ktime_t deadlin
 		pt->deadline = deadline;
 		__set_bit(SW_SYNC_HAS_DEADLINE_BIT, &fence->flags);
 	}
-	dma_fence_unlock_irqrestore(fence, flags);
+	spin_unlock_irqrestore(fence->lock, flags);
 }
 
 static const struct dma_fence_ops timeline_fence_ops = {
@@ -252,7 +251,7 @@ static struct sync_pt *sync_pt_create(struct sync_timeline *obj,
 {
 	struct sync_pt *pt;
 
-	pt = kzalloc_obj(*pt);
+	pt = kzalloc(sizeof(*pt), GFP_KERNEL);
 	if (!pt)
 		return NULL;
 
@@ -350,9 +349,6 @@ static long sw_sync_ioctl_create_fence(struct sync_timeline *obj,
 	struct sync_file *sync_file;
 	struct sw_sync_create_fence_data data;
 
-	/* SW sync fence are inherently unsafe and can deadlock the kernel */
-	add_taint(TAINT_SOFTLOCKUP, LOCKDEP_STILL_OK);
-
 	if (fd < 0)
 		return fd;
 
@@ -431,13 +427,13 @@ static int sw_sync_ioctl_get_deadline(struct sync_timeline *obj, unsigned long a
 		goto put_fence;
 	}
 
-	dma_fence_lock_irqsave(fence, flags);
+	spin_lock_irqsave(fence->lock, flags);
 	if (!test_bit(SW_SYNC_HAS_DEADLINE_BIT, &fence->flags)) {
 		ret = -ENOENT;
 		goto unlock;
 	}
 	data.deadline_ns = ktime_to_ns(pt->deadline);
-	dma_fence_unlock_irqrestore(fence, flags);
+	spin_unlock_irqrestore(fence->lock, flags);
 
 	dma_fence_put(fence);
 
@@ -450,7 +446,7 @@ static int sw_sync_ioctl_get_deadline(struct sync_timeline *obj, unsigned long a
 	return 0;
 
 unlock:
-	dma_fence_unlock_irqrestore(fence, flags);
+	spin_unlock_irqrestore(fence->lock, flags);
 put_fence:
 	dma_fence_put(fence);
 

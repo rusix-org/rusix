@@ -1021,7 +1021,6 @@ static int imx415_enum_frame_size(struct v4l2_subdev *sd,
 }
 
 static int imx415_set_format(struct v4l2_subdev *sd,
-			     const struct v4l2_subdev_client_info *ci,
 			     struct v4l2_subdev_state *state,
 			     struct v4l2_subdev_format *fmt)
 {
@@ -1043,7 +1042,6 @@ static int imx415_set_format(struct v4l2_subdev *sd,
 }
 
 static int imx415_get_selection(struct v4l2_subdev *sd,
-				const struct v4l2_subdev_client_info *ci,
 				struct v4l2_subdev_state *sd_state,
 				struct v4l2_subdev_selection *sel)
 {
@@ -1072,7 +1070,7 @@ static int imx415_init_state(struct v4l2_subdev *sd,
 		},
 	};
 
-	imx415_set_format(sd, NULL, state, &format);
+	imx415_set_format(sd, state, &format);
 
 	return 0;
 }

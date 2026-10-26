@@ -106,34 +106,23 @@ mptcp_lib_pr_info() {
 	mptcp_lib_print_info "INFO: ${*}"
 }
 
-mptcp_lib_pr_nstat() {
-	local ns="${1}"
-	local cache="/tmp/${ns}.out"
-	local hist="/tmp/${ns}.nstat"
-
-	if [ -f "${cache}" ]; then
-		awk '$2 != 0 { print "  "$0 }' "${cache}"
-	else
-		NSTAT_HISTORY="${hist}" ip netns exec "${ns}" nstat -s |
-			grep Tcp
-	fi
-}
-
-# $1-2: listener/connector ns ; $3 port
+# $1-2: listener/connector ns ; $3 port ; $4-5 listener/connector stat file
 mptcp_lib_pr_err_stats() {
 	local lns="${1}"
 	local cns="${2}"
 	local port="${3}"
+	local lstat="${4}"
+	local cstat="${5}"
 
 	echo -en "${MPTCP_LIB_COLOR_RED}"
 	{
 		printf "\nnetns %s (listener) socket stat for %d:\n" "${lns}" "${port}"
 		ip netns exec "${lns}" ss -Menitam -o "sport = :${port}"
-		mptcp_lib_pr_nstat "${lns}"
+		cat "${lstat}"
 
 		printf "\nnetns %s (connector) socket stat for %d:\n" "${cns}" "${port}"
 		ip netns exec "${cns}" ss -Menitam -o "dport = :${port}"
-		[ "${lns}" != "${cns}" ] && mptcp_lib_pr_nstat "${cns}"
+		[ "${lstat}" != "${cstat}" ] && cat "${cstat}"
 	} 1>&2
 	echo -en "${MPTCP_LIB_COLOR_RESET}"
 }
@@ -352,19 +341,6 @@ mptcp_lib_evts_get_info() {
 		mptcp_lib_get_info_value "${1}" "^type:${3:-1},"
 }
 
-mptcp_lib_wait_timeout() {
-	local timeout_test="${1}"
-	local listener_ns="${2}"
-	local connector_ns="${3}"
-	local port="${4}"
-	shift 4 # rest are PIDs
-
-	sleep "${timeout_test}"
-	mptcp_lib_print_err "timeout"
-	mptcp_lib_pr_err_stats "${listener_ns}" "${connector_ns}" "${port}"
-	kill "${@}" 2>/dev/null
-}
-
 # $1: PID
 mptcp_lib_kill_wait() {
 	[ "${1}" -eq 0 ] && return 0
@@ -400,38 +376,14 @@ mptcp_lib_is_v6() {
 	[ -z "${1##*:*}" ]
 }
 
-mptcp_lib_nstat_init() {
-	local ns="${1}"
-
-	rm -f "/tmp/${ns}."{nstat,out}
-	NSTAT_HISTORY="/tmp/${ns}.nstat" ip netns exec "${ns}" nstat -n
-}
-
-mptcp_lib_nstat_get() {
-	local ns="${1}"
-
-	# filter out non-*TCP stats, and the rate (last column)
-	NSTAT_HISTORY="/tmp/${ns}.nstat" ip netns exec "${ns}" nstat -sz |
-		grep -o ".*Tcp\S\+\s\+[0-9]\+" > "/tmp/${ns}.out"
-}
-
 # $1: ns, $2: MIB counter
-# Get the counter from the cache (mptcp_lib_nstat_{init,get}()) if available.
-# If not, get the counter from nstat ignoring any cache, but using the history.
 mptcp_lib_get_counter() {
 	local ns="${1}"
 	local counter="${2}"
-	local cache="/tmp/${ns}.out"
-	local hist="/tmp/${ns}.nstat"
 	local count
 
-	if [[ -s "${cache}" && "${counter}" == *"Tcp"* ]]; then
-		count=$(awk "/^${counter} / {print \$2; exit}" "${cache}")
-	else
-		count=$(NSTAT_HISTORY="${hist}" ip netns exec "${ns}" \
-			nstat -sz "${counter}" |
-				awk 'NR==1 {next} {print $2}')
-	fi
+	count=$(ip netns exec "${ns}" nstat -asz "${counter}" |
+		awk 'NR==1 {next} {print $2}')
 	if [ -z "${count}" ]; then
 		mptcp_lib_fail_if_expected_feature "${counter} counter"
 		return 1
@@ -528,14 +480,7 @@ mptcp_lib_check_tools() {
 				exit ${KSFT_SKIP}
 			fi
 			;;
-		"nft")
-			if ! nft --version &> /dev/null || \
-			   ! nft -j list ruleset &> /dev/null; then
-				mptcp_lib_pr_skip "Could not run all tests without nft -j"
-				exit ${KSFT_SKIP}
-			fi
-			;;
-		"jq")
+		"iptables"* | "ip6tables"*)
 			if ! "${tool}" -V &> /dev/null; then
 				mptcp_lib_pr_skip "Could not run all tests without ${tool}"
 				exit ${KSFT_SKIP}

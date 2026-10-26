@@ -14,11 +14,11 @@
 #include "fabrics.h"
 #include <linux/nvme-keyring.h>
 
+static LIST_HEAD(nvmf_transports);
 static DECLARE_RWSEM(nvmf_transports_rwsem);
-static LIST_HEAD_GUARDED(nvmf_transports, nvmf_transports_rwsem);
 
+static LIST_HEAD(nvmf_hosts);
 static DEFINE_MUTEX(nvmf_hosts_mutex);
-static LIST_HEAD_GUARDED(nvmf_hosts, nvmf_hosts_mutex);
 
 static struct nvmf_host *nvmf_default_host;
 
@@ -26,7 +26,7 @@ static struct nvmf_host *nvmf_host_alloc(const char *hostnqn, uuid_t *id)
 {
 	struct nvmf_host *host;
 
-	host = kmalloc_obj(*host);
+	host = kmalloc(sizeof(*host), GFP_KERNEL);
 	if (!host)
 		return NULL;
 
@@ -396,7 +396,7 @@ static struct nvmf_connect_data *nvmf_connect_data_prep(struct nvme_ctrl *ctrl,
 {
 	struct nvmf_connect_data *data;
 
-	data = kzalloc_obj(*data);
+	data = kzalloc(sizeof(*data), GFP_KERNEL);
 	if (!data)
 		return NULL;
 
@@ -1314,7 +1314,7 @@ nvmf_create_ctrl(struct device *dev, const char *buf)
 	struct nvme_ctrl *ctrl;
 	int ret;
 
-	opts = kzalloc_obj(*opts);
+	opts = kzalloc(sizeof(*opts), GFP_KERNEL);
 	if (!opts)
 		return ERR_PTR(-ENOMEM);
 

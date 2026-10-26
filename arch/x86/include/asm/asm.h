@@ -2,8 +2,6 @@
 #ifndef _ASM_X86_ASM_H
 #define _ASM_X86_ASM_H
 
-#include <linux/annotate.h>
-
 #ifdef __ASSEMBLER__
 # define __ASM_FORM(x, ...)		x,## __VA_ARGS__
 # define __ASM_FORM_RAW(x, ...)		x,## __VA_ARGS__
@@ -126,21 +124,17 @@ static __always_inline __pure void *rip_rel_ptr(void *p)
 
 #ifdef __KERNEL__
 
-#ifndef COMPILE_OFFSETS
-#include <asm/asm-offsets.h>
-#endif
-
 # include <asm/extable_fixup_types.h>
 
 /* Exception table entry */
 #ifdef __ASSEMBLER__
 
-# define _ASM_EXTABLE_TYPE(from, to, type)				\
-	.pushsection "__ex_table", "aM", @progbits, EXTABLE_SIZE ;	\
-	.balign 4 ;							\
-	.long (from) - . ;						\
-	.long (to) - . ;						\
-	.long type ;							\
+# define _ASM_EXTABLE_TYPE(from, to, type)			\
+	.pushsection "__ex_table","a" ;				\
+	.balign 4 ;						\
+	.long (from) - . ;					\
+	.long (to) - . ;					\
+	.long type ;						\
 	.popsection
 
 # ifdef CONFIG_KPROBES
@@ -183,8 +177,7 @@ static __always_inline __pure void *rip_rel_ptr(void *p)
 	".purgem extable_type_reg\n"
 
 # define _ASM_EXTABLE_TYPE(from, to, type)			\
-	" .pushsection __ex_table, \"aM\", @progbits, "		\
-		       __stringify(EXTABLE_SIZE) "\n"		\
+	" .pushsection \"__ex_table\",\"a\"\n"			\
 	" .balign 4\n"						\
 	" .long (" #from ") - .\n"				\
 	" .long (" #to ") - .\n"				\
@@ -192,8 +185,7 @@ static __always_inline __pure void *rip_rel_ptr(void *p)
 	" .popsection\n"
 
 # define _ASM_EXTABLE_TYPE_REG(from, to, type, reg)				\
-	" .pushsection __ex_table, \"aM\", @progbits, "				\
-		       __stringify(EXTABLE_SIZE) "\n"				\
+	" .pushsection \"__ex_table\",\"a\"\n"					\
 	" .balign 4\n"								\
 	" .long (" #from ") - .\n"						\
 	" .long (" #to ") - .\n"						\

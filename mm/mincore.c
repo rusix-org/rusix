@@ -12,10 +12,9 @@
 #include <linux/gfp.h>
 #include <linux/pagewalk.h>
 #include <linux/mman.h>
-#include <linux/slab.h>
 #include <linux/syscalls.h>
 #include <linux/swap.h>
-#include <linux/leafops.h>
+#include <linux/swapops.h>
 #include <linux/shmem_fs.h>
 #include <linux/hugetlb.h>
 #include <linux/pgtable.h>
@@ -28,16 +27,19 @@ static int mincore_hugetlb(pte_t *pte, unsigned long hmask, unsigned long addr,
 			unsigned long end, struct mm_walk *walk)
 {
 #ifdef CONFIG_HUGETLB_PAGE
-	const unsigned long nr = (end - addr) >> PAGE_SHIFT;
-	unsigned char resident;
+	unsigned char present;
+	unsigned char *vec = walk->private;
 	spinlock_t *ptl;
-	pte_t ptep;
 
 	ptl = huge_pte_lock(hstate_vma(walk->vma), walk->mm, pte);
-	ptep = huge_ptep_get(walk->mm, addr, pte);
-	resident = !huge_pte_none(ptep) && !pte_is_marker(ptep);
-	memset(walk->private, resident, nr);
-	walk->private += nr;
+	/*
+	 * Hugepages under user process are always in RAM and never
+	 * swapped out, but theoretically it needs to be checked.
+	 */
+	present = pte && !huge_pte_none_mostly(huge_ptep_get(walk->mm, addr, pte));
+	for (; addr != end; vec++, addr += PAGE_SIZE)
+		*vec = present;
+	walk->private = vec;
 	spin_unlock(ptl);
 #else
 	BUG();
@@ -56,7 +58,7 @@ static unsigned char mincore_swap(swp_entry_t entry, bool shmem)
 	 * absent. Page table may contain migration or hwpoison
 	 * entries which are always uptodate.
 	 */
-	if (!softleaf_is_swap(entry))
+	if (non_swap_entry(entry))
 		return !shmem;
 
 	if (!IS_ENABLED(CONFIG_SWAP)) {
@@ -71,13 +73,14 @@ static unsigned char mincore_swap(swp_entry_t entry, bool shmem)
 	 */
 	if (shmem) {
 		si = get_swap_device(entry);
-		if (IS_ERR_OR_NULL(si))
+		if (!si)
 			return 0;
 	}
 	folio = swap_cache_get_folio(entry);
 	if (shmem)
 		put_swap_device(si);
-	if (folio) {
+	/* The swap cache space contains either folio, shadow or NULL */
+	if (folio && !xa_is_value(folio)) {
 		present = folio_test_uptodate(folio);
 		folio_put(folio);
 	}
@@ -93,7 +96,7 @@ static unsigned char mincore_swap(swp_entry_t entry, bool shmem)
  */
 static unsigned char mincore_page(struct address_space *mapping, pgoff_t index)
 {
-	unsigned char present;
+	unsigned char present = 0;
 	struct folio *folio;
 
 	/*
@@ -103,16 +106,17 @@ static unsigned char mincore_page(struct address_space *mapping, pgoff_t index)
 	 * tmpfs's .fault). So swapped out tmpfs mappings are tested here.
 	 */
 	folio = filemap_get_entry(mapping, index);
-	if (!folio)
-		return 0;
-
-	if (xa_is_value(folio)) {
-		if (!shmem_mapping(mapping))
-			return 0;
-		return mincore_swap(radix_to_swp_entry(folio), true);
+	if (folio) {
+		if (xa_is_value(folio)) {
+			if (shmem_mapping(mapping))
+				return mincore_swap(radix_to_swp_entry(folio),
+						    true);
+			else
+				return 0;
+		}
+		present = folio_test_uptodate(folio);
+		folio_put(folio);
 	}
-	present = folio_test_uptodate(folio);
-	folio_put(folio);
 
 	return present;
 }
@@ -145,20 +149,6 @@ static int mincore_unmapped_range(unsigned long addr, unsigned long end,
 	return 0;
 }
 
-static int mincore_pud_entry(pud_t *pudp, unsigned long addr, unsigned long end,
-		struct mm_walk *walk)
-{
-	if (pud_is_huge(pudp_get(pudp))) {
-		const unsigned long nr = (end - addr) >> PAGE_SHIFT;
-
-		memset(walk->private, 1, nr);
-		walk->private += nr;
-		walk->action = ACTION_CONTINUE;
-	}
-
-	return 0;
-}
-
 static int mincore_pte_range(pmd_t *pmd, unsigned long addr, unsigned long end,
 			struct mm_walk *walk)
 {
@@ -185,8 +175,8 @@ static int mincore_pte_range(pmd_t *pmd, unsigned long addr, unsigned long end,
 		pte_t pte = ptep_get(ptep);
 
 		step = 1;
-		/* We need to do cache lookup too for markers */
-		if (pte_none(pte) || pte_is_marker(pte))
+		/* We need to do cache lookup too for pte markers */
+		if (pte_none_mostly(pte))
 			__mincore_unmapped_range(addr, addr + PAGE_SIZE,
 						 vma, vec);
 		else if (pte_present(pte)) {
@@ -201,9 +191,7 @@ static int mincore_pte_range(pmd_t *pmd, unsigned long addr, unsigned long end,
 			for (i = 0; i < step; i++)
 				vec[i] = 1;
 		} else { /* pte is a swap entry */
-			const softleaf_t entry = softleaf_from_pte(pte);
-
-			*vec = mincore_swap(entry, false);
+			*vec = mincore_swap(pte_to_swp_entry(pte), false);
 		}
 		vec += step;
 	}
@@ -231,33 +219,33 @@ static inline bool can_do_mincore(struct vm_area_struct *vma)
 }
 
 static const struct mm_walk_ops mincore_walk_ops = {
-	.pud_entry		= mincore_pud_entry,
 	.pmd_entry		= mincore_pte_range,
 	.pte_hole		= mincore_unmapped_range,
 	.hugetlb_entry		= mincore_hugetlb,
-	.walk_lock		= PGWALK_VMA_RDLOCK_VERIFY,
+	.walk_lock		= PGWALK_RDLOCK,
 };
 
 /*
  * Do a chunk of "sys_mincore()". We've already checked
- * all the arguments, we hold the VMA read lock: we should
+ * all the arguments, we hold the mmap semaphore: we should
  * just return the amount of info we're asked for.
  */
-static long do_mincore(struct vm_area_struct *vma, unsigned long addr,
-		unsigned long pages, unsigned char *vec)
+static long do_mincore(unsigned long addr, unsigned long pages, unsigned char *vec)
 {
-	unsigned long end = min(vma->vm_end, addr + (pages << PAGE_SHIFT));
+	struct vm_area_struct *vma;
+	unsigned long end;
 	int err;
 
-	vma_assert_locked(vma);
-
+	vma = vma_lookup(current->mm, addr);
+	if (!vma)
+		return -ENOMEM;
+	end = min(vma->vm_end, addr + (pages << PAGE_SHIFT));
 	if (!can_do_mincore(vma)) {
 		unsigned long pages = DIV_ROUND_UP(end - addr, PAGE_SIZE);
 		memset(vec, 1, pages);
 		return pages;
 	}
-
-	err = walk_page_range_vma(vma, addr, end, &mincore_walk_ops, vec);
+	err = walk_page_range(vma->vm_mm, addr, end, &mincore_walk_ops, vec);
 	if (err < 0)
 		return err;
 	return (end - addr) >> PAGE_SHIFT;
@@ -311,26 +299,19 @@ SYSCALL_DEFINE3(mincore, unsigned long, start, size_t, len,
 	if (!access_ok(vec, pages))
 		return -EFAULT;
 
-	tmp = kmalloc(PAGE_SIZE, GFP_KERNEL);
+	tmp = (void *) __get_free_page(GFP_USER);
 	if (!tmp)
 		return -EAGAIN;
 
 	retval = 0;
 	while (pages) {
-		struct vm_area_struct *vma;
-
-		vma = vma_start_read_unlocked(current->mm, start);
-		if (!vma) {
-			retval = -ENOMEM;
-			break;
-		}
-
 		/*
 		 * Do at most PAGE_SIZE entries per iteration, due to
 		 * the temporary buffer size.
 		 */
-		retval = do_mincore(vma, start, min(pages, PAGE_SIZE), tmp);
-		vma_end_read(vma);
+		mmap_read_lock(current->mm);
+		retval = do_mincore(start, min(pages, PAGE_SIZE), tmp);
+		mmap_read_unlock(current->mm);
 
 		if (retval <= 0)
 			break;
@@ -343,6 +324,6 @@ SYSCALL_DEFINE3(mincore, unsigned long, start, size_t, len,
 		start += retval << PAGE_SHIFT;
 		retval = 0;
 	}
-	kfree(tmp);
+	free_page((unsigned long) tmp);
 	return retval;
 }

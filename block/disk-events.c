@@ -437,7 +437,7 @@ int disk_alloc_events(struct gendisk *disk)
 	if (!disk->fops->check_events || !disk->events)
 		return 0;
 
-	ev = kzalloc_obj(*ev);
+	ev = kzalloc(sizeof(*ev), GFP_KERNEL);
 	if (!ev) {
 		pr_warn("%s: failed to initialize events\n", disk->disk_name);
 		return -ENOMEM;

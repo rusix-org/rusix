@@ -1,13 +1,12 @@
 // SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause
 /*
  * Copyright (C) 2017 Intel Deutschland GmbH
- * Copyright (C) 2018-2026 Intel Corporation
+ * Copyright (C) 2018-2025 Intel Corporation
  */
 #include "iwl-trans.h"
 #include "iwl-fh.h"
 #include "iwl-context-info.h"
-#include "internal.h"
-#include "utils.h"
+#include "gen1_2/internal.h"
 #include "iwl-prph.h"
 
 static void *_iwl_pcie_ctxt_info_dma_alloc_coherent(struct iwl_trans *trans,
@@ -100,15 +99,10 @@ int iwl_pcie_init_fw_sec(struct iwl_trans *trans,
 	/* add 2 due to separators */
 	paging_cnt = iwl_pcie_get_num_sections(fw, lmac_cnt + umac_cnt + 2);
 
-	if (WARN_ON(lmac_cnt > ARRAY_SIZE(ctxt_dram->lmac_img) ||
-		    umac_cnt > ARRAY_SIZE(ctxt_dram->umac_img) ||
-		    paging_cnt > ARRAY_SIZE(ctxt_dram->virtual_img)))
-		return -EINVAL;
-
-	dram->fw = kzalloc_objs(*dram->fw, umac_cnt + lmac_cnt);
+	dram->fw = kcalloc(umac_cnt + lmac_cnt, sizeof(*dram->fw), GFP_KERNEL);
 	if (!dram->fw)
 		return -ENOMEM;
-	dram->paging = kzalloc_objs(*dram->paging, paging_cnt);
+	dram->paging = kcalloc(paging_cnt, sizeof(*dram->paging), GFP_KERNEL);
 	if (!dram->paging)
 		return -ENOMEM;
 
@@ -246,7 +240,7 @@ int iwl_pcie_ctxt_info_init(struct iwl_trans *trans,
 		iwl_pcie_apply_destination(trans);
 
 	/* kick FW self load */
-	iwl_pcie_write64(trans, CSR_CTXT_INFO_BA, trans_pcie->ctxt_info_dma_addr);
+	iwl_write64(trans, CSR_CTXT_INFO_BA, trans_pcie->ctxt_info_dma_addr);
 
 	/* Context info will be released upon alive or failure to get one */
 

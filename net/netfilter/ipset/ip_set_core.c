@@ -25,7 +25,6 @@
 static LIST_HEAD(ip_set_type_list);		/* all registered set types */
 static DEFINE_MUTEX(ip_set_type_mutex);		/* protects ip_set_type_list */
 static DEFINE_RWLOCK(ip_set_ref_lock);		/* protects the set refs */
-static struct workqueue_struct *ipset_destroy_wq;
 
 struct ip_set_net {
 	struct ip_set * __rcu *ip_set_list;	/* all individual sets */
@@ -993,7 +992,7 @@ static const struct nla_policy ip_set_create_policy[IPSET_ATTR_CMD_MAX + 1] = {
 				    .len = IPSET_MAXNAMELEN - 1 },
 	[IPSET_ATTR_TYPENAME]	= { .type = NLA_NUL_STRING,
 				    .len = IPSET_MAXNAMELEN - 1},
-	[IPSET_ATTR_REVISION]	= NLA_POLICY_MAX(NLA_U8, IPSET_REVISION_MAX),
+	[IPSET_ATTR_REVISION]	= { .type = NLA_U8 },
 	[IPSET_ATTR_FAMILY]	= { .type = NLA_U8 },
 	[IPSET_ATTR_DATA]	= { .type = NLA_NESTED },
 };
@@ -1085,7 +1084,7 @@ static int ip_set_create(struct sk_buff *skb, const struct nfnl_info *info,
 	/* First, and without any locks, allocate and initialize
 	 * a normal base set structure.
 	 */
-	set = kzalloc_obj(*set);
+	set = kzalloc(sizeof(*set), GFP_KERNEL);
 	if (!set)
 		return -ENOMEM;
 	spin_lock_init(&set->lock);
@@ -1143,7 +1142,7 @@ static int ip_set_create(struct sk_buff *skb, const struct nfnl_info *info,
 			/* Wraparound */
 			goto cleanup;
 
-		list = kvzalloc_objs(struct ip_set *, i);
+		list = kvcalloc(i, sizeof(struct ip_set *), GFP_KERNEL);
 		if (!list)
 			goto cleanup;
 		/* nfnl mutex is held, both lists are valid */
@@ -1186,24 +1185,20 @@ ip_set_setname_policy[IPSET_ATTR_CMD_MAX + 1] = {
 				    .len = IPSET_MAXNAMELEN - 1 },
 };
 
+/* In order to return quickly when destroying a single set, it is split
+ * into two stages:
+ * - Cancel garbage collector
+ * - Destroy the set itself via call_rcu()
+ */
+
 static void
-destroy_and_free_set(struct ip_set *set)
+ip_set_destroy_set_rcu(struct rcu_head *head)
 {
+	struct ip_set *set = container_of(head, struct ip_set, rcu);
+
 	set->variant->destroy(set);
 	module_put(set->type->me);
 	kfree(set);
-}
-
-/* In order to return quickly when destroying a single set,
- * destruction is done asynchronously via work queues.
- */
-static void
-ip_set_destroy_set_work(struct work_struct *work)
-{
-	struct ip_set *set = container_of(to_rcu_work(work),
-					  struct ip_set, rwork);
-
-	destroy_and_free_set(set);
 }
 
 static void
@@ -1295,8 +1290,7 @@ static int ip_set_destroy(struct sk_buff *skb, const struct nfnl_info *info,
 			/* Must wait for flush to be really finished  */
 			rcu_barrier();
 		}
-		INIT_RCU_WORK(&s->rwork, ip_set_destroy_set_work);
-		queue_rcu_work(ipset_destroy_wq, &s->rwork);
+		call_rcu(&s->rcu, ip_set_destroy_set_rcu);
 	}
 	return 0;
 out:
@@ -1426,7 +1420,7 @@ static int ip_set_swap(struct sk_buff *skb, const struct nfnl_info *info,
 		return -IPSET_ERR_EXIST_SETNAME2;
 
 	/* Features must not change.
-	 * Not an artificial restriction anymore, as we must prevent
+	 * Not an artifical restriction anymore, as we must prevent
 	 * possible loops created by swapping in setlist type of sets.
 	 */
 	if (!(from->type->features == to->type->features &&
@@ -1630,7 +1624,6 @@ dump_last:
 		    ((dump_type == DUMP_ALL) ==
 		     !!(set->type->features & IPSET_DUMP_LAST))) {
 			write_unlock_bh(&ip_set_ref_lock);
-			set = NULL;
 			continue;
 		}
 		pr_debug("List set: %s\n", set->name);
@@ -1666,13 +1659,13 @@ dump_last:
 			if (cb->args[IPSET_CB_PROTO] > IPSET_PROTOCOL_MIN &&
 			    nla_put_net16(skb, IPSET_ATTR_INDEX, htons(index)))
 				goto nla_put_failure;
-			if (set->variant->uref)
-				set->variant->uref(set, cb, true);
 			ret = set->variant->head(set, skb);
 			if (ret < 0)
 				goto release_refcount;
 			if (dump_flags & IPSET_FLAG_LIST_HEADER)
 				goto next_set;
+			if (set->variant->uref)
+				set->variant->uref(set, cb, true);
 			fallthrough;
 		default:
 			ret = set->variant->list(set, skb, cb);
@@ -2397,7 +2390,7 @@ ip_set_net_init(struct net *net)
 	if (inst->ip_set_max >= IPSET_INVALID_ID)
 		inst->ip_set_max = IPSET_INVALID_ID - 1;
 
-	list = kvzalloc_objs(struct ip_set *, inst->ip_set_max);
+	list = kvcalloc(inst->ip_set_max, sizeof(struct ip_set *), GFP_KERNEL);
 	if (!list)
 		return -ENOMEM;
 	inst->is_deleted = false;
@@ -2434,23 +2427,18 @@ static struct pernet_operations ip_set_net_ops = {
 static int __init
 ip_set_init(void)
 {
-	int ret;
+	int ret = register_pernet_subsys(&ip_set_net_ops);
 
-	ipset_destroy_wq = alloc_ordered_workqueue("ipset_destroy_wq", 0);
-	if (!ipset_destroy_wq)
-		return -ENOMEM;
-
-	ret = register_pernet_subsys(&ip_set_net_ops);
 	if (ret) {
 		pr_err("ip_set: cannot register pernet_subsys.\n");
-		goto out_wq;
+		return ret;
 	}
 
 	ret = nfnetlink_subsys_register(&ip_set_netlink_subsys);
 	if (ret != 0) {
 		pr_err("ip_set: cannot register with nfnetlink.\n");
 		unregister_pernet_subsys(&ip_set_net_ops);
-		goto out_wq;
+		return ret;
 	}
 
 	ret = nf_register_sockopt(&so_set);
@@ -2458,13 +2446,10 @@ ip_set_init(void)
 		pr_err("SO_SET registry failed: %d\n", ret);
 		nfnetlink_subsys_unregister(&ip_set_netlink_subsys);
 		unregister_pernet_subsys(&ip_set_net_ops);
-		goto out_wq;
+		return ret;
 	}
 
 	return 0;
-out_wq:
-	destroy_workqueue(ipset_destroy_wq);
-	return ret;
 }
 
 static void __exit
@@ -2474,7 +2459,9 @@ ip_set_fini(void)
 	nfnetlink_subsys_unregister(&ip_set_netlink_subsys);
 	unregister_pernet_subsys(&ip_set_net_ops);
 
-	destroy_workqueue(ipset_destroy_wq);
+	/* Wait for call_rcu() in destroy */
+	rcu_barrier();
+
 	pr_debug("these are the famous last words\n");
 }
 

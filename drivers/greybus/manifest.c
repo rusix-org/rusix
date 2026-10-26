@@ -122,8 +122,6 @@ static int identify_descriptor(struct gb_interface *intf,
 	switch (desc_header->type) {
 	case GREYBUS_TYPE_STRING:
 		expected_size += sizeof(struct greybus_descriptor_string);
-		if (desc_size < expected_size)
-			break;
 		expected_size += desc->string.length;
 
 		/* String descriptors are padded to 4 byte boundaries */
@@ -159,7 +157,7 @@ static int identify_descriptor(struct gb_interface *intf,
 			 expected_size, desc_size);
 	}
 
-	descriptor = kzalloc_obj(*descriptor);
+	descriptor = kzalloc(sizeof(*descriptor), GFP_KERNEL);
 	if (!descriptor)
 		return -ENOMEM;
 
@@ -277,7 +275,8 @@ static u32 gb_manifest_parse_cports(struct gb_bundle *bundle)
 	if (!count)
 		return 0;
 
-	bundle->cport_desc = kzalloc_objs(*bundle->cport_desc, count);
+	bundle->cport_desc = kcalloc(count, sizeof(*bundle->cport_desc),
+				     GFP_KERNEL);
 	if (!bundle->cport_desc)
 		goto exit;
 

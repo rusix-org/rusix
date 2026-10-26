@@ -9,11 +9,9 @@
  ******************************************************************************/
 
 #include <crypto/hash.h>
-#include <crypto/utils.h>
 #include <linux/kernel.h>
 #include <linux/string.h>
 #include <linux/err.h>
-#include <linux/hex.h>
 #include <linux/random.h>
 #include <linux/scatterlist.h>
 #include <target/iscsi/iscsi_target_core.h>
@@ -153,7 +151,7 @@ static struct iscsi_chap *chap_server_open(
 		return NULL;
 	}
 
-	conn->auth_protocol = kzalloc_obj(struct iscsi_chap);
+	conn->auth_protocol = kzalloc(sizeof(struct iscsi_chap), GFP_KERNEL);
 	if (!conn->auth_protocol)
 		return NULL;
 
@@ -409,7 +407,7 @@ static int chap_server_compute_hash(
 	pr_debug("[server] %s Server Digest: %s\n",
 		chap->digest_name, response);
 
-	if (crypto_memneq(server_digest, client_digest, chap->digest_size)) {
+	if (memcmp(server_digest, client_digest, chap->digest_size) != 0) {
 		pr_debug("[server] %s Digests do not match!\n\n",
 			chap->digest_name);
 		goto out;

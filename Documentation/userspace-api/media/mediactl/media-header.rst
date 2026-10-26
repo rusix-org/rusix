@@ -2,12 +2,10 @@
 
 .. _media_header:
 
-*****************************
-Media controller uAPI symbols
-*****************************
+****************************
+Media Controller Header File
+****************************
 
 .. kernel-include:: include/uapi/linux/media.h
     :generate-cross-refs:
     :exception-file: media.h.rst.exceptions
-    :toc:
-    :warn-broken:

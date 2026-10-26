@@ -90,24 +90,33 @@ void ecc_digits_from_bytes(const u8 *in, unsigned int nbytes,
 }
 EXPORT_SYMBOL(ecc_digits_from_bytes);
 
-struct ecc_point *ecc_alloc_point(unsigned int ndigits)
+static u64 *ecc_alloc_digits_space(unsigned int ndigits)
 {
-	struct ecc_point *p;
-	size_t ndigits_sz;
+	size_t len = ndigits * sizeof(u64);
 
-	if (!ndigits)
+	if (!len)
 		return NULL;
 
-	p = kmalloc_obj(*p);
+	return kmalloc(len, GFP_KERNEL);
+}
+
+static void ecc_free_digits_space(u64 *space)
+{
+	kfree_sensitive(space);
+}
+
+struct ecc_point *ecc_alloc_point(unsigned int ndigits)
+{
+	struct ecc_point *p = kmalloc(sizeof(*p), GFP_KERNEL);
+
 	if (!p)
 		return NULL;
 
-	ndigits_sz = ndigits * sizeof(u64);
-	p->x = kmalloc(ndigits_sz, GFP_KERNEL);
+	p->x = ecc_alloc_digits_space(ndigits);
 	if (!p->x)
 		goto err_alloc_x;
 
-	p->y = kmalloc(ndigits_sz, GFP_KERNEL);
+	p->y = ecc_alloc_digits_space(ndigits);
 	if (!p->y)
 		goto err_alloc_y;
 
@@ -116,7 +125,7 @@ struct ecc_point *ecc_alloc_point(unsigned int ndigits)
 	return p;
 
 err_alloc_y:
-	kfree(p->x);
+	ecc_free_digits_space(p->x);
 err_alloc_x:
 	kfree(p);
 	return NULL;
@@ -279,48 +288,6 @@ static void vli_rshift1(u64 *vli, unsigned int ndigits)
 	}
 }
 
-#ifdef __has_builtin
-#if __has_builtin(__builtin_addcll)
-#define USE_BUILTIN_ADDC
-#endif
-#endif
-
-/* Computes result = left + right + carry_in and updates carry_out */
-static inline void add_carry(u64 left, u64 right, u64 *result, u64 carry_in,
-			     u64 *carry_out)
-{
-#ifdef USE_BUILTIN_ADDC
-	*result = __builtin_addcll(left, right, carry_in, carry_out);
-#else
-	u64 sum1, sum2;
-	u64 c1 = __builtin_uaddll_overflow(left, right, &sum1);
-	u64 c2 = __builtin_uaddll_overflow(sum1, carry_in, &sum2);
-	*result = sum2;
-	*carry_out = c1 | c2;
-#endif
-}
-
-#ifdef __has_builtin
-#if __has_builtin(__builtin_subcll)
-#define USE_BUILTIN_SUBC
-#endif
-#endif
-
-/* Computes result = left - right - borrow_in and updates borrow_out */
-static inline void sub_borrow(u64 left, u64 right, u64 *result, u64 borrow_in,
-			      u64 *borrow_out)
-{
-#ifdef USE_BUILTIN_SUBC
-	*result = __builtin_subcll(left, right, borrow_in, borrow_out);
-#else
-	u64 diff1, diff2;
-	u64 b1 = __builtin_usubll_overflow(left, right, &diff1);
-	u64 b2 = __builtin_usubll_overflow(diff1, borrow_in, &diff2);
-	*result = diff2;
-	*borrow_out = b1 | b2;
-#endif
-}
-
 /* Computes result = left + right, returning carry. Can modify in place. */
 static u64 vli_add(u64 *result, const u64 *left, const u64 *right,
 		   unsigned int ndigits)
@@ -328,8 +295,15 @@ static u64 vli_add(u64 *result, const u64 *left, const u64 *right,
 	u64 carry = 0;
 	int i;
 
-	for (i = 0; i < ndigits; i++)
-		add_carry(left[i], right[i], &result[i], carry, &carry);
+	for (i = 0; i < ndigits; i++) {
+		u64 sum;
+
+		sum = left[i] + right[i] + carry;
+		if (sum != left[i])
+			carry = (sum < left[i]);
+
+		result[i] = sum;
+	}
 
 	return carry;
 }
@@ -338,29 +312,40 @@ static u64 vli_add(u64 *result, const u64 *left, const u64 *right,
 static u64 vli_uadd(u64 *result, const u64 *left, u64 right,
 		    unsigned int ndigits)
 {
-	u64 carry;
+	u64 carry = right;
 	int i;
 
-	if (ndigits == 0)
-		return right;
+	for (i = 0; i < ndigits; i++) {
+		u64 sum;
 
-	carry = __builtin_uaddll_overflow(left[0], right, &result[0]);
+		sum = left[i] + carry;
+		if (sum != left[i])
+			carry = (sum < left[i]);
+		else
+			carry = !!carry;
 
-	for (i = 1; i < ndigits; i++)
-		carry = __builtin_uaddll_overflow(left[i], carry, &result[i]);
+		result[i] = sum;
+	}
 
 	return carry;
 }
 
 /* Computes result = left - right, returning borrow. Can modify in place. */
 u64 vli_sub(u64 *result, const u64 *left, const u64 *right,
-	    unsigned int ndigits)
+		   unsigned int ndigits)
 {
 	u64 borrow = 0;
 	int i;
 
-	for (i = 0; i < ndigits; i++)
-		sub_borrow(left[i], right[i], &result[i], borrow, &borrow);
+	for (i = 0; i < ndigits; i++) {
+		u64 diff;
+
+		diff = left[i] - right[i] - borrow;
+		if (diff != left[i])
+			borrow = (diff > left[i]);
+
+		result[i] = diff;
+	}
 
 	return borrow;
 }
@@ -368,18 +353,20 @@ EXPORT_SYMBOL(vli_sub);
 
 /* Computes result = left - right, returning borrow. Can modify in place. */
 static u64 vli_usub(u64 *result, const u64 *left, u64 right,
-		    unsigned int ndigits)
+	     unsigned int ndigits)
 {
-	u64 borrow;
+	u64 borrow = right;
 	int i;
 
-	if (ndigits == 0)
-		return right;
+	for (i = 0; i < ndigits; i++) {
+		u64 diff;
 
-	borrow = __builtin_usubll_overflow(left[0], right, &result[0]);
+		diff = left[i] - borrow;
+		if (diff != left[i])
+			borrow = (diff > left[i]);
 
-	for (i = 1; i < ndigits; i++)
-		borrow = __builtin_usubll_overflow(left[i], borrow, &result[i]);
+		result[i] = diff;
+	}
 
 	return borrow;
 }
@@ -1423,22 +1410,9 @@ static void ecc_point_add(const struct ecc_point *result,
 	vli_set(result->x, q->x, ndigits);
 	vli_set(result->y, q->y, ndigits);
 	vli_mod_sub(z, result->x, p->x, curve->p, ndigits);
-	if (vli_is_zero(z, ndigits)) {
-		if (vli_cmp(p->y, q->y, ndigits)) {
-			/* P + (-P) is the point at infinity. */
-			vli_clear(result->x, ndigits);
-			vli_clear(result->y, ndigits);
-			return;
-		}
-		/* The co-Z addition formula does not handle P == Q. */
-		z[0] = 1;
-		ecc_point_double_jacobian(result->x, result->y, z, curve);
-		goto out;
-	}
 	vli_set(px, p->x, ndigits);
 	vli_set(py, p->y, ndigits);
 	xycz_add(px, py, result->x, result->y, curve);
-out:
 	vli_mod_inv(z, z, curve->p, ndigits);
 	apply_z(result->x, result->y, z, curve);
 }
@@ -1478,38 +1452,22 @@ void ecc_point_mult_shamir(const struct ecc_point *result,
 	vli_set(rx, point->x, ndigits);
 	vli_set(ry, point->y, ndigits);
 	vli_clear(z + 1, ndigits - 1);
-	z[0] = !ecc_point_is_zero(point);
+	z[0] = 1;
 
 	for (--i; i >= 0; i--) {
 		ecc_point_double_jacobian(rx, ry, z, curve);
 		idx = !!vli_test_bit(u1, i);
 		idx |= (!!vli_test_bit(u2, i)) << 1;
 		point = points[idx];
-		if (point && !ecc_point_is_zero(point)) {
+		if (point) {
 			u64 tx[ECC_MAX_DIGITS];
 			u64 ty[ECC_MAX_DIGITS];
 			u64 tz[ECC_MAX_DIGITS];
 
-			if (vli_is_zero(z, ndigits)) {
-				/* Adding to infinity starts a new accumulator. */
-				vli_set(rx, point->x, ndigits);
-				vli_set(ry, point->y, ndigits);
-				z[0] = 1;
-				continue;
-			}
 			vli_set(tx, point->x, ndigits);
 			vli_set(ty, point->y, ndigits);
 			apply_z(tx, ty, z, curve);
 			vli_mod_sub(tz, rx, tx, curve->p, ndigits);
-			if (vli_is_zero(tz, ndigits)) {
-				if (!vli_cmp(ry, ty, ndigits))
-					ecc_point_double_jacobian(rx, ry, z,
-								  curve);
-				else
-					/* Adding opposite points yields infinity. */
-					vli_clear(z, ndigits);
-				continue;
-			}
 			xycz_add(tx, ty, rx, ry, curve);
 			vli_mod_mult_fast(z, z, tz, curve);
 		}
@@ -1593,11 +1551,16 @@ int ecc_gen_privkey(unsigned int curve_id, unsigned int ndigits,
 	 * The maximum security strength identified by NIST SP800-57pt1r4 for
 	 * ECC is 256 (N >= 512).
 	 *
-	 * This condition is met by stdrng because it selects a favored DRBG
-	 * with a security strength of 256.
+	 * This condition is met by the default RNG because it selects a favored
+	 * DRBG with a security strength of 256.
 	 */
+	if (crypto_get_default_rng())
+		return -EFAULT;
+
 	/* Step 3: obtain N returned_bits from the DRBG. */
-	err = crypto_stdrng_get_bytes(private_key, nbytes);
+	err = crypto_rng_get_bytes(crypto_default_rng,
+				   (u8 *)private_key, nbytes);
+	crypto_put_default_rng();
 	if (err)
 		return err;
 

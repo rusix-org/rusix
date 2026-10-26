@@ -10,7 +10,6 @@ maintainers:
   - Mattijs Korpershoek <mkorpershoek@kernel.org>
 
 allOf:
-  - $ref: input.yaml#
   - $ref: /schemas/input/matrix-keymap.yaml#
 
 description: |
@@ -26,7 +25,6 @@ properties:
       - const: mediatek,mt6779-keypad
       - items:
           - enum:
-              - mediatek,mt6572-keypad
               - mediatek,mt6873-keypad
               - mediatek,mt8183-keypad
               - mediatek,mt8365-keypad
@@ -79,10 +77,10 @@ examples:
         #size-cells = <2>;
 
         keyboard@10010000 {
-            compatible = "mediatek,mt6779-keypad";
-            reg = <0 0x10010000 0 0x1000>;
-            interrupts = <GIC_SPI 75 IRQ_TYPE_EDGE_FALLING>;
-            clocks = <&clk26m>;
-            clock-names = "kpd";
+          compatible = "mediatek,mt6779-keypad";
+          reg = <0 0x10010000 0 0x1000>;
+          interrupts = <GIC_SPI 75 IRQ_TYPE_EDGE_FALLING>;
+          clocks = <&clk26m>;
+          clock-names = "kpd";
         };
     };

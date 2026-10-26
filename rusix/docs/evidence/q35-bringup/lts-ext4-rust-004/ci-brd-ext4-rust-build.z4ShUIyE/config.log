@@ -1,0 +1,8 @@
+make: Entering directory '/src'
+make[1]: Entering directory '/out/builds/ci-brd-ext4-rust'
+  GEN     Makefile
+#
+# configuration written to .config
+#
+make[1]: Leaving directory '/out/builds/ci-brd-ext4-rust'
+make: Leaving directory '/src'

@@ -835,17 +835,17 @@ int qat_hal_init(struct adf_accel_dev *accel_dev)
 	struct icp_qat_fw_loader_handle *handle;
 	int ret = 0;
 
-	handle = kzalloc_obj(*handle);
+	handle = kzalloc(sizeof(*handle), GFP_KERNEL);
 	if (!handle)
 		return -ENOMEM;
 
-	handle->hal_handle = kzalloc_obj(*handle->hal_handle);
+	handle->hal_handle = kzalloc(sizeof(*handle->hal_handle), GFP_KERNEL);
 	if (!handle->hal_handle) {
 		ret = -ENOMEM;
 		goto out_hal_handle;
 	}
 
-	handle->chip_info = kzalloc_obj(*handle->chip_info);
+	handle->chip_info = kzalloc(sizeof(*handle->chip_info), GFP_KERNEL);
 	if (!handle->chip_info) {
 		ret = -ENOMEM;
 		goto out_chip_info;

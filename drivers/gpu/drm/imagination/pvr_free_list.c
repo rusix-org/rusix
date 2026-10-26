@@ -308,7 +308,7 @@ pvr_free_list_grow(struct pvr_free_list *free_list, u32 num_pages)
 		goto err_unlock;
 	}
 
-	free_list_node = kzalloc_obj(*free_list_node);
+	free_list_node = kzalloc(sizeof(*free_list_node), GFP_KERNEL);
 	if (!free_list_node) {
 		err = -ENOMEM;
 		goto err_unlock;
@@ -416,7 +416,7 @@ pvr_free_list_create(struct pvr_file *pvr_file,
 	int err;
 
 	/* Create and fill out the kernel structure */
-	free_list = kzalloc_obj(*free_list);
+	free_list = kzalloc(sizeof(*free_list), GFP_KERNEL);
 
 	if (!free_list)
 		return ERR_PTR(-ENOMEM);

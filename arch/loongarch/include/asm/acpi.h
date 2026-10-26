@@ -42,6 +42,11 @@ extern void acpi_add_early_pio(void);
 extern void acpi_remove_early_pio(void);
 extern int __init parse_acpi_topology(void);
 
+static inline u32 get_acpi_id_for_cpu(unsigned int cpu)
+{
+	return acpi_core_pic[cpu_logical_map(cpu)].processor_id;
+}
+
 #endif /* !CONFIG_ACPI */
 
 #define ACPI_TABLE_UPGRADE_MAX_PHYS ARCH_LOW_ADDRESS_LIMIT

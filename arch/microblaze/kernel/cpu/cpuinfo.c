@@ -133,7 +133,6 @@ void __init setup_cpuinfo_clk(void)
 		cpuinfo.cpu_clock_freq = fcpu(cpu, "timebase-frequency");
 	} else {
 		cpuinfo.cpu_clock_freq = clk_get_rate(clk);
-		clk_put(clk);
 	}
 
 	if (!cpuinfo.cpu_clock_freq) {

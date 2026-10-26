@@ -254,6 +254,7 @@ struct fcloop_nport {
 struct fcloop_lsreq {
 	struct nvmefc_ls_req		*lsreq;
 	struct nvmefc_ls_rsp		ls_rsp;
+	int				lsdir;	/* H2T or T2H */
 	int				status;
 	struct list_head		ls_list; /* fcloop_rport->ls_list */
 };
@@ -566,7 +567,7 @@ fcloop_tgt_discovery_evt(struct nvmet_fc_target_port *tgtport)
 {
 	struct fcloop_rscn *tgt_rscn;
 
-	tgt_rscn = kzalloc_obj(*tgt_rscn);
+	tgt_rscn = kzalloc(sizeof(*tgt_rscn), GFP_KERNEL);
 	if (!tgt_rscn)
 		return;
 
@@ -773,7 +774,7 @@ fcloop_fcp_req(struct nvme_fc_local_port *localport,
 	if (!rport->targetport)
 		return -ECONNREFUSED;
 
-	tfcp_req = kzalloc_obj(*tfcp_req, GFP_ATOMIC);
+	tfcp_req = kzalloc(sizeof(*tfcp_req), GFP_ATOMIC);
 	if (!tfcp_req)
 		return -ENOMEM;
 
@@ -1117,10 +1118,8 @@ fcloop_remoteport_delete(struct nvme_fc_remote_port *remoteport)
 	rport->nport->rport = NULL;
 	spin_unlock_irqrestore(&fcloop_lock, flags);
 
-	if (put_port) {
-		WARN_ON(!list_empty(&rport->ls_list));
+	if (put_port)
 		fcloop_nport_put(rport->nport);
-	}
 }
 
 static void
@@ -1138,10 +1137,8 @@ fcloop_targetport_delete(struct nvmet_fc_target_port *targetport)
 	tport->nport->tport = NULL;
 	spin_unlock_irqrestore(&fcloop_lock, flags);
 
-	if (put_port) {
-		WARN_ON(!list_empty(&tport->ls_list));
+	if (put_port)
 		fcloop_nport_put(tport->nport);
-	}
 }
 
 #define	FCLOOP_HW_QUEUES		4
@@ -1201,11 +1198,11 @@ fcloop_create_local_port(struct device *dev, struct device_attribute *attr,
 	unsigned long flags;
 	int ret = -ENOMEM;
 
-	lport = kzalloc_obj(*lport);
+	lport = kzalloc(sizeof(*lport), GFP_KERNEL);
 	if (!lport)
 		return -ENOMEM;
 
-	opts = kzalloc_obj(*opts);
+	opts = kzalloc(sizeof(*opts), GFP_KERNEL);
 	if (!opts)
 		goto out_free_lport;
 
@@ -1352,7 +1349,7 @@ fcloop_alloc_nport(const char *buf, size_t count, bool remoteport)
 	u32 opts_mask = (remoteport) ? RPORT_OPTS : TGTPORT_OPTS;
 	int ret;
 
-	opts = kzalloc_obj(*opts);
+	opts = kzalloc(sizeof(*opts), GFP_KERNEL);
 	if (!opts)
 		return NULL;
 
@@ -1364,7 +1361,7 @@ fcloop_alloc_nport(const char *buf, size_t count, bool remoteport)
 	if ((opts->mask & opts_mask) != opts_mask)
 		goto out_free_opts;
 
-	newnport = kzalloc_obj(*newnport);
+	newnport = kzalloc(sizeof(*newnport), GFP_KERNEL);
 	if (!newnport)
 		goto out_free_opts;
 

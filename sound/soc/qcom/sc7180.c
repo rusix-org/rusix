@@ -287,9 +287,8 @@ static int sc7180_qdsp_snd_startup(struct snd_pcm_substream *substream)
 static int dmic_get(struct snd_kcontrol *kcontrol,
 		    struct snd_ctl_elem_value *ucontrol)
 {
-	struct snd_soc_dapm_context *dapm = snd_soc_dapm_kcontrol_to_dapm(kcontrol);
-	struct snd_soc_card *card = snd_soc_dapm_to_card(dapm);
-	struct sc7180_snd_data *data = snd_soc_card_get_drvdata(card);
+	struct snd_soc_dapm_context *dapm = snd_soc_dapm_kcontrol_dapm(kcontrol);
+	struct sc7180_snd_data *data = snd_soc_card_get_drvdata(dapm->card);
 
 	ucontrol->value.integer.value[0] = data->dmic_switch;
 	return 0;
@@ -298,9 +297,8 @@ static int dmic_get(struct snd_kcontrol *kcontrol,
 static int dmic_set(struct snd_kcontrol *kcontrol,
 		    struct snd_ctl_elem_value *ucontrol)
 {
-	struct snd_soc_dapm_context *dapm = snd_soc_dapm_kcontrol_to_dapm(kcontrol);
-	struct snd_soc_card *card = snd_soc_dapm_to_card(dapm);
-	struct sc7180_snd_data *data = snd_soc_card_get_drvdata(card);
+	struct snd_soc_dapm_context *dapm = snd_soc_dapm_kcontrol_dapm(kcontrol);
+	struct sc7180_snd_data *data = snd_soc_card_get_drvdata(dapm->card);
 
 	data->dmic_switch = ucontrol->value.integer.value[0];
 	gpiod_set_value(data->dmic_sel, data->dmic_switch);

@@ -23,6 +23,8 @@
 #include <linux/slab.h>
 #include <linux/workqueue.h>
 
+#include "mailbox.h"
+
 #define IMX_MU_CHANS		24
 /* TX0/RX0/RXDB[0-3] */
 #define IMX_MU_SCU_CHANS	6
@@ -87,7 +89,7 @@ struct imx_mu_priv {
 	struct device		*dev;
 	void __iomem		*base;
 	void			*msg;
-	raw_spinlock_t		xcr_lock; /* control register lock */
+	spinlock_t		xcr_lock; /* control register lock */
 
 	struct mbox_controller	mbox;
 	struct mbox_chan	mbox_chans[IMX_MU_CHANS];
@@ -207,14 +209,15 @@ static int imx_mu_rx_waiting_read(struct imx_mu_priv *priv, u32 *val, u32 idx)
 
 static u32 imx_mu_xcr_rmw(struct imx_mu_priv *priv, enum imx_mu_xcr type, u32 set, u32 clr)
 {
+	unsigned long flags;
 	u32 val;
 
-	guard(raw_spinlock_irqsave)(&priv->xcr_lock);
-
+	spin_lock_irqsave(&priv->xcr_lock, flags);
 	val = imx_mu_read(priv, priv->dcfg->xCR[type]);
 	val &= ~clr;
 	val |= set;
 	imx_mu_write(priv, val, priv->dcfg->xCR[type]);
+	spin_unlock_irqrestore(&priv->xcr_lock, flags);
 
 	return val;
 }
@@ -222,27 +225,31 @@ static u32 imx_mu_xcr_rmw(struct imx_mu_priv *priv, enum imx_mu_xcr type, u32 se
 static void imx_mu_xcr_clr_shut(struct imx_mu_priv *priv, struct imx_mu_con_priv *cp,
 				enum imx_mu_xcr type, u32 clr)
 {
+	unsigned long flags;
 	u32 val;
 
-	guard(raw_spinlock_irqsave)(&priv->xcr_lock);
+	spin_lock_irqsave(&priv->xcr_lock, flags);
 	cp->shutdown = true;
 
 	val = imx_mu_read(priv, priv->dcfg->xCR[type]);
 	val &= ~clr;
 	imx_mu_write(priv, val, priv->dcfg->xCR[type]);
+	spin_unlock_irqrestore(&priv->xcr_lock, flags);
 }
 
 static void imx_mu_xcr_set_act(struct imx_mu_priv *priv, struct imx_mu_con_priv *cp,
 			       enum imx_mu_xcr type, u32 set)
 {
+	unsigned long flags;
 	u32 val;
 
-	guard(raw_spinlock_irqsave)(&priv->xcr_lock);
+	spin_lock_irqsave(&priv->xcr_lock, flags);
 	if (!cp->shutdown) {
 		val = imx_mu_read(priv, priv->dcfg->xCR[type]);
 		val |= set;
 		imx_mu_write(priv, val, priv->dcfg->xCR[type]);
 	}
+	spin_unlock_irqrestore(&priv->xcr_lock, flags);
 }
 
 static int imx_mu_generic_tx(struct imx_mu_priv *priv,
@@ -376,6 +383,7 @@ static int imx_mu_specific_rx(struct imx_mu_priv *priv, struct imx_mu_con_priv *
 
 	data = (u32 *)priv->msg;
 
+	imx_mu_xcr_rmw(priv, IMX_MU_RCR, 0, IMX_MU_xCR_RIEn(priv->dcfg->type, 0));
 	*data++ = imx_mu_read(priv, priv->dcfg->xRR);
 
 	if (priv->dcfg->type & IMX_MU_V2_S4) {
@@ -402,6 +410,7 @@ static int imx_mu_specific_rx(struct imx_mu_priv *priv, struct imx_mu_con_priv *
 		*data++ = imx_mu_read(priv, priv->dcfg->xRR + (i % num_rr) * 4);
 	}
 
+	imx_mu_xcr_set_act(priv, cp, IMX_MU_RCR, IMX_MU_xCR_RIEn(priv->dcfg->type, 0));
 	mbox_chan_received_data(cp->chan, (void *)priv->msg);
 
 	return 0;
@@ -533,41 +542,11 @@ static void imx_mu_txdb_work(struct work_struct *t)
 	mbox_chan_txdone(cp->chan, 0);
 }
 
-static irqreturn_t imx_mu_isr_th(int irq, void *p)
-{
-	struct mbox_chan *chan = p;
-	struct imx_mu_priv *priv = to_imx_mu_priv(chan->mbox);
-	struct imx_mu_con_priv *cp = chan->con_priv;
-
-	switch (cp->type) {
-	case IMX_MU_TYPE_TX:
-		mbox_chan_txdone(chan, 0);
-		break;
-
-	case IMX_MU_TYPE_RX:
-		if (!priv->dcfg->rx(priv, cp))
-			imx_mu_xcr_set_act(priv, cp, IMX_MU_RCR, IMX_MU_xCR_RIEn(priv->dcfg->type, cp->idx));
-		break;
-
-	case IMX_MU_TYPE_RXDB:
-		if (!priv->dcfg->rxdb(priv, cp))
-			imx_mu_xcr_set_act(priv, cp, IMX_MU_GIER, IMX_MU_xCR_GIEn(priv->dcfg->type, cp->idx));
-		break;
-
-	default:
-		dev_warn_ratelimited(priv->dev, "Unhandled channel type %d\n",
-				     cp->type);
-		return IRQ_NONE;
-	}
-	return IRQ_HANDLED;
-}
-
 static irqreturn_t imx_mu_isr(int irq, void *p)
 {
 	struct mbox_chan *chan = p;
 	struct imx_mu_priv *priv = to_imx_mu_priv(chan->mbox);
 	struct imx_mu_con_priv *cp = chan->con_priv;
-	irqreturn_t ret = IRQ_HANDLED;
 	u32 val, ctrl;
 
 	switch (cp->type) {
@@ -603,15 +582,13 @@ static irqreturn_t imx_mu_isr(int irq, void *p)
 	if ((val == IMX_MU_xSR_TEn(priv->dcfg->type, cp->idx)) &&
 	    (cp->type == IMX_MU_TYPE_TX)) {
 		imx_mu_xcr_rmw(priv, IMX_MU_TCR, 0, IMX_MU_xCR_TIEn(priv->dcfg->type, cp->idx));
-		ret = IRQ_WAKE_THREAD;
+		mbox_chan_txdone(chan, 0);
 	} else if ((val == IMX_MU_xSR_RFn(priv->dcfg->type, cp->idx)) &&
 		   (cp->type == IMX_MU_TYPE_RX)) {
-		imx_mu_xcr_rmw(priv, IMX_MU_RCR, 0, IMX_MU_xCR_RIEn(priv->dcfg->type, cp->idx));
-		ret = IRQ_WAKE_THREAD;
+		priv->dcfg->rx(priv, cp);
 	} else if ((val == IMX_MU_xSR_GIPn(priv->dcfg->type, cp->idx)) &&
 		   (cp->type == IMX_MU_TYPE_RXDB)) {
-		imx_mu_xcr_rmw(priv, IMX_MU_GIER, 0, IMX_MU_xCR_GIEn(priv->dcfg->type, cp->idx));
-		ret = IRQ_WAKE_THREAD;
+		priv->dcfg->rxdb(priv, cp);
 	} else {
 		dev_warn_ratelimited(priv->dev, "Not handled interrupt\n");
 		return IRQ_NONE;
@@ -620,7 +597,7 @@ static irqreturn_t imx_mu_isr(int irq, void *p)
 	if (priv->suspend)
 		pm_system_wakeup();
 
-	return ret;
+	return IRQ_HANDLED;
 }
 
 static int imx_mu_send_data(struct mbox_chan *chan, void *data)
@@ -635,7 +612,7 @@ static int imx_mu_startup(struct mbox_chan *chan)
 {
 	struct imx_mu_priv *priv = to_imx_mu_priv(chan->mbox);
 	struct imx_mu_con_priv *cp = chan->con_priv;
-	unsigned long irq_flag = IRQF_NO_THREAD;
+	unsigned long irq_flag = 0;
 	int ret;
 
 	pm_runtime_get_sync(priv->dev);
@@ -655,8 +632,7 @@ static int imx_mu_startup(struct mbox_chan *chan)
 	if (!(priv->dcfg->type & IMX_MU_V2_IRQ))
 		irq_flag |= IRQF_SHARED;
 
-	ret = request_threaded_irq(priv->irq[cp->type], imx_mu_isr, imx_mu_isr_th,
-				   irq_flag, cp->irq_desc, chan);
+	ret = request_irq(priv->irq[cp->type], imx_mu_isr, irq_flag, cp->irq_desc, chan);
 	if (ret) {
 		dev_err(priv->dev, "Unable to acquire IRQ %d\n", priv->irq[cp->type]);
 		return ret;
@@ -791,7 +767,7 @@ static struct mbox_chan * imx_mu_xlate(struct mbox_controller *mbox,
 	p_chan = &mbox->chans[chan];
 
 	if (type == IMX_MU_TYPE_TXDB_V2)
-		p_chan->txdone_method = MBOX_TXDONE_BY_ACK;
+		p_chan->txdone_method = TXDONE_BY_ACK;
 
 	return p_chan;
 }
@@ -983,7 +959,7 @@ static int imx_mu_probe(struct platform_device *pdev)
 		goto disable_clk;
 	}
 
-	raw_spin_lock_init(&priv->xcr_lock);
+	spin_lock_init(&priv->xcr_lock);
 
 	priv->mbox.dev = dev;
 	priv->mbox.ops = &imx_mu_ops;

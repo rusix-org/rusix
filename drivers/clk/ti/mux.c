@@ -129,7 +129,7 @@ static struct clk *_register_mux(struct device_node *node, const char *name,
 	struct clk *clk;
 
 	/* allocate the mux */
-	mux = kzalloc_obj(*mux);
+	mux = kzalloc(sizeof(*mux), GFP_KERNEL);
 	if (!mux)
 		return ERR_PTR(-ENOMEM);
 
@@ -181,7 +181,7 @@ static void of_mux_clk_setup(struct device_node *node)
 		pr_err("mux-clock %pOFn must have parents\n", node);
 		return;
 	}
-	parent_data = kzalloc_objs(*parent_data, num_parents);
+	parent_data = kcalloc(num_parents, sizeof(*parent_data), GFP_KERNEL);
 	if (!parent_data)
 		return;
 
@@ -229,7 +229,7 @@ struct clk_hw *ti_clk_build_component_mux(struct ti_clk_mux *setup)
 	if (!setup)
 		return NULL;
 
-	mux = kzalloc_obj(*mux);
+	mux = kzalloc(sizeof(*mux), GFP_KERNEL);
 	if (!mux)
 		return ERR_PTR(-ENOMEM);
 
@@ -255,7 +255,7 @@ static void __init of_ti_composite_mux_clk_setup(struct device_node *node)
 	struct clk_omap_mux *mux;
 	unsigned int num_parents;
 
-	mux = kzalloc_obj(*mux);
+	mux = kzalloc(sizeof(*mux), GFP_KERNEL);
 	if (!mux)
 		return;
 

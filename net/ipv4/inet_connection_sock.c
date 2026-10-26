@@ -20,8 +20,6 @@
 #include <net/tcp_states.h>
 #include <net/xfrm.h>
 #include <net/tcp.h>
-#include <net/tcp_ecn.h>
-#include <net/mptcp.h>
 #include <net/sock_reuseport.h>
 #include <net/addrconf.h>
 
@@ -108,6 +106,7 @@ bool inet_rcv_saddr_equal(const struct sock *sk, const struct sock *sk2,
 				    ipv6_only_sock(sk2), match_wildcard,
 				    match_wildcard);
 }
+EXPORT_SYMBOL(inet_rcv_saddr_equal);
 
 bool inet_rcv_saddr_any(const struct sock *sk)
 {
@@ -699,6 +698,31 @@ struct sock *inet_csk_accept(struct sock *sk, struct proto_accept_arg *arg)
 
 	release_sock(sk);
 
+	if (mem_cgroup_sockets_enabled) {
+		gfp_t gfp = GFP_KERNEL | __GFP_NOFAIL;
+		int amt = 0;
+
+		/* atomically get the memory usage, set and charge the
+		 * newsk->sk_memcg.
+		 */
+		lock_sock(newsk);
+
+		mem_cgroup_sk_alloc(newsk);
+		if (mem_cgroup_from_sk(newsk)) {
+			/* The socket has not been accepted yet, no need
+			 * to look at newsk->sk_wmem_queued.
+			 */
+			amt = sk_mem_pages(newsk->sk_forward_alloc +
+					   atomic_read(&newsk->sk_rmem_alloc));
+		}
+
+		if (amt)
+			mem_cgroup_sk_charge(newsk, amt, gfp);
+		kmem_cache_charge(newsk, gfp);
+
+		release_sock(newsk);
+	}
+
 	if (req)
 		reqsk_put(req);
 
@@ -710,6 +734,7 @@ out_err:
 	arg->err = error;
 	return NULL;
 }
+EXPORT_SYMBOL(inet_csk_accept);
 
 /*
  * Using different timers for retransmit, delayed acks and probes
@@ -825,6 +850,7 @@ no_route:
 	__IP_INC_STATS(net, IPSTATS_MIB_OUTNOROUTES);
 	return NULL;
 }
+EXPORT_SYMBOL_GPL(inet_csk_route_child_sock);
 
 /* Decide when to expire the request and when to resend SYN-ACK */
 static void syn_ack_recalc(struct request_sock *req,
@@ -870,6 +896,7 @@ reqsk_alloc_noprof(const struct request_sock_ops *ops, struct sock *sk_listener,
 	sk_tx_queue_clear(req_to_sk(req));
 	req->saved_syn = NULL;
 	req->syncookie = 0;
+	req->timeout = 0;
 	req->num_timeout = 0;
 	req->num_retrans = 0;
 	req->sk = NULL;
@@ -897,19 +924,12 @@ struct request_sock *inet_reqsk_alloc(const struct request_sock_ops *ops,
 		ireq->ireq_state = TCP_NEW_SYN_RECV;
 		write_pnet(&ireq->ireq_net, sock_net(sk_listener));
 		ireq->ireq_family = sk_listener->sk_family;
+		req->timeout = TCP_TIMEOUT_INIT;
 	}
 
 	return req;
 }
-
-void __reqsk_free(struct request_sock *req)
-{
-	req->rsk_ops->destructor(req);
-	if (req->rsk_listener)
-		sock_put(req->rsk_listener);
-	kfree(req->saved_syn);
-	kmem_cache_free(req->rsk_ops->slab, req);
-}
+EXPORT_SYMBOL(inet_reqsk_alloc);
 
 static struct request_sock *inet_reqsk_clone(struct request_sock *req,
 					     struct sock *sk)
@@ -961,9 +981,6 @@ static struct request_sock *inet_reqsk_clone(struct request_sock *req,
 		 */
 		rcu_assign_pointer(tcp_sk(nreq->sk)->fastopen_rsk, nreq);
 	}
-
-	if (rsk_is_mptcp(req))
-		mptcp_subflow_reqsk_clone(req, nreq);
 
 	return nreq;
 }
@@ -1033,6 +1050,7 @@ void inet_csk_reqsk_queue_drop_and_put(struct sock *sk, struct request_sock *req
 	inet_csk_reqsk_queue_drop(sk, req);
 	reqsk_put(req);
 }
+EXPORT_IPV6_MOD(inet_csk_reqsk_queue_drop_and_put);
 
 static void reqsk_timer_handler(struct timer_list *t)
 {
@@ -1101,27 +1119,23 @@ static void reqsk_timer_handler(struct timer_list *t)
 			young <<= 1;
 		}
 	}
-
 	syn_ack_recalc(req, max_syn_ack_retries, READ_ONCE(queue->rskq_defer_accept),
 		       &expire, &resend);
-	tcp_syn_ack_timeout(req);
-
+	req->rsk_ops->syn_ack_timeout(req);
 	if (!expire &&
 	    (!resend ||
 	     !tcp_rtx_synack(sk_listener, req) ||
 	     inet_rsk(req)->acked)) {
-		if (req->num_retrans > 1 && tcp_rsk(req)->accecn_ok)
-			tcp_rsk(req)->accecn_fail_mode |= TCP_ACCECN_ACE_FAIL_SEND;
 		if (req->num_timeout++ == 0)
 			atomic_dec(&queue->young);
-		mod_timer(&req->rsk_timer, jiffies + tcp_reqsk_timeout(req));
+		mod_timer(&req->rsk_timer, jiffies + reqsk_timeout(req, TCP_RTO_MAX));
 
 		if (!nreq)
 			return;
 
 		if (!inet_ehash_insert(req_to_sk(nreq), req_to_sk(oreq), NULL)) {
 			/* delete timer */
-			__inet_csk_reqsk_queue_drop(sk_listener, nreq, false);
+			__inet_csk_reqsk_queue_drop(sk_listener, nreq, true);
 			goto no_ownership;
 		}
 
@@ -1151,7 +1165,8 @@ drop:
 	reqsk_put(oreq);
 }
 
-static bool reqsk_queue_hash_req(struct request_sock *req)
+static bool reqsk_queue_hash_req(struct request_sock *req,
+				 unsigned long timeout)
 {
 	bool found_dup_sk = false;
 
@@ -1159,12 +1174,11 @@ static bool reqsk_queue_hash_req(struct request_sock *req)
 		return false;
 
 	/* The timer needs to be setup after a successful insertion. */
-	req->timeout = tcp_timeout_init((struct sock *)req);
 	timer_setup(&req->rsk_timer, reqsk_timer_handler, TIMER_PINNED);
 
 	preempt_disable_nested();
 
-	mod_timer(&req->rsk_timer, jiffies + req->timeout);
+	mod_timer(&req->rsk_timer, jiffies + timeout);
 
 	/* before letting lookups find us, make sure all req fields
 	 * are committed to memory and refcnt initialized.
@@ -1177,9 +1191,10 @@ static bool reqsk_queue_hash_req(struct request_sock *req)
 	return true;
 }
 
-bool inet_csk_reqsk_queue_hash_add(struct sock *sk, struct request_sock *req)
+bool inet_csk_reqsk_queue_hash_add(struct sock *sk, struct request_sock *req,
+				   unsigned long timeout)
 {
-	if (!reqsk_queue_hash_req(req))
+	if (!reqsk_queue_hash_req(req, timeout))
 		return false;
 
 	inet_csk_reqsk_queue_added(sk);
@@ -1211,7 +1226,7 @@ struct sock *inet_csk_clone_lock(const struct sock *sk,
 {
 	struct sock *newsk = sk_clone_lock(sk, priority);
 	struct inet_connection_sock *newicsk;
-	const struct inet_request_sock *ireq;
+	struct inet_request_sock *ireq;
 	struct inet_sock *newinet;
 
 	if (!newsk)
@@ -1257,7 +1272,6 @@ struct sock *inet_csk_clone_lock(const struct sock *sk,
 	memset(&newicsk->icsk_accept_queue, 0,
 	       sizeof(newicsk->icsk_accept_queue));
 
-	newicsk->unhashed_state = 0;
 	inet_sk_set_state(newsk, TCP_SYN_RECV);
 
 	inet_clone_ulp(req, newsk, priority);
@@ -1294,6 +1308,7 @@ void inet_csk_destroy_sock(struct sock *sk)
 
 	sock_put(sk);
 }
+EXPORT_SYMBOL(inet_csk_destroy_sock);
 
 void inet_csk_prepare_for_destroy_sock(struct sock *sk)
 {
@@ -1315,6 +1330,7 @@ void inet_csk_prepare_forced_close(struct sock *sk)
 	inet_csk_prepare_for_destroy_sock(sk);
 	inet_sk(sk)->inet_num = 0;
 }
+EXPORT_SYMBOL(inet_csk_prepare_forced_close);
 
 static int inet_ulp_can_listen(const struct sock *sk)
 {
@@ -1324,15 +1340,6 @@ static int inet_ulp_can_listen(const struct sock *sk)
 		return -EINVAL;
 
 	return 0;
-}
-
-static void reqsk_queue_alloc(struct request_sock_queue *queue)
-{
-	queue->fastopenq.rskq_rst_head = NULL;
-	queue->fastopenq.rskq_rst_tail = NULL;
-	queue->fastopenq.qlen = 0;
-
-	queue->rskq_accept_head = NULL;
 }
 
 int inet_csk_listen_start(struct sock *sk)
@@ -1418,6 +1425,7 @@ struct sock *inet_csk_reqsk_queue_add(struct sock *sk,
 	spin_unlock(&queue->rskq_lock);
 	return child;
 }
+EXPORT_SYMBOL(inet_csk_reqsk_queue_add);
 
 struct sock *inet_csk_complete_hashdance(struct sock *sk, struct sock *child,
 					 struct request_sock *req, bool own_req)
@@ -1542,6 +1550,7 @@ skip_child_forget:
 	}
 	WARN_ON_ONCE(sk->sk_ack_backlog);
 }
+EXPORT_SYMBOL_GPL(inet_csk_listen_stop);
 
 static struct dst_entry *inet_csk_rebuild_route(struct sock *sk, struct flowi *fl)
 {

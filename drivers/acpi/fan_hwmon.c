@@ -94,7 +94,7 @@ static int acpi_fan_hwmon_read(struct device *dev, enum hwmon_sensor_types type,
 	struct acpi_fan_fst fst;
 	int ret;
 
-	ret = acpi_fan_get_fst(fan->adev->handle, &fst);
+	ret = acpi_fan_get_fst(fan->handle, &fst);
 	if (ret < 0)
 		return ret;
 
@@ -162,19 +162,12 @@ static const struct hwmon_chip_info acpi_fan_hwmon_chip_info = {
 	.info = acpi_fan_hwmon_info,
 };
 
-void acpi_fan_notify_hwmon(struct device *dev)
-{
-	struct acpi_fan *fan = dev_get_drvdata(dev);
-
-	hwmon_notify_event(fan->hdev, hwmon_fan, hwmon_fan_input, 0);
-}
-
 int devm_acpi_fan_create_hwmon(struct device *dev)
 {
 	struct acpi_fan *fan = dev_get_drvdata(dev);
+	struct device *hdev;
 
-	fan->hdev = devm_hwmon_device_register_with_info(dev, "acpi_fan", fan,
-							 &acpi_fan_hwmon_chip_info, NULL);
-
-	return PTR_ERR_OR_ZERO(fan->hdev);
+	hdev = devm_hwmon_device_register_with_info(dev, "acpi_fan", fan, &acpi_fan_hwmon_chip_info,
+						    NULL);
+	return PTR_ERR_OR_ZERO(hdev);
 }

@@ -403,7 +403,6 @@ static void vhost_vq_reset(struct vhost_dev *dev,
 	vq->busyloop_timeout = 0;
 	vq->umem = NULL;
 	vq->iotlb = NULL;
-	vq->iotlb_miss = NULL;
 	rcu_assign_pointer(vq->worker, NULL);
 	vhost_vring_call_reset(&vq->call_ctx);
 	__vhost_vq_meta_reset(vq);
@@ -526,9 +525,13 @@ static long vhost_dev_alloc_iovecs(struct vhost_dev *dev)
 
 	for (i = 0; i < dev->nvqs; ++i) {
 		vq = dev->vqs[i];
-		vq->indirect = kmalloc_objs(*vq->indirect, UIO_MAXIOV);
-		vq->log = kmalloc_objs(*vq->log, dev->iov_limit);
-		vq->heads = kmalloc_objs(*vq->heads, dev->iov_limit);
+		vq->indirect = kmalloc_array(UIO_MAXIOV,
+					     sizeof(*vq->indirect),
+					     GFP_KERNEL);
+		vq->log = kmalloc_array(dev->iov_limit, sizeof(*vq->log),
+					GFP_KERNEL);
+		vq->heads = kmalloc_array(dev->iov_limit, sizeof(*vq->heads),
+					  GFP_KERNEL);
 		vq->nheads = kmalloc_array(dev->iov_limit, sizeof(*vq->nheads),
 					   GFP_KERNEL);
 		if (!vq->indirect || !vq->log || !vq->heads || !vq->nheads)
@@ -731,7 +734,7 @@ static void vhost_worker_destroy(struct vhost_dev *dev,
 	kfree(worker);
 }
 
-static void vhost_workers_free(struct vhost_dev *dev, bool sync)
+static void vhost_workers_free(struct vhost_dev *dev)
 {
 	struct vhost_worker *worker;
 	unsigned long i;
@@ -741,21 +744,6 @@ static void vhost_workers_free(struct vhost_dev *dev, bool sync)
 
 	for (i = 0; i < dev->nvqs; i++)
 		rcu_assign_pointer(dev->vqs[i]->worker, NULL);
-
-	/*
-	 * This path can be reached by lockless work queuers.  In this case
-	 * vhost_vq_work_queue() reads vq->worker under rcu_read_lock(), so a
-	 * RCU reader that fetched a worker before we cleared the pointers above
-	 * may still be queueing work on it.  Wait for those readers to finish,
-	 * then flush so any work they queued runs (clearing VHOST_WORK_QUEUED)
-	 * before the workers are freed.  Notably, that is the case for the
-	 * vsock RESET_OWNER path.
-	 */
-	if (sync) {
-		synchronize_rcu();
-		vhost_dev_flush(dev);
-	}
-
 	/*
 	 * Free the default worker we created and cleanup workers userspace
 	 * created but couldn't clean up (it forgot or crashed).
@@ -859,7 +847,7 @@ static struct vhost_worker *vhost_worker_create(struct vhost_dev *dev)
 	const struct vhost_worker_ops *ops = dev->fork_owner ? &vhost_task_ops :
 							       &kthread_ops;
 
-	worker = kzalloc_obj(*worker, GFP_KERNEL_ACCOUNT);
+	worker = kzalloc(sizeof(*worker), GFP_KERNEL_ACCOUNT);
 	if (!worker)
 		return NULL;
 
@@ -1178,12 +1166,11 @@ struct vhost_iotlb *vhost_dev_reset_owner_prepare(void)
 EXPORT_SYMBOL_GPL(vhost_dev_reset_owner_prepare);
 
 /* Caller should have device mutex */
-void vhost_dev_reset_owner(struct vhost_dev *dev, struct vhost_iotlb *umem,
-			   bool sync)
+void vhost_dev_reset_owner(struct vhost_dev *dev, struct vhost_iotlb *umem)
 {
 	int i;
 
-	vhost_dev_cleanup(dev, sync);
+	vhost_dev_cleanup(dev);
 
 	dev->fork_owner = fork_from_owner_default;
 	dev->umem = umem;
@@ -1208,21 +1195,6 @@ void vhost_dev_stop(struct vhost_dev *dev)
 }
 EXPORT_SYMBOL_GPL(vhost_dev_stop);
 
-static void vhost_free_msg_locked(struct vhost_msg_node *node)
-{
-	if (node->vq->iotlb_miss == node)
-		node->vq->iotlb_miss = NULL;
-	kfree(node);
-}
-
-static void vhost_free_msg(struct vhost_dev *dev,
-			   struct vhost_msg_node *node)
-{
-	spin_lock(&dev->iotlb_lock);
-	vhost_free_msg_locked(node);
-	spin_unlock(&dev->iotlb_lock);
-}
-
 void vhost_clear_msg(struct vhost_dev *dev)
 {
 	struct vhost_msg_node *node, *n;
@@ -1231,19 +1203,19 @@ void vhost_clear_msg(struct vhost_dev *dev)
 
 	list_for_each_entry_safe(node, n, &dev->read_list, node) {
 		list_del(&node->node);
-		vhost_free_msg_locked(node);
+		kfree(node);
 	}
 
 	list_for_each_entry_safe(node, n, &dev->pending_list, node) {
 		list_del(&node->node);
-		vhost_free_msg_locked(node);
+		kfree(node);
 	}
 
 	spin_unlock(&dev->iotlb_lock);
 }
 EXPORT_SYMBOL_GPL(vhost_clear_msg);
 
-void vhost_dev_cleanup(struct vhost_dev *dev, bool sync)
+void vhost_dev_cleanup(struct vhost_dev *dev)
 {
 	int i;
 
@@ -1267,7 +1239,7 @@ void vhost_dev_cleanup(struct vhost_dev *dev, bool sync)
 	dev->iotlb = NULL;
 	vhost_clear_msg(dev);
 	wake_up_interruptible_poll(&dev->wait, EPOLLIN | EPOLLRDNORM);
-	vhost_workers_free(dev, sync);
+	vhost_workers_free(dev);
 	vhost_detach_mm(dev);
 }
 EXPORT_SYMBOL_GPL(vhost_dev_cleanup);
@@ -1486,13 +1458,13 @@ static inline void __user *__vhost_get_user(struct vhost_virtqueue *vq,
 ({ \
 	int ret; \
 	if (!vq->iotlb) { \
-		ret = put_user(x, ptr); \
+		ret = __put_user(x, ptr); \
 	} else { \
 		__typeof__(ptr) to = \
 			(__typeof__(ptr)) __vhost_get_user(vq, ptr,	\
 					  sizeof(*ptr), VHOST_ADDR_USED); \
 		if (to != NULL) \
-			ret = put_user(x, to); \
+			ret = __put_user(x, to); \
 		else \
 			ret = -EFAULT;	\
 	} \
@@ -1531,14 +1503,14 @@ static inline int vhost_put_used_idx(struct vhost_virtqueue *vq)
 ({ \
 	int ret; \
 	if (!vq->iotlb) { \
-		ret = get_user(x, ptr); \
+		ret = __get_user(x, ptr); \
 	} else { \
 		__typeof__(ptr) from = \
 			(__typeof__(ptr)) __vhost_get_user(vq, ptr, \
 							   sizeof(*ptr), \
 							   type); \
 		if (from != NULL) \
-			ret = get_user(x, from); \
+			ret = __get_user(x, from); \
 		else \
 			ret = -EFAULT; \
 	} \
@@ -1645,7 +1617,7 @@ static void vhost_iotlb_notify_vq(struct vhost_dev *d,
 		    vq_msg->type == VHOST_IOTLB_MISS) {
 			vhost_poll_queue(&node->vq->poll);
 			list_del(&node->node);
-			vhost_free_msg_locked(node);
+			kfree(node);
 		}
 	}
 
@@ -1701,10 +1673,6 @@ static int vhost_process_iotlb_msg(struct vhost_dev *dev, u32 asid,
 	case VHOST_IOTLB_INVALIDATE:
 		if (!dev->iotlb) {
 			ret = -EFAULT;
-			break;
-		}
-		if (!msg->size) {
-			ret = -EINVAL;
 			break;
 		}
 		vhost_vq_meta_reset(dev);
@@ -1859,7 +1827,7 @@ ssize_t vhost_chr_read_iter(struct vhost_dev *dev, struct iov_iter *to,
 
 		ret = copy_to_iter(start, size, to);
 		if (ret != size || msg->type != VHOST_IOTLB_MISS) {
-			vhost_free_msg(dev, node);
+			kfree(node);
 			return ret;
 		}
 		vhost_enqueue_msg(dev, &dev->pending_list, node);
@@ -1891,19 +1859,7 @@ static int vhost_iotlb_miss(struct vhost_virtqueue *vq, u64 iova, int access)
 	msg->iova = iova;
 	msg->perm = access;
 
-	spin_lock(&dev->iotlb_lock);
-	/* VQ processing stops at the first miss until userspace resolves it. */
-	if (vq->iotlb_miss) {
-		spin_unlock(&dev->iotlb_lock);
-		kfree(node);
-		return 0;
-	}
-
-	vq->iotlb_miss = node;
-	list_add_tail(&node->node, &dev->read_list);
-	spin_unlock(&dev->iotlb_lock);
-
-	wake_up_interruptible_poll(&dev->wait, EPOLLIN | EPOLLRDNORM);
+	vhost_enqueue_msg(dev, &dev->read_list, node);
 
 	return 0;
 }
@@ -2052,7 +2008,8 @@ static long vhost_set_memory(struct vhost_dev *d, struct vhost_memory __user *m)
 		return -E2BIG;
 	if (max_iotlb_entries <= 0)
 		return -EINVAL;
-	newmem = kvzalloc_flex(*newmem, regions, mem.nregions);
+	newmem = kvzalloc(struct_size(newmem, regions, mem.nregions),
+			GFP_KERNEL);
 	if (!newmem)
 		return -ENOMEM;
 
@@ -3389,7 +3346,7 @@ EXPORT_SYMBOL_GPL(vhost_disable_notify);
 struct vhost_msg_node *vhost_new_msg(struct vhost_virtqueue *vq, int type)
 {
 	/* Make sure all padding within the structure is initialized. */
-	struct vhost_msg_node *node = kzalloc_obj(*node);
+	struct vhost_msg_node *node = kzalloc(sizeof(*node), GFP_KERNEL);
 	if (!node)
 		return NULL;
 
@@ -3442,6 +3399,18 @@ void vhost_set_backend_features(struct vhost_dev *dev, u64 features)
 	mutex_unlock(&dev->mutex);
 }
 EXPORT_SYMBOL_GPL(vhost_set_backend_features);
+
+static int __init vhost_init(void)
+{
+	return 0;
+}
+
+static void __exit vhost_exit(void)
+{
+}
+
+module_init(vhost_init);
+module_exit(vhost_exit);
 
 MODULE_VERSION("0.0.1");
 MODULE_LICENSE("GPL v2");

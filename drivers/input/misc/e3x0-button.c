@@ -78,6 +78,7 @@ static int e3x0_button_probe(struct platform_device *pdev)
 
 	input->name = "NI Ettus Research USRP E3x0 Button Driver";
 	input->phys = "e3x0_button/input0";
+	input->dev.parent = &pdev->dev;
 
 	input_set_capability(input, EV_KEY, KEY_POWER);
 

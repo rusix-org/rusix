@@ -204,9 +204,9 @@ but do not see any change in your workload's behavior.  Is this because
 your workload isn't affected that much by OS jitter, or is it because
 something else is in the way?  This section helps answer this question
 by providing a simple OS-jitter test suite, which is available on branch
-master of the following git repository:
+master of the following git archive:
 
-https://git.kernel.org/pub/scm/linux/kernel/git/frederic/cpunoise.git
+git://git.kernel.org/pub/scm/linux/kernel/git/frederic/dynticks-testing.git
 
 Clone this archive and follow the instructions in the README file.
 This test procedure will produce a trace that will allow you to evaluate

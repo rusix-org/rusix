@@ -78,6 +78,7 @@ static struct clock_event_device ce_broadcast_hrtimer = {
 	.set_state_shutdown	= bc_shutdown,
 	.set_next_ktime		= bc_set_next,
 	.features		= CLOCK_EVT_FEAT_ONESHOT |
+				  CLOCK_EVT_FEAT_KTIME |
 				  CLOCK_EVT_FEAT_HRTIMER,
 	.rating			= 0,
 	.bound_on		= -1,

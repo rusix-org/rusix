@@ -42,7 +42,6 @@
 #include <linux/semaphore.h>
 #include <linux/io.h>
 #include <linux/uaccess.h>
-#include <linux/stringify.h>
 
 #define SC1200_MODULE_VER	"build 20020303"
 #define SC1200_MODULE_NAME	"sc1200wdt"
@@ -93,7 +92,7 @@ static bool nowayout = WATCHDOG_NOWAYOUT;
 module_param(nowayout, bool, 0);
 MODULE_PARM_DESC(nowayout,
 	"Watchdog cannot be stopped once started (default="
-				__stringify(WATCHDOG_NOWAYOUT) ")");
+				__MODULE_STRING(WATCHDOG_NOWAYOUT) ")");
 
 
 
@@ -340,8 +339,8 @@ static int __init sc1200wdt_probe(void)
 
 static const struct pnp_device_id scl200wdt_pnp_devices[] = {
 	/* National Semiconductor PC87307/PC97307 watchdog component */
-	{ .id = "NSC0800" },
-	{ }
+	{.id = "NSC0800", .driver_data = 0},
+	{.id = ""},
 };
 
 static int scl200wdt_pnp_probe(struct pnp_dev *dev,

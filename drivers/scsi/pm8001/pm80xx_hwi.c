@@ -1570,7 +1570,7 @@ void pm80xx_fatal_error_uevent_emit(struct pm8001_hba_info *pm8001_ha,
 
 	pm8001_dbg(pm8001_ha, FAIL, "emitting fatal error uevent");
 
-	env = kzalloc_obj(struct kobj_uevent_env);
+	env = kzalloc(sizeof(struct kobj_uevent_env), GFP_KERNEL);
 	if (!env)
 		return;
 
@@ -3296,7 +3296,7 @@ hw_event_sata_phy_up(struct pm8001_hba_info *pm8001_ha, void *piomb)
 	phy->sas_phy.oob_mode = SATA_OOB_MODE;
 	sas_notify_phy_event(&phy->sas_phy, PHYE_OOB_DONE, GFP_ATOMIC);
 	spin_lock_irqsave(&phy->sas_phy.frame_rcvd_lock, flags);
-	memcpy(phy->frame_rcvd, &pPayload->sata_fis,
+	memcpy(phy->frame_rcvd, ((u8 *)&pPayload->sata_fis - 4),
 		sizeof(struct dev_to_host_fis));
 	phy->frame_rcvd_size = sizeof(struct dev_to_host_fis);
 	phy->identify.target_port_protocols = SAS_PROTOCOL_SATA;

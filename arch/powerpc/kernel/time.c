@@ -615,13 +615,13 @@ DEFINE_INTERRUPT_HANDLER_ASYNC(timer_interrupt)
 	now = get_tb();
 	if (now >= *next_tb) {
 		evt->event_handler(evt);
-		inc_irq_stat(LOC_TIMER);
+		__this_cpu_inc(irq_stat.timer_irqs_event);
 	} else {
 		now = *next_tb - now;
 		if (now > decrementer_max)
 			now = decrementer_max;
 		set_dec_or_work(now);
-		inc_irq_stat(OTHER_TIMER);
+		__this_cpu_inc(irq_stat.timer_irqs_others);
 	}
 
 	trace_timer_interrupt_exit(regs);
@@ -634,7 +634,7 @@ EXPORT_SYMBOL(timer_interrupt);
 void timer_broadcast_interrupt(void)
 {
 	tick_receive_broadcast();
-	inc_irq_stat(BCT_TIMER);
+	__this_cpu_inc(irq_stat.broadcast_irqs_event);
 }
 #endif
 

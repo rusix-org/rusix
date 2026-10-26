@@ -10,6 +10,7 @@
 #include <linux/device.h>
 #include <linux/interrupt.h>
 #include <linux/module.h>
+#include <linux/mod_devicetable.h>
 #include <linux/dma-mapping.h>
 #include <linux/platform_device.h>
 #include <linux/videodev2.h>
@@ -200,7 +201,7 @@ struct vdoa_ctx *vdoa_context_create(struct vdoa_data *vdoa)
 	struct vdoa_ctx *ctx;
 	int err;
 
-	ctx = kzalloc_obj(*ctx);
+	ctx = kzalloc(sizeof(*ctx), GFP_KERNEL);
 	if (!ctx)
 		return NULL;
 

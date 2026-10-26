@@ -1,12 +1,11 @@
 /* SPDX-License-Identifier: GPL-2.0 */
-#include <errno.h>
 #include <inttypes.h>
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 
 #include "dwarf-regs.h" /* for EM_HOST */
-#include "trace/beauty/syscalltbl.h"
+#include "syscalltbl.h"
 #include "util/cgroup.h"
 #include "util/hashmap.h"
 #include "util/trace.h"

@@ -24,9 +24,11 @@ static int sl3516_ce_rng_read(struct hwrng *rng, void *buf, size_t max, bool wai
 	ce->hwrng_stat_bytes += max;
 #endif
 
-	err = pm_runtime_resume_and_get(ce->dev);
-	if (err < 0)
+	err = pm_runtime_get_sync(ce->dev);
+	if (err < 0) {
+		pm_runtime_put_noidle(ce->dev);
 		return err;
+	}
 
 	while (read < max) {
 		*data = readl(ce->base + IPSEC_RAND_NUM_REG);

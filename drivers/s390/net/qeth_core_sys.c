@@ -7,7 +7,8 @@
  *		 Frank Blaschka <frank.blaschka@de.ibm.com>
  */
 
-#define pr_fmt(fmt) "qeth: " fmt
+#define KMSG_COMPONENT "qeth"
+#define pr_fmt(fmt) KMSG_COMPONENT ": " fmt
 
 #include <linux/list.h>
 #include <linux/rwsem.h>

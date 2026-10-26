@@ -28,9 +28,11 @@
 #include <linux/errno.h>
 #include <linux/slab.h>
 #include <linux/tty.h>
+#include <linux/tty_driver.h>
 #include <linux/tty_flip.h>
 #include <linux/module.h>
 #include <linux/spinlock.h>
+#include <linux/uaccess.h>
 #include <linux/usb.h>
 #include <linux/usb/serial.h>
 
@@ -99,7 +101,7 @@ static int cyberjack_port_probe(struct usb_serial_port *port)
 	struct cyberjack_private *priv;
 	int result;
 
-	priv = kmalloc_obj(struct cyberjack_private);
+	priv = kmalloc(sizeof(struct cyberjack_private), GFP_KERNEL);
 	if (!priv)
 		return -ENOMEM;
 

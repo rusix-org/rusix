@@ -179,8 +179,7 @@ static int rockchip_mmc_set_phase(struct dw_mci *host, bool sample, int degrees)
 static void dw_mci_rk3288_set_ios(struct dw_mci *host, struct mmc_ios *ios)
 {
 	struct dw_mci_rockchip_priv_data *priv = host->priv;
-	struct mmc_clk_phase phase = host->phase_map.phase[ios->timing];
-	int ret, sample_phase, drv_phase;
+	int ret;
 	unsigned int cclkin;
 	u32 bus_hz;
 
@@ -214,15 +213,8 @@ static void dw_mci_rk3288_set_ios(struct dw_mci *host, struct mmc_ios *ios)
 	}
 
 	/* Make sure we use phases which we can enumerate with */
-	if (!IS_ERR(priv->sample_clk)) {
-		/* Keep backward compatibility */
-		if (ios->timing <= MMC_TIMING_SD_HS) {
-			sample_phase = phase.valid ? phase.in_deg : priv->default_sample_phase;
-			rockchip_mmc_set_phase(host, true, sample_phase);
-		} else if (phase.valid) {
-			rockchip_mmc_set_phase(host, true, phase.in_deg);
-		}
-	}
+	if (!IS_ERR(priv->sample_clk) && ios->timing <= MMC_TIMING_SD_HS)
+		rockchip_mmc_set_phase(host, true, priv->default_sample_phase);
 
 	/*
 	 * Set the drive phase offset based on speed mode to achieve hold times.
@@ -251,13 +243,15 @@ static void dw_mci_rk3288_set_ios(struct dw_mci *host, struct mmc_ios *ios)
 	 * same results, for instance).
 	 */
 	if (!IS_ERR(priv->drv_clk)) {
+		int phase;
+
 		/*
 		 * In almost all cases a 90 degree phase offset will provide
 		 * sufficient hold times across all valid input clock rates
 		 * assuming delay_o is not absurd for a given SoC.  We'll use
 		 * that as a default.
 		 */
-		drv_phase = 90;
+		phase = 90;
 
 		switch (ios->timing) {
 		case MMC_TIMING_MMC_DDR52:
@@ -267,7 +261,7 @@ static void dw_mci_rk3288_set_ios(struct dw_mci *host, struct mmc_ios *ios)
 			 * to get the same timings.
 			 */
 			if (ios->bus_width == MMC_BUS_WIDTH_8)
-				drv_phase = 180;
+				phase = 180;
 			break;
 		case MMC_TIMING_UHS_SDR104:
 		case MMC_TIMING_MMC_HS200:
@@ -279,24 +273,22 @@ static void dw_mci_rk3288_set_ios(struct dw_mci *host, struct mmc_ios *ios)
 			 * SoCs measured this seems to be OK, but it doesn't
 			 * hurt to give margin here, so we use 180.
 			 */
-			drv_phase = 180;
+			phase = 180;
 			break;
 		}
 
-		/* Use out phase from phase map first */
-		if (phase.valid)
-			drv_phase = phase.out_deg;
-		rockchip_mmc_set_phase(host, false, drv_phase);
+		rockchip_mmc_set_phase(host, false, phase);
 	}
 }
 
 #define TUNING_ITERATION_TO_PHASE(i, num_phases) \
 		(DIV_ROUND_UP((i) * 360, num_phases))
 
-static int dw_mci_rk3288_execute_tuning(struct dw_mci *host, u32 opcode)
+static int dw_mci_rk3288_execute_tuning(struct dw_mci_slot *slot, u32 opcode)
 {
+	struct dw_mci *host = slot->host;
 	struct dw_mci_rockchip_priv_data *priv = host->priv;
-	struct mmc_host *mmc = host->mmc;
+	struct mmc_host *mmc = slot->mmc;
 	int ret = 0;
 	int i;
 	bool v, prev_v = 0, first_v;
@@ -316,7 +308,8 @@ static int dw_mci_rk3288_execute_tuning(struct dw_mci *host, u32 opcode)
 		return -EIO;
 	}
 
-	ranges = kmalloc_objs(*ranges, priv->num_phases / 2 + 1);
+	ranges = kmalloc_array(priv->num_phases / 2 + 1,
+			       sizeof(*ranges), GFP_KERNEL);
 	if (!ranges)
 		return -ENOMEM;
 
@@ -327,7 +320,7 @@ static int dw_mci_rk3288_execute_tuning(struct dw_mci *host, u32 opcode)
 						i,
 						priv->num_phases));
 
-		v = !mmc_send_tuning_timeout(mmc, opcode, NULL, 5);
+		v = !mmc_send_tuning(mmc, opcode, NULL);
 
 		if (i == 0)
 			first_v = v;
@@ -500,8 +493,8 @@ static int dw_mci_rockchip_init(struct dw_mci *host)
 	struct dw_mci_rockchip_priv_data *priv = host->priv;
 	int ret, i;
 
-	/* SDIO irq is the 8th on Rockchip SoCs */
-	host->sdio_irq = 8;
+	/* It is slot 8 on Rockchip SoCs */
+	host->sdio_id0 = 8;
 
 	if (of_device_is_compatible(host->dev->of_node, "rockchip,rk3288-dw-mshc")) {
 		host->bus_hz /= RK3288_CLKGEN_DIV;

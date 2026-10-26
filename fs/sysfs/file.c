@@ -70,8 +70,9 @@ static int sysfs_kf_seq_show(struct seq_file *sf, void *v)
 	 * The code works fine with PAGE_SIZE return but it's likely to
 	 * indicate truncated result or overflow in normal use cases.
 	 */
-	if (count >= PAGE_SIZE) {
-		WARN(1, "OOB write or bad count %zd at %pS\n", count, ops->show);
+	if (count >= (ssize_t)PAGE_SIZE) {
+		printk("fill_read_buffer: %pS returned bad count\n",
+				ops->show);
 		/* Try to struggle along */
 		count = PAGE_SIZE - 1;
 	}
@@ -275,7 +276,7 @@ static const struct kernfs_ops sysfs_bin_kfops_mmap = {
 
 int sysfs_add_file_mode_ns(struct kernfs_node *parent,
 		const struct attribute *attr, umode_t mode, kuid_t uid,
-		kgid_t gid, const struct ns_common *ns)
+		kgid_t gid, const void *ns)
 {
 	struct kobject *kobj = parent->priv;
 	const struct sysfs_ops *sysfs_ops = kobj->ktype->sysfs_ops;
@@ -325,7 +326,7 @@ int sysfs_add_file_mode_ns(struct kernfs_node *parent,
 
 int sysfs_add_bin_file_mode_ns(struct kernfs_node *parent,
 		const struct bin_attribute *battr, umode_t mode, size_t size,
-		kuid_t uid, kgid_t gid, const struct ns_common *ns)
+		kuid_t uid, kgid_t gid, const void *ns)
 {
 	const struct attribute *attr = &battr->attr;
 	struct lock_class_key *key = NULL;
@@ -365,7 +366,7 @@ int sysfs_add_bin_file_mode_ns(struct kernfs_node *parent,
  * @ns: namespace the new file should belong to
  */
 int sysfs_create_file_ns(struct kobject *kobj, const struct attribute *attr,
-			 const struct ns_common *ns)
+			 const void *ns)
 {
 	kuid_t uid;
 	kgid_t gid;
@@ -508,7 +509,7 @@ EXPORT_SYMBOL_GPL(sysfs_unbreak_active_protection);
  * Hash the attribute name and namespace tag and kill the victim.
  */
 void sysfs_remove_file_ns(struct kobject *kobj, const struct attribute *attr,
-			  const struct ns_common *ns)
+			  const void *ns)
 {
 	struct kernfs_node *parent = kobj->sd;
 
@@ -692,6 +693,7 @@ int sysfs_file_change_owner(struct kobject *kobj, const char *name, kuid_t kuid,
 
 	return error;
 }
+EXPORT_SYMBOL_GPL(sysfs_file_change_owner);
 
 /**
  *	sysfs_change_owner - change owner of the given object.
@@ -738,6 +740,7 @@ int sysfs_change_owner(struct kobject *kobj, kuid_t kuid, kgid_t kgid)
 
 	return 0;
 }
+EXPORT_SYMBOL_GPL(sysfs_change_owner);
 
 /**
  *	sysfs_emit - scnprintf equivalent, aware of PAGE_SIZE buffer.

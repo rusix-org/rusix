@@ -3,8 +3,8 @@
  * Copyright © 2022 Intel Corporation
  */
 
-#ifndef _XE_PLATFORM_TYPES_H_
-#define _XE_PLATFORM_TYPES_H_
+#ifndef _XE_PLATFORM_INFO_TYPES_H_
+#define _XE_PLATFORM_INFO_TYPES_H_
 
 /*
  * Keep this in graphics version based order and chronological order within a
@@ -24,9 +24,6 @@ enum xe_platform {
 	XE_LUNARLAKE,
 	XE_BATTLEMAGE,
 	XE_PANTHERLAKE,
-	XE_NOVALAKE_S,
-	XE_CRESCENTISLAND,
-	XE_NOVALAKE_P,
 };
 
 enum xe_subplatform {
@@ -37,7 +34,6 @@ enum xe_subplatform {
 	XE_SUBPLATFORM_DG2_G10,
 	XE_SUBPLATFORM_DG2_G11,
 	XE_SUBPLATFORM_DG2_G12,
-	XE_SUBPLATFORM_BATTLEMAGE_G21,
 };
 
 #endif

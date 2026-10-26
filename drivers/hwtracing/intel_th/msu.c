@@ -236,7 +236,7 @@ int intel_th_msu_buffer_register(const struct msu_buffer *mbuf,
 	struct msu_buffer_entry *mbe;
 	int ret = 0;
 
-	mbe = kzalloc_obj(*mbe);
+	mbe = kzalloc(sizeof(*mbe), GFP_KERNEL);
 	if (!mbe)
 		return -ENOMEM;
 
@@ -450,7 +450,7 @@ static struct msc_iter *msc_iter_install(struct msc *msc)
 {
 	struct msc_iter *iter;
 
-	iter = kzalloc_obj(*iter);
+	iter = kzalloc(sizeof(*iter), GFP_KERNEL);
 	if (!iter)
 		return ERR_PTR(-ENOMEM);
 
@@ -1105,7 +1105,7 @@ static int msc_buffer_win_alloc(struct msc *msc, unsigned int nr_blocks)
 	if (!nr_blocks)
 		return 0;
 
-	win = kzalloc_obj(*win);
+	win = kzalloc(sizeof(*win), GFP_KERNEL);
 	if (!win)
 		return -ENOMEM;
 

@@ -1,8 +1,8 @@
 # Phase 1 delivery gates
 
 [ADR 0002](adr/0002.md) defines the target and Linux 6.18.58 behavioral baseline.
-The current engineering tree and its evidence still use `21a7f44fd076`; an LTS
-transition requires reviewed source changes and new results. Gate completion is
+The integration tree uses that baseline; earlier engineering results remain
+attributed to their original commits. Gate completion is
 observed evidence, not checked-in plans. See [PROGRESS.md](../PROGRESS.md).
 
 ## Phase 1a — Working x86_64 Rust BRD system
@@ -36,7 +36,7 @@ behavioral departures require recorded decisions; do not weaken tests silently.
 
 ## Sequence and limitations
 
-Finish the baseline/container/CI work, establish C workloads, review reusable
+Finish the baseline/container/local verification work, establish C workloads, review reusable
 upstream abstractions, implement Rust BRD and run paired tests, then complete the
 1b matrix and budgets. Immediately after BRD, start the executable core ownership
 spike in [ROADMAP.md](ROADMAP.md), rather than an indefinite sequence of drivers.

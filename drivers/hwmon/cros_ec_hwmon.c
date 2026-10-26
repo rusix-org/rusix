@@ -9,6 +9,7 @@
 #include <linux/device.h>
 #include <linux/hwmon.h>
 #include <linux/math.h>
+#include <linux/mod_devicetable.h>
 #include <linux/module.h>
 #include <linux/platform_device.h>
 #include <linux/platform_data/cros_ec_commands.h>
@@ -88,20 +89,6 @@ static int cros_ec_hwmon_read_pwm_enable(struct cros_ec_device *cros_ec, u8 inde
 	return 0;
 }
 
-static int cros_ec_hwmon_read_fan_target(struct cros_ec_device *cros_ec, u16 *speed)
-{
-	struct ec_response_pwm_get_fan_rpm resp;
-	int ret;
-
-	ret = cros_ec_cmd(cros_ec, 0, EC_CMD_PWM_GET_FAN_TARGET_RPM,
-			  NULL, 0, &resp, sizeof(resp));
-	if (ret < 0)
-		return ret;
-
-	*speed = resp.rpm;
-	return 0;
-}
-
 static int cros_ec_hwmon_read_temp(struct cros_ec_device *cros_ec, u8 index, u8 *temp)
 {
 	unsigned int offset;
@@ -148,17 +135,9 @@ static bool cros_ec_hwmon_is_error_temp(u8 temp)
 	       temp == EC_TEMP_SENSOR_NOT_CALIBRATED;
 }
 
-/* This differs slightly from the variant in units.h to avoid rounding inconsistencies. */
-#define CROS_EC_HWMON_ABSOLUTE_ZERO_MILLICELSIUS (-273000)
-
-static long cros_ec_hwmon_kelvin_to_millicelsius(long t)
-{
-	return t * MILLIDEGREE_PER_DEGREE + CROS_EC_HWMON_ABSOLUTE_ZERO_MILLICELSIUS;
-}
-
 static long cros_ec_hwmon_temp_to_millicelsius(u8 temp)
 {
-	return cros_ec_hwmon_kelvin_to_millicelsius((((long)temp) + EC_TEMP_SENSOR_OFFSET));
+	return kelvin_to_millicelsius((((long)temp) + EC_TEMP_SENSOR_OFFSET));
 }
 
 static bool cros_ec_hwmon_attr_is_temp_threshold(u32 attr)
@@ -201,11 +180,6 @@ static int cros_ec_hwmon_read(struct device *dev, enum hwmon_sensor_types type,
 			ret = cros_ec_hwmon_read_fan_speed(priv->cros_ec, channel, &speed);
 			if (ret == 0)
 				*val = cros_ec_hwmon_is_error_fan(speed);
-
-		} else if (attr == hwmon_fan_target) {
-			ret = cros_ec_hwmon_read_fan_target(priv->cros_ec, &speed);
-			if (ret == 0)
-				*val = speed;
 		}
 	} else if (type == hwmon_pwm) {
 		if (attr == hwmon_pwm_enable) {
@@ -236,13 +210,8 @@ static int cros_ec_hwmon_read(struct device *dev, enum hwmon_sensor_types type,
 			ret = cros_ec_hwmon_read_temp_threshold(priv->cros_ec, channel,
 								cros_ec_hwmon_attr_to_thres(attr),
 								&threshold);
-			if (ret == 0) {
-				/* Limit to sensible, non-overflowing values. */
-				if (threshold > 255 + 273)
-					*val = 255000;
-				else
-					*val = cros_ec_hwmon_kelvin_to_millicelsius(threshold);
-			}
+			if (ret == 0)
+				*val = kelvin_to_millicelsius(threshold);
 		}
 	}
 
@@ -334,13 +303,8 @@ static umode_t cros_ec_hwmon_is_visible(const void *data, enum hwmon_sensor_type
 					u32 attr, int channel)
 {
 	const struct cros_ec_hwmon_priv *priv = data;
-	u16 speed;
 
 	if (type == hwmon_fan) {
-		if (attr == hwmon_fan_target &&
-		    cros_ec_hwmon_read_fan_target(priv->cros_ec, &speed) == -EOPNOTSUPP)
-			return 0;
-
 		if (priv->usable_fans & BIT(channel))
 			return 0444;
 	} else if (type == hwmon_pwm) {
@@ -363,7 +327,7 @@ static umode_t cros_ec_hwmon_is_visible(const void *data, enum hwmon_sensor_type
 static const struct hwmon_channel_info * const cros_ec_hwmon_info[] = {
 	HWMON_CHANNEL_INFO(chip, HWMON_C_REGISTER_TZ),
 	HWMON_CHANNEL_INFO(fan,
-			   HWMON_F_INPUT | HWMON_F_FAULT | HWMON_F_TARGET,
+			   HWMON_F_INPUT | HWMON_F_FAULT,
 			   HWMON_F_INPUT | HWMON_F_FAULT,
 			   HWMON_F_INPUT | HWMON_F_FAULT,
 			   HWMON_F_INPUT | HWMON_F_FAULT),
@@ -550,8 +514,8 @@ static void cros_ec_hwmon_register_fan_cooling_devices(struct device *dev,
 
 		cpriv->hwmon_priv = priv;
 		cpriv->index = i;
-		cdev = devm_thermal_cooling_device_register(dev, type, cpriv,
-							    &cros_ec_thermal_cooling_ops);
+		cdev = devm_thermal_of_cooling_device_register(dev, NULL, type, cpriv,
+							       &cros_ec_thermal_cooling_ops);
 		if (IS_ERR(cdev)) {
 			dev_warn(dev, "failed to register fan %zu as a cooling device: %pe\n", i,
 				 cdev);
@@ -675,10 +639,9 @@ static int cros_ec_hwmon_resume(struct platform_device *pdev)
 }
 
 static const struct platform_device_id cros_ec_hwmon_id[] = {
-	{ .name = DRV_NAME },
-	{ }
+	{ DRV_NAME, 0 },
+	{}
 };
-MODULE_DEVICE_TABLE(platform, cros_ec_hwmon_id);
 
 static struct platform_driver cros_ec_hwmon_driver = {
 	.driver.name	= DRV_NAME,
@@ -689,6 +652,7 @@ static struct platform_driver cros_ec_hwmon_driver = {
 };
 module_platform_driver(cros_ec_hwmon_driver);
 
+MODULE_DEVICE_TABLE(platform, cros_ec_hwmon_id);
 MODULE_DESCRIPTION("ChromeOS EC Hardware Monitoring Driver");
 MODULE_AUTHOR("Thomas Weißschuh <linux@weissschuh.net");
 MODULE_LICENSE("GPL");

@@ -528,12 +528,13 @@ static size_t fsi_spi_max_transfer_size(struct spi_device *spi)
 	return SPI_FSI_MAX_RX_SIZE;
 }
 
-static int fsi_spi_probe(struct fsi_device *fsi)
+static int fsi_spi_probe(struct device *dev)
 {
 	int rc;
+	struct device_node *np;
 	int num_controllers_registered = 0;
 	struct fsi2spi *bridge;
-	struct device *dev = &fsi->dev;
+	struct fsi_device *fsi = to_fsi_dev(dev);
 
 	rc = fsi_spi_check_mux(fsi, dev);
 	if (rc)
@@ -546,7 +547,7 @@ static int fsi_spi_probe(struct fsi_device *fsi)
 	bridge->fsi = fsi;
 	mutex_init(&bridge->lock);
 
-	for_each_available_child_of_node_scoped(dev->of_node, np) {
+	for_each_available_child_of_node(dev->of_node, np) {
 		u32 base;
 		struct fsi_spi *ctx;
 		struct spi_controller *ctlr;
@@ -554,9 +555,11 @@ static int fsi_spi_probe(struct fsi_device *fsi)
 		if (of_property_read_u32(np, "reg", &base))
 			continue;
 
-		ctlr = devm_spi_alloc_host(dev, sizeof(*ctx));
-		if (!ctlr)
+		ctlr = spi_alloc_host(dev, sizeof(*ctx));
+		if (!ctlr) {
+			of_node_put(np);
 			break;
+		}
 
 		ctlr->dev.of_node = np;
 		ctlr->num_chipselect = of_get_available_child_count(np) ?: 1;
@@ -571,9 +574,9 @@ static int fsi_spi_probe(struct fsi_device *fsi)
 
 		rc = devm_spi_register_controller(dev, ctlr);
 		if (rc)
-			continue;
-
-		num_controllers_registered++;
+			spi_controller_put(ctlr);
+		else
+			num_controllers_registered++;
 	}
 
 	if (!num_controllers_registered)
@@ -590,9 +593,10 @@ MODULE_DEVICE_TABLE(fsi, fsi_spi_ids);
 
 static struct fsi_driver fsi_spi_driver = {
 	.id_table = fsi_spi_ids,
-	.probe = fsi_spi_probe,
 	.drv = {
 		.name = "spi-fsi",
+		.bus = &fsi_bus_type,
+		.probe = fsi_spi_probe,
 	},
 };
 module_fsi_driver(fsi_spi_driver);

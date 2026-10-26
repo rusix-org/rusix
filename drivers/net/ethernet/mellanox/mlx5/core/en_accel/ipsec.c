@@ -36,6 +36,7 @@
 #include <linux/inetdevice.h>
 #include <linux/netdevice.h>
 #include <net/netevent.h>
+#include <net/ipv6_stubs.h>
 
 #include "en.h"
 #include "eswitch.h"
@@ -364,9 +365,9 @@ static void mlx5e_ipsec_init_macs(struct mlx5e_ipsec_sa_entry *sa_entry,
 	return;
 
 neigh:
-	n = ipv4_neigh_lookup(netdev, pkey);
+	n = neigh_lookup(&arp_tbl, pkey, netdev);
 	if (!n) {
-		n = ipv4_neigh_create(netdev, pkey);
+		n = neigh_create(&arp_tbl, pkey, netdev);
 		if (IS_ERR(n))
 			return;
 		neigh_event_send(n, NULL);
@@ -710,20 +711,21 @@ static int mlx5_ipsec_create_work(struct mlx5e_ipsec_sa_entry *sa_entry)
 		break;
 	}
 
-	work = kzalloc_obj(*work);
+	work = kzalloc(sizeof(*work), GFP_KERNEL);
 	if (!work)
 		return -ENOMEM;
 
 	switch (x->xso.type) {
 	case XFRM_DEV_OFFLOAD_CRYPTO:
-		data = kzalloc_obj(*sa_entry);
+		data = kzalloc(sizeof(*sa_entry), GFP_KERNEL);
 		if (!data)
 			goto free_work;
 
 		INIT_WORK(&work->work, mlx5e_ipsec_modify_state);
 		break;
 	case XFRM_DEV_OFFLOAD_PACKET:
-		data = kzalloc_obj(struct mlx5e_ipsec_netevent_data);
+		data = kzalloc(sizeof(struct mlx5e_ipsec_netevent_data),
+			       GFP_KERNEL);
 		if (!data)
 			goto free_work;
 
@@ -757,7 +759,7 @@ static int mlx5e_ipsec_create_dwork(struct mlx5e_ipsec_sa_entry *sa_entry)
 	    x->lft.hard_byte_limit == XFRM_INF)
 		return 0;
 
-	dwork = kzalloc_obj(*dwork);
+	dwork = kzalloc(sizeof(*dwork), GFP_KERNEL);
 	if (!dwork)
 		return -ENOMEM;
 
@@ -784,7 +786,7 @@ static int mlx5e_xfrm_add_state(struct net_device *dev,
 
 	ipsec = priv->ipsec;
 	gfp = (x->xso.flags & XFRM_DEV_OFFLOAD_FLAG_ACQ) ? GFP_ATOMIC : GFP_KERNEL;
-	sa_entry = kzalloc_obj(*sa_entry, gfp);
+	sa_entry = kzalloc(sizeof(*sa_entry), gfp);
 	if (!sa_entry)
 		return -ENOMEM;
 
@@ -987,7 +989,7 @@ void mlx5e_ipsec_init(struct mlx5e_priv *priv)
 		return;
 	}
 
-	ipsec = kzalloc_obj(*ipsec);
+	ipsec = kzalloc(sizeof(*ipsec), GFP_KERNEL);
 	if (!ipsec)
 		return;
 
@@ -1275,7 +1277,7 @@ static int mlx5e_xfrm_add_policy(struct xfrm_policy *x,
 	if (err)
 		return err;
 
-	pol_entry = kzalloc_obj(*pol_entry);
+	pol_entry = kzalloc(sizeof(*pol_entry), GFP_KERNEL);
 	if (!pol_entry)
 		return -ENOMEM;
 

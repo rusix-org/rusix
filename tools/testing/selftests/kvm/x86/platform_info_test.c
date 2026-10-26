@@ -23,8 +23,8 @@
 
 static void guest_code(void)
 {
-	u64 msr_platform_info;
-	u8 vector;
+	uint64_t msr_platform_info;
+	uint8_t vector;
 
 	GUEST_SYNC(true);
 	msr_platform_info = rdmsr(MSR_PLATFORM_INFO);
@@ -42,7 +42,7 @@ int main(int argc, char *argv[])
 {
 	struct kvm_vcpu *vcpu;
 	struct kvm_vm *vm;
-	u64 msr_platform_info;
+	uint64_t msr_platform_info;
 	struct ucall uc;
 
 	TEST_REQUIRE(kvm_has_cap(KVM_CAP_MSR_PLATFORM_INFO));

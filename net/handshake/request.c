@@ -115,12 +115,12 @@ struct handshake_req *handshake_req_alloc(const struct handshake_proto *proto,
 		return NULL;
 	if (proto->hp_handler_class <= HANDSHAKE_HANDLER_CLASS_NONE)
 		return NULL;
-	if (proto->hp_handler_class > HANDSHAKE_HANDLER_CLASS_MAX)
+	if (proto->hp_handler_class >= HANDSHAKE_HANDLER_CLASS_MAX)
 		return NULL;
 	if (!proto->hp_accept || !proto->hp_done)
 		return NULL;
 
-	req = kzalloc_flex(*req, hr_priv, proto->hp_privsize, flags);
+	req = kzalloc(struct_size(req, hr_priv, proto->hp_privsize), flags);
 	if (!req)
 		return NULL;
 

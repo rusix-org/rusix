@@ -238,7 +238,7 @@ void ubi_refill_pools_and_lock(struct ubi_device *ubi)
 			if (left_free <= 0)
 				break;
 
-			e = find_wl_entry(ubi, &ubi->free, ubi->wl_free_max_diff,
+			e = find_wl_entry(ubi, &ubi->free, WL_FREE_MAX_DIFF,
 					  !can_fill_pools(ubi, left_free));
 			self_check_in_wl_tree(ubi, e, &ubi->free);
 			rb_erase(&e->u.rb, &ubi->free);
@@ -392,18 +392,18 @@ static bool need_wear_leveling(struct ubi_device *ubi)
 	if (!e) {
 		if (!ubi->free.rb_node)
 			return false;
-		e = find_wl_entry(ubi, &ubi->free, ubi->wl_free_max_diff, 0);
+		e = find_wl_entry(ubi, &ubi->free, WL_FREE_MAX_DIFF, 0);
 		ec = e->ec;
 	} else {
 		ec = e->ec;
 		if (ubi->free.rb_node) {
-			e = find_wl_entry(ubi, &ubi->free, ubi->wl_free_max_diff, 0);
+			e = find_wl_entry(ubi, &ubi->free, WL_FREE_MAX_DIFF, 0);
 			ec = max(ec, e->ec);
 		}
 	}
 	e = rb_entry(rb_first(&ubi->used), struct ubi_wl_entry, u.rb);
 
-	return ec - e->ec >= ubi->wl_threshold;
+	return ec - e->ec >= UBI_WL_THRESHOLD;
 }
 
 /* get_peb_for_wl - returns a PEB to be used internally by the WL sub-system.
@@ -466,7 +466,7 @@ int ubi_ensure_anchor_pebs(struct ubi_device *ubi)
 	ubi->wl_scheduled = 1;
 	spin_unlock(&ubi->wl_lock);
 
-	wrk = kmalloc_obj(struct ubi_work, GFP_NOFS);
+	wrk = kmalloc(sizeof(struct ubi_work), GFP_NOFS);
 	if (!wrk) {
 		spin_lock(&ubi->wl_lock);
 		ubi->wl_scheduled = 0;

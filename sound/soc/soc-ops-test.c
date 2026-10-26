@@ -486,7 +486,7 @@ static void soc_ops_test_access(struct kunit *test)
 	/* it is too large struct. use kzalloc() */
 	struct snd_ctl_elem_value *result;
 
-	result = kzalloc_obj(*result);
+	result = kzalloc(sizeof(*result), GFP_KERNEL);
 	if (!result)
 		return;
 

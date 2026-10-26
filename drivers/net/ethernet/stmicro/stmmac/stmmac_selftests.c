@@ -11,6 +11,7 @@
 #include <linux/crc32.h>
 #include <linux/ethtool.h>
 #include <linux/ip.h>
+#include <linux/phy.h>
 #include <linux/udp.h>
 #include <net/dsa.h>
 #include <net/pkt_cls.h>
@@ -30,7 +31,6 @@ struct stmmachdr {
 			      sizeof(struct stmmachdr))
 #define STMMAC_TEST_PKT_MAGIC	0xdeadcafecafedeadULL
 #define STMMAC_LB_TIMEOUT	msecs_to_jiffies(200)
-#define STMMAC_SFT_MAX_LPI	(5 * USEC_PER_SEC)
 
 struct stmmac_packet_attrs {
 	int vlan;
@@ -155,9 +155,9 @@ static struct sk_buff *stmmac_test_get_udp_skb(struct stmmac_priv *priv,
 	} else {
 		uhdr->source = htons(attr->sport);
 		uhdr->dest = htons(attr->dport);
-		udp_set_len_short(uhdr, sizeof(*shdr) + sizeof(*uhdr) + attr->size);
+		uhdr->len = htons(sizeof(*shdr) + sizeof(*uhdr) + attr->size);
 		if (attr->max_size)
-			udp_set_len_short(uhdr, attr->max_size -
+			uhdr->len = htons(attr->max_size -
 					  (sizeof(*ihdr) + sizeof(*ehdr)));
 		uhdr->check = 0;
 	}
@@ -217,6 +217,24 @@ static struct sk_buff *stmmac_test_get_udp_skb(struct stmmac_priv *priv,
 	return skb;
 }
 
+static struct sk_buff *stmmac_test_get_arp_skb(struct stmmac_priv *priv,
+					       struct stmmac_packet_attrs *attr)
+{
+	__be32 ip_src = htonl(attr->ip_src);
+	__be32 ip_dst = htonl(attr->ip_dst);
+	struct sk_buff *skb = NULL;
+
+	skb = arp_create(ARPOP_REQUEST, ETH_P_ARP, ip_dst, priv->dev, ip_src,
+			 NULL, attr->src, attr->dst);
+	if (!skb)
+		return NULL;
+
+	skb->pkt_type = PACKET_HOST;
+	skb->dev = priv->dev;
+
+	return skb;
+}
+
 struct stmmac_test_priv {
 	struct stmmac_packet_attrs *packet;
 	struct packet_type pt;
@@ -225,7 +243,7 @@ struct stmmac_test_priv {
 	int (*func)(struct sk_buff *skb, struct net_device *ndev,
 		    struct packet_type *pt, struct net_device *orig_ndev);
 	bool capture_all;
-	int svlan;
+	int double_vlan;
 	int vlan_id;
 	int ok;
 };
@@ -244,7 +262,7 @@ static int stmmac_test_loopback_validate(struct sk_buff *skb,
 	struct tcphdr *thdr;
 	struct iphdr *ihdr;
 
-	skb = skb_share_check(skb, GFP_ATOMIC);
+	skb = skb_unshare(skb, GFP_ATOMIC);
 	if (!skb)
 		goto out;
 
@@ -267,7 +285,7 @@ static int stmmac_test_loopback_validate(struct sk_buff *skb,
 	}
 
 	ihdr = ip_hdr(skb);
-	if (tpriv->svlan)
+	if (tpriv->double_vlan)
 		ihdr = (struct iphdr *)(skb_network_header(skb) + 4);
 
 	if (tpriv->packet->tcp) {
@@ -357,7 +375,7 @@ static int __stmmac_test_loopback(struct stmmac_priv *priv,
 	struct sk_buff *skb = NULL;
 	int ret = 0;
 
-	tpriv = kzalloc_obj(*tpriv);
+	tpriv = kzalloc(sizeof(*tpriv), GFP_KERNEL);
 	if (!tpriv)
 		return -ENOMEM;
 
@@ -407,6 +425,25 @@ static int stmmac_test_mac_loopback(struct stmmac_priv *priv)
 	return __stmmac_test_loopback(priv, &attr);
 }
 
+static int stmmac_test_phy_loopback(struct stmmac_priv *priv)
+{
+	struct stmmac_packet_attrs attr = { };
+	int ret;
+
+	if (!priv->dev->phydev)
+		return -EOPNOTSUPP;
+
+	ret = phy_loopback(priv->dev->phydev, true, 0);
+	if (ret)
+		return ret;
+
+	attr.dst = priv->dev->dev_addr;
+	ret = __stmmac_test_loopback(priv, &attr);
+
+	phy_loopback(priv->dev->phydev, false, 0);
+	return ret;
+}
+
 static int stmmac_test_mmc(struct stmmac_priv *priv)
 {
 	struct stmmac_counters initial, final;
@@ -448,41 +485,30 @@ static int stmmac_test_mmc(struct stmmac_priv *priv)
 static int stmmac_test_eee(struct stmmac_priv *priv)
 {
 	struct stmmac_extra_stats *initial, *final;
-	unsigned long timeout, max_duration;
+	int retries = 10;
 	int ret;
 
 	if (!priv->dma_cap.eee || !priv->eee_active)
 		return -EOPNOTSUPP;
 
-	/* Bail out if the configured LPI timer is too long */
-	if (priv->tx_lpi_timer > STMMAC_SFT_MAX_LPI)
-		return -EOPNOTSUPP;
-
-	initial = kzalloc_obj(*initial);
+	initial = kzalloc(sizeof(*initial), GFP_KERNEL);
 	if (!initial)
 		return -ENOMEM;
 
-	final = kzalloc_obj(*final);
+	final = kzalloc(sizeof(*final), GFP_KERNEL);
 	if (!final) {
 		ret = -ENOMEM;
 		goto out_free_initial;
 	}
 
-	/* Snapshot stats, we want to count the in_lpi events. We may enter
-	 * LPI just after the packet was sent.
-	 */
 	memcpy(initial, &priv->xstats, sizeof(*initial));
 
-	/* Send a frame, then wait to enter LPI */
 	ret = stmmac_test_mac_loopback(priv);
 	if (ret)
 		goto out_free_final;
 
-	max_duration = usecs_to_jiffies(2 * priv->tx_lpi_timer);
-
 	/* We have no traffic in the line so, sooner or later it will go LPI */
-	timeout = jiffies + max_duration;
-	while (!time_after(jiffies, timeout)) {
+	while (--retries) {
 		memcpy(final, &priv->xstats, sizeof(*final));
 
 		if (final->irq_tx_path_in_lpi_mode_n >
@@ -491,38 +517,20 @@ static int stmmac_test_eee(struct stmmac_priv *priv)
 		msleep(100);
 	}
 
-	memcpy(final, &priv->xstats, sizeof(*final));
+	if (!retries) {
+		ret = -ETIMEDOUT;
+		goto out_free_final;
+	}
+
 	if (final->irq_tx_path_in_lpi_mode_n <=
 	    initial->irq_tx_path_in_lpi_mode_n) {
-		ret = -ETIMEDOUT;
+		ret = -EINVAL;
 		goto out_free_final;
 	}
 
-	/* Re-snapshot, as we want to measure exit_lpi events. We should be
-	 * in LPI right now.
-	 */
-	memcpy(initial, &priv->xstats, sizeof(*initial));
-
-	/* TX something so we go out of LPI */
-	ret = stmmac_test_mac_loopback(priv);
-	if (ret)
-		goto out_free_final;
-
-	/* Wait for the exit LPI interrupt */
-	timeout = jiffies + max_duration;
-	while (!time_after(jiffies, timeout)) {
-		memcpy(final, &priv->xstats, sizeof(*final));
-
-		if (final->irq_tx_path_exit_lpi_mode_n >
-		    initial->irq_tx_path_exit_lpi_mode_n)
-			break;
-		msleep(100);
-	}
-
-	memcpy(final, &priv->xstats, sizeof(*final));
 	if (final->irq_tx_path_exit_lpi_mode_n <=
 	    initial->irq_tx_path_exit_lpi_mode_n) {
-		ret = -ETIMEDOUT;
+		ret = -EINVAL;
 		goto out_free_final;
 	}
 
@@ -799,28 +807,16 @@ out:
 static int stmmac_test_flowctrl(struct stmmac_priv *priv)
 {
 	unsigned char paddr[ETH_ALEN] = {0x01, 0x80, 0xC2, 0x00, 0x00, 0x01};
+	struct phy_device *phydev = priv->dev->phydev;
 	u32 rx_cnt = priv->plat->rx_queues_to_use;
-	struct mac_device_info *mac = priv->hw;
 	struct stmmac_test_priv *tpriv;
-	unsigned int rx_fifo_size;
 	unsigned int pkt_count;
 	int i, ret = 0;
 
-	if (!(mac->link.caps & MAC_SYM_PAUSE))
+	if (!phydev || (!phydev->pause && !phydev->asym_pause))
 		return -EOPNOTSUPP;
 
-	rx_fifo_size = priv->plat->rx_fifo_size;
-	if (!rx_fifo_size)
-		rx_fifo_size = priv->dma_cap.rx_fifo_size;
-
-	/* No pause frame is emitted if we don't have at least 4096 bytes per
-	 * queue, except on dwmac100.
-	 */
-	if (priv->plat->core_type != DWMAC_CORE_MAC100 &&
-	    rx_fifo_size / priv->plat->rx_queues_to_use < 4096)
-		return -EOPNOTSUPP;
-
-	tpriv = kzalloc_obj(*tpriv);
+	tpriv = kzalloc(sizeof(*tpriv), GFP_KERNEL);
 	if (!tpriv)
 		return -ENOMEM;
 
@@ -833,7 +829,9 @@ static int stmmac_test_flowctrl(struct stmmac_priv *priv)
 	stmmac_sft_add_pack(&tpriv->pt);
 
 	/* Compute minimum number of packets to make FIFO full */
-	pkt_count = rx_fifo_size;
+	pkt_count = priv->plat->rx_fifo_size;
+	if (!pkt_count)
+		pkt_count = priv->dma_cap.rx_fifo_size;
 	pkt_count /= 1400;
 	pkt_count *= 2;
 
@@ -918,9 +916,9 @@ static int stmmac_test_vlan_validate(struct sk_buff *skb,
 	struct iphdr *ihdr;
 	u16 proto;
 
-	proto = tpriv->svlan ? ETH_P_8021AD : ETH_P_8021Q;
+	proto = tpriv->double_vlan ? ETH_P_8021AD : ETH_P_8021Q;
 
-	skb = skb_unclone_full(skb, GFP_ATOMIC);
+	skb = skb_unshare(skb, GFP_ATOMIC);
 	if (!skb)
 		goto out;
 
@@ -945,7 +943,7 @@ static int stmmac_test_vlan_validate(struct sk_buff *skb,
 	}
 
 	ihdr = ip_hdr(skb);
-	if (tpriv->svlan)
+	if (tpriv->double_vlan)
 		ihdr = (struct iphdr *)(skb_network_header(skb) + 4);
 	if (ihdr->protocol != IPPROTO_UDP)
 		goto out;
@@ -973,7 +971,7 @@ static int __stmmac_test_vlanfilt(struct stmmac_priv *priv)
 	struct sk_buff *skb = NULL;
 	int ret = 0, i;
 
-	tpriv = kzalloc_obj(*tpriv);
+	tpriv = kzalloc(sizeof(*tpriv), GFP_KERNEL);
 	if (!tpriv)
 		return -ENOMEM;
 
@@ -1062,19 +1060,19 @@ static int stmmac_test_vlanfilt_perfect(struct stmmac_priv *priv)
 	return ret;
 }
 
-static int __stmmac_test_svlanfilt(struct stmmac_priv *priv)
+static int __stmmac_test_dvlanfilt(struct stmmac_priv *priv)
 {
 	struct stmmac_packet_attrs attr = { };
 	struct stmmac_test_priv *tpriv;
 	struct sk_buff *skb = NULL;
 	int ret = 0, i;
 
-	tpriv = kzalloc_obj(*tpriv);
+	tpriv = kzalloc(sizeof(*tpriv), GFP_KERNEL);
 	if (!tpriv)
 		return -ENOMEM;
 
 	tpriv->ok = false;
-	tpriv->svlan = true;
+	tpriv->double_vlan = true;
 	init_completion(&tpriv->comp);
 
 	tpriv->pt.type = htons(ETH_P_8021Q);
@@ -1137,15 +1135,15 @@ cleanup:
 	return ret;
 }
 
-static int stmmac_test_svlanfilt(struct stmmac_priv *priv)
+static int stmmac_test_dvlanfilt(struct stmmac_priv *priv)
 {
 	if (!priv->dma_cap.vlhash)
 		return -EOPNOTSUPP;
 
-	return __stmmac_test_svlanfilt(priv);
+	return __stmmac_test_dvlanfilt(priv);
 }
 
-static int stmmac_test_svlanfilt_perfect(struct stmmac_priv *priv)
+static int stmmac_test_dvlanfilt_perfect(struct stmmac_priv *priv)
 {
 	int ret, prev_cap = priv->dma_cap.vlhash;
 
@@ -1153,7 +1151,7 @@ static int stmmac_test_svlanfilt_perfect(struct stmmac_priv *priv)
 		return -EOPNOTSUPP;
 
 	priv->dma_cap.vlhash = 0;
-	ret = __stmmac_test_svlanfilt(priv);
+	ret = __stmmac_test_dvlanfilt(priv);
 	priv->dma_cap.vlhash = prev_cap;
 
 	return ret;
@@ -1176,23 +1174,23 @@ static int stmmac_test_rxp(struct stmmac_priv *priv)
 	if (!priv->dma_cap.frpsel)
 		return -EOPNOTSUPP;
 
-	sel = kzalloc_flex(*sel, keys, nk);
+	sel = kzalloc(struct_size(sel, keys, nk), GFP_KERNEL);
 	if (!sel)
 		return -ENOMEM;
 
-	exts = kzalloc_obj(*exts);
+	exts = kzalloc(sizeof(*exts), GFP_KERNEL);
 	if (!exts) {
 		ret = -ENOMEM;
 		goto cleanup_sel;
 	}
 
-	actions = kzalloc_objs(*actions, nk);
+	actions = kcalloc(nk, sizeof(*actions), GFP_KERNEL);
 	if (!actions) {
 		ret = -ENOMEM;
 		goto cleanup_exts;
 	}
 
-	gact = kzalloc_objs(*gact, nk);
+	gact = kcalloc(nk, sizeof(*gact), GFP_KERNEL);
 	if (!gact) {
 		ret = -ENOMEM;
 		goto cleanup_actions;
@@ -1347,14 +1345,14 @@ static int stmmac_test_vlanoff_common(struct stmmac_priv *priv, bool svlan)
 	if (!priv->dma_cap.vlins)
 		return -EOPNOTSUPP;
 
-	tpriv = kzalloc_obj(*tpriv);
+	tpriv = kzalloc(sizeof(*tpriv), GFP_KERNEL);
 	if (!tpriv)
 		return -ENOMEM;
 
 	proto = svlan ? ETH_P_8021AD : ETH_P_8021Q;
 
 	tpriv->ok = false;
-	tpriv->svlan = svlan;
+	tpriv->double_vlan = svlan;
 	init_completion(&tpriv->comp);
 
 	tpriv->pt.type = svlan ? htons(ETH_P_8021Q) : htons(ETH_P_IP);
@@ -1432,7 +1430,7 @@ static int __stmmac_test_l3filt(struct stmmac_priv *priv, u32 dst, u32 src,
 				     priv->plat->rx_queues_to_use);
 	}
 
-	dissector = kzalloc_obj(*dissector);
+	dissector = kzalloc(sizeof(*dissector), GFP_KERNEL);
 	if (!dissector) {
 		ret = -ENOMEM;
 		goto cleanup_rss;
@@ -1441,7 +1439,7 @@ static int __stmmac_test_l3filt(struct stmmac_priv *priv, u32 dst, u32 src,
 	dissector->used_keys |= (1ULL << FLOW_DISSECTOR_KEY_IPV4_ADDRS);
 	dissector->offset[FLOW_DISSECTOR_KEY_IPV4_ADDRS] = 0;
 
-	cls = kzalloc_obj(*cls);
+	cls = kzalloc(sizeof(*cls), GFP_KERNEL);
 	if (!cls) {
 		ret = -ENOMEM;
 		goto cleanup_dissector;
@@ -1451,7 +1449,7 @@ static int __stmmac_test_l3filt(struct stmmac_priv *priv, u32 dst, u32 src,
 	cls->command = FLOW_CLS_REPLACE;
 	cls->cookie = dummy_cookie;
 
-	rule = kzalloc_flex(*rule, action.entries, 1);
+	rule = kzalloc(struct_size(rule, action.entries, 1), GFP_KERNEL);
 	if (!rule) {
 		ret = -ENOMEM;
 		goto cleanup_cls;
@@ -1558,7 +1556,7 @@ static int __stmmac_test_l4filt(struct stmmac_priv *priv, u32 dst, u32 src,
 				     priv->plat->rx_queues_to_use);
 	}
 
-	dissector = kzalloc_obj(*dissector);
+	dissector = kzalloc(sizeof(*dissector), GFP_KERNEL);
 	if (!dissector) {
 		ret = -ENOMEM;
 		goto cleanup_rss;
@@ -1569,7 +1567,7 @@ static int __stmmac_test_l4filt(struct stmmac_priv *priv, u32 dst, u32 src,
 	dissector->offset[FLOW_DISSECTOR_KEY_BASIC] = 0;
 	dissector->offset[FLOW_DISSECTOR_KEY_PORTS] = offsetof(typeof(keys), key);
 
-	cls = kzalloc_obj(*cls);
+	cls = kzalloc(sizeof(*cls), GFP_KERNEL);
 	if (!cls) {
 		ret = -ENOMEM;
 		goto cleanup_dissector;
@@ -1579,7 +1577,7 @@ static int __stmmac_test_l4filt(struct stmmac_priv *priv, u32 dst, u32 src,
 	cls->command = FLOW_CLS_REPLACE;
 	cls->cookie = dummy_cookie;
 
-	rule = kzalloc_flex(*rule, action.entries, 1);
+	rule = kzalloc(struct_size(rule, action.entries, 1), GFP_KERNEL);
 	if (!rule) {
 		ret = -ENOMEM;
 		goto cleanup_cls;
@@ -1673,6 +1671,97 @@ static int stmmac_test_l4filt_sa_udp(struct stmmac_priv *priv)
 	u16 dummy_port = 0x123;
 
 	return __stmmac_test_l4filt(priv, 0, dummy_port, 0, ~0, true);
+}
+
+static int stmmac_test_arp_validate(struct sk_buff *skb,
+				    struct net_device *ndev,
+				    struct packet_type *pt,
+				    struct net_device *orig_ndev)
+{
+	struct stmmac_test_priv *tpriv = pt->af_packet_priv;
+	struct ethhdr *ehdr;
+	struct arphdr *ahdr;
+
+	ehdr = (struct ethhdr *)skb_mac_header(skb);
+	if (!ether_addr_equal_unaligned(ehdr->h_dest, tpriv->packet->src))
+		goto out;
+
+	ahdr = arp_hdr(skb);
+	if (ahdr->ar_op != htons(ARPOP_REPLY))
+		goto out;
+
+	tpriv->ok = true;
+	complete(&tpriv->comp);
+out:
+	kfree_skb(skb);
+	return 0;
+}
+
+static int stmmac_test_arpoffload(struct stmmac_priv *priv)
+{
+	unsigned char src[ETH_ALEN] = {0x01, 0x02, 0x03, 0x04, 0x05, 0x06};
+	unsigned char dst[ETH_ALEN] = {0xff, 0xff, 0xff, 0xff, 0xff, 0xff};
+	struct stmmac_packet_attrs attr = { };
+	struct stmmac_test_priv *tpriv;
+	struct sk_buff *skb = NULL;
+	u32 ip_addr = 0xdeadcafe;
+	u32 ip_src = 0xdeadbeef;
+	int ret;
+
+	if (!priv->dma_cap.arpoffsel)
+		return -EOPNOTSUPP;
+
+	tpriv = kzalloc(sizeof(*tpriv), GFP_KERNEL);
+	if (!tpriv)
+		return -ENOMEM;
+
+	tpriv->ok = false;
+	init_completion(&tpriv->comp);
+
+	tpriv->pt.type = htons(ETH_P_ARP);
+	tpriv->pt.func = stmmac_test_arp_validate;
+	tpriv->pt.dev = priv->dev;
+	tpriv->pt.af_packet_priv = tpriv;
+	tpriv->packet = &attr;
+	dev_add_pack(&tpriv->pt);
+
+	attr.src = src;
+	attr.ip_src = ip_src;
+	attr.dst = dst;
+	attr.ip_dst = ip_addr;
+
+	skb = stmmac_test_get_arp_skb(priv, &attr);
+	if (!skb) {
+		ret = -ENOMEM;
+		goto cleanup;
+	}
+
+	ret = stmmac_set_arp_offload(priv, priv->hw, true, ip_addr);
+	if (ret) {
+		kfree_skb(skb);
+		goto cleanup;
+	}
+
+	ret = dev_set_promiscuity(priv->dev, 1);
+	if (ret) {
+		kfree_skb(skb);
+		goto cleanup;
+	}
+
+	ret = dev_direct_xmit(skb, 0);
+	if (ret)
+		goto cleanup_promisc;
+
+	wait_for_completion_timeout(&tpriv->comp, STMMAC_LB_TIMEOUT);
+	ret = tpriv->ok ? 0 : -ETIMEDOUT;
+
+cleanup_promisc:
+	dev_set_promiscuity(priv->dev, -1);
+cleanup:
+	stmmac_set_arp_offload(priv, priv->hw, false, 0x0);
+	dev_remove_pack(&tpriv->pt);
+	kfree(tpriv);
+	return ret;
 }
 
 static int __stmmac_test_jumbo(struct stmmac_priv *priv, u16 queue)
@@ -1778,7 +1867,7 @@ static int stmmac_test_tbs(struct stmmac_priv *priv)
 		return ret;
 
 	read_lock_irqsave(&priv->ptp_lock, flags);
-	stmmac_get_systime(priv, priv->ptpaddr, &curr_time, NULL);
+	stmmac_get_systime(priv, priv->ptpaddr, &curr_time);
 	read_unlock_irqrestore(&priv->ptp_lock, flags);
 
 	if (!curr_time) {
@@ -1800,7 +1889,7 @@ static int stmmac_test_tbs(struct stmmac_priv *priv)
 
 	/* Check if expected time has elapsed */
 	read_lock_irqsave(&priv->ptp_lock, flags);
-	stmmac_get_systime(priv, priv->ptpaddr, &curr_time, NULL);
+	stmmac_get_systime(priv, priv->ptpaddr, &curr_time);
 	read_unlock_irqrestore(&priv->ptp_lock, flags);
 
 	if ((curr_time - start_time) < STMMAC_TBS_LT_OFFSET)
@@ -1812,6 +1901,10 @@ fail_disable:
 	return ret;
 }
 
+#define STMMAC_LOOPBACK_NONE	0
+#define STMMAC_LOOPBACK_MAC	1
+#define STMMAC_LOOPBACK_PHY	2
+
 static const struct stmmac_test {
 	char name[ETH_GSTRING_LEN];
 	int lb;
@@ -1819,93 +1912,131 @@ static const struct stmmac_test {
 } stmmac_selftests[] = {
 	{
 		.name = "MAC Loopback               ",
+		.lb = STMMAC_LOOPBACK_MAC,
 		.fn = stmmac_test_mac_loopback,
 	}, {
+		.name = "PHY Loopback               ",
+		.lb = STMMAC_LOOPBACK_NONE, /* Test will handle it */
+		.fn = stmmac_test_phy_loopback,
+	}, {
 		.name = "MMC Counters               ",
+		.lb = STMMAC_LOOPBACK_PHY,
 		.fn = stmmac_test_mmc,
 	}, {
 		.name = "EEE                        ",
+		.lb = STMMAC_LOOPBACK_PHY,
 		.fn = stmmac_test_eee,
 	}, {
 		.name = "Hash Filter MC             ",
+		.lb = STMMAC_LOOPBACK_PHY,
 		.fn = stmmac_test_hfilt,
 	}, {
 		.name = "Perfect Filter UC          ",
+		.lb = STMMAC_LOOPBACK_PHY,
 		.fn = stmmac_test_pfilt,
 	}, {
 		.name = "MC Filter                  ",
+		.lb = STMMAC_LOOPBACK_PHY,
 		.fn = stmmac_test_mcfilt,
 	}, {
 		.name = "UC Filter                  ",
+		.lb = STMMAC_LOOPBACK_PHY,
 		.fn = stmmac_test_ucfilt,
 	}, {
 		.name = "Flow Control               ",
+		.lb = STMMAC_LOOPBACK_PHY,
 		.fn = stmmac_test_flowctrl,
 	}, {
 		.name = "RSS                        ",
+		.lb = STMMAC_LOOPBACK_PHY,
 		.fn = stmmac_test_rss,
 	}, {
 		.name = "VLAN Filtering             ",
+		.lb = STMMAC_LOOPBACK_PHY,
 		.fn = stmmac_test_vlanfilt,
 	}, {
 		.name = "VLAN Filtering (perf)      ",
+		.lb = STMMAC_LOOPBACK_PHY,
 		.fn = stmmac_test_vlanfilt_perfect,
 	}, {
-		.name = "SVLAN Filtering            ",
-		.fn = stmmac_test_svlanfilt,
+		.name = "Double VLAN Filter         ",
+		.lb = STMMAC_LOOPBACK_PHY,
+		.fn = stmmac_test_dvlanfilt,
 	}, {
-		.name = "SVLAN Filtering (perf)     ",
-		.fn = stmmac_test_svlanfilt_perfect,
+		.name = "Double VLAN Filter (perf)  ",
+		.lb = STMMAC_LOOPBACK_PHY,
+		.fn = stmmac_test_dvlanfilt_perfect,
 	}, {
 		.name = "Flexible RX Parser         ",
+		.lb = STMMAC_LOOPBACK_PHY,
 		.fn = stmmac_test_rxp,
 	}, {
 		.name = "SA Insertion (desc)        ",
+		.lb = STMMAC_LOOPBACK_PHY,
 		.fn = stmmac_test_desc_sai,
 	}, {
 		.name = "SA Replacement (desc)      ",
+		.lb = STMMAC_LOOPBACK_PHY,
 		.fn = stmmac_test_desc_sar,
 	}, {
 		.name = "SA Insertion (reg)         ",
+		.lb = STMMAC_LOOPBACK_PHY,
 		.fn = stmmac_test_reg_sai,
 	}, {
 		.name = "SA Replacement (reg)       ",
+		.lb = STMMAC_LOOPBACK_PHY,
 		.fn = stmmac_test_reg_sar,
 	}, {
 		.name = "VLAN TX Insertion          ",
+		.lb = STMMAC_LOOPBACK_PHY,
 		.fn = stmmac_test_vlanoff,
 	}, {
 		.name = "SVLAN TX Insertion         ",
+		.lb = STMMAC_LOOPBACK_PHY,
 		.fn = stmmac_test_svlanoff,
 	}, {
 		.name = "L3 DA Filtering            ",
+		.lb = STMMAC_LOOPBACK_PHY,
 		.fn = stmmac_test_l3filt_da,
 	}, {
 		.name = "L3 SA Filtering            ",
+		.lb = STMMAC_LOOPBACK_PHY,
 		.fn = stmmac_test_l3filt_sa,
 	}, {
 		.name = "L4 DA TCP Filtering        ",
+		.lb = STMMAC_LOOPBACK_PHY,
 		.fn = stmmac_test_l4filt_da_tcp,
 	}, {
 		.name = "L4 SA TCP Filtering        ",
+		.lb = STMMAC_LOOPBACK_PHY,
 		.fn = stmmac_test_l4filt_sa_tcp,
 	}, {
 		.name = "L4 DA UDP Filtering        ",
+		.lb = STMMAC_LOOPBACK_PHY,
 		.fn = stmmac_test_l4filt_da_udp,
 	}, {
 		.name = "L4 SA UDP Filtering        ",
+		.lb = STMMAC_LOOPBACK_PHY,
 		.fn = stmmac_test_l4filt_sa_udp,
 	}, {
+		.name = "ARP Offload                ",
+		.lb = STMMAC_LOOPBACK_PHY,
+		.fn = stmmac_test_arpoffload,
+	}, {
 		.name = "Jumbo Frame                ",
+		.lb = STMMAC_LOOPBACK_PHY,
 		.fn = stmmac_test_jumbo,
 	}, {
 		.name = "Multichannel Jumbo         ",
+		.lb = STMMAC_LOOPBACK_PHY,
 		.fn = stmmac_test_mjumbo,
 	}, {
 		.name = "Split Header               ",
+		.lb = STMMAC_LOOPBACK_PHY,
 		.fn = stmmac_test_sph,
 	}, {
 		.name = "TBS (ETF Scheduler)        ",
+		.lb = STMMAC_LOOPBACK_PHY,
 		.fn = stmmac_test_tbs,
 	},
 };
@@ -1933,21 +2064,57 @@ void stmmac_selftest_run(struct net_device *dev,
 	/* Wait for queues drain */
 	msleep(200);
 
-	ret = stmmac_set_mac_loopback(priv, priv->ioaddr, true);
-	if (ret) {
-		netdev_err(priv->dev, "Loopback is not supported\n");
-		etest->flags |= ETH_TEST_FL_FAILED;
-		return;
-	}
-
 	for (i = 0; i < count; i++) {
+		ret = 0;
+
+		switch (stmmac_selftests[i].lb) {
+		case STMMAC_LOOPBACK_PHY:
+			ret = -EOPNOTSUPP;
+			if (dev->phydev)
+				ret = phy_loopback(dev->phydev, true, 0);
+			if (!ret)
+				break;
+			fallthrough;
+		case STMMAC_LOOPBACK_MAC:
+			ret = stmmac_set_mac_loopback(priv, priv->ioaddr, true);
+			break;
+		case STMMAC_LOOPBACK_NONE:
+			break;
+		default:
+			ret = -EOPNOTSUPP;
+			break;
+		}
+
+		/*
+		 * First tests will always be MAC / PHY loobpack. If any of
+		 * them is not supported we abort earlier.
+		 */
+		if (ret) {
+			netdev_err(priv->dev, "Loopback is not supported\n");
+			etest->flags |= ETH_TEST_FL_FAILED;
+			break;
+		}
+
 		ret = stmmac_selftests[i].fn(priv);
 		if (ret && (ret != -EOPNOTSUPP))
 			etest->flags |= ETH_TEST_FL_FAILED;
 		buf[i] = ret;
-	}
 
-	stmmac_set_mac_loopback(priv, priv->ioaddr, false);
+		switch (stmmac_selftests[i].lb) {
+		case STMMAC_LOOPBACK_PHY:
+			ret = -EOPNOTSUPP;
+			if (dev->phydev)
+				ret = phy_loopback(dev->phydev, false, 0);
+			if (!ret)
+				break;
+			fallthrough;
+		case STMMAC_LOOPBACK_MAC:
+			stmmac_set_mac_loopback(priv, priv->ioaddr, false);
+			break;
+		default:
+			break;
+		}
+	}
 }
 
 void stmmac_selftest_get_strings(struct stmmac_priv *priv, u8 *data)

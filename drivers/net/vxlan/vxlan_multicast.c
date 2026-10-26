@@ -14,12 +14,11 @@
 /* Update multicast group membership when first VNI on
  * multicast address is brought up
  */
-int vxlan_igmp_join(struct vxlan_dev *vxlan, const union vxlan_addr *rip,
+int vxlan_igmp_join(struct vxlan_dev *vxlan, union vxlan_addr *rip,
 		    int rifindex)
 {
-	const struct vxlan_config *cfg = rtnl_dereference(vxlan->cfg);
-	const union vxlan_addr *ip = (rip ? : &cfg->remote_ip);
-	int ifindex = (rifindex ? : cfg->remote_ifindex);
+	union vxlan_addr *ip = (rip ? : &vxlan->default_dst.remote_ip);
+	int ifindex = (rifindex ? : vxlan->default_dst.remote_ifindex);
 	int ret = -EINVAL;
 	struct sock *sk;
 
@@ -30,7 +29,7 @@ int vxlan_igmp_join(struct vxlan_dev *vxlan, const union vxlan_addr *rip,
 			.imr_ifindex		= ifindex,
 		};
 
-		sk = sock4->sk;
+		sk = sock4->sock->sk;
 		lock_sock(sk);
 		ret = ip_mc_join_group(sk, &mreq);
 		release_sock(sk);
@@ -38,9 +37,10 @@ int vxlan_igmp_join(struct vxlan_dev *vxlan, const union vxlan_addr *rip,
 	} else {
 		struct vxlan_sock *sock6 = rtnl_dereference(vxlan->vn6_sock);
 
-		sk = sock6->sk;
+		sk = sock6->sock->sk;
 		lock_sock(sk);
-		ret = ipv6_sock_mc_join(sk, ifindex, &ip->sin6.sin6_addr);
+		ret = ipv6_stub->ipv6_sock_mc_join(sk, ifindex,
+						   &ip->sin6.sin6_addr);
 		release_sock(sk);
 #endif
 	}
@@ -48,12 +48,11 @@ int vxlan_igmp_join(struct vxlan_dev *vxlan, const union vxlan_addr *rip,
 	return ret;
 }
 
-int vxlan_igmp_leave(struct vxlan_dev *vxlan, const union vxlan_addr *rip,
+int vxlan_igmp_leave(struct vxlan_dev *vxlan, union vxlan_addr *rip,
 		     int rifindex)
 {
-	const struct vxlan_config *cfg = rtnl_dereference(vxlan->cfg);
-	const union vxlan_addr *ip = (rip ? : &cfg->remote_ip);
-	int ifindex = (rifindex ? : cfg->remote_ifindex);
+	union vxlan_addr *ip = (rip ? : &vxlan->default_dst.remote_ip);
+	int ifindex = (rifindex ? : vxlan->default_dst.remote_ifindex);
 	int ret = -EINVAL;
 	struct sock *sk;
 
@@ -64,7 +63,7 @@ int vxlan_igmp_leave(struct vxlan_dev *vxlan, const union vxlan_addr *rip,
 			.imr_ifindex		= ifindex,
 		};
 
-		sk = sock4->sk;
+		sk = sock4->sock->sk;
 		lock_sock(sk);
 		ret = ip_mc_leave_group(sk, &mreq);
 		release_sock(sk);
@@ -72,9 +71,10 @@ int vxlan_igmp_leave(struct vxlan_dev *vxlan, const union vxlan_addr *rip,
 	} else {
 		struct vxlan_sock *sock6 = rtnl_dereference(vxlan->vn6_sock);
 
-		sk = sock6->sk;
+		sk = sock6->sock->sk;
 		lock_sock(sk);
-		ret = ipv6_sock_mc_drop(sk, ifindex, &ip->sin6.sin6_addr);
+		ret = ipv6_stub->ipv6_sock_mc_drop(sk, ifindex,
+						   &ip->sin6.sin6_addr);
 		release_sock(sk);
 #endif
 	}
@@ -82,8 +82,8 @@ int vxlan_igmp_leave(struct vxlan_dev *vxlan, const union vxlan_addr *rip,
 	return ret;
 }
 
-static bool vxlan_group_used_match(const union vxlan_addr *ip, int ifindex,
-				   const union vxlan_addr *rip, int rifindex)
+static bool vxlan_group_used_match(union vxlan_addr *ip, int ifindex,
+				   union vxlan_addr *rip, int rifindex)
 {
 	if (!vxlan_addr_multicast(rip))
 		return false;
@@ -98,16 +98,14 @@ static bool vxlan_group_used_match(const union vxlan_addr *ip, int ifindex,
 }
 
 static bool vxlan_group_used_by_vnifilter(struct vxlan_dev *vxlan,
-					  const struct vxlan_config *cfg,
-					  const union vxlan_addr *ip,
-					  int ifindex)
+					  union vxlan_addr *ip, int ifindex)
 {
 	struct vxlan_vni_group *vg = rtnl_dereference(vxlan->vnigrp);
 	struct vxlan_vni_node *v, *tmp;
 
 	if (vxlan_group_used_match(ip, ifindex,
-				   &cfg->remote_ip,
-				   cfg->remote_ifindex))
+				   &vxlan->default_dst.remote_ip,
+				   vxlan->default_dst.remote_ifindex))
 		return true;
 
 	list_for_each_entry_safe(v, tmp, &vg->vni_list, vlist) {
@@ -116,7 +114,7 @@ static bool vxlan_group_used_by_vnifilter(struct vxlan_dev *vxlan,
 
 		if (vxlan_group_used_match(ip, ifindex,
 					   &v->remote_ip,
-					   cfg->remote_ifindex))
+					   vxlan->default_dst.remote_ifindex))
 			return true;
 	}
 
@@ -125,17 +123,16 @@ static bool vxlan_group_used_by_vnifilter(struct vxlan_dev *vxlan,
 
 /* See if multicast group is already in use by other ID */
 bool vxlan_group_used(struct vxlan_net *vn, struct vxlan_dev *dev,
-		      __be32 vni, const union vxlan_addr *rip, int rifindex)
+		      __be32 vni, union vxlan_addr *rip, int rifindex)
 {
-	const struct vxlan_config *dev_cfg = rtnl_dereference(dev->cfg);
-	const union vxlan_addr *ip = (rip ? : &dev_cfg->remote_ip);
-	int ifindex = (rifindex ? : dev_cfg->remote_ifindex);
+	union vxlan_addr *ip = (rip ? : &dev->default_dst.remote_ip);
+	int ifindex = (rifindex ? : dev->default_dst.remote_ifindex);
 	struct vxlan_dev *vxlan;
 	struct vxlan_sock *sock4;
 #if IS_ENABLED(CONFIG_IPV6)
 	struct vxlan_sock *sock6;
 #endif
-	unsigned short family = dev_cfg->remote_ip.sa.sa_family;
+	unsigned short family = dev->default_dst.remote_ip.sa.sa_family;
 
 	sock4 = rtnl_dereference(dev->vn4_sock);
 
@@ -152,8 +149,6 @@ bool vxlan_group_used(struct vxlan_net *vn, struct vxlan_dev *dev,
 #endif
 
 	list_for_each_entry(vxlan, &vn->vxlan_list, next) {
-		const struct vxlan_config *cfg;
-
 		if (!netif_running(vxlan->dev) || vxlan == dev)
 			continue;
 
@@ -165,15 +160,13 @@ bool vxlan_group_used(struct vxlan_net *vn, struct vxlan_dev *dev,
 		    rtnl_dereference(vxlan->vn6_sock) != sock6)
 			continue;
 #endif
-		cfg = rtnl_dereference(vxlan->cfg);
-
-		if (cfg->flags & VXLAN_F_VNIFILTER) {
-			if (!vxlan_group_used_by_vnifilter(vxlan, cfg, ip, ifindex))
+		if (vxlan->cfg.flags & VXLAN_F_VNIFILTER) {
+			if (!vxlan_group_used_by_vnifilter(vxlan, ip, ifindex))
 				continue;
 		} else {
 			if (!vxlan_group_used_match(ip, ifindex,
-						    &cfg->remote_ip,
-						    cfg->remote_ifindex))
+						    &vxlan->default_dst.remote_ip,
+						    vxlan->default_dst.remote_ifindex))
 				continue;
 		}
 
@@ -183,8 +176,7 @@ bool vxlan_group_used(struct vxlan_net *vn, struct vxlan_dev *dev,
 	return false;
 }
 
-static int vxlan_multicast_join_vnigrp(struct vxlan_dev *vxlan,
-				       const struct vxlan_config *cfg)
+static int vxlan_multicast_join_vnigrp(struct vxlan_dev *vxlan)
 {
 	struct vxlan_vni_group *vg = rtnl_dereference(vxlan->vnigrp);
 	struct vxlan_vni_node *v, *tmp, *vgood = NULL;
@@ -195,7 +187,7 @@ static int vxlan_multicast_join_vnigrp(struct vxlan_dev *vxlan,
 			continue;
 		/* skip if address is same as default address */
 		if (vxlan_addr_equal(&v->remote_ip,
-				     &cfg->remote_ip))
+				     &vxlan->default_dst.remote_ip))
 			continue;
 		ret = vxlan_igmp_join(vxlan, &v->remote_ip, 0);
 		if (ret == -EADDRINUSE)
@@ -210,7 +202,7 @@ out:
 			if (!vxlan_addr_multicast(&v->remote_ip))
 				continue;
 			if (vxlan_addr_equal(&v->remote_ip,
-					     &cfg->remote_ip))
+					     &vxlan->default_dst.remote_ip))
 				continue;
 			vxlan_igmp_leave(vxlan, &v->remote_ip, 0);
 			if (v == vgood)
@@ -221,8 +213,7 @@ out:
 	return ret;
 }
 
-static int vxlan_multicast_leave_vnigrp(struct vxlan_dev *vxlan,
-					const struct vxlan_config *cfg)
+static int vxlan_multicast_leave_vnigrp(struct vxlan_dev *vxlan)
 {
 	struct vxlan_net *vn = net_generic(vxlan->net, vxlan_net_id);
 	struct vxlan_vni_group *vg = rtnl_dereference(vxlan->vnigrp);
@@ -230,17 +221,10 @@ static int vxlan_multicast_leave_vnigrp(struct vxlan_dev *vxlan,
 	int last_err = 0, ret;
 
 	list_for_each_entry_safe(v, tmp, &vg->vni_list, vlist) {
-		if (!vxlan_addr_multicast(&v->remote_ip))
-			continue;
-		/* skip if address is same as default address */
-		if (vxlan_addr_equal(&v->remote_ip,
-				     &cfg->remote_ip))
-			continue;
-		if (!vxlan_group_used(vn, vxlan, v->vni, &v->remote_ip,
+		if (vxlan_addr_multicast(&v->remote_ip) &&
+		    !vxlan_group_used(vn, vxlan, v->vni, &v->remote_ip,
 				      0)) {
 			ret = vxlan_igmp_leave(vxlan, &v->remote_ip, 0);
-			if (ret == -EADDRNOTAVAIL)
-				ret = 0;
 			if (ret)
 				last_err = ret;
 		}
@@ -251,42 +235,38 @@ static int vxlan_multicast_leave_vnigrp(struct vxlan_dev *vxlan,
 
 int vxlan_multicast_join(struct vxlan_dev *vxlan)
 {
-	const struct vxlan_config *cfg = rtnl_dereference(vxlan->cfg);
 	int ret = 0;
 
-	if (vxlan_addr_multicast(&cfg->remote_ip)) {
-		ret = vxlan_igmp_join(vxlan, &cfg->remote_ip,
-				      cfg->remote_ifindex);
+	if (vxlan_addr_multicast(&vxlan->default_dst.remote_ip)) {
+		ret = vxlan_igmp_join(vxlan, &vxlan->default_dst.remote_ip,
+				      vxlan->default_dst.remote_ifindex);
 		if (ret == -EADDRINUSE)
 			ret = 0;
 		if (ret)
 			return ret;
 	}
 
-	if (cfg->flags & VXLAN_F_VNIFILTER)
-		return vxlan_multicast_join_vnigrp(vxlan, cfg);
+	if (vxlan->cfg.flags & VXLAN_F_VNIFILTER)
+		return vxlan_multicast_join_vnigrp(vxlan);
 
 	return 0;
 }
 
 int vxlan_multicast_leave(struct vxlan_dev *vxlan)
 {
-	const struct vxlan_config *cfg = rtnl_dereference(vxlan->cfg);
 	struct vxlan_net *vn = net_generic(vxlan->net, vxlan_net_id);
 	int ret = 0;
 
-	if (vxlan_addr_multicast(&cfg->remote_ip) &&
+	if (vxlan_addr_multicast(&vxlan->default_dst.remote_ip) &&
 	    !vxlan_group_used(vn, vxlan, 0, NULL, 0)) {
-		ret = vxlan_igmp_leave(vxlan, &cfg->remote_ip,
-				       cfg->remote_ifindex);
-		if (ret == -EADDRNOTAVAIL)
-			ret = 0;
+		ret = vxlan_igmp_leave(vxlan, &vxlan->default_dst.remote_ip,
+				       vxlan->default_dst.remote_ifindex);
 		if (ret)
 			return ret;
 	}
 
-	if (cfg->flags & VXLAN_F_VNIFILTER)
-		return vxlan_multicast_leave_vnigrp(vxlan, cfg);
+	if (vxlan->cfg.flags & VXLAN_F_VNIFILTER)
+		return vxlan_multicast_leave_vnigrp(vxlan);
 
 	return 0;
 }

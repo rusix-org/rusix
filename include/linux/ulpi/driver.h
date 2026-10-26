@@ -2,7 +2,7 @@
 #ifndef __LINUX_ULPI_DRIVER_H
 #define __LINUX_ULPI_DRIVER_H
 
-#include <linux/device-id/ulpi.h>
+#include <linux/mod_devicetable.h>
 
 #include <linux/device.h>
 
@@ -51,8 +51,8 @@ struct ulpi_driver {
 /*
  * use a macro to avoid include chaining to get THIS_MODULE
  */
-#define ulpi_register_driver(drv) __ulpi_register_driver(drv, THIS_MODULE, KBUILD_MODNAME)
-int __ulpi_register_driver(struct ulpi_driver *drv, struct module *module, const char *mod_name);
+#define ulpi_register_driver(drv) __ulpi_register_driver(drv, THIS_MODULE)
+int __ulpi_register_driver(struct ulpi_driver *drv, struct module *module);
 void ulpi_unregister_driver(struct ulpi_driver *drv);
 
 #define module_ulpi_driver(__ulpi_driver) \

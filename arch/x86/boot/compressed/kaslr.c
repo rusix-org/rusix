@@ -32,8 +32,6 @@
 #include <asm/setup.h>	/* For COMMAND_LINE_SIZE */
 #undef _SETUP
 
-#include <asm/kexec_handover.h>
-
 extern unsigned long get_cmd_line_ptr(void);
 
 /* Simplified build-specific string for starting entropy. */
@@ -221,8 +219,7 @@ static void parse_gb_huge_pages(char *param, char *val)
 
 	if (!strcmp(param, "hugepages") && gbpage_sz) {
 		p = val;
-		if (boot_kstrtoul(p, 0, &max_gb_huge_pages))
-			warn("Failed to parse hugepages= boot parameter\n");
+		max_gb_huge_pages = simple_strtoull(p, &p, 0);
 		return;
 	}
 }

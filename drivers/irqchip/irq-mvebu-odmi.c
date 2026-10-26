@@ -178,7 +178,7 @@ static int __init mvebu_odmi_init(struct device_node *node,
 	if (of_property_read_u32(node, "marvell,odmi-frames", &odmis_count))
 		return -EINVAL;
 
-	odmis = kzalloc_objs(struct odmi_data, odmis_count);
+	odmis = kcalloc(odmis_count, sizeof(struct odmi_data), GFP_KERNEL);
 	if (!odmis)
 		return -ENOMEM;
 
@@ -217,7 +217,7 @@ err_unmap:
 	for (i = 0; i < odmis_count; i++) {
 		struct odmi_data *odmi = &odmis[i];
 
-		if (!IS_ERR_OR_NULL(odmi->base))
+		if (odmi->base && !IS_ERR(odmi->base))
 			iounmap(odmis[i].base);
 	}
 	bitmap_free(odmis_bm);

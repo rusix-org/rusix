@@ -19,8 +19,7 @@ struct file *shmem_create_from_data(const char *name, void *data, size_t len)
 	struct file *file;
 	int err;
 
-	file = shmem_file_setup(name, PAGE_ALIGN(len),
-				mk_vma_flags(VMA_NORESERVE_BIT));
+	file = shmem_file_setup(name, PAGE_ALIGN(len), VM_NORESERVE);
 	if (IS_ERR(file))
 		return file;
 
@@ -63,7 +62,7 @@ void *shmem_pin_map(struct file *file)
 	void *vaddr;
 
 	n_pages = file->f_mapping->host->i_size >> PAGE_SHIFT;
-	pages = kvmalloc_objs(*pages, n_pages);
+	pages = kvmalloc_array(n_pages, sizeof(*pages), GFP_KERNEL);
 	if (!pages)
 		return NULL;
 

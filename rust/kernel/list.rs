@@ -12,31 +12,15 @@ use core::ptr;
 use pin_init::PinInit;
 
 mod impl_list_item_mod;
-#[doc(inline)]
 pub use self::impl_list_item_mod::{
-    impl_has_list_links,
-    impl_has_list_links_self_ptr,
-    impl_list_item,
-    HasListLinks,
-    HasSelfPtr, //
+    impl_has_list_links, impl_has_list_links_self_ptr, impl_list_item, HasListLinks, HasSelfPtr,
 };
 
 mod arc;
-#[doc(inline)]
-pub use self::arc::{
-    impl_list_arc_safe,
-    AtomicTracker,
-    ListArc,
-    ListArcSafe,
-    TryNewListArc, //
-};
+pub use self::arc::{impl_list_arc_safe, AtomicTracker, ListArc, ListArcSafe, TryNewListArc};
 
 mod arc_field;
-#[doc(inline)]
-pub use self::arc_field::{
-    define_list_arc_field_getter,
-    ListArcField, //
-};
+pub use self::arc_field::{define_list_arc_field_getter, ListArcField};
 
 /// A linked list.
 ///
@@ -591,9 +575,6 @@ impl<T: ?Sized + ListItem<ID>, const ID: u64> List<T, ID> {
     ///
     /// This returns `None` if the item is not in the list. (Note that by the safety requirements,
     /// this means that the item is not in any list.)
-    ///
-    /// When using this method, be careful with using `mem::take` on the same list as that may
-    /// result in violating the safety requirements of this method.
     ///
     /// # Safety
     ///

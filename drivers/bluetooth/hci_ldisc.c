@@ -163,12 +163,6 @@ restart:
 
 		set_bit(TTY_DO_WRITE_WAKEUP, &tty->flags);
 		len = tty->ops->write(tty, skb->data, skb->len);
-		if (len < 0 || len > skb->len) {
-			hdev->stat.err_tx++;
-			kfree_skb(skb);
-			continue;
-		}
-
 		hdev->stat.byte_tx += len;
 
 		skb_pull(skb, len);
@@ -515,7 +509,7 @@ static int hci_uart_tty_open(struct tty_struct *tty)
 	if (tty->ops->write == NULL)
 		return -EOPNOTSUPP;
 
-	hu = kzalloc_obj(*hu);
+	hu = kzalloc(sizeof(*hu), GFP_KERNEL);
 	if (!hu) {
 		BT_ERR("Can't allocate control structure");
 		return -ENFILE;
@@ -762,9 +756,9 @@ static int hci_uart_set_proto(struct hci_uart *hu, int id)
 	hu->proto = p;
 
 	err = hci_uart_register_dev(hu);
-	if (err)
+	if (err) {
 		return err;
-
+	}
 
 	set_bit(HCI_UART_PROTO_READY, &hu->flags);
 	clear_bit(HCI_UART_PROTO_INIT, &hu->flags);

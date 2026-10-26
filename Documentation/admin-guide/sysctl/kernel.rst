@@ -397,14 +397,13 @@ a hung task is detected.
 hung_task_panic
 ===============
 
-When set to a non-zero value, a kernel panic will be triggered if the
-number of hung tasks found during a single scan reaches this value.
+Controls the kernel's behavior when a hung task is detected.
 This file shows up if ``CONFIG_DETECT_HUNG_TASK`` is enabled.
 
-= =======================================================
+= =================================================
 0 Continue operation. This is the default behavior.
-N Panic when N hung tasks are found during a single scan.
-= =======================================================
+1 Panic immediately.
+= =================================================
 
 
 hung_task_check_count
@@ -418,16 +417,10 @@ hung_task_detect_count
 ======================
 
 Indicates the total number of tasks that have been detected as hung since
-the system boot or since the counter was reset. The counter is zeroed when
-a value of 0 is written.
+the system boot.
 
 This file shows up if ``CONFIG_DETECT_HUNG_TASK`` is enabled.
 
-hung_task_sys_info
-==================
-A comma separated list of extra system information to be dumped when
-hung task is detected, for example, "tasks,mem,timers,locks,...".
-Refer 'panic_sys_info' section below for more details.
 
 hung_task_timeout_secs
 ======================
@@ -522,15 +515,6 @@ default), only processes with the CAP_SYS_ADMIN capability may create
 io_uring instances.
 
 
-kernel_sys_info
-===============
-A comma separated list of extra system information to be dumped when
-soft/hard lockup is detected, for example, "tasks,mem,timers,locks,...".
-Refer 'panic_sys_info' section below for more details.
-
-It serves as the default kernel control knob, which will take effect
-when a kernel module calls sys_info() with parameter==0.
-
 kexec_load_disabled
 ===================
 
@@ -592,14 +576,6 @@ if leaking kernel pointer values to unprivileged users is a concern.
 When ``kptr_restrict`` is set to 2, kernel pointers printed using
 %pK will be replaced with 0s regardless of privileges.
 
-For disabling these security restrictions early at boot time (and once
-for all), use the ``hash_pointers`` boot parameter instead.
-
-softlockup_sys_info & hardlockup_sys_info
-=========================================
-A comma separated list of extra system information to be dumped when
-soft/hard lockup is detected, for example, "tasks,mem,timers,locks,...".
-Refer 'panic_sys_info' section below for more details.
 
 modprobe
 ========
@@ -934,8 +910,8 @@ to 'panic_print'. Possible values are:
 =============   ===================================================
 tasks           print all tasks info
 mem             print system memory info
-timers          print timers info
-locks           print locks info if CONFIG_LOCKDEP is on
+timer           print timers info
+lock            print locks info if CONFIG_LOCKDEP is on
 ftrace          print ftrace buffer
 all_bt          print all CPUs backtrace (if available in the arch)
 blocked_tasks   print only tasks in uninterruptible (blocked) state
@@ -1239,6 +1215,12 @@ that support this feature.
 ==  ===========================================================================
 
 
+real-root-dev
+=============
+
+See Documentation/admin-guide/initrd.rst.
+
+
 reboot-cmd (SPARC only)
 =======================
 
@@ -1334,6 +1316,19 @@ seccomp
 See Documentation/userspace-api/seccomp_filter.rst.
 
 
+sg-big-buff
+===========
+
+This file shows the size of the generic SCSI (sg) buffer.
+You can't tune it just yet, but you could change it on
+compile time by editing ``include/scsi/sg.h`` and changing
+the value of ``SG_BIG_BUFF``.
+
+There shouldn't be any reason to change this value. If
+you can come up with one, you probably know what you
+are doing anyway :)
+
+
 shmall
 ======
 
@@ -1387,23 +1382,6 @@ need this.
 
 Note that if you change this from 0 to 1, already created segments
 without users and with a dead originative process will be destroyed.
-
-
-syscall_user_dispatch
-=====================
-
-Controls whether userspace may arm Syscall User Dispatch via
-``prctl(PR_SET_SYSCALL_USER_DISPATCH, ...)`` or the
-``PTRACE_SET_SYSCALL_USER_DISPATCH_CONFIG`` ptrace request:
-
-  ==  ===================================================================
-  0   Arming syscall user dispatch is denied with ``-EPERM``.  Tasks that
-      already armed it keep it, and disabling it is always permitted.
-  1   (default) Arming syscall user dispatch is permitted.
-  ==  ===================================================================
-
-Only present when the kernel is built with ``CONFIG_SYSCALL_USER_DISPATCH``
-and ``CONFIG_SYSCTL``.
 
 
 sysctl_writes_strict
@@ -1596,10 +1574,8 @@ If a value outside of this range is written to ``threads-max`` an
 timer_migration
 ===============
 
-When set to a non-zero value, attempt to migrate high-resolution timers from
-nohz isolated (nohz_full) to housekeeping CPUs.
-See Documentation/admin-guide/cpu-isolation.rst
-and Documentation/admin-guide/kernel-parameters.rst.
+When set to a non-zero value, attempt to migrate timers away from idle cpus to
+allow them to remain in low power states longer.
 
 Default is set (1).
 

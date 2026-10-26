@@ -11,7 +11,6 @@
 #include <drm/drm_atomic_helper.h>
 #include <drm/drm_crtc.h>
 #include <drm/drm_device.h>
-#include <drm/drm_dumb_buffers.h>
 #include <drm/drm_framebuffer.h>
 #include <drm/drm_gem_dma_helper.h>
 #include <drm/drm_gem_framebuffer_helper.h>
@@ -19,7 +18,6 @@
 #include <drm/drm_probe_helper.h>
 #include <drm/drm_vblank.h>
 
-#include <linux/cleanup.h>
 #include <linux/device.h>
 #include <linux/dma-buf.h>
 #include <linux/of.h>
@@ -382,7 +380,7 @@ struct drm_gem_object *rcar_du_gem_prime_import_sg_table(struct drm_device *dev,
 		return drm_gem_dma_prime_import_sg_table(dev, attach, sgt);
 
 	/* Create a DMA GEM buffer. */
-	dma_obj = kzalloc_obj(*dma_obj);
+	dma_obj = kzalloc(sizeof(*dma_obj), GFP_KERNEL);
 	if (!dma_obj)
 		return ERR_PTR(-ENOMEM);
 
@@ -409,8 +407,8 @@ int rcar_du_dumb_create(struct drm_file *file, struct drm_device *dev,
 			struct drm_mode_create_dumb *args)
 {
 	struct rcar_du_device *rcdu = to_rcar_du_device(dev);
+	unsigned int min_pitch = DIV_ROUND_UP(args->width * args->bpp, 8);
 	unsigned int align;
-	int ret;
 
 	/*
 	 * The R8A7779 DU requires a 16 pixels pitch alignment as documented,
@@ -421,9 +419,7 @@ int rcar_du_dumb_create(struct drm_file *file, struct drm_device *dev,
 	else
 		align = 16 * args->bpp / 8;
 
-	ret = drm_mode_size_dumb(dev, args, align, 0);
-	if (ret)
-		return ret;
+	args->pitch = roundup(min_pitch, align);
 
 	return drm_gem_dma_dumb_create_internal(file, dev, args);
 }
@@ -503,7 +499,7 @@ rcar_du_fb_create(struct drm_device *dev, struct drm_file *file_priv,
  */
 
 static int rcar_du_atomic_check(struct drm_device *dev,
-				struct drm_atomic_commit *state)
+				struct drm_atomic_state *state)
 {
 	struct rcar_du_device *rcdu = to_rcar_du_device(dev);
 	int ret;
@@ -518,7 +514,7 @@ static int rcar_du_atomic_check(struct drm_device *dev,
 	return rcar_du_atomic_check_planes(dev, state);
 }
 
-static void rcar_du_atomic_commit_tail(struct drm_atomic_commit *old_state)
+static void rcar_du_atomic_commit_tail(struct drm_atomic_state *old_state)
 {
 	struct drm_device *dev = old_state->dev;
 	struct rcar_du_device *rcdu = to_rcar_du_device(dev);
@@ -574,7 +570,7 @@ static int rcar_du_encoders_init_one(struct rcar_du_device *rcdu,
 				     enum rcar_du_output output,
 				     struct of_endpoint *ep)
 {
-	struct device_node *entity __free(device_node) = NULL;
+	struct device_node *entity;
 	int ret;
 
 	/* Locate the connected entity and initialize the encoder. */
@@ -589,6 +585,7 @@ static int rcar_du_encoders_init_one(struct rcar_du_device *rcdu,
 		dev_dbg(rcdu->dev,
 			"connected entity %pOF is disabled, skipping\n",
 			entity);
+		of_node_put(entity);
 		return -ENODEV;
 	}
 
@@ -598,13 +595,15 @@ static int rcar_du_encoders_init_one(struct rcar_du_device *rcdu,
 			 "failed to initialize encoder %pOF on output %s (%d), skipping\n",
 			 entity, rcar_du_output_name(output), ret);
 
+	of_node_put(entity);
+
 	return ret;
 }
 
 static int rcar_du_encoders_init(struct rcar_du_device *rcdu)
 {
-	struct device_node *ep_node __free(device_node) = NULL;
 	struct device_node *np = rcdu->dev->of_node;
+	struct device_node *ep_node;
 	unsigned int num_encoders = 0;
 
 	/*
@@ -618,8 +617,10 @@ static int rcar_du_encoders_init(struct rcar_du_device *rcdu)
 		int ret;
 
 		ret = of_graph_parse_endpoint(ep_node, &ep);
-		if (ret < 0)
+		if (ret < 0) {
+			of_node_put(ep_node);
 			return ret;
+		}
 
 		/* Find the output route corresponding to the port number. */
 		for (i = 0; i < RCAR_DU_OUTPUT_MAX; ++i) {
@@ -640,8 +641,10 @@ static int rcar_du_encoders_init(struct rcar_du_device *rcdu)
 		/* Process the output pipeline. */
 		ret = rcar_du_encoders_init_one(rcdu, output, &ep);
 		if (ret < 0) {
-			if (ret == -EPROBE_DEFER)
+			if (ret == -EPROBE_DEFER) {
+				of_node_put(ep_node);
 				return ret;
+			}
 
 			continue;
 		}
@@ -769,47 +772,51 @@ static int rcar_du_cmm_init(struct rcar_du_device *rcdu)
 	}
 
 	for (i = 0; i < cells; ++i) {
-		struct device_node *cmm_node __free(device_node) = NULL;
-		struct rcar_du_cmm *cmm = &rcdu->cmms[i];
 		struct platform_device *pdev;
+		struct device_link *link;
+		struct device_node *cmm;
 		int ret;
 
-		cmm_node = of_parse_phandle(np, "renesas,cmms", i);
-		if (!cmm_node) {
+		cmm = of_parse_phandle(np, "renesas,cmms", i);
+		if (!cmm) {
 			dev_err(rcdu->dev,
 				"Failed to parse 'renesas,cmms' property\n");
 			return -EINVAL;
 		}
 
-		if (!of_device_is_available(cmm_node))
+		if (!of_device_is_available(cmm)) {
 			/* It's fine to have a phandle to a non-enabled CMM. */
+			of_node_put(cmm);
 			continue;
+		}
 
-		pdev = of_find_device_by_node(cmm_node);
+		pdev = of_find_device_by_node(cmm);
 		if (!pdev) {
 			dev_err(rcdu->dev, "No device found for CMM%u\n", i);
+			of_node_put(cmm);
 			return -EINVAL;
 		}
+
+		of_node_put(cmm);
 
 		/*
 		 * -ENODEV is used to report that the CMM config option is
 		 * disabled: return 0 and let the DU continue probing.
 		 */
-		ret = rcar_cmm_init(&pdev->dev);
+		ret = rcar_cmm_init(pdev);
 		if (ret) {
 			platform_device_put(pdev);
 			return ret == -ENODEV ? 0 : ret;
 		}
 
-		cmm->dev = &pdev->dev;
+		rcdu->cmms[i] = pdev;
 
 		/*
 		 * Enforce suspend/resume ordering by making the CMM a provider
 		 * of the DU: CMM is suspended after and resumed before the DU.
 		 */
-		cmm->link = device_link_add(rcdu->dev, cmm->dev,
-					    DL_FLAG_STATELESS);
-		if (!cmm->link) {
+		link = device_link_add(rcdu->dev, &pdev->dev, DL_FLAG_STATELESS);
+		if (!link) {
 			dev_err(rcdu->dev,
 				"Failed to create device link to CMM%u\n", i);
 			return -EINVAL;
@@ -824,16 +831,8 @@ static void rcar_du_modeset_cleanup(struct drm_device *dev, void *res)
 	struct rcar_du_device *rcdu = to_rcar_du_device(dev);
 	unsigned int i;
 
-	for (i = 0; i < ARRAY_SIZE(rcdu->cmms); ++i) {
-		struct rcar_du_cmm *cmm = &rcdu->cmms[i];
-
-		if (cmm->link)
-			device_link_del(cmm->link);
-
-		put_device(cmm->dev);
-	}
-
-	rcar_du_encoder_cleanup(rcdu);
+	for (i = 0; i < ARRAY_SIZE(rcdu->cmms); ++i)
+		platform_device_put(rcdu->cmms[i]);
 }
 
 int rcar_du_modeset_init(struct rcar_du_device *rcdu)

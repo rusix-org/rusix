@@ -35,11 +35,13 @@
 
 #define DIE
 #define DIE_NO 0
-#define SOC_NODE {/soc}
 
-#include "t602x-die0.dtsi"
-#include "t602x-dieX.dtsi"
-#include "t602x-nvme.dtsi"
+&{/soc} {
+	#include "t602x-die0.dtsi"
+	#include "t602x-dieX.dtsi"
+	#include "t602x-nvme.dtsi"
+};
+
 #include "t602x-gpio-pins.dtsi"
 #include "t602x-pmgr.dtsi"
 
@@ -65,5 +67,3 @@
 &gpu {
 	compatible = "apple,agx-g14c", "apple,agx-g14s";
 };
-
-#include "hwmon-common.dtsi"

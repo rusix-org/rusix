@@ -49,7 +49,7 @@ typedef void (*ipi_handler_t) (void *data,
  *			 handle VP8 video encoder job,, and vice versa.
  * @IPI_MDP:		 The interrupt from vpu is to notify kernel to
  *			 handle MDP (Media Data Path) job, and vice versa.
- * @IPI_VPU_MAX:	 The maximum VPU IPI number
+ * @IPI_MAX:		 The maximum IPI number
  */
 
 enum ipi_id {
@@ -60,7 +60,7 @@ enum ipi_id {
 	IPI_VENC_H264,
 	IPI_VENC_VP8,
 	IPI_MDP,
-	IPI_VPU_MAX,
+	IPI_MAX,
 };
 
 /**
@@ -119,7 +119,8 @@ int vpu_ipi_send(struct platform_device *pdev,
  * @pdev:	the platform device of the module requesting VPU platform
  *		device for using VPU API.
  *
- * Return: a reference to the VPU's platform device, or NULL on failure.
+ * Return: Return NULL if it is failed.
+ * otherwise it is VPU's platform device
  **/
 struct platform_device *vpu_get_plat_device(struct platform_device *pdev);
 

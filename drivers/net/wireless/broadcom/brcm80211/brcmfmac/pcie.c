@@ -1155,7 +1155,7 @@ brcmf_pcie_alloc_dma_and_ring(struct brcmf_pciedev_info *devinfo, u32 ring_id,
 	addr = tcm_ring_phys_addr + BRCMF_RING_LEN_ITEMS_OFFSET;
 	brcmf_pcie_write_tcm16(devinfo, addr, ring_itemsize_array[ring_id]);
 
-	ring = kzalloc_obj(*ring);
+	ring = kzalloc(sizeof(*ring), GFP_KERNEL);
 	if (!ring) {
 		dma_free_coherent(&devinfo->pdev->dev, size, dma_buf,
 				  dma_handle);
@@ -1347,7 +1347,7 @@ static int brcmf_pcie_init_ringbuffers(struct brcmf_pciedev_info *devinfo)
 	devinfo->shared.max_flowrings = max_flowrings;
 	devinfo->shared.max_submissionrings = max_submissionrings;
 	devinfo->shared.max_completionrings = max_completionrings;
-	rings = kzalloc_objs(*ring, max_flowrings);
+	rings = kcalloc(max_flowrings, sizeof(*ring), GFP_KERNEL);
 	if (!rings)
 		goto fail;
 
@@ -2203,7 +2203,8 @@ static void brcmf_pcie_setup(struct device *dev, int ret,
 		bus->msgbuf->commonrings[i] =
 				&devinfo->shared.commonrings[i]->commonring;
 
-	flowrings = kzalloc_objs(*flowrings, devinfo->shared.max_flowrings);
+	flowrings = kcalloc(devinfo->shared.max_flowrings, sizeof(*flowrings),
+			    GFP_KERNEL);
 	if (!flowrings)
 		goto fail;
 
@@ -2460,7 +2461,7 @@ brcmf_pcie_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 	brcmf_dbg(PCIE, "Enter %x:%x\n", pdev->vendor, pdev->device);
 
 	ret = -ENOMEM;
-	devinfo = kzalloc_obj(*devinfo);
+	devinfo = kzalloc(sizeof(*devinfo), GFP_KERNEL);
 	if (devinfo == NULL)
 		return ret;
 
@@ -2480,7 +2481,7 @@ brcmf_pcie_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 	else
 		devinfo->reginfo = &brcmf_reginfo_default;
 
-	pcie_bus_dev = kzalloc_obj(*pcie_bus_dev);
+	pcie_bus_dev = kzalloc(sizeof(*pcie_bus_dev), GFP_KERNEL);
 	if (pcie_bus_dev == NULL) {
 		ret = -ENOMEM;
 		goto fail;
@@ -2498,13 +2499,13 @@ brcmf_pcie_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 	if (ret < 0)
 		goto fail;
 
-	bus = kzalloc_obj(*bus);
+	bus = kzalloc(sizeof(*bus), GFP_KERNEL);
 	if (!bus) {
 		ret = -ENOMEM;
 		goto fail;
 	}
 	mutex_init(&bus->bus_reset_lock);
-	bus->msgbuf = kzalloc_obj(*bus->msgbuf);
+	bus->msgbuf = kzalloc(sizeof(*bus->msgbuf), GFP_KERNEL);
 	if (!bus->msgbuf) {
 		ret = -ENOMEM;
 		kfree(bus);
@@ -2652,13 +2653,9 @@ static int brcmf_pcie_pm_enter_D3(struct device *dev)
 	wait_event_timeout(devinfo->mbdata_resp_wait, devinfo->mbdata_completed,
 			   BRCMF_PCIE_MBDATA_TIMEOUT);
 	if (!devinfo->mbdata_completed) {
-		if (devinfo->wowl_enabled) {
-			brcmf_err(bus, "Timeout on response for entering D3 substate\n");
-			brcmf_bus_change_state(bus, BRCMF_BUS_UP);
-			return -EIO;
-		}
-
-		brcmf_dbg(PCIE, "No D3 ACK, continuing to power the device off\n");
+		brcmf_err(bus, "Timeout on response for entering D3 substate\n");
+		brcmf_bus_change_state(bus, BRCMF_BUS_UP);
+		return -EIO;
 	}
 
 	devinfo->state = BRCMFMAC_PCIE_STATE_DOWN;
@@ -2722,18 +2719,17 @@ static const struct dev_pm_ops brcmf_pciedrvr_pm = {
 
 #define BRCMF_PCIE_DEVICE(dev_id, fw_vend) \
 	{ \
-		PCI_DEVICE(BRCM_PCIE_VENDOR_ID_BROADCOM, (dev_id)), \
-		.class = PCI_CLASS_NETWORK_OTHER << 8, \
-		.class_mask = 0xffff00, \
-		.driver_data = BRCMF_DRVDATA_ ## fw_vend, \
+		BRCM_PCIE_VENDOR_ID_BROADCOM, (dev_id), \
+		PCI_ANY_ID, PCI_ANY_ID, \
+		PCI_CLASS_NETWORK_OTHER << 8, 0xffff00, \
+		BRCMF_DRVDATA_ ## fw_vend \
 	}
 #define BRCMF_PCIE_DEVICE_SUB(dev_id, subvend, subdev, fw_vend) \
 	{ \
-		PCI_DEVICE_SUB(BRCM_PCIE_VENDOR_ID_BROADCOM, (dev_id), \
-			       (subvend), (subdev)), \
-		.class = PCI_CLASS_NETWORK_OTHER << 8, \
-		.class_mask = 0xffff00, \
-		.driver_data = BRCMF_DRVDATA_ ## fw_vend, \
+		BRCM_PCIE_VENDOR_ID_BROADCOM, (dev_id), \
+		(subvend), (subdev), \
+		PCI_CLASS_NETWORK_OTHER << 8, 0xffff00, \
+		BRCMF_DRVDATA_ ## fw_vend \
 	}
 
 static const struct pci_device_id brcmf_pcie_devid_table[] = {

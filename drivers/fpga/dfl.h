@@ -23,6 +23,7 @@
 #include <linux/interrupt.h>
 #include <linux/iopoll.h>
 #include <linux/io-64-nonatomic-lo-hi.h>
+#include <linux/mod_devicetable.h>
 #include <linux/platform_device.h>
 #include <linux/slab.h>
 #include <linux/uuid.h>
@@ -81,7 +82,7 @@
 #define DFH_TYPE_FIU		4
 
 /*
- * DFHv1 Register Offset definitions
+ * DFHv1 Register Offset definitons
  * In DHFv1, DFH + GUID + CSR_START + CSR_SIZE_GROUP + PARAM_HDR + PARAM_DATA
  * as common header registers
  */

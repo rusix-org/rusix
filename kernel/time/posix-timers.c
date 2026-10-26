@@ -66,7 +66,14 @@ static const struct k_clock clock_realtime, clock_monotonic;
 #error "SIGEV_THREAD_ID must not share bit with other SIGEV values!"
 #endif
 
-static struct k_itimer *lock_timer(timer_t timer_id);
+static struct k_itimer *__lock_timer(timer_t timer_id);
+
+#define lock_timer(tid)							\
+({	struct k_itimer *__timr;					\
+	__cond_lock(&__timr->it_lock, __timr = __lock_timer(tid));	\
+	__timr;								\
+})
+
 static inline void unlock_timer(struct k_itimer *timr)
 {
 	if (likely((timr)))
@@ -78,7 +85,7 @@ static inline void unlock_timer(struct k_itimer *timr)
 
 #define scoped_timer				(scope)
 
-DEFINE_CLASS(lock_timer, struct k_itimer *, unlock_timer(_T), lock_timer(id), timer_t id);
+DEFINE_CLASS(lock_timer, struct k_itimer *, unlock_timer(_T), __lock_timer(id), timer_t id);
 DEFINE_CLASS_IS_COND_GUARD(lock_timer);
 
 static struct timer_hash_bucket *hash_bucket(struct signal_struct *sig, unsigned int nr)
@@ -293,13 +300,12 @@ static bool common_hrtimer_rearm(struct k_itimer *timr)
 	struct hrtimer *timer = &timr->it.real.timer;
 
 	timr->it_overrun += hrtimer_forward_now(timer, timr->it_interval);
-	return hrtimer_start_expires_user(timer, HRTIMER_MODE_ABS);
+	hrtimer_restart(timer);
+	return true;
 }
 
 static bool __posixtimer_deliver_signal(struct kernel_siginfo *info, struct k_itimer *timr)
 {
-	bool queued;
-
 	guard(spinlock)(&timr->it_lock);
 
 	/*
@@ -313,18 +319,12 @@ static bool __posixtimer_deliver_signal(struct kernel_siginfo *info, struct k_it
 	if (!timr->it_interval || WARN_ON_ONCE(timr->it_status != POSIX_TIMER_REQUEUE_PENDING))
 		return true;
 
-	/* timer_rearm() updates timr::it_overrun */
-	queued = timr->kclock->timer_rearm(timr);
-
+	timr->kclock->timer_rearm(timr);
+	timr->it_status = POSIX_TIMER_ARMED;
 	timr->it_overrun_last = timr->it_overrun;
 	timr->it_overrun = -1LL;
 	++timr->it_signal_seq;
 	info->si_overrun = timer_overrun_to_int(timr);
-
-	if (queued)
-		timr->it_status = POSIX_TIMER_ARMED;
-	else
-		posix_timer_queue_signal(timr);
 	return true;
 }
 
@@ -601,7 +601,7 @@ COMPAT_SYSCALL_DEFINE3(timer_create, clockid_t, which_clock,
 }
 #endif
 
-static struct k_itimer *lock_timer(timer_t timer_id)
+static struct k_itimer *__lock_timer(timer_t timer_id)
 {
 	struct k_itimer *timr;
 
@@ -828,11 +828,9 @@ static bool common_hrtimer_arm(struct k_itimer *timr, ktime_t expires,
 		expires = ktime_add_safe(expires, hrtimer_cb_get_time(timer));
 	hrtimer_set_expires(timer, expires);
 
-	/* For sigev_none pretend that the timer is queued */
-	if (sigev_none)
-		return true;
-
-	return hrtimer_start_expires_user(timer, HRTIMER_MODE_ABS);
+	if (!sigev_none)
+		hrtimer_start_expires(timer, HRTIMER_MODE_ABS);
+	return true;
 }
 
 static int common_hrtimer_try_to_cancel(struct k_itimer *timr)
@@ -914,13 +912,9 @@ int common_timer_set(struct k_itimer *timr, int flags,
 		expires = timens_ktime_to_host(timr->it_clock, expires);
 	sigev_none = timr->it_sigev_notify == SIGEV_NONE;
 
-	if (kc->timer_arm(timr, expires, flags & TIMER_ABSTIME, sigev_none)) {
-		if (!sigev_none)
-			timr->it_status = POSIX_TIMER_ARMED;
-	} else {
-		/* Timer was already expired, queue the signal */
-		posix_timer_queue_signal(timr);
-	}
+	kc->timer_arm(timr, expires, flags & TIMER_ABSTIME, sigev_none);
+	if (!sigev_none)
+		timr->it_status = POSIX_TIMER_ARMED;
 	return 0;
 }
 
@@ -1077,9 +1071,13 @@ SYSCALL_DEFINE1(timer_delete, timer_t, timer_id)
 	return 0;
 }
 
-static void posixtimer_delete_timers(void)
+/*
+ * Invoked from do_exit() when the last thread of a thread group exits.
+ * At that point no other task can access the timers of the dying
+ * task anymore.
+ */
+void exit_itimers(struct task_struct *tsk)
 {
-	struct task_struct *tsk = current;
 	struct hlist_head timers;
 	struct hlist_node *next;
 	struct k_itimer *timer;
@@ -1103,7 +1101,7 @@ static void posixtimer_delete_timers(void)
 	}
 
 	/*
-	 * There should be no timers on the ignored list. posix_timer_delete() has
+	 * There should be no timers on the ignored list. itimer_delete() has
 	 * mopped them up.
 	 */
 	if (!WARN_ON_ONCE(!hlist_empty(&tsk->signal->ignored_posix_timers)))
@@ -1114,24 +1112,6 @@ static void posixtimer_delete_timers(void)
 		posix_timer_cleanup_ignored(hlist_entry(timers.first, struct k_itimer,
 							ignored_list));
 	}
-}
-
-void posixtimer_exit(bool group_dead)
-{
-	if (group_dead) {
-		hrtimer_cancel(&current->signal->real_timer);
-		posix_cpu_timers_exit_group();
-		posixtimer_delete_timers();
-	} else {
-		posix_cpu_timers_exit_task();
-	}
-}
-
-void posixtimer_exec(void)
-{
-	posix_cpu_timers_exit_task();
-	posixtimer_delete_timers();
-	flush_itimer_signals();
 }
 
 SYSCALL_DEFINE2(clock_settime, const clockid_t, which_clock,
@@ -1264,7 +1244,7 @@ SYSCALL_DEFINE2(clock_adjtime, const clockid_t, which_clock,
  *    sys_clock_settime(). The kernel internal timekeeping is always using
  *    nanoseconds precision independent of the clocksource device which is
  *    used to read the time from. The resolution of that device only
- *    affects the precision of the time returned by sys_clock_gettime().
+ *    affects the presicion of the time returned by sys_clock_gettime().
  *
  * Returns:
  *	0		Success. @tp contains the resolution

@@ -87,8 +87,7 @@ static int gfs2_get_name(struct dentry *parent, char *name,
 {
 	struct inode *dir = d_inode(parent);
 	struct inode *inode = d_inode(child);
-	struct gfs2_glock *gl;
-	struct gfs2_inode *ip;
+	struct gfs2_inode *dip, *ip;
 	struct get_name_filldir gnfd = {
 		.ctx.actor = get_name_filldir,
 		.name = name
@@ -103,14 +102,14 @@ static int gfs2_get_name(struct dentry *parent, char *name,
 	if (!S_ISDIR(dir->i_mode) || !inode)
 		return -EINVAL;
 
-	gl = gfs2_inode_glock(dir);
+	dip = GFS2_I(dir);
 	ip = GFS2_I(inode);
 
 	*name = 0;
 	gnfd.inum.no_addr = ip->i_no_addr;
 	gnfd.inum.no_formal_ino = ip->i_no_formal_ino;
 
-	error = gfs2_glock_nq_init(gl, LM_ST_SHARED, 0, &gh);
+	error = gfs2_glock_nq_init(dip->i_gl, LM_ST_SHARED, 0, &gh);
 	if (error)
 		return error;
 

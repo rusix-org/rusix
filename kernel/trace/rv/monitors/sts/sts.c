@@ -6,6 +6,7 @@
 #include <linux/init.h>
 #include <linux/rv.h>
 #include <rv/instrumentation.h>
+#include <rv/da_monitor.h>
 
 #define MODULE_NAME "sts"
 
@@ -15,16 +16,17 @@
 #include <rv_trace.h>
 #include <monitors/sched/sched.h>
 
-#define RV_MON_TYPE RV_MON_PER_CPU
 #include "sts.h"
-#include <rv/da_monitor.h>
+
+static struct rv_monitor rv_sts;
+DECLARE_DA_MON_PER_CPU(sts, unsigned char);
 
 #ifdef CONFIG_X86_LOCAL_APIC
 #include <asm/trace/irq_vectors.h>
 
 static void handle_vector_irq_entry(void *data, int vector)
 {
-	da_handle_event(irq_entry_sts);
+	da_handle_event_sts(irq_entry_sts);
 }
 
 static void attach_vector_irq(void)
@@ -59,17 +61,17 @@ static void detach_vector_irq(void) { }
 
 static void handle_irq_disable(void *data, unsigned long ip, unsigned long parent_ip)
 {
-	da_handle_event(irq_disable_sts);
+	da_handle_event_sts(irq_disable_sts);
 }
 
 static void handle_irq_enable(void *data, unsigned long ip, unsigned long parent_ip)
 {
-	da_handle_event(irq_enable_sts);
+	da_handle_event_sts(irq_enable_sts);
 }
 
 static void handle_irq_entry(void *data, int irq, struct irqaction *action)
 {
-	da_handle_event(irq_entry_sts);
+	da_handle_event_sts(irq_entry_sts);
 }
 
 static void handle_sched_switch(void *data, bool preempt,
@@ -77,24 +79,24 @@ static void handle_sched_switch(void *data, bool preempt,
 				struct task_struct *next,
 				unsigned int prev_state)
 {
-	da_handle_event(sched_switch_sts);
+	da_handle_event_sts(sched_switch_sts);
 }
 
 static void handle_schedule_entry(void *data, bool preempt)
 {
-	da_handle_event(schedule_entry_sts);
+	da_handle_event_sts(schedule_entry_sts);
 }
 
 static void handle_schedule_exit(void *data, bool is_switch)
 {
-	da_handle_start_event(schedule_exit_sts);
+	da_handle_start_event_sts(schedule_exit_sts);
 }
 
 static int enable_sts(void)
 {
 	int retval;
 
-	retval = da_monitor_init();
+	retval = da_monitor_init_sts();
 	if (retval)
 		return retval;
 
@@ -111,7 +113,7 @@ static int enable_sts(void)
 
 static void disable_sts(void)
 {
-	rv_this.enabled = 0;
+	rv_sts.enabled = 0;
 
 	rv_detach_trace_probe("sts", irq_disable, handle_irq_disable);
 	rv_detach_trace_probe("sts", irq_enable, handle_irq_enable);
@@ -121,29 +123,29 @@ static void disable_sts(void)
 	rv_detach_trace_probe("sts", sched_exit_tp, handle_schedule_exit);
 	detach_vector_irq();
 
-	da_monitor_destroy();
+	da_monitor_destroy_sts();
 }
 
 /*
  * This is the monitor register section.
  */
-static struct rv_monitor rv_this = {
+static struct rv_monitor rv_sts = {
 	.name = "sts",
 	.description = "schedule implies task switch.",
 	.enable = enable_sts,
 	.disable = disable_sts,
-	.reset = da_monitor_reset_all,
+	.reset = da_monitor_reset_all_sts,
 	.enabled = 0,
 };
 
 static int __init register_sts(void)
 {
-	return rv_register_monitor(&rv_this, &rv_sched);
+	return rv_register_monitor(&rv_sts, &rv_sched);
 }
 
 static void __exit unregister_sts(void)
 {
-	rv_unregister_monitor(&rv_this);
+	rv_unregister_monitor(&rv_sts);
 }
 
 module_init(register_sts);
@@ -152,22 +154,3 @@ module_exit(unregister_sts);
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Gabriele Monaco <gmonaco@redhat.com>");
 MODULE_DESCRIPTION("sts: schedule implies task switch.");
-
-#if IS_ENABLED(CONFIG_RV_MONITORS_KUNIT_TEST)
-#include <kunit/visibility.h>
-#include "sts_kunit.h"
-
-const struct rv_sts_ops rv_sts_ops = {
-	.mon = RV_MON_OPS_INIT(),
-#ifdef CONFIG_X86_LOCAL_APIC
-	.handle_vector_irq_entry = handle_vector_irq_entry,
-#endif
-	.handle_irq_disable = handle_irq_disable,
-	.handle_irq_enable = handle_irq_enable,
-	.handle_irq_entry = handle_irq_entry,
-	.handle_sched_switch = handle_sched_switch,
-	.handle_schedule_entry = handle_schedule_entry,
-	.handle_schedule_exit = handle_schedule_exit,
-};
-EXPORT_SYMBOL_IF_KUNIT(rv_sts_ops);
-#endif

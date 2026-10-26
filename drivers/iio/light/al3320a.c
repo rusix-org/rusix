@@ -16,6 +16,7 @@
 #include <linux/i2c.h>
 #include <linux/module.h>
 #include <linux/regmap.h>
+#include <linux/mod_devicetable.h>
 
 #include <linux/iio/iio.h>
 #include <linux/iio/sysfs.h>
@@ -247,7 +248,7 @@ static DEFINE_SIMPLE_DEV_PM_OPS(al3320a_pm_ops, al3320a_suspend,
 				al3320a_resume);
 
 static const struct i2c_device_id al3320a_id[] = {
-	{ .name = "al3320a" },
+	{ "al3320a" },
 	{ }
 };
 MODULE_DEVICE_TABLE(i2c, al3320a_id);

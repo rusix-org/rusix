@@ -146,7 +146,7 @@ static int get_target(const char *symname, struct config_item **target,
 }
 
 
-int configfs_symlink(const struct mnt_idmap *idmap, struct inode *dir,
+int configfs_symlink(struct mnt_idmap *idmap, struct inode *dir,
 		     struct dentry *dentry, const char *symname)
 {
 	int ret;
@@ -245,8 +245,9 @@ int configfs_unlink(struct inode *dir, struct dentry *dentry)
 	spin_lock(&configfs_dirent_lock);
 	list_del_init(&sd->s_sibling);
 	spin_unlock(&configfs_dirent_lock);
+	configfs_drop_dentry(sd, dentry->d_parent);
+	dput(dentry);
 	configfs_put(sd);
-	simple_unlink(dir, dentry);
 
 	/*
 	 * drop_link() must be called before

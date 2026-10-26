@@ -707,7 +707,7 @@ struct ipic * __init ipic_init(struct device_node *node, unsigned int flags)
 	if (ret)
 		return NULL;
 
-	ipic = kzalloc_obj(*ipic);
+	ipic = kzalloc(sizeof(*ipic), GFP_KERNEL);
 	if (ipic == NULL)
 		return NULL;
 

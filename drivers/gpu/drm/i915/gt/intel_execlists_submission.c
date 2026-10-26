@@ -110,8 +110,6 @@
 #include <linux/interrupt.h>
 #include <linux/string_helpers.h>
 
-#include <drm/drm_print.h>
-
 #include "gen8_engine_cs.h"
 #include "i915_drv.h"
 #include "i915_list_util.h"
@@ -1300,7 +1298,7 @@ static void execlists_dequeue(struct intel_engine_cs *engine)
 	 * and context switches) submission.
 	 */
 
-	spin_lock_irq(&sched_engine->lock);
+	spin_lock(&sched_engine->lock);
 
 	/*
 	 * If the queue is higher priority than the last
@@ -1400,7 +1398,7 @@ static void execlists_dequeue(struct intel_engine_cs *engine)
 				 * Even if ELSP[1] is occupied and not worthy
 				 * of timeslices, our queue might be.
 				 */
-				spin_unlock_irq(&sched_engine->lock);
+				spin_unlock(&sched_engine->lock);
 				return;
 			}
 		}
@@ -1426,7 +1424,7 @@ static void execlists_dequeue(struct intel_engine_cs *engine)
 
 		if (last && !can_merge_rq(last, rq)) {
 			spin_unlock(&ve->base.sched_engine->lock);
-			spin_unlock_irq(&engine->sched_engine->lock);
+			spin_unlock(&engine->sched_engine->lock);
 			return; /* leave this for another sibling */
 		}
 
@@ -1588,7 +1586,7 @@ done:
 	 */
 	sched_engine->queue_priority_hint = queue_prio(sched_engine);
 	i915_sched_engine_reset_on_empty(sched_engine);
-	spin_unlock_irq(&sched_engine->lock);
+	spin_unlock(&sched_engine->lock);
 
 	/*
 	 * We can skip poking the HW if we ended up with exactly the same set
@@ -1612,6 +1610,13 @@ done:
 			i915_request_put(*port);
 		*execlists->pending = NULL;
 	}
+}
+
+static void execlists_dequeue_irq(struct intel_engine_cs *engine)
+{
+	local_irq_disable(); /* Suspend interrupts across request submission */
+	execlists_dequeue(engine);
+	local_irq_enable(); /* flush irq_work (e.g. breadcrumb enabling) */
 }
 
 static void clear_ports(struct i915_request **ports, int count)
@@ -2247,7 +2252,7 @@ static struct execlists_capture *capture_regs(struct intel_engine_cs *engine)
 	const gfp_t gfp = GFP_ATOMIC | __GFP_NOWARN;
 	struct execlists_capture *cap;
 
-	cap = kmalloc_obj(*cap, gfp);
+	cap = kmalloc(sizeof(*cap), gfp);
 	if (!cap)
 		return NULL;
 
@@ -2468,7 +2473,7 @@ static void execlists_submission_tasklet(struct tasklet_struct *t)
 	}
 
 	if (!engine->execlists.pending[0]) {
-		execlists_dequeue(engine);
+		execlists_dequeue_irq(engine);
 		start_timeslice(engine);
 	}
 
@@ -2927,12 +2932,12 @@ static void enable_execlists(struct intel_engine_cs *engine)
 	intel_engine_set_hwsp_writemask(engine, ~0u); /* HWSTAM */
 
 	if (GRAPHICS_VER(engine->i915) >= 11)
-		mode = REG_MASKED_FIELD_ENABLE(GEN11_GFX_DISABLE_LEGACY_MODE);
+		mode = _MASKED_BIT_ENABLE(GEN11_GFX_DISABLE_LEGACY_MODE);
 	else
-		mode = REG_MASKED_FIELD_ENABLE(GFX_RUN_LIST_ENABLE);
+		mode = _MASKED_BIT_ENABLE(GFX_RUN_LIST_ENABLE);
 	ENGINE_WRITE_FW(engine, RING_MODE_GEN7, mode);
 
-	ENGINE_WRITE_FW(engine, RING_MI_MODE, REG_MASKED_FIELD_DISABLE(STOP_RING));
+	ENGINE_WRITE_FW(engine, RING_MI_MODE, _MASKED_BIT_DISABLE(STOP_RING));
 
 	ENGINE_WRITE_FW(engine,
 			RING_HWS_PGA,
@@ -3927,7 +3932,7 @@ execlists_create_virtual(struct intel_engine_cs **siblings, unsigned int count,
 	unsigned int n;
 	int err = -ENOMEM;
 
-	ve = kzalloc_flex(*ve, siblings, count);
+	ve = kzalloc(struct_size(ve, siblings, count), GFP_KERNEL);
 	if (!ve)
 		goto err;
 

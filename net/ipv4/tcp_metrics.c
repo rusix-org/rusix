@@ -161,26 +161,16 @@ static void tcpm_check_stamp(struct tcp_metrics_block *tm,
 	rcu_dereference_protected(p, lockdep_is_held(&tcp_metrics_lock))
 
 static struct tcp_metrics_block *tcpm_new(struct dst_entry *dst,
-					  struct net *net,
 					  struct inetpeer_addr *saddr,
 					  struct inetpeer_addr *daddr,
 					  unsigned int hash)
 {
 	struct tcp_metrics_block *tm;
 	bool reclaim = false;
+	struct net *net;
 
 	spin_lock_bh(&tcp_metrics_lock);
-
-	/* Do not add entries to a dismantling netns: they would not be
-	 * flushed again. Callers are in an RCU read-side section, and
-	 * cleanup_net() waits for a grace period after the netns refcount
-	 * reached zero and before tcp_metrics_flush_all(NULL) runs, so an
-	 * entry added after a successful check_net() is seen by the flush.
-	 */
-	if (unlikely(!check_net(net))) {
-		tm = NULL;
-		goto out_unlock;
-	}
+	net = dst_dev_net_rcu(dst);
 
 	/* While waiting for the spin-lock the cache might have been populated
 	 * with this entry and so we have to check again.
@@ -207,7 +197,7 @@ static struct tcp_metrics_block *tcpm_new(struct dst_entry *dst,
 		}
 		tm = oldest;
 	} else {
-		tm = kzalloc_obj(*tm, GFP_ATOMIC);
+		tm = kzalloc(sizeof(*tm), GFP_ATOMIC);
 		if (!tm)
 			goto out_unlock;
 	}
@@ -283,7 +273,7 @@ static struct tcp_metrics_block *__tcp_get_metrics_req(struct request_sock *req,
 		return NULL;
 	}
 
-	net = sock_net(req_to_sk(req));
+	net = dst_dev_net_rcu(dst);
 	hash ^= net_hash_mix(net);
 	hash = hash_32(hash, tcp_metrics_hash_log);
 
@@ -328,7 +318,7 @@ static struct tcp_metrics_block *tcp_get_metrics(struct sock *sk,
 	else
 		return NULL;
 
-	net = sock_net(sk);
+	net = dst_dev_net_rcu(dst);
 	hash ^= net_hash_mix(net);
 	hash = hash_32(hash, tcp_metrics_hash_log);
 
@@ -336,7 +326,7 @@ static struct tcp_metrics_block *tcp_get_metrics(struct sock *sk,
 	if (tm == TCP_METRICS_RECLAIM_PTR)
 		tm = NULL;
 	if (!tm && create)
-		tm = tcpm_new(dst, net, &saddr, &daddr, hash);
+		tm = tcpm_new(dst, &saddr, &daddr, hash);
 	else
 		tcpm_check_stamp(tm, dst);
 

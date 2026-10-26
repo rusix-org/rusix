@@ -151,10 +151,14 @@ gfs2_io_error_i((sdp), __func__, __FILE__, __LINE__)
 
 
 void gfs2_io_error_bh_i(struct gfs2_sbd *sdp, struct buffer_head *bh,
-			const char *function, char *file, unsigned int line);
+			const char *function, char *file, unsigned int line,
+			bool withdraw);
+
+#define gfs2_io_error_bh_wd(sdp, bh) \
+gfs2_io_error_bh_i((sdp), (bh), __func__, __FILE__, __LINE__, true)
 
 #define gfs2_io_error_bh(sdp, bh) \
-gfs2_io_error_bh_i((sdp), (bh), __func__, __FILE__, __LINE__)
+gfs2_io_error_bh_i((sdp), (bh), __func__, __FILE__, __LINE__, false)
 
 
 extern struct kmem_cache *gfs2_glock_cachep;
@@ -185,6 +189,11 @@ static inline unsigned int gfs2_tune_get_i(struct gfs2_tune *gt,
 static inline bool gfs2_withdrawn(struct gfs2_sbd *sdp)
 {
 	return unlikely(test_bit(SDF_WITHDRAWN, &sdp->sd_flags));
+}
+
+static inline bool gfs2_withdraw_in_prog(struct gfs2_sbd *sdp)
+{
+	return unlikely(test_bit(SDF_WITHDRAW_IN_PROG, &sdp->sd_flags));
 }
 
 #define gfs2_tune_get(sdp, field) \

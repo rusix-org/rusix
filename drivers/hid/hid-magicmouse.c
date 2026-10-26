@@ -553,10 +553,6 @@ static int magicmouse_event(struct hid_device *hdev, struct hid_field *field,
 		struct hid_usage *usage, __s32 value)
 {
 	struct magicmouse_sc *msc = hid_get_drvdata(hdev);
-
-	if (!msc || !msc->input)
-		return 0;
-
 	if ((msc->input->id.product == USB_DEVICE_ID_APPLE_MAGICMOUSE2 ||
 	     msc->input->id.product == USB_DEVICE_ID_APPLE_MAGICMOUSE2_USBC) &&
 	    field->report->id == MOUSE2_REPORT_ID) {
@@ -858,22 +854,20 @@ static int magicmouse_fetch_battery(struct hid_device *hdev)
 #ifdef CONFIG_HID_BATTERY_STRENGTH
 	struct hid_report_enum *report_enum;
 	struct hid_report *report;
-	struct hid_battery *bat;
 
-	bat = hid_get_battery(hdev);
-	if (!bat ||
+	if (!hdev->battery ||
 	    (!is_usb_magicmouse2(hdev->vendor, hdev->product) &&
 	     !is_usb_magictrackpad2(hdev->vendor, hdev->product) &&
 	     !is_bt_magictrackpad2(hdev->vendor, hdev->product)))
 		return -1;
 
-	report_enum = &hdev->report_enum[bat->report_type];
-	report = report_enum->report_id_hash[bat->report_id];
+	report_enum = &hdev->report_enum[hdev->battery_report_type];
+	report = report_enum->report_id_hash[hdev->battery_report_id];
 
 	if (!report || report->maxfield < 1)
 		return -1;
 
-	if (bat->capacity == bat->max)
+	if (hdev->battery_capacity == hdev->battery_max)
 		return -1;
 
 	hid_hw_request(hdev, report, HID_REQ_GET_REPORT);

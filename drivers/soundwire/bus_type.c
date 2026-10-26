@@ -2,6 +2,7 @@
 // Copyright(c) 2015-17 Intel Corporation.
 
 #include <linux/module.h>
+#include <linux/mod_devicetable.h>
 #include <linux/pm_domain.h>
 #include <linux/soundwire/sdw.h>
 #include <linux/soundwire/sdw_type.h>
@@ -71,7 +72,13 @@ int sdw_slave_uevent(const struct device *dev, struct kobj_uevent_env *env)
 	return 0;
 }
 
-static int sdw_bus_probe(struct device *dev)
+const struct bus_type sdw_bus_type = {
+	.name = "soundwire",
+	.match = sdw_bus_match,
+};
+EXPORT_SYMBOL_GPL(sdw_bus_type);
+
+static int sdw_drv_probe(struct device *dev)
 {
 	struct sdw_slave *slave = dev_to_sdw_dev(dev);
 	struct sdw_driver *drv = drv_to_sdw_driver(dev->driver);
@@ -105,9 +112,6 @@ static int sdw_bus_probe(struct device *dev)
 	}
 	slave->index = ret;
 
-	/* Create IRQ mapping now so the driver can get it in probe() */
-	sdw_irq_create_mapping(slave);
-
 	ret = drv->probe(slave, id);
 	if (ret) {
 		ida_free(&slave->bus->slave_ida, slave->index);
@@ -119,6 +123,9 @@ static int sdw_bus_probe(struct device *dev)
 	/* device is probed so let's read the properties now */
 	if (drv->ops && drv->ops->read_prop)
 		drv->ops->read_prop(slave);
+
+	if (slave->prop.use_domain_irq)
+		sdw_irq_create_mapping(slave);
 
 	/* init the dynamic sysfs attributes we need */
 	ret = sdw_slave_sysfs_dpn_init(slave);
@@ -157,10 +164,11 @@ static int sdw_bus_probe(struct device *dev)
 	return 0;
 }
 
-static void sdw_bus_remove(struct device *dev)
+static int sdw_drv_remove(struct device *dev)
 {
 	struct sdw_slave *slave = dev_to_sdw_dev(dev);
 	struct sdw_driver *drv = drv_to_sdw_driver(dev->driver);
+	int ret = 0;
 
 	mutex_lock(&slave->sdw_dev_lock);
 
@@ -169,28 +177,21 @@ static void sdw_bus_remove(struct device *dev)
 	mutex_unlock(&slave->sdw_dev_lock);
 
 	if (drv->remove)
-		drv->remove(slave);
+		ret = drv->remove(slave);
 
 	ida_free(&slave->bus->slave_ida, slave->index);
+
+	return ret;
 }
 
-static void sdw_bus_shutdown(struct device *dev)
+static void sdw_drv_shutdown(struct device *dev)
 {
 	struct sdw_slave *slave = dev_to_sdw_dev(dev);
 	struct sdw_driver *drv = drv_to_sdw_driver(dev->driver);
 
-	if (dev->driver && drv->shutdown)
+	if (drv->shutdown)
 		drv->shutdown(slave);
 }
-
-const struct bus_type sdw_bus_type = {
-	.name = "soundwire",
-	.match = sdw_bus_match,
-	.probe = sdw_bus_probe,
-	.remove = sdw_bus_remove,
-	.shutdown = sdw_bus_shutdown,
-};
-EXPORT_SYMBOL_GPL(sdw_bus_type);
 
 /**
  * __sdw_register_driver() - register a SoundWire Slave driver
@@ -210,6 +211,9 @@ int __sdw_register_driver(struct sdw_driver *drv, struct module *owner)
 	}
 
 	drv->driver.owner = owner;
+	drv->driver.probe = sdw_drv_probe;
+	drv->driver.remove = sdw_drv_remove;
+	drv->driver.shutdown = sdw_drv_shutdown;
 	drv->driver.dev_groups = sdw_attr_groups;
 
 	return driver_register(&drv->driver);

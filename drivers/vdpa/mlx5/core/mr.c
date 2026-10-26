@@ -215,16 +215,17 @@ static int create_direct_keys(struct mlx5_vdpa_dev *mvdev, struct mlx5_vdpa_mr *
 	int err = 0;
 	int i = 0;
 
-	cmds = kvzalloc_objs(*cmds, mr->num_directs);
+	cmds = kvcalloc(mr->num_directs, sizeof(*cmds), GFP_KERNEL);
 	if (!cmds)
 		return -ENOMEM;
 
 	list_for_each_entry(dmr, &mr->head, list) {
 		struct mlx5_create_mkey_mem *cmd_mem;
-		int mttcount;
+		int mttlen, mttcount;
 
-		mttcount = ALIGN(dmr->nsg, MLX5_VDPA_MTT_ALIGN / sizeof(cmd_mem->mtt[0]));
-		cmd_mem = kvzalloc_flex(*cmd_mem, mtt, mttcount);
+		mttlen = roundup(MLX5_ST_SZ_BYTES(mtt) * dmr->nsg, MLX5_VDPA_MTT_ALIGN);
+		mttcount = mttlen / sizeof(cmd_mem->mtt[0]);
+		cmd_mem = kvcalloc(1, struct_size(cmd_mem, mtt, mttcount), GFP_KERNEL);
 		if (!cmd_mem) {
 			err = -ENOMEM;
 			goto done;
@@ -287,8 +288,8 @@ static int destroy_direct_keys(struct mlx5_vdpa_dev *mvdev, struct mlx5_vdpa_mr 
 	int err = 0;
 	int i = 0;
 
-	cmds = kvzalloc_objs(*cmds, mr->num_directs);
-	cmd_mem = kvzalloc_objs(*cmd_mem, mr->num_directs);
+	cmds = kvcalloc(mr->num_directs, sizeof(*cmds), GFP_KERNEL);
+	cmd_mem = kvcalloc(mr->num_directs, sizeof(*cmd_mem), GFP_KERNEL);
 	if (!cmds || !cmd_mem)
 		return -ENOMEM;
 
@@ -456,7 +457,7 @@ static int add_direct_chain(struct mlx5_vdpa_dev *mvdev,
 	st = start;
 	while (size) {
 		sz = (u32)min_t(u64, MAX_KLM_SIZE, size);
-		dmr = kzalloc_obj(*dmr);
+		dmr = kzalloc(sizeof(*dmr), GFP_KERNEL);
 		if (!dmr) {
 			err = -ENOMEM;
 			goto err_alloc;
@@ -820,7 +821,7 @@ struct mlx5_vdpa_mr *mlx5_vdpa_create_mr(struct mlx5_vdpa_dev *mvdev,
 	struct mlx5_vdpa_mr *mr;
 	int err;
 
-	mr = kzalloc_obj(*mr);
+	mr = kzalloc(sizeof(*mr), GFP_KERNEL);
 	if (!mr)
 		return ERR_PTR(-ENOMEM);
 

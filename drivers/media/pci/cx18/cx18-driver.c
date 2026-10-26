@@ -40,8 +40,9 @@ EXPORT_SYMBOL(cx18_ext_init);
 
 /* add your revision and whatnot here */
 static const struct pci_device_id cx18_pci_tbl[] = {
-	{ PCI_VDEVICE(CX, PCI_DEVICE_ID_CX23418) },
-	{ }
+	{PCI_VENDOR_ID_CX, PCI_DEVICE_ID_CX23418,
+	 PCI_ANY_ID, PCI_ANY_ID, 0, 0, 0},
+	{0,}
 };
 
 MODULE_DEVICE_TABLE(pci, cx18_pci_tbl);
@@ -313,7 +314,7 @@ void cx18_read_eeprom(struct cx18 *cx, struct tveeprom *tv)
 
 	memset(tv, 0, sizeof(*tv));
 
-	c = kzalloc_obj(*c);
+	c = kzalloc(sizeof(*c), GFP_KERNEL);
 	if (!c)
 		return;
 
@@ -805,12 +806,12 @@ static int cx18_setup_pci(struct cx18 *cx, struct pci_dev *pci_dev,
 	}
 	if (dma_set_mask(&pci_dev->dev, DMA_BIT_MASK(32))) {
 		CX18_ERR("No suitable DMA available, card %d\n", cx->instance);
-		goto err_disable_device;
+		return -EIO;
 	}
 	if (!request_mem_region(cx->base_addr, CX18_MEM_SIZE, "cx18 encoder")) {
 		CX18_ERR("Cannot request encoder memory region, card %d\n",
 			 cx->instance);
-		goto err_disable_device;
+		return -EIO;
 	}
 
 	/* Enable bus mastering and memory mapped IO for the CX23418 */
@@ -834,10 +835,6 @@ static int cx18_setup_pci(struct cx18 *cx, struct pci_dev *pci_dev,
 		   cx->pci_dev->irq, pci_latency, (u64)cx->base_addr);
 
 	return 0;
-
-err_disable_device:
-	pci_disable_device(pci_dev);
-	return -EIO;
 }
 
 static void cx18_init_subdevs(struct cx18 *cx)
@@ -902,7 +899,7 @@ static int cx18_probe(struct pci_dev *pci_dev,
 		return -ENOMEM;
 	}
 
-	cx = kzalloc_obj(*cx);
+	cx = kzalloc(sizeof(*cx), GFP_KERNEL);
 	if (!cx)
 		return -ENOMEM;
 
@@ -1124,7 +1121,6 @@ free_map:
 	cx18_iounmap(cx);
 free_mem:
 	release_mem_region(cx->base_addr, CX18_MEM_SIZE);
-	pci_disable_device(pci_dev);
 free_workqueues:
 	destroy_workqueue(cx->in_work_queue);
 err:

@@ -184,7 +184,7 @@ fbsr_vram(struct fbsr *fbsr, const char *type, u64 addr, u64 size)
 {
 	struct fbsr_item *item;
 
-	if (!(item = kzalloc_obj(*item)))
+	if (!(item = kzalloc(sizeof(*item), GFP_KERNEL)))
 		return false;
 
 	item->type = type;
@@ -297,7 +297,6 @@ r535_fbsr = {
 static void *
 r535_instmem_dtor(struct nvkm_instmem *imem)
 {
-	nv50_instmem_dtor(imem);
 	kfree(imem->func);
 	return imem;
 }
@@ -310,7 +309,7 @@ r535_instmem_new(const struct nvkm_instmem_func *hw,
 	struct nvkm_instmem_func *rm;
 	int ret;
 
-	if (!(rm = kzalloc_obj(*rm)))
+	if (!(rm = kzalloc(sizeof(*rm), GFP_KERNEL)))
 		return -ENOMEM;
 
 	rm->dtor = r535_instmem_dtor;

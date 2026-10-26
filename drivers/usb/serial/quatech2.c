@@ -13,12 +13,14 @@
 #include <linux/errno.h>
 #include <linux/slab.h>
 #include <linux/tty.h>
+#include <linux/tty_driver.h>
 #include <linux/tty_flip.h>
 #include <linux/module.h>
 #include <linux/serial.h>
 #include <linux/usb.h>
 #include <linux/usb/serial.h>
 #include <linux/serial_reg.h>
+#include <linux/uaccess.h>
 
 /* default urb timeout for usb operations */
 #define QT2_USB_TIMEOUT USB_CTRL_SET_TIMEOUT
@@ -637,7 +639,7 @@ static int qt2_attach(struct usb_serial *serial)
 		return status;
 	}
 
-	serial_priv = kzalloc_obj(*serial_priv);
+	serial_priv = kzalloc(sizeof(*serial_priv), GFP_KERNEL);
 	if (!serial_priv)
 		return -ENOMEM;
 
@@ -668,7 +670,7 @@ static int qt2_port_probe(struct usb_serial_port *port)
 	struct qt2_port_private *port_priv;
 	u8 bEndpointAddress;
 
-	port_priv = kzalloc_obj(*port_priv);
+	port_priv = kzalloc(sizeof(*port_priv), GFP_KERNEL);
 	if (!port_priv)
 		return -ENOMEM;
 

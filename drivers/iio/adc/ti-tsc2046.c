@@ -121,6 +121,11 @@ struct tsc2046_adc_group_layout {
 	unsigned int skip;
 };
 
+struct tsc2046_adc_dcfg {
+	const struct iio_chan_spec *channels;
+	unsigned int num_channels;
+};
+
 struct tsc2046_adc_ch_cfg {
 	unsigned int settling_time_us;
 	unsigned int oversampling_ratio;
@@ -136,6 +141,7 @@ enum tsc2046_state {
 
 struct tsc2046_adc_priv {
 	struct spi_device *spi;
+	const struct tsc2046_adc_dcfg *dcfg;
 	bool internal_vref;
 
 	struct iio_trigger *trig;
@@ -208,6 +214,11 @@ const struct iio_chan_spec name ## _channels[] = { \
 
 static DECLARE_TI_TSC2046_8_CHANNELS(tsc2046_adc, 12);
 
+static const struct tsc2046_adc_dcfg tsc2046_adc_dcfg_tsc2046e = {
+	.channels = tsc2046_adc_channels,
+	.num_channels = ARRAY_SIZE(tsc2046_adc_channels),
+};
+
 /*
  * Convert time to a number of samples which can be transferred within this
  * time.
@@ -279,13 +290,15 @@ static int tsc2046_adc_read_one(struct tsc2046_adc_priv *priv, int ch_idx,
 	if (sizeof(struct tsc2046_adc_atom) * max_count > PAGE_SIZE)
 		return -ENOSPC;
 
-	struct tsc2046_adc_atom *tx_buf __free(kfree) = kzalloc_objs(*tx_buf,
-								     max_count);
+	struct tsc2046_adc_atom *tx_buf __free(kfree) = kcalloc(max_count,
+								sizeof(*tx_buf),
+								GFP_KERNEL);
 	if (!tx_buf)
 		return -ENOMEM;
 
-	struct tsc2046_adc_atom *rx_buf __free(kfree) = kzalloc_objs(*rx_buf,
-								     max_count);
+	struct tsc2046_adc_atom *rx_buf __free(kfree) = kcalloc(max_count,
+								sizeof(*rx_buf),
+								GFP_KERNEL);
 	if (!rx_buf)
 		return -ENOMEM;
 
@@ -728,6 +741,7 @@ static void tsc2046_adc_parse_fwnode(struct tsc2046_adc_priv *priv)
 
 static int tsc2046_adc_probe(struct spi_device *spi)
 {
+	const struct tsc2046_adc_dcfg *dcfg;
 	struct device *dev = &spi->dev;
 	struct tsc2046_adc_priv *priv;
 	struct iio_dev *indio_dev;
@@ -740,6 +754,10 @@ static int tsc2046_adc_probe(struct spi_device *spi)
 		return -EINVAL;
 	}
 
+	dcfg = spi_get_device_match_data(spi);
+	if (!dcfg)
+		return -EINVAL;
+
 	spi->mode &= ~SPI_MODE_X_MASK;
 	spi->mode |= SPI_MODE_0;
 	ret = spi_setup(spi);
@@ -751,13 +769,14 @@ static int tsc2046_adc_probe(struct spi_device *spi)
 		return -ENOMEM;
 
 	priv = iio_priv(indio_dev);
+	priv->dcfg = dcfg;
 
 	priv->spi = spi;
 
 	indio_dev->name = TI_TSC2046_NAME;
 	indio_dev->modes = INDIO_DIRECT_MODE;
-	indio_dev->channels = tsc2046_adc_channels;
-	indio_dev->num_channels = ARRAY_SIZE(tsc2046_adc_channels);
+	indio_dev->channels = dcfg->channels;
+	indio_dev->num_channels = dcfg->num_channels;
 	indio_dev->info = &tsc2046_adc_info;
 
 	ret = devm_regulator_get_enable_read_voltage(dev, "vref");
@@ -812,13 +831,13 @@ static int tsc2046_adc_probe(struct spi_device *spi)
 }
 
 static const struct of_device_id ads7950_of_table[] = {
-	{ .compatible = "ti,tsc2046e-adc" },
+	{ .compatible = "ti,tsc2046e-adc", .data = &tsc2046_adc_dcfg_tsc2046e },
 	{ }
 };
 MODULE_DEVICE_TABLE(of, ads7950_of_table);
 
 static const struct spi_device_id tsc2046_adc_spi_ids[] = {
-	{ .name = "tsc2046e-adc" },
+	{ "tsc2046e-adc", (unsigned long)&tsc2046_adc_dcfg_tsc2046e },
 	{ }
 };
 MODULE_DEVICE_TABLE(spi, tsc2046_adc_spi_ids);

@@ -6,7 +6,6 @@
  * Copyright (c) 2023-2025 Hans de Goede <hansg@kernel.org>
  */
 
-#include <linux/clk.h>
 #include <linux/delay.h>
 #include <linux/errno.h>
 #include <linux/gpio/consumer.h>
@@ -85,8 +84,6 @@
 #define to_gc0310_sensor(x) container_of(x, struct gc0310_device, sd)
 
 struct gc0310_device {
-	struct clk *clk;
-
 	struct v4l2_subdev sd;
 	struct media_pad pad;
 
@@ -365,7 +362,6 @@ static void gc0310_fill_format(struct v4l2_mbus_framefmt *fmt)
 }
 
 static int gc0310_get_selection(struct v4l2_subdev *sd,
-				const struct v4l2_subdev_client_info *ci,
 				struct v4l2_subdev_state *state,
 				struct v4l2_subdev_selection *sel)
 {
@@ -538,6 +534,7 @@ static const struct v4l2_subdev_pad_ops gc0310_pad_ops = {
 	.enum_mbus_code = gc0310_enum_mbus_code,
 	.enum_frame_size = gc0310_enum_frame_size,
 	.get_fmt = v4l2_subdev_get_fmt,
+	.set_fmt = v4l2_subdev_get_fmt, /* Only 1 fixed mode supported */
 	.get_selection = gc0310_get_selection,
 	.set_selection = gc0310_get_selection,
 	.enable_streams = gc0310_enable_streams,
@@ -638,6 +635,7 @@ static int gc0310_check_hwcfg(struct device *dev)
 	};
 	struct fwnode_handle *ep_fwnode;
 	unsigned long link_freq_bitmap;
+	u32 mclk;
 	int ret;
 
 	/*
@@ -648,6 +646,21 @@ static int gc0310_check_hwcfg(struct device *dev)
 	if (!ep_fwnode)
 		return dev_err_probe(dev, -EPROBE_DEFER,
 				     "waiting for fwnode graph endpoint\n");
+
+	ret = fwnode_property_read_u32(dev_fwnode(dev), "clock-frequency",
+				       &mclk);
+	if (ret) {
+		fwnode_handle_put(ep_fwnode);
+		return dev_err_probe(dev, ret,
+				     "reading clock-frequency property\n");
+	}
+
+	if (mclk != GC0310_MCLK_FREQ) {
+		fwnode_handle_put(ep_fwnode);
+		return dev_err_probe(dev, -EINVAL,
+				     "external clock %u is not supported\n",
+				     mclk);
+	}
 
 	ret = v4l2_fwnode_endpoint_alloc_parse(ep_fwnode, &bus_cfg);
 	fwnode_handle_put(ep_fwnode);
@@ -672,7 +685,6 @@ static int gc0310_check_hwcfg(struct device *dev)
 static int gc0310_probe(struct i2c_client *client)
 {
 	struct gc0310_device *sensor;
-	unsigned long freq;
 	int ret;
 
 	ret = gc0310_check_hwcfg(&client->dev);
@@ -682,16 +694,6 @@ static int gc0310_probe(struct i2c_client *client)
 	sensor = devm_kzalloc(&client->dev, sizeof(*sensor), GFP_KERNEL);
 	if (!sensor)
 		return -ENOMEM;
-
-	sensor->clk = devm_v4l2_sensor_clk_get(&client->dev, NULL);
-	if (IS_ERR(sensor->clk))
-		return dev_err_probe(&client->dev, PTR_ERR(sensor->clk),
-				     "failed to get clock\n");
-
-	freq = clk_get_rate(sensor->clk);
-	if (freq != GC0310_MCLK_FREQ)
-		return dev_err_probe(&client->dev, -EINVAL,
-				     "external clock %lu is not supported\n", freq);
 
 	sensor->reset = devm_gpiod_get(&client->dev, "reset", GPIOD_OUT_HIGH);
 	if (IS_ERR(sensor->reset)) {

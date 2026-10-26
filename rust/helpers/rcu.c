@@ -2,12 +2,12 @@
 
 #include <linux/rcupdate.h>
 
-__rust_helper void rust_helper_rcu_read_lock(void)
+void rust_helper_rcu_read_lock(void)
 {
 	rcu_read_lock();
 }
 
-__rust_helper void rust_helper_rcu_read_unlock(void)
+void rust_helper_rcu_read_unlock(void)
 {
 	rcu_read_unlock();
 }

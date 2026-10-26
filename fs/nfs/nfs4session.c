@@ -106,7 +106,7 @@ static struct nfs4_slot *nfs4_new_slot(struct nfs4_slot_table  *tbl,
 {
 	struct nfs4_slot *slot;
 
-	slot = kzalloc_obj(*slot, gfp_mask);
+	slot = kzalloc(sizeof(*slot), gfp_mask);
 	if (slot) {
 		slot->table = tbl;
 		slot->slot_nr = slotid;
@@ -408,6 +408,8 @@ void nfs41_wake_slot_table(struct nfs4_slot_table *tbl)
 	}
 }
 
+#if defined(CONFIG_NFS_V4_1)
+
 static void nfs41_set_max_slotid_locked(struct nfs4_slot_table *tbl,
 		u32 target_highest_slotid)
 {
@@ -558,7 +560,7 @@ struct nfs4_session *nfs4_alloc_session(struct nfs_client *clp)
 {
 	struct nfs4_session *session;
 
-	session = kzalloc_obj(struct nfs4_session, GFP_NOFS);
+	session = kzalloc(sizeof(struct nfs4_session), GFP_NOFS);
 	if (!session)
 		return NULL;
 
@@ -626,8 +628,7 @@ int nfs4_init_session(struct nfs_client *clp)
 	return nfs41_check_session_ready(clp);
 }
 
-int nfs4_init_ds_session(struct nfs_client *clp, unsigned long lease_time,
-			 bool tightly_coupled)
+int nfs4_init_ds_session(struct nfs_client *clp, unsigned long lease_time)
 {
 	struct nfs4_session *session = clp->cl_session;
 	int ret;
@@ -653,8 +654,10 @@ int nfs4_init_ds_session(struct nfs_client *clp, unsigned long lease_time,
 	if (ret)
 		return ret;
 	/* Test for the DS role */
-	if (tightly_coupled && !is_ds_client(clp))
+	if (!is_ds_client(clp))
 		return -ENODEV;
 	return 0;
 }
 EXPORT_SYMBOL_GPL(nfs4_init_ds_session);
+
+#endif	/* defined(CONFIG_NFS_V4_1) */

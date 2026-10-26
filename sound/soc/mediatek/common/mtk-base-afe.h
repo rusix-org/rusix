@@ -153,8 +153,6 @@ struct mtk_base_afe_memif {
 struct mtk_base_afe_irq {
 	const struct mtk_base_irq_data *irq_data;
 	int irq_occupyed;
-
-	struct regmap *regmap;
 };
 
 struct mtk_base_afe_dai {

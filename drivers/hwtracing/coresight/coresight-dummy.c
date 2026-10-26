@@ -19,6 +19,9 @@ struct dummy_drvdata {
 	u8				traceid;
 };
 
+DEFINE_CORESIGHT_DEVLIST(source_devs, "dummy_source");
+DEFINE_CORESIGHT_DEVLIST(sink_devs, "dummy_sink");
+
 static int dummy_source_enable(struct coresight_device *csdev,
 			       struct perf_event *event, enum cs_mode mode,
 			       __maybe_unused struct coresight_path *path)
@@ -49,7 +52,7 @@ static int dummy_source_trace_id(struct coresight_device *csdev, __maybe_unused 
 }
 
 static int dummy_sink_enable(struct coresight_device *csdev, enum cs_mode mode,
-			     struct coresight_path *path)
+				void *data)
 {
 	dev_dbg(csdev->dev.parent, "Dummy sink enabled\n");
 
@@ -123,7 +126,7 @@ static int dummy_probe(struct platform_device *pdev)
 
 	if (of_device_is_compatible(node, "arm,coresight-dummy-source")) {
 
-		desc.name = coresight_alloc_device_name("dummy_source", dev);
+		desc.name = coresight_alloc_device_name(&source_devs, dev);
 		if (!desc.name)
 			return -ENOMEM;
 
@@ -152,7 +155,7 @@ static int dummy_probe(struct platform_device *pdev)
 		drvdata->traceid = (u8)trace_id;
 
 	} else if (of_device_is_compatible(node, "arm,coresight-dummy-sink")) {
-		desc.name = coresight_alloc_device_name("dummy_sink", dev);
+		desc.name = coresight_alloc_device_name(&sink_devs, dev);
 		if (!desc.name)
 			return -ENOMEM;
 

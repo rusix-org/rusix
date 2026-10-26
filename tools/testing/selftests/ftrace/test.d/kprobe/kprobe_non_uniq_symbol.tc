@@ -3,7 +3,7 @@
 # description: Test failure of registering kprobe on non unique symbol
 # requires: kprobe_events
 
-SYMBOL='init_once'
+SYMBOL='name_show'
 
 # We skip this test on kernel where SYMBOL is unique or does not exist.
 if [ "$(grep -c -E "[[:alnum:]]+ t ${SYMBOL}$" /proc/kallsyms)" -le '1' ]; then

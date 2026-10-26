@@ -21,6 +21,14 @@ class GateTests(unittest.TestCase):
         self.lines = [f"RUSIX_BRD_PASS {case}" for case in runner.CASES]
         self.lines.append("RUSIX_BRD_SUCCESS cases=6")
 
+    def test_acpi_diagnostics_even_after_success(self):
+        for diagnostic in ("ACPI Error: AE_NOT_FOUND", "ACPI Warning: invalid table",
+                           "ACPI BIOS Error (bug): Could not resolve symbol",
+                           "ACPI BIOS Warning: invalid table", "ACPI Exception: AE_ERROR",
+                           "ACPI: Unable to load the System Description Tables"):
+            with self.subTest(diagnostic=diagnostic):
+                self.check_rejected(self.lines + [diagnostic])
+
     def check_rejected(self, lines, exit_code=0):
         with self.assertRaises(ValueError):
             runner.accept_console("\n".join(lines), exit_code)
@@ -71,6 +79,52 @@ class GateTests(unittest.TestCase):
     def test_prefixed_or_truncated_marker(self):
         self.check_rejected(["interleaved " + self.lines[0]] + self.lines[1:])
         self.check_rejected(self.lines[:-1] + ["RUSIX_BRD_SUCCESS cases="])
+
+
+class SelectionTests(unittest.TestCase):
+    def config(self, rust=False):
+        lines = [f"CONFIG_{name}=y" for name in runner.REQUIRED_CONFIG]
+        lines += ["CONFIG_RUSIX_BRD_RUST=y" if rust else
+                  "# CONFIG_RUSIX_BRD_RUST is not set", "# CONFIG_KUNIT is not set"]
+        return "\n".join(lines)
+
+    def test_each_implementation_requires_matching_profile_and_configuration(self):
+        for profile, implementation, rust in (("brd", "brd-c", False),
+                                               ("brd-rust", "brd-rust", True),
+                                               ("brd-ext4-c", "brd-c", False),
+                                               ("brd-ext4-rust", "brd-rust", True)):
+            with self.subTest(profile=profile):
+                self.assertEqual(runner.validate_selection(
+                    profile, f"implementation={implementation}", self.config(rust)),
+                    implementation)
+                with self.assertRaises(ValueError):
+                    runner.validate_selection(profile, f"implementation={implementation}",
+                                              self.config(not rust))
+                other = "brd-c" if rust else "brd-rust"
+                with self.assertRaises(ValueError):
+                    runner.validate_selection(profile, f"implementation={other}",
+                                              self.config(rust))
+
+    def test_invalid_profile_and_selection(self):
+        for profile, selection in (("kunit", "implementation=brd-c"),
+                                   ("server", "implementation=brd-rust"),
+                                   ("brd", ""), ("brd", "implementation=brd-c extra")):
+            with self.subTest(profile=profile, selection=selection):
+                with self.assertRaises(ValueError):
+                    runner.validate_selection(profile, selection, self.config())
+
+    def test_each_required_builtin_option_is_enforced(self):
+        for name in runner.REQUIRED_CONFIG:
+            for replacement in ("", f"CONFIG_{name}=m"):
+                with self.subTest(name=name, replacement=replacement):
+                    config = self.config().replace(f"CONFIG_{name}=y", replacement)
+                    with self.assertRaises(ValueError):
+                        runner.validate_selection("brd", "implementation=brd-c", config)
+
+    def test_kunit_is_not_allowed_in_contract_guest(self):
+        with self.assertRaises(ValueError):
+            runner.validate_selection("brd-rust", "implementation=brd-rust",
+                                      self.config(True) + "\nCONFIG_KUNIT=y")
 
 
 class InputTests(unittest.TestCase):

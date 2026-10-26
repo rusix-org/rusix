@@ -21,6 +21,7 @@
 #include <linux/delay.h>
 #include <linux/device.h>
 #include <linux/freezer.h>
+#include <linux/mod_devicetable.h>
 #include <linux/module.h>
 #include <linux/pm.h>
 #include <linux/property.h>
@@ -707,7 +708,7 @@ static int max3100_probe(struct spi_device *spi)
 		return dev_err_probe(dev, -ENOSPC, "too many MAX3100 chips\n");
 	}
 
-	max3100s[i] = kzalloc_obj(struct max3100_port);
+	max3100s[i] = kzalloc(sizeof(struct max3100_port), GFP_KERNEL);
 	if (!max3100s[i]) {
 		mutex_unlock(&max3100s_lock);
 		return -ENOMEM;
@@ -724,7 +725,6 @@ static int max3100_probe(struct spi_device *spi)
 	max3100s[i]->port.ops = &max3100_ops;
 	max3100s[i]->port.flags = UPF_SKIP_TEST | UPF_BOOT_AUTOCONF;
 	max3100s[i]->port.line = i;
-	max3100s[i]->port.iotype = UPIO_BUS;
 	max3100s[i]->port.type = PORT_MAX3100;
 	max3100s[i]->port.dev = &spi->dev;
 

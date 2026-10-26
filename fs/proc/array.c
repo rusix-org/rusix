@@ -55,7 +55,6 @@
 
 #include <linux/types.h>
 #include <linux/errno.h>
-#include <linux/hex.h>
 #include <linux/time.h>
 #include <linux/time_namespace.h>
 #include <linux/kernel.h>
@@ -168,8 +167,8 @@ static inline void task_state(struct seq_file *m, struct pid_namespace *ns,
 	cred = get_task_cred(p);
 
 	task_lock(p);
-	if (p->real_fs)
-		umask = p->real_fs->umask;
+	if (p->fs)
+		umask = p->fs->umask;
 	if (p->files)
 		max_fds = files_fdtable(p->files)->max_fds;
 	task_unlock(p);
@@ -280,7 +279,7 @@ static inline void task_sig(struct seq_file *m, struct task_struct *p)
 		blocked = p->blocked;
 		collect_sigign_sigcatch(p, &ignored, &caught);
 		num_threads = get_nr_threads(p);
-		rcu_read_lock();
+		rcu_read_lock();  /* FIXME: is this correct? */
 		qsize = get_rlimit_value(task_ucounts(p), UCOUNT_RLIMIT_SIGPENDING);
 		rcu_read_unlock();
 		qlim = task_rlimit(p, RLIMIT_SIGPENDING);
@@ -543,27 +542,27 @@ static int do_task_stat(struct seq_file *m, struct pid_namespace *ns,
 	if (permitted && (!whole || num_threads < 2))
 		wchan = !task_is_running(task);
 
-	scoped_guard(rcu) {
-		scoped_seqlock_read (&sig->stats_lock, ss_lock_irqsave) {
-			cmin_flt = sig->cmin_flt;
-			cmaj_flt = sig->cmaj_flt;
-			cutime = sig->cutime;
-			cstime = sig->cstime;
-			cgtime = sig->cgtime;
+	scoped_seqlock_read (&sig->stats_lock, ss_lock_irqsave) {
+		cmin_flt = sig->cmin_flt;
+		cmaj_flt = sig->cmaj_flt;
+		cutime = sig->cutime;
+		cstime = sig->cstime;
+		cgtime = sig->cgtime;
 
-			if (whole) {
-				struct task_struct *t;
+		if (whole) {
+			struct task_struct *t;
 
-				min_flt = sig->min_flt;
-				maj_flt = sig->maj_flt;
-				gtime = sig->gtime;
+			min_flt = sig->min_flt;
+			maj_flt = sig->maj_flt;
+			gtime = sig->gtime;
 
-				__for_each_thread(sig, t) {
-					min_flt += t->min_flt;
-					maj_flt += t->maj_flt;
-					gtime += task_gtime(t);
-				}
+			rcu_read_lock();
+			__for_each_thread(sig, t) {
+				min_flt += t->min_flt;
+				maj_flt += t->maj_flt;
+				gtime += task_gtime(t);
 			}
+			rcu_read_unlock();
 		}
 	}
 

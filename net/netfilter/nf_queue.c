@@ -1,4 +1,3 @@
-// SPDX-License-Identifier: GPL-2.0-or-later
 /*
  * Rusty Russell (C)2000 -- This code is GPL.
  * Patrick McHardy (c) 2006-2012
@@ -129,14 +128,14 @@ bool nf_queue_entry_get_refs(struct nf_queue_entry *entry)
 }
 EXPORT_SYMBOL_GPL(nf_queue_entry_get_refs);
 
-void nf_queue_nf_hook_drop(struct net *net, const struct nf_hook_ops *ops)
+void nf_queue_nf_hook_drop(struct net *net)
 {
 	const struct nf_queue_handler *qh;
 
 	rcu_read_lock();
 	qh = rcu_dereference(nf_queue_handler);
 	if (qh)
-		qh->nf_hook_drop(net, ops);
+		qh->nf_hook_drop(net);
 	rcu_read_unlock();
 }
 EXPORT_SYMBOL_GPL(nf_queue_nf_hook_drop);

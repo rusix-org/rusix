@@ -115,8 +115,6 @@ struct ima_file_id {
 
 int integrity_kernel_read(struct file *file, loff_t offset,
 			  void *addr, unsigned long count);
-int __init integrity_fs_init(void);
-void __init integrity_fs_fini(void);
 
 #define INTEGRITY_KEYRING_EVM		0
 #define INTEGRITY_KEYRING_IMA		1
@@ -131,7 +129,7 @@ struct modsig;
 #ifdef CONFIG_INTEGRITY_SIGNATURE
 
 int integrity_digsig_verify(const unsigned int id, const char *sig, int siglen,
-			    const char *digest, int digestlen, u8 algo);
+			    const char *digest, int digestlen);
 int integrity_modsig_verify(unsigned int id, const struct modsig *modsig);
 
 int __init integrity_init_keyring(const unsigned int id);
@@ -142,8 +140,7 @@ int __init integrity_load_cert(const unsigned int id, const char *source,
 
 static inline int integrity_digsig_verify(const unsigned int id,
 					  const char *sig, int siglen,
-					  const char *digest, int digestlen,
-					  u8 algo)
+					  const char *digest, int digestlen)
 {
 	return -EOPNOTSUPP;
 }
@@ -171,18 +168,9 @@ static inline int __init integrity_load_cert(const unsigned int id,
 #ifdef CONFIG_INTEGRITY_ASYMMETRIC_KEYS
 int asymmetric_verify(struct key *keyring, const char *sig,
 		      int siglen, const char *data, int datalen);
-int asymmetric_verify_v3(struct key *keyring, const char *sig,
-			 int siglen, const char *data, int datalen, u8 algo);
 #else
 static inline int asymmetric_verify(struct key *keyring, const char *sig,
 				    int siglen, const char *data, int datalen)
-{
-	return -EOPNOTSUPP;
-}
-
-static inline int asymmetric_verify_v3(struct key *keyring,
-				       const char *sig, int siglen,
-				       const char *data, int datalen, u8 algo)
 {
 	return -EOPNOTSUPP;
 }
@@ -218,8 +206,12 @@ static inline void evm_load_x509(void)
 /* declarations */
 void integrity_audit_msg(int audit_msgno, struct inode *inode,
 			 const unsigned char *fname, const char *op,
-			 const char *cause, int result, int info,
-			 int errno);
+			 const char *cause, int result, int info);
+
+void integrity_audit_message(int audit_msgno, struct inode *inode,
+			     const unsigned char *fname, const char *op,
+			     const char *cause, int result, int info,
+			     int errno);
 
 static inline struct audit_buffer *
 integrity_audit_log_start(struct audit_context *ctx, gfp_t gfp_mask, int type)
@@ -231,7 +223,15 @@ integrity_audit_log_start(struct audit_context *ctx, gfp_t gfp_mask, int type)
 static inline void integrity_audit_msg(int audit_msgno, struct inode *inode,
 				       const unsigned char *fname,
 				       const char *op, const char *cause,
-				       int result, int info, int errno)
+				       int result, int info)
+{
+}
+
+static inline void integrity_audit_message(int audit_msgno,
+					   struct inode *inode,
+					   const unsigned char *fname,
+					   const char *op, const char *cause,
+					   int result, int info, int errno)
 {
 }
 

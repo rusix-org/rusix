@@ -1309,7 +1309,8 @@ int mptscsih_show_info(struct seq_file *m, struct Scsi_Host *host)
  *
  *	Returns 0. (rtn value discarded by linux scsi mid-layer)
  */
-enum scsi_qc_status mptscsih_qcmd(struct scsi_cmnd *SCpnt)
+int
+mptscsih_qcmd(struct scsi_cmnd *SCpnt)
 {
 	MPT_SCSI_HOST		*hd;
 	MPT_FRAME_HDR		*mf;

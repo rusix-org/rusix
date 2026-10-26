@@ -72,15 +72,6 @@ static inline bool bpf_iter_target_support_resched(const struct bpf_iter_target_
 	return tinfo->reg_info->feature & BPF_ITER_RESCHED;
 }
 
-/* Only allow sleepable program for resched-able iterator that can run one */
-static bool bpf_iter_target_support_prog(const struct bpf_iter_target_info *tinfo,
-					 const struct bpf_prog *prog)
-{
-	return !prog->sleepable ||
-	       (bpf_iter_target_support_resched(tinfo) &&
-		!(tinfo->reg_info->feature & BPF_ITER_NOSLEEP));
-}
-
 static bool bpf_iter_support_resched(struct seq_file *seq)
 {
 	struct bpf_iter_priv_data *iter_priv;
@@ -95,7 +86,7 @@ static bool bpf_iter_support_resched(struct seq_file *seq)
 
 /* bpf_seq_read, a customized and simpler version for bpf iterator.
  * The following are differences from seq_read():
- *  . fixed buffer size (PAGE_SIZE << 3)
+ *  . fixed buffer size (PAGE_SIZE)
  *  . assuming NULL ->llseek()
  *  . stop() may call bpf program, handling potential overflow there
  */
@@ -304,7 +295,7 @@ int bpf_iter_reg_target(const struct bpf_iter_reg *reg_info)
 {
 	struct bpf_iter_target_info *tinfo;
 
-	tinfo = kzalloc_obj(*tinfo);
+	tinfo = kzalloc(sizeof(*tinfo), GFP_KERNEL);
 	if (!tinfo)
 		return -ENOMEM;
 
@@ -350,13 +341,6 @@ int bpf_iter_prog_supported(struct bpf_prog *prog)
 	u32 prog_btf_id = prog->aux->attach_btf_id;
 	const char *prefix = BPF_ITER_FUNC_PREFIX;
 	int prefix_len = strlen(prefix);
-
-	/*
-	 * The attach function of a program that has a target program is a
-	 * function of that program, whatever its name is.
-	 */
-	if (prog->aux->dst_prog)
-		return -EINVAL;
 
 	if (strncmp(attach_fname, prefix, prefix_len))
 		return -EINVAL;
@@ -425,8 +409,6 @@ static int bpf_iter_link_replace(struct bpf_link *link,
 				 struct bpf_prog *new_prog,
 				 struct bpf_prog *old_prog)
 {
-	struct bpf_iter_link *iter_link =
-		container_of(link, struct bpf_iter_link, link);
 	int ret = 0;
 
 	mutex_lock(&link_mutex);
@@ -437,17 +419,9 @@ static int bpf_iter_link_replace(struct bpf_link *link,
 
 	if (link->prog->type != new_prog->type ||
 	    link->prog->expected_attach_type != new_prog->expected_attach_type ||
-	    link->prog->aux->attach_btf_id != new_prog->aux->attach_btf_id ||
-	    !bpf_iter_target_support_prog(iter_link->tinfo, new_prog)) {
+	    link->prog->aux->attach_btf_id != new_prog->aux->attach_btf_id) {
 		ret = -EINVAL;
 		goto out_unlock;
-	}
-
-	if (iter_link->tinfo->reg_info->check_prog) {
-		ret = iter_link->tinfo->reg_info->check_prog(new_prog,
-							     &iter_link->aux);
-		if (ret)
-			goto out_unlock;
 	}
 
 	old_prog = xchg(&link->prog, new_prog);
@@ -570,10 +544,11 @@ int bpf_iter_link_attach(const union bpf_attr *attr, bpfptr_t uattr,
 	if (!tinfo)
 		return -ENOENT;
 
-	if (!bpf_iter_target_support_prog(tinfo, prog))
+	/* Only allow sleepable program for resched-able iterator */
+	if (prog->sleepable && !bpf_iter_target_support_resched(tinfo))
 		return -EINVAL;
 
-	link = kzalloc_obj(*link, GFP_USER | __GFP_NOWARN);
+	link = kzalloc(sizeof(*link), GFP_USER | __GFP_NOWARN);
 	if (!link)
 		return -ENOMEM;
 
@@ -659,24 +634,37 @@ release_prog:
 int bpf_iter_new_fd(struct bpf_link *link)
 {
 	struct bpf_iter_link *iter_link;
+	struct file *file;
 	unsigned int flags;
-	int err;
+	int err, fd;
 
 	if (link->ops != &bpf_iter_link_lops)
 		return -EINVAL;
 
 	flags = O_RDONLY | O_CLOEXEC;
+	fd = get_unused_fd_flags(flags);
+	if (fd < 0)
+		return fd;
 
-	FD_PREPARE(fdf, flags, anon_inode_getfile("bpf_iter", &bpf_iter_fops, NULL, flags));
-	if (fdf->fd < 0)
-		return fdf->fd;
+	file = anon_inode_getfile("bpf_iter", &bpf_iter_fops, NULL, flags);
+	if (IS_ERR(file)) {
+		err = PTR_ERR(file);
+		goto free_fd;
+	}
 
 	iter_link = container_of(link, struct bpf_iter_link, link);
-	err = prepare_seq_file(fdf->file, iter_link);
+	err = prepare_seq_file(file, iter_link);
 	if (err)
-		return err; /* Automatic cleanup handles fput */
+		goto free_file;
 
-	return fd_publish(fdf);
+	fd_install(fd, file);
+	return fd;
+
+free_file:
+	fput(file);
+free_fd:
+	put_unused_fd(fd);
+	return err;
 }
 
 struct bpf_prog *bpf_iter_get_info(struct bpf_iter_meta *meta, bool in_stop)
@@ -807,8 +795,8 @@ __bpf_kfunc int bpf_iter_num_new(struct bpf_iter_num *it, int start, int end)
 		return -EINVAL;
 	}
 
-	/* start <= end here, so end - start fits in a u32 without overflow */
-	if ((u32)(end - start) > BPF_MAX_LOOPS) {
+	/* avoid overflows, e.g., if start == INT_MIN and end == INT_MAX */
+	if ((s64)end - (s64)start > BPF_MAX_LOOPS) {
 		s->cur = s->end = 0;
 		return -E2BIG;
 	}
@@ -827,11 +815,12 @@ __bpf_kfunc int *bpf_iter_num_next(struct bpf_iter_num* it)
 {
 	struct bpf_iter_num_kern *s = (void *)it;
 
-	/*
-	 * s->cur < s->end while iterating, else s->cur == s->end == 0; the signed
-	 * s->cur + 1 >= s->end holds even when s->cur + 1 wraps (start == INT_MIN).
+	/* check failed initialization or if we are done (same behavior);
+	 * need to be careful about overflow, so convert to s64 for checks,
+	 * e.g., if s->cur == s->end == INT_MAX, we can't just do
+	 * s->cur + 1 >= s->end
 	 */
-	if (s->cur + 1 >= s->end) {
+	if ((s64)(s->cur + 1) >= s->end) {
 		s->cur = s->end = 0;
 		return NULL;
 	}
@@ -843,7 +832,9 @@ __bpf_kfunc int *bpf_iter_num_next(struct bpf_iter_num* it)
 
 __bpf_kfunc void bpf_iter_num_destroy(struct bpf_iter_num *it)
 {
-	/* no-op */
+	struct bpf_iter_num_kern *s = (void *)it;
+
+	s->cur = s->end = 0;
 }
 
 __bpf_kfunc_end_defs();

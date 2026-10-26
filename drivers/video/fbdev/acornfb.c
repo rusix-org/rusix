@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
+ *  linux/drivers/video/acornfb.c
+ *
  *  Copyright (C) 1998-2001 Russell King
  *
  * Frame buffer code for Acorn platforms
@@ -92,6 +94,7 @@ static struct vidc_timing current_vidc;
 
 extern unsigned int vram_size;	/* set by setup.c */
 
+#ifdef HAS_VIDC20
 #include <mach/acornfb.h>
 
 #define MAX_SIZE	(2*1024*1024)
@@ -303,6 +306,7 @@ acornfb_setcolreg(u_int regno, u_int red, u_int green, u_int blue,
 
 	return 0;
 }
+#endif
 
 /*
  * Before selecting the timing parameters, adjust
@@ -386,6 +390,7 @@ acornfb_adjust_timing(struct fb_info *info, struct fb_var_screeninfo *var, u_int
 	/* hsync_len must be even */
 	var->hsync_len = (var->hsync_len + 1) & ~1;
 
+#if defined(HAS_VIDC20)
 	/* left_margin must be even */
 	if (var->left_margin & 1) {
 		var->left_margin += 1;
@@ -395,6 +400,7 @@ acornfb_adjust_timing(struct fb_info *info, struct fb_var_screeninfo *var, u_int
 	/* right_margin must be even */
 	if (var->right_margin & 1)
 		var->right_margin += 1;
+#endif
 
 	if (var->vsync_len < 1)
 		var->vsync_len = 1;
@@ -430,7 +436,11 @@ acornfb_update_dma(struct fb_info *info, struct fb_var_screeninfo *var)
 {
 	u_int off = var->yoffset * info->fix.line_length;
 
+#if defined(HAS_MEMC)
+	memc_write(VDMA_INIT, off >> 2);
+#elif defined(HAS_IOMD)
 	iomd_writel(info->fix.smem_start + off, IOMD_VIDINIT);
+#endif
 }
 
 static int
@@ -459,6 +469,7 @@ acornfb_check_var(struct fb_var_screeninfo *var, struct fb_info *info)
 		var->transp.length = 0;
 		break;
 
+#ifdef HAS_VIDC20
 	case 16:
 		var->red.offset    = 0;
 		var->red.length    = 5;
@@ -480,6 +491,7 @@ acornfb_check_var(struct fb_var_screeninfo *var, struct fb_info *info)
 		var->transp.offset = 24;
 		var->transp.length = 4;
 		break;
+#endif
 	default:
 		return -EINVAL;
 	}
@@ -507,9 +519,6 @@ acornfb_check_var(struct fb_var_screeninfo *var, struct fb_info *info)
 
 static int acornfb_set_par(struct fb_info *info)
 {
-	unsigned long start, size;
-	u_int control;
-
 	switch (info->var.bits_per_pixel) {
 	case 1:
 		current_par.palette_size = 2;
@@ -527,6 +536,7 @@ static int acornfb_set_par(struct fb_info *info)
 		current_par.palette_size = VIDC_PALETTE_SIZE;
 		info->fix.visual = FB_VISUAL_PSEUDOCOLOR;
 		break;
+#ifdef HAS_VIDC20
 	case 16:
 		current_par.palette_size = 32;
 		info->fix.visual = FB_VISUAL_DIRECTCOLOR;
@@ -535,26 +545,41 @@ static int acornfb_set_par(struct fb_info *info)
 		current_par.palette_size = VIDC_PALETTE_SIZE;
 		info->fix.visual = FB_VISUAL_DIRECTCOLOR;
 		break;
+#endif
 	default:
 		BUG();
 	}
 
 	info->fix.line_length	= (info->var.xres * info->var.bits_per_pixel) / 8;
 
-	start = info->fix.smem_start;
-	size  = current_par.screen_end;
+#if defined(HAS_MEMC)
+	{
+		unsigned long size = info->fix.smem_len - VDMA_XFERSIZE;
 
-	if (current_par.using_vram) {
-		size -= current_par.vram_half_sam;
-		control = DMA_CR_E | (current_par.vram_half_sam / 256);
-	} else {
-		size -= 16;
-		control = DMA_CR_E | DMA_CR_D | 16;
+		memc_write(VDMA_START, 0);
+		memc_write(VDMA_END, size >> 2);
 	}
+#elif defined(HAS_IOMD)
+	{
+		unsigned long start, size;
+		u_int control;
 
-	iomd_writel(start,   IOMD_VIDSTART);
-	iomd_writel(size,    IOMD_VIDEND);
-	iomd_writel(control, IOMD_VIDCR);
+		start = info->fix.smem_start;
+		size  = current_par.screen_end;
+
+		if (current_par.using_vram) {
+			size -= current_par.vram_half_sam;
+			control = DMA_CR_E | (current_par.vram_half_sam / 256);
+		} else {
+			size -= 16;
+			control = DMA_CR_E | DMA_CR_D | 16;
+		}
+
+		iomd_writel(start,   IOMD_VIDSTART);
+		iomd_writel(size,    IOMD_VIDEND);
+		iomd_writel(control, IOMD_VIDCR);
+	}
+#endif
 
 	acornfb_update_dma(info, &info->var);
 	acornfb_set_timing(info);
@@ -684,8 +709,10 @@ static void acornfb_init_fbinfo(void)
 	 */
 	memset(&fb_info.var, 0, sizeof(fb_info.var));
 
+#if defined(HAS_VIDC20)
 	fb_info.var.red.length	   = 8;
 	fb_info.var.transp.length  = 4;
+#endif
 	fb_info.var.green	   = fb_info.var.red;
 	fb_info.var.blue	   = fb_info.var.red;
 	fb_info.var.nonstd	   = 0;
@@ -964,6 +991,7 @@ static int acornfb_probe(struct platform_device *dev)
 
 	size = PAGE_ALIGN(size);
 
+#if defined(HAS_VIDC20)
 	if (!current_par.using_vram) {
 		dma_addr_t handle;
 		void *base;
@@ -983,6 +1011,7 @@ static int acornfb_probe(struct platform_device *dev)
 		fb_info.screen_base = base;
 		fb_info.fix.smem_start = handle;
 	}
+#endif
 	fb_info.fix.smem_len = size;
 	current_par.palette_size   = VIDC_PALETTE_SIZE;
 

@@ -25,8 +25,6 @@ extern int ibt_selftest_noendbr(void);
 void handle_invalid_op(struct pt_regs *regs);
 #endif
 
-noinstr bool handle_bug(struct pt_regs *regs);
-
 static inline int get_si_code(unsigned long condition)
 {
 	if (condition & DR_STEP)
@@ -36,6 +34,8 @@ static inline int get_si_code(unsigned long condition)
 	else
 		return TRAP_BRKPT;
 }
+
+void math_emulate(struct math_emu_info *);
 
 bool fault_in_kernel_space(unsigned long address);
 

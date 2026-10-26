@@ -15,7 +15,7 @@
  *   Signed-off-by: Michael Schwarz <michael.schwarz@iaik.tugraz.at>
  *
  * Major changes to the original code by: Dave Hansen <dave.hansen@intel.com>
- * Mostly rewritten by Thomas Gleixner <tglx@kernel.org> and
+ * Mostly rewritten by Thomas Gleixner <tglx@linutronix.de> and
  *		       Andy Lutomirsky <luto@amacapital.net>
  */
 #include <linux/kernel.h>
@@ -31,7 +31,6 @@
 
 #include <asm/cpufeature.h>
 #include <asm/hypervisor.h>
-#include <asm/cpuid/api.h>
 #include <asm/vsyscall.h>
 #include <asm/cmdline.h>
 #include <asm/pti.h>

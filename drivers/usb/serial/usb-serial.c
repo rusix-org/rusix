@@ -22,11 +22,14 @@
 #include <linux/slab.h>
 #include <linux/tty.h>
 #include <linux/tty_driver.h>
+#include <linux/tty_flip.h>
 #include <linux/module.h>
+#include <linux/moduleparam.h>
 #include <linux/seq_file.h>
 #include <linux/spinlock.h>
 #include <linux/mutex.h>
 #include <linux/list.h>
+#include <linux/uaccess.h>
 #include <linux/serial.h>
 #include <linux/usb.h>
 #include <linux/usb/serial.h>
@@ -739,7 +742,7 @@ static struct usb_serial *create_serial(struct usb_device *dev,
 {
 	struct usb_serial *serial;
 
-	serial = kzalloc_obj(*serial);
+	serial = kzalloc(sizeof(*serial), GFP_KERNEL);
 	if (!serial)
 		return NULL;
 	serial->dev = usb_get_dev(dev);
@@ -1056,7 +1059,7 @@ static int usb_serial_probe(struct usb_interface *interface,
 	}
 
 	/* descriptor matches, let's find the endpoints needed */
-	epds = kzalloc_obj(*epds);
+	epds = kzalloc(sizeof(*epds), GFP_KERNEL);
 	if (!epds) {
 		retval = -ENOMEM;
 		goto err_release_sibling;
@@ -1110,7 +1113,7 @@ static int usb_serial_probe(struct usb_interface *interface,
 
 	dev_dbg(ddev, "setting up %d port structure(s)\n", max_endpoints);
 	for (i = 0; i < max_endpoints; ++i) {
-		port = kzalloc_obj(struct usb_serial_port);
+		port = kzalloc(sizeof(struct usb_serial_port), GFP_KERNEL);
 		if (!port) {
 			retval = -ENOMEM;
 			goto err_free_epds;
@@ -1539,7 +1542,7 @@ int __usb_serial_register_drivers(struct usb_serial_driver *const serial_drivers
 	 * Suspend/resume support is implemented in the usb-serial core,
 	 * so fill in the PM-related fields in udriver.
 	 */
-	udriver = kzalloc_obj(*udriver);
+	udriver = kzalloc(sizeof(*udriver), GFP_KERNEL);
 	if (!udriver)
 		return -ENOMEM;
 
@@ -1613,8 +1616,8 @@ void usb_serial_deregister_drivers(struct usb_serial_driver *const serial_driver
 
 	usb_deregister(udriver);
 
-	for (sd = serial_drivers; *sd; ++sd)
-		usb_serial_deregister(*sd);
+	for (; *serial_drivers; ++serial_drivers)
+		usb_serial_deregister(*serial_drivers);
 
 	kfree(udriver);
 }

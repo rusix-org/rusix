@@ -732,7 +732,7 @@ cfg80211_parse_colocated_ap_iter(void *_data, u8 type,
 					   bss_params)))
 		return RNR_ITER_CONTINUE;
 
-	entry = kzalloc_obj(*entry, GFP_ATOMIC);
+	entry = kzalloc(sizeof(*entry), GFP_ATOMIC);
 	if (!entry)
 		return RNR_ITER_ERROR;
 
@@ -898,7 +898,7 @@ static int cfg80211_scan_6ghz(struct cfg80211_registered_device *rdev,
 			if (ret)
 				continue;
 
-			entry = kzalloc_obj(*entry, GFP_ATOMIC);
+			entry = kzalloc(sizeof(*entry), GFP_ATOMIC);
 			if (!entry)
 				continue;
 
@@ -1089,7 +1089,8 @@ int cfg80211_scan(struct cfg80211_registered_device *rdev)
 	if (!n_channels)
 		return cfg80211_scan_6ghz(rdev, true);
 
-	request = kzalloc_flex(*request, req.channels, n_channels);
+	request = kzalloc(struct_size(request, req.channels, n_channels),
+			  GFP_KERNEL);
 	if (!request)
 		return -ENOMEM;
 
@@ -1436,8 +1437,7 @@ void cfg80211_bss_flush(struct wiphy *wiphy)
 EXPORT_SYMBOL(cfg80211_bss_flush);
 
 const struct element *
-cfg80211_find_elem_match(enum ieee80211_eid eid,
-			 const u8 *ies, unsigned int len,
+cfg80211_find_elem_match(u8 eid, const u8 *ies, unsigned int len,
 			 const u8 *match, unsigned int match_len,
 			 unsigned int match_offset)
 {
@@ -1640,12 +1640,10 @@ struct cfg80211_bss *__cfg80211_get_bss(struct wiphy *wiphy,
 					const u8 *ssid, size_t ssid_len,
 					enum ieee80211_bss_type bss_type,
 					enum ieee80211_privacy privacy,
-					u32 use_for,
-					struct netlink_ext_ack *extack)
+					u32 use_for)
 {
 	struct cfg80211_registered_device *rdev = wiphy_to_rdev(wiphy);
 	struct cfg80211_internal_bss *bss, *res = NULL;
-	bool expired = false, unusable = false;
 	unsigned long now = jiffies;
 	int bss_privacy;
 
@@ -1667,48 +1665,22 @@ struct cfg80211_bss *__cfg80211_get_bss(struct wiphy *wiphy,
 			continue;
 		if (!is_valid_ether_addr(bss->pub.bssid))
 			continue;
-		if (!is_bss(&bss->pub, bssid, ssid, ssid_len))
+		if ((bss->pub.use_for & use_for) != use_for)
 			continue;
-
-		/*
-		 * The identity checks above must all come first so that
-		 * the expired/unusable classification below only ever
-		 * applies to entries that actually match the request.
-		 */
-
 		/* Don't get expired BSS structs */
 		if (time_after(now, bss->ts + IEEE80211_SCAN_RESULT_EXPIRE) &&
-		    !atomic_read(&bss->hold)) {
-			expired = true;
+		    !atomic_read(&bss->hold))
 			continue;
+		if (is_bss(&bss->pub, bssid, ssid, ssid_len)) {
+			res = bss;
+			bss_ref_get(rdev, res);
+			break;
 		}
-
-		if ((bss->pub.use_for & use_for) != use_for) {
-			unusable = true;
-			continue;
-		}
-
-		res = bss;
-		bss_ref_get(rdev, res);
-		break;
 	}
 
 	spin_unlock_bh(&rdev->bss_lock);
-	if (!res) {
-		if (expired && unusable)
-			NL_SET_ERR_MSG(extack,
-				       "BSS entries are expired or cannot be used for the requested operation");
-		else if (unusable)
-			NL_SET_ERR_MSG(extack,
-				       "BSS cannot be used for the requested operation");
-		else if (expired)
-			NL_SET_ERR_MSG(extack,
-				       "BSS entry in scan results is expired");
-		else
-			NL_SET_ERR_MSG(extack,
-				       "BSS not found in scan results");
+	if (!res)
 		return NULL;
-	}
 	trace_cfg80211_return_bss(&res->pub);
 	return &res->pub;
 }
@@ -2286,8 +2258,7 @@ struct cfg80211_inform_single_bss_data {
 };
 
 enum ieee80211_ap_reg_power
-cfg80211_get_6ghz_power_type(const u8 *elems, size_t elems_len,
-			     u32 client_flags)
+cfg80211_get_6ghz_power_type(const u8 *elems, size_t elems_len)
 {
 	const struct ieee80211_he_6ghz_oper *he_6ghz_oper;
 	struct ieee80211_he_operation *he_oper;
@@ -2305,13 +2276,26 @@ cfg80211_get_6ghz_power_type(const u8 *elems, size_t elems_len,
 	if (!he_6ghz_oper)
 		return IEEE80211_REG_UNSET_AP;
 
-	return cfg80211_6ghz_power_type(he_6ghz_oper->control, client_flags);
+	switch (u8_get_bits(he_6ghz_oper->control,
+			    IEEE80211_HE_6GHZ_OPER_CTRL_REG_INFO)) {
+	case IEEE80211_6GHZ_CTRL_REG_LPI_AP:
+	case IEEE80211_6GHZ_CTRL_REG_INDOOR_LPI_AP:
+		return IEEE80211_REG_LPI_AP;
+	case IEEE80211_6GHZ_CTRL_REG_SP_AP:
+	case IEEE80211_6GHZ_CTRL_REG_INDOOR_SP_AP:
+	case IEEE80211_6GHZ_CTRL_REG_INDOOR_SP_AP_OLD:
+		return IEEE80211_REG_SP_AP;
+	case IEEE80211_6GHZ_CTRL_REG_VLP_AP:
+		return IEEE80211_REG_VLP_AP;
+	default:
+		return IEEE80211_REG_UNSET_AP;
+	}
 }
 
 static bool cfg80211_6ghz_power_type_valid(const u8 *elems, size_t elems_len,
 					   const u32 flags)
 {
-	switch (cfg80211_get_6ghz_power_type(elems, elems_len, flags)) {
+	switch (cfg80211_get_6ghz_power_type(elems, elems_len)) {
 	case IEEE80211_REG_LPI_AP:
 		return true;
 	case IEEE80211_REG_SP_AP:
@@ -2471,11 +2455,12 @@ drop:
 	return NULL;
 }
 
-static bool cfg80211_iter_profile_continuation(const u8 *ie, size_t ielen,
-					       const struct element **mbssid,
-					       const struct element **sub_elem)
+static const struct element
+*cfg80211_get_profile_continuation(const u8 *ie, size_t ielen,
+				   const struct element *mbssid_elem,
+				   const struct element *sub_elem)
 {
-	const u8 *mbssid_end = (*mbssid)->data + (*mbssid)->datalen;
+	const u8 *mbssid_end = mbssid_elem->data + mbssid_elem->datalen;
 	const struct element *next_mbssid;
 	const struct element *next_sub;
 
@@ -2487,34 +2472,30 @@ static bool cfg80211_iter_profile_continuation(const u8 *ie, size_t ielen,
 	 * If it is not the last subelement in current MBSSID IE or there isn't
 	 * a next MBSSID IE - profile is complete.
 	*/
-	if (((*sub_elem)->data + (*sub_elem)->datalen < mbssid_end - 1) ||
+	if ((sub_elem->data + sub_elem->datalen < mbssid_end - 1) ||
 	    !next_mbssid)
-		return false;
+		return NULL;
 
-	/* For any length error, just return false to stop iteration */
+	/* For any length error, just return NULL */
 
 	if (next_mbssid->datalen < 4)
-		return false;
+		return NULL;
 
 	next_sub = (void *)&next_mbssid->data[1];
 
 	if (next_mbssid->data + next_mbssid->datalen <
 	    next_sub->data + next_sub->datalen)
-		return false;
+		return NULL;
 
 	if (next_sub->id != 0 || next_sub->datalen < 2)
-		return false;
+		return NULL;
 
 	/*
 	 * Check if the first element in the next sub element is a start
 	 * of a new profile
 	 */
-	if (next_sub->data[0] == WLAN_EID_NON_TX_BSSID_CAP)
-		return false;
-
-	*mbssid = next_mbssid;
-	*sub_elem = next_sub;
-	return true;
+	return next_sub->data[0] == WLAN_EID_NON_TX_BSSID_CAP ?
+	       NULL : next_mbssid;
 }
 
 size_t cfg80211_merge_profile(const u8 *ie, size_t ielen,
@@ -2523,20 +2504,26 @@ size_t cfg80211_merge_profile(const u8 *ie, size_t ielen,
 			      u8 *merged_ie, size_t max_copy_len)
 {
 	size_t copied_len = sub_elem->datalen;
+	const struct element *next_mbssid;
 
 	if (sub_elem->datalen > max_copy_len)
 		return 0;
 
 	memcpy(merged_ie, sub_elem->data, sub_elem->datalen);
 
-	while (cfg80211_iter_profile_continuation(ie, ielen,
-						  &mbssid_elem,
-						  &sub_elem)) {
-		if (copied_len + sub_elem->datalen > max_copy_len)
+	while ((next_mbssid = cfg80211_get_profile_continuation(ie, ielen,
+								mbssid_elem,
+								sub_elem))) {
+		const struct element *next_sub = (void *)&next_mbssid->data[1];
+
+		if (copied_len + next_sub->datalen > max_copy_len)
 			break;
-		memcpy(merged_ie + copied_len, sub_elem->data,
-		       sub_elem->datalen);
-		copied_len += sub_elem->datalen;
+		memcpy(merged_ie + copied_len, next_sub->data,
+		       next_sub->datalen);
+		copied_len += next_sub->datalen;
+
+		mbssid_elem = next_mbssid;
+		sub_elem = next_sub;
 	}
 
 	return copied_len;
@@ -2770,7 +2757,7 @@ cfg80211_defrag_mle(const struct element *mle, const u8 *ie, size_t ielen,
 		buf_len += elem->datalen;
 	}
 
-	res = kzalloc_flex(*res, data, buf_len, gfp);
+	res = kzalloc(struct_size(res, data, buf_len), gfp);
 	if (!res)
 		return NULL;
 
@@ -2788,7 +2775,7 @@ cfg80211_defrag_mle(const struct element *mle, const u8 *ie, size_t ielen,
 	ielen = mle_len - common_size;
 
 	idx = 0;
-	for_each_element_id(elem, (u8)IEEE80211_MLE_SUBELEM_PER_STA_PROFILE,
+	for_each_element_id(elem, IEEE80211_MLE_SUBELEM_PER_STA_PROFILE,
 			    ie, ielen) {
 		res->sta_prof[idx] = (void *)elem->data;
 		res->sta_prof_len[idx] = elem->datalen;
@@ -2986,8 +2973,9 @@ cfg80211_gen_reporter_rnr(struct cfg80211_bss *source_bss, bool is_mbssid,
 		le16_encode_bits(bss_change_count,
 				 IEEE80211_RNR_MLD_PARAMS_BSS_CHANGE_COUNT);
 
-	res = kzalloc_flex(*res, data, sizeof(ap_info) + ap_info.tbtt_info_len,
-			   gfp);
+	res = kzalloc(struct_size(res, data,
+				  sizeof(ap_info) + ap_info.tbtt_info_len),
+		      gfp);
 	if (!res)
 		return NULL;
 
@@ -3337,10 +3325,6 @@ cfg80211_inform_bss_frame_data(struct wiphy *wiphy,
 		return NULL;
 
 	if (WARN_ON(!wiphy))
-		return NULL;
-
-	/* NAN beacons are not a BSS, don't add to the BSS table */
-	if (ieee80211_is_nan_beacon(mgmt, len))
 		return NULL;
 
 	BUILD_BUG_ON(offsetof(struct ieee80211_mgmt, u.probe_resp.variable) !=

@@ -221,7 +221,7 @@ static int emu8k_pcm_open(struct snd_pcm_substream *subs)
 	struct snd_emu8k_pcm *rec;
 	struct snd_pcm_runtime *runtime = subs->runtime;
 
-	rec = kzalloc_obj(*rec);
+	rec = kzalloc(sizeof(*rec), GFP_KERNEL);
 	if (! rec)
 		return -ENOMEM;
 

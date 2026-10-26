@@ -900,7 +900,7 @@ static void test_msg_redir_to_listening_with_link(struct test_sockmap_listen *sk
 
 	redir_to_listening(family, sotype, sock_map, verdict_map, REDIR_EGRESS);
 
-	bpf_link__destroy(link);
+	bpf_link__detach(link);
 }
 
 static void redir_partial(int family, int sotype, int sock_map, int parser_map)
@@ -1232,6 +1232,22 @@ static void test_ops_cleanup(const struct bpf_map *map)
 	}
 }
 
+static const char *family_str(sa_family_t family)
+{
+	switch (family) {
+	case AF_INET:
+		return "IPv4";
+	case AF_INET6:
+		return "IPv6";
+	case AF_UNIX:
+		return "Unix";
+	case AF_VSOCK:
+		return "VSOCK";
+	default:
+		return "unknown";
+	}
+}
+
 static const char *map_type_str(const struct bpf_map *map)
 {
 	int type;
@@ -1299,7 +1315,7 @@ static void test_ops(struct test_sockmap_listen *skel, struct bpf_map *map,
 	char s[MAX_TEST_NAME];
 	int map_fd;
 
-	family_name = inet_family_str(family);
+	family_name = family_str(family);
 	map_name = map_type_str(map);
 	sotype_name = sotype_str(sotype);
 	map_fd = bpf_map__fd(map);
@@ -1339,7 +1355,7 @@ static void test_redir(struct test_sockmap_listen *skel, struct bpf_map *map,
 	const struct redir_test *t;
 	char s[MAX_TEST_NAME];
 
-	family_name = inet_family_str(family);
+	family_name = family_str(family);
 	map_name = map_type_str(map);
 
 	for (t = tests; t < tests + ARRAY_SIZE(tests); t++) {
@@ -1371,7 +1387,7 @@ static void test_reuseport(struct test_sockmap_listen *skel,
 	const struct reuseport_test *t;
 	char s[MAX_TEST_NAME];
 
-	family_name = inet_family_str(family);
+	family_name = family_str(family);
 	map_name = map_type_str(map);
 	sotype_name = sotype_str(sotype);
 

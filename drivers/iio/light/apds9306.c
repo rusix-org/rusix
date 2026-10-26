@@ -61,7 +61,7 @@
 #define APDS9306_NUM_REPEAT_RATES	7
 #define APDS9306_INT_SRC_CLEAR	0
 #define APDS9306_INT_SRC_ALS	1
-#define APDS9306_SAMP_FREQ_10HZ	2
+#define APDS9306_SAMP_FREQ_10HZ	0
 
 /**
  * struct part_id_gts_multiplier - Part no. and corresponding gts multiplier
@@ -168,6 +168,7 @@ struct apds9306_regfields {
  *         respectively.
  * @regmap: Regmap structure pointer
  * @rf: Regmap register fields structure
+ * @nlux_per_count: Nano lux per ADC count for a particular model
  * @read_data_available: Flag set by IRQ handler for ADC data available
  */
 struct apds9306_data {
@@ -179,6 +180,7 @@ struct apds9306_data {
 	struct regmap *regmap;
 	struct apds9306_regfields rf;
 
+	int nlux_per_count;
 	int read_data_available;
 };
 
@@ -348,7 +350,7 @@ static const struct regmap_config apds9306_regmap = {
 	.volatile_table = &apds9306_volatile_table,
 	.precious_table = &apds9306_precious_table,
 	.max_register = APDS9306_ALS_THRES_VAR_REG,
-	.cache_type = REGCACHE_MAPLE,
+	.cache_type = REGCACHE_RBTREE,
 };
 
 static const struct reg_field apds9306_rf_sw_reset =
@@ -1172,7 +1174,7 @@ static int apds9306_init_iio_gts(struct apds9306_data *data)
 
 static void apds9306_powerdown(void *ptr)
 {
-	struct apds9306_data *data = ptr;
+	struct apds9306_data *data = (struct apds9306_data *)ptr;
 	struct apds9306_regfields *rf = &data->rf;
 	int ret;
 
@@ -1284,7 +1286,8 @@ static int apds9306_probe(struct i2c_client *client)
 						apds9306_irq_handler, IRQF_ONESHOT,
 						"apds9306_event", indio_dev);
 		if (ret)
-			return ret;
+			return dev_err_probe(dev, ret,
+					     "failed to assign interrupt.\n");
 	} else {
 		indio_dev->info = &apds9306_info_no_events;
 		indio_dev->channels = apds9306_channels_without_events;

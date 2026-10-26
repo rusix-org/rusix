@@ -416,10 +416,11 @@
 
 &gpu {
 	status = "okay";
-};
 
-&gpu_zap_shader {
-	firmware-name = "qcom/sdm845/a630_zap.mbn";
+	zap-shader {
+		memory-region = <&gpu_mem>;
+		firmware-name = "qcom/sdm845/a630_zap.mbn";
+	};
 };
 
 &i2c10 {
@@ -428,6 +429,8 @@
 };
 
 &ipa {
+	qcom,gsi-loader = "self";
+	memory-region = <&ipa_fw_mem>;
 	status = "okay";
 };
 
@@ -508,6 +511,8 @@
 };
 
 &pcie0 {
+	perst-gpios = <&tlmm 35 GPIO_ACTIVE_LOW>;
+
 	pinctrl-0 = <&pcie0_default_state>;
 	pinctrl-names = "default";
 
@@ -521,11 +526,9 @@
 	status = "okay";
 };
 
-&pcie0_port0 {
-	reset-gpios = <&tlmm 35 GPIO_ACTIVE_LOW>;
-};
-
 &pcie1 {
+	perst-gpios = <&tlmm 102 GPIO_ACTIVE_LOW>;
+
 	pinctrl-names = "default";
 	pinctrl-0 = <&pcie1_default_state>;
 
@@ -537,10 +540,6 @@
 
 	vdda-phy-supply = <&vreg_l1a_0p875>;
 	vdda-pll-supply = <&vreg_l26a_1p2>;
-};
-
-&pcie1_port0 {
-	reset-gpios = <&tlmm 102 GPIO_ACTIVE_LOW>;
 };
 
 &pm8998_adc {
@@ -731,8 +730,8 @@
 &usb_1_qmpphy {
 	status = "okay";
 
-	vdda-phy-supply = <&vdda_usb1_ss_core>;
-	vdda-pll-supply = <&vdda_usb1_ss_1p2>;
+	vdda-phy-supply = <&vdda_usb1_ss_1p2>;
+	vdda-pll-supply = <&vdda_usb1_ss_core>;
 };
 
 &usb_2 {
@@ -763,8 +762,8 @@
 &usb_2_qmpphy {
 	status = "okay";
 
-	vdda-phy-supply = <&vdda_usb2_ss_core>;
-	vdda-pll-supply = <&vdda_usb2_ss_1p2>;
+	vdda-phy-supply = <&vdda_usb2_ss_1p2>;
+	vdda-pll-supply = <&vdda_usb2_ss_core>;
 };
 
 &venus {

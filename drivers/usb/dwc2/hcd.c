@@ -3823,7 +3823,7 @@ static struct dwc2_hcd_urb *dwc2_hcd_urb_alloc(struct dwc2_hsotg *hsotg,
 {
 	struct dwc2_hcd_urb *urb;
 
-	urb = kzalloc_flex(*urb, iso_descs, iso_desc_count, mem_flags);
+	urb = kzalloc(struct_size(urb, iso_descs, iso_desc_count), mem_flags);
 	if (urb)
 		urb->packet_count = iso_desc_count;
 	return urb;
@@ -4743,7 +4743,7 @@ static int _dwc2_hcd_urb_enqueue(struct usb_hcd *hcd, struct urb *urb,
 		qh_allocated = true;
 	}
 
-	qtd = kzalloc_obj(*qtd, mem_flags);
+	qtd = kzalloc(sizeof(*qtd), mem_flags);
 	if (!qtd) {
 		retval = -ENOMEM;
 		goto fail1;
@@ -5219,7 +5219,7 @@ int dwc2_hcd_init(struct dwc2_hsotg *hsotg)
 	memset(&hsotg->hc_ptr_array[0], 0, sizeof(hsotg->hc_ptr_array));
 
 	for (i = 0; i < num_channels; i++) {
-		channel = kzalloc_obj(*channel);
+		channel = kzalloc(sizeof(*channel), GFP_KERNEL);
 		if (!channel)
 			goto error3;
 		channel->hc_num = i;
@@ -5655,7 +5655,7 @@ int dwc2_host_exit_hibernation(struct dwc2_hsotg *hsotg, int rem_wakeup,
 	 */
 	mdelay(100);
 
-	/* Clear all pending interrupts */
+	/* Clear all pending interupts */
 	dwc2_writel(hsotg, 0xffffffff, GINTSTS);
 
 	/* De-assert Restore */
@@ -5725,7 +5725,7 @@ int dwc2_host_exit_hibernation(struct dwc2_hsotg *hsotg, int rem_wakeup,
 
 	hprt0 = dwc2_readl(hsotg, HPRT0);
 
-	/* Clear all pending interrupts */
+	/* Clear all pending interupts */
 	dwc2_writel(hsotg, 0xffffffff, GINTSTS);
 
 	/* Restore global registers */

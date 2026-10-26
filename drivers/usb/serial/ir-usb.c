@@ -25,9 +25,11 @@
 #include <linux/init.h>
 #include <linux/slab.h>
 #include <linux/tty.h>
+#include <linux/tty_driver.h>
 #include <linux/tty_flip.h>
 #include <linux/module.h>
 #include <linux/spinlock.h>
+#include <linux/uaccess.h>
 #include <linux/usb.h>
 #include <linux/usb/serial.h>
 #include <linux/usb/irda.h>
@@ -124,7 +126,7 @@ irda_usb_find_class_desc(struct usb_serial *serial, unsigned int ifnum)
 	struct usb_irda_cs_descriptor *desc;
 	int ret;
 
-	desc = kzalloc_obj(*desc);
+	desc = kzalloc(sizeof(*desc), GFP_KERNEL);
 	if (!desc)
 		return NULL;
 

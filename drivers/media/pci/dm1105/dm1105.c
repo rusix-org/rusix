@@ -982,7 +982,7 @@ static int dm1105_probe(struct pci_dev *pdev,
 	if (dm1105_devcount >= ARRAY_SIZE(card))
 		return -ENODEV;
 
-	dev = kzalloc_obj(struct dm1105_dev);
+	dev = kzalloc(sizeof(struct dm1105_dev), GFP_KERNEL);
 	if (!dev)
 		return -ENOMEM;
 
@@ -1209,9 +1209,15 @@ static void dm1105_remove(struct pci_dev *pdev)
 
 static const struct pci_device_id dm1105_id_table[] = {
 	{
-		PCI_VDEVICE(TRIGEM, PCI_DEVICE_ID_DM1105),
+		.vendor = PCI_VENDOR_ID_TRIGEM,
+		.device = PCI_DEVICE_ID_DM1105,
+		.subvendor = PCI_ANY_ID,
+		.subdevice = PCI_ANY_ID,
 	}, {
-		PCI_VDEVICE(AXESS, PCI_DEVICE_ID_DM05),
+		.vendor = PCI_VENDOR_ID_AXESS,
+		.device = PCI_DEVICE_ID_DM05,
+		.subvendor = PCI_ANY_ID,
+		.subdevice = PCI_ANY_ID,
 	}, {
 		/* empty */
 	},

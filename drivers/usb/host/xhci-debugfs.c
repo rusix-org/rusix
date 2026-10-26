@@ -9,7 +9,6 @@
 
 #include <linux/slab.h>
 #include <linux/uaccess.h>
-#include <linux/bitfield.h>
 
 #include "xhci.h"
 #include "xhci-debugfs.h"
@@ -88,7 +87,7 @@ static struct xhci_regset *xhci_debugfs_alloc_regset(struct xhci_hcd *xhci)
 {
 	struct xhci_regset	*regset;
 
-	regset = kzalloc_obj(*regset);
+	regset = kzalloc(sizeof(*regset), GFP_KERNEL);
 	if (!regset)
 		return NULL;
 
@@ -356,7 +355,7 @@ static ssize_t xhci_port_write(struct file *file,  const char __user *ubuf,
 
 	if (!strncmp(buf, "compliance", 10)) {
 		/* If CTC is clear, compliance is enabled by default */
-		if (!(xhci->hcc_params2 & HCC2_CTC))
+		if (!HCC2_CTC(xhci->hcc_params2))
 			return count;
 		spin_lock_irqsave(&xhci->lock, flags);
 		/* compliance mode can only be enabled on ports in RxDetect */
@@ -379,47 +378,6 @@ static ssize_t xhci_port_write(struct file *file,  const char __user *ubuf,
 static const struct file_operations port_fops = {
 	.open			= xhci_port_open,
 	.write                  = xhci_port_write,
-	.read			= seq_read,
-	.llseek			= seq_lseek,
-	.release		= single_release,
-};
-
-static int xhci_portli_show(struct seq_file *s, void *unused)
-{
-	struct xhci_port	*port = s->private;
-	struct xhci_hcd		*xhci;
-	u32			portli;
-
-	portli = readl(&port->port_reg->portli);
-
-	/* port without protocol capability isn't added to a roothub */
-	if (!port->rhub) {
-		seq_printf(s, "0x%08x\n", portli);
-		return 0;
-	}
-
-	xhci = hcd_to_xhci(port->rhub->hcd);
-
-	/* PORTLI fields are valid if port is a USB3 or eUSB2V2 port */
-	if (port->rhub == &xhci->usb3_rhub)
-		seq_printf(s, "0x%08x LEC=%u RLC=%u TLC=%u\n", portli,
-			   PORT_LEC(portli), PORT_RX_LANES(portli), PORT_TX_LANES(portli));
-	else if (xhci->hcc_params2 & HCC2_E2V2C)
-		seq_printf(s, "0x%08x RDR=%u TDR=%u\n", portli,
-			   PORTLI_RDR(portli), PORTLI_TDR(portli));
-	else
-		seq_printf(s, "0x%08x RsvdP\n", portli);
-
-	return 0;
-}
-
-static int xhci_portli_open(struct inode *inode, struct file *file)
-{
-	return single_open(file, xhci_portli_show, inode->i_private);
-}
-
-static const struct file_operations portli_fops = {
-	.open			= xhci_portli_open,
 	.read			= seq_read,
 	.llseek			= seq_lseek,
 	.release		= single_release,
@@ -477,7 +435,7 @@ void xhci_debugfs_create_endpoint(struct xhci_hcd *xhci,
 	if (spriv->eps[ep_index])
 		return;
 
-	epriv = kzalloc_obj(*epriv);
+	epriv = kzalloc(sizeof(*epriv), GFP_KERNEL);
 	if (!epriv)
 		return;
 
@@ -617,7 +575,7 @@ void xhci_debugfs_create_slot(struct xhci_hcd *xhci, int slot_id)
 	struct xhci_slot_priv	*priv;
 	struct xhci_virt_device	*dev = xhci->devs[slot_id];
 
-	priv = kzalloc_obj(*priv);
+	priv = kzalloc(sizeof(*priv), GFP_KERNEL);
 	if (!priv)
 		return;
 
@@ -666,7 +624,6 @@ static void xhci_debugfs_create_ports(struct xhci_hcd *xhci,
 		dir = debugfs_create_dir(port_name, parent);
 		port = &xhci->hw_ports[i];
 		debugfs_create_file("portsc", 0644, dir, port, &port_fops);
-		debugfs_create_file("portli", 0444, dir, port, &portli_fops);
 	}
 }
 
@@ -701,10 +658,6 @@ static int xhci_port_bw_show(struct xhci_hcd *xhci, u8 dev_speed,
 		seq_printf(s, "port[%d] available bw: %d%%.\n", i,
 				ctx->bytes[i]);
 err_out:
-	if (ret == -EIO) {
-		seq_puts(s, "Get Port Bandwidth failed\n");
-		ret = 0;
-	}
 	pm_runtime_put_sync(dev);
 	xhci_free_port_bw_ctx(xhci, ctx);
 	return ret;
@@ -715,7 +668,7 @@ static int xhci_ss_bw_show(struct seq_file *s, void *unused)
 	int ret;
 	struct xhci_hcd		*xhci = (struct xhci_hcd *)s->private;
 
-	ret = xhci_port_bw_show(xhci, DEV_PORT_SPEED(XDEV_SS), s);
+	ret = xhci_port_bw_show(xhci, USB_SPEED_SUPER, s);
 	return ret;
 }
 
@@ -724,7 +677,7 @@ static int xhci_hs_bw_show(struct seq_file *s, void *unused)
 	int ret;
 	struct xhci_hcd		*xhci = (struct xhci_hcd *)s->private;
 
-	ret = xhci_port_bw_show(xhci, DEV_PORT_SPEED(XDEV_HS), s);
+	ret = xhci_port_bw_show(xhci, USB_SPEED_HIGH, s);
 	return ret;
 }
 
@@ -733,7 +686,7 @@ static int xhci_fs_bw_show(struct seq_file *s, void *unused)
 	int ret;
 	struct xhci_hcd		*xhci = (struct xhci_hcd *)s->private;
 
-	ret = xhci_port_bw_show(xhci, DEV_PORT_SPEED(XDEV_FS), s);
+	ret = xhci_port_bw_show(xhci, USB_SPEED_FULL, s);
 	return ret;
 }
 
@@ -792,7 +745,7 @@ void xhci_debugfs_init(struct xhci_hcd *xhci)
 			    xhci->debugfs_root, "reg-cap");
 
 	xhci_debugfs_regset(xhci,
-			    FIELD_GET(HC_LENGTH, readl(&xhci->cap_regs->hc_capbase)),
+			    HC_LENGTH(readl(&xhci->cap_regs->hc_capbase)),
 			    xhci_op_regs, ARRAY_SIZE(xhci_op_regs),
 			    xhci->debugfs_root, "reg-op");
 

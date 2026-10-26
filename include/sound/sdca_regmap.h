@@ -27,7 +27,5 @@ int sdca_regmap_populate_constants(struct device *dev, struct sdca_function_data
 
 int sdca_regmap_write_defaults(struct device *dev, struct regmap *regmap,
 			       struct sdca_function_data *function);
-int sdca_regmap_write_init(struct device *dev, struct regmap *regmap,
-			   struct sdca_function_data *function);
 
 #endif // __SDCA_REGMAP_H__

@@ -142,14 +142,13 @@ out:
 EXPORT_SYMBOL_GPL(usb_ep_enable);
 
 /**
- * usb_ep_disable - unconfigure an endpoint, making it no longer usable
+ * usb_ep_disable - endpoint is no longer usable
  * @ep:the endpoint being unconfigured.  may not be the endpoint named "ep0".
  *
- * Any pending and uncompleted requests will complete with status
+ * no other task may be using this endpoint when this is called.
+ * any pending and uncompleted requests will complete with status
  * indicating disconnect (-ESHUTDOWN) before this call returns.
- * (However, this call will not wait for requests whose completion
- * handlers have already started running but not yet returned.)
- * Gadget drivers must call usb_ep_enable() again before queuing
+ * gadget drivers must call usb_ep_enable() again before queueing
  * requests to the endpoint.
  *
  * This routine may be called in an atomic (interrupt) context.
@@ -1274,9 +1273,8 @@ static inline void usb_gadget_udc_stop_locked(struct usb_udc *udc)
  * @speed: The maximum speed to allowed to run
  *
  * This call is issued by the UDC Class driver before calling
- * usb_gadget_udc_start_locked() in order to make sure that
- * we don't try to connect on speeds the gadget driver
- * doesn't support.
+ * usb_gadget_udc_start() in order to make sure that we don't try to
+ * connect on speeds the gadget driver doesn't support.
  */
 static inline void usb_gadget_udc_set_speed(struct usb_udc *udc,
 					    enum usb_device_speed speed)
@@ -1413,7 +1411,7 @@ int usb_add_gadget(struct usb_gadget *gadget)
 	struct usb_udc		*udc;
 	int			ret = -ENOMEM;
 
-	udc = kzalloc_obj(*udc);
+	udc = kzalloc(sizeof(*udc), GFP_KERNEL);
 	if (!udc)
 		goto error;
 

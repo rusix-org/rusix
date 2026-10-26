@@ -3,7 +3,7 @@
  * Copyright (c) 2018-2024 Oracle.  All Rights Reserved.
  * Author: Darrick J. Wong <djwong@kernel.org>
  */
-#include "xfs_platform.h"
+#include "xfs.h"
 #include "xfs_fs.h"
 #include "xfs_shared.h"
 #include "xfs_format.h"
@@ -285,7 +285,6 @@ xrep_xattr_salvage_local_attr(
 	struct xfs_attr_leaf_name_local	*lentry)
 {
 	struct xchk_xattr_buf		*ab = rx->sc->buf;
-	char				*name_end;
 	unsigned char			*value;
 	unsigned int			valuelen;
 	unsigned int			namesize;
@@ -294,14 +293,10 @@ xrep_xattr_salvage_local_attr(
 	 * Decode the leaf local entry format.  If something seems wrong, we
 	 * junk the attribute.
 	 */
-	name_end = (char *)lentry + offsetof(typeof(*lentry), nameval[0]);
-	if (name_end > buf_end)
-		return 0;
 	value = &lentry->nameval[lentry->namelen];
 	valuelen = be16_to_cpu(lentry->valuelen);
 	namesize = xfs_attr_leaf_entsize_local(lentry->namelen, valuelen);
-	name_end = (char *)lentry + namesize;
-	if (name_end > buf_end)
+	if ((char *)lentry + namesize > buf_end)
 		return 0;
 	if (!xrep_xattr_want_salvage(rx, ent->flags, lentry->nameval,
 			lentry->namelen, value, valuelen))
@@ -334,12 +329,12 @@ xrep_xattr_salvage_remote_attr(
 		.dp			= rx->sc->ip,
 		.index			= ent_idx,
 		.geo			= rx->sc->mp->m_attr_geo,
-		.owner			= I_INO(rx->sc->ip),
+		.owner			= rx->sc->ip->i_ino,
 		.attr_filter		= ent->flags & XFS_ATTR_NSP_ONDISK_MASK,
 		.namelen		= rentry->namelen,
 		.name			= rentry->name,
+		.valuelen		= be32_to_cpu(rentry->valuelen),
 	};
-	char				*name_end;
 	unsigned int			namesize;
 	int				error;
 
@@ -348,14 +343,9 @@ xrep_xattr_salvage_remote_attr(
 	 * junk the attribute.  Note that we should never find a zero-length
 	 * remote attribute value.
 	 */
-	name_end = (char *)rentry + offsetof(typeof(*rentry), name[0]);
-	if (name_end > buf_end)
-		return 0;
 	namesize = xfs_attr_leaf_entsize_remote(rentry->namelen);
-	name_end = (char *)rentry + namesize;
-	if (name_end > buf_end)
+	if ((char *)rentry + namesize > buf_end)
 		return 0;
-	args.valuelen = be32_to_cpu(rentry->valuelen);
 	if (args.valuelen == 0 ||
 	    !xrep_xattr_want_salvage(rx, ent->flags, rentry->name,
 			rentry->namelen, NULL, args.valuelen))
@@ -487,9 +477,6 @@ xrep_xattr_recover_sf(
 		if (xchk_should_terminate(sc, &error))
 			return error;
 
-		if ((unsigned char *)(sfe + 1) >= end)
-			break;
-
 		next = xfs_attr_sf_nextentry(sfe);
 		if ((unsigned char *)next > end)
 			break;
@@ -603,7 +590,7 @@ xrep_xattr_recover_block(
 	 * as much as we can from the block. */
 	if (info->magic == cpu_to_be16(XFS_ATTR3_LEAF_MAGIC) &&
 	    xrep_buf_verify_struct(bp, &xfs_attr3_leaf_buf_ops) &&
-	    xfs_attr3_leaf_header_check(bp, I_INO(rx->sc->ip)) == NULL)
+	    xfs_attr3_leaf_header_check(bp, rx->sc->ip->i_ino) == NULL)
 		error = xrep_xattr_recover_leaf(rx, bp);
 
 	/*
@@ -630,7 +617,7 @@ xrep_xattr_insert_rec(
 		.attr_filter		= key->flags,
 		.namelen		= key->namelen,
 		.valuelen		= key->valuelen,
-		.owner			= I_INO(rx->sc->ip),
+		.owner			= rx->sc->ip->i_ino,
 		.geo			= rx->sc->mp->m_attr_geo,
 		.whichfork		= XFS_ATTR_FORK,
 		.op_flags		= XFS_DA_OP_OKNOENT,
@@ -850,11 +837,11 @@ xrep_xattr_full_reset(
 
 		ASSERT(ifp->if_bytes == 0);
 		ifp->if_format = XFS_DINODE_FMT_LOCAL;
+		xfs_idata_realloc(sc->tempip, sizeof(*hdr), XFS_ATTR_FORK);
 	}
 
 	/* Reinitialize the attr fork to an empty shortform structure. */
-	hdr = xfs_idata_realloc(sc->tempip,
-			(int64_t)sizeof(*hdr) - ifp->if_bytes, XFS_ATTR_FORK);
+	hdr = ifp->if_data;
 	memset(hdr, 0, sizeof(*hdr));
 	hdr->totsize = cpu_to_be16(sizeof(*hdr));
 	xfs_trans_log_inode(sc->tp, sc->tempip, XFS_ILOG_CORE | XFS_ILOG_ADATA);
@@ -980,7 +967,7 @@ xrep_xattr_fork_remove(
 		ifp->if_format = XFS_DINODE_FMT_LOCAL;
 		hdr = xfs_idata_realloc(ip, (int)sizeof(*hdr) - ifp->if_bytes,
 				XFS_ATTR_FORK);
-		memset(hdr, 0, sizeof(*hdr));
+		hdr->count = 0;
 		hdr->totsize = cpu_to_be16(sizeof(*hdr));
 		xfs_trans_log_inode(sc->tp, ip,
 				XFS_ILOG_CORE | XFS_ILOG_ADATA);
@@ -995,7 +982,7 @@ xrep_xattr_fork_remove(
 
 		xfs_emerg(sc->mp,
 	"inode 0x%llx attr fork still has %llu attr extents, format %d?!",
-				I_INO(ip), ifp->if_nextents, ifp->if_format);
+				ip->i_ino, ifp->if_nextents, ifp->if_format);
 		for_each_xfs_iext(ifp, &icur, &irec) {
 			xfs_err(sc->mp,
 	"[%u]: startoff %llu startblock %llu blockcount %llu state %u",
@@ -1129,7 +1116,7 @@ xrep_xattr_replay_pptr_update(
 		trace_xrep_xattr_replay_parentadd(sc->tempip, xname,
 				&pptr->pptr_rec);
 
-		error = xfs_parent_set(sc->tempip, I_INO(sc->ip), xname,
+		error = xfs_parent_set(sc->tempip, sc->ip->i_ino, xname,
 				&pptr->pptr_rec, &rx->pptr_args);
 		ASSERT(error != -EEXIST);
 		return error;
@@ -1138,7 +1125,7 @@ xrep_xattr_replay_pptr_update(
 		trace_xrep_xattr_replay_parentremove(sc->tempip, xname,
 				&pptr->pptr_rec);
 
-		error = xfs_parent_unset(sc->tempip, I_INO(sc->ip), xname,
+		error = xfs_parent_unset(sc->tempip, sc->ip->i_ino, xname,
 				&pptr->pptr_rec, &rx->pptr_args);
 		ASSERT(error != -ENOATTR);
 		return error;
@@ -1269,7 +1256,7 @@ xrep_xattr_live_dirent_update(
 	 * repairing, so stash the update for replay against the temporary
 	 * file.
 	 */
-	if (I_INO(p->ip) != I_INO(sc->ip))
+	if (p->ip->i_ino != sc->ip->i_ino)
 		return NOTIFY_DONE;
 
 	mutex_lock(&rx->lock);
@@ -1329,8 +1316,21 @@ xrep_xattr_swap_prep(
 	 * that to an empty extent list in preparation for the atomic mapping
 	 * exchange.
 	 */
-	if (ip_local)
-		xrep_reset_fork_to_extents(sc, XFS_ATTR_FORK);
+	if (ip_local) {
+		struct xfs_ifork	*ifp;
+
+		ifp = xfs_ifork_ptr(sc->ip, XFS_ATTR_FORK);
+
+		xfs_idestroy_fork(ifp);
+		ifp->if_format = XFS_DINODE_FMT_EXTENTS;
+		ifp->if_nextents = 0;
+		ifp->if_bytes = 0;
+		ifp->if_data = NULL;
+		ifp->if_height = 0;
+
+		xfs_trans_log_inode(sc->tp, sc->ip,
+				XFS_ILOG_CORE | XFS_ILOG_ADATA);
+	}
 
 	return 0;
 }
@@ -1474,9 +1474,6 @@ xrep_xattr_rebuild_tree(
 	if (error)
 		return error;
 
-	if (rx->live_update_aborted)
-		return -EIO;
-
 	/*
 	 * Exchange the blocks mapped by the tempfile's attr fork with the file
 	 * being repaired.  The old attr blocks will then be attached to the
@@ -1488,7 +1485,7 @@ xrep_xattr_rebuild_tree(
 
 	error = xrep_xattr_reset_tempfile_fork(sc);
 	if (error)
-		goto forget_acls;
+		return error;
 
 	/*
 	 * Roll to get a transaction without any inodes joined to it.  Then we
@@ -1497,7 +1494,7 @@ xrep_xattr_rebuild_tree(
 	 */
 	error = xfs_trans_roll(&sc->tp);
 	if (error)
-		goto forget_acls;
+		return error;
 
 	xrep_tempfile_iunlock(sc);
 	xrep_tempfile_iounlock(sc);
@@ -1506,7 +1503,7 @@ forget_acls:
 	/* Invalidate cached ACLs now that we've reloaded all the xattrs. */
 	xfs_forget_acl(VFS_I(sc->ip), SGI_ACL_FILE);
 	xfs_forget_acl(VFS_I(sc->ip), SGI_ACL_DEFAULT);
-	return error;
+	return 0;
 }
 
 /* Tear down all the incore scan stuff we created. */
@@ -1538,7 +1535,7 @@ xrep_xattr_setup_scan(
 	int			max_len;
 	int			error;
 
-	rx = kzalloc_obj(struct xrep_xattr, XCHK_GFP_FLAGS);
+	rx = kzalloc(sizeof(struct xrep_xattr), XCHK_GFP_FLAGS);
 	if (!rx)
 		return -ENOMEM;
 	rx->sc = sc;

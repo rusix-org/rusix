@@ -7,7 +7,6 @@
 
 #define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
 
-#include <linux/firmware_attributes.h>
 #include <linux/fs.h>
 #include <linux/module.h>
 #include <linux/kernel.h>
@@ -15,6 +14,7 @@
 #include <linux/string.h>
 #include <linux/wmi.h>
 #include "bioscfg.h"
+#include "../../firmware_attributes_class.h"
 #include <linux/nls.h>
 #include <linux/errno.h>
 
@@ -588,7 +588,7 @@ static int hp_add_other_attributes(int attr_type)
 	int ret;
 	char *attr_name;
 
-	attr_name_kobj = kzalloc_obj(*attr_name_kobj);
+	attr_name_kobj = kzalloc(sizeof(*attr_name_kobj), GFP_KERNEL);
 	if (!attr_name_kobj)
 		return -ENOMEM;
 
@@ -716,7 +716,7 @@ static int hp_init_bios_package_attribute(enum hp_wmi_data_type attr_type,
 	}
 
 	/* build attribute */
-	attr_name_kobj = kzalloc_obj(*attr_name_kobj);
+	attr_name_kobj = kzalloc(sizeof(*attr_name_kobj), GFP_KERNEL);
 	if (!attr_name_kobj) {
 		ret = -ENOMEM;
 		goto pack_attr_exit;
@@ -820,7 +820,7 @@ static int hp_init_bios_buffer_attribute(enum hp_wmi_data_type attr_type,
 	}
 
 	/* build attribute */
-	attr_name_kobj = kzalloc_obj(*attr_name_kobj);
+	attr_name_kobj = kzalloc(sizeof(*attr_name_kobj), GFP_KERNEL);
 	if (!attr_name_kobj) {
 		ret = -ENOMEM;
 		goto buff_attr_exit;

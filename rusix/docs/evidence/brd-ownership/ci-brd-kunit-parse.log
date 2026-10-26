@@ -1,0 +1,21 @@
+[04:54:40] ============================================================
+[04:54:40] =============== rusix_noio_scope (1 subtest) ===============
+[04:54:40] [PASSED] nested_scopes_restore_task_policy_on_error
+[04:54:40] ================ [PASSED] rusix_noio_scope =================
+[04:54:40] ============= rusix_xarray_insert (2 subtests) =============
+[04:54:40] [PASSED] occupied_insert_returns_owner_without_replacing
+[04:54:40] [PASSED] array_drop_releases_inserted_owner
+[04:54:40] =============== [PASSED] rusix_xarray_insert ===============
+[04:54:40] =============== rusix_brd_store (3 subtests) ===============
+[04:54:40] [PASSED] lookup_and_repeated_insert_preserve_page
+[04:54:40] [PASSED] discard_keeps_inflight_page_alive_and_reinsert_is_independent
+[04:54:40] [PASSED] discard_excludes_end_and_is_idempotent
+[04:54:40] ================= [PASSED] rusix_brd_store =================
+[04:54:40] ============== rusix_brd_policy (3 subtests) ===============
+[04:54:40] [PASSED] minor_count_preserves_defined_normalization
+[04:54:40] [PASSED] invalid_minor_normalization_is_rejected
+[04:54:40] [PASSED] legacy_size_retains_prefix_and_wrapping_semantics
+[04:54:40] ================ [PASSED] rusix_brd_policy =================
+[04:54:40] ============================================================
+[04:54:40] Testing complete. Ran 9 tests: passed: 9
+[04:54:40] Test results stored in /out/logs/ci-brd-kunit-kunit.json

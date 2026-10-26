@@ -20,7 +20,6 @@
  * OTHER DEALINGS IN THE SOFTWARE.
  */
 #include "priv.h"
-#include <nvif/cl0080.h>
 
 int
 nvkm_gsp_intr_nonstall(struct nvkm_gsp *gsp, enum nvkm_subdev_type type, int inst)
@@ -46,15 +45,6 @@ nvkm_gsp_intr_stall(struct nvkm_gsp *gsp, enum nvkm_subdev_type type, int inst)
 	}
 
 	return -ENOENT;
-}
-
-int
-nvkm_gsp_gcx_ready(struct nvkm_gsp *gsp)
-{
-	if (!gsp->rm->api->gsp->gcx_ready)
-		return NV_DEVICE_GC6_READY | NV_DEVICE_GCOFF_READY;
-
-	return gsp->rm->api->gsp->gcx_ready(gsp);
 }
 
 static int
@@ -142,7 +132,7 @@ nvkm_gsp_new_(const struct nvkm_gsp_fwif *fwif, struct nvkm_device *device,
 {
 	struct nvkm_gsp *gsp;
 
-	if (!(gsp = *pgsp = kzalloc_obj(*gsp)))
+	if (!(gsp = *pgsp = kzalloc(sizeof(*gsp), GFP_KERNEL)))
 		return -ENOMEM;
 
 	nvkm_subdev_ctor(&nvkm_gsp, device, type, inst, &gsp->subdev);
@@ -158,7 +148,7 @@ nvkm_gsp_new_(const struct nvkm_gsp_fwif *fwif, struct nvkm_device *device,
 	if (fwif->rm) {
 		nvkm_info(&gsp->subdev, "RM version: %s\n", fwif->ver);
 
-		gsp->rm = kzalloc_obj(*gsp->rm);
+		gsp->rm = kzalloc(sizeof(*gsp->rm), GFP_KERNEL);
 		if (!gsp->rm)
 			return -ENOMEM;
 

@@ -1183,7 +1183,7 @@ qla82xx_pinit_from_rom(scsi_qla_host_t *vha)
 	ql_log(ql_log_info, vha, 0x0072,
 	    "%d CRB init values found in ROM.\n", n);
 
-	buf = kmalloc_objs(struct crb_addr_pair, n);
+	buf = kmalloc_array(n, sizeof(struct crb_addr_pair), GFP_KERNEL);
 	if (buf == NULL) {
 		ql_log(ql_log_fatal, vha, 0x010c,
 		    "Unable to allocate memory.\n");
@@ -2663,7 +2663,7 @@ qla82xx_write_flash_data(struct scsi_qla_host *vha, __le32 *dwptr,
 
 			ret = qla2x00_load_ram(vha, optrom_dma,
 			    (ha->flash_data_off | faddr),
-			    OPTROM_BURST_DWORDS, 0);
+			    OPTROM_BURST_DWORDS);
 			if (ret != QLA_SUCCESS) {
 				ql_log(ql_log_warn, vha, 0xb01e,
 				    "Unable to burst-write optrom segment "

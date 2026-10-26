@@ -1516,7 +1516,8 @@ static int anx7411_i2c_probe(struct i2c_client *client)
 
 	INIT_WORK(&plat->work, anx7411_work_func);
 	plat->workqueue = alloc_workqueue("anx7411_work",
-					  WQ_FREEZABLE | WQ_MEM_RECLAIM | WQ_PERCPU,
+					  WQ_FREEZABLE |
+					  WQ_MEM_RECLAIM,
 					  1);
 	if (!plat->workqueue) {
 		dev_err(dev, "fail to create work queue\n");
@@ -1529,8 +1530,10 @@ static int anx7411_i2c_probe(struct i2c_client *client)
 					IRQF_TRIGGER_FALLING |
 					IRQF_ONESHOT,
 					"anx7411-intp", plat);
-	if (ret)
+	if (ret) {
+		dev_err(dev, "fail to request irq\n");
 		goto free_wq;
+	}
 
 	if (anx7411_typec_check_connection(plat))
 		dev_err(dev, "check status\n");
@@ -1580,8 +1583,8 @@ static void anx7411_i2c_remove(struct i2c_client *client)
 }
 
 static const struct i2c_device_id anx7411_id[] = {
-	{ .name = "anx7411" },
-	{ }
+	{ "anx7411" },
+	{}
 };
 
 MODULE_DEVICE_TABLE(i2c, anx7411_id);

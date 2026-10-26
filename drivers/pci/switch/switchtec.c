@@ -86,7 +86,7 @@ static struct switchtec_user *stuser_create(struct switchtec_dev *stdev)
 {
 	struct switchtec_user *stuser;
 
-	stuser = kzalloc_obj(*stuser);
+	stuser = kzalloc(sizeof(*stuser), GFP_KERNEL);
 	if (!stuser)
 		return ERR_PTR(-ENOMEM);
 
@@ -895,7 +895,7 @@ static int ioctl_event_summary(struct switchtec_dev *stdev,
 	u32 reg;
 	int ret = 0;
 
-	s = kzalloc_obj(*s);
+	s = kzalloc(sizeof(*s), GFP_KERNEL);
 	if (!s)
 		return -ENOMEM;
 
@@ -1874,7 +1874,6 @@ static const struct pci_device_id switchtec_pci_tbl[] = {
 	SWITCHTEC_PCI100X_DEVICE(0x1004, SWITCHTEC_GEN4),  /* PCI1004 16XG4 */
 	SWITCHTEC_PCI100X_DEVICE(0x1005, SWITCHTEC_GEN4),  /* PCI1005 16XG4 */
 	SWITCHTEC_PCI100X_DEVICE(0x1006, SWITCHTEC_GEN4),  /* PCI1006 16XG4 */
-	SWITCHTEC_PCI100X_DEVICE(0x1008, SWITCHTEC_GEN4),  /* PCI1008 16XG4 */
 	{0}
 };
 MODULE_DEVICE_TABLE(pci, switchtec_pci_tbl);

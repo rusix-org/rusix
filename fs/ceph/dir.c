@@ -774,13 +774,8 @@ struct dentry *ceph_finish_lookup(struct ceph_mds_request *req,
 				d_drop(dentry);
 				err = -ENOENT;
 			} else {
-				if (d_unhashed(dentry)) {
-					struct inode *parent =
-						d_inode(dentry->d_parent);
-					if (!parent ||
-					    ceph_snap(parent) == CEPH_NOSNAP)
-						d_add(dentry, NULL);
-				}
+				if (d_unhashed(dentry))
+					d_add(dentry, NULL);
 			}
 		}
 	}
@@ -845,7 +840,6 @@ static struct dentry *ceph_lookup(struct inode *dir, struct dentry *dentry,
 			    dentry->d_name.len) &&
 		    !is_root_ceph_dentry(dir, dentry) &&
 		    ceph_test_mount_opt(fsc, DCACHE) &&
-		    ceph_snap(dir) == CEPH_NOSNAP &&
 		    __ceph_dir_is_complete(ci) &&
 		    __ceph_caps_issued_mask_metric(ci, CEPH_CAP_FILE_SHARED, 1)) {
 			__ceph_touch_fmode(ci, mdsc, CEPH_FILE_MODE_RD);
@@ -921,7 +915,7 @@ int ceph_handle_notrace_create(struct inode *dir, struct dentry *dentry)
 	return PTR_ERR(result);
 }
 
-static int ceph_mknod(const struct mnt_idmap *idmap, struct inode *dir,
+static int ceph_mknod(struct mnt_idmap *idmap, struct inode *dir,
 		      struct dentry *dentry, umode_t mode, dev_t rdev)
 {
 	struct ceph_mds_client *mdsc = ceph_sb_to_mdsc(dir->i_sb);
@@ -988,8 +982,8 @@ out:
 	return err;
 }
 
-static int ceph_create(const struct mnt_idmap *idmap, struct inode *dir,
-		       struct dentry *dentry, umode_t mode)
+static int ceph_create(struct mnt_idmap *idmap, struct inode *dir,
+		       struct dentry *dentry, umode_t mode, bool excl)
 {
 	return ceph_mknod(idmap, dir, dentry, mode, 0);
 }
@@ -1011,14 +1005,13 @@ static int prep_encrypted_symlink_target(struct ceph_mds_request *req,
 	if (err)
 		goto out;
 
-	req->r_path2 = kmalloc(BASE64_CHARS(osd_link.len) + 1, GFP_KERNEL);
+	req->r_path2 = kmalloc(CEPH_BASE64_CHARS(osd_link.len) + 1, GFP_KERNEL);
 	if (!req->r_path2) {
 		err = -ENOMEM;
 		goto out;
 	}
 
-	len = base64_encode(osd_link.name, osd_link.len,
-			    req->r_path2, false, BASE64_IMAP);
+	len = ceph_base64_encode(osd_link.name, osd_link.len, req->r_path2);
 	req->r_path2[len] = '\0';
 out:
 	fscrypt_fname_free_buffer(&osd_link);
@@ -1032,7 +1025,7 @@ static int prep_encrypted_symlink_target(struct ceph_mds_request *req,
 }
 #endif
 
-static int ceph_symlink(const struct mnt_idmap *idmap, struct inode *dir,
+static int ceph_symlink(struct mnt_idmap *idmap, struct inode *dir,
 			struct dentry *dentry, const char *dest)
 {
 	struct ceph_mds_client *mdsc = ceph_sb_to_mdsc(dir->i_sb);
@@ -1106,7 +1099,7 @@ out:
 	return err;
 }
 
-static struct dentry *ceph_mkdir(const struct mnt_idmap *idmap, struct inode *dir,
+static struct dentry *ceph_mkdir(struct mnt_idmap *idmap, struct inode *dir,
 				 struct dentry *dentry, umode_t mode)
 {
 	struct ceph_mds_client *mdsc = ceph_sb_to_mdsc(dir->i_sb);
@@ -1153,6 +1146,7 @@ static struct dentry *ceph_mkdir(const struct mnt_idmap *idmap, struct inode *di
 		goto out;
 	}
 
+	mode |= S_IFDIR;
 	req->r_new_inode = ceph_new_inode(dir, dentry, &mode, &as_ctx);
 	if (IS_ERR(req->r_new_inode)) {
 		ret = ERR_CAST(req->r_new_inode);
@@ -1478,7 +1472,7 @@ out:
 	return err;
 }
 
-static int ceph_rename(const struct mnt_idmap *idmap, struct inode *old_dir,
+static int ceph_rename(struct mnt_idmap *idmap, struct inode *old_dir,
 		       struct dentry *old_dentry, struct inode *new_dir,
 		       struct dentry *new_dentry, unsigned int flags)
 {
@@ -1678,7 +1672,7 @@ __dentry_leases_walk(struct ceph_mds_client *mdsc,
 		if (!spin_trylock(&dentry->d_lock))
 			continue;
 
-		if (lockref_is_dead(&dentry->d_lockref)) {
+		if (__lockref_is_dead(&dentry->d_lockref)) {
 			list_del_init(&di->lease_list);
 			goto next;
 		}
@@ -2185,7 +2179,7 @@ static ssize_t ceph_read_dir(struct file *file, char __user *buf, size_t size,
 				" rfiles:   %20lld\n"
 				" rsubdirs: %20lld\n"
 				"rbytes:    %20lld\n"
-				"rctime:    %ptSp\n",
+				"rctime:    %10lld.%09ld\n",
 				ci->i_files + ci->i_subdirs,
 				ci->i_files,
 				ci->i_subdirs,
@@ -2193,7 +2187,8 @@ static ssize_t ceph_read_dir(struct file *file, char __user *buf, size_t size,
 				ci->i_rfiles,
 				ci->i_rsubdirs,
 				ci->i_rbytes,
-				&ci->i_rctime);
+				ci->i_rctime.tv_sec,
+				ci->i_rctime.tv_nsec);
 	}
 
 	if (*ppos >= dfi->dir_info_len)

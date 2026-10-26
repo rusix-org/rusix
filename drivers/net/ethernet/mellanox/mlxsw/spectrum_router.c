@@ -538,7 +538,7 @@ static struct mlxsw_sp_fib *mlxsw_sp_fib_create(struct mlxsw_sp *mlxsw_sp,
 	int err;
 
 	lpm_tree = mlxsw_sp->router->lpm.proto_trees[proto];
-	fib = kzalloc_obj(*fib);
+	fib = kzalloc(sizeof(*fib), GFP_KERNEL);
 	if (!fib)
 		return ERR_PTR(-ENOMEM);
 	err = rhashtable_init(&fib->ht, &mlxsw_sp_fib_ht_params);
@@ -556,7 +556,6 @@ static struct mlxsw_sp_fib *mlxsw_sp_fib_create(struct mlxsw_sp *mlxsw_sp,
 
 err_lpm_tree_bind:
 	mlxsw_sp_lpm_tree_put(mlxsw_sp, lpm_tree);
-	rhashtable_destroy(&fib->ht);
 err_rhashtable_init:
 	kfree(fib);
 	return ERR_PTR(err);
@@ -718,8 +717,9 @@ static int mlxsw_sp_lpm_init(struct mlxsw_sp *mlxsw_sp)
 
 	max_trees = MLXSW_CORE_RES_GET(mlxsw_sp->core, MAX_LPM_TREES);
 	mlxsw_sp->router->lpm.tree_count = max_trees - MLXSW_SP_LPM_TREE_MIN;
-	mlxsw_sp->router->lpm.trees = kzalloc_objs(struct mlxsw_sp_lpm_tree,
-						   mlxsw_sp->router->lpm.tree_count);
+	mlxsw_sp->router->lpm.trees = kcalloc(mlxsw_sp->router->lpm.tree_count,
+					     sizeof(struct mlxsw_sp_lpm_tree),
+					     GFP_KERNEL);
 	if (!mlxsw_sp->router->lpm.trees)
 		return -ENOMEM;
 
@@ -1039,7 +1039,8 @@ static int mlxsw_sp_vrs_init(struct mlxsw_sp *mlxsw_sp)
 		return -EIO;
 
 	max_vrs = MLXSW_CORE_RES_GET(mlxsw_sp->core, MAX_VRS);
-	mlxsw_sp->router->vrs = kzalloc_objs(struct mlxsw_sp_vr, max_vrs);
+	mlxsw_sp->router->vrs = kcalloc(max_vrs, sizeof(struct mlxsw_sp_vr),
+					GFP_KERNEL);
 	if (!mlxsw_sp->router->vrs)
 		return -ENOMEM;
 
@@ -1095,7 +1096,7 @@ mlxsw_sp_crif_alloc(struct net_device *dev)
 {
 	struct mlxsw_sp_crif *crif;
 
-	crif = kzalloc_obj(*crif);
+	crif = kzalloc(sizeof(*crif), GFP_KERNEL);
 	if (!crif)
 		return NULL;
 
@@ -1178,7 +1179,7 @@ mlxsw_sp_ipip_entry_alloc(struct mlxsw_sp *mlxsw_sp,
 	int err;
 
 	ipip_ops = mlxsw_sp->router->ipip_ops_arr[ipipt];
-	ipip_entry = kzalloc_obj(*ipip_entry);
+	ipip_entry = kzalloc(sizeof(*ipip_entry), GFP_KERNEL);
 	if (!ipip_entry)
 		return ERR_PTR(-ENOMEM);
 
@@ -2261,7 +2262,7 @@ mlxsw_sp_neigh_entry_alloc(struct mlxsw_sp *mlxsw_sp, struct neighbour *n,
 {
 	struct mlxsw_sp_neigh_entry *neigh_entry;
 
-	neigh_entry = kzalloc_obj(*neigh_entry);
+	neigh_entry = kzalloc(sizeof(*neigh_entry), GFP_KERNEL);
 	if (!neigh_entry)
 		return NULL;
 
@@ -2398,15 +2399,14 @@ mlxsw_sp_neigh_entry_lookup(struct mlxsw_sp *mlxsw_sp, struct neighbour *n)
 static void
 mlxsw_sp_router_neighs_update_interval_init(struct mlxsw_sp *mlxsw_sp)
 {
-	struct net *net = mlxsw_sp_net(mlxsw_sp);
 	unsigned long interval;
 
 #if IS_ENABLED(CONFIG_IPV6)
 	interval = min_t(unsigned long,
-			 NEIGH_VAR(&arp_table(net)->parms, DELAY_PROBE_TIME),
-			 NEIGH_VAR(&nd_table(net)->parms, DELAY_PROBE_TIME));
+			 NEIGH_VAR(&arp_tbl.parms, DELAY_PROBE_TIME),
+			 NEIGH_VAR(&nd_tbl.parms, DELAY_PROBE_TIME));
 #else
-	interval = NEIGH_VAR(&arp_table(net)->parms, DELAY_PROBE_TIME);
+	interval = NEIGH_VAR(&arp_tbl.parms, DELAY_PROBE_TIME);
 #endif
 	mlxsw_sp->router->neighs_update.interval = jiffies_to_msecs(interval);
 }
@@ -2433,7 +2433,7 @@ static void mlxsw_sp_router_neigh_ent_ipv4_process(struct mlxsw_sp *mlxsw_sp,
 
 	dipn = htonl(dip);
 	dev = mlxsw_sp_rif_dev(mlxsw_sp->router->rifs[rif]);
-	n = ipv4_neigh_lookup(dev, &dipn);
+	n = neigh_lookup(&arp_tbl, &dipn, dev);
 	if (!n)
 		return;
 
@@ -2461,7 +2461,7 @@ static void mlxsw_sp_router_neigh_ent_ipv6_process(struct mlxsw_sp *mlxsw_sp,
 	}
 
 	dev = mlxsw_sp_rif_dev(mlxsw_sp->router->rifs[rif]);
-	n = ipv6_neigh_lookup(dev, &dip);
+	n = neigh_lookup(&nd_tbl, &dip, dev);
 	if (!n)
 		return;
 
@@ -2857,7 +2857,7 @@ static int mlxsw_sp_router_schedule_work(struct net *net,
 	if (!net_eq(net, mlxsw_sp_net(router->mlxsw_sp)))
 		return NOTIFY_DONE;
 
-	net_work = kzalloc_obj(*net_work, GFP_ATOMIC);
+	net_work = kzalloc(sizeof(*net_work), GFP_ATOMIC);
 	if (!net_work)
 		return NOTIFY_BAD;
 
@@ -3016,17 +3016,16 @@ static int mlxsw_sp_neigh_rif_made_sync(struct mlxsw_sp *mlxsw_sp,
 		.mlxsw_sp = mlxsw_sp,
 		.rif = rif,
 	};
-	struct net *net = mlxsw_sp_net(mlxsw_sp);
 
 	if (!mlxsw_sp_dev_lower_is_port(mlxsw_sp_rif_dev(rif)))
 		return 0;
 
-	neigh_for_each(arp_table(net), mlxsw_sp_neigh_rif_made_sync_each, &rms);
+	neigh_for_each(&arp_tbl, mlxsw_sp_neigh_rif_made_sync_each, &rms);
 	if (rms.err)
 		goto err_arp;
 
 #if IS_ENABLED(CONFIG_IPV6)
-	neigh_for_each(nd_table(net), mlxsw_sp_neigh_rif_made_sync_each, &rms);
+	neigh_for_each(&nd_tbl, mlxsw_sp_neigh_rif_made_sync_each, &rms);
 #endif
 	if (rms.err)
 		goto err_nd;
@@ -3067,9 +3066,9 @@ struct mlxsw_sp_nexthop {
 						   * this nexthop belongs to
 						   */
 	struct rhash_head ht_node;
+	struct neigh_table *neigh_tbl;
 	struct mlxsw_sp_nexthop_key key;
 	unsigned char gw_addr[sizeof(struct in6_addr)];
-	int family;
 	int ifindex;
 	int nh_weight;
 	int norm_nh_weight;
@@ -3174,7 +3173,7 @@ mlxsw_sp_nexthop_counter_alloc(struct mlxsw_sp *mlxsw_sp)
 	struct mlxsw_sp_nexthop_counter *nhct;
 	int err;
 
-	nhct = kzalloc_obj(*nhct);
+	nhct = kzalloc(sizeof(*nhct), GFP_KERNEL);
 	if (!nhct)
 		return ERR_PTR(-ENOMEM);
 
@@ -3406,7 +3405,7 @@ mlxsw_sp_nexthop_group_vr_entry_create(struct mlxsw_sp_nexthop_group *nh_grp,
 	struct mlxsw_sp_nexthop_group_vr_entry *vr_entry;
 	int err;
 
-	vr_entry = kzalloc_obj(*vr_entry);
+	vr_entry = kzalloc(sizeof(*vr_entry), GFP_KERNEL);
 	if (!vr_entry)
 		return -ENOMEM;
 
@@ -4295,51 +4294,28 @@ static void __mlxsw_sp_nexthop_neigh_update(struct mlxsw_sp_nexthop *nh,
 	nh->update = 1;
 }
 
-static struct neighbour *
-mlxsw_sp_nexthop_neigh_lookup(struct mlxsw_sp_nexthop *nh)
-{
-	struct net_device *dev;
-	struct neighbour *n;
-
-	dev = mlxsw_sp_nexthop_dev(nh);
-
-#if IS_ENABLED(CONFIG_IPV6)
-	if (nh->family == AF_INET6) {
-		n = ipv6_neigh_lookup(dev, &nh->gw_addr);
-		if (!n) {
-			n = ipv6_neigh_create(dev, &nh->gw_addr);
-			if (!IS_ERR(n))
-				neigh_event_send(n, NULL);
-		}
-	} else
-#endif
-	{
-		n = ipv4_neigh_lookup(dev, &nh->gw_addr);
-		if (!n) {
-			n = ipv4_neigh_create(dev, &nh->gw_addr);
-			if (!IS_ERR(n))
-				neigh_event_send(n, NULL);
-		}
-	}
-
-	return n;
-}
-
 static int
 mlxsw_sp_nexthop_dead_neigh_replace(struct mlxsw_sp *mlxsw_sp,
 				    struct mlxsw_sp_neigh_entry *neigh_entry)
 {
 	struct neighbour *n, *old_n = neigh_entry->key.n;
 	struct mlxsw_sp_nexthop *nh;
+	struct net_device *dev;
 	bool entry_connected;
 	u8 nud_state, dead;
 	int err;
 
 	nh = list_first_entry(&neigh_entry->nexthop_list,
 			      struct mlxsw_sp_nexthop, neigh_list_node);
-	n = mlxsw_sp_nexthop_neigh_lookup(nh);
-	if (IS_ERR(n))
-		return PTR_ERR(n);
+	dev = mlxsw_sp_nexthop_dev(nh);
+
+	n = neigh_lookup(nh->neigh_tbl, &nh->gw_addr, dev);
+	if (!n) {
+		n = neigh_create(nh->neigh_tbl, &nh->gw_addr, dev);
+		if (IS_ERR(n))
+			return PTR_ERR(n);
+		neigh_event_send(n, NULL);
+	}
 
 	mlxsw_sp_neigh_entry_remove(mlxsw_sp, neigh_entry);
 	neigh_entry->key.n = n;
@@ -4420,6 +4396,7 @@ static int mlxsw_sp_nexthop_neigh_init(struct mlxsw_sp *mlxsw_sp,
 				       struct mlxsw_sp_nexthop *nh)
 {
 	struct mlxsw_sp_neigh_entry *neigh_entry;
+	struct net_device *dev;
 	struct neighbour *n;
 	u8 nud_state, dead;
 	int err;
@@ -4429,16 +4406,20 @@ static int mlxsw_sp_nexthop_neigh_init(struct mlxsw_sp *mlxsw_sp,
 
 	if (!nh->nhgi->gateway || nh->neigh_entry)
 		return 0;
+	dev = mlxsw_sp_nexthop_dev(nh);
 
 	/* Take a reference of neigh here ensuring that neigh would
 	 * not be destructed before the nexthop entry is finished.
 	 * The reference is taken either in neigh_lookup() or
 	 * in neigh_create() in case n is not found.
 	 */
-	n = mlxsw_sp_nexthop_neigh_lookup(nh);
-	if (IS_ERR(n))
-		return PTR_ERR(n);
-
+	n = neigh_lookup(nh->neigh_tbl, &nh->gw_addr, dev);
+	if (!n) {
+		n = neigh_create(nh->neigh_tbl, &nh->gw_addr, dev);
+		if (IS_ERR(n))
+			return PTR_ERR(n);
+		neigh_event_send(n, NULL);
+	}
 	neigh_entry = mlxsw_sp_neigh_entry_lookup(mlxsw_sp, n);
 	if (!neigh_entry) {
 		neigh_entry = mlxsw_sp_neigh_entry_create(mlxsw_sp, n);
@@ -4643,7 +4624,7 @@ static int mlxsw_sp_nexthop4_init(struct mlxsw_sp *mlxsw_sp,
 	nh->nh_weight = 1;
 #endif
 	memcpy(&nh->gw_addr, &fib_nh->fib_nh_gw4, sizeof(fib_nh->fib_nh_gw4));
-	nh->family = AF_INET;
+	nh->neigh_tbl = &arp_tbl;
 	err = mlxsw_sp_nexthop_insert(mlxsw_sp, nh);
 	if (err)
 		return err;
@@ -5141,12 +5122,12 @@ mlxsw_sp_nexthop_obj_init(struct mlxsw_sp *mlxsw_sp,
 	switch (nh_obj->gw_family) {
 	case AF_INET:
 		memcpy(&nh->gw_addr, &nh_obj->ipv4, sizeof(nh_obj->ipv4));
-		nh->family = AF_INET;
+		nh->neigh_tbl = &arp_tbl;
 		break;
 	case AF_INET6:
 		memcpy(&nh->gw_addr, &nh_obj->ipv6, sizeof(nh_obj->ipv6));
 #if IS_ENABLED(CONFIG_IPV6)
-		nh->family = AF_INET6;
+		nh->neigh_tbl = &nd_tbl;
 #endif
 		break;
 	}
@@ -5218,7 +5199,7 @@ mlxsw_sp_nexthop_obj_group_info_init(struct mlxsw_sp *mlxsw_sp,
 		return -EINVAL;
 	}
 
-	nhgi = kzalloc_flex(*nhgi, nexthops, nhs);
+	nhgi = kzalloc(struct_size(nhgi, nexthops, nhs), GFP_KERNEL);
 	if (!nhgi)
 		return -ENOMEM;
 	nh_grp->nhgi = nhgi;
@@ -5324,7 +5305,7 @@ mlxsw_sp_nexthop_obj_group_create(struct mlxsw_sp *mlxsw_sp,
 	struct mlxsw_sp_nexthop_group *nh_grp;
 	int err;
 
-	nh_grp = kzalloc_obj(*nh_grp);
+	nh_grp = kzalloc(sizeof(*nh_grp), GFP_KERNEL);
 	if (!nh_grp)
 		return ERR_PTR(-ENOMEM);
 	INIT_LIST_HEAD(&nh_grp->vr_list);
@@ -5799,7 +5780,7 @@ mlxsw_sp_nexthop4_group_info_init(struct mlxsw_sp *mlxsw_sp,
 	struct mlxsw_sp_nexthop *nh;
 	int err, i;
 
-	nhgi = kzalloc_flex(*nhgi, nexthops, nhs);
+	nhgi = kzalloc(struct_size(nhgi, nexthops, nhs), GFP_KERNEL);
 	if (!nhgi)
 		return -ENOMEM;
 	nh_grp->nhgi = nhgi;
@@ -5861,7 +5842,7 @@ mlxsw_sp_nexthop4_group_create(struct mlxsw_sp *mlxsw_sp, struct fib_info *fi)
 	struct mlxsw_sp_nexthop_group *nh_grp;
 	int err;
 
-	nh_grp = kzalloc_obj(*nh_grp);
+	nh_grp = kzalloc(sizeof(*nh_grp), GFP_KERNEL);
 	if (!nh_grp)
 		return ERR_PTR(-ENOMEM);
 	INIT_LIST_HEAD(&nh_grp->vr_list);
@@ -6501,7 +6482,7 @@ mlxsw_sp_fib4_entry_create(struct mlxsw_sp *mlxsw_sp,
 	struct mlxsw_sp_fib_entry *fib_entry;
 	int err;
 
-	fib4_entry = kzalloc_obj(*fib4_entry);
+	fib4_entry = kzalloc(sizeof(*fib4_entry), GFP_KERNEL);
 	if (!fib4_entry)
 		return ERR_PTR(-ENOMEM);
 	fib_entry = &fib4_entry->common;
@@ -6621,7 +6602,7 @@ mlxsw_sp_fib_node_create(struct mlxsw_sp_fib *fib, const void *addr,
 {
 	struct mlxsw_sp_fib_node *fib_node;
 
-	fib_node = kzalloc_obj(*fib_node);
+	fib_node = kzalloc(sizeof(*fib_node), GFP_KERNEL);
 	if (!fib_node)
 		return NULL;
 
@@ -6926,7 +6907,7 @@ static struct mlxsw_sp_rt6 *mlxsw_sp_rt6_create(struct fib6_info *rt)
 {
 	struct mlxsw_sp_rt6 *mlxsw_sp_rt6;
 
-	mlxsw_sp_rt6 = kzalloc_obj(*mlxsw_sp_rt6);
+	mlxsw_sp_rt6 = kzalloc(sizeof(*mlxsw_sp_rt6), GFP_KERNEL);
 	if (!mlxsw_sp_rt6)
 		return ERR_PTR(-ENOMEM);
 
@@ -7002,7 +6983,7 @@ static int mlxsw_sp_nexthop6_init(struct mlxsw_sp *mlxsw_sp,
 	nh->nh_weight = rt->fib6_nh->fib_nh_weight;
 	memcpy(&nh->gw_addr, &rt->fib6_nh->fib_nh_gw6, sizeof(nh->gw_addr));
 #if IS_ENABLED(CONFIG_IPV6)
-	nh->family = AF_INET6;
+	nh->neigh_tbl = &nd_tbl;
 #endif
 
 	err = mlxsw_sp_nexthop_counter_enable(mlxsw_sp, nh);
@@ -7052,7 +7033,8 @@ mlxsw_sp_nexthop6_group_info_init(struct mlxsw_sp *mlxsw_sp,
 	struct mlxsw_sp_nexthop *nh;
 	int err, i;
 
-	nhgi = kzalloc_flex(*nhgi, nexthops, fib6_entry->nrt6);
+	nhgi = kzalloc(struct_size(nhgi, nexthops, fib6_entry->nrt6),
+		       GFP_KERNEL);
 	if (!nhgi)
 		return -ENOMEM;
 	nh_grp->nhgi = nhgi;
@@ -7118,7 +7100,7 @@ mlxsw_sp_nexthop6_group_create(struct mlxsw_sp *mlxsw_sp,
 	struct mlxsw_sp_nexthop_group *nh_grp;
 	int err;
 
-	nh_grp = kzalloc_obj(*nh_grp);
+	nh_grp = kzalloc(sizeof(*nh_grp), GFP_KERNEL);
 	if (!nh_grp)
 		return ERR_PTR(-ENOMEM);
 	INIT_LIST_HEAD(&nh_grp->vr_list);
@@ -7397,7 +7379,7 @@ mlxsw_sp_fib6_entry_create(struct mlxsw_sp *mlxsw_sp,
 	struct mlxsw_sp_rt6 *mlxsw_sp_rt6;
 	int err, i;
 
-	fib6_entry = kzalloc_obj(*fib6_entry);
+	fib6_entry = kzalloc(sizeof(*fib6_entry), GFP_KERNEL);
 	if (!fib6_entry)
 		return ERR_PTR(-ENOMEM);
 	fib_entry = &fib6_entry->common;
@@ -7846,7 +7828,7 @@ mlxsw_sp_router_fib6_work_init(struct mlxsw_sp_fib6_event_work *fib6_work,
 
 	nrt6 = fen6_info->nsiblings + 1;
 
-	rt_arr = kzalloc_objs(struct fib6_info *, nrt6, GFP_ATOMIC);
+	rt_arr = kcalloc(nrt6, sizeof(struct fib6_info *), GFP_ATOMIC);
 	if (!rt_arr)
 		return -ENOMEM;
 
@@ -8158,7 +8140,7 @@ static int mlxsw_sp_router_fib_event(struct notifier_block *nb,
 		break;
 	}
 
-	fib_work = kzalloc_obj(*fib_work, GFP_ATOMIC);
+	fib_work = kzalloc(sizeof(*fib_work), GFP_ATOMIC);
 	if (!fib_work)
 		return NOTIFY_BAD;
 
@@ -8561,7 +8543,7 @@ mlxsw_sp_router_hwstats_notify_schedule(struct net_device *dev)
 	 * later.
 	 */
 
-	hws_work = kzalloc_obj(*hws_work);
+	hws_work = kzalloc(sizeof(*hws_work), GFP_KERNEL);
 	if (!hws_work)
 		return;
 
@@ -8966,7 +8948,7 @@ mlxsw_sp_rif_mac_profile_alloc(const char *mac)
 {
 	struct mlxsw_sp_rif_mac_profile *profile;
 
-	profile = kzalloc_obj(*profile);
+	profile = kzalloc(sizeof(*profile), GFP_KERNEL);
 	if (!profile)
 		return NULL;
 
@@ -9613,7 +9595,7 @@ static int mlxsw_sp_inet6addr_event(struct notifier_block *nb,
 	if (event == NETDEV_UP)
 		return NOTIFY_DONE;
 
-	inet6addr_work = kzalloc_obj(*inet6addr_work, GFP_ATOMIC);
+	inet6addr_work = kzalloc(sizeof(*inet6addr_work), GFP_ATOMIC);
 	if (!inet6addr_work)
 		return NOTIFY_BAD;
 
@@ -11088,7 +11070,9 @@ static int mlxsw_sp_rifs_init(struct mlxsw_sp *mlxsw_sp)
 	mlxsw_sp->router->max_rif_mac_profile =
 		MLXSW_CORE_RES_GET(core, MAX_RIF_MAC_PROFILES);
 
-	mlxsw_sp->router->rifs = kzalloc_objs(struct mlxsw_sp_rif *, max_rifs);
+	mlxsw_sp->router->rifs = kcalloc(max_rifs,
+					 sizeof(struct mlxsw_sp_rif *),
+					 GFP_KERNEL);
 	if (!mlxsw_sp->router->rifs)
 		return -ENOMEM;
 
@@ -11601,7 +11585,7 @@ int mlxsw_sp_router_init(struct mlxsw_sp *mlxsw_sp,
 	struct notifier_block *nb;
 	int err;
 
-	router = kzalloc_obj(*mlxsw_sp->router);
+	router = kzalloc(sizeof(*mlxsw_sp->router), GFP_KERNEL);
 	if (!router)
 		return -ENOMEM;
 	mutex_init(&router->lock);

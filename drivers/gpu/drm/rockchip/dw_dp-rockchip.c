@@ -7,11 +7,8 @@
  */
 
 #include <linux/component.h>
-#include <linux/media-bus-format.h>
 #include <linux/of_device.h>
 #include <linux/platform_device.h>
-#include <linux/videodev2.h>
-
 #include <drm/bridge/dw_dp.h>
 #include <drm/drm_atomic_helper.h>
 #include <drm/drm_bridge.h>
@@ -20,8 +17,13 @@
 #include <drm/drm_of.h>
 #include <drm/drm_print.h>
 #include <drm/drm_probe_helper.h>
+#include <drm/drm_simple_kms_helper.h>
+
+#include <linux/media-bus-format.h>
+#include <linux/videodev2.h>
 
 #include "rockchip_drm_drv.h"
+#include "rockchip_drm_vop.h"
 
 struct rockchip_dw_dp {
 	struct dw_dp *base;
@@ -34,7 +36,7 @@ static int dw_dp_encoder_atomic_check(struct drm_encoder *encoder,
 				      struct drm_connector_state *conn_state)
 {
 	struct rockchip_crtc_state *s = to_rockchip_crtc_state(crtc_state);
-	struct drm_atomic_commit *state = conn_state->state;
+	struct drm_atomic_state *state = conn_state->state;
 	struct drm_display_info *di = &conn_state->connector->display_info;
 	struct drm_bridge *bridge  = drm_bridge_chain_get_first_bridge(encoder);
 	struct drm_bridge_state *bridge_state = drm_atomic_get_new_bridge_state(state, bridge);
@@ -112,7 +114,7 @@ static int dw_dp_rockchip_bind(struct device *dev, struct device *master, void *
 				     "Failed to init bridge connector\n");
 	}
 
-	return 0;
+	return drm_connector_attach_encoder(connector, encoder);
 }
 
 static void dw_dp_rockchip_unbind(struct device *dev, struct device *master,
@@ -143,18 +145,10 @@ static const struct dw_dp_plat_data rk3588_dp_plat_data = {
 	.pixel_mode = DW_DP_MP_QUAD_PIXEL,
 };
 
-static const struct dw_dp_plat_data rk3576_dp_plat_data = {
-	.max_link_rate = 810000,
-	.pixel_mode = DW_DP_MP_DUAL_PIXEL,
-};
-
 static const struct of_device_id dw_dp_of_match[] = {
 	{
 		.compatible = "rockchip,rk3588-dp",
 		.data = &rk3588_dp_plat_data,
-	}, {
-		.compatible = "rockchip,rk3576-dp",
-		.data = &rk3576_dp_plat_data,
 	},
 	{}
 };

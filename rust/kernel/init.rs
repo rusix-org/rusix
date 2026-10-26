@@ -30,7 +30,7 @@
 //! ## General Examples
 //!
 //! ```rust
-//! # #![expect(clippy::undocumented_unsafe_blocks)]
+//! # #![expect(clippy::disallowed_names, clippy::undocumented_unsafe_blocks)]
 //! use kernel::types::Opaque;
 //! use pin_init::pin_init_from_closure;
 //!
@@ -67,6 +67,7 @@
 //! ```
 //!
 //! ```rust
+//! # #![expect(unreachable_pub, clippy::disallowed_names)]
 //! use kernel::{prelude::*, types::Opaque};
 //! use core::{ptr::addr_of_mut, marker::PhantomPinned, pin::Pin};
 //! # mod bindings {
@@ -151,16 +152,13 @@ pub trait InPlaceInit<T>: Sized {
     /// type.
     ///
     /// If `T: !Unpin` it will not be able to move afterwards.
-    #[inline]
     fn pin_init<E>(init: impl PinInit<T, E>, flags: Flags) -> error::Result<Self::PinnedSelf>
     where
         Error: From<E>,
     {
         // SAFETY: We delegate to `init` and only change the error type.
         let init = unsafe {
-            pin_init_from_closure(|slot| {
-                pin_init::raw_try_init(slot, init).map_err(|e| Error::from(e))
-            })
+            pin_init_from_closure(|slot| init.__pinned_init(slot).map_err(|e| Error::from(e)))
         };
         Self::try_pin_init(init, flags)
     }
@@ -171,14 +169,13 @@ pub trait InPlaceInit<T>: Sized {
         E: From<AllocError>;
 
     /// Use the given initializer to in-place initialize a `T`.
-    #[inline]
     fn init<E>(init: impl Init<T, E>, flags: Flags) -> error::Result<Self>
     where
         Error: From<E>,
     {
         // SAFETY: We delegate to `init` and only change the error type.
         let init = unsafe {
-            init_from_closure(|slot| pin_init::raw_try_init(slot, init).map_err(|e| Error::from(e)))
+            init_from_closure(|slot| init.__pinned_init(slot).map_err(|e| Error::from(e)))
         };
         Self::try_init(init, flags)
     }
@@ -223,12 +220,20 @@ pub trait InPlaceInit<T>: Sized {
 /// [`Error`]: crate::error::Error
 #[macro_export]
 macro_rules! try_init {
-    ($($args:tt)*) => {
-        ::pin_init::init!(
-            #[default_error($crate::error::Error)]
-            $($args)*
-        )
-    }
+    ($(&$this:ident in)? $t:ident $(::<$($generics:ty),* $(,)?>)? {
+        $($fields:tt)*
+    }) => {
+        ::pin_init::try_init!($(&$this in)? $t $(::<$($generics),*>)? {
+            $($fields)*
+        }? $crate::error::Error)
+    };
+    ($(&$this:ident in)? $t:ident $(::<$($generics:ty),* $(,)?>)? {
+        $($fields:tt)*
+    }? $err:ty) => {
+        ::pin_init::try_init!($(&$this in)? $t $(::<$($generics),*>)? {
+            $($fields)*
+        }? $err)
+    };
 }
 
 /// Construct an in-place, fallible pinned initializer for `struct`s.
@@ -275,10 +280,18 @@ macro_rules! try_init {
 /// [`Error`]: crate::error::Error
 #[macro_export]
 macro_rules! try_pin_init {
-    ($($args:tt)*) => {
-        ::pin_init::pin_init!(
-            #[default_error($crate::error::Error)]
-            $($args)*
-        )
-    }
+    ($(&$this:ident in)? $t:ident $(::<$($generics:ty),* $(,)?>)? {
+        $($fields:tt)*
+    }) => {
+        ::pin_init::try_pin_init!($(&$this in)? $t $(::<$($generics),*>)? {
+            $($fields)*
+        }? $crate::error::Error)
+    };
+    ($(&$this:ident in)? $t:ident $(::<$($generics:ty),* $(,)?>)? {
+        $($fields:tt)*
+    }? $err:ty) => {
+        ::pin_init::try_pin_init!($(&$this in)? $t $(::<$($generics),*>)? {
+            $($fields)*
+        }? $err)
+    };
 }

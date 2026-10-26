@@ -545,7 +545,7 @@ void snd_pcm_set_sync_per_card(struct snd_pcm_substream *substream,
 			       struct snd_pcm_hw_params *params,
 			       const unsigned char *id, unsigned int len)
 {
-	*(__le32 *)params->sync = cpu_to_le32(substream->pcm->card->number);
+	*(__u32 *)params->sync = cpu_to_le32(substream->pcm->card->number);
 	len = min(12, len);
 	memcpy(params->sync + 4, id, len);
 	memset(params->sync + 4 + len, 0, 12 - len);
@@ -2009,8 +2009,8 @@ static int wait_for_avail(struct snd_pcm_substream *substream,
 		case SNDRV_PCM_STATE_DRAINING:
 			if (is_playback)
 				err = -EPIPE;
-			else
-				avail = snd_pcm_avail(substream);
+			else 
+				avail = 0; /* indicate draining */
 			goto _endloop;
 		case SNDRV_PCM_STATE_OPEN:
 		case SNDRV_PCM_STATE_SETUP:
@@ -2208,17 +2208,13 @@ static int pcm_sanity_check(struct snd_pcm_substream *substream)
 	return 0;
 }
 
-static int pcm_accessible_state(struct snd_pcm_substream *substream)
+static int pcm_accessible_state(struct snd_pcm_runtime *runtime)
 {
-	struct snd_pcm_runtime *runtime = substream->runtime;
-
 	switch (runtime->state) {
 	case SNDRV_PCM_STATE_PREPARED:
 	case SNDRV_PCM_STATE_RUNNING:
 	case SNDRV_PCM_STATE_PAUSED:
 		return 0;
-	case SNDRV_PCM_STATE_DRAINING:
-		return substream->stream == SNDRV_PCM_STREAM_CAPTURE ? 0 : -EBADFD;
 	case SNDRV_PCM_STATE_XRUN:
 		return -EPIPE;
 	case SNDRV_PCM_STATE_SUSPENDED:
@@ -2324,7 +2320,7 @@ snd_pcm_sframes_t __snd_pcm_lib_xfer(struct snd_pcm_substream *substream,
 	nonblock = !!(substream->f_flags & O_NONBLOCK);
 
 	snd_pcm_stream_lock_irq(substream);
-	err = pcm_accessible_state(substream);
+	err = pcm_accessible_state(runtime);
 	if (err < 0)
 		goto _end_unlock;
 
@@ -2352,7 +2348,7 @@ snd_pcm_sframes_t __snd_pcm_lib_xfer(struct snd_pcm_substream *substream,
 		if (!avail) {
 			if (!is_playback &&
 			    runtime->state == SNDRV_PCM_STATE_DRAINING) {
-				snd_pcm_drain_done(substream);
+				snd_pcm_stop(substream, SNDRV_PCM_STATE_SETUP);
 				goto _end_unlock;
 			}
 			if (nonblock) {
@@ -2392,7 +2388,7 @@ snd_pcm_sframes_t __snd_pcm_lib_xfer(struct snd_pcm_substream *substream,
 		atomic_dec(&runtime->buffer_accessing);
 		if (err < 0)
 			goto _end_unlock;
-		err = pcm_accessible_state(substream);
+		err = pcm_accessible_state(runtime);
 		if (err < 0)
 			goto _end_unlock;
 		appl_ptr += frames;
@@ -2500,7 +2496,6 @@ static int pcm_chmap_ctl_get(struct snd_kcontrol *kcontrol,
 	unsigned int idx = snd_ctl_get_ioffidx(kcontrol, &ucontrol->id);
 	struct snd_pcm_substream *substream;
 	const struct snd_pcm_chmap_elem *map;
-	unsigned int channels;
 
 	if (!info->chmap)
 		return -EINVAL;
@@ -2509,20 +2504,11 @@ static int pcm_chmap_ctl_get(struct snd_kcontrol *kcontrol,
 		return -ENODEV;
 	memset(ucontrol->value.integer.value, 0,
 	       sizeof(long) * info->max_channels);
-	/*
-	 * PCM disconnect takes open_mutex before removing controls.
-	 * Use trylock to avoid a deadlock with controls_rwsem.
-	 */
-	scoped_cond_guard(mutex_try, return -EBUSY,
-			  &info->pcm->open_mutex) {
-		if (!substream->runtime)
-			return 0; /* no channels set */
-		channels = substream->runtime->channels;
-	}
+	if (!substream->runtime)
+		return 0; /* no channels set */
 	for (map = info->chmap; map->channels; map++) {
 		int i;
-
-		if (map->channels == channels &&
+		if (map->channels == substream->runtime->channels &&
 		    valid_chmap_channels(info, map->channels)) {
 			for (i = 0; i < map->channels; i++)
 				ucontrol->value.integer.value[i] = map->map[i];
@@ -2618,7 +2604,7 @@ int snd_pcm_add_chmap_ctls(struct snd_pcm *pcm, int stream,
 
 	if (WARN_ON(pcm->streams[stream].chmap_kctl))
 		return -EBUSY;
-	info = kzalloc_obj(*info);
+	info = kzalloc(sizeof(*info), GFP_KERNEL);
 	if (!info)
 		return -ENOMEM;
 	info->pcm = pcm;

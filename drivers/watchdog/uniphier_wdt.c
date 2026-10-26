@@ -13,7 +13,6 @@
 #include <linux/of.h>
 #include <linux/platform_device.h>
 #include <linux/regmap.h>
-#include <linux/stringify.h>
 #include <linux/watchdog.h>
 
 /* WDT timer setting register */
@@ -246,12 +245,12 @@ module_platform_driver(uniphier_wdt_driver);
 module_param(timeout, uint, 0000);
 MODULE_PARM_DESC(timeout,
 	"Watchdog timeout seconds in power of 2. (0 < timeout < 128, default="
-				__stringify(WDT_DEFAULT_TIMEOUT) ")");
+				__MODULE_STRING(WDT_DEFAULT_TIMEOUT) ")");
 
 module_param(nowayout, bool, 0000);
 MODULE_PARM_DESC(nowayout,
 	"Watchdog cannot be stopped once started (default="
-				__stringify(WATCHDOG_NOWAYOUT) ")");
+				__MODULE_STRING(WATCHDOG_NOWAYOUT) ")");
 
 MODULE_AUTHOR("Keiji Hayashibara <hayashibara.keiji@socionext.com>");
 MODULE_DESCRIPTION("UniPhier Watchdog Device Driver");

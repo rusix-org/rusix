@@ -153,7 +153,7 @@ static void libie_fwlog_realloc_rings(struct libie_fwlog *fwlog, int index)
 	 * old rings and buffers. that way if we don't have enough
 	 * memory then we at least have what we had before
 	 */
-	ring.rings = kzalloc_objs(*ring.rings, ring_size);
+	ring.rings = kcalloc(ring_size, sizeof(*ring.rings), GFP_KERNEL);
 	if (!ring.rings)
 		return;
 
@@ -208,7 +208,7 @@ libie_aq_fwlog_set(struct libie_fwlog *fwlog,
 	int status;
 	int i;
 
-	fw_modules = kzalloc_objs(*fw_modules, num_entries);
+	fw_modules = kcalloc(num_entries, sizeof(*fw_modules), GFP_KERNEL);
 	if (!fw_modules)
 		return -ENOMEM;
 
@@ -861,7 +861,8 @@ static void libie_debugfs_fwlog_init(struct libie_fwlog *fwlog,
 	/* allocate space for this first because if it fails then we don't
 	 * need to unwind
 	 */
-	fw_modules = kzalloc_objs(*fw_modules, LIBIE_NR_FW_LOG_MODULES);
+	fw_modules = kcalloc(LIBIE_NR_FW_LOG_MODULES, sizeof(*fw_modules),
+			     GFP_KERNEL);
 	if (!fw_modules)
 		return;
 
@@ -1000,7 +1001,7 @@ static void libie_fwlog_set_supported(struct libie_fwlog *fwlog)
 
 	fwlog->supported = false;
 
-	cfg = kzalloc_obj(*cfg);
+	cfg = kzalloc(sizeof(*cfg), GFP_KERNEL);
 	if (!cfg)
 		return;
 
@@ -1035,8 +1036,9 @@ int libie_fwlog_init(struct libie_fwlog *fwlog, struct libie_fwlog_api *api)
 		if (status)
 			return status;
 
-		fwlog->ring.rings = kzalloc_objs(*fwlog->ring.rings,
-						 LIBIE_FWLOG_RING_SIZE_DFLT);
+		fwlog->ring.rings = kcalloc(LIBIE_FWLOG_RING_SIZE_DFLT,
+					    sizeof(*fwlog->ring.rings),
+					    GFP_KERNEL);
 		if (!fwlog->ring.rings) {
 			dev_warn(&fwlog->pdev->dev, "Unable to allocate memory for FW log rings\n");
 			return -ENOMEM;

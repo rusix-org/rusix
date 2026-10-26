@@ -849,7 +849,7 @@ int ata_slave_link_init(struct ata_port *ap)
 	WARN_ON(ap->slave_link);
 	WARN_ON(ap->flags & ATA_FLAG_PMP);
 
-	link = kzalloc_obj(*link);
+	link = kzalloc(sizeof(*link), GFP_KERNEL);
 	if (!link)
 		return -ENOMEM;
 
@@ -1377,15 +1377,16 @@ EXPORT_SYMBOL_GPL(ata_sas_sdev_configure);
  */
 
 int ata_sas_queuecmd(struct scsi_cmnd *cmd, struct ata_port *ap)
-	__must_hold(ap->lock)
 {
+	int rc = 0;
+
 	if (likely(ata_dev_enabled(ap->link.device)))
-		return __ata_scsi_queuecmd(cmd, ap->link.device, ap);
-
-	cmd->result = (DID_BAD_TARGET << 16);
-	scsi_done(cmd);
-
-	return 0;
+		rc = __ata_scsi_queuecmd(cmd, ap->link.device);
+	else {
+		cmd->result = (DID_BAD_TARGET << 16);
+		scsi_done(cmd);
+	}
+	return rc;
 }
 EXPORT_SYMBOL_GPL(ata_sas_queuecmd);
 
@@ -1588,7 +1589,7 @@ int ata_eh_get_ncq_success_sense(struct ata_link *link)
 		asc = sense[1];
 		ascq = sense[2];
 
-		if (!ata_scsi_sense_is_valid(sk, scsi_sense_code(asc, ascq))) {
+		if (!ata_scsi_sense_is_valid(sk, asc, ascq)) {
 			ret = -EIO;
 			continue;
 		}
@@ -1605,9 +1606,9 @@ int ata_eh_get_ncq_success_sense(struct ata_link *link)
 			qc->result_tf.auxiliary = get_unaligned_le32(&sense[16]);
 
 		/* Set sense without also setting scsicmd->result */
-		scsi_set_sense_buffer(dev->flags & ATA_DFLAG_D_SENSE,
-				      qc->scsicmd->sense_buffer, sk,
-				      scsi_sense_code(asc, ascq));
+		scsi_build_sense_buffer(dev->flags & ATA_DFLAG_D_SENSE,
+					qc->scsicmd->sense_buffer, sk,
+					asc, ascq);
 		qc->flags |= ATA_QCFLAG_SENSE_VALID;
 
 		/*
@@ -1684,14 +1685,14 @@ void ata_eh_analyze_ncq_error(struct ata_link *link)
 	 * stored the sense data in qc->result_tf.auxiliary.
 	 */
 	if (qc->result_tf.auxiliary) {
-		u16 sense_code;
-		u8 sense_key;
+		char sense_key, asc, ascq;
 
 		sense_key = (qc->result_tf.auxiliary >> 16) & 0xff;
-		sense_code = qc->result_tf.auxiliary & 0xffff;
-		if (ata_scsi_sense_is_valid(sense_key, sense_code)) {
-			ata_scsi_set_sense(dev, qc->scsicmd, sense_key,
-					   sense_code);
+		asc = (qc->result_tf.auxiliary >> 8) & 0xff;
+		ascq = qc->result_tf.auxiliary & 0xff;
+		if (ata_scsi_sense_is_valid(sense_key, asc, ascq)) {
+			ata_scsi_set_sense(dev, qc->scsicmd, sense_key, asc,
+					   ascq);
 			qc->flags |= ATA_QCFLAG_SENSE_VALID;
 		}
 	}

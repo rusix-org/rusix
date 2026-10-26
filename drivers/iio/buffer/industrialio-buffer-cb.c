@@ -13,7 +13,6 @@
 
 struct iio_cb_buffer {
 	struct iio_buffer buffer;
-	/* Must be safe to call from any context (e.g. must not sleep). */
 	int (*cb)(const void *data, void *private);
 	void *private;
 	struct iio_channel *channels;
@@ -60,7 +59,7 @@ struct iio_cb_buffer *iio_channel_get_all_cb(struct device *dev,
 		return ERR_PTR(-EINVAL);
 	}
 
-	cb_buff = kzalloc_obj(*cb_buff);
+	cb_buff = kzalloc(sizeof(*cb_buff), GFP_KERNEL);
 	if (cb_buff == NULL)
 		return ERR_PTR(-ENOMEM);
 
@@ -154,4 +153,3 @@ EXPORT_SYMBOL_GPL(iio_channel_cb_get_iio_dev);
 MODULE_AUTHOR("Jonathan Cameron <jic23@kernel.org>");
 MODULE_DESCRIPTION("Industrial I/O callback buffer");
 MODULE_LICENSE("GPL");
-MODULE_IMPORT_NS("IIO_CONSUMER");

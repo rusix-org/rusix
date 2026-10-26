@@ -113,7 +113,7 @@ static int nci_uart_set_driver(struct tty_struct *tty, unsigned int driver)
 	if (!nci_uart_drivers[driver])
 		return -ENOENT;
 
-	nu = kzalloc_obj(*nu);
+	nu = kzalloc(sizeof(*nu), GFP_KERNEL);
 	if (!nu)
 		return -ENOMEM;
 
@@ -421,7 +421,7 @@ void nci_uart_set_config(struct nci_uart *nu, int baudrate, int flow_ctrl)
 }
 EXPORT_SYMBOL_GPL(nci_uart_set_config);
 
-static const struct tty_ldisc_ops nci_uart_ldisc = {
+static struct tty_ldisc_ops nci_uart_ldisc = {
 	.owner		= THIS_MODULE,
 	.num		= N_NCI,
 	.name		= "n_nci",

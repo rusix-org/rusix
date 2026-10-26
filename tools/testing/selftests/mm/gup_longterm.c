@@ -21,18 +21,18 @@
 #include <linux/magic.h>
 #include <linux/memfd.h>
 
-#include "local_config.h_gen"
+#include "local_config.h"
 #ifdef LOCAL_CONFIG_HAVE_LIBURING
 #include <liburing.h>
 #endif /* LOCAL_CONFIG_HAVE_LIBURING */
 
 #include "../../../../mm/gup_test.h"
-#include "kselftest.h"
+#include "../kselftest.h"
 #include "vm_util.h"
 
 static size_t pagesize;
 static int nr_hugetlbsizes;
-static unsigned long hugetlbsizes[10];
+static size_t hugetlbsizes[10];
 static int gup_fd;
 
 static __fsword_t get_fs_type(int fd)
@@ -195,7 +195,7 @@ static void do_test(int fd, size_t size, enum test_type type, bool shared)
 		args.flags |= rw ? PIN_LONGTERM_TEST_FLAG_USE_WRITE : 0;
 		ret = ioctl(gup_fd, PIN_LONGTERM_TEST_START, &args);
 		if (ret && errno == EINVAL) {
-			ksft_print_msg("PIN_LONGTERM_TEST_START failed (EINVAL)\n");
+			ksft_print_msg("PIN_LONGTERM_TEST_START failed (EINVAL)n");
 			result = KSFT_SKIP;
 			break;
 		} else if (ret && errno == EFAULT) {
@@ -509,7 +509,7 @@ int main(int argc, char **argv)
 	int i;
 
 	pagesize = getpagesize();
-	nr_hugetlbsizes = hugetlb_setup(2, hugetlbsizes,
+	nr_hugetlbsizes = detect_hugetlb_page_sizes(hugetlbsizes,
 						    ARRAY_SIZE(hugetlbsizes));
 
 	ksft_print_header();

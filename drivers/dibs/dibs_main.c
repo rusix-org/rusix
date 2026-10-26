@@ -6,7 +6,8 @@
  *
  *  Copyright IBM Corp. 2025
  */
-#define pr_fmt(fmt) "dibs: " fmt
+#define KMSG_COMPONENT "dibs"
+#define pr_fmt(fmt) KMSG_COMPONENT ": " fmt
 
 #include <linux/module.h>
 #include <linux/types.h>
@@ -136,7 +137,7 @@ struct dibs_dev *dibs_dev_alloc(void)
 {
 	struct dibs_dev *dibs;
 
-	dibs = kzalloc_obj(*dibs);
+	dibs = kzalloc(sizeof(*dibs), GFP_KERNEL);
 	if (!dibs)
 		return dibs;
 	spin_lock_init(&dibs->lock);
@@ -272,5 +273,5 @@ static void __exit dibs_exit(void)
 	class_unregister(&dibs_class);
 }
 
-subsys_initcall(dibs_init);
+module_init(dibs_init);
 module_exit(dibs_exit);

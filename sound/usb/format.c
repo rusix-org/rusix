@@ -34,7 +34,6 @@ static u64 parse_audio_format_i_type(struct snd_usb_audio *chip,
 {
 	int sample_width, sample_bytes;
 	u64 pcm_formats = 0;
-	u64 dsd_formats = 0;
 
 	switch (fp->protocol) {
 	case UAC_VERSION_1:
@@ -155,9 +154,7 @@ static u64 parse_audio_format_i_type(struct snd_usb_audio *chip,
 			 fp->iface, fp->altsetting, format);
 	}
 
-	dsd_formats |= snd_usb_interface_dsd_format_quirks(chip, fp, sample_bytes);
-	if (dsd_formats && !fp->dsd_dop)
-		pcm_formats = dsd_formats;
+	pcm_formats |= snd_usb_interface_dsd_format_quirks(chip, fp, sample_bytes);
 
 	return pcm_formats;
 }
@@ -453,10 +450,6 @@ static int parse_uac2_sample_rate_range(struct snd_usb_audio *chip,
 				goto skip_rate;
 			/* Filter out invalid rates on Presonus Studio 1824c */
 			if (chip->usb_id == USB_ID(0x194f, 0x010d) &&
-			    !s1810c_valid_sample_rate(fp, rate))
-				goto skip_rate;
-			/* Filter out invalid rates on Presonus Studio 1824 */
-			if (chip->usb_id == USB_ID(0x194f, 0x0107) &&
 			    !s1810c_valid_sample_rate(fp, rate))
 				goto skip_rate;
 

@@ -1,4 +1,3 @@
-// SPDX-License-Identifier: GPL-2.0
 /*
    BNEP implementation for Linux Bluetooth stack (BlueZ).
    Copyright (C) 2001-2002 Inventel Systemes
@@ -7,6 +6,10 @@
 	David Libault  <david.libault@inventel.fr>
 
    Copyright (C) 2002 Maxim Krasnyansky <maxk@qualcomm.com>
+
+   This program is free software; you can redistribute it and/or modify
+   it under the terms of the GNU General Public License version 2 as
+   published by the Free Software Foundation;
 
    THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
    OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
@@ -495,7 +498,10 @@ send:
 	iv[il++] = (struct kvec) { skb->data, skb->len };
 	len += skb->len;
 
-	len = kernel_sendmsg(sock, &s->msg, iv, il, len);
+	/* FIXME: linearize skb */
+	{
+		len = kernel_sendmsg(sock, &s->msg, iv, il, len);
+	}
 	kfree_skb(skb);
 
 	if (len > 0) {
@@ -536,12 +542,9 @@ static int bnep_session(void *arg)
 			break;
 
 		/* TX */
-		while ((skb = skb_dequeue(&sk->sk_write_queue))) {
-			if (skb_linearize(skb))
-				kfree_skb(skb);
-			else if (bnep_tx_frame(s, skb))
+		while ((skb = skb_dequeue(&sk->sk_write_queue)))
+			if (bnep_tx_frame(s, skb))
 				break;
-		}
 		netif_wake_queue(dev);
 
 		/*
@@ -685,7 +688,7 @@ int bnep_add_connection(struct bnep_connadd_req *req, struct socket *sock)
 		goto failed;
 	}
 
-	strscpy(req->device, dev->name, sizeof(req->device));
+	strcpy(req->device, dev->name);
 	up_write(&bnep_session_sem);
 	return 0;
 
@@ -727,7 +730,7 @@ static void __bnep_copy_ci(struct bnep_conninfo *ci, struct bnep_session *s)
 
 	memset(ci, 0, sizeof(*ci));
 	memcpy(ci->dst, s->eh.h_source, ETH_ALEN);
-	strscpy(ci->device, s->dev->name, sizeof(ci->device));
+	strcpy(ci->device, s->dev->name);
 	ci->flags = s->flags & valid_flags;
 	ci->state = s->state;
 	ci->role  = s->role;

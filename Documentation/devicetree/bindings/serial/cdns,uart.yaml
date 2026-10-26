@@ -19,7 +19,6 @@ properties:
       - items:
           - enum:
               - axiado,ax3000-uart
-              - axiado,ax3005-uart
               - xlnx,zynqmp-uart
           - const: cdns,uart-r1p12
 

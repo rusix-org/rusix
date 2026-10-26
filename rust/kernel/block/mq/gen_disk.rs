@@ -7,26 +7,14 @@
 
 use crate::{
     bindings,
-    block::mq::{
-        Operations,
-        TagSet, //
-    },
-    error::{
-        from_err_ptr,
-        to_result, //
-    },
-    fmt::{
-        self,
-        Write, //
-    },
+    block::mq::{Operations, TagSet},
+    error::{self, from_err_ptr, Result},
+    fmt::{self, Write},
     prelude::*,
     static_lock_class,
     str::NullTerminatedFormatter,
     sync::Arc,
-    types::{
-        ForeignOwnable,
-        ScopeGuard, //
-    }, //
+    types::{ForeignOwnable, ScopeGuard},
 };
 
 /// A builder for [`GenDisk`].
@@ -66,7 +54,7 @@ impl GenDiskBuilder {
     /// and that it is a power of two.
     pub fn validate_block_size(size: u32) -> Result {
         if !(512..=bindings::PAGE_SIZE as u32).contains(&size) || !size.is_power_of_two() {
-            Err(EINVAL)
+            Err(error::code::EINVAL)
         } else {
             Ok(())
         }
@@ -75,7 +63,7 @@ impl GenDiskBuilder {
     /// Set the logical block size of the device to be built.
     ///
     /// This method will check that block size is a power of two and between 512
-    /// and `PAGE_SIZE`. If not, an error is returned and the block size is not set.
+    /// and 4096. If not, an error is returned and the block size is not set.
     ///
     /// This is the smallest unit the storage device can address. It is
     /// typically 4096 bytes.
@@ -88,7 +76,7 @@ impl GenDiskBuilder {
     /// Set the physical block size of the device to be built.
     ///
     /// This method will check that block size is a power of two and between 512
-    /// and `PAGE_SIZE`. If not, an error is returned and the block size is not set.
+    /// and 4096. If not, an error is returned and the block size is not set.
     ///
     /// This is the smallest unit a physical storage device can write
     /// atomically. It is usually the same as the logical block size but may be
@@ -119,7 +107,8 @@ impl GenDiskBuilder {
             drop(unsafe { T::QueueData::from_foreign(data) });
         });
 
-        let mut lim: bindings::queue_limits = pin_init::zeroed();
+        // SAFETY: `bindings::queue_limits` contain only fields that are valid when zeroed.
+        let mut lim: bindings::queue_limits = unsafe { core::mem::zeroed() };
 
         lim.logical_block_size = self.logical_block_size;
         lim.physical_block_size = self.physical_block_size;
@@ -137,9 +126,32 @@ impl GenDiskBuilder {
             )
         })?;
 
-        // SAFETY: `gendisk` is a valid pointer. We have exclusive access,
-        // since the disk is not added to the VFS yet.
-        unsafe { (*gendisk).fops = &GenDisk::<T>::VTABLE };
+        const TABLE: bindings::block_device_operations = bindings::block_device_operations {
+            submit_bio: None,
+            open: None,
+            release: None,
+            ioctl: None,
+            compat_ioctl: None,
+            check_events: None,
+            unlock_native_capacity: None,
+            getgeo: None,
+            set_read_only: None,
+            swap_slot_free_notify: None,
+            report_zones: None,
+            devnode: None,
+            alternative_gpt_sector: None,
+            get_unique_id: None,
+            // TODO: Set to THIS_MODULE. Waiting for const_refs_to_static feature to
+            // be merged (unstable in rustc 1.78 which is staged for linux 6.10)
+            // <https://github.com/rust-lang/rust/issues/119618>
+            owner: core::ptr::null_mut(),
+            pr_ops: core::ptr::null_mut(),
+            free_disk: None,
+            poll_bio: None,
+        };
+
+        // SAFETY: `gendisk` is a valid pointer as we initialized it above
+        unsafe { (*gendisk).fops = &TABLE };
 
         let cleanup_failure = ScopeGuard::new_with_data((gendisk, data), |(gendisk, data)| {
             // SAFETY: `gendisk` came from `__blk_mq_alloc_disk()` above and
@@ -168,7 +180,7 @@ impl GenDiskBuilder {
         // operation, so we will not race.
         unsafe { bindings::set_capacity(gendisk, self.capacity_sectors) };
 
-        to_result(
+        crate::error::to_result(
             // SAFETY: `gendisk` points to a valid and initialized instance of
             // `struct gendisk`.
             unsafe {
@@ -202,22 +214,9 @@ pub struct GenDisk<T: Operations> {
     gendisk: *mut bindings::gendisk,
 }
 
-impl<T: Operations> GenDisk<T> {
-    const VTABLE: bindings::block_device_operations = bindings::block_device_operations {
-        owner: crate::module::this_module::<T::OwnerModule>().as_ptr(),
-        ..pin_init::zeroed()
-    };
-}
-
 // SAFETY: `GenDisk` is an owned pointer to a `struct gendisk` and an `Arc` to a
-// `TagSet`. It is safe to send this to other threads as long as these two are `Send`.
-unsafe impl<T> Send for GenDisk<T>
-where
-    T: Operations,
-    T::QueueData: Send,
-    Arc<TagSet<T>>: Send,
-{
-}
+// `TagSet` It is safe to send this to other threads as long as T is Send.
+unsafe impl<T: Operations + Send> Send for GenDisk<T> {}
 
 impl<T: Operations> Drop for GenDisk<T> {
     fn drop(&mut self) {

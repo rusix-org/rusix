@@ -473,9 +473,6 @@ static int mxs_dcp_aes_enqueue(struct skcipher_request *req, int enc, int ecb)
 	struct dcp_aes_req_ctx *rctx = skcipher_request_ctx(req);
 	int ret;
 
-	if (!req->cryptlen)
-		return 0;
-
 	if (unlikely(actx->key_len != AES_KEYSIZE_128 && !actx->key_referenced))
 		return mxs_dcp_block_fallback(req, enc);
 
@@ -1088,13 +1085,17 @@ static int mxs_dcp_probe(struct platform_device *pdev)
 
 	ret = devm_request_irq(dev, dcp_vmi_irq, mxs_dcp_irq, 0,
 			       "dcp-vmi-irq", sdcp);
-	if (ret)
+	if (ret) {
+		dev_err(dev, "Failed to claim DCP VMI IRQ!\n");
 		return ret;
+	}
 
 	ret = devm_request_irq(dev, dcp_irq, mxs_dcp_irq, 0,
 			       "dcp-irq", sdcp);
-	if (ret)
+	if (ret) {
+		dev_err(dev, "Failed to claim DCP IRQ!\n");
 		return ret;
+	}
 
 	/* Allocate coherent helper block. */
 	sdcp->coh = devm_kzalloc(dev, sizeof(*sdcp->coh) + DCP_ALIGNMENT,

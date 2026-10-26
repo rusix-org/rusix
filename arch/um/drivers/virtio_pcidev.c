@@ -490,24 +490,13 @@ static int virtio_pcidev_init_vqs(struct virtio_pcidev_device *dev)
 	return 0;
 }
 
-static void virtio_pcidev_del_vqs(struct virtio_device *vdev,
-				  struct virtio_pcidev_device *dev)
-{
-	void *msg;
-
-	while ((msg = virtqueue_detach_unused_buf(dev->irq_vq)))
-		kfree(msg);
-
-	vdev->config->del_vqs(vdev);
-}
-
 static void __virtio_pcidev_virtio_platform_remove(struct virtio_device *vdev,
 						   struct virtio_pcidev_device *dev)
 {
 	um_pci_platform_device_unregister(&dev->pdev);
 
 	virtio_reset_device(vdev);
-	virtio_pcidev_del_vqs(vdev, dev);
+	vdev->config->del_vqs(vdev);
 
 	kfree(dev);
 }
@@ -537,7 +526,7 @@ err_unregister:
 	um_pci_platform_device_unregister(&dev->pdev);
 err_reset:
 	virtio_reset_device(vdev);
-	virtio_pcidev_del_vqs(vdev, dev);
+	vdev->config->del_vqs(vdev);
 err_free:
 	kfree(dev);
 	return err;
@@ -548,7 +537,7 @@ static int virtio_pcidev_virtio_probe(struct virtio_device *vdev)
 	struct virtio_pcidev_device *dev;
 	int err;
 
-	dev = kzalloc_obj(*dev);
+	dev = kzalloc(sizeof(*dev), GFP_KERNEL);
 	if (!dev)
 		return -ENOMEM;
 
@@ -580,7 +569,7 @@ static int virtio_pcidev_virtio_probe(struct virtio_device *vdev)
 
 err_reset:
 	virtio_reset_device(vdev);
-	virtio_pcidev_del_vqs(vdev, dev);
+	vdev->config->del_vqs(vdev);
 err_free:
 	kfree(dev);
 	return err;
@@ -602,9 +591,9 @@ static void virtio_pcidev_virtio_remove(struct virtio_device *vdev)
 
 	/* Stop all virtqueues */
 	virtio_reset_device(vdev);
-	virtio_pcidev_del_vqs(vdev, dev);
 	dev->cmd_vq = NULL;
 	dev->irq_vq = NULL;
+	vdev->config->del_vqs(vdev);
 
 	kfree(dev);
 }

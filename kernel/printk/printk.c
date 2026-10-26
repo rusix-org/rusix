@@ -188,7 +188,7 @@ static int __init control_devkmsg(char *str)
 	/*
 	 * Sysctl cannot change it anymore. The kernel command line setting of
 	 * this parameter is to force the setting to be permanent throughout the
-	 * runtime of the system. This is a precautionary measure against userspace
+	 * runtime of the system. This is a precation measure against userspace
 	 * trying to be a smarta** and attempting to change it up on us.
 	 */
 	devkmsg_log |= DEVKMSG_LOG_MASK_LOCK;
@@ -245,7 +245,6 @@ int devkmsg_sysctl_set_loglvl(const struct ctl_table *table, int write,
  * For console list or console->flags updates
  */
 void console_list_lock(void)
-	__acquires(&console_mutex)
 {
 	/*
 	 * In unregister_console() and console_force_preferred_locked(),
@@ -270,7 +269,6 @@ EXPORT_SYMBOL(console_list_lock);
  * Counterpart to console_list_lock()
  */
 void console_list_unlock(void)
-	__releases(&console_mutex)
 {
 	mutex_unlock(&console_mutex);
 }
@@ -933,7 +931,7 @@ static int devkmsg_open(struct inode *inode, struct file *file)
 			return err;
 	}
 
-	user = kvmalloc_obj(struct devkmsg_user);
+	user = kvmalloc(sizeof(struct devkmsg_user), GFP_KERNEL);
 	if (!user)
 		return -ENOMEM;
 
@@ -1085,9 +1083,9 @@ static void __init log_buf_add_cpu(void)
 	if (num_possible_cpus() == 1)
 		return;
 
-	cpu_extra = num_possible_cpus() * __LOG_CPU_MAX_BUF_LEN;
+	cpu_extra = (num_possible_cpus() - 1) * __LOG_CPU_MAX_BUF_LEN;
 
-	/* by default this will only continue through for more than 16 CPUs */
+	/* by default this will only continue through for large > 64 CPUs */
 	if (cpu_extra <= __LOG_BUF_LEN / 2)
 		return;
 
@@ -1975,7 +1973,7 @@ int console_lock_spinning_disable_and_check(int cookie)
  * the current owner is running and cannot reschedule until it
  * is ready to lose the lock.
  *
- * Return: 1 if we got the lock, 0 otherwise
+ * Return: 1 if we got the lock, 0 othrewise
  */
 static int console_trylock_spinning(void)
 {
@@ -2133,39 +2131,11 @@ static inline void printk_delay(int level)
 	}
 }
 
-#define CALLER_ID_MASK 0x80000000
-
 static inline u32 printk_caller_id(void)
 {
 	return in_task() ? task_pid_nr(current) :
-		CALLER_ID_MASK + smp_processor_id();
+		0x80000000 + smp_processor_id();
 }
-
-#ifdef CONFIG_PRINTK_EXECUTION_CTX
-/* Store the opposite info than caller_id. */
-static u32 printk_caller_id2(void)
-{
-	return !in_task() ? task_pid_nr(current) :
-		CALLER_ID_MASK + smp_processor_id();
-}
-
-static pid_t printk_info_get_pid(const struct printk_info *info)
-{
-	u32 caller_id = info->caller_id;
-	u32 caller_id2 = info->caller_id2;
-
-	return caller_id & CALLER_ID_MASK ? caller_id2 : caller_id;
-}
-
-static int printk_info_get_cpu(const struct printk_info *info)
-{
-	u32 caller_id = info->caller_id;
-	u32 caller_id2 = info->caller_id2;
-
-	return ((caller_id & CALLER_ID_MASK ?
-		 caller_id : caller_id2) & ~CALLER_ID_MASK);
-}
-#endif
 
 /**
  * printk_parse_prefix - Parse level and control flags.
@@ -2242,28 +2212,6 @@ static u16 printk_sprint(char *text, u16 size, int facility,
 
 	return text_len;
 }
-
-#ifdef CONFIG_PRINTK_EXECUTION_CTX
-static void printk_store_execution_ctx(struct printk_info *info)
-{
-	info->caller_id2 = printk_caller_id2();
-	get_task_comm(info->comm, current);
-}
-
-static void pmsg_load_execution_ctx(struct printk_message *pmsg,
-				    const struct printk_info *info)
-{
-	pmsg->cpu = printk_info_get_cpu(info);
-	pmsg->pid = printk_info_get_pid(info);
-	memcpy(pmsg->comm, info->comm, sizeof(pmsg->comm));
-	static_assert(sizeof(pmsg->comm) == sizeof(info->comm));
-}
-#else
-static void printk_store_execution_ctx(struct printk_info *info) {}
-
-static void pmsg_load_execution_ctx(struct printk_message *pmsg,
-				    const struct printk_info *info) {}
-#endif
 
 __printf(4, 0)
 int vprintk_store(int facility, int level,
@@ -2372,7 +2320,6 @@ int vprintk_store(int facility, int level,
 	r.info->caller_id = caller_id;
 	if (dev_info)
 		memcpy(&r.info->dev_info, dev_info, sizeof(r.info->dev_info));
-	printk_store_execution_ctx(r.info);
 
 	/* A message without a trailing newline can be continued. */
 	if (!(flags & LOG_NEWLINE))
@@ -2646,24 +2593,23 @@ static int __init console_setup(char *str)
 	if (_braille_console_setup(&str, &brl_options))
 		return 1;
 
-	/*
-	 * Decode str into name, index and options. Start with options, since
-	 * it might also contain a ':' used for DEVNAME.
-	 */
-	options = strchr(str, ',');
-	if (options)
-		*(options++) = 0;
-
 	/* For a DEVNAME:0.0 style console the character device is unknown early */
 	if (strchr(str, ':'))
 		devname = buf;
 	else
 		ttyname = buf;
 
+	/*
+	 * Decode str into name, index, options.
+	 */
 	if (ttyname && isdigit(str[0]))
 		scnprintf(buf, sizeof(buf), "ttyS%s", str);
 	else
 		strscpy(buf, str);
+
+	options = strchr(str, ',');
+	if (options)
+		*(options++) = 0;
 
 #ifdef __sparc__
 	if (!strcmp(str, "ttya"))
@@ -2672,18 +2618,17 @@ static int __init console_setup(char *str)
 		strscpy(buf, "ttyS1");
 #endif
 
-	if (ttyname) {
-		/* Detect @idx in ttyname and remove it. */
-		for (s = ttyname; *s; s++) {
-			if (isdigit(*s))
-				break;
-		}
-		idx = simple_strtoul(s, NULL, 10);
-		*s = 0;
-	} else {
-		/* @idx will get defined when devname matches. */
+	for (s = buf; *s; s++)
+		if ((ttyname && isdigit(*s)) || *s == ',')
+			break;
+
+	/* @idx will get defined when devname matches. */
+	if (devname)
 		idx = -1;
-	}
+	else
+		idx = simple_strtoul(s, NULL, 10);
+
+	*s = 0;
 
 	__add_preferred_console(ttyname, idx, devname, options, brl_options, true);
 	return 1;
@@ -3057,7 +3002,6 @@ bool printk_get_next_message(struct printk_message *pmsg, u64 seq,
 	pmsg->seq = r.info->seq;
 	pmsg->dropped = r.info->seq - seq;
 	force_con = r.info->flags & LOG_FORCE_CON;
-	pmsg_load_execution_ctx(pmsg, r.info);
 
 	/*
 	 * Skip records that are not forced to be printed on consoles and that
@@ -3079,18 +3023,21 @@ out:
 }
 
 /*
- * The legacy console always acquires a spinlock_t from its printing
- * callback. This violates lock nesting if the caller acquired an always
- * spinning lock (raw_spinlock_t) while invoking printk(). This is not a
- * problem on PREEMPT_RT because legacy consoles print always from a
- * dedicated thread and never from within printk(). Therefore we tell
- * lockdep that a sleeping spin lock (spinlock_t) is valid here.
+ * Legacy console printing from printk() caller context does not respect
+ * raw_spinlock/spinlock nesting. For !PREEMPT_RT the lockdep warning is a
+ * false positive. For PREEMPT_RT the false positive condition does not
+ * occur.
+ *
+ * This map is used to temporarily establish LD_WAIT_SLEEP context for the
+ * console write() callback when legacy printing to avoid false positive
+ * lockdep complaints, thus allowing lockdep to continue to function for
+ * real issues.
  */
 #ifdef CONFIG_PREEMPT_RT
 static inline void printk_legacy_allow_spinlock_enter(void) { }
 static inline void printk_legacy_allow_spinlock_exit(void) { }
 #else
-static DEFINE_WAIT_OVERRIDE_MAP(printk_legacy_map, LD_WAIT_CONFIG);
+static DEFINE_WAIT_OVERRIDE_MAP(printk_legacy_map, LD_WAIT_SLEEP);
 
 static inline void printk_legacy_allow_spinlock_enter(void)
 {
@@ -3216,32 +3163,30 @@ static inline void printk_kthreads_check_locked(void) { }
  * context.
  *
  * @next_seq is set to the sequence number after the last available record.
- * The value is valid only when all usable consoles were flushed. It is
- * when the function returns true (can do the job) and @try_again parameter
- * is set to false, see below.
+ * The value is valid only when there is at least one usable console and all
+ * usable consoles were flushed.
  *
  * @handover will be set to true if a printk waiter has taken over the
  * console_lock, in which case the caller is no longer holding the
  * console_lock. Otherwise it is set to false.
  *
- * @try_again will be set to true when it still makes sense to call this
- * function again. The function could do the job, see the return value.
- * And some consoles still make progress.
+ * @any_usable will be set to true if there are any usable consoles.
  *
- * Returns true when the function could do the job. Some consoles are usable,
- * and there was no takeover and no panic_on_other_cpu().
+ * Returns true when there was at least one usable console and a record was
+ * flushed. A returned false indicates there were no records to flush for any
+ * of the consoles. It may also indicate that there were no usable consoles,
+ * the context has been lost or there is a panic suitation. Regardless the
+ * reason, the caller should assume it is not useful to immediately try again.
  *
  * Requires the console_lock.
  */
 static bool console_flush_one_record(bool do_cond_resched, u64 *next_seq, bool *handover,
-				     bool *try_again)
+				     bool *any_usable)
 {
 	struct console_flush_type ft;
-	bool any_usable = false;
+	bool any_progress = false;
 	struct console *con;
 	int cookie;
-
-	*try_again = false;
 
 	printk_get_console_flush_type(&ft);
 
@@ -3261,7 +3206,7 @@ static bool console_flush_one_record(bool do_cond_resched, u64 *next_seq, bool *
 
 		if (!console_is_usable(con, flags, !do_cond_resched))
 			continue;
-		any_usable = true;
+		*any_usable = true;
 
 		if (flags & CON_NBCON) {
 			progress = nbcon_legacy_emit_next_record(con, handover, cookie,
@@ -3275,7 +3220,7 @@ static bool console_flush_one_record(bool do_cond_resched, u64 *next_seq, bool *
 		 * is already released.
 		 */
 		if (*handover)
-			goto fail;
+			return false;
 
 		/*
 		 * @con can be used here now that it is certain that this
@@ -3292,28 +3237,21 @@ static bool console_flush_one_record(bool do_cond_resched, u64 *next_seq, bool *
 
 		if (!progress)
 			continue;
-
-		/*
-		 * A usable console made progress. There might still be
-		 * pending messages.
-		 */
-		*try_again = true;
+		any_progress = true;
 
 		/* Allow panic_cpu to take over the consoles safely. */
 		if (panic_on_other_cpu())
-			goto fail_srcu;
+			goto abandon;
 
 		if (do_cond_resched)
 			cond_resched();
 	}
 	console_srcu_read_unlock(cookie);
 
-	return any_usable;
+	return any_progress;
 
-fail_srcu:
+abandon:
 	console_srcu_read_unlock(cookie);
-fail:
-	*try_again = false;
 	return false;
 }
 
@@ -3342,18 +3280,24 @@ fail:
  */
 static bool console_flush_all(bool do_cond_resched, u64 *next_seq, bool *handover)
 {
-	bool try_again;
-	bool ret;
+	bool any_usable = false;
+	bool any_progress;
 
 	*next_seq = 0;
 	*handover = false;
 
 	do {
-		ret = console_flush_one_record(do_cond_resched, next_seq,
-					       handover, &try_again);
-	} while (try_again);
+		any_progress = console_flush_one_record(do_cond_resched, next_seq, handover,
+							&any_usable);
 
-	return ret;
+		if (*handover)
+			return false;
+
+		if (panic_on_other_cpu())
+			return false;
+	} while (any_progress);
+
+	return any_usable;
 }
 
 static void __console_flush_and_unlock(void)
@@ -3425,6 +3369,22 @@ void console_unlock(void)
 }
 EXPORT_SYMBOL(console_unlock);
 
+/**
+ * console_conditional_schedule - yield the CPU if required
+ *
+ * If the console code is currently allowed to sleep, and
+ * if this CPU should yield the CPU to another task, do
+ * so here.
+ *
+ * Must be called within console_lock();.
+ */
+void __sched console_conditional_schedule(void)
+{
+	if (console_may_schedule)
+		cond_resched();
+}
+EXPORT_SYMBOL(console_conditional_schedule);
+
 void console_unblank(void)
 {
 	bool found_unblank = false;
@@ -3439,10 +3399,12 @@ void console_unblank(void)
 	 */
 	cookie = console_srcu_read_lock();
 	for_each_console_srcu(c) {
-		if (!console_is_usable(c, console_srcu_read_flags(c), true))
+		short flags = console_srcu_read_flags(c);
+
+		if (flags & CON_SUSPENDED)
 			continue;
 
-		if (c->unblank) {
+		if ((flags & CON_ENABLED) && c->unblank) {
 			found_unblank = true;
 			break;
 		}
@@ -3479,10 +3441,12 @@ void console_unblank(void)
 
 	cookie = console_srcu_read_lock();
 	for_each_console_srcu(c) {
-		if (!console_is_usable(c, console_srcu_read_flags(c), true))
+		short flags = console_srcu_read_flags(c);
+
+		if (flags & CON_SUSPENDED)
 			continue;
 
-		if (c->unblank)
+		if ((flags & CON_ENABLED) && c->unblank)
 			c->unblank();
 	}
 	console_srcu_read_unlock(cookie);
@@ -3705,26 +3669,17 @@ static bool legacy_kthread_should_wakeup(void)
 
 static int legacy_kthread_func(void *unused)
 {
-	bool try_again;
-
-wait_for_event:
-	wait_event_interruptible(legacy_wait, legacy_kthread_should_wakeup());
-
-	do {
-		bool handover = false;
-		u64 next_seq = 0;
+	for (;;) {
+		wait_event_interruptible(legacy_wait, legacy_kthread_should_wakeup());
 
 		if (kthread_should_stop())
-			return 0;
+			break;
 
 		console_lock();
-		console_flush_one_record(true, &next_seq, &handover, &try_again);
-		if (!handover)
-			__console_unlock();
+		__console_flush_and_unlock();
+	}
 
-	} while (try_again);
-
-	goto wait_for_event;
+	return 0;
 }
 
 static bool legacy_kthread_create(void)
@@ -3864,7 +3819,7 @@ static int __init printk_set_kthreads_ready(void)
 
 	return 0;
 }
-subsys_initcall(printk_set_kthreads_ready);
+early_initcall(printk_set_kthreads_ready);
 #endif /* CONFIG_PRINTK */
 
 static int __read_mostly keep_bootcon;
@@ -3899,6 +3854,9 @@ static int console_call_setup(struct console *newcon, char *options)
  * the newly registered console with any of the ones selected
  * by either the command line or add_preferred_console() and
  * setup/enable it.
+ *
+ * Care need to be taken with consoles that are statically
+ * enabled such as netconsole
  */
 static int try_enable_preferred_console(struct console *newcon,
 					bool user_specified)
@@ -3938,6 +3896,14 @@ static int try_enable_preferred_console(struct console *newcon,
 			newcon->flags |= CON_CONSDEV;
 		return 0;
 	}
+
+	/*
+	 * Some consoles, such as pstore and netconsole, can be enabled even
+	 * without matching. Accept the pre-enabled consoles only when match()
+	 * and setup() had a chance to be called.
+	 */
+	if (newcon->flags & CON_ENABLED && c->user_specified ==	user_specified)
+		return 0;
 
 	return -ENOENT;
 }
@@ -4120,14 +4086,6 @@ void register_console(struct console *newcon)
 	/* If not, try to match against the platform default(s) */
 	if (err == -ENOENT)
 		err = try_enable_preferred_console(newcon, false);
-
-	/*
-	 * Some consoles, such as pstore and netconsole, can be enabled even
-	 * without matching. Accept them at this stage when they had a chance
-	 * to match() and call setup().
-	 */
-	if (err == -ENOENT && (newcon->flags & CON_ENABLED))
-		err = 0;
 
 	/* printk() messages are not printed to the Braille console. */
 	if (err || newcon->flags & CON_BRL) {
@@ -4426,51 +4384,36 @@ void __init console_init(void)
  * be a brief interval in which no messages are logged to the console, which
  * makes it difficult to diagnose problems that occur during this time.
  *
- * If a real console has already registered, remove all remaining boot consoles.
- * Otherwise, mitigate the no-console interval by removing only boot consoles
- * whose memory intersects with the init section.
+ * To mitigate this problem somewhat, only unregister consoles whose memory
+ * intersects with the init section. Note that all other boot consoles will
+ * get unregistered when the real preferred console is registered.
  */
 static int __init printk_late_init(void)
 {
-	bool have_real_console = false;
 	struct hlist_node *tmp;
 	struct console *con;
 	int ret;
 
 	console_list_lock();
-	for_each_console(con) {
-		if (!(con->flags & CON_BOOT)) {
-			have_real_console = true;
-			break;
-		}
-	}
-
 	hlist_for_each_entry_safe(con, tmp, &console_list, node) {
 		if (!(con->flags & CON_BOOT))
 			continue;
 
-		/*
-		 * Keep the boot console when requested or as a fallback
-		 * unless it is using an init section.
-		 */
-		if (keep_bootcon || !have_real_console) {
-			if (!init_section_intersects(con, sizeof(*con)) &&
-			    !init_section_contains(con->write, 0) &&
-			    !init_section_contains(con->read, 0) &&
-			    !init_section_contains(con->device, 0) &&
-			    !init_section_contains(con->unblank, 0) &&
-			    !init_section_contains(con->data, 0))
-				continue;
-
+		/* Check addresses that might be used for enabled consoles. */
+		if (init_section_intersects(con, sizeof(*con)) ||
+		    init_section_contains(con->write, 0) ||
+		    init_section_contains(con->read, 0) ||
+		    init_section_contains(con->device, 0) ||
+		    init_section_contains(con->unblank, 0) ||
+		    init_section_contains(con->data, 0)) {
 			/*
 			 * Please, consider moving the reported consoles out
 			 * of the init section.
 			 */
 			pr_warn("bootconsole [%s%d] uses init memory and must be disabled even before the real one is ready\n",
 				con->name, con->index);
+			unregister_console_locked(con);
 		}
-
-		unregister_console_locked(con);
 	}
 	console_list_unlock();
 
@@ -4610,26 +4553,31 @@ bool pr_flush(int timeout_ms, bool reset_on_progress)
 /*
  * Delayed printk version, for scheduler-internal messages:
  */
-#define PRINTK_PENDING_OUTPUT	0x01
+#define PRINTK_PENDING_WAKEUP	0x01
+#define PRINTK_PENDING_OUTPUT	0x02
 
-static void pending_wake_fn(struct irq_work *irq_work)
-{
-	wake_up_interruptible(&log_wait);
-}
+static DEFINE_PER_CPU(int, printk_pending);
 
-static void pending_output_fn(struct irq_work *irq_work)
+static void wake_up_klogd_work_func(struct irq_work *irq_work)
 {
-	if (force_legacy_kthread()) {
-		if (printk_legacy_kthread)
-			wake_up_interruptible(&legacy_wait);
-	} else {
-		if (console_trylock())
-			console_unlock();
+	int pending = this_cpu_xchg(printk_pending, 0);
+
+	if (pending & PRINTK_PENDING_OUTPUT) {
+		if (force_legacy_kthread()) {
+			if (printk_legacy_kthread)
+				wake_up_interruptible(&legacy_wait);
+		} else {
+			if (console_trylock())
+				console_unlock();
+		}
 	}
+
+	if (pending & PRINTK_PENDING_WAKEUP)
+		wake_up_interruptible(&log_wait);
 }
 
-static struct irq_work pending_wakeup_work = IRQ_WORK_INIT_LAZY(pending_wake_fn);
-static struct irq_work pending_output_work = IRQ_WORK_INIT_LAZY(pending_output_fn);
+static DEFINE_PER_CPU(struct irq_work, wake_up_klogd_work) =
+	IRQ_WORK_INIT_LAZY(wake_up_klogd_work_func);
 
 static void __wake_up_klogd(int val)
 {
@@ -4643,6 +4591,7 @@ static void __wake_up_klogd(int val)
 	if (WARN_ON_ONCE(console_irqwork_blocked))
 		return;
 
+	preempt_disable();
 	/*
 	 * Guarantee any new records can be seen by tasks preparing to wait
 	 * before this context checks if the wait queue is empty.
@@ -4654,11 +4603,12 @@ static void __wake_up_klogd(int val)
 	 *
 	 * This pairs with devkmsg_read:A and syslog_print:A.
 	 */
-	if (wq_has_sleeper(&log_wait)) /* LMM(__wake_up_klogd:A) */
-		irq_work_queue(&pending_wakeup_work);
-
-	if (val & PRINTK_PENDING_OUTPUT)
-		irq_work_queue(&pending_output_work);
+	if (wq_has_sleeper(&log_wait) || /* LMM(__wake_up_klogd:A) */
+	    (val & PRINTK_PENDING_OUTPUT)) {
+		this_cpu_or(printk_pending, val);
+		irq_work_queue(this_cpu_ptr(&wake_up_klogd_work));
+	}
+	preempt_enable();
 }
 
 /**
@@ -4673,7 +4623,7 @@ static void __wake_up_klogd(int val)
  */
 void wake_up_klogd(void)
 {
-	__wake_up_klogd(0);
+	__wake_up_klogd(PRINTK_PENDING_WAKEUP);
 }
 
 /**
@@ -4694,7 +4644,7 @@ void defer_console_output(void)
 	 * New messages may have been added directly to the ringbuffer
 	 * using vprintk_store(), so wake any waiters as well.
 	 */
-	__wake_up_klogd(PRINTK_PENDING_OUTPUT);
+	__wake_up_klogd(PRINTK_PENDING_WAKEUP | PRINTK_PENDING_OUTPUT);
 }
 
 /**

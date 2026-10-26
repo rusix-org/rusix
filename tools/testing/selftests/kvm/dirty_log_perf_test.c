@@ -24,7 +24,7 @@
 #define TEST_HOST_LOOP_N		2UL
 
 static int nr_vcpus = 1;
-static u64 guest_percpu_mem_size = DEFAULT_PER_VCPU_MEM_SIZE;
+static uint64_t guest_percpu_mem_size = DEFAULT_PER_VCPU_MEM_SIZE;
 static bool run_vcpus_while_disabling_dirty_logging;
 
 /* Host variables */
@@ -37,7 +37,7 @@ static void vcpu_worker(struct memstress_vcpu_args *vcpu_args)
 {
 	struct kvm_vcpu *vcpu = vcpu_args->vcpu;
 	int vcpu_idx = vcpu_args->vcpu_idx;
-	u64 pages_count = 0;
+	uint64_t pages_count = 0;
 	struct kvm_run *run;
 	struct timespec start;
 	struct timespec ts_diff;
@@ -93,11 +93,11 @@ static void vcpu_worker(struct memstress_vcpu_args *vcpu_args)
 
 struct test_params {
 	unsigned long iterations;
-	u64 phys_offset;
+	uint64_t phys_offset;
 	bool partition_vcpu_memory_access;
 	enum vm_mem_backing_src_type backing_src;
 	int slots;
-	u32 write_percent;
+	uint32_t write_percent;
 	bool random_access;
 };
 
@@ -106,9 +106,9 @@ static void run_test(enum vm_guest_mode mode, void *arg)
 	struct test_params *p = arg;
 	struct kvm_vm *vm;
 	unsigned long **bitmaps;
-	u64 guest_num_pages;
-	u64 host_num_pages;
-	u64 pages_per_slot;
+	uint64_t guest_num_pages;
+	uint64_t host_num_pages;
+	uint64_t pages_per_slot;
 	struct timespec start;
 	struct timespec ts_diff;
 	struct timespec get_dirty_log_total = (struct timespec){0};
@@ -311,7 +311,7 @@ int main(int argc, char *argv[])
 	int opt;
 
 	/* Override the seed to be deterministic by default. */
-	kvm_random_seed = 1;
+	guest_random_seed = 1;
 
 	dirty_log_manual_caps =
 		kvm_check_cap(KVM_CAP_MANUAL_DIRTY_LOG_PROTECT2);
@@ -357,7 +357,7 @@ int main(int argc, char *argv[])
 			p.phys_offset = strtoull(optarg, NULL, 0);
 			break;
 		case 'r':
-			kvm_random_seed = atoi_positive("Random seed", optarg);
+			guest_random_seed = atoi_positive("Random seed", optarg);
 			break;
 		case 's':
 			p.backing_src = parse_backing_src_type(optarg);

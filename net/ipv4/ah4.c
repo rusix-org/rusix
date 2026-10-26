@@ -494,7 +494,7 @@ static int ah_init_state(struct xfrm_state *x, struct netlink_ext_ack *extack)
 		goto error;
 	}
 
-	ahp = kzalloc_obj(*ahp);
+	ahp = kzalloc(sizeof(*ahp), GFP_KERNEL);
 	if (!ahp)
 		return -ENOMEM;
 

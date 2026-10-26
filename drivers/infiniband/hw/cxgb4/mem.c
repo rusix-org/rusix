@@ -74,8 +74,11 @@ static int _c4iw_write_mem_dma_aligned(struct c4iw_rdev *rdev, u32 addr,
 		c4iw_init_wr_wait(wr_waitp);
 	wr_len = roundup(sizeof(*req) + sizeof(*sgl), 16);
 
-	if (!skb)
+	if (!skb) {
 		skb = alloc_skb(wr_len, GFP_KERNEL | __GFP_NOFAIL);
+		if (!skb)
+			return -ENOMEM;
+	}
 	set_wr_txq(skb, CPL_PRIORITY_CONTROL, 0);
 
 	req = __skb_put_zero(skb, wr_len);
@@ -131,8 +134,11 @@ static int _c4iw_write_mem_inline(struct c4iw_rdev *rdev, u32 addr, u32 len,
 					 roundup(copy_len, T4_ULPTX_MIN_IO),
 				 16);
 
-		if (!skb)
+		if (!skb) {
 			skb = alloc_skb(wr_len, GFP_KERNEL | __GFP_NOFAIL);
+			if (!skb)
+				return -ENOMEM;
+		}
 		set_wr_txq(skb, CPL_PRIORITY_CONTROL, 0);
 
 		req = __skb_put_zero(skb, wr_len);
@@ -262,7 +268,7 @@ static int write_tpt_entry(struct c4iw_rdev *rdev, u32 reset_tpt_entry,
 		return -EIO;
 	}
 
-	tpt = kmalloc_obj(*tpt);
+	tpt = kmalloc(sizeof(*tpt), GFP_KERNEL);
 	if (!tpt) {
 		kfree_skb(skb);
 		return -ENOMEM;
@@ -332,7 +338,7 @@ static int write_pbl(struct c4iw_rdev *rdev, __be64 *pbl,
 {
 	int err;
 
-	pr_debug("*pbl_addr 0x%x, pbl_base 0x%x, pbl_size %d\n",
+	pr_debug("*pdb_addr 0x%x, pbl_base 0x%x, pbl_size %d\n",
 		 pbl_addr, rdev->lldi.vr->pbl.start,
 		 pbl_size);
 
@@ -423,7 +429,7 @@ struct ib_mr *c4iw_get_dma_mr(struct ib_pd *pd, int acc)
 	php = to_c4iw_pd(pd);
 	rhp = php->rhp;
 
-	mhp = kzalloc_obj(*mhp);
+	mhp = kzalloc(sizeof(*mhp), GFP_KERNEL);
 	if (!mhp)
 		return ERR_PTR(-ENOMEM);
 	mhp->wr_waitp = c4iw_alloc_wr_wait(GFP_KERNEL);
@@ -501,7 +507,7 @@ struct ib_mr *c4iw_reg_user_mr(struct ib_pd *pd, u64 start, u64 length,
 	if (mr_exceeds_hw_limits(rhp, length))
 		return ERR_PTR(-EINVAL);
 
-	mhp = kzalloc_obj(*mhp);
+	mhp = kzalloc(sizeof(*mhp), GFP_KERNEL);
 	if (!mhp)
 		return ERR_PTR(-ENOMEM);
 	mhp->wr_waitp = c4iw_alloc_wr_wait(GFP_KERNEL);
@@ -514,7 +520,7 @@ struct ib_mr *c4iw_reg_user_mr(struct ib_pd *pd, u64 start, u64 length,
 
 	mhp->rhp = rhp;
 
-	mhp->umem = ib_umem_get_va(pd->device, start, length, acc);
+	mhp->umem = ib_umem_get(pd->device, start, length, acc);
 	if (IS_ERR(mhp->umem))
 		goto err_free_skb;
 
@@ -525,7 +531,7 @@ struct ib_mr *c4iw_reg_user_mr(struct ib_pd *pd, u64 start, u64 length,
 	if (err)
 		goto err_umem_release;
 
-	pages = kmalloc(PAGE_SIZE, GFP_KERNEL);
+	pages = (__be64 *) __get_free_page(GFP_KERNEL);
 	if (!pages) {
 		err = -ENOMEM;
 		goto err_pbl_free;
@@ -552,7 +558,7 @@ struct ib_mr *c4iw_reg_user_mr(struct ib_pd *pd, u64 start, u64 length,
 				mhp->wr_waitp);
 
 pbl_done:
-	kfree(pages);
+	free_page((unsigned long) pages);
 	if (err)
 		goto err_pbl_free;
 
@@ -602,7 +608,7 @@ struct ib_mr *c4iw_alloc_mr(struct ib_pd *pd, enum ib_mr_type mr_type,
 					 use_dsgl))
 		return ERR_PTR(-EINVAL);
 
-	mhp = kzalloc_obj(*mhp);
+	mhp = kzalloc(sizeof(*mhp), GFP_KERNEL);
 	if (!mhp) {
 		ret = -ENOMEM;
 		goto err;

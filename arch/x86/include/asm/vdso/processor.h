@@ -18,7 +18,9 @@ static __always_inline void cpu_relax(void)
 	native_pause();
 }
 
-notrace long __vdso_getcpu(unsigned *cpu, unsigned *node, void *unused);
+struct getcpu_cache;
+
+notrace long __vdso_getcpu(unsigned *cpu, unsigned *node, struct getcpu_cache *unused);
 
 #endif /* __ASSEMBLER__ */
 

@@ -727,8 +727,8 @@ static int w1_f19_add_slave(struct w1_slave *sl)
 	data->adapter.owner      = THIS_MODULE;
 	data->adapter.algo       = &w1_f19_i2c_algorithm;
 	data->adapter.algo_data  = sl;
-	scnprintf(data->adapter.name, sizeof(data->adapter.name), "w1-%s",
-		  sl->name);
+	strcpy(data->adapter.name, "w1-");
+	strcat(data->adapter.name, sl->name);
 	data->adapter.dev.parent = &sl->dev;
 	data->adapter.quirks     = &w1_f19_i2c_adapter_quirks;
 

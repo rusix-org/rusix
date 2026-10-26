@@ -15,7 +15,7 @@
 #include <linux/clk.h>
 #include <linux/etherdevice.h>
 #include <linux/ethtool.h>
-#include <linux/gpio/consumer.h>
+#include <linux/gpio.h>
 #include <linux/interrupt.h>
 #include <linux/irq.h>
 #include <linux/mii.h>
@@ -223,7 +223,7 @@ emac_alloc_dma_req(struct emac_board_info *db,
 {
 	struct emac_dma_req *req;
 
-	req = kzalloc_obj(struct emac_dma_req, GFP_ATOMIC);
+	req = kzalloc(sizeof(struct emac_dma_req), GFP_ATOMIC);
 	if (!req)
 		return NULL;
 
@@ -300,7 +300,7 @@ static int emac_dma_inblk_32bit(struct emac_board_info *db,
 	if (!req) {
 		dev_err(db->dev, "alloc emac dma req error.\n");
 		ret = -ENOMEM;
-		goto prepare_err;
+		goto alloc_req_err;
 	}
 
 	desc->callback_param = req;
@@ -318,6 +318,9 @@ static int emac_dma_inblk_32bit(struct emac_board_info *db,
 
 submit_err:
 	emac_free_dma_req(req);
+
+alloc_req_err:
+	dmaengine_desc_free(desc);
 
 prepare_err:
 	dma_unmap_single(db->dev, rxbuf, count, DMA_FROM_DEVICE);

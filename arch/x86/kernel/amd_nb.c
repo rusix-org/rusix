@@ -68,7 +68,7 @@ static int amd_cache_northbridges(void)
 
 	amd_northbridges.num = amd_num_nodes();
 
-	nb = kzalloc_objs(struct amd_northbridge, amd_northbridges.num);
+	nb = kcalloc(amd_northbridges.num, sizeof(struct amd_northbridge), GFP_KERNEL);
 	if (!nb)
 		return -ENOMEM;
 

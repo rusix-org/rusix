@@ -85,13 +85,14 @@ static struct stv0900_inode *append_internal(struct stv0900_internal *internal)
 	struct stv0900_inode *new_node = stv0900_first_inode;
 
 	if (new_node == NULL) {
-		new_node = kmalloc_obj(struct stv0900_inode);
+		new_node = kmalloc(sizeof(struct stv0900_inode), GFP_KERNEL);
 		stv0900_first_inode = new_node;
 	} else {
 		while (new_node->next_inode != NULL)
 			new_node = new_node->next_inode;
 
-		new_node->next_inode = kmalloc_obj(struct stv0900_inode);
+		new_node->next_inode = kmalloc(sizeof(struct stv0900_inode),
+								GFP_KERNEL);
 		if (new_node->next_inode != NULL)
 			new_node = new_node->next_inode;
 		else
@@ -1347,7 +1348,8 @@ static enum fe_stv0900_error stv0900_init_internal(struct dvb_frontend *fe,
 		dprintk("%s: Find Internal Structure!\n", __func__);
 		return STV0900_NO_ERROR;
 	} else {
-		state->internal = kmalloc_obj(struct stv0900_internal);
+		state->internal = kmalloc(sizeof(struct stv0900_internal),
+								GFP_KERNEL);
 		if (state->internal == NULL)
 			return STV0900_INVALID_HANDLE;
 		temp_int = append_internal(state->internal);
@@ -1773,8 +1775,6 @@ static int stv0900_recv_slave_reply(struct dvb_frontend *fe,
 
 	if (stv0900_get_bits(intp, RX_END)) {
 		reply->msg_len = stv0900_get_bits(intp, FIFO_BYTENBR);
-		if (reply->msg_len > sizeof(reply->msg))
-			reply->msg_len = sizeof(reply->msg);
 
 		for (i = 0; i < reply->msg_len; i++)
 			reply->msg[i] = stv0900_read_reg(intp, DISRXDATA);
@@ -1903,7 +1903,7 @@ struct dvb_frontend *stv0900_attach(const struct stv0900_config *config,
 	struct stv0900_init_params init_params;
 	enum fe_stv0900_error err_stv0900;
 
-	state = kzalloc_obj(struct stv0900_state);
+	state = kzalloc(sizeof(struct stv0900_state), GFP_KERNEL);
 	if (state == NULL)
 		goto error;
 

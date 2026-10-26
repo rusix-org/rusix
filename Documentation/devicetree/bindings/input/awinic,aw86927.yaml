@@ -11,12 +11,7 @@ maintainers:
 
 properties:
   compatible:
-    oneOf:
-      - const: awinic,aw86927
-      - items:
-          - enum:
-              - awinic,aw86938
-          - const: awinic,aw86927
+    const: awinic,aw86927
 
   reg:
     maxItems: 1

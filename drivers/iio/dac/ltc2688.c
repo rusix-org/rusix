@@ -6,7 +6,6 @@
  */
 #include <linux/bitfield.h>
 #include <linux/bits.h>
-#include <linux/cleanup.h>
 #include <linux/clk.h>
 #include <linux/device.h>
 #include <linux/gpio/consumer.h>
@@ -14,6 +13,7 @@
 #include <linux/limits.h>
 #include <linux/kernel.h>
 #include <linux/module.h>
+#include <linux/mod_devicetable.h>
 #include <linux/mutex.h>
 #include <linux/of.h>
 #include <linux/property.h>
@@ -208,12 +208,12 @@ static int ltc2688_dac_code_write(struct ltc2688_state *st, u32 chan, u32 input,
 		code = FIELD_PREP(LTC2688_DITHER_RAW_MASK, code);
 	}
 
-	guard(mutex)(&st->lock);
+	mutex_lock(&st->lock);
 	/* select the correct input register to read from */
 	ret = regmap_update_bits(st->regmap, LTC2688_CMD_A_B_SELECT, BIT(chan),
 				 input << chan);
 	if (ret)
-		return ret;
+		goto out_unlock;
 
 	/*
 	 * If in dither/toggle mode the dac should be updated by an
@@ -224,7 +224,10 @@ static int ltc2688_dac_code_write(struct ltc2688_state *st, u32 chan, u32 input,
 	else
 		reg = LTC2688_CMD_CH_CODE(chan);
 
-	return regmap_write(st->regmap, reg, code);
+	ret = regmap_write(st->regmap, reg, code);
+out_unlock:
+	mutex_unlock(&st->lock);
+	return ret;
 }
 
 static int ltc2688_dac_code_read(struct ltc2688_state *st, u32 chan, u32 input,
@@ -233,20 +236,20 @@ static int ltc2688_dac_code_read(struct ltc2688_state *st, u32 chan, u32 input,
 	struct ltc2688_chan *c = &st->channels[chan];
 	int ret;
 
-	guard(mutex)(&st->lock);
+	mutex_lock(&st->lock);
 	ret = regmap_update_bits(st->regmap, LTC2688_CMD_A_B_SELECT, BIT(chan),
 				 input << chan);
 	if (ret)
-		return ret;
+		goto out_unlock;
 
 	ret = regmap_read(st->regmap, LTC2688_CMD_CH_CODE(chan), code);
-	if (ret)
-		return ret;
+out_unlock:
+	mutex_unlock(&st->lock);
 
 	if (!c->toggle_chan && input == LTC2688_INPUT_B)
 		*code = FIELD_GET(LTC2688_DITHER_RAW_MASK, *code);
 
-	return 0;
+	return ret;
 }
 
 static const int ltc2688_raw_range[] = {0, 1, U16_MAX};
@@ -356,15 +359,17 @@ static ssize_t ltc2688_dither_toggle_set(struct iio_dev *indio_dev,
 	if (ret)
 		return ret;
 
-	guard(mutex)(&st->lock);
+	mutex_lock(&st->lock);
 	ret = regmap_update_bits(st->regmap, LTC2688_CMD_TOGGLE_DITHER_EN,
 				 BIT(chan->channel), en << chan->channel);
 	if (ret)
-		return ret;
+		goto out_unlock;
 
 	c->mode = en ? LTC2688_MODE_DITHER_TOGGLE : LTC2688_MODE_DEFAULT;
+out_unlock:
+	mutex_unlock(&st->lock);
 
-	return len;
+	return ret ?: len;
 }
 
 static ssize_t ltc2688_reg_bool_get(struct iio_dev *indio_dev,
@@ -948,9 +953,7 @@ static int ltc2688_probe(struct spi_device *spi)
 
 	/* Just write this once. No need to do it in every regmap read. */
 	st->tx_data[3] = LTC2688_CMD_NOOP;
-	ret = devm_mutex_init(dev, &st->lock);
-	if (ret)
-		return ret;
+	mutex_init(&st->lock);
 
 	st->regmap = devm_regmap_init(dev, &ltc2688_regmap_bus, st,
 				      &ltc2688_regmap_config);
@@ -991,7 +994,7 @@ static const struct of_device_id ltc2688_of_id[] = {
 MODULE_DEVICE_TABLE(of, ltc2688_of_id);
 
 static const struct spi_device_id ltc2688_id[] = {
-	{ .name = "ltc2688" },
+	{ "ltc2688" },
 	{ }
 };
 MODULE_DEVICE_TABLE(spi, ltc2688_id);

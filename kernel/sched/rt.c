@@ -19,9 +19,9 @@ int sysctl_sched_rt_period = 1000000;
 
 /*
  * part of the period that we allow rt tasks to run in us.
- * default: 1s
+ * default: 0.95s
  */
-int sysctl_sched_rt_runtime = 1000000;
+int sysctl_sched_rt_runtime = 950000;
 
 #ifdef CONFIG_SYSCTL
 static int sysctl_sched_rr_timeslice = (MSEC_PER_SEC * RR_TIMESLICE) / HZ;
@@ -259,10 +259,10 @@ int alloc_rt_sched_group(struct task_group *tg, struct task_group *parent)
 	if (!rt_group_sched_enabled())
 		return 1;
 
-	tg->rt_rq = kzalloc_objs(rt_rq, nr_cpu_ids);
+	tg->rt_rq = kcalloc(nr_cpu_ids, sizeof(rt_rq), GFP_KERNEL);
 	if (!tg->rt_rq)
 		goto err;
-	tg->rt_se = kzalloc_objs(rt_se, nr_cpu_ids);
+	tg->rt_se = kcalloc(nr_cpu_ids, sizeof(rt_se), GFP_KERNEL);
 	if (!tg->rt_se)
 		goto err;
 
@@ -1302,17 +1302,12 @@ update_stats_dequeue_rt(struct rt_rq *rt_rq, struct sched_rt_entity *rt_se,
 			int flags)
 {
 	struct task_struct *p = NULL;
-	struct rq *rq = rq_of_rt_rq(rt_rq);
 
 	if (!schedstat_enabled())
 		return;
 
-	if (rt_entity_is_task(rt_se)) {
+	if (rt_entity_is_task(rt_se))
 		p = rt_task_of(rt_se);
-
-		if (p != rq->curr)
-			update_stats_wait_end_rt(rt_rq, rt_se);
-	}
 
 	if ((flags & DEQUEUE_SLEEP) && p) {
 		unsigned int state;
@@ -1626,13 +1621,6 @@ static void wakeup_preempt_rt(struct rq *rq, struct task_struct *p, int flags)
 {
 	struct task_struct *donor = rq->donor;
 
-	/*
-	 * XXX If we're preempted by DL, queue a push?
-	 */
-	if (p->sched_class != &rt_sched_class ||
-	    donor->sched_class != &rt_sched_class)
-		return;
-
 	if (p->prio < donor->prio) {
 		resched_curr(rq);
 		return;
@@ -1654,13 +1642,10 @@ static void wakeup_preempt_rt(struct rq *rq, struct task_struct *p, int flags)
 		check_preempt_equal_prio(rq, p);
 }
 
-static inline void set_next_task_rt(struct rq *rq, struct task_struct *p, enum snt_e type)
+static inline void set_next_task_rt(struct rq *rq, struct task_struct *p, bool first)
 {
 	struct sched_rt_entity *rt_se = &p->rt;
 	struct rt_rq *rt_rq = &rq->rt;
-
-	if (type == SNT_REPICK)
-		return;
 
 	p->se.exec_start = rq_clock_task(rq);
 	if (on_rt_rq(&p->rt))
@@ -1669,7 +1654,7 @@ static inline void set_next_task_rt(struct rq *rq, struct task_struct *p, enum s
 	/* The running task is never eligible for pushing */
 	dequeue_pushable_task(rq, p);
 
-	if (type != SNT_PICK)
+	if (!first)
 		return;
 
 	/*
@@ -1716,7 +1701,7 @@ static struct task_struct *_pick_next_task_rt(struct rq *rq)
 	return rt_task_of(rt_se);
 }
 
-static struct task_struct *pick_task_rt(struct rq *rq, struct rq_flags *rf)
+static struct task_struct *pick_task_rt(struct rq *rq)
 {
 	struct task_struct *p;
 
@@ -2472,12 +2457,9 @@ static void switched_to_rt(struct rq *rq, struct task_struct *p)
  * us to initiate a push or pull.
  */
 static void
-prio_changed_rt(struct rq *rq, struct task_struct *p, u64 oldprio)
+prio_changed_rt(struct rq *rq, struct task_struct *p, int oldprio)
 {
 	if (!task_on_rq_queued(p))
-		return;
-
-	if (p->prio == oldprio)
 		return;
 
 	if (task_current_donor(rq, p)) {
@@ -2603,6 +2585,7 @@ static int task_is_throttled_rt(struct task_struct *p, int cpu)
 #endif /* CONFIG_SCHED_CORE */
 
 DEFINE_SCHED_CLASS(rt) = {
+
 	.enqueue_task		= enqueue_task_rt,
 	.dequeue_task		= dequeue_task_rt,
 	.yield_task		= yield_task_rt,
@@ -2626,8 +2609,8 @@ DEFINE_SCHED_CLASS(rt) = {
 
 	.get_rr_interval	= get_rr_interval_rt,
 
-	.switched_to		= switched_to_rt,
 	.prio_changed		= prio_changed_rt,
+	.switched_to		= switched_to_rt,
 
 	.update_curr		= update_curr_rt,
 
@@ -2839,6 +2822,21 @@ long sched_group_rt_period(struct task_group *tg)
 	return rt_period_us;
 }
 
+#ifdef CONFIG_SYSCTL
+static int sched_rt_global_constraints(void)
+{
+	int ret = 0;
+	if (!rt_group_sched_enabled())
+		return ret;
+
+	mutex_lock(&rt_constraints_mutex);
+	ret = __rt_schedulable(NULL, 0, 0);
+	mutex_unlock(&rt_constraints_mutex);
+
+	return ret;
+}
+#endif /* CONFIG_SYSCTL */
+
 int sched_rt_can_attach(struct task_group *tg, struct task_struct *tsk)
 {
 	/* Don't accept real-time tasks when there is no way for them to run */
@@ -2848,6 +2846,14 @@ int sched_rt_can_attach(struct task_group *tg, struct task_struct *tsk)
 	return 1;
 }
 
+#else /* !CONFIG_RT_GROUP_SCHED: */
+
+#ifdef CONFIG_SYSCTL
+static int sched_rt_global_constraints(void)
+{
+	return 0;
+}
+#endif /* CONFIG_SYSCTL */
 #endif /* !CONFIG_RT_GROUP_SCHED */
 
 #ifdef CONFIG_SYSCTL
@@ -2859,14 +2865,11 @@ static int sched_rt_global_validate(void)
 			NSEC_PER_USEC > max_rt_runtime)))
 		return -EINVAL;
 
-#ifdef CONFIG_RT_GROUP_SCHED
-	if (!rt_group_sched_enabled())
-		return 0;
-
-	scoped_guard(mutex, &rt_constraints_mutex)
-		return __rt_schedulable(NULL, 0, 0);
-#endif
 	return 0;
+}
+
+static void sched_rt_do_global(void)
+{
 }
 
 static int sched_rt_handler(const struct ctl_table *table, int write, void *buffer,
@@ -2892,6 +2895,11 @@ static int sched_rt_handler(const struct ctl_table *table, int write, void *buff
 		if (ret)
 			goto undo;
 
+		ret = sched_rt_global_constraints();
+		if (ret)
+			goto undo;
+
+		sched_rt_do_global();
 		sched_dl_do_global();
 	}
 	if (0) {

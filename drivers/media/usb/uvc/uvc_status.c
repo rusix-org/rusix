@@ -165,7 +165,7 @@ static struct uvc_control *uvc_event_find_ctrl(struct uvc_device *dev,
 static bool uvc_event_control(struct urb *urb,
 			      const struct uvc_status *status, int len)
 {
-	static const char *const attrs[] = { "value", "info", "failure", "min", "max" };
+	static const char *attrs[] = { "value", "info", "failure", "min", "max" };
 	struct uvc_device *dev = urb->context;
 	struct uvc_video_chain *chain;
 	struct uvc_control *ctrl;
@@ -263,7 +263,7 @@ int uvc_status_init(struct uvc_device *dev)
 	if (ep == NULL)
 		return 0;
 
-	dev->status = kzalloc_obj(*dev->status);
+	dev->status = kzalloc(sizeof(*dev->status), GFP_KERNEL);
 	if (!dev->status)
 		return -ENOMEM;
 

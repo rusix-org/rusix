@@ -1,0 +1,219 @@
+{
+    "name": "KUnit Test Group",
+    "sub_groups": [
+        {
+            "name": "rusix_noio_scope",
+            "sub_groups": [],
+            "test_cases": [
+                {
+                    "name": "nested_scopes_restore_task_policy_on_error",
+                    "status": "PASS"
+                }
+            ],
+            "misc": {
+                "tests": 1,
+                "passed": 1,
+                "failed": 0,
+                "crashed": 0,
+                "skipped": 0,
+                "errors": 0
+            },
+            "arch": "",
+            "defconfig": "",
+            "build_environment": "",
+            "lab_name": null,
+            "kernel": null,
+            "job": null,
+            "git_branch": "kselftest"
+        },
+        {
+            "name": "rusix_completion_contract",
+            "sub_groups": [],
+            "test_cases": [
+                {
+                    "name": "initial_state_has_no_token",
+                    "status": "PASS"
+                },
+                {
+                    "name": "presignals_are_consumed_once_each",
+                    "status": "PASS"
+                },
+                {
+                    "name": "broadcast_persists_until_quiescent_reset",
+                    "status": "PASS"
+                },
+                {
+                    "name": "zero_timeout_reports_completion_and_consumes_token",
+                    "status": "PASS"
+                },
+                {
+                    "name": "signal_saturates_instead_of_wrapping",
+                    "status": "PASS"
+                }
+            ],
+            "misc": {
+                "tests": 5,
+                "passed": 5,
+                "failed": 0,
+                "crashed": 0,
+                "skipped": 0,
+                "errors": 0
+            },
+            "arch": "",
+            "defconfig": "",
+            "build_environment": "",
+            "lab_name": null,
+            "kernel": null,
+            "job": null,
+            "git_branch": "kselftest"
+        },
+        {
+            "name": "rusix_completion_layout",
+            "sub_groups": [],
+            "test_cases": [
+                {
+                    "name": "c_operations_share_pinned_rust_owned_storage",
+                    "status": "PASS"
+                },
+                {
+                    "name": "worker_handoff_observes_published_value",
+                    "status": "PASS"
+                },
+                {
+                    "name": "two_workers_consume_exactly_two_tokens",
+                    "status": "PASS"
+                },
+                {
+                    "name": "timed_out_worker_unlinks_before_late_signal",
+                    "status": "PASS"
+                }
+            ],
+            "misc": {
+                "tests": 4,
+                "passed": 4,
+                "failed": 0,
+                "crashed": 0,
+                "skipped": 0,
+                "errors": 0
+            },
+            "arch": "",
+            "defconfig": "",
+            "build_environment": "",
+            "lab_name": null,
+            "kernel": null,
+            "job": null,
+            "git_branch": "kselftest"
+        },
+        {
+            "name": "rusix_xarray_insert",
+            "sub_groups": [],
+            "test_cases": [
+                {
+                    "name": "occupied_insert_returns_owner_without_replacing",
+                    "status": "PASS"
+                },
+                {
+                    "name": "array_drop_releases_inserted_owner",
+                    "status": "PASS"
+                }
+            ],
+            "misc": {
+                "tests": 2,
+                "passed": 2,
+                "failed": 0,
+                "crashed": 0,
+                "skipped": 0,
+                "errors": 0
+            },
+            "arch": "",
+            "defconfig": "",
+            "build_environment": "",
+            "lab_name": null,
+            "kernel": null,
+            "job": null,
+            "git_branch": "kselftest"
+        },
+        {
+            "name": "rusix_brd_store",
+            "sub_groups": [],
+            "test_cases": [
+                {
+                    "name": "lookup_and_repeated_insert_preserve_page",
+                    "status": "PASS"
+                },
+                {
+                    "name": "discard_keeps_inflight_page_alive_and_reinsert_is_independent",
+                    "status": "PASS"
+                },
+                {
+                    "name": "discard_excludes_end_and_is_idempotent",
+                    "status": "PASS"
+                }
+            ],
+            "misc": {
+                "tests": 3,
+                "passed": 3,
+                "failed": 0,
+                "crashed": 0,
+                "skipped": 0,
+                "errors": 0
+            },
+            "arch": "",
+            "defconfig": "",
+            "build_environment": "",
+            "lab_name": null,
+            "kernel": null,
+            "job": null,
+            "git_branch": "kselftest"
+        },
+        {
+            "name": "rusix_brd_policy",
+            "sub_groups": [],
+            "test_cases": [
+                {
+                    "name": "minor_count_preserves_defined_normalization",
+                    "status": "PASS"
+                },
+                {
+                    "name": "invalid_minor_normalization_is_rejected",
+                    "status": "PASS"
+                },
+                {
+                    "name": "legacy_size_retains_prefix_and_wrapping_semantics",
+                    "status": "PASS"
+                }
+            ],
+            "misc": {
+                "tests": 3,
+                "passed": 3,
+                "failed": 0,
+                "crashed": 0,
+                "skipped": 0,
+                "errors": 0
+            },
+            "arch": "",
+            "defconfig": "",
+            "build_environment": "",
+            "lab_name": null,
+            "kernel": null,
+            "job": null,
+            "git_branch": "kselftest"
+        }
+    ],
+    "test_cases": [],
+    "misc": {
+        "tests": 18,
+        "passed": 18,
+        "failed": 0,
+        "crashed": 0,
+        "skipped": 0,
+        "errors": 0
+    },
+    "arch": "",
+    "defconfig": "",
+    "build_environment": "",
+    "lab_name": null,
+    "kernel": null,
+    "job": null,
+    "git_branch": "kselftest"
+}

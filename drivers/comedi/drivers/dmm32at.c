@@ -572,27 +572,11 @@ static int dmm32at_attach(struct comedi_device *dev,
 			  struct comedi_devconfig *it)
 {
 	struct comedi_subdevice *s;
-	unsigned int iobase = it->options[0];
 	int ret;
 
-	switch (iobase) {
-	case 0x100:
-	case 0x140:
-	case 0x180:
-	case 0x200:
-	case 0x280:
-	case 0x300:
-	case 0x340:
-	case 0x380:
-		ret = comedi_request_region(dev, iobase, 0x10);
-		if (ret)
-			return ret;
-		break;
-	default:
-		dev_err(dev->class_dev, "unsupported base address %#x\n",
-			iobase);
-		return -EINVAL;
-	}
+	ret = comedi_request_region(dev, it->options[0], 0x10);
+	if (ret)
+		return ret;
 
 	ret = dmm32at_reset(dev);
 	if (ret) {
@@ -600,8 +584,7 @@ static int dmm32at_attach(struct comedi_device *dev,
 		return ret;
 	}
 
-	/* only ISA interrupts are valid on this board */
-	if (it->options[1] >= 1 && it->options[1] <= 15) {
+	if (it->options[1]) {
 		ret = request_irq(it->options[1], dmm32at_isr, 0,
 				  dev->board_name, dev);
 		if (ret == 0)

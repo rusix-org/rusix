@@ -6,6 +6,7 @@
 #include <linux/init.h>
 #include <linux/rv.h>
 #include <rv/instrumentation.h>
+#include <rv/da_monitor.h>
 
 #define MODULE_NAME "scpd"
 
@@ -14,35 +15,36 @@
 #include <rv_trace.h>
 #include <monitors/sched/sched.h>
 
-#define RV_MON_TYPE RV_MON_PER_CPU
 #include "scpd.h"
-#include <rv/da_monitor.h>
+
+static struct rv_monitor rv_scpd;
+DECLARE_DA_MON_PER_CPU(scpd, unsigned char);
 
 static void handle_preempt_disable(void *data, unsigned long ip, unsigned long parent_ip)
 {
-	da_handle_event(preempt_disable_scpd);
+	da_handle_event_scpd(preempt_disable_scpd);
 }
 
 static void handle_preempt_enable(void *data, unsigned long ip, unsigned long parent_ip)
 {
-	da_handle_start_event(preempt_enable_scpd);
+	da_handle_start_event_scpd(preempt_enable_scpd);
 }
 
 static void handle_schedule_entry(void *data, bool preempt)
 {
-	da_handle_event(schedule_entry_scpd);
+	da_handle_event_scpd(schedule_entry_scpd);
 }
 
 static void handle_schedule_exit(void *data, bool is_switch)
 {
-	da_handle_event(schedule_exit_scpd);
+	da_handle_event_scpd(schedule_exit_scpd);
 }
 
 static int enable_scpd(void)
 {
 	int retval;
 
-	retval = da_monitor_init();
+	retval = da_monitor_init_scpd();
 	if (retval)
 		return retval;
 
@@ -56,33 +58,33 @@ static int enable_scpd(void)
 
 static void disable_scpd(void)
 {
-	rv_this.enabled = 0;
+	rv_scpd.enabled = 0;
 
 	rv_detach_trace_probe("scpd", preempt_disable, handle_preempt_disable);
 	rv_detach_trace_probe("scpd", preempt_enable, handle_preempt_enable);
 	rv_detach_trace_probe("scpd", sched_entry_tp, handle_schedule_entry);
 	rv_detach_trace_probe("scpd", sched_exit_tp, handle_schedule_exit);
 
-	da_monitor_destroy();
+	da_monitor_destroy_scpd();
 }
 
-static struct rv_monitor rv_this = {
+static struct rv_monitor rv_scpd = {
 	.name = "scpd",
 	.description = "schedule called with preemption disabled.",
 	.enable = enable_scpd,
 	.disable = disable_scpd,
-	.reset = da_monitor_reset_all,
+	.reset = da_monitor_reset_all_scpd,
 	.enabled = 0,
 };
 
 static int __init register_scpd(void)
 {
-	return rv_register_monitor(&rv_this, &rv_sched);
+	return rv_register_monitor(&rv_scpd, &rv_sched);
 }
 
 static void __exit unregister_scpd(void)
 {
-	rv_unregister_monitor(&rv_this);
+	rv_unregister_monitor(&rv_scpd);
 }
 
 module_init(register_scpd);

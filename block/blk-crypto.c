@@ -116,7 +116,6 @@ void bio_crypt_set_ctx(struct bio *bio, const struct blk_crypto_key *key,
 
 	bio->bi_crypt_context = bc;
 }
-EXPORT_SYMBOL_GPL(bio_crypt_set_ctx);
 
 void __bio_crypt_free_ctx(struct bio *bio)
 {
@@ -220,6 +219,22 @@ bool bio_crypt_ctx_mergeable(struct bio_crypt_ctx *bc1, unsigned int bc1_bytes,
 	return !bc1 || bio_crypt_dun_is_contiguous(bc1, bc1_bytes, bc2->bc_dun);
 }
 
+/* Check that all I/O segments are data unit aligned. */
+static bool bio_crypt_check_alignment(struct bio *bio)
+{
+	const unsigned int data_unit_size =
+		bio->bi_crypt_context->bc_key->crypto_cfg.data_unit_size;
+	struct bvec_iter iter;
+	struct bio_vec bv;
+
+	bio_for_each_segment(bv, bio, iter) {
+		if (!IS_ALIGNED(bv.bv_len | bv.bv_offset, data_unit_size))
+			return false;
+	}
+
+	return true;
+}
+
 blk_status_t __blk_crypto_rq_get_keyslot(struct request *rq)
 {
 	return blk_crypto_get_keyslot(rq->q->crypto_profile,
@@ -243,13 +258,25 @@ void __blk_crypto_free_request(struct request *rq)
 	rq->crypt_ctx = NULL;
 }
 
-/*
- * Process a bio with a crypto context.  Returns true if the caller should
- * submit the passed in bio, false if the bio is consumed.
+/**
+ * __blk_crypto_bio_prep - Prepare bio for inline encryption
+ * @bio: bio to prepare
  *
- * See the kerneldoc comment for blk_crypto_submit_bio for further details.
+ * If the bio crypt context provided for the bio is supported by the underlying
+ * device's inline encryption hardware, do nothing.
+ *
+ * Otherwise, try to perform en/decryption for this bio by falling back to the
+ * kernel crypto API.  For encryption this means submitting newly allocated
+ * bios for the encrypted payload while keeping back the source bio until they
+ * complete, while for reads the decryption happens in-place by a hooked in
+ * completion handler.
+ *
+ * Caller must ensure bio has bio_crypt_ctx.
+ *
+ * Return: true if @bio should be submitted to the driver by the caller, else
+ * false.  Sets bio->bi_status, calls bio_endio and returns false on error.
  */
-bool __blk_crypto_submit_bio(struct bio *bio)
+bool __blk_crypto_bio_prep(struct bio *bio)
 {
 	const struct blk_crypto_key *bc_key = bio->bi_crypt_context->bc_key;
 	struct block_device *bdev = bio->bi_bdev;
@@ -257,6 +284,12 @@ bool __blk_crypto_submit_bio(struct bio *bio)
 	/* Error if bio has no data. */
 	if (WARN_ON_ONCE(!bio_has_data(bio))) {
 		bio_io_error(bio);
+		return false;
+	}
+
+	if (!bio_crypt_check_alignment(bio)) {
+		bio->bi_status = BLK_STS_INVAL;
+		bio_endio(bio);
 		return false;
 	}
 
@@ -276,7 +309,6 @@ bool __blk_crypto_submit_bio(struct bio *bio)
 
 	return true;
 }
-EXPORT_SYMBOL_GPL(__blk_crypto_submit_bio);
 
 int __blk_crypto_rq_bio_prep(struct request *rq, struct bio *bio,
 			     gfp_t gfp_mask)
@@ -300,7 +332,6 @@ int __blk_crypto_rq_bio_prep(struct request *rq, struct bio *bio,
  * @dun_bytes: number of bytes that will be used to specify the DUN when this
  *	       key is used
  * @data_unit_size: the data unit size to use for en/decryption
- * @flags: BLK_CRYPTO_CFG_* flags
  *
  * Return: 0 on success, -errno on failure.  The caller is responsible for
  *	   zeroizing both blk_key and key_bytes when done with them.
@@ -310,16 +341,13 @@ int blk_crypto_init_key(struct blk_crypto_key *blk_key,
 			enum blk_crypto_key_type key_type,
 			enum blk_crypto_mode_num crypto_mode,
 			unsigned int dun_bytes,
-			unsigned int data_unit_size, int flags)
+			unsigned int data_unit_size)
 {
 	const struct blk_crypto_mode *mode;
 
 	memset(blk_key, 0, sizeof(*blk_key));
 
 	if (crypto_mode >= ARRAY_SIZE(blk_crypto_modes))
-		return -EINVAL;
-
-	if (flags & ~BLK_CRYPTO_CFG_ALLOW_HW)
 		return -EINVAL;
 
 	mode = &blk_crypto_modes[crypto_mode];
@@ -331,8 +359,6 @@ int blk_crypto_init_key(struct blk_crypto_key *blk_key,
 	case BLK_CRYPTO_KEY_TYPE_HW_WRAPPED:
 		if (key_size < mode->security_strength ||
 		    key_size > BLK_CRYPTO_MAX_HW_WRAPPED_KEY_SIZE)
-			return -EINVAL;
-		if (!(flags & BLK_CRYPTO_CFG_ALLOW_HW))
 			return -EINVAL;
 		break;
 	default:
@@ -349,41 +375,32 @@ int blk_crypto_init_key(struct blk_crypto_key *blk_key,
 	blk_key->crypto_cfg.dun_bytes = dun_bytes;
 	blk_key->crypto_cfg.data_unit_size = data_unit_size;
 	blk_key->crypto_cfg.key_type = key_type;
-	blk_key->crypto_cfg.flags = flags;
 	blk_key->data_unit_size_bits = ilog2(data_unit_size);
 	blk_key->size = key_size;
 	memcpy(blk_key->bytes, key_bytes, key_size);
 
 	return 0;
 }
-EXPORT_SYMBOL_GPL(blk_crypto_init_key);
 
-/**
- * blk_crypto_config_supported_natively() - Check whether a block device
- *					    supports hardware inline encryption
- *					    with the given configuration.
- * @bdev: the block device
- * @cfg: the crypto configuration to check for
- *
- * Return: %true if @bdev supports hardware inline encryption with @cfg.
- */
 bool blk_crypto_config_supported_natively(struct block_device *bdev,
 					  const struct blk_crypto_config *cfg)
 {
-	struct blk_crypto_profile *profile =
-		bdev_get_queue(bdev)->crypto_profile;
+	return __blk_crypto_cfg_supported(bdev_get_queue(bdev)->crypto_profile,
+					  cfg);
+}
 
-	if (!profile)
-		return false;
-	if (!(cfg->flags & BLK_CRYPTO_CFG_ALLOW_HW))
-		return false;
-	if (!(profile->modes_supported[cfg->crypto_mode] & cfg->data_unit_size))
-		return false;
-	if (profile->max_dun_bytes_supported < cfg->dun_bytes)
-		return false;
-	if (!(profile->key_types_supported & cfg->key_type))
-		return false;
-	return true;
+/*
+ * Check if bios with @cfg can be en/decrypted by blk-crypto (i.e. either the
+ * block_device it's submitted to supports inline crypto, or the
+ * blk-crypto-fallback is enabled and supports the cfg).
+ */
+bool blk_crypto_config_supported(struct block_device *bdev,
+				 const struct blk_crypto_config *cfg)
+{
+	if (IS_ENABLED(CONFIG_BLK_INLINE_ENCRYPTION_FALLBACK) &&
+	    cfg->key_type == BLK_CRYPTO_KEY_TYPE_RAW)
+		return true;
+	return blk_crypto_config_supported_natively(bdev, cfg);
 }
 
 /**
@@ -414,7 +431,6 @@ int blk_crypto_start_using_key(struct block_device *bdev,
 	}
 	return blk_crypto_fallback_start_using_mode(key->crypto_cfg.crypto_mode);
 }
-EXPORT_SYMBOL_GPL(blk_crypto_start_using_key);
 
 /**
  * blk_crypto_evict_key() - Evict a blk_crypto_key from a block_device

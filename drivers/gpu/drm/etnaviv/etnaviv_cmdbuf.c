@@ -33,7 +33,7 @@ etnaviv_cmdbuf_suballoc_new(struct device *dev)
 	struct etnaviv_cmdbuf_suballoc *suballoc;
 	int ret;
 
-	suballoc = kzalloc_obj(*suballoc);
+	suballoc = kzalloc(sizeof(*suballoc), GFP_KERNEL);
 	if (!suballoc)
 		return ERR_PTR(-ENOMEM);
 

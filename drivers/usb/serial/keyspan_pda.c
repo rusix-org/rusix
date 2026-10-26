@@ -15,10 +15,12 @@
 #include <linux/errno.h>
 #include <linux/slab.h>
 #include <linux/tty.h>
+#include <linux/tty_driver.h>
 #include <linux/tty_flip.h>
 #include <linux/module.h>
 #include <linux/spinlock.h>
 #include <linux/workqueue.h>
+#include <linux/uaccess.h>
 #include <linux/usb.h>
 #include <linux/usb/serial.h>
 #include <linux/usb/ezusb.h>
@@ -31,6 +33,7 @@
 struct keyspan_pda_private {
 	int			tx_room;
 	struct work_struct	unthrottle_work;
+	struct usb_serial	*serial;
 	struct usb_serial_port	*port;
 	bool			throttled;
 	bool			throttle_req;
@@ -677,7 +680,7 @@ static int keyspan_pda_port_probe(struct usb_serial_port *port)
 
 	struct keyspan_pda_private *priv;
 
-	priv = kmalloc_obj(struct keyspan_pda_private);
+	priv = kmalloc(sizeof(struct keyspan_pda_private), GFP_KERNEL);
 	if (!priv)
 		return -ENOMEM;
 

@@ -126,9 +126,11 @@ static bool dma_go_direct(struct device *dev, dma_addr_t mask,
 	if (likely(!ops))
 		return true;
 
-	if (IS_ENABLED(CONFIG_DMA_OPS_BYPASS) && dev_dma_ops_bypass(dev))
+#ifdef CONFIG_DMA_OPS_BYPASS
+	if (dev->dma_ops_bypass)
 		return min_not_zero(mask, dev->bus_dma_limit) >=
 			    dma_direct_get_required_mask(dev);
+#endif
 	return false;
 }
 
@@ -155,27 +157,33 @@ dma_addr_t dma_map_phys(struct device *dev, phys_addr_t phys, size_t size,
 {
 	const struct dma_map_ops *ops = get_dma_ops(dev);
 	bool is_mmio = attrs & DMA_ATTR_MMIO;
-	bool is_cc_shared = attrs & DMA_ATTR_CC_SHARED;
-	dma_addr_t addr = DMA_MAPPING_ERROR;
+	dma_addr_t addr;
 
 	BUG_ON(!valid_dma_direction(dir));
 
 	if (WARN_ON_ONCE(!dev->dma_mask))
 		return DMA_MAPPING_ERROR;
 
-	if (!dev_is_dma_coherent(dev) && (attrs & DMA_ATTR_REQUIRE_COHERENT))
-		return DMA_MAPPING_ERROR;
-
 	if (dma_map_direct(dev, ops) ||
-	    (!is_mmio && !is_cc_shared &&
-	     arch_dma_map_phys_direct(dev, phys + size)))
-		addr = dma_direct_map_phys(dev, phys, size, dir, attrs, true);
-	else if (is_cc_shared)
-		return DMA_MAPPING_ERROR;
+	    (!is_mmio && arch_dma_map_phys_direct(dev, phys + size)))
+		addr = dma_direct_map_phys(dev, phys, size, dir, attrs);
 	else if (use_dma_iommu(dev))
 		addr = iommu_dma_map_phys(dev, phys, size, dir, attrs);
-	else if (ops->map_phys)
-		addr = ops->map_phys(dev, phys, size, dir, attrs);
+	else if (is_mmio) {
+		if (!ops->map_resource)
+			return DMA_MAPPING_ERROR;
+
+		addr = ops->map_resource(dev, phys, size, dir, attrs);
+	} else {
+		struct page *page = phys_to_page(phys);
+		size_t offset = offset_in_page(phys);
+
+		/*
+		 * The dma_ops API contract for ops->map_page() requires
+		 * kmappable memory, while ops->map_resource() does not.
+		 */
+		addr = ops->map_page(dev, page, offset, size, dir, attrs);
+	}
 
 	if (!is_mmio)
 		kmsan_handle_dma(phys, size, dir);
@@ -208,22 +216,20 @@ void dma_unmap_phys(struct device *dev, dma_addr_t addr, size_t size,
 {
 	const struct dma_map_ops *ops = get_dma_ops(dev);
 	bool is_mmio = attrs & DMA_ATTR_MMIO;
-	bool is_cc_shared = attrs & DMA_ATTR_CC_SHARED;
 
 	BUG_ON(!valid_dma_direction(dir));
-
 	if (dma_map_direct(dev, ops) ||
-	    (!is_mmio && !is_cc_shared &&
-	     arch_dma_unmap_phys_direct(dev, addr + size)))
-		dma_direct_unmap_phys(dev, addr, size, dir, attrs, true);
-	else if (is_cc_shared)
-		return;
+	    (!is_mmio && arch_dma_unmap_phys_direct(dev, addr + size)))
+		dma_direct_unmap_phys(dev, addr, size, dir, attrs);
 	else if (use_dma_iommu(dev))
 		iommu_dma_unmap_phys(dev, addr, size, dir, attrs);
-	else if (ops->unmap_phys)
-		ops->unmap_phys(dev, addr, size, dir, attrs);
+	else if (is_mmio) {
+		if (ops->unmap_resource)
+			ops->unmap_resource(dev, addr, size, dir, attrs);
+	} else
+		ops->unmap_page(dev, addr, size, dir, attrs);
 	trace_dma_unmap_phys(dev, addr, size, dir, attrs);
-	debug_dma_unmap_phys(dev, addr, size, dir, attrs);
+	debug_dma_unmap_phys(dev, addr, size, dir);
 }
 EXPORT_SYMBOL_GPL(dma_unmap_phys);
 
@@ -244,9 +250,6 @@ static int __dma_map_sg_attrs(struct device *dev, struct scatterlist *sg,
 	int ents;
 
 	BUG_ON(!valid_dma_direction(dir));
-
-	if (!dev_is_dma_coherent(dev) && (attrs & DMA_ATTR_REQUIRE_COHERENT))
-		return -EOPNOTSUPP;
 
 	if (WARN_ON_ONCE(!dev->dma_mask))
 		return 0;
@@ -349,7 +352,7 @@ void dma_unmap_sg_attrs(struct device *dev, struct scatterlist *sg,
 
 	BUG_ON(!valid_dma_direction(dir));
 	trace_dma_unmap_sg(dev, sg, nents, dir, attrs);
-	debug_dma_unmap_sg(dev, sg, nents, dir, attrs);
+	debug_dma_unmap_sg(dev, sg, nents, dir);
 	if (dma_map_direct(dev, ops) ||
 	    arch_dma_unmap_sg_direct(dev, sg, nents))
 		dma_direct_unmap_sg(dev, sg, nents, dir, attrs);
@@ -382,7 +385,7 @@ void __dma_sync_single_for_cpu(struct device *dev, dma_addr_t addr, size_t size,
 
 	BUG_ON(!valid_dma_direction(dir));
 	if (dma_map_direct(dev, ops))
-		dma_direct_sync_single_for_cpu(dev, addr, size, dir, true);
+		dma_direct_sync_single_for_cpu(dev, addr, size, dir);
 	else if (use_dma_iommu(dev))
 		iommu_dma_sync_single_for_cpu(dev, addr, size, dir);
 	else if (ops->sync_single_for_cpu)
@@ -470,7 +473,7 @@ bool dma_need_unmap(struct device *dev)
 {
 	if (!dma_map_direct(dev, get_dma_ops(dev)))
 		return true;
-	if (!dev_dma_skip_sync(dev))
+	if (!dev->dma_skip_sync)
 		return true;
 	return IS_ENABLED(CONFIG_DMA_API_DEBUG);
 }
@@ -486,16 +489,16 @@ static void dma_setup_need_sync(struct device *dev)
 		 * mapping, if any. During the device initialization, it's
 		 * enough to check only for the DMA coherence.
 		 */
-		dev_assign_dma_skip_sync(dev, dev_is_dma_coherent(dev));
+		dev->dma_skip_sync = dev_is_dma_coherent(dev);
 	else if (!ops->sync_single_for_device && !ops->sync_single_for_cpu &&
 		 !ops->sync_sg_for_device && !ops->sync_sg_for_cpu)
 		/*
 		 * Synchronization is not possible when none of DMA sync ops
 		 * is set.
 		 */
-		dev_set_dma_skip_sync(dev);
+		dev->dma_skip_sync = true;
 	else
-		dev_clear_dma_skip_sync(dev);
+		dev->dma_skip_sync = false;
 }
 #else /* !CONFIG_DMA_NEED_SYNC */
 static inline void dma_setup_need_sync(struct device *dev) { }
@@ -537,21 +540,13 @@ EXPORT_SYMBOL(dma_get_sgtable_attrs);
  */
 pgprot_t dma_pgprot(struct device *dev, pgprot_t prot, unsigned long attrs)
 {
-	pgprot_t dma_prot;
-
 	if (dev_is_dma_coherent(dev))
-		dma_prot = prot;
+		return prot;
 #ifdef CONFIG_ARCH_HAS_DMA_WRITE_COMBINE
-	else if (attrs & DMA_ATTR_WRITE_COMBINE)
-		dma_prot = pgprot_writecombine(prot);
+	if (attrs & DMA_ATTR_WRITE_COMBINE)
+		return pgprot_writecombine(prot);
 #endif
-	else
-		dma_prot = pgprot_dmacoherent(prot);
-
-	if (attrs & (DMA_ATTR_CC_SHARED | __DMA_ATTR_ALLOC_CC_SHARED))
-		return pgprot_decrypted(dma_prot);
-	else
-		return pgprot_encrypted(dma_prot);
+	return pgprot_dmacoherent(prot);
 }
 #endif /* CONFIG_MMU */
 
@@ -646,15 +641,6 @@ void *dma_alloc_attrs(struct device *dev, size_t size, dma_addr_t *dma_handle,
 	if (WARN_ON_ONCE(flag & __GFP_COMP))
 		return NULL;
 
-	if (attrs & (DMA_ATTR_CC_SHARED | __DMA_ATTR_ALLOC_CC_SHARED)) {
-		trace_dma_alloc(dev, NULL, 0, size, DMA_BIDIRECTIONAL, flag,
-				attrs);
-		return NULL;
-	}
-
-	if (force_dma_unencrypted(dev))
-		attrs |= __DMA_ATTR_ALLOC_CC_SHARED;
-
 	if (dma_alloc_from_dev_coherent(dev, size, dma_handle, &cpu_addr)) {
 		trace_dma_alloc(dev, cpu_addr, *dma_handle, size,
 				DMA_BIDIRECTIONAL, flag, attrs);
@@ -664,7 +650,7 @@ void *dma_alloc_attrs(struct device *dev, size_t size, dma_addr_t *dma_handle,
 	/* let the implementation decide on the zone to allocate from: */
 	flag &= ~(__GFP_DMA | __GFP_DMA32 | __GFP_HIGHMEM);
 
-	if (dma_alloc_direct(dev, ops) || arch_dma_alloc_direct(dev)) {
+	if (dma_alloc_direct(dev, ops)) {
 		cpu_addr = dma_direct_alloc(dev, size, dma_handle, flag, attrs);
 	} else if (use_dma_iommu(dev)) {
 		cpu_addr = iommu_dma_alloc(dev, size, dma_handle, flag, attrs);
@@ -704,8 +690,8 @@ void dma_free_attrs(struct device *dev, size_t size, void *cpu_addr,
 	if (!cpu_addr)
 		return;
 
-	debug_dma_free_coherent(dev, size, cpu_addr, dma_handle, attrs);
-	if (dma_alloc_direct(dev, ops) || arch_dma_free_direct(dev, dma_handle))
+	debug_dma_free_coherent(dev, size, cpu_addr, dma_handle);
+	if (dma_alloc_direct(dev, ops))
 		dma_direct_free(dev, size, cpu_addr, dma_handle, attrs);
 	else if (use_dma_iommu(dev))
 		iommu_dma_free(dev, size, cpu_addr, dma_handle, attrs);
@@ -744,7 +730,7 @@ struct page *dma_alloc_pages(struct device *dev, size_t size,
 	if (page) {
 		trace_dma_alloc_pages(dev, page_to_virt(page), *dma_handle,
 				      size, dir, gfp, 0);
-		debug_dma_alloc_pages(dev, page, size, dir, *dma_handle);
+		debug_dma_alloc_pages(dev, page, size, dir, *dma_handle, 0);
 	} else {
 		trace_dma_alloc_pages(dev, NULL, 0, size, dir, gfp, 0);
 	}
@@ -778,14 +764,12 @@ EXPORT_SYMBOL_GPL(dma_free_pages);
 int dma_mmap_pages(struct device *dev, struct vm_area_struct *vma,
 		size_t size, struct page *page)
 {
-	const pgoff_t pgoff_start = vma_start_pgoff(vma);
-	const pgoff_t pgoff_end = vma_end_pgoff(vma);
-	const unsigned long count = PAGE_ALIGN(size) >> PAGE_SHIFT;
+	unsigned long count = PAGE_ALIGN(size) >> PAGE_SHIFT;
 
-	if (pgoff_start >= count || pgoff_end > count)
+	if (vma->vm_pgoff >= count || vma_pages(vma) > count - vma->vm_pgoff)
 		return -ENXIO;
 	return remap_pfn_range(vma, vma->vm_start,
-			       page_to_pfn(page) + pgoff_start,
+			       page_to_pfn(page) + vma->vm_pgoff,
 			       vma_pages(vma) << PAGE_SHIFT, vma->vm_page_prot);
 }
 EXPORT_SYMBOL_GPL(dma_mmap_pages);
@@ -796,7 +780,7 @@ static struct sg_table *alloc_single_sgt(struct device *dev, size_t size,
 	struct sg_table *sgt;
 	struct page *page;
 
-	sgt = kmalloc_obj(*sgt, gfp);
+	sgt = kmalloc(sizeof(*sgt), gfp);
 	if (!sgt)
 		return NULL;
 	if (sg_alloc_table(sgt, 1, gfp))
@@ -853,7 +837,7 @@ void dma_free_noncontiguous(struct device *dev, size_t size,
 		struct sg_table *sgt, enum dma_data_direction dir)
 {
 	trace_dma_free_sgt(dev, sgt, size, dir);
-	debug_dma_unmap_sg(dev, sgt->sgl, sgt->orig_nents, dir, 0);
+	debug_dma_unmap_sg(dev, sgt->sgl, sgt->orig_nents, dir);
 
 	if (use_dma_iommu(dev))
 		iommu_dma_free_noncontiguous(dev, size, sgt, dir);
@@ -998,9 +982,6 @@ size_t dma_max_mapping_size(struct device *dev)
 	const struct dma_map_ops *ops = get_dma_ops(dev);
 	size_t size = SIZE_MAX;
 
-	if (!dev->dma_mask)
-		return 0;
-
 	if (dma_map_direct(dev, ops))
 		size = dma_direct_max_mapping_size(dev);
 	else if (use_dma_iommu(dev))
@@ -1012,19 +993,19 @@ size_t dma_max_mapping_size(struct device *dev)
 }
 EXPORT_SYMBOL_GPL(dma_max_mapping_size);
 
-size_t dma_max_opt_mapping_size(struct device *dev)
+size_t dma_opt_mapping_size(struct device *dev)
 {
 	const struct dma_map_ops *ops = get_dma_ops(dev);
 	size_t size = SIZE_MAX;
 
 	if (use_dma_iommu(dev))
-		size = iommu_dma_max_opt_mapping_size();
-	else if (ops && ops->max_opt_mapping_size)
-		size = ops->max_opt_mapping_size();
+		size = iommu_dma_opt_mapping_size();
+	else if (ops && ops->opt_mapping_size)
+		size = ops->opt_mapping_size();
 
 	return min(dma_max_mapping_size(dev), size);
 }
-EXPORT_SYMBOL_GPL(dma_max_opt_mapping_size);
+EXPORT_SYMBOL_GPL(dma_opt_mapping_size);
 
 unsigned long dma_get_merge_boundary(struct device *dev)
 {

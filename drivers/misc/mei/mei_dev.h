@@ -470,27 +470,6 @@ struct mei_dev_timeouts {
 };
 
 /**
- * enum mei_dev_kind - device type
- *
- * @MEI_DEV_KIND_MEI: basic device
- * @MEI_DEV_KIND_ITOUCH: itouch support
- * @MEI_DEV_KIND_GSC: discete graphics content protection
- * @MEI_DEV_KIND_GSCFI: discete graphics chassis controller
- * @MEI_DEV_KIND_IVSC: visual sensing controller
- * @MEI_DEV_KIND_IOE: IO extender
- * @MEI_DEV_KIND_MAX: sentinel
- */
-enum mei_dev_kind {
-	MEI_DEV_KIND_MEI,
-	MEI_DEV_KIND_ITOUCH,
-	MEI_DEV_KIND_GSC,
-	MEI_DEV_KIND_GSCFI,
-	MEI_DEV_KIND_IVSC,
-	MEI_DEV_KIND_IOE,
-	MEI_DEV_KIND_MAX
-};
-
-/**
  * struct mei_device -  MEI private device struct
  *
  * @parent      : device on a bus
@@ -511,8 +490,6 @@ enum mei_dev_kind {
  * @timer_work  : MEI timer delayed work (timeouts)
  *
  * @recvd_hw_ready : hw ready message received flag
- * @pg_blocked  : low power mode is not allowed
- * @read_fws_need_resume: the FW status handler needs HW woken from sleep
  *
  * @wait_hw_ready : wait queue for receive HW ready message form FW
  * @wait_pg     : wait queue for receive PG message from FW
@@ -598,9 +575,6 @@ struct mei_device {
 	struct delayed_work timer_work;
 
 	bool recvd_hw_ready;
-	bool pg_blocked;
-	bool read_fws_need_resume;
-
 	/*
 	 * waiting queue for receive message from FW
 	 */
@@ -671,7 +645,7 @@ struct mei_device {
 	struct list_head device_list;
 	struct mutex cl_bus_lock;
 
-	enum mei_dev_kind kind;
+	const char *kind;
 
 #if IS_ENABLED(CONFIG_DEBUG_FS)
 	struct dentry *dbgfs_dir;
@@ -736,7 +710,6 @@ int mei_reset(struct mei_device *dev);
 int mei_start(struct mei_device *dev);
 int mei_restart(struct mei_device *dev);
 void mei_stop(struct mei_device *dev);
-void mei_stop_fast(struct mei_device *dev);
 void mei_cancel_work(struct mei_device *dev);
 
 void mei_set_devstate(struct mei_device *dev, enum mei_dev_state state);
@@ -933,7 +906,8 @@ static inline ssize_t mei_fw_status_str(struct mei_device *dev,
  */
 static inline bool kind_is_gsc(struct mei_device *dev)
 {
-	return dev->kind == MEI_DEV_KIND_GSC;
+	/* check kind for NULL because it may be not set, like at the fist call to hw_start */
+	return dev->kind && (strcmp(dev->kind, "gsc") == 0);
 }
 
 /**
@@ -945,6 +919,7 @@ static inline bool kind_is_gsc(struct mei_device *dev)
  */
 static inline bool kind_is_gscfi(struct mei_device *dev)
 {
-	return dev->kind == MEI_DEV_KIND_GSCFI;
+	/* check kind for NULL because it may be not set, like at the fist call to hw_start */
+	return dev->kind && (strcmp(dev->kind, "gscfi") == 0);
 }
 #endif

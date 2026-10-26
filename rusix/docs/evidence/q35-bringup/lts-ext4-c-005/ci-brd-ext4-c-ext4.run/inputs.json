@@ -1,0 +1,23 @@
+{
+  "artifacts": {
+    "/out/builds/ext4-vm-ci-brd-ext4-c/bzImage": "c61f9af984a6e69863de3b970ce6ba0b34e956f40c47b3b38c7423d3c145e9c6",
+    "/out/builds/ext4-vm-ci-brd-ext4-c/init": "380549dd5888688dc1d65ec15f40b4c3fe77cf461084c5a2a31f84d34c726899",
+    "/out/builds/ext4-vm-ci-brd-ext4-c/initramfs.cpio": "cbbd51878baab0f3081c403597a63ef29b52ad2ff73c67c21791595e746f26f2"
+  },
+  "config_sha256": "bf562962ae943935b43e1a0e93bc7ca77e8d04c3c76d2ace9141f327802cf25a",
+  "container_image": "sha256:c02eb3929889b3f0cc035d57a02c844e0c74c71d24fbda1311249faeb8257f63",
+  "implementation": "brd-c",
+  "source_revision": "13f851e005135441ef3e03e1e068253891e48222",
+  "sources": {
+    "rusix/scripts/rusix_paths.py": "15158c8c33e303341ef523c8317da73fb3f008908b8bfa53611d13bc87c94cae",
+    "rusix/scripts/test-brd-ext4-vm.py": "27c8c93a800b7258d968ca1772b243ff159d9b32b1de858a17f8828317c5e0fb",
+    "rusix/scripts/test-brd-vm.py": "7ff87117153b623115de5d414a693f39f7161ea33b4ad5a50127bb52bf86862c",
+    "rusix/tests/brd-ext4/Dockerfile": "16c3dc63cd956f56ef494dff04ec66beb5d246928f0cb04ba4b578376cf5dd02",
+    "rusix/tests/brd-ext4/FINAL.sha256": "4badf6874d8f5bcb531eeebbd70b8814c5c54a8c87247f79f1266975da3e7f0f",
+    "rusix/tests/brd-ext4/README.md": "415b47b4f933d4635eeecaa8e43024244cd601125e465a2098ab57afd9aafa54",
+    "rusix/tests/brd-ext4/SHA256SUMS": "b8fe76c42a436aa12c3efa253976561559c1bc9432c1a38343ac94ad0cb0de8b",
+    "rusix/tests/brd-ext4/ext4-packages.lock": "30a6ea7af0307248c70192e2ec793e655084c4f65a788a5d6c367412ab9e39e7",
+    "rusix/tests/brd-ext4/init.rs": "4602121535fd874f1f15843214ddb6ab4a956e519713794d94c52526aa089190",
+    "rusix/tests/brd-ext4/workload.sh": "14351e980fc14c25cfd9291f1ebeaace3fbba050ea8533f2d6d1cc697147436e"
+  }
+}

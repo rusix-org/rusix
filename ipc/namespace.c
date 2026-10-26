@@ -58,7 +58,7 @@ static struct ipc_namespace *create_ipc_ns(struct user_namespace *user_ns,
 	}
 
 	err = -ENOMEM;
-	ns = kzalloc_obj(struct ipc_namespace, GFP_KERNEL_ACCOUNT);
+	ns = kzalloc(sizeof(struct ipc_namespace), GFP_KERNEL_ACCOUNT);
 	if (ns == NULL)
 		goto fail_dec;
 
@@ -66,7 +66,6 @@ static struct ipc_namespace *create_ipc_ns(struct user_namespace *user_ns,
 	if (err)
 		goto fail_free;
 
-	ns_tree_gen_id(ns);
 	ns->user_ns = get_user_ns(user_ns);
 	ns->ucounts = ucounts;
 
@@ -76,10 +75,10 @@ static struct ipc_namespace *create_ipc_ns(struct user_namespace *user_ns,
 
 	err = -ENOMEM;
 	if (!setup_mq_sysctls(ns))
-		goto fail_mq_mount;
+		goto fail_put;
 
 	if (!setup_ipc_sysctls(ns))
-		goto fail_mq_sysctls;
+		goto fail_mq;
 
 	err = msg_init_ns(ns);
 	if (err)
@@ -87,16 +86,15 @@ static struct ipc_namespace *create_ipc_ns(struct user_namespace *user_ns,
 
 	sem_init_ns(ns);
 	shm_init_ns(ns);
-	ns_tree_add_raw(ns);
+	ns_tree_add(ns);
 
 	return ns;
 
 fail_ipc:
 	retire_ipc_sysctls(ns);
-fail_mq_sysctls:
+fail_mq:
 	retire_mq_sysctls(ns);
-fail_mq_mount:
-	kern_unmount(ns->mq_mnt);
+
 fail_put:
 	put_user_ns(ns->user_ns);
 	ns_common_free(ns);

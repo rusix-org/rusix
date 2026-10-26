@@ -66,9 +66,6 @@ properties:
       - mii
       - rgmii-id
 
-  power-domains:
-    maxItems: 1
-
 required:
   - compatible
   - reg

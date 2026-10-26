@@ -154,10 +154,11 @@ SYSCALL32_DEFINE0(sigreturn)
 
 	prevent_single_step_upon_eretu(regs);
 
-	scoped_user_read_access(frame, badframe) {
-		unsafe_get_user(set.sig[0], &frame->sc.oldmask, badframe);
-		unsafe_get_user(((__u32 *)&set)[1], &frame->extramask[0], badframe);
-	}
+	if (!access_ok(frame, sizeof(*frame)))
+		goto badframe;
+	if (__get_user(set.sig[0], &frame->sc.oldmask)
+	    || __get_user(((__u32 *)&set)[1], &frame->extramask[0]))
+		goto badframe;
 
 	set_current_blocked(&set);
 
@@ -180,8 +181,10 @@ SYSCALL32_DEFINE0(rt_sigreturn)
 
 	frame = (struct rt_sigframe_ia32 __user *)(regs->sp - 4);
 
-	scoped_user_read_access(frame, badframe)
-		unsafe_get_user(*(__u64 *)&set, (__u64 __user *)&frame->uc.uc_sigmask, badframe);
+	if (!access_ok(frame, sizeof(*frame)))
+		goto badframe;
+	if (__get_user(*(__u64 *)&set, (__u64 __user *)&frame->uc.uc_sigmask))
+		goto badframe;
 
 	set_current_blocked(&set);
 
@@ -279,7 +282,7 @@ int ia32_setup_frame(struct ksignal *ksig, struct pt_regs *regs)
 		/* Return stub is in 32bit vsyscall page */
 		if (current->mm->context.vdso)
 			restorer = current->mm->context.vdso +
-				vdso32_image.sym___kernel_sigreturn;
+				vdso_image_32.sym___kernel_sigreturn;
 		else
 			restorer = &frame->retcode;
 	}
@@ -354,7 +357,7 @@ int ia32_setup_rt_frame(struct ksignal *ksig, struct pt_regs *regs)
 	unsafe_put_user(ptr_to_compat(&frame->uc), &frame->puc, Efault);
 
 	/* Create the ucontext.  */
-	if (cpu_feature_enabled(X86_FEATURE_XSAVE))
+	if (static_cpu_has(X86_FEATURE_XSAVE))
 		unsafe_put_user(UC_FP_XSTATE, &frame->uc.uc_flags, Efault);
 	else
 		unsafe_put_user(0, &frame->uc.uc_flags, Efault);
@@ -365,7 +368,7 @@ int ia32_setup_rt_frame(struct ksignal *ksig, struct pt_regs *regs)
 		restorer = ksig->ka.sa.sa_restorer;
 	else
 		restorer = current->mm->context.vdso +
-			vdso32_image.sym___kernel_rt_sigreturn;
+			vdso_image_32.sym___kernel_rt_sigreturn;
 	unsafe_put_user(ptr_to_compat(restorer), &frame->pretcode, Efault);
 
 	/*

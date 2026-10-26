@@ -3,20 +3,18 @@
 #include <linux/pid_namespace.h>
 #include <linux/cleanup.h>
 
-__rust_helper struct pid_namespace *
-rust_helper_get_pid_ns(struct pid_namespace *ns)
+struct pid_namespace *rust_helper_get_pid_ns(struct pid_namespace *ns)
 {
 	return get_pid_ns(ns);
 }
 
-__rust_helper void rust_helper_put_pid_ns(struct pid_namespace *ns)
+void rust_helper_put_pid_ns(struct pid_namespace *ns)
 {
 	put_pid_ns(ns);
 }
 
 /* Get a reference on a task's pid namespace. */
-__rust_helper struct pid_namespace *
-rust_helper_task_get_pid_ns(struct task_struct *task)
+struct pid_namespace *rust_helper_task_get_pid_ns(struct task_struct *task)
 {
 	struct pid_namespace *pid_ns;
 

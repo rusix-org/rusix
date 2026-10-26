@@ -118,7 +118,7 @@ xdr_alloc_bvec(struct xdr_buf *buf, gfp_t gfp)
 	size_t i, n = xdr_buf_pagecount(buf);
 
 	if (n != 0 && buf->bvec == NULL) {
-		buf->bvec = kmalloc_objs(buf->bvec[0], n, gfp);
+		buf->bvec = kmalloc_array(n, sizeof(buf->bvec[0]), gfp);
 		if (!buf->bvec)
 			return -ENOMEM;
 		for (i = 0; i < n; i++) {
@@ -371,7 +371,8 @@ int xdr_buf_to_sg_alloc(const struct xdr_buf *buf, unsigned int offset,
 		unsigned int overflow_nents = nsg - sg_head_nents + 1;
 		struct scatterlist *overflow;
 
-		overflow = kmalloc_objs(*overflow, overflow_nents, gfp);
+		overflow = kmalloc_array(overflow_nents, sizeof(*overflow),
+					 gfp);
 		if (!overflow)
 			return -ENOMEM;
 
@@ -2351,6 +2352,73 @@ int xdr_encode_array2(const struct xdr_buf *buf, unsigned int base,
 	return xdr_xcode_array2(buf, base, desc, 1);
 }
 EXPORT_SYMBOL_GPL(xdr_encode_array2);
+
+int xdr_process_buf(const struct xdr_buf *buf, unsigned int offset,
+		    unsigned int len,
+		    int (*actor)(struct scatterlist *, void *), void *data)
+{
+	int i, ret = 0;
+	unsigned int page_len, thislen, page_offset;
+	struct scatterlist      sg[1];
+
+	sg_init_table(sg, 1);
+
+	if (offset >= buf->head[0].iov_len) {
+		offset -= buf->head[0].iov_len;
+	} else {
+		thislen = buf->head[0].iov_len - offset;
+		if (thislen > len)
+			thislen = len;
+		sg_set_buf(sg, buf->head[0].iov_base + offset, thislen);
+		ret = actor(sg, data);
+		if (ret)
+			goto out;
+		offset = 0;
+		len -= thislen;
+	}
+	if (len == 0)
+		goto out;
+
+	if (offset >= buf->page_len) {
+		offset -= buf->page_len;
+	} else {
+		page_len = buf->page_len - offset;
+		if (page_len > len)
+			page_len = len;
+		len -= page_len;
+		page_offset = (offset + buf->page_base) & (PAGE_SIZE - 1);
+		i = (offset + buf->page_base) >> PAGE_SHIFT;
+		thislen = PAGE_SIZE - page_offset;
+		do {
+			if (thislen > page_len)
+				thislen = page_len;
+			sg_set_page(sg, buf->pages[i], thislen, page_offset);
+			ret = actor(sg, data);
+			if (ret)
+				goto out;
+			page_len -= thislen;
+			i++;
+			page_offset = 0;
+			thislen = PAGE_SIZE;
+		} while (page_len != 0);
+		offset = 0;
+	}
+	if (len == 0)
+		goto out;
+	if (offset < buf->tail[0].iov_len) {
+		thislen = buf->tail[0].iov_len - offset;
+		if (thislen > len)
+			thislen = len;
+		sg_set_buf(sg, buf->tail[0].iov_base + offset, thislen);
+		ret = actor(sg, data);
+		len -= thislen;
+	}
+	if (len != 0)
+		ret = -EINVAL;
+out:
+	return ret;
+}
+EXPORT_SYMBOL_GPL(xdr_process_buf);
 
 /**
  * xdr_stream_decode_string_dup - Decode and duplicate variable length string

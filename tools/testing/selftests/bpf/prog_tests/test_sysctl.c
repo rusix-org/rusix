@@ -27,7 +27,6 @@ struct sysctl_test {
 		OP_EPERM,
 		SUCCESS,
 	} result;
-	struct bpf_object *obj;
 };
 
 static struct sysctl_test tests[] = {
@@ -1472,7 +1471,6 @@ static int load_sysctl_prog_file(struct sysctl_test *test)
 		return -1;
 	}
 
-	test->obj = obj;
 	return prog_fd;
 }
 
@@ -1575,7 +1573,6 @@ out:
 	/* Detaching w/o checking return code: best effort attempt. */
 	if (progfd != -1)
 		bpf_prog_detach(cgfd, atype);
-	bpf_object__close(test->obj);
 	close(progfd);
 	printf("[%s]\n", err ? "FAIL" : "PASS");
 	return err;

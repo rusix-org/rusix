@@ -14,12 +14,11 @@
 
 #include <sound/core.h>
 #include <sound/soc.h>
+#include <sound/pxa2xx-lib.h>
 #include <sound/dmaengine_pcm.h>
 
-#include "pxa2xx-lib.h"
-
 static const struct snd_soc_component_driver pxa2xx_soc_platform = {
-	.pcm_new	= pxa2xx_soc_pcm_new,
+	.pcm_construct	= pxa2xx_soc_pcm_new,
 	.open		= pxa2xx_soc_pcm_open,
 	.close		= pxa2xx_soc_pcm_close,
 	.hw_params	= pxa2xx_soc_pcm_hw_params,

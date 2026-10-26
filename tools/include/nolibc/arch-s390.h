@@ -5,10 +5,6 @@
 
 #ifndef _NOLIBC_ARCH_S390_H
 #define _NOLIBC_ARCH_S390_H
-
-#include "types.h"
-
-#include <linux/sched.h>
 #include <linux/signal.h>
 #include <linux/unistd.h>
 
@@ -28,7 +24,7 @@
  *
  */
 
-#define __nolibc_syscall0(num)						\
+#define my_syscall0(num)						\
 ({									\
 	register long _num __asm__ ("1") = (num);			\
 	register long _rc __asm__ ("2");				\
@@ -42,7 +38,7 @@
 	_rc;								\
 })
 
-#define __nolibc_syscall1(num, arg1)					\
+#define my_syscall1(num, arg1)						\
 ({									\
 	register long _num __asm__ ("1") = (num);			\
 	register long _arg1 __asm__ ("2") = (long)(arg1);		\
@@ -56,7 +52,7 @@
 	_arg1;								\
 })
 
-#define __nolibc_syscall2(num, arg1, arg2)				\
+#define my_syscall2(num, arg1, arg2)					\
 ({									\
 	register long _num __asm__ ("1") = (num);			\
 	register long _arg1 __asm__ ("2") = (long)(arg1);		\
@@ -71,7 +67,7 @@
 	_arg1;								\
 })
 
-#define __nolibc_syscall3(num, arg1, arg2, arg3)			\
+#define my_syscall3(num, arg1, arg2, arg3)				\
 ({									\
 	register long _num __asm__ ("1") = (num);			\
 	register long _arg1 __asm__ ("2") = (long)(arg1);		\
@@ -87,7 +83,7 @@
 	_arg1;								\
 })
 
-#define __nolibc_syscall4(num, arg1, arg2, arg3, arg4)			\
+#define my_syscall4(num, arg1, arg2, arg3, arg4)			\
 ({									\
 	register long _num __asm__ ("1") = (num);			\
 	register long _arg1 __asm__ ("2") = (long)(arg1);		\
@@ -104,7 +100,7 @@
 	_arg1;								\
 })
 
-#define __nolibc_syscall5(num, arg1, arg2, arg3, arg4, arg5)		\
+#define my_syscall5(num, arg1, arg2, arg3, arg4, arg5)			\
 ({									\
 	register long _num __asm__ ("1") = (num);			\
 	register long _arg1 __asm__ ("2") = (long)(arg1);		\
@@ -123,7 +119,7 @@
 	_arg1;								\
 })
 
-#define __nolibc_syscall6(num, arg1, arg2, arg3, arg4, arg5, arg6)	\
+#define my_syscall6(num, arg1, arg2, arg3, arg4, arg5, arg6)		\
 ({									\
 	register long _num __asm__ ("1") = (num);			\
 	register long _arg1 __asm__ ("2") = (long)(arg1);		\
@@ -143,19 +139,22 @@
 	_arg1;								\
 })
 
-#ifndef NOLIBC_NO_RUNTIME
 /* startup code */
-void __attribute__((weak, noreturn)) __nolibc_entrypoint __nolibc_no_stack_protector _start(void)
+void __attribute__((weak, noreturn)) __nolibc_entrypoint __no_stack_protector _start(void)
 {
 	__asm__ volatile (
+#ifdef __s390x__
 		"lgr	%r2, %r15\n"          /* save stack pointer to %r2, as arg1 of _start_c */
 		"aghi	%r15, -160\n"         /* allocate new stackframe                        */
+#else
+		"lr	%r2, %r15\n"
+		"ahi	%r15, -96\n"
+#endif
 		"xc	0(8,%r15), 0(%r15)\n" /* clear backchain                                */
 		"brasl	%r14, _start_c\n"     /* transfer to c runtime                          */
 	);
 	__nolibc_entrypoint_epilogue();
 }
-#endif /* NOLIBC_NO_RUNTIME */
 
 struct s390_mmap_arg_struct {
 	unsigned long addr;
@@ -167,8 +166,8 @@ struct s390_mmap_arg_struct {
 };
 
 static __attribute__((unused))
-void *_sys_mmap(void *addr, size_t length, int prot, int flags, int fd,
-		off_t offset)
+void *sys_mmap(void *addr, size_t length, int prot, int flags, int fd,
+	       off_t offset)
 {
 	struct s390_mmap_arg_struct args = {
 		.addr = (unsigned long)addr,
@@ -179,22 +178,15 @@ void *_sys_mmap(void *addr, size_t length, int prot, int flags, int fd,
 		.offset = (unsigned long)offset
 	};
 
-	return (void *)__nolibc_syscall1(__NR_mmap, &args);
+	return (void *)my_syscall1(__NR_mmap, &args);
 }
-#define _sys_mmap _sys_mmap
+#define sys_mmap sys_mmap
 
 static __attribute__((unused))
-pid_t _sys_fork(void)
+pid_t sys_fork(void)
 {
-	return __nolibc_syscall5(__NR_clone, 0, SIGCHLD, 0, 0, 0);
+	return my_syscall5(__NR_clone, 0, SIGCHLD, 0, 0, 0);
 }
-#define _sys_fork _sys_fork
-
-static __attribute__((unused))
-pid_t _sys_vfork(void)
-{
-	return __nolibc_syscall5(__NR_clone, 0, CLONE_VM | CLONE_VFORK | SIGCHLD, 0, 0, 0);
-}
-#define _sys_vfork _sys_vfork
+#define sys_fork sys_fork
 
 #endif /* _NOLIBC_ARCH_S390_H */

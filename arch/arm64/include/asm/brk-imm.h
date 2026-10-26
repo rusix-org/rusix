@@ -2,7 +2,6 @@
 /*
  * Copyright (C) 2012 ARM Ltd.
  */
-/* Whole file is shared with s390 */
 
 #ifndef __ASM_BRK_IMM_H
 #define __ASM_BRK_IMM_H

@@ -3,7 +3,7 @@
  * Copyright (C) 2019 - 2021
  *
  * Richard van Schagen <vschagen@icloud.com>
- * Christian Marangi <ansuelsmth@gmail.com>
+ * Christian Marangi <ansuelsmth@gmail.com
  */
 #ifndef REG_EIP93_H
 #define REG_EIP93_H
@@ -281,7 +281,7 @@
 #define   EIP93_SA_CMD_HASH_CRYPT_OFFSET	GENMASK(23, 16)
 #define   EIP93_SA_CMD_BYTE_OFFSET		BIT(13) /* 0: CRYPT_OFFSET in 32bit word 1: CRYPT_OFFSET in 8bit bytes */
 #define   EIP93_SA_CMD_HMAC			BIT(12)
-#define   EIP93_SA_CMD_SSL_MAC			BIT(11)
+#define   EIP93_SA_CMD_SSL_MAC			BIT(12)
 /* This mask can be either used for ARC4 or AES */
 #define   EIP93_SA_CMD_CHIPER_MODE		GENMASK(9, 8)
 /* AES or DES operations */

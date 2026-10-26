@@ -80,7 +80,7 @@ static int dlm_lockres_master_requery(struct dlm_ctxt *dlm,
 
 static u64 dlm_get_next_mig_cookie(void);
 
-DEFINE_SPINLOCK(dlm_reco_state_lock);
+static DEFINE_SPINLOCK(dlm_reco_state_lock);
 static DEFINE_SPINLOCK(dlm_mig_cookie_lock);
 static u64 dlm_mig_cookie = 1;
 
@@ -743,7 +743,7 @@ static int dlm_init_recovery_area(struct dlm_ctxt *dlm, u8 dead_node)
 		}
 		BUG_ON(num == dead_node);
 
-		ndata = kzalloc_obj(*ndata, GFP_NOFS);
+		ndata = kzalloc(sizeof(*ndata), GFP_NOFS);
 		if (!ndata) {
 			dlm_destroy_recovery_area(dlm);
 			return -ENOMEM;
@@ -830,14 +830,14 @@ int dlm_request_all_locks_handler(struct o2net_msg *msg, u32 len, void *data,
 	}
 	BUG_ON(lr->dead_node != dlm->reco.dead_node);
 
-	item = kzalloc_obj(*item, GFP_NOFS);
+	item = kzalloc(sizeof(*item), GFP_NOFS);
 	if (!item) {
 		dlm_put(dlm);
 		return -ENOMEM;
 	}
 
 	/* this will get freed by dlm_request_all_locks_worker */
-	buf = kmalloc(PAGE_SIZE, GFP_NOFS);
+	buf = (char *) __get_free_page(GFP_NOFS);
 	if (!buf) {
 		kfree(item);
 		dlm_put(dlm);
@@ -933,7 +933,7 @@ static void dlm_request_all_locks_worker(struct dlm_work_item *item, void *data)
 		}
 	}
 leave:
-	kfree(data);
+	free_page((unsigned long)data);
 }
 
 
@@ -1391,7 +1391,7 @@ int dlm_mig_lockres_handler(struct o2net_msg *msg, u32 len, void *data,
 
 	ret = -ENOMEM;
 	buf = kmalloc(be16_to_cpu(msg->data_len), GFP_NOFS);
-	item = kzalloc_obj(*item, GFP_NOFS);
+	item = kzalloc(sizeof(*item), GFP_NOFS);
 	if (!buf || !item)
 		goto leave;
 

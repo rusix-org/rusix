@@ -26,9 +26,6 @@
 #include "hwif.h"
 #include "mmc.h"
 
-#define DWMAC_SNPSVER	GENMASK_U32(7, 0)
-#define DWMAC_USERVER	GENMASK_U32(15, 8)
-
 /* Synopsys Core versions */
 #define	DWMAC_CORE_3_40		0x34
 #define	DWMAC_CORE_3_50		0x35
@@ -158,6 +155,7 @@ struct stmmac_extra_stats {
 	unsigned long fatal_bus_error_irq;
 	/* Tx/Rx IRQ Events */
 	unsigned long rx_early_irq;
+	unsigned long threshold;
 	unsigned long irq_receive_pmt_irq_n;
 	/* MMC info */
 	unsigned long mmc_tx_irq_n;
@@ -256,7 +254,6 @@ struct stmmac_safety_stats {
 	(sizeof(struct stmmac_safety_stats) / sizeof(unsigned long))
 
 /* CSR Frequency Access Defines*/
-#define CSR_F_20M	20000000
 #define CSR_F_35M	35000000
 #define CSR_F_60M	60000000
 #define CSR_F_100M	100000000
@@ -276,6 +273,10 @@ struct stmmac_safety_stats {
 #define FLOW_RX		1
 #define FLOW_TX		2
 #define FLOW_AUTO	(FLOW_TX | FLOW_RX)
+
+/* PCS defines */
+#define STMMAC_PCS_RGMII	(1 << 0)
+#define STMMAC_PCS_SGMII	(1 << 1)
 
 #define SF_DMA_MODE 1		/* DMA STORE-AND-FORWARD Operation Mode */
 
@@ -309,20 +310,6 @@ struct stmmac_safety_stats {
 #define DMA_HW_FEAT_SAVLANINS	0x08000000	/* Source Addr or VLAN */
 #define DMA_HW_FEAT_ACTPHYIF	0x70000000	/* Active/selected PHY iface */
 #define DEFAULT_DMA_PBL		8
-
-/* phy_intf_sel_i and ACTPHYIF encodings */
-#define PHY_INTF_SEL_GMII_MII	0
-#define PHY_INTF_SEL_RGMII	1
-#define PHY_INTF_SEL_SGMII	2
-#define PHY_INTF_SEL_TBI	3
-#define PHY_INTF_SEL_RMII	4
-#define PHY_INTF_SEL_RTBI	5
-#define PHY_INTF_SEL_SMII	6
-#define PHY_INTF_SEL_REVMII	7
-
-/* XGMAC uses a different encoding - from the AgileX5 documentation */
-#define PHY_INTF_GMII		0
-#define PHY_INTF_RGMII		1
 
 /* MSI defines */
 #define STMMAC_MSI_VEC_MAX	32
@@ -418,8 +405,6 @@ struct dma_features {
 	unsigned int half_duplex;
 	unsigned int hash_filter;
 	unsigned int multi_addr;
-	unsigned int additional_32_addr;
-	unsigned int additional_64_addr;
 	unsigned int pcs;
 	unsigned int sma_mdio;
 	unsigned int pmt_remote_wake_up;
@@ -444,8 +429,8 @@ struct dma_features {
 	unsigned int number_rx_channel;
 	unsigned int number_tx_channel;
 	/* TX and RX number of queues */
-	u8 number_rx_queues;
-	u8 number_tx_queues;
+	unsigned int number_rx_queues;
+	unsigned int number_tx_queues;
 	/* PPS output */
 	unsigned int pps_out_num;
 	/* Number of Traffic Classes */
@@ -514,8 +499,6 @@ struct dma_features {
 	unsigned int dbgmem;
 	/* Number of Policing Counters */
 	unsigned int pcsel;
-	/* Active PHY interface, PHY_INTF_SEL_xxx */
-	u8 actphyif;
 };
 
 /* RX Buffer size must be multiple of 4/8/16 bytes */
@@ -551,19 +534,6 @@ struct dma_features {
 #define LPI_CTRL_STATUS_RLPIEN	BIT(2)	/* Receive LPI Entry */
 #define LPI_CTRL_STATUS_TLPIEX	BIT(1)	/* Transmit LPI Exit */
 #define LPI_CTRL_STATUS_TLPIEN	BIT(0)	/* Transmit LPI Entry */
-
-/* Common definitions for AXI Master Bus Mode */
-#define DMA_AXI_AAL		BIT(12)
-#define DMA_AXI_BLEN256		BIT(7)
-#define DMA_AXI_BLEN128		BIT(6)
-#define DMA_AXI_BLEN64		BIT(5)
-#define DMA_AXI_BLEN32		BIT(4)
-#define DMA_AXI_BLEN16		BIT(3)
-#define DMA_AXI_BLEN8		BIT(2)
-#define DMA_AXI_BLEN4		BIT(1)
-#define DMA_AXI_BLEN_MASK	GENMASK(7, 1)
-
-void stmmac_axi_blen_to_mask(u32 *regval, const u32 *blen, size_t len);
 
 #define STMMAC_CHAIN_MODE	0x1
 #define STMMAC_RING_MODE	0x2
@@ -606,9 +576,12 @@ struct mac_link {
 struct mii_regs {
 	unsigned int addr;	/* MII Address */
 	unsigned int data;	/* MII Data */
-	u32 addr_mask;		/* MII address mask */
-	u32 reg_mask;		/* MII reg mask */
-	u32 clk_csr_mask;
+	unsigned int addr_shift;	/* MII address shift */
+	unsigned int reg_shift;		/* MII reg shift */
+	unsigned int addr_mask;		/* MII address mask */
+	unsigned int reg_mask;		/* MII reg mask */
+	unsigned int clk_csr_shift;
+	unsigned int clk_csr_mask;
 };
 
 struct mac_device_info {
@@ -628,22 +601,16 @@ struct mac_device_info {
 	void __iomem *pcsr;     /* vpointer to device CSRs */
 	unsigned int multicast_filter_bins;
 	unsigned int unicast_filter_entries;
-	unsigned int multi_addr;
 	unsigned int mcast_bits_log2;
 	unsigned int rx_csum;
+	unsigned int pcs;
+	unsigned int ps;
+	unsigned int xlgmac;
 	unsigned int num_vlan;
 	u32 vlan_filter[32];
 	bool vlan_fail_q_en;
 	u8 vlan_fail_q;
 	bool hw_vlan_en;
-	bool reverse_sgmii_enable;
-	bool additional_32_addr;
-	bool additional_64_addr;
-
-	/* This spinlock protects read-modify-write of the interrupt
-	 * mask/enable registers.
-	 */
-	spinlock_t irq_ctrl_lock;
 };
 
 struct stmmac_rx_routing {

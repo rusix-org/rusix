@@ -20,7 +20,6 @@
 #include <linux/init.h>
 #include <linux/usb/input.h>
 #include <linux/hid.h>
-#include <linux/seq_buf.h>
 
 /*
  * Version Information
@@ -242,7 +241,7 @@ static int usb_kbd_alloc_mem(struct usb_device *dev, struct usb_kbd *kbd)
 		return -1;
 	if (!(kbd->new = usb_alloc_coherent(dev, 8, GFP_KERNEL, &kbd->new_dma)))
 		return -1;
-	if (!(kbd->cr = kmalloc_obj(struct usb_ctrlrequest)))
+	if (!(kbd->cr = kmalloc(sizeof(struct usb_ctrlrequest), GFP_KERNEL)))
 		return -1;
 	if (!(kbd->leds = usb_alloc_coherent(dev, 1, GFP_KERNEL, &kbd->leds_dma)))
 		return -1;
@@ -267,10 +266,8 @@ static int usb_kbd_probe(struct usb_interface *iface,
 	struct usb_endpoint_descriptor *endpoint;
 	struct usb_kbd *kbd;
 	struct input_dev *input_dev;
-	struct seq_buf kbd_name;
 	int i, pipe, maxp;
 	int error = -ENOMEM;
-	size_t len;
 
 	interface = iface->cur_altsetting;
 
@@ -284,7 +281,7 @@ static int usb_kbd_probe(struct usb_interface *iface,
 	pipe = usb_rcvintpipe(dev, endpoint->bEndpointAddress);
 	maxp = usb_maxpacket(dev, pipe);
 
-	kbd = kzalloc_obj(struct usb_kbd);
+	kbd = kzalloc(sizeof(struct usb_kbd), GFP_KERNEL);
 	input_dev = input_allocate_device();
 	if (!kbd || !input_dev)
 		goto fail1;
@@ -295,26 +292,24 @@ static int usb_kbd_probe(struct usb_interface *iface,
 	kbd->usbdev = dev;
 	kbd->dev = input_dev;
 	spin_lock_init(&kbd->leds_lock);
-	seq_buf_init(&kbd_name, kbd->name, sizeof(kbd->name));
 
 	if (dev->manufacturer)
-		seq_buf_puts(&kbd_name, dev->manufacturer);
+		strscpy(kbd->name, dev->manufacturer, sizeof(kbd->name));
 
 	if (dev->product) {
 		if (dev->manufacturer)
-			seq_buf_puts(&kbd_name, " ");
-		seq_buf_puts(&kbd_name, dev->product);
+			strlcat(kbd->name, " ", sizeof(kbd->name));
+		strlcat(kbd->name, dev->product, sizeof(kbd->name));
 	}
 
-	if (!seq_buf_used(&kbd_name))
+	if (!strlen(kbd->name))
 		snprintf(kbd->name, sizeof(kbd->name),
 			 "USB HIDBP Keyboard %04x:%04x",
 			 le16_to_cpu(dev->descriptor.idVendor),
 			 le16_to_cpu(dev->descriptor.idProduct));
 
 	usb_make_path(dev, kbd->phys, sizeof(kbd->phys));
-	len = strnlen(kbd->phys, sizeof(kbd->phys));
-	strscpy(kbd->phys + len, "/input0", sizeof(kbd->phys) - len);
+	strlcat(kbd->phys, "/input0", sizeof(kbd->phys));
 
 	input_dev->name = kbd->name;
 	input_dev->phys = kbd->phys;

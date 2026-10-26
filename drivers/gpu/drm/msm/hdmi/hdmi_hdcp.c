@@ -306,9 +306,9 @@ static int msm_reset_hdcp_ddc_failures(struct hdmi_hdcp_ctrl *hdcp_ctrl)
 			HDMI_HDCP_DDC_CTRL_0_DISABLE);
 
 		/* ACK the Failure to Clear it */
-		hdmi_update_bits(hdmi, REG_HDMI_HDCP_DDC_CTRL_1,
-				 HDMI_HDCP_DDC_CTRL_1_FAILED_ACK,
-				 HDMI_HDCP_DDC_CTRL_1_FAILED_ACK);
+		reg_val = hdmi_read(hdmi, REG_HDMI_HDCP_DDC_CTRL_1);
+		reg_val |= HDMI_HDCP_DDC_CTRL_1_FAILED_ACK;
+		hdmi_write(hdmi, REG_HDMI_HDCP_DDC_CTRL_1, reg_val);
 
 		/* Check if the FAILURE got Cleared */
 		reg_val = hdmi_read(hdmi, REG_HDMI_HDCP_DDC_STATUS);
@@ -324,22 +324,28 @@ static int msm_reset_hdcp_ddc_failures(struct hdmi_hdcp_ctrl *hdcp_ctrl)
 		DBG("Before: HDMI_DDC_SW_STATUS=0x%08x",
 			hdmi_read(hdmi, REG_HDMI_DDC_SW_STATUS));
 		/* Reset HDMI DDC software status */
-		hdmi_update_bits(hdmi, REG_HDMI_DDC_CTRL, HDMI_DDC_CTRL_SW_STATUS_RESET,
-				 HDMI_DDC_CTRL_SW_STATUS_RESET);
+		reg_val = hdmi_read(hdmi, REG_HDMI_DDC_CTRL);
+		reg_val |= HDMI_DDC_CTRL_SW_STATUS_RESET;
+		hdmi_write(hdmi, REG_HDMI_DDC_CTRL, reg_val);
 
 		rc = msm_hdmi_hdcp_msleep(hdcp_ctrl, 20, AUTH_ABORT_EV);
 
-		hdmi_clear_bits(hdmi, REG_HDMI_DDC_CTRL, HDMI_DDC_CTRL_SW_STATUS_RESET);
+		reg_val = hdmi_read(hdmi, REG_HDMI_DDC_CTRL);
+		reg_val &= ~HDMI_DDC_CTRL_SW_STATUS_RESET;
+		hdmi_write(hdmi, REG_HDMI_DDC_CTRL, reg_val);
 
 		/* Reset HDMI DDC Controller */
-		hdmi_update_bits(hdmi, REG_HDMI_DDC_CTRL, HDMI_DDC_CTRL_SOFT_RESET,
-				 HDMI_DDC_CTRL_SOFT_RESET);
+		reg_val = hdmi_read(hdmi, REG_HDMI_DDC_CTRL);
+		reg_val |= HDMI_DDC_CTRL_SOFT_RESET;
+		hdmi_write(hdmi, REG_HDMI_DDC_CTRL, reg_val);
 
 		/* If previous msleep is aborted, skip this msleep */
 		if (!rc)
 			rc = msm_hdmi_hdcp_msleep(hdcp_ctrl, 20, AUTH_ABORT_EV);
 
-		hdmi_clear_bits(hdmi, REG_HDMI_DDC_CTRL, HDMI_DDC_CTRL_SOFT_RESET);
+		reg_val = hdmi_read(hdmi, REG_HDMI_DDC_CTRL);
+		reg_val &= ~HDMI_DDC_CTRL_SOFT_RESET;
+		hdmi_write(hdmi, REG_HDMI_DDC_CTRL, reg_val);
 		DBG("After: HDMI_DDC_SW_STATUS=0x%08x",
 			hdmi_read(hdmi, REG_HDMI_DDC_SW_STATUS));
 	}
@@ -393,6 +399,7 @@ static void msm_hdmi_hdcp_reauth_work(struct work_struct *work)
 		struct hdmi_hdcp_ctrl, hdcp_reauth_work);
 	struct hdmi *hdmi = hdcp_ctrl->hdmi;
 	unsigned long flags;
+	u32 reg_val;
 
 	DBG("HDCP REAUTH WORK");
 	/*
@@ -402,7 +409,9 @@ static void msm_hdmi_hdcp_reauth_work(struct work_struct *work)
 	 * AN1_READY bits in HDMI_HDCP_LINK0_STATUS register
 	 */
 	spin_lock_irqsave(&hdmi->reg_lock, flags);
-	hdmi_clear_bits(hdmi, REG_HDMI_HPD_CTRL, HDMI_HPD_CTRL_ENABLE);
+	reg_val = hdmi_read(hdmi, REG_HDMI_HPD_CTRL);
+	reg_val &= ~HDMI_HPD_CTRL_ENABLE;
+	hdmi_write(hdmi, REG_HDMI_HPD_CTRL, reg_val);
 
 	/* Disable HDCP interrupts */
 	hdmi_write(hdmi, REG_HDMI_HDCP_INT_CTRL, 0);
@@ -422,8 +431,9 @@ static void msm_hdmi_hdcp_reauth_work(struct work_struct *work)
 
 	/* Enable HPD circuitry */
 	spin_lock_irqsave(&hdmi->reg_lock, flags);
-	hdmi_update_bits(hdmi, REG_HDMI_HPD_CTRL, HDMI_HPD_CTRL_ENABLE,
-			 HDMI_HPD_CTRL_ENABLE);
+	reg_val = hdmi_read(hdmi, REG_HDMI_HPD_CTRL);
+	reg_val |= HDMI_HPD_CTRL_ENABLE;
+	hdmi_write(hdmi, REG_HDMI_HPD_CTRL, reg_val);
 	spin_unlock_irqrestore(&hdmi->reg_lock, flags);
 
 	/*
@@ -446,6 +456,7 @@ static int msm_hdmi_hdcp_auth_prepare(struct hdmi_hdcp_ctrl *hdcp_ctrl)
 {
 	struct hdmi *hdmi = hdcp_ctrl->hdmi;
 	u32 link0_status;
+	u32 reg_val;
 	unsigned long flags;
 	int rc;
 
@@ -461,11 +472,14 @@ static int msm_hdmi_hdcp_auth_prepare(struct hdmi_hdcp_ctrl *hdcp_ctrl)
 
 	spin_lock_irqsave(&hdmi->reg_lock, flags);
 	/* disable HDMI Encrypt */
-	hdmi_clear_bits(hdmi, REG_HDMI_CTRL, HDMI_CTRL_ENCRYPTED);
+	reg_val = hdmi_read(hdmi, REG_HDMI_CTRL);
+	reg_val &= ~HDMI_CTRL_ENCRYPTED;
+	hdmi_write(hdmi, REG_HDMI_CTRL, reg_val);
 
 	/* Enabling Software DDC */
-	hdmi_clear_bits(hdmi, REG_HDMI_DDC_ARBITRATION,
-			HDMI_DDC_ARBITRATION_HW_ARBITRATION);
+	reg_val = hdmi_read(hdmi, REG_HDMI_DDC_ARBITRATION);
+	reg_val &= ~HDMI_DDC_ARBITRATION_HW_ARBITRATION;
+	hdmi_write(hdmi, REG_HDMI_DDC_ARBITRATION, reg_val);
 	spin_unlock_irqrestore(&hdmi->reg_lock, flags);
 
 	/*
@@ -484,8 +498,9 @@ static int msm_hdmi_hdcp_auth_prepare(struct hdmi_hdcp_ctrl *hdcp_ctrl)
 	hdmi_write(hdmi, REG_HDMI_HDCP_ENTROPY_CTRL1, 0xF00DFACE);
 
 	/* Disable the RngCipher state */
-	hdmi_clear_bits(hdmi, REG_HDMI_HDCP_DEBUG_CTRL,
-			HDMI_HDCP_DEBUG_CTRL_RNG_CIPHER);
+	reg_val = hdmi_read(hdmi, REG_HDMI_HDCP_DEBUG_CTRL);
+	reg_val &= ~HDMI_HDCP_DEBUG_CTRL_RNG_CIPHER;
+	hdmi_write(hdmi, REG_HDMI_HDCP_DEBUG_CTRL, reg_val);
 	DBG("HDCP_DEBUG_CTRL=0x%08x",
 		hdmi_read(hdmi, REG_HDMI_HDCP_DEBUG_CTRL));
 
@@ -522,12 +537,15 @@ static int msm_hdmi_hdcp_auth_prepare(struct hdmi_hdcp_ctrl *hdcp_ctrl)
 static void msm_hdmi_hdcp_auth_fail(struct hdmi_hdcp_ctrl *hdcp_ctrl)
 {
 	struct hdmi *hdmi = hdcp_ctrl->hdmi;
+	u32 reg_val;
 	unsigned long flags;
 
 	DBG("hdcp auth failed, queue reauth work");
 	/* clear HDMI Encrypt */
 	spin_lock_irqsave(&hdmi->reg_lock, flags);
-	hdmi_clear_bits(hdmi, REG_HDMI_CTRL, HDMI_CTRL_ENCRYPTED);
+	reg_val = hdmi_read(hdmi, REG_HDMI_CTRL);
+	reg_val &= ~HDMI_CTRL_ENCRYPTED;
+	hdmi_write(hdmi, REG_HDMI_CTRL, reg_val);
 	spin_unlock_irqrestore(&hdmi->reg_lock, flags);
 
 	hdcp_ctrl->hdcp_state = HDCP_STATE_AUTH_FAILED;
@@ -537,6 +555,7 @@ static void msm_hdmi_hdcp_auth_fail(struct hdmi_hdcp_ctrl *hdcp_ctrl)
 static void msm_hdmi_hdcp_auth_done(struct hdmi_hdcp_ctrl *hdcp_ctrl)
 {
 	struct hdmi *hdmi = hdcp_ctrl->hdmi;
+	u32 reg_val;
 	unsigned long flags;
 
 	/*
@@ -544,15 +563,16 @@ static void msm_hdmi_hdcp_auth_done(struct hdmi_hdcp_ctrl *hdcp_ctrl)
 	 * there is no Arbitration between software and hardware for DDC
 	 */
 	spin_lock_irqsave(&hdmi->reg_lock, flags);
-	hdmi_update_bits(hdmi, REG_HDMI_DDC_ARBITRATION,
-			 HDMI_DDC_ARBITRATION_HW_ARBITRATION,
-			 HDMI_DDC_ARBITRATION_HW_ARBITRATION);
+	reg_val = hdmi_read(hdmi, REG_HDMI_DDC_ARBITRATION);
+	reg_val |= HDMI_DDC_ARBITRATION_HW_ARBITRATION;
+	hdmi_write(hdmi, REG_HDMI_DDC_ARBITRATION, reg_val);
 	spin_unlock_irqrestore(&hdmi->reg_lock, flags);
 
 	/* enable HDMI Encrypt */
 	spin_lock_irqsave(&hdmi->reg_lock, flags);
-	hdmi_update_bits(hdmi, REG_HDMI_CTRL, HDMI_CTRL_ENCRYPTED,
-			 HDMI_CTRL_ENCRYPTED);
+	reg_val = hdmi_read(hdmi, REG_HDMI_CTRL);
+	reg_val |= HDMI_CTRL_ENCRYPTED;
+	hdmi_write(hdmi, REG_HDMI_CTRL, reg_val);
 	spin_unlock_irqrestore(&hdmi->reg_lock, flags);
 
 	hdcp_ctrl->hdcp_state = HDCP_STATE_AUTHENTICATED;
@@ -1284,6 +1304,7 @@ end:
 void msm_hdmi_hdcp_on(struct hdmi_hdcp_ctrl *hdcp_ctrl)
 {
 	struct hdmi *hdmi = hdcp_ctrl->hdmi;
+	u32 reg_val;
 	unsigned long flags;
 
 	if ((HDCP_STATE_INACTIVE != hdcp_ctrl->hdcp_state) ||
@@ -1294,7 +1315,9 @@ void msm_hdmi_hdcp_on(struct hdmi_hdcp_ctrl *hdcp_ctrl)
 
 	/* clear HDMI Encrypt */
 	spin_lock_irqsave(&hdmi->reg_lock, flags);
-	hdmi_clear_bits(hdmi, REG_HDMI_CTRL, HDMI_CTRL_ENCRYPTED);
+	reg_val = hdmi_read(hdmi, REG_HDMI_CTRL);
+	reg_val &= ~HDMI_CTRL_ENCRYPTED;
+	hdmi_write(hdmi, REG_HDMI_CTRL, reg_val);
 	spin_unlock_irqrestore(&hdmi->reg_lock, flags);
 
 	hdcp_ctrl->auth_event = 0;
@@ -1307,6 +1330,7 @@ void msm_hdmi_hdcp_off(struct hdmi_hdcp_ctrl *hdcp_ctrl)
 {
 	struct hdmi *hdmi = hdcp_ctrl->hdmi;
 	unsigned long flags;
+	u32 reg_val;
 
 	if ((HDCP_STATE_INACTIVE == hdcp_ctrl->hdcp_state) ||
 		(HDCP_STATE_NO_AKSV == hdcp_ctrl->hdcp_state)) {
@@ -1321,7 +1345,9 @@ void msm_hdmi_hdcp_off(struct hdmi_hdcp_ctrl *hdcp_ctrl)
 	 * AN1_READY bits in HDMI_HDCP_LINK0_STATUS register
 	 */
 	spin_lock_irqsave(&hdmi->reg_lock, flags);
-	hdmi_clear_bits(hdmi, REG_HDMI_HPD_CTRL, HDMI_HPD_CTRL_ENABLE);
+	reg_val = hdmi_read(hdmi, REG_HDMI_HPD_CTRL);
+	reg_val &= ~HDMI_HPD_CTRL_ENABLE;
+	hdmi_write(hdmi, REG_HDMI_HPD_CTRL, reg_val);
 
 	/*
 	 * Disable HDCP interrupts.
@@ -1349,11 +1375,14 @@ void msm_hdmi_hdcp_off(struct hdmi_hdcp_ctrl *hdcp_ctrl)
 	hdmi_write(hdmi, REG_HDMI_HDCP_CTRL, 0);
 
 	spin_lock_irqsave(&hdmi->reg_lock, flags);
-	hdmi_clear_bits(hdmi, REG_HDMI_CTRL, HDMI_CTRL_ENCRYPTED);
+	reg_val = hdmi_read(hdmi, REG_HDMI_CTRL);
+	reg_val &= ~HDMI_CTRL_ENCRYPTED;
+	hdmi_write(hdmi, REG_HDMI_CTRL, reg_val);
 
 	/* Enable HPD circuitry */
-	hdmi_update_bits(hdmi, REG_HDMI_HPD_CTRL, HDMI_HPD_CTRL_ENABLE,
-			 HDMI_HPD_CTRL_ENABLE);
+	reg_val = hdmi_read(hdmi, REG_HDMI_HPD_CTRL);
+	reg_val |= HDMI_HPD_CTRL_ENABLE;
+	hdmi_write(hdmi, REG_HDMI_HPD_CTRL, reg_val);
 	spin_unlock_irqrestore(&hdmi->reg_lock, flags);
 
 	hdcp_ctrl->hdcp_state = HDCP_STATE_INACTIVE;
@@ -1371,7 +1400,7 @@ struct hdmi_hdcp_ctrl *msm_hdmi_hdcp_init(struct hdmi *hdmi)
 		return ERR_PTR(-EINVAL);
 	}
 
-	hdcp_ctrl = kzalloc_obj(*hdcp_ctrl);
+	hdcp_ctrl = kzalloc(sizeof(*hdcp_ctrl), GFP_KERNEL);
 	if (!hdcp_ctrl)
 		return ERR_PTR(-ENOMEM);
 

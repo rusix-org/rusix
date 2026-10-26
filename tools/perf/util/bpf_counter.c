@@ -294,8 +294,7 @@ static int bpf_program_profiler__read(struct evsel *evsel)
 	struct perf_counts_values *counts;
 	int reading_map_fd;
 	__u32 key = 0;
-	int err, bpf_cpu;
-	unsigned int idx;
+	int err, idx, bpf_cpu;
 
 	if (list_empty(&evsel->bpf_counter_list))
 		return -EAGAIN;
@@ -319,12 +318,11 @@ static int bpf_program_profiler__read(struct evsel *evsel)
 		}
 
 		for (bpf_cpu = 0; bpf_cpu < num_cpu_bpf; bpf_cpu++) {
-			int i = perf_cpu_map__idx(evsel__cpus(evsel),
-						  (struct perf_cpu){.cpu = bpf_cpu});
-
-			if (i == -1)
+			idx = perf_cpu_map__idx(evsel__cpus(evsel),
+						(struct perf_cpu){.cpu = bpf_cpu});
+			if (idx == -1)
 				continue;
-			counts = perf_counts(evsel->counts, i, 0);
+			counts = perf_counts(evsel->counts, idx, 0);
 			counts->val += values[bpf_cpu].counter;
 			counts->ena += values[bpf_cpu].enabled;
 			counts->run += values[bpf_cpu].running;
@@ -353,7 +351,7 @@ static int bpf_program_profiler__install_pe(struct evsel *evsel, int cpu_map_idx
 	return 0;
 }
 
-static struct bpf_counter_ops bpf_program_profiler_ops = {
+struct bpf_counter_ops bpf_program_profiler_ops = {
 	.load       = bpf_program_profiler__load,
 	.enable	    = bpf_program_profiler__enable,
 	.disable    = bpf_program_profiler__disable,
@@ -443,7 +441,7 @@ static int bperf_check_target(struct evsel *evsel,
 	} else if (target->tid) {
 		*filter_type = BPERF_FILTER_PID;
 		*filter_entry_cnt = perf_thread_map__nr(evsel->core.threads);
-	} else if (target->pid || evlist__workload_pid(evsel->evlist) != -1) {
+	} else if (target->pid || evsel->evlist->workload.pid != -1) {
 		*filter_type = BPERF_FILTER_TGID;
 		*filter_entry_cnt = perf_thread_map__nr(evsel->core.threads);
 	} else {
@@ -670,7 +668,7 @@ static int bperf__install_pe(struct evsel *evsel, int cpu_map_idx, int fd)
 static int bperf_sync_counters(struct evsel *evsel)
 {
 	struct perf_cpu cpu;
-	unsigned int idx;
+	int idx;
 
 	perf_cpu_map__for_each_cpu(cpu, idx, evsel->core.cpus)
 		bperf_trigger_reading(evsel->bperf_leader_prog_fd, cpu.cpu);
@@ -697,11 +695,13 @@ static int bperf__read(struct evsel *evsel)
 	struct bpf_perf_event_value values[num_cpu_bpf];
 	struct perf_counts_values *counts;
 	int reading_map_fd, err = 0;
+	__u32 i;
+	int j;
 
 	bperf_sync_counters(evsel);
 	reading_map_fd = bpf_map__fd(skel->maps.accum_readings);
 
-	for (__u32 i = 0; i < filter_entry_cnt; i++) {
+	for (i = 0; i < filter_entry_cnt; i++) {
 		struct perf_cpu entry;
 		__u32 cpu;
 
@@ -709,10 +709,9 @@ static int bperf__read(struct evsel *evsel)
 		if (err)
 			goto out;
 		switch (evsel->follower_skel->bss->type) {
-		case BPERF_FILTER_GLOBAL: {
-			unsigned int j;
-
+		case BPERF_FILTER_GLOBAL:
 			assert(i == 0);
+
 			perf_cpu_map__for_each_cpu(entry, j, evsel__cpus(evsel)) {
 				counts = perf_counts(evsel->counts, j, 0);
 				counts->val = values[entry.cpu].counter;
@@ -720,7 +719,6 @@ static int bperf__read(struct evsel *evsel)
 				counts->run = values[entry.cpu].running;
 			}
 			break;
-		}
 		case BPERF_FILTER_CPU:
 			cpu = perf_cpu_map__cpu(evsel__cpus(evsel), i).cpu;
 			assert(cpu >= 0);
@@ -833,7 +831,7 @@ static int bperf__destroy(struct evsel *evsel)
  * the leader prog.
  */
 
-static struct bpf_counter_ops bperf_ops = {
+struct bpf_counter_ops bperf_ops = {
 	.load       = bperf__load,
 	.enable     = bperf__enable,
 	.disable    = bperf__disable,

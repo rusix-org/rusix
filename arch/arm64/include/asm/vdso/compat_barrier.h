@@ -5,7 +5,7 @@
 #ifndef __COMPAT_BARRIER_H
 #define __COMPAT_BARRIER_H
 
-#ifndef __ASSEMBLER__
+#ifndef __ASSEMBLY__
 /*
  * Warning: This code is meant to be used from the compat vDSO only.
  */
@@ -31,6 +31,6 @@
 #define smp_rmb()	aarch32_smp_rmb()
 #define smp_wmb()	aarch32_smp_wmb()
 
-#endif /* !__ASSEMBLER__ */
+#endif /* !__ASSEMBLY__ */
 
 #endif /* __COMPAT_BARRIER_H */

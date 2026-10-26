@@ -12,9 +12,11 @@
 #include <linux/etherdevice.h>
 #include <linux/if_ether.h>
 #include <linux/if_vlan.h>
+#include <net/llc_pdu.h>
 #include <linux/kernel.h>
 #include <linux/jhash.h>
 #include <linux/jiffies.h>
+#include <linux/llc.h>
 #include <linux/module.h>
 #include <linux/in.h>
 #include <linux/rcupdate.h>
@@ -1888,7 +1890,7 @@ int ovs_nla_get_identifier(struct sw_flow_id *sfid, const struct nlattr *ufid,
 		return 0;
 
 	/* If UFID was not provided, use unmasked key. */
-	new_key = kmalloc_obj(*new_key);
+	new_key = kmalloc(sizeof(*new_key), GFP_KERNEL);
 	if (!new_key)
 		return -ENOMEM;
 	memcpy(new_key, key, sizeof(*key));

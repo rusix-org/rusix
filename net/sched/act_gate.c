@@ -18,13 +18,6 @@
 
 static struct tc_action_ops act_gate_ops;
 
-/* A nested attribute's u16 nla_len caps it at 65532 bytes. tcf_gate_dump()
- * emits each entry as 36 bytes (40 with the gate-open flag), so 4096 entries
- * would need ~144-160 KiB and cannot be represented. 1024 matches the
- * SJA1105 schedule-table capacity (SJA1110 provides 4096).
- */
-#define GATE_ENTRIES_MAX	1024U
-
 static ktime_t gate_get_time(struct tcf_gate *gact)
 {
 	ktime_t mono = ktime_get();
@@ -247,7 +240,7 @@ static int tcf_gate_copy_entries(struct tcf_gate_params *dst,
 	list_for_each_entry(entry, &src->entries, list) {
 		struct tcfg_gate_entry *new;
 
-		new = kzalloc_obj(*new, GFP_ATOMIC);
+		new = kzalloc(sizeof(*new), GFP_ATOMIC);
 		if (!new) {
 			NL_SET_ERR_MSG(extack, "Not enough memory for entry");
 			return -ENOMEM;
@@ -284,15 +277,7 @@ static int parse_gate_list(struct nlattr *list_attr,
 			continue;
 		}
 
-		if (i >= GATE_ENTRIES_MAX) {
-			NL_SET_ERR_MSG_FMT(extack,
-					   "Too many schedule entries, at most %u are supported",
-					   GATE_ENTRIES_MAX);
-			err = -E2BIG;
-			goto release_list;
-		}
-
-		entry = kzalloc_obj(*entry, GFP_ATOMIC);
+		entry = kzalloc(sizeof(*entry), GFP_ATOMIC);
 		if (!entry) {
 			NL_SET_ERR_MSG(extack, "Not enough memory for entry");
 			err = -ENOMEM;
@@ -430,7 +415,7 @@ static int tcf_gate_init(struct net *net, struct nlattr *nla,
 	if (err < 0)
 		goto release_idr;
 
-	p = kzalloc_obj(*p);
+	p = kzalloc(sizeof(*p), GFP_KERNEL);
 	if (!p) {
 		err = -ENOMEM;
 		goto chain_put;
@@ -669,8 +654,7 @@ static int tcf_gate_dump(struct sk_buff *skb, struct tc_action *a,
 			goto nla_put_failure;
 	}
 
-	if (nla_nest_end_safe(skb, entry_list) < 0)
-		goto nla_put_failure;
+	nla_nest_end(skb, entry_list);
 
 	tcf_tm_dump(&t, &gact->tcf_tm);
 	if (nla_put_64bit(skb, TCA_GATE_TM, sizeof(t), &t, TCA_GATE_PAD))

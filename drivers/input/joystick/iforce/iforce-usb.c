@@ -210,7 +210,7 @@ static int iforce_usb_probe(struct usb_interface *intf,
 	if (!usb_endpoint_is_int_out(epout))
 		return -ENODEV;
 
-	iforce_usb = kzalloc_obj(*iforce_usb);
+	iforce_usb = kzalloc(sizeof(*iforce_usb), GFP_KERNEL);
 	if (!iforce_usb)
 		goto fail;
 

@@ -832,7 +832,7 @@ static int sbs_get_battery_serial_number(struct i2c_client *client,
 	if (ret < 0)
 		return ret;
 
-	sprintf(chip->serial, "%04x", (u16)ret);
+	sprintf(chip->serial, "%04x", ret);
 	val->strval = chip->serial;
 
 	return 0;
@@ -861,14 +861,6 @@ static int sbs_get_chemistry(struct sbs_info *chip,
 		chip->technology = POWER_SUPPLY_TECHNOLOGY_NiCd;
 	else if (!strncasecmp(chemistry, "NiMH", 4))
 		chip->technology = POWER_SUPPLY_TECHNOLOGY_NiMH;
-	else if (!strncasecmp(chemistry, "PbAc", 4))
-		chip->technology = POWER_SUPPLY_TECHNOLOGY_PbAc;
-	else if (!strncasecmp(chemistry, "NiZn", 4))
-		chip->technology = POWER_SUPPLY_TECHNOLOGY_NiZn;
-	else if (!strncasecmp(chemistry, "RAM", 3))
-		chip->technology = POWER_SUPPLY_TECHNOLOGY_RAM;
-	else if (!strncasecmp(chemistry, "ZnAr", 4))
-		chip->technology = POWER_SUPPLY_TECHNOLOGY_ZnAr;
 	else
 		chip->technology = POWER_SUPPLY_TECHNOLOGY_UNKNOWN;
 
@@ -1263,10 +1255,10 @@ static SIMPLE_DEV_PM_OPS(sbs_pm_ops, sbs_suspend, NULL);
 #endif
 
 static const struct i2c_device_id sbs_id[] = {
-	{ .name = "bq20z65", .driver_data = SBS_FLAGS_TI_BQ20ZX5 },
-	{ .name = "bq20z75", .driver_data = SBS_FLAGS_TI_BQ20ZX5 },
-	{ .name = "sbs-battery", .driver_data = 0 },
-	{ }
+	{ "bq20z65", SBS_FLAGS_TI_BQ20ZX5 },
+	{ "bq20z75", SBS_FLAGS_TI_BQ20ZX5 },
+	{ "sbs-battery", 0 },
+	{}
 };
 MODULE_DEVICE_TABLE(i2c, sbs_id);
 

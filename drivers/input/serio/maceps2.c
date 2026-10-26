@@ -117,7 +117,7 @@ static struct serio *maceps2_allocate_port(int idx)
 {
 	struct serio *serio;
 
-	serio = kzalloc_obj(*serio);
+	serio = kzalloc(sizeof(*serio), GFP_KERNEL);
 	if (serio) {
 		serio->id.type		= SERIO_8042;
 		serio->write		= maceps2_write;

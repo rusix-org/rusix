@@ -20,7 +20,6 @@ description: |
 
 allOf:
   - $ref: regulator.yaml#
-  - $ref: /schemas/regulator/nvidia,tegra-regulators-coupling.yaml#
 
 properties:
   compatible:

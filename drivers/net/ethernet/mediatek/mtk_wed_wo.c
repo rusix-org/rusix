@@ -99,6 +99,7 @@ static void *
 mtk_wed_wo_dequeue(struct mtk_wed_wo *wo, struct mtk_wed_wo_queue *q, u32 *len,
 		   bool flush)
 {
+	int buf_len = SKB_WITH_OVERHEAD(q->buf_size);
 	int index = (q->tail + 1) % q->n_desc;
 	struct mtk_wed_wo_queue_entry *entry;
 	struct mtk_wed_wo_queue_desc *desc;
@@ -122,7 +123,7 @@ mtk_wed_wo_dequeue(struct mtk_wed_wo *wo, struct mtk_wed_wo_queue *q, u32 *len,
 		*len = FIELD_GET(MTK_WED_WO_CTL_SD_LEN0,
 				 le32_to_cpu(READ_ONCE(desc->ctrl)));
 	if (buf)
-		dma_unmap_single(wo->hw->dev, entry->addr, q->buf_size,
+		dma_unmap_single(wo->hw->dev, entry->addr, buf_len,
 				 DMA_FROM_DEVICE);
 	entry->buf = NULL;
 

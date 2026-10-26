@@ -18,7 +18,7 @@
 #include <linux/types.h>
 #include <linux/slab.h>
 #include <linux/list.h>
-#include <linux/device-id/hid.h>
+#include <linux/mod_devicetable.h> /* hid_device_id */
 #include <linux/timer.h>
 #include <linux/workqueue.h>
 #include <linux/input.h>
@@ -634,40 +634,6 @@ enum hid_battery_status {
 	HID_BATTERY_REPORTED,		/* Device sent unsolicited battery strength report */
 };
 
-/**
- * struct hid_battery - represents a single battery power supply
- * @dev: pointer to the parent hid_device
- * @ps: the power supply instance
- * @min: minimum battery value from HID descriptor
- * @max: maximum battery value from HID descriptor
- * @report_type: HID report type (input/feature)
- * @report_id: HID report ID for this battery
- * @report_offset: bit offset of the capacity field within its report
- * @charge_status: current charging status
- * @status: battery reporting status
- * @capacity: current battery capacity (0-100)
- * @avoid_query: if true, avoid querying battery (e.g., for stylus)
- * @present: if true, battery is present (may be dynamic)
- * @ratelimit_time: rate limiting for battery reports
- * @list: list node for linking into hid_device's battery list
- */
-struct hid_battery {
-	struct hid_device *dev;
-	struct power_supply *ps;
-	__s32 min;
-	__s32 max;
-	__s32 report_type;
-	__s32 report_id;
-	__s32 report_offset;
-	__s32 charge_status;
-	enum hid_battery_status status;
-	__s32 capacity;
-	bool avoid_query;
-	bool present;
-	ktime_t ratelimit_time;
-	struct list_head list;
-};
-
 struct hid_driver;
 struct hid_ll_driver;
 
@@ -704,10 +670,19 @@ struct hid_device {
 #ifdef CONFIG_HID_BATTERY_STRENGTH
 	/*
 	 * Power supply information for HID devices which report
-	 * battery strength. Each battery is tracked separately in the
-	 * batteries list.
+	 * battery strength. power_supply was successfully registered if
+	 * battery is non-NULL.
 	 */
-	struct list_head batteries;
+	struct power_supply *battery;
+	__s32 battery_capacity;
+	__s32 battery_min;
+	__s32 battery_max;
+	__s32 battery_report_type;
+	__s32 battery_report_id;
+	__s32 battery_charge_status;
+	enum hid_battery_status battery_status;
+	bool battery_avoid_query;
+	ktime_t battery_ratelimit_time;
 #endif
 
 	unsigned long status;						/* see STAT flags above */
@@ -723,7 +698,6 @@ struct hid_device {
 	char name[128];							/* Device name */
 	char phys[64];							/* Device physical location */
 	char uniq[64];							/* Device unique identifier (serial #) */
-	u64 firmware_version;						/* Firmware version */
 
 	void *driver_data;
 
@@ -768,15 +742,6 @@ static inline void hid_set_drvdata(struct hid_device *hdev, void *data)
 {
 	dev_set_drvdata(&hdev->dev, data);
 }
-
-#ifdef CONFIG_HID_BATTERY_STRENGTH
-static inline struct hid_battery *hid_get_battery(struct hid_device *hdev)
-{
-	if (list_empty(&hdev->batteries))
-		return NULL;
-	return list_first_entry(&hdev->batteries, struct hid_battery, list);
-}
-#endif
 
 #define HID_GLOBAL_STACK_SIZE 4
 #define HID_COLLECTION_STACK_SIZE 4
@@ -870,12 +835,6 @@ struct hid_usage_id {
  *
  * raw_event and event should return negative on error, any other value will
  * pass the event on to .event() typically return 0 for success.
- *
- * report_fixup must return a report descriptor pointer whose lifetime is at
- * least that of the input rdesc.  This is usually done by mutating the input
- * rdesc and returning it or a sub-portion of it.  In case a new buffer is
- * allocated and returned, the implementation of report_fixup is responsible for
- * freeing it later.
  *
  * input_mapping shall return a negative value to completely ignore this usage
  * (e.g. doubled or invalid usage), zero to continue with parsing of this
@@ -1023,9 +982,8 @@ extern void hid_unregister_driver(struct hid_driver *);
 
 extern void hidinput_hid_event(struct hid_device *, struct hid_field *, struct hid_usage *, __s32);
 extern void hidinput_report_event(struct hid_device *hid, struct hid_report *report);
-extern int hidinput_connect(struct hid_device *hid, unsigned int connect_mask);
+extern int hidinput_connect(struct hid_device *hid, unsigned int force);
 extern void hidinput_disconnect(struct hid_device *);
-void hidinput_reset_resume(struct hid_device *hid);
 
 struct hid_field *hid_find_field(struct hid_device *hdev, unsigned int report_type,
 				 unsigned int application, unsigned int usage);

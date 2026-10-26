@@ -409,8 +409,10 @@ static int ad7266_probe(struct spi_device *spi)
 				st->gpios[i] = devm_gpiod_get(&spi->dev,
 						      ad7266_gpio_labels[i],
 						      GPIOD_OUT_LOW);
-				if (IS_ERR(st->gpios[i]))
-					return PTR_ERR(st->gpios[i]);
+				if (IS_ERR(st->gpios[i])) {
+					ret = PTR_ERR(st->gpios[i]);
+					return ret;
+				}
 			}
 		}
 	} else {
@@ -453,8 +455,8 @@ static int ad7266_probe(struct spi_device *spi)
 }
 
 static const struct spi_device_id ad7266_id[] = {
-	{ .name = "ad7265" },
-	{ .name = "ad7266" },
+	{ "ad7265", 0 },
+	{ "ad7266", 0 },
 	{ }
 };
 MODULE_DEVICE_TABLE(spi, ad7266_id);

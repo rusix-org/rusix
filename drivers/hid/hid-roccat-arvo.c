@@ -299,7 +299,7 @@ static int arvo_init_specials(struct hid_device *hdev)
 		return 0;
 	}
 
-	arvo = kzalloc_obj(*arvo);
+	arvo = kzalloc(sizeof(*arvo), GFP_KERNEL);
 	if (!arvo) {
 		hid_err(hdev, "can't alloc device descriptor\n");
 		return -ENOMEM;

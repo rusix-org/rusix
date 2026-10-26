@@ -62,8 +62,8 @@ MODULE_PARM_DESC(model, "Use the given board model.");
 
 /* Both VT1720 and VT1724 have the same PCI IDs */
 static const struct pci_device_id snd_vt1724_ids[] = {
-	{ PCI_VDEVICE(ICE, PCI_DEVICE_ID_VT1724) },
-	{ }
+	{ PCI_VDEVICE(ICE, PCI_DEVICE_ID_VT1724), 0 },
+	{ 0, }
 };
 
 MODULE_DEVICE_TABLE(pci, snd_vt1724_ids);
@@ -982,7 +982,7 @@ static int set_rate_constraints(struct snd_ice1712 *ice,
 					  ice->hw_rates);
 }
 
-/* if the card has the internal rate locked (is_pro_rate_locked), limit runtime
+/* if the card has the internal rate locked (is_pro_locked), limit runtime
    hw rates to the current internal rate only.
 */
 static void constrain_rate_if_locked(struct snd_pcm_substream *substream)
@@ -2524,11 +2524,11 @@ static int snd_vt1724_create(struct snd_card *card,
  *
  */
 
-static int snd_vt1724_probe(struct pci_dev *pci,
-			    const struct pci_device_id *pci_id)
+static int __snd_vt1724_probe(struct pci_dev *pci,
+			      const struct pci_device_id *pci_id)
 {
 	static int dev;
-	struct snd_card *card __free(snd_card_free) = NULL;
+	struct snd_card *card;
 	struct snd_ice1712 *ice;
 	int pcm_dev = 0, err;
 	const struct snd_ice1712_card_info *c;
@@ -2663,9 +2663,14 @@ static int snd_vt1724_probe(struct pci_dev *pci,
 	if (err < 0)
 		return err;
 	pci_set_drvdata(pci, card);
-	card = NULL; /* probe succeeded, don't release as error */
 	dev++;
 	return 0;
+}
+
+static int snd_vt1724_probe(struct pci_dev *pci,
+			    const struct pci_device_id *pci_id)
+{
+	return snd_card_free_on_error(&pci->dev, __snd_vt1724_probe(pci, pci_id));
 }
 
 #ifdef CONFIG_PM_SLEEP

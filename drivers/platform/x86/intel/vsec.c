@@ -24,9 +24,7 @@
 #include <linux/intel_vsec.h>
 #include <linux/kernel.h>
 #include <linux/module.h>
-#include <linux/overflow.h>
 #include <linux/pci.h>
-#include <linux/string.h>
 #include <linux/types.h>
 
 #define PMT_XA_START			0
@@ -103,12 +101,6 @@ static void intel_vsec_remove_aux(void *data)
 	auxiliary_device_uninit(data);
 }
 
-static void intel_vsec_dev_free(struct intel_vsec_device *intel_vsec_dev)
-{
-	kfree(intel_vsec_dev->acpi_disc);
-	kfree(intel_vsec_dev);
-}
-
 static void intel_vsec_dev_release(struct device *dev)
 {
 	struct intel_vsec_device *intel_vsec_dev = dev_to_ivdev(dev);
@@ -117,7 +109,8 @@ static void intel_vsec_dev_release(struct device *dev)
 
 	ida_free(intel_vsec_dev->ida, intel_vsec_dev->auxdev.id);
 
-	intel_vsec_dev_free(intel_vsec_dev);
+	kfree(intel_vsec_dev->resource);
+	kfree(intel_vsec_dev);
 }
 
 static const struct vsec_feature_dependency *
@@ -223,22 +216,22 @@ int intel_vsec_add_aux(struct device *parent,
 	struct auxiliary_device *auxdev = &intel_vsec_dev->auxdev;
 	int ret, id;
 
-	if (!parent) {
-		intel_vsec_dev_free(intel_vsec_dev);
+	if (!parent)
 		return -EINVAL;
-	}
 
 	ret = xa_alloc(&auxdev_array, &intel_vsec_dev->id, intel_vsec_dev,
 		       PMT_XA_LIMIT, GFP_KERNEL);
 	if (ret < 0) {
-		intel_vsec_dev_free(intel_vsec_dev);
+		kfree(intel_vsec_dev->resource);
+		kfree(intel_vsec_dev);
 		return ret;
 	}
 
 	id = ida_alloc(intel_vsec_dev->ida, GFP_KERNEL);
 	if (id < 0) {
 		xa_erase(&auxdev_array, intel_vsec_dev->id);
-		intel_vsec_dev_free(intel_vsec_dev);
+		kfree(intel_vsec_dev->resource);
+		kfree(intel_vsec_dev);
 		return id;
 	}
 
@@ -286,7 +279,7 @@ static int intel_vsec_add_dev(struct device *dev, struct intel_vsec_header *head
 			      unsigned long cap_id, u64 base_addr)
 {
 	struct intel_vsec_device __free(kfree) *intel_vsec_dev = NULL;
-	struct resource *res;
+	struct resource __free(kfree) *res = NULL;
 	struct resource *tmp;
 	struct device *parent;
 	unsigned long quirks = info->quirks;
@@ -310,12 +303,13 @@ static int intel_vsec_add_dev(struct device *dev, struct intel_vsec_header *head
 		return -EINVAL;
 	}
 
-	intel_vsec_dev = kzalloc_flex(*intel_vsec_dev, resource, header->num_entries);
+	intel_vsec_dev = kzalloc(sizeof(*intel_vsec_dev), GFP_KERNEL);
 	if (!intel_vsec_dev)
 		return -ENOMEM;
 
-	intel_vsec_dev->num_resources = header->num_entries;
-	res = intel_vsec_dev->resource;
+	res = kcalloc(header->num_entries, sizeof(*res), GFP_KERNEL);
+	if (!res)
+		return -ENOMEM;
 
 	if (quirks & VSEC_QUIRK_TABLE_SHIFT)
 		header->offset >>= TABLE_OFFSET_SHIFT;
@@ -326,13 +320,6 @@ static int intel_vsec_add_dev(struct device *dev, struct intel_vsec_header *head
 	 * auxiliary device driver.
 	 */
 	for (i = 0, tmp = res; i < header->num_entries; i++, tmp++) {
-		/*
-		 * Skip resource mapping check for ACPI-based discovery
-		 * since those tables are read from _DSD, not MMIO.
-		 */
-		if (info->src == INTEL_VSEC_DISC_ACPI)
-			break;
-
 		tmp->start = base_addr + header->offset + i * (header->entry_size * sizeof(u32));
 		tmp->end = tmp->start + (header->entry_size * sizeof(u32)) - 1;
 		tmp->flags = IORESOURCE_MEM;
@@ -345,23 +332,12 @@ static int intel_vsec_add_dev(struct device *dev, struct intel_vsec_header *head
 	}
 
 	intel_vsec_dev->dev = dev;
+	intel_vsec_dev->resource = no_free_ptr(res);
+	intel_vsec_dev->num_resources = header->num_entries;
 	intel_vsec_dev->quirks = info->quirks;
 	intel_vsec_dev->base_addr = info->base_addr;
 	intel_vsec_dev->priv_data = info->priv_data;
 	intel_vsec_dev->cap_id = cap_id;
-	intel_vsec_dev->src = info->src;
-
-	if (info->src == INTEL_VSEC_DISC_ACPI) {
-		size_t bytes;
-
-		if (check_mul_overflow(intel_vsec_dev->num_resources,
-				       sizeof(*info->acpi_disc), &bytes))
-			return -EOVERFLOW;
-
-		intel_vsec_dev->acpi_disc = kmemdup(info->acpi_disc, bytes, GFP_KERNEL);
-		if (!intel_vsec_dev->acpi_disc)
-			return -ENOMEM;
-	}
 
 	if (header->id == VSEC_ID_SDSI)
 		intel_vsec_dev->ida = &intel_vsec_sdsi_ida;
@@ -819,8 +795,6 @@ static const struct intel_vsec_platform_info lnl_info = {
 #define PCI_DEVICE_ID_INTEL_VSEC_TGL		0x9a0d
 #define PCI_DEVICE_ID_INTEL_VSEC_LNL_M		0x647d
 #define PCI_DEVICE_ID_INTEL_VSEC_PTL		0xb07d
-#define PCI_DEVICE_ID_INTEL_VSEC_WCL		0xfd7d
-#define PCI_DEVICE_ID_INTEL_VSEC_NVL		0xd70d
 static const struct pci_device_id intel_vsec_pci_ids[] = {
 	{ PCI_DEVICE_DATA(INTEL, VSEC_ADL, &tgl_info) },
 	{ PCI_DEVICE_DATA(INTEL, VSEC_DG1, &dg1_info) },
@@ -832,8 +806,6 @@ static const struct pci_device_id intel_vsec_pci_ids[] = {
 	{ PCI_DEVICE_DATA(INTEL, VSEC_TGL, &tgl_info) },
 	{ PCI_DEVICE_DATA(INTEL, VSEC_LNL_M, &lnl_info) },
 	{ PCI_DEVICE_DATA(INTEL, VSEC_PTL, &mtl_info) },
-	{ PCI_DEVICE_DATA(INTEL, VSEC_WCL, &mtl_info) },
-	{ PCI_DEVICE_DATA(INTEL, VSEC_NVL, &mtl_info) },
 	{ }
 };
 MODULE_DEVICE_TABLE(pci, intel_vsec_pci_ids);

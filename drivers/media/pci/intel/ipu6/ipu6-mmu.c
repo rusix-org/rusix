@@ -5,6 +5,7 @@
 #include <asm/barrier.h>
 
 #include <linux/align.h>
+#include <linux/atomic.h>
 #include <linux/bitops.h>
 #include <linux/bits.h>
 #include <linux/bug.h>
@@ -12,8 +13,10 @@
 #include <linux/dma-mapping.h>
 #include <linux/err.h>
 #include <linux/gfp.h>
+#include <linux/io.h>
 #include <linux/iova.h>
 #include <linux/math.h>
+#include <linux/minmax.h>
 #include <linux/mm.h>
 #include <linux/pfn.h>
 #include <linux/slab.h>
@@ -47,6 +50,42 @@
 #define REG_INFO		0x0008
 
 #define TBL_PHYS_ADDR(a)	((phys_addr_t)(a) << ISP_PADDR_SHIFT)
+
+static void tlb_invalidate(struct ipu6_mmu *mmu)
+{
+	unsigned long flags;
+	unsigned int i;
+
+	spin_lock_irqsave(&mmu->ready_lock, flags);
+	if (!mmu->ready) {
+		spin_unlock_irqrestore(&mmu->ready_lock, flags);
+		return;
+	}
+
+	for (i = 0; i < mmu->nr_mmus; i++) {
+		/*
+		 * To avoid the HW bug induced dead lock in some of the IPU6
+		 * MMUs on successive invalidate calls, we need to first do a
+		 * read to the page table base before writing the invalidate
+		 * register. MMUs which need to implement this WA, will have
+		 * the insert_read_before_invalidate flags set as true.
+		 * Disregard the return value of the read.
+		 */
+		if (mmu->mmu_hw[i].insert_read_before_invalidate)
+			readl(mmu->mmu_hw[i].base + REG_L1_PHYS);
+
+		writel(0xffffffff, mmu->mmu_hw[i].base +
+		       REG_TLB_INVALIDATE);
+		/*
+		 * The TLB invalidation is a "single cycle" (IOMMU clock cycles)
+		 * When the actual MMIO write reaches the IPU6 TLB Invalidate
+		 * register, wmb() will force the TLB invalidate out if the CPU
+		 * attempts to update the IOMMU page table (or sooner).
+		 */
+		wmb();
+	}
+	spin_unlock_irqrestore(&mmu->ready_lock, flags);
+}
 
 #ifdef DEBUG
 static void page_table_dump(struct ipu6_mmu_info *mmu_info)
@@ -433,14 +472,55 @@ out_free_iova:
 
 int ipu6_mmu_hw_init(struct ipu6_mmu *mmu)
 {
+	struct ipu6_mmu_info *mmu_info;
 	unsigned long flags;
-	int ret;
+	unsigned int i;
 
-	ret = mmu->ops->hw_init(mmu);
-	if (ret)
-		return ret;
+	mmu_info = mmu->dmap->mmu_info;
+
+	/* Initialise the each MMU HW block */
+	for (i = 0; i < mmu->nr_mmus; i++) {
+		struct ipu6_mmu_hw *mmu_hw = &mmu->mmu_hw[i];
+		unsigned int j;
+		u16 block_addr;
+
+		/* Write page table address per MMU */
+		writel((phys_addr_t)mmu_info->l1_pt_dma,
+		       mmu->mmu_hw[i].base + REG_L1_PHYS);
+
+		/* Set info bits per MMU */
+		writel(mmu->mmu_hw[i].info_bits,
+		       mmu->mmu_hw[i].base + REG_INFO);
+
+		/* Configure MMU TLB stream configuration for L1 */
+		for (j = 0, block_addr = 0; j < mmu_hw->nr_l1streams;
+		     block_addr += mmu->mmu_hw[i].l1_block_sz[j], j++) {
+			if (block_addr > IPU6_MAX_LI_BLOCK_ADDR) {
+				dev_err(mmu->dev, "invalid L1 configuration\n");
+				return -EINVAL;
+			}
+
+			/* Write block start address for each streams */
+			writel(block_addr, mmu_hw->base +
+			       mmu_hw->l1_stream_id_reg_offset + 4 * j);
+		}
+
+		/* Configure MMU TLB stream configuration for L2 */
+		for (j = 0, block_addr = 0; j < mmu_hw->nr_l2streams;
+		     block_addr += mmu->mmu_hw[i].l2_block_sz[j], j++) {
+			if (block_addr > IPU6_MAX_L2_BLOCK_ADDR) {
+				dev_err(mmu->dev, "invalid L2 configuration\n");
+				return -EINVAL;
+			}
+
+			writel(block_addr, mmu_hw->base +
+			       mmu_hw->l2_stream_id_reg_offset + 4 * j);
+		}
+	}
 
 	if (!mmu->trash_page) {
+		int ret;
+
 		mmu->trash_page = alloc_page(GFP_KERNEL);
 		if (!mmu->trash_page) {
 			dev_err(mmu->dev, "insufficient memory for trash buffer\n");
@@ -469,16 +549,11 @@ static struct ipu6_mmu_info *ipu6_mmu_alloc(struct ipu6_device *isp)
 	struct ipu6_mmu_info *mmu_info;
 	int ret;
 
-	mmu_info = kzalloc_obj(*mmu_info);
+	mmu_info = kzalloc(sizeof(*mmu_info), GFP_KERNEL);
 	if (!mmu_info)
 		return NULL;
 
-	if (IS_IPU7(isp) || IS_IPU8(isp))
-		mmu_info->aperture_start = isp->secure_mode ?
-			IPU7_FW_CODE_REGION_END : IPU7_FW_CODE_REGION_START;
-	else
-		mmu_info->aperture_start = 0;
-
+	mmu_info->aperture_start = 0;
 	mmu_info->aperture_end =
 		(dma_addr_t)DMA_BIT_MASK(isp->secure_mode ?
 					 IPU6_MMU_ADDR_BITS :
@@ -537,9 +612,8 @@ EXPORT_SYMBOL_NS_GPL(ipu6_mmu_hw_cleanup, "INTEL_IPU6");
 static struct ipu6_dma_mapping *alloc_dma_mapping(struct ipu6_device *isp)
 {
 	struct ipu6_dma_mapping *dmap;
-	unsigned long base_pfn;
 
-	dmap = kzalloc_obj(*dmap);
+	dmap = kzalloc(sizeof(*dmap), GFP_KERNEL);
 	if (!dmap)
 		return NULL;
 
@@ -549,9 +623,7 @@ static struct ipu6_dma_mapping *alloc_dma_mapping(struct ipu6_device *isp)
 		return NULL;
 	}
 
-	base_pfn = max_t(unsigned long, 1,
-			 PFN_DOWN(dmap->mmu_info->aperture_start));
-	init_iova_domain(&dmap->iovad, SZ_4K, base_pfn);
+	init_iova_domain(&dmap->iovad, SZ_4K, 1);
 	dmap->mmu_info->dmap = dmap;
 
 	dev_dbg(&isp->pdev->dev, "alloc mapping\n");
@@ -674,25 +746,44 @@ static void ipu6_mmu_destroy(struct ipu6_mmu *mmu)
 }
 
 struct ipu6_mmu *ipu6_mmu_init(struct device *dev,
-			       void __iomem *base, int mmid)
+			       void __iomem *base, int mmid,
+			       const struct ipu6_hw_variants *hw)
 {
 	struct ipu6_device *isp = pci_get_drvdata(to_pci_dev(dev));
+	struct ipu6_mmu_pdata *pdata;
 	struct ipu6_mmu *mmu;
-	int ret;
+	unsigned int i;
+
+	if (hw->nr_mmus > IPU6_MMU_MAX_DEVICES)
+		return ERR_PTR(-EINVAL);
+
+	pdata = devm_kzalloc(dev, sizeof(*pdata), GFP_KERNEL);
+	if (!pdata)
+		return ERR_PTR(-ENOMEM);
+
+	for (i = 0; i < hw->nr_mmus; i++) {
+		struct ipu6_mmu_hw *pdata_mmu = &pdata->mmu_hw[i];
+		const struct ipu6_mmu_hw *src_mmu = &hw->mmu_hw[i];
+
+		if (src_mmu->nr_l1streams > IPU6_MMU_MAX_TLB_L1_STREAMS ||
+		    src_mmu->nr_l2streams > IPU6_MMU_MAX_TLB_L2_STREAMS)
+			return ERR_PTR(-EINVAL);
+
+		*pdata_mmu = *src_mmu;
+		pdata_mmu->base = base + src_mmu->offset;
+	}
 
 	mmu = devm_kzalloc(dev, sizeof(*mmu), GFP_KERNEL);
 	if (!mmu)
 		return ERR_PTR(-ENOMEM);
 
-	mmu->ops = (IS_IPU7(isp) || IS_IPU8(isp)) ? &ipu7_mmu_ops : &ipu6_mmu_ops;
 	mmu->mmid = mmid;
+	mmu->mmu_hw = pdata->mmu_hw;
+	mmu->nr_mmus = hw->nr_mmus;
+	mmu->tlb_invalidate = tlb_invalidate;
 	mmu->ready = false;
 	INIT_LIST_HEAD(&mmu->vma_list);
 	spin_lock_init(&mmu->ready_lock);
-
-	ret = mmu->ops->init_hw_data(mmu, dev, base);
-	if (ret)
-		return ERR_PTR(ret);
 
 	mmu->dmap = alloc_dma_mapping(isp);
 	if (!mmu->dmap) {

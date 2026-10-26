@@ -95,7 +95,7 @@ int uvc_query_ctrl(struct uvc_device *dev, u8 query, u8 unit,
 	 */
 	if (ret > 0 && query != UVC_GET_INFO) {
 		memset(data + ret, 0, size - ret);
-		uvc_warn_once(dev, UVC_WARN_QUERY_CTRL,
+		dev_warn_once(&dev->intf->dev,
 			      "UVC non compliance: %s control %u on unit %u returned %d bytes when we expected %u.\n",
 			      uvc_query_name(query), cs, unit, ret, size);
 		return 0;
@@ -524,7 +524,7 @@ static void uvc_video_clock_add_sample(struct uvc_clock *clock,
 
 	spin_lock_irqsave(&clock->lock, flags);
 
-	if (clock->count > 0 && clock->last_sof_processed > sample->dev_sof) {
+	if (clock->count > 0 && clock->last_sof > sample->dev_sof) {
 		/*
 		 * Remove data from the circular buffer that is older than the
 		 * last SOF overflow. We only support one SOF overflow per
@@ -599,12 +599,7 @@ uvc_video_clock_decode(struct uvc_streaming *stream, struct uvc_buffer *buf,
 	if (!has_scr)
 		return;
 
-	sample.dev_sof = get_unaligned_le16(&data[header_size - 2]) & 2047;
-	/* If the sample SOF is identical to the previous one, quit early. */
-	if (stream->clock.last_sof_raw == sample.dev_sof)
-		return;
-	stream->clock.last_sof_raw = sample.dev_sof;
-
+	sample.dev_sof = get_unaligned_le16(&data[header_size - 2]);
 	sample.dev_stc = get_unaligned_le32(&data[header_size - 6]);
 
 	/*
@@ -645,6 +640,8 @@ uvc_video_clock_decode(struct uvc_streaming *stream, struct uvc_buffer *buf,
 	if (stream->dev->quirks & UVC_QUIRK_INVALID_DEVICE_SOF)
 		sample.dev_sof = sample.host_sof;
 
+	sample.host_time = uvc_video_get_time();
+
 	/*
 	 * The UVC specification allows device implementations that can't obtain
 	 * the USB frame number to keep their own frame counters as long as they
@@ -681,23 +678,19 @@ uvc_video_clock_decode(struct uvc_streaming *stream, struct uvc_buffer *buf,
 	 * all the data packets of the same frame contains the same SOF. In that
 	 * case only the first one will match the host_sof.
 	 */
-	if (sof_diff(sample.dev_sof, stream->clock.last_sof_processed) <=
+	if (sof_diff(sample.dev_sof, stream->clock.last_sof) <=
 	    (UVC_MIN_HW_TIMESTAMP_DIFF / stream->clock.size))
 		return;
 
-	/* This is expensive, only do it if the sample will be added. */
-	sample.host_time = uvc_video_get_time();
-
 	uvc_video_clock_add_sample(&stream->clock, &sample);
-	stream->clock.last_sof_processed = sample.dev_sof;
+	stream->clock.last_sof = sample.dev_sof;
 }
 
 static void uvc_video_clock_reset(struct uvc_clock *clock)
 {
 	clock->head = 0;
 	clock->count = 0;
-	clock->last_sof_processed = -1;
-	clock->last_sof_raw = -1;
+	clock->last_sof = -1;
 	clock->last_sof_overflow = -1;
 	clock->sof_offset = -1;
 }
@@ -707,7 +700,8 @@ static int uvc_video_clock_init(struct uvc_clock *clock)
 	spin_lock_init(&clock->lock);
 	clock->size = 32;
 
-	clock->samples = kmalloc_objs(*clock->samples, clock->size);
+	clock->samples = kmalloc_array(clock->size, sizeof(*clock->samples),
+				       GFP_KERNEL);
 	if (clock->samples == NULL)
 		return -ENOMEM;
 
@@ -1741,6 +1735,7 @@ static void uvc_video_complete(struct urb *urb)
 	struct vb2_queue *vb2_qmeta = stream->meta.queue.vdev.queue;
 	struct uvc_buffer *buf = NULL;
 	struct uvc_buffer *buf_meta = NULL;
+	unsigned long flags;
 	int ret;
 
 	switch (urb->status) {
@@ -1766,8 +1761,13 @@ static void uvc_video_complete(struct urb *urb)
 
 	buf = uvc_queue_get_current_buffer(queue);
 
-	if (vb2_qmeta)
-		buf_meta = uvc_queue_get_current_buffer(qmeta);
+	if (vb2_qmeta) {
+		spin_lock_irqsave(&qmeta->irqlock, flags);
+		if (!list_empty(&qmeta->irqqueue))
+			buf_meta = list_first_entry(&qmeta->irqqueue,
+						    struct uvc_buffer, queue);
+		spin_unlock_irqrestore(&qmeta->irqlock, flags);
+	}
 
 	/* Re-initialise the URB async work. */
 	uvc_urb->async_operations = 0;
@@ -1793,8 +1793,7 @@ static void uvc_video_complete(struct urb *urb)
 /*
  * Free transfer buffers.
  */
-static void uvc_free_urb_buffers(struct uvc_streaming *stream,
-				 unsigned int size)
+static void uvc_free_urb_buffers(struct uvc_streaming *stream)
 {
 	struct usb_device *udev = stream->dev->udev;
 	struct uvc_urb *uvc_urb;
@@ -1803,7 +1802,7 @@ static void uvc_free_urb_buffers(struct uvc_streaming *stream,
 		if (!uvc_urb->buffer)
 			continue;
 
-		usb_free_noncoherent(udev, size, uvc_urb->buffer,
+		usb_free_noncoherent(udev, stream->urb_size, uvc_urb->buffer,
 				     uvc_stream_dir(stream), uvc_urb->sgt);
 		uvc_urb->buffer = NULL;
 		uvc_urb->sgt = NULL;
@@ -1813,13 +1812,12 @@ static void uvc_free_urb_buffers(struct uvc_streaming *stream,
 }
 
 static bool uvc_alloc_urb_buffer(struct uvc_streaming *stream,
-				 struct uvc_urb *uvc_urb, unsigned int size,
-				 gfp_t gfp_flags)
+				 struct uvc_urb *uvc_urb, gfp_t gfp_flags)
 {
 	struct usb_device *udev = stream->dev->udev;
 
-	uvc_urb->buffer = usb_alloc_noncoherent(udev, size, gfp_flags,
-						&uvc_urb->dma,
+	uvc_urb->buffer = usb_alloc_noncoherent(udev, stream->urb_size,
+						gfp_flags, &uvc_urb->dma,
 						uvc_stream_dir(stream),
 						&uvc_urb->sgt);
 	return !!uvc_urb->buffer;
@@ -1856,14 +1854,13 @@ static int uvc_alloc_urb_buffers(struct uvc_streaming *stream,
 
 	/* Retry allocations until one succeed. */
 	for (; npackets > 0; npackets /= 2) {
-		unsigned int urb_size = psize * npackets;
+		stream->urb_size = psize * npackets;
 
 		for (i = 0; i < UVC_URBS; ++i) {
 			struct uvc_urb *uvc_urb = &stream->uvc_urb[i];
 
-			if (!uvc_alloc_urb_buffer(stream, uvc_urb, urb_size,
-						  gfp_flags)) {
-				uvc_free_urb_buffers(stream, urb_size);
+			if (!uvc_alloc_urb_buffer(stream, uvc_urb, gfp_flags)) {
+				uvc_free_urb_buffers(stream);
 				break;
 			}
 
@@ -1874,7 +1871,6 @@ static int uvc_alloc_urb_buffers(struct uvc_streaming *stream,
 			uvc_dbg(stream->dev, VIDEO,
 				"Allocated %u URB buffers of %ux%u bytes each\n",
 				UVC_URBS, npackets, psize);
-			stream->urb_size = urb_size;
 			return npackets;
 		}
 	}
@@ -1882,6 +1878,7 @@ static int uvc_alloc_urb_buffers(struct uvc_streaming *stream,
 	uvc_dbg(stream->dev, VIDEO,
 		"Failed to allocate URB buffers (%u bytes per packet)\n",
 		psize);
+	stream->urb_size = 0;
 	return 0;
 }
 
@@ -1911,7 +1908,7 @@ static void uvc_video_stop_transfer(struct uvc_streaming *stream,
 	}
 
 	if (free_buffers)
-		uvc_free_urb_buffers(stream, stream->urb_size);
+		uvc_free_urb_buffers(stream);
 }
 
 /*
@@ -2228,6 +2225,8 @@ int uvc_video_init(struct uvc_streaming *stream)
 			 "No supported video formats found.\n");
 		return -EINVAL;
 	}
+
+	atomic_set(&stream->active, 0);
 
 	/*
 	 * Alternate setting 0 should be the default, yet the XBox Live Vision

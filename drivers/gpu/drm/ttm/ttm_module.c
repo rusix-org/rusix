@@ -34,6 +34,7 @@
 #include <linux/pgtable.h>
 #include <linux/sched.h>
 #include <linux/debugfs.h>
+#include <drm/drm_sysfs.h>
 #include <drm/ttm/ttm_caching.h>
 
 #include "ttm_module.h"
@@ -73,8 +74,7 @@ pgprot_t ttm_prot_from_caching(enum ttm_caching caching, pgprot_t tmp)
 #endif /* CONFIG_UML */
 #endif /* __i386__ || __x86_64__ */
 #if defined(__ia64__) || defined(__arm__) || defined(__aarch64__) || \
-	defined(__powerpc__) || defined(__mips__) || defined(__loongarch__) || \
-	defined(__riscv)
+	defined(__powerpc__) || defined(__mips__) || defined(__loongarch__)
 	if (caching == ttm_write_combined)
 		tmp = pgprot_writecombine(tmp);
 	else

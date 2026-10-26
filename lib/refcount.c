@@ -10,15 +10,6 @@
 
 #define REFCOUNT_WARN(str)	WARN_ONCE(1, "refcount_t: " str ".\n")
 
-#ifdef CONFIG_BUG_ON_DATA_CORRUPTION
-#define REFCOUNT_CORRUPTION(str) ({		\
-	pr_err("refcount_t: " str ".\n");	\
-	BUG();					\
-})
-#else
-#define REFCOUNT_CORRUPTION(str) REFCOUNT_WARN(str)
-#endif
-
 void refcount_warn_saturate(refcount_t *r, enum refcount_saturation_type t)
 {
 	refcount_set(r, REFCOUNT_SATURATED);
@@ -31,10 +22,10 @@ void refcount_warn_saturate(refcount_t *r, enum refcount_saturation_type t)
 		REFCOUNT_WARN("saturated; leaking memory");
 		break;
 	case REFCOUNT_ADD_UAF:
-		REFCOUNT_CORRUPTION("addition on 0; use-after-free");
+		REFCOUNT_WARN("addition on 0; use-after-free");
 		break;
 	case REFCOUNT_SUB_UAF:
-		REFCOUNT_CORRUPTION("underflow; use-after-free");
+		REFCOUNT_WARN("underflow; use-after-free");
 		break;
 	case REFCOUNT_DEC_LEAK:
 		REFCOUNT_WARN("decrement hit 0; leaking memory");
@@ -93,7 +84,7 @@ bool refcount_dec_not_one(refcount_t *r)
 
 		new = val - 1;
 		if (new > val) {
-			REFCOUNT_CORRUPTION("underflow; use-after-free");
+			WARN_ONCE(new > val, "refcount_t: underflow; use-after-free.\n");
 			return true;
 		}
 

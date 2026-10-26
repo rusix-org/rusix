@@ -15,6 +15,59 @@
 #include "mds_client.h"
 #include "crypto.h"
 
+/*
+ * The base64url encoding used by fscrypt includes the '_' character, which may
+ * cause problems in snapshot names (which can not start with '_').  Thus, we
+ * used the base64 encoding defined for IMAP mailbox names (RFC 3501) instead,
+ * which replaces '-' and '_' by '+' and ','.
+ */
+static const char base64_table[65] =
+	"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+,";
+
+int ceph_base64_encode(const u8 *src, int srclen, char *dst)
+{
+	u32 ac = 0;
+	int bits = 0;
+	int i;
+	char *cp = dst;
+
+	for (i = 0; i < srclen; i++) {
+		ac = (ac << 8) | src[i];
+		bits += 8;
+		do {
+			bits -= 6;
+			*cp++ = base64_table[(ac >> bits) & 0x3f];
+		} while (bits >= 6);
+	}
+	if (bits)
+		*cp++ = base64_table[(ac << (6 - bits)) & 0x3f];
+	return cp - dst;
+}
+
+int ceph_base64_decode(const char *src, int srclen, u8 *dst)
+{
+	u32 ac = 0;
+	int bits = 0;
+	int i;
+	u8 *bp = dst;
+
+	for (i = 0; i < srclen; i++) {
+		const char *p = strchr(base64_table, src[i]);
+
+		if (p == NULL || src[i] == 0)
+			return -1;
+		ac = (ac << 6) | (p - base64_table);
+		bits += 6;
+		if (bits >= 8) {
+			bits -= 8;
+			*bp++ = (u8)(ac >> bits);
+		}
+	}
+	if (ac & ((1 << bits) - 1))
+		return -1;
+	return bp - dst;
+}
+
 static int ceph_crypt_get_context(struct inode *inode, void *ctx, size_t len)
 {
 	struct ceph_inode_info *ci = ceph_inode(inode);
@@ -50,7 +103,7 @@ static int ceph_crypt_set_context(struct inode *inode, const void *ctx,
 	if (len > FSCRYPT_SET_CONTEXT_MAX_SIZE)
 		return -EINVAL;
 
-	cfa = kzalloc_obj(*cfa);
+	cfa = kzalloc(sizeof(*cfa), GFP_KERNEL);
 	if (!cfa)
 		return -ENOMEM;
 
@@ -112,7 +165,7 @@ int ceph_fscrypt_prepare_context(struct inode *dir, struct inode *inode,
 	if (!encrypted)
 		return 0;
 
-	as->fscrypt_auth = kzalloc_obj(*as->fscrypt_auth);
+	as->fscrypt_auth = kzalloc(sizeof(*as->fscrypt_auth), GFP_KERNEL);
 	if (!as->fscrypt_auth)
 		return -ENOMEM;
 
@@ -266,18 +319,18 @@ int ceph_encode_encrypted_dname(struct inode *parent, char *buf, int elen)
 	}
 
 	/* base64 encode the encrypted name */
-	elen = base64_encode(cryptbuf, len, p, false, BASE64_IMAP);
+	elen = ceph_base64_encode(cryptbuf, len, p);
 	doutc(cl, "base64-encoded ciphertext name = %.*s\n", elen, p);
 
 	/* To understand the 240 limit, see CEPH_NOHASH_NAME_MAX comments */
 	WARN_ON(elen > 240);
 	if (dir != parent) // leading _ is already there; append _<inum>
-		elen += 1 + sprintf(p + elen, "_%llu", dir->i_ino);
+		elen += 1 + sprintf(p + elen, "_%ld", dir->i_ino);
 
 out:
 	kfree(cryptbuf);
 	if (dir != parent) {
-		if ((inode_state_read_once(dir) & I_NEW))
+		if ((dir->i_state & I_NEW))
 			discard_new_inode(dir);
 		else
 			iput(dir);
@@ -300,11 +353,12 @@ out:
  *
  * Though the fscrypt/crypto subsystems broadly expect all buffers to be in the
  * linear-mapped region, this function slightly relaxes those requirements:
- * fname->ctext, fname->name, and oname->name may be vmalloc(), but not tname.
+ * fname->ctext, fname->name, and oname->name may be vmalloc(), but not
+ * tname->name.
  *
  * Returns 0 on success or negative error code on error.
  */
-int ceph_fname_to_usr(const struct ceph_fname *fname, unsigned char *tname,
+int ceph_fname_to_usr(const struct ceph_fname *fname, struct fscrypt_str *tname,
 		      struct fscrypt_str *oname, bool *is_nokey)
 {
 	struct inode *dir = fname->dir;
@@ -315,7 +369,7 @@ int ceph_fname_to_usr(const struct ceph_fname *fname, unsigned char *tname,
 	int name_len = fname->name_len;
 	int ret;
 
-	if (WARN_ON_ONCE(tname && is_vmalloc_addr(tname)))
+	if (WARN_ON_ONCE(tname && is_vmalloc_addr(tname->name)))
 		return -EIO;
 
 	/* Sanity check that the resulting name will fit in the buffer */
@@ -358,36 +412,38 @@ int ceph_fname_to_usr(const struct ceph_fname *fname, unsigned char *tname,
 		goto out_inode;
 	}
 
-	if (!tname && (fname->ctext_len == 0 ||
-		       unlikely(is_vmalloc_addr(fname->ctext)) ||
-		       unlikely(is_vmalloc_addr(oname->name)))) {
+	if ((!tname || !tname->name) &&
+	    (fname->ctext_len == 0 ||
+	     unlikely(is_vmalloc_addr(fname->ctext)) ||
+	     unlikely(is_vmalloc_addr(oname->name)))) {
 		ret = fscrypt_fname_alloc_buffer(NAME_MAX, &_tname);
 		if (ret)
 			goto out_inode;
-		tname = _tname.name;
+		tname = &_tname;
 	}
 
 	if (fname->ctext_len == 0) {
 		int declen;
 
-		declen = base64_decode(name, name_len, tname, false, BASE64_IMAP);
+		declen = ceph_base64_decode(name, name_len, tname->name);
 		if (declen <= 0) {
 			ret = -EIO;
 			goto out;
 		}
-		iname.name = tname;
+		iname.name = tname->name;
 		iname.len = declen;
 	} else if (unlikely(is_vmalloc_addr(fname->ctext))) {
-		memcpy(tname, fname->ctext, fname->ctext_len);
+		memcpy(tname->name, fname->ctext, fname->ctext_len);
 
-		iname.name = tname;
+		iname.name = tname->name;
 		iname.len = fname->ctext_len;
 	} else {
 		iname.name = fname->ctext;
 		iname.len = fname->ctext_len;
 	}
 
-	_oname.name = unlikely(is_vmalloc_addr(oname->name)) ? tname : oname->name;
+	_oname.name = unlikely(is_vmalloc_addr(oname->name)) ?
+			tname->name : oname->name;
 	_oname.len = oname->len;
 
 	ret = fscrypt_fname_disk_to_usr(dir, 0, 0, &iname, &_oname);
@@ -399,9 +455,9 @@ int ceph_fname_to_usr(const struct ceph_fname *fname, unsigned char *tname,
 	oname->len = _oname.len;
 
 	if (dir != fname->dir) {
-		char tmp_buf[BASE64_CHARS(NAME_MAX)];
+		char tmp_buf[CEPH_BASE64_CHARS(NAME_MAX)];
 
-		name_len = snprintf(tmp_buf, sizeof(tmp_buf), "_%.*s_%llu",
+		name_len = snprintf(tmp_buf, sizeof(tmp_buf), "_%.*s_%ld",
 				    oname->len, oname->name, dir->i_ino);
 		memcpy(oname->name, tmp_buf, name_len);
 		oname->len = name_len;
@@ -411,7 +467,7 @@ out:
 	fscrypt_fname_free_buffer(&_tname);
 out_inode:
 	if (dir != fname->dir) {
-		if ((inode_state_read_once(dir) & I_NEW))
+		if ((dir->i_state & I_NEW))
 			discard_new_inode(dir);
 		else
 			iput(dir);

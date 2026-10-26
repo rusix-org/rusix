@@ -678,7 +678,7 @@ static int cafe_nand_probe(struct pci_dev *pdev,
 
 	pci_set_master(pdev);
 
-	cafe = kzalloc_obj(*cafe);
+	cafe = kzalloc(sizeof(*cafe), GFP_KERNEL);
 	if (!cafe) {
 		err = -ENOMEM;
 		goto out_disable_device;
@@ -830,16 +830,16 @@ static void cafe_nand_remove(struct pci_dev *pdev)
 }
 
 static const struct pci_device_id cafe_nand_tbl[] = {
-	{ PCI_DEVICE(PCI_VENDOR_ID_MARVELL, PCI_DEVICE_ID_MARVELL_88ALP01_NAND) },
+	{ PCI_VENDOR_ID_MARVELL, PCI_DEVICE_ID_MARVELL_88ALP01_NAND,
+	  PCI_ANY_ID, PCI_ANY_ID },
 	{ }
 };
 
 MODULE_DEVICE_TABLE(pci, cafe_nand_tbl);
 
-static int cafe_nand_resume(struct device *dev)
+static int cafe_nand_resume(struct pci_dev *pdev)
 {
 	uint32_t ctrl;
-	struct pci_dev *pdev = to_pci_dev(dev);
 	struct mtd_info *mtd = pci_get_drvdata(pdev);
 	struct nand_chip *chip = mtd_to_nand(mtd);
 	struct cafe_priv *cafe = nand_get_controller_data(chip);
@@ -877,14 +877,12 @@ static int cafe_nand_resume(struct device *dev)
 	return 0;
 }
 
-static DEFINE_SIMPLE_DEV_PM_OPS(cafe_nand_ops, NULL, cafe_nand_resume);
-
 static struct pci_driver cafe_nand_pci_driver = {
 	.name = "CAFÉ NAND",
 	.id_table = cafe_nand_tbl,
 	.probe = cafe_nand_probe,
 	.remove = cafe_nand_remove,
-	.driver.pm = &cafe_nand_ops,
+	.resume = cafe_nand_resume,
 };
 
 module_pci_driver(cafe_nand_pci_driver);

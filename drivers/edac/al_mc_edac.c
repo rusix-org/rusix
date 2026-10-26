@@ -302,8 +302,12 @@ static int al_mc_edac_probe(struct platform_device *pdev)
 				       IRQF_SHARED,
 				       pdev->name,
 				       pdev);
-		if (ret != 0)
+		if (ret != 0) {
+			dev_err(&pdev->dev,
+				"failed to request UE IRQ %d (%d)\n",
+				al_mc->irq_ue, ret);
 			return ret;
+		}
 	}
 
 	if (al_mc->irq_ce > 0) {
@@ -313,8 +317,12 @@ static int al_mc_edac_probe(struct platform_device *pdev)
 				       IRQF_SHARED,
 				       pdev->name,
 				       pdev);
-		if (ret != 0)
+		if (ret != 0) {
+			dev_err(&pdev->dev,
+				"failed to request CE IRQ %d (%d)\n",
+				al_mc->irq_ce, ret);
 			return ret;
+		}
 	}
 
 	return 0;

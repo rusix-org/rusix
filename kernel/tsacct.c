@@ -125,7 +125,7 @@ static void __acct_update_integrals(struct task_struct *tsk,
 {
 	u64 time, delta;
 
-	if (unlikely(!tsk->mm || (tsk->flags & PF_KTHREAD)))
+	if (!likely(tsk->mm))
 		return;
 
 	time = stime + utime;

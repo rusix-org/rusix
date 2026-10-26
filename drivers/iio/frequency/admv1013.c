@@ -11,6 +11,7 @@
 #include <linux/device.h>
 #include <linux/iio/iio.h>
 #include <linux/module.h>
+#include <linux/mod_devicetable.h>
 #include <linux/notifier.h>
 #include <linux/property.h>
 #include <linux/regulator/consumer.h>
@@ -440,7 +441,7 @@ static int admv1013_init(struct admv1013_state *st, int vcm_uv)
 {
 	int ret;
 	unsigned int data;
-	struct device *dev = &st->spi->dev;
+	struct spi_device *spi = st->spi;
 
 	/* Perform a software reset */
 	ret = __admv1013_spi_update_bits(st, ADMV1013_REG_SPI_CONTROL,
@@ -460,8 +461,10 @@ static int admv1013_init(struct admv1013_state *st, int vcm_uv)
 		return ret;
 
 	data = FIELD_GET(ADMV1013_CHIP_ID_MSK, data);
-	if (data != ADMV1013_CHIP_ID)
-		return dev_err_probe(dev, -EINVAL, "Invalid Chip ID.\n");
+	if (data != ADMV1013_CHIP_ID) {
+		dev_err(&spi->dev, "Invalid Chip ID.\n");
+		return -EINVAL;
+	}
 
 	ret = __admv1013_spi_write(st, ADMV1013_REG_VVA_TEMP_COMP, 0xE700);
 	if (ret)
@@ -611,8 +614,10 @@ static int admv1013_probe(struct spi_device *spi)
 		return ret;
 
 	ret = admv1013_init(st, vcm_uv);
-	if (ret)
-		return dev_err_probe(dev, ret, "admv1013 init failed\n");
+	if (ret) {
+		dev_err(&spi->dev, "admv1013 init failed\n");
+		return ret;
+	}
 
 	ret = devm_add_action_or_reset(dev, admv1013_powerdown, st);
 	if (ret)
@@ -622,7 +627,7 @@ static int admv1013_probe(struct spi_device *spi)
 }
 
 static const struct spi_device_id admv1013_id[] = {
-	{ .name = "admv1013" },
+	{ "admv1013", 0 },
 	{ }
 };
 MODULE_DEVICE_TABLE(spi, admv1013_id);

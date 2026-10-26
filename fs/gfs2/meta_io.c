@@ -59,7 +59,7 @@ static void gfs2_aspace_write_folio(struct folio *folio,
 			continue;
 		}
 		if (test_clear_buffer_dirty(bh)) {
-			set_buffer_async_write(bh);
+			mark_buffer_async_write(bh);
 		} else {
 			unlock_buffer(bh);
 		}
@@ -75,8 +75,7 @@ static void gfs2_aspace_write_folio(struct folio *folio,
 	do {
 		struct buffer_head *next = bh->b_this_page;
 		if (buffer_async_write(bh)) {
-			bh_submit(bh, REQ_OP_WRITE | write_flags,
-					bh_end_async_write);
+			submit_bh(REQ_OP_WRITE | write_flags, bh);
 			nr_underway++;
 		}
 		bh = next;
@@ -127,7 +126,7 @@ const struct address_space_operations gfs2_rgrp_aops = {
 struct buffer_head *gfs2_getbuf(struct gfs2_glock *gl, u64 blkno, int create)
 {
 	struct address_space *mapping = gfs2_glock2aspace(gl);
-	struct gfs2_sbd *sdp = glock_sbd(gl);
+	struct gfs2_sbd *sdp = gl->gl_name.ln_sbd;
 	struct folio *folio;
 	struct buffer_head *bh;
 	unsigned int shift;
@@ -213,7 +212,7 @@ static void gfs2_meta_read_endio(struct bio *bio)
 		do {
 			struct buffer_head *next = bh->b_this_page;
 			len -= bh->b_size;
-			end_buffer_read_sync(bh, bio->bi_status == BLK_STS_OK);
+			bh->b_end_io(bh, !bio->bi_status);
 			bh = next;
 		} while (bh && len);
 	}
@@ -222,7 +221,7 @@ static void gfs2_meta_read_endio(struct bio *bio)
 
 /*
  * Submit several consecutive buffer head I/O requests as a single bio I/O
- * request.  (See bh_submit.)
+ * request.  (See submit_bh_wbc.)
  */
 static void gfs2_submit_bhs(blk_opf_t opf, struct buffer_head *bhs[], int num)
 {
@@ -260,11 +259,12 @@ static void gfs2_submit_bhs(blk_opf_t opf, struct buffer_head *bhs[], int num)
 int gfs2_meta_read(struct gfs2_glock *gl, u64 blkno, int flags,
 		   int rahead, struct buffer_head **bhp)
 {
-	struct gfs2_sbd *sdp = glock_sbd(gl);
+	struct gfs2_sbd *sdp = gl->gl_name.ln_sbd;
 	struct buffer_head *bh, *bhs[2];
 	int num = 0;
 
-	if (gfs2_withdrawn(sdp)) {
+	if (gfs2_withdrawn(sdp) &&
+	    !gfs2_withdraw_in_prog(sdp)) {
 		*bhp = NULL;
 		return -EIO;
 	}
@@ -276,6 +276,7 @@ int gfs2_meta_read(struct gfs2_glock *gl, u64 blkno, int flags,
 		unlock_buffer(bh);
 		flags &= ~DIO_WAIT;
 	} else {
+		bh->b_end_io = end_buffer_read_sync;
 		get_bh(bh);
 		bhs[num++] = bh;
 	}
@@ -286,10 +287,11 @@ int gfs2_meta_read(struct gfs2_glock *gl, u64 blkno, int flags,
 		lock_buffer(bh);
 		if (buffer_uptodate(bh)) {
 			unlock_buffer(bh);
+			brelse(bh);
 		} else {
+			bh->b_end_io = end_buffer_read_sync;
 			bhs[num++] = bh;
 		}
-		brelse(bh);
 	}
 
 	gfs2_submit_bhs(REQ_OP_READ | REQ_META | REQ_PRIO, bhs, num);
@@ -301,7 +303,7 @@ int gfs2_meta_read(struct gfs2_glock *gl, u64 blkno, int flags,
 	if (unlikely(!buffer_uptodate(bh))) {
 		struct gfs2_trans *tr = current->journal_info;
 		if (tr && test_bit(TR_TOUCHED, &tr->tr_flags))
-			gfs2_io_error_bh(sdp, bh);
+			gfs2_io_error_bh_wd(sdp, bh);
 		brelse(bh);
 		*bhp = NULL;
 		return -EIO;
@@ -320,7 +322,8 @@ int gfs2_meta_read(struct gfs2_glock *gl, u64 blkno, int flags,
 
 int gfs2_meta_wait(struct gfs2_sbd *sdp, struct buffer_head *bh)
 {
-	if (gfs2_withdrawn(sdp))
+	if (gfs2_withdrawn(sdp) &&
+	    !gfs2_withdraw_in_prog(sdp))
 		return -EIO;
 
 	wait_on_buffer(bh);
@@ -328,13 +331,49 @@ int gfs2_meta_wait(struct gfs2_sbd *sdp, struct buffer_head *bh)
 	if (!buffer_uptodate(bh)) {
 		struct gfs2_trans *tr = current->journal_info;
 		if (tr && test_bit(TR_TOUCHED, &tr->tr_flags))
-			gfs2_io_error_bh(sdp, bh);
+			gfs2_io_error_bh_wd(sdp, bh);
 		return -EIO;
 	}
-	if (gfs2_withdrawn(sdp))
+	if (gfs2_withdrawn(sdp) &&
+	    !gfs2_withdraw_in_prog(sdp))
 		return -EIO;
 
 	return 0;
+}
+
+void gfs2_remove_from_journal(struct buffer_head *bh, int meta)
+{
+	struct address_space *mapping = bh->b_folio->mapping;
+	struct gfs2_sbd *sdp = gfs2_mapping2sbd(mapping);
+	struct gfs2_bufdata *bd = bh->b_private;
+	struct gfs2_trans *tr = current->journal_info;
+	int was_pinned = 0;
+
+	if (test_clear_buffer_pinned(bh)) {
+		trace_gfs2_pin(bd, 0);
+		atomic_dec(&sdp->sd_log_pinned);
+		list_del_init(&bd->bd_list);
+		if (meta == REMOVE_META)
+			tr->tr_num_buf_rm++;
+		else
+			tr->tr_num_databuf_rm++;
+		set_bit(TR_TOUCHED, &tr->tr_flags);
+		was_pinned = 1;
+		brelse(bh);
+	}
+	if (bd) {
+		if (bd->bd_tr) {
+			gfs2_trans_add_revoke(sdp, bd);
+		} else if (was_pinned) {
+			bh->b_private = NULL;
+			kmem_cache_free(gfs2_bufdata_cachep, bd);
+		} else if (!list_empty(&bd->bd_ail_st_list) &&
+					!list_empty(&bd->bd_ail_gl_list)) {
+			gfs2_remove_from_ail(bd);
+		}
+	}
+	clear_buffer_dirty(bh);
+	clear_buffer_uptodate(bh);
 }
 
 /**
@@ -355,7 +394,7 @@ static void gfs2_ail1_wipe(struct gfs2_sbd *sdp, u64 bstart, u32 blen)
 	struct buffer_head *bh;
 	u64 end = bstart + blen;
 
-	spin_lock(&sdp->sd_log_lock);
+	gfs2_log_lock(sdp);
 	spin_lock(&sdp->sd_ail_lock);
 	list_for_each_entry_safe(tr, s, &sdp->sd_ail1_list, tr_list) {
 		list_for_each_entry_safe(bd, bs, &tr->tr_ail1_list,
@@ -368,7 +407,7 @@ static void gfs2_ail1_wipe(struct gfs2_sbd *sdp, u64 bstart, u32 blen)
 		}
 	}
 	spin_unlock(&sdp->sd_ail_lock);
-	spin_unlock(&sdp->sd_log_lock);
+	gfs2_log_unlock(sdp);
 }
 
 static struct buffer_head *gfs2_getjdatabuf(struct gfs2_inode *ip, u64 blkno)
@@ -402,30 +441,29 @@ static struct buffer_head *gfs2_getjdatabuf(struct gfs2_inode *ip, u64 blkno)
 
 void gfs2_journal_wipe(struct gfs2_inode *ip, u64 bstart, u32 blen)
 {
-	struct gfs2_glock *gl = gfs2_inode_glock(&ip->i_inode);
 	struct gfs2_sbd *sdp = GFS2_SB(&ip->i_inode);
 	struct buffer_head *bh;
 	int ty;
 
 	/* This can only happen during incomplete inode creation. */
-	if (!gl)
+	if (!ip->i_gl)
 		return;
 
 	gfs2_ail1_wipe(sdp, bstart, blen);
 	while (blen) {
 		ty = REMOVE_META;
-		bh = gfs2_getbuf(gl, bstart, NO_CREATE);
+		bh = gfs2_getbuf(ip->i_gl, bstart, NO_CREATE);
 		if (!bh && gfs2_is_jdata(ip)) {
 			bh = gfs2_getjdatabuf(ip, bstart);
 			ty = REMOVE_JDATA;
 		}
 		if (bh) {
 			lock_buffer(bh);
-			spin_lock(&sdp->sd_log_lock);
+			gfs2_log_lock(sdp);
 			spin_lock(&sdp->sd_ail_lock);
 			gfs2_remove_from_journal(bh, ty);
 			spin_unlock(&sdp->sd_ail_lock);
-			spin_unlock(&sdp->sd_log_lock);
+			gfs2_log_unlock(sdp);
 			unlock_buffer(bh);
 			brelse(bh);
 		}
@@ -448,8 +486,8 @@ void gfs2_journal_wipe(struct gfs2_inode *ip, u64 bstart, u32 blen)
 int gfs2_meta_buffer(struct gfs2_inode *ip, u32 mtype, u64 num,
 		     struct buffer_head **bhp)
 {
-	struct gfs2_glock *gl = gfs2_inode_glock(&ip->i_inode);
 	struct gfs2_sbd *sdp = GFS2_SB(&ip->i_inode);
+	struct gfs2_glock *gl = ip->i_gl;
 	struct buffer_head *bh;
 	int ret = 0;
 	int rahead = 0;
@@ -478,7 +516,7 @@ int gfs2_meta_buffer(struct gfs2_inode *ip, u32 mtype, u64 num,
 
 struct buffer_head *gfs2_meta_ra(struct gfs2_glock *gl, u64 dblock, u32 extlen)
 {
-	struct gfs2_sbd *sdp = glock_sbd(gl);
+	struct gfs2_sbd *sdp = gl->gl_name.ln_sbd;
 	struct buffer_head *first_bh, *bh;
 	u32 max_ra = gfs2_tune_get(sdp, gt_max_readahead) >>
 			  sdp->sd_sb.sb_bsize_shift;

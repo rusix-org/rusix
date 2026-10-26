@@ -23,8 +23,8 @@
 #include <linux/xarray.h>
 #include <linux/perf_event.h>
 #include <linux/pci.h>
-#include <linux/generic_pt/iommu.h>
 
+#include <asm/cacheflush.h>
 #include <asm/iommu.h>
 #include <uapi/linux/iommufd.h>
 
@@ -147,6 +147,11 @@
 #define DMAR_IQER_REG_ICESID(reg)	FIELD_GET(GENMASK_ULL(63, 48), reg)
 
 #define OFFSET_STRIDE		(9)
+
+#define dmar_readq(a) readq(a)
+#define dmar_writeq(a,v) writeq(v,a)
+#define dmar_readl(a) readl(a)
+#define dmar_writel(a, v) writel(v, a)
 
 #define DMAR_VER_MAJOR(v)		(((v) & 0xf0) >> 4)
 #define DMAR_VER_MINOR(v)		((v) & 0x0f)
@@ -590,20 +595,22 @@ struct qi_batch {
 };
 
 struct dmar_domain {
-	union {
-		struct iommu_domain domain;
-		struct pt_iommu iommu;
-		/* First stage page table */
-		struct pt_iommu_x86_64 fspt;
-		/* Second stage page table */
-		struct pt_iommu_vtdss sspt;
-	};
-
+	int	nid;			/* node id */
 	struct xarray iommu_array;	/* Attached IOMMU array */
 
-	u8 force_snooping:1;		/* Create PASID entry with snoop control */
+	u8 iommu_coherency: 1;		/* indicate coherency of iommu access */
+	u8 force_snooping : 1;		/* Create IOPTEs with snoop control */
+	u8 set_pte_snp:1;
+	u8 use_first_level:1;		/* DMA translation for the domain goes
+					 * through the first level page table,
+					 * otherwise, goes through the second
+					 * level.
+					 */
 	u8 dirty_tracking:1;		/* Dirty tracking is enabled */
 	u8 nested_parent:1;		/* Has other domains nested on it */
+	u8 has_mappings:1;		/* Has mappings configured through
+					 * iommu_map() interface.
+					 */
 	u8 iotlb_sync_map:1;		/* Need to flush IOTLB cache or write
 					 * buffer when creating mappings.
 					 */
@@ -616,9 +623,26 @@ struct dmar_domain {
 	struct list_head cache_tags;	/* Cache tag list */
 	struct qi_batch *qi_batch;	/* Batched QI descriptors */
 
+	int		iommu_superpage;/* Level of superpages supported:
+					   0 == 4KiB (no superpages), 1 == 2MiB,
+					   2 == 1GiB, 3 == 512GiB, 4 == 1TiB */
 	union {
 		/* DMA remapping domain */
 		struct {
+			/* virtual address */
+			struct dma_pte	*pgd;
+			/* max guest address width */
+			int		gaw;
+			/*
+			 * adjusted guest address width:
+			 *   0: level 2 30-bit
+			 *   1: level 3 39-bit
+			 *   2: level 4 48-bit
+			 *   3: level 5 57-bit
+			 */
+			int		agaw;
+			/* maximum mapped address */
+			u64		max_addr;
 			/* Protect the s1_domains list */
 			spinlock_t	s1_lock;
 			/* Track s1_domains nested on this domain */
@@ -640,10 +664,10 @@ struct dmar_domain {
 			struct mmu_notifier notifier;
 		};
 	};
+
+	struct iommu_domain domain;	/* generic domain data structure for
+					   iommu core */
 };
-PT_IOMMU_CHECK_DOMAIN(struct dmar_domain, iommu, domain);
-PT_IOMMU_CHECK_DOMAIN(struct dmar_domain, sspt.iommu, domain);
-PT_IOMMU_CHECK_DOMAIN(struct dmar_domain, fspt.iommu, domain);
 
 /*
  * In theory, the VT-d 4.0 spec can support up to 2 ^ 16 counters.
@@ -700,7 +724,6 @@ struct intel_iommu {
 	/* mutex to protect domain_ida */
 	struct mutex	did_lock;
 	struct ida	domain_ida; /* domain id allocator */
-	unsigned long	max_domain_id;
 	unsigned long	*copied_tables; /* bitmap of copied tables */
 	spinlock_t	lock; /* protect context, domain ids */
 	struct root_entry *root_entry; /* virtual address */
@@ -843,6 +866,11 @@ struct dma_pte {
 	u64 val;
 };
 
+static inline void dma_clear_pte(struct dma_pte *pte)
+{
+	pte->val = 0;
+}
+
 static inline u64 dma_pte_addr(struct dma_pte *pte)
 {
 #ifdef CONFIG_64BIT
@@ -858,9 +886,30 @@ static inline bool dma_pte_present(struct dma_pte *pte)
 	return (pte->val & 3) != 0;
 }
 
+static inline bool dma_sl_pte_test_and_clear_dirty(struct dma_pte *pte,
+						   unsigned long flags)
+{
+	if (flags & IOMMU_DIRTY_NO_CLEAR)
+		return (pte->val & DMA_SL_PTE_DIRTY) != 0;
+
+	return test_and_clear_bit(DMA_SL_PTE_DIRTY_BIT,
+				  (unsigned long *)&pte->val);
+}
+
 static inline bool dma_pte_superpage(struct dma_pte *pte)
 {
 	return (pte->val & DMA_PTE_LARGE_PAGE);
+}
+
+static inline bool first_pte_in_page(struct dma_pte *pte)
+{
+	return IS_ALIGNED((unsigned long)pte, VTD_PAGE_SIZE);
+}
+
+static inline int nr_pte_to_next_page(struct dma_pte *pte)
+{
+	return first_pte_in_page(pte) ? BIT_ULL(VTD_STRIDE_SHIFT) :
+		(struct dma_pte *)ALIGN((unsigned long)pte, VTD_PAGE_SIZE) - pte;
 }
 
 static inline bool context_present(struct context_entry *context)
@@ -878,6 +927,11 @@ static inline int agaw_to_level(int agaw)
 	return agaw + 2;
 }
 
+static inline int agaw_to_width(int agaw)
+{
+	return min_t(int, 30 + agaw * LEVEL_STRIDE, MAX_AGAW_WIDTH);
+}
+
 static inline int width_to_agaw(int width)
 {
 	return DIV_ROUND_UP(width - 30, LEVEL_STRIDE);
@@ -893,6 +947,25 @@ static inline int pfn_level_offset(u64 pfn, int level)
 	return (pfn >> level_to_offset_bits(level)) & LEVEL_MASK;
 }
 
+static inline u64 level_mask(int level)
+{
+	return -1ULL << level_to_offset_bits(level);
+}
+
+static inline u64 level_size(int level)
+{
+	return 1ULL << level_to_offset_bits(level);
+}
+
+static inline u64 align_to_level(u64 pfn, int level)
+{
+	return (pfn + level_size(level) - 1) & level_mask(level);
+}
+
+static inline unsigned long lvl_to_nr_pages(unsigned int lvl)
+{
+	return 1UL << min_t(int, (lvl - 1) * LEVEL_STRIDE, MAX_AGAW_PFN_WIDTH);
+}
 
 static inline void context_set_present(struct context_entry *context)
 {
@@ -1078,26 +1151,31 @@ static inline void qi_desc_dev_iotlb(u16 sid, u16 pfsid, u16 qdep, u64 addr,
 	desc->qw3 = 0;
 }
 
-/* PASID-selective IOTLB invalidation */
-static inline void qi_desc_piotlb_all(u16 did, u32 pasid, struct qi_desc *desc)
-{
-	desc->qw0 = QI_EIOTLB_PASID(pasid) | QI_EIOTLB_DID(did) |
-		    QI_EIOTLB_GRAN(QI_GRAN_NONG_PASID) | QI_EIOTLB_TYPE;
-	desc->qw1 = 0;
-}
-
-/* Page-selective-within-PASID IOTLB invalidation */
 static inline void qi_desc_piotlb(u16 did, u32 pasid, u64 addr,
-				  unsigned int size_order, bool ih,
+				  unsigned long npages, bool ih,
 				  struct qi_desc *desc)
 {
-	/*
-	 * calculate_psi_aligned_address() must be used for addr and size_order
-	 */
-	desc->qw0 = QI_EIOTLB_PASID(pasid) | QI_EIOTLB_DID(did) |
-		    QI_EIOTLB_GRAN(QI_GRAN_PSI_PASID) | QI_EIOTLB_TYPE;
-	desc->qw1 = QI_EIOTLB_ADDR(addr) | QI_EIOTLB_IH(ih) |
-		    QI_EIOTLB_AM(size_order);
+	if (npages == -1) {
+		desc->qw0 = QI_EIOTLB_PASID(pasid) |
+				QI_EIOTLB_DID(did) |
+				QI_EIOTLB_GRAN(QI_GRAN_NONG_PASID) |
+				QI_EIOTLB_TYPE;
+		desc->qw1 = 0;
+	} else {
+		int mask = ilog2(__roundup_pow_of_two(npages));
+		unsigned long align = (1ULL << (VTD_PAGE_SHIFT + mask));
+
+		if (WARN_ON_ONCE(!IS_ALIGNED(addr, align)))
+			addr = ALIGN_DOWN(addr, align);
+
+		desc->qw0 = QI_EIOTLB_PASID(pasid) |
+				QI_EIOTLB_DID(did) |
+				QI_EIOTLB_GRAN(QI_GRAN_PSI_PASID) |
+				QI_EIOTLB_TYPE;
+		desc->qw1 = QI_EIOTLB_ADDR(addr) |
+				QI_EIOTLB_IH(ih) |
+				QI_EIOTLB_AM(mask);
+	}
 }
 
 static inline void qi_desc_dev_iotlb_pasid(u16 sid, u16 pfsid, u32 pasid,
@@ -1105,19 +1183,11 @@ static inline void qi_desc_dev_iotlb_pasid(u16 sid, u16 pfsid, u32 pasid,
 					   unsigned int size_order,
 					   struct qi_desc *desc)
 {
+	unsigned long mask = 1UL << (VTD_PAGE_SHIFT + size_order - 1);
+
 	desc->qw0 = QI_DEV_EIOTLB_PASID(pasid) | QI_DEV_EIOTLB_SID(sid) |
 		QI_DEV_EIOTLB_QDEP(qdep) | QI_DEIOTLB_TYPE |
 		QI_DEV_IOTLB_PFSID(pfsid);
-
-	/*
-	 * The widest range the descriptor can express is a full flush, encoded
-	 * by making bit 63 the least significant zero bit of ADDR, that is
-	 * @size_order == 64 - VTD_PAGE_SHIFT.  Bound @size_order there so that
-	 * a caller passing something larger cannot produce an out-of-range
-	 * shift below.
-	 */
-	if (size_order > 64 - VTD_PAGE_SHIFT)
-		size_order = 64 - VTD_PAGE_SHIFT;
 
 	/*
 	 * If S bit is 0, we only flush a single page. If S bit is set,
@@ -1128,8 +1198,7 @@ static inline void qi_desc_dev_iotlb_pasid(u16 sid, u16 pfsid, u32 pasid,
 	 * Max Invs Pending (MIP) is set to 0 for now until we have DIT in
 	 * ECAP.
 	 */
-	if (size_order < 64 - VTD_PAGE_SHIFT &&
-	    !IS_ALIGNED(addr, BIT_ULL(VTD_PAGE_SHIFT + size_order)))
+	if (!IS_ALIGNED(addr, VTD_PAGE_SIZE << size_order))
 		pr_warn_ratelimited("Invalidate non-aligned address %llx, order %d\n",
 				    addr, size_order);
 
@@ -1145,7 +1214,7 @@ static inline void qi_desc_dev_iotlb_pasid(u16 sid, u16 pfsid, u32 pasid,
 		desc->qw1 |= GENMASK_ULL(size_order + VTD_PAGE_SHIFT - 1,
 					VTD_PAGE_SHIFT);
 		/* Clear size_order bit to indicate size */
-		desc->qw1 &= ~BIT_ULL(VTD_PAGE_SHIFT + size_order - 1);
+		desc->qw1 &= ~mask;
 		/* Set the S bit to indicate flushing more than 1 page */
 		desc->qw1 |= QI_DEV_EIOTLB_SIZE;
 	}
@@ -1168,7 +1237,8 @@ void qi_flush_iotlb(struct intel_iommu *iommu, u16 did, u64 addr,
 void qi_flush_dev_iotlb(struct intel_iommu *iommu, u16 sid, u16 pfsid,
 			u16 qdep, u64 addr, unsigned mask);
 
-void qi_flush_piotlb_all(struct intel_iommu *iommu, u16 did, u32 pasid);
+void qi_flush_piotlb(struct intel_iommu *iommu, u16 did, u32 pasid, u64 addr,
+		     unsigned long npages, bool ih);
 
 void qi_flush_dev_iotlb_pasid(struct intel_iommu *iommu, u16 sid, u16 pfsid,
 			      u32 pasid, u16 qdep, u64 addr,
@@ -1350,6 +1420,7 @@ static inline bool intel_domain_is_ss_paging(struct dmar_domain *domain)
 	return domain->domain.ops == &intel_ss_paging_domain_ops;
 }
 
+#ifdef CONFIG_INTEL_IOMMU
 extern int intel_iommu_sm;
 int iommu_calculate_agaw(struct intel_iommu *iommu);
 int iommu_calculate_max_sagaw(struct intel_iommu *iommu);
@@ -1361,62 +1432,23 @@ static inline bool ecmd_has_pmu_essential(struct intel_iommu *iommu)
 		DMA_ECMD_ECCAP3_ESSENTIAL;
 }
 
-enum dmar_force_on {
-	DMAR_FORCEON_PLATFORM,
-	DMAR_FORCEON_TBOOT
-};
-
-/*
- * On policies are positive, with more positive value being stronger.
- * Off policies are negative, with more negative value being stronger.
- *
- * 'dmar' here refers to DMA remapping instead of the dmar/iommu unit.
- *
- * - DMAR_FORCE_ON:
- *     force to turn on (e.g. by tboot or platform opt-in).
- *
- * - DMAR_ON:
- *     turn on by build configuration (CONFIG_INTEL_IOMMU_DEFAULT_ON=on)
- *     or user opts ("intel_iommu=on").
- *
- * - DMAR_DEFAULT_OFF
- *     turn off by build configuration (CONFIG_INTEL_IOMMU_DEFAULT_ON=off).
- *
- * - DMAR_USER_OFF
- *     turn off by user opts ("intel_iommu=off" or "iommu=off").
- *
- * - DMAR_FW_OFF
- *     turn off due to firmware opt-out (DMAR_REMAP_OPT_OUT)
- *
- * - '0' is invalid, compared to decide the on/off policy
- *
- */
-#define DMAR_FORCE_ON		2
-#define DMAR_ON			1
-#define DMAR_DEFAULT_OFF	-1
-#define DMAR_USER_OFF		-2
-#define DMAR_FW_OFF		-3
-extern int dmar_policy;
-
-static inline bool dmar_policy_on(void)
-{
-	return dmar_policy > 0;
-}
-
-static inline bool dmar_policy_off(void)
-{
-	return dmar_policy < 0;
-}
-
-static inline bool dmar_policy_force_on(void)
-{
-	return dmar_policy == DMAR_FORCE_ON;
-}
-
-bool dmar_can_force_on(enum dmar_force_on force_on);
-
+extern int dmar_disabled;
 extern int intel_iommu_enabled;
 extern int intel_iommu_tboot_noforce;
+#else
+static inline int iommu_calculate_agaw(struct intel_iommu *iommu)
+{
+	return 0;
+}
+static inline int iommu_calculate_max_sagaw(struct intel_iommu *iommu)
+{
+	return 0;
+}
+#define dmar_disabled	(1)
+#define intel_iommu_enabled (0)
+#define intel_iommu_sm (0)
+#define intel_iommu_tboot_noforce (0)
+#endif
 
 static inline const char *decode_prq_descriptor(char *str, size_t size,
 		u64 dw0, u64 dw1, u64 dw2, u64 dw3)

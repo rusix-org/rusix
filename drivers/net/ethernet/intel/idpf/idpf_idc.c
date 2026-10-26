@@ -60,7 +60,7 @@ static int idpf_plug_vport_aux_dev(struct iidc_rdma_core_dev_info *cdev_info,
 	struct auxiliary_device *adev;
 	int ret;
 
-	iadev = kzalloc_obj(*iadev);
+	iadev = kzalloc(sizeof(*iadev), GFP_KERNEL);
 	if (!iadev)
 		return -ENOMEM;
 
@@ -123,7 +123,7 @@ static int idpf_idc_init_aux_vport_dev(struct idpf_vport *vport)
 	if (!(le16_to_cpu(vport_msg->vport_flags) & VIRTCHNL2_VPORT_ENABLE_RDMA))
 		return 0;
 
-	vport->vdev_info = kzalloc_obj(*vdev_info);
+	vport->vdev_info = kzalloc(sizeof(*vdev_info), GFP_KERNEL);
 	if (!vport->vdev_info)
 		return -ENOMEM;
 
@@ -201,7 +201,7 @@ static int idpf_plug_core_aux_dev(struct iidc_rdma_core_dev_info *cdev_info)
 	struct auxiliary_device *adev;
 	int ret;
 
-	iadev = kzalloc_obj(*iadev);
+	iadev = kzalloc(sizeof(*iadev), GFP_KERNEL);
 	if (!iadev)
 		return -ENOMEM;
 
@@ -416,19 +416,16 @@ idpf_idc_init_msix_data(struct idpf_adapter *adapter)
 int idpf_idc_init_aux_core_dev(struct idpf_adapter *adapter,
 			       enum iidc_function_type ftype)
 {
-	struct libie_mmio_info *mmio = &adapter->ctlq_ctx.mmio_info;
 	struct iidc_rdma_core_dev_info *cdev_info;
 	struct iidc_rdma_priv_dev_info *privd;
-	struct libie_pci_mmio_region *mr;
-	size_t num_mem_regions;
-	int err, i = 0;
+	int err, i;
 
-	adapter->cdev_info = kzalloc_obj(*cdev_info);
+	adapter->cdev_info = kzalloc(sizeof(*cdev_info), GFP_KERNEL);
 	if (!adapter->cdev_info)
 		return -ENOMEM;
 	cdev_info = adapter->cdev_info;
 
-	privd = kzalloc_obj(*privd);
+	privd = kzalloc(sizeof(*privd), GFP_KERNEL);
 	if (!privd) {
 		err = -ENOMEM;
 		goto err_privd_alloc;
@@ -439,31 +436,23 @@ int idpf_idc_init_aux_core_dev(struct idpf_adapter *adapter,
 	cdev_info->rdma_protocol = IIDC_RDMA_PROTOCOL_ROCEV2;
 	privd->ftype = ftype;
 
-	num_mem_regions = list_count_nodes(&mmio->mmio_list);
-	if (num_mem_regions <= IDPF_MMIO_REG_NUM_STATIC) {
-		err = -EINVAL;
-		goto err_plug_aux_dev;
-	}
-
-	num_mem_regions -= IDPF_MMIO_REG_NUM_STATIC;
 	privd->mapped_mem_regions =
-		kzalloc_objs(struct iidc_rdma_lan_mapped_mem_region,
-			     num_mem_regions);
+		kcalloc(adapter->hw.num_lan_regs,
+			sizeof(struct iidc_rdma_lan_mapped_mem_region),
+			GFP_KERNEL);
 	if (!privd->mapped_mem_regions) {
 		err = -ENOMEM;
 		goto err_plug_aux_dev;
 	}
 
-	privd->num_memory_regions = cpu_to_le16(num_mem_regions);
-	list_for_each_entry(mr, &mmio->mmio_list, list) {
-		if (!idpf_mmio_region_non_static(&adapter->ctlq_ctx.mmio_info,
-						 mr))
-			continue;
-
-		privd->mapped_mem_regions[i].region_addr = mr->addr;
-		privd->mapped_mem_regions[i].size = cpu_to_le64(mr->size);
-		privd->mapped_mem_regions[i++].start_offset =
-						cpu_to_le64(mr->offset);
+	privd->num_memory_regions = cpu_to_le16(adapter->hw.num_lan_regs);
+	for (i = 0; i < adapter->hw.num_lan_regs; i++) {
+		privd->mapped_mem_regions[i].region_addr =
+			adapter->hw.lan_regs[i].vaddr;
+		privd->mapped_mem_regions[i].size =
+			cpu_to_le64(adapter->hw.lan_regs[i].addr_len);
+		privd->mapped_mem_regions[i].start_offset =
+			cpu_to_le64(adapter->hw.lan_regs[i].addr_start);
 	}
 
 	idpf_idc_init_msix_data(adapter);
@@ -488,11 +477,10 @@ err_privd_alloc:
 
 /**
  * idpf_idc_deinit_core_aux_device - de-initialize Auxiliary Device(s)
- * @adapter: driver private data structure
+ * @cdev_info: IDC core device info pointer
  */
-void idpf_idc_deinit_core_aux_device(struct idpf_adapter *adapter)
+void idpf_idc_deinit_core_aux_device(struct iidc_rdma_core_dev_info *cdev_info)
 {
-	struct iidc_rdma_core_dev_info *cdev_info = adapter->cdev_info;
 	struct iidc_rdma_priv_dev_info *privd;
 
 	if (!cdev_info)
@@ -504,7 +492,6 @@ void idpf_idc_deinit_core_aux_device(struct idpf_adapter *adapter)
 	kfree(privd->mapped_mem_regions);
 	kfree(privd);
 	kfree(cdev_info);
-	adapter->cdev_info = NULL;
 }
 
 /**

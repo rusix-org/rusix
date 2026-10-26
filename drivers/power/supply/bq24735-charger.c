@@ -462,8 +462,12 @@ static int bq24735_charger_probe(struct i2c_client *client)
 						IRQF_ONESHOT,
 						supply_desc->name,
 						charger->charger);
-		if (ret)
+		if (ret) {
+			dev_err(&client->dev,
+				"Unable to register IRQ %d err %d\n",
+				client->irq, ret);
 			return ret;
+		}
 	} else {
 		ret = device_property_read_u32(&client->dev, "poll-interval",
 					       &charger->poll_interval);
@@ -485,8 +489,8 @@ static int bq24735_charger_probe(struct i2c_client *client)
 }
 
 static const struct i2c_device_id bq24735_charger_id[] = {
-	{ .name = "bq24735-charger" },
-	{ }
+	{ "bq24735-charger" },
+	{}
 };
 MODULE_DEVICE_TABLE(i2c, bq24735_charger_id);
 

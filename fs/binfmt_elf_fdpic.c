@@ -75,7 +75,7 @@ static int elf_fdpic_map_file_by_direct_mmap(struct elf_fdpic_params *,
 					     struct file *, struct mm_struct *);
 
 #ifdef CONFIG_ELF_CORE
-static bool elf_fdpic_core_dump(struct coredump_params *cprm);
+static int elf_fdpic_core_dump(struct coredump_params *cprm);
 #endif
 
 static struct linux_binfmt elf_fdpic_format = {
@@ -263,8 +263,7 @@ static int load_elf_fdpic_binary(struct linux_binprm *bprm)
 			kdebug("Using ELF interpreter %s", interpreter_name);
 
 			/* replace the program with the interpreter */
-			interpreter = bprm_open_interpreter(bprm,
-							    interpreter_name);
+			interpreter = open_exec(interpreter_name);
 			retval = PTR_ERR(interpreter);
 			if (IS_ERR(interpreter)) {
 				interpreter = NULL;
@@ -299,9 +298,6 @@ static int load_elf_fdpic_binary(struct linux_binprm *bprm)
 		}
 
 	}
-
-	/* No PT_INTERP to substitute for: the override does not apply. */
-	bprm_drop_loader(bprm);
 
 	if (is_constdisp(&exec_params.hdr))
 		exec_params.flags |= ELF_FDPIC_FLAG_CONSTDISP;
@@ -513,6 +509,7 @@ static int create_elf_fdpic_tables(struct linux_binprm *bprm,
 	char *k_platform, *k_base_platform;
 	char __user *u_platform, *u_base_platform, *p;
 	int loop;
+	unsigned long flags = 0;
 	int ei_index;
 	elf_addr_t *elf_info;
 
@@ -652,7 +649,9 @@ static int create_elf_fdpic_tables(struct linux_binprm *bprm,
 	NEW_AUX_ENT(AT_PHENT,	sizeof(struct elf_phdr));
 	NEW_AUX_ENT(AT_PHNUM,	exec_params->hdr.e_phnum);
 	NEW_AUX_ENT(AT_BASE,	interp_params->elfhdr_addr);
-	NEW_AUX_ENT(AT_FLAGS,	bprm_at_flags(bprm));
+	if (bprm->interp_flags & BINPRM_FLAGS_PRESERVE_ARGV0)
+		flags |= AT_FLAGS_PRESERVE_ARGV0;
+	NEW_AUX_ENT(AT_FLAGS,	flags);
 	NEW_AUX_ENT(AT_ENTRY,	exec_params->entry_addr);
 	NEW_AUX_ENT(AT_UID,	(elf_addr_t) from_kuid_munged(cred->user_ns, cred->uid));
 	NEW_AUX_ENT(AT_EUID,	(elf_addr_t) from_kuid_munged(cred->user_ns, cred->euid));
@@ -772,7 +771,7 @@ static int elf_fdpic_map_file(struct elf_fdpic_params *params,
 	if (nloads == 0)
 		return -ELIBBAD;
 
-	loadmap = kzalloc_flex(*loadmap, segs, nloads);
+	loadmap = kzalloc(struct_size(loadmap, segs, nloads), GFP_KERNEL);
 	if (!loadmap)
 		return -ENOMEM;
 
@@ -922,7 +921,7 @@ static int elf_fdpic_map_file(struct elf_fdpic_params *params,
 	return 0;
 
 dynamic_error:
-	printk("ELF FDPIC %s with invalid DYNAMIC section (inode=%llu)\n",
+	printk("ELF FDPIC %s with invalid DYNAMIC section (inode=%lu)\n",
 	       what, file_inode(file)->i_ino);
 	return -ELIBBAD;
 }
@@ -1402,7 +1401,7 @@ static struct elf_thread_status *elf_dump_thread_status(long signr, struct task_
 	struct elf_thread_status *t;
 	int i, ret;
 
-	t = kzalloc_obj(struct elf_thread_status);
+	t = kzalloc(sizeof(struct elf_thread_status), GFP_KERNEL);
 	if (!t)
 		return t;
 
@@ -1477,9 +1476,9 @@ static bool elf_fdpic_dump_segments(struct coredump_params *cprm,
  * and then they are actually written out.  If we run out of core limit
  * we just truncate.
  */
-static bool elf_fdpic_core_dump(struct coredump_params *cprm)
+static int elf_fdpic_core_dump(struct coredump_params *cprm)
 {
-	bool ret = false;
+	int has_dumped = 0;
 	int segs;
 	int i;
 	struct elfhdr *elf = NULL;
@@ -1497,14 +1496,14 @@ static bool elf_fdpic_core_dump(struct coredump_params *cprm)
 	struct elf_thread_status *tmp;
 
 	/* alloc memory for large data structures: too large to be on stack */
-	elf = kmalloc_obj(*elf);
+	elf = kmalloc(sizeof(*elf), GFP_KERNEL);
 	if (!elf)
 		goto end_coredump;
-	psinfo = kmalloc_obj(*psinfo);
+	psinfo = kmalloc(sizeof(*psinfo), GFP_KERNEL);
 	if (!psinfo)
 		goto end_coredump;
 
-	for (ct = current->signal->core_state->tasks;
+	for (ct = current->signal->core_state->dumper.next;
 					ct; ct = ct->next) {
 		tmp = elf_dump_thread_status(cprm->siginfo->si_signo,
 					     ct->task, &thread_status_size);
@@ -1536,7 +1535,7 @@ static bool elf_fdpic_core_dump(struct coredump_params *cprm)
 	/* Set up header */
 	fill_elf_fdpic_header(elf, e_phnum);
 
-	cprm->state |= COREDUMP_STATE_STARTED;
+	has_dumped = 1;
 	/*
 	 * Set up the notes in similar form to SVR4 core dumps made
 	 * with info from their /proc.
@@ -1558,7 +1557,7 @@ static bool elf_fdpic_core_dump(struct coredump_params *cprm)
 	offset += segs * sizeof(struct elf_phdr);	/* Program headers */
 
 	/* Write notes phdr entry */
-	phdr4note = kmalloc_obj(*phdr4note);
+	phdr4note = kmalloc(sizeof(*phdr4note), GFP_KERNEL);
 	if (!phdr4note)
 		goto end_coredump;
 
@@ -1573,7 +1572,7 @@ static bool elf_fdpic_core_dump(struct coredump_params *cprm)
 	e_shoff = offset;
 
 	if (e_phnum == PN_XNUM) {
-		shdr4extnum = kmalloc_obj(*shdr4extnum);
+		shdr4extnum = kmalloc(sizeof(*shdr4extnum), GFP_KERNEL);
 		if (!shdr4extnum)
 			goto end_coredump;
 		fill_extnum_info(elf, shdr4extnum, e_shoff, segs);
@@ -1656,8 +1655,6 @@ static bool elf_fdpic_core_dump(struct coredump_params *cprm)
 		       cprm->file->f_pos, offset);
 	}
 
-	ret = true;
-
 end_coredump:
 	while (thread_list) {
 		tmp = thread_list;
@@ -1668,7 +1665,7 @@ end_coredump:
 	kfree(elf);
 	kfree(psinfo);
 	kfree(shdr4extnum);
-	return ret;
+	return has_dumped;
 }
 
 #endif		/* CONFIG_ELF_CORE */

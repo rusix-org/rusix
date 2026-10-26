@@ -5,7 +5,6 @@
  * Copyright (c) 2023 CTERA Networks.
  */
 
-#include "dev.h"
 #include "fuse_i.h"
 
 #include <linux/file.h>
@@ -113,13 +112,13 @@ int fuse_backing_open(struct fuse_conn *fc, struct fuse_backing_map *map)
 	if (backing_sb->s_stack_depth >= fc->max_stack_depth)
 		goto out_fput;
 
-	fb = kmalloc_obj(struct fuse_backing);
+	fb = kmalloc(sizeof(struct fuse_backing), GFP_KERNEL);
 	res = -ENOMEM;
 	if (!fb)
 		goto out_fput;
 
 	fb->file = file;
-	fb->cred = get_current_cred();
+	fb->cred = prepare_creds();
 	refcount_set(&fb->count, 1);
 
 	res = fuse_backing_id_alloc(fc, fb);

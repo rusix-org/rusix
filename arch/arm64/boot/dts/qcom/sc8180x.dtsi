@@ -646,11 +646,6 @@
 			no-map;
 		};
 
-		gpu_mem: memory@98715000 {
-			reg = <0x0 0x98715000 0x0 0x2000>;
-			no-map;
-		};
-
 		reserved@9d400000 {
 			reg = <0x0 0x9d400000 0x0 0x1000000>;
 			no-map;
@@ -1767,8 +1762,8 @@
 			assigned-clocks = <&gcc GCC_PCIE_0_AUX_CLK>;
 			assigned-clock-rates = <19200000>;
 
-			iommu-map = <0x0   &apps_smmu 0x1d80 0x0 0x1>,
-				    <0x100 &apps_smmu 0x1d81 0x0 0x1>;
+			iommu-map = <0x0   &apps_smmu 0x1d80 0x1>,
+				    <0x100 &apps_smmu 0x1d81 0x1>;
 
 			resets = <&gcc GCC_PCIE_0_BCR>;
 			reset-names = "pci";
@@ -1779,16 +1774,16 @@
 					<&gem_noc MASTER_AMPSS_M0 0 &config_noc SLAVE_PCIE_0 0>;
 			interconnect-names = "pcie-mem", "cpu-pcie";
 
+			phys = <&pcie0_phy>;
+			phy-names = "pciephy";
 			dma-coherent;
 
 			status = "disabled";
 
-			pcie0_port0: pcie@0 {
+			pcie@0 {
 				device_type = "pci";
 				reg = <0x0 0x0 0x0 0x0 0x0>;
 				bus-range = <0x01 0xff>;
-
-				phys = <&pcie0_phy>;
 
 				#address-cells = <3>;
 				#size-cells = <2>;
@@ -1886,8 +1881,8 @@
 			assigned-clocks = <&gcc GCC_PCIE_3_AUX_CLK>;
 			assigned-clock-rates = <19200000>;
 
-			iommu-map = <0x0   &apps_smmu 0x1e00 0x0 0x1>,
-				    <0x100 &apps_smmu 0x1e01 0x0 0x1>;
+			iommu-map = <0x0   &apps_smmu 0x1e00 0x1>,
+				    <0x100 &apps_smmu 0x1e01 0x1>;
 
 			resets = <&gcc GCC_PCIE_3_BCR>;
 			reset-names = "pci";
@@ -1898,16 +1893,16 @@
 					<&gem_noc MASTER_AMPSS_M0 0 &config_noc SLAVE_PCIE_3 0>;
 			interconnect-names = "pcie-mem", "cpu-pcie";
 
+			phys = <&pcie3_phy>;
+			phy-names = "pciephy";
 			dma-coherent;
 
 			status = "disabled";
 
-			pcie3_port0: pcie@0 {
+			pcie@0 {
 				device_type = "pci";
 				reg = <0x0 0x0 0x0 0x0 0x0>;
 				bus-range = <0x01 0xff>;
-
-				phys = <&pcie3_phy>;
 
 				#address-cells = <3>;
 				#size-cells = <2>;
@@ -2006,8 +2001,8 @@
 			assigned-clocks = <&gcc GCC_PCIE_1_AUX_CLK>;
 			assigned-clock-rates = <19200000>;
 
-			iommu-map = <0x0   &apps_smmu 0x1c80 0x0 0x1>,
-				    <0x100 &apps_smmu 0x1c81 0x0 0x1>;
+			iommu-map = <0x0   &apps_smmu 0x1c80 0x1>,
+				    <0x100 &apps_smmu 0x1c81 0x1>;
 
 			resets = <&gcc GCC_PCIE_1_BCR>;
 			reset-names = "pci";
@@ -2018,16 +2013,16 @@
 					<&gem_noc MASTER_AMPSS_M0 0 &config_noc SLAVE_PCIE_1 0>;
 			interconnect-names = "pcie-mem", "cpu-pcie";
 
+			phys = <&pcie1_phy>;
+			phy-names = "pciephy";
 			dma-coherent;
 
 			status = "disabled";
 
-			pcie1_port0: pcie@0 {
+			pcie@0 {
 				device_type = "pci";
 				reg = <0x0 0x0 0x0 0x0 0x0>;
 				bus-range = <0x01 0xff>;
-
-				phys = <&pcie1_phy>;
 
 				#address-cells = <3>;
 				#size-cells = <2>;
@@ -2126,8 +2121,8 @@
 			assigned-clocks = <&gcc GCC_PCIE_2_AUX_CLK>;
 			assigned-clock-rates = <19200000>;
 
-			iommu-map = <0x0   &apps_smmu 0x1d00 0x0 0x1>,
-				    <0x100 &apps_smmu 0x1d01 0x0 0x1>;
+			iommu-map = <0x0   &apps_smmu 0x1d00 0x1>,
+				    <0x100 &apps_smmu 0x1d01 0x1>;
 
 			resets = <&gcc GCC_PCIE_2_BCR>;
 			reset-names = "pci";
@@ -2138,16 +2133,16 @@
 					<&gem_noc MASTER_AMPSS_M0 0 &config_noc SLAVE_PCIE_2 0>;
 			interconnect-names = "pcie-mem", "cpu-pcie";
 
+			phys = <&pcie2_phy>;
+			phy-names = "pciephy";
 			dma-coherent;
 
 			status = "disabled";
 
-			pcie2_port0: pcie@0 {
+			pcie@0 {
 				device_type = "pci";
 				reg = <0x0 0x0 0x0 0x0 0x0>;
 				bus-range = <0x01 0xff>;
-
-				phys = <&pcie2_phy>;
 
 				#address-cells = <3>;
 				#size-cells = <2>;
@@ -2278,10 +2273,6 @@
 			#cooling-cells = <2>;
 
 			status = "disabled";
-
-			gpu_zap_shader: zap-shader {
-				memory-region = <&gpu_mem>;
-			};
 
 			gpu_opp_table: opp-table {
 				compatible = "operating-points-v2";
@@ -2537,12 +2528,6 @@
 			resets = <&gcc GCC_QUSB2PHY_MP1_BCR>;
 
 			status = "disabled";
-		};
-
-		refgen: regulator@88e7000 {
-			compatible = "qcom,sc8180x-refgen-regulator",
-				     "qcom,sdm845-refgen-regulator";
-			reg = <0x0 0x088e7000 0x0 0x60>;
 		};
 
 		usb_prim_qmpphy: phy@88e8000 {
@@ -3131,8 +3116,6 @@
 				phys = <&mdss_dsi0_phy>;
 				phy-names = "dsi";
 
-				refgen-supply = <&refgen>;
-
 				status = "disabled";
 
 				ports {
@@ -3219,8 +3202,6 @@
 
 				phys = <&mdss_dsi1_phy>;
 				phy-names = "dsi";
-
-				refgen-supply = <&refgen>;
 
 				status = "disabled";
 
@@ -3554,7 +3535,7 @@
 
 		pdc: interrupt-controller@b220000 {
 			compatible = "qcom,sc8180x-pdc", "qcom,pdc";
-			reg = <0 0x0b220000 0 0x10000>;
+			reg = <0 0x0b220000 0 0x30000>;
 			qcom,pdc-ranges = <0 480 94>, <94 609 31>;
 			#interrupt-cells = <2>;
 			interrupt-parent = <&intc>;
@@ -3755,7 +3736,7 @@
 
 			status = "disabled";
 
-			glink-edge {
+			remoteproc_adsp_glink: glink-edge {
 				interrupts = <GIC_SPI 156 IRQ_TYPE_EDGE_RISING>;
 				label = "lpass";
 				qcom,remote-pid = <2>;

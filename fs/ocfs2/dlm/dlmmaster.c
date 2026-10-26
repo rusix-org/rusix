@@ -930,6 +930,7 @@ redo_request:
 	if (blocked)
 		goto wait;
 
+	ret = -EINVAL;
 	dlm_node_iter_init(mle->vote_map, &iter);
 	while ((nodenum = dlm_node_iter_next(&iter)) >= 0) {
 		ret = dlm_do_master_request(res, mle, nodenum);
@@ -2039,7 +2040,7 @@ int dlm_dispatch_assert_master(struct dlm_ctxt *dlm,
 			       int ignore_higher, u8 request_from, u32 flags)
 {
 	struct dlm_work_item *item;
-	item = kzalloc_obj(*item, GFP_ATOMIC);
+	item = kzalloc(sizeof(*item), GFP_ATOMIC);
 	if (!item)
 		return -ENOMEM;
 
@@ -2302,7 +2303,7 @@ int dlm_deref_lockres_handler(struct o2net_msg *msg, u32 len, void *data,
 		goto done;
 	}
 
-	item = kzalloc_obj(*item, GFP_NOFS);
+	item = kzalloc(sizeof(*item), GFP_NOFS);
 	if (!item) {
 		ret = -ENOMEM;
 		mlog_errno(ret);
@@ -2548,7 +2549,7 @@ static int dlm_migrate_lockres(struct dlm_ctxt *dlm,
 
 	/* preallocate up front. if this fails, abort */
 	ret = -ENOMEM;
-	mres = kmalloc(PAGE_SIZE, GFP_NOFS);
+	mres = (struct dlm_migratable_lockres *) __get_free_page(GFP_NOFS);
 	if (!mres) {
 		mlog_errno(ret);
 		goto leave;
@@ -2725,7 +2726,8 @@ leave:
 	if (wake)
 		wake_up(&res->wq);
 
-	kfree(mres);
+	if (mres)
+		free_page((unsigned long)mres);
 
 	dlm_put(dlm);
 

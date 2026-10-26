@@ -8,6 +8,7 @@
 #include <linux/clk.h>
 #include <linux/module.h>
 #include <linux/property.h>
+#include <linux/mod_devicetable.h>
 #include <linux/platform_device.h>
 
 #include "stmmac_platform.h"
@@ -28,6 +29,7 @@ static int sophgo_sg2044_dwmac_init(struct platform_device *pdev,
 	plat_dat->flags |= STMMAC_FLAG_SPH_DISABLE;
 	plat_dat->set_clk_tx_rate = stmmac_set_clk_tx_rate;
 	plat_dat->multicast_filter_bins = 0;
+	plat_dat->unicast_filter_entries = 1;
 
 	return 0;
 }
@@ -55,10 +57,14 @@ static int sophgo_dwmac_probe(struct platform_device *pdev)
 		return ret;
 
 	data = device_get_match_data(&pdev->dev);
-	if (data)
-		plat_dat->has_internal_rx_delay = data->has_internal_rx_delay;
+	if (data && data->has_internal_rx_delay) {
+		plat_dat->phy_interface = phy_fix_phy_mode_for_mac_delays(plat_dat->phy_interface,
+									  false, true);
+		if (plat_dat->phy_interface == PHY_INTERFACE_MODE_NA)
+			return -EINVAL;
+	}
 
-	return stmmac_pltfr_probe(pdev, plat_dat, &stmmac_res);
+	return stmmac_dvr_probe(dev, plat_dat, &stmmac_res);
 }
 
 static const struct sophgo_dwmac_data sg2042_dwmac_data = {

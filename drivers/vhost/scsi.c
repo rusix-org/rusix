@@ -197,50 +197,17 @@ enum {
 };
 
 /* Note: can't set VIRTIO_F_VERSION_1 yet, since that implies ANY_LAYOUT. */
-static const int vhost_scsi_bits[] = {
-	VHOST_FEATURES,
-	VIRTIO_SCSI_F_HOTPLUG,
-	VIRTIO_SCSI_F_T10_PI
+enum {
+	VHOST_SCSI_FEATURES = VHOST_FEATURES | (1ULL << VIRTIO_SCSI_F_HOTPLUG) |
+					       (1ULL << VIRTIO_SCSI_F_T10_PI)
 };
-
-#define VHOST_SCSI_FEATURES VHOST_FEATURES_U64(vhost_scsi_bits, 0)
 
 #define VHOST_SCSI_MAX_TARGET	256
 #define VHOST_SCSI_MAX_IO_VQ	1024
 #define VHOST_SCSI_MAX_EVENT	128
 
 static unsigned vhost_scsi_max_io_vqs = 128;
-
-static int vhost_scsi_set_max_io_vqs(const char *val,
-				     const struct kernel_param *kp)
-{
-	unsigned int max_io_vqs;
-	int ret;
-
-	ret = kstrtouint(val, 0, &max_io_vqs);
-	if (ret)
-		return ret;
-
-	if (max_io_vqs > VHOST_SCSI_MAX_IO_VQ) {
-		pr_err("Invalid max_io_vqs of %u. Using %u.\n",
-		       max_io_vqs, VHOST_SCSI_MAX_IO_VQ);
-		max_io_vqs = VHOST_SCSI_MAX_IO_VQ;
-	} else if (!max_io_vqs) {
-		pr_err("Invalid max_io_vqs of 0. Using 1.\n");
-		max_io_vqs = 1;
-	}
-
-	WRITE_ONCE(vhost_scsi_max_io_vqs, max_io_vqs);
-	return 0;
-}
-
-static const struct kernel_param_ops vhost_scsi_max_io_vqs_op = {
-	.set = vhost_scsi_set_max_io_vqs,
-	.get = param_get_uint,
-};
-
-module_param_cb(max_io_vqs, &vhost_scsi_max_io_vqs_op,
-		&vhost_scsi_max_io_vqs, 0644);
+module_param_named(max_io_vqs, vhost_scsi_max_io_vqs, uint, 0644);
 MODULE_PARM_DESC(max_io_vqs, "Set the max number of IO virtqueues a vhost scsi device can support. The default is 128. The max is 1024.");
 
 struct vhost_scsi_virtqueue {
@@ -412,7 +379,9 @@ static int vhost_scsi_copy_cmd_log(struct vhost_virtqueue *vq,
 				   unsigned int log_num)
 {
 	if (!cmd->tvc_log)
-		cmd->tvc_log = kmalloc_objs(*cmd->tvc_log, vq->dev->iov_limit);
+		cmd->tvc_log = kmalloc_array(vq->dev->iov_limit,
+					     sizeof(*cmd->tvc_log),
+					     GFP_KERNEL);
 
 	if (unlikely(!cmd->tvc_log)) {
 		vq_err(vq, "Failed to alloc tvc_log\n");
@@ -577,7 +546,7 @@ vhost_scsi_allocate_evt(struct vhost_scsi *vs,
 		return NULL;
 	}
 
-	evt = kzalloc_obj(*evt);
+	evt = kzalloc(sizeof(*evt), GFP_KERNEL);
 	if (!evt) {
 		vq_err(vq, "Failed to allocate vhost_scsi_evt\n");
 		vs->vs_events_missed = true;
@@ -925,7 +894,7 @@ vhost_scsi_copy_iov_to_sgl(struct vhost_scsi_cmd *cmd, struct iov_iter *iter,
 	int i, ret;
 
 	if (data_dir == DMA_FROM_DEVICE) {
-		cmd->read_iter = kzalloc_obj(*cmd->read_iter);
+		cmd->read_iter = kzalloc(sizeof(*cmd->read_iter), GFP_KERNEL);
 		if (!cmd->read_iter)
 			return -ENOMEM;
 
@@ -1295,7 +1264,8 @@ vhost_scsi_setup_resp_iovs(struct vhost_scsi_cmd *cmd, struct iovec *in_iovs,
 		 * iov per byte.
 		 */
 		cnt = min(VHOST_SCSI_MAX_RESP_IOVS, in_iovs_cnt);
-		cmd->tvc_resp_iovs = kzalloc_objs(struct iovec, cnt);
+		cmd->tvc_resp_iovs = kcalloc(cnt, sizeof(struct iovec),
+					     GFP_KERNEL);
 		if (!cmd->tvc_resp_iovs)
 			return -ENOMEM;
 
@@ -1638,7 +1608,7 @@ vhost_scsi_handle_tmf(struct vhost_scsi *vs, struct vhost_scsi_tpg *tpg,
 		goto send_reject;
 	}
 
-	tmf = kzalloc_obj(*tmf);
+	tmf = kzalloc(sizeof(*tmf), GFP_KERNEL);
 	if (!tmf)
 		goto send_reject;
 
@@ -1652,7 +1622,8 @@ vhost_scsi_handle_tmf(struct vhost_scsi *vs, struct vhost_scsi_tpg *tpg,
 	tmf->inflight = vhost_scsi_get_inflight(vq);
 
 	if (unlikely(log && log_num)) {
-		tmf->tmf_log = kmalloc_objs(*tmf->tmf_log, log_num);
+		tmf->tmf_log = kmalloc_array(log_num, sizeof(*tmf->tmf_log),
+					     GFP_KERNEL);
 		if (tmf->tmf_log) {
 			memcpy(tmf->tmf_log, log, sizeof(*tmf->tmf_log) * log_num);
 			tmf->tmf_log_num = log_num;
@@ -1970,13 +1941,14 @@ static int vhost_scsi_setup_vq_cmds(struct vhost_virtqueue *vq, int max_cmds)
 		return -ENOMEM;
 	svq->max_cmds = max_cmds;
 
-	svq->scsi_cmds = kzalloc_objs(*tv_cmd, max_cmds);
+	svq->scsi_cmds = kcalloc(max_cmds, sizeof(*tv_cmd), GFP_KERNEL);
 	if (!svq->scsi_cmds) {
 		sbitmap_free(&svq->scsi_tags);
 		return -ENOMEM;
 	}
 
-	svq->upages = kzalloc_objs(struct page *, VHOST_SCSI_PREALLOC_UPAGES);
+	svq->upages = kcalloc(VHOST_SCSI_PREALLOC_UPAGES, sizeof(struct page *),
+			      GFP_KERNEL);
 	if (!svq->upages)
 		goto out;
 
@@ -1984,8 +1956,9 @@ static int vhost_scsi_setup_vq_cmds(struct vhost_virtqueue *vq, int max_cmds)
 		tv_cmd = &svq->scsi_cmds[i];
 
 		if (vs->inline_sg_cnt) {
-			tv_cmd->sgl = kzalloc_objs(struct scatterlist,
-						   vs->inline_sg_cnt);
+			tv_cmd->sgl = kcalloc(vs->inline_sg_cnt,
+					      sizeof(struct scatterlist),
+					      GFP_KERNEL);
 			if (!tv_cmd->sgl) {
 				pr_err("Unable to allocate tv_cmd->sgl\n");
 				goto out;
@@ -1994,8 +1967,9 @@ static int vhost_scsi_setup_vq_cmds(struct vhost_virtqueue *vq, int max_cmds)
 
 		if (vhost_has_feature(vq, VIRTIO_SCSI_F_T10_PI) &&
 		    vs->inline_sg_cnt) {
-			tv_cmd->prot_sgl = kzalloc_objs(struct scatterlist,
-							vs->inline_sg_cnt);
+			tv_cmd->prot_sgl = kcalloc(vs->inline_sg_cnt,
+						   sizeof(struct scatterlist),
+						   GFP_KERNEL);
 			if (!tv_cmd->prot_sgl) {
 				pr_err("Unable to allocate tv_cmd->prot_sgl\n");
 				goto out;
@@ -2320,26 +2294,34 @@ static int vhost_scsi_open(struct inode *inode, struct file *f)
 	struct vhost_scsi_virtqueue *svq;
 	struct vhost_scsi *vs;
 	struct vhost_virtqueue **vqs;
-	int r = -ENOMEM, i, nvqs;
+	int r = -ENOMEM, i, nvqs = vhost_scsi_max_io_vqs;
 
-	vs = kvzalloc_obj(*vs);
+	vs = kvzalloc(sizeof(*vs), GFP_KERNEL);
 	if (!vs)
 		goto err_vs;
 	vs->inline_sg_cnt = vhost_scsi_inline_sg_cnt;
 
-	nvqs = READ_ONCE(vhost_scsi_max_io_vqs);
+	if (nvqs > VHOST_SCSI_MAX_IO_VQ) {
+		pr_err("Invalid max_io_vqs of %d. Using %d.\n", nvqs,
+		       VHOST_SCSI_MAX_IO_VQ);
+		nvqs = VHOST_SCSI_MAX_IO_VQ;
+	} else if (nvqs == 0) {
+		pr_err("Invalid max_io_vqs of %d. Using 1.\n", nvqs);
+		nvqs = 1;
+	}
 	nvqs += VHOST_SCSI_VQ_IO;
 
-	vs->old_inflight = kmalloc_objs(*vs->old_inflight, nvqs,
-					GFP_KERNEL | __GFP_ZERO);
+	vs->old_inflight = kmalloc_array(nvqs, sizeof(*vs->old_inflight),
+					 GFP_KERNEL | __GFP_ZERO);
 	if (!vs->old_inflight)
 		goto err_inflight;
 
-	vs->vqs = kvzalloc_objs(*vs->vqs, nvqs);
+	vs->vqs = kmalloc_array(nvqs, sizeof(*vs->vqs),
+				GFP_KERNEL | __GFP_ZERO);
 	if (!vs->vqs)
 		goto err_vqs;
 
-	vqs = kmalloc_objs(*vqs, nvqs);
+	vqs = kmalloc_array(nvqs, sizeof(*vqs), GFP_KERNEL);
 	if (!vqs)
 		goto err_local_vqs;
 
@@ -2371,7 +2353,7 @@ static int vhost_scsi_open(struct inode *inode, struct file *f)
 	return 0;
 
 err_local_vqs:
-	kvfree(vs->vqs);
+	kfree(vs->vqs);
 err_vqs:
 	kfree(vs->old_inflight);
 err_inflight:
@@ -2390,9 +2372,9 @@ static int vhost_scsi_release(struct inode *inode, struct file *f)
 	mutex_unlock(&vs->dev.mutex);
 	vhost_scsi_clear_endpoint(vs, &t);
 	vhost_dev_stop(&vs->dev);
-	vhost_dev_cleanup(&vs->dev, false);
+	vhost_dev_cleanup(&vs->dev);
 	kfree(vs->dev.vqs);
-	kvfree(vs->vqs);
+	kfree(vs->vqs);
 	kfree(vs->old_inflight);
 	kvfree(vs);
 	return 0;
@@ -2636,7 +2618,7 @@ static int vhost_scsi_make_nexus(struct vhost_scsi_tpg *tpg,
 		return -EEXIST;
 	}
 
-	tv_nexus = kzalloc_obj(*tv_nexus);
+	tv_nexus = kzalloc(sizeof(*tv_nexus), GFP_KERNEL);
 	if (!tv_nexus) {
 		mutex_unlock(&tpg->tv_tpg_mutex);
 		pr_err("Unable to allocate struct vhost_scsi_nexus\n");
@@ -2831,7 +2813,7 @@ vhost_scsi_make_tpg(struct se_wwn *wwn, const char *name)
 	if (kstrtou16(name + 5, 10, &tpgt) || tpgt >= VHOST_SCSI_MAX_TARGET)
 		return ERR_PTR(-EINVAL);
 
-	tpg = kzalloc_obj(*tpg);
+	tpg = kzalloc(sizeof(*tpg), GFP_KERNEL);
 	if (!tpg) {
 		pr_err("Unable to allocate struct vhost_scsi_tpg");
 		return ERR_PTR(-ENOMEM);
@@ -2885,7 +2867,7 @@ vhost_scsi_make_tport(struct target_fabric_configfs *tf,
 	/* if (vhost_scsi_parse_wwn(name, &wwpn, 1) < 0)
 		return ERR_PTR(-EINVAL); */
 
-	tport = kzalloc_obj(*tport);
+	tport = kzalloc(sizeof(*tport), GFP_KERNEL);
 	if (!tport) {
 		pr_err("Unable to allocate struct vhost_scsi_tport");
 		return ERR_PTR(-ENOMEM);
@@ -2991,8 +2973,6 @@ static const struct target_core_fabric_ops vhost_scsi_ops = {
 	.tfc_tpg_base_attrs		= vhost_scsi_tpg_attrs,
 	.tfc_tpg_attrib_attrs		= vhost_scsi_tpg_attrib_attrs,
 
-	.default_compl_type		= TARGET_QUEUE_COMPL,
-	.direct_compl_supp		= 1,
 	.default_submit_type		= TARGET_QUEUE_SUBMIT,
 	.direct_submit_supp		= 1,
 };

@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0
 
+#include <linux/compat.h>
 #include <linux/ptrace.h>
 #include <asm/cio.h>
 #include <asm/asm-offsets.h>
@@ -11,7 +12,7 @@
 #define PSW_MASK_DISABLED (PSW_MASK_WAIT | PSW_MASK_EA | PSW_MASK_BA)
 
 struct ipl_lowcore {
-	psw32_t		ipl_psw;			/* 0x0000 */
+	psw_t32		ipl_psw;			/* 0x0000 */
 	struct ccw0	ccwpgm[2];			/* 0x0008 */
 	u8		fill[56];			/* 0x0018 */
 	struct ccw0	ccwpgmcc[20];			/* 0x0050 */

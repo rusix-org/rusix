@@ -340,11 +340,6 @@ struct dlm_rsb {
 	char			res_name[DLM_RESNAME_MAXLEN+1];
 };
 
-struct dlm_rsb_key {
-	char name[DLM_RESNAME_MAXLEN];
-	size_t len;
-};
-
 /* dlm_master_lookup() flags */
 
 #define DLM_LU_RECOVER_DIR	1
@@ -611,6 +606,7 @@ struct dlm_ls {
 
 	struct dlm_rsb		ls_local_rsb;	/* for returning errors */
 	struct dlm_lkb		ls_local_lkb;	/* for returning errors */
+	struct dlm_message	ls_local_ms;	/* for faking a reply */
 
 	struct dentry		*ls_debug_rsb_dentry; /* debugfs */
 	struct dentry		*ls_debug_waiters_dentry; /* debugfs */
@@ -669,9 +665,6 @@ struct dlm_ls {
 
 	int			ls_namelen;
 	char			ls_name[DLM_LOCKSPACE_LEN + 1];
-
-	/* Must be last --ends in a flexible-array member.*/
-	struct dlm_message	ls_local_ms;	/* for faking a reply */
 };
 
 /*

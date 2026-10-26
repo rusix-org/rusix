@@ -103,17 +103,17 @@ MODULE_PARM_DESC(modeset, "enable driver (default: auto, "
 int nouveau_modeset = -1;
 module_param_named(modeset, nouveau_modeset, int, 0400);
 
-MODULE_PARM_DESC(atomic, "Expose atomic ioctl (default: auto, "
-			 "0 = disabled, 1 = enabled)");
-static int nouveau_atomic = -1;
+MODULE_PARM_DESC(atomic, "Expose atomic ioctl (default: disabled)");
+static int nouveau_atomic = 0;
 module_param_named(atomic, nouveau_atomic, int, 0400);
 
 MODULE_PARM_DESC(runpm, "disable (0), force enable (1), optimus only default (-1)");
 static int nouveau_runtime_pm = -1;
 module_param_named(runpm, nouveau_runtime_pm, int, 0400);
 
-static const struct drm_driver driver_legacy_kms;
-static const struct drm_driver driver_atomic_kms;
+static struct drm_driver driver_stub;
+static struct drm_driver driver_pci;
+static struct drm_driver driver_platform;
 
 #ifdef CONFIG_DEBUG_FS
 struct dentry *nouveau_debugfs_root;
@@ -153,6 +153,21 @@ nouveau_name(struct drm_device *dev)
 		return nouveau_platform_name(to_platform_device(dev->dev));
 }
 
+static inline bool
+nouveau_cli_work_ready(struct dma_fence *fence)
+{
+	bool ret = true;
+
+	spin_lock_irq(fence->lock);
+	if (!dma_fence_is_signaled_locked(fence))
+		ret = false;
+	spin_unlock_irq(fence->lock);
+
+	if (ret == true)
+		dma_fence_put(fence);
+	return ret;
+}
+
 static void
 nouveau_cli_work(struct work_struct *w)
 {
@@ -160,25 +175,9 @@ nouveau_cli_work(struct work_struct *w)
 	struct nouveau_cli_work *work, *wtmp;
 	mutex_lock(&cli->lock);
 	list_for_each_entry_safe(work, wtmp, &cli->worker, head) {
-		struct dma_fence *fence = work->fence;
-
-		if (!fence || dma_fence_is_signaled(fence)) {
-			if (fence) {
-				unsigned long flags;
-
-				/*
-				 * Because fence can still be in the process of
-				 * processing the callback list, and the
-				 * callback references the work we are about to
-				 * free, we need to sync with the callback
-				 * processing before freeing the work.
-				 */
-				dma_fence_lock_irqsave(fence, flags);
-				dma_fence_unlock_irqrestore(fence, flags);
-			}
+		if (!work->fence || nouveau_cli_work_ready(work->fence)) {
 			list_del(&work->head);
 			work->func(work);
-			dma_fence_put(fence);
 		}
 	}
 	mutex_unlock(&cli->lock);
@@ -633,7 +632,7 @@ nouveau_drm_device_init(struct nouveau_drm *drm)
 	struct drm_device *dev = drm->dev;
 	int ret;
 
-	drm->sched_wq = alloc_workqueue("nouveau_sched_wq_shared", WQ_PERCPU,
+	drm->sched_wq = alloc_workqueue("nouveau_sched_wq_shared", 0,
 					WQ_MAX_ACTIVE);
 	if (!drm->sched_wq)
 		return -ENOMEM;
@@ -728,7 +727,8 @@ nouveau_drm_device_del(struct nouveau_drm *drm)
 }
 
 static struct nouveau_drm *
-nouveau_drm_device_new(struct device *parent, struct nvkm_device *device)
+nouveau_drm_device_new(const struct drm_driver *drm_driver, struct device *parent,
+		       struct nvkm_device *device)
 {
 	static const struct nvif_mclass
 	mmus[] = {
@@ -737,32 +737,19 @@ nouveau_drm_device_new(struct device *parent, struct nvkm_device *device)
 		{ NVIF_CLASS_MMU_NV04 , -1 },
 		{}
 	};
-	const struct drm_driver *driver;
 	struct nouveau_drm *drm;
 	int ret;
 
-	if (device->card_type >= NV_50) {
-		if (nouveau_atomic)
-			driver = &driver_atomic_kms;
-		else
-			driver = &driver_legacy_kms;
-	} else {
-		if (nouveau_atomic == 1)
-			dev_warn(parent, "Atomic modesetting not supported (needs nv50+)\n");
-
-		driver = &driver_legacy_kms;
-	}
-
-	drm = kzalloc_obj(*drm);
+	drm = kzalloc(sizeof(*drm), GFP_KERNEL);
 	if (!drm)
 		return ERR_PTR(-ENOMEM);
 
 	drm->nvkm = device;
-	drm->dev = drm_dev_alloc(driver, parent);
+
+	drm->dev = drm_dev_alloc(drm_driver, parent);
 	if (IS_ERR(drm->dev)) {
 		ret = PTR_ERR(drm->dev);
-		kfree(drm);
-		return ERR_PTR(ret);
+		goto done;
 	}
 
 	drm->dev->dev_private = drm;
@@ -886,13 +873,16 @@ static int nouveau_drm_probe(struct pci_dev *pdev,
 		return ret;
 
 	/* Remove conflicting drivers (vesafb, efifb etc). */
-	ret = aperture_remove_conflicting_pci_devices(pdev, DRIVER_NAME);
+	ret = aperture_remove_conflicting_pci_devices(pdev, driver_pci.name);
 	if (ret)
 		goto fail_nvkm;
 
 	pci_set_master(pdev);
 
-	drm = nouveau_drm_device_new(&pdev->dev, device);
+	if (nouveau_atomic)
+		driver_pci.driver_features |= DRIVER_ATOMIC;
+
+	drm = nouveau_drm_device_new(&driver_pci, &pdev->dev, device);
 	if (IS_ERR(drm)) {
 		ret = PTR_ERR(drm);
 		goto fail_nvkm;
@@ -1090,37 +1080,6 @@ nouveau_pmops_resume(struct device *dev)
 	return ret;
 }
 
-static void
-nouveau_drm_shutdown(struct pci_dev *pdev)
-{
-	struct nouveau_drm *drm = pci_get_drvdata(pdev);
-	int ret;
-
-	if (!drm)
-		return;
-
-	if (drm->dev->switch_power_state == DRM_SWITCH_POWER_OFF ||
-	    drm->dev->switch_power_state == DRM_SWITCH_POWER_DYNAMIC_OFF)
-		return;
-
-	ret = nouveau_do_suspend(drm, false);
-	if (ret)
-		NV_ERROR(drm, "shutdown suspend failed with: %d\n", ret);
-
-	pci_save_state(pdev);
-	pci_disable_device(pdev);
-	pci_set_power_state(pdev, PCI_D3hot);
-	/*
-	 *  This is just to give the pci power transition time to settle
-	 *  before an immediate kexec jump. it’s mirroring the existing
-	 *  nouveau_pmops_suspend() behavior, which already does
-	 *  udelay(200) right after pci_set_power_state(..., pci_d3hot). In
-	 *  ->shutdown() we’re allowed to sleep, so I used usleep_range()
-	 *  instead of a busy-wait udelay().
-	 */
-	usleep_range(200, 400);
-}
-
 static int
 nouveau_pmops_freeze(struct device *dev)
 {
@@ -1158,23 +1117,10 @@ nouveau_pmops_runtime_suspend(struct device *dev)
 {
 	struct pci_dev *pdev = to_pci_dev(dev);
 	struct nouveau_drm *drm = pci_get_drvdata(pdev);
-	struct nvif_device *nvif = &drm->client.device;
 	int ret;
 
 	if (!nouveau_pmops_runtime()) {
 		pm_runtime_forbid(dev);
-		return -EBUSY;
-	}
-
-	// Check if the GPU itself is ready for runtime suspend, otherwise mark as busy and check
-	// again in a bit.
-	ret = nvif_device_gcx_ready(nvif);
-	if (ret < 0) {
-		NV_ERROR(drm, "Failed to query GCX readiness (returned %d)\n", ret);
-		return -EBUSY;
-	} else if (!(ret & NV_DEVICE_GCOFF_READY)) {
-		NV_DEBUG(drm, "GPU isn't ready for suspend yet, delaying...\n");
-		pm_runtime_mark_last_busy(dev);
 		return -EBUSY;
 	}
 
@@ -1232,6 +1178,7 @@ nouveau_pmops_runtime_idle(struct device *dev)
 		return -EBUSY;
 	}
 
+	pm_runtime_mark_last_busy(dev);
 	pm_runtime_autosuspend(dev);
 	/* we don't want the main rpm_idle to call suspend - we want to autosuspend */
 	return 1;
@@ -1257,7 +1204,7 @@ nouveau_drm_open(struct drm_device *dev, struct drm_file *fpriv)
 		 current->comm, pid_nr(rcu_dereference(fpriv->pid)));
 	rcu_read_unlock();
 
-	if (!(cli = kzalloc_obj(*cli))) {
+	if (!(cli = kzalloc(sizeof(*cli), GFP_KERNEL))) {
 		ret = -ENOMEM;
 		goto done;
 	}
@@ -1324,7 +1271,6 @@ nouveau_ioctls[] = {
 	DRM_IOCTL_DEF_DRV(NOUVEAU_GROBJ_ALLOC, nouveau_abi16_ioctl_grobj_alloc, DRM_RENDER_ALLOW),
 	DRM_IOCTL_DEF_DRV(NOUVEAU_NOTIFIEROBJ_ALLOC, nouveau_abi16_ioctl_notifierobj_alloc, DRM_RENDER_ALLOW),
 	DRM_IOCTL_DEF_DRV(NOUVEAU_GPUOBJ_FREE, nouveau_abi16_ioctl_gpuobj_free, DRM_RENDER_ALLOW),
-	DRM_IOCTL_DEF_DRV(NOUVEAU_GET_ZCULL_INFO, nouveau_abi16_ioctl_get_zcull_info, DRM_RENDER_ALLOW),
 	DRM_IOCTL_DEF_DRV(NOUVEAU_SVM_INIT, nouveau_svmm_init, DRM_RENDER_ALLOW),
 	DRM_IOCTL_DEF_DRV(NOUVEAU_SVM_BIND, nouveau_svmm_bind, DRM_RENDER_ALLOW),
 	DRM_IOCTL_DEF_DRV(NOUVEAU_GEM_NEW, nouveau_gem_ioctl_new, DRM_RENDER_ALLOW),
@@ -1380,54 +1326,36 @@ nouveau_driver_fops = {
 	.fop_flags = FOP_UNSIGNED_OFFSET,
 };
 
-#ifdef CONFIG_DEBUG_FS
-#define NOUVEAU_DEBUGFS_OPS .debugfs_init = nouveau_drm_debugfs_init,
-#else
-#define NOUVEAU_DEBUGFS_OPS
+static struct drm_driver
+driver_stub = {
+	.driver_features = DRIVER_GEM |
+			   DRIVER_SYNCOBJ | DRIVER_SYNCOBJ_TIMELINE |
+			   DRIVER_GEM_GPUVA |
+			   DRIVER_MODESET |
+			   DRIVER_RENDER,
+	.open = nouveau_drm_open,
+	.postclose = nouveau_drm_postclose,
+
+#if defined(CONFIG_DEBUG_FS)
+	.debugfs_init = nouveau_drm_debugfs_init,
 #endif
 
-#define NOUVEAU_DRIVER_OPS                                              \
-	.open = nouveau_drm_open,                                       \
-	.postclose = nouveau_drm_postclose,                             \
-                                                                        \
-	NOUVEAU_DEBUGFS_OPS						\
-                                                                        \
-	.ioctls = nouveau_ioctls,                                       \
-	.num_ioctls = ARRAY_SIZE(nouveau_ioctls),                       \
-	.fops = &nouveau_driver_fops,                                   \
-                                                                        \
-	.gem_prime_import_sg_table = nouveau_gem_prime_import_sg_table, \
-                                                                        \
-	.dumb_create = nouveau_display_dumb_create,                     \
-	.dumb_map_offset = drm_gem_ttm_dumb_map_offset,                 \
-                                                                        \
-	DRM_FBDEV_TTM_DRIVER_OPS,                                       \
-                                                                        \
-	.name = DRIVER_NAME,                                            \
-	.desc = DRIVER_DESC,                                            \
-	.major = DRIVER_MAJOR,                                          \
-	.minor = DRIVER_MINOR,                                          \
-	.patchlevel = DRIVER_PATCHLEVEL
+	.ioctls = nouveau_ioctls,
+	.num_ioctls = ARRAY_SIZE(nouveau_ioctls),
+	.fops = &nouveau_driver_fops,
 
-static const struct drm_driver
-driver_legacy_kms = {
-	.driver_features = DRIVER_GEM
-			 | DRIVER_SYNCOBJ
-			 | DRIVER_SYNCOBJ_TIMELINE
-			 | DRIVER_MODESET
-			 | DRIVER_RENDER,
-	NOUVEAU_DRIVER_OPS,
-};
+	.gem_prime_import_sg_table = nouveau_gem_prime_import_sg_table,
 
-static const struct drm_driver
-driver_atomic_kms = {
-	.driver_features = DRIVER_GEM
-			 | DRIVER_SYNCOBJ
-			 | DRIVER_SYNCOBJ_TIMELINE
-			 | DRIVER_MODESET
-			 | DRIVER_RENDER
-			 | DRIVER_ATOMIC,
-	NOUVEAU_DRIVER_OPS,
+	.dumb_create = nouveau_display_dumb_create,
+	.dumb_map_offset = drm_gem_ttm_dumb_map_offset,
+
+	DRM_FBDEV_TTM_DRIVER_OPS,
+
+	.name = DRIVER_NAME,
+	.desc = DRIVER_DESC,
+	.major = DRIVER_MAJOR,
+	.minor = DRIVER_MINOR,
+	.patchlevel = DRIVER_PATCHLEVEL,
 };
 
 static struct pci_device_id
@@ -1456,7 +1384,6 @@ static void nouveau_display_options(void)
 	DRM_DEBUG_DRIVER("... debug        : %s\n", nouveau_debug);
 	DRM_DEBUG_DRIVER("... noaccel      : %d\n", nouveau_noaccel);
 	DRM_DEBUG_DRIVER("... modeset      : %d\n", nouveau_modeset);
-	DRM_DEBUG_DRIVER("... atomic       : %d\n", nouveau_atomic);
 	DRM_DEBUG_DRIVER("... runpm        : %d\n", nouveau_runtime_pm);
 	DRM_DEBUG_DRIVER("... vram_pushbuf : %d\n", nouveau_vram_pushbuf);
 	DRM_DEBUG_DRIVER("... hdmimhz      : %d\n", nouveau_hdmimhz);
@@ -1480,7 +1407,6 @@ nouveau_drm_pci_driver = {
 	.id_table = nouveau_drm_pci_table,
 	.probe = nouveau_drm_probe,
 	.remove = nouveau_drm_remove,
-	.shutdown = nouveau_drm_shutdown,
 	.driver.pm = &nouveau_pm_ops,
 };
 
@@ -1496,7 +1422,7 @@ nouveau_platform_device_create(const struct nvkm_device_tegra_func *func,
 	if (err)
 		goto err_free;
 
-	drm = nouveau_drm_device_new(&pdev->dev, *pdevice);
+	drm = nouveau_drm_device_new(&driver_platform, &pdev->dev, *pdevice);
 	if (IS_ERR(drm)) {
 		err = PTR_ERR(drm);
 		goto err_free;
@@ -1520,6 +1446,9 @@ static int __init
 nouveau_drm_init(void)
 {
 	int ret;
+
+	driver_pci = driver_stub;
+	driver_platform = driver_stub;
 
 	nouveau_display_options();
 

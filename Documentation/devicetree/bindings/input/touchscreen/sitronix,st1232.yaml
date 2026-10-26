@@ -14,13 +14,9 @@ allOf:
 
 properties:
   compatible:
-    oneOf:
-      - enum:
-          - sitronix,st1232
-          - sitronix,st1633
-      - items:
-          - const: sitronix,st1624
-          - const: sitronix,st1633
+    enum:
+      - sitronix,st1232
+      - sitronix,st1633
 
   reg:
     maxItems: 1
@@ -31,9 +27,6 @@ properties:
   gpios:
     description: A phandle to the reset GPIO
     maxItems: 1
-
-  wakeup-source:
-    type: boolean
 
 required:
   - compatible
@@ -54,7 +47,6 @@ examples:
                     reg = <0x55>;
                     interrupts = <2 0>;
                     gpios = <&gpio1 166 0>;
-                    wakeup-source;
 
                     touch-overlay {
                             segment-0 {

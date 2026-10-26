@@ -168,7 +168,7 @@ static void ipmi_ls2k_remove(struct platform_device *pdev)
 	ipmi_si_remove_by_dev(&pdev->dev);
 }
 
-static struct platform_driver ipmi_ls2k_platform_driver = {
+struct platform_driver ipmi_ls2k_platform_driver = {
 	.driver = {
 		.name = "ls2k-ipmi-si",
 	},

@@ -36,13 +36,19 @@
 #define __type_min(T) ((T)((T)-type_max(T)-(T)1))
 #define type_min(t)	__type_min(typeof(t))
 
+/*
+ * Avoids triggering -Wtype-limits compilation warning,
+ * while using unsigned data types to check a < 0.
+ */
+#define is_non_negative(a) ((a) > 0 || (a) == 0)
+#define is_negative(a) (!(is_non_negative(a)))
 
 /*
  * Allows for effectively applying __must_check to a macro so we can have
  * both the type-agnostic benefits of the macros while also being able to
  * enforce that the return value is, in fact, checked.
  */
-static __always_inline bool __must_check __must_check_overflow(bool overflow)
+static inline bool __must_check __must_check_overflow(bool overflow)
 {
 	return unlikely(overflow);
 }
@@ -195,9 +201,9 @@ static __always_inline bool __must_check __must_check_overflow(bool overflow)
 	typeof(d) _d = d;						\
 	unsigned long long _a_full = _a;				\
 	unsigned int _to_shift =					\
-		_s >= 0 && _s < 8 * sizeof(*d) ? _s : 0;		\
+		is_non_negative(_s) && _s < 8 * sizeof(*d) ? _s : 0;	\
 	*_d = (_a_full << _to_shift);					\
-	(_to_shift != _s || *_d < 0 || _a < 0 ||			\
+	(_to_shift != _s || is_negative(*_d) || is_negative(_a) ||	\
 	(*_d >> _to_shift) != _a);					\
 }))
 
@@ -327,7 +333,7 @@ static __always_inline bool __must_check __must_check_overflow(bool overflow)
  * with any overflow causing the return value to be SIZE_MAX. The
  * lvalue must be size_t to avoid implicit type conversion.
  */
-static __always_inline size_t __must_check size_mul(size_t factor1, size_t factor2)
+static inline size_t __must_check size_mul(size_t factor1, size_t factor2)
 {
 	size_t bytes;
 
@@ -346,7 +352,7 @@ static __always_inline size_t __must_check size_mul(size_t factor1, size_t facto
  * with any overflow causing the return value to be SIZE_MAX. The
  * lvalue must be size_t to avoid implicit type conversion.
  */
-static __always_inline size_t __must_check size_add(size_t addend1, size_t addend2)
+static inline size_t __must_check size_add(size_t addend1, size_t addend2)
 {
 	size_t bytes;
 
@@ -367,7 +373,7 @@ static __always_inline size_t __must_check size_add(size_t addend1, size_t adden
  * argument may be SIZE_MAX (or the result with be forced to SIZE_MAX).
  * The lvalue must be size_t to avoid implicit type conversion.
  */
-static __always_inline size_t __must_check size_sub(size_t minuend, size_t subtrahend)
+static inline size_t __must_check size_sub(size_t minuend, size_t subtrahend)
 {
 	size_t bytes;
 
@@ -418,7 +424,7 @@ static __always_inline size_t __must_check size_sub(size_t minuend, size_t subtr
 #define flex_array_size(p, member, count)				\
 	__builtin_choose_expr(__is_constexpr(count),			\
 		(count) * sizeof(*(p)->member) + __must_be_array((p)->member),	\
-		size_mul(count, sizeof(*(p)->member)) + __must_be_array((p)->member))
+		size_mul(count, sizeof(*(p)->member) + __must_be_array((p)->member)))
 
 /**
  * struct_size() - Calculate size of structure with trailing flexible array.
@@ -451,18 +457,6 @@ static __always_inline size_t __must_check size_sub(size_t minuend, size_t subtr
  */
 #define struct_size_t(type, member, count)					\
 	struct_size((type *)NULL, member, count)
-
-/**
- * struct_offset() - Calculate the offset of a member within a struct
- * @p: Pointer to the struct
- * @member: Name of the member to get the offset of
- *
- * Calculates the offset of a particular @member of the structure pointed
- * to by @p.
- *
- * Return: number of bytes to the location of @member.
- */
-#define struct_offset(p, member) (offsetof(typeof(*(p)), member))
 
 /**
  * __DEFINE_FLEX() - helper macro for DEFINE_FLEX() family.
@@ -545,47 +539,5 @@ static __always_inline size_t __must_check size_sub(size_t minuend, size_t subtr
 #define STACK_FLEX_ARRAY_SIZE(name, array)						\
 	(__member_size((name)->array) / sizeof(*(name)->array) +			\
 						__must_be_array((name)->array))
-
-/**
- * typeof_flex_counter() - Return the type of the counter variable of a given
- *                         flexible array member annotated by __counted_by().
- * @FAM: Instance of flexible array member within a given struct.
- *
- * Returns: "size_t" if no annotation exists.
- */
-#define typeof_flex_counter(FAM)				\
-	typeof(_Generic(__flex_counter(FAM),			\
-			void *: (size_t)0,			\
-			default: *__flex_counter(FAM)))
-
-/**
- * overflows_flex_counter_type() - Check if the counter associated with the
- *				   given flexible array member can represent
- *				   a value.
- * @TYPE: Type of the struct that contains the @FAM.
- * @FAM: Member name of the FAM within @TYPE.
- * @COUNT: Value to check against the __counted_by annotated @FAM's counter.
- *
- * Returns: true if @COUNT can be represented in the @FAM's counter. When
- * @FAM is not annotated with __counted_by(), always returns true.
- */
-#define overflows_flex_counter_type(TYPE, FAM, COUNT)		\
-	(overflows_type(COUNT, typeof_flex_counter(((TYPE *)NULL)->FAM)))
-
-/**
- * __set_flex_counter() - Set the counter associated with the given flexible
- *                        array member that has been annoated by __counted_by().
- * @FAM: Instance of flexible array member within a given struct.
- * @COUNT: Value to store to the __counted_by annotated @FAM_PTR's counter.
- *
- * This is a no-op if no annotation exists. Count needs to be checked with
- * overflows_flex_counter_type() before using this function.
- */
-#define __set_flex_counter(FAM, COUNT)				\
-({								\
-	*_Generic(__flex_counter(FAM),				\
-		  void *:  &(size_t){ 0 },			\
-		  default: __flex_counter(FAM)) = (COUNT);	\
-})
 
 #endif /* __LINUX_OVERFLOW_H */

@@ -415,7 +415,7 @@ static int nfs_do_refmount(struct fs_context *fc, struct rpc_clnt *client)
 	if (!page)
 		return -ENOMEM;
 
-	fs_locations = kmalloc_obj(struct nfs4_fs_locations);
+	fs_locations = kmalloc(sizeof(struct nfs4_fs_locations), GFP_KERNEL);
 	if (!fs_locations)
 		goto out_free;
 	fs_locations->fattr = nfs_alloc_fattr();
@@ -481,6 +481,7 @@ int nfs4_submount(struct fs_context *fc, struct nfs_server *server)
  * Returns zero on success, or a negative errno value.
  */
 static int nfs4_try_replacing_one_location(struct nfs_server *server,
+		char *page, char *page2,
 		const struct nfs4_fs_location *location)
 {
 	struct net *net = rpc_net_ns(server->client);
@@ -489,7 +490,7 @@ static int nfs4_try_replacing_one_location(struct nfs_server *server,
 	size_t salen;
 	int error;
 
-	sap = kmalloc_obj(*sap);
+	sap = kmalloc(sizeof(*sap), GFP_KERNEL);
 	if (sap == NULL)
 		return -ENOMEM;
 
@@ -540,10 +541,19 @@ static int nfs4_try_replacing_one_location(struct nfs_server *server,
 int nfs4_replace_transport(struct nfs_server *server,
 			   const struct nfs4_fs_locations *locations)
 {
+	char *page = NULL, *page2 = NULL;
 	int loc, error;
 
 	error = -ENOENT;
 	if (locations == NULL || locations->nlocations <= 0)
+		goto out;
+
+	error = -ENOMEM;
+	page = (char *) __get_free_page(GFP_USER);
+	if (!page)
+		goto out;
+	page2 = (char *) __get_free_page(GFP_USER);
+	if (!page2)
 		goto out;
 
 	for (loc = 0; loc < locations->nlocations; loc++) {
@@ -554,11 +564,14 @@ int nfs4_replace_transport(struct nfs_server *server,
 		    location->rootpath.ncomponents == 0)
 			continue;
 
-		error = nfs4_try_replacing_one_location(server, location);
+		error = nfs4_try_replacing_one_location(server, page,
+							page2, location);
 		if (error == 0)
 			break;
 	}
 
 out:
+	free_page((unsigned long)page);
+	free_page((unsigned long)page2);
 	return error;
 }

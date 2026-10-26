@@ -170,12 +170,12 @@ static void mana_hwc_init_event_handler(void *ctx, struct gdma_queue *q_self,
 			hwc->txq->msg_buf->gpa_mkey = val;
 			break;
 
-		case HWC_INIT_DATA_DEST_RQ_ID:
-			hwc->dest_vrq_id = val;
+		case HWC_INIT_DATA_PF_DEST_RQ_ID:
+			hwc->pf_dest_vrq_id = val;
 			break;
 
-		case HWC_INIT_DATA_DEST_CQ_ID:
-			hwc->dest_vrcq_id = val;
+		case HWC_INIT_DATA_PF_DEST_CQ_ID:
+			hwc->pf_dest_vrcq_id = val;
 			break;
 		}
 
@@ -416,7 +416,7 @@ static int mana_hwc_create_cq(struct hw_channel_context *hwc, u16 q_depth,
 	if (cq_size < MANA_MIN_QSIZE)
 		cq_size = MANA_MIN_QSIZE;
 
-	hwc_cq = kzalloc_obj(*hwc_cq);
+	hwc_cq = kzalloc(sizeof(*hwc_cq), GFP_KERNEL);
 	if (!hwc_cq)
 		return -ENOMEM;
 
@@ -435,7 +435,7 @@ static int mana_hwc_create_cq(struct hw_channel_context *hwc, u16 q_depth,
 	}
 	hwc_cq->gdma_cq = cq;
 
-	comp_buf = kzalloc_objs(*comp_buf, q_depth);
+	comp_buf = kcalloc(q_depth, sizeof(*comp_buf), GFP_KERNEL);
 	if (!comp_buf) {
 		err = -ENOMEM;
 		goto out;
@@ -470,7 +470,7 @@ static int mana_hwc_alloc_dma_buf(struct hw_channel_context *hwc, u16 q_depth,
 	int err;
 	u16 i;
 
-	dma_buf = kzalloc_flex(*dma_buf, reqs, q_depth);
+	dma_buf = kzalloc(struct_size(dma_buf, reqs, q_depth), GFP_KERNEL);
 	if (!dma_buf)
 		return -ENOMEM;
 
@@ -479,7 +479,7 @@ static int mana_hwc_alloc_dma_buf(struct hw_channel_context *hwc, u16 q_depth,
 	buf_size = MANA_PAGE_ALIGN(q_depth * max_msg_size);
 
 	gmi = &dma_buf->mem_info;
-	err = mana_gd_alloc_memory(gc, buf_size, gmi, false);
+	err = mana_gd_alloc_memory(gc, buf_size, gmi);
 	if (err) {
 		dev_err(hwc->dev, "Failed to allocate DMA buffer size: %u, err %d\n",
 			buf_size, err);
@@ -548,7 +548,7 @@ static int mana_hwc_create_wq(struct hw_channel_context *hwc,
 	if (queue_size < MANA_MIN_QSIZE)
 		queue_size = MANA_MIN_QSIZE;
 
-	hwc_wq = kzalloc_obj(*hwc_wq);
+	hwc_wq = kzalloc(sizeof(*hwc_wq), GFP_KERNEL);
 	if (!hwc_wq)
 		return -ENOMEM;
 
@@ -653,7 +653,7 @@ static int mana_hwc_test_channel(struct hw_channel_context *hwc, u16 q_depth,
 			return err;
 	}
 
-	ctx = kzalloc_objs(*ctx, q_depth);
+	ctx = kcalloc(q_depth, sizeof(*ctx), GFP_KERNEL);
 	if (!ctx)
 		return -ENOMEM;
 
@@ -759,7 +759,7 @@ int mana_hwc_create_channel(struct gdma_context *gc)
 	u16 q_depth_max;
 	int err;
 
-	hwc = kzalloc_obj(*hwc);
+	hwc = kzalloc(sizeof(*hwc), GFP_KERNEL);
 	if (!hwc)
 		return -ENOMEM;
 
@@ -855,13 +855,13 @@ void mana_hwc_destroy_channel(struct gdma_context *gc)
 int mana_hwc_send_request(struct hw_channel_context *hwc, u32 req_len,
 			  const void *req, u32 resp_len, void *resp)
 {
+	struct gdma_context *gc = hwc->gdma_dev->gdma_context;
 	struct hwc_work_request *tx_wr;
 	struct hwc_wq *txq = hwc->txq;
 	struct gdma_req_hdr *req_msg;
 	struct hwc_caller_ctx *ctx;
-	u32 dest_vrcq;
-	u32 dest_vrq;
-	u32 command;
+	u32 dest_vrcq = 0;
+	u32 dest_vrq = 0;
 	u16 msg_id;
 	int err;
 
@@ -887,15 +887,11 @@ int mana_hwc_send_request(struct hw_channel_context *hwc, u32 req_len,
 	req_msg->req.hwc_msg_id = msg_id;
 
 	tx_wr->msg_size = req_len;
-	command = req_msg->req.msg_type;
 
-	/* The hardware reports the HWC destination queues through
-	 * HWC_INIT_DATA_DEST_RQ_ID and HWC_INIT_DATA_DEST_CQ_ID, and
-	 * always supplies values that are valid for this function, so no
-	 * PF-specific handling is needed here.
-	 */
-	dest_vrq = hwc->dest_vrq_id;
-	dest_vrcq = hwc->dest_vrcq_id;
+	if (gc->is_pf) {
+		dest_vrq = hwc->pf_dest_vrq_id;
+		dest_vrcq = hwc->pf_dest_vrcq_id;
+	}
 
 	err = mana_hwc_post_tx_wqe(txq, tx_wr, dest_vrq, dest_vrcq, false);
 	if (err) {
@@ -906,8 +902,8 @@ int mana_hwc_send_request(struct hw_channel_context *hwc, u32 req_len,
 	if (!wait_for_completion_timeout(&ctx->comp_event,
 					 (msecs_to_jiffies(hwc->hwc_timeout)))) {
 		if (hwc->hwc_timeout != 0)
-			dev_err(hwc->dev, "Command 0x%x timed out: %u ms\n",
-				command, hwc->hwc_timeout);
+			dev_err(hwc->dev, "HWC: Request timed out: %u ms\n",
+				hwc->hwc_timeout);
 
 		/* Reduce further waiting if HWC no response */
 		if (hwc->hwc_timeout > 1)
@@ -927,9 +923,9 @@ int mana_hwc_send_request(struct hw_channel_context *hwc, u32 req_len,
 			err = -EOPNOTSUPP;
 			goto out;
 		}
-		if (command != MANA_QUERY_PHY_STAT)
-			dev_err(hwc->dev, "Command 0x%x failed with status: 0x%x\n",
-				command, ctx->status_code);
+		if (req_msg->req.msg_type != MANA_QUERY_PHY_STAT)
+			dev_err(hwc->dev, "HWC: Failed hw_channel req: 0x%x\n",
+				ctx->status_code);
 		err = -EPROTO;
 		goto out;
 	}

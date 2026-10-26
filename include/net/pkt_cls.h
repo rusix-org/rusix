@@ -316,8 +316,10 @@ tcf_exts_hw_stats_update(const struct tcf_exts *exts,
 				continue;
 		}
 
+		preempt_disable();
 		tcf_action_stats_update(a, stats->bytes, stats->pkts, stats->drops,
 					stats->lastused, true);
+		preempt_enable();
 
 		a->used_hw_stats = stats->used_hw_stats;
 		a->used_hw_stats_valid = stats->used_hw_stats_valid;
@@ -1056,7 +1058,6 @@ struct tc_tbf_qopt_offload_replace_params {
 };
 
 struct tc_tbf_qopt_offload {
-	struct netlink_ext_ack *extack;
 	enum tc_tbf_command command;
 	u32 handle;
 	u32 parent;

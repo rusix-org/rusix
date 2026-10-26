@@ -22,6 +22,7 @@
 #include <linux/vmalloc.h>
 #include <vdso/datapage.h>
 #include <vdso/helpers.h>
+#include <vdso/vsyscall.h>
 
 #include <asm/cacheflush.h>
 #include <asm/signal32.h>
@@ -80,7 +81,9 @@ static int __init __vdso_init(enum vdso_abi abi)
 			vdso_info[abi].vdso_code_start) >>
 			PAGE_SHIFT;
 
-	vdso_pagelist = kzalloc_objs(struct page *, vdso_info[abi].vdso_pages);
+	vdso_pagelist = kcalloc(vdso_info[abi].vdso_pages,
+				sizeof(struct page *),
+				GFP_KERNEL);
 	if (vdso_pagelist == NULL)
 		return -ENOMEM;
 

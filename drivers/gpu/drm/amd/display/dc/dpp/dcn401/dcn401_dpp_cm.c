@@ -49,6 +49,9 @@
 #define FN(reg_name, field_name) \
 	dpp->tf_shift->field_name, dpp->tf_mask->field_name
 
+#define NUM_ELEMENTS(a) (sizeof(a) / sizeof((a)[0]))
+
+
 enum dcn401_coef_filter_type_sel {
 	SCL_COEF_LUMA_VERT_FILTER = 0,
 	SCL_COEF_LUMA_HORZ_FILTER = 1,
@@ -100,21 +103,17 @@ void dpp401_set_cursor_attributes(
 		}
 	}
 
-	if (!dpp_base->cursor_offload)
-		REG_UPDATE_3(CURSOR0_CONTROL,
-			CUR0_MODE, color_format,
-			CUR0_EXPANSION_MODE, 0,
-			CUR0_ROM_EN, cur_rom_en);
+	REG_UPDATE_3(CURSOR0_CONTROL,
+		CUR0_MODE, color_format,
+		CUR0_EXPANSION_MODE, 0,
+		CUR0_ROM_EN, cur_rom_en);
 
 	if (color_format == CURSOR_MODE_MONO) {
 		/* todo: clarify what to program these to */
-
-		if (!dpp_base->cursor_offload) {
-			REG_UPDATE(CURSOR0_COLOR0,
-				CUR0_COLOR0, 0x00000000);
-			REG_UPDATE(CURSOR0_COLOR1,
-				CUR0_COLOR1, 0xFFFFFFFF);
-		}
+		REG_UPDATE(CURSOR0_COLOR0,
+			CUR0_COLOR0, 0x00000000);
+		REG_UPDATE(CURSOR0_COLOR1,
+			CUR0_COLOR1, 0xFFFFFFFF);
 	}
 
 	dpp_base->att.cur0_ctl.bits.expansion_mode = 0;
@@ -129,38 +128,14 @@ void dpp401_set_cursor_position(
 	uint32_t width,
 	uint32_t height)
 {
-	(void)param;
-	(void)width;
-	(void)height;
 	struct dcn401_dpp *dpp = TO_DCN401_DPP(dpp_base);
 	uint32_t cur_en = pos->enable ? 1 : 0;
 
 	if (dpp_base->pos.cur0_ctl.bits.cur0_enable != cur_en) {
-		if (!dpp_base->cursor_offload)
-			REG_UPDATE(CURSOR0_CONTROL, CUR0_ENABLE, cur_en);
+		REG_UPDATE(CURSOR0_CONTROL, CUR0_ENABLE, cur_en);
+
+		dpp_base->pos.cur0_ctl.bits.cur0_enable = cur_en;
 	}
-
-	dpp_base->pos.cur0_ctl.bits.cur0_enable = cur_en;
-	dpp_base->att.cur0_ctl.bits.cur0_enable = cur_en;
-}
-
-/* Resync the SW cursor cache from real hardware state. */
-void dpp401_cursor_refresh_state(struct dpp *dpp_base)
-{
-	struct dcn401_dpp *dpp = TO_DCN401_DPP(dpp_base);
-	uint32_t cur0_enable = 0, mode = 0, expansion_mode = 0, rom_en = 0;
-
-	REG_GET_4(CURSOR0_CONTROL,
-		CUR0_ENABLE, &cur0_enable,
-		CUR0_MODE, &mode,
-		CUR0_EXPANSION_MODE, &expansion_mode,
-		CUR0_ROM_EN, &rom_en);
-
-	dpp_base->pos.cur0_ctl.bits.cur0_enable = cur0_enable;
-	dpp_base->att.cur0_ctl.bits.cur0_enable = cur0_enable;
-	dpp_base->att.cur0_ctl.bits.mode = mode;
-	dpp_base->att.cur0_ctl.bits.expansion_mode = expansion_mode;
-	dpp_base->att.cur0_ctl.bits.cur0_rom_en = rom_en;
 }
 
 void dpp401_set_optional_cursor_attributes(
@@ -170,17 +145,10 @@ void dpp401_set_optional_cursor_attributes(
 	struct dcn401_dpp *dpp = TO_DCN401_DPP(dpp_base);
 
 	if (attr) {
-		if (!dpp_base->cursor_offload) {
-			REG_UPDATE(CURSOR0_FP_SCALE_BIAS_G_Y, CUR0_FP_BIAS_G_Y, attr->bias);
-			REG_UPDATE(CURSOR0_FP_SCALE_BIAS_G_Y, CUR0_FP_SCALE_G_Y, attr->scale);
-			REG_UPDATE(CURSOR0_FP_SCALE_BIAS_RB_CRCB, CUR0_FP_BIAS_RB_CRCB, attr->bias);
-			REG_UPDATE(CURSOR0_FP_SCALE_BIAS_RB_CRCB, CUR0_FP_SCALE_RB_CRCB, attr->scale);
-		}
-
-		dpp_base->att.fp_scale_bias_g_y.bits.fp_bias_g_y = attr->bias;
-		dpp_base->att.fp_scale_bias_g_y.bits.fp_scale_g_y = attr->scale;
-		dpp_base->att.fp_scale_bias_rb_crcb.bits.fp_bias_rb_crcb = attr->bias;
-		dpp_base->att.fp_scale_bias_rb_crcb.bits.fp_scale_rb_crcb = attr->scale;
+		REG_UPDATE(CURSOR0_FP_SCALE_BIAS_G_Y, CUR0_FP_BIAS_G_Y, attr->bias);
+		REG_UPDATE(CURSOR0_FP_SCALE_BIAS_G_Y, CUR0_FP_SCALE_G_Y, attr->scale);
+		REG_UPDATE(CURSOR0_FP_SCALE_BIAS_RB_CRCB, CUR0_FP_BIAS_RB_CRCB, attr->bias);
+		REG_UPDATE(CURSOR0_FP_SCALE_BIAS_RB_CRCB, CUR0_FP_SCALE_RB_CRCB, attr->scale);
 	}
 }
 
@@ -195,7 +163,7 @@ static void dpp401_program_cursor_csc(
 	struct color_matrices_reg cur_matrix_regs;
 	unsigned int i;
 	const uint16_t *regval = NULL;
-	unsigned int arr_size = sizeof(dpp_input_csc_matrix) / sizeof(struct dpp_input_csc_matrix);
+	int arr_size = sizeof(dpp_input_csc_matrix) / sizeof(struct dpp_input_csc_matrix);
 
 	if (color_space < COLOR_SPACE_YCBCR601) {
 		REG_SET(CUR0_MATRIX_MODE, 0, CUR0_MATRIX_MODE, CUR_MATRIX_BYPASS);
@@ -256,8 +224,6 @@ void dpp401_set_cursor_matrix(
 	enum dc_color_space color_space,
 	struct dc_csc_transform cursor_csc_color_matrix)
 {
-	(void)color_space;
-	(void)cursor_csc_color_matrix;
 	//Since we don't have cursor matrix information, force bypass mode by passing in unknown color space
 	dpp401_program_cursor_csc(dpp_base, COLOR_SPACE_UNKNOWN, NULL);
 }

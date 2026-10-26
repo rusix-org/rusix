@@ -106,7 +106,7 @@ virtio_gpu_parse_deps(struct virtio_gpu_submit *submit)
 	 * internally for allocations larger than a page size, preventing
 	 * storm of KMSG warnings.
 	 */
-	syncobjs = kvzalloc_objs(*syncobjs, num_in_syncobjs);
+	syncobjs = kvcalloc(num_in_syncobjs, sizeof(*syncobjs), GFP_KERNEL);
 	if (!syncobjs)
 		return -ENOMEM;
 
@@ -197,7 +197,7 @@ static int virtio_gpu_parse_post_deps(struct virtio_gpu_submit *submit)
 	if (!num_out_syncobjs)
 		return 0;
 
-	post_deps = kvzalloc_objs(*post_deps, num_out_syncobjs);
+	post_deps = kvcalloc(num_out_syncobjs, sizeof(*post_deps), GFP_KERNEL);
 	if (!post_deps)
 		return -ENOMEM;
 
@@ -279,7 +279,7 @@ static int virtio_gpu_fence_event_create(struct drm_device *dev,
 	struct virtio_gpu_fence_event *e = NULL;
 	int ret;
 
-	e = kzalloc_obj(*e);
+	e = kzalloc(sizeof(*e), GFP_KERNEL);
 	if (!e)
 		return -ENOMEM;
 

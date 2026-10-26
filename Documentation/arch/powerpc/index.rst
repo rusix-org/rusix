@@ -40,3 +40,10 @@ powerpc
     vpa-dtl
 
     features
+
+.. only::  subproject and html
+
+   Indices
+   =======
+
+   * :ref:`genindex`

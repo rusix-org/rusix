@@ -173,11 +173,11 @@ static void rds_ib_cm_fill_conn_param(struct rds_connection *conn,
 
 	memset(conn_param, 0, sizeof(struct rdma_conn_param));
 
-	conn_param->responder_resources = min3(rds_ibdev->max_responder_resources,
-					       max_responder_resources, U8_MAX);
-	conn_param->initiator_depth = min3(rds_ibdev->max_initiator_depth,
-					   max_initiator_depth, U8_MAX);
-	conn_param->retry_count = min(rds_ib_retry_count, 7U);
+	conn_param->responder_resources =
+		min_t(u32, rds_ibdev->max_responder_resources, max_responder_resources);
+	conn_param->initiator_depth =
+		min_t(u32, rds_ibdev->max_initiator_depth, max_initiator_depth);
+	conn_param->retry_count = min_t(unsigned int, rds_ib_retry_count, 7);
 	conn_param->rnr_retry_count = 7;
 
 	if (dp) {
@@ -253,7 +253,7 @@ static void rds_ib_cq_comp_handler_recv(struct ib_cq *cq, void *context)
 
 	rds_ib_stats_inc(s_ib_evt_handler_call);
 
-	queue_work(system_bh_wq, &ic->i_recv_work);
+	tasklet_schedule(&ic->i_recv_tasklet);
 }
 
 static void poll_scq(struct rds_ib_connection *ic, struct ib_cq *cq,
@@ -279,9 +279,9 @@ static void poll_scq(struct rds_ib_connection *ic, struct ib_cq *cq,
 	}
 }
 
-static void rds_ib_send_worker(struct work_struct *work)
+static void rds_ib_tasklet_fn_send(unsigned long data)
 {
-	struct rds_ib_connection *ic = from_work(ic, work, i_send_work);
+	struct rds_ib_connection *ic = (struct rds_ib_connection *)data;
 	struct rds_connection *conn = ic->conn;
 
 	rds_ib_stats_inc(s_ib_tasklet_call);
@@ -319,9 +319,9 @@ static void poll_rcq(struct rds_ib_connection *ic, struct ib_cq *cq,
 	}
 }
 
-static void rds_ib_recv_worker(struct work_struct *work)
+static void rds_ib_tasklet_fn_recv(unsigned long data)
 {
-	struct rds_ib_connection *ic = from_work(ic, work, i_recv_work);
+	struct rds_ib_connection *ic = (struct rds_ib_connection *)data;
 	struct rds_connection *conn = ic->conn;
 	struct rds_ib_device *rds_ibdev = ic->rds_ibdev;
 	struct rds_ib_ack_state state;
@@ -381,7 +381,7 @@ static void rds_ib_cq_comp_handler_send(struct ib_cq *cq, void *context)
 
 	rds_ib_stats_inc(s_ib_evt_handler_call);
 
-	queue_work(system_bh_wq, &ic->i_send_work);
+	tasklet_schedule(&ic->i_send_tasklet);
 }
 
 static inline int ibdev_get_unused_vector(struct rds_ib_device *rds_ibdev)
@@ -999,18 +999,6 @@ int rds_ib_conn_path_connect(struct rds_conn_path *cp)
 		goto out;
 	}
 
-	/* rds_ib_laddr_check() only vouched for the local address being
-	 * on an IB device; the address resolution below picks the device
-	 * on its own, so restrict it to the same kind.
-	 */
-	ret = rdma_restrict_node_type(ic->i_cm_id, RDMA_NODE_IB_CA);
-	if (ret) {
-		rdsdebug("rdma_restrict_node_type() failed: %d\n", ret);
-		rdma_destroy_id(ic->i_cm_id);
-		ic->i_cm_id = NULL;
-		goto out;
-	}
-
 	rdsdebug("created cm id %p for conn %p\n", ic->i_cm_id, conn);
 
 	if (ipv6_addr_v4mapped(&conn->c_faddr)) {
@@ -1111,12 +1099,12 @@ void rds_ib_conn_path_shutdown(struct rds_conn_path *cp)
 		while (!wait_event_timeout(rds_ib_ring_empty_wait,
 					   rds_ib_conn_path_shutdown_check_wait(cp) == 0,
 					   msecs_to_jiffies(1000))) {
-			queue_work(system_bh_wq, &ic->i_send_work);
-			queue_work(system_bh_wq, &ic->i_recv_work);
+			tasklet_schedule(&ic->i_send_tasklet);
+			tasklet_schedule(&ic->i_recv_tasklet);
 		}
 
-		disable_work_sync(&ic->i_send_work);
-		disable_work_sync(&ic->i_recv_work);
+		tasklet_kill(&ic->i_send_tasklet);
+		tasklet_kill(&ic->i_recv_tasklet);
 
 		atomic_set(&ic->i_cq_quiesce, 1);
 
@@ -1134,9 +1122,6 @@ void rds_ib_conn_path_shutdown(struct rds_conn_path *cp)
 				ibdev_put_vector(ic->rds_ibdev, ic->i_rcq_vector);
 			ib_destroy_cq(ic->i_recv_cq);
 		}
-
-		enable_work(&ic->i_send_work);
-		enable_work(&ic->i_recv_work);
 
 		if (ic->rds_ibdev) {
 			/* then free the resources that ib callbacks use */
@@ -1238,7 +1223,7 @@ int rds_ib_conn_alloc(struct rds_connection *conn, gfp_t gfp)
 	int ret;
 
 	/* XXX too lazy? */
-	ic = kzalloc_obj(struct rds_ib_connection, gfp);
+	ic = kzalloc(sizeof(struct rds_ib_connection), gfp);
 	if (!ic)
 		return -ENOMEM;
 
@@ -1249,8 +1234,10 @@ int rds_ib_conn_alloc(struct rds_connection *conn, gfp_t gfp)
 	}
 
 	INIT_LIST_HEAD(&ic->ib_node);
-	INIT_WORK(&ic->i_send_work, rds_ib_send_worker);
-	INIT_WORK(&ic->i_recv_work, rds_ib_recv_worker);
+	tasklet_init(&ic->i_send_tasklet, rds_ib_tasklet_fn_send,
+		     (unsigned long)ic);
+	tasklet_init(&ic->i_recv_tasklet, rds_ib_tasklet_fn_recv,
+		     (unsigned long)ic);
 	mutex_init(&ic->i_recv_mutex);
 #ifndef KERNEL_HAS_ATOMIC64
 	spin_lock_init(&ic->i_ack_lock);
@@ -1284,7 +1271,6 @@ void rds_ib_conn_free(void *arg)
 {
 	struct rds_ib_connection *ic = arg;
 	spinlock_t	*lock_ptr;
-	unsigned long flags;
 
 	rdsdebug("ic %p\n", ic);
 
@@ -1295,10 +1281,9 @@ void rds_ib_conn_free(void *arg)
 	 */
 	lock_ptr = ic->rds_ibdev ? &ic->rds_ibdev->spinlock : &ib_nodev_conns_lock;
 
-	/* May be called with IRQs already disabled (see __rds_conn_create()) */
-	spin_lock_irqsave(lock_ptr, flags);
+	spin_lock_irq(lock_ptr);
 	list_del(&ic->ib_node);
-	spin_unlock_irqrestore(lock_ptr, flags);
+	spin_unlock_irq(lock_ptr);
 
 	rds_ib_recv_free_caches(ic);
 

@@ -41,12 +41,13 @@
  * @buf_size:   size of one rx or tx buffer
  * @last_sbuf:	index of last tx buffer used
  * @bufs_dma:	dma base addr of the buffers
- * @tx_lock:	protects svq and sbufs, to allow concurrent senders.
+ * @tx_lock:	protects svq, sbufs and sleepers, to allow concurrent senders.
  *		sending a message might require waking up a dozing remote
  *		processor, which involves sleeping, hence the mutex.
  * @endpoints:	idr of local endpoints, allows fast retrieval
  * @endpoints_lock: lock of the endpoints set
  * @sendq:	wait queue of sending contexts waiting for a tx buffers
+ * @sleepers:	number of senders that are waiting for a tx buffer
  *
  * This structure stores the rpmsg state of a given virtio remote processor
  * device (there might be several virtio proc devices for each physical
@@ -64,6 +65,7 @@ struct virtproc_info {
 	struct idr endpoints;
 	struct mutex endpoints_lock;
 	wait_queue_head_t sendq;
+	atomic_t sleepers;
 };
 
 /* The feature bitmap for virtio rpmsg */
@@ -136,15 +138,12 @@ struct virtio_rpmsg_channel {
 #define RPMSG_RESERVED_ADDRESSES	(1024)
 
 static void virtio_rpmsg_destroy_ept(struct rpmsg_endpoint *ept);
-static int virtio_rpmsg_send(struct rpmsg_endpoint *ept, const void *data, int len);
-static int virtio_rpmsg_sendto(struct rpmsg_endpoint *ept, const void *data,
-			       int len, u32 dst);
-static int virtio_rpmsg_trysend(struct rpmsg_endpoint *ept, const void *data,
-				int len);
-static int virtio_rpmsg_trysendto(struct rpmsg_endpoint *ept, const void *data,
+static int virtio_rpmsg_send(struct rpmsg_endpoint *ept, void *data, int len);
+static int virtio_rpmsg_sendto(struct rpmsg_endpoint *ept, void *data, int len,
+			       u32 dst);
+static int virtio_rpmsg_trysend(struct rpmsg_endpoint *ept, void *data, int len);
+static int virtio_rpmsg_trysendto(struct rpmsg_endpoint *ept, void *data,
 				  int len, u32 dst);
-static __poll_t virtio_rpmsg_poll(struct rpmsg_endpoint *ept, struct file *filp,
-				  poll_table *wait);
 static ssize_t virtio_rpmsg_get_mtu(struct rpmsg_endpoint *ept);
 static struct rpmsg_device *__rpmsg_create_channel(struct virtproc_info *vrp,
 						   struct rpmsg_channel_info *chinfo);
@@ -155,7 +154,6 @@ static const struct rpmsg_endpoint_ops virtio_endpoint_ops = {
 	.sendto = virtio_rpmsg_sendto,
 	.trysend = virtio_rpmsg_trysend,
 	.trysendto = virtio_rpmsg_trysendto,
-	.poll = virtio_rpmsg_poll,
 	.get_mtu = virtio_rpmsg_get_mtu,
 };
 
@@ -211,7 +209,7 @@ static struct rpmsg_endpoint *__rpmsg_create_ept(struct virtproc_info *vrp,
 	struct rpmsg_endpoint *ept;
 	struct device *dev = rpdev ? &rpdev->dev : &vrp->vdev->dev;
 
-	ept = kzalloc_obj(*ept);
+	ept = kzalloc(sizeof(*ept), GFP_KERNEL);
 	if (!ept)
 		return NULL;
 
@@ -400,7 +398,7 @@ static struct rpmsg_device *__rpmsg_create_channel(struct virtproc_info *vrp,
 		return NULL;
 	}
 
-	vch = kzalloc_obj(*vch);
+	vch = kzalloc(sizeof(*vch), GFP_KERNEL);
 	if (!vch)
 		return NULL;
 
@@ -437,6 +435,7 @@ static void *get_a_tx_buf(struct virtproc_info *vrp)
 	unsigned int len;
 	void *ret;
 
+	/* support multiple concurrent senders */
 	mutex_lock(&vrp->tx_lock);
 
 	/*
@@ -452,6 +451,62 @@ static void *get_a_tx_buf(struct virtproc_info *vrp)
 	mutex_unlock(&vrp->tx_lock);
 
 	return ret;
+}
+
+/**
+ * rpmsg_upref_sleepers() - enable "tx-complete" interrupts, if needed
+ * @vrp: virtual remote processor state
+ *
+ * This function is called before a sender is blocked, waiting for
+ * a tx buffer to become available.
+ *
+ * If we already have blocking senders, this function merely increases
+ * the "sleepers" reference count, and exits.
+ *
+ * Otherwise, if this is the first sender to block, we also enable
+ * virtio's tx callbacks, so we'd be immediately notified when a tx
+ * buffer is consumed (we rely on virtio's tx callback in order
+ * to wake up sleeping senders as soon as a tx buffer is used by the
+ * remote processor).
+ */
+static void rpmsg_upref_sleepers(struct virtproc_info *vrp)
+{
+	/* support multiple concurrent senders */
+	mutex_lock(&vrp->tx_lock);
+
+	/* are we the first sleeping context waiting for tx buffers ? */
+	if (atomic_inc_return(&vrp->sleepers) == 1)
+		/* enable "tx-complete" interrupts before dozing off */
+		virtqueue_enable_cb(vrp->svq);
+
+	mutex_unlock(&vrp->tx_lock);
+}
+
+/**
+ * rpmsg_downref_sleepers() - disable "tx-complete" interrupts, if needed
+ * @vrp: virtual remote processor state
+ *
+ * This function is called after a sender, that waited for a tx buffer
+ * to become available, is unblocked.
+ *
+ * If we still have blocking senders, this function merely decreases
+ * the "sleepers" reference count, and exits.
+ *
+ * Otherwise, if there are no more blocking senders, we also disable
+ * virtio's tx callbacks, to avoid the overhead incurred with handling
+ * those (now redundant) interrupts.
+ */
+static void rpmsg_downref_sleepers(struct virtproc_info *vrp)
+{
+	/* support multiple concurrent senders */
+	mutex_lock(&vrp->tx_lock);
+
+	/* are we the last sleeping context waiting for tx buffers ? */
+	if (atomic_dec_and_test(&vrp->sleepers))
+		/* disable "tx-complete" interrupts */
+		virtqueue_disable_cb(vrp->svq);
+
+	mutex_unlock(&vrp->tx_lock);
 }
 
 /**
@@ -490,7 +545,7 @@ static void *get_a_tx_buf(struct virtproc_info *vrp)
  */
 static int rpmsg_send_offchannel_raw(struct rpmsg_device *rpdev,
 				     u32 src, u32 dst,
-				     const void *data, int len, bool wait)
+				     void *data, int len, bool wait)
 {
 	struct virtio_rpmsg_channel *vch = to_virtio_rpmsg_channel(rpdev);
 	struct virtproc_info *vrp = vch->vrp;
@@ -526,6 +581,9 @@ static int rpmsg_send_offchannel_raw(struct rpmsg_device *rpdev,
 
 	/* no free buffer ? wait for one (but bail after 15 seconds) */
 	while (!msg) {
+		/* enable "tx-complete" interrupts, if not already enabled */
+		rpmsg_upref_sleepers(vrp);
+
 		/*
 		 * sleep until a free buffer is available or 15 secs elapse.
 		 * the timeout period is not configurable because there's
@@ -535,6 +593,9 @@ static int rpmsg_send_offchannel_raw(struct rpmsg_device *rpdev,
 		err = wait_event_interruptible_timeout(vrp->sendq,
 					(msg = get_a_tx_buf(vrp)),
 					msecs_to_jiffies(15000));
+
+		/* disable "tx-complete" interrupts if we're the last sleeper */
+		rpmsg_downref_sleepers(vrp);
 
 		/* timeout ? */
 		if (!err) {
@@ -580,7 +641,7 @@ out:
 	return err;
 }
 
-static int virtio_rpmsg_send(struct rpmsg_endpoint *ept, const void *data, int len)
+static int virtio_rpmsg_send(struct rpmsg_endpoint *ept, void *data, int len)
 {
 	struct rpmsg_device *rpdev = ept->rpdev;
 	u32 src = ept->addr, dst = rpdev->dst;
@@ -588,8 +649,8 @@ static int virtio_rpmsg_send(struct rpmsg_endpoint *ept, const void *data, int l
 	return rpmsg_send_offchannel_raw(rpdev, src, dst, data, len, true);
 }
 
-static int virtio_rpmsg_sendto(struct rpmsg_endpoint *ept, const void *data,
-			       int len, u32 dst)
+static int virtio_rpmsg_sendto(struct rpmsg_endpoint *ept, void *data, int len,
+			       u32 dst)
 {
 	struct rpmsg_device *rpdev = ept->rpdev;
 	u32 src = ept->addr;
@@ -597,8 +658,7 @@ static int virtio_rpmsg_sendto(struct rpmsg_endpoint *ept, const void *data,
 	return rpmsg_send_offchannel_raw(rpdev, src, dst, data, len, true);
 }
 
-static int virtio_rpmsg_trysend(struct rpmsg_endpoint *ept, const void *data,
-				int len)
+static int virtio_rpmsg_trysend(struct rpmsg_endpoint *ept, void *data, int len)
 {
 	struct rpmsg_device *rpdev = ept->rpdev;
 	u32 src = ept->addr, dst = rpdev->dst;
@@ -606,41 +666,13 @@ static int virtio_rpmsg_trysend(struct rpmsg_endpoint *ept, const void *data,
 	return rpmsg_send_offchannel_raw(rpdev, src, dst, data, len, false);
 }
 
-static int virtio_rpmsg_trysendto(struct rpmsg_endpoint *ept, const void *data,
+static int virtio_rpmsg_trysendto(struct rpmsg_endpoint *ept, void *data,
 				  int len, u32 dst)
 {
 	struct rpmsg_device *rpdev = ept->rpdev;
 	u32 src = ept->addr;
 
 	return rpmsg_send_offchannel_raw(rpdev, src, dst, data, len, false);
-}
-
-static __poll_t virtio_rpmsg_poll(struct rpmsg_endpoint *ept, struct file *filp,
-				  poll_table *wait)
-{
-	struct rpmsg_device *rpdev = ept->rpdev;
-	struct virtio_rpmsg_channel *vch = to_virtio_rpmsg_channel(rpdev);
-	struct virtproc_info *vrp = vch->vrp;
-	__poll_t mask = 0;
-
-	poll_wait(filp, &vrp->sendq, wait);
-
-	/* support multiple concurrent senders */
-	mutex_lock(&vrp->tx_lock);
-
-	/*
-	 * check for a free buffer, either:
-	 * - we haven't used all of the available transmit buffers (half of the
-	 *   allocated buffers are used for transmit, hence num_bufs / 2), or,
-	 * - we ask the virtqueue if there's a buffer available
-	 */
-	if (vrp->last_sbuf < vrp->num_bufs / 2 ||
-	    !virtqueue_enable_cb(vrp->svq))
-		mask |= EPOLLOUT;
-
-	mutex_unlock(&vrp->tx_lock);
-
-	return mask;
 }
 
 static ssize_t virtio_rpmsg_get_mtu(struct rpmsg_endpoint *ept)
@@ -780,7 +812,7 @@ static struct rpmsg_device *rpmsg_virtio_add_ctrl_dev(struct virtio_device *vdev
 	struct rpmsg_device *rpdev_ctrl;
 	int err = 0;
 
-	vch = kzalloc_obj(*vch);
+	vch = kzalloc(sizeof(*vch), GFP_KERNEL);
 	if (!vch)
 		return ERR_PTR(-ENOMEM);
 
@@ -826,7 +858,7 @@ static int rpmsg_probe(struct virtio_device *vdev)
 	size_t total_buf_space;
 	bool notify;
 
-	vrp = kzalloc_obj(*vrp);
+	vrp = kzalloc(sizeof(*vrp), GFP_KERNEL);
 	if (!vrp)
 		return -ENOMEM;
 
@@ -889,6 +921,9 @@ static int rpmsg_probe(struct virtio_device *vdev)
 		WARN_ON(err); /* sanity check; this can't really happen */
 	}
 
+	/* suppress "tx-complete" interrupts */
+	virtqueue_disable_cb(vrp->svq);
+
 	vdev->priv = vrp;
 
 	rpdev_ctrl = rpmsg_virtio_add_ctrl_dev(vdev);
@@ -899,7 +934,7 @@ static int rpmsg_probe(struct virtio_device *vdev)
 
 	/* if supported by the remote processor, enable the name service */
 	if (virtio_has_feature(vdev, VIRTIO_RPMSG_F_NS)) {
-		vch = kzalloc_obj(*vch);
+		vch = kzalloc(sizeof(*vch), GFP_KERNEL);
 		if (!vch) {
 			err = -ENOMEM;
 			goto free_ctrldev;

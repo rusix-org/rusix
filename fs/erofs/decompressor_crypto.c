@@ -9,17 +9,16 @@ static int __z_erofs_crypto_decompress(struct z_erofs_decompress_req *rq,
 	struct sg_table st_src, st_dst;
 	struct acomp_req *req;
 	struct crypto_wait wait;
-	const char *reason;
 	u8 *headpage;
 	int ret;
 
 	headpage = kmap_local_page(*rq->in);
-	reason = z_erofs_fixup_insize(rq, headpage + rq->pageofs_in,
+	ret = z_erofs_fixup_insize(rq, headpage + rq->pageofs_in,
 				min_t(unsigned int, rq->inputsize,
 				      rq->sb->s_blocksize - rq->pageofs_in));
 	kunmap_local(headpage);
-	if (reason)
-		return IS_ERR(reason) ? PTR_ERR(reason) : -EFSCORRUPTED;
+	if (ret)
+		return ret;
 
 	req = acomp_request_alloc(tfm);
 	if (!req)
@@ -62,7 +61,7 @@ struct z_erofs_crypto_engine {
 	struct crypto_acomp *tfm;
 };
 
-static struct z_erofs_crypto_engine *z_erofs_crypto[Z_EROFS_COMPRESSION_MAX] = {
+struct z_erofs_crypto_engine *z_erofs_crypto[Z_EROFS_COMPRESSION_MAX] = {
 	[Z_EROFS_COMPRESSION_LZ4] = (struct z_erofs_crypto_engine[]) {
 		{},
 	},

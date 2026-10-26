@@ -8,12 +8,11 @@
 #include <linux/delay.h>
 #include <linux/scatterlist.h>
 
-#include "page_alloc.h"
 #include "page_reporting.h"
 #include "internal.h"
 
 /* Initialize to an unsupported value */
-unsigned int page_reporting_order = PAGE_REPORTING_ORDER_UNSPECIFIED;
+unsigned int page_reporting_order = -1;
 
 static int page_order_update_notify(const char *val, const struct kernel_param *kp)
 {
@@ -48,11 +47,7 @@ MODULE_PARM_DESC(page_reporting_order, "Set page reporting order");
  */
 EXPORT_SYMBOL_GPL(page_reporting_order);
 
-static unsigned int page_reporting_delay_ms = 2 * MSEC_PER_SEC;
-module_param(page_reporting_delay_ms, uint, 0644);
-MODULE_PARM_DESC(page_reporting_delay_ms,
-		 "Set page reporting delay in milliseconds");
-
+#define PAGE_REPORTING_DELAY	(2 * HZ)
 static struct page_reporting_dev_info __rcu *pr_dev_info __read_mostly;
 
 enum {
@@ -60,13 +55,6 @@ enum {
 	PAGE_REPORTING_REQUESTED,
 	PAGE_REPORTING_ACTIVE
 };
-
-/* schedule work for page reporting */
-static void page_reporting_schedule_work(struct page_reporting_dev_info *prdev)
-{
-	queue_delayed_work(system_freezable_wq, &prdev->work,
-			   msecs_to_jiffies(page_reporting_delay_ms));
-}
 
 /* request page reporting */
 static void
@@ -88,10 +76,12 @@ __page_reporting_request(struct page_reporting_dev_info *prdev)
 		return;
 
 	/*
-	 * Delay the start of work to allow a sizable queue to build.
-	 * We limit this based on page_reporting_delay_ms.
+	 * Delay the start of work to allow a sizable queue to build. For
+	 * now we are limiting this to running no more than once every
+	 * couple of seconds.
 	 */
-	page_reporting_schedule_work(prdev);
+	queue_delayed_work(system_freezable_wq, &prdev->work,
+			   PAGE_REPORTING_DELAY);
 }
 
 /* notify prdev of free page reporting request */
@@ -134,7 +124,7 @@ page_reporting_drain(struct page_reporting_dev_info *prdev,
 			continue;
 
 		/*
-		 * If page was not commingled with another page we can
+		 * If page was not comingled with another page we can
 		 * consider the result to be "reported" since the page
 		 * hasn't been modified, otherwise we will need to
 		 * report on the new larger page when we make our way
@@ -184,8 +174,11 @@ page_reporting_cycle(struct page_reporting_dev_info *prdev, struct zone *zone,
 	 * any pages that may have already been present from the previous
 	 * list processed. This should result in us reporting all pages on
 	 * an idle system in about 30 seconds.
+	 *
+	 * The division here should be cheap since PAGE_REPORTING_CAPACITY
+	 * should always be a power of 2.
 	 */
-	budget = DIV_ROUND_UP(area->nr_free, prdev->capacity * 16);
+	budget = DIV_ROUND_UP(area->nr_free, PAGE_REPORTING_CAPACITY * 16);
 
 	/* loop through free list adding unreported pages to sg list */
 	list_for_each_entry_safe(page, next, list, lru) {
@@ -230,10 +223,10 @@ page_reporting_cycle(struct page_reporting_dev_info *prdev, struct zone *zone,
 		spin_unlock_irq(&zone->lock);
 
 		/* begin processing pages in local list */
-		err = prdev->report(prdev, sgl, prdev->capacity);
+		err = prdev->report(prdev, sgl, PAGE_REPORTING_CAPACITY);
 
 		/* reset offset since the full list was reported */
-		*offset = prdev->capacity;
+		*offset = PAGE_REPORTING_CAPACITY;
 
 		/* update budget to reflect call to report function */
 		budget--;
@@ -242,7 +235,7 @@ page_reporting_cycle(struct page_reporting_dev_info *prdev, struct zone *zone,
 		spin_lock_irq(&zone->lock);
 
 		/* flush reported pages from the sg list */
-		page_reporting_drain(prdev, sgl, prdev->capacity, !err);
+		page_reporting_drain(prdev, sgl, PAGE_REPORTING_CAPACITY, !err);
 
 		/*
 		 * Reset next to first entry, the old next isn't valid
@@ -268,13 +261,13 @@ static int
 page_reporting_process_zone(struct page_reporting_dev_info *prdev,
 			    struct scatterlist *sgl, struct zone *zone)
 {
-	unsigned int order, mt, leftover, offset = prdev->capacity;
+	unsigned int order, mt, leftover, offset = PAGE_REPORTING_CAPACITY;
 	unsigned long watermark;
 	int err = 0;
 
 	/* Generate minimum watermark to be able to guarantee progress */
 	watermark = low_wmark_pages(zone) +
-		    (prdev->capacity << page_reporting_order);
+		    (PAGE_REPORTING_CAPACITY << page_reporting_order);
 
 	/*
 	 * Cancel request if insufficient free memory or if we failed
@@ -298,7 +291,7 @@ page_reporting_process_zone(struct page_reporting_dev_info *prdev,
 	}
 
 	/* report the leftover pages before going idle */
-	leftover = prdev->capacity - offset;
+	leftover = PAGE_REPORTING_CAPACITY - offset;
 	if (leftover) {
 		sgl = &sgl[offset];
 		err = prdev->report(prdev, sgl, leftover);
@@ -330,11 +323,11 @@ static void page_reporting_process(struct work_struct *work)
 	atomic_set(&prdev->state, state);
 
 	/* allocate scatterlist to store pages being reported on */
-	sgl = kmalloc_objs(*sgl, prdev->capacity);
+	sgl = kmalloc_array(PAGE_REPORTING_CAPACITY, sizeof(*sgl), GFP_KERNEL);
 	if (!sgl)
 		goto err_out;
 
-	sg_init_table(sgl, prdev->capacity);
+	sg_init_table(sgl, PAGE_REPORTING_CAPACITY);
 
 	for_each_zone(zone) {
 		err = page_reporting_process_zone(prdev, sgl, zone);
@@ -346,12 +339,13 @@ static void page_reporting_process(struct work_struct *work)
 err_out:
 	/*
 	 * If the state has reverted back to requested then there may be
-	 * additional pages to be processed. We will defer by
-	 * page_reporting_delay_ms to allow more pages to accumulate.
+	 * additional pages to be processed. We will defer for 2s to allow
+	 * more pages to accumulate.
 	 */
 	state = atomic_cmpxchg(&prdev->state, state, PAGE_REPORTING_IDLE);
 	if (state == PAGE_REPORTING_REQUESTED)
-		page_reporting_schedule_work(prdev);
+		queue_delayed_work(system_freezable_wq, &prdev->work,
+				   PAGE_REPORTING_DELAY);
 }
 
 static DEFINE_MUTEX(page_reporting_mutex);
@@ -377,16 +371,12 @@ int page_reporting_register(struct page_reporting_dev_info *prdev)
 	 * pageblock_order.
 	 */
 
-	if (page_reporting_order == PAGE_REPORTING_ORDER_UNSPECIFIED) {
-		if (prdev->order != PAGE_REPORTING_ORDER_UNSPECIFIED &&
-		    prdev->order <= MAX_PAGE_ORDER)
+	if (page_reporting_order == -1) {
+		if (prdev->order > 0 && prdev->order <= MAX_PAGE_ORDER)
 			page_reporting_order = prdev->order;
 		else
 			page_reporting_order = pageblock_order;
 	}
-
-	if (!prdev->capacity || prdev->capacity > PAGE_REPORTING_CAPACITY)
-		prdev->capacity = PAGE_REPORTING_CAPACITY;
 
 	/* initialize state and work structures */
 	atomic_set(&prdev->state, PAGE_REPORTING_IDLE);

@@ -3,7 +3,7 @@
  * Copyright (c) 2020-2024 Oracle.  All Rights Reserved.
  * Author: Darrick J. Wong <djwong@kernel.org>
  */
-#include "xfs_platform.h"
+#include "xfs.h"
 #include "xfs_fs.h"
 #include "xfs_shared.h"
 #include "xfs_format.h"
@@ -133,6 +133,7 @@ xmi_has_postop_work(const struct xfs_exchmaps_intent *xmi)
 /* Check all mappings to make sure we can actually exchange them. */
 int
 xfs_exchmaps_check_forks(
+	struct xfs_mount		*mp,
 	const struct xfs_exchmaps_req	*req)
 {
 	struct xfs_ifork		*ifp1, *ifp2;
@@ -392,7 +393,7 @@ xfs_exchmaps_one_step(
 	/*
 	 * Re-add both mappings.  We exchange the file offsets between the two
 	 * maps and add the opposite map, which has the effect of filling the
-	 * logical offsets we just unmapped, but with the physical mapping
+	 * logical offsets we just unmapped, but with with the physical mapping
 	 * information exchanged.
 	 */
 	swap(irec1->br_startoff, irec2->br_startoff);
@@ -426,7 +427,7 @@ xfs_exchmaps_attr_to_sf(
 		.geo		= tp->t_mountp->m_attr_geo,
 		.whichfork	= XFS_ATTR_FORK,
 		.trans		= tp,
-		.owner		= I_INO(xmi->xmi_ip2),
+		.owner		= xmi->xmi_ip2->i_ino,
 	};
 	struct xfs_buf		*bp;
 	int			forkoff;
@@ -435,7 +436,7 @@ xfs_exchmaps_attr_to_sf(
 	if (!xfs_attr_is_leaf(xmi->xmi_ip2))
 		return 0;
 
-	error = xfs_attr3_leaf_read(tp, xmi->xmi_ip2, I_INO(xmi->xmi_ip2), 0,
+	error = xfs_attr3_leaf_read(tp, xmi->xmi_ip2, xmi->xmi_ip2->i_ino, 0,
 			&bp);
 	if (error)
 		return error;
@@ -458,7 +459,7 @@ xfs_exchmaps_dir_to_sf(
 		.geo		= tp->t_mountp->m_dir_geo,
 		.whichfork	= XFS_DATA_FORK,
 		.trans		= tp,
-		.owner		= I_INO(xmi->xmi_ip2),
+		.owner		= xmi->xmi_ip2->i_ino,
 	};
 	struct xfs_dir2_sf_hdr	sfh;
 	struct xfs_buf		*bp;
@@ -468,7 +469,7 @@ xfs_exchmaps_dir_to_sf(
 	if (xfs_dir2_format(&args, &error) != XFS_DIR2_FMT_BLOCK)
 		return error;
 
-	error = xfs_dir3_block_read(tp, xmi->xmi_ip2, I_INO(xmi->xmi_ip2), &bp);
+	error = xfs_dir3_block_read(tp, xmi->xmi_ip2, xmi->xmi_ip2->i_ino, &bp);
 	if (error)
 		return error;
 

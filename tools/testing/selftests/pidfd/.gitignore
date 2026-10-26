@@ -12,4 +12,3 @@ pidfd_info_test
 pidfd_exec_helper
 pidfd_xattr_test
 pidfd_setattr_test
-pidfd_autoreap_test

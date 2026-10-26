@@ -941,19 +941,16 @@ static int dlfb_ops_open(struct fb_info *info, int user)
 
 		struct fb_deferred_io *fbdefio;
 
-		fbdefio = kzalloc_obj(struct fb_deferred_io);
+		fbdefio = kzalloc(sizeof(struct fb_deferred_io), GFP_KERNEL);
 
 		if (fbdefio) {
 			fbdefio->delay = DL_DEFIO_WRITE_DELAY;
 			fbdefio->sort_pagereflist = true;
 			fbdefio->deferred_io = dlfb_dpy_deferred_io;
-
-			info->fbdefio = fbdefio;
-			if (fb_deferred_io_init(info)) {
-				kfree(fbdefio);
-				info->fbdefio = NULL;
-			}
 		}
+
+		info->fbdefio = fbdefio;
+		fb_deferred_io_init(info);
 	}
 
 	dev_dbg(info->dev, "open, user=%d fb_info=%p count=%d\n",
@@ -1193,7 +1190,7 @@ static const struct fb_ops dlfb_ops = {
 
 static void dlfb_deferred_vfree(struct dlfb_data *dlfb, void *mem)
 {
-	struct dlfb_deferred_free *d = kmalloc_obj(struct dlfb_deferred_free);
+	struct dlfb_deferred_free *d = kmalloc(sizeof(struct dlfb_deferred_free), GFP_KERNEL);
 	if (!d)
 		return;
 	d->mem = mem;
@@ -1293,11 +1290,6 @@ static int dlfb_setup_modes(struct dlfb_data *dlfb,
 	edid = kmalloc(EDID_LENGTH, GFP_KERNEL);
 	if (!edid) {
 		result = -ENOMEM;
-		goto error;
-	}
-
-	if (dlfb->fb_count) {
-		result = -EINVAL;
 		goto error;
 	}
 
@@ -1594,29 +1586,19 @@ static int dlfb_parse_vendor_descriptor(struct dlfb_data *dlfb,
 		desc += 5; /* the fixed header we've already parsed */
 
 		while (desc < desc_end) {
-			char *value;
 			u8 length;
 			u16 key;
 
-			if (desc_end - desc < sizeof(key) + sizeof(length))
-				goto unrecognized;
-
-			key = get_unaligned_le16(desc);
-			desc += sizeof(key);
+			key = *desc++;
+			key |= (u16)*desc++ << 8;
 			length = *desc++;
 
-			if (length > desc_end - desc)
-				goto unrecognized;
-
-			value = desc;
 			switch (key) {
 			case 0x0200: { /* max_area */
-				u32 max_area;
-
-				if (length < sizeof(max_area))
-					goto unrecognized;
-
-				max_area = get_unaligned_le32(value);
+				u32 max_area = *desc++;
+				max_area |= (u32)*desc++ << 8;
+				max_area |= (u32)*desc++ << 16;
+				max_area |= (u32)*desc++ << 24;
 				dev_warn(&intf->dev,
 					 "DL chip limited to %d pixel modes\n",
 					 max_area);
@@ -1656,7 +1638,7 @@ static int dlfb_usb_probe(struct usb_interface *intf,
 	static u8 out_ep[] = {OUT_EP_NUM + USB_DIR_OUT, 0};
 
 	/* usb initialization */
-	dlfb = kzalloc_obj(*dlfb);
+	dlfb = kzalloc(sizeof(*dlfb), GFP_KERNEL);
 	if (!dlfb) {
 		dev_err(&intf->dev, "%s: failed to allocate dlfb\n", __func__);
 		return -ENOMEM;
@@ -1902,7 +1884,7 @@ retry:
 	dlfb->urbs.available = 0;
 
 	while (dlfb->urbs.count * size < wanted_size) {
-		unode = kzalloc_obj(*unode);
+		unode = kzalloc(sizeof(*unode), GFP_KERNEL);
 		if (!unode)
 			break;
 		unode->dlfb = dlfb;

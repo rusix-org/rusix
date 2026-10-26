@@ -472,7 +472,6 @@ struct rcar_canfd_global {
 	unsigned long channels_mask;	/* Enabled channels mask */
 	bool extclk;			/* CANFD or Ext clock */
 	bool fdmode;			/* CAN FD or Classical CAN only mode */
-	bool fd_only_mode;		/* FD-Only mode for CAN-FD */
 	struct reset_control *rstc1;
 	struct reset_control *rstc2;
 	const struct rcar_canfd_hw_info *info;
@@ -670,23 +669,6 @@ static const struct rcar_canfd_hw_info r9a09g047_hw_info = {
 	.external_clk = 0,
 };
 
-static const struct rcar_canfd_hw_info r9a09g077_hw_info = {
-	.nom_bittiming = &rcar_canfd_gen4_nom_bittiming_const,
-	.data_bittiming = &rcar_canfd_gen4_data_bittiming_const,
-	.tdc_const = &rcar_canfd_gen4_tdc_const,
-	.regs = &rcar_gen4_regs,
-	.sh = &rcar_gen4_shift_data,
-	.rnc_field_width = 16,
-	.max_aflpn = 15,
-	.max_cftml = 31,
-	.max_channels = 2,
-	.postdiv = 1,
-	.multi_channel_irqs = 1,
-	.ch_interface_mode = 1,
-	.shared_can_regs = 1,
-	.external_clk = 1,
-};
-
 /* Helper functions */
 static inline void rcar_canfd_update(u32 mask, u32 val, u32 __iomem *reg)
 {
@@ -847,20 +829,12 @@ static int rcar_canfd_reset_controller(struct rcar_canfd_global *gpriv)
 							 RCANFD_GEN4_FDCFG_FDOE);
 				rcar_canfd_set_bit_reg(&gpriv->fcbase[ch].cfdcfg,
 						       RCANFD_GEN4_FDCFG_CLOE);
-			} else if (gpriv->fd_only_mode) {
-				rcar_canfd_clear_bit_reg(&gpriv->fcbase[ch].cfdcfg,
-							 RCANFD_GEN4_FDCFG_CLOE);
-				rcar_canfd_set_bit_reg(&gpriv->fcbase[ch].cfdcfg,
-						       RCANFD_GEN4_FDCFG_FDOE);
 			} else {
 				rcar_canfd_clear_bit_reg(&gpriv->fcbase[ch].cfdcfg,
 							 RCANFD_GEN4_FDCFG_FDOE);
 				rcar_canfd_clear_bit_reg(&gpriv->fcbase[ch].cfdcfg,
 							 RCANFD_GEN4_FDCFG_CLOE);
 			}
-		} else if (gpriv->fd_only_mode) {
-			rcar_canfd_set_bit_reg(&gpriv->fcbase[ch].cfdcfg,
-					       RCANFD_GEN4_FDCFG_FDOE);
 		}
 	}
 
@@ -1605,8 +1579,8 @@ static int rcar_canfd_close(struct net_device *ndev)
 	netif_stop_queue(ndev);
 	rcar_canfd_stop(ndev);
 	napi_disable(&priv->napi);
-	close_candev(ndev);
 	clk_disable_unprepare(gpriv->can_clk);
+	close_candev(ndev);
 	phy_power_off(priv->transceiver);
 	return 0;
 }
@@ -1854,6 +1828,7 @@ static const struct net_device_ops rcar_canfd_netdev_ops = {
 	.ndo_open = rcar_canfd_open,
 	.ndo_stop = rcar_canfd_close,
 	.ndo_start_xmit = rcar_canfd_start_xmit,
+	.ndo_change_mtu = can_change_mtu,
 };
 
 static const struct ethtool_ops rcar_canfd_ethtool_ops = {
@@ -2166,9 +2141,6 @@ static int rcar_canfd_probe(struct platform_device *pdev)
 	gpriv->fdmode = fdmode;
 	gpriv->info = info;
 
-	if (of_property_read_bool(dev->of_node, "renesas,fd-only"))
-		gpriv->fd_only_mode = true; /* FD-Only mode for CAN-FD */
-
 	gpriv->rstc1 = devm_reset_control_get_optional_exclusive(dev, "rstp_n");
 	if (IS_ERR(gpriv->rstc1))
 		return dev_err_probe(dev, PTR_ERR(gpriv->rstc1),
@@ -2268,7 +2240,7 @@ static int rcar_canfd_probe(struct platform_device *pdev)
 	platform_set_drvdata(pdev, gpriv);
 	dev_info(dev, "global operational state (%s clk, %s mode)\n",
 		 gpriv->extclk ? "ext" : "canfd",
-		 gpriv->fdmode ? (gpriv->fd_only_mode ? "fd-only" : "fd") : "classical");
+		 gpriv->fdmode ? "fd" : "classical");
 	return 0;
 
 fail_channel:
@@ -2293,76 +2265,22 @@ static void rcar_canfd_remove(struct platform_device *pdev)
 	rcar_canfd_global_deinit(gpriv, true);
 }
 
-static int rcar_canfd_suspend(struct device *dev)
+static int __maybe_unused rcar_canfd_suspend(struct device *dev)
 {
-	struct rcar_canfd_global *gpriv = dev_get_drvdata(dev);
-	int err;
-	u32 ch;
-
-	for_each_set_bit(ch, &gpriv->channels_mask, gpriv->info->max_channels) {
-		struct rcar_canfd_channel *priv = gpriv->ch[ch];
-		struct net_device *ndev = priv->ndev;
-
-		if (!netif_running(ndev))
-			continue;
-
-		netif_device_detach(ndev);
-
-		err = rcar_canfd_close(ndev);
-		if (err) {
-			netdev_err(ndev, "rcar_canfd_close() failed %pe\n",
-				   ERR_PTR(err));
-			return err;
-		}
-
-		priv->can.state = CAN_STATE_SLEEPING;
-	}
-
-	/* TODO Skip if wake-up (which is not yet supported) is enabled */
-	rcar_canfd_global_deinit(gpriv, false);
-
 	return 0;
 }
 
-static int rcar_canfd_resume(struct device *dev)
+static int __maybe_unused rcar_canfd_resume(struct device *dev)
 {
-	struct rcar_canfd_global *gpriv = dev_get_drvdata(dev);
-	int err;
-	u32 ch;
-
-	err = rcar_canfd_global_init(gpriv);
-	if (err) {
-		dev_err(dev, "rcar_canfd_global_init() failed %pe\n", ERR_PTR(err));
-		return err;
-	}
-
-	for_each_set_bit(ch, &gpriv->channels_mask, gpriv->info->max_channels) {
-		struct rcar_canfd_channel *priv = gpriv->ch[ch];
-		struct net_device *ndev = priv->ndev;
-
-		if (!netif_running(ndev))
-			continue;
-
-		err = rcar_canfd_open(ndev);
-		if (err) {
-			netdev_err(ndev, "rcar_canfd_open() failed %pe\n",
-				   ERR_PTR(err));
-			return err;
-		}
-
-		netif_device_attach(ndev);
-	}
-
 	return 0;
 }
 
-static DEFINE_SIMPLE_DEV_PM_OPS(rcar_canfd_pm_ops, rcar_canfd_suspend,
-				rcar_canfd_resume);
+static SIMPLE_DEV_PM_OPS(rcar_canfd_pm_ops, rcar_canfd_suspend,
+			 rcar_canfd_resume);
 
 static const __maybe_unused struct of_device_id rcar_canfd_of_table[] = {
 	{ .compatible = "renesas,r8a779a0-canfd", .data = &rcar_gen4_hw_info },
 	{ .compatible = "renesas,r9a09g047-canfd", .data = &r9a09g047_hw_info },
-	{ .compatible = "renesas,r9a09g077-canfd", .data = &r9a09g077_hw_info },
 	{ .compatible = "renesas,rcar-gen3-canfd", .data = &rcar_gen3_hw_info },
 	{ .compatible = "renesas,rcar-gen4-canfd", .data = &rcar_gen4_hw_info },
 	{ .compatible = "renesas,rzg2l-canfd", .data = &rzg2l_hw_info },
@@ -2375,7 +2293,7 @@ static struct platform_driver rcar_canfd_driver = {
 	.driver = {
 		.name = RCANFD_DRV_NAME,
 		.of_match_table = of_match_ptr(rcar_canfd_of_table),
-		.pm = pm_sleep_ptr(&rcar_canfd_pm_ops),
+		.pm = &rcar_canfd_pm_ops,
 	},
 	.probe = rcar_canfd_probe,
 	.remove = rcar_canfd_remove,

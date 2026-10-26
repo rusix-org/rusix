@@ -125,7 +125,7 @@ static ssize_t field##_show(struct device *dev,			\
 			    char *buf)					\
 {									\
 	struct gb_loopback *gb = dev_get_drvdata(dev);			\
-	return sysfs_emit(buf, "%u\n", gb->field);			\
+	return sprintf(buf, "%u\n", gb->field);			\
 }									\
 static DEVICE_ATTR_RO(field)
 
@@ -137,8 +137,8 @@ static ssize_t name##_##field##_show(struct device *dev,	\
 	struct gb_loopback *gb = dev_get_drvdata(dev);			\
 	/* Report 0 for min and max if no transfer succeeded */		\
 	if (!gb->requests_completed)					\
-		return sysfs_emit(buf, "0\n");				\
-	return sysfs_emit(buf, "%" #type "\n", gb->name.field);		\
+		return sprintf(buf, "0\n");				\
+	return sprintf(buf, "%" #type "\n", gb->name.field);		\
 }									\
 static DEVICE_ATTR_RO(name##_##field)
 
@@ -158,7 +158,7 @@ static ssize_t name##_avg_show(struct device *dev,		\
 	rem = do_div(avg, count);					\
 	rem *= 1000000;							\
 	do_div(rem, count);						\
-	return sysfs_emit(buf, "%llu.%06u\n", avg, (u32)rem);		\
+	return sprintf(buf, "%llu.%06u\n", avg, (u32)rem);		\
 }									\
 static DEVICE_ATTR_RO(name##_avg)
 
@@ -167,13 +167,39 @@ static DEVICE_ATTR_RO(name##_avg)
 	gb_loopback_ro_stats_attr(field, max, u);		\
 	gb_loopback_ro_avg_attr(field)
 
-#define gb_dev_loopback_ro_attr(field)				\
+#define gb_loopback_attr(field, type)					\
+static ssize_t field##_show(struct device *dev,				\
+			    struct device_attribute *attr,		\
+			    char *buf)					\
+{									\
+	struct gb_loopback *gb = dev_get_drvdata(dev);			\
+	return sprintf(buf, "%" #type "\n", gb->field);			\
+}									\
+static ssize_t field##_store(struct device *dev,			\
+			    struct device_attribute *attr,		\
+			    const char *buf,				\
+			    size_t len)					\
+{									\
+	int ret;							\
+	struct gb_loopback *gb = dev_get_drvdata(dev);			\
+	mutex_lock(&gb->mutex);						\
+	ret = sscanf(buf, "%"#type, &gb->field);			\
+	if (ret != 1)							\
+		len = -EINVAL;						\
+	else								\
+		gb_loopback_check_attr(gb, bundle);			\
+	mutex_unlock(&gb->mutex);					\
+	return len;							\
+}									\
+static DEVICE_ATTR_RW(field)
+
+#define gb_dev_loopback_ro_attr(field, conn)				\
 static ssize_t field##_show(struct device *dev,		\
 			    struct device_attribute *attr,		\
 			    char *buf)					\
 {									\
 	struct gb_loopback *gb = dev_get_drvdata(dev);			\
-	return sysfs_emit(buf, "%u\n", gb->field);				\
+	return sprintf(buf, "%u\n", gb->field);				\
 }									\
 static DEVICE_ATTR_RO(field)
 
@@ -183,7 +209,7 @@ static ssize_t field##_show(struct device *dev,				\
 			    char *buf)					\
 {									\
 	struct gb_loopback *gb = dev_get_drvdata(dev);			\
-	return sysfs_emit(buf, "%" #type "\n", gb->field);			\
+	return sprintf(buf, "%" #type "\n", gb->field);			\
 }									\
 static ssize_t field##_store(struct device *dev,			\
 			    struct device_attribute *attr,		\
@@ -279,7 +305,7 @@ gb_dev_loopback_rw_attr(us_wait, d);
 /* Maximum iterations for a given operation: 1-(2^32-1), 0 implies infinite */
 gb_dev_loopback_rw_attr(iteration_max, u);
 /* The current index of the for (i = 0; i < iteration_max; i++) loop */
-gb_dev_loopback_ro_attr(iteration_count);
+gb_dev_loopback_ro_attr(iteration_count, false);
 /* A flag to indicate synchronous or asynchronous operations */
 gb_dev_loopback_rw_attr(async, u);
 /* Timeout of an individual asynchronous request */
@@ -445,7 +471,7 @@ static int gb_loopback_async_operation(struct gb_loopback *gb, int type,
 	struct gb_operation *operation;
 	int ret;
 
-	op_async = kzalloc_obj(*op_async);
+	op_async = kzalloc(sizeof(*op_async), GFP_KERNEL);
 	if (!op_async)
 		return -ENOMEM;
 
@@ -562,7 +588,8 @@ static int gb_loopback_async_sink(struct gb_loopback *gb, u32 len)
 	return retval;
 }
 
-static int gb_loopback_async_transfer_complete(struct gb_loopback_async_operation *op_async)
+static int gb_loopback_async_transfer_complete(
+				struct gb_loopback_async_operation *op_async)
 {
 	struct gb_loopback *gb;
 	struct gb_operation *operation;
@@ -652,8 +679,7 @@ static int gb_loopback_request_handler(struct gb_operation *operation)
 		}
 
 		if (!gb_operation_response_alloc(operation,
-						 len + sizeof(*response),
-						 GFP_KERNEL)) {
+				len + sizeof(*response), GFP_KERNEL)) {
 			dev_err(dev, "error allocating response\n");
 			return -ENOMEM;
 		}
@@ -963,7 +989,7 @@ static int gb_loopback_probe(struct gb_bundle *bundle,
 	if (cport_desc->protocol_id != GREYBUS_PROTOCOL_LOOPBACK)
 		return -ENODEV;
 
-	gb = kzalloc_obj(*gb);
+	gb = kzalloc(sizeof(*gb), GFP_KERNEL);
 	if (!gb)
 		return -ENOMEM;
 

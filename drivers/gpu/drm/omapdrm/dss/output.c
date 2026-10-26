@@ -12,6 +12,7 @@
 #include <linux/of_graph.h>
 
 #include <drm/drm_bridge.h>
+#include <drm/drm_panel.h>
 
 #include "dss.h"
 #include "omapdss.h"
@@ -19,16 +20,37 @@
 int omapdss_device_init_output(struct omap_dss_device *out,
 			       struct drm_bridge *local_bridge)
 {
-	struct drm_bridge *bridge;
+	struct device_node *remote_node;
 	int ret;
 
-	bridge = of_drm_get_bridge_by_endpoint(out->dev->of_node, out->of_port, 0);
-	if (IS_ERR(bridge)) {
+	remote_node = of_graph_get_remote_node(out->dev->of_node,
+					       out->of_port, 0);
+	if (!remote_node) {
 		dev_dbg(out->dev, "failed to find video sink\n");
 		return 0;
 	}
 
-	out->bridge = bridge;
+	out->bridge = of_drm_find_bridge(remote_node);
+	out->panel = of_drm_find_panel(remote_node);
+	if (IS_ERR(out->panel))
+		out->panel = NULL;
+
+	of_node_put(remote_node);
+
+	if (out->panel) {
+		struct drm_bridge *bridge;
+
+		bridge = drm_panel_bridge_add(out->panel);
+		if (IS_ERR(bridge)) {
+			dev_err(out->dev,
+				"unable to create panel bridge (%ld)\n",
+				PTR_ERR(bridge));
+			ret = PTR_ERR(bridge);
+			goto error;
+		}
+
+		out->bridge = bridge;
+	}
 
 	if (local_bridge) {
 		if (!out->bridge) {
@@ -37,7 +59,12 @@ int omapdss_device_init_output(struct omap_dss_device *out,
 		}
 
 		out->next_bridge = out->bridge;
-		out->bridge = drm_bridge_get(local_bridge);
+		out->bridge = local_bridge;
+	}
+
+	if (!out->bridge) {
+		ret = -EPROBE_DEFER;
+		goto error;
 	}
 
 	return 0;
@@ -49,8 +76,9 @@ error:
 
 void omapdss_device_cleanup_output(struct omap_dss_device *out)
 {
-	drm_bridge_put(out->next_bridge);
-	drm_bridge_put(out->bridge);
+	if (out->bridge && out->panel)
+		drm_panel_bridge_remove(out->next_bridge ?
+					out->next_bridge : out->bridge);
 }
 
 void dss_mgr_set_timings(struct omap_dss_device *dssdev,

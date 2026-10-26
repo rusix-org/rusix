@@ -113,7 +113,7 @@ static int virtio_crypto_alg_akcipher_init_session(struct virtio_crypto_akcipher
 	if (!pkey)
 		return -ENOMEM;
 
-	vc_ctrl_req = kzalloc_obj(*vc_ctrl_req);
+	vc_ctrl_req = kzalloc(sizeof(*vc_ctrl_req), GFP_KERNEL);
 	if (!vc_ctrl_req) {
 		err = -ENOMEM;
 		goto out;
@@ -170,7 +170,7 @@ static int virtio_crypto_alg_akcipher_close_session(struct virtio_crypto_akciphe
 	if (!ctx->session_valid)
 		return 0;
 
-	vc_ctrl_req = kzalloc_obj(*vc_ctrl_req);
+	vc_ctrl_req = kzalloc(sizeof(*vc_ctrl_req), GFP_KERNEL);
 	if (!vc_ctrl_req)
 		return -ENOMEM;
 
@@ -195,8 +195,7 @@ static int virtio_crypto_alg_akcipher_close_session(struct virtio_crypto_akciphe
 
 	if (ctrl_status->status != VIRTIO_CRYPTO_OK) {
 		pr_err("virtio_crypto: Close session failed status: %u, session_id: 0x%llx\n",
-			ctrl_status->status,
-		       le64_to_cpu(destroy_session->session_id));
+			ctrl_status->status, destroy_session->session_id);
 		err = -EINVAL;
 		goto out;
 	}

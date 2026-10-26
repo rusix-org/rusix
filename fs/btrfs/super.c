@@ -22,7 +22,6 @@
 #include <linux/namei.h>
 #include <linux/miscdevice.h>
 #include <linux/magic.h>
-#include <linux/memcontrol.h>
 #include <linux/slab.h>
 #include <linux/ratelimit.h>
 #include <linux/crc32c.h>
@@ -61,7 +60,6 @@
 #include "verity.h"
 #include "super.h"
 #include "extent-tree.h"
-#include "tree-log.h"
 #define CREATE_TRACE_POINTS
 #include <trace/events/btrfs.h>
 
@@ -87,7 +85,6 @@ struct btrfs_fs_context {
 	unsigned long long mount_opt;
 	unsigned long compress_type:4;
 	int compress_level;
-	int use_backup_slot;
 	refcount_t refs;
 };
 
@@ -130,6 +127,7 @@ enum {
 
 	/* Rescue options */
 	Opt_rescue,
+	Opt_usebackuproot,
 
 	/* Debugging options */
 	Opt_enospc_debug,
@@ -176,10 +174,6 @@ static const struct constant_table btrfs_parameter_space_cache[] = {
 
 enum {
 	Opt_rescue_usebackuproot,
-	Opt_rescue_usebackup_slot_0,
-	Opt_rescue_usebackup_slot_1,
-	Opt_rescue_usebackup_slot_2,
-	Opt_rescue_usebackup_slot_3,
 	Opt_rescue_nologreplay,
 	Opt_rescue_ignorebadroots,
 	Opt_rescue_ignoredatacsums,
@@ -190,10 +184,6 @@ enum {
 
 static const struct constant_table btrfs_parameter_rescue[] = {
 	{ "usebackuproot", Opt_rescue_usebackuproot },
-	{ "usebackuproot_0", Opt_rescue_usebackup_slot_0},
-	{ "usebackuproot_1", Opt_rescue_usebackup_slot_1},
-	{ "usebackuproot_2", Opt_rescue_usebackup_slot_2},
-	{ "usebackuproot_3", Opt_rescue_usebackup_slot_3},
 	{ "nologreplay", Opt_rescue_nologreplay },
 	{ "ignorebadroots", Opt_rescue_ignorebadroots },
 	{ "ibadroots", Opt_rescue_ignorebadroots },
@@ -257,6 +247,8 @@ static const struct fs_parameter_spec btrfs_fs_parameters[] = {
 
 	/* Rescue options. */
 	fsparam_enum("rescue", Opt_rescue, btrfs_parameter_rescue),
+	/* Deprecated, with alias rescue=usebackuproot */
+	__fsparam(NULL, "usebackuproot", Opt_usebackuproot, fs_param_deprecated, NULL),
 	/* For compatibility only, alias for "rescue=nologreplay". */
 	fsparam_flag("norecovery", Opt_norecovery),
 
@@ -520,20 +512,19 @@ static int btrfs_parse_param(struct fs_context *fc, struct fs_parameter *param)
 		btrfs_clear_opt(ctx->mount_opt, NODISCARD);
 		break;
 	case Opt_space_cache:
-		if (!result.negated)
-			btrfs_warn(NULL,
-			"v1 space cache is deprecated, falling back to no space cache");
-		btrfs_set_opt(ctx->mount_opt, NOSPACECACHE);
-		btrfs_clear_opt(ctx->mount_opt, SPACE_CACHE);
-		btrfs_clear_opt(ctx->mount_opt, FREE_SPACE_TREE);
+		if (result.negated) {
+			btrfs_set_opt(ctx->mount_opt, NOSPACECACHE);
+			btrfs_clear_opt(ctx->mount_opt, SPACE_CACHE);
+			btrfs_clear_opt(ctx->mount_opt, FREE_SPACE_TREE);
+		} else {
+			btrfs_clear_opt(ctx->mount_opt, FREE_SPACE_TREE);
+			btrfs_set_opt(ctx->mount_opt, SPACE_CACHE);
+		}
 		break;
 	case Opt_space_cache_version:
 		switch (result.uint_32) {
 		case Opt_space_cache_v1:
-			btrfs_warn(NULL,
-			"v1 space cache is deprecated, falling back to no space cache");
-			btrfs_set_opt(ctx->mount_opt, NOSPACECACHE);
-			btrfs_clear_opt(ctx->mount_opt, SPACE_CACHE);
+			btrfs_set_opt(ctx->mount_opt, SPACE_CACHE);
 			btrfs_clear_opt(ctx->mount_opt, FREE_SPACE_TREE);
 			break;
 		case Opt_space_cache_v2:
@@ -567,6 +558,14 @@ static int btrfs_parse_param(struct fs_context *fc, struct fs_parameter *param)
 		else
 			btrfs_set_opt(ctx->mount_opt, AUTO_DEFRAG);
 		break;
+	case Opt_usebackuproot:
+		btrfs_warn(NULL,
+			   "'usebackuproot' is deprecated, use 'rescue=usebackuproot' instead");
+		btrfs_set_opt(ctx->mount_opt, USEBACKUPROOT);
+
+		/* If we're loading the backup roots we can't trust the space cache. */
+		btrfs_set_opt(ctx->mount_opt, CLEAR_CACHE);
+		break;
 	case Opt_skip_balance:
 		btrfs_set_opt(ctx->mount_opt, SKIP_BALANCE);
 		break;
@@ -597,14 +596,6 @@ static int btrfs_parse_param(struct fs_context *fc, struct fs_parameter *param)
 		switch (result.uint_32) {
 		case Opt_rescue_usebackuproot:
 			btrfs_set_opt(ctx->mount_opt, USEBACKUPROOT);
-			ctx->use_backup_slot = 1;
-			break;
-		case Opt_rescue_usebackup_slot_0:
-		case Opt_rescue_usebackup_slot_1:
-		case Opt_rescue_usebackup_slot_2:
-		case Opt_rescue_usebackup_slot_3:
-			btrfs_set_opt(ctx->mount_opt, USEBACKUPROOT);
-			ctx->use_backup_slot = result.uint_32 - Opt_rescue_usebackup_slot_0;
 			break;
 		case Opt_rescue_nologreplay:
 			btrfs_set_opt(ctx->mount_opt, NOLOGREPLAY);
@@ -627,8 +618,6 @@ static int btrfs_parse_param(struct fs_context *fc, struct fs_parameter *param)
 			btrfs_set_opt(ctx->mount_opt, IGNORESUPERFLAGS);
 			btrfs_set_opt(ctx->mount_opt, IGNOREBADROOTS);
 			btrfs_set_opt(ctx->mount_opt, NOLOGREPLAY);
-			btrfs_set_opt(ctx->mount_opt, USEBACKUPROOT);
-			ctx->use_backup_slot = 1;
 			break;
 		default:
 			btrfs_info(NULL, "unrecognized rescue option '%s'",
@@ -677,6 +666,7 @@ static int btrfs_parse_param(struct fs_context *fc, struct fs_parameter *param)
  */
 static void btrfs_clear_oneshot_options(struct btrfs_fs_info *fs_info)
 {
+	btrfs_clear_opt(fs_info->mount_opt, USEBACKUPROOT);
 	btrfs_clear_opt(fs_info->mount_opt, CLEAR_CACHE);
 	btrfs_clear_opt(fs_info->mount_opt, NOSPACECACHE);
 }
@@ -700,8 +690,7 @@ bool btrfs_check_options(const struct btrfs_fs_info *info,
 	bool ret = true;
 
 	if (!(flags & SB_RDONLY) &&
-	    (check_ro_option(info, *mount_opt, BTRFS_MOUNT_USEBACKUPROOT, "usebackuproot") ||
-	     check_ro_option(info, *mount_opt, BTRFS_MOUNT_NOLOGREPLAY, "nologreplay") ||
+	    (check_ro_option(info, *mount_opt, BTRFS_MOUNT_NOLOGREPLAY, "nologreplay") ||
 	     check_ro_option(info, *mount_opt, BTRFS_MOUNT_IGNOREBADROOTS, "ignorebadroots") ||
 	     check_ro_option(info, *mount_opt, BTRFS_MOUNT_IGNOREDATACSUMS, "ignoredatacsums") ||
 	     check_ro_option(info, *mount_opt, BTRFS_MOUNT_IGNOREMETACSUMS, "ignoremetacsums") ||
@@ -747,7 +736,7 @@ bool btrfs_check_options(const struct btrfs_fs_info *info,
  */
 void btrfs_set_free_space_cache_settings(struct btrfs_fs_info *fs_info)
 {
-	if (fs_info->sectorsize != PAGE_SIZE && btrfs_test_opt(fs_info, SPACE_CACHE)) {
+	if (fs_info->sectorsize < PAGE_SIZE && btrfs_test_opt(fs_info, SPACE_CACHE)) {
 		btrfs_info(fs_info,
 			   "forcing free space tree for sector size %u with page size %lu",
 			   fs_info->sectorsize, PAGE_SIZE);
@@ -991,7 +980,7 @@ static int btrfs_fill_super(struct super_block *sb,
 
 	ret = open_ctree(sb, fs_devices);
 	if (ret) {
-		btrfs_err(fs_info, "open_ctree failed: %pe", ERR_PTR(ret));
+		btrfs_err(fs_info, "open_ctree failed: %d", ret);
 		return ret;
 	}
 
@@ -1107,11 +1096,8 @@ static int btrfs_show_options(struct seq_file *seq, struct dentry *dentry)
 		seq_puts(seq, ",notreelog");
 	if (btrfs_test_opt(info, NOLOGREPLAY))
 		print_rescue_option(seq, "nologreplay", &printed);
-	if (btrfs_test_opt(info, USEBACKUPROOT)) {
-		seq_printf(seq, "%susebackuproot_%d", printed ? ":" : ",rescue=",
-			   info->use_backup_slot);
-		printed = true;
-	}
+	if (btrfs_test_opt(info, USEBACKUPROOT))
+		print_rescue_option(seq, "usebackuproot", &printed);
 	if (btrfs_test_opt(info, IGNOREBADROOTS))
 		print_rescue_option(seq, "ignorebadroots", &printed);
 	if (btrfs_test_opt(info, IGNOREDATACSUMS))
@@ -1313,7 +1299,7 @@ static int btrfs_remount_rw(struct btrfs_fs_info *fs_info)
 {
 	int ret;
 
-	if (unlikely(BTRFS_FS_ERROR(fs_info))) {
+	if (BTRFS_FS_ERROR(fs_info)) {
 		btrfs_err(fs_info,
 			  "remounting read-write after error is not allowed");
 		return -EINVAL;
@@ -1427,7 +1413,6 @@ static void btrfs_ctx_to_info(struct btrfs_fs_info *fs_info, struct btrfs_fs_con
 	fs_info->mount_opt = ctx->mount_opt;
 	fs_info->compress_type = ctx->compress_type;
 	fs_info->compress_level = ctx->compress_level;
-	fs_info->use_backup_slot = ctx->use_backup_slot;
 }
 
 static void btrfs_info_to_ctx(struct btrfs_fs_info *fs_info, struct btrfs_fs_context *ctx)
@@ -1439,7 +1424,6 @@ static void btrfs_info_to_ctx(struct btrfs_fs_info *fs_info, struct btrfs_fs_con
 	ctx->mount_opt = fs_info->mount_opt;
 	ctx->compress_type = fs_info->compress_type;
 	ctx->compress_level = fs_info->compress_level;
-	ctx->use_backup_slot = fs_info->use_backup_slot;
 }
 
 #define btrfs_info_if_set(fs_info, old_ctx, opt, fmt, args...)			\
@@ -1651,7 +1635,8 @@ static inline int btrfs_calc_avail_data_space(struct btrfs_fs_info *fs_info,
 		}
 	}
 
-	devices_info = kmalloc_objs(*devices_info, nr_devices);
+	devices_info = kmalloc_array(nr_devices, sizeof(*devices_info),
+			       GFP_KERNEL);
 	if (!devices_info)
 		return -ENOMEM;
 
@@ -1749,13 +1734,12 @@ static int btrfs_statfs(struct dentry *dentry, struct kstatfs *buf)
 	u64 total_free_data = 0;
 	u64 total_free_meta = 0;
 	u32 bits = fs_info->sectorsize_bits;
-	__be32 *fsid;
+	__be32 *fsid = (__be32 *)fs_info->fs_devices->fsid;
 	unsigned factor = 1;
 	struct btrfs_block_rsv *block_rsv = &fs_info->global_block_rsv;
 	int ret;
 	u64 thresh = 0;
-	bool mixed = false;
-	__kernel_fsid_t f_fsid;
+	int mixed = 0;
 
 	list_for_each_entry(found, &fs_info->space_info, list) {
 		if (found->flags & BTRFS_BLOCK_GROUP_DATA &&
@@ -1778,7 +1762,7 @@ static int btrfs_statfs(struct dentry *dentry, struct kstatfs *buf)
 		 */
 		if (!mixed && found->flags & BTRFS_BLOCK_GROUP_METADATA) {
 			if (found->flags & BTRFS_BLOCK_GROUP_DATA)
-				mixed = true;
+				mixed = 1;
 			else
 				total_free_meta += found->disk_total -
 					found->disk_used;
@@ -1837,42 +1821,14 @@ static int btrfs_statfs(struct dentry *dentry, struct kstatfs *buf)
 	buf->f_bsize = fs_info->sectorsize;
 	buf->f_namelen = BTRFS_NAME_LEN;
 
-	/*
-	 * fs_devices->fsid is dynamically generated when temp_fsid is active
-	 * to support cloned filesystems. Use the original on-disk fsid instead,
-	 * as it remains consistent across mount cycles.
-	 */
-	if (fs_info->fs_devices->temp_fsid)
-		fsid = (__be32 *)fs_info->super_copy->fsid;
-	else
-		fsid = (__be32 *)fs_info->fs_devices->fsid;
-
-	/*
-	 * We treat it as constant endianness (it doesn't matter _which_)
-	 * because we want the fsid to come out the same whether mounted
-	 * on a big-endian or little-endian host.
-	 */
-	f_fsid.val[0] = be32_to_cpu(fsid[0]) ^ be32_to_cpu(fsid[2]);
-	f_fsid.val[1] = be32_to_cpu(fsid[1]) ^ be32_to_cpu(fsid[3]);
-
+	/* We treat it as constant endianness (it doesn't matter _which_)
+	   because we want the fsid to come out the same whether mounted
+	   on a big-endian or little-endian host */
+	buf->f_fsid.val[0] = be32_to_cpu(fsid[0]) ^ be32_to_cpu(fsid[2]);
+	buf->f_fsid.val[1] = be32_to_cpu(fsid[1]) ^ be32_to_cpu(fsid[3]);
 	/* Mask in the root object ID too, to disambiguate subvols */
-	f_fsid.val[0] ^= btrfs_root_id(BTRFS_I(d_inode(dentry))->root) >> 32;
-	f_fsid.val[1] ^= btrfs_root_id(BTRFS_I(d_inode(dentry))->root);
-
-	/*
-	 * Hash dev_t to avoid f_fsid collisions with cloned filesystems.
-	 * Only do this when a clone is present so the original filesystem
-	 * (mounted first) maintains backward-compatible f_fsid behavior.
-	 */
-	if (fs_info->fs_devices->temp_fsid) {
-		__kernel_fsid_t dev_fsid =
-			u64_to_fsid(huge_encode_dev(fs_info->fs_devices->latest_dev->bdev->bd_dev));
-
-		f_fsid.val[0] ^= dev_fsid.val[1];
-		f_fsid.val[1] ^= dev_fsid.val[0];
-	}
-
-	memcpy(&buf->f_fsid, &f_fsid, sizeof(f_fsid));
+	buf->f_fsid.val[0] ^= btrfs_root_id(BTRFS_I(d_inode(dentry))->root) >> 32;
+	buf->f_fsid.val[1] ^= btrfs_root_id(BTRFS_I(d_inode(dentry))->root);
 
 	return 0;
 }
@@ -2100,9 +2056,9 @@ static int btrfs_get_tree_subvol(struct fs_context *fc)
 	 * then open_ctree will properly initialize the file system specific
 	 * settings later.  btrfs_init_fs_info initializes the static elements
 	 * of the fs_info (locks and such) to make cleanup easier if we find a
-	 * superblock with our given fs_devices later on at sget_fc() time.
+	 * superblock with our given fs_devices later on at sget() time.
 	 */
-	fs_info = kvzalloc_obj(struct btrfs_fs_info);
+	fs_info = kvzalloc(sizeof(struct btrfs_fs_info), GFP_KERNEL);
 	if (!fs_info)
 		return -ENOMEM;
 
@@ -2221,7 +2177,7 @@ static int btrfs_init_fs_context(struct fs_context *fc)
 {
 	struct btrfs_fs_context *ctx;
 
-	ctx = kzalloc_obj(struct btrfs_fs_context);
+	ctx = kzalloc(sizeof(struct btrfs_fs_context), GFP_KERNEL);
 	if (!ctx)
 		return -ENOMEM;
 
@@ -2232,7 +2188,6 @@ static int btrfs_init_fs_context(struct fs_context *fc)
 	if (fc->purpose == FS_CONTEXT_FOR_RECONFIGURE) {
 		btrfs_info_to_ctx(btrfs_sb(fc->root->d_sb), ctx);
 	} else {
-		ctx->use_backup_slot = -1;
 		ctx->thread_pool_size =
 			min_t(unsigned long, num_online_cpus() + 2, 8);
 		ctx->max_inline = BTRFS_DEFAULT_MAX_INLINE;
@@ -2328,9 +2283,6 @@ static long btrfs_control_ioctl(struct file *file, unsigned int cmd,
 		break;
 	case BTRFS_IOC_GET_SUPPORTED_FEATURES:
 		ret = btrfs_ioctl_get_supported_features((void __user*)arg);
-		break;
-	default:
-		ret = -ENOTTY;
 		break;
 	}
 
@@ -2459,15 +2411,6 @@ static long btrfs_nr_cached_objects(struct super_block *sb, struct shrink_contro
 	struct btrfs_fs_info *fs_info = btrfs_sb(sb);
 	const s64 nr = percpu_counter_read_positive(&fs_info->evictable_extent_maps);
 
-	/*
-	 * The evictable extent map counter is filesystem-global and does not
-	 * honour sc->memcg, so it is only meaningful on the global (kswapd or
-	 * root direct reclaim) shrink path. Skip the per-memcg iterations of
-	 * shrink_slab_memcg() to avoid queueing duplicate global work.
-	 */
-	if (!mem_cgroup_shrink_is_root(sc))
-		return 0;
-
 	trace_btrfs_extent_map_shrinker_count(fs_info, nr);
 
 	return nr;
@@ -2481,76 +2424,6 @@ static long btrfs_free_cached_objects(struct super_block *sb, struct shrink_cont
 	btrfs_free_extent_maps(fs_info, nr_to_scan);
 
 	/* The extent map shrinker runs asynchronously, so always return 0. */
-	return 0;
-}
-
-static int btrfs_remove_bdev(struct super_block *sb, struct block_device *bdev)
-{
-	struct btrfs_fs_info *fs_info = btrfs_sb(sb);
-	struct btrfs_device *device;
-	struct btrfs_dev_lookup_args lookup_args = { .devt = bdev->bd_dev };
-	bool can_rw;
-
-	mutex_lock(&fs_info->fs_devices->device_list_mutex);
-	device = btrfs_find_device(fs_info->fs_devices, &lookup_args);
-	if (!device) {
-		mutex_unlock(&fs_info->fs_devices->device_list_mutex);
-		/* Device not found, should not affect the running fs, just give a warning. */
-		btrfs_warn(fs_info, "unable to find btrfs device for block device '%pg'", bdev);
-		return 0;
-	}
-	/*
-	 * The to-be-removed device is already missing?
-	 *
-	 * That's weird but no special handling needed and can exit right now.
-	 */
-	if (unlikely(test_and_set_bit(BTRFS_DEV_STATE_MISSING, &device->dev_state))) {
-		mutex_unlock(&fs_info->fs_devices->device_list_mutex);
-		btrfs_warn(fs_info, "btrfs device id %llu is already missing", device->devid);
-		return 0;
-	}
-
-	device->fs_devices->missing_devices++;
-	if (test_and_clear_bit(BTRFS_DEV_STATE_WRITEABLE, &device->dev_state)) {
-		list_del_init(&device->dev_alloc_list);
-		WARN_ON(device->fs_devices->rw_devices < 1);
-		device->fs_devices->rw_devices--;
-	}
-	can_rw = btrfs_check_rw_degradable(fs_info, device);
-	mutex_unlock(&fs_info->fs_devices->device_list_mutex);
-	/*
-	 * Now device is considered missing, btrfs_device_name() won't give a
-	 * meaningful result anymore, so only output the devid.
-	 */
-	if (unlikely(!can_rw)) {
-		btrfs_crit(fs_info,
-		"btrfs device id %llu has gone missing, can not maintain read-write",
-			   device->devid);
-		return -EIO;
-	}
-	btrfs_warn(fs_info,
-		   "btrfs device id %llu has gone missing, continue as degraded",
-		   device->devid);
-	btrfs_set_opt(fs_info->mount_opt, DEGRADED);
-	return 0;
-}
-
-static void btrfs_shutdown(struct super_block *sb)
-{
-	struct btrfs_fs_info *fs_info = btrfs_sb(sb);
-
-	btrfs_force_shutdown(fs_info);
-}
-
-static int btrfs_show_stats(struct seq_file *seq, struct dentry *root)
-{
-	struct btrfs_fs_info *fs_info = btrfs_sb(root->d_sb);
-
-	if (btrfs_is_zoned(fs_info)) {
-		btrfs_show_zoned_stats(fs_info, seq);
-		return 0;
-	}
-
 	return 0;
 }
 
@@ -2569,9 +2442,6 @@ static const struct super_operations btrfs_super_ops = {
 	.unfreeze_fs	= btrfs_unfreeze,
 	.nr_cached_objects = btrfs_nr_cached_objects,
 	.free_cached_objects = btrfs_free_cached_objects,
-	.show_stats	= btrfs_show_stats,
-	.remove_bdev	= btrfs_remove_bdev,
-	.shutdown	= btrfs_shutdown,
 };
 
 static const struct file_operations btrfs_ctl_fops = {
@@ -2665,9 +2535,6 @@ static const struct init_sequence mod_init_seq[] = {
 	}, {
 		.init_func = btrfs_init_compress,
 		.exit_func = btrfs_exit_compress,
-	}, {
-		.init_func = btrfs_init_block_group,
-		.exit_func = btrfs_exit_block_group,
 	}, {
 		.init_func = btrfs_init_cachep,
 		.exit_func = btrfs_destroy_cachep,
@@ -2773,3 +2640,7 @@ module_exit(exit_btrfs_fs)
 
 MODULE_DESCRIPTION("B-Tree File System (BTRFS)");
 MODULE_LICENSE("GPL");
+MODULE_SOFTDEP("pre: crc32c");
+MODULE_SOFTDEP("pre: xxhash64");
+MODULE_SOFTDEP("pre: sha256");
+MODULE_SOFTDEP("pre: blake2b-256");

@@ -154,7 +154,7 @@ static struct mctp_i2c_client *mctp_i2c_new_client(struct i2c_client *client)
 		goto err;
 	}
 
-	mcli = kzalloc_obj(*mcli);
+	mcli = kzalloc(sizeof(*mcli), GFP_KERNEL);
 	if (!mcli) {
 		rc = -ENOMEM;
 		goto err;
@@ -1101,8 +1101,8 @@ static struct notifier_block mctp_i2c_notifier = {
 };
 
 static const struct i2c_device_id mctp_i2c_id[] = {
-	{ .name = "mctp-i2c-interface" },
-	{ }
+	{ "mctp-i2c-interface" },
+	{}
 };
 MODULE_DEVICE_TABLE(i2c, mctp_i2c_id);
 

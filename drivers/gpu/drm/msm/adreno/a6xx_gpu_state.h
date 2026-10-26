@@ -71,8 +71,8 @@ static const struct a6xx_cluster {
 	u32 sel_val;
 } a6xx_clusters[] = {
 	CLUSTER(CLUSTER_GRAS, a6xx_gras_cluster, 0, 0),
-	CLUSTER(CLUSTER_PS, a6xx_ps_cluster_rac, REG_A6XX_RB_SUB_BLOCK_SEL_CNTL_CD, 0x0),
-	CLUSTER(CLUSTER_PS, a6xx_ps_cluster_rbp, REG_A6XX_RB_SUB_BLOCK_SEL_CNTL_CD, 0x9),
+	CLUSTER(CLUSTER_PS, a6xx_ps_cluster_rac, REG_A6XX_RB_RB_SUB_BLOCK_SEL_CNTL_CD, 0x0),
+	CLUSTER(CLUSTER_PS, a6xx_ps_cluster_rbp, REG_A6XX_RB_RB_SUB_BLOCK_SEL_CNTL_CD, 0x9),
 	CLUSTER(CLUSTER_PS, a6xx_ps_cluster, 0, 0),
 	CLUSTER(CLUSTER_FE, a6xx_fe_cluster, 0, 0),
 	CLUSTER(CLUSTER_PC_VS, a6xx_pc_vs_cluster, 0, 0),
@@ -303,8 +303,8 @@ static const u32 a660_registers[] = {
 static const struct a6xx_registers a6xx_reglist[] = {
 	REGS(a6xx_registers, 0, 0),
 	REGS(a660_registers, 0, 0),
-	REGS(a6xx_rb_rac_registers, REG_A6XX_RB_SUB_BLOCK_SEL_CNTL_CD, 0),
-	REGS(a6xx_rb_rbp_registers, REG_A6XX_RB_SUB_BLOCK_SEL_CNTL_CD, 9),
+	REGS(a6xx_rb_rac_registers, REG_A6XX_RB_RB_SUB_BLOCK_SEL_CNTL_CD, 0),
+	REGS(a6xx_rb_rbp_registers, REG_A6XX_RB_RB_SUB_BLOCK_SEL_CNTL_CD, 9),
 };
 
 static const u32 a6xx_ahb_registers[] = {
@@ -474,11 +474,6 @@ static const struct a6xx_indexed_registers a7xx_cp_bv_mempool_indexed[] = {
 		REG_A7XX_CP_BV_MEM_POOL_DBG_DATA, 0x2200, NULL },
 };
 
-static const struct a6xx_indexed_registers a7xx_cp_mempool_indexed[] = {
-	{ "CP_MEM_POOL_DBG", REG_A6XX_CP_MEM_POOL_DBG_ADDR,
-		REG_A6XX_CP_MEM_POOL_DBG_DATA, 0x2200, NULL },
-};
-
 #define DEBUGBUS(_id, _count) { .id = _id, .name = #_id, .count = _count }
 
 static const struct a6xx_debugbus_block {
@@ -592,7 +587,7 @@ struct gen7_sptp_cluster_registers {
 	/* statetype: SP block state type for the cluster */
 	enum a7xx_statetype_id statetype;
 	/* pipe_id: Pipe identifier */
-	enum adreno_pipe pipe_id;
+	enum a7xx_pipe pipe_id;
 	/* context_id: Context identifier */
 	int context_id;
 	/* location_id: Location identifier */
@@ -818,10 +813,10 @@ static const char *a7xx_statetype_names[] = {
 };
 
 static const char *a7xx_pipe_names[] = {
-	A7XX_NAME(PIPE_NONE),
-	A7XX_NAME(PIPE_BR),
-	A7XX_NAME(PIPE_BV),
-	A7XX_NAME(PIPE_LPAC),
+	A7XX_NAME(A7XX_PIPE_NONE),
+	A7XX_NAME(A7XX_PIPE_BR),
+	A7XX_NAME(A7XX_PIPE_BV),
+	A7XX_NAME(A7XX_PIPE_LPAC),
 };
 
 static const char *a7xx_cluster_names[] = {

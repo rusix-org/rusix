@@ -31,7 +31,7 @@
 #include <linux/iopoll.h>
 #include <linux/dma-mapping.h>
 
-#include <linux/irq.h>
+#include <asm/irq.h>
 #include <linux/dma/imx-dma.h>
 
 #include "serial_mctrl_gpio.h"
@@ -1443,9 +1443,9 @@ static void imx_uart_enable_dma(struct imx_port *sport)
 
 	imx_uart_setup_ufcr(sport, TXTL_DMA, RXTL_DMA);
 
-	/* set UCR1 except TXDMAEN which would be enabled in imx_uart_dma_tx */
+	/* set UCR1 */
 	ucr1 = imx_uart_readl(sport, UCR1);
-	ucr1 |= UCR1_RXDMAEN | UCR1_ATDMAEN;
+	ucr1 |= UCR1_RXDMAEN | UCR1_TXDMAEN | UCR1_ATDMAEN;
 	imx_uart_writel(sport, ucr1, UCR1);
 
 	sport->dma_is_enabled = 1;
@@ -1568,9 +1568,8 @@ static int imx_uart_startup(struct uart_port *port)
 	imx_uart_enable_ms(&sport->port);
 
 	if (dma_is_inited) {
-		/* Note: enable dma request after transfer start! */
-		imx_uart_start_rx_dma(sport);
 		imx_uart_enable_dma(sport);
+		imx_uart_start_rx_dma(sport);
 	} else {
 		ucr1 = imx_uart_readl(sport, UCR1);
 		ucr1 |= UCR1_RRDYEN;
@@ -2136,7 +2135,7 @@ static void imx_uart_console_write_atomic(struct console *co,
 	imx_uart_writel(sport, ucr1, UCR1);
 	imx_uart_writel(sport, old_ucr.ucr2 | UCR2_TXEN, UCR2);
 
-	if (unlikely(!sport->last_putchar_was_newline && !nbcon_is_braille(co)))
+	if (!sport->last_putchar_was_newline)
 		uart_console_write(port, "\n", 1, imx_uart_console_putchar);
 	uart_console_write(port, wctxt->outbuf, wctxt->len,
 			   imx_uart_console_putchar);
@@ -2606,23 +2605,34 @@ static int imx_uart_probe(struct platform_device *pdev)
 	if (txirq > 0) {
 		ret = devm_request_irq(&pdev->dev, rxirq, imx_uart_rxint, 0,
 				       dev_name(&pdev->dev), sport);
-		if (ret)
+		if (ret) {
+			dev_err(&pdev->dev, "failed to request rx irq: %d\n",
+				ret);
 			goto err_clk;
+		}
 
 		ret = devm_request_irq(&pdev->dev, txirq, imx_uart_txint, 0,
 				       dev_name(&pdev->dev), sport);
-		if (ret)
+		if (ret) {
+			dev_err(&pdev->dev, "failed to request tx irq: %d\n",
+				ret);
 			goto err_clk;
+		}
 
 		ret = devm_request_irq(&pdev->dev, rtsirq, imx_uart_rtsint, 0,
 				       dev_name(&pdev->dev), sport);
-		if (ret)
+		if (ret) {
+			dev_err(&pdev->dev, "failed to request rts irq: %d\n",
+				ret);
 			goto err_clk;
+		}
 	} else {
 		ret = devm_request_irq(&pdev->dev, rxirq, imx_uart_int, 0,
 				       dev_name(&pdev->dev), sport);
-		if (ret)
+		if (ret) {
+			dev_err(&pdev->dev, "failed to request irq: %d\n", ret);
 			goto err_clk;
+		}
 	}
 
 	platform_set_drvdata(pdev, sport);
@@ -2703,8 +2713,8 @@ static void imx_uart_enable_wakeup(struct imx_port *sport, bool on)
 {
 	struct tty_port *port = &sport->port.state->port;
 	struct device *tty_dev;
-	bool may_wake = false, wake_active = false;
-	u32 ucr3, usr1;
+	bool may_wake = false;
+	u32 ucr3;
 
 	scoped_guard(tty_port_tty, port) {
 		struct tty_struct *tty = scoped_tty();
@@ -2719,14 +2729,12 @@ static void imx_uart_enable_wakeup(struct imx_port *sport, bool on)
 
 	uart_port_lock_irq(&sport->port);
 
-	usr1 = imx_uart_readl(sport, USR1);
 	ucr3 = imx_uart_readl(sport, UCR3);
 	if (on) {
 		imx_uart_writel(sport, USR1_AWAKE, USR1);
 		ucr3 |= UCR3_AWAKEN;
 	} else {
 		ucr3 &= ~UCR3_AWAKEN;
-		wake_active = usr1 & USR1_AWAKE;
 	}
 	imx_uart_writel(sport, ucr3, UCR3);
 
@@ -2737,13 +2745,9 @@ static void imx_uart_enable_wakeup(struct imx_port *sport, bool on)
 			ucr1 |= UCR1_RTSDEN;
 		} else {
 			ucr1 &= ~UCR1_RTSDEN;
-			wake_active = wake_active || (usr1 & USR1_RTSD);
 		}
 		imx_uart_writel(sport, ucr1, UCR1);
 	}
-
-	if (wake_active && irqd_is_wakeup_set(irq_get_irq_data(sport->port.irq)))
-		pm_wakeup_event(tty_port_tty_get(port)->dev, 0);
 
 	uart_port_unlock_irq(&sport->port);
 }

@@ -34,7 +34,7 @@ struct dummy_buf {
 
 static u32 get_output_size(u32 width, u32 height)
 {
-	return ALIGN(ALIGN(width, 32) * ALIGN(height, 32), SZ_64K);
+	return ALIGN(width * height, SZ_64K);
 }
 
 u32 amvdec_get_output_size(struct amvdec_session *sess)
@@ -132,7 +132,7 @@ vdec_queue_recycle(struct amvdec_session *sess, struct vb2_buffer *vb)
 {
 	struct amvdec_buffer *new_buf;
 
-	new_buf = kmalloc_obj(*new_buf);
+	new_buf = kmalloc(sizeof(*new_buf), GFP_KERNEL);
 	if (!new_buf)
 		return;
 	new_buf->vb = vb;
@@ -867,7 +867,7 @@ static int vdec_open(struct file *file)
 	struct amvdec_session *sess;
 	int ret;
 
-	sess = kzalloc_obj(*sess);
+	sess = kzalloc(sizeof(*sess), GFP_KERNEL);
 	if (!sess)
 		return -ENOMEM;
 

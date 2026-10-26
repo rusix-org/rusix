@@ -471,8 +471,7 @@ static int snd_gf1_pcm_playback_trigger(struct snd_pcm_substream *substream,
 
 	if (cmd == SNDRV_PCM_TRIGGER_START) {
 		snd_gf1_pcm_trigger_up(substream);
-	} else if (cmd == SNDRV_PCM_TRIGGER_STOP ||
-		   cmd == SNDRV_PCM_TRIGGER_SUSPEND) {
+	} else if (cmd == SNDRV_PCM_TRIGGER_STOP) {
 		scoped_guard(spinlock, &pcmp->lock) {
 			pcmp->flags &= ~SNDRV_GF1_PCM_PFLG_ACTIVE;
 		}
@@ -559,8 +558,7 @@ static int snd_gf1_pcm_capture_trigger(struct snd_pcm_substream *substream,
 	
 	if (cmd == SNDRV_PCM_TRIGGER_START) {
 		val = gus->gf1.pcm_rcntrl_reg;
-	} else if (cmd == SNDRV_PCM_TRIGGER_STOP ||
-		   cmd == SNDRV_PCM_TRIGGER_SUSPEND) {
+	} else if (cmd == SNDRV_PCM_TRIGGER_STOP) {
 		val = 0;
 	} else {
 		return -EINVAL;
@@ -640,7 +638,7 @@ static int snd_gf1_pcm_playback_open(struct snd_pcm_substream *substream)
 	struct snd_pcm_runtime *runtime = substream->runtime;
 	int err;
 
-	pcmp = kzalloc_obj(*pcmp);
+	pcmp = kzalloc(sizeof(*pcmp), GFP_KERNEL);
 	if (pcmp == NULL)
 		return -ENOMEM;
 	pcmp->gus = gus;
@@ -860,3 +858,4 @@ int snd_gf1_pcm_new(struct snd_gus_card *gus, int pcm_dev, int control_index)
 
 	return 0;
 }
+

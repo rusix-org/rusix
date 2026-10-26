@@ -1028,7 +1028,11 @@ static int lan87xx_read_status(struct phy_device *phydev)
 	if (rc < 0)
 		return rc;
 
-	return genphy_read_status_fixed(phydev);
+	rc = genphy_read_status_fixed(phydev);
+	if (rc < 0)
+		return rc;
+
+	return rc;
 }
 
 static int lan87xx_config_aneg(struct phy_device *phydev)
@@ -1285,16 +1289,14 @@ static int lan887x_phy_init(struct phy_device *phydev)
 		if (IS_ERR(priv->clock))
 			return PTR_ERR(priv->clock);
 
-		if (priv->clock) {
-			/* Enable pin mux for EVT */
-			phy_modify_mmd(phydev, MDIO_MMD_VEND1,
-				       LAN887X_MX_CHIP_TOP_REG_CONTROL1,
-				       LAN887X_MX_CHIP_TOP_REG_CONTROL1_EVT_EN,
-				       LAN887X_MX_CHIP_TOP_REG_CONTROL1_EVT_EN);
+		/* Enable pin mux for EVT */
+		phy_modify_mmd(phydev, MDIO_MMD_VEND1,
+			       LAN887X_MX_CHIP_TOP_REG_CONTROL1,
+			       LAN887X_MX_CHIP_TOP_REG_CONTROL1_EVT_EN,
+			       LAN887X_MX_CHIP_TOP_REG_CONTROL1_EVT_EN);
 
-			/* Initialize pin numbers specific to PEROUT */
-			priv->clock->event_pin = 3;
-		}
+		/* Initialize pin numbers specific to PEROUT */
+		priv->clock->event_pin = 3;
 
 		priv->init_done = true;
 	}

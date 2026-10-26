@@ -5,6 +5,7 @@
  */
 
 #include <linux/clk-provider.h>
+#include <linux/mod_devicetable.h>
 #include <linux/module.h>
 #include <linux/platform_device.h>
 #include <linux/regmap.h>
@@ -1841,7 +1842,6 @@ static struct gdsc camcc_bps_gdsc = {
 		.name = "camcc_bps_gdsc",
 	},
 	.flags = HW_CTRL | POLL_CFG_GDSCR,
-	.parent = &camcc_titan_top_gdsc.pd,
 	.pwrsts = PWRSTS_OFF_ON,
 };
 
@@ -1871,7 +1871,6 @@ static struct gdsc camcc_ipe_0_gdsc = {
 		.name = "camcc_ipe_0_gdsc",
 	},
 	.flags = HW_CTRL | POLL_CFG_GDSCR,
-	.parent = &camcc_titan_top_gdsc.pd,
 	.pwrsts = PWRSTS_OFF_ON,
 };
 
@@ -1881,7 +1880,6 @@ static struct gdsc camcc_ipe_1_gdsc = {
 		.name = "camcc_ipe_1_gdsc",
 	},
 	.flags = HW_CTRL | POLL_CFG_GDSCR,
-	.parent = &camcc_titan_top_gdsc.pd,
 	.pwrsts = PWRSTS_OFF_ON,
 };
 
@@ -1894,7 +1892,7 @@ static struct gdsc camcc_titan_top_gdsc = {
 	.pwrsts = PWRSTS_OFF_ON,
 };
 
-static struct clk_hw *camcc_sm7150_hws[] = {
+struct clk_hw *camcc_sm7150_hws[] = {
 	[CAMCC_PLL0_OUT_EVEN] = &camcc_pll0_out_even.hw,
 	[CAMCC_PLL0_OUT_ODD] = &camcc_pll0_out_odd.hw,
 	[CAMCC_PLL1_OUT_EVEN] = &camcc_pll1_out_even.hw,

@@ -2,7 +2,6 @@
 /******************************************************************************
  *
  * Copyright(c) 2008 - 2014, 2022 Intel Corporation. All rights reserved.
- * Copyright (C) 2026 Intel Corporation
  *****************************************************************************/
 #include <linux/etherdevice.h>
 #include <linux/kernel.h>
@@ -10,6 +9,7 @@
 #include <linux/sched.h>
 #include <net/mac80211.h>
 
+#include "iwl-io.h"
 #include "iwl-agn-hw.h"
 #include "iwl-trans.h"
 #include "iwl-modparams.h"
@@ -1056,7 +1056,7 @@ int iwlagn_suspend(struct iwl_priv *priv, struct cfg80211_wowlan *wowlan)
 	int ret, i;
 	u16 seq;
 
-	key_data.rsc_tsc = kzalloc_obj(*key_data.rsc_tsc);
+	key_data.rsc_tsc = kzalloc(sizeof(*key_data.rsc_tsc), GFP_KERNEL);
 	if (!key_data.rsc_tsc)
 		return -ENOMEM;
 

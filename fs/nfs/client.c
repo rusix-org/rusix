@@ -150,7 +150,7 @@ struct nfs_client *nfs_alloc_client(const struct nfs_client_initdata *cl_init)
 	struct nfs_client *clp;
 	int err = -ENOMEM;
 
-	if ((clp = kzalloc_obj(*clp)) == NULL)
+	if ((clp = kzalloc(sizeof(*clp), GFP_KERNEL)) == NULL)
 		goto error_0;
 
 	clp->cl_minorversion = cl_init->minorversion;
@@ -926,7 +926,6 @@ static void nfs_server_set_fsinfo(struct nfs_server *server,
  */
 static int nfs_probe_fsinfo(struct nfs_server *server, struct nfs_fh *mntfh, struct nfs_fattr *fattr)
 {
-	struct nfs_pathconf pathinfo = { };
 	struct nfs_fsinfo fsinfo;
 	struct nfs_client *clp = server->nfs_client;
 	int error;
@@ -946,28 +945,15 @@ static int nfs_probe_fsinfo(struct nfs_server *server, struct nfs_fh *mntfh, str
 
 	nfs_server_set_fsinfo(server, &fsinfo);
 
-	pathinfo.fattr = fattr;
-	nfs_fattr_init(fattr);
+	/* Get some general file system info */
+	if (server->namelen == 0) {
+		struct nfs_pathconf pathinfo;
 
-	if (clp->rpc_ops->version < 4 || server->namelen == 0) {
-		if (clp->rpc_ops->pathconf(server, mntfh, &pathinfo) >= 0) {
-			if (server->namelen == 0)
-				server->namelen = pathinfo.max_namelen;
-			if (clp->rpc_ops->version < 4) {
-				unsigned int caps = server->caps;
+		pathinfo.fattr = fattr;
+		nfs_fattr_init(fattr);
 
-				caps &= ~(NFS_CAP_CASE_INSENSITIVE |
-					  NFS_CAP_CASE_NONPRESERVING);
-				if (pathinfo.case_insensitive)
-					caps |= NFS_CAP_CASE_INSENSITIVE;
-				if (!pathinfo.case_preserving)
-					caps |= NFS_CAP_CASE_NONPRESERVING;
-				server->caps = caps;
-			}
-		} else if (clp->rpc_ops->version < 4) {
-			server->caps &= ~(NFS_CAP_CASE_INSENSITIVE |
-					  NFS_CAP_CASE_NONPRESERVING);
-		}
+		if (clp->rpc_ops->pathconf(server, mntfh, &pathinfo) >= 0)
+			server->namelen = pathinfo.max_namelen;
 	}
 
 	if (clp->rpc_ops->discover_trunking != NULL &&
@@ -1070,13 +1056,15 @@ struct nfs_server *nfs_alloc_server(void)
 {
 	struct nfs_server *server;
 
-	server = kzalloc_obj(struct nfs_server);
+	server = kzalloc(sizeof(struct nfs_server), GFP_KERNEL);
 	if (!server)
 		return NULL;
 
 	server->s_sysfs_id = ida_alloc(&s_sysfs_ids, GFP_KERNEL);
-	if (server->s_sysfs_id < 0)
-		goto free_server;
+	if (server->s_sysfs_id < 0) {
+		kfree(server);
+		return NULL;
+	}
 
 	server->client = server->client_acl = ERR_PTR(-EINVAL);
 
@@ -1084,10 +1072,6 @@ struct nfs_server *nfs_alloc_server(void)
 	INIT_LIST_HEAD(&server->client_link);
 	INIT_LIST_HEAD(&server->master_link);
 	INIT_LIST_HEAD(&server->delegations);
-	spin_lock_init(&server->delegations_lock);
-	INIT_LIST_HEAD(&server->delegations_return);
-	INIT_LIST_HEAD(&server->delegations_lru);
-	INIT_LIST_HEAD(&server->delegations_delayed);
 	INIT_LIST_HEAD(&server->layouts);
 	INIT_LIST_HEAD(&server->state_owners_lru);
 	INIT_LIST_HEAD(&server->ss_copies);
@@ -1099,7 +1083,8 @@ struct nfs_server *nfs_alloc_server(void)
 	server->io_stats = nfs_alloc_iostats();
 	if (!server->io_stats) {
 		ida_free(&s_sysfs_ids, server->s_sysfs_id);
-		goto free_server;
+		kfree(server);
+		return NULL;
 	}
 
 	server->change_attr_type = NFS4_CHANGE_TYPE_IS_UNDEFINED;
@@ -1113,10 +1098,6 @@ struct nfs_server *nfs_alloc_server(void)
 	rpc_init_wait_queue(&server->uoc_rpcwaitq, "NFS UOC");
 
 	return server;
-
-free_server:
-	kfree(server);
-	return NULL;
 }
 EXPORT_SYMBOL_GPL(nfs_alloc_server);
 
@@ -1295,9 +1276,11 @@ void nfs_clients_init(struct net *net)
 	INIT_LIST_HEAD(&nn->nfs_volume_list);
 #if IS_ENABLED(CONFIG_NFS_V4)
 	idr_init(&nn->cb_ident_idr);
+#endif
+#if IS_ENABLED(CONFIG_NFS_V4_1)
 	INIT_LIST_HEAD(&nn->nfs4_data_server_cache);
 	spin_lock_init(&nn->nfs4_data_server_lock);
-#endif /* CONFIG_NFS_V4 */
+#endif
 	spin_lock_init(&nn->nfs_client_lock);
 	nn->boot_time = ktime_get_real();
 	memset(&nn->rpcstats, 0, sizeof(nn->rpcstats));
@@ -1314,9 +1297,9 @@ void nfs_clients_exit(struct net *net)
 	nfs_cleanup_cb_ident_idr(net);
 	WARN_ON_ONCE(!list_empty(&nn->nfs_client_list));
 	WARN_ON_ONCE(!list_empty(&nn->nfs_volume_list));
-#if IS_ENABLED(CONFIG_NFS_V4)
+#if IS_ENABLED(CONFIG_NFS_V4_1)
 	WARN_ON_ONCE(!list_empty(&nn->nfs4_data_server_cache));
-#endif /* CONFIG_NFS_V4 */
+#endif
 }
 
 #ifdef CONFIG_PROC_FS

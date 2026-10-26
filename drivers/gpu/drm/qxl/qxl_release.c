@@ -22,8 +22,6 @@
 
 #include <linux/delay.h>
 
-#include <drm/drm_print.h>
-
 #include <trace/events/dma_fence.h>
 
 #include "qxl_drv.h"
@@ -62,8 +60,7 @@ static long qxl_fence_wait(struct dma_fence *fence, bool intr,
 	struct qxl_device *qdev;
 	unsigned long cur, end = jiffies + timeout;
 
-	qdev = container_of(fence->extern_lock, struct qxl_device,
-			    release_lock);
+	qdev = container_of(fence->lock, struct qxl_device, release_lock);
 
 	if (!wait_event_timeout(qdev->release_event,
 				(dma_fence_is_signaled(fence) ||
@@ -147,7 +144,7 @@ qxl_release_free(struct qxl_device *qdev,
 	idr_remove(&qdev->release_idr, release->id);
 	spin_unlock(&qdev->release_idr_lock);
 
-	if (dma_fence_was_initialized(&release->base)) {
+	if (release->base.ops) {
 		WARN_ON(list_empty(&release->bos));
 		qxl_release_free_list(release);
 
@@ -178,7 +175,7 @@ int qxl_release_list_add(struct qxl_release *release, struct qxl_bo *bo)
 			return 0;
 	}
 
-	entry = kmalloc_obj(struct qxl_bo_list);
+	entry = kmalloc(sizeof(struct qxl_bo_list), GFP_KERNEL);
 	if (!entry)
 		return -ENOMEM;
 

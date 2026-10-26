@@ -89,6 +89,7 @@ static int __op_panel_update_display(void)
 static ssize_t oppanel_write(struct file *filp, const char __user *userbuf,
 			     size_t len, loff_t *f_pos)
 {
+	loff_t f_pos_prev = *f_pos;
 	ssize_t ret;
 	int rc;
 
@@ -104,6 +105,7 @@ static ssize_t oppanel_write(struct file *filp, const char __user *userbuf,
 		if (rc != OPAL_SUCCESS) {
 			pr_err_ratelimited("OPAL call failed to write to op panel display [rc=%d]\n",
 				rc);
+			*f_pos = f_pos_prev;
 			return -EIO;
 		}
 	}
@@ -165,7 +167,7 @@ static int oppanel_probe(struct platform_device *pdev)
 	if (!oppanel_data)
 		return -ENOMEM;
 
-	oppanel_lines = kzalloc_objs(oppanel_line_t, num_lines);
+	oppanel_lines = kcalloc(num_lines, sizeof(oppanel_line_t), GFP_KERNEL);
 	if (!oppanel_lines) {
 		rc = -ENOMEM;
 		goto free_oppanel_data;

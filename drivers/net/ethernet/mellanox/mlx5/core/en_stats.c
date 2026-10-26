@@ -496,7 +496,8 @@ static void mlx5e_stats_update_stats_rq_page_pool(struct mlx5e_channel *c)
 	struct page_pool *pool = c->rq.page_pool;
 	struct page_pool_stats stats = { 0 };
 
-	page_pool_get_stats(pool, &stats);
+	if (!page_pool_get_stats(pool, &stats))
+		return;
 
 	rq_stats->pp_alloc_fast = stats.alloc_stats.fast;
 	rq_stats->pp_alloc_slow = stats.alloc_stats.slow;
@@ -916,30 +917,11 @@ static int mlx5e_stats_get_ieee(struct mlx5_core_dev *mdev,
 				    sz, MLX5_REG_PPCNT, 0, 0);
 }
 
-static int mlx5e_stats_get_per_prio(struct mlx5_core_dev *mdev,
-				    u32 *ppcnt_per_prio, int prio)
-{
-	u32 in[MLX5_ST_SZ_DW(ppcnt_reg)] = {};
-	int sz = MLX5_ST_SZ_BYTES(ppcnt_reg);
-
-	if (!(MLX5_CAP_PCAM_FEATURE(mdev, pfcc_mask) &&
-	      MLX5_CAP_DEBUG(mdev, stall_detect)))
-		return -EOPNOTSUPP;
-
-	MLX5_SET(ppcnt_reg, in, local_port, 1);
-	MLX5_SET(ppcnt_reg, in, grp, MLX5_PER_PRIORITY_COUNTERS_GROUP);
-	MLX5_SET(ppcnt_reg, in, prio_tc, prio);
-	return mlx5_core_access_reg(mdev, in, sz, ppcnt_per_prio, sz,
-				    MLX5_REG_PPCNT, 0, 0);
-}
-
 void mlx5e_stats_pause_get(struct mlx5e_priv *priv,
 			   struct ethtool_pause_stats *pause_stats)
 {
 	u32 ppcnt_ieee_802_3[MLX5_ST_SZ_DW(ppcnt_reg)];
 	struct mlx5_core_dev *mdev = priv->mdev;
-	u64 ps_stats = 0;
-	int prio;
 
 	if (mlx5e_stats_get_ieee(mdev, ppcnt_ieee_802_3))
 		return;
@@ -952,17 +934,6 @@ void mlx5e_stats_pause_get(struct mlx5e_priv *priv,
 		MLX5E_READ_CTR64_BE_F(ppcnt_ieee_802_3,
 				      eth_802_3_cntrs_grp_data_layout,
 				      a_pause_mac_ctrl_frames_received);
-
-	for (prio = 0; prio < NUM_PPORT_PRIO; prio++) {
-		if (mlx5e_stats_get_per_prio(mdev, ppcnt_ieee_802_3, prio))
-			return;
-
-		ps_stats += MLX5E_READ_CTR64_BE_F(ppcnt_ieee_802_3,
-						  eth_per_prio_grp_data_layout,
-						  device_stall_critical_watermark_cnt);
-	}
-
-	pause_stats->tx_pause_storm_events = ps_stats;
 }
 
 void mlx5e_stats_eth_phy_get(struct mlx5e_priv *priv,
@@ -1539,7 +1510,7 @@ static bool fec_rs_validate_hist_type(int mode, int hist_type)
 
 static u8
 fec_rs_histogram_fill_ranges(struct mlx5e_priv *priv, int mode,
-			     struct ethtool_fec_hist_range *ranges)
+			     const struct ethtool_fec_hist_range **ranges)
 {
 	struct mlx5_core_dev *mdev = priv->mdev;
 	u32 out[MLX5_ST_SZ_DW(pphcr_reg)] = {0};
@@ -1547,6 +1518,8 @@ fec_rs_histogram_fill_ranges(struct mlx5e_priv *priv, int mode,
 	int sz = MLX5_ST_SZ_BYTES(pphcr_reg);
 	u8 hist_type, num_of_bins;
 
+	memset(priv->fec_ranges, 0,
+	       ETHTOOL_FEC_HIST_MAX * sizeof(*priv->fec_ranges));
 	MLX5_SET(pphcr_reg, in, local_port, 1);
 	if (mlx5_core_access_reg(mdev, in, sz, out, sz, MLX5_REG_PPHCR, 0, 0))
 		return 0;
@@ -1562,11 +1535,12 @@ fec_rs_histogram_fill_ranges(struct mlx5e_priv *priv, int mode,
 	for (int i = 0; i < num_of_bins; i++) {
 		void *bin_range = MLX5_ADDR_OF(pphcr_reg, out, bin_range[i]);
 
-		ranges[i].high = MLX5_GET(bin_range_layout, bin_range,
-					  high_val);
-		ranges[i].low = MLX5_GET(bin_range_layout, bin_range,
-					 low_val);
+		priv->fec_ranges[i].high = MLX5_GET(bin_range_layout, bin_range,
+						    high_val);
+		priv->fec_ranges[i].low = MLX5_GET(bin_range_layout, bin_range,
+						   low_val);
 	}
+	*ranges = priv->fec_ranges;
 
 	return num_of_bins;
 }
@@ -1608,12 +1582,10 @@ static void fec_set_histograms_stats(struct mlx5e_priv *priv, int mode,
 	case MLX5E_FEC_LLRS_272_257_1:
 	case MLX5E_FEC_RS_544_514_INTERLEAVED_QUAD:
 		num_of_bins =
-			fec_rs_histogram_fill_ranges(priv, mode, hist->ranges_buf);
-		if (num_of_bins) {
-			hist->ranges = hist->ranges_buf;
+			fec_rs_histogram_fill_ranges(priv, mode, &hist->ranges);
+		if (num_of_bins)
 			return fec_rs_histogram_fill_stats(priv, num_of_bins,
 							   hist);
-		}
 		break;
 	default:
 		return;

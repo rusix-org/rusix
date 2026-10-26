@@ -11,7 +11,6 @@
 #include <linux/slab.h>
 #include <linux/file.h>
 #include <linux/fs.h>
-#include <linux/hex.h>
 #include <linux/xattr.h>
 #include <linux/evm.h>
 #include <linux/fsverity.h>
@@ -48,14 +47,13 @@ int ima_alloc_init_template(struct ima_event_data *event_data,
 	else
 		template_desc = ima_template_desc_current();
 
-	*entry = kzalloc_flex(**entry, template_data, template_desc->num_fields,
-			      GFP_NOFS);
+	*entry = kzalloc(struct_size(*entry, template_data,
+				     template_desc->num_fields), GFP_NOFS);
 	if (!*entry)
 		return -ENOMEM;
 
-	digests = kzalloc_objs(*digests,
-			       NR_BANKS(ima_tpm_chip) + ima_extra_slots,
-			       GFP_NOFS);
+	digests = kcalloc(NR_BANKS(ima_tpm_chip) + ima_extra_slots,
+			  sizeof(*digests), GFP_NOFS);
 	if (!digests) {
 		kfree(*entry);
 		*entry = NULL;
@@ -116,7 +114,7 @@ int ima_store_template(struct ima_template_entry *entry,
 		if (result < 0) {
 			integrity_audit_msg(AUDIT_INTEGRITY_PCR, inode,
 					    template_name, op,
-					    audit_cause, result, 0, result);
+					    audit_cause, result, 0);
 			return result;
 		}
 	}
@@ -146,7 +144,7 @@ void ima_add_violation(struct file *file, const unsigned char *filename,
 	int result;
 
 	/* can overflow, only indicator */
-	atomic_long_inc(&ima_num_violations);
+	atomic_long_inc(&ima_htable.violations);
 
 	result = ima_alloc_init_template(&event_data, &entry, NULL);
 	if (result < 0) {
@@ -159,7 +157,7 @@ void ima_add_violation(struct file *file, const unsigned char *filename,
 		ima_free_template_entry(entry);
 err_out:
 	integrity_audit_msg(AUDIT_INTEGRITY_PCR, inode, filename,
-			    op, cause, result, 0, result);
+			    op, cause, result, 0);
 }
 
 /**
@@ -188,7 +186,7 @@ err_out:
  * Returns IMA_MEASURE, IMA_APPRAISE mask.
  *
  */
-int ima_get_action(const struct mnt_idmap *idmap, struct inode *inode,
+int ima_get_action(struct mnt_idmap *idmap, struct inode *inode,
 		   const struct cred *cred, struct lsm_prop *prop, int mask,
 		   enum ima_hooks func, int *pcr,
 		   struct ima_template_desc **template_desc,
@@ -269,20 +267,15 @@ int ima_collect_measurement(struct ima_iint_cache *iint, struct file *file,
 		goto out;
 
 	/*
-	 * Detect file change based on STATX_CHANGE_COOKIE, when supported,
-	 * and fallback to detecting file change based on i_version.
-	 *
-	 * On filesystems which did not support i_version, support was
-	 * originally limited to an initial measurement/appraisal/audit,
-	 * but was later modified to assume the file changed.
+	 * Detecting file change is based on i_version. On filesystems
+	 * which do not support i_version, support was originally limited
+	 * to an initial measurement/appraisal/audit, but was modified to
+	 * assume the file changed.
 	 */
 	result = vfs_getattr_nosec(&file->f_path, &stat, STATX_CHANGE_COOKIE,
 				   AT_STATX_SYNC_AS_STAT);
 	if (!result && (stat.result_mask & STATX_CHANGE_COOKIE))
 		i_version = stat.change_cookie;
-	else if (IS_I_VERSION(real_inode))
-		i_version = inode_peek_iversion(real_inode);
-
 	hash.hdr.algo = algo;
 	hash.hdr.length = hash_digest_size[algo];
 
@@ -330,7 +323,7 @@ out:
 
 		integrity_audit_msg(AUDIT_INTEGRITY_DATA, inode,
 				    filename.name.name, "collect_data",
-				    audit_cause, result, 0, result);
+				    audit_cause, result, 0);
 
 		release_dentry_name_snapshot(&filename);
 	}
@@ -383,7 +376,7 @@ void ima_store_measurement(struct ima_iint_cache *iint, struct file *file,
 	result = ima_alloc_init_template(&event_data, &entry, template_desc);
 	if (result < 0) {
 		integrity_audit_msg(AUDIT_INTEGRITY_PCR, inode, filename,
-				    op, audit_cause, result, 0, result);
+				    op, audit_cause, result, 0);
 		return;
 	}
 

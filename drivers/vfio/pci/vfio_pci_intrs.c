@@ -69,7 +69,7 @@ vfio_irq_ctx_alloc(struct vfio_pci_core_device *vdev, unsigned long index)
 	struct vfio_pci_irq_ctx *ctx;
 	int ret;
 
-	ctx = kzalloc_obj(*ctx, GFP_KERNEL_ACCOUNT);
+	ctx = kzalloc(sizeof(*ctx), GFP_KERNEL_ACCOUNT);
 	if (!ctx)
 		return NULL;
 
@@ -859,7 +859,8 @@ int vfio_pci_set_irqs_ioctl(struct vfio_pci_core_device *vdev, uint32_t flags,
 	case VFIO_PCI_ERR_IRQ_INDEX:
 		switch (flags & VFIO_IRQ_SET_ACTION_TYPE_MASK) {
 		case VFIO_IRQ_SET_ACTION_TRIGGER:
-			func = vfio_pci_set_err_trigger;
+			if (pci_is_pcie(vdev->pdev))
+				func = vfio_pci_set_err_trigger;
 			break;
 		}
 		break;

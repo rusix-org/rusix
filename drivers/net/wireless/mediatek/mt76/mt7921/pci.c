@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: BSD-3-Clause-Clear
+// SPDX-License-Identifier: ISC
 /* Copyright (C) 2020 MediaTek Inc.
  *
  */
@@ -12,7 +12,6 @@
 #include "../mt76_connac2_mac.h"
 #include "../dma.h"
 #include "mcu.h"
-#include "regd.h"
 
 static const struct pci_device_id mt7921_pci_device_table[] = {
 	{ PCI_DEVICE(PCI_VENDOR_ID_MEDIATEK, 0x7961),
@@ -27,8 +26,6 @@ static const struct pci_device_id mt7921_pci_device_table[] = {
 		.driver_data = (kernel_ulong_t)MT7922_FIRMWARE_WM },
 	{ PCI_DEVICE(PCI_VENDOR_ID_MEDIATEK, 0x7920),
 		.driver_data = (kernel_ulong_t)MT7920_FIRMWARE_WM },
-	{ PCI_DEVICE(PCI_VENDOR_ID_MEDIATEK, 0x7902),
-		.driver_data = (kernel_ulong_t)MT7902_FIRMWARE_WM },
 	{ },
 };
 
@@ -170,28 +167,7 @@ static u32 mt7921_rmw(struct mt76_dev *mdev, u32 offset, u32 mask, u32 val)
 
 static int mt7921_dma_init(struct mt792x_dev *dev)
 {
-	struct mt7921_dma_layout layout = {
-		/* General case: MT7921 / MT7922 /MT7920 */
-		.mcu_wm_txq            = MT7921_TXQ_MCU_WM,
-		.mcu_rxdone_ring_size  = MT7921_RX_MCU_RING_SIZE,
-		.has_mcu_wa            = true,
-	};
-	bool is_mt7902;
 	int ret;
-
-	is_mt7902 = mt7921_l1_rr(dev, MT_HW_CHIPID) == 0x7902;
-
-	/*
-	 * MT7902 special case:
-	 *   - MCU-WM TXQ uses index 15
-	 *   - RX Ring0 is larger and shared for event/TX-done
-	 *   - MT7902 does not use the MCU_WA ring
-	 */
-	if (is_mt7902) {
-		layout.mcu_wm_txq           = MT7902_TXQ_MCU_WM;
-		layout.mcu_rxdone_ring_size = MT7902_RX_MCU_RING_SIZE;
-		layout.has_mcu_wa           = false;
-	}
 
 	mt76_dma_attach(&dev->mt76);
 
@@ -209,7 +185,7 @@ static int mt7921_dma_init(struct mt792x_dev *dev)
 	mt76_wr(dev, MT_WFDMA0_TX_RING0_EXT_CTRL, 0x4);
 
 	/* command to WM */
-	ret = mt76_init_mcu_queue(&dev->mt76, MT_MCUQ_WM, layout.mcu_wm_txq,
+	ret = mt76_init_mcu_queue(&dev->mt76, MT_MCUQ_WM, MT7921_TXQ_MCU_WM,
 				  MT7921_TX_MCU_RING_SIZE, MT_TX_RING_BASE);
 	if (ret)
 		return ret;
@@ -223,20 +199,18 @@ static int mt7921_dma_init(struct mt792x_dev *dev)
 	/* event from WM before firmware download */
 	ret = mt76_queue_alloc(dev, &dev->mt76.q_rx[MT_RXQ_MCU],
 			       MT7921_RXQ_MCU_WM,
-			       layout.mcu_rxdone_ring_size,
+			       MT7921_RX_MCU_RING_SIZE,
 			       MT_RX_BUF_SIZE, MT_RX_EVENT_RING_BASE);
 	if (ret)
 		return ret;
 
-	if (layout.has_mcu_wa) {
-		/* Change mcu queue after firmware download */
-		ret = mt76_queue_alloc(dev, &dev->mt76.q_rx[MT_RXQ_MCU_WA],
-				       MT7921_RXQ_MCU_WM,
-				       MT7921_RX_MCU_WA_RING_SIZE,
-				       MT_RX_BUF_SIZE, MT_WFDMA0(0x540));
-		if (ret)
-			return ret;
-	}
+	/* Change mcu queue after firmware download */
+	ret = mt76_queue_alloc(dev, &dev->mt76.q_rx[MT_RXQ_MCU_WA],
+			       MT7921_RXQ_MCU_WM,
+			       MT7921_RX_MCU_WA_RING_SIZE,
+			       MT_RX_BUF_SIZE, MT_WFDMA0(0x540));
+	if (ret)
+		return ret;
 
 	/* rx data */
 	ret = mt76_queue_alloc(dev, &dev->mt76.q_rx[MT_RXQ_MAIN],
@@ -286,10 +260,6 @@ static int mt7921_pci_probe(struct pci_dev *pdev,
 		.drv_own = mt792xe_mcu_drv_pmctrl,
 		.fw_own = mt792xe_mcu_fw_pmctrl,
 	};
-	static const struct mt792x_pcie_reg mt7921_pcie_reg = {
-		.imask = MT_PCIE_MAC_INT_ENABLE,
-		.pm = MT_PCIE_MAC_PM,
-	};
 	static const struct mt792x_irq_map irq_map = {
 		.host_irq_enable = MT_WFDMA0_HOST_INT_ENA,
 		.tx = {
@@ -297,7 +267,6 @@ static int mt7921_pci_probe(struct pci_dev *pdev,
 			.mcu_complete_mask = MT_INT_TX_DONE_MCU,
 		},
 		.rx = {
-			.all_complete_mask = MT_INT_RX_DONE_ALL,
 			.data_complete_mask = MT_INT_RX_DONE_DATA,
 			.wm_complete_mask = MT_INT_RX_DONE_WM,
 			.wm2_complete_mask = MT_INT_RX_DONE_WM2,
@@ -307,12 +276,15 @@ static int mt7921_pci_probe(struct pci_dev *pdev,
 	struct mt76_bus_ops *bus_ops;
 	struct mt792x_dev *dev;
 	struct mt76_dev *mdev;
-	void __iomem *regs;
 	u16 cmd, chipid;
 	u8 features;
 	int ret;
 
 	ret = pcim_enable_device(pdev);
+	if (ret)
+		return ret;
+
+	ret = pcim_iomap_regions(pdev, BIT(0), pci_name(pdev));
 	if (ret)
 		return ret;
 
@@ -350,35 +322,10 @@ static int mt7921_pci_probe(struct pci_dev *pdev,
 	pci_set_drvdata(pdev, mdev);
 
 	dev = container_of(mdev, struct mt792x_dev, mt76);
-
-	regs =  pcim_iomap_region(pdev, 0, pci_name(pdev));
-	if (IS_ERR(regs)) {
-		ret = PTR_ERR(regs);
-		goto err_free_dev;
-	}
-
 	dev->fw_features = features;
 	dev->hif_ops = &mt7921_pcie_ops;
-	dev->pcie_reg = &mt7921_pcie_reg;
 	dev->irq_map = &irq_map;
-	mt76_mmio_init(&dev->mt76, regs);
-
-	if (id->device == 0x7902) {
-		struct mt792x_irq_map *map;
-
-		/* MT7902 needs a mutable copy because wm2_complete_mask differs */
-		map = devm_kmemdup(&pdev->dev, &irq_map,
-				   sizeof(irq_map), GFP_KERNEL);
-		if (!map) {
-			ret = -ENOMEM;
-			goto err_free_dev;
-		}
-
-		map->rx.wm2_complete_mask = 0;
-		map->rx.all_complete_mask &= ~MT_INT_RX_DONE_WM2;
-		dev->irq_map = map;
-	}
-
+	mt76_mmio_init(&dev->mt76, pcim_iomap_table(pdev)[0]);
 	tasklet_init(&mdev->irq_tasklet, mt792x_irq_tasklet, (unsigned long)dev);
 
 	dev->phy.dev = dev;
@@ -567,8 +514,7 @@ static int mt7921_pci_resume(struct device *device)
 	mt76_wr(dev, MT_PCIE_MAC_INT_ENABLE, 0xff);
 	mt76_connac_irq_enable(&dev->mt76,
 			       dev->irq_map->tx.all_complete_mask |
-			       dev->irq_map->rx.all_complete_mask |
-			       MT_INT_MCU_CMD);
+			       MT_INT_RX_DONE_ALL | MT_INT_MCU_CMD);
 	mt76_set(dev, MT_MCU2HOST_SW_INT_ENA, MT_MCU_CMD_WAKE_RX_PCIE);
 
 	/* put dma enabled */
@@ -597,7 +543,7 @@ static int mt7921_pci_resume(struct device *device)
 	if (err < 0)
 		goto failed;
 
-	mt7921_mcu_regd_update(dev, mdev->alpha2, dev->country_ie_env);
+	mt7921_regd_update(dev);
 	err = mt7921_mcu_radio_led_ctrl(dev, EXT_CMD_RADIO_ON_LED);
 failed:
 	pm->suspended = false;
@@ -736,8 +682,6 @@ MODULE_FIRMWARE(MT7921_FIRMWARE_WM);
 MODULE_FIRMWARE(MT7921_ROM_PATCH);
 MODULE_FIRMWARE(MT7922_FIRMWARE_WM);
 MODULE_FIRMWARE(MT7922_ROM_PATCH);
-MODULE_FIRMWARE(MT7902_FIRMWARE_WM);
-MODULE_FIRMWARE(MT7902_ROM_PATCH);
 MODULE_AUTHOR("Sean Wang <sean.wang@mediatek.com>");
 MODULE_AUTHOR("Lorenzo Bianconi <lorenzo@kernel.org>");
 MODULE_DESCRIPTION("MediaTek MT7921E (PCIe) wireless driver");

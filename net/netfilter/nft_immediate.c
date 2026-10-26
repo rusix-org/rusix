@@ -25,7 +25,7 @@ void nft_immediate_eval(const struct nft_expr *expr,
 }
 
 static const struct nla_policy nft_immediate_policy[NFTA_IMMEDIATE_MAX + 1] = {
-	[NFTA_IMMEDIATE_DREG]	= NLA_POLICY_MAX(NLA_BE32, NFT_REG32_MAX),
+	[NFTA_IMMEDIATE_DREG]	= { .type = NLA_U32 },
 	[NFTA_IMMEDIATE_DATA]	= { .type = NLA_NESTED },
 };
 
@@ -279,9 +279,7 @@ static int nft_immediate_offload_verdict(struct nft_offload_ctx *ctx,
 	struct flow_action_entry *entry;
 	const struct nft_data *data;
 
-	entry = nft_flow_action_entry_next(ctx, flow);
-	if (!entry)
-		return -E2BIG;
+	entry = &flow->rule->action.entries[ctx->num_actions++];
 
 	data = &priv->data;
 	switch (data->verdict.code) {

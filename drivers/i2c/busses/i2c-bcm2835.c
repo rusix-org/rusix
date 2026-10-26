@@ -137,14 +137,12 @@ static int clk_bcm2835_i2c_set_rate(struct clk_hw *hw, unsigned long rate,
 	return 0;
 }
 
-static int clk_bcm2835_i2c_determine_rate(struct clk_hw *hw,
-					  struct clk_rate_request *req)
+static long clk_bcm2835_i2c_round_rate(struct clk_hw *hw, unsigned long rate,
+				unsigned long *parent_rate)
 {
-	u32 divider = clk_bcm2835_i2c_calc_divider(req->rate, req->best_parent_rate);
+	u32 divider = clk_bcm2835_i2c_calc_divider(rate, *parent_rate);
 
-	req->rate = DIV_ROUND_UP(req->best_parent_rate, divider);
-
-	return 0;
+	return DIV_ROUND_UP(*parent_rate, divider);
 }
 
 static unsigned long clk_bcm2835_i2c_recalc_rate(struct clk_hw *hw,
@@ -158,7 +156,7 @@ static unsigned long clk_bcm2835_i2c_recalc_rate(struct clk_hw *hw,
 
 static const struct clk_ops clk_bcm2835_i2c_ops = {
 	.set_rate = clk_bcm2835_i2c_set_rate,
-	.determine_rate = clk_bcm2835_i2c_determine_rate,
+	.round_rate = clk_bcm2835_i2c_round_rate,
 	.recalc_rate = clk_bcm2835_i2c_recalc_rate,
 };
 
@@ -166,7 +164,7 @@ static struct clk *bcm2835_i2c_register_div(struct device *dev,
 					struct clk *mclk,
 					struct bcm2835_i2c_dev *i2c_dev)
 {
-	struct clk_init_data init = {};
+	struct clk_init_data init;
 	struct clk_bcm2835_i2c *priv;
 	char name[32];
 	const char *mclk_name;

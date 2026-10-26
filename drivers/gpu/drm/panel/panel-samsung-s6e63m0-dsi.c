@@ -6,6 +6,7 @@
 
 #include <linux/module.h>
 #include <linux/delay.h>
+#include <linux/mod_devicetable.h>
 
 #include <drm/drm_mipi_dsi.h>
 #include <drm/drm_print.h>
@@ -105,7 +106,17 @@ static int s6e63m0_dsi_probe(struct mipi_dsi_device *dsi)
 	if (ret)
 		return ret;
 
-	return devm_mipi_dsi_attach(dev, dsi);
+	ret = mipi_dsi_attach(dsi);
+	if (ret < 0)
+		s6e63m0_remove(dev);
+
+	return ret;
+}
+
+static void s6e63m0_dsi_remove(struct mipi_dsi_device *dsi)
+{
+	mipi_dsi_detach(dsi);
+	s6e63m0_remove(&dsi->dev);
 }
 
 static const struct of_device_id s6e63m0_dsi_of_match[] = {
@@ -116,6 +127,7 @@ MODULE_DEVICE_TABLE(of, s6e63m0_dsi_of_match);
 
 static struct mipi_dsi_driver s6e63m0_dsi_driver = {
 	.probe			= s6e63m0_dsi_probe,
+	.remove			= s6e63m0_dsi_remove,
 	.driver			= {
 		.name		= "panel-samsung-s6e63m0",
 		.of_match_table = s6e63m0_dsi_of_match,

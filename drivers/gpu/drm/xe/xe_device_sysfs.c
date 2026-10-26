@@ -8,7 +8,6 @@
 #include <linux/pci.h>
 #include <linux/sysfs.h>
 
-#include "regs/xe_regs.h"
 #include "xe_device.h"
 #include "xe_device_sysfs.h"
 #include "xe_mmio.h"
@@ -39,8 +38,13 @@ vram_d3cold_threshold_show(struct device *dev,
 {
 	struct pci_dev *pdev = to_pci_dev(dev);
 	struct xe_device *xe = pdev_to_xe_device(pdev);
+	int ret;
 
-	return sysfs_emit(buf, "%d\n", xe->d3cold.vram_threshold);
+	xe_pm_runtime_get(xe);
+	ret = sysfs_emit(buf, "%d\n", xe->d3cold.vram_threshold);
+	xe_pm_runtime_put(xe);
+
+	return ret;
 }
 
 static ssize_t
@@ -58,8 +62,9 @@ vram_d3cold_threshold_store(struct device *dev, struct device_attribute *attr,
 
 	drm_dbg(&xe->drm, "vram_d3cold_threshold: %u\n", vram_d3cold_threshold);
 
-	guard(xe_pm_runtime)(xe);
+	xe_pm_runtime_get(xe);
 	ret = xe_pm_set_vram_threshold(xe, vram_d3cold_threshold);
+	xe_pm_runtime_put(xe);
 
 	return ret ?: count;
 }
@@ -84,31 +89,33 @@ lb_fan_control_version_show(struct device *dev, struct device_attribute *attr, c
 	u16 major = 0, minor = 0, hotfix = 0, build = 0;
 	int ret;
 
-	guard(xe_pm_runtime)(xe);
+	xe_pm_runtime_get(xe);
 
 	ret = xe_pcode_read(root, PCODE_MBOX(PCODE_LATE_BINDING, GET_CAPABILITY_STATUS, 0),
 			    &cap, NULL);
 	if (ret)
-		return ret;
+		goto out;
 
 	if (REG_FIELD_GET(V1_FAN_PROVISIONED, cap)) {
 		ret = xe_pcode_read(root, PCODE_MBOX(PCODE_LATE_BINDING, GET_VERSION_LOW, 0),
 				    &ver_low, NULL);
 		if (ret)
-			return ret;
+			goto out;
 
 		ret = xe_pcode_read(root, PCODE_MBOX(PCODE_LATE_BINDING, GET_VERSION_HIGH, 0),
 				    &ver_high, NULL);
 		if (ret)
-			return ret;
+			goto out;
 
 		major = REG_FIELD_GET(MAJOR_VERSION_MASK, ver_low);
 		minor = REG_FIELD_GET(MINOR_VERSION_MASK, ver_low);
 		hotfix = REG_FIELD_GET(HOTFIX_VERSION_MASK, ver_high);
 		build = REG_FIELD_GET(BUILD_VERSION_MASK, ver_high);
 	}
+out:
+	xe_pm_runtime_put(xe);
 
-	return sysfs_emit(buf, "%u.%u.%u.%u\n", major, minor, hotfix, build);
+	return ret ?: sysfs_emit(buf, "%u.%u.%u.%u\n", major, minor, hotfix, build);
 }
 static DEVICE_ATTR_ADMIN_RO(lb_fan_control_version);
 
@@ -121,31 +128,33 @@ lb_voltage_regulator_version_show(struct device *dev, struct device_attribute *a
 	u16 major = 0, minor = 0, hotfix = 0, build = 0;
 	int ret;
 
-	guard(xe_pm_runtime)(xe);
+	xe_pm_runtime_get(xe);
 
 	ret = xe_pcode_read(root, PCODE_MBOX(PCODE_LATE_BINDING, GET_CAPABILITY_STATUS, 0),
 			    &cap, NULL);
 	if (ret)
-		return ret;
+		goto out;
 
 	if (REG_FIELD_GET(VR_PARAMS_PROVISIONED, cap)) {
 		ret = xe_pcode_read(root, PCODE_MBOX(PCODE_LATE_BINDING, GET_VERSION_LOW, 0),
 				    &ver_low, NULL);
 		if (ret)
-			return ret;
+			goto out;
 
 		ret = xe_pcode_read(root, PCODE_MBOX(PCODE_LATE_BINDING, GET_VERSION_HIGH, 0),
 				    &ver_high, NULL);
 		if (ret)
-			return ret;
+			goto out;
 
 		major = REG_FIELD_GET(MAJOR_VERSION_MASK, ver_low);
 		minor = REG_FIELD_GET(MINOR_VERSION_MASK, ver_low);
 		hotfix = REG_FIELD_GET(HOTFIX_VERSION_MASK, ver_high);
 		build = REG_FIELD_GET(BUILD_VERSION_MASK, ver_high);
 	}
+out:
+	xe_pm_runtime_put(xe);
 
-	return sysfs_emit(buf, "%u.%u.%u.%u\n", major, minor, hotfix, build);
+	return ret ?: sysfs_emit(buf, "%u.%u.%u.%u\n", major, minor, hotfix, build);
 }
 static DEVICE_ATTR_ADMIN_RO(lb_voltage_regulator_version);
 
@@ -164,8 +173,11 @@ static umode_t late_bind_attr_is_visible(struct kobject *kobj,
 	u32 cap = 0;
 	int ret;
 
+	xe_pm_runtime_get(xe);
+
 	ret = xe_pcode_read(root, PCODE_MBOX(PCODE_LATE_BINDING, GET_CAPABILITY_STATUS, 0),
 			    &cap, NULL);
+	xe_pm_runtime_put(xe);
 	if (ret)
 		return 0;
 
@@ -229,8 +241,9 @@ auto_link_downgrade_capable_show(struct device *dev, struct device_attribute *at
 	struct xe_device *xe = pdev_to_xe_device(pdev);
 	u32 cap, val;
 
-	guard(xe_pm_runtime)(xe);
+	xe_pm_runtime_get(xe);
 	val = xe_mmio_read32(xe_root_tile_mmio(xe), BMG_PCIE_CAP);
+	xe_pm_runtime_put(xe);
 
 	cap = REG_FIELD_GET(LINK_DOWNGRADE, val);
 	return sysfs_emit(buf, "%u\n", cap == DOWNGRADE_CAPABLE);
@@ -246,10 +259,11 @@ auto_link_downgrade_status_show(struct device *dev, struct device_attribute *att
 	u32 val = 0;
 	int ret;
 
-	guard(xe_pm_runtime)(xe);
+	xe_pm_runtime_get(xe);
 	ret = xe_pcode_read(xe_device_get_root_tile(xe),
 			    PCODE_MBOX(DGFX_PCODE_STATUS, DGFX_GET_INIT_STATUS, 0),
 			    &val, NULL);
+	xe_pm_runtime_put(xe);
 
 	return ret ?: sysfs_emit(buf, "%u\n", REG_FIELD_GET(DGFX_LINK_DOWNGRADE_STATUS, val));
 }
@@ -263,35 +277,6 @@ static struct attribute *auto_link_downgrade_attrs[] = {
 
 static const struct attribute_group auto_link_downgrade_attr_group = {
 	.attrs = auto_link_downgrade_attrs,
-};
-
-/**
- * DOC: Device Unique ID
- *
- * On supported platforms, Xe driver exposes a unique 64-bit GPU SOC
- * device identifier through the 'device_uid' sysfs entry.
- *
- * See Documentation/ABI/testing/sysfs-driver-intel-xe-gpu for the ABI
- * specification.
- */
-
-static ssize_t
-device_uid_show(struct device *dev, struct device_attribute *attr, char *buf)
-{
-	struct pci_dev *pdev = to_pci_dev(dev);
-	struct xe_device *xe = pdev_to_xe_device(pdev);
-
-	return sysfs_emit(buf, "0x%016llx\n", xe->device_uid);
-}
-static DEVICE_ATTR_ADMIN_RO(device_uid);
-
-static struct attribute *device_uid_attrs[] = {
-	&dev_attr_device_uid.attr,
-	NULL
-};
-
-static const struct attribute_group device_uid_attr_group = {
-	.attrs = device_uid_attrs,
 };
 
 int xe_device_sysfs_init(struct xe_device *xe)
@@ -311,12 +296,6 @@ int xe_device_sysfs_init(struct xe_device *xe)
 			return ret;
 
 		ret = devm_device_add_group(dev, &late_bind_attr_group);
-		if (ret)
-			return ret;
-	}
-
-	if (xe->info.has_device_uid) {
-		ret = devm_device_add_group(dev, &device_uid_attr_group);
 		if (ret)
 			return ret;
 	}

@@ -2,7 +2,7 @@
 
 #include <linux/smp.h>
 
-__rust_helper unsigned int rust_helper_raw_smp_processor_id(void)
+unsigned int rust_helper_raw_smp_processor_id(void)
 {
 	return raw_smp_processor_id();
 }

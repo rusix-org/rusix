@@ -5,7 +5,8 @@
 
 config MISC_RP1
 	tristate "RaspberryPi RP1 misc device"
-	depends on OF_IRQ && PCI_MSI
+	depends on OF_IRQ && OF_OVERLAY && PCI_MSI && PCI_QUIRKS
+	select PCI_DYNAMIC_OF_NODES
 	help
 	  Support the RP1 peripheral chip found on Raspberry Pi 5 board.
 
@@ -14,3 +15,6 @@ config MISC_RP1
 
 	  The driver is responsible for enabling the DT node once the PCIe
 	  endpoint has been configured, and handling interrupts.
+
+	  This driver uses an overlay to load other drivers to support for
+	  RP1 internal sub-devices.

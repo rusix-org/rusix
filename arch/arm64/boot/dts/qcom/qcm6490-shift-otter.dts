@@ -14,7 +14,7 @@
 #include <dt-bindings/leds/common.h>
 #include <dt-bindings/pinctrl/qcom,pmic-gpio.h>
 #include <dt-bindings/regulator/qcom,rpmh-regulator.h>
-#include "kodiak.dtsi"
+#include "sc7280.dtsi"
 #include "pm7250b.dtsi"
 #include "pm7325.dtsi"
 #include "pm8350c.dtsi" /* PM7350C */
@@ -39,9 +39,9 @@
 
 		stdout-path = "serial0:115200n8";
 
-		framebuffer {
+		framebuffer0: framebuffer@a000000 {
 			compatible = "simple-framebuffer";
-			memory-region = <&cont_splash_mem>;
+			reg = <0x0 0xe1000000 0x0 (2400 * 1080 * 4)>;
 			width = <1080>;
 			height = <2400>;
 			stride = <(1080 * 4)>;
@@ -135,6 +135,8 @@
 
 	thermal-zones {
 		camera-thermal {
+			polling-delay-passive = <0>;
+			polling-delay = <0>;
 			thermal-sensors = <&pmk8350_adc_tm 2>;
 
 			trips {
@@ -147,6 +149,8 @@
 		};
 
 		chg-skin-thermal {
+			polling-delay-passive = <0>;
+			polling-delay = <0>;
 			thermal-sensors = <&pm7250b_adc_tm 0>;
 
 			trips {
@@ -159,6 +163,8 @@
 		};
 
 		conn-thermal {
+			polling-delay-passive = <0>;
+			polling-delay = <0>;
 			thermal-sensors = <&pm7250b_adc_tm 1>;
 
 			trips {
@@ -171,6 +177,8 @@
 		};
 
 		quiet-thermal {
+			polling-delay-passive = <0>;
+			polling-delay = <0>;
 			thermal-sensors = <&pmk8350_adc_tm 1>;
 
 			trips {
@@ -183,6 +191,8 @@
 		};
 
 		rear-cam-thermal {
+			polling-delay-passive = <0>;
+			polling-delay = <0>;
 			thermal-sensors = <&pmk8350_adc_tm 4>;
 
 			trips {
@@ -195,6 +205,8 @@
 		};
 
 		sdm-skin-thermal {
+			polling-delay-passive = <0>;
+			polling-delay = <0>;
 			thermal-sensors = <&pmk8350_adc_tm 3>;
 
 			trips {
@@ -207,6 +219,8 @@
 		};
 
 		xo-thermal {
+			polling-delay-passive = <0>;
+			polling-delay = <0>;
 			thermal-sensors = <&pmk8350_adc_tm 0>;
 
 			trips {
@@ -553,14 +567,10 @@
 };
 
 &ipa {
+	qcom,gsi-loader = "self";
+	memory-region = <&ipa_fw_mem>;
 	firmware-name = "qcom/qcm6490/SHIFT/otter/ipa_fws.mbn";
-
 	status = "okay";
-};
-
-&lpass_audiocc {
-	compatible = "qcom,qcm6490-lpassaudiocc";
-	/delete-property/ power-domains;
 };
 
 &pm7250b_adc {
@@ -606,46 +616,6 @@
 		power-source = <1>;
 		bias-pull-up;
 		input-enable;
-	};
-};
-
-&pm8350c_flash {
-	status = "okay";
-
-	led-0 {
-		function = LED_FUNCTION_FLASH;
-		color = <LED_COLOR_ID_WHITE>;
-		led-sources = <1>, <2>;
-		led-max-microamp = <500000>;
-		flash-max-microamp = <1500000>;
-		flash-max-timeout-us = <1280000>;
-	};
-};
-
-&pm8350c_pwm {
-	status = "okay";
-
-	multi-led {
-		color = <LED_COLOR_ID_RGB>;
-		function = LED_FUNCTION_STATUS;
-
-		#address-cells = <1>;
-		#size-cells = <0>;
-
-		led@1 {
-			reg = <1>;
-			color = <LED_COLOR_ID_RED>;
-		};
-
-		led@2 {
-			reg = <2>;
-			color = <LED_COLOR_ID_GREEN>;
-		};
-
-		led@3 {
-			reg = <3>;
-			color = <LED_COLOR_ID_BLUE>;
-		};
 	};
 };
 
@@ -892,7 +862,7 @@
 &uart7 {
 	/delete-property/interrupts;
 	interrupts-extended = <&intc GIC_SPI 608 IRQ_TYPE_LEVEL_HIGH>,
-			      <&tlmm 31 IRQ_TYPE_EDGE_FALLING>;
+			<&tlmm 31 IRQ_TYPE_EDGE_FALLING>;
 
 	pinctrl-1 = <&qup_uart7_sleep_cts>, <&qup_uart7_sleep_rts>, <&qup_uart7_sleep_tx>, <&qup_uart7_sleep_rx>;
 	pinctrl-names = "default", "sleep";
@@ -955,6 +925,10 @@
 	remote-endpoint = <&pmic_glink_hs_in>;
 };
 
+&usb_dp_qmpphy_out {
+	remote-endpoint = <&pmic_glink_ss_in>;
+};
+
 &usb_1_hsphy {
 	vdda-pll-supply = <&vreg_l10c>;
 	vdda18-supply = <&vreg_l1c>;
@@ -975,18 +949,8 @@
 };
 
 &usb_1_qmpphy {
-	vdda-phy-supply = <&vreg_l1b>;
-	vdda-pll-supply = <&vreg_l6b>;
-
-	status = "okay";
-};
-
-&usb_dp_qmpphy_out {
-	remote-endpoint = <&pmic_glink_ss_in>;
-};
-
-&venus {
-	firmware-name = "qcom/qcm6490/SHIFT/otter/venus.mbn";
+	vdda-phy-supply = <&vreg_l6b>;
+	vdda-pll-supply = <&vreg_l1b>;
 
 	status = "okay";
 };

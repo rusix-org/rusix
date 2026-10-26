@@ -58,7 +58,6 @@ enum osnoise_options_index {
 	OSN_PANIC_ON_STOP,
 	OSN_PREEMPT_DISABLE,
 	OSN_IRQ_DISABLE,
-	OSN_TIMERLAT_ALIGN,
 	OSN_MAX
 };
 
@@ -67,8 +66,7 @@ static const char * const osnoise_options_str[OSN_MAX] = {
 							"OSNOISE_WORKLOAD",
 							"PANIC_ON_STOP",
 							"OSNOISE_PREEMPT_DISABLE",
-							"OSNOISE_IRQ_DISABLE",
-							"TIMERLAT_ALIGN" };
+							"OSNOISE_IRQ_DISABLE" };
 
 #define OSN_DEFAULT_OPTIONS		0x2
 static unsigned long osnoise_options	= OSN_DEFAULT_OPTIONS;
@@ -82,22 +80,6 @@ struct osnoise_instance {
 };
 
 static struct list_head osnoise_instances;
-
-static void osnoise_print(const char *fmt, ...)
-{
-	struct osnoise_instance *inst;
-	struct trace_array *tr;
-	va_list ap;
-
-	rcu_read_lock();
-	list_for_each_entry_rcu(inst, &osnoise_instances, list) {
-		tr = inst->tr;
-		va_start(ap, fmt);
-		trace_array_vprintk(tr, _RET_IP_, fmt, ap);
-		va_end(ap);
-	}
-	rcu_read_unlock();
-}
 
 static bool osnoise_has_registered_instances(void)
 {
@@ -139,9 +121,8 @@ static int osnoise_register_instance(struct trace_array *tr)
 	 * trace_types_lock.
 	 */
 	lockdep_assert_held(&trace_types_lock);
-	trace_array_init_printk(tr);
 
-	inst = kmalloc_obj(*inst);
+	inst = kmalloc(sizeof(*inst), GFP_KERNEL);
 	if (!inst)
 		return -ENOMEM;
 
@@ -272,11 +253,6 @@ struct timerlat_variables {
 static DEFINE_PER_CPU(struct timerlat_variables, per_cpu_timerlat_var);
 
 /*
- * timerlat wake-up offset for next thread with TIMERLAT_ALIGN set.
- */
-static atomic64_t align_next;
-
-/*
  * this_cpu_tmr_var - Return the per-cpu timerlat_variables on its relative CPU
  */
 static inline struct timerlat_variables *this_cpu_tmr_var(void)
@@ -294,7 +270,6 @@ static inline void tlat_var_reset(void)
 
 	/* Synchronize with the timerlat interfaces */
 	mutex_lock(&interface_lock);
-
 	/*
 	 * So far, all the values are initialized as 0, so
 	 * zeroing the structure is perfect.
@@ -305,12 +280,6 @@ static inline void tlat_var_reset(void)
 			hrtimer_cancel(&tlat_var->timer);
 		memset(tlat_var, 0, sizeof(*tlat_var));
 	}
-	/*
-	 * Reset also align_next, to be filled by a new offset by the first timerlat
-	 * thread that wakes up, if TIMERLAT_ALIGN is set.
-	 */
-	atomic64_set(&align_next, 0);
-
 	mutex_unlock(&interface_lock);
 }
 #else /* CONFIG_TIMERLAT_TRACER */
@@ -359,11 +328,10 @@ static struct osnoise_data {
 	u64	stop_tracing_total;	/* stop trace in the final operation (report/thread) */
 #ifdef CONFIG_TIMERLAT_TRACER
 	u64	timerlat_period;	/* timerlat period */
-	u64	timerlat_align_us;	/* timerlat alignment */
 	u64	print_stack;		/* print IRQ stack if total > */
 	int	timerlat_tracer;	/* timerlat tracer */
 #endif
-	bool	tainted;		/* info users and developers about a problem */
+	bool	tainted;		/* infor users and developers about a problem */
 } osnoise_data = {
 	.sample_period			= DEFAULT_SAMPLE_PERIOD,
 	.sample_runtime			= DEFAULT_SAMPLE_RUNTIME,
@@ -372,7 +340,6 @@ static struct osnoise_data {
 #ifdef CONFIG_TIMERLAT_TRACER
 	.print_stack			= 0,
 	.timerlat_period		= DEFAULT_TIMERLAT_PERIOD,
-	.timerlat_align_us		= 0,
 	.timerlat_tracer		= 0,
 #endif
 };
@@ -490,7 +457,15 @@ static void print_osnoise_headers(struct seq_file *s)
  * osnoise_taint - report an osnoise error.
  */
 #define osnoise_taint(msg) ({							\
-	osnoise_print(msg);							\
+	struct osnoise_instance *inst;						\
+	struct trace_buffer *buffer;						\
+										\
+	rcu_read_lock();							\
+	list_for_each_entry_rcu(inst, &osnoise_instances, list) {		\
+		buffer = inst->tr->array_buffer.buffer;				\
+		trace_array_printk_buf(buffer, _THIS_IP_, msg);			\
+	}									\
+	rcu_read_unlock();							\
 	osnoise_data.tainted = true;						\
 })
 
@@ -765,7 +740,7 @@ cond_move_thread_delta_start(struct osnoise_variables *osn_var, u64 duration)
 /*
  * get_int_safe_duration - Get the duration of a window
  *
- * The irq, softirq and thread variables need to have its duration without
+ * The irq, softirq and thread varaibles need to have its duration without
  * the interference from higher priority interrupts. Instead of keeping a
  * variable to discount the interrupt interference from these variables, the
  * starting time of these variables are pushed forward with the interrupt's
@@ -1200,10 +1175,10 @@ static __always_inline void osnoise_stop_exception(char *msg, int cpu)
 	rcu_read_lock();
 	list_for_each_entry_rcu(inst, &osnoise_instances, list) {
 		tr = inst->tr;
-		trace_array_printk(tr, _THIS_IP_,
-				   "stop tracing hit on cpu %d due to exception: %s\n",
-				   smp_processor_id(),
-				   msg);
+		trace_array_printk_buf(tr->array_buffer.buffer, _THIS_IP_,
+				       "stop tracing hit on cpu %d due to exception: %s\n",
+				       smp_processor_id(),
+				       msg);
 
 		if (test_bit(OSN_PANIC_ON_STOP, &osnoise_options))
 			panic("tracer hit on cpu %d due to exception: %s\n",
@@ -1373,8 +1348,8 @@ static __always_inline void osnoise_stop_tracing(void)
 	rcu_read_lock();
 	list_for_each_entry_rcu(inst, &osnoise_instances, list) {
 		tr = inst->tr;
-		trace_array_printk(tr, _THIS_IP_,
-				   "stop tracing hit on cpu %d\n", smp_processor_id());
+		trace_array_printk_buf(tr->array_buffer.buffer, _THIS_IP_,
+				"stop tracing hit on cpu %d\n", smp_processor_id());
 
 		if (test_bit(OSN_PANIC_ON_STOP, &osnoise_options))
 			panic("tracer hit stop condition on CPU %d\n", smp_processor_id());
@@ -1487,7 +1462,7 @@ static int run_osnoise(void)
 	stop_in = osnoise_data.stop_tracing * NSEC_PER_USEC;
 
 	/*
-	 * Start timestamp
+	 * Start timestemp
 	 */
 	start = time_get();
 
@@ -1857,26 +1832,6 @@ static int wait_next_period(struct timerlat_variables *tlat)
 	tlat->abs_period = (u64) ktime_to_ns(next_abs_period);
 
 	/*
-	 * Align thread in the first cycle on each CPU to the set alignment
-	 * if TIMERLAT_ALIGN is set.
-	 *
-	 * This is done by using an atomic64_t to store the next absolute period.
-	 * The first thread that wakes up will set the atomic64_t to its
-	 * absolute period, and the other threads will increment it by
-	 * the alignment value.
-	 */
-	if (test_bit(OSN_TIMERLAT_ALIGN, &osnoise_options) && !tlat->count
-	    && atomic64_cmpxchg_relaxed(&align_next, 0, tlat->abs_period)) {
-		/*
-		 * A thread has already set align_next, use it and increment it
-		 * to be used by the next thread that wakes up after this one.
-		 */
-		tlat->abs_period = atomic64_add_return_relaxed(
-			osnoise_data.timerlat_align_us * 1000, &align_next);
-		next_abs_period = ns_to_ktime(tlat->abs_period);
-	}
-
-	/*
 	 * If the new abs_period is in the past, skip the activation.
 	 */
 	while (ktime_compare(now, next_abs_period) > 0) {
@@ -1928,7 +1883,7 @@ static int timerlat_main(void *data)
 	tlat->kthread = current;
 	osn_var->pid = current->pid;
 	/*
-	 * Annotate the arrival time.
+	 * Anotate the arrival time.
 	 */
 	tlat->abs_period = hrtimer_cb_get_time(&tlat->timer);
 
@@ -2025,7 +1980,7 @@ static void stop_per_cpu_kthreads(void)
 }
 
 /*
- * start_kthread - Start a workload thread
+ * start_kthread - Start a workload tread
  */
 static int start_kthread(unsigned int cpu)
 {
@@ -2555,12 +2510,9 @@ timerlat_fd_read(struct file *file, char __user *ubuf, size_t count,
 		notify_new_max_latency(diff);
 
 		tlat->tracing_thread = false;
-		if (osnoise_data.stop_tracing_total) {
-			if (time_to_us(diff) >= osnoise_data.stop_tracing_total) {
-				timerlat_dump_stack(time_to_us(diff));
+		if (osnoise_data.stop_tracing_total)
+			if (time_to_us(diff) >= osnoise_data.stop_tracing_total)
 				osnoise_stop_tracing();
-			}
-		}
 	} else {
 		tlat->tracing_thread = false;
 		tlat->kthread = current;
@@ -2700,17 +2652,6 @@ static struct trace_min_max_param timerlat_period = {
 	.min	= &timerlat_min_period,
 };
 
-/*
- * osnoise/timerlat_align_us: align the first wakeup of all timerlat
- * threads to a common boundary (in us). 0 means disabled.
- */
-static struct trace_min_max_param timerlat_align_us = {
-	.lock	= &interface_lock,
-	.val	= &osnoise_data.timerlat_align_us,
-	.max	= NULL,
-	.min	= NULL,
-};
-
 static const struct file_operations timerlat_fd_fops = {
 	.open		= timerlat_fd_open,
 	.read		= timerlat_fd_read,
@@ -2766,7 +2707,7 @@ static int osnoise_create_cpu_timerlat_fd(struct dentry *top_dir)
 	 * Why not using tracing instance per_cpu/ dir?
 	 *
 	 * Because osnoise/timerlat have a single workload, having
-	 * multiple files like these are waste of memory.
+	 * multiple files like these are wast of memory.
 	 */
 	per_cpu = tracefs_create_dir("per_cpu", top_dir);
 	if (!per_cpu)
@@ -2804,11 +2745,6 @@ static int init_timerlat_tracefs(struct dentry *top_dir)
 
 	tmp = tracefs_create_file("timerlat_period_us", TRACE_MODE_WRITE, top_dir,
 				  &timerlat_period, &trace_min_max_fops);
-	if (!tmp)
-		return -ENOMEM;
-
-	tmp = tracefs_create_file("timerlat_align_us", TRACE_MODE_WRITE, top_dir,
-				  &timerlat_align_us, &trace_min_max_fops);
 	if (!tmp)
 		return -ENOMEM;
 

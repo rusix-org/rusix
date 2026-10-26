@@ -35,7 +35,6 @@ enum chips { lm25056, lm25066, lm5064, lm5066, lm5066i };
 #define LM25066_READ_AVG_PIN		0xdf
 
 #define LM25066_DEV_SETUP_CL		BIT(4)	/* Current limit */
-#define LM25066_DEV_SETUP_CL_CFG	BIT(2)	/* Current limit configuration */
 
 #define LM25066_SAMPLES_FOR_AVG_MAX	4096
 
@@ -444,11 +443,11 @@ static const struct regulator_desc lm25066_reg_desc[] = {
 #endif
 
 static const struct i2c_device_id lm25066_id[] = {
-	{ .name = "lm25056", .driver_data = lm25056 },
-	{ .name = "lm25066", .driver_data = lm25066 },
-	{ .name = "lm5064", .driver_data = lm5064 },
-	{ .name = "lm5066", .driver_data = lm5066 },
-	{ .name = "lm5066i", .driver_data = lm5066i },
+	{"lm25056", lm25056},
+	{"lm25066", lm25066},
+	{"lm5064", lm5064},
+	{"lm5066", lm5066},
+	{"lm5066i", lm5066i},
 	{ }
 };
 MODULE_DEVICE_TABLE(i2c, lm25066_id);
@@ -485,42 +484,6 @@ static int lm25066_probe(struct i2c_client *client)
 		return config;
 
 	data->id = (enum chips)(unsigned long)i2c_get_match_data(client);
-
-	if (data->id != lm25056) {
-		int config_new = config;
-		const char *cl_setting;
-		int ret;
-
-		if (!of_property_read_string(client->dev.of_node,
-					     "ti,current-range", &cl_setting)) {
-			config_new |= LM25066_DEV_SETUP_CL_CFG;
-			if (strcmp(cl_setting, "high") == 0) {
-				if (data->id == lm25066)
-					config_new |= LM25066_DEV_SETUP_CL;
-				else
-					config_new &= ~LM25066_DEV_SETUP_CL;
-			} else if (strcmp(cl_setting, "low") == 0) {
-				if (data->id == lm25066)
-					config_new &= ~LM25066_DEV_SETUP_CL;
-				else
-					config_new |= LM25066_DEV_SETUP_CL;
-			} else {
-				dev_err(&client->dev,
-					"invalid current-range setting: %s\n",
-					cl_setting);
-				return -EINVAL;
-			}
-		}
-
-		if (config_new != config) {
-			ret = i2c_smbus_write_byte_data(client,
-							LM25066_DEVICE_SETUP,
-							config_new);
-			if (ret < 0)
-				return ret;
-			config = config_new;
-		}
-	}
 
 	info = &data->info;
 

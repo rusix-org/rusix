@@ -50,7 +50,6 @@ static int avs_rt5640_codec_init(struct snd_soc_pcm_runtime *runtime)
 {
 	struct snd_soc_dai *codec_dai = snd_soc_rtd_to_codec(runtime, 0);
 	struct snd_soc_card *card = runtime->card;
-	struct snd_soc_dapm_context *dapm = snd_soc_card_to_dapm(card);
 	struct snd_soc_jack_pin *pins;
 	struct snd_soc_jack *jack;
 	int num_pins, ret;
@@ -68,7 +67,7 @@ static int avs_rt5640_codec_init(struct snd_soc_pcm_runtime *runtime)
 		return ret;
 
 	snd_soc_component_set_jack(codec_dai->component, jack, NULL);
-	snd_soc_dapm_set_idle_bias(dapm, false);
+	card->dapm.idle_bias = false;
 
 	return 0;
 }
@@ -252,7 +251,7 @@ static const struct platform_device_id avs_rt5640_driver_ids[] = {
 	{
 		.name = "avs_rt5640",
 	},
-	{ }
+	{},
 };
 MODULE_DEVICE_TABLE(platform, avs_rt5640_driver_ids);
 

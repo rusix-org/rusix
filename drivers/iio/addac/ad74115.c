@@ -1835,10 +1835,7 @@ static int ad74115_probe(struct spi_device *spi)
 	st = iio_priv(indio_dev);
 
 	st->spi = spi;
-	ret = devm_mutex_init(dev, &st->lock);
-	if (ret)
-		return ret;
-
+	mutex_init(&st->lock);
 	init_completion(&st->adc_data_completion);
 
 	indio_dev->name = AD74115_NAME;
@@ -1904,7 +1901,7 @@ static int __init ad74115_register_driver(struct spi_driver *spi)
 }
 
 static const struct spi_device_id ad74115_spi_id[] = {
-	{ .name = "ad74115h" },
+	{ "ad74115h" },
 	{ }
 };
 

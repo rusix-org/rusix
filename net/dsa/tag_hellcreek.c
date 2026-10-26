@@ -20,6 +20,7 @@
 static struct sk_buff *hellcreek_xmit(struct sk_buff *skb,
 				      struct net_device *dev)
 {
+	struct dsa_port *dp = dsa_user_to_port(dev);
 	u8 *tag;
 
 	/* Calculate checksums (if required) before adding the trailer tag to
@@ -27,14 +28,12 @@ static struct sk_buff *hellcreek_xmit(struct sk_buff *skb,
 	 * checksums after the switch strips the tag.
 	 */
 	if (skb->ip_summed == CHECKSUM_PARTIAL &&
-	    skb_checksum_help(skb)) {
-		kfree_skb(skb);
+	    skb_checksum_help(skb))
 		return NULL;
-	}
 
 	/* Tag encoding */
 	tag  = skb_put(skb, HELLCREEK_TAG_LEN);
-	*tag = dsa_xmit_port_mask(skb, dev);
+	*tag = BIT(dp->index);
 
 	return skb;
 }
@@ -49,14 +48,11 @@ static struct sk_buff *hellcreek_rcv(struct sk_buff *skb,
 	skb->dev = dsa_conduit_find_user(dev, 0, port);
 	if (!skb->dev) {
 		netdev_warn_once(dev, "Failed to get source port: %d\n", port);
-		kfree_skb(skb);
 		return NULL;
 	}
 
-	if (pskb_trim_rcsum(skb, skb->len - HELLCREEK_TAG_LEN)) {
-		kfree_skb(skb);
+	if (pskb_trim_rcsum(skb, skb->len - HELLCREEK_TAG_LEN))
 		return NULL;
-	}
 
 	dsa_default_offload_fwd_mark(skb);
 

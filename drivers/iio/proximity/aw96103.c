@@ -687,7 +687,7 @@ static irqreturn_t aw96103_irq(int irq, void *data)
 				       iio_get_time_ns(indio_dev));
 			break;
 		default:
-			continue;
+			return IRQ_HANDLED;
 		}
 		aw96103->channels_arr[i].old_irq_status = curr_status;
 	}
@@ -843,8 +843,8 @@ static const struct of_device_id aw96103_dt_match[] = {
 MODULE_DEVICE_TABLE(of, aw96103_dt_match);
 
 static const struct i2c_device_id aw96103_i2c_id[] = {
-	{ .name = "aw96103", .driver_data = (kernel_ulong_t)&aw_chip_info_tbl[AW96103_VAL] },
-	{ .name = "aw96105", .driver_data = (kernel_ulong_t)&aw_chip_info_tbl[AW96105_VAL] },
+	{ "aw96103", (kernel_ulong_t)&aw_chip_info_tbl[AW96103_VAL] },
+	{ "aw96105", (kernel_ulong_t)&aw_chip_info_tbl[AW96105_VAL] },
 	{ }
 };
 MODULE_DEVICE_TABLE(i2c, aw96103_i2c_id);

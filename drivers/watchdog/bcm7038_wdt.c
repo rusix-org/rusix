@@ -12,7 +12,6 @@
 #include <linux/platform_device.h>
 #include <linux/platform_data/bcm7038_wdt.h>
 #include <linux/pm.h>
-#include <linux/stringify.h>
 #include <linux/watchdog.h>
 
 #define WDT_START_1		0xff00
@@ -229,7 +228,7 @@ module_platform_driver(bcm7038_wdt_driver);
 
 module_param(nowayout, bool, 0);
 MODULE_PARM_DESC(nowayout, "Watchdog cannot be stopped once started (default="
-	__stringify(WATCHDOG_NOWAYOUT) ")");
+	__MODULE_STRING(WATCHDOG_NOWAYOUT) ")");
 MODULE_LICENSE("GPL");
 MODULE_DESCRIPTION("Driver for Broadcom 7038 SoCs Watchdog");
 MODULE_AUTHOR("Justin Chen");

@@ -5,7 +5,7 @@
  * Copyright (c) 2011 Christoph Hellwig.
  * All Rights Reserved.
  */
-#include "xfs_platform.h"
+#include "xfs.h"
 #include "xfs_fs.h"
 #include "xfs_format.h"
 #include "xfs_log_format.h"
@@ -41,7 +41,8 @@ xfs_extent_busy_insert_list(
 	struct rb_node		**rbp;
 	struct rb_node		*parent = NULL;
 
-	new = kzalloc_obj(struct xfs_extent_busy, GFP_KERNEL | __GFP_NOFAIL);
+	new = kzalloc(sizeof(struct xfs_extent_busy),
+			GFP_KERNEL | __GFP_NOFAIL);
 	new->group = xfs_group_hold(xg);
 	new->bno = bno;
 	new->length = len;
@@ -161,8 +162,8 @@ xfs_extent_busy_update_extent(
 	xfs_agblock_t		fbno,
 	xfs_extlen_t		flen,
 	bool			userdata)
-		__releases(&xg->xg_busy_extents->eb_lock)
-		__acquires(&xg->xg_busy_extents->eb_lock)
+		__releases(&eb->eb_lock)
+		__acquires(&eb->eb_lock)
 {
 	struct xfs_extent_busy_tree *eb = xg->xg_busy_extents;
 	xfs_agblock_t		fend = fbno + flen;
@@ -690,9 +691,9 @@ xfs_extent_busy_ag_cmp(
 		container_of(l2, struct xfs_extent_busy, list);
 	s32 diff;
 
-	diff = cmp_int(b1->group->xg_gno, b2->group->xg_gno);
+	diff = b1->group->xg_gno - b2->group->xg_gno;
 	if (!diff)
-		diff = cmp_int(b1->bno, b2->bno);
+		diff = b1->bno - b2->bno;
 	return diff;
 }
 
@@ -717,7 +718,7 @@ xfs_extent_busy_alloc(void)
 {
 	struct xfs_extent_busy_tree *eb;
 
-	eb = kzalloc_obj(*eb);
+	eb = kzalloc(sizeof(*eb), GFP_KERNEL);
 	if (!eb)
 		return NULL;
 	spin_lock_init(&eb->eb_lock);

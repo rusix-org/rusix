@@ -106,17 +106,11 @@ bool hibernation_in_progress(void)
 	return !atomic_read(&hibernate_atomic);
 }
 
-__weak bool arch_hibernation_available(void)
-{
-	return true;
-}
-
 bool hibernation_available(void)
 {
 	return nohibernate == 0 &&
 		!security_locked_down(LOCKDOWN_HIBERNATION) &&
-		!secretmem_active() && !cxl_mem_active() &&
-		arch_hibernation_available();
+		!secretmem_active() && !cxl_mem_active();
 }
 
 /**
@@ -398,6 +392,23 @@ static int create_image(int platform_mode)
 	return error;
 }
 
+static void shrink_shmem_memory(void)
+{
+	struct sysinfo info;
+	unsigned long nr_shmem_pages, nr_freed_pages;
+
+	si_meminfo(&info);
+	nr_shmem_pages = info.sharedram; /* current page count used for shmem */
+	/*
+	 * The intent is to reclaim all shmem pages. Though shrink_all_memory() can
+	 * only reclaim about half of them, it's enough for creating the hibernation
+	 * image.
+	 */
+	nr_freed_pages = shrink_all_memory(nr_shmem_pages);
+	pr_debug("requested to reclaim %lu shmem pages, actually freed %lu pages\n",
+			nr_shmem_pages, nr_freed_pages);
+}
+
 /**
  * hibernation_snapshot - Quiesce devices and create a hibernation image.
  * @platform_mode: If set, use platform driver to prepare for the transition.
@@ -414,14 +425,10 @@ int hibernation_snapshot(int platform_mode)
 	if (error)
 		goto Close;
 
-	error = dpm_prepare(PMSG_FREEZE);
-	if (error)
-		goto Complete;
-
-	/* Preallocate image memory before freezing kernel threads and shutting down devices. */
+	/* Preallocate image memory before shutting down devices. */
 	error = hibernate_preallocate_memory();
 	if (error)
-		goto Complete;
+		goto Close;
 
 	error = freeze_kernel_threads();
 	if (error)
@@ -436,6 +443,21 @@ int hibernation_snapshot(int platform_mode)
 		freezer_test_done = true;
 		goto Thaw;
 	}
+
+	error = dpm_prepare(PMSG_FREEZE);
+	if (error) {
+		dpm_complete(PMSG_RECOVER);
+		goto Thaw;
+	}
+
+	/*
+	 * Device drivers may move lots of data to shmem in dpm_prepare(). The shmem
+	 * pages will use lots of system memory, causing hibernation image creation
+	 * fail due to insufficient free memory.
+	 * This call is to force flush the shmem pages to swap disk and reclaim
+	 * the system memory so that image creation can succeed.
+	 */
+	shrink_shmem_memory();
 
 	console_suspend_all();
 	pm_restrict_gfp_mask();
@@ -474,8 +496,6 @@ int hibernation_snapshot(int platform_mode)
 	thaw_kernel_threads();
  Cleanup:
 	swsusp_free();
- Complete:
-	dpm_complete(PMSG_RECOVER);
 	goto Close;
 }
 
@@ -800,10 +820,7 @@ int hibernate(void)
 	if (error)
 		goto Restore;
 
-	error = pm_sleep_fs_sync();
-	if (error)
-		goto Notify;
-
+	ksys_sync_helper();
 	filesystems_freeze(filesystem_freeze_enabled);
 
 	error = freeze_processes();
@@ -874,7 +891,6 @@ int hibernate(void)
 	freezer_test_done = false;
  Exit:
 	filesystems_thaw();
- Notify:
 	pm_notifier_call_chain(PM_POST_HIBERNATION);
  Restore:
 	pm_restore_console();

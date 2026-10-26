@@ -1132,7 +1132,7 @@ static int snd_emu10k1_efx_playback_open(struct snd_pcm_substream *substream)
 	struct snd_pcm_runtime *runtime = substream->runtime;
 	int i, j, err;
 
-	epcm = kzalloc_obj(*epcm);
+	epcm = kzalloc(sizeof(*epcm), GFP_KERNEL);
 	if (epcm == NULL)
 		return -ENOMEM;
 	epcm->emu = emu;
@@ -1171,7 +1171,7 @@ static int snd_emu10k1_playback_open(struct snd_pcm_substream *substream)
 	struct snd_pcm_runtime *runtime = substream->runtime;
 	int i, err, sample_rate;
 
-	epcm = kzalloc_obj(*epcm);
+	epcm = kzalloc(sizeof(*epcm), GFP_KERNEL);
 	if (epcm == NULL)
 		return -ENOMEM;
 	epcm->emu = emu;
@@ -1181,17 +1181,19 @@ static int snd_emu10k1_playback_open(struct snd_pcm_substream *substream)
 	runtime->private_free = snd_emu10k1_pcm_free_substream;
 	runtime->hw = snd_emu10k1_playback;
 	err = snd_emu10k1_playback_set_constraints(runtime);
-	if (err < 0)
-		goto free_epcm;
-
+	if (err < 0) {
+		kfree(epcm);
+		return err;
+	}
 	if (emu->card_capabilities->emu_model)
 		sample_rate = emu->emu1010.word_clock;
 	else
 		sample_rate = 48000;
 	err = snd_pcm_hw_rule_noresample(runtime, sample_rate);
-	if (err < 0)
-		goto free_epcm;
-
+	if (err < 0) {
+		kfree(epcm);
+		return err;
+	}
 	mix = &emu->pcm_mixer[substream->number];
 	for (i = 0; i < 8; i++)
 		mix->send_routing[0][i] = mix->send_routing[1][i] = mix->send_routing[2][i] = i;
@@ -1202,10 +1204,6 @@ static int snd_emu10k1_playback_open(struct snd_pcm_substream *substream)
 	mix->epcm = epcm;
 	snd_emu10k1_pcm_mixer_notify(emu, substream->number, 1);
 	return 0;
-
-free_epcm:
-	kfree(epcm);
-	return err;
 }
 
 static int snd_emu10k1_playback_close(struct snd_pcm_substream *substream)
@@ -1224,7 +1222,7 @@ static int snd_emu10k1_capture_open(struct snd_pcm_substream *substream)
 	struct snd_pcm_runtime *runtime = substream->runtime;
 	struct snd_emu10k1_pcm *epcm;
 
-	epcm = kzalloc_obj(*epcm);
+	epcm = kzalloc(sizeof(*epcm), GFP_KERNEL);
 	if (epcm == NULL)
 		return -ENOMEM;
 	epcm->emu = emu;
@@ -1261,7 +1259,7 @@ static int snd_emu10k1_capture_mic_open(struct snd_pcm_substream *substream)
 	struct snd_emu10k1_pcm *epcm;
 	struct snd_pcm_runtime *runtime = substream->runtime;
 
-	epcm = kzalloc_obj(*epcm);
+	epcm = kzalloc(sizeof(*epcm), GFP_KERNEL);
 	if (epcm == NULL)
 		return -ENOMEM;
 	epcm->emu = emu;
@@ -1301,7 +1299,7 @@ static int snd_emu10k1_capture_efx_open(struct snd_pcm_substream *substream)
 	int nefx = emu->audigy ? 64 : 32;
 	int idx, err;
 
-	epcm = kzalloc_obj(*epcm);
+	epcm = kzalloc(sizeof(*epcm), GFP_KERNEL);
 	if (epcm == NULL)
 		return -ENOMEM;
 	epcm->emu = emu;

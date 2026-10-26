@@ -354,7 +354,7 @@ static int sysc_add_named_clock_from_child(struct sysc *ddata,
 	 * limit for clk_get(). If cl ever needs to be freed, it should be done
 	 * with clkdev_drop().
 	 */
-	cl = kzalloc_obj(*cl);
+	cl = kzalloc(sizeof(*cl), GFP_KERNEL);
 	if (!cl)
 		return -ENOMEM;
 
@@ -2474,7 +2474,7 @@ static void sysc_add_restored(struct sysc *ddata)
 {
 	struct sysc_module *restored_module;
 
-	restored_module = kzalloc_obj(*restored_module);
+	restored_module = kzalloc(sizeof(*restored_module), GFP_KERNEL);
 	if (!restored_module)
 		return;
 
@@ -2957,7 +2957,7 @@ static int sysc_add_disabled(unsigned long base)
 {
 	struct sysc_address *disabled_module;
 
-	disabled_module = kzalloc_obj(*disabled_module);
+	disabled_module = kzalloc(sizeof(*disabled_module), GFP_KERNEL);
 	if (!disabled_module)
 		return -ENOMEM;
 
@@ -2988,7 +2988,7 @@ static int sysc_init_static_data(struct sysc *ddata)
 	if (sysc_soc)
 		return 0;
 
-	sysc_soc = kzalloc_obj(*sysc_soc);
+	sysc_soc = kzalloc(sizeof(*sysc_soc), GFP_KERNEL);
 	if (!sysc_soc)
 		return -ENOMEM;
 

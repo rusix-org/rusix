@@ -325,7 +325,6 @@ int unregister_service_level(struct service_level *slr)
 EXPORT_SYMBOL(unregister_service_level);
 
 static void *service_level_start(struct seq_file *m, loff_t *pos)
-__acquires_shared(service_level_sem)
 {
 	down_read(&service_level_sem);
 	return seq_list_start(&service_level_list, *pos);
@@ -337,7 +336,6 @@ static void *service_level_next(struct seq_file *m, void *p, loff_t *pos)
 }
 
 static void service_level_stop(struct seq_file *m, void *p)
-__releases_shared(service_level_sem)
 {
 	up_read(&service_level_sem);
 }
@@ -528,7 +526,7 @@ static __init int stsi_init_debugfs(void)
 	if (IS_ENABLED(CONFIG_SCHED_TOPOLOGY) && cpu_has_topology()) {
 		char link_to[10];
 
-		snprintf(link_to, sizeof(link_to), "15_1_%d", topology_mnest_limit());
+		sprintf(link_to, "15_1_%d", topology_mnest_limit());
 		debugfs_create_symlink("topology", stsi_root, link_to);
 	}
 	return 0;

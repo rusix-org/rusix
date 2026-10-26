@@ -9,12 +9,12 @@ if [[ ${1:-} == --profile ]]; then
     shift 2
 fi
 case "$profile" in
-    kunit|brd|server) ;;
-    *) echo 'Profile must be kunit, brd or server.' >&2; exit 2 ;;
+    kunit|brd|brd-rust|brd-kunit|brd-ext4-c|brd-ext4-rust|completion-c|completion-rust|server) ;;
+    *) echo 'Profile must be kunit, brd, brd-rust, brd-kunit, brd-ext4-c, brd-ext4-rust, completion-c, completion-rust or server.' >&2; exit 2 ;;
 esac
 config="$RUSIX_PROJECT/configs/x86_64-$profile.config"
 if [[ $# != 1 || ! "$1" =~ ^[a-zA-Z0-9_-]+$ ]]; then
-    echo 'Usage: bash rusix/scripts/build-kernel.sh [--profile kunit|brd|server] BUILD_NAME' >&2
+    echo 'Usage: bash rusix/scripts/build-kernel.sh [--profile kunit|brd|brd-rust|brd-kunit|brd-ext4-c|brd-ext4-rust|completion-c|completion-rust|server] BUILD_NAME' >&2
     exit 2
 fi
 name=$1
@@ -69,16 +69,19 @@ if [[ $status != 0 ]]; then
     tail -40 "$evidence/build.log" >&2
     exit "$status"
 fi
-if [[ "$profile" == brd ]]; then
+if [[ "$profile" == brd || "$profile" == brd-ext4-c ]]; then
     # This profile currently establishes the unchanged C driver baseline.
     git -C "$RUSIX_SOURCE" diff --exit-code \
-        21a7f44fd0765fcc5194130b28767786eba1d1e7 -- drivers/block/brd.c \
+        2926d88bb7fc4608fd942453d929c39e4e5ec006 -- drivers/block/brd.c \
         > "$evidence/brd-reference.diff"
     bash "$RUSIX_PROJECT/scripts/with-local-tools.sh" llvm-ar t \
         "$out/drivers/block/built-in.a" > "$evidence/block-archive.txt"
     grep -E '(^|/)brd\.o$' "$evidence/block-archive.txt" > "$evidence/brd-objects.txt"
     bash "$RUSIX_PROJECT/scripts/with-local-tools.sh" llvm-nm --defined-only \
         "$out/vmlinux" > "$evidence/kernel-symbols.tmp"
+    if grep -q 'brd_rust' "$evidence/kernel-symbols.tmp"; then
+        echo 'Rust BRD symbols remain linked in the C profile.' >&2; exit 1;
+    fi
     awk '$3 == "brd_submit_bio" { print }' "$evidence/kernel-symbols.tmp" \
         > "$evidence/brd-symbols.txt"
     rm -- "$evidence/kernel-symbols.tmp"
@@ -91,6 +94,69 @@ if [[ "$profile" == brd ]]; then
         sha256sum "$RUSIX_SOURCE/drivers/block/brd.c" "$out/drivers/block/brd.o"
     } > "$evidence/selection.log"
 fi
+if [[ "$profile" == brd-rust || "$profile" == brd-kunit || "$profile" == brd-ext4-rust || "$profile" == completion-c || "$profile" == completion-rust || "$profile" == server ]]; then
+    git -C "$RUSIX_SOURCE" diff --exit-code \
+        2926d88bb7fc4608fd942453d929c39e4e5ec006 -- drivers/block/brd.c \
+        > "$evidence/brd-reference.diff"
+    bash "$RUSIX_PROJECT/scripts/with-local-tools.sh" llvm-ar t \
+        "$out/drivers/block/built-in.a" > "$evidence/block-archive.txt"
+    grep -E '(^|/)brd_rust\.o$' "$evidence/block-archive.txt" > "$evidence/brd-objects.txt"
+    bash "$RUSIX_PROJECT/scripts/with-local-tools.sh" llvm-nm --defined-only --demangle \
+        "$out/vmlinux" > "$evidence/kernel-symbols.tmp"
+    if grep -Eq ' brd_submit_bio$' "$evidence/kernel-symbols.tmp"; then
+        echo 'C BRD submission remains linked in the Rust profile.' >&2; exit 1;
+    fi
+    grep -E 'brd.*Device.*Operations.*submit' "$evidence/kernel-symbols.tmp" \
+        > "$evidence/brd-symbols.txt"
+    rm -- "$evidence/kernel-symbols.tmp"
+    {
+        echo 'implementation=brd-rust'
+        cat "$evidence/brd-objects.txt" "$evidence/brd-symbols.txt"
+        sha256sum "$RUSIX_SOURCE/drivers/block/brd_rust.rs" \
+            "$RUSIX_SOURCE/drivers/block/brd_rust/store.rs" \
+            "$out/drivers/block/brd_rust.o" "$out/drivers/block/brd_rust/params.o"
+    } > "$evidence/selection.log"
+fi
+
+# Bind completion selection to the linked scheduler archive and defining object.
+bash "$RUSIX_PROJECT/scripts/with-local-tools.sh" llvm-ar t \
+    "$out/kernel/sched/built-in.a" > "$evidence/scheduler-archive.txt"
+if grep -qx 'CONFIG_RUSIX_COMPLETION_RUST=y' "$out/.config"; then
+    completion_impl=rust
+    completion_object="$out/kernel/sched/completion_rust.o"
+    grep -E '(^|/)completion_rust\.o$' "$evidence/scheduler-archive.txt" \
+        > "$evidence/completion-objects.txt"
+else
+    completion_impl=c
+    completion_object="$out/kernel/sched/build_utility.o"
+    if grep -Eq '(^|/)completion_rust\.o$' "$evidence/scheduler-archive.txt"; then
+        echo 'Rust completion object linked in the C selection.' >&2; exit 1;
+    fi
+    grep -E '(^|/)build_utility\.o$' "$evidence/scheduler-archive.txt" \
+        > "$evidence/completion-objects.txt"
+fi
+for item in "$completion_object" "$out/vmlinux"; do
+    bash "$RUSIX_PROJECT/scripts/with-local-tools.sh" llvm-nm --defined-only "$item" \
+        > "$evidence/completion-symbols.tmp"
+    awk '$2 == "T" && $3 == "complete" { print }' "$evidence/completion-symbols.tmp" \
+        > "$evidence/completion-current.txt"
+    [[ $(wc -l < "$evidence/completion-current.txt") == 1 ]] || {
+        echo "Expected one global complete definition in $item" >&2; exit 1;
+    }
+    printf '%s\n' "$item" >> "$evidence/completion-symbols.txt"
+    cat "$evidence/completion-current.txt" >> "$evidence/completion-symbols.txt"
+done
+rm -- "$evidence/completion-symbols.tmp" "$evidence/completion-current.txt"
+{
+    printf 'implementation=completion-%s\n' "$completion_impl"
+    cat "$evidence/completion-objects.txt" "$evidence/completion-symbols.txt"
+    sha256sum "$RUSIX_SOURCE/kernel/sched/completion.c" "$completion_object"
+    if [[ "$completion_impl" == rust ]]; then
+        sha256sum "$RUSIX_SOURCE/kernel/sched/completion_rust.rs" \
+            "$RUSIX_SOURCE/rust/helpers/raw_spinlock.c"
+    fi
+} > "$evidence/completion-selection.log"
+
 git -C "$RUSIX_SOURCE" status --porcelain > "$evidence/source-after.status"
 git -C "$RUSIX_SOURCE" rev-parse HEAD > "$evidence/source-after.commit"
 if [[ -s "$evidence/source-after.status" || $(cat "$evidence/source-after.commit") != "$source_commit" ]]; then

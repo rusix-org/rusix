@@ -1,0 +1,190 @@
+Linux version 6.18.58+ (rusix@ci) (Debian clang version 19.1.7 (3+b1), Debian LLD 19.1.7) #1 SMP Sun, 25 Oct 2026 21:45:47 -0700
+Command line: console=ttyS0 kunit.enable=1 kunit.autorun=1 kunit.filter_glob=rusix_* kunit_shutdown=reboot panic=-1
+BIOS-provided physical RAM map:
+BIOS-e820: [mem 0x0000000000000000-0x000000000009fbff] usable
+BIOS-e820: [mem 0x000000000009fc00-0x000000000009ffff] reserved
+BIOS-e820: [mem 0x00000000000f0000-0x00000000000fffff] reserved
+BIOS-e820: [mem 0x0000000000100000-0x000000001ffdffff] usable
+BIOS-e820: [mem 0x000000001ffe0000-0x000000001fffffff] reserved
+BIOS-e820: [mem 0x00000000feffc000-0x00000000feffffff] reserved
+BIOS-e820: [mem 0x00000000fffc0000-0x00000000ffffffff] reserved
+BIOS-e820: [mem 0x000000fd00000000-0x000000ffffffffff] reserved
+NX (Execute Disable) protection: active
+APIC: Static calls initialized
+SMBIOS 2.8 present.
+DMI: QEMU Standard PC (i440FX + PIIX, 1996), BIOS 1.16.3-debian-1.16.3-2 04/01/2014
+DMI: Memory slots populated: 1/1
+tsc: Fast TSC calibration using PIT
+tsc: Detected 1796.694 MHz processor
+last_pfn = 0x1ffe0 max_arch_pfn = 0x400000000
+MTRR map: 4 entries (3 fixed + 1 variable; max 19), built from 8 variable MTRRs
+x86/PAT: Configuration [0-7]: WB  WC  UC- UC  WB  WP  UC- WT  
+ACPI: Early table checksum verification disabled
+ACPI: RSDP 0x00000000000F52B0 000014 (v00 BOCHS )
+ACPI: RSDT 0x000000001FFE238A 000034 (v01 BOCHS  BXPC     00000001 BXPC 00000001)
+ACPI: FACP 0x000000001FFE2236 000074 (v01 BOCHS  BXPC     00000001 BXPC 00000001)
+ACPI: DSDT 0x000000001FFE0040 0021F6 (v01 BOCHS  BXPC     00000001 BXPC 00000001)
+ACPI: FACS 0x000000001FFE0000 000040
+ACPI: APIC 0x000000001FFE22AA 000080 (v03 BOCHS  BXPC     00000001 BXPC 00000001)
+ACPI: HPET 0x000000001FFE232A 000038 (v01 BOCHS  BXPC     00000001 BXPC 00000001)
+ACPI: WAET 0x000000001FFE2362 000028 (v01 BOCHS  BXPC     00000001 BXPC 00000001)
+ACPI: Reserving FACP table memory at [mem 0x1ffe2236-0x1ffe22a9]
+ACPI: Reserving DSDT table memory at [mem 0x1ffe0040-0x1ffe2235]
+ACPI: Reserving FACS table memory at [mem 0x1ffe0000-0x1ffe003f]
+ACPI: Reserving APIC table memory at [mem 0x1ffe22aa-0x1ffe2329]
+ACPI: Reserving HPET table memory at [mem 0x1ffe232a-0x1ffe2361]
+ACPI: Reserving WAET table memory at [mem 0x1ffe2362-0x1ffe2389]
+Zone ranges:
+  DMA      [mem 0x0000000000001000-0x0000000000ffffff]
+  DMA32    [mem 0x0000000001000000-0x000000001ffdffff]
+  Normal   empty
+Movable zone start for each node
+Early memory node ranges
+  node   0: [mem 0x0000000000001000-0x000000000009efff]
+  node   0: [mem 0x0000000000100000-0x000000001ffdffff]
+Initmem setup node 0 [mem 0x0000000000001000-0x000000001ffdffff]
+On node 0, zone DMA: 1 pages in unavailable ranges
+On node 0, zone DMA: 97 pages in unavailable ranges
+On node 0, zone DMA32: 32 pages in unavailable ranges
+ACPI: PM-Timer IO Port: 0x608
+ACPI: LAPIC_NMI (acpi_id[0xff] dfl dfl lint[0x1])
+IOAPIC[0]: apic_id 0, version 17, address 0xfec00000, GSI 0-23
+ACPI: INT_SRC_OVR (bus 0 bus_irq 0 global_irq 2 dfl dfl)
+ACPI: INT_SRC_OVR (bus 0 bus_irq 5 global_irq 5 high level)
+ACPI: INT_SRC_OVR (bus 0 bus_irq 9 global_irq 9 high level)
+ACPI: INT_SRC_OVR (bus 0 bus_irq 10 global_irq 10 high level)
+ACPI: INT_SRC_OVR (bus 0 bus_irq 11 global_irq 11 high level)
+ACPI: Using ACPI (MADT) for SMP configuration information
+ACPI: HPET id: 0x8086a201 base: 0xfed00000
+CPU topo: Max. logical packages:   1
+CPU topo: Max. logical dies:       1
+CPU topo: Max. dies per package:   1
+CPU topo: Max. threads per core:   1
+CPU topo: Num. cores per package:     2
+CPU topo: Num. threads per package:   2
+CPU topo: Allowing 2 present CPUs plus 0 hotplug CPUs
+[mem 0x20000000-0xfeffbfff] available for PCI devices
+clocksource: refined-jiffies: mask: 0xffffffff max_cycles: 0xffffffff, max_idle_ns: 7645519600211568 ns
+setup_percpu: NR_CPUS:2 nr_cpumask_bits:2 nr_cpu_ids:2 nr_node_ids:1
+percpu: Embedded 35 pages/cpu s113888 r0 d29472 u1048576
+Kernel command line: console=ttyS0 kunit.enable=1 kunit.autorun=1 kunit.filter_glob=rusix_* kunit_shutdown=reboot panic=-1
+printk: log buffer data + meta data: 131072 + 458752 = 589824 bytes
+Dentry cache hash table entries: 65536 (order: 7, 524288 bytes, linear)
+Inode-cache hash table entries: 32768 (order: 6, 262144 bytes, linear)
+Built 1 zonelists, mobility grouping on.  Total pages: 130942
+mem auto-init: stack:all(zero), heap alloc:off, heap free:off
+SLUB: HWalign=64, Order=0-3, MinObjects=0, CPUs=2, Nodes=1
+rcu: Hierarchical RCU implementation.
+rcu: RCU calculated value of scheduler-enlistment delay is 25 jiffies.
+NR_IRQS: 4352, nr_irqs: 56, preallocated irqs: 16
+rcu: srcu_init: Setting srcu_struct sizes based on contention.
+clocksource: jiffies: mask: 0xffffffff max_cycles: 0xffffffff, max_idle_ns: 7645041785100000 ns
+Console: colour VGA+ 80x25
+printk: legacy console [ttyS0] enabled
+ACPI: Core revision 20250807
+clocksource: hpet: mask: 0xffffffff max_cycles: 0xffffffff, max_idle_ns: 19112604467 ns
+APIC: Switch to symmetric I/O mode setup
+..TIMER: vector=0x30 apic1=0 pin1=2 apic2=-1 pin2=-1
+clocksource: tsc-early: mask: 0xffffffffffffffff max_cycles: 0x19e5f69a84d, max_idle_ns: 440795284313 ns
+Calibrating delay loop (skipped), value calculated using timer frequency.. 3593.38 BogoMIPS (lpj=7186776)
+Last level iTLB entries: 4KB 512, 2MB 255, 4MB 127
+Last level dTLB entries: 4KB 512, 2MB 255, 4MB 127, 1GB 0
+mitigations: Enabled attack vectors: SMT mitigations: off
+Spectre V2 : Vulnerable
+Spectre V1 : Vulnerable: __user pointer sanitization and usercopy barriers only; no swapgs barriers
+x86/fpu: x87 FPU will use FXSAVE
+Freeing SMP alternatives memory: 20K
+pid_max: default: 32768 minimum: 301
+Mount-cache hash table entries: 1024 (order: 1, 8192 bytes, linear)
+Mountpoint-cache hash table entries: 1024 (order: 1, 8192 bytes, linear)
+smpboot: CPU0: AMD QEMU Virtual CPU version 2.5+ (family: 0xf, model: 0x6b, stepping: 0x1)
+Performance Events: AMD PMU driver.
+... version:                   0
+... bit width:                 48
+... generic counters:          4
+... generic bitmap:            000000000000000f
+... fixed-purpose counters:    0
+... fixed-purpose bitmap:      0000000000000000
+... value mask:                0000ffffffffffff
+... max period:                00007fffffffffff
+... global_ctrl mask:          000000000000000f
+signal: max sigframe size: 1040
+rcu: Hierarchical SRCU implementation.
+rcu: 	Max phase no-delay instances is 1000.
+smp: Bringing up secondary CPUs ...
+smpboot: x86: Booting SMP configuration:
+.... node  #0, CPUs:      #1
+TSC synchronization [CPU#0 -> CPU#1]:
+Measured 71 cycles TSC warp between CPUs, turning off TSC clock.
+tsc: Marking TSC unstable due to check_tsc_sync_source failed
+smp: Brought up 1 node, 2 CPUs
+smpboot: Total of 2 processors activated (7186.41 BogoMIPS)
+Memory: 499680K/523768K available (5170K kernel code, 680K rwdata, 1044K rodata, 796K init, 1364K bss, 22224K reserved, 0K cma-reserved)
+posixtimers hash table entries: 1024 (order: 2, 16384 bytes, linear)
+futex hash table entries: 512 (32768 bytes on 1 NUMA nodes, total 32 KiB, linear).
+ACPI: Added _OSI(Module Device)
+ACPI: Added _OSI(Processor Device)
+ACPI: Added _OSI(Processor Aggregator Device)
+ACPI Error: AE_BAD_PARAMETER, During Region initialization (20250807/tbxfload-52)
+ACPI: Unable to load the System Description Tables
+ACPI Error: Could not remove SCI handler (20250807/evmisc-251)
+clocksource: Switched to clocksource hpet
+pnp: PnP ACPI: disabled
+clocksource: acpi_pm: mask: 0xffffff max_cycles: 0xffffff, max_idle_ns: 2085701024 ns
+platform rtc_cmos: registered platform RTC device (no PNP device found)
+workingset: timestamp_bits=62 max_order=17 bucket_order=0
+Serial: 8250/16550 driver, 4 ports, IRQ sharing disabled
+serial8250: ttyS0 at I/O 0x3f8 (irq = 4, base_baud = 115200) is a 16550A
+brd: Rust RAM disk driver loaded
+IPI shorthand broadcast: enabled
+KTAP version 1
+1..4
+    KTAP version 1
+    # Subtest: rusix_noio_scope
+    # speed: normal
+    1..1
+    # nested_scopes_restore_task_policy_on_error.speed: normal
+    ok 1 nested_scopes_restore_task_policy_on_error
+ok 1 rusix_noio_scope
+    KTAP version 1
+    # Subtest: rusix_xarray_insert
+    # speed: normal
+    1..2
+    # occupied_insert_returns_owner_without_replacing.speed: normal
+    ok 1 occupied_insert_returns_owner_without_replacing
+    # array_drop_releases_inserted_owner.speed: normal
+    ok 2 array_drop_releases_inserted_owner
+# rusix_xarray_insert: pass:2 fail:0 skip:0 total:2
+# Totals: pass:2 fail:0 skip:0 total:2
+ok 2 rusix_xarray_insert
+    KTAP version 1
+    # Subtest: rusix_brd_store
+    # speed: normal
+    1..3
+    # lookup_and_repeated_insert_preserve_page.speed: normal
+    ok 1 lookup_and_repeated_insert_preserve_page
+    # discard_keeps_inflight_page_alive_and_reinsert_is_independent.speed: normal
+    ok 2 discard_keeps_inflight_page_alive_and_reinsert_is_independent
+    # discard_excludes_end_and_is_idempotent.speed: normal
+    ok 3 discard_excludes_end_and_is_idempotent
+# rusix_brd_store: pass:3 fail:0 skip:0 total:3
+# Totals: pass:3 fail:0 skip:0 total:3
+ok 3 rusix_brd_store
+    KTAP version 1
+    # Subtest: rusix_brd_policy
+    # speed: normal
+    1..3
+brd: max_part can't exceed 256, resetting it
+brd: max_part can't exceed 256, resetting it
+brd: max_part can't exceed 256, resetting it
+    # minor_count_preserves_defined_normalization.speed: normal
+    ok 1 minor_count_preserves_defined_normalization
+    # invalid_minor_normalization_is_rejected.speed: normal
+    ok 2 invalid_minor_normalization_is_rejected
+    # legacy_size_retains_prefix_and_wrapping_semantics.speed: normal
+    ok 3 legacy_size_retains_prefix_and_wrapping_semantics
+# rusix_brd_policy: pass:3 fail:0 skip:0 total:3
+# Totals: pass:3 fail:0 skip:0 total:3
+ok 4 rusix_brd_policy
+reboot: Restarting system
+reboot: machine restart

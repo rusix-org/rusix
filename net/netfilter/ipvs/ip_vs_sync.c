@@ -32,7 +32,8 @@
  *					Persistence support, fwmark and time-out.
  */
 
-#define pr_fmt(fmt) "IPVS: " fmt
+#define KMSG_COMPONENT "IPVS"
+#define pr_fmt(fmt) KMSG_COMPONENT ": " fmt
 
 #include <linux/module.h>
 #include <linux/slab.h>
@@ -329,7 +330,7 @@ ip_vs_sync_buff_create(struct netns_ipvs *ipvs, unsigned int len)
 {
 	struct ip_vs_sync_buff *sb;
 
-	if (!(sb=kmalloc_obj(struct ip_vs_sync_buff, GFP_ATOMIC)))
+	if (!(sb=kmalloc(sizeof(struct ip_vs_sync_buff), GFP_ATOMIC)))
 		return NULL;
 
 	len = max_t(unsigned int, len + sizeof(struct ip_vs_sync_mesg),
@@ -417,7 +418,7 @@ ip_vs_sync_buff_create_v0(struct netns_ipvs *ipvs, unsigned int len)
 	struct ip_vs_sync_buff *sb;
 	struct ip_vs_sync_mesg_v0 *mesg;
 
-	if (!(sb=kmalloc_obj(struct ip_vs_sync_buff, GFP_ATOMIC)))
+	if (!(sb=kmalloc(sizeof(struct ip_vs_sync_buff), GFP_ATOMIC)))
 		return NULL;
 
 	len = max_t(unsigned int, len + sizeof(struct ip_vs_sync_mesg_v0),
@@ -543,15 +544,13 @@ static void ip_vs_sync_conn_v0(struct netns_ipvs *ipvs, struct ip_vs_conn *cp,
 	struct ip_vs_sync_conn_v0 *s;
 	struct ip_vs_sync_buff *buff;
 	struct ipvs_master_sync_state *ms;
-	u32 flags, seq_mask;
-	unsigned int len;
 	int id;
+	unsigned int len;
 
 	if (unlikely(cp->af != AF_INET))
 		return;
-	flags = READ_ONCE(cp->flags);
 	/* Do not sync ONE PACKET */
-	if (flags & IP_VS_CONN_F_ONE_PACKET)
+	if (cp->flags & IP_VS_CONN_F_ONE_PACKET)
 		return;
 
 	if (!ip_vs_sync_conn_needed(ipvs, cp, pkts))
@@ -566,8 +565,8 @@ static void ip_vs_sync_conn_v0(struct netns_ipvs *ipvs, struct ip_vs_conn *cp,
 	id = select_master_thread_id(ipvs, cp);
 	ms = &ipvs->ms[id];
 	buff = ms->sync_buff;
-	seq_mask = flags & IP_VS_CONN_F_SEQ_MASK;
-	len = seq_mask ? FULL_CONN_SIZE : SIMPLE_CONN_SIZE;
+	len = (cp->flags & IP_VS_CONN_F_SEQ_MASK) ? FULL_CONN_SIZE :
+		SIMPLE_CONN_SIZE;
 	if (buff) {
 		m = (struct ip_vs_sync_mesg_v0 *) buff->mesg;
 		/* Send buffer if it is for v1 */
@@ -599,9 +598,9 @@ static void ip_vs_sync_conn_v0(struct netns_ipvs *ipvs, struct ip_vs_conn *cp,
 	s->caddr = cp->caddr.ip;
 	s->vaddr = cp->vaddr.ip;
 	s->daddr = cp->daddr.ip;
-	s->flags = htons(flags & ~IP_VS_CONN_F_HASHED);
+	s->flags = htons(cp->flags & ~IP_VS_CONN_F_HASHED);
 	s->state = htons(cp->state);
-	if (seq_mask) {
+	if (cp->flags & IP_VS_CONN_F_SEQ_MASK) {
 		struct ip_vs_sync_conn_options *opt =
 			(struct ip_vs_sync_conn_options *)&s[1];
 		memcpy(opt, &cp->sync_conn_opt, sizeof(*opt));
@@ -637,7 +636,6 @@ void ip_vs_sync_conn(struct netns_ipvs *ipvs, struct ip_vs_conn *cp, int pkts)
 	int id;
 	__u8 *p;
 	unsigned int len, pe_name_len, pad;
-	u32 flags, seq_mask;
 
 	/* Handle old version of the protocol */
 	if (sysctl_sync_ver(ipvs) == 0) {
@@ -650,7 +648,6 @@ void ip_vs_sync_conn(struct netns_ipvs *ipvs, struct ip_vs_conn *cp, int pkts)
 sloop:
 	if (!ip_vs_sync_conn_needed(ipvs, cp, pkts))
 		goto control;
-	flags = READ_ONCE(cp->flags);
 
 	/* Sanity checks */
 	pe_name_len = 0;
@@ -678,8 +675,7 @@ sloop:
 #endif
 		len = sizeof(struct ip_vs_sync_v4);
 
-	seq_mask = flags & IP_VS_CONN_F_SEQ_MASK;
-	if (seq_mask)
+	if (cp->flags & IP_VS_CONN_F_SEQ_MASK)
 		len += sizeof(struct ip_vs_sync_conn_options) + 2;
 
 	if (cp->pe_data_len)
@@ -725,7 +721,7 @@ sloop:
 	/* Set message type  & copy members */
 	s->v4.type = (cp->af == AF_INET6 ? STYPE_F_INET6 : 0);
 	s->v4.ver_size = htons(len & SVER_MASK);	/* Version 0 */
-	s->v4.flags = htonl(flags & ~IP_VS_CONN_F_HASHED);
+	s->v4.flags = htonl(cp->flags & ~IP_VS_CONN_F_HASHED);
 	s->v4.state = htons(cp->state);
 	s->v4.protocol = cp->protocol;
 	s->v4.cport = cp->cport;
@@ -749,7 +745,7 @@ sloop:
 		s->v4.vaddr = cp->vaddr.ip;
 		s->v4.daddr = cp->daddr.ip;
 	}
-	if (seq_mask) {
+	if (cp->flags & IP_VS_CONN_F_SEQ_MASK) {
 		*(p++) = IPVS_OPT_SEQ_DATA;
 		*(p++) = sizeof(struct ip_vs_sync_conn_options);
 		hton_seq(&cp->in_seq, (struct ip_vs_seq *)p);
@@ -1376,7 +1372,7 @@ static void set_mcast_pmtudisc(struct sock *sk, int val)
 }
 
 /*
- *      Specify default interface for outgoing multicasts
+ *      Specifiy default interface for outgoing multicasts
  */
 static int set_mcast_if(struct sock *sk, struct net_device *dev)
 {
@@ -1529,7 +1525,7 @@ static int make_send_sock(struct netns_ipvs *ipvs, int id,
 	}
 
 	get_mcast_sockaddr(&mcast_addr, &salen, &ipvs->mcfg, id);
-	result = kernel_connect(sock, (struct sockaddr_unsized *)&mcast_addr,
+	result = kernel_connect(sock, (struct sockaddr *)&mcast_addr,
 				salen, 0);
 	if (result < 0) {
 		pr_err("Error connecting to the multicast addr\n");
@@ -1784,28 +1780,6 @@ int start_sync_thread(struct netns_ipvs *ipvs, struct ipvs_sync_daemon_cfg *c,
 	if (!ip_vs_use_count_inc())
 		return -ENOPROTOOPT;
 
-	/* Backup server can be started without services just to sync conns,
-	 * make sure conn_tab is created even if ipvs->enable is 0.
-	 */
-	if (state == IP_VS_STATE_BACKUP) {
-		mutex_lock(&ipvs->service_mutex);
-		if (!rcu_dereference_protected(ipvs->conn_tab, 1)) {
-			int lfactor = sysctl_conn_lfactor(ipvs);
-			int new_size = ip_vs_conn_desired_size(ipvs, NULL,
-							       lfactor);
-			struct ip_vs_rht *tc_new;
-
-			tc_new = ip_vs_conn_tab_alloc(ipvs, new_size, lfactor);
-			if (!tc_new) {
-				mutex_unlock(&ipvs->service_mutex);
-				result = -ENOMEM;
-				goto out_module;
-			}
-			rcu_assign_pointer(ipvs->conn_tab, tc_new);
-		}
-		mutex_unlock(&ipvs->service_mutex);
-	}
-
 	/* Do not hold one mutex and then to block on another */
 	for (;;) {
 		rtnl_lock();
@@ -1878,7 +1852,7 @@ int start_sync_thread(struct netns_ipvs *ipvs, struct ipvs_sync_daemon_cfg *c,
 		struct ipvs_master_sync_state *ms;
 
 		result = -ENOMEM;
-		ipvs->ms = kzalloc_objs(ipvs->ms[0], count);
+		ipvs->ms = kcalloc(count, sizeof(ipvs->ms[0]), GFP_KERNEL);
 		if (!ipvs->ms)
 			goto out;
 		ms = ipvs->ms;
@@ -1892,7 +1866,8 @@ int start_sync_thread(struct netns_ipvs *ipvs, struct ipvs_sync_daemon_cfg *c,
 		}
 	}
 	result = -ENOMEM;
-	ti = kzalloc_objs(struct ip_vs_sync_thread_data, count);
+	ti = kcalloc(count, sizeof(struct ip_vs_sync_thread_data),
+		     GFP_KERNEL);
 	if (!ti)
 		goto out;
 
@@ -1973,7 +1948,6 @@ out_early:
 	mutex_unlock(&ipvs->sync_mutex);
 	rtnl_unlock();
 
-out_module:
 	/* decrease the module use count */
 	ip_vs_use_count_dec();
 	return result;

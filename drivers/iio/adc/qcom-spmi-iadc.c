@@ -16,7 +16,6 @@
 #include <linux/platform_device.h>
 #include <linux/regmap.h>
 #include <linux/slab.h>
-#include <linux/spmi.h>
 
 /* IADC register and bit definition */
 #define IADC_REVISION2				0x1
@@ -95,6 +94,7 @@
  * struct iadc_chip - IADC Current ADC device structure.
  * @regmap: regmap for register read/write.
  * @dev: This device pointer.
+ * @base: base offset for the ADC peripheral.
  * @rsense: Values of the internal and external sense resister in micro Ohms.
  * @poll_eoc: Poll for end of conversion instead of waiting for IRQ.
  * @offset: Raw offset values for the internal and external channels.
@@ -105,6 +105,7 @@
 struct iadc_chip {
 	struct regmap	*regmap;
 	struct device	*dev;
+	u16		base;
 	bool		poll_eoc;
 	u32		rsense[2];
 	u16		offset[2];
@@ -113,59 +114,77 @@ struct iadc_chip {
 	struct completion complete;
 };
 
-static int iadc_reset(struct iadc_chip *iadc)
+static int iadc_read(struct iadc_chip *iadc, u16 offset, u8 *data)
 {
-	u32 data;
+	unsigned int val;
 	int ret;
 
-	ret = regmap_write(iadc->regmap, IADC_SEC_ACCESS, IADC_SEC_ACCESS_DATA);
+	ret = regmap_read(iadc->regmap, iadc->base + offset, &val);
 	if (ret < 0)
 		return ret;
 
-	ret = regmap_read(iadc->regmap, IADC_PERH_RESET_CTL3, &data);
+	*data = val;
+	return 0;
+}
+
+static int iadc_write(struct iadc_chip *iadc, u16 offset, u8 data)
+{
+	return regmap_write(iadc->regmap, iadc->base + offset, data);
+}
+
+static int iadc_reset(struct iadc_chip *iadc)
+{
+	u8 data;
+	int ret;
+
+	ret = iadc_write(iadc, IADC_SEC_ACCESS, IADC_SEC_ACCESS_DATA);
 	if (ret < 0)
 		return ret;
 
-	ret = regmap_write(iadc->regmap, IADC_SEC_ACCESS, IADC_SEC_ACCESS_DATA);
+	ret = iadc_read(iadc, IADC_PERH_RESET_CTL3, &data);
+	if (ret < 0)
+		return ret;
+
+	ret = iadc_write(iadc, IADC_SEC_ACCESS, IADC_SEC_ACCESS_DATA);
 	if (ret < 0)
 		return ret;
 
 	data |= IADC_FOLLOW_WARM_RB;
 
-	return regmap_write(iadc->regmap, IADC_PERH_RESET_CTL3, data);
+	return iadc_write(iadc, IADC_PERH_RESET_CTL3, data);
 }
 
 static int iadc_set_state(struct iadc_chip *iadc, bool state)
 {
-	return regmap_write(iadc->regmap, IADC_EN_CTL1, state ? IADC_EN_CTL1_SET : 0);
+	return iadc_write(iadc, IADC_EN_CTL1, state ? IADC_EN_CTL1_SET : 0);
 }
 
 static void iadc_status_show(struct iadc_chip *iadc)
 {
-	u32 mode, sta1, chan, dig, en, req;
+	u8 mode, sta1, chan, dig, en, req;
 	int ret;
 
-	ret = regmap_read(iadc->regmap, IADC_MODE_CTL, &mode);
+	ret = iadc_read(iadc, IADC_MODE_CTL, &mode);
 	if (ret < 0)
 		return;
 
-	ret = regmap_read(iadc->regmap, IADC_DIG_PARAM, &dig);
+	ret = iadc_read(iadc, IADC_DIG_PARAM, &dig);
 	if (ret < 0)
 		return;
 
-	ret = regmap_read(iadc->regmap, IADC_CH_SEL_CTL, &chan);
+	ret = iadc_read(iadc, IADC_CH_SEL_CTL, &chan);
 	if (ret < 0)
 		return;
 
-	ret = regmap_read(iadc->regmap, IADC_CONV_REQ, &req);
+	ret = iadc_read(iadc, IADC_CONV_REQ, &req);
 	if (ret < 0)
 		return;
 
-	ret = regmap_read(iadc->regmap, IADC_STATUS1, &sta1);
+	ret = iadc_read(iadc, IADC_STATUS1, &sta1);
 	if (ret < 0)
 		return;
 
-	ret = regmap_read(iadc->regmap, IADC_EN_CTL1, &en);
+	ret = iadc_read(iadc, IADC_EN_CTL1, &en);
 	if (ret < 0)
 		return;
 
@@ -181,34 +200,34 @@ static int iadc_configure(struct iadc_chip *iadc, int channel)
 
 	/* Mode selection */
 	mode = (IADC_OP_MODE_NORMAL << IADC_OP_MODE_SHIFT) | IADC_TRIM_EN;
-	ret = regmap_write(iadc->regmap, IADC_MODE_CTL, mode);
+	ret = iadc_write(iadc, IADC_MODE_CTL, mode);
 	if (ret < 0)
 		return ret;
 
 	/* Channel selection */
-	ret = regmap_write(iadc->regmap, IADC_CH_SEL_CTL, channel);
+	ret = iadc_write(iadc, IADC_CH_SEL_CTL, channel);
 	if (ret < 0)
 		return ret;
 
 	/* Digital parameter setup */
 	decim = IADC_DEF_DECIMATION << IADC_DIG_DEC_RATIO_SEL_SHIFT;
-	ret = regmap_write(iadc->regmap, IADC_DIG_PARAM, decim);
+	ret = iadc_write(iadc, IADC_DIG_PARAM, decim);
 	if (ret < 0)
 		return ret;
 
 	/* HW settle time delay */
-	ret = regmap_write(iadc->regmap, IADC_HW_SETTLE_DELAY, IADC_DEF_HW_SETTLE_TIME);
+	ret = iadc_write(iadc, IADC_HW_SETTLE_DELAY, IADC_DEF_HW_SETTLE_TIME);
 	if (ret < 0)
 		return ret;
 
-	ret = regmap_write(iadc->regmap, IADC_FAST_AVG_CTL, IADC_DEF_AVG_SAMPLES);
+	ret = iadc_write(iadc, IADC_FAST_AVG_CTL, IADC_DEF_AVG_SAMPLES);
 	if (ret < 0)
 		return ret;
 
 	if (IADC_DEF_AVG_SAMPLES)
-		ret = regmap_write(iadc->regmap, IADC_FAST_AVG_EN, IADC_FAST_AVG_EN_SET);
+		ret = iadc_write(iadc, IADC_FAST_AVG_EN, IADC_FAST_AVG_EN_SET);
 	else
-		ret = regmap_write(iadc->regmap, IADC_FAST_AVG_EN, 0);
+		ret = iadc_write(iadc, IADC_FAST_AVG_EN, 0);
 
 	if (ret < 0)
 		return ret;
@@ -221,19 +240,19 @@ static int iadc_configure(struct iadc_chip *iadc, int channel)
 		return ret;
 
 	/* Request conversion */
-	return regmap_write(iadc->regmap, IADC_CONV_REQ, IADC_CONV_REQ_SET);
+	return iadc_write(iadc, IADC_CONV_REQ, IADC_CONV_REQ_SET);
 }
 
 static int iadc_poll_wait_eoc(struct iadc_chip *iadc, unsigned int interval_us)
 {
 	unsigned int count, retry;
-	u32 sta1;
 	int ret;
+	u8 sta1;
 
 	retry = interval_us / IADC_CONV_TIME_MIN_US;
 
 	for (count = 0; count < retry; count++) {
-		ret = regmap_read(iadc->regmap, IADC_STATUS1, &sta1);
+		ret = iadc_read(iadc, IADC_STATUS1, &sta1);
 		if (ret < 0)
 			return ret;
 
@@ -247,6 +266,11 @@ static int iadc_poll_wait_eoc(struct iadc_chip *iadc, unsigned int interval_us)
 	iadc_status_show(iadc);
 
 	return -ETIMEDOUT;
+}
+
+static int iadc_read_result(struct iadc_chip *iadc, u16 *data)
+{
+	return regmap_bulk_read(iadc->regmap, iadc->base + IADC_DATA, data, 2);
 }
 
 static int iadc_do_conversion(struct iadc_chip *iadc, int chan, u16 *data)
@@ -273,7 +297,7 @@ static int iadc_do_conversion(struct iadc_chip *iadc, int chan, u16 *data)
 	}
 
 	if (!ret)
-		ret = regmap_bulk_read(iadc->regmap, IADC_DATA, data, sizeof(*data));
+		ret = iadc_read_result(iadc, data);
 exit:
 	iadc_set_state(iadc, false);
 	if (ret < 0)
@@ -369,33 +393,33 @@ static int iadc_update_offset(struct iadc_chip *iadc)
 
 static int iadc_version_check(struct iadc_chip *iadc)
 {
-	u32 val;
+	u8 val;
 	int ret;
 
-	ret = regmap_read(iadc->regmap, IADC_PERPH_TYPE, &val);
+	ret = iadc_read(iadc, IADC_PERPH_TYPE, &val);
 	if (ret < 0)
 		return ret;
 
 	if (val < IADC_PERPH_TYPE_ADC) {
-		dev_err(iadc->dev, "%u is not ADC\n", val);
+		dev_err(iadc->dev, "%d is not ADC\n", val);
 		return -EINVAL;
 	}
 
-	ret = regmap_read(iadc->regmap, IADC_PERPH_SUBTYPE, &val);
+	ret = iadc_read(iadc, IADC_PERPH_SUBTYPE, &val);
 	if (ret < 0)
 		return ret;
 
 	if (val < IADC_PERPH_SUBTYPE_IADC) {
-		dev_err(iadc->dev, "%u is not IADC\n", val);
+		dev_err(iadc->dev, "%d is not IADC\n", val);
 		return -EINVAL;
 	}
 
-	ret = regmap_read(iadc->regmap, IADC_REVISION2, &val);
+	ret = iadc_read(iadc, IADC_REVISION2, &val);
 	if (ret < 0)
 		return ret;
 
 	if (val < IADC_REVISION2_SUPPORTED_IADC) {
-		dev_err(iadc->dev, "revision %u not supported\n", val);
+		dev_err(iadc->dev, "revision %d not supported\n", val);
 		return -EINVAL;
 	}
 
@@ -405,7 +429,7 @@ static int iadc_version_check(struct iadc_chip *iadc)
 static int iadc_rsense_read(struct iadc_chip *iadc, struct device_node *node)
 {
 	int ret, sign, int_sense;
-	u32 deviation;
+	u8 deviation;
 
 	ret = of_property_read_u32(node, "qcom,external-resistor-micro-ohms",
 				   &iadc->rsense[IADC_EXT_RSENSE]);
@@ -417,7 +441,7 @@ static int iadc_rsense_read(struct iadc_chip *iadc, struct device_node *node)
 		return -EINVAL;
 	}
 
-	ret = regmap_read(iadc->regmap, IADC_NOMINAL_RSENSE, &deviation);
+	ret = iadc_read(iadc, IADC_NOMINAL_RSENSE, &deviation);
 	if (ret < 0)
 		return ret;
 
@@ -464,19 +488,12 @@ static void iadc_disable_irq_wake(void *data)
 
 static int iadc_probe(struct platform_device *pdev)
 {
-	struct regmap_config iadc_regmap_config = {
-		.reg_bits = 16,
-		.val_bits = 8,
-		.max_register = 0xff,
-		.fast_io = true,
-	};
 	struct device_node *node = pdev->dev.of_node;
 	struct device *dev = &pdev->dev;
-	struct spmi_subdevice *sub_sdev;
-	struct spmi_device *sparent;
 	struct iio_dev *indio_dev;
 	struct iadc_chip *iadc;
 	int ret, irq_eoc;
+	u32 res;
 
 	indio_dev = devm_iio_device_alloc(dev, sizeof(*iadc));
 	if (!indio_dev)
@@ -485,24 +502,18 @@ static int iadc_probe(struct platform_device *pdev)
 	iadc = iio_priv(indio_dev);
 	iadc->dev = dev;
 
-	sparent = spmi_get_parent_spmi_device(dev);
-	if (!sparent)
+	iadc->regmap = dev_get_regmap(dev->parent, NULL);
+	if (!iadc->regmap)
 		return -ENODEV;
-
-	sub_sdev = devm_spmi_subdevice_alloc_and_add(dev, sparent);
-	if (IS_ERR(sub_sdev))
-		return PTR_ERR(sub_sdev);
 
 	init_completion(&iadc->complete);
 	mutex_init(&iadc->lock);
 
-	ret = device_property_read_u32(dev, "reg", &iadc_regmap_config.reg_base);
+	ret = of_property_read_u32(node, "reg", &res);
 	if (ret < 0)
 		return -ENODEV;
 
-	iadc->regmap = devm_regmap_init_spmi_ext(&sub_sdev->sdev, &iadc_regmap_config);
-	if (IS_ERR(iadc->regmap))
-		return PTR_ERR(iadc->regmap);
+	iadc->base = res;
 
 	ret = iadc_version_check(iadc);
 	if (ret < 0)
@@ -585,4 +596,3 @@ MODULE_ALIAS("platform:qcom-spmi-iadc");
 MODULE_DESCRIPTION("Qualcomm SPMI PMIC current ADC driver");
 MODULE_LICENSE("GPL v2");
 MODULE_AUTHOR("Ivan T. Ivanov <iivanov@mm-sol.com>");
-MODULE_IMPORT_NS("SPMI");

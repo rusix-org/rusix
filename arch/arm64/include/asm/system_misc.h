@@ -7,7 +7,7 @@
 #ifndef __ASM_SYSTEM_MISC_H
 #define __ASM_SYSTEM_MISC_H
 
-#ifndef __ASSEMBLER__
+#ifndef __ASSEMBLY__
 
 #include <linux/compiler.h>
 #include <linux/linkage.h>
@@ -28,6 +28,6 @@ void arm64_notify_die(const char *str, struct pt_regs *regs,
 struct mm_struct;
 extern void __show_regs(struct pt_regs *);
 
-#endif	/* __ASSEMBLER__ */
+#endif	/* __ASSEMBLY__ */
 
 #endif	/* __ASM_SYSTEM_MISC_H */

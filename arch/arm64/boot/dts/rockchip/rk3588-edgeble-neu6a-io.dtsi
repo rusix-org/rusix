@@ -239,6 +239,7 @@
 
 &sdmmc {
 	bus-width = <4>;
+	cap-mmc-highspeed;
 	cap-sd-highspeed;
 	disable-wp;
 	no-sdio;
@@ -251,7 +252,6 @@
 
 &uart2 {
 	pinctrl-0 = <&uart2m0_xfer>;
-	pinctrl-names = "default";
 	status = "okay";
 };
 

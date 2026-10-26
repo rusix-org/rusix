@@ -92,7 +92,7 @@ static int slurp_symtab(bfd *abfd, struct a2l_data *a2l)
 	long storage;
 	long symcount;
 	asymbol **syms;
-	bool dynamic = false;
+	bfd_boolean dynamic = FALSE;
 
 	if ((bfd_get_file_flags(abfd) & HAS_SYMS) == 0)
 		return bfd_error(bfd_get_filename(abfd));
@@ -100,7 +100,7 @@ static int slurp_symtab(bfd *abfd, struct a2l_data *a2l)
 	storage = bfd_get_symtab_upper_bound(abfd);
 	if (storage == 0L) {
 		storage = bfd_get_dynamic_symtab_upper_bound(abfd);
-		dynamic = true;
+		dynamic = TRUE;
 	}
 	if (storage < 0L)
 		return bfd_error(bfd_get_filename(abfd));
@@ -234,7 +234,7 @@ int libbfd__addr2line(const char *dso_name, u64 addr,
 	}
 
 	if (a2l == NULL) {
-		if (!symbol_conf.addr2line_disable_warn)
+		if (!symbol_conf.disable_add2line_warn)
 			pr_warning("addr2line_init failed for %s\n", dso_name);
 		return 0;
 	}

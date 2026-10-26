@@ -6,13 +6,14 @@
 
 /**
  * cache_key_gc - Releases the reference of a cache key segment.
+ * @cache: Pointer to the pcache_cache structure.
  * @key: Pointer to the cache key to be garbage collected.
  *
  * This function decrements the reference count of the cache segment
  * associated with the given key. If the reference count drops to zero,
  * the segment may be invalidated and reused.
  */
-static void cache_key_gc(struct pcache_cache_key *key)
+static void cache_key_gc(struct pcache_cache *cache, struct pcache_cache_key *key)
 {
 	cache_seg_put(key->cache_pos.cache_seg);
 }
@@ -168,7 +169,7 @@ void pcache_cache_gc_fn(struct work_struct *work)
 				return;
 			}
 
-			cache_key_gc(key);
+			cache_key_gc(cache, key);
 		}
 
 		pcache_dev_debug(pcache, "gc advance: %u:%u %u\n",

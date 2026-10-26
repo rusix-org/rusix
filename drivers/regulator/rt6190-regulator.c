@@ -12,6 +12,7 @@
 #include <linux/i2c.h>
 #include <linux/interrupt.h>
 #include <linux/kernel.h>
+#include <linux/mod_devicetable.h>
 #include <linux/module.h>
 #include <linux/pm_runtime.h>
 #include <linux/regmap.h>
@@ -108,27 +109,19 @@ static int rt6190_out_enable(struct regulator_dev *rdev)
 	ret = regmap_raw_read(regmap, RT6190_REG_OUTV, out_cfg,
 			      sizeof(out_cfg));
 	if (ret)
-		goto err_pm_put;
+		return ret;
 
 	ret = regulator_enable_regmap(rdev);
 	if (ret)
-		goto err_pm_put;
+		return ret;
 
 	ret = regmap_raw_write(regmap, RT6190_REG_OUTV, out_cfg,
 			       sizeof(out_cfg));
 	if (ret)
-		goto err_pm_put;
+		return ret;
 
-	ret = regmap_update_bits(regmap, RT6190_REG_SET5, RT6190_ENGCP_MASK,
-				 RT6190_ENGCP_MASK);
-	if (ret)
-		goto err_pm_put;
-
-	return 0;
-
-err_pm_put:
-	pm_runtime_put(data->dev);
-	return ret;
+	return regmap_update_bits(regmap, RT6190_REG_SET5, RT6190_ENGCP_MASK,
+				  RT6190_ENGCP_MASK);
 }
 
 static int rt6190_out_disable(struct regulator_dev *rdev)

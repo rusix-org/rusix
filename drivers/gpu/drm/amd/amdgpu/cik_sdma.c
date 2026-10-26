@@ -27,7 +27,6 @@
 
 #include "amdgpu.h"
 #include "amdgpu_ucode.h"
-#include "amdgpu_sdma.h"
 #include "amdgpu_trace.h"
 #include "cikd.h"
 #include "cik.h"
@@ -54,7 +53,10 @@ static const u32 sdma_offsets[SDMA_MAX_INSTANCE] =
 static void cik_sdma_set_ring_funcs(struct amdgpu_device *adev);
 static void cik_sdma_set_irq_funcs(struct amdgpu_device *adev);
 static void cik_sdma_set_buffer_funcs(struct amdgpu_device *adev);
+static void cik_sdma_set_vm_pte_funcs(struct amdgpu_device *adev);
 static int cik_sdma_soft_reset(struct amdgpu_ip_block *ip_block);
+
+u32 amdgpu_cik_gpu_check_soft_reset(struct amdgpu_device *adev);
 
 MODULE_FIRMWARE("amdgpu/bonaire_sdma.bin");
 MODULE_FIRMWARE("amdgpu/bonaire_sdma1.bin");
@@ -124,8 +126,7 @@ static int cik_sdma_init_microcode(struct amdgpu_device *adev)
 	case CHIP_MULLINS:
 		chip_name = "mullins";
 		break;
-	default:
-		return -EINVAL;
+	default: BUG();
 	}
 
 	for (i = 0; i < adev->sdma.num_instances; i++) {
@@ -318,6 +319,18 @@ static void cik_sdma_gfx_stop(struct amdgpu_device *adev)
 }
 
 /**
+ * cik_sdma_rlc_stop - stop the compute async dma engines
+ *
+ * @adev: amdgpu_device pointer
+ *
+ * Stop the compute async dma queues (CIK).
+ */
+static void cik_sdma_rlc_stop(struct amdgpu_device *adev)
+{
+	/* XXX todo */
+}
+
+/**
  * cik_ctx_switch_enable - stop the async dma engines context switch
  *
  * @adev: amdgpu_device pointer
@@ -389,6 +402,7 @@ static void cik_sdma_enable(struct amdgpu_device *adev, bool enable)
 
 	if (!enable) {
 		cik_sdma_gfx_stop(adev);
+		cik_sdma_rlc_stop(adev);
 	}
 
 	for (i = 0; i < adev->sdma.num_instances; i++) {
@@ -490,6 +504,20 @@ static int cik_sdma_gfx_resume(struct amdgpu_device *adev)
 }
 
 /**
+ * cik_sdma_rlc_resume - setup and start the async dma engines
+ *
+ * @adev: amdgpu_device pointer
+ *
+ * Set up the compute DMA queues and enable them (CIK).
+ * Returns 0 for success, error for failure.
+ */
+static int cik_sdma_rlc_resume(struct amdgpu_device *adev)
+{
+	/* XXX todo */
+	return 0;
+}
+
+/**
  * cik_sdma_load_microcode - load the sDMA ME ucode
  *
  * @adev: amdgpu_device pointer
@@ -553,6 +581,9 @@ static int cik_sdma_start(struct amdgpu_device *adev)
 	r = cik_sdma_gfx_resume(adev);
 	if (r)
 		return r;
+	r = cik_sdma_rlc_resume(adev);
+	if (r)
+		return r;
 
 	return 0;
 }
@@ -575,7 +606,7 @@ static int cik_sdma_ring_test_ring(struct amdgpu_ring *ring)
 	u32 tmp;
 	u64 gpu_addr;
 
-	r = amdgpu_wb_get(adev, &index);
+	r = amdgpu_device_wb_get(adev, &index);
 	if (r)
 		return r;
 
@@ -605,7 +636,7 @@ static int cik_sdma_ring_test_ring(struct amdgpu_ring *ring)
 		r = -ETIMEDOUT;
 
 error_free_wb:
-	amdgpu_wb_free(adev, index);
+	amdgpu_device_wb_free(adev, index);
 	return r;
 }
 
@@ -621,43 +652,36 @@ error_free_wb:
 static int cik_sdma_ring_test_ib(struct amdgpu_ring *ring, long timeout)
 {
 	struct amdgpu_device *adev = ring->adev;
-	struct amdgpu_job *job;
-	struct amdgpu_ib *ib;
+	struct amdgpu_ib ib;
 	struct dma_fence *f = NULL;
 	unsigned index;
 	u32 tmp = 0;
 	u64 gpu_addr;
 	long r;
 
-	r = amdgpu_wb_get(adev, &index);
+	r = amdgpu_device_wb_get(adev, &index);
 	if (r)
 		return r;
 
 	gpu_addr = adev->wb.gpu_addr + (index * 4);
 	tmp = 0xCAFEDEAD;
 	adev->wb.wb[index] = cpu_to_le32(tmp);
-
-	r = amdgpu_job_alloc_with_ib(ring->adev, NULL, NULL, 256,
-				     AMDGPU_IB_POOL_DIRECT,
-				     AMDGPU_KERNEL_JOB_ID_SDMA_RING_TEST,
-				     &job);
+	memset(&ib, 0, sizeof(ib));
+	r = amdgpu_ib_get(adev, NULL, 256,
+					AMDGPU_IB_POOL_DIRECT, &ib);
 	if (r)
 		goto err0;
-	ib = &job->ibs[0];
 
-	ib->ptr[0] = SDMA_PACKET(SDMA_OPCODE_WRITE,
-				 SDMA_WRITE_SUB_OPCODE_LINEAR, 0);
-	ib->ptr[1] = lower_32_bits(gpu_addr);
-	ib->ptr[2] = upper_32_bits(gpu_addr);
-	ib->ptr[3] = 1;
-	ib->ptr[4] = 0xDEADBEEF;
-	ib->length_dw = 5;
-
-	r = amdgpu_job_submit_direct(job, ring, &f);
-	if (r) {
-		amdgpu_job_free(job);
+	ib.ptr[0] = SDMA_PACKET(SDMA_OPCODE_WRITE,
+				SDMA_WRITE_SUB_OPCODE_LINEAR, 0);
+	ib.ptr[1] = lower_32_bits(gpu_addr);
+	ib.ptr[2] = upper_32_bits(gpu_addr);
+	ib.ptr[3] = 1;
+	ib.ptr[4] = 0xDEADBEEF;
+	ib.length_dw = 5;
+	r = amdgpu_ib_schedule(ring, 1, &ib, NULL, &f);
+	if (r)
 		goto err1;
-	}
 
 	r = dma_fence_wait_timeout(f, false, timeout);
 	if (r == 0) {
@@ -673,9 +697,10 @@ static int cik_sdma_ring_test_ib(struct amdgpu_ring *ring, long timeout)
 		r = -EINVAL;
 
 err1:
+	amdgpu_ib_free(&ib, NULL);
 	dma_fence_put(f);
 err0:
-	amdgpu_wb_free(adev, index);
+	amdgpu_device_wb_free(adev, index);
 	return r;
 }
 
@@ -894,14 +919,6 @@ static void cik_enable_sdma_mgls(struct amdgpu_device *adev,
 	}
 }
 
-static const struct amdgpu_vm_pte_funcs cik_sdma_vm_pte_funcs = {
-	.copy_pte_num_dw = 7,
-	.copy_pte = cik_sdma_vm_copy_pte,
-
-	.write_pte = cik_sdma_vm_write_pte,
-	.set_pte_pde = cik_sdma_vm_set_pte_pde,
-};
-
 static int cik_sdma_early_init(struct amdgpu_ip_block *ip_block)
 {
 	struct amdgpu_device *adev = ip_block->adev;
@@ -915,7 +932,8 @@ static int cik_sdma_early_init(struct amdgpu_ip_block *ip_block)
 
 	cik_sdma_set_ring_funcs(adev);
 	cik_sdma_set_irq_funcs(adev);
-	amdgpu_sdma_set_vm_pte_scheds(adev, &cik_sdma_vm_pte_funcs);
+	cik_sdma_set_buffer_funcs(adev);
+	cik_sdma_set_vm_pte_funcs(adev);
 
 	return 0;
 }
@@ -975,15 +993,8 @@ static int cik_sdma_sw_fini(struct amdgpu_ip_block *ip_block)
 static int cik_sdma_hw_init(struct amdgpu_ip_block *ip_block)
 {
 	struct amdgpu_device *adev = ip_block->adev;
-	int r;
 
-	r = cik_sdma_start(adev);
-	if (r)
-		return r;
-
-	cik_sdma_set_buffer_funcs(adev);
-
-	return 0;
+	return cik_sdma_start(adev);
 }
 
 static int cik_sdma_hw_fini(struct amdgpu_ip_block *ip_block)
@@ -1200,6 +1211,7 @@ static const struct amd_ip_funcs cik_sdma_ip_funcs = {
 	.hw_fini = cik_sdma_hw_fini,
 	.suspend = cik_sdma_suspend,
 	.resume = cik_sdma_resume,
+	.is_idle = cik_sdma_is_idle,
 	.wait_for_idle = cik_sdma_wait_for_idle,
 	.soft_reset = cik_sdma_soft_reset,
 	.set_clockgating_state = cik_sdma_set_clockgating_state,
@@ -1321,7 +1333,28 @@ static const struct amdgpu_buffer_funcs cik_sdma_buffer_funcs = {
 
 static void cik_sdma_set_buffer_funcs(struct amdgpu_device *adev)
 {
-	amdgpu_sdma_set_buffer_funcs_scheds(adev, &cik_sdma_buffer_funcs);
+	adev->mman.buffer_funcs = &cik_sdma_buffer_funcs;
+	adev->mman.buffer_funcs_ring = &adev->sdma.instance[0].ring;
+}
+
+static const struct amdgpu_vm_pte_funcs cik_sdma_vm_pte_funcs = {
+	.copy_pte_num_dw = 7,
+	.copy_pte = cik_sdma_vm_copy_pte,
+
+	.write_pte = cik_sdma_vm_write_pte,
+	.set_pte_pde = cik_sdma_vm_set_pte_pde,
+};
+
+static void cik_sdma_set_vm_pte_funcs(struct amdgpu_device *adev)
+{
+	unsigned i;
+
+	adev->vm_manager.vm_pte_funcs = &cik_sdma_vm_pte_funcs;
+	for (i = 0; i < adev->sdma.num_instances; i++) {
+		adev->vm_manager.vm_pte_scheds[i] =
+			&adev->sdma.instance[i].ring.sched;
+	}
+	adev->vm_manager.vm_pte_num_scheds = adev->sdma.num_instances;
 }
 
 const struct amdgpu_ip_block_version cik_sdma_ip_block =

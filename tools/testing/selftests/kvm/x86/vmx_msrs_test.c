@@ -12,10 +12,11 @@
 #include "kvm_util.h"
 #include "vmx.h"
 
-static void vmx_fixed1_msr_test(struct kvm_vcpu *vcpu, u32 msr_index, u64 mask)
+static void vmx_fixed1_msr_test(struct kvm_vcpu *vcpu, uint32_t msr_index,
+				  uint64_t mask)
 {
-	u64 val = vcpu_get_msr(vcpu, msr_index);
-	u64 bit;
+	uint64_t val = vcpu_get_msr(vcpu, msr_index);
+	uint64_t bit;
 
 	mask &= val;
 
@@ -25,10 +26,11 @@ static void vmx_fixed1_msr_test(struct kvm_vcpu *vcpu, u32 msr_index, u64 mask)
 	}
 }
 
-static void vmx_fixed0_msr_test(struct kvm_vcpu *vcpu, u32 msr_index, u64 mask)
+static void vmx_fixed0_msr_test(struct kvm_vcpu *vcpu, uint32_t msr_index,
+				uint64_t mask)
 {
-	u64 val = vcpu_get_msr(vcpu, msr_index);
-	u64 bit;
+	uint64_t val = vcpu_get_msr(vcpu, msr_index);
+	uint64_t bit;
 
 	mask = ~mask | val;
 
@@ -38,7 +40,7 @@ static void vmx_fixed0_msr_test(struct kvm_vcpu *vcpu, u32 msr_index, u64 mask)
 	}
 }
 
-static void vmx_fixed0and1_msr_test(struct kvm_vcpu *vcpu, u32 msr_index)
+static void vmx_fixed0and1_msr_test(struct kvm_vcpu *vcpu, uint32_t msr_index)
 {
 	vmx_fixed0_msr_test(vcpu, msr_index, GENMASK_ULL(31, 0));
 	vmx_fixed1_msr_test(vcpu, msr_index, GENMASK_ULL(63, 32));
@@ -66,10 +68,10 @@ static void vmx_save_restore_msrs_test(struct kvm_vcpu *vcpu)
 }
 
 static void __ia32_feature_control_msr_test(struct kvm_vcpu *vcpu,
-					    u64 msr_bit,
+					    uint64_t msr_bit,
 					    struct kvm_x86_cpu_feature feature)
 {
-	u64 val;
+	uint64_t val;
 
 	vcpu_clear_cpuid_feature(vcpu, feature);
 
@@ -88,7 +90,7 @@ static void __ia32_feature_control_msr_test(struct kvm_vcpu *vcpu,
 
 static void ia32_feature_control_msr_test(struct kvm_vcpu *vcpu)
 {
-	u64 supported_bits = FEAT_CTL_LOCKED |
+	uint64_t supported_bits = FEAT_CTL_LOCKED |
 				  FEAT_CTL_VMX_ENABLED_INSIDE_SMX |
 				  FEAT_CTL_VMX_ENABLED_OUTSIDE_SMX |
 				  FEAT_CTL_SGX_LC_ENABLED |

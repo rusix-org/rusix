@@ -203,7 +203,7 @@ static void nvmet_execute_get_supported_log_pages(struct nvmet_req *req)
 	struct nvme_supported_log *logs;
 	u16 status;
 
-	logs = kzalloc_obj(*logs);
+	logs = kzalloc(sizeof(*logs), GFP_KERNEL);
 	if (!logs) {
 		status = NVME_SC_INTERNAL;
 		goto out;
@@ -298,7 +298,7 @@ static void nvmet_execute_get_log_page_rmi(struct nvmet_req *req)
 	if (status)
 		goto out;
 
-	if (!req->ns->bdev || !bdev_rot(req->ns->bdev)) {
+	if (!req->ns->bdev || bdev_nonrot(req->ns->bdev)) {
 		status = NVME_SC_INVALID_FIELD | NVME_STATUS_DNR;
 		goto out;
 	}
@@ -308,7 +308,7 @@ static void nvmet_execute_get_log_page_rmi(struct nvmet_req *req)
 		goto out;
 	}
 
-	log = kzalloc_obj(*log);
+	log = kzalloc(sizeof(*log), GFP_KERNEL);
 	if (!log) {
 		status = NVME_SC_INTERNAL;
 		goto out;
@@ -336,7 +336,7 @@ static void nvmet_execute_get_log_page_smart(struct nvmet_req *req)
 	if (req->transfer_len != sizeof(*log))
 		goto out;
 
-	log = kzalloc_obj(*log);
+	log = kzalloc(sizeof(*log), GFP_KERNEL);
 	if (!log)
 		goto out;
 
@@ -411,7 +411,7 @@ static void nvmet_execute_get_log_cmd_effects_ns(struct nvmet_req *req)
 	struct nvme_effects_log *log;
 	u16 status = NVME_SC_SUCCESS;
 
-	log = kzalloc_obj(*log);
+	log = kzalloc(sizeof(*log), GFP_KERNEL);
 	if (!log) {
 		status = NVME_SC_INTERNAL;
 		goto out;
@@ -506,7 +506,7 @@ static void nvmet_execute_get_log_page_endgrp(struct nvmet_req *req)
 	if (status)
 		goto out;
 
-	log = kzalloc_obj(*log);
+	log = kzalloc(sizeof(*log), GFP_KERNEL);
 	if (!log) {
 		status = NVME_SC_INTERNAL;
 		goto out;
@@ -544,7 +544,8 @@ static void nvmet_execute_get_log_page_ana(struct nvmet_req *req)
 	u16 status;
 
 	status = NVME_SC_INTERNAL;
-	desc = kmalloc_flex(*desc, nsids, NVMET_MAX_NAMESPACES);
+	desc = kmalloc(struct_size(desc, nsids, NVMET_MAX_NAMESPACES),
+		       GFP_KERNEL);
 	if (!desc)
 		goto out;
 
@@ -582,7 +583,7 @@ static void nvmet_execute_get_log_page_features(struct nvmet_req *req)
 	struct nvme_supported_features_log *features;
 	u16 status;
 
-	features = kzalloc_obj(*features);
+	features = kzalloc(sizeof(*features), GFP_KERNEL);
 	if (!features) {
 		status = NVME_SC_INTERNAL;
 		goto out;
@@ -661,7 +662,7 @@ static void nvmet_execute_identify_ctrl(struct nvmet_req *req)
 		mutex_unlock(&subsys->lock);
 	}
 
-	id = kzalloc_obj(*id);
+	id = kzalloc(sizeof(*id), GFP_KERNEL);
 	if (!id) {
 		status = NVME_SC_INTERNAL;
 		goto out;
@@ -689,16 +690,18 @@ static void nvmet_execute_identify_ctrl(struct nvmet_req *req)
 	id->cmic = NVME_CTRL_CMIC_MULTI_PORT | NVME_CTRL_CMIC_MULTI_CTRL |
 		NVME_CTRL_CMIC_ANA;
 
-	/* Limit MDTS according to port config or transport capability */
-	id->mdts = nvmet_ctrl_mdts(req);
+	/* Limit MDTS according to transport capability */
+	if (ctrl->ops->get_mdts)
+		id->mdts = ctrl->ops->get_mdts(ctrl);
+	else
+		id->mdts = 0;
+
 	id->cntlid = cpu_to_le16(ctrl->cntlid);
 	id->ver = cpu_to_le32(ctrl->subsys->ver);
 
 	/* XXX: figure out what to do about RTD3R/RTD3 */
 	id->oaes = cpu_to_le32(NVMET_AEN_CFG_OPTIONAL);
-	ctratt = NVME_CTRL_ATTR_HID_128_BIT;
-	if (ctrl->tbkas)
-		ctratt |= NVME_CTRL_ATTR_TBKAS;
+	ctratt = NVME_CTRL_ATTR_HID_128_BIT | NVME_CTRL_ATTR_TBKAS;
 	if (nvmet_is_pci_ctrl(ctrl))
 		ctratt |= NVME_CTRL_ATTR_RHII;
 	id->ctratt = cpu_to_le32(ctratt);
@@ -707,7 +710,7 @@ static void nvmet_execute_identify_ctrl(struct nvmet_req *req)
 
 	/*
 	 * We don't really have a practical limit on the number of abort
-	 * commands.  But we don't do anything useful for abort either, so
+	 * comands.  But we don't do anything useful for abort either, so
 	 * no point in allowing more abort commands than the spec requires.
 	 */
 	id->acl = 3;
@@ -808,7 +811,7 @@ static void nvmet_execute_identify_ns(struct nvmet_req *req)
 		goto out;
 	}
 
-	id = kzalloc_obj(*id);
+	id = kzalloc(sizeof(*id), GFP_KERNEL);
 	if (!id) {
 		status = NVME_SC_INTERNAL;
 		goto out;
@@ -1052,13 +1055,11 @@ static void nvme_execute_identify_ns_nvm(struct nvmet_req *req)
 	if (status)
 		goto out;
 
-	id = kzalloc_obj(*id);
+	id = kzalloc(sizeof(*id), GFP_KERNEL);
 	if (!id) {
 		status = NVME_SC_INTERNAL;
 		goto out;
 	}
-	if (req->ns->bdev)
-		nvmet_bdev_set_nvm_limits(req->ns->bdev, id);
 	status = nvmet_copy_to_sgl(req, 0, id, sizeof(*id));
 	kfree(id);
 out:
@@ -1074,7 +1075,7 @@ static void nvmet_execute_id_cs_indep(struct nvmet_req *req)
 	if (status)
 		goto out;
 
-	id = kzalloc_obj(*id);
+	id = kzalloc(sizeof(*id), GFP_KERNEL);
 	if (!id) {
 		status = NVME_SC_INTERNAL;
 		goto out;
@@ -1085,7 +1086,7 @@ static void nvmet_execute_id_cs_indep(struct nvmet_req *req)
 	id->nmic = NVME_NS_NMIC_SHARED;
 	if (req->ns->readonly)
 		id->nsattr |= NVME_NS_ATTR_RO;
-	if (req->ns->bdev && bdev_rot(req->ns->bdev))
+	if (req->ns->bdev && !bdev_nonrot(req->ns->bdev))
 		id->nsfeat |= NVME_NS_ROTATIONAL;
 	/*
 	 * We need flush command to flush the file's metadata,
@@ -1605,7 +1606,7 @@ void nvmet_execute_keep_alive(struct nvmet_req *req)
 
 	pr_debug("ctrl %d update keep-alive timer for %d secs\n",
 		ctrl->cntlid, ctrl->kato);
-	mod_delayed_work(system_percpu_wq, &ctrl->ka_work, ctrl->kato * HZ);
+	mod_delayed_work(system_wq, &ctrl->ka_work, ctrl->kato * HZ);
 out:
 	nvmet_req_complete(req, status);
 }

@@ -45,12 +45,11 @@ static void alt_debug_modify(int type, unsigned int nr, bool clear)
 
 static char *alt_debug_parse(int type, char *str)
 {
-	unsigned long val, endval, limit;
+	unsigned long val, endval;
 	char *endp;
 	bool clear;
 	int i;
 
-	limit = type == ALT_TYPE_FACILITY ? MAX_FACILITY_BIT : MAX_MFEATURE_BIT;
 	if (*str == ':') {
 		str++;
 	} else {
@@ -74,7 +73,7 @@ static char *alt_debug_parse(int type, char *str)
 			if (str == endp)
 				break;
 			str = endp;
-			while (val <= endval && val < limit) {
+			while (val <= endval) {
 				alt_debug_modify(type, val, clear);
 				val++;
 			}

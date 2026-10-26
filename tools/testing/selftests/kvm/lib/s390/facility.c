@@ -10,5 +10,5 @@
 
 #include "facility.h"
 
-u64 stfl_doublewords[NB_STFL_DOUBLEWORDS];
+uint64_t stfl_doublewords[NB_STFL_DOUBLEWORDS];
 bool stfle_flag;

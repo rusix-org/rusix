@@ -17,7 +17,7 @@
 #include <linux/swap.h>
 #include <linux/capability.h>
 #include <linux/fs.h>
-#include <linux/leafops.h>
+#include <linux/swapops.h>
 #include <linux/highmem.h>
 #include <linux/security.h>
 #include <linux/syscalls.h>
@@ -25,10 +25,10 @@
 #include <linux/uaccess.h>
 #include <linux/userfaultfd_k.h>
 #include <linux/mempolicy.h>
-#include <linux/pgalloc.h>
 
 #include <asm/cacheflush.h>
 #include <asm/tlb.h>
+#include <asm/pgalloc.h>
 
 #include "internal.h"
 
@@ -68,7 +68,7 @@ struct vma_remap_struct {
 	bool populate_expand;		/* mlock()'d expanded, must populate. */
 	enum mremap_type remap_type;	/* expand, shrink, etc. */
 	bool mmap_locked;		/* Is mm currently write-locked? */
-	unsigned long charged;		/* If VMA_ACCOUNT_BIT, # pgs to account */
+	unsigned long charged;		/* If VM_ACCOUNT, # pages to account. */
 	bool vmi_needs_invalidate;	/* Is the VMA iterator invalidated? */
 };
 
@@ -158,20 +158,16 @@ static void drop_rmap_locks(struct vm_area_struct *vma)
 
 static pte_t move_soft_dirty_pte(pte_t pte)
 {
-	if (pte_none(pte))
-		return pte;
-
 	/*
 	 * Set soft dirty bit so we can notice
 	 * in userspace the ptes were moved.
 	 */
-	if (pgtable_supports_soft_dirty()) {
-		if (pte_present(pte))
-			pte = pte_mksoft_dirty(pte);
-		else
-			pte = pte_swp_mksoft_dirty(pte);
-	}
-
+#ifdef CONFIG_MEM_SOFT_DIRTY
+	if (pte_present(pte))
+		pte = pte_mksoft_dirty(pte);
+	else if (is_swap_pte(pte))
+		pte = pte_swp_mksoft_dirty(pte);
+#endif
 	return pte;
 }
 
@@ -244,7 +240,7 @@ static int move_ptes(struct pagetable_move_control *pmc,
 		goto out;
 	}
 	/*
-	 * Now new_pte is none, so collapse_scan_file() path can not find
+	 * Now new_pte is none, so hpage_collapse_scan_file() path can not find
 	 * this by traversing file->f_mapping, so there is no concurrency with
 	 * retract_page_tables(). In addition, we already hold the exclusive
 	 * mmap_lock, so this new_pte page is stable, so there is no need to get
@@ -260,11 +256,11 @@ static int move_ptes(struct pagetable_move_control *pmc,
 	if (new_ptl != old_ptl)
 		spin_lock_nested(new_ptl, SINGLE_DEPTH_NESTING);
 	flush_tlb_batched_pending(vma->vm_mm);
-	lazy_mmu_mode_enable();
+	arch_enter_lazy_mmu_mode();
 
 	for (; old_addr < old_end; old_ptep += nr_ptes, old_addr += nr_ptes * PAGE_SIZE,
 		new_ptep += nr_ptes, new_addr += nr_ptes * PAGE_SIZE) {
-		VM_WARN_ON_ONCE(!pte_none(ptep_get(new_ptep)));
+		VM_WARN_ON_ONCE(!pte_none(*new_ptep));
 
 		nr_ptes = 1;
 		max_nr_ptes = (old_end - old_addr) >> PAGE_SHIFT;
@@ -292,29 +288,20 @@ static int move_ptes(struct pagetable_move_control *pmc,
 		pte = move_pte(pte, old_addr, new_addr);
 		pte = move_soft_dirty_pte(pte);
 
-		if (need_clear_uffd_wp && pte_is_uffd_wp_marker(pte))
+		if (need_clear_uffd_wp && pte_marker_uffd_wp(pte))
 			pte_clear(mm, new_addr, new_ptep);
 		else {
 			if (need_clear_uffd_wp) {
-				if (pte_present(pte)) {
-					/*
-					 * See __copy_present_ptes(): normalise
-					 * RWP PTEs so the destination starts
-					 * accessible instead of taking a
-					 * numa-hinting fault on first access.
-					 */
-					if (userfaultfd_rwp(vma) && pte_uffd(pte))
-						pte = pte_modify(pte, vma->vm_page_prot);
-					pte = pte_clear_uffd(pte);
-				} else {
-					pte = pte_swp_clear_uffd(pte);
-				}
+				if (pte_present(pte))
+					pte = pte_clear_uffd_wp(pte);
+				else if (is_swap_pte(pte))
+					pte = pte_swp_clear_uffd_wp(pte);
 			}
 			set_ptes(mm, new_addr, new_ptep, pte, nr_ptes);
 		}
 	}
 
-	lazy_mmu_mode_disable();
+	arch_leave_lazy_mmu_mode();
 	if (force_flush)
 		flush_tlb_range(vma, old_end - len, old_end);
 	if (new_ptl != old_ptl)
@@ -687,7 +674,7 @@ static bool can_realign_addr(struct pagetable_move_control *pmc,
 	/*
 	 * We don't want to have to go hunting for VMAs from the end of the old
 	 * VMA to the next page table boundary, also we want to make sure the
-	 * operation is worthwhile.
+	 * operation is wortwhile.
 	 *
 	 * So ensure that we only perform this realignment if the end of the
 	 * range being copied reaches or crosses the page table boundary.
@@ -860,7 +847,7 @@ unsigned long move_page_tables(struct pagetable_move_control *pmc)
 		if (!new_pmd)
 			break;
 again:
-		if (pmd_is_huge(*old_pmd)) {
+		if (is_swap_pmd(*old_pmd) || pmd_trans_huge(*old_pmd)) {
 			if (extent == HPAGE_PMD_SIZE &&
 			    move_pgt_entry(pmc, HPAGE_PMD, old_pmd, new_pmd))
 				continue;
@@ -935,7 +922,7 @@ static bool vrm_overlaps(struct vma_remap_struct *vrm)
 /*
  * Will a new address definitely be assigned? This either if the user specifies
  * it via MREMAP_FIXED, or if MREMAP_DONTUNMAP is used, indicating we will
- * always determine a target address.
+ * always detemrine a target address.
  */
 static bool vrm_implies_new_addr(struct vma_remap_struct *vrm)
 {
@@ -957,13 +944,14 @@ static unsigned long vrm_set_new_addr(struct vma_remap_struct *vrm)
 	struct vm_area_struct *vma = vrm->vma;
 	unsigned long map_flags = 0;
 	/* Page Offset _into_ the VMA. */
-	const pgoff_t pgoff = linear_page_index(vma, vrm->addr);
+	pgoff_t internal_pgoff = (vrm->addr - vma->vm_start) >> PAGE_SHIFT;
+	pgoff_t pgoff = vma->vm_pgoff + internal_pgoff;
 	unsigned long new_addr = vrm_implies_new_addr(vrm) ? vrm->new_addr : 0;
 	unsigned long res;
 
 	if (vrm->flags & MREMAP_FIXED)
 		map_flags |= MAP_FIXED;
-	if (vma_test(vma, VMA_MAYSHARE_BIT))
+	if (vma->vm_flags & VM_MAYSHARE)
 		map_flags |= MAP_SHARED;
 
 	res = get_unmapped_area(vma->vm_file, new_addr, vrm->new_len, pgoff,
@@ -985,7 +973,7 @@ static bool vrm_calc_charge(struct vma_remap_struct *vrm)
 {
 	unsigned long charged;
 
-	if (!vma_test(vrm->vma, VMA_ACCOUNT_BIT))
+	if (!(vrm->vma->vm_flags & VM_ACCOUNT))
 		return true;
 
 	/*
@@ -1012,7 +1000,7 @@ static bool vrm_calc_charge(struct vma_remap_struct *vrm)
  */
 static void vrm_uncharge(struct vma_remap_struct *vrm)
 {
-	if (!vma_test(vrm->vma, VMA_ACCOUNT_BIT))
+	if (!(vrm->vma->vm_flags & VM_ACCOUNT))
 		return;
 
 	vm_unacct_memory(vrm->charged);
@@ -1032,94 +1020,8 @@ static void vrm_stat_account(struct vma_remap_struct *vrm,
 	struct vm_area_struct *vma = vrm->vma;
 
 	vm_stat_account(mm, vma->vm_flags, pages);
-	if (vma_test(vma, VMA_LOCKED_BIT))
+	if (vma->vm_flags & VM_LOCKED)
 		mm->locked_vm += pages;
-}
-
-static bool __check_map_count_against_split(struct mm_struct *mm,
-					    bool pre_split,
-					    bool before_unmaps)
-{
-	const int sys_map_count = get_sysctl_max_map_count();
-	int map_count = mm->map_count;
-
-	mmap_assert_write_locked(mm);
-
-	/*
-	 * At the point of shrinking the VMA, if new_len < old_len, we unmap
-	 * thusly in the worst case:
-	 *
-	 *              old_addr+old_len                    old_addr+old_len
-	 * |---------------.----.---------|    |---------------|    |---------|
-	 * |               .    .         | -> |      +1       | -1 |   +1    |
-	 * |---------------.----.---------|    |---------------|    |---------|
-	 *        old_addr+new_len                     old_addr+new_len
-	 *
-	 * At the point of removing the portion of an existing VMA to make space
-	 * for the moved VMA if MREMAP_FIXED, we unmap thusly in the worst case:
-	 *
-	 *   new_addr   new_addr+new_len         new_addr   new_addr+new_len
-	 * |----.---------------.---------|    |----|               |---------|
-	 * |    .               .         | -> | +1 |      -1       |   +1    |
-	 * |----.---------------.---------|    |----|               |---------|
-	 *
-	 * Therefore, before we consider the move anything, we have to account
-	 * for 2 additional VMAs possibly being created upon these unmappings.
-	 */
-	if (before_unmaps)
-		map_count += 2;
-
-	/*
-	 * At the point of MOVING the VMA:
-	 *
-	 * We start by copying a VMA, which creates an additional VMA if no
-	 * merge occurs, then if not MREMAP_DONTUNMAP, we unmap the source VMA.
-	 * In the worst case we might then observe:
-	 *
-	 *   new_addr   new_addr+new_len         new_addr   new_addr+new_len
-	 * |----|               |---------|    |----|---------------|---------|
-	 * |    |               |         | -> |    |      +1       |         |
-	 * |----|               |---------|    |----|---------------|---------|
-	 *
-	 *   old_addr   old_addr+old_len         old_addr   old_addr+old_len
-	 * |----.---------------.---------|    |----|               |---------|
-	 * |    .               .         | -> | +1 |      -1       |   +1    |
-	 * |----.---------------.---------|    |----|               |---------|
-	 *
-	 * Therefore we must check to ensure we have headroom of 2 additional
-	 * VMAs.
-	 */
-	map_count += 2;
-
-	/* If pre-split, the -1 observed above doesn't apply. */
-	if (pre_split)
-		map_count++;
-
-	return map_count <= sys_map_count;
-}
-
-static bool needs_pre_split(struct vma_remap_struct *vrm)
-{
-	/*
-	 * An MREMAP_DONTUNMAP of a mlock()'d VMA needs to unlock the
-	 * source VMA, so split in this case.
-	 */
-	return (vrm->flags & MREMAP_DONTUNMAP) &&
-		vma_test(vrm->vma, VMA_LOCKED_BIT);
-}
-
-/* Do we violate the map count limit if we split VMAs when moving the VMA? */
-static bool check_map_count_against_split(struct vma_remap_struct *vrm)
-{
-	return __check_map_count_against_split(current->mm,
-		needs_pre_split(vrm), /*before_unmaps=*/false);
-}
-
-/* Do we violate the map count limit if we split VMAs prior to early unmaps? */
-static bool check_map_count_against_split_early(struct vma_remap_struct *vrm)
-{
-	return __check_map_count_against_split(current->mm,
-		vrm->flags & MREMAP_DONTUNMAP, /*before_unmaps=*/true);
 }
 
 /*
@@ -1137,7 +1039,7 @@ static unsigned long prep_move_vma(struct vma_remap_struct *vrm)
 	const bool split_after = vma->vm_end != old_addr + old_len;
 
 	/* Avoid failure later on. */
-	if (!check_map_count_against_split(vrm))
+	if (current->mm->map_count >= sysctl_max_map_count - 3)
 		return -ENOMEM;
 
 	if (vma->vm_ops && vma->vm_ops->may_split) {
@@ -1165,7 +1067,8 @@ static unsigned long prep_move_vma(struct vma_remap_struct *vrm)
 	 * To account mlock()'d pages correctly in the MREMAP_DONTUNMAP
 	 * case perform any split ahead of time for an mlock()'d VMA.
 	 */
-	if (needs_pre_split(vrm)) {
+	if ((vrm->flags & MREMAP_DONTUNMAP) &&
+	    (vma->vm_flags & VM_LOCKED)) {
 		VMA_ITERATOR(vmi, vma->vm_mm, old_addr);
 
 		if (split_before)
@@ -1206,7 +1109,7 @@ static void unmap_source_vma(struct vma_remap_struct *vrm)
 	 * arose, in which case we _do_ wish to unmap the _new_ VMA, which means
 	 * we actually _do_ want it be unaccounted.
 	 */
-	bool accountable_move = vma_test(vma, VMA_ACCOUNT_BIT) &&
+	bool accountable_move = (vma->vm_flags & VM_ACCOUNT) &&
 		!(vrm->flags & MREMAP_DONTUNMAP);
 
 	/*
@@ -1225,7 +1128,7 @@ static void unmap_source_vma(struct vma_remap_struct *vrm)
 	 * portions of the original VMA that remain.
 	 */
 	if (accountable_move) {
-		vma_clear_flags(vma, VMA_ACCOUNT_BIT);
+		vm_flags_clear(vma, VM_ACCOUNT);
 		/* We are about to split vma, so store the start/end. */
 		vm_start = vma->vm_start;
 		vm_end = vma->vm_end;
@@ -1250,8 +1153,8 @@ static void unmap_source_vma(struct vma_remap_struct *vrm)
 	 * |             |
 	 * |-------------|
 	 *
-	 * Having cleared VMA_ACCOUNT_BIT from the whole VMA, after we unmap
-	 * above we'll end up with:
+	 * Having cleared VM_ACCOUNT from the whole VMA, after we unmap above
+	 * we'll end up with:
 	 *
 	 *    addr  end
 	 *     |     |
@@ -1271,15 +1174,13 @@ static void unmap_source_vma(struct vma_remap_struct *vrm)
 		if (vm_start < addr) {
 			struct vm_area_struct *prev = vma_prev(&vmi);
 
-			vma_start_write(prev);
-			vma_set_flags(prev, VMA_ACCOUNT_BIT);
+			vm_flags_set(prev, VM_ACCOUNT); /* Acquires VMA lock. */
 		}
 
 		if (vm_end > end) {
 			struct vm_area_struct *next = vma_next(&vmi);
 
-			vma_start_write(next);
-			vma_set_flags(next, VMA_ACCOUNT_BIT);
+			vm_flags_set(next, VM_ACCOUNT); /* Acquires VMA lock. */
 		}
 	}
 }
@@ -1295,18 +1196,17 @@ static void unmap_source_vma(struct vma_remap_struct *vrm)
 static int copy_vma_and_data(struct vma_remap_struct *vrm,
 			     struct vm_area_struct **new_vma_ptr)
 {
-	const pgoff_t new_pgoff = linear_page_index(vrm->vma, vrm->addr);
-	const pgoff_t new_anon_pgoff =
-		__linear_anon_page_index(vrm->vma, vrm->addr);
+	unsigned long internal_offset = vrm->addr - vrm->vma->vm_start;
+	unsigned long internal_pgoff = internal_offset >> PAGE_SHIFT;
+	unsigned long new_pgoff = vrm->vma->vm_pgoff + internal_pgoff;
+	unsigned long moved_len;
 	struct vm_area_struct *vma = vrm->vma;
 	struct vm_area_struct *new_vma;
-	unsigned long moved_len;
 	int err = 0;
 	PAGETABLE_MOVE(pmc, NULL, NULL, vrm->addr, vrm->new_addr, vrm->old_len);
 
 	new_vma = copy_vma(&vma, vrm->new_addr, vrm->new_len, new_pgoff,
-			   new_anon_pgoff, &pmc.need_rmap_locks,
-			   vrm->flags & MREMAP_DONTUNMAP);
+			   &pmc.need_rmap_locks, vrm->flags & MREMAP_DONTUNMAP);
 	if (!new_vma) {
 		vrm_uncharge(vrm);
 		*new_vma_ptr = NULL;
@@ -1369,8 +1269,8 @@ static void dontunmap_complete(struct vma_remap_struct *vrm,
 	/* Self-merge is disallowed. */
 	VM_WARN_ON_ONCE(new_vma == vma);
 
-	/* We always clear VMA_LOCKED[ONFAULT]_BIT on the old VMA. */
-	vma_clear_flags_mask(vma, VMA_LOCKED_MASK);
+	/* We always clear VM_LOCKED[ONFAULT] on the old VMA. */
+	vm_flags_clear(vma, VM_LOCKED_MASK);
 
 	/*
 	 * anon_vma links of the old vma is no longer needed after its page
@@ -1385,9 +1285,8 @@ static void dontunmap_complete(struct vma_remap_struct *vrm,
 		 * unfaulted anonymous VMAs have page offset equal to
 		 * vma->vm_start >> PAGE_SHIFT.
 		 */
-		vma_set_anon_pgoff(vma, pgoff_unfaulted);
 		if (vma_is_anonymous(vma) && !vma->vm_file)
-			vma_set_pgoff(vma, pgoff_unfaulted);
+			vma->vm_pgoff = pgoff_unfaulted;
 	}
 }
 
@@ -1527,10 +1426,10 @@ static unsigned long mremap_to(struct vma_remap_struct *vrm)
 
 	/* MREMAP_DONTUNMAP expands by old_len since old_len == new_len */
 	if (vrm->flags & MREMAP_DONTUNMAP) {
-		vma_flags_t vma_flags = vrm->vma->flags;
+		vm_flags_t vm_flags = vrm->vma->vm_flags;
 		unsigned long pages = vrm->old_len >> PAGE_SHIFT;
 
-		if (!may_expand_vm(mm, &vma_flags, pages))
+		if (!may_expand_vm(mm, vm_flags, pages))
 			return -ENOMEM;
 	}
 
@@ -1816,14 +1715,14 @@ static int check_prep_vma(struct vma_remap_struct *vrm)
 	 * based on the original.  There are no known use cases for this
 	 * behavior.  As a result, fail such attempts.
 	 */
-	if (!old_len && !vma_test_any(vma, VMA_SHARED_BIT, VMA_MAYSHARE_BIT)) {
+	if (!old_len && !(vma->vm_flags & (VM_SHARED | VM_MAYSHARE))) {
 		pr_warn_once("%s (%d): attempted to duplicate a private mapping with mremap.  This is not supported.\n",
 			     current->comm, current->pid);
 		return -EINVAL;
 	}
 
 	if ((vrm->flags & MREMAP_DONTUNMAP) &&
-	    vma_test_any(vma, VMA_DONTEXPAND_BIT, VMA_PFNMAP_BIT))
+			(vma->vm_flags & (VM_DONTEXPAND | VM_PFNMAP)))
 		return -EINVAL;
 
 	/*
@@ -1853,21 +1752,22 @@ static int check_prep_vma(struct vma_remap_struct *vrm)
 		return 0;
 
 	/* We are expanding and the VMA is mlock()'d so we need to populate. */
-	if (vma_test(vma, VMA_LOCKED_BIT))
+	if (vma->vm_flags & VM_LOCKED)
 		vrm->populate_expand = true;
 
 	/* Need to be careful about a growing mapping */
-	pgoff = linear_page_index(vma, addr);
+	pgoff = (addr - vma->vm_start) >> PAGE_SHIFT;
+	pgoff += vma->vm_pgoff;
 	if (pgoff + (new_len >> PAGE_SHIFT) < pgoff)
 		return -EINVAL;
 
-	if (vma_test_any(vma, VMA_DONTEXPAND_BIT, VMA_PFNMAP_BIT))
+	if (vma->vm_flags & (VM_DONTEXPAND | VM_PFNMAP))
 		return -EFAULT;
 
-	if (!mlock_future_ok(mm, vma_test(vma, VMA_LOCKED_BIT), vrm->delta))
+	if (!mlock_future_ok(mm, vma->vm_flags, vrm->delta))
 		return -EAGAIN;
 
-	if (!may_expand_vm(mm, &vma->flags, vrm->delta >> PAGE_SHIFT))
+	if (!may_expand_vm(mm, vma->vm_flags, vrm->delta >> PAGE_SHIFT))
 		return -ENOMEM;
 
 	return 0;
@@ -1926,6 +1826,23 @@ static unsigned long check_mremap_params(struct vma_remap_struct *vrm)
 	/* Target VMA must not overlap source VMA. */
 	if (vrm_overlaps(vrm))
 		return -EINVAL;
+
+	/*
+	 * move_vma() need us to stay 4 maps below the threshold, otherwise
+	 * it will bail out at the very beginning.
+	 * That is a problem if we have already unmaped the regions here
+	 * (new_addr, and old_addr), because userspace will not know the
+	 * state of the vma's after it gets -ENOMEM.
+	 * So, to avoid such scenario we can pre-compute if the whole
+	 * operation has high chances to success map-wise.
+	 * Worst-scenario case is when both vma's (new_addr and old_addr) get
+	 * split in 3 before unmapping it.
+	 * That means 2 more maps (1 for each) to the ones we already hold.
+	 * Check whether current map count plus 2 still leads us to 4 maps below
+	 * the threshold, otherwise return -ENOMEM here to be more safe.
+	 */
+	if ((current->mm->map_count + 2) >= sysctl_max_map_count - 3)
+		return -ENOMEM;
 
 	return 0;
 }
@@ -2035,11 +1952,6 @@ static unsigned long do_mremap(struct vma_remap_struct *vrm)
 	if (mmap_write_lock_killable(mm))
 		return -EINTR;
 	vrm->mmap_locked = true;
-
-	if (!check_map_count_against_split_early(vrm)) {
-		mmap_write_unlock(mm);
-		return -ENOMEM;
-	}
 
 	if (vrm_move_only(vrm)) {
 		res = remap_move(vrm);

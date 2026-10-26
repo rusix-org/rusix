@@ -25,42 +25,17 @@
 #include <linux/skb_array.h>
 #include <linux/if_macvlan.h>
 #include <linux/bpf.h>
-#include <trace/events/qdisc.h>
 #include <net/sch_generic.h>
 #include <net/pkt_sched.h>
 #include <net/dst.h>
 #include <net/hotdata.h>
+#include <trace/events/qdisc.h>
 #include <trace/events/net.h>
 #include <net/xfrm.h>
 
 /* Qdisc to use by default */
 const struct Qdisc_ops *default_qdisc_ops = &pfifo_fast_ops;
 EXPORT_SYMBOL(default_qdisc_ops);
-
-void __tcf_kfree_skb_list(struct sk_buff *skb, struct Qdisc *q,
-			  struct netdev_queue *txq, struct net_device *dev)
-{
-	while (skb) {
-		u32 reason = tc_skb_cb(skb)->drop_reason;
-		struct sk_buff *next = skb->next;
-		enum skb_drop_reason skb_reason;
-
-		prefetch(next);
-		/* TC classifier and qdisc share drop_reason storage.
-		 * Check subsystem mask to identify qdisc drop reasons,
-		 * else pass through skb_drop_reason set by TC classifier.
-		 */
-		if ((reason & SKB_DROP_REASON_SUBSYS_MASK) == __QDISC_DROP_REASON) {
-			trace_qdisc_drop(q, txq, dev, skb, (enum qdisc_drop_reason)reason);
-			skb_reason = SKB_DROP_REASON_QDISC_DROP;
-		} else {
-			skb_reason = (enum skb_drop_reason)reason;
-		}
-		kfree_skb_reason(skb, skb_reason);
-		skb = next;
-	}
-}
-EXPORT_SYMBOL(__tcf_kfree_skb_list);
 
 static void qdisc_maybe_clear_missed(struct Qdisc *q,
 				     const struct netdev_queue *txq)
@@ -118,7 +93,7 @@ static inline struct sk_buff *__skb_dequeue_bad_txq(struct Qdisc *q)
 				qdisc_qstats_cpu_qlen_dec(q);
 			} else {
 				qdisc_qstats_backlog_dec(q, skb);
-				qdisc_qlen_dec(q);
+				q->q.qlen--;
 			}
 		} else {
 			skb = SKB_XOFF_MAGIC;
@@ -159,7 +134,7 @@ static inline void qdisc_enqueue_skb_bad_txq(struct Qdisc *q,
 		qdisc_qstats_cpu_qlen_inc(q);
 	} else {
 		qdisc_qstats_backlog_inc(q, skb);
-		qdisc_qlen_inc(q);
+		q->q.qlen++;
 	}
 
 	if (lock)
@@ -188,7 +163,7 @@ static inline void dev_requeue_skb(struct sk_buff *skb, struct Qdisc *q)
 		} else {
 			q->qstats.requeues++;
 			qdisc_qstats_backlog_inc(q, skb);
-			qdisc_qlen_inc(q);
+			q->q.qlen++;
 		}
 
 		skb = next;
@@ -294,7 +269,7 @@ static struct sk_buff *dequeue_skb(struct Qdisc *q, bool *validate,
 				qdisc_qstats_cpu_qlen_dec(q);
 			} else {
 				qdisc_qstats_backlog_dec(q, skb);
-				qdisc_qlen_dec(q);
+				q->q.qlen--;
 			}
 		} else {
 			skb = NULL;
@@ -630,9 +605,6 @@ static void netdev_watchdog_down(struct net_device *dev)
  */
 void netif_carrier_on(struct net_device *dev)
 {
-	if (READ_ONCE(dev->proto_down))
-		return;
-
 	if (test_and_clear_bit(__LINK_STATE_NOCARRIER, &dev->state)) {
 		if (dev->reg_state == NETREG_UNINITIALIZED)
 			return;
@@ -716,6 +688,7 @@ struct Qdisc noop_qdisc = {
 	.ops		=	&noop_qdisc_ops,
 	.q.lock		=	__SPIN_LOCK_UNLOCKED(noop_qdisc.q.lock),
 	.dev_queue	=	&noop_netdev_queue,
+	.busylock	=	__SPIN_LOCK_UNLOCKED(noop_qdisc.busylock),
 	.gso_skb = {
 		.next = (struct sk_buff *)&noop_qdisc.gso_skb,
 		.prev = (struct sk_buff *)&noop_qdisc.gso_skb,
@@ -728,6 +701,7 @@ struct Qdisc noop_qdisc = {
 		.qlen = 0,
 		.lock = __SPIN_LOCK_UNLOCKED(noop_qdisc.skb_bad_txq.lock),
 	},
+	.owner = -1,
 };
 EXPORT_SYMBOL(noop_qdisc);
 
@@ -788,7 +762,7 @@ static int pfifo_fast_enqueue(struct sk_buff *skb, struct Qdisc *qdisc,
 	err = skb_array_produce(q, skb);
 
 	if (unlikely(err)) {
-		tcf_set_qdisc_drop_reason(skb, QDISC_DROP_OVERLIMIT);
+		tcf_set_drop_reason(skb, SKB_DROP_REASON_QDISC_OVERLIMIT);
 
 		if (qdisc_is_percpu_stats(qdisc))
 			return qdisc_drop_cpu(skb, qdisc, to_free);
@@ -872,7 +846,7 @@ static void pfifo_fast_reset(struct Qdisc *qdisc)
 			continue;
 
 		while ((skb = __skb_array_consume(q)) != NULL)
-			rtnl_kfree_skbs(skb, skb);
+			kfree_skb(skb);
 	}
 
 	if (qdisc_is_percpu_stats(qdisc)) {
@@ -1002,7 +976,9 @@ struct Qdisc *qdisc_alloc(struct netdev_queue *dev_queue,
 	__skb_queue_head_init(&sch->gso_skb);
 	__skb_queue_head_init(&sch->skb_bad_txq);
 	gnet_stats_basic_sync_init(&sch->bstats);
-	qdisc_lock_init(sch, ops);
+	lockdep_register_key(&sch->root_lock_key);
+	spin_lock_init(&sch->q.lock);
+	lockdep_set_class(&sch->q.lock, &sch->root_lock_key);
 
 	if (ops->static_flags & TCQ_F_CPUSTATS) {
 		sch->cpu_bstats =
@@ -1017,6 +993,10 @@ struct Qdisc *qdisc_alloc(struct netdev_queue *dev_queue,
 		}
 	}
 
+	spin_lock_init(&sch->busylock);
+	lockdep_set_class(&sch->busylock,
+			  dev->qdisc_tx_busylock ?: &qdisc_tx_busylock);
+
 	/* seqlock has the same scope of busylock, for NOLOCK qdisc */
 	spin_lock_init(&sch->seqlock);
 	lockdep_set_class(&sch->seqlock,
@@ -1027,12 +1007,13 @@ struct Qdisc *qdisc_alloc(struct netdev_queue *dev_queue,
 	sch->enqueue = ops->enqueue;
 	sch->dequeue = ops->dequeue;
 	sch->dev_queue = dev_queue;
+	sch->owner = -1;
 	netdev_hold(dev, &sch->dev_tracker, GFP_KERNEL);
 	refcount_set(&sch->refcnt, 1);
 
 	return sch;
 errout1:
-	qdisc_lock_uninit(sch, ops);
+	lockdep_unregister_key(&sch->root_lock_key);
 	kfree(sch);
 errout:
 	return ERR_PTR(err);
@@ -1081,8 +1062,8 @@ void qdisc_reset(struct Qdisc *qdisc)
 	__skb_queue_purge(&qdisc->gso_skb);
 	__skb_queue_purge(&qdisc->skb_bad_txq);
 
-	WRITE_ONCE(qdisc->q.qlen, 0);
-	WRITE_ONCE(qdisc->qstats.backlog, 0);
+	qdisc->q.qlen = 0;
+	qdisc->qstats.backlog = 0;
 }
 EXPORT_SYMBOL(qdisc_reset);
 
@@ -1121,7 +1102,7 @@ static void __qdisc_destroy(struct Qdisc *qdisc)
 	if (ops->destroy)
 		ops->destroy(qdisc);
 
-	qdisc_lock_uninit(qdisc, ops);
+	lockdep_unregister_key(&qdisc->root_lock_key);
 	bpf_module_put(ops, ops->owner);
 	netdev_put(dev, &qdisc->dev_tracker);
 
@@ -1365,12 +1346,11 @@ static bool some_qdisc_is_busy(struct net_device *dev)
 /**
  * 	dev_deactivate_many - deactivate transmissions on several devices
  * 	@head: list of devices to deactivate
- *	@reset_needed: qdisc should be reset if true.
  *
  *	This function returns only when all outstanding transmissions
  *	have completed, unless all devices are in dismantle phase.
  */
-void dev_deactivate_many(struct list_head *head, bool reset_needed)
+void dev_deactivate_many(struct list_head *head)
 {
 	bool sync_needed = false;
 	struct net_device *dev;
@@ -1389,14 +1369,11 @@ void dev_deactivate_many(struct list_head *head, bool reset_needed)
 	if (sync_needed)
 		synchronize_net();
 
-	if (reset_needed) {
-		list_for_each_entry(dev, head, close_list) {
-			netdev_for_each_tx_queue(dev, dev_reset_queue, NULL);
+	list_for_each_entry(dev, head, close_list) {
+		netdev_for_each_tx_queue(dev, dev_reset_queue, NULL);
 
-			if (dev_ingress_queue(dev))
-				dev_reset_queue(dev, dev_ingress_queue(dev),
-						NULL);
-		}
+		if (dev_ingress_queue(dev))
+			dev_reset_queue(dev, dev_ingress_queue(dev), NULL);
 	}
 
 	/* Wait for outstanding qdisc_run calls. */
@@ -1411,12 +1388,12 @@ void dev_deactivate_many(struct list_head *head, bool reset_needed)
 	}
 }
 
-void dev_deactivate(struct net_device *dev, bool reset_needed)
+void dev_deactivate(struct net_device *dev)
 {
 	LIST_HEAD(single);
 
 	list_add(&dev->close_list, &single);
-	dev_deactivate_many(&single, reset_needed);
+	dev_deactivate_many(&single);
 	list_del(&single);
 }
 EXPORT_SYMBOL(dev_deactivate);
@@ -1472,7 +1449,7 @@ int dev_qdisc_change_tx_queue_len(struct net_device *dev)
 	int ret = 0;
 
 	if (up)
-		dev_deactivate(dev, false);
+		dev_deactivate(dev);
 
 	for (i = 0; i < dev->num_tx_queues; i++) {
 		ret = qdisc_change_tx_queue_len(dev, &dev->_tx[i]);

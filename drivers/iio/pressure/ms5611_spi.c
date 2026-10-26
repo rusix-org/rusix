@@ -9,6 +9,7 @@
 #include <linux/delay.h>
 #include <linux/module.h>
 #include <linux/spi/spi.h>
+#include <linux/mod_devicetable.h>
 
 #include <linux/unaligned.h>
 
@@ -113,8 +114,8 @@ static const struct of_device_id ms5611_spi_matches[] = {
 MODULE_DEVICE_TABLE(of, ms5611_spi_matches);
 
 static const struct spi_device_id ms5611_id[] = {
-	{ .name = "ms5611", .driver_data = MS5611 },
-	{ .name = "ms5607", .driver_data = MS5607 },
+	{ "ms5611", MS5611 },
+	{ "ms5607", MS5607 },
 	{ }
 };
 MODULE_DEVICE_TABLE(spi, ms5611_id);

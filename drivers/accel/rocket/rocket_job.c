@@ -7,7 +7,6 @@
 #include <drm/drm_file.h>
 #include <drm/drm_gem.h>
 #include <drm/rocket_accel.h>
-#include <linux/align.h>
 #include <linux/interrupt.h>
 #include <linux/overflow.h>
 #include <linux/iommu.h>
@@ -21,15 +20,6 @@
 #include "rocket_registers.h"
 
 #define JOB_TIMEOUT_MS 500
-
-/*
- * The PC unit fetches two 64-bit register commands per pc_data_amount unit,
- * and the field holds (regcmd_count + 1) / 2 - 1.
- */
-#define ROCKET_MAX_REGCMDS	((PC_REGISTER_AMOUNTS_PC_DATA_AMOUNT__MASK + 1) * 2U)
-
-/* Bits 3:0 of PC_BASE_ADDRESS hold the mode selection bit and reserved bits */
-#define ROCKET_REGCMD_ALIGN	16
 
 static struct rocket_job *
 to_rocket_job(struct drm_sched_job *sched_job)
@@ -56,7 +46,7 @@ static struct dma_fence *rocket_fence_create(struct rocket_core *core)
 {
 	struct dma_fence *fence;
 
-	fence = kzalloc_obj(*fence);
+	fence = kzalloc(sizeof(*fence), GFP_KERNEL);
 	if (!fence)
 		return ERR_PTR(-ENOMEM);
 
@@ -82,13 +72,13 @@ rocket_copy_tasks(struct drm_device *dev,
 	if (!rjob->task_count)
 		return 0;
 
-	rjob->tasks = kvmalloc_objs(*rjob->tasks, job->task_count);
+	rjob->tasks = kvmalloc_array(job->task_count, sizeof(*rjob->tasks), GFP_KERNEL);
 	if (!rjob->tasks) {
 		drm_dbg(dev, "Failed to allocate task array\n");
 		return -ENOMEM;
 	}
 
-	for (unsigned int i = 0; i < rjob->task_count; i++) {
+	for (int i = 0; i < rjob->task_count; i++) {
 		struct drm_rocket_task task = {0};
 
 		if (copy_from_user(&task,
@@ -101,20 +91,6 @@ rocket_copy_tasks(struct drm_device *dev,
 
 		if (task.regcmd_count == 0) {
 			drm_dbg(dev, "regcmd_count field in drm_rocket_task should be > 0.\n");
-			ret = -EINVAL;
-			goto fail;
-		}
-
-		if (task.regcmd_count > ROCKET_MAX_REGCMDS) {
-			drm_dbg(dev, "regcmd_count field in drm_rocket_task should be <= %u.\n",
-				ROCKET_MAX_REGCMDS);
-			ret = -EINVAL;
-			goto fail;
-		}
-
-		if (!IS_ALIGNED(task.regcmd, ROCKET_REGCMD_ALIGN)) {
-			drm_dbg(dev, "regcmd field in drm_rocket_task should be aligned to %u bytes.\n",
-				ROCKET_REGCMD_ALIGN);
 			ret = -EINVAL;
 			goto fail;
 		}
@@ -220,7 +196,7 @@ static int rocket_job_push(struct rocket_job *job)
 	if (check_add_overflow(job->in_bo_count, job->out_bo_count, &bo_count))
 		return -EINVAL;
 
-	bos = kvmalloc_objs(*bos, bo_count);
+	bos = kvmalloc_array(bo_count, sizeof(*bos), GFP_KERNEL);
 	if (!bos)
 		return -ENOMEM;
 	memcpy(bos, job->in_bos, job->in_bo_count * sizeof(void *));
@@ -307,7 +283,7 @@ static struct rocket_core *sched_to_core(struct rocket_device *rdev,
 {
 	unsigned int core;
 
-	for (core = 0; core < rdev->max_cores; core++) {
+	for (core = 0; core < rdev->num_cores; core++) {
 		if (&rdev->cores[core].sched == sched)
 			return &rdev->cores[core];
 	}
@@ -518,6 +494,8 @@ int rocket_job_init(struct rocket_core *core)
 	return 0;
 
 err_sched:
+	drm_sched_fini(&core->sched);
+
 	destroy_workqueue(core->reset.wq);
 	return ret;
 }
@@ -533,8 +511,9 @@ void rocket_job_fini(struct rocket_core *core)
 int rocket_job_open(struct rocket_file_priv *rocket_priv)
 {
 	struct rocket_device *rdev = rocket_priv->rdev;
-	struct drm_gpu_scheduler **scheds = kmalloc_objs(*scheds,
-							 rdev->num_cores);
+	struct drm_gpu_scheduler **scheds = kmalloc_array(rdev->num_cores,
+							  sizeof(*scheds),
+							  GFP_KERNEL);
 	unsigned int core;
 	int ret;
 
@@ -579,7 +558,7 @@ static int rocket_ioctl_submit_job(struct drm_device *dev, struct drm_file *file
 	if (job->task_count == 0)
 		return -EINVAL;
 
-	rjob = kzalloc_obj(*rjob);
+	rjob = kzalloc(sizeof(*rjob), GFP_KERNEL);
 	if (!rjob)
 		return -ENOMEM;
 
@@ -645,7 +624,7 @@ int rocket_ioctl_submit(struct drm_device *dev, void *data, struct drm_file *fil
 		return -EINVAL;
 	}
 
-	jobs = kvmalloc_objs(*jobs, args->job_count);
+	jobs = kvmalloc_array(args->job_count, sizeof(*jobs), GFP_KERNEL);
 	if (!jobs) {
 		drm_dbg(dev, "Failed to allocate incoming job array\n");
 		return -ENOMEM;

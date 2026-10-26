@@ -62,12 +62,12 @@ static int bells_set_bias_level(struct snd_soc_card *card,
 	codec_dai = snd_soc_rtd_to_codec(rtd, 0);
 	component = codec_dai->component;
 
-	if (snd_soc_dapm_to_dev(dapm) != codec_dai->dev)
+	if (dapm->dev != codec_dai->dev)
 		return 0;
 
 	switch (level) {
 	case SND_SOC_BIAS_PREPARE:
-		if (snd_soc_dapm_get_bias_level(dapm) != SND_SOC_BIAS_STANDBY)
+		if (dapm->bias_level != SND_SOC_BIAS_STANDBY)
 			break;
 
 		ret = snd_soc_component_set_pll(component, WM5102_FLL1,
@@ -108,7 +108,7 @@ static int bells_set_bias_level_post(struct snd_soc_card *card,
 	codec_dai = snd_soc_rtd_to_codec(rtd, 0);
 	component = codec_dai->component;
 
-	if (snd_soc_dapm_to_dev(dapm) != codec_dai->dev)
+	if (dapm->dev != codec_dai->dev)
 		return 0;
 
 	switch (level) {

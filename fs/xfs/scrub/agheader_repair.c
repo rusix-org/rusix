@@ -3,7 +3,7 @@
  * Copyright (C) 2018-2023 Oracle.  All Rights Reserved.
  * Author: Darrick J. Wong <djwong@kernel.org>
  */
-#include "xfs_platform.h"
+#include "xfs.h"
 #include "xfs_fs.h"
 #include "xfs_shared.h"
 #include "xfs_format.h"
@@ -44,35 +44,12 @@ xrep_superblock(
 	struct xfs_mount	*mp = sc->mp;
 	struct xfs_buf		*bp;
 	xfs_agnumber_t		agno;
-	int			error = 0;
+	int			error;
 
+	/* Don't try to repair AG 0's sb; let xfs_repair deal with it. */
 	agno = sc->sm->sm_agno;
-	if (agno == 0) {
-		/* Last chance to abort before we start committing fixes. */
-		if (xchk_should_terminate(sc, &error))
-			return error;
-
-		bp = xfs_trans_getsb(sc->tp);
-
-		/* Format the incore superblock into the primary sb buffer */
-		xfs_buf_zero(bp, 0, BBTOB(bp->b_length));
-		xfs_sb_to_disk(bp->b_addr, &mp->m_sb);
-
-		xfs_log_sb(sc->tp);
-
-		/* synchronous transaction to flush/release the buffer log item */
-		xfs_trans_set_sync(sc->tp);
-		error = xrep_trans_commit(sc);
-		if (error)
-			return error;
-
-		/* write the super out immediately */
-		xfs_buf_lock(bp);
-		xfs_buf_hold(bp);
-		error = xfs_bwrite(bp);
-		xfs_buf_relse(bp);
-		return error;
-	}
+	if (agno == 0)
+		return -EOPNOTSUPP;
 
 	error = xfs_sb_get_secondary(mp, sc->tp, agno, &bp);
 	if (error)
@@ -675,7 +652,7 @@ xrep_agfl_fill(
 	while (agbno < start + len && af->fl_off < af->flcount)
 		af->agfl_bno[af->fl_off++] = cpu_to_be32(agbno++);
 
-	error = xagb_bitmap_set(&af->used_extents, start, agbno - start);
+	error = xagb_bitmap_set(&af->used_extents, start, agbno - 1);
 	if (error)
 		return error;
 
@@ -1104,9 +1081,12 @@ xrep_iunlink_reload_next(
 	if (VFS_I(ip)->i_nlink != 0) {
 		error = xrep_iunlink_store_next(ragi, agino, NULLAGINO);
 		if (error)
-			goto rele;
+			return error;
 
 		error = xrep_iunlink_store_prev(ragi, agino, LINKED_AGINO);
+		if (error)
+			return error;
+
 		goto rele;
 	}
 
@@ -1120,7 +1100,7 @@ xrep_iunlink_reload_next(
 	 */
 rele:
 	xchk_irele(sc, ip);
-	return error;
+	return 0;
 }
 
 /*
@@ -1185,7 +1165,9 @@ xrep_iunlink_igrab(
 	struct xfs_perag	*pag,
 	struct xfs_inode	*ip)
 {
-	if (XFS_INODE_TO_AGNO(ip) != pag_agno(pag))
+	struct xfs_mount	*mp = pag_mount(pag);
+
+	if (XFS_INO_TO_AGNO(mp, ip->i_ino) != pag_agno(pag))
 		return false;
 
 	if (!xfs_inode_on_unlinked_list(ip))
@@ -1203,13 +1185,17 @@ xrep_iunlink_visit(
 	struct xrep_agi		*ragi,
 	unsigned int		batch_idx)
 {
+	struct xfs_mount	*mp = ragi->sc->mp;
 	struct xfs_inode	*ip = ragi->lookup_batch[batch_idx];
-	xfs_agino_t		agino = XFS_INODE_TO_AGINO(ip);
-	unsigned int		bucket = agino % XFS_AGI_UNLINKED_BUCKETS;
+	xfs_agino_t		agino;
+	unsigned int		bucket;
 	int			error;
 
-	ASSERT(XFS_INODE_TO_AGNO(ip) == pag_agno(ragi->sc->sa.pag));
+	ASSERT(XFS_INO_TO_AGNO(mp, ip->i_ino) == pag_agno(ragi->sc->sa.pag));
 	ASSERT(xfs_inode_on_unlinked_list(ip));
+
+	agino = XFS_INO_TO_AGINO(mp, ip->i_ino);
+	bucket = agino % XFS_AGI_UNLINKED_BUCKETS;
 
 	trace_xrep_iunlink_visit(ragi->sc->sa.pag, bucket,
 			ragi->iunlink_heads[bucket], ip);
@@ -1276,10 +1262,10 @@ xrep_iunlink_mark_incore(
 			 * us to see this inode, so another lookup from the
 			 * same index will not find it again.
 			 */
-			if (XFS_INODE_TO_AGNO(ip) != pag_agno(pag))
+			if (XFS_INO_TO_AGNO(mp, ip->i_ino) != pag_agno(pag))
 				continue;
-			first_index = XFS_INO_TO_AGINO(mp, I_INO(ip) + 1);
-			if (first_index < XFS_INODE_TO_AGINO(ip))
+			first_index = XFS_INO_TO_AGINO(mp, ip->i_ino + 1);
+			if (first_index < XFS_INO_TO_AGINO(mp, ip->i_ino))
 				done = true;
 		}
 
@@ -1345,12 +1331,8 @@ xrep_iunlink_mark_ondisk_rec(
 		 */
 		error = xchk_iget(ragi->sc, xfs_agino_to_ino(sc->sa.pag, agino),
 				&ip);
-		if (error == -ENOMEM)
-			return error;
-		if (error) {
-			error = 0;
+		if (error)
 			continue;
-		}
 
 		trace_xrep_iunlink_reload_ondisk(ip);
 
@@ -1393,7 +1375,7 @@ xrep_iunlink_mark_ondisk(
 
 /*
  * Walk an iunlink bucket's inode list.  For each inode that should be on this
- * chain, clear its entry in iunlink_bmp because it's ok and we don't need
+ * chain, clear its entry in in iunlink_bmp because it's ok and we don't need
  * to touch it further.
  */
 STATIC int
@@ -1865,7 +1847,7 @@ xrep_agi(
 	if (!xfs_has_rmapbt(mp))
 		return -EOPNOTSUPP;
 
-	sc->buf = kzalloc_obj(struct xrep_agi, XCHK_GFP_FLAGS);
+	sc->buf = kzalloc(sizeof(struct xrep_agi), XCHK_GFP_FLAGS);
 	if (!sc->buf)
 		return -ENOMEM;
 	ragi = sc->buf;

@@ -104,8 +104,11 @@ void test_kmem_cache_iter(void)
 	if (!ASSERT_GE(iter_fd, 0, "iter_create"))
 		goto destroy;
 
-	while (read(iter_fd, buf, sizeof(buf)) > 0)
-		; /* Read out all contents */
+	memset(buf, 0, sizeof(buf));
+	while (read(iter_fd, buf, sizeof(buf)) > 0) {
+		/* Read out all contents */
+		printf("%s", buf);
+	}
 
 	/* Next reads should return 0 */
 	ASSERT_EQ(read(iter_fd, buf, sizeof(buf)), 0, "read");

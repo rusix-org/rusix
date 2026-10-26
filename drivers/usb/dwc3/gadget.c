@@ -278,7 +278,7 @@ int dwc3_send_gadget_generic_command(struct dwc3 *dwc, unsigned int cmd,
 		status = -ETIMEDOUT;
 	}
 
-	trace_dwc3_gadget_generic_cmd(dwc, cmd, param, status);
+	trace_dwc3_gadget_generic_cmd(cmd, param, status);
 
 	return ret;
 }
@@ -1192,7 +1192,7 @@ static struct usb_request *dwc3_gadget_ep_alloc_request(struct usb_ep *ep,
 	struct dwc3_request		*req;
 	struct dwc3_ep			*dep = to_dwc3_ep(ep);
 
-	req = kzalloc_obj(*req, gfp_flags);
+	req = kzalloc(sizeof(*req), gfp_flags);
 	if (!req)
 		return NULL;
 
@@ -1692,7 +1692,7 @@ static int __dwc3_gadget_kick_transfer(struct dwc3_ep *dep)
 	 * transfer, there's no need to update the transfer.
 	 */
 	if (!ret && !starting)
-		return 0;
+		return ret;
 
 	req = next_request(&dep->started_list);
 	if (!req) {
@@ -3156,26 +3156,15 @@ static void dwc3_gadget_set_ssp_rate(struct usb_gadget *g,
 static int dwc3_gadget_vbus_draw(struct usb_gadget *g, unsigned int mA)
 {
 	struct dwc3		*dwc = gadget_to_dwc(g);
-	unsigned long		flags;
 
 	if (dwc->usb2_phy)
 		return usb_phy_set_power(dwc->usb2_phy, mA);
 
-	spin_lock_irqsave(&dwc->lock, flags);
-	if (!dwc->usb_psy) {
-		if (!dwc->psy_nb.notifier_call) {
-			spin_unlock_irqrestore(&dwc->lock, flags);
-			return -EOPNOTSUPP;
-		}
-		dwc->current_limit = mA;
-		spin_unlock_irqrestore(&dwc->lock, flags);
-		dev_dbg(dwc->dev, "Stored VBUS draw: %u mA (power supply not ready)\n", mA);
-		return 0;
-	}
+	if (!dwc->usb_psy)
+		return -EOPNOTSUPP;
 
 	dwc->current_limit = mA;
 	schedule_work(&dwc->vbus_draw_work);
-	spin_unlock_irqrestore(&dwc->lock, flags);
 
 	return 0;
 }
@@ -3416,7 +3405,7 @@ static int dwc3_gadget_init_endpoint(struct dwc3 *dwc, u8 epnum)
 	int				ret;
 	u8				num = epnum >> 1;
 
-	dep = kzalloc_obj(*dep);
+	dep = kzalloc(sizeof(*dep), GFP_KERNEL);
 	if (!dep)
 		return -ENOMEM;
 
@@ -3921,7 +3910,7 @@ static void dwc3_gadget_endpoint_stream_event(struct dwc3_ep *dep,
 	case DEPEVT_STREAM_NOSTREAM:
 		dep->flags &= ~DWC3_EP_STREAM_PRIMED;
 		if (dep->flags & DWC3_EP_FORCE_RESTART_STREAM)
-			queue_delayed_work(system_percpu_wq, &dep->nostream_work,
+			queue_delayed_work(system_wq, &dep->nostream_work,
 					   msecs_to_jiffies(100));
 		break;
 	}
@@ -4880,7 +4869,7 @@ int dwc3_gadget_init(struct dwc3 *dwc)
 	init_completion(&dwc->ep0_in_setup);
 	INIT_WORK(&dwc->err_recovery_work, dwc3_err_recovery_work);
 	mutex_init(&dwc->connect_mutex);
-	dwc->gadget = kzalloc_obj(struct usb_gadget);
+	dwc->gadget = kzalloc(sizeof(struct usb_gadget), GFP_KERNEL);
 	if (!dwc->gadget) {
 		ret = -ENOMEM;
 		goto err3;
@@ -4967,7 +4956,6 @@ err1:
 err0:
 	return ret;
 }
-EXPORT_SYMBOL_GPL(dwc3_gadget_init);
 
 /* -------------------------------------------------------------------------- */
 
@@ -4988,7 +4976,6 @@ void dwc3_gadget_exit(struct dwc3 *dwc)
 	dma_free_coherent(dwc->sysdev, sizeof(*dwc->ep0_trb) * 2,
 			  dwc->ep0_trb, dwc->ep0_trb_addr);
 }
-EXPORT_SYMBOL_GPL(dwc3_gadget_exit);
 
 int dwc3_gadget_suspend(struct dwc3 *dwc)
 {

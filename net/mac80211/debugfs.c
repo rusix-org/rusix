@@ -96,8 +96,8 @@ static ssize_t aqm_read(struct file *file,
 			"RW fq_quantum %u\n",
 			fq->flows_cnt,
 			fq->backlog,
-			fq->overlimit,
 			fq->overmemory,
+			fq->overlimit,
 			fq->collisions,
 			fq->memory_usage,
 			fq->memory_limit,
@@ -171,10 +171,23 @@ static ssize_t airtime_flags_write(struct file *file,
 				   size_t count, loff_t *ppos)
 {
 	struct ieee80211_local *local = file->private_data;
-	int ret;
+	char buf[16];
 
-	ret = kstrtou16_from_user(user_buf, count, 0, &local->airtime_flags);
-	return ret ? : count;
+	if (count >= sizeof(buf))
+		return -EINVAL;
+
+	if (copy_from_user(buf, user_buf, count))
+		return -EFAULT;
+
+	if (count && buf[count - 1] == '\n')
+		buf[count - 1] = '\0';
+	else
+		buf[count] = '\0';
+
+	if (kstrtou16(buf, 0, &local->airtime_flags))
+		return -EINVAL;
+
+	return count;
 }
 
 static const struct debugfs_short_fops airtime_flags_ops = {
@@ -316,17 +329,26 @@ static ssize_t aql_enable_read(struct file *file, char __user *user_buf,
 static ssize_t aql_enable_write(struct file *file, const char __user *user_buf,
 				size_t count, loff_t *ppos)
 {
-	bool val;
-	int ret;
+	char buf[3];
+	size_t len;
 
-	ret = kstrtobool_from_user(user_buf, count, &val);
-	if (unlikely(ret))
-		return ret;
+	if (count > sizeof(buf))
+		return -EINVAL;
 
-	if (val)
+	if (copy_from_user(buf, user_buf, count))
+		return -EFAULT;
+
+	buf[sizeof(buf) - 1] = '\0';
+	len = strlen(buf);
+	if (len > 0 && buf[len - 1] == '\n')
+		buf[len - 1] = 0;
+
+	if (buf[0] == '0' && buf[1] == '\0')
+		static_branch_enable(&aql_disable);
+	else if (buf[0] == '1' && buf[1] == '\0')
 		static_branch_disable(&aql_disable);
 	else
-		static_branch_enable(&aql_disable);
+		return -EINVAL;
 
 	return count;
 }
@@ -358,14 +380,26 @@ static ssize_t force_tx_status_write(struct file *file,
 				     loff_t *ppos)
 {
 	struct ieee80211_local *local = file->private_data;
-	bool val;
-	int ret;
+	char buf[3];
 
-	ret = kstrtobool_from_user(user_buf, count, &val);
-	if (unlikely(ret))
-		return ret;
+	if (count >= sizeof(buf))
+		return -EINVAL;
 
-	local->force_tx_status = val;
+	if (copy_from_user(buf, user_buf, count))
+		return -EFAULT;
+
+	if (count && buf[count - 1] == '\n')
+		buf[count - 1] = '\0';
+	else
+		buf[count] = '\0';
+
+	if (buf[0] == '0' && buf[1] == '\0')
+		local->force_tx_status = 0;
+	else if (buf[0] == '1' && buf[1] == '\0')
+		local->force_tx_status = 1;
+	else
+		return -EINVAL;
+
 	return count;
 }
 
@@ -461,7 +495,6 @@ static const char *hw_flag_names[] = {
 	FLAG(DISALLOW_PUNCTURING),
 	FLAG(HANDLES_QUIET_CSA),
 	FLAG(STRICT),
-	FLAG(SUPPORTS_NDP_BLOCKACK),
 #undef FLAG
 };
 
@@ -529,7 +562,6 @@ static ssize_t hwflags_write(struct file *file, const char __user *user_buf,
 }
 
 static const struct file_operations hwflags_ops = {
-	.owner = THIS_MODULE,
 	.open = simple_open,
 	.read = hwflags_read,
 	.write = hwflags_write,

@@ -11,6 +11,13 @@
 /* Lowest firmware API version supported */
 #define IWL_GF_UCODE_API_MIN	100
 
+#define IWL_SO_A_GF_A_FW_PRE		"iwlwifi-so-a0-gf-a0"
+#define IWL_TY_A_GF_A_FW_PRE		"iwlwifi-ty-a0-gf-a0"
+#define IWL_MA_A_GF_A_FW_PRE		"iwlwifi-ma-a0-gf-a0"
+#define IWL_MA_B_GF_A_FW_PRE		"iwlwifi-ma-b0-gf-a0"
+#define IWL_SO_A_GF4_A_FW_PRE		"iwlwifi-so-a0-gf4-a0"
+#define IWL_MA_A_GF4_A_FW_PRE		"iwlwifi-ma-a0-gf4-a0"
+#define IWL_MA_B_GF4_A_FW_PRE		"iwlwifi-ma-b0-gf4-a0"
 #define IWL_BZ_A_GF_A_FW_PRE		"iwlwifi-bz-a0-gf-a0"
 #define IWL_BZ_A_GF4_A_FW_PRE		"iwlwifi-bz-a0-gf4-a0"
 #define IWL_SC_A_GF_A_FW_PRE		"iwlwifi-sc-a0-gf-a0"
@@ -28,6 +35,9 @@
 #define IWL_SC_A_GF4_A_MODULE_FIRMWARE(api) \
 	IWL_SC_A_GF4_A_FW_PRE "-" __stringify(api) ".ucode"
 
+/* NVM versions */
+#define IWL_GF_NVM_VERSION		0x0a1d
+
 const struct iwl_rf_cfg iwl_rf_gf = {
 	.uhb_supported = true,
 	.led_mode = IWL_LED_RF_STATE,
@@ -39,6 +49,7 @@ const struct iwl_rf_cfg iwl_rf_gf = {
 		.ht40_bands = BIT(NL80211_BAND_2GHZ) |
 			      BIT(NL80211_BAND_5GHZ),
 	},
+	.nvm_ver = IWL_GF_NVM_VERSION,
 	.nvm_type = IWL_NVM_EXT,
 	.num_rbds = IWL_NUM_RBDS_HE,
 	.ucode_api_min = IWL_GF_UCODE_API_MIN,
@@ -63,6 +74,12 @@ const char iwl_ax211_name[] = "Intel(R) Wi-Fi 6E AX211 160MHz";
 const char iwl_ax231_name[] = "Intel(R) Wi-Fi 6 AX231";
 const char iwl_ax411_name[] = "Intel(R) Wi-Fi 6E AX411 160MHz";
 
+IWL_FW_AND_PNVM(IWL_SO_A_GF_A_FW_PRE, IWL_GF_UCODE_API_MAX);
+IWL_FW_AND_PNVM(IWL_TY_A_GF_A_FW_PRE, IWL_GF_UCODE_API_MAX);
+IWL_FW_AND_PNVM(IWL_MA_A_GF_A_FW_PRE, IWL_GF_UCODE_API_MAX);
+IWL_FW_AND_PNVM(IWL_MA_B_GF_A_FW_PRE, IWL_GF_UCODE_API_MAX);
+IWL_FW_AND_PNVM(IWL_MA_A_GF4_A_FW_PRE, IWL_GF_UCODE_API_MAX);
+IWL_FW_AND_PNVM(IWL_MA_B_GF4_A_FW_PRE, IWL_GF_UCODE_API_MAX);
 MODULE_FIRMWARE(IWL_BZ_A_GF_A_MODULE_FIRMWARE(IWL_GF_UCODE_API_MAX));
 MODULE_FIRMWARE(IWL_BZ_A_GF4_A_MODULE_FIRMWARE(IWL_GF_UCODE_API_MAX));
 MODULE_FIRMWARE(IWL_SC_A_GF_A_MODULE_FIRMWARE(IWL_GF_UCODE_API_MAX));

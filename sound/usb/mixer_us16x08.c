@@ -151,9 +151,6 @@ static const char *const route_names[] = {
 static int snd_us16x08_recv_urb(struct snd_usb_audio *chip,
 	unsigned char *buf, int size)
 {
-	CLASS(snd_usb_lock, pm)(chip);
-	if (pm.err < 0)
-		return -EIO;
 
 	guard(mutex)(&chip->mutex);
 	snd_usb_ctl_msg(chip->dev,
@@ -168,10 +165,6 @@ static int snd_us16x08_recv_urb(struct snd_usb_audio *chip,
  */
 static int snd_us16x08_send_urb(struct snd_usb_audio *chip, char *buf, int size)
 {
-	CLASS(snd_usb_lock, pm)(chip);
-	if (pm.err < 0)
-		return -EIO;
-
 	return snd_usb_ctl_msg(chip->dev, usb_sndctrlpipe(chip->dev, 0),
 			SND_US16X08_URB_REQUEST, SND_US16X08_URB_REQUESTTYPE,
 			0, 0, buf, size);
@@ -189,7 +182,6 @@ static int snd_us16x08_route_get(struct snd_kcontrol *kcontrol,
 	struct usb_mixer_elem_info *elem = snd_kcontrol_chip(kcontrol);
 	int index = ucontrol->id.index;
 
-	guard(mutex)(&elem->head.mixer->lock);
 	/* route has no bias */
 	ucontrol->value.enumerated.item[0] = elem->cache_val[index];
 
@@ -205,7 +197,6 @@ static int snd_us16x08_route_put(struct snd_kcontrol *kcontrol,
 	char buf[sizeof(route_msg)];
 	int val, val_org, err;
 
-	guard(mutex)(&elem->head.mixer->lock);
 	/*  get the new value (no bias for routes) */
 	val = ucontrol->value.enumerated.item[0];
 
@@ -238,7 +229,7 @@ static int snd_us16x08_route_put(struct snd_kcontrol *kcontrol,
 		return err;
 	}
 
-	set_bit(index, elem->cached);
+	elem->cached |= 1 << index;
 	elem->cache_val[index] = val;
 	return 1;
 }
@@ -260,7 +251,6 @@ static int snd_us16x08_master_get(struct snd_kcontrol *kcontrol,
 	struct usb_mixer_elem_info *elem = snd_kcontrol_chip(kcontrol);
 	int index = ucontrol->id.index;
 
-	guard(mutex)(&elem->head.mixer->lock);
 	ucontrol->value.integer.value[0] = elem->cache_val[index];
 
 	return 0;
@@ -275,7 +265,6 @@ static int snd_us16x08_master_put(struct snd_kcontrol *kcontrol,
 	int val, err;
 	int index = ucontrol->id.index;
 
-	guard(mutex)(&elem->head.mixer->lock);
 	/* new control value incl. bias*/
 	val = ucontrol->value.integer.value[0];
 
@@ -299,7 +288,7 @@ static int snd_us16x08_master_put(struct snd_kcontrol *kcontrol,
 		return err;
 	}
 
-	set_bit(index, elem->cached);
+	elem->cached |= 1 << index;
 	elem->cache_val[index] = val;
 	return 1;
 }
@@ -314,7 +303,6 @@ static int snd_us16x08_bus_put(struct snd_kcontrol *kcontrol,
 
 	val = ucontrol->value.integer.value[0];
 
-	guard(mutex)(&elem->head.mixer->lock);
 	/* prepare the message buffer from template */
 	switch (elem->head.id) {
 	case SND_US16X08_ID_BYPASS:
@@ -341,7 +329,7 @@ static int snd_us16x08_bus_put(struct snd_kcontrol *kcontrol,
 		return err;
 	}
 
-	set_bit(0, elem->cached);
+	elem->cached |= 1;
 	elem->cache_val[0] = val;
 	return 1;
 }
@@ -351,7 +339,6 @@ static int snd_us16x08_bus_get(struct snd_kcontrol *kcontrol,
 {
 	struct usb_mixer_elem_info *elem = snd_kcontrol_chip(kcontrol);
 
-	guard(mutex)(&elem->head.mixer->lock);
 	switch (elem->head.id) {
 	case SND_US16X08_ID_BUSS_OUT:
 		ucontrol->value.integer.value[0] = elem->cache_val[0];
@@ -374,7 +361,6 @@ static int snd_us16x08_channel_get(struct snd_kcontrol *kcontrol,
 	struct usb_mixer_elem_info *elem = snd_kcontrol_chip(kcontrol);
 	int index = ucontrol->id.index;
 
-	guard(mutex)(&elem->head.mixer->lock);
 	ucontrol->value.integer.value[0] = elem->cache_val[index];
 
 	return 0;
@@ -389,7 +375,6 @@ static int snd_us16x08_channel_put(struct snd_kcontrol *kcontrol,
 	int val, err;
 	int index = ucontrol->id.index;
 
-	guard(mutex)(&elem->head.mixer->lock);
 	val = ucontrol->value.integer.value[0];
 
 	/* sanity check */
@@ -412,7 +397,7 @@ static int snd_us16x08_channel_put(struct snd_kcontrol *kcontrol,
 		return err;
 	}
 
-	set_bit(index, elem->cached);
+	elem->cached |= 1 << index;
 	elem->cache_val[index] = val;
 	return 1;
 }
@@ -436,7 +421,6 @@ static int snd_us16x08_comp_get(struct snd_kcontrol *kcontrol,
 	int index = ucontrol->id.index;
 	int val_idx = COMP_STORE_IDX(elem->head.id);
 
-	guard(mutex)(&elem->head.mixer->lock);
 	ucontrol->value.integer.value[0] = store->val[val_idx][index];
 
 	return 0;
@@ -454,7 +438,6 @@ static int snd_us16x08_comp_put(struct snd_kcontrol *kcontrol,
 	int threshold, ratio, attack, release, gain, switch_on;
 	int err;
 
-	guard(mutex)(&elem->head.mixer->lock);
 	val = ucontrol->value.integer.value[0];
 
 	/* sanity check */
@@ -518,7 +501,7 @@ static int snd_us16x08_comp_put(struct snd_kcontrol *kcontrol,
 	}
 
 	store->val[val_idx][index] = val;
-	set_bit(index, elem->cached);
+	elem->cached |= 1 << index;
 	elem->cache_val[index] = val;
 	return 1;
 }
@@ -531,7 +514,6 @@ static int snd_us16x08_eqswitch_get(struct snd_kcontrol *kcontrol,
 	struct snd_us16x08_eq_store *store = elem->private_data;
 	int index = ucontrol->id.index;
 
-	guard(mutex)(&elem->head.mixer->lock);
 	/* get low switch from cache is enough, cause all bands are together */
 	val = store->val[EQ_STORE_BAND_IDX(elem->head.id)]
 		[EQ_STORE_PARAM_IDX(elem->head.id)][index];
@@ -551,7 +533,6 @@ static int snd_us16x08_eqswitch_put(struct snd_kcontrol *kcontrol,
 	int val, err = 0;
 	int b_idx;
 
-	guard(mutex)(&elem->head.mixer->lock);
 	/* new control value incl. bias*/
 	val = ucontrol->value.integer.value[0] + SND_US16X08_KCBIAS(kcontrol);
 
@@ -579,7 +560,7 @@ static int snd_us16x08_eqswitch_put(struct snd_kcontrol *kcontrol,
 		return err;
 	}
 
-	set_bit(index, elem->cached);
+	elem->cached |= 1 << index;
 	elem->cache_val[index] = val;
 	return 1;
 }
@@ -594,7 +575,6 @@ static int snd_us16x08_eq_get(struct snd_kcontrol *kcontrol,
 	int b_idx = EQ_STORE_BAND_IDX(elem->head.id) - 1;
 	int p_idx = EQ_STORE_PARAM_IDX(elem->head.id);
 
-	guard(mutex)(&elem->head.mixer->lock);
 	val = store->val[b_idx][p_idx][index];
 
 	ucontrol->value.integer.value[0] = val;
@@ -614,7 +594,6 @@ static int snd_us16x08_eq_put(struct snd_kcontrol *kcontrol,
 	int b_idx = EQ_STORE_BAND_IDX(elem->head.id) - 1;
 	int p_idx = EQ_STORE_PARAM_IDX(elem->head.id);
 
-	guard(mutex)(&elem->head.mixer->lock);
 	val = ucontrol->value.integer.value[0];
 
 	/* sanity check */
@@ -645,7 +624,7 @@ static int snd_us16x08_eq_put(struct snd_kcontrol *kcontrol,
 
 	store->val[b_idx][p_idx][index] = val;
 	/* store new value in EQ band cache */
-	set_bit(index, elem->cached);
+	elem->cached |= 1 << index;
 	elem->cache_val[index] = val;
 	return 1;
 }
@@ -743,7 +722,6 @@ static int snd_us16x08_meter_get(struct snd_kcontrol *kcontrol,
 	struct snd_us16x08_meter_store *store = elem->private_data;
 	u8 meter_urb[64] = {0};
 
-	guard(mutex)(&elem->head.mixer->lock);
 	switch (kcontrol->private_value) {
 	case 0: {
 		char tmp[sizeof(mix_init_msg1)];
@@ -803,7 +781,6 @@ static int snd_us16x08_meter_put(struct snd_kcontrol *kcontrol,
 	struct snd_us16x08_meter_store *store = elem->private_data;
 	int val;
 
-	guard(mutex)(&elem->head.mixer->lock);
 	val = ucontrol->value.integer.value[0];
 
 	/* sanity check */
@@ -1018,7 +995,7 @@ static struct snd_us16x08_comp_store *snd_us16x08_create_comp_store(void)
 	int i;
 	struct snd_us16x08_comp_store *tmp;
 
-	tmp = kmalloc_obj(*tmp);
+	tmp = kmalloc(sizeof(*tmp), GFP_KERNEL);
 	if (!tmp)
 		return NULL;
 
@@ -1040,7 +1017,7 @@ static struct snd_us16x08_eq_store *snd_us16x08_create_eq_store(void)
 	int i, b_idx;
 	struct snd_us16x08_eq_store *tmp;
 
-	tmp = kmalloc_obj(*tmp);
+	tmp = kmalloc(sizeof(*tmp), GFP_KERNEL);
 	if (!tmp)
 		return NULL;
 
@@ -1076,7 +1053,7 @@ static struct snd_us16x08_meter_store *snd_us16x08_create_meter_store(void)
 {
 	struct snd_us16x08_meter_store *tmp;
 
-	tmp = kzalloc_obj(*tmp);
+	tmp = kzalloc(sizeof(*tmp), GFP_KERNEL);
 	if (!tmp)
 		return NULL;
 	tmp->comp_index = 1;
@@ -1108,7 +1085,7 @@ static int add_new_ctl(struct usb_mixer_interface *mixer,
 
 	usb_audio_dbg(mixer->chip, "us16x08 add mixer %s\n", name);
 
-	elem = kzalloc_obj(*elem);
+	elem = kzalloc(sizeof(*elem), GFP_KERNEL);
 	if (!elem)
 		return -ENOMEM;
 
@@ -1134,8 +1111,7 @@ static int add_new_ctl(struct usb_mixer_interface *mixer,
 
 	strscpy(kctl->id.name, name, sizeof(kctl->id.name));
 
-	/* look_for_empty=false, as we want the fixed id.index as channel */
-	err = snd_usb_mixer_add_list(&elem->head, kctl, true, false);
+	err = snd_usb_mixer_add_control(&elem->head, kctl);
 	if (err < 0)
 		return err;
 
@@ -1369,7 +1345,7 @@ int snd_us16x08_controls_create(struct usb_mixer_interface *mixer)
 		}
 		for (i = 0; i < 8; i++)
 			elem->cache_val[i] = i < 2 ? i : i + 2;
-		bitmap_set(elem->cached, 0, 8);
+		elem->cached = 0xff;
 
 		/* create compressor mixer elements */
 		comp_store = snd_us16x08_create_comp_store();
@@ -1391,7 +1367,7 @@ int snd_us16x08_controls_create(struct usb_mixer_interface *mixer)
 			if (err < 0)
 				return err;
 			elem->cache_val[0] = master_controls[i].default_val;
-			set_bit(0, elem->cached);
+			elem->cached = 1;
 		}
 
 		/* add channel controls */
@@ -1411,7 +1387,7 @@ int snd_us16x08_controls_create(struct usb_mixer_interface *mixer)
 				elem->cache_val[j] =
 					channel_controls[i].default_val;
 			}
-			bitmap_set(elem->cached, 0, SND_US16X08_MAX_CHANNELS);
+			elem->cached = 0xffff;
 		}
 
 		/* create eq store */

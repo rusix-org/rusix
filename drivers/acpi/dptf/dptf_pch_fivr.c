@@ -41,7 +41,7 @@ static int pch_fivr_read(acpi_handle handle, char *method, struct pch_fivr_resp 
 	ret = 0;
 
 release_buffer:
-	ACPI_FREE(buffer.pointer);
+	kfree(buffer.pointer);
 	return ret;
 }
 

@@ -95,11 +95,9 @@ dmabuf_exp_wait_obj_new(struct gntdev_dmabuf_priv *priv,
 {
 	struct gntdev_dmabuf_wait_obj *obj;
 
-	obj = kzalloc_obj(*obj);
-	if (!obj) {
-		kref_put(&gntdev_dmabuf->u.exp.refcount, dmabuf_exp_release);
+	obj = kzalloc(sizeof(*obj), GFP_KERNEL);
+	if (!obj)
 		return ERR_PTR(-ENOMEM);
-	}
 
 	init_completion(&obj->completion);
 	obj->gntdev_dmabuf = gntdev_dmabuf;
@@ -200,7 +198,7 @@ dmabuf_pages_to_sgt(struct page **pages, unsigned int nr_pages)
 	struct sg_table *sgt;
 	int ret;
 
-	sgt = kmalloc_obj(*sgt);
+	sgt = kmalloc(sizeof(*sgt), GFP_KERNEL);
 	if (!sgt) {
 		ret = -ENOMEM;
 		goto out;
@@ -224,7 +222,8 @@ static int dmabuf_exp_ops_attach(struct dma_buf *dma_buf,
 {
 	struct gntdev_dmabuf_attachment *gntdev_dmabuf_attach;
 
-	gntdev_dmabuf_attach = kzalloc_obj(*gntdev_dmabuf_attach);
+	gntdev_dmabuf_attach = kzalloc(sizeof(*gntdev_dmabuf_attach),
+				       GFP_KERNEL);
 	if (!gntdev_dmabuf_attach)
 		return -ENOMEM;
 
@@ -364,7 +363,7 @@ static int dmabuf_exp_from_pages(struct gntdev_dmabuf_export_args *args)
 	if (ret < 0)
 		return ret;
 
-	gntdev_dmabuf = kzalloc_obj(*gntdev_dmabuf);
+	gntdev_dmabuf = kzalloc(sizeof(*gntdev_dmabuf), GFP_KERNEL);
 	if (!gntdev_dmabuf)
 		return -ENOMEM;
 
@@ -532,12 +531,13 @@ static struct gntdev_dmabuf *dmabuf_imp_alloc_storage(int count)
 	struct gntdev_dmabuf *gntdev_dmabuf;
 	int i;
 
-	gntdev_dmabuf = kzalloc_obj(*gntdev_dmabuf);
+	gntdev_dmabuf = kzalloc(sizeof(*gntdev_dmabuf), GFP_KERNEL);
 	if (!gntdev_dmabuf)
 		goto fail_no_free;
 
-	gntdev_dmabuf->u.imp.refs = kzalloc_objs(gntdev_dmabuf->u.imp.refs[0],
-						 count);
+	gntdev_dmabuf->u.imp.refs = kcalloc(count,
+					    sizeof(gntdev_dmabuf->u.imp.refs[0]),
+					    GFP_KERNEL);
 	if (!gntdev_dmabuf->u.imp.refs)
 		goto fail;
 
@@ -818,7 +818,7 @@ struct gntdev_dmabuf_priv *gntdev_dmabuf_init(struct file *filp)
 {
 	struct gntdev_dmabuf_priv *priv;
 
-	priv = kzalloc_obj(*priv);
+	priv = kzalloc(sizeof(*priv), GFP_KERNEL);
 	if (!priv)
 		return ERR_PTR(-ENOMEM);
 

@@ -70,11 +70,12 @@
 
 #include <drm/drm_print.h>
 #include <drm/intel/intel_lpe_audio.h>
-#include <drm/intel/pci_config.h>
 
+#include "i915_irq.h"
 #include "intel_audio_regs.h"
 #include "intel_de.h"
 #include "intel_lpe_audio.h"
+#include "intel_pci_config.h"
 
 #define HAS_LPE_AUDIO(display) ((display)->audio.lpe.platdev)
 
@@ -87,11 +88,11 @@ lpe_audio_platdev_create(struct intel_display *display)
 	struct platform_device *platdev;
 	struct intel_hdmi_lpe_audio_pdata *pdata;
 
-	pdata = kzalloc_obj(*pdata);
+	pdata = kzalloc(sizeof(*pdata), GFP_KERNEL);
 	if (!pdata)
 		return ERR_PTR(-ENOMEM);
 
-	rsc = kzalloc_objs(*rsc, 2);
+	rsc = kcalloc(2, sizeof(*rsc), GFP_KERNEL);
 	if (!rsc) {
 		kfree(pdata);
 		return ERR_PTR(-ENOMEM);
@@ -262,10 +263,10 @@ void intel_lpe_audio_irq_handler(struct intel_display *display)
 	if (!HAS_LPE_AUDIO(display))
 		return;
 
-	ret = generic_handle_irq_safe(display->audio.lpe.irq);
+	ret = generic_handle_irq(display->audio.lpe.irq);
 	if (ret)
 		drm_err_ratelimited(display->drm,
-				    "LPE audio: irq handling failed (%pe)\n", ERR_PTR(ret));
+				    "error handling LPE audio irq: %d\n", ret);
 }
 
 /**

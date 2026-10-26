@@ -510,18 +510,6 @@ static void wacom_intuos_schedule_prox_event(struct wacom_wac *wacom_wac)
 	}
 }
 
-static void wacom_report_touch_mute(struct wacom_wac *wacom_wac, bool mute)
-{
-	struct input_dev *touch_input;
-
-	guard(rcu)();
-	touch_input = rcu_dereference(wacom_wac->shared->touch_input);
-	if (touch_input) {
-		input_report_switch(touch_input, SW_MUTE_DEVICE, mute);
-		input_sync(touch_input);
-	}
-}
-
 static int wacom_intuos_pad(struct wacom_wac *wacom)
 {
 	struct wacom_features *features = &wacom->features;
@@ -662,8 +650,12 @@ static int wacom_intuos_pad(struct wacom_wac *wacom)
 	input_report_key(input, KEY_CONTROLPANEL, menu);
 	input_report_key(input, KEY_INFO, info);
 
-	if (wacom->shared)
-		wacom_report_touch_mute(wacom, !wacom->shared->is_touch_on);
+	if (wacom->shared && wacom->shared->touch_input) {
+		input_report_switch(wacom->shared->touch_input,
+				    SW_MUTE_DEVICE,
+				    !wacom->shared->is_touch_on);
+		input_sync(wacom->shared->touch_input);
+	}
 
 	input_report_abs(input, ABS_RX, strip1);
 	input_report_abs(input, ABS_RY, strip2);
@@ -1027,10 +1019,10 @@ static int wacom_intuos_general(struct wacom_wac *wacom)
 	return 2;
 }
 
-static int wacom_intuos_irq(struct wacom_wac *wacom_wac)
+static int wacom_intuos_irq(struct wacom_wac *wacom)
 {
-	unsigned char *data = wacom_wac->data;
-	struct wacom *wacom = container_of(wacom_wac, struct wacom, wacom_wac);
+	unsigned char *data = wacom->data;
+	struct input_dev *input = wacom->pen_input;
 	int result;
 
 	if (data[0] != WACOM_REPORT_PENABLED &&
@@ -1041,23 +1033,23 @@ static int wacom_intuos_irq(struct wacom_wac *wacom_wac)
 	    data[0] != WACOM_REPORT_CINTIQ &&
 	    data[0] != WACOM_REPORT_CINTIQPAD &&
 	    data[0] != WACOM_REPORT_INTUOS5PAD) {
-		hid_dbg(wacom->hdev,
+		dev_dbg(input->dev.parent,
 			"%s: received unknown report #%d\n", __func__, data[0]);
                 return 0;
 	}
 
 	/* process pad events */
-	result = wacom_intuos_pad(wacom_wac);
+	result = wacom_intuos_pad(wacom);
 	if (result)
 		return result;
 
 	/* process in/out prox events */
-	result = wacom_intuos_inout(wacom_wac);
+	result = wacom_intuos_inout(wacom);
 	if (result)
 		return result - 1;
 
 	/* process general packets */
-	result = wacom_intuos_general(wacom_wac);
+	result = wacom_intuos_general(wacom);
 	if (result)
 		return result - 1;
 
@@ -1200,11 +1192,8 @@ static int int_dist(int x1, int y1, int x2, int y2)
 static void wacom_intuos_bt_process_data(struct wacom_wac *wacom,
 		unsigned char *data)
 {
-	u8 *saved_data = wacom->data;
-
-	wacom->data = data;
+	memcpy(wacom->data, data, 10);
 	wacom_intuos_irq(wacom);
-	wacom->data = saved_data;
 
 	input_sync(wacom->pen_input);
 	if (wacom->pad_input)
@@ -1213,7 +1202,7 @@ static void wacom_intuos_bt_process_data(struct wacom_wac *wacom,
 
 static int wacom_intuos_bt_irq(struct wacom_wac *wacom, size_t len)
 {
-	u8 *data = wacom->data;
+	u8 *data = kmemdup(wacom->data, len, GFP_KERNEL);
 	int i = 1;
 	unsigned power_raw, battery_capacity, bat_charging, ps_connected;
 
@@ -1253,6 +1242,7 @@ static int wacom_intuos_bt_irq(struct wacom_wac *wacom, size_t len)
 		break;
 	}
 
+	kfree(data);
 	return 0;
 }
 
@@ -2176,7 +2166,7 @@ static void wacom_wac_pad_event(struct hid_device *hdev, struct hid_field *field
 	 */
 	if ((equivalent_usage == WACOM_HID_WD_MUTE_DEVICE) ||
 	   (equivalent_usage == WACOM_HID_WD_TOUCHONOFF)) {
-		if (wacom_wac->shared) {
+		if (wacom_wac->shared->touch_input) {
 			bool *is_touch_on = &wacom_wac->shared->is_touch_on;
 
 			if (equivalent_usage == WACOM_HID_WD_MUTE_DEVICE && value)
@@ -2184,7 +2174,9 @@ static void wacom_wac_pad_event(struct hid_device *hdev, struct hid_field *field
 			else if (equivalent_usage == WACOM_HID_WD_TOUCHONOFF)
 				*is_touch_on = value;
 
-			wacom_report_touch_mute(wacom_wac, !(*is_touch_on));
+			input_report_switch(wacom_wac->shared->touch_input,
+					    SW_MUTE_DEVICE, !(*is_touch_on));
+			input_sync(wacom_wac->shared->touch_input);
 		}
 		return;
 	}
@@ -3307,7 +3299,6 @@ static int wacom_bpt_irq(struct wacom_wac *wacom, size_t len)
 static void wacom_bamboo_pad_pen_event(struct wacom_wac *wacom,
 		unsigned char *data)
 {
-	struct hid_device *pen;
 	unsigned char prefix;
 
 	/*
@@ -3320,11 +3311,13 @@ static void wacom_bamboo_pad_pen_event(struct wacom_wac *wacom,
 	prefix = data[0];
 	data[0] = WACOM_REPORT_BPAD_PEN;
 
-	guard(rcu)();
-	pen = rcu_dereference(wacom->shared->pen);
-	if (pen)
-		hid_input_report(pen, HID_INPUT_REPORT, data,
-				 WACOM_PKGLEN_PENABLED, 1);
+	/*
+	 * actually reroute the event.
+	 * No need to check if wacom->shared->pen is valid, hid_input_report()
+	 * will check for us.
+	 */
+	hid_input_report(wacom->shared->pen, HID_INPUT_REPORT, data,
+			 WACOM_PKGLEN_PENABLED, 1);
 
 	data[0] = prefix;
 }
@@ -3401,8 +3394,11 @@ static int wacom_wireless_irq(struct wacom_wac *wacom, size_t len)
 
 		if ((wacom->shared->type == INTUOSHT ||
 		    wacom->shared->type == INTUOSHT2) &&
+		    wacom->shared->touch_input &&
 		    wacom->shared->touch_max) {
-			wacom_report_touch_mute(wacom, data[5] & 0x40);
+			input_report_switch(wacom->shared->touch_input,
+					SW_MUTE_DEVICE, data[5] & 0x40);
+			input_sync(wacom->shared->touch_input);
 		}
 
 		pid = get_unaligned_be16(&data[6]);
@@ -3437,8 +3433,11 @@ static int wacom_status_irq(struct wacom_wac *wacom_wac, size_t len)
 
 	if ((features->type == INTUOSHT ||
 	    features->type == INTUOSHT2) &&
+	    wacom_wac->shared->touch_input &&
 	    features->touch_max) {
-		wacom_report_touch_mute(wacom_wac, data[8] & 0x40);
+		input_report_switch(wacom_wac->shared->touch_input,
+				    SW_MUTE_DEVICE, data[8] & 0x40);
+		input_sync(wacom_wac->shared->touch_input);
 	}
 
 	if (data[9] & 0x02) { /* wireless module is attached */
@@ -3965,8 +3964,8 @@ int wacom_setup_pen_input_capabilities(struct input_dev *input_dev,
 int wacom_setup_touch_input_capabilities(struct input_dev *input_dev,
 					 struct wacom_wac *wacom_wac)
 {
-	struct hid_device *hdev = container_of(wacom_wac, struct wacom, wacom_wac)->hdev;
 	struct wacom_features *features = &wacom_wac->features;
+
 	if (!(features->device_type & WACOM_DEVICETYPE_TOUCH))
 		return -ENODEV;
 
@@ -3975,24 +3974,9 @@ int wacom_setup_touch_input_capabilities(struct input_dev *input_dev,
 	else
 		__set_bit(INPUT_PROP_POINTER, input_dev->propbit);
 
-	if (features->type == HID_GENERIC) {
-		hid_dbg(hdev, "generic touch setup\n");
-
-		/*
-		 * This is to setup the touch switch for those devices that report
-		 * pen interface first. The setup can only be done here since this
-		 * routine is only called once. When we are here, the shared
-		 * has_mute_touch_switch has been set by the pad.
-
-		 * There are two ways of reporting inputs from firmware: stylus first
-		 * or touch first. This path covers the stylus input first case.
-		 */
-		if (wacom_wac->shared && READ_ONCE(wacom_wac->shared->has_mute_touch_switch)) {
-			input_set_capability(input_dev, EV_SW, SW_MUTE_DEVICE);
-		}
+	if (features->type == HID_GENERIC)
 		/* setup has already been done */
 		return 0;
-	}
 
 	input_dev->evbit[0] |= BIT_MASK(EV_KEY) | BIT_MASK(EV_ABS);
 	__set_bit(BTN_TOUCH, input_dev->keybit);
@@ -4024,17 +4008,19 @@ int wacom_setup_touch_input_capabilities(struct input_dev *input_dev,
 		input_dev->evbit[0] |= BIT_MASK(EV_SW);
 		__set_bit(SW_MUTE_DEVICE, input_dev->swbit);
 
-		if (hdev->product == 0x361) {
+		if (wacom_wac->shared->touch->product == 0x361) {
 			input_set_abs_params(input_dev, ABS_MT_POSITION_X,
 					     0, 12440, 4, 0);
 			input_set_abs_params(input_dev, ABS_MT_POSITION_Y,
 					     0, 8640, 4, 0);
-		} else if (hdev->product == 0x360) {
+		}
+		else if (wacom_wac->shared->touch->product == 0x360) {
 			input_set_abs_params(input_dev, ABS_MT_POSITION_X,
 					     0, 8960, 4, 0);
 			input_set_abs_params(input_dev, ABS_MT_POSITION_Y,
 					     0, 5920, 4, 0);
-		} else if (hdev->product == 0x393) {
+		}
+		else if (wacom_wac->shared->touch->product == 0x393) {
 			input_set_abs_params(input_dev, ABS_MT_POSITION_X,
 					     0, 6400, 4, 0);
 			input_set_abs_params(input_dev, ABS_MT_POSITION_Y,
@@ -4064,8 +4050,8 @@ int wacom_setup_touch_input_capabilities(struct input_dev *input_dev,
 		fallthrough;
 
 	case WACOM_27QHDT:
-		if (hdev->product == 0x32C ||
-		    hdev->product == 0xF6) {
+		if (wacom_wac->shared->touch->product == 0x32C ||
+		    wacom_wac->shared->touch->product == 0xF6) {
 			input_dev->evbit[0] |= BIT_MASK(EV_SW);
 			__set_bit(SW_MUTE_DEVICE, input_dev->swbit);
 			wacom_wac->has_mute_touch_switch = true;
@@ -4411,26 +4397,7 @@ int wacom_setup_pad_input_capabilities(struct input_dev *input_dev,
 		break;
 
 	case INTUOSHT3_BT:
-		break;
-
 	case HID_GENERIC:
-		if (wacom_wac->shared) {
-			/*
-			 * The setup of touch switch capability can only be done
-			 * here for those devices, such as Cintiq Pro 13 and 16,
-			 * that have touch input registered before stylus and pad
-			 * inputs.
-			 *
-			 * There are two ways of reporting inputs from firmware:
-			 * stylus first or touch first. This path covers the touch
-			 * input first case.
-			 */
-			if (wacom_wac->has_mute_touch_switch &&
-			    wacom_wac->shared->touch_input) {
-				input_set_capability(wacom_wac->shared->touch_input,
-				    EV_SW, SW_MUTE_DEVICE);
-			}
-		}
 		break;
 
 	default:

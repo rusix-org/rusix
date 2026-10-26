@@ -52,9 +52,6 @@ properties:
       Should contain freqs and voltages and opp-supported-hw property, which
       is a bitfield indicating SoC speedo ID mask.
 
-allOf:
-  - $ref: /schemas/thermal/thermal-cooling-devices.yaml
-
 required:
   - compatible
   - reg
@@ -62,7 +59,7 @@ required:
   - clock-names
   - nvidia,memory-controller
 
-unevaluatedProperties: false
+additionalProperties: false
 
 examples:
   - |
@@ -93,5 +90,4 @@ examples:
         operating-points-v2 = <&dvfs_opp_table>;
 
         #interconnect-cells = <0>;
-        #cooling-cells = <2>;
     };

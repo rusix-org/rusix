@@ -743,7 +743,6 @@ static int wm8961_set_clkdiv(struct snd_soc_dai *dai, int div_id, int div)
 static int wm8961_set_bias_level(struct snd_soc_component *component,
 				 enum snd_soc_bias_level level)
 {
-	struct snd_soc_dapm_context *dapm = snd_soc_component_to_dapm(component);
 	u16 reg;
 
 	/* This is all slightly unusual since we have no bypass paths
@@ -756,7 +755,7 @@ static int wm8961_set_bias_level(struct snd_soc_component *component,
 		break;
 
 	case SND_SOC_BIAS_PREPARE:
-		if (snd_soc_dapm_get_bias_level(dapm) == SND_SOC_BIAS_STANDBY) {
+		if (snd_soc_component_get_bias_level(component) == SND_SOC_BIAS_STANDBY) {
 			/* Enable bias generation */
 			reg = snd_soc_component_read(component, WM8961_ANTI_POP);
 			reg |= WM8961_BUFIOEN | WM8961_BUFDCOPEN;
@@ -771,7 +770,7 @@ static int wm8961_set_bias_level(struct snd_soc_component *component,
 		break;
 
 	case SND_SOC_BIAS_STANDBY:
-		if (snd_soc_dapm_get_bias_level(dapm) == SND_SOC_BIAS_PREPARE) {
+		if (snd_soc_component_get_bias_level(component) == SND_SOC_BIAS_PREPARE) {
 			/* VREF off */
 			reg = snd_soc_component_read(component, WM8961_PWR_MGMT_1);
 			reg &= ~WM8961_VREF;
@@ -803,22 +802,6 @@ static int wm8961_set_bias_level(struct snd_soc_component *component,
 	(SNDRV_PCM_FMTBIT_S16_LE | SNDRV_PCM_FMTBIT_S20_3LE | \
 	SNDRV_PCM_FMTBIT_S24_LE)
 
-static const u64 wm8961_selectable_formats[] = {
-	/* 1st priority */
-	SND_SOC_POSSIBLE_DAIFMT_I2S	|
-	SND_SOC_POSSIBLE_DAIFMT_RIGHT_J	|
-	SND_SOC_POSSIBLE_DAIFMT_LEFT_J	|
-	SND_SOC_POSSIBLE_DAIFMT_NB_NF	|
-	SND_SOC_POSSIBLE_DAIFMT_NB_IF	|
-	SND_SOC_POSSIBLE_DAIFMT_IB_NF	|
-	SND_SOC_POSSIBLE_DAIFMT_IB_IF,
-	/* 2nd priority */
-	SND_SOC_POSSIBLE_DAIFMT_DSP_A	|
-	SND_SOC_POSSIBLE_DAIFMT_DSP_B	|
-	SND_SOC_POSSIBLE_DAIFMT_NB_NF	|
-	SND_SOC_POSSIBLE_DAIFMT_IB_NF,
-};
-
 static const struct snd_soc_dai_ops wm8961_dai_ops = {
 	.hw_params = wm8961_hw_params,
 	.set_sysclk = wm8961_set_sysclk,
@@ -827,8 +810,6 @@ static const struct snd_soc_dai_ops wm8961_dai_ops = {
 	.set_tristate = wm8961_set_tristate,
 	.set_clkdiv = wm8961_set_clkdiv,
 	.no_capture_mute = 1,
-	.auto_selectable_formats	= wm8961_selectable_formats,
-	.num_auto_selectable_formats	= ARRAY_SIZE(wm8961_selectable_formats),
 };
 
 static struct snd_soc_dai_driver wm8961_dai = {
@@ -985,7 +966,7 @@ static int wm8961_i2c_probe(struct i2c_client *i2c)
 }
 
 static const struct i2c_device_id wm8961_i2c_id[] = {
-	{ .name = "wm8961" },
+	{ "wm8961" },
 	{ }
 };
 MODULE_DEVICE_TABLE(i2c, wm8961_i2c_id);

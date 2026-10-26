@@ -67,8 +67,13 @@ find_video(acpi_handle handle, u32 lvl, void *context, void **rv)
 	long *cap = context;
 	struct pci_dev *dev;
 
-	if (acpi_dev_is_video_device(acpi_dev)) {
-		dev = acpi_dev_get_pci_dev(acpi_dev);
+	static const struct acpi_device_id video_ids[] = {
+		{ACPI_VIDEO_HID, 0},
+		{"", 0},
+	};
+
+	if (acpi_dev && !acpi_match_device_ids(acpi_dev, video_ids)) {
+		dev = acpi_get_pci_dev(handle);
 		if (!dev)
 			return AE_OK;
 		pci_dev_put(dev);
@@ -883,14 +888,6 @@ static const struct dmi_system_id video_detect_dmi_table[] = {
 		DMI_MATCH(DMI_PRODUCT_NAME, "OptiPlex 7770 AIO"),
 		},
 	},
-	{
-	 .callback = video_detect_force_native,
-	 /* Dell OptiPlex AIO 7410 35W */
-	 .matches = {
-		DMI_MATCH(DMI_SYS_VENDOR, "Dell Inc."),
-		DMI_MATCH(DMI_PRODUCT_NAME, "OptiPlex AIO 7410 35W"),
-		},
-	},
 
 	/*
 	 * Models which have nvidia-ec-wmi support, but should not use it.
@@ -913,36 +910,11 @@ static const struct dmi_system_id video_detect_dmi_table[] = {
 		},
 	},
 	{
-	 /* https://gitlab.freedesktop.org/drm/amd/-/issues/4512 */
-	 .callback = video_detect_force_native,
-	 /* Lenovo Legion S7 15ACH6 */
-	 .matches = {
-		DMI_MATCH(DMI_SYS_VENDOR, "LENOVO"),
-		DMI_MATCH(DMI_PRODUCT_NAME, "82K8"),
-		},
-	},
-	{
 	 .callback = video_detect_force_native,
 	 /* HP OMEN Gaming Laptop 16-n0xxx */
 	 .matches = {
 		DMI_MATCH(DMI_SYS_VENDOR, "HP"),
 		DMI_MATCH(DMI_PRODUCT_NAME, "OMEN by HP Gaming Laptop 16-n0xxx"),
-		},
-	},
-	{
-	 .callback = video_detect_force_native,
-	 /* Acer Nitro AN515-46 */
-	 .matches = {
-		DMI_MATCH(DMI_SYS_VENDOR, "Acer"),
-		DMI_MATCH(DMI_PRODUCT_NAME, "Nitro AN515-46"),
-		},
-	},
-	{
-	 .callback = video_detect_force_native,
-	 /* Acer Nitro AN515-58 */
-	 .matches = {
-		DMI_MATCH(DMI_SYS_VENDOR, "Acer"),
-		DMI_MATCH(DMI_PRODUCT_NAME, "Nitro AN515-58"),
 		},
 	},
 
@@ -992,6 +964,14 @@ static const struct dmi_system_id video_detect_dmi_table[] = {
 	 .matches = {
 		DMI_MATCH(DMI_SYS_VENDOR, "Xiaomi Inc"),
 		DMI_MATCH(DMI_PRODUCT_NAME, "Mipad2"),
+		},
+	},
+	/* https://gitlab.freedesktop.org/drm/amd/-/issues/4512 */
+	{
+	 .callback = video_detect_force_native,
+	 .matches = {
+		DMI_MATCH(DMI_SYS_VENDOR, "LENOVO"),
+		DMI_MATCH(DMI_PRODUCT_NAME, "82K8"),
 		},
 	},
 	{ },

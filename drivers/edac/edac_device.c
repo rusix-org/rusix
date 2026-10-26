@@ -67,18 +67,17 @@ edac_device_alloc_ctl_info(unsigned pvt_sz, char *dev_name, unsigned nr_instance
 
 	edac_dbg(4, "instances=%d blocks=%d\n", nr_instances, nr_blocks);
 
-	dev_ctl = kzalloc_obj(struct edac_device_ctl_info);
+	dev_ctl = kzalloc(sizeof(struct edac_device_ctl_info), GFP_KERNEL);
 	if (!dev_ctl)
 		return NULL;
 
-	dev_inst = kzalloc_objs(struct edac_device_instance, nr_instances);
+	dev_inst = kcalloc(nr_instances, sizeof(struct edac_device_instance), GFP_KERNEL);
 	if (!dev_inst)
 		goto free;
 
 	dev_ctl->instances = dev_inst;
 
-	dev_blk = kzalloc_objs(struct edac_device_block,
-			       nr_instances * nr_blocks);
+	dev_blk = kcalloc(nr_instances * nr_blocks, sizeof(struct edac_device_block), GFP_KERNEL);
 	if (!dev_blk)
 		goto free;
 
@@ -342,10 +341,14 @@ static void edac_device_workq_teardown(struct edac_device_ctl_info *edac_dev)
 }
 
 /*
- * Stop any outstanding workq queued up at this time because sleep time will
- * be reset. Then restart the workq on the new delay.
+ * edac_device_reset_delay_period
+ *
+ *	need to stop any outstanding workq queued up at this time
+ *	because we will be resetting the sleep time.
+ *	Then restart the workq on the new delay
  */
-void edac_device_reset_delay_period(struct edac_device_ctl_info *edac_dev, unsigned int msec)
+void edac_device_reset_delay_period(struct edac_device_ctl_info *edac_dev,
+				    unsigned long msec)
 {
 	edac_dev->poll_msec = msec;
 	edac_dev->delay	    = msecs_to_jiffies(msec);
@@ -639,22 +642,22 @@ int edac_dev_register(struct device *parent, char *name,
 		}
 	}
 
-	ctx = kzalloc_obj(*ctx);
+	ctx = kzalloc(sizeof(*ctx), GFP_KERNEL);
 	if (!ctx)
 		return -ENOMEM;
 
-	ras_attr_groups = kzalloc_objs(*ras_attr_groups, attr_gcnt + 1);
+	ras_attr_groups = kcalloc(attr_gcnt + 1, sizeof(*ras_attr_groups), GFP_KERNEL);
 	if (!ras_attr_groups)
 		goto ctx_free;
 
 	if (scrub_cnt) {
-		ctx->scrub = kzalloc_objs(*ctx->scrub, scrub_cnt);
+		ctx->scrub = kcalloc(scrub_cnt, sizeof(*ctx->scrub), GFP_KERNEL);
 		if (!ctx->scrub)
 			goto groups_free;
 	}
 
 	if (mem_repair_cnt) {
-		ctx->mem_repair = kzalloc_objs(*ctx->mem_repair, mem_repair_cnt);
+		ctx->mem_repair = kcalloc(mem_repair_cnt, sizeof(*ctx->mem_repair), GFP_KERNEL);
 		if (!ctx->mem_repair)
 			goto data_mem_free;
 	}

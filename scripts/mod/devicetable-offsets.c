@@ -1,6 +1,4 @@
 // SPDX-License-Identifier: GPL-2.0
-#define COMPILE_OFFSETS
-#include <linux/device-id/scmi.h>
 #include <linux/kbuild.h>
 #include <linux/mod_devicetable.h>
 
@@ -145,10 +143,6 @@ int main(void)
 	DEVID(rpmsg_device_id);
 	DEVID_FIELD(rpmsg_device_id, name);
 
-	DEVID(scmi_device_id);
-	DEVID_FIELD(scmi_device_id, protocol_id);
-	DEVID_FIELD(scmi_device_id, name);
-
 	DEVID(i2c_device_id);
 	DEVID_FIELD(i2c_device_id, name);
 
@@ -258,9 +252,6 @@ int main(void)
 
 	DEVID(auxiliary_device_id);
 	DEVID_FIELD(auxiliary_device_id, name);
-
-	DEVID(arm_smccc_device_id);
-	DEVID_FIELD(arm_smccc_device_id, func_id);
 
 	DEVID(ssam_device_id);
 	DEVID_FIELD(ssam_device_id, match_flags);

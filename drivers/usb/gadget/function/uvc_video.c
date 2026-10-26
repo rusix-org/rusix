@@ -559,7 +559,7 @@ uvc_video_alloc_requests(struct uvc_video *video)
 	uvc_video_prep_requests(video);
 
 	for (i = 0; i < video->uvc_num_requests; i++) {
-		ureq = kzalloc_obj(struct uvc_request);
+		ureq = kzalloc(sizeof(struct uvc_request), GFP_KERNEL);
 		if (ureq == NULL)
 			goto error;
 
@@ -838,6 +838,7 @@ int uvcg_video_init(struct uvc_video *video, struct uvc_device *uvc)
 	video->interval = 666666;
 
 	/* Initialize the video buffers queue. */
-	return uvcg_queue_init(&video->queue, uvc->v4l2_dev.dev->parent,
+	uvcg_queue_init(&video->queue, uvc->v4l2_dev.dev->parent,
 			V4L2_BUF_TYPE_VIDEO_OUTPUT, &video->mutex);
+	return 0;
 }

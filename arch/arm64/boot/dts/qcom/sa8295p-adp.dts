@@ -149,6 +149,13 @@
 		enable-active-high;
 		regulator-always-on;
 	};
+
+	reserved-memory {
+		gpu_mem: gpu-mem@8bf00000 {
+			reg = <0 0x8bf00000 0 0x2000>;
+			no-map;
+		};
+	};
 };
 
 &apps_rsc {
@@ -338,10 +345,11 @@
 
 &gpu {
 	status = "okay";
-};
 
-&gpu_zap_shader {
-	firmware-name = "qcom/sa8295p/a690_zap.mbn";
+	zap-shader {
+		memory-region = <&gpu_mem>;
+		firmware-name = "qcom/sa8295p/a690_zap.mbn";
+	};
 };
 
 &gpu_smmu {
@@ -453,15 +461,13 @@
 };
 
 &pcie2a {
+	perst-gpios = <&tlmm 143 GPIO_ACTIVE_LOW>;
+	wake-gpios = <&tlmm 145 GPIO_ACTIVE_LOW>;
+
 	pinctrl-names = "default";
 	pinctrl-0 = <&pcie2a_default>;
 
 	status = "okay";
-};
-
-&pcie2a_port0 {
-	reset-gpios = <&tlmm 143 GPIO_ACTIVE_LOW>;
-	wake-gpios = <&tlmm 145 GPIO_ACTIVE_LOW>;
 };
 
 &pcie2a_phy {
@@ -474,15 +480,13 @@
 &pcie3a {
 	num-lanes = <2>;
 
+	perst-gpios = <&tlmm 151 GPIO_ACTIVE_LOW>;
+	wake-gpios = <&tlmm 56 GPIO_ACTIVE_LOW>;
+
 	pinctrl-names = "default";
 	pinctrl-0 = <&pcie3a_default>;
 
 	status = "okay";
-};
-
-&pcie3a_port0 {
-	reset-gpios = <&tlmm 151 GPIO_ACTIVE_LOW>;
-	wake-gpios = <&tlmm 56 GPIO_ACTIVE_LOW>;
 };
 
 &pcie3a_phy {
@@ -493,15 +497,13 @@
 };
 
 &pcie3b {
+	perst-gpios = <&tlmm 153 GPIO_ACTIVE_LOW>;
+	wake-gpios = <&tlmm 130 GPIO_ACTIVE_LOW>;
+
 	pinctrl-names = "default";
 	pinctrl-0 = <&pcie3b_default>;
 
 	status = "okay";
-};
-
-&pcie3b_port0 {
-	reset-gpios = <&tlmm 153 GPIO_ACTIVE_LOW>;
-	wake-gpios = <&tlmm 130 GPIO_ACTIVE_LOW>;
 };
 
 &pcie3b_phy {
@@ -512,15 +514,13 @@
 };
 
 &pcie4 {
+	perst-gpios = <&tlmm 141 GPIO_ACTIVE_LOW>;
+	wake-gpios = <&tlmm 139 GPIO_ACTIVE_LOW>;
+
 	pinctrl-names = "default";
 	pinctrl-0 = <&pcie4_default>;
 
 	status = "okay";
-};
-
-&pcie4_port0 {
-	reset-gpios = <&tlmm 141 GPIO_ACTIVE_LOW>;
-	wake-gpios = <&tlmm 139 GPIO_ACTIVE_LOW>;
 };
 
 &pcie4_phy {
@@ -612,8 +612,8 @@
 };
 
 &usb_0_qmpphy {
-	vdda-phy-supply = <&vreg_l5a>;
-	vdda-pll-supply = <&vreg_l3a>;
+	vdda-phy-supply = <&vreg_l3a>;
+	vdda-pll-supply = <&vreg_l5a>;
 
 	status = "okay";
 };
@@ -636,8 +636,8 @@
 };
 
 &usb_1_qmpphy {
-	vdda-phy-supply = <&vreg_l1c>;
-	vdda-pll-supply = <&vreg_l4c>;
+	vdda-phy-supply = <&vreg_l4c>;
+	vdda-pll-supply = <&vreg_l1c>;
 
 	status = "okay";
 };
@@ -679,15 +679,15 @@
 };
 
 &usb_2_qmpphy0 {
-	vdda-phy-supply = <&vreg_l5a>;
-	vdda-pll-supply = <&vreg_l3a>;
+	vdda-phy-supply = <&vreg_l3a>;
+	vdda-pll-supply = <&vreg_l5a>;
 
 	status = "okay";
 };
 
 &usb_2_qmpphy1 {
-	vdda-phy-supply = <&vreg_l5a>;
-	vdda-pll-supply = <&vreg_l3a>;
+	vdda-phy-supply = <&vreg_l3a>;
+	vdda-pll-supply = <&vreg_l5a>;
 
 	status = "okay";
 };

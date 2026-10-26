@@ -94,7 +94,7 @@ static void sctp_control_release_owner(struct sk_buff *skb)
 	}
 }
 
-void sctp_control_set_owner_w(struct sctp_chunk *chunk)
+static void sctp_control_set_owner_w(struct sctp_chunk *chunk)
 {
 	struct sctp_association *asoc = chunk->asoc;
 	struct sk_buff *skb = chunk->skb;
@@ -107,8 +107,7 @@ void sctp_control_set_owner_w(struct sctp_chunk *chunk)
 	 *  For now don't do anything for now.
 	 */
 	if (chunk->auth) {
-		if (!chunk->shkey)
-			chunk->shkey = asoc->shkey;
+		chunk->shkey = asoc->shkey;
 		sctp_auth_shkey_hold(chunk->shkey);
 	}
 	skb->sk = asoc ? asoc->base.sk : NULL;
@@ -1853,9 +1852,6 @@ struct sctp_association *sctp_unpack_cookie(
 	/* Set up our peer's port number.  */
 	retval->peer.port = ntohs(chunk->sctp_hdr->source);
 
-	if (!sctp_auth_verify_cookie_params(ep, bear_cookie))
-		goto malformed;
-
 	/* Populate the association from the cookie.  */
 	memcpy(&retval->c, bear_cookie, sizeof(*bear_cookie));
 
@@ -2756,7 +2752,7 @@ __u32 sctp_generate_tag(const struct sctp_endpoint *ep)
 	__u32 x;
 
 	do {
-		x = get_random_u32();
+		get_random_bytes(&x, sizeof(__u32));
 	} while (x == 0);
 
 	return x;
@@ -2767,7 +2763,7 @@ __u32 sctp_generate_tsn(const struct sctp_endpoint *ep)
 {
 	__u32 retval;
 
-	retval = get_random_u32();
+	get_random_bytes(&retval, sizeof(__u32));
 	return retval;
 }
 

@@ -234,8 +234,8 @@ static u32 stmmac_mdio_format_addr(struct stmmac_priv *priv,
 {
 	const struct mii_regs *mii_regs = &priv->hw->mii;
 
-	return field_prep(mii_regs->addr_mask, pa) |
-	       field_prep(mii_regs->reg_mask, gr) |
+	return ((pa << mii_regs->addr_shift) & mii_regs->addr_mask) |
+	       ((gr << mii_regs->reg_shift) & mii_regs->reg_mask) |
 	       priv->gmii_address_bus_config |
 	       MII_ADDR_GBUSY;
 }
@@ -426,14 +426,35 @@ int stmmac_mdio_reset(struct mii_bus *bus)
 int stmmac_pcs_setup(struct net_device *ndev)
 {
 	struct stmmac_priv *priv = netdev_priv(ndev);
-	int ret;
+	struct fwnode_handle *devnode, *pcsnode;
+	struct dw_xpcs *xpcs = NULL;
+	int addr, ret;
 
-	if (!priv->plat->pcs_init)
+	devnode = priv->plat->port_node;
+
+	if (priv->plat->pcs_init) {
+		ret = priv->plat->pcs_init(priv);
+	} else if (fwnode_property_present(devnode, "pcs-handle")) {
+		pcsnode = fwnode_find_reference(devnode, "pcs-handle", 0);
+		xpcs = xpcs_create_fwnode(pcsnode);
+		fwnode_handle_put(pcsnode);
+		ret = PTR_ERR_OR_ZERO(xpcs);
+	} else if (priv->plat->mdio_bus_data &&
+		   priv->plat->mdio_bus_data->pcs_mask) {
+		addr = ffs(priv->plat->mdio_bus_data->pcs_mask) - 1;
+		xpcs = xpcs_create_mdiodev(priv->mii, addr);
+		ret = PTR_ERR_OR_ZERO(xpcs);
+	} else {
 		return 0;
+	}
 
-	ret = priv->plat->pcs_init(priv);
 	if (ret)
-		return dev_err_probe(priv->device, ret, "Failed to initialize PCS\n");
+		return dev_err_probe(priv->device, ret, "No xPCS found\n");
+
+	if (xpcs)
+		xpcs_config_eee_mult_fact(xpcs, priv->plat->mult_fact_100ns);
+
+	priv->hw->xpcs = xpcs;
 
 	return 0;
 }
@@ -442,58 +463,15 @@ void stmmac_pcs_clean(struct net_device *ndev)
 {
 	struct stmmac_priv *priv = netdev_priv(ndev);
 
-	if (!priv->plat->pcs_exit)
+	if (priv->plat->pcs_exit)
+		priv->plat->pcs_exit(priv);
+
+	if (!priv->hw->xpcs)
 		return;
 
-	priv->plat->pcs_exit(priv);
+	xpcs_destroy(priv->hw->xpcs);
+	priv->hw->xpcs = NULL;
 }
-
-struct stmmac_clk_rate {
-	unsigned long rate;
-	u8 cr;
-};
-
-/* The standard clk_csr_i to GMII_Address CR field mapping. The rate provided
- * in this table is the exclusive maximum frequency for the divisor. The
- * comments for each entry give the divisor and the resulting range of MDC
- * clock frequencies.
- */
-static const struct stmmac_clk_rate stmmac_std_csr_to_mdc[] = {
-	{ CSR_F_800M, ~0 },
-	{ CSR_F_500M, STMMAC_CSR_500_800M },
-	{ CSR_F_300M, STMMAC_CSR_300_500M },
-	{ CSR_F_250M, STMMAC_CSR_250_300M },
-	{ CSR_F_150M, STMMAC_CSR_150_250M },
-	{ CSR_F_100M, STMMAC_CSR_100_150M },
-	{ CSR_F_60M,  STMMAC_CSR_60_100M },
-	{ CSR_F_35M,  STMMAC_CSR_35_60M },
-	{ CSR_F_20M,  STMMAC_CSR_20_35M },
-	{ 0, ~0 },
-};
-
-/* The sun8i clk_csr_i to GMII_Address CR field mapping uses rate as the
- * exclusive minimum frequency for the divisor. Note that the last entry
- * is valid and also acts as the sentinel.
- */
-static const struct stmmac_clk_rate stmmac_sun8i_csr_to_mdc[] = {
-	{ 160000000, 3 },
-	{ 80000000, 2 },
-	{ 40000000, 1 },
-	{ 0, 0 },
-};
-
-/* The xgmac clk_csr_i to GMII_Address CR field mapping similarly uses rate
- * as the exclusive minimum frequency for the divisor, and again the last
- * entry is valid and also the sentinel.
- */
-static const struct stmmac_clk_rate stmmac_xgmac_csr_to_mdc[] = {
-	{ 400000000, 5 },
-	{ 350000000, 4 },
-	{ 300000000, 3 },
-	{ 250000000, 2 },
-	{ 150000000, 1 },
-	{ 0, 0 },
-};
 
 /**
  * stmmac_clk_csr_set - dynamically set the MDC clock
@@ -505,15 +483,13 @@ static const struct stmmac_clk_rate stmmac_xgmac_csr_to_mdc[] = {
  *	If a specific clk_csr value is passed from the platform
  *	this means that the CSR Clock Range selection cannot be
  *	changed at run-time and it is fixed (as reported in the driver
- *	documentation). Vice versa the driver will try to set the MDC
+ *	documentation). Viceversa the driver will try to set the MDC
  *	clock dynamically according to the actual clock input.
  */
 static u32 stmmac_clk_csr_set(struct stmmac_priv *priv)
 {
-	const struct stmmac_clk_rate *rates;
 	unsigned long clk_rate;
 	u32 value = ~0;
-	int i;
 
 	clk_rate = clk_get_rate(priv->plat->stmmac_clk);
 
@@ -524,17 +500,48 @@ static u32 stmmac_clk_csr_set(struct stmmac_priv *priv)
 	 * the frequency of clk_csr_i. So we do not change the default
 	 * divider.
 	 */
-	rates = stmmac_std_csr_to_mdc;
-	if (priv->plat->flags & STMMAC_FLAG_HAS_SUN8I)
-		rates = stmmac_sun8i_csr_to_mdc;
-	if (priv->plat->core_type == DWMAC_CORE_XGMAC)
-		rates = stmmac_xgmac_csr_to_mdc;
+	if (clk_rate < CSR_F_35M)
+		value = STMMAC_CSR_20_35M;
+	else if (clk_rate < CSR_F_60M)
+		value = STMMAC_CSR_35_60M;
+	else if (clk_rate < CSR_F_100M)
+		value = STMMAC_CSR_60_100M;
+	else if (clk_rate < CSR_F_150M)
+		value = STMMAC_CSR_100_150M;
+	else if (clk_rate < CSR_F_250M)
+		value = STMMAC_CSR_150_250M;
+	else if (clk_rate <= CSR_F_300M)
+		value = STMMAC_CSR_250_300M;
+	else if (clk_rate < CSR_F_500M)
+		value = STMMAC_CSR_300_500M;
+	else if (clk_rate < CSR_F_800M)
+		value = STMMAC_CSR_500_800M;
 
-	for (i = 0; rates[i].rate; i++)
-		if (clk_rate > rates[i].rate)
-			break;
-	if (rates[i].cr != (u8)~0)
-		value = rates[i].cr;
+	if (priv->plat->flags & STMMAC_FLAG_HAS_SUN8I) {
+		if (clk_rate > 160000000)
+			value = 0x03;
+		else if (clk_rate > 80000000)
+			value = 0x02;
+		else if (clk_rate > 40000000)
+			value = 0x01;
+		else
+			value = 0;
+	}
+
+	if (priv->plat->core_type == DWMAC_CORE_XGMAC) {
+		if (clk_rate > 400000000)
+			value = 0x5;
+		else if (clk_rate > 350000000)
+			value = 0x4;
+		else if (clk_rate > 300000000)
+			value = 0x3;
+		else if (clk_rate > 250000000)
+			value = 0x2;
+		else if (clk_rate > 150000000)
+			value = 0x1;
+		else
+			value = 0x0;
+	}
 
 	return value;
 }
@@ -552,7 +559,7 @@ static void stmmac_mdio_bus_config(struct stmmac_priv *priv)
 	else
 		value = stmmac_clk_csr_set(priv);
 
-	value <<= __ffs(priv->hw->mii.clk_csr_mask);
+	value <<= priv->hw->mii.clk_csr_shift;
 
 	if (value & ~priv->hw->mii.clk_csr_mask)
 		dev_warn(priv->device,
@@ -576,9 +583,8 @@ int stmmac_mdio_register(struct net_device *ndev)
 	struct device_node *mdio_node = priv->plat->mdio_node;
 	struct device *dev = ndev->dev.parent;
 	struct fwnode_handle *fixed_node;
-	int max_addr = PHY_MAX_ADDR - 1;
 	struct fwnode_handle *fwnode;
-	struct phy_device *phydev;
+	int addr, found, max_addr;
 
 	if (!mdio_bus_data)
 		return 0;
@@ -602,12 +608,15 @@ int stmmac_mdio_register(struct net_device *ndev)
 
 		if (priv->synopsys_id < DWXGMAC_CORE_2_20) {
 			/* Right now only C22 phys are supported */
-			max_addr = MII_XGMAC_MAX_C22ADDR;
+			max_addr = MII_XGMAC_MAX_C22ADDR + 1;
 
 			/* Check if DT specified an unsupported phy addr */
 			if (priv->plat->phy_addr > MII_XGMAC_MAX_C22ADDR)
 				dev_err(dev, "Unsupported phy_addr (max=%d)\n",
 					MII_XGMAC_MAX_C22ADDR);
+		} else {
+			/* XGMAC version 2.20 onwards support 32 phy addr */
+			max_addr = PHY_MAX_ADDR;
 		}
 	} else {
 		new_bus->read = &stmmac_mdio_read_c22;
@@ -616,6 +625,8 @@ int stmmac_mdio_register(struct net_device *ndev)
 			new_bus->read_c45 = &stmmac_mdio_read_c45;
 			new_bus->write_c45 = &stmmac_mdio_write_c45;
 		}
+
+		max_addr = PHY_MAX_ADDR;
 	}
 
 	if (mdio_bus_data->needs_reset)
@@ -642,7 +653,10 @@ int stmmac_mdio_register(struct net_device *ndev)
 		stmmac_xgmac2_mdio_read_c45(new_bus, 0, 0, 0);
 
 	/* If fixed-link is set, skip PHY scanning */
-	fwnode = dev_fwnode(priv->device);
+	fwnode = priv->plat->port_node;
+	if (!fwnode)
+		fwnode = dev_fwnode(priv->device);
+
 	if (fwnode) {
 		fixed_node = fwnode_get_named_child_node(fwnode, "fixed-link");
 		if (fixed_node) {
@@ -654,30 +668,40 @@ int stmmac_mdio_register(struct net_device *ndev)
 	if (priv->plat->phy_node || mdio_node)
 		goto bus_register_done;
 
-	phydev = phy_find_first(new_bus);
-	if (!phydev || phydev->mdio.addr > max_addr) {
+	found = 0;
+	for (addr = 0; addr < max_addr; addr++) {
+		struct phy_device *phydev = mdiobus_get_phy(new_bus, addr);
+
+		if (!phydev)
+			continue;
+
+		/*
+		 * If an IRQ was provided to be assigned after
+		 * the bus probe, do it here.
+		 */
+		if (!mdio_bus_data->irqs &&
+		    (mdio_bus_data->probed_phy_irq > 0)) {
+			new_bus->irq[addr] = mdio_bus_data->probed_phy_irq;
+			phydev->irq = mdio_bus_data->probed_phy_irq;
+		}
+
+		/*
+		 * If we're going to bind the MAC to this PHY bus,
+		 * and no PHY number was provided to the MAC,
+		 * use the one probed here.
+		 */
+		if (priv->plat->phy_addr == -1)
+			priv->plat->phy_addr = addr;
+
+		phy_attached_info(phydev);
+		found = 1;
+	}
+
+	if (!found && !mdio_node) {
 		dev_warn(dev, "No PHY found\n");
 		err = -ENODEV;
 		goto no_phy_found;
 	}
-
-	/*
-	 * If an IRQ was provided to be assigned after
-	 * the bus probe, do it here.
-	 */
-	if (!mdio_bus_data->irqs && mdio_bus_data->probed_phy_irq > 0) {
-		new_bus->irq[phydev->mdio.addr] = mdio_bus_data->probed_phy_irq;
-		phydev->irq = mdio_bus_data->probed_phy_irq;
-	}
-
-	/*
-	 * If we're going to bind the MAC to this PHY bus, and no PHY number
-	 * was provided to the MAC, use the one probed here.
-	 */
-	if (priv->plat->phy_addr == -1)
-		priv->plat->phy_addr = phydev->mdio.addr;
-
-	phy_attached_info(phydev);
 
 bus_register_done:
 	priv->mii = new_bus;
@@ -710,17 +734,3 @@ int stmmac_mdio_unregister(struct net_device *ndev)
 
 	return 0;
 }
-
-void stmmac_mdio_lock(struct stmmac_priv *priv)
-{
-	if (priv->mii)
-		mutex_lock(&priv->mii->mdio_lock);
-}
-EXPORT_SYMBOL_GPL(stmmac_mdio_lock);
-
-void stmmac_mdio_unlock(struct stmmac_priv *priv)
-{
-	if (priv->mii)
-		mutex_unlock(&priv->mii->mdio_lock);
-}
-EXPORT_SYMBOL_GPL(stmmac_mdio_unlock);

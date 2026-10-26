@@ -411,12 +411,12 @@ static int mmap_return_error(int err, struct mmap_batch_state *st)
 			gfn |= (err == -ENOENT) ?
 				PRIVCMD_MMAPBATCH_PAGED_ERROR :
 				PRIVCMD_MMAPBATCH_MFN_ERROR;
-			return put_user(gfn, st->user_gfn++);
+			return __put_user(gfn, st->user_gfn++);
 		} else
 			st->user_gfn++;
 	} else { /* st->version == 2 */
 		if (err)
-			return put_user(err, st->user_err++);
+			return __put_user(err, st->user_err++);
 		else
 			st->user_err++;
 	}
@@ -448,7 +448,7 @@ static int alloc_empty_pages(struct vm_area_struct *vma, int numpgs)
 	int rc;
 	struct page **pages;
 
-	pages = kvzalloc_objs(pages[0], numpgs);
+	pages = kvcalloc(numpgs, sizeof(pages[0]), GFP_KERNEL);
 	if (pages == NULL)
 		return -ENOMEM;
 
@@ -668,7 +668,7 @@ static long privcmd_ioctl_dm_op(struct file *file, void __user *udata)
 	if (kdata.num > privcmd_dm_op_max_num)
 		return -E2BIG;
 
-	kbufs = kzalloc_objs(*kbufs, kdata.num);
+	kbufs = kcalloc(kdata.num, sizeof(*kbufs), GFP_KERNEL);
 	if (!kbufs)
 		return -ENOMEM;
 
@@ -695,13 +695,13 @@ static long privcmd_ioctl_dm_op(struct file *file, void __user *udata)
 			PAGE_SIZE);
 	}
 
-	pages = kzalloc_objs(*pages, nr_pages);
+	pages = kcalloc(nr_pages, sizeof(*pages), GFP_KERNEL);
 	if (!pages) {
 		rc = -ENOMEM;
 		goto out;
 	}
 
-	xbufs = kzalloc_objs(*xbufs, kdata.num);
+	xbufs = kcalloc(kdata.num, sizeof(*xbufs), GFP_KERNEL);
 	if (!xbufs) {
 		rc = -ENOMEM;
 		goto out;
@@ -777,7 +777,7 @@ static long privcmd_ioctl_mmap_resource(struct file *file,
 		rc = HYPERVISOR_memory_op(XENMEM_acquire_resource, &xdata);
 		if (rc)
 			return rc;
-		return put_user(xdata.nr_frames, &udata->num);
+		return __put_user(xdata.nr_frames, &udata->num);
 	}
 
 	mmap_write_lock(mm);
@@ -788,13 +788,13 @@ static long privcmd_ioctl_mmap_resource(struct file *file,
 		goto out;
 	}
 
-	pfns = kzalloc_objs(*pfns, kdata.num, GFP_KERNEL | __GFP_NOWARN);
+	pfns = kcalloc(kdata.num, sizeof(*pfns), GFP_KERNEL | __GFP_NOWARN);
 	if (!pfns) {
 		rc = -ENOMEM;
 		goto out;
 	}
 
-	if (!xen_pv_domain()) {
+	if (IS_ENABLED(CONFIG_XEN_AUTO_XLATE) && !xen_pv_domain()) {
 		unsigned int nr = DIV_ROUND_UP(kdata.num, XEN_PFN_PER_PAGE);
 		struct page **pages;
 		unsigned int i;
@@ -825,7 +825,7 @@ static long privcmd_ioctl_mmap_resource(struct file *file,
 	if (rc)
 		goto out;
 
-	if (!xen_pv_domain()) {
+	if (IS_ENABLED(CONFIG_XEN_AUTO_XLATE) && !xen_pv_domain()) {
 		rc = xen_remap_vma_range(vma, kdata.addr, kdata.num << PAGE_SHIFT);
 	} else {
 		unsigned int domid =
@@ -1106,8 +1106,7 @@ static long privcmd_ioctl_irqfd(struct file *file, void __user *udata)
 
 static int privcmd_irqfd_init(void)
 {
-	irqfd_cleanup_wq = alloc_workqueue("privcmd-irqfd-cleanup", WQ_PERCPU,
-					   0);
+	irqfd_cleanup_wq = alloc_workqueue("privcmd-irqfd-cleanup", 0, 0);
 	if (!irqfd_cleanup_wq)
 		return -ENOMEM;
 
@@ -1169,40 +1168,51 @@ static irqreturn_t ioeventfd_interrupt(int irq, void *dev_id)
 	struct privcmd_kernel_ioreq *kioreq = port->kioreq;
 	struct ioreq *ioreq = &kioreq->ioreq[port->vcpu];
 	struct privcmd_kernel_ioeventfd *kioeventfd;
-	bool matched = false;
+	unsigned int state = STATE_IOREQ_READY;
 
-	if (ioreq->state != STATE_IOREQ_READY)
+	if (ioreq->state != STATE_IOREQ_READY ||
+	    ioreq->type != IOREQ_TYPE_COPY || ioreq->dir != IOREQ_WRITE)
 		return IRQ_NONE;
 
-	/* Xen publishes the request before changing its state to READY. */
-	virt_rmb();
-
-	if (ioreq->type != IOREQ_TYPE_COPY || ioreq->dir != IOREQ_WRITE)
-		return IRQ_NONE;
+	/*
+	 * We need a barrier, smp_mb(), here to ensure reads are finished before
+	 * `state` is updated. Since the lock implementation ensures that
+	 * appropriate barrier will be added anyway, we can avoid adding
+	 * explicit barrier here.
+	 *
+	 * Ideally we don't need to update `state` within the locks, but we do
+	 * that here to avoid adding explicit barrier.
+	 */
 
 	spin_lock(&kioreq->lock);
+	ioreq->state = STATE_IOREQ_INPROCESS;
+
 	list_for_each_entry(kioeventfd, &kioreq->ioeventfds, list) {
 		if (ioreq->addr == kioeventfd->addr + VIRTIO_MMIO_QUEUE_NOTIFY &&
 		    ioreq->size == kioeventfd->addr_len &&
 		    (ioreq->data & QUEUE_NOTIFY_VQ_MASK) == kioeventfd->vq) {
-			/* Finish reading the request before claiming it. */
-			virt_mb();
-			ioreq->state = STATE_IOREQ_INPROCESS;
 			eventfd_signal(kioeventfd->eventfd);
-			matched = true;
+			state = STATE_IORESP_READY;
 			break;
 		}
 	}
 	spin_unlock(&kioreq->lock);
 
-	if (!matched)
-		return IRQ_NONE;
+	/*
+	 * We need a barrier, smp_mb(), here to ensure writes are finished
+	 * before `state` is updated. Since the lock implementation ensures that
+	 * appropriate barrier will be added anyway, we can avoid adding
+	 * explicit barrier here.
+	 */
 
-	/* Publish the response only after signaling the eventfd. */
-	virt_wmb();
-	ioreq->state = STATE_IORESP_READY;
-	notify_remote_via_evtchn(port->port);
-	return IRQ_HANDLED;
+	ioreq->state = state;
+
+	if (state == STATE_IORESP_READY) {
+		notify_remote_via_evtchn(port->port);
+		return IRQ_HANDLED;
+	}
+
+	return IRQ_NONE;
 }
 
 static void ioreq_free(struct privcmd_kernel_ioreq *kioreq)
@@ -1359,7 +1369,7 @@ static int privcmd_ioeventfd_assign(struct privcmd_ioeventfd *ioeventfd)
 	if (!ioeventfd->vcpus || ioeventfd->vcpus > 4096)
 		return -EINVAL;
 
-	kioeventfd = kzalloc_obj(*kioeventfd);
+	kioeventfd = kzalloc(sizeof(*kioeventfd), GFP_KERNEL);
 	if (!kioeventfd)
 		return -ENOMEM;
 
@@ -1572,7 +1582,7 @@ static int privcmd_open(struct inode *ino, struct file *file)
 	if (wait_event_interruptible(restrict_wait_wq, !restrict_wait) < 0)
 		return -EINTR;
 
-	data = kzalloc_obj(*data);
+	data = kzalloc(sizeof(*data), GFP_KERNEL);
 	if (!data)
 		return -ENOMEM;
 

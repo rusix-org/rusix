@@ -11,9 +11,8 @@
 #include <linux/idr.h>
 #include <linux/irq.h>
 #include <linux/irqdomain.h>
-#include <linux/jiffies.h>
 #include <linux/lockdep_types.h>
-#include <linux/device-id/sdw.h>
+#include <linux/mod_devicetable.h>
 #include <linux/mutex.h>
 #include <linux/types.h>
 #include <sound/sdca.h>
@@ -365,10 +364,6 @@ struct sdw_dpn_prop {
  * @commit_register_supported: is PCP_Commit register supported
  * @scp_int1_mask: SCP_INT1_MASK desired settings
  * @lane_maps: Lane mapping for the slave, only valid if lane_control_support is set
- * @bra_block_alignment: If non-zero the length of data in a BRA frame must be
- *			 a multiple of this number of bytes.
- * @bra_max_data_per_frame: If non-zero the maximum data payload size (in bytes per
- *			    frame excluding header, CRC, and footer) for this BRA Mode
  * @clock_reg_supported: the Peripheral implements the clock base and scale
  * registers introduced with the SoundWire 1.2 specification. SDCA devices
  * do not need to set this boolean property as the registers are required.
@@ -399,8 +394,6 @@ struct sdw_slave_prop {
 	u8 commit_register_supported;
 	u8 scp_int1_mask;
 	u8 lane_maps[SDW_MAX_LANES];
-	u32 bra_block_alignment;
-	u32 bra_max_data_per_frame;
 	bool clock_reg_supported;
 	bool use_domain_irq;
 };
@@ -539,7 +532,7 @@ struct sdw_slave_intr_status {
 };
 
 /**
- * enum sdw_reg_bank - SoundWire register banks
+ * sdw_reg_bank - SoundWire register banks
  * @SDW_BANK0: Soundwire register bank 0
  * @SDW_BANK1: Soundwire register bank 1
  */
@@ -712,7 +705,7 @@ struct sdw_master_device {
 
 struct sdw_driver {
 	int (*probe)(struct sdw_slave *sdw, const struct sdw_device_id *id);
-	void (*remove)(struct sdw_slave *sdw);
+	int (*remove)(struct sdw_slave *sdw);
 	void (*shutdown)(struct sdw_slave *sdw);
 
 	const struct sdw_device_id *id_table;
@@ -758,7 +751,7 @@ struct sdw_port_params {
  * struct sdw_transport_params: Data Port Transport Parameters
  *
  * @blk_grp_ctrl_valid: Port implements block group control
- * @port_num: Port number
+ * @num: Port number
  * @blk_grp_ctrl: Block group control value
  * @sample_interval: Sample interval
  * @offset1: Blockoffset of the payload data
@@ -789,7 +782,7 @@ struct sdw_transport_params {
 /**
  * struct sdw_enable_ch: Enable/disable Data Port channel
  *
- * @port_num: Port number
+ * @num: Port number
  * @ch_mask: Active channel mask
  * @enable: Enable (true) /disable (false) channel
  */
@@ -843,14 +836,6 @@ struct sdw_defer {
  */
 #define SDW_BPT_MSG_MAX_BYTES  (1024 * 1024)
 
-/*
- * According to mipi SoundWire DisCo Specification_v2-1,
- * this maximum value shall not exceed 470.
- * Note that the largest number of bytes accessible by a single BRA operation is limited to 470
- * bytes when using lane 0, but goes up to 502 bytes when using one of the optional extra lanes.
- */
-#define SDW_BRA_MAX_BYTES_PER_FRAME  470
-
 struct sdw_bpt_msg;
 
 /**
@@ -900,7 +885,7 @@ void sdw_bus_master_delete(struct sdw_bus *bus);
 void sdw_show_ping_status(struct sdw_bus *bus, bool sync_delay);
 
 /**
- * struct sdw_port_config: Master or Slave Port configuration
+ * sdw_port_config: Master or Slave Port configuration
  *
  * @num: Port number
  * @ch_mask: channels mask for port
@@ -911,7 +896,7 @@ struct sdw_port_config {
 };
 
 /**
- * struct sdw_stream_config: Master or Slave stream configuration
+ * sdw_stream_config: Master or Slave stream configuration
  *
  * @frame_rate: Audio frame rate of the stream, in Hz
  * @ch_count: Channel count of the stream
@@ -928,7 +913,7 @@ struct sdw_stream_config {
 };
 
 /**
- * enum sdw_stream_state: Stream states
+ * sdw_stream_state: Stream states
  *
  * @SDW_STREAM_ALLOCATED: New stream allocated.
  * @SDW_STREAM_CONFIGURED: Stream configured
@@ -949,7 +934,7 @@ enum sdw_stream_state {
 };
 
 /**
- * struct sdw_stream_params: Stream parameters
+ * sdw_stream_params: Stream parameters
  *
  * @rate: Sampling frequency, in Hz
  * @ch_count: Number of channels
@@ -962,7 +947,7 @@ struct sdw_stream_params {
 };
 
 /**
- * struct sdw_stream_runtime: Runtime stream parameters
+ * sdw_stream_runtime: Runtime stream parameters
  *
  * @name: SoundWire stream name
  * @params: Stream parameters
@@ -998,7 +983,7 @@ struct sdw_stream_runtime {
  * @defer_msg: Defer message
  * @params: Current bus parameters
  * @stream_refcount: number of streams currently using this bus
- * @bpt_stream_refcount: number of BTP streams currently using this bus (should
+ * @btp_stream_refcount: number of BTP streams currently using this bus (should
  * be zero or one, multiple streams per link is not supported).
  * @bpt_stream: pointer stored to handle BTP streams.
  * @ops: Master callback ops
@@ -1108,6 +1093,8 @@ int sdw_slave_get_current_bank(struct sdw_slave *sdev);
 
 int sdw_slave_get_scale_index(struct sdw_slave *slave, u8 *base);
 
+int sdw_slave_wait_for_init(struct sdw_slave *slave, int timeout_ms);
+
 /* messaging and data APIs */
 int sdw_read(struct sdw_slave *slave, u32 addr);
 int sdw_write(struct sdw_slave *slave, u32 addr, u8 value);
@@ -1146,6 +1133,12 @@ static inline struct device *of_sdw_find_device_by_node(struct device_node *np)
 }
 
 static inline int sdw_slave_get_current_bank(struct sdw_slave *sdev)
+{
+	WARN_ONCE(1, "SoundWire API is disabled");
+	return -EINVAL;
+}
+
+static inline int sdw_slave_wait_for_init(struct sdw_slave *slave, int timeout_ms)
 {
 	WARN_ONCE(1, "SoundWire API is disabled");
 	return -EINVAL;
@@ -1213,34 +1206,5 @@ static inline int sdw_update_no_pm(struct sdw_slave *slave, u32 addr, u8 mask, u
 }
 
 #endif /* CONFIG_SOUNDWIRE */
-
-/**
- * sdw_slave_wait_for_init - Wait for device initialisation
- * @slave: Pointer to the SoundWire peripheral.
- * @timeout_ms: Timeout in milliseconds.
- *
- * Wait for a peripheral device to enumerate and be initialised by the
- * SoundWire core.
- *
- * Return: Zero on success, and a negative error code on failure.
- */
-static inline int sdw_slave_wait_for_init(struct sdw_slave *slave, int timeout_ms)
-{
-	unsigned long time;
-
-	if (!slave)
-		return 0;
-
-	time = wait_for_completion_timeout(&slave->initialization_complete,
-					   msecs_to_jiffies(timeout_ms));
-	if (!time) {
-		dev_err(&slave->dev, "Initialization not complete\n");
-		return -ETIMEDOUT;
-	}
-
-	slave->unattach_request = 0;
-
-	return 0;
-}
 
 #endif /* __SOUNDWIRE_H */

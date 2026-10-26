@@ -2278,10 +2278,10 @@ vmxnet3_rq_create(struct vmxnet3_rx_queue *rq, struct vmxnet3_adapter *adapter)
 		rq->data_ring.base =
 			dma_alloc_coherent(&adapter->pdev->dev, sz,
 					   &rq->data_ring.basePA,
-					   GFP_KERNEL | __GFP_NOWARN);
+					   GFP_KERNEL);
 		if (!rq->data_ring.base) {
 			netdev_err(adapter->netdev,
-				   "failed to allocate %zu bytes, rx data ring will be disabled\n", sz);
+				   "rx data ring will be disabled\n");
 			adapter->rxdataring_enabled = false;
 		}
 	} else {

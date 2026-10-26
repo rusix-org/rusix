@@ -4,11 +4,18 @@
 
 #ifdef CONFIG_PARAVIRT
 
-#include <linux/jump_label.h>
+#include <linux/static_call_types.h>
+struct static_key;
+extern struct static_key paravirt_steal_enabled;
+extern struct static_key paravirt_steal_rq_enabled;
 
-DECLARE_STATIC_KEY_FALSE(virt_preempt_key);
-DECLARE_STATIC_KEY_FALSE(virt_spin_lock_key);
-DECLARE_PER_CPU(struct kvm_steal_time, steal_time);
+u64 dummy_steal_clock(int cpu);
+DECLARE_STATIC_CALL(pv_steal_clock, dummy_steal_clock);
+
+static inline u64 paravirt_steal_clock(int cpu)
+{
+	return static_call(pv_steal_clock)(cpu);
+}
 
 int __init pv_ipi_init(void);
 int __init pv_time_init(void);

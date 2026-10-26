@@ -157,24 +157,26 @@ unlock:
 	spin_unlock_irqrestore(&pdata->tstamp_lock, flags);
 }
 
-int xgbe_get_hwtstamp_settings(struct net_device *netdev,
-			       struct kernel_hwtstamp_config *config)
+int xgbe_get_hwtstamp_settings(struct xgbe_prv_data *pdata, struct ifreq *ifreq)
 {
-	struct xgbe_prv_data *pdata = netdev_priv(netdev);
-
-	*config = pdata->tstamp_config;
+	if (copy_to_user(ifreq->ifr_data, &pdata->tstamp_config,
+			 sizeof(pdata->tstamp_config)))
+		return -EFAULT;
 
 	return 0;
 }
 
-int xgbe_set_hwtstamp_settings(struct net_device *netdev,
-			       struct kernel_hwtstamp_config *config,
-			       struct netlink_ext_ack *extack)
+int xgbe_set_hwtstamp_settings(struct xgbe_prv_data *pdata, struct ifreq *ifreq)
 {
-	struct xgbe_prv_data *pdata = netdev_priv(netdev);
-	unsigned int mac_tscr = 0;
+	struct hwtstamp_config config;
+	unsigned int mac_tscr;
 
-	switch (config->tx_type) {
+	if (copy_from_user(&config, ifreq->ifr_data, sizeof(config)))
+		return -EFAULT;
+
+	mac_tscr = 0;
+
+	switch (config.tx_type) {
 	case HWTSTAMP_TX_OFF:
 		break;
 
@@ -186,7 +188,7 @@ int xgbe_set_hwtstamp_settings(struct net_device *netdev,
 		return -ERANGE;
 	}
 
-	switch (config->rx_filter) {
+	switch (config.rx_filter) {
 	case HWTSTAMP_FILTER_NONE:
 		break;
 
@@ -288,7 +290,7 @@ int xgbe_set_hwtstamp_settings(struct net_device *netdev,
 
 	xgbe_config_tstamp(pdata, mac_tscr);
 
-	pdata->tstamp_config = *config;
+	memcpy(&pdata->tstamp_config, &config, sizeof(config));
 
 	return 0;
 }

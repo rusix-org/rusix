@@ -1,0 +1,9 @@
+{
+  "scope": "host ownership model only, no kernel-runtime proof",
+  "model_sha256": "e35408d36bdcd97a8390317f71f299108ba58e24025ec8cddd9bf7e8f1320a0c",
+  "result": "5 passed, zero failed/ignored",
+  "sha256": {
+    "rustc-version.txt": "6661789050175828fe81cbba4e3bd5817751f51884bb3f5baaa7919bc01caa88",
+    "tests.log": "296cc88c3bc13ed5631fb9fedf010eea4ed7124cadedb383de71bd12d3da04dd"
+  }
+}

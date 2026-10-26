@@ -2,6 +2,7 @@
 /*
  * Copyright (c) 2005-2011 Atheros Communications Inc.
  * Copyright (c) 2011-2017 Qualcomm Atheros, Inc.
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 
@@ -505,8 +506,9 @@ free_idr_pending_tx:
 	return ret;
 }
 
-static void ath10k_htt_tx_clean_up_pending(int msdu_id, struct ath10k *ar)
+static int ath10k_htt_tx_clean_up_pending(int msdu_id, void *skb, void *ctx)
 {
+	struct ath10k *ar = ctx;
 	struct ath10k_htt *htt = &ar->htt;
 	struct htt_tx_done tx_done = {};
 
@@ -516,6 +518,8 @@ static void ath10k_htt_tx_clean_up_pending(int msdu_id, struct ath10k *ar)
 	tx_done.status = HTT_TX_COMPL_STATE_DISCARD;
 
 	ath10k_txrx_tx_unref(htt, &tx_done);
+
+	return 0;
 }
 
 void ath10k_htt_tx_destroy(struct ath10k_htt *htt)
@@ -532,13 +536,8 @@ void ath10k_htt_tx_destroy(struct ath10k_htt *htt)
 
 static void ath10k_htt_flush_tx_queue(struct ath10k_htt *htt)
 {
-	struct sk_buff *msdu;
-	int msdu_id;
-
 	ath10k_htc_stop_hl(htt->ar);
-
-	idr_for_each_entry(&htt->pending_tx, msdu, msdu_id)
-		ath10k_htt_tx_clean_up_pending(msdu_id, htt->ar);
+	idr_for_each(&htt->pending_tx, ath10k_htt_tx_clean_up_pending, htt->ar);
 }
 
 void ath10k_htt_tx_stop(struct ath10k_htt *htt)
@@ -1354,7 +1353,7 @@ static int ath10k_htt_tx_hl(struct ath10k_htt *htt, enum ath10k_hw_txrx_mode txm
 		msdu_id = res;
 	}
 
-	/* As msdu is freed by mac80211 (in ieee80211_tx_status_skb()) and by
+	/* As msdu is freed by mac80211 (in ieee80211_tx_status()) and by
 	 * ath10k (in ath10k_htt_htc_tx_complete()) we have to increase
 	 * reference by one to avoid a use-after-free case and a double
 	 * free.

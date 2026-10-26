@@ -1077,7 +1077,7 @@ static int p4_pmu_handle_irq(struct pt_regs *regs)
 	}
 
 	if (handled)
-		inc_perf_irq_stat();
+		inc_irq_stat(apic_perf_irqs);
 
 	/*
 	 * When dealing with the unmasking of the LVTPC on P4 perf hw, it has
@@ -1367,14 +1367,14 @@ static __initconst const struct x86_pmu p4_pmu = {
 
 __init int p4_pmu_init(void)
 {
-	unsigned int misc;
+	unsigned int low, high;
 	int i, reg;
 
 	/* If we get stripped -- indexing fails */
 	BUILD_BUG_ON(ARCH_P4_MAX_CCCR > INTEL_PMC_MAX_GENERIC);
 
-	rdmsrq(MSR_IA32_MISC_ENABLE, misc);
-	if (!(misc & MSR_IA32_MISC_ENABLE_EMON)) {
+	rdmsr(MSR_IA32_MISC_ENABLE, low, high);
+	if (!(low & (1 << 7))) {
 		pr_cont("unsupported Netburst CPU model %d ",
 			boot_cpu_data.x86_model);
 		return -ENODEV;

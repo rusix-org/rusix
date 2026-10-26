@@ -22,8 +22,7 @@
  * The function checks the given frequency is valid for the device. For input
  * pins it checks that the frequency can be factorized using supported base
  * frequencies. For output pins it checks that the frequency divides connected
- * synth frequency without remainder and that the resulting divisor is not
- * below the minimum the driver supports.
+ * synth frequency without remainder.
  *
  * Return: true if the frequency is valid, false if not.
  */
@@ -31,7 +30,7 @@ static bool
 zl3073x_pin_check_freq(struct zl3073x_dev *zldev, enum dpll_pin_direction dir,
 		       u8 id, u64 freq)
 {
-	if (!freq || freq > U32_MAX)
+	if (freq > U32_MAX)
 		goto err_inv_freq;
 
 	if (dir == DPLL_PIN_DIRECTION_INPUT) {
@@ -42,38 +41,18 @@ zl3073x_pin_check_freq(struct zl3073x_dev *zldev, enum dpll_pin_direction dir,
 		if (rc)
 			goto err_inv_freq;
 	} else {
-		u32 synth_freq, div, min_div, rem;
-		const struct zl3073x_out *out;
-		u8 out_id, synth;
+		u32 synth_freq;
+		u8 out, synth;
 
 		/* Get output pin synthesizer */
-		out_id = zl3073x_output_pin_out_get(id);
-		synth = zl3073x_dev_out_synth_get(zldev, out_id);
+		out = zl3073x_output_pin_out_get(id);
+		synth = zl3073x_dev_out_synth_get(zldev, out);
 
 		/* Get synth frequency */
 		synth_freq = zl3073x_dev_synth_freq_get(zldev, synth);
 
 		/* Check the frequency divides synth frequency */
-		div = div_u64_rem(synth_freq, freq, &rem);
-		if (rem)
-			goto err_inv_freq;
-
-		/* The driver requires an output divisor of at least 2 -
-		 * below that the hardware bypasses the divider and ignores
-		 * the pulse width and eSync registers the driver programs.
-		 * For the N-pin of an N-divided output the effective divisor
-		 * also includes the N divider (>= 2), so the minimum is 4.
-		 * For N-divided outputs this is only a necessary condition -
-		 * whether the frequency can be set also depends on the output
-		 * divisor shared by both pins, which is checked when the
-		 * frequency is set.
-		 */
-		out = zl3073x_out_state_get(zldev, out_id);
-		if (zl3073x_out_is_ndiv(out) && zl3073x_is_n_pin(id))
-			min_div = 4;
-		else
-			min_div = 2;
-		if (div < min_div)
+		if (synth_freq % (u32)freq)
 			goto err_inv_freq;
 	}
 
@@ -214,12 +193,11 @@ struct zl3073x_pin_props *zl3073x_pin_props_get(struct zl3073x_dev *zldev,
 {
 	struct dpll_pin_frequency *ranges;
 	struct zl3073x_pin_props *props;
-	int i, j, num_freqs = 0, rc;
-	u64 *freqs = NULL;
+	int i, j, num_freqs, rc;
 	const char *type;
-	u32 curr_freq;
+	u64 *freqs;
 
-	props = kzalloc_obj(*props);
+	props = kzalloc(sizeof(*props), GFP_KERNEL);
 	if (!props)
 		return ERR_PTR(-ENOMEM);
 
@@ -229,7 +207,6 @@ struct zl3073x_pin_props *zl3073x_pin_props_get(struct zl3073x_dev *zldev,
 		props->dpll_props.capabilities =
 			DPLL_PIN_CAPABILITIES_PRIORITY_CAN_CHANGE |
 			DPLL_PIN_CAPABILITIES_STATE_CAN_CHANGE;
-		curr_freq = zl3073x_dev_ref_freq_get(zldev, index);
 	} else {
 		u8 out, synth;
 		u32 f;
@@ -243,7 +220,6 @@ struct zl3073x_pin_props *zl3073x_pin_props_get(struct zl3073x_dev *zldev,
 		synth = zl3073x_dev_out_synth_get(zldev, out);
 		f = 2 * zl3073x_dev_synth_freq_get(zldev, synth);
 		props->dpll_props.phase_gran = f ? div_u64(PSEC_PER_SEC, f) : 1;
-		curr_freq = zl3073x_dev_output_pin_freq_get(zldev, index);
 	}
 
 	props->dpll_props.phase_range.min = S32_MIN;
@@ -254,7 +230,7 @@ struct zl3073x_pin_props *zl3073x_pin_props_get(struct zl3073x_dev *zldev,
 	/* Get firmware node for the given pin */
 	rc = zl3073x_prop_pin_fwnode_get(zldev, props, dir, index);
 	if (rc)
-		goto skip_fwnode_props;
+		return props; /* Return if it does not exist */
 
 	/* Look for label property and store the value as board label */
 	fwnode_property_read_string(props->fwnode, "label",
@@ -273,8 +249,6 @@ struct zl3073x_pin_props *zl3073x_pin_props_get(struct zl3073x_dev *zldev,
 			props->dpll_props.type = DPLL_PIN_TYPE_INT_OSCILLATOR;
 		else if (!strcmp(type, "synce"))
 			props->dpll_props.type = DPLL_PIN_TYPE_SYNCE_ETH_PORT;
-		else if (!strcmp(type, "mux"))
-			props->dpll_props.type = DPLL_PIN_TYPE_MUX;
 		else
 			dev_warn(zldev->dev,
 				 "Unknown or unsupported pin type '%s'\n",
@@ -288,10 +262,9 @@ struct zl3073x_pin_props *zl3073x_pin_props_get(struct zl3073x_dev *zldev,
 	/* Read supported frequencies property if it is specified */
 	num_freqs = fwnode_property_count_u64(props->fwnode,
 					      "supported-frequencies-hz");
-	if (num_freqs <= 0) {
-		num_freqs = 0;
-		goto skip_fwnode_props;
-	}
+	if (num_freqs <= 0)
+		/* Return if the property does not exist or number is 0 */
+		return props;
 
 	/* The firmware node specifies list of supported frequencies while
 	 * DPLL core pin properties requires list of frequency ranges.
@@ -308,44 +281,23 @@ struct zl3073x_pin_props *zl3073x_pin_props_get(struct zl3073x_dev *zldev,
 				       "supported-frequencies-hz", freqs,
 				       num_freqs);
 
-skip_fwnode_props:
-	/* Allocate frequency ranges list - extra slot for current frequency */
-	ranges = kzalloc_objs(*ranges, num_freqs + 1);
+	/* Allocate frequency ranges list and fill it */
+	ranges = kcalloc(num_freqs, sizeof(*ranges), GFP_KERNEL);
 	if (!ranges) {
 		rc = -ENOMEM;
 		goto err_alloc_ranges;
 	}
 
-	/* Start with current frequency at index 0. A sub-Hz frequency is
-	 * read back as 0 Hz and cannot be set, so it is not offered.
+	/* Convert list of frequencies to list of frequency ranges but
+	 * filter-out frequencies that are not representable by device
 	 */
-	j = 0;
-	if (curr_freq) {
-		struct dpll_pin_frequency freq = DPLL_PIN_FREQUENCY(curr_freq);
-
-		ranges[j++] = freq;
-	}
-
-	/* Add frequencies from firmware node, skipping current frequency
-	 * and filtering out frequencies not representable by device
-	 */
-	for (i = 0; i < num_freqs; i++) {
+	for (i = 0, j = 0; i < num_freqs; i++) {
 		struct dpll_pin_frequency freq = DPLL_PIN_FREQUENCY(freqs[i]);
 
-		if (freqs[i] == curr_freq)
-			continue;
 		if (zl3073x_pin_check_freq(zldev, dir, index, freqs[i])) {
 			ranges[j] = freq;
 			j++;
 		}
-	}
-
-	/* The DPLL core rejects a non-NULL list without entries, so do
-	 * not publish the array at all when nothing is settable.
-	 */
-	if (!j) {
-		kfree(ranges);
-		ranges = NULL;
 	}
 
 	/* Save number of freq ranges and pointer to them into pin properties */

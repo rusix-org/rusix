@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause
 /*
- * Copyright (C) 2012-2014, 2018-2026 Intel Corporation
+ * Copyright (C) 2012-2014, 2018-2025 Intel Corporation
  * Copyright (C) 2013-2015 Intel Mobile Communications GmbH
  * Copyright (C) 2016-2017 Intel Deutschland GmbH
  */
@@ -10,7 +10,7 @@
 
 #include "mvm.h"
 #include "fw/api/scan.h"
-#include "iwl-trans.h"
+#include "iwl-io.h"
 #include "iwl-utils.h"
 
 #define IWL_DENSE_EBS_SCAN_RATIO 5
@@ -547,7 +547,7 @@ iwl_mvm_config_sched_scan_profiles(struct iwl_mvm *mvm,
 	else
 		blocklist_len = IWL_SCAN_MAX_BLACKLIST_LEN;
 
-	blocklist = kzalloc_objs(*blocklist, blocklist_len);
+	blocklist = kcalloc(blocklist_len, sizeof(*blocklist), GFP_KERNEL);
 	if (!blocklist)
 		return -ENOMEM;
 
@@ -2568,16 +2568,16 @@ static int iwl_mvm_scan_umac_v14_and_above(struct iwl_mvm *mvm,
 					       bitmap_ssid,
 					       version);
 		return 0;
+	} else {
+		pb->preq = params->preq;
 	}
 
-	pb->preq = params->preq;
+	cp->flags = iwl_mvm_scan_umac_chan_flags_v2(mvm, params, vif);
+	cp->n_aps_override[0] = IWL_SCAN_ADWELL_N_APS_GO_FRIENDLY;
+	cp->n_aps_override[1] = IWL_SCAN_ADWELL_N_APS_SOCIAL_CHS;
 
 	iwl_mvm_umac_scan_fill_6g_chan_list(mvm, params, pb);
 
-	/* Explicitly clear the flags since most of them are not
-	 * relevant for 6 GHz scan.
-	 */
-	cp->flags = 0;
 	cp->count = iwl_mvm_umac_scan_cfg_channels_v7_6g(mvm, params,
 							 params->n_channels,
 							 pb, cp, vif->type,
@@ -2703,7 +2703,7 @@ void iwl_mvm_scan_timeout_wk(struct work_struct *work)
 
 	IWL_ERR(mvm, "regular scan timed out\n");
 
-	iwl_trans_force_nmi(mvm->trans);
+	iwl_force_nmi(mvm->trans);
 }
 
 static void iwl_mvm_fill_scan_type(struct iwl_mvm *mvm,
@@ -3023,8 +3023,12 @@ static int _iwl_mvm_single_scan_start(struct iwl_mvm *mvm,
 		params.iter_notif = true;
 
 	params.tsf_report_link_id = req->tsf_report_link_id;
-	if (params.tsf_report_link_id < 0)
-		params.tsf_report_link_id = 0;
+	if (params.tsf_report_link_id < 0) {
+		if (vif->active_links)
+			params.tsf_report_link_id = __ffs(vif->active_links);
+		else
+			params.tsf_report_link_id = 0;
+	}
 
 	iwl_mvm_build_scan_probe(mvm, vif, ies, &params);
 
@@ -3217,10 +3221,6 @@ void iwl_mvm_rx_umac_scan_complete_notif(struct iwl_mvm *mvm,
 
 	mvm->mei_scan_filter.is_mei_limited_scan = false;
 
-	if (IWL_FW_CHECK(mvm, uid >= ARRAY_SIZE(mvm->scan_uid_status),
-			 "FW reports out-of-range scan UID %d\n", uid))
-		return;
-
 	IWL_DEBUG_SCAN(mvm,
 		       "Scan completed: uid=%u type=%u, status=%s, EBS=%s\n",
 		       uid, mvm->scan_uid_status[uid],
@@ -3282,7 +3282,7 @@ void iwl_mvm_rx_umac_scan_iter_complete_notif(struct iwl_mvm *mvm,
 					      struct iwl_rx_cmd_buffer *rxb)
 {
 	struct iwl_rx_packet *pkt = rxb_addr(rxb);
-	struct iwl_umac_scan_iter_complete_notif_v2 *notif = (void *)pkt->data;
+	struct iwl_umac_scan_iter_complete_notif *notif = (void *)pkt->data;
 
 	mvm->scan_start = le64_to_cpu(notif->start_tsf);
 
@@ -3607,8 +3607,9 @@ void iwl_mvm_rx_channel_survey_notif(struct iwl_mvm *mvm,
 			n_channels += mvm->hw->wiphy->bands[band]->n_channels;
 		}
 
-		mvm->acs_survey = kzalloc_flex(*mvm->acs_survey, channels,
-					       n_channels);
+		mvm->acs_survey = kzalloc(struct_size(mvm->acs_survey,
+						      channels, n_channels),
+					  GFP_KERNEL);
 
 		if (!mvm->acs_survey)
 			return;

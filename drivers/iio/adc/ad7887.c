@@ -104,7 +104,7 @@ static int ad7887_ring_postdisable(struct iio_dev *indio_dev)
 {
 	struct ad7887_state *st = iio_priv(indio_dev);
 
-	/* dummy read: restore default CH0 settings */
+	/* dummy read: restore default CH0 settin */
 	return spi_sync(st->spi, &st->msg[AD7887_CH0]);
 }
 
@@ -328,7 +328,7 @@ static int ad7887_probe(struct spi_device *spi)
 }
 
 static const struct spi_device_id ad7887_id[] = {
-	{ .name = "ad7887", .driver_data = ID_AD7887 },
+	{ "ad7887", ID_AD7887 },
 	{ }
 };
 MODULE_DEVICE_TABLE(spi, ad7887_id);

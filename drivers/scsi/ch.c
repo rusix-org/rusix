@@ -122,32 +122,38 @@ static DEFINE_IDR(ch_index_idr);
 static DEFINE_SPINLOCK(ch_index_lock);
 
 static const struct {
-	u8	sense_key;
-	u16	sense_code;
-	int	errno;
+	unsigned char  sense;
+	unsigned char  asc;
+	unsigned char  ascq;
+	int	       errno;
 } ch_err[] = {
 /* Just filled in what looks right. Hav'nt checked any standard paper for
    these errno assignments, so they may be wrong... */
 	{
-		.sense_key	= ILLEGAL_REQUEST,
-		.sense_code	= INVALID_ELEMENT_ADDRESS,
-		.errno		= EBADSLT,
+		.sense  = ILLEGAL_REQUEST,
+		.asc    = 0x21,
+		.ascq   = 0x01,
+		.errno  = EBADSLT, /* Invalid element address */
 	},{
-		.sense_key	= ILLEGAL_REQUEST,
-		.sense_code	= IMPORT_OR_EXPORT_ELEMENT_ACCESSED,
-		.errno		= EBADE,
+		.sense  = ILLEGAL_REQUEST,
+		.asc    = 0x28,
+		.ascq   = 0x01,
+		.errno  = EBADE,   /* Import or export element accessed */
 	},{
-		.sense_key	= ILLEGAL_REQUEST,
-		.sense_code	= MEDIUM_DESTINATION_ELEMENT_FULL,
-		.errno		= EXFULL,
+		.sense  = ILLEGAL_REQUEST,
+		.asc    = 0x3B,
+		.ascq   = 0x0D,
+		.errno  = EXFULL,  /* Medium destination element full */
 	},{
-		.sense_key	= ILLEGAL_REQUEST,
-		.sense_code	= MEDIUM_SOURCE_ELEMENT_EMPTY,
-		.errno		= EBADE,
+		.sense  = ILLEGAL_REQUEST,
+		.asc    = 0x3B,
+		.ascq   = 0x0E,
+		.errno  = EBADE,   /* Medium source element empty */
 	},{
-		.sense_key	= ILLEGAL_REQUEST,
-		.sense_code	= INVALID_COMMAND_OP_CODE,
-		.errno		= EBADRQC,
+		.sense  = ILLEGAL_REQUEST,
+		.asc    = 0x20,
+		.ascq   = 0x00,
+		.errno  = EBADRQC, /* Invalid command operation code */
 	},{
 	        /* end of list */
 	}
@@ -160,10 +166,12 @@ static int ch_find_errno(struct scsi_sense_hdr *sshdr)
 	int i,errno = 0;
 
 	/* Check to see if additional sense information is available */
-	if (scsi_sense_valid(sshdr) && scsi_sense_asc(sshdr) != 0) {
+	if (scsi_sense_valid(sshdr) &&
+	    sshdr->asc != 0) {
 		for (i = 0; ch_err[i].errno != 0; i++) {
-			if (ch_err[i].sense_key == sshdr->sense_key &&
-			    ch_err[i].sense_code == sshdr->sense_code) {
+			if (ch_err[i].sense == sshdr->sense_key &&
+			    ch_err[i].asc   == sshdr->asc &&
+			    ch_err[i].ascq  == sshdr->ascq) {
 				errno = -ch_err[i].errno;
 				break;
 			}
@@ -182,8 +190,9 @@ ch_do_scsi(scsi_changer *ch, unsigned char *cmd, int cmd_len,
 	struct scsi_sense_hdr sshdr;
 	struct scsi_failure failure_defs[] = {
 		{
-			.sense_key = UNIT_ATTENTION,
-			.sense_code = SCMD_FAILURE_SENSE_CODE_ANY,
+			.sense = UNIT_ATTENTION,
+			.asc = SCMD_FAILURE_ASC_ANY,
+			.ascq = SCMD_FAILURE_ASCQ_ANY,
 			.allowed = 3,
 			.result = SAM_STAT_CHECK_CONDITION,
 		},
@@ -873,9 +882,9 @@ static long ch_ioctl(struct file *file,
 
 /* ------------------------------------------------------------------------ */
 
-static int ch_probe(struct scsi_device *sd)
+static int ch_probe(struct device *dev)
 {
-	struct device *dev = &sd->sdev_gendev;
+	struct scsi_device *sd = to_scsi_device(dev);
 	struct device *class_dev;
 	int ret;
 	scsi_changer *ch;
@@ -883,7 +892,7 @@ static int ch_probe(struct scsi_device *sd)
 	if (sd->type != TYPE_MEDIUM_CHANGER)
 		return -ENODEV;
 
-	ch = kzalloc_obj(*ch);
+	ch = kzalloc(sizeof(*ch), GFP_KERNEL);
 	if (NULL == ch)
 		return -ENOMEM;
 
@@ -946,9 +955,8 @@ free_ch:
 	return ret;
 }
 
-static void ch_remove(struct scsi_device *sd)
+static int ch_remove(struct device *dev)
 {
-	struct device *dev = &sd->sdev_gendev;
 	scsi_changer *ch = dev_get_drvdata(dev);
 
 	spin_lock(&ch_index_lock);
@@ -959,14 +967,15 @@ static void ch_remove(struct scsi_device *sd)
 	device_destroy(&ch_sysfs_class, MKDEV(SCSI_CHANGER_MAJOR, ch->minor));
 	scsi_device_put(ch->device);
 	kref_put(&ch->ref, ch_destroy);
+	return 0;
 }
 
 static struct scsi_driver ch_template = {
-	.probe = ch_probe,
-	.remove = ch_remove,
-	.gendrv = {
+	.gendrv     	= {
 		.name	= "ch",
 		.owner	= THIS_MODULE,
+		.probe  = ch_probe,
+		.remove = ch_remove,
 	},
 };
 
@@ -993,7 +1002,7 @@ static int __init init_ch_module(void)
 		       SCSI_CHANGER_MAJOR);
 		goto fail1;
 	}
-	rc = scsi_register_driver(&ch_template);
+	rc = scsi_register_driver(&ch_template.gendrv);
 	if (rc < 0)
 		goto fail2;
 	return 0;
@@ -1007,7 +1016,7 @@ static int __init init_ch_module(void)
 
 static void __exit exit_ch_module(void)
 {
-	scsi_unregister_driver(&ch_template);
+	scsi_unregister_driver(&ch_template.gendrv);
 	unregister_chrdev(SCSI_CHANGER_MAJOR, "ch");
 	class_unregister(&ch_sysfs_class);
 	idr_destroy(&ch_index_idr);

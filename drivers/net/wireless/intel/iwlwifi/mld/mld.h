@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause */
 /*
- * Copyright (C) 2024-2026 Intel Corporation
+ * Copyright (C) 2024-2025 Intel Corporation
  */
 #ifndef __iwl_mld_h__
 #define __iwl_mld_h__
@@ -29,14 +29,12 @@
 #include "notif.h"
 #include "scan.h"
 #include "rx.h"
-#include "tx.h"
 #include "thermal.h"
 #include "low_latency.h"
 #include "constants.h"
 #include "ptp.h"
 #include "time_sync.h"
 #include "ftm-initiator.h"
-#include "nan.h"
 
 /**
  * DOC: Introduction
@@ -120,11 +118,7 @@
  * @monitor.cur_bssid: current bssid tracked by the sniffer
  * @monitor.ptp_time: set the Rx mactime using the device's PTP clock time
  * @monitor.p80: primary channel position relative to he whole bandwidth, in
- *	steps of 80 MHz
- * @monitor.phy: PHY data information
- * @monitor.phy.data: PHY data (&struct iwl_rx_phy_air_sniffer_ntfy) received
- * @monitor.phy.valid: PHY data is valid (was received)
- * @monitor.phy.used: PHY data was used by an RX
+ * steps of 80 MHz
  * @fw_id_to_link_sta: maps a fw id of a sta to the corresponding
  *	ieee80211_link_sta. This is not cleaned up on restart since we want to
  *	preserve the fw sta ids during a restart (for SN/PN restoring).
@@ -140,8 +134,6 @@
  * @fw: a pointer to the fw object
  * @hw: pointer to the hw object.
  * @wiphy: a pointer to the wiphy struct, for easier access to it.
- * @ext_capab: extended capabilities that will be set to wiphy on registration.
- * @sta_ext_capab: extended capabilities for the station interface.
  * @nvm_data: pointer to the nvm_data that includes all our capabilities
  * @fwrt: fw runtime data
  * @debugfs_dir: debugfs directory
@@ -173,6 +165,7 @@
  * @debug_max_sleep: maximum sleep time in D3 (for debug purposes)
  * @led: the led device
  * @mcc_src: the source id of the MCC, comes from the firmware
+ * @bios_enable_puncturing: is puncturing enabled by bios
  * @fw_id_to_ba: maps a fw (BA) id to a corresponding Block Ack session data.
  * @num_rx_ba_sessions: tracks the number of active Rx Block Ack (BA) sessions.
  *	the driver ensures that new BA sessions are blocked once the maximum
@@ -187,8 +180,7 @@
  * @mcast_filter_cmd: pointer to the multicast filter command.
  * @mgmt_tx_ant: stores the last TX antenna index; used for setting
  *	TX rate_n_flags for non-STA mgmt frames (toggles on every TX failure).
- * @set_tx_ant: stores the last TX antenna bitmask set by user space (if any)
- * @set_rx_ant: stores the last RX antenna bitmask set by user space (if any)
+ * @fw_rates_ver_3: FW rates are in version 3
  * @low_latency: low-latency manager.
  * @tzone: thermal zone device's data
  * @cooling_dev: cooling device's related data
@@ -197,15 +189,13 @@
  *	being IBSS manager for that time and needing to respond to probe
  *	requests
  * @ptp_data: data of the PTP clock
- * @tx_gp2: gp2 timestamping state for TX commands
  * @time_sync: time sync data.
  * @ftm_initiator: FTM initiator data
- * @nan_device_vif: points to the NAN device vif if exists
  */
 struct iwl_mld {
 	/* Add here fields that need clean up on restart */
 	struct_group(zeroed_on_hw_restart,
-		struct ieee80211_bss_conf __rcu *fw_id_to_bss_conf[IWL_FW_MAX_LINKS];
+		struct ieee80211_bss_conf __rcu *fw_id_to_bss_conf[IWL_FW_MAX_LINK_ID + 1];
 		struct ieee80211_vif __rcu *fw_id_to_vif[NUM_MAC_INDEX_DRIVER];
 		struct ieee80211_txq __rcu *fw_id_to_txq[IWL_MAX_TVQM_QUEUES];
 		u8 used_phy_ids: NUM_PHY_CTX;
@@ -215,10 +205,6 @@ struct iwl_mld {
 			u32 ampdu_ref;
 			bool ampdu_toggle;
 			u8 p80;
-			struct {
-				struct iwl_rx_phy_air_sniffer_ntfy data;
-				u8 valid:1, used:1;
-			} phy;
 #ifdef CONFIG_IWLWIFI_DEBUGFS
 			__le16 cur_aid;
 			u8 cur_bssid[ETH_ALEN];
@@ -230,7 +216,6 @@ struct iwl_mld {
 #endif /* CONFIG_PM_SLEEP */
 		struct ieee80211_vif *p2p_device_vif;
 		bool bt_is_active;
-		struct ieee80211_vif *nan_device_vif;
 	);
 	struct ieee80211_link_sta __rcu *fw_id_to_link_sta[IWL_STATION_COUNT_MAX];
 	/* And here fields that survive a fw restart */
@@ -240,8 +225,6 @@ struct iwl_mld {
 	const struct iwl_fw *fw;
 	struct ieee80211_hw *hw;
 	struct wiphy *wiphy;
-	struct wiphy_iftype_ext_capab ext_capab[IWL_MLD_EXT_CAPA_NUM_IFTYPES];
-	u8 sta_ext_capab[IWL_MLD_STA_EXT_CAPA_SIZE];
 	struct iwl_nvm_data *nvm_data;
 	struct iwl_fw_runtime fwrt;
 	struct dentry *debugfs_dir;
@@ -280,6 +263,7 @@ struct iwl_mld {
 	struct led_classdev led;
 #endif
 	enum iwl_mcc_source mcc_src;
+	bool bios_enable_puncturing;
 
 	struct iwl_mld_baid_data __rcu *fw_id_to_ba[IWL_MAX_BAID];
 	u8 num_rx_ba_sessions;
@@ -295,8 +279,7 @@ struct iwl_mld {
 
 	u8 mgmt_tx_ant;
 
-	u8 set_tx_ant;
-	u8 set_rx_ant;
+	bool fw_rates_ver_3;
 
 	struct iwl_mld_low_latency low_latency;
 
@@ -307,8 +290,6 @@ struct iwl_mld {
 #endif
 
 	struct ptp_data ptp_data;
-
-	struct iwl_mld_tx_gp2 tx_gp2;
 
 	struct iwl_mld_time_sync_data __rcu *time_sync;
 
@@ -393,9 +374,6 @@ static inline u8 iwl_mld_get_valid_tx_ant(const struct iwl_mld *mld)
 	if (mld->nvm_data && mld->nvm_data->valid_tx_ant)
 		tx_ant &= mld->nvm_data->valid_tx_ant;
 
-	if (mld->set_tx_ant)
-		tx_ant &= mld->set_tx_ant;
-
 	return tx_ant;
 }
 
@@ -405,9 +383,6 @@ static inline u8 iwl_mld_get_valid_rx_ant(const struct iwl_mld *mld)
 
 	if (mld->nvm_data && mld->nvm_data->valid_rx_ant)
 		rx_ant &= mld->nvm_data->valid_rx_ant;
-
-	if (mld->set_rx_ant)
-		rx_ant &= mld->set_rx_ant;
 
 	return rx_ant;
 }
@@ -529,9 +504,9 @@ void iwl_construct_mld(struct iwl_mld *mld, struct iwl_trans *trans,
 #define IWL_MLD_INVALID_FW_ID 0xff
 
 #define IWL_MLD_ALLOC_FN(_type, _mac80211_type)						\
-int											\
+static int										\
 iwl_mld_allocate_##_type##_fw_id(struct iwl_mld *mld,					\
-				 u8 *fw_id,						\
+				 u8 *fw_id,				\
 				 struct ieee80211_##_mac80211_type *mac80211_ptr)	\
 {											\
 	u8 rand = IWL_MLD_DIS_RANDOM_FW_ID ? 0 : get_random_u8();			\
@@ -554,29 +529,18 @@ iwl_mld_allocate_##_type##_fw_id(struct iwl_mld *mld,					\
 	return -ENOSPC;									\
 }
 
-#define IWL_MLD_ALLOC_FN_STATIC(_type, _mac80211_type) \
-static IWL_MLD_ALLOC_FN(_type, _mac80211_type)
-
 static inline struct ieee80211_bss_conf *
 iwl_mld_fw_id_to_link_conf(struct iwl_mld *mld, u8 fw_link_id)
 {
-	struct ieee80211_bss_conf *link;
-
 	if (IWL_FW_CHECK(mld, fw_link_id >= mld->fw->ucode_capa.num_links,
 			 "Invalid fw_link_id: %d\n", fw_link_id))
 		return NULL;
 
-	link = wiphy_dereference(mld->wiphy,
+	return wiphy_dereference(mld->wiphy,
 				 mld->fw_id_to_bss_conf[fw_link_id]);
-	if (IS_ERR(link))
-		return NULL;
-
-	return link;
 }
 
 #define MSEC_TO_TU(_msec)	((_msec) * 1000 / 1024)
-
-int iwl_mld_get_systime(struct iwl_mld *mld, u32 *gp2);
 
 void iwl_mld_add_vif_debugfs(struct ieee80211_hw *hw,
 			     struct ieee80211_vif *vif);

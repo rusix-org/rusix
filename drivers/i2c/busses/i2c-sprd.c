@@ -469,10 +469,11 @@ static int sprd_i2c_clk_init(struct sprd_i2c *i2c_dev)
 		i2c_dev->adap.nr, i2c_dev->src_clk);
 
 	i2c_dev->clk = devm_clk_get(i2c_dev->dev, "enable");
-	if (IS_ERR(i2c_dev->clk))
-		return dev_err_probe(i2c_dev->dev, PTR_ERR(i2c_dev->clk),
-				     "i2c%d can't get the enable clock\n",
-				     i2c_dev->adap.nr);
+	if (IS_ERR(i2c_dev->clk)) {
+		dev_err(i2c_dev->dev, "i2c%d can't get the enable clock\n",
+			i2c_dev->adap.nr);
+		return PTR_ERR(i2c_dev->clk);
+	}
 
 	return 0;
 }
@@ -546,12 +547,14 @@ static int sprd_i2c_probe(struct platform_device *pdev)
 		sprd_i2c_isr, sprd_i2c_isr_thread,
 		IRQF_NO_SUSPEND | IRQF_ONESHOT,
 		pdev->name, i2c_dev);
-	if (ret)
+	if (ret) {
+		dev_err(&pdev->dev, "failed to request irq %d\n", i2c_dev->irq);
 		goto err_rpm_put;
+	}
 
 	ret = i2c_add_numbered_adapter(&i2c_dev->adap);
 	if (ret) {
-		dev_err_probe(&pdev->dev, ret, "add adapter failed\n");
+		dev_err(&pdev->dev, "add adapter failed\n");
 		goto err_rpm_put;
 	}
 

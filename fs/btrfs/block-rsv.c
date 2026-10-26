@@ -111,8 +111,10 @@ static u64 block_rsv_release_bytes(struct btrfs_fs_info *fs_info,
 	u64 ret;
 
 	spin_lock(&block_rsv->lock);
-	if (num_bytes == (u64)-1)
+	if (num_bytes == (u64)-1) {
 		num_bytes = block_rsv->size;
+		qgroup_to_release = block_rsv->qgroup_rsv_size;
+	}
 	block_rsv->size -= num_bytes;
 	if (block_rsv->reserved >= block_rsv->size) {
 		num_bytes = block_rsv->reserved - block_rsv->size;
@@ -126,6 +128,8 @@ static u64 block_rsv_release_bytes(struct btrfs_fs_info *fs_info,
 		qgroup_to_release = block_rsv->qgroup_rsv_reserved -
 				    block_rsv->qgroup_rsv_size;
 		block_rsv->qgroup_rsv_reserved = block_rsv->qgroup_rsv_size;
+	} else {
+		qgroup_to_release = 0;
 	}
 	spin_unlock(&block_rsv->lock);
 
@@ -188,7 +192,7 @@ struct btrfs_block_rsv *btrfs_alloc_block_rsv(struct btrfs_fs_info *fs_info,
 {
 	struct btrfs_block_rsv *block_rsv;
 
-	block_rsv = kmalloc_obj(*block_rsv, GFP_NOFS);
+	block_rsv = kmalloc(sizeof(*block_rsv), GFP_NOFS);
 	if (!block_rsv)
 		return NULL;
 
@@ -205,7 +209,8 @@ void btrfs_free_block_rsv(struct btrfs_fs_info *fs_info,
 	kfree(rsv);
 }
 
-int btrfs_block_rsv_add(struct btrfs_block_rsv *block_rsv, u64 num_bytes,
+int btrfs_block_rsv_add(struct btrfs_fs_info *fs_info,
+			struct btrfs_block_rsv *block_rsv, u64 num_bytes,
 			enum btrfs_reserve_flush_enum flush)
 {
 	int ret;
@@ -213,7 +218,8 @@ int btrfs_block_rsv_add(struct btrfs_block_rsv *block_rsv, u64 num_bytes,
 	if (num_bytes == 0)
 		return 0;
 
-	ret = btrfs_reserve_metadata_bytes(block_rsv->space_info, num_bytes, flush);
+	ret = btrfs_reserve_metadata_bytes(fs_info, block_rsv->space_info,
+					   num_bytes, flush);
 	if (!ret)
 		btrfs_block_rsv_add_bytes(block_rsv, num_bytes, true);
 
@@ -234,7 +240,8 @@ int btrfs_block_rsv_check(struct btrfs_block_rsv *block_rsv, int min_percent)
 	return ret;
 }
 
-int btrfs_block_rsv_refill(struct btrfs_block_rsv *block_rsv, u64 num_bytes,
+int btrfs_block_rsv_refill(struct btrfs_fs_info *fs_info,
+			   struct btrfs_block_rsv *block_rsv, u64 num_bytes,
 			   enum btrfs_reserve_flush_enum flush)
 {
 	int ret = -ENOSPC;
@@ -252,7 +259,8 @@ int btrfs_block_rsv_refill(struct btrfs_block_rsv *block_rsv, u64 num_bytes,
 	if (!ret)
 		return 0;
 
-	ret = btrfs_reserve_metadata_bytes(block_rsv->space_info, num_bytes, flush);
+	ret = btrfs_reserve_metadata_bytes(fs_info, block_rsv->space_info,
+					   num_bytes, flush);
 	if (!ret) {
 		btrfs_block_rsv_add_bytes(block_rsv, num_bytes, false);
 		return 0;
@@ -429,9 +437,6 @@ void btrfs_init_root_block_rsv(struct btrfs_root *root)
 	case BTRFS_TREE_LOG_OBJECTID:
 		root->block_rsv = &fs_info->treelog_rsv;
 		break;
-	case BTRFS_REMAP_TREE_OBJECTID:
-		root->block_rsv = &fs_info->remap_block_rsv;
-		break;
 	default:
 		root->block_rsv = NULL;
 		break;
@@ -444,9 +449,6 @@ void btrfs_init_global_block_rsv(struct btrfs_fs_info *fs_info)
 
 	space_info = btrfs_find_space_info(fs_info, BTRFS_BLOCK_GROUP_SYSTEM);
 	fs_info->chunk_block_rsv.space_info = space_info;
-
-	space_info = btrfs_find_space_info(fs_info, BTRFS_BLOCK_GROUP_METADATA_REMAP);
-	fs_info->remap_block_rsv.space_info = space_info;
 
 	space_info = btrfs_find_space_info(fs_info, BTRFS_BLOCK_GROUP_METADATA);
 	fs_info->global_block_rsv.space_info = space_info;
@@ -474,8 +476,6 @@ void btrfs_release_global_block_rsv(struct btrfs_fs_info *fs_info)
 	WARN_ON(fs_info->trans_block_rsv.reserved > 0);
 	WARN_ON(fs_info->chunk_block_rsv.size > 0);
 	WARN_ON(fs_info->chunk_block_rsv.reserved > 0);
-	WARN_ON(fs_info->remap_block_rsv.size > 0);
-	WARN_ON(fs_info->remap_block_rsv.reserved > 0);
 	WARN_ON(fs_info->delayed_block_rsv.size > 0);
 	WARN_ON(fs_info->delayed_block_rsv.reserved > 0);
 	WARN_ON(fs_info->delayed_refs_rsv.reserved > 0);
@@ -546,35 +546,10 @@ again:
 				block_rsv->type, ret);
 	}
 try_reserve:
-	ret = btrfs_reserve_metadata_bytes(block_rsv->space_info, blocksize,
-					   BTRFS_RESERVE_NO_FLUSH);
+	ret = btrfs_reserve_metadata_bytes(fs_info, block_rsv->space_info,
+					   blocksize, BTRFS_RESERVE_NO_FLUSH);
 	if (!ret)
 		return block_rsv;
-
-	/*
-	 * If we are being used for updating a log tree, fail immediately, which
-	 * makes the fsync fallback to a transaction commit.
-	 *
-	 * We don't want to consume from the global block reserve, as that is
-	 * precious space that may be needed to do updates to some trees for
-	 * which we don't reserve space during a transaction commit (update root
-	 * items in the root tree, device stat items in the device tree and
-	 * quota tree updates, see btrfs_init_root_block_rsv()), or to fallback
-	 * to in case we did not reserve enough space to run delayed items,
-	 * delayed references, or anything else we need in order to avoid a
-	 * transaction abort.
-	 *
-	 * We also don't want to do a reservation in flush emergency mode, as
-	 * we end up using metadata that could be critical to allow a
-	 * transaction to complete successfully and therefore increase the
-	 * chances for a transaction abort.
-	 *
-	 * Log trees are an optimization and should never consume from the
-	 * global reserve or be allowed overcommitting metadata.
-	 */
-	if (btrfs_root_id(root) == BTRFS_TREE_LOG_OBJECTID)
-		return ERR_PTR(ret);
-
 	/*
 	 * If we couldn't reserve metadata bytes try and use some from
 	 * the global reserve if its space type is the same as the global
@@ -593,7 +568,7 @@ try_reserve:
 	 * one last time to force a reservation if there's enough actual space
 	 * on disk to make the reservation.
 	 */
-	ret = btrfs_reserve_metadata_bytes(block_rsv->space_info, blocksize,
+	ret = btrfs_reserve_metadata_bytes(fs_info, block_rsv->space_info, blocksize,
 					   BTRFS_RESERVE_FLUSH_EMERGENCY);
 	if (!ret)
 		return block_rsv;

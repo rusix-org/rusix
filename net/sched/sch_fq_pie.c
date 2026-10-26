@@ -130,7 +130,7 @@ static inline void flow_queue_add(struct fq_pie_flow *flow,
 static int fq_pie_qdisc_enqueue(struct sk_buff *skb, struct Qdisc *sch,
 				struct sk_buff **to_free)
 {
-	enum qdisc_drop_reason reason = QDISC_DROP_OVERLIMIT;
+	enum skb_drop_reason reason = SKB_DROP_REASON_QDISC_OVERLIMIT;
 	struct fq_pie_sched_data *q = qdisc_priv(sch);
 	struct fq_pie_flow *sel_flow;
 	int ret;
@@ -162,7 +162,7 @@ static int fq_pie_qdisc_enqueue(struct sk_buff *skb, struct Qdisc *sch,
 		q->overmemory++;
 	}
 
-	reason = QDISC_DROP_CONGESTED;
+	reason = SKB_DROP_REASON_QDISC_CONGESTED;
 
 	if (!pie_drop_early(sch, &q->p_params, &sel_flow->vars,
 			    sel_flow->backlog, skb->len)) {
@@ -184,8 +184,8 @@ static int fq_pie_qdisc_enqueue(struct sk_buff *skb, struct Qdisc *sch,
 		pkt_len = qdisc_pkt_len(skb);
 		q->stats.packets_in++;
 		q->memory_usage += skb->truesize;
-		qstats_backlog_add(sch, pkt_len);
-		qdisc_qlen_inc(sch);
+		sch->qstats.backlog += pkt_len;
+		sch->q.qlen++;
 		flow_queue_add(sel_flow, skb);
 		if (list_empty(&sel_flow->flowchain)) {
 			list_add_tail(&sel_flow->flowchain, &q->new_flows);
@@ -262,8 +262,8 @@ begin:
 	if (flow->head) {
 		skb = dequeue_head(flow);
 		pkt_len = qdisc_pkt_len(skb);
-		qstats_backlog_sub(sch, pkt_len);
-		qdisc_qlen_dec(sch);
+		sch->qstats.backlog -= pkt_len;
+		sch->q.qlen--;
 		qdisc_bstats_update(sch, skb);
 	}
 
@@ -450,7 +450,8 @@ static int fq_pie_init(struct Qdisc *sch, struct nlattr *opt,
 	if (err)
 		goto init_failure;
 
-	q->flows = kvzalloc_objs(struct fq_pie_flow, q->flows_cnt);
+	q->flows = kvcalloc(q->flows_cnt, sizeof(struct fq_pie_flow),
+			    GFP_KERNEL);
 	if (!q->flows) {
 		err = -ENOMEM;
 		goto init_failure;

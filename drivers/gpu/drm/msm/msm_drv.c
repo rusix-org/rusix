@@ -54,87 +54,16 @@ static bool modeset = true;
 MODULE_PARM_DESC(modeset, "Use kernel modesetting [KMS] (1=on (default), 0=disable)");
 module_param(modeset, bool, 0600);
 
-/*
- * separate_gpu_kms (tristate):
- *   -1 (default): decide automatically based on hardware topology. Split devices
- *                 if there is more than one GPU or more than one display master.
- *    0: force single DRM device (bind display + GPU)
- *    1: force separate DRM devices
- */
-static int separate_gpu_kms = -1;
-MODULE_PARM_DESC(separate_gpu_kms,
-		 "Use separate DRM device for the GPU (-1=auto (default), 0=single DRM device, 1=separate DRM devices)");
-module_param(separate_gpu_kms, int, 0400);
-
-#ifdef CONFIG_TRANSPARENT_HUGEPAGE
-static bool transparent_hugepage = true;
-module_param(transparent_hugepage, bool, 0400);
-MODULE_PARM_DESC(transparent_hugepage, "Use a dedicated tmpfs mount point with Transparent Hugepage enabled (true = default)");
-#else
-#define transparent_hugepage false
-#endif
+static bool separate_gpu_kms;
+MODULE_PARM_DESC(separate_gpu_kms, "Use separate DRM device for the GPU (0=single DRM device for both GPU and display (default), 1=two DRM devices)");
+module_param(separate_gpu_kms, bool, 0400);
 
 DECLARE_FAULT_ATTR(fail_gem_alloc);
 DECLARE_FAULT_ATTR(fail_gem_iova);
 
-static void msm_gem_thp_init(struct drm_device *dev)
+bool msm_gpu_no_components(void)
 {
-	int err;
-
-	if (!transparent_hugepage)
-		return;
-
-	err = drm_gem_huge_mnt_create(dev, "within_size");
-	if (drm_gem_get_huge_mnt(dev))
-		drm_info(dev, "Using Transparent Hugepage\n");
-	else if (err)
-		drm_warn(dev, "Can't use Transparent Hugepage (%d)\n", err);
-}
-
-static const struct of_device_id msm_gpu_match[];
-static inline bool msm_gpu_node_present(struct device_node *np)
-{
-	return np && of_device_is_available(np) && adreno_has_gpu(np);
-}
-
-static int msm_count_gpus(void)
-{
-	struct device_node *np;
-	int count = 0;
-
-	for_each_matching_node(np, msm_gpu_match) {
-		if (msm_gpu_node_present(np))
-			count++;
-	}
-
-	return count;
-}
-
-static bool msm_separate_gpu_kms_auto(void)
-{
-	int gpus = msm_count_gpus();
-	int display_subsystems = msm_count_mdss() + msm_count_mdp4();
-
-	if (gpus <= 0 || display_subsystems <= 0)
-		return false;
-
-	/* Single card if there is exactly one GPU and one display subsystem */
-	return gpus > 1 || display_subsystems > 1;
-}
-
-bool msm_separate_gpu_kms_components(void)
-{
-	if (msm_count_gpus() == 0)
-		return true;
-
-	switch (separate_gpu_kms) {
-	case 0:
-		return false;
-	case 1:
-		return true;
-	default:
-		return msm_separate_gpu_kms_auto();
-	}
+	return separate_gpu_kms;
 }
 
 static int msm_drm_uninit(struct device *dev, const struct component_ops *gpu_ops)
@@ -158,6 +87,7 @@ static int msm_drm_uninit(struct device *dev, const struct component_ops *gpu_op
 
 	msm_gem_shrinker_cleanup(ddev);
 
+	msm_perf_debugfs_cleanup(priv);
 	msm_rd_debugfs_cleanup(priv);
 
 	if (priv->kms)
@@ -198,10 +128,11 @@ static int msm_drm_init(struct device *dev, const struct drm_driver *drv,
 	/*
 	 * Initialize the LRUs:
 	 */
-	drm_gem_lru_init(&priv->lru.unbacked);
-	drm_gem_lru_init(&priv->lru.pinned);
-	drm_gem_lru_init(&priv->lru.willneed);
-	drm_gem_lru_init(&priv->lru.dontneed);
+	mutex_init(&priv->lru.lock);
+	drm_gem_lru_init(&priv->lru.unbacked, &priv->lru.lock);
+	drm_gem_lru_init(&priv->lru.pinned,   &priv->lru.lock);
+	drm_gem_lru_init(&priv->lru.willneed, &priv->lru.lock);
+	drm_gem_lru_init(&priv->lru.dontneed, &priv->lru.lock);
 
 	/* Initialize stall-on-fault */
 	spin_lock_init(&priv->fault_stall_lock);
@@ -209,7 +140,7 @@ static int msm_drm_init(struct device *dev, const struct drm_driver *drv,
 
 	/* Teach lockdep about lock ordering wrt. shrinker: */
 	fs_reclaim_acquire(GFP_KERNEL);
-	might_lock(&ddev->gem_lru_mutex);
+	might_lock(&priv->lru.lock);
 	fs_reclaim_release(GFP_KERNEL);
 
 	if (priv->kms_init) {
@@ -231,8 +162,6 @@ static int msm_drm_init(struct device *dev, const struct drm_driver *drv,
 	ret = msm_gem_shrinker_init(ddev);
 	if (ret)
 		goto err_msm_uninit;
-
-	msm_gem_thp_init(ddev);
 
 	if (priv->kms_init) {
 		ret = msm_drm_kms_init(dev, drv);
@@ -295,21 +224,20 @@ static void load_gpu(struct drm_device *dev)
  */
 struct drm_gpuvm *msm_context_vm(struct drm_device *dev, struct msm_context *ctx)
 {
+	static DEFINE_MUTEX(init_lock);
 	struct msm_drm_private *priv = dev->dev_private;
-	struct drm_gpuvm *vm = smp_load_acquire(&ctx->vm);
 
 	/* Once ctx->vm is created it is valid for the lifetime of the context: */
-	if (vm)
-		return vm;
+	if (ctx->vm)
+		return ctx->vm;
 
-	guard(rwsem_write)(&ctx->ctxlock);
-
+	mutex_lock(&init_lock);
 	if (!ctx->vm) {
-		vm = msm_gpu_create_private_vm(
+		ctx->vm = msm_gpu_create_private_vm(
 			priv->gpu, current, !ctx->userspace_managed_vm);
-		if (!IS_ERR_OR_NULL(vm))
-			smp_store_release(&ctx->vm, vm);
+
 	}
+	mutex_unlock(&init_lock);
 
 	return ctx->vm;
 }
@@ -319,12 +247,12 @@ static int context_init(struct drm_device *dev, struct drm_file *file)
 	static atomic_t ident = ATOMIC_INIT(0);
 	struct msm_context *ctx;
 
-	ctx = kzalloc_obj(*ctx);
+	ctx = kzalloc(sizeof(*ctx), GFP_KERNEL);
 	if (!ctx)
 		return -ENOMEM;
 
 	INIT_LIST_HEAD(&ctx->submitqueues);
-	init_rwsem(&ctx->ctxlock);
+	rwlock_init(&ctx->queuelock);
 
 	kref_init(&ctx->ref);
 	msm_submitqueue_init(dev, ctx);
@@ -496,13 +424,9 @@ static int msm_ioctl_gem_info_iova(struct drm_device *dev,
 {
 	struct msm_drm_private *priv = dev->dev_private;
 	struct msm_context *ctx = file->driver_priv;
-	struct drm_gpuvm *vm = msm_context_vm(dev, ctx);
 
 	if (!priv->gpu)
 		return -EINVAL;
-
-	if (!vm)
-		return UERR(ENOMEM, dev, "no VM");
 
 	if (msm_context_is_vmbind(ctx))
 		return UERR(EINVAL, dev, "VM_BIND is enabled");
@@ -514,7 +438,7 @@ static int msm_ioctl_gem_info_iova(struct drm_device *dev,
 	 * Don't pin the memory here - just get an address so that userspace can
 	 * be productive
 	 */
-	return msm_gem_get_iova(obj, vm, iova);
+	return msm_gem_get_iova(obj, msm_context_vm(dev, ctx), iova);
 }
 
 static int msm_ioctl_gem_info_set_iova(struct drm_device *dev,
@@ -527,9 +451,6 @@ static int msm_ioctl_gem_info_set_iova(struct drm_device *dev,
 
 	if (!priv->gpu)
 		return -EINVAL;
-
-	if (!vm)
-		return UERR(ENOMEM, dev, "no VM");
 
 	if (msm_context_is_vmbind(ctx))
 		return UERR(EINVAL, dev, "VM_BIND is enabled");
@@ -672,9 +593,7 @@ static int msm_ioctl_gem_info(struct drm_device *dev, void *data,
 
 	switch (args->info) {
 	case MSM_INFO_GET_OFFSET:
-		ret = drm_gem_create_mmap_offset(obj);
-		if (ret == 0)
-		    args->value = drm_vma_node_offset_addr(&obj->vma_node);
+		args->value = msm_gem_mmap_offset(obj);
 		break;
 	case MSM_INFO_GET_IOVA:
 		ret = msm_ioctl_gem_info_iova(dev, file, obj, &args->value);
@@ -881,7 +800,6 @@ static const struct drm_ioctl_desc msm_ioctls[] = {
 	DRM_IOCTL_DEF_DRV(MSM_SUBMITQUEUE_CLOSE, msm_ioctl_submitqueue_close, DRM_RENDER_ALLOW),
 	DRM_IOCTL_DEF_DRV(MSM_SUBMITQUEUE_QUERY, msm_ioctl_submitqueue_query, DRM_RENDER_ALLOW),
 	DRM_IOCTL_DEF_DRV(MSM_VM_BIND,      msm_ioctl_vm_bind,      DRM_RENDER_ALLOW),
-	DRM_IOCTL_DEF_DRV(MSM_PERFCNTR_CONFIG,   msm_ioctl_perfcntr_config,    DRM_RENDER_ALLOW),
 };
 
 static void msm_show_fdinfo(struct drm_printer *p, struct drm_file *file)
@@ -905,6 +823,7 @@ static const struct file_operations fops = {
 
 #define DRIVER_FEATURES_GPU ( \
 		DRIVER_GEM | \
+		DRIVER_GEM_GPUVA | \
 		DRIVER_RENDER | \
 		DRIVER_SYNCOBJ | \
 		DRIVER_SYNCOBJ_TIMELINE | \
@@ -912,6 +831,7 @@ static const struct file_operations fops = {
 
 #define DRIVER_FEATURES_KMS ( \
 		DRIVER_GEM | \
+		DRIVER_GEM_GPUVA | \
 		DRIVER_ATOMIC | \
 		DRIVER_MODESET | \
 		0 )
@@ -921,7 +841,7 @@ static const struct drm_driver msm_driver = {
 	.open               = msm_open,
 	.postclose          = msm_postclose,
 	.dumb_create        = msm_gem_dumb_create,
-	.dumb_map_offset    = drm_gem_dumb_map_offset,
+	.dumb_map_offset    = msm_gem_dumb_map_offset,
 	.gem_prime_import   = msm_gem_prime_import,
 	.gem_prime_import_sg_table = msm_gem_prime_import_sg_table,
 #ifdef CONFIG_DEBUG_FS
@@ -944,7 +864,7 @@ static const struct drm_driver msm_kms_driver = {
 	.open               = msm_open,
 	.postclose          = msm_postclose,
 	.dumb_create        = msm_gem_dumb_create,
-	.dumb_map_offset    = drm_gem_dumb_map_offset,
+	.dumb_map_offset    = msm_gem_dumb_map_offset,
 	.gem_prime_import_sg_table = msm_gem_prime_import_sg_table,
 #ifdef CONFIG_DEBUG_FS
 	.debugfs_init       = msm_debugfs_init,
@@ -1045,31 +965,21 @@ static bool prefer_mdp5 = true;
 MODULE_PARM_DESC(prefer_mdp5, "Select whether MDP5 or DPU driver should be preferred");
 module_param(prefer_mdp5, bool, 0444);
 
-/* list all platforms that have been migrated from mdp5 to dpu driver */
-static const char *const msm_mdp5_dpu_migrated[] = {
-	/* there never was qcom,msm8998-mdp5 */
-	"qcom,sdm630-mdp5",
-	"qcom,sdm660-mdp5",
-	NULL
-};
-
 /* list all platforms supported by both mdp5 and dpu drivers */
 static const char *const msm_mdp5_dpu_migration[] = {
 	"qcom,msm8917-mdp5",
 	"qcom,msm8937-mdp5",
 	"qcom,msm8953-mdp5",
 	"qcom,msm8996-mdp5",
+	"qcom,sdm630-mdp5",
+	"qcom,sdm660-mdp5",
 	NULL,
 };
 
 bool msm_disp_drv_should_bind(struct device *dev, bool dpu_driver)
 {
-	/* If it is not an MDP5 device, use DPU */
+	/* If it is not an MDP5 device, do not try MDP5 driver */
 	if (!of_device_is_compatible(dev->of_node, "qcom,mdp5"))
-		return dpu_driver;
-
-	/* If it is no longer supported by MDP5, use DPU */
-	if (of_device_compatible_match(dev->of_node, msm_mdp5_dpu_migrated))
 		return dpu_driver;
 
 	/* If it is not in the migration list, use MDP5 */
@@ -1102,7 +1012,7 @@ static int add_gpu_components(struct device *dev,
 	if (!np)
 		return 0;
 
-	if (msm_gpu_node_present(np))
+	if (of_device_is_available(np) && adreno_has_gpu(np))
 		drm_of_component_match_add(dev, matchptr, component_compare_of, np);
 
 	of_node_put(np);
@@ -1113,7 +1023,7 @@ static int add_gpu_components(struct device *dev,
 static int msm_drm_bind(struct device *dev)
 {
 	return msm_drm_init(dev,
-			    msm_separate_gpu_kms_components() ?
+			    msm_gpu_no_components() ?
 				    &msm_kms_driver :
 				    &msm_driver,
 			    NULL);
@@ -1152,7 +1062,7 @@ int msm_drv_probe(struct device *master_dev,
 			return ret;
 	}
 
-	if (!msm_separate_gpu_kms_components()) {
+	if (!msm_gpu_no_components()) {
 		ret = add_gpu_components(master_dev, &match);
 		if (ret)
 			return ret;

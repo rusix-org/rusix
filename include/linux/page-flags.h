@@ -44,6 +44,10 @@
  * Consequently, PG_reserved for a page mapped into user space can indicate
  * the zero page, the vDSO, MMIO pages or device memory.
  *
+ * The PG_private bitflag is set on pagecache pages if they contain filesystem
+ * specific data (which is normally at page->private). It can be used by
+ * private allocations for its own usage.
+ *
  * During initiation of disk I/O, PG_locked is set. This bit is set before I/O
  * and cleared when writeback _starts_ or when read _completes_. PG_writeback
  * is set before writeback starts and cleared when it finishes.
@@ -101,7 +105,7 @@ enum pageflags {
 	PG_owner_2,		/* Owner use. If pagecache, fs may use */
 	PG_arch_1,
 	PG_reserved,
-	PG_folio,		/* Do not use: reserved for folio identification */
+	PG_private,		/* If pagecache, has fs-private data */
 	PG_private_2,		/* If pagecache, has fs aux data */
 	PG_reclaim,		/* To be reclaimed asap */
 	PG_swapbacked,		/* Page is backed by RAM/swap */
@@ -194,90 +198,97 @@ enum pageflags {
 
 #ifndef __GENERATING_BOUNDS_H
 
+#ifdef CONFIG_HUGETLB_PAGE_OPTIMIZE_VMEMMAP
+DECLARE_STATIC_KEY_FALSE(hugetlb_optimize_vmemmap_key);
+
 /*
- * For tail pages, if the size of struct page is power-of-2 ->compound_info
- * encodes the mask that converts the address of the tail page address to
- * the head page address.
- *
- * Otherwise, ->compound_info has direct pointer to head pages.
+ * Return the real head page struct iff the @page is a fake head page, otherwise
+ * return the @page itself. See Documentation/mm/vmemmap_dedup.rst.
  */
-static __always_inline bool compound_info_has_mask(void)
+static __always_inline const struct page *page_fixed_fake_head(const struct page *page)
 {
+	if (!static_branch_unlikely(&hugetlb_optimize_vmemmap_key))
+		return page;
+
 	/*
-	 * Limit mask usage to HVO where it makes a difference.
-	 *
-	 * The approach with mask would work in the wider set of conditions,
-	 * but it requires validating that struct pages are naturally aligned
-	 * for all orders up to the MAX_FOLIO_ORDER, which can be tricky.
+	 * Only addresses aligned with PAGE_SIZE of struct page may be fake head
+	 * struct page. The alignment check aims to avoid access the fields (
+	 * e.g. compound_head) of the @page[1]. It can avoid touch a (possibly)
+	 * cold cacheline in some cases.
 	 */
-	if (!IS_ENABLED(CONFIG_VMEMMAP_OPTIMIZATION))
+	if (IS_ALIGNED((unsigned long)page, PAGE_SIZE) &&
+	    test_bit(PG_head, &page->flags.f)) {
+		/*
+		 * We can safely access the field of the @page[1] with PG_head
+		 * because the @page is a compound page composed with at least
+		 * two contiguous pages.
+		 */
+		unsigned long head = READ_ONCE(page[1].compound_head);
+
+		if (likely(head & 1))
+			return (const struct page *)(head - 1);
+	}
+	return page;
+}
+
+static __always_inline bool page_count_writable(const struct page *page, int u)
+{
+	if (!static_branch_unlikely(&hugetlb_optimize_vmemmap_key))
+		return true;
+
+	/*
+	 * The refcount check is ordered before the fake-head check to prevent
+	 * the following race:
+	 *   CPU 1 (HVO)                     CPU 2 (speculative PFN walker)
+	 *
+	 *   page_ref_freeze()
+	 *   synchronize_rcu()
+	 *                                   rcu_read_lock()
+	 *                                   page_is_fake_head() is false
+	 *   vmemmap_remap_pte()
+	 *   XXX: struct page[] becomes r/o
+	 *
+	 *   page_ref_unfreeze()
+	 *                                   page_ref_count() is not zero
+	 *
+	 *                                   atomic_add_unless(&page->_refcount)
+	 *                                   XXX: try to modify r/o struct page[]
+	 *
+	 * The refcount check also prevents modification attempts to other (r/o)
+	 * tail pages that are not fake heads.
+	 */
+	if (atomic_read_acquire(&page->_refcount) == u)
 		return false;
 
-	return is_power_of_2(sizeof(struct page));
+	return page_fixed_fake_head(page) == page;
+}
+#else
+static inline const struct page *page_fixed_fake_head(const struct page *page)
+{
+	return page;
+}
+
+static inline bool page_count_writable(const struct page *page, int u)
+{
+	return true;
+}
+#endif
+
+static __always_inline int page_is_fake_head(const struct page *page)
+{
+	return page_fixed_fake_head(page) != page;
 }
 
 static __always_inline unsigned long _compound_head(const struct page *page)
 {
-	unsigned long info = READ_ONCE(page->compound_info);
-	unsigned long mask;
+	unsigned long head = READ_ONCE(page->compound_head);
 
-	if (!compound_info_has_mask()) {
-		/* Bit 0 encodes PageTail() */
-		if (info & 1)
-			return info - 1;
-
-		return (unsigned long)page;
-	}
-
-	/*
-	 * If compound_info_has_mask() is true the rest of the info encodes
-	 * the mask that converts the address of the tail page to the head page.
-	 *
-	 * No need to clear bit 0 in the mask as 'page' always has it clear.
-	 *
-	 * Let's do it in a branchless manner.
-	 */
-
-	/* Non-tail: -1UL, Tail: 0 */
-	mask = (info & 1) - 1;
-
-	/* Non-tail: -1UL, Tail: info */
-	mask |= info;
-
-	return (unsigned long)page & mask;
+	if (unlikely(head & 1))
+		return head - 1;
+	return (unsigned long)page_fixed_fake_head(page);
 }
 
 #define compound_head(page)	((typeof(page))_compound_head(page))
-
-static __always_inline void set_compound_head(struct page *tail,
-		const struct page *head, unsigned int order)
-{
-	unsigned int shift;
-	unsigned long mask;
-
-	if (!compound_info_has_mask()) {
-		WRITE_ONCE(tail->compound_info, (unsigned long)head | 1);
-		return;
-	}
-
-	/*
-	 * If the size of struct page is power-of-2, bits [shift:0] of the
-	 * virtual address of compound head are zero.
-	 *
-	 * Calculate mask that can be applied to the virtual address of
-	 * the tail page to get address of the head page.
-	 */
-	shift = order + order_base_2(sizeof(struct page));
-	mask = GENMASK(BITS_PER_LONG - 1, shift);
-
-	/* Bit 0 encodes PageTail() */
-	WRITE_ONCE(tail->compound_info, mask | 1);
-}
-
-static __always_inline void clear_compound_head(struct page *page)
-{
-	WRITE_ONCE(page->compound_info, 0);
-}
 
 /**
  * page_folio - Converts from page to folio.
@@ -309,13 +320,13 @@ static __always_inline void clear_compound_head(struct page *page)
 
 static __always_inline int PageTail(const struct page *page)
 {
-	return READ_ONCE(page->compound_info) & 1;
+	return READ_ONCE(page->compound_head) & 1 || page_is_fake_head(page);
 }
 
 static __always_inline int PageCompound(const struct page *page)
 {
 	return test_bit(PG_head, &page->flags.f) ||
-	       READ_ONCE(page->compound_info) & 1;
+	       READ_ONCE(page->compound_head) & 1;
 }
 
 #define	PAGE_POISON_PATTERN	-1l
@@ -337,7 +348,7 @@ static const unsigned long *const_folio_flags(const struct folio *folio,
 {
 	const struct page *page = &folio->page;
 
-	VM_BUG_ON_PGFLAGS(page->compound_info & 1, page);
+	VM_BUG_ON_PGFLAGS(page->compound_head & 1, page);
 	VM_BUG_ON_PGFLAGS(n > 0 && !test_bit(PG_head, &page->flags.f), page);
 	return &page[n].flags.f;
 }
@@ -346,7 +357,7 @@ static unsigned long *folio_flags(struct folio *folio, unsigned n)
 {
 	struct page *page = &folio->page;
 
-	VM_BUG_ON_PGFLAGS(page->compound_info & 1, page);
+	VM_BUG_ON_PGFLAGS(page->compound_head & 1, page);
 	VM_BUG_ON_PGFLAGS(n > 0 && !test_bit(PG_head, &page->flags.f), page);
 	return &page[n].flags.f;
 }
@@ -571,19 +582,9 @@ FOLIO_FLAG(swapbacked, FOLIO_HEAD_PAGE)
 /*
  * Private page markings that may be used by the filesystem that owns the page
  * for its own purposes.
- * - folio->private and PG_private_2 cause release_folio() and co to be invoked
+ * - PG_private and PG_private_2 cause release_folio() and co to be invoked
  */
-
-static __always_inline bool folio_test_private(const struct folio *folio)
-{
-	/*
-	 * data_race() is added for readers without holding the folio lock.
-	 * Only the NULL/non-NULL answer is used and both are valid while
-	 * private is being attached or detached, so the race is benign.
-	 */
-	return data_race(folio->private);
-}
-
+PAGEFLAG(Private, private, PF_ANY)
 FOLIO_FLAG(private_2, FOLIO_HEAD_PAGE)
 
 /* owner_2 can be set on tail pages for anon memory */
@@ -593,12 +594,13 @@ FOLIO_FLAG(owner_2, FOLIO_HEAD_PAGE)
  * Only test-and-set exist for PG_writeback.  The unconditional operators are
  * risky: they bypass page accounting.
  */
-FOLIO_TEST_FLAG(writeback, FOLIO_HEAD_PAGE)
-	FOLIO_TEST_SET_FLAG(writeback, FOLIO_HEAD_PAGE)
+TESTPAGEFLAG(Writeback, writeback, PF_NO_TAIL)
+	TESTSCFLAG(Writeback, writeback, PF_NO_TAIL)
 FOLIO_FLAG(mappedtodisk, FOLIO_HEAD_PAGE)
 
 /* PG_readahead is only used for reads; PG_reclaim is only for writes */
-FOLIO_FLAG(reclaim, FOLIO_HEAD_PAGE)
+PAGEFLAG(Reclaim, reclaim, PF_NO_TAIL)
+	TESTCLEARFLAG(Reclaim, reclaim, PF_NO_TAIL)
 FOLIO_FLAG(readahead, FOLIO_HEAD_PAGE)
 	FOLIO_TEST_CLEAR_FLAG(readahead, FOLIO_HEAD_PAGE)
 
@@ -660,7 +662,6 @@ TESTSCFLAG(HWPoison, hwpoison, PF_ANY)
 #define __PG_HWPOISON (1UL << PG_hwpoison)
 #else
 PAGEFLAG_FALSE(HWPoison, hwpoison)
-TESTSCFLAG_FALSE(HWPoison, hwpoison)
 #define __PG_HWPOISON 0
 #endif
 
@@ -721,11 +722,6 @@ PAGEFLAG_FALSE(VmemmapSelfHosted, vmemmap_self_hosted)
 static __always_inline bool folio_test_anon(const struct folio *folio)
 {
 	return ((unsigned long)folio->mapping & FOLIO_MAPPING_ANON) != 0;
-}
-
-static __always_inline bool folio_test_lazyfree(const struct folio *folio)
-{
-	return folio_test_anon(folio) && !folio_test_swapbacked(folio);
 }
 
 static __always_inline bool PageAnonNotKsm(const struct page *page)
@@ -851,7 +847,7 @@ static __always_inline bool folio_test_head(const struct folio *folio)
 static __always_inline int PageHead(const struct page *page)
 {
 	PF_POISONED_CHECK(page);
-	return test_bit(PG_head, &page->flags.f);
+	return test_bit(PG_head, &page->flags.f) && !page_is_fake_head(page);
 }
 
 __SETPAGEFLAG(Head, head, PF_ANY)
@@ -869,6 +865,16 @@ static inline bool folio_test_large(const struct folio *folio)
 	return folio_test_head(folio);
 }
 
+static __always_inline void set_compound_head(struct page *page, struct page *head)
+{
+	WRITE_ONCE(page->compound_head, (unsigned long)head + 1);
+}
+
+static __always_inline void clear_compound_head(struct page *page)
+{
+	WRITE_ONCE(page->compound_head, 0);
+}
+
 #ifdef CONFIG_TRANSPARENT_HUGEPAGE
 static inline void ClearPageCompound(struct page *page)
 {
@@ -883,6 +889,20 @@ FOLIO_FLAG_FALSE(partially_mapped)
 #endif
 
 #define PG_head_mask ((1UL << PG_head))
+
+#ifdef CONFIG_TRANSPARENT_HUGEPAGE
+/*
+ * PageTransCompound returns true for both transparent huge pages
+ * and hugetlbfs pages, so it should only be called when it's known
+ * that hugetlbfs pages aren't involved.
+ */
+static inline int PageTransCompound(const struct page *page)
+{
+	return PageCompound(page);
+}
+#else
+TESTPAGEFLAG_FALSE(TransCompound, transcompound)
+#endif
 
 #if defined(CONFIG_MEMORY_FAILURE) && defined(CONFIG_TRANSPARENT_HUGEPAGE)
 /*
@@ -1028,7 +1048,19 @@ PAGE_TYPE_OPS(Table, table, pgtable)
  */
 PAGE_TYPE_OPS(Guard, guard, guard)
 
-PAGE_TYPE_OPS(Slab, slab, slab)
+FOLIO_TYPE_OPS(slab, slab)
+
+/**
+ * PageSlab - Determine if the page belongs to the slab allocator
+ * @page: The page to test.
+ *
+ * Context: Any context.
+ * Return: True for slab pages, false for any other kind of page.
+ */
+static inline bool PageSlab(const struct page *page)
+{
+	return folio_test_slab(page_folio(page));
+}
 
 #ifdef CONFIG_HUGETLB_PAGE
 FOLIO_TYPE_OPS(hugetlb, hugetlb)
@@ -1044,7 +1076,7 @@ PAGE_TYPE_OPS(Zsmalloc, zsmalloc, zsmalloc)
  * Serialized with zone lock.
  */
 PAGE_TYPE_OPS(Unaccepted, unaccepted, unaccepted)
-PAGE_TYPE_OPS(LargeKmalloc, large_kmalloc, large_kmalloc)
+FOLIO_TYPE_OPS(large_kmalloc, large_kmalloc)
 
 /**
  * PageHuge - Determine if the page belongs to hugetlbfs
@@ -1175,7 +1207,7 @@ static __always_inline void __ClearPageAnonExclusive(struct page *page)
  */
 #define PAGE_FLAGS_CHECK_AT_FREE				\
 	(1UL << PG_lru		| 1UL << PG_locked	|	\
-	 1UL << PG_private_2	|				\
+	 1UL << PG_private	| 1UL << PG_private_2	|	\
 	 1UL << PG_writeback	| 1UL << PG_reserved	|	\
 	 1UL << PG_active 	|				\
 	 1UL << PG_unevictable	| __PG_MLOCKED | LRU_GEN_MASK)
@@ -1199,31 +1231,8 @@ static __always_inline void __ClearPageAnonExclusive(struct page *page)
 	(0xffUL /* order */		| 1UL << PG_has_hwpoisoned |	\
 	 1UL << PG_large_rmappable	| 1UL << PG_partially_mapped)
 
-/**
- * folio_has_attached_private - check if the folio has private data attached
- * @folio: The folio to check.
- *
- * Use this in code that may encounter swapcache or hugetlb folios but only
- * wants to detect attached private data.
- *
- * Return: true if the folio has private data attached.
- */
-static inline bool folio_has_attached_private(const struct folio *folio)
-{
-	/*
-	 * Swapcache stores swp_entry_t in folio->swap, a union with
-	 * folio->private, and hugetlb stores its own flags in folio->private;
-	 * both are excluded.
-	 *
-	 * NOTE: For swapcache, folio->swap.val PG_swapcache are not set as
-	 * a whole, so folio_test_swapcache() is not reliable to exclude
-	 * swapcache. Use folio_test_swapbacked() instead, since it remains set
-	 * when a folio is added to/removed from swapcache.
-	 */
-
-	return folio_test_private(folio) && !folio_test_swapbacked(folio) &&
-	       !folio_test_hugetlb(folio);
-}
+#define PAGE_FLAGS_PRIVATE				\
+	(1UL << PG_private | 1UL << PG_private_2)
 /**
  * folio_has_private - Determine if folio has private stuff
  * @folio: The folio to be checked
@@ -1233,7 +1242,7 @@ static inline bool folio_has_attached_private(const struct folio *folio)
  */
 static inline int folio_has_private(const struct folio *folio)
 {
-	return folio_has_attached_private(folio) || folio_test_private_2(folio);
+	return !!(folio->flags.f & PAGE_FLAGS_PRIVATE);
 }
 
 #undef PF_ANY

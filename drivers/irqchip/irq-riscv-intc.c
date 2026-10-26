@@ -349,13 +349,13 @@ static int __init riscv_intc_acpi_init(union acpi_subtable_headers *header,
 		if (count <= 0)
 			return -EINVAL;
 
-		rintc_acpi_data = kzalloc_objs(*rintc_acpi_data, count);
+		rintc_acpi_data = kcalloc(count, sizeof(*rintc_acpi_data), GFP_KERNEL);
 		if (!rintc_acpi_data)
 			return -ENOMEM;
 	}
 
 	rintc = (struct acpi_madt_rintc *)header;
-	rintc_acpi_data[nr_rintc] = kzalloc_obj(*rintc_acpi_data[0]);
+	rintc_acpi_data[nr_rintc] = kzalloc(sizeof(*rintc_acpi_data[0]), GFP_KERNEL);
 	if (!rintc_acpi_data[nr_rintc])
 		return -ENOMEM;
 
@@ -384,8 +384,7 @@ static int __init riscv_intc_acpi_init(union acpi_subtable_headers *header,
 	if (rc)
 		irq_domain_free_fwnode(fn);
 	else
-		acpi_set_irq_model(ACPI_IRQ_MODEL_RINTC, riscv_acpi_get_gsi_domain_id,
-				   acpi_get_riscv_gsi_handle);
+		acpi_set_irq_model(ACPI_IRQ_MODEL_RINTC, riscv_acpi_get_gsi_domain_id);
 
 	return rc;
 }

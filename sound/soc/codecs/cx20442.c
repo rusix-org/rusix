@@ -200,7 +200,7 @@ static int cx20442_write(struct snd_soc_component *component, unsigned int reg,
  * Line discpline related code
  *
  * Any of the callback functions below can be used in two ways:
- * 1) registered by a machine driver as one of line discipline operations,
+ * 1) registerd by a machine driver as one of line discipline operations,
  * 2) called from a machine's provided line discipline callback function
  *    in case when extra machine specific code must be run as well.
  */
@@ -236,8 +236,7 @@ err:
 /* Line discipline .close() */
 static void v253_close(struct tty_struct *tty)
 {
-	struct cx20442_codec *codec = tty->disc_data;
-	struct snd_soc_component *component = codec->component;
+	struct snd_soc_component *component = tty->disc_data;
 	struct cx20442_priv *cx20442;
 
 	tty->disc_data = NULL;
@@ -249,7 +248,7 @@ static void v253_close(struct tty_struct *tty)
 
 	/* Prevent the codec driver from further accessing the modem */
 	cx20442->tty = NULL;
-	codec->ready = false;
+	component->card->pop_time = 0;
 }
 
 /* Line discipline .hangup() */
@@ -262,8 +261,7 @@ static void v253_hangup(struct tty_struct *tty)
 static void v253_receive(struct tty_struct *tty, const u8 *cp, const u8 *fp,
 			 size_t count)
 {
-	struct cx20442_codec *codec = tty->disc_data;
-	struct snd_soc_component *component = codec->component;
+	struct snd_soc_component *component = tty->disc_data;
 	struct cx20442_priv *cx20442;
 
 	if (!component)
@@ -276,7 +274,7 @@ static void v253_receive(struct tty_struct *tty, const u8 *cp, const u8 *fp,
 
 		/* Set up codec driver access to modem controls */
 		cx20442->tty = tty;
-		codec->ready = true;
+		component->card->pop_time = 1;
 	}
 }
 
@@ -317,12 +315,11 @@ static int cx20442_set_bias_level(struct snd_soc_component *component,
 		enum snd_soc_bias_level level)
 {
 	struct cx20442_priv *cx20442 = snd_soc_component_get_drvdata(component);
-	struct snd_soc_dapm_context *dapm = snd_soc_component_to_dapm(component);
 	int err = 0;
 
 	switch (level) {
 	case SND_SOC_BIAS_PREPARE:
-		if (snd_soc_dapm_get_bias_level(dapm) != SND_SOC_BIAS_STANDBY)
+		if (snd_soc_component_get_bias_level(component) != SND_SOC_BIAS_STANDBY)
 			break;
 		if (IS_ERR(cx20442->por))
 			err = PTR_ERR(cx20442->por);
@@ -330,7 +327,7 @@ static int cx20442_set_bias_level(struct snd_soc_component *component,
 			err = regulator_enable(cx20442->por);
 		break;
 	case SND_SOC_BIAS_STANDBY:
-		if (snd_soc_dapm_get_bias_level(dapm) != SND_SOC_BIAS_PREPARE)
+		if (snd_soc_component_get_bias_level(component) != SND_SOC_BIAS_PREPARE)
 			break;
 		if (IS_ERR(cx20442->por))
 			err = PTR_ERR(cx20442->por);
@@ -348,7 +345,7 @@ static int cx20442_component_probe(struct snd_soc_component *component)
 {
 	struct cx20442_priv *cx20442;
 
-	cx20442 = kzalloc_obj(struct cx20442_priv);
+	cx20442 = kzalloc(sizeof(struct cx20442_priv), GFP_KERNEL);
 	if (cx20442 == NULL)
 		return -ENOMEM;
 
@@ -377,6 +374,7 @@ static int cx20442_component_probe(struct snd_soc_component *component)
 	cx20442->tty = NULL;
 
 	snd_soc_component_set_drvdata(component, cx20442);
+	component->card->pop_time = 0;
 
 	return 0;
 }

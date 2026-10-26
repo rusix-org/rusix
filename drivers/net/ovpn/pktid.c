@@ -65,7 +65,7 @@ int ovpn_pktid_recv(struct ovpn_pktid_recv *pr, u32 pkt_id, u32 pkt_time)
 	if (likely(pkt_id == pr->id + 1)) {
 		/* well-formed ID sequence (incremented by 1) */
 		pr->base = REPLAY_INDEX(pr->base, -1);
-		__set_bit(pr->base, pr->history);
+		pr->history[pr->base / 8] |= (1 << (pr->base % 8));
 		if (pr->extent < REPLAY_WINDOW_SIZE)
 			++pr->extent;
 		pr->id = pkt_id;
@@ -77,14 +77,14 @@ int ovpn_pktid_recv(struct ovpn_pktid_recv *pr, u32 pkt_id, u32 pkt_time)
 			unsigned int i;
 
 			pr->base = REPLAY_INDEX(pr->base, -delta);
-			__set_bit(pr->base, pr->history);
+			pr->history[pr->base / 8] |= (1 << (pr->base % 8));
 			pr->extent += delta;
 			if (pr->extent > REPLAY_WINDOW_SIZE)
 				pr->extent = REPLAY_WINDOW_SIZE;
 			for (i = 1; i < delta; ++i) {
 				unsigned int newb = REPLAY_INDEX(pr->base, i);
 
-				__clear_bit(newb, pr->history);
+				pr->history[newb / 8] &= ~BIT(newb % 8);
 			}
 		} else {
 			pr->base = 0;
@@ -103,11 +103,14 @@ int ovpn_pktid_recv(struct ovpn_pktid_recv *pr, u32 pkt_id, u32 pkt_time)
 			if (pkt_id > pr->id_floor) {
 				const unsigned int ri = REPLAY_INDEX(pr->base,
 								     delta);
+				u8 *p = &pr->history[ri / 8];
+				const u8 mask = (1 << (ri % 8));
 
-				if (__test_and_set_bit(ri, pr->history)) {
+				if (*p & mask) {
 					ret = -EINVAL;
 					goto out;
 				}
+				*p |= mask;
 			} else {
 				ret = -EINVAL;
 				goto out;

@@ -29,10 +29,11 @@
 bool insn_has_rep_prefix(struct insn *insn)
 {
 	insn_byte_t p;
+	int i;
 
 	insn_get_prefixes(insn);
 
-	for_each_insn_prefix(insn, p) {
+	for_each_insn_prefix(insn, i, p) {
 		if (p == 0xf2 || p == 0xf3)
 			return true;
 	}

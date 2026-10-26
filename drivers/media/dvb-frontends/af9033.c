@@ -1062,7 +1062,7 @@ static int af9033_probe(struct i2c_client *client)
 	};
 
 	/* Allocate memory for the internal state */
-	dev = kzalloc_obj(*dev);
+	dev = kzalloc(sizeof(*dev), GFP_KERNEL);
 	if (!dev) {
 		ret = -ENOMEM;
 		goto err;
@@ -1173,8 +1173,8 @@ static void af9033_remove(struct i2c_client *client)
 }
 
 static const struct i2c_device_id af9033_id_table[] = {
-	{ .name = "af9033" },
-	{ }
+	{ "af9033" },
+	{}
 };
 MODULE_DEVICE_TABLE(i2c, af9033_id_table);
 

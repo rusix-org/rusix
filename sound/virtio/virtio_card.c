@@ -137,7 +137,8 @@ static int virtsnd_find_vqs(struct virtio_snd *snd)
 
 	n = virtqueue_get_vring_size(vqs[VIRTIO_SND_VQ_EVENT]);
 
-	snd->event_msgs = kmalloc_objs(*snd->event_msgs, n);
+	snd->event_msgs = kmalloc_array(n, sizeof(*snd->event_msgs),
+					GFP_KERNEL);
 	if (!snd->event_msgs)
 		return -ENOMEM;
 

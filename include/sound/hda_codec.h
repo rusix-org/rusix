@@ -9,7 +9,7 @@
 #define __SOUND_HDA_CODEC_H
 
 #include <linux/refcount.h>
-#include <linux/device-id/hda.h>
+#include <linux/mod_devicetable.h>
 #include <sound/info.h>
 #include <sound/control.h>
 #include <sound/pcm.h>
@@ -28,7 +28,6 @@ struct hda_codec;
 struct hda_pcm;
 struct hda_pcm_stream;
 struct hda_codec_ops;
-struct hda_jack_tbl;
 
 /*
  * codec bus
@@ -189,7 +188,8 @@ struct hda_codec {
 
 	/* PCM to create, set by hda_codec_ops.build_pcms callback */
 	struct list_head pcm_list_head;
-	struct snd_refcount pcm_ref;
+	refcount_t pcm_ref;
+	wait_queue_head_t remove_sleep;
 
 	/* codec specific info */
 	void *spec;
@@ -257,7 +257,6 @@ struct hda_codec {
 	unsigned int link_down_at_suspend:1; /* link down at runtime suspend */
 	unsigned int relaxed_resume:1;	/* don't resume forcibly for jack */
 	unsigned int forced_resume:1; /* forced resume for jack */
-	unsigned int acomp_requested_resume:1; /* resume requested by acomp */
 	unsigned int no_stream_clean_at_suspend:1; /* do not clean streams at suspend */
 	unsigned int ctl_dev_id:1; /* old control element id build behaviour */
 	unsigned int eld_jack_detect:1;	/* Machine jack-detection by ELD */
@@ -275,8 +274,7 @@ struct hda_codec {
 				 struct hda_codec *codec, hda_nid_t nid);
 
 	/* jack detection */
-	struct hda_jack_tbl *jacktbl, *jacktbl_last; /* linked list head/tail */
-	int jacktbl_used; /* number of jacktbl elements */
+	struct snd_array jacktbl;
 	unsigned long jackpoll_interval; /* In jiffies. Zero means no poll, rely on unsol events */
 	struct delayed_work jackpoll_work;
 
@@ -337,17 +335,6 @@ snd_hda_codec_write(struct hda_codec *codec, hda_nid_t nid, int flags,
 			unsigned int verb, unsigned int parm)
 {
 	return snd_hdac_codec_write(&codec->core, nid, flags, verb, parm);
-}
-
-/* sync after write */
-static inline int
-snd_hda_codec_write_sync(struct hda_codec *codec, hda_nid_t nid, int flags,
-			 unsigned int verb, unsigned int parm)
-{
-	/* use snd_hda_codec_read() for writing;
-	 * the returned value is usually discarded
-	 */
-	return snd_hdac_codec_read(&codec->core, nid, flags, verb, parm);
 }
 
 #define snd_hda_param_read(codec, nid, param) \
@@ -441,12 +428,9 @@ void snd_hda_codec_cleanup_for_unbind(struct hda_codec *codec);
 
 static inline void snd_hda_codec_pcm_get(struct hda_pcm *pcm)
 {
-	snd_refcount_get(&pcm->codec->pcm_ref);
+	refcount_inc(&pcm->codec->pcm_ref);
 }
-static inline void snd_hda_codec_pcm_put(struct hda_pcm *pcm)
-{
-	snd_refcount_put(&pcm->codec->pcm_ref);
-}
+void snd_hda_codec_pcm_put(struct hda_pcm *pcm);
 
 int snd_hda_codec_prepare(struct hda_codec *codec,
 			  struct hda_pcm_stream *hinfo,
@@ -487,10 +471,6 @@ void snd_hda_unlock_devices(struct hda_bus *bus);
 void snd_hda_bus_reset(struct hda_bus *bus);
 void snd_hda_bus_reset_codecs(struct hda_bus *bus);
 
-void snd_hda_codec_set_gpio(struct hda_codec *codec, unsigned int mask,
-			    unsigned int dir, unsigned int data,
-			    unsigned int delay);
-
 int snd_hda_codec_set_name(struct hda_codec *codec, const char *name);
 
 /*
@@ -521,7 +501,7 @@ void snd_hda_update_power_acct(struct hda_codec *codec);
 
 static inline bool hda_codec_need_resume(struct hda_codec *codec)
 {
-	return !codec->relaxed_resume && codec->jacktbl_used;
+	return !codec->relaxed_resume && codec->jacktbl.used;
 }
 
 /*

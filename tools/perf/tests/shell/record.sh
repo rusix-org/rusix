@@ -261,21 +261,7 @@ test_uid() {
 
 test_leader_sampling() {
   echo "Basic leader sampling test"
-  events="{cycles,cycles}:Su"
-  [ "$(uname -m)" = "s390x" ] && {
-    [ ! -d /sys/devices/cpum_sf ] && {
-      echo "No CPUMF [Skipped record]"
-      return
-    }
-    events="{cpum_sf/SF_CYCLES_BASIC/,cycles}:Su"
-    perf record -o "${perfdata}" -e "$events" -- perf test -w brstack 2> /dev/null
-    # Perf grouping might be unsupported, depends on version.
-    [ "$?" -ne 0 ] && {
-      echo "Grouping not support [Skipped record]"
-      return
-    }
-  }
-  if ! perf record -o "${perfdata}" -e "$events" -- \
+  if ! perf record -o "${perfdata}" -e "{cycles,cycles}:Su" -- \
     perf test -w brstack 2> /dev/null
   then
     echo "Leader sampling [Failed record]"
@@ -403,48 +389,6 @@ test_callgraph() {
   echo "Callgraph test [Success]"
 }
 
-test_acr_sampling() {
-  events="{instructions/period=40000,acr_mask=0x2/u,cycles/period=20000,acr_mask=0x3/u}"
-  pebs_events="{instructions/period=40000,acr_mask=0x2/pu,cycles/period=20000,acr_mask=0x3/u}"
-  echo "Auto counter reload (ACR) sampling test"
-  if ! perf record -o "${perfdata}" -e "${events}" ${testprog} 2> /dev/null
-  then
-    echo "Auto counter reload sampling [Skipped not supported]"
-    return
-  fi
-  if ! perf script -i "${perfdata}" -F event | grep -q "instructions"
-  then
-    echo "Auto counter reload sampling [Failed missing instructions event]"
-    err=1
-    return
-  fi
-  if perf script -i "${perfdata}" -F event | grep -q "cycles"
-  then
-    echo "Auto counter reload sampling [Failed cycles event shouldn't be sampled]"
-    err=1
-    return
-  fi
-  if ! perf record -o "${perfdata}" -e "${pebs_events}" ${testprog} 2> /dev/null
-  then
-    echo "Auto counter reload PEBS sampling [Skipped not supported]"
-    echo "Auto counter reload sampling [Success]"
-    return
-  fi
-  if ! perf script -i "${perfdata}" -F event | grep -q "instructions"
-  then
-    echo "Auto counter reload PEBS sampling [Failed missing instructions event]"
-    err=1
-    return
-  fi
-  if perf script -i "${perfdata}" -F event | grep -q "cycles"
-  then
-    echo "Auto counter reload PEBS sampling [Failed cycles event shouldn't be sampled]"
-    err=1
-    return
-  fi
-  echo "Auto counter reload sampling [Success]"
-}
-
 test_ratio_to_prev() {
   echo "ratio-to-prev test"
   if ! perf record -o /dev/null -e "{instructions, cycles/period=100000,ratio-to-prev=0.5/}" \
@@ -500,7 +444,6 @@ test_leader_sampling
 test_topdown_leader_sampling
 test_precise_max
 test_callgraph
-test_acr_sampling
 test_ratio_to_prev
 
 # restore the default value

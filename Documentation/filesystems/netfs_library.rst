@@ -195,7 +195,7 @@ structure is defined::
 		struct inode inode;
 		const struct netfs_request_ops *ops;
 		struct fscache_cookie * cache;
-		loff_t _remote_i_size;
+		loff_t remote_i_size;
 		unsigned long flags;
 		...
 	};
@@ -229,13 +229,10 @@ filesystem:
    Local caching cookie, or NULL if no caching is enabled.  This field does not
    exist if fscache is disabled.
 
- * ``_remote_i_size``
+ * ``remote_i_size``
 
    The size of the file on the server.  This differs from inode->i_size if
    local modifications have been made but not yet written back.
-
-   Use netfs_read_remote_i_size() and netfs_write_remote_i_size() to access
-   this field.  Hold inode->i_lock when writing it.
 
  * ``flags``
 
@@ -463,8 +460,8 @@ its own write paths, and exports a helper so a filesystem can do the same from
 a resize path (truncate, setattr, fallocate and the like) that holds the
 inode's ``i_rwsem`` exclusively across the whole resize::
 
-	void netfs_clear_stale_post_isize(struct inode *inode, uoff_t from,
-					  uoff_t to);
+	void netfs_clear_stale_post_isize(struct inode *inode, unsigned long long from,
+					  unsigned long long to);
 
 This zeroes any such data within the ``[from, to)`` hole to be made, where
 @from is the old EOF and @to is the new one, and the caller must have already

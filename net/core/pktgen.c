@@ -126,7 +126,6 @@
 #include <linux/string.h>
 #include <linux/ptrace.h>
 #include <linux/errno.h>
-#include <linux/hex.h>
 #include <linux/ioport.h>
 #include <linux/interrupt.h>
 #include <linux/capability.h>
@@ -566,7 +565,6 @@ static const struct proc_ops pktgen_proc_ops = {
 static int pktgen_if_show(struct seq_file *seq, void *v)
 {
 	const struct pktgen_dev *pkt_dev = seq->private;
-	unsigned int cflows = READ_ONCE(pkt_dev->cflows);
 	ktime_t stopped;
 	unsigned int i;
 	u64 idle;
@@ -591,7 +589,7 @@ static int pktgen_if_show(struct seq_file *seq, void *v)
 		   pkt_dev->nfrags, (unsigned long long) pkt_dev->delay,
 		   pkt_dev->clone_skb, pkt_dev->odevname);
 
-	seq_printf(seq, "     flows: %u flowlen: %u\n", cflows,
+	seq_printf(seq, "     flows: %u flowlen: %u\n", pkt_dev->cflows,
 		   pkt_dev->lflow);
 
 	seq_printf(seq,
@@ -676,7 +674,7 @@ static int pktgen_if_show(struct seq_file *seq, void *v)
 
 	for (i = 0; i < NR_PKT_FLAGS; i++) {
 		if (i == FLOW_SEQ_SHIFT)
-			if (!cflows)
+			if (!pkt_dev->cflows)
 				continue;
 
 		if (pkt_dev->flags & (1 << i)) {
@@ -1633,8 +1631,8 @@ static ssize_t pktgen_if_write(struct file *file,
 		if (value > MAX_CFLOWS)
 			value = MAX_CFLOWS;
 
-		WRITE_ONCE(pkt_dev->cflows, value);
-		sprintf(pg_result, "OK: flows=%u", (unsigned int)value);
+		pkt_dev->cflows = value;
+		sprintf(pg_result, "OK: flows=%u", pkt_dev->cflows);
 		return count;
 	}
 #ifdef CONFIG_XFRM
@@ -2024,11 +2022,11 @@ static const struct proc_ops pktgen_thread_proc_ops = {
 };
 
 /* Think find or remove for NN */
-static bool __pktgen_NN_threads(const struct pktgen_net *pn,
-				const char *ifname, int remove)
+static struct pktgen_dev *__pktgen_NN_threads(const struct pktgen_net *pn,
+					      const char *ifname, int remove)
 {
 	struct pktgen_thread *t;
-	struct pktgen_dev *pkt_dev;
+	struct pktgen_dev *pkt_dev = NULL;
 	bool exact = (remove == FIND);
 
 	list_for_each_entry(t, &pn->pktgen_threads, th_list) {
@@ -2038,10 +2036,10 @@ static bool __pktgen_NN_threads(const struct pktgen_net *pn,
 				pkt_dev->removal_mark = 1;
 				t->control |= T_REMDEV;
 			}
-			return true;
+			break;
 		}
 	}
-	return false;
+	return pkt_dev;
 }
 
 /*
@@ -2049,6 +2047,7 @@ static bool __pktgen_NN_threads(const struct pktgen_net *pn,
  */
 static void pktgen_mark_device(const struct pktgen_net *pn, const char *ifname)
 {
+	struct pktgen_dev *pkt_dev = NULL;
 	const int max_tries = 10, msec_per_try = 125;
 	int i = 0;
 
@@ -2057,7 +2056,8 @@ static void pktgen_mark_device(const struct pktgen_net *pn, const char *ifname)
 
 	while (1) {
 
-		if (!__pktgen_NN_threads(pn, ifname, REMOVE))
+		pkt_dev = __pktgen_NN_threads(pn, ifname, REMOVE);
+		if (pkt_dev == NULL)
 			break;	/* success */
 
 		mutex_unlock(&pktgen_thread_lock);
@@ -2344,11 +2344,11 @@ static void spin(struct pktgen_dev *pkt_dev, ktime_t spin_until)
 			set_current_state(TASK_INTERRUPTIBLE);
 			hrtimer_sleeper_start_expires(&t, HRTIMER_MODE_ABS);
 
-			if (likely(hrtimer_sleeper_task_get(&t)))
+			if (likely(t.task))
 				schedule();
 
 			hrtimer_cancel(&t.timer);
-		} while (hrtimer_sleeper_task_get(&t) && pkt_dev->running && !signal_pending(current));
+		} while (t.task && pkt_dev->running && !signal_pending(current));
 		__set_current_state(TASK_RUNNING);
 		end_time = ktime_get();
 	}
@@ -2372,7 +2372,7 @@ static inline int f_seen(const struct pktgen_dev *pkt_dev, int flow)
 	return !!(pkt_dev->flows[flow].flags & F_INIT);
 }
 
-static inline int f_pick(struct pktgen_dev *pkt_dev, unsigned int cflows)
+static inline int f_pick(struct pktgen_dev *pkt_dev)
 {
 	int flow = pkt_dev->curfl;
 
@@ -2382,11 +2382,11 @@ static inline int f_pick(struct pktgen_dev *pkt_dev, unsigned int cflows)
 			pkt_dev->flows[flow].count = 0;
 			pkt_dev->flows[flow].flags = 0;
 			pkt_dev->curfl += 1;
-			if (pkt_dev->curfl >= cflows)
+			if (pkt_dev->curfl >= pkt_dev->cflows)
 				pkt_dev->curfl = 0; /*reset */
 		}
 	} else {
-		flow = get_random_u32_below(cflows);
+		flow = get_random_u32_below(pkt_dev->cflows);
 		pkt_dev->curfl = flow;
 
 		if (pkt_dev->flows[flow].count > pkt_dev->lflow) {
@@ -2460,14 +2460,12 @@ static void set_cur_queue_map(struct pktgen_dev *pkt_dev)
  */
 static void mod_cur_headers(struct pktgen_dev *pkt_dev)
 {
-	unsigned int cflows;
 	__u32 imn;
 	__u32 imx;
 	int flow = 0;
 
-	cflows = READ_ONCE(pkt_dev->cflows);
-	if (cflows)
-		flow = f_pick(pkt_dev, cflows);
+	if (pkt_dev->cflows)
+		flow = f_pick(pkt_dev);
 
 	/*  Deal with source MAC */
 	if (pkt_dev->src_mac_count > 1) {
@@ -2583,7 +2581,7 @@ static void mod_cur_headers(struct pktgen_dev *pkt_dev)
 			pkt_dev->cur_saddr = htonl(t);
 		}
 
-		if (cflows && f_seen(pkt_dev, flow)) {
+		if (pkt_dev->cflows && f_seen(pkt_dev, flow)) {
 			pkt_dev->cur_daddr = pkt_dev->flows[flow].cur_daddr;
 		} else {
 			imn = ntohl(pkt_dev->daddr_min);
@@ -2612,7 +2610,7 @@ static void mod_cur_headers(struct pktgen_dev *pkt_dev)
 					pkt_dev->cur_daddr = htonl(t);
 				}
 			}
-			if (cflows) {
+			if (pkt_dev->cflows) {
 				pkt_dev->flows[flow].flags |= F_INIT;
 				pkt_dev->flows[flow].cur_daddr =
 				    pkt_dev->cur_daddr;
@@ -3006,7 +3004,7 @@ static struct sk_buff *fill_packet_ipv4(struct net_device *odev,
 
 	udph->source = htons(pkt_dev->cur_udp_src);
 	udph->dest = htons(pkt_dev->cur_udp_dst);
-	udp_set_len_short(udph, datalen + 8);	/* DATA + udphdr */
+	udph->len = htons(datalen + 8);	/* DATA + udphdr */
 	udph->check = 0;
 
 	iph->ihl = 5;
@@ -3139,7 +3137,7 @@ static struct sk_buff *fill_packet_ipv6(struct net_device *odev,
 	udplen = datalen + sizeof(struct udphdr);
 	udph->source = htons(pkt_dev->cur_udp_src);
 	udph->dest = htons(pkt_dev->cur_udp_dst);
-	udp_set_len_short(udph, udplen);
+	udph->len = htons(udplen);
 	udph->check = 0;
 
 	*(__be32 *) iph = htonl(0x60000000);	/* Version + flow */
@@ -3833,7 +3831,8 @@ static int pktgen_add_device(struct pktgen_thread *t, const char *ifname)
 
 	/* We don't allow a device to be on several threads */
 
-	if (__pktgen_NN_threads(t->net, ifname, FIND)) {
+	pkt_dev = __pktgen_NN_threads(t->net, ifname, FIND);
+	if (pkt_dev) {
 		pr_err("ERROR: interface already used\n");
 		return -EBUSY;
 	}

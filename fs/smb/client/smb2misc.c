@@ -85,36 +85,6 @@ static const __le16 smb2_rsp_struct_sizes[NUMBER_OF_SMB2_COMMANDS] = {
 	/* SMB2_OPLOCK_BREAK */ cpu_to_le16(24)
 };
 
-/*
- * Minimum received PDU size for commands whose response carries a
- * variable-length data area.  A non-zero entry marks the command as
- * having one, and gives the length smb2_check_message() requires
- * before smb2_get_data_area_len() reads the offset and length fields
- * out of the fixed response struct.
- */
-static const size_t smb2_min_pdu_len[NUMBER_OF_SMB2_COMMANDS] = {
-	/* SMB2_NEGOTIATE */       sizeof(struct smb2_negotiate_rsp),
-	/* SMB2_SESSION_SETUP */   sizeof(struct smb2_sess_setup_rsp),
-	/* SMB2_LOGOFF */          0,
-	/* SMB2_TREE_CONNECT */    0,
-	/* SMB2_TREE_DISCONNECT */ 0,
-	/* SMB2_CREATE */          sizeof(struct smb2_create_rsp),
-	/* SMB2_CLOSE */           0,
-	/* SMB2_FLUSH */           0,
-	/* SMB2_READ */            sizeof(struct smb2_read_rsp),
-	/* SMB2_WRITE */           0,
-	/* SMB2_LOCK */            0,
-	/* SMB2_IOCTL */           sizeof(struct smb2_ioctl_rsp),
-	/* SMB2_CANCEL */          0,
-	/* SMB2_ECHO */            0,
-	/* SMB2_QUERY_DIRECTORY */ sizeof(struct smb2_query_directory_rsp),
-	/* SMB2_CHANGE_NOTIFY */   sizeof(struct smb2_change_notify_rsp),
-	/* SMB2_QUERY_INFO */      sizeof(struct smb2_query_info_rsp),
-	/* SMB2_SET_INFO */        0,
-	/* SMB2_OPLOCK_BREAK */    0,
-};
-
-#define smb2_has_data_area(cmd) (smb2_min_pdu_len[cmd] != 0)
 #define SMB311_NEGPROT_BASE_SIZE (sizeof(struct smb2_hdr) + sizeof(struct smb2_negotiate_rsp))
 
 static __u32 get_neg_ctxt_len(struct smb2_hdr *hdr, __u32 len,
@@ -167,8 +137,7 @@ static __u32 get_neg_ctxt_len(struct smb2_hdr *hdr, __u32 len,
 }
 
 int
-smb2_check_message(char *buf, unsigned int pdu_len, unsigned int len,
-		   struct TCP_Server_Info *server)
+smb2_check_message(char *buf, unsigned int len, struct TCP_Server_Info *server)
 {
 	struct TCP_Server_Info *pserver;
 	struct smb2_hdr *shdr = (struct smb2_hdr *)buf;
@@ -263,16 +232,6 @@ smb2_check_message(char *buf, unsigned int pdu_len, unsigned int len,
 		}
 	}
 
-	if ((shdr->Status == STATUS_SUCCESS ||
-	     shdr->Status == STATUS_MORE_PROCESSING_REQUIRED ||
-	     pdu->StructureSize2 != SMB2_ERROR_STRUCTURE_SIZE2_LE) &&
-	    smb2_has_data_area(command) &&
-	    len < smb2_min_pdu_len[command]) {
-		cifs_server_dbg(VFS, "SMB2 command %d response too short: %u < %zu\n",
-				command, len, smb2_min_pdu_len[command]);
-		return 1;
-	}
-
 	have_data = false;
 	data_area_overlap = false;
 	calc_len = __smb2_calc_size(buf, &have_data, &data_area_overlap);
@@ -337,6 +296,33 @@ smb2_check_message(char *buf, unsigned int pdu_len, unsigned int len,
 	}
 	return 0;
 }
+
+/*
+ * The size of the variable area depends on the offset and length fields
+ * located in different fields for various SMB2 responses. SMB2 responses
+ * with no variable length info, show an offset of zero for the offset field.
+ */
+static const bool has_smb2_data_area[NUMBER_OF_SMB2_COMMANDS] = {
+	/* SMB2_NEGOTIATE */ true,
+	/* SMB2_SESSION_SETUP */ true,
+	/* SMB2_LOGOFF */ false,
+	/* SMB2_TREE_CONNECT */	false,
+	/* SMB2_TREE_DISCONNECT */ false,
+	/* SMB2_CREATE */ true,
+	/* SMB2_CLOSE */ false,
+	/* SMB2_FLUSH */ false,
+	/* SMB2_READ */	true,
+	/* SMB2_WRITE */ false,
+	/* SMB2_LOCK */	false,
+	/* SMB2_IOCTL */ true,
+	/* SMB2_CANCEL */ false, /* BB CHECK this not listed in documentation */
+	/* SMB2_ECHO */ false,
+	/* SMB2_QUERY_DIRECTORY */ true,
+	/* SMB2_CHANGE_NOTIFY */ true,
+	/* SMB2_QUERY_INFO */ true,
+	/* SMB2_SET_INFO */ false,
+	/* SMB2_OPLOCK_BREAK */ false
+};
 
 /*
  * Returns the pointer to the beginning of the data area. Length of the data
@@ -464,7 +450,7 @@ __smb2_calc_size(void *buf, bool *have_data, bool *data_area_overlap)
 	 */
 	len += le16_to_cpu(pdu->StructureSize2);
 
-	if (!smb2_has_data_area(le16_to_cpu(shdr->Command)))
+	if (has_smb2_data_area[le16_to_cpu(shdr->Command)] == false)
 		goto calc_size_exit;
 
 	smb2_get_data_area_len(&offset, &data_length, shdr);
@@ -505,8 +491,17 @@ smb2_calc_size(void *buf)
 __le16 *
 cifs_convert_path_to_utf16(const char *from, struct cifs_sb_info *cifs_sb)
 {
-	const char *start_of_path;
 	int len;
+	const char *start_of_path;
+	__le16 *to;
+	int map_type;
+
+	if (cifs_sb_flags(cifs_sb) & CIFS_MOUNT_MAP_SFM_CHR)
+		map_type = SFM_MAP_UNI_RSVD;
+	else if (cifs_sb_flags(cifs_sb) & CIFS_MOUNT_MAP_SPECIAL_CHR)
+		map_type = SFU_MAP_UNI_RSVD;
+	else
+		map_type = NO_MAP_UNI_RSVD;
 
 	/* Windows doesn't allow paths beginning with \ */
 	if (from[0] == '\\')
@@ -520,20 +515,21 @@ cifs_convert_path_to_utf16(const char *from, struct cifs_sb_info *cifs_sb)
 	} else
 		start_of_path = from;
 
-	return cifs_strndup_to_utf16(start_of_path, PATH_MAX, &len,
-				     cifs_sb->local_nls, cifs_remap(cifs_sb));
+	to = cifs_strndup_to_utf16(start_of_path, PATH_MAX, &len,
+				   cifs_sb->local_nls, map_type);
+	return to;
 }
 
-__le32 smb2_get_lease_state(struct cifsInodeInfo *cinode, unsigned int oplock)
+__le32
+smb2_get_lease_state(struct cifsInodeInfo *cinode)
 {
-	unsigned int sbflags = cifs_sb_flags(CIFS_SB(cinode));
 	__le32 lease = 0;
 
-	if ((oplock & CIFS_CACHE_WRITE_FLG) || (sbflags & CIFS_MOUNT_RW_CACHE))
+	if (CIFS_CACHE_WRITE(cinode))
 		lease |= SMB2_LEASE_WRITE_CACHING_LE;
-	if (oplock & CIFS_CACHE_HANDLE_FLG)
+	if (CIFS_CACHE_HANDLE(cinode))
 		lease |= SMB2_LEASE_HANDLE_CACHING_LE;
-	if ((oplock & CIFS_CACHE_READ_FLG) || (sbflags & CIFS_MOUNT_RO_CACHE))
+	if (CIFS_CACHE_READ(cinode))
 		lease |= SMB2_LEASE_READ_CACHING_LE;
 	return lease;
 }
@@ -566,7 +562,7 @@ smb2_queue_pending_open_break(struct tcon_link *tlink, __u8 *lease_key,
 {
 	struct smb2_lease_break_work *lw;
 
-	lw = kmalloc_obj(struct smb2_lease_break_work);
+	lw = kmalloc(sizeof(struct smb2_lease_break_work), GFP_KERNEL);
 	if (!lw) {
 		cifs_put_tlink(tlink);
 		return;
@@ -839,7 +835,7 @@ __smb2_handle_cancelled_cmd(struct cifs_tcon *tcon, __u16 cmd, __u64 mid,
 {
 	struct close_cancelled_open *cancelled;
 
-	cancelled = kzalloc_obj(*cancelled);
+	cancelled = kzalloc(sizeof(*cancelled), GFP_KERNEL);
 	if (!cancelled)
 		return -ENOMEM;
 

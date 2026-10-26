@@ -9,7 +9,6 @@
 #include <linux/fs.h>
 #include <linux/f2fs_fs.h>
 #include <linux/sched/mm.h>
-#include <linux/fserror.h>
 #include "f2fs.h"
 #include "node.h"
 #include "segment.h"
@@ -116,26 +115,18 @@ static void del_fsync_inode(struct fsync_inode_entry *entry, int drop)
 }
 
 static int init_recovered_filename(const struct inode *dir,
-				   struct inode *inode,
 				   struct f2fs_inode *raw_inode,
 				   struct f2fs_filename *fname,
 				   struct qstr *usr_fname)
 {
-	struct f2fs_sb_info *sbi = F2FS_I_SB(inode);
 	int err;
 
 	memset(fname, 0, sizeof(*fname));
 	fname->disk_name.len = le32_to_cpu(raw_inode->i_namelen);
 	fname->disk_name.name = raw_inode->i_name;
 
-	if (unlikely(!fname->disk_name.len ||
-		     fname->disk_name.len > F2FS_NAME_LEN)) {
-		f2fs_err(sbi, "invalid recovered filename length %u for ino %llu",
-			 fname->disk_name.len, inode->i_ino);
-		set_sbi_flag(sbi, SBI_NEED_FSCK);
-		f2fs_handle_error(sbi, ERROR_CORRUPTED_INODE);
-		return -EFSCORRUPTED;
-	}
+	if (WARN_ON(fname->disk_name.len > F2FS_NAME_LEN))
+		return -ENAMETOOLONG;
 
 	if (!IS_ENCRYPTED(dir)) {
 		usr_fname->name = fname->disk_name.name;
@@ -166,22 +157,6 @@ static int init_recovered_filename(const struct inode *dir,
 	return 0;
 }
 
-static const char *recover_printable_name(struct inode *inode,
-					  struct f2fs_inode *raw,
-					  int *name_len)
-{
-	static const char encrypted_name[] = "<encrypted>";
-
-	if (file_enc_name(inode)) {
-		*name_len = sizeof(encrypted_name) - 1;
-		return encrypted_name;
-	}
-
-	*name_len = min_t(unsigned int, le32_to_cpu(raw->i_namelen),
-			  F2FS_NAME_LEN);
-	return raw->i_name;
-}
-
 static int recover_dentry(struct inode *inode, struct folio *ifolio,
 						struct list_head *dir_list)
 {
@@ -209,7 +184,7 @@ static int recover_dentry(struct inode *inode, struct folio *ifolio,
 	}
 
 	dir = entry->inode;
-	err = init_recovered_filename(dir, inode, raw_inode, &fname, &usr_fname);
+	err = init_recovered_filename(dir, raw_inode, &fname, &usr_fname);
 	if (err)
 		goto out;
 retry:
@@ -254,8 +229,15 @@ retry:
 out_put:
 	f2fs_folio_put(folio, false);
 out:
-	name = recover_printable_name(inode, raw_inode, &name_len);
-	f2fs_notice(F2FS_I_SB(inode), "%s: ino = %x, name = %.*s, dir = %llu, err = %d",
+	if (file_enc_name(inode)) {
+		name = "<encrypted>";
+		name_len = sizeof("<encrypted>") - 1;
+	} else {
+		name = raw_inode->i_name;
+		name_len = min_t(unsigned int, le32_to_cpu(raw_inode->i_namelen),
+				 F2FS_NAME_LEN);
+	}
+	f2fs_notice(F2FS_I_SB(inode), "%s: ino = %x, name = %.*s, dir = %lx, err = %d",
 		    __func__, ino_of_node(ifolio), name_len, name,
 		    IS_ERR(dir) ? 0 : dir->i_ino, err);
 	return err;
@@ -354,7 +336,14 @@ static int recover_inode(struct inode *inode, struct folio *folio)
 
 	f2fs_mark_inode_dirty_sync(inode, true);
 
-	name = recover_printable_name(inode, raw, &name_len);
+	if (file_enc_name(inode)) {
+		name = "<encrypted>";
+		name_len = sizeof("<encrypted>") - 1;
+	} else {
+		name = raw->i_name;
+		name_len = min_t(unsigned int, le32_to_cpu(raw->i_namelen),
+				 F2FS_NAME_LEN);
+	}
 
 	f2fs_notice(F2FS_I_SB(inode), "%s: ino = %x, name = %.*s, inline = %x",
 		    __func__, ino_of_node(folio), name_len, name,
@@ -554,7 +543,7 @@ got_it:
 
 	max_addrs = ADDRS_PER_PAGE(dn->node_folio, dn->inode);
 	if (ofs_in_node >= max_addrs) {
-		f2fs_err(sbi, "Inconsistent ofs_in_node:%u in summary, ino:%llu, nid:%u, max:%u",
+		f2fs_err(sbi, "Inconsistent ofs_in_node:%u in summary, ino:%lu, nid:%u, max:%u",
 			ofs_in_node, dn->inode->i_ino, nid, max_addrs);
 		f2fs_handle_error(sbi, ERROR_INCONSISTENT_SUMMARY);
 		return -EFSCORRUPTED;
@@ -696,12 +685,11 @@ retry_dn:
 	f2fs_bug_on(sbi, ni.ino != ino_of_node(folio));
 
 	if (ofs_of_node(dn.node_folio) != ofs_of_node(folio)) {
-		f2fs_warn(sbi, "Inconsistent ofs_of_node, ino:%llu, ofs:%u, %u",
+		f2fs_warn(sbi, "Inconsistent ofs_of_node, ino:%lu, ofs:%u, %u",
 			  inode->i_ino, ofs_of_node(dn.node_folio),
 			  ofs_of_node(folio));
 		err = -EFSCORRUPTED;
 		f2fs_handle_error(sbi, ERROR_INCONSISTENT_FOOTER);
-		fserror_report_file_metadata(dn.inode, err, GFP_NOFS);
 		goto err;
 	}
 
@@ -771,7 +759,7 @@ retry_prev:
 
 			if (f2fs_is_valid_blkaddr(sbi, dest,
 					DATA_GENERIC_ENHANCE_UPDATE)) {
-				f2fs_err(sbi, "Inconsistent dest blkaddr:%u, ino:%llu, ofs:%u",
+				f2fs_err(sbi, "Inconsistent dest blkaddr:%u, ino:%lu, ofs:%u",
 					dest, inode->i_ino, dn.ofs_in_node);
 				err = -EFSCORRUPTED;
 				goto err;
@@ -791,7 +779,7 @@ retry_prev:
 err:
 	f2fs_put_dnode(&dn);
 out:
-	f2fs_notice(sbi, "recover_data: ino = %llx, nid = %x (i_size: %s), "
+	f2fs_notice(sbi, "recover_data: ino = %lx, nid = %x (i_size: %s), "
 		    "range (%u, %u), recovered = %d, err = %d",
 		    inode->i_ino, nid_of_node(folio),
 		    file_keep_isize(inode) ? "keep" : "recover",
@@ -895,10 +883,8 @@ next:
 
 int f2fs_recover_fsync_data(struct f2fs_sb_info *sbi, bool check_only)
 {
-	LIST_HEAD(inode_list);
-	LIST_HEAD(tmp_inode_list);
-	LIST_HEAD(dir_list);
-	struct f2fs_lock_context lc;
+	struct list_head inode_list, tmp_inode_list;
+	struct list_head dir_list;
 	int err;
 	int ret = 0;
 	unsigned long s_flags = sbi->sb->s_flags;
@@ -911,8 +897,12 @@ int f2fs_recover_fsync_data(struct f2fs_sb_info *sbi, bool check_only)
 	if (is_sbi_flag_set(sbi, SBI_IS_WRITABLE))
 		f2fs_info(sbi, "recover fsync data on readonly fs");
 
+	INIT_LIST_HEAD(&inode_list);
+	INIT_LIST_HEAD(&tmp_inode_list);
+	INIT_LIST_HEAD(&dir_list);
+
 	/* prevent checkpoint */
-	f2fs_down_write_trace(&sbi->cp_global_sem, &lc);
+	f2fs_down_write(&sbi->cp_global_sem);
 
 	/* step #1: find fsynced inode numbers */
 	err = find_fsync_dnodes(sbi, &inode_list, check_only, &new_inode);
@@ -956,7 +946,7 @@ skip:
 	if (!err)
 		clear_sbi_flag(sbi, SBI_POR_DOING);
 
-	f2fs_up_write_trace(&sbi->cp_global_sem, &lc);
+	f2fs_up_write(&sbi->cp_global_sem);
 
 	/* let's drop all the directory inodes for clean checkpoint */
 	destroy_fsync_dnodes(&dir_list, err);

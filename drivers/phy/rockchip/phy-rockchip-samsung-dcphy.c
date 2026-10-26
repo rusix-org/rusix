@@ -13,6 +13,7 @@
 #include <linux/kernel.h>
 #include <linux/mfd/syscon.h>
 #include <linux/module.h>
+#include <linux/mod_devicetable.h>
 #include <linux/of.h>
 #include <linux/phy/phy.h>
 #include <linux/platform_device.h>
@@ -1507,9 +1508,7 @@ static int samsung_mipi_dcphy_exit(struct phy *phy)
 {
 	struct samsung_mipi_dcphy *samsung = phy_get_drvdata(phy);
 
-	pm_runtime_put(samsung->dev);
-
-	return 0;
+	return pm_runtime_put(samsung->dev);
 }
 
 static const struct phy_ops samsung_mipi_dcphy_ops = {

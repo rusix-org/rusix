@@ -78,7 +78,6 @@ static struct kmem_cache		*nfsd_file_mark_slab;
 static struct list_lru			nfsd_file_lru;
 static unsigned long			nfsd_file_flags;
 static struct fsnotify_group		*nfsd_file_fsnotify_group;
-static struct fsnotify_group		*nfsd_dir_fsnotify_group;
 static struct delayed_work		nfsd_filecache_laundrette;
 static struct rhltable			nfsd_file_rhltable
 						____cacheline_aligned_in_smp;
@@ -154,7 +153,7 @@ static void
 nfsd_file_mark_put(struct nfsd_file_mark *nfm)
 {
 	if (refcount_dec_and_test(&nfm->nfm_ref)) {
-		fsnotify_destroy_mark(&nfm->nfm_mark, nfm->nfm_mark.group);
+		fsnotify_destroy_mark(&nfm->nfm_mark, nfsd_file_fsnotify_group);
 		fsnotify_put_mark(&nfm->nfm_mark);
 	}
 }
@@ -162,40 +161,37 @@ nfsd_file_mark_put(struct nfsd_file_mark *nfm)
 static struct nfsd_file_mark *
 nfsd_file_mark_find_or_create(struct inode *inode)
 {
-	struct nfsd_file_mark	*nfm = NULL, *new;
-	struct fsnotify_group	*group;
-	struct fsnotify_mark	*mark;
 	int			err;
-
-	group = S_ISDIR(inode->i_mode) ? nfsd_dir_fsnotify_group : nfsd_file_fsnotify_group;
+	struct fsnotify_mark	*mark;
+	struct nfsd_file_mark	*nfm = NULL, *new;
 
 	do {
-		fsnotify_group_lock(group);
-		mark = fsnotify_find_inode_mark(inode, group);
+		fsnotify_group_lock(nfsd_file_fsnotify_group);
+		mark = fsnotify_find_inode_mark(inode,
+						nfsd_file_fsnotify_group);
 		if (mark) {
 			nfm = nfsd_file_mark_get(container_of(mark,
 						 struct nfsd_file_mark,
 						 nfm_mark));
-			fsnotify_group_unlock(group);
+			fsnotify_group_unlock(nfsd_file_fsnotify_group);
 			if (nfm) {
 				fsnotify_put_mark(mark);
 				break;
 			}
 			/* Avoid soft lockup race with nfsd_file_mark_put() */
-			fsnotify_destroy_mark(mark, group);
+			fsnotify_destroy_mark(mark, nfsd_file_fsnotify_group);
 			fsnotify_put_mark(mark);
 		} else {
-			fsnotify_group_unlock(group);
+			fsnotify_group_unlock(nfsd_file_fsnotify_group);
 		}
 
 		/* allocate a new nfm */
 		new = kmem_cache_alloc(nfsd_file_mark_slab, GFP_KERNEL);
 		if (!new)
 			return NULL;
-		fsnotify_init_mark(&new->nfm_mark, group);
+		fsnotify_init_mark(&new->nfm_mark, nfsd_file_fsnotify_group);
 		new->nfm_mark.mask = FS_ATTRIB|FS_DELETE_SELF;
 		refcount_set(&new->nfm_ref, 1);
-		mutex_init(&new->nfm_recalc_mutex);
 
 		err = fsnotify_add_inode_mark(&new->nfm_mark, inode, 0);
 
@@ -745,52 +741,6 @@ nfsd_file_close_inode_sync(struct inode *inode)
 	nfsd_file_dispose_list(&dispose);
 }
 
-/**
- * nfsd_file_close_export - close cached file handles for an export
- * @net: net namespace in which to operate
- * @path: export path whose cached files should be closed
- *
- * Close out GC-managed nfsd_file entries whose underlying file is on
- * the same filesystem as, and a descendant of, @path.  nfsd_file
- * entries do not carry an export reference, so the check uses the
- * file's dentry ancestry.  False positives (closing a cached handle
- * that did not originate from the target export) are harmless -- the
- * handle is simply reopened on the next access.
- *
- * Called from the NFSD_CMD_UNLOCK_EXPORT handler before revoking
- * NFSv4 state, to ensure that cached file handles do not hold the
- * filesystem busy.
- */
-void nfsd_file_close_export(struct net *net, const struct path *path)
-{
-	struct rhashtable_iter iter;
-	struct nfsd_file *nf;
-	LIST_HEAD(dispose);
-
-	rhltable_walk_enter(&nfsd_file_rhltable, &iter);
-	do {
-		rhashtable_walk_start(&iter);
-
-		nf = rhashtable_walk_next(&iter);
-		while (!IS_ERR_OR_NULL(nf)) {
-			if (nf->nf_net == net &&
-			    test_bit(NFSD_FILE_GC, &nf->nf_flags) &&
-			    nf->nf_file &&
-			    file_inode(nf->nf_file)->i_sb ==
-					path->dentry->d_sb &&
-			    is_subdir(nf->nf_file->f_path.dentry,
-				      path->dentry))
-				nfsd_file_cond_queue(nf, &dispose);
-			nf = rhashtable_walk_next(&iter);
-		}
-
-		rhashtable_walk_stop(&iter);
-	} while (nf == ERR_PTR(-EAGAIN));
-	rhashtable_walk_exit(&iter);
-
-	nfsd_file_dispose_list(&dispose);
-}
-
 static int
 nfsd_file_lease_notifier_call(struct notifier_block *nb, unsigned long arg,
 			    void *data)
@@ -833,33 +783,9 @@ nfsd_file_fsnotify_handle_event(struct fsnotify_mark *mark, u32 mask,
 	return 0;
 }
 
-#ifdef CONFIG_NFSD_V4
-static int
-nfsd_dir_fsnotify_handle_event(struct fsnotify_group *group, u32 mask,
-			       const void *data, int data_type, struct inode *dir,
-			       const struct qstr *name, u32 cookie,
-			       struct fsnotify_iter_info *iter_info)
-{
-	return nfsd_handle_dir_event(mask, dir, data, data_type, name);
-}
-#else
-static int
-nfsd_dir_fsnotify_handle_event(struct fsnotify_group *group, u32 mask,
-			       const void *data, int data_type, struct inode *dir,
-			       const struct qstr *name, u32 cookie,
-			       struct fsnotify_iter_info *iter_info)
-{
-	return 0;
-}
-#endif
 
 static const struct fsnotify_ops nfsd_file_fsnotify_ops = {
 	.handle_inode_event = nfsd_file_fsnotify_handle_event,
-	.free_mark = nfsd_file_mark_free,
-};
-
-static const struct fsnotify_ops nfsd_dir_fsnotify_ops = {
-	.handle_event = nfsd_dir_fsnotify_handle_event,
 	.free_mark = nfsd_file_mark_free,
 };
 
@@ -914,7 +840,8 @@ nfsd_file_cache_init(void)
 		goto out_shrinker;
 	}
 
-	nfsd_file_fsnotify_group = fsnotify_alloc_group(&nfsd_file_fsnotify_ops, 0);
+	nfsd_file_fsnotify_group = fsnotify_alloc_group(&nfsd_file_fsnotify_ops,
+							0);
 	if (IS_ERR(nfsd_file_fsnotify_group)) {
 		pr_err("nfsd: unable to create fsnotify group: %ld\n",
 			PTR_ERR(nfsd_file_fsnotify_group));
@@ -923,23 +850,11 @@ nfsd_file_cache_init(void)
 		goto out_notifier;
 	}
 
-	nfsd_dir_fsnotify_group = fsnotify_alloc_group(&nfsd_dir_fsnotify_ops, 0);
-	if (IS_ERR(nfsd_dir_fsnotify_group)) {
-		pr_err("nfsd: unable to create fsnotify group: %ld\n",
-			PTR_ERR(nfsd_dir_fsnotify_group));
-		ret = PTR_ERR(nfsd_dir_fsnotify_group);
-		nfsd_dir_fsnotify_group = NULL;
-		goto out_notify_group;
-	}
-
 	INIT_DELAYED_WORK(&nfsd_filecache_laundrette, nfsd_file_gc_worker);
 out:
 	if (ret)
 		clear_bit(NFSD_FILE_CACHE_UP, &nfsd_file_flags);
 	return ret;
-out_notify_group:
-	fsnotify_put_group(nfsd_file_fsnotify_group);
-	nfsd_file_fsnotify_group = NULL;
 out_notifier:
 	lease_unregister_notifier(&nfsd_file_lease_notifier);
 out_shrinker:
@@ -1057,8 +972,6 @@ nfsd_file_cache_shutdown(void)
 	rcu_barrier();
 	fsnotify_put_group(nfsd_file_fsnotify_group);
 	nfsd_file_fsnotify_group = NULL;
-	fsnotify_put_group(nfsd_dir_fsnotify_group);
-	nfsd_dir_fsnotify_group = NULL;
 	kmem_cache_destroy(nfsd_file_slab);
 	nfsd_file_slab = NULL;
 	fsnotify_wait_marks_destroyed();
@@ -1172,7 +1085,7 @@ nfsd_file_do_acquire(struct svc_rqst *rqstp, struct net *net,
 		     struct auth_domain *client,
 		     struct svc_fh *fhp,
 		     unsigned int may_flags, struct file *file,
-		     umode_t type, bool want_gc, struct nfsd_file **pnf)
+		     struct nfsd_file **pnf, bool want_gc)
 {
 	unsigned char need = may_flags & NFSD_FILE_MAY_MASK;
 	struct nfsd_file *new, *nf;
@@ -1183,13 +1096,13 @@ nfsd_file_do_acquire(struct svc_rqst *rqstp, struct net *net,
 	int ret;
 
 retry:
-	if (rqstp)
-		status = fh_verify(rqstp, fhp, type,
+	if (rqstp) {
+		status = fh_verify(rqstp, fhp, S_IFREG,
 				   may_flags|NFSD_MAY_OWNER_OVERRIDE);
-	else
-		status = fh_verify_local(net, cred, client, fhp, type,
+	} else {
+		status = fh_verify_local(net, cred, client, fhp, S_IFREG,
 					 may_flags|NFSD_MAY_OWNER_OVERRIDE);
-
+	}
 	if (status != nfs_ok)
 		return status;
 	inode = d_inode(fhp->fh_dentry);
@@ -1262,16 +1175,15 @@ out:
 
 open_file:
 	trace_nfsd_file_alloc(nf);
-
 	nf->nf_mark = nfsd_file_mark_find_or_create(inode);
 	if (nf->nf_mark) {
-		if (file && (file->f_mode & FMODE_OPENED)) {
+		if (file) {
 			get_file(file);
 			nf->nf_file = file;
 			status = nfs_ok;
 			trace_nfsd_file_opened(nf, status);
 		} else {
-			ret = nfsd_open_verified(fhp, type, may_flags, &nf->nf_file);
+			ret = nfsd_open_verified(fhp, may_flags, &nf->nf_file);
 			if (ret == -EOPENSTALE && stale_retry) {
 				stale_retry = false;
 				nfsd_file_unhash(nf);
@@ -1333,7 +1245,7 @@ nfsd_file_acquire_gc(struct svc_rqst *rqstp, struct svc_fh *fhp,
 		     unsigned int may_flags, struct nfsd_file **pnf)
 {
 	return nfsd_file_do_acquire(rqstp, SVC_NET(rqstp), NULL, NULL,
-				    fhp, may_flags, NULL, S_IFREG, true, pnf);
+				    fhp, may_flags, NULL, pnf, true);
 }
 
 /**
@@ -1358,7 +1270,7 @@ nfsd_file_acquire(struct svc_rqst *rqstp, struct svc_fh *fhp,
 		  unsigned int may_flags, struct nfsd_file **pnf)
 {
 	return nfsd_file_do_acquire(rqstp, SVC_NET(rqstp), NULL, NULL,
-				    fhp, may_flags, NULL, S_IFREG, false, pnf);
+				    fhp, may_flags, NULL, pnf, false);
 }
 
 /**
@@ -1401,8 +1313,8 @@ nfsd_file_acquire_local(struct net *net, struct svc_cred *cred,
 	const struct cred *save_cred = get_current_cred();
 	__be32 beres;
 
-	beres = nfsd_file_do_acquire(NULL, net, cred, client, fhp, may_flags,
-				     NULL, S_IFREG, false, pnf);
+	beres = nfsd_file_do_acquire(NULL, net, cred, client,
+				     fhp, may_flags, NULL, pnf, false);
 	put_cred(revert_creds(save_cred));
 	return beres;
 }
@@ -1412,12 +1324,12 @@ nfsd_file_acquire_local(struct net *net, struct svc_cred *cred,
  * @rqstp: the RPC transaction being executed
  * @fhp: the NFS filehandle of the file just created
  * @may_flags: NFSD_MAY_ settings for the file
- * @file: cached, already-open file (may be NULL or not yet opened)
+ * @file: cached, already-open file (may be NULL)
  * @pnf: OUT: new or found "struct nfsd_file" object
  *
  * Acquire a nfsd_file object that is not GC'ed. If one doesn't already exist,
- * and @file has FMODE_OPENED set, use it to instantiate a new nfsd_file
- * instead of opening a new one.
+ * and @file is non-NULL, use it to instantiate a new nfsd_file instead of
+ * opening a new one.
  *
  * Return values:
  *   %nfs_ok - @pnf points to an nfsd_file with its reference
@@ -1431,33 +1343,7 @@ nfsd_file_acquire_opened(struct svc_rqst *rqstp, struct svc_fh *fhp,
 			 struct nfsd_file **pnf)
 {
 	return nfsd_file_do_acquire(rqstp, SVC_NET(rqstp), NULL, NULL,
-				    fhp, may_flags, file, S_IFREG, false, pnf);
-}
-
-/**
- * nfsd_file_acquire_dir - Get a struct nfsd_file with an open directory
- * @rqstp: the RPC transaction being executed
- * @fhp: the NFS filehandle of the file to be opened
- * @pnf: OUT: new or found "struct nfsd_file" object
- *
- * The nfsd_file_object returned by this API is reference-counted
- * but not garbage-collected. The object is unhashed after the
- * final nfsd_file_put(). This opens directories only, and only
- * in O_RDONLY mode.
- *
- * Return values:
- *   %nfs_ok - @pnf points to an nfsd_file with its reference
- *   count boosted.
- *
- * On error, an nfsstat value in network byte order is returned.
- */
-__be32
-nfsd_file_acquire_dir(struct svc_rqst *rqstp, struct svc_fh *fhp,
-		      struct nfsd_file **pnf)
-{
-	return nfsd_file_do_acquire(rqstp, SVC_NET(rqstp), NULL, NULL, fhp,
-				    NFSD_MAY_READ|NFSD_MAY_64BIT_COOKIE,
-				    NULL, S_IFDIR, false, pnf);
+				    fhp, may_flags, file, pnf, false);
 }
 
 /*
@@ -1511,55 +1397,4 @@ int nfsd_file_cache_stats_show(struct seq_file *m, void *v)
 	else
 		seq_printf(m, "mean age (ms): -\n");
 	return 0;
-}
-
-/**
- * nfsd_fsnotify_recalc_mask - recalculate the fsnotify mask for a nfsd_file
- * @nf: nfsd_file to recalculate the mask on
- *
- * When a directory nfsd_file has a delegation added or removed, that may
- * change the events that nfsd requires from the VFS layer. This function
- * recalculates the fsnotify mask based on the leases present.
- */
-void nfsd_fsnotify_recalc_mask(struct nfsd_file *nf)
-{
-	struct inode *inode = file_inode(nf->nf_file);
-	u32 lease_mask, set = 0, clear = 0;
-	struct fsnotify_mark *mark;
-
-	/* This is only needed when adding or removing dir delegs */
-	if (!S_ISDIR(inode->i_mode) || !nf->nf_mark)
-		return;
-
-	mark = &nf->nf_mark->nfm_mark;
-
-	/*
-	 * The mark is shared by every nfsd_file on this inode, so concurrent
-	 * delegation add/remove on the same directory can recalc it in
-	 * parallel. Serialize the read of the lease state and the update of
-	 * the mark so that a recalc working from a stale snapshot of the
-	 * lease list can't clobber a concurrent recalc's update.
-	 */
-	mutex_lock(&nf->nf_mark->nfm_recalc_mutex);
-
-	/* Set up notifications for any ignored delegation events */
-	lease_mask = inode_lease_ignore_mask(inode);
-
-	if (lease_mask & FL_IGN_DIR_CREATE)
-		set |= FS_CREATE | FS_MOVED_TO;
-	else
-		clear |= FS_CREATE | FS_MOVED_TO;
-
-	if (lease_mask & FL_IGN_DIR_DELETE)
-		set |= FS_DELETE | FS_MOVED_FROM;
-	else
-		clear |= FS_DELETE | FS_MOVED_FROM;
-
-	if (lease_mask & FL_IGN_DIR_RENAME)
-		set |= FS_RENAME;
-	else
-		clear |= FS_RENAME;
-
-	fsnotify_modify_mark_mask(mark, set, clear);
-	mutex_unlock(&nf->nf_mark->nfm_recalc_mutex);
 }

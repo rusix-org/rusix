@@ -35,6 +35,12 @@ MODULE_DESCRIPTION("SIP connection tracking helper");
 MODULE_ALIAS("ip_conntrack_sip");
 MODULE_ALIAS_NFCT_HELPER(HELPER_NAME);
 
+#define MAX_PORTS	8
+static unsigned short ports[MAX_PORTS];
+static unsigned int ports_c;
+module_param_array(ports, ushort, &ports_c, 0400);
+MODULE_PARM_DESC(ports, "port numbers of SIP servers");
+
 static unsigned int sip_timeout __read_mostly = SIP_TIMEOUT;
 module_param(sip_timeout, uint, 0600);
 MODULE_PARM_DESC(sip_timeout, "timeout for the master SIP session");
@@ -881,9 +887,6 @@ static int refresh_signalling_expectation(struct nf_conn *ct,
 	struct hlist_node *next;
 	int found = 0;
 
-	if (!help)
-		return 0;
-
 	spin_lock_bh(&nf_conntrack_expect_lock);
 	hlist_for_each_entry_safe(exp, next, &help->expectations, lnode) {
 		if (exp->class != SIP_EXPECT_SIGNALLING ||
@@ -891,10 +894,11 @@ static int refresh_signalling_expectation(struct nf_conn *ct,
 		    exp->tuple.dst.protonum != proto ||
 		    exp->tuple.dst.u.udp.port != port)
 			continue;
-		WRITE_ONCE(exp->timeout, nfct_time_stamp + (expires * HZ));
-		WRITE_ONCE(exp->flags, exp->flags & ~NF_CT_EXPECT_INACTIVE);
-		found = 1;
-		break;
+		if (mod_timer_pending(&exp->timeout, jiffies + expires * HZ)) {
+			exp->flags &= ~NF_CT_EXPECT_INACTIVE;
+			found = 1;
+			break;
+		}
 	}
 	spin_unlock_bh(&nf_conntrack_expect_lock);
 	return found;
@@ -906,14 +910,12 @@ static void flush_expectations(struct nf_conn *ct, bool media)
 	struct nf_conntrack_expect *exp;
 	struct hlist_node *next;
 
-	if (!help)
-		return;
-
 	spin_lock_bh(&nf_conntrack_expect_lock);
 	hlist_for_each_entry_safe(exp, next, &help->expectations, lnode) {
 		if ((exp->class != SIP_EXPECT_SIGNALLING) ^ media)
 			continue;
-		nf_ct_unlink_expect(exp);
+		if (!nf_ct_remove_expect(exp))
+			continue;
 		if (!media)
 			break;
 	}
@@ -938,11 +940,6 @@ static int set_expected_rtp_rtcp(struct sk_buff *skb, unsigned int protoff,
 	u_int16_t base_port;
 	__be16 rtp_port, rtcp_port;
 	const struct nf_nat_sip_hooks *hooks;
-	struct nf_conn_help *help;
-
-	help = nfct_help(ct);
-	if (!help)
-		return NF_DROP;
 
 	saddr = NULL;
 	if (sip_direct_media) {
@@ -1008,7 +1005,7 @@ static int set_expected_rtp_rtcp(struct sk_buff *skb, unsigned int protoff,
 		exp = __nf_ct_expect_find(net, nf_ct_zone(ct), &tuple);
 
 		if (!exp || exp->master == ct ||
-		    exp->helper != help->helper ||
+		    exp->helper != nfct_help(ct)->helper ||
 		    exp->class != class)
 			break;
 #if IS_ENABLED(CONFIG_NF_NAT)
@@ -1233,9 +1230,6 @@ static int process_invite_response(struct sk_buff *skb, unsigned int protoff,
 	struct nf_conn *ct = nf_ct_get(skb, &ctinfo);
 	struct nf_ct_sip_master *ct_sip_info = nfct_help_data(ct);
 
-	if (!ct_sip_info)
-		return NF_DROP;
-
 	if ((code >= 100 && code <= 199) ||
 	    (code >= 200 && code <= 299))
 		return process_sdp(skb, protoff, dataoff, dptr, datalen, cseq);
@@ -1252,9 +1246,6 @@ static int process_update_response(struct sk_buff *skb, unsigned int protoff,
 	enum ip_conntrack_info ctinfo;
 	struct nf_conn *ct = nf_ct_get(skb, &ctinfo);
 	struct nf_ct_sip_master *ct_sip_info = nfct_help_data(ct);
-
-	if (!ct_sip_info)
-		return NF_DROP;
 
 	if ((code >= 100 && code <= 199) ||
 	    (code >= 200 && code <= 299))
@@ -1273,9 +1264,6 @@ static int process_prack_response(struct sk_buff *skb, unsigned int protoff,
 	struct nf_conn *ct = nf_ct_get(skb, &ctinfo);
 	struct nf_ct_sip_master *ct_sip_info = nfct_help_data(ct);
 
-	if (!ct_sip_info)
-		return NF_DROP;
-
 	if ((code >= 100 && code <= 199) ||
 	    (code >= 200 && code <= 299))
 		return process_sdp(skb, protoff, dataoff, dptr, datalen, cseq);
@@ -1293,9 +1281,6 @@ static int process_invite_request(struct sk_buff *skb, unsigned int protoff,
 	struct nf_conn *ct = nf_ct_get(skb, &ctinfo);
 	struct nf_ct_sip_master *ct_sip_info = nfct_help_data(ct);
 	unsigned int ret;
-
-	if (!ct_sip_info)
-		return NF_DROP;
 
 	flush_expectations(ct, true);
 	ret = process_sdp(skb, protoff, dataoff, dptr, datalen, cseq);
@@ -1334,14 +1319,10 @@ static int process_register_request(struct sk_buff *skb, unsigned int protoff,
 	union nf_inet_addr *saddr, daddr;
 	const struct nf_nat_sip_hooks *hooks;
 	struct nf_conntrack_helper *helper;
-	struct nf_conn_help *help;
 	__be16 port;
 	u8 proto;
 	unsigned int expires = 0;
 	int ret;
-
-	if (!ct_sip_info)
-		return NF_DROP;
 
 	/* Expected connections can not register again. */
 	if (ct->status & IPS_EXPECTED)
@@ -1388,11 +1369,7 @@ static int process_register_request(struct sk_buff *skb, unsigned int protoff,
 		goto store_cseq;
 	}
 
-	help = nfct_help(ct);
-	if (!help)
-		return NF_DROP;
-
-	helper = rcu_dereference(help->helper);
+	helper = rcu_dereference(nfct_help(ct)->helper);
 	if (!helper)
 		return NF_DROP;
 
@@ -1408,6 +1385,7 @@ static int process_register_request(struct sk_buff *skb, unsigned int protoff,
 
 	nf_ct_expect_init(exp, SIP_EXPECT_SIGNALLING, nf_ct_l3num(ct),
 			  saddr, &daddr, proto, NULL, &port);
+	exp->timeout.expires = sip_timeout * HZ;
 	rcu_assign_pointer(exp->assign_helper, helper);
 	exp->flags = NF_CT_EXPECT_PERMANENT | NF_CT_EXPECT_INACTIVE;
 
@@ -1445,9 +1423,6 @@ static int process_register_response(struct sk_buff *skb, unsigned int protoff,
 	unsigned int matchoff, matchlen, coff = 0;
 	unsigned int expires = 0;
 	int in_contact = 0, ret;
-
-	if (!ct_sip_info)
-		return NF_DROP;
 
 	/* According to RFC 3261, "UAs MUST NOT send a new registration until
 	 * they have received a final response from the registrar for the
@@ -1577,9 +1552,6 @@ static int process_sip_request(struct sk_buff *skb, unsigned int protoff,
 	unsigned int cseq, i;
 	union nf_inet_addr addr;
 	__be16 port;
-
-	if (!ct_sip_info)
-		return NF_DROP;
 
 	/* Many Cisco IP phones use a high source port for SIP requests, but
 	 * listen for the response on port 5060.  If we are the local
@@ -1761,8 +1733,7 @@ static int sip_help_udp(struct sk_buff *skb, unsigned int protoff,
 	return process_sip_msg(skb, ct, protoff, dataoff, &dptr, &datalen);
 }
 
-static struct nf_conntrack_helper sip[2] __read_mostly;
-static struct nf_conntrack_helper *sip_ptr[2] __read_mostly;
+static struct nf_conntrack_helper sip[MAX_PORTS * 4] __read_mostly;
 
 static const struct nf_conntrack_expect_policy sip_exp_policy[SIP_EXPECT_MAX + 1] = {
 	[SIP_EXPECT_SIGNALLING] = {
@@ -1789,25 +1760,38 @@ static const struct nf_conntrack_expect_policy sip_exp_policy[SIP_EXPECT_MAX + 1
 
 static void __exit nf_conntrack_sip_fini(void)
 {
-	nf_conntrack_helpers_unregister(sip_ptr, 2);
+	nf_conntrack_helpers_unregister(sip, ports_c * 4);
 }
 
 static int __init nf_conntrack_sip_init(void)
 {
-	int ret;
+	int i, ret;
 
 	NF_CT_HELPER_BUILD_BUG_ON(sizeof(struct nf_ct_sip_master));
 
-	nf_ct_helper_init(&sip[0], NFPROTO_UNSPEC, IPPROTO_UDP,
-			  HELPER_NAME,
-			  sip_exp_policy, SIP_EXPECT_MAX, sip_help_udp,
-			  NULL, THIS_MODULE);
-	nf_ct_helper_init(&sip[1], NFPROTO_UNSPEC, IPPROTO_TCP,
-			  HELPER_NAME,
-			  sip_exp_policy, SIP_EXPECT_MAX, sip_help_tcp,
-			  NULL, THIS_MODULE);
+	if (ports_c == 0)
+		ports[ports_c++] = SIP_PORT;
 
-	ret = nf_conntrack_helpers_register(sip, 2, sip_ptr);
+	for (i = 0; i < ports_c; i++) {
+		nf_ct_helper_init(&sip[4 * i], AF_INET, IPPROTO_UDP,
+				  HELPER_NAME, SIP_PORT, ports[i], i,
+				  sip_exp_policy, SIP_EXPECT_MAX, sip_help_udp,
+				  NULL, THIS_MODULE);
+		nf_ct_helper_init(&sip[4 * i + 1], AF_INET, IPPROTO_TCP,
+				  HELPER_NAME, SIP_PORT, ports[i], i,
+				  sip_exp_policy, SIP_EXPECT_MAX, sip_help_tcp,
+				  NULL, THIS_MODULE);
+		nf_ct_helper_init(&sip[4 * i + 2], AF_INET6, IPPROTO_UDP,
+				  HELPER_NAME, SIP_PORT, ports[i], i,
+				  sip_exp_policy, SIP_EXPECT_MAX, sip_help_udp,
+				  NULL, THIS_MODULE);
+		nf_ct_helper_init(&sip[4 * i + 3], AF_INET6, IPPROTO_TCP,
+				  HELPER_NAME, SIP_PORT, ports[i], i,
+				  sip_exp_policy, SIP_EXPECT_MAX, sip_help_tcp,
+				  NULL, THIS_MODULE);
+	}
+
+	ret = nf_conntrack_helpers_register(sip, ports_c * 4);
 	if (ret < 0) {
 		pr_err("failed to register helpers\n");
 		return ret;

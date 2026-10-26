@@ -12,7 +12,6 @@
 #include <linux/platform_device.h>
 #include <linux/usb.h>
 #include <linux/usb/hcd.h>
-#include <linux/bitfield.h>
 
 #include "../host/xhci-port.h"
 #include "../host/xhci-ext-caps.h"
@@ -47,9 +46,9 @@ static void dwc3_power_off_all_roothub_ports(struct dwc3 *dwc)
 			return;
 		}
 
-		op_regs_base = FIELD_GET(HC_LENGTH, readl(xhci_regs));
+		op_regs_base = HC_LENGTH(readl(xhci_regs));
 		reg = readl(xhci_regs + XHCI_HCSPARAMS1);
-		port_num = FIELD_GET(HCS_MAX_PORTS, reg);
+		port_num = HCS_MAX_PORTS(reg);
 
 		for (i = 1; i <= port_num; i++) {
 			offset = op_regs_base + XHCI_PORTSC_BASE + 0x10 * (i - 1);
@@ -221,7 +220,6 @@ err:
 	platform_device_put(xhci);
 	return ret;
 }
-EXPORT_SYMBOL_GPL(dwc3_host_init);
 
 void dwc3_host_exit(struct dwc3 *dwc)
 {
@@ -232,4 +230,3 @@ void dwc3_host_exit(struct dwc3 *dwc)
 	platform_device_unregister(dwc->xhci);
 	dwc->xhci = NULL;
 }
-EXPORT_SYMBOL_GPL(dwc3_host_exit);

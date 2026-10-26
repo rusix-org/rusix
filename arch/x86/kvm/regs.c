@@ -1,55 +1,11 @@
 // SPDX-License-Identifier: GPL-2.0-only
+#define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
+
 #include <linux/kvm_host.h>
 
 #include "lapic.h"
 #include "mmu.h"
-#include "regs.h"
 #include "x86.h"
-
-unsigned long kvm_get_linear_rip(struct kvm_vcpu *vcpu)
-{
-	/* Can't read the RIP when guest state is protected, just return 0 */
-	if (vcpu->arch.guest_state_protected)
-		return 0;
-
-	if (is_64_bit_mode(vcpu))
-		return kvm_rip_read(vcpu);
-	return (u32)(kvm_get_segment_base(vcpu, VCPU_SREG_CS) +
-		     kvm_rip_read(vcpu));
-}
-EXPORT_SYMBOL_FOR_KVM_INTERNAL(kvm_get_linear_rip);
-
-bool kvm_is_linear_rip(struct kvm_vcpu *vcpu, unsigned long linear_rip)
-{
-	return kvm_get_linear_rip(vcpu) == linear_rip;
-}
-EXPORT_SYMBOL_FOR_KVM_INTERNAL(kvm_is_linear_rip);
-
-unsigned long kvm_get_rflags(struct kvm_vcpu *vcpu)
-{
-	unsigned long rflags;
-
-	rflags = kvm_x86_call(get_rflags)(vcpu);
-	if (vcpu->guest_debug & KVM_GUESTDBG_SINGLESTEP)
-		rflags &= ~X86_EFLAGS_TF;
-	return rflags;
-}
-EXPORT_SYMBOL_FOR_KVM_INTERNAL(kvm_get_rflags);
-
-void __kvm_set_rflags(struct kvm_vcpu *vcpu, unsigned long rflags)
-{
-	if (vcpu->guest_debug & KVM_GUESTDBG_SINGLESTEP &&
-	    kvm_is_linear_rip(vcpu, vcpu->arch.singlestep_rip))
-		rflags |= X86_EFLAGS_TF;
-	kvm_x86_call(set_rflags)(vcpu, rflags);
-}
-
-void kvm_set_rflags(struct kvm_vcpu *vcpu, unsigned long rflags)
-{
-	__kvm_set_rflags(vcpu, rflags);
-	kvm_make_request(KVM_REQ_EVENT, vcpu);
-}
-EXPORT_SYMBOL_FOR_KVM_INTERNAL(kvm_set_rflags);
 
 static void __get_regs(struct kvm_vcpu *vcpu, struct kvm_regs *regs)
 {
@@ -64,23 +20,23 @@ static void __get_regs(struct kvm_vcpu *vcpu, struct kvm_regs *regs)
 		emulator_writeback_register_cache(vcpu->arch.emulate_ctxt);
 		vcpu->arch.emulate_regs_need_sync_to_vcpu = false;
 	}
-	regs->rax = kvm_rax_read_raw(vcpu);
-	regs->rbx = kvm_rbx_read_raw(vcpu);
-	regs->rcx = kvm_rcx_read_raw(vcpu);
-	regs->rdx = kvm_rdx_read_raw(vcpu);
-	regs->rsi = kvm_rsi_read_raw(vcpu);
-	regs->rdi = kvm_rdi_read_raw(vcpu);
+	regs->rax = kvm_rax_read(vcpu);
+	regs->rbx = kvm_rbx_read(vcpu);
+	regs->rcx = kvm_rcx_read(vcpu);
+	regs->rdx = kvm_rdx_read(vcpu);
+	regs->rsi = kvm_rsi_read(vcpu);
+	regs->rdi = kvm_rdi_read(vcpu);
 	regs->rsp = kvm_rsp_read(vcpu);
-	regs->rbp = kvm_rbp_read_raw(vcpu);
+	regs->rbp = kvm_rbp_read(vcpu);
 #ifdef CONFIG_X86_64
-	regs->r8 = kvm_r8_read_raw(vcpu);
-	regs->r9 = kvm_r9_read_raw(vcpu);
-	regs->r10 = kvm_r10_read_raw(vcpu);
-	regs->r11 = kvm_r11_read_raw(vcpu);
-	regs->r12 = kvm_r12_read_raw(vcpu);
-	regs->r13 = kvm_r13_read_raw(vcpu);
-	regs->r14 = kvm_r14_read_raw(vcpu);
-	regs->r15 = kvm_r15_read_raw(vcpu);
+	regs->r8 = kvm_r8_read(vcpu);
+	regs->r9 = kvm_r9_read(vcpu);
+	regs->r10 = kvm_r10_read(vcpu);
+	regs->r11 = kvm_r11_read(vcpu);
+	regs->r12 = kvm_r12_read(vcpu);
+	regs->r13 = kvm_r13_read(vcpu);
+	regs->r14 = kvm_r14_read(vcpu);
+	regs->r15 = kvm_r15_read(vcpu);
 #endif
 
 	regs->rip = kvm_rip_read(vcpu);
@@ -104,23 +60,23 @@ static void __set_regs(struct kvm_vcpu *vcpu, struct kvm_regs *regs)
 	vcpu->arch.emulate_regs_need_sync_from_vcpu = true;
 	vcpu->arch.emulate_regs_need_sync_to_vcpu = false;
 
-	kvm_rax_write_raw(vcpu, regs->rax);
-	kvm_rbx_write_raw(vcpu, regs->rbx);
-	kvm_rcx_write_raw(vcpu, regs->rcx);
-	kvm_rdx_write_raw(vcpu, regs->rdx);
-	kvm_rsi_write_raw(vcpu, regs->rsi);
-	kvm_rdi_write_raw(vcpu, regs->rdi);
+	kvm_rax_write(vcpu, regs->rax);
+	kvm_rbx_write(vcpu, regs->rbx);
+	kvm_rcx_write(vcpu, regs->rcx);
+	kvm_rdx_write(vcpu, regs->rdx);
+	kvm_rsi_write(vcpu, regs->rsi);
+	kvm_rdi_write(vcpu, regs->rdi);
 	kvm_rsp_write(vcpu, regs->rsp);
-	kvm_rbp_write_raw(vcpu, regs->rbp);
+	kvm_rbp_write(vcpu, regs->rbp);
 #ifdef CONFIG_X86_64
-	kvm_r8_write_raw(vcpu, regs->r8);
-	kvm_r9_write_raw(vcpu, regs->r9);
-	kvm_r10_write_raw(vcpu, regs->r10);
-	kvm_r11_write_raw(vcpu, regs->r11);
-	kvm_r12_write_raw(vcpu, regs->r12);
-	kvm_r13_write_raw(vcpu, regs->r13);
-	kvm_r14_write_raw(vcpu, regs->r14);
-	kvm_r15_write_raw(vcpu, regs->r15);
+	kvm_r8_write(vcpu, regs->r8);
+	kvm_r9_write(vcpu, regs->r9);
+	kvm_r10_write(vcpu, regs->r10);
+	kvm_r11_write(vcpu, regs->r11);
+	kvm_r12_write(vcpu, regs->r12);
+	kvm_r13_write(vcpu, regs->r13);
+	kvm_r14_write(vcpu, regs->r14);
+	kvm_r15_write(vcpu, regs->r15);
 #endif
 
 	kvm_rip_write(vcpu, regs->rip);
@@ -154,20 +110,19 @@ static inline u64 pdptr_rsvd_bits(struct kvm_vcpu *vcpu)
  */
 int load_pdptrs(struct kvm_vcpu *vcpu, unsigned long cr3)
 {
-	struct kvm_pagewalk *w = &vcpu->arch.gva_walk;
+	struct kvm_mmu *mmu = vcpu->arch.walk_mmu;
 	gfn_t pdpt_gfn = cr3 >> PAGE_SHIFT;
 	gpa_t real_gpa;
 	int i;
 	int ret;
-	u64 pdpte[ARRAY_SIZE(vcpu->arch.pdptrs)];
+	u64 pdpte[ARRAY_SIZE(mmu->pdptrs)];
 
 	/*
 	 * If the MMU is nested, CR3 holds an L2 GPA and needs to be translated
 	 * to an L1 GPA.
 	 */
-	real_gpa = kvm_translate_gpa(vcpu, w, gfn_to_gpa(pdpt_gfn),
-				     PFERR_USER_MASK | PFERR_WRITE_MASK |
-				     PFERR_GUEST_PAGE_MASK, NULL, 0);
+	real_gpa = kvm_translate_gpa(vcpu, mmu, gfn_to_gpa(pdpt_gfn),
+				     PFERR_USER_MASK | PFERR_WRITE_MASK, NULL);
 	if (real_gpa == INVALID_GPA)
 		return 0;
 
@@ -185,15 +140,14 @@ int load_pdptrs(struct kvm_vcpu *vcpu, unsigned long cr3)
 	}
 
 	/*
-	 * Marking VCPU_REG_PDPTR dirty doesn't work for !tdp_enabled.
+	 * Marking VCPU_EXREG_PDPTR dirty doesn't work for !tdp_enabled.
 	 * Shadow page roots need to be reconstructed instead.
 	 */
-	if (!tdp_enabled && memcmp(vcpu->arch.pdptrs, pdpte, sizeof(vcpu->arch.pdptrs)))
-		kvm_mmu_free_roots(vcpu->kvm, &vcpu->arch.root_mmu,
-				   KVM_MMU_ROOT_CURRENT);
+	if (!tdp_enabled && memcmp(mmu->pdptrs, pdpte, sizeof(mmu->pdptrs)))
+		kvm_mmu_free_roots(vcpu->kvm, mmu, KVM_MMU_ROOT_CURRENT);
 
-	memcpy(vcpu->arch.pdptrs, pdpte, sizeof(vcpu->arch.pdptrs));
-	kvm_register_mark_dirty(vcpu, VCPU_REG_PDPTR);
+	memcpy(mmu->pdptrs, pdpte, sizeof(mmu->pdptrs));
+	kvm_register_mark_dirty(vcpu, VCPU_EXREG_PDPTR);
 	kvm_make_request(KVM_REQ_LOAD_MMU_PGD, vcpu);
 	vcpu->arch.pdptrs_from_userspace = false;
 
@@ -216,48 +170,6 @@ static bool kvm_is_valid_cr0(struct kvm_vcpu *vcpu, unsigned long cr0)
 
 	return kvm_x86_call(is_valid_cr0)(vcpu, cr0);
 }
-
-void kvm_post_set_cr0(struct kvm_vcpu *vcpu, unsigned long old_cr0, unsigned long cr0)
-{
-	/*
-	 * CR0.WP is incorporated into the MMU role, but only for non-nested,
-	 * indirect shadow MMUs.  If paging is disabled, no updates are needed
-	 * as there are no permission bits to emulate.  If TDP is enabled, the
-	 * MMU's metadata needs to be updated, e.g. so that emulating guest
-	 * translations does the right thing, but there's no need to unload the
-	 * root as CR0.WP doesn't affect SPTEs.
-	 */
-	if ((cr0 ^ old_cr0) == X86_CR0_WP) {
-		if (!(cr0 & X86_CR0_PG))
-			return;
-
-		if (tdp_enabled) {
-			kvm_init_mmu(vcpu);
-			return;
-		}
-	}
-
-	if ((cr0 ^ old_cr0) & X86_CR0_PG) {
-		/*
-		 * Clearing CR0.PG is defined to flush the TLB from the guest's
-		 * perspective.
-		 */
-		if (!(cr0 & X86_CR0_PG))
-			kvm_make_request(KVM_REQ_TLB_FLUSH_GUEST, vcpu);
-		/*
-		 * Check for async #PF completion events when enabling paging,
-		 * as the vCPU may have previously encountered async #PFs (it's
-		 * entirely legal for the guest to toggle paging on/off without
-		 * waiting for the async #PF queue to drain).
-		 */
-		else if (kvm_pv_async_pf_enabled(vcpu))
-			kvm_make_request(KVM_REQ_APF_READY, vcpu);
-	}
-
-	if ((cr0 ^ old_cr0) & KVM_MMU_CR0_ROLE_BITS)
-		kvm_mmu_reset_context(vcpu);
-}
-EXPORT_SYMBOL_FOR_KVM_INTERNAL(kvm_post_set_cr0);
 
 int kvm_set_cr0(struct kvm_vcpu *vcpu, unsigned long cr0)
 {
@@ -340,7 +252,7 @@ int kvm_set_cr3(struct kvm_vcpu *vcpu, unsigned long cr3)
 		kvm_mmu_new_pgd(vcpu, cr3);
 
 	vcpu->arch.cr3 = cr3;
-	kvm_register_mark_dirty(vcpu, VCPU_REG_CR3);
+	kvm_register_mark_dirty(vcpu, VCPU_EXREG_CR3);
 	/* Do not call post_set_cr3, we do not get here for confidential guests.  */
 
 handle_tlb_flush:
@@ -440,14 +352,9 @@ int kvm_set_cr4(struct kvm_vcpu *vcpu, unsigned long cr4)
 }
 EXPORT_SYMBOL_FOR_KVM_INTERNAL(kvm_set_cr4);
 
-static bool kvm_is_valid_cr8(unsigned long cr8)
-{
-	return !(cr8 & CR8_RESERVED_BITS);
-}
-
 int kvm_set_cr8(struct kvm_vcpu *vcpu, unsigned long cr8)
 {
-	if (!kvm_is_valid_cr8(cr8))
+	if (cr8 & CR8_RESERVED_BITS)
 		return 1;
 	if (lapic_in_kernel(vcpu))
 		kvm_lapic_set_tpr(vcpu, cr8);
@@ -529,7 +436,7 @@ int kvm_arch_vcpu_ioctl_get_sregs(struct kvm_vcpu *vcpu,
 }
 
 void kvm_vcpu_ioctl_x86_get_sregs2(struct kvm_vcpu *vcpu,
-				   struct kvm_sregs2 *sregs2)
+					  struct kvm_sregs2 *sregs2)
 {
 	int i;
 
@@ -570,12 +477,11 @@ static bool kvm_is_valid_sregs(struct kvm_vcpu *vcpu, struct kvm_sregs *sregs)
 
 	return kvm_is_valid_cr4(vcpu, sregs->cr4) &&
 	       kvm_is_valid_cr0(vcpu, sregs->cr0) &&
-	       kvm_is_valid_cr8(sregs->cr8) &&
 	       kvm_valid_efer(vcpu, sregs->efer);
 }
 
 static int __set_sregs_common(struct kvm_vcpu *vcpu, struct kvm_sregs *sregs,
-			      int *mmu_reset_needed, bool update_pdptrs)
+		int *mmu_reset_needed, bool update_pdptrs)
 {
 	int idx;
 	struct desc_ptr dt;
@@ -599,7 +505,7 @@ static int __set_sregs_common(struct kvm_vcpu *vcpu, struct kvm_sregs *sregs,
 	vcpu->arch.cr2 = sregs->cr2;
 	*mmu_reset_needed |= kvm_read_cr3(vcpu) != sregs->cr3;
 	vcpu->arch.cr3 = sregs->cr3;
-	kvm_register_mark_dirty(vcpu, VCPU_REG_CR3);
+	kvm_register_mark_dirty(vcpu, VCPU_EXREG_CR3);
 	kvm_x86_call(post_set_cr3)(vcpu, sregs->cr3);
 
 	*mmu_reset_needed |= vcpu->arch.efer != sregs->efer;
@@ -683,7 +589,7 @@ int kvm_arch_vcpu_ioctl_set_sregs(struct kvm_vcpu *vcpu,
 }
 
 int kvm_vcpu_ioctl_x86_set_sregs2(struct kvm_vcpu *vcpu,
-				  struct kvm_sregs2 *sregs2)
+					 struct kvm_sregs2 *sregs2)
 {
 	int mmu_reset_needed = 0;
 	bool valid_pdptrs = sregs2->flags & KVM_SREGS2_FLAGS_PDPTRS_VALID;
@@ -706,7 +612,7 @@ int kvm_vcpu_ioctl_x86_set_sregs2(struct kvm_vcpu *vcpu,
 		for (i = 0; i < 4 ; i++)
 			kvm_pdptr_write(vcpu, i, sregs2->pdptrs[i]);
 
-		kvm_register_mark_dirty(vcpu, VCPU_REG_PDPTR);
+		kvm_register_mark_dirty(vcpu, VCPU_EXREG_PDPTR);
 		mmu_reset_needed = 1;
 		vcpu->arch.pdptrs_from_userspace = true;
 	}
@@ -772,19 +678,17 @@ void kvm_update_dr7(struct kvm_vcpu *vcpu)
 }
 EXPORT_SYMBOL_FOR_KVM_INTERNAL(kvm_update_dr7);
 
-unsigned long kvm_get_dr6_fixed_1(struct kvm_vcpu *vcpu)
+static u64 kvm_dr6_fixed(struct kvm_vcpu *vcpu)
 {
-	unsigned long fixed = DR6_ACTIVE_LOW & ~DR6_VOLATILE;
+	u64 fixed = DR6_FIXED_1;
 
 	if (!guest_cpu_cap_has(vcpu, X86_FEATURE_RTM))
 		fixed |= DR6_RTM;
 
 	if (!guest_cpu_cap_has(vcpu, X86_FEATURE_BUS_LOCK_DETECT))
 		fixed |= DR6_BUS_LOCK;
-
 	return fixed;
 }
-EXPORT_SYMBOL_FOR_KVM_INTERNAL(kvm_get_dr6_fixed_1);
 
 int kvm_set_dr(struct kvm_vcpu *vcpu, int dr, unsigned long val)
 {
@@ -800,7 +704,7 @@ int kvm_set_dr(struct kvm_vcpu *vcpu, int dr, unsigned long val)
 	case 6:
 		if (!kvm_dr6_valid(val))
 			return 1; /* #GP */
-		vcpu->arch.dr6 = (val & DR6_VOLATILE) | kvm_get_dr6_fixed_1(vcpu);
+		vcpu->arch.dr6 = (val & DR6_VOLATILE) | kvm_dr6_fixed(vcpu);
 		break;
 	case 5:
 	default: /* 7 */
@@ -833,7 +737,7 @@ unsigned long kvm_get_dr(struct kvm_vcpu *vcpu, int dr)
 EXPORT_SYMBOL_FOR_KVM_INTERNAL(kvm_get_dr);
 
 int kvm_vcpu_ioctl_x86_get_debugregs(struct kvm_vcpu *vcpu,
-				     struct kvm_debugregs *dbgregs)
+					    struct kvm_debugregs *dbgregs)
 {
 	unsigned int i;
 
@@ -855,7 +759,7 @@ int kvm_vcpu_ioctl_x86_get_debugregs(struct kvm_vcpu *vcpu,
 }
 
 int kvm_vcpu_ioctl_x86_set_debugregs(struct kvm_vcpu *vcpu,
-				     struct kvm_debugregs *dbgregs)
+					    struct kvm_debugregs *dbgregs)
 {
 	unsigned int i;
 

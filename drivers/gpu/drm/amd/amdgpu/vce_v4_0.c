@@ -410,11 +410,6 @@ static int vce_v4_0_stop(struct amdgpu_device *adev)
 static int vce_v4_0_early_init(struct amdgpu_ip_block *ip_block)
 {
 	struct amdgpu_device *adev = ip_block->adev;
-	int r;
-
-	r = amdgpu_vce_early_init(adev);
-	if (r)
-		return r;
 
 	if (amdgpu_sriov_vf(adev)) /* currently only VCN0 support SRIOV */
 		adev->vce.num_rings = 1;
@@ -460,7 +455,7 @@ static int vce_v4_0_sw_init(struct amdgpu_ip_block *ip_block)
 		adev->firmware.ucode[AMDGPU_UCODE_ID_VCE].fw = adev->vce.fw;
 		adev->firmware.fw_size +=
 			ALIGN(le32_to_cpu(hdr->ucode_size_bytes), PAGE_SIZE);
-		drm_info(adev_to_drm(adev), "PSP loading VCE firmware\n");
+		DRM_INFO("PSP loading VCE firmware\n");
 	} else {
 		r = amdgpu_vce_resume(adev);
 		if (r)
@@ -536,7 +531,7 @@ static int vce_v4_0_hw_init(struct amdgpu_ip_block *ip_block)
 			return r;
 	}
 
-	drm_info(adev_to_drm(adev), "VCE initialized successfully.\n");
+	DRM_INFO("VCE initialized successfully.\n");
 
 	return 0;
 }
@@ -864,7 +859,7 @@ static void vce_v4_0_set_ring_funcs(struct amdgpu_device *adev)
 		adev->vce.ring[i].funcs = &vce_v4_0_ring_vm_funcs;
 		adev->vce.ring[i].me = i;
 	}
-	drm_info(adev_to_drm(adev), "VCE enabled in VM mode\n");
+	DRM_INFO("VCE enabled in VM mode\n");
 }
 
 static const struct amdgpu_irq_src_funcs vce_v4_0_irq_funcs = {

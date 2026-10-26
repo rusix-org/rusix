@@ -107,17 +107,17 @@ int handshake_nl_accept_doit(struct sk_buff *skb, struct genl_info *info)
 	req = handshake_req_next(hn, class);
 	if (req) {
 		FD_PREPARE(fdf, O_CLOEXEC, req->hr_file);
-		if (fdf->fd < 0) {
+		if (fdf.err) {
 			fput(req->hr_file); /* drop ref from handshake_req_next() */
-			err = fdf->fd;
+			err = fdf.err;
 			goto out_complete;
 		}
 
-		err = req->hr_proto->hp_accept(req, info, fdf->fd);
+		err = req->hr_proto->hp_accept(req, info, fd_prepare_fd(fdf));
 		if (err)
 			goto out_complete; /* Automatic cleanup handles fput */
 
-		trace_handshake_cmd_accept(net, req, req->hr_sk, fdf->fd);
+		trace_handshake_cmd_accept(net, req, req->hr_sk, fd_prepare_fd(fdf));
 		fd_publish(fdf);
 		return 0;
 	}

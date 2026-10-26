@@ -167,6 +167,7 @@ static int usx2y_urb_submit(struct snd_usx2y_substream *subs, struct urb *urb, i
 	if (!urb)
 		return -ENODEV;
 	urb->start_frame = frame + NRURBS * nr_of_packs();  // let hcd do rollover sanity checks
+	urb->hcpriv = NULL;
 	urb->dev = subs->usx2y->dev; /* we need to set this at each time */
 	err = usb_submit_urb(urb, GFP_ATOMIC);
 	if (err < 0) {
@@ -656,13 +657,15 @@ static int usx2y_rate_set(struct usx2ydev *usx2y, int rate)
 	struct urb *urb;
 
 	if (usx2y->rate != rate) {
-		us = kzalloc_flex(*us, urb, NOOF_SETRATE_URBS);
+		us = kzalloc(struct_size(us, urb, NOOF_SETRATE_URBS),
+			     GFP_KERNEL);
 		if (!us) {
 			err = -ENOMEM;
 			goto cleanup;
 		}
 		us->len = NOOF_SETRATE_URBS;
-		usbdata = kmalloc_objs(int, NOOF_SETRATE_URBS);
+		usbdata = kmalloc_array(NOOF_SETRATE_URBS, sizeof(int),
+					GFP_KERNEL);
 		if (!usbdata) {
 			err = -ENOMEM;
 			goto cleanup;
@@ -941,7 +944,7 @@ static int usx2y_audio_stream_new(struct snd_card *card, int playback_endpoint, 
 
 	for (i = playback_endpoint ? SNDRV_PCM_STREAM_PLAYBACK : SNDRV_PCM_STREAM_CAPTURE;
 	     i <= SNDRV_PCM_STREAM_CAPTURE; ++i) {
-		usx2y_substream[i] = kzalloc_obj(struct snd_usx2y_substream);
+		usx2y_substream[i] = kzalloc(sizeof(struct snd_usx2y_substream), GFP_KERNEL);
 		if (!usx2y_substream[i])
 			return -ENOMEM;
 

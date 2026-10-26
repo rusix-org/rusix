@@ -48,15 +48,8 @@
  * See struct dma_exec for more details.
  */
 
-/* Unlock and put the prelocked obj */
-static void drm_exec_drop_prelocked(struct drm_exec *exec)
-{
-	if (exec->prelocked) {
-		dma_resv_unlock(exec->prelocked->resv);
-		drm_gem_object_put(exec->prelocked);
-		exec->prelocked = NULL;
-	}
-}
+/* Dummy value used to initially enter the retry loop */
+#define DRM_EXEC_DUMMY ((void *)~0)
 
 /* Unlock all objects and drop references */
 static void drm_exec_unlock_all(struct drm_exec *exec)
@@ -68,7 +61,8 @@ static void drm_exec_unlock_all(struct drm_exec *exec)
 		drm_gem_object_put(obj);
 	}
 
-	drm_exec_drop_prelocked(exec);
+	drm_gem_object_put(exec->prelocked);
+	exec->prelocked = NULL;
 }
 
 /**
@@ -88,7 +82,7 @@ void drm_exec_init(struct drm_exec *exec, u32 flags, unsigned nr)
 		nr = PAGE_SIZE / sizeof(void *);
 
 	exec->flags = flags;
-	exec->objects = kvmalloc_objs(*exec->objects, nr);
+	exec->objects = kvmalloc_array(nr, sizeof(void *), GFP_KERNEL);
 
 	/* If allocation here fails, just delay that till the first use */
 	exec->max_objects = exec->objects ? nr : 0;
@@ -127,14 +121,6 @@ EXPORT_SYMBOL(drm_exec_fini);
 bool drm_exec_cleanup(struct drm_exec *exec)
 {
 	if (likely(!exec->contended)) {
-
-		/*
-		 * The contended and prelocked object might never be passed to
-		 * drm_exec_lock_obj() again. This can happen when the object
-		 * is about to be cleaned up and we now hold the last reference
-		 * to it. Make sure that we don't unnecessarily keep it around.
-		 */
-		drm_exec_drop_prelocked(exec);
 		ww_acquire_done(&exec->ticket);
 		return false;
 	}
@@ -192,15 +178,15 @@ static int drm_exec_lock_contended(struct drm_exec *exec)
 		dma_resv_lock_slow(obj->resv, &exec->ticket);
 	}
 
-	/*
-	 * It is perfectly possible that we see another contention before the
-	 * first one is fully handled.
-	 */
-	drm_exec_drop_prelocked(exec);
+	ret = drm_exec_obj_locked(exec, obj);
+	if (unlikely(ret))
+		goto error_unlock;
 
-	/* We move the reference from contended to prelocked here */
 	exec->prelocked = obj;
 	return 0;
+
+error_unlock:
+	dma_resv_unlock(obj->resv);
 
 error_dropref:
 	drm_gem_object_put(obj);
@@ -229,31 +215,35 @@ int drm_exec_lock_obj(struct drm_exec *exec, struct drm_gem_object *obj)
 	if (exec->prelocked == obj) {
 		drm_gem_object_put(exec->prelocked);
 		exec->prelocked = NULL;
-	} else {
-		if (exec->flags & DRM_EXEC_INTERRUPTIBLE_WAIT)
-			ret = dma_resv_lock_interruptible(obj->resv,
-							  &exec->ticket);
-		else
-			ret = dma_resv_lock(obj->resv, &exec->ticket);
-
-		if (unlikely(ret == -EDEADLK)) {
-			drm_gem_object_get(obj);
-			exec->contended = obj;
-			return -EDEADLK;
-		}
-
-		if (unlikely(ret == -EALREADY) &&
-		    exec->flags & DRM_EXEC_IGNORE_DUPLICATES)
-			return 0;
-
-		if (unlikely(ret))
-			return ret;
+		return 0;
 	}
+
+	if (exec->flags & DRM_EXEC_INTERRUPTIBLE_WAIT)
+		ret = dma_resv_lock_interruptible(obj->resv, &exec->ticket);
+	else
+		ret = dma_resv_lock(obj->resv, &exec->ticket);
+
+	if (unlikely(ret == -EDEADLK)) {
+		drm_gem_object_get(obj);
+		exec->contended = obj;
+		return -EDEADLK;
+	}
+
+	if (unlikely(ret == -EALREADY) &&
+	    exec->flags & DRM_EXEC_IGNORE_DUPLICATES)
+		return 0;
+
+	if (unlikely(ret))
+		return ret;
 
 	ret = drm_exec_obj_locked(exec, obj);
 	if (ret)
-		dma_resv_unlock(obj->resv);
+		goto error_unlock;
 
+	return 0;
+
+error_unlock:
+	dma_resv_unlock(obj->resv);
 	return ret;
 }
 EXPORT_SYMBOL(drm_exec_lock_obj);

@@ -13,7 +13,6 @@
 #include <linux/mm.h>
 #include <linux/init.h>
 #include <linux/perf_event.h>
-#include <linux/perf/arm_pmu.h>
 #include <linux/percpu-defs.h>
 #include <linux/slab.h>
 #include <linux/stringhash.h>
@@ -49,23 +48,28 @@ struct etm_ctxt {
 };
 
 static DEFINE_PER_CPU(struct etm_ctxt, etm_ctxt);
+static DEFINE_PER_CPU(struct coresight_device *, csdev_src);
 
-GEN_PMU_FORMAT_ATTR(cycacc);
-GEN_PMU_FORMAT_ATTR(timestamp);
-GEN_PMU_FORMAT_ATTR(retstack);
-GEN_PMU_FORMAT_ATTR(sinkid);
-
-#if IS_ENABLED(CONFIG_CORESIGHT_SOURCE_ETM4X)
-GEN_PMU_FORMAT_ATTR(branch_broadcast);
-/* contextid1 enables tracing CONTEXTIDR_EL1*/
-GEN_PMU_FORMAT_ATTR(contextid1);
-/* contextid2 enables tracing CONTEXTIDR_EL2*/
-GEN_PMU_FORMAT_ATTR(contextid2);
+/*
+ * The PMU formats were orignally for ETMv3.5/PTM's ETMCR 'config';
+ * now take them as general formats and apply on all ETMs.
+ */
+PMU_FORMAT_ATTR(branch_broadcast, "config:"__stringify(ETM_OPT_BRANCH_BROADCAST));
+PMU_FORMAT_ATTR(cycacc,		"config:" __stringify(ETM_OPT_CYCACC));
+/* contextid1 enables tracing CONTEXTIDR_EL1 for ETMv4 */
+PMU_FORMAT_ATTR(contextid1,	"config:" __stringify(ETM_OPT_CTXTID));
+/* contextid2 enables tracing CONTEXTIDR_EL2 for ETMv4 */
+PMU_FORMAT_ATTR(contextid2,	"config:" __stringify(ETM_OPT_CTXTID2));
+PMU_FORMAT_ATTR(timestamp,	"config:" __stringify(ETM_OPT_TS));
+PMU_FORMAT_ATTR(retstack,	"config:" __stringify(ETM_OPT_RETSTK));
 /* preset - if sink ID is used as a configuration selector */
-GEN_PMU_FORMAT_ATTR(preset);
+PMU_FORMAT_ATTR(preset,		"config:0-3");
+/* Sink ID - same for all ETMs */
+PMU_FORMAT_ATTR(sinkid,		"config2:0-31");
 /* config ID - set if a system configuration is selected */
-GEN_PMU_FORMAT_ATTR(configid);
-GEN_PMU_FORMAT_ATTR(cc_threshold);
+PMU_FORMAT_ATTR(configid,	"config2:32-63");
+PMU_FORMAT_ATTR(cc_threshold,	"config3:0-11");
+
 
 /*
  * contextid always traces the "PID".  The PID is in CONTEXTIDR_EL1
@@ -76,35 +80,29 @@ static ssize_t format_attr_contextid_show(struct device *dev,
 					  struct device_attribute *attr,
 					  char *page)
 {
-	if (is_kernel_in_hyp_mode())
-		return contextid2_show(dev, attr, page);
-	return contextid1_show(dev, attr, page);
+	int pid_fmt = ETM_OPT_CTXTID;
+
+#if IS_ENABLED(CONFIG_CORESIGHT_SOURCE_ETM4X)
+	pid_fmt = is_kernel_in_hyp_mode() ? ETM_OPT_CTXTID2 : ETM_OPT_CTXTID;
+#endif
+	return sprintf(page, "config:%d\n", pid_fmt);
 }
 
 static struct device_attribute format_attr_contextid =
 	__ATTR(contextid, 0444, format_attr_contextid_show, NULL);
-#endif
 
-/*
- * ETMv3 only uses the first 3 attributes for programming itself (see
- * ETM3X_SUPPORTED_OPTIONS). Sink ID is also supported for selecting a
- * sink in both, but not used for configuring the ETM. The remaining
- * attributes are ETMv4 specific.
- */
 static struct attribute *etm_config_formats_attr[] = {
 	&format_attr_cycacc.attr,
-	&format_attr_timestamp.attr,
-	&format_attr_retstack.attr,
-	&format_attr_sinkid.attr,
-#if IS_ENABLED(CONFIG_CORESIGHT_SOURCE_ETM4X)
 	&format_attr_contextid.attr,
 	&format_attr_contextid1.attr,
 	&format_attr_contextid2.attr,
+	&format_attr_timestamp.attr,
+	&format_attr_retstack.attr,
+	&format_attr_sinkid.attr,
 	&format_attr_preset.attr,
 	&format_attr_configid.attr,
 	&format_attr_branch_broadcast.attr,
 	&format_attr_cc_threshold.attr,
-#endif
 	NULL,
 };
 
@@ -259,7 +257,7 @@ static void *alloc_event_data(int cpu)
 	struct etm_event_data *event_data;
 
 	/* First get memory for the session's data */
-	event_data = kzalloc_obj(struct etm_event_data);
+	event_data = kzalloc(sizeof(struct etm_event_data), GFP_KERNEL);
 	if (!event_data)
 		return NULL;
 
@@ -343,95 +341,16 @@ static struct coresight_path *etm_event_get_ctxt_path(struct etm_ctxt *ctxt)
 	return path;
 }
 
-static struct coresight_path *
-etm_event_build_path(struct perf_event *event, int cpu,
-		     struct coresight_device *user_sink,
-		     struct coresight_device *match_sink)
-{
-	struct coresight_path *path = NULL;
-	struct coresight_device *source, *sink;
-	int ret;
-
-	source = coresight_get_percpu_source_ref(cpu);
-
-	/*
-	 * If there is no ETM associated with this CPU or ever we try to trace
-	 * on this CPU, we handle it accordingly.
-	 */
-	if (!source)
-		return NULL;
-
-	/*
-	 * If AUX pause feature is enabled but the ETM driver does not
-	 * support the operations, skip for this source.
-	 */
-	if (event->attr.aux_start_paused &&
-	    (!source_ops(source)->pause_perf ||
-	     !source_ops(source)->resume_perf)) {
-		dev_err_once(&source->dev, "AUX pause is not supported.\n");
-		goto out;
-	}
-
-	/* If sink has been specified by user, directly use it */
-	if (user_sink) {
-		sink = user_sink;
-	} else {
-		/*
-		 * No sink provided - look for a default sink for all the ETMs,
-		 * where this event can be scheduled.
-		 *
-		 * We allocate the sink specific buffers only once for this
-		 * event. If the ETMs have different default sink devices, we
-		 * can only use a single "type" of sink as the event can carry
-		 * only one sink specific buffer. Thus we have to make sure
-		 * that the sinks are of the same type and driven by the same
-		 * driver, as the one we allocate the buffer for. We don't
-		 * trace on a CPU if the sink is not compatible.
-		 */
-
-		/* Find the default sink for this ETM */
-		sink = coresight_find_default_sink(source);
-		if (!sink)
-			goto out;
-
-		/* Check if this sink compatible with the last sink */
-		if (match_sink && !sinks_compatible(match_sink, sink))
-			goto out;
-	}
-
-	/*
-	 * Building a path doesn't enable it, it simply builds a
-	 * list of devices from source to sink that can be
-	 * referenced later when the path is actually needed.
-	 */
-	path = coresight_build_path(source, sink);
-	if (IS_ERR(path))
-		goto out;
-
-	/* ensure we can allocate a trace ID for this CPU */
-	ret = coresight_path_assign_trace_id(path, CS_MODE_PERF);
-	if (ret) {
-		coresight_release_path(path);
-		path = NULL;
-		goto out;
-	}
-
-	coresight_trace_id_perf_start(&sink->perf_sink_id_map);
-
-out:
-	coresight_put_percpu_source_ref(source);
-	return IS_ERR_OR_NULL(path) ? NULL : path;
-}
-
 static void *etm_setup_aux(struct perf_event *event, void **pages,
 			   int nr_pages, bool overwrite)
 {
-	u32 sink_hash, cfg_hash;
+	u32 id, cfg_hash;
 	int cpu = event->cpu;
 	cpumask_t *mask;
 	struct coresight_device *sink = NULL;
-	struct coresight_device *user_sink = NULL;
+	struct coresight_device *user_sink = NULL, *last_sink = NULL;
 	struct etm_event_data *event_data = NULL;
+	int ret;
 
 	event_data = alloc_event_data(cpu);
 	if (!event_data)
@@ -439,12 +358,13 @@ static void *etm_setup_aux(struct perf_event *event, void **pages,
 	INIT_WORK(&event_data->work, free_event_data);
 
 	/* First get the selected sink from user space. */
-	sink_hash = ATTR_CFG_GET_FLD(&event->attr, sinkid);
-	if (sink_hash)
-		sink = user_sink = coresight_get_sink_by_id(sink_hash);
+	if (event->attr.config2 & GENMASK_ULL(31, 0)) {
+		id = (u32)event->attr.config2;
+		sink = user_sink = coresight_get_sink_by_id(id);
+	}
 
 	/* check if user wants a coresight configuration selected */
-	cfg_hash = ATTR_CFG_GET_FLD(&event->attr, configid);
+	cfg_hash = (u32)((event->attr.config2 & GENMASK_ULL(63, 32)) >> 32);
 	if (cfg_hash) {
 		if (cscfg_activate_config(cfg_hash))
 			goto err;
@@ -462,25 +382,80 @@ static void *etm_setup_aux(struct perf_event *event, void **pages,
 	 */
 	for_each_cpu(cpu, mask) {
 		struct coresight_path *path;
+		struct coresight_device *csdev;
 
-		path = etm_event_build_path(event, cpu, user_sink, sink);
-		if (!path) {
-			/*
-			 * Failed to create a path for the CPU, clear it from
-			 * the mask and continue to next one.
-			 */
+		csdev = per_cpu(csdev_src, cpu);
+		/*
+		 * If there is no ETM associated with this CPU clear it from
+		 * the mask and continue with the rest. If ever we try to trace
+		 * on this CPU, we handle it accordingly.
+		 */
+		if (!csdev) {
 			cpumask_clear_cpu(cpu, mask);
 			continue;
 		}
 
 		/*
-		 * The first found sink is saved here and passed to
-		 * etm_event_build_path() to check whether the remaining ETMs
-		 * have a compatible default sink.
+		 * If AUX pause feature is enabled but the ETM driver does not
+		 * support the operations, clear this CPU from the mask and
+		 * continue to next one.
 		 */
-		if (!user_sink && !sink)
-			sink = coresight_get_sink(path);
+		if (event->attr.aux_start_paused &&
+		    (!source_ops(csdev)->pause_perf || !source_ops(csdev)->resume_perf)) {
+			dev_err_once(&csdev->dev, "AUX pause is not supported.\n");
+			cpumask_clear_cpu(cpu, mask);
+			continue;
+		}
 
+		/*
+		 * No sink provided - look for a default sink for all the ETMs,
+		 * where this event can be scheduled.
+		 * We allocate the sink specific buffers only once for this
+		 * event. If the ETMs have different default sink devices, we
+		 * can only use a single "type" of sink as the event can carry
+		 * only one sink specific buffer. Thus we have to make sure
+		 * that the sinks are of the same type and driven by the same
+		 * driver, as the one we allocate the buffer for. As such
+		 * we choose the first sink and check if the remaining ETMs
+		 * have a compatible default sink. We don't trace on a CPU
+		 * if the sink is not compatible.
+		 */
+		if (!user_sink) {
+			/* Find the default sink for this ETM */
+			sink = coresight_find_default_sink(csdev);
+			if (!sink) {
+				cpumask_clear_cpu(cpu, mask);
+				continue;
+			}
+
+			/* Check if this sink compatible with the last sink */
+			if (last_sink && !sinks_compatible(last_sink, sink)) {
+				cpumask_clear_cpu(cpu, mask);
+				continue;
+			}
+			last_sink = sink;
+		}
+
+		/*
+		 * Building a path doesn't enable it, it simply builds a
+		 * list of devices from source to sink that can be
+		 * referenced later when the path is actually needed.
+		 */
+		path = coresight_build_path(csdev, sink);
+		if (IS_ERR(path)) {
+			cpumask_clear_cpu(cpu, mask);
+			continue;
+		}
+
+		/* ensure we can allocate a trace ID for this CPU */
+		ret = coresight_path_assign_trace_id(path, CS_MODE_PERF);
+		if (ret) {
+			cpumask_clear_cpu(cpu, mask);
+			coresight_release_path(path);
+			continue;
+		}
+
+		coresight_trace_id_perf_start(&sink->perf_sink_id_map);
 		*etm_event_cpu_path_ptr(event_data, cpu) = path;
 	}
 
@@ -589,11 +564,11 @@ static void etm_event_start(struct perf_event *event, int flags)
 		goto fail_end_stop;
 
 	/* Nothing will happen without a path */
-	if (coresight_enable_path(path, CS_MODE_PERF))
+	if (coresight_enable_path(path, CS_MODE_PERF, handle))
 		goto fail_end_stop;
 
 	/* Finally enable the tracer */
-	if (coresight_enable_source(source, event, CS_MODE_PERF, path))
+	if (source_ops(source)->enable(source, event, CS_MODE_PERF, path))
 		goto fail_disable_path;
 
 	/*
@@ -612,8 +587,6 @@ static void etm_event_start(struct perf_event *event, int flags)
 
 		perf_report_aux_output_id(event, hw_id);
 	}
-
-	perf_event_itrace_started(event);
 
 out:
 	/* Tell the perf core the event is alive */
@@ -880,7 +853,7 @@ static void etm_addr_filters_sync(struct perf_event *event)
 int etm_perf_symlink(struct coresight_device *csdev, bool link)
 {
 	char entry[sizeof("cpu9999999")];
-	int ret = 0, cpu = csdev->cpu;
+	int ret = 0, cpu = source_ops(csdev)->cpu_id(csdev);
 	struct device *pmu_dev = etm_pmu.dev;
 	struct device *cs_dev = &csdev->dev;
 
@@ -889,12 +862,17 @@ int etm_perf_symlink(struct coresight_device *csdev, bool link)
 	if (!etm_perf_up)
 		return -EPROBE_DEFER;
 
-	if (link)
+	if (link) {
 		ret = sysfs_create_link(&pmu_dev->kobj, &cs_dev->kobj, entry);
-	else
+		if (ret)
+			return ret;
+		per_cpu(csdev_src, cpu) = csdev;
+	} else {
 		sysfs_remove_link(&pmu_dev->kobj, entry);
+		per_cpu(csdev_src, cpu) = NULL;
+	}
 
-	return ret;
+	return 0;
 }
 EXPORT_SYMBOL_GPL(etm_perf_symlink);
 
@@ -953,10 +931,7 @@ int etm_perf_add_symlink_sink(struct coresight_device *csdev)
 
 	if (csdev->type != CORESIGHT_DEV_TYPE_SINK &&
 	    csdev->type != CORESIGHT_DEV_TYPE_LINKSINK)
-		return -EOPNOTSUPP;
-
-	if (!sink_ops(csdev)->alloc_buffer)
-		return -EOPNOTSUPP;
+		return -EINVAL;
 
 	if (csdev->ea != NULL)
 		return -EINVAL;

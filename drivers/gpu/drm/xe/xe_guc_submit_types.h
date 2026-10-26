@@ -61,6 +61,12 @@ struct guc_submit_parallel_scratch {
 	u32 wq[WQ_SIZE / sizeof(u32)];
 };
 
+struct pending_list_snapshot {
+	u32 seqno;
+	bool fence;
+	bool finished;
+};
+
 /**
  * struct xe_guc_submit_exec_queue_snapshot - Snapshot for devcoredump
  */
@@ -77,8 +83,6 @@ struct xe_guc_submit_exec_queue_snapshot {
 	u16 width;
 	/** @refcount: ref count of this exec queue */
 	u32 refcount;
-	/** @jobcount: job count of this exec queue */
-	u32 jobcount;
 	/**
 	 * @sched_timeout: the time after which a job is removed from the
 	 * scheduler.
@@ -131,18 +135,10 @@ struct xe_guc_submit_exec_queue_snapshot {
 		u32 wq[WQ_SIZE / sizeof(u32)];
 	} parallel;
 
-	/** @multi_queue: snapshot of the multi queue information */
-	struct {
-		/**
-		 * @multi_queue.primary: GuC id of the primary exec queue
-		 * of the multi queue group.
-		 */
-		u32 primary;
-		/** @multi_queue.pos: Position of the exec queue within the multi queue group */
-		u8 pos;
-		/** @multi_queue.valid: The exec queue is part of a multi queue group */
-		bool valid;
-	} multi_queue;
+	/** @pending_list_size: Size of the pending list snapshot array */
+	int pending_list_size;
+	/** @pending_list: snapshot of the pending list info */
+	struct pending_list_snapshot *pending_list;
 };
 
 #endif

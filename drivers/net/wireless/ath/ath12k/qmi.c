@@ -14,53 +14,53 @@
 #include <linux/of_address.h>
 #include <linux/ioport.h>
 #include <linux/of_reserved_mem.h>
-#include <linux/sizes.h>
 
 #define SLEEP_CLOCK_SELECT_INTERNAL_BIT	0x02
 #define HOST_CSTATE_BIT			0x04
 #define PLATFORM_CAP_PCIE_GLOBAL_RESET	0x08
+#define ATH12K_QMI_MAX_CHUNK_SIZE	2097152
 
 static const struct qmi_elem_info wlfw_host_mlo_chip_info_s_v01_ei[] = {
 	{
-		.data_type	= QMI_UNSIGNED_1_BYTE,
-		.elem_len	= 1,
-		.elem_size	= sizeof(u8),
+		.data_type      = QMI_UNSIGNED_1_BYTE,
+		.elem_len       = 1,
+		.elem_size      = sizeof(u8),
 		.array_type	= NO_ARRAY,
-		.tlv_type	= 0,
-		.offset		= offsetof(struct wlfw_host_mlo_chip_info_s_v01,
+		.tlv_type       = 0,
+		.offset         = offsetof(struct wlfw_host_mlo_chip_info_s_v01,
 					   chip_id),
 	},
 	{
-		.data_type	= QMI_UNSIGNED_1_BYTE,
-		.elem_len	= 1,
-		.elem_size	= sizeof(u8),
+		.data_type      = QMI_UNSIGNED_1_BYTE,
+		.elem_len       = 1,
+		.elem_size      = sizeof(u8),
 		.array_type	= NO_ARRAY,
-		.tlv_type	= 0,
-		.offset		= offsetof(struct wlfw_host_mlo_chip_info_s_v01,
+		.tlv_type       = 0,
+		.offset         = offsetof(struct wlfw_host_mlo_chip_info_s_v01,
 					   num_local_links),
 	},
 	{
-		.data_type	= QMI_UNSIGNED_1_BYTE,
-		.elem_len	= QMI_WLFW_MAX_NUM_MLO_LINKS_PER_CHIP_V01,
-		.elem_size	= sizeof(u8),
-		.array_type	= STATIC_ARRAY,
-		.tlv_type	= 0,
-		.offset		= offsetof(struct wlfw_host_mlo_chip_info_s_v01,
+		.data_type      = QMI_UNSIGNED_1_BYTE,
+		.elem_len       = QMI_WLFW_MAX_NUM_MLO_LINKS_PER_CHIP_V01,
+		.elem_size      = sizeof(u8),
+		.array_type     = STATIC_ARRAY,
+		.tlv_type       = 0,
+		.offset         = offsetof(struct wlfw_host_mlo_chip_info_s_v01,
 					   hw_link_id),
 	},
 	{
-		.data_type	= QMI_UNSIGNED_1_BYTE,
-		.elem_len	= QMI_WLFW_MAX_NUM_MLO_LINKS_PER_CHIP_V01,
-		.elem_size	= sizeof(u8),
-		.array_type	= STATIC_ARRAY,
-		.tlv_type	= 0,
-		.offset		= offsetof(struct wlfw_host_mlo_chip_info_s_v01,
+		.data_type      = QMI_UNSIGNED_1_BYTE,
+		.elem_len       = QMI_WLFW_MAX_NUM_MLO_LINKS_PER_CHIP_V01,
+		.elem_size      = sizeof(u8),
+		.array_type     = STATIC_ARRAY,
+		.tlv_type       = 0,
+		.offset         = offsetof(struct wlfw_host_mlo_chip_info_s_v01,
 					   valid_mlo_link_id),
 	},
 	{
-		.data_type	= QMI_EOTI,
+		.data_type      = QMI_EOTI,
 		.array_type	= NO_ARRAY,
-		.tlv_type	= QMI_COMMON_TLV_TYPE,
+		.tlv_type       = QMI_COMMON_TLV_TYPE,
 	},
 };
 
@@ -508,24 +508,6 @@ static const struct qmi_elem_info qmi_wlanfw_host_cap_req_msg_v01_ei[] = {
 					   feature_list),
 	},
 	{
-		.data_type	= QMI_OPT_FLAG,
-		.elem_len	= 1,
-		.elem_size	= sizeof(u8),
-		.array_type	= NO_ARRAY,
-		.tlv_type	= 0x33,
-		.offset		= offsetof(struct qmi_wlanfw_host_cap_req_msg_v01,
-					   dynamic_mem_support_valid),
-	},
-	{
-		.data_type	= QMI_UNSIGNED_1_BYTE,
-		.elem_len	= 1,
-		.elem_size	= sizeof(u8),
-		.array_type	= NO_ARRAY,
-		.tlv_type	= 0x33,
-		.offset		= offsetof(struct qmi_wlanfw_host_cap_req_msg_v01,
-					   dynamic_mem_support),
-	},
-	{
 		.data_type	= QMI_EOTI,
 		.array_type	= NO_ARRAY,
 		.tlv_type	= QMI_COMMON_TLV_TYPE,
@@ -604,40 +586,22 @@ static const struct qmi_elem_info qmi_wlanfw_phy_cap_resp_msg_v01_ei[] = {
 					   board_id),
 	},
 	{
-		.data_type	= QMI_OPT_FLAG,
-		.elem_len	= 1,
-		.elem_size	= sizeof(u8),
-		.array_type	= NO_ARRAY,
-		.tlv_type	= 0x13,
-		.offset		= offsetof(struct qmi_wlanfw_phy_cap_resp_msg_v01,
+		.data_type      = QMI_OPT_FLAG,
+		.elem_len       = 1,
+		.elem_size      = sizeof(u8),
+		.array_type     = NO_ARRAY,
+		.tlv_type       = 0x13,
+		.offset         = offsetof(struct qmi_wlanfw_phy_cap_resp_msg_v01,
 					   single_chip_mlo_support_valid),
 	},
 	{
-		.data_type	= QMI_UNSIGNED_1_BYTE,
-		.elem_len	= 1,
-		.elem_size	= sizeof(u8),
-		.array_type	= NO_ARRAY,
-		.tlv_type	= 0x13,
-		.offset		= offsetof(struct qmi_wlanfw_phy_cap_resp_msg_v01,
+		.data_type      = QMI_UNSIGNED_1_BYTE,
+		.elem_len       = 1,
+		.elem_size      = sizeof(u8),
+		.array_type     = NO_ARRAY,
+		.tlv_type       = 0x13,
+		.offset         = offsetof(struct qmi_wlanfw_phy_cap_resp_msg_v01,
 					   single_chip_mlo_support),
-	},
-	{
-		.data_type	= QMI_OPT_FLAG,
-		.elem_len	= 1,
-		.elem_size	= sizeof(u8),
-		.array_type	= NO_ARRAY,
-		.tlv_type	= 0x17,
-		.offset		= offsetof(struct qmi_wlanfw_phy_cap_resp_msg_v01,
-					   dynamic_ddr_support_valid),
-	},
-	{
-		.data_type	= QMI_UNSIGNED_1_BYTE,
-		.elem_len	= 1,
-		.elem_size	= sizeof(u8),
-		.array_type	= NO_ARRAY,
-		.tlv_type	= 0x17,
-		.offset		= offsetof(struct qmi_wlanfw_phy_cap_resp_msg_v01,
-					   dynamic_ddr_support),
 	},
 	{
 		.data_type	= QMI_EOTI,
@@ -1660,50 +1624,6 @@ static const struct qmi_elem_info qmi_wlanfw_m3_info_resp_msg_v01_ei[] = {
 	},
 };
 
-static const struct qmi_elem_info qmi_wlanfw_aux_uc_info_req_msg_v01_ei[] = {
-	{
-		.data_type	= QMI_UNSIGNED_8_BYTE,
-		.elem_len	= 1,
-		.elem_size	= sizeof(u64),
-		.array_type	= NO_ARRAY,
-		.tlv_type	= 0x01,
-		.offset		= offsetof(struct qmi_wlanfw_aux_uc_info_req_msg_v01,
-					   addr),
-	},
-	{
-		.data_type	= QMI_UNSIGNED_4_BYTE,
-		.elem_len	= 1,
-		.elem_size	= sizeof(u32),
-		.array_type	= NO_ARRAY,
-		.tlv_type	= 0x02,
-		.offset		= offsetof(struct qmi_wlanfw_aux_uc_info_req_msg_v01,
-					   size),
-	},
-	{
-		.data_type	= QMI_EOTI,
-		.array_type	= NO_ARRAY,
-		.tlv_type	= QMI_COMMON_TLV_TYPE,
-	},
-};
-
-static const struct qmi_elem_info qmi_wlanfw_aux_uc_info_resp_msg_v01_ei[] = {
-	{
-		.data_type	= QMI_STRUCT,
-		.elem_len	= 1,
-		.elem_size	= sizeof(struct qmi_response_type_v01),
-		.array_type	= NO_ARRAY,
-		.tlv_type	= 0x02,
-		.offset		= offsetof(struct qmi_wlanfw_aux_uc_info_resp_msg_v01,
-					   resp),
-		.ei_array	= qmi_response_type_v01_ei,
-	},
-	{
-		.data_type	= QMI_EOTI,
-		.array_type	= NO_ARRAY,
-		.tlv_type	= QMI_COMMON_TLV_TYPE,
-	},
-};
-
 static const struct qmi_elem_info qmi_wlanfw_ce_tgt_pipe_cfg_s_v01_ei[] = {
 	{
 		.data_type	= QMI_UNSIGNED_4_BYTE,
@@ -1812,8 +1732,7 @@ static const struct qmi_elem_info qmi_wlanfw_shadow_reg_cfg_s_v01_ei[] = {
 	},
 	{
 		.data_type	= QMI_EOTI,
-		.array_type	= NO_ARRAY,
-		.tlv_type	= QMI_COMMON_TLV_TYPE,
+		.array_type	= QMI_COMMON_TLV_TYPE,
 	},
 };
 
@@ -1966,7 +1885,7 @@ static const struct qmi_elem_info qmi_wlanfw_wlan_cfg_req_msg_v01_ei[] = {
 		.data_type	= QMI_OPT_FLAG,
 		.elem_len	= 1,
 		.elem_size	= sizeof(u8),
-		.array_type	= NO_ARRAY,
+		.array_type = NO_ARRAY,
 		.tlv_type	= 0x13,
 		.offset		= offsetof(struct qmi_wlanfw_wlan_cfg_req_msg_v01,
 					   shadow_reg_valid),
@@ -1975,7 +1894,7 @@ static const struct qmi_elem_info qmi_wlanfw_wlan_cfg_req_msg_v01_ei[] = {
 		.data_type	= QMI_DATA_LEN,
 		.elem_len	= 1,
 		.elem_size	= sizeof(u8),
-		.array_type	= NO_ARRAY,
+		.array_type = NO_ARRAY,
 		.tlv_type	= 0x13,
 		.offset		= offsetof(struct qmi_wlanfw_wlan_cfg_req_msg_v01,
 					   shadow_reg_len),
@@ -1984,7 +1903,7 @@ static const struct qmi_elem_info qmi_wlanfw_wlan_cfg_req_msg_v01_ei[] = {
 		.data_type	= QMI_STRUCT,
 		.elem_len	= QMI_WLANFW_MAX_NUM_SHADOW_REG_V01,
 		.elem_size	= sizeof(struct qmi_wlanfw_shadow_reg_cfg_s_v01),
-		.array_type	= VAR_LEN_ARRAY,
+		.array_type = VAR_LEN_ARRAY,
 		.tlv_type	= 0x13,
 		.offset		= offsetof(struct qmi_wlanfw_wlan_cfg_req_msg_v01,
 					   shadow_reg),
@@ -2044,17 +1963,15 @@ static const struct qmi_elem_info qmi_wlanfw_wlan_cfg_resp_msg_v01_ei[] = {
 
 static const struct qmi_elem_info qmi_wlanfw_mem_ready_ind_msg_v01_ei[] = {
 	{
-		.data_type	= QMI_EOTI,
-		.array_type	= NO_ARRAY,
-		.tlv_type	= QMI_COMMON_TLV_TYPE,
+		.data_type = QMI_EOTI,
+		.array_type = NO_ARRAY,
 	},
 };
 
 static const struct qmi_elem_info qmi_wlanfw_fw_ready_ind_msg_v01_ei[] = {
 	{
-		.data_type	= QMI_EOTI,
-		.array_type	= NO_ARRAY,
-		.tlv_type	= QMI_COMMON_TLV_TYPE,
+		.data_type = QMI_EOTI,
+		.array_type = NO_ARRAY,
 	},
 };
 
@@ -2137,14 +2054,14 @@ static int ath12k_host_cap_parse_mlo(struct ath12k_base *ab,
 
 	if (!ag->mlo_capable) {
 		ath12k_dbg(ab, ATH12K_DBG_QMI,
-			   "MLO is disabled hence skip QMI MLO cap\n");
+			   "MLO is disabled hence skip QMI MLO cap");
 		return 0;
 	}
 
 	if (!ab->qmi.num_radios || ab->qmi.num_radios == U8_MAX) {
 		ag->mlo_capable = false;
 		ath12k_dbg(ab, ATH12K_DBG_QMI,
-			   "skip QMI MLO cap due to invalid num_radio %u\n",
+			   "skip QMI MLO cap due to invalid num_radio %d\n",
 			   ab->qmi.num_radios);
 		return 0;
 	}
@@ -2168,7 +2085,7 @@ static int ath12k_host_cap_parse_mlo(struct ath12k_base *ab,
 	req->mlo_num_chips_valid = 1;
 	req->mlo_num_chips = ag->num_devices;
 
-	ath12k_dbg(ab, ATH12K_DBG_QMI, "mlo capability advertisement device_id %u group_id %u num_devices %u\n",
+	ath12k_dbg(ab, ATH12K_DBG_QMI, "mlo capability advertisement device_id %d group_id %d num_devices %d",
 		   req->mlo_chip_id, req->mlo_group_id, req->mlo_num_chips);
 
 	mutex_lock(&ag->mutex);
@@ -2189,14 +2106,14 @@ static int ath12k_host_cap_parse_mlo(struct ath12k_base *ab,
 		info->chip_id = partner_ab->device_id;
 		info->num_local_links = partner_ab->qmi.num_radios;
 
-		ath12k_dbg(ab, ATH12K_DBG_QMI, "mlo device id %u num_link %u\n",
+		ath12k_dbg(ab, ATH12K_DBG_QMI, "mlo device id %d num_link %d\n",
 			   info->chip_id, info->num_local_links);
 
 		for (j = 0; j < info->num_local_links; j++) {
 			info->hw_link_id[j] = partner_ab->wsi_info.hw_link_id_base + j;
 			info->valid_mlo_link_id[j] = 1;
 
-			ath12k_dbg(ab, ATH12K_DBG_QMI, "mlo hw_link_id %u\n",
+			ath12k_dbg(ab, ATH12K_DBG_QMI, "mlo hw_link_id %d\n",
 				   info->hw_link_id[j]);
 
 			hw_link_id++;
@@ -2291,11 +2208,6 @@ int ath12k_qmi_host_cap_send(struct ath12k_base *ab)
 	if (ret < 0)
 		goto out;
 
-	if (ab->qmi.dynamic_ddr_support) {
-		req.dynamic_mem_support_valid = 1;
-		req.dynamic_mem_support = 1;
-	}
-
 	ret = qmi_txn_init(&ab->qmi.handle, &txn,
 			   qmi_wlanfw_host_cap_resp_msg_v01_ei, &resp);
 	if (ret < 0)
@@ -2316,7 +2228,7 @@ int ath12k_qmi_host_cap_send(struct ath12k_base *ab)
 		goto out;
 
 	if (resp.resp.result != QMI_RESULT_SUCCESS_V01) {
-		ath12k_warn(ab, "Host capability request failed, result: %u, err: %u\n",
+		ath12k_warn(ab, "Host capability request failed, result: %d, err: %d\n",
 			    resp.resp.result, resp.resp.error);
 		ret = -EINVAL;
 		goto out;
@@ -2367,15 +2279,11 @@ static void ath12k_qmi_phy_cap_send(struct ath12k_base *ab)
 
 	ab->qmi.num_radios = resp.num_phy;
 
-	if (resp.dynamic_ddr_support_valid)
-		ab->qmi.dynamic_ddr_support = resp.dynamic_ddr_support;
-
 	ath12k_dbg(ab, ATH12K_DBG_QMI,
-		   "phy capability resp valid %u single_chip_mlo_support %u valid %u num_phy %u valid %u board_id %u dynamic_ddr_valid %u dynamic_ddr_support %u\n",
+		   "phy capability resp valid %d single_chip_mlo_support %d valid %d num_phy %d valid %d board_id %d\n",
 		   resp.single_chip_mlo_support_valid, resp.single_chip_mlo_support,
 		   resp.num_phy_valid, resp.num_phy,
-		   resp.board_id_valid, resp.board_id, resp.dynamic_ddr_support_valid,
-		   resp.dynamic_ddr_support);
+		   resp.board_id_valid, resp.board_id);
 
 	return;
 
@@ -2384,7 +2292,7 @@ out:
 	ab->qmi.num_radios = ab->hw_params->def_num_link;
 
 	ath12k_dbg(ab, ATH12K_DBG_QMI,
-		   "no valid response from PHY capability, choose default num_phy %u\n",
+		   "no valid response from PHY capability, choose default num_phy %d\n",
 		   ab->qmi.num_radios);
 }
 
@@ -2396,11 +2304,11 @@ static int ath12k_qmi_fw_ind_register_send(struct ath12k_base *ab)
 	struct qmi_txn txn;
 	int ret;
 
-	req = kzalloc_obj(*req);
+	req = kzalloc(sizeof(*req), GFP_KERNEL);
 	if (!req)
 		return -ENOMEM;
 
-	resp = kzalloc_obj(*resp);
+	resp = kzalloc(sizeof(*resp), GFP_KERNEL);
 	if (!resp) {
 		ret = -ENOMEM;
 		goto resp_out;
@@ -2445,7 +2353,7 @@ static int ath12k_qmi_fw_ind_register_send(struct ath12k_base *ab)
 	}
 
 	if (resp->resp.result != QMI_RESULT_SUCCESS_V01) {
-		ath12k_warn(ab, "FW Ind register request failed, result: %u, err: %u\n",
+		ath12k_warn(ab, "FW Ind register request failed, result: %d, err: %d\n",
 			    resp->resp.result, resp->resp.error);
 		ret = -EINVAL;
 		goto out;
@@ -2468,7 +2376,7 @@ int ath12k_qmi_respond_fw_mem_request(struct ath12k_base *ab)
 	int ret = 0, i;
 	bool delayed;
 
-	req = kzalloc_obj(*req);
+	req = kzalloc(sizeof(*req), GFP_KERNEL);
 	if (!req)
 		return -ENOMEM;
 
@@ -2480,7 +2388,7 @@ int ath12k_qmi_respond_fw_mem_request(struct ath12k_base *ab)
 	if (!test_bit(ATH12K_FLAG_FIXED_MEM_REGION, &ab->dev_flags) &&
 	    ab->qmi.target_mem_delayed) {
 		delayed = true;
-		ath12k_dbg(ab, ATH12K_DBG_QMI, "qmi delays mem_request %u\n",
+		ath12k_dbg(ab, ATH12K_DBG_QMI, "qmi delays mem_request %d\n",
 			   ab->qmi.mem_seg_count);
 	} else {
 		delayed = false;
@@ -2526,7 +2434,7 @@ int ath12k_qmi_respond_fw_mem_request(struct ath12k_base *ab)
 		if (delayed && resp.resp.error == 0)
 			goto out;
 
-		ath12k_warn(ab, "Respond mem req failed, result: %u, err: %u\n",
+		ath12k_warn(ab, "Respond mem req failed, result: %d, err: %d\n",
 			    resp.resp.result, resp.resp.error);
 		ret = -EINVAL;
 		goto out;
@@ -2584,63 +2492,46 @@ static void ath12k_qmi_free_mlo_mem_chunk(struct ath12k_base *ab,
 		mlo_chunk->v.ioaddr = NULL;
 	} else if (mlo_chunk->v.addr) {
 		dma_free_coherent(ab->dev,
-				  mlo_chunk->total_size,
-				  mlo_chunk->vaddr_unaligned,
-				  mlo_chunk->paddr_unaligned);
-		mlo_chunk->vaddr_unaligned = NULL;
+				  mlo_chunk->size,
+				  mlo_chunk->v.addr,
+				  mlo_chunk->paddr);
 		mlo_chunk->v.addr = NULL;
 	}
 
 	mlo_chunk->paddr = 0;
-	mlo_chunk->paddr_unaligned = 0;
 	mlo_chunk->size = 0;
-	mlo_chunk->total_size = 0;
-
-	if (fixed_mem) {
+	if (fixed_mem)
 		chunk->v.ioaddr = NULL;
-	} else {
+	else
 		chunk->v.addr = NULL;
-		chunk->vaddr_unaligned = NULL;
-	}
 	chunk->paddr = 0;
-	chunk->paddr_unaligned = 0;
 	chunk->size = 0;
-	chunk->total_size = 0;
 }
 
 static void ath12k_qmi_free_target_mem_chunk(struct ath12k_base *ab)
 {
 	struct ath12k_hw_group *ag = ab->ag;
-	struct target_mem_chunk *chunk;
 	int i, mlo_idx;
 
 	for (i = 0, mlo_idx = 0; i < ab->qmi.mem_seg_count; i++) {
-		chunk = &ab->qmi.target_mem[i];
-
-		if (chunk->type == MLO_GLOBAL_MEM_REGION_TYPE) {
+		if (ab->qmi.target_mem[i].type == MLO_GLOBAL_MEM_REGION_TYPE) {
 			ath12k_qmi_free_mlo_mem_chunk(ab,
-						      chunk,
+						      &ab->qmi.target_mem[i],
 						      mlo_idx++);
 		} else {
 			if (test_bit(ATH12K_FLAG_FIXED_MEM_REGION, &ab->dev_flags) &&
-			    chunk->v.ioaddr) {
-				iounmap(chunk->v.ioaddr);
-				chunk->v.ioaddr = NULL;
+			    ab->qmi.target_mem[i].v.ioaddr) {
+				iounmap(ab->qmi.target_mem[i].v.ioaddr);
+				ab->qmi.target_mem[i].v.ioaddr = NULL;
 			} else {
-				if (!chunk->v.addr)
+				if (!ab->qmi.target_mem[i].v.addr)
 					continue;
 				dma_free_coherent(ab->dev,
-						  chunk->total_size,
-						  chunk->vaddr_unaligned,
-						  chunk->paddr_unaligned);
-				chunk->vaddr_unaligned = NULL;
-				chunk->v.addr = NULL;
+						  ab->qmi.target_mem[i].prev_size,
+						  ab->qmi.target_mem[i].v.addr,
+						  ab->qmi.target_mem[i].paddr);
+				ab->qmi.target_mem[i].v.addr = NULL;
 			}
-
-			chunk->paddr = 0;
-			chunk->paddr_unaligned = 0;
-			chunk->size = 0;
-			chunk->total_size = 0;
 		}
 	}
 
@@ -2653,10 +2544,6 @@ static void ath12k_qmi_free_target_mem_chunk(struct ath12k_base *ab)
 static int ath12k_qmi_alloc_chunk(struct ath12k_base *ab,
 				  struct target_mem_chunk *chunk)
 {
-	dma_addr_t paddr;
-	size_t size;
-	void *vaddr;
-
 	/* Firmware reloads in recovery/resume.
 	 * In such cases, no need to allocate memory for FW again.
 	 */
@@ -2666,56 +2553,29 @@ static int ath12k_qmi_alloc_chunk(struct ath12k_base *ab,
 			goto this_chunk_done;
 
 		/* cannot reuse the existing chunk */
-		dma_free_coherent(ab->dev, chunk->total_size,
-				  chunk->vaddr_unaligned, chunk->paddr_unaligned);
+		dma_free_coherent(ab->dev, chunk->prev_size,
+				  chunk->v.addr, chunk->paddr);
 		chunk->v.addr = NULL;
-		chunk->vaddr_unaligned = NULL;
-		chunk->paddr_unaligned = 0;
-		chunk->total_size = 0;
 	}
 
-	/*
-	 * Each unaligned chunk costs the firmware extra TLB entries when
-	 * mapping it, and too many unaligned chunks exhaust the TLB and
-	 * crash the firmware, so align the base to 64 KB. The DMA
-	 * allocator only guarantees page alignment, but a natural
-	 * allocation is often already 64 KB aligned. Try the exact size
-	 * first and keep it when it happens to be aligned; only fall back
-	 * to over-allocating and rounding up when it is not.
-	 */
-	size = chunk->size;
-	vaddr = dma_alloc_coherent(ab->dev, size, &paddr,
-				   GFP_KERNEL | __GFP_NOWARN);
-	if (vaddr && !IS_ALIGNED(paddr, SZ_64K)) {
-		dma_free_coherent(ab->dev, size, vaddr, paddr);
-
-		size = chunk->size + SZ_64K - PAGE_SIZE;
-		vaddr = dma_alloc_coherent(ab->dev, size, &paddr,
+	chunk->v.addr = dma_alloc_coherent(ab->dev,
+					   chunk->size,
+					   &chunk->paddr,
 					   GFP_KERNEL | __GFP_NOWARN);
-	}
-
-	if (!vaddr) {
-		if (chunk->size > ab->hw_params->qmi_max_chunk_size) {
+	if (!chunk->v.addr) {
+		if (chunk->size > ATH12K_QMI_MAX_CHUNK_SIZE) {
 			ab->qmi.target_mem_delayed = true;
 			ath12k_warn(ab,
-				    "qmi dma allocation failed (%zu B type %u), will try later with small size\n",
-				    size,
+				    "qmi dma allocation failed (%d B type %u), will try later with small size\n",
+				    chunk->size,
 				    chunk->type);
 			ath12k_qmi_free_target_mem_chunk(ab);
 			return -EAGAIN;
 		}
-		ath12k_warn(ab, "memory allocation failure for %u size: %zu\n",
-			    chunk->type, size);
+		ath12k_warn(ab, "memory allocation failure for %u size: %d\n",
+			    chunk->type, chunk->size);
 		return -ENOMEM;
 	}
-
-	chunk->vaddr_unaligned = vaddr;
-	chunk->paddr_unaligned = paddr;
-	chunk->total_size = size;
-
-	chunk->paddr = ALIGN(paddr, SZ_64K);
-	chunk->v.addr = (u8 *)vaddr + (chunk->paddr - paddr);
-
 	chunk->prev_type = chunk->type;
 	chunk->prev_size = chunk->size;
 this_chunk_done:
@@ -2750,7 +2610,6 @@ static int ath12k_qmi_alloc_target_mem_chunk(struct ath12k_base *ab)
 		case M3_DUMP_REGION_TYPE:
 		case PAGEABLE_MEM_REGION_TYPE:
 		case CALDB_MEM_REGION_TYPE:
-		case LPASS_SHARED_V01_REGION_TYPE:
 			ret = ath12k_qmi_alloc_chunk(ab, chunk);
 			if (ret)
 				goto err;
@@ -2759,7 +2618,7 @@ static int ath12k_qmi_alloc_target_mem_chunk(struct ath12k_base *ab)
 			mlo_size += chunk->size;
 			if (ag->mlo_mem.mlo_mem_size &&
 			    mlo_size > ag->mlo_mem.mlo_mem_size) {
-				ath12k_err(ab, "QMI MLO memory allocation failure, requested size %d is more than allocated size %d\n",
+				ath12k_err(ab, "QMI MLO memory allocation failure, requested size %d is more than allocated size %d",
 					   mlo_size, ag->mlo_mem.mlo_mem_size);
 				ret = -EINVAL;
 				goto err;
@@ -2768,7 +2627,7 @@ static int ath12k_qmi_alloc_target_mem_chunk(struct ath12k_base *ab)
 			mlo_chunk = &ag->mlo_mem.chunk[mlo_idx];
 			if (mlo_chunk->paddr) {
 				if (chunk->size != mlo_chunk->size) {
-					ath12k_err(ab, "QMI MLO chunk memory allocation failure for index %d, requested size %u is more than allocated size %u\n",
+					ath12k_err(ab, "QMI MLO chunk memory allocation failure for index %d, requested size %d is more than allocated size %d",
 						   mlo_idx, chunk->size, mlo_chunk->size);
 					ret = -EINVAL;
 					goto err;
@@ -2799,7 +2658,7 @@ static int ath12k_qmi_alloc_target_mem_chunk(struct ath12k_base *ab)
 	if (!ag->mlo_mem.mlo_mem_size) {
 		ag->mlo_mem.mlo_mem_size = mlo_size;
 	} else if (ag->mlo_mem.mlo_mem_size != mlo_size) {
-		ath12k_err(ab, "QMI MLO memory size error, expected size is %d but requested size is %d\n",
+		ath12k_err(ab, "QMI MLO memory size error, expected size is %d but requested size is %d",
 			   ag->mlo_mem.mlo_mem_size, mlo_size);
 		ret = -EINVAL;
 		goto err;
@@ -2959,7 +2818,7 @@ int ath12k_qmi_request_target_cap(struct ath12k_base *ab)
 	}
 
 	if (resp.resp.result != QMI_RESULT_SUCCESS_V01) {
-		ath12k_warn(ab, "qmi targetcap req failed, result: %u, err: %u\n",
+		ath12k_warn(ab, "qmi targetcap req failed, result: %d, err: %d\n",
 			    resp.resp.result, resp.resp.error);
 		ret = -EINVAL;
 		goto out;
@@ -3011,7 +2870,7 @@ int ath12k_qmi_request_target_cap(struct ath12k_base *ab)
 		    ab->qmi.target.chip_id, ab->qmi.target.chip_family,
 		    ab->qmi.target.board_id, ab->qmi.target.soc_id);
 
-	ath12k_info(ab, "fw_version 0x%x fw_build_timestamp %s fw_build_id %s\n",
+	ath12k_info(ab, "fw_version 0x%x fw_build_timestamp %s fw_build_id %s",
 		    ab->qmi.target.fw_version,
 		    ab->qmi.target.fw_build_timestamp,
 		    ab->qmi.target.fw_build_id);
@@ -3019,10 +2878,6 @@ int ath12k_qmi_request_target_cap(struct ath12k_base *ab)
 	r = ath12k_core_check_smbios(ab);
 	if (r)
 		ath12k_dbg(ab, ATH12K_DBG_QMI, "SMBIOS bdf variant name not set.\n");
-
-	r = ath12k_core_check_dt(ab);
-	if (r)
-		ath12k_dbg(ab, ATH12K_DBG_QMI, "DT bdf variant name not set.\n");
 
 	r = ath12k_acpi_start(ab);
 	if (r)
@@ -3047,7 +2902,7 @@ static int ath12k_qmi_load_file_target_mem(struct ath12k_base *ab,
 	int ret = 0;
 	u32 remaining = len;
 
-	req = kzalloc_obj(*req);
+	req = kzalloc(sizeof(*req), GFP_KERNEL);
 	if (!req)
 		return -ENOMEM;
 
@@ -3085,7 +2940,7 @@ static int ath12k_qmi_load_file_target_mem(struct ath12k_base *ab,
 		if (ret < 0)
 			goto out;
 
-		ath12k_dbg(ab, ATH12K_DBG_QMI, "qmi bdf download req fixed addr type %u\n",
+		ath12k_dbg(ab, ATH12K_DBG_QMI, "qmi bdf download req fixed addr type %d\n",
 			   type);
 
 		ret = qmi_send_request(&ab->qmi.handle, NULL, &txn,
@@ -3102,7 +2957,7 @@ static int ath12k_qmi_load_file_target_mem(struct ath12k_base *ab,
 			goto out;
 
 		if (resp.resp.result != QMI_RESULT_SUCCESS_V01) {
-			ath12k_warn(ab, "qmi BDF download failed, result: %u, err: %u\n",
+			ath12k_warn(ab, "qmi BDF download failed, result: %d, err: %d\n",
 				    resp.resp.result, resp.resp.error);
 			ret = -EINVAL;
 			goto out;
@@ -3115,7 +2970,7 @@ static int ath12k_qmi_load_file_target_mem(struct ath12k_base *ab,
 			temp += req->data_len;
 			req->seg_id++;
 			ath12k_dbg(ab, ATH12K_DBG_QMI,
-				   "qmi bdf download request remaining %u\n",
+				   "qmi bdf download request remaining %i\n",
 				   remaining);
 		}
 	}
@@ -3206,7 +3061,7 @@ out_qmi_cal:
 			release_firmware(fw_entry);
 		return ret;
 	default:
-		ath12k_warn(ab, "unknown file type for load %d\n", type);
+		ath12k_warn(ab, "unknown file type for load %d", type);
 		goto out;
 	}
 
@@ -3318,7 +3173,7 @@ int ath12k_qmi_wlanfw_m3_info_send(struct ath12k_base *ab)
 	if (ab->hw_params->fw.m3_loader == ath12k_m3_fw_loader_driver) {
 		ret = ath12k_qmi_m3_load(ab);
 		if (ret) {
-			ath12k_err(ab, "failed to load m3 firmware: %d\n", ret);
+			ath12k_err(ab, "failed to load m3 firmware: %d", ret);
 			return ret;
 		}
 		req.addr = m3_mem->paddr;
@@ -3348,132 +3203,7 @@ int ath12k_qmi_wlanfw_m3_info_send(struct ath12k_base *ab)
 	}
 
 	if (resp.resp.result != QMI_RESULT_SUCCESS_V01) {
-		ath12k_warn(ab, "qmi M3 info request failed, result: %u, err: %u\n",
-			    resp.resp.result, resp.resp.error);
-		ret = -EINVAL;
-		goto out;
-	}
-out:
-	return ret;
-}
-
-static void ath12k_qmi_aux_uc_free(struct ath12k_base *ab)
-{
-	struct m3_mem_region *aux_uc_mem = &ab->qmi.aux_uc_mem;
-
-	if (!aux_uc_mem->vaddr)
-		return;
-
-	dma_free_coherent(ab->dev, aux_uc_mem->total_size,
-			  aux_uc_mem->vaddr, aux_uc_mem->paddr);
-	aux_uc_mem->vaddr = NULL;
-	aux_uc_mem->total_size = 0;
-	aux_uc_mem->size = 0;
-}
-
-static int ath12k_qmi_aux_uc_load(struct ath12k_base *ab)
-{
-	struct m3_mem_region *aux_uc_mem = &ab->qmi.aux_uc_mem;
-	const struct firmware *fw = NULL;
-	const void *aux_uc_data;
-	char path[100];
-	size_t aux_uc_len;
-	int ret;
-
-	if (ab->fw.aux_uc_data && ab->fw.aux_uc_len > 0) {
-		/* firmware-N.bin had a aux_uc firmware file so use that */
-		aux_uc_data = ab->fw.aux_uc_data;
-		aux_uc_len = ab->fw.aux_uc_len;
-	} else {
-		/*
-		 * No aux_uc file in firmware-N.bin so try to request old
-		 * separate aux_ucode.bin.
-		 */
-		fw = ath12k_core_firmware_request(ab, ATH12K_AUX_UC_FILE);
-		if (IS_ERR(fw)) {
-			ret = PTR_ERR(fw);
-			ath12k_core_create_firmware_path(ab, ATH12K_AUX_UC_FILE,
-							 path, sizeof(path));
-			ath12k_err(ab, "failed to load %s: %d\n", path, ret);
-			return ret;
-		}
-
-		aux_uc_data = fw->data;
-		aux_uc_len = fw->size;
-	}
-
-	/* In recovery/resume cases, AUX_UC buffer is not freed, try to reuse that */
-	if (aux_uc_mem->vaddr) {
-		if (aux_uc_mem->total_size >= aux_uc_len)
-			goto copy;
-
-		/* Old buffer is too small, free and reallocate */
-		ath12k_qmi_aux_uc_free(ab);
-	}
-
-	aux_uc_mem->vaddr = dma_alloc_coherent(ab->dev, aux_uc_len,
-					       &aux_uc_mem->paddr, GFP_KERNEL);
-	if (!aux_uc_mem->vaddr) {
-		ret = -ENOMEM;
-		goto out;
-	}
-
-	aux_uc_mem->total_size = aux_uc_len;
-
-copy:
-	memcpy(aux_uc_mem->vaddr, aux_uc_data, aux_uc_len);
-	aux_uc_mem->size = aux_uc_len;
-
-	ret = 0;
-
-out:
-	release_firmware(fw);
-
-	return ret;
-}
-
-static noinline_for_stack
-int ath12k_qmi_wlanfw_aux_uc_info_send(struct ath12k_base *ab)
-{
-	struct m3_mem_region *aux_uc_mem = &ab->qmi.aux_uc_mem;
-	struct qmi_wlanfw_aux_uc_info_req_msg_v01 req = {};
-	struct qmi_wlanfw_aux_uc_info_resp_msg_v01 resp = {};
-	struct qmi_txn txn;
-	int ret = 0;
-
-	ret = ath12k_qmi_aux_uc_load(ab);
-	if (ret) {
-		ath12k_err(ab, "failed to load aux_uc firmware: %d\n", ret);
-		return ret;
-	}
-
-	req.addr = aux_uc_mem->paddr;
-	req.size = aux_uc_mem->size;
-
-	ret = qmi_txn_init(&ab->qmi.handle, &txn,
-			   qmi_wlanfw_aux_uc_info_resp_msg_v01_ei, &resp);
-	if (ret < 0)
-		goto out;
-
-	ret = qmi_send_request(&ab->qmi.handle, NULL, &txn,
-			       QMI_WLANFW_AUX_UC_INFO_REQ_V01,
-			       QMI_WLANFW_AUX_UC_INFO_REQ_MSG_V01_MAX_MSG_LEN,
-			       qmi_wlanfw_aux_uc_info_req_msg_v01_ei, &req);
-	if (ret < 0) {
-		qmi_txn_cancel(&txn);
-		ath12k_warn(ab, "qmi failed to send AUX_UC information request, err = %d\n",
-			    ret);
-		goto out;
-	}
-
-	ret = qmi_txn_wait(&txn, msecs_to_jiffies(ATH12K_QMI_WLANFW_TIMEOUT_MS));
-	if (ret < 0) {
-		ath12k_warn(ab, "qmi failed AUX_UC information request %d\n", ret);
-		goto out;
-	}
-
-	if (resp.resp.result != QMI_RESULT_SUCCESS_V01) {
-		ath12k_warn(ab, "qmi AUX_UC info request failed, result: %u, err: %u\n",
+		ath12k_warn(ab, "qmi M3 info request failed, result: %d, err: %d\n",
 			    resp.resp.result, resp.resp.error);
 		ret = -EINVAL;
 		goto out;
@@ -3483,7 +3213,7 @@ out:
 }
 
 static int ath12k_qmi_wlanfw_mode_send(struct ath12k_base *ab,
-				       enum ath12k_qmi_firmware_mode mode)
+				       u32 mode)
 {
 	struct qmi_wlanfw_wlan_mode_req_msg_v01 req = {};
 	struct qmi_wlanfw_wlan_mode_resp_msg_v01 resp = {};
@@ -3505,24 +3235,24 @@ static int ath12k_qmi_wlanfw_mode_send(struct ath12k_base *ab,
 			       qmi_wlanfw_wlan_mode_req_msg_v01_ei, &req);
 	if (ret < 0) {
 		qmi_txn_cancel(&txn);
-		ath12k_warn(ab, "qmi failed to send mode request, mode: %u, err = %d\n",
+		ath12k_warn(ab, "qmi failed to send mode request, mode: %d, err = %d\n",
 			    mode, ret);
 		goto out;
 	}
 
 	ret = qmi_txn_wait(&txn, msecs_to_jiffies(ATH12K_QMI_WLANFW_TIMEOUT_MS));
 	if (ret < 0) {
-		if (mode == ATH12K_QMI_FIRMWARE_MODE_OFF && ret == -ENETRESET) {
+		if (mode == ATH12K_FIRMWARE_MODE_OFF && ret == -ENETRESET) {
 			ath12k_warn(ab, "WLFW service is dis-connected\n");
 			return 0;
 		}
-		ath12k_warn(ab, "qmi failed set mode request, mode: %u, err = %d\n",
+		ath12k_warn(ab, "qmi failed set mode request, mode: %d, err = %d\n",
 			    mode, ret);
 		goto out;
 	}
 
 	if (resp.resp.result != QMI_RESULT_SUCCESS_V01) {
-		ath12k_warn(ab, "Mode request failed, mode: %u, result: %u err: %u\n",
+		ath12k_warn(ab, "Mode request failed, mode: %d, result: %d err: %d\n",
 			    mode, resp.resp.result, resp.resp.error);
 		ret = -EINVAL;
 		goto out;
@@ -3544,7 +3274,7 @@ static int ath12k_qmi_wlanfw_wlan_cfg_send(struct ath12k_base *ab)
 	ce_cfg	= (struct ce_pipe_config *)ab->qmi.ce_cfg.tgt_ce;
 	svc_cfg	= (struct service_to_pipe *)ab->qmi.ce_cfg.svc_to_ce_map;
 
-	req = kzalloc_obj(*req);
+	req = kzalloc(sizeof(*req), GFP_KERNEL);
 	if (!req)
 		return -ENOMEM;
 
@@ -3615,7 +3345,7 @@ static int ath12k_qmi_wlanfw_wlan_cfg_send(struct ath12k_base *ab)
 	}
 
 	if (resp.resp.result != QMI_RESULT_SUCCESS_V01) {
-		ath12k_warn(ab, "qmi wlan config request failed, result: %u, err: %u\n",
+		ath12k_warn(ab, "qmi wlan config request failed, result: %d, err: %d\n",
 			    resp.resp.result, resp.resp.error);
 		ret = -EINVAL;
 		goto out;
@@ -3659,7 +3389,7 @@ static int ath12k_qmi_wlanfw_wlan_ini_send(struct ath12k_base *ab)
 	}
 
 	if (resp.resp.result != QMI_RESULT_SUCCESS_V01) {
-		ath12k_warn(ab, "QMI wlan ini response failure: %u %u\n",
+		ath12k_warn(ab, "QMI wlan ini response failure: %d %d\n",
 			    resp.resp.result, resp.resp.error);
 		ret = -EINVAL;
 		goto out;
@@ -3675,7 +3405,7 @@ void ath12k_qmi_firmware_stop(struct ath12k_base *ab)
 
 	clear_bit(ATH12K_FLAG_QMI_FW_READY_COMPLETE, &ab->dev_flags);
 
-	ret = ath12k_qmi_wlanfw_mode_send(ab, ATH12K_QMI_FIRMWARE_MODE_OFF);
+	ret = ath12k_qmi_wlanfw_mode_send(ab, ATH12K_FIRMWARE_MODE_OFF);
 	if (ret < 0) {
 		ath12k_warn(ab, "qmi failed to send wlan mode off\n");
 		return;
@@ -3683,7 +3413,7 @@ void ath12k_qmi_firmware_stop(struct ath12k_base *ab)
 }
 
 int ath12k_qmi_firmware_start(struct ath12k_base *ab,
-			      enum ath12k_qmi_firmware_mode mode)
+			      u32 mode)
 {
 	int ret;
 
@@ -3715,7 +3445,7 @@ ath12k_qmi_driver_event_post(struct ath12k_qmi *qmi,
 {
 	struct ath12k_qmi_driver_event *event;
 
-	event = kzalloc_obj(*event, GFP_ATOMIC);
+	event = kzalloc(sizeof(*event), GFP_ATOMIC);
 	if (!event)
 		return -ENOMEM;
 
@@ -3742,7 +3472,7 @@ void ath12k_qmi_trigger_host_cap(struct ath12k_base *ab)
 
 	spin_unlock(&qmi->event_lock);
 
-	ath12k_dbg(ab, ATH12K_DBG_QMI, "trigger host cap for device id %u\n",
+	ath12k_dbg(ab, ATH12K_DBG_QMI, "trigger host cap for device id %d\n",
 		   ab->device_id);
 
 	ath12k_qmi_driver_event_post(qmi, ATH12K_QMI_EVENT_HOST_CAP, NULL);
@@ -3846,7 +3576,6 @@ static noinline_for_stack
 int ath12k_qmi_event_load_bdf(struct ath12k_qmi *qmi)
 {
 	struct ath12k_base *ab = qmi->ab;
-	const struct ath12k_hw_params *hw_params = ab->hw_params;
 	int ret;
 
 	ret = ath12k_qmi_request_target_cap(ab);
@@ -3867,7 +3596,7 @@ int ath12k_qmi_event_load_bdf(struct ath12k_qmi *qmi)
 		return ret;
 	}
 
-	if (hw_params->download_calib) {
+	if (ab->hw_params->download_calib) {
 		ret = ath12k_qmi_load_bdf_qmi(ab, ATH12K_QMI_BDF_TYPE_CALIBRATION);
 		if (ret < 0)
 			ath12k_warn(ab, "qmi failed to load calibrated data :%d\n", ret);
@@ -3877,14 +3606,6 @@ int ath12k_qmi_event_load_bdf(struct ath12k_qmi *qmi)
 	if (ret < 0) {
 		ath12k_warn(ab, "qmi failed to send m3 info req:%d\n", ret);
 		return ret;
-	}
-
-	if (hw_params->fw.download_aux_ucode) {
-		ret = ath12k_qmi_wlanfw_aux_uc_info_send(ab);
-		if (ret < 0) {
-			ath12k_warn(ab, "qmi failed to send aux_uc info req: %d\n", ret);
-			return ret;
-		}
 	}
 
 	return ret;
@@ -3912,7 +3633,7 @@ static void ath12k_qmi_msg_mem_request_cb(struct qmi_handle *qmi_hdl,
 	for (i = 0; i < qmi->mem_seg_count ; i++) {
 		ab->qmi.target_mem[i].type = msg->mem_seg[i].type;
 		ab->qmi.target_mem[i].size = msg->mem_seg[i].size;
-		ath12k_dbg(ab, ATH12K_DBG_QMI, "qmi mem seg type %d size %u\n",
+		ath12k_dbg(ab, ATH12K_DBG_QMI, "qmi mem seg type %d size %d\n",
 			   msg->mem_seg[i].type, msg->mem_seg[i].size);
 	}
 
@@ -3998,7 +3719,7 @@ static int ath12k_qmi_ops_new_server(struct qmi_handle *qmi_hdl,
 	sq->sq_node = service->node;
 	sq->sq_port = service->port;
 
-	ret = kernel_connect(qmi_hdl->sock, (struct sockaddr_unsized *)sq,
+	ret = kernel_connect(qmi_hdl->sock, (struct sockaddr *)sq,
 			     sizeof(*sq), 0);
 	if (ret) {
 		ath12k_warn(ab, "qmi failed to connect to remote service %d\n", ret);
@@ -4033,7 +3754,7 @@ static int ath12k_qmi_event_host_cap(struct ath12k_qmi *qmi)
 
 	ret = ath12k_qmi_host_cap_send(ab);
 	if (ret < 0) {
-		ath12k_warn(ab, "failed to send qmi host cap for device id %u: %d\n",
+		ath12k_warn(ab, "failed to send qmi host cap for device id %d: %d\n",
 			    ab->device_id, ret);
 		return ret;
 	}
@@ -4103,7 +3824,7 @@ static void ath12k_qmi_driver_event_work(struct work_struct *work)
 				set_bit(ATH12K_FLAG_QMI_FAIL, &ab->dev_flags);
 			break;
 		default:
-			ath12k_warn(ab, "invalid event type: %d\n", event->type);
+			ath12k_warn(ab, "invalid event type: %d", event->type);
 			break;
 		}
 
@@ -4140,7 +3861,7 @@ int ath12k_qmi_init_service(struct ath12k_base *ab)
 	spin_lock_init(&ab->qmi.event_lock);
 	INIT_WORK(&ab->qmi.event_work, ath12k_qmi_driver_event_work);
 
-	ret = qmi_add_lookup(&ab->qmi.handle, QMI_SERVICE_ID_WLFW,
+	ret = qmi_add_lookup(&ab->qmi.handle, ATH12K_QMI_WLFW_SERVICE_ID_V01,
 			     ATH12K_QMI_WLFW_SERVICE_VERS_V01,
 			     ab->qmi.service_ins_id);
 	if (ret < 0) {
@@ -4160,7 +3881,6 @@ void ath12k_qmi_deinit_service(struct ath12k_base *ab)
 	qmi_handle_release(&ab->qmi.handle);
 	cancel_work_sync(&ab->qmi.event_work);
 	destroy_workqueue(ab->qmi.event_wq);
-	ath12k_qmi_aux_uc_free(ab);
 	ath12k_qmi_m3_free(ab);
 	ath12k_qmi_free_target_mem_chunk(ab);
 	ab->qmi.ab = NULL;
@@ -4169,6 +3889,5 @@ void ath12k_qmi_deinit_service(struct ath12k_base *ab)
 void ath12k_qmi_free_resource(struct ath12k_base *ab)
 {
 	ath12k_qmi_free_target_mem_chunk(ab);
-	ath12k_qmi_aux_uc_free(ab);
 	ath12k_qmi_m3_free(ab);
 }

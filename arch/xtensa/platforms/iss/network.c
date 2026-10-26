@@ -13,7 +13,6 @@
 
 #define pr_fmt(fmt) "%s: " fmt, __func__
 
-#include <linux/hex.h>
 #include <linux/list.h>
 #include <linux/irq.h>
 #include <linux/spinlock.h>

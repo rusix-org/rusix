@@ -484,13 +484,15 @@ static int disconnect(struct wiphy *wiphy, struct net_device *dev,
 static int wilc_wfi_cfg_allocate_wpa_entry(struct wilc_priv *priv, u8 idx)
 {
 	if (!priv->wilc_gtk[idx]) {
-		priv->wilc_gtk[idx] = kzalloc_obj(*priv->wilc_gtk[idx]);
+		priv->wilc_gtk[idx] = kzalloc(sizeof(*priv->wilc_gtk[idx]),
+					      GFP_KERNEL);
 		if (!priv->wilc_gtk[idx])
 			return -ENOMEM;
 	}
 
 	if (!priv->wilc_ptk[idx]) {
-		priv->wilc_ptk[idx] = kzalloc_obj(*priv->wilc_ptk[idx]);
+		priv->wilc_ptk[idx] = kzalloc(sizeof(*priv->wilc_ptk[idx]),
+					      GFP_KERNEL);
 		if (!priv->wilc_ptk[idx])
 			return -ENOMEM;
 	}
@@ -502,7 +504,8 @@ static int wilc_wfi_cfg_allocate_wpa_igtk_entry(struct wilc_priv *priv, u8 idx)
 {
 	idx -= 4;
 	if (!priv->wilc_igtk[idx]) {
-		priv->wilc_igtk[idx] = kzalloc_obj(*priv->wilc_igtk[idx]);
+		priv->wilc_igtk[idx] = kzalloc(sizeof(*priv->wilc_igtk[idx]),
+					       GFP_KERNEL);
 		if (!priv->wilc_igtk[idx])
 			return -ENOMEM;
 	}
@@ -534,20 +537,17 @@ static int wilc_wfi_cfg_copy_wpa_info(struct wilc_wfi_key *key_info,
 	return 0;
 }
 
-static int add_key(struct wiphy *wiphy, struct wireless_dev *wdev, int link_id,
-		   u8 key_index,
-		   enum nl80211_key_type type,
-		   const u8 *mac_addr,
+static int add_key(struct wiphy *wiphy, struct net_device *netdev, int link_id,
+		   u8 key_index, bool pairwise, const u8 *mac_addr,
 		   struct key_params *params)
 
 {
-	bool pairwise = type == NL80211_KEYTYPE_PAIRWISE;
 	int ret = 0, keylen = params->key_len;
 	const u8 *rx_mic = NULL;
 	const u8 *tx_mic = NULL;
 	u8 mode = WILC_FW_SEC_NO;
 	u8 op_mode;
-	struct wilc_vif *vif = netdev_priv(wdev->netdev);
+	struct wilc_vif *vif = netdev_priv(netdev);
 	struct wilc_priv *priv = &vif->priv;
 	struct wilc_wfi_key *key;
 
@@ -635,20 +635,19 @@ static int add_key(struct wiphy *wiphy, struct wireless_dev *wdev, int link_id,
 		break;
 
 	default:
-		netdev_err(wdev->netdev, "%s: Unsupported cipher\n", __func__);
+		netdev_err(netdev, "%s: Unsupported cipher\n", __func__);
 		ret = -ENOTSUPP;
 	}
 
 	return ret;
 }
 
-static int del_key(struct wiphy *wiphy, struct wireless_dev *wdev, int link_id,
+static int del_key(struct wiphy *wiphy, struct net_device *netdev, int link_id,
 		   u8 key_index,
-		   enum nl80211_key_type type,
+		   bool pairwise,
 		   const u8 *mac_addr)
 {
-	bool pairwise = type == NL80211_KEYTYPE_PAIRWISE;
-	struct wilc_vif *vif = netdev_priv(wdev->netdev);
+	struct wilc_vif *vif = netdev_priv(netdev);
 	struct wilc_priv *priv = &vif->priv;
 
 	if (!pairwise && (key_index == 4 || key_index == 5)) {
@@ -684,13 +683,12 @@ static int del_key(struct wiphy *wiphy, struct wireless_dev *wdev, int link_id,
 	return 0;
 }
 
-static int get_key(struct wiphy *wiphy, struct wireless_dev *wdev, int link_id,
-		   u8 key_index, enum nl80211_key_type type,
-		   const u8 *mac_addr, void *cookie,
+static int get_key(struct wiphy *wiphy, struct net_device *netdev, int link_id,
+		   u8 key_index, bool pairwise, const u8 *mac_addr,
+		   void *cookie,
 		   void (*callback)(void *cookie, struct key_params *))
 {
-	bool pairwise = type == NL80211_KEYTYPE_PAIRWISE;
-	struct wilc_vif *vif = netdev_priv(wdev->netdev);
+	struct wilc_vif *vif = netdev_priv(netdev);
 	struct wilc_priv *priv = &vif->priv;
 	struct  key_params key_params;
 
@@ -730,18 +728,17 @@ static int set_default_key(struct wiphy *wiphy, struct net_device *netdev,
 	return 0;
 }
 
-static int set_default_mgmt_key(struct wiphy *wiphy, struct wireless_dev *wdev,
+static int set_default_mgmt_key(struct wiphy *wiphy, struct net_device *netdev,
 				int link_id, u8 key_index)
 {
-	struct wilc_vif *vif = netdev_priv(wdev->netdev);
+	struct wilc_vif *vif = netdev_priv(netdev);
 
 	return wilc_set_default_mgmt_key_index(vif, key_index);
 }
 
-static int get_station(struct wiphy *wiphy, struct wireless_dev *wdev,
+static int get_station(struct wiphy *wiphy, struct net_device *dev,
 		       const u8 *mac, struct station_info *sinfo)
 {
-	struct net_device *dev = wdev->netdev;
 	struct wilc_vif *vif = netdev_priv(dev);
 	struct wilc_priv *priv = &vif->priv;
 	struct wilc *wilc = vif->wilc;
@@ -1112,19 +1109,23 @@ static void wilc_wfi_remain_on_channel_expired(struct wilc_vif *vif, u64 cookie)
 static int remain_on_channel(struct wiphy *wiphy,
 			     struct wireless_dev *wdev,
 			     struct ieee80211_channel *chan,
-			     unsigned int duration, u64 cookie,
-			     const u8 *rx_addr)
+			     unsigned int duration, u64 *cookie)
 {
 	int ret = 0;
 	struct wilc_vif *vif = netdev_priv(wdev->netdev);
 	struct wilc_priv *priv = &vif->priv;
+	u64 id;
 
 	if (wdev->iftype == NL80211_IFTYPE_AP) {
 		netdev_dbg(vif->ndev, "Required while in AP mode\n");
 		return ret;
 	}
 
-	ret = wilc_remain_on_channel(vif, cookie, chan->hw_value,
+	id = ++priv->inc_roc_cookie;
+	if (id == 0)
+		id = ++priv->inc_roc_cookie;
+
+	ret = wilc_remain_on_channel(vif, id, chan->hw_value,
 				     wilc_wfi_remain_on_channel_expired);
 	if (ret)
 		return ret;
@@ -1132,11 +1133,12 @@ static int remain_on_channel(struct wiphy *wiphy,
 	vif->wilc->op_ch = chan->hw_value;
 
 	priv->remain_on_ch_params.listen_ch = chan;
-	priv->remain_on_ch_params.listen_cookie = cookie;
+	priv->remain_on_ch_params.listen_cookie = id;
+	*cookie = id;
 	priv->p2p_listen_state = true;
 	priv->remain_on_ch_params.listen_duration = duration;
 
-	cfg80211_ready_on_channel(wdev, cookie, chan, duration, GFP_KERNEL);
+	cfg80211_ready_on_channel(wdev, *cookie, chan, duration, GFP_KERNEL);
 	mod_timer(&vif->hif_drv->remain_on_ch_timer,
 		  jiffies + msecs_to_jiffies(duration + 1000));
 
@@ -1159,7 +1161,7 @@ static int cancel_remain_on_channel(struct wiphy *wiphy,
 static int mgmt_tx(struct wiphy *wiphy,
 		   struct wireless_dev *wdev,
 		   struct cfg80211_mgmt_tx_params *params,
-		   u64 cookie)
+		   u64 *cookie)
 {
 	struct ieee80211_channel *chan = params->chan;
 	unsigned int wait = params->wait;
@@ -1176,13 +1178,14 @@ static int mgmt_tx(struct wiphy *wiphy,
 	const u8 *vendor_ie;
 	int ret = 0;
 
-	priv->tx_cookie = cookie;
+	*cookie = get_random_u32();
+	priv->tx_cookie = *cookie;
 	mgmt = (const struct ieee80211_mgmt *)buf;
 
 	if (!ieee80211_is_mgmt(mgmt->frame_control))
 		goto out;
 
-	mgmt_tx = kmalloc_obj(*mgmt_tx);
+	mgmt_tx = kmalloc(sizeof(*mgmt_tx), GFP_KERNEL);
 	if (!mgmt_tx) {
 		ret = -ENOMEM;
 		goto out;
@@ -1326,10 +1329,10 @@ static int set_cqm_rssi_config(struct wiphy *wiphy, struct net_device *dev,
 	return 0;
 }
 
-static int dump_station(struct wiphy *wiphy, struct wireless_dev *wdev,
+static int dump_station(struct wiphy *wiphy, struct net_device *dev,
 			int idx, u8 *mac, struct station_info *sinfo)
 {
-	struct wilc_vif *vif = netdev_priv(wdev->netdev);
+	struct wilc_vif *vif = netdev_priv(dev);
 	int ret;
 
 	if (idx != 0)
@@ -1464,11 +1467,11 @@ static int stop_ap(struct wiphy *wiphy, struct net_device *dev,
 	return ret;
 }
 
-static int add_station(struct wiphy *wiphy, struct wireless_dev *wdev,
+static int add_station(struct wiphy *wiphy, struct net_device *dev,
 		       const u8 *mac, struct station_parameters *params)
 {
 	int ret = 0;
-	struct wilc_vif *vif = netdev_priv(wdev->netdev);
+	struct wilc_vif *vif = netdev_priv(dev);
 	struct wilc_priv *priv = &vif->priv;
 
 	if (vif->iftype == WILC_AP_MODE || vif->iftype == WILC_GO_MODE) {
@@ -1477,18 +1480,18 @@ static int add_station(struct wiphy *wiphy, struct wireless_dev *wdev,
 
 		ret = wilc_add_station(vif, mac, params);
 		if (ret)
-			netdev_err(wdev->netdev, "Host add station fail\n");
+			netdev_err(dev, "Host add station fail\n");
 	}
 
 	return ret;
 }
 
-static int del_station(struct wiphy *wiphy, struct wireless_dev *wdev,
+static int del_station(struct wiphy *wiphy, struct net_device *dev,
 		       struct station_del_parameters *params)
 {
 	const u8 *mac = params->mac;
 	int ret = 0;
-	struct wilc_vif *vif = netdev_priv(wdev->netdev);
+	struct wilc_vif *vif = netdev_priv(dev);
 	struct wilc_priv *priv = &vif->priv;
 	struct sta_info *info;
 
@@ -1502,19 +1505,20 @@ static int del_station(struct wiphy *wiphy, struct wireless_dev *wdev,
 
 	ret = wilc_del_station(vif, mac);
 	if (ret)
-		netdev_err(wdev->netdev, "Host delete station fail\n");
+		netdev_err(dev, "Host delete station fail\n");
 	return ret;
 }
 
-static int change_station(struct wiphy *wiphy, struct wireless_dev *wdev,
+static int change_station(struct wiphy *wiphy, struct net_device *dev,
 			  const u8 *mac, struct station_parameters *params)
 {
 	int ret = 0;
-	struct wilc_vif *vif = netdev_priv(wdev->netdev);
+	struct wilc_vif *vif = netdev_priv(dev);
+
 	if (vif->iftype == WILC_AP_MODE || vif->iftype == WILC_GO_MODE) {
 		ret = wilc_edit_station(vif, mac, params);
 		if (ret)
-			netdev_err(wdev->netdev, "Host edit station fail\n");
+			netdev_err(dev, "Host edit station fail\n");
 	}
 	return ret;
 }

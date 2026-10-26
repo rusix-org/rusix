@@ -16,19 +16,17 @@
 static void ccu_gate_disable(struct clk_hw *hw)
 {
 	struct ccu_mix *mix = hw_to_ccu_mix(hw);
-	struct ccu_gate_config *gate = &mix->gate;
-	u32 val = gate->inverted ? gate->mask : 0;
 
-	ccu_update(&mix->common, ctrl, gate->mask, val);
+	ccu_update(&mix->common, ctrl, mix->gate.mask, 0);
 }
 
 static int ccu_gate_enable(struct clk_hw *hw)
 {
 	struct ccu_mix *mix = hw_to_ccu_mix(hw);
 	struct ccu_gate_config *gate = &mix->gate;
-	u32 val = gate->inverted ? 0 : gate->mask;
 
-	ccu_update(&mix->common, ctrl, gate->mask, val);
+	ccu_update(&mix->common, ctrl, gate->mask, gate->mask);
+
 	return 0;
 }
 
@@ -36,10 +34,8 @@ static int ccu_gate_is_enabled(struct clk_hw *hw)
 {
 	struct ccu_mix *mix = hw_to_ccu_mix(hw);
 	struct ccu_gate_config *gate = &mix->gate;
-	u32 tmp = ccu_read(&mix->common, ctrl) & gate->mask;
-	u32 val = gate->inverted ? 0 : gate->mask;
 
-	return !!(tmp == val);
+	return (ccu_read(&mix->common, ctrl) & gate->mask) == gate->mask;
 }
 
 static unsigned long ccu_factor_recalc_rate(struct clk_hw *hw,

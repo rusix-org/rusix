@@ -735,7 +735,11 @@ static int aq_set_rxsc(struct aq_nic_s *nic, const u32 rxsc_idx)
 	sc_record.valid = 1;
 	sc_record.fresh = 1;
 
-	return aq_mss_set_ingress_sc_record(hw, &sc_record, hw_sc_idx);
+	ret = aq_mss_set_ingress_sc_record(hw, &sc_record, hw_sc_idx);
+	if (ret)
+		return ret;
+
+	return ret;
 }
 
 static int aq_mdo_add_rxsc(struct macsec_context *ctx)
@@ -1458,7 +1462,7 @@ int aq_macsec_init(struct aq_nic_s *nic)
 	if (!(caps_lo & BIT(CAPS_LO_MACSEC)))
 		return 0;
 
-	nic->macsec_cfg = kzalloc_obj(*cfg);
+	nic->macsec_cfg = kzalloc(sizeof(*cfg), GFP_KERNEL);
 	if (!nic->macsec_cfg)
 		return -ENOMEM;
 

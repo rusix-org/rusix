@@ -828,7 +828,7 @@ static int sierra_startup(struct usb_serial *serial)
 {
 	struct sierra_intf_private *intfdata;
 
-	intfdata = kzalloc_obj(*intfdata);
+	intfdata = kzalloc(sizeof(*intfdata), GFP_KERNEL);
 	if (!intfdata)
 		return -ENOMEM;
 
@@ -861,7 +861,7 @@ static int sierra_port_probe(struct usb_serial_port *port)
 	const struct sierra_iface_list *himemory_list;
 	u8 ifnum;
 
-	portdata = kzalloc_obj(*portdata);
+	portdata = kzalloc(sizeof(*portdata), GFP_KERNEL);
 	if (!portdata)
 		return -ENOMEM;
 
@@ -972,13 +972,12 @@ static int sierra_submit_delayed_urbs(struct usb_serial_port *port)
 			intfdata->in_flight--;
 			usb_unanchor_urb(urb);
 			kfree(urb->transfer_buffer);
+			usb_free_urb(urb);
 
 			spin_lock(&portdata->lock);
 			portdata->outstanding_urbs--;
 			spin_unlock(&portdata->lock);
 		}
-
-		usb_put_urb(urb);
 	}
 
 	if (ec)

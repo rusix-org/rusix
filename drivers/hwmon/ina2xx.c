@@ -1,7 +1,22 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Driver for Texas Instruments INA219, INA226 and register-layout compatible
- * current/power monitor chips with I2C Interface
+ * Driver for Texas Instruments INA219, INA226 power monitor chips
+ *
+ * INA219:
+ * Zero Drift Bi-Directional Current/Power Monitor with I2C Interface
+ * Datasheet: https://www.ti.com/product/ina219
+ *
+ * INA220:
+ * Bi-Directional Current/Power Monitor with I2C Interface
+ * Datasheet: https://www.ti.com/product/ina220
+ *
+ * INA226:
+ * Bi-Directional Current/Power Monitor with I2C Interface
+ * Datasheet: https://www.ti.com/product/ina226
+ *
+ * INA230:
+ * Bi-directional Current/Power Monitor with I2C Interface
+ * Datasheet: https://www.ti.com/product/ina230
  *
  * Copyright (C) 2012 Lothar Felten <lothar.felten@gmail.com>
  * Thanks to Jan Volkering
@@ -36,6 +51,7 @@
 /* INA226 register definitions */
 #define INA226_MASK_ENABLE		0x06
 #define INA226_ALERT_LIMIT		0x07
+#define INA226_DIE_ID			0xFF
 
 /* SY24655 register definitions */
 #define SY24655_EIN				0x0A
@@ -124,7 +140,6 @@ static const struct regmap_config ina2xx_regmap_config = {
 enum ina2xx_ids {
 	ina219,
 	ina226,
-	ina232,
 	ina234,
 	ina260,
 	sy24655
@@ -209,20 +224,6 @@ static const struct ina2xx_config ina2xx_config[] = {
 		.has_ishunt = false,
 		.has_power_average = false,
 		.current_shift = 4,
-		.has_update_interval = true,
-	},
-	[ina232] = {
-		.config_default = INA226_CONFIG_DEFAULT,
-		.calibration_value = 2048,
-		.shunt_div = 400,
-		.shunt_voltage_shift = 0,
-		.bus_voltage_shift = 0,
-		.bus_voltage_lsb = 1600,
-		.power_lsb_factor = 32,
-		.has_alerts = true,
-		.has_ishunt = false,
-		.has_power_average = false,
-		.current_shift = 0,
 		.has_update_interval = true,
 	},
 	[ina260] = {
@@ -998,11 +999,11 @@ static ssize_t shunt_resistor_store(struct device *dev,
 	if (status < 0)
 		return status;
 
-	scoped_guard(hwmon_lock, dev) {
-		status = ina2xx_set_shunt(data, val);
-		if (status < 0)
-			return status;
-	}
+	hwmon_lock(dev);
+	status = ina2xx_set_shunt(data, val);
+	hwmon_unlock(dev);
+	if (status < 0)
+		return status;
 	return count;
 }
 
@@ -1133,15 +1134,14 @@ static int ina2xx_probe(struct i2c_client *client)
 }
 
 static const struct i2c_device_id ina2xx_id[] = {
-	{ .name = "ina219", .driver_data = ina219 },
-	{ .name = "ina220", .driver_data = ina219 },
-	{ .name = "ina226", .driver_data = ina226 },
-	{ .name = "ina230", .driver_data = ina226 },
-	{ .name = "ina231", .driver_data = ina226 },
-	{ .name = "ina232", .driver_data = ina232 },
-	{ .name = "ina234", .driver_data = ina234 },
-	{ .name = "ina260", .driver_data = ina260 },
-	{ .name = "sy24655", .driver_data = sy24655 },
+	{ "ina219", ina219 },
+	{ "ina220", ina219 },
+	{ "ina226", ina226 },
+	{ "ina230", ina226 },
+	{ "ina231", ina226 },
+	{ "ina234", ina234 },
+	{ "ina260", ina260 },
+	{ "sy24655", sy24655 },
 	{ }
 };
 MODULE_DEVICE_TABLE(i2c, ina2xx_id);
@@ -1170,10 +1170,6 @@ static const struct of_device_id __maybe_unused ina2xx_of_match[] = {
 	{
 		.compatible = "ti,ina231",
 		.data = (void *)ina226
-	},
-	{
-		.compatible = "ti,ina232",
-		.data = (void *)ina232
 	},
 	{
 		.compatible = "ti,ina234",

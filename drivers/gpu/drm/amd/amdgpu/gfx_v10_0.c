@@ -4041,8 +4041,8 @@ static int gfx_v10_0_ring_test_ring(struct amdgpu_ring *ring)
 	WREG32(scratch, 0xCAFEDEAD);
 	r = amdgpu_ring_alloc(ring, 3);
 	if (r) {
-		drm_err(adev_to_drm(adev), "cp failed to lock ring %d (%d).\n",
-			ring->idx, r);
+		DRM_ERROR("amdgpu: cp failed to lock ring %d (%d).\n",
+			  ring->idx, r);
 		return r;
 	}
 
@@ -4071,15 +4071,16 @@ static int gfx_v10_0_ring_test_ring(struct amdgpu_ring *ring)
 static int gfx_v10_0_ring_test_ib(struct amdgpu_ring *ring, long timeout)
 {
 	struct amdgpu_device *adev = ring->adev;
-	struct amdgpu_job *job;
-	struct amdgpu_ib *ib;
+	struct amdgpu_ib ib;
 	struct dma_fence *f = NULL;
 	unsigned int index;
 	uint64_t gpu_addr;
 	uint32_t *cpu_ptr;
 	long r;
 
-	r = amdgpu_wb_get(adev, &index);
+	memset(&ib, 0, sizeof(ib));
+
+	r = amdgpu_device_wb_get(adev, &index);
 	if (r)
 		return r;
 
@@ -4087,28 +4088,22 @@ static int gfx_v10_0_ring_test_ib(struct amdgpu_ring *ring, long timeout)
 	adev->wb.wb[index] = cpu_to_le32(0xCAFEDEAD);
 	cpu_ptr = &adev->wb.wb[index];
 
-	r = amdgpu_job_alloc_with_ib(ring->adev, NULL, NULL, 20,
-				     AMDGPU_IB_POOL_DIRECT,
-				     AMDGPU_KERNEL_JOB_ID_GFX_RING_TEST,
-				     &job);
+	r = amdgpu_ib_get(adev, NULL, 20, AMDGPU_IB_POOL_DIRECT, &ib);
 	if (r) {
-		drm_err(adev_to_drm(adev), "failed to get ib (%ld).\n", r);
+		DRM_ERROR("amdgpu: failed to get ib (%ld).\n", r);
 		goto err1;
 	}
-	ib = &job->ibs[0];
 
-	ib->ptr[0] = PACKET3(PACKET3_WRITE_DATA, 3);
-	ib->ptr[1] = WRITE_DATA_DST_SEL(5) | WR_CONFIRM;
-	ib->ptr[2] = lower_32_bits(gpu_addr);
-	ib->ptr[3] = upper_32_bits(gpu_addr);
-	ib->ptr[4] = 0xDEADBEEF;
-	ib->length_dw = 5;
+	ib.ptr[0] = PACKET3(PACKET3_WRITE_DATA, 3);
+	ib.ptr[1] = WRITE_DATA_DST_SEL(5) | WR_CONFIRM;
+	ib.ptr[2] = lower_32_bits(gpu_addr);
+	ib.ptr[3] = upper_32_bits(gpu_addr);
+	ib.ptr[4] = 0xDEADBEEF;
+	ib.length_dw = 5;
 
-	r = amdgpu_job_submit_direct(job, ring, &f);
-	if (r) {
-		amdgpu_job_free(job);
+	r = amdgpu_ib_schedule(ring, 1, &ib, NULL, &f);
+	if (r)
 		goto err2;
-	}
 
 	r = dma_fence_wait_timeout(f, false, timeout);
 	if (r == 0) {
@@ -4123,9 +4118,10 @@ static int gfx_v10_0_ring_test_ib(struct amdgpu_ring *ring, long timeout)
 	else
 		r = -EINVAL;
 err2:
+	amdgpu_ib_free(&ib, NULL);
 	dma_fence_put(f);
 err1:
-	amdgpu_wb_free(adev, index);
+	amdgpu_device_wb_free(adev, index);
 	return r;
 }
 
@@ -4174,7 +4170,7 @@ static void gfx_v10_0_check_fw_write_wait(struct amdgpu_device *adev)
 	}
 
 	if (!adev->gfx.cp_fw_write_wait)
-		drm_warn_once(adev_to_drm(adev), "CP firmware version too old, please update!");
+		DRM_WARN_ONCE("CP firmware version too old, please update!");
 }
 
 static bool gfx_v10_0_navi10_gfxoff_should_enable(struct amdgpu_device *adev)
@@ -4579,12 +4575,11 @@ static const struct amdgpu_gfx_funcs gfx_v10_0_gfx_funcs = {
 	.select_me_pipe_q = &gfx_v10_0_select_me_pipe_q,
 	.init_spm_golden = &gfx_v10_0_init_spm_golden_registers,
 	.update_perfmon_mgcg = &gfx_v10_0_update_perfmon_mgcg,
-	.get_hdp_flush_mask = &amdgpu_gfx_get_hdp_flush_mask,
 };
 
 static void gfx_v10_0_gpu_early_init(struct amdgpu_device *adev)
 {
-	u32 gb_addr_config = 0;
+	u32 gb_addr_config;
 
 	switch (amdgpu_ip_version(adev, GC_HWIP, 0)) {
 	case IP_VERSION(10, 1, 10):
@@ -4624,9 +4619,8 @@ static void gfx_v10_0_gpu_early_init(struct amdgpu_device *adev)
 		gb_addr_config = CYAN_SKILLFISH_GB_ADDR_CONFIG_GOLDEN;
 		break;
 	default:
-		dev_warn(adev->dev, "Unsupported GC version 0x%08x\n",
-			 amdgpu_ip_version(adev, GC_HWIP, 0));
-		return;
+		BUG();
+		break;
 	}
 
 	adev->gfx.config.gb_addr_config = gb_addr_config;
@@ -4720,7 +4714,7 @@ static void gfx_v10_0_alloc_ip_dump(struct amdgpu_device *adev)
 	uint32_t *ptr;
 	uint32_t inst;
 
-	ptr = kzalloc_objs(*ptr, reg_count);
+	ptr = kcalloc(reg_count, sizeof(uint32_t), GFP_KERNEL);
 	if (!ptr) {
 		DRM_ERROR("Failed to allocate memory for GFX IP Dump\n");
 		adev->gfx.ip_dump_core = NULL;
@@ -4733,7 +4727,7 @@ static void gfx_v10_0_alloc_ip_dump(struct amdgpu_device *adev)
 	inst = adev->gfx.mec.num_mec * adev->gfx.mec.num_pipe_per_mec *
 		adev->gfx.mec.num_queue_per_pipe;
 
-	ptr = kzalloc_objs(*ptr, reg_count * inst);
+	ptr = kcalloc(reg_count * inst, sizeof(uint32_t), GFP_KERNEL);
 	if (!ptr) {
 		DRM_ERROR("Failed to allocate memory for Compute Queues IP Dump\n");
 		adev->gfx.ip_dump_compute_queues = NULL;
@@ -4746,7 +4740,7 @@ static void gfx_v10_0_alloc_ip_dump(struct amdgpu_device *adev)
 	inst = adev->gfx.me.num_me * adev->gfx.me.num_pipe_per_me *
 		adev->gfx.me.num_queue_per_pipe;
 
-	ptr = kzalloc_objs(*ptr, reg_count * inst);
+	ptr = kcalloc(reg_count * inst, sizeof(uint32_t), GFP_KERNEL);
 	if (!ptr) {
 		DRM_ERROR("Failed to allocate memory for GFX Queues IP Dump\n");
 		adev->gfx.ip_dump_gfx_queues = NULL;
@@ -4993,11 +4987,11 @@ static int gfx_v10_0_sw_init(struct amdgpu_ip_block *ip_block)
 
 	gfx_v10_0_gpu_early_init(adev);
 
+	gfx_v10_0_alloc_ip_dump(adev);
+
 	r = amdgpu_gfx_sysfs_init(adev);
 	if (r)
 		return r;
-
-	gfx_v10_0_alloc_ip_dump(adev);
 
 	return 0;
 }
@@ -5368,7 +5362,7 @@ static void gfx_v10_0_constants_init(struct amdgpu_device *adev)
 	/* XXX SH_MEM regs */
 	/* where to put LDS, scratch, GPUVM in FSA64 space */
 	mutex_lock(&adev->srbm_mutex);
-	for_each_vmid_and_zero(i, adev, AMDGPU_GFXHUB(0)) {
+	for (i = 0; i < adev->vm_manager.id_mgr[AMDGPU_GFXHUB(0)].num_ids; i++) {
 		nv_grbm_select(adev, 0, 0, 0, i);
 		/* CP and shaders */
 		WREG32_SOC15(GC, 0, mmSH_MEM_CONFIG, DEFAULT_SH_MEM_CONFIG);
@@ -6393,7 +6387,7 @@ static int gfx_v10_0_cp_gfx_start(struct amdgpu_device *adev)
 	ring = &adev->gfx.gfx_ring[0];
 	r = amdgpu_ring_alloc(ring, gfx_v10_0_get_csb_size(adev) + 4);
 	if (r) {
-		drm_err(adev_to_drm(adev), "cp failed to lock ring (%d).\n", r);
+		DRM_ERROR("amdgpu: cp failed to lock ring (%d).\n", r);
 		return r;
 	}
 
@@ -6443,7 +6437,7 @@ static int gfx_v10_0_cp_gfx_start(struct amdgpu_device *adev)
 		ring = &adev->gfx.gfx_ring[1];
 		r = amdgpu_ring_alloc(ring, 2);
 		if (r) {
-			drm_err(adev_to_drm(adev), "cp failed to lock ring (%d).\n", r);
+			DRM_ERROR("amdgpu: cp failed to lock ring (%d).\n", r);
 			return r;
 		}
 
@@ -7025,11 +7019,6 @@ static int gfx_v10_0_compute_mqd_init(struct amdgpu_device *adev, void *m,
 	tmp = REG_SET_FIELD(tmp, CP_HQD_IB_CONTROL, MIN_IB_AVAIL_SIZE, 3);
 	mqd->cp_hqd_ib_control = tmp;
 
-	tmp = REG_SET_FIELD(0, CP_HQD_QUANTUM, QUANTUM_EN, 1);
-	tmp = REG_SET_FIELD(tmp, CP_HQD_QUANTUM, QUANTUM_SCALE, 1);
-	tmp = REG_SET_FIELD(tmp, CP_HQD_QUANTUM, QUANTUM_DURATION, 1);
-	mqd->cp_hqd_quantum = tmp;
-
 	/* set static priority for a compute queue/ring */
 	mqd->cp_hqd_pipe_priority = prop->hqd_pipe_priority;
 	mqd->cp_hqd_queue_priority = prop->hqd_queue_priority;
@@ -7544,24 +7533,6 @@ static int gfx_v10_0_hw_init(struct amdgpu_ip_block *ip_block)
 	if (amdgpu_ip_version(adev, GC_HWIP, 0) >= IP_VERSION(10, 3, 0) && !amdgpu_sriov_vf(adev))
 		gfx_v10_3_set_power_brake_sequence(adev);
 
-	r = amdgpu_irq_get(adev, &adev->gfx.priv_reg_irq, 0);
-	if (r)
-		return r;
-
-	r = amdgpu_irq_get(adev, &adev->gfx.priv_inst_irq, 0);
-	if (r)
-		goto err_priv_inst;
-
-	r = amdgpu_irq_get(adev, &adev->gfx.bad_op_irq, 0);
-	if (r)
-		goto err_bad_op;
-
-	return 0;
-
-err_bad_op:
-	amdgpu_irq_put(adev, &adev->gfx.priv_inst_irq, 0);
-err_priv_inst:
-	amdgpu_irq_put(adev, &adev->gfx.priv_reg_irq, 0);
 	return r;
 }
 
@@ -7571,9 +7542,9 @@ static int gfx_v10_0_hw_fini(struct amdgpu_ip_block *ip_block)
 
 	cancel_delayed_work_sync(&adev->gfx.idle_work);
 
-	amdgpu_irq_put(adev, &adev->gfx.bad_op_irq, 0);
-	amdgpu_irq_put(adev, &adev->gfx.priv_inst_irq, 0);
 	amdgpu_irq_put(adev, &adev->gfx.priv_reg_irq, 0);
+	amdgpu_irq_put(adev, &adev->gfx.priv_inst_irq, 0);
+	amdgpu_irq_put(adev, &adev->gfx.bad_op_irq, 0);
 
 	/* WA added for Vangogh asic fixing the SMU suspend failure
 	 * It needs to set power gating again during gfxoff control
@@ -7613,6 +7584,17 @@ static int gfx_v10_0_suspend(struct amdgpu_ip_block *ip_block)
 static int gfx_v10_0_resume(struct amdgpu_ip_block *ip_block)
 {
 	return gfx_v10_0_hw_init(ip_block);
+}
+
+static bool gfx_v10_0_is_idle(struct amdgpu_ip_block *ip_block)
+{
+	struct amdgpu_device *adev = ip_block->adev;
+
+	if (REG_GET_FIELD(RREG32_SOC15(GC, 0, mmGRBM_STATUS),
+				GRBM_STATUS, GUI_ACTIVE))
+		return false;
+	else
+		return true;
 }
 
 static int gfx_v10_0_wait_for_idle(struct amdgpu_ip_block *ip_block)
@@ -7855,9 +7837,27 @@ static int gfx_v10_0_early_init(struct amdgpu_ip_block *ip_block)
 	/* init rlcg reg access ctrl */
 	gfx_v10_0_init_rlcg_reg_access_ctrl(adev);
 
-	amdgpu_init_rlc_reg_funcs(adev);
-
 	return gfx_v10_0_init_microcode(adev);
+}
+
+static int gfx_v10_0_late_init(struct amdgpu_ip_block *ip_block)
+{
+	struct amdgpu_device *adev = ip_block->adev;
+	int r;
+
+	r = amdgpu_irq_get(adev, &adev->gfx.priv_reg_irq, 0);
+	if (r)
+		return r;
+
+	r = amdgpu_irq_get(adev, &adev->gfx.priv_inst_irq, 0);
+	if (r)
+		return r;
+
+	r = amdgpu_irq_get(adev, &adev->gfx.bad_op_irq, 0);
+	if (r)
+		return r;
+
+	return 0;
 }
 
 static bool gfx_v10_0_is_rlc_enabled(struct amdgpu_device *adev)
@@ -8327,8 +8327,7 @@ static void gfx_v10_0_update_spm_vmid_internal(struct amdgpu_device *adev,
 	}
 }
 
-static void gfx_v10_0_update_spm_vmid(struct amdgpu_device *adev, int xcc_id,
-		struct amdgpu_ring *ring, unsigned int vmid)
+static void gfx_v10_0_update_spm_vmid(struct amdgpu_device *adev, struct amdgpu_ring *ring, unsigned int vmid)
 {
 	amdgpu_gfx_off_ctrl(adev, false);
 
@@ -8596,16 +8595,13 @@ static u64 gfx_v10_0_ring_get_rptr_compute(struct amdgpu_ring *ring)
 
 static u64 gfx_v10_0_ring_get_wptr_compute(struct amdgpu_ring *ring)
 {
-	struct amdgpu_device *adev = ring->adev;
 	u64 wptr;
 
 	/* XXX check if swapping is necessary on BE */
-	if (ring->use_doorbell) {
+	if (ring->use_doorbell)
 		wptr = atomic64_read((atomic64_t *)ring->wptr_cpu_addr);
-	} else {
-		dev_warn_once(adev->dev, "%s requires doorbell!\n", __func__);
-		wptr = 0;
-	}
+	else
+		BUG();
 	return wptr;
 }
 
@@ -8618,7 +8614,7 @@ static void gfx_v10_0_ring_set_wptr_compute(struct amdgpu_ring *ring)
 			     ring->wptr);
 		WDOORBELL64(ring->doorbell_index, ring->wptr);
 	} else {
-		dev_warn_once(adev->dev, "%s requires doorbell!\n", __func__);
+		BUG(); /* only DOORBELL method supported on gfx10 now */
 	}
 }
 
@@ -8626,13 +8622,25 @@ static void gfx_v10_0_ring_emit_hdp_flush(struct amdgpu_ring *ring)
 {
 	struct amdgpu_device *adev = ring->adev;
 	u32 ref_and_mask, reg_mem_engine;
+	const struct nbio_hdp_flush_reg *nbio_hf_reg = adev->nbio.hdp_flush_reg;
 
-	if (!adev->gfx.funcs->get_hdp_flush_mask) {
-		dev_err(adev->dev, "%s: gfx hdp flush is not supported.\n", __func__);
-		return;
+	if (ring->funcs->type == AMDGPU_RING_TYPE_COMPUTE) {
+		switch (ring->me) {
+		case 1:
+			ref_and_mask = nbio_hf_reg->ref_and_mask_cp2 << ring->pipe;
+			break;
+		case 2:
+			ref_and_mask = nbio_hf_reg->ref_and_mask_cp6 << ring->pipe;
+			break;
+		default:
+			return;
+		}
+		reg_mem_engine = 0;
+	} else {
+		ref_and_mask = nbio_hf_reg->ref_and_mask_cp0 << ring->pipe;
+		reg_mem_engine = 1; /* pfp */
 	}
 
-	adev->gfx.funcs->get_hdp_flush_mask(ring, &ref_and_mask, &reg_mem_engine);
 	gfx_v10_0_wait_reg_mem(ring, reg_mem_engine, 0, 1,
 			       adev->nbio.funcs->get_hdp_flush_req_offset(adev),
 			       adev->nbio.funcs->get_hdp_flush_done_offset(adev),
@@ -9376,7 +9384,7 @@ static void gfx_v10_0_handle_priv_fault(struct amdgpu_device *adev,
 		}
 		break;
 	default:
-		break;
+		BUG();
 	}
 }
 
@@ -9393,7 +9401,7 @@ static int gfx_v10_0_bad_op_irq(struct amdgpu_device *adev,
 				struct amdgpu_irq_src *source,
 				struct amdgpu_iv_entry *entry)
 {
-	DRM_ERROR("Illegal opcode in command stream\n");
+	DRM_ERROR("Illegal opcode in command stream \n");
 	gfx_v10_0_handle_priv_fault(adev, entry);
 	return 0;
 }
@@ -9446,7 +9454,7 @@ static int gfx_v10_0_kiq_set_interrupt_state(struct amdgpu_device *adev,
 		}
 		break;
 	default:
-		/* kiq only support GENERIC2_INT now */
+		BUG(); /* kiq only support GENERIC2_INT now */
 		break;
 	}
 	return 0;
@@ -9808,12 +9816,14 @@ static void gfx_v10_0_ring_end_use(struct amdgpu_ring *ring)
 static const struct amd_ip_funcs gfx_v10_0_ip_funcs = {
 	.name = "gfx_v10_0",
 	.early_init = gfx_v10_0_early_init,
+	.late_init = gfx_v10_0_late_init,
 	.sw_init = gfx_v10_0_sw_init,
 	.sw_fini = gfx_v10_0_sw_fini,
 	.hw_init = gfx_v10_0_hw_init,
 	.hw_fini = gfx_v10_0_hw_fini,
 	.suspend = gfx_v10_0_suspend,
 	.resume = gfx_v10_0_resume,
+	.is_idle = gfx_v10_0_is_idle,
 	.wait_for_idle = gfx_v10_0_wait_for_idle,
 	.soft_reset = gfx_v10_0_soft_reset,
 	.set_clockgating_state = gfx_v10_0_set_clockgating_state,
@@ -9948,7 +9958,6 @@ static const struct amdgpu_ring_funcs gfx_v10_0_ring_funcs_kiq = {
 	.emit_wreg = gfx_v10_0_ring_emit_wreg,
 	.emit_reg_wait = gfx_v10_0_ring_emit_reg_wait,
 	.emit_reg_write_reg_wait = gfx_v10_0_ring_emit_reg_write_reg_wait,
-	.emit_hdp_flush = gfx_v10_0_ring_emit_hdp_flush,
 };
 
 static void gfx_v10_0_set_ring_funcs(struct amdgpu_device *adev)
@@ -10120,7 +10129,7 @@ static int gfx_v10_0_get_cu_info(struct amdgpu_device *adev,
 	if (!adev || !cu_info)
 		return -EINVAL;
 
-	amdgpu_gfx_parse_disable_cu(adev, disable_masks, 4, 2);
+	amdgpu_gfx_parse_disable_cu(disable_masks, 4, 2);
 
 	mutex_lock(&adev->grbm_idx_mutex);
 	for (i = 0; i < adev->gfx.config.max_shader_engines; i++) {

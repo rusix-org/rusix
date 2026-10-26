@@ -138,32 +138,14 @@ static void io_init_poll_iocb(struct io_poll *poll, __poll_t events)
 	init_waitqueue_func_entry(&poll->wait, io_poll_wake);
 }
 
-static void io_poll_remove_waitq(struct io_poll *poll)
-{
-	/*
-	 * If the waitqueue is being freed early but someone is already holds
-	 * ownership over it, we have to tear down the request as best we can.
-	 * That means immediately removing the request from its waitqueue and
-	 * preventing all further accesses to the waitqueue via the request.
-	 */
-	list_del_init(&poll->wait.entry);
-
-	/*
-	 * Careful: this *must* be the last step, since as soon as req->head is
-	 * NULL'ed out, the request can be completed and freed, since
-	 * io_poll_remove_entry() will no longer need to take the waitqueue
-	 * lock.
-	 */
-	smp_store_release(&poll->head, NULL);
-}
-
 static inline void io_poll_remove_entry(struct io_poll *poll)
 {
 	struct wait_queue_head *head = smp_load_acquire(&poll->head);
 
 	if (head) {
 		spin_lock_irq(&head->lock);
-		io_poll_remove_waitq(poll);
+		list_del_init(&poll->wait.entry);
+		poll->head = NULL;
 		spin_unlock_irq(&head->lock);
 	}
 }
@@ -241,14 +223,12 @@ static inline void io_poll_execute(struct io_kiocb *req, int res,
  */
 static int io_poll_check_events(struct io_kiocb *req, io_tw_token_t tw)
 {
-	bool again;
 	int v;
 
 	if (unlikely(tw.cancel))
 		return -ECANCELED;
 
 	do {
-		again = false;
 		v = atomic_read(&req->poll_refs);
 
 		if (unlikely(v != 1)) {
@@ -280,10 +260,8 @@ static int io_poll_check_events(struct io_kiocb *req, io_tw_token_t tw)
 
 		/* the mask was stashed in __io_poll_execute */
 		if (!req->cqe.res) {
-			__poll_t events = req->apoll_events;
-			struct poll_table_struct pt = { ._key = events };
-
-			req->cqe.res = vfs_poll(req->file, &pt) & events;
+			struct poll_table_struct pt = { ._key = req->apoll_events };
+			req->cqe.res = vfs_poll(req->file, &pt) & req->apoll_events;
 			/*
 			 * We got woken with a mask, but someone else got to
 			 * it first. The above vfs_poll() doesn't add us back
@@ -292,7 +270,7 @@ static int io_poll_check_events(struct io_kiocb *req, io_tw_token_t tw)
 			 */
 			if (unlikely(!req->cqe.res)) {
 				/* Multishot armed need not reissue */
-				if (!(events & EPOLLONESHOT))
+				if (!(req->apoll_events & EPOLLONESHOT))
 					continue;
 				return IOU_POLL_REISSUE;
 			}
@@ -312,15 +290,9 @@ static int io_poll_check_events(struct io_kiocb *req, io_tw_token_t tw)
 		} else {
 			int ret;
 
-			/*
-			 * Multiple refs and HUP, ensure we loop once more. Drop
-			 * down to one ref now, so the next pass ends unless a
-			 * wake up came in.
-			 */
-			if ((req->cqe.res & (POLLHUP | POLLRDHUP)) && v != 1) {
-				atomic_sub(v - 1, &req->poll_refs);
-				again = true;
-			}
+			/* multiple refs and HUP, ensure we loop once more */
+			if ((req->cqe.res & (POLLHUP | POLLRDHUP)) && v != 1)
+				v--;
 
 			ret = io_poll_issue(req, tw);
 			if (ret == IOU_COMPLETE)
@@ -338,8 +310,7 @@ static int io_poll_check_events(struct io_kiocb *req, io_tw_token_t tw)
 		 * Release all references, retry if someone tried to restart
 		 * task_work while we were executing it.
 		 */
-		v &= IO_POLL_REF_MASK;
-	} while (again || atomic_cmpxchg(&req->poll_refs, v, 0) != v);
+	} while (atomic_sub_return(v, &req->poll_refs) & IO_POLL_REF_MASK);
 
 	io_napi_add(req);
 	return IOU_POLL_NO_ACTION;
@@ -403,7 +374,23 @@ static __cold int io_pollfree_wake(struct io_kiocb *req, struct io_poll *poll)
 	io_poll_mark_cancelled(req);
 	/* we have to kick tw in case it's not already */
 	io_poll_execute(req, 0, IOU_F_TWQ_IN_WAKE);
-	io_poll_remove_waitq(poll);
+
+	/*
+	 * If the waitqueue is being freed early but someone is already
+	 * holds ownership over it, we have to tear down the request as
+	 * best we can. That means immediately removing the request from
+	 * its waitqueue and preventing all further accesses to the
+	 * waitqueue via the request.
+	 */
+	list_del_init(&poll->wait.entry);
+
+	/*
+	 * Careful: this *must* be the last step, since as soon
+	 * as req->head is NULL'ed out, the request can be
+	 * completed and freed, since aio_poll_complete_work()
+	 * will no longer need to take the waitqueue lock.
+	 */
+	smp_store_release(&poll->head, NULL);
 	return 1;
 }
 
@@ -434,7 +421,8 @@ static int io_poll_wake(struct wait_queue_entry *wait, unsigned mode, int sync,
 
 		/* optional, saves extra locking for removal in tw handler */
 		if (mask && poll->events & EPOLLONESHOT) {
-			io_poll_remove_waitq(poll);
+			list_del_init(&poll->wait.entry);
+			poll->head = NULL;
 			if (wqe_is_double(wait))
 				req->flags &= ~REQ_F_DOUBLE_POLL;
 			else
@@ -497,7 +485,7 @@ static void __io_queue_proc(struct io_poll *poll, struct io_poll_table *pt,
 			return;
 		}
 
-		poll = kmalloc_obj(*poll, GFP_ATOMIC);
+		poll = kmalloc(sizeof(*poll), GFP_ATOMIC);
 		if (!poll) {
 			pt->error = -ENOMEM;
 			return;
@@ -626,18 +614,6 @@ static int __io_arm_poll_handler(struct io_kiocb *req,
 
 	io_poll_add_hash(req, issue_flags);
 
-	/*
-	 * Whoever tried to cancel the request while io-wq was running it has
-	 * flagged the work item. If it searched the hash table before the
-	 * request got there it found nothing, and it won't come back. Both
-	 * the search and the insertion are done with ->uring_lock held, and
-	 * the flag is set before the search. If the search came first,
-	 * the flag is visible by now.
-	 */
-	if (ipt->owning &&
-	    (atomic_read(&req->work.flags) & IO_WQ_WORK_CANCEL))
-		io_poll_mark_cancelled(req);
-
 	if (mask && (poll->events & EPOLLET) &&
 	    io_poll_can_finish_inline(req, ipt)) {
 		__io_poll_execute(req, mask, 0);
@@ -686,7 +662,7 @@ static struct async_poll *io_req_alloc_apoll(struct io_kiocb *req,
 		if (!(issue_flags & IO_URING_F_UNLOCKED))
 			apoll = io_cache_alloc(&ctx->apoll_cache, GFP_ATOMIC);
 		else
-			apoll = kmalloc_obj(*apoll, GFP_ATOMIC);
+			apoll = kmalloc(sizeof(*apoll), GFP_ATOMIC);
 		if (!apoll)
 			return NULL;
 		apoll->poll.retries = APOLL_MAX_RETRY;
@@ -926,15 +902,6 @@ int io_poll_add(struct io_kiocb *req, unsigned int issue_flags)
 	int ret;
 
 	ipt.pt._qproc = io_poll_queue_proc;
-
-	/*
-	 * A poll update or a spurious wake up arms the request again. Forget
-	 * the entries of the previous round like io_arm_apoll() does, a stale
-	 * second entry would be taken for a third wait queue.
-	 */
-	if (req_has_async_data(req))
-		io_req_async_data_free(req);
-	req->flags &= ~(REQ_F_SINGLE_POLL | REQ_F_DOUBLE_POLL);
 
 	ret = __io_arm_poll_handler(req, poll, &ipt, poll->events, issue_flags);
 	if (ret > 0) {

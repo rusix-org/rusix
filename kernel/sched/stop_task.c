@@ -27,15 +27,12 @@ wakeup_preempt_stop(struct rq *rq, struct task_struct *p, int flags)
 	/* we're never preempted */
 }
 
-static void set_next_task_stop(struct rq *rq, struct task_struct *stop, enum snt_e type)
+static void set_next_task_stop(struct rq *rq, struct task_struct *stop, bool first)
 {
-	if (type == SNT_REPICK)
-		return;
-
 	stop->se.exec_start = rq_clock_task(rq);
 }
 
-static struct task_struct *pick_task_stop(struct rq *rq, struct rq_flags *rf)
+static struct task_struct *pick_task_stop(struct rq *rq)
 {
 	if (!sched_stop_runnable(rq))
 		return NULL;
@@ -78,17 +75,14 @@ static void task_tick_stop(struct rq *rq, struct task_struct *curr, int queued)
 {
 }
 
-static void switching_to_stop(struct rq *rq, struct task_struct *p)
+static void switched_to_stop(struct rq *rq, struct task_struct *p)
 {
 	BUG(); /* its impossible to change to this class */
 }
 
 static void
-prio_changed_stop(struct rq *rq, struct task_struct *p, u64 oldprio)
+prio_changed_stop(struct rq *rq, struct task_struct *p, int oldprio)
 {
-	if (p->prio == oldprio)
-		return;
-
 	BUG(); /* how!?, what priority? */
 }
 
@@ -100,6 +94,7 @@ static void update_curr_stop(struct rq *rq)
  * Simple, special scheduling class for the per-CPU stop tasks:
  */
 DEFINE_SCHED_CLASS(stop) = {
+
 	.enqueue_task		= enqueue_task_stop,
 	.dequeue_task		= dequeue_task_stop,
 	.yield_task		= yield_task_stop,
@@ -117,6 +112,6 @@ DEFINE_SCHED_CLASS(stop) = {
 	.task_tick		= task_tick_stop,
 
 	.prio_changed		= prio_changed_stop,
-	.switching_to		= switching_to_stop,
+	.switched_to		= switched_to_stop,
 	.update_curr		= update_curr_stop,
 };

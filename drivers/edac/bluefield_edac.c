@@ -472,8 +472,8 @@ static void bluefield_edac_mc_remove(struct platform_device *pdev)
 }
 
 static const struct acpi_device_id bluefield_mc_acpi_ids[] = {
-	{ .id = "MLNXBF08" },
-	{ }
+	{"MLNXBF08", 0},
+	{}
 };
 
 MODULE_DEVICE_TABLE(acpi, bluefield_mc_acpi_ids);

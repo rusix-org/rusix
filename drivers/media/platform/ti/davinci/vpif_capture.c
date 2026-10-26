@@ -1335,7 +1335,8 @@ static int initialize_vpif(void)
 
 	/* Allocate memory for six channel objects */
 	for (i = 0; i < VPIF_CAPTURE_MAX_DEVICES; i++) {
-		vpif_obj.dev[i] = kzalloc_obj(*vpif_obj.dev[i]);
+		vpif_obj.dev[i] =
+		    kzalloc(sizeof(*vpif_obj.dev[i]), GFP_KERNEL);
 		/* If memory allocation fails, return error */
 		if (!vpif_obj.dev[i]) {
 			free_channel_objects_index = i;
@@ -1602,7 +1603,7 @@ err_cleanup:
 static int vpif_probe(struct platform_device *pdev)
 {
 	struct vpif_subdev_info *subdevdata;
-	struct i2c_adapter *i2c_adap = NULL;
+	struct i2c_adapter *i2c_adap;
 	int subdev_count;
 	int res_idx = 0;
 	int i, err;
@@ -1650,7 +1651,7 @@ static int vpif_probe(struct platform_device *pdev)
 	vpif_obj.config = pdev->dev.platform_data;
 
 	subdev_count = vpif_obj.config->subdev_count;
-	vpif_obj.sd = kzalloc_objs(*vpif_obj.sd, subdev_count);
+	vpif_obj.sd = kcalloc(subdev_count, sizeof(*vpif_obj.sd), GFP_KERNEL);
 	if (!vpif_obj.sd) {
 		err = -ENOMEM;
 		goto probe_subdev_out;
@@ -1692,12 +1693,9 @@ static int vpif_probe(struct platform_device *pdev)
 		}
 	}
 
-	i2c_put_adapter(i2c_adap);
-
 	return 0;
 
 probe_subdev_out:
-	i2c_put_adapter(i2c_adap);
 	v4l2_async_nf_cleanup(&vpif_obj.notifier);
 	/* free sub devices memory */
 	kfree(vpif_obj.sd);

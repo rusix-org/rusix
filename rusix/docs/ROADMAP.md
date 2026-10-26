@@ -13,7 +13,8 @@ baseline.
 ## Phase 1a — Working Rust storage component
 
 Transition deliberately to the accepted LTS baseline, inventory any newer Rust
-infrastructure, pin a container toolchain and establish CI. Implement complete
+infrastructure, pin a container toolchain and run the required gates locally
+under the [execution policy](../ci/README.md). Implement complete
 BRD behavior on x86_64, with paired C/Rust tests and ordinary Linux userspace
 performing verified ext4 I/O. Basic error, ownership and concurrency correctness
 are required. [PHASE1.md](PHASE1.md) lists the gates.

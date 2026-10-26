@@ -37,7 +37,6 @@
 #include <linux/in.h>
 #include <linux/ipv6.h>
 #include <linux/poll.h>
-#include <linux/uio.h>
 #include <net/sock.h>
 
 #include "rds.h"
@@ -486,36 +485,35 @@ out:
 }
 
 static int rds_getsockopt(struct socket *sock, int level, int optname,
-			  sockopt_t *opt)
+			  char __user *optval, int __user *optlen)
 {
 	struct rds_sock *rs = rds_sk_to_rs(sock->sk);
 	int ret = -ENOPROTOOPT, len;
 	int trans;
-	int val;
 
 	if (level != SOL_RDS)
 		goto out;
 
-	len = opt->optlen;
+	if (get_user(len, optlen)) {
+		ret = -EFAULT;
+		goto out;
+	}
 
 	switch (optname) {
 	case RDS_INFO_FIRST ... RDS_INFO_LAST:
-		ret = rds_info_getsockopt(sock, optname, opt);
+		ret = rds_info_getsockopt(sock, optname, optval,
+					  optlen);
 		break;
 
 	case RDS_RECVERR:
-		if (len < sizeof(int)) {
+		if (len < sizeof(int))
 			ret = -EINVAL;
-			break;
-		}
-		val = rs->rs_recverr;
-		if (copy_to_iter(&val, sizeof(int), &opt->iter_out) !=
-		    sizeof(int)) {
+		else
+		if (put_user(rs->rs_recverr, (int __user *) optval) ||
+		    put_user(sizeof(int), optlen))
 			ret = -EFAULT;
-		} else {
-			opt->optlen = sizeof(int);
+		else
 			ret = 0;
-		}
 		break;
 	case SO_RDS_TRANSPORT:
 		if (len < sizeof(int)) {
@@ -524,13 +522,11 @@ static int rds_getsockopt(struct socket *sock, int level, int optname,
 		}
 		trans = (rs->rs_transport ? rs->rs_transport->t_type :
 			 RDS_TRANS_NONE); /* unbound */
-		if (copy_to_iter(&trans, sizeof(int), &opt->iter_out) !=
-		    sizeof(int)) {
+		if (put_user(trans, (int __user *)optval) ||
+		    put_user(sizeof(int), optlen))
 			ret = -EFAULT;
-		} else {
-			opt->optlen = sizeof(int);
+		else
 			ret = 0;
-		}
 		break;
 	default:
 		break;
@@ -541,7 +537,7 @@ out:
 
 }
 
-static int rds_connect(struct socket *sock, struct sockaddr_unsized *uaddr,
+static int rds_connect(struct socket *sock, struct sockaddr *uaddr,
 		       int addr_len, int flags)
 {
 	struct sock *sk = sock->sk;
@@ -657,7 +653,7 @@ static const struct proto_ops rds_proto_ops = {
 	.listen =	sock_no_listen,
 	.shutdown =	sock_no_shutdown,
 	.setsockopt =	rds_setsockopt,
-	.getsockopt_iter =	rds_getsockopt,
+	.getsockopt =	rds_getsockopt,
 	.sendmsg =	rds_sendmsg,
 	.recvmsg =	rds_recvmsg,
 	.mmap =		sock_no_mmap,

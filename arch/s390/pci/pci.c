@@ -16,7 +16,8 @@
  *   Thomas Klein
  */
 
-#define pr_fmt(fmt) "zpci: " fmt
+#define KMSG_COMPONENT "zpci"
+#define pr_fmt(fmt) KMSG_COMPONENT ": " fmt
 
 #include <linux/kernel.h>
 #include <linux/slab.h>
@@ -266,7 +267,6 @@ static int zpci_cfg_store(struct zpci_dev *zdev, int offset, u32 val, u8 len)
 }
 
 resource_size_t pcibios_align_resource(void *data, const struct resource *res,
-				       const struct resource *empty_res,
 				       resource_size_t size,
 				       resource_size_t align)
 {
@@ -407,9 +407,7 @@ static int pci_read(struct pci_bus *bus, unsigned int devfn, int where,
 {
 	struct zpci_dev *zdev = zdev_from_bus(bus, devfn);
 
-	if (!zdev || zpci_cfg_load(zdev, where, val, size))
-		return PCIBIOS_DEVICE_NOT_FOUND;
-	return PCIBIOS_SUCCESSFUL;
+	return (zdev) ? zpci_cfg_load(zdev, where, val, size) : -ENODEV;
 }
 
 static int pci_write(struct pci_bus *bus, unsigned int devfn, int where,
@@ -417,9 +415,7 @@ static int pci_write(struct pci_bus *bus, unsigned int devfn, int where,
 {
 	struct zpci_dev *zdev = zdev_from_bus(bus, devfn);
 
-	if (!zdev || zpci_cfg_store(zdev, where, val, size))
-		return PCIBIOS_DEVICE_NOT_FOUND;
-	return PCIBIOS_SUCCESSFUL;
+	return (zdev) ? zpci_cfg_store(zdev, where, val, size) : -ENODEV;
 }
 
 static struct pci_ops pci_root_ops = {
@@ -524,7 +520,7 @@ static struct resource *__alloc_res(struct zpci_dev *zdev, unsigned long start,
 {
 	struct resource *r;
 
-	r = kzalloc_obj(*r);
+	r = kzalloc(sizeof(*r), GFP_KERNEL);
 	if (!r)
 		return NULL;
 
@@ -722,12 +718,6 @@ int zpci_reenable_device(struct zpci_dev *zdev)
 	if (rc)
 		return rc;
 
-	if (zdev->msi_nr_irqs > 0) {
-		rc = zpci_set_irq(zdev);
-		if (rc)
-			return rc;
-	}
-
 	rc = zpci_iommu_register_ioat(zdev, &status);
 	if (rc)
 		zpci_disable_device(zdev);
@@ -825,7 +815,7 @@ struct zpci_dev *zpci_create_device(u32 fid, u32 fh, enum zpci_state state)
 	struct zpci_dev *zdev;
 	int rc;
 
-	zdev = kzalloc_obj(*zdev);
+	zdev = kzalloc(sizeof(*zdev), GFP_KERNEL);
 	if (!zdev)
 		return ERR_PTR(-ENOMEM);
 
@@ -842,7 +832,6 @@ struct zpci_dev *zpci_create_device(u32 fid, u32 fh, enum zpci_state state)
 	mutex_init(&zdev->state_lock);
 	mutex_init(&zdev->fmb_lock);
 	mutex_init(&zdev->kzdev_lock);
-	mutex_init(&zdev->pending_errs_lock);
 
 	return zdev;
 
@@ -976,7 +965,6 @@ void zpci_device_reserved(struct zpci_dev *zdev)
 }
 
 void zpci_release_device(struct kref *kref)
-	__releases(&zpci_list_lock)
 {
 	struct zpci_dev *zdev = container_of(kref, struct zpci_dev, kref);
 
@@ -1067,15 +1055,14 @@ static int zpci_mem_init(void)
 {
 	BUILD_BUG_ON(!is_power_of_2(__alignof__(struct zpci_fmb)) ||
 		     __alignof__(struct zpci_fmb) < sizeof(struct zpci_fmb));
-	BUILD_BUG_ON((CONFIG_ILLEGAL_POINTER_VALUE + 0x10000 > ZPCI_IOMAP_ADDR_BASE) &&
-		     (CONFIG_ILLEGAL_POINTER_VALUE <= ZPCI_IOMAP_ADDR_MAX));
 
 	zdev_fmb_cache = kmem_cache_create("PCI_FMB_cache", sizeof(struct zpci_fmb),
 					   __alignof__(struct zpci_fmb), 0, NULL);
 	if (!zdev_fmb_cache)
 		goto error_fmb;
 
-	zpci_iomap_start = kzalloc_objs(*zpci_iomap_start, ZPCI_IOMAP_ENTRIES);
+	zpci_iomap_start = kcalloc(ZPCI_IOMAP_ENTRIES,
+				   sizeof(*zpci_iomap_start), GFP_KERNEL);
 	if (!zpci_iomap_start)
 		goto error_iomap;
 
@@ -1165,7 +1152,6 @@ static void zpci_add_devices(struct list_head *scan_list)
 
 int zpci_scan_devices(void)
 {
-	struct zpci_bus *zbus;
 	LIST_HEAD(scan_list);
 	int rc;
 
@@ -1174,8 +1160,7 @@ int zpci_scan_devices(void)
 		return rc;
 
 	zpci_add_devices(&scan_list);
-	zpci_bus_for_each(zbus)
-		zpci_bus_scan_bus(zbus);
+	zpci_bus_scan_busses();
 	return 0;
 }
 

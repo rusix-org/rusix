@@ -16,6 +16,7 @@
 #include <linux/interrupt.h>
 #include <linux/io.h>
 #include <linux/iopoll.h>
+#include <linux/mod_devicetable.h>
 #include <linux/module.h>
 #include <linux/platform_device.h>
 #include <linux/pm_runtime.h>
@@ -62,7 +63,7 @@
  * @adsmp_mask: ADC sampling period mask (see ADM3 register)
  * @adint_inten_mask: conversion end interrupt mask (see ADINT register)
  * @default_adcmp: default ADC cmp (see ADM3 register)
- * @max_channels: maximum number of channels
+ * @num_channels: number of supported channels
  * @adivc: specifies if ADVIC register is available
  */
 struct rzg2l_adc_hw_params {
@@ -70,7 +71,7 @@ struct rzg2l_adc_hw_params {
 	u16 adsmp_mask;
 	u16 adint_inten_mask;
 	u8 default_adcmp;
-	u8 max_channels;
+	u8 num_channels;
 	bool adivc;
 };
 
@@ -196,7 +197,7 @@ static int rzg2l_adc_conversion_setup(struct rzg2l_adc *adc, u8 ch)
 
 	/* Select analog input channel subjected to conversion. */
 	reg = rzg2l_adc_readl(adc, RZG2L_ADM(2));
-	reg &= ~GENMASK(hw_params->max_channels - 1, 0);
+	reg &= ~GENMASK(hw_params->num_channels - 1, 0);
 	reg |= BIT(ch);
 	rzg2l_adc_writel(adc, RZG2L_ADM(2), reg);
 
@@ -307,11 +308,11 @@ static irqreturn_t rzg2l_adc_isr(int irq, void *dev_id)
 		return IRQ_HANDLED;
 	}
 
-	intst = reg & GENMASK(hw_params->max_channels - 1, 0);
+	intst = reg & GENMASK(hw_params->num_channels - 1, 0);
 	if (!intst)
 		return IRQ_NONE;
 
-	for_each_set_bit(ch, &intst, hw_params->max_channels)
+	for_each_set_bit(ch, &intst, hw_params->num_channels)
 		adc->last_val[ch] = rzg2l_adc_readl(adc, RZG2L_ADCR(ch)) & RZG2L_ADCR_AD_MASK;
 
 	/* clear the channel interrupt */
@@ -341,12 +342,12 @@ static int rzg2l_adc_parse_properties(struct platform_device *pdev, struct rzg2l
 
 	num_channels = devm_iio_adc_device_alloc_chaninfo_se(&pdev->dev,
 						&rzg2l_adc_chan_template,
-						hw_params->max_channels - 1,
+						hw_params->num_channels - 1,
 						&chan_array);
 	if (num_channels < 0)
 		return num_channels;
 
-	if (num_channels > hw_params->max_channels)
+	if (num_channels > hw_params->num_channels)
 		return dev_err_probe(&pdev->dev, -EINVAL,
 				     "num of channel children out of range\n");
 
@@ -429,7 +430,7 @@ static int rzg2l_adc_probe(struct platform_device *pdev)
 	adc = iio_priv(indio_dev);
 
 	adc->hw_params = device_get_match_data(dev);
-	if (!adc->hw_params || adc->hw_params->max_channels > RZG2L_ADC_MAX_CHANNELS)
+	if (!adc->hw_params || adc->hw_params->num_channels > RZG2L_ADC_MAX_CHANNELS)
 		return -EINVAL;
 
 	ret = rzg2l_adc_parse_properties(pdev, adc);
@@ -484,7 +485,7 @@ static int rzg2l_adc_probe(struct platform_device *pdev)
 }
 
 static const struct rzg2l_adc_hw_params rzg2l_hw_params = {
-	.max_channels = 8,
+	.num_channels = 8,
 	.default_adcmp = 0xe,
 	.default_adsmp = { 0x578 },
 	.adsmp_mask = GENMASK(15, 0),
@@ -493,24 +494,15 @@ static const struct rzg2l_adc_hw_params rzg2l_hw_params = {
 };
 
 static const struct rzg2l_adc_hw_params rzg3s_hw_params = {
-	.max_channels = 9,
+	.num_channels = 9,
 	.default_adcmp = 0x1d,
 	.default_adsmp = { 0x7f, 0xff },
 	.adsmp_mask = GENMASK(7, 0),
 	.adint_inten_mask = GENMASK(11, 0),
 };
 
-static const struct rzg2l_adc_hw_params rzg3l_adc1_hw_params = {
-	.max_channels = 9,
-	.default_adcmp = 0x1d,
-	.default_adsmp = { 0x7f, 0xff },
-	.adsmp_mask = GENMASK(7, 0),
-	.adint_inten_mask = BIT(8),
-};
-
 static const struct of_device_id rzg2l_adc_match[] = {
 	{ .compatible = "renesas,r9a08g045-adc", .data = &rzg3s_hw_params },
-	{ .compatible = "renesas,r9a08g046-adc1", .data = &rzg3l_adc1_hw_params },
 	{ .compatible = "renesas,rzg2l-adc", .data = &rzg2l_hw_params },
 	{ }
 };

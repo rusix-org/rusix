@@ -1,10 +1,9 @@
-# BRD migration contract and ownership proposal
+# BRD migration contract and ownership
 
-**Status: initial C baseline verified; Rust design only, no Rust BRD implementation.**
-The reference is `drivers/block/brd.c` at upstream
-`21a7f44fd0765fcc5194130b28767786eba1d1e7`. Paths below are relative to the
-Git root. The six-case VM probe passed at project source `976e2de80`; see the
-[baseline evidence](evidence/brd-c-baseline/manifest.json) and `rusix/PROGRESS.md`. The full required outcome remains [Phase 1](PHASE1.md).
+Reference: `drivers/block/brd.c` at Linux 6.18.58,
+`2926d88bb7fc4608fd942453d929c39e4e5ec006`. Paths below are relative to the
+Git root. [Progress](../PROGRESS.md) records executed checks;
+[Phase 1](PHASE1.md) defines delivery gates.
 
 ## Behavior to preserve
 
@@ -34,11 +33,11 @@ to change it. Initialization fixes must be explicit semantic changes, not hidden
 inside translation. Likewise, inspect each registration/debugfs failure path;
 copying its control flow alone does not establish sound Rust ownership.
 
-## First C baseline probe
+## Shared block contract probe
 
 `rusix/tests/brd-contract/probe.c` is a purpose-built VM init, not the ordinary
-Linux userspace required by P1-04. The initial profile uses x86_64, 4 KiB pages,
-two CPUs, and one built-in 64 MiB C RAM disk. The six named checks are:
+Linux userspace required by Phase 1a. Both profiles use x86_64, 4 KiB pages,
+two CPUs, and one built-in 64 MiB RAM disk. The six named checks are:
 
 - `geometry`: capacity and logical/physical block sizes.
 - `sparse_read`: untouched data is zero and sparse reads do not populate storage.
@@ -53,14 +52,13 @@ two CPUs, and one built-in 64 MiB C RAM disk. The six named checks are:
 
 The runner must require all cases exactly once, reject failure/missing/duplicate
 results and kernel diagnostics, and bind the tested image/configuration to clean
-source build evidence. Passing these cases would establish only this C baseline;
-Rust parity requires executing the same workload against a selected Rust driver.
+source build evidence. The same unchanged executable runs against the selected
+C and Rust implementations; broader filesystem and hardening gates are separate.
 
-## Proposed backing-store ownership
+## Backing-store ownership
 
-Use an `XArray<Arc<PageSlot>>`, with a pinned page lock in each `PageSlot` owning
-one `Page`. This is a proposal to review and compile, not a proven implementation.
-The existing pieces support the outline:
+The store uses `XArray<Arc<PageSlot>>`, with a pinned page lock in each `PageSlot`
+owning one `Page`. Its ownership builds on these existing interfaces:
 
 - `rust/kernel/sync/arc.rs` implements `ForeignOwnable` for `Arc`, returns an
   `ArcBorrow` when borrowed, and can create an owned `Arc` from that borrow.
@@ -72,15 +70,15 @@ The existing pieces support the outline:
 
 Allocate the page and slot outside locks. The page uses NOIO/NOWAIT with
 `__GFP_ZERO | __GFP_HIGHMEM`; slot metadata uses NOIO/NOWAIT **without HIGHMEM**,
-which is invalid for kmalloc-like allocations. The public Rust flag set currently
-omits typed `GFP_NOIO`. Upstream has proposed scoped allocation policies instead;
-review that work and its safety objections before choosing the interface.
+which is invalid for kmalloc-like allocations. A synchronous `alloc::with_noio`
+closure applies NOIO to nested allocations without exposing an escaping guard;
+NOWAIT requests retain their explicit nonblocking flags.
 
-A new xarray insert-if-absent operation is required. `Guard::store` can release
+`Guard::insert` supplies insert-if-absent. `Guard::store` can release
 the lock while allocating and replaces any existing value, so lookup followed by
 store can destroy a concurrent writer's insertion. The pinned
 `__xa_insert` already supplies conditional insertion through `__xa_cmpxchg_raw`
-and is present in generated bindings. One local candidate is a narrow `Guard::insert` returning
+and is present in generated bindings. The narrow `Guard::insert` returns
 `Result<(), StoreError<T>>`: transfer candidate ownership on success and return
 it on any error, including `EBUSY`. It may release/reacquire the lock to allocate
 but returns with the guard held. BRD can borrow and clone the winner on `EBUSY`
@@ -89,7 +87,7 @@ owned by the array. A generic `EBUSY` must not imply `get().is_some()`: reserved
 entries reject insertion but appear empty to normal lookup. BRD uses
 `AllocKind::Alloc` with no reservations. Preserve the foreign-pointer alignment
 and ownership rules of the existing abstraction. Audit upstream entry/preload
-work below before implementing this alternative.
+work informed this adaptation; its allocator dependencies are described below.
 
 For a transfer, release the index lock before acquiring the slot lock. Hold the
 slot lock only across the bounded page access; never allocate or acquire the
@@ -121,16 +119,16 @@ primitive appropriate for concurrently accessible bio memory, prove backing/bio
 non-aliasing or handle aliases, and keep mappings scoped to the executing task.
 No safe bio-copy API should be exposed until these conditions are established.
 
-The remaining enabling interfaces are substantive:
+The implementation adds these transitional interfaces:
 
 - Bio-based disk registration with matching queue limits, major/minor policy,
   parameters, on-demand discovery, initialization rollback and deregistration.
-  Current `rust/kernel/block.rs` exposes mq; its disk builder invokes
-  `__blk_mq_alloc_disk`, so using it would change the submission model.
+  `block::bio_disk` uses `__blk_alloc_disk`; the inherited mq builder uses
+  `__blk_mq_alloc_disk` and would change the submission model.
 - A submitted-bio abstraction with validated segment iteration, bounded advance,
   status mapping and exactly-once completion. Completion must consume access to
   the bio; device state must outlive every callback and cleanup path.
-- The conditional xarray operation and allocation flag above, plus a reviewed
+- The conditional xarray operation and allocation scope above, plus a reviewed
   backing/bio transfer abstraction. C helpers may expose inline/macro boundaries;
   driver ownership, data-path decisions and lifecycle policy belong in Rust.
 
@@ -155,13 +153,51 @@ review even though this project's long-term direction is governed by ADR 0002.
 
 ## Remaining verification
 
-Before calling this a migrated driver, add paired C/Rust coverage for allocation
-injection and deterministic NOWAIT errors, overlapping I/O/discard lifetimes,
-capacity edges, parameters/partitions and on-demand creation, memory pressure,
-initialization failure, busy removal and repeated module load/use/unload. Use
+[Paired q35 verification](evidence/brd-q35/manifest.json) at `9d1c1ca5dd` passes
+block6, ext4 six cases, six parameter/on-demand boots and partition5 (including
+clipped writes). Each fixture archive is identical across C/Rust; configs differ
+only in BRD selection. This does not resolve the negative-parameter exception
+below or retire the remaining C boundaries.
+Phase 1b adds paired allocation injection and deterministic NOWAIT errors,
+overlapping I/O/discard lifetimes, memory pressure, initialization failure,
+busy removal and repeated module load/use/unload. Use
 supported memory instrumentation and lockdep with demonstrated coverage.
 
-The ordinary userspace/ext4 workload, built-in/module x86_64 and arm64 matrix,
-controlled performance measurements, pinned environment/CI and a chosen upstream-fix port remain required,
-with the 1a/1b split defined in [PHASE1.md](PHASE1.md). Neither this
-design nor six passing baseline tests would complete any of those broader gates.
+Expanded architecture/module coverage, controlled performance and a chosen
+upstream-fix port remain subject to the 1a/1b split in [PHASE1.md](PHASE1.md).
+Hosted CI is disabled by execution policy; these local results do not complete
+those broader gates.
+
+## LTS implementation candidate
+
+The initial implementation lives in `drivers/block/brd_rust.rs` and its `store`
+module. `RUSIX_BRD_RUST` selects it for built-in 64-bit configurations; the original
+C source remains unchanged. `block::bio` owns completion and bounded segments;
+`block::bio_disk` retains typed state through final disk release. The sparse store
+uses Arc-owned, zeroed pages, conditional insertion and per-page locking.
+
+The generic xarray addition wraps the LTS's existing `__xa_insert`: importing the
+entry/preload proposal would also import unrelated allocator machinery. NOIO uses
+a synchronous closure with a private save/restore guard, avoiding an escaping
+async guard. These are local adaptations, not upstream-approved interfaces.
+
+Executing C boundaries are explicitly retained: block-core allocation/publication,
+xarray and lock/page primitives, debugfs, parameter metadata and inline wrappers.
+Bio payload copies/zeroing use C highmem primitives because externally mutable
+userspace pages cannot safely become ordinary Rust references. No helper implements
+BRD request policy or sparse-store ownership. Removing these boundaries requires
+migration of their owning core abstractions.
+
+On the declared 64-bit targets, positive `max_part` inputs from 2^30 through
+INT_MAX preserve the pinned narrowing to INT_MIN, signed clamp comparison,
+parameter sysfs value and major registration. Their unsigned probe divisor is
+0x80000000; disk creation rejects the minor count, and opening ram0 returns
+ENXIO. The paired q35 high-positive guest case verifies these observations;
+it avoids the C failure path's dangling debugfs counter.
+Negative inputs instead narrow to zero in C, producing a zero divisor in its
+on-demand probe. Rust retains an initialization-time EINVAL guard for this
+undefined-behavior boundary. That guard also changes pre-fault initialization
+observations; this narrow exception remains disclosed rather than being called
+full negative-parameter parity. Values outside the `int` parser range continue
+to use the shared C parameter parser's existing rejection behavior.
+Built-in operation is the only selectable mode until module lifetime is audited.

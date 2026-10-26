@@ -93,7 +93,7 @@ static int tcf_csum_init(struct net *net, struct nlattr *nla,
 
 	p = to_tcf_csum(*a);
 
-	params_new = kzalloc_obj(*params_new);
+	params_new = kzalloc(sizeof(*params_new), GFP_KERNEL);
 	if (unlikely(!params_new)) {
 		err = -ENOMEM;
 		goto put_chain;
@@ -276,7 +276,7 @@ static int tcf_csum_ipv4_udp(struct sk_buff *skb, unsigned int ihl,
 		return 0;
 
 	iph = ip_hdr(skb);
-	ul = udp_get_len_short(udph);
+	ul = ntohs(udph->len);
 
 	if (udplite || udph->check) {
 
@@ -334,7 +334,7 @@ static int tcf_csum_ipv6_udp(struct sk_buff *skb, unsigned int ihl,
 		return 0;
 
 	ip6h = ipv6_hdr(skb);
-	ul = udp_get_len_short(udph);
+	ul = ntohs(udph->len);
 
 	udph->check = 0;
 

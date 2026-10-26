@@ -9,6 +9,7 @@
 #include <linux/init.h>
 #include <linux/slab.h>
 #include <linux/err.h>
+#include <crypto/hash.h>
 #include <linux/crc32.h>
 #include <linux/base64.h>
 #include <linux/ctype.h>
@@ -43,6 +44,15 @@ int nvmet_auth_set_key(struct nvmet_host *host, const char *secret,
 		pr_warn("Invalid DH-HMAC-CHAP hash id %d\n",
 			 key_hash);
 		return -EINVAL;
+	}
+	if (key_hash > 0) {
+		/* Validate selected hash algorithm */
+		const char *hmac = nvme_auth_hmac_name(key_hash);
+
+		if (!crypto_has_shash(hmac, 0, 0)) {
+			pr_err("DH-HMAC-CHAP hash %s unsupported\n", hmac);
+			return -ENOTSUPP;
+		}
 	}
 	dhchap_secret = kstrdup(secret, GFP_KERNEL);
 	if (!dhchap_secret)
@@ -144,6 +154,7 @@ u8 nvmet_setup_auth(struct nvmet_ctrl *ctrl, struct nvmet_sq *sq, bool reset)
 		goto out_unlock;
 
 	list_for_each_entry(p, &ctrl->subsys->hosts, entry) {
+		pr_debug("check %s\n", nvmet_host_name(p->host));
 		if (strcmp(nvmet_host_name(p->host), ctrl->hostnqn))
 			continue;
 		host = p->host;
@@ -188,12 +199,11 @@ u8 nvmet_setup_auth(struct nvmet_ctrl *ctrl, struct nvmet_sq *sq, bool reset)
 		ctrl->host_key = NULL;
 		goto out_free_hash;
 	}
-#ifdef CONFIG_NVME_TARGET_AUTH_DEBUG
 	pr_debug("%s: using hash %s key %*ph\n", __func__,
 		 ctrl->host_key->hash > 0 ?
 		 nvme_auth_hmac_name(ctrl->host_key->hash) : "none",
 		 (int)ctrl->host_key->len, ctrl->host_key->key);
-#endif
+
 	nvme_auth_free_key(ctrl->ctrl_key);
 	if (!host->dhchap_ctrl_secret) {
 		ctrl->ctrl_key = NULL;
@@ -207,12 +217,11 @@ u8 nvmet_setup_auth(struct nvmet_ctrl *ctrl, struct nvmet_sq *sq, bool reset)
 		ctrl->ctrl_key = NULL;
 		goto out_free_hash;
 	}
-#ifdef CONFIG_NVME_TARGET_AUTH_DEBUG
 	pr_debug("%s: using ctrl hash %s key %*ph\n", __func__,
 		 ctrl->ctrl_key->hash > 0 ?
 		 nvme_auth_hmac_name(ctrl->ctrl_key->hash) : "none",
 		 (int)ctrl->ctrl_key->len, ctrl->ctrl_key->key);
-#endif
+
 out_free_hash:
 	if (ret) {
 		if (ctrl->host_key) {
@@ -229,8 +238,10 @@ out_unlock:
 
 void nvmet_auth_sq_free(struct nvmet_sq *sq)
 {
-	sq->auth_expiry_active = false;
 	cancel_delayed_work(&sq->auth_expired_work);
+#ifdef CONFIG_NVME_TARGET_TCP_TLS
+	sq->tls_key = NULL;
+#endif
 	kfree(sq->dhchap_c1);
 	sq->dhchap_c1 = NULL;
 	kfree(sq->dhchap_c2);
@@ -287,29 +298,46 @@ bool nvmet_check_auth_status(struct nvmet_req *req)
 int nvmet_auth_host_hash(struct nvmet_req *req, u8 *response,
 			 unsigned int shash_len)
 {
-	struct nvme_auth_hmac_ctx hmac;
+	struct crypto_shash *shash_tfm;
+	SHASH_DESC_ON_STACK(shash, shash_tfm);
 	struct nvmet_ctrl *ctrl = req->sq->ctrl;
+	const char *hash_name;
 	u8 *challenge = req->sq->dhchap_c1;
 	struct nvme_dhchap_key *transformed_key;
 	u8 buf[4];
 	int ret;
 
+	hash_name = nvme_auth_hmac_name(ctrl->shash_id);
+	if (!hash_name) {
+		pr_warn("Hash ID %d invalid\n", ctrl->shash_id);
+		return -EINVAL;
+	}
+
+	shash_tfm = crypto_alloc_shash(hash_name, 0, 0);
+	if (IS_ERR(shash_tfm)) {
+		pr_err("failed to allocate shash %s\n", hash_name);
+		return PTR_ERR(shash_tfm);
+	}
+
+	if (shash_len != crypto_shash_digestsize(shash_tfm)) {
+		pr_err("%s: hash len mismatch (len %d digest %d)\n",
+			__func__, shash_len,
+			crypto_shash_digestsize(shash_tfm));
+		ret = -EINVAL;
+		goto out_free_tfm;
+	}
+
 	transformed_key = nvme_auth_transform_key(ctrl->host_key,
 						  ctrl->hostnqn);
-	if (IS_ERR(transformed_key))
-		return PTR_ERR(transformed_key);
+	if (IS_ERR(transformed_key)) {
+		ret = PTR_ERR(transformed_key);
+		goto out_free_tfm;
+	}
 
-	ret = nvme_auth_hmac_init(&hmac, ctrl->shash_id, transformed_key->key,
+	ret = crypto_shash_setkey(shash_tfm, transformed_key->key,
 				  transformed_key->len);
 	if (ret)
 		goto out_free_response;
-
-	if (shash_len != nvme_auth_hmac_hash_len(ctrl->shash_id)) {
-		pr_err("%s: hash len mismatch (len %u digest %zu)\n", __func__,
-		       shash_len, nvme_auth_hmac_hash_len(ctrl->shash_id));
-		ret = -EINVAL;
-		goto out_free_response;
-	}
 
 	if (ctrl->dh_gid != NVME_AUTH_DHGROUP_NULL) {
 		challenge = kmalloc(shash_len, GFP_KERNEL);
@@ -323,65 +351,100 @@ int nvmet_auth_host_hash(struct nvmet_req *req, u8 *response,
 						    req->sq->dhchap_c1,
 						    challenge, shash_len);
 		if (ret)
-			goto out_free_challenge;
+			goto out;
 	}
+
 	pr_debug("ctrl %d qid %d host response seq %u transaction %d\n",
 		 ctrl->cntlid, req->sq->qid, req->sq->dhchap_s1,
 		 req->sq->dhchap_tid);
 
-	nvme_auth_hmac_update(&hmac, challenge, shash_len);
-
+	shash->tfm = shash_tfm;
+	ret = crypto_shash_init(shash);
+	if (ret)
+		goto out;
+	ret = crypto_shash_update(shash, challenge, shash_len);
+	if (ret)
+		goto out;
 	put_unaligned_le32(req->sq->dhchap_s1, buf);
-	nvme_auth_hmac_update(&hmac, buf, 4);
-
+	ret = crypto_shash_update(shash, buf, 4);
+	if (ret)
+		goto out;
 	put_unaligned_le16(req->sq->dhchap_tid, buf);
-	nvme_auth_hmac_update(&hmac, buf, 2);
-
+	ret = crypto_shash_update(shash, buf, 2);
+	if (ret)
+		goto out;
 	*buf = req->sq->sc_c;
-	nvme_auth_hmac_update(&hmac, buf, 1);
-	nvme_auth_hmac_update(&hmac, "HostHost", 8);
+	ret = crypto_shash_update(shash, buf, 1);
+	if (ret)
+		goto out;
+	ret = crypto_shash_update(shash, "HostHost", 8);
+	if (ret)
+		goto out;
 	memset(buf, 0, 4);
-	nvme_auth_hmac_update(&hmac, ctrl->hostnqn, strlen(ctrl->hostnqn));
-	nvme_auth_hmac_update(&hmac, buf, 1);
-	nvme_auth_hmac_update(&hmac, ctrl->subsys->subsysnqn,
-			      strlen(ctrl->subsys->subsysnqn));
-	nvme_auth_hmac_final(&hmac, response);
-	ret = 0;
-out_free_challenge:
+	ret = crypto_shash_update(shash, ctrl->hostnqn, strlen(ctrl->hostnqn));
+	if (ret)
+		goto out;
+	ret = crypto_shash_update(shash, buf, 1);
+	if (ret)
+		goto out;
+	ret = crypto_shash_update(shash, ctrl->subsysnqn,
+				  strlen(ctrl->subsysnqn));
+	if (ret)
+		goto out;
+	ret = crypto_shash_final(shash, response);
+out:
 	if (challenge != req->sq->dhchap_c1)
 		kfree(challenge);
 out_free_response:
-	memzero_explicit(&hmac, sizeof(hmac));
 	nvme_auth_free_key(transformed_key);
+out_free_tfm:
+	crypto_free_shash(shash_tfm);
 	return ret;
 }
 
 int nvmet_auth_ctrl_hash(struct nvmet_req *req, u8 *response,
 			 unsigned int shash_len)
 {
-	struct nvme_auth_hmac_ctx hmac;
+	struct crypto_shash *shash_tfm;
+	struct shash_desc *shash;
 	struct nvmet_ctrl *ctrl = req->sq->ctrl;
+	const char *hash_name;
 	u8 *challenge = req->sq->dhchap_c2;
 	struct nvme_dhchap_key *transformed_key;
 	u8 buf[4];
 	int ret;
 
-	transformed_key = nvme_auth_transform_key(ctrl->ctrl_key,
-						ctrl->subsys->subsysnqn);
-	if (IS_ERR(transformed_key))
-		return PTR_ERR(transformed_key);
+	hash_name = nvme_auth_hmac_name(ctrl->shash_id);
+	if (!hash_name) {
+		pr_warn("Hash ID %d invalid\n", ctrl->shash_id);
+		return -EINVAL;
+	}
 
-	ret = nvme_auth_hmac_init(&hmac, ctrl->shash_id, transformed_key->key,
+	shash_tfm = crypto_alloc_shash(hash_name, 0, 0);
+	if (IS_ERR(shash_tfm)) {
+		pr_err("failed to allocate shash %s\n", hash_name);
+		return PTR_ERR(shash_tfm);
+	}
+
+	if (shash_len != crypto_shash_digestsize(shash_tfm)) {
+		pr_debug("%s: hash len mismatch (len %d digest %d)\n",
+			 __func__, shash_len,
+			 crypto_shash_digestsize(shash_tfm));
+		ret = -EINVAL;
+		goto out_free_tfm;
+	}
+
+	transformed_key = nvme_auth_transform_key(ctrl->ctrl_key,
+						ctrl->subsysnqn);
+	if (IS_ERR(transformed_key)) {
+		ret = PTR_ERR(transformed_key);
+		goto out_free_tfm;
+	}
+
+	ret = crypto_shash_setkey(shash_tfm, transformed_key->key,
 				  transformed_key->len);
 	if (ret)
 		goto out_free_response;
-
-	if (shash_len != nvme_auth_hmac_hash_len(ctrl->shash_id)) {
-		pr_err("%s: hash len mismatch (len %u digest %zu)\n", __func__,
-		       shash_len, nvme_auth_hmac_hash_len(ctrl->shash_id));
-		ret = -EINVAL;
-		goto out_free_response;
-	}
 
 	if (ctrl->dh_gid != NVME_AUTH_DHGROUP_NULL) {
 		challenge = kmalloc(shash_len, GFP_KERNEL);
@@ -398,30 +461,55 @@ int nvmet_auth_ctrl_hash(struct nvmet_req *req, u8 *response,
 			goto out_free_challenge;
 	}
 
-	nvme_auth_hmac_update(&hmac, challenge, shash_len);
+	shash = kzalloc(sizeof(*shash) + crypto_shash_descsize(shash_tfm),
+			GFP_KERNEL);
+	if (!shash) {
+		ret = -ENOMEM;
+		goto out_free_challenge;
+	}
+	shash->tfm = shash_tfm;
 
+	ret = crypto_shash_init(shash);
+	if (ret)
+		goto out;
+	ret = crypto_shash_update(shash, challenge, shash_len);
+	if (ret)
+		goto out;
 	put_unaligned_le32(req->sq->dhchap_s2, buf);
-	nvme_auth_hmac_update(&hmac, buf, 4);
-
+	ret = crypto_shash_update(shash, buf, 4);
+	if (ret)
+		goto out;
 	put_unaligned_le16(req->sq->dhchap_tid, buf);
-	nvme_auth_hmac_update(&hmac, buf, 2);
-
-	*buf = req->sq->sc_c;
-	nvme_auth_hmac_update(&hmac, buf, 1);
-	nvme_auth_hmac_update(&hmac, "Controller", 10);
-	nvme_auth_hmac_update(&hmac, ctrl->subsys->subsysnqn,
-			      strlen(ctrl->subsys->subsysnqn));
+	ret = crypto_shash_update(shash, buf, 2);
+	if (ret)
+		goto out;
 	memset(buf, 0, 4);
-	nvme_auth_hmac_update(&hmac, buf, 1);
-	nvme_auth_hmac_update(&hmac, ctrl->hostnqn, strlen(ctrl->hostnqn));
-	nvme_auth_hmac_final(&hmac, response);
-	ret = 0;
+	ret = crypto_shash_update(shash, buf, 1);
+	if (ret)
+		goto out;
+	ret = crypto_shash_update(shash, "Controller", 10);
+	if (ret)
+		goto out;
+	ret = crypto_shash_update(shash, ctrl->subsysnqn,
+			    strlen(ctrl->subsysnqn));
+	if (ret)
+		goto out;
+	ret = crypto_shash_update(shash, buf, 1);
+	if (ret)
+		goto out;
+	ret = crypto_shash_update(shash, ctrl->hostnqn, strlen(ctrl->hostnqn));
+	if (ret)
+		goto out;
+	ret = crypto_shash_final(shash, response);
+out:
+	kfree(shash);
 out_free_challenge:
 	if (challenge != req->sq->dhchap_c2)
 		kfree(challenge);
 out_free_response:
-	memzero_explicit(&hmac, sizeof(hmac));
 	nvme_auth_free_key(transformed_key);
+out_free_tfm:
+	crypto_free_shash(shash_tfm);
 	return ret;
 }
 
@@ -441,46 +529,41 @@ int nvmet_auth_ctrl_exponential(struct nvmet_req *req,
 		ret = -EINVAL;
 	} else {
 		memcpy(buf, ctrl->dh_key, buf_size);
-#ifdef CONFIG_NVME_TARGET_AUTH_DEBUG
 		pr_debug("%s: ctrl %d public key %*ph\n", __func__,
 			 ctrl->cntlid, (int)buf_size, buf);
-#endif
 	}
 
 	return ret;
 }
 
 int nvmet_auth_ctrl_sesskey(struct nvmet_req *req,
-			    const u8 *pkey, int pkey_size)
+			    u8 *pkey, int pkey_size)
 {
 	struct nvmet_ctrl *ctrl = req->sq->ctrl;
 	int ret;
 
-	req->sq->dhchap_skey_len = nvme_auth_hmac_hash_len(ctrl->shash_id);
+	req->sq->dhchap_skey_len = ctrl->dh_keysize;
 	req->sq->dhchap_skey = kzalloc(req->sq->dhchap_skey_len, GFP_KERNEL);
 	if (!req->sq->dhchap_skey)
 		return -ENOMEM;
-	ret = nvme_auth_gen_session_key(ctrl->dh_tfm,
-					pkey, pkey_size,
-					req->sq->dhchap_skey,
-					req->sq->dhchap_skey_len,
-					ctrl->shash_id);
+	ret = nvme_auth_gen_shared_secret(ctrl->dh_tfm,
+					  pkey, pkey_size,
+					  req->sq->dhchap_skey,
+					  req->sq->dhchap_skey_len);
 	if (ret)
-		pr_debug("failed to compute session key, err %d\n", ret);
-#ifdef CONFIG_NVME_TARGET_AUTH_DEBUG
+		pr_debug("failed to compute shared secret, err %d\n", ret);
 	else
-		pr_debug("%s: session key %*ph\n", __func__,
+		pr_debug("%s: shared secret %*ph\n", __func__,
 			 (int)req->sq->dhchap_skey_len,
 			 req->sq->dhchap_skey);
-#endif
+
 	return ret;
 }
 
 void nvmet_auth_insert_psk(struct nvmet_sq *sq)
 {
 	int hash_len = nvme_auth_hmac_hash_len(sq->ctrl->shash_id);
-	u8 *psk, *tls_psk;
-	char *digest;
+	u8 *psk, *digest, *tls_psk;
 	size_t psk_len;
 	int ret;
 #ifdef CONFIG_NVME_TARGET_TCP_TLS
@@ -498,7 +581,7 @@ void nvmet_auth_insert_psk(struct nvmet_sq *sq)
 		return;
 	}
 	ret = nvme_auth_generate_digest(sq->ctrl->shash_id, psk, psk_len,
-					sq->ctrl->subsys->subsysnqn,
+					sq->ctrl->subsysnqn,
 					sq->ctrl->hostnqn, &digest);
 	if (ret) {
 		pr_warn("%s: ctrl %d qid %d failed to generate digest, error %d\n",
@@ -513,10 +596,8 @@ void nvmet_auth_insert_psk(struct nvmet_sq *sq)
 		goto out_free_digest;
 	}
 #ifdef CONFIG_NVME_TARGET_TCP_TLS
-	tls_key = nvme_tls_psk_refresh(NULL, sq->ctrl->hostnqn,
-				       sq->ctrl->subsys->subsysnqn,
-				       sq->ctrl->shash_id, tls_psk, psk_len,
-				       digest);
+	tls_key = nvme_tls_psk_refresh(NULL, sq->ctrl->hostnqn, sq->ctrl->subsysnqn,
+				       sq->ctrl->shash_id, tls_psk, psk_len, digest);
 	if (IS_ERR(tls_key)) {
 		pr_warn("%s: ctrl %d qid %d failed to refresh key, error %ld\n",
 			__func__, sq->ctrl->cntlid, sq->qid, PTR_ERR(tls_key));

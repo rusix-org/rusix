@@ -332,17 +332,13 @@ static int visl_open(struct file *file)
 
 	if (mutex_lock_interruptible(&dev->dev_mutex))
 		return -ERESTARTSYS;
-	ctx = kzalloc_obj(*ctx);
+	ctx = kzalloc(sizeof(*ctx), GFP_KERNEL);
 	if (!ctx) {
 		rc = -ENOMEM;
 		goto unlock;
 	}
 
 	ctx->tpg_str_buf = kzalloc(TPG_STR_BUF_SZ, GFP_KERNEL);
-	if (!ctx->tpg_str_buf) {
-		rc = -ENOMEM;
-		goto free_ctx;
-	}
 
 	v4l2_fh_init(&ctx->fh, video_devdata(file));
 	ctx->dev = dev;
@@ -441,7 +437,7 @@ static int visl_probe(struct platform_device *pdev)
 	int ret;
 	int rc;
 
-	dev = kzalloc_obj(*dev);
+	dev = kzalloc(sizeof(*dev), GFP_KERNEL);
 	if (!dev)
 		return -ENOMEM;
 

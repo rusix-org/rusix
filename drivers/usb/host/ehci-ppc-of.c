@@ -18,6 +18,8 @@
 
 #include <linux/of.h>
 #include <linux/of_address.h>
+#include <linux/of_irq.h>
+#include <linux/of_platform.h>
 
 
 static const struct hc_driver ehci_ppc_of_hc_driver = {
@@ -94,9 +96,7 @@ static int ehci_hcd_ppc_of_probe(struct platform_device *op)
 	struct device_node *dn = op->dev.of_node;
 	struct usb_hcd *hcd;
 	struct ehci_hcd	*ehci = NULL;
-	struct resource *res;
-	struct resource ohci_res;
-	void __iomem *regs;
+	struct resource res;
 	int irq;
 	int rv;
 
@@ -107,30 +107,39 @@ static int ehci_hcd_ppc_of_probe(struct platform_device *op)
 
 	dev_dbg(&op->dev, "initializing PPC-OF USB Controller\n");
 
-	regs = devm_platform_get_and_ioremap_resource(op, 0, &res);
-	if (IS_ERR(regs))
-		return PTR_ERR(regs);
-
-	irq = platform_get_irq(op, 0);
-	if (irq	< 0)
-		return irq;
+	rv = of_address_to_resource(dn, 0, &res);
+	if (rv)
+		return rv;
 
 	hcd = usb_create_hcd(&ehci_ppc_of_hc_driver, &op->dev, "PPC-OF USB");
 	if (!hcd)
 		return -ENOMEM;
 
-	hcd->regs = regs;
-	hcd->rsrc_start = res->start;
-	hcd->rsrc_len = resource_size(res);
+	hcd->rsrc_start = res.start;
+	hcd->rsrc_len = resource_size(&res);
+
+	irq = irq_of_parse_and_map(dn, 0);
+	if (!irq) {
+		dev_err(&op->dev, "%s: irq_of_parse_and_map failed\n",
+			__FILE__);
+		rv = -EBUSY;
+		goto err_irq;
+	}
+
+	hcd->regs = devm_ioremap_resource(&op->dev, &res);
+	if (IS_ERR(hcd->regs)) {
+		rv = PTR_ERR(hcd->regs);
+		goto err_ioremap;
+	}
 
 	ehci = hcd_to_ehci(hcd);
 	np = of_find_compatible_node(NULL, NULL, "ibm,usb-ohci-440epx");
 	if (np != NULL) {
 		/* claim we really affected by usb23 erratum */
-		if (!of_address_to_resource(np, 0, &ohci_res))
+		if (!of_address_to_resource(np, 0, &res))
 			ehci->ohci_hcctrl_reg =
 				devm_ioremap(&op->dev,
-					     ohci_res.start + OHCI_HCCTRL_OFFSET,
+					     res.start + OHCI_HCCTRL_OFFSET,
 					     OHCI_HCCTRL_LEN);
 		else
 			pr_debug("%s: no ohci offset in fdt\n", __FILE__);
@@ -161,12 +170,14 @@ static int ehci_hcd_ppc_of_probe(struct platform_device *op)
 
 	rv = usb_add_hcd(hcd, irq, 0);
 	if (rv)
-		goto err;
+		goto err_ioremap;
 
 	device_wakeup_enable(hcd->self.controller);
 	return 0;
 
-err:
+err_ioremap:
+	irq_dispose_mapping(irq);
+err_irq:
 	usb_put_hcd(hcd);
 
 	return rv;
@@ -184,6 +195,8 @@ static void ehci_hcd_ppc_of_remove(struct platform_device *op)
 	dev_dbg(&op->dev, "stopping PPC-OF USB Controller\n");
 
 	usb_remove_hcd(hcd);
+
+	irq_dispose_mapping(hcd->irq);
 
 	/* use request_mem_region to test if the ohci driver is loaded.  if so
 	 * ensure the ohci core is operational.

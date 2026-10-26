@@ -55,7 +55,7 @@ void hns_roce_get_cq_bankid_for_uctx(struct hns_roce_ucontext *uctx)
 {
 	struct hns_roce_dev *hr_dev = to_hr_dev(uctx->ibucontext.device);
 	struct hns_roce_cq_table *cq_table = &hr_dev->cq_table;
-	u32 least_load = U32_MAX;
+	u32 least_load = cq_table->ctx_num[0];
 	u8 bankid = 0;
 	u8 i;
 
@@ -63,10 +63,7 @@ void hns_roce_get_cq_bankid_for_uctx(struct hns_roce_ucontext *uctx)
 		return;
 
 	mutex_lock(&cq_table->bank_mutex);
-	for (i = 0; i < HNS_ROCE_CQ_BANK_NUM; i++) {
-		if (!(cq_table->valid_cq_bank_mask & BIT(i)))
-			continue;
-
+	for (i = 1; i < HNS_ROCE_CQ_BANK_NUM; i++) {
 		if (cq_table->ctx_num[i] < least_load) {
 			least_load = cq_table->ctx_num[i];
 			bankid = i;
@@ -261,11 +258,10 @@ static int alloc_cq_buf(struct hns_roce_dev *hr_dev, struct hns_roce_cq *hr_cq,
 	buf_attr.region[0].size = hr_cq->cq_depth * hr_cq->cqe_size;
 	buf_attr.region[0].hopnum = hr_dev->caps.cqe_hop_num;
 	buf_attr.region_count = 1;
-	buf_attr.user_access = IB_ACCESS_LOCAL_WRITE;
 
 	ret = hns_roce_mtr_create(hr_dev, &hr_cq->mtr, &buf_attr,
 				  hr_dev->caps.cqe_ba_pg_sz + PAGE_SHIFT,
-				  udata, addr, true);
+				  udata, addr);
 	if (ret)
 		ibdev_err(ibdev, "failed to alloc CQ mtr, ret = %d.\n", ret);
 
@@ -351,6 +347,20 @@ static int verify_cq_create_attr(struct hns_roce_dev *hr_dev,
 	return 0;
 }
 
+static int get_cq_ucmd(struct hns_roce_cq *hr_cq, struct ib_udata *udata,
+		       struct hns_roce_ib_create_cq *ucmd)
+{
+	struct ib_device *ibdev = hr_cq->ib_cq.device;
+	int ret;
+
+	ret = ib_copy_from_udata(ucmd, udata, min(udata->inlen, sizeof(*ucmd)));
+	if (ret) {
+		ibdev_err(ibdev, "failed to copy CQ udata, ret = %d.\n", ret);
+		return ret;
+	}
+
+	return 0;
+}
 
 static void set_cq_param(struct hns_roce_cq *hr_cq, u32 cq_entries, int vector,
 			 struct hns_roce_ib_create_cq *ucmd)
@@ -415,7 +425,7 @@ int hns_roce_create_cq(struct ib_cq *ib_cq, const struct ib_cq_init_attr *attr,
 		goto err_out;
 
 	if (udata) {
-		ret = ib_copy_validate_udata_in(udata, ucmd, db_addr);
+		ret = get_cq_ucmd(hr_cq, udata, &ucmd);
 		if (ret)
 			goto err_out;
 	}
@@ -453,7 +463,8 @@ int hns_roce_create_cq(struct ib_cq *ib_cq, const struct ib_cq_init_attr *attr,
 
 	if (udata) {
 		resp.cqn = hr_cq->cqn;
-		ret = ib_respond_udata(udata, resp);
+		ret = ib_copy_to_udata(udata, &resp,
+				       min(udata->outlen, sizeof(resp)));
 		if (ret)
 			goto err_cqc;
 	}
@@ -570,11 +581,6 @@ void hns_roce_init_cq_table(struct hns_roce_dev *hr_dev)
 		cq_table->bank[i].max = hr_dev->caps.num_cqs /
 					HNS_ROCE_CQ_BANK_NUM - 1;
 	}
-
-	if (hr_dev->caps.flags & HNS_ROCE_CAP_FLAG_LIMIT_BANK)
-		cq_table->valid_cq_bank_mask = VALID_CQ_BANK_MASK_LIMIT;
-	else
-		cq_table->valid_cq_bank_mask = VALID_CQ_BANK_MASK_DEFAULT;
 }
 
 void hns_roce_cleanup_cq_table(struct hns_roce_dev *hr_dev)

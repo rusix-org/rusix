@@ -133,10 +133,7 @@ struct faux_device *faux_device_create_with_groups(const char *name,
 	struct device *dev;
 	int ret;
 
-	if (!faux_bus_root)
-		return NULL;
-
-	faux_obj = kzalloc_obj(*faux_obj);
+	faux_obj = kzalloc(sizeof(*faux_obj), GFP_KERNEL);
 	if (!faux_obj)
 		return NULL;
 
@@ -235,29 +232,34 @@ EXPORT_SYMBOL_GPL(faux_device_destroy);
 
 int __init faux_bus_init(void)
 {
-	struct device *root;
 	int ret;
 
-	root = root_device_register("faux");
-	if (IS_ERR(root))
-		return PTR_ERR(root);
+	faux_bus_root = kzalloc(sizeof(*faux_bus_root), GFP_KERNEL);
+	if (!faux_bus_root)
+		return -ENOMEM;
+
+	dev_set_name(faux_bus_root, "faux");
+
+	ret = device_register(faux_bus_root);
+	if (ret) {
+		put_device(faux_bus_root);
+		return ret;
+	}
 
 	ret = bus_register(&faux_bus_type);
 	if (ret)
-		goto err_deregister_root;
+		goto error_bus;
 
 	ret = driver_register(&faux_driver);
 	if (ret)
-		goto err_deregister_bus;
+		goto error_driver;
 
-	faux_bus_root = root;
+	return ret;
 
-	return 0;
-
-err_deregister_bus:
+error_driver:
 	bus_unregister(&faux_bus_type);
-err_deregister_root:
-	root_device_unregister(root);
 
+error_bus:
+	device_unregister(faux_bus_root);
 	return ret;
 }

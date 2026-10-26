@@ -71,7 +71,7 @@ int init_queue(struct queue **q, const struct queue_properties *properties)
 {
 	struct queue *tmp_q;
 
-	tmp_q = kzalloc_obj(*tmp_q);
+	tmp_q = kzalloc(sizeof(*tmp_q), GFP_KERNEL);
 	if (!tmp_q)
 		return -ENOMEM;
 
@@ -102,7 +102,7 @@ static int kfd_queue_buffer_svm_get(struct kfd_process_device *pdd, u64 addr, u6
 	mutex_lock(&p->svms.lock);
 
 	/*
-	 * range may split to multiple svm pranges aligned to granularity boundary.
+	 * range may split to multiple svm pranges aligned to granularity boundaery.
 	 */
 	while (size) {
 		uint32_t gpuid, gpuidx;
@@ -112,10 +112,11 @@ static int kfd_queue_buffer_svm_get(struct kfd_process_device *pdd, u64 addr, u6
 		if (!prange)
 			break;
 
+		if (!prange->mapped_to_gpu)
+			break;
+
 		r = kfd_process_gpuid_from_node(p, pdd->dev, &gpuid, &gpuidx);
 		if (r < 0)
-			break;
-		if (!test_bit(gpuidx, prange->bitmap_mapped))
 			break;
 		if (!test_bit(gpuidx, prange->bitmap_access) &&
 		    !test_bit(gpuidx, prange->bitmap_aip))
@@ -197,18 +198,18 @@ int kfd_queue_buffer_get(struct amdgpu_vm *vm, void __user *addr, struct amdgpu_
 			 u64 expected_size)
 {
 	struct amdgpu_bo_va_mapping *mapping;
-	u64 user_pfn;
+	u64 user_addr;
 	u64 size;
 
+	user_addr = (u64)addr >> AMDGPU_GPU_PAGE_SHIFT;
 	size = expected_size >> AMDGPU_GPU_PAGE_SHIFT;
 
-	mapping = amdgpu_vm_bo_lookup_mapping(vm, (u64)(uintptr_t)addr);
+	mapping = amdgpu_vm_bo_lookup_mapping(vm, user_addr);
 	if (!mapping)
 		goto out_err;
 
-	user_pfn = (u64)(uintptr_t)addr >> AMDGPU_GPU_PAGE_SHIFT;
-	if (user_pfn != mapping->start ||
-	    (size != 0 && user_pfn + size - 1 != mapping->last)) {
+	if (user_addr != mapping->start ||
+	    (size != 0 && user_addr + size - 1 != mapping->last)) {
 		pr_debug("expected size 0x%llx not equal to mapping addr 0x%llx size 0x%llx\n",
 			expected_size, mapping->start << AMDGPU_GPU_PAGE_SHIFT,
 			(mapping->last - mapping->start + 1) << AMDGPU_GPU_PAGE_SHIFT);
@@ -247,12 +248,9 @@ int kfd_queue_acquire_buffers(struct kfd_process_device *pdd, struct queue_prope
 	    properties->format == KFD_QUEUE_FORMAT_AQL &&
 	    topo_dev->node_props.gfx_target_version >= 70000 &&
 	    topo_dev->node_props.gfx_target_version < 90000)
-		/* metadata_queue_size not supported on GFX7/GFX8 */
-		expected_queue_size =
-			PAGE_ALIGN(properties->queue_size / 2);
+		expected_queue_size = properties->queue_size / 2;
 	else
-		expected_queue_size =
-			PAGE_ALIGN(properties->queue_size + properties->metadata_queue_size);
+		expected_queue_size = properties->queue_size;
 
 	vm = drm_priv_to_vm(pdd->drm_priv);
 	err = amdgpu_bo_reserve(vm->root.bo, false);
@@ -405,19 +403,11 @@ int kfd_queue_unref_bo_vas(struct kfd_process_device *pdd,
 	return 0;
 }
 
+#define SGPR_SIZE_PER_CU	0x4000
+#define LDS_SIZE_PER_CU		0x10000
+#define HWREG_SIZE_PER_CU	0x1000
 #define DEBUGGER_BYTES_ALIGN	64
 #define DEBUGGER_BYTES_PER_WAVE	32
-
-static u32 kfd_get_sgpr_size_per_cu(u32 gfxv)
-{
-	u32 sgpr_size = 0x4000;
-
-	if (gfxv == 120500 ||
-	    gfxv == 120501)
-		sgpr_size = 0x8000;
-
-	return sgpr_size;
-}
 
 static u32 kfd_get_vgpr_size_per_cu(u32 gfxv)
 {
@@ -434,53 +424,14 @@ static u32 kfd_get_vgpr_size_per_cu(u32 gfxv)
 		 gfxv == 120000 ||		/* GFX_VERSION_GFX1200 */
 		 gfxv == 120001)		/* GFX_VERSION_GFX1201 */
 		vgpr_size = 0x60000;
-	else if (gfxv == 120500 ||		/* GFX_VERSION_GFX1250 */
-		 gfxv == 120501)		/* GFX_VERSION_GFX1251 */
-		vgpr_size = 0x80000;
 
 	return vgpr_size;
 }
 
-static u32 kfd_get_hwreg_size_per_cu(u32 gfxv)
-{
-	u32 hwreg_size = 0x1000;
-
-	if (gfxv == 120500 || gfxv == 120501)
-		hwreg_size = 0x8000;
-
-	return hwreg_size;
-}
-
-static u32 kfd_get_lds_size_per_cu(u32 gfxv, struct kfd_node_properties *props)
-{
-	u32 lds_size = 0x10000;
-
-	if (gfxv == 90500 || gfxv == 120500 || gfxv == 120501)
-		lds_size = props->lds_size_in_kb << 10;
-
-	return lds_size;
-}
-
-static u32 get_num_waves(struct kfd_node_properties *props, u32 gfxv, u32 cu_num)
-{
-	u32 wave_num = 0;
-
-	if (gfxv < 100100)
-		wave_num = min(cu_num * 40,
-				props->array_count / props->simd_arrays_per_engine * 512);
-	else if (gfxv < 120500)
-		wave_num = cu_num * 32;
-	else if (gfxv <= 120501)
-		wave_num = cu_num * 64;
-
-	WARN_ON(wave_num == 0);
-
-	return wave_num;
-}
-
 #define WG_CONTEXT_DATA_SIZE_PER_CU(gfxv, props)	\
-	(kfd_get_vgpr_size_per_cu(gfxv) + kfd_get_sgpr_size_per_cu(gfxv) +\
-	 kfd_get_lds_size_per_cu(gfxv, props) + kfd_get_hwreg_size_per_cu(gfxv))
+	(kfd_get_vgpr_size_per_cu(gfxv) + SGPR_SIZE_PER_CU +\
+	 (((gfxv) == 90500) ? (props->lds_size_in_kb << 10) : LDS_SIZE_PER_CU) +\
+	 HWREG_SIZE_PER_CU)
 
 #define CNTL_STACK_BYTES_PER_WAVE(gfxv)	\
 	((gfxv) >= 100100 ? 12 : 8)	/* GFX_VERSION_NAVI10*/
@@ -500,7 +451,9 @@ void kfd_queue_ctx_save_restore_size(struct kfd_topology_device *dev)
 		return;
 
 	cu_num = props->simd_count / props->simd_per_cu / NUM_XCC(dev->gpu->xcc_mask);
-	wave_num = get_num_waves(props, gfxv, cu_num);
+	wave_num = (gfxv < 100100) ?	/* GFX_VERSION_NAVI10 */
+		    min(cu_num * 40, props->array_count / props->simd_arrays_per_engine * 512)
+		    : cu_num * 32;
 
 	wg_data_size = ALIGN(cu_num * WG_CONTEXT_DATA_SIZE_PER_CU(gfxv, props),
 				AMDGPU_GPU_PAGE_SIZE);

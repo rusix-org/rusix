@@ -16,7 +16,6 @@
 #include <linux/irqreturn.h>
 #include <linux/interrupt.h>
 #include <linux/kernel.h>
-#include <linux/minmax.h>
 #include <linux/module.h>
 #include <linux/of.h>
 #include <linux/platform_device.h>
@@ -155,7 +154,7 @@ static int brcmstb_get_temp(struct thermal_zone_device *tz, int *temp)
 {
 	struct brcmstb_thermal_priv *priv = thermal_zone_device_priv(tz);
 	u32 val;
-	int t;
+	long t;
 
 	val = __raw_readl(priv->tmon_base + AVS_TMON_STATUS);
 
@@ -165,7 +164,10 @@ static int brcmstb_get_temp(struct thermal_zone_device *tz, int *temp)
 	val = (val & AVS_TMON_STATUS_data_msk) >> AVS_TMON_STATUS_data_shift;
 
 	t = avs_tmon_code_to_temp(priv, val);
-	*temp = max(0, t);
+	if (t < 0)
+		*temp = 0;
+	else
+		*temp = t;
 
 	return 0;
 }
@@ -356,7 +358,8 @@ static int brcmstb_thermal_probe(struct platform_device *pdev)
 						IRQF_ONESHOT,
 						DRV_NAME, priv);
 		if (ret < 0)
-			return ret;
+			return dev_err_probe(&pdev->dev, ret,
+						"could not request IRQ\n");
 	}
 
 	dev_info(&pdev->dev, "registered AVS TMON of-sensor driver\n");

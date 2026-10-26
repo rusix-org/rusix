@@ -10,7 +10,6 @@
 #ifndef _REGMAP_INTERNAL_H
 #define _REGMAP_INTERNAL_H
 
-#include <linux/cleanup.h>
 #include <linux/device.h>
 #include <linux/regmap.h>
 #include <linux/fs.h>
@@ -85,7 +84,6 @@ struct regmap {
 	bool debugfs_disable;
 	struct dentry *debugfs;
 	const char *debugfs_name;
-	int debugfs_dummy_id;
 
 	unsigned int debugfs_reg_len;
 	unsigned int debugfs_val_len;
@@ -118,9 +116,6 @@ struct regmap {
 	int (*read)(void *context, const void *reg_buf, size_t reg_size,
 		    void *val_buf, size_t val_size);
 	int (*write)(void *context, const void *data, size_t count);
-
-	int (*reg_default_cb)(struct device *dev, unsigned int reg,
-			      unsigned int *val);
 
 	unsigned long read_flag_mask;
 	unsigned long write_flag_mask;
@@ -164,7 +159,7 @@ struct regmap {
 	bool no_sync_defaults;
 
 	struct reg_sequence *patch;
-	unsigned int patch_regs;
+	int patch_regs;
 
 	/* if set, the regmap core can sleep */
 	bool can_sleep;
@@ -186,22 +181,11 @@ struct regmap {
 	struct hwspinlock *hwlock;
 };
 
-/*
- * Scoped guard for the regmap lock. The lock/unlock callbacks are selected
- * at init time (mutex, spinlock, raw spinlock, hwspinlock or none) and never
- * fail, so an unconditional guard is sufficient. Use with guard(regmap)(map)
- * or scoped_guard(regmap, map) { ... }.
- */
-DEFINE_GUARD(regmap, struct regmap *,
-	     _T->lock(_T->lock_arg),
-	     _T->unlock(_T->lock_arg))
-
 struct regcache_ops {
 	const char *name;
 	enum regcache_type type;
 	int (*init)(struct regmap *map);
-	void (*exit)(struct regmap *map);
-	int (*populate)(struct regmap *map);
+	int (*exit)(struct regmap *map);
 #ifdef CONFIG_DEBUG_FS
 	void (*debugfs_init)(struct regmap *map);
 #endif
@@ -304,7 +288,6 @@ enum regmap_endian regmap_get_val_endian(struct device *dev,
 					 const struct regmap_bus *bus,
 					 const struct regmap_config *config);
 
-extern struct regcache_ops regcache_flat_sparse_ops;
 extern struct regcache_ops regcache_rbtree_ops;
 extern struct regcache_ops regcache_maple_ops;
 extern struct regcache_ops regcache_flat_ops;
@@ -333,7 +316,6 @@ static inline unsigned int regcache_get_index_by_order(const struct regmap *map,
 }
 
 struct regmap_ram_data {
-	unsigned int base_reg;
 	unsigned int *vals;  /* Allocatd by caller */
 	bool *read;
 	bool *written;

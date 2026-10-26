@@ -40,7 +40,7 @@ static int mctp_neigh_add(struct mctp_dev *mdev, mctp_eid_t eid,
 		goto out;
 	}
 
-	neigh = kzalloc_obj(*neigh);
+	neigh = kzalloc(sizeof(*neigh), GFP_KERNEL);
 	if (!neigh) {
 		rc = -ENOMEM;
 		goto out;

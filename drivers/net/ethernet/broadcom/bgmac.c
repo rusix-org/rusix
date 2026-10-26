@@ -447,18 +447,16 @@ static int bgmac_dma_rx_read(struct bgmac *bgmac, struct bgmac_dma_ring *ring,
 
 			/* Check for poison and drop or pass the packet */
 			if (len == 0xdead && flags == 0xbeef) {
-				if (net_ratelimit())
-					netdev_err(bgmac->net_dev, "Found poisoned packet at slot %d, DMA issue!\n",
-						   ring->start);
+				netdev_err(bgmac->net_dev, "Found poisoned packet at slot %d, DMA issue!\n",
+					   ring->start);
 				put_page(virt_to_head_page(buf));
 				bgmac->net_dev->stats.rx_errors++;
 				break;
 			}
 
 			if (len > BGMAC_RX_ALLOC_SIZE) {
-				if (net_ratelimit())
-					netdev_err(bgmac->net_dev, "Found oversized packet at slot %d, DMA issue!\n",
-						   ring->start);
+				netdev_err(bgmac->net_dev, "Found oversized packet at slot %d, DMA issue!\n",
+					   ring->start);
 				put_page(virt_to_head_page(buf));
 				bgmac->net_dev->stats.rx_length_errors++;
 				bgmac->net_dev->stats.rx_errors++;
@@ -1185,6 +1183,9 @@ static int bgmac_open(struct net_device *net_dev)
 	if (err)
 		return err;
 
+	/* Specs say about reclaiming rings here, but we do that in DMA init */
+	bgmac_chip_init(bgmac);
+
 	err = request_irq(bgmac->irq, bgmac_interrupt, IRQF_SHARED,
 			  net_dev->name, net_dev);
 	if (err < 0) {
@@ -1193,9 +1194,6 @@ static int bgmac_open(struct net_device *net_dev)
 		return err;
 	}
 	napi_enable(&bgmac->napi);
-
-	/* Specs say about reclaiming rings here, but we do that in DMA init */
-	bgmac_chip_init(bgmac);
 
 	phy_start(net_dev->phydev);
 
@@ -1610,9 +1608,9 @@ int bgmac_enet_resume(struct bgmac *bgmac)
 	if (rc)
 		return rc;
 
-	napi_enable(&bgmac->napi);
-
 	bgmac_chip_init(bgmac);
+
+	napi_enable(&bgmac->napi);
 
 	netif_tx_lock(bgmac->net_dev);
 	netif_device_attach(bgmac->net_dev);

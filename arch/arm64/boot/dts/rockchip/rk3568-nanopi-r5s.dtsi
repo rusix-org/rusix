@@ -515,6 +515,7 @@
 	no-sdio;
 	no-mmc;
 	bus-width = <4>;
+	cap-mmc-highspeed;
 	cap-sd-highspeed;
 	disable-wp;
 	vmmc-supply = <&vcc3v3_sd>;

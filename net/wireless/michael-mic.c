@@ -5,7 +5,6 @@
  */
 #include <linux/types.h>
 #include <linux/bitops.h>
-#include <linux/export.h>
 #include <linux/ieee80211.h>
 #include <linux/unaligned.h>
 

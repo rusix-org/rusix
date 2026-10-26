@@ -3,7 +3,7 @@
  * Copyright (C) 2017-2023 Oracle.  All Rights Reserved.
  * Author: Darrick J. Wong <djwong@kernel.org>
  */
-#include "xfs_platform.h"
+#include "xfs.h"
 #include "xfs_fs.h"
 #include "xfs_shared.h"
 #include "xfs_format.h"
@@ -107,9 +107,8 @@ __xchk_process_error(
 	case -ENODATA:
 		/* Note the badness but don't abort. */
 		sc->sm->sm_flags |= errflag;
-		trace_xchk_op_error(sc, agno, bno, *error, ret_ip);
 		*error = 0;
-		break;
+		fallthrough;
 	default:
 		trace_xchk_op_error(sc, agno, bno, *error, ret_ip);
 		break;
@@ -184,10 +183,8 @@ __xchk_fblock_process_error(
 	case -ENODATA:
 		/* Note the badness but don't abort. */
 		sc->sm->sm_flags |= errflag;
-		trace_xchk_file_op_error(sc, whichfork, offset, *error,
-				ret_ip);
 		*error = 0;
-		break;
+		fallthrough;
 	default:
 		trace_xchk_file_op_error(sc, whichfork, offset, *error,
 				ret_ip);
@@ -254,17 +251,6 @@ xchk_ino_set_preen(
 	trace_xchk_ino_preen(sc, ino, __return_address);
 }
 
-/* Record a block indexed by a file fork that could be optimized. */
-void
-xchk_fblock_set_preen(
-	struct xfs_scrub        *sc,
-	int                     whichfork,
-	xfs_fileoff_t           offset)
-{
-	sc->sm->sm_flags |= XFS_SCRUB_OFLAG_PREEN;
-	trace_xchk_fblock_preen(sc, whichfork, offset, __return_address);
-}
-
 /* Record something being wrong with the filesystem primary superblock. */
 void
 xchk_set_corrupt(
@@ -328,7 +314,7 @@ xchk_ip_xref_set_corrupt(
 	struct xfs_inode	*ip)
 {
 	sc->sm->sm_flags |= XFS_SCRUB_OFLAG_XCORRUPT;
-	trace_xchk_ino_error(sc, I_INO(ip), __return_address);
+	trace_xchk_ino_error(sc, ip->i_ino, __return_address);
 }
 
 /* Record corruption in a block indexed by a file fork. */
@@ -578,10 +564,10 @@ xchk_perag_drain_and_lock(
 int
 xchk_ag_read_headers(
 	struct xfs_scrub	*sc,
-	xfs_agnumber_t		agno)
+	xfs_agnumber_t		agno,
+	struct xchk_ag		*sa)
 {
 	struct xfs_mount	*mp = sc->mp;
-	struct xchk_ag		*sa = &sc->sa;
 
 	ASSERT(!sa->pag);
 	sa->pag = xfs_perag_get(mp, agno);
@@ -594,10 +580,8 @@ xchk_ag_read_headers(
 /* Release all the AG btree cursors. */
 void
 xchk_ag_btcur_free(
-	struct xfs_scrub	*sc)
+	struct xchk_ag		*sa)
 {
-	struct xchk_ag		*sa = &sc->sa;
-
 	if (sa->refc_cur)
 		xfs_btree_del_cursor(sa->refc_cur, XFS_BTREE_ERROR);
 	if (sa->rmap_cur)
@@ -622,10 +606,10 @@ xchk_ag_btcur_free(
 /* Initialize all the btree cursors for an AG. */
 void
 xchk_ag_btcur_init(
-	struct xfs_scrub	*sc)
+	struct xfs_scrub	*sc,
+	struct xchk_ag		*sa)
 {
 	struct xfs_mount	*mp = sc->mp;
-	struct xchk_ag		*sa = &sc->sa;
 
 	if (sa->agf_bp) {
 		/* Set up a bnobt cursor for cross-referencing. */
@@ -677,11 +661,10 @@ xchk_ag_btcur_init(
 /* Release the AG header context and btree cursors. */
 void
 xchk_ag_free(
-	struct xfs_scrub	*sc)
+	struct xfs_scrub	*sc,
+	struct xchk_ag		*sa)
 {
-	struct xchk_ag		*sa = &sc->sa;
-
-	xchk_ag_btcur_free(sc);
+	xchk_ag_btcur_free(sa);
 	xrep_reset_perag_resv(sc);
 	if (sa->agf_bp) {
 		xfs_trans_brelse(sc->tp, sa->agf_bp);
@@ -707,15 +690,16 @@ xchk_ag_free(
 int
 xchk_ag_init(
 	struct xfs_scrub	*sc,
-	xfs_agnumber_t		agno)
+	xfs_agnumber_t		agno,
+	struct xchk_ag		*sa)
 {
 	int			error;
 
-	error = xchk_ag_read_headers(sc, agno);
+	error = xchk_ag_read_headers(sc, agno, sa);
 	if (error)
 		return error;
 
-	xchk_ag_btcur_init(sc);
+	xchk_ag_btcur_init(sc, sa);
 	return 0;
 }
 
@@ -730,10 +714,9 @@ xchk_ag_init(
 int
 xchk_rtgroup_init(
 	struct xfs_scrub	*sc,
-	xfs_rgnumber_t		rgno)
+	xfs_rgnumber_t		rgno,
+	struct xchk_rt		*sr)
 {
-	struct xchk_rt		*sr = &sc->sr;
-
 	ASSERT(sr->rtg == NULL);
 	ASSERT(sr->rtlock_flags == 0);
 
@@ -747,9 +730,9 @@ xchk_rtgroup_init(
 int
 xchk_rtgroup_lock(
 	struct xfs_scrub	*sc,
+	struct xchk_rt		*sr,
 	unsigned int		rtglock_flags)
 {
-	struct xchk_rt		*sr = &sc->sr;
 	int			error = 0;
 
 	ASSERT(sr->rtg != NULL);
@@ -832,10 +815,8 @@ xchk_rtgroup_lock(
  */
 void
 xchk_rtgroup_btcur_free(
-	struct xfs_scrub	*sc)
+	struct xchk_rt		*sr)
 {
-	struct xchk_rt		*sr = &sc->sr;
-
 	if (sr->rmap_cur)
 		xfs_btree_del_cursor(sr->rmap_cur, XFS_BTREE_ERROR);
 	if (sr->refc_cur)
@@ -851,10 +832,8 @@ xchk_rtgroup_btcur_free(
  */
 void
 xchk_rtgroup_unlock(
-	struct xfs_scrub	*sc)
+	struct xchk_rt		*sr)
 {
-	struct xchk_rt		*sr = &sc->sr;
-
 	ASSERT(sr->rtg != NULL);
 
 	if (sr->rtlock_flags) {
@@ -869,13 +848,12 @@ xchk_rtgroup_unlock(
  */
 void
 xchk_rtgroup_free(
-	struct xfs_scrub	*sc)
+	struct xfs_scrub	*sc,
+	struct xchk_rt		*sr)
 {
-	struct xchk_rt		*sr = &sc->sr;
-
 	ASSERT(sr->rtg != NULL);
 
-	xchk_rtgroup_unlock(sc);
+	xchk_rtgroup_unlock(sr);
 
 	xfs_rtgroup_put(sr->rtg);
 	sr->rtg = NULL;
@@ -966,7 +944,7 @@ xchk_setup_ag_btree(
 	if (error)
 		return error;
 
-	return xchk_ag_init(sc, sc->sm->sm_agno);
+	return xchk_ag_init(sc, sc->sm->sm_agno, &sc->sa);
 }
 
 /* Push everything out of the log onto disk. */
@@ -1152,7 +1130,7 @@ xchk_iget_for_scrubbing(
 	ASSERT(sc->tp == NULL);
 
 	/* We want to scan the inode we already had opened. */
-	if (sc->sm->sm_ino == 0 || sc->sm->sm_ino == I_INO(ip_in))
+	if (sc->sm->sm_ino == 0 || sc->sm->sm_ino == ip_in->i_ino)
 		return xchk_install_live_inode(sc, ip_in);
 
 	/*
@@ -1275,7 +1253,7 @@ xchk_irele(
 		 * hits do not clear DONTCACHE, so we must do it here.
 		 */
 		spin_lock(&VFS_I(ip)->i_lock);
-		inode_state_clear(VFS_I(ip), I_DONTCACHE);
+		VFS_I(ip)->i_state &= ~I_DONTCACHE;
 		spin_unlock(&VFS_I(ip)->i_lock);
 	}
 
@@ -1584,7 +1562,7 @@ xchk_inode_is_allocated(
 	 * This isn't the inode we want.
 	 */
 	spin_lock(&ip->i_flags_lock);
-	if (I_INO(ip) != ino)
+	if (ip->i_ino != ino)
 		goto out_skip;
 
 	trace_xchk_inode_is_allocated(ip);
@@ -1692,7 +1670,7 @@ bool
 xchk_inode_is_sb_rooted(const struct xfs_inode *ip)
 {
 	return xchk_inode_is_dirtree_root(ip) ||
-	       xfs_is_sb_inum(ip->i_mount, I_INO(ip));
+	       xfs_is_sb_inum(ip->i_mount, ip->i_ino);
 }
 
 /* What is the root directory inumber for this inode? */
@@ -1702,8 +1680,8 @@ xchk_inode_rootdir_inum(const struct xfs_inode *ip)
 	struct xfs_mount	*mp = ip->i_mount;
 
 	if (xfs_is_metadir_inode(ip))
-		return I_INO(mp->m_metadirip);
-	return I_INO(mp->m_rootip);
+		return mp->m_metadirip->i_ino;
+	return mp->m_rootip->i_ino;
 }
 
 static int

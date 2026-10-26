@@ -44,7 +44,7 @@ int __fbnic_open(struct fbnic_net *fbn)
 	if (err)
 		goto time_stop;
 
-	err = fbnic_mac_request_irq(fbd);
+	err = fbnic_pcs_request_irq(fbd);
 	if (err)
 		goto time_stop;
 
@@ -86,10 +86,10 @@ static int fbnic_stop(struct net_device *netdev)
 {
 	struct fbnic_net *fbn = netdev_priv(netdev);
 
-	fbnic_mac_free_irq(fbn->fbd);
 	phylink_suspend(fbn->phylink, fbnic_bmc_present(fbn->fbd));
 
 	fbnic_down(fbn);
+	fbnic_pcs_free_irq(fbn->fbd);
 
 	fbnic_time_stop(fbn);
 	fbnic_fw_xmit_ownership_msg(fbn->fbd, false);
@@ -183,9 +183,7 @@ static int fbnic_mc_unsync(struct net_device *netdev, const unsigned char *addr)
 	return ret;
 }
 
-void __fbnic_set_rx_mode(struct fbnic_dev *fbd,
-			 struct netdev_hw_addr_list *uc,
-			 struct netdev_hw_addr_list *mc)
+void __fbnic_set_rx_mode(struct fbnic_dev *fbd)
 {
 	bool uc_promisc = false, mc_promisc = false;
 	struct net_device *netdev = fbd->netdev;
@@ -215,10 +213,10 @@ void __fbnic_set_rx_mode(struct fbnic_dev *fbd,
 	}
 
 	/* Synchronize unicast and multicast address lists */
-	err = __hw_addr_sync_dev(uc, netdev, fbnic_uc_sync, fbnic_uc_unsync);
+	err = __dev_uc_sync(netdev, fbnic_uc_sync, fbnic_uc_unsync);
 	if (err == -ENOSPC)
 		uc_promisc = true;
-	err = __hw_addr_sync_dev(mc, netdev, fbnic_mc_sync, fbnic_mc_unsync);
+	err = __dev_mc_sync(netdev, fbnic_mc_sync, fbnic_mc_unsync);
 	if (err == -ENOSPC)
 		mc_promisc = true;
 
@@ -240,23 +238,18 @@ void __fbnic_set_rx_mode(struct fbnic_dev *fbd,
 	fbnic_write_tce_tcam(fbd);
 }
 
-static int fbnic_set_rx_mode(struct net_device *netdev,
-			     struct netdev_hw_addr_list *uc,
-			     struct netdev_hw_addr_list *mc)
+static void fbnic_set_rx_mode(struct net_device *netdev)
 {
 	struct fbnic_net *fbn = netdev_priv(netdev);
 	struct fbnic_dev *fbd = fbn->fbd;
 
 	/* No need to update the hardware if we are not running */
 	if (netif_running(netdev))
-		__fbnic_set_rx_mode(fbd, uc, mc);
-
-	return 0;
+		__fbnic_set_rx_mode(fbd);
 }
 
 static int fbnic_set_mac(struct net_device *netdev, void *p)
 {
-	struct fbnic_net *fbn = netdev_priv(netdev);
 	struct sockaddr *addr = p;
 
 	if (!is_valid_ether_addr(addr->sa_data))
@@ -264,11 +257,7 @@ static int fbnic_set_mac(struct net_device *netdev, void *p)
 
 	eth_hw_addr_set(netdev, addr->sa_data);
 
-	if (netif_running(netdev)) {
-		netif_addr_lock_bh(netdev);
-		__fbnic_set_rx_mode(fbn->fbd, &netdev->uc, &netdev->mc);
-		netif_addr_unlock_bh(netdev);
-	}
+	fbnic_set_rx_mode(netdev);
 
 	return 0;
 }
@@ -313,10 +302,8 @@ void fbnic_clear_rx_mode(struct fbnic_dev *fbd)
 	/* Write updates to hardware */
 	fbnic_write_macda(fbd);
 
-	netif_addr_lock_bh(netdev);
 	__dev_uc_unsync(netdev, NULL);
 	__dev_mc_unsync(netdev, NULL);
-	netif_addr_unlock_bh(netdev);
 }
 
 static int fbnic_hwtstamp_get(struct net_device *netdev,
@@ -564,7 +551,7 @@ static const struct net_device_ops fbnic_netdev_ops = {
 	.ndo_features_check	= fbnic_features_check,
 	.ndo_set_mac_address	= fbnic_set_mac,
 	.ndo_change_mtu		= fbnic_change_mtu,
-	.ndo_set_rx_mode_async	= fbnic_set_rx_mode,
+	.ndo_set_rx_mode	= fbnic_set_rx_mode,
 	.ndo_get_stats64	= fbnic_get_stats64,
 	.ndo_bpf		= fbnic_bpf,
 	.ndo_hwtstamp_get	= fbnic_hwtstamp_get,
@@ -728,7 +715,10 @@ void fbnic_reset_queues(struct fbnic_net *fbn,
  **/
 void fbnic_netdev_free(struct fbnic_dev *fbd)
 {
-	fbnic_phylink_destroy(fbd->netdev);
+	struct fbnic_net *fbn = netdev_priv(fbd->netdev);
+
+	if (fbn->phylink)
+		phylink_destroy(fbn->phylink);
 
 	free_netdev(fbd->netdev);
 	fbd->netdev = NULL;
@@ -759,7 +749,7 @@ struct net_device *fbnic_netdev_alloc(struct fbnic_dev *fbd)
 	netdev->netdev_ops = &fbnic_netdev_ops;
 	netdev->stat_ops = &fbnic_stat_ops;
 	netdev->queue_mgmt_ops = &fbnic_queue_mgmt_ops;
-	netdev->netmem_tx = NETMEM_TX_DMA;
+	netdev->netmem_tx = true;
 
 	fbnic_set_ethtool_ops(netdev);
 
@@ -772,10 +762,6 @@ struct net_device *fbnic_netdev_alloc(struct fbnic_dev *fbd)
 	fbn->hpq_size = FBNIC_HPQ_SIZE_DEFAULT;
 	fbn->ppq_size = FBNIC_PPQ_SIZE_DEFAULT;
 	fbn->rcq_size = FBNIC_RCQ_SIZE_DEFAULT;
-
-	netdev->cfg->rings.rx_pending = fbn->rcq_size;
-	netdev->cfg->rings.rx_mini_pending = fbn->hpq_size;
-	netdev->cfg->rings.rx_jumbo_pending = fbn->ppq_size;
 
 	fbn->tx_usecs = FBNIC_TX_USECS_DEFAULT;
 	fbn->rx_usecs = FBNIC_RX_USECS_DEFAULT;
@@ -836,9 +822,8 @@ struct net_device *fbnic_netdev_alloc(struct fbnic_dev *fbd)
 
 	netif_tx_stop_all_queues(netdev);
 
-	if (fbnic_phylink_create(netdev)) {
-		free_netdev(netdev);
-		fbd->netdev = NULL;
+	if (fbnic_phylink_init(netdev)) {
+		fbnic_netdev_free(fbd);
 		return NULL;
 	}
 

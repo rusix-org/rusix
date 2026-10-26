@@ -301,7 +301,6 @@ static __always_inline void __cpacf_query(unsigned int opcode,
 					  cpacf_mask_t *mask)
 {
 	__cpacf_query_insn(opcode, mask, CPACF_FC_QUERY);
-	kmsan_unpoison_memory(mask, sizeof(*mask));
 }
 
 static __always_inline int __cpacf_check_opcode(unsigned int opcode)
@@ -371,7 +370,6 @@ static __always_inline int cpacf_query_func(unsigned int opcode,
 static __always_inline void __cpacf_qai(unsigned int opcode, cpacf_qai_t *qai)
 {
 	__cpacf_query_insn(opcode, qai, CPACF_FC_QUERY_AUTH_INFO);
-	kmsan_unpoison_memory(qai, sizeof(*qai));
 }
 
 /**
@@ -424,7 +422,6 @@ static inline int cpacf_km(unsigned long func, void *param,
 		  [opc] "i" (CPACF_KM)
 		: "cc", "memory", "0", "1");
 
-	kmsan_unpoison_memory(dest, src_len - s.odd);
 	return src_len - s.odd;
 }
 
@@ -457,7 +454,6 @@ static inline int cpacf_kmc(unsigned long func, void *param,
 		  [opc] "i" (CPACF_KMC)
 		: "cc", "memory", "0", "1");
 
-	kmsan_unpoison_memory(dest, src_len - s.odd);
 	return src_len - s.odd;
 }
 
@@ -591,7 +587,6 @@ static inline int cpacf_kmctr(unsigned long func, void *param, u8 *dest,
 		  [opc] "i" (CPACF_KMCTR)
 		: "cc", "memory", "0", "1");
 
-	kmsan_unpoison_memory(dest, src_len - s.odd);
 	return src_len - s.odd;
 }
 
@@ -624,7 +619,6 @@ static inline void cpacf_prno(unsigned long func, void *param,
 		: [fc] "d" (func), [pba] "d" ((unsigned long)param),
 		  [seed] "d" (s.pair), [opc] "i" (CPACF_PRNO)
 		: "cc", "memory", "0", "1");
-	kmsan_unpoison_memory(dest, dest_len);
 }
 
 /**

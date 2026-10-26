@@ -10,7 +10,6 @@
 # XZ-compressed kernel isn't currently supported on every listed arch.
 #
 #   Arch        Align   Notes
-#   alpha         4
 #   arm          2/4    ARM and ARM-Thumb2
 #   arm64         4
 #   csky          2
@@ -45,10 +44,6 @@ BCJ=
 # Set the BCJ filter if one is available.
 # It must match the #ifdef usage in lib/decompress_unxz.c.
 case $SRCARCH in
-	alpha)
-		ALIGN=4
-		;;
-
 	arm)
 		if is_enabled CONFIG_THUMB2_KERNEL; then
 			ALIGN=2

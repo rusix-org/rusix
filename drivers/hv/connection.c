@@ -47,26 +47,25 @@ EXPORT_SYMBOL_GPL(vmbus_proto_version);
 
 /*
  * Table of VMBus versions listed from newest to oldest.
- * VERSION_WIN7,VERSION_WS2008, VERSION_WIN8 (which is
- * Windows Server 2012) and VERSION_WIN8_1 (which is
- * Windows Server 2012 R2) are no longer supported in
+ * VERSION_WIN7 and VERSION_WS2008 are no longer supported in
  * Linux guests and are not listed.
  */
 static __u32 vmbus_versions[] = {
-	VERSION_WIN10_V6_0,
 	VERSION_WIN10_V5_3,
 	VERSION_WIN10_V5_2,
 	VERSION_WIN10_V5_1,
 	VERSION_WIN10_V5,
 	VERSION_WIN10_V4_1,
-	VERSION_WIN10
+	VERSION_WIN10,
+	VERSION_WIN8_1,
+	VERSION_WIN8
 };
 
 /*
  * Maximal VMBus protocol version guests can negotiate.  Useful to cap the
  * VMBus version for testing and debugging purpose.
  */
-static uint max_version = VERSION_WIN10_V6_0;
+static uint max_version = VERSION_WIN10_V5_3;
 
 module_param(max_version, uint, S_IRUGO);
 MODULE_PARM_DESC(max_version,
@@ -106,9 +105,6 @@ static int vmbus_try_connection_id(struct vmbus_channel_msginfo *msginfo,
 		msg->interrupt_page = virt_to_phys(vmbus_connection.int_page);
 		vmbus_connection.msg_conn_id = VMBUS_MESSAGE_CONNECTION_ID;
 	}
-
-	if (vmbus_is_confidential() && version >= VERSION_WIN10_V6_0)
-		msg->feature_flags = VMBUS_FEATURE_FLAG_CONFIDENTIAL_CHANNELS;
 
 	/*
 	 * shared_gpa_boundary is zero in non-SNP VMs, so it's safe to always
@@ -304,9 +300,6 @@ int vmbus_connect(void)
 	for (i = 0; ; i++) {
 		if (i == ARRAY_SIZE(vmbus_versions)) {
 			ret = -EDOM;
-			pr_err("Hyper-V host does not support VMBus version %d.%d or higher;\n\
-		 the host may be an older version no longer supported by Linux\n",
-				vmbus_versions[i-1] >> 16, vmbus_versions[i-1] & 0xFFFF);
 			goto cleanup;
 		}
 
@@ -333,8 +326,9 @@ int vmbus_connect(void)
 	pr_info("Vmbus version:%d.%d\n",
 		version >> 16, version & 0xFFFF);
 
-	vmbus_connection.channels = kzalloc_objs(struct vmbus_channel *,
-						 MAX_CHANNEL_RELIDS);
+	vmbus_connection.channels = kcalloc(MAX_CHANNEL_RELIDS,
+					    sizeof(struct vmbus_channel *),
+					    GFP_KERNEL);
 	if (vmbus_connection.channels == NULL) {
 		ret = -ENOMEM;
 		goto cleanup;
@@ -346,6 +340,7 @@ int vmbus_connect(void)
 cleanup:
 	pr_err("Unable to connect to host\n");
 
+	vmbus_connection.conn_state = DISCONNECTED;
 	vmbus_disconnect();
 
 	kfree(msginfo);

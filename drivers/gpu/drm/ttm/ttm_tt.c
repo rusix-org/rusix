@@ -40,14 +40,12 @@
 #include <linux/shmem_fs.h>
 #include <drm/drm_cache.h>
 #include <drm/drm_device.h>
-#include <drm/drm_print.h>
 #include <drm/drm_util.h>
 #include <drm/ttm/ttm_backup.h>
 #include <drm/ttm/ttm_bo.h>
 #include <drm/ttm/ttm_tt.h>
 
 #include "ttm_module.h"
-#include "ttm_pool_internal.h"
 
 static unsigned long ttm_pages_limit;
 
@@ -95,8 +93,7 @@ int ttm_tt_create(struct ttm_buffer_object *bo, bool zero_alloc)
 	 * mapped TT pages need to be decrypted or otherwise the drivers
 	 * will end up sending encrypted mem to the gpu.
 	 */
-	if (ttm_pool_uses_dma_alloc(&bdev->pool) &&
-	    cc_platform_has(CC_ATTR_GUEST_MEM_ENCRYPT)) {
+	if (bdev->pool.use_dma_alloc && cc_platform_has(CC_ATTR_GUEST_MEM_ENCRYPT)) {
 		page_flags |= TTM_TT_FLAG_DECRYPTED;
 		drm_info_once(ddev, "TT memory decryption enabled.");
 	}
@@ -137,7 +134,8 @@ static int ttm_dma_tt_alloc_page_directory(struct ttm_tt *ttm)
 
 static int ttm_sg_tt_alloc_page_directory(struct ttm_tt *ttm)
 {
-	ttm->dma_address = kvzalloc_objs(*ttm->dma_address, ttm->num_pages);
+	ttm->dma_address = kvcalloc(ttm->num_pages, sizeof(*ttm->dma_address),
+				    GFP_KERNEL);
 	if (!ttm->dma_address)
 		return -ENOMEM;
 
@@ -329,7 +327,7 @@ int ttm_tt_swapout(struct ttm_device *bdev, struct ttm_tt *ttm,
 	struct page *to_page;
 	int i, ret;
 
-	swap_storage = shmem_file_setup("ttm swap", size, EMPTY_VMA_FLAGS);
+	swap_storage = shmem_file_setup("ttm swap", size, 0);
 	if (IS_ERR(swap_storage)) {
 		pr_err("Failed allocating swap storage\n");
 		return PTR_ERR(swap_storage);
@@ -380,7 +378,7 @@ int ttm_tt_populate(struct ttm_device *bdev,
 
 	if (!(ttm->page_flags & TTM_TT_FLAG_EXTERNAL)) {
 		atomic_long_add(ttm->num_pages, &ttm_pages_allocated);
-		if (ttm_pool_uses_dma32(&bdev->pool))
+		if (bdev->pool.use_dma32)
 			atomic_long_add(ttm->num_pages,
 					&ttm_dma32_pages_allocated);
 	}
@@ -418,7 +416,7 @@ int ttm_tt_populate(struct ttm_device *bdev,
 error:
 	if (!(ttm->page_flags & TTM_TT_FLAG_EXTERNAL)) {
 		atomic_long_sub(ttm->num_pages, &ttm_pages_allocated);
-		if (ttm_pool_uses_dma32(&bdev->pool))
+		if (bdev->pool.use_dma32)
 			atomic_long_sub(ttm->num_pages,
 					&ttm_dma32_pages_allocated);
 	}
@@ -441,7 +439,7 @@ void ttm_tt_unpopulate(struct ttm_device *bdev, struct ttm_tt *ttm)
 
 	if (!(ttm->page_flags & TTM_TT_FLAG_EXTERNAL)) {
 		atomic_long_sub(ttm->num_pages, &ttm_pages_allocated);
-		if (ttm_pool_uses_dma32(&bdev->pool))
+		if (bdev->pool.use_dma32)
 			atomic_long_sub(ttm->num_pages,
 					&ttm_dma32_pages_allocated);
 	}
@@ -455,7 +453,7 @@ EXPORT_SYMBOL_FOR_TESTS_ONLY(ttm_tt_unpopulate);
 /* Test the shrinker functions and dump the result */
 static int ttm_tt_debugfs_shrink_show(struct seq_file *m, void *data)
 {
-	struct ttm_operation_ctx ctx = { };
+	struct ttm_operation_ctx ctx = { false, false };
 
 	seq_printf(m, "%d\n", ttm_global_swapout(&ctx, GFP_KERNEL));
 	return 0;

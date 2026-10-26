@@ -8,7 +8,7 @@
 #include <linux/unaligned.h>
 #include "nvmet.h"
 
-#define NVMET_PR_NOTIFY_MASK_ALL \
+#define NVMET_PR_NOTIFI_MASK_ALL \
 	(1 << NVME_PR_NOTIFY_BIT_REG_PREEMPTED | \
 	 1 << NVME_PR_NOTIFY_BIT_RESV_RELEASED | \
 	 1 << NVME_PR_NOTIFY_BIT_RESV_PREEMPTED)
@@ -44,7 +44,7 @@ u16 nvmet_set_feat_resv_notif_mask(struct nvmet_req *req, u32 mask)
 	unsigned long idx;
 	u16 status;
 
-	if (mask & ~(NVMET_PR_NOTIFY_MASK_ALL)) {
+	if (mask & ~(NVMET_PR_NOTIFI_MASK_ALL)) {
 		req->error_loc = offsetof(struct nvme_common_command, cdw11);
 		return NVME_SC_INVALID_FIELD | NVME_STATUS_DNR;
 	}
@@ -149,7 +149,7 @@ static void nvmet_pr_add_resv_log(struct nvmet_ctrl *ctrl, u8 log_type,
 	log.nsid = cpu_to_le32(nsid);
 
 	if (!kfifo_put(&log_mgr->log_queue, log)) {
-		pr_info("a reservation log lost, cntlid:%d, log_type:%d, nsid:%u\n",
+		pr_info("a reservation log lost, cntlid:%d, log_type:%d, nsid:%d\n",
 			ctrl->cntlid, log_type, nsid);
 		log_mgr->lost_count++;
 	}
@@ -173,7 +173,7 @@ static void nvmet_pr_resv_released(struct nvmet_pr *pr, uuid_t *hostid)
 			nvmet_pr_add_resv_log(ctrl,
 				NVME_PR_LOG_RESERVATION_RELEASED, ns->nsid);
 			nvmet_add_async_event(ctrl, NVME_AER_CSS,
-				NVME_AEN_RESV_LOG_PAGE_AVAILABLE,
+				NVME_AEN_RESV_LOG_PAGE_AVALIABLE,
 				NVME_LOG_RESERVATION);
 		}
 	}
@@ -192,7 +192,7 @@ static void nvmet_pr_send_event_to_host(struct nvmet_pr *pr, uuid_t *hostid,
 		if (uuid_equal(hostid, &ctrl->hostid)) {
 			nvmet_pr_add_resv_log(ctrl, log_type, ns->nsid);
 			nvmet_add_async_event(ctrl, NVME_AER_CSS,
-				NVME_AEN_RESV_LOG_PAGE_AVAILABLE,
+				NVME_AEN_RESV_LOG_PAGE_AVALIABLE,
 				NVME_LOG_RESERVATION);
 		}
 	}
@@ -205,7 +205,7 @@ static void nvmet_pr_resv_preempted(struct nvmet_pr *pr, uuid_t *hostid)
 		return;
 
 	nvmet_pr_send_event_to_host(pr, hostid,
-		NVME_PR_LOG_RESERVATION_PREEMPTED);
+		NVME_PR_LOG_RESERVATOIN_PREEMPTED);
 }
 
 static void nvmet_pr_registration_preempted(struct nvmet_pr *pr,
@@ -234,7 +234,7 @@ static u16 nvmet_pr_register(struct nvmet_req *req,
 	u16 status = NVME_SC_SUCCESS;
 	u64 nrkey = le64_to_cpu(d->nrkey);
 
-	new = kmalloc_obj(*new);
+	new = kmalloc(sizeof(*new), GFP_KERNEL);
 	if (!new)
 		return NVME_SC_INTERNAL;
 
@@ -335,7 +335,7 @@ static u16 nvmet_pr_update_reg_attr(struct nvmet_pr *pr,
 		return NVME_SC_SUCCESS;
 	}
 
-	new = kmalloc_obj(*new, GFP_ATOMIC);
+	new = kmalloc(sizeof(*new), GFP_ATOMIC);
 	if (!new)
 		return NVME_SC_INTERNAL;
 
@@ -407,7 +407,7 @@ static void nvmet_execute_pr_register(struct nvmet_req *req)
 	u8 reg_act = cdw10 & 0x07; /* Reservation Register Action, bit 02:00 */
 	u16 status;
 
-	d = kmalloc_obj(*d);
+	d = kmalloc(sizeof(*d), GFP_KERNEL);
 	if (!d) {
 		status = NVME_SC_INTERNAL;
 		goto out;
@@ -589,11 +589,11 @@ static u16 nvmet_pr_preempt(struct nvmet_req *req,
 				&ctrl->hostid, abort);
 	}
 
-	if (holder == reg && prkey == holder->rkey) {
+	if (holder == reg) {
 		status = nvmet_pr_update_reg_attr(pr, holder,
 				nvmet_pr_update_holder_rtype, &rtype);
 		if (!status && original_rtype != rtype)
-			nvmet_pr_resv_released(pr, &ctrl->hostid);
+			nvmet_pr_resv_released(pr, &reg->hostid);
 		return status;
 	}
 
@@ -689,7 +689,7 @@ static void nvmet_execute_pr_acquire(struct nvmet_req *req)
 		goto out;
 	}
 
-	d = kmalloc_obj(*d);
+	d = kmalloc(sizeof(*d), GFP_KERNEL);
 	if (!d) {
 		status = NVME_SC_INTERNAL;
 		goto out;
@@ -800,7 +800,7 @@ static void nvmet_execute_pr_release(struct nvmet_req *req)
 		goto out;
 	}
 
-	d = kmalloc_obj(*d);
+	d = kmalloc(sizeof(*d), GFP_KERNEL);
 	if (!d) {
 		status = NVME_SC_INTERNAL;
 		goto out;
@@ -1040,7 +1040,7 @@ static int nvmet_pr_alloc_and_insert_pc_ref(struct nvmet_ns *ns,
 	struct nvmet_pr_per_ctrl_ref *pc_ref;
 	int ret;
 
-	pc_ref = kmalloc_obj(*pc_ref, GFP_ATOMIC);
+	pc_ref = kmalloc(sizeof(*pc_ref), GFP_ATOMIC);
 	if (!pc_ref)
 		return  -ENOMEM;
 

@@ -3,9 +3,8 @@
 #define _LINUX_RING_BUFFER_H
 
 #include <linux/mm.h>
-#include <linux/poll.h>
-#include <linux/ring_buffer_types.h>
 #include <linux/seq_file.h>
+#include <linux/poll.h>
 
 #include <uapi/linux/trace_mmap.h>
 
@@ -97,13 +96,6 @@ struct trace_buffer *__ring_buffer_alloc_range(unsigned long size, unsigned flag
 					       struct lock_class_key *key);
 
 void *ring_buffer_meta_scratch(struct trace_buffer *buffer, unsigned int *size);
-
-/*
- * A minimum of 2 pages ensures we can always swap a page out of the ring
- * buffer. This does not account for the reader page or any other page
- * containing meta data used by static ring buffers.
- */
-#define RING_BUFFER_MIN_NR_PAGES 2UL
 
 /*
  * Because the ring buffer is generic, if other users of the ring buffer get
@@ -247,7 +239,6 @@ int ring_buffer_subbuf_size_get(struct trace_buffer *buffer);
 
 enum ring_buffer_flags {
 	RB_FL_OVERWRITE		= 1 << 0,
-	RB_FL_TESTING		= 1 << 1,
 };
 
 #ifdef CONFIG_RING_BUFFER
@@ -261,76 +252,4 @@ int ring_buffer_map(struct trace_buffer *buffer, int cpu,
 void ring_buffer_map_dup(struct trace_buffer *buffer, int cpu);
 int ring_buffer_unmap(struct trace_buffer *buffer, int cpu);
 int ring_buffer_map_get_reader(struct trace_buffer *buffer, int cpu);
-
-struct ring_buffer_desc {
-	int		cpu;
-	unsigned int	nr_page_va; /* excludes the meta page */
-	unsigned long	meta_va;
-	unsigned long	page_va[] __counted_by(nr_page_va);
-};
-
-struct trace_buffer_desc {
-	int		nr_cpus;
-	size_t		struct_len;
-	char		__data[]; /* list of ring_buffer_desc */
-};
-
-static inline struct ring_buffer_desc *__next_ring_buffer_desc(struct ring_buffer_desc *desc)
-{
-	size_t len = struct_size(desc, page_va, desc->nr_page_va);
-
-	return (struct ring_buffer_desc *)((void *)desc + len);
-}
-
-static inline struct ring_buffer_desc *__first_ring_buffer_desc(struct trace_buffer_desc *desc)
-{
-	return (struct ring_buffer_desc *)(&desc->__data[0]);
-}
-
-/*
- * Returns the number of pages for a ring_buffer_desc. The caller must ensure it
- * does not overflow ring_buffer_desc::nr_page_va.
- */
-static inline unsigned long __calc_nr_pages_ring_buffer_desc(size_t size)
-{
-	/* Takes into account the reader page */
-	return max(DIV_ROUND_UP(size, PAGE_SIZE - BUF_PAGE_HDR_SIZE), RING_BUFFER_MIN_NR_PAGES) + 1;
-}
-
-static inline size_t trace_buffer_desc_size(size_t buffer_size, unsigned int nr_cpus)
-{
-	unsigned long nr_pages = __calc_nr_pages_ring_buffer_desc(buffer_size);
-	struct ring_buffer_desc *rbdesc;
-
-	/* Capped by ring_buffer_desc::nr_page_va */
-	if (nr_pages > UINT_MAX)
-		return SIZE_MAX;
-
-	return size_add(offsetof(struct trace_buffer_desc, __data),
-			size_mul(nr_cpus, struct_size(rbdesc, page_va, nr_pages)));
-}
-
-#define for_each_ring_buffer_desc(__pdesc, __cpu, __trace_pdesc)		\
-	for (__pdesc = __first_ring_buffer_desc(__trace_pdesc), __cpu = 0;	\
-	     (__cpu) < (__trace_pdesc)->nr_cpus;				\
-	     (__cpu)++, __pdesc = __next_ring_buffer_desc(__pdesc))
-
-struct ring_buffer_remote {
-	struct trace_buffer_desc	*desc;
-	int				(*swap_reader_page)(unsigned int cpu, void *priv);
-	int				(*reset)(unsigned int cpu, void *priv);
-	void				*priv;
-};
-
-int ring_buffer_poll_remote(struct trace_buffer *buffer, int cpu);
-
-struct trace_buffer *
-__ring_buffer_alloc_remote(struct ring_buffer_remote *remote,
-			   struct lock_class_key *key);
-
-#define ring_buffer_alloc_remote(remote)			\
-({								\
-	static struct lock_class_key __key;			\
-	__ring_buffer_alloc_remote(remote, &__key);		\
-})
 #endif /* _LINUX_RING_BUFFER_H */

@@ -247,7 +247,7 @@ static int mtk_cirq_suspend(void *data)
 		writel_relaxed(mask, reg);
 	}
 
-	/* set edge_only mode, record edge-triggered interrupts */
+	/* set edge_only mode, record edge-triggerd interrupts */
 	/* enable cirq */
 	reg = mtk_cirq_reg(cirq_data, CIRQ_CONTROL);
 	value = readl_relaxed(reg);
@@ -311,7 +311,7 @@ static int __init mtk_cirq_of_init(struct device_node *node,
 		return -EINVAL;
 	}
 
-	cirq_data = kzalloc_obj(*cirq_data);
+	cirq_data = kzalloc(sizeof(*cirq_data), GFP_KERNEL);
 	if (!cirq_data)
 		return -ENOMEM;
 

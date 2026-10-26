@@ -86,6 +86,8 @@
 	pinctrl-0 = <&pcie2_default_state>;
 	pinctrl-names = "default";
 
+	perst-gpios = <&tlmm 31 GPIO_ACTIVE_LOW>;
+
 	status = "okay";
 };
 
@@ -93,23 +95,17 @@
 	status = "okay";
 };
 
-&pcie2_port0 {
-	reset-gpios = <&tlmm 31 GPIO_ACTIVE_LOW>;
-};
-
 &pcie3 {
 	pinctrl-0 = <&pcie3_default_state>;
 	pinctrl-names = "default";
+
+	perst-gpios = <&tlmm 34 GPIO_ACTIVE_LOW>;
 
 	status = "okay";
 };
 
 &pcie3_phy {
 	status = "okay";
-};
-
-&pcie3_port0 {
-	reset-gpios = <&tlmm 34 GPIO_ACTIVE_LOW>;
 };
 
 &qusb_phy_0 {
@@ -124,6 +120,13 @@
 	vdd-supply = <&vreg_misc_0p925>;
 	vdda-pll-supply = <&vreg_misc_1p8>;
 	vdda-phy-dpdm-supply = <&vreg_misc_3p3>;
+
+	status = "okay";
+};
+
+&sdhc {
+	pinctrl-0 = <&sdc_default_state>;
+	pinctrl-names = "default";
 
 	status = "okay";
 };
@@ -198,26 +201,26 @@
 		};
 	};
 
-	qpic_snand_default_state: qpic-snand-default-state {
-		clock-pins {
+	sdc_default_state: sdc-default-state {
+		clk-pins {
 			pins = "gpio5";
-			function = "qspi_clk";
+			function = "sdc_clk";
 			drive-strength = <8>;
-			bias-pull-down;
+			bias-disable;
 		};
 
-		cs-pins {
+		cmd-pins {
 			pins = "gpio4";
-			function = "qspi_cs";
+			function = "sdc_cmd";
 			drive-strength = <8>;
 			bias-pull-up;
 		};
 
 		data-pins {
 			pins = "gpio0", "gpio1", "gpio2", "gpio3";
-			function = "qspi_data";
+			function = "sdc_data";
 			drive-strength = <8>;
-			bias-pull-down;
+			bias-pull-up;
 		};
 	};
 
@@ -240,29 +243,6 @@
 		function = "gpio";
 		drive-strength = <8>;
 		bias-pull-up;
-	};
-};
-
-&qpic_bam {
-	status = "okay";
-};
-
-&qpic_nand {
-	pinctrl-0 = <&qpic_snand_default_state>;
-	pinctrl-names = "default";
-
-	status = "okay";
-
-	flash@0 {
-		compatible = "spi-nand";
-		reg = <0>;
-		#address-cells = <1>;
-		#size-cells = <1>;
-		nand-ecc-engine = <&qpic_nand>;
-		nand-ecc-strength = <4>;
-		nand-ecc-step-size = <512>;
-		spi-rx-bus-width = <4>;
-		spi-tx-bus-width = <4>;
 	};
 };
 

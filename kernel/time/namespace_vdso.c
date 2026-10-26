@@ -74,8 +74,11 @@ struct page *find_timens_vvar_page(struct vm_area_struct *vma)
 		return current->nsproxy->time_ns->vvar_page;
 
 	/*
-	 * vvar_fault() protects this from being called through remote interfaces like
-	 * /proc/$pid/mem or process_vm_{readv,writev}().
+	 * VM_PFNMAP | VM_IO protect .fault() handler from being called
+	 * through interfaces like /proc/$pid/mem or
+	 * process_vm_{readv,writev}() as long as there's no .access()
+	 * in special_mapping_vmops().
+	 * For more details check_vma_flags() and __access_remote_vm()
 	 */
 
 	WARN(1, "vvar_page accessed remotely");
@@ -131,7 +134,7 @@ static int vdso_join_timens(struct task_struct *task, struct time_namespace *ns)
 	guard(mmap_read_lock)(mm);
 	for_each_vma(vmi, vma) {
 		if (vma_is_special_mapping(vma, &vdso_vvar_mapping))
-			zap_vma(vma);
+			zap_vma_pages(vma);
 	}
 	return 0;
 }
@@ -140,18 +143,4 @@ void timens_commit(struct task_struct *tsk, struct time_namespace *ns)
 {
 	timens_set_vvar_page(tsk, ns);
 	vdso_join_timens(tsk, ns);
-}
-
-int timens_vdso_alloc_vvar_page(struct time_namespace *ns)
-{
-	ns->vvar_page = alloc_page(GFP_KERNEL_ACCOUNT | __GFP_ZERO);
-	if (!ns->vvar_page)
-		return -ENOMEM;
-
-	return 0;
-}
-
-void timens_vdso_free_vvar_page(struct time_namespace *ns)
-{
-	__free_page(ns->vvar_page);
 }

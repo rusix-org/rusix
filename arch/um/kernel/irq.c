@@ -22,9 +22,6 @@
 #include <irq_kern.h>
 #include <linux/time-internal.h>
 
-DEFINE_PER_CPU_SHARED_ALIGNED(irq_cpustat_t, irq_stat);
-
-#define irq_stats(x)		(&per_cpu(irq_stat, x))
 
 /* When epoll triggers we do not know why it did so
  * we can also have different IRQs for read and write.
@@ -326,7 +323,7 @@ already:
 
 		/* don't restore interrupts */
 		raw_spin_unlock(&irq_lock);
-		new = kzalloc_obj(*irq_entry, GFP_ATOMIC);
+		new = kzalloc(sizeof(*irq_entry), GFP_ATOMIC);
 		if (!new) {
 			local_irq_restore(flags);
 			return -ENOMEM;
@@ -686,7 +683,7 @@ void __init init_IRQ(void)
 {
 	int i;
 
-	irq_set_chip_and_handler(TIMER_IRQ, &alarm_irq_type, handle_percpu_irq);
+	irq_set_chip_and_handler(TIMER_IRQ, &alarm_irq_type, handle_edge_irq);
 
 	for (i = 1; i < UM_LAST_SIGNAL_IRQ; i++)
 		irq_set_chip_and_handler(i, &normal_irq_type, handle_edge_irq);
@@ -703,26 +700,4 @@ void sigchld_handler(int sig, struct siginfo *unused_si,
 		     struct uml_pt_regs *regs, void *mc)
 {
 	do_IRQ(SIGCHLD_IRQ, regs);
-}
-
-/*
- * /proc/interrupts printing for arch specific interrupts
- */
-int arch_show_interrupts(struct seq_file *p, int prec)
-{
-#if IS_ENABLED(CONFIG_SMP)
-	int cpu;
-
-	seq_printf(p, "%*s: ", prec, "RES");
-	for_each_online_cpu(cpu)
-		seq_printf(p, "%10u ", irq_stats(cpu)->irq_resched_count);
-	seq_puts(p, " Rescheduling interrupts\n");
-
-	seq_printf(p, "%*s: ", prec, "CAL");
-	for_each_online_cpu(cpu)
-		seq_printf(p, "%10u ", irq_stats(cpu)->irq_call_count);
-	seq_puts(p, " Function call interrupts\n");
-#endif
-
-	return 0;
 }

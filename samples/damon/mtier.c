@@ -52,11 +52,6 @@ module_param(detect_node_addresses, bool, 0600);
 
 static struct damon_ctx *ctxs[2];
 
-/*
- * Use phys_addr_t instead of damon_addr_range (unsigned long) for physical
- * addresses.  On 32-bit systems with more than 4GB memory, phys_addr_t will
- * be 64-bit while unsigned long is 32-bit.
- */
 struct region_range {
 	phys_addr_t start;
 	phys_addr_t end;
@@ -80,11 +75,11 @@ static struct damon_ctx *damon_sample_mtier_build_ctx(bool promote)
 	struct damon_ctx *ctx;
 	struct damon_attrs attrs;
 	struct damon_target *target;
+	struct damon_region *region;
 	struct damos *scheme;
 	struct damos_quota_goal *quota_goal;
 	struct damos_filter *filter;
 	struct region_range addr;
-	struct damon_addr_range range;
 	int ret;
 
 	ctx = damon_new_ctx();
@@ -127,13 +122,10 @@ static struct damon_ctx *damon_sample_mtier_build_ctx(bool promote)
 
 	if (addr.start >= addr.end)
 		goto free_out;
-
-	range.start = addr.start;
-	range.end = addr.end;
-
-	ret = damon_set_regions(target, &range, 1, DAMON_MIN_REGION_SZ);
-	if (ret)
+	region = damon_new_region(addr.start, addr.end);
+	if (!region)
 		goto free_out;
+	damon_add_region(region, target);
 
 	scheme = damon_new_scheme(
 			/* access pattern */
@@ -161,6 +153,9 @@ static struct damon_ctx *damon_sample_mtier_build_ctx(bool promote)
 	if (!scheme)
 		goto free_out;
 	damon_set_schemes(ctx, &scheme, 1);
+	/* zero target value causes division by zero in damos_quota_store() */
+	if (!node0_mem_used_bp || !node0_mem_free_bp)
+		goto free_out;
 	quota_goal = damos_new_quota_goal(
 			promote ? DAMOS_QUOTA_NODE_MEM_USED_BP :
 			DAMOS_QUOTA_NODE_MEM_FREE_BP,
@@ -198,6 +193,8 @@ static int damon_sample_mtier_start(void)
 	if (!err)
 		return 0;
 
+	if (damon_is_running(ctxs[0]))
+		damon_stop(ctxs, 1);
 	damon_destroy_ctx(ctxs[0]);
 	damon_destroy_ctx(ctxs[1]);
 	return err;
@@ -205,7 +202,8 @@ static int damon_sample_mtier_start(void)
 
 static void damon_sample_mtier_stop(void)
 {
-	damon_stop(ctxs, 2);
+	damon_stop(ctxs, 1);
+	damon_stop(&ctxs[1], 1);
 	damon_destroy_ctx(ctxs[0]);
 	damon_destroy_ctx(ctxs[1]);
 }

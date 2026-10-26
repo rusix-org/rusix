@@ -27,7 +27,6 @@
 #include <soc/tegra/mc.h>
 
 #include "mc.h"
-#include "tegra-emc-common.h"
 
 #define EMC_FBIO_CFG5				0x104
 #define	EMC_FBIO_CFG5_DRAM_TYPE_MASK		0x3
@@ -468,6 +467,17 @@ struct emc_timing {
 	u32 emc_zcal_interval;
 };
 
+enum emc_rate_request_type {
+	EMC_RATE_DEBUG,
+	EMC_RATE_ICC,
+	EMC_RATE_TYPE_MAX,
+};
+
+struct emc_rate_request {
+	unsigned long min_rate;
+	unsigned long max_rate;
+};
+
 struct tegra_emc {
 	struct device *dev;
 
@@ -493,7 +503,14 @@ struct tegra_emc {
 
 	struct icc_provider provider;
 
-	struct tegra_emc_rate_requests reqs;
+	/*
+	 * There are multiple sources in the EMC driver which could request
+	 * a min/max clock rate, these rates are contained in this array.
+	 */
+	struct emc_rate_request requested_rate[EMC_RATE_TYPE_MAX];
+
+	/* protect shared rate-change code path */
+	struct mutex rate_lock;
 };
 
 /* Timing change sequence functions */
@@ -554,8 +571,8 @@ static void emc_seq_wait_clkchange(struct tegra_emc *emc)
 	dev_err(emc->dev, "clock change timed out\n");
 }
 
-static struct emc_timing *tegra124_emc_find_timing(struct tegra_emc *emc,
-						   unsigned long rate)
+static struct emc_timing *tegra_emc_find_timing(struct tegra_emc *emc,
+						unsigned long rate)
 {
 	struct emc_timing *timing = NULL;
 	unsigned int i;
@@ -575,10 +592,10 @@ static struct emc_timing *tegra124_emc_find_timing(struct tegra_emc *emc,
 	return timing;
 }
 
-static int tegra124_emc_prepare_timing_change(struct tegra_emc *emc,
-					      unsigned long rate)
+static int tegra_emc_prepare_timing_change(struct tegra_emc *emc,
+					   unsigned long rate)
 {
-	struct emc_timing *timing = tegra124_emc_find_timing(emc, rate);
+	struct emc_timing *timing = tegra_emc_find_timing(emc, rate);
 	struct emc_timing *last = &emc->last_timing;
 	enum emc_dll_change dll_change;
 	unsigned int pre_wait = 0;
@@ -803,10 +820,10 @@ static int tegra124_emc_prepare_timing_change(struct tegra_emc *emc,
 	return 0;
 }
 
-static void tegra124_emc_complete_timing_change(struct tegra_emc *emc,
-						unsigned long rate)
+static void tegra_emc_complete_timing_change(struct tegra_emc *emc,
+					     unsigned long rate)
 {
-	struct emc_timing *timing = tegra124_emc_find_timing(emc, rate);
+	struct emc_timing *timing = tegra_emc_find_timing(emc, rate);
 	struct emc_timing *last = &emc->last_timing;
 	u32 val;
 
@@ -879,7 +896,7 @@ static void emc_read_current_timing(struct tegra_emc *emc,
 	timing->emc_mode_reset = 0;
 }
 
-static void emc_init(struct tegra_emc *emc)
+static int emc_init(struct tegra_emc *emc)
 {
 	emc->dram_type = readl(emc->regs + EMC_FBIO_CFG5);
 
@@ -896,6 +913,8 @@ static void emc_init(struct tegra_emc *emc)
 	emc->dram_num = tegra_mc_get_emem_device_count(emc->mc);
 
 	emc_read_current_timing(emc, &emc->last_timing);
+
+	return 0;
 }
 
 static int load_one_timing_from_dt(struct tegra_emc *emc,
@@ -969,8 +988,8 @@ static int cmp_timings(const void *_a, const void *_b)
 		return 1;
 }
 
-static int tegra124_emc_load_timings_from_dt(struct tegra_emc *emc,
-					     struct device_node *node)
+static int tegra_emc_load_timings_from_dt(struct tegra_emc *emc,
+					  struct device_node *node)
 {
 	int child_count = of_get_child_count(node);
 	struct emc_timing *timing;
@@ -998,15 +1017,15 @@ static int tegra124_emc_load_timings_from_dt(struct tegra_emc *emc,
 	return 0;
 }
 
-static const struct of_device_id tegra124_emc_of_match[] = {
+static const struct of_device_id tegra_emc_of_match[] = {
 	{ .compatible = "nvidia,tegra124-emc" },
 	{ .compatible = "nvidia,tegra132-emc" },
 	{}
 };
-MODULE_DEVICE_TABLE(of, tegra124_emc_of_match);
+MODULE_DEVICE_TABLE(of, tegra_emc_of_match);
 
 static struct device_node *
-tegra124_emc_find_node_by_ram_code(struct device_node *node, u32 ram_code)
+tegra_emc_find_node_by_ram_code(struct device_node *node, u32 ram_code)
 {
 	struct device_node *np;
 	int err;
@@ -1022,6 +1041,83 @@ tegra124_emc_find_node_by_ram_code(struct device_node *node, u32 ram_code)
 	}
 
 	return NULL;
+}
+
+static void tegra_emc_rate_requests_init(struct tegra_emc *emc)
+{
+	unsigned int i;
+
+	for (i = 0; i < EMC_RATE_TYPE_MAX; i++) {
+		emc->requested_rate[i].min_rate = 0;
+		emc->requested_rate[i].max_rate = ULONG_MAX;
+	}
+}
+
+static int emc_request_rate(struct tegra_emc *emc,
+			    unsigned long new_min_rate,
+			    unsigned long new_max_rate,
+			    enum emc_rate_request_type type)
+{
+	struct emc_rate_request *req = emc->requested_rate;
+	unsigned long min_rate = 0, max_rate = ULONG_MAX;
+	unsigned int i;
+	int err;
+
+	/* select minimum and maximum rates among the requested rates */
+	for (i = 0; i < EMC_RATE_TYPE_MAX; i++, req++) {
+		if (i == type) {
+			min_rate = max(new_min_rate, min_rate);
+			max_rate = min(new_max_rate, max_rate);
+		} else {
+			min_rate = max(req->min_rate, min_rate);
+			max_rate = min(req->max_rate, max_rate);
+		}
+	}
+
+	if (min_rate > max_rate) {
+		dev_err_ratelimited(emc->dev, "%s: type %u: out of range: %lu %lu\n",
+				    __func__, type, min_rate, max_rate);
+		return -ERANGE;
+	}
+
+	/*
+	 * EMC rate-changes should go via OPP API because it manages voltage
+	 * changes.
+	 */
+	err = dev_pm_opp_set_rate(emc->dev, min_rate);
+	if (err)
+		return err;
+
+	emc->requested_rate[type].min_rate = new_min_rate;
+	emc->requested_rate[type].max_rate = new_max_rate;
+
+	return 0;
+}
+
+static int emc_set_min_rate(struct tegra_emc *emc, unsigned long rate,
+			    enum emc_rate_request_type type)
+{
+	struct emc_rate_request *req = &emc->requested_rate[type];
+	int ret;
+
+	mutex_lock(&emc->rate_lock);
+	ret = emc_request_rate(emc, rate, req->max_rate, type);
+	mutex_unlock(&emc->rate_lock);
+
+	return ret;
+}
+
+static int emc_set_max_rate(struct tegra_emc *emc, unsigned long rate,
+			    enum emc_rate_request_type type)
+{
+	struct emc_rate_request *req = &emc->requested_rate[type];
+	int ret;
+
+	mutex_lock(&emc->rate_lock);
+	ret = emc_request_rate(emc, req->min_rate, rate, type);
+	mutex_unlock(&emc->rate_lock);
+
+	return ret;
 }
 
 /*
@@ -1049,7 +1145,7 @@ tegra124_emc_find_node_by_ram_code(struct device_node *node, u32 ram_code)
  *       valid range.
  */
 
-static bool tegra124_emc_validate_rate(struct tegra_emc *emc, unsigned long rate)
+static bool tegra_emc_validate_rate(struct tegra_emc *emc, unsigned long rate)
 {
 	unsigned int i;
 
@@ -1060,8 +1156,8 @@ static bool tegra124_emc_validate_rate(struct tegra_emc *emc, unsigned long rate
 	return false;
 }
 
-static int tegra124_emc_debug_available_rates_show(struct seq_file *s,
-						   void *data)
+static int tegra_emc_debug_available_rates_show(struct seq_file *s,
+						void *data)
 {
 	struct tegra_emc *emc = s->private;
 	const char *prefix = "";
@@ -1077,9 +1173,9 @@ static int tegra124_emc_debug_available_rates_show(struct seq_file *s,
 	return 0;
 }
 
-DEFINE_SHOW_ATTRIBUTE(tegra124_emc_debug_available_rates);
+DEFINE_SHOW_ATTRIBUTE(tegra_emc_debug_available_rates);
 
-static int tegra124_emc_debug_min_rate_get(void *data, u64 *rate)
+static int tegra_emc_debug_min_rate_get(void *data, u64 *rate)
 {
 	struct tegra_emc *emc = data;
 
@@ -1088,15 +1184,15 @@ static int tegra124_emc_debug_min_rate_get(void *data, u64 *rate)
 	return 0;
 }
 
-static int tegra124_emc_debug_min_rate_set(void *data, u64 rate)
+static int tegra_emc_debug_min_rate_set(void *data, u64 rate)
 {
 	struct tegra_emc *emc = data;
 	int err;
 
-	if (!tegra124_emc_validate_rate(emc, rate))
+	if (!tegra_emc_validate_rate(emc, rate))
 		return -EINVAL;
 
-	err = tegra_emc_set_min_rate(&emc->reqs, rate, TEGRA_EMC_RATE_DEBUG);
+	err = emc_set_min_rate(emc, rate, EMC_RATE_DEBUG);
 	if (err < 0)
 		return err;
 
@@ -1105,11 +1201,11 @@ static int tegra124_emc_debug_min_rate_set(void *data, u64 rate)
 	return 0;
 }
 
-DEFINE_DEBUGFS_ATTRIBUTE(tegra124_emc_debug_min_rate_fops,
-			 tegra124_emc_debug_min_rate_get,
-			 tegra124_emc_debug_min_rate_set, "%llu\n");
+DEFINE_DEBUGFS_ATTRIBUTE(tegra_emc_debug_min_rate_fops,
+			tegra_emc_debug_min_rate_get,
+			tegra_emc_debug_min_rate_set, "%llu\n");
 
-static int tegra124_emc_debug_max_rate_get(void *data, u64 *rate)
+static int tegra_emc_debug_max_rate_get(void *data, u64 *rate)
 {
 	struct tegra_emc *emc = data;
 
@@ -1118,15 +1214,15 @@ static int tegra124_emc_debug_max_rate_get(void *data, u64 *rate)
 	return 0;
 }
 
-static int tegra124_emc_debug_max_rate_set(void *data, u64 rate)
+static int tegra_emc_debug_max_rate_set(void *data, u64 rate)
 {
 	struct tegra_emc *emc = data;
 	int err;
 
-	if (!tegra124_emc_validate_rate(emc, rate))
+	if (!tegra_emc_validate_rate(emc, rate))
 		return -EINVAL;
 
-	err = tegra_emc_set_max_rate(&emc->reqs, rate, TEGRA_EMC_RATE_DEBUG);
+	err = emc_set_max_rate(emc, rate, EMC_RATE_DEBUG);
 	if (err < 0)
 		return err;
 
@@ -1135,9 +1231,9 @@ static int tegra124_emc_debug_max_rate_set(void *data, u64 rate)
 	return 0;
 }
 
-DEFINE_DEBUGFS_ATTRIBUTE(tegra124_emc_debug_max_rate_fops,
-			 tegra124_emc_debug_max_rate_get,
-			 tegra124_emc_debug_max_rate_set, "%llu\n");
+DEFINE_DEBUGFS_ATTRIBUTE(tegra_emc_debug_max_rate_fops,
+			tegra_emc_debug_max_rate_get,
+			tegra_emc_debug_max_rate_set, "%llu\n");
 
 static void emc_debugfs_init(struct device *dev, struct tegra_emc *emc)
 {
@@ -1172,11 +1268,11 @@ static void emc_debugfs_init(struct device *dev, struct tegra_emc *emc)
 	emc->debugfs.root = debugfs_create_dir("emc", NULL);
 
 	debugfs_create_file("available_rates", 0444, emc->debugfs.root, emc,
-			    &tegra124_emc_debug_available_rates_fops);
+			    &tegra_emc_debug_available_rates_fops);
 	debugfs_create_file("min_rate", 0644, emc->debugfs.root,
-			    emc, &tegra124_emc_debug_min_rate_fops);
+			    emc, &tegra_emc_debug_min_rate_fops);
 	debugfs_create_file("max_rate", 0644, emc->debugfs.root,
-			    emc, &tegra124_emc_debug_max_rate_fops);
+			    emc, &tegra_emc_debug_max_rate_fops);
 }
 
 static inline struct tegra_emc *
@@ -1197,7 +1293,7 @@ emc_of_icc_xlate_extended(const struct of_phandle_args *spec, void *data)
 		if (node->id != TEGRA_ICC_EMEM)
 			continue;
 
-		ndata = kzalloc_obj(*ndata);
+		ndata = kzalloc(sizeof(*ndata), GFP_KERNEL);
 		if (!ndata)
 			return ERR_PTR(-ENOMEM);
 
@@ -1233,14 +1329,14 @@ static int emc_icc_set(struct icc_node *src, struct icc_node *dst)
 	do_div(rate, ddr * dram_data_bus_width_bytes);
 	rate = min_t(u64, rate, U32_MAX);
 
-	err = tegra_emc_set_min_rate(&emc->reqs, rate, TEGRA_EMC_RATE_ICC);
+	err = emc_set_min_rate(emc, rate, EMC_RATE_ICC);
 	if (err)
 		return err;
 
 	return 0;
 }
 
-static int tegra124_emc_interconnect_init(struct tegra_emc *emc)
+static int tegra_emc_interconnect_init(struct tegra_emc *emc)
 {
 	const struct tegra_mc_soc *soc = emc->mc->soc;
 	struct icc_node *node;
@@ -1256,8 +1352,10 @@ static int tegra124_emc_interconnect_init(struct tegra_emc *emc)
 
 	/* create External Memory Controller node */
 	node = icc_node_create(TEGRA_ICC_EMC);
-	if (IS_ERR(node))
-		return PTR_ERR(node);
+	if (IS_ERR(node)) {
+		err = PTR_ERR(node);
+		goto err_msg;
+	}
 
 	node->name = "External Memory Controller";
 	icc_node_add(node, &emc->provider);
@@ -1285,28 +1383,30 @@ static int tegra124_emc_interconnect_init(struct tegra_emc *emc)
 
 remove_nodes:
 	icc_nodes_remove(&emc->provider);
+err_msg:
+	dev_err(emc->dev, "failed to initialize ICC: %d\n", err);
 
-	return dev_err_probe(emc->dev, err, "failed to initialize ICC\n");
+	return err;
 }
 
-static int tegra124_emc_opp_table_init(struct tegra_emc *emc)
+static int tegra_emc_opp_table_init(struct tegra_emc *emc)
 {
 	u32 hw_version = BIT(tegra_sku_info.soc_speedo_id);
 	int opp_token, err;
 
 	err = dev_pm_opp_set_supported_hw(emc->dev, &hw_version, 1);
-	if (err < 0)
-		return dev_err_probe(emc->dev, err, "failed to set OPP supported HW\n");
-
+	if (err < 0) {
+		dev_err(emc->dev, "failed to set OPP supported HW: %d\n", err);
+		return err;
+	}
 	opp_token = err;
 
 	err = dev_pm_opp_of_add_table(emc->dev);
 	if (err) {
 		if (err == -ENODEV)
-			dev_err_probe(emc->dev, err,
-				      "OPP table not found, please update your device tree\n");
+			dev_err(emc->dev, "OPP table not found, please update your device tree\n");
 		else
-			dev_err_probe(emc->dev, err, "failed to add OPP table\n");
+			dev_err(emc->dev, "failed to add OPP table: %d\n", err);
 
 		goto put_hw_table;
 	}
@@ -1317,7 +1417,7 @@ static int tegra124_emc_opp_table_init(struct tegra_emc *emc)
 	/* first dummy rate-set initializes voltage state */
 	err = dev_pm_opp_set_rate(emc->dev, clk_get_rate(emc->clk));
 	if (err) {
-		dev_err_probe(emc->dev, err, "failed to initialize OPP clock\n");
+		dev_err(emc->dev, "failed to initialize OPP clock: %d\n", err);
 		goto remove_table;
 	}
 
@@ -1331,12 +1431,12 @@ put_hw_table:
 	return err;
 }
 
-static void devm_tegra124_emc_unset_callback(void *data)
+static void devm_tegra_emc_unset_callback(void *data)
 {
 	tegra124_clk_set_emc_callbacks(NULL, NULL);
 }
 
-static int tegra124_emc_probe(struct platform_device *pdev)
+static int tegra_emc_probe(struct platform_device *pdev)
 {
 	struct device_node *np;
 	struct tegra_emc *emc;
@@ -1347,6 +1447,7 @@ static int tegra124_emc_probe(struct platform_device *pdev)
 	if (!emc)
 		return -ENOMEM;
 
+	mutex_init(&emc->rate_lock);
 	emc->dev = &pdev->dev;
 
 	emc->regs = devm_platform_ioremap_resource(pdev, 0);
@@ -1359,9 +1460,9 @@ static int tegra124_emc_probe(struct platform_device *pdev)
 
 	ram_code = tegra_read_ram_code();
 
-	np = tegra124_emc_find_node_by_ram_code(pdev->dev.of_node, ram_code);
+	np = tegra_emc_find_node_by_ram_code(pdev->dev.of_node, ram_code);
 	if (np) {
-		err = tegra124_emc_load_timings_from_dt(emc, np);
+		err = tegra_emc_load_timings_from_dt(emc, np);
 		of_node_put(np);
 		if (err)
 			return err;
@@ -1371,33 +1472,39 @@ static int tegra124_emc_probe(struct platform_device *pdev)
 			      ram_code);
 	}
 
-	emc_init(emc);
+	err = emc_init(emc);
+	if (err) {
+		dev_err(&pdev->dev, "EMC initialization failed: %d\n", err);
+		return err;
+	}
 
 	platform_set_drvdata(pdev, emc);
 
-	tegra124_clk_set_emc_callbacks(tegra124_emc_prepare_timing_change,
-				       tegra124_emc_complete_timing_change);
+	tegra124_clk_set_emc_callbacks(tegra_emc_prepare_timing_change,
+				       tegra_emc_complete_timing_change);
 
-	err = devm_add_action_or_reset(&pdev->dev, devm_tegra124_emc_unset_callback,
+	err = devm_add_action_or_reset(&pdev->dev, devm_tegra_emc_unset_callback,
 				       NULL);
 	if (err)
 		return err;
 
 	emc->clk = devm_clk_get(&pdev->dev, "emc");
-	if (IS_ERR(emc->clk))
-		return dev_err_probe(&pdev->dev, PTR_ERR(emc->clk),
-				     "failed to get EMC clock\n");
+	if (IS_ERR(emc->clk)) {
+		err = PTR_ERR(emc->clk);
+		dev_err(&pdev->dev, "failed to get EMC clock: %d\n", err);
+		return err;
+	}
 
-	err = tegra124_emc_opp_table_init(emc);
+	err = tegra_emc_opp_table_init(emc);
 	if (err)
 		return err;
 
-	tegra_emc_rate_requests_init(&emc->reqs, &pdev->dev);
+	tegra_emc_rate_requests_init(emc);
 
 	if (IS_ENABLED(CONFIG_DEBUG_FS))
 		emc_debugfs_init(&pdev->dev, emc);
 
-	tegra124_emc_interconnect_init(emc);
+	tegra_emc_interconnect_init(emc);
 
 	/*
 	 * Don't allow the kernel module to be unloaded. Unloading adds some
@@ -1409,16 +1516,16 @@ static int tegra124_emc_probe(struct platform_device *pdev)
 	return 0;
 };
 
-static struct platform_driver tegra124_emc_driver = {
-	.probe = tegra124_emc_probe,
+static struct platform_driver tegra_emc_driver = {
+	.probe = tegra_emc_probe,
 	.driver = {
 		.name = "tegra-emc",
-		.of_match_table = tegra124_emc_of_match,
+		.of_match_table = tegra_emc_of_match,
 		.suppress_bind_attrs = true,
 		.sync_state = icc_sync_state,
 	},
 };
-module_platform_driver(tegra124_emc_driver);
+module_platform_driver(tegra_emc_driver);
 
 MODULE_AUTHOR("Mikko Perttunen <mperttunen@nvidia.com>");
 MODULE_DESCRIPTION("NVIDIA Tegra124 EMC driver");

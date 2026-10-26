@@ -1,8 +1,11 @@
-// SPDX-License-Identifier: GPL-2.0
 /*
    HIDP implementation for Linux Bluetooth stack (BlueZ).
    Copyright (C) 2003-2004 Marcel Holtmann <marcel@holtmann.org>
    Copyright (C) 2013 David Herrmann <dh.herrmann@gmail.com>
+
+   This program is free software; you can redistribute it and/or modify
+   it under the terms of the GNU General Public License version 2 as
+   published by the Free Software Foundation;
 
    THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
    OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
@@ -936,7 +939,7 @@ static int hidp_session_new(struct hidp_session **out, const bdaddr_t *bdaddr,
 	ctrl = bt_sk(ctrl_sock->sk);
 	intr = bt_sk(intr_sock->sk);
 
-	session = kzalloc_obj(*session);
+	session = kzalloc(sizeof(*session), GFP_KERNEL);
 	if (!session)
 		return -ENOMEM;
 
@@ -1049,28 +1052,6 @@ static struct hidp_session *hidp_session_find(const bdaddr_t *bdaddr)
 	up_read(&hidp_session_sem);
 
 	return session;
-}
-
-/*
- * Consume session->conn: clear the member under hidp_session_sem, then
- * l2cap_unregister_user() and l2cap_conn_put() the snapshot outside the
- * sem.  At most one caller wins; later callers see NULL and skip.  The
- * reference is the one hidp_session_new() took via l2cap_conn_get().
- */
-static void hidp_session_unregister_conn(struct hidp_session *session)
-{
-	struct l2cap_conn *conn;
-
-	down_write(&hidp_session_sem);
-	conn = session->conn;
-	if (conn)
-		session->conn = NULL;
-	up_write(&hidp_session_sem);
-
-	if (conn) {
-		l2cap_unregister_user(conn, &session->user);
-		l2cap_conn_put(conn);
-	}
 }
 
 /*
@@ -1349,7 +1330,8 @@ static int hidp_session_thread(void *arg)
 	 * Instead, this call has the same semantics as if user-space tried to
 	 * delete the session.
 	 */
-	hidp_session_unregister_conn(session);
+	if (session->conn)
+		l2cap_unregister_user(session->conn, &session->user);
 
 	hidp_session_put(session);
 
@@ -1455,7 +1437,7 @@ int hidp_connection_del(struct hidp_conndel_req *req)
 				         HIDP_CTRL_VIRTUAL_CABLE_UNPLUG,
 				       NULL, 0);
 	else
-		hidp_session_unregister_conn(session);
+		l2cap_unregister_user(session->conn, &session->user);
 
 	hidp_session_put(session);
 

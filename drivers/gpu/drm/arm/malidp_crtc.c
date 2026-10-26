@@ -47,7 +47,7 @@ static enum drm_mode_status malidp_crtc_mode_valid(struct drm_crtc *crtc,
 }
 
 static void malidp_crtc_atomic_enable(struct drm_crtc *crtc,
-				      struct drm_atomic_commit *state)
+				      struct drm_atomic_state *state)
 {
 	struct malidp_drm *malidp = crtc_to_malidp_device(crtc);
 	struct malidp_hw_device *hwdev = malidp->dev;
@@ -56,7 +56,6 @@ static void malidp_crtc_atomic_enable(struct drm_crtc *crtc,
 
 	if (err < 0) {
 		DRM_DEBUG_DRIVER("Failed to enable runtime power management: %d\n", err);
-		pm_runtime_put_noidle(crtc->dev->dev);
 		return;
 	}
 
@@ -72,12 +71,13 @@ static void malidp_crtc_atomic_enable(struct drm_crtc *crtc,
 }
 
 static void malidp_crtc_atomic_disable(struct drm_crtc *crtc,
-				       struct drm_atomic_commit *state)
+				       struct drm_atomic_state *state)
 {
 	struct drm_crtc_state *old_state = drm_atomic_get_old_crtc_state(state,
 									 crtc);
 	struct malidp_drm *malidp = crtc_to_malidp_device(crtc);
 	struct malidp_hw_device *hwdev = malidp->dev;
+	int err;
 
 	/* always disable planes on the CRTC that is being turned off */
 	drm_atomic_helper_disable_planes_on_crtc(old_state, false);
@@ -87,7 +87,10 @@ static void malidp_crtc_atomic_disable(struct drm_crtc *crtc,
 
 	clk_disable_unprepare(hwdev->pxlclk);
 
-	pm_runtime_put(crtc->dev->dev);
+	err = pm_runtime_put(crtc->dev->dev);
+	if (err < 0) {
+		DRM_DEBUG_DRIVER("Failed to disable runtime power management: %d\n", err);
+	}
 }
 
 static const struct gamma_curve_segment {
@@ -335,7 +338,7 @@ mclk_calc:
 }
 
 static int malidp_crtc_atomic_check(struct drm_crtc *crtc,
-				    struct drm_atomic_commit *state)
+				    struct drm_atomic_state *state)
 {
 	struct drm_crtc_state *crtc_state = drm_atomic_get_new_crtc_state(state,
 									  crtc);
@@ -448,7 +451,7 @@ static struct drm_crtc_state *malidp_crtc_duplicate_state(struct drm_crtc *crtc)
 		return NULL;
 
 	old_state = to_malidp_crtc_state(crtc->state);
-	state = kmalloc_obj(*state);
+	state = kmalloc(sizeof(*state), GFP_KERNEL);
 	if (!state)
 		return NULL;
 
@@ -477,17 +480,18 @@ static void malidp_crtc_destroy_state(struct drm_crtc *crtc,
 	kfree(mali_state);
 }
 
-static struct drm_crtc_state *malidp_crtc_create_state(struct drm_crtc *crtc)
+static void malidp_crtc_reset(struct drm_crtc *crtc)
 {
-	struct malidp_crtc_state *state;
+	struct malidp_crtc_state *state =
+		kzalloc(sizeof(*state), GFP_KERNEL);
 
-	state = kzalloc_obj(*state);
-	if (!state)
-		return ERR_PTR(-ENOMEM);
+	if (crtc->state)
+		malidp_crtc_destroy_state(crtc, crtc->state);
 
-	__drm_atomic_helper_crtc_state_init(&state->base, crtc);
-
-	return &state->base;
+	if (state)
+		__drm_atomic_helper_crtc_reset(crtc, &state->base);
+	else
+		__drm_atomic_helper_crtc_reset(crtc, NULL);
 }
 
 static int malidp_crtc_enable_vblank(struct drm_crtc *crtc)
@@ -512,7 +516,7 @@ static void malidp_crtc_disable_vblank(struct drm_crtc *crtc)
 static const struct drm_crtc_funcs malidp_crtc_funcs = {
 	.set_config = drm_atomic_helper_set_config,
 	.page_flip = drm_atomic_helper_page_flip,
-	.atomic_create_state = malidp_crtc_create_state,
+	.reset = malidp_crtc_reset,
 	.atomic_duplicate_state = malidp_crtc_duplicate_state,
 	.atomic_destroy_state = malidp_crtc_destroy_state,
 	.enable_vblank = malidp_crtc_enable_vblank,

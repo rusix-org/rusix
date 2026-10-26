@@ -535,9 +535,7 @@ err_free_requests:
 err_free_fifo:
 	kfifo_free(&port->port.xmit_fifo);
 err_exit_port:
-	mutex_lock(&dbc_tty_minors_lock);
 	idr_remove(&dbc_tty_minors, port->minor);
-	mutex_unlock(&dbc_tty_minors_lock);
 err_idr:
 	xhci_dbc_tty_exit_port(port);
 
@@ -586,7 +584,7 @@ int xhci_dbc_tty_probe(struct device *dev, void __iomem *base, struct xhci_hcd *
 	if (!dbc_tty_driver)
 		return -ENODEV;
 
-	port = kzalloc_obj(*port);
+	port = kzalloc(sizeof(*port), GFP_KERNEL);
 	if (!port)
 		return -ENOMEM;
 
@@ -667,11 +665,11 @@ fail:
 
 void dbc_tty_exit(void)
 {
-	if (IS_ERR_OR_NULL(dbc_tty_driver))
-		return;
+	if (dbc_tty_driver) {
+		tty_unregister_driver(dbc_tty_driver);
+		tty_driver_kref_put(dbc_tty_driver);
+		dbc_tty_driver = NULL;
+	}
 
-	tty_unregister_driver(dbc_tty_driver);
-	tty_driver_kref_put(dbc_tty_driver);
 	idr_destroy(&dbc_tty_minors);
-	dbc_tty_driver = NULL;
 }

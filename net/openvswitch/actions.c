@@ -21,7 +21,6 @@
 #include <net/ip.h>
 #include <net/ipv6.h>
 #include <net/ip6_fib.h>
-#include <net/ip6_route.h>
 #include <net/checksum.h>
 #include <net/dsfield.h>
 #include <net/mpls.h>
@@ -595,9 +594,6 @@ static int set_udp(struct sk_buff *skb, struct sw_flow_key *flow_key,
 	__be16 src, dst;
 	int err;
 
-	if (flow_key->ip.frag == OVS_FRAG_TYPE_LATER)
-		return 0;
-
 	err = skb_ensure_writable(skb, skb_transport_offset(skb) +
 				  sizeof(struct udphdr));
 	if (unlikely(err))
@@ -641,9 +637,6 @@ static int set_tcp(struct sk_buff *skb, struct sw_flow_key *flow_key,
 	__be16 src, dst;
 	int err;
 
-	if (flow_key->ip.frag == OVS_FRAG_TYPE_LATER)
-		return 0;
-
 	err = skb_ensure_writable(skb, skb_transport_offset(skb) +
 				  sizeof(struct tcphdr));
 	if (unlikely(err))
@@ -673,9 +666,6 @@ static int set_sctp(struct sk_buff *skb, struct sw_flow_key *flow_key,
 	struct sctphdr *sh;
 	__le32 old_correct_csum, new_csum, old_csum;
 	int err;
-
-	if (flow_key->ip.frag != OVS_FRAG_TYPE_NONE)
-		return -EINVAL;
 
 	err = skb_ensure_writable(skb, sctphoff + sizeof(struct sctphdr));
 	if (unlikely(err))
@@ -825,7 +815,7 @@ static void ovs_fragment(struct net *net, struct vport *vport,
 		skb_dst_set_noref(skb, &ovs_rt.dst);
 		IP6CB(skb)->frag_max_size = mru;
 
-		ip6_fragment(net, skb->sk, skb, ovs_vport_output);
+		ipv6_stub->ipv6_fragment(net, skb->sk, skb, ovs_vport_output);
 		refdst_drop(orig_dst);
 	} else {
 		WARN_ONCE(1, "Failed fragment ->%s: eth=%04x, MRU=%d, MTU=%d.",

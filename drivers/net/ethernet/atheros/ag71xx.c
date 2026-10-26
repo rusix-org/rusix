@@ -38,9 +38,13 @@
 #include <linux/reset.h>
 #include <linux/clk.h>
 #include <linux/io.h>
-#include <net/dsa.h>
 #include <net/selftests.h>
 
+/* For our NAPI weight bigger does *NOT* mean better - it means more
+ * D-cache misses and lots more wasted cycles than we'll ever
+ * possibly gain from saving instructions.
+ */
+#define AG71XX_NAPI_WEIGHT	32
 #define AG71XX_OOM_REFILL	(1 + HZ / 10)
 
 #define AG71XX_INT_ERR	(AG71XX_INT_RX_BE | AG71XX_INT_TX_BE)
@@ -1301,7 +1305,7 @@ static int ag71xx_rings_init(struct ag71xx *ag)
 	ring_size = BIT(tx->order) + BIT(rx->order);
 	tx_size = BIT(tx->order);
 
-	tx->buf = kzalloc_objs(*tx->buf, ring_size);
+	tx->buf = kcalloc(ring_size, sizeof(*tx->buf), GFP_KERNEL);
 	if (!tx->buf)
 		return -ENOMEM;
 
@@ -1397,26 +1401,6 @@ static void ag71xx_hw_disable(struct ag71xx *ag)
 	ag71xx_rings_cleanup(ag);
 }
 
-static unsigned int ag71xx_rx_offset(struct ag71xx *ag)
-{
-	unsigned int align = NET_IP_ALIGN;
-
-	if (ag71xx_is(ag, AR7100) || ag71xx_is(ag, AR9130))
-		return NET_SKB_PAD;
-
-#if IS_ENABLED(CONFIG_NET_DSA)
-	/* A tag inserted in front of the EtherType shifts the IP header,
-	 * compensate for it to avoid unaligned accesses in the stack.
-	 * This is only evaluated in ndo_open, so a DSA tree that binds to
-	 * or unbinds from a running conduit takes effect on the next open.
-	 */
-	if (netdev_uses_dsa(ag->ndev))
-		align = (align - ag->ndev->dsa_ptr->tag_ops->needed_headroom) & 3;
-#endif
-
-	return NET_SKB_PAD + align;
-}
-
 static int ag71xx_open(struct net_device *ndev)
 {
 	struct ag71xx *ag = netdev_priv(ndev);
@@ -1431,9 +1415,8 @@ static int ag71xx_open(struct net_device *ndev)
 	}
 
 	max_frame_len = ag71xx_max_frame_len(ndev->mtu);
-	ag->rx_buf_offset = ag71xx_rx_offset(ag);
 	ag->rx_buf_size =
-		SKB_DATA_ALIGN(max_frame_len + ag->rx_buf_offset);
+		SKB_DATA_ALIGN(max_frame_len + NET_SKB_PAD + NET_IP_ALIGN);
 
 	/* setup max frame length */
 	ag71xx_wr(ag, AG71XX_REG_MAC_MFL, max_frame_len);
@@ -1896,6 +1879,10 @@ static int ag71xx_probe(struct platform_device *pdev)
 	ndev->min_mtu = 68;
 	ndev->max_mtu = dcfg->max_frame_len - ag71xx_max_frame_len(0);
 
+	ag->rx_buf_offset = NET_SKB_PAD;
+	if (!ag71xx_is(ag, AR7100) && !ag71xx_is(ag, AR9130))
+		ag->rx_buf_offset += NET_IP_ALIGN;
+
 	if (ag71xx_is(ag, AR7100)) {
 		ag->tx_ring.desc_split = AG71XX_TX_RING_SPLIT;
 		tx_size *= AG71XX_TX_RING_DS_PER_PKT;
@@ -1926,7 +1913,8 @@ static int ag71xx_probe(struct platform_device *pdev)
 		return err;
 	}
 
-	netif_napi_add(ndev, &ag->napi, ag71xx_poll);
+	netif_napi_add_weight(ndev, &ag->napi, ag71xx_poll,
+			      AG71XX_NAPI_WEIGHT);
 
 	ag71xx_wr(ag, AG71XX_REG_MAC_CFG1, 0);
 

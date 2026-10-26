@@ -26,9 +26,11 @@
 
 /* GET_INST returns the physical instance corresponding to a logical instance */
 #define GET_INST(ip, inst) \
-	amdgpu_ip_map_logical_to_dev_inst(&adev->ip_map, ip##_HWIP, inst)
+	(adev->ip_map.logical_to_dev_inst ? \
+	adev->ip_map.logical_to_dev_inst(adev, ip##_HWIP, inst) : inst)
 #define GET_MASK(ip, mask) \
-	amdgpu_ip_map_logical_to_dev_mask(&adev->ip_map, ip##_HWIP, mask)
+	(adev->ip_map.logical_to_dev_mask ? \
+	adev->ip_map.logical_to_dev_mask(adev, ip##_HWIP, mask) : mask)
 
 /* Register Access Macros */
 #define SOC15_REG_OFFSET(ip, inst, reg)	(adev->reg_offset[ip##_HWIP][inst][reg##_BASE_IDX] + reg)
@@ -36,30 +38,30 @@
 	(adev->reg_offset[ip##_HWIP][inst][reg##_BASE_IDX] + (reg)+(offset))
 
 #define __WREG32_SOC15_RLC__(reg, value, flag, hwip, inst) \
-	adev->gfx.rlc.reg_funcs->wreg32(adev, reg, value, flag, hwip, inst)
+	((amdgpu_sriov_vf(adev) && adev->gfx.rlc.funcs && adev->gfx.rlc.rlcg_reg_access_supported) ? \
+	 amdgpu_sriov_wreg(adev, reg, value, flag, hwip, inst) : \
+	 WREG32(reg, value))
 
 #define __RREG32_SOC15_RLC__(reg, flag, hwip, inst) \
-	adev->gfx.rlc.reg_funcs->rreg32(adev, reg, flag, hwip, inst)
+	((amdgpu_sriov_vf(adev) && adev->gfx.rlc.funcs && adev->gfx.rlc.rlcg_reg_access_supported) ? \
+	 amdgpu_sriov_rreg(adev, reg, flag, hwip, inst) : \
+	 RREG32(reg))
 
-#define WREG32_FIELD15(ip, idx, reg_name, field, val) \
-do { \
-	u32 reg__ = adev->reg_offset[ip##_HWIP][idx][mm##reg_name##_BASE_IDX] + mm##reg_name; \
-	u32 val__ = __RREG32_SOC15_RLC__(reg__, 0, ip##_HWIP, idx); \
-\
-	val__ &= ~REG_FIELD_MASK(reg_name, field); \
-	val__ |= (val) << REG_FIELD_SHIFT(reg_name, field); \
-	__WREG32_SOC15_RLC__(reg__, val__, 0, ip##_HWIP, idx); \
-} while (0)
+#define WREG32_FIELD15(ip, idx, reg, field, val)	\
+	 __WREG32_SOC15_RLC__(adev->reg_offset[ip##_HWIP][idx][mm##reg##_BASE_IDX] + mm##reg,	\
+				(__RREG32_SOC15_RLC__( \
+					adev->reg_offset[ip##_HWIP][idx][mm##reg##_BASE_IDX] + mm##reg, \
+					0, ip##_HWIP, idx) & \
+				~REG_FIELD_MASK(reg, field)) | (val) << REG_FIELD_SHIFT(reg, field), \
+			      0, ip##_HWIP, idx)
 
-#define WREG32_FIELD15_PREREG(ip, idx, reg_name, field, val) \
-do { \
-	u32 reg__ = adev->reg_offset[ip##_HWIP][idx][reg##reg_name##_BASE_IDX] + reg##reg_name; \
-	u32 val__ = __RREG32_SOC15_RLC__(reg__, 0, ip##_HWIP, idx); \
-\
-	val__ &= ~REG_FIELD_MASK(reg_name, field); \
-	val__ |= (val) << REG_FIELD_SHIFT(reg_name, field); \
-	__WREG32_SOC15_RLC__(reg__, val__, 0, ip##_HWIP, idx); \
-} while (0)
+#define WREG32_FIELD15_PREREG(ip, idx, reg_name, field, val)        \
+	__WREG32_SOC15_RLC__(adev->reg_offset[ip##_HWIP][idx][reg##reg_name##_BASE_IDX] + reg##reg_name,   \
+			(__RREG32_SOC15_RLC__( \
+					adev->reg_offset[ip##_HWIP][idx][reg##reg_name##_BASE_IDX] + reg##reg_name, \
+					0, ip##_HWIP, idx) & \
+					~REG_FIELD_MASK(reg_name, field)) | (val) << REG_FIELD_SHIFT(reg_name, field), \
+			0, ip##_HWIP, idx)
 
 #define RREG32_SOC15(ip, inst, reg) \
 	__RREG32_SOC15_RLC__(adev->reg_offset[ip##_HWIP][inst][reg##_BASE_IDX] + reg, \
@@ -179,15 +181,12 @@ do { \
 			WREG32_RLC_EX(prefix, target_reg, value, inst); \
 	} while (0)
 
-#define WREG32_FIELD15_RLC(ip, idx, reg_name, field, val) \
-do { \
-	u32 reg__ = adev->reg_offset[ip##_HWIP][idx][mm##reg_name##_BASE_IDX] + mm##reg_name; \
-	u32 val__ = __RREG32_SOC15_RLC__(reg__, AMDGPU_REGS_RLC, ip##_HWIP, idx); \
-\
-	val__ &= ~REG_FIELD_MASK(reg_name, field); \
-	val__ |= (val) << REG_FIELD_SHIFT(reg_name, field); \
-	__WREG32_SOC15_RLC__(reg__, val__, AMDGPU_REGS_RLC, ip##_HWIP, idx); \
-} while (0)
+#define WREG32_FIELD15_RLC(ip, idx, reg, field, val)   \
+	__WREG32_SOC15_RLC__((adev->reg_offset[ip##_HWIP][idx][mm##reg##_BASE_IDX] + mm##reg), \
+			     (__RREG32_SOC15_RLC__(adev->reg_offset[ip##_HWIP][idx][mm##reg##_BASE_IDX] + mm##reg, \
+						   AMDGPU_REGS_RLC, ip##_HWIP, idx) & \
+			      ~REG_FIELD_MASK(reg, field)) | (val) << REG_FIELD_SHIFT(reg, field), \
+			     AMDGPU_REGS_RLC, ip##_HWIP, idx)
 
 #define WREG32_SOC15_OFFSET_RLC(ip, inst, reg, offset, value) \
 	__WREG32_SOC15_RLC__((adev->reg_offset[ip##_HWIP][inst][reg##_BASE_IDX] + reg) + offset, value, AMDGPU_REGS_RLC, ip##_HWIP, inst)
@@ -196,16 +195,19 @@ do { \
 	__RREG32_SOC15_RLC__((adev->reg_offset[ip##_HWIP][inst][reg##_BASE_IDX] + reg) + offset, AMDGPU_REGS_RLC, ip##_HWIP, inst)
 
 /* inst equals to ext for some IPs */
-#define RREG32_SOC15_EXT(ip, inst, reg, ext)                                 \
-	RREG32_PCIE_EXT((adev->reg_offset[ip##_HWIP][inst][reg##_BASE_IDX] + \
-			 reg) * 4 +                                          \
-			amdgpu_reg_get_smn_base64(adev, ip##_HWIP, inst))
+#define RREG32_SOC15_EXT(ip, inst, reg, ext) \
+	RREG32_PCIE_EXT((adev->reg_offset[ip##_HWIP][inst][reg##_BASE_IDX] + reg) * 4 \
+			+ adev->asic_funcs->encode_ext_smn_addressing(ext)) \
 
-#define WREG32_SOC15_EXT(ip, inst, reg, ext, value)                         \
-	WREG32_PCIE_EXT(                                                    \
-		(adev->reg_offset[ip##_HWIP][inst][reg##_BASE_IDX] + reg) * \
-				4 +                                         \
-			amdgpu_reg_get_smn_base64(adev, ip##_HWIP, inst),   \
-		value)
+#define WREG32_SOC15_EXT(ip, inst, reg, ext, value) \
+	WREG32_PCIE_EXT((adev->reg_offset[ip##_HWIP][inst][reg##_BASE_IDX] + reg) * 4 \
+			+ adev->asic_funcs->encode_ext_smn_addressing(ext), \
+			value) \
+
+#define RREG64_MCA(ext, mca_base, idx) \
+	RREG64_PCIE_EXT(adev->asic_funcs->encode_ext_smn_addressing(ext) + mca_base + (idx * 8))
+
+#define WREG64_MCA(ext, mca_base, idx, val) \
+	WREG64_PCIE_EXT(adev->asic_funcs->encode_ext_smn_addressing(ext) + mca_base + (idx * 8), val)
 
 #endif

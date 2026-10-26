@@ -179,10 +179,9 @@ static int tegra_tcu_probe(struct platform_device *pdev)
 {
 	struct uart_port *port;
 	struct tegra_tcu *tcu;
-	struct device *dev = &pdev->dev;
 	int err;
 
-	tcu = devm_kzalloc(dev, sizeof(*tcu), GFP_KERNEL);
+	tcu = devm_kzalloc(&pdev->dev, sizeof(*tcu), GFP_KERNEL);
 	if (!tcu)
 		return -ENOMEM;
 
@@ -191,9 +190,11 @@ static int tegra_tcu_probe(struct platform_device *pdev)
 	tcu->rx_client.rx_callback = tegra_tcu_receive;
 
 	tcu->tx = mbox_request_channel_byname(&tcu->tx_client, "tx");
-	if (IS_ERR(tcu->tx))
-		return dev_err_probe(dev, PTR_ERR(tcu->tx),
-				     "failed to get tx mailbox\n");
+	if (IS_ERR(tcu->tx)) {
+		err = PTR_ERR(tcu->tx);
+		dev_err(&pdev->dev, "failed to get tx mailbox: %d\n", err);
+		return err;
+	}
 
 #if IS_ENABLED(CONFIG_SERIAL_TEGRA_TCU_CONSOLE)
 	/* setup the console */
@@ -217,14 +218,15 @@ static int tegra_tcu_probe(struct platform_device *pdev)
 
 	err = uart_register_driver(&tcu->driver);
 	if (err) {
-		dev_err_probe(dev, err, "failed to register UART driver\n");
+		dev_err(&pdev->dev, "failed to register UART driver: %d\n",
+			err);
 		goto free_tx;
 	}
 
 	/* setup the port */
 	port = &tcu->port;
 	spin_lock_init(&port->lock);
-	port->dev = dev;
+	port->dev = &pdev->dev;
 	port->type = PORT_TEGRA_TCU;
 	port->ops = &tegra_tcu_uart_ops;
 	port->fifosize = 1;
@@ -234,7 +236,7 @@ static int tegra_tcu_probe(struct platform_device *pdev)
 
 	err = uart_add_one_port(&tcu->driver, port);
 	if (err) {
-		dev_err_probe(dev, err, "failed to add UART port\n");
+		dev_err(&pdev->dev, "failed to add UART port: %d\n", err);
 		goto unregister_uart;
 	}
 
@@ -244,8 +246,8 @@ static int tegra_tcu_probe(struct platform_device *pdev)
 	 */
 	tcu->rx = mbox_request_channel_byname(&tcu->rx_client, "rx");
 	if (IS_ERR(tcu->rx)) {
-		err = dev_err_probe(dev, PTR_ERR(tcu->rx),
-				    "failed to get rx mailbox\n");
+		err = PTR_ERR(tcu->rx);
+		dev_err(&pdev->dev, "failed to get rx mailbox: %d\n", err);
 		goto remove_uart_port;
 	}
 

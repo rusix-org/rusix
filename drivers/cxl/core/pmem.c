@@ -83,7 +83,7 @@ static struct cxl_nvdimm_bridge *cxl_nvdimm_bridge_alloc(struct cxl_port *port)
 	struct device *dev;
 	int rc;
 
-	cxl_nvb = kzalloc_obj(*cxl_nvb);
+	cxl_nvb = kzalloc(sizeof(*cxl_nvb), GFP_KERNEL);
 	if (!cxl_nvb)
 		return ERR_PTR(-ENOMEM);
 
@@ -205,7 +205,7 @@ static struct cxl_nvdimm *cxl_nvdimm_alloc(struct cxl_nvdimm_bridge *cxl_nvb,
 	struct cxl_nvdimm *cxl_nvd;
 	struct device *dev;
 
-	cxl_nvd = kzalloc_obj(*cxl_nvd);
+	cxl_nvd = kzalloc(sizeof(*cxl_nvd), GFP_KERNEL);
 	if (!cxl_nvd)
 		return ERR_PTR(-ENOMEM);
 
@@ -246,13 +246,12 @@ static void cxlmd_release_nvdimm(void *_cxlmd)
 
 /**
  * devm_cxl_add_nvdimm() - add a bridge between a cxl_memdev and an nvdimm
- * @host: host device for devm operations
- * @port: any port in the CXL topology to find the nvdimm-bridge device
- * @cxlmd: parent of the to be created cxl_nvdimm device
+ * @parent_port: parent port for the (to be added) @cxlmd endpoint port
+ * @cxlmd: cxl_memdev instance that will perform LIBNVDIMM operations
  *
  * Return: 0 on success negative error code on failure.
  */
-int devm_cxl_add_nvdimm(struct device *host, struct cxl_port *port,
+int devm_cxl_add_nvdimm(struct cxl_port *parent_port,
 			struct cxl_memdev *cxlmd)
 {
 	struct cxl_nvdimm_bridge *cxl_nvb;
@@ -260,7 +259,7 @@ int devm_cxl_add_nvdimm(struct device *host, struct cxl_port *port,
 	struct device *dev;
 	int rc;
 
-	cxl_nvb = cxl_find_nvdimm_bridge(port);
+	cxl_nvb = cxl_find_nvdimm_bridge(parent_port);
 	if (!cxl_nvb)
 		return -ENODEV;
 
@@ -295,10 +294,10 @@ int devm_cxl_add_nvdimm(struct device *host, struct cxl_port *port,
 	if (rc)
 		goto err;
 
-	dev_dbg(host, "register %s\n", dev_name(dev));
+	dev_dbg(&cxlmd->dev, "register %s\n", dev_name(dev));
 
 	/* @cxlmd carries a reference on @cxl_nvb until cxlmd_release_nvdimm */
-	return devm_add_action_or_reset(host, cxlmd_release_nvdimm, cxlmd);
+	return devm_add_action_or_reset(&cxlmd->dev, cxlmd_release_nvdimm, cxlmd);
 
 err:
 	put_device(dev);

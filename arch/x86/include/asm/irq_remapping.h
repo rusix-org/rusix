@@ -67,10 +67,9 @@ static inline struct irq_domain *arch_get_ir_parent_domain(void)
 
 extern bool enable_posted_msi;
 
-static inline bool posted_msi_enabled(void)
+static inline bool posted_msi_supported(void)
 {
-	return IS_ENABLED(CONFIG_X86_POSTED_MSI) &&
-		enable_posted_msi && irq_remapping_cap(IRQ_POSTING_CAP);
+	return enable_posted_msi && irq_remapping_cap(IRQ_POSTING_CAP);
 }
 
 #else  /* CONFIG_IRQ_REMAP */

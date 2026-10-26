@@ -458,7 +458,7 @@ void rds_ib_recv_refill(struct rds_connection *conn, int prefill, gfp_t gfp)
 	    (must_wake ||
 	    (can_wait && rds_ib_ring_low(&ic->i_recv_ring)) ||
 	    rds_ib_ring_empty(&ic->i_recv_ring))) {
-		queue_delayed_work(conn->c_path->cp_wq, &conn->c_recv_w, 1);
+		queue_delayed_work(rds_wq, &conn->c_recv_w, 1);
 	}
 	if (can_wait)
 		cond_resched();
@@ -949,12 +949,6 @@ static void rds_ib_process_recv(struct rds_connection *conn,
 		}
 	}
 
-	if (data_len < min_t(u32, ic->i_recv_data_rem, RDS_FRAG_SIZE)) {
-		rds_ib_conn_error(conn,
-				  "fragment shorter than header-declared length; forcing reconnect\n");
-		goto done;
-	}
-
 	list_add_tail(&recv->r_frag->f_item, &ibinc->ii_frags);
 	recv->r_frag = NULL;
 
@@ -1010,12 +1004,7 @@ void rds_ib_recv_cqe_handler(struct rds_ib_connection *ic,
 	 * event is processed.
 	 */
 	if (wc->status == IB_WC_SUCCESS) {
-		if (wc->opcode != IB_WC_RECV)
-			rds_ib_conn_error(conn,
-					  "recv completion had unexpected opcode %u, disconnecting and reconnecting\n",
-					  wc->opcode);
-		else
-			rds_ib_process_recv(conn, recv, wc->byte_len, state);
+		rds_ib_process_recv(conn, recv, wc->byte_len, state);
 	} else {
 		/* We expect errors as the qp is drained during shutdown */
 		if (rds_conn_up(conn) || rds_conn_connecting(conn))

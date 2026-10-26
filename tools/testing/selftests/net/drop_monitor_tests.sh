@@ -18,7 +18,18 @@ DEVLINK_DEV=netdevsim/${DEV}
 
 log_test()
 {
-	log_test_expected "$1" "$2" "$3"
+	local rc=$1
+	local expected=$2
+	local msg="$3"
+
+	if [ ${rc} -eq ${expected} ]; then
+		printf "    TEST: %-60s  [ OK ]\n" "${msg}"
+		nsuccess=$((nsuccess+1))
+	else
+		ret=1
+		nfail=$((nfail+1))
+		printf "    TEST: %-60s  [FAIL]\n" "${msg}"
+	fi
 }
 
 setup()

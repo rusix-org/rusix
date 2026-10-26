@@ -7,6 +7,7 @@
 #include <linux/clk.h>
 #include <linux/component.h>
 #include <linux/io.h>
+#include <linux/mod_devicetable.h>
 #include <linux/module.h>
 #include <linux/platform_device.h>
 #include <linux/seq_file.h>
@@ -404,8 +405,7 @@ static void sti_hda_configure_awg(struct sti_hda *hda, u32 *awg_instr, int nb)
 		hda_write(hda, 0, HDA_SYNC_AWGI + i * 4);
 }
 
-static void sti_hda_disable(struct drm_bridge *bridge,
-			    struct drm_atomic_commit *commit)
+static void sti_hda_disable(struct drm_bridge *bridge)
 {
 	struct sti_hda *hda = drm_bridge_to_sti_hda(bridge);
 	u32 val;
@@ -430,8 +430,7 @@ static void sti_hda_disable(struct drm_bridge *bridge,
 	hda->enabled = false;
 }
 
-static void sti_hda_pre_enable(struct drm_bridge *bridge,
-			       struct drm_atomic_commit *commit)
+static void sti_hda_pre_enable(struct drm_bridge *bridge)
 {
 	struct sti_hda *hda = drm_bridge_to_sti_hda(bridge);
 	u32 val, i, mode_idx;
@@ -565,20 +564,16 @@ static void sti_hda_set_mode(struct drm_bridge *bridge,
 			  mode->clock * 1000);
 }
 
-static void sti_hda_bridge_nope(struct drm_bridge *bridge,
-				struct drm_atomic_commit *commit)
+static void sti_hda_bridge_nope(struct drm_bridge *bridge)
 {
 	/* do nothing */
 }
 
 static const struct drm_bridge_funcs sti_hda_bridge_funcs = {
-	.atomic_create_state = drm_atomic_helper_bridge_create_state,
-	.atomic_destroy_state = drm_atomic_helper_bridge_destroy_state,
-	.atomic_duplicate_state = drm_atomic_helper_bridge_duplicate_state,
-	.atomic_pre_enable = sti_hda_pre_enable,
-	.atomic_enable = sti_hda_bridge_nope,
-	.atomic_disable = sti_hda_disable,
-	.atomic_post_disable = sti_hda_bridge_nope,
+	.pre_enable = sti_hda_pre_enable,
+	.enable = sti_hda_bridge_nope,
+	.disable = sti_hda_disable,
+	.post_disable = sti_hda_bridge_nope,
 	.mode_set = sti_hda_set_mode,
 };
 
@@ -746,7 +741,6 @@ static int sti_hda_probe(struct platform_device *pdev)
 	struct device *dev = &pdev->dev;
 	struct sti_hda *hda;
 	struct resource *res;
-	int ret;
 
 	DRM_INFO("%s\n", __func__);
 
@@ -784,10 +778,6 @@ static int sti_hda_probe(struct platform_device *pdev)
 		DRM_ERROR("Cannot get hda_hddac clock\n");
 		return PTR_ERR(hda->clk_hddac);
 	}
-
-	ret = devm_drm_bridge_add(dev, &hda->bridge);
-	if (ret)
-		return ret;
 
 	platform_set_drvdata(pdev, hda);
 

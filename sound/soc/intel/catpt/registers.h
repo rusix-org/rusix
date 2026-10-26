@@ -144,8 +144,6 @@
 
 #define catpt_dram_addr(cdev) \
 	((cdev)->lpe_ba + (cdev)->spec->host_dram_offset)
-#define catpt_iram_addr(cdev) \
-	((cdev)->lpe_ba + (cdev)->spec->host_iram_offset)
 #define catpt_shim_addr(cdev) \
 	((cdev)->lpe_ba + (cdev)->spec->host_shim_offset)
 #define catpt_dma_addr(cdev, dma) \

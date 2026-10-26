@@ -549,26 +549,13 @@ struct es1968 {
 static irqreturn_t snd_es1968_interrupt(int irq, void *dev_id);
 
 static const struct pci_device_id snd_es1968_ids[] = {
-	{
-		/* Maestro 1 */
-		PCI_DEVICE(0x1285, 0x0100),
-		.class = PCI_CLASS_MULTIMEDIA_AUDIO << 8,
-		.class_mask = 0xffff00,
-		.driver_data = TYPE_MAESTRO,
-	}, {
-		/* Maestro 2 */
-		PCI_DEVICE(0x125d, 0x1968),
-		.class = PCI_CLASS_MULTIMEDIA_AUDIO << 8,
-		.class_mask = 0xffff00,
-		.driver_data = TYPE_MAESTRO2,
-	}, {
-		/* Maestro 2E */
-		PCI_DEVICE(0x125d, 0x1978),
-		.class = PCI_CLASS_MULTIMEDIA_AUDIO << 8,
-		.class_mask = 0xffff00,
-		.driver_data = TYPE_MAESTRO2E,
-	},
-	{ }
+	/* Maestro 1 */
+        { 0x1285, 0x0100, PCI_ANY_ID, PCI_ANY_ID, PCI_CLASS_MULTIMEDIA_AUDIO << 8, 0xffff00, TYPE_MAESTRO },
+	/* Maestro 2 */
+	{ 0x125d, 0x1968, PCI_ANY_ID, PCI_ANY_ID, PCI_CLASS_MULTIMEDIA_AUDIO << 8, 0xffff00, TYPE_MAESTRO2 },
+	/* Maestro 2E */
+        { 0x125d, 0x1978, PCI_ANY_ID, PCI_ANY_ID, PCI_CLASS_MULTIMEDIA_AUDIO << 8, 0xffff00, TYPE_MAESTRO2E },
+	{ 0, }
 };
 
 MODULE_DEVICE_TABLE(pci, snd_es1968_ids);
@@ -1320,7 +1307,7 @@ static struct esm_memory *snd_es1968_new_memory(struct es1968 *chip, int size)
 
 __found:
 	if (buf->buf.bytes > size) {
-		struct esm_memory *chunk = kmalloc_obj(*chunk);
+		struct esm_memory *chunk = kmalloc(sizeof(*chunk), GFP_KERNEL);
 		if (chunk == NULL)
 			return NULL;
 		chunk->buf = buf->buf;
@@ -1398,7 +1385,7 @@ snd_es1968_init_dmabuf(struct es1968 *chip)
 
 	INIT_LIST_HEAD(&chip->buf_list);
 	/* allocate an empty chunk */
-	chunk = kmalloc_obj(*chunk);
+	chunk = kmalloc(sizeof(*chunk), GFP_KERNEL);
 	if (chunk == NULL) {
 		snd_es1968_free_dmabuf(chip);
 		return -ENOMEM;
@@ -1501,7 +1488,7 @@ static int snd_es1968_playback_open(struct snd_pcm_substream *substream)
 	if (apu1 < 0)
 		return apu1;
 
-	es = kzalloc_obj(*es);
+	es = kzalloc(sizeof(*es), GFP_KERNEL);
 	if (!es) {
 		snd_es1968_free_apu_pair(chip, apu1);
 		return -ENOMEM;
@@ -1542,7 +1529,7 @@ static int snd_es1968_capture_open(struct snd_pcm_substream *substream)
 		return apu2;
 	}
 	
-	es = kzalloc_obj(*es);
+	es = kzalloc(sizeof(*es), GFP_KERNEL);
 	if (!es) {
 		snd_es1968_free_apu_pair(chip, apu1);
 		snd_es1968_free_apu_pair(chip, apu2);
@@ -2692,11 +2679,11 @@ static int snd_es1968_create(struct snd_card *card,
 
 /*
  */
-static int snd_es1968_probe(struct pci_dev *pci,
-			    const struct pci_device_id *pci_id)
+static int __snd_es1968_probe(struct pci_dev *pci,
+			      const struct pci_device_id *pci_id)
 {
 	static int dev;
-	struct snd_card *card __free(snd_card_free) = NULL;
+	struct snd_card *card;
 	struct es1968 *chip;
 	unsigned int i;
 	int err;
@@ -2795,9 +2782,14 @@ static int snd_es1968_probe(struct pci_dev *pci,
 	if (err < 0)
 		return err;
 	pci_set_drvdata(pci, card);
-	card = NULL; /* probe succeeded, don't release as error */
 	dev++;
 	return 0;
+}
+
+static int snd_es1968_probe(struct pci_dev *pci,
+			    const struct pci_device_id *pci_id)
+{
+	return snd_card_free_on_error(&pci->dev, __snd_es1968_probe(pci, pci_id));
 }
 
 static struct pci_driver es1968_driver = {

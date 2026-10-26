@@ -42,12 +42,6 @@ config USB_XHCI_PCI
 	depends on USB_PCI
 	default y
 
-config USB_XHCI_PCI_PROM21
-	tristate
-	depends on USB_XHCI_PCI
-	default USB_XHCI_PCI if SENSORS_PROM21_XHCI != n
-	select AUXILIARY_BUS
-
 config USB_XHCI_PCI_RENESAS
 	tristate "Support for additional Renesas xHCI controller with firmware"
 	depends on USB_XHCI_PCI
@@ -210,19 +204,6 @@ config USB_EHCI_PCI
 	tristate
 	depends on USB_PCI
 	default y
-
-config USB_EHCI_DEVIANT_PORT_STATUS_REG
-	bool
-	# Used for hosts with a deviant port status register location
-
-config USB_EHCI_PORT_RESET_HOOKS
-	bool
-	# Used for hosts with controller-specific port reset sequencing
-
-config USB_EHCI_PORT_SPEED_HOOK
-	bool
-	depends on USB_EHCI_ROOT_HUB_TT
-	# Used for hosts with controller-specific port speed reporting
 
 config XPS_USB_HCD_XILINX
 	bool "Use Xilinx usb host EHCI controller core"
@@ -401,6 +382,18 @@ config USB_ISP116X_HCD
 
 	  To compile this driver as a module, choose M here: the
 	  module will be called isp116x-hcd.
+
+config USB_ISP1362_HCD
+	tristate "ISP1362 HCD support"
+	depends on HAS_IOPORT
+	depends on COMPILE_TEST # nothing uses this
+	help
+	  Supports the Philips ISP1362 chip as a host controller
+
+	  This driver does not support isochronous transfers.
+
+	  To compile this driver as a module, choose M here: the
+	  module will be called isp1362-hcd.
 
 config USB_MAX3421_HCD
 	tristate "MAX3421 HCD (USB-over-SPI) support"
@@ -623,8 +616,7 @@ config USB_UHCI_ASPEED
 
 config USB_FHCI_HCD
 	tristate "Freescale QE USB Host Controller support"
-	depends on QE_GPIO && QUICC_ENGINE
-	depends on PPC
+	depends on OF_GPIO && QE_GPIO && QUICC_ENGINE
 	select FSL_GTM
 	select QE_USB
 	help

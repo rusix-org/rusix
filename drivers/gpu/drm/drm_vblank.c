@@ -236,21 +236,6 @@ static u32 __get_vblank_counter(struct drm_device *dev, unsigned int pipe)
 	return drm_vblank_no_hw_counter(dev, pipe);
 }
 
-static bool get_vblank_counter_and_timestamp(struct drm_device *dev, unsigned int pipe,
-					     u32 *cur_vblank, ktime_t *t_vblank,
-					     bool in_vblank_irq)
-{
-	int count = DRM_TIMESTAMP_MAXRETRIES;
-	bool rc;
-
-	do {
-		*cur_vblank = __get_vblank_counter(dev, pipe);
-		rc = drm_get_last_vbltimestamp(dev, pipe, t_vblank, in_vblank_irq);
-	} while (*cur_vblank != __get_vblank_counter(dev, pipe) && --count > 0);
-
-	return rc;
-}
-
 /*
  * Reset the stored timestamp for the current vblank count to correspond
  * to the last vblank occurred.
@@ -265,6 +250,7 @@ static void drm_reset_vblank_timestamp(struct drm_device *dev, unsigned int pipe
 	u32 cur_vblank;
 	bool rc;
 	ktime_t t_vblank;
+	int count = DRM_TIMESTAMP_MAXRETRIES;
 
 	spin_lock(&dev->vblank_time_lock);
 
@@ -272,8 +258,10 @@ static void drm_reset_vblank_timestamp(struct drm_device *dev, unsigned int pipe
 	 * sample the current counter to avoid random jumps
 	 * when drm_vblank_enable() applies the diff
 	 */
-	rc = get_vblank_counter_and_timestamp(dev, pipe, &cur_vblank,
-					      &t_vblank, false);
+	do {
+		cur_vblank = __get_vblank_counter(dev, pipe);
+		rc = drm_get_last_vbltimestamp(dev, pipe, &t_vblank, false);
+	} while (cur_vblank != __get_vblank_counter(dev, pipe) && --count > 0);
 
 	/*
 	 * Only reinitialize corresponding vblank timestamp if high-precision query
@@ -311,6 +299,7 @@ static void drm_update_vblank_count(struct drm_device *dev, unsigned int pipe,
 	u32 cur_vblank, diff;
 	bool rc;
 	ktime_t t_vblank;
+	int count = DRM_TIMESTAMP_MAXRETRIES;
 	int framedur_ns = vblank->framedur_ns;
 	u32 max_vblank_count = drm_max_vblank_count(dev, pipe);
 
@@ -326,8 +315,10 @@ static void drm_update_vblank_count(struct drm_device *dev, unsigned int pipe,
 	 * updating its hardware counter while we are retrieving the
 	 * corresponding vblank timestamp.
 	 */
-	rc = get_vblank_counter_and_timestamp(dev, pipe, &cur_vblank,
-					      &t_vblank, in_vblank_irq);
+	do {
+		cur_vblank = __get_vblank_counter(dev, pipe);
+		rc = drm_get_last_vbltimestamp(dev, pipe, &t_vblank, in_vblank_irq);
+	} while (cur_vblank != __get_vblank_counter(dev, pipe) && --count > 0);
 
 	if (max_vblank_count) {
 		/* trust the hw counter when it's around */
@@ -560,7 +551,7 @@ int drm_vblank_init(struct drm_device *dev, unsigned int num_crtcs)
 	dev->num_crtcs = num_crtcs;
 
 	for (i = 0; i < num_crtcs; i++) {
-		struct drm_vblank_crtc *vblank = drm_vblank_crtc(dev, i);
+		struct drm_vblank_crtc *vblank = &dev->vblank[i];
 
 		vblank->dev = dev;
 		vblank->pipe = i;
@@ -614,9 +605,7 @@ EXPORT_SYMBOL(drm_dev_has_vblank);
  */
 wait_queue_head_t *drm_crtc_vblank_waitqueue(struct drm_crtc *crtc)
 {
-	struct drm_vblank_crtc *vblank = drm_crtc_vblank_crtc(crtc);
-
-	return &vblank->queue;
+	return &crtc->dev->vblank[drm_crtc_index(crtc)].queue;
 }
 EXPORT_SYMBOL(drm_crtc_vblank_waitqueue);
 
@@ -721,6 +710,7 @@ drm_crtc_vblank_helper_get_vblank_timestamp_internal(
 {
 	struct drm_device *dev = crtc->dev;
 	unsigned int pipe = crtc->index;
+	struct drm_vblank_crtc *vblank = &dev->vblank[pipe];
 	struct timespec64 ts_etime, ts_vblank_time;
 	ktime_t stime, etime;
 	bool vbl_status;
@@ -739,13 +729,10 @@ drm_crtc_vblank_helper_get_vblank_timestamp_internal(
 		return false;
 	}
 
-	if (drm_drv_uses_atomic_modeset(dev)) {
-		struct drm_vblank_crtc *vblank = drm_crtc_vblank_crtc(crtc);
-
+	if (drm_drv_uses_atomic_modeset(dev))
 		mode = &vblank->hwmode;
-	} else {
+	else
 		mode = &crtc->hwmode;
-	}
 
 	/* If mode timing undefined, just return as no-op:
 	 * Happens during initial modesetting of a crtc.
@@ -819,8 +806,10 @@ drm_crtc_vblank_helper_get_vblank_timestamp_internal(
 	ts_vblank_time = ktime_to_timespec64(*vblank_time);
 
 	drm_dbg_vbl(dev,
-		    "crtc %u : v p(%d,%d)@ %ptSp -> %ptSp [e %d us, %d rep]\n",
-		    pipe, hpos, vpos, &ts_etime, &ts_vblank_time,
+		    "crtc %u : v p(%d,%d)@ %lld.%06ld -> %lld.%06ld [e %d us, %d rep]\n",
+		    pipe, hpos, vpos,
+		    (u64)ts_etime.tv_sec, ts_etime.tv_nsec / 1000,
+		    (u64)ts_vblank_time.tv_sec, ts_vblank_time.tv_nsec / 1000,
 		    duration_ns / 1000, i);
 
 	return true;
@@ -1298,39 +1287,53 @@ void drm_crtc_vblank_put(struct drm_crtc *crtc)
 EXPORT_SYMBOL(drm_crtc_vblank_put);
 
 /**
+ * drm_wait_one_vblank - wait for one vblank
+ * @dev: DRM device
+ * @pipe: CRTC index
+ *
+ * This waits for one vblank to pass on @pipe, using the irq driver interfaces.
+ * It is a failure to call this when the vblank irq for @pipe is disabled, e.g.
+ * due to lack of driver support or because the crtc is off.
+ *
+ * This is the legacy version of drm_crtc_wait_one_vblank().
+ */
+void drm_wait_one_vblank(struct drm_device *dev, unsigned int pipe)
+{
+	struct drm_vblank_crtc *vblank = drm_vblank_crtc(dev, pipe);
+	int ret;
+	u64 last;
+
+	if (drm_WARN_ON(dev, pipe >= dev->num_crtcs))
+		return;
+
+	ret = drm_vblank_get(dev, pipe);
+	if (drm_WARN(dev, ret, "vblank not available on crtc %i, ret=%i\n",
+		     pipe, ret))
+		return;
+
+	last = drm_vblank_count(dev, pipe);
+
+	ret = wait_event_timeout(vblank->queue,
+				 last != drm_vblank_count(dev, pipe),
+				 msecs_to_jiffies(100));
+
+	drm_WARN(dev, ret == 0, "vblank wait timed out on crtc %i\n", pipe);
+
+	drm_vblank_put(dev, pipe);
+}
+EXPORT_SYMBOL(drm_wait_one_vblank);
+
+/**
  * drm_crtc_wait_one_vblank - wait for one vblank
  * @crtc: DRM crtc
  *
  * This waits for one vblank to pass on @crtc, using the irq driver interfaces.
  * It is a failure to call this when the vblank irq for @crtc is disabled, e.g.
  * due to lack of driver support or because the crtc is off.
- *
- * Returns: 0 on success, negative error on failures.
  */
-int drm_crtc_wait_one_vblank(struct drm_crtc *crtc)
+void drm_crtc_wait_one_vblank(struct drm_crtc *crtc)
 {
-	struct drm_device *dev = crtc->dev;
-	int pipe = drm_crtc_index(crtc);
-	struct drm_vblank_crtc *vblank = drm_crtc_vblank_crtc(crtc);
-	int ret;
-	u64 last;
-
-	ret = drm_vblank_get(dev, pipe);
-	if (drm_WARN(dev, ret, "vblank not available on crtc %i, ret=%i\n",
-		     pipe, ret))
-		return ret;
-
-	last = drm_vblank_count(dev, pipe);
-
-	ret = wait_event_timeout(vblank->queue,
-				 last != drm_vblank_count(dev, pipe),
-				 msecs_to_jiffies(1000));
-
-	drm_WARN(dev, ret == 0, "vblank wait timed out on crtc %i\n", pipe);
-
-	drm_vblank_put(dev, pipe);
-
-	return ret ? 0 : -ETIMEDOUT;
+	drm_wait_one_vblank(crtc->dev, drm_crtc_index(crtc));
 }
 EXPORT_SYMBOL(drm_crtc_wait_one_vblank);
 
@@ -1552,6 +1555,7 @@ static void drm_vblank_restore(struct drm_device *dev, unsigned int pipe)
 	int framedur_ns;
 	u64 diff_ns;
 	u32 cur_vblank, diff = 1;
+	int count = DRM_TIMESTAMP_MAXRETRIES;
 	u32 max_vblank_count = drm_max_vblank_count(dev, pipe);
 
 	if (drm_WARN_ON(dev, pipe >= dev->num_crtcs))
@@ -1566,8 +1570,10 @@ static void drm_vblank_restore(struct drm_device *dev, unsigned int pipe)
 		      "Cannot compute missed vblanks without frame duration\n");
 	framedur_ns = vblank->framedur_ns;
 
-	get_vblank_counter_and_timestamp(dev, pipe, &cur_vblank,
-					 &t_vblank, false);
+	do {
+		cur_vblank = __get_vblank_counter(dev, pipe);
+		drm_get_last_vbltimestamp(dev, pipe, &t_vblank, false);
+	} while (cur_vblank != __get_vblank_counter(dev, pipe) && --count > 0);
 
 	diff_ns = ktime_to_ns(ktime_sub(t_vblank, vblank->time));
 	if (framedur_ns)
@@ -1621,7 +1627,7 @@ static int drm_queue_vblank_event(struct drm_device *dev, unsigned int pipe,
 	u64 seq;
 	int ret;
 
-	e = kzalloc_obj(*e);
+	e = kzalloc(sizeof(*e), GFP_KERNEL);
 	if (e == NULL) {
 		ret = -ENOMEM;
 		goto err_put;
@@ -1790,7 +1796,7 @@ int drm_wait_vblank_ioctl(struct drm_device *dev, void *data,
 	if (pipe >= dev->num_crtcs)
 		return -EINVAL;
 
-	vblank = drm_vblank_crtc(dev, pipe);
+	vblank = &dev->vblank[pipe];
 
 	/* If the counter is currently enabled and accurate, short-circuit
 	 * queries to return the cached timestamp of the last vblank.
@@ -2100,7 +2106,7 @@ int drm_crtc_queue_sequence_ioctl(struct drm_device *dev, void *data,
 
 	vblank = drm_crtc_vblank_crtc(crtc);
 
-	e = kzalloc_obj(*e);
+	e = kzalloc(sizeof(*e), GFP_KERNEL);
 	if (e == NULL)
 		return -ENOMEM;
 

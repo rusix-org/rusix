@@ -458,7 +458,7 @@ static struct socket *drbd_try_connect(struct drbd_connection *connection)
 	 * stay C_WF_CONNECTION, don't go Disconnecting! */
 	disconnect_on_error = 0;
 	what = "connect";
-	err = sock->ops->connect(sock, (struct sockaddr_unsized *) &peer_in6, peer_addr_len, 0);
+	err = sock->ops->connect(sock, (struct sockaddr *) &peer_in6, peer_addr_len, 0);
 
 out:
 	if (err < 0) {
@@ -1095,7 +1095,7 @@ static void submit_one_flush(struct drbd_device *device, struct issue_flush_cont
 {
 	struct bio *bio = bio_alloc(device->ldev->backing_bdev, 0,
 				    REQ_OP_WRITE | REQ_PREFLUSH, GFP_NOIO);
-	struct one_flush_context *octx = kmalloc_obj(*octx, GFP_NOIO);
+	struct one_flush_context *octx = kmalloc(sizeof(*octx), GFP_NOIO);
 
 	if (!octx) {
 		drbd_warn(device, "Could not allocate a octx, CANNOT ISSUE FLUSH\n");
@@ -1592,7 +1592,7 @@ static int receive_Barrier(struct drbd_connection *connection, struct packet_inf
 
 		/* receiver context, in the writeout path of the other node.
 		 * avoid potential distributed deadlock */
-		epoch = kmalloc_obj(struct drbd_epoch, GFP_NOIO);
+		epoch = kmalloc(sizeof(struct drbd_epoch), GFP_NOIO);
 		if (epoch)
 			break;
 		else
@@ -1605,7 +1605,7 @@ static int receive_Barrier(struct drbd_connection *connection, struct packet_inf
 		drbd_flush(connection);
 
 		if (atomic_read(&connection->current_epoch->epoch_size)) {
-			epoch = kmalloc_obj(struct drbd_epoch, GFP_NOIO);
+			epoch = kmalloc(sizeof(struct drbd_epoch), GFP_NOIO);
 			if (epoch)
 				break;
 		}
@@ -1736,13 +1736,13 @@ read_in_block(struct drbd_peer_device *peer_device, u64 id, sector_t sector,
 	page = peer_req->pages;
 	page_chain_for_each(page) {
 		unsigned len = min_t(int, ds, PAGE_SIZE);
-		data = kmap_local_page(page);
+		data = kmap(page);
 		err = drbd_recv_all_warn(peer_device->connection, data, len);
 		if (drbd_insert_fault(device, DRBD_FAULT_RECEIVE)) {
 			drbd_err(device, "Fault injection: Corrupting data on receive\n");
 			data[0] = data[0] ^ (unsigned long)-1;
 		}
-		kunmap_local(data);
+		kunmap(page);
 		if (err) {
 			drbd_free_peer_req(device, peer_req);
 			return NULL;
@@ -1777,7 +1777,7 @@ static int drbd_drain_block(struct drbd_peer_device *peer_device, int data_size)
 
 	page = drbd_alloc_pages(peer_device, 1, 1);
 
-	data = kmap_local_page(page);
+	data = kmap(page);
 	while (data_size) {
 		unsigned int len = min_t(int, data_size, PAGE_SIZE);
 
@@ -1786,7 +1786,7 @@ static int drbd_drain_block(struct drbd_peer_device *peer_device, int data_size)
 			break;
 		data_size -= len;
 	}
-	kunmap_local(data);
+	kunmap(page);
 	drbd_free_pages(peer_device->device, page);
 	return err;
 }
@@ -3552,7 +3552,7 @@ static int receive_protocol(struct drbd_connection *connection, struct packet_in
 		}
 	}
 
-	new_net_conf = kmalloc_obj(struct net_conf);
+	new_net_conf = kmalloc(sizeof(struct net_conf), GFP_KERNEL);
 	if (!new_net_conf)
 		goto disconnect;
 
@@ -3713,7 +3713,7 @@ static int receive_SyncParam(struct drbd_connection *connection, struct packet_i
 	mutex_lock(&connection->resource->conf_update);
 	old_net_conf = peer_device->connection->net_conf;
 	if (get_ldev(device)) {
-		new_disk_conf = kzalloc_obj(struct disk_conf);
+		new_disk_conf = kzalloc(sizeof(struct disk_conf), GFP_KERNEL);
 		if (!new_disk_conf) {
 			put_ldev(device);
 			mutex_unlock(&connection->resource->conf_update);
@@ -3799,21 +3799,21 @@ static int receive_SyncParam(struct drbd_connection *connection, struct packet_i
 		}
 
 		if (verify_tfm || csums_tfm) {
-			new_net_conf = kzalloc_obj(struct net_conf);
+			new_net_conf = kzalloc(sizeof(struct net_conf), GFP_KERNEL);
 			if (!new_net_conf)
 				goto disconnect;
 
 			*new_net_conf = *old_net_conf;
 
 			if (verify_tfm) {
-				strscpy(new_net_conf->verify_alg, p->verify_alg);
+				strcpy(new_net_conf->verify_alg, p->verify_alg);
 				new_net_conf->verify_alg_len = strlen(p->verify_alg) + 1;
 				crypto_free_shash(peer_device->connection->verify_tfm);
 				peer_device->connection->verify_tfm = verify_tfm;
 				drbd_info(device, "using verify-alg: \"%s\"\n", p->verify_alg);
 			}
 			if (csums_tfm) {
-				strscpy(new_net_conf->csums_alg, p->csums_alg);
+				strcpy(new_net_conf->csums_alg, p->csums_alg);
 				new_net_conf->csums_alg_len = strlen(p->csums_alg) + 1;
 				crypto_free_shash(peer_device->connection->csums_tfm);
 				peer_device->connection->csums_tfm = csums_tfm;
@@ -3937,7 +3937,7 @@ static int receive_sizes(struct drbd_connection *connection, struct packet_info 
 		if (my_usize != p_usize) {
 			struct disk_conf *old_disk_conf, *new_disk_conf = NULL;
 
-			new_disk_conf = kzalloc_obj(struct disk_conf);
+			new_disk_conf = kzalloc(sizeof(struct disk_conf), GFP_KERNEL);
 			if (!new_disk_conf) {
 				put_ldev(device);
 				return -ENOMEM;
@@ -5697,7 +5697,7 @@ static int got_OVResult(struct drbd_connection *connection, struct packet_info *
 		drbd_advance_rs_marks(peer_device, device->ov_left);
 
 	if (device->ov_left == 0) {
-		dw = kmalloc_obj(*dw, GFP_NOIO);
+		dw = kmalloc(sizeof(*dw), GFP_NOIO);
 		if (dw) {
 			dw->w.cb = w_ov_finished;
 			dw->device = device;

@@ -1118,7 +1118,7 @@ static void happy_meal_transceiver_check(struct happy_meal *hp, void __iomem *tr
  *
  * We use skb_reserve() to align the data block we get in the skb.  We
  * also program the etxregs->cfg register to use an offset of 2.  This
- * empirical constant plus the ethernet header size will always leave
+ * imperical constant plus the ethernet header size will always leave
  * us with a nicely aligned ip header once we pass things up to the
  * protocol layers.
  *
@@ -2248,7 +2248,7 @@ static struct quattro *quattro_sbus_find(struct platform_device *child)
 	if (qp)
 		return qp;
 
-	qp = kzalloc_obj(*qp);
+	qp = kzalloc(sizeof(*qp), GFP_KERNEL);
 	if (!qp)
 		return NULL;
 
@@ -2278,7 +2278,7 @@ static struct quattro *quattro_pci_find(struct pci_dev *pdev)
 			return qp;
 	}
 
-	qp = kmalloc_obj(struct quattro);
+	qp = kmalloc(sizeof(struct quattro), GFP_KERNEL);
 	if (!qp)
 		return ERR_PTR(-ENOMEM);
 

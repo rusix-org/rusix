@@ -611,7 +611,6 @@ out:
  * Returns 0 on success, negative value otherwise.
  */
 static int tomoyo_environ(struct tomoyo_execve *ee)
-	__must_hold_shared(&tomoyo_ss)
 {
 	struct tomoyo_request_info *r = &ee->r;
 	struct linux_binprm *bprm = ee->bprm;
@@ -708,7 +707,7 @@ int tomoyo_find_next_domain(struct linux_binprm *bprm)
 	bool reject_on_transition_failure = false;
 	const struct tomoyo_path_info *candidate;
 	struct tomoyo_path_info exename;
-	struct tomoyo_execve *ee = kzalloc_obj(*ee, GFP_NOFS);
+	struct tomoyo_execve *ee = kzalloc(sizeof(*ee), GFP_NOFS);
 
 	if (!ee)
 		return -ENOMEM;
@@ -935,12 +934,17 @@ bool tomoyo_dump_page(struct linux_binprm *bprm, unsigned long pos,
 #endif
 	if (page != dump->page) {
 		const unsigned int offset = pos % PAGE_SIZE;
-		char *kaddr = kmap_local_page(page);
+		/*
+		 * Maybe kmap()/kunmap() should be used here.
+		 * But remove_arg_zero() uses kmap_atomic()/kunmap_atomic().
+		 * So do I.
+		 */
+		char *kaddr = kmap_atomic(page);
 
 		dump->page = page;
 		memcpy(dump->data + offset, kaddr + offset,
 		       PAGE_SIZE - offset);
-		kunmap_local(kaddr);
+		kunmap_atomic(kaddr);
 	}
 	/* Same with put_arg_page(page) in fs/exec.c */
 #ifdef CONFIG_MMU

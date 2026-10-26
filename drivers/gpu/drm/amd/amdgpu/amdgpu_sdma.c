@@ -22,7 +22,6 @@
  */
 
 #include <linux/firmware.h>
-#include <linux/stdarg.h>
 #include "amdgpu.h"
 #include "amdgpu_sdma.h"
 #include "amdgpu_ras.h"
@@ -38,35 +37,57 @@
  * GPU SDMA IP block helpers function.
  */
 
-int __printf(4, 5)
-amdgpu_sdma_ring_init(struct amdgpu_device *adev, struct amdgpu_ring *ring,
-		      unsigned int instance, const char *fmt, ...)
+struct amdgpu_sdma_instance *amdgpu_sdma_get_instance_from_ring(struct amdgpu_ring *ring)
 {
-	struct amdgpu_sdma_instance *sdma;
-	va_list args;
+	struct amdgpu_device *adev = ring->adev;
+	int i;
+
+	for (i = 0; i < adev->sdma.num_instances; i++)
+		if (ring == &adev->sdma.instance[i].ring ||
+		    ring == &adev->sdma.instance[i].page)
+			return &adev->sdma.instance[i];
+
+	return NULL;
+}
+
+int amdgpu_sdma_get_index_from_ring(struct amdgpu_ring *ring, uint32_t *index)
+{
+	struct amdgpu_device *adev = ring->adev;
+	int i;
+
+	for (i = 0; i < adev->sdma.num_instances; i++) {
+		if (ring == &adev->sdma.instance[i].ring ||
+			ring == &adev->sdma.instance[i].page) {
+			*index = i;
+			return 0;
+		}
+	}
+
+	return -EINVAL;
+}
+
+uint64_t amdgpu_sdma_get_csa_mc_addr(struct amdgpu_ring *ring,
+				     unsigned int vmid)
+{
+	struct amdgpu_device *adev = ring->adev;
+	uint64_t csa_mc_addr;
+	uint32_t index = 0;
 	int r;
 
-	ring->ring_obj = NULL;
+	/* don't enable OS preemption on SDMA under SRIOV */
+	if (amdgpu_sriov_vf(adev) || vmid == 0 || !adev->gfx.mcbp)
+		return 0;
 
-	va_start(args, fmt);
-	vsnprintf(ring->name, sizeof(ring->name), fmt, args);
-	va_end(args);
+	r = amdgpu_sdma_get_index_from_ring(ring, &index);
 
-	r = amdgpu_ring_init(adev, ring, 1024, &adev->sdma.trap_irq,
-			     AMDGPU_SDMA_IRQ_INSTANCE0 + instance,
-			     AMDGPU_RING_PRIO_DEFAULT, NULL);
-	if (r)
-		return r;
-
-	sdma = amdgpu_sdma_get_instance_from_ring(ring);
-	if (amdgpu_sriov_vf(adev) || !adev->gfx.mcbp)
-		sdma->csa_addr = 0;
+	if (r || index > 31)
+		csa_mc_addr = 0;
 	else
-		sdma->csa_addr = amdgpu_csa_vaddr(adev) +
-				 AMDGPU_CSA_SDMA_OFFSET +
-				 ring->me * AMDGPU_CSA_SDMA_SIZE;
+		csa_mc_addr = amdgpu_csa_vaddr(adev) +
+			AMDGPU_CSA_SDMA_OFFSET +
+			index * AMDGPU_CSA_SDMA_SIZE;
 
-	return r;
+	return csa_mc_addr;
 }
 
 int amdgpu_sdma_ras_late_init(struct amdgpu_device *adev,
@@ -521,43 +542,36 @@ static int amdgpu_sdma_soft_reset(struct amdgpu_device *adev, u32 instance_id)
 }
 
 /**
- * amdgpu_sdma_reset_engine() - Reset a specific SDMA engine instance.
- *
+ * amdgpu_sdma_reset_engine - Reset a specific SDMA engine
  * @adev: Pointer to the AMDGPU device
  * @instance_id: Logical ID of the SDMA engine instance to reset
+ * @caller_handles_kernel_queues: Skip kernel queue processing. Caller
+ * will handle it.
  *
  * Returns: 0 on success, or a negative error code on failure.
  */
-int amdgpu_sdma_reset_engine(struct amdgpu_device *adev, uint32_t instance_id)
+int amdgpu_sdma_reset_engine(struct amdgpu_device *adev, uint32_t instance_id,
+			     bool caller_handles_kernel_queues)
 {
+	int ret = 0;
 	struct amdgpu_sdma_instance *sdma_instance = &adev->sdma.instance[instance_id];
 	struct amdgpu_ring *gfx_ring = &sdma_instance->ring;
 	struct amdgpu_ring *page_ring = &sdma_instance->page;
-	struct amdgpu_fence *gfx_fence, *page_fence;
-	int ret = 0;
 
 	if (amdgpu_sriov_vf(adev))
 		return -EOPNOTSUPP;
 
 	mutex_lock(&sdma_instance->engine_reset_mutex);
 
-	/*
-	 * Stop the scheduler's work queue for the GFX and page rings if they are running.
-	 * This ensures that no new tasks are submitted to the queues while
-	 * the reset is in progress.
-	 */
-	if (amdgpu_ring_sched_ready(gfx_ring) && !drm_sched_is_stopped(&gfx_ring->sched))
+	if (!caller_handles_kernel_queues) {
+		/* Stop the scheduler's work queue for the GFX and page rings if they are running.
+		 * This ensures that no new tasks are submitted to the queues while
+		 * the reset is in progress.
+		 */
 		drm_sched_wqueue_stop(&gfx_ring->sched);
 
-	gfx_fence = amdgpu_ring_find_guilty_fence(gfx_ring);
-	amdgpu_ring_reset_helper_begin(gfx_ring, gfx_fence);
-
-	if (adev->sdma.has_page_queue) {
-		if (amdgpu_ring_sched_ready(page_ring) && !drm_sched_is_stopped(&page_ring->sched))
+		if (adev->sdma.has_page_queue)
 			drm_sched_wqueue_stop(&page_ring->sched);
-
-		page_fence = amdgpu_ring_find_guilty_fence(page_ring);
-		amdgpu_ring_reset_helper_begin(page_ring, page_fence);
 	}
 
 	if (sdma_instance->funcs->stop_kernel_queue) {
@@ -573,11 +587,6 @@ int amdgpu_sdma_reset_engine(struct amdgpu_device *adev, uint32_t instance_id)
 		goto exit;
 	}
 
-	amdgpu_ring_clear_ring_and_ptrs(gfx_ring);
-
-	if (adev->sdma.has_page_queue)
-		amdgpu_ring_clear_ring_and_ptrs(page_ring);
-
 	if (sdma_instance->funcs->start_kernel_queue) {
 		sdma_instance->funcs->start_kernel_queue(gfx_ring);
 		if (adev->sdma.has_page_queue)
@@ -585,64 +594,21 @@ int amdgpu_sdma_reset_engine(struct amdgpu_device *adev, uint32_t instance_id)
 	}
 
 exit:
-	/* Restart the scheduler's work queue for the GFX and page rings
-	 * if they were stopped by this function. This allows new tasks
-	 * to be submitted to the queues after the reset is complete.
-	 */
-	if (!ret) {
-		ret = amdgpu_ring_reset_helper_end(gfx_ring, gfx_fence);
-		if (ret)
-			goto unlock;
-
-		if (amdgpu_ring_sched_ready(gfx_ring))
+	if (!caller_handles_kernel_queues) {
+		/* Restart the scheduler's work queue for the GFX and page rings
+		 * if they were stopped by this function. This allows new tasks
+		 * to be submitted to the queues after the reset is complete.
+		 */
+		if (!ret) {
+			amdgpu_fence_driver_force_completion(gfx_ring, NULL);
 			drm_sched_wqueue_start(&gfx_ring->sched);
-
-		if (adev->sdma.has_page_queue) {
-			ret = amdgpu_ring_reset_helper_end(page_ring, page_fence);
-			if (ret)
-				goto unlock;
-
-			if (amdgpu_ring_sched_ready(page_ring))
+			if (adev->sdma.has_page_queue) {
+				amdgpu_fence_driver_force_completion(page_ring, NULL);
 				drm_sched_wqueue_start(&page_ring->sched);
+			}
 		}
 	}
-unlock:
 	mutex_unlock(&sdma_instance->engine_reset_mutex);
 
 	return ret;
-}
-
-/**
- * amdgpu_sdma_reset_queue_legacy() - Reset legacy SDMA queue after timeout (without MES)
- *
- * @ring: Pointer to the ring of the SDMA queue
- * @vmid: VMID of the timed out job
- * @timedout_fence: Fence of the timed out job
- *
- * Common implementation for resetting SDMA queues without MES (legacy).
- * This relies on the proper amdgpu_sdma_funcs to be set up
- * for the given ring.
- *
- * Applicable to SDMA versions that don't rely on the MES yet,
- * that is all versions up to SDMA v5.x and older.
- */
-int amdgpu_sdma_reset_queue_legacy(struct amdgpu_ring *ring,
-				   unsigned int vmid,
-				   struct amdgpu_fence *timedout_fence)
-{
-	struct amdgpu_device *adev = ring->adev;
-	int r;
-
-	if (ring->me >= adev->sdma.num_instances) {
-		dev_err(adev->dev, "sdma instance not found\n");
-		return -EINVAL;
-	}
-
-	amdgpu_amdkfd_suspend(adev, true);
-	r = amdgpu_sdma_reset_engine(adev, ring->me);
-	amdgpu_amdkfd_resume(adev, true);
-	if (r)
-		return r;
-
-	return 0;
 }

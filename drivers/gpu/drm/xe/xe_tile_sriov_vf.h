@@ -10,11 +10,9 @@
 
 struct xe_tile;
 
-u64 xe_tile_sriov_vf_ggtt(struct xe_tile *tile);
-void xe_tile_sriov_vf_ggtt_store(struct xe_tile *tile, u64 ggtt_size);
-u64 xe_tile_sriov_vf_ggtt_base(struct xe_tile *tile);
-void xe_tile_sriov_vf_ggtt_base_store(struct xe_tile *tile, u64 ggtt_size);
-u64 xe_tile_sriov_vf_lmem(struct xe_tile *tile);
-void xe_tile_sriov_vf_lmem_store(struct xe_tile *tile, u64 lmem_size);
+int xe_tile_sriov_vf_prepare_ggtt(struct xe_tile *tile);
+int xe_tile_sriov_vf_balloon_ggtt_locked(struct xe_tile *tile);
+void xe_tile_sriov_vf_deballoon_ggtt_locked(struct xe_tile *tile);
+void xe_tile_sriov_vf_fixup_ggtt_nodes(struct xe_tile *tile, s64 shift);
 
 #endif

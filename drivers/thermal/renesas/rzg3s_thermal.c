@@ -12,7 +12,6 @@
 #include <linux/module.h>
 #include <linux/platform_device.h>
 #include <linux/pm_runtime.h>
-#include <linux/property.h>
 #include <linux/reset.h>
 #include <linux/thermal.h>
 #include <linux/units.h>
@@ -27,6 +26,10 @@
 #define OTPTSUTRIM_MASK		GENMASK(11, 0)
 
 #define TSU_READ_STEPS		8
+
+/* Default calibration values, if FUSE values are missing. */
+#define SW_CALIB0_VAL		1297
+#define SW_CALIB1_VAL		751
 
 #define MCELSIUS(temp)		((temp) * MILLIDEGREE_PER_DEGREE)
 
@@ -48,16 +51,6 @@ struct rzg3s_thermal_priv {
 	struct reset_control *rstc;
 	struct iio_channel *channel;
 	enum thermal_device_mode mode;
-	u16 calib0;
-	u16 calib1;
-};
-
-/**
- * struct rzg3s_thermal_info - RZ/G3S thermal information
- * @calib0: calibration value if FUSE value is missing
- * @calib1: calibration value if FUSE value is missing
- */
-struct rzg3s_thermal_info {
 	u16 calib0;
 	u16 calib1;
 };
@@ -156,8 +149,7 @@ static const struct thermal_zone_device_ops rzg3s_tz_of_ops = {
 	.change_mode = rzg3s_thermal_change_mode,
 };
 
-static int rzg3s_thermal_read_calib(struct rzg3s_thermal_priv *priv,
-				    const struct rzg3s_thermal_info *info)
+static int rzg3s_thermal_read_calib(struct rzg3s_thermal_priv *priv)
 {
 	struct device *dev = priv->dev;
 	u32 val;
@@ -171,13 +163,13 @@ static int rzg3s_thermal_read_calib(struct rzg3s_thermal_priv *priv,
 	if (val & OTPTSUTRIM_EN_MASK)
 		priv->calib0 = FIELD_GET(OTPTSUTRIM_MASK, val);
 	else
-		priv->calib0 = info->calib0;
+		priv->calib0 = SW_CALIB0_VAL;
 
 	val = readl(priv->base + OTPTSUTRIM_REG(1));
 	if (val & OTPTSUTRIM_EN_MASK)
 		priv->calib1 = FIELD_GET(OTPTSUTRIM_MASK, val);
 	else
-		priv->calib1 = info->calib1;
+		priv->calib1 = SW_CALIB1_VAL;
 
 	pm_runtime_put_autosuspend(dev);
 
@@ -186,7 +178,6 @@ static int rzg3s_thermal_read_calib(struct rzg3s_thermal_priv *priv,
 
 static int rzg3s_thermal_probe(struct platform_device *pdev)
 {
-	const struct rzg3s_thermal_info *info = device_get_match_data(&pdev->dev);
 	struct rzg3s_thermal_priv *priv;
 	struct device *dev = &pdev->dev;
 	int ret;
@@ -217,7 +208,7 @@ static int rzg3s_thermal_probe(struct platform_device *pdev)
 	if (ret)
 		return dev_err_probe(dev, ret, "Failed to enable runtime PM!\n");
 
-	ret = rzg3s_thermal_read_calib(priv, info);
+	ret = rzg3s_thermal_read_calib(priv);
 	if (ret)
 		return dev_err_probe(dev, ret, "Failed to read calibration data!\n");
 
@@ -260,19 +251,8 @@ static const struct dev_pm_ops rzg3s_thermal_pm_ops = {
 	SYSTEM_SLEEP_PM_OPS(rzg3s_thermal_suspend, rzg3s_thermal_resume)
 };
 
-static const struct rzg3s_thermal_info rzg3s_info = {
-	.calib0 = 1297,
-	.calib1 = 751,
-};
-
-static const struct rzg3s_thermal_info rzg3l_info = {
-	.calib0 = 1322,
-	.calib1 = 772,
-};
-
 static const struct of_device_id rzg3s_thermal_dt_ids[] = {
-	{ .compatible = "renesas,r9a08g045-tsu", .data = &rzg3s_info },
-	{ .compatible = "renesas,r9a08g046-tsu", .data = &rzg3l_info },
+	{ .compatible = "renesas,r9a08g045-tsu" },
 	{ /* sentinel */ }
 };
 MODULE_DEVICE_TABLE(of, rzg3s_thermal_dt_ids);
@@ -290,4 +270,3 @@ module_platform_driver(rzg3s_thermal_driver);
 MODULE_DESCRIPTION("Renesas RZ/G3S Thermal Sensor Unit Driver");
 MODULE_AUTHOR("Claudiu Beznea <claudiu.beznea.uj@bp.renesas.com>");
 MODULE_LICENSE("GPL");
-MODULE_IMPORT_NS("IIO_CONSUMER");

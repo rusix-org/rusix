@@ -111,12 +111,11 @@ static int led_tg_check(const struct xt_tgchk_param *par)
 	}
 
 	err = -ENOMEM;
-	ledinternal = kzalloc_obj(struct xt_led_info_internal,
-				  GFP_KERNEL_ACCOUNT);
+	ledinternal = kzalloc(sizeof(struct xt_led_info_internal), GFP_KERNEL);
 	if (!ledinternal)
 		goto exit_mutex_only;
 
-	ledinternal->trigger_id = kstrdup(ledinfo->id, GFP_KERNEL_ACCOUNT);
+	ledinternal->trigger_id = kstrdup(ledinfo->id, GFP_KERNEL);
 	if (!ledinternal->trigger_id)
 		goto exit_internal_alloc;
 

@@ -467,7 +467,8 @@ int sk_psock_msg_verdict(struct sock *sk, struct sk_psock *psock,
  * intentional to enforce typesafety.
  */
 #define sk_psock_init_link()	\
-		kzalloc_obj(struct sk_psock_link, GFP_ATOMIC | __GFP_NOWARN)
+		((struct sk_psock_link *)kzalloc(sizeof(struct sk_psock_link),	\
+						 GFP_ATOMIC | __GFP_NOWARN))
 
 static inline void sk_psock_free_link(struct sk_psock_link *link)
 {
@@ -549,6 +550,15 @@ static inline void psock_progs_drop(struct sk_psock_progs *progs)
 	psock_set_prog(&progs->stream_parser, NULL);
 	psock_set_prog(&progs->stream_verdict, NULL);
 	psock_set_prog(&progs->skb_verdict, NULL);
+}
+
+int sk_psock_tls_strp_read(struct sk_psock *psock, struct sk_buff *skb);
+
+static inline bool sk_psock_strp_enabled(struct sk_psock *psock)
+{
+	if (!psock)
+		return false;
+	return !!psock->saved_data_ready;
 }
 
 /* for udp only, sk is not locked */

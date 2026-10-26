@@ -7,7 +7,6 @@
 #include <sys/mman.h>
 #include <sys/syscall.h>
 #include <bpf/btf.h>
-#include "bpftool_helpers.h"
 
 static int duration = 0;
 
@@ -986,15 +985,16 @@ static size_t roundup_page(size_t sz)
 
 static int run_btfgen(const char *src_btf, const char *dst_btf, const char *objpath)
 {
-	char args[4096];
+	char command[4096];
 	int n;
 
-	n = snprintf(args, sizeof(args), "gen min_core_btf %s %s %s",
+	n = snprintf(command, sizeof(command),
+		     "./bpftool gen min_core_btf %s %s %s",
 		     src_btf, dst_btf, objpath);
-	if (n < 0 || n >= sizeof(args))
+	if (n < 0 || n >= sizeof(command))
 		return -1;
 
-	return run_bpftool_command(args);
+	return system(command);
 }
 
 static void run_core_reloc_tests(bool use_btfgen)

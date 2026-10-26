@@ -34,7 +34,6 @@
 #include "amdgpu_ucode.h"
 #include "atom.h"
 #include "amd_pcie.h"
-#include "amdgpu_video_codecs.h"
 
 #include "gmc/gmc_8_1_d.h"
 #include "gmc/gmc_8_1_sh_mask.h"
@@ -300,11 +299,11 @@ static u32 vi_pcie_rreg(struct amdgpu_device *adev, u32 reg)
 	unsigned long flags;
 	u32 r;
 
-	spin_lock_irqsave(&adev->reg.pcie.lock, flags);
+	spin_lock_irqsave(&adev->pcie_idx_lock, flags);
 	WREG32_NO_KIQ(mmPCIE_INDEX, reg);
 	(void)RREG32_NO_KIQ(mmPCIE_INDEX);
 	r = RREG32_NO_KIQ(mmPCIE_DATA);
-	spin_unlock_irqrestore(&adev->reg.pcie.lock, flags);
+	spin_unlock_irqrestore(&adev->pcie_idx_lock, flags);
 	return r;
 }
 
@@ -312,12 +311,12 @@ static void vi_pcie_wreg(struct amdgpu_device *adev, u32 reg, u32 v)
 {
 	unsigned long flags;
 
-	spin_lock_irqsave(&adev->reg.pcie.lock, flags);
+	spin_lock_irqsave(&adev->pcie_idx_lock, flags);
 	WREG32_NO_KIQ(mmPCIE_INDEX, reg);
 	(void)RREG32_NO_KIQ(mmPCIE_INDEX);
 	WREG32_NO_KIQ(mmPCIE_DATA, v);
 	(void)RREG32_NO_KIQ(mmPCIE_DATA);
-	spin_unlock_irqrestore(&adev->reg.pcie.lock, flags);
+	spin_unlock_irqrestore(&adev->pcie_idx_lock, flags);
 }
 
 static u32 vi_smc_rreg(struct amdgpu_device *adev, u32 reg)
@@ -325,10 +324,10 @@ static u32 vi_smc_rreg(struct amdgpu_device *adev, u32 reg)
 	unsigned long flags;
 	u32 r;
 
-	spin_lock_irqsave(&adev->reg.smc.lock, flags);
+	spin_lock_irqsave(&adev->smc_idx_lock, flags);
 	WREG32_NO_KIQ(mmSMC_IND_INDEX_11, (reg));
 	r = RREG32_NO_KIQ(mmSMC_IND_DATA_11);
-	spin_unlock_irqrestore(&adev->reg.smc.lock, flags);
+	spin_unlock_irqrestore(&adev->smc_idx_lock, flags);
 	return r;
 }
 
@@ -336,10 +335,10 @@ static void vi_smc_wreg(struct amdgpu_device *adev, u32 reg, u32 v)
 {
 	unsigned long flags;
 
-	spin_lock_irqsave(&adev->reg.smc.lock, flags);
+	spin_lock_irqsave(&adev->smc_idx_lock, flags);
 	WREG32_NO_KIQ(mmSMC_IND_INDEX_11, (reg));
 	WREG32_NO_KIQ(mmSMC_IND_DATA_11, (v));
-	spin_unlock_irqrestore(&adev->reg.smc.lock, flags);
+	spin_unlock_irqrestore(&adev->smc_idx_lock, flags);
 }
 
 /* smu_8_0_d.h */
@@ -351,10 +350,10 @@ static u32 cz_smc_rreg(struct amdgpu_device *adev, u32 reg)
 	unsigned long flags;
 	u32 r;
 
-	spin_lock_irqsave(&adev->reg.smc.lock, flags);
+	spin_lock_irqsave(&adev->smc_idx_lock, flags);
 	WREG32(mmMP0PUB_IND_INDEX, (reg));
 	r = RREG32(mmMP0PUB_IND_DATA);
-	spin_unlock_irqrestore(&adev->reg.smc.lock, flags);
+	spin_unlock_irqrestore(&adev->smc_idx_lock, flags);
 	return r;
 }
 
@@ -362,10 +361,10 @@ static void cz_smc_wreg(struct amdgpu_device *adev, u32 reg, u32 v)
 {
 	unsigned long flags;
 
-	spin_lock_irqsave(&adev->reg.smc.lock, flags);
+	spin_lock_irqsave(&adev->smc_idx_lock, flags);
 	WREG32(mmMP0PUB_IND_INDEX, (reg));
 	WREG32(mmMP0PUB_IND_DATA, (v));
-	spin_unlock_irqrestore(&adev->reg.smc.lock, flags);
+	spin_unlock_irqrestore(&adev->smc_idx_lock, flags);
 }
 
 static u32 vi_uvd_ctx_rreg(struct amdgpu_device *adev, u32 reg)
@@ -373,10 +372,10 @@ static u32 vi_uvd_ctx_rreg(struct amdgpu_device *adev, u32 reg)
 	unsigned long flags;
 	u32 r;
 
-	spin_lock_irqsave(&adev->reg.uvd_ctx.lock, flags);
+	spin_lock_irqsave(&adev->uvd_ctx_idx_lock, flags);
 	WREG32(mmUVD_CTX_INDEX, ((reg) & 0x1ff));
 	r = RREG32(mmUVD_CTX_DATA);
-	spin_unlock_irqrestore(&adev->reg.uvd_ctx.lock, flags);
+	spin_unlock_irqrestore(&adev->uvd_ctx_idx_lock, flags);
 	return r;
 }
 
@@ -384,10 +383,10 @@ static void vi_uvd_ctx_wreg(struct amdgpu_device *adev, u32 reg, u32 v)
 {
 	unsigned long flags;
 
-	spin_lock_irqsave(&adev->reg.uvd_ctx.lock, flags);
+	spin_lock_irqsave(&adev->uvd_ctx_idx_lock, flags);
 	WREG32(mmUVD_CTX_INDEX, ((reg) & 0x1ff));
 	WREG32(mmUVD_CTX_DATA, (v));
-	spin_unlock_irqrestore(&adev->reg.uvd_ctx.lock, flags);
+	spin_unlock_irqrestore(&adev->uvd_ctx_idx_lock, flags);
 }
 
 static u32 vi_didt_rreg(struct amdgpu_device *adev, u32 reg)
@@ -395,10 +394,10 @@ static u32 vi_didt_rreg(struct amdgpu_device *adev, u32 reg)
 	unsigned long flags;
 	u32 r;
 
-	spin_lock_irqsave(&adev->reg.didt.lock, flags);
+	spin_lock_irqsave(&adev->didt_idx_lock, flags);
 	WREG32(mmDIDT_IND_INDEX, (reg));
 	r = RREG32(mmDIDT_IND_DATA);
-	spin_unlock_irqrestore(&adev->reg.didt.lock, flags);
+	spin_unlock_irqrestore(&adev->didt_idx_lock, flags);
 	return r;
 }
 
@@ -406,10 +405,10 @@ static void vi_didt_wreg(struct amdgpu_device *adev, u32 reg, u32 v)
 {
 	unsigned long flags;
 
-	spin_lock_irqsave(&adev->reg.didt.lock, flags);
+	spin_lock_irqsave(&adev->didt_idx_lock, flags);
 	WREG32(mmDIDT_IND_INDEX, (reg));
 	WREG32(mmDIDT_IND_DATA, (v));
-	spin_unlock_irqrestore(&adev->reg.didt.lock, flags);
+	spin_unlock_irqrestore(&adev->didt_idx_lock, flags);
 }
 
 static u32 vi_gc_cac_rreg(struct amdgpu_device *adev, u32 reg)
@@ -417,10 +416,10 @@ static u32 vi_gc_cac_rreg(struct amdgpu_device *adev, u32 reg)
 	unsigned long flags;
 	u32 r;
 
-	spin_lock_irqsave(&adev->reg.gc_cac.lock, flags);
+	spin_lock_irqsave(&adev->gc_cac_idx_lock, flags);
 	WREG32(mmGC_CAC_IND_INDEX, (reg));
 	r = RREG32(mmGC_CAC_IND_DATA);
-	spin_unlock_irqrestore(&adev->reg.gc_cac.lock, flags);
+	spin_unlock_irqrestore(&adev->gc_cac_idx_lock, flags);
 	return r;
 }
 
@@ -428,10 +427,10 @@ static void vi_gc_cac_wreg(struct amdgpu_device *adev, u32 reg, u32 v)
 {
 	unsigned long flags;
 
-	spin_lock_irqsave(&adev->reg.gc_cac.lock, flags);
+	spin_lock_irqsave(&adev->gc_cac_idx_lock, flags);
 	WREG32(mmGC_CAC_IND_INDEX, (reg));
 	WREG32(mmGC_CAC_IND_DATA, (v));
-	spin_unlock_irqrestore(&adev->reg.gc_cac.lock, flags);
+	spin_unlock_irqrestore(&adev->gc_cac_idx_lock, flags);
 }
 
 
@@ -650,7 +649,7 @@ static bool vi_read_bios_from_rom(struct amdgpu_device *adev,
 	dw_ptr = (u32 *)bios;
 	length_dw = ALIGN(length_bytes, 4) / 4;
 	/* take the smc lock since we are using the smc index */
-	spin_lock_irqsave(&adev->reg.smc.lock, flags);
+	spin_lock_irqsave(&adev->smc_idx_lock, flags);
 	/* set rom index to 0 */
 	WREG32(mmSMC_IND_INDEX_11, ixROM_INDEX);
 	WREG32(mmSMC_IND_DATA_11, 0);
@@ -658,7 +657,7 @@ static bool vi_read_bios_from_rom(struct amdgpu_device *adev,
 	WREG32(mmSMC_IND_INDEX_11, ixROM_DATA);
 	for (i = 0; i < length_dw; i++)
 		dw_ptr[i] = RREG32(mmSMC_IND_DATA_11);
-	spin_unlock_irqrestore(&adev->reg.smc.lock, flags);
+	spin_unlock_irqrestore(&adev->smc_idx_lock, flags);
 
 	return true;
 }
@@ -1329,6 +1328,27 @@ static void vi_invalidate_hdp(struct amdgpu_device *adev,
 	}
 }
 
+static bool vi_need_full_reset(struct amdgpu_device *adev)
+{
+	switch (adev->asic_type) {
+	case CHIP_CARRIZO:
+	case CHIP_STONEY:
+		/* CZ has hang issues with full reset at the moment */
+		return false;
+	case CHIP_FIJI:
+	case CHIP_TONGA:
+		/* XXX: soft reset should work on fiji and tonga */
+		return true;
+	case CHIP_POLARIS10:
+	case CHIP_POLARIS11:
+	case CHIP_POLARIS12:
+	case CHIP_TOPAZ:
+	default:
+		/* change this when we support soft reset */
+		return true;
+	}
+}
+
 static void vi_get_pcie_usage(struct amdgpu_device *adev, uint64_t *count0,
 			      uint64_t *count1)
 {
@@ -1425,6 +1445,10 @@ static bool vi_need_reset_on_init(struct amdgpu_device *adev)
 	return false;
 }
 
+static void vi_pre_asic_init(struct amdgpu_device *adev)
+{
+}
+
 static const struct amdgpu_asic_funcs vi_asic_funcs =
 {
 	.read_disabled_bios = &vi_read_disabled_bios,
@@ -1438,11 +1462,13 @@ static const struct amdgpu_asic_funcs vi_asic_funcs =
 	.get_config_memsize = &vi_get_config_memsize,
 	.flush_hdp = &vi_flush_hdp,
 	.invalidate_hdp = &vi_invalidate_hdp,
+	.need_full_reset = &vi_need_full_reset,
 	.init_doorbell_index = &legacy_doorbell_index_init,
 	.get_pcie_usage = &vi_get_pcie_usage,
 	.need_reset_on_init = &vi_need_reset_on_init,
 	.get_pcie_replay_count = &vi_get_pcie_replay_count,
 	.supports_baco = &vi_asic_supports_baco,
+	.pre_asic_init = &vi_pre_asic_init,
 	.query_video_codecs = &vi_query_video_codecs,
 };
 
@@ -1454,20 +1480,20 @@ static int vi_common_early_init(struct amdgpu_ip_block *ip_block)
 	struct amdgpu_device *adev = ip_block->adev;
 
 	if (adev->flags & AMD_IS_APU) {
-		adev->reg.smc.rreg = cz_smc_rreg;
-		adev->reg.smc.wreg = cz_smc_wreg;
+		adev->smc_rreg = &cz_smc_rreg;
+		adev->smc_wreg = &cz_smc_wreg;
 	} else {
-		adev->reg.smc.rreg = vi_smc_rreg;
-		adev->reg.smc.wreg = vi_smc_wreg;
+		adev->smc_rreg = &vi_smc_rreg;
+		adev->smc_wreg = &vi_smc_wreg;
 	}
-	adev->reg.pcie.rreg = &vi_pcie_rreg;
-	adev->reg.pcie.wreg = &vi_pcie_wreg;
-	adev->reg.uvd_ctx.rreg = &vi_uvd_ctx_rreg;
-	adev->reg.uvd_ctx.wreg = &vi_uvd_ctx_wreg;
-	adev->reg.didt.rreg = &vi_didt_rreg;
-	adev->reg.didt.wreg = &vi_didt_wreg;
-	adev->reg.gc_cac.rreg = &vi_gc_cac_rreg;
-	adev->reg.gc_cac.wreg = &vi_gc_cac_wreg;
+	adev->pcie_rreg = &vi_pcie_rreg;
+	adev->pcie_wreg = &vi_pcie_wreg;
+	adev->uvd_ctx_rreg = &vi_uvd_ctx_rreg;
+	adev->uvd_ctx_wreg = &vi_uvd_ctx_wreg;
+	adev->didt_rreg = &vi_didt_rreg;
+	adev->didt_wreg = &vi_didt_wreg;
+	adev->gc_cac_rreg = &vi_gc_cac_rreg;
+	adev->gc_cac_wreg = &vi_gc_cac_wreg;
 
 	adev->asic_funcs = &vi_asic_funcs;
 
@@ -1728,6 +1754,11 @@ static int vi_common_suspend(struct amdgpu_ip_block *ip_block)
 static int vi_common_resume(struct amdgpu_ip_block *ip_block)
 {
 	return vi_common_hw_init(ip_block);
+}
+
+static bool vi_common_is_idle(struct amdgpu_ip_block *ip_block)
+{
+	return true;
 }
 
 static void vi_update_bif_medium_grain_light_sleep(struct amdgpu_device *adev,
@@ -2021,6 +2052,7 @@ static const struct amd_ip_funcs vi_common_ip_funcs = {
 	.hw_fini = vi_common_hw_fini,
 	.suspend = vi_common_suspend,
 	.resume = vi_common_resume,
+	.is_idle = vi_common_is_idle,
 	.set_clockgating_state = vi_common_set_clockgating_state,
 	.set_powergating_state = vi_common_set_powergating_state,
 	.get_clockgating_state = vi_common_get_clockgating_state,

@@ -27,6 +27,8 @@
 
 #include "dce/dce_11_0_d.h"
 #include "dce/dce_11_0_sh_mask.h"
+#include "gmc/gmc_8_2_sh_mask.h"
+#include "gmc/gmc_8_2_d.h"
 
 #include "include/logger_interface.h"
 
@@ -392,7 +394,7 @@ void dce110_compressor_set_fbc_invalidation_triggers(
 struct compressor *dce110_compressor_create(struct dc_context *ctx)
 {
 	struct dce110_compressor *cp110 =
-		kzalloc_obj(struct dce110_compressor);
+		kzalloc(sizeof(struct dce110_compressor), GFP_KERNEL);
 
 	if (!cp110)
 		return NULL;

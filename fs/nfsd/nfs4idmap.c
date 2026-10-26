@@ -38,7 +38,6 @@
 #include <linux/slab.h>
 #include <linux/sunrpc/svc_xprt.h>
 #include <net/net_namespace.h>
-#include "auth.h"
 #include "idmap.h"
 #include "nfsd.h"
 #include "netns.h"
@@ -98,7 +97,7 @@ ent_put(struct kref *ref)
 static struct cache_head *
 ent_alloc(void)
 {
-	struct ent *e = kmalloc_obj(*e);
+	struct ent *e = kmalloc(sizeof(*e), GFP_KERNEL);
 	if (e)
 		return &e->h;
 	else
@@ -127,7 +126,7 @@ idtoname_hash(struct ent *ent)
 static int
 idtoname_upcall(struct cache_detail *cd, struct cache_head *h)
 {
-	return sunrpc_cache_upcall_warn(cd, h);
+	return sunrpc_cache_pipe_upcall_timeout(cd, h);
 }
 
 static void
@@ -307,7 +306,7 @@ nametoid_hash(struct ent *ent)
 static int
 nametoid_upcall(struct cache_detail *cd, struct cache_head *h)
 {
-	return sunrpc_cache_upcall_warn(cd, h);
+	return sunrpc_cache_pipe_upcall_timeout(cd, h);
 }
 
 static void

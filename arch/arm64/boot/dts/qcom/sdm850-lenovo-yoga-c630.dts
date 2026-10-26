@@ -360,10 +360,11 @@
 };
 
 &gpu {
-	status = "okay";};
-
-&gpu_zap_shader {
-	firmware-name = "qcom/sdm850/LENOVO/81JL/qcdxkmsuc850.mbn";
+	status = "okay";
+	zap-shader {
+		memory-region = <&gpu_mem>;
+		firmware-name = "qcom/sdm850/LENOVO/81JL/qcdxkmsuc850.mbn";
+	};
 };
 
 &i2c1 {
@@ -588,6 +589,8 @@
 };
 
 &ipa {
+	qcom,gsi-loader = "self";
+	memory-region = <&ipa_fw_mem>;
 	firmware-name = "qcom/sdm850/LENOVO/81JL/ipa_fws.elf";
 	status = "okay";
 };
@@ -862,8 +865,8 @@
 &usb_1_qmpphy {
 	status = "okay";
 
-	vdda-phy-supply = <&vdda_usb1_ss_core>;
-	vdda-pll-supply = <&vdda_usb1_ss_1p2>;
+	vdda-phy-supply = <&vdda_usb1_ss_1p2>;
+	vdda-pll-supply = <&vdda_usb1_ss_core>;
 };
 
 &usb_1_qmpphy_out {
@@ -955,8 +958,8 @@
 &usb_2_qmpphy {
 	status = "okay";
 
-	vdda-phy-supply = <&vdda_usb2_ss_core>;
-	vdda-pll-supply = <&vdda_usb2_ss_1p2>;
+	vdda-phy-supply = <&vdda_usb2_ss_1p2>;
+	vdda-pll-supply = <&vdda_usb2_ss_core>;
 };
 
 &venus {

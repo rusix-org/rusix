@@ -439,7 +439,7 @@ This governor exposes only one tunable:
 ``rate_limit_us``
 	Minimum time (in microseconds) that has to pass between two consecutive
 	runs of governor computations (default: 1.5 times the scaling driver's
-	transition latency or 1ms if the driver does not provide a latency value).
+	transition latency or the maximum 2ms).
 
 	The purpose of this tunable is to reduce the scheduler context overhead
 	of the governor which might be excessive without it.
@@ -497,7 +497,7 @@ This governor exposes the following tunables:
 	represented by it to be 1.5 times as high as the transition latency
 	(the default)::
 
-	# echo $(($(cat cpuinfo_transition_latency) * 3 / 2)) > ondemand/sampling_rate
+	# echo `$(($(cat cpuinfo_transition_latency) * 3 / 2))` > ondemand/sampling_rate
 
 ``up_threshold``
 	If the estimated CPU load is above this value (in percent), the governor

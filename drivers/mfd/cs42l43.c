@@ -118,11 +118,6 @@ const struct reg_default cs42l43_reg_default[CS42L43_N_DEFAULTS] = {
 	{ CS42L43_DMIC_PDM_CTRL,			0x00000000 },
 	{ CS42L43_DECIM_VOL_CTRL_CH1_CH2,		0x20122012 },
 	{ CS42L43_DECIM_VOL_CTRL_CH3_CH4,		0x20122012 },
-	{ CS42L43B_DECIM_VOL_CTRL_CH1_CH2,		0x20122012 },
-	{ CS42L43B_DECIM_VOL_CTRL_CH3_CH4,		0x20122012 },
-	{ CS42L43B_DECIM_VOL_CTRL_CH5_CH6,		0x20122012 },
-	{ CS42L43B_DECIM_HPF_WNF_CTRL5,			0x00000001 },
-	{ CS42L43B_DECIM_HPF_WNF_CTRL6,			0x00000001 },
 	{ CS42L43_INTP_VOLUME_CTRL1,			0x00000180 },
 	{ CS42L43_INTP_VOLUME_CTRL2,			0x00000180 },
 	{ CS42L43_AMP1_2_VOL_RAMP,			0x00000022 },
@@ -162,10 +157,6 @@ const struct reg_default cs42l43_reg_default[CS42L43_N_DEFAULTS] = {
 	{ CS42L43_SWIRE_DP3_CH2_INPUT,			0x00000000 },
 	{ CS42L43_SWIRE_DP4_CH1_INPUT,			0x00000000 },
 	{ CS42L43_SWIRE_DP4_CH2_INPUT,			0x00000000 },
-	{ CS42L43B_SWIRE_DP3_CH3_INPUT,			0x00000000 },
-	{ CS42L43B_SWIRE_DP3_CH4_INPUT,			0x00000000 },
-	{ CS42L43B_SWIRE_DP4_CH3_INPUT,			0x00000000 },
-	{ CS42L43B_SWIRE_DP4_CH4_INPUT,			0x00000000 },
 	{ CS42L43_ASRC_INT1_INPUT1,			0x00000000 },
 	{ CS42L43_ASRC_INT2_INPUT1,			0x00000000 },
 	{ CS42L43_ASRC_INT3_INPUT1,			0x00000000 },
@@ -208,10 +199,6 @@ const struct reg_default cs42l43_reg_default[CS42L43_N_DEFAULTS] = {
 	{ CS42L43_AMP4MIX_INPUT2,			0x00800000 },
 	{ CS42L43_AMP4MIX_INPUT3,			0x00800000 },
 	{ CS42L43_AMP4MIX_INPUT4,			0x00800000 },
-	{ CS42L43B_ISRC1DEC3_INPUT1,			0x00000000 },
-	{ CS42L43B_ISRC1DEC4_INPUT1,			0x00000000 },
-	{ CS42L43B_ISRC2DEC3_INPUT1,			0x00000000 },
-	{ CS42L43B_ISRC2DEC4_INPUT1,			0x00000000 },
 	{ CS42L43_ASRC_INT_ENABLES,			0x00000100 },
 	{ CS42L43_ASRC_DEC_ENABLES,			0x00000100 },
 	{ CS42L43_PDNCNTL,				0x00000000 },
@@ -282,8 +269,6 @@ EXPORT_SYMBOL_NS_GPL(cs42l43_reg_default, "MFD_CS42L43");
 
 bool cs42l43_readable_register(struct device *dev, unsigned int reg)
 {
-	struct cs42l43 *cs42l43 = dev_get_drvdata(dev);
-
 	switch (reg) {
 	case CS42L43_DEVID:
 	case CS42L43_REVID:
@@ -307,6 +292,7 @@ bool cs42l43_readable_register(struct device *dev, unsigned int reg)
 	case CS42L43_ADC_B_CTRL1 ...  CS42L43_ADC_B_CTRL2:
 	case CS42L43_DECIM_HPF_WNF_CTRL1 ... CS42L43_DECIM_HPF_WNF_CTRL4:
 	case CS42L43_DMIC_PDM_CTRL:
+	case CS42L43_DECIM_VOL_CTRL_CH1_CH2 ... CS42L43_DECIM_VOL_CTRL_CH3_CH4:
 	case CS42L43_INTP_VOLUME_CTRL1 ... CS42L43_INTP_VOLUME_CTRL2:
 	case CS42L43_AMP1_2_VOL_RAMP:
 	case CS42L43_ASP_CTRL:
@@ -401,16 +387,8 @@ bool cs42l43_readable_register(struct device *dev, unsigned int reg)
 	case CS42L43_BOOT_CONTROL:
 	case CS42L43_BLOCK_EN:
 	case CS42L43_SHUTTER_CONTROL:
-	case CS42L43B_MCU_SW_REV ... CS42L43B_MCU_RAM_MAX:
-		return true; // registers present on all variants
-	case CS42L43_MCU_SW_REV ... CS42L43B_MCU_SW_REV - 1:
-	case CS42L43B_MCU_RAM_MAX + 1 ... CS42L43_MCU_RAM_MAX:
-	case CS42L43_DECIM_VOL_CTRL_CH1_CH2 ... CS42L43_DECIM_VOL_CTRL_CH3_CH4:
-		return cs42l43->variant_id == CS42L43_DEVID_VAL; // regs only in CS42L43 variant
-	case CS42L43B_DECIM_VOL_CTRL_CH1_CH2 ... CS42L43B_DECIM_HPF_WNF_CTRL6:
-	case CS42L43B_SWIRE_DP3_CH3_INPUT ... CS42L43B_SWIRE_DP4_CH4_INPUT:
-	case CS42L43B_ISRC1DEC3_INPUT1 ... CS42L43B_ISRC2DEC4_INPUT1:
-		return cs42l43->variant_id == CS42L43B_DEVID_VAL; // regs only in CS42L43B variant
+	case CS42L43_MCU_SW_REV ... CS42L43_MCU_RAM_MAX:
+		return true;
 	default:
 		return false;
 	}
@@ -586,11 +564,16 @@ static int cs42l43_soft_reset(struct cs42l43 *cs42l43)
  */
 static int cs42l43_wait_for_attach(struct cs42l43 *cs42l43)
 {
-	int ret;
+	if (!cs42l43->attached) {
+		unsigned long timeout = msecs_to_jiffies(CS42L43_SDW_ATTACH_TIMEOUT_MS);
+		unsigned long time;
 
-	ret = sdw_slave_wait_for_init(cs42l43->sdw, CS42L43_SDW_ATTACH_TIMEOUT_MS);
-	if (ret)
-		return ret;
+		time = wait_for_completion_timeout(&cs42l43->device_attach, timeout);
+		if (!time) {
+			dev_err(cs42l43->dev, "Timed out waiting for device re-attach\n");
+			return -ETIMEDOUT;
+		}
+	}
 
 	regcache_cache_only(cs42l43->regmap, false);
 
@@ -614,27 +597,15 @@ static int cs42l43_wait_for_attach(struct cs42l43 *cs42l43)
 static int cs42l43_mcu_stage_2_3(struct cs42l43 *cs42l43, bool shadow)
 {
 	unsigned int need_reg = CS42L43_NEED_CONFIGS;
-	unsigned int boot_reg;
 	unsigned int val;
 	int ret;
 
-	switch (cs42l43->variant_id) {
-	case CS42L43_DEVID_VAL:
-		if (shadow)
-			need_reg = CS42L43_FW_SH_BOOT_CFG_NEED_CONFIGS;
-		boot_reg = CS42L43_BOOT_STATUS;
-		break;
-	case CS42L43B_DEVID_VAL:
-		need_reg = CS42L43B_NEED_CONFIGS;
-		boot_reg = CS42L43B_BOOT_STATUS;
-		break;
-	default:
-		return -EINVAL;
-	}
+	if (shadow)
+		need_reg = CS42L43_FW_SH_BOOT_CFG_NEED_CONFIGS;
 
 	regmap_write(cs42l43->regmap, need_reg, 0);
 
-	ret = regmap_read_poll_timeout(cs42l43->regmap, boot_reg,
+	ret = regmap_read_poll_timeout(cs42l43->regmap, CS42L43_BOOT_STATUS,
 				       val, (val == CS42L43_MCU_BOOT_STAGE3),
 				       CS42L43_MCU_POLL_US, CS42L43_MCU_CMD_TIMEOUT_US);
 	if (ret) {
@@ -673,25 +644,13 @@ static int cs42l43_mcu_stage_3_2(struct cs42l43 *cs42l43)
  */
 static int cs42l43_mcu_disable(struct cs42l43 *cs42l43)
 {
-	unsigned int val, cfg_reg, ctrl_reg;
+	unsigned int val;
 	int ret;
 
-	switch (cs42l43->variant_id) {
-	case CS42L43_DEVID_VAL:
-		cfg_reg = CS42L43_FW_MISSION_CTRL_MM_MCU_CFG_REG;
-		ctrl_reg = CS42L43_FW_MISSION_CTRL_MM_CTRL_SELECTION;
-		break;
-	case CS42L43B_DEVID_VAL:
-		cfg_reg = CS42L43B_FW_MISSION_CTRL_MM_MCU_CFG_REG;
-		ctrl_reg = CS42L43B_FW_MISSION_CTRL_MM_CTRL_SELECTION;
-		break;
-	default:
-		return -EINVAL;
-	}
-
-	regmap_write(cs42l43->regmap, cfg_reg, CS42L43_FW_MISSION_CTRL_MM_MCU_CFG_DISABLE_VAL);
-	regmap_write(cs42l43->regmap, ctrl_reg, CS42L43_FW_MM_CTRL_MCU_SEL_MASK);
-
+	regmap_write(cs42l43->regmap, CS42L43_FW_MISSION_CTRL_MM_MCU_CFG_REG,
+		     CS42L43_FW_MISSION_CTRL_MM_MCU_CFG_DISABLE_VAL);
+	regmap_write(cs42l43->regmap, CS42L43_FW_MISSION_CTRL_MM_CTRL_SELECTION,
+		     CS42L43_FW_MM_CTRL_MCU_SEL_MASK);
 	regmap_write(cs42l43->regmap, CS42L43_MCU_SW_INTERRUPT, CS42L43_CONTROL_IND_MASK);
 	regmap_write(cs42l43->regmap, CS42L43_MCU_SW_INTERRUPT, 0);
 
@@ -781,32 +740,18 @@ static int cs42l43_mcu_update_step(struct cs42l43 *cs42l43)
 {
 	unsigned int mcu_rev, bios_rev, boot_status, secure_cfg;
 	bool patched, shadow;
-	int boot_status_reg, mcu_sw_rev_reg;
 	int ret;
-
-	switch (cs42l43->variant_id) {
-	case CS42L43_DEVID_VAL:
-		boot_status_reg = CS42L43_BOOT_STATUS;
-		mcu_sw_rev_reg = CS42L43_MCU_SW_REV;
-		break;
-	case CS42L43B_DEVID_VAL:
-		boot_status_reg = CS42L43B_BOOT_STATUS;
-		mcu_sw_rev_reg = CS42L43B_MCU_SW_REV;
-		break;
-	default:
-		return -EINVAL;
-	}
 
 	/* Clear any stale software interrupt bits. */
 	regmap_read(cs42l43->regmap, CS42L43_SOFT_INT, &mcu_rev);
 
-	ret = regmap_read(cs42l43->regmap, boot_status_reg, &boot_status);
+	ret = regmap_read(cs42l43->regmap, CS42L43_BOOT_STATUS, &boot_status);
 	if (ret) {
 		dev_err(cs42l43->dev, "Failed to read boot status: %d\n", ret);
 		return ret;
 	}
 
-	ret = regmap_read(cs42l43->regmap, mcu_sw_rev_reg, &mcu_rev);
+	ret = regmap_read(cs42l43->regmap, CS42L43_MCU_SW_REV, &mcu_rev);
 	if (ret) {
 		dev_err(cs42l43->dev, "Failed to read firmware revision: %d\n", ret);
 		return ret;
@@ -973,13 +918,6 @@ static void cs42l43_boot_work(struct work_struct *work)
 
 	switch (devid) {
 	case CS42L43_DEVID_VAL:
-	case CS42L43B_DEVID_VAL:
-		if (devid != cs42l43->variant_id) {
-			dev_err(cs42l43->dev,
-				"Device ID (0x%06x) does not match variant ID (0x%06lx)\n",
-				devid, cs42l43->variant_id);
-			goto err;
-		}
 		break;
 	default:
 		dev_err(cs42l43->dev, "Unrecognised devid: 0x%06x\n", devid);
@@ -1115,6 +1053,7 @@ int cs42l43_dev_probe(struct cs42l43 *cs42l43)
 	dev_set_drvdata(cs42l43->dev, cs42l43);
 
 	mutex_init(&cs42l43->pll_lock);
+	init_completion(&cs42l43->device_attach);
 	init_completion(&cs42l43->device_detach);
 	init_completion(&cs42l43->firmware_download);
 	INIT_WORK(&cs42l43->boot_work, cs42l43_boot_work);

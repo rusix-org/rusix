@@ -38,6 +38,8 @@ static int dwc_eth_dwmac_config_dt(struct platform_device *pdev,
 {
 	struct device *dev = &pdev->dev;
 	u32 burst_map = 0;
+	u32 bit_index = 0;
+	u32 a_index = 0;
 
 	if (!plat_dat->axi) {
 		plat_dat->axi = devm_kzalloc(&pdev->dev,
@@ -81,14 +83,36 @@ static int dwc_eth_dwmac_config_dt(struct platform_device *pdev,
 	}
 	device_property_read_u32(dev, "snps,burst-map", &burst_map);
 
-	plat_dat->axi->axi_blen_regval = FIELD_PREP(DMA_AXI_BLEN_MASK,
-						    burst_map);
+	/* converts burst-map bitmask to burst array */
+	for (bit_index = 0; bit_index < 7; bit_index++) {
+		if (burst_map & (1 << bit_index)) {
+			switch (bit_index) {
+			case 0:
+			plat_dat->axi->axi_blen[a_index] = 4; break;
+			case 1:
+			plat_dat->axi->axi_blen[a_index] = 8; break;
+			case 2:
+			plat_dat->axi->axi_blen[a_index] = 16; break;
+			case 3:
+			plat_dat->axi->axi_blen[a_index] = 32; break;
+			case 4:
+			plat_dat->axi->axi_blen[a_index] = 64; break;
+			case 5:
+			plat_dat->axi->axi_blen[a_index] = 128; break;
+			case 6:
+			plat_dat->axi->axi_blen[a_index] = 256; break;
+			default:
+			break;
+			}
+			a_index++;
+		}
+	}
 
 	/* dwc-qos needs GMAC4, AAL, TSO and PMT */
 	plat_dat->core_type = DWMAC_CORE_GMAC4;
 	plat_dat->dma_cfg->aal = 1;
 	plat_dat->flags |= STMMAC_FLAG_TSO_EN;
-	plat_dat->pmt = true;
+	plat_dat->pmt = 1;
 
 	return 0;
 }
@@ -112,8 +136,7 @@ static int dwc_qos_probe(struct platform_device *pdev,
 #define AUTO_CAL_STATUS 0x880c
 #define  AUTO_CAL_STATUS_ACTIVE BIT(31)
 
-static void tegra_eqos_fix_speed(void *bsp_priv, phy_interface_t interface,
-				 int speed, unsigned int mode)
+static void tegra_eqos_fix_speed(void *bsp_priv, int speed, unsigned int mode)
 {
 	struct tegra_eqos *eqos = bsp_priv;
 	bool needs_calibration = false;
@@ -139,7 +162,7 @@ static void tegra_eqos_fix_speed(void *bsp_priv, phy_interface_t interface,
 		priv = netdev_priv(dev_get_drvdata(eqos->dev));
 
 		/* Calibration should be done with the MDIO bus idle */
-		stmmac_mdio_lock(priv);
+		mutex_lock(&priv->mii->mdio_lock);
 
 		/* calibrate */
 		value = readl(eqos->regs + SDMEMCOMPPADCTRL);
@@ -175,7 +198,7 @@ static void tegra_eqos_fix_speed(void *bsp_priv, phy_interface_t interface,
 		value &= ~SDMEMCOMPPADCTRL_PAD_E_INPUT_OR_E_PWRD;
 		writel(value, eqos->regs + SDMEMCOMPPADCTRL);
 
-		stmmac_mdio_unlock(priv);
+		mutex_unlock(&priv->mii->mdio_lock);
 	} else {
 		value = readl(eqos->regs + AUTO_CAL_CONFIG);
 		value &= ~AUTO_CAL_CONFIG_ENABLE;

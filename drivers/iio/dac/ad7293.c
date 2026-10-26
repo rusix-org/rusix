@@ -11,6 +11,7 @@
 #include <linux/device.h>
 #include <linux/gpio/consumer.h>
 #include <linux/iio/iio.h>
+#include <linux/mod_devicetable.h>
 #include <linux/module.h>
 #include <linux/regulator/consumer.h>
 #include <linux/spi/spi.h>
@@ -775,27 +776,27 @@ static int ad7293_reset(struct ad7293_state *st)
 
 static int ad7293_properties_parse(struct ad7293_state *st)
 {
-	struct device *dev = &st->spi->dev;
+	struct spi_device *spi = st->spi;
 	int ret;
 
-	ret = devm_regulator_get_enable(dev, "avdd");
+	ret = devm_regulator_get_enable(&spi->dev, "avdd");
 	if (ret)
-		return dev_err_probe(dev, ret, "failed to enable AVDD\n");
+		return dev_err_probe(&spi->dev, ret, "failed to enable AVDD\n");
 
-	ret = devm_regulator_get_enable(dev, "vdrive");
+	ret = devm_regulator_get_enable(&spi->dev, "vdrive");
 	if (ret)
-		return dev_err_probe(dev, ret, "failed to enable VDRIVE\n");
+		return dev_err_probe(&spi->dev, ret, "failed to enable VDRIVE\n");
 
-	ret = devm_regulator_get_enable_optional(dev, "vrefin");
+	ret = devm_regulator_get_enable_optional(&spi->dev, "vrefin");
 	if (ret < 0 && ret != -ENODEV)
-		return dev_err_probe(dev, ret, "failed to enable VREFIN\n");
+		return dev_err_probe(&spi->dev, ret, "failed to enable VREFIN\n");
 
 	st->vrefin_en = ret != -ENODEV;
 
-	st->gpio_reset = devm_gpiod_get_optional(dev, "reset",
+	st->gpio_reset = devm_gpiod_get_optional(&st->spi->dev, "reset",
 						 GPIOD_OUT_HIGH);
 	if (IS_ERR(st->gpio_reset))
-		return dev_err_probe(dev, PTR_ERR(st->gpio_reset),
+		return dev_err_probe(&spi->dev, PTR_ERR(st->gpio_reset),
 				     "failed to get the reset GPIO\n");
 
 	return 0;
@@ -805,7 +806,7 @@ static int ad7293_init(struct ad7293_state *st)
 {
 	int ret;
 	u16 chip_id;
-	struct device *dev = &st->spi->dev;
+	struct spi_device *spi = st->spi;
 
 	ret = ad7293_properties_parse(st);
 	if (ret)
@@ -820,8 +821,10 @@ static int ad7293_init(struct ad7293_state *st)
 	if (ret)
 		return ret;
 
-	if (chip_id != AD7293_CHIP_ID)
-		return dev_err_probe(dev, -EINVAL, "Invalid Chip ID.\n");
+	if (chip_id != AD7293_CHIP_ID) {
+		dev_err(&spi->dev, "Invalid Chip ID.\n");
+		return -EINVAL;
+	}
 
 	if (!st->vrefin_en)
 		return __ad7293_spi_update_bits(st, AD7293_REG_GENERAL,
@@ -842,10 +845,9 @@ static int ad7293_probe(struct spi_device *spi)
 {
 	struct iio_dev *indio_dev;
 	struct ad7293_state *st;
-	struct device *dev = &spi->dev;
 	int ret;
 
-	indio_dev = devm_iio_device_alloc(dev, sizeof(*st));
+	indio_dev = devm_iio_device_alloc(&spi->dev, sizeof(*st));
 	if (!indio_dev)
 		return -ENOMEM;
 
@@ -865,11 +867,11 @@ static int ad7293_probe(struct spi_device *spi)
 	if (ret)
 		return ret;
 
-	return devm_iio_device_register(dev, indio_dev);
+	return devm_iio_device_register(&spi->dev, indio_dev);
 }
 
 static const struct spi_device_id ad7293_id[] = {
-	{ .name = "ad7293" },
+	{ "ad7293", 0 },
 	{ }
 };
 MODULE_DEVICE_TABLE(spi, ad7293_id);

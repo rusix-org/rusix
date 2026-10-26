@@ -271,7 +271,7 @@ iommufd_veventq_deliver_fetch(struct iommufd_veventq *veventq)
 		next = list_first_entry(list, struct iommufd_vevent, node);
 		/* Make a copy of the lost_events_header for copy_to_user */
 		if (next == &veventq->lost_events_header) {
-			vevent = kzalloc_obj(*vevent, GFP_ATOMIC);
+			vevent = kzalloc(sizeof(*vevent), GFP_ATOMIC);
 			if (!vevent) {
 				vevent = ERR_PTR(-ENOMEM);
 				goto out_unlock;
@@ -396,11 +396,9 @@ static __poll_t iommufd_eventq_fops_poll(struct file *filep,
 static int iommufd_eventq_fops_release(struct inode *inode, struct file *filep)
 {
 	struct iommufd_eventq *eventq = filep->private_data;
-	/* eventq may be freed once the users reference is dropped. */
-	struct iommufd_ctx *ictx = eventq->ictx;
 
 	refcount_dec(&eventq->obj.users);
-	iommufd_ctx_put(ictx);
+	iommufd_ctx_put(eventq->ictx);
 	return 0;
 }
 

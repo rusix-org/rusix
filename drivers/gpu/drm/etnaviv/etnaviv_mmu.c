@@ -6,8 +6,6 @@
 #include <linux/dma-mapping.h>
 #include <linux/scatterlist.h>
 
-#include <drm/drm_print.h>
-
 #include "common.xml.h"
 #include "etnaviv_cmdbuf.h"
 #include "etnaviv_drv.h"
@@ -494,7 +492,7 @@ int etnaviv_iommu_global_init(struct etnaviv_gpu *gpu)
 		return 0;
 	}
 
-	global = kzalloc_obj(*global);
+	global = kzalloc(sizeof(*global), GFP_KERNEL);
 	if (!global)
 		return -ENOMEM;
 

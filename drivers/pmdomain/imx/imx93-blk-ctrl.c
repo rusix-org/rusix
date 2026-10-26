@@ -7,7 +7,6 @@
 #include <linux/device.h>
 #include <linux/module.h>
 #include <linux/of.h>
-#include <linux/of_platform.h>
 #include <linux/platform_device.h>
 #include <linux/pm_domain.h>
 #include <linux/pm_runtime.h>
@@ -152,8 +151,9 @@ static int imx93_blk_ctrl_power_on(struct generic_pm_domain *genpd)
 		return ret;
 	}
 
-	ret = pm_runtime_resume_and_get(bc->dev);
+	ret = pm_runtime_get_sync(bc->dev);
 	if (ret < 0) {
+		pm_runtime_put_noidle(bc->dev);
 		dev_err(bc->dev, "failed to power up domain\n");
 		goto disable_clk;
 	}
@@ -269,8 +269,10 @@ static int imx93_blk_ctrl_probe(struct platform_device *pdev)
 	bc->num_clks = bc_data->num_clks;
 
 	ret = devm_clk_bulk_get(dev, bc->num_clks, bc->clks);
-	if (ret)
-		return dev_err_probe(dev, ret, "failed to get bus clock\n");
+	if (ret) {
+		dev_err_probe(dev, ret, "failed to get bus clock\n");
+		return ret;
+	}
 
 	for (i = 0; i < bc_data->num_domains; i++) {
 		const struct imx93_blk_ctrl_domain_data *data = &bc_data->domains[i];
@@ -355,10 +357,6 @@ static int imx93_blk_ctrl_probe(struct platform_device *pdev)
 	ret = devm_add_action_or_reset(dev, imx93_release_genpd_provider, dev->of_node);
 	if (ret)
 		return dev_err_probe(dev, ret, "failed to add genpd_provider release callback\n");
-
-	ret = devm_of_platform_populate(dev);
-	if (ret)
-		return dev_err_probe(dev, ret, "failed to populate blk-ctrl sub-devices\n");
 
 	return 0;
 }

@@ -76,7 +76,7 @@ struct aspeed_lpc_snoop_channel {
 	const struct aspeed_lpc_snoop_channel_cfg *cfg;
 	bool enabled;
 	spinlock_t		lock;
-	struct kfifo		fifo __guarded_by(&lock);
+	struct kfifo		fifo;
 	wait_queue_head_t	wq;
 	struct miscdevice	miscdev;
 };
@@ -251,11 +251,10 @@ static int aspeed_lpc_enable_snoop(struct device *dev,
 	if (!channel->miscdev.name)
 		return -ENOMEM;
 
-	scoped_guard(spinlock_init, &channel->lock) {
-		rc = kfifo_alloc(&channel->fifo, SNOOP_FIFO_SIZE, GFP_KERNEL);
-		if (rc)
-			return rc;
-	}
+	spin_lock_init(&channel->lock);
+	rc = kfifo_alloc(&channel->fifo, SNOOP_FIFO_SIZE, GFP_KERNEL);
+	if (rc)
+		return rc;
 
 	rc = misc_register(&channel->miscdev);
 	if (rc)
@@ -380,7 +379,6 @@ static const struct of_device_id aspeed_lpc_snoop_match[] = {
 	  .data = &ast2500_model_data },
 	{ },
 };
-MODULE_DEVICE_TABLE(of, aspeed_lpc_snoop_match);
 
 static struct platform_driver aspeed_lpc_snoop_driver = {
 	.driver = {
@@ -393,6 +391,7 @@ static struct platform_driver aspeed_lpc_snoop_driver = {
 
 module_platform_driver(aspeed_lpc_snoop_driver);
 
+MODULE_DEVICE_TABLE(of, aspeed_lpc_snoop_match);
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Robert Lippert <rlippert@google.com>");
 MODULE_DESCRIPTION("Linux driver to control Aspeed LPC snoop functionality");

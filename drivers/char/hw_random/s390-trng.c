@@ -9,7 +9,8 @@
  * Author(s): Harald Freudenberger <freude@de.ibm.com>
  */
 
-#define pr_fmt(fmt) "trng: " fmt
+#define KMSG_COMPONENT "trng"
+#define pr_fmt(fmt) KMSG_COMPONENT ": " fmt
 
 #include <linux/hw_random.h>
 #include <linux/kernel.h>
@@ -20,7 +21,6 @@
 #include <linux/atomic.h>
 #include <linux/random.h>
 #include <linux/sched/signal.h>
-#include <linux/slab.h>
 #include <asm/debug.h>
 #include <asm/cpacf.h>
 #include <asm/archrandom.h>
@@ -68,7 +68,7 @@ static ssize_t trng_read(struct file *file, char __user *ubuf,
 	 */
 
 	if (nbytes > sizeof(buf)) {
-		p = kmalloc(PAGE_SIZE, GFP_KERNEL);
+		p = (u8 *) __get_free_page(GFP_KERNEL);
 		if (!p)
 			return -ENOMEM;
 	}
@@ -95,7 +95,7 @@ static ssize_t trng_read(struct file *file, char __user *ubuf,
 	}
 
 	if (p != buf)
-		kfree(p);
+		free_page((unsigned long) p);
 
 	DEBUG_DBG("trng_read()=%zd\n", ret);
 	return ret;

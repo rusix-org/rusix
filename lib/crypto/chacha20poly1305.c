@@ -89,7 +89,7 @@ __chacha20poly1305_encrypt(u8 *dst, const u8 *src, const size_t src_len,
 void chacha20poly1305_encrypt(u8 *dst, const u8 *src, const size_t src_len,
 			      const u8 *ad, const size_t ad_len,
 			      const u64 nonce,
-			      const u8 key[at_least CHACHA20POLY1305_KEY_SIZE])
+			      const u8 key[CHACHA20POLY1305_KEY_SIZE])
 {
 	struct chacha_state chacha_state;
 	u32 k[CHACHA_KEY_WORDS];
@@ -111,8 +111,8 @@ EXPORT_SYMBOL(chacha20poly1305_encrypt);
 
 void xchacha20poly1305_encrypt(u8 *dst, const u8 *src, const size_t src_len,
 			       const u8 *ad, const size_t ad_len,
-			       const u8 nonce[at_least XCHACHA20POLY1305_NONCE_SIZE],
-			       const u8 key[at_least CHACHA20POLY1305_KEY_SIZE])
+			       const u8 nonce[XCHACHA20POLY1305_NONCE_SIZE],
+			       const u8 key[CHACHA20POLY1305_KEY_SIZE])
 {
 	struct chacha_state chacha_state;
 
@@ -137,6 +137,9 @@ __chacha20poly1305_decrypt(u8 *dst, const u8 *src, const size_t src_len,
 		__le64 lens[2];
 	} b;
 
+	if (unlikely(src_len < POLY1305_DIGEST_SIZE))
+		return false;
+
 	chacha20_crypt(chacha_state, b.block0, pad0, sizeof(b.block0));
 	poly1305_init(&poly1305_state, b.block0);
 
@@ -159,7 +162,6 @@ __chacha20poly1305_decrypt(u8 *dst, const u8 *src, const size_t src_len,
 	if (likely(!ret))
 		chacha20_crypt(chacha_state, dst, src, dst_len);
 
-	chacha_zeroize_state(chacha_state);
 	memzero_explicit(&b, sizeof(b));
 
 	return !ret;
@@ -168,15 +170,12 @@ __chacha20poly1305_decrypt(u8 *dst, const u8 *src, const size_t src_len,
 bool chacha20poly1305_decrypt(u8 *dst, const u8 *src, const size_t src_len,
 			      const u8 *ad, const size_t ad_len,
 			      const u64 nonce,
-			      const u8 key[at_least CHACHA20POLY1305_KEY_SIZE])
+			      const u8 key[CHACHA20POLY1305_KEY_SIZE])
 {
 	struct chacha_state chacha_state;
 	u32 k[CHACHA_KEY_WORDS];
 	__le64 iv[2];
 	bool ret;
-
-	if (unlikely(src_len < POLY1305_DIGEST_SIZE))
-		return false;
 
 	chacha_load_key(k, key);
 
@@ -187,6 +186,7 @@ bool chacha20poly1305_decrypt(u8 *dst, const u8 *src, const size_t src_len,
 	ret = __chacha20poly1305_decrypt(dst, src, src_len, ad, ad_len,
 					 &chacha_state);
 
+	chacha_zeroize_state(&chacha_state);
 	memzero_explicit(iv, sizeof(iv));
 	memzero_explicit(k, sizeof(k));
 	return ret;
@@ -195,13 +195,10 @@ EXPORT_SYMBOL(chacha20poly1305_decrypt);
 
 bool xchacha20poly1305_decrypt(u8 *dst, const u8 *src, const size_t src_len,
 			       const u8 *ad, const size_t ad_len,
-			       const u8 nonce[at_least XCHACHA20POLY1305_NONCE_SIZE],
-			       const u8 key[at_least CHACHA20POLY1305_KEY_SIZE])
+			       const u8 nonce[XCHACHA20POLY1305_NONCE_SIZE],
+			       const u8 key[CHACHA20POLY1305_KEY_SIZE])
 {
 	struct chacha_state chacha_state;
-
-	if (unlikely(src_len < POLY1305_DIGEST_SIZE))
-		return false;
 
 	xchacha_init(&chacha_state, key, nonce);
 	return __chacha20poly1305_decrypt(dst, src, src_len, ad, ad_len,
@@ -214,7 +211,7 @@ bool chacha20poly1305_crypt_sg_inplace(struct scatterlist *src,
 				       const size_t src_len,
 				       const u8 *ad, const size_t ad_len,
 				       const u64 nonce,
-				       const u8 key[at_least CHACHA20POLY1305_KEY_SIZE],
+				       const u8 key[CHACHA20POLY1305_KEY_SIZE],
 				       int encrypt)
 {
 	const u8 *pad0 = page_address(ZERO_PAGE(0));
@@ -338,7 +335,7 @@ bool chacha20poly1305_crypt_sg_inplace(struct scatterlist *src,
 bool chacha20poly1305_encrypt_sg_inplace(struct scatterlist *src, size_t src_len,
 					 const u8 *ad, const size_t ad_len,
 					 const u64 nonce,
-					 const u8 key[at_least CHACHA20POLY1305_KEY_SIZE])
+					 const u8 key[CHACHA20POLY1305_KEY_SIZE])
 {
 	return chacha20poly1305_crypt_sg_inplace(src, src_len, ad, ad_len,
 						 nonce, key, 1);
@@ -348,7 +345,7 @@ EXPORT_SYMBOL(chacha20poly1305_encrypt_sg_inplace);
 bool chacha20poly1305_decrypt_sg_inplace(struct scatterlist *src, size_t src_len,
 					 const u8 *ad, const size_t ad_len,
 					 const u64 nonce,
-					 const u8 key[at_least CHACHA20POLY1305_KEY_SIZE])
+					 const u8 key[CHACHA20POLY1305_KEY_SIZE])
 {
 	if (unlikely(src_len < POLY1305_DIGEST_SIZE))
 		return false;
@@ -359,6 +356,20 @@ bool chacha20poly1305_decrypt_sg_inplace(struct scatterlist *src, size_t src_len
 }
 EXPORT_SYMBOL(chacha20poly1305_decrypt_sg_inplace);
 
+static int __init chacha20poly1305_init(void)
+{
+	if (IS_ENABLED(CONFIG_CRYPTO_SELFTESTS) &&
+	    WARN_ON(!chacha20poly1305_selftest()))
+		return -ENODEV;
+	return 0;
+}
+
+static void __exit chacha20poly1305_exit(void)
+{
+}
+
+module_init(chacha20poly1305_init);
+module_exit(chacha20poly1305_exit);
 MODULE_LICENSE("GPL v2");
 MODULE_DESCRIPTION("ChaCha20Poly1305 AEAD construction");
 MODULE_AUTHOR("Jason A. Donenfeld <Jason@zx2c4.com>");

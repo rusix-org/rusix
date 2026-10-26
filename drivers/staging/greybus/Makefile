@@ -4,6 +4,7 @@ ccflags-y += -I$(src)
 
 # Greybus class drivers
 gb-bootrom-y		:= bootrom.o
+gb-camera-y		:= camera.o
 gb-firmware-y		:= fw-core.o fw-download.o fw-management.o authentication.o
 gb-spilib-y		:= spilib.o
 gb-hid-y		:= hid.o
@@ -15,6 +16,7 @@ gb-raw-y		:= raw.o
 gb-vibrator-y		:= vibrator.o
 
 obj-$(CONFIG_GREYBUS_BOOTROM)	+= gb-bootrom.o
+obj-$(CONFIG_GREYBUS_CAMERA)	+= gb-camera.o
 obj-$(CONFIG_GREYBUS_FIRMWARE)	+= gb-firmware.o gb-spilib.o
 obj-$(CONFIG_GREYBUS_HID)	+= gb-hid.o
 obj-$(CONFIG_GREYBUS_LIGHT)	+= gb-light.o
@@ -63,3 +65,9 @@ obj-$(CONFIG_GREYBUS_SDIO)		+= gb-sdio.o
 obj-$(CONFIG_GREYBUS_SPI)		+= gb-spi.o gb-spilib.o
 obj-$(CONFIG_GREYBUS_UART)		+= gb-uart.o
 obj-$(CONFIG_GREYBUS_USB)		+= gb-usb.o
+
+
+# Greybus Platform driver
+gb-arche-y	:= arche-platform.o arche-apb-ctrl.o
+
+obj-$(CONFIG_GREYBUS_ARCHE)	+= gb-arche.o

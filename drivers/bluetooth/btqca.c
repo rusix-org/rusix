@@ -143,8 +143,6 @@ static int qca_read_fw_build_info(struct hci_dev *hdev)
 
 	hci_set_fw_info(hdev, "%s", build_label);
 
-	bt_dev_info(hdev, "QCA FW build version: %s", build_label);
-
 	kfree(build_label);
 out:
 	kfree_skb(skb);
@@ -188,6 +186,25 @@ static int qca_send_patch_config_cmd(struct hci_dev *hdev)
 out:
 	kfree_skb(skb);
 	return err;
+}
+
+static int qca_send_reset(struct hci_dev *hdev)
+{
+	struct sk_buff *skb;
+	int err;
+
+	bt_dev_dbg(hdev, "QCA HCI_RESET");
+
+	skb = __hci_cmd_sync(hdev, HCI_OP_RESET, 0, NULL, HCI_INIT_TIMEOUT);
+	if (IS_ERR(skb)) {
+		err = PTR_ERR(skb);
+		bt_dev_err(hdev, "QCA Reset failed (%d)", err);
+		return err;
+	}
+
+	kfree_skb(skb);
+
+	return 0;
 }
 
 static int qca_read_fw_board_id(struct hci_dev *hdev, u16 *bid)
@@ -564,11 +581,28 @@ static int qca_download_firmware(struct hci_dev *hdev,
 
 	ret = request_firmware(&fw, config->fwname, &hdev->dev);
 	if (ret) {
+		/* For WCN6750, if mbn file is not present then check for
+		 * tlv file.
+		 */
+		if (soc_type == QCA_WCN6750 && config->type == ELF_TYPE_PATCH) {
+			bt_dev_dbg(hdev, "QCA Failed to request file: %s (%d)",
+				   config->fwname, ret);
+			config->type = TLV_TYPE_PATCH;
+			snprintf(config->fwname, sizeof(config->fwname),
+				 "qca/msbtfw%02x.tlv", rom_ver);
+			bt_dev_info(hdev, "QCA Downloading %s", config->fwname);
+			ret = request_firmware(&fw, config->fwname, &hdev->dev);
+			if (ret) {
+				bt_dev_err(hdev, "QCA Failed to request file: %s (%d)",
+					   config->fwname, ret);
+				return ret;
+			}
+		}
 		/* If the board-specific file is missing, try loading the default
 		 * one, unless that was attempted already.
 		 */
-		if (config->type == TLV_TYPE_NVM &&
-		    qca_get_alt_nvm_file(config->fwname, sizeof(config->fwname))) {
+		else if (config->type == TLV_TYPE_NVM &&
+			 qca_get_alt_nvm_file(config->fwname, sizeof(config->fwname))) {
 			bt_dev_info(hdev, "QCA Downloading %s", config->fwname);
 			ret = request_firmware(&fw, config->fwname, &hdev->dev);
 			if (ret) {
@@ -815,12 +849,8 @@ int qca_uart_setup(struct hci_dev *hdev, uint8_t baudrate,
 				 "qca/msbtfw%02x.mbn", rom_ver);
 			break;
 		case QCA_WCN6855:
-			/* Due to historical reasons, WCN685x chip has been using firmware
-			 * without the "wcn" prefix. The mapping between the chip and its
-			 * corresponding firmware has now been corrected.
-			 */
 			snprintf(config.fwname, sizeof(config.fwname),
-				 "qca/wcnhpbtfw%02x.tlv", rom_ver);
+				 "qca/hpbtfw%02x.tlv", rom_ver);
 			break;
 		case QCA_WCN7850:
 			snprintf(config.fwname, sizeof(config.fwname),
@@ -833,26 +863,8 @@ int qca_uart_setup(struct hci_dev *hdev, uint8_t baudrate,
 	}
 
 	err = qca_download_firmware(hdev, &config, soc_type, rom_ver);
-	/* For WCN6750, if mbn file is not present then check for
-	 * tlv file.
-	 */
-	if (err < 0 && soc_type == QCA_WCN6750) {
-		bt_dev_dbg(hdev, "QCA Failed to request file: %s (%d)",
-			   config.fwname, err);
-		config.type = TLV_TYPE_PATCH;
-		snprintf(config.fwname, sizeof(config.fwname),
-			 "qca/msbtfw%02x.tlv", rom_ver);
-		bt_dev_info(hdev, "QCA Downloading %s", config.fwname);
-		err = qca_download_firmware(hdev, &config, soc_type, rom_ver);
-	} else if (err < 0 && !rampatch_name && soc_type == QCA_WCN6855) {
-		snprintf(config.fwname, sizeof(config.fwname),
-			 "qca/hpbtfw%02x.tlv", rom_ver);
-		err = qca_download_firmware(hdev, &config, soc_type, rom_ver);
-	}
-
 	if (err < 0) {
-		bt_dev_err(hdev, "QCA Failed to request file: %s (%d)",
-			   config.fwname, err);
+		bt_dev_err(hdev, "QCA Failed to download patch (%d)", err);
 		return err;
 	}
 
@@ -914,7 +926,7 @@ int qca_uart_setup(struct hci_dev *hdev, uint8_t baudrate,
 		case QCA_WCN6855:
 			qca_read_fw_board_id(hdev, &boardid);
 			qca_get_nvm_name_by_board(config.fwname, sizeof(config.fwname),
-						  "wcnhpnv", soc_type, ver, rom_ver, boardid);
+						  "hpnv", soc_type, ver, rom_ver, boardid);
 			break;
 		case QCA_WCN7850:
 			qca_get_nvm_name_by_board(config.fwname, sizeof(config.fwname),
@@ -927,15 +939,8 @@ int qca_uart_setup(struct hci_dev *hdev, uint8_t baudrate,
 	}
 
 	err = qca_download_firmware(hdev, &config, soc_type, rom_ver);
-	if (err < 0 && !firmware_name && soc_type == QCA_WCN6855) {
-		qca_get_nvm_name_by_board(config.fwname, sizeof(config.fwname),
-					  "hpnv", soc_type, ver, rom_ver, boardid);
-		err = qca_download_firmware(hdev, &config, soc_type, rom_ver);
-	}
-
 	if (err < 0) {
-		bt_dev_err(hdev, "QCA Failed to request file: %s (%d)",
-			   config.fwname, err);
+		bt_dev_err(hdev, "QCA Failed to download NVM (%d)", err);
 		return err;
 	}
 
@@ -971,12 +976,11 @@ int qca_uart_setup(struct hci_dev *hdev, uint8_t baudrate,
 	}
 
 	/* Perform HCI reset */
-	err = __hci_reset_sync(hdev);
+	err = qca_send_reset(hdev);
 	if (err < 0) {
 		bt_dev_err(hdev, "QCA Failed to run HCI_RESET (%d)", err);
 		return err;
 	}
-	bt_dev_dbg(hdev, "QCA HCI_RESET succeed");
 
 	switch (soc_type) {
 	case QCA_WCN3991:

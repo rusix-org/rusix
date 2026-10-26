@@ -12,9 +12,6 @@
 #include <linux/spi/spi-mem.h>
 #include <linux/sched/task_stack.h>
 
-#define CREATE_TRACE_POINTS
-#include <trace/events/spi-mem.h>
-
 #include "internals.h"
 
 #define SPI_MEM_MAX_BUSWIDTH		8
@@ -46,9 +43,9 @@ int spi_controller_dma_map_mem_op_data(struct spi_controller *ctlr,
 		return -EINVAL;
 
 	if (op->data.dir == SPI_MEM_DATA_OUT && ctlr->dma_tx)
-		dmadev = dmaengine_get_dma_device(ctlr->dma_tx);
+		dmadev = ctlr->dma_tx->device->dev;
 	else if (op->data.dir == SPI_MEM_DATA_IN && ctlr->dma_rx)
-		dmadev = dmaengine_get_dma_device(ctlr->dma_rx);
+		dmadev = ctlr->dma_rx->device->dev;
 	else
 		dmadev = ctlr->dev.parent;
 
@@ -92,9 +89,9 @@ void spi_controller_dma_unmap_mem_op_data(struct spi_controller *ctlr,
 		return;
 
 	if (op->data.dir == SPI_MEM_DATA_OUT && ctlr->dma_tx)
-		dmadev = dmaengine_get_dma_device(ctlr->dma_tx);
+		dmadev = ctlr->dma_tx->device->dev;
 	else if (op->data.dir == SPI_MEM_DATA_IN && ctlr->dma_rx)
-		dmadev = dmaengine_get_dma_device(ctlr->dma_rx);
+		dmadev = ctlr->dma_rx->device->dev;
 	else
 		dmadev = ctlr->dev.parent;
 
@@ -172,7 +169,7 @@ bool spi_mem_default_supports_op(struct spi_mem *mem,
 		op->cmd.dtr || op->addr.dtr || op->dummy.dtr || op->data.dtr;
 
 	if (op_is_dtr) {
-		if (!spi_mem_controller_is_capable(ctlr, dtr) && !ctlr->dtr_caps)
+		if (!spi_mem_controller_is_capable(ctlr, dtr))
 			return false;
 
 		if (op->data.swap16 && !spi_mem_controller_is_capable(ctlr, swap16))
@@ -424,9 +421,7 @@ int spi_mem_exec_op(struct spi_mem *mem, const struct spi_mem_op *op)
 		if (ret)
 			return ret;
 
-		trace_spi_mem_start_op(mem, op);
 		ret = ctlr->mem_ops->exec_op(mem, op);
-		trace_spi_mem_stop_op(mem, op);
 
 		spi_mem_access_end(mem);
 
@@ -461,7 +456,6 @@ int spi_mem_exec_op(struct spi_mem *mem, const struct spi_mem_op *op)
 	xfers[xferpos].len = op->cmd.nbytes;
 	xfers[xferpos].tx_nbits = op->cmd.buswidth;
 	xfers[xferpos].speed_hz = op->max_freq;
-	xfers[xferpos].dtr_mode = op->cmd.dtr;
 	spi_message_add_tail(&xfers[xferpos], &msg);
 	xferpos++;
 	totalxferlen++;
@@ -477,7 +471,6 @@ int spi_mem_exec_op(struct spi_mem *mem, const struct spi_mem_op *op)
 		xfers[xferpos].len = op->addr.nbytes;
 		xfers[xferpos].tx_nbits = op->addr.buswidth;
 		xfers[xferpos].speed_hz = op->max_freq;
-		xfers[xferpos].dtr_mode = op->addr.dtr;
 		spi_message_add_tail(&xfers[xferpos], &msg);
 		xferpos++;
 		totalxferlen += op->addr.nbytes;
@@ -490,7 +483,6 @@ int spi_mem_exec_op(struct spi_mem *mem, const struct spi_mem_op *op)
 		xfers[xferpos].tx_nbits = op->dummy.buswidth;
 		xfers[xferpos].dummy_data = 1;
 		xfers[xferpos].speed_hz = op->max_freq;
-		xfers[xferpos].dtr_mode = op->dummy.dtr;
 		spi_message_add_tail(&xfers[xferpos], &msg);
 		xferpos++;
 		totalxferlen += op->dummy.nbytes;
@@ -507,7 +499,6 @@ int spi_mem_exec_op(struct spi_mem *mem, const struct spi_mem_op *op)
 
 		xfers[xferpos].len = op->data.nbytes;
 		xfers[xferpos].speed_hz = op->max_freq;
-		xfers[xferpos].dtr_mode = op->data.dtr;
 		spi_message_add_tail(&xfers[xferpos], &msg);
 		xferpos++;
 		totalxferlen += op->data.nbytes;
@@ -544,38 +535,6 @@ const char *spi_mem_get_name(struct spi_mem *mem)
 	return mem->name;
 }
 EXPORT_SYMBOL_GPL(spi_mem_get_name);
-
-/**
- * spi_mem_set_dqs() - Mark DQS as being available
- * @mem: the SPI memory
- *
- * When reading at high frequencies (> 100MHz), especially when DTR is enabled,
- * transfer speed is limited due to clock skews. In particular, the controller
- * does not know the board propagation delay nor the memory chip internal delay
- * (clock in to data out) and thus cannot optimize its sampling points.
- * Mitigating this limitation is possible with the addition of a data strobe
- * signal, commonly named DQS.
- *
- * Set the DQS boolean if the feature is available and configured at the chip
- * level. Controllers may query this value.
- */
-void spi_mem_set_dqs(struct spi_mem *mem)
-{
-	mem->dqs = true;
-}
-EXPORT_SYMBOL_GPL(spi_mem_set_dqs);
-
-/**
- * spi_mem_has_dqs() - Query whether the DQS is available or not
- * @mem: the SPI memory
- *
- * Return: a boolean indicating whether the DQS signal is available or not.
- */
-bool spi_mem_has_dqs(struct spi_mem *mem)
-{
-	return mem->dqs;
-}
-EXPORT_SYMBOL_GPL(spi_mem_has_dqs);
 
 /**
  * spi_mem_adjust_op_size() - Adjust the data size of a SPI mem operation to
@@ -690,7 +649,7 @@ EXPORT_SYMBOL_GPL(spi_mem_calc_op_duration);
 static ssize_t spi_mem_no_dirmap_read(struct spi_mem_dirmap_desc *desc,
 				      u64 offs, size_t len, void *buf)
 {
-	struct spi_mem_op op = *desc->info.op_tmpl;
+	struct spi_mem_op op = desc->info.op_tmpl;
 	int ret;
 
 	op.addr.val = desc->info.offset + offs;
@@ -710,7 +669,7 @@ static ssize_t spi_mem_no_dirmap_read(struct spi_mem_dirmap_desc *desc,
 static ssize_t spi_mem_no_dirmap_write(struct spi_mem_dirmap_desc *desc,
 				       u64 offs, size_t len, const void *buf)
 {
-	struct spi_mem_op op = *desc->info.op_tmpl;
+	struct spi_mem_op op = desc->info.op_tmpl;
 	int ret;
 
 	op.addr.val = desc->info.offset + offs;
@@ -749,37 +708,19 @@ spi_mem_dirmap_create(struct spi_mem *mem,
 	int ret = -ENOTSUPP;
 
 	/* Make sure the number of address cycles is between 1 and 8 bytes. */
-	if (!info->primary_op_tmpl.addr.nbytes || info->primary_op_tmpl.addr.nbytes > 8)
+	if (!info->op_tmpl.addr.nbytes || info->op_tmpl.addr.nbytes > 8)
 		return ERR_PTR(-EINVAL);
 
 	/* data.dir should either be SPI_MEM_DATA_IN or SPI_MEM_DATA_OUT. */
-	if (info->primary_op_tmpl.data.dir == SPI_MEM_NO_DATA)
+	if (info->op_tmpl.data.dir == SPI_MEM_NO_DATA)
 		return ERR_PTR(-EINVAL);
 
-	/* Apply similar constraints to the secondary template */
-	if (info->secondary_op_tmpl.cmd.opcode) {
-		if (!info->secondary_op_tmpl.addr.nbytes ||
-		    info->secondary_op_tmpl.addr.nbytes > 8)
-			return ERR_PTR(-EINVAL);
-
-		if (info->secondary_op_tmpl.data.dir == SPI_MEM_NO_DATA)
-			return ERR_PTR(-EINVAL);
-
-		if (!spi_mem_supports_op(mem, &info->secondary_op_tmpl))
-			return ERR_PTR(-EOPNOTSUPP);
-
-		if (ctlr->mem_ops && ctlr->mem_ops->dirmap_create &&
-		    !spi_mem_controller_is_capable(ctlr, secondary_op_tmpl))
-			return ERR_PTR(-EOPNOTSUPP);
-	}
-
-	desc = kzalloc_obj(*desc);
+	desc = kzalloc(sizeof(*desc), GFP_KERNEL);
 	if (!desc)
 		return ERR_PTR(-ENOMEM);
 
 	desc->mem = mem;
 	desc->info = *info;
-	desc->info.op_tmpl = &desc->info.primary_op_tmpl;
 	if (ctlr->mem_ops && ctlr->mem_ops->dirmap_create) {
 		ret = spi_mem_access_start(mem);
 		if (ret) {
@@ -794,7 +735,7 @@ spi_mem_dirmap_create(struct spi_mem *mem,
 
 	if (ret) {
 		desc->nodirmap = true;
-		if (!spi_mem_supports_op(desc->mem, &desc->info.primary_op_tmpl))
+		if (!spi_mem_supports_op(desc->mem, &desc->info.op_tmpl))
 			ret = -EOPNOTSUPP;
 		else
 			ret = 0;
@@ -918,7 +859,7 @@ ssize_t spi_mem_dirmap_read(struct spi_mem_dirmap_desc *desc,
 	struct spi_controller *ctlr = desc->mem->spi->controller;
 	ssize_t ret;
 
-	if (desc->info.op_tmpl->data.dir != SPI_MEM_DATA_IN)
+	if (desc->info.op_tmpl.data.dir != SPI_MEM_DATA_IN)
 		return -EINVAL;
 
 	if (!len)
@@ -964,7 +905,7 @@ ssize_t spi_mem_dirmap_write(struct spi_mem_dirmap_desc *desc,
 	struct spi_controller *ctlr = desc->mem->spi->controller;
 	ssize_t ret;
 
-	if (desc->info.op_tmpl->data.dir != SPI_MEM_DATA_OUT)
+	if (desc->info.op_tmpl.data.dir != SPI_MEM_DATA_OUT)
 		return -EINVAL;
 
 	if (!len)

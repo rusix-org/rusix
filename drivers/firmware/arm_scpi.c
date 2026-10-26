@@ -634,14 +634,14 @@ static struct scpi_dvfs_info *scpi_dvfs_get_info(u8 domain)
 	if (!buf.opp_count || buf.opp_count > MAX_DVFS_OPPS)
 		return ERR_PTR(-EINVAL);
 
-	info = kmalloc_obj(*info);
+	info = kmalloc(sizeof(*info), GFP_KERNEL);
 	if (!info)
 		return ERR_PTR(-ENOMEM);
 
 	info->count = buf.opp_count;
 	info->latency = le16_to_cpu(buf.latency) * 1000; /* uS to nS */
 
-	info->opps = kzalloc_objs(*opp, info->count);
+	info->opps = kcalloc(info->count, sizeof(*opp), GFP_KERNEL);
 	if (!info->opps) {
 		kfree(info);
 		return ERR_PTR(-ENOMEM);
@@ -661,15 +661,12 @@ static struct scpi_dvfs_info *scpi_dvfs_get_info(u8 domain)
 static int scpi_dev_domain_id(struct device *dev)
 {
 	struct of_phandle_args clkspec;
-	int domain;
 
 	if (of_parse_phandle_with_args(dev->of_node, "clocks", "#clock-cells",
 				       0, &clkspec))
 		return -EINVAL;
 
-	domain = clkspec.args[0];
-	of_node_put(clkspec.np);
-	return domain;
+	return clkspec.args[0];
 }
 
 static struct scpi_dvfs_info *scpi_dvfs_info(struct device *dev)

@@ -17,7 +17,7 @@
 #include <linux/string.h>
 #include <linux/kobject.h>
 #include <linux/export.h>
-#include <linux/umh.h>
+#include <linux/kmod.h>
 #include <linux/slab.h>
 #include <linux/socket.h>
 #include <linux/skbuff.h>
@@ -83,7 +83,7 @@ static int kobject_action_type(const char *buf, size_t count,
 	for (action = 0; action < ARRAY_SIZE(kobject_actions); action++) {
 		if (strncmp(kobject_actions[action], buf, count_first) != 0)
 			continue;
-		if (strlen(kobject_actions[action]) != count_first)
+		if (kobject_actions[action][count_first] != '\0')
 			continue;
 		if (args)
 			*args = args_start;
@@ -124,7 +124,7 @@ static int kobject_action_args(const char *buf, size_t count,
 	if (!count)
 		return -EINVAL;
 
-	env = kzalloc_obj(*env);
+	env = kzalloc(sizeof(*env), GFP_KERNEL);
 	if (!env)
 		return -ENOMEM;
 
@@ -238,7 +238,7 @@ static int kobj_usermode_filter(struct kobject *kobj)
 
 	ops = kobj_ns_ops(kobj);
 	if (ops) {
-		const struct ns_common *init_ns, *ns;
+		const void *init_ns, *ns;
 
 		ns = kobj->ktype->namespace(kobj);
 		init_ns = ops->initial_ns();
@@ -388,7 +388,7 @@ static int kobject_uevent_net_broadcast(struct kobject *kobj,
 
 #ifdef CONFIG_NET
 	const struct kobj_ns_type_operations *ops;
-	const struct ns_common *ns = NULL;
+	const struct net *net = NULL;
 
 	ops = kobj_ns_ops(kobj);
 	if (!ops && kobj->kset) {
@@ -404,17 +404,14 @@ static int kobject_uevent_net_broadcast(struct kobject *kobj,
 	 */
 	if (ops && ops->netlink_ns && kobj->ktype->namespace)
 		if (ops->type == KOBJ_NS_TYPE_NET)
-			ns = kobj->ktype->namespace(kobj);
+			net = kobj->ktype->namespace(kobj);
 
-	if (!ns)
+	if (!net)
 		ret = uevent_net_broadcast_untagged(env, action_string,
 						    devpath);
-	else {
-		const struct net *net = container_of(ns, struct net, ns);
-
+	else
 		ret = uevent_net_broadcast_tagged(net->uevent_sock->sk, env,
 						  action_string, devpath);
-	}
 #endif
 
 	return ret;
@@ -540,7 +537,7 @@ int kobject_uevent_env(struct kobject *kobj, enum kobject_action action,
 	}
 
 	/* environment buffer */
-	env = kzalloc_obj(struct kobj_uevent_env);
+	env = kzalloc(sizeof(struct kobj_uevent_env), GFP_KERNEL);
 	if (!env)
 		return -ENOMEM;
 
@@ -779,7 +776,7 @@ static int uevent_net_init(struct net *net)
 		.flags	= NL_CFG_F_NONROOT_RECV
 	};
 
-	ue_sk = kzalloc_obj(*ue_sk);
+	ue_sk = kzalloc(sizeof(*ue_sk), GFP_KERNEL);
 	if (!ue_sk)
 		return -ENOMEM;
 

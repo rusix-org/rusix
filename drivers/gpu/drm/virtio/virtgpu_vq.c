@@ -32,7 +32,6 @@
 #include <linux/virtio_ring.h>
 
 #include <drm/drm_edid.h>
-#include <drm/drm_print.h>
 
 #include "virtgpu_drv.h"
 #include "virtgpu_trace.h"
@@ -208,21 +207,6 @@ static void free_vbuf(struct virtio_gpu_device *vgdev,
 	kmem_cache_free(vgdev->vbufs, vbuf);
 }
 
-void virtio_gpu_reclaim_vbufs(struct virtio_gpu_device *vgdev)
-{
-	struct virtio_gpu_vbuffer *vbuf;
-
-	while ((vbuf = virtqueue_detach_unused_buf(vgdev->ctrlq.vq))) {
-		if (vbuf->objs)
-			virtio_gpu_array_put_free(vbuf->objs);
-		if (vbuf->resp_cb_data)
-			virtio_gpu_cleanup_object(vbuf->resp_cb_data);
-		free_vbuf(vgdev, vbuf);
-	}
-	while ((vbuf = virtqueue_detach_unused_buf(vgdev->cursorq.vq)))
-		free_vbuf(vgdev, vbuf);
-}
-
 static void reclaim_vbufs(struct virtqueue *vq, struct list_head *reclaim_list)
 {
 	struct virtio_gpu_vbuffer *vbuf;
@@ -354,7 +338,7 @@ static struct sg_table *vmalloc_to_sgt(char *data, uint32_t size, int *sg_ents)
 	if (WARN_ON(!PAGE_ALIGNED(data)))
 		return NULL;
 
-	sgt = kmalloc_obj(*sgt);
+	sgt = kmalloc(sizeof(*sgt), GFP_KERNEL);
 	if (!sgt)
 		return NULL;
 
@@ -411,20 +395,6 @@ static int virtio_gpu_panic_queue_ctrl_sgs(struct virtio_gpu_device *vgdev,
 	return 0;
 }
 
-int virtio_gpu_wait_queue(struct virtio_gpu_queue *vgvq, unsigned int num_elem)
-{
-	int ret;
-
-	/* Wait up to 5 seconds for enough free slots to become available */
-	ret = wait_event_timeout(vgvq->ack_queue,
-				 vgvq->vq->num_free >= num_elem,
-				 5 * HZ);
-	if (ret == 0)
-		return -ETIMEDOUT;
-
-	return 0;
-}
-
 static int virtio_gpu_queue_ctrl_sgs(struct virtio_gpu_device *vgdev,
 				     struct virtio_gpu_vbuffer *vbuf,
 				     struct virtio_gpu_fence *fence,
@@ -452,19 +422,7 @@ again:
 	if (vq->num_free < elemcnt) {
 		spin_unlock(&vgdev->ctrlq.qlock);
 		virtio_gpu_notify(vgdev);
-		wait_event(vgdev->ctrlq.ack_queue,
-			   vq->num_free >= elemcnt || vgdev->vqs_released);
-		/*
-		 * Set by virtio_gpu_release_vqs() to unblock
-		 * synchronize_srcu() wait in drm_dev_unplug().
-		 */
-		if (vgdev->vqs_released) {
-			if (fence && vbuf->objs)
-				virtio_gpu_array_unlock_resv(vbuf->objs);
-			free_vbuf(vgdev, vbuf);
-			drm_dev_exit(idx);
-			return -ENODEV;
-		}
+		wait_event(vgdev->ctrlq.ack_queue, vq->num_free >= elemcnt);
 		goto again;
 	}
 
@@ -634,14 +592,7 @@ retry:
 	ret = virtqueue_add_sgs(vq, sgs, outcnt, 0, vbuf, GFP_ATOMIC);
 	if (ret == -ENOSPC) {
 		spin_unlock(&vgdev->cursorq.qlock);
-		wait_event(vgdev->cursorq.ack_queue,
-			   vq->num_free >= outcnt || vgdev->vqs_released);
-		/* See comment in virtio_gpu_queue_ctrl_sgs(). */
-		if (vgdev->vqs_released) {
-			free_vbuf(vgdev, vbuf);
-			drm_dev_exit(idx);
-			return;
-		}
+		wait_event(vgdev->cursorq.ack_queue, vq->num_free >= outcnt);
 		spin_lock(&vgdev->cursorq.qlock);
 		goto retry;
 	} else {
@@ -701,21 +652,14 @@ static void virtio_gpu_cmd_unref_cb(struct virtio_gpu_device *vgdev,
 }
 
 void virtio_gpu_cmd_unref_resource(struct virtio_gpu_device *vgdev,
-				   struct virtio_gpu_object *bo,
-				   bool no_cb)
+				   struct virtio_gpu_object *bo)
 {
 	struct virtio_gpu_resource_unref *cmd_p;
 	struct virtio_gpu_vbuffer *vbuf;
 	int ret;
 
-	if (no_cb) {
-		cmd_p = virtio_gpu_alloc_cmd_cb(vgdev, &vbuf, sizeof(*cmd_p),
-						NULL);
-	} else {
-		cmd_p = virtio_gpu_alloc_cmd_cb(vgdev, &vbuf, sizeof(*cmd_p),
-						virtio_gpu_cmd_unref_cb);
-	}
-
+	cmd_p = virtio_gpu_alloc_cmd_cb(vgdev, &vbuf, sizeof(*cmd_p),
+					virtio_gpu_cmd_unref_cb);
 	memset(cmd_p, 0, sizeof(*cmd_p));
 
 	cmd_p->hdr.type = cpu_to_le32(VIRTIO_GPU_CMD_RESOURCE_UNREF);
@@ -1016,7 +960,8 @@ int virtio_gpu_cmd_get_display_info(struct virtio_gpu_device *vgdev)
 	struct virtio_gpu_vbuffer *vbuf;
 	void *resp_buf;
 
-	resp_buf = kzalloc_obj(struct virtio_gpu_resp_display_info);
+	resp_buf = kzalloc(sizeof(struct virtio_gpu_resp_display_info),
+			   GFP_KERNEL);
 	if (!resp_buf)
 		return -ENOMEM;
 
@@ -1038,7 +983,8 @@ int virtio_gpu_cmd_get_capset_info(struct virtio_gpu_device *vgdev, int idx)
 	struct virtio_gpu_vbuffer *vbuf;
 	void *resp_buf;
 
-	resp_buf = kzalloc_obj(struct virtio_gpu_resp_capset_info);
+	resp_buf = kzalloc(sizeof(struct virtio_gpu_resp_capset_info),
+			   GFP_KERNEL);
 	if (!resp_buf)
 		return -ENOMEM;
 
@@ -1073,7 +1019,7 @@ int virtio_gpu_cmd_get_capset(struct virtio_gpu_device *vgdev,
 	if (version > vgdev->capsets[idx].max_version)
 		return -EINVAL;
 
-	cache_ent = kzalloc_obj(*cache_ent);
+	cache_ent = kzalloc(sizeof(*cache_ent), GFP_KERNEL);
 	if (!cache_ent)
 		return -ENOMEM;
 
@@ -1141,7 +1087,8 @@ int virtio_gpu_cmd_get_edids(struct virtio_gpu_device *vgdev)
 		return -EINVAL;
 
 	for (scanout = 0; scanout < vgdev->num_scanouts; scanout++) {
-		resp_buf = kzalloc_obj(struct virtio_gpu_resp_edid);
+		resp_buf = kzalloc(sizeof(struct virtio_gpu_resp_edid),
+				   GFP_KERNEL);
 		if (!resp_buf)
 			return -ENOMEM;
 
@@ -1437,7 +1384,7 @@ virtio_gpu_cmd_resource_assign_uuid(struct virtio_gpu_device *vgdev,
 	struct virtio_gpu_vbuffer *vbuf;
 	struct virtio_gpu_resp_resource_uuid *resp_buf;
 
-	resp_buf = kzalloc_obj(*resp_buf);
+	resp_buf = kzalloc(sizeof(*resp_buf), GFP_KERNEL);
 	if (!resp_buf) {
 		spin_lock(&vgdev->resource_export_lock);
 		bo->uuid_state = STATE_ERR;
@@ -1490,7 +1437,7 @@ int virtio_gpu_cmd_map(struct virtio_gpu_device *vgdev,
 	struct virtio_gpu_vbuffer *vbuf;
 	struct virtio_gpu_resp_map_info *resp_buf;
 
-	resp_buf = kzalloc_obj(*resp_buf);
+	resp_buf = kzalloc(sizeof(*resp_buf), GFP_KERNEL);
 	if (!resp_buf)
 		return -ENOMEM;
 

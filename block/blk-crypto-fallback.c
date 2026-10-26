@@ -22,7 +22,7 @@
 #include "blk-cgroup.h"
 #include "blk-crypto-internal.h"
 
-static unsigned int num_prealloc_bounce_pg = BIO_MAX_VECS;
+static unsigned int num_prealloc_bounce_pg = 32;
 module_param(num_prealloc_bounce_pg, uint, 0);
 MODULE_PARM_DESC(num_prealloc_bounce_pg,
 		 "Number of preallocated bounce pages for the blk-crypto crypto API fallback");
@@ -144,21 +144,11 @@ static const struct blk_crypto_ll_ops blk_crypto_fallback_ll_ops = {
 static void blk_crypto_fallback_encrypt_endio(struct bio *enc_bio)
 {
 	struct bio *src_bio = enc_bio->bi_private;
-	struct page **pages = (struct page **)enc_bio->bi_io_vec;
-	struct bio_vec *bv;
-	unsigned int i;
+	int i;
 
-	/*
-	 * Use the same trick as the alloc side to avoid the need for an extra
-	 * pages array.
-	 */
-	bio_for_each_bvec_all(bv, enc_bio, i)
-		pages[i] = bv->bv_page;
-
-	i = mempool_free_bulk(blk_crypto_bounce_page_pool, (void **)pages,
-			enc_bio->bi_vcnt);
-	if (i < enc_bio->bi_vcnt)
-		release_pages(pages + i, enc_bio->bi_vcnt - i);
+	for (i = 0; i < enc_bio->bi_vcnt; i++)
+		mempool_free(enc_bio->bi_io_vec[i].bv_page,
+			     blk_crypto_bounce_page_pool);
 
 	if (enc_bio->bi_status)
 		cmpxchg(&src_bio->bi_status, 0, enc_bio->bi_status);
@@ -167,14 +157,9 @@ static void blk_crypto_fallback_encrypt_endio(struct bio *enc_bio)
 	bio_endio(src_bio);
 }
 
-#define PAGE_PTRS_PER_BVEC     (sizeof(struct bio_vec) / sizeof(struct page *))
-
 static struct bio *blk_crypto_alloc_enc_bio(struct bio *bio_src,
-		unsigned int nr_segs, struct page ***pages_ret)
+		unsigned int nr_segs)
 {
-	unsigned int memflags = memalloc_noio_save();
-	unsigned int nr_allocated;
-	struct page **pages;
 	struct bio *bio;
 
 	bio = bio_alloc_bioset(bio_src->bi_bdev, nr_segs, bio_src->bi_opf,
@@ -188,31 +173,6 @@ static struct bio *blk_crypto_alloc_enc_bio(struct bio *bio_src,
 	bio->bi_write_stream	= bio_src->bi_write_stream;
 	bio->bi_iter.bi_sector	= bio_src->bi_iter.bi_sector;
 	bio_clone_blkg_association(bio, bio_src);
-
-	/*
-	 * Move page array up in the allocated memory for the bio vecs as far as
-	 * possible so that we can start filling biovecs from the beginning
-	 * without overwriting the temporary page array.
-	 */
-	static_assert(PAGE_PTRS_PER_BVEC > 1);
-	pages = (struct page **)bio->bi_io_vec;
-	pages += nr_segs * (PAGE_PTRS_PER_BVEC - 1);
-
-	/*
-	 * Try a bulk allocation first.  This might not fill all allocated
-	 * pages, but we'll fix that up later in mempool_alloc_bulk.
-	 *
-	 * Note: alloc_pages_bulk needs the array to be zeroed, as it assumes
-	 * any non-zero slot already contains a valid allocation.
-	 */
-	memset(pages, 0, sizeof(struct page *) * nr_segs);
-	nr_allocated = alloc_pages_bulk(GFP_KERNEL, nr_segs, pages);
-	if (nr_allocated < nr_segs)
-		mempool_alloc_bulk(blk_crypto_bounce_page_pool,
-				(void **)pages + nr_allocated,
-				nr_segs - nr_allocated);
-	memalloc_noio_restore(memflags);
-	*pages_ret = pages;
 	return bio;
 }
 
@@ -249,7 +209,6 @@ static void __blk_crypto_fallback_encrypt_bio(struct bio *src_bio,
 	struct scatterlist src, dst;
 	union blk_crypto_iv iv;
 	unsigned int nr_enc_pages, enc_idx;
-	struct page **enc_pages;
 	struct bio *enc_bio;
 	unsigned int i;
 
@@ -272,19 +231,15 @@ static void __blk_crypto_fallback_encrypt_bio(struct bio *src_bio,
 	 */
 new_bio:
 	nr_enc_pages = min(bio_segments(src_bio), BIO_MAX_VECS);
-	enc_bio = blk_crypto_alloc_enc_bio(src_bio, nr_enc_pages, &enc_pages);
+	enc_bio = blk_crypto_alloc_enc_bio(src_bio, nr_enc_pages);
 	enc_idx = 0;
 	for (;;) {
 		struct bio_vec src_bv =
 			bio_iter_iovec(src_bio, src_bio->bi_iter);
-		struct page *enc_page = enc_pages[enc_idx];
+		struct page *enc_page;
 
-		if (!IS_ALIGNED(src_bv.bv_len | src_bv.bv_offset,
-				data_unit_size)) {
-			enc_bio->bi_status = BLK_STS_INVAL;
-			goto out_free_enc_bio;
-		}
-
+		enc_page = mempool_alloc(blk_crypto_bounce_page_pool,
+				GFP_NOIO);
 		__bio_add_page(enc_bio, enc_page, src_bv.bv_len,
 				src_bv.bv_offset);
 
@@ -304,8 +259,8 @@ new_bio:
 		for (i = 0; i < src_bv.bv_len; i += data_unit_size) {
 			blk_crypto_dun_to_iv(curr_dun, &iv);
 			if (crypto_skcipher_encrypt(ciph_req)) {
-				enc_bio->bi_status = BLK_STS_IOERR;
-				goto out_free_enc_bio;
+				bio_io_error(enc_bio);
+				return;
 			}
 			bio_crypt_dun_increment(curr_dun, 1);
 			src.offset += data_unit_size;
@@ -332,18 +287,6 @@ new_bio:
 	}
 
 	submit_bio(enc_bio);
-	return;
-
-out_free_enc_bio:
-	/*
-	 * Add the remaining pages to the bio so that the normal completion path
-	 * in blk_crypto_fallback_encrypt_endio frees them.  The exact data
-	 * layout does not matter for that, so don't bother iterating the source
-	 * bio.
-	 */
-	for (; enc_idx < nr_enc_pages; enc_idx++)
-		__bio_add_page(enc_bio, enc_pages[enc_idx], PAGE_SIZE, 0);
-	bio_endio(enc_bio);
 }
 
 /*
@@ -394,9 +337,6 @@ static blk_status_t __blk_crypto_fallback_decrypt_bio(struct bio *bio,
 	/* Decrypt each segment in the bio */
 	__bio_for_each_segment(bv, bio, iter, iter) {
 		struct page *page = bv.bv_page;
-
-		if (!IS_ALIGNED(bv.bv_len | bv.bv_offset, data_unit_size))
-			return BLK_STS_INVAL;
 
 		sg_set_page(&sg, page, data_unit_size, bv.bv_offset);
 
@@ -496,7 +436,8 @@ bool blk_crypto_fallback_bio_prep(struct bio *bio)
 		return false;
 	}
 
-	if (bc->bc_key->crypto_cfg.key_type != BLK_CRYPTO_KEY_TYPE_RAW) {
+	if (!__blk_crypto_cfg_supported(blk_crypto_fallback_profile,
+					&bc->bc_key->crypto_cfg)) {
 		bio_endio_status(bio, BLK_STS_NOTSUPP);
 		return false;
 	}
@@ -543,7 +484,8 @@ static int blk_crypto_fallback_init(void)
 		goto out;
 
 	/* Dynamic allocation is needed because of lockdep_register_key(). */
-	blk_crypto_fallback_profile = kzalloc_obj(*blk_crypto_fallback_profile);
+	blk_crypto_fallback_profile =
+		kzalloc(sizeof(*blk_crypto_fallback_profile), GFP_KERNEL);
 	if (!blk_crypto_fallback_profile) {
 		err = -ENOMEM;
 		goto fail_free_bioset;
@@ -570,8 +512,9 @@ static int blk_crypto_fallback_init(void)
 	if (!blk_crypto_wq)
 		goto fail_destroy_profile;
 
-	blk_crypto_keyslots = kzalloc_objs(blk_crypto_keyslots[0],
-					   blk_crypto_num_keyslots);
+	blk_crypto_keyslots = kcalloc(blk_crypto_num_keyslots,
+				      sizeof(blk_crypto_keyslots[0]),
+				      GFP_KERNEL);
 	if (!blk_crypto_keyslots)
 		goto fail_free_wq;
 

@@ -14,6 +14,7 @@
 #include "mm_communication.h"
 
 static struct efivars tee_efivars;
+static struct efivar_operations tee_efivar_ops;
 
 static size_t max_buffer_size; /* comm + var + func + data */
 static size_t max_payload_size; /* func + data */
@@ -519,18 +520,8 @@ static void tee_stmm_restore_efivars_generic_ops(void)
 	efivars_generic_ops_register();
 }
 
-static const struct efivar_operations tee_efivar_ops = {
-	.get_variable			= tee_get_variable,
-	.get_next_variable		= tee_get_next_variable,
-	.set_variable			= tee_set_variable,
-	.set_variable_nonblocking	= tee_set_variable_nonblocking,
-	.query_variable_store		= efi_query_variable_store,
-	.query_variable_info		= tee_query_variable_info,
-};
-
-static int tee_stmm_efi_probe(struct tee_client_device *tee_dev)
+static int tee_stmm_efi_probe(struct device *dev)
 {
-	struct device *dev = &tee_dev->dev;
 	struct tee_ioctl_open_session_arg sess_arg;
 	efi_status_t ret;
 	int rc;
@@ -566,6 +557,13 @@ static int tee_stmm_efi_probe(struct tee_client_device *tee_dev)
 			  MM_VARIABLE_COMMUNICATE_SIZE +
 			  max_payload_size;
 
+	tee_efivar_ops.get_variable		= tee_get_variable;
+	tee_efivar_ops.get_next_variable	= tee_get_next_variable;
+	tee_efivar_ops.set_variable		= tee_set_variable;
+	tee_efivar_ops.set_variable_nonblocking	= tee_set_variable_nonblocking;
+	tee_efivar_ops.query_variable_store	= efi_query_variable_store;
+	tee_efivar_ops.query_variable_info	= tee_query_variable_info;
+
 	efivars_generic_ops_unregister();
 	pr_info("Using TEE-based EFI runtime variable services\n");
 	efivars_register(&tee_efivars, &tee_efivar_ops);
@@ -573,23 +571,37 @@ static int tee_stmm_efi_probe(struct tee_client_device *tee_dev)
 	return 0;
 }
 
-static void tee_stmm_efi_remove(struct tee_client_device *dev)
+static int tee_stmm_efi_remove(struct device *dev)
 {
 	tee_stmm_restore_efivars_generic_ops();
+
+	return 0;
 }
 
 MODULE_DEVICE_TABLE(tee, tee_stmm_efi_id_table);
 
 static struct tee_client_driver tee_stmm_efi_driver = {
 	.id_table	= tee_stmm_efi_id_table,
-	.probe		= tee_stmm_efi_probe,
-	.remove		= tee_stmm_efi_remove,
 	.driver		= {
 		.name		= "tee-stmm-efi",
+		.bus		= &tee_bus_type,
+		.probe		= tee_stmm_efi_probe,
+		.remove		= tee_stmm_efi_remove,
 	},
 };
 
-module_tee_client_driver(tee_stmm_efi_driver);
+static int __init tee_stmm_efi_mod_init(void)
+{
+	return driver_register(&tee_stmm_efi_driver.driver);
+}
+
+static void __exit tee_stmm_efi_mod_exit(void)
+{
+	driver_unregister(&tee_stmm_efi_driver.driver);
+}
+
+module_init(tee_stmm_efi_mod_init);
+module_exit(tee_stmm_efi_mod_exit);
 
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Ilias Apalodimas <ilias.apalodimas@linaro.org>");

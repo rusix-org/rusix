@@ -6,6 +6,7 @@
  */
 #include <linux/bits.h>
 #include <linux/freezer.h>
+#include <linux/gpio/consumer.h>
 #include <linux/i2c.h>
 #include <linux/interrupt.h>
 #include <linux/kernel.h>
@@ -651,15 +652,21 @@ static int ucs1002_probe(struct i2c_client *client)
 						ucs1002_charger_irq,
 						IRQF_ONESHOT,
 						"ucs1002-a_det", info);
-		if (ret)
+		if (ret) {
+			dev_err(dev, "Failed to request A_DET threaded irq: %d\n",
+				ret);
 			return ret;
+		}
 	}
 
 	if (irq_alert > 0) {
 		ret = devm_request_irq(dev, irq_alert, ucs1002_alert_irq,
 				       0,"ucs1002-alert", info);
-		if (ret)
+		if (ret) {
+			dev_err(dev, "Failed to request ALERT threaded irq: %d\n",
+				ret);
 			return ret;
+		}
 	}
 
 	return 0;

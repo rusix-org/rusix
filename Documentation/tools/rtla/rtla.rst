@@ -21,10 +21,6 @@ results.
 
 COMMANDS
 ========
-**hwnoise**
-
-        Detect and quantify hardware-related noise.
-
 **osnoise**
 
         Gives information about the operating system noise (osnoise).
@@ -43,7 +39,7 @@ For other options, see the man page for the corresponding command.
 
 SEE ALSO
 ========
-**rtla-hwnoise**\(1), **rtla-osnoise**\(1), **rtla-timerlat**\(1)
+**rtla-osnoise**\(1), **rtla-timerlat**\(1)
 
 AUTHOR
 ======

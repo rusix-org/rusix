@@ -8,6 +8,7 @@
  */
 
 #include <linux/tty.h>
+#include <linux/tty_flip.h>
 #include <linux/module.h>
 #include <linux/usb.h>
 #include <linux/usb/serial.h>
@@ -430,7 +431,7 @@ static int qc_attach(struct usb_serial *serial)
 	struct usb_wwan_intf_private *data;
 	bool sendsetup;
 
-	data = kzalloc_obj(*data);
+	data = kzalloc(sizeof(*data), GFP_KERNEL);
 	if (!data)
 		return -ENOMEM;
 

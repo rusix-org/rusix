@@ -10,7 +10,6 @@
 #include <linux/of.h>
 #include <linux/kobject.h>
 #include <linux/slab.h>
-#include <linux/sysfs.h>
 
 #include <asm/opal.h>
 
@@ -57,11 +56,16 @@ static ssize_t powercap_show(struct kobject *kobj, struct kobj_attribute *attr,
 			goto out;
 		}
 		ret = opal_error_code(opal_get_async_rc(msg));
-		if (!ret)
-			ret = sysfs_emit(buf, "%u\n", be32_to_cpu(pcap));
+		if (!ret) {
+			ret = sprintf(buf, "%u\n", be32_to_cpu(pcap));
+			if (ret < 0)
+				ret = -EIO;
+		}
 		break;
 	case OPAL_SUCCESS:
-		ret = sysfs_emit(buf, "%u\n", be32_to_cpu(pcap));
+		ret = sprintf(buf, "%u\n", be32_to_cpu(pcap));
+		if (ret < 0)
+			ret = -EIO;
 		break;
 	default:
 		ret = opal_error_code(ret);
@@ -146,7 +150,8 @@ void __init opal_powercap_init(void)
 		return;
 	}
 
-	pcaps = kzalloc_objs(*pcaps, of_get_child_count(powercap));
+	pcaps = kcalloc(of_get_child_count(powercap), sizeof(*pcaps),
+			GFP_KERNEL);
 	if (!pcaps)
 		goto out_put_powercap;
 
@@ -177,11 +182,13 @@ void __init opal_powercap_init(void)
 			has_cur = true;
 		}
 
-		pcaps[i].pattrs = kzalloc_objs(struct powercap_attr, j);
+		pcaps[i].pattrs = kcalloc(j, sizeof(struct powercap_attr),
+					  GFP_KERNEL);
 		if (!pcaps[i].pattrs)
 			goto out_pcaps_pattrs;
 
-		pcaps[i].pg.attrs = kzalloc_objs(struct attribute *, j + 1);
+		pcaps[i].pg.attrs = kcalloc(j + 1, sizeof(struct attribute *),
+					    GFP_KERNEL);
 		if (!pcaps[i].pg.attrs) {
 			kfree(pcaps[i].pattrs);
 			goto out_pcaps_pattrs;

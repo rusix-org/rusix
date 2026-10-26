@@ -5,7 +5,7 @@
 /*
  *  Copyright (c) 1999-2000 Takashi Iwai <tiwai@suse.de>
  *
- *  Definitions of OSS compatible headers for Emu8000 device information
+ *  Definitions of OSS compatible headers for Emu8000 device informations
  */
 
 #include <sound/seq_oss_legacy.h>

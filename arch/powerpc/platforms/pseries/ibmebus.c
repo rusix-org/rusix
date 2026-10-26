@@ -46,7 +46,6 @@
 #include <linux/of.h>
 #include <linux/slab.h>
 #include <linux/stat.h>
-#include <linux/sysfs.h>
 #include <linux/of_platform.h>
 #include <linux/platform_device.h>
 #include <asm/ibmebus.h>
@@ -87,18 +86,17 @@ static void ibmebus_free_coherent(struct device *dev,
 	kfree(vaddr);
 }
 
-static dma_addr_t ibmebus_map_phys(struct device *dev, phys_addr_t phys,
+static dma_addr_t ibmebus_map_page(struct device *dev,
+				   struct page *page,
+				   unsigned long offset,
 				   size_t size,
 				   enum dma_data_direction direction,
 				   unsigned long attrs)
 {
-	if (attrs & DMA_ATTR_MMIO)
-		return DMA_MAPPING_ERROR;
-
-	return (dma_addr_t)(phys_to_virt(phys));
+	return (dma_addr_t)(page_address(page) + offset);
 }
 
-static void ibmebus_unmap_phys(struct device *dev,
+static void ibmebus_unmap_page(struct device *dev,
 			       dma_addr_t dma_addr,
 			       size_t size,
 			       enum dma_data_direction direction,
@@ -148,8 +146,8 @@ static const struct dma_map_ops ibmebus_dma_ops = {
 	.unmap_sg           = ibmebus_unmap_sg,
 	.dma_supported      = ibmebus_dma_supported,
 	.get_required_mask  = ibmebus_dma_get_required_mask,
-	.map_phys           = ibmebus_map_phys,
-	.unmap_phys         = ibmebus_unmap_phys,
+	.map_page           = ibmebus_map_page,
+	.unmap_page         = ibmebus_unmap_page,
 };
 
 static int ibmebus_match_path(struct device *dev, const void *data)
@@ -400,7 +398,7 @@ static ssize_t devspec_show(struct device *dev,
 	struct platform_device *ofdev;
 
 	ofdev = to_platform_device(dev);
-	return sysfs_emit(buf, "%pOF\n", ofdev->dev.of_node);
+	return sprintf(buf, "%pOF\n", ofdev->dev.of_node);
 }
 static DEVICE_ATTR_RO(devspec);
 
@@ -410,7 +408,7 @@ static ssize_t name_show(struct device *dev,
 	struct platform_device *ofdev;
 
 	ofdev = to_platform_device(dev);
-	return sysfs_emit(buf, "%pOFn\n", ofdev->dev.of_node);
+	return sprintf(buf, "%pOFn\n", ofdev->dev.of_node);
 }
 static DEVICE_ATTR_RO(name);
 

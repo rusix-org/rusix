@@ -11,7 +11,6 @@
 #include <linux/module.h>
 #include <linux/interrupt.h>
 #include <linux/kref.h>
-#include <linux/rwsem.h>
 #include <linux/sched.h>
 #include <linux/tty.h>
 #include <linux/serial.h>
@@ -55,7 +54,6 @@ struct ipoctal {
 	u8 __iomem			*int_space;
 	struct kref			kref;
 	struct module			*carrier_owner;
-	struct rw_semaphore		remove_sem;
 	bool				removed;
 };
 
@@ -83,7 +81,7 @@ static int ipoctal_port_activate(struct tty_port *port, struct tty_struct *tty)
 	channel = dev_get_drvdata(tty->dev);
 	ipoctal = chan_to_ipoctal(channel, tty->index);
 
-	guard(rwsem_read)(&ipoctal->remove_sem);
+
 	if (ipoctal->removed)
 		return -ENODEV;
 
@@ -478,7 +476,7 @@ static ssize_t ipoctal_write_tty(struct tty_struct *tty, const u8 *buf,
 	struct ipoctal *ipoctal = chan_to_ipoctal(channel, tty->index);
 	size_t char_copied;
 
-	guard(rwsem_read)(&ipoctal->remove_sem);
+
 	if (ipoctal->removed || !channel->tty_port.xmit_buf)
 		return 0;
 
@@ -524,7 +522,7 @@ static void ipoctal_set_termios(struct tty_struct *tty,
 	struct ipoctal *ipoctal = chan_to_ipoctal(channel, tty->index);
 	speed_t baud;
 
-	guard(rwsem_read)(&ipoctal->remove_sem);
+
 	if (ipoctal->removed)
 		return;
 
@@ -662,7 +660,7 @@ static void ipoctal_hangup(struct tty_struct *tty)
 		return;
 
 	ipoctal = chan_to_ipoctal(channel, tty->index);
-	guard(rwsem_read)(&ipoctal->remove_sem);
+
 	if (ipoctal->removed)
 		return;
 
@@ -688,7 +686,7 @@ static void ipoctal_shutdown(struct tty_struct *tty)
 		return;
 
 	ipoctal = chan_to_ipoctal(channel, tty->index);
-	guard(rwsem_read)(&ipoctal->remove_sem);
+
 	if (ipoctal->removed)
 		return;
 
@@ -733,12 +731,11 @@ static int ipoctal_probe(struct ipack_device *dev)
 	int res;
 	struct ipoctal *ipoctal;
 
-	ipoctal = kzalloc_obj(struct ipoctal);
+	ipoctal = kzalloc(sizeof(struct ipoctal), GFP_KERNEL);
 	if (ipoctal == NULL)
 		return -ENOMEM;
 
 	kref_init(&ipoctal->kref);
-	init_rwsem(&ipoctal->remove_sem);
 
 	ipoctal->dev = dev;
 	ipoctal->carrier_owner = dev->bus->owner;
@@ -758,8 +755,7 @@ static void __ipoctal_remove(struct ipoctal *ipoctal)
 {
 	int i;
 
-	scoped_guard(rwsem_write, &ipoctal->remove_sem)
-		ipoctal->removed = true;
+	ipoctal->removed = true;
 
 	ipoctal->dev->bus->ops->free_irq(ipoctal->dev);
 

@@ -163,6 +163,9 @@ static int stop_urb_transfer(struct au0828_dev *dev)
 
 	dprintk(2, "%s()\n", __func__);
 
+	if (!dev->urb_streaming)
+		return 0;
+
 	if (dev->bulk_timeout_running == 1) {
 		dev->bulk_timeout_running = 0;
 		timer_delete(&dev->bulk_timeout);
@@ -176,7 +179,6 @@ static int stop_urb_transfer(struct au0828_dev *dev)
 				kfree(dev->urbs[i]->transfer_buffer);
 
 			usb_free_urb(dev->urbs[i]);
-			dev->urbs[i] = NULL;
 		}
 	}
 
@@ -198,10 +200,8 @@ static int start_urb_transfer(struct au0828_dev *dev)
 	for (i = 0; i < URB_COUNT; i++) {
 
 		dev->urbs[i] = usb_alloc_urb(0, GFP_KERNEL);
-		if (!dev->urbs[i]) {
-			ret = -ENOMEM;
-			goto err;
-		}
+		if (!dev->urbs[i])
+			return -ENOMEM;
 
 		purb = dev->urbs[i];
 
@@ -217,7 +217,7 @@ static int start_urb_transfer(struct au0828_dev *dev)
 			ret = -ENOMEM;
 			pr_err("%s: failed big buffer allocation, err = %d\n",
 			       __func__, ret);
-			goto err;
+			return ret;
 		}
 
 		purb->status = -EINPROGRESS;
@@ -235,9 +235,10 @@ static int start_urb_transfer(struct au0828_dev *dev)
 	for (i = 0; i < URB_COUNT; i++) {
 		ret = usb_submit_urb(dev->urbs[i], GFP_ATOMIC);
 		if (ret != 0) {
+			stop_urb_transfer(dev);
 			pr_err("%s: failed urb submission, err = %d\n",
 			       __func__, ret);
-			goto err;
+			return ret;
 		}
 	}
 
@@ -248,10 +249,6 @@ static int start_urb_transfer(struct au0828_dev *dev)
 	dev->bulk_timeout_running = 1;
 
 	return 0;
-
-err:
-	stop_urb_transfer(dev);
-	return ret;
 }
 
 static void au0828_start_transport(struct au0828_dev *dev)
@@ -540,7 +537,6 @@ void au0828_dvb_unregister(struct au0828_dev *dev)
 	if (dvb->frontend == NULL)
 		return;
 
-	timer_shutdown_sync(&dev->bulk_timeout);
 	cancel_work_sync(&dev->restart_streaming);
 
 	dvb_net_release(&dvb->net);
@@ -575,7 +571,6 @@ int au0828_dvb_register(struct au0828_dev *dev)
 	switch (dev->boardnr) {
 	case AU0828_BOARD_HAUPPAUGE_HVR850:
 	case AU0828_BOARD_HAUPPAUGE_HVR950Q:
-	case AU0828_BOARD_HAUPPAUGE_HVR1265:
 		dvb->frontend = dvb_attach(au8522_attach,
 				&hauppauge_hvr950q_config,
 				&dev->i2c_adap);
@@ -604,7 +599,6 @@ int au0828_dvb_register(struct au0828_dev *dev)
 				   &mxl5007t_hvr950q_config);
 		break;
 	case AU0828_BOARD_HAUPPAUGE_WOODBURY:
-	case AU0828_BOARD_MONOPRICE_106456:
 		dvb->frontend = dvb_attach(au8522_attach,
 				&hauppauge_woodbury_config,
 				&dev->i2c_adap);

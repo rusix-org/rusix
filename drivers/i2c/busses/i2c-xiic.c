@@ -27,6 +27,7 @@
 #include <linux/platform_data/i2c-xiic.h>
 #include <linux/io.h>
 #include <linux/slab.h>
+#include <linux/of.h>
 #include <linux/clk.h>
 #include <linux/pm_runtime.h>
 #include <linux/iopoll.h>
@@ -67,7 +68,6 @@ enum i2c_scl_freq {
  * @rx_pos: Position within current RX message
  * @endianness: big/little-endian byte order
  * @clk: Pointer to AXI4-lite input clock
- * @irq: Interrupt number
  * @state: See STATE_
  * @singlemaster: Indicates bus is single master
  * @dynamic: Mode of controller
@@ -96,7 +96,6 @@ struct xiic_i2c {
 	int rx_pos;
 	enum xiic_endian endianness;
 	struct clk *clk;
-	int irq;
 	enum xilinx_i2c_state state;
 	bool singlemaster;
 	bool dynamic;
@@ -571,11 +570,11 @@ static void xiic_smbus_block_read_setup(struct xiic_i2c *i2c)
 			i2c->smbus_actual_len = 1 + rxmsg_len + pec_len;
 		} else {
 			/*
-			 * All trailing bytes fit in the Rx FIFO. Defer RX_FULL
-			 * until every one of them is buffered, so the drain
-			 * takes xiic_read_rx()'s bytes_rem == 0 path.
+			 * All trailing bytes fit in the Rx FIFO. The widened
+			 * condition above guarantees rxmsg_len + pec_len >= 2,
+			 * so this cannot underflow.
 			 */
-			rfd_set = rxmsg_len + pec_len - 1;
+			rfd_set = rxmsg_len + pec_len - 2;
 			i2c->rx_msg->len = rxmsg_len + 1 + pec_len;
 		}
 		xiic_setreg8(i2c, XIIC_RFD_REG_OFFSET, rfd_set);
@@ -1440,6 +1439,7 @@ static const struct i2c_adapter xiic_adapter = {
 	.algo = &xiic_algorithm,
 };
 
+#if defined(CONFIG_OF)
 static const struct xiic_version_data xiic_2_00 = {
 	.quirks = DYNAMIC_MODE_READ_BROKEN_BIT,
 };
@@ -1450,26 +1450,28 @@ static const struct of_device_id xiic_of_match[] = {
 	{},
 };
 MODULE_DEVICE_TABLE(of, xiic_of_match);
+#endif
 
 static int xiic_i2c_probe(struct platform_device *pdev)
 {
-	struct device *dev = &pdev->dev;
-	struct fwnode_handle *fwnode = dev_fwnode(dev);
 	struct xiic_i2c *i2c;
 	struct xiic_i2c_platform_data *pdata;
-	const struct xiic_version_data *data;
+	const struct of_device_id *match;
 	struct resource *res;
 	int ret, irq;
 	u8 i;
 	u32 sr;
 
-	i2c = devm_kzalloc(dev, sizeof(*i2c), GFP_KERNEL);
+	i2c = devm_kzalloc(&pdev->dev, sizeof(*i2c), GFP_KERNEL);
 	if (!i2c)
 		return -ENOMEM;
 
-	data = device_get_match_data(dev);
-	if (data)
+	match = of_match_node(xiic_of_match, pdev->dev.of_node);
+	if (match && match->data) {
+		const struct xiic_version_data *data = match->data;
+
 		i2c->quirks = data->quirks;
+	}
 
 	i2c->base = devm_platform_get_and_ioremap_resource(pdev, 0, &res);
 	if (IS_ERR(i2c->base))
@@ -1479,65 +1481,50 @@ static int xiic_i2c_probe(struct platform_device *pdev)
 	if (irq < 0)
 		return irq;
 
-	pdata = dev_get_platdata(dev);
+	pdata = dev_get_platdata(&pdev->dev);
 
 	/* hook up driver to tree */
 	platform_set_drvdata(pdev, i2c);
 	i2c->adap = xiic_adapter;
-	i2c->adap.nr = pdev->id;
 	i2c_set_adapdata(&i2c->adap, i2c);
 	i2c->adap.dev.parent = &pdev->dev;
-	device_set_node(&i2c->adap.dev, fwnode);
+	i2c->adap.dev.of_node = pdev->dev.of_node;
 	snprintf(i2c->adap.name, sizeof(i2c->adap.name),
 		 DRIVER_NAME " %s", pdev->name);
 
-	ret = devm_mutex_init(dev, &i2c->lock);
-	if (ret)
-		return ret;
-
+	mutex_init(&i2c->lock);
 	spin_lock_init(&i2c->atomic_lock);
 
-	if (is_of_node(fwnode)) {
-		i2c->clk = devm_clk_get_enabled(dev, NULL);
-		if (IS_ERR(i2c->clk))
-			return dev_err_probe(dev, PTR_ERR(i2c->clk),
-					"failed to enable input clock.\n");
-	}
+	i2c->clk = devm_clk_get_enabled(&pdev->dev, NULL);
+	if (IS_ERR(i2c->clk))
+		return dev_err_probe(&pdev->dev, PTR_ERR(i2c->clk),
+				     "failed to enable input clock.\n");
 
-	i2c->dev = dev;
-
-	pm_runtime_set_autosuspend_delay(dev, XIIC_PM_TIMEOUT);
-	pm_runtime_use_autosuspend(dev);
-	/*
-	 * Enable runtime PM by hand: devm_pm_runtime_set_active_enabled()
-	 * tears down in an order that races the devm-enabled clock release and
-	 * makes clk_core_disable() WARN (see xiic_i2c_remove()).
-	 */
-	ret = pm_runtime_set_active(dev);
-	if (ret) {
-		pm_runtime_dont_use_autosuspend(dev);
-		return ret;
-	}
-	pm_runtime_enable(dev);
+	i2c->dev = &pdev->dev;
+	pm_runtime_set_autosuspend_delay(i2c->dev, XIIC_PM_TIMEOUT);
+	pm_runtime_use_autosuspend(i2c->dev);
+	pm_runtime_set_active(i2c->dev);
+	pm_runtime_enable(i2c->dev);
 
 	/* SCL frequency configuration */
 	i2c->input_clk = clk_get_rate(i2c->clk);
-	ret = device_property_read_u32(dev, "clock-frequency", &i2c->i2c_clk);
+	ret = of_property_read_u32(pdev->dev.of_node, "clock-frequency",
+				   &i2c->i2c_clk);
 	/* If clock-frequency not specified in DT, do not configure in SW */
 	if (ret || i2c->i2c_clk > I2C_MAX_FAST_MODE_PLUS_FREQ)
 		i2c->i2c_clk = 0;
 
-	/*
-	 * Request the IRQ non-managed: later probe steps unwind manually via
-	 * goto, so a devm handler could still be live after that teardown runs.
-	 */
-	i2c->irq = irq;
-	ret = request_threaded_irq(irq, NULL, xiic_process, IRQF_ONESHOT,
-				   pdev->name, i2c);
-	if (ret)
-		goto err_pm_disable;
+	ret = devm_request_threaded_irq(&pdev->dev, irq, NULL,
+					xiic_process, IRQF_ONESHOT,
+					pdev->name, i2c);
 
-	i2c->singlemaster = device_property_read_bool(dev, "single-master");
+	if (ret < 0) {
+		dev_err_probe(&pdev->dev, ret, "Cannot claim IRQ\n");
+		goto err_pm_disable;
+	}
+
+	i2c->singlemaster =
+		of_property_read_bool(pdev->dev.of_node, "single-master");
 
 	/*
 	 * Detect endianness
@@ -1552,16 +1539,16 @@ static int xiic_i2c_probe(struct platform_device *pdev)
 		i2c->endianness = BIG;
 
 	ret = xiic_reinit(i2c);
-	if (ret) {
-		dev_err_probe(dev, ret, "Cannot xiic_reinit\n");
-		goto err_free_irq;
+	if (ret < 0) {
+		dev_err_probe(&pdev->dev, ret, "Cannot xiic_reinit\n");
+		goto err_pm_disable;
 	}
 
 	/* add i2c adapter to i2c tree */
-	ret = i2c_add_numbered_adapter(&i2c->adap);
+	ret = i2c_add_adapter(&i2c->adap);
 	if (ret) {
 		xiic_deinit(i2c);
-		goto err_free_irq;
+		goto err_pm_disable;
 	}
 
 	if (pdata) {
@@ -1570,43 +1557,38 @@ static int xiic_i2c_probe(struct platform_device *pdev)
 			i2c_new_client_device(&i2c->adap, pdata->devices + i);
 	}
 
-	dev_dbg(dev, "mmio %pR irq %d scl clock frequency %d\n",
-		res, irq, i2c->i2c_clk);
+	dev_dbg(&pdev->dev, "mmio %08lx irq %d scl clock frequency %d\n",
+		(unsigned long)res->start, irq, i2c->i2c_clk);
 
 	return 0;
 
-err_free_irq:
-	free_irq(irq, i2c);
 err_pm_disable:
-	pm_runtime_disable(dev);
-	pm_runtime_set_suspended(dev);
-	pm_runtime_dont_use_autosuspend(dev);
+	pm_runtime_disable(&pdev->dev);
+	pm_runtime_set_suspended(&pdev->dev);
 
 	return ret;
 }
 
 static void xiic_i2c_remove(struct platform_device *pdev)
 {
-	struct device *dev = &pdev->dev;
 	struct xiic_i2c *i2c = platform_get_drvdata(pdev);
 	int ret;
 
 	/* remove adapter & data */
 	i2c_del_adapter(&i2c->adap);
 
-	free_irq(i2c->irq, i2c);
+	ret = pm_runtime_get_sync(i2c->dev);
 
-	ret = pm_runtime_get_sync(dev);
 	if (ret < 0)
-		dev_warn(dev, "Failed to activate device for removal (%pe)\n",
+		dev_warn(&pdev->dev, "Failed to activate device for removal (%pe)\n",
 			 ERR_PTR(ret));
 	else
 		xiic_deinit(i2c);
 
-	pm_runtime_disable(dev);
-	pm_runtime_put_noidle(dev);
-	pm_runtime_set_suspended(dev);
-	pm_runtime_dont_use_autosuspend(dev);
+	pm_runtime_put_sync(i2c->dev);
+	pm_runtime_disable(&pdev->dev);
+	pm_runtime_set_suspended(&pdev->dev);
+	pm_runtime_dont_use_autosuspend(&pdev->dev);
 }
 
 static const struct dev_pm_ops xiic_dev_pm_ops = {

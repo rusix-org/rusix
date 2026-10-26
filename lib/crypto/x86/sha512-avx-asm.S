@@ -276,9 +276,6 @@ frame_size = frame_WK + WK_SIZE
 ########################################################################
 SYM_FUNC_START(sha512_transform_avx)
 
-	push	%rbp
-	mov	%rsp, %rbp
-
 	# Save GPRs
 	push	%rbx
 	push	%r12
@@ -287,6 +284,8 @@ SYM_FUNC_START(sha512_transform_avx)
 	push	%r15
 
 	# Allocate Stack Space
+	push	%rbp
+	mov	%rsp, %rbp
 	sub     $frame_size, %rsp
 	and	$~(0x20 - 1), %rsp
 
@@ -349,8 +348,9 @@ SYM_FUNC_START(sha512_transform_avx)
 	dec     msglen
 	jnz     .Lupdateblock
 
-	# Deallocate Stack Space
-	lea	-40(%rbp), %rsp
+	# Restore Stack Pointer
+	mov	%rbp, %rsp
+	pop	%rbp
 
 	# Restore GPRs
 	pop	%r15
@@ -358,7 +358,6 @@ SYM_FUNC_START(sha512_transform_avx)
 	pop	%r13
 	pop	%r12
 	pop	%rbx
-	pop	%rbp
 
 	RET
 SYM_FUNC_END(sha512_transform_avx)

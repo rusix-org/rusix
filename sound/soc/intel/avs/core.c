@@ -14,7 +14,6 @@
 // foundation of this driver
 //
 
-#include <linux/cleanup.h>
 #include <linux/acpi.h>
 #include <linux/module.h>
 #include <linux/pci.h>
@@ -92,28 +91,16 @@ static int avs_hdac_bus_init_streams(struct hdac_bus *bus)
 {
 	unsigned int cp_streams, pb_streams;
 	unsigned int gcap;
-	int ret;
 
 	gcap = snd_hdac_chip_readw(bus, GCAP);
 	cp_streams = (gcap >> 8) & 0x0F;
 	pb_streams = (gcap >> 12) & 0x0F;
 	bus->num_streams = cp_streams + pb_streams;
 
-	ret = snd_hdac_ext_stream_init_all(bus, 0, cp_streams, SNDRV_PCM_STREAM_CAPTURE);
-	if (ret)
-		return ret;
-	ret = snd_hdac_ext_stream_init_all(bus, cp_streams, pb_streams, SNDRV_PCM_STREAM_PLAYBACK);
-	if (ret)
-		goto err;
+	snd_hdac_ext_stream_init_all(bus, 0, cp_streams, SNDRV_PCM_STREAM_CAPTURE);
+	snd_hdac_ext_stream_init_all(bus, cp_streams, pb_streams, SNDRV_PCM_STREAM_PLAYBACK);
 
-	ret = snd_hdac_bus_alloc_stream_pages(bus);
-	if (ret)
-		goto err;
-
-	return 0;
-err:
-	snd_hdac_ext_stream_free_all(bus);
-	return ret;
+	return snd_hdac_bus_alloc_stream_pages(bus);
 }
 
 static bool avs_hdac_bus_init_chip(struct hdac_bus *bus, bool full_reset)
@@ -286,7 +273,7 @@ static irqreturn_t avs_hda_interrupt(struct hdac_bus *bus)
 	if (snd_hdac_bus_handle_stream_irq(bus, status, hdac_update_stream))
 		ret = IRQ_HANDLED;
 
-	guard(spinlock_irq)(&bus->reg_lock);
+	spin_lock_irq(&bus->reg_lock);
 	/* Clear RIRB interrupt. */
 	status = snd_hdac_chip_readb(bus, RIRBSTS);
 	if (status & RIRB_INT_MASK) {
@@ -296,6 +283,7 @@ static irqreturn_t avs_hda_interrupt(struct hdac_bus *bus)
 		ret = IRQ_HANDLED;
 	}
 
+	spin_unlock_irq(&bus->reg_lock);
 	return ret;
 }
 
@@ -395,18 +383,6 @@ static int avs_bus_init(struct avs_dev *adev, struct pci_dev *pci, const struct 
 	struct device *dev = &pci->dev;
 	int ret;
 
-	ipc = devm_kzalloc(dev, sizeof(*ipc), GFP_KERNEL);
-	if (!ipc)
-		return -ENOMEM;
-
-	adev->modcfg_buf = devm_kzalloc(dev, AVS_MAILBOX_SIZE, GFP_KERNEL);
-	if (!adev->modcfg_buf)
-		return -ENOMEM;
-
-	ret = avs_ipc_init(ipc, dev);
-	if (ret < 0)
-		return ret;
-
 	ret = snd_hdac_ext_bus_init(&bus->core, dev, NULL, &soc_hda_ext_bus_ops);
 	if (ret < 0)
 		return ret;
@@ -417,6 +393,17 @@ static int avs_bus_init(struct avs_dev *adev, struct pci_dev *pci, const struct 
 	bus->pci = pci;
 	bus->mixer_assigned = -1;
 	mutex_init(&bus->prepare_mutex);
+
+	ipc = devm_kzalloc(dev, sizeof(*ipc), GFP_KERNEL);
+	if (!ipc)
+		return -ENOMEM;
+	ret = avs_ipc_init(ipc, dev);
+	if (ret < 0)
+		return ret;
+
+	adev->modcfg_buf = devm_kzalloc(dev, AVS_MAILBOX_SIZE, GFP_KERNEL);
+	if (!adev->modcfg_buf)
+		return -ENOMEM;
 
 	adev->dev = dev;
 	adev->spec = (const struct avs_spec *)id->driver_data;
@@ -469,14 +456,13 @@ static int avs_pci_probe(struct pci_dev *pci, const struct pci_device_id *id)
 
 	ret = pcim_request_all_regions(pci, "AVS HDAudio");
 	if (ret < 0)
-		goto err_request_regions;
+		return ret;
 
 	bus->addr = pci_resource_start(pci, 0);
 	bus->remap_addr = pci_ioremap_bar(pci, 0);
 	if (!bus->remap_addr) {
 		dev_err(bus->dev, "ioremap error\n");
-		ret = -ENXIO;
-		goto err_request_regions;
+		return -ENXIO;
 	}
 
 	adev->dsp_ba = pci_ioremap_bar(pci, 4);
@@ -540,8 +526,6 @@ err_ml_cap:
 	iounmap(adev->dsp_ba);
 err_remap_bar4:
 	iounmap(bus->remap_addr);
-err_request_regions:
-	snd_hdac_ext_bus_exit(bus);
 	return ret;
 }
 
@@ -920,7 +904,7 @@ static const struct pci_device_id avs_ids[] = {
 	{ PCI_DEVICE_DATA(INTEL, HDA_KBL_H, &skl_desc) },
 	{ PCI_DEVICE_DATA(INTEL, HDA_CML_S, &skl_desc) },
 	{ PCI_DEVICE_DATA(INTEL, HDA_APL, &apl_desc) },
-	{ PCI_DEVICE_DATA(INTEL, HDA_GLK, &apl_desc) },
+	{ PCI_DEVICE_DATA(INTEL, HDA_GML, &apl_desc) },
 	{ PCI_DEVICE_DATA(INTEL, HDA_CNL_LP,	&cnl_desc) },
 	{ PCI_DEVICE_DATA(INTEL, HDA_CNL_H,	&cnl_desc) },
 	{ PCI_DEVICE_DATA(INTEL, HDA_CML_LP,	&cnl_desc) },

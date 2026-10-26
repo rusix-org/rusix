@@ -59,7 +59,10 @@ static int pack_bits(uint32_t index, void *value, void *context)
 		if (r)
 			return r;
 
-		assign_bit(bit, (unsigned long *)&word, bv);
+		if (bv)
+			set_bit(bit, (unsigned long *) &word);
+		else
+			clear_bit(bit, (unsigned long *) &word);
 	}
 
 	*((__le64 *) value) = cpu_to_le64(word);

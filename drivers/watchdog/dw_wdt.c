@@ -27,7 +27,6 @@
 #include <linux/platform_device.h>
 #include <linux/pm.h>
 #include <linux/reset.h>
-#include <linux/stringify.h>
 #include <linux/watchdog.h>
 
 #define WDOG_CONTROL_REG_OFFSET		    0x00
@@ -67,7 +66,7 @@ static const u32 dw_wdt_fix_tops[DW_WDT_NUM_TOPS] = {
 static bool nowayout = WATCHDOG_NOWAYOUT;
 module_param(nowayout, bool, 0);
 MODULE_PARM_DESC(nowayout, "Watchdog cannot be stopped once started "
-		 "(default=" __stringify(WATCHDOG_NOWAYOUT) ")");
+		 "(default=" __MODULE_STRING(WATCHDOG_NOWAYOUT) ")");
 
 enum dw_wdt_rmod {
 	DW_WDT_RMOD_RESET = 1,
@@ -612,7 +611,7 @@ static int dw_wdt_drv_probe(struct platform_device *pdev)
 
 		dw_wdt->wdd.info = &dw_wdt_pt_ident;
 	} else {
-		if (ret != -ENXIO)
+		if (ret == -EPROBE_DEFER)
 			return ret;
 
 		dw_wdt->wdd.info = &dw_wdt_ident;

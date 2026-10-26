@@ -8,7 +8,6 @@
 #ifndef RSEQ_H
 #define RSEQ_H
 
-#include <assert.h>
 #include <stdint.h>
 #include <stdbool.h>
 #include <pthread.h>
@@ -143,12 +142,7 @@ static inline struct rseq_abi *rseq_get_abi(void)
  * succeed. A restartable sequence executed from a non-registered
  * thread will always fail.
  */
-int __rseq_register_current_thread(bool nolibc, bool legacy);
-
-static inline int rseq_register_current_thread(void)
-{
-	return __rseq_register_current_thread(false, false);
-}
+int rseq_register_current_thread(void);
 
 /*
  * Unregister rseq for current thread.

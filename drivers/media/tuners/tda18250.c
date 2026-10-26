@@ -769,7 +769,7 @@ static int tda18250_probe(struct i2c_client *client)
 		.volatile_table = &tda18250_volatile_table,
 	};
 
-	dev = kzalloc_obj(*dev);
+	dev = kzalloc(sizeof(*dev), GFP_KERNEL);
 	if (!dev) {
 		ret = -ENOMEM;
 		goto err;
@@ -804,7 +804,8 @@ static int tda18250_probe(struct i2c_client *client)
 
 	/* read the three chip ID registers */
 	regmap_bulk_read(dev->regmap, R00_ID1, &chip_id, 3);
-	dev_dbg(&client->dev, "chip_id=%3phC", chip_id);
+	dev_dbg(&client->dev, "chip_id=%02x:%02x:%02x",
+			chip_id[0], chip_id[1], chip_id[2]);
 
 	switch (chip_id[0]) {
 	case 0xc7:
@@ -867,8 +868,8 @@ static void tda18250_remove(struct i2c_client *client)
 }
 
 static const struct i2c_device_id tda18250_id_table[] = {
-	{ .name = "tda18250" },
-	{ }
+	{ "tda18250" },
+	{}
 };
 MODULE_DEVICE_TABLE(i2c, tda18250_id_table);
 

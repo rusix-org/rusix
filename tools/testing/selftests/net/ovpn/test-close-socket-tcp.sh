@@ -4,6 +4,6 @@
 #
 #  Author:	Antonio Quartulli <antonio@openvpn.net>
 
-OVPN_PROTO="TCP"
+PROTO="TCP"
 
 source test-close-socket.sh

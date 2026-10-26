@@ -19,13 +19,6 @@
 #include <sound/info.h>
 #include <sound/control.h>
 
-#ifdef CONFIG_SND_CTL_DEBUG
-#define CREATE_TRACE_POINTS
-#include "control_trace.h"
-#else
-#define trace_snd_ctl_put(card, kctl, iname, expected, actual)
-#endif
-
 // Max allocation size for user controls.
 static int max_user_ctl_alloc_size = 8 * 1024 * 1024;
 module_param_named(max_user_ctl_alloc_size, max_user_ctl_alloc_size, int, 0444);
@@ -38,7 +31,7 @@ struct snd_kctl_ioctl {
 	snd_kctl_ioctl_func_t fioctl;
 };
 
-DECLARE_RWSEM(snd_ioctl_rwsem);
+static DECLARE_RWSEM(snd_ioctl_rwsem);
 static DECLARE_RWSEM(snd_ctl_layer_rwsem);
 static LIST_HEAD(snd_control_ioctls);
 #ifdef CONFIG_COMPAT
@@ -55,7 +48,9 @@ static int snd_ctl_open(struct inode *inode, struct file *file)
 	struct snd_ctl_file *ctl;
 	int i, err;
 
-	stream_open(inode, file);
+	err = stream_open(inode, file);
+	if (err < 0)
+		return err;
 
 	card = snd_lookup_minor_data(iminor(inode), SNDRV_DEVICE_TYPE_CONTROL);
 	if (!card) {
@@ -63,13 +58,15 @@ static int snd_ctl_open(struct inode *inode, struct file *file)
 		goto __error1;
 	}
 	err = snd_card_file_add(card, file);
-	if (err < 0)
-		goto __error1;
-	if (!try_module_get(card->module)) {
+	if (err < 0) {
 		err = -ENODEV;
+		goto __error1;
+	}
+	if (!try_module_get(card->module)) {
+		err = -EFAULT;
 		goto __error2;
 	}
-	ctl = kzalloc_obj(*ctl);
+	ctl = kzalloc(sizeof(*ctl), GFP_KERNEL);
 	if (ctl == NULL) {
 		err = -ENOMEM;
 		goto __error;
@@ -174,7 +171,7 @@ void snd_ctl_notify(struct snd_card *card, unsigned int mask,
 					goto _found;
 				}
 			}
-			ev = kzalloc_obj(*ev, GFP_ATOMIC);
+			ev = kzalloc(sizeof(*ev), GFP_ATOMIC);
 			if (ev) {
 				ev->id = *id;
 				ev->mask = mask;
@@ -236,7 +233,7 @@ static int snd_ctl_new(struct snd_kcontrol **kctl, unsigned int count,
 	if (count == 0 || count > MAX_CONTROL_COUNT)
 		return -EINVAL;
 
-	*kctl = kzalloc_flex(**kctl, vd, count);
+	*kctl = kzalloc(struct_size(*kctl, vd, count), GFP_KERNEL);
 	if (!*kctl)
 		return -ENOMEM;
 
@@ -870,81 +867,23 @@ EXPORT_SYMBOL(snd_ctl_find_id);
 static int snd_ctl_card_info(struct snd_card *card, struct snd_ctl_file * ctl,
 			     unsigned int cmd, void __user *arg)
 {
-	struct snd_ctl_card_info *info __free(kfree) =
-		kzalloc_obj(*info);
-	ssize_t n;
+	struct snd_ctl_card_info *info __free(kfree) = NULL;
 
+	info = kzalloc(sizeof(*info), GFP_KERNEL);
 	if (! info)
 		return -ENOMEM;
-
-	static_assert(sizeof(info->components) >= 2);
-
 	scoped_guard(rwsem_read, &snd_ioctl_rwsem) {
-		const char *components = card->components;
-
-		if (!components)
-			components = "";
-
 		info->card = card->number;
 		strscpy(info->id, card->id, sizeof(info->id));
 		strscpy(info->driver, card->driver, sizeof(info->driver));
 		strscpy(info->name, card->shortname, sizeof(info->name));
 		strscpy(info->longname, card->longname, sizeof(info->longname));
 		strscpy(info->mixername, card->mixername, sizeof(info->mixername));
-		n = strscpy(info->components, components, sizeof(info->components));
-		if (n < 0) // mark the truncation with '>' before NULL terminator
-			info->components[sizeof(info->components) - 2] = '>';
+		strscpy(info->components, card->components, sizeof(info->components));
 	}
 	if (copy_to_user(arg, info, sizeof(struct snd_ctl_card_info)))
 		return -EFAULT;
 	return 0;
-}
-
-static int snd_ctl_card_bytes(struct snd_card *card,
-			      struct snd_ctl_card_bytes *info,
-			      unsigned int __user *data_len_out)
-{
-	unsigned int data_len;
-
-	switch (info->type) {
-	case SND_CTL_CARD_BTYPE_COMPONENTS:
-		scoped_guard(rwsem_read, &snd_ioctl_rwsem) {
-			const char *components = card->components;
-
-			if (!components)
-				components = "";
-
-			data_len = strlen(components) + 1;
-
-			if (!info->data || info->data_allocated == 0)
-				break;
-
-			if (info->data_allocated < data_len)
-				return -ENOMEM;
-
-			if (copy_to_user(u64_to_user_ptr(info->data), components, data_len))
-				return -EFAULT;
-		}
-		break;
-	default:
-		return -EINVAL;
-	}
-
-	if (put_user(data_len, data_len_out))
-		return -EFAULT;
-
-	return 0;
-}
-
-static int snd_ctl_card_bytes_user(struct snd_card *card,
-				   struct snd_ctl_card_bytes __user *_info)
-{
-	struct snd_ctl_card_bytes info;
-
-	if (copy_from_user(&info, _info, sizeof(info)))
-		return -EFAULT;
-
-	return snd_ctl_card_bytes(card, &info, &_info->data_len);
 }
 
 static int snd_ctl_elem_list(struct snd_card *card,
@@ -1305,10 +1244,10 @@ static int snd_ctl_elem_read(struct snd_card *card,
 static int snd_ctl_elem_read_user(struct snd_card *card,
 				  struct snd_ctl_elem_value __user *_control)
 {
+	struct snd_ctl_elem_value *control __free(kfree) = NULL;
 	int result;
-	struct snd_ctl_elem_value *control __free(kfree) =
-		memdup_user(_control, sizeof(*control));
 
+	control = memdup_user(_control, sizeof(*control));
 	if (IS_ERR(control))
 		return PTR_ERR(control);
 
@@ -1324,72 +1263,6 @@ static int snd_ctl_elem_read_user(struct snd_card *card,
 		return -EFAULT;
 	return result;
 }
-
-#if IS_ENABLED(CONFIG_SND_CTL_DEBUG)
-
-static const char *const snd_ctl_elem_iface_names[] = {
-	[SNDRV_CTL_ELEM_IFACE_CARD]		= "CARD",
-	[SNDRV_CTL_ELEM_IFACE_HWDEP]		= "HWDEP",
-	[SNDRV_CTL_ELEM_IFACE_MIXER]		= "MIXER",
-	[SNDRV_CTL_ELEM_IFACE_PCM]		= "PCM",
-	[SNDRV_CTL_ELEM_IFACE_RAWMIDI]		= "RAWMIDI",
-	[SNDRV_CTL_ELEM_IFACE_TIMER]		= "TIMER",
-	[SNDRV_CTL_ELEM_IFACE_SEQUENCER]	= "SEQUENCER",
-};
-
-static int snd_ctl_put_verify(struct snd_card *card, struct snd_kcontrol *kctl,
-			      struct snd_ctl_elem_value *control)
-{
-	struct snd_ctl_elem_value *original = card->value_buf;
-	struct snd_ctl_elem_info info;
-	const char *iname;
-	int ret, retcmp;
-
-	memset(original, 0, sizeof(*original));
-	memset(&info, 0, sizeof(info));
-
-	ret = kctl->info(kctl, &info);
-	if (ret)
-		return ret;
-
-	ret = kctl->get(kctl, original);
-	if (ret)
-		return ret;
-
-	ret = kctl->put(kctl, control);
-	if (ret < 0)
-		return ret;
-
-	/* Sanitize the new value (control->value) before comparing. */
-	fill_remaining_elem_value(control, &info, 0);
-
-	/* With known state for both new and original, do the comparison. */
-	retcmp = memcmp(&original->value, &control->value, sizeof(original->value));
-	if (retcmp)
-		retcmp = 1;
-
-	iname = snd_ctl_elem_iface_names[kctl->id.iface];
-	trace_snd_ctl_put(&kctl->id, iname, card->number, ret, retcmp);
-
-	return ret;
-}
-
-static int snd_ctl_put(struct snd_card *card, struct snd_kcontrol *kctl,
-		       struct snd_ctl_elem_value *control, unsigned int access)
-{
-	if ((access & SNDRV_CTL_ELEM_ACCESS_SKIP_CHECK) ||
-	    (access & SNDRV_CTL_ELEM_ACCESS_VOLATILE))
-		return kctl->put(kctl, control);
-
-	return snd_ctl_put_verify(card, kctl, control);
-}
-#else
-static inline int snd_ctl_put(struct snd_card *card, struct snd_kcontrol *kctl,
-			      struct snd_ctl_elem_value *control, unsigned int access)
-{
-	return kctl->put(kctl, control);
-}
-#endif
 
 static int snd_ctl_elem_write(struct snd_card *card, struct snd_ctl_file *file,
 			      struct snd_ctl_elem_value *control)
@@ -1427,8 +1300,7 @@ static int snd_ctl_elem_write(struct snd_card *card, struct snd_ctl_file *file,
 							   false);
 	}
 	if (!result)
-		result = snd_ctl_put(card, kctl, control, vd->access);
-
+		result = kctl->put(kctl, control);
 	if (result < 0) {
 		up_write(&card->controls_rwsem);
 		return result;
@@ -1448,11 +1320,11 @@ static int snd_ctl_elem_write(struct snd_card *card, struct snd_ctl_file *file,
 static int snd_ctl_elem_write_user(struct snd_ctl_file *file,
 				   struct snd_ctl_elem_value __user *_control)
 {
+	struct snd_ctl_elem_value *control __free(kfree) = NULL;
 	struct snd_card *card;
 	int result;
-	struct snd_ctl_elem_value *control __free(kfree) =
-		memdup_user(_control, sizeof(*control));
 
+	control = memdup_user(_control, sizeof(*control));
 	if (IS_ERR(control))
 		return PTR_ERR(control);
 
@@ -1604,6 +1476,7 @@ static int replace_user_tlv(struct snd_kcontrol *kctl, unsigned int __user *buf,
 			    unsigned int size)
 {
 	struct user_element *ue = snd_kcontrol_chip(kctl);
+	unsigned int *container;
 	unsigned int mask = 0;
 	int i;
 	int change;
@@ -1617,16 +1490,17 @@ static int replace_user_tlv(struct snd_kcontrol *kctl, unsigned int __user *buf,
 	if (check_user_elem_overflow(ue->card, (ssize_t)(size - ue->tlv_data_size)))
 		return -ENOMEM;
 
-	unsigned int *container __free(kvfree) = vmemdup_user(buf, size);
-
+	container = vmemdup_user(buf, size);
 	if (IS_ERR(container))
 		return PTR_ERR(container);
 
 	change = ue->tlv_data_size != size;
 	if (!change)
 		change = memcmp(ue->tlv_data, container, size) != 0;
-	if (!change)
+	if (!change) {
+		kvfree(container);
 		return 0;
+	}
 
 	if (ue->tlv_data == NULL) {
 		/* Now TLV data is available. */
@@ -1639,7 +1513,7 @@ static int replace_user_tlv(struct snd_kcontrol *kctl, unsigned int __user *buf,
 		kvfree(ue->tlv_data);
 	}
 
-	ue->tlv_data = no_free_ptr(container);
+	ue->tlv_data = container;
 	ue->tlv_data_size = size;
 	// decremented at private_free.
 	ue->card->user_ctl_alloc_size += size;
@@ -1680,6 +1554,7 @@ static int snd_ctl_elem_user_tlv(struct snd_kcontrol *kctl, int op_flag,
 /* called in controls_rwsem write lock */
 static int snd_ctl_elem_init_enum_names(struct user_element *ue)
 {
+	char *names, *p;
 	size_t buf_len, name_len;
 	unsigned int i;
 	const uintptr_t user_ptrval = ue->info.value.enumerated.names_ptr;
@@ -1692,28 +1567,27 @@ static int snd_ctl_elem_init_enum_names(struct user_element *ue)
 
 	if (check_user_elem_overflow(ue->card, buf_len))
 		return -ENOMEM;
-	char *names __free(kvfree) = vmemdup_user((const void __user *)user_ptrval,
-						  buf_len);
-
+	names = vmemdup_user((const void __user *)user_ptrval, buf_len);
 	if (IS_ERR(names))
 		return PTR_ERR(names);
 
 	/* check that there are enough valid names */
-	char *p = names;
-
+	p = names;
 	for (i = 0; i < ue->info.value.enumerated.items; ++i) {
-		if (buf_len == 0)
+		if (buf_len == 0) {
+			kvfree(names);
 			return -EINVAL;
-
+		}
 		name_len = strnlen(p, buf_len);
-		if (name_len == 0 || name_len >= 64 || name_len == buf_len)
+		if (name_len == 0 || name_len >= 64 || name_len == buf_len) {
+			kvfree(names);
 			return -EINVAL;
-
+		}
 		p += name_len + 1;
 		buf_len -= name_len + 1;
 	}
 
-	ue->priv_data = no_free_ptr(names);
+	ue->priv_data = names;
 	ue->info.value.enumerated.names_ptr = 0;
 	// increment the allocation size; decremented again at private_free.
 	ue->card->user_ctl_alloc_size += ue->info.value.enumerated.names_length;
@@ -1802,8 +1676,6 @@ static int snd_ctl_elem_add(struct snd_ctl_file *file,
 	alloc_size = compute_user_elem_size(private_size, count);
 
 	guard(rwsem_write)(&card->controls_rwsem);
-	if (card->shutdown)
-		return -ENODEV;
 	if (check_user_elem_overflow(card, alloc_size))
 		return -ENOMEM;
 
@@ -2046,8 +1918,6 @@ static long snd_ctl_ioctl(struct file *file, unsigned int cmd, unsigned long arg
 		return put_user(SNDRV_CTL_VERSION, ip) ? -EFAULT : 0;
 	case SNDRV_CTL_IOCTL_CARD_INFO:
 		return snd_ctl_card_info(card, ctl, cmd, argp);
-	case SNDRV_CTL_IOCTL_CARD_BYTES:
-		return snd_ctl_card_bytes_user(card, argp);
 	case SNDRV_CTL_IOCTL_ELEM_LIST:
 		return snd_ctl_elem_list_user(card, argp);
 	case SNDRV_CTL_IOCTL_ELEM_INFO:
@@ -2191,7 +2061,7 @@ static int _snd_ctl_register_ioctl(snd_kctl_ioctl_func_t fcn, struct list_head *
 {
 	struct snd_kctl_ioctl *pn;
 
-	pn = kzalloc_obj(struct snd_kctl_ioctl);
+	pn = kzalloc(sizeof(struct snd_kctl_ioctl), GFP_KERNEL);
 	if (pn == NULL)
 		return -ENOMEM;
 	pn->fioctl = fcn;
@@ -2397,15 +2267,16 @@ EXPORT_SYMBOL_GPL(snd_ctl_disconnect_layer);
  *  INIT PART
  */
 
-static const struct file_operations snd_ctl_f_ops = {
-	.owner		=	THIS_MODULE,
-	.read		=	snd_ctl_read,
-	.open		=	snd_ctl_open,
-	.release	=	snd_ctl_release,
-	.poll		=	snd_ctl_poll,
-	.unlocked_ioctl	=	snd_ctl_ioctl,
-	.compat_ioctl	=	snd_ctl_ioctl_compat,
-	.fasync		=	snd_ctl_fasync,
+static const struct file_operations snd_ctl_f_ops =
+{
+	.owner =	THIS_MODULE,
+	.read =		snd_ctl_read,
+	.open =		snd_ctl_open,
+	.release =	snd_ctl_release,
+	.poll =		snd_ctl_poll,
+	.unlocked_ioctl =	snd_ctl_ioctl,
+	.compat_ioctl =	snd_ctl_ioctl_compat,
+	.fasync =	snd_ctl_fasync,
 };
 
 /* call lops under rwsems; called from snd_ctl_dev_*() below() */

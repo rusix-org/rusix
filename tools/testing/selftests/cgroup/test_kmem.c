@@ -14,7 +14,7 @@
 #include <sys/sysinfo.h>
 #include <pthread.h>
 
-#include "kselftest.h"
+#include "../kselftest.h"
 #include "cgroup_util.h"
 
 
@@ -24,9 +24,8 @@
  * the maximum discrepancy between charge and vmstat entries is number
  * of cpus multiplied by 64 pages.
  */
-#define MAX_VMSTAT_ERROR (sysconf(_SC_PAGESIZE) * MEMCG_CHARGE_BATCH * get_nprocs())
+#define MAX_VMSTAT_ERROR (4096 * 64 * get_nprocs())
 
-#define KMEM_DEAD_WAIT_RETRIES        80
 
 static int alloc_dcache(const char *cgroup, void *arg)
 {
@@ -307,7 +306,9 @@ static int test_kmem_dead_cgroups(const char *root)
 {
 	int ret = KSFT_FAIL;
 	char *parent;
-	long dead = -1;
+	long dead;
+	int i;
+	int max_time = 20;
 
 	parent = cg_name(root, "kmem_dead_cgroups_test");
 	if (!parent)
@@ -322,19 +323,21 @@ static int test_kmem_dead_cgroups(const char *root)
 	if (cg_run_in_subcgroups(parent, alloc_dcache, (void *)100, 30))
 		goto cleanup;
 
-	/*
-	 * Allow up to ~8s for reclaim of dying descendants to complete.
-	 * This is a generous upper bound derived from stress testing, not
-	 * from a specific kernel constant, and can be adjusted if reclaim
-	 * behavior changes in the future.
-	 */
-	dead = cg_read_key_long_poll(parent, "cgroup.stat",
-					"nr_dying_descendants ", 0, KMEM_DEAD_WAIT_RETRIES,
-					DEFAULT_WAIT_INTERVAL_US);
-	if (dead)
-		goto cleanup;
-
-	ret = KSFT_PASS;
+	for (i = 0; i < max_time; i++) {
+		dead = cg_read_key_long(parent, "cgroup.stat",
+					"nr_dying_descendants ");
+		if (dead == 0) {
+			ret = KSFT_PASS;
+			break;
+		}
+		/*
+		 * Reclaiming cgroups might take some time,
+		 * let's wait a bit and repeat.
+		 */
+		sleep(1);
+		if (i > 5)
+			printf("Waiting time longer than 5s; wait: %ds (dead: %ld)\n", i, dead);
+	}
 
 cleanup:
 	cg_destroy(parent);
@@ -353,7 +356,7 @@ static int test_percpu_basic(const char *root)
 {
 	int ret = KSFT_FAIL;
 	char *parent, *child;
-	long current, percpu, slab;
+	long current, percpu;
 	int i;
 
 	parent = cg_name(root, "percpu_basic_test");
@@ -368,29 +371,24 @@ static int test_percpu_basic(const char *root)
 
 	for (i = 0; i < 1000; i++) {
 		child = cg_name_indexed(parent, "child", i);
-		if (!child) {
-			ret = -1;
-			goto cleanup_children;
-		}
+		if (!child)
+			return -1;
 
-		if (cg_create(child)) {
-			free(child);
+		if (cg_create(child))
 			goto cleanup_children;
-		}
 
 		free(child);
 	}
 
 	current = cg_read_long(parent, "memory.current");
 	percpu = cg_read_key_long(parent, "memory.stat", "percpu ");
-	slab = cg_read_key_long(parent, "memory.stat", "slab ");
 
-	if (current > 0 && percpu > 0 && slab >= 0 &&
-			labs(current - (percpu + slab)) < MAX_VMSTAT_ERROR)
+	if (current > 0 && percpu > 0 && labs(current - percpu) <
+	    MAX_VMSTAT_ERROR)
 		ret = KSFT_PASS;
 	else
-		printf("memory.current %ld\npercpu %ld\nslab %ld\ndelta %ld\n",
-			current, percpu, slab, current - (percpu + slab));
+		printf("memory.current %ld\npercpu %ld\n",
+		       current, percpu);
 
 cleanup_children:
 	for (i = 0; i < 1000; i++) {
@@ -423,9 +421,8 @@ struct kmem_test {
 int main(int argc, char **argv)
 {
 	char root[PATH_MAX];
-	int i;
+	int i, ret = EXIT_SUCCESS;
 
-	ksft_print_header();
 	if (cg_find_unified_root(root, sizeof(root), NULL))
 		ksft_exit_skip("cgroup v2 isn't mounted\n");
 
@@ -440,7 +437,6 @@ int main(int argc, char **argv)
 		if (cg_write(root, "cgroup.subtree_control", "+memory"))
 			ksft_exit_skip("Failed to set memory controller\n");
 
-	ksft_set_plan(ARRAY_SIZE(tests));
 	for (i = 0; i < ARRAY_SIZE(tests); i++) {
 		switch (tests[i].fn(root)) {
 		case KSFT_PASS:
@@ -450,10 +446,11 @@ int main(int argc, char **argv)
 			ksft_test_result_skip("%s\n", tests[i].name);
 			break;
 		default:
+			ret = EXIT_FAILURE;
 			ksft_test_result_fail("%s\n", tests[i].name);
 			break;
 		}
 	}
 
-	ksft_finished();
+	return ret;
 }

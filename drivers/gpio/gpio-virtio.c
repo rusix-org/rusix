@@ -10,7 +10,6 @@
  */
 
 #include <linux/completion.h>
-#include <linux/dma-mapping.h>
 #include <linux/err.h>
 #include <linux/gpio/driver.h>
 #include <linux/io.h>
@@ -25,13 +24,9 @@
 struct virtio_gpio_line {
 	struct mutex lock; /* Protects line operation */
 	struct completion completion;
-
+	struct virtio_gpio_request req ____cacheline_aligned;
+	struct virtio_gpio_response res ____cacheline_aligned;
 	unsigned int rxlen;
-
-	__dma_from_device_group_begin();
-	struct virtio_gpio_request req;
-	struct virtio_gpio_response res;
-	__dma_from_device_group_end();
 };
 
 struct vgpio_irq_line {
@@ -42,10 +37,8 @@ struct vgpio_irq_line {
 	bool update_pending;
 	bool queue_pending;
 
-	__dma_from_device_group_begin();
-	struct virtio_gpio_irq_request ireq;
-	struct virtio_gpio_irq_response ires;
-	__dma_from_device_group_end();
+	struct virtio_gpio_irq_request ireq ____cacheline_aligned;
+	struct virtio_gpio_irq_response ires ____cacheline_aligned;
 };
 
 struct virtio_gpio {

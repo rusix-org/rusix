@@ -11,7 +11,6 @@
  */
 
 #include <linux/device.h>
-#include <linux/err.h>
 #include <linux/init.h>
 #include <linux/io.h>
 #include <linux/module.h>
@@ -27,7 +26,7 @@
 #include "8250.h"
 
 struct pxa8250_data {
-	struct uart_8250_port	*uport;
+	int			line;
 	struct clk		*clk;
 };
 
@@ -35,7 +34,7 @@ static int __maybe_unused serial_pxa_suspend(struct device *dev)
 {
 	struct pxa8250_data *data = dev_get_drvdata(dev);
 
-	serial8250_suspend_port(data->uport);
+	serial8250_suspend_port(data->line);
 
 	return 0;
 }
@@ -44,7 +43,7 @@ static int __maybe_unused serial_pxa_resume(struct device *dev)
 {
 	struct pxa8250_data *data = dev_get_drvdata(dev);
 
-	serial8250_resume_port(data->uport);
+	serial8250_resume_port(data->line);
 
 	return 0;
 }
@@ -129,11 +128,11 @@ static int serial_pxa_probe(struct platform_device *pdev)
 	uart.tx_loadsz = 32;
 	uart.dl_write = serial_pxa_dl_write;
 
-	data->uport = serial8250_register_8250_port(&uart);
-	if (IS_ERR(data->uport)) {
-		ret = PTR_ERR(data->uport);
+	ret = serial8250_register_8250_port(&uart);
+	if (ret < 0)
 		goto err_clk;
-	}
+
+	data->line = ret;
 
 	platform_set_drvdata(pdev, data);
 
@@ -148,7 +147,7 @@ static void serial_pxa_remove(struct platform_device *pdev)
 {
 	struct pxa8250_data *data = platform_get_drvdata(pdev);
 
-	serial8250_unregister_port(data->uport);
+	serial8250_unregister_port(data->line);
 
 	clk_unprepare(data->clk);
 }

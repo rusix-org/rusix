@@ -4,7 +4,6 @@
 //
 // Copyright (C) 2016-2025 Shanghai FourSemi Semiconductor Co.,Ltd.
 
-#include <linux/cleanup.h>
 #include <linux/clk.h>
 #include <linux/delay.h>
 #include <linux/i2c.h>
@@ -608,11 +607,9 @@ tag_power_down:
 
 	regcache_cache_bypass(fs210x->regmap, false);
 	if (!ret) {
-		regcache_cache_only(fs210x->regmap, false);
 		regcache_mark_dirty(fs210x->regmap);
-		ret = regcache_sync(fs210x->regmap);
-		if (!ret)
-			fs210x->is_inited = true;
+		regcache_sync(fs210x->regmap);
+		fs210x->is_inited = true;
 	}
 
 	return ret;
@@ -773,8 +770,9 @@ static int fs210x_dai_hw_params(struct snd_pcm_substream *substream,
 	if (fs210x->devid == FS2105S_DEVICE_ID && fs210x->srate == 16000)
 		return -EOPNOTSUPP;
 
-	scoped_guard(mutex, &fs210x->lock)
-		ret = fs210x_set_hw_params(fs210x);
+	mutex_lock(&fs210x->lock);
+	ret = fs210x_set_hw_params(fs210x);
+	mutex_unlock(&fs210x->lock);
 	if (ret)
 		dev_err(fs210x->dev, "Failed to set hw params: %d\n", ret);
 
@@ -791,10 +789,14 @@ static int fs210x_dai_mute(struct snd_soc_dai *dai, int mute, int stream)
 
 	fs210x = snd_soc_component_get_drvdata(dai->component);
 
-	scoped_guard(mutex, &fs210x->lock) {
-		if (!fs210x->is_inited || fs210x->is_suspended)
-			return 0;
+	mutex_lock(&fs210x->lock);
+
+	if (!fs210x->is_inited || fs210x->is_suspended) {
+		mutex_unlock(&fs210x->lock);
+		return 0;
 	}
+
+	mutex_unlock(&fs210x->lock);
 
 	if (mute) {
 		cancel_delayed_work_sync(&fs210x->fault_check_work);
@@ -814,10 +816,14 @@ static int fs210x_dai_trigger(struct snd_pcm_substream *substream,
 
 	fs210x = snd_soc_component_get_drvdata(dai->component);
 
-	scoped_guard(mutex, &fs210x->lock) {
-		if (!fs210x->is_inited || fs210x->is_suspended || fs210x->is_playing)
-			return 0;
+	mutex_lock(&fs210x->lock);
+
+	if (!fs210x->is_inited || fs210x->is_suspended || fs210x->is_playing) {
+		mutex_unlock(&fs210x->lock);
+		return 0;
 	}
+
+	mutex_unlock(&fs210x->lock);
 
 	switch (cmd) {
 	case SNDRV_PCM_TRIGGER_START:
@@ -846,11 +852,13 @@ static void fs210x_start_work(struct work_struct *work)
 
 	fs210x = container_of(work, struct fs210x_priv, start_work.work);
 
-	guard(mutex)(&fs210x->lock);
+	mutex_lock(&fs210x->lock);
 
 	ret = fs210x_dev_play(fs210x);
 	if (ret)
 		dev_err(fs210x->dev, "Failed to start playing: %d\n", ret);
+
+	mutex_unlock(&fs210x->lock);
 }
 
 static void fs210x_fault_check_work(struct work_struct *work)
@@ -861,13 +869,15 @@ static void fs210x_fault_check_work(struct work_struct *work)
 
 	fs210x = container_of(work, struct fs210x_priv, fault_check_work.work);
 
-	scoped_guard(mutex, &fs210x->lock) {
-		if (!fs210x->is_inited || fs210x->is_suspended || !fs210x->is_playing)
-			return;
+	mutex_lock(&fs210x->lock);
 
-		ret = fs210x_reg_read(fs210x, FS210X_05H_ANASTAT, &status);
+	if (!fs210x->is_inited || fs210x->is_suspended || !fs210x->is_playing) {
+		mutex_unlock(&fs210x->lock);
+		return;
 	}
 
+	ret = fs210x_reg_read(fs210x, FS210X_05H_ANASTAT, &status);
+	mutex_unlock(&fs210x->lock);
 	if (ret)
 		return;
 
@@ -914,7 +924,7 @@ static int fs210x_get_drvdata_from_kctrl(struct snd_kcontrol *kctrl,
 		return -EINVAL;
 	}
 
-	cmpnt = snd_kcontrol_chip(kctrl);
+	cmpnt = snd_soc_kcontrol_component(kctrl);
 	if (!cmpnt) {
 		pr_err("fs210x: component is null\n");
 		return -EINVAL;
@@ -980,7 +990,7 @@ static int fs210x_effect_scene_get(struct snd_kcontrol *kcontrol,
 	if (fs210x->scene_id < 1)
 		return -EINVAL;
 
-	guard(mutex)(&fs210x->lock);
+	mutex_lock(&fs210x->lock);
 	/*
 	 * FS210x has scene(s) as below:
 	 * init scene: id = 0
@@ -989,6 +999,7 @@ static int fs210x_effect_scene_get(struct snd_kcontrol *kcontrol,
 	 */
 	index = fs210x->scene_id - 1;
 	ucontrol->value.integer.value[0] = index;
+	mutex_unlock(&fs210x->lock);
 
 	return 0;
 }
@@ -1007,7 +1018,7 @@ static int fs210x_effect_scene_put(struct snd_kcontrol *kcontrol,
 		return -EINVAL;
 	}
 
-	guard(mutex)(&fs210x->lock);
+	mutex_lock(&fs210x->lock);
 
 	/*
 	 * FS210x has scene(s) as below:
@@ -1017,20 +1028,25 @@ static int fs210x_effect_scene_put(struct snd_kcontrol *kcontrol,
 	 */
 	scene_id = ucontrol->value.integer.value[0] + 1;
 	scene_count = fs210x->amp_lib.scene_count - 1; /* Skip init scene */
-	if (scene_id < 1 || scene_id > scene_count)
+	if (scene_id < 1 || scene_id > scene_count) {
+		mutex_unlock(&fs210x->lock);
 		return -ERANGE;
+	}
 
 	if (scene_id != fs210x->scene_id)
 		is_changed = true;
 
 	if (fs210x->is_suspended) {
 		fs210x->scene_id = scene_id;
+		mutex_unlock(&fs210x->lock);
 		return is_changed;
 	}
 
 	ret = fs210x_set_scene(fs210x, scene_id);
 	if (ret)
 		dev_err(fs210x->dev, "Failed to set scene: %d\n", ret);
+
+	mutex_unlock(&fs210x->lock);
 
 	if (!ret && is_changed)
 		return 1;
@@ -1045,10 +1061,12 @@ static int fs210x_playback_event(struct snd_soc_dapm_widget *w,
 	struct fs210x_priv *fs210x = snd_soc_component_get_drvdata(cmpnt);
 	int ret = 0;
 
-	guard(mutex)(&fs210x->lock);
+	mutex_lock(&fs210x->lock);
 
-	if (fs210x->is_suspended)
+	if (fs210x->is_suspended) {
+		mutex_unlock(&fs210x->lock);
 		return 0;
+	}
 
 	switch (event) {
 	case SND_SOC_DAPM_PRE_PMU:
@@ -1068,6 +1086,8 @@ static int fs210x_playback_event(struct snd_soc_dapm_widget *w,
 	default:
 		break;
 	}
+
+	mutex_unlock(&fs210x->lock);
 
 	return ret;
 }
@@ -1199,9 +1219,11 @@ static int fs210x_probe(struct snd_soc_component *cmpnt)
 	if (ret)
 		return ret;
 
-	guard(mutex)(&fs210x->lock);
+	mutex_lock(&fs210x->lock);
+	ret = fs210x_init_chip(fs210x);
+	mutex_unlock(&fs210x->lock);
 
-	return fs210x_init_chip(fs210x);
+	return ret;
 }
 
 static void fs210x_remove(struct snd_soc_component *cmpnt)
@@ -1228,15 +1250,15 @@ static int fs210x_suspend(struct snd_soc_component *cmpnt)
 
 	regcache_cache_only(fs210x->regmap, true);
 
-	scoped_guard(mutex, &fs210x->lock) {
-		fs210x->cur_scene = NULL;
-		fs210x->is_inited = false;
-		fs210x->is_playing = false;
-		fs210x->is_suspended = true;
+	mutex_lock(&fs210x->lock);
+	fs210x->cur_scene = NULL;
+	fs210x->is_inited = false;
+	fs210x->is_playing = false;
+	fs210x->is_suspended = true;
 
-		gpiod_set_value_cansleep(fs210x->gpio_sdz, 1); /* Active */
-		fsleep(30000); /* >= 30ms */
-	}
+	gpiod_set_value_cansleep(fs210x->gpio_sdz, 1); /* Active */
+	fsleep(30000); /* >= 30ms */
+	mutex_unlock(&fs210x->lock);
 
 	cancel_delayed_work_sync(&fs210x->start_work);
 	cancel_delayed_work_sync(&fs210x->fault_check_work);
@@ -1265,11 +1287,14 @@ static int fs210x_resume(struct snd_soc_component *cmpnt)
 		return ret;
 	}
 
-	guard(mutex)(&fs210x->lock);
+	mutex_lock(&fs210x->lock);
 
 	fs210x->is_suspended = false;
+	ret = fs210x_init_chip(fs210x);
 
-	return fs210x_init_chip(fs210x);
+	mutex_unlock(&fs210x->lock);
+
+	return ret;
 }
 #else
 #define fs210x_suspend NULL
@@ -1532,9 +1557,9 @@ static void fs210x_i2c_remove(struct i2c_client *client)
 }
 
 static const struct i2c_device_id fs210x_i2c_id[] = {
-	{ .name = "fs2104" },
-	{ .name = "fs2105s" },
-	{ }
+	{ "fs2104" },
+	{ "fs2105s" },
+	{}
 };
 MODULE_DEVICE_TABLE(i2c, fs210x_i2c_id);
 

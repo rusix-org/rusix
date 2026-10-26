@@ -220,15 +220,12 @@ struct blkg_conf_ctx {
 };
 
 void blkg_conf_init(struct blkg_conf_ctx *ctx, char *input);
-int blkg_conf_open_bdev(struct blkg_conf_ctx *ctx)
-	__cond_acquires(0, &ctx->bdev->bd_queue->rq_qos_mutex);
+int blkg_conf_open_bdev(struct blkg_conf_ctx *ctx);
+unsigned long blkg_conf_open_bdev_frozen(struct blkg_conf_ctx *ctx);
 int blkg_conf_prep(struct blkcg *blkcg, const struct blkcg_policy *pol,
-		   struct blkg_conf_ctx *ctx)
-	__cond_acquires(0, &ctx->bdev->bd_disk->queue->queue_lock);
-void blkg_conf_unprep(struct blkg_conf_ctx *ctx)
-	__releases(ctx->bdev->bd_disk->queue->queue_lock);
-void blkg_conf_close_bdev(struct blkg_conf_ctx *ctx)
-	__releases(&ctx->bdev->bd_queue->rq_qos_mutex);
+		   struct blkg_conf_ctx *ctx);
+void blkg_conf_exit(struct blkg_conf_ctx *ctx);
+void blkg_conf_exit_frozen(struct blkg_conf_ctx *ctx, unsigned long memflags);
 
 /**
  * bio_issue_as_root_blkg - see if this bio needs to be issued as root blkg
@@ -284,9 +281,9 @@ static inline struct blkcg_gq *blkg_lookup(struct blkcg *blkcg,
  * Return pointer to private data associated with the @blkg-@pol pair.
  */
 static inline struct blkg_policy_data *blkg_to_pd(struct blkcg_gq *blkg,
-						  const struct blkcg_policy *pol)
+						  struct blkcg_policy *pol)
 {
-	return blkg ? READ_ONCE(blkg->pd[pol->plid]) : NULL;
+	return blkg ? blkg->pd[pol->plid] : NULL;
 }
 
 static inline struct blkcg_policy_data *blkcg_to_cpd(struct blkcg *blkcg,
@@ -375,29 +372,12 @@ static inline void blkg_put(struct blkcg_gq *blkg)
 		if (((d_blkg) = blkg_lookup(css_to_blkcg(pos_css),	\
 					    (p_blkg)->q)))
 
-/*
- * blkcg_nr_congested gates the hierarchy walk in blk_cgroup_congested().
- * These two helpers keep it in step with each blkcg's congestion_count in
- * normal operation; blkcg_css_free() drops a residual count as a backstop.
- */
-static inline void blkcg_inc_congestion_count(struct blkcg *blkcg)
-{
-	if (atomic_inc_return(&blkcg->congestion_count) == 1)
-		atomic_inc(&blkcg_nr_congested);
-}
-
-static inline void blkcg_dec_congestion_count(struct blkcg *blkcg)
-{
-	if (atomic_dec_and_test(&blkcg->congestion_count))
-		atomic_dec(&blkcg_nr_congested);
-}
-
 static inline void blkcg_use_delay(struct blkcg_gq *blkg)
 {
 	if (WARN_ON_ONCE(atomic_read(&blkg->use_delay) < 0))
 		return;
 	if (atomic_add_return(1, &blkg->use_delay) == 1)
-		blkcg_inc_congestion_count(blkg->blkcg);
+		atomic_inc(&blkg->blkcg->congestion_count);
 }
 
 static inline int blkcg_unuse_delay(struct blkcg_gq *blkg)
@@ -422,7 +402,7 @@ static inline int blkcg_unuse_delay(struct blkcg_gq *blkg)
 	if (old == 0)
 		return 0;
 	if (old == 1)
-		blkcg_dec_congestion_count(blkg->blkcg);
+		atomic_dec(&blkg->blkcg->congestion_count);
 	return 1;
 }
 
@@ -441,7 +421,7 @@ static inline void blkcg_set_delay(struct blkcg_gq *blkg, u64 delay)
 
 	/* We only want 1 person setting the congestion count for this blkg. */
 	if (!old && atomic_try_cmpxchg(&blkg->use_delay, &old, -1))
-		blkcg_inc_congestion_count(blkg->blkcg);
+		atomic_inc(&blkg->blkcg->congestion_count);
 
 	atomic64_set(&blkg->delay_nsec, delay);
 }
@@ -458,7 +438,7 @@ static inline void blkcg_clear_delay(struct blkcg_gq *blkg)
 
 	/* We only want 1 person clearing the congestion count for this blkg. */
 	if (old && atomic_try_cmpxchg(&blkg->use_delay, &old, 0))
-		blkcg_dec_congestion_count(blkg->blkcg);
+		atomic_dec(&blkg->blkcg->congestion_count);
 }
 
 /**
@@ -510,7 +490,7 @@ static inline void blkcg_deactivate_policy(struct gendisk *disk,
 					   const struct blkcg_policy *pol) { }
 
 static inline struct blkg_policy_data *blkg_to_pd(struct blkcg_gq *blkg,
-						  const struct blkcg_policy *pol) { return NULL; }
+						  struct blkcg_policy *pol) { return NULL; }
 static inline struct blkcg_gq *pd_to_blkg(struct blkg_policy_data *pd) { return NULL; }
 static inline void blkg_get(struct blkcg_gq *blkg) { }
 static inline void blkg_put(struct blkcg_gq *blkg) { }

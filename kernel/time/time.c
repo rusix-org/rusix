@@ -42,13 +42,6 @@
 
 #include <generated/timeconst.h>
 #include "timekeeping.h"
-#include "timekeeping_internal.h"
-
-#if defined(CONFIG_64BIT) || defined(CONFIG_COMPAT_32BIT_TIME)
-#define __WANT_OLD_TIME_TYPE_SYSCALL 1
-#endif
-
-static_assert(sizeof(__kernel_old_time_t) == 8 ? IS_ENABLED(__WANT_OLD_TIME_TYPE_SYSCALL) : true);
 
 /*
  * The timezone where the local system is located.  Used as a default by some
@@ -58,7 +51,7 @@ struct timezone sys_tz;
 
 EXPORT_SYMBOL(sys_tz);
 
-#if defined(__ARCH_WANT_SYS_TIME) && defined(__WANT_OLD_TIME_TYPE_SYSCALL)
+#ifdef __ARCH_WANT_SYS_TIME
 
 /*
  * sys_time() can be implemented in user-level using
@@ -103,7 +96,7 @@ SYSCALL_DEFINE1(stime, __kernel_old_time_t __user *, tptr)
 	return 0;
 }
 
-#endif /* __ARCH_WANT_SYS_TIME && __WANT_OLD_TIME_TYPE_SYSCALL */
+#endif /* __ARCH_WANT_SYS_TIME */
 
 #ifdef CONFIG_COMPAT_32BIT_TIME
 #ifdef __ARCH_WANT_SYS_TIME32
@@ -144,7 +137,6 @@ SYSCALL_DEFINE1(stime32, old_time32_t __user *, tptr)
 #endif /* __ARCH_WANT_SYS_TIME32 */
 #endif
 
-#ifdef __WANT_OLD_TIME_TYPE_SYSCALL
 SYSCALL_DEFINE2(gettimeofday, struct __kernel_old_timeval __user *, tv,
 		struct timezone __user *, tz)
 {
@@ -162,7 +154,6 @@ SYSCALL_DEFINE2(gettimeofday, struct __kernel_old_timeval __user *, tv,
 	}
 	return 0;
 }
-#endif /* __WANT_OLD_TIME_TYPE_SYSCALL */
 
 /*
  * In case for some reason the CMOS clock has not already been running
@@ -212,9 +203,6 @@ SYSCALL_DEFINE2(settimeofday, struct __kernel_old_timeval __user *, tv,
 	struct timezone new_tz;
 
 	if (tv) {
-		if (!IS_ENABLED(__WANT_OLD_TIME_TYPE_SYSCALL))
-			return -EINVAL;
-
 		if (get_user(new_ts.tv_sec, &tv->tv_sec) ||
 		    get_user(new_ts.tv_nsec, &tv->tv_usec))
 			return -EFAULT;
@@ -232,7 +220,7 @@ SYSCALL_DEFINE2(settimeofday, struct __kernel_old_timeval __user *, tv,
 	return do_sys_settimeofday64(tv ? &new_ts : NULL, tz ? &new_tz : NULL);
 }
 
-#ifdef CONFIG_COMPAT_32BIT_TIME
+#ifdef CONFIG_COMPAT
 COMPAT_SYSCALL_DEFINE2(gettimeofday, struct old_timeval32 __user *, tv,
 		       struct timezone __user *, tz)
 {
@@ -251,9 +239,7 @@ COMPAT_SYSCALL_DEFINE2(gettimeofday, struct old_timeval32 __user *, tv,
 
 	return 0;
 }
-#endif /* CONFIG_COMPAT_32BIT_TIME */
 
-#ifdef CONFIG_COMPAT
 COMPAT_SYSCALL_DEFINE2(settimeofday, struct old_timeval32 __user *, tv,
 		       struct timezone __user *, tz)
 {
@@ -261,9 +247,6 @@ COMPAT_SYSCALL_DEFINE2(settimeofday, struct old_timeval32 __user *, tv,
 	struct timezone new_tz;
 
 	if (tv) {
-		if (!IS_ENABLED(CONFIG_COMPAT_32BIT_TIME))
-			return -EINVAL;
-
 		if (get_user(new_ts.tv_sec, &tv->tv_sec) ||
 		    get_user(new_ts.tv_nsec, &tv->tv_usec))
 			return -EFAULT;
@@ -280,7 +263,7 @@ COMPAT_SYSCALL_DEFINE2(settimeofday, struct old_timeval32 __user *, tv,
 
 	return do_sys_settimeofday64(tv ? &new_ts : NULL, tz ? &new_tz : NULL);
 }
-#endif /* CONFIG_COMPAT */
+#endif
 
 #ifdef CONFIG_64BIT
 SYSCALL_DEFINE1(adjtimex, struct __kernel_timex __user *, txc_p)
@@ -382,16 +365,20 @@ SYSCALL_DEFINE1(adjtimex_time32, struct old_timex32 __user *, utp)
 }
 #endif
 
-#if HZ > MSEC_PER_SEC || (MSEC_PER_SEC % HZ)
 /**
  * jiffies_to_msecs - Convert jiffies to milliseconds
  * @j: jiffies value
+ *
+ * Avoid unnecessary multiplications/divisions in the
+ * two most common HZ cases.
  *
  * Return: milliseconds value
  */
 unsigned int jiffies_to_msecs(const unsigned long j)
 {
-#if HZ > MSEC_PER_SEC && !(HZ % MSEC_PER_SEC)
+#if HZ <= MSEC_PER_SEC && !(MSEC_PER_SEC % HZ)
+	return (MSEC_PER_SEC / HZ) * j;
+#elif HZ > MSEC_PER_SEC && !(HZ % MSEC_PER_SEC)
 	return (j + (HZ / MSEC_PER_SEC) - 1)/(HZ / MSEC_PER_SEC);
 #else
 # if BITS_PER_LONG == 32
@@ -403,9 +390,7 @@ unsigned int jiffies_to_msecs(const unsigned long j)
 #endif
 }
 EXPORT_SYMBOL(jiffies_to_msecs);
-#endif
 
-#if (USEC_PER_SEC % HZ)
 /**
  * jiffies_to_usecs - Convert jiffies to microseconds
  * @j: jiffies value
@@ -420,14 +405,17 @@ unsigned int jiffies_to_usecs(const unsigned long j)
 	 */
 	BUILD_BUG_ON(HZ > USEC_PER_SEC);
 
-#if BITS_PER_LONG == 32
-	return (HZ_TO_USEC_MUL32 * j) >> HZ_TO_USEC_SHR32;
+#if !(USEC_PER_SEC % HZ)
+	return (USEC_PER_SEC / HZ) * j;
 #else
+# if BITS_PER_LONG == 32
+	return (HZ_TO_USEC_MUL32 * j) >> HZ_TO_USEC_SHR32;
+# else
 	return (j * HZ_TO_USEC_NUM) / HZ_TO_USEC_DEN;
+# endif
 #endif
 }
 EXPORT_SYMBOL(jiffies_to_usecs);
-#endif
 
 /**
  * mktime64 - Converts date to seconds.

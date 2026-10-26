@@ -12,7 +12,6 @@
 #include <linux/string.h>
 #include <linux/of.h>
 #include <asm/secvar.h>
-#include <asm/plpks.h>
 
 #define NAME_MAX_SIZE	   1024
 
@@ -146,12 +145,25 @@ static __init int update_kobj_size(void)
 	return 0;
 }
 
+static __init int secvar_sysfs_config(struct kobject *kobj)
+{
+	struct attribute_group config_group = {
+		.name = "config",
+		.attrs = (struct attribute **)secvar_ops->config_attrs,
+	};
+
+	if (secvar_ops->config_attrs)
+		return sysfs_create_group(kobj, &config_group);
+
+	return 0;
+}
+
 static __init int add_var(const char *name)
 {
 	struct kobject *kobj;
 	int rc;
 
-	kobj = kzalloc_obj(*kobj);
+	kobj = kzalloc(sizeof(*kobj), GFP_KERNEL);
 	if (!kobj)
 		return -ENOMEM;
 
@@ -248,14 +260,11 @@ static __init int secvar_sysfs_init(void)
 		goto err;
 	}
 
-	rc = plpks_config_create_softlink(secvar_kobj);
+	rc = secvar_sysfs_config(secvar_kobj);
 	if (rc) {
-		pr_err("Failed to create softlink to PLPKS config directory");
+		pr_err("Failed to create config directory\n");
 		goto err;
 	}
-
-	pr_info("/sys/firmware/secvar/config is now deprecated.\n");
-	pr_info("Will be removed in future versions.\n");
 
 	if (secvar_ops->get_next)
 		rc = secvar_sysfs_load();

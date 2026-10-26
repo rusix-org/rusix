@@ -12,7 +12,6 @@
 #include <linux/moduleparam.h>
 #include <linux/init.h>
 #include <linux/slab.h>
-#include <linux/string_choices.h>
 #include <linux/ioport.h>
 #include <asm/io.h>
 
@@ -136,7 +135,7 @@ static int eisa_bus_uevent(const struct device *dev, struct kobj_uevent_env *env
 	return 0;
 }
 
-const struct bus_type eisa_bus_type = {
+struct bus_type eisa_bus_type = {
 	.name  = "eisa",
 	.match = eisa_bus_match,
 	.uevent = eisa_bus_uevent,
@@ -318,7 +317,7 @@ static int __init eisa_probe(struct eisa_root_device *root)
 	/* First try to get hold of slot 0. If there is no device
 	 * here, simply fail, unless root->force_probe is set. */
 
-	edev = kzalloc_obj(*edev);
+	edev = kzalloc(sizeof(*edev), GFP_KERNEL);
 	if (!edev)
 		return -ENOMEM;
 
@@ -351,7 +350,7 @@ static int __init eisa_probe(struct eisa_root_device *root)
  force_probe:
 
 	for (c = 0, i = 1; i <= root->slots; i++) {
-		edev = kzalloc_obj(*edev);
+		edev = kzalloc(sizeof(*edev), GFP_KERNEL);
 		if (!edev) {
 			dev_err(root->dev, "EISA: Out of memory for slot %d\n",
 				i);
@@ -394,7 +393,7 @@ static int __init eisa_probe(struct eisa_root_device *root)
 		}
 	}
 
-	dev_info(root->dev, "EISA: Detected %d card%s\n", c, str_plural(c));
+	dev_info(root->dev, "EISA: Detected %d card%s\n", c, c == 1 ? "" : "s");
 	return 0;
 }
 

@@ -249,26 +249,24 @@ int net_hwtstamp_validate(const struct kernel_hwtstamp_config *cfg)
  *
  * Helper for calling the default hardware provider timestamping.
  *
- * Note: phy_mii_ioctl() only handles SIOCSHWTSTAMP (not SIOCGHWTSTAMP), but
- * phydev->mii_ts has both hwtstamp_get() and hwtstamp_set() methods. So this
- * will return -EOPNOTSUPP for phylib only if hwtstamp_get() is not
- * implemented for now, which is still more accurate than letting the netdev
- * handle the GET request.
+ * Note: phy_mii_ioctl() only handles SIOCSHWTSTAMP (not SIOCGHWTSTAMP), and
+ * there only exists a phydev->mii_ts->hwtstamp() method. So this will return
+ * -EOPNOTSUPP for phylib for now, which is still more accurate than letting
+ * the netdev handle the GET request.
  */
 int dev_get_hwtstamp_phylib(struct net_device *dev,
 			    struct kernel_hwtstamp_config *cfg)
 {
 	struct hwtstamp_provider *hwprov;
 
-	hwprov = netdev_ops_lock_dereference(dev->hwprov, dev);
+	hwprov = rtnl_dereference(dev->hwprov);
 	if (hwprov) {
 		cfg->qualifier = hwprov->desc.qualifier;
 		if (hwprov->source == HWTSTAMP_SOURCE_PHYLIB &&
 		    hwprov->phydev)
 			return phy_hwtstamp_get(hwprov->phydev, cfg);
 
-		if (hwprov->source == HWTSTAMP_SOURCE_NETDEV &&
-		    dev->netdev_ops->ndo_hwtstamp_get)
+		if (hwprov->source == HWTSTAMP_SOURCE_NETDEV)
 			return dev->netdev_ops->ndo_hwtstamp_get(dev, cfg);
 
 		return -EOPNOTSUPP;
@@ -277,17 +275,18 @@ int dev_get_hwtstamp_phylib(struct net_device *dev,
 	if (phy_is_default_hwtstamp(dev->phydev))
 		return phy_hwtstamp_get(dev->phydev, cfg);
 
-	if (!dev->netdev_ops->ndo_hwtstamp_get)
-		return -EOPNOTSUPP;
-
 	return dev->netdev_ops->ndo_hwtstamp_get(dev, cfg);
 }
 
 static int dev_get_hwtstamp(struct net_device *dev, struct ifreq *ifr)
 {
+	const struct net_device_ops *ops = dev->netdev_ops;
 	struct kernel_hwtstamp_config kernel_cfg = {};
 	struct hwtstamp_config cfg;
 	int err;
+
+	if (!ops->ndo_hwtstamp_get)
+		return dev_eth_ioctl(dev, ifr, SIOCGHWTSTAMP); /* legacy */
 
 	if (!netif_device_present(dev))
 		return -ENODEV;
@@ -337,7 +336,7 @@ int dev_set_hwtstamp_phylib(struct net_device *dev,
 	bool phy_ts;
 	int err;
 
-	hwprov = netdev_ops_lock_dereference(dev->hwprov, dev);
+	hwprov = rtnl_dereference(dev->hwprov);
 	if (hwprov) {
 		if (hwprov->source == HWTSTAMP_SOURCE_PHYLIB &&
 		    hwprov->phydev) {
@@ -359,18 +358,12 @@ int dev_set_hwtstamp_phylib(struct net_device *dev,
 	cfg->source = phy_ts ? HWTSTAMP_SOURCE_PHYLIB : HWTSTAMP_SOURCE_NETDEV;
 
 	if (phy_ts && dev->see_all_hwtstamp_requests) {
-		if (!ops->ndo_hwtstamp_get)
-			return -EOPNOTSUPP;
-
 		err = ops->ndo_hwtstamp_get(dev, &old_cfg);
 		if (err)
 			return err;
 	}
 
 	if (!phy_ts || dev->see_all_hwtstamp_requests) {
-		if (!ops->ndo_hwtstamp_set)
-			return -EOPNOTSUPP;
-
 		err = ops->ndo_hwtstamp_set(dev, cfg, extack);
 		if (err) {
 			if (extack->_msg)
@@ -396,6 +389,7 @@ int dev_set_hwtstamp_phylib(struct net_device *dev,
 
 static int dev_set_hwtstamp(struct net_device *dev, struct ifreq *ifr)
 {
+	const struct net_device_ops *ops = dev->netdev_ops;
 	struct kernel_hwtstamp_config kernel_cfg = {};
 	struct netlink_ext_ack extack = {};
 	struct hwtstamp_config cfg;
@@ -417,6 +411,9 @@ static int dev_set_hwtstamp(struct net_device *dev, struct ifreq *ifr)
 			netdev_err(dev, "%s\n", extack._msg);
 		return err;
 	}
+
+	if (!ops->ndo_hwtstamp_set)
+		return dev_eth_ioctl(dev, ifr, SIOCSHWTSTAMP); /* legacy */
 
 	if (!netif_device_present(dev))
 		return -ENODEV;
@@ -440,19 +437,48 @@ static int dev_set_hwtstamp(struct net_device *dev, struct ifreq *ifr)
 	return 0;
 }
 
+static int generic_hwtstamp_ioctl_lower(struct net_device *dev, int cmd,
+					struct kernel_hwtstamp_config *kernel_cfg)
+{
+	struct ifreq ifrr;
+	int err;
+
+	if (!kernel_cfg->ifr)
+		return -EINVAL;
+
+	strscpy_pad(ifrr.ifr_name, dev->name, IFNAMSIZ);
+	ifrr.ifr_ifru = kernel_cfg->ifr->ifr_ifru;
+
+	err = dev_eth_ioctl(dev, &ifrr, cmd);
+	if (err)
+		return err;
+
+	kernel_cfg->ifr->ifr_ifru = ifrr.ifr_ifru;
+	kernel_cfg->copied_to_user = true;
+
+	return 0;
+}
+
 int generic_hwtstamp_get_lower(struct net_device *dev,
 			       struct kernel_hwtstamp_config *kernel_cfg)
 {
-	int err;
+	const struct net_device_ops *ops = dev->netdev_ops;
 
 	if (!netif_device_present(dev))
 		return -ENODEV;
 
-	netdev_lock_ops(dev);
-	err = dev_get_hwtstamp_phylib(dev, kernel_cfg);
-	netdev_unlock_ops(dev);
+	if (ops->ndo_hwtstamp_get) {
+		int err;
 
-	return err;
+		netdev_lock_ops(dev);
+		err = dev_get_hwtstamp_phylib(dev, kernel_cfg);
+		netdev_unlock_ops(dev);
+
+		return err;
+	}
+
+	/* Legacy path: unconverted lower driver */
+	return generic_hwtstamp_ioctl_lower(dev, SIOCGHWTSTAMP, kernel_cfg);
 }
 EXPORT_SYMBOL(generic_hwtstamp_get_lower);
 
@@ -460,16 +486,23 @@ int generic_hwtstamp_set_lower(struct net_device *dev,
 			       struct kernel_hwtstamp_config *kernel_cfg,
 			       struct netlink_ext_ack *extack)
 {
-	int err;
+	const struct net_device_ops *ops = dev->netdev_ops;
 
 	if (!netif_device_present(dev))
 		return -ENODEV;
 
-	netdev_lock_ops(dev);
-	err = dev_set_hwtstamp_phylib(dev, kernel_cfg, extack);
-	netdev_unlock_ops(dev);
+	if (ops->ndo_hwtstamp_set) {
+		int err;
 
-	return err;
+		netdev_lock_ops(dev);
+		err = dev_set_hwtstamp_phylib(dev, kernel_cfg, extack);
+		netdev_unlock_ops(dev);
+
+		return err;
+	}
+
+	/* Legacy path: unconverted lower driver */
+	return generic_hwtstamp_ioctl_lower(dev, SIOCSHWTSTAMP, kernel_cfg);
 }
 EXPORT_SYMBOL(generic_hwtstamp_set_lower);
 
@@ -566,7 +599,7 @@ static int dev_ifsioc(struct net *net, struct ifreq *ifr, void __user *data,
 		if (ifr->ifr_hwaddr.sa_family != dev->type)
 			return -EINVAL;
 		memcpy(dev->broadcast, ifr->ifr_hwaddr.sa_data,
-		       min(sizeof(ifr->ifr_hwaddr.sa_data),
+		       min(sizeof(ifr->ifr_hwaddr.sa_data_min),
 			   (size_t)dev->addr_len));
 		netdev_lock_ops(dev);
 		call_netdevice_notifiers(NETDEV_CHANGEADDR, dev);
@@ -580,26 +613,24 @@ static int dev_ifsioc(struct net *net, struct ifreq *ifr, void __user *data,
 		return err;
 
 	case SIOCADDMULTI:
-		if ((!ops->ndo_set_rx_mode && !ops->ndo_set_rx_mode_async) ||
+		if (!ops->ndo_set_rx_mode ||
 		    ifr->ifr_hwaddr.sa_family != AF_UNSPEC)
 			return -EINVAL;
 		if (!netif_device_present(dev))
 			return -ENODEV;
 		netdev_lock_ops(dev);
 		err = dev_mc_add_global(dev, ifr->ifr_hwaddr.sa_data);
-		netif_rx_mode_sync(dev);
 		netdev_unlock_ops(dev);
 		return err;
 
 	case SIOCDELMULTI:
-		if ((!ops->ndo_set_rx_mode && !ops->ndo_set_rx_mode_async) ||
+		if (!ops->ndo_set_rx_mode ||
 		    ifr->ifr_hwaddr.sa_family != AF_UNSPEC)
 			return -EINVAL;
 		if (!netif_device_present(dev))
 			return -ENODEV;
 		netdev_lock_ops(dev);
 		err = dev_mc_del_global(dev, ifr->ifr_hwaddr.sa_data);
-		netif_rx_mode_sync(dev);
 		netdev_unlock_ops(dev);
 		return err;
 

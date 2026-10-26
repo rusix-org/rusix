@@ -7,12 +7,8 @@
 
 #if IS_ENABLED(CONFIG_IPV6)
 #include <net/ipv6.h>
+#include <net/ipv6_stubs.h>
 #endif
-
-#define UDP_TUNNEL_PARTIAL_FEATURES	NETIF_F_GSO_ENCAP_ALL
-#define UDP_TUNNEL_STRIPPED_GSO_TYPES	((UDP_TUNNEL_PARTIAL_FEATURES |	\
-					  NETIF_F_GSO_PARTIAL) >>	\
-					 NETIF_F_GSO_SHIFT)
 
 struct udp_port_cfg {
 	u8			family;
@@ -94,7 +90,7 @@ struct udp_tunnel_sock_cfg {
 };
 
 /* Setup the given (UDP) sock to receive UDP encapsulated packets */
-void setup_udp_tunnel_sock(struct net *net, struct sock *sk,
+void setup_udp_tunnel_sock(struct net *net, struct socket *sock,
 			   struct udp_tunnel_sock_cfg *sock_cfg);
 
 /* -- List of parsable UDP tunnel types --
@@ -127,12 +123,12 @@ struct udp_tunnel_info {
 };
 
 /* Notify network devices of offloadable types */
-void udp_tunnel_push_rx_port(struct net_device *dev, struct sock *sk,
+void udp_tunnel_push_rx_port(struct net_device *dev, struct socket *sock,
 			     unsigned short type);
-void udp_tunnel_drop_rx_port(struct net_device *dev, struct sock *sk,
+void udp_tunnel_drop_rx_port(struct net_device *dev, struct socket *sock,
 			     unsigned short type);
-void udp_tunnel_notify_add_rx_port(struct sock *sk, unsigned short type);
-void udp_tunnel_notify_del_rx_port(struct sock *sk, unsigned short type);
+void udp_tunnel_notify_add_rx_port(struct socket *sock, unsigned short type);
+void udp_tunnel_notify_del_rx_port(struct socket *sock, unsigned short type);
 
 /* Transmit the skb using UDP encapsulation. */
 void udp_tunnel_xmit_skb(struct rtable *rt, struct sock *sk, struct sk_buff *skb,
@@ -149,34 +145,7 @@ void udp_tunnel6_xmit_skb(struct dst_entry *dst, struct sock *sk,
 			  __be16 src_port, __be16 dst_port, bool nocheck,
 			  u16 ip6cb_flags);
 
-static inline bool udp_tunnel_handle_partial(struct sk_buff *skb)
-{
-	bool double_encap = !!(skb_shinfo(skb)->gso_type & SKB_GSO_PARTIAL);
-
-	/*
-	 * If the skb went through partial segmentation, lower devices
-	 * will not need to offload the related features - except for
-	 * UDP_TUNNEL, that will be re-added by the later
-	 * udp_tunnel_handle_offloads().
-	 */
-	if (double_encap)
-		skb_shinfo(skb)->gso_type &= ~UDP_TUNNEL_STRIPPED_GSO_TYPES;
-	return double_encap;
-}
-
-static inline void udp_tunnel_set_inner_protocol(struct sk_buff *skb,
-						 bool double_encap,
-						 __be16 inner_proto)
-{
-	/*
-	 * The inner protocol has been set by the nested tunnel, don't
-	 * overraid it.
-	 */
-	if (!double_encap)
-		skb_set_inner_protocol(skb, inner_proto);
-}
-
-void udp_tunnel_sock_release(struct sock *sk);
+void udp_tunnel_sock_release(struct socket *sock);
 
 struct rtable *udp_tunnel_dst_lookup(struct sk_buff *skb,
 				     struct net_device *dev,
@@ -188,7 +157,7 @@ struct rtable *udp_tunnel_dst_lookup(struct sk_buff *skb,
 struct dst_entry *udp_tunnel6_dst_lookup(struct sk_buff *skb,
 					 struct net_device *dev,
 					 struct net *net,
-					 struct sock *sk, int oif,
+					 struct socket *sock, int oif,
 					 struct in6_addr *saddr,
 					 const struct ip_tunnel_key *key,
 					 __be16 sport, __be16 dport, u8 dsfield,
@@ -229,7 +198,7 @@ static inline void udp_tunnel_encap_enable(struct sock *sk)
 
 #if IS_ENABLED(CONFIG_IPV6)
 	if (READ_ONCE(sk->sk_family) == PF_INET6)
-		udpv6_encap_enable();
+		ipv6_stub->udpv6_encap_enable();
 #endif
 	udp_encap_enable();
 }

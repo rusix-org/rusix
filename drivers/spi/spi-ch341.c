@@ -189,12 +189,6 @@ static int ch341_probe(struct usb_interface *intf,
 	ctrl->transfer_one = ch341_transfer_one;
 	ctrl->set_cs = ch341_set_cs;
 	ctrl->auto_runtime_pm = false;
-	/*
-	 * The CH341A SPI_STREAM command clocks data in both directions on
-	 * every transfer, so the driver always needs a TX and an RX buffer;
-	 * let the SPI core supply dummy buffers for half-duplex transfers.
-	 */
-	ctrl->flags = SPI_CONTROLLER_MUST_TX | SPI_CONTROLLER_MUST_RX;
 
 	usb_set_intfdata(intf, ch341);
 
@@ -256,5 +250,5 @@ static struct usb_driver ch341a_usb_driver = {
 module_usb_driver(ch341a_usb_driver);
 
 MODULE_AUTHOR("Johannes Thumshirn <jth@kernel.org>");
-MODULE_DESCRIPTION("Nanjing Qinheng Microelectronics CH341 USB2SPI driver");
+MODULE_DESCRIPTION("QiHeng Electronics ch341 USB2SPI");
 MODULE_LICENSE("GPL v2");

@@ -18,7 +18,6 @@
 #include <linux/slab.h>
 #include <linux/sysfs.h>
 #include <linux/types.h>
-#include <linux/stringify.h>
 #include <linux/watchdog.h>
 
 #include <linux/unaligned.h>
@@ -95,7 +94,7 @@ MODULE_PARM_DESC(reset_duration,
 static bool nowayout = WATCHDOG_NOWAYOUT;
 module_param(nowayout, bool, 0);
 MODULE_PARM_DESC(nowayout, "Watchdog cannot be stopped once started default="
-		 __stringify(WATCHDOG_NOWAYOUT) ")");
+		 __MODULE_STRING(WATCHDOG_NOWAYOUT) ")");
 
 static int ziirave_wdt_revision(struct i2c_client *client,
 				struct ziirave_wdt_rev *rev, u8 command)
@@ -719,7 +718,7 @@ static void ziirave_wdt_remove(struct i2c_client *client)
 }
 
 static const struct i2c_device_id ziirave_wdt_id[] = {
-	{ .name = "rave-wdt" },
+	{ "rave-wdt" },
 	{ }
 };
 MODULE_DEVICE_TABLE(i2c, ziirave_wdt_id);

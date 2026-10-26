@@ -94,7 +94,6 @@ static inline int __ww_mutex_check_kill(struct rt_mutex *lock,
 
 static __always_inline struct task_struct *
 rt_mutex_owner_encode(struct rt_mutex_base *lock, struct task_struct *owner)
-	__must_hold(&lock->wait_lock)
 {
 	unsigned long val = (unsigned long)owner;
 
@@ -106,7 +105,6 @@ rt_mutex_owner_encode(struct rt_mutex_base *lock, struct task_struct *owner)
 
 static __always_inline void
 rt_mutex_set_owner(struct rt_mutex_base *lock, struct task_struct *owner)
-	__must_hold(&lock->wait_lock)
 {
 	/*
 	 * lock->wait_lock is held but explicit acquire semantics are needed
@@ -116,14 +114,12 @@ rt_mutex_set_owner(struct rt_mutex_base *lock, struct task_struct *owner)
 }
 
 static __always_inline void rt_mutex_clear_owner(struct rt_mutex_base *lock)
-	__must_hold(&lock->wait_lock)
 {
 	/* lock->wait_lock is held so the unlock provides release semantics. */
 	WRITE_ONCE(lock->owner, rt_mutex_owner_encode(lock, NULL));
 }
 
 static __always_inline void clear_rt_mutex_waiters(struct rt_mutex_base *lock)
-	__must_hold(&lock->wait_lock)
 {
 	lock->owner = (struct task_struct *)
 			((unsigned long)lock->owner & ~RT_MUTEX_HAS_WAITERS);
@@ -131,7 +127,6 @@ static __always_inline void clear_rt_mutex_waiters(struct rt_mutex_base *lock)
 
 static __always_inline void
 fixup_rt_mutex_waiters(struct rt_mutex_base *lock, bool acquire_lock)
-	__must_hold(&lock->wait_lock)
 {
 	unsigned long owner, *p = (unsigned long *) &lock->owner;
 
@@ -333,7 +328,6 @@ static __always_inline bool rt_mutex_cmpxchg_release(struct rt_mutex_base *lock,
 }
 
 static __always_inline void mark_rt_mutex_waiters(struct rt_mutex_base *lock)
-	__must_hold(&lock->wait_lock)
 {
 	lock->owner = (struct task_struct *)
 			((unsigned long)lock->owner | RT_MUTEX_HAS_WAITERS);
@@ -484,7 +478,6 @@ static __always_inline bool __waiter_less(struct rb_node *a, const struct rb_nod
 
 static __always_inline void
 rt_mutex_enqueue(struct rt_mutex_base *lock, struct rt_mutex_waiter *waiter)
-	__must_hold(&lock->wait_lock)
 {
 	lockdep_assert_held(&lock->wait_lock);
 
@@ -493,7 +486,6 @@ rt_mutex_enqueue(struct rt_mutex_base *lock, struct rt_mutex_waiter *waiter)
 
 static __always_inline void
 rt_mutex_dequeue(struct rt_mutex_base *lock, struct rt_mutex_waiter *waiter)
-	__must_hold(&lock->wait_lock)
 {
 	lockdep_assert_held(&lock->wait_lock);
 
@@ -1094,7 +1086,6 @@ static int __sched rt_mutex_adjust_prio_chain(struct task_struct *task,
 static int __sched
 try_to_take_rt_mutex(struct rt_mutex_base *lock, struct task_struct *task,
 		     struct rt_mutex_waiter *waiter)
-	__must_hold(&lock->wait_lock)
 {
 	lockdep_assert_held(&lock->wait_lock);
 
@@ -1215,7 +1206,6 @@ static int __sched task_blocks_on_rt_mutex(struct rt_mutex_base *lock,
 					   struct ww_acquire_ctx *ww_ctx,
 					   enum rtmutex_chainwalk chwalk,
 					   struct wake_q_head *wake_q)
-	__must_hold(&lock->wait_lock)
 {
 	struct task_struct *owner = rt_mutex_owner(lock);
 	struct rt_mutex_waiter *top_waiter = waiter;
@@ -1259,7 +1249,6 @@ static int __sched task_blocks_on_rt_mutex(struct rt_mutex_base *lock,
 
 		/* Check whether the waiter should back out immediately */
 		rtm = container_of(lock, struct rt_mutex, rtmutex);
-		__assume_ctx_lock(&rtm->rtmutex.wait_lock);
 		res = __ww_mutex_add_waiter(waiter, rtm, ww_ctx, wake_q);
 		if (res) {
 			raw_spin_lock(&task->pi_lock);
@@ -1322,7 +1311,6 @@ static int __sched task_blocks_on_rt_mutex(struct rt_mutex_base *lock,
  */
 static void __sched mark_wakeup_next_waiter(struct rt_wake_q_head *wqh,
 					    struct rt_mutex_base *lock)
-	__must_hold(&lock->wait_lock)
 {
 	struct rt_mutex_waiter *waiter;
 
@@ -1368,7 +1356,6 @@ static void __sched mark_wakeup_next_waiter(struct rt_wake_q_head *wqh,
 }
 
 static int __sched __rt_mutex_slowtrylock(struct rt_mutex_base *lock)
-	__must_hold(&lock->wait_lock)
 {
 	int ret = try_to_take_rt_mutex(lock, current, NULL);
 
@@ -1470,7 +1457,6 @@ static void __sched rt_mutex_slowunlock(struct rt_mutex_base *lock)
 		raw_spin_lock_irqsave(&lock->wait_lock, flags);
 	}
 
-	trace_contended_release(lock);
 	/*
 	 * The wakeup next waiter path does not suffer from the above
 	 * race. See the comments there.
@@ -1519,7 +1505,7 @@ static bool rtmutex_spin_on_owner(struct rt_mutex_base *lock,
 		 *  - the VCPU on which owner runs is preempted
 		 */
 		if (!owner_on_cpu(owner) || need_resched() ||
-		    !data_race(rt_mutex_waiter_is_top_waiter(lock, waiter))) {
+		    !rt_mutex_waiter_is_top_waiter(lock, waiter)) {
 			res = false;
 			break;
 		}
@@ -1554,7 +1540,6 @@ static bool rtmutex_spin_on_owner(struct rt_mutex_base *lock,
  */
 static void __sched remove_waiter(struct rt_mutex_base *lock,
 				  struct rt_mutex_waiter *waiter)
-	__must_hold(&lock->wait_lock)
 {
 	bool is_top_waiter = (waiter == rt_mutex_top_waiter(lock));
 	struct task_struct *owner = rt_mutex_owner(lock);
@@ -1634,8 +1619,6 @@ static int __sched rt_mutex_slowlock_block(struct rt_mutex_base *lock,
 	struct task_struct *owner;
 	int ret = 0;
 
-	__assume_ctx_lock(&rtm->rtmutex.wait_lock);
-
 	lockevent_inc(rtmutex_slow_block);
 	for (;;) {
 		/* Try to acquire the lock: */
@@ -1644,7 +1627,7 @@ static int __sched rt_mutex_slowlock_block(struct rt_mutex_base *lock,
 			break;
 		}
 
-		if (timeout && !hrtimer_sleeper_task_get(timeout)) {
+		if (timeout && !timeout->task) {
 			ret = -ETIMEDOUT;
 			break;
 		}
@@ -1681,7 +1664,6 @@ static int __sched rt_mutex_slowlock_block(struct rt_mutex_base *lock,
 static void __sched rt_mutex_handle_deadlock(int res, int detect_deadlock,
 					     struct rt_mutex_base *lock,
 					     struct rt_mutex_waiter *w)
-	__must_hold(&lock->wait_lock)
 {
 	/*
 	 * If the result is not -EDEADLOCK or the caller requested
@@ -1718,13 +1700,11 @@ static int __sched __rt_mutex_slowlock(struct rt_mutex_base *lock,
 				       enum rtmutex_chainwalk chwalk,
 				       struct rt_mutex_waiter *waiter,
 				       struct wake_q_head *wake_q)
-	__must_hold(&lock->wait_lock)
 {
 	struct rt_mutex *rtm = container_of(lock, struct rt_mutex, rtmutex);
 	struct ww_mutex *ww = ww_container_of(rtm);
 	int ret;
 
-	__assume_ctx_lock(&rtm->rtmutex.wait_lock);
 	lockdep_assert_held(&lock->wait_lock);
 	lockevent_inc(rtmutex_slowlock);
 
@@ -1776,7 +1756,6 @@ static inline int __rt_mutex_slowlock_locked(struct rt_mutex_base *lock,
 					     struct ww_acquire_ctx *ww_ctx,
 					     unsigned int state,
 					     struct wake_q_head *wake_q)
-	__must_hold(&lock->wait_lock)
 {
 	struct rt_mutex_waiter waiter;
 	int ret;

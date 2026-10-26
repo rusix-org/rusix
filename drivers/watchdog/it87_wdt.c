@@ -29,7 +29,6 @@
 #include <linux/module.h>
 #include <linux/moduleparam.h>
 #include <linux/printk.h>
-#include <linux/stringify.h>
 #include <linux/types.h>
 #include <linux/watchdog.h>
 
@@ -106,13 +105,13 @@ static bool nowayout = DEFAULT_NOWAYOUT;
 
 module_param(timeout, int, 0);
 MODULE_PARM_DESC(timeout, "Watchdog timeout in seconds, default="
-		__stringify(DEFAULT_TIMEOUT));
+		__MODULE_STRING(DEFAULT_TIMEOUT));
 module_param(testmode, int, 0);
 MODULE_PARM_DESC(testmode, "Watchdog test mode (1 = no reboot), default="
-		__stringify(DEFAULT_TESTMODE));
+		__MODULE_STRING(DEFAULT_TESTMODE));
 module_param(nowayout, bool, 0);
 MODULE_PARM_DESC(nowayout, "Watchdog cannot be stopped once started, default="
-		__stringify(WATCHDOG_NOWAYOUT));
+		__MODULE_STRING(WATCHDOG_NOWAYOUT));
 
 /* Superio Chip */
 

@@ -3,6 +3,7 @@
 #include <linux/kernel.h>
 #include <linux/spi/spi.h>
 #include <linux/module.h>
+#include <linux/mod_devicetable.h>
 #include <linux/slab.h>
 #include <linux/regmap.h>
 
@@ -36,7 +37,7 @@ static void kxsd9_spi_remove(struct spi_device *spi)
 }
 
 static const struct spi_device_id kxsd9_spi_id[] = {
-	{ .name = "kxsd9" },
+	{"kxsd9", 0},
 	{ }
 };
 MODULE_DEVICE_TABLE(spi, kxsd9_spi_id);

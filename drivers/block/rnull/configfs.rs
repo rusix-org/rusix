@@ -1,29 +1,18 @@
 // SPDX-License-Identifier: GPL-2.0
 
-use super::NullBlkDevice;
+use super::{NullBlkDevice, THIS_MODULE};
+use core::fmt::{Display, Write};
 use kernel::{
-    block::mq::gen_disk::{
-        GenDisk,
-        GenDiskBuilder, //
-    },
-    configfs::{
-        self,
-        AttributeOperations, //
-    },
-    configfs_attrs,
-    fmt::{
-        self,
-        Write as _, //
-    },
-    new_mutex,
+    block::mq::gen_disk::{GenDisk, GenDiskBuilder},
+    c_str,
+    configfs::{self, AttributeOperations},
+    configfs_attrs, new_mutex,
     page::PAGE_SIZE,
     prelude::*,
-    str::{
-        kstrtobool_bytes,
-        CString, //
-    },
-    sync::Mutex, //
+    str::{kstrtobool_bytes, CString},
+    sync::Mutex,
 };
+use pin_init::PinInit;
 
 pub(crate) fn subsystem() -> impl PinInit<kernel::configfs::Subsystem<Config>, Error> {
     let item_type = configfs_attrs! {
@@ -35,7 +24,7 @@ pub(crate) fn subsystem() -> impl PinInit<kernel::configfs::Subsystem<Config>, E
         ],
     };
 
-    kernel::configfs::Subsystem::new(c"rnull", item_type, try_pin_init!(Config {}))
+    kernel::configfs::Subsystem::new(c_str!("rnull"), item_type, try_pin_init!(Config {}))
 }
 
 #[pin_data]
@@ -47,7 +36,7 @@ impl AttributeOperations<0> for Config {
 
     fn show(_this: &Config, page: &mut [u8; PAGE_SIZE]) -> Result<usize> {
         let mut writer = kernel::str::Formatter::new(page);
-        writer.write_str("blocksize,size,rotational,irqmode,power\n")?;
+        writer.write_str("blocksize,size,rotational,irqmode\n")?;
         Ok(writer.bytes_written())
     }
 }
@@ -110,8 +99,8 @@ impl TryFrom<u8> for IRQMode {
     }
 }
 
-impl fmt::Display for IRQMode {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl Display for IRQMode {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self {
             Self::None => f.write_str("0")?,
             Self::Soft => f.write_str("1")?,
@@ -186,8 +175,7 @@ impl configfs::AttributeOperations<1> for DeviceConfig {
     }
 
     fn store(this: &DeviceConfig, page: &[u8]) -> Result {
-        let mut guard = this.data.lock();
-        if guard.powered {
+        if this.data.lock().powered {
             return Err(EBUSY);
         }
 
@@ -195,7 +183,7 @@ impl configfs::AttributeOperations<1> for DeviceConfig {
         let value = text.parse::<u32>().map_err(|_| EINVAL)?;
 
         GenDiskBuilder::validate_block_size(value)?;
-        guard.block_size = value;
+        this.data.lock().block_size = value;
         Ok(())
     }
 }
@@ -217,12 +205,11 @@ impl configfs::AttributeOperations<2> for DeviceConfig {
     }
 
     fn store(this: &DeviceConfig, page: &[u8]) -> Result {
-        let mut guard = this.data.lock();
-        if guard.powered {
+        if this.data.lock().powered {
             return Err(EBUSY);
         }
 
-        guard.rotational = kstrtobool_bytes(page)?;
+        this.data.lock().rotational = kstrtobool_bytes(page)?;
 
         Ok(())
     }
@@ -239,15 +226,14 @@ impl configfs::AttributeOperations<3> for DeviceConfig {
     }
 
     fn store(this: &DeviceConfig, page: &[u8]) -> Result {
-        let mut guard = this.data.lock();
-        if guard.powered {
+        if this.data.lock().powered {
             return Err(EBUSY);
         }
 
         let text = core::str::from_utf8(page)?.trim();
         let value = text.parse::<u64>().map_err(|_| EINVAL)?;
 
-        guard.capacity_mib = value;
+        this.data.lock().capacity_mib = value;
         Ok(())
     }
 }
@@ -263,15 +249,14 @@ impl configfs::AttributeOperations<4> for DeviceConfig {
     }
 
     fn store(this: &DeviceConfig, page: &[u8]) -> Result {
-        let mut guard = this.data.lock();
-        if guard.powered {
+        if this.data.lock().powered {
             return Err(EBUSY);
         }
 
         let text = core::str::from_utf8(page)?.trim();
         let value = text.parse::<u8>().map_err(|_| EINVAL)?;
 
-        guard.irq_mode = IRQMode::try_from(value)?;
+        this.data.lock().irq_mode = IRQMode::try_from(value)?;
         Ok(())
     }
 }

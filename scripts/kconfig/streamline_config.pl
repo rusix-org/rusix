@@ -145,7 +145,6 @@ my %prompts;
 my %objects;
 my %config2kfile;
 my %defaults;
-my %types;
 my $var;
 my $iflevel = 0;
 my @ifdeps;
@@ -225,7 +224,6 @@ sub read_kconfig {
 	} elsif ($state ne "NONE" && /^\s*def(_(bool|tristate)|ault)\s+(\S.*)$/) {
 	    my $dep = $3;
             $defaults{$config} = 1;
-	    $types{$config} = $2 if (defined($2));
 	    if ($dep !~ /^\s*(y|m|n)\s*$/) {
 		$dep =~ s/.*\sif\s+//;
 		$depends{$config} .= " " . $dep;
@@ -242,13 +240,7 @@ sub read_kconfig {
 	    }
 
 	# configs without prompts must be selected
-	} elsif ($state ne "NONE" && /^\s*(bool|boolean)(\s+\S.*)?$/) {
-	    $types{$config} = "bool";
-	    $prompts{$config} = 1 if (defined($2));
-	} elsif ($state ne "NONE" && /^\s*tristate(\s+\S.*)?$/) {
-	    $types{$config} = "tristate";
-	    $prompts{$config} = 1 if (defined($1));
-	} elsif ($state ne "NONE" && /^\s*prompt\b/) {
+	} elsif ($state ne "NONE" && /^\s*(tristate\s+\S|prompt\b)/) {
 	    # note if the config has a prompt
 	    $prompts{$config} = 1;
 
@@ -423,7 +415,7 @@ foreach my $module (keys(%modules)) {
 	}
     } else {
 	# Most likely, someone has a custom (binary?) module loaded.
-	print STDERR "$module config not found!\n";
+	print STDERR "$module config not found!!\n";
     }
 }
 
@@ -715,15 +707,7 @@ foreach my $module (keys(%modules)) {
 	}
 	print STDERR "module $module did not have configs";
 	foreach my $conf (@arr) {
-	    my $c = $conf;
-	    $c =~ s/^CONFIG_//;
-	    if (!$localyesconfig && defined($types{$c}) && $types{$c} eq "bool") {
-		print STDERR " $conf (boolean, not supported with =m)";
-	    } elsif (defined($types{$c})) {
-		print STDERR " $conf ($types{$c})";
-	    } else {
-		print STDERR " " , $conf;
-	    }
+	    print STDERR " " , $conf;
 	}
 	print STDERR "\n";
     }

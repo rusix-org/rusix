@@ -1014,7 +1014,7 @@ static struct vcap_rule_internal *vcap_dup_rule(struct vcap_rule_internal *ri,
 	struct vcap_rule_internal *duprule;
 
 	/* Allocate the client part */
-	duprule = kzalloc_obj(*duprule);
+	duprule = kzalloc(sizeof(*duprule), GFP_KERNEL);
 	if (!duprule)
 		return ERR_PTR(-ENOMEM);
 	*duprule = *ri;
@@ -1319,7 +1319,7 @@ static void vcap_rule_alloc_keyfield(struct vcap_rule_internal *ri,
 {
 	struct vcap_client_keyfield *field;
 
-	field = kzalloc_obj(*field);
+	field = kzalloc(sizeof(*field), GFP_KERNEL);
 	if (!field)
 		return;
 	INIT_LIST_HEAD(&field->ctrl.list);
@@ -1428,7 +1428,7 @@ static void vcap_rule_alloc_actionfield(struct vcap_rule_internal *ri,
 {
 	struct vcap_client_actionfield *field;
 
-	field = kzalloc_obj(*field);
+	field = kzalloc(sizeof(*field), GFP_KERNEL);
 	if (!field)
 		return;
 	INIT_LIST_HEAD(&field->ctrl.list);
@@ -2355,7 +2355,7 @@ struct vcap_rule *vcap_alloc_rule(struct vcap_control *vctrl,
 	}
 
 	/* Create a container for the rule and return it */
-	ri = kzalloc_obj(*ri);
+	ri = kzalloc(sizeof(*ri), GFP_KERNEL);
 	if (!ri) {
 		err = -ENOMEM;
 		goto out_unlock;
@@ -2427,21 +2427,18 @@ struct vcap_rule *vcap_decode_rule(struct vcap_rule_internal *elem)
 
 	err = vcap_read_rule(ri);
 	if (err)
-		goto err_free_rule;
+		return ERR_PTR(err);
 
 	err = vcap_decode_keyset(ri);
 	if (err)
-		goto err_free_rule;
+		return ERR_PTR(err);
 
 	err = vcap_decode_actionset(ri);
 	if (err)
-		goto err_free_rule;
+		return ERR_PTR(err);
 
 out:
 	return &ri->data;
-err_free_rule:
-	vcap_free_rule(&ri->data);
-	return ERR_PTR(err);
 }
 
 struct vcap_rule *vcap_get_rule(struct vcap_control *vctrl, u32 id)
@@ -2702,7 +2699,7 @@ static int vcap_rule_add_key(struct vcap_rule *rule,
 		return -EINVAL;
 	}
 
-	field = kzalloc_obj(*field);
+	field = kzalloc(sizeof(*field), GFP_KERNEL);
 	if (!field)
 		return -ENOMEM;
 	memcpy(&field->data, data, sizeof(field->data));
@@ -2870,7 +2867,7 @@ static int vcap_rule_add_action(struct vcap_rule *rule,
 		return -EINVAL;
 	}
 
-	field = kzalloc_obj(*field);
+	field = kzalloc(sizeof(*field), GFP_KERNEL);
 	if (!field)
 		return -ENOMEM;
 	memcpy(&field->data, data, sizeof(field->data));
@@ -3138,7 +3135,7 @@ static int vcap_enable(struct vcap_control *vctrl, struct net_device *ndev,
 	if (!admin)
 		return -ENOENT;
 
-	eport = kzalloc_obj(*eport);
+	eport = kzalloc(sizeof(*eport), GFP_KERNEL);
 	if (!eport)
 		return -ENOMEM;
 

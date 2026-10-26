@@ -102,7 +102,7 @@ static int cdns3_pci_probe(struct pci_dev *pdev,
 			return -EPROBE_DEFER;
 		}
 	} else {
-		wrap = kzalloc_obj(*wrap);
+		wrap = kzalloc(sizeof(*wrap), GFP_KERNEL);
 		if (!wrap)
 			return -ENOMEM;
 	}

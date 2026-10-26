@@ -70,7 +70,6 @@ enum cgt_group_id {
 	CGT_HCR_ENSCXT,
 	CGT_HCR_TTLBIS,
 	CGT_HCR_TTLBOS,
-	CGT_HCR_TID5,
 
 	CGT_MDCR_TPMCR,
 	CGT_MDCR_TPM,
@@ -135,8 +134,6 @@ enum cgt_group_id {
 
 	CGT_CPTR_TTA,
 	CGT_MDCR_HPMN,
-
-	CGT_HCR_NV_HCRX_nNVTGE,
 
 	/* Must be last */
 	__NR_CGT_GROUP_IDS__
@@ -309,12 +306,6 @@ static const struct trap_bits coarse_trap_bits[] = {
 		.index		= HCR_EL2,
 		.value		= HCR_TTLBOS,
 		.mask		= HCR_TTLBOS,
-		.behaviour	= BEHAVE_FORWARD_RW,
-	},
-	[CGT_HCR_TID5] = {
-		.index		= HCR_EL2,
-		.value		= HCR_TID5,
-		.mask		= HCR_TID5,
 		.behaviour	= BEHAVE_FORWARD_RW,
 	},
 	[CGT_MDCR_TPMCR] = {
@@ -590,15 +581,6 @@ static enum trap_behaviour check_mdcr_hpmn(struct kvm_vcpu *vcpu)
 	return BEHAVE_HANDLE_LOCALLY;
 }
 
-static enum trap_behaviour check_hcr_nv_hcrx_nnvtge(struct kvm_vcpu *vcpu)
-{
-	if ((__vcpu_sys_reg(vcpu, HCR_EL2) & HCR_EL2_NV) &&
-	    !(__vcpu_sys_reg(vcpu, HCRX_EL2) & HCRX_EL2_NVTGE))
-		return BEHAVE_FORWARD_RW;
-
-	return BEHAVE_HANDLE_LOCALLY;
-}
-
 #define CCC(id, fn)				\
 	[id - __COMPLEX_CONDITIONS__] = fn
 
@@ -609,7 +591,6 @@ static const complex_condition_check ccc[] = {
 	CCC(CGT_CNTHCTL_EL1NVVCT, check_cnthctl_el1nvvct),
 	CCC(CGT_CPTR_TTA, check_cptr_tta),
 	CCC(CGT_MDCR_HPMN, check_mdcr_hpmn),
-	CCC(CGT_HCR_NV_HCRX_nNVTGE, check_hcr_nv_hcrx_nnvtge),
 };
 
 /*
@@ -684,7 +665,6 @@ static const struct encoding_to_trap_config encoding_to_cgt[] __initconst = {
 	SR_TRAP(SYS_CCSIDR2_EL1,	CGT_HCR_TID2_TID4),
 	SR_TRAP(SYS_CLIDR_EL1,		CGT_HCR_TID2_TID4),
 	SR_TRAP(SYS_CSSELR_EL1,		CGT_HCR_TID2_TID4),
-	SR_TRAP(SYS_GMID_EL1,		CGT_HCR_TID5),
 	SR_RANGE_TRAP(SYS_ID_PFR0_EL1,
 		      sys_reg(3, 0, 0, 7, 7), CGT_HCR_TID3),
 	SR_TRAP(SYS_ICC_SGI0R_EL1,	CGT_HCR_IMO_FMO_ICH_HCR_TC),
@@ -865,7 +845,6 @@ static const struct encoding_to_trap_config encoding_to_cgt[] __initconst = {
 	SR_TRAP(SYS_SCTLR2_EL2,		CGT_HCR_NV),
 	SR_RANGE_TRAP(SYS_HCR_EL2,
 		      SYS_HCRX_EL2,	CGT_HCR_NV),
-	SR_TRAP(SYS_NVHCR_EL2,		CGT_HCR_NV_HCRX_nNVTGE),
 	SR_TRAP(SYS_SMPRIMAP_EL2,	CGT_HCR_NV),
 	SR_TRAP(SYS_SMCR_EL2,		CGT_HCR_NV),
 	SR_RANGE_TRAP(SYS_TTBR0_EL2,
@@ -1187,7 +1166,6 @@ static const struct encoding_to_trap_config encoding_to_cgt[] __initconst = {
 	SR_TRAP(SYS_DBGWCRn_EL1(12),	CGT_MDCR_TDE_TDA),
 	SR_TRAP(SYS_DBGWCRn_EL1(13),	CGT_MDCR_TDE_TDA),
 	SR_TRAP(SYS_DBGWCRn_EL1(14),	CGT_MDCR_TDE_TDA),
-	SR_TRAP(SYS_DBGWCRn_EL1(15),	CGT_MDCR_TDE_TDA),
 	SR_TRAP(SYS_DBGCLAIMSET_EL1,	CGT_MDCR_TDE_TDA),
 	SR_TRAP(SYS_DBGCLAIMCLR_EL1,	CGT_MDCR_TDE_TDA),
 	SR_TRAP(SYS_DBGAUTHSTATUS_EL1,	CGT_MDCR_TDE_TDA),
@@ -1431,7 +1409,7 @@ static const struct encoding_to_trap_config encoding_to_fgt[] __initconst = {
 	SR_FGT(SYS_CPACRMASK_EL1,	HFGRTR2, nCPACRMASK_EL1, 0),
 	SR_FGT(SYS_PFAR_EL1,		HFGRTR2, nPFAR_EL1, 0),
 	SR_FGT(SYS_RCWSMASK_EL1,	HFGRTR2, nRCWSMASK_EL1, 0),
-	SR_FGT(SYS_SCTLR2ALIAS_EL1,	HFGRTR2, nSCTLR2ALIAS_EL1, 0),
+	SR_FGT(SYS_SCTLR2ALIAS_EL1,	HFGRTR2, nSCTLRALIAS2_EL1, 0),
 	SR_FGT(SYS_SCTLR2MASK_EL1,	HFGRTR2, nSCTLR2MASK_EL1, 0),
 	SR_FGT(SYS_SCTLRALIAS_EL1,	HFGRTR2, nSCTLRALIAS_EL1, 0),
 	SR_FGT(SYS_SCTLRMASK_EL1,	HFGRTR2, nSCTLRMASK_EL1, 0),
@@ -2066,60 +2044,6 @@ static const struct encoding_to_trap_config encoding_to_fgt[] __initconst = {
 	SR_FGT(SYS_AMEVCNTR0_EL0(2),	HAFGRTR, AMEVCNTR02_EL0, 1),
 	SR_FGT(SYS_AMEVCNTR0_EL0(1),	HAFGRTR, AMEVCNTR01_EL0, 1),
 	SR_FGT(SYS_AMEVCNTR0_EL0(0),	HAFGRTR, AMEVCNTR00_EL0, 1),
-
-	/*
-	 * ICH_HFGRTR_EL2 & ICH_HFGWTR_EL2
-	 */
-	SR_FGT(SYS_ICC_APR_EL1,			ICH_HFGRTR, ICC_APR_EL1, 0),
-	SR_FGT(SYS_ICC_IDR0_EL1,		ICH_HFGRTR, ICC_IDRn_EL1, 0),
-	SR_FGT(SYS_ICC_CR0_EL1,			ICH_HFGRTR, ICC_CR0_EL1, 0),
-	SR_FGT(SYS_ICC_HPPIR_EL1,		ICH_HFGRTR, ICC_HPPIR_EL1, 0),
-	SR_FGT(SYS_ICC_PCR_EL1,			ICH_HFGRTR, ICC_PCR_EL1, 0),
-	SR_FGT(SYS_ICC_ICSR_EL1,		ICH_HFGRTR, ICC_ICSR_EL1, 0),
-	SR_FGT(SYS_ICC_IAFFIDR_EL1,		ICH_HFGRTR, ICC_IAFFIDR_EL1, 0),
-	SR_FGT(SYS_ICC_PPI_HMR0_EL1,		ICH_HFGRTR, ICC_PPI_HMRn_EL1, 0),
-	SR_FGT(SYS_ICC_PPI_HMR1_EL1,		ICH_HFGRTR, ICC_PPI_HMRn_EL1, 0),
-	SR_FGT(SYS_ICC_PPI_ENABLER0_EL1,	ICH_HFGRTR, ICC_PPI_ENABLERn_EL1, 0),
-	SR_FGT(SYS_ICC_PPI_ENABLER1_EL1,	ICH_HFGRTR, ICC_PPI_ENABLERn_EL1, 0),
-	SR_FGT(SYS_ICC_PPI_CPENDR0_EL1,		ICH_HFGRTR, ICC_PPI_PENDRn_EL1, 0),
-	SR_FGT(SYS_ICC_PPI_CPENDR1_EL1,		ICH_HFGRTR, ICC_PPI_PENDRn_EL1, 0),
-	SR_FGT(SYS_ICC_PPI_SPENDR0_EL1,		ICH_HFGRTR, ICC_PPI_PENDRn_EL1, 0),
-	SR_FGT(SYS_ICC_PPI_SPENDR1_EL1,		ICH_HFGRTR, ICC_PPI_PENDRn_EL1, 0),
-	SR_FGT(SYS_ICC_PPI_PRIORITYR0_EL1,	ICH_HFGRTR, ICC_PPI_PRIORITYRn_EL1, 0),
-	SR_FGT(SYS_ICC_PPI_PRIORITYR1_EL1,	ICH_HFGRTR, ICC_PPI_PRIORITYRn_EL1, 0),
-	SR_FGT(SYS_ICC_PPI_PRIORITYR2_EL1,	ICH_HFGRTR, ICC_PPI_PRIORITYRn_EL1, 0),
-	SR_FGT(SYS_ICC_PPI_PRIORITYR3_EL1,	ICH_HFGRTR, ICC_PPI_PRIORITYRn_EL1, 0),
-	SR_FGT(SYS_ICC_PPI_PRIORITYR4_EL1,	ICH_HFGRTR, ICC_PPI_PRIORITYRn_EL1, 0),
-	SR_FGT(SYS_ICC_PPI_PRIORITYR5_EL1,	ICH_HFGRTR, ICC_PPI_PRIORITYRn_EL1, 0),
-	SR_FGT(SYS_ICC_PPI_PRIORITYR6_EL1,	ICH_HFGRTR, ICC_PPI_PRIORITYRn_EL1, 0),
-	SR_FGT(SYS_ICC_PPI_PRIORITYR7_EL1,	ICH_HFGRTR, ICC_PPI_PRIORITYRn_EL1, 0),
-	SR_FGT(SYS_ICC_PPI_PRIORITYR8_EL1,	ICH_HFGRTR, ICC_PPI_PRIORITYRn_EL1, 0),
-	SR_FGT(SYS_ICC_PPI_PRIORITYR9_EL1,	ICH_HFGRTR, ICC_PPI_PRIORITYRn_EL1, 0),
-	SR_FGT(SYS_ICC_PPI_PRIORITYR10_EL1,	ICH_HFGRTR, ICC_PPI_PRIORITYRn_EL1, 0),
-	SR_FGT(SYS_ICC_PPI_PRIORITYR11_EL1,	ICH_HFGRTR, ICC_PPI_PRIORITYRn_EL1, 0),
-	SR_FGT(SYS_ICC_PPI_PRIORITYR12_EL1,	ICH_HFGRTR, ICC_PPI_PRIORITYRn_EL1, 0),
-	SR_FGT(SYS_ICC_PPI_PRIORITYR13_EL1,	ICH_HFGRTR, ICC_PPI_PRIORITYRn_EL1, 0),
-	SR_FGT(SYS_ICC_PPI_PRIORITYR14_EL1,	ICH_HFGRTR, ICC_PPI_PRIORITYRn_EL1, 0),
-	SR_FGT(SYS_ICC_PPI_PRIORITYR15_EL1,	ICH_HFGRTR, ICC_PPI_PRIORITYRn_EL1, 0),
-	SR_FGT(SYS_ICC_PPI_CACTIVER0_EL1,	ICH_HFGRTR, ICC_PPI_ACTIVERn_EL1, 0),
-	SR_FGT(SYS_ICC_PPI_CACTIVER1_EL1,	ICH_HFGRTR, ICC_PPI_ACTIVERn_EL1, 0),
-	SR_FGT(SYS_ICC_PPI_SACTIVER0_EL1,	ICH_HFGRTR, ICC_PPI_ACTIVERn_EL1, 0),
-	SR_FGT(SYS_ICC_PPI_SACTIVER1_EL1,	ICH_HFGRTR, ICC_PPI_ACTIVERn_EL1, 0),
-
-	/*
-	 * ICH_HFGITR_EL2
-	 */
-	SR_FGT(GICV5_OP_GIC_CDEN,	ICH_HFGITR, GICCDEN, 0),
-	SR_FGT(GICV5_OP_GIC_CDDIS,	ICH_HFGITR, GICCDDIS, 0),
-	SR_FGT(GICV5_OP_GIC_CDPRI,	ICH_HFGITR, GICCDPRI, 0),
-	SR_FGT(GICV5_OP_GIC_CDAFF,	ICH_HFGITR, GICCDAFF, 0),
-	SR_FGT(GICV5_OP_GIC_CDPEND,	ICH_HFGITR, GICCDPEND, 0),
-	SR_FGT(GICV5_OP_GIC_CDRCFG,	ICH_HFGITR, GICCDRCFG, 0),
-	SR_FGT(GICV5_OP_GIC_CDHM,	ICH_HFGITR, GICCDHM, 0),
-	SR_FGT(GICV5_OP_GIC_CDEOI,	ICH_HFGITR, GICCDEOI, 0),
-	SR_FGT(GICV5_OP_GIC_CDDI,	ICH_HFGITR, GICCDDI, 0),
-	SR_FGT(GICV5_OP_GICR_CDIA,	ICH_HFGITR, GICRCDIA, 0),
-	SR_FGT(GICV5_OP_GICR_CDNMIA,	ICH_HFGITR, GICRCDNMIA, 0),
 };
 
 /*
@@ -2181,27 +2105,23 @@ static u32 encoding_next(u32 encoding)
 }
 
 #define FGT_MASKS(__n, __m)						\
-	struct fgt_masks __n = { .str = #__m, .res0 = __m ## _RES0, .res1 = __m ## _RES1 }
+	struct fgt_masks __n = { .str = #__m, .res0 = __m, }
 
-FGT_MASKS(hfgrtr_masks, HFGRTR_EL2);
-FGT_MASKS(hfgwtr_masks, HFGWTR_EL2);
-FGT_MASKS(hfgitr_masks, HFGITR_EL2);
-FGT_MASKS(hdfgrtr_masks, HDFGRTR_EL2);
-FGT_MASKS(hdfgwtr_masks, HDFGWTR_EL2);
-FGT_MASKS(hafgrtr_masks, HAFGRTR_EL2);
-FGT_MASKS(hfgrtr2_masks, HFGRTR2_EL2);
-FGT_MASKS(hfgwtr2_masks, HFGWTR2_EL2);
-FGT_MASKS(hfgitr2_masks, HFGITR2_EL2);
-FGT_MASKS(hdfgrtr2_masks, HDFGRTR2_EL2);
-FGT_MASKS(hdfgwtr2_masks, HDFGWTR2_EL2);
-FGT_MASKS(ich_hfgrtr_masks, ICH_HFGRTR_EL2);
-FGT_MASKS(ich_hfgwtr_masks, ICH_HFGWTR_EL2);
-FGT_MASKS(ich_hfgitr_masks, ICH_HFGITR_EL2);
+FGT_MASKS(hfgrtr_masks, HFGRTR_EL2_RES0);
+FGT_MASKS(hfgwtr_masks, HFGWTR_EL2_RES0);
+FGT_MASKS(hfgitr_masks, HFGITR_EL2_RES0);
+FGT_MASKS(hdfgrtr_masks, HDFGRTR_EL2_RES0);
+FGT_MASKS(hdfgwtr_masks, HDFGWTR_EL2_RES0);
+FGT_MASKS(hafgrtr_masks, HAFGRTR_EL2_RES0);
+FGT_MASKS(hfgrtr2_masks, HFGRTR2_EL2_RES0);
+FGT_MASKS(hfgwtr2_masks, HFGWTR2_EL2_RES0);
+FGT_MASKS(hfgitr2_masks, HFGITR2_EL2_RES0);
+FGT_MASKS(hdfgrtr2_masks, HDFGRTR2_EL2_RES0);
+FGT_MASKS(hdfgwtr2_masks, HDFGWTR2_EL2_RES0);
 
 static __init bool aggregate_fgt(union trap_config tc)
 {
 	struct fgt_masks *rmasks, *wmasks;
-	u64 rresx, wresx;
 
 	switch (tc.fgt) {
 	case HFGRTR_GROUP:
@@ -2232,37 +2152,26 @@ static __init bool aggregate_fgt(union trap_config tc)
 		rmasks = &hfgitr2_masks;
 		wmasks = NULL;
 		break;
-	case ICH_HFGRTR_GROUP:
-		rmasks = &ich_hfgrtr_masks;
-		wmasks = &ich_hfgwtr_masks;
-		break;
-	case ICH_HFGITR_GROUP:
-		rmasks = &ich_hfgitr_masks;
-		wmasks = NULL;
-		break;
 	}
-
-	rresx = rmasks->res0 | rmasks->res1;
-	if (wmasks)
-		wresx = wmasks->res0 | wmasks->res1;
 
 	/*
 	 * A bit can be reserved in either the R or W register, but
 	 * not both.
 	 */
-	if ((BIT(tc.bit) & rresx) && (!wmasks || (BIT(tc.bit) & wresx)))
+	if ((BIT(tc.bit) & rmasks->res0) &&
+	    (!wmasks || (BIT(tc.bit) & wmasks->res0)))
 		return false;
 
 	if (tc.pol)
-		rmasks->mask |= BIT(tc.bit) & ~rresx;
+		rmasks->mask |= BIT(tc.bit) & ~rmasks->res0;
 	else
-		rmasks->nmask |= BIT(tc.bit) & ~rresx;
+		rmasks->nmask |= BIT(tc.bit) & ~rmasks->res0;
 
 	if (wmasks) {
 		if (tc.pol)
-			wmasks->mask |= BIT(tc.bit) & ~wresx;
+			wmasks->mask |= BIT(tc.bit) & ~wmasks->res0;
 		else
-			wmasks->nmask |= BIT(tc.bit) & ~wresx;
+			wmasks->nmask |= BIT(tc.bit) & ~wmasks->res0;
 	}
 
 	return true;
@@ -2271,6 +2180,7 @@ static __init bool aggregate_fgt(union trap_config tc)
 static __init int check_fgt_masks(struct fgt_masks *masks)
 {
 	unsigned long duplicate = masks->mask & masks->nmask;
+	u64 res0 = masks->res0;
 	int ret = 0;
 
 	if (duplicate) {
@@ -2284,14 +2194,10 @@ static __init int check_fgt_masks(struct fgt_masks *masks)
 		ret = -EINVAL;
 	}
 
-	if ((masks->res0 | masks->res1 | masks->mask | masks->nmask) != GENMASK(63, 0) ||
-	    (masks->res0 & masks->res1)  || (masks->res0 & masks->mask) ||
-	    (masks->res0 & masks->nmask) || (masks->res1 & masks->mask)  ||
-	    (masks->res1 & masks->nmask) || (masks->mask & masks->nmask)) {
-		kvm_info("Inconsistent masks for %s (%016llx, %016llx, %016llx, %016llx)\n",
-			 masks->str, masks->res0, masks->res1, masks->mask, masks->nmask);
-		masks->res0 = ~(masks->res1 | masks->mask | masks->nmask);
-	}
+	masks->res0 = ~(masks->mask | masks->nmask);
+	if (masks->res0 != res0)
+		kvm_info("Implicit %s = %016llx, expecting %016llx\n",
+			 masks->str, masks->res0, res0);
 
 	return ret;
 }
@@ -2310,9 +2216,6 @@ static __init int check_all_fgt_masks(int ret)
 		&hfgitr2_masks,
 		&hdfgrtr2_masks,
 		&hdfgwtr2_masks,
-		&ich_hfgrtr_masks,
-		&ich_hfgwtr_masks,
-		&ich_hfgitr_masks,
 	};
 	int err = 0;
 
@@ -2333,6 +2236,7 @@ int __init populate_nv_trap_config(void)
 	BUILD_BUG_ON(__NR_CGT_GROUP_IDS__ > BIT(TC_CGT_BITS));
 	BUILD_BUG_ON(__NR_FGT_GROUP_IDS__ > BIT(TC_FGT_BITS));
 	BUILD_BUG_ON(__NR_FG_FILTER_IDS__ > BIT(TC_FGF_BITS));
+	BUILD_BUG_ON(__HCRX_EL2_MASK & __HCRX_EL2_nMASK);
 
 	for (int i = 0; i < ARRAY_SIZE(encoding_to_cgt); i++) {
 		const struct encoding_to_trap_config *cgt = &encoding_to_cgt[i];
@@ -2357,6 +2261,10 @@ int __init populate_nv_trap_config(void)
 			}
 		}
 	}
+
+	if (__HCRX_EL2_RES0 != HCRX_EL2_RES0)
+		kvm_info("Sanitised HCR_EL2_RES0 = %016llx, expecting %016llx\n",
+			 __HCRX_EL2_RES0, HCRX_EL2_RES0);
 
 	kvm_info("nv: %ld coarse grained trap handlers\n",
 		 ARRAY_SIZE(encoding_to_cgt));
@@ -2509,7 +2417,15 @@ static enum trap_behaviour compute_trap_behaviour(struct kvm_vcpu *vcpu,
 
 static u64 kvm_get_sysreg_res0(struct kvm *kvm, enum vcpu_sysreg sr)
 {
-	return kvm_get_sysreg_resx(kvm, sr).res0;
+	struct kvm_sysreg_masks *masks;
+
+	/* Only handle the VNCR-backed regs for now */
+	if (sr < __VNCR_START__)
+		return 0;
+
+	masks = kvm->arch.sysreg_masks;
+
+	return masks->mask[sr - __SANITISED_REG_START__].res0;
 }
 
 static bool check_fgt_bit(struct kvm_vcpu *vcpu, enum vcpu_sysreg sr,
@@ -2636,14 +2552,6 @@ bool triage_sysreg_trap(struct kvm_vcpu *vcpu, int *sr_index)
 		fgtreg = HFGITR2_EL2;
 		break;
 
-	case ICH_HFGRTR_GROUP:
-		fgtreg = is_read ? ICH_HFGRTR_EL2 : ICH_HFGWTR_EL2;
-		break;
-
-	case ICH_HFGITR_GROUP:
-		fgtreg = ICH_HFGITR_EL2;
-		break;
-
 	default:
 		/* Something is really wrong, bail out */
 		WARN_ONCE(1, "Bad FGT group (encoding %08x, config %016llx)\n",
@@ -2668,19 +2576,6 @@ local:
 		struct sys_reg_params params;
 
 		params = esr_sys64_to_params(esr);
-
-		/*
-		 * This implements the pseudocode UnimplementedIDRegister()
-		 * helper for the purpose of dealing with FEAT_IDST.
-		 */
-		if (in_feat_id_space(&params)) {
-			if (kvm_has_feat(vcpu->kvm, ID_AA64MMFR2_EL1, IDS, IMP))
-				kvm_inject_sync(vcpu, kvm_vcpu_get_esr(vcpu));
-			else
-				kvm_inject_undefined(vcpu);
-
-			return true;
-		}
 
 		/*
 		 * Check for the IMPDEF range, as per DDI0487 J.a,
@@ -2751,33 +2646,17 @@ static u64 kvm_check_illegal_exception_return(struct kvm_vcpu *vcpu, u64 spsr)
 	    (spsr & PSR_MODE32_BIT) ||
 	    (vcpu_el2_tge_is_set(vcpu) && (mode == PSR_MODE_EL1t ||
 					   mode == PSR_MODE_EL1h))) {
-		u64 mask;
-
 		/*
-		 * On an illegal exception return, the flags and masks are
-		 * taken from the SPSR while PSTATE.{EL,SP,nRW} and, if
-		 * FEAT_GCS, PSTATE.EXLOCK are unchanged (R_VWJHB). Set IL
-		 * so the HW generates an Illegal State Exception right
-		 * after ERET.
+		 * The guest is playing with our nerves. Preserve EL, SP,
+		 * masks, flags from the existing PSTATE, and set IL.
+		 * The HW will then generate an Illegal State Exception
+		 * immediately after ERET.
 		 */
-		mask = PSR_D_BIT | PSR_A_BIT | PSR_I_BIT | PSR_F_BIT |
-		       PSR_N_BIT | PSR_Z_BIT | PSR_C_BIT | PSR_V_BIT;
+		spsr = *vcpu_cpsr(vcpu);
 
-		if (kvm_has_feat(vcpu->kvm, ID_AA64MMFR1_EL1, PAN, IMP))
-			mask |= PSR_PAN_BIT;
-		if (kvm_has_feat(vcpu->kvm, ID_AA64PFR1_EL1, NMI, IMP))
-			mask |= ALLINT_ALLINT;
-		/* FEAT_SPE_EXC and FEAT_TRBE_EXC also gate PSTATE.PM one day... */
-		if (kvm_has_feat(vcpu->kvm, ID_AA64DFR1_EL1, EBEP, IMP))
-			mask |= BIT_ULL(32);	/* SPSR_ELx.PM */
-
-		spsr &= mask;
-
-		mask = PSR_MODE_MASK | PSR_MODE32_BIT;
-		if (kvm_has_feat(vcpu->kvm, ID_AA64PFR1_EL1, GCS, IMP))
-			mask |= BIT_ULL(34);	/* PSTATE.EXLOCK */
-
-		spsr |= *vcpu_cpsr(vcpu) & mask;
+		spsr &= (PSR_D_BIT | PSR_A_BIT | PSR_I_BIT | PSR_F_BIT |
+			 PSR_N_BIT | PSR_Z_BIT | PSR_C_BIT | PSR_V_BIT |
+			 PSR_MODE_MASK | PSR_MODE32_BIT);
 		spsr |= PSR_IL_BIT;
 	}
 
@@ -2805,7 +2684,7 @@ void kvm_emulate_nested_eret(struct kvm_vcpu *vcpu)
 		 * ERET handling, and the guest will have a little surprise.
 		 */
 		if (kvm_has_pauth(vcpu->kvm, FPACCOMBINE) && !(spsr & PSR_IL_BIT)) {
-			esr &= (ESR_ELx_ERET_ISS_ERETA | ESR_ELx_IL);
+			esr &= ESR_ELx_ERET_ISS_ERETA;
 			esr |= FIELD_PREP(ESR_ELx_EC_MASK, ESR_ELx_EC_FPAC);
 			kvm_inject_nested_sync(vcpu, esr);
 			return;
@@ -2892,8 +2771,6 @@ static int kvm_inject_nested(struct kvm_vcpu *vcpu, u64 esr_el2,
 
 	preempt_disable();
 
-	vcpu_set_flag(vcpu, IN_NESTED_EXCEPTION);
-
 	/*
 	 * We may have an exception or PC update in the EL0/EL1 context.
 	 * Commit it before entering EL2.
@@ -2916,8 +2793,6 @@ static int kvm_inject_nested(struct kvm_vcpu *vcpu, u64 esr_el2,
 	__kvm_adjust_pc(vcpu);
 
 	kvm_arch_vcpu_load(vcpu, smp_processor_id());
-	vcpu_clear_flag(vcpu, IN_NESTED_EXCEPTION);
-
 	preempt_enable();
 
 	if (kvm_vcpu_has_pmu(vcpu))
@@ -2972,6 +2847,6 @@ int kvm_inject_nested_serror(struct kvm_vcpu *vcpu, u64 esr)
 	 * vSError injection. Manually populate EC for an emulated SError
 	 * exception.
 	 */
-	esr |= FIELD_PREP(ESR_ELx_EC_MASK, ESR_ELx_EC_SERROR) | ESR_ELx_IL;
+	esr |= FIELD_PREP(ESR_ELx_EC_MASK, ESR_ELx_EC_SERROR);
 	return kvm_inject_nested(vcpu, esr, except_type_serror);
 }

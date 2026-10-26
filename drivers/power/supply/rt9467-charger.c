@@ -17,6 +17,7 @@
 #include <linux/kstrtox.h>
 #include <linux/linear_range.h>
 #include <linux/module.h>
+#include <linux/mod_devicetable.h>
 #include <linux/mutex.h>
 #include <linux/of.h>
 #include <linux/power_supply.h>
@@ -1030,7 +1031,8 @@ static int rt9467_request_interrupt(struct rt9467_chg_data *data)
 		ret = devm_request_threaded_irq(dev, virq, NULL, chg_irqs[i].handler,
 						IRQF_ONESHOT, chg_irqs[i].name, data);
 		if (ret)
-			return ret;
+			return dev_err_probe(dev, ret, "Failed to request (%s) irq\n",
+					     chg_irqs[i].name);
 	}
 
 	return 0;

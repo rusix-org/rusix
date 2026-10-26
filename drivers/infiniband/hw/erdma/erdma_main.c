@@ -50,7 +50,7 @@ static int erdma_enum_and_get_netdev(struct erdma_dev *dev)
 	struct net_device *netdev;
 	int ret = -EPROBE_DEFER;
 
-	/* Already bound to a net_device, so we skip. */
+	/* Already binded to a net_device, so we skip. */
 	if (dev->netdev)
 		return 0;
 
@@ -261,6 +261,7 @@ static int erdma_probe_dev(struct pci_dev *pdev)
 
 	pci_set_drvdata(pdev, dev);
 	dev->pdev = pdev;
+	dev->attrs.numa_node = dev_to_node(&pdev->dev);
 
 	bars = pci_select_bars(pdev, IORESOURCE_MEM);
 	err = pci_request_selected_regions(pdev, bars, DRV_MODULE_NAME);

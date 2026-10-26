@@ -141,12 +141,14 @@ void usb_stor_show_command(const struct us_data *us, struct scsi_cmnd *srb)
 }
 
 void usb_stor_show_sense(const struct us_data *us,
-			 const struct scsi_sense_hdr *sshdr)
+			 unsigned char key,
+			 unsigned char asc,
+			 unsigned char ascq)
 {
 	const char *what, *keystr, *fmt;
 
-	keystr = scsi_sense_key_string(sshdr->sense_key);
-	what = scsi_extd_sense_format(sshdr, &fmt);
+	keystr = scsi_sense_key_string(key);
+	what = scsi_extd_sense_format(asc, ascq, &fmt);
 
 	if (keystr == NULL)
 		keystr = "(Unknown Key)";
@@ -154,8 +156,7 @@ void usb_stor_show_sense(const struct us_data *us,
 		what = "(unknown ASC/ASCQ)";
 
 	if (fmt)
-		usb_stor_dbg(us, "%s: %s (%s%x)\n", keystr, what, fmt,
-			     scsi_sense_ascq(sshdr));
+		usb_stor_dbg(us, "%s: %s (%s%x)\n", keystr, what, fmt, ascq);
 	else
 		usb_stor_dbg(us, "%s: %s\n", keystr, what);
 }

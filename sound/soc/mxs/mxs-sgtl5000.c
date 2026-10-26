@@ -155,16 +155,15 @@ static int mxs_sgtl5000_probe(struct platform_device *pdev)
 
 		ret = snd_soc_of_parse_audio_routing(card, "audio-routing");
 		if (ret) {
-			mxs_saif_put_mclk(0);
+			dev_err(&pdev->dev, "failed to parse audio-routing (%d)\n",
+				ret);
 			return ret;
 		}
 	}
 
 	ret = devm_snd_soc_register_card(&pdev->dev, card);
-	if (ret) {
-		mxs_saif_put_mclk(0);
+	if (ret)
 		return dev_err_probe(&pdev->dev, ret, "snd_soc_register_card failed\n");
-	}
 
 	return 0;
 }

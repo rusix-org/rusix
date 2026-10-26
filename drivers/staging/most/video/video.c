@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0
 /*
- * V4L2 component for Mostcore
+ * video.c - V4L2 component for Mostcore
  *
  * Copyright (C) 2015, Microchip Technology Germany II GmbH & Co. KG
  */
@@ -84,7 +84,7 @@ static int comp_vdev_open(struct file *filp)
 		return -EINVAL;
 	}
 
-	fh = kzalloc_obj(*fh);
+	fh = kzalloc(sizeof(*fh), GFP_KERNEL);
 	if (!fh)
 		return -ENOMEM;
 
@@ -121,7 +121,6 @@ static int comp_vdev_close(struct file *filp)
 	struct comp_fh *fh = to_comp_fh(filp);
 	struct most_video_dev *mdev = fh->mdev;
 	struct mbo *mbo, *tmp;
-	LIST_HEAD(free_list);
 
 	/*
 	 * We need to put MBOs back before we call most_stop_channel()
@@ -134,14 +133,13 @@ static int comp_vdev_close(struct file *filp)
 
 	spin_lock_irq(&mdev->list_lock);
 	mdev->mute = true;
-	list_replace_init(&mdev->pending_mbos, &free_list);
-	spin_unlock_irq(&mdev->list_lock);
-
-	list_for_each_entry_safe(mbo, tmp, &free_list, list) {
-		list_del_init(&mbo->list);
+	list_for_each_entry_safe(mbo, tmp, &mdev->pending_mbos, list) {
+		list_del(&mbo->list);
+		spin_unlock_irq(&mdev->list_lock);
 		most_put_mbo(mbo);
+		spin_lock_irq(&mdev->list_lock);
 	}
-
+	spin_unlock_irq(&mdev->list_lock);
 	most_stop_channel(mdev->iface, mdev->ch_idx, &comp);
 	mdev->mute = false;
 
@@ -439,6 +437,7 @@ static int comp_register_videodev(struct most_video_dev *mdev)
 	mdev->vdev->release = video_device_release;
 
 	return 0;
+
 }
 
 static void comp_unregister_videodev(struct most_video_dev *mdev)
@@ -463,22 +462,22 @@ static int comp_probe_channel(struct most_interface *iface, int channel_idx,
 	struct most_video_dev *mdev = get_comp_dev(iface, channel_idx);
 
 	if (mdev) {
-		dev_err(iface->dev, "Channel already linked\n");
+		pr_err("Channel already linked\n");
 		return -EEXIST;
 	}
 
 	if (ccfg->direction != MOST_CH_RX) {
-		dev_err(iface->dev, "Wrong direction, expected rx\n");
+		pr_err("Wrong direction, expected rx\n");
 		return -EINVAL;
 	}
 
 	if (ccfg->data_type != MOST_CH_SYNC &&
 	    ccfg->data_type != MOST_CH_ISOC) {
-		dev_err(iface->dev, "Wrong channel type, expected sync or isoc\n");
+		pr_err("Wrong channel type, expected sync or isoc\n");
 		return -EINVAL;
 	}
 
-	mdev = kzalloc_obj(*mdev);
+	mdev = kzalloc(sizeof(*mdev), GFP_KERNEL);
 	if (!mdev)
 		return -ENOMEM;
 
@@ -494,7 +493,7 @@ static int comp_probe_channel(struct most_interface *iface, int channel_idx,
 	strscpy(mdev->v4l2_dev.name, name, sizeof(mdev->v4l2_dev.name));
 	ret = v4l2_device_register(NULL, &mdev->v4l2_dev);
 	if (ret) {
-		dev_err(iface->dev, "v4l2_device_register() failed\n");
+		pr_err("v4l2_device_register() failed\n");
 		kfree(mdev);
 		return ret;
 	}
@@ -520,7 +519,7 @@ static int comp_disconnect_channel(struct most_interface *iface,
 	struct most_video_dev *mdev = get_comp_dev(iface, channel_idx);
 
 	if (!mdev) {
-		dev_err(iface->dev, "no such channel is linked\n");
+		pr_err("no such channel is linked\n");
 		return -ENOENT;
 	}
 
@@ -559,8 +558,29 @@ static int __init comp_init(void)
 
 static void __exit comp_exit(void)
 {
+	struct most_video_dev *mdev, *tmp;
+
+	/*
+	 * As the mostcore currently doesn't call disconnect_channel()
+	 * for linked channels while we call most_deregister_component()
+	 * we simulate this call here.
+	 * This must be fixed in core.
+	 */
+	spin_lock_irq(&list_lock);
+	list_for_each_entry_safe(mdev, tmp, &video_devices, list) {
+		list_del(&mdev->list);
+		spin_unlock_irq(&list_lock);
+
+		comp_unregister_videodev(mdev);
+		v4l2_device_disconnect(&mdev->v4l2_dev);
+		v4l2_device_put(&mdev->v4l2_dev);
+		spin_lock_irq(&list_lock);
+	}
+	spin_unlock_irq(&list_lock);
+
 	most_deregister_configfs_subsys(&comp);
 	most_deregister_component(&comp);
+	BUG_ON(!list_empty(&video_devices));
 }
 
 module_init(comp_init);

@@ -19,7 +19,6 @@
 #include <linux/completion.h>
 #include <linux/ctype.h>
 #include <linux/delay.h>
-#include <linux/hex.h>
 #include <linux/init.h>
 #include <linux/interrupt.h>
 #include <linux/kernel.h>
@@ -847,9 +846,7 @@ static irqreturn_t extron_interrupt(struct serio *serio, unsigned char data,
 			return IRQ_HANDLED;
 		memcpy(extron->data, extron->buf, extron->idx);
 		extron->len = extron->idx;
-		/* Keep fixed-offset response tests from using stale tail bytes. */
-		memset(extron->data + extron->len, 0,
-		       min_t(size_t, 10, sizeof(extron->data) - extron->len));
+		extron->data[extron->len] = 0;
 		if (debug)
 			dev_info(extron->dev, "received %s\n", extron->data);
 		extron->idx = 0;
@@ -1497,7 +1494,7 @@ static int extron_setup(struct extron *extron)
 
 		if (vendor_id)
 			caps &= ~CEC_CAP_LOG_ADDRS;
-		port = kzalloc_obj(*port);
+		port = kzalloc(sizeof(*port), GFP_KERNEL);
 		if (!port)
 			return -ENOMEM;
 
@@ -1772,7 +1769,7 @@ static int extron_connect(struct serio *serio, struct serio_driver *drv)
 		manufacturer_name[0] = 0;
 	}
 
-	extron = kzalloc_obj(*extron);
+	extron = kzalloc(sizeof(*extron), GFP_KERNEL);
 
 	if (!extron)
 		return -ENOMEM;

@@ -129,7 +129,6 @@ enum {
 	TPS_MODE_BIST,
 	TPS_MODE_DISC,
 	TPS_MODE_PTCH,
-	TPS_MODE_APP1,
 };
 
 static const char *const modes[] = {
@@ -138,7 +137,6 @@ static const char *const modes[] = {
 	[TPS_MODE_BIST]	= "BIST",
 	[TPS_MODE_DISC]	= "DISC",
 	[TPS_MODE_PTCH] = "PTCH",
-	[TPS_MODE_APP1]	= "APP1",
 };
 
 /* Unrecognized commands will be replaced with "!CMD" */
@@ -150,7 +148,6 @@ struct tipd_data {
 	irq_handler_t irq_handler;
 	u64 irq_mask1;
 	size_t tps_struct_size;
-	bool no_mode_control;
 	void (*remove)(struct tps6598x *tps);
 	int (*register_port)(struct tps6598x *tps, struct fwnode_handle *node);
 	void (*unregister_port)(struct tps6598x *tps);
@@ -161,7 +158,6 @@ struct tipd_data {
 	int (*init)(struct tps6598x *tps);
 	int (*switch_power_state)(struct tps6598x *tps, u8 target_state);
 	bool (*read_data_status)(struct tps6598x *tps);
-	bool (*read_power_status)(struct tps6598x *tps);
 	int (*reset)(struct tps6598x *tps);
 	int (*connect)(struct tps6598x *tps, u32 status);
 };
@@ -579,36 +575,30 @@ static bool cd321x_read_data_status(struct tps6598x *tps)
 	int ret;
 
 	ret = tps6598x_read_data_status(tps);
-	if (!ret)
+	if (ret < 0)
 		return false;
 
 	if (tps->data_status & TPS_DATA_STATUS_DP_CONNECTION) {
 		ret = tps6598x_block_read(tps, TPS_REG_DP_SID_STATUS,
 				&cd321x->dp_sid_status, sizeof(cd321x->dp_sid_status));
-		if (ret) {
+		if (ret)
 			dev_err(tps->dev, "Failed to read DP SID Status: %d\n",
 				ret);
-			return false;
-		}
 	}
 
 	if (tps->data_status & TPS_DATA_STATUS_TBT_CONNECTION) {
 		ret = tps6598x_block_read(tps, TPS_REG_INTEL_VID_STATUS,
 				&cd321x->intel_vid_status, sizeof(cd321x->intel_vid_status));
-		if (ret) {
+		if (ret)
 			dev_err(tps->dev, "Failed to read Intel VID Status: %d\n", ret);
-			return false;
-		}
 	}
 
 	if (tps->data_status & CD321X_DATA_STATUS_USB4_CONNECTION) {
 		ret = tps6598x_block_read(tps, TPS_REG_USB4_STATUS,
 				&cd321x->usb4_status, sizeof(cd321x->usb4_status));
-		if (ret) {
+		if (ret)
 			dev_err(tps->dev,
 				"Failed to read USB4 Status: %d\n", ret);
-			return false;
-		}
 	}
 
 	return true;
@@ -628,34 +618,6 @@ static bool tps6598x_read_power_status(struct tps6598x *tps)
 
 	if (tps->data->trace_power_status)
 		tps->data->trace_power_status(pwr_status);
-
-	return true;
-}
-
-/*
- * TPS66993 deprecated Power_Status register (0x3F). BC1.2 is not supported
- * and the remaining bits are redundant with STATUS register (0x1A).
- * Synthesize pwr_status from the already-read STATUS register.
- */
-static bool tps66993_read_power_status(struct tps6598x *tps)
-{
-	u16 pwr_status = 0;
-
-	/* Same masks as TPS_POWER_STATUS_CONNECTION() / SOURCESINK() / PWROPMODE() in tps6598x.h */
-	if (tps->status & TPS_STATUS_PLUG_PRESENT)
-		pwr_status |= FIELD_PREP(TPS_POWER_STATUS_CONNECTION_MASK, 1);
-
-	/* SOURCESINK: 1=sink; STATUS.PortRole 1=source, opposite convention */
-	if (!TPS_STATUS_TO_TYPEC_PORTROLE(tps->status))
-		pwr_status |= FIELD_PREP(TPS_POWER_STATUS_SOURCESINK_MASK, 1);
-
-	if (TPS_STATUS_VBUS_STATUS(tps->status) == TPS_STATUS_VBUS_STATUS_PD)
-		pwr_status |= FIELD_PREP(TPS_POWER_STATUS_TYPEC_CURRENT_MASK,
-					 TPS_POWER_STATUS_TYPEC_CURRENT_PD);
-
-	tps->pwr_status = pwr_status;
-
-	tps->data->trace_power_status(pwr_status);
 
 	return true;
 }
@@ -936,7 +898,7 @@ static irqreturn_t cd321x_interrupt(int irq, void *data)
 		goto err_unlock;
 
 	if (event & APPLE_CD_REG_INT_POWER_STATUS_UPDATE) {
-		if (!tps->data->read_power_status(tps))
+		if (!tps6598x_read_power_status(tps))
 			goto err_unlock;
 		if (TPS_POWER_STATUS_PWROPMODE(tps->pwr_status) == TYPEC_PWR_MODE_PD) {
 			if (tps6598x_read_partner_identity(tps)) {
@@ -991,7 +953,7 @@ static irqreturn_t tps25750_interrupt(int irq, void *data)
 		goto err_clear_ints;
 
 	if (event[0] & TPS_REG_INT_POWER_STATUS_UPDATE)
-		if (!tps->data->read_power_status(tps))
+		if (!tps6598x_read_power_status(tps))
 			goto err_clear_ints;
 
 	if (event[0] & TPS_REG_INT_DATA_STATUS_UPDATE)
@@ -1064,25 +1026,17 @@ static irqreturn_t tps6598x_interrupt(int irq, void *data)
 	if (!tps6598x_read_status(tps, &status))
 		goto err_unlock;
 
-	tps->status = status;
-
 	if ((event1[0] | event2[0]) & TPS_REG_INT_POWER_STATUS_UPDATE)
-		if (!tps->data->read_power_status(tps))
+		if (!tps6598x_read_power_status(tps))
 			goto err_unlock;
 
 	if ((event1[0] | event2[0]) & TPS_REG_INT_DATA_STATUS_UPDATE)
 		if (!tps->data->read_data_status(tps))
 			goto err_unlock;
 
-	/*
-	 * Refresh power status before connect - needed for TPS66993 which
-	 * synthesizes pwr_status from STATUS and never gets POWER_STATUS_UPDATE.
-	 */
-	if ((event1[0] | event2[0]) & TPS_REG_INT_PLUG_EVENT) {
-		if (!tps->data->read_power_status(tps))
-			goto err_unlock;
+	/* Handle plug insert or removal */
+	if ((event1[0] | event2[0]) & TPS_REG_INT_PLUG_EVENT)
 		tps6598x_handle_plug_event(tps, status);
-	}
 
 err_unlock:
 	mutex_unlock(&tps->lock);
@@ -1118,7 +1072,6 @@ static int tps6598x_check_mode(struct tps6598x *tps)
 
 	switch (ret) {
 	case TPS_MODE_APP:
-	case TPS_MODE_APP1:
 	case TPS_MODE_PTCH:
 		return ret;
 	case TPS_MODE_BOOT:
@@ -1250,7 +1203,6 @@ tps6598x_register_port(struct tps6598x *tps, struct fwnode_handle *fwnode)
 	typec_cap.driver_data = tps;
 	typec_cap.ops = &tps6598x_ops;
 	typec_cap.fwnode = fwnode;
-	typec_cap.no_mode_control = tps->data->no_mode_control;
 
 	switch (TPS_SYSCONF_PORTINFO(conf)) {
 	case TPS_PORTINFO_SINK_ACCESSORY:
@@ -1752,7 +1704,6 @@ tps25750_register_port(struct tps6598x *tps, struct fwnode_handle *fwnode)
 	typec_cap.data = ret;
 	typec_cap.revision = USB_TYPEC_REV_1_3;
 	typec_cap.pd_revision = 0x300;
-	typec_cap.orientation_aware = true;
 	typec_cap.driver_data = tps;
 	typec_cap.ops = &tps6598x_ops;
 	typec_cap.fwnode = fwnode;
@@ -1794,7 +1745,7 @@ static int tps6598x_probe(struct i2c_client *client)
 	struct fwnode_handle *fwnode;
 	bool patch_loaded = false;
 	u32 status;
-	u32 vid = 0;
+	u32 vid;
 	int ret;
 
 	data = i2c_get_match_data(client);
@@ -1822,11 +1773,8 @@ static int tps6598x_probe(struct i2c_client *client)
 
 	if (!device_is_compatible(tps->dev, "ti,tps25750")) {
 		ret = tps6598x_read32(tps, TPS_REG_VID, &vid);
-		if (ret < 0 || !vid) {
-			dev_err(tps->dev, "failed to read vendor ID: %d, vid: %#x\n",
-				ret, vid);
+		if (ret < 0 || !vid)
 			return -ENODEV;
-		}
 	}
 
 	/*
@@ -1863,8 +1811,6 @@ static int tps6598x_probe(struct i2c_client *client)
 		goto err_clear_mask;
 	}
 
-	tps->status = status;
-
 	/*
 	 * This fwnode has a "compatible" property, but is never populated as a
 	 * struct device. Instead we simply parse it to read the properties.
@@ -1892,7 +1838,7 @@ static int tps6598x_probe(struct i2c_client *client)
 
 	if (status & TPS_STATUS_PLUG_PRESENT) {
 		ret = -EINVAL;
-		if (!tps->data->read_power_status(tps))
+		if (!tps6598x_read_power_status(tps))
 			goto err_unregister_port;
 		if (!tps->data->read_data_status(tps))
 			goto err_unregister_port;
@@ -1907,7 +1853,7 @@ static int tps6598x_probe(struct i2c_client *client)
 						IRQF_SHARED | IRQF_ONESHOT,
 						dev_name(&client->dev), tps);
 	} else {
-		dev_dbg(tps->dev, "no IRQ specified, using polling mode\n");
+		dev_warn(tps->dev, "Unable to find the interrupt, switching to polling\n");
 		INIT_DELAYED_WORK(&tps->wq_poll, tps6598x_poll_work);
 		queue_delayed_work(system_power_efficient_wq, &tps->wq_poll,
 				   msecs_to_jiffies(POLL_INTERVAL));
@@ -2027,7 +1973,6 @@ static const struct tipd_data cd321x_data = {
 		     APPLE_CD_REG_INT_DATA_STATUS_UPDATE |
 		     APPLE_CD_REG_INT_PLUG_EVENT,
 	.tps_struct_size = sizeof(struct cd321x),
-	.no_mode_control = true,
 	.remove = cd321x_remove,
 	.register_port = cd321x_register_port,
 	.unregister_port = cd321x_unregister_port,
@@ -2036,7 +1981,6 @@ static const struct tipd_data cd321x_data = {
 	.trace_status = trace_tps6598x_status,
 	.init = cd321x_init,
 	.read_data_status = cd321x_read_data_status,
-	.read_power_status = tps6598x_read_power_status,
 	.reset = cd321x_reset,
 	.switch_power_state = cd321x_switch_power_state,
 	.connect = cd321x_connect,
@@ -2056,25 +2000,6 @@ static const struct tipd_data tps6598x_data = {
 	.apply_patch = tps6598x_apply_patch,
 	.init = tps6598x_init,
 	.read_data_status = tps6598x_read_data_status,
-	.read_power_status = tps6598x_read_power_status,
-	.reset = tps6598x_reset,
-	.connect = tps6598x_connect,
-};
-
-static const struct tipd_data tps66993_data = {
-	.irq_handler = tps6598x_interrupt,
-	.irq_mask1 = TPS_REG_INT_DATA_STATUS_UPDATE |
-		     TPS_REG_INT_PLUG_EVENT,
-	.tps_struct_size = sizeof(struct tps6598x),
-	.register_port = tps6598x_register_port,
-	.unregister_port = tps6598x_unregister_port,
-	.trace_data_status = trace_tps6598x_data_status,
-	.trace_power_status = trace_tps6598x_power_status,
-	.trace_status = trace_tps6598x_status,
-	.apply_patch = tps6598x_apply_patch,
-	.init = tps6598x_init,
-	.read_data_status = tps6598x_read_data_status,
-	.read_power_status = tps66993_read_power_status,
 	.reset = tps6598x_reset,
 	.connect = tps6598x_connect,
 };
@@ -2093,14 +2018,12 @@ static const struct tipd_data tps25750_data = {
 	.apply_patch = tps25750_apply_patch,
 	.init = tps25750_init,
 	.read_data_status = tps6598x_read_data_status,
-	.read_power_status = tps6598x_read_power_status,
 	.reset = tps25750_reset,
 	.connect = tps6598x_connect,
 };
 
 static const struct of_device_id tps6598x_of_match[] = {
 	{ .compatible = "ti,tps6598x", &tps6598x_data},
-	{ .compatible = "ti,tps66993", &tps66993_data},
 	{ .compatible = "apple,cd321x", &cd321x_data},
 	{ .compatible = "ti,tps25750", &tps25750_data},
 	{}
@@ -2108,7 +2031,7 @@ static const struct of_device_id tps6598x_of_match[] = {
 MODULE_DEVICE_TABLE(of, tps6598x_of_match);
 
 static const struct i2c_device_id tps6598x_id[] = {
-	{ .name = "tps6598x", .driver_data = (kernel_ulong_t)&tps6598x_data },
+	{ "tps6598x", (kernel_ulong_t)&tps6598x_data },
 	{ }
 };
 MODULE_DEVICE_TABLE(i2c, tps6598x_id);

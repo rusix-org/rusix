@@ -5,7 +5,6 @@
  * Copyright (C) 2021, Alibaba Cloud
  */
 #include "internal.h"
-#include <linux/filelock.h>
 #include <linux/sched/mm.h>
 #include <trace/events/erofs.h>
 
@@ -33,16 +32,12 @@ void *erofs_bread(struct erofs_buf *buf, erofs_off_t offset, bool need_kmap)
 
 	if (buf->page) {
 		folio = page_folio(buf->page);
-		if (folio->mapping != buf->mapping)
-			/* the cached folio belongs to another address_space */
-			folio = NULL;
-		else if (folio_file_page(folio, index) != buf->page)
+		if (folio_file_page(folio, index) != buf->page)
 			erofs_unmap_metabuf(buf);
 	}
 	if (!folio || !folio_contains(folio, index)) {
 		erofs_put_metabuf(buf);
-		folio = read_cache_folio(buf->mapping, index,
-				buf->mc ? erofs_read_meta_folio : NULL, NULL);
+		folio = read_mapping_folio(buf->mapping, index, buf->file);
 		if (IS_ERR(folio))
 			return folio;
 	}
@@ -59,20 +54,21 @@ int erofs_init_metabuf(struct erofs_buf *buf, struct super_block *sb,
 {
 	struct erofs_sb_info *sbi = EROFS_SB(sb);
 
-	buf->mc = false;
+	buf->file = NULL;
 	if (in_metabox) {
 		if (unlikely(!sbi->metabox_inode))
 			return -EFSCORRUPTED;
 		buf->mapping = sbi->metabox_inode->i_mapping;
 		return 0;
 	}
+	buf->off = sbi->dif0.fsoff;
 	if (erofs_is_fileio_mode(sbi)) {
-		buf->mapping = sbi->managed_cache->i_mapping;
-		buf->mc = true;
-	} else {
-		buf->off = sbi->dif0.fsoff;
+		buf->file = sbi->dif0.file;	/* some fs like FUSE needs it */
+		buf->mapping = buf->file->f_mapping;
+	} else if (erofs_is_fscache_mode(sb))
+		buf->mapping = sbi->dif0.fscache->inode->i_mapping;
+	else
 		buf->mapping = sb->s_bdev->bd_mapping;
-	}
 	return 0;
 }
 
@@ -87,73 +83,17 @@ void *erofs_read_metabuf(struct erofs_buf *buf, struct super_block *sb,
 	return erofs_bread(buf, offset, true);
 }
 
-static int erofs_map_chunks(struct inode *inode, struct erofs_map_blocks *map)
+int erofs_map_blocks(struct inode *inode, struct erofs_map_blocks *map)
 {
 	struct erofs_buf buf = __EROFS_BUF_INITIALIZER;
 	struct super_block *sb = inode->i_sb;
+	unsigned int unit, blksz = sb->s_blocksize;
 	struct erofs_inode *vi = EROFS_I(inode);
 	struct erofs_inode_chunk_index *idx;
-	unsigned int unit = vi->chunkformat & EROFS_CHUNK_FORMAT_INDEXES ?
-		sizeof(*idx) : EROFS_BLOCK_MAP_ENTRY_SIZE;
-	erofs_blk_t addrmask = (vi->chunkformat & EROFS_CHUNK_FORMAT_48BIT) ?
-		BIT_ULL(48) - 1 : BIT_ULL(32) - 1;
-	u64 nr = map->m_la >> vi->chunkbits, chunksize = 1ULL << vi->chunkbits;
-	erofs_off_t pos = ALIGN(erofs_iloc(inode) + vi->inode_isize +
-				vi->xattr_isize, unit) + unit * nr;
-	/* m_llen will be clamped to EOF in the end */
-	erofs_off_t endpos = round_up(pos + 1, sb->s_blocksize);
-	u64 last, addr;
-
-	idx = erofs_read_metabuf(&buf, sb, pos, erofs_inode_in_metabox(inode));
-	if (IS_ERR(idx))
-		return PTR_ERR(idx);
-
-	map->m_la = nr << vi->chunkbits;
-	map->m_llen = 0;
-	nr = 0;
-	do {
-		if (unit == EROFS_BLOCK_MAP_ENTRY_SIZE) {
-			addr = le32_to_cpu(((__le32 *)idx)[nr]);
-			if (addr == (u32)EROFS_NULL_ADDR)
-				addr = EROFS_NULL_ADDR;
-		} else {
-			addr = (((u64)le16_to_cpu(idx[nr].startblk_hi) << 32) |
-				le32_to_cpu(idx[nr].startblk_lo)) & addrmask;
-			if (addr ^ (EROFS_NULL_ADDR & addrmask))
-				addr |= (u64)(le16_to_cpu(idx[nr].device_id) &
-					EROFS_SB(sb)->device_id_mask) << 48;
-			else
-				addr = EROFS_NULL_ADDR;
-		}
-		if (!nr) {
-			last = addr;
-			continue;
-		}
-		/* expand and account the prior chunk here */
-		map->m_llen += chunksize;
-		if (last != EROFS_NULL_ADDR)
-			last += erofs_blknr(sb, chunksize);
-	} while (addr == last && pos + (++nr) * unit < endpos);
-
-	if (last != EROFS_NULL_ADDR) {
-		map->m_pa = erofs_pos(sb, last & addrmask) - map->m_llen;
-		map->m_deviceid = last >> 48;
-		map->m_flags = EROFS_MAP_MAPPED;
-	}
-	if (addr == last)
-		map->m_llen += chunksize;
-	map->m_llen = min_t(erofs_off_t, map->m_llen,
-			round_up(inode->i_size - map->m_la, sb->s_blocksize));
-	erofs_put_metabuf(&buf);
-	return 0;
-}
-
-int erofs_map_blocks(struct inode *inode, struct erofs_map_blocks *map)
-{
-	struct super_block *sb = inode->i_sb;
-	struct erofs_inode *vi = EROFS_I(inode);
-	bool tailinline = (vi->datalayout == EROFS_INODE_FLAT_INLINE);
+	erofs_blk_t startblk, addrmask;
+	bool tailpacking;
 	erofs_off_t pos;
+	u64 chunknr;
 	int err = 0;
 
 	trace_erofs_map_blocks_enter(inode, map, 0);
@@ -161,10 +101,13 @@ int erofs_map_blocks(struct inode *inode, struct erofs_map_blocks *map)
 	map->m_flags = 0;
 	if (map->m_la >= inode->i_size)
 		goto out;
-	if (vi->datalayout == EROFS_INODE_CHUNK_BASED) {
-		err = erofs_map_chunks(inode, map);
-	} else if (tailinline || vi->startblk != EROFS_NULL_ADDR) {
-		pos = erofs_pos(sb, erofs_iblks(inode) - tailinline);
+
+	if (vi->datalayout != EROFS_INODE_CHUNK_BASED) {
+		tailpacking = (vi->datalayout == EROFS_INODE_FLAT_INLINE);
+		if (!tailpacking && vi->startblk == EROFS_NULL_ADDR)
+			goto out;
+		pos = erofs_pos(sb, erofs_iblks(inode) - tailpacking);
+
 		map->m_flags = EROFS_MAP_MAPPED;
 		if (map->m_la < pos) {
 			map->m_pa = erofs_pos(sb, vi->startblk) + map->m_la;
@@ -174,15 +117,57 @@ int erofs_map_blocks(struct inode *inode, struct erofs_map_blocks *map)
 				vi->xattr_isize + erofs_blkoff(sb, map->m_la);
 			map->m_llen = inode->i_size - map->m_la;
 			map->m_flags |= EROFS_MAP_META;
-			if (erofs_blkoff(sb, map->m_pa) + map->m_llen >
-			    sb->s_blocksize) {
-				erofs_err(sb, "inline data across blocks @ nid %llu", vi->nid);
-				return -EFSCORRUPTED;
-			}
+		}
+		goto out;
+	}
+
+	if (vi->chunkformat & EROFS_CHUNK_FORMAT_INDEXES)
+		unit = sizeof(*idx);			/* chunk index */
+	else
+		unit = EROFS_BLOCK_MAP_ENTRY_SIZE;	/* block map */
+
+	chunknr = map->m_la >> vi->chunkbits;
+	pos = ALIGN(erofs_iloc(inode) + vi->inode_isize +
+		    vi->xattr_isize, unit) + unit * chunknr;
+
+	idx = erofs_read_metabuf(&buf, sb, pos, erofs_inode_in_metabox(inode));
+	if (IS_ERR(idx)) {
+		err = PTR_ERR(idx);
+		goto out;
+	}
+	map->m_la = chunknr << vi->chunkbits;
+	map->m_llen = min_t(erofs_off_t, 1UL << vi->chunkbits,
+			    round_up(inode->i_size - map->m_la, blksz));
+	if (vi->chunkformat & EROFS_CHUNK_FORMAT_INDEXES) {
+		addrmask = (vi->chunkformat & EROFS_CHUNK_FORMAT_48BIT) ?
+			BIT_ULL(48) - 1 : BIT_ULL(32) - 1;
+		startblk = (((u64)le16_to_cpu(idx->startblk_hi) << 32) |
+			    le32_to_cpu(idx->startblk_lo)) & addrmask;
+		if ((startblk ^ EROFS_NULL_ADDR) & addrmask) {
+			map->m_deviceid = le16_to_cpu(idx->device_id) &
+				EROFS_SB(sb)->device_id_mask;
+			map->m_pa = erofs_pos(sb, startblk);
+			map->m_flags = EROFS_MAP_MAPPED;
+		}
+	} else {
+		startblk = le32_to_cpu(*(__le32 *)idx);
+		if (startblk != (u32)EROFS_NULL_ADDR) {
+			map->m_pa = erofs_pos(sb, startblk);
+			map->m_flags = EROFS_MAP_MAPPED;
 		}
 	}
+	erofs_put_metabuf(&buf);
 out:
-	map->m_plen = err ? 0 : map->m_llen;
+	if (!err) {
+		map->m_plen = map->m_llen;
+		/* inline data should be located in the same meta block */
+		if ((map->m_flags & EROFS_MAP_META) &&
+		    erofs_blkoff(sb, map->m_pa) + map->m_plen > blksz) {
+			erofs_err(sb, "inline data across blocks @ nid %llu", vi->nid);
+			DBG_BUGON(1);
+			return -EFSCORRUPTED;
+		}
+	}
 	trace_erofs_map_blocks_exit(inode, map, 0, err);
 	return err;
 }
@@ -242,23 +227,19 @@ int erofs_map_dev(struct super_block *sb, struct erofs_map_dev *map)
 /*
  * bit 30: I/O error occurred on this folio
  * bit 29: CPU has dirty data in D-cache (needs aliasing handling);
- * bit 0 - 28: remaining parts to complete this folio, biased by 1 so that
- *	       ->private stays non-NULL while the folio is attached
+ * bit 0 - 29: remaining parts to complete this folio
  */
 #define EROFS_ONLINEFOLIO_EIO		30
 #define EROFS_ONLINEFOLIO_DIRTY		29
-#define EROFS_ONLINEFOLIO_COUNT_MASK	(BIT(EROFS_ONLINEFOLIO_DIRTY) - 1)
-#define EROFS_ONLINEFOLIO_BIAS		1
 
 void erofs_onlinefolio_init(struct folio *folio)
 {
 	union {
 		atomic_t o;
 		void *v;
-	} u = { .o = ATOMIC_INIT(1 + EROFS_ONLINEFOLIO_BIAS) };
+	} u = { .o = ATOMIC_INIT(1) };
 
-	/* valid only if file-backed folio is locked */
-	folio_attach_private(folio, u.v);
+	folio->private = u.v;	/* valid only if file-backed folio is locked */
 }
 
 void erofs_onlinefolio_split(struct folio *folio)
@@ -272,14 +253,14 @@ void erofs_onlinefolio_end(struct folio *folio, int err, bool dirty)
 
 	do {
 		orig = atomic_read((atomic_t *)&folio->private);
-		DBG_BUGON((orig & EROFS_ONLINEFOLIO_COUNT_MASK) <= EROFS_ONLINEFOLIO_BIAS);
+		DBG_BUGON(orig <= 0);
 		v = dirty << EROFS_ONLINEFOLIO_DIRTY;
 		v |= (orig - 1) | (!!err << EROFS_ONLINEFOLIO_EIO);
 	} while (atomic_cmpxchg((atomic_t *)&folio->private, orig, v) != orig);
 
-	if ((v & EROFS_ONLINEFOLIO_COUNT_MASK) != EROFS_ONLINEFOLIO_BIAS)
+	if (v & (BIT(EROFS_ONLINEFOLIO_DIRTY) - 1))
 		return;
-	folio_detach_private(folio);
+	folio->private = 0;
 	if (v & BIT(EROFS_ONLINEFOLIO_DIRTY))
 		flush_dcache_folio(folio);
 	folio_end_read(folio, !(v & BIT(EROFS_ONLINEFOLIO_EIO)));
@@ -288,31 +269,28 @@ void erofs_onlinefolio_end(struct folio *folio, int err, bool dirty)
 static int erofs_iomap_begin(struct inode *inode, loff_t offset, loff_t length,
 		unsigned int flags, struct iomap *iomap, struct iomap *srcmap)
 {
-	struct iomap_iter *iter = container_of(iomap, struct iomap_iter, iomap);
-	struct erofs_iomap_iter_ctx *ctx = iter->private;
-	struct inode *realinode = ctx ? ctx->realinode : inode;
-	struct super_block *sb = realinode->i_sb;
+	int ret;
+	struct super_block *sb = inode->i_sb;
 	struct erofs_map_blocks map;
 	struct erofs_map_dev mdev;
-	int ret;
 
 	map.m_la = offset;
 	map.m_llen = length;
-	ret = erofs_map_blocks(realinode, &map);
+	ret = erofs_map_blocks(inode, &map);
 	if (ret < 0)
 		return ret;
 
 	iomap->offset = map.m_la;
 	iomap->length = map.m_llen;
 	iomap->flags = 0;
-	iomap->addr = IOMAP_NULL_ADDR;
 	iomap->private = NULL;
+	iomap->addr = IOMAP_NULL_ADDR;
 	if (!(map.m_flags & EROFS_MAP_MAPPED)) {
 		iomap->type = IOMAP_HOLE;
 		return 0;
 	}
 
-	if (!(map.m_flags & EROFS_MAP_META) || !erofs_inode_in_metabox(realinode)) {
+	if (!(map.m_flags & EROFS_MAP_META) || !erofs_inode_in_metabox(inode)) {
 		mdev = (struct erofs_map_dev) {
 			.m_deviceid = map.m_deviceid,
 			.m_pa = map.m_pa,
@@ -321,7 +299,6 @@ static int erofs_iomap_begin(struct inode *inode, loff_t offset, loff_t length,
 		if (ret)
 			return ret;
 
-		iomap->private = mdev.m_dif;
 		if (flags & IOMAP_DAX)
 			iomap->dax_dev = mdev.m_dif->dax_dev;
 		else
@@ -332,20 +309,16 @@ static int erofs_iomap_begin(struct inode *inode, loff_t offset, loff_t length,
 	}
 
 	if (map.m_flags & EROFS_MAP_META) {
-		iomap->type = IOMAP_INLINE;
-		/* read context should read the inlined data */
-		if (ctx) {
-			struct erofs_buf buf = __EROFS_BUF_INITIALIZER;
-			void *ptr;
+		void *ptr;
+		struct erofs_buf buf = __EROFS_BUF_INITIALIZER;
 
-			ptr = erofs_read_metabuf(&buf, sb, map.m_pa,
-						 erofs_inode_in_metabox(realinode));
-			if (IS_ERR(ptr))
-				return PTR_ERR(ptr);
-			iomap->inline_data = ptr;
-			ctx->page = buf.page;
-			ctx->base = buf.base;
-		}
+		iomap->type = IOMAP_INLINE;
+		ptr = erofs_read_metabuf(&buf, sb, map.m_pa,
+					 erofs_inode_in_metabox(inode));
+		if (IS_ERR(ptr))
+			return PTR_ERR(ptr);
+		iomap->inline_data = ptr;
+		iomap->private = buf.base;
 	} else {
 		iomap->type = IOMAP_MAPPED;
 	}
@@ -355,37 +328,37 @@ static int erofs_iomap_begin(struct inode *inode, loff_t offset, loff_t length,
 static int erofs_iomap_end(struct inode *inode, loff_t pos, loff_t length,
 		ssize_t written, unsigned int flags, struct iomap *iomap)
 {
-	struct iomap_iter *iter = container_of(iomap, struct iomap_iter, iomap);
-	struct erofs_iomap_iter_ctx *ctx = iter->private;
+	void *ptr = iomap->private;
 
-	if (ctx && ctx->base) {
+	if (ptr) {
 		struct erofs_buf buf = {
-			.page = ctx->page,
-			.base = ctx->base,
+			.page = kmap_to_page(ptr),
+			.base = ptr,
 		};
 
 		DBG_BUGON(iomap->type != IOMAP_INLINE);
 		erofs_put_metabuf(&buf);
-		ctx->base = NULL;
+	} else {
+		DBG_BUGON(iomap->type == IOMAP_INLINE);
 	}
 	return written;
 }
 
-static DEFINE_IOMAP_ITER_NEXT_END(erofs_iomap_next, erofs_iomap_begin,
-				  erofs_iomap_end);
-
 static const struct iomap_ops erofs_iomap_ops = {
-	.iomap_next = erofs_iomap_next,
+	.iomap_begin = erofs_iomap_begin,
+	.iomap_end = erofs_iomap_end,
 };
 
 int erofs_fiemap(struct inode *inode, struct fiemap_extent_info *fieinfo,
 		 u64 start, u64 len)
 {
 	if (erofs_inode_is_data_compressed(EROFS_I(inode)->datalayout)) {
-		if (!IS_ENABLED(CONFIG_EROFS_FS_ZIP))
-			return -EOPNOTSUPP;
+#ifdef CONFIG_EROFS_FS_ZIP
 		return iomap_fiemap(inode, fieinfo, start, len,
 				    &z_erofs_iomap_report_ops);
+#else
+		return -EOPNOTSUPP;
+#endif
 	}
 	return iomap_fiemap(inode, fieinfo, start, len, &erofs_iomap_ops);
 }
@@ -396,42 +369,17 @@ int erofs_fiemap(struct inode *inode, struct fiemap_extent_info *fieinfo,
  */
 static int erofs_read_folio(struct file *file, struct folio *folio)
 {
-	bool need_iput;
-	struct erofs_iomap_iter_ctx iter_ctx = {
-		.realinode = erofs_real_inode(folio_inode(folio), &need_iput),
-	};
-	struct erofs_sb_info *sbi = EROFS_I_SB(iter_ctx.realinode);
-	struct iomap_read_folio_ctx read_ctx = {
-		.ops = erofs_is_fileio_mode(sbi) ?
-			&erofs_fileio_iomap_read_ops : &iomap_bio_read_ops,
-		.cur_folio = folio,
-	};
+	trace_erofs_read_folio(folio, true);
 
-	trace_erofs_read_folio(iter_ctx.realinode, folio, true);
-	iomap_read_folio(&erofs_iomap_ops, &read_ctx, &iter_ctx);
-	if (need_iput)
-		iput(iter_ctx.realinode);
-	return 0;
+	return iomap_read_folio(folio, &erofs_iomap_ops);
 }
 
 static void erofs_readahead(struct readahead_control *rac)
 {
-	bool need_iput;
-	struct erofs_iomap_iter_ctx iter_ctx = {
-		.realinode = erofs_real_inode(rac->mapping->host, &need_iput),
-	};
-	struct erofs_sb_info *sbi = EROFS_I_SB(iter_ctx.realinode);
-	struct iomap_read_folio_ctx read_ctx = {
-		.ops = erofs_is_fileio_mode(sbi) ?
-			&erofs_fileio_iomap_read_ops : &iomap_bio_read_ops,
-		.rac = rac,
-	};
+	trace_erofs_readahead(rac->mapping->host, readahead_index(rac),
+					readahead_count(rac), true);
 
-	trace_erofs_readahead(iter_ctx.realinode, readahead_index(rac),
-			      readahead_count(rac), true);
-	iomap_readahead(&erofs_iomap_ops, &read_ctx, &iter_ctx);
-	if (need_iput)
-		iput(iter_ctx.realinode);
+	return iomap_readahead(rac, &erofs_iomap_ops);
 }
 
 static sector_t erofs_bmap(struct address_space *mapping, sector_t block)
@@ -447,20 +395,17 @@ static ssize_t erofs_file_read_iter(struct kiocb *iocb, struct iov_iter *to)
 	if (!iov_iter_count(to))
 		return 0;
 
-	if (IS_ENABLED(CONFIG_FS_DAX) && IS_DAX(inode))
+#ifdef CONFIG_FS_DAX
+	if (IS_DAX(inode))
 		return dax_iomap_rw(iocb, to, &erofs_iomap_ops);
-
-	if ((iocb->ki_flags & IOCB_DIRECT) && inode->i_sb->s_bdev) {
-		struct erofs_iomap_iter_ctx iter_ctx = {
-			.realinode = inode,
-		};
-
+#endif
+	if ((iocb->ki_flags & IOCB_DIRECT) && inode->i_sb->s_bdev)
 		return iomap_dio_rw(iocb, to, &erofs_iomap_ops,
-				    NULL, 0, &iter_ctx, 0);
-	}
+				    NULL, 0, NULL, 0);
 	return filemap_read(iocb, to, 0);
 }
 
+/* for uncompressed (aligned) files and raw access for other files */
 const struct address_space_operations erofs_aops = {
 	.read_folio = erofs_read_folio,
 	.readahead = erofs_readahead,
@@ -492,27 +437,28 @@ static int erofs_file_mmap_prepare(struct vm_area_desc *desc)
 	if (!IS_DAX(file_inode(desc->file)))
 		return generic_file_readonly_mmap_prepare(desc);
 
-	if (vma_desc_test_all(desc, VMA_SHARED_BIT, VMA_MAYWRITE_BIT))
+	if ((desc->vm_flags & VM_SHARED) && (desc->vm_flags & VM_MAYWRITE))
 		return -EINVAL;
 
 	desc->vm_ops = &erofs_dax_vm_ops;
-	vma_desc_set_flags(desc, VMA_HUGEPAGE_BIT);
+	desc->vm_flags |= VM_HUGEPAGE;
 	return 0;
 }
 #else
 #define erofs_file_mmap_prepare	generic_file_readonly_mmap_prepare
 #endif
 
-loff_t erofs_file_llseek(struct file *file, loff_t offset, int whence)
+static loff_t erofs_file_llseek(struct file *file, loff_t offset, int whence)
 {
 	struct inode *inode = file->f_mapping->host;
 	const struct iomap_ops *ops = &erofs_iomap_ops;
 
-	if (erofs_inode_is_data_compressed(EROFS_I(inode)->datalayout)) {
-		if (!IS_ENABLED(CONFIG_EROFS_FS_ZIP))
-			return generic_file_llseek(file, offset, whence);
+	if (erofs_inode_is_data_compressed(EROFS_I(inode)->datalayout))
+#ifdef CONFIG_EROFS_FS_ZIP
 		ops = &z_erofs_iomap_report_ops;
-	}
+#else
+		return generic_file_llseek(file, offset, whence);
+#endif
 
 	if (whence == SEEK_HOLE)
 		offset = iomap_seek_hole(inode, offset, ops);
@@ -536,5 +482,4 @@ const struct file_operations erofs_file_fops = {
 	.mmap_prepare	= erofs_file_mmap_prepare,
 	.get_unmapped_area = thp_get_unmapped_area,
 	.splice_read	= filemap_splice_read,
-	.setlease	= generic_setlease,
 };

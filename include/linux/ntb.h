@@ -567,7 +567,7 @@ void ntb_msg_event(struct ntb_dev *ntb);
 int ntb_default_port_number(struct ntb_dev *ntb);
 
 /**
- * ntb_default_peer_port_count() - get the default number of peer device ports
+ * ntb_default_port_count() - get the default number of peer device ports
  * @ntb:	NTB device context.
  *
  * By default hardware driver supports just one peer device.
@@ -582,7 +582,7 @@ int ntb_default_peer_port_count(struct ntb_dev *ntb);
 /**
  * ntb_default_peer_port_number() - get the default peer port by given index
  * @ntb:	NTB device context.
- * @pidx:	Peer port index (should not differ from zero).
+ * @idx:	Peer port index (should not differ from zero).
  *
  * By default hardware driver supports just one peer device, so this method
  * shall return the corresponding value from enum ntb_default_port.
@@ -1671,8 +1671,12 @@ int ntbm_msi_request_threaded_irq(struct ntb_dev *ntb, irq_handler_t handler,
 				  irq_handler_t thread_fn,
 				  const char *name, void *dev_id,
 				  struct ntb_msi_desc *msi_desc);
+void ntbm_msi_free_irq(struct ntb_dev *ntb, unsigned int irq, void *dev_id);
 int ntb_msi_peer_trigger(struct ntb_dev *ntb, int peer,
 			 struct ntb_msi_desc *desc);
+int ntb_msi_peer_addr(struct ntb_dev *ntb, int peer,
+		      struct ntb_msi_desc *desc,
+		      phys_addr_t *msi_addr);
 
 #else /* not CONFIG_NTB_MSI */
 
@@ -1694,11 +1698,21 @@ static inline int ntbm_msi_request_threaded_irq(struct ntb_dev *ntb,
 {
 	return -EOPNOTSUPP;
 }
+static inline void ntbm_msi_free_irq(struct ntb_dev *ntb, unsigned int irq,
+				     void *dev_id) {}
 static inline int ntb_msi_peer_trigger(struct ntb_dev *ntb, int peer,
 				       struct ntb_msi_desc *desc)
 {
 	return -EOPNOTSUPP;
 }
+static inline int ntb_msi_peer_addr(struct ntb_dev *ntb, int peer,
+				    struct ntb_msi_desc *desc,
+				    phys_addr_t *msi_addr)
+{
+	return -EOPNOTSUPP;
+
+}
+
 #endif /* CONFIG_NTB_MSI */
 
 static inline int ntbm_msi_request_irq(struct ntb_dev *ntb,

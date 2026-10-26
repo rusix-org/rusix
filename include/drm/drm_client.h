@@ -29,16 +29,6 @@ struct drm_client_funcs {
 	struct module *owner;
 
 	/**
-	 * @free:
-	 *
-	 * Called when the client gets unregistered. Implementations should
-	 * release all client-specific data and free the memory.
-	 *
-	 * This callback is optional.
-	 */
-	void (*free)(struct drm_client_dev *client);
-
-	/**
 	 * @unregister:
 	 *
 	 * Called when &drm_device is unregistered. The client should respond by
@@ -65,20 +55,6 @@ struct drm_client_funcs {
 	 * This callback is optional.
 	 */
 	int (*restore)(struct drm_client_dev *client, bool force);
-
-	/**
-	 * @acquire_outputs:
-	 *
-	 * Called by vga-switcheroo. Informs the client that the outputs will
-	 * be switched to its device. When @acquire_outputs runs, the outputs
-	 * have not been switched yet. The client should only prepare the software
-	 * state. After the switch happened, the client might get a hotplug
-	 * event to update the hardware state.
-	 *
-	 * This callback exists for remapping framebuffers to virtual terminals
-	 * in fbcon.
-	 */
-	void (*acquire_outputs)(struct drm_client_dev *client);
 
 	/**
 	 * @hotplug:
@@ -210,12 +186,9 @@ struct drm_client_buffer {
 };
 
 struct drm_client_buffer *
-drm_client_buffer_create(struct drm_client_dev *client, u32 width, u32 height,
-			 u32 format, u32 handle, u32 pitch);
-struct drm_client_buffer *
-drm_client_buffer_create_dumb(struct drm_client_dev *client, u32 width, u32 height, u32 format);
+drm_client_framebuffer_create(struct drm_client_dev *client, u32 width, u32 height, u32 format);
 void drm_client_buffer_delete(struct drm_client_buffer *buffer);
-int drm_client_buffer_flush(struct drm_client_buffer *buffer, struct drm_rect *rect);
+int drm_client_framebuffer_flush(struct drm_client_buffer *buffer, struct drm_rect *rect);
 int drm_client_buffer_vmap_local(struct drm_client_buffer *buffer,
 				 struct iosys_map *map_copy);
 void drm_client_buffer_vunmap_local(struct drm_client_buffer *buffer);
@@ -231,7 +204,6 @@ int drm_client_modeset_check(struct drm_client_dev *client);
 int drm_client_modeset_commit_locked(struct drm_client_dev *client);
 int drm_client_modeset_commit(struct drm_client_dev *client);
 int drm_client_modeset_dpms(struct drm_client_dev *client, int mode);
-int drm_client_modeset_wait_for_vblank(struct drm_client_dev *client, unsigned int crtc_index);
 
 /**
  * drm_client_for_each_modeset() - Iterate over client modesets

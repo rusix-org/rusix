@@ -18,7 +18,7 @@
 SYM_FUNC_START(sm4_ce_do_crypt)
 	ld1		{v8.4s}, [x2]
 	ld1		{v0.4s-v3.4s}, [x0], #64
-	rev32		v8.16b, v8.16b
+CPU_LE(	rev32		v8.16b, v8.16b		)
 	ld1		{v4.4s-v7.4s}, [x0]
 	sm4e		v8.4s, v0.4s
 	sm4e		v8.4s, v1.4s
@@ -30,7 +30,7 @@ SYM_FUNC_START(sm4_ce_do_crypt)
 	sm4e		v8.4s, v7.4s
 	rev64		v8.4s, v8.4s
 	ext		v8.16b, v8.16b, v8.16b, #8
-	rev32		v8.16b, v8.16b
+CPU_LE(	rev32		v8.16b, v8.16b		)
 	st1		{v8.4s}, [x1]
 	ret
 SYM_FUNC_END(sm4_ce_do_crypt)

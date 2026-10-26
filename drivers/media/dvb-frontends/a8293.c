@@ -218,7 +218,7 @@ static int a8293_probe(struct i2c_client *client)
 	int ret;
 	u8 buf[2];
 
-	dev = kzalloc_obj(*dev);
+	dev = kzalloc(sizeof(*dev), GFP_KERNEL);
 	if (!dev) {
 		ret = -ENOMEM;
 		goto err;
@@ -256,8 +256,8 @@ static void a8293_remove(struct i2c_client *client)
 }
 
 static const struct i2c_device_id a8293_id_table[] = {
-	{ .name = "a8293" },
-	{ }
+	{ "a8293" },
+	{}
 };
 MODULE_DEVICE_TABLE(i2c, a8293_id_table);
 

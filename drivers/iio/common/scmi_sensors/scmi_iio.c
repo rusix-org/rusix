@@ -66,9 +66,10 @@ static int scmi_iio_sensor_update_cb(struct notifier_block *nb,
 		/*
 		 *  Timestamp returned by SCMI is in seconds and is equal to
 		 *  time * power-of-10 multiplier(tstamp_scale) seconds.
-		 *  Converting the timestamp to nanoseconds (10⁹) below.
+		 *  Converting the timestamp to nanoseconds below.
 		 */
-		tstamp_scale = sensor->sensor_info->tstamp_scale + 9;
+		tstamp_scale = sensor->sensor_info->tstamp_scale +
+			       const_ilog2(NSEC_PER_SEC) / const_ilog2(10);
 		if (tstamp_scale < 0) {
 			do_div(time, int_pow(10, abs(tstamp_scale)));
 			time_ns = time;
@@ -419,6 +420,17 @@ static const struct iio_chan_spec_ext_info scmi_iio_ext_info[] = {
 	{ }
 };
 
+static void scmi_iio_set_timestamp_channel(struct iio_chan_spec *iio_chan,
+					   int scan_index)
+{
+	iio_chan->type = IIO_TIMESTAMP;
+	iio_chan->channel = -1;
+	iio_chan->scan_index = scan_index;
+	iio_chan->scan_type.sign = 'u';
+	iio_chan->scan_type.realbits = 64;
+	iio_chan->scan_type.storagebits = 64;
+}
+
 static void scmi_iio_set_data_channel(struct iio_chan_spec *iio_chan,
 				      enum iio_chan_type type,
 				      enum iio_modifier mod, int scan_index)
@@ -618,7 +630,7 @@ scmi_alloc_iiodev(struct scmi_device *sdev,
 					 "Error in registering sensor update notifier for sensor %s\n",
 					 sensor->sensor_info->name);
 
-	iio_channels[i] = IIO_CHAN_SOFT_TIMESTAMP(i);
+	scmi_iio_set_timestamp_channel(&iio_channels[i], i);
 	iiodev->channels = iio_channels;
 	return iiodev;
 }

@@ -66,6 +66,7 @@ extern unsigned int svcrdma_ord;
 extern unsigned int svcrdma_max_requests;
 extern unsigned int svcrdma_max_bc_requests;
 extern unsigned int svcrdma_max_req_size;
+extern struct workqueue_struct *svcrdma_wq;
 
 extern struct percpu_counter svcrdma_stat_read;
 extern struct percpu_counter svcrdma_stat_recv;
@@ -77,15 +78,12 @@ struct svcxprt_rdma {
 	struct rdma_cm_id    *sc_cm_id;		/* RDMA connection id */
 	struct list_head     sc_accept_q;	/* Conn. waiting accept */
 	struct rpcrdma_notification sc_rn;	/* removal notification */
-	u32		     sc_ord;		/* RDMA read limit */
-	unsigned int         sc_max_send_sges;
+	int		     sc_ord;		/* RDMA read limit */
+	int                  sc_max_send_sges;
 	bool		     sc_snd_w_inv;	/* OK to use Send With Invalidate */
 
 	atomic_t             sc_sq_avail;	/* SQEs ready to be consumed */
 	unsigned int	     sc_sq_depth;	/* Depth of SQ */
-	atomic_t	     sc_sq_ticket_head;	/* Next ticket to issue */
-	atomic_t	     sc_sq_ticket_tail;	/* Ticket currently serving */
-	wait_queue_head_t    sc_sq_ticket_wait;	/* Ticket ordering waitlist */
 	__be32		     sc_fc_credits;	/* Forward credits */
 	u32		     sc_max_requests;	/* Max requests */
 	u32		     sc_max_bc_requests;/* Backward credits */
@@ -116,8 +114,6 @@ struct svcxprt_rdma {
 
 	struct llist_head    sc_recv_ctxts;
 
-	struct llist_head    sc_send_release_list;
-
 	atomic_t	     sc_completion_ids;
 };
 /* sc_flags */
@@ -135,7 +131,7 @@ static inline struct svcxprt_rdma *svc_rdma_rqst_rdma(struct svc_rqst *rqstp)
  */
 enum {
 	RPCRDMA_LISTEN_BACKLOG	= 10,
-	RPCRDMA_MAX_REQUESTS	= 128,
+	RPCRDMA_MAX_REQUESTS	= 64,
 	RPCRDMA_MAX_BC_REQUESTS	= 2,
 };
 
@@ -231,11 +227,13 @@ struct svc_rdma_write_info {
 	unsigned int		wi_next_off;
 
 	struct svc_rdma_chunk_ctxt	wi_cc;
+	struct work_struct	wi_work;
 };
 
 struct svc_rdma_send_ctxt {
 	struct llist_node	sc_node;
 	struct rpc_rdma_cid	sc_cid;
+	struct work_struct	sc_work;
 
 	struct svcxprt_rdma	*sc_rdma;
 	struct ib_send_wr	sc_send_wr;
@@ -299,7 +297,6 @@ extern int svc_rdma_process_read_list(struct svcxprt_rdma *rdma,
 
 /* svc_rdma_sendto.c */
 extern void svc_rdma_send_ctxts_destroy(struct svcxprt_rdma *rdma);
-extern void svc_rdma_send_ctxts_drain(struct svcxprt_rdma *rdma);
 extern struct svc_rdma_send_ctxt *
 		svc_rdma_send_ctxt_get(struct svcxprt_rdma *rdma);
 extern void svc_rdma_send_ctxt_put(struct svcxprt_rdma *rdma,
@@ -316,13 +313,6 @@ extern void svc_rdma_send_error_msg(struct svcxprt_rdma *rdma,
 				    struct svc_rdma_recv_ctxt *rctxt,
 				    int status);
 extern void svc_rdma_wake_send_waiters(struct svcxprt_rdma *rdma, int avail);
-extern int svc_rdma_sq_wait(struct svcxprt_rdma *rdma,
-			    const struct rpc_rdma_cid *cid, int sqecount);
-extern int svc_rdma_post_send_err(struct svcxprt_rdma *rdma,
-				  const struct rpc_rdma_cid *cid,
-				  const struct ib_send_wr *bad_wr,
-				  const struct ib_send_wr *first_wr,
-				  int sqecount, int ret);
 extern int svc_rdma_sendto(struct svc_rqst *);
 extern int svc_rdma_result_payload(struct svc_rqst *rqstp, unsigned int offset,
 				   unsigned int length);

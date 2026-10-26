@@ -23,10 +23,8 @@ static int pla_read_word(struct usbnet *dev, u16 index)
 
 	ret = usbnet_read_cmd(dev, RTL8152_REQ_GET_REGS, RTL8152_REQT_READ, index,
 			      MCU_TYPE_PLA | byen, &tmp, sizeof(tmp));
-	if (ret != sizeof(tmp)) {
-		ret = ret < 0 ? ret : -ENODATA;
+	if (ret < 0)
 		goto out;
-	}
 
 	ret = __le32_to_cpu(tmp);
 	ret >>= (shift * 8);
@@ -57,10 +55,8 @@ static int pla_write_word(struct usbnet *dev, u16 index, u32 data)
 	ret = usbnet_read_cmd(dev, RTL8152_REQ_GET_REGS, RTL8152_REQT_READ, index,
 			      MCU_TYPE_PLA | byen, &tmp, sizeof(tmp));
 
-	if (ret != sizeof(tmp)) {
-		ret = ret < 0 ? ret : -ENODATA;
+	if (ret < 0)
 		goto out;
-	}
 
 	data |= __le32_to_cpu(tmp) & ~mask;
 	tmp = __cpu_to_le32(data);

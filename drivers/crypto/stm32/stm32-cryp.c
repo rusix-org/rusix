@@ -21,7 +21,6 @@
 #include <linux/interrupt.h>
 #include <linux/kernel.h>
 #include <linux/module.h>
-#include <linux/minmax.h>
 #include <linux/of.h>
 #include <linux/platform_device.h>
 #include <linux/pm_runtime.h>
@@ -361,13 +360,19 @@ static int stm32_cryp_it_start(struct stm32_cryp *cryp);
 
 static struct stm32_cryp *stm32_cryp_find_dev(struct stm32_cryp_ctx *ctx)
 {
-	struct stm32_cryp *cryp;
+	struct stm32_cryp *tmp, *cryp = NULL;
 
 	spin_lock_bh(&cryp_list.lock);
-	if (!ctx->cryp)
-		ctx->cryp = list_first_entry_or_null(&cryp_list.dev_list,
-						     struct stm32_cryp, list);
-	cryp = ctx->cryp;
+	if (!ctx->cryp) {
+		list_for_each_entry(tmp, &cryp_list.dev_list, list) {
+			cryp = tmp;
+			break;
+		}
+		ctx->cryp = cryp;
+	} else {
+		cryp = ctx->cryp;
+	}
+
 	spin_unlock_bh(&cryp_list.lock);
 
 	return cryp;
@@ -1492,7 +1497,7 @@ static int stm32_cryp_truncate_sg(struct scatterlist **new_sg, size_t *new_sg_le
 		return alloc_sg_len;
 
 	/* We allocate to much sg entry, but it is easier */
-	*new_sg = kmalloc_objs(struct scatterlist, (size_t)alloc_sg_len);
+	*new_sg = kmalloc_array((size_t)alloc_sg_len, sizeof(struct scatterlist), GFP_KERNEL);
 	if (!*new_sg)
 		return -ENOMEM;
 
@@ -1917,19 +1922,20 @@ static void stm32_cryp_irq_read_data(struct stm32_cryp *cryp)
 	u32 block[AES_BLOCK_32];
 
 	readsl(cryp->regs + cryp->caps->dout, block, cryp->hw_blocksize / sizeof(u32));
-	memcpy_to_scatterwalk(&cryp->out_walk, block, min(cryp->hw_blocksize,
-							  cryp->payload_out));
-	cryp->payload_out -= min(cryp->hw_blocksize, cryp->payload_out);
+	memcpy_to_scatterwalk(&cryp->out_walk, block, min_t(size_t, cryp->hw_blocksize,
+							    cryp->payload_out));
+	cryp->payload_out -= min_t(size_t, cryp->hw_blocksize,
+				   cryp->payload_out);
 }
 
 static void stm32_cryp_irq_write_block(struct stm32_cryp *cryp)
 {
 	u32 block[AES_BLOCK_32] = {0};
 
-	memcpy_from_scatterwalk(block, &cryp->in_walk, min(cryp->hw_blocksize,
-							   cryp->payload_in));
+	memcpy_from_scatterwalk(block, &cryp->in_walk, min_t(size_t, cryp->hw_blocksize,
+							     cryp->payload_in));
 	writesl(cryp->regs + cryp->caps->din, block, cryp->hw_blocksize / sizeof(u32));
-	cryp->payload_in -= min(cryp->hw_blocksize, cryp->payload_in);
+	cryp->payload_in -= min_t(size_t, cryp->hw_blocksize, cryp->payload_in);
 }
 
 static void stm32_cryp_irq_write_gcm_padded_data(struct stm32_cryp *cryp)
@@ -1974,9 +1980,10 @@ static void stm32_cryp_irq_write_gcm_padded_data(struct stm32_cryp *cryp)
 	 */
 	readsl(cryp->regs + cryp->caps->dout, block, cryp->hw_blocksize / sizeof(u32));
 
-	memcpy_to_scatterwalk(&cryp->out_walk, block, min(cryp->hw_blocksize,
-							  cryp->payload_out));
-	cryp->payload_out -= min(cryp->hw_blocksize, cryp->payload_out);
+	memcpy_to_scatterwalk(&cryp->out_walk, block, min_t(size_t, cryp->hw_blocksize,
+							    cryp->payload_out));
+	cryp->payload_out -= min_t(size_t, cryp->hw_blocksize,
+				   cryp->payload_out);
 
 	/* d) change mode back to AES GCM */
 	cfg &= ~CR_ALGO_MASK;
@@ -2071,9 +2078,9 @@ static void stm32_cryp_irq_write_ccm_padded_data(struct stm32_cryp *cryp)
 	 */
 	readsl(cryp->regs + cryp->caps->dout, block, cryp->hw_blocksize / sizeof(u32));
 
-	memcpy_to_scatterwalk(&cryp->out_walk, block, min(cryp->hw_blocksize,
-							  cryp->payload_out));
-	cryp->payload_out -= min(cryp->hw_blocksize, cryp->payload_out);
+	memcpy_to_scatterwalk(&cryp->out_walk, block, min_t(size_t, cryp->hw_blocksize,
+							    cryp->payload_out));
+	cryp->payload_out -= min_t(size_t, cryp->hw_blocksize, cryp->payload_out);
 
 	/* d) Load again CRYP_CSGCMCCMxR */
 	for (i = 0; i < ARRAY_SIZE(cstmp2); i++)
@@ -2151,7 +2158,7 @@ static void stm32_cryp_irq_write_gcmccm_header(struct stm32_cryp *cryp)
 	u32 block[AES_BLOCK_32] = {0};
 	size_t written;
 
-	written = min(AES_BLOCK_SIZE, cryp->header_in);
+	written = min_t(size_t, AES_BLOCK_SIZE, cryp->header_in);
 
 	memcpy_from_scatterwalk(block, &cryp->in_walk, written);
 
@@ -2590,8 +2597,10 @@ static int stm32_cryp_probe(struct platform_device *pdev)
 	ret = devm_request_threaded_irq(dev, irq, stm32_cryp_irq,
 					stm32_cryp_irq_thread, IRQF_ONESHOT,
 					dev_name(dev), cryp);
-	if (ret)
+	if (ret) {
+		dev_err(dev, "Cannot grab IRQ\n");
 		return ret;
+	}
 
 	cryp->clk = devm_clk_get(dev, NULL);
 	if (IS_ERR(cryp->clk)) {

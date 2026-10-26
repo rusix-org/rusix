@@ -5,7 +5,6 @@
 // Copyright (C) 2022 Intel
 
 #include <linux/acpi_iort.h>
-#include <linux/fsl/mc.h>
 #include <linux/of_address.h>
 #include <linux/pci.h>
 
@@ -18,27 +17,20 @@
 
 #define ITS_MSI_FLAGS_SUPPORTED (MSI_GENERIC_FLAGS_MASK |	\
 				 MSI_FLAG_PCI_MSIX      |	\
-				 MSI_FLAG_MULTI_PCI_MSI |	\
-				 MSI_FLAG_PCI_MSIX_ALLOC_DYN)
+				 MSI_FLAG_MULTI_PCI_MSI)
 
-static int its_translate_frame_address(struct fwnode_handle *msi_node, phys_addr_t *pa)
+static int its_translate_frame_address(struct device_node *msi_node, phys_addr_t *pa)
 {
 	struct resource res;
 	int ret;
 
-	if (is_of_node(msi_node)) {
-		struct device_node *msi_np = to_of_node(msi_node);
+	ret = of_property_match_string(msi_node, "reg-names", "ns-translate");
+	if (ret < 0)
+		return ret;
 
-		ret = of_property_match_string(msi_np, "reg-names", "ns-translate");
-		if (ret < 0)
-			return ret;
-
-		ret = of_address_to_resource(msi_np, ret, &res);
-		if (ret)
-			return ret;
-	} else {
-		ret = iort_its_translate_pa(msi_node, &res.start);
-	}
+	ret = of_address_to_resource(msi_node, ret, &res);
+	if (ret)
+		return ret;
 
 	*pa = res.start;
 	return 0;
@@ -112,7 +104,7 @@ static int its_pci_msi_prepare(struct irq_domain *domain, struct device *dev,
 static int its_v5_pci_msi_prepare(struct irq_domain *domain, struct device *dev,
 				  int nvec, msi_alloc_info_t *info)
 {
-	struct fwnode_handle *msi_node = NULL;
+	struct device_node *msi_node = NULL;
 	struct msi_domain_info *msi_info;
 	struct pci_dev *pdev;
 	phys_addr_t pa;
@@ -124,7 +116,7 @@ static int its_v5_pci_msi_prepare(struct irq_domain *domain, struct device *dev,
 
 	pdev = to_pci_dev(dev);
 
-	rid = pci_msi_map_rid_ctlr_node(domain->parent, pdev, &msi_node);
+	rid = pci_msi_map_rid_ctlr_node(pdev, &msi_node);
 	if (!msi_node)
 		return -ENODEV;
 
@@ -132,7 +124,7 @@ static int its_v5_pci_msi_prepare(struct irq_domain *domain, struct device *dev,
 	if (ret)
 		return -ENODEV;
 
-	fwnode_handle_put(msi_node);
+	of_node_put(msi_node);
 
 	/* ITS specific DeviceID */
 	info->scratchpad[0].ul = rid;
@@ -150,42 +142,88 @@ static int its_v5_pci_msi_prepare(struct irq_domain *domain, struct device *dev,
 #define its_v5_pci_msi_prepare	NULL
 #endif /* !CONFIG_PCI_MSI */
 
-static int of_pmsi_get_msi_info(struct irq_domain *domain, struct device *dev, u32 *dev_id,
-				phys_addr_t *pa)
+static int of_pmsi_get_dev_id(struct irq_domain *domain, struct device *dev,
+				  u32 *dev_id)
 {
-	struct device_node *msi_ctrl = NULL;
-	struct of_phandle_args msi_spec = {};
-	struct of_phandle_iterator it;
-	int ret;
+	int ret, index = 0;
 
 	/* Suck the DeviceID out of the msi-parent property */
-	of_for_each_phandle(&it, ret, dev->of_node, "msi-parent", "#msi-cells", -1) {
-		/* GICv5 ITS domain matches the MSI controller node parent */
-		struct device_node *np __free(device_node) = pa ? of_get_parent(it.node)
-								: of_node_get(it.node);
+	do {
+		struct of_phandle_args args;
 
-		if (np == irq_domain_get_of_node(domain)) {
-			u32 args;
+		ret = of_parse_phandle_with_args(dev->of_node,
+						 "msi-parent", "#msi-cells",
+						 index, &args);
+		if (args.np == irq_domain_get_of_node(domain)) {
+			if (WARN_ON(args.args_count != 1))
+				return -EINVAL;
+			*dev_id = args.args[0];
+			break;
+		}
+		index++;
+	} while (!ret);
 
-			if (WARN_ON(of_phandle_iterator_args(&it, &args, 1) != 1))
-				ret = -EINVAL;
+	if (ret) {
+		struct device_node *np = NULL;
 
-			if (!ret && pa)
-				ret = its_translate_frame_address(of_fwnode_handle(it.node), pa);
+		ret = of_map_id(dev->of_node, dev->id, "msi-map", "msi-map-mask", &np, dev_id);
+		if (np)
+			of_node_put(np);
+	}
 
-			if (!ret)
-				*dev_id = args;
+	return ret;
+}
 
-			of_node_put(it.node);
-			return ret;
+static int of_v5_pmsi_get_msi_info(struct irq_domain *domain, struct device *dev,
+				   u32 *dev_id, phys_addr_t *pa)
+{
+	int ret, index = 0;
+	/*
+	 * Retrieve the DeviceID and the ITS translate frame node pointer
+	 * out of the msi-parent property.
+	 */
+	do {
+		struct of_phandle_args args;
+
+		ret = of_parse_phandle_with_args(dev->of_node,
+						 "msi-parent", "#msi-cells",
+						 index, &args);
+		if (ret)
+			break;
+		/*
+		 * The IRQ domain fwnode is the msi controller parent
+		 * in GICv5 (where the msi controller nodes are the
+		 * ITS translate frames).
+		 */
+		if (args.np->parent == irq_domain_get_of_node(domain)) {
+			if (WARN_ON(args.args_count != 1))
+				return -EINVAL;
+			*dev_id = args.args[0];
+
+			ret = its_translate_frame_address(args.np, pa);
+			if (ret)
+				return -ENODEV;
+			break;
+		}
+		index++;
+	} while (!ret);
+
+	if (ret) {
+		struct device_node *np = NULL;
+
+		ret = of_map_id(dev->of_node, dev->id, "msi-map", "msi-map-mask", &np, dev_id);
+		if (np) {
+			ret = its_translate_frame_address(np, pa);
+			of_node_put(np);
 		}
 	}
 
-	ret = of_map_msi_id(dev->of_node, dev->id, &msi_ctrl, &msi_spec);
-	if (!ret)
-		*dev_id = msi_spec.args[0];
-	of_node_put(msi_spec.np);
 	return ret;
+}
+
+int __weak iort_pmsi_get_dev_id(struct device *dev, u32 *dev_id)
+{
+	return -1;
 }
 
 static int its_pmsi_prepare(struct irq_domain *domain, struct device *dev,
@@ -193,14 +231,12 @@ static int its_pmsi_prepare(struct irq_domain *domain, struct device *dev,
 {
 	struct msi_domain_info *msi_info;
 	u32 dev_id;
-	int ret = 0;
+	int ret;
 
-	if (dev_is_fsl_mc(dev))
-		dev_id = fsl_mc_get_msi_id(dev);
-	else if (dev->of_node)
-		ret = of_pmsi_get_msi_info(domain->parent, dev, &dev_id, NULL);
+	if (dev->of_node)
+		ret = of_pmsi_get_dev_id(domain->parent, dev, &dev_id);
 	else
-		ret = iort_pmsi_get_msi_info(dev, &dev_id, NULL);
+		ret = iort_pmsi_get_dev_id(dev, &dev_id);
 	if (ret)
 		return ret;
 
@@ -223,10 +259,10 @@ static int its_v5_pmsi_prepare(struct irq_domain *domain, struct device *dev,
 	u32 dev_id;
 	int ret;
 
-	if (dev->of_node)
-		ret = of_pmsi_get_msi_info(domain->parent, dev, &dev_id, &pa);
-	else
-		ret = iort_pmsi_get_msi_info(dev, &dev_id, &pa);
+	if (!dev->of_node)
+		return -ENODEV;
+
+	ret = of_v5_pmsi_get_msi_info(domain->parent, dev, &dev_id, &pa);
 	if (ret)
 		return ret;
 

@@ -4,4 +4,3 @@
 #
 
 obj-$(CONFIG_FBNIC) += fbnic/
-obj-$(CONFIG_MPNIC) += mpnic/

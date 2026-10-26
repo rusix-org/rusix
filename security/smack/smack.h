@@ -261,7 +261,6 @@ struct smack_audit_data {
 	char *subject;
 	char *object;
 	char *request;
-	struct task_struct *subj_tsk;
 	int result;
 };
 
@@ -275,20 +274,6 @@ struct smk_audit_info {
 	struct smack_audit_data sad;
 #endif
 };
-
-/*
- * Initialization
- */
-#if defined(CONFIG_SECURITY_SMACK_NETFILTER)
-int smack_nf_ip_init(void);
-#else
-static inline int smack_nf_ip_init(void)
-{
-	return 0;
-}
-#endif
-int init_smk_fs(void);
-int smack_initcall(void);
 
 /*
  * These functions are in smack_access.c

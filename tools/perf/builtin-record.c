@@ -14,7 +14,6 @@
 #include "util/parse-events.h"
 #include "util/config.h"
 
-#include "util/arm64-frame-pointer-unwind-support.h"
 #include "util/callchain.h"
 #include "util/cgroup.h"
 #include "util/header.h"
@@ -41,6 +40,7 @@
 #include "util/perf_api_probe.h"
 #include "util/trigger.h"
 #include "util/perf-hooks.h"
+#include "util/cpu-set-sched.h"
 #include "util/synthetic-events.h"
 #include "util/time-utils.h"
 #include "util/units.h"
@@ -56,7 +56,6 @@
 #include "asm/bug.h"
 #include "perf.h"
 #include "cputopo.h"
-#include "dwarf-regs.h"
 
 #include <errno.h>
 #include <inttypes.h>
@@ -455,7 +454,7 @@ static int record__aio_pushfn(struct mmap *map, void *to, void *buf, size_t size
 static int record__aio_push(struct record *rec, struct mmap *map, off_t *off)
 {
 	int ret, idx;
-	int trace_fd = perf_data__fd(rec->session->data);
+	int trace_fd = rec->session->data->file.fd;
 	struct record_aio aio = { .rec = rec, .size = 0 };
 
 	/*
@@ -503,12 +502,12 @@ static void record__aio_mmap_read_sync(struct record *rec)
 {
 	int i;
 	struct evlist *evlist = rec->evlist;
-	struct mmap *maps = evlist__mmap(evlist);
+	struct mmap *maps = evlist->mmap;
 
 	if (!record__aio_enabled(rec))
 		return;
 
-	for (i = 0; i < evlist__core(evlist)->nr_mmaps; i++) {
+	for (i = 0; i < evlist->core.nr_mmaps; i++) {
 		struct mmap *map = &maps[i];
 
 		if (map->core.base)
@@ -719,6 +718,8 @@ static void record__sig_exit(void)
 	raise(signr);
 }
 
+#ifdef HAVE_AUXTRACE_SUPPORT
+
 static int record__process_auxtrace(const struct perf_tool *tool,
 				    struct mmap *map,
 				    union perf_event *event, void *data1,
@@ -799,8 +800,8 @@ static int record__auxtrace_read_snapshot_all(struct record *rec)
 	int i;
 	int rc = 0;
 
-	for (i = 0; i < evlist__core(rec->evlist)->nr_mmaps; i++) {
-		struct mmap *map = &evlist__mmap(rec->evlist)[i];
+	for (i = 0; i < rec->evlist->core.nr_mmaps; i++) {
+		struct mmap *map = &rec->evlist->mmap[i];
 
 		if (!map->auxtrace_mmap.base)
 			continue;
@@ -877,6 +878,40 @@ static int record__auxtrace_init(struct record *rec)
 	return auxtrace_parse_filters(rec->evlist);
 }
 
+#else
+
+static inline
+int record__auxtrace_mmap_read(struct record *rec __maybe_unused,
+			       struct mmap *map __maybe_unused)
+{
+	return 0;
+}
+
+static inline
+void record__read_auxtrace_snapshot(struct record *rec __maybe_unused,
+				    bool on_exit __maybe_unused)
+{
+}
+
+static inline
+int auxtrace_record__snapshot_start(struct auxtrace_record *itr __maybe_unused)
+{
+	return 0;
+}
+
+static inline
+int record__auxtrace_snapshot_exit(struct record *rec __maybe_unused)
+{
+	return 0;
+}
+
+static int record__auxtrace_init(struct record *rec __maybe_unused)
+{
+	return 0;
+}
+
+#endif
+
 static int record__config_text_poke(struct evlist *evlist)
 {
 	struct evsel *evsel;
@@ -937,6 +972,7 @@ static int record__config_tracking_events(struct record *rec)
 	 */
 	if (opts->target.initial_delay || target__has_cpu(&opts->target) ||
 	    perf_pmus__num_core_pmus() > 1) {
+
 		/*
 		 * User space tasks can migrate between CPUs, so when tracing
 		 * selected CPUs, sideband for all CPUs is still needed.
@@ -1043,15 +1079,15 @@ static void record__thread_data_close_pipes(struct record_thread *thread_data)
 
 static bool evlist__per_thread(struct evlist *evlist)
 {
-	return cpu_map__is_dummy(evlist__core(evlist)->user_requested_cpus);
+	return cpu_map__is_dummy(evlist->core.user_requested_cpus);
 }
 
 static int record__thread_data_init_maps(struct record_thread *thread_data, struct evlist *evlist)
 {
-	int m, tm, nr_mmaps = evlist__core(evlist)->nr_mmaps;
-	struct mmap *mmap = evlist__mmap(evlist);
-	struct mmap *overwrite_mmap = evlist__overwrite_mmap(evlist);
-	struct perf_cpu_map *cpus = evlist__core(evlist)->all_cpus;
+	int m, tm, nr_mmaps = evlist->core.nr_mmaps;
+	struct mmap *mmap = evlist->mmap;
+	struct mmap *overwrite_mmap = evlist->overwrite_mmap;
+	struct perf_cpu_map *cpus = evlist->core.all_cpus;
 	bool per_thread = evlist__per_thread(evlist);
 
 	if (per_thread)
@@ -1060,12 +1096,12 @@ static int record__thread_data_init_maps(struct record_thread *thread_data, stru
 		thread_data->nr_mmaps = bitmap_weight(thread_data->mask->maps.bits,
 						      thread_data->mask->maps.nbits);
 	if (mmap) {
-		thread_data->maps = calloc(thread_data->nr_mmaps, sizeof(struct mmap *));
+		thread_data->maps = zalloc(thread_data->nr_mmaps * sizeof(struct mmap *));
 		if (!thread_data->maps)
 			return -ENOMEM;
 	}
 	if (overwrite_mmap) {
-		thread_data->overwrite_maps = calloc(thread_data->nr_mmaps, sizeof(struct mmap *));
+		thread_data->overwrite_maps = zalloc(thread_data->nr_mmaps * sizeof(struct mmap *));
 		if (!thread_data->overwrite_maps) {
 			zfree(&thread_data->maps);
 			return -ENOMEM;
@@ -1106,17 +1142,16 @@ static int record__thread_data_init_pollfd(struct record_thread *thread_data, st
 		overwrite_map = thread_data->overwrite_maps ?
 				thread_data->overwrite_maps[tm] : NULL;
 
-		for (f = 0; f < evlist__core(evlist)->pollfd.nr; f++) {
-			void *ptr = evlist__core(evlist)->pollfd.priv[f].ptr;
+		for (f = 0; f < evlist->core.pollfd.nr; f++) {
+			void *ptr = evlist->core.pollfd.priv[f].ptr;
 
 			if ((map && ptr == map) || (overwrite_map && ptr == overwrite_map)) {
 				pos = fdarray__dup_entry_from(&thread_data->pollfd, f,
-							      &evlist__core(evlist)->pollfd);
+							      &evlist->core.pollfd);
 				if (pos < 0)
 					return pos;
 				pr_debug2("thread_data[%p]: pollfd[%d] <- event_fd=%d\n",
-					 thread_data, pos,
-					 evlist__core(evlist)->pollfd.entries[f].fd);
+					 thread_data, pos, evlist->core.pollfd.entries[f].fd);
 			}
 		}
 	}
@@ -1160,7 +1195,7 @@ static int record__update_evlist_pollfd_from_thread(struct record *rec,
 						    struct evlist *evlist,
 						    struct record_thread *thread_data)
 {
-	struct pollfd *e_entries = evlist__core(evlist)->pollfd.entries;
+	struct pollfd *e_entries = evlist->core.pollfd.entries;
 	struct pollfd *t_entries = thread_data->pollfd.entries;
 	int err = 0;
 	size_t i;
@@ -1184,7 +1219,7 @@ static int record__dup_non_perf_events(struct record *rec,
 				       struct evlist *evlist,
 				       struct record_thread *thread_data)
 {
-	struct fdarray *fda = &evlist__core(evlist)->pollfd;
+	struct fdarray *fda = &evlist->core.pollfd;
 	int i, ret;
 
 	for (i = 0; i < fda->nr; i++) {
@@ -1211,7 +1246,7 @@ static int record__alloc_thread_data(struct record *rec, struct evlist *evlist)
 	int t, ret;
 	struct record_thread *thread_data;
 
-	rec->thread_data = calloc(rec->nr_threads, sizeof(*(rec->thread_data)));
+	rec->thread_data = zalloc(rec->nr_threads * sizeof(*(rec->thread_data)));
 	if (!rec->thread_data) {
 		pr_err("Failed to allocate thread data\n");
 		return -ENOMEM;
@@ -1311,17 +1346,17 @@ static int record__mmap_evlist(struct record *rec,
 		return ret;
 
 	if (record__threads_enabled(rec)) {
-		ret = perf_data__create_dir(&rec->data, evlist__core(evlist)->nr_mmaps);
+		ret = perf_data__create_dir(&rec->data, evlist->core.nr_mmaps);
 		if (ret) {
 			errno = -ret;
 			pr_err("Failed to create data directory: %m\n");
 			return ret;
 		}
-		for (i = 0; i < evlist__core(evlist)->nr_mmaps; i++) {
-			if (evlist__mmap(evlist))
-				evlist__mmap(evlist)[i].file = &rec->data.dir.files[i];
-			if (evlist__overwrite_mmap(evlist))
-				evlist__overwrite_mmap(evlist)[i].file = &rec->data.dir.files[i];
+		for (i = 0; i < evlist->core.nr_mmaps; i++) {
+			if (evlist->mmap)
+				evlist->mmap[i].file = &rec->data.dir.files[i];
+			if (evlist->overwrite_mmap)
+				evlist->overwrite_mmap[i].file = &rec->data.dir.files[i];
 		}
 	}
 
@@ -1341,27 +1376,10 @@ static int record__open(struct record *rec)
 	struct perf_session *session = rec->session;
 	struct record_opts *opts = &rec->opts;
 	int rc = 0;
-	bool skipped = false;
-	bool removed_tracking = false;
 
 	evlist__for_each_entry(evlist, pos) {
-		if (removed_tracking) {
-			/*
-			 * Normally the head of the list has tracking enabled
-			 * for sideband data like mmaps. If this event is
-			 * removed, make sure to add tracking to the next
-			 * processed event.
-			 */
-			if (!pos->tracking) {
-				pos->tracking = true;
-				evsel__config(pos, opts, &callchain_param);
-			}
-			removed_tracking = false;
-		}
 try_again:
 		if (evsel__open(pos, pos->core.cpus, pos->core.threads) < 0) {
-			bool report_error = true;
-
 			if (evsel__fallback(pos, &opts->target, errno, msg, sizeof(msg))) {
 				if (verbose > 0)
 					ui__warning("%s\n", msg);
@@ -1373,73 +1391,13 @@ try_again:
 			        pos = evlist__reset_weak_group(evlist, pos, true);
 				goto try_again;
 			}
-#if defined(__aarch64__) || defined(__arm__)
-			if (strstr(evsel__name(pos), "cycles")) {
-				struct evsel *pos2;
-				/*
-				 * Unfortunately ARM has many events named
-				 * "cycles" on PMUs like the system-level (L3)
-				 * cache which don't support sampling. Only
-				 * display such failures to open when there is
-				 * only 1 cycles event or verbose is enabled.
-				 */
-				evlist__for_each_entry(evlist, pos2) {
-					if (pos2 == pos)
-						continue;
-					if (strstr(evsel__name(pos2), "cycles")) {
-						report_error = false;
-						break;
-					}
-				}
-			}
-#endif
-			if (report_error || verbose > 0) {
-				evsel__open_strerror(pos, &opts->target, errno, msg, sizeof(msg));
-				ui__error("Failure to open event '%s' on PMU '%s' which will be "
-					  "removed.\n%s\n",
-					  evsel__name(pos), evsel__pmu_name(pos), msg);
-			}
-			if (pos->tracking)
-				removed_tracking = true;
-			pos->skippable = true;
-			skipped = true;
-		}
-	}
-
-	if (skipped) {
-		struct evsel *tmp;
-		int idx = 0;
-		bool evlist_empty = true;
-
-		/* Remove evsels that failed to open and update indices. */
-		evlist__for_each_entry_safe(evlist, tmp, pos) {
-			if (pos->skippable) {
-				evlist__remove(evlist, pos);
-				continue;
-			}
-
-			/*
-			 * Note, dummy events may be command line parsed or
-			 * added by the tool. We care about supporting `perf
-			 * record -e dummy` which may be used as a permission
-			 * check. Dummy events that are added to the command
-			 * line and opened along with other events that fail,
-			 * will still fail as if the dummy events were tool
-			 * added events for the sake of code simplicity.
-			 */
-			if (!evsel__is_dummy_event(pos))
-				evlist_empty = false;
-		}
-		evlist__for_each_entry(evlist, pos) {
-			pos->core.idx = idx++;
-		}
-		/* If list is empty then fail. */
-		if (evlist_empty) {
-			ui__error("Failure to open any events for recording.\n");
-			rc = -1;
+			rc = -errno;
+			evsel__open_strerror(pos, &opts->target, errno, msg, sizeof(msg));
+			ui__error("%s\n", msg);
 			goto out;
 		}
 	}
+
 	if (symbol_conf.kptr_restrict && !evlist__exclude_kernel(evlist)) {
 		pr_warning(
 "WARNING: Kernel address maps (/proc/{kallsyms,modules}) are restricted,\n"
@@ -1470,16 +1428,17 @@ out:
 
 static void set_timestamp_boundary(struct record *rec, u64 sample_time)
 {
-	if (evlist__first_sample_time(rec->evlist) == 0)
-		evlist__set_first_sample_time(rec->evlist, sample_time);
+	if (rec->evlist->first_sample_time == 0)
+		rec->evlist->first_sample_time = sample_time;
 
 	if (sample_time)
-		evlist__set_last_sample_time(rec->evlist, sample_time);
+		rec->evlist->last_sample_time = sample_time;
 }
 
 static int process_sample_event(const struct perf_tool *tool,
 				union perf_event *event,
 				struct perf_sample *sample,
+				struct evsel *evsel,
 				struct machine *machine)
 {
 	struct record *rec = container_of(tool, struct record, tool);
@@ -1490,7 +1449,7 @@ static int process_sample_event(const struct perf_tool *tool,
 		return 0;
 
 	rec->samples++;
-	return build_id__mark_dso_hit(tool, event, sample, machine);
+	return build_id__mark_dso_hit(tool, event, sample, evsel, machine);
 }
 
 static int process_buildids(struct record *rec)
@@ -1500,8 +1459,6 @@ static int process_buildids(struct record *rec)
 	if (perf_data__size(&rec->data) == 0)
 		return 0;
 
-	/* A single DSO is needed and not all inline frames. */
-	symbol_conf.inline_name = false;
 	/*
 	 * During this process, it'll load kernel map and replace the
 	 * dso->long_name to a real pathname it found.  In this case
@@ -1512,6 +1469,7 @@ static int process_buildids(struct record *rec)
 	 *   $HOME/.debug/.build-id/f0/6e17aa50adf4d00b88925e03775de107611551
 	 */
 	symbol_conf.ignore_vmlinux_buildid = true;
+
 	/*
 	 * If --buildid-all is given, it marks all DSO regardless of hits,
 	 * so no need to process samples. But if timestamp_boundary is enabled,
@@ -1653,7 +1611,7 @@ static int record__mmap_read_evlist(struct record *rec, struct evlist *evlist,
 	int rc = 0;
 	int nr_mmaps;
 	struct mmap **maps;
-	int trace_fd = perf_data__fd(&rec->data);
+	int trace_fd = rec->data.file.fd;
 	off_t off = 0;
 
 	if (!evlist)
@@ -1665,7 +1623,7 @@ static int record__mmap_read_evlist(struct record *rec, struct evlist *evlist,
 	if (!maps)
 		return 0;
 
-	if (overwrite && evlist__bkw_mmap_state(evlist) != BKW_MMAP_DATA_PENDING)
+	if (overwrite && evlist->bkw_mmap_state != BKW_MMAP_DATA_PENDING)
 		return 0;
 
 	if (record__aio_enabled(rec))
@@ -1820,7 +1778,7 @@ static void record__init_features(struct record *rec)
 	if (rec->no_buildid)
 		perf_header__clear_feat(&session->header, HEADER_BUILD_ID);
 
-	if (!have_tracepoints(&evlist__core(rec->evlist)->entries))
+	if (!have_tracepoints(&rec->evlist->core.entries))
 		perf_header__clear_feat(&session->header, HEADER_TRACING_DATA);
 
 	if (!rec->opts.branch_stack)
@@ -1858,23 +1816,22 @@ record__finish_output(struct record *rec)
 	}
 
 	rec->session->header.data_size += rec->bytes_written;
-	data->file.size = perf_data__seek(data, 0, SEEK_CUR);
+	data->file.size = lseek(perf_data__fd(data), 0, SEEK_CUR);
 	if (record__threads_enabled(rec)) {
-		for (i = 0; i < data->dir.nr; i++) {
-			data->dir.files[i].size =
-				perf_data_file__seek(&data->dir.files[i], 0, SEEK_CUR);
-		}
+		for (i = 0; i < data->dir.nr; i++)
+			data->dir.files[i].size = lseek(data->dir.files[i].fd, 0, SEEK_CUR);
 	}
 
 	/* Buildid scanning disabled or build ID in kernel and synthesized map events. */
-	if (!rec->no_buildid || !rec->no_buildid_cache) {
+	if (!rec->no_buildid) {
 		process_buildids(rec);
 
 		if (rec->buildid_all)
 			perf_session__dsos_hit_all(rec->session);
 	}
 	perf_session__write_header(rec->session, rec->evlist, fd, true);
-	perf_session__cache_build_ids(rec->session);
+
+	return;
 }
 
 static int record__synthesize_workload(struct record *rec, bool tail)
@@ -1886,7 +1843,7 @@ static int record__synthesize_workload(struct record *rec, bool tail)
 	if (rec->opts.tail_synthesize != tail)
 		return 0;
 
-	thread_map = thread_map__new_by_tid(evlist__workload_pid(rec->evlist));
+	thread_map = thread_map__new_by_tid(rec->evlist->workload.pid);
 	if (thread_map == NULL)
 		return -1;
 
@@ -1894,7 +1851,7 @@ static int record__synthesize_workload(struct record *rec, bool tail)
 						 process_synthesized_event,
 						 &rec->session->machines.host,
 						 needs_mmap,
-						 rec->opts.record_data_mmap);
+						 rec->opts.sample_address);
 	perf_thread_map__put(thread_map);
 	return err;
 }
@@ -2079,10 +2036,10 @@ static void alarm_sig_handler(int sig);
 static const struct perf_event_mmap_page *evlist__pick_pc(struct evlist *evlist)
 {
 	if (evlist) {
-		if (evlist__mmap(evlist) && evlist__mmap(evlist)[0].core.base)
-			return evlist__mmap(evlist)[0].core.base;
-		if (evlist__overwrite_mmap(evlist) && evlist__overwrite_mmap(evlist)[0].core.base)
-			return evlist__overwrite_mmap(evlist)[0].core.base;
+		if (evlist->mmap && evlist->mmap[0].core.base)
+			return evlist->mmap[0].core.base;
+		if (evlist->overwrite_mmap && evlist->overwrite_mmap[0].core.base)
+			return evlist->overwrite_mmap[0].core.base;
 	}
 	return NULL;
 }
@@ -2162,7 +2119,7 @@ static int record__synthesize(struct record *rec, bool tail)
 	if (err)
 		goto out;
 
-	err = perf_event__synthesize_thread_map2(&rec->tool, evlist__core(rec->evlist)->threads,
+	err = perf_event__synthesize_thread_map2(&rec->tool, rec->evlist->core.threads,
 						 process_synthesized_event,
 						NULL);
 	if (err < 0) {
@@ -2170,7 +2127,7 @@ static int record__synthesize(struct record *rec, bool tail)
 		return err;
 	}
 
-	err = perf_event__synthesize_cpu_map(&rec->tool, evlist__core(rec->evlist)->all_cpus,
+	err = perf_event__synthesize_cpu_map(&rec->tool, rec->evlist->core.all_cpus,
 					     process_synthesized_event, NULL);
 	if (err < 0) {
 		pr_err("Couldn't synthesize cpu map.\n");
@@ -2203,8 +2160,8 @@ static int record__synthesize(struct record *rec, bool tail)
 		bool needs_mmap = rec->opts.synth & PERF_SYNTH_MMAP;
 
 		err = __machine__synthesize_threads(machine, tool, &opts->target,
-						    evlist__core(rec->evlist)->threads,
-						    f, needs_mmap, opts->record_data_mmap,
+						    rec->evlist->core.threads,
+						    f, needs_mmap, opts->sample_address,
 						    rec->opts.nr_threads_synthesize);
 	}
 
@@ -2258,8 +2215,6 @@ static int record__setup_sb_evlist(struct record *rec)
 
 		if (evlist__add_bpf_sb_event(rec->sb_evlist, perf_session__env(rec->session))) {
 			pr_err("Couldn't ask for PERF_RECORD_BPF_EVENT side band events.\n.");
-			evlist__put(rec->sb_evlist);
-			rec->sb_evlist = NULL;
 			return -1;
 		}
 	}
@@ -2558,7 +2513,7 @@ static int __cmd_record(struct record *rec, int argc, const char **argv)
 	 * because we synthesize event name through the pipe
 	 * and need the id for that.
 	 */
-	if (data->is_pipe && evlist__nr_entries(rec->evlist) == 1)
+	if (data->is_pipe && rec->evlist->core.nr_entries == 1)
 		rec->opts.sample_id = true;
 
 	if (rec->timestamp_filename && perf_data__is_pipe(data)) {
@@ -2582,7 +2537,7 @@ static int __cmd_record(struct record *rec, int argc, const char **argv)
 	}
 	/* Debug message used by test scripts */
 	pr_debug3("perf record done opening and mmapping events\n");
-	env->comp_mmap_len = evlist__core(session->evlist)->mmap_len;
+	env->comp_mmap_len = session->evlist->core.mmap_len;
 
 	if (rec->opts.kcore) {
 		err = record__kcore_copy(&session->machines.host, data);
@@ -2683,7 +2638,7 @@ static int __cmd_record(struct record *rec, int argc, const char **argv)
 		 * Synthesize COMM event to prevent it.
 		 */
 		tgid = perf_event__synthesize_comm(tool, event,
-						   evlist__workload_pid(rec->evlist),
+						   rec->evlist->workload.pid,
 						   process_synthesized_event,
 						   machine);
 		free(event);
@@ -2703,7 +2658,7 @@ static int __cmd_record(struct record *rec, int argc, const char **argv)
 		 * Synthesize NAMESPACES event for the command specified.
 		 */
 		perf_event__synthesize_namespaces(tool, event,
-						  evlist__workload_pid(rec->evlist),
+						  rec->evlist->workload.pid,
 						  tgid, process_synthesized_event,
 						  machine);
 		free(event);
@@ -2720,7 +2675,7 @@ static int __cmd_record(struct record *rec, int argc, const char **argv)
 		}
 	}
 
-	err = event_enable_timer__start(evlist__event_enable_timer(rec->evlist));
+	err = event_enable_timer__start(rec->evlist->eet);
 	if (err)
 		goto out_child;
 
@@ -2782,7 +2737,7 @@ static int __cmd_record(struct record *rec, int argc, const char **argv)
 			 * record__mmap_read_all() didn't collect data from
 			 * overwritable ring buffer. Read again.
 			 */
-			if (evlist__bkw_mmap_state(rec->evlist) == BKW_MMAP_RUNNING)
+			if (rec->evlist->bkw_mmap_state == BKW_MMAP_RUNNING)
 				continue;
 			trigger_ready(&switch_output_trigger);
 
@@ -2851,7 +2806,7 @@ static int __cmd_record(struct record *rec, int argc, const char **argv)
 			}
 		}
 
-		err = event_enable_timer__process(evlist__event_enable_timer(rec->evlist));
+		err = event_enable_timer__process(rec->evlist->eet);
 		if (err < 0)
 			goto out_child;
 		if (err) {
@@ -2903,13 +2858,11 @@ static int __cmd_record(struct record *rec, int argc, const char **argv)
 		record__synthesize_workload(rec, true);
 
 out_child:
-	evlist__disable(rec->evlist);
 	record__stop_threads(rec);
 	record__mmap_read_all(rec, true);
 	goto out_free_threads;
 out_child_no_flush:
 	/* mmap read already failed — retrying would just fail again */
-	evlist__disable(rec->evlist);
 	record__stop_threads(rec);
 out_free_threads:
 	record__free_thread_data(rec);
@@ -2925,7 +2878,7 @@ out_free_threads:
 		int exit_status;
 
 		if (!child_finished)
-			kill(evlist__workload_pid(rec->evlist), SIGTERM);
+			kill(rec->evlist->workload.pid, SIGTERM);
 
 		wait(&exit_status);
 
@@ -2999,31 +2952,63 @@ out_delete_session:
 	return status;
 }
 
-static int record_parse_callchain_opt(const struct option *opt,
+static void callchain_debug(struct callchain_param *callchain)
+{
+	static const char *str[CALLCHAIN_MAX] = { "NONE", "FP", "DWARF", "LBR" };
+
+	pr_debug("callchain: type %s\n", str[callchain->record_mode]);
+
+	if (callchain->record_mode == CALLCHAIN_DWARF)
+		pr_debug("callchain: stack dump size %d\n",
+			 callchain->dump_size);
+}
+
+int record_opts__parse_callchain(struct record_opts *record,
+				 struct callchain_param *callchain,
+				 const char *arg, bool unset)
+{
+	int ret;
+	callchain->enabled = !unset;
+
+	/* --no-call-graph */
+	if (unset) {
+		callchain->record_mode = CALLCHAIN_NONE;
+		pr_debug("callchain: disabled\n");
+		return 0;
+	}
+
+	ret = parse_callchain_record_opt(arg, callchain);
+	if (!ret) {
+		/* Enable data address sampling for DWARF unwind. */
+		if (callchain->record_mode == CALLCHAIN_DWARF)
+			record->sample_address = true;
+		callchain_debug(callchain);
+	}
+
+	return ret;
+}
+
+int record_parse_callchain_opt(const struct option *opt,
 			       const char *arg,
 			       int unset)
 {
 	return record_opts__parse_callchain(opt->value, &callchain_param, arg, unset);
 }
 
-static int record_callchain_opt(const struct option *opt,
-				const char *arg __maybe_unused,
-				int unset)
+int record_callchain_opt(const struct option *opt,
+			 const char *arg __maybe_unused,
+			 int unset __maybe_unused)
 {
-	/*
-	 * The -g option only sets the callchain if not already configured by
-	 * .perfconfig. It does, however, enable it.
-	 */
-	if (callchain_param.record_mode != CALLCHAIN_NONE) {
-		callchain_param.enabled = true;
-		return 0;
-	}
+	struct callchain_param *callchain = opt->value;
 
-	return record_opts__parse_callchain(opt->value, &callchain_param,
-					    EM_HOST != EM_S390 ? "fp" : "dwarf",
-					    unset);
+	callchain->enabled = true;
+
+	if (callchain->record_mode == CALLCHAIN_NONE)
+		callchain->record_mode = CALLCHAIN_FP;
+
+	callchain_debug(callchain);
+	return 0;
 }
-
 
 static int perf_record_config(const char *var, const char *value, void *cb)
 {
@@ -3035,7 +3020,7 @@ static int perf_record_config(const char *var, const char *value, void *cb)
 		else if (!strcmp(value, "no-cache"))
 			rec->no_buildid_cache = true;
 		else if (!strcmp(value, "skip"))
-			rec->no_buildid = rec->no_buildid_cache = true;
+			rec->no_buildid = true;
 		else if (!strcmp(value, "mmap"))
 			rec->buildid_mmap = true;
 		else if (!strcmp(value, "no-mmap"))
@@ -3100,7 +3085,6 @@ static int record__mmap_cpu_mask_alloc(struct mmap_cpu_mask *mask, int nr_bits)
 static void record__mmap_cpu_mask_free(struct mmap_cpu_mask *mask)
 {
 	bitmap_free(mask->bits);
-	mask->bits = NULL;
 	mask->nbits = 0;
 }
 
@@ -3250,6 +3234,10 @@ static int record__parse_off_cpu_thresh(const struct option *opt,
 		opts->off_cpu_thresh_ns = off_cpu_thresh_ms * NSEC_PER_MSEC;
 
 	return 0;
+}
+
+void __weak arch__add_leaf_frame_record_opts(struct record_opts *opts __maybe_unused)
+{
 }
 
 static int parse_control_option(const struct option *opt,
@@ -3513,7 +3501,7 @@ static struct option __record_options[] = {
 	OPT_CALLBACK(0, "mmap-flush", &record.opts, "number",
 		     "Minimal number of bytes that is extracted from mmap data pages (default: 1)",
 		     record__mmap_flush_parse),
-	OPT_CALLBACK_NOOPT('g', NULL, &record.opts,
+	OPT_CALLBACK_NOOPT('g', NULL, &callchain_param,
 			   NULL, "enables call-graph recording" ,
 			   &record_callchain_opt),
 	OPT_CALLBACK(0, "call-graph", &record.opts,
@@ -3672,9 +3660,6 @@ static struct option __record_options[] = {
 	OPT_CALLBACK(0, "off-cpu-thresh", &record.opts, "ms",
 		     "Dump off-cpu samples if off-cpu time exceeds this threshold (in milliseconds). (Default: 500ms)",
 		     record__parse_off_cpu_thresh),
-	OPT_BOOLEAN_SET(0, "data-mmap", &record.opts.record_data_mmap,
-			&record.opts.record_data_mmap_set,
-			"Record mmap events for non-executable mappings"),
 	OPT_END()
 };
 
@@ -3683,7 +3668,7 @@ struct option *record_options = __record_options;
 static int record__mmap_cpu_mask_init(struct mmap_cpu_mask *mask, struct perf_cpu_map *cpus)
 {
 	struct perf_cpu cpu;
-	unsigned int idx;
+	int idx;
 
 	if (cpu_map__is_dummy(cpus))
 		return 0;
@@ -3730,7 +3715,7 @@ static int record__alloc_thread_masks(struct record *rec, int nr_threads, int nr
 {
 	int t, ret;
 
-	rec->thread_masks = calloc(nr_threads, sizeof(*(rec->thread_masks)));
+	rec->thread_masks = zalloc(nr_threads * sizeof(*(rec->thread_masks)));
 	if (!rec->thread_masks) {
 		pr_err("Failed to allocate thread masks\n");
 		return -ENOMEM;
@@ -3940,7 +3925,7 @@ static int record__init_thread_numa_masks(struct record *rec, struct perf_cpu_ma
 		return -ENOMEM;
 	}
 
-	spec = calloc(topo->nr, sizeof(char *));
+	spec = zalloc(topo->nr * sizeof(char *));
 	if (!spec) {
 		pr_err("Failed to allocate NUMA spec\n");
 		ret = -ENOMEM;
@@ -4048,7 +4033,7 @@ static int record__init_thread_default_masks(struct record *rec, struct perf_cpu
 static int record__init_thread_masks(struct record *rec)
 {
 	int ret = 0;
-	struct perf_cpu_map *cpus = evlist__core(rec->evlist)->all_cpus;
+	struct perf_cpu_map *cpus = rec->evlist->core.all_cpus;
 
 	if (!record__threads_enabled(rec))
 		return record__init_thread_default_masks(rec, cpus);
@@ -4118,11 +4103,8 @@ int cmd_record(int argc, const char **argv)
 
 	perf_debuginfod_setup(&record.debuginfod);
 
-	/*
-	 * Use system wide (-a) for the default target (ie. when no
-	 * workload). User ID filtering also implies system-wide.
-	 */
-	if ((!argc && target__none(&rec->opts.target)) || rec->uid_str)
+	/* Make system wide (-a) the default target. */
+	if (!argc && target__none(&rec->opts.target))
 		rec->opts.target.system_wide = true;
 
 	if (nr_cgroups && !rec->opts.target.system_wide) {
@@ -4147,25 +4129,24 @@ int cmd_record(int argc, const char **argv)
 		record.opts.record_switch_events = true;
 	}
 
+	if (!rec->buildid_mmap) {
+		pr_debug("Disabling build id in synthesized mmap2 events.\n");
+		symbol_conf.no_buildid_mmap2 = true;
+	} else if (rec->buildid_mmap_set) {
+		/*
+		 * Explicitly passing --buildid-mmap disables buildid processing
+		 * and cache generation.
+		 */
+		rec->no_buildid = true;
+	}
 	if (rec->buildid_mmap && !perf_can_record_build_id()) {
 		pr_warning("Missing support for build id in kernel mmap events.\n"
 			   "Disable this warning with --no-buildid-mmap\n");
 		rec->buildid_mmap = false;
 	}
-
 	if (rec->buildid_mmap) {
 		/* Enable perf_event_attr::build_id bit. */
 		rec->opts.build_id = true;
-		/* Disable build-ID table in the header. */
-		rec->no_buildid = true;
-	} else {
-		pr_debug("Disabling build id in synthesized mmap2 events.\n");
-		symbol_conf.no_buildid_mmap2 = true;
-	}
-
-	if (rec->no_buildid_set && rec->no_buildid) {
-		/* -B implies -N for historic reasons. */
-		rec->no_buildid_cache = true;
 	}
 
 	if (rec->opts.record_cgroup && !perf_can_record_cgroup()) {
@@ -4241,12 +4222,9 @@ int cmd_record(int argc, const char **argv)
 		goto out_opts;
 	}
 
-	/* For backward compatibility, -d implies --mem-info and --data-mmap */
-	if (rec->opts.sample_address) {
+	/* For backward compatibility, -d implies --mem-info */
+	if (rec->opts.sample_address)
 		rec->opts.sample_data_src = true;
-		if (!rec->opts.record_data_mmap_set)
-			rec->opts.record_data_mmap = true;
-	}
 
 	/*
 	 * Allow aliases to facilitate the lookup of symbols for address
@@ -4265,7 +4243,7 @@ int cmd_record(int argc, const char **argv)
 
 	err = -ENOMEM;
 
-	if (rec->no_buildid_cache) {
+	if (rec->no_buildid_cache || rec->no_buildid) {
 		disable_buildid_cache();
 	} else if (rec->switch_output.enabled) {
 		/*
@@ -4299,15 +4277,10 @@ int cmd_record(int argc, const char **argv)
 	if (record.opts.overwrite)
 		record.opts.tail_synthesize = true;
 
-	if (evlist__nr_entries(rec->evlist) == 0) {
-		struct evlist *def_evlist = evlist__new_default(&rec->opts.target,
-								callchain_param.enabled);
-
-		if (!def_evlist)
+	if (rec->evlist->core.nr_entries == 0) {
+		err = parse_event(rec->evlist, "cycles:P");
+		if (err)
 			goto out;
-
-		evlist__splice_list_tail(rec->evlist, &evlist__core(def_evlist)->entries);
-		evlist__put(def_evlist);
 	}
 
 	if (rec->opts.target.tid && !rec->opts.no_inherit_set)
@@ -4330,6 +4303,9 @@ int cmd_record(int argc, const char **argv)
 		err = parse_uid_filter(rec->evlist, uid);
 		if (err)
 			goto out;
+
+		/* User ID filtering implies system wide. */
+		rec->opts.target.system_wide = true;
 	}
 
 	/* Enable ignoring missing threads when -p option is defined. */
@@ -4337,10 +4313,8 @@ int cmd_record(int argc, const char **argv)
 
 	evlist__warn_user_requested_cpus(rec->evlist, rec->opts.target.cpu_list);
 
-	if (callchain_param.enabled && callchain_param.record_mode == CALLCHAIN_FP) {
-		if (EM_HOST == EM_AARCH64)
-			add_leaf_frame_caller_opts_aarch64(&rec->opts);
-	}
+	if (callchain_param.enabled && callchain_param.record_mode == CALLCHAIN_FP)
+		arch__add_leaf_frame_record_opts(&rec->opts);
 
 	err = -ENOMEM;
 	if (evlist__create_maps(rec->evlist, &rec->opts.target) < 0) {
@@ -4417,7 +4391,7 @@ out:
 	auxtrace_record__free(rec->itr);
 out_opts:
 	evlist__close_control(rec->opts.ctl_fd, rec->opts.ctl_fd_ack, &rec->opts.ctl_fd_close);
-	evlist__put(rec->evlist);
+	evlist__delete(rec->evlist);
 	return err;
 }
 

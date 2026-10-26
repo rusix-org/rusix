@@ -71,10 +71,8 @@ static noinline int nft_socket_cgroup_subtree_level(void)
 	if (level > 255)
 		return -ERANGE;
 
-	if (unlikely(level < 0)) {
-		DEBUG_NET_WARN_ON_ONCE(1);
+	if (WARN_ON_ONCE(level < 0))
 		return -EINVAL;
-	}
 
 	return level;
 }
@@ -99,7 +97,7 @@ static struct sock *nft_socket_do_lookup(const struct nft_pktinfo *pkt)
 		break;
 #endif
 	default:
-		DEBUG_NET_WARN_ON_ONCE(1);
+		WARN_ON_ONCE(1);
 		break;
 	}
 
@@ -154,7 +152,7 @@ static void nft_socket_eval(const struct nft_expr *expr,
 		break;
 #endif
 	default:
-		DEBUG_NET_WARN_ON_ONCE(1);
+		WARN_ON(1);
 		regs->verdict.code = NFT_BREAK;
 	}
 
@@ -165,7 +163,7 @@ out_put_sk:
 
 static const struct nla_policy nft_socket_policy[NFTA_SOCKET_MAX + 1] = {
 	[NFTA_SOCKET_KEY]		= NLA_POLICY_MAX(NLA_BE32, 255),
-	[NFTA_SOCKET_DREG]		= NLA_POLICY_MAX(NLA_BE32, NFT_REG32_MAX),
+	[NFTA_SOCKET_DREG]		= { .type = NLA_U32 },
 	[NFTA_SOCKET_LEVEL]		= NLA_POLICY_MAX(NLA_BE32, 255),
 };
 

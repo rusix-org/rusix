@@ -15,7 +15,6 @@
 #include <linux/module.h>
 #include <linux/scatterlist.h>
 #include <linux/slab.h>
-#include <linux/string.h>
 #include <linux/sysfs.h>
 #include <linux/workqueue.h>
 #include "atmel-i2c.h"
@@ -36,7 +35,7 @@ static void atmel_sha204a_rng_done(struct atmel_i2c_work_data *work_data,
 		dev_warn_ratelimited(&i2c_priv->client->dev,
 				     "i2c transaction failed (%d)\n",
 				     status);
-		kfree_sensitive(work_data);
+		kfree(work_data);
 		atomic_dec(&i2c_priv->tfm_count);
 		return;
 	}
@@ -63,7 +62,7 @@ static int atmel_sha204a_rng_read_nonblocking(struct hwrng *rng, void *data,
 		memcpy(data, &work_data->cmd.data[RSP_DATA_IDX], max);
 		rng->priv = 0;
 	} else {
-		work_data = kmalloc_obj(*work_data, GFP_ATOMIC);
+		work_data = kmalloc(sizeof(*work_data), GFP_ATOMIC);
 		if (!work_data) {
 			atomic_dec(&i2c_priv->tfm_count);
 			return -ENOMEM;
@@ -96,15 +95,12 @@ static int atmel_sha204a_rng_read(struct hwrng *rng, void *data, size_t max,
 
 	ret = atmel_i2c_send_receive(i2c_priv->client, &cmd);
 	if (ret)
-		goto out;
+		return ret;
 
 	max = min(RANDOM_RSP_SIZE - CMD_OVERHEAD_SIZE, max);
 	memcpy(data, &cmd.data[RSP_DATA_IDX], max);
-	ret = max;
 
-out:
-	memzero_explicit(&cmd, sizeof(cmd));
-	return ret;
+	return max;
 }
 
 static int atmel_sha204a_otp_read(struct i2c_client *client, u16 addr, u8 *otp)
@@ -196,6 +192,10 @@ static int atmel_sha204a_probe(struct i2c_client *client)
 		return ret;
 	}
 
+	/* otp read out */
+	if (!i2c_check_functionality(client->adapter, I2C_FUNC_I2C))
+		return -ENODEV;
+
 	ret = sysfs_create_group(&client->dev.kobj, &atmel_sha204a_groups);
 	if (ret) {
 		dev_err(&client->dev, "failed to create sysfs group (%d)\n", ret);
@@ -213,20 +213,20 @@ static void atmel_sha204a_remove(struct i2c_client *client)
 	devm_hwrng_unregister(&client->dev, &i2c_priv->hwrng);
 	atmel_i2c_flush_queue();
 
-	kfree_sensitive((void *)i2c_priv->hwrng.priv);
+	kfree((void *)i2c_priv->hwrng.priv);
 }
 
-static const struct of_device_id atmel_sha204a_dt_ids[] = {
-	{ .compatible = "atmel,atsha204" },
-	{ .compatible = "atmel,atsha204a" },
-	{ }
+static const struct of_device_id atmel_sha204a_dt_ids[] __maybe_unused = {
+	{ .compatible = "atmel,atsha204", .data = &atsha204_quality },
+	{ .compatible = "atmel,atsha204a", },
+	{ /* sentinel */ }
 };
 MODULE_DEVICE_TABLE(of, atmel_sha204a_dt_ids);
 
 static const struct i2c_device_id atmel_sha204a_id[] = {
-	{ .name = "atsha204", .driver_data = (kernel_ulong_t)&atsha204_quality },
-	{ .name = "atsha204a", .driver_data = (kernel_ulong_t)NULL },
-	{ }
+	{ "atsha204", (kernel_ulong_t)&atsha204_quality },
+	{ "atsha204a" },
+	{ /* sentinel */ }
 };
 MODULE_DEVICE_TABLE(i2c, atmel_sha204a_id);
 
@@ -236,7 +236,7 @@ static struct i2c_driver atmel_sha204a_driver = {
 	.id_table		= atmel_sha204a_id,
 
 	.driver.name		= "atmel-sha204a",
-	.driver.of_match_table	= atmel_sha204a_dt_ids,
+	.driver.of_match_table	= of_match_ptr(atmel_sha204a_dt_ids),
 };
 
 static int __init atmel_sha204a_init(void)

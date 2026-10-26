@@ -297,7 +297,7 @@ static int cs35l34_set_tdm_slot(struct snd_soc_dai *dai, unsigned int tx_mask,
 				CS35L34_X_STATE | CS35L34_X_LOC,
 				CS35L34_X_STATE | CS35L34_X_LOC);
 
-	/* disconnect {vp,vbst}_mon routes: enable later if set in tx_mask*/
+	/* disconnect {vp,vbst}_mon routes: eanble later if set in tx_mask*/
 	while (slot >= 0) {
 		/* configure VMON_TX_LOC */
 		if (slot_num == 0)
@@ -1185,8 +1185,8 @@ static const struct of_device_id cs35l34_of_match[] = {
 MODULE_DEVICE_TABLE(of, cs35l34_of_match);
 
 static const struct i2c_device_id cs35l34_id[] = {
-	{ .name = "cs35l34" },
-	{ }
+	{"cs35l34"},
+	{}
 };
 MODULE_DEVICE_TABLE(i2c, cs35l34_id);
 

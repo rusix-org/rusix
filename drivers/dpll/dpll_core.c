@@ -11,7 +11,6 @@
 #include <linux/device.h>
 #include <linux/err.h>
 #include <linux/idr.h>
-#include <linux/module.h>
 #include <linux/property.h>
 #include <linux/slab.h>
 #include <linux/string.h>
@@ -42,7 +41,6 @@ struct dpll_device_registration {
 	struct list_head list;
 	const struct dpll_device_ops *ops;
 	void *priv;
-	dpll_tracker tracker;
 };
 
 struct dpll_pin_registration {
@@ -50,7 +48,6 @@ struct dpll_pin_registration {
 	const struct dpll_pin_ops *ops;
 	void *priv;
 	void *cookie;
-	dpll_tracker tracker;
 };
 
 static int call_dpll_notifiers(unsigned long action, void *info)
@@ -72,8 +69,7 @@ void dpll_device_notify(struct dpll_device *dpll, unsigned long action)
 	call_dpll_notifiers(action, &info);
 }
 
-void dpll_pin_notify(struct dpll_pin *pin, u64 src_clock_id,
-		     unsigned long action)
+void dpll_pin_notify(struct dpll_pin *pin, unsigned long action)
 {
 	struct dpll_pin_notifier_info info = {
 		.pin = pin,
@@ -82,74 +78,38 @@ void dpll_pin_notify(struct dpll_pin *pin, u64 src_clock_id,
 		.clock_id = pin->clock_id,
 		.fwnode = pin->fwnode,
 		.prop = &pin->prop,
-		.src_clock_id = src_clock_id,
 	};
 
 	call_dpll_notifiers(action, &info);
 }
 
-static void dpll_device_tracker_alloc(struct dpll_device *dpll,
-				      dpll_tracker *tracker)
+static void __dpll_device_hold(struct dpll_device *dpll)
 {
-#ifdef CONFIG_DPLL_REFCNT_TRACKER
-	ref_tracker_alloc(&dpll->refcnt_tracker, tracker, GFP_KERNEL);
-#endif
-}
-
-static void dpll_device_tracker_free(struct dpll_device *dpll,
-				     dpll_tracker *tracker)
-{
-#ifdef CONFIG_DPLL_REFCNT_TRACKER
-	ref_tracker_free(&dpll->refcnt_tracker, tracker);
-#endif
-}
-
-static void __dpll_device_hold(struct dpll_device *dpll, dpll_tracker *tracker)
-{
-	dpll_device_tracker_alloc(dpll, tracker);
 	refcount_inc(&dpll->refcount);
 }
 
-static void __dpll_device_put(struct dpll_device *dpll, dpll_tracker *tracker)
+static void __dpll_device_put(struct dpll_device *dpll)
 {
-	dpll_device_tracker_free(dpll, tracker);
 	if (refcount_dec_and_test(&dpll->refcount)) {
 		ASSERT_DPLL_NOT_REGISTERED(dpll);
 		WARN_ON_ONCE(!xa_empty(&dpll->pin_refs));
 		xa_destroy(&dpll->pin_refs);
 		xa_erase(&dpll_device_xa, dpll->id);
 		WARN_ON(!list_empty(&dpll->registration_list));
-		ref_tracker_dir_exit(&dpll->refcnt_tracker);
 		kfree(dpll);
 	}
 }
 
-static void dpll_pin_tracker_alloc(struct dpll_pin *pin, dpll_tracker *tracker)
+static void __dpll_pin_hold(struct dpll_pin *pin)
 {
-#ifdef CONFIG_DPLL_REFCNT_TRACKER
-	ref_tracker_alloc(&pin->refcnt_tracker, tracker, GFP_KERNEL);
-#endif
-}
-
-static void dpll_pin_tracker_free(struct dpll_pin *pin, dpll_tracker *tracker)
-{
-#ifdef CONFIG_DPLL_REFCNT_TRACKER
-	ref_tracker_free(&pin->refcnt_tracker, tracker);
-#endif
-}
-
-static void __dpll_pin_hold(struct dpll_pin *pin, dpll_tracker *tracker)
-{
-	dpll_pin_tracker_alloc(pin, tracker);
 	refcount_inc(&pin->refcount);
 }
 
 static void dpll_pin_idx_free(u32 pin_idx);
 static void dpll_pin_prop_free(struct dpll_pin_properties *prop);
 
-static void __dpll_pin_put(struct dpll_pin *pin, dpll_tracker *tracker)
+static void __dpll_pin_put(struct dpll_pin *pin)
 {
-	dpll_pin_tracker_free(pin, tracker);
 	if (refcount_dec_and_test(&pin->refcount)) {
 		xa_erase(&dpll_pin_xa, pin->id);
 		xa_destroy(&pin->dpll_refs);
@@ -158,7 +118,6 @@ static void __dpll_pin_put(struct dpll_pin *pin, dpll_tracker *tracker)
 		dpll_pin_prop_free(&pin->prop);
 		fwnode_handle_put(pin->fwnode);
 		dpll_pin_idx_free(pin->pin_idx);
-		ref_tracker_dir_exit(&pin->refcnt_tracker);
 		kfree_rcu(pin, rcu);
 	}
 }
@@ -208,7 +167,7 @@ dpll_xa_ref_pin_add(struct xarray *xa_pins, struct dpll_pin *pin,
 	}
 
 	if (!ref_exists) {
-		ref = kzalloc_obj(*ref);
+		ref = kzalloc(sizeof(*ref), GFP_KERNEL);
 		if (!ref)
 			return -ENOMEM;
 		ref->pin = pin;
@@ -221,7 +180,7 @@ dpll_xa_ref_pin_add(struct xarray *xa_pins, struct dpll_pin *pin,
 		refcount_set(&ref->refcount, 1);
 	}
 
-	reg = kzalloc_obj(*reg);
+	reg = kzalloc(sizeof(*reg), GFP_KERNEL);
 	if (!reg) {
 		if (!ref_exists) {
 			xa_erase(xa_pins, pin->pin_idx);
@@ -232,7 +191,7 @@ dpll_xa_ref_pin_add(struct xarray *xa_pins, struct dpll_pin *pin,
 	reg->ops = ops;
 	reg->priv = priv;
 	reg->cookie = cookie;
-	__dpll_pin_hold(pin, &reg->tracker);
+	__dpll_pin_hold(pin);
 	if (ref_exists)
 		refcount_inc(&ref->refcount);
 	list_add_tail(&reg->list, &ref->registration_list);
@@ -255,7 +214,7 @@ static int dpll_xa_ref_pin_del(struct xarray *xa_pins, struct dpll_pin *pin,
 		if (WARN_ON(!reg))
 			return -EINVAL;
 		list_del(&reg->list);
-		__dpll_pin_put(pin, &reg->tracker);
+		__dpll_pin_put(pin);
 		kfree(reg);
 		if (refcount_dec_and_test(&ref->refcount)) {
 			xa_erase(xa_pins, i);
@@ -289,7 +248,7 @@ dpll_xa_ref_dpll_add(struct xarray *xa_dplls, struct dpll_device *dpll,
 	}
 
 	if (!ref_exists) {
-		ref = kzalloc_obj(*ref);
+		ref = kzalloc(sizeof(*ref), GFP_KERNEL);
 		if (!ref)
 			return -ENOMEM;
 		ref->dpll = dpll;
@@ -302,7 +261,7 @@ dpll_xa_ref_dpll_add(struct xarray *xa_dplls, struct dpll_device *dpll,
 		refcount_set(&ref->refcount, 1);
 	}
 
-	reg = kzalloc_obj(*reg);
+	reg = kzalloc(sizeof(*reg), GFP_KERNEL);
 	if (!reg) {
 		if (!ref_exists) {
 			xa_erase(xa_dplls, dpll->id);
@@ -313,7 +272,7 @@ dpll_xa_ref_dpll_add(struct xarray *xa_dplls, struct dpll_device *dpll,
 	reg->ops = ops;
 	reg->priv = priv;
 	reg->cookie = cookie;
-	__dpll_device_hold(dpll, &reg->tracker);
+	__dpll_device_hold(dpll);
 	if (ref_exists)
 		refcount_inc(&ref->refcount);
 	list_add_tail(&reg->list, &ref->registration_list);
@@ -336,7 +295,7 @@ dpll_xa_ref_dpll_del(struct xarray *xa_dplls, struct dpll_device *dpll,
 		if (WARN_ON(!reg))
 			return;
 		list_del(&reg->list);
-		__dpll_device_put(dpll, &reg->tracker);
+		__dpll_device_put(dpll);
 		kfree(reg);
 		if (refcount_dec_and_test(&ref->refcount)) {
 			xa_erase(xa_dplls, i);
@@ -363,7 +322,7 @@ dpll_device_alloc(const u64 clock_id, u32 device_idx, struct module *module)
 	struct dpll_device *dpll;
 	int ret;
 
-	dpll = kzalloc_obj(*dpll);
+	dpll = kzalloc(sizeof(*dpll), GFP_KERNEL);
 	if (!dpll)
 		return ERR_PTR(-ENOMEM);
 	refcount_set(&dpll->refcount, 1);
@@ -378,7 +337,6 @@ dpll_device_alloc(const u64 clock_id, u32 device_idx, struct module *module)
 		return ERR_PTR(ret);
 	}
 	xa_init_flags(&dpll->pin_refs, XA_FLAGS_ALLOC);
-	ref_tracker_dir_init(&dpll->refcnt_tracker, 128, "dpll_device");
 
 	return dpll;
 }
@@ -388,7 +346,6 @@ dpll_device_alloc(const u64 clock_id, u32 device_idx, struct module *module)
  * @clock_id: clock_id of creator
  * @device_idx: idx given by device driver
  * @module: reference to registering module
- * @tracker: tracking object for the acquired reference
  *
  * Get existing object of a dpll device, unique for given arguments.
  * Create new if doesn't exist yet.
@@ -399,8 +356,7 @@ dpll_device_alloc(const u64 clock_id, u32 device_idx, struct module *module)
  * * ERR_PTR(X) - error
  */
 struct dpll_device *
-dpll_device_get(u64 clock_id, u32 device_idx, struct module *module,
-		dpll_tracker *tracker)
+dpll_device_get(u64 clock_id, u32 device_idx, struct module *module)
 {
 	struct dpll_device *dpll, *ret = NULL;
 	unsigned long index;
@@ -410,17 +366,13 @@ dpll_device_get(u64 clock_id, u32 device_idx, struct module *module,
 		if (dpll->clock_id == clock_id &&
 		    dpll->device_idx == device_idx &&
 		    dpll->module == module) {
-			__dpll_device_hold(dpll, tracker);
+			__dpll_device_hold(dpll);
 			ret = dpll;
 			break;
 		}
 	}
-	if (!ret) {
+	if (!ret)
 		ret = dpll_device_alloc(clock_id, device_idx, module);
-		if (!IS_ERR(ret))
-			dpll_device_tracker_alloc(ret, tracker);
-	}
-
 	mutex_unlock(&dpll_lock);
 
 	return ret;
@@ -430,16 +382,15 @@ EXPORT_SYMBOL_GPL(dpll_device_get);
 /**
  * dpll_device_put - decrease the refcount and free memory if possible
  * @dpll: dpll_device struct pointer
- * @tracker: tracking object for the acquired reference
  *
  * Context: Acquires a lock (dpll_lock)
  * Drop reference for a dpll device, if all references are gone, delete
  * dpll device object.
  */
-void dpll_device_put(struct dpll_device *dpll, dpll_tracker *tracker)
+void dpll_device_put(struct dpll_device *dpll)
 {
 	mutex_lock(&dpll_lock);
-	__dpll_device_put(dpll, tracker);
+	__dpll_device_put(dpll);
 	mutex_unlock(&dpll_lock);
 }
 EXPORT_SYMBOL_GPL(dpll_device_put);
@@ -493,7 +444,7 @@ int dpll_device_register(struct dpll_device *dpll, enum dpll_type type,
 		return -EEXIST;
 	}
 
-	reg = kzalloc_obj(*reg);
+	reg = kzalloc(sizeof(*reg), GFP_KERNEL);
 	if (!reg) {
 		mutex_unlock(&dpll_lock);
 		return -ENOMEM;
@@ -501,7 +452,7 @@ int dpll_device_register(struct dpll_device *dpll, enum dpll_type type,
 	reg->ops = ops;
 	reg->priv = priv;
 	dpll->type = type;
-	__dpll_device_hold(dpll, &reg->tracker);
+	__dpll_device_hold(dpll);
 	first_registration = list_empty(&dpll->registration_list);
 	list_add_tail(&reg->list, &dpll->registration_list);
 	if (!first_registration) {
@@ -541,7 +492,7 @@ void dpll_device_unregister(struct dpll_device *dpll,
 		return;
 	}
 	list_del(&reg->list);
-	__dpll_device_put(dpll, &reg->tracker);
+	__dpll_device_put(dpll);
 	kfree(reg);
 
 	if (!list_empty(&dpll->registration_list)) {
@@ -647,7 +598,7 @@ dpll_pin_alloc(u64 clock_id, u32 pin_idx, struct module *module,
 	} else if (pin_idx > INT_MAX) {
 		return ERR_PTR(-EINVAL);
 	}
-	pin = kzalloc_obj(*pin);
+	pin = kzalloc(sizeof(*pin), GFP_KERNEL);
 	if (!pin) {
 		ret = -ENOMEM;
 		goto err_pin_alloc;
@@ -655,7 +606,6 @@ dpll_pin_alloc(u64 clock_id, u32 pin_idx, struct module *module,
 	pin->pin_idx = pin_idx;
 	pin->clock_id = clock_id;
 	pin->module = module;
-	strscpy(pin->module_name, module_name(module));
 	if (WARN_ON(prop->type < DPLL_PIN_TYPE_MUX ||
 		    prop->type > DPLL_PIN_TYPE_MAX)) {
 		ret = -EINVAL;
@@ -672,7 +622,6 @@ dpll_pin_alloc(u64 clock_id, u32 pin_idx, struct module *module,
 			      &dpll_pin_xa_id, GFP_KERNEL);
 	if (ret < 0)
 		goto err_xa_alloc;
-	ref_tracker_dir_init(&pin->refcnt_tracker, 128, "dpll_pin");
 	return pin;
 err_xa_alloc:
 	xa_destroy(&pin->dpll_refs);
@@ -734,7 +683,6 @@ EXPORT_SYMBOL_GPL(unregister_dpll_notifier);
  * @pin_idx: idx given by dev driver
  * @module: reference to registering module
  * @prop: dpll pin properties
- * @tracker: tracking object for the acquired reference
  *
  * Get existing object of a pin (unique for given arguments) or create new
  * if doesn't exist yet.
@@ -746,7 +694,7 @@ EXPORT_SYMBOL_GPL(unregister_dpll_notifier);
  */
 struct dpll_pin *
 dpll_pin_get(u64 clock_id, u32 pin_idx, struct module *module,
-	     const struct dpll_pin_properties *prop, dpll_tracker *tracker)
+	     const struct dpll_pin_properties *prop)
 {
 	struct dpll_pin *pos, *ret = NULL;
 	unsigned long i;
@@ -756,16 +704,13 @@ dpll_pin_get(u64 clock_id, u32 pin_idx, struct module *module,
 		if (pos->clock_id == clock_id &&
 		    pos->pin_idx == pin_idx &&
 		    pos->module == module) {
-			__dpll_pin_hold(pos, tracker);
+			__dpll_pin_hold(pos);
 			ret = pos;
 			break;
 		}
 	}
-	if (!ret) {
+	if (!ret)
 		ret = dpll_pin_alloc(clock_id, pin_idx, module, prop);
-		if (!IS_ERR(ret))
-			dpll_pin_tracker_alloc(ret, tracker);
-	}
 	mutex_unlock(&dpll_lock);
 
 	return ret;
@@ -775,16 +720,15 @@ EXPORT_SYMBOL_GPL(dpll_pin_get);
 /**
  * dpll_pin_put - decrease the refcount and free memory if possible
  * @pin: pointer to a pin to be put
- * @tracker: tracking object for the acquired reference
  *
  * Drop reference for a pin, if all references are gone, delete pin object.
  *
  * Context: Acquires a lock (dpll_lock)
  */
-void dpll_pin_put(struct dpll_pin *pin, dpll_tracker *tracker)
+void dpll_pin_put(struct dpll_pin *pin)
 {
 	mutex_lock(&dpll_lock);
-	__dpll_pin_put(pin, tracker);
+	__dpll_pin_put(pin);
 	mutex_unlock(&dpll_lock);
 }
 EXPORT_SYMBOL_GPL(dpll_pin_put);
@@ -808,7 +752,6 @@ EXPORT_SYMBOL_GPL(dpll_pin_fwnode_set);
 /**
  * fwnode_dpll_pin_find - find dpll pin by firmware node reference
  * @fwnode: reference to firmware node
- * @tracker: tracking object for the acquired reference
  *
  * Get existing object of a pin that is associated with given firmware node
  * reference.
@@ -818,8 +761,7 @@ EXPORT_SYMBOL_GPL(dpll_pin_fwnode_set);
  * * valid dpll_pin pointer on success
  * * NULL when no such pin exists
  */
-struct dpll_pin *fwnode_dpll_pin_find(struct fwnode_handle *fwnode,
-				      dpll_tracker *tracker)
+struct dpll_pin *fwnode_dpll_pin_find(struct fwnode_handle *fwnode)
 {
 	struct dpll_pin *pin, *ret = NULL;
 	unsigned long index;
@@ -827,7 +769,7 @@ struct dpll_pin *fwnode_dpll_pin_find(struct fwnode_handle *fwnode,
 	mutex_lock(&dpll_lock);
 	xa_for_each(&dpll_pin_xa, index, pin) {
 		if (pin->fwnode == fwnode) {
-			__dpll_pin_hold(pin, tracker);
+			__dpll_pin_hold(pin);
 			ret = pin;
 			break;
 		}
@@ -851,7 +793,7 @@ __dpll_pin_register(struct dpll_device *dpll, struct dpll_pin *pin,
 	if (ret)
 		goto ref_pin_del;
 	xa_set_mark(&dpll_pin_xa, pin->id, DPLL_REGISTERED);
-	dpll_pin_create_ntf(pin, dpll->clock_id);
+	dpll_pin_create_ntf(pin);
 
 	return ret;
 
@@ -876,43 +818,19 @@ int
 dpll_pin_register(struct dpll_device *dpll, struct dpll_pin *pin,
 		  const struct dpll_pin_ops *ops, void *priv)
 {
-	const struct dpll_device_ops *dev_ops;
 	int ret;
 
 	if (WARN_ON(!ops) ||
 	    WARN_ON(!ops->state_on_dpll_get) ||
-	    WARN_ON(!ops->direction_get) ||
-	    WARN_ON(ops->supported_ffo && !ops->ffo_get) ||
-	    WARN_ON((pin->prop.capabilities &
-		     DPLL_PIN_CAPABILITIES_STATE_CONNECTED_OVERRIDE) &&
-		    !(pin->prop.capabilities &
-		      DPLL_PIN_CAPABILITIES_STATE_CAN_CHANGE)))
+	    WARN_ON(!ops->direction_get))
 		return -EINVAL;
 
 	mutex_lock(&dpll_lock);
-
-	dev_ops = dpll_device_ops(dpll);
-	if (WARN_ON(ops->measured_freq_get &&
-		    (!dev_ops || !dev_ops->freq_monitor_get ||
-		     !dev_ops->freq_monitor_set))) {
+	if (WARN_ON(!(dpll->module == pin->module &&
+		      dpll->clock_id == pin->clock_id)))
 		ret = -EINVAL;
-		goto out_unlock;
-	}
-
-	/*
-	 * For pins identified via firmware (pin->fwnode), allow registration
-	 * even if the pin's (module, clock_id) differs from the target DPLL.
-	 * For non-fwnode pins, require a strict (module, clock_id) match.
-	 */
-	if (!pin->fwnode &&
-	    WARN_ON_ONCE(dpll->module != pin->module ||
-			 dpll->clock_id != pin->clock_id)) {
-		ret = -EINVAL;
-		goto out_unlock;
-	}
-
-	ret = __dpll_pin_register(dpll, pin, ops, priv, NULL);
-out_unlock:
+	else
+		ret = __dpll_pin_register(dpll, pin, ops, priv, NULL);
 	mutex_unlock(&dpll_lock);
 
 	return ret;
@@ -938,7 +856,7 @@ __dpll_pin_unregister(struct dpll_device *dpll, struct dpll_pin *pin,
 		      const struct dpll_pin_ops *ops, void *priv, void *cookie)
 {
 	ASSERT_DPLL_PIN_REGISTERED(pin);
-	dpll_pin_delete_ntf(pin, dpll->clock_id);
+	dpll_pin_delete_ntf(pin);
 	dpll_xa_ref_pin_del(&dpll->pin_refs, pin, ops, priv, cookie);
 	dpll_xa_ref_dpll_del(&pin->dpll_refs, dpll, ops, priv, cookie);
 	if (xa_empty(&pin->dpll_refs)) {
@@ -1011,7 +929,7 @@ int dpll_pin_on_pin_register(struct dpll_pin *parent, struct dpll_pin *pin,
 			stop = i;
 			goto dpll_unregister;
 		}
-		dpll_pin_create_ntf(pin, parent->clock_id);
+		dpll_pin_create_ntf(pin);
 	}
 	mutex_unlock(&dpll_lock);
 
@@ -1020,7 +938,7 @@ int dpll_pin_on_pin_register(struct dpll_pin *parent, struct dpll_pin *pin,
 dpll_unregister:
 	xa_for_each(&parent->dpll_refs, i, ref)
 		if (i < stop) {
-			dpll_pin_delete_ntf(pin, parent->clock_id);
+			dpll_pin_delete_ntf(pin);
 			__dpll_pin_unregister(ref->dpll, pin, ops, priv,
 					      parent);
 		}
@@ -1053,7 +971,7 @@ void dpll_pin_on_pin_unregister(struct dpll_pin *parent, struct dpll_pin *pin,
 		reg = dpll_pin_registration_find(ref, ops, priv, parent);
 		if (!reg)
 			continue;
-		dpll_pin_delete_ntf(pin, parent->clock_id);
+		dpll_pin_delete_ntf(pin);
 		__dpll_pin_unregister(ref->dpll, pin, ops, priv, parent);
 	}
 	dpll_xa_ref_pin_del(&pin->parent_refs, parent, ops, priv, pin);
@@ -1150,33 +1068,6 @@ void *dpll_pin_on_pin_priv(struct dpll_pin *parent,
 		return NULL;
 	reg = dpll_pin_registration_first(ref);
 	return reg->priv;
-}
-
-/**
- * dpll_pin_own_dpll_ref_first - find the first owner dpll ref of a pin
- * @pin: pointer to a dpll pin
- *
- * Search pin's dpll_refs for a ref whose dpll matches the pin's
- * (module, clock_id) tuple, i.e. the dpll registered by the driver
- * that created the pin. This ensures pin-level attributes are
- * reported and modified using the owner's ops even when the pin is
- * also registered with dplls from other drivers.
- *
- * Return: pointer to the owner's dpll_pin_ref, or NULL if no
- * owner ref is found.
- */
-struct dpll_pin_ref *dpll_pin_own_dpll_ref_first(struct dpll_pin *pin)
-{
-	struct dpll_pin_ref *ref;
-	unsigned long i;
-
-	xa_for_each(&pin->dpll_refs, i, ref) {
-		if (ref->dpll->module == pin->module &&
-		    ref->dpll->clock_id == pin->clock_id)
-			return ref;
-	}
-
-	return NULL;
 }
 
 const struct dpll_pin_ops *dpll_pin_ops(struct dpll_pin_ref *ref)

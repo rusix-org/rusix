@@ -1067,7 +1067,7 @@ int smc_llc_cli_add_link(struct smc_link *link, struct smc_llc_qentry *qentry)
 	if (!llc->qp_mtu)
 		goto out_reject;
 
-	ini = kzalloc_obj(*ini);
+	ini = kzalloc(sizeof(*ini), GFP_KERNEL);
 	if (!ini) {
 		rc = -ENOMEM;
 		goto out_reject;
@@ -1205,7 +1205,7 @@ static void smc_llc_cli_add_link_invite(struct smc_link *link,
 	if (lgr->type == SMC_LGR_SINGLE && lgr->max_links <= 1)
 		goto out;
 
-	ini = kzalloc_obj(*ini);
+	ini = kzalloc(sizeof(*ini), GFP_KERNEL);
 	if (!ini)
 		goto out;
 
@@ -1444,7 +1444,7 @@ int smc_llc_srv_add_link(struct smc_link *link,
 	    req_qentry->msg.raw.hdr.common.llc_type == SMC_LLC_REQ_ADD_LINK)
 		send_req_add_link_resp = true;
 
-	ini = kzalloc_obj(*ini);
+	ini = kzalloc(sizeof(*ini), GFP_KERNEL);
 	if (!ini) {
 		rc = -ENOMEM;
 		goto out;
@@ -2229,8 +2229,6 @@ void smc_llc_lgr_init(struct smc_link_group *lgr, struct smc_sock *smc)
 	init_waitqueue_head(&lgr->llc_msg_waiter);
 	init_rwsem(&lgr->llc_conf_mutex);
 	lgr->llc_testlink_time = READ_ONCE(net->smc.sysctl_smcr_testlink_time);
-	lgr->max_send_wr = (u16)(READ_ONCE(net->smc.sysctl_smcr_max_send_wr));
-	lgr->max_recv_wr = (u16)(READ_ONCE(net->smc.sysctl_smcr_max_recv_wr));
 }
 
 /* called after lgr was removed from lgr_list */

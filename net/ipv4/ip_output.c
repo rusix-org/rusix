@@ -195,6 +195,7 @@ int ip_build_and_send_pkt(struct sk_buff *skb, const struct sock *sk,
 	/* Send it out. */
 	return ip_local_out(net, skb->sk, skb);
 }
+EXPORT_SYMBOL_GPL(ip_build_and_send_pkt);
 
 static int ip_finish_output2(struct net *net, struct sock *sk, struct sk_buff *skb)
 {
@@ -1414,7 +1415,6 @@ struct sk_buff *__ip_make_skb(struct sock *sk,
 	struct iphdr *iph;
 	u8 pmtudisc, ttl;
 	__be16 df = 0;
-	int segs;
 
 	skb = __skb_dequeue(queue);
 	if (!skb)
@@ -1469,19 +1469,7 @@ struct sk_buff *__ip_make_skb(struct sock *sk,
 	iph->ttl = ttl;
 	iph->protocol = sk->sk_protocol;
 	ip_copy_addrs(iph, fl4);
-
-	/* UDP GSO packets are segmented later (see udp_send_skb()):
-	 * reserve one IP ID per segment.
-	 */
-	segs = 1;
-	if (cork->gso_size && sk_is_udp(sk)) {
-		int datalen = skb->len - skb_transport_offset(skb) -
-			      sizeof(struct udphdr);
-
-		if (datalen > cork->gso_size)
-			segs = DIV_ROUND_UP(datalen, cork->gso_size);
-	}
-	ip_select_ident_segs(net, skb, sk, segs);
+	ip_select_ident(net, skb, sk);
 
 	if (opt) {
 		iph->ihl += opt->optlen >> 2;
@@ -1626,8 +1614,7 @@ void ip_send_unicast_reply(struct sock *sk, const struct sock *orig_sk,
 			   const struct ip_reply_arg *arg,
 			   unsigned int len, u64 transmit_time, u32 txhash)
 {
-	DEFINE_RAW_FLEX(struct ip_options_rcu, replyopts, opt.__data,
-			IP_OPTIONS_DATA_FIXED_SIZE);
+	struct ip_options_data replyopts;
 	struct ipcm_cookie ipc;
 	struct flowi4 fl4;
 	struct rtable *rt = skb_rtable(skb);
@@ -1636,18 +1623,18 @@ void ip_send_unicast_reply(struct sock *sk, const struct sock *orig_sk,
 	int err;
 	int oif;
 
-	if (__ip_options_echo(net, &replyopts->opt, skb, sopt))
+	if (__ip_options_echo(net, &replyopts.opt.opt, skb, sopt))
 		return;
 
 	ipcm_init(&ipc);
 	ipc.addr = daddr;
 	ipc.sockc.transmit_time = transmit_time;
 
-	if (replyopts->opt.optlen) {
-		ipc.opt = replyopts;
+	if (replyopts.opt.opt.optlen) {
+		ipc.opt = &replyopts.opt;
 
-		if (replyopts->opt.srr)
-			daddr = replyopts->opt.faddr;
+		if (replyopts.opt.opt.srr)
+			daddr = replyopts.opt.opt.faddr;
 	}
 
 	oif = arg->bound_dev_if;

@@ -129,7 +129,7 @@ zl3073x_fw_component_alloc(size_t size)
 {
 	struct zl3073x_fw_component *comp;
 
-	comp = kzalloc_obj(*comp);
+	comp = kzalloc(sizeof(*comp), GFP_KERNEL);
 	if (!comp)
 		return NULL;
 
@@ -313,7 +313,7 @@ struct zl3073x_fw *zl3073x_fw_load(struct zl3073x_dev *zldev, const char *data,
 	ssize_t rc;
 
 	/* Allocate firmware structure */
-	fw = kzalloc_obj(*fw);
+	fw = kzalloc(sizeof(*fw), GFP_KERNEL);
 	if (!fw)
 		return ERR_PTR(-ENOMEM);
 
@@ -352,12 +352,12 @@ struct zl3073x_fw *zl3073x_fw_load(struct zl3073x_dev *zldev, const char *data,
 }
 
 /**
- * zl3073x_fw_component_flash - Flash all components
+ * zl3073x_flash_bundle_flash - Flash all components
  * @zldev: zl3073x device structure
- * @comp: pointer to components array
+ * @components: pointer to components array
  * @extack: netlink extack pointer to report errors
  *
- * Return: 0 in case of success or negative number otherwise.
+ * Returns 0 in case of success or negative number otherwise.
  */
 static int
 zl3073x_fw_component_flash(struct zl3073x_dev *zldev,

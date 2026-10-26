@@ -21,7 +21,6 @@
 #include "ipu6-dma.h"
 #include "ipu6-fw-isys.h"
 #include "ipu6-isys.h"
-#include "ipu6-isys-queue.h"
 #include "ipu6-isys-video.h"
 
 static int ipu6_isys_buf_init(struct vb2_buffer *vb)
@@ -133,6 +132,9 @@ void ipu6_isys_buffer_list_queue(struct ipu6_isys_buffer_list *bl,
 			list_add_tail(&ib->head, &aq->incoming);
 		spin_unlock_irqrestore(&aq->lock, flags);
 
+		if (op_flags & IPU6_ISYS_BUFFER_LIST_FL_SET_STATE)
+			vb2_buffer_done(vb, state);
+
 		if (first) {
 			dev_dbg(dev,
 				"queue buf list %p flags %lx, s %d, %d bufs\n",
@@ -192,8 +194,8 @@ static void flush_firmware_streamon_fail(struct ipu6_isys_stream *stream)
  * that contains one entry from each video buffer queue. If a buffer can't be
  * obtained from every queue, the buffers are returned back to the queue.
  */
-int ipu6_isys_buffer_list_get(struct ipu6_isys_stream *stream,
-			      struct ipu6_isys_buffer_list *bl)
+static int buffer_list_get(struct ipu6_isys_stream *stream,
+			   struct ipu6_isys_buffer_list *bl)
 {
 	struct device *dev = &stream->isys->adev->auxdev.dev;
 	struct ipu6_isys_queue *aq;
@@ -234,54 +236,110 @@ int ipu6_isys_buffer_list_get(struct ipu6_isys_stream *stream,
 	return 0;
 }
 
-/* Start streaming for real. The buffer list must be available. */
-static int ipu6_isys_stream_start(struct ipu6_isys_video *av)
+static void
+ipu6_isys_buf_to_fw_frame_buf_pin(struct vb2_buffer *vb,
+				  struct ipu6_fw_isys_frame_buff_set_abi *set)
 {
-	struct ipu6_bus_device *adev = av->isys->adev;
-	const struct ipu6_fw_isys_ops *fw_ops = adev->auxdrv_data->fw_ops;
-	struct device *dev = &adev->auxdev.dev;
-	struct ipu6_isys_buffer_list bl;
-	struct isys_fw_msgs *msg;
+	struct ipu6_isys_queue *aq = vb2_queue_to_isys_queue(vb->vb2_queue);
+	struct vb2_v4l2_buffer *vvb = to_vb2_v4l2_buffer(vb);
+	struct ipu6_isys_video_buffer *ivb =
+		vb2_buffer_to_ipu6_isys_video_buffer(vvb);
+
+	set->output_pins[aq->fw_output].addr = ivb->dma_addr;
+	set->output_pins[aq->fw_output].out_buf_id = vb->index + 1;
+}
+
+/*
+ * Convert a buffer list to a isys fw ABI framebuffer set. The
+ * buffer list is not modified.
+ */
+#define IPU6_ISYS_FRAME_NUM_THRESHOLD  (30)
+void
+ipu6_isys_buf_to_fw_frame_buf(struct ipu6_fw_isys_frame_buff_set_abi *set,
+			      struct ipu6_isys_stream *stream,
+			      struct ipu6_isys_buffer_list *bl)
+{
+	struct ipu6_isys_buffer *ib;
+
+	WARN_ON(!bl->nbufs);
+
+	set->send_irq_sof = 1;
+	set->send_resp_sof = 1;
+	set->send_irq_eof = 0;
+	set->send_resp_eof = 0;
+
+	if (stream->streaming)
+		set->send_irq_capture_ack = 0;
+	else
+		set->send_irq_capture_ack = 1;
+	set->send_irq_capture_done = 0;
+
+	set->send_resp_capture_ack = 1;
+	set->send_resp_capture_done = 1;
+	if (atomic_read(&stream->sequence) >= IPU6_ISYS_FRAME_NUM_THRESHOLD) {
+		set->send_resp_capture_ack = 0;
+		set->send_resp_capture_done = 0;
+	}
+
+	list_for_each_entry(ib, &bl->head, head) {
+		struct vb2_buffer *vb = ipu6_isys_buffer_to_vb2_buffer(ib);
+
+		ipu6_isys_buf_to_fw_frame_buf_pin(vb, set);
+	}
+}
+
+/* Start streaming for real. The buffer list must be available. */
+static int ipu6_isys_stream_start(struct ipu6_isys_video *av,
+				  struct ipu6_isys_buffer_list *bl, bool error)
+{
+	struct ipu6_isys_stream *stream = av->stream;
+	struct device *dev = &stream->isys->adev->auxdev.dev;
+	struct ipu6_isys_buffer_list __bl;
 	int ret;
 
-	guard(mutex)(&av->isys->stream_mutex);
-	ret = ipu6_isys_video_set_streaming(av, 1);
+	guard(mutex)(&stream->isys->stream_mutex);
+	ret = ipu6_isys_video_set_streaming(av, 1, bl);
 	if (ret)
-		return ret;
+		goto out_requeue;
 
-	if (!av->stream || !(BIT(av->stream->vc) & av->csi2->streaming_vc))
-		return 0;
+	stream->streaming = 1;
 
-	struct ipu6_isys_stream *stream = av->stream;
-
-	guard(mutex)(&stream->mutex);
+	bl = &__bl;
 
 	do {
-		ret = ipu6_isys_buffer_list_get(stream, &bl);
+		struct ipu6_fw_isys_frame_buff_set_abi *buf = NULL;
+		struct isys_fw_msgs *msg;
+		u16 send_type = IPU6_FW_ISYS_SEND_TYPE_STREAM_CAPTURE;
+
+		ret = buffer_list_get(stream, bl);
 		if (ret < 0)
-			return 0;
+			break;
 
 		msg = ipu6_get_fw_msg_buf(stream);
-		if (WARN_ON(!msg))
-			goto out_requeue;
+		if (!msg)
+			return -ENOMEM;
 
-		fw_ops->prepare_buf_set(msg, stream, &bl);
-		fw_ops->dump_frame_buf_set(dev, msg, stream->nr_output_pins);
-		ipu6_isys_buffer_list_queue(&bl,
-					    IPU6_ISYS_BUFFER_LIST_FL_ACTIVE, 0);
-		ret = fw_ops->stream_capture(stream->isys,
-					     stream->stream_handle, msg);
-		if (WARN_ON(ret))
-			break;
-	} while (true);
+		buf = &msg->fw_msg.frame;
+		ipu6_isys_buf_to_fw_frame_buf(buf, stream, bl);
+		ipu6_fw_isys_dump_frame_buff_set(dev, buf,
+						 stream->nr_output_pins);
+		ipu6_isys_buffer_list_queue(bl, IPU6_ISYS_BUFFER_LIST_FL_ACTIVE,
+					    0);
+		ret = ipu6_fw_isys_complex_cmd(stream->isys,
+					       stream->stream_handle, buf,
+					       msg->dma_addr, sizeof(*buf),
+					       send_type);
+	} while (!WARN_ON(ret));
 
-	/* Error handling begins here. */
-	ipu6_put_fw_msg_buf(stream->isys, msg);
+	return 0;
 
 out_requeue:
-	if (bl.nbufs)
-		ipu6_isys_buffer_list_queue(&bl,
-					    IPU6_ISYS_BUFFER_LIST_FL_INCOMING,
+	if (bl && bl->nbufs)
+		ipu6_isys_buffer_list_queue(bl,
+					    IPU6_ISYS_BUFFER_LIST_FL_INCOMING |
+					    (error ?
+					    IPU6_ISYS_BUFFER_LIST_FL_SET_STATE :
+					     0), error ? VB2_BUF_STATE_ERROR :
 					    VB2_BUF_STATE_QUEUED);
 	flush_firmware_streamon_fail(stream);
 
@@ -292,15 +350,15 @@ static void buf_queue(struct vb2_buffer *vb)
 {
 	struct ipu6_isys_queue *aq = vb2_queue_to_isys_queue(vb->vb2_queue);
 	struct ipu6_isys_video *av = ipu6_isys_queue_to_video(aq);
-	struct ipu6_bus_device *adev = av->isys->adev;
-	const struct ipu6_fw_isys_ops *fw_ops = adev->auxdrv_data->fw_ops;
 	struct vb2_v4l2_buffer *vvb = to_vb2_v4l2_buffer(vb);
 	struct ipu6_isys_video_buffer *ivb =
 		vb2_buffer_to_ipu6_isys_video_buffer(vvb);
 	struct ipu6_isys_buffer *ib = &ivb->ib;
-	struct device *dev = &adev->auxdev.dev;
+	struct device *dev = &av->isys->adev->auxdev.dev;
+	struct media_pipeline *media_pipe =
+		media_entity_pipeline(&av->vdev.entity);
+	struct ipu6_fw_isys_frame_buff_set_abi *buf = NULL;
 	struct ipu6_isys_stream *stream = av->stream;
-	struct ipu6_isys_csi2 *csi2;
 	struct ipu6_isys_buffer_list bl;
 	struct isys_fw_msgs *msg;
 	unsigned long flags;
@@ -316,16 +374,15 @@ static void buf_queue(struct vb2_buffer *vb)
 	list_add(&ib->head, &aq->incoming);
 	spin_unlock_irqrestore(&aq->lock, flags);
 
-	if (!vb2_start_streaming_called(vb->vb2_queue)) {
-		dev_dbg(dev, "start_streaming hasn't been called yet on %s\n",
+	if (!media_pipe || !vb->vb2_queue->start_streaming_called) {
+		dev_dbg(dev, "media pipeline is not ready for %s\n",
 			av->vdev.name);
 		return;
 	}
 
 	mutex_lock(&stream->mutex);
 
-	csi2 = ipu6_isys_subdev_to_csi2(stream->asd);
-	if (!(BIT(stream->vc) & csi2->streaming_vc)) {
+	if (stream->nr_streaming != stream->nr_queues) {
 		dev_dbg(dev, "not streaming yet, adding to incoming\n");
 		goto out;
 	}
@@ -335,7 +392,7 @@ static void buf_queue(struct vb2_buffer *vb)
 	 * (above). Let's see whether all queues in the pipeline would
 	 * have a buffer.
 	 */
-	ret = ipu6_isys_buffer_list_get(stream, &bl);
+	ret = buffer_list_get(stream, &bl);
 	if (ret < 0) {
 		dev_dbg(dev, "No buffers available\n");
 		goto out;
@@ -347,8 +404,16 @@ static void buf_queue(struct vb2_buffer *vb)
 		goto out;
 	}
 
-	fw_ops->prepare_buf_set(msg, stream, &bl);
-	fw_ops->dump_frame_buf_set(dev, msg, stream->nr_output_pins);
+	buf = &msg->fw_msg.frame;
+	ipu6_isys_buf_to_fw_frame_buf(buf, stream, &bl);
+	ipu6_fw_isys_dump_frame_buff_set(dev, buf, stream->nr_output_pins);
+
+	if (!stream->streaming) {
+		ret = ipu6_isys_stream_start(av, &bl, true);
+		if (ret)
+			dev_err(dev, "stream start failed.\n");
+		goto out;
+	}
 
 	/*
 	 * We must queue the buffers in the buffer list to the
@@ -358,7 +423,9 @@ static void buf_queue(struct vb2_buffer *vb)
 	 */
 	ipu6_isys_buffer_list_queue(&bl, IPU6_ISYS_BUFFER_LIST_FL_ACTIVE, 0);
 
-	ret = fw_ops->stream_capture(stream->isys, stream->stream_handle, msg);
+	ret = ipu6_fw_isys_complex_cmd(stream->isys, stream->stream_handle,
+				       buf, msg->dma_addr, sizeof(*buf),
+				       IPU6_FW_ISYS_SEND_TYPE_STREAM_CAPTURE);
 	if (ret < 0)
 		dev_err(dev, "send stream capture failed\n");
 
@@ -368,13 +435,14 @@ out:
 
 static int ipu6_isys_link_fmt_validate(struct ipu6_isys_queue *aq)
 {
-	struct v4l2_mbus_framefmt format, *__format;
+	struct v4l2_mbus_framefmt format;
 	struct ipu6_isys_video *av = ipu6_isys_queue_to_video(aq);
 	struct device *dev = &av->isys->adev->auxdev.dev;
 	struct media_pad *remote_pad =
 		media_pad_remote_pad_first(av->vdev.entity.pads);
 	struct v4l2_subdev *sd;
 	u32 r_stream, code;
+	int ret;
 
 	if (!remote_pad)
 		return -ENOTCONN;
@@ -382,20 +450,13 @@ static int ipu6_isys_link_fmt_validate(struct ipu6_isys_queue *aq)
 	sd = media_entity_to_v4l2_subdev(remote_pad->entity);
 	r_stream = ipu6_isys_get_src_stream_by_src_pad(sd, remote_pad->index);
 
-	struct v4l2_subdev_state *state =
-		v4l2_subdev_lock_and_get_active_state(sd);
+	ret = ipu6_isys_get_stream_pad_fmt(sd, remote_pad->index, r_stream,
+					   &format);
 
-	__format = v4l2_subdev_state_get_format(state, remote_pad->index,
-						r_stream);
-	if (__format)
-		format = *__format;
-
-	v4l2_subdev_unlock_state(state);
-
-	if (!__format) {
+	if (ret) {
 		dev_dbg(dev, "failed to get %s: pad %d, stream:%d format\n",
 			sd->entity.name, remote_pad->index, r_stream);
-		return -EPIPE;
+		return ret;
 	}
 
 	if (format.width != ipu6_isys_get_frame_width(av) ||
@@ -467,14 +528,13 @@ static void return_buffers(struct ipu6_isys_queue *aq,
 		mutex_lock(&av->isys->mutex);
 		av->isys->need_reset = true;
 		mutex_unlock(&av->isys->mutex);
-		dev_warn(&av->isys->adev->auxdev.dev,
-			 "buffer list not empty, needs isys reset\n");
 	}
 }
 
 static void ipu6_isys_stream_cleanup(struct ipu6_isys_video *av)
 {
 	video_device_pipeline_stop(&av->vdev);
+	ipu6_isys_put_stream(av->stream);
 	av->stream = NULL;
 }
 
@@ -485,30 +545,20 @@ static int start_streaming(struct vb2_queue *q, unsigned int count)
 	struct device *dev = &av->isys->adev->auxdev.dev;
 	const struct ipu6_isys_pixelformat *pfmt =
 		ipu6_isys_get_isys_format(ipu6_isys_get_format(av), 0);
-	struct media_pad *source_pad, *remote_pad;
-	int ret;
+	struct ipu6_isys_buffer_list __bl, *bl = NULL;
+	struct ipu6_isys_stream *stream;
+	struct media_entity *source_entity = NULL;
+	int nr_queues, ret;
 
 	dev_dbg(dev, "stream: %s: width %u, height %u, css pixelformat %u\n",
 		av->vdev.name, ipu6_isys_get_frame_width(av),
 		ipu6_isys_get_frame_height(av), pfmt->css_pixelformat);
 
-	remote_pad = media_pad_remote_pad_unique(&av->pad);
-	if (IS_ERR(remote_pad)) {
-		dev_dbg(dev, "failed to get remote pad\n");
-		ret = PTR_ERR(remote_pad);
+	ret = ipu6_isys_setup_video(av, &source_entity, &nr_queues);
+	if (ret < 0) {
+		dev_dbg(dev, "failed to setup video\n");
 		goto out_return_buffers;
 	}
-
-	source_pad = media_pad_remote_pad_unique(&remote_pad->entity->pads[0]);
-	if (IS_ERR(source_pad)) {
-		dev_dbg(dev, "No external source entity\n");
-		ret = PTR_ERR(source_pad);
-		goto out_return_buffers;
-	}
-
-	ret = video_device_pipeline_alloc_start(&av->vdev);
-	if (ret < 0)
-		goto out_return_buffers;
 
 	ret = ipu6_isys_link_fmt_validate(aq);
 	if (ret) {
@@ -518,11 +568,54 @@ static int start_streaming(struct vb2_queue *q, unsigned int count)
 		goto out_pipeline_stop;
 	}
 
-	ret = ipu6_isys_stream_start(av);
+	ret = ipu6_isys_fw_open(av->isys);
 	if (ret)
 		goto out_pipeline_stop;
 
+	stream = av->stream;
+	mutex_lock(&stream->mutex);
+	if (!stream->nr_streaming) {
+		ret = ipu6_isys_video_prepare_stream(av, source_entity,
+						     nr_queues);
+		if (ret)
+			goto out_fw_close;
+	}
+
+	stream->nr_streaming++;
+	dev_dbg(dev, "queue %u of %u\n", stream->nr_streaming,
+		stream->nr_queues);
+
+	list_add(&aq->node, &stream->queues);
+	ipu6_isys_configure_stream_watermark(av, true);
+	ipu6_isys_update_stream_watermark(av, true);
+
+	if (stream->nr_streaming != stream->nr_queues)
+		goto out;
+
+	bl = &__bl;
+	ret = buffer_list_get(stream, bl);
+	if (ret < 0) {
+		dev_warn(dev, "no buffer available, DRIVER BUG?\n");
+		goto out;
+	}
+
+	ret = ipu6_isys_stream_start(av, bl, false);
+	if (ret)
+		goto out_stream_start;
+
+out:
+	mutex_unlock(&stream->mutex);
+
 	return 0;
+
+out_stream_start:
+	ipu6_isys_update_stream_watermark(av, false);
+	list_del(&aq->node);
+	stream->nr_streaming--;
+
+out_fw_close:
+	mutex_unlock(&stream->mutex);
+	ipu6_isys_fw_close(av->isys);
 
 out_pipeline_stop:
 	ipu6_isys_stream_cleanup(av);
@@ -537,14 +630,27 @@ static void stop_streaming(struct vb2_queue *q)
 {
 	struct ipu6_isys_queue *aq = vb2_queue_to_isys_queue(q);
 	struct ipu6_isys_video *av = ipu6_isys_queue_to_video(aq);
+	struct ipu6_isys_stream *stream = av->stream;
+
+	mutex_lock(&stream->mutex);
+
+	ipu6_isys_update_stream_watermark(av, false);
 
 	mutex_lock(&av->isys->stream_mutex);
-	ipu6_isys_video_set_streaming(av, 0);
+	if (stream->nr_streaming == stream->nr_queues && stream->streaming)
+		ipu6_isys_video_set_streaming(av, 0, NULL);
+	list_del(&aq->node);
 	mutex_unlock(&av->isys->stream_mutex);
+
+	stream->nr_streaming--;
+	stream->streaming = 0;
+	mutex_unlock(&stream->mutex);
 
 	ipu6_isys_stream_cleanup(av);
 
 	return_buffers(aq, VB2_BUF_STATE_ERROR);
+
+	ipu6_isys_fw_close(av->isys);
 }
 
 static unsigned int
@@ -630,7 +736,7 @@ static void ipu6_isys_queue_buf_done(struct ipu6_isys_buffer *ib)
 	}
 }
 
-void
+static void
 ipu6_stream_buf_ready(struct ipu6_isys_stream *stream, u8 pin_id, u32 pin_addr,
 		      u64 time, bool error_check)
 {

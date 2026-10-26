@@ -27,11 +27,11 @@
 /**
  * array_index_mask_nospec() - generate a mask that is ~0UL when the
  * 	bounds check succeeds and 0 otherwise
- * @idx: array element index
- * @sz: number of elements in array
+ * @index: array element index
+ * @size: number of elements in array
  *
  * Returns:
- *     0 - (@idx < @sz)
+ *     0 - (index < size)
  */
 #define array_index_mask_nospec(idx,sz) ({	\
 	typeof((idx)+(sz)) __idx = (idx);	\

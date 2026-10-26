@@ -69,8 +69,6 @@ static struct iommu_table *iommu_pseries_alloc_table(int node)
 	return tbl;
 }
 
-static phys_addr_t pseries_ddw_max_ram __ro_after_init;
-
 #ifdef CONFIG_IOMMU_API
 static struct iommu_table_group_ops spapr_tce_table_group_ops;
 #endif
@@ -1003,7 +1001,7 @@ static void copy_property(struct device_node *pdn, const char *from, const char 
 	if (!src)
 		return;
 
-	dst = kzalloc_obj(*dst);
+	dst = kzalloc(sizeof(*dst), GFP_KERNEL);
 	if (!dst)
 		return;
 
@@ -1092,7 +1090,7 @@ static struct dma_win *ddw_list_new_entry(struct device_node *pdn,
 {
 	struct dma_win *window;
 
-	window = kzalloc_obj(*window);
+	window = kzalloc(sizeof(*window), GFP_KERNEL);
 	if (!window)
 		return NULL;
 
@@ -1286,19 +1284,15 @@ struct failed_ddw_pdn {
 
 static LIST_HEAD(failed_ddw_pdn_list);
 
-static phys_addr_t __init ddw_memory_hotplug_max(void)
+static phys_addr_t ddw_memory_hotplug_max(void)
 {
-	resource_size_t max_addr = memory_hotplug_max();
-	struct device_node *memory;
+	resource_size_t max_addr;
 
-	for_each_node_by_type(memory, "memory") {
-		struct resource res;
-
-		if (of_address_to_resource(memory, 0, &res))
-			continue;
-
-		max_addr = max_t(resource_size_t, max_addr, res.end + 1);
-	}
+#if defined(CONFIG_NUMA) && defined(CONFIG_MEMORY_HOTPLUG)
+	max_addr = hot_add_drconf_memory_max();
+#else
+	max_addr = memblock_end_of_DRAM();
+#endif
 
 	return max_addr;
 }
@@ -1416,12 +1410,12 @@ static struct property *ddw_property_create(const char *propname, u32 liobn, u64
 	struct dynamic_dma_window_prop *ddwprop;
 	struct property *win64;
 
-	win64 = kzalloc_obj(*win64);
+	win64 = kzalloc(sizeof(*win64), GFP_KERNEL);
 	if (!win64)
 		return NULL;
 
 	win64->name = kstrdup(propname, GFP_KERNEL);
-	ddwprop = kzalloc_obj(*ddwprop);
+	ddwprop = kzalloc(sizeof(*ddwprop), GFP_KERNEL);
 	win64->value = ddwprop;
 	win64->length = sizeof(*ddwprop);
 	if (!win64->name || !win64->value) {
@@ -1453,7 +1447,7 @@ static struct property *ddw_property_create(const char *propname, u32 liobn, u64
 static bool enable_ddw(struct pci_dev *dev, struct device_node *pdn, u64 dma_mask)
 {
 	int len = 0, ret;
-	int max_ram_len = order_base_2(pseries_ddw_max_ram);
+	int max_ram_len = order_base_2(ddw_memory_hotplug_max());
 	struct ddw_query_response query;
 	struct ddw_create_response create;
 	int page_shift;
@@ -1623,12 +1617,12 @@ static bool enable_ddw(struct pci_dev *dev, struct device_node *pdn, u64 dma_mas
 		if (default_win_removed && pmem_present && !direct_mapping) {
 			/* DDW is big enough to be split */
 			if ((1ULL << ddw_sz) >=
-			    MIN_DDW_VPMEM_DMA_WINDOW + pseries_ddw_max_ram) {
+			    MIN_DDW_VPMEM_DMA_WINDOW + (1ULL << max_ram_len)) {
 
 				direct_mapping = true;
 
 				/* offset of the Dynamic part of DDW */
-				dynamic_offset = pseries_ddw_max_ram;
+				dynamic_offset = 1ULL << max_ram_len;
 			}
 
 			/* DDW will at least have dynamic allocation */
@@ -1675,7 +1669,7 @@ static bool enable_ddw(struct pci_dev *dev, struct device_node *pdn, u64 dma_mas
 
 	if (direct_mapping) {
 		/* DDW maps the whole partition, so enable direct DMA mapping */
-		ret = walk_system_ram_range(0, pseries_ddw_max_ram >> PAGE_SHIFT,
+		ret = walk_system_ram_range(0, ddw_memory_hotplug_max() >> PAGE_SHIFT,
 					    win64->value, tce_setrange_multi_pSeriesLP_walk);
 		if (ret) {
 			dev_info(&dev->dev, "failed to map DMA window for %pOF: %d\n",
@@ -1767,7 +1761,7 @@ out_failed:
 	if (default_win_removed || limited_addr_enabled)
 		reset_dma_window(dev, pdn);
 
-	fpdn = kzalloc_obj(*fpdn);
+	fpdn = kzalloc(sizeof(*fpdn), GFP_KERNEL);
 	if (!fpdn)
 		goto out_unlock;
 	fpdn->pdn = pdn;
@@ -1776,9 +1770,12 @@ out_failed:
 out_unlock:
 	mutex_unlock(&dma_win_init_mutex);
 
-	/* For pre-mapped memory, set bus_dma_limit to the max RAM */
-	if (direct_mapping)
-		dev->dev.bus_dma_limit = dev->dev.archdata.dma_offset + pseries_ddw_max_ram;
+	/* If we have persistent memory and the window size is not big enough
+	 * to directly map both RAM and vPMEM, then we need to set DMA limit.
+	 */
+	if (pmem_present && direct_mapping && len != MAX_PHYSMEM_BITS)
+		dev->dev.bus_dma_limit = dev->dev.archdata.dma_offset +
+						(1ULL << max_ram_len);
 
 	dev_info(&dev->dev, "lsa_required: %x, lsa_enabled: %x, direct mapping: %x\n",
 			limited_addr_req, limited_addr_enabled, direct_mapping);
@@ -2241,7 +2238,7 @@ remove_window:
 	__remove_dma_window(pdn, ddw_avail, create.liobn);
 
 out_failed:
-	fpdn = kzalloc_obj(*fpdn);
+	fpdn = kzalloc(sizeof(*fpdn), GFP_KERNEL);
 	if (!fpdn)
 		goto out_unlock;
 	fpdn->pdn = pdn;
@@ -2328,7 +2325,7 @@ static long spapr_tce_unset_window(struct iommu_table_group *table_group, int nu
 	goto out_unlock;
 
 out_failed:
-	fpdn = kzalloc_obj(*fpdn);
+	fpdn = kzalloc(sizeof(*fpdn), GFP_KERNEL);
 	if (!fpdn)
 		goto out_unlock;
 	fpdn->pdn = pdn;
@@ -2425,35 +2422,23 @@ static int iommu_mem_notifier(struct notifier_block *nb, unsigned long action,
 {
 	struct dma_win *window;
 	struct memory_notify *arg = data;
-	unsigned long limit = arg->nr_pages;
-	unsigned long max_ram_pages = pseries_ddw_max_ram >> PAGE_SHIFT;
 	int ret = 0;
 
 	/* This notifier can get called when onlining persistent memory as well.
 	 * TCEs are not pre-mapped for persistent memory. Persistent memory will
-	 * always be above pseries_ddw_max_ram
+	 * always be above ddw_memory_hotplug_max()
 	 */
-	if (arg->start_pfn >= max_ram_pages)
-		return NOTIFY_OK;
-
-	/* RAM is being DLPAR'ed. The range should never exceed max ram.
-	 * Just in case, clamp the range and throw a warning.
-	 */
-	if (arg->start_pfn + limit > max_ram_pages) {
-		limit = max_ram_pages - arg->start_pfn;
-		WARN_ONCE(1, "Limiting Page Range %lx - %lx to Max Mem Pages: %lx\n",
-					arg->start_pfn, arg->start_pfn + arg->nr_pages,
-					max_ram_pages);
-	}
 
 	switch (action) {
 	case MEM_GOING_ONLINE:
 		spin_lock(&dma_win_list_lock);
 		list_for_each_entry(window, &dma_win_list, list) {
-			if (window->direct) {
+			if (window->direct && (arg->start_pfn << PAGE_SHIFT) <
+				ddw_memory_hotplug_max()) {
 				ret |= tce_setrange_multi_pSeriesLP(arg->start_pfn,
-						limit, window->prop);
+						arg->nr_pages, window->prop);
 			}
+			/* XXX log error */
 		}
 		spin_unlock(&dma_win_list_lock);
 		break;
@@ -2461,10 +2446,12 @@ static int iommu_mem_notifier(struct notifier_block *nb, unsigned long action,
 	case MEM_OFFLINE:
 		spin_lock(&dma_win_list_lock);
 		list_for_each_entry(window, &dma_win_list, list) {
-			if (window->direct) {
+			if (window->direct && (arg->start_pfn << PAGE_SHIFT) <
+				ddw_memory_hotplug_max()) {
 				ret |= tce_clearrange_multi_pSeriesLP(arg->start_pfn,
-						limit, window->prop);
+						arg->nr_pages, window->prop);
 			}
+			/* XXX log error */
 		}
 		spin_unlock(&dma_win_list_lock);
 		break;
@@ -2548,14 +2535,6 @@ void __init iommu_init_early_pSeries(void)
 	register_memory_notifier(&iommu_mem_nb);
 
 	set_pci_dma_ops(&dma_iommu_ops);
-
-	/* During init determine the max memory an LPAR can have and set it. This
-	 * will be used for pre-mapping RAM in DDW. memblock_end_of_DRAM() can
-	 * change during the running of LPAR - daxctl can add pmemory as
-	 * "system-ram". This memory range should not be pre-mapped in DDW since
-	 * the address of pmemory can be much higher than the DDW size.
-	 */
-	pseries_ddw_max_ram = ddw_memory_hotplug_max();
 }
 
 static int __init disable_multitce(char *str)

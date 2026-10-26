@@ -435,7 +435,8 @@ static int qt1050_probe(struct i2c_client *client)
 	int err;
 
 	/* Check basic functionality */
-	if (!i2c_check_functionality(client->adapter, I2C_FUNC_SMBUS_BYTE)) {
+	err = i2c_check_functionality(client->adapter, I2C_FUNC_SMBUS_BYTE);
+	if (!err) {
 		dev_err(&client->dev, "%s adapter not supported\n",
 			dev_driver_string(&client->adapter->dev));
 		return -ENODEV;
@@ -476,6 +477,7 @@ static int qt1050_probe(struct i2c_client *client)
 	}
 
 	input->name = "AT42QT1050 QTouch Sensor";
+	input->dev.parent = &client->dev;
 	input->id.bustype = BUS_I2C;
 
 	/* Add the keycode */

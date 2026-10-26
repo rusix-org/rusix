@@ -12,7 +12,8 @@
  *    Copyright (C) 1991, 1992, 1995  Linus Torvalds
  */
 
-#define pr_fmt(fmt) "time: " fmt
+#define KMSG_COMPONENT "time"
+#define pr_fmt(fmt) KMSG_COMPONENT ": " fmt
 
 #include <linux/kernel_stat.h>
 #include <linux/errno.h>
@@ -39,7 +40,7 @@
 #include <linux/gfp.h>
 #include <linux/kprobes.h>
 #include <linux/uaccess.h>
-#include <linux/vdso_time.h>
+#include <vdso/vsyscall.h>
 #include <vdso/clocksource.h>
 #include <vdso/helpers.h>
 #include <asm/facility.h>
@@ -48,9 +49,9 @@
 #include <asm/vdso.h>
 #include <asm/irq.h>
 #include <asm/irq_regs.h>
+#include <asm/vtimer.h>
 #include <asm/stp.h>
 #include <asm/cio.h>
-#include <asm/vtime.h>
 #include "entry.h"
 
 union tod_clock __bootdata_preserved(tod_clock_base);
@@ -527,7 +528,7 @@ static int stp_sync_clock(void *data)
 			cpu_relax();
 		rc = 0;
 		if (stp_info.todoff || stp_info.tmd != 2) {
-			flags = vdso_time_update_begin();
+			flags = vdso_update_begin();
 			rc = chsc_sstpc(stp_page, STP_OP_SYNC, 0,
 					&clock_delta);
 			if (rc == 0) {
@@ -537,7 +538,7 @@ static int stp_sync_clock(void *data)
 				if (rc == 0 && stp_info.tmd != 2)
 					rc = -EAGAIN;
 			}
-			vdso_time_update_end(flags);
+			vdso_update_end(flags);
 		}
 		sync->in_sync = rc ? -EAGAIN : 1;
 		xchg(&first, 0);

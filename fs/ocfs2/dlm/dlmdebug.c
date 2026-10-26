@@ -260,10 +260,10 @@ void dlm_print_one_mle(struct dlm_master_list_entry *mle)
 {
 	char *buf;
 
-	buf = kzalloc(PAGE_SIZE, GFP_ATOMIC);
+	buf = (char *) get_zeroed_page(GFP_ATOMIC);
 	if (buf) {
 		dump_mle(mle, buf, PAGE_SIZE - 1);
-		kfree(buf);
+		free_page((unsigned long)buf);
 	}
 }
 
@@ -280,7 +280,7 @@ static struct dentry *dlm_debugfs_root;
 /* begin - utils funcs */
 static int debug_release(struct inode *inode, struct file *file)
 {
-	kfree(file->private_data);
+	free_page((unsigned long)file->private_data);
 	return 0;
 }
 
@@ -327,15 +327,17 @@ static int debug_purgelist_open(struct inode *inode, struct file *file)
 	struct dlm_ctxt *dlm = inode->i_private;
 	char *buf = NULL;
 
-	buf = kzalloc(PAGE_SIZE, GFP_NOFS);
+	buf = (char *) get_zeroed_page(GFP_NOFS);
 	if (!buf)
-		return -ENOMEM;
+		goto bail;
 
 	i_size_write(inode, debug_purgelist_print(dlm, buf, PAGE_SIZE - 1));
 
 	file->private_data = buf;
 
 	return 0;
+bail:
+	return -ENOMEM;
 }
 
 static const struct file_operations debug_purgelist_fops = {
@@ -382,15 +384,17 @@ static int debug_mle_open(struct inode *inode, struct file *file)
 	struct dlm_ctxt *dlm = inode->i_private;
 	char *buf = NULL;
 
-	buf = kzalloc(PAGE_SIZE, GFP_NOFS);
+	buf = (char *) get_zeroed_page(GFP_NOFS);
 	if (!buf)
-		return -ENOMEM;
+		goto bail;
 
 	i_size_write(inode, debug_mle_print(dlm, buf, PAGE_SIZE - 1));
 
 	file->private_data = buf;
 
 	return 0;
+bail:
+	return -ENOMEM;
 }
 
 static const struct file_operations debug_mle_fops = {
@@ -736,11 +740,8 @@ static int debug_state_print(struct dlm_ctxt *dlm, char *buf, int len)
 				 buf + out, len - out);
 	out += scnprintf(buf + out, len - out, "\n");
 
-	spin_unlock(&dlm->spinlock);
-
 	/* Recovery Node State: */
 	out += scnprintf(buf + out, len - out, "Recovery Node State:\n");
-	spin_lock(&dlm_reco_state_lock);
 	list_for_each_entry(node, &dlm->reco.node_data, list) {
 		switch (node->state) {
 		case DLM_RECO_NODE_DATA_INIT:
@@ -772,7 +773,7 @@ static int debug_state_print(struct dlm_ctxt *dlm, char *buf, int len)
 				node->node_num, state);
 	}
 
-	spin_unlock(&dlm_reco_state_lock);
+	spin_unlock(&dlm->spinlock);
 
 	return out;
 }
@@ -782,15 +783,17 @@ static int debug_state_open(struct inode *inode, struct file *file)
 	struct dlm_ctxt *dlm = inode->i_private;
 	char *buf = NULL;
 
-	buf = kzalloc(PAGE_SIZE, GFP_NOFS);
+	buf = (char *) get_zeroed_page(GFP_NOFS);
 	if (!buf)
-		return -ENOMEM;
+		goto bail;
 
 	i_size_write(inode, debug_state_print(dlm, buf, PAGE_SIZE - 1));
 
 	file->private_data = buf;
 
 	return 0;
+bail:
+	return -ENOMEM;
 }
 
 static const struct file_operations debug_state_fops = {

@@ -51,7 +51,6 @@
 #include <linux/uio.h>
 #include <linux/user_namespace.h>
 
-#include "dev.h"
 #include "fuse_i.h"
 #include "fuse_dev_i.h"
 
@@ -363,7 +362,7 @@ static void cuse_process_init_reply(struct fuse_args *args, int error)
 
 	/* devt determined, create device */
 	rc = -ENOMEM;
-	dev = kzalloc_obj(*dev);
+	dev = kzalloc(sizeof(*dev), GFP_KERNEL);
 	if (!dev)
 		goto err_region;
 
@@ -426,7 +425,7 @@ err_unlock:
 err_region:
 	unregister_chrdev_region(devt, 1);
 err:
-	fuse_chan_abort(fc->chan, false);
+	fuse_abort_conn(fc);
 	goto out;
 }
 
@@ -446,7 +445,7 @@ static int cuse_send_init(struct cuse_conn *cc)
 	if (!folio)
 		goto err;
 
-	ia = kzalloc_obj(*ia);
+	ia = kzalloc(sizeof(*ia), GFP_KERNEL);
 	if (!ia)
 		goto err_free_folio;
 
@@ -506,14 +505,10 @@ static int cuse_channel_open(struct inode *inode, struct file *file)
 {
 	struct fuse_dev *fud;
 	struct cuse_conn *cc;
-	struct fuse_chan *fch __free(fuse_chan_free) = fuse_dev_chan_new();
 	int rc;
 
-	if (!fch)
-		return -ENOMEM;
-
 	/* set up cuse_conn */
-	cc = kzalloc_obj(*cc);
+	cc = kzalloc(sizeof(*cc), GFP_KERNEL);
 	if (!cc)
 		return -ENOMEM;
 
@@ -521,20 +516,21 @@ static int cuse_channel_open(struct inode *inode, struct file *file)
 	 * Limit the cuse channel to requests that can
 	 * be represented in file->f_cred->user_ns.
 	 */
-	fuse_conn_init(&cc->fc, &cc->fm, file->f_cred->user_ns, no_free_ptr(fch));
+	fuse_conn_init(&cc->fc, &cc->fm, file->f_cred->user_ns,
+		       &fuse_dev_fiq_ops, NULL);
+
 	cc->fc.release = cuse_fc_release;
-	fud = fuse_dev_alloc_install(cc->fc.chan);
+	fud = fuse_dev_alloc_install(&cc->fc);
 	fuse_conn_put(&cc->fc);
 	if (!fud)
 		return -ENOMEM;
 
 	INIT_LIST_HEAD(&cc->list);
 
-	/* Pairs with smp_load_acquire() readers of fch->initialized */
-	smp_store_release(&cc->fc.chan->initialized, 1);
+	cc->fc.initialized = 1;
 	rc = cuse_send_init(cc);
 	if (rc) {
-		fuse_dev_put(fud);
+		fuse_dev_free(fud);
 		return rc;
 	}
 	file->private_data = fud;
@@ -556,7 +552,7 @@ static int cuse_channel_open(struct inode *inode, struct file *file)
 static int cuse_channel_release(struct inode *inode, struct file *file)
 {
 	struct fuse_dev *fud = __fuse_get_dev(file);
-	struct cuse_conn *cc = fc_to_cc(fud->chan->conn);
+	struct cuse_conn *cc = fc_to_cc(fud->fc);
 
 	/* remove from the conntbl, no more access from this point on */
 	mutex_lock(&cuse_lock);
@@ -588,7 +584,7 @@ static ssize_t cuse_class_waiting_show(struct device *dev,
 {
 	struct cuse_conn *cc = dev_get_drvdata(dev);
 
-	return sprintf(buf, "%d\n", atomic_read(&cc->fc.chan->num_waiting));
+	return sprintf(buf, "%d\n", atomic_read(&cc->fc.num_waiting));
 }
 static DEVICE_ATTR(waiting, 0400, cuse_class_waiting_show, NULL);
 
@@ -598,7 +594,7 @@ static ssize_t cuse_class_abort_store(struct device *dev,
 {
 	struct cuse_conn *cc = dev_get_drvdata(dev);
 
-	fuse_chan_abort(cc->fc.chan, false);
+	fuse_abort_conn(&cc->fc);
 	return count;
 }
 static DEVICE_ATTR(abort, 0200, NULL, cuse_class_abort_store);

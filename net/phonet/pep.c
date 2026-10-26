@@ -899,8 +899,7 @@ drop:
 	return newsk;
 }
 
-static int pep_sock_connect(struct sock *sk, struct sockaddr_unsized *addr,
-			    int len)
+static int pep_sock_connect(struct sock *sk, struct sockaddr *addr, int len)
 {
 	struct pep_sock *pn = pep_sk(sk);
 	int err;
@@ -1080,10 +1079,16 @@ out_norel:
 	return err;
 }
 
-static int do_pep_getsockopt(struct sock *sk, int optname, sockopt_t *opt)
+static int pep_getsockopt(struct sock *sk, int level, int optname,
+				char __user *optval, int __user *optlen)
 {
 	struct pep_sock *pn = pep_sk(sk);
 	int len, val;
+
+	if (level != SOL_PNPIPE)
+		return -ENOPROTOOPT;
+	if (get_user(len, optlen))
+		return -EFAULT;
 
 	switch (optname) {
 	case PNPIPE_ENCAP:
@@ -1108,33 +1113,11 @@ static int do_pep_getsockopt(struct sock *sk, int optname, sockopt_t *opt)
 		return -ENOPROTOOPT;
 	}
 
-	len = umin(sizeof(int), opt->optlen);
-	opt->optlen = len;
-	if (copy_to_iter(&val, len, &opt->iter_out) != len)
+	len = min_t(unsigned int, sizeof(int), len);
+	if (put_user(len, optlen))
 		return -EFAULT;
-	return 0;
-}
-
-static int pep_getsockopt(struct sock *sk, int level, int optname,
-			  char __user *optval, int __user *optlen)
-{
-	sockopt_t opt;
-	int err;
-
-	if (level != SOL_PNPIPE)
-		return -ENOPROTOOPT;
-
-	err = sockopt_init_user(&opt, optval, optlen);
-	if (err)
-		return err;
-
-	err = do_pep_getsockopt(sk, optname, &opt);
-	if (err)
-		return err;
-
-	if (put_user(opt.optlen, optlen))
+	if (copy_to_user(optval, &val, len))
 		return -EFAULT;
-
 	return 0;
 }
 

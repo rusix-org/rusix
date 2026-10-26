@@ -4,7 +4,6 @@
  */
 
 #include <drm/drm_file.h>
-#include <drm/drm_print.h>
 #include <linux/dma-fence-array.h>
 #include <linux/file.h>
 #include <linux/dma-resv.h>
@@ -32,12 +31,14 @@ static struct etnaviv_gem_submit *submit_create(struct drm_device *dev,
 		struct etnaviv_gpu *gpu, size_t nr_bos, size_t nr_pmrs)
 {
 	struct etnaviv_gem_submit *submit;
+	size_t sz = size_vstruct(nr_bos, sizeof(submit->bos[0]), sizeof(*submit));
 
-	submit = kzalloc_flex(*submit, bos, nr_bos);
+	submit = kzalloc(sz, GFP_KERNEL);
 	if (!submit)
 		return NULL;
 
-	submit->pmrs = kzalloc_objs(struct etnaviv_perfmon_request, nr_pmrs);
+	submit->pmrs = kcalloc(nr_pmrs, sizeof(struct etnaviv_perfmon_request),
+			       GFP_KERNEL);
 	if (!submit->pmrs) {
 		kfree(submit);
 		return NULL;
@@ -466,9 +467,9 @@ int etnaviv_ioctl_gem_submit(struct drm_device *dev, void *data,
 	 * Copy the command submission and bo array to kernel space in
 	 * one go, and do this outside of any locks.
 	 */
-	bos = kvmalloc_objs(*bos, args->nr_bos);
-	relocs = kvmalloc_objs(*relocs, args->nr_relocs);
-	pmrs = kvmalloc_objs(*pmrs, args->nr_pmrs);
+	bos = kvmalloc_array(args->nr_bos, sizeof(*bos), GFP_KERNEL);
+	relocs = kvmalloc_array(args->nr_relocs, sizeof(*relocs), GFP_KERNEL);
+	pmrs = kvmalloc_array(args->nr_pmrs, sizeof(*pmrs), GFP_KERNEL);
 	stream = kvmalloc_array(1, args->stream_size, GFP_KERNEL);
 	if (!bos || !relocs || !pmrs || !stream) {
 		ret = -ENOMEM;

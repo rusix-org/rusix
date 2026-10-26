@@ -21,7 +21,6 @@
  */
 
 #include "amdgpu_vm.h"
-#include "amdgpu_vm_internal.h"
 #include "amdgpu_job.h"
 #include "amdgpu_object.h"
 #include "amdgpu_trace.h"
@@ -57,7 +56,7 @@ static int amdgpu_vm_sdma_alloc_job(struct amdgpu_vm_update_params *p,
 	ndw = min(ndw, AMDGPU_VM_SDMA_MAX_NUM_DW);
 
 	r = amdgpu_job_alloc_with_ib(p->adev, entity, AMDGPU_FENCE_OWNER_VM,
-				     ndw * 4, pool, k_job_id, &p->job);
+				     ndw * 4, pool, &p->job, k_job_id);
 	if (r)
 		return r;
 
@@ -255,17 +254,9 @@ static int amdgpu_vm_sdma_update(struct amdgpu_vm_update_params *p,
 						     AMDGPU_KERNEL_JOB_ID_VM_UPDATE);
 			if (r)
 				return r;
-
-			/* The estimate above describes the job which was just
-			 * submitted, take the budget of the newly allocated one.
-			 */
-			ndw = p->num_dw_left;
 		}
 
 		if (!p->pages_addr) {
-			if (p->override_pte)
-				amdgpu_gmc_override_vm_pte_flags(p->adev, p->vm, addr, &flags);
-
 			/* set page commands needed */
 			amdgpu_vm_sdma_set_ptes(p, bo, pe, addr, count,
 						incr, flags);
@@ -284,14 +275,8 @@ static int amdgpu_vm_sdma_update(struct amdgpu_vm_update_params *p,
 		p->num_dw_left -= nptes * 2;
 		pte = (uint64_t *)&(p->job->ibs->ptr[p->num_dw_left]);
 		for (i = 0; i < nptes; ++i, addr += incr) {
-			u64 oflags = flags;
-
 			pte[i] = amdgpu_vm_map_gart(p->pages_addr, addr);
-
-			if (p->override_pte)
-				amdgpu_gmc_override_vm_pte_flags(p->adev, p->vm, pte[i], &oflags);
-
-			pte[i] |= oflags;
+			pte[i] |= flags;
 		}
 
 		amdgpu_vm_sdma_copy_ptes(p, bo, pe, nptes);

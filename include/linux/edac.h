@@ -184,7 +184,6 @@ static inline char *mc_event_error_type(const unsigned int err_type)
  * @MEM_DDR5:		Unbuffered DDR5 RAM
  * @MEM_RDDR5:		Registered DDR5 RAM
  * @MEM_LRDDR5:		Load-Reduced DDR5 memory.
- * @MEM_LPDDR5:		Low-Power DDR5 memory.
  * @MEM_NVDIMM:		Non-volatile RAM
  * @MEM_WIO2:		Wide I/O 2.
  * @MEM_HBM2:		High bandwidth Memory Gen 2.
@@ -217,7 +216,6 @@ enum mem_type {
 	MEM_DDR5,
 	MEM_RDDR5,
 	MEM_LRDDR5,
-	MEM_LPDDR5,
 	MEM_NVDIMM,
 	MEM_WIO2,
 	MEM_HBM2,
@@ -249,7 +247,6 @@ enum mem_type {
 #define MEM_FLAG_DDR5		BIT(MEM_DDR5)
 #define MEM_FLAG_RDDR5		BIT(MEM_RDDR5)
 #define MEM_FLAG_LRDDR5		BIT(MEM_LRDDR5)
-#define MEM_FLAG_LPDDR5		BIT(MEM_LPDDR5)
 #define MEM_FLAG_NVDIMM		BIT(MEM_NVDIMM)
 #define MEM_FLAG_WIO2		BIT(MEM_WIO2)
 #define MEM_FLAG_HBM2		BIT(MEM_HBM2)
@@ -544,6 +541,17 @@ struct mem_ctl_info {
 	struct csrow_info **csrows;
 	unsigned int nr_csrows, num_cschannel;
 
+	/*
+	 * Memory Controller hierarchy
+	 *
+	 * There are basically two types of memory controller: the ones that
+	 * sees memory sticks ("dimms"), and the ones that sees memory ranks.
+	 * All old memory controllers enumerate memories per rank, but most
+	 * of the recent drivers enumerate memories per DIMM, instead.
+	 * When the memory controller is per rank, csbased is true.
+	 */
+	unsigned int n_layers;
+	struct edac_mc_layer *layers;
 	bool csbased;
 
 	/*
@@ -598,18 +606,9 @@ struct mem_ctl_info {
 	int op_state;
 
 	struct dentry *debugfs;
-
-	/*
-	 * Memory Controller hierarchy
-	 *
-	 * There are basically two types of memory controller: the ones that
-	 * sees memory sticks ("dimms"), and the ones that sees memory ranks.
-	 * All old memory controllers enumerate memories per rank, but most
-	 * of the recent drivers enumerate memories per DIMM, instead.
-	 * When the memory controller is per rank, csbased is true.
-	 */
-	unsigned int n_layers;
-	struct edac_mc_layer layers[] __counted_by(n_layers);
+	u8 fake_inject_layer[EDAC_MAX_LAYERS];
+	bool fake_inject_ue;
+	u16 fake_inject_count;
 };
 
 #define mci_for_each_dimm(mci, dimm)				\

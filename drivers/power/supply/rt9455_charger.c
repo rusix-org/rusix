@@ -1693,8 +1693,10 @@ static int rt9455_probe(struct i2c_client *client)
 					rt9455_irq_handler_thread,
 					IRQF_TRIGGER_LOW | IRQF_ONESHOT,
 					RT9455_DRIVER_NAME, info);
-	if (ret)
+	if (ret) {
+		dev_err(dev, "Failed to register IRQ handler\n");
 		goto put_usb_notifier;
+	}
 
 	ret = rt9455_hw_init(info, ichrg, ieoc_percentage, mivr, iaicr);
 	if (ret) {
@@ -1730,7 +1732,7 @@ static void rt9455_remove(struct i2c_client *client)
 }
 
 static const struct i2c_device_id rt9455_i2c_id_table[] = {
-	{ .name = RT9455_DRIVER_NAME },
+	{ RT9455_DRIVER_NAME },
 	{ }
 };
 MODULE_DEVICE_TABLE(i2c, rt9455_i2c_id_table);

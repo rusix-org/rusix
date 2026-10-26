@@ -8,23 +8,21 @@
  */
 
 #include <linux/bitfield.h>
-#include <linux/clk.h>
 #include <linux/device.h>
 #include <linux/errno.h>
 #include <linux/i3c/master.h>
 #include <linux/interrupt.h>
 #include <linux/iopoll.h>
 #include <linux/module.h>
-#include <linux/pci.h>
 #include <linux/platform_data/mipi-i3c-hci.h>
 #include <linux/platform_device.h>
-#include <linux/pm_runtime.h>
 
 #include "hci.h"
 #include "ext_caps.h"
 #include "cmd.h"
 #include "dat.h"
 #include "ibi.h"
+
 
 /*
  * Host Controller Capabilities and Operation Registers
@@ -113,31 +111,10 @@
 #define DEV_CTX_BASE_LO			0x60
 #define DEV_CTX_BASE_HI			0x64
 
+
 static inline struct i3c_hci *to_i3c_hci(struct i3c_master_controller *m)
 {
 	return container_of(m, struct i3c_hci, master);
-}
-
-/**
- * i3c_hci_sysdev() - Get the device to use for DMA and system PM
- * @dev: Device the HCI controller is bound to
- *
- * When an IOMMU is enabled, DMA API calls must use the device that IOMMU
- * setup was done for.  Under PCI enumeration that is the PCI device, not
- * the "mipi-i3c-hci" platform device below it.  The same device owns
- * system PM and wakeup configuration.
- *
- * Return: @dev's parent if it is a PCI device, otherwise @dev.
- */
-struct device *i3c_hci_sysdev(struct device *dev)
-{
-	return dev->parent && dev_is_pci(dev->parent) ? dev->parent : dev;
-}
-
-static void i3c_hci_set_master_dyn_addr(struct i3c_hci *hci)
-{
-	reg_write(MASTER_DEVICE_ADDR,
-		  MASTER_DYNAMIC_ADDR(hci->dyn_addr) | MASTER_DYNAMIC_ADDR_VALID);
 }
 
 static int i3c_hci_bus_init(struct i3c_master_controller *m)
@@ -156,10 +133,10 @@ static int i3c_hci_bus_init(struct i3c_master_controller *m)
 	ret = i3c_master_get_free_addr(m, 0);
 	if (ret < 0)
 		return ret;
-	hci->dyn_addr = ret;
-	i3c_hci_set_master_dyn_addr(hci);
+	reg_write(MASTER_DEVICE_ADDR,
+		  MASTER_DYNAMIC_ADDR(ret) | MASTER_DYNAMIC_ADDR_VALID);
 	memset(&info, 0, sizeof(info));
-	info.dyn_addr = hci->dyn_addr;
+	info.dyn_addr = ret;
 	ret = i3c_master_set_info(m, &info);
 	if (ret)
 		return ret;
@@ -176,8 +153,7 @@ static int i3c_hci_bus_init(struct i3c_master_controller *m)
 	if (hci->quirks & HCI_QUIRK_RESP_BUF_THLD)
 		amd_set_resp_buf_thld(hci);
 
-	scoped_guard(spinlock_irqsave, &hci->lock)
-		hci->irq_inactive = false;
+	WRITE_ONCE(hci->irq_inactive, false);
 
 	/* Enable bus with Hot-Join disabled */
 	reg_set(HC_CONTROL, HC_CONTROL_BUS_ENABLE | HC_CONTROL_HOT_JOIN_CTRL);
@@ -186,89 +162,21 @@ static int i3c_hci_bus_init(struct i3c_master_controller *m)
 	return 0;
 }
 
-/* Bus disable should never fail, so be generous with the timeout */
-#define BUS_DISABLE_TIMEOUT_US (500 * USEC_PER_MSEC)
-
-static int i3c_hci_bus_disable(struct i3c_hci *hci)
-{
-	u32 regval;
-	int ret;
-
-	reg_clear(HC_CONTROL, HC_CONTROL_BUS_ENABLE);
-
-	/* Ensure controller is disabled */
-	ret = readx_poll_timeout(reg_read, HC_CONTROL, regval,
-				 !(regval & HC_CONTROL_BUS_ENABLE), 0, BUS_DISABLE_TIMEOUT_US);
-	if (ret)
-		dev_err(&hci->master.dev, "%s: Failed to disable bus\n", __func__);
-
-	return ret;
-}
-
-static int i3c_hci_software_reset(struct i3c_hci *hci)
-{
-	u32 regval;
-	int ret;
-
-	/*
-	 * SOFT_RST must be clear before we write to it.
-	 * Then we must wait until it clears again.
-	 */
-	ret = readx_poll_timeout(reg_read, RESET_CONTROL, regval,
-				 !(regval & SOFT_RST), 0, 10 * USEC_PER_MSEC);
-	if (ret) {
-		dev_err(&hci->master.dev, "%s: Software reset stuck\n", __func__);
-		return ret;
-	}
-
-	reg_write(RESET_CONTROL, SOFT_RST);
-
-	ret = readx_poll_timeout(reg_read, RESET_CONTROL, regval,
-				 !(regval & SOFT_RST), 0, 10 * USEC_PER_MSEC);
-	if (ret) {
-		dev_err(&hci->master.dev, "%s: Software reset failed\n", __func__);
-		return ret;
-	}
-
-	return 0;
-}
-
-void i3c_hci_sync_irq_inactive(struct i3c_hci *hci)
-{
-	struct platform_device *pdev = to_platform_device(hci->master.dev.parent);
-	int irq = platform_get_irq(pdev, 0);
-
-	reg_write(INTR_SIGNAL_ENABLE, 0x0);
-	synchronize_irq(irq);
-	scoped_guard(spinlock_irqsave, &hci->lock)
-		hci->irq_inactive = true;
-}
-
 static void i3c_hci_bus_cleanup(struct i3c_master_controller *m)
 {
 	struct i3c_hci *hci = to_i3c_hci(m);
+	struct platform_device *pdev = to_platform_device(m->dev.parent);
 
-	if (i3c_hci_bus_disable(hci))
-		i3c_hci_software_reset(hci);
+	reg_clear(HC_CONTROL, HC_CONTROL_BUS_ENABLE);
+	synchronize_irq(platform_get_irq(pdev, 0));
 	hci->io->cleanup(hci);
+	if (hci->cmd == &mipi_i3c_hci_cmd_v1)
+		mipi_i3c_hci_dat_v1.cleanup(hci);
 }
 
 void mipi_i3c_hci_resume(struct i3c_hci *hci)
 {
-	u32 reg = reg_read(HC_CONTROL);
-
-	reg |= HC_CONTROL_RESUME;
-	reg &= ~HC_CONTROL_ABORT;
-	reg_write(HC_CONTROL, reg);
-}
-
-void mipi_i3c_hci_abort(struct i3c_hci *hci)
-{
-	u32 reg = reg_read(HC_CONTROL);
-
-	reg &= ~HC_CONTROL_RESUME; /* Do not set resume */
-	reg |= HC_CONTROL_ABORT;
-	reg_write(HC_CONTROL, reg);
+	reg_set(HC_CONTROL, HC_CONTROL_RESUME);
 }
 
 /* located here rather than pio.c because needed bits are in core reg space */
@@ -277,69 +185,10 @@ void mipi_i3c_hci_pio_reset(struct i3c_hci *hci)
 	reg_write(RESET_CONTROL, RX_FIFO_RST | TX_FIFO_RST | RESP_QUEUE_RST);
 }
 
-#define ALL_QUEUES_RST (CMD_QUEUE_RST | RESP_QUEUE_RST | RX_FIFO_RST | TX_FIFO_RST | IBI_QUEUE_RST)
-
-void mipi_i3c_hci_pio_reset_all_queues(struct i3c_hci *hci)
-{
-	u32 regval;
-
-	reg_write(RESET_CONTROL, ALL_QUEUES_RST);
-	if (readx_poll_timeout_atomic(reg_read, RESET_CONTROL, regval,
-				      !(regval & ALL_QUEUES_RST), 0, 20))
-		dev_err(&hci->master.dev, "%s: Reset queues failed\n", __func__);
-}
-
 /* located here rather than dct.c because needed bits are in core reg space */
 void mipi_i3c_hci_dct_index_reset(struct i3c_hci *hci)
 {
 	reg_write(DCT_SECTION, FIELD_PREP(DCT_TABLE_INDEX, 0));
-}
-
-int i3c_hci_process_xfer(struct i3c_hci *hci, struct hci_xfer *xfer, int n)
-{
-	struct completion *done = xfer[n - 1].completion;
-	unsigned long timeout = xfer[n - 1].timeout;
-	unsigned long remaining_timeout = timeout;
-	long time_taken;
-	bool started;
-	int ret;
-
-	xfer[0].started = false;
-
-	ret = hci->io->queue_xfer(hci, xfer, n);
-	if (ret)
-		return ret;
-
-	while (!wait_for_completion_timeout(done, remaining_timeout)) {
-		scoped_guard(spinlock_irqsave, &hci->lock) {
-			started = xfer[0].started;
-			time_taken = jiffies - xfer[0].start_jiffies;
-		}
-		/* Keep waiting if xfer has not started */
-		if (!started)
-			continue;
-		/* Recalculate timeout based on actual start time */
-		if (time_taken < timeout) {
-			remaining_timeout = timeout - time_taken;
-			continue;
-		}
-		if (hci->io->dequeue_xfer(hci, xfer, n)) {
-			dev_err(&hci->master.dev, "%s: timeout error\n", __func__);
-			return -ETIMEDOUT;
-		}
-		return 0;
-	}
-
-	if (hci->io->handle_error) {
-		bool error = false;
-
-		for (int i = 0; i < n && !error; i++)
-			error = RESP_STATUS(xfer[i].response);
-		if (error)
-			return hci->io->handle_error(hci, xfer, n);
-	}
-
-	return 0;
 }
 
 static int i3c_hci_send_ccc_cmd(struct i3c_master_controller *m,
@@ -382,17 +231,21 @@ static int i3c_hci_send_ccc_cmd(struct i3c_master_controller *m,
 	last = i - 1;
 	xfer[last].cmd_desc[0] |= CMD_0_TOC;
 	xfer[last].completion = &done;
-	xfer[last].timeout = HZ;
 
 	if (prefixed)
 		xfer--;
 
-	ret = i3c_hci_process_xfer(hci, xfer, nxfers);
+	ret = hci->io->queue_xfer(hci, xfer, nxfers);
 	if (ret)
 		goto out;
+	if (!wait_for_completion_timeout(&done, HZ) &&
+	    hci->io->dequeue_xfer(hci, xfer, nxfers)) {
+		ret = -ETIMEDOUT;
+		goto out;
+	}
 	for (i = prefixed; i < nxfers; i++) {
 		if (ccc->rnw)
-			ccc->dests[i - prefixed].payload.actual_len =
+			ccc->dests[i - prefixed].payload.len =
 				RESP_DATA_LENGTH(xfer[i].response);
 		switch (RESP_STATUS(xfer[i].response)) {
 		case RESP_SUCCESS:
@@ -409,65 +262,23 @@ static int i3c_hci_send_ccc_cmd(struct i3c_master_controller *m,
 
 	if (ccc->rnw)
 		dev_dbg(&hci->master.dev, "got: %*ph",
-			ccc->dests[0].payload.actual_len,
-			ccc->dests[0].payload.data);
+			ccc->dests[0].payload.len, ccc->dests[0].payload.data);
 
 out:
 	hci_free_xfer(xfer, nxfers);
 	return ret;
 }
 
-static int i3c_hci_enable_hotjoin(struct i3c_master_controller *m)
-{
-	struct i3c_hci *hci = to_i3c_hci(m);
-	int ret;
-
-	reg_clear(HC_CONTROL, HC_CONTROL_HOT_JOIN_CTRL);
-
-	/*
-	 * Broadcast Hot_join enable, so that an I3C device that has previously
-	 * had its Hot-Join request NACK'ed knows to try again.
-	 */
-	ret = i3c_master_enec_disec_locked(m, I3C_BROADCAST_ADDR, true, I3C_CCC_EVENT_HJ, true);
-	if (ret) {
-		reg_set(HC_CONTROL, HC_CONTROL_HOT_JOIN_CTRL);
-		dev_err(&hci->master.dev, "Hot-Join ENEC CCC failed\n");
-	}
-
-	return ret;
-}
-
-static int i3c_hci_disable_hotjoin(struct i3c_master_controller *m)
-{
-	struct i3c_hci *hci = to_i3c_hci(m);
-
-	reg_set(HC_CONTROL, HC_CONTROL_HOT_JOIN_CTRL);
-	return 0;
-}
-
 static int i3c_hci_daa(struct i3c_master_controller *m)
 {
 	struct i3c_hci *hci = to_i3c_hci(m);
-	int ret;
 
-	ret = hci->cmd->perform_daa(hci);
-
-	if (!hci->hj_init_done) {
-		hci->hj_init_done = true;
-		/*
-		 * Enable Hot-Join by default after initial DAA if it does not
-		 * prevent runtime suspend.
-		 */
-		if (m->rpm_ibi_allowed && !ret)
-			m->hotjoin = !i3c_hci_enable_hotjoin(m);
-	}
-
-	return ret;
+	return hci->cmd->perform_daa(hci);
 }
 
-static int i3c_hci_i3c_xfers(struct i3c_dev_desc *dev,
-			     struct i3c_xfer *i3c_xfers, int nxfers,
-			     enum i3c_xfer_mode mode)
+static int i3c_hci_priv_xfers(struct i3c_dev_desc *dev,
+			      struct i3c_priv_xfer *i3c_xfers,
+			      int nxfers)
 {
 	struct i3c_master_controller *m = i3c_dev_get_master(dev);
 	struct i3c_hci *hci = to_i3c_hci(m);
@@ -502,11 +313,15 @@ static int i3c_hci_i3c_xfers(struct i3c_dev_desc *dev,
 	last = i - 1;
 	xfer[last].cmd_desc[0] |= CMD_0_TOC;
 	xfer[last].completion = &done;
-	xfer[last].timeout = HZ;
 
-	ret = i3c_hci_process_xfer(hci, xfer, nxfers);
+	ret = hci->io->queue_xfer(hci, xfer, nxfers);
 	if (ret)
 		goto out;
+	if (!wait_for_completion_timeout(&done, HZ) &&
+	    hci->io->dequeue_xfer(hci, xfer, nxfers)) {
+		ret = -ETIMEDOUT;
+		goto out;
+	}
 	for (i = 0; i < nxfers; i++) {
 		if (i3c_xfers[i].rnw)
 			i3c_xfers[i].len = RESP_DATA_LENGTH(xfer[i].response);
@@ -546,11 +361,15 @@ static int i3c_hci_i2c_xfers(struct i2c_dev_desc *dev,
 	last = i - 1;
 	xfer[last].cmd_desc[0] |= CMD_0_TOC;
 	xfer[last].completion = &done;
-	xfer[last].timeout = m->i2c.timeout;
 
-	ret = i3c_hci_process_xfer(hci, xfer, nxfers);
+	ret = hci->io->queue_xfer(hci, xfer, nxfers);
 	if (ret)
 		goto out;
+	if (!wait_for_completion_timeout(&done, m->i2c.timeout) &&
+	    hci->io->dequeue_xfer(hci, xfer, nxfers)) {
+		ret = -ETIMEDOUT;
+		goto out;
+	}
 	for (i = 0; i < nxfers; i++) {
 		if (RESP_STATUS(xfer[i].response) != RESP_SUCCESS) {
 			ret = -EIO;
@@ -570,7 +389,7 @@ static int i3c_hci_attach_i3c_dev(struct i3c_dev_desc *dev)
 	struct i3c_hci_dev_data *dev_data;
 	int ret;
 
-	dev_data = kzalloc_obj(*dev_data);
+	dev_data = kzalloc(sizeof(*dev_data), GFP_KERNEL);
 	if (!dev_data)
 		return -ENOMEM;
 	if (hci->cmd == &mipi_i3c_hci_cmd_v1) {
@@ -620,7 +439,7 @@ static int i3c_hci_attach_i2c_dev(struct i2c_dev_desc *dev)
 
 	if (hci->cmd != &mipi_i3c_hci_cmd_v1)
 		return 0;
-	dev_data = kzalloc_obj(*dev_data);
+	dev_data = kzalloc(sizeof(*dev_data), GFP_KERNEL);
 	if (!dev_data)
 		return -ENOMEM;
 	ret = mipi_i3c_hci_dat_v1.alloc_entry(hci);
@@ -716,13 +535,7 @@ static int i3c_hci_disable_ibi(struct i3c_dev_desc *dev)
 	struct i3c_hci *hci = to_i3c_hci(m);
 
 	__i3c_hci_disable_ibi(hci, dev);
-	/*
-	 * The DAT entry is now set to NACK and DISEC this target's IBIs, so
-	 * the IBI teardown can proceed even if DISEC below fails, so ignore
-	 * errors.
-	 */
-	i3c_master_disec_locked(m, dev->info.dyn_addr, I3C_CCC_EVENT_SIR);
-	return 0;
+	return i3c_master_disec_locked(m, dev->info.dyn_addr, I3C_CCC_EVENT_SIR);
 }
 
 static void i3c_hci_recycle_ibi_slot(struct i3c_dev_desc *dev,
@@ -739,7 +552,7 @@ static const struct i3c_master_controller_ops i3c_hci_ops = {
 	.bus_cleanup		= i3c_hci_bus_cleanup,
 	.do_daa			= i3c_hci_daa,
 	.send_ccc_cmd		= i3c_hci_send_ccc_cmd,
-	.i3c_xfers		= i3c_hci_i3c_xfers,
+	.priv_xfers		= i3c_hci_priv_xfers,
 	.i2c_xfers		= i3c_hci_i2c_xfers,
 	.attach_i3c_dev		= i3c_hci_attach_i3c_dev,
 	.reattach_i3c_dev	= i3c_hci_reattach_i3c_dev,
@@ -751,8 +564,6 @@ static const struct i3c_master_controller_ops i3c_hci_ops = {
 	.enable_ibi		= i3c_hci_enable_ibi,
 	.disable_ibi		= i3c_hci_disable_ibi,
 	.recycle_ibi_slot	= i3c_hci_recycle_ibi_slot,
-	.enable_hotjoin		= i3c_hci_enable_hotjoin,
-	.disable_hotjoin	= i3c_hci_disable_hotjoin,
 };
 
 static irqreturn_t i3c_hci_irq_handler(int irq, void *dev_id)
@@ -761,14 +572,13 @@ static irqreturn_t i3c_hci_irq_handler(int irq, void *dev_id)
 	irqreturn_t result = IRQ_NONE;
 	u32 val;
 
-	guard(spinlock)(&hci->lock);
-
 	/*
 	 * The IRQ can be shared, so the handler may be called when the IRQ is
-	 * due to a different device. That could happen when runtime suspended,
-	 * so exit immediately if IRQs are not expected for this device.
+	 * due to a different device. That could happen before the controller
+	 * has been initialized, so exit immediately if IRQs are not expected
+	 * for this device.
 	 */
-	if (hci->irq_inactive)
+	if (READ_ONCE(hci->irq_inactive))
 		return IRQ_NONE;
 
 	val = reg_read(INTR_STATUS);
@@ -786,7 +596,6 @@ static irqreturn_t i3c_hci_irq_handler(int irq, void *dev_id)
 	if (val & INTR_HC_INTERNAL_ERR) {
 		dev_err(&hci->master.dev, "Host Controller Internal Error\n");
 		val &= ~INTR_HC_INTERNAL_ERR;
-		hci->recovery_needed = true;
 	}
 
 	if (val)
@@ -799,242 +608,9 @@ static irqreturn_t i3c_hci_irq_handler(int irq, void *dev_id)
 	return result;
 }
 
-static inline bool is_version_1_1_or_newer(struct i3c_hci *hci)
-{
-	return hci->version_major > 1 || (hci->version_major == 1 && hci->version_minor > 0);
-}
-
-static int i3c_hci_set_io_mode(struct i3c_hci *hci, bool dma)
-{
-	bool pio_mode;
-
-	if (dma)
-		reg_clear(HC_CONTROL, HC_CONTROL_PIO_MODE);
-	else
-		reg_set(HC_CONTROL, HC_CONTROL_PIO_MODE);
-
-	if (!is_version_1_1_or_newer(hci))
-		return 0;
-
-	pio_mode = reg_read(HC_CONTROL) & HC_CONTROL_PIO_MODE;
-	if ((dma && pio_mode) || (!dma && !pio_mode)) {
-		dev_err(&hci->master.dev, "%s mode is stuck\n", pio_mode ? "PIO" : "DMA");
-		return -EIO;
-	}
-
-	return 0;
-}
-
-static int i3c_hci_reset_and_init(struct i3c_hci *hci)
-{
-	u32 regval;
-	int ret;
-
-	ret = i3c_hci_software_reset(hci);
-	if (ret)
-		return -ENXIO;
-
-	/* Disable all interrupts */
-	reg_write(INTR_SIGNAL_ENABLE, 0x0);
-	/*
-	 * Only allow bit 31:10 signal updates because
-	 * Bit 0:9 are reserved in IP version >= 0.8
-	 * Bit 0:5 are defined in IP version < 0.8 but not handled by PIO code
-	 */
-	reg_write(INTR_STATUS_ENABLE, GENMASK(31, 10));
-
-	/* Make sure our data ordering fits the host's */
-	regval = reg_read(HC_CONTROL);
-	if (IS_ENABLED(CONFIG_CPU_BIG_ENDIAN)) {
-		if (!(regval & HC_CONTROL_DATA_BIG_ENDIAN)) {
-			regval |= HC_CONTROL_DATA_BIG_ENDIAN;
-			reg_write(HC_CONTROL, regval);
-			regval = reg_read(HC_CONTROL);
-			if (!(regval & HC_CONTROL_DATA_BIG_ENDIAN)) {
-				dev_err(&hci->master.dev, "cannot set BE mode\n");
-				return -EOPNOTSUPP;
-			}
-		}
-	} else {
-		if (regval & HC_CONTROL_DATA_BIG_ENDIAN) {
-			regval &= ~HC_CONTROL_DATA_BIG_ENDIAN;
-			reg_write(HC_CONTROL, regval);
-			regval = reg_read(HC_CONTROL);
-			if (regval & HC_CONTROL_DATA_BIG_ENDIAN) {
-				dev_err(&hci->master.dev, "cannot clear BE mode\n");
-				return -EOPNOTSUPP;
-			}
-		}
-	}
-
-	if (hci->io) {
-		ret = i3c_hci_set_io_mode(hci, hci->io == &mipi_i3c_hci_dma);
-	} else {
-		/* Try activating DMA operations first */
-		if (hci->RHS_regs) {
-			ret = i3c_hci_set_io_mode(hci, true);
-			if (!ret) {
-				hci->io = &mipi_i3c_hci_dma;
-				dev_dbg(&hci->master.dev, "Using DMA\n");
-			}
-		}
-
-		/* If no DMA, try PIO */
-		if (!hci->io && hci->PIO_regs) {
-			ret = i3c_hci_set_io_mode(hci, false);
-			if (!ret) {
-				hci->io = &mipi_i3c_hci_pio;
-				dev_dbg(&hci->master.dev, "Using PIO\n");
-			}
-		}
-
-		if (!hci->io) {
-			dev_err(&hci->master.dev, "neither DMA nor PIO can be used\n");
-			ret = ret ?: -EINVAL;
-		}
-	}
-	if (ret)
-		return ret;
-
-	/* Configure OD and PP timings for AMD platforms */
-	if (hci->quirks & HCI_QUIRK_OD_PP_TIMING)
-		amd_set_od_pp_timing(hci);
-
-	return 0;
-}
-
-int i3c_hci_rpm_suspend(struct device *dev)
-{
-	struct i3c_hci *hci = dev_get_drvdata(dev);
-
-	/* Fall back to software reset to disable the bus */
-	if (i3c_hci_bus_disable(hci))
-		i3c_hci_software_reset(hci);
-
-	hci->io->suspend(hci);
-
-	return 0;
-}
-EXPORT_SYMBOL_GPL(i3c_hci_rpm_suspend);
-
-static int i3c_hci_do_reset_and_restore(struct i3c_hci *hci)
-{
-	int ret;
-
-	ret = i3c_hci_reset_and_init(hci);
-	if (ret)
-		return -EIO;
-
-	i3c_hci_set_master_dyn_addr(hci);
-
-	mipi_i3c_hci_dat_v1.restore(hci);
-
-	hci->io->resume(hci);
-
-	scoped_guard(spinlock_irqsave, &hci->lock)
-		hci->irq_inactive = false;
-
-	/* Enable bus, restoring hot-join state */
-	reg_set(HC_CONTROL,
-		HC_CONTROL_BUS_ENABLE | (hci->master.hotjoin ? 0 : HC_CONTROL_HOT_JOIN_CTRL));
-
-	return 0;
-}
-
-int i3c_hci_reset_and_restore(struct i3c_hci *hci)
-{
-	i3c_hci_bus_disable(hci);
-
-	hci->io->suspend(hci);
-
-	return i3c_hci_do_reset_and_restore(hci);
-}
-
-int i3c_hci_rpm_resume(struct device *dev)
-{
-	struct i3c_hci *hci = dev_get_drvdata(dev);
-
-	return i3c_hci_do_reset_and_restore(hci);
-}
-EXPORT_SYMBOL_GPL(i3c_hci_rpm_resume);
-
-static int i3c_hci_runtime_suspend(struct device *dev)
-{
-	struct i3c_hci *hci = dev_get_drvdata(dev);
-
-	if (hci->quirks & HCI_QUIRK_RPM_PARENT_MANAGED)
-		return 0;
-
-	return i3c_hci_rpm_suspend(dev);
-}
-
-static int i3c_hci_runtime_resume(struct device *dev)
-{
-	struct i3c_hci *hci = dev_get_drvdata(dev);
-
-	if (hci->quirks & HCI_QUIRK_RPM_PARENT_MANAGED)
-		return 0;
-
-	return i3c_hci_rpm_resume(dev);
-}
-
-static int i3c_hci_suspend(struct device *dev)
-{
-	struct i3c_hci *hci = dev_get_drvdata(dev);
-
-	if (!(hci->quirks & HCI_QUIRK_RPM_ALLOWED))
-		return 0;
-
-	return pm_runtime_force_suspend(dev);
-}
-
-static int i3c_hci_resume_common(struct device *dev, bool rstdaa)
-{
-	struct i3c_hci *hci = dev_get_drvdata(dev);
-	int ret;
-
-	if (!(hci->quirks & HCI_QUIRK_RPM_ALLOWED))
-		return 0;
-
-	ret = pm_runtime_force_resume(dev);
-	if (ret)
-		return ret;
-
-	ret = i3c_master_do_daa_ext(&hci->master, rstdaa);
-	if (ret)
-		dev_err(dev, "Dynamic Address Assignment failed on resume, error %d\n", ret);
-
-	/*
-	 * I3C devices may have retained their dynamic address anyway. Do not
-	 * fail the resume because of DAA error.
-	 */
-	return 0;
-}
-
-static int i3c_hci_resume(struct device *dev)
-{
-	return i3c_hci_resume_common(dev, false);
-}
-
-static int i3c_hci_restore(struct device *dev)
-{
-	return i3c_hci_resume_common(dev, true);
-}
-
-static void i3c_hci_rpm_enable(struct device *dev)
-{
-	struct i3c_hci *hci = dev_get_drvdata(dev);
-
-	pm_runtime_set_autosuspend_delay(dev, DEFAULT_AUTOSUSPEND_DELAY_MS);
-	pm_runtime_use_autosuspend(dev);
-	devm_pm_runtime_set_active_enabled(dev);
-
-	hci->master.rpm_allowed = true;
-}
-
 static int i3c_hci_init(struct i3c_hci *hci)
 {
-	bool size_in_dwords;
+	bool size_in_dwords, mode_selector;
 	u32 regval, offset;
 	int ret;
 
@@ -1049,7 +625,6 @@ static int i3c_hci_init(struct i3c_hci *hci)
 	switch (regval & ~0xf) {
 	case 0x100:	/* version 1.0 */
 	case 0x110:	/* version 1.1 */
-	case 0x120:	/* version 1.2 */
 	case 0x200:	/* version 2.0 */
 		break;
 	default:
@@ -1102,6 +677,57 @@ static int i3c_hci_init(struct i3c_hci *hci)
 	if (ret)
 		return ret;
 
+	spin_lock_init(&hci->lock);
+	mutex_init(&hci->control_mutex);
+
+	/*
+	 * Now let's reset the hardware.
+	 * SOFT_RST must be clear before we write to it.
+	 * Then we must wait until it clears again.
+	 */
+	ret = readx_poll_timeout(reg_read, RESET_CONTROL, regval,
+				 !(regval & SOFT_RST), 1, 10000);
+	if (ret)
+		return -ENXIO;
+	reg_write(RESET_CONTROL, SOFT_RST);
+	ret = readx_poll_timeout(reg_read, RESET_CONTROL, regval,
+				 !(regval & SOFT_RST), 1, 10000);
+	if (ret)
+		return -ENXIO;
+
+	/* Disable all interrupts */
+	reg_write(INTR_SIGNAL_ENABLE, 0x0);
+	/*
+	 * Only allow bit 31:10 signal updates because
+	 * Bit 0:9 are reserved in IP version >= 0.8
+	 * Bit 0:5 are defined in IP version < 0.8 but not handled by PIO code
+	 */
+	reg_write(INTR_STATUS_ENABLE, GENMASK(31, 10));
+
+	/* Make sure our data ordering fits the host's */
+	regval = reg_read(HC_CONTROL);
+	if (IS_ENABLED(CONFIG_CPU_BIG_ENDIAN)) {
+		if (!(regval & HC_CONTROL_DATA_BIG_ENDIAN)) {
+			regval |= HC_CONTROL_DATA_BIG_ENDIAN;
+			reg_write(HC_CONTROL, regval);
+			regval = reg_read(HC_CONTROL);
+			if (!(regval & HC_CONTROL_DATA_BIG_ENDIAN)) {
+				dev_err(&hci->master.dev, "cannot set BE mode\n");
+				return -EOPNOTSUPP;
+			}
+		}
+	} else {
+		if (regval & HC_CONTROL_DATA_BIG_ENDIAN) {
+			regval &= ~HC_CONTROL_DATA_BIG_ENDIAN;
+			reg_write(HC_CONTROL, regval);
+			regval = reg_read(HC_CONTROL);
+			if (regval & HC_CONTROL_DATA_BIG_ENDIAN) {
+				dev_err(&hci->master.dev, "cannot clear BE mode\n");
+				return -EOPNOTSUPP;
+			}
+		}
+	}
+
 	/* Select our command descriptor model */
 	switch (FIELD_GET(HC_CAP_CMD_SIZE, hci->caps)) {
 	case 0:
@@ -1115,27 +741,60 @@ static int i3c_hci_init(struct i3c_hci *hci)
 		return -EINVAL;
 	}
 
+	mode_selector = hci->version_major > 1 ||
+				(hci->version_major == 1 && hci->version_minor > 0);
+
 	/* Quirk for HCI_QUIRK_PIO_MODE on AMD platforms */
 	if (hci->quirks & HCI_QUIRK_PIO_MODE)
 		hci->RHS_regs = NULL;
 
-	return i3c_hci_reset_and_init(hci);
+	/* Try activating DMA operations first */
+	if (hci->RHS_regs) {
+		reg_clear(HC_CONTROL, HC_CONTROL_PIO_MODE);
+		if (mode_selector && (reg_read(HC_CONTROL) & HC_CONTROL_PIO_MODE)) {
+			dev_err(&hci->master.dev, "PIO mode is stuck\n");
+			ret = -EIO;
+		} else {
+			hci->io = &mipi_i3c_hci_dma;
+			dev_dbg(&hci->master.dev, "Using DMA\n");
+		}
+	}
+
+	/* If no DMA, try PIO */
+	if (!hci->io && hci->PIO_regs) {
+		reg_set(HC_CONTROL, HC_CONTROL_PIO_MODE);
+		if (mode_selector && !(reg_read(HC_CONTROL) & HC_CONTROL_PIO_MODE)) {
+			dev_err(&hci->master.dev, "DMA mode is stuck\n");
+			ret = -EIO;
+		} else {
+			hci->io = &mipi_i3c_hci_pio;
+			dev_dbg(&hci->master.dev, "Using PIO\n");
+		}
+	}
+
+	if (!hci->io) {
+		dev_err(&hci->master.dev, "neither DMA nor PIO can be used\n");
+		if (!ret)
+			ret = -EINVAL;
+		return ret;
+	}
+
+	/* Configure OD and PP timings for AMD platforms */
+	if (hci->quirks & HCI_QUIRK_OD_PP_TIMING)
+		amd_set_od_pp_timing(hci);
+
+	return 0;
 }
 
 static int i3c_hci_probe(struct platform_device *pdev)
 {
 	const struct mipi_i3c_hci_platform_data *pdata = pdev->dev.platform_data;
-	struct clk_bulk_data *clks;
 	struct i3c_hci *hci;
 	int irq, ret;
 
 	hci = devm_kzalloc(&pdev->dev, sizeof(*hci), GFP_KERNEL);
 	if (!hci)
 		return -ENOMEM;
-
-	spin_lock_init(&hci->lock);
-	mutex_init(&hci->control_mutex);
-	init_waitqueue_head(&hci->enqueue_wait_queue);
 
 	/*
 	 * Multi-bus instances share the same MMIO address range, but not
@@ -1156,19 +815,12 @@ static int i3c_hci_probe(struct platform_device *pdev)
 	hci->master.dev.init_name = dev_name(&pdev->dev);
 
 	hci->quirks = (unsigned long)device_get_match_data(&pdev->dev);
-	if (!hci->quirks && platform_get_device_id(pdev))
-		hci->quirks = platform_get_device_id(pdev)->driver_data;
-
-	ret = devm_clk_bulk_get_all_enabled(&pdev->dev, &clks);
-	if (ret < 0)
-		return dev_err_probe(&pdev->dev, ret,
-				     "Failed to get clocks\n");
 
 	ret = i3c_hci_init(hci);
 	if (ret)
 		return ret;
 
-	hci->irq_inactive = true;
+	WRITE_ONCE(hci->irq_inactive, true);
 
 	irq = platform_get_irq(pdev, 0);
 	ret = devm_request_irq(&pdev->dev, irq, i3c_hci_irq_handler,
@@ -1176,16 +828,12 @@ static int i3c_hci_probe(struct platform_device *pdev)
 	if (ret)
 		return ret;
 
-	if (hci->quirks & HCI_QUIRK_RPM_ALLOWED)
-		i3c_hci_rpm_enable(&pdev->dev);
+	ret = i3c_master_register(&hci->master, &pdev->dev,
+				  &i3c_hci_ops, false);
+	if (ret)
+		return ret;
 
-	if (hci->quirks & HCI_QUIRK_RPM_IBI_ALLOWED)
-		hci->master.rpm_ibi_allowed = true;
-
-	if (device_can_wakeup(i3c_hci_sysdev(&pdev->dev)))
-		hci->master.ibi_wakeup = true;
-
-	return i3c_master_register(&hci->master, &pdev->dev, &i3c_hci_ops, false);
+	return 0;
 }
 
 static void i3c_hci_remove(struct platform_device *pdev)
@@ -1197,9 +845,6 @@ static void i3c_hci_remove(struct platform_device *pdev)
 
 static const __maybe_unused struct of_device_id i3c_hci_of_match[] = {
 	{ .compatible = "mipi-i3c-hci", },
-	{ .compatible = "microchip,sama7d65-i3c-hci",
-	  .data = (void *)(ulong)(HCI_QUIRK_PIO_MODE | HCI_QUIRK_OD_PP_TIMING |
-				  HCI_QUIRK_RESP_BUF_THLD) },
 	{},
 };
 MODULE_DEVICE_TABLE(of, i3c_hci_of_match);
@@ -1210,42 +855,13 @@ static const struct acpi_device_id i3c_hci_acpi_match[] = {
 };
 MODULE_DEVICE_TABLE(acpi, i3c_hci_acpi_match);
 
-static const struct platform_device_id i3c_hci_driver_ids[] = {
-	{
-		.name = "intel-lpss-i3c",
-		.driver_data = HCI_QUIRK_RPM_ALLOWED |
-			HCI_QUIRK_RPM_IBI_ALLOWED |
-			HCI_QUIRK_RPM_PARENT_MANAGED |
-			HCI_QUIRK_DMA_ABORT_REQUIRES_PIO_RESET |
-			HCI_QUIRK_DMA_REQUIRES_HC_ABORT,
-	},
-	{
-		.name = "amd-pt-i3c-hci",
-		.driver_data = HCI_QUIRK_RPM_ALLOWED,
-	},
-	{ /* sentinel */ }
-};
-MODULE_DEVICE_TABLE(platform, i3c_hci_driver_ids);
-
-static const struct dev_pm_ops i3c_hci_pm_ops = {
-	.suspend  = pm_sleep_ptr(i3c_hci_suspend),
-	.resume   = pm_sleep_ptr(i3c_hci_resume),
-	.freeze   = pm_sleep_ptr(i3c_hci_suspend),
-	.thaw     = pm_sleep_ptr(i3c_hci_resume),
-	.poweroff = pm_sleep_ptr(i3c_hci_suspend),
-	.restore  = pm_sleep_ptr(i3c_hci_restore),
-	RUNTIME_PM_OPS(i3c_hci_runtime_suspend, i3c_hci_runtime_resume, NULL)
-};
-
 static struct platform_driver i3c_hci_driver = {
 	.probe = i3c_hci_probe,
 	.remove = i3c_hci_remove,
-	.id_table = i3c_hci_driver_ids,
 	.driver = {
 		.name = "mipi-i3c-hci",
 		.of_match_table = of_match_ptr(i3c_hci_of_match),
 		.acpi_match_table = i3c_hci_acpi_match,
-		.pm = pm_ptr(&i3c_hci_pm_ops),
 	},
 };
 module_platform_driver(i3c_hci_driver);

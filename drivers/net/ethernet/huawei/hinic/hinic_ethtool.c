@@ -1080,11 +1080,22 @@ static int __set_rss_rxfh(struct net_device *netdev,
 	return 0;
 }
 
-static u32 hinic_get_rx_ring_count(struct net_device *netdev)
+static int hinic_get_rxnfc(struct net_device *netdev,
+			   struct ethtool_rxnfc *cmd, u32 *rule_locs)
 {
 	struct hinic_dev *nic_dev = netdev_priv(netdev);
+	int err = 0;
 
-	return nic_dev->num_qps;
+	switch (cmd->cmd) {
+	case ETHTOOL_GRXRINGS:
+		cmd->data = nic_dev->num_qps;
+		break;
+	default:
+		err = -EOPNOTSUPP;
+		break;
+	}
+
+	return err;
 }
 
 static int hinic_get_rxfh(struct net_device *netdev,
@@ -1371,7 +1382,7 @@ static void hinic_get_ethtool_stats(struct net_device *netdev,
 				sizeof(u64)) ? *(u64 *)p : *(u32 *)p;
 	}
 
-	port_stats = kzalloc_obj(*port_stats);
+	port_stats = kzalloc(sizeof(*port_stats), GFP_KERNEL);
 	if (!port_stats) {
 		memset(&data[i], 0,
 		       ARRAY_SIZE(hinic_port_stats) * sizeof(*data));
@@ -1747,7 +1758,7 @@ static const struct ethtool_ops hinic_ethtool_ops = {
 	.set_pauseparam = hinic_set_pauseparam,
 	.get_channels = hinic_get_channels,
 	.set_channels = hinic_set_channels,
-	.get_rx_ring_count = hinic_get_rx_ring_count,
+	.get_rxnfc = hinic_get_rxnfc,
 	.get_rxfh_key_size = hinic_get_rxfh_key_size,
 	.get_rxfh_indir_size = hinic_get_rxfh_indir_size,
 	.get_rxfh = hinic_get_rxfh,
@@ -1780,7 +1791,7 @@ static const struct ethtool_ops hinicvf_ethtool_ops = {
 	.set_per_queue_coalesce = hinic_set_per_queue_coalesce,
 	.get_channels = hinic_get_channels,
 	.set_channels = hinic_set_channels,
-	.get_rx_ring_count = hinic_get_rx_ring_count,
+	.get_rxnfc = hinic_get_rxnfc,
 	.get_rxfh_key_size = hinic_get_rxfh_key_size,
 	.get_rxfh_indir_size = hinic_get_rxfh_indir_size,
 	.get_rxfh = hinic_get_rxfh,

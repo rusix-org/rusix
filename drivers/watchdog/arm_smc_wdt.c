@@ -13,7 +13,6 @@
 #include <linux/moduleparam.h>
 #include <linux/of.h>
 #include <linux/platform_device.h>
-#include <linux/stringify.h>
 #include <linux/types.h>
 #include <linux/watchdog.h>
 #include <uapi/linux/psci.h>
@@ -192,7 +191,7 @@ MODULE_PARM_DESC(timeout, "Watchdog heartbeat in seconds");
 
 module_param(nowayout, bool, 0);
 MODULE_PARM_DESC(nowayout, "Watchdog cannot be stopped once started (default="
-			__stringify(WATCHDOG_NOWAYOUT) ")");
+			__MODULE_STRING(WATCHDOG_NOWAYOUT) ")");
 
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Julius Werner <jwerner@chromium.org>");

@@ -92,7 +92,7 @@ static void do_purge(struct dlm_ls *ls, int nodeid, int pid);
 static void deactivate_rsb(struct kref *kref);
 
 /*
- * Lock compatibility matrix - thanks Steve
+ * Lock compatibilty matrix - thanks Steve
  * UN = Unlocked state. Not really a state, used as a flag
  * PD = Padding. Used to make the matrix a nice power of two in size
  * Other states are the same as the VMS DLM.
@@ -343,7 +343,7 @@ void dlm_hold_rsb(struct dlm_rsb *r)
 /* TODO move this to lib/refcount.c */
 static __must_check bool
 dlm_refcount_dec_and_write_lock_bh(refcount_t *r, rwlock_t *lock)
-      __cond_acquires(true, lock)
+__cond_acquires(lock)
 {
 	if (refcount_dec_not_one(r))
 		return false;
@@ -622,17 +622,13 @@ static int get_rsb_struct(struct dlm_ls *ls, const void *name, int len,
 	return 0;
 }
 
-int dlm_search_rsb_tree(struct rhashtable *rhash, const void *name,
-			unsigned int len, struct dlm_rsb **r_ret)
+int dlm_search_rsb_tree(struct rhashtable *rhash, const void *name, int len,
+			struct dlm_rsb **r_ret)
 {
-	struct dlm_rsb_key key = {
-		.len = len,
-	};
-
+	char key[DLM_RESNAME_MAXLEN] = {};
 	if (len > DLM_RESNAME_MAXLEN)
 		return -EINVAL;
-
-	memcpy(key.name, name, len);
+	memcpy(key, name, len);
 	*r_ret = rhashtable_lookup_fast(rhash, &key, dlm_rhash_rsb_params);
 	if (*r_ret)
 		return 0;
@@ -1425,7 +1421,7 @@ void dlm_dump_rsb_name(struct dlm_ls *ls, const char *name, int len)
 
 	rcu_read_lock();
 	error = dlm_search_rsb_tree(&ls->ls_rsbtbl, name, len, &r);
-	if (error)
+	if (!error)
 		goto out;
 
 	dlm_dump_rsb(r);
@@ -5054,7 +5050,7 @@ void dlm_recover_waiters_pre(struct dlm_ls *ls)
 	int wait_type, local_unlock_result, local_cancel_result;
 	int dir_nodeid;
 
-	ms_local = kmalloc_obj(*ms_local);
+	ms_local = kmalloc(sizeof(*ms_local), GFP_KERNEL);
 	if (!ms_local)
 		return;
 
@@ -5532,10 +5528,6 @@ static int receive_rcom_lock_args(struct dlm_ls *ls, struct dlm_lkb *lkb,
 				  struct dlm_rsb *r, const struct dlm_rcom *rc)
 {
 	struct rcom_lock *rl = (struct rcom_lock *) rc->rc_buf;
-
-	if (rl->rl_rqmode < DLM_LOCK_IV || rl->rl_rqmode > DLM_LOCK_EX ||
-	    rl->rl_grmode < DLM_LOCK_IV || rl->rl_grmode > DLM_LOCK_EX)
-		return -EINVAL;
 
 	lkb->lkb_nodeid = le32_to_cpu(rc->rc_header.h_nodeid);
 	lkb->lkb_ownpid = le32_to_cpu(rl->rl_ownpid);
@@ -6296,7 +6288,7 @@ int dlm_debug_add_lkb(struct dlm_ls *ls, uint32_t lkb_id, char *name, int len,
 	if (lkb_dflags & BIT(DLM_DFL_USER_BIT))
 		return -EOPNOTSUPP;
 
-	lksb = kzalloc_obj(*lksb, GFP_NOFS);
+	lksb = kzalloc(sizeof(*lksb), GFP_NOFS);
 	if (!lksb)
 		return -ENOMEM;
 

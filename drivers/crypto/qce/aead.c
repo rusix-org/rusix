@@ -5,7 +5,6 @@
  */
 #include <linux/dma-mapping.h>
 #include <linux/interrupt.h>
-#include <linux/string.h>
 #include <crypto/gcm.h>
 #include <crypto/authenc.h>
 #include <crypto/internal/aead.h>
@@ -34,6 +33,7 @@ static void qce_aead_done(void *data)
 	u32 status;
 	unsigned int totallen;
 	unsigned char tag[SHA256_DIGEST_SIZE] = {0};
+	int ret = 0;
 
 	diff_dst = (req->src != req->dst) ? true : false;
 	dir_src = diff_dst ? DMA_TO_DEVICE : DMA_BIDIRECTIONAL;
@@ -77,7 +77,8 @@ static void qce_aead_done(void *data)
 	} else if (!IS_CCM(rctx->flags)) {
 		totallen = req->cryptlen + req->assoclen - ctx->authsize;
 		scatterwalk_map_and_copy(tag, req->src, totallen, ctx->authsize, 0);
-		if (memcmp(result_buf->auth_iv, tag, ctx->authsize)) {
+		ret = memcmp(result_buf->auth_iv, tag, ctx->authsize);
+		if (ret) {
 			pr_err("Bad message error\n");
 			error = -EBADMSG;
 		}
@@ -141,12 +142,16 @@ qce_aead_prepare_dst_buf(struct aead_request *req)
 
 		sg = qce_sgtable_add(&rctx->dst_tbl, &rctx->adata_sg,
 				     rctx->assoclen);
-		if (IS_ERR(sg))
+		if (IS_ERR(sg)) {
+			ret = PTR_ERR(sg);
 			goto dst_tbl_free;
+		}
 		/* dst buffer */
 		sg = qce_sgtable_add(&rctx->dst_tbl, msg_sg, rctx->cryptlen);
-		if (IS_ERR(sg))
+		if (IS_ERR(sg)) {
+			ret = PTR_ERR(sg);
 			goto dst_tbl_free;
+		}
 		totallen = rctx->cryptlen + rctx->assoclen;
 	} else {
 		if (totallen) {
@@ -379,7 +384,7 @@ static int qce_aead_create_ccm_nonce(struct qce_aead_reqctx *rctx, struct qce_ae
 
 	/*
 	 * The crypto framework encodes cryptlen as unsigned int. Thus, even though
-	 * spec allows for up to 8 bytes to encode msg_len only 4 bytes are needed.
+	 * spec allows for upto 8 bytes to encode msg_len only 4 bytes are needed.
 	 */
 	if (msglen_size > 4)
 		msglen_size = 4;
@@ -615,8 +620,8 @@ static int qce_aead_setkey(struct crypto_aead *tfm, const u8 *key, unsigned int 
 
 	memcpy(ctx->enc_key, authenc_keys.enckey, authenc_keys.enckeylen);
 
-	memcpy_and_pad(ctx->auth_key, sizeof(ctx->auth_key),
-		       authenc_keys.authkey, authenc_keys.authkeylen, 0);
+	memset(ctx->auth_key, 0, sizeof(ctx->auth_key));
+	memcpy(ctx->auth_key, authenc_keys.authkey, authenc_keys.authkeylen);
 
 	return crypto_aead_setkey(ctx->fallback, key, keylen);
 }
@@ -703,14 +708,15 @@ static int qce_aead_register_one(const struct qce_aead_def *def, struct qce_devi
 	struct aead_alg *alg;
 	int ret;
 
-	tmpl = kzalloc_obj(*tmpl);
+	tmpl = kzalloc(sizeof(*tmpl), GFP_KERNEL);
 	if (!tmpl)
 		return -ENOMEM;
 
 	alg = &tmpl->alg.aead;
 
-	strscpy(alg->base.cra_name, def->name);
-	strscpy(alg->base.cra_driver_name, def->drv_name);
+	snprintf(alg->base.cra_name, CRYPTO_MAX_ALG_NAME, "%s", def->name);
+	snprintf(alg->base.cra_driver_name, CRYPTO_MAX_ALG_NAME, "%s",
+		 def->drv_name);
 
 	alg->base.cra_blocksize		= def->blocksize;
 	alg->chunksize			= def->chunksize;
@@ -769,13 +775,14 @@ static int qce_aead_register(struct qce_device *qce)
 
 	for (i = 0; i < ARRAY_SIZE(aead_def); i++) {
 		ret = qce_aead_register_one(&aead_def[i], qce);
-		if (ret) {
-			qce_aead_unregister(qce);
-			return ret;
-		}
+		if (ret)
+			goto err;
 	}
 
 	return 0;
+err:
+	qce_aead_unregister(qce);
+	return ret;
 }
 
 const struct qce_algo_ops aead_ops = {

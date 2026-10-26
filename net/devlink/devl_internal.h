@@ -49,8 +49,6 @@ struct devlink {
 	struct xarray snapshot_ids;
 	struct devlink_dev_stats stats;
 	struct device *dev;
-	const char *dev_name_index;
-	const struct device_driver *dev_driver;
 	possible_net_t _net;
 	/* Serializes access to devlink instance specific objects such as
 	 * port, sb, dpipe, resource, params, region, traps and more.
@@ -67,19 +65,6 @@ struct devlink {
 
 extern struct xarray devlinks;
 extern struct genl_family devlink_nl_family;
-
-struct devlink *__devlink_alloc(const struct devlink_ops *ops, size_t priv_size,
-				struct net *net, struct device *dev,
-				const struct device_driver *dev_driver);
-
-#define devl_warn(devlink, format, args...)				\
-	do {								\
-		if ((devlink)->dev)					\
-			dev_warn((devlink)->dev, format, ##args);	\
-		else							\
-			pr_warn("devlink (%s): " format,		\
-				devlink_dev_name(devlink), ##args);	\
-	} while (0)
 
 /* devlink instances are open to the access from the user space after
  * devlink_register() call. Such logical barrier allows us to have certain
@@ -105,7 +90,6 @@ struct devlink *__devlink_alloc(const struct devlink_ops *ops, size_t priv_size,
 	for (index = 0; (devlink = devlinks_xa_find_get(net, &index)); index++)
 
 struct devlink *devlinks_xa_find_get(struct net *net, unsigned long *indexp);
-struct devlink *devlinks_xa_lookup_get(struct net *net, unsigned long index);
 
 static inline bool __devl_is_registered(struct devlink *devlink)
 {
@@ -120,7 +104,7 @@ static inline bool devl_is_registered(struct devlink *devlink)
 
 static inline void devl_dev_lock(struct devlink *devlink, bool dev_lock)
 {
-	if (dev_lock && devlink->dev)
+	if (dev_lock)
 		device_lock(devlink->dev);
 	devl_lock(devlink);
 }
@@ -128,17 +112,13 @@ static inline void devl_dev_lock(struct devlink *devlink, bool dev_lock)
 static inline void devl_dev_unlock(struct devlink *devlink, bool dev_lock)
 {
 	devl_unlock(devlink);
-	if (dev_lock && devlink->dev)
+	if (dev_lock)
 		device_unlock(devlink->dev);
 }
 
 typedef void devlink_rel_notify_cb_t(struct devlink *devlink, u32 obj_index);
 typedef void devlink_rel_cleanup_cb_t(struct devlink *devlink, u32 obj_index,
 				      u32 rel_index);
-
-/* Returns the locked+referenced nested-in instance or NULL. */
-struct devlink *__must_check
-devlink_nested_in_get_lock(struct devlink *devlink);
 
 void devlink_rel_nested_in_clear(u32 rel_index);
 int devlink_rel_nested_in_add(u32 *rel_index, u32 devlink_index,
@@ -151,20 +131,6 @@ int devlink_rel_devlink_handle_put(struct sk_buff *msg, struct devlink *devlink,
 				   bool *msg_updated);
 
 /* Netlink */
-struct devlink_nl_ctx {
-	struct devlink *devlink;
-	struct devlink_port *devlink_port;
-	struct devlink *parent_devlink;
-};
-
-static inline struct devlink_nl_ctx *
-devlink_nl_ctx(struct genl_info *info)
-{
-	BUILD_BUG_ON(sizeof(struct devlink_nl_ctx) >
-		     sizeof_field(struct genl_info, ctx));
-	return (struct devlink_nl_ctx *)info->ctx;
-}
-
 enum devlink_multicast_groups {
 	DEVLINK_MCGRP_CONFIG,
 };
@@ -182,11 +148,6 @@ struct devlink_nl_dump_state {
 		struct {
 			u64 dump_ts;
 		};
-		/* DEVLINK_CMD_RESOURCE_DUMP */
-		struct {
-			u32 index;
-			bool index_valid;
-		} port_ctx;
 	};
 };
 
@@ -198,8 +159,6 @@ typedef int devlink_nl_dump_one_func_t(struct sk_buff *msg,
 struct devlink *
 devlink_get_from_attrs_lock(struct net *net, struct nlattr **attrs,
 			    bool dev_lock);
-struct devlink *
-devlink_get_parent_from_attrs_lock(struct net *net, struct nlattr **attrs);
 
 int devlink_nl_dumpit(struct sk_buff *msg, struct netlink_callback *cb,
 		      devlink_nl_dump_one_func_t *dump_one);
@@ -215,11 +174,9 @@ devlink_dump_state(struct netlink_callback *cb)
 static inline int
 devlink_nl_put_handle(struct sk_buff *msg, struct devlink *devlink)
 {
-	if (nla_put_string(msg, DEVLINK_ATTR_BUS_NAME, devlink_bus_name(devlink)))
+	if (nla_put_string(msg, DEVLINK_ATTR_BUS_NAME, devlink->dev->bus->name))
 		return -EMSGSIZE;
-	if (nla_put_string(msg, DEVLINK_ATTR_DEV_NAME, devlink_dev_name(devlink)))
-		return -EMSGSIZE;
-	if (nla_put_uint(msg, DEVLINK_ATTR_INDEX, devlink->index))
+	if (nla_put_string(msg, DEVLINK_ATTR_DEV_NAME, dev_name(devlink->dev)))
 		return -EMSGSIZE;
 	return 0;
 }
@@ -245,8 +202,6 @@ struct devlink_obj_desc {
 	const char *dev_name;
 	unsigned int port_index;
 	bool port_index_valid;
-	unsigned int devlink_index;
-	bool devlink_index_valid;
 	long data[];
 };
 
@@ -254,10 +209,8 @@ static inline void devlink_nl_obj_desc_init(struct devlink_obj_desc *desc,
 					    struct devlink *devlink)
 {
 	memset(desc, 0, sizeof(*desc));
-	desc->bus_name = devlink_bus_name(devlink);
-	desc->dev_name = devlink_dev_name(devlink);
-	desc->devlink_index = devlink->index;
-	desc->devlink_index_valid = true;
+	desc->bus_name = devlink->dev->bus->name;
+	desc->dev_name = dev_name(devlink->dev);
 }
 
 static inline void devlink_nl_obj_desc_port_set(struct devlink_obj_desc *desc,
@@ -324,9 +277,6 @@ struct devlink_port *devlink_port_get_from_attrs(struct devlink *devlink,
 
 /* Reload */
 bool devlink_reload_actions_valid(const struct devlink_ops *ops);
-void devlink_reload_netns_change(struct devlink *devlink,
-				 struct net *curr_net,
-				 struct net *dest_net);
 int devlink_reload(struct devlink *devlink, struct net *dest_net,
 		   enum devlink_reload_action action,
 		   enum devlink_reload_limit limit,
@@ -347,10 +297,8 @@ int devlink_resources_validate(struct devlink *devlink,
 			       struct genl_info *info);
 
 /* Rates */
-bool devlink_rate_is_node(const struct devlink_rate *devlink_rate);
-int devlink_rates_check(struct devlink *devlink,
-			bool (*rate_filter)(const struct devlink_rate *),
-			struct netlink_ext_ack *extack);
+int devlink_rate_nodes_check(struct devlink *devlink, u16 mode,
+			     struct netlink_ext_ack *extack);
 
 /* Linecards */
 unsigned int devlink_linecard_index(struct devlink_linecard *linecard);

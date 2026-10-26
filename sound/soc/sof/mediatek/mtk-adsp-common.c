@@ -107,9 +107,11 @@ EXPORT_SYMBOL(mtk_adsp_send_msg);
 void mtk_adsp_handle_reply(struct mtk_adsp_ipc *ipc)
 {
 	struct adsp_priv *priv = mtk_adsp_ipc_get_data(ipc);
+	unsigned long flags;
 
-	guard(spinlock_irqsave)(&priv->sdev->ipc_lock);
+	spin_lock_irqsave(&priv->sdev->ipc_lock, flags);
 	snd_sof_ipc_process_reply(priv->sdev, 0);
+	spin_unlock_irqrestore(&priv->sdev->ipc_lock, flags);
 }
 EXPORT_SYMBOL(mtk_adsp_handle_reply);
 

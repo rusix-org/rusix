@@ -1781,7 +1781,8 @@ static int ppc440spe_adma_alloc_chan_resources(struct dma_chan *chan)
 		db_sz = sizeof(struct xor_cb);
 
 	for (; i < (ppc440spe_chan->device->pool_size / db_sz); i++) {
-		slot = kzalloc_obj(struct ppc440spe_adma_desc_slot);
+		slot = kzalloc(sizeof(struct ppc440spe_adma_desc_slot),
+			       GFP_KERNEL);
 		if (!slot) {
 			printk(KERN_INFO "SPE ADMA Channel only initialized"
 				" %d descriptor slots", i--);
@@ -4063,7 +4064,7 @@ static int ppc440spe_adma_probe(struct platform_device *ofdev)
 	}
 
 	/* create a device */
-	adev = kzalloc_obj(*adev);
+	adev = kzalloc(sizeof(*adev), GFP_KERNEL);
 	if (!adev) {
 		initcode = PPC_ADMA_INIT_ALLOC;
 		ret = -ENOMEM;
@@ -4123,7 +4124,7 @@ static int ppc440spe_adma_probe(struct platform_device *ofdev)
 	platform_set_drvdata(ofdev, adev);
 
 	/* create a channel */
-	chan = kzalloc_obj(*chan);
+	chan = kzalloc(sizeof(*chan), GFP_KERNEL);
 	if (!chan) {
 		initcode = PPC_ADMA_INIT_CHANNEL;
 		ret = -ENOMEM;
@@ -4160,7 +4161,7 @@ static int ppc440spe_adma_probe(struct platform_device *ofdev)
 					   PAGE_SIZE, DMA_BIDIRECTIONAL);
 	}
 
-	ref = kmalloc_obj(*ref);
+	ref = kmalloc(sizeof(*ref), GFP_KERNEL);
 	if (ref) {
 		ref->chan = &chan->common;
 		INIT_LIST_HEAD(&ref->node);

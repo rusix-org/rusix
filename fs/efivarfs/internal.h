@@ -11,7 +11,6 @@
 struct efivarfs_mount_opts {
 	kuid_t uid;
 	kgid_t gid;
-	bool nostatfs;
 };
 
 struct efivarfs_fs_info {

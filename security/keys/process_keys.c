@@ -22,9 +22,6 @@
 /* Session keyring create vs join semaphore */
 static DEFINE_MUTEX(key_session_mutex);
 
-/* BPF keyring reachable through KEY_SPEC_BPF_KEYRING */
-static struct key *bpf_keyring __ro_after_init;
-
 /* The root user's tracking struct */
 struct key_user root_key_user = {
 	.usage		= REFCOUNT_INIT(3),
@@ -54,7 +51,7 @@ static struct key *get_user_register(struct user_namespace *user_ns)
 	if (!reg_keyring) {
 		reg_keyring = keyring_alloc(".user_reg",
 					    user_ns->owner, INVALID_GID,
-					    kernel_cred(),
+					    &init_cred,
 					    KEY_POS_WRITE | KEY_POS_SEARCH |
 					    KEY_USR_VIEW | KEY_USR_READ,
 					    0,
@@ -531,7 +528,7 @@ found:
 
 /*
  * Search the process keyrings attached to the supplied cred for the first
- * matching key in the manner of search_cred_keyrings_rcu(), but also search
+ * matching key in the manner of search_my_process_keyrings(), but also search
  * the keys attached to the assumed authorisation key using its credentials if
  * one is available.
  *
@@ -559,8 +556,9 @@ key_ref_t search_process_keyrings_rcu(struct keyring_search_context *ctx)
 	    ) {
 		const struct cred *cred = ctx->cred;
 
-		rka = dereference_key_rcu(cred->request_key_auth);
-		if (rka && key_validate(cred->request_key_auth) == 0) {
+		if (key_validate(cred->request_key_auth) == 0) {
+			rka = ctx->cred->request_key_auth->payload.data[0];
+
 			//// was search_process_keyrings() [ie. recursive]
 			ctx->cred = rka->cred;
 			key_ref = search_cred_keyrings_rcu(ctx);
@@ -590,20 +588,6 @@ bool lookup_user_key_possessed(const struct key *key,
 			       const struct key_match_data *match_data)
 {
 	return key == match_data->raw_data;
-}
-
-/**
- * key_register_bpf_keyring - Publish the BPF keyring for KEY_SPEC_BPF_KEYRING
- * @keyring: The keyring to publish
- *
- * Make @keyring reachable by userspace through the KEY_SPEC_BPF_KEYRING
- * special key ID, so that provisioning it does not require scraping its
- * serial out of /proc/keys first. Called once, from an initcall, and never
- * undone.
- */
-void key_register_bpf_keyring(struct key *keyring)
-{
-	bpf_keyring = keyring;
 }
 
 /*
@@ -755,14 +739,6 @@ try_again:
 		if (!key)
 			goto error;
 		key_ref = make_key_ref(key, 1);
-		break;
-
-	case KEY_SPEC_BPF_KEYRING:
-		key = bpf_keyring;
-		if (!key)
-			goto error;
-		__key_get(key);
-		key_ref = make_key_ref(key, 0);
 		break;
 
 	default:

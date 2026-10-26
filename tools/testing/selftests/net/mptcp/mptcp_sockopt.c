@@ -25,7 +25,6 @@
 #include <netinet/in.h>
 
 #include <linux/tcp.h>
-#include <linux/compiler.h>
 
 static int pf = AF_INET;
 
@@ -128,7 +127,7 @@ struct so_state {
 #define MIN(a, b) ((a) < (b) ? (a) : (b))
 #endif
 
-static void __noreturn die_perror(const char *msg)
+static void die_perror(const char *msg)
 {
 	perror(msg);
 	exit(1);
@@ -140,7 +139,7 @@ static void die_usage(int r)
 	exit(r);
 }
 
-static void __noreturn xerror(const char *fmt, ...)
+static void xerror(const char *fmt, ...)
 {
 	va_list ap;
 

@@ -12,7 +12,6 @@
 // Author: Shenghao Ding <shenghao-ding@ti.com>
 //
 
-#include <linux/cleanup.h>
 #include <linux/unaligned.h>
 #include <linux/firmware.h>
 #include <linux/gpio/consumer.h>
@@ -28,28 +27,28 @@
 #include "pcm6240.h"
 
 static const struct i2c_device_id pcmdevice_i2c_id[] = {
-	{ .name = "adc3120", .driver_data = ADC3120 },
-	{ .name = "adc5120", .driver_data = ADC5120 },
-	{ .name = "adc6120", .driver_data = ADC6120 },
-	{ .name = "dix4192", .driver_data = DIX4192 },
-	{ .name = "pcm1690", .driver_data = PCM1690 },
-	{ .name = "pcm3120", .driver_data = PCM3120 },
-	{ .name = "pcm3140", .driver_data = PCM3140 },
-	{ .name = "pcm5120", .driver_data = PCM5120 },
-	{ .name = "pcm5140", .driver_data = PCM5140 },
-	{ .name = "pcm6120", .driver_data = PCM6120 },
-	{ .name = "pcm6140", .driver_data = PCM6140 },
-	{ .name = "pcm6240", .driver_data = PCM6240 },
-	{ .name = "pcm6260", .driver_data = PCM6260 },
-	{ .name = "pcm9211", .driver_data = PCM9211 },
-	{ .name = "pcmd3140", .driver_data = PCMD3140 },
-	{ .name = "pcmd3180", .driver_data = PCMD3180 },
-	{ .name = "pcmd512x", .driver_data = PCMD512X },
-	{ .name = "taa5212", .driver_data = TAA5212 },
-	{ .name = "taa5412", .driver_data = TAA5412 },
-	{ .name = "tad5212", .driver_data = TAD5212 },
-	{ .name = "tad5412", .driver_data = TAD5412 },
-	{ }
+	{ "adc3120",  ADC3120  },
+	{ "adc5120",  ADC5120  },
+	{ "adc6120",  ADC6120  },
+	{ "dix4192",  DIX4192  },
+	{ "pcm1690",  PCM1690  },
+	{ "pcm3120",  PCM3120  },
+	{ "pcm3140",  PCM3140  },
+	{ "pcm5120",  PCM5120  },
+	{ "pcm5140",  PCM5140  },
+	{ "pcm6120",  PCM6120  },
+	{ "pcm6140",  PCM6140  },
+	{ "pcm6240",  PCM6240  },
+	{ "pcm6260",  PCM6260  },
+	{ "pcm9211",  PCM9211  },
+	{ "pcmd3140", PCMD3140 },
+	{ "pcmd3180", PCMD3180 },
+	{ "pcmd512x", PCMD512X },
+	{ "taa5212",  TAA5212  },
+	{ "taa5412",  TAA5412  },
+	{ "tad5212",  TAD5212  },
+	{ "tad5412",  TAD5412  },
+	{}
 };
 MODULE_DEVICE_TABLE(i2c, pcmdevice_i2c_id);
 
@@ -606,7 +605,7 @@ static int pcmdev_get_volsw(struct snd_kcontrol *kcontrol,
 	unsigned int reg = mc->reg;
 	unsigned int val;
 
-	guard(mutex)(&pcm_dev->codec_lock);
+	mutex_lock(&pcm_dev->codec_lock);
 
 	if (pcm_dev->chip_id == PCM1690) {
 		ret = pcmdev_dev_read(pcm_dev, dev_no, PCM1690_REG_MODE_CTRL,
@@ -614,18 +613,18 @@ static int pcmdev_get_volsw(struct snd_kcontrol *kcontrol,
 		if (ret) {
 			dev_err(pcm_dev->dev, "%s: read mode err=%d\n",
 				__func__, ret);
-			return ret;
+			goto out;
 		}
 		val &= PCM1690_REG_MODE_CTRL_DAMS_MSK;
 		/* Set to wide-range mode, before using vol ctrl. */
 		if (!val && vol_ctrl_type == PCMDEV_PCM1690_VOL_CTRL) {
 			ucontrol->value.integer.value[0] = -25500;
-			return 0;
+			goto out;
 		}
 		/* Set to fine mode, before using fine vol ctrl. */
 		if (val && vol_ctrl_type == PCMDEV_PCM1690_FINE_VOL_CTRL) {
 			ucontrol->value.integer.value[0] = -12750;
-			return 0;
+			goto out;
 		}
 	}
 
@@ -633,15 +632,16 @@ static int pcmdev_get_volsw(struct snd_kcontrol *kcontrol,
 	if (ret) {
 		dev_err(pcm_dev->dev, "%s: read err=%d\n",
 			__func__, ret);
-		return ret;
+		goto out;
 	}
 
 	val = (val >> shift) & mask;
 	val = (val > max) ? max : val;
 	val = mc->invert ? max - val : val;
 	ucontrol->value.integer.value[0] = val;
-
-	return 0;
+out:
+	mutex_unlock(&pcm_dev->codec_lock);
+	return ret;
 }
 
 static int pcmdevice_get_volsw(struct snd_kcontrol *kcontrol,
@@ -678,7 +678,7 @@ static int pcmdev_put_volsw(struct snd_kcontrol *kcontrol,
 	unsigned int val, val_mask;
 	unsigned int reg = mc->reg;
 
-	guard(mutex)(&pcm_dev->codec_lock);
+	mutex_lock(&pcm_dev->codec_lock);
 	val = ucontrol->value.integer.value[0] & mask;
 	val = (val > max) ? max : val;
 	val = mc->invert ? max - val : val;
@@ -702,7 +702,7 @@ static int pcmdev_put_volsw(struct snd_kcontrol *kcontrol,
 			__func__, rc);
 	else
 		rc = 1;
-
+	mutex_unlock(&pcm_dev->codec_lock);
 	return rc;
 }
 
@@ -1139,7 +1139,8 @@ static int pcmdevice_info_profile(
 	struct snd_kcontrol *kcontrol,
 	struct snd_ctl_elem_info *uinfo)
 {
-	struct snd_soc_component *codec = snd_kcontrol_chip(kcontrol);
+	struct snd_soc_component *codec
+		= snd_soc_kcontrol_component(kcontrol);
 	struct pcmdevice_priv *pcm_dev =
 		snd_soc_component_get_drvdata(codec);
 
@@ -1155,7 +1156,8 @@ static int pcmdevice_get_profile_id(
 	struct snd_kcontrol *kcontrol,
 	struct snd_ctl_elem_value *ucontrol)
 {
-	struct snd_soc_component *codec = snd_kcontrol_chip(kcontrol);
+	struct snd_soc_component *codec
+		= snd_soc_kcontrol_component(kcontrol);
 	struct pcmdevice_priv *pcm_dev =
 		snd_soc_component_get_drvdata(codec);
 
@@ -1168,7 +1170,8 @@ static int pcmdevice_set_profile_id(
 	struct snd_kcontrol *kcontrol,
 	struct snd_ctl_elem_value *ucontrol)
 {
-	struct snd_soc_component *codec = snd_kcontrol_chip(kcontrol);
+	struct snd_soc_component *codec
+		= snd_soc_kcontrol_component(kcontrol);
 	struct pcmdevice_priv *pcm_dev =
 		snd_soc_component_get_drvdata(codec);
 	int nr_profile = ucontrol->value.integer.value[0];
@@ -1230,11 +1233,15 @@ static struct pcmdevice_config_info *pcmdevice_add_config(void *ctxt,
 	int *status)
 {
 	struct pcmdevice_priv *pcm_dev = (struct pcmdevice_priv *)ctxt;
-	struct pcmdevice_config_info *cfg_info = NULL;
+	struct pcmdevice_config_info *cfg_info;
 	struct pcmdevice_block_data **bk_da;
-	char cfg_name[64] = {};
 	unsigned int config_offset = 0, i;
-	unsigned int nblocks;
+
+	cfg_info = kzalloc(sizeof(struct pcmdevice_config_info), GFP_KERNEL);
+	if (!cfg_info) {
+		*status = -ENOMEM;
+		goto out;
+	}
 
 	if (pcm_dev->regbin.fw_hdr.binary_version_num >= 0x105) {
 		if (config_offset + 64 > (int)config_size) {
@@ -1243,7 +1250,7 @@ static struct pcmdevice_config_info *pcmdevice_add_config(void *ctxt,
 				"%s: cfg_name out of boundary\n", __func__);
 			goto out;
 		}
-		memcpy(cfg_name, &config_data[config_offset], 64);
+		memcpy(cfg_info->cfg_name, &config_data[config_offset], 64);
 		config_offset += 64;
 	}
 
@@ -1253,17 +1260,16 @@ static struct pcmdevice_config_info *pcmdevice_add_config(void *ctxt,
 			__func__);
 		goto out;
 	}
-	nblocks = get_unaligned_be32(&config_data[config_offset]);
+	cfg_info->nblocks =
+		get_unaligned_be32(&config_data[config_offset]);
 	config_offset += 4;
 
-	cfg_info = kzalloc_flex(*cfg_info, blk_data, nblocks);
-	if (!cfg_info) {
+	bk_da = cfg_info->blk_data = kcalloc(cfg_info->nblocks,
+		sizeof(struct pcmdevice_block_data *), GFP_KERNEL);
+	if (!bk_da) {
 		*status = -ENOMEM;
 		goto out;
 	}
-	cfg_info->nblocks = nblocks;
-	memcpy(cfg_info->cfg_name, cfg_name, sizeof(cfg_info->cfg_name));
-	bk_da = cfg_info->blk_data;
 	cfg_info->real_nblocks = 0;
 	for (i = 0; i < cfg_info->nblocks; i++) {
 		if (config_offset + 12 > config_size) {
@@ -1273,7 +1279,8 @@ static struct pcmdevice_config_info *pcmdevice_add_config(void *ctxt,
 				__func__, i, cfg_info->nblocks);
 			break;
 		}
-		bk_da[i] = kzalloc_obj(struct pcmdevice_block_data);
+		bk_da[i] = kzalloc(sizeof(struct pcmdevice_block_data),
+			GFP_KERNEL);
 		if (!bk_da[i]) {
 			*status = -ENOMEM;
 			break;
@@ -1446,11 +1453,14 @@ static void pcmdevice_config_info_remove(void *ctxt)
 	for (i = 0; i < regbin->ncfgs; i++) {
 		if (!cfg_info[i])
 			continue;
-		for (j = 0; j < (int)cfg_info[i]->real_nblocks; j++) {
-			if (!cfg_info[i]->blk_data[j])
-				continue;
-			kfree(cfg_info[i]->blk_data[j]->regdata);
-			kfree(cfg_info[i]->blk_data[j]);
+		if (cfg_info[i]->blk_data) {
+			for (j = 0; j < (int)cfg_info[i]->real_nblocks; j++) {
+				if (!cfg_info[i]->blk_data[j])
+					continue;
+				kfree(cfg_info[i]->blk_data[j]->regdata);
+				kfree(cfg_info[i]->blk_data[j]);
+			}
+			kfree(cfg_info[i]->blk_data);
 		}
 		kfree(cfg_info[i]);
 	}
@@ -1542,7 +1552,7 @@ static int pcmdev_regbin_ready(const struct firmware *fmw, void *ctxt)
 		ret = -EINVAL;
 		goto out;
 	}
-	cfg_info = kzalloc_objs(*cfg_info, fw_hdr->nconfig);
+	cfg_info = kcalloc(fw_hdr->nconfig, sizeof(*cfg_info), GFP_KERNEL);
 	if (!cfg_info) {
 		pcm_dev->fw_state = PCMDEVICE_FW_LOAD_FAILED;
 		ret = -ENOMEM;
@@ -1577,10 +1587,10 @@ static int pcmdevice_comp_probe(struct snd_soc_component *comp)
 {
 	struct pcmdevice_priv *pcm_dev = snd_soc_component_get_drvdata(comp);
 	struct i2c_adapter *adap = pcm_dev->client->adapter;
-	const struct firmware *fw_entry __free(firmware) = NULL;
+	const struct firmware *fw_entry = NULL;
 	int ret, i, j;
 
-	guard(mutex)(&pcm_dev->codec_lock);
+	mutex_lock(&pcm_dev->codec_lock);
 
 	pcm_dev->component = comp;
 
@@ -1588,7 +1598,7 @@ static int pcmdevice_comp_probe(struct snd_soc_component *comp)
 		for (j = 0; j < 2; j++) {
 			ret = pcmdev_gain_ctrl_add(pcm_dev, i, j);
 			if (ret < 0)
-				return ret;
+				goto out;
 		}
 	}
 
@@ -1621,17 +1631,21 @@ static int pcmdevice_comp_probe(struct snd_soc_component *comp)
 	if (ret) {
 		dev_err(pcm_dev->dev, "%s: request %s err = %d\n", __func__,
 			pcm_dev->bin_name, ret);
-		return ret;
+		goto out;
 	}
 
 	ret = pcmdev_regbin_ready(fw_entry, pcm_dev);
 	if (ret) {
 		dev_err(pcm_dev->dev, "%s: %s parse err = %d\n", __func__,
 			pcm_dev->bin_name, ret);
-		return ret;
+		goto out;
 	}
+	ret = pcmdev_profile_ctrl_add(pcm_dev);
+out:
+	release_firmware(fw_entry);
 
-	return pcmdev_profile_ctrl_add(pcm_dev);
+	mutex_unlock(&pcm_dev->codec_lock);
+	return ret;
 }
 
 
@@ -1641,8 +1655,9 @@ static void pcmdevice_comp_remove(struct snd_soc_component *codec)
 
 	if (!pcm_dev)
 		return;
-	guard(mutex)(&pcm_dev->codec_lock);
+	mutex_lock(&pcm_dev->codec_lock);
 	pcmdevice_config_info_remove(pcm_dev);
+	mutex_unlock(&pcm_dev->codec_lock);
 }
 
 static const struct snd_soc_dapm_widget pcmdevice_dapm_widgets[] = {
@@ -1885,9 +1900,9 @@ static int pcmdevice_mute(struct snd_soc_dai *dai, int mute, int stream)
 	else
 		block_type = PCMDEVICE_BIN_BLK_PRE_POWER_UP;
 
-	guard(mutex)(&pcm_dev->codec_lock);
+	mutex_lock(&pcm_dev->codec_lock);
 	pcmdevice_select_cfg_blk(pcm_dev, pcm_dev->cur_conf, block_type);
-
+	mutex_unlock(&pcm_dev->codec_lock);
 	return 0;
 }
 
@@ -2019,6 +2034,8 @@ static const struct regmap_config pcmdevice_i2c_regmap = {
 
 static void pcmdevice_remove(struct pcmdevice_priv *pcm_dev)
 {
+	if (pcm_dev->irq)
+		free_irq(pcm_dev->irq, pcm_dev);
 	mutex_destroy(&pcm_dev->codec_lock);
 }
 

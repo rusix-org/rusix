@@ -221,7 +221,7 @@ add_symbol (struct snd_cs46xx * chip, char * symbol_name, u32 address, int type)
 
 struct dsp_spos_instance *cs46xx_dsp_spos_create (struct snd_cs46xx * chip)
 {
-	struct dsp_spos_instance * ins = kzalloc_obj(struct dsp_spos_instance);
+	struct dsp_spos_instance * ins = kzalloc(sizeof(struct dsp_spos_instance), GFP_KERNEL);
 
 	if (ins == NULL)
 		return NULL;
@@ -231,7 +231,9 @@ struct dsp_spos_instance *cs46xx_dsp_spos_create (struct snd_cs46xx * chip)
 		vmalloc(array_size(DSP_MAX_SYMBOLS,
 				   sizeof(struct dsp_symbol_entry)));
 	ins->code.data = kmalloc(DSP_CODE_BYTE_SIZE, GFP_KERNEL);
-	ins->modules = kmalloc_objs(struct dsp_module_desc, DSP_MAX_MODULES);
+	ins->modules = kmalloc_array(DSP_MAX_MODULES,
+				     sizeof(struct dsp_module_desc),
+				     GFP_KERNEL);
 	if (!ins->symbol_table.symbols || !ins->code.data || !ins->modules) {
 		cs46xx_dsp_spos_destroy(chip);
 		goto error;
@@ -393,7 +395,7 @@ int cs46xx_dsp_load_module (struct snd_cs46xx * chip, struct dsp_module_desc * m
 		dev_dbg(chip->card->dev,
 			"dsp_spos: module got no code segment\n");
 	} else {
-		if ((u64)ins->code.offset + code->size > DSP_CODE_BYTE_SIZE / 4) {
+		if (ins->code.offset + code->size > DSP_CODE_BYTE_SIZE) {
 			dev_err(chip->card->dev,
 				"dsp_spos: no space available in DSP\n");
 			return -ENOMEM;

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: BSD-3-Clause-Clear
+// SPDX-License-Identifier: ISC
 /*
  * Copyright (C) 2024 Felix Fietkau <nbd@nbd.name>
  */
@@ -41,7 +41,7 @@ int mt76_add_chanctx(struct ieee80211_hw *hw,
 	if (WARN_ON_ONCE(!phy))
 		return ret;
 
-	if (mt76_phy_scanning(phy))
+	if (dev->scan.phy == phy)
 		mt76_abort_scan(dev);
 
 	mutex_lock(&dev->mutex);
@@ -66,7 +66,7 @@ void mt76_remove_chanctx(struct ieee80211_hw *hw,
 	if (WARN_ON_ONCE(!phy))
 		return;
 
-	if (mt76_phy_scanning(phy))
+	if (dev->scan.phy == phy)
 		mt76_abort_scan(dev);
 
 	mutex_lock(&dev->mutex);
@@ -87,9 +87,6 @@ void mt76_change_chanctx(struct ieee80211_hw *hw,
 	if (!(changed & (IEEE80211_CHANCTX_CHANGE_WIDTH |
 			 IEEE80211_CHANCTX_CHANGE_RADAR)))
 		return;
-
-	if (phy->roc_vif)
-		mt76_abort_roc(phy);
 
 	cancel_delayed_work_sync(&phy->mac_work);
 
@@ -114,7 +111,7 @@ int mt76_assign_vif_chanctx(struct ieee80211_hw *hw,
 	bool mlink_alloc = false;
 	int ret = 0;
 
-	if (dev->scan.vif == vif && mt76_phy_scanning(phy))
+	if (dev->scan.vif == vif)
 		mt76_abort_scan(dev);
 
 	mutex_lock(&dev->mutex);
@@ -158,10 +155,12 @@ void mt76_unassign_vif_chanctx(struct ieee80211_hw *hw,
 {
 	struct mt76_chanctx *ctx = (struct mt76_chanctx *)conf->drv_priv;
 	struct mt76_vif_link *mlink = (struct mt76_vif_link *)vif->drv_priv;
+	struct mt76_vif_data *mvif = mlink->mvif;
+	int link_id = link_conf->link_id;
 	struct mt76_phy *phy = ctx->phy;
 	struct mt76_dev *dev = phy->dev;
 
-	if (dev->scan.vif == vif && mt76_phy_scanning(phy))
+	if (dev->scan.vif == vif)
 		mt76_abort_scan(dev);
 
 	mutex_lock(&dev->mutex);
@@ -174,8 +173,15 @@ void mt76_unassign_vif_chanctx(struct ieee80211_hw *hw,
 	if (!mlink)
 		goto out;
 
+	if (mlink != (struct mt76_vif_link *)vif->drv_priv)
+		rcu_assign_pointer(mvif->link[link_id], NULL);
+
 	dev->drv->vif_link_remove(phy, vif, link_conf, mlink);
 	mlink->ctx = NULL;
+
+	if (mlink != (struct mt76_vif_link *)vif->drv_priv)
+		kfree_rcu(mlink, rcu_head);
+
 out:
 	mutex_unlock(&dev->mutex);
 }
@@ -209,7 +215,7 @@ int mt76_switch_vif_chanctx(struct ieee80211_hw *hw,
 			continue;
 
 		if (phy->chanctx != new_ctx) {
-			if (mt76_phy_scanning(phy))
+			if (dev->scan.phy == phy)
 				mt76_abort_scan(dev);
 
 			cancel_delayed_work_sync(&phy->mac_work);
@@ -254,8 +260,6 @@ int mt76_switch_vif_chanctx(struct ieee80211_hw *hw,
 		}
 
 		mlink->ctx = v->new_ctx;
-		if (mlink->beacon_mon_interval)
-			WRITE_ONCE(mlink->beacon_mon_last, jiffies);
 	}
 
 out:
@@ -295,6 +299,7 @@ struct mt76_vif_link *mt76_get_vif_phy_link(struct mt76_phy *phy,
 		kfree(mlink);
 		return ERR_PTR(ret);
 	}
+	rcu_assign_pointer(mvif->offchannel_link, mlink);
 
 	return mlink;
 }
@@ -303,10 +308,14 @@ void mt76_put_vif_phy_link(struct mt76_phy *phy, struct ieee80211_vif *vif,
 			   struct mt76_vif_link *mlink)
 {
 	struct mt76_dev *dev = phy->dev;
+	struct mt76_vif_data *mvif;
 
 	if (IS_ERR_OR_NULL(mlink) || !mlink->offchannel)
 		return;
 
+	mvif = mlink->mvif;
+
+	rcu_assign_pointer(mvif->offchannel_link, NULL);
 	dev->drv->vif_link_remove(phy, vif, &vif->bss_conf, mlink);
 	kfree_rcu(mlink, rcu_head);
 }
@@ -321,17 +330,13 @@ void mt76_roc_complete(struct mt76_phy *phy)
 
 	if (mlink)
 		mlink->mvif->roc_phy = NULL;
-	if (phy->chanctx && phy->main_chandef.chan && phy->offchannel &&
-	    !test_bit(MT76_MCU_RESET, &dev->phy.state)) {
+	if (phy->main_chandef.chan &&
+	    !test_bit(MT76_MCU_RESET, &dev->phy.state))
 		__mt76_set_channel(phy, &phy->main_chandef, false);
-		mt76_offchannel_notify(phy, false);
-	} else {
-		phy->offchannel = false;
-	}
 	mt76_put_vif_phy_link(phy, phy->roc_vif, phy->roc_link);
 	phy->roc_vif = NULL;
 	phy->roc_link = NULL;
-	if (!test_bit(MT76_RESTART, &dev->phy.state))
+	if (!test_bit(MT76_MCU_RESET, &dev->phy.state))
 		ieee80211_remain_on_channel_expired(phy->hw);
 }
 
@@ -365,7 +370,6 @@ int mt76_remain_on_channel(struct ieee80211_hw *hw, struct ieee80211_vif *vif,
 	struct mt76_phy *phy = hw->priv;
 	struct mt76_dev *dev = phy->dev;
 	struct mt76_vif_link *mlink;
-	bool offchannel;
 	int ret = 0;
 
 	phy = dev->band_phys[chan->band];
@@ -376,9 +380,8 @@ int mt76_remain_on_channel(struct ieee80211_hw *hw, struct ieee80211_vif *vif,
 
 	mutex_lock(&dev->mutex);
 
-	if (phy->roc_vif || mt76_phy_scanning(phy) ||
-	    test_bit(MT76_MCU_RESET, &dev->phy.state) ||
-	    test_bit(MT76_RESTART, &dev->phy.state)) {
+	if (phy->roc_vif || dev->scan.phy == phy ||
+	    test_bit(MT76_MCU_RESET, &dev->phy.state)) {
 		ret = -EBUSY;
 		goto out;
 	}
@@ -392,11 +395,8 @@ int mt76_remain_on_channel(struct ieee80211_hw *hw, struct ieee80211_vif *vif,
 	mlink->mvif->roc_phy = phy;
 	phy->roc_vif = vif;
 	phy->roc_link = mlink;
-
-	offchannel = mt76_offchannel_chandef(phy, chan, &chandef);
-	if (offchannel)
-		mt76_offchannel_notify(phy, true);
-	ret = __mt76_set_channel(phy, &chandef, offchannel);
+	cfg80211_chandef_create(&chandef, chan, NL80211_CHAN_HT20);
+	ret = __mt76_set_channel(phy, &chandef, true);
 	if (ret) {
 		mlink->mvif->roc_phy = NULL;
 		phy->roc_vif = NULL;
@@ -421,7 +421,7 @@ int mt76_cancel_remain_on_channel(struct ieee80211_hw *hw,
 	struct mt76_vif_data *mvif = mlink->mvif;
 	struct mt76_phy *phy = mvif->roc_phy;
 
-	if (!phy || phy->roc_vif != vif)
+	if (!phy)
 		return 0;
 
 	mt76_abort_roc(phy);

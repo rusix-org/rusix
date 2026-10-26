@@ -66,7 +66,7 @@ static void safe_copy_string(void *dst, size_t max_dst_size,
 
 	if (!max_dst_size--)
 		return;
-	for (s = src; max_dst_size && max_src_size-- && *s; s++) {
+	for (s = src; max_dst_size && *s && max_src_size--; s++) {
 		if (!isascii(*s) || !isprint(*s))
 			continue;
 		*d++ = *s;
@@ -166,7 +166,7 @@ int snd_ump_endpoint_new(struct snd_card *card, char *id, int device,
 	if (input && output)
 		info_flags |= SNDRV_RAWMIDI_INFO_DUPLEX;
 
-	ump = kzalloc_obj(*ump);
+	ump = kzalloc(sizeof(*ump), GFP_KERNEL);
 	if (!ump)
 		return -ENOMEM;
 	INIT_LIST_HEAD(&ump->block_list);
@@ -408,7 +408,7 @@ int snd_ump_block_new(struct snd_ump_endpoint *ump, unsigned int blk,
 	if (snd_ump_get_block(ump, blk))
 		return -EBUSY;
 
-	fb = kzalloc_obj(*fb);
+	fb = kzalloc(sizeof(*fb), GFP_KERNEL);
 	if (!fb)
 		return -ENOMEM;
 
@@ -1157,11 +1157,10 @@ static int snd_ump_legacy_open(struct snd_rawmidi_substream *substream)
 		return -ENODEV;
 	if (dir == SNDRV_RAWMIDI_STREAM_OUTPUT) {
 		if (!ump->legacy_out_opens) {
-			err = snd_rawmidi_kernel_open_nested(&ump->core, 0,
-							     SNDRV_RAWMIDI_LFLG_OUTPUT |
-							     SNDRV_RAWMIDI_LFLG_APPEND,
-							     &ump->legacy_out_rfile,
-							     SINGLE_DEPTH_NESTING);
+			err = snd_rawmidi_kernel_open(&ump->core, 0,
+						      SNDRV_RAWMIDI_LFLG_OUTPUT |
+						      SNDRV_RAWMIDI_LFLG_APPEND,
+						      &ump->legacy_out_rfile);
 			if (err < 0)
 				return err;
 		}
@@ -1184,8 +1183,7 @@ static int snd_ump_legacy_close(struct snd_rawmidi_substream *substream)
 		ump->legacy_substreams[dir][group] = NULL;
 	if (dir == SNDRV_RAWMIDI_STREAM_OUTPUT) {
 		if (!--ump->legacy_out_opens)
-			snd_rawmidi_kernel_release_nested(&ump->legacy_out_rfile,
-							  SINGLE_DEPTH_NESTING);
+			snd_rawmidi_kernel_release(&ump->legacy_out_rfile);
 	}
 	return 0;
 }
@@ -1358,7 +1356,8 @@ int snd_ump_attach_legacy_rawmidi(struct snd_ump_endpoint *ump,
 	bool input, output;
 	int err, num;
 
-	ump->out_cvts = kzalloc_objs(*ump->out_cvts, SNDRV_UMP_MAX_GROUPS);
+	ump->out_cvts = kcalloc(SNDRV_UMP_MAX_GROUPS,
+				sizeof(*ump->out_cvts), GFP_KERNEL);
 	if (!ump->out_cvts)
 		return -ENOMEM;
 

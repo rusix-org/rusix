@@ -22,7 +22,6 @@
 #include <linux/fs.h>
 #include <linux/dma-fence.h>
 #include <linux/wait.h>
-#include <linux/pci-p2pdma.h>
 
 struct device;
 struct dma_buf;
@@ -322,13 +321,13 @@ struct dma_buf {
 	 * @vmapping_counter:
 	 *
 	 * Used internally to refcnt the vmaps returned by dma_buf_vmap().
-	 * Protected by @resv.
+	 * Protected by @lock.
 	 */
 	unsigned vmapping_counter;
 
 	/**
 	 * @vmap_ptr:
-	 * The current vmap ptr if @vmapping_counter > 0. Protected by @resv.
+	 * The current vmap ptr if @vmapping_counter > 0. Protected by @lock.
 	 */
 	struct iosys_map vmap_ptr;
 
@@ -407,7 +406,7 @@ struct dma_buf {
 	 *   through the device.
 	 *
 	 * - Dynamic importers should set fences for any access that they can't
-	 *   disable immediately from their &dma_buf_attach_ops.invalidate_mappings
+	 *   disable immediately from their &dma_buf_attach_ops.move_notify
 	 *   callback.
 	 *
 	 * IMPORTANT:
@@ -429,6 +428,18 @@ struct dma_buf {
 
 		__poll_t active;
 	} cb_in, cb_out;
+#ifdef CONFIG_DMABUF_SYSFS_STATS
+	/**
+	 * @sysfs_entry:
+	 *
+	 * For exposing information about this buffer in sysfs. See also
+	 * `DMA-BUF statistics`_ for the uapi this enables.
+	 */
+	struct dma_buf_sysfs_entry {
+		struct kobject kobj;
+		struct dma_buf *dmabuf;
+	} *sysfs_entry;
+#endif
 };
 
 /**
@@ -446,7 +457,7 @@ struct dma_buf_attach_ops {
 	bool allow_peer2peer;
 
 	/**
-	 * @invalidate_mappings: [optional] notification that the DMA-buf is moving
+	 * @move_notify: [optional] notification that the DMA-buf is moving
 	 *
 	 * If this callback is provided the framework can avoid pinning the
 	 * backing store while mappings exists.
@@ -456,10 +467,14 @@ struct dma_buf_attach_ops {
 	 * called with this lock held as well. This makes sure that no mapping
 	 * is created concurrently with an ongoing move operation.
 	 *
-	 * See the kdoc for dma_buf_invalidate_mappings() for details on the
-	 * required behavior.
+	 * Mappings stay valid and are not directly affected by this callback.
+	 * But the DMA-buf can now be in a different physical location, so all
+	 * mappings should be destroyed and re-created as soon as possible.
+	 *
+	 * New mappings can be created after this callback returns, and will
+	 * point to the new location of the DMA-buf.
 	 */
-	void (*invalidate_mappings)(struct dma_buf_attachment *attach);
+	void (*move_notify)(struct dma_buf_attachment *attach);
 };
 
 /**
@@ -567,7 +582,11 @@ void dma_buf_unpin(struct dma_buf_attachment *attach);
 struct dma_buf *dma_buf_export(const struct dma_buf_export_info *exp_info);
 
 int dma_buf_fd(struct dma_buf *dmabuf, int flags);
-void dma_buf_fd_install(struct dma_buf *dmabuf, int fd);
+/*
+ * This tree has no DMA-BUF fd tracepoint, so publishing a reserved fd only
+ * requires fd_install(). Call this after all fallible work has succeeded.
+ */
+#define dma_buf_fd_install(dmabuf, fd) fd_install((fd), (dmabuf)->file)
 struct dma_buf *dma_buf_get(int fd);
 void dma_buf_put(struct dma_buf *dmabuf);
 
@@ -575,8 +594,7 @@ struct sg_table *dma_buf_map_attachment(struct dma_buf_attachment *,
 					enum dma_data_direction);
 void dma_buf_unmap_attachment(struct dma_buf_attachment *, struct sg_table *,
 				enum dma_data_direction);
-void dma_buf_invalidate_mappings(struct dma_buf *dma_buf);
-bool dma_buf_attach_revocable(struct dma_buf_attachment *attach);
+void dma_buf_move_notify(struct dma_buf *dma_buf);
 int dma_buf_begin_cpu_access(struct dma_buf *dma_buf,
 			     enum dma_data_direction dir);
 int dma_buf_end_cpu_access(struct dma_buf *dma_buf,

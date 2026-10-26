@@ -563,8 +563,14 @@ netdev_tx_t hinic_xmit_frame(struct sk_buff *skb, struct net_device *netdev)
 	txq = &nic_dev->txqs[q_id];
 	qp = container_of(txq->sq, struct hinic_qp, sq);
 
-	if (skb_put_padto(skb, MIN_SKB_LEN))
-		goto update_error_stats;
+	if (skb->len < MIN_SKB_LEN) {
+		if (skb_pad(skb, MIN_SKB_LEN - skb->len)) {
+			netdev_err(netdev, "Failed to pad skb\n");
+			goto update_error_stats;
+		}
+
+		skb->len = MIN_SKB_LEN;
+	}
 
 	nr_sges = skb_shinfo(skb)->nr_frags + 1;
 	if (nr_sges > 17) {

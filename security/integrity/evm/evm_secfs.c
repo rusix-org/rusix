@@ -205,7 +205,7 @@ static ssize_t evm_write_xattrs(struct file *file, const char __user *buf,
 	if (!ab && IS_ENABLED(CONFIG_AUDIT))
 		return -ENOMEM;
 
-	xattr = kmalloc_obj(struct xattr_list);
+	xattr = kmalloc(sizeof(struct xattr_list), GFP_KERNEL);
 	if (!xattr) {
 		err = -ENOMEM;
 		goto out;
@@ -308,15 +308,9 @@ int __init evm_init_secfs(void)
 	int error = 0;
 	struct dentry *dentry;
 
-	error = integrity_fs_init();
-	if (error < 0)
-		return -EFAULT;
-
 	evm_dir = securityfs_create_dir("evm", integrity_dir);
-	if (IS_ERR(evm_dir)) {
-		error = -EFAULT;
-		goto out;
-	}
+	if (IS_ERR(evm_dir))
+		return -EFAULT;
 
 	dentry = securityfs_create_file("evm", 0660,
 				      evm_dir, NULL, &evm_key_ops);
@@ -341,6 +335,5 @@ int __init evm_init_secfs(void)
 out:
 	securityfs_remove(evm_symlink);
 	securityfs_remove(evm_dir);
-	integrity_fs_fini();
 	return error;
 }

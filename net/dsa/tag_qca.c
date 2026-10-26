@@ -14,6 +14,7 @@
 
 static struct sk_buff *qca_tag_xmit(struct sk_buff *skb, struct net_device *dev)
 {
+	struct dsa_port *dp = dsa_user_to_port(dev);
 	__be16 *phdr;
 	u16 hdr;
 
@@ -25,7 +26,7 @@ static struct sk_buff *qca_tag_xmit(struct sk_buff *skb, struct net_device *dev)
 	/* Set the version field, and set destination port information */
 	hdr = FIELD_PREP(QCA_HDR_XMIT_VERSION, QCA_HDR_VERSION);
 	hdr |= QCA_HDR_XMIT_FROM_CPU;
-	hdr |= FIELD_PREP(QCA_HDR_XMIT_DP_BIT, dsa_xmit_port_mask(skb, dev));
+	hdr |= FIELD_PREP(QCA_HDR_XMIT_DP_BIT, BIT(dp->index));
 
 	*phdr = htons(hdr);
 
@@ -46,20 +47,16 @@ static struct sk_buff *qca_tag_rcv(struct sk_buff *skb, struct net_device *dev)
 
 	tagger_data = ds->tagger_data;
 
-	if (unlikely(!pskb_may_pull(skb, QCA_HDR_LEN))) {
-		kfree_skb(skb);
+	if (unlikely(!pskb_may_pull(skb, QCA_HDR_LEN)))
 		return NULL;
-	}
 
 	phdr = dsa_etype_header_pos_rx(skb);
 	hdr = ntohs(*phdr);
 
 	/* Make sure the version is correct */
 	ver = FIELD_GET(QCA_HDR_RECV_VERSION, hdr);
-	if (unlikely(ver != QCA_HDR_VERSION)) {
-		kfree_skb(skb);
+	if (unlikely(ver != QCA_HDR_VERSION))
 		return NULL;
-	}
 
 	/* Get pk type */
 	pk_type = FIELD_GET(QCA_HDR_RECV_TYPE, hdr);
@@ -68,7 +65,6 @@ static struct sk_buff *qca_tag_rcv(struct sk_buff *skb, struct net_device *dev)
 	if (pk_type == QCA_HDR_RECV_TYPE_RW_REG_ACK) {
 		if (likely(tagger_data->rw_reg_ack_handler))
 			tagger_data->rw_reg_ack_handler(ds, skb);
-		kfree_skb(skb);
 		return NULL;
 	}
 
@@ -76,7 +72,6 @@ static struct sk_buff *qca_tag_rcv(struct sk_buff *skb, struct net_device *dev)
 	if (pk_type == QCA_HDR_RECV_TYPE_MIB) {
 		if (likely(tagger_data->mib_autocast_handler))
 			tagger_data->mib_autocast_handler(ds, skb);
-		kfree_skb(skb);
 		return NULL;
 	}
 
@@ -84,10 +79,8 @@ static struct sk_buff *qca_tag_rcv(struct sk_buff *skb, struct net_device *dev)
 	port = FIELD_GET(QCA_HDR_RECV_SOURCE_PORT, hdr);
 
 	skb->dev = dsa_conduit_find_user(dev, 0, port);
-	if (!skb->dev) {
-		kfree_skb(skb);
+	if (!skb->dev)
 		return NULL;
-	}
 
 	/* Remove QCA tag and recalculate checksum */
 	skb_pull_rcsum(skb, QCA_HDR_LEN);
@@ -100,7 +93,7 @@ static int qca_tag_connect(struct dsa_switch *ds)
 {
 	struct qca_tagger_data *tagger_data;
 
-	tagger_data = kzalloc_obj(*tagger_data);
+	tagger_data = kzalloc(sizeof(*tagger_data), GFP_KERNEL);
 	if (!tagger_data)
 		return -ENOMEM;
 

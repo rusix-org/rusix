@@ -39,12 +39,6 @@ static int call_exec_verb(struct hda_bus *bus, struct hda_codec *codec,
 	int err;
 
 	CLASS(snd_hda_power_pm, pm)(codec);
-	if (pm.err < 0 && !bus->core.chip_init) {
-		codec_warn(codec,
-			   "Failed to send cmd 0x%x ret=[%d], hda control stopped\n",
-			   cmd, pm.err);
-		return pm.err;
-	}
 	guard(mutex)(&bus->core.cmd_mutex);
 	if (flags & HDA_RW_NO_RESPONSE_FALLBACK)
 		bus->no_response_fallback = 1;
@@ -123,7 +117,7 @@ static int add_conn_list(struct hda_codec *codec, hda_nid_t nid, int len,
 {
 	struct hda_conn_list *p;
 
-	p = kmalloc_flex(*p, conns, len);
+	p = kmalloc(struct_size(p, conns, len), GFP_KERNEL);
 	if (!p)
 		return -ENOMEM;
 	p->len = len;
@@ -153,7 +147,7 @@ static int read_and_add_raw_conns(struct hda_codec *codec, hda_nid_t nid)
 	len = snd_hda_get_raw_connections(codec, nid, list, ARRAY_SIZE(list));
 	if (len == -ENOSPC) {
 		len = snd_hda_get_num_raw_conns(codec, nid);
-		result = kmalloc_objs(hda_nid_t, len);
+		result = kmalloc_array(len, sizeof(hda_nid_t), GFP_KERNEL);
 		if (!result)
 			return -ENOMEM;
 		len = snd_hda_get_raw_connections(codec, nid, result, len);
@@ -612,8 +606,9 @@ void snd_hda_shutup_pins(struct hda_codec *codec)
 	if (codec->bus->shutdown)
 		return;
 	snd_array_for_each(&codec->init_pins, i, pin) {
-		snd_hda_codec_write_sync(codec, pin->nid, 0,
-					 AC_VERB_SET_PIN_WIDGET_CONTROL, 0);
+		/* use read here for syncing after issuing each verb */
+		snd_hda_codec_read(codec, pin->nid, 0,
+				   AC_VERB_SET_PIN_WIDGET_CONTROL, 0);
 	}
 	codec->pins_shutup = 1;
 }
@@ -695,13 +690,20 @@ get_hda_cvt_setup(struct hda_codec *codec, hda_nid_t nid)
 /*
  * PCM device
  */
+void snd_hda_codec_pcm_put(struct hda_pcm *pcm)
+{
+	if (refcount_dec_and_test(&pcm->codec->pcm_ref))
+		wake_up(&pcm->codec->remove_sleep);
+}
+EXPORT_SYMBOL_GPL(snd_hda_codec_pcm_put);
+
 struct hda_pcm *snd_hda_codec_pcm_new(struct hda_codec *codec,
 				      const char *fmt, ...)
 {
 	struct hda_pcm *pcm;
 	va_list args;
 
-	pcm = kzalloc_obj(*pcm);
+	pcm = kzalloc(sizeof(*pcm), GFP_KERNEL);
 	if (!pcm)
 		return NULL;
 
@@ -715,7 +717,7 @@ struct hda_pcm *snd_hda_codec_pcm_new(struct hda_codec *codec,
 	}
 
 	list_add_tail(&pcm->list, &codec->pcm_list_head);
-	snd_hda_codec_pcm_get(pcm);
+	refcount_inc(&codec->pcm_ref);
 	return pcm;
 }
 EXPORT_SYMBOL_GPL(snd_hda_codec_pcm_new);
@@ -757,15 +759,11 @@ static void codec_release_pcms(struct hda_codec *codec)
  */
 void snd_hda_codec_cleanup_for_unbind(struct hda_codec *codec)
 {
-	struct hda_bus *bus = codec->bus;
-
 	if (codec->core.registered) {
 		/* pm_runtime_put() is called in snd_hdac_device_exit() */
 		pm_runtime_get_noresume(hda_codec_dev(codec));
 		pm_runtime_disable(hda_codec_dev(codec));
-		spin_lock_irq(&bus->core.reg_lock);
-		codec->core.registered = false;
-		spin_unlock_irq(&bus->core.reg_lock);
+		codec->core.registered = 0;
 	}
 
 	snd_hda_codec_disconnect_pcms(codec);
@@ -790,7 +788,7 @@ void snd_hda_codec_cleanup_for_unbind(struct hda_codec *codec)
 	remove_conn_list(codec);
 	snd_hdac_regmap_exit(&codec->core);
 	codec->configured = 0;
-	snd_refcount_init(&codec->pcm_ref); /* reset refcount */
+	refcount_set(&codec->pcm_ref, 1); /* reset refcount */
 }
 EXPORT_SYMBOL_GPL(snd_hda_codec_cleanup_for_unbind);
 
@@ -812,8 +810,6 @@ void snd_hda_codec_display_power(struct hda_codec *codec, bool enable)
  */
 void snd_hda_codec_register(struct hda_codec *codec)
 {
-	struct hda_bus *bus = codec->bus;
-
 	if (codec->core.registered)
 		return;
 	if (device_is_registered(hda_codec_dev(codec))) {
@@ -821,9 +817,7 @@ void snd_hda_codec_register(struct hda_codec *codec)
 		pm_runtime_enable(hda_codec_dev(codec));
 		/* it was powered up in snd_hda_codec_new(), now all done */
 		snd_hda_power_down(codec);
-		spin_lock_irq(&bus->core.reg_lock);
-		codec->core.registered = true;
-		spin_unlock_irq(&bus->core.reg_lock);
+		codec->core.registered = 1;
 	}
 }
 EXPORT_SYMBOL_GPL(snd_hda_codec_register);
@@ -901,7 +895,7 @@ snd_hda_codec_device_init(struct hda_bus *bus, unsigned int codec_addr,
 	if (snd_BUG_ON(codec_addr > HDA_MAX_CODEC_ADDRESS))
 		return ERR_PTR(-EINVAL);
 
-	codec = kzalloc_obj(*codec);
+	codec = kzalloc(sizeof(*codec), GFP_KERNEL);
 	if (!codec)
 		return ERR_PTR(-ENOMEM);
 
@@ -929,11 +923,13 @@ snd_hda_codec_device_init(struct hda_bus *bus, unsigned int codec_addr,
 	snd_array_init(&codec->driver_pins, sizeof(struct hda_pincfg), 16);
 	snd_array_init(&codec->cvt_setups, sizeof(struct hda_cvt_setup), 8);
 	snd_array_init(&codec->spdif_out, sizeof(struct hda_spdif_out), 16);
+	snd_array_init(&codec->jacktbl, sizeof(struct hda_jack_tbl), 16);
 	snd_array_init(&codec->verbs, sizeof(struct hda_verb *), 8);
 	INIT_LIST_HEAD(&codec->conn_list);
 	INIT_LIST_HEAD(&codec->pcm_list_head);
 	INIT_DELAYED_WORK(&codec->jackpoll_work, hda_jackpoll_work);
-	snd_refcount_init(&codec->pcm_ref);
+	refcount_set(&codec->pcm_ref, 1);
+	init_waitqueue_head(&codec->remove_sleep);
 
 	return codec;
 }
@@ -1704,9 +1700,6 @@ int snd_hda_ctl_add(struct hda_codec *codec, hda_nid_t nid,
 	unsigned short flags = 0;
 	struct hda_nid_item *item;
 
-	if (!kctl)
-		return -EINVAL;
-
 	if (kctl->id.subdevice & HDA_SUBDEV_AMP_FLAG) {
 		flags |= HDA_NID_ITEM_AMP;
 		if (nid == 0)
@@ -1861,9 +1854,9 @@ static int check_follower_present(struct hda_codec *codec,
 /* call kctl->put with the given value(s) */
 static int put_kctl_with_value(struct snd_kcontrol *kctl, int val)
 {
-	struct snd_ctl_elem_value *ucontrol __free(kfree) =
-		kzalloc_obj(*ucontrol);
+	struct snd_ctl_elem_value *ucontrol __free(kfree) = NULL;
 
+	ucontrol = kzalloc(sizeof(*ucontrol), GFP_KERNEL);
 	if (!ucontrol)
 		return -ENOMEM;
 	ucontrol->value.integer.value[0] = val;
@@ -2025,7 +2018,7 @@ int snd_hda_add_vmaster_hook(struct hda_codec *codec,
 	if (!hook->hook || !hook->sw_kctl)
 		return 0;
 	hook->codec = codec;
-	snd_ctl_add_vmaster_hook(codec->card, hook->sw_kctl, vmaster_hook, hook);
+	snd_ctl_add_vmaster_hook(hook->sw_kctl, vmaster_hook, hook);
 	return 0;
 }
 EXPORT_SYMBOL_GPL(snd_hda_add_vmaster_hook);
@@ -2538,10 +2531,7 @@ EXPORT_SYMBOL_GPL(snd_hda_spdif_ctls_assign);
 static int spdif_share_sw_get(struct snd_kcontrol *kcontrol,
 			      struct snd_ctl_elem_value *ucontrol)
 {
-	struct hda_codec *codec = snd_kcontrol_chip(kcontrol);
-	struct hda_multi_out *mout = (void *)kcontrol->private_value;
-
-	guard(mutex)(&codec->spdif_mutex);
+	struct hda_multi_out *mout = snd_kcontrol_chip(kcontrol);
 	ucontrol->value.integer.value[0] = mout->share_spdif;
 	return 0;
 }
@@ -2549,15 +2539,9 @@ static int spdif_share_sw_get(struct snd_kcontrol *kcontrol,
 static int spdif_share_sw_put(struct snd_kcontrol *kcontrol,
 			      struct snd_ctl_elem_value *ucontrol)
 {
-	struct hda_codec *codec = snd_kcontrol_chip(kcontrol);
-	struct hda_multi_out *mout = (void *)kcontrol->private_value;
-	bool val = !!ucontrol->value.integer.value[0];
-	int change;
-
-	guard(mutex)(&codec->spdif_mutex);
-	change = mout->share_spdif != val;
-	mout->share_spdif = val;
-	return change;
+	struct hda_multi_out *mout = snd_kcontrol_chip(kcontrol);
+	mout->share_spdif = !!ucontrol->value.integer.value[0];
+	return 0;
 }
 
 static const struct snd_kcontrol_new spdif_share_sw = {
@@ -2568,14 +2552,6 @@ static const struct snd_kcontrol_new spdif_share_sw = {
 	.put = spdif_share_sw_put,
 };
 
-static void notify_spdif_share_sw(struct hda_codec *codec,
-				  struct hda_multi_out *mout)
-{
-	if (mout->share_spdif_kctl)
-		snd_ctl_notify_one(codec->card, SNDRV_CTL_EVENT_MASK_VALUE,
-				   mout->share_spdif_kctl, 0);
-}
-
 /**
  * snd_hda_create_spdif_share_sw - create Default PCM switch
  * @codec: the HDA codec
@@ -2585,24 +2561,15 @@ int snd_hda_create_spdif_share_sw(struct hda_codec *codec,
 				  struct hda_multi_out *mout)
 {
 	struct snd_kcontrol *kctl;
-	int err;
 
 	if (!mout->dig_out_nid)
 		return 0;
 
-	kctl = snd_ctl_new1(&spdif_share_sw, codec);
+	kctl = snd_ctl_new1(&spdif_share_sw, mout);
 	if (!kctl)
 		return -ENOMEM;
-	/* snd_ctl_new1() stores @codec in private_data; stash @mout in
-	 * private_value for the share-switch callbacks and cache the
-	 * assigned control for forced-disable notifications.
-	 */
-	kctl->private_value = (unsigned long)mout;
-	err = snd_hda_ctl_add(codec, mout->dig_out_nid, kctl);
-	if (err < 0)
-		return err;
-	mout->share_spdif_kctl = kctl;
-	return 0;
+	/* ATTENTION: here mout is passed as private_data, instead of codec */
+	return snd_hda_ctl_add(codec, mout->dig_out_nid, kctl);
 }
 EXPORT_SYMBOL_GPL(snd_hda_create_spdif_share_sw);
 
@@ -2803,9 +2770,9 @@ static unsigned int hda_set_power_state(struct hda_codec *codec,
 			if (codec->power_filter)
 				state = codec->power_filter(codec, fg, state);
 			if (state == power_state || power_state != AC_PWRST_D3)
-				snd_hda_codec_write_sync(codec, fg, flags,
-							 AC_VERB_SET_POWER_STATE,
-							 state);
+				snd_hda_codec_read(codec, fg, flags,
+						   AC_VERB_SET_POWER_STATE,
+						   state);
 			snd_hda_codec_set_power_to_all(codec, fg, power_state);
 		}
 		state = snd_hda_sync_power_state(codec, fg, power_state);
@@ -2982,11 +2949,8 @@ static void hda_codec_pm_complete(struct device *dev)
 		dev->power.power_state = PMSG_RESUME;
 
 	if (pm_runtime_suspended(dev) && (codec->jackpoll_interval ||
-	    hda_codec_need_resume(codec) || codec->forced_resume ||
-	    codec->acomp_requested_resume)) {
-		codec->acomp_requested_resume = 0;
+	    hda_codec_need_resume(codec) || codec->forced_resume))
 		pm_request_resume(dev);
-	}
 }
 
 static int hda_codec_pm_suspend(struct device *dev)
@@ -3047,7 +3011,6 @@ void snd_hda_codec_shutdown(struct hda_codec *codec)
 
 	codec->jackpoll_interval = 0; /* don't poll any longer */
 	cancel_delayed_work_sync(&codec->jackpoll_work);
-	snd_hdac_device_disable_unsol(&codec->core);
 	list_for_each_entry(cpcm, &codec->pcm_list_head, list)
 		snd_pcm_suspend_all(cpcm->pcm);
 
@@ -3389,7 +3352,7 @@ int snd_hda_add_new_ctls(struct hda_codec *codec,
 	for (; knew->name; knew++) {
 		struct snd_kcontrol *kctl;
 		int addr = 0, idx = 0;
-		if (knew->iface == -1)
+		if (knew->iface == (__force snd_ctl_elem_iface_t)-1)
 			continue; /* skip this codec private value */
 		for (;;) {
 			kctl = snd_ctl_new1(knew, codec);
@@ -3740,8 +3703,6 @@ int snd_hda_multi_out_analog_open(struct hda_codec *codec,
 				  struct hda_pcm_stream *hinfo)
 {
 	struct snd_pcm_runtime *runtime = substream->runtime;
-	bool notify_share_sw = false;
-
 	runtime->hw.channels_max = mout->max_channels;
 	if (mout->dig_out_nid) {
 		if (!mout->analog_rates) {
@@ -3770,19 +3731,17 @@ int snd_hda_multi_out_analog_open(struct hda_codec *codec,
 					hinfo->maxbps = mout->spdif_maxbps;
 			} else {
 				mout->share_spdif = 0;
-				notify_share_sw = true;
+				/* FIXME: need notify? */
 			}
 		}
 	}
-	if (notify_share_sw)
-		notify_spdif_share_sw(codec, mout);
 	return snd_pcm_hw_constraint_step(substream->runtime, 0,
 					  SNDRV_PCM_HW_PARAM_CHANNELS, 2);
 }
 EXPORT_SYMBOL_GPL(snd_hda_multi_out_analog_open);
 
 /**
- * snd_hda_multi_out_analog_prepare - Prepare the analog outputs.
+ * snd_hda_multi_out_analog_prepare - Preapre the analog outputs.
  * @codec: the HDA codec
  * @mout: hda_multi_out object
  * @stream_tag: stream tag to assign
@@ -4065,35 +4024,6 @@ void snd_hda_bus_reset_codecs(struct hda_bus *bus)
 		}
 	}
 }
-
-/**
- * snd_hda_codec_set_gpio - Set up GPIO bits for AFG
- * @codec: the HDA codec
- * @mask: GPIO bitmask
- * @dir: GPIO direction bits
- * @data: GPIO data bits
- * @delay: the delay in msec before writing GPIO data bits
- */
-void snd_hda_codec_set_gpio(struct hda_codec *codec, unsigned int mask,
-			    unsigned int dir, unsigned int data,
-			    unsigned int delay)
-{
-	snd_hda_codec_write(codec, codec->core.afg, 0,
-			    AC_VERB_SET_GPIO_MASK, mask);
-	if (delay) {
-		snd_hda_codec_write_sync(codec, codec->core.afg, 0,
-					 AC_VERB_SET_GPIO_DIRECTION, dir);
-		msleep(delay);
-		snd_hda_codec_write_sync(codec, codec->core.afg, 0,
-					 AC_VERB_SET_GPIO_DATA, data);
-	} else {
-		snd_hda_codec_write(codec, codec->core.afg, 0,
-				    AC_VERB_SET_GPIO_DIRECTION, dir);
-		snd_hda_codec_write(codec, codec->core.afg, 0,
-				    AC_VERB_SET_GPIO_DATA, data);
-	}
-}
-EXPORT_SYMBOL_GPL(snd_hda_codec_set_gpio);
 
 /**
  * snd_print_pcm_bits - Print the supported PCM fmt bits to the string buffer

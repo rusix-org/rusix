@@ -810,8 +810,6 @@ int smcr_link_init(struct smc_link_group *lgr, struct smc_link *lnk,
 	lnk->clearing = 0;
 	lnk->path_mtu = lnk->smcibdev->pattr[lnk->ibport - 1].active_mtu;
 	lnk->link_id = smcr_next_link_id(lgr);
-	lnk->max_send_wr = lgr->max_send_wr;
-	lnk->max_recv_wr = lgr->max_recv_wr;
 	lnk->lgr = lgr;
 	smc_lgr_hold(lgr); /* lgr_put in smcr_link_clear() */
 	lnk->link_idx = link_idx;
@@ -838,39 +836,27 @@ int smcr_link_init(struct smc_link_group *lgr, struct smc_link *lnk,
 	rc = smc_llc_link_init(lnk);
 	if (rc)
 		goto out;
-	rc = smc_ib_create_protection_domain(lnk);
+	rc = smc_wr_alloc_link_mem(lnk);
 	if (rc)
 		goto clear_llc_lnk;
-	do {
-		rc = smc_ib_create_queue_pair(lnk);
-		if (rc)
-			goto dealloc_pd;
-		rc = smc_wr_alloc_link_mem(lnk);
-		if (!rc)
-			break;
-		else if (rc != -ENOMEM) /* give up */
-			goto destroy_qp;
-		/* retry with smaller ... */
-		lnk->max_send_wr /= 2;
-		lnk->max_recv_wr /= 2;
-		/* ... unless droping below old SMC_WR_BUF_SIZE */
-		if (lnk->max_send_wr < 16 || lnk->max_recv_wr < 48)
-			goto destroy_qp;
-		smc_ib_destroy_queue_pair(lnk);
-	} while (1);
-
-	rc = smc_wr_create_link(lnk);
+	rc = smc_ib_create_protection_domain(lnk);
 	if (rc)
 		goto free_link_mem;
+	rc = smc_ib_create_queue_pair(lnk);
+	if (rc)
+		goto dealloc_pd;
+	rc = smc_wr_create_link(lnk);
+	if (rc)
+		goto destroy_qp;
 	lnk->state = SMC_LNK_ACTIVATING;
 	return 0;
 
-free_link_mem:
-	smc_wr_free_link_mem(lnk);
 destroy_qp:
 	smc_ib_destroy_queue_pair(lnk);
 dealloc_pd:
 	smc_ib_dealloc_protection_domain(lnk);
+free_link_mem:
+	smc_wr_free_link_mem(lnk);
 clear_llc_lnk:
 	smc_llc_link_clear(lnk, false);
 out:
@@ -905,7 +891,7 @@ static int smc_lgr_create(struct smc_sock *smc, struct smc_init_info *ini)
 		}
 	}
 
-	lgr = kzalloc_obj(*lgr);
+	lgr = kzalloc(sizeof(*lgr), GFP_KERNEL);
 	if (!lgr) {
 		rc = SMC_CLC_DECL_MEM;
 		goto ism_put_vlan;
@@ -1070,9 +1056,7 @@ static int smc_switch_cursor(struct smc_sock *smc, struct smc_cdc_tx_pend *pend,
 	    smc->sk.sk_state != SMC_CLOSED) {
 		rc = smcr_cdc_msg_send_validation(conn, pend, wr_buf);
 		if (!rc) {
-			sock_hold(&smc->sk);
-			if (!queue_delayed_work(conn->lgr->tx_wq, &conn->tx_work, 0))
-				sock_put(&smc->sk);
+			queue_delayed_work(conn->lgr->tx_wq, &conn->tx_work, 0);
 			smc->sk.sk_data_ready(&smc->sk);
 		}
 	} else {
@@ -2325,7 +2309,7 @@ static struct smc_buf_desc *smcr_new_buf_create(struct smc_link_group *lgr,
 	struct smc_buf_desc *buf_desc;
 
 	/* try to alloc a new buffer */
-	buf_desc = kzalloc_obj(*buf_desc);
+	buf_desc = kzalloc(sizeof(*buf_desc), GFP_KERNEL);
 	if (!buf_desc)
 		return ERR_PTR(-ENOMEM);
 
@@ -2399,7 +2383,7 @@ static struct smc_buf_desc *smcd_new_buf_create(struct smc_link_group *lgr,
 	int rc;
 
 	/* try to alloc a new DMB */
-	buf_desc = kzalloc_obj(*buf_desc);
+	buf_desc = kzalloc(sizeof(*buf_desc), GFP_KERNEL);
 	if (!buf_desc)
 		return ERR_PTR(-ENOMEM);
 	if (is_dmb) {
@@ -2444,10 +2428,6 @@ static int __smc_buf_create(struct smc_sock *smc, bool is_smcd, bool is_rmb)
 	else
 		/* use socket send buffer size (w/o overhead) as start value */
 		bufsize = smc->sk.sk_sndbuf / 2;
-
-	/* limit bufsize for physically contiguous buffers */
-	if (!is_smcd && lgr->buf_type == SMCR_PHYS_CONT_BUFS)
-		bufsize = min_t(int, bufsize, PAGE_SIZE << MAX_PAGE_ORDER);
 
 	for (bufsize_comp = smc_compress_bufsize(bufsize, is_smcd, is_rmb);
 	     bufsize_comp >= 0; bufsize_comp--) {
@@ -2587,7 +2567,7 @@ int smcd_buf_attach(struct smc_sock *smc)
 	struct smc_buf_desc *buf_desc;
 	int rc;
 
-	buf_desc = kzalloc_obj(*buf_desc);
+	buf_desc = kzalloc(sizeof(*buf_desc), GFP_KERNEL);
 	if (!buf_desc)
 		return -ENOMEM;
 

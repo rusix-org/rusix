@@ -23,6 +23,7 @@
 #include <asm/vdso.h>
 #include <clocksource/arm_arch_timer.h>
 #include <vdso/helpers.h>
+#include <vdso/vsyscall.h>
 
 #define MAX_SYMNAME	64
 
@@ -161,7 +162,6 @@ static void __init patch_vdso(void *ehdr)
 		vdso_nullpatch_one(&einfo, "__vdso_clock_gettime");
 		vdso_nullpatch_one(&einfo, "__vdso_clock_gettime64");
 		vdso_nullpatch_one(&einfo, "__vdso_clock_getres");
-		vdso_nullpatch_one(&einfo, "__vdso_clock_getres_time64");
 	}
 }
 
@@ -178,7 +178,8 @@ static int __init vdso_init(void)
 	text_pages = (vdso_end - vdso_start) >> PAGE_SHIFT;
 
 	/* Allocate the VDSO text pagelist */
-	vdso_text_pagelist = kzalloc_objs(struct page *, text_pages);
+	vdso_text_pagelist = kcalloc(text_pages, sizeof(struct page *),
+				     GFP_KERNEL);
 	if (vdso_text_pagelist == NULL)
 		return -ENOMEM;
 

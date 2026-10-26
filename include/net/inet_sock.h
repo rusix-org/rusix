@@ -26,8 +26,6 @@
 #include <net/tcp_states.h>
 #include <net/l3mdev.h>
 
-#define IP_OPTIONS_DATA_FIXED_SIZE 40
-
 /** struct ip_options - IP Options
  *
  * @faddr - Saved first hop address
@@ -60,9 +58,12 @@ struct ip_options {
 
 struct ip_options_rcu {
 	struct rcu_head rcu;
-
-	/* Must be last as it ends in a flexible-array member. */
 	struct ip_options opt;
+};
+
+struct ip_options_data {
+	struct ip_options_rcu	opt;
+	char			data[40];
 };
 
 struct inet_request_sock {
@@ -100,7 +101,10 @@ struct inet_request_sock {
 	};
 };
 
-#define inet_rsk(ptr) container_of_const(ptr, struct inet_request_sock, req)
+static inline struct inet_request_sock *inet_rsk(const struct request_sock *sk)
+{
+	return (struct inet_request_sock *)sk;
+}
 
 static inline u32 inet_request_mark(const struct sock *sk, struct sk_buff *skb)
 {
@@ -159,13 +163,6 @@ static inline bool inet_sk_bound_dev_eq(const struct net *net,
 #endif
 }
 
-struct inet6_cork {
-	struct ipv6_txoptions *opt;
-	u8 hop_limit;
-	u8 tclass;
-	u8 dontfrag:1;
-};
-
 struct inet_cork {
 	unsigned int		flags;
 	__be32			addr;
@@ -186,9 +183,6 @@ struct inet_cork {
 struct inet_cork_full {
 	struct inet_cork	base;
 	struct flowi		fl;
-#if IS_ENABLED(CONFIG_IPV6)
-	struct inet6_cork	base6;
-#endif
 };
 
 struct ip_mc_socklist;
@@ -207,7 +201,7 @@ struct rtable;
  * @inet_saddr - Sending source
  * @uc_ttl - Unicast TTL
  * @inet_sport - Source port
- * @inet_id - ID counter for non atomic pkts
+ * @inet_id - ID counter for DF pkts
  * @tos - TOS
  * @mc_ttl - Multicasting TTL
  * @uc_index - Unicast outgoing device index
@@ -360,6 +354,14 @@ static inline struct sock *skb_to_full_sk(const struct sk_buff *skb)
 }
 
 #define inet_sk(ptr) container_of_const(ptr, struct inet_sock, sk)
+
+static inline void __inet_sk_copy_descendant(struct sock *sk_to,
+					     const struct sock *sk_from,
+					     const int ancestor_size)
+{
+	memcpy(inet_sk(sk_to) + 1, inet_sk(sk_from) + 1,
+	       sk_from->sk_prot->obj_size - ancestor_size);
+}
 
 int inet_sk_rebuild_header(struct sock *sk);
 

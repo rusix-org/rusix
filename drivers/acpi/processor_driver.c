@@ -53,7 +53,7 @@ static void acpi_processor_notify(acpi_handle handle, u32 event, void *data)
 {
 	struct acpi_device *device = data;
 	struct acpi_processor *pr;
-	int saved, ev_data = 0;
+	int saved;
 
 	if (device->handle != handle)
 		return;
@@ -66,27 +66,33 @@ static void acpi_processor_notify(acpi_handle handle, u32 event, void *data)
 	case ACPI_PROCESSOR_NOTIFY_PERFORMANCE:
 		saved = pr->performance_platform_limit;
 		acpi_processor_ppc_has_changed(pr, 1);
-		ev_data = pr->performance_platform_limit;
-		if (saved == ev_data)
-			return;
-
+		if (saved == pr->performance_platform_limit)
+			break;
+		acpi_bus_generate_netlink_event(device->pnp.device_class,
+						  dev_name(&device->dev), event,
+						  pr->performance_platform_limit);
 		break;
 	case ACPI_PROCESSOR_NOTIFY_POWER:
 		acpi_processor_power_state_has_changed(pr);
+		acpi_bus_generate_netlink_event(device->pnp.device_class,
+						  dev_name(&device->dev), event, 0);
 		break;
 	case ACPI_PROCESSOR_NOTIFY_THROTTLING:
 		acpi_processor_tstate_has_changed(pr);
+		acpi_bus_generate_netlink_event(device->pnp.device_class,
+						  dev_name(&device->dev), event, 0);
 		break;
 	case ACPI_PROCESSOR_NOTIFY_HIGEST_PERF_CHANGED:
 		cpufreq_update_limits(pr->id);
+		acpi_bus_generate_netlink_event(device->pnp.device_class,
+						  dev_name(&device->dev), event, 0);
 		break;
 	default:
 		acpi_handle_debug(handle, "Unsupported event [0x%x]\n", event);
-		return;
+		break;
 	}
 
-	acpi_bus_generate_netlink_event("processor", dev_name(&device->dev),
-					event, ev_data);
+	return;
 }
 
 static int __acpi_processor_start(struct acpi_device *device);
@@ -160,11 +166,12 @@ static int __acpi_processor_start(struct acpi_device *device)
 	if (result && !IS_ENABLED(CONFIG_ACPI_CPU_FREQ_PSS))
 		dev_dbg(&device->dev, "CPPC data invalid or not present\n");
 
-	acpi_processor_power_init(pr);
+	if (cpuidle_get_driver() == &acpi_idle_driver)
+		acpi_processor_power_init(pr);
 
 	acpi_pss_perf_init(pr);
 
-	result = acpi_processor_thermal_init(pr);
+	result = acpi_processor_thermal_init(pr, device);
 	if (result)
 		goto err_power_exit;
 
@@ -179,7 +186,7 @@ static int __acpi_processor_start(struct acpi_device *device)
 	return 0;
 
 err_thermal_exit:
-	acpi_processor_thermal_exit(pr);
+	acpi_processor_thermal_exit(pr, device);
 err_power_exit:
 	acpi_processor_power_exit(pr);
 	return result;
@@ -203,7 +210,7 @@ static int acpi_processor_stop(struct device *dev)
 
 	acpi_cppc_processor_exit(pr);
 
-	acpi_processor_thermal_exit(pr);
+	acpi_processor_thermal_exit(pr, device);
 
 	return 0;
 }

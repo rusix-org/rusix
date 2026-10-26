@@ -10,7 +10,6 @@
 #include <linux/log2.h>
 #include <linux/string.h>
 #include <linux/zalloc.h>
-#include <errno.h>
 #include <time.h>
 
 #include "../../../util/cpumap.h"
@@ -60,7 +59,7 @@ static bool arm_spe_is_set_freq(struct evsel *evsel)
  */
 static struct perf_cpu_map *arm_spe_find_cpus(struct evlist *evlist)
 {
-	struct perf_cpu_map *event_cpus = evlist__core(evlist)->user_requested_cpus;
+	struct perf_cpu_map *event_cpus = evlist->core.user_requested_cpus;
 	struct perf_cpu_map *online_cpus = perf_cpu_map__new_online_cpus();
 	struct perf_cpu_map *intersect_cpus;
 
@@ -144,8 +143,7 @@ static int arm_spe_info_fill(struct auxtrace_record *itr,
 			     struct perf_record_auxtrace_info *auxtrace_info,
 			     size_t priv_size)
 {
-	unsigned int i;
-	int ret;
+	int i, ret;
 	size_t offset;
 	struct arm_spe_recording *sper =
 			container_of(itr, struct arm_spe_recording, itr);
@@ -157,7 +155,7 @@ static int arm_spe_info_fill(struct auxtrace_record *itr,
 	if (priv_size != arm_spe_info_priv_size(itr, session->evlist))
 		return -EINVAL;
 
-	if (!evlist__core(session->evlist)->nr_mmaps)
+	if (!session->evlist->core.nr_mmaps)
 		return -EINVAL;
 
 	cpu_map = arm_spe_find_cpus(session->evlist);
@@ -257,7 +255,7 @@ static __u64 arm_spe_pmu__sample_period(const struct perf_pmu *arm_spe_pmu)
 
 static void arm_spe_setup_evsel(struct evsel *evsel, struct perf_cpu_map *cpus)
 {
-	u64 pa_enable_bit;
+	u64 bit;
 
 	evsel->core.attr.freq = 0;
 	evsel->core.attr.sample_period = arm_spe_pmu__sample_period(evsel->pmu);
@@ -275,7 +273,7 @@ static void arm_spe_setup_evsel(struct evsel *evsel, struct perf_cpu_map *cpus)
 	 */
 	if (!perf_cpu_map__is_any_cpu_or_is_empty(cpus)) {
 		evsel__set_sample_bit(evsel, CPU);
-		evsel__set_config_if_unset(evsel, "ts_enable", 1);
+		evsel__set_config_if_unset(evsel->pmu, evsel, "ts_enable", 1);
 	}
 
 	/*
@@ -289,10 +287,9 @@ static void arm_spe_setup_evsel(struct evsel *evsel, struct perf_cpu_map *cpus)
 	 * inform that the resulting output's SPE samples contain physical addresses
 	 * where applicable.
 	 */
-
-	if (!evsel__get_config_val(evsel, "pa_enable", &pa_enable_bit))
-		if (pa_enable_bit)
-			evsel__set_sample_bit(evsel, PHYS_ADDR);
+	bit = perf_pmu__format_bits(evsel->pmu, "pa_enable");
+	if (evsel->core.attr.config & bit)
+		evsel__set_sample_bit(evsel, PHYS_ADDR);
 }
 
 static int arm_spe_setup_aux_buffer(struct record_opts *opts)
@@ -363,7 +360,7 @@ static int arm_spe_setup_tracking_event(struct evlist *evlist,
 {
 	int err;
 	struct evsel *tracking_evsel;
-	struct perf_cpu_map *cpus = evlist__core(evlist)->user_requested_cpus;
+	struct perf_cpu_map *cpus = evlist->core.user_requested_cpus;
 
 	/* Add dummy event to keep tracking */
 	err = parse_event(evlist, "dummy:u");
@@ -396,10 +393,9 @@ static int arm_spe_recording_options(struct auxtrace_record *itr,
 	struct arm_spe_recording *sper =
 			container_of(itr, struct arm_spe_recording, itr);
 	struct evsel *evsel, *tmp;
-	struct perf_cpu_map *cpus = evlist__core(evlist)->user_requested_cpus;
+	struct perf_cpu_map *cpus = evlist->core.user_requested_cpus;
 	bool discard = false;
 	int err;
-	u64 discard_bit;
 
 	sper->evlist = evlist;
 
@@ -428,9 +424,9 @@ static int arm_spe_recording_options(struct auxtrace_record *itr,
 	evlist__for_each_entry_safe(evlist, tmp, evsel) {
 		if (evsel__is_aux_event(evsel)) {
 			arm_spe_setup_evsel(evsel, cpus);
-			if (evsel__config_exists(evsel, "discard") &&
-			    !evsel__get_config_val(evsel, "discard", &discard_bit))
-				discard = !!discard_bit;
+			if (evsel->core.attr.config &
+			    perf_pmu__format_bits(evsel->pmu, "discard"))
+				discard = true;
 		}
 	}
 

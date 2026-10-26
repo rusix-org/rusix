@@ -272,9 +272,6 @@ struct esd_usb {
 
 	struct usb_anchor rx_submitted;
 
-	unsigned int rx_pipe;
-	unsigned int tx_pipe;
-
 	int net_count;
 	u32 version;
 	int rxinitdone;
@@ -540,7 +537,7 @@ static void esd_usb_read_bulk_callback(struct urb *urb)
 	}
 
 resubmit_urb:
-	usb_fill_bulk_urb(urb, dev->udev, dev->rx_pipe,
+	usb_fill_bulk_urb(urb, dev->udev, usb_rcvbulkpipe(dev->udev, 1),
 			  urb->transfer_buffer, ESD_USB_RX_BUFFER_SIZE,
 			  esd_usb_read_bulk_callback, dev);
 
@@ -629,7 +626,9 @@ static int esd_usb_send_msg(struct esd_usb *dev, union esd_usb_msg *msg)
 {
 	int actual_length;
 
-	return usb_bulk_msg(dev->udev, dev->tx_pipe, msg,
+	return usb_bulk_msg(dev->udev,
+			    usb_sndbulkpipe(dev->udev, 2),
+			    msg,
 			    msg->hdr.len * sizeof(u32), /* convert to # of bytes */
 			    &actual_length,
 			    1000);
@@ -640,8 +639,12 @@ static int esd_usb_wait_msg(struct esd_usb *dev,
 {
 	int actual_length;
 
-	return usb_bulk_msg(dev->udev, dev->rx_pipe, msg,
-			    sizeof(*msg), &actual_length, 1000);
+	return usb_bulk_msg(dev->udev,
+			    usb_rcvbulkpipe(dev->udev, 1),
+			    msg,
+			    sizeof(*msg),
+			    &actual_length,
+			    1000);
 }
 
 static int esd_usb_setup_rx_urbs(struct esd_usb *dev)
@@ -674,7 +677,8 @@ static int esd_usb_setup_rx_urbs(struct esd_usb *dev)
 
 		urb->transfer_dma = buf_dma;
 
-		usb_fill_bulk_urb(urb, dev->udev, dev->rx_pipe,
+		usb_fill_bulk_urb(urb, dev->udev,
+				  usb_rcvbulkpipe(dev->udev, 1),
 				  buf, ESD_USB_RX_BUFFER_SIZE,
 				  esd_usb_read_bulk_callback, dev);
 		urb->transfer_flags |= URB_NO_TRANSFER_DMA_MAP;
@@ -722,7 +726,7 @@ static int esd_usb_start(struct esd_usb_net_priv *priv)
 	union esd_usb_msg *msg;
 	int err, i;
 
-	msg = kmalloc_obj(*msg);
+	msg = kmalloc(sizeof(*msg), GFP_KERNEL);
 	if (!msg) {
 		err = -ENOMEM;
 		goto out;
@@ -899,7 +903,7 @@ static netdev_tx_t esd_usb_start_xmit(struct sk_buff *skb,
 	/* hnd must not be 0 - MSB is stripped in txdone handling */
 	msg->tx.hnd = BIT(31) | i; /* returned in TX done message */
 
-	usb_fill_bulk_urb(urb, dev->udev, dev->tx_pipe, buf,
+	usb_fill_bulk_urb(urb, dev->udev, usb_sndbulkpipe(dev->udev, 2), buf,
 			  msg->hdr.len * sizeof(u32), /* convert to # of bytes */
 			  esd_usb_write_bulk_callback, context);
 
@@ -958,7 +962,7 @@ static int esd_usb_stop(struct esd_usb_net_priv *priv)
 	int err;
 	int i;
 
-	msg = kmalloc_obj(*msg);
+	msg = kmalloc(sizeof(*msg), GFP_KERNEL);
 	if (!msg)
 		return -ENOMEM;
 
@@ -1014,6 +1018,7 @@ static const struct net_device_ops esd_usb_netdev_ops = {
 	.ndo_open = esd_usb_open,
 	.ndo_stop = esd_usb_close,
 	.ndo_start_xmit = esd_usb_start_xmit,
+	.ndo_change_mtu = can_change_mtu,
 };
 
 static const struct ethtool_ops esd_usb_ethtool_ops = {
@@ -1064,7 +1069,7 @@ static int esd_usb_2_set_bittiming(struct net_device *netdev)
 	if (priv->can.ctrlmode & CAN_CTRLMODE_3_SAMPLES)
 		canbtr |= ESD_USB_TRIPLE_SAMPLES;
 
-	msg = kmalloc_obj(*msg);
+	msg = kmalloc(sizeof(*msg), GFP_KERNEL);
 	if (!msg)
 		return -ENOMEM;
 
@@ -1126,7 +1131,7 @@ static int esd_usb_3_set_bittiming(struct net_device *netdev)
 	u16 flags = 0;
 	int err;
 
-	msg = kmalloc_obj(*msg);
+	msg = kmalloc(sizeof(*msg), GFP_KERNEL);
 	if (!msg)
 		return -ENOMEM;
 
@@ -1294,31 +1299,23 @@ done:
 static int esd_usb_probe(struct usb_interface *intf,
 			 const struct usb_device_id *id)
 {
-	struct usb_endpoint_descriptor *ep_in, *ep_out;
 	struct esd_usb *dev;
 	union esd_usb_msg *msg;
 	int i, err;
 
-	err = usb_find_common_endpoints(intf->cur_altsetting, &ep_in, &ep_out,
-					NULL, NULL);
-	if (err)
-		return err;
-
-	dev = kzalloc_obj(*dev);
+	dev = kzalloc(sizeof(*dev), GFP_KERNEL);
 	if (!dev) {
 		err = -ENOMEM;
 		goto done;
 	}
 
 	dev->udev = interface_to_usbdev(intf);
-	dev->rx_pipe = usb_rcvbulkpipe(dev->udev, ep_in->bEndpointAddress);
-	dev->tx_pipe = usb_sndbulkpipe(dev->udev, ep_out->bEndpointAddress);
 
 	init_usb_anchor(&dev->rx_submitted);
 
 	usb_set_intfdata(intf, dev);
 
-	msg = kmalloc_obj(*msg);
+	msg = kmalloc(sizeof(*msg), GFP_KERNEL);
 	if (!msg) {
 		err = -ENOMEM;
 		goto free_msg;

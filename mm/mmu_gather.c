@@ -1,4 +1,3 @@
-// SPDX-License-Identifier: GPL-2.0
 #include <linux/gfp.h>
 #include <linux/highmem.h>
 #include <linux/kernel.h>
@@ -10,9 +9,9 @@
 #include <linux/smp.h>
 #include <linux/swap.h>
 #include <linux/rmap.h>
-#include <linux/pgalloc.h>
 #include <linux/hugetlb.h>
 
+#include <asm/pgalloc.h>
 #include <asm/tlb.h>
 
 #ifndef CONFIG_MMU_GATHER_NO_GATHER
@@ -211,12 +210,15 @@ bool __tlb_remove_folio_pages(struct mmu_gather *tlb, struct page *page,
 					     PAGE_SIZE);
 }
 
-bool __tlb_remove_page_size(struct mmu_gather *tlb, struct page *page, int page_size)
+bool __tlb_remove_page_size(struct mmu_gather *tlb, struct page *page,
+		bool delay_rmap, int page_size)
 {
-	return __tlb_remove_folio_pages_size(tlb, page, 1, false, page_size);
+	return __tlb_remove_folio_pages_size(tlb, page, 1, delay_rmap, page_size);
 }
 
 #endif /* MMU_GATHER_NO_GATHER */
+
+#ifdef CONFIG_MMU_GATHER_TABLE_FREE
 
 static void __tlb_remove_table_free(struct mmu_table_batch *batch)
 {
@@ -228,8 +230,10 @@ static void __tlb_remove_table_free(struct mmu_table_batch *batch)
 	free_page((unsigned long)batch);
 }
 
+#ifdef CONFIG_MMU_GATHER_RCU_TABLE_FREE
+
 /*
- * RCU freeing of the page directories.
+ * Semi RCU freeing of the page directories.
  *
  * This is needed by some architectures to implement software pagetable walkers.
  *
@@ -255,13 +259,13 @@ static void __tlb_remove_table_free(struct mmu_table_batch *batch)
  * means.
  *
  * What we do is batch the freed directory pages (tables) and RCU free them.
- * Disabling IRQs or preemption holds off RCU grace periods, so this protects
- * both rcu_read_lock() and IRQ-disabling walkers.
+ * We use the sched RCU variant, as that guarantees that IRQ/preempt disabling
+ * holds off grace periods.
  *
  * However, in order to batch these pages we need to allocate storage, this
  * allocation is deep inside the MM code and can thus easily fail on memory
- * pressure. To guarantee progress we fall back to single table freeing, which
- * is also RCU-deferred - see the implementation of tlb_remove_table_one().
+ * pressure. To guarantee progress we fall back to single table freeing, see
+ * the implementation of tlb_remove_table_one().
  *
  */
 
@@ -292,24 +296,14 @@ static void tlb_remove_table_free(struct mmu_table_batch *batch)
 	call_rcu(&batch->rcu, tlb_remove_table_rcu);
 }
 
-/**
- * tlb_remove_table_sync_rcu - synchronize with software page-table walkers
- *
- * Like tlb_remove_table_sync_one() but uses RCU grace period instead of IPI
- * broadcast. Use in slow paths where sleeping is acceptable.
- *
- * Software/Lockless page-table walkers use local_irq_disable(), which is also
- * an RCU read-side critical section. synchronize_rcu() waits for all such
- * sections, providing the same guarantee as tlb_remove_table_sync_one() but
- * without disrupting all CPUs with IPIs.
- *
- * Do not use for freeing memory. Use RCU callbacks instead to avoid latency
- * spikes.
- */
-void tlb_remove_table_sync_rcu(void)
+#else /* !CONFIG_MMU_GATHER_RCU_TABLE_FREE */
+
+static void tlb_remove_table_free(struct mmu_table_batch *batch)
 {
-	synchronize_rcu();
+	__tlb_remove_table_free(batch);
 }
+
+#endif /* CONFIG_MMU_GATHER_RCU_TABLE_FREE */
 
 /*
  * If we want tlb_remove_table() to imply TLB invalidates.
@@ -345,7 +339,7 @@ static inline void __tlb_remove_table_one(void *table)
 #else
 static inline void __tlb_remove_table_one(void *table)
 {
-	tlb_remove_table_sync_rcu();
+	tlb_remove_table_sync_one();
 	__tlb_remove_table(table);
 }
 #endif /* CONFIG_PT_RECLAIM */
@@ -389,6 +383,13 @@ static inline void tlb_table_init(struct mmu_gather *tlb)
 {
 	tlb->batch = NULL;
 }
+
+#else /* !CONFIG_MMU_GATHER_TABLE_FREE */
+
+static inline void tlb_table_flush(struct mmu_gather *tlb) { }
+static inline void tlb_table_init(struct mmu_gather *tlb) { }
+
+#endif /* CONFIG_MMU_GATHER_TABLE_FREE */
 
 static void tlb_flush_mmu_free(struct mmu_gather *tlb)
 {

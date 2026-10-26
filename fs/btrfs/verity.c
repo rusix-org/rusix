@@ -286,17 +286,21 @@ static int write_key_bytes(struct btrfs_inode *inode, u8 key_type, u64 offset,
  * @dest:       Buffer to read into. This parameter has slightly tricky
  *              semantics.  If it is NULL, the function will not do any copying
  *              and will just return the size of all the items up to len bytes.
+ *              If dest_page is passed, then the function will kmap_local the
+ *              page and ignore dest, but it must still be non-NULL to avoid the
+ *              counting-only behavior.
  * @len:        length in bytes to read
+ * @dest_folio: copy into this folio instead of the dest buffer
  *
  * Helper function to read items from the btree.  This returns the number of
  * bytes read or < 0 for errors.  We can return short reads if the items don't
  * exist on disk or aren't big enough to fill the desired length.  Supports
- * reading into a provided buffer (dest).
+ * reading into a provided buffer (dest) or into the page cache
  *
  * Returns number of bytes read or a negative error code on failure.
  */
 static int read_key_bytes(struct btrfs_inode *inode, u8 key_type, u64 offset,
-			  char *dest, u64 len)
+			  char *dest, u64 len, struct folio *dest_folio)
 {
 	BTRFS_PATH_AUTO_FREE(path);
 	struct btrfs_root *root = inode->root;
@@ -316,11 +320,7 @@ static int read_key_bytes(struct btrfs_inode *inode, u8 key_type, u64 offset,
 	if (!path)
 		return -ENOMEM;
 
-	/*
-	 * Merkle items can be large and split across multiple items, so enable
-	 * readahead for such cases.
-	 */
-	if (key_type == BTRFS_VERITY_MERKLE_ITEM_KEY)
+	if (dest_folio)
 		path->reada = READA_FORWARD;
 
 	key.objectid = btrfs_ino(inode);
@@ -364,7 +364,7 @@ static int read_key_bytes(struct btrfs_inode *inode, u8 key_type, u64 offset,
 				break;
 		}
 
-		/* dest == NULL to just sum all the item lengths */
+		/* desc = NULL to just sum all the item lengths */
 		if (!dest)
 			copy_end = item_end;
 		else
@@ -377,10 +377,16 @@ static int read_key_bytes(struct btrfs_inode *inode, u8 key_type, u64 offset,
 		copy_offset = offset - key.offset;
 
 		if (dest) {
+			if (dest_folio)
+				kaddr = kmap_local_folio(dest_folio, 0);
+
 			data = btrfs_item_ptr(leaf, path->slots[0], void);
 			read_extent_buffer(leaf, kaddr + dest_offset,
 					   (unsigned long)data + copy_offset,
 					   copy_bytes);
+
+			if (dest_folio)
+				kunmap_local(kaddr);
 		}
 
 		offset += copy_bytes;
@@ -466,7 +472,7 @@ static int rollback_verity(struct btrfs_inode *inode)
 	if (ret) {
 		btrfs_handle_fs_error(root->fs_info, ret,
 				"failed to drop verity items in rollback %llu",
-				inode->vfs_inode.i_ino);
+				(u64)inode->vfs_inode.i_ino);
 		goto out;
 	}
 
@@ -480,7 +486,7 @@ static int rollback_verity(struct btrfs_inode *inode)
 		trans = NULL;
 		btrfs_handle_fs_error(root->fs_info, ret,
 			"failed to start transaction in verity rollback %llu",
-			inode->vfs_inode.i_ino);
+			(u64)inode->vfs_inode.i_ino);
 		goto out;
 	}
 	inode->ro_flags &= ~BTRFS_INODE_RO_VERITY;
@@ -533,21 +539,23 @@ static int finish_verity(struct btrfs_inode *inode, const void *desc,
 	ret = write_key_bytes(inode, BTRFS_VERITY_DESC_ITEM_KEY, 0,
 			      (const char *)&item, sizeof(item));
 	if (ret)
-		return ret;
+		goto out;
 
 	/* Write out the descriptor itself */
 	ret = write_key_bytes(inode, BTRFS_VERITY_DESC_ITEM_KEY, 1,
 			      desc, desc_size);
 	if (ret)
-		return ret;
+		goto out;
 
 	/*
 	 * 1 for updating the inode flag
 	 * 1 for deleting the orphan
 	 */
 	trans = btrfs_start_transaction(root, 2);
-	if (IS_ERR(trans))
-		return PTR_ERR(trans);
+	if (IS_ERR(trans)) {
+		ret = PTR_ERR(trans);
+		goto out;
+	}
 	inode->ro_flags |= BTRFS_INODE_RO_VERITY;
 	btrfs_sync_inode_flags_to_i_flags(inode);
 	ret = btrfs_update_inode(trans, inode);
@@ -560,6 +568,7 @@ static int finish_verity(struct btrfs_inode *inode, const void *desc,
 	btrfs_set_fs_compat_ro(root->fs_info, VERITY);
 end_trans:
 	btrfs_end_transaction(trans);
+out:
 	return ret;
 
 }
@@ -582,9 +591,6 @@ static int btrfs_begin_enable_verity(struct file *filp)
 	int ret;
 
 	btrfs_assert_inode_locked(inode);
-
-	if (IS_ENCRYPTED(&inode->vfs_inode))
-		return -EOPNOTSUPP;
 
 	if (test_bit(BTRFS_INODE_VERITY_IN_PROGRESS, &inode->runtime_flags))
 		return -EBUSY;
@@ -646,7 +652,7 @@ rollback:
 	rollback_ret = rollback_verity(inode);
 	if (rollback_ret)
 		btrfs_err(inode->root->fs_info,
-			  "failed to rollback verity items: %pe", ERR_PTR(rollback_ret));
+			  "failed to rollback verity items: %d", rollback_ret);
 	return ret;
 }
 
@@ -671,7 +677,7 @@ int btrfs_get_verity_descriptor(struct inode *inode, void *buf, size_t buf_size)
 
 	memset(&item, 0, sizeof(item));
 	ret = read_key_bytes(BTRFS_I(inode), BTRFS_VERITY_DESC_ITEM_KEY, 0,
-			     (char *)&item, sizeof(item));
+			     (char *)&item, sizeof(item), NULL);
 	if (ret < 0)
 		return ret;
 
@@ -688,7 +694,7 @@ int btrfs_get_verity_descriptor(struct inode *inode, void *buf, size_t buf_size)
 		return -ERANGE;
 
 	ret = read_key_bytes(BTRFS_I(inode), BTRFS_VERITY_DESC_ITEM_KEY, 1,
-			     buf, buf_size);
+			     buf, buf_size, NULL);
 	if (ret < 0)
 		return ret;
 	if (ret != true_size)
@@ -702,6 +708,7 @@ int btrfs_get_verity_descriptor(struct inode *inode, void *buf, size_t buf_size)
  *
  * @inode:         inode to read a merkle tree page for
  * @index:         page index relative to the start of the merkle tree
+ * @num_ra_pages:  number of pages to readahead. Optional, we ignore it
  *
  * The Merkle tree is stored in the filesystem btree, but its pages are cached
  * with a logical position past EOF in the inode's mapping.
@@ -709,12 +716,12 @@ int btrfs_get_verity_descriptor(struct inode *inode, void *buf, size_t buf_size)
  * Returns the page we read, or an ERR_PTR on error.
  */
 static struct page *btrfs_read_merkle_tree_page(struct inode *inode,
-						pgoff_t index)
+						pgoff_t index,
+						unsigned long num_ra_pages)
 {
 	struct folio *folio;
 	u64 off = (u64)index << PAGE_SHIFT;
 	loff_t merkle_pos = merkle_file_pos(inode);
-	void *kaddr;
 	int ret;
 
 	if (merkle_pos < 0)
@@ -744,7 +751,7 @@ again:
 	}
 
 	folio = filemap_alloc_folio(mapping_gfp_constraint(inode->i_mapping, ~__GFP_FS),
-				    0, NULL);
+				    0);
 	if (!folio)
 		return ERR_PTR(-ENOMEM);
 
@@ -758,7 +765,6 @@ again:
 	}
 
 read_folio:
-	kaddr = kmap_local_folio(folio, 0);
 	/*
 	 * Merkle item keys are indexed from byte 0 in the merkle tree.
 	 * They have the form:
@@ -766,8 +772,7 @@ read_folio:
 	 * [ inode objectid, BTRFS_MERKLE_ITEM_KEY, offset in bytes ]
 	 */
 	ret = read_key_bytes(BTRFS_I(inode), BTRFS_VERITY_MERKLE_ITEM_KEY, off,
-			     kaddr, PAGE_SIZE);
-	kunmap_local(kaddr);
+			     folio_address(folio), PAGE_SIZE, folio);
 	if (ret < 0) {
 		folio_unlock(folio);
 		folio_put(folio);
@@ -786,21 +791,16 @@ out:
 /*
  * fsverity op that writes a Merkle tree block into the btree.
  *
- * @file:	file to write a Merkle tree block for
+ * @inode:	inode to write a Merkle tree block for
  * @buf:	Merkle tree block to write
  * @pos:	the position of the block in the Merkle tree (in bytes)
  * @size:	the Merkle tree block size (in bytes)
- * @zero_digest:	the hash of the all-zeroes block
- * @digest_size:	size of zero_digest, in bytes
  *
  * Returns 0 on success or negative error code on failure
  */
-static int btrfs_write_merkle_tree_block(struct file *file, const void *buf,
-					 u64 pos, unsigned int size,
-					 const u8 *zero_digest,
-					 unsigned int digest_size)
+static int btrfs_write_merkle_tree_block(struct inode *inode, const void *buf,
+					 u64 pos, unsigned int size)
 {
-	struct inode *inode = file_inode(file);
 	loff_t merkle_pos = merkle_file_pos(inode);
 
 	if (merkle_pos < 0)
@@ -813,6 +813,8 @@ static int btrfs_write_merkle_tree_block(struct file *file, const void *buf,
 }
 
 const struct fsverity_operations btrfs_verityops = {
+	.inode_info_offs         = (int)offsetof(struct btrfs_inode, i_verity_info) -
+				   (int)offsetof(struct btrfs_inode, vfs_inode),
 	.begin_enable_verity     = btrfs_begin_enable_verity,
 	.end_enable_verity       = btrfs_end_enable_verity,
 	.get_verity_descriptor   = btrfs_get_verity_descriptor,

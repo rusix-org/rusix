@@ -181,7 +181,7 @@ static void pruss_intc_map(struct pruss_intc *intc, unsigned long hwirq)
 	u8 ch, host, reg_idx;
 	u32 val;
 
-	guard(mutex)(&intc->lock);
+	mutex_lock(&intc->lock);
 
 	intc->event_channel[hwirq].ref_count++;
 
@@ -206,6 +206,8 @@ static void pruss_intc_map(struct pruss_intc *intc, unsigned long hwirq)
 
 	dev_dbg(dev, "mapped system_event = %lu channel = %d host = %d",
 		hwirq, ch, host);
+
+	mutex_unlock(&intc->lock);
 }
 
 /**
@@ -222,7 +224,7 @@ static void pruss_intc_unmap(struct pruss_intc *intc, unsigned long hwirq)
 	u8 ch, host, reg_idx;
 	u32 val;
 
-	guard(mutex)(&intc->lock);
+	mutex_lock(&intc->lock);
 
 	ch = intc->event_channel[hwirq].value;
 	host = intc->channel_host[ch].value;
@@ -249,6 +251,8 @@ static void pruss_intc_unmap(struct pruss_intc *intc, unsigned long hwirq)
 
 	dev_dbg(intc->dev, "unmapped system_event = %lu channel = %d host = %d\n",
 		hwirq, ch, host);
+
+	mutex_unlock(&intc->lock);
 }
 
 static void pruss_intc_init(struct pruss_intc *intc)
@@ -372,15 +376,17 @@ static int pruss_intc_validate_mapping(struct pruss_intc *intc, int event,
 				       int channel, int host)
 {
 	struct device *dev = intc->dev;
+	int ret = 0;
 
-	guard(mutex)(&intc->lock);
+	mutex_lock(&intc->lock);
 
 	/* check if sysevent already assigned */
 	if (intc->event_channel[event].ref_count > 0 &&
 	    intc->event_channel[event].value != channel) {
 		dev_err(dev, "event %d (req. ch %d) already assigned to channel %d\n",
 			event, channel, intc->event_channel[event].value);
-		return -EBUSY;
+		ret = -EBUSY;
+		goto unlock;
 	}
 
 	/* check if channel already assigned */
@@ -388,13 +394,16 @@ static int pruss_intc_validate_mapping(struct pruss_intc *intc, int event,
 	    intc->channel_host[channel].value != host) {
 		dev_err(dev, "channel %d (req. host %d) already assigned to host %d\n",
 			channel, host, intc->channel_host[channel].value);
-		return -EBUSY;
+		ret = -EBUSY;
+		goto unlock;
 	}
 
 	intc->event_channel[event].value = channel;
 	intc->channel_host[channel].value = host;
 
-	return 0;
+unlock:
+	mutex_unlock(&intc->lock);
+	return ret;
 }
 
 static int
@@ -507,21 +516,24 @@ static const char * const irq_names[MAX_NUM_HOST_IRQS] = {
 
 static int pruss_intc_probe(struct platform_device *pdev)
 {
+	const struct pruss_intc_match_data *data;
 	struct device *dev = &pdev->dev;
 	struct pruss_intc *intc;
 	struct pruss_host_irq_data *host_data;
 	int i, irq, ret;
 	u8 max_system_events, irqs_reserved = 0;
 
+	data = of_device_get_match_data(dev);
+	if (!data)
+		return -ENODEV;
+
+	max_system_events = data->num_system_events;
+
 	intc = devm_kzalloc(dev, sizeof(*intc), GFP_KERNEL);
 	if (!intc)
 		return -ENOMEM;
 
-	intc->soc_config = of_device_get_match_data(dev);
-	if (!intc->soc_config)
-		return -ENODEV;
-	max_system_events = intc->soc_config->num_system_events;
-
+	intc->soc_config = data;
 	intc->dev = dev;
 	platform_set_drvdata(pdev, intc);
 
@@ -541,9 +553,7 @@ static int pruss_intc_probe(struct platform_device *pdev)
 
 	pruss_intc_init(intc);
 
-	ret = devm_mutex_init(dev, &intc->lock);
-	if (ret)
-		return ret;
+	mutex_init(&intc->lock);
 
 	intc->domain = irq_domain_create_linear(dev_fwnode(dev), max_system_events,
 						&pruss_intc_irq_domain_ops, intc);

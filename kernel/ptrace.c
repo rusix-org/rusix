@@ -13,7 +13,6 @@
 #include <linux/sched.h>
 #include <linux/sched/mm.h>
 #include <linux/sched/coredump.h>
-#include <linux/sched/exec_state.h>
 #include <linux/sched/task.h>
 #include <linux/errno.h>
 #include <linux/mm.h>
@@ -37,30 +36,6 @@
 
 #include <asm/syscall.h>	/* for syscall_get_* */
 
-/**
- * ptracer_access_allowed - may current peek/poke @tsk's address space?
- * @tsk: tracee
- *
- * Per-access check used by ptrace_access_vm() and architecture-specific
- * tag/register accessors.  Returns true iff current is the registered
- * ptracer of @tsk and either @tsk is owner-dumpable or current holds
- * CAP_SYS_PTRACE in @tsk's exec namespace.  Lighter than
- * __ptrace_may_access(): it re-validates only dumpability and
- * capability on every access, without re-running LSM hooks or
- * cred_cap_issubset() checks performed at attach time.
- */
-bool ptracer_access_allowed(struct task_struct *tsk)
-{
-	const struct task_exec_state *es;
-
-	guard(rcu)();
-	if (ptrace_parent(tsk) != current)
-		return false;
-	es = task_exec_state_rcu(tsk);
-	return READ_ONCE(es->dumpable) == TASK_DUMPABLE_OWNER ||
-	       ptracer_capable(tsk, es->user_ns);
-}
-
 /*
  * Access another process' address space via ptrace.
  * Source/target buffer must be kernel space,
@@ -70,14 +45,21 @@ int ptrace_access_vm(struct task_struct *tsk, unsigned long addr,
 		     void *buf, int len, unsigned int gup_flags)
 {
 	struct mm_struct *mm;
-	int ret = 0;
+	int ret;
 
 	mm = get_task_mm(tsk);
 	if (!mm)
 		return 0;
 
-	if (ptracer_access_allowed(tsk))
-		ret = access_remote_vm(mm, addr, buf, len, gup_flags);
+	if (!tsk->ptrace ||
+	    (current != tsk->parent) ||
+	    ((get_dumpable(mm) != SUID_DUMP_USER) &&
+	     !ptracer_capable(tsk, mm->user_ns))) {
+		mmput(mm);
+		return 0;
+	}
+
+	ret = access_remote_vm(mm, addr, buf, len, gup_flags);
 	mmput(mm);
 
 	return ret;
@@ -292,13 +274,16 @@ static bool ptrace_has_cap(struct user_namespace *ns, unsigned int mode)
 
 static bool task_still_dumpable(struct task_struct *task, unsigned int mode)
 {
-	const struct task_exec_state *exec_state;
+	struct mm_struct *mm = task->mm;
+	if (mm) {
+		if (get_dumpable(mm) == SUID_DUMP_USER)
+			return true;
+		return ptrace_has_cap(mm->user_ns, mode);
+	}
 
-	guard(rcu)();
-	exec_state = task_exec_state_rcu(task);
-	if (READ_ONCE(exec_state->dumpable) == TASK_DUMPABLE_OWNER)
+	if (task->user_dumpable)
 		return true;
-	return ptrace_has_cap(exec_state->user_ns, mode);
+	return ptrace_has_cap(&init_user_ns, mode);
 }
 
 /* Returns 0 on success, -errno on denial. */
@@ -574,8 +559,7 @@ static bool __ptrace_detach(struct task_struct *tracer, struct task_struct *p)
 	if (!dead && thread_group_empty(p)) {
 		if (!same_thread_group(p->real_parent, tracer))
 			dead = do_notify_parent(p, p->exit_signal);
-		else if (ignoring_children(tracer->sighand) ||
-			 p->signal->autoreap) {
+		else if (ignoring_children(tracer->sighand)) {
 			__wake_up_parent(p, tracer);
 			dead = true;
 		}
@@ -819,9 +803,9 @@ static long ptrace_get_rseq_configuration(struct task_struct *task,
 					  unsigned long size, void __user *data)
 {
 	struct ptrace_rseq_configuration conf = {
-		.rseq_abi_pointer = (u64)(uintptr_t)task->rseq.usrptr,
-		.rseq_abi_size = task->rseq.len,
-		.signature = task->rseq.sig,
+		.rseq_abi_pointer = (u64)(uintptr_t)task->rseq,
+		.rseq_abi_size = task->rseq_len,
+		.signature = task->rseq_sig,
 		.flags = 0,
 	};
 
@@ -1227,12 +1211,6 @@ int ptrace_request(struct task_struct *child, long request,
 	case PTRACE_SETSIGMASK: {
 		sigset_t new_set;
 
-		/* A user worker only ever takes SIGKILL and SIGSTOP. */
-		if (child->flags & PF_USER_WORKER) {
-			ret = -EPERM;
-			break;
-		}
-
 		if (addr != sizeof(sigset_t)) {
 			ret = -EINVAL;
 			break;
@@ -1365,13 +1343,16 @@ int ptrace_request(struct task_struct *child, long request,
 		struct iovec kiov;
 		struct iovec __user *uiov = datavp;
 
-		if (get_user(kiov.iov_base, &uiov->iov_base) ||
-		    get_user(kiov.iov_len, &uiov->iov_len))
+		if (!access_ok(uiov, sizeof(*uiov)))
+			return -EFAULT;
+
+		if (__get_user(kiov.iov_base, &uiov->iov_base) ||
+		    __get_user(kiov.iov_len, &uiov->iov_len))
 			return -EFAULT;
 
 		ret = ptrace_regset(child, request, addr, &kiov);
 		if (!ret)
-			ret = put_user(kiov.iov_len, &uiov->iov_len);
+			ret = __put_user(kiov.iov_len, &uiov->iov_len);
 		break;
 	}
 
@@ -1528,8 +1509,11 @@ int compat_ptrace_request(struct task_struct *child, compat_long_t request,
 		compat_uptr_t ptr;
 		compat_size_t len;
 
-		if (get_user(ptr, &uiov->iov_base) ||
-		    get_user(len, &uiov->iov_len))
+		if (!access_ok(uiov, sizeof(*uiov)))
+			return -EFAULT;
+
+		if (__get_user(ptr, &uiov->iov_base) ||
+		    __get_user(len, &uiov->iov_len))
 			return -EFAULT;
 
 		kiov.iov_base = compat_ptr(ptr);
@@ -1537,7 +1521,7 @@ int compat_ptrace_request(struct task_struct *child, compat_long_t request,
 
 		ret = ptrace_regset(child, request, addr, &kiov);
 		if (!ret)
-			ret = put_user(kiov.iov_len, &uiov->iov_len);
+			ret = __put_user(kiov.iov_len, &uiov->iov_len);
 		break;
 	}
 #endif

@@ -29,19 +29,24 @@
 	.endm
 
 	.macro		hwordle, reg
+CPU_BE(	rev16		\reg, \reg	)
 	.endm
 
 	.macro		hwordbe, reg
-	rev		\reg, \reg
+CPU_LE(	rev		\reg, \reg	)
 	rbit		\reg, \reg
+CPU_BE(	lsr		\reg, \reg, #16	)
 	.endm
 
 	.macro		le, regs:vararg
+	.irp		r, \regs
+CPU_BE(	rev		\r, \r		)
+	.endr
 	.endm
 
 	.macro		be, regs:vararg
 	.irp		r, \regs
-	rev		\r, \r
+CPU_LE(	rev		\r, \r		)
 	.endr
 	.irp		r, \regs
 	rbit		\r, \r

@@ -66,16 +66,19 @@ void l2_guest_code(void)
 
 void l1_guest_code(struct vmx_pages *vmx_pages)
 {
+#define L2_GUEST_STACK_SIZE 64
+	unsigned long l2_guest_stack[L2_GUEST_STACK_SIZE];
 	u64 l1_vmx_pt_start;
 	u64 l1_vmx_pt_finish;
 	u64 l1_tsc_deadline, l2_tsc_deadline;
 
 	GUEST_ASSERT(vmx_pages->vmcs_gpa);
-	prepare_for_vmx_operation(vmx_pages);
-	load_vmcs(vmx_pages);
-	GUEST_ASSERT(vmptrst() == vmx_pages->vmcs_gpa);
+	GUEST_ASSERT(prepare_for_vmx_operation(vmx_pages));
+	GUEST_ASSERT(load_vmcs(vmx_pages));
+	GUEST_ASSERT(vmptrstz() == vmx_pages->vmcs_gpa);
 
-	prepare_vmcs(vmx_pages, l2_guest_code);
+	prepare_vmcs(vmx_pages, l2_guest_code,
+		     &l2_guest_stack[L2_GUEST_STACK_SIZE]);
 
 	/*
 	 * Check for Preemption timer support
@@ -90,17 +93,19 @@ void l1_guest_code(struct vmx_pages *vmx_pages)
 	    !(ctrl_exit_rev.clr & VM_EXIT_SAVE_VMX_PREEMPTION_TIMER))
 		return;
 
-	vmlaunch();
-	GUEST_ASSERT(vmread(VM_EXIT_REASON) == EXIT_REASON_VMCALL);
-	vmwrite(GUEST_RIP, vmread(GUEST_RIP) + vmread(VM_EXIT_INSTRUCTION_LEN));
+	GUEST_ASSERT(!vmlaunch());
+	GUEST_ASSERT(vmreadz(VM_EXIT_REASON) == EXIT_REASON_VMCALL);
+	vmwrite(GUEST_RIP, vmreadz(GUEST_RIP) + vmreadz(VM_EXIT_INSTRUCTION_LEN));
 
 	/*
 	 * Turn on PIN control and resume the guest
 	 */
-	vmwrite(PIN_BASED_VM_EXEC_CONTROL,
-		vmread(PIN_BASED_VM_EXEC_CONTROL) | PIN_BASED_VMX_PREEMPTION_TIMER);
+	GUEST_ASSERT(!vmwrite(PIN_BASED_VM_EXEC_CONTROL,
+			      vmreadz(PIN_BASED_VM_EXEC_CONTROL) |
+			      PIN_BASED_VMX_PREEMPTION_TIMER));
 
-	vmwrite(VMX_PREEMPTION_TIMER_VALUE, PREEMPTION_TIMER_VALUE);
+	GUEST_ASSERT(!vmwrite(VMX_PREEMPTION_TIMER_VALUE,
+			      PREEMPTION_TIMER_VALUE));
 
 	vmx_pt_rate = rdmsr(MSR_IA32_VMX_MISC) & 0x1F;
 
@@ -108,7 +113,7 @@ void l1_guest_code(struct vmx_pages *vmx_pages)
 
 	l1_vmx_pt_start = (rdtsc() >> vmx_pt_rate) << vmx_pt_rate;
 
-	vmresume();
+	GUEST_ASSERT(!vmresume());
 
 	l1_vmx_pt_finish = rdtsc();
 
@@ -121,7 +126,7 @@ void l1_guest_code(struct vmx_pages *vmx_pages)
 	/*
 	 * Ensure the exit from L2 is due to preemption timer expiry
 	 */
-	GUEST_ASSERT(vmread(VM_EXIT_REASON) == EXIT_REASON_PREEMPTION_TIMER);
+	GUEST_ASSERT(vmreadz(VM_EXIT_REASON) == EXIT_REASON_PREEMPTION_TIMER);
 
 	l1_tsc_deadline = l1_vmx_pt_start +
 		(PREEMPTION_TIMER_VALUE << vmx_pt_rate);
@@ -147,7 +152,7 @@ void guest_code(struct vmx_pages *vmx_pages)
 
 int main(int argc, char *argv[])
 {
-	gva_t vmx_pages_gva = 0;
+	vm_vaddr_t vmx_pages_gva = 0;
 
 	struct kvm_regs regs1, regs2;
 	struct kvm_vm *vm;
@@ -191,7 +196,7 @@ int main(int argc, char *argv[])
 		/* UCALL_SYNC is handled here.  */
 		TEST_ASSERT(!strcmp((const char *)uc.args[0], "hello") &&
 			    uc.args[1] == stage, "Stage %d: Unexpected register values vmexit, got %lx",
-			    stage, (unsigned long)uc.args[1]);
+			    stage, (ulong)uc.args[1]);
 		/*
 		 * If this stage 2 then we should verify the vmx pt expiry
 		 * is as expected.
@@ -232,7 +237,7 @@ int main(int argc, char *argv[])
 		vcpu_regs_get(vcpu, &regs2);
 		TEST_ASSERT(!memcmp(&regs1, &regs2, sizeof(regs2)),
 			    "Unexpected register values after vcpu_load_state; rdi: %lx rsi: %lx",
-			    (unsigned long)regs2.rdi, (unsigned long)regs2.rsi);
+			    (ulong) regs2.rdi, (ulong) regs2.rsi);
 	}
 
 done:

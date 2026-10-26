@@ -334,7 +334,7 @@ static int meson_ao_cec_g12a_setup_clk(struct meson_ao_cec_g12a_device *ao_cec)
 {
 	struct meson_ao_cec_g12a_dualdiv_clk *dualdiv_clk;
 	struct device *dev = &ao_cec->pdev->dev;
-	struct clk_init_data init = {};
+	struct clk_init_data init;
 	const char *parent_name;
 	struct clk *clk;
 	char *name;
@@ -689,8 +689,10 @@ static int meson_ao_cec_g12a_probe(struct platform_device *pdev)
 					meson_ao_cec_g12a_irq,
 					meson_ao_cec_g12a_irq_thread,
 					0, NULL, ao_cec);
-	if (ret)
+	if (ret) {
+		dev_err(&pdev->dev, "irq request failed\n");
 		goto out_probe_adapter;
+	}
 
 	ao_cec->oscin = devm_clk_get(&pdev->dev, "oscin");
 	if (IS_ERR(ao_cec->oscin)) {

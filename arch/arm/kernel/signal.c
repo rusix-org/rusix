@@ -292,7 +292,7 @@ setup_sigframe(struct sigframe __user *sf, struct pt_regs *regs, sigset_t *set)
 	if (err == 0)
 		err |= preserve_vfp_context(&aux->vfp);
 #endif
-	err |= put_user(0, &aux->end_magic);
+	err |= __put_user(0, &aux->end_magic);
 
 	return err;
 }
@@ -332,13 +332,12 @@ setup_return(struct pt_regs *regs, struct ksignal *ksig,
 	if (fdpic) {
 		unsigned long __user *fdpic_func_desc =
 					(unsigned long __user *)handler;
-		if (get_user(handler, &fdpic_func_desc[0]) ||
-		    get_user(handler_fdpic_GOT, &fdpic_func_desc[1]))
+		if (__get_user(handler, &fdpic_func_desc[0]) ||
+		    __get_user(handler_fdpic_GOT, &fdpic_func_desc[1]))
 			return 1;
 	}
 
-	if (IS_ENABLED(CONFIG_CPU_ENDIAN_BE8))
-		cpsr |= PSR_E_BIT;
+	cpsr |= PSR_ENDSTATE;
 
 	/*
 	 * Maybe we need to deliver a 32-bit signal to a 26-bit task.
@@ -387,12 +386,11 @@ setup_return(struct pt_regs *regs, struct ksignal *ksig,
 			idx = 6 + thumb * 3;
 			if (ksig->ka.sa.sa_flags & SA_SIGINFO)
 				idx += 5;
-			scoped_user_write_access_size(rc, 4 * sizeof(*rc), efault) {
-				unsafe_put_user(sigreturn_codes[idx],   rc,   efault);
-				unsafe_put_user(sigreturn_codes[idx+1], rc+1, efault);
-				unsafe_put_user(sigreturn_codes[idx+2], rc+2, efault);
-				unsafe_put_user(retcode,                rc+3, efault);
-			}
+			if (__put_user(sigreturn_codes[idx],   rc  ) ||
+			    __put_user(sigreturn_codes[idx+1], rc+1) ||
+			    __put_user(sigreturn_codes[idx+2], rc+2) ||
+			    __put_user(retcode,                rc+3))
+				return 1;
 			goto rc_finish;
 		}
 	} else {
@@ -404,10 +402,9 @@ setup_return(struct pt_regs *regs, struct ksignal *ksig,
 		 * Put the sigreturn code on the stack no matter which return
 		 * mechanism we use in order to remain ABI compliant
 		 */
-		scoped_user_write_access_size(rc, 2 * sizeof(*rc), efault) {
-			unsafe_put_user(sigreturn_codes[idx],   rc,   efault);
-			unsafe_put_user(sigreturn_codes[idx+1], rc+1, efault);
-		}
+		if (__put_user(sigreturn_codes[idx],   rc) ||
+		    __put_user(sigreturn_codes[idx+1], rc+1))
+			return 1;
 
 rc_finish:
 #ifdef CONFIG_MMU
@@ -444,9 +441,6 @@ rc_finish:
 	regs->ARM_cpsr = cpsr;
 
 	return 0;
-
-efault:
-	return 1;
 }
 
 static int
@@ -461,7 +455,7 @@ setup_frame(struct ksignal *ksig, sigset_t *set, struct pt_regs *regs)
 	/*
 	 * Set uc.uc_flags to a value which sc.trap_no would never have.
 	 */
-	err = put_user(0x5ac3c35a, &frame->uc.uc_flags);
+	err = __put_user(0x5ac3c35a, &frame->uc.uc_flags);
 
 	err |= setup_sigframe(frame, regs, set);
 	if (err == 0)
@@ -481,10 +475,8 @@ setup_rt_frame(struct ksignal *ksig, sigset_t *set, struct pt_regs *regs)
 
 	err |= copy_siginfo_to_user(&frame->info, &ksig->info);
 
-	scoped_user_write_access(frame, efault) {
-		unsafe_put_user(0, &frame->sig.uc.uc_flags, efault);
-		unsafe_put_user(NULL, &frame->sig.uc.uc_link, efault);
-	}
+	err |= __put_user(0, &frame->sig.uc.uc_flags);
+	err |= __put_user(NULL, &frame->sig.uc.uc_link);
 
 	err |= __save_altstack(&frame->sig.uc.uc_stack, regs->ARM_sp);
 	err |= setup_sigframe(&frame->sig, regs, set);
@@ -502,9 +494,6 @@ setup_rt_frame(struct ksignal *ksig, sigset_t *set, struct pt_regs *regs)
 	}
 
 	return err;
-
-efault:
-	return -EFAULT;
 }
 
 /*

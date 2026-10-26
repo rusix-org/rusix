@@ -48,7 +48,8 @@ static void br_send_bpdu(struct net_bridge_port *p,
 	skb_reserve(skb, LLC_RESERVE);
 	__skb_put_data(skb, data, length);
 
-	llc_pdu_header_init(skb, LLC_SAP_BSPAN, LLC_SAP_BSPAN, LLC_PDU_CMD);
+	llc_pdu_header_init(skb, LLC_PDU_TYPE_U, LLC_SAP_BSPAN,
+			    LLC_SAP_BSPAN, LLC_PDU_CMD);
 	llc_pdu_init_as_ui_cmd(skb);
 
 	if (llc_mac_hdr_init(skb, p->dev->dev_addr, p->br->group_addr)) {
@@ -180,7 +181,7 @@ void br_stp_rcv(const struct stp_proto *proto, struct sk_buff *skb,
 	if (!ether_addr_equal(eth_hdr(skb)->h_dest, br->group_addr))
 		goto out;
 
-	if (test_bit(BR_BPDU_GUARD_BIT, &p->flags)) {
+	if (p->flags & BR_BPDU_GUARD) {
 		br_notice(br, "BPDU received on blocked port %u(%s)\n",
 			  (unsigned int) p->port_no, p->dev->name);
 		br_stp_disable_port(p);

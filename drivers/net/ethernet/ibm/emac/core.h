@@ -56,7 +56,10 @@
 /* RX BD size for the given MTU */
 static inline int emac_rx_size(int mtu)
 {
-	return mal_rx_size(max(mtu, ETH_DATA_LEN) + EMAC_MTU_OVERHEAD);
+	if (mtu > ETH_DATA_LEN)
+		return MAL_MAX_RX_SIZE;
+	else
+		return mal_rx_size(ETH_DATA_LEN + EMAC_MTU_OVERHEAD);
 }
 
 /* Size of RX skb for the given MTU */

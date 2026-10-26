@@ -387,8 +387,8 @@ static const struct pmbus_driver_info tps25990_base_info = {
 };
 
 static const struct i2c_device_id tps25990_i2c_id[] = {
-	{ .name = "tps25990" },
-	{ }
+	{ "tps25990" },
+	{}
 };
 MODULE_DEVICE_TABLE(i2c, tps25990_i2c_id);
 
@@ -402,18 +402,12 @@ static int tps25990_probe(struct i2c_client *client)
 {
 	struct device *dev = &client->dev;
 	struct pmbus_driver_info *info;
-	const char *propname;
-	u32 rimon;
+	u32 rimon = TPS25990_DEFAULT_RIMON;
 	int ret;
 
-	propname = "ti,rimon-micro-ohms";
-	if (device_property_present(dev, propname)) {
-		ret = device_property_read_u32(dev, propname, &rimon);
-		if (ret)
-			return dev_err_probe(dev, ret, "failed to get %s\n", propname);
-	} else {
-		rimon = TPS25990_DEFAULT_RIMON;
-	}
+	ret = device_property_read_u32(dev, "ti,rimon-micro-ohms", &rimon);
+	if (ret < 0 && ret != -EINVAL)
+		return dev_err_probe(dev, ret, "failed to get rimon\n");
 
 	info = devm_kmemdup(dev, &tps25990_base_info, sizeof(*info), GFP_KERNEL);
 	if (!info)

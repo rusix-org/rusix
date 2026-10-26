@@ -34,7 +34,6 @@
 #include "qcom_pil_info.h"
 #include "qcom_q6v5.h"
 
-#include <linux/firmware/qcom/qcom_pas.h>
 #include <linux/firmware/qcom/qcom_scm.h>
 
 #define MPSS_CRASH_REASON_SMEM		421
@@ -125,7 +124,6 @@
 #define QDSP6v56_CLAMP_QMC_MEM		BIT(22)
 #define QDSP6SS_XO_CBCR		0x0038
 #define QDSP6SS_ACC_OVERRIDE_VAL		0x20
-#define QDSP6SS_ACC_OVERRIDE_VAL_9607	0x80800000
 #define QDSP6v55_BHS_EN_REST_ACK	BIT(0)
 
 /* QDSP6v65 parameters */
@@ -163,9 +161,7 @@ struct rproc_hexagon_res {
 	char **active_clk_names;
 	char **proxy_pd_names;
 	int version;
-	int ssctl_id;
 	bool need_mem_protection;
-	bool need_pas_mem_setup;
 	bool has_alt_reset;
 	bool has_mba_logs;
 	bool has_spare_reg;
@@ -244,7 +240,6 @@ struct q6v5 {
 	struct qcom_sysmon *sysmon;
 	struct platform_device *bam_dmux;
 	bool need_mem_protection;
-	bool need_pas_mem_setup;
 	bool has_alt_reset;
 	bool has_mba_logs;
 	bool has_spare_reg;
@@ -259,14 +254,10 @@ struct q6v5 {
 };
 
 enum {
-	MSS_MDM9607,
 	MSS_MSM8226,
 	MSS_MSM8909,
 	MSS_MSM8916,
-	MSS_MSM8917,
 	MSS_MSM8926,
-	MSS_MSM8937,
-	MSS_MSM8940,
 	MSS_MSM8953,
 	MSS_MSM8974,
 	MSS_MSM8996,
@@ -754,25 +745,15 @@ static int q6v5proc_reset(struct q6v5 *qproc)
 			return ret;
 		}
 		goto pbl_wait;
-	} else if (qproc->version == MSS_MDM9607 ||
-		   qproc->version == MSS_MSM8909 ||
-		   qproc->version == MSS_MSM8917 ||
-		   qproc->version == MSS_MSM8937 ||
-		   qproc->version == MSS_MSM8940 ||
+	} else if (qproc->version == MSS_MSM8909 ||
 		   qproc->version == MSS_MSM8953 ||
 		   qproc->version == MSS_MSM8996 ||
 		   qproc->version == MSS_MSM8998 ||
 		   qproc->version == MSS_SDM660) {
 
-		/* Override the ACC value if required */
-		if (qproc->version == MSS_MDM9607 ||
-		    qproc->version == MSS_MSM8917 ||
-		    qproc->version == MSS_MSM8937 ||
-		    qproc->version == MSS_MSM8940)
-			writel(QDSP6SS_ACC_OVERRIDE_VAL_9607,
-			       qproc->reg_base + QDSP6SS_STRAP_ACC);
-		else if (qproc->version != MSS_MSM8909 &&
-			 qproc->version != MSS_MSM8953)
+		if (qproc->version != MSS_MSM8909 &&
+		    qproc->version != MSS_MSM8953)
+			/* Override the ACC value if required */
 			writel(QDSP6SS_ACC_OVERRIDE_VAL,
 			       qproc->reg_base + QDSP6SS_STRAP_ACC);
 
@@ -818,7 +799,6 @@ static int q6v5proc_reset(struct q6v5 *qproc)
 
 		if (qproc->version != MSS_MSM8909) {
 			int mem_pwr_ctl;
-			int reverse;
 
 			/* Deassert QDSP6 compiler memory clamp */
 			val = readl(qproc->reg_base + QDSP6SS_PWR_CTL_REG);
@@ -830,37 +810,17 @@ static int q6v5proc_reset(struct q6v5 *qproc)
 			writel(val, qproc->reg_base + QDSP6SS_PWR_CTL_REG);
 
 			/* Turn on L1, L2, ETB and JU memories 1 at a time */
-			if (qproc->version == MSS_MSM8940 ||
-			    qproc->version == MSS_MSM8953 ||
+			if (qproc->version == MSS_MSM8953 ||
 			    qproc->version == MSS_MSM8996) {
 				mem_pwr_ctl = QDSP6SS_MEM_PWR_CTL;
 				i = 19;
-				reverse = 0;
-			} else if (qproc->version == MSS_MDM9607 ||
-				   qproc->version == MSS_MSM8917 ||
-				   qproc->version == MSS_MSM8937) {
-				mem_pwr_ctl = QDSP6SS_MEM_PWR_CTL;
-				i = 19;
-				/*
-				 * Set first 5 bits in reverse to avoid
-				 * "inrush current" issues.
-				 */
-				reverse = 6;
 			} else {
 				/* MSS_MSM8998, MSS_SDM660 */
 				mem_pwr_ctl = QDSP6V6SS_MEM_PWR_CTL;
 				i = 28;
-				reverse = 0;
 			}
-
 			val = readl(qproc->reg_base + mem_pwr_ctl);
-			for (; i >= reverse; i--) {
-				val |= BIT(i);
-				writel(val, qproc->reg_base + mem_pwr_ctl);
-				val = readl(qproc->reg_base + mem_pwr_ctl);
-				udelay(1);
-			}
-			for (i = 0; i < reverse; i++) {
+			for (; i >= 0; i--) {
 				val |= BIT(i);
 				writel(val, qproc->reg_base + mem_pwr_ctl);
 				/*
@@ -868,7 +828,7 @@ static int q6v5proc_reset(struct q6v5 *qproc)
 				 * wait for 1us for both memory peripheral and data
 				 * array to turn on.
 				 */
-				val = readl(qproc->reg_base + mem_pwr_ctl);
+				val |= readl(qproc->reg_base + mem_pwr_ctl);
 				udelay(1);
 			}
 		} else {
@@ -1481,8 +1441,8 @@ static int q6v5_mpss_load(struct q6v5 *qproc)
 			max_addr = ALIGN(phdr->p_paddr + phdr->p_memsz, SZ_4K);
 	}
 
-	if (qproc->need_pas_mem_setup) {
-		ret = qcom_pas_mem_setup(MPSS_PAS_ID, qproc->mpss_phys, qproc->mpss_size);
+	if (qproc->version == MSS_MSM8953) {
+		ret = qcom_scm_pas_mem_setup(MPSS_PAS_ID, qproc->mpss_phys, qproc->mpss_size);
 		if (ret) {
 			dev_err(qproc->dev,
 				"setting up mpss memory failed: %d\n", ret);
@@ -2010,8 +1970,8 @@ static int q6v5_init_reset(struct q6v5 *qproc)
 static int q6v5_alloc_memory_region(struct q6v5 *qproc)
 {
 	struct device_node *child;
-	struct resource res;
-	int ret;
+	struct reserved_mem *rmem;
+	struct device_node *node;
 
 	/*
 	 * In the absence of mba/mpss sub-child, extract the mba and mpss
@@ -2019,49 +1979,71 @@ static int q6v5_alloc_memory_region(struct q6v5 *qproc)
 	 */
 	child = of_get_child_by_name(qproc->dev->of_node, "mba");
 	if (!child) {
-		ret = of_reserved_mem_region_to_resource(qproc->dev->of_node, 0, &res);
+		node = of_parse_phandle(qproc->dev->of_node,
+					"memory-region", 0);
 	} else {
-		ret = of_reserved_mem_region_to_resource(child, 0, &res);
+		node = of_parse_phandle(child, "memory-region", 0);
 		of_node_put(child);
 	}
 
-	if (ret) {
-		dev_err(qproc->dev, "unable to resolve mba region\n");
-		return ret;
+	if (!node) {
+		dev_err(qproc->dev, "no mba memory-region specified\n");
+		return -EINVAL;
 	}
 
-	qproc->mba_phys = res.start;
-	qproc->mba_size = resource_size(&res);
+	rmem = of_reserved_mem_lookup(node);
+	of_node_put(node);
+	if (!rmem) {
+		dev_err(qproc->dev, "unable to resolve mba region\n");
+		return -EINVAL;
+	}
+
+	qproc->mba_phys = rmem->base;
+	qproc->mba_size = rmem->size;
 
 	if (!child) {
-		ret = of_reserved_mem_region_to_resource(qproc->dev->of_node, 1, &res);
+		node = of_parse_phandle(qproc->dev->of_node,
+					"memory-region", 1);
 	} else {
 		child = of_get_child_by_name(qproc->dev->of_node, "mpss");
-		ret = of_reserved_mem_region_to_resource(child, 0, &res);
+		node = of_parse_phandle(child, "memory-region", 0);
 		of_node_put(child);
 	}
 
-	if (ret) {
-		dev_err(qproc->dev, "unable to resolve mpss region\n");
-		return ret;
+	if (!node) {
+		dev_err(qproc->dev, "no mpss memory-region specified\n");
+		return -EINVAL;
 	}
 
-	qproc->mpss_phys = qproc->mpss_reloc = res.start;
-	qproc->mpss_size = resource_size(&res);
+	rmem = of_reserved_mem_lookup(node);
+	of_node_put(node);
+	if (!rmem) {
+		dev_err(qproc->dev, "unable to resolve mpss region\n");
+		return -EINVAL;
+	}
+
+	qproc->mpss_phys = qproc->mpss_reloc = rmem->base;
+	qproc->mpss_size = rmem->size;
 
 	if (!child) {
-		ret = of_reserved_mem_region_to_resource(qproc->dev->of_node, 2, &res);
+		node = of_parse_phandle(qproc->dev->of_node, "memory-region", 2);
 	} else {
 		child = of_get_child_by_name(qproc->dev->of_node, "metadata");
-		ret = of_reserved_mem_region_to_resource(child, 0, &res);
+		node = of_parse_phandle(child, "memory-region", 0);
 		of_node_put(child);
 	}
 
-	if (ret)
+	if (!node)
 		return 0;
 
-	qproc->mdata_phys = res.start;
-	qproc->mdata_size = resource_size(&res);
+	rmem = of_reserved_mem_lookup(node);
+	if (!rmem) {
+		dev_err(qproc->dev, "unable to resolve metadata region\n");
+		return -EINVAL;
+	}
+
+	qproc->mdata_phys = rmem->base;
+	qproc->mdata_size = rmem->size;
 
 	return 0;
 }
@@ -2079,16 +2061,7 @@ static int q6v5_probe(struct platform_device *pdev)
 	if (!desc)
 		return -EINVAL;
 
-	/*
-	 * Memory protection is done through qcom_scm_assign_mem(), which needs
-	 * SCM but not PAS. Only the memory setup path issues PAS calls, so
-	 * requiring PAS for every need_mem_protection platform prevents the
-	 * modem from probing at all on TZ firmware that offers no PAS.
-	 */
 	if (desc->need_mem_protection && !qcom_scm_is_available())
-		return -EPROBE_DEFER;
-
-	if (desc->need_pas_mem_setup && !qcom_pas_is_available())
 		return -EPROBE_DEFER;
 
 	mba_image = desc->hexagon_mba_image;
@@ -2202,7 +2175,7 @@ static int q6v5_probe(struct platform_device *pdev)
 	qcom_add_smd_subdev(rproc, &qproc->smd_subdev);
 	qcom_add_pdm_subdev(rproc, &qproc->pdm_subdev);
 	qcom_add_ssr_subdev(rproc, &qproc->ssr_subdev, "mpss");
-	qproc->sysmon = qcom_add_sysmon_subdev(rproc, "modem", desc->ssctl_id);
+	qproc->sysmon = qcom_add_sysmon_subdev(rproc, "modem", 0x12);
 	if (IS_ERR(qproc->sysmon)) {
 		ret = PTR_ERR(qproc->sysmon);
 		goto remove_subdevs;
@@ -2273,7 +2246,6 @@ static const struct rproc_hexagon_res sc7180_mss = {
 		NULL
 	},
 	.need_mem_protection = true,
-	.need_pas_mem_setup = false,
 	.has_alt_reset = false,
 	.has_mba_logs = true,
 	.has_spare_reg = true,
@@ -2282,7 +2254,6 @@ static const struct rproc_hexagon_res sc7180_mss = {
 	.has_ext_cntl_regs = false,
 	.has_vq6 = false,
 	.version = MSS_SC7180,
-	.ssctl_id = 0x12,
 };
 
 static const struct rproc_hexagon_res sc7280_mss = {
@@ -2304,7 +2275,6 @@ static const struct rproc_hexagon_res sc7280_mss = {
 		NULL
 	},
 	.need_mem_protection = true,
-	.need_pas_mem_setup = false,
 	.has_alt_reset = false,
 	.has_mba_logs = true,
 	.has_spare_reg = false,
@@ -2313,7 +2283,6 @@ static const struct rproc_hexagon_res sc7280_mss = {
 	.has_ext_cntl_regs = true,
 	.has_vq6 = true,
 	.version = MSS_SC7280,
-	.ssctl_id = 0x12,
 };
 
 static const struct rproc_hexagon_res sdm660_mss = {
@@ -2338,7 +2307,6 @@ static const struct rproc_hexagon_res sdm660_mss = {
 			NULL
 	},
 	.need_mem_protection = true,
-	.need_pas_mem_setup = false,
 	.has_alt_reset = false,
 	.has_mba_logs = false,
 	.has_spare_reg = false,
@@ -2347,7 +2315,6 @@ static const struct rproc_hexagon_res sdm660_mss = {
 	.has_ext_cntl_regs = false,
 	.has_vq6 = false,
 	.version = MSS_SDM660,
-	.ssctl_id = 0x12,
 };
 
 static const struct rproc_hexagon_res sdm845_mss = {
@@ -2376,7 +2343,6 @@ static const struct rproc_hexagon_res sdm845_mss = {
 			NULL
 	},
 	.need_mem_protection = true,
-	.need_pas_mem_setup = false,
 	.has_alt_reset = true,
 	.has_mba_logs = false,
 	.has_spare_reg = false,
@@ -2385,7 +2351,6 @@ static const struct rproc_hexagon_res sdm845_mss = {
 	.has_ext_cntl_regs = false,
 	.has_vq6 = false,
 	.version = MSS_SDM845,
-	.ssctl_id = 0x12,
 };
 
 static const struct rproc_hexagon_res msm8998_mss = {
@@ -2410,7 +2375,6 @@ static const struct rproc_hexagon_res msm8998_mss = {
 			NULL
 	},
 	.need_mem_protection = true,
-	.need_pas_mem_setup = false,
 	.has_alt_reset = false,
 	.has_mba_logs = false,
 	.has_spare_reg = false,
@@ -2419,7 +2383,6 @@ static const struct rproc_hexagon_res msm8998_mss = {
 	.has_ext_cntl_regs = false,
 	.has_vq6 = false,
 	.version = MSS_MSM8998,
-	.ssctl_id = 0x12,
 };
 
 static const struct rproc_hexagon_res msm8996_mss = {
@@ -2451,7 +2414,6 @@ static const struct rproc_hexagon_res msm8996_mss = {
 			NULL
 	},
 	.need_mem_protection = true,
-	.need_pas_mem_setup = false,
 	.has_alt_reset = false,
 	.has_mba_logs = false,
 	.has_spare_reg = false,
@@ -2460,43 +2422,6 @@ static const struct rproc_hexagon_res msm8996_mss = {
 	.has_ext_cntl_regs = false,
 	.has_vq6 = false,
 	.version = MSS_MSM8996,
-	.ssctl_id = 0x12,
-};
-
-static const struct rproc_hexagon_res mdm9607_mss = {
-	.hexagon_mba_image = "mba.mbn",
-	.proxy_supply = (struct qcom_mss_reg_res[]) {
-		{
-			.supply = "pll",
-			.uA = 100000,
-		},
-		{}
-	},
-	.proxy_clk_names = (char*[]){
-		"xo",
-		NULL
-	},
-	.active_clk_names = (char*[]){
-		"iface",
-		"bus",
-		"mem",
-		NULL
-	},
-	.proxy_pd_names = (char*[]){
-		"mx",
-		"cx",
-		NULL
-	},
-	.need_mem_protection = false,
-	.has_alt_reset = false,
-	.has_mba_logs = false,
-	.has_spare_reg = false,
-	.has_qaccept_regs = false,
-	.has_ext_bhs_reg = false,
-	.has_ext_cntl_regs = false,
-	.has_vq6 = false,
-	.version = MSS_MDM9607,
-	.ssctl_id = 0x22,
 };
 
 static const struct rproc_hexagon_res msm8909_mss = {
@@ -2524,7 +2449,6 @@ static const struct rproc_hexagon_res msm8909_mss = {
 		NULL
 	},
 	.need_mem_protection = false,
-	.need_pas_mem_setup = false,
 	.has_alt_reset = false,
 	.has_mba_logs = false,
 	.has_spare_reg = false,
@@ -2533,7 +2457,6 @@ static const struct rproc_hexagon_res msm8909_mss = {
 	.has_ext_cntl_regs = false,
 	.has_vq6 = false,
 	.version = MSS_MSM8909,
-	.ssctl_id = 0x12,
 };
 
 static const struct rproc_hexagon_res msm8916_mss = {
@@ -2572,7 +2495,6 @@ static const struct rproc_hexagon_res msm8916_mss = {
 		NULL
 	},
 	.need_mem_protection = false,
-	.need_pas_mem_setup = false,
 	.has_alt_reset = false,
 	.has_mba_logs = false,
 	.has_spare_reg = false,
@@ -2581,142 +2503,6 @@ static const struct rproc_hexagon_res msm8916_mss = {
 	.has_ext_cntl_regs = false,
 	.has_vq6 = false,
 	.version = MSS_MSM8916,
-	.ssctl_id = 0x12,
-};
-
-static const struct rproc_hexagon_res msm8917_mss = {
-	.hexagon_mba_image = "mba.mbn",
-	.proxy_supply = (struct qcom_mss_reg_res[]) {
-		{
-			.supply = "pll",
-			.uA = 100000,
-		},
-		{}
-	},
-	.active_supply = (struct qcom_mss_reg_res[]) {
-		{
-			.supply = "mss",
-			.uV = 1050000,
-			.uA = 100000,
-		},
-		{}
-	},
-	.proxy_clk_names = (char*[]){
-		"xo",
-		NULL
-	},
-	.active_clk_names = (char*[]){
-		"iface",
-		"bus",
-		"mem",
-		NULL
-	},
-	.proxy_pd_names = (char*[]) {
-		"cx",
-		"mx",
-		NULL
-	},
-	.need_mem_protection = false,
-	.need_pas_mem_setup = false,
-	.has_alt_reset = false,
-	.has_mba_logs = false,
-	.has_spare_reg = false,
-	.has_qaccept_regs = false,
-	.has_ext_bhs_reg = false,
-	.has_ext_cntl_regs = false,
-	.has_vq6 = false,
-	.version = MSS_MSM8917,
-	.ssctl_id = 0x12,
-};
-
-static const struct rproc_hexagon_res msm8937_mss = {
-	.hexagon_mba_image = "mba.mbn",
-	.proxy_supply = (struct qcom_mss_reg_res[]) {
-		{
-			.supply = "pll",
-			.uA = 100000,
-		},
-		{}
-	},
-	.active_supply = (struct qcom_mss_reg_res[]) {
-		{
-			.supply = "mss",
-			.uV = 1050000,
-			.uA = 100000,
-		},
-		{}
-	},
-	.proxy_clk_names = (char*[]){
-		"xo",
-		NULL
-	},
-	.active_clk_names = (char*[]){
-		"iface",
-		"bus",
-		"mem",
-		NULL
-	},
-	.proxy_pd_names = (char*[]) {
-		"cx",
-		"mx",
-		NULL
-	},
-	.need_mem_protection = false,
-	.need_pas_mem_setup = true,
-	.has_alt_reset = false,
-	.has_mba_logs = false,
-	.has_spare_reg = false,
-	.has_qaccept_regs = false,
-	.has_ext_bhs_reg = false,
-	.has_ext_cntl_regs = false,
-	.has_vq6 = false,
-	.version = MSS_MSM8937,
-	.ssctl_id = 0x12,
-};
-
-static const struct rproc_hexagon_res msm8940_mss = {
-	.hexagon_mba_image = "mba.mbn",
-	.proxy_supply = (struct qcom_mss_reg_res[]) {
-		{
-			.supply = "pll",
-			.uA = 100000,
-		},
-		{}
-	},
-	.active_supply = (struct qcom_mss_reg_res[]) {
-		{
-			.supply = "mss",
-			.uV = 1050000,
-			.uA = 100000,
-		},
-		{}
-	},
-	.proxy_clk_names = (char*[]){
-		"xo",
-		NULL
-	},
-	.active_clk_names = (char*[]){
-		"iface",
-		"bus",
-		"mem",
-		NULL
-	},
-	.proxy_pd_names = (char*[]) {
-		"cx",
-		"mx",
-		NULL
-	},
-	.need_mem_protection = false,
-	.need_pas_mem_setup = true,
-	.has_alt_reset = false,
-	.has_mba_logs = false,
-	.has_spare_reg = false,
-	.has_qaccept_regs = false,
-	.has_ext_bhs_reg = false,
-	.has_ext_cntl_regs = false,
-	.has_vq6 = false,
-	.version = MSS_MSM8940,
-	.ssctl_id = 0x12,
 };
 
 static const struct rproc_hexagon_res msm8953_mss = {
@@ -2745,7 +2531,6 @@ static const struct rproc_hexagon_res msm8953_mss = {
 		NULL
 	},
 	.need_mem_protection = false,
-	.need_pas_mem_setup = true,
 	.has_alt_reset = false,
 	.has_mba_logs = false,
 	.has_spare_reg = false,
@@ -2754,7 +2539,6 @@ static const struct rproc_hexagon_res msm8953_mss = {
 	.has_ext_cntl_regs = false,
 	.has_vq6 = false,
 	.version = MSS_MSM8953,
-	.ssctl_id = 0x12,
 };
 
 static const struct rproc_hexagon_res msm8974_mss = {
@@ -2800,7 +2584,6 @@ static const struct rproc_hexagon_res msm8974_mss = {
 		NULL
 	},
 	.need_mem_protection = false,
-	.need_pas_mem_setup = false,
 	.has_alt_reset = false,
 	.has_mba_logs = false,
 	.has_spare_reg = false,
@@ -2809,7 +2592,6 @@ static const struct rproc_hexagon_res msm8974_mss = {
 	.has_ext_cntl_regs = false,
 	.has_vq6 = false,
 	.version = MSS_MSM8974,
-	.ssctl_id = 0x12,
 };
 
 static const struct rproc_hexagon_res msm8226_mss = {
@@ -2840,7 +2622,6 @@ static const struct rproc_hexagon_res msm8226_mss = {
 		NULL
 	},
 	.need_mem_protection = false,
-	.need_pas_mem_setup = false,
 	.has_alt_reset = false,
 	.has_mba_logs = false,
 	.has_spare_reg = false,
@@ -2849,7 +2630,6 @@ static const struct rproc_hexagon_res msm8226_mss = {
 	.has_ext_cntl_regs = false,
 	.has_vq6 = false,
 	.version = MSS_MSM8226,
-	.ssctl_id = 0x12,
 };
 
 static const struct rproc_hexagon_res msm8926_mss = {
@@ -2888,7 +2668,6 @@ static const struct rproc_hexagon_res msm8926_mss = {
 		NULL
 	},
 	.need_mem_protection = false,
-	.need_pas_mem_setup = false,
 	.has_alt_reset = false,
 	.has_mba_logs = false,
 	.has_spare_reg = false,
@@ -2897,27 +2676,22 @@ static const struct rproc_hexagon_res msm8926_mss = {
 	.has_ext_cntl_regs = false,
 	.has_vq6 = false,
 	.version = MSS_MSM8926,
-	.ssctl_id = 0x12,
 };
 
 static const struct of_device_id q6v5_of_match[] = {
-	{ .compatible = "qcom,q6v5-pil", .data = &msm8916_mss },
-	{ .compatible = "qcom,mdm9607-mss-pil", .data = &mdm9607_mss },
-	{ .compatible = "qcom,msm8226-mss-pil", .data = &msm8226_mss },
-	{ .compatible = "qcom,msm8909-mss-pil", .data = &msm8909_mss },
-	{ .compatible = "qcom,msm8916-mss-pil", .data = &msm8916_mss },
-	{ .compatible = "qcom,msm8917-mss-pil", .data = &msm8917_mss },
-	{ .compatible = "qcom,msm8926-mss-pil", .data = &msm8926_mss },
-	{ .compatible = "qcom,msm8937-mss-pil", .data = &msm8937_mss },
-	{ .compatible = "qcom,msm8940-mss-pil", .data = &msm8940_mss },
-	{ .compatible = "qcom,msm8953-mss-pil", .data = &msm8953_mss },
-	{ .compatible = "qcom,msm8974-mss-pil", .data = &msm8974_mss },
-	{ .compatible = "qcom,msm8996-mss-pil", .data = &msm8996_mss },
-	{ .compatible = "qcom,msm8998-mss-pil", .data = &msm8998_mss },
-	{ .compatible = "qcom,sc7180-mss-pil", .data = &sc7180_mss },
-	{ .compatible = "qcom,sc7280-mss-pil", .data = &sc7280_mss },
-	{ .compatible = "qcom,sdm660-mss-pil", .data = &sdm660_mss },
-	{ .compatible = "qcom,sdm845-mss-pil", .data = &sdm845_mss },
+	{ .compatible = "qcom,q6v5-pil", .data = &msm8916_mss},
+	{ .compatible = "qcom,msm8226-mss-pil", .data = &msm8226_mss},
+	{ .compatible = "qcom,msm8909-mss-pil", .data = &msm8909_mss},
+	{ .compatible = "qcom,msm8916-mss-pil", .data = &msm8916_mss},
+	{ .compatible = "qcom,msm8926-mss-pil", .data = &msm8926_mss},
+	{ .compatible = "qcom,msm8953-mss-pil", .data = &msm8953_mss},
+	{ .compatible = "qcom,msm8974-mss-pil", .data = &msm8974_mss},
+	{ .compatible = "qcom,msm8996-mss-pil", .data = &msm8996_mss},
+	{ .compatible = "qcom,msm8998-mss-pil", .data = &msm8998_mss},
+	{ .compatible = "qcom,sc7180-mss-pil", .data = &sc7180_mss},
+	{ .compatible = "qcom,sc7280-mss-pil", .data = &sc7280_mss},
+	{ .compatible = "qcom,sdm660-mss-pil", .data = &sdm660_mss},
+	{ .compatible = "qcom,sdm845-mss-pil", .data = &sdm845_mss},
 	{ },
 };
 MODULE_DEVICE_TABLE(of, q6v5_of_match);

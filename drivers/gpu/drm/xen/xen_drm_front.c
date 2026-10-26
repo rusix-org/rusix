@@ -18,7 +18,6 @@
 #include <drm/drm_probe_helper.h>
 #include <drm/drm_file.h>
 #include <drm/drm_gem.h>
-#include <drm/drm_print.h>
 
 #include <xen/platform_pci.h>
 #include <xen/xen.h>
@@ -171,7 +170,7 @@ int xen_drm_front_dbuf_create(struct xen_drm_front_info *front_info,
 	if (unlikely(!evtchnl))
 		return -EIO;
 
-	dbuf = kzalloc_obj(*dbuf);
+	dbuf = kzalloc(sizeof(*dbuf), GFP_KERNEL);
 	if (!dbuf)
 		return -ENOMEM;
 
@@ -496,7 +495,7 @@ static int xen_drm_drv_init(struct xen_drm_front_info *front_info)
 
 	DRM_INFO("Creating %s\n", xen_drm_driver.desc);
 
-	drm_info = kzalloc_obj(*drm_info);
+	drm_info = kzalloc(sizeof(*drm_info), GFP_KERNEL);
 	if (!drm_info) {
 		ret = -ENOMEM;
 		goto fail;

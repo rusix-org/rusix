@@ -35,10 +35,7 @@ bool dal_bios_parser_init_cmd_tbl_helper(
 	const struct command_table_helper **h,
 	enum dce_version dce)
 {
-  if (!h)
-    return false;
-
-  switch (dce) {
+	switch (dce) {
 #if defined(CONFIG_DRM_AMD_DC_SI)
 	case DCE_VERSION_6_0:
 	case DCE_VERSION_6_1:
@@ -47,7 +44,6 @@ bool dal_bios_parser_init_cmd_tbl_helper(
 		return true;
 #endif
 
-#if defined(CONFIG_DRM_AMD_DC_DCE)
 	case DCE_VERSION_8_0:
 	case DCE_VERSION_8_1:
 	case DCE_VERSION_8_3:
@@ -66,7 +62,6 @@ bool dal_bios_parser_init_cmd_tbl_helper(
 	case DCE_VERSION_11_22:
 		*h = dal_cmd_tbl_helper_dce112_get_table();
 		return true;
-#endif
 
 	default:
 		/* Unsupported DCE */

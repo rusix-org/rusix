@@ -36,13 +36,10 @@ static ssize_t oldi_lane_width_show(struct device *dev,
 	u32 config;
 	int ret;
 
-	if (MGB4_IS_GMSL1(mgbdev))
-		return sprintf(buf, "0\n");
-
-	i2c_reg = MGB4_IS_GMSL3(mgbdev) ? 0x1CE : 0x49;
-	i2c_mask = MGB4_IS_GMSL3(mgbdev) ? 0x0E : 0x03;
-	i2c_single_val = MGB4_IS_GMSL3(mgbdev) ? 0x00 : 0x02;
-	i2c_dual_val = MGB4_IS_GMSL3(mgbdev) ? 0x0E : 0x00;
+	i2c_reg = MGB4_IS_GMSL(mgbdev) ? 0x1CE : 0x49;
+	i2c_mask = MGB4_IS_GMSL(mgbdev) ? 0x0E : 0x03;
+	i2c_single_val = MGB4_IS_GMSL(mgbdev) ? 0x00 : 0x02;
+	i2c_dual_val = MGB4_IS_GMSL(mgbdev) ? 0x0E : 0x00;
 
 	mutex_lock(&mgbdev->i2c_lock);
 	ret = mgb4_i2c_read_byte(&vindev->deser, i2c_reg);
@@ -82,24 +79,21 @@ static ssize_t oldi_lane_width_store(struct device *dev,
 	if (ret)
 		return ret;
 
-	if (MGB4_IS_GMSL1(mgbdev))
-		return val ? -EINVAL : count;
-
 	switch (val) {
 	case 0: /* single */
 		fpga_data = 0;
-		i2c_data = MGB4_IS_GMSL3(mgbdev) ? 0x00 : 0x02;
+		i2c_data = MGB4_IS_GMSL(mgbdev) ? 0x00 : 0x02;
 		break;
 	case 1: /* dual */
 		fpga_data = 1U << 9;
-		i2c_data = MGB4_IS_GMSL3(mgbdev) ? 0x0E : 0x00;
+		i2c_data = MGB4_IS_GMSL(mgbdev) ? 0x0E : 0x00;
 		break;
 	default:
 		return -EINVAL;
 	}
 
-	i2c_reg = MGB4_IS_GMSL3(mgbdev) ? 0x1CE : 0x49;
-	i2c_mask = MGB4_IS_GMSL3(mgbdev) ? 0x0E : 0x03;
+	i2c_reg = MGB4_IS_GMSL(mgbdev) ? 0x1CE : 0x49;
+	i2c_mask = MGB4_IS_GMSL(mgbdev) ? 0x0E : 0x03;
 
 	mutex_lock(&mgbdev->i2c_lock);
 	ret = mgb4_i2c_mask_byte(&vindev->deser, i2c_reg, i2c_mask, i2c_data);
@@ -108,7 +102,7 @@ static ssize_t oldi_lane_width_store(struct device *dev,
 		return -EIO;
 	mgb4_mask_reg(&mgbdev->video, vindev->config->regs.config, 1U << 9,
 		      fpga_data);
-	if (MGB4_IS_GMSL3(mgbdev)) {
+	if (MGB4_IS_GMSL(mgbdev)) {
 		/* reset input link */
 		mutex_lock(&mgbdev->i2c_lock);
 		ret = mgb4_i2c_mask_byte(&vindev->deser, 0x10, 1U << 5, 1U << 5);
@@ -128,16 +122,7 @@ static ssize_t color_mapping_show(struct device *dev,
 	u32 config = mgb4_read_reg(&vindev->mgbdev->video,
 	  vindev->config->regs.config);
 
-	switch ((config >> 7) & 3) {
-	case 0: /* SPWG/VESA */
-		return sprintf(buf, "1\n");
-	case 1: /* ZDML */
-		return sprintf(buf, "2\n");
-	case 2: /* OLDI/JEIDA */
-		return sprintf(buf, "0\n");
-	default:
-		return -EIO;
-	}
+	return sprintf(buf, "%s\n", config & (1U << 8) ? "0" : "1");
 }
 
 /*
@@ -160,20 +145,17 @@ static ssize_t color_mapping_store(struct device *dev,
 
 	switch (val) {
 	case 0: /* OLDI/JEIDA */
-		fpga_data = 2;
+		fpga_data = (1U << 8);
 		break;
 	case 1: /* SPWG/VESA */
 		fpga_data = 0;
-		break;
-	case 2: /* ZDML */
-		fpga_data = 1;
 		break;
 	default:
 		return -EINVAL;
 	}
 
 	mgb4_mask_reg(&vindev->mgbdev->video, vindev->config->regs.config,
-		      3U << 7, fpga_data << 7);
+		      1U << 8, fpga_data);
 
 	return count;
 }
@@ -763,7 +745,7 @@ struct attribute *mgb4_fpdl3_in_attrs[] = {
 	NULL
 };
 
-struct attribute *mgb4_gmsl3_in_attrs[] = {
+struct attribute *mgb4_gmsl_in_attrs[] = {
 	&dev_attr_input_id.attr,
 	&dev_attr_link_status.attr,
 	&dev_attr_stream_status.attr,
@@ -786,28 +768,5 @@ struct attribute *mgb4_gmsl3_in_attrs[] = {
 	&dev_attr_gmsl_mode.attr,
 	&dev_attr_gmsl_stream_id.attr,
 	&dev_attr_gmsl_fec.attr,
-	NULL
-};
-
-struct attribute *mgb4_gmsl1_in_attrs[] = {
-	&dev_attr_input_id.attr,
-	&dev_attr_link_status.attr,
-	&dev_attr_stream_status.attr,
-	&dev_attr_video_width.attr,
-	&dev_attr_video_height.attr,
-	&dev_attr_hsync_status.attr,
-	&dev_attr_vsync_status.attr,
-	&dev_attr_oldi_lane_width.attr,
-	&dev_attr_color_mapping.attr,
-	&dev_attr_hsync_gap_length.attr,
-	&dev_attr_vsync_gap_length.attr,
-	&dev_attr_pclk_frequency.attr,
-	&dev_attr_hsync_width.attr,
-	&dev_attr_vsync_width.attr,
-	&dev_attr_hback_porch.attr,
-	&dev_attr_hfront_porch.attr,
-	&dev_attr_vback_porch.attr,
-	&dev_attr_vfront_porch.attr,
-	&dev_attr_frequency_range.attr,
 	NULL
 };

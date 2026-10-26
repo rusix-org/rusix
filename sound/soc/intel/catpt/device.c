@@ -25,28 +25,51 @@
 #include "core.h"
 #include "registers.h"
 
-static int catpt_do_suspend(struct device *dev)
+#define CREATE_TRACE_POINTS
+#include "trace.h"
+
+static int catpt_suspend(struct device *dev)
 {
 	struct catpt_dev *cdev = dev_get_drvdata(dev);
+	struct dma_chan *chan;
 	int ret;
+
+	chan = catpt_dma_request_config_chan(cdev);
+	if (IS_ERR(chan))
+		return PTR_ERR(chan);
 
 	memset(&cdev->dx_ctx, 0, sizeof(cdev->dx_ctx));
 	ret = catpt_ipc_enter_dxstate(cdev, CATPT_DX_STATE_D3, &cdev->dx_ctx);
-	if (ret)
-		return CATPT_IPC_RET(ret);
+	if (ret) {
+		ret = CATPT_IPC_ERROR(ret);
+		goto release_dma_chan;
+	}
 
-	ret = catpt_store_firmware_context(cdev);
+	ret = catpt_dsp_stall(cdev, true);
+	if (ret)
+		goto release_dma_chan;
+
+	ret = catpt_store_memdumps(cdev, chan);
+	if (ret) {
+		dev_err(cdev->dev, "store memdumps failed: %d\n", ret);
+		goto release_dma_chan;
+	}
+
+	ret = catpt_store_module_states(cdev, chan);
+	if (ret) {
+		dev_err(cdev->dev, "store module states failed: %d\n", ret);
+		goto release_dma_chan;
+	}
+
+	ret = catpt_store_streams_context(cdev, chan);
+	if (ret)
+		dev_err(cdev->dev, "store streams ctx failed: %d\n", ret);
+
+release_dma_chan:
+	dma_release_channel(chan);
 	if (ret)
 		return ret;
-
 	return catpt_dsp_power_down(cdev);
-}
-
-/* Do not block the system from suspending, recover on resume() if needed. */
-static int catpt_suspend(struct device *dev)
-{
-	catpt_do_suspend(dev);
-	return 0;
 }
 
 static int catpt_resume(struct device *dev)
@@ -77,7 +100,7 @@ static int catpt_resume(struct device *dev)
 
 		ret = catpt_ipc_set_device_format(cdev, &cdev->devfmt[i]);
 		if (ret)
-			return CATPT_IPC_RET(ret);
+			return CATPT_IPC_ERROR(ret);
 	}
 
 	return 0;
@@ -91,7 +114,7 @@ static int catpt_runtime_suspend(struct device *dev)
 	}
 	module_put(dev->driver->owner);
 
-	return catpt_do_suspend(dev);
+	return catpt_suspend(dev);
 }
 
 static int catpt_runtime_resume(struct device *dev)
@@ -127,7 +150,7 @@ static int catpt_register_board(struct catpt_dev *cdev)
 					PLATFORM_DEVID_NONE,
 					(const void *)mach, sizeof(*mach));
 	if (IS_ERR(board)) {
-		dev_err(cdev->dev, "register board failed: %ld\n", PTR_ERR(board));
+		dev_err(cdev->dev, "board register failed\n");
 		return PTR_ERR(board);
 	}
 
@@ -161,25 +184,22 @@ static int catpt_probe_components(struct catpt_dev *cdev)
 		goto err_boot_fw;
 	}
 
-	/* reflect actual ADSP state in pm_runtime */
-	pm_runtime_set_active(cdev->dev);
-
-	pm_runtime_set_autosuspend_delay(cdev->dev, 2000);
-	pm_runtime_use_autosuspend(cdev->dev);
-	pm_runtime_mark_last_busy(cdev->dev);
-	/* Enable PM before spawning child device. See catpt_dai_pcm_new(). */
-	pm_runtime_enable(cdev->dev);
-
 	ret = catpt_register_board(cdev);
 	if (ret) {
 		dev_err(cdev->dev, "register board failed: %d\n", ret);
 		goto err_reg_board;
 	}
 
+	/* reflect actual ADSP state in pm_runtime */
+	pm_runtime_set_active(cdev->dev);
+
+	pm_runtime_set_autosuspend_delay(cdev->dev, 2000);
+	pm_runtime_use_autosuspend(cdev->dev);
+	pm_runtime_mark_last_busy(cdev->dev);
+	pm_runtime_enable(cdev->dev);
 	return 0;
 
 err_reg_board:
-	pm_runtime_disable(cdev->dev);
 	snd_soc_unregister_component(cdev->dev);
 err_boot_fw:
 	catpt_dmac_remove(cdev);
@@ -196,7 +216,7 @@ static void catpt_dev_init(struct catpt_dev *cdev, struct device *dev,
 	cdev->spec = spec;
 	init_completion(&cdev->fw_ready);
 	INIT_LIST_HEAD(&cdev->stream_list);
-	mutex_init(&cdev->stream_mutex);
+	spin_lock_init(&cdev->list_lock);
 	mutex_init(&cdev->clk_mutex);
 
 	/*
@@ -206,9 +226,12 @@ static void catpt_dev_init(struct catpt_dev *cdev, struct device *dev,
 	cdev->devfmt[CATPT_SSP_IFACE_0].iface = UINT_MAX;
 	cdev->devfmt[CATPT_SSP_IFACE_1].iface = UINT_MAX;
 
-	resource_set_range(&cdev->dram, spec->host_dram_offset, catpt_dram_size(cdev));
-	resource_set_range(&cdev->iram, spec->host_iram_offset, catpt_iram_size(cdev));
 	catpt_ipc_init(&cdev->ipc, dev);
+
+	catpt_sram_init(&cdev->dram, spec->host_dram_offset,
+			catpt_dram_size(cdev));
+	catpt_sram_init(&cdev->iram, spec->host_iram_offset,
+			catpt_iram_size(cdev));
 }
 
 static int catpt_acpi_probe(struct platform_device *pdev)
@@ -257,7 +280,7 @@ static int catpt_acpi_probe(struct platform_device *pdev)
 	if (ret)
 		return ret;
 
-	cdev->dxbuf_vaddr = dmam_alloc_coherent(dev, resource_size(&cdev->dram),
+	cdev->dxbuf_vaddr = dmam_alloc_coherent(dev, catpt_dram_size(cdev),
 						&cdev->dxbuf_paddr, GFP_KERNEL);
 	if (!cdev->dxbuf_vaddr)
 		return -ENOMEM;
@@ -323,7 +346,6 @@ static struct snd_soc_acpi_mach wpt_machines[] = {
 static struct catpt_spec lpt_desc = {
 	.machines = lpt_machines,
 	.core_id = 0x01,
-	.fw_name = "intel/IntcSST1.bin",
 	.host_dram_offset = 0x000000,
 	.host_iram_offset = 0x080000,
 	.host_shim_offset = 0x0E7000,
@@ -339,7 +361,6 @@ static struct catpt_spec lpt_desc = {
 static struct catpt_spec wpt_desc = {
 	.machines = wpt_machines,
 	.core_id = 0x02,
-	.fw_name = "intel/IntcSST2.bin",
 	.host_dram_offset = 0x000000,
 	.host_iram_offset = 0x0A0000,
 	.host_shim_offset = 0x0FB000,

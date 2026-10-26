@@ -721,7 +721,8 @@ static int mt6360_chg_irq_register(struct platform_device *pdev)
 						irq_descs[i].name,
 						platform_get_drvdata(pdev));
 		if (ret < 0)
-			return ret;
+			return dev_err_probe(&pdev->dev, ret, "Failed to request %s irq\n",
+					     irq_descs[i].name);
 	}
 
 	return 0;
@@ -840,15 +841,15 @@ static const struct of_device_id __maybe_unused mt6360_charger_of_id[] = {
 MODULE_DEVICE_TABLE(of, mt6360_charger_of_id);
 
 static const struct platform_device_id mt6360_charger_id[] = {
-	{ .name = "mt6360-chg" },
-	{ }
+	{ "mt6360-chg", 0 },
+	{},
 };
 MODULE_DEVICE_TABLE(platform, mt6360_charger_id);
 
 static struct platform_driver mt6360_charger_driver = {
 	.driver = {
 		.name = "mt6360-chg",
-		.of_match_table = mt6360_charger_of_id,
+		.of_match_table = of_match_ptr(mt6360_charger_of_id),
 	},
 	.probe = mt6360_charger_probe,
 	.id_table = mt6360_charger_id,

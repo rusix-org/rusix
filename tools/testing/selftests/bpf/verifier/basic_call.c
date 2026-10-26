@@ -4,7 +4,7 @@
 	BPF_RAW_INSN(BPF_JMP | BPF_CALL | BPF_X, 0, 0, 0, 0),
 	BPF_EXIT_INSN(),
 	},
-	.errstr = "R0 !read_ok",
+	.errstr = "unknown opcode 8d",
 	.result = REJECT,
 },
 {

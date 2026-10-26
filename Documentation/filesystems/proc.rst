@@ -48,11 +48,10 @@ fixes/update part 1.1  Stefani Seibold <stefani@seibold.net>    June 9 2009
   3.11	/proc/<pid>/patch_state - Livepatch patch operation state
   3.12	/proc/<pid>/arch_status - Task architecture specific information
   3.13  /proc/<pid>/fd - List of symlinks to open files
-  3.14  /proc/<pid>/ksm_stat - Information about the process's ksm status.
+  3.14  /proc/<pid/ksm_stat - Information about the process's ksm status.
 
   4	Configuring procfs
   4.1	Mount options
-  4.2	Mount restrictions
 
   5	Filesystem behavior
 
@@ -119,7 +118,7 @@ PTRACE_MODE_ATTACH permissions; CAP_PERFMON capability does not grant access
 to /proc/PID/mem for other processes.
 
 Note that an open file descriptor to /proc/<pid> or to any of its
-contained files or subdirectories does not prevent <pid> from being reused
+contained files or subdirectories does not prevent <pid> being reused
 for some other process in the event that <pid> exits. Operations on
 open /proc/<pid> file descriptors corresponding to dead processes
 never act on any new process that the kernel may, through chance, have
@@ -440,7 +439,7 @@ ioctl()-based API that gives ability to flexibly and efficiently query and
 filter individual VMAs. This interface is binary and is meant for more
 efficient and easy programmatic use. `struct procmap_query`, defined in
 linux/fs.h UAPI header, serves as an input/output argument to the
-`PROCMAP_QUERY` ioctl() command. See comments in linux/fs.h UAPI header for
+`PROCMAP_QUERY` ioctl() command. See comments in linus/fs.h UAPI header for
 details on query semantics, supported flags, data returned, and general API
 usage information.
 
@@ -465,37 +464,26 @@ Memory Area, or VMA) there is a series of lines such as the following::
     KSM:                   0 kB
     LazyFree:              0 kB
     AnonHugePages:         0 kB
-    FilePmdMapped:         0 kB
     ShmemPmdMapped:        0 kB
     Shared_Hugetlb:        0 kB
     Private_Hugetlb:       0 kB
     Swap:                  0 kB
     SwapPss:               0 kB
+    KernelPageSize:        4 kB
+    MMUPageSize:           4 kB
     Locked:                0 kB
     THPeligible:           0
     VmFlags: rd ex mr mw me dw
 
 The first of these lines shows the same information as is displayed for
 the mapping in /proc/PID/maps.  Following lines show the size of the
-mapping (size); the smallest possible page size allocated when backing a
-VMA (KernelPageSize), which is the granularity in which VMA modifications
-can be performed; the smallest possible page size that could be used by the
-MMU (MMUPageSize) when backing a VMA; the amount of the mapping that is
-currently resident in RAM (RSS); the process's proportional share of this
-mapping (PSS); and the number of clean and dirty shared and private pages
-in the mapping.
-
-"KernelPageSize" always corresponds to "MMUPageSize", except when a larger
-kernel page size is emulated on a system with a smaller page size used by the
-MMU, which is the case for some PPC64 setups with hugetlb.  Furthermore,
-"KernelPageSize" and "MMUPageSize" always correspond to the smallest
-possible granularity (fallback) that can be encountered in a VMA throughout
-its lifetime.  These values are not affected by Transparent Huge Pages
-being in effect, or any usage of larger MMU page sizes (either through
-architectural huge-page mappings or other explicit/implicit coalescing of
-virtual ranges performed by the MMU).  "AnonHugePages", "ShmemPmdMapped" and
-"FilePmdMapped" provide insight into the usage of PMD-level architectural
-huge-page mappings.
+mapping (size); the size of each page allocated when backing a VMA
+(KernelPageSize), which is usually the same as the size in the page table
+entries; the page size used by the MMU when backing a VMA (in most cases,
+the same as KernelPageSize); the amount of the mapping that is currently
+resident in RAM (RSS); the process's proportional share of this mapping
+(PSS); and the number of clean and dirty shared and private pages in the
+mapping.
 
 The "proportional set size" (PSS) of a process is the count of pages it has
 in memory, where each page is divided by the number of processes sharing it.
@@ -513,7 +501,7 @@ In some kernel configurations, the semantics of pages part of a larger
 allocation (e.g., THP) can differ: a page is accounted as "private" if all
 pages part of the corresponding large allocation are *certainly* mapped in the
 same process, even if the page is mapped multiple times in that process. A
-page is accounted as "shared" if any page of the larger allocation
+page is accounted as "shared" if any page page of the larger allocation
 is *maybe* mapped in a different process. In some cases, a large allocation
 might be treated as "maybe mapped by multiple processes" even though this
 is no longer the case.
@@ -540,15 +528,10 @@ pressure if the memory is clean. Please note that the printed value might
 be lower than the real value due to optimizations used in the current
 implementation. If this is not desirable please file a bug report.
 
-"AnonHugePages", "ShmemPmdMapped" and "FilePmdMapped" show the amount of
-memory backed by Transparent Huge Pages that are currently mapped by
-architectural huge-page mappings at the PMD level. "AnonHugePages"
-corresponds to memory that does not belong to a file, "ShmemPmdMapped" to
-shared memory (shmem/tmpfs) and "FilePmdMapped" to file-backed memory
-(excluding shmem/tmpfs).
+"AnonHugePages" shows the amount of memory backed by transparent hugepage.
 
-There are no dedicated entries for Transparent Huge Pages (or similar concepts)
-that are not mapped by architectural huge-page mappings at the PMD level.
+"ShmemPmdMapped" shows the amount of shared (shmem/tmpfs) memory backed by
+huge pages.
 
 "Shared_Hugetlb" and "Private_Hugetlb" show the amounts of memory backed by
 hugetlbfs page which is *not* counted in "RSS" or "PSS" field for historical
@@ -566,24 +549,20 @@ does not take into account swapped out page of underlying shmem objects.
 naturally aligned THP pages of any currently enabled size. 1 if true, 0
 otherwise.
 
-If both the kernel and the CPU support protection keys (pkeys),
-"ProtectionKey" indicates the memory protection key associated with the
-virtual memory area.
-
 "VmFlags" field deserves a separate description. This member represents the
 kernel flags associated with the particular virtual memory area in two letter
 encoded manner. The codes are the following:
 
     ==    =============================================================
     rd    readable
-    wr    writable
+    wr    writeable
     ex    executable
     sh    shared
     mr    may read
     mw    may write
     me    may execute
     ms    may share
-    gd    stack segment grows down
+    gd    stack segment growns down
     pf    pure PFN range
     lo    pages are locked in memory
     io    memory mapped I/O area
@@ -608,7 +587,6 @@ encoded manner. The codes are the following:
     um    userfaultfd missing tracking
     uw    userfaultfd wr-protect tracking
     ui    userfaultfd minor fault
-    ur    userfaultfd read-write-protect tracking
     ss    shadow/guarded control stack page
     sl    sealed
     lf    lock on fault pages
@@ -719,7 +697,7 @@ size, in KB, that is backing the mapping up.
 
 Note that some kernel configurations do not track the precise number of times
 a page part of a larger allocation (e.g., THP) is mapped. In these
-configurations, "mapmax" might correspond to the average number of mappings
+configurations, "mapmax" might corresponds to the average number of mappings
 per page in such a larger allocation instead.
 
 1.2 Kernel data
@@ -749,7 +727,7 @@ files are there, and which are missing.
               in the kernel image
  cpuinfo      Info about the CPU
  devices      Available devices (block and character)
- dma          Used DMA channels
+ dma          Used DMS channels
  filesystems  Supported filesystems
  driver       Various drivers grouped here, currently rtc	(2.4)
  execdomains  Execdomains, related to security			(2.4)
@@ -883,13 +861,14 @@ i386 and x86_64 platforms support the new IRQ vector displays.
 Of some interest is the introduction of the /proc/irq directory to 2.4.
 It could be used to set IRQ to CPU affinity. This means that you can "hook" an
 IRQ to only one CPU, or to exclude a CPU of handling IRQs. The contents of the
-irq subdir is one subdir for each IRQ, and default_smp_affinity.
+irq subdir is one subdir for each IRQ, and two files; default_smp_affinity and
+prof_cpu_mask.
 
 For example::
 
   > ls /proc/irq/
-  0  10  12  14  16  18  2  4  6  8  default_smp_affinity
-  1  11  13  15  17  19  3  5  7  9
+  0  10  12  14  16  18  2  4  6  8  prof_cpu_mask
+  1  11  13  15  17  19  3  5  7  9  default_smp_affinity
   > ls /proc/irq/0/
   smp_affinity
 
@@ -919,6 +898,9 @@ IRQs which have not yet been allocated/activated, and hence which lack a
 The node file on an SMP system shows the node to which the device using the IRQ
 reports itself as being attached. This hardware locality information does not
 include information about any possible driver locality preference.
+
+prof_cpu_mask specifies which CPUs are to be profiled by the system wide
+profiler. Default value is ffffffff (all CPUs if there are only 32 of them).
 
 The way IRQs are routed is handled by the IO-APIC, and it's Round Robin
 between all the CPUs which are allowed to handle it. As usual the kernel has
@@ -1107,8 +1089,6 @@ Example output. You may not have all of these fields.
     CmaFree:               0 kB
     Unaccepted:            0 kB
     Balloon:               0 kB
-    GPUActive:             0 kB
-    GPUReclaim:            0 kB
     HugePages_Total:       0
     HugePages_Free:        0
     HugePages_Rsvd:        0
@@ -1289,12 +1269,6 @@ Unaccepted
               Memory that has not been accepted by the guest
 Balloon
               Memory returned to Host by VM Balloon Drivers
-GPUActive
-              System memory allocated to active GPU objects
-GPUReclaim
-              System memory stored in GPU pools for reuse. This memory is not
-              counted in GPUActive. It is shrinker reclaimable memory kept in a reuse
-              pool because it has non-standard page table attributes, like WC or UC.
 HugePages_Total, HugePages_Free, HugePages_Rsvd, HugePages_Surp, Hugepagesize, Hugetlb
               See Documentation/admin-guide/mm/hugetlbpage.rst.
 DirectMap4k, DirectMap2M, DirectMap1G
@@ -1963,10 +1937,6 @@ For example::
   $ echo 0x7 > /proc/self/coredump_filter
   $ ./some_program
 
-If the coredump socket protocol is used a coredump server can select memory
-types to include dynamically. See COREDUMP_MEMORY_TYPES in
-include/uapi/linux/coredump.h.
-
 3.5	/proc/<pid>/mountinfo - Information about mounts
 --------------------------------------------------------
 
@@ -2012,7 +1982,7 @@ For more information on mount propagation see:
 These files provide a method to access a task's comm value. It also allows for
 a task to set its own or one of its thread siblings comm value. The comm value
 is limited in size compared to the cmdline value, so writing anything longer
-than the kernel's TASK_COMM_LEN (currently 16 chars, including the NUL
+then the kernel's TASK_COMM_LEN (currently 16 chars, including the NUL
 terminator) will result in a truncated comm value.
 
 
@@ -2217,7 +2187,7 @@ the process is maintaining.  Example output::
      | lr-------- 1 root root 64 Jan 27 11:24 400000-41a000 -> /usr/bin/ls
 
 The name of a link represents the virtual memory bounds of a mapping, i.e.
-vm_area_struct::vm_start - vm_area_struct::vm_end.
+vm_area_struct::vm_start-vm_area_struct::vm_end.
 
 The main purpose of the map_files is to retrieve a set of memory mapped
 files in a fast way instead of parsing /proc/<pid>/maps or
@@ -2319,8 +2289,8 @@ The number of open files for the process is stored in 'size' member
 of stat() output for /proc/<pid>/fd for fast access.
 -------------------------------------------------------
 
-3.14 /proc/<pid>/ksm_stat - Information about the process's ksm status
-----------------------------------------------------------------------
+3.14 /proc/<pid/ksm_stat - Information about the process's ksm status
+---------------------------------------------------------------------
 When CONFIG_KSM is enabled, each process has this file which displays
 the information of ksm merging status.
 
@@ -2431,9 +2401,7 @@ prohibited by hidepid=.  If you use some daemon like identd which needs to learn
 information about processes information, just add identd to this group.
 
 subset=pid hides all top level files and directories in the procfs that
-are not related to tasks. This option cannot be changed on an existing
-procfs instance because overmounts that existed before the change could
-otherwise remain reachable after the top level procfs entries are hidden.
+are not related to tasks.
 
 pidns= specifies a pid namespace (either as a string path to something like
 `/proc/$pid/ns/pid`, or a file descriptor when using `FSCONFIG_SET_FD`) that
@@ -2441,20 +2409,6 @@ will be used by the procfs instance when translating pids. By default, procfs
 will use the calling process's active pid namespace. Note that the pid
 namespace of an existing procfs instance cannot be modified (attempting to do
 so will give an `-EBUSY` error).
-
-4.2	Mount restrictions
---------------------------
-
-If user namespaces are in use, the kernel additionally checks the instances of
-procfs available to the mounter and will not allow procfs to be mounted if:
-
-  1. This mount is not fully visible unless the new procfs is going to be
-     mounted with subset=pid option.
-
-     a. Its root directory is not the root directory of the filesystem.
-     b. If any file or non-empty procfs directory is hidden by another mount.
-
-  2. A new mount overrides the readonly option or any option from atime family.
 
 Chapter 5: Filesystem behavior
 ==============================

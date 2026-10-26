@@ -1,9 +1,12 @@
-// SPDX-License-Identifier: GPL-2.0
 /*
    BlueZ - Bluetooth protocol stack for Linux
 
    Copyright (C) 2010  Nokia Corporation
    Copyright (C) 2011-2012 Intel Corporation
+
+   This program is free software; you can redistribute it and/or modify
+   it under the terms of the GNU General Public License version 2 as
+   published by the Free Software Foundation;
 
    THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
    OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
@@ -177,7 +180,6 @@ static const u16 mgmt_events[] = {
 	MGMT_EV_CONTROLLER_RESUME,
 	MGMT_EV_ADV_MONITOR_DEVICE_FOUND,
 	MGMT_EV_ADV_MONITOR_DEVICE_LOST,
-	MGMT_EV_SECURITY_LEVEL_CHANGED,
 };
 
 static const u16 mgmt_untrusted_commands[] = {
@@ -302,8 +304,6 @@ static u8 mgmt_errno_status(int err)
 		return MGMT_STATUS_ALREADY_CONNECTED;
 	case -ENOTCONN:
 		return MGMT_STATUS_DISCONNECTED;
-	case -ECANCELED:
-		return MGMT_STATUS_CANCELLED;
 	}
 
 	return MGMT_STATUS_FAILED;
@@ -556,7 +556,7 @@ static int read_ext_index_list(struct sock *sk, struct hci_dev *hdev,
 	list_for_each_entry(d, &hci_dev_list, list)
 		count++;
 
-	rp = kmalloc_flex(*rp, entry, count, GFP_ATOMIC);
+	rp = kmalloc(struct_size(rp, entry, count), GFP_ATOMIC);
 	if (!rp) {
 		read_unlock(&hci_dev_list_lock);
 		return -ENOMEM;
@@ -860,9 +860,6 @@ static u32 get_supported_settings(struct hci_dev *hdev)
 	if (past_receiver_capable(hdev))
 		settings |= MGMT_SETTING_PAST_RECEIVER;
 
-	if (le_sci_capable(hdev))
-		settings |= MGMT_SETTING_SCI;
-
 	settings |= MGMT_SETTING_PHY_CONFIGURATION;
 
 	return settings;
@@ -953,9 +950,6 @@ static u32 get_current_settings(struct hci_dev *hdev)
 
 	if (past_receiver_enabled(hdev))
 		settings |= MGMT_SETTING_PAST_RECEIVER;
-
-	if (le_sci_enabled(hdev))
-		settings |= MGMT_SETTING_SCI;
 
 	return settings;
 }
@@ -1299,7 +1293,7 @@ void mgmt_advertising_removed(struct sock *sk, struct hci_dev *hdev,
 static void cancel_adv_timeout(struct hci_dev *hdev)
 {
 	if (hdev->adv_instance_timeout) {
-		hdev->adv_instance_timeout = false;
+		hdev->adv_instance_timeout = 0;
 		cancel_delayed_work(&hdev->adv_instance_expire);
 	}
 }
@@ -2811,7 +2805,7 @@ static int add_uuid(struct sock *sk, struct hci_dev *hdev, void *data, u16 len)
 		goto failed;
 	}
 
-	uuid = kmalloc_obj(*uuid);
+	uuid = kmalloc(sizeof(*uuid), GFP_KERNEL);
 	if (!uuid) {
 		err = -ENOMEM;
 		goto failed;
@@ -3420,7 +3414,7 @@ static int get_connections(struct sock *sk, struct hci_dev *hdev, void *data,
 			i++;
 	}
 
-	rp = kmalloc_flex(*rp, addr, i);
+	rp = kmalloc(struct_size(rp, addr, i), GFP_KERNEL);
 	if (!rp) {
 		err = -ENOMEM;
 		goto unlock;
@@ -3902,8 +3896,6 @@ static int user_pairing_resp(struct sock *sk, struct hci_dev *hdev,
 	}
 
 	if (addr->type == BDADDR_LE_PUBLIC || addr->type == BDADDR_LE_RANDOM) {
-		lockdep_assert_held(&conn->hdev->lock);
-
 		err = smp_user_confirm_reply(conn, mgmt_op, passkey);
 		if (!err)
 			err = mgmt_cmd_complete(sk, hdev->id, mgmt_op,
@@ -4473,7 +4465,7 @@ static int set_blocked_keys(struct sock *sk, struct hci_dev *hdev, void *data,
 	hci_blocked_keys_clear(hdev);
 
 	for (i = 0; i < key_count; ++i) {
-		struct blocked_key *b = kzalloc_obj(*b);
+		struct blocked_key *b = kzalloc(sizeof(*b), GFP_KERNEL);
 
 		if (!b) {
 			err = MGMT_STATUS_NO_RESOURCES;
@@ -4909,13 +4901,6 @@ static int set_quality_report_func(struct sock *sk, struct hci_dev *hdev,
 
 	hci_req_sync_lock(hdev);
 
-	if (hci_dev_test_flag(hdev, HCI_UNREGISTER)) {
-		err = mgmt_cmd_status(sk, hdev->id,
-				      MGMT_OP_SET_EXP_FEATURE,
-				      MGMT_STATUS_INVALID_INDEX);
-		goto unlock_quality_report;
-	}
-
 	val = !!cp->param[0];
 	changed = (val != hci_dev_test_flag(hdev, HCI_QUALITY_REPORT));
 
@@ -5233,69 +5218,6 @@ static void device_flags_changed(struct sock *sk, struct hci_dev *hdev,
 	mgmt_event(MGMT_EV_DEVICE_FLAGS_CHANGED, hdev, &ev, sizeof(ev), sk);
 }
 
-static bool is_connected(struct hci_dev *hdev, bdaddr_t *addr, u8 type)
-{
-	struct hci_conn *conn;
-
-	conn = hci_conn_hash_lookup_ba(hdev, LE_LINK, addr);
-	if (!conn)
-		return false;
-
-	if (conn->dst_type != type)
-		return false;
-
-	if (conn->state != BT_CONNECTED)
-		return false;
-
-	return true;
-}
-
-/* This function requires the caller holds hdev->lock */
-static struct hci_conn_params *hci_conn_params_set(struct hci_dev *hdev,
-						   bdaddr_t *addr, u8 addr_type,
-						   u8 auto_connect)
-{
-	struct hci_conn_params *params;
-
-	params = hci_conn_params_add(hdev, addr, addr_type);
-	if (!params)
-		return NULL;
-
-	if (params->auto_connect == auto_connect)
-		return params;
-
-	hci_pend_le_list_del_init(params);
-
-	switch (auto_connect) {
-	case HCI_AUTO_CONN_DISABLED:
-	case HCI_AUTO_CONN_LINK_LOSS:
-		/* If auto connect is being disabled when we're trying to
-		 * connect to device, keep connecting.
-		 */
-		if (params->explicit_connect)
-			hci_pend_le_list_add(params, &hdev->pend_le_conns);
-		break;
-	case HCI_AUTO_CONN_REPORT:
-		if (params->explicit_connect)
-			hci_pend_le_list_add(params, &hdev->pend_le_conns);
-		else
-			hci_pend_le_list_add(params, &hdev->pend_le_reports);
-		break;
-	case HCI_AUTO_CONN_DIRECT:
-	case HCI_AUTO_CONN_ALWAYS:
-		if (!is_connected(hdev, addr, addr_type))
-			hci_pend_le_list_add(params, &hdev->pend_le_conns);
-		break;
-	}
-
-	params->auto_connect = auto_connect;
-
-	bt_dev_dbg(hdev, "addr %pMR (type %u) auto_connect %u",
-		   addr, addr_type, auto_connect);
-
-	return params;
-}
-
 static int set_device_flags(struct sock *sk, struct hci_dev *hdev, void *data,
 			    u16 len)
 {
@@ -5339,16 +5261,9 @@ static int set_device_flags(struct sock *sk, struct hci_dev *hdev, void *data,
 	params = hci_conn_params_lookup(hdev, &cp->addr.bdaddr,
 					le_addr_type(cp->addr.type));
 	if (!params) {
-		/* Create a new hci_conn_params if it doesn't exist */
-		params = hci_conn_params_set(hdev, &cp->addr.bdaddr,
-					     le_addr_type(cp->addr.type),
-					     HCI_AUTO_CONN_DISABLED);
-		if (!params) {
-			bt_dev_warn(hdev, "No such LE device %pMR (0x%x)",
-				    &cp->addr.bdaddr,
-				    le_addr_type(cp->addr.type));
-			goto unlock;
-		}
+		bt_dev_warn(hdev, "No such LE device %pMR (0x%x)",
+			    &cp->addr.bdaddr, le_addr_type(cp->addr.type));
+		goto unlock;
 	}
 
 	supported_flags = hdev->conn_flags;
@@ -5595,7 +5510,7 @@ static u8 parse_adv_monitor_pattern(struct adv_monitor *m, u8 pattern_count,
 		    (offset + length) > HCI_MAX_AD_LENGTH)
 			return MGMT_STATUS_INVALID_PARAMS;
 
-		p = kmalloc_obj(*p);
+		p = kmalloc(sizeof(*p), GFP_KERNEL);
 		if (!p)
 			return MGMT_STATUS_NO_RESOURCES;
 
@@ -5632,7 +5547,7 @@ static int add_adv_patterns_monitor(struct sock *sk, struct hci_dev *hdev,
 		goto done;
 	}
 
-	m = kzalloc_obj(*m);
+	m = kzalloc(sizeof(*m), GFP_KERNEL);
 	if (!m) {
 		status = MGMT_STATUS_NO_RESOURCES;
 		goto done;
@@ -5669,7 +5584,7 @@ static int add_adv_patterns_monitor_rssi(struct sock *sk, struct hci_dev *hdev,
 		goto done;
 	}
 
-	m = kzalloc_obj(*m);
+	m = kzalloc(sizeof(*m), GFP_KERNEL);
 	if (!m) {
 		status = MGMT_STATUS_NO_RESOURCES;
 		goto done;
@@ -5692,18 +5607,8 @@ static void mgmt_remove_adv_monitor_complete(struct hci_dev *hdev,
 	struct mgmt_pending_cmd *cmd = data;
 	struct mgmt_cp_remove_adv_monitor *cp;
 
-	/* Reply to a cancelled command so bluetoothd's serialised mgmt queue
-	 * is not blocked.
-	 */
-	if (status == -ECANCELED) {
-		cp = cmd->param;
-		rp.monitor_handle = cp->monitor_handle;
-
-		mgmt_cmd_complete(cmd->sk, cmd->hdev->id, cmd->opcode,
-				  mgmt_status(status), &rp, sizeof(rp));
-		mgmt_pending_free(cmd);
+	if (status == -ECANCELED)
 		return;
-	}
 
 	hci_dev_lock(hdev);
 
@@ -6553,12 +6458,7 @@ static void set_advertising_complete(struct hci_dev *hdev, void *data, int err)
 		return;
 	}
 
-	/* With extended advertising global advertising (instance 0) has its
-	 * own advertising set so only consider its state, other instances may
-	 * still be enabled.
-	 */
-	if (ext_adv_capable(hdev) ? hci_dev_test_flag(hdev, HCI_LE_ADV_0) :
-				    hci_dev_test_flag(hdev, HCI_LE_ADV))
+	if (hci_dev_test_flag(hdev, HCI_LE_ADV))
 		hci_dev_set_flag(hdev, HCI_ADVERTISING);
 	else
 		hci_dev_clear_flag(hdev, HCI_ADVERTISING);
@@ -6577,34 +6477,6 @@ static void set_advertising_complete(struct hci_dev *hdev, void *data, int err)
 	if (hci_dev_test_flag(hdev, HCI_ADVERTISING) ||
 	    list_empty(&hdev->adv_instances))
 		return;
-
-	/* With extended advertising instances are not overridden by global
-	 * advertising, except the ones sharing its set, so only (re)start the
-	 * instances that are not already enabled.
-	 *
-	 * Lookup instances by identifier while holding hdev->lock since the
-	 * list may change while waiting for the HCI commands to complete.
-	 */
-	if (ext_adv_capable(hdev)) {
-		u16 i;
-
-		for (i = 1; i <= hdev->le_num_of_adv_sets + 1; i++) {
-			bool enabled;
-
-			hci_dev_lock(hdev);
-			adv_instance = hci_find_adv_instance(hdev, i);
-			enabled = !adv_instance || adv_instance->enabled;
-			hci_dev_unlock(hdev);
-
-			if (enabled)
-				continue;
-
-			err = hci_schedule_adv_instance_sync(hdev, i, true);
-			enable_advertising_instance(hdev, err);
-		}
-
-		return;
-	}
 
 	instance = hdev->cur_adv_instance;
 	if (!instance) {
@@ -6661,11 +6533,6 @@ static int set_adv_sync(struct hci_dev *hdev, void *data)
 			hci_update_scan_rsp_data_sync(hdev, 0x00);
 			hci_enable_advertising_sync(hdev);
 		}
-	} else if (ext_adv_capable(hdev)) {
-		/* Only disable global advertising (instance 0) leaving other
-		 * instances untouched.
-		 */
-		hci_disable_ext_adv_legacy_instance_sync(hdev);
 	} else {
 		hci_disable_advertising_sync(hdev);
 	}
@@ -7811,6 +7678,68 @@ unlock:
 	return err;
 }
 
+static bool is_connected(struct hci_dev *hdev, bdaddr_t *addr, u8 type)
+{
+	struct hci_conn *conn;
+
+	conn = hci_conn_hash_lookup_ba(hdev, LE_LINK, addr);
+	if (!conn)
+		return false;
+
+	if (conn->dst_type != type)
+		return false;
+
+	if (conn->state != BT_CONNECTED)
+		return false;
+
+	return true;
+}
+
+/* This function requires the caller holds hdev->lock */
+static int hci_conn_params_set(struct hci_dev *hdev, bdaddr_t *addr,
+			       u8 addr_type, u8 auto_connect)
+{
+	struct hci_conn_params *params;
+
+	params = hci_conn_params_add(hdev, addr, addr_type);
+	if (!params)
+		return -EIO;
+
+	if (params->auto_connect == auto_connect)
+		return 0;
+
+	hci_pend_le_list_del_init(params);
+
+	switch (auto_connect) {
+	case HCI_AUTO_CONN_DISABLED:
+	case HCI_AUTO_CONN_LINK_LOSS:
+		/* If auto connect is being disabled when we're trying to
+		 * connect to device, keep connecting.
+		 */
+		if (params->explicit_connect)
+			hci_pend_le_list_add(params, &hdev->pend_le_conns);
+		break;
+	case HCI_AUTO_CONN_REPORT:
+		if (params->explicit_connect)
+			hci_pend_le_list_add(params, &hdev->pend_le_conns);
+		else
+			hci_pend_le_list_add(params, &hdev->pend_le_reports);
+		break;
+	case HCI_AUTO_CONN_DIRECT:
+	case HCI_AUTO_CONN_ALWAYS:
+		if (!is_connected(hdev, addr, addr_type))
+			hci_pend_le_list_add(params, &hdev->pend_le_conns);
+		break;
+	}
+
+	params->auto_connect = auto_connect;
+
+	bt_dev_dbg(hdev, "addr %pMR (type %u) auto_connect %u",
+		   addr, addr_type, auto_connect);
+
+	return 0;
+}
+
 static void device_added(struct sock *sk, struct hci_dev *hdev,
 			 bdaddr_t *bdaddr, u8 type, u8 action)
 {
@@ -7925,13 +7854,17 @@ static int add_device(struct sock *sk, struct hci_dev *hdev,
 	/* If the connection parameters don't exist for this device,
 	 * they will be created and configured with defaults.
 	 */
-	params = hci_conn_params_set(hdev, &cp->addr.bdaddr, addr_type,
-				     auto_conn);
-	if (!params) {
+	if (hci_conn_params_set(hdev, &cp->addr.bdaddr, addr_type,
+				auto_conn) < 0) {
 		err = mgmt_cmd_complete(sk, hdev->id, MGMT_OP_ADD_DEVICE,
 					MGMT_STATUS_FAILED, &cp->addr,
 					sizeof(cp->addr));
 		goto unlock;
+	} else {
+		params = hci_conn_params_lookup(hdev, &cp->addr.bdaddr,
+						addr_type);
+		if (params)
+			current_flags = params->flags;
 	}
 
 	cmd = mgmt_pending_new(sk, MGMT_OP_ADD_DEVICE, hdev, data, len);
@@ -8260,119 +8193,6 @@ static int load_conn_param(struct sock *sk, struct hci_dev *hdev, void *data,
 	hci_dev_unlock(hdev);
 
 	return mgmt_cmd_complete(sk, hdev->id, MGMT_OP_LOAD_CONN_PARAM, 0,
-				 NULL, 0);
-}
-
-static int load_conn_subrate(struct sock *sk, struct hci_dev *hdev, void *data,
-			     u16 len)
-{
-	struct mgmt_cp_load_conn_subrate *cp = data;
-	const u16 max_param_count = ((U16_MAX - sizeof(*cp)) /
-				     sizeof(struct mgmt_conn_subrate));
-	u16 param_count, expected_len;
-	int i;
-
-	if (!lmp_le_capable(hdev) || !le_sci_capable(hdev))
-		return mgmt_cmd_status(sk, hdev->id, MGMT_OP_LOAD_CONN_SUBRATE,
-				       MGMT_STATUS_NOT_SUPPORTED);
-
-	param_count = __le16_to_cpu(cp->param_count);
-	if (param_count > max_param_count) {
-		bt_dev_err(hdev, "too big param_count value %u", param_count);
-		return mgmt_cmd_status(sk, hdev->id, MGMT_OP_LOAD_CONN_SUBRATE,
-				       MGMT_STATUS_INVALID_PARAMS);
-	}
-
-	expected_len = struct_size(cp, params, param_count);
-	if (expected_len != len) {
-		bt_dev_err(hdev, "expected %u bytes, got %u bytes",
-			   expected_len, len);
-		return mgmt_cmd_status(sk, hdev->id, MGMT_OP_LOAD_CONN_SUBRATE,
-				       MGMT_STATUS_INVALID_PARAMS);
-	}
-
-	bt_dev_dbg(hdev, "param_count %u", param_count);
-
-	hci_dev_lock(hdev);
-
-	for (i = 0; i < param_count; i++) {
-		struct mgmt_conn_subrate *param = &cp->params[i];
-		struct hci_conn_params *hci_param;
-		u16 min, max, subrate_min, subrate_max;
-		u16 max_latency, cont_num, supv_timeout;
-		u8 addr_type;
-
-		bt_dev_dbg(hdev, "Adding subrate %pMR (type %u)",
-			   &param->addr.bdaddr, param->addr.type);
-
-		if (param->addr.type == BDADDR_LE_PUBLIC) {
-			addr_type = ADDR_LE_DEV_PUBLIC;
-		} else if (param->addr.type == BDADDR_LE_RANDOM) {
-			addr_type = ADDR_LE_DEV_RANDOM;
-		} else {
-			bt_dev_err(hdev, "ignoring invalid connection subrate parameters");
-			continue;
-		}
-
-		min = le16_to_cpu(param->min_interval);
-		max = le16_to_cpu(param->max_interval);
-		subrate_min = le16_to_cpu(param->subrate_min);
-		subrate_max = le16_to_cpu(param->subrate_max);
-		max_latency = le16_to_cpu(param->max_latency);
-		cont_num = le16_to_cpu(param->cont_num);
-		supv_timeout = le16_to_cpu(param->supv_timeout);
-
-		/* Validate the parameters before storing them. Reject
-		 * logically inconsistent values instead of forwarding them to
-		 * the controller.
-		 */
-		if (min > max || subrate_min > subrate_max ||
-		    subrate_min < 1 || supv_timeout < 1) {
-			bt_dev_err(hdev, "ignoring invalid connection subrate parameters");
-			continue;
-		}
-
-		hci_param = hci_conn_params_add(hdev, &param->addr.bdaddr,
-						addr_type);
-		if (!hci_param) {
-			bt_dev_err(hdev, "failed to add connection parameters");
-			continue;
-		}
-
-		hci_param->rate_min_interval = min;
-		hci_param->rate_max_interval = max;
-		hci_param->subrate_min = subrate_min;
-		hci_param->subrate_max = subrate_max;
-		hci_param->max_latency = max_latency;
-		hci_param->cont_num = cont_num;
-		hci_param->rate_supv_timeout = supv_timeout;
-
-		/* If the device is connected check if the connection rate
-		 * parameters need to be updated, either role can initiate the
-		 * Connection Rate Update procedure, e.g. a HID device acting
-		 * as peripheral once the HID host requests a HID SCI mode.
-		 */
-		if (!i && param_count == 1) {
-			struct hci_conn *conn;
-
-			conn = hci_conn_hash_lookup_le(hdev,
-						       &hci_param->addr,
-						       addr_type);
-			if (conn && conn->state == BT_CONNECTED &&
-			    (conn->le_rate_interval < min ||
-			     conn->le_rate_interval > max ||
-			     conn->le_subrate < subrate_min ||
-			     conn->le_subrate > subrate_max ||
-			     conn->le_rate_latency != max_latency ||
-			     conn->le_cont_num != cont_num ||
-			     conn->le_rate_supv_timeout != supv_timeout))
-				hci_le_conn_rate_request(hdev, conn);
-		}
-	}
-
-	hci_dev_unlock(hdev);
-
-	return mgmt_cmd_complete(sk, hdev->id, MGMT_OP_LOAD_CONN_SUBRATE, 0,
 				 NULL, 0);
 }
 
@@ -8998,21 +8818,6 @@ static bool adv_busy(struct hci_dev *hdev)
 	return pending_find(MGMT_OP_SET_LE, hdev);
 }
 
-/* Global advertising, enabled with MGMT_OP_SET_ADVERTISING, uses instance 0
- * and takes precedence over any instance that would share its advertising
- * set: with legacy advertising there is only a single set so all instances
- * are overridden, whereas with extended advertising only an instance using
- * handle 0x00 is.
- */
-static bool adv_overridden_by_global(struct hci_dev *hdev,
-				     struct adv_info *adv)
-{
-	if (!hci_dev_test_flag(hdev, HCI_ADVERTISING))
-		return false;
-
-	return !ext_adv_capable(hdev) || !adv->handle;
-}
-
 static void add_adv_complete(struct hci_dev *hdev, struct sock *sk, u8 instance,
 			     int err)
 {
@@ -9174,19 +8979,13 @@ static int add_advertising(struct sock *sk, struct hci_dev *hdev,
 		schedule_instance = cp->instance;
 	}
 
-	/* If the instance is overridden by global advertising or the device
-	 * isn't powered or there is no instance to be advertised then we have
-	 * no HCI communication to make. Simply return.
+	/* If the HCI_ADVERTISING flag is set or the device isn't powered or
+	 * there is no instance to be advertised then we have no HCI
+	 * communication to make. Simply return.
 	 */
 	if (!hdev_is_powered(hdev) ||
-	    adv_overridden_by_global(hdev, adv) ||
+	    hci_dev_test_flag(hdev, HCI_ADVERTISING) ||
 	    !schedule_instance) {
-		/* Instance has been accepted so it shall no longer be
-		 * considered pending, otherwise a later failure in
-		 * add_adv_complete would remove it.
-		 */
-		adv->pending = false;
-
 		rp.instance = cp->instance;
 		err = mgmt_cmd_complete(sk, hdev->id, MGMT_OP_ADD_ADVERTISING,
 					MGMT_STATUS_SUCCESS, &rp, sizeof(rp));
@@ -9360,24 +9159,20 @@ static int add_ext_adv_params(struct sock *sk, struct hci_dev *hdev,
 		goto unlock;
 	}
 
-	/* Submit request for advertising params if ext adv available, unless
-	 * the set is in use by global advertising in which case the params
-	 * will be programmed once the instance is scheduled.
-	 */
-	if (ext_adv_capable(hdev) && !adv_overridden_by_global(hdev, adv)) {
+	/* Submit request for advertising params if ext adv available */
+	if (ext_adv_capable(hdev)) {
 		cmd = mgmt_pending_new(sk, MGMT_OP_ADD_EXT_ADV_PARAMS, hdev,
 				       data, data_len);
 		if (!cmd) {
 			err = -ENOMEM;
-			goto remove;
+			hci_remove_adv_instance(hdev, cp->instance);
+			goto unlock;
 		}
 
 		err = hci_cmd_sync_queue(hdev, add_ext_adv_params_sync, cmd,
 					 add_ext_adv_params_complete);
-		if (err < 0) {
+		if (err < 0)
 			mgmt_pending_free(cmd);
-			goto remove;
-		}
 	} else {
 		rp.instance = cp->instance;
 		rp.tx_power = HCI_ADV_TX_POWER_NO_PREFERENCE;
@@ -9387,18 +9182,6 @@ static int add_ext_adv_params(struct sock *sk, struct hci_dev *hdev,
 					MGMT_OP_ADD_EXT_ADV_PARAMS,
 					MGMT_STATUS_SUCCESS, &rp, sizeof(rp));
 	}
-
-	goto unlock;
-
-remove:
-	/* The instance may have been modified already so remove it, like it
-	 * is done in add_ext_adv_params_complete, signaling it has been
-	 * removed if it was previously added.
-	 */
-	if (!adv->pending)
-		mgmt_advertising_removed(sk, hdev, cp->instance);
-
-	hci_remove_adv_instance(hdev, cp->instance);
 
 unlock:
 	hci_dev_unlock(hdev);
@@ -9527,12 +9310,11 @@ static int add_ext_adv_data(struct sock *sk, struct hci_dev *hdev, void *data,
 		schedule_instance = cp->instance;
 	}
 
-	/* If the instance is overridden by global advertising or there is no
-	 * instance to be advertised then we have no HCI communication to make.
+	/* If the HCI_ADVERTISING flag is set or there is no instance to
+	 * be advertised then we have no HCI communication to make.
 	 * Simply return.
 	 */
-	if (adv_overridden_by_global(hdev, adv_instance) ||
-	    !schedule_instance) {
+	if (hci_dev_test_flag(hdev, HCI_ADVERTISING) || !schedule_instance) {
 		if (adv_instance->pending) {
 			mgmt_advertising_added(sk, hdev, cp->instance);
 			adv_instance->pending = false;
@@ -9608,11 +9390,7 @@ static int remove_advertising_sync(struct hci_dev *hdev, void *data)
 	if (err)
 		return err;
 
-	/* Don't disable advertising if global advertising (instance 0) is
-	 * enabled since it is not affected by removing instances.
-	 */
-	if (list_empty(&hdev->adv_instances) &&
-	    !hci_dev_test_flag(hdev, HCI_ADVERTISING))
+	if (list_empty(&hdev->adv_instances))
 		err = hci_disable_advertising_sync(hdev);
 
 	return err;
@@ -9835,8 +9613,6 @@ static const struct hci_mgmt_handler mgmt_handlers[] = {
 						HCI_MGMT_VAR_LEN },
 	{ mesh_send_cancel,        MGMT_MESH_SEND_CANCEL_SIZE },
 	{ mgmt_hci_cmd_sync,       MGMT_HCI_CMD_SYNC_SIZE, HCI_MGMT_VAR_LEN },
-	{ load_conn_subrate,       MGMT_LOAD_CONN_SUBRATE_SIZE,
-						HCI_MGMT_VAR_LEN },
 };
 
 void mgmt_index_added(struct hci_dev *hdev)
@@ -10171,14 +9947,6 @@ void mgmt_device_connected(struct hci_dev *hdev, struct hci_conn *conn,
 	ev->eir_len = cpu_to_le16(eir_len);
 
 	mgmt_event_skb(skb, NULL);
-
-	/* Connections that negotiated encryption as part of setup (e.g. via
-	 * an existing link key) had their security level change suppressed
-	 * since userspace did not know about them yet, so report it now.
-	 * Unencrypted connections have no change to report.
-	 */
-	if (test_bit(HCI_CONN_ENCRYPT, &conn->flags))
-		mgmt_security_level_changed(conn);
 }
 
 static void unpair_device_rsp(struct mgmt_pending_cmd *cmd, void *data)
@@ -10208,22 +9976,6 @@ bool mgmt_powering_down(struct hci_dev *hdev)
 		return true;
 
 	return false;
-}
-
-u8 hci_to_mgmt_reason(u8 err)
-{
-	switch (err) {
-	case HCI_ERROR_CONNECTION_TIMEOUT:
-		return MGMT_DEV_DISCONN_TIMEOUT;
-	case HCI_ERROR_REMOTE_USER_TERM:
-	case HCI_ERROR_REMOTE_LOW_RESOURCES:
-	case HCI_ERROR_REMOTE_POWER_OFF:
-		return MGMT_DEV_DISCONN_REMOTE;
-	case HCI_ERROR_LOCAL_HOST_TERM:
-		return MGMT_DEV_DISCONN_LOCAL_HOST;
-	default:
-		return MGMT_DEV_DISCONN_UNKNOWN;
-	}
 }
 
 void mgmt_device_disconnected(struct hci_dev *hdev, bdaddr_t *bdaddr,
@@ -10285,14 +10037,9 @@ void mgmt_connect_failed(struct hci_dev *hdev, struct hci_conn *conn, u8 status)
 {
 	struct mgmt_ev_connect_failed ev;
 
-	/* Only peek at the flag here: hci_conn_del() (via hci_conn_unlink())
-	 * still needs it set to know whether to report the security level
-	 * reset, so it is consumed there instead of here.
-	 */
-	if (test_bit(HCI_CONN_MGMT_CONNECTED, &conn->flags)) {
+	if (test_and_clear_bit(HCI_CONN_MGMT_CONNECTED, &conn->flags)) {
 		mgmt_device_disconnected(hdev, &conn->dst, conn->type,
-					 conn->dst_type,
-					 hci_to_mgmt_reason(status), true);
+					 conn->dst_type, status, true);
 		return;
 	}
 
@@ -10923,57 +10670,6 @@ void mgmt_device_found(struct hci_dev *hdev, bdaddr_t *bdaddr, u8 link_type,
 	mgmt_adv_monitor_device_found(hdev, bdaddr, report_device, skb, NULL);
 }
 
-void mgmt_security_level_changed(struct hci_conn *conn)
-{
-	struct mgmt_ev_security_level_changed *ev;
-	struct mgmt_tlv *tlv;
-	u8 *tlv_data;
-	u8 tlv_len;
-
-	if (!test_bit(HCI_CONN_MGMT_CONNECTED, &conn->flags))
-		return;
-
-	/* Only ACL, LE and BIS links are tracked as mgmt connections, so
-	 * restrict the event to those link types. Other transports (SCO,
-	 * CIS, PA sync, ...) share the parent's address and would otherwise
-	 * report a spurious security level change for it.
-	 */
-	if (conn->type != ACL_LINK && conn->type != LE_LINK &&
-	    conn->type != BIS_LINK)
-		return;
-
-	tlv_len = 2 * (sizeof(*tlv) + sizeof(__u8));
-	ev = kzalloc_flex(*ev, tlv_data, tlv_len, GFP_KERNEL);
-	if (!ev)
-		return;
-
-	bacpy(&ev->addr.bdaddr, &conn->dst);
-	ev->addr.type = link_to_bdaddr(conn->type, conn->dst_type);
-	ev->tlv_length = tlv_len;
-
-	tlv_data = ev->tlv_data;
-	tlv = (void *)tlv_data;
-	tlv->type = cpu_to_le16(MGMT_SEC_LEVEL_CHANGED_PARAM_LEVEL);
-	tlv->length = sizeof(__u8);
-	tlv->value[0] = conn->sec_level;
-
-	tlv_data += sizeof(*tlv) + sizeof(__u8);
-	tlv = (void *)tlv_data;
-	tlv->type = cpu_to_le16(MGMT_SEC_LEVEL_CHANGED_PARAM_ENC_TYPE);
-	tlv->length = sizeof(__u8);
-	if (!test_bit(HCI_CONN_ENCRYPT, &conn->flags))
-		tlv->value[0] = MGMT_CONN_SEC_ENCRYPT_NONE;
-	else if (test_bit(HCI_CONN_AES_CCM, &conn->flags))
-		tlv->value[0] = MGMT_CONN_SEC_ENCRYPT_AES_CCM;
-	else
-		tlv->value[0] = MGMT_CONN_SEC_ENCRYPT_E0;
-
-	mgmt_event(MGMT_EV_SECURITY_LEVEL_CHANGED, conn->hdev, ev,
-		   struct_size(ev, tlv_data, tlv_len), NULL);
-
-	kfree(ev);
-}
-
 void mgmt_remote_name(struct hci_dev *hdev, bdaddr_t *bdaddr, u8 link_type,
 		      u8 addr_type, s8 rssi, u8 *name, u8 name_len)
 {
@@ -11050,23 +10746,6 @@ static struct hci_mgmt_chan chan = {
 int mgmt_init(void)
 {
 	return hci_mgmt_chan_register(&chan);
-}
-
-void mgmt_conn_subrate_notify(struct hci_dev *hdev, struct hci_conn *conn,
-			      u8 status)
-{
-	struct mgmt_ev_conn_subrate ev;
-
-	bacpy(&ev.addr.bdaddr, &conn->dst);
-	ev.addr.type = link_to_bdaddr(conn->type, conn->dst_type);
-	ev.status = mgmt_status(status);
-	ev.interval = cpu_to_le16(conn->le_rate_interval);
-	ev.subrate = cpu_to_le16(conn->le_subrate);
-	ev.latency = cpu_to_le16(conn->le_rate_latency);
-	ev.cont_num = cpu_to_le16(conn->le_cont_num);
-	ev.supv_timeout = cpu_to_le16(conn->le_rate_supv_timeout);
-
-	mgmt_event(MGMT_EV_CONN_SUBRATE, hdev, &ev, sizeof(ev), NULL);
 }
 
 void mgmt_exit(void)

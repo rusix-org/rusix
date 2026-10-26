@@ -18,7 +18,6 @@
 #include <linux/spinlock.h>
 #include <linux/hdreg.h>
 #include <linux/mutex.h>
-#include <linux/sched/mm.h>
 #include <linux/uaccess.h>
 
 #include "mtdcore.h"
@@ -168,7 +167,6 @@ static blk_status_t mtd_queue_rq(struct blk_mq_hw_ctx *hctx,
 				 const struct blk_mq_queue_data *bd)
 {
 	struct mtd_blktrans_dev *dev;
-	unsigned int noio_flags;
 
 	dev = hctx->queue->queuedata;
 	if (!dev) {
@@ -176,13 +174,10 @@ static blk_status_t mtd_queue_rq(struct blk_mq_hw_ctx *hctx,
 		return BLK_STS_IOERR;
 	}
 
-	/* Reclaim must not recurse into I/O while processing requests. */
-	noio_flags = memalloc_noio_save();
 	spin_lock_irq(&dev->queue_lock);
 	list_add_tail(&bd->rq->queuelist, &dev->rq_list);
 	mtd_blktrans_work(dev);
 	spin_unlock_irq(&dev->queue_lock);
-	memalloc_noio_restore(noio_flags);
 
 	return BLK_STS_OK;
 }
@@ -329,7 +324,7 @@ int add_mtd_blktrans_dev(struct mtd_blktrans_dev *new)
 		new->readonly = 1;
 
 	ret = -ENOMEM;
-	new->tag_set = kzalloc_obj(*new->tag_set);
+	new->tag_set = kzalloc(sizeof(*new->tag_set), GFP_KERNEL);
 	if (!new->tag_set)
 		goto out_list_del;
 

@@ -17,17 +17,13 @@ description:
 
 properties:
   compatible:
-    oneOf:
-      - items:
-          - enum:
-              - nuvoton,npcm845-gcr
-          - const: syscon
-      - items:
-          - enum:
-              - nuvoton,wpcm450-gcr
-              - nuvoton,npcm750-gcr
-          - const: syscon
-          - const: simple-mfd
+    items:
+      - enum:
+          - nuvoton,wpcm450-gcr
+          - nuvoton,npcm750-gcr
+          - nuvoton,npcm845-gcr
+      - const: syscon
+      - const: simple-mfd
 
   reg:
     maxItems: 1

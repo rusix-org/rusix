@@ -61,7 +61,8 @@ static int quirks_param_set(const char *value, const struct kernel_param *kp)
 		quirk_list = NULL;
 	}
 
-	quirk_list = kzalloc_objs(struct quirk_entry, quirk_count);
+	quirk_list = kcalloc(quirk_count, sizeof(struct quirk_entry),
+			     GFP_KERNEL);
 	if (!quirk_list) {
 		quirk_count = 0;
 		mutex_unlock(&quirk_mutex);
@@ -611,9 +612,6 @@ static const struct usb_device_id usb_quirk_list[] = {
 
 	/* ezcap401 - BOS descriptor fetch hangs at SuperSpeed Plus */
 	{ USB_DEVICE(0x32ed, 0x0401), .driver_info = USB_QUIRK_NO_BOS },
-
-	/* GameSir G7 SE */
-	{ USB_DEVICE(0x3537, 0x10a0), .driver_info = USB_QUIRK_WINDOWS_CONFIG_REQ_SIZE },
 
 	/* DELL USB GEN2 */
 	{ USB_DEVICE(0x413c, 0xb062), .driver_info = USB_QUIRK_NO_LPM | USB_QUIRK_RESET_RESUME },

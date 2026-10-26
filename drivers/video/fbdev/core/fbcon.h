@@ -11,19 +11,12 @@
 #ifndef _VIDEO_FBCON_H
 #define _VIDEO_FBCON_H
 
-#include <linux/compiler_types.h>
-#include <linux/font.h>
 #include <linux/types.h>
 #include <linux/vt_buffer.h>
 #include <linux/vt_kern.h>
 #include <linux/workqueue.h>
 
 #include <asm/io.h>
-
-struct fb_blit_caps;
-struct fb_info;
-struct fb_var_screeninfo;
-struct fb_videomode;
 
    /*
     *    This is the interface between the low-level console driver and the
@@ -32,7 +25,8 @@ struct fb_videomode;
 
 struct fbcon_display {
     /* Filled in by the low-level console driver */
-    font_data_t *fontdata;
+    const u_char *fontdata;
+    int userfont;                   /* != 0 if fontdata kmalloc()ed */
 #ifdef CONFIG_FRAMEBUFFER_CONSOLE_LEGACY_ACCELERATION
     u_short scrollmode;             /* Scroll Method, use fb_scrollmode() */
 #endif
@@ -56,7 +50,7 @@ struct fbcon_display {
     const struct fb_videomode *mode;
 };
 
-struct fbcon_bitops {
+struct fbcon_par {
 	void (*bmove)(struct vc_data *vc, struct fb_info *info, int sy,
 		      int sx, int dy, int dx, int height, int width);
 	void (*clear)(struct vc_data *vc, struct fb_info *info, int sy,
@@ -70,21 +64,6 @@ struct fbcon_bitops {
 		       bool enable, int fg, int bg);
 	int  (*update_start)(struct fb_info *info);
 	int  (*rotate_font)(struct fb_info *info, struct vc_data *vc);
-};
-
-#ifdef CONFIG_FRAMEBUFFER_CONSOLE_ROTATION
-struct fbcon_rotated {
-	font_data_t *fontdata;       /* source font */
-	u8 *buf;                     /* rotated glyphs */
-	size_t bufsize;
-	int buf_rotate;              /* rotation of buf */
-	unsigned int buf_width;      /* geometry of source font */
-	unsigned int buf_height;
-	unsigned int buf_charcount;
-};
-#endif
-
-struct fbcon_par {
 	struct fb_var_screeninfo var;  /* copy of the current fb_var_screeninfo */
 	struct delayed_work cursor_work; /* Cursor timer */
 	struct fb_cursor cursor_state;
@@ -96,18 +75,17 @@ struct fbcon_par {
 	int    cursor_reset;
 	int    blank_state;
 	int    graphics;
+	int    save_graphics; /* for debug enter/leave */
 	bool   initialized;
 	int    rotate;
+	int    cur_rotate;
 	char  *cursor_data;
-#ifdef CONFIG_FRAMEBUFFER_CONSOLE_ROTATION
-	struct fbcon_rotated rotated;
-#endif
+	u8    *fontbuffer;
+	u8    *fontdata;
 	u8    *cursor_src;
 	u32    cursor_size;
-
-	const struct fbcon_bitops *bitops;
+	u32    fd_size;
 };
-
     /*
      *  Attribute Decoding
      */
@@ -127,6 +105,7 @@ struct fbcon_par {
 	((s) & 0x400)
 #define attr_blink(s) \
 	((s) & 0x8000)
+	
 
 static inline int mono_col(const struct fb_info *info)
 {
@@ -206,10 +185,8 @@ static inline u_short fb_scrollmode(struct fbcon_display *fb)
 #ifdef CONFIG_FB_TILEBLITTING
 extern void fbcon_set_tileops(struct vc_data *vc, struct fb_info *info);
 #endif
-extern void fbcon_set_bitops_ur(struct fbcon_par *par);
+extern void fbcon_set_bitops(struct fbcon_par *par);
 extern int  soft_cursor(struct fb_info *info, struct fb_cursor *cursor);
-
-unsigned char *fbcon_cursor_glyph(const struct vc_font *font, unsigned int cursor_type);
 
 #define FBCON_ATTRIBUTE_UNDERLINE 1
 #define FBCON_ATTRIBUTE_REVERSE   2
@@ -246,48 +223,10 @@ static inline int get_attribute(struct fb_info *info, u16 c)
         (void) (&_r == &_v); \
         (i == FB_ROTATE_UR || i == FB_ROTATE_UD) ? _r : _v; })
 
-#ifdef CONFIG_FRAMEBUFFER_CONSOLE
-void __init fb_console_init(void);
-void __exit fb_console_exit(void);
-int fbcon_fb_registered(struct fb_info *info);
-void fbcon_fb_unregistered(struct fb_info *info);
-void fbcon_fb_unbind(struct fb_info *info);
-void fbcon_suspended(struct fb_info *info);
-void fbcon_resumed(struct fb_info *info);
-int fbcon_mode_deleted(struct fb_info *info,
-		       struct fb_videomode *mode);
-void fbcon_delete_modelist(struct list_head *head);
-void fbcon_new_modelist(struct fb_info *info);
-void fbcon_get_requirement(struct fb_info *info,
-			   struct fb_blit_caps *caps);
-void fbcon_fb_blanked(struct fb_info *info, int blank);
-int  fbcon_modechange_possible(struct fb_info *info,
-			       struct fb_var_screeninfo *var);
-void fbcon_update_vcs(struct fb_info *info, bool all);
-void fbcon_remap_all(struct fb_info *info);
-int fbcon_set_con2fb_map_ioctl(void __user *argp);
-int fbcon_get_con2fb_map_ioctl(void __user *argp);
+#ifdef CONFIG_FRAMEBUFFER_CONSOLE_ROTATION
+extern void fbcon_set_rotate(struct fbcon_par *par);
 #else
-static inline void fb_console_init(void) {}
-static inline void fb_console_exit(void) {}
-static inline int fbcon_fb_registered(struct fb_info *info) { return 0; }
-static inline void fbcon_fb_unregistered(struct fb_info *info) {}
-static inline void fbcon_fb_unbind(struct fb_info *info) {}
-static inline void fbcon_suspended(struct fb_info *info) {}
-static inline void fbcon_resumed(struct fb_info *info) {}
-static inline int fbcon_mode_deleted(struct fb_info *info,
-				     struct fb_videomode *mode) { return 0; }
-static inline void fbcon_delete_modelist(struct list_head *head) {}
-static inline void fbcon_new_modelist(struct fb_info *info) {}
-static inline void fbcon_get_requirement(struct fb_info *info,
-					 struct fb_blit_caps *caps) {}
-static inline void fbcon_fb_blanked(struct fb_info *info, int blank) {}
-static inline int  fbcon_modechange_possible(struct fb_info *info,
-				struct fb_var_screeninfo *var) { return 0; }
-static inline void fbcon_update_vcs(struct fb_info *info, bool all) {}
-static inline void fbcon_remap_all(struct fb_info *info) {}
-static inline int fbcon_set_con2fb_map_ioctl(void __user *argp) { return 0; }
-static inline int fbcon_get_con2fb_map_ioctl(void __user *argp) { return 0; }
-#endif
+#define fbcon_set_rotate(x) do {} while(0)
+#endif /* CONFIG_FRAMEBUFFER_CONSOLE_ROTATION */
 
 #endif /* _VIDEO_FBCON_H */

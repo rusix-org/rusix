@@ -210,7 +210,9 @@ struct nvmet_pci_epf {
 
 	bool				dma_enabled;
 	struct dma_chan			*dma_tx_chan;
+	struct mutex			dma_tx_lock;
 	struct dma_chan			*dma_rx_chan;
+	struct mutex			dma_rx_lock;
 
 	struct mutex			mmio_lock;
 
@@ -293,6 +295,9 @@ static void nvmet_pci_epf_init_dma(struct nvmet_pci_epf *nvme_epf)
 	struct dma_chan *chan;
 	dma_cap_mask_t mask;
 
+	mutex_init(&nvme_epf->dma_rx_lock);
+	mutex_init(&nvme_epf->dma_tx_lock);
+
 	dma_cap_zero(mask);
 	dma_cap_set(DMA_SLAVE, mask);
 
@@ -315,14 +320,12 @@ static void nvmet_pci_epf_init_dma(struct nvmet_pci_epf *nvme_epf)
 	nvme_epf->dma_enabled = true;
 
 	dev_dbg(dev, "Using DMA RX channel %s, maximum segment size %u B\n",
-		dma_chan_name(nvme_epf->dma_rx_chan),
-		dma_get_max_seg_size(dmaengine_get_dma_device(nvme_epf->
-							      dma_rx_chan)));
+		dma_chan_name(chan),
+		dma_get_max_seg_size(dmaengine_get_dma_device(chan)));
 
 	dev_dbg(dev, "Using DMA TX channel %s, maximum segment size %u B\n",
-		dma_chan_name(nvme_epf->dma_tx_chan),
-		dma_get_max_seg_size(dmaengine_get_dma_device(nvme_epf->
-							      dma_tx_chan)));
+		dma_chan_name(chan),
+		dma_get_max_seg_size(dmaengine_get_dma_device(chan)));
 
 	return;
 
@@ -331,6 +334,8 @@ out_dma_no_tx:
 	nvme_epf->dma_rx_chan = NULL;
 
 out_dma_no_rx:
+	mutex_destroy(&nvme_epf->dma_rx_lock);
+	mutex_destroy(&nvme_epf->dma_tx_lock);
 	nvme_epf->dma_enabled = false;
 
 	dev_info(&epf->dev, "DMA not supported, falling back to MMIO\n");
@@ -345,6 +350,8 @@ static void nvmet_pci_epf_deinit_dma(struct nvmet_pci_epf *nvme_epf)
 	nvme_epf->dma_tx_chan = NULL;
 	dma_release_channel(nvme_epf->dma_rx_chan);
 	nvme_epf->dma_rx_chan = NULL;
+	mutex_destroy(&nvme_epf->dma_rx_lock);
+	mutex_destroy(&nvme_epf->dma_tx_lock);
 	nvme_epf->dma_enabled = false;
 }
 
@@ -359,15 +366,18 @@ static int nvmet_pci_epf_dma_transfer(struct nvmet_pci_epf *nvme_epf,
 	struct dma_chan *chan;
 	dma_cookie_t cookie;
 	dma_addr_t dma_addr;
+	struct mutex *lock;
 	int ret;
 
 	switch (dir) {
 	case DMA_FROM_DEVICE:
+		lock = &nvme_epf->dma_rx_lock;
 		chan = nvme_epf->dma_rx_chan;
 		sconf.direction = DMA_DEV_TO_MEM;
 		sconf.src_addr = seg->pci_addr;
 		break;
 	case DMA_TO_DEVICE:
+		lock = &nvme_epf->dma_tx_lock;
 		chan = nvme_epf->dma_tx_chan;
 		sconf.direction = DMA_MEM_TO_DEV;
 		sconf.dst_addr = seg->pci_addr;
@@ -376,15 +386,22 @@ static int nvmet_pci_epf_dma_transfer(struct nvmet_pci_epf *nvme_epf,
 		return -EINVAL;
 	}
 
+	mutex_lock(lock);
+
 	dma_dev = dmaengine_get_dma_device(chan);
 	dma_addr = dma_map_single(dma_dev, seg->buf, seg->length, dir);
 	ret = dma_mapping_error(dma_dev, dma_addr);
 	if (ret)
-		return ret;
+		goto unlock;
 
-	desc = dmaengine_prep_config_single_safe(chan, dma_addr, seg->length,
-						 sconf.direction,
-						 DMA_CTRL_ACK, &sconf);
+	ret = dmaengine_slave_config(chan, &sconf);
+	if (ret) {
+		dev_err(dev, "Failed to configure DMA channel\n");
+		goto unmap;
+	}
+
+	desc = dmaengine_prep_slave_single(chan, dma_addr, seg->length,
+					   sconf.direction, DMA_CTRL_ACK);
 	if (!desc) {
 		dev_err(dev, "Failed to prepare DMA\n");
 		ret = -EIO;
@@ -401,11 +418,15 @@ static int nvmet_pci_epf_dma_transfer(struct nvmet_pci_epf *nvme_epf,
 	if (dma_sync_wait(chan, cookie) != DMA_COMPLETE) {
 		dev_err(dev, "DMA transfer failed\n");
 		ret = -EIO;
-		dmaengine_terminate_sync(chan);
 	}
+
+	dmaengine_terminate_sync(chan);
 
 unmap:
 	dma_unmap_single(dma_dev, dma_addr, seg->length, dir);
+
+unlock:
+	mutex_unlock(lock);
 
 	return ret;
 }
@@ -479,8 +500,9 @@ static inline int nvmet_pci_epf_transfer(struct nvmet_pci_epf_ctrl *ctrl,
 
 static int nvmet_pci_epf_alloc_irq_vectors(struct nvmet_pci_epf_ctrl *ctrl)
 {
-	ctrl->irq_vectors = kzalloc_objs(struct nvmet_pci_epf_irq_vector,
-					 ctrl->nr_queues);
+	ctrl->irq_vectors = kcalloc(ctrl->nr_queues,
+				    sizeof(struct nvmet_pci_epf_irq_vector),
+				    GFP_KERNEL);
 	if (!ctrl->irq_vectors)
 		return -ENOMEM;
 
@@ -1543,11 +1565,13 @@ static int nvmet_pci_epf_alloc_queues(struct nvmet_pci_epf_ctrl *ctrl)
 {
 	unsigned int qid;
 
-	ctrl->sq = kzalloc_objs(struct nvmet_pci_epf_queue, ctrl->nr_queues);
+	ctrl->sq = kcalloc(ctrl->nr_queues,
+			   sizeof(struct nvmet_pci_epf_queue), GFP_KERNEL);
 	if (!ctrl->sq)
 		return -ENOMEM;
 
-	ctrl->cq = kzalloc_objs(struct nvmet_pci_epf_queue, ctrl->nr_queues);
+	ctrl->cq = kcalloc(ctrl->nr_queues,
+			   sizeof(struct nvmet_pci_epf_queue), GFP_KERNEL);
 	if (!ctrl->cq) {
 		kfree(ctrl->sq);
 		ctrl->sq = NULL;

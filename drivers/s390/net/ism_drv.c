@@ -4,7 +4,8 @@
  *
  * Copyright IBM Corp. 2018
  */
-#define pr_fmt(fmt) "ism: " fmt
+#define KMSG_COMPONENT "ism"
+#define pr_fmt(fmt) KMSG_COMPONENT ": " fmt
 
 #include <linux/export.h>
 #include <linux/module.h>
@@ -23,8 +24,8 @@ MODULE_LICENSE("GPL");
 #define DRV_NAME "ism"
 
 static const struct pci_device_id ism_device_table[] = {
-	{ PCI_VDEVICE(IBM, PCI_DEVICE_ID_IBM_ISM) },
-	{ }
+	{ PCI_VDEVICE(IBM, PCI_DEVICE_ID_IBM_ISM), 0 },
+	{ 0, }
 };
 MODULE_DEVICE_TABLE(pci, ism_device_table);
 
@@ -256,8 +257,7 @@ static int ism_alloc_dmb(struct ism_dev *ism, struct dibs_dmb *dmb)
 		return -EINVAL;
 
 	folio = folio_alloc(GFP_KERNEL | __GFP_NOWARN | __GFP_NOMEMALLOC |
-			    __GFP_NORETRY | __GFP_ZERO,
-			    get_order(dmb->dmb_len));
+			    __GFP_NORETRY, get_order(dmb->dmb_len));
 
 	if (!folio) {
 		rc = -ENOMEM;
@@ -612,7 +612,7 @@ static int ism_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 	struct ism_dev *ism;
 	int ret;
 
-	ism = kzalloc_obj(*ism);
+	ism = kzalloc(sizeof(*ism), GFP_KERNEL);
 	if (!ism)
 		return -ENOMEM;
 

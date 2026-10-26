@@ -8,10 +8,10 @@
 #include "kvm_util.h"
 #include "ucall_common.h"
 
-#define LABEL_ADDRESS(v) ((u64)&(v))
+#define LABEL_ADDRESS(v) ((uint64_t)&(v))
 
 extern unsigned char sw_bp_1, sw_bp_2;
-static u64 sw_bp_addr;
+static uint64_t sw_bp_addr;
 
 static void guest_code(void)
 {
@@ -37,7 +37,7 @@ int main(void)
 {
 	struct kvm_vm *vm;
 	struct kvm_vcpu *vcpu;
-	u64 pc;
+	uint64_t pc;
 	struct kvm_guest_debug debug = {
 		.control = KVM_GUESTDBG_ENABLE,
 	};

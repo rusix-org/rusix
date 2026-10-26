@@ -261,16 +261,13 @@ static int menu_select(struct cpuidle_driver *drv, struct cpuidle_device *dev,
 		predicted_ns = min((u64)timer_us * NSEC_PER_USEC, predicted_ns);
 		/*
 		 * If the tick is already stopped, the cost of possible short
-		 * idle duration misprediction is higher because the CPU may get
-		 * stuck in a shallow idle state then.  To avoid that, if
-		 * predicted_ns is small enough, say it might be mispredicted
-		 * and use the known time till the closest timer for idle state
-		 * selection unless that timer is going to trigger within
-		 * SAFE_TIMER_RANGE_NS in which case it can be regarded as a
-		 * sufficient safety net.
+		 * idle duration misprediction is much higher, because the CPU
+		 * may be stuck in a shallow idle state for a long time as a
+		 * result of it.  In that case, say we might mispredict and use
+		 * the known time till the closest timer event for the idle
+		 * state selection.
 		 */
-		if (tick_nohz_tick_stopped() && predicted_ns < TICK_NSEC &&
-		    data->next_timer_ns > SAFE_TIMER_RANGE_NS)
+		if (tick_nohz_tick_stopped() && predicted_ns < TICK_NSEC)
 			predicted_ns = data->next_timer_ns;
 	} else {
 		/*
@@ -284,10 +281,10 @@ static int menu_select(struct cpuidle_driver *drv, struct cpuidle_device *dev,
 		data->bucket = BUCKETS - 1;
 	}
 
-	if (!dev->states_usage[0].disable &&
-	    (latency_req == 0 ||
-	     data->next_timer_ns < drv->states[1].target_residency_ns ||
-	     latency_req < drv->states[1].exit_latency_ns)) {
+	if (unlikely(drv->state_count <= 1 || latency_req == 0) ||
+	    ((data->next_timer_ns < drv->states[1].target_residency_ns ||
+	      latency_req < drv->states[1].exit_latency_ns) &&
+	     !dev->states_usage[0].disable)) {
 		/*
 		 * In this case state[0] will be used no matter what, so return
 		 * it right away and keep the tick running if state[0] is a

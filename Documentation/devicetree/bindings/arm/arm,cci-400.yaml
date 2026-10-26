@@ -45,11 +45,7 @@ patternProperties:
 
     properties:
       compatible:
-        oneOf:
-          - const: arm,cci-400-ctrl-if
-          - items:
-              - const: arm,cci-400-ctrl-if
-              - const: syscon
+        const: arm,cci-400-ctrl-if
 
       interface-type:
         enum:

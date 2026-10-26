@@ -146,7 +146,6 @@ static void setup_ctx(void)
 	bpf_program__set_autoload(ctx.skel->progs.trigger_driver, true);
 
 	ctx.skel->rodata->batch_iters = args.batch_iters;
-	ctx.skel->rodata->stacktrace = env.stacktrace;
 }
 
 static void load_ctx(void)
@@ -181,10 +180,10 @@ static void trigger_kernel_count_setup(void)
 {
 	setup_ctx();
 	bpf_program__set_autoload(ctx.skel->progs.trigger_driver, false);
-	bpf_program__set_autoload(ctx.skel->progs.trigger_kernel_count, true);
+	bpf_program__set_autoload(ctx.skel->progs.trigger_count, true);
 	load_ctx();
 	/* override driver program */
-	ctx.driver_prog_fd = bpf_program__fd(ctx.skel->progs.trigger_kernel_count);
+	ctx.driver_prog_fd = bpf_program__fd(ctx.skel->progs.trigger_count);
 }
 
 static void trigger_kprobe_setup(void)
@@ -230,8 +229,8 @@ static void trigger_fentry_setup(void)
 static void attach_ksyms_all(struct bpf_program *empty, bool kretprobe)
 {
 	LIBBPF_OPTS(bpf_kprobe_multi_opts, opts);
-	struct bpf_link *link = NULL;
-	struct ksyms *ksyms = NULL;
+	char **syms = NULL;
+	size_t cnt = 0;
 
 	/* Some recursive functions will be skipped in
 	 * bpf_get_ksyms -> skip_entry, as they can introduce sufficient
@@ -241,18 +240,16 @@ static void attach_ksyms_all(struct bpf_program *empty, bool kretprobe)
 	 * So, don't run the kprobe-multi-all and kretprobe-multi-all on
 	 * a debug kernel.
 	 */
-	if (bpf_get_ksyms(&ksyms, true)) {
+	if (bpf_get_ksyms(&syms, &cnt, true)) {
 		fprintf(stderr, "failed to get ksyms\n");
 		exit(1);
 	}
 
-	opts.syms = (const char **)ksyms->filtered_syms;
-	opts.cnt = ksyms->filtered_cnt;
+	opts.syms = (const char **) syms;
+	opts.cnt = cnt;
 	opts.retprobe = kretprobe;
 	/* attach empty to all the kernel functions except bpf_get_numa_node_id. */
-	link = bpf_program__attach_kprobe_multi_opts(empty, NULL, &opts);
-	free_kallsyms_local(ksyms);
-	if (!link) {
+	if (!bpf_program__attach_kprobe_multi_opts(empty, NULL, &opts)) {
 		fprintf(stderr, "failed to attach bpf_program__attach_kprobe_multi_opts to all\n");
 		exit(1);
 	}
@@ -396,32 +393,15 @@ static void *uprobe_producer_ret(void *input)
 }
 
 #ifdef __x86_64__
-__nocf_check __weak void uprobe_target_nop10(void)
+__nocf_check __weak void uprobe_target_nop5(void)
 {
-	asm volatile (".byte 0x66, 0x2e, 0x0f, 0x1f, 0x84, 0x00, 0x00, 0x00, 0x00, 0x00");
+	asm volatile (".byte 0x0f, 0x1f, 0x44, 0x00, 0x00");
 }
 
-static void *uprobe_producer_nop10(void *input)
+static void *uprobe_producer_nop5(void *input)
 {
 	while (true)
-		uprobe_target_nop10();
-	return NULL;
-}
-
-void usdt_1(void);
-void usdt_2(void);
-
-static void *uprobe_producer_usdt_nop(void *input)
-{
-	while (true)
-		usdt_1();
-	return NULL;
-}
-
-static void *uprobe_producer_usdt_nop10(void *input)
-{
-	while (true)
-		usdt_2();
+		uprobe_target_nop5();
 	return NULL;
 }
 #endif
@@ -542,65 +522,24 @@ static void uretprobe_multi_ret_setup(void)
 }
 
 #ifdef __x86_64__
-static void uprobe_nop10_setup(void)
+static void uprobe_nop5_setup(void)
 {
-	usetup(false, false /* !use_multi */, &uprobe_target_nop10);
+	usetup(false, false /* !use_multi */, &uprobe_target_nop5);
 }
 
-static void uretprobe_nop10_setup(void)
+static void uretprobe_nop5_setup(void)
 {
-	usetup(true, false /* !use_multi */, &uprobe_target_nop10);
+	usetup(true, false /* !use_multi */, &uprobe_target_nop5);
 }
 
-static void uprobe_multi_nop10_setup(void)
+static void uprobe_multi_nop5_setup(void)
 {
-	usetup(false, true /* use_multi */, &uprobe_target_nop10);
+	usetup(false, true /* use_multi */, &uprobe_target_nop5);
 }
 
-static void uretprobe_multi_nop10_setup(void)
+static void uretprobe_multi_nop5_setup(void)
 {
-	usetup(true, true /* use_multi */, &uprobe_target_nop10);
-}
-
-static void usdt_setup(const char *name)
-{
-	struct bpf_link *link;
-	int err;
-
-	setup_libbpf();
-
-	ctx.skel = trigger_bench__open();
-	if (!ctx.skel) {
-		fprintf(stderr, "failed to open skeleton\n");
-		exit(1);
-	}
-
-	bpf_program__set_autoload(ctx.skel->progs.bench_trigger_usdt, true);
-
-	err = trigger_bench__load(ctx.skel);
-	if (err) {
-		fprintf(stderr, "failed to load skeleton\n");
-		exit(1);
-	}
-
-	link = bpf_program__attach_usdt(ctx.skel->progs.bench_trigger_usdt,
-					0 /*self*/, "/proc/self/exe",
-					"optimized_attach", name, NULL);
-	if (libbpf_get_error(link)) {
-		fprintf(stderr, "failed to attach optimized_attach:%s usdt probe\n", name);
-		exit(1);
-	}
-	ctx.skel->links.bench_trigger_usdt = link;
-}
-
-static void usdt_nop_setup(void)
-{
-	usdt_setup("usdt_1");
-}
-
-static void usdt_nop10_setup(void)
-{
-	usdt_setup("usdt_2");
+	usetup(true, true /* use_multi */, &uprobe_target_nop5);
 }
 #endif
 
@@ -665,10 +604,8 @@ BENCH_TRIG_USERMODE(uretprobe_multi_nop, nop, "uretprobe-multi-nop");
 BENCH_TRIG_USERMODE(uretprobe_multi_push, push, "uretprobe-multi-push");
 BENCH_TRIG_USERMODE(uretprobe_multi_ret, ret, "uretprobe-multi-ret");
 #ifdef __x86_64__
-BENCH_TRIG_USERMODE(uprobe_nop10, nop10, "uprobe-nop10");
-BENCH_TRIG_USERMODE(uretprobe_nop10, nop10, "uretprobe-nop10");
-BENCH_TRIG_USERMODE(uprobe_multi_nop10, nop10, "uprobe-multi-nop10");
-BENCH_TRIG_USERMODE(uretprobe_multi_nop10, nop10, "uretprobe-multi-nop10");
-BENCH_TRIG_USERMODE(usdt_nop, usdt_nop, "usdt-nop");
-BENCH_TRIG_USERMODE(usdt_nop10, usdt_nop10, "usdt-nop10");
+BENCH_TRIG_USERMODE(uprobe_nop5, nop5, "uprobe-nop5");
+BENCH_TRIG_USERMODE(uretprobe_nop5, nop5, "uretprobe-nop5");
+BENCH_TRIG_USERMODE(uprobe_multi_nop5, nop5, "uprobe-multi-nop5");
+BENCH_TRIG_USERMODE(uretprobe_multi_nop5, nop5, "uretprobe-multi-nop5");
 #endif

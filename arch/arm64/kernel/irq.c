@@ -72,7 +72,7 @@ static int __init init_irq_stacks(void)
 	return 0;
 }
 
-#ifdef CONFIG_SOFTIRQ_ON_OWN_STACK
+#ifndef CONFIG_PREEMPT_RT
 static void ____do_softirq(struct pt_regs *regs)
 {
 	__do_softirq();

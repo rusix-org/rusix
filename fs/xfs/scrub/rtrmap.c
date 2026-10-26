@@ -3,7 +3,7 @@
  * Copyright (c) 2018-2024 Oracle.  All Rights Reserved.
  * Author: Darrick J. Wong <djwong@kernel.org>
  */
-#include "xfs_platform.h"
+#include "xfs.h"
 #include "xfs_fs.h"
 #include "xfs_shared.h"
 #include "xfs_format.h"
@@ -46,7 +46,7 @@ xchk_setup_rtrmapbt(
 			return error;
 	}
 
-	error = xchk_rtgroup_init(sc, sc->sm->sm_agno);
+	error = xchk_rtgroup_init(sc, sc->sm->sm_agno, &sc->sr);
 	if (error)
 		return error;
 
@@ -58,7 +58,7 @@ xchk_setup_rtrmapbt(
 	if (error)
 		return error;
 
-	return xchk_rtgroup_lock(sc, XCHK_RTGLOCK_ALL);
+	return xchk_rtgroup_lock(sc, &sc->sr, XCHK_RTGLOCK_ALL);
 }
 
 /* Realtime reverse mapping. */
@@ -250,6 +250,7 @@ int
 xchk_rtrmapbt(
 	struct xfs_scrub	*sc)
 {
+	struct xfs_inode	*ip = rtg_rmap(sc->sr.rtg);
 	struct xfs_owner_info	oinfo;
 	struct xchk_rtrmap	cr = { };
 	int			error;
@@ -258,7 +259,7 @@ xchk_rtrmapbt(
 	if (error || (sc->sm->sm_flags & XFS_SCRUB_OFLAG_CORRUPT))
 		return error;
 
-	xfs_rmap_inode_bmbt_owner(&oinfo, rtg_rmap(sc->sr.rtg), XFS_DATA_FORK);
+	xfs_rmap_ino_bmbt_owner(&oinfo, ip->i_ino, XFS_DATA_FORK);
 	return xchk_btree(sc, sc->sr.rmap_cur, xchk_rtrmapbt_rec, &oinfo, &cr);
 }
 

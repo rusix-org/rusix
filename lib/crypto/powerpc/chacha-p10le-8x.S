@@ -573,7 +573,7 @@
 
 #
 # void chacha_p10le_8x(const struct chacha_state *state, u8 *dst, const u8 *src,
-#		       size_t len, int nrounds);
+#		       unsigned int len, int nrounds);
 #
 SYM_FUNC_START(chacha_p10le_8x)
 .align 5

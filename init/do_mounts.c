@@ -34,6 +34,13 @@ static int root_wait;
 
 dev_t ROOT_DEV;
 
+static int __init load_ramdisk(char *str)
+{
+	pr_warn("ignoring the deprecated load_ramdisk= option\n");
+	return 1;
+}
+__setup("load_ramdisk=", load_ramdisk);
+
 static int __init readonly(char *str)
 {
 	if (*str)
@@ -113,8 +120,7 @@ static int __init fs_names_setup(char *str)
 static unsigned int __initdata root_delay;
 static int __init root_delay_setup(char *str)
 {
-	if (kstrtouint(str, 0, &root_delay))
-		return 0;
+	root_delay = simple_strtoul(str, NULL, 0);
 	return 1;
 }
 
@@ -143,14 +149,16 @@ static int __init do_mount_root(const char *name, const char *fs,
 				 const int flags, const void *data)
 {
 	struct super_block *s;
+	struct page *p = NULL;
 	char *data_page = NULL;
 	int ret;
 
 	if (data) {
 		/* init_mount() requires a full page as fifth argument */
-		data_page = kmalloc(PAGE_SIZE, GFP_KERNEL);
-		if (!data_page)
+		p = alloc_page(GFP_KERNEL);
+		if (!p)
 			return -ENOMEM;
+		data_page = page_address(p);
 		strscpy_pad(data_page, data, PAGE_SIZE);
 	}
 
@@ -168,19 +176,18 @@ static int __init do_mount_root(const char *name, const char *fs,
 	       MAJOR(ROOT_DEV), MINOR(ROOT_DEV));
 
 out:
-	kfree(data_page);
+	if (p)
+		put_page(p);
 	return ret;
 }
 
 void __init mount_root_generic(char *name, char *pretty_name, int flags)
 {
-	char *fs_names = kmalloc(PAGE_SIZE, GFP_KERNEL);
+	struct page *page = alloc_page(GFP_KERNEL);
+	char *fs_names = page_address(page);
 	char *p;
 	char b[BDEVNAME_SIZE];
 	int num_fs, i;
-
-	if (!fs_names)
-		panic("VFS: Unable to mount root fs: not enough memory");
 
 	scnprintf(b, BDEVNAME_SIZE, "unknown-block(%u,%u)",
 		  MAJOR(ROOT_DEV), MINOR(ROOT_DEV));
@@ -241,7 +248,7 @@ retry:
 	printk("\n");
 	panic("VFS: Unable to mount root fs on \"%s\" or %s", pretty_name, b);
 out:
-	kfree(fs_names);
+	put_page(page);
 }
  
 #ifdef CONFIG_ROOT_NFS
@@ -342,7 +349,7 @@ static int __init mount_nodev_root(char *root_device_name)
 	int err = -EINVAL;
 	int num_fs, i;
 
-	fs_names = kmalloc(PAGE_SIZE, GFP_KERNEL);
+	fs_names = (void *)__get_free_page(GFP_KERNEL);
 	if (!fs_names)
 		return -EINVAL;
 	num_fs = split_fs_names(fs_names, PAGE_SIZE);
@@ -359,7 +366,7 @@ static int __init mount_nodev_root(char *root_device_name)
 			break;
 	}
 
-	kfree(fs_names);
+	free_page((unsigned long)fs_names);
 	return err;
 }
 
@@ -476,22 +483,16 @@ void __init prepare_namespace(void)
 	if (saved_root_name[0])
 		ROOT_DEV = parse_root_device(saved_root_name);
 
-	initrd_load();
+	if (initrd_load(saved_root_name))
+		goto out;
 
 	if (root_wait)
 		wait_for_root(saved_root_name);
 	mount_root(saved_root_name);
+out:
 	devtmpfs_mount();
-
-	if (init_pivot_root(".", ".")) {
-		pr_err("VFS: Failed to pivot into new rootfs\n");
-		return;
-	}
-	if (init_umount(".", MNT_DETACH)) {
-		pr_err("VFS: Failed to unmount old rootfs\n");
-		return;
-	}
-	pr_info("VFS: Pivoted into new rootfs\n");
+	init_mount(".", "/", NULL, MS_MOVE, NULL);
+	init_chroot(".");
 }
 
 static bool is_tmpfs;
@@ -506,7 +507,7 @@ static int rootfs_init_fs_context(struct fs_context *fc)
 struct file_system_type rootfs_fs_type = {
 	.name		= "rootfs",
 	.init_fs_context = rootfs_init_fs_context,
-	.kill_sb	= kill_anon_super,
+	.kill_sb	= kill_litter_super,
 };
 
 void __init init_rootfs(void)

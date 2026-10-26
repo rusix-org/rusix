@@ -60,7 +60,7 @@ static int failover_slave_register(struct net_device *slave_dev)
 	if (!failover_dev)
 		goto done;
 
-	if (fops->slave_pre_register &&
+	if (fops && fops->slave_pre_register &&
 	    fops->slave_pre_register(slave_dev, failover_dev))
 		goto done;
 
@@ -83,7 +83,7 @@ static int failover_slave_register(struct net_device *slave_dev)
 
 	slave_dev->priv_flags |= (IFF_FAILOVER_SLAVE | IFF_NO_ADDRCONF);
 
-	if (fops->slave_register &&
+	if (fops && fops->slave_register &&
 	    !fops->slave_register(slave_dev, failover_dev))
 		return NOTIFY_OK;
 
@@ -116,7 +116,7 @@ int failover_slave_unregister(struct net_device *slave_dev)
 	if (!failover_dev)
 		goto done;
 
-	if (fops->slave_pre_unregister &&
+	if (fops && fops->slave_pre_unregister &&
 	    fops->slave_pre_unregister(slave_dev, failover_dev))
 		goto done;
 
@@ -124,7 +124,7 @@ int failover_slave_unregister(struct net_device *slave_dev)
 	netdev_upper_dev_unlink(slave_dev, failover_dev);
 	slave_dev->priv_flags &= ~(IFF_FAILOVER_SLAVE | IFF_NO_ADDRCONF);
 
-	if (fops->slave_unregister &&
+	if (fops && fops->slave_unregister &&
 	    !fops->slave_unregister(slave_dev, failover_dev))
 		return NOTIFY_OK;
 
@@ -150,7 +150,7 @@ static int failover_slave_link_change(struct net_device *slave_dev)
 	if (!netif_running(failover_dev))
 		goto done;
 
-	if (fops->slave_link_change &&
+	if (fops && fops->slave_link_change &&
 	    !fops->slave_link_change(slave_dev, failover_dev))
 		return NOTIFY_OK;
 
@@ -175,7 +175,7 @@ static int failover_slave_name_change(struct net_device *slave_dev)
 	if (!netif_running(failover_dev))
 		goto done;
 
-	if (fops->slave_name_change &&
+	if (fops && fops->slave_name_change &&
 	    !fops->slave_name_change(slave_dev, failover_dev))
 		return NOTIFY_OK;
 
@@ -248,10 +248,10 @@ struct failover *failover_register(struct net_device *dev,
 {
 	struct failover *failover;
 
-	if (dev->type != ARPHRD_ETHER || !ops)
+	if (dev->type != ARPHRD_ETHER)
 		return ERR_PTR(-EINVAL);
 
-	failover = kzalloc_obj(*failover);
+	failover = kzalloc(sizeof(*failover), GFP_KERNEL);
 	if (!failover)
 		return ERR_PTR(-ENOMEM);
 
@@ -302,7 +302,9 @@ EXPORT_SYMBOL_GPL(failover_unregister);
 static __init int
 failover_init(void)
 {
-	return register_netdevice_notifier(&failover_notifier);
+	register_netdevice_notifier(&failover_notifier);
+
+	return 0;
 }
 module_init(failover_init);
 

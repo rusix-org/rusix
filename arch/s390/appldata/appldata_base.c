@@ -9,7 +9,8 @@
  * Author: Gerald Schaefer <gerald.schaefer@de.ibm.com>
  */
 
-#define pr_fmt(fmt) "appldata: " fmt
+#define KMSG_COMPONENT	"appldata"
+#define pr_fmt(fmt) KMSG_COMPONENT ": " fmt
 
 #include <linux/export.h>
 #include <linux/module.h>
@@ -28,14 +29,19 @@
 #include <linux/workqueue.h>
 #include <linux/uaccess.h>
 #include <linux/io.h>
-#include <linux/kernel_stat.h>
 #include <asm/appldata.h>
+#include <asm/vtimer.h>
 #include <asm/smp.h>
 
 #include "appldata.h"
 
-/* Default CPU time for sampling interval */
-#define APPLDATA_CPU_INTERVAL	(10 * NSEC_PER_SEC)
+
+#define APPLDATA_CPU_INTERVAL	10000		/* default (CPU) time for
+						   sampling interval in
+						   milliseconds */
+
+#define TOD_MICRO	0x01000			/* nr. of TOD clock units
+						   for 1 microsecond */
 
 /*
  * /proc entries (sysctl)
@@ -46,6 +52,7 @@ static int appldata_timer_handler(const struct ctl_table *ctl, int write,
 static int appldata_interval_handler(const struct ctl_table *ctl, int write,
 				     void *buffer, size_t *lenp, loff_t *ppos);
 
+static struct ctl_table_header *appldata_sysctl_header;
 static const struct ctl_table appldata_table[] = {
 	{
 		.procname	= "timer",
@@ -59,14 +66,22 @@ static const struct ctl_table appldata_table[] = {
 	},
 };
 
-static void appldata_work_fn(struct work_struct *work);
-static DECLARE_DELAYED_WORK(appldata_work, appldata_work_fn);
+/*
+ * Timer
+ */
+static struct vtimer_list appldata_timer;
 
-static DEFINE_MUTEX(appldata_timer_lock);
-static u64 appldata_interval = APPLDATA_CPU_INTERVAL;
+static DEFINE_SPINLOCK(appldata_timer_lock);
+static int appldata_interval = APPLDATA_CPU_INTERVAL;
 static int appldata_timer_active;
 
-static u64 appldata_cputime_start;
+/*
+ * Work queue
+ */
+static struct workqueue_struct *appldata_wq;
+static void appldata_work_fn(struct work_struct *work);
+static DECLARE_WORK(appldata_work, appldata_work_fn);
+
 
 /*
  * Ops list
@@ -76,34 +91,14 @@ static LIST_HEAD(appldata_ops_list);
 
 
 /*************************** timer, work, DIAG *******************************/
-static u64 appldata_total_cpu_time_ns(void)
+/*
+ * appldata_timer_function()
+ *
+ * schedule work and reschedule timer
+ */
+static void appldata_timer_function(unsigned long data)
 {
-	u64 total = 0;
-	int cpu;
-
-	for_each_possible_cpu(cpu) {
-		total += kcpustat_cpu(cpu).cpustat[CPUTIME_USER];
-		total += kcpustat_cpu(cpu).cpustat[CPUTIME_NICE];
-		total += kcpustat_cpu(cpu).cpustat[CPUTIME_SYSTEM];
-		total += kcpustat_cpu(cpu).cpustat[CPUTIME_IRQ];
-		total += kcpustat_cpu(cpu).cpustat[CPUTIME_SOFTIRQ];
-	}
-	return total;
-}
-
-static void appldata_schedule_work(u64 remaining)
-{
-	unsigned int ncpus = num_online_cpus();
-	unsigned long delay = HZ / 10;
-
-	/*
-	 * At most ncpus CPUs consume CPU time simultaneously, so the
-	 * minimum wall-clock time until the remaining CPU time elapses
-	 * is remaining / ncpus.
-	 * Make sure the work is not scheduled more than once per 100ms.
-	 */
-	delay = max(delay, nsecs_to_jiffies(remaining / ncpus));
-	mod_delayed_work(system_percpu_wq, &appldata_work, delay);
+	queue_work(appldata_wq, (struct work_struct *) data);
 }
 
 /*
@@ -113,27 +108,9 @@ static void appldata_schedule_work(u64 remaining)
  */
 static void appldata_work_fn(struct work_struct *work)
 {
-	u64 now, elapsed, interval;
-	struct appldata_ops *ops;
 	struct list_head *lh;
-	bool expired = false;
+	struct appldata_ops *ops;
 
-	now = appldata_total_cpu_time_ns();
-	mutex_lock(&appldata_timer_lock);
-	if (appldata_timer_active) {
-		interval = appldata_interval;
-		elapsed = now - appldata_cputime_start;
-		if (elapsed < interval) {
-			appldata_schedule_work(interval - elapsed);
-		} else {
-			appldata_cputime_start = now;
-			appldata_schedule_work(interval);
-			expired = true;
-		}
-	}
-	mutex_unlock(&appldata_timer_lock);
-	if (!expired)
-		return;
 	mutex_lock(&appldata_ops_mutex);
 	list_for_each(lh, &appldata_ops_list) {
 		ops = list_entry(lh, struct appldata_ops, list);
@@ -164,7 +141,7 @@ int appldata_diag(char record_nr, u16 function, unsigned long buffer,
 	struct appldata_product_id *id;
 	int rc;
 
-	parm_list = kmalloc_obj(*parm_list);
+	parm_list = kmalloc(sizeof(*parm_list), GFP_KERNEL);
 	id = kmemdup(&appldata_id, sizeof(appldata_id), GFP_KERNEL);
 	rc = -ENOMEM;
 	if (parm_list && id) {
@@ -187,52 +164,33 @@ int appldata_diag(char record_nr, u16 function, unsigned long buffer,
 #define APPLDATA_MOD_TIMER	2
 
 /*
- * __appldata_timer_setup()
+ * __appldata_vtimer_setup()
  *
- * Add, delete or modify the appldata delayed work.
+ * Add, delete or modify virtual timers on all online cpus.
+ * The caller needs to get the appldata_timer_lock spinlock.
  */
-static void __appldata_timer_setup(int cmd)
+static void __appldata_vtimer_setup(int cmd)
 {
-	static DEFINE_MUTEX(appldata_cancel_lock);
-	u64 now, elapsed, remaining;
+	u64 timer_interval = (u64) appldata_interval * 1000 * TOD_MICRO;
 
 	switch (cmd) {
 	case APPLDATA_ADD_TIMER:
-		mutex_lock(&appldata_cancel_lock);
-		mutex_lock(&appldata_timer_lock);
-		if (!appldata_timer_active) {
-			appldata_cputime_start = appldata_total_cpu_time_ns();
-			appldata_schedule_work(appldata_interval);
-			appldata_timer_active = 1;
-		}
-		mutex_unlock(&appldata_timer_lock);
-		mutex_unlock(&appldata_cancel_lock);
+		if (appldata_timer_active)
+			break;
+		appldata_timer.expires = timer_interval;
+		add_virt_timer_periodic(&appldata_timer);
+		appldata_timer_active = 1;
 		break;
 	case APPLDATA_DEL_TIMER:
-		mutex_lock(&appldata_cancel_lock);
-		mutex_lock(&appldata_timer_lock);
-		if (!appldata_timer_active) {
-			mutex_unlock(&appldata_timer_lock);
-			mutex_unlock(&appldata_cancel_lock);
+		del_virt_timer(&appldata_timer);
+		if (!appldata_timer_active)
 			break;
-		}
 		appldata_timer_active = 0;
-		mutex_unlock(&appldata_timer_lock);
-		cancel_delayed_work_sync(&appldata_work);
-		mutex_unlock(&appldata_cancel_lock);
 		break;
 	case APPLDATA_MOD_TIMER:
-		mutex_lock(&appldata_timer_lock);
-		if (appldata_timer_active) {
-			now = appldata_total_cpu_time_ns();
-			elapsed = now - appldata_cputime_start;
-			remaining = appldata_interval - elapsed;
-			if (elapsed >= appldata_interval)
-				remaining = 1;
-			appldata_schedule_work(remaining);
-		}
-		mutex_unlock(&appldata_timer_lock);
-		break;
+		if (!appldata_timer_active)
+			break;
+		mod_virt_timer_periodic(&appldata_timer, timer_interval);
 	}
 }
 
@@ -259,10 +217,12 @@ appldata_timer_handler(const struct ctl_table *ctl, int write,
 	if (rc < 0 || !write)
 		return rc;
 
+	spin_lock(&appldata_timer_lock);
 	if (timer_active)
-		__appldata_timer_setup(APPLDATA_ADD_TIMER);
+		__appldata_vtimer_setup(APPLDATA_ADD_TIMER);
 	else
-		__appldata_timer_setup(APPLDATA_DEL_TIMER);
+		__appldata_vtimer_setup(APPLDATA_DEL_TIMER);
+	spin_unlock(&appldata_timer_lock);
 	return 0;
 }
 
@@ -276,7 +236,7 @@ static int
 appldata_interval_handler(const struct ctl_table *ctl, int write,
 			   void *buffer, size_t *lenp, loff_t *ppos)
 {
-	int interval = appldata_interval / NSEC_PER_MSEC;
+	int interval = appldata_interval;
 	int rc;
 	struct ctl_table ctl_entry = {
 		.procname	= ctl->procname,
@@ -289,10 +249,10 @@ appldata_interval_handler(const struct ctl_table *ctl, int write,
 	if (rc < 0 || !write)
 		return rc;
 
-	mutex_lock(&appldata_timer_lock);
-	appldata_interval = interval * NSEC_PER_MSEC;
-	mutex_unlock(&appldata_timer_lock);
-	__appldata_timer_setup(APPLDATA_MOD_TIMER);
+	spin_lock(&appldata_timer_lock);
+	appldata_interval = interval;
+	__appldata_vtimer_setup(APPLDATA_MOD_TIMER);
+	spin_unlock(&appldata_timer_lock);
 	return 0;
 }
 
@@ -391,7 +351,7 @@ int appldata_register_ops(struct appldata_ops *ops)
 	if (ops->size > APPLDATA_MAX_REC_SIZE)
 		return -EINVAL;
 
-	ops->ctl_table = kzalloc_objs(struct ctl_table, 1);
+	ops->ctl_table = kcalloc(1, sizeof(struct ctl_table), GFP_KERNEL);
 	if (!ops->ctl_table)
 		return -ENOMEM;
 
@@ -434,21 +394,20 @@ void appldata_unregister_ops(struct appldata_ops *ops)
 
 /******************************* init / exit *********************************/
 
-static int appldata_cpu_online(unsigned int cpu)
-{
-	__appldata_timer_setup(APPLDATA_MOD_TIMER);
-	return 0;
-}
-
+/*
+ * appldata_init()
+ *
+ * init timer, register /proc entries
+ */
 static int __init appldata_init(void)
 {
-	int rc;
-
-	rc = cpuhp_setup_state_nocalls(CPUHP_AP_ONLINE_DYN, "s390/appldata:online",
-				       appldata_cpu_online, NULL);
-	if (rc < 0)
-		return rc;
-	register_sysctl(appldata_proc_name, appldata_table);
+	init_virt_timer(&appldata_timer);
+	appldata_timer.function = appldata_timer_function;
+	appldata_timer.data = (unsigned long) &appldata_work;
+	appldata_wq = alloc_ordered_workqueue("appldata", 0);
+	if (!appldata_wq)
+		return -ENOMEM;
+	appldata_sysctl_header = register_sysctl(appldata_proc_name, appldata_table);
 	return 0;
 }
 

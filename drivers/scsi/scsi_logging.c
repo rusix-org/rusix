@@ -26,9 +26,9 @@ static void scsi_log_release_buffer(char *bufptr)
 	kfree(bufptr);
 }
 
-static inline const char *scmd_name(struct scsi_cmnd *scmd)
+static inline const char *scmd_name(const struct scsi_cmnd *scmd)
 {
-	const struct request *rq = scsi_cmd_to_rq(scmd);
+	struct request *rq = scsi_cmd_to_rq((struct scsi_cmnd *)scmd);
 
 	if (!rq->q || !rq->q->disk)
 		return NULL;
@@ -80,8 +80,8 @@ void sdev_prefix_printk(const char *level, const struct scsi_device *sdev,
 }
 EXPORT_SYMBOL(sdev_prefix_printk);
 
-void scmd_printk(const char *level, struct scsi_cmnd *scmd, const char *fmt,
-		 ...)
+void scmd_printk(const char *level, const struct scsi_cmnd *scmd,
+		const char *fmt, ...)
 {
 	va_list args;
 	char *logbuf;
@@ -94,7 +94,7 @@ void scmd_printk(const char *level, struct scsi_cmnd *scmd, const char *fmt,
 	if (!logbuf)
 		return;
 	off = sdev_format_header(logbuf, logbuf_len, scmd_name(scmd),
-				 scsi_cmd_to_rq(scmd)->tag);
+				 scsi_cmd_to_rq((struct scsi_cmnd *)scmd)->tag);
 	if (off < logbuf_len) {
 		va_start(args, fmt);
 		off += vscnprintf(logbuf + off, logbuf_len - off, fmt, args);
@@ -238,32 +238,29 @@ EXPORT_SYMBOL(scsi_print_command);
 
 static size_t
 scsi_format_extd_sense(char *buffer, size_t buf_len,
-		       const struct scsi_sense_hdr *sshdr)
+		       unsigned char asc, unsigned char ascq)
 {
 	size_t off = 0;
 	const char *extd_sense_fmt = NULL;
-	const char *extd_sense_str =
-		scsi_extd_sense_format(sshdr, &extd_sense_fmt);
+	const char *extd_sense_str = scsi_extd_sense_format(asc, ascq,
+							    &extd_sense_fmt);
 
 	if (extd_sense_str) {
 		off = scnprintf(buffer, buf_len, "Add. Sense: %s",
 				extd_sense_str);
 		if (extd_sense_fmt)
 			off += scnprintf(buffer + off, buf_len - off,
-					 "(%s%x)", extd_sense_fmt,
-					 scsi_sense_ascq(sshdr));
+					 "(%s%x)", extd_sense_fmt, ascq);
 	} else {
-		if (scsi_sense_asc(sshdr) >= 0x80)
+		if (asc >= 0x80)
 			off = scnprintf(buffer, buf_len, "<<vendor>>");
 		off += scnprintf(buffer + off, buf_len - off,
-				 "ASC=0x%x ",
-				 scsi_sense_asc(sshdr));
-		if (scsi_sense_ascq(sshdr) >= 0x80)
+				 "ASC=0x%x ", asc);
+		if (ascq >= 0x80)
 			off += scnprintf(buffer + off, buf_len - off,
 					 "<<vendor>>");
 		off += scnprintf(buffer + off, buf_len - off,
-				 "ASCQ=0x%x ",
-				 scsi_sense_ascq(sshdr));
+				 "ASCQ=0x%x ", ascq);
 	}
 	return off;
 }
@@ -336,7 +333,8 @@ scsi_log_print_sense_hdr(const struct scsi_device *sdev, const char *name,
 	if (!logbuf)
 		return;
 	off = sdev_format_header(logbuf, logbuf_len, name, tag);
-	off += scsi_format_extd_sense(logbuf + off, logbuf_len - off, sshdr);
+	off += scsi_format_extd_sense(logbuf + off, logbuf_len - off,
+				      sshdr->asc, sshdr->ascq);
 	dev_printk(KERN_INFO, &sdev->sdev_gendev, "%s", logbuf);
 	scsi_log_release_buffer(logbuf);
 }
@@ -373,15 +371,16 @@ void __scsi_print_sense(const struct scsi_device *sdev, const char *name,
 EXPORT_SYMBOL(__scsi_print_sense);
 
 /* Normalize and print sense buffer in SCSI command */
-void scsi_print_sense(struct scsi_cmnd *cmd)
+void scsi_print_sense(const struct scsi_cmnd *cmd)
 {
 	scsi_log_print_sense(cmd->device, scmd_name(cmd),
-			     scsi_cmd_to_rq(cmd)->tag, cmd->sense_buffer,
-			     SCSI_SENSE_BUFFERSIZE);
+			     scsi_cmd_to_rq((struct scsi_cmnd *)cmd)->tag,
+			     cmd->sense_buffer, SCSI_SENSE_BUFFERSIZE);
 }
 EXPORT_SYMBOL(scsi_print_sense);
 
-void scsi_print_result(struct scsi_cmnd *cmd, const char *msg, int disposition)
+void scsi_print_result(const struct scsi_cmnd *cmd, const char *msg,
+		       int disposition)
 {
 	char *logbuf;
 	size_t off, logbuf_len;
@@ -394,7 +393,7 @@ void scsi_print_result(struct scsi_cmnd *cmd, const char *msg, int disposition)
 		return;
 
 	off = sdev_format_header(logbuf, logbuf_len, scmd_name(cmd),
-				 scsi_cmd_to_rq(cmd)->tag);
+				 scsi_cmd_to_rq((struct scsi_cmnd *)cmd)->tag);
 
 	if (off >= logbuf_len)
 		goto out_printk;

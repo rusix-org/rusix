@@ -626,6 +626,8 @@ static void init_rtpoll_triggers(struct psi_group *group, u64 now)
 static void psi_schedule_rtpoll_work(struct psi_group *group, unsigned long delay,
 				   bool force)
 {
+	struct task_struct *task;
+
 	/*
 	 * atomic_xchg should be called even when !force to provide a
 	 * full memory barrier (see the comment inside psi_rtpoll_work).
@@ -633,16 +635,19 @@ static void psi_schedule_rtpoll_work(struct psi_group *group, unsigned long dela
 	if (atomic_xchg(&group->rtpoll_scheduled, 1) && !force)
 		return;
 
+	rcu_read_lock();
+
+	task = rcu_dereference(group->rtpoll_task);
 	/*
-	 * Only test whether a worker is installed; do not dereference the task.
-	 * A racing trigger destruction may leave the timer armed.
-	 * psi_cgroup_free() shuts it down before freeing the group.
-	 * The system PSI group is static.
+	 * kworker might be NULL in case psi_trigger_destroy races with
+	 * psi_task_change (hotpath) which can't use locks
 	 */
-	if (likely(rcu_access_pointer(group->rtpoll_task)))
+	if (likely(task))
 		mod_timer(&group->rtpoll_timer, jiffies + delay);
 	else
 		atomic_set(&group->rtpoll_scheduled, 0);
+
+	rcu_read_unlock();
 }
 
 static void psi_rtpoll_work(struct psi_group *group)
@@ -1018,7 +1023,7 @@ void psi_account_irqtime(struct rq *rq, struct task_struct *curr, struct task_st
 
 	irq = irq_time_read(cpu);
 	delta = (s64)(irq - rq->psi_irq_time);
-	if (delta <= 0)
+	if (delta < 0)
 		return;
 	rq->psi_irq_time = irq;
 
@@ -1109,7 +1114,7 @@ int psi_cgroup_alloc(struct cgroup *cgroup)
 	if (!static_branch_likely(&psi_cgroups_enabled))
 		return 0;
 
-	cgroup->psi = kzalloc_obj(struct psi_group);
+	cgroup->psi = kzalloc(sizeof(struct psi_group), GFP_KERNEL);
 	if (!cgroup->psi)
 		return -ENOMEM;
 
@@ -1378,7 +1383,7 @@ struct psi_trigger *psi_trigger_create(struct psi_group *group, char *buf,
 	if (threshold_us == 0 || threshold_us > window_us)
 		return ERR_PTR(-EINVAL);
 
-	t = kmalloc_obj(*t);
+	t = kmalloc(sizeof(*t), GFP_KERNEL);
 	if (!t)
 		return ERR_PTR(-ENOMEM);
 
@@ -1484,11 +1489,21 @@ void psi_trigger_destroy(struct psi_trigger *t)
 	}
 
 	/*
+	 * Wait for psi_schedule_rtpoll_work RCU to complete its read-side
+	 * critical section before destroying the trigger and optionally the
+	 * rtpoll_task.
+	 */
+	synchronize_rcu();
+	/*
 	 * Stop kthread 'psimon' after releasing rtpoll_trigger_lock to prevent
 	 * a deadlock while waiting for psi_rtpoll_work to acquire
 	 * rtpoll_trigger_lock
 	 */
 	if (task_to_destroy) {
+		/*
+		 * After the RCU grace period has expired, the worker
+		 * can no longer be found through group->rtpoll_task.
+		 */
 		kthread_stop(task_to_destroy);
 		atomic_set(&group->rtpoll_scheduled, 0);
 	}

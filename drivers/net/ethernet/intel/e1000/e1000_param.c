@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0
 /* Copyright(c) 1999 - 2006 Intel Corporation. */
 
-#include <linux/stringify.h>
 #include "e1000.h"
 
 /* This is the only thing that needs to be changed to adjust the
@@ -260,7 +259,7 @@ void e1000_check_options(struct e1000_adapter *adapter)
 			.type = range_option,
 			.name = "Transmit Descriptors",
 			.err  = "using default of "
-				__stringify(E1000_DEFAULT_TXD),
+				__MODULE_STRING(E1000_DEFAULT_TXD),
 			.def  = E1000_DEFAULT_TXD,
 			.arg  = { .r = {
 				.min = E1000_MIN_TXD,
@@ -288,7 +287,7 @@ void e1000_check_options(struct e1000_adapter *adapter)
 			.type = range_option,
 			.name = "Receive Descriptors",
 			.err  = "using default of "
-				__stringify(E1000_DEFAULT_RXD),
+				__MODULE_STRING(E1000_DEFAULT_RXD),
 			.def  = E1000_DEFAULT_RXD,
 			.arg  = { .r = {
 				.min = E1000_MIN_RXD,
@@ -355,7 +354,7 @@ void e1000_check_options(struct e1000_adapter *adapter)
 		opt = (struct e1000_option) {
 			.type = range_option,
 			.name = "Transmit Interrupt Delay",
-			.err  = "using default of " __stringify(DEFAULT_TIDV),
+			.err  = "using default of " __MODULE_STRING(DEFAULT_TIDV),
 			.def  = DEFAULT_TIDV,
 			.arg  = { .r = { .min = MIN_TXDELAY,
 					 .max = MAX_TXDELAY }}
@@ -373,7 +372,7 @@ void e1000_check_options(struct e1000_adapter *adapter)
 		opt = (struct e1000_option) {
 			.type = range_option,
 			.name = "Transmit Absolute Interrupt Delay",
-			.err  = "using default of " __stringify(DEFAULT_TADV),
+			.err  = "using default of " __MODULE_STRING(DEFAULT_TADV),
 			.def  = DEFAULT_TADV,
 			.arg  = { .r = { .min = MIN_TXABSDELAY,
 					 .max = MAX_TXABSDELAY }}
@@ -391,7 +390,7 @@ void e1000_check_options(struct e1000_adapter *adapter)
 		opt = (struct e1000_option) {
 			.type = range_option,
 			.name = "Receive Interrupt Delay",
-			.err  = "using default of " __stringify(DEFAULT_RDTR),
+			.err  = "using default of " __MODULE_STRING(DEFAULT_RDTR),
 			.def  = DEFAULT_RDTR,
 			.arg  = { .r = { .min = MIN_RXDELAY,
 					 .max = MAX_RXDELAY }}
@@ -409,7 +408,7 @@ void e1000_check_options(struct e1000_adapter *adapter)
 		opt = (struct e1000_option) {
 			.type = range_option,
 			.name = "Receive Absolute Interrupt Delay",
-			.err  = "using default of " __stringify(DEFAULT_RADV),
+			.err  = "using default of " __MODULE_STRING(DEFAULT_RADV),
 			.def  = DEFAULT_RADV,
 			.arg  = { .r = { .min = MIN_RXABSDELAY,
 					 .max = MAX_RXABSDELAY }}
@@ -427,7 +426,7 @@ void e1000_check_options(struct e1000_adapter *adapter)
 		opt = (struct e1000_option) {
 			.type = range_option,
 			.name = "Interrupt Throttling Rate (ints/sec)",
-			.err  = "using default of " __stringify(DEFAULT_ITR),
+			.err  = "using default of " __MODULE_STRING(DEFAULT_ITR),
 			.def  = DEFAULT_ITR,
 			.arg  = { .r = { .min = MIN_ITR,
 					 .max = MAX_ITR }}

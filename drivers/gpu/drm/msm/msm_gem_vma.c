@@ -65,7 +65,7 @@ struct msm_vm_unmap_op {
 };
 
 /**
- * struct msm_vm_op - A MAP or UNMAP operation
+ * struct msm_vma_op - A MAP or UNMAP operation
  */
 struct msm_vm_op {
 	/** @op: The operation type */
@@ -373,15 +373,9 @@ msm_gem_vma_new(struct drm_gpuvm *gpuvm, struct drm_gem_object *obj,
 	struct msm_gem_vma *vma;
 	int ret;
 
-	/* _NO_SHARE objs cannot be mapped outside of their "host" vm: */
-	if (obj && (to_msm_bo(obj)->flags & MSM_BO_NO_SHARE) &&
-	    GEM_WARN_ON(obj->resv != drm_gpuvm_resv(gpuvm))) {
-		return ERR_PTR(-EINVAL);
-	}
-
 	drm_gpuvm_resv_assert_held(&vm->base);
 
-	vma = kzalloc_obj(*vma);
+	vma = kzalloc(sizeof(*vma), GFP_KERNEL);
 	if (!vma)
 		return ERR_PTR(-ENOMEM);
 
@@ -419,7 +413,7 @@ msm_gem_vma_new(struct drm_gpuvm *gpuvm, struct drm_gem_object *obj,
 	if (!obj)
 		return &vma->base;
 
-	vm_bo = drm_gpuvm_bo_obtain_locked(&vm->base, obj);
+	vm_bo = drm_gpuvm_bo_obtain(&vm->base, obj);
 	if (IS_ERR(vm_bo)) {
 		ret = PTR_ERR(vm_bo);
 		goto err_va_remove;
@@ -470,20 +464,15 @@ struct op_arg {
 	bool kept;
 };
 
-static int
+static void
 vm_op_enqueue(struct op_arg *arg, struct msm_vm_op _op)
 {
-	struct msm_vm_op *op = kmalloc_obj(*op);
-	if (!op)
-		return -ENOMEM;
-
+	struct msm_vm_op *op = kmalloc(sizeof(*op), GFP_KERNEL);
 	*op = _op;
 	list_add_tail(&op->node, &arg->job->vm_ops);
 
 	if (op->obj)
 		drm_gem_object_get(op->obj);
-
-	return 0;
 }
 
 static struct drm_gpuva *
@@ -502,7 +491,6 @@ msm_gem_vm_sm_step_map(struct drm_gpuva_op *op, void *_arg)
 	struct drm_gpuva *vma;
 	struct sg_table *sgt;
 	unsigned prot;
-	int ret;
 
 	if (arg->kept)
 		return 0;
@@ -514,6 +502,8 @@ msm_gem_vm_sm_step_map(struct drm_gpuva_op *op, void *_arg)
 	vm_dbg("%p:%p:%p: %016llx %016llx", vma->vm, vma, vma->gem.obj,
 	       vma->va.addr, vma->va.range);
 
+	vma->flags = ((struct op_arg *)arg)->flags;
+
 	if (obj) {
 		sgt = to_msm_bo(obj)->sgt;
 		prot = msm_gem_prot(obj);
@@ -522,7 +512,7 @@ msm_gem_vm_sm_step_map(struct drm_gpuva_op *op, void *_arg)
 		prot = IOMMU_READ | IOMMU_WRITE;
 	}
 
-	ret = vm_op_enqueue(arg, (struct msm_vm_op){
+	vm_op_enqueue(arg, (struct msm_vm_op){
 		.op = MSM_VM_OP_MAP,
 		.map = {
 			.sgt = sgt,
@@ -535,10 +525,6 @@ msm_gem_vm_sm_step_map(struct drm_gpuva_op *op, void *_arg)
 		.obj = vma->gem.obj,
 	});
 
-	if (ret)
-		return ret;
-
-	vma->flags = ((struct op_arg *)arg)->flags;
 	to_msm_vma(vma)->mapped = true;
 
 	return 0;
@@ -554,7 +540,6 @@ msm_gem_vm_sm_step_remap(struct drm_gpuva_op *op, void *arg)
 	struct drm_gpuvm_bo *vm_bo = orig_vma->vm_bo;
 	bool mapped = to_msm_vma(orig_vma)->mapped;
 	unsigned flags;
-	int ret;
 
 	vm_dbg("orig_vma: %p:%p:%p: %016llx %016llx", vm, orig_vma,
 	       orig_vma->gem.obj, orig_vma->va.addr, orig_vma->va.range);
@@ -564,7 +549,7 @@ msm_gem_vm_sm_step_remap(struct drm_gpuva_op *op, void *arg)
 
 		drm_gpuva_op_remap_to_unmap_range(&op->remap, &unmap_start, &unmap_range);
 
-		ret = vm_op_enqueue(arg, (struct msm_vm_op){
+		vm_op_enqueue(arg, (struct msm_vm_op){
 			.op = MSM_VM_OP_UNMAP,
 			.unmap = {
 				.iova = unmap_start,
@@ -573,9 +558,6 @@ msm_gem_vm_sm_step_remap(struct drm_gpuva_op *op, void *arg)
 			},
 			.obj = orig_vma->gem.obj,
 		});
-
-		if (ret)
-			return ret;
 
 		/*
 		 * Part of this GEM obj is still mapped, but we're going to kill the
@@ -638,7 +620,6 @@ msm_gem_vm_sm_step_unmap(struct drm_gpuva_op *op, void *_arg)
 	struct msm_vm_bind_job *job = arg->job;
 	struct drm_gpuva *vma = op->unmap.va;
 	struct msm_gem_vma *msm_vma = to_msm_vma(vma);
-	int ret;
 
 	vm_dbg("%p:%p:%p: %016llx %016llx", vma->vm, vma, vma->gem.obj,
 	       vma->va.addr, vma->va.range);
@@ -671,7 +652,7 @@ msm_gem_vm_sm_step_unmap(struct drm_gpuva_op *op, void *_arg)
 	if (!msm_vma->mapped)
 		goto out_close;
 
-	ret = vm_op_enqueue(arg, (struct msm_vm_op){
+	vm_op_enqueue(arg, (struct msm_vm_op){
 		.op = MSM_VM_OP_UNMAP,
 		.unmap = {
 			.iova = vma->va.addr,
@@ -680,9 +661,6 @@ msm_gem_vm_sm_step_unmap(struct drm_gpuva_op *op, void *_arg)
 		},
 		.obj = vma->gem.obj,
 	});
-
-	if (ret)
-		return ret;
 
 	msm_vma->mapped = false;
 
@@ -704,7 +682,7 @@ static struct dma_fence *
 msm_vma_job_run(struct drm_sched_job *_job)
 {
 	struct msm_vm_bind_job *job = to_msm_vm_bind_job(_job);
-	struct drm_device *dev = job->vm->drm;
+	struct msm_drm_private *priv = job->vm->drm->dev_private;
 	struct msm_gem_vm *vm = to_msm_vm(job->vm);
 	struct drm_gem_object *obj;
 	int ret = vm->unusable ? -EINVAL : 0;
@@ -747,13 +725,13 @@ msm_vma_job_run(struct drm_sched_job *_job)
 	if (ret)
 		msm_gem_vm_unusable(job->vm);
 
-	mutex_lock(&dev->gem_lru_mutex);
+	mutex_lock(&priv->lru.lock);
 
 	job_foreach_bo (obj, job) {
 		msm_gem_unpin_active(obj);
 	}
 
-	mutex_unlock(&dev->gem_lru_mutex);
+	mutex_unlock(&priv->lru.lock);
 
 	/* VM_BIND ops are synchronous, so no fence to wait on: */
 	return NULL;
@@ -809,9 +787,6 @@ static const struct drm_sched_backend_ops msm_vm_bind_ops = {
  * synchronous operations are supported.  In a user managed VM, userspace
  * handles virtual address allocation, and both async and sync operations
  * are supported.
- *
- * Returns: pointer to the created &struct drm_gpuvm on success
- * or an ERR_PTR(-errno) on failure.
  */
 struct drm_gpuvm *
 msm_gem_vm_create(struct drm_device *drm, struct msm_mmu *mmu, const char *name,
@@ -830,7 +805,7 @@ msm_gem_vm_create(struct drm_device *drm, struct msm_mmu *mmu, const char *name,
 	if (IS_ERR(mmu))
 		return ERR_CAST(mmu);
 
-	vm = kzalloc_obj(*vm);
+	vm = kzalloc(sizeof(*vm), GFP_KERNEL);
 	if (!vm)
 		return ERR_PTR(-ENOMEM);
 
@@ -880,8 +855,8 @@ msm_gem_vm_create(struct drm_device *drm, struct msm_mmu *mmu, const char *name,
 		vm->log_shift = MIN(vm_log_shift, 8);
 
 	if (vm->log_shift) {
-		vm->log = kmalloc_objs(vm->log[0], 1 << vm->log_shift,
-				       GFP_KERNEL | __GFP_ZERO);
+		vm->log = kmalloc_array(1 << vm->log_shift, sizeof(vm->log[0]),
+					GFP_KERNEL | __GFP_ZERO);
 	}
 
 	return &vm->base;
@@ -957,13 +932,19 @@ msm_gem_vm_close(struct drm_gpuvm *gpuvm)
 
 
 static struct msm_vm_bind_job *
-vm_bind_job_create(struct drm_device *dev, struct drm_file *file, struct drm_gpuvm *vm,
+vm_bind_job_create(struct drm_device *dev, struct drm_file *file,
 		   struct msm_gpu_submitqueue *queue, uint32_t nr_ops)
 {
 	struct msm_vm_bind_job *job;
+	uint64_t sz;
 	int ret;
 
-	job = kzalloc_flex(*job, ops, nr_ops, GFP_KERNEL | __GFP_NOWARN);
+	sz = struct_size(job, ops, nr_ops);
+
+	if (sz > SIZE_MAX)
+		return ERR_PTR(-ENOMEM);
+
+	job = kzalloc(sz, GFP_KERNEL | __GFP_NOWARN);
 	if (!job)
 		return ERR_PTR(-ENOMEM);
 
@@ -974,7 +955,7 @@ vm_bind_job_create(struct drm_device *dev, struct drm_file *file, struct drm_gpu
 		return ERR_PTR(ret);
 	}
 
-	job->vm = vm;
+	job->vm = msm_context_vm(dev, queue->ctx);
 	job->queue = queue;
 	INIT_LIST_HEAD(&job->vm_ops);
 
@@ -1300,14 +1281,14 @@ vm_bind_job_pin_objects(struct msm_vm_bind_job *job)
 	 * trigger get_pages())
 	 */
 	job_foreach_bo (obj, job) {
-		int ret;
+		struct page **pages;
 
-		ret = msm_gem_make_resident_locked(obj, MSM_MADV_WILLNEED);
-		if (ret)
-			return ret;
+		pages = msm_gem_get_pages_locked(obj, MSM_MADV_WILLNEED);
+		if (IS_ERR(pages))
+			return PTR_ERR(pages);
 	}
 
-	struct drm_device *dev = job->vm->drm;
+	struct msm_drm_private *priv = job->vm->drm->dev_private;
 
 	/*
 	 * A second loop while holding the LRU lock (a) avoids acquiring/dropping
@@ -1316,10 +1297,10 @@ vm_bind_job_pin_objects(struct msm_vm_bind_job *job)
 	 * get_pages() which could trigger reclaim.. and if we held the LRU lock
 	 * could trigger deadlock with the shrinker).
 	 */
-	mutex_lock(&dev->gem_lru_mutex);
+	mutex_lock(&priv->lru.lock);
 	job_foreach_bo (obj, job)
 		msm_gem_pin_obj_locked(obj);
-	mutex_unlock(&dev->gem_lru_mutex);
+	mutex_unlock(&priv->lru.lock);
 
 	job->bos_pinned = true;
 
@@ -1433,7 +1414,6 @@ msm_ioctl_vm_bind(struct drm_device *dev, void *data, struct drm_file *file)
 	struct msm_drm_private *priv = dev->dev_private;
 	struct drm_msm_vm_bind *args = data;
 	struct msm_context *ctx = file->driver_priv;
-	struct drm_gpuvm *vm = msm_context_vm(dev, ctx);
 	struct msm_vm_bind_job *job = NULL;
 	struct msm_gpu *gpu = priv->gpu;
 	struct msm_gpu_submitqueue *queue;
@@ -1448,14 +1428,11 @@ msm_ioctl_vm_bind(struct drm_device *dev, void *data, struct drm_file *file)
 	if (!gpu)
 		return -ENXIO;
 
-	if (!vm)
-		return UERR(ENOMEM, dev, "no VM");
-
 	/*
 	 * Maybe we could allow just UNMAP ops?  OTOH userspace should just
 	 * immediately close the device file and all will be torn down.
 	 */
-	if (to_msm_vm(vm)->unusable)
+	if (to_msm_vm(msm_context_vm(dev, ctx))->unusable)
 		return UERR(EPIPE, dev, "context is unusable");
 
 	/*
@@ -1486,7 +1463,7 @@ msm_ioctl_vm_bind(struct drm_device *dev, void *data, struct drm_file *file)
 		}
 	}
 
-	job = vm_bind_job_create(dev, file, vm, queue, args->nr_ops);
+	job = vm_bind_job_create(dev, file, queue, args->nr_ops);
 	if (IS_ERR(job)) {
 		ret = PTR_ERR(job);
 		goto out_post_unlock;

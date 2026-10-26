@@ -27,6 +27,7 @@
 #define NVT_TS_PARAMS_MAX_TOUCH		0x09
 #define NVT_TS_PARAMS_MAX_BUTTONS	0x0a
 #define NVT_TS_PARAMS_IRQ_TYPE		0x0b
+#define NVT_TS_PARAMS_WAKE_TYPE		0x0c
 #define NVT_TS_PARAMS_CHIP_ID		0x0e
 #define NVT_TS_PARAMS_SIZE		0x0f
 
@@ -48,6 +49,7 @@ static const int nvt_ts_irq_type[4] = {
 };
 
 struct nvt_ts_i2c_chip_data {
+	u8 wake_type;
 	u8 chip_id;
 };
 
@@ -170,10 +172,10 @@ static int nvt_ts_suspend(struct device *dev)
 {
 	struct nvt_ts_data *data = i2c_get_clientdata(to_i2c_client(dev));
 
-	guard(mutex)(&data->input->mutex);
-
+	mutex_lock(&data->input->mutex);
 	if (input_device_enabled(data->input))
 		nvt_ts_stop(data->input);
+	mutex_unlock(&data->input->mutex);
 
 	return 0;
 }
@@ -182,10 +184,10 @@ static int nvt_ts_resume(struct device *dev)
 {
 	struct nvt_ts_data *data = i2c_get_clientdata(to_i2c_client(dev));
 
-	guard(mutex)(&data->input->mutex);
-
+	mutex_lock(&data->input->mutex);
 	if (input_device_enabled(data->input))
 		nvt_ts_start(data->input);
+	mutex_unlock(&data->input->mutex);
 
 	return 0;
 }
@@ -259,6 +261,7 @@ static int nvt_ts_probe(struct i2c_client *client)
 	if (width > NVT_TS_MAX_SIZE || height >= NVT_TS_MAX_SIZE ||
 	    data->max_touches > NVT_TS_MAX_TOUCHES ||
 	    irq_type >= ARRAY_SIZE(nvt_ts_irq_type) ||
+	    data->buf[NVT_TS_PARAMS_WAKE_TYPE] != chip->wake_type ||
 	    data->buf[NVT_TS_PARAMS_CHIP_ID] != chip->chip_id) {
 		dev_err(dev, "Unsupported touchscreen parameters: %*ph\n",
 			NVT_TS_PARAMS_SIZE, data->buf);
@@ -311,10 +314,12 @@ static int nvt_ts_probe(struct i2c_client *client)
 }
 
 static const struct nvt_ts_i2c_chip_data nvt_nt11205_ts_data = {
+	.wake_type = 0x05,
 	.chip_id = 0x05,
 };
 
 static const struct nvt_ts_i2c_chip_data nvt_nt36672a_ts_data = {
+	.wake_type = 0x01,
 	.chip_id = 0x08,
 };
 
@@ -326,8 +331,8 @@ static const struct of_device_id nvt_ts_of_match[] = {
 MODULE_DEVICE_TABLE(of, nvt_ts_of_match);
 
 static const struct i2c_device_id nvt_ts_i2c_id[] = {
-	{ .name = "nt11205-ts", .driver_data = (unsigned long)&nvt_nt11205_ts_data },
-	{ .name = "nt36672a-ts", .driver_data = (unsigned long)&nvt_nt36672a_ts_data },
+	{ "nt11205-ts", (unsigned long) &nvt_nt11205_ts_data },
+	{ "nt36672a-ts", (unsigned long) &nvt_nt36672a_ts_data },
 	{ }
 };
 MODULE_DEVICE_TABLE(i2c, nvt_ts_i2c_id);

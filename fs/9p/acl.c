@@ -6,7 +6,6 @@
 
 #include <linux/module.h>
 #include <linux/fs.h>
-#include <linux/fs_struct.h>
 #include <net/9p/9p.h>
 #include <net/9p/client.h>
 #include <linux/slab.h>
@@ -140,7 +139,7 @@ struct posix_acl *v9fs_iop_get_inode_acl(struct inode *inode, int type, bool rcu
 
 }
 
-struct posix_acl *v9fs_iop_get_acl(const struct mnt_idmap *idmap,
+struct posix_acl *v9fs_iop_get_acl(struct mnt_idmap *idmap,
 				   struct dentry *dentry, int type)
 {
 	struct v9fs_session_info *v9ses;
@@ -152,7 +151,7 @@ struct posix_acl *v9fs_iop_get_acl(const struct mnt_idmap *idmap,
 	return v9fs_get_cached_acl(d_inode(dentry), type);
 }
 
-int v9fs_iop_set_acl(const struct mnt_idmap *idmap, struct dentry *dentry,
+int v9fs_iop_set_acl(struct mnt_idmap *idmap, struct dentry *dentry,
 		     struct posix_acl *acl, int type)
 {
 	int retval;
@@ -167,11 +166,17 @@ int v9fs_iop_set_acl(const struct mnt_idmap *idmap, struct dentry *dentry,
 		if (retval)
 			goto err_out;
 
-		value = posix_acl_to_xattr(&init_user_ns, acl, &size, GFP_NOFS);
+		size = posix_acl_xattr_size(acl->a_count);
+
+		value = kzalloc(size, GFP_NOFS);
 		if (!value) {
 			retval = -ENOMEM;
 			goto err_out;
 		}
+
+		retval = posix_acl_to_xattr(&init_user_ns, acl, value, size);
+		if (retval < 0)
+			goto err_out;
 	}
 
 	/*
@@ -251,10 +256,13 @@ static int v9fs_set_acl(struct p9_fid *fid, int type, struct posix_acl *acl)
 		return 0;
 
 	/* Set a setxattr request to server */
-	buffer = posix_acl_to_xattr(&init_user_ns, acl, &size, GFP_KERNEL);
+	size = posix_acl_xattr_size(acl->a_count);
+	buffer = kmalloc(size, GFP_KERNEL);
 	if (!buffer)
 		return -ENOMEM;
-
+	retval = posix_acl_to_xattr(&init_user_ns, acl, buffer, size);
+	if (retval < 0)
+		goto err_free_out;
 	switch (type) {
 	case ACL_TYPE_ACCESS:
 		name = XATTR_NAME_POSIX_ACL_ACCESS;
@@ -266,6 +274,7 @@ static int v9fs_set_acl(struct p9_fid *fid, int type, struct posix_acl *acl)
 		BUG();
 	}
 	retval = v9fs_fid_xattr_set(fid, name, buffer, size, 0);
+err_free_out:
 	kfree(buffer);
 	return retval;
 }

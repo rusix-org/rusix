@@ -335,7 +335,7 @@ static int jpeg_v4_0_disable_static_power_gating(struct amdgpu_device *adev)
 			UVD_PGFSM_STATUS__UVDJ_PWR_STATUS_MASK);
 
 		if (r) {
-			drm_err(adev_to_drm(adev), "failed to disable JPEG power gating\n");
+			DRM_DEV_ERROR(adev->dev, "amdgpu: JPEG disable power gating failed\n");
 			return r;
 		}
 	}
@@ -370,7 +370,7 @@ static int jpeg_v4_0_enable_static_power_gating(struct amdgpu_device *adev)
 			UVD_PGFSM_STATUS__UVDJ_PWR_STATUS_MASK);
 
 		if (r) {
-			drm_err(adev_to_drm(adev), "failed to enable JPEG power gating\n");
+			DRM_DEV_ERROR(adev->dev, "amdgpu: JPEG enable power gating failed\n");
 			return r;
 		}
 	}
@@ -748,6 +748,7 @@ static const struct amd_ip_funcs jpeg_v4_0_ip_funcs = {
 	.hw_fini = jpeg_v4_0_hw_fini,
 	.suspend = jpeg_v4_0_suspend,
 	.resume = jpeg_v4_0_resume,
+	.is_idle = jpeg_v4_0_is_idle,
 	.wait_for_idle = jpeg_v4_0_wait_for_idle,
 	.set_clockgating_state = jpeg_v4_0_set_clockgating_state,
 	.set_powergating_state = jpeg_v4_0_set_powergating_state,

@@ -36,7 +36,6 @@
 #include <linux/mount.h>
 #include <linux/pseudo_fs.h>
 #include <linux/sched.h>
-#include <linux/seq_buf.h>
 #include <linux/slab.h>
 #include <linux/sprintf.h>
 #include <linux/srcu.h>
@@ -51,13 +50,12 @@
 #include <drm/drm_file.h>
 #include <drm/drm_managed.h>
 #include <drm/drm_mode_object.h>
+#include <drm/drm_panic.h>
 #include <drm/drm_print.h>
 #include <drm/drm_privacy_screen_machine.h>
-#include <drm/drm_ras_genl_family.h>
 
 #include "drm_crtc_internal.h"
 #include "drm_internal.h"
-#include "drm_panic_internal.h"
 
 MODULE_AUTHOR("Gareth Hughes, Leif Delgass, José Fonseca, Jon Smirl");
 MODULE_DESCRIPTION("DRM shared core routines");
@@ -343,9 +341,7 @@ void drm_minor_release(struct drm_minor *minor)
  *
  *		platform_set_drvdata(pdev, drm);
  *
- *		ret = drm_mode_config_create_initial_state(drm);
- *		if (ret)
- *			return ret;
+ *		drm_mode_config_reset(drm);
  *
  *		ret = drm_dev_register(drm);
  *		if (ret)
@@ -546,8 +542,6 @@ static const char *drm_get_wedge_recovery(unsigned int opt)
 		return "bus-reset";
 	case DRM_WEDGE_RECOVERY_VENDOR:
 		return "vendor-specific";
-	case DRM_WEDGE_RECOVERY_COLD_RESET:
-		return "cold-reset";
 	default:
 		return NULL;
 	}
@@ -577,34 +571,30 @@ static const char *drm_get_wedge_recovery(unsigned int opt)
 int drm_dev_wedged_event(struct drm_device *dev, unsigned long method,
 			 struct drm_wedge_task_info *info)
 {
-	DECLARE_SEQ_BUF(event_string, WEDGE_STR_LEN);
-	char pid_string[PID_STR_LEN], comm_string[COMM_STR_LEN];
-	char *envp[4] = { };
-	unsigned int len = 0, opt;
+	char event_string[WEDGE_STR_LEN], pid_string[PID_STR_LEN], comm_string[COMM_STR_LEN];
+	char *envp[] = { event_string, NULL, NULL, NULL };
+	const char *recovery = NULL;
+	unsigned int len, opt;
 
-	seq_buf_puts(&event_string, "WEDGED=");
-	envp[0] = event_string.buffer;
+	len = scnprintf(event_string, sizeof(event_string), "%s", "WEDGED=");
 
 	for_each_set_bit(opt, &method, BITS_PER_TYPE(method)) {
-		const char *recovery = drm_get_wedge_recovery(opt);
+		recovery = drm_get_wedge_recovery(opt);
 		if (drm_WARN_ONCE(dev, !recovery, "invalid recovery method %u\n", opt))
 			break;
 
-		if (drm_WARN_ON_ONCE(dev, seq_buf_printf(&event_string, "%s,", recovery)))
-			break;
-
-		len = seq_buf_used(&event_string);
+		len += scnprintf(event_string + len, sizeof(event_string) - len, "%s,", recovery);
 	}
 
-	if (len)
-		/* Strip trailing comma; also discards any partial overflow entry */
-		event_string.buffer[len - 1] = '\0';
+	if (recovery)
+		/* Get rid of trailing comma */
+		event_string[len - 1] = '\0';
 	else
-		/* No complete entry written, do the best we can at this point. */
-		snprintf(event_string.buffer, event_string.size, "%s", "WEDGED=unknown");
+		/* Caller is unsure about recovery, do the best we can at this point. */
+		snprintf(event_string, sizeof(event_string), "%s", "WEDGED=unknown");
 
 	drm_info(dev, "device wedged, %s\n", method == DRM_WEDGE_RECOVERY_NONE ?
-		 "but no recovery needed" : "needs recovery");
+		 "but recovered through reset" : "needs recovery");
 
 	if (info && (info->comm[0] != '\0') && (info->pid >= 0)) {
 		snprintf(pid_string, sizeof(pid_string), "PID=%u", info->pid);
@@ -714,7 +704,6 @@ static void drm_dev_init_release(struct drm_device *dev, void *res)
 	mutex_destroy(&dev->master_mutex);
 	mutex_destroy(&dev->clientlist_mutex);
 	mutex_destroy(&dev->filelist_mutex);
-	mutex_destroy(&dev->gem_lru_mutex);
 }
 
 static int drm_dev_init(struct drm_device *dev,
@@ -752,11 +741,9 @@ static int drm_dev_init(struct drm_device *dev,
 	INIT_LIST_HEAD(&dev->filelist);
 	INIT_LIST_HEAD(&dev->filelist_internal);
 	INIT_LIST_HEAD(&dev->clientlist);
-	INIT_LIST_HEAD(&dev->client_sysrq_list);
 	INIT_LIST_HEAD(&dev->vblank_event_list);
 
 	spin_lock_init(&dev->event_lock);
-	mutex_init(&dev->gem_lru_mutex);
 	mutex_init(&dev->filelist_mutex);
 	mutex_init(&dev->clientlist_mutex);
 	mutex_init(&dev->master_mutex);
@@ -975,19 +962,17 @@ static void drmm_cg_unregister_region(struct drm_device *dev, void *arg)
  * drmm_cgroup_register_region - Register a region of a DRM device to cgroups
  * @dev: device for region
  * @region_name: Region name for registering
- * @init: Initialization parameters for the region.
+ * @size: Size of region in bytes
  *
  * This decreases the ref-count of @dev by one. The device is destroyed if the
  * ref-count drops to zero.
  */
-struct dmem_cgroup_region *
-drmm_cgroup_register_region(struct drm_device *dev, const char *region_name,
-			    const struct dmem_cgroup_init *init)
+struct dmem_cgroup_region *drmm_cgroup_register_region(struct drm_device *dev, const char *region_name, u64 size)
 {
 	struct dmem_cgroup_region *region;
 	int ret;
 
-	region = dmem_cgroup_register_region(init, "drm/%s/%s", dev->unique, region_name);
+	region = dmem_cgroup_register_region(size, "drm/%s/%s", dev->unique, region_name);
 	if (IS_ERR_OR_NULL(region))
 		return region;
 
@@ -1124,7 +1109,6 @@ int drm_dev_register(struct drm_device *dev, unsigned long flags)
 			goto err_unload;
 	}
 	drm_panic_register(dev);
-	drm_client_sysrq_register(dev);
 
 	DRM_INFO("Initialized %s %d.%d.%d for %s on minor %d\n",
 		 driver->name, driver->major, driver->minor,
@@ -1176,7 +1160,6 @@ void drm_dev_unregister(struct drm_device *dev)
 {
 	dev->registered = false;
 
-	drm_client_sysrq_unregister(dev);
 	drm_panic_unregister(dev);
 
 	drm_client_dev_unregister(dev);
@@ -1253,8 +1236,8 @@ static const struct file_operations drm_stub_fops = {
 
 static void drm_core_exit(void)
 {
-	drm_ras_genl_family_unregister();
 	drm_privacy_screen_lookup_exit();
+	drm_panic_exit();
 	accel_core_exit();
 	unregister_chrdev(DRM_MAJOR, "drm");
 	drm_debugfs_remove_root();
@@ -1290,10 +1273,6 @@ static int __init drm_core_init(void)
 	drm_panic_init();
 
 	drm_privacy_screen_lookup_init();
-
-	ret = drm_ras_genl_family_register();
-	if (ret < 0)
-		goto error;
 
 	drm_core_init_complete = true;
 

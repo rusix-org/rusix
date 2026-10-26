@@ -81,8 +81,6 @@ static const struct of_device_id allowlist[] __initconst = {
 		{ .have_governor_per_policy = true, },
 	},
 
-	{ .compatible = "spacemit,k1", },
-
 	{ .compatible = "st-ericsson,u8500", },
 	{ .compatible = "st-ericsson,u8540", },
 	{ .compatible = "st-ericsson,u9500", },
@@ -149,20 +147,16 @@ static const struct of_device_id blocklist[] __initconst = {
 	{ .compatible = "nvidia,tegra30", },
 	{ .compatible = "nvidia,tegra114", },
 	{ .compatible = "nvidia,tegra124", },
-	{ .compatible = "nvidia,tegra186", },
-	{ .compatible = "nvidia,tegra194", },
 	{ .compatible = "nvidia,tegra210", },
 	{ .compatible = "nvidia,tegra234", },
 
 	{ .compatible = "qcom,apq8096", },
-	{ .compatible = "qcom,milos", },
 	{ .compatible = "qcom,msm8909", },
 	{ .compatible = "qcom,msm8996", },
 	{ .compatible = "qcom,msm8998", },
 	{ .compatible = "qcom,qcm2290", },
 	{ .compatible = "qcom,qcm6490", },
 	{ .compatible = "qcom,qcs404", },
-	{ .compatible = "qcom,qcs8300", },
 	{ .compatible = "qcom,qdu1000", },
 	{ .compatible = "qcom,sa8155p" },
 	{ .compatible = "qcom,sa8540p" },
@@ -200,17 +194,14 @@ static const struct of_device_id blocklist[] __initconst = {
 	{ .compatible = "ti,am625", },
 	{ .compatible = "ti,am62a7", },
 	{ .compatible = "ti,am62d2", },
-	{ .compatible = "ti,am62l3", },
 	{ .compatible = "ti,am62p5", },
 
-	{ .compatible = "qcom,ipq5210", },
 	{ .compatible = "qcom,ipq5332", },
 	{ .compatible = "qcom,ipq5424", },
 	{ .compatible = "qcom,ipq6018", },
 	{ .compatible = "qcom,ipq8064", },
 	{ .compatible = "qcom,ipq8074", },
 	{ .compatible = "qcom,ipq9574", },
-	{ .compatible = "qcom,ipq9650", },
 	{ .compatible = "qcom,apq8064", },
 	{ .compatible = "qcom,msm8974", },
 	{ .compatible = "qcom,msm8960", },
@@ -231,14 +222,20 @@ static bool __init cpu0_node_has_opp_v2_prop(void)
 
 static int __init cpufreq_dt_platdev_init(void)
 {
+	struct device_node *np __free(device_node) = of_find_node_by_path("/");
+	const struct of_device_id *match;
 	const void *data = NULL;
 
-	if (of_machine_device_match(allowlist)) {
-		data = of_machine_get_match_data(allowlist);
+	if (!np)
+		return -ENODEV;
+
+	match = of_match_node(allowlist, np);
+	if (match) {
+		data = match->data;
 		goto create_pdev;
 	}
 
-	if (cpu0_node_has_opp_v2_prop() && !of_machine_device_match(blocklist))
+	if (cpu0_node_has_opp_v2_prop() && !of_match_node(blocklist, np))
 		goto create_pdev;
 
 	return -ENODEV;

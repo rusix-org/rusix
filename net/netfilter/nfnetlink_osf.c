@@ -36,6 +36,7 @@ static inline int nf_osf_ttl(const struct sk_buff *skb,
 	switch (ttl_check) {
 	case NF_OSF_TTL_TRUE:
 		return ip->ttl == f_ttl;
+		break;
 	case NF_OSF_TTL_NOCHECK:
 		return 1;
 	case NF_OSF_TTL_LESS:
@@ -277,7 +278,7 @@ bool nf_osf_find(const struct sk_buff *skb,
 EXPORT_SYMBOL_GPL(nf_osf_find);
 
 static const struct nla_policy nfnl_osf_policy[OSF_ATTR_MAX + 1] = {
-	[OSF_ATTR_FINGER]	= NLA_POLICY_EXACT_LEN(sizeof(struct nf_osf_user_finger)),
+	[OSF_ATTR_FINGER]	= { .len = sizeof(struct nf_osf_user_finger) },
 };
 
 static int nfnl_osf_add_callback(struct sk_buff *skb,
@@ -324,7 +325,7 @@ static int nfnl_osf_add_callback(struct sk_buff *skb,
 	    !memchr(f->version, 0, MAXGENRELEN))
 		return -EINVAL;
 
-	kf = kmalloc_obj(struct nf_osf_finger, GFP_KERNEL_ACCOUNT);
+	kf = kmalloc(sizeof(struct nf_osf_finger), GFP_KERNEL);
 	if (!kf)
 		return -ENOMEM;
 

@@ -46,9 +46,5 @@ obj-$(CONFIG_KEXEC_FILE)		+= kexec_file.o
 
 # vdso
 obj-y			+= vdso.o
-ifdef CONFIG_64BIT
-obj-y			+= vdso64/
-obj-$(CONFIG_COMPAT)	+= vdso32/
-else
+obj-$(CONFIG_64BIT)	+= vdso64/
 obj-y			+= vdso32/
-endif

@@ -420,7 +420,8 @@ static int sh_mtu2_setup(struct sh_mtu2_device *mtu,
 	mtu->num_channels = min_t(unsigned int, ret,
 				  ARRAY_SIZE(sh_mtu2_channel_offsets));
 
-	mtu->channels = kzalloc_objs(*mtu->channels, mtu->num_channels);
+	mtu->channels = kcalloc(mtu->num_channels, sizeof(*mtu->channels),
+				GFP_KERNEL);
 	if (mtu->channels == NULL) {
 		ret = -ENOMEM;
 		goto err_unmap;
@@ -461,7 +462,7 @@ static int sh_mtu2_probe(struct platform_device *pdev)
 		goto out;
 	}
 
-	mtu = kzalloc_obj(*mtu);
+	mtu = kzalloc(sizeof(*mtu), GFP_KERNEL);
 	if (mtu == NULL)
 		return -ENOMEM;
 
@@ -484,8 +485,8 @@ static int sh_mtu2_probe(struct platform_device *pdev)
 }
 
 static const struct platform_device_id sh_mtu2_id_table[] = {
-	{ .name = "sh-mtu2" },
-	{ }
+	{ "sh-mtu2", 0 },
+	{ },
 };
 MODULE_DEVICE_TABLE(platform, sh_mtu2_id_table);
 

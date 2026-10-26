@@ -11,8 +11,6 @@
 
   RO_DATA(4096)
 
-  .lrodata : { *(.lrodata .lrodata.[0-9a-zA-Z_]* .lrodata..L*) }
-
   .unprotected : { *(.unprotected) }
   . = ALIGN(4096);
   PROVIDE (_unprotected_end = .);
@@ -93,7 +91,6 @@
   .fini_array : {
 	__fini_array_start = .;
 	*(.fini_array)
-	*(.fini_array.*)
 	__fini_array_end = .;
   }
 

@@ -248,14 +248,10 @@ static int tegra_xusb_padctl_dt_node_to_map(struct pinctrl_dev *pinctrl,
 						      &reserved_maps,
 						      num_maps);
 		if (err < 0)
-			goto err_free_map;
+			return err;
 	}
 
 	return 0;
-
-err_free_map:
-	pinctrl_utils_free_map(pinctrl, *maps, *num_maps);
-	return err;
 }
 
 static const struct pinctrl_ops tegra_xusb_padctl_pinctrl_ops = {
@@ -478,14 +474,14 @@ static const struct pinconf_ops tegra_xusb_padctl_pinconf_ops = {
 #endif
 };
 
-static void tegra_xusb_padctl_enable(struct tegra_xusb_padctl *padctl)
+static int tegra_xusb_padctl_enable(struct tegra_xusb_padctl *padctl)
 {
 	u32 value;
 
-	guard(mutex)(&padctl->lock);
+	mutex_lock(&padctl->lock);
 
 	if (padctl->enable++ > 0)
-		return;
+		goto out;
 
 	value = padctl_readl(padctl, XUSB_PADCTL_ELPG_PROGRAM);
 	value &= ~XUSB_PADCTL_ELPG_PROGRAM_AUX_MUX_LP0_CLAMP_EN;
@@ -502,19 +498,23 @@ static void tegra_xusb_padctl_enable(struct tegra_xusb_padctl *padctl)
 	value = padctl_readl(padctl, XUSB_PADCTL_ELPG_PROGRAM);
 	value &= ~XUSB_PADCTL_ELPG_PROGRAM_AUX_MUX_LP0_VCORE_DOWN;
 	padctl_writel(padctl, value, XUSB_PADCTL_ELPG_PROGRAM);
+
+out:
+	mutex_unlock(&padctl->lock);
+	return 0;
 }
 
-static void tegra_xusb_padctl_disable(struct tegra_xusb_padctl *padctl)
+static int tegra_xusb_padctl_disable(struct tegra_xusb_padctl *padctl)
 {
 	u32 value;
 
-	guard(mutex)(&padctl->lock);
+	mutex_lock(&padctl->lock);
 
 	if (WARN_ON(padctl->enable == 0))
-		return;
+		goto out;
 
 	if (--padctl->enable > 0)
-		return;
+		goto out;
 
 	value = padctl_readl(padctl, XUSB_PADCTL_ELPG_PROGRAM);
 	value |= XUSB_PADCTL_ELPG_PROGRAM_AUX_MUX_LP0_VCORE_DOWN;
@@ -531,24 +531,24 @@ static void tegra_xusb_padctl_disable(struct tegra_xusb_padctl *padctl)
 	value = padctl_readl(padctl, XUSB_PADCTL_ELPG_PROGRAM);
 	value |= XUSB_PADCTL_ELPG_PROGRAM_AUX_MUX_LP0_CLAMP_EN;
 	padctl_writel(padctl, value, XUSB_PADCTL_ELPG_PROGRAM);
+
+out:
+	mutex_unlock(&padctl->lock);
+	return 0;
 }
 
 static int tegra_xusb_phy_init(struct phy *phy)
 {
 	struct tegra_xusb_padctl *padctl = phy_get_drvdata(phy);
 
-	tegra_xusb_padctl_enable(padctl);
-
-	return 0;
+	return tegra_xusb_padctl_enable(padctl);
 }
 
 static int tegra_xusb_phy_exit(struct phy *phy)
 {
 	struct tegra_xusb_padctl *padctl = phy_get_drvdata(phy);
 
-	tegra_xusb_padctl_disable(padctl);
-
-	return 0;
+	return tegra_xusb_padctl_disable(padctl);
 }
 
 static int pcie_phy_power_on(struct phy *phy)

@@ -41,7 +41,7 @@ module_param(tx_flow, int, 0);
 module_param(rx_flow, int, 0);
 module_param(copy_thresh, int, 0);
 module_param(rx_coalesce, int, 0);	/* Rx frame count each interrupt */
-module_param(rx_timeout, int, 0);  /* Rx DMA wait time in 640ns increments */
+module_param(rx_timeout, int, 0);	/* Rx DMA wait time in 64ns increments */
 module_param(tx_coalesce, int, 0); /* HW xmit count each TxDMAComplete */
 
 
@@ -262,7 +262,7 @@ rio_probe1 (struct pci_dev *pdev, const struct pci_device_id *ent)
 	np->link_status = 0;
 	/* Set media and reset PHY */
 	if (np->phy_media) {
-		/* default Auto-Negotiation for fiber devices */
+		/* default Auto-Negotiation for fiber deivices */
 	 	if (np->an_enable == 2) {
 			np->an_enable = 1;
 		}
@@ -279,15 +279,18 @@ rio_probe1 (struct pci_dev *pdev, const struct pci_device_id *ent)
 
 	card_idx++;
 
-	netdev_info(dev, "%s, %pM, IRQ %d", np->name, dev->dev_addr, irq);
+	printk (KERN_INFO "%s: %s, %pM, IRQ %d\n",
+		dev->name, np->name, dev->dev_addr, irq);
 	if (tx_coalesce > 1)
-		netdev_dbg(dev, "tx_coalesce:\t%d packets", tx_coalesce);
-	if (np->coalesce) {
-		netdev_dbg(dev, "rx_coalesce:\t%d packets", np->rx_coalesce);
-		netdev_dbg(dev, "rx_timeout: \t%d ns", np->rx_timeout * 640);
-	}
+		printk(KERN_INFO "tx_coalesce:\t%d packets\n",
+				tx_coalesce);
+	if (np->coalesce)
+		printk(KERN_INFO
+		       "rx_coalesce:\t%d packets\n"
+		       "rx_timeout: \t%d ns\n",
+				np->rx_coalesce, np->rx_timeout*640);
 	if (np->vlan)
-		netdev_dbg(dev, "vlan(id):\t%d", np->vlan);
+		printk(KERN_INFO "vlan(id):\t%d\n", np->vlan);
 	return 0;
 
 err_out_unmap_rx:
@@ -884,7 +887,7 @@ tx_error (struct net_device *dev, int tx_status)
 	frame_id = (tx_status & 0xffff0000);
 	printk (KERN_ERR "%s: Transmit error, TxStatus %4.4x, FrameId %d.\n",
 		dev->name, tx_status, frame_id);
-	/* Transmit Underrun */
+	/* Ttransmit Underrun */
 	if (tx_status & 0x10) {
 		dev->stats.tx_fifo_errors++;
 		dw16(TxStartThresh, dr16(TxStartThresh) + 0x10);
@@ -1080,7 +1083,7 @@ rio_error (struct net_device *dev, int int_status)
 		get_stats (dev);
 	}
 
-	/* PCI Error, a catastrophic error related to the bus interface
+	/* PCI Error, a catastronphic error related to the bus interface
 	   occurs, set GlobalReset and HostReset to reset. */
 	if (int_status & HostError) {
 		printk (KERN_ERR "%s: HostError! IntStatus %4.4x.\n",

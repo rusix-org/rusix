@@ -1234,7 +1234,7 @@ static void usbg_submit_cmd(struct usbg_cmd *cmd)
 		goto out;
 
 	target_submit_cmd(se_cmd, tv_nexus->tvn_se_sess, cmd->cmd_buf,
-			  cmd->sense_iu.sense, cmd->unpacked_lun, cmd->data_len,
+			  cmd->sense_iu.sense, cmd->unpacked_lun, 0,
 			  cmd->prio_attr, dir, flags);
 
 	return;
@@ -1396,7 +1396,6 @@ static int usbg_submit_command(struct f_uas *fu, struct usb_request *req)
 	cmd->tmr_func = 0;
 	cmd->tmr_rsp = RC_RESPONSE_UNKNOWN;
 	cmd->flags = 0;
-	cmd->data_len = 0;
 
 	cmd_iu = (struct command_iu *)iu;
 
@@ -1696,7 +1695,7 @@ static struct se_portal_group *usbg_make_tpg(struct se_wwn *wwn,
 			goto unlock_inst;
 	}
 
-	tpg = kzalloc_obj(struct usbg_tpg);
+	tpg = kzalloc(sizeof(struct usbg_tpg), GFP_KERNEL);
 	ret = -ENOMEM;
 	if (!tpg)
 		goto unref_dep;
@@ -1785,7 +1784,7 @@ static struct se_wwn *usbg_make_tport(
 	if (!wnn_name)
 		return ERR_PTR(-EINVAL);
 
-	tport = kzalloc_obj(struct usbg_tport);
+	tport = kzalloc(sizeof(struct usbg_tport), GFP_KERNEL);
 	if (!(tport))
 		return ERR_PTR(-ENOMEM);
 
@@ -1878,7 +1877,7 @@ static int tcm_usbg_make_nexus(struct usbg_tpg *tpg, char *name)
 		goto out_unlock;
 	}
 
-	tv_nexus = kzalloc_obj(*tv_nexus);
+	tv_nexus = kzalloc(sizeof(*tv_nexus), GFP_KERNEL);
 	if (!tv_nexus) {
 		ret = -ENOMEM;
 		goto out_unlock;
@@ -2033,7 +2032,6 @@ static const struct target_core_fabric_ops usbg_ops = {
 	.tfc_wwn_attrs			= usbg_wwn_attrs,
 	.tfc_tpg_base_attrs		= usbg_base_attrs,
 
-	.default_compl_type		= TARGET_QUEUE_COMPL,
 	.default_submit_type		= TARGET_DIRECT_SUBMIT,
 	.direct_submit_supp		= 1,
 };
@@ -2594,7 +2592,7 @@ static void tcm_attr_release(struct config_item *item)
 	usb_put_function_instance(&opts->func_inst);
 }
 
-static const struct configfs_item_operations tcm_item_ops = {
+static struct configfs_item_operations tcm_item_ops = {
 	.release		= tcm_attr_release,
 };
 
@@ -2680,7 +2678,7 @@ static struct usb_function_instance *tcm_alloc_inst(void)
 	int i;
 
 
-	opts = kzalloc_obj(*opts);
+	opts = kzalloc(sizeof(*opts), GFP_KERNEL);
 	if (!opts)
 		return ERR_PTR(-ENOMEM);
 
@@ -2740,7 +2738,7 @@ static struct usb_function *tcm_alloc(struct usb_function_instance *fi)
 		return ERR_PTR(-ENODEV);
 	}
 
-	fu = kzalloc_obj(*fu);
+	fu = kzalloc(sizeof(*fu), GFP_KERNEL);
 	if (!fu) {
 		mutex_unlock(&tpg_instances_lock);
 		return ERR_PTR(-ENOMEM);

@@ -27,9 +27,9 @@
 #include <sound/initval.h>
 #include <sound/pcm_params.h>
 #include <sound/soc.h>
+#include <sound/pxa2xx-lib.h>
 #include <sound/dmaengine_pcm.h>
 
-#include "pxa2xx-lib.h"
 #include "pxa-ssp.h"
 
 /*
@@ -85,7 +85,7 @@ static int pxa_ssp_startup(struct snd_pcm_substream *substream,
 
 	clk_prepare_enable(priv->extclk);
 
-	dma = kzalloc_obj(struct snd_dmaengine_dai_dma_data);
+	dma = kzalloc(sizeof(struct snd_dmaengine_dai_dma_data), GFP_KERNEL);
 	if (!dma)
 		return -ENOMEM;
 	dma->chan_name = substream->stream == SNDRV_PCM_STREAM_PLAYBACK ?
@@ -749,7 +749,7 @@ static int pxa_ssp_probe(struct snd_soc_dai *dai)
 	struct ssp_priv *priv;
 	int ret;
 
-	priv = kzalloc_obj(struct ssp_priv);
+	priv = kzalloc(sizeof(struct ssp_priv), GFP_KERNEL);
 	if (!priv)
 		return -ENOMEM;
 
@@ -809,15 +809,6 @@ static int pxa_ssp_remove(struct snd_soc_dai *dai)
 
 #define PXA_SSP_FORMATS (SNDRV_PCM_FMTBIT_S16_LE | SNDRV_PCM_FMTBIT_S32_LE)
 
-static const u64 pxa_ssp_dai_selectable_formats =
-	SND_SOC_POSSIBLE_DAIFMT_I2S	|
-	SND_SOC_POSSIBLE_DAIFMT_DSP_A	|
-	SND_SOC_POSSIBLE_DAIFMT_DSP_B	|
-	SND_SOC_POSSIBLE_DAIFMT_NB_NF	|
-	SND_SOC_POSSIBLE_DAIFMT_NB_IF	|
-	SND_SOC_POSSIBLE_DAIFMT_IB_NF	|
-	SND_SOC_POSSIBLE_DAIFMT_IB_IF;
-
 static const struct snd_soc_dai_ops pxa_ssp_dai_ops = {
 	.probe		= pxa_ssp_probe,
 	.remove		= pxa_ssp_remove,
@@ -829,8 +820,6 @@ static const struct snd_soc_dai_ops pxa_ssp_dai_ops = {
 	.set_fmt	= pxa_ssp_set_dai_fmt,
 	.set_tdm_slot	= pxa_ssp_set_dai_tdm_slot,
 	.set_tristate	= pxa_ssp_set_dai_tristate,
-	.auto_selectable_formats	= &pxa_ssp_dai_selectable_formats,
-	.num_auto_selectable_formats	= 1,
 };
 
 static struct snd_soc_dai_driver pxa_ssp_dai = {
@@ -851,7 +840,7 @@ static struct snd_soc_dai_driver pxa_ssp_dai = {
 
 static const struct snd_soc_component_driver pxa_ssp_component = {
 	.name			= "pxa-ssp",
-	.pcm_new		= pxa2xx_soc_pcm_new,
+	.pcm_construct		= pxa2xx_soc_pcm_new,
 	.open			= pxa2xx_soc_pcm_open,
 	.close			= pxa2xx_soc_pcm_close,
 	.hw_params		= pxa2xx_soc_pcm_hw_params,

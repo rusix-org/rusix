@@ -175,95 +175,6 @@ static inline void stack_map_build_id_set_valid(struct bpf_stack_build_id *id,
 		memcpy(id->build_id, build_id, BUILD_ID_SIZE_MAX);
 }
 
-/*
- * A cached VMA lookup result. The range [vm_start, vm_end) is always set.
- * vm_pgoff, file, build_id are set only when the build ID was resolved.
- * Zero vm_end marks the slot empty. build_id aliases the id_offs[] entry.
- */
-struct stack_map_cached_vma {
-	unsigned long vm_start;
-	unsigned long vm_end;
-	unsigned long vm_pgoff;
-	struct file *file; /* pinned in the sleepable path; NULL otherwise */
-	const unsigned char *build_id;
-};
-
-/*
- * Per stack_map_get_build_id_offset() call cache of the last VMA with a build ID
- * resolved and the last VMA with no usable build ID. Adjacent stack frames tend
- * to land in the same VMA or the same backing file, so caching the last result
- * of each kind lets us skip unnecessary VMA lookups and build ID parse calls.
- * Keeping the two slots independent means a build-ID-less VMA doesn't evict the
- * last resolved build ID.
- */
-struct stack_map_build_id_cache {
-	struct stack_map_cached_vma resolved;
-	struct stack_map_cached_vma unresolved;
-};
-
-/*
- * Fill @id from a cached range covering @ip. On a hit this writes @id (resolved
- * range -> build ID + offset, unresolved range -> raw ip) and returns 0; on a
- * miss it leaves @id untouched and returns -ENOENT.
- */
-static int stack_map_build_id_set_from_cache(struct stack_map_build_id_cache *cache,
-					     struct bpf_stack_build_id *id, u64 ip)
-{
-	unsigned long vm_start, vm_end, vm_pgoff;
-	u64 offset;
-
-	vm_start = cache->resolved.vm_start;
-	vm_end = cache->resolved.vm_end;
-	if (vm_end && ip >= vm_start && ip < vm_end) {
-		vm_pgoff = cache->resolved.vm_pgoff;
-		offset = stack_map_build_id_offset(vm_pgoff, vm_start, ip);
-		stack_map_build_id_set_valid(id, offset, cache->resolved.build_id);
-		return 0;
-	}
-
-	vm_start = cache->unresolved.vm_start;
-	vm_end = cache->unresolved.vm_end;
-	if (vm_end && ip >= vm_start && ip < vm_end) {
-		stack_map_build_id_set_ip(id);
-		return 0;
-	}
-
-	return -ENOENT;
-}
-
-/*
- * Record @vma's build ID as the last resolved one. @file is the pinned backing
- * file in the sleepable path (released when evicted), or NULL otherwise.
- */
-static void stack_map_build_id_cache_set_resolved(struct stack_map_build_id_cache *cache,
-						  struct file *file,
-						  const unsigned char *build_id,
-						  unsigned long vm_start,
-						  unsigned long vm_end,
-						  unsigned long vm_pgoff)
-{
-	if (cache->resolved.file)
-		fput(cache->resolved.file);
-	cache->resolved = (struct stack_map_cached_vma){
-		.vm_start = vm_start,
-		.vm_end = vm_end,
-		.vm_pgoff = vm_pgoff,
-		.file = file,
-		.build_id = build_id,
-	};
-}
-
-/* Record [vm_start, vm_end) as a range with no usable build ID. */
-static void stack_map_build_id_cache_set_unresolved(struct stack_map_build_id_cache *cache,
-						    unsigned long vm_start,
-						    unsigned long vm_end)
-{
-	cache->unresolved = (struct stack_map_cached_vma){
-		.vm_start = vm_start,
-		.vm_end = vm_end,
-	};
-}
-
 struct stack_map_vma_lock {
 	struct vm_area_struct *vma;
 	struct mm_struct *mm;
@@ -272,10 +183,13 @@ struct stack_map_vma_lock {
 /*
  * Acquire a stable read-side reference on the VMA covering @ip.
  *
- * On NOMMU configurations, returns with the mmap_lock held.  If the MMU
- * is enabled, the per-VMA lock will be held instead.  The lock
- * should be released with stack_map_unlock_vma() which will release the
- * appropriate lock.  Once the lock is released, the VMA may be freed.
+ * With CONFIG_PER_VMA_LOCK=y this returns a VMA with its per-VMA read
+ * lock held and mmap_lock dropped, so the caller may sleep.
+ *
+ * With CONFIG_PER_VMA_LOCK=n it returns a VMA with mmap_lock still
+ * held; the caller must snapshot any fields it needs and pin vm_file
+ * with get_file() before stack_map_unlock_vma() drops mmap_lock, as
+ * the VMA may be split, merged, or freed after that.
  *
  * Returns NULL on failure, in which case no lock is held.
  */
@@ -285,6 +199,7 @@ stack_map_lock_vma(struct stack_map_vma_lock *lock, unsigned long ip)
 	struct mm_struct *mm = lock->mm;
 	struct vm_area_struct *vma;
 
+	/* noop under !CONFIG_PER_VMA_LOCK */
 	vma = lock_vma_under_rcu(mm, ip);
 	if (vma) {
 		lock->vma = vma;
@@ -304,20 +219,21 @@ stack_map_lock_vma(struct stack_map_vma_lock *lock, unsigned long ip)
 		return NULL;
 	}
 
-#ifdef CONFIG_MMU
+#ifdef CONFIG_PER_VMA_LOCK
 	if (!vma_start_read_locked(vma)) {
 		mmap_read_unlock(mm);
 		return NULL;
 	}
 	mmap_read_unlock(mm);
 #endif
+
 	lock->vma = vma;
 	return vma;
 }
 
 static void stack_map_unlock_vma(struct stack_map_vma_lock *lock)
 {
-#ifdef CONFIG_MMU
+#ifdef CONFIG_PER_VMA_LOCK
 	vma_end_read(lock->vma);
 #else
 	mmap_read_unlock(lock->mm);
@@ -328,10 +244,8 @@ static void stack_map_unlock_vma(struct stack_map_vma_lock *lock)
 static void stack_map_get_build_id_offset_sleepable(struct bpf_stack_build_id *id_offs,
 						    u32 trace_nr)
 {
-	struct stack_map_vma_lock lock = { .mm = current->mm };
-	struct stack_map_build_id_cache cache = {};
-	struct stack_map_cached_vma *res = &cache.resolved;
-	unsigned long vm_pgoff, vm_start, vm_end;
+	struct mm_struct *mm = current->mm;
+	struct stack_map_vma_lock lock = { .mm = mm };
 	struct vm_area_struct *vma;
 	struct file *file;
 	u64 offset;
@@ -340,60 +254,28 @@ static void stack_map_get_build_id_offset_sleepable(struct bpf_stack_build_id *i
 	for (u32 i = 0; i < trace_nr; i++) {
 		ip = READ_ONCE(id_offs[i].ip);
 
-		if (!stack_map_build_id_set_from_cache(&cache, &id_offs[i], ip))
-			continue;
-
 		vma = stack_map_lock_vma(&lock, ip);
 		if (!vma) {
 			stack_map_build_id_set_ip(&id_offs[i]);
 			continue;
 		}
-
-		vm_pgoff = vma->vm_pgoff;
-		vm_start = vma->vm_start;
-		vm_end = vma->vm_end;
-
 		if (vma_is_anonymous(vma) || !vma->vm_file) {
-			stack_map_unlock_vma(&lock);
 			stack_map_build_id_set_ip(&id_offs[i]);
-			stack_map_build_id_cache_set_unresolved(&cache, vm_start, vm_end);
-			continue;
-		}
-
-		file = vma->vm_file;
-		offset = stack_map_build_id_offset(vm_pgoff, vm_start, ip);
-
-		/*
-		 * Same backing file as the last resolved VMA (another mapping
-		 * of the same ELF binary): reuse its build_id without re-parsing.
-		 */
-		if (file == res->file) {
 			stack_map_unlock_vma(&lock);
-			stack_map_build_id_set_valid(&id_offs[i], offset, res->build_id);
-			res->vm_start = vm_start;
-			res->vm_end = vm_end;
-			res->vm_pgoff = vm_pgoff;
 			continue;
 		}
 
-		file = get_file(file);
+		file = get_file(vma->vm_file);
+		offset = stack_map_build_id_offset(vma->vm_pgoff, vma->vm_start, ip);
 		stack_map_unlock_vma(&lock);
 
 		/* build_id_parse_file() may block on filesystem reads */
-		if (build_id_parse_file(file, id_offs[i].build_id, NULL)) {
+		if (build_id_parse_file(file, id_offs[i].build_id, NULL))
 			stack_map_build_id_set_ip(&id_offs[i]);
-			fput(file);
-			stack_map_build_id_cache_set_unresolved(&cache, vm_start, vm_end);
-			continue;
-		}
-
-		stack_map_build_id_set_valid(&id_offs[i], offset, id_offs[i].build_id);
-		stack_map_build_id_cache_set_resolved(&cache, file, id_offs[i].build_id,
-						      vm_start, vm_end, vm_pgoff);
+		else
+			stack_map_build_id_set_valid(&id_offs[i], offset, id_offs[i].build_id);
+		fput(file);
 	}
-
-	if (res->file)
-		fput(res->file);
 }
 
 /*
@@ -411,8 +293,8 @@ static void stack_map_get_build_id_offset(struct bpf_stack_build_id *id_offs,
 {
 	struct mmap_unlock_irq_work *work;
 	bool has_user_ctx = user && current && current->mm;
-	struct stack_map_build_id_cache cache = {};
-	struct vm_area_struct *vma;
+	struct vm_area_struct *vma, *prev_vma = NULL;
+	const unsigned char *prev_build_id = NULL;
 	int i;
 
 	if (may_fault && has_user_ctx) {
@@ -434,30 +316,27 @@ static void stack_map_get_build_id_offset(struct bpf_stack_build_id *id_offs,
 
 	for (i = 0; i < trace_nr; i++) {
 		u64 ip = READ_ONCE(id_offs[i].ip);
+		u64 offset;
 
-		if (!stack_map_build_id_set_from_cache(&cache, &id_offs[i], ip))
+		if (prev_build_id && range_in_vma(prev_vma, ip, ip)) {
+			vma = prev_vma;
+			offset = stack_map_build_id_offset(vma->vm_pgoff, vma->vm_start, ip);
+			stack_map_build_id_set_valid(&id_offs[i], offset, prev_build_id);
 			continue;
-
+		}
 		vma = find_vma(current->mm, ip);
 		if (!vma || vma_is_anonymous(vma) ||
 		    fetch_build_id(vma, id_offs[i].build_id, may_fault)) {
-			/* per entry fall back to ips; cache build-ID-less range */
+			/* per entry fall back to ips */
 			stack_map_build_id_set_ip(&id_offs[i]);
-			if (vma)
-				stack_map_build_id_cache_set_unresolved(&cache,
-						vma->vm_start, vma->vm_end);
+			prev_vma = vma;
+			prev_build_id = NULL;
 			continue;
 		}
-		/*
-		 * mmap_lock is held for the whole loop, so the cached VMA
-		 * fields stay valid; no file pinning is needed here.
-		 */
-		stack_map_build_id_set_valid(&id_offs[i],
-			stack_map_build_id_offset(vma->vm_pgoff, vma->vm_start, ip),
-			id_offs[i].build_id);
-		stack_map_build_id_cache_set_resolved(&cache, NULL, id_offs[i].build_id,
-						      vma->vm_start, vma->vm_end,
-						      vma->vm_pgoff);
+		offset = stack_map_build_id_offset(vma->vm_pgoff, vma->vm_start, ip);
+		stack_map_build_id_set_valid(&id_offs[i], offset, id_offs[i].build_id);
+		prev_vma = vma;
+		prev_build_id = id_offs[i].build_id;
 	}
 	bpf_mmap_unlock_mm(work, current->mm);
 	return;
@@ -507,7 +386,7 @@ get_callchain_entry_for_task(struct task_struct *task, u32 max_depth)
 
 struct stackid {
 	struct stack_map_bucket *bucket;
-	const u64 *ips;
+	u64 *ips;
 	u32  nr;
 	u32  len;
 	u32  hash;
@@ -516,21 +395,21 @@ struct stackid {
 };
 
 static int stackid_init(struct stackid *stackid, struct bpf_map *map,
-			const struct perf_callchain_entry *trace, u32 trace_nr, u64 flags)
+			struct perf_callchain_entry *trace, u64 flags)
 {
 	struct bpf_stack_map *smap = container_of(map, struct bpf_stack_map, map);
 	u32 skip = flags & BPF_F_SKIP_FIELD_MASK;
 	u32 max_depth;
 
-	if (trace_nr <= skip)
+	if (trace->nr <= skip)
 		/* skipping more than usable stack trace */
 		return -EFAULT;
 
 	max_depth = stack_map_calculate_max_depth(map->value_size, stack_map_data_size(map), flags);
-	stackid->nr = min_t(u32, trace_nr - skip, max_depth - skip);
+	stackid->nr = min_t(u32, trace->nr - skip, max_depth - skip);
 	stackid->len = stackid->nr * sizeof(u64);
 	stackid->ips = trace->ip + skip;
-	stackid->hash = jhash2((const u32 *)stackid->ips, stackid->len / sizeof(u32), 0);
+	stackid->hash = jhash2((u32 *)stackid->ips, stackid->len / sizeof(u32), 0);
 	stackid->id = stackid->hash & (smap->n_buckets - 1);
 	stackid->bucket = READ_ONCE(smap->buckets[stackid->id]);
 	stackid->hash_matches = stackid->bucket && stackid->bucket->hash == stackid->hash;
@@ -538,12 +417,11 @@ static int stackid_init(struct stackid *stackid, struct bpf_map *map,
 }
 
 static int stackid_fastpath(struct stackid *stackid, struct bpf_map *map,
-			    const struct perf_callchain_entry *trace, u32 trace_nr,
-			    u64 flags)
+			    struct perf_callchain_entry *trace, u64 flags)
 {
 	int err;
 
-	err = stackid_init(stackid, map, trace, trace_nr, flags);
+	err = stackid_init(stackid, map, trace, flags);
 	if (err)
 		return err;
 
@@ -637,12 +515,12 @@ BPF_CALL_3(bpf_get_stackid, struct pt_regs *, regs, struct bpf_map *, map,
 
 	scoped_guard(preempt) {
 		trace = get_perf_callchain(regs, kernel, user, max_depth,
-					   false, false, 0);
+					   false, false);
 		if (unlikely(!trace))
 			/* couldn't fetch the stack trace */
 			return -EFAULT;
 
-		err = stackid_fastpath(&stackid, map, trace, trace->nr, flags);
+		err = stackid_fastpath(&stackid, map, trace, flags);
 		if (err != -ENOENT)
 			return err;
 
@@ -663,7 +541,7 @@ const struct bpf_func_proto bpf_get_stackid_proto = {
 	.arg3_type	= ARG_ANYTHING,
 };
 
-static __u64 count_kernel_ip(const struct perf_callchain_entry *trace)
+static __u64 count_kernel_ip(struct perf_callchain_entry *trace)
 {
 	__u64 nr_kernel = 0;
 
@@ -678,13 +556,12 @@ static __u64 count_kernel_ip(const struct perf_callchain_entry *trace)
 BPF_CALL_3(bpf_get_stackid_pe, struct bpf_perf_event_data_kern *, ctx,
 	   struct bpf_map *, map, u64, flags)
 {
-	const struct perf_callchain_entry *trace;
 	struct perf_event *event = ctx->event;
 	struct stack_map_bucket *new_bucket;
+	struct perf_callchain_entry *trace;
 	struct stackid stackid;
 	bool kernel, user;
 	__u64 nr_kernel;
-	u32 trace_nr;
 	int ret;
 
 	/* perf_sample_data doesn't have callchain, use bpf_get_stackid */
@@ -704,13 +581,13 @@ BPF_CALL_3(bpf_get_stackid_pe, struct bpf_perf_event_data_kern *, ctx,
 		return -EFAULT;
 
 	nr_kernel = count_kernel_ip(trace);
+	__u64 nr = trace->nr; /* save original */
 
 	if (kernel) {
-		trace_nr = nr_kernel;
+		trace->nr = nr_kernel;
 	} else { /* user */
 		u64 skip = flags & BPF_F_SKIP_FIELD_MASK;
 
-		trace_nr = trace->nr;
 		skip += nr_kernel;
 		if (skip > BPF_F_SKIP_FIELD_MASK)
 			return -EFAULT;
@@ -718,14 +595,21 @@ BPF_CALL_3(bpf_get_stackid_pe, struct bpf_perf_event_data_kern *, ctx,
 		flags = (flags & ~BPF_F_SKIP_FIELD_MASK) | skip;
 	}
 
-	ret = stackid_fastpath(&stackid, map, trace, trace_nr, flags);
+	ret = stackid_fastpath(&stackid, map, trace, flags);
 	if (ret != -ENOENT)
-		return ret;
+		goto out;
 
 	new_bucket = stackid_new_bucket(&stackid, map);
-	if (new_bucket)
+	if (new_bucket) {
+		trace->nr = nr;
 		return stackid_install(&stackid, map, new_bucket, flags);
-	return -ENOMEM;
+	}
+	ret = -ENOMEM;
+
+out:
+	/* restore nr */
+	trace->nr = nr;
+	return ret;
 }
 
 const struct bpf_func_proto bpf_get_stackid_proto_pe = {
@@ -737,15 +621,15 @@ const struct bpf_func_proto bpf_get_stackid_proto_pe = {
 	.arg3_type	= ARG_ANYTHING,
 };
 
-static u32 callchain_store(const struct perf_callchain_entry *trace, u32 trace_nr,
-			   void *buf, u32 elem_size, u64 flags)
+static u32 callchain_store(struct perf_callchain_entry *trace, void *buf,
+			   u32 elem_size, u64 flags)
 {
 	bool user_build_id = flags & BPF_F_USER_BUILD_ID;
 	u32 skip = flags & BPF_F_SKIP_FIELD_MASK;
-	const u64 *ips;
-	u32 copy_len;
+	u32 trace_nr, copy_len;
+	u64 *ips;
 
-	trace_nr = trace_nr - skip;
+	trace_nr = trace->nr - skip;
 	copy_len = trace_nr * elem_size;
 
 	ips = trace->ip + skip;
@@ -819,7 +703,7 @@ static long __bpf_get_stack(struct pt_regs *regs, struct task_struct *task,
 		trace = get_callchain_entry_for_task(task, max_depth);
 	} else {
 		trace = get_perf_callchain(regs, kernel, user, max_depth,
-					   crosstask, false, 0);
+					   crosstask, false);
 	}
 
 	if (unlikely(!trace) || trace->nr < skip) {
@@ -829,7 +713,7 @@ static long __bpf_get_stack(struct pt_regs *regs, struct task_struct *task,
 		goto err_fault;
 	}
 
-	trace_nr = callchain_store(trace, trace->nr, buf, elem_size, flags);
+	trace_nr = callchain_store(trace, buf, elem_size, flags);
 
 	/* trace should not be dereferenced after this point */
 	if (may_fault)
@@ -857,7 +741,7 @@ const struct bpf_func_proto bpf_get_stack_proto = {
 	.ret_type	= RET_INTEGER,
 	.arg1_type	= ARG_PTR_TO_CTX,
 	.arg2_type	= ARG_PTR_TO_UNINIT_MEM,
-	.arg3_type	= ARG_MEM_SIZE_OR_ZERO,
+	.arg3_type	= ARG_CONST_SIZE_OR_ZERO,
 	.arg4_type	= ARG_ANYTHING,
 };
 
@@ -874,7 +758,7 @@ const struct bpf_func_proto bpf_get_stack_sleepable_proto = {
 	.ret_type	= RET_INTEGER,
 	.arg1_type	= ARG_PTR_TO_CTX,
 	.arg2_type	= ARG_PTR_TO_UNINIT_MEM,
-	.arg3_type	= ARG_MEM_SIZE_OR_ZERO,
+	.arg3_type	= ARG_CONST_SIZE_OR_ZERO,
 	.arg4_type	= ARG_ANYTHING,
 };
 
@@ -911,7 +795,7 @@ const struct bpf_func_proto bpf_get_task_stack_proto = {
 	.arg1_type	= ARG_PTR_TO_BTF_ID,
 	.arg1_btf_id	= &btf_tracing_ids[BTF_TRACING_TYPE_TASK],
 	.arg2_type	= ARG_PTR_TO_UNINIT_MEM,
-	.arg3_type	= ARG_MEM_SIZE_OR_ZERO,
+	.arg3_type	= ARG_CONST_SIZE_OR_ZERO,
 	.arg4_type	= ARG_ANYTHING,
 };
 
@@ -929,12 +813,12 @@ const struct bpf_func_proto bpf_get_task_stack_sleepable_proto = {
 	.arg1_type	= ARG_PTR_TO_BTF_ID,
 	.arg1_btf_id	= &btf_tracing_ids[BTF_TRACING_TYPE_TASK],
 	.arg2_type	= ARG_PTR_TO_UNINIT_MEM,
-	.arg3_type	= ARG_MEM_SIZE_OR_ZERO,
+	.arg3_type	= ARG_CONST_SIZE_OR_ZERO,
 	.arg4_type	= ARG_ANYTHING,
 };
 
-static int __bpf_get_stack_pe(const struct perf_callchain_entry *trace, u32 trace_nr,
-			      void *buf, u32 size, u64 flags)
+static int __bpf_get_stack_pe(struct perf_callchain_entry *trace, void *buf, u32 size,
+			      u64 flags)
 {
 	bool user_build_id = flags & BPF_F_USER_BUILD_ID;
 	u64 skip = flags & BPF_F_SKIP_FIELD_MASK;
@@ -950,12 +834,12 @@ static int __bpf_get_stack_pe(const struct perf_callchain_entry *trace, u32 trac
 		return -EINVAL;
 
 	max_depth = stack_map_calculate_max_depth(size, elem_size, flags);
-	trace_nr = min_t(u32, trace_nr, max_depth);
+	trace->nr = min_t(u32, trace->nr, max_depth);
 
-	if (trace_nr < skip)
+	if (trace->nr < skip)
 		return -EFAULT;
 
-	nr_trace = callchain_store(trace, trace_nr, buf, elem_size, flags);
+	nr_trace = callchain_store(trace, buf, elem_size, flags);
 	return callchain_finalize(buf, size, nr_trace, elem_size, flags, false /* !may_fault */);
 }
 
@@ -963,8 +847,8 @@ BPF_CALL_4(bpf_get_stack_pe, struct bpf_perf_event_data_kern *, ctx,
 	   void *, buf, u32, size, u64, flags)
 {
 	struct pt_regs *regs = (struct pt_regs *)(ctx->regs);
-	const struct perf_callchain_entry *trace;
 	struct perf_event *event = ctx->event;
+	struct perf_callchain_entry *trace;
 	bool kernel, user;
 	int err = -EINVAL;
 	__u64 nr_kernel;
@@ -987,7 +871,13 @@ BPF_CALL_4(bpf_get_stack_pe, struct bpf_perf_event_data_kern *, ctx,
 	nr_kernel = count_kernel_ip(trace);
 
 	if (kernel) {
-		err = __bpf_get_stack_pe(trace, nr_kernel, buf, size, flags);
+		__u64 nr = trace->nr;
+
+		trace->nr = nr_kernel;
+		err = __bpf_get_stack_pe(trace, buf, size, flags);
+
+		/* restore nr */
+		trace->nr = nr;
 	} else { /* user */
 		u64 skip = flags & BPF_F_SKIP_FIELD_MASK;
 
@@ -995,7 +885,7 @@ BPF_CALL_4(bpf_get_stack_pe, struct bpf_perf_event_data_kern *, ctx,
 		if (skip > BPF_F_SKIP_FIELD_MASK)
 			goto clear;
 		flags = (flags & ~BPF_F_SKIP_FIELD_MASK) | skip;
-		err = __bpf_get_stack_pe(trace, trace->nr, buf, size, flags);
+		err = __bpf_get_stack_pe(trace, buf, size, flags);
 	}
 
 clear:
@@ -1011,7 +901,7 @@ const struct bpf_func_proto bpf_get_stack_proto_pe = {
 	.ret_type	= RET_INTEGER,
 	.arg1_type	= ARG_PTR_TO_CTX,
 	.arg2_type	= ARG_PTR_TO_UNINIT_MEM,
-	.arg3_type	= ARG_MEM_SIZE_OR_ZERO,
+	.arg3_type	= ARG_CONST_SIZE_OR_ZERO,
 	.arg4_type	= ARG_ANYTHING,
 };
 

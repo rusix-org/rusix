@@ -1096,7 +1096,7 @@ static int save_mixer_state(struct cmipci *cm)
 		struct snd_ctl_elem_value *val;
 		unsigned int i;
 
-		val = kmalloc_obj(*val);
+		val = kmalloc(sizeof(*val), GFP_KERNEL);
 		if (!val)
 			return -ENOMEM;
 		for (i = 0; i < CM_SAVED_MIXERS; i++) {
@@ -1130,7 +1130,7 @@ static void restore_mixer_state(struct cmipci *cm)
 		struct snd_ctl_elem_value *val;
 		unsigned int i;
 
-		val = kmalloc_obj(*val);
+		val = kmalloc(sizeof(*val), GFP_KERNEL);
 		if (!val)
 			return;
 		cm->mixer_insensitive = 0; /* at first clear this;
@@ -2727,12 +2727,12 @@ static void snd_cmipci_proc_init(struct cmipci *cm)
 }
 
 static const struct pci_device_id snd_cmipci_ids[] = {
-	{PCI_VDEVICE(CMEDIA, PCI_DEVICE_ID_CMEDIA_CM8338A) },
-	{PCI_VDEVICE(CMEDIA, PCI_DEVICE_ID_CMEDIA_CM8338B) },
-	{PCI_VDEVICE(CMEDIA, PCI_DEVICE_ID_CMEDIA_CM8738) },
-	{PCI_VDEVICE(CMEDIA, PCI_DEVICE_ID_CMEDIA_CM8738B) },
-	{PCI_VDEVICE(AL, PCI_DEVICE_ID_CMEDIA_CM8738) },
-	{ }
+	{PCI_VDEVICE(CMEDIA, PCI_DEVICE_ID_CMEDIA_CM8338A), 0},
+	{PCI_VDEVICE(CMEDIA, PCI_DEVICE_ID_CMEDIA_CM8338B), 0},
+	{PCI_VDEVICE(CMEDIA, PCI_DEVICE_ID_CMEDIA_CM8738), 0},
+	{PCI_VDEVICE(CMEDIA, PCI_DEVICE_ID_CMEDIA_CM8738B), 0},
+	{PCI_VDEVICE(AL, PCI_DEVICE_ID_CMEDIA_CM8738), 0},
+	{0,},
 };
 
 
@@ -3170,7 +3170,7 @@ static int snd_cmipci_probe(struct pci_dev *pci,
 			    const struct pci_device_id *pci_id)
 {
 	static int dev;
-	struct snd_card *card __free(snd_card_free) = NULL;
+	struct snd_card *card;
 	int err;
 
 	if (dev >= SNDRV_CARDS)
@@ -3201,16 +3201,19 @@ static int snd_cmipci_probe(struct pci_dev *pci,
 
 	err = snd_cmipci_create(card, pci, dev);
 	if (err < 0)
-		return err;
+		goto error;
 
 	err = snd_card_register(card);
 	if (err < 0)
-		return err;
+		goto error;
 
 	pci_set_drvdata(pci, card);
-	card = NULL; /* probe succeeded, don't release as error */
 	dev++;
 	return 0;
+
+ error:
+	snd_card_free(card);
+	return err;
 }
 
 /*

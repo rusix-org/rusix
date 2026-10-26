@@ -1110,9 +1110,9 @@ bad:
  */
 
 #define sym_get_mem_cluster()	\
-	kmalloc(PAGE_SIZE << SYM_MEM_PAGE_ORDER, GFP_ATOMIC)
+	(void *) __get_free_pages(GFP_ATOMIC, SYM_MEM_PAGE_ORDER)
 #define sym_free_mem_cluster(p)	\
-	kfree(p)
+	free_pages((unsigned long)p, SYM_MEM_PAGE_ORDER)
 
 /*
  *  Link between free memory chunks of a given size.

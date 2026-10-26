@@ -139,7 +139,7 @@ static int *cci_pci_create_irq_table(struct pci_dev *pcidev, unsigned int nvec)
 	unsigned int i;
 	int *table;
 
-	table = kzalloc_objs(int, nvec);
+	table = kcalloc(nvec, sizeof(int), GFP_KERNEL);
 	if (!table)
 		return table;
 

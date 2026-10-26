@@ -7,20 +7,23 @@
 
 #include "regs/xe_guc_regs.h"
 #include "regs/xe_irq_regs.h"
+#include "regs/xe_regs.h"
 
 #include "xe_assert.h"
 #include "xe_bo.h"
 #include "xe_device.h"
 #include "xe_device_types.h"
 #include "xe_gt.h"
+#include "xe_gt_printk.h"
 #include "xe_guc.h"
 #include "xe_hw_engine.h"
+#include "xe_map.h"
 #include "xe_memirq.h"
-#include "xe_tile_printk.h"
 
 #define memirq_assert(m, condition)	xe_tile_assert(memirq_to_tile(m), condition)
 #define memirq_printk(m, _level, _fmt, ...)			\
-	xe_tile_##_level(memirq_to_tile(m), "MEMIRQ: " _fmt, ##__VA_ARGS__)
+	drm_##_level(&memirq_to_xe(m)->drm, "MEMIRQ%u: " _fmt,	\
+		     memirq_to_tile(m)->id, ##__VA_ARGS__)
 
 #ifdef CONFIG_DRM_XE_DEBUG_MEMIRQ
 #define memirq_debug(m, _fmt, ...)	memirq_printk(m, dbg, _fmt, ##__VA_ARGS__)
@@ -152,16 +155,6 @@ static const char *guc_name(struct xe_guc *guc)
  *
  */
 
-/* ISR */
-#define XE_MEMIRQ_STATUS_OFFSET(inst)	((inst) * SZ_4K + 0x0)
-/* IIR */
-#define XE_MEMIRQ_SOURCE_OFFSET(inst)	((inst) * SZ_4K + 0x400)
-/* IMR */
-#define XE_MEMIRQ_ENABLE_OFFSET		0x440
-
-/* engine ISR vector offset */
-#define XE_MEMIRQ_VECTOR_OFFSET(page, source)	(XE_MEMIRQ_STATUS_OFFSET(page) + (source) * SZ_16)
-
 static inline bool hw_reports_to_instance_zero(struct xe_memirq *memirq)
 {
 	/*
@@ -172,34 +165,17 @@ static inline bool hw_reports_to_instance_zero(struct xe_memirq *memirq)
 	return xe_device_has_msix(memirq_to_xe(memirq));
 }
 
-static unsigned int hwe_max_count(struct xe_tile *tile)
-{
-	unsigned int max_instance = 0;
-	unsigned int gtid, hweid;
-	struct xe_hw_engine *hwe;
-	struct xe_gt *gt;
-
-	for_each_gt_on_tile(gt, tile, gtid)
-		for_each_hw_engine(hwe, gt, hweid)
-			max_instance = max(max_instance, hwe->instance);
-
-	return max_instance + 1;
-}
-
 static int memirq_alloc_pages(struct xe_memirq *memirq)
 {
 	struct xe_device *xe = memirq_to_xe(memirq);
 	struct xe_tile *tile = memirq_to_tile(memirq);
-	unsigned int num_pages;
+	size_t bo_size = hw_reports_to_instance_zero(memirq) ?
+		XE_HW_ENGINE_MAX_INSTANCE * SZ_4K : SZ_4K;
 	struct xe_bo *bo;
-	size_t bo_size;
 	int err;
 
 	BUILD_BUG_ON(!IS_ALIGNED(XE_MEMIRQ_SOURCE_OFFSET(0), SZ_64));
 	BUILD_BUG_ON(!IS_ALIGNED(XE_MEMIRQ_STATUS_OFFSET(0), SZ_4K));
-
-	num_pages = hw_reports_to_instance_zero(memirq) ? hwe_max_count(tile) : 1;
-	bo_size = num_pages * SZ_4K;
 
 	bo = xe_managed_bo_create_pin_map(xe, tile, bo_size,
 					  XE_BO_FLAG_SYSTEM |
@@ -219,15 +195,16 @@ static int memirq_alloc_pages(struct xe_memirq *memirq)
 
 	memirq->bo = bo;
 	memirq->source = IOSYS_MAP_INIT_OFFSET(&bo->vmap, XE_MEMIRQ_SOURCE_OFFSET(0));
-	memirq->num_pages = num_pages;
+	memirq->status = IOSYS_MAP_INIT_OFFSET(&bo->vmap, XE_MEMIRQ_STATUS_OFFSET(0));
+	memirq->mask = IOSYS_MAP_INIT_OFFSET(&bo->vmap, XE_MEMIRQ_ENABLE_OFFSET);
 
 	memirq_assert(memirq, !memirq->source.is_iomem);
+	memirq_assert(memirq, !memirq->status.is_iomem);
+	memirq_assert(memirq, !memirq->mask.is_iomem);
 
-	memirq_debug(memirq, "pages: count %u size %zu\n", num_pages, bo_size);
-	memirq_debug(memirq, "page0: source %#x status %#x mask %#x\n",
-		     xe_bo_ggtt_addr(bo) + XE_MEMIRQ_SOURCE_OFFSET(0),
-		     xe_bo_ggtt_addr(bo) + XE_MEMIRQ_STATUS_OFFSET(0),
-		     xe_bo_ggtt_addr(bo) + XE_MEMIRQ_ENABLE_OFFSET);
+	memirq_debug(memirq, "page offsets: bo %#x bo_size %zu source %#x status %#x\n",
+		     xe_bo_ggtt_addr(bo), bo_size, XE_MEMIRQ_SOURCE_OFFSET(0),
+		     XE_MEMIRQ_STATUS_OFFSET(0));
 
 	return 0;
 
@@ -238,12 +215,7 @@ out:
 
 static void memirq_set_enable(struct xe_memirq *memirq, bool enable)
 {
-	/*
-	 * We only care about the GT_MI_USER_INTERRUPT from the engines and
-	 * the GuC does not look at the ENABLE mask at all.
-	 */
-	iosys_map_wr(&memirq->bo->vmap, XE_MEMIRQ_ENABLE_OFFSET, u32,
-		     enable ? GT_MI_USER_INTERRUPT : 0);
+	iosys_map_wr(&memirq->mask, 0, u32, enable ? GENMASK(15, 0) : 0);
 
 	memirq->enabled = enable;
 }
@@ -280,6 +252,15 @@ int xe_memirq_init(struct xe_memirq *memirq)
 	return 0;
 }
 
+static u32 __memirq_source_page(struct xe_memirq *memirq, u16 instance)
+{
+	memirq_assert(memirq, instance <= XE_HW_ENGINE_MAX_INSTANCE);
+	memirq_assert(memirq, memirq->bo);
+
+	instance = hw_reports_to_instance_zero(memirq) ? instance : 0;
+	return xe_bo_ggtt_addr(memirq->bo) + XE_MEMIRQ_SOURCE_OFFSET(instance);
+}
+
 /**
  * xe_memirq_source_ptr - Get GGTT's offset of the `Interrupt Source Report Page`_.
  * @memirq: the &xe_memirq to query
@@ -294,7 +275,16 @@ u32 xe_memirq_source_ptr(struct xe_memirq *memirq, struct xe_hw_engine *hwe)
 {
 	memirq_assert(memirq, xe_device_uses_memirq(memirq_to_xe(memirq)));
 
-	return xe_bo_ggtt_addr(memirq->bo) + XE_MEMIRQ_SOURCE_OFFSET(hwe->irq_page);
+	return __memirq_source_page(memirq, hwe->instance);
+}
+
+static u32 __memirq_status_page(struct xe_memirq *memirq, u16 instance)
+{
+	memirq_assert(memirq, instance <= XE_HW_ENGINE_MAX_INSTANCE);
+	memirq_assert(memirq, memirq->bo);
+
+	instance = hw_reports_to_instance_zero(memirq) ? instance : 0;
+	return xe_bo_ggtt_addr(memirq->bo) + XE_MEMIRQ_STATUS_OFFSET(instance);
 }
 
 /**
@@ -311,7 +301,7 @@ u32 xe_memirq_status_ptr(struct xe_memirq *memirq, struct xe_hw_engine *hwe)
 {
 	memirq_assert(memirq, xe_device_uses_memirq(memirq_to_xe(memirq)));
 
-	return xe_bo_ggtt_addr(memirq->bo) + XE_MEMIRQ_STATUS_OFFSET(hwe->irq_page);
+	return __memirq_status_page(memirq, hwe->instance);
 }
 
 /**
@@ -348,14 +338,13 @@ int xe_memirq_init_guc(struct xe_memirq *memirq, struct xe_guc *guc)
 {
 	bool is_media = xe_gt_is_media_type(guc_to_gt(guc));
 	u32 offset = is_media ? ilog2(INTR_MGUC) : ilog2(INTR_GUC);
-	u64 source, status;
+	u32 source, status;
 	int err;
 
 	memirq_assert(memirq, xe_device_uses_memirq(memirq_to_xe(memirq)));
 
-	/* GuC expects exact locations, it doesn't add anything on its own */
-	source = xe_bo_ggtt_addr(memirq->bo) + XE_MEMIRQ_SOURCE_OFFSET(0) + offset;
-	status = xe_bo_ggtt_addr(memirq->bo) + XE_MEMIRQ_VECTOR_OFFSET(0, offset);
+	source = __memirq_source_page(memirq, 0) + offset;
+	status = __memirq_status_page(memirq, 0) + offset * SZ_16;
 
 	err = xe_guc_self_cfg64(guc, GUC_KLV_SELF_CFG_MEMIRQ_SOURCE_ADDR_KEY,
 				source);
@@ -409,9 +398,8 @@ void xe_memirq_postinstall(struct xe_memirq *memirq)
 		memirq_set_enable(memirq, true);
 }
 
-static bool __memirq_received(struct xe_memirq *memirq,
-			      struct iosys_map *vector, u16 offset,
-			      const char *name, bool clear)
+static bool memirq_received(struct xe_memirq *memirq, struct iosys_map *vector,
+			    u16 offset, const char *name)
 {
 	u8 value;
 
@@ -421,30 +409,10 @@ static bool __memirq_received(struct xe_memirq *memirq,
 			memirq_err_ratelimited(memirq,
 					       "Unexpected memirq value %#x from %s at %u\n",
 					       value, name, offset);
-		if (clear)
-			iosys_map_wr(vector, offset, u8, 0x00);
+		iosys_map_wr(vector, offset, u8, 0x00);
 	}
 
 	return value;
-}
-
-static bool memirq_received_noclear(struct xe_memirq *memirq,
-				    struct iosys_map *vector,
-				    u16 offset, const char *name)
-{
-	return __memirq_received(memirq, vector, offset, name, false);
-}
-
-static bool memirq_received(struct xe_memirq *memirq, struct iosys_map *vector,
-			    u16 offset, const char *name)
-{
-	return __memirq_received(memirq, vector, offset, name, true);
-}
-
-static void memirq_assume_received(struct xe_memirq *memirq, const char *source,
-				   u16 offset, const char *status)
-{
-	memirq_debug(memirq, "ASSUME %s %s(%u)\n", source, status, offset);
 }
 
 static void memirq_dispatch_engine(struct xe_memirq *memirq, struct iosys_map *status,
@@ -452,14 +420,8 @@ static void memirq_dispatch_engine(struct xe_memirq *memirq, struct iosys_map *s
 {
 	memirq_debug(memirq, "STATUS %s %*ph\n", hwe->name, 16, status->vaddr);
 
-	/*
-	 * The programming note says to assume that GT_MI_USER_INTERRUPT is always
-	 * set. Check and clear related status byte just for a debug.
-	 */
-	if (IS_ENABLED(CONFIG_DRM_XE_DEBUG_MEMIRQ) &&
-	    !memirq_received(memirq, status, ilog2(GT_MI_USER_INTERRUPT), hwe->name))
-		memirq_assume_received(memirq, hwe->name, ilog2(GT_MI_USER_INTERRUPT), "USER");
-	xe_hw_engine_handle_irq(hwe, GT_MI_USER_INTERRUPT);
+	if (memirq_received(memirq, status, ilog2(GT_RENDER_USER_INTERRUPT), hwe->name))
+		xe_hw_engine_handle_irq(hwe, GT_RENDER_USER_INTERRUPT);
 }
 
 static void memirq_dispatch_guc(struct xe_memirq *memirq, struct iosys_map *status,
@@ -469,25 +431,11 @@ static void memirq_dispatch_guc(struct xe_memirq *memirq, struct iosys_map *stat
 
 	memirq_debug(memirq, "STATUS %s %*ph\n", name, 16, status->vaddr);
 
-	/*
-	 * The programming note says to assume that GUC_INTR_GUC2HOST is always
-	 * set. Check and clear related status byte just for a debug.
-	 */
-	if (IS_ENABLED(CONFIG_DRM_XE_DEBUG_MEMIRQ) &&
-	    !memirq_received(memirq, status, ilog2(GUC_INTR_GUC2HOST), name))
-		memirq_assume_received(memirq, name, ilog2(GUC_INTR_GUC2HOST), "GUC2HOST");
-	xe_guc_irq_handler(guc, GUC_INTR_GUC2HOST);
+	if (memirq_received(memirq, status, ilog2(GUC_INTR_GUC2HOST), name))
+		xe_guc_irq_handler(guc, GUC_INTR_GUC2HOST);
 
-	/*
-	 * This is a software interrupt that must be cleared after it's consumed
-	 * to avoid race conditions where xe_gt_sriov_vf_recovery_pending()
-	 * returns false.
-	 */
-	if (memirq_received_noclear(memirq, status, ilog2(GUC_INTR_SW_INT_0),
-				    name)) {
+	if (memirq_received(memirq, status, ilog2(GUC_INTR_SW_INT_0), name))
 		xe_guc_irq_handler(guc, GUC_INTR_SW_INT_0);
-		iosys_map_wr(status, ilog2(GUC_INTR_SW_INT_0), u8, 0x00);
-	}
 }
 
 /**
@@ -499,46 +447,16 @@ static void memirq_dispatch_guc(struct xe_memirq *memirq, struct iosys_map *stat
  */
 void xe_memirq_hwe_handler(struct xe_memirq *memirq, struct xe_hw_engine *hwe)
 {
-	struct iosys_map source =
-		IOSYS_MAP_INIT_OFFSET(&memirq->bo->vmap,
-				      XE_MEMIRQ_SOURCE_OFFSET(hwe->irq_page));
+	u16 offset = hwe->irq_offset;
+	u16 instance = hw_reports_to_instance_zero(memirq) ? hwe->instance : 0;
+	struct iosys_map src_offset = IOSYS_MAP_INIT_OFFSET(&memirq->bo->vmap,
+							    XE_MEMIRQ_SOURCE_OFFSET(instance));
 
-	if (memirq_received(memirq, &source, hwe->irq_offset, "SRC")) {
-		struct iosys_map status =
+	if (memirq_received(memirq, &src_offset, offset, "SRC")) {
+		struct iosys_map status_offset =
 			IOSYS_MAP_INIT_OFFSET(&memirq->bo->vmap,
-					      XE_MEMIRQ_VECTOR_OFFSET(hwe->irq_page,
-								      hwe->irq_offset));
-		memirq_dispatch_engine(memirq, &status, hwe);
-	}
-}
-
-/**
- * xe_memirq_guc_sw_int_0_irq_pending() - SW_INT_0 IRQ is pending
- * @memirq: the &xe_memirq
- * @guc: the &xe_guc to check for IRQ
- *
- * Return: True if SW_INT_0 IRQ is pending on @guc, False otherwise
- */
-bool xe_memirq_guc_sw_int_0_irq_pending(struct xe_memirq *memirq, struct xe_guc *guc)
-{
-	struct xe_gt *gt = guc_to_gt(guc);
-	u32 offset = xe_gt_is_media_type(gt) ? ilog2(INTR_MGUC) : ilog2(INTR_GUC);
-	struct iosys_map map = IOSYS_MAP_INIT_OFFSET(&memirq->bo->vmap,
-						     XE_MEMIRQ_VECTOR_OFFSET(0, offset));
-
-	return memirq_received_noclear(memirq, &map, ilog2(GUC_INTR_SW_INT_0),
-				       guc_name(guc));
-}
-
-static void memirq_dump_source_pages(struct xe_memirq *memirq)
-{
-	memirq_assert(memirq, !memirq->bo->vmap.is_iomem);
-
-	for (int n = 0; n < memirq->num_pages; n++) {
-		memirq_debug(memirq, "SOURCE %*ph\n", 32,
-			     memirq->bo->vmap.vaddr + XE_MEMIRQ_SOURCE_OFFSET(n));
-		memirq_debug(memirq, "SOURCE %*ph\n", 32,
-			     memirq->bo->vmap.vaddr + XE_MEMIRQ_SOURCE_OFFSET(n) + 32);
+					      XE_MEMIRQ_STATUS_OFFSET(instance) + offset * SZ_16);
+		memirq_dispatch_engine(memirq, &status_offset, hwe);
 	}
 }
 
@@ -561,8 +479,9 @@ void xe_memirq_handler(struct xe_memirq *memirq)
 	if (!memirq->bo)
 		return;
 
-	if (IS_ENABLED(CONFIG_DRM_XE_DEBUG_MEMIRQ))
-		memirq_dump_source_pages(memirq);
+	memirq_assert(memirq, !memirq->source.is_iomem);
+	memirq_debug(memirq, "SOURCE %*ph\n", 32, memirq->source.vaddr);
+	memirq_debug(memirq, "SOURCE %*ph\n", 32, memirq->source.vaddr + 32);
 
 	for_each_gt(gt, xe, gtid) {
 		if (gt->tile != tile)
@@ -575,8 +494,7 @@ void xe_memirq_handler(struct xe_memirq *memirq)
 	/* GuC and media GuC (if present) must be checked separately */
 
 	if (memirq_received(memirq, &memirq->source, ilog2(INTR_GUC), "SRC")) {
-		map = IOSYS_MAP_INIT_OFFSET(&memirq->bo->vmap,
-					    XE_MEMIRQ_VECTOR_OFFSET(0, ilog2(INTR_GUC)));
+		map = IOSYS_MAP_INIT_OFFSET(&memirq->status, ilog2(INTR_GUC) * SZ_16);
 		memirq_dispatch_guc(memirq, &map, &tile->primary_gt->uc.guc);
 	}
 
@@ -584,8 +502,7 @@ void xe_memirq_handler(struct xe_memirq *memirq)
 		return;
 
 	if (memirq_received(memirq, &memirq->source, ilog2(INTR_MGUC), "SRC")) {
-		map = IOSYS_MAP_INIT_OFFSET(&memirq->bo->vmap,
-					    XE_MEMIRQ_VECTOR_OFFSET(0, ilog2(INTR_MGUC)));
+		map = IOSYS_MAP_INIT_OFFSET(&memirq->status, ilog2(INTR_MGUC) * SZ_16);
 		memirq_dispatch_guc(memirq, &map, &tile->media_gt->uc.guc);
 	}
 }

@@ -105,7 +105,7 @@ int rvu_mbox_handler_rep_event_notify(struct rvu *rvu, struct rep_event *req,
 	if (!is_pf_func_valid(rvu, req->pcifunc))
 		return -EINVAL;
 
-	qentry = kmalloc_obj(*qentry, GFP_ATOMIC);
+	qentry = kmalloc(sizeof(*qentry), GFP_ATOMIC);
 	if (!qentry)
 		return -ENOMEM;
 

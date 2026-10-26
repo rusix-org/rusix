@@ -9,8 +9,6 @@
 #ifndef __ASM_OPENRISC_SMP_H
 #define __ASM_OPENRISC_SMP_H
 
-#include <linux/cpumask.h>
-
 #include <asm/spr.h>
 #include <asm/spr_defs.h>
 
@@ -22,8 +20,7 @@ extern void smp_init_cpus(void);
 extern void arch_send_call_function_single_ipi(int cpu);
 extern void arch_send_call_function_ipi_mask(const struct cpumask *mask);
 
-extern void set_smp_cross_call(void (*)(const struct cpumask *, unsigned int),
-			       unsigned int irq);
+extern void set_smp_cross_call(void (*)(const struct cpumask *, unsigned int));
 extern void handle_IPI(unsigned int ipi_msg);
 
 #endif /* __ASM_OPENRISC_SMP_H */

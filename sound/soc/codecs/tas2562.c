@@ -460,7 +460,7 @@ static int tas2562_dac_event(struct snd_soc_dapm_widget *w,
 static int tas2562_volume_control_get(struct snd_kcontrol *kcontrol,
 				      struct snd_ctl_elem_value *ucontrol)
 {
-	struct snd_soc_component *component = snd_kcontrol_chip(kcontrol);
+	struct snd_soc_component *component = snd_soc_kcontrol_component(kcontrol);
 	struct tas2562_data *tas2562 = snd_soc_component_get_drvdata(component);
 
 	ucontrol->value.integer.value[0] = tas2562->volume_lvl;
@@ -470,13 +470,10 @@ static int tas2562_volume_control_get(struct snd_kcontrol *kcontrol,
 static int tas2562_volume_control_put(struct snd_kcontrol *kcontrol,
 				      struct snd_ctl_elem_value *ucontrol)
 {
-	struct snd_soc_component *component = snd_kcontrol_chip(kcontrol);
+	struct snd_soc_component *component = snd_soc_kcontrol_component(kcontrol);
 	struct tas2562_data *tas2562 = snd_soc_component_get_drvdata(component);
 	int ret, index;
 	u32 reg_val;
-
-	if (tas2562->volume_lvl == ucontrol->value.integer.value[0])
-		return 0;
 
 	index = ucontrol->value.integer.value[0] / 2;
 	if (index < 0 || index >= ARRAY_SIZE(float_vol_db_lookup))
@@ -510,7 +507,7 @@ static int tas2562_volume_control_put(struct snd_kcontrol *kcontrol,
 
 	tas2562->volume_lvl = ucontrol->value.integer.value[0];
 
-	return 1;
+	return 0;
 }
 
 /* Digital Volume Control. From 0 dB to -110 dB in 1 dB steps */
@@ -604,21 +601,11 @@ static const struct snd_soc_component_driver soc_component_dev_tas2562 = {
 	.endianness		= 1,
 };
 
-static const u64 tas2562_selectable_formats =
-	SND_SOC_POSSIBLE_DAIFMT_I2S	|
-	SND_SOC_POSSIBLE_DAIFMT_LEFT_J	|
-	SND_SOC_POSSIBLE_DAIFMT_DSP_A	|
-	SND_SOC_POSSIBLE_DAIFMT_DSP_B	|
-	SND_SOC_POSSIBLE_DAIFMT_NB_NF	|
-	SND_SOC_POSSIBLE_DAIFMT_IB_NF;
-
 static const struct snd_soc_dai_ops tas2562_speaker_dai_ops = {
 	.hw_params	= tas2562_hw_params,
 	.set_fmt	= tas2562_set_dai_fmt,
 	.set_tdm_slot	= tas2562_set_dai_tdm_slot,
 	.mute_stream	= tas2562_mute,
-	.auto_selectable_formats	= &tas2562_selectable_formats,
-	.num_auto_selectable_formats	= 1,
 	.no_capture_mute = 1,
 };
 
@@ -738,9 +725,9 @@ static int tas2562_parse_dt(struct tas2562_data *tas2562)
 }
 
 static const struct i2c_device_id tas2562_id[] = {
-	{ .name = "tas2562", .driver_data = TAS2562 },
-	{ .name = "tas2564", .driver_data = TAS2564 },
-	{ .name = "tas2110", .driver_data = TAS2110 },
+	{ "tas2562", TAS2562 },
+	{ "tas2564", TAS2564 },
+	{ "tas2110", TAS2110 },
 	{ }
 };
 MODULE_DEVICE_TABLE(i2c, tas2562_id);
@@ -758,8 +745,6 @@ static int tas2562_probe(struct i2c_client *client)
 	data->client = client;
 	data->dev = &client->dev;
 	data->model_id = (uintptr_t)i2c_get_match_data(client);
-	/* Register default is 0x40400000, this is closest */
-	data->volume_lvl = (ARRAY_SIZE(float_vol_db_lookup) - 1) * 2;
 
 	tas2562_parse_dt(data);
 

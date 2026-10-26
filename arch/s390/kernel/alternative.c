@@ -4,7 +4,6 @@
 #define pr_fmt(fmt)	"alt: " fmt
 #endif
 
-#include <linux/hex.h>
 #include <linux/uaccess.h>
 #include <linux/printk.h>
 #include <asm/nospec-branch.h>

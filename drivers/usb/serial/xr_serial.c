@@ -16,7 +16,6 @@
 #include <linux/module.h>
 #include <linux/slab.h>
 #include <linux/tty.h>
-#include <linux/uaccess.h>
 #include <linux/usb.h>
 #include <linux/usb/cdc.h>
 #include <linux/usb/serial.h>
@@ -757,7 +756,7 @@ static void xr_cdc_set_line_coding(struct tty_struct *tty,
 	struct usb_cdc_line_coding *lc;
 	int ret;
 
-	lc = kzalloc_obj(*lc);
+	lc = kzalloc(sizeof(*lc), GFP_KERNEL);
 	if (!lc)
 		return;
 
@@ -1017,7 +1016,7 @@ static int xr_port_probe(struct usb_serial_port *port)
 	type_id = (int)(unsigned long)usb_get_serial_data(port->serial);
 	type = &xr_types[type_id];
 
-	data = kzalloc_obj(*data);
+	data = kzalloc(sizeof(*data), GFP_KERNEL);
 	if (!data)
 		return -ENOMEM;
 

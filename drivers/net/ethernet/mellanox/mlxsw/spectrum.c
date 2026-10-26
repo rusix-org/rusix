@@ -663,11 +663,8 @@ static netdev_tx_t mlxsw_sp_port_xmit(struct sk_buff *skb,
 	return NETDEV_TX_OK;
 }
 
-static int mlxsw_sp_set_rx_mode_async(struct net_device *dev,
-				      struct netdev_hw_addr_list *uc,
-				      struct netdev_hw_addr_list *mc)
+static void mlxsw_sp_set_rx_mode(struct net_device *dev)
 {
-	return 0;
 }
 
 static int mlxsw_sp_port_set_mac_address(struct net_device *dev, void *p)
@@ -975,7 +972,7 @@ mlxsw_sp_port_vlan_create(struct mlxsw_sp_port *mlxsw_sp_port, u16 vid)
 	if (err)
 		return ERR_PTR(err);
 
-	mlxsw_sp_port_vlan = kzalloc_obj(*mlxsw_sp_port_vlan);
+	mlxsw_sp_port_vlan = kzalloc(sizeof(*mlxsw_sp_port_vlan), GFP_KERNEL);
 	if (!mlxsw_sp_port_vlan) {
 		err = -ENOMEM;
 		goto err_port_vlan_alloc;
@@ -1194,7 +1191,7 @@ static const struct net_device_ops mlxsw_sp_port_netdev_ops = {
 	.ndo_stop		= mlxsw_sp_port_stop,
 	.ndo_start_xmit		= mlxsw_sp_port_xmit,
 	.ndo_setup_tc           = mlxsw_sp_setup_tc,
-	.ndo_set_rx_mode_async	= mlxsw_sp_set_rx_mode_async,
+	.ndo_set_rx_mode	= mlxsw_sp_set_rx_mode,
 	.ndo_set_mac_address	= mlxsw_sp_port_set_mac_address,
 	.ndo_change_mtu		= mlxsw_sp_port_change_mtu,
 	.ndo_get_stats64	= mlxsw_sp_port_get_stats64,
@@ -1552,7 +1549,6 @@ static int mlxsw_sp_port_create(struct mlxsw_sp *mlxsw_sp, u16 local_port,
 	dev->vlan_features |= NETIF_F_IP_CSUM | NETIF_F_IPV6_CSUM;
 	dev->lltx = true;
 	dev->netns_immutable = true;
-	dev->request_ops_lock = true;
 
 	dev->min_mtu = ETH_MIN_MTU;
 	dev->max_mtu = MLXSW_PORT_MAX_MTU - MLXSW_PORT_ETH_FRAME_HDR;
@@ -1780,7 +1776,7 @@ static int mlxsw_sp_cpu_port_create(struct mlxsw_sp *mlxsw_sp)
 	struct mlxsw_sp_port *mlxsw_sp_port;
 	int err;
 
-	mlxsw_sp_port = kzalloc_obj(*mlxsw_sp_port);
+	mlxsw_sp_port = kzalloc(sizeof(*mlxsw_sp_port), GFP_KERNEL);
 	if (!mlxsw_sp_port)
 		return -ENOMEM;
 
@@ -1902,7 +1898,7 @@ mlxsw_sp_port_mapping_listener_func(const struct mlxsw_reg_info *reg,
 		return;
 
 	events = &mlxsw_sp->port_mapping_events;
-	event = kmalloc_obj(*event, GFP_ATOMIC);
+	event = kmalloc(sizeof(*event), GFP_ATOMIC);
 	if (!event)
 		return;
 	memcpy(event->pmlp_pl, pmlp_pl, sizeof(event->pmlp_pl));
@@ -2023,8 +2019,9 @@ static int mlxsw_sp_port_module_info_init(struct mlxsw_sp *mlxsw_sp)
 	int i;
 	int err;
 
-	mlxsw_sp->port_mapping = kzalloc_objs(struct mlxsw_sp_port_mapping,
-					      max_ports);
+	mlxsw_sp->port_mapping = kcalloc(max_ports,
+					 sizeof(struct mlxsw_sp_port_mapping),
+					 GFP_KERNEL);
 	if (!mlxsw_sp->port_mapping)
 		return -ENOMEM;
 
@@ -2493,7 +2490,8 @@ static int mlxsw_sp_traps_init(struct mlxsw_sp *mlxsw_sp)
 	if (!MLXSW_CORE_RES_VALID(mlxsw_sp->core, MAX_CPU_POLICERS))
 		return -EIO;
 	max_policers = MLXSW_CORE_RES_GET(mlxsw_sp->core, MAX_CPU_POLICERS);
-	trap = kzalloc_flex(*trap, policers_usage, BITS_TO_LONGS(max_policers));
+	trap = kzalloc(struct_size(trap, policers_usage,
+				   BITS_TO_LONGS(max_policers)), GFP_KERNEL);
 	if (!trap)
 		return -ENOMEM;
 	trap->max_policers = max_policers;
@@ -2626,7 +2624,8 @@ static int mlxsw_sp_lag_init(struct mlxsw_sp *mlxsw_sp)
 	if (err)
 		return err;
 
-	mlxsw_sp->lags = kzalloc_objs(struct mlxsw_sp_lag, mlxsw_sp->max_lag);
+	mlxsw_sp->lags = kcalloc(mlxsw_sp->max_lag, sizeof(struct mlxsw_sp_lag),
+				 GFP_KERNEL);
 	if (!mlxsw_sp->lags) {
 		err = -ENOMEM;
 		goto err_kcalloc;
@@ -2749,7 +2748,7 @@ mlxsw_sp_sample_trigger_node_init(struct mlxsw_sp *mlxsw_sp,
 	struct mlxsw_sp_sample_trigger_node *trigger_node;
 	int err;
 
-	trigger_node = kzalloc_obj(*trigger_node);
+	trigger_node = kzalloc(sizeof(*trigger_node), GFP_KERNEL);
 	if (!trigger_node)
 		return -ENOMEM;
 
@@ -2895,7 +2894,7 @@ mlxsw_sp_ipv6_addr_init(struct mlxsw_sp *mlxsw_sp, const struct in6_addr *addr6,
 	if (err)
 		goto err_rips_write;
 
-	node = kzalloc_obj(*node);
+	node = kzalloc(sizeof(*node), GFP_KERNEL);
 	if (!node) {
 		err = -ENOMEM;
 		goto err_node_alloc;
@@ -5281,8 +5280,8 @@ static int mlxsw_sp_netdevice_event(struct notifier_block *nb,
 }
 
 static const struct pci_device_id mlxsw_sp1_pci_id_table[] = {
-	{PCI_VDEVICE(MELLANOX, PCI_DEVICE_ID_MELLANOX_SPECTRUM) },
-	{ },
+	{PCI_VDEVICE(MELLANOX, PCI_DEVICE_ID_MELLANOX_SPECTRUM), 0},
+	{0, },
 };
 
 static struct pci_driver mlxsw_sp1_pci_driver = {
@@ -5291,8 +5290,8 @@ static struct pci_driver mlxsw_sp1_pci_driver = {
 };
 
 static const struct pci_device_id mlxsw_sp2_pci_id_table[] = {
-	{PCI_VDEVICE(MELLANOX, PCI_DEVICE_ID_MELLANOX_SPECTRUM2) },
-	{ },
+	{PCI_VDEVICE(MELLANOX, PCI_DEVICE_ID_MELLANOX_SPECTRUM2), 0},
+	{0, },
 };
 
 static struct pci_driver mlxsw_sp2_pci_driver = {
@@ -5301,8 +5300,8 @@ static struct pci_driver mlxsw_sp2_pci_driver = {
 };
 
 static const struct pci_device_id mlxsw_sp3_pci_id_table[] = {
-	{PCI_VDEVICE(MELLANOX, PCI_DEVICE_ID_MELLANOX_SPECTRUM3) },
-	{ },
+	{PCI_VDEVICE(MELLANOX, PCI_DEVICE_ID_MELLANOX_SPECTRUM3), 0},
+	{0, },
 };
 
 static struct pci_driver mlxsw_sp3_pci_driver = {
@@ -5311,8 +5310,8 @@ static struct pci_driver mlxsw_sp3_pci_driver = {
 };
 
 static const struct pci_device_id mlxsw_sp4_pci_id_table[] = {
-	{PCI_VDEVICE(MELLANOX, PCI_DEVICE_ID_MELLANOX_SPECTRUM4) },
-	{ },
+	{PCI_VDEVICE(MELLANOX, PCI_DEVICE_ID_MELLANOX_SPECTRUM4), 0},
+	{0, },
 };
 
 static struct pci_driver mlxsw_sp4_pci_driver = {

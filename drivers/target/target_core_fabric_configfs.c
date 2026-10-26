@@ -59,7 +59,7 @@ static void target_fabric_setup_##_name##_cit(struct target_fabric_configfs *tf)
 	pr_debug("Setup generic %s\n", __stringify(_name));		\
 }
 
-static const struct configfs_item_operations target_fabric_port_item_ops;
+static struct configfs_item_operations target_fabric_port_item_ops;
 
 /* Start of tfc_tpg_mappedlun_cit */
 
@@ -219,7 +219,7 @@ static void target_fabric_mappedlun_release(struct config_item *item)
 	core_dev_free_initiator_node_lun_acl(se_tpg, lacl);
 }
 
-static const struct configfs_item_operations target_fabric_mappedlun_item_ops = {
+static struct configfs_item_operations target_fabric_mappedlun_item_ops = {
 	.release		= target_fabric_mappedlun_release,
 	.allow_link		= target_fabric_mappedlun_link,
 	.drop_link		= target_fabric_mappedlun_unlink,
@@ -246,7 +246,7 @@ static void target_core_mappedlun_stat_rmdir(
 	return;
 }
 
-static const struct configfs_group_operations target_fabric_mappedlun_stat_group_ops = {
+static struct configfs_group_operations target_fabric_mappedlun_stat_group_ops = {
 	.make_group		= target_core_mappedlun_stat_mkdir,
 	.drop_item		= target_core_mappedlun_stat_rmdir,
 };
@@ -345,11 +345,11 @@ static void target_fabric_nacl_base_release(struct config_item *item)
 	core_tpg_del_initiator_node_acl(se_nacl);
 }
 
-static const struct configfs_item_operations target_fabric_nacl_base_item_ops = {
+static struct configfs_item_operations target_fabric_nacl_base_item_ops = {
 	.release		= target_fabric_nacl_base_release,
 };
 
-static const struct configfs_group_operations target_fabric_nacl_base_group_ops = {
+static struct configfs_group_operations target_fabric_nacl_base_group_ops = {
 	.make_group		= target_fabric_make_mappedlun,
 	.drop_item		= target_fabric_drop_mappedlun,
 };
@@ -433,7 +433,7 @@ static void target_fabric_drop_nodeacl(
 	config_item_put(item);
 }
 
-static const struct configfs_group_operations target_fabric_nacl_group_ops = {
+static struct configfs_group_operations target_fabric_nacl_group_ops = {
 	.make_group	= target_fabric_make_nodeacl,
 	.drop_item	= target_fabric_drop_nodeacl,
 };
@@ -454,7 +454,7 @@ static void target_fabric_np_base_release(struct config_item *item)
 	tf->tf_ops->fabric_drop_np(se_tpg_np);
 }
 
-static const struct configfs_item_operations target_fabric_np_base_item_ops = {
+static struct configfs_item_operations target_fabric_np_base_item_ops = {
 	.release		= target_fabric_np_base_release,
 };
 
@@ -499,7 +499,7 @@ static void target_fabric_drop_np(
 	config_item_put(item);
 }
 
-static const struct configfs_group_operations target_fabric_np_group_ops = {
+static struct configfs_group_operations target_fabric_np_group_ops = {
 	.make_group	= &target_fabric_make_np,
 	.drop_item	= &target_fabric_drop_np,
 };
@@ -705,10 +705,10 @@ static void target_fabric_port_release(struct config_item *item)
 	struct se_lun *lun = container_of(to_config_group(item),
 					  struct se_lun, lun_group);
 
-	call_rcu(&lun->rcu_head, target_tpg_free_lun);
+	kfree_rcu(lun, rcu_head);
 }
 
-static const struct configfs_item_operations target_fabric_port_item_ops = {
+static struct configfs_item_operations target_fabric_port_item_ops = {
 	.release		= target_fabric_port_release,
 	.allow_link		= target_fabric_port_link,
 	.drop_link		= target_fabric_port_unlink,
@@ -734,7 +734,7 @@ static void target_core_port_stat_rmdir(
 	return;
 }
 
-static const struct configfs_group_operations target_fabric_port_stat_group_ops = {
+static struct configfs_group_operations target_fabric_port_stat_group_ops = {
 	.make_group		= target_core_port_stat_mkdir,
 	.drop_item		= target_core_port_stat_rmdir,
 };
@@ -795,7 +795,7 @@ static void target_fabric_drop_lun(
 	config_item_put(item);
 }
 
-static const struct configfs_group_operations target_fabric_lun_group_ops = {
+static struct configfs_group_operations target_fabric_lun_group_ops = {
 	.make_group	= &target_fabric_make_lun,
 	.drop_item	= &target_fabric_drop_lun,
 };
@@ -820,7 +820,7 @@ static void target_fabric_tpg_release(struct config_item *item)
 	tf->tf_ops->fabric_drop_tpg(se_tpg);
 }
 
-static const struct configfs_item_operations target_fabric_tpg_base_item_ops = {
+static struct configfs_item_operations target_fabric_tpg_base_item_ops = {
 	.release		= target_fabric_tpg_release,
 };
 
@@ -907,7 +907,7 @@ target_fabric_setup_tpg_base_cit(struct target_fabric_configfs *tf)
 	nr_attrs++;
 
 	/* + 1 for final NULL in the array */
-	attrs = kzalloc_objs(*attrs, nr_attrs + 1);
+	attrs = kcalloc(nr_attrs + 1, sizeof(*attrs), GFP_KERNEL);
 	if (!attrs)
 		return -ENOMEM;
 
@@ -1006,11 +1006,11 @@ static void target_fabric_release_wwn(struct config_item *item)
 	tf->tf_ops->fabric_drop_wwn(wwn);
 }
 
-static const struct configfs_item_operations target_fabric_tpg_item_ops = {
+static struct configfs_item_operations target_fabric_tpg_item_ops = {
 	.release	= target_fabric_release_wwn,
 };
 
-static const struct configfs_group_operations target_fabric_tpg_group_ops = {
+static struct configfs_group_operations target_fabric_tpg_group_ops = {
 	.make_group	= target_fabric_make_tpg,
 	.drop_item	= target_fabric_drop_tpg,
 };
@@ -1074,28 +1074,6 @@ target_fabric_wwn_cmd_completion_affinity_store(struct config_item *item,
 CONFIGFS_ATTR(target_fabric_wwn_, cmd_completion_affinity);
 
 static ssize_t
-target_fabric_wwn_default_complete_type_show(struct config_item *item,
-					     char *page)
-{
-	struct se_wwn *wwn = container_of(to_config_group(item), struct se_wwn,
-					  param_group);
-	return sysfs_emit(page, "%u\n",
-			  wwn->wwn_tf->tf_ops->default_compl_type);
-}
-CONFIGFS_ATTR_RO(target_fabric_wwn_, default_complete_type);
-
-static ssize_t
-target_fabric_wwn_direct_complete_supported_show(struct config_item *item,
-						 char *page)
-{
-	struct se_wwn *wwn = container_of(to_config_group(item), struct se_wwn,
-					  param_group);
-	return sysfs_emit(page, "%u\n",
-			  wwn->wwn_tf->tf_ops->direct_compl_supp);
-}
-CONFIGFS_ATTR_RO(target_fabric_wwn_, direct_complete_supported);
-
-static ssize_t
 target_fabric_wwn_default_submit_type_show(struct config_item *item,
 					   char *page)
 {
@@ -1119,8 +1097,6 @@ CONFIGFS_ATTR_RO(target_fabric_wwn_, direct_submit_supported);
 
 static struct configfs_attribute *target_fabric_wwn_param_attrs[] = {
 	&target_fabric_wwn_attr_cmd_completion_affinity,
-	&target_fabric_wwn_attr_default_complete_type,
-	&target_fabric_wwn_attr_direct_complete_supported,
 	&target_fabric_wwn_attr_default_submit_type,
 	&target_fabric_wwn_attr_direct_submit_supported,
 	NULL,
@@ -1176,7 +1152,7 @@ static void target_fabric_drop_wwn(
 	config_item_put(item);
 }
 
-static const struct configfs_group_operations target_fabric_wwn_group_ops = {
+static struct configfs_group_operations target_fabric_wwn_group_ops = {
 	.make_group	= target_fabric_make_wwn,
 	.drop_item	= target_fabric_drop_wwn,
 };

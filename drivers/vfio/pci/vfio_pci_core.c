@@ -11,7 +11,6 @@
 #define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
 
 #include <linux/aperture.h>
-#include <linux/debugfs.h>
 #include <linux/device.h>
 #include <linux/eventfd.h>
 #include <linux/file.h>
@@ -20,7 +19,6 @@
 #include <linux/module.h>
 #include <linux/mutex.h>
 #include <linux/notifier.h>
-#include <linux/pagemap.h>
 #include <linux/pci.h>
 #include <linux/pm_runtime.h>
 #include <linux/slab.h>
@@ -30,8 +28,6 @@
 #include <linux/nospec.h>
 #include <linux/sched/mm.h>
 #include <linux/iommufd.h>
-#include <linux/pci-p2pdma.h>
-#include <linux/seq_file.h>
 #if IS_ENABLED(CONFIG_EEH)
 #include <asm/eeh.h>
 #endif
@@ -40,6 +36,10 @@
 
 #define DRIVER_AUTHOR   "Alex Williamson <alex.williamson@redhat.com>"
 #define DRIVER_DESC "core driver for VFIO based PCI devices"
+
+static bool nointxmask;
+static bool disable_vga;
+static bool disable_idle_d3;
 
 static void vfio_pci_eventfd_rcu_free(struct rcu_head *rcu)
 {
@@ -60,7 +60,7 @@ int vfio_pci_eventfd_replace_locked(struct vfio_pci_core_device *vdev,
 	lockdep_assert_held(&vdev->igate);
 
 	if (ctx) {
-		new = kzalloc_obj(*new, GFP_KERNEL_ACCOUNT);
+		new = kzalloc(sizeof(*new), GFP_KERNEL_ACCOUNT);
 		if (!new)
 			return -ENOMEM;
 
@@ -91,68 +91,14 @@ struct vfio_pci_vf_token {
 	int			users;
 };
 
-static inline bool vfio_vga_disabled(struct vfio_pci_core_device *vdev)
+static inline bool vfio_vga_disabled(void)
 {
 #ifdef CONFIG_VFIO_PCI_VGA
-	return vdev->disable_vga;
+	return disable_vga;
 #else
 	return true;
 #endif
 }
-
-#ifdef CONFIG_VFIO_DEBUGFS
-static struct vfio_pci_core_device *
-vfio_pci_core_debugfs_private(struct seq_file *seq)
-{
-	struct device *dev = seq->private;
-	struct vfio_device *core_vdev = container_of(dev, struct vfio_device,
-						     device);
-
-	return container_of(core_vdev, struct vfio_pci_core_device, vdev);
-}
-
-static int vfio_pci_core_debugfs_nointxmask(struct seq_file *seq, void *data)
-{
-	struct vfio_pci_core_device *vdev = vfio_pci_core_debugfs_private(seq);
-
-	seq_puts(seq, vdev->nointxmask ? "Y\n" : "N\n");
-	return 0;
-}
-
-static int vfio_pci_core_debugfs_disable_idle_d3(struct seq_file *seq,
-						 void *data)
-{
-	struct vfio_pci_core_device *vdev = vfio_pci_core_debugfs_private(seq);
-
-	seq_puts(seq, vdev->disable_idle_d3 ? "Y\n" : "N\n");
-	return 0;
-}
-
-/*
- * disable_idle_d3 and nointxmask are writable module parameters latched
- * per device at init, so a device's effective value can differ from the
- * current parameter setting.  Expose the per-device (read-only) values
- * here for visibility; read-only parameters can't drift and are omitted.
- */
-static void vfio_pci_core_debugfs_init(struct vfio_pci_core_device *vdev)
-{
-	struct device *dev = &vdev->vdev.device;
-	struct dentry *pci_dir;
-
-	if (IS_ERR_OR_NULL(vdev->vdev.debug_root))
-		return;
-
-	pci_dir = debugfs_create_dir("pci", vdev->vdev.debug_root);
-	debugfs_create_devm_seqfile(dev, "nointxmask", pci_dir,
-				    vfio_pci_core_debugfs_nointxmask);
-	debugfs_create_devm_seqfile(dev, "disable_idle_d3", pci_dir,
-				    vfio_pci_core_debugfs_disable_idle_d3);
-}
-#else
-static inline void vfio_pci_core_debugfs_init(struct vfio_pci_core_device *vdev)
-{
-}
-#endif /* CONFIG_VFIO_DEBUGFS */
 
 /*
  * Our VGA arbiter participation is limited since we don't know anything
@@ -162,15 +108,13 @@ static inline void vfio_pci_core_debugfs_init(struct vfio_pci_core_device *vdev)
  * has no way to get to it and routing can be disabled externally at the
  * bridge.
  */
-static unsigned int vfio_pci_set_decode(void *data, bool single_vga)
+static unsigned int vfio_pci_set_decode(struct pci_dev *pdev, bool single_vga)
 {
-	struct vfio_pci_core_device *vdev = data;
-	struct pci_dev *pdev = vdev->pdev;
 	struct pci_dev *tmp = NULL;
 	unsigned char max_busnr;
 	unsigned int decodes;
 
-	if (single_vga || !vfio_vga_disabled(vdev) || pci_is_root_bus(pdev->bus))
+	if (single_vga || !vfio_vga_disabled() || pci_is_root_bus(pdev->bus))
 		return VGA_RSRC_NORMAL_IO | VGA_RSRC_NORMAL_MEM |
 		       VGA_RSRC_LEGACY_IO | VGA_RSRC_LEGACY_MEM;
 
@@ -230,7 +174,8 @@ static void vfio_pci_probe_mmaps(struct vfio_pci_core_device *vdev)
 			 * of the exclusive page in case that hot-add
 			 * device's bar is assigned into it.
 			 */
-			dummy_res = kzalloc_obj(*dummy_res, GFP_KERNEL_ACCOUNT);
+			dummy_res =
+				kzalloc(sizeof(*dummy_res), GFP_KERNEL_ACCOUNT);
 			if (dummy_res == NULL)
 				goto no_mmap;
 
@@ -378,8 +323,6 @@ static int vfio_pci_runtime_pm_entry(struct vfio_pci_core_device *vdev,
 	 * semaphore.
 	 */
 	vfio_pci_zap_and_down_write_memory_lock(vdev);
-	vfio_pci_dma_buf_move(vdev, true);
-
 	if (vdev->pm_runtime_engaged) {
 		up_write(&vdev->memory_lock);
 		return -EINVAL;
@@ -393,9 +336,11 @@ static int vfio_pci_runtime_pm_entry(struct vfio_pci_core_device *vdev,
 	return 0;
 }
 
-static int vfio_pci_core_pm_entry(struct vfio_pci_core_device *vdev, u32 flags,
+static int vfio_pci_core_pm_entry(struct vfio_device *device, u32 flags,
 				  void __user *arg, size_t argsz)
 {
+	struct vfio_pci_core_device *vdev =
+		container_of(device, struct vfio_pci_core_device, vdev);
 	int ret;
 
 	ret = vfio_check_feature(flags, argsz, VFIO_DEVICE_FEATURE_SET, 0);
@@ -412,10 +357,12 @@ static int vfio_pci_core_pm_entry(struct vfio_pci_core_device *vdev, u32 flags,
 }
 
 static int vfio_pci_core_pm_entry_with_wakeup(
-	struct vfio_pci_core_device *vdev, u32 flags,
+	struct vfio_device *device, u32 flags,
 	struct vfio_device_low_power_entry_with_wakeup __user *arg,
 	size_t argsz)
 {
+	struct vfio_pci_core_device *vdev =
+		container_of(device, struct vfio_pci_core_device, vdev);
 	struct vfio_device_low_power_entry_with_wakeup entry;
 	struct eventfd_ctx *efdctx;
 	int ret;
@@ -463,14 +410,14 @@ static void vfio_pci_runtime_pm_exit(struct vfio_pci_core_device *vdev)
 	 */
 	down_write(&vdev->memory_lock);
 	__vfio_pci_runtime_pm_exit(vdev);
-	if (__vfio_pci_memory_enabled(vdev))
-		vfio_pci_dma_buf_move(vdev, false);
 	up_write(&vdev->memory_lock);
 }
 
-static int vfio_pci_core_pm_exit(struct vfio_pci_core_device *vdev, u32 flags,
+static int vfio_pci_core_pm_exit(struct vfio_device *device, u32 flags,
 				 void __user *arg, size_t argsz)
 {
+	struct vfio_pci_core_device *vdev =
+		container_of(device, struct vfio_pci_core_device, vdev);
 	int ret;
 
 	ret = vfio_check_feature(flags, argsz, VFIO_DEVICE_FEATURE_SET, 0);
@@ -489,8 +436,10 @@ static int vfio_pci_core_pm_exit(struct vfio_pci_core_device *vdev, u32 flags,
 }
 
 #ifdef CONFIG_PM
-int vfio_pci_core_runtime_suspend(struct vfio_pci_core_device *vdev)
+static int vfio_pci_core_runtime_suspend(struct device *dev)
 {
+	struct vfio_pci_core_device *vdev = dev_get_drvdata(dev);
+
 	down_write(&vdev->memory_lock);
 	/*
 	 * The user can move the device into D3hot state before invoking
@@ -515,10 +464,11 @@ int vfio_pci_core_runtime_suspend(struct vfio_pci_core_device *vdev)
 
 	return 0;
 }
-EXPORT_SYMBOL_GPL(vfio_pci_core_runtime_suspend);
 
-int vfio_pci_core_runtime_resume(struct vfio_pci_core_device *vdev)
+static int vfio_pci_core_runtime_resume(struct device *dev)
 {
+	struct vfio_pci_core_device *vdev = dev_get_drvdata(dev);
+
 	/*
 	 * Resume with a pm_wake_eventfd_ctx signals the eventfd and exit
 	 * low power mode.
@@ -535,45 +485,19 @@ int vfio_pci_core_runtime_resume(struct vfio_pci_core_device *vdev)
 
 	return 0;
 }
-EXPORT_SYMBOL_GPL(vfio_pci_core_runtime_resume);
 #endif /* CONFIG_PM */
 
 /*
- * Eager-request BAR resources, and iomap them.  Soft failures are
- * allowed, and consumers must check the barmap before use in order to
- * give compatible user-visible behaviour with the previous on-demand
- * allocation method.
+ * The pci-driver core runtime PM routines always save the device state
+ * before going into suspended state. If the device is going into low power
+ * state with only with runtime PM ops, then no explicit handling is needed
+ * for the devices which have NoSoftRst-.
  */
-static void vfio_pci_core_map_bars(struct vfio_pci_core_device *vdev)
-{
-	struct pci_dev *pdev = vdev->pdev;
-	int i;
-
-	for (i = 0; i < PCI_STD_NUM_BARS; i++) {
-		int bar = i + PCI_STD_RESOURCES;
-
-		vdev->barmap[bar] = IOMEM_ERR_PTR(-ENODEV);
-
-		if (pdev->non_mappable_bars)
-			continue;
-
-		if (!pci_resource_len(pdev, i))
-			continue;
-
-		if (pci_request_selected_regions(pdev, 1 << bar, "vfio")) {
-			pci_dbg(pdev, "Failed to reserve region %d\n", bar);
-			vdev->barmap[bar] = IOMEM_ERR_PTR(-EBUSY);
-			continue;
-		}
-
-		vdev->barmap[bar] = pci_iomap(pdev, bar, 0);
-		if (!vdev->barmap[bar]) {
-			pci_dbg(pdev, "Failed to iomap region %d\n", bar);
-			pci_release_selected_regions(pdev, 1 << bar);
-			vdev->barmap[bar] = IOMEM_ERR_PTR(-ENOMEM);
-		}
-	}
-}
+static const struct dev_pm_ops vfio_pci_core_pm_ops = {
+	SET_RUNTIME_PM_OPS(vfio_pci_core_runtime_suspend,
+			   vfio_pci_core_runtime_resume,
+			   NULL)
+};
 
 int vfio_pci_core_enable(struct vfio_pci_core_device *vdev)
 {
@@ -606,7 +530,7 @@ int vfio_pci_core_enable(struct vfio_pci_core_device *vdev)
 	if (!vdev->pci_saved_state)
 		pci_dbg(pdev, "%s: Couldn't store saved state\n", __func__);
 
-	if (likely(!vdev->nointxmask)) {
+	if (likely(!nointxmask)) {
 		if (vfio_pci_nointx(pdev)) {
 			pci_info(pdev, "Masking broken INTx support\n");
 			vdev->nointx = true;
@@ -646,10 +570,9 @@ int vfio_pci_core_enable(struct vfio_pci_core_device *vdev)
 		vdev->has_dyn_msix = false;
 	}
 
-	if (!vfio_vga_disabled(vdev) && vfio_pci_is_vga(pdev))
+	if (!vfio_vga_disabled() && vfio_pci_is_vga(pdev))
 		vdev->has_vga = true;
 
-	vfio_pci_core_map_bars(vdev);
 
 	return 0;
 
@@ -730,7 +653,7 @@ void vfio_pci_core_disable(struct vfio_pci_core_device *vdev)
 
 	for (i = 0; i < PCI_STD_NUM_BARS; i++) {
 		bar = i + PCI_STD_RESOURCES;
-		if (IS_ERR_OR_NULL(vdev->barmap[bar]))
+		if (!vdev->barmap[bar])
 			continue;
 		pci_iounmap(pdev, vdev->barmap[bar]);
 		pci_release_selected_regions(pdev, 1 << bar);
@@ -816,8 +739,6 @@ void vfio_pci_core_close_device(struct vfio_device *core_vdev)
 #if IS_ENABLED(CONFIG_EEH)
 	eeh_dev_release(vdev->pdev);
 #endif
-	vfio_pci_dma_buf_cleanup(vdev);
-
 	vfio_pci_core_disable(vdev);
 
 	mutex_lock(&vdev->igate);
@@ -868,7 +789,8 @@ static int vfio_pci_get_irq_count(struct vfio_pci_core_device *vdev, int irq_typ
 			return (flags & PCI_MSIX_FLAGS_QSIZE) + 1;
 		}
 	} else if (irq_type == VFIO_PCI_ERR_IRQ_INDEX) {
-		return 1;
+		if (pci_is_pcie(vdev->pdev))
+			return 1;
 	} else if (irq_type == VFIO_PCI_REQ_IRQ_INDEX) {
 		return 1;
 	}
@@ -1114,36 +1036,42 @@ static int vfio_pci_ioctl_get_info(struct vfio_pci_core_device *vdev,
 	return copy_to_user(arg, &info, minsz) ? -EFAULT : 0;
 }
 
-int vfio_pci_ioctl_get_region_info(struct vfio_device *core_vdev,
-				   struct vfio_region_info *info,
-				   struct vfio_info_cap *caps)
+static int vfio_pci_ioctl_get_region_info(struct vfio_pci_core_device *vdev,
+					  struct vfio_region_info __user *arg)
 {
-	struct vfio_pci_core_device *vdev =
-		container_of(core_vdev, struct vfio_pci_core_device, vdev);
+	unsigned long minsz = offsetofend(struct vfio_region_info, offset);
 	struct pci_dev *pdev = vdev->pdev;
+	struct vfio_region_info info;
+	struct vfio_info_cap caps = { .buf = NULL, .size = 0 };
 	int i, ret;
 
-	switch (info->index) {
+	if (copy_from_user(&info, arg, minsz))
+		return -EFAULT;
+
+	if (info.argsz < minsz)
+		return -EINVAL;
+
+	switch (info.index) {
 	case VFIO_PCI_CONFIG_REGION_INDEX:
-		info->offset = VFIO_PCI_INDEX_TO_OFFSET(info->index);
-		info->size = pdev->cfg_size;
-		info->flags = VFIO_REGION_INFO_FLAG_READ |
-			      VFIO_REGION_INFO_FLAG_WRITE;
+		info.offset = VFIO_PCI_INDEX_TO_OFFSET(info.index);
+		info.size = pdev->cfg_size;
+		info.flags = VFIO_REGION_INFO_FLAG_READ |
+			     VFIO_REGION_INFO_FLAG_WRITE;
 		break;
 	case VFIO_PCI_BAR0_REGION_INDEX ... VFIO_PCI_BAR5_REGION_INDEX:
-		info->offset = VFIO_PCI_INDEX_TO_OFFSET(info->index);
-		info->size = pci_resource_len(pdev, info->index);
-		if (!info->size) {
-			info->flags = 0;
+		info.offset = VFIO_PCI_INDEX_TO_OFFSET(info.index);
+		info.size = pci_resource_len(pdev, info.index);
+		if (!info.size) {
+			info.flags = 0;
 			break;
 		}
 
-		info->flags = VFIO_REGION_INFO_FLAG_READ |
-			      VFIO_REGION_INFO_FLAG_WRITE;
-		if (vdev->bar_mmap_supported[info->index]) {
-			info->flags |= VFIO_REGION_INFO_FLAG_MMAP;
-			if (info->index == vdev->msix_bar) {
-				ret = msix_mmappable_cap(vdev, caps);
+		info.flags = VFIO_REGION_INFO_FLAG_READ |
+			     VFIO_REGION_INFO_FLAG_WRITE;
+		if (vdev->bar_mmap_supported[info.index]) {
+			info.flags |= VFIO_REGION_INFO_FLAG_MMAP;
+			if (info.index == vdev->msix_bar) {
+				ret = msix_mmappable_cap(vdev, &caps);
 				if (ret)
 					return ret;
 			}
@@ -1155,9 +1083,9 @@ int vfio_pci_ioctl_get_region_info(struct vfio_device *core_vdev,
 		size_t size;
 		u16 cmd;
 
-		info->offset = VFIO_PCI_INDEX_TO_OFFSET(info->index);
-		info->flags = 0;
-		info->size = 0;
+		info.offset = VFIO_PCI_INDEX_TO_OFFSET(info.index);
+		info.flags = 0;
+		info.size = 0;
 
 		if (pci_resource_start(pdev, PCI_ROM_RESOURCE)) {
 			/*
@@ -1167,17 +1095,16 @@ int vfio_pci_ioctl_get_region_info(struct vfio_device *core_vdev,
 			cmd = vfio_pci_memory_lock_and_enable(vdev);
 			io = pci_map_rom(pdev, &size);
 			if (io) {
-				info->flags = VFIO_REGION_INFO_FLAG_READ;
+				info.flags = VFIO_REGION_INFO_FLAG_READ;
 				/* Report the BAR size, not the ROM size. */
-				info->size = pci_resource_len(pdev,
-							      PCI_ROM_RESOURCE);
+				info.size = pci_resource_len(pdev, PCI_ROM_RESOURCE);
 				pci_unmap_rom(pdev, io);
 			}
 			vfio_pci_memory_unlock_and_restore(vdev, cmd);
 		} else if (pdev->rom && pdev->romlen) {
-			info->flags = VFIO_REGION_INFO_FLAG_READ;
+			info.flags = VFIO_REGION_INFO_FLAG_READ;
 			/* Report BAR size as power of two. */
-			info->size = roundup_pow_of_two(pdev->romlen);
+			info.size = roundup_pow_of_two(pdev->romlen);
 		}
 
 		break;
@@ -1186,10 +1113,10 @@ int vfio_pci_ioctl_get_region_info(struct vfio_device *core_vdev,
 		if (!vdev->has_vga)
 			return -EINVAL;
 
-		info->offset = VFIO_PCI_INDEX_TO_OFFSET(info->index);
-		info->size = 0xc0000;
-		info->flags = VFIO_REGION_INFO_FLAG_READ |
-			      VFIO_REGION_INFO_FLAG_WRITE;
+		info.offset = VFIO_PCI_INDEX_TO_OFFSET(info.index);
+		info.size = 0xc0000;
+		info.flags = VFIO_REGION_INFO_FLAG_READ |
+			     VFIO_REGION_INFO_FLAG_WRITE;
 
 		break;
 	default: {
@@ -1198,36 +1125,53 @@ int vfio_pci_ioctl_get_region_info(struct vfio_device *core_vdev,
 			.header.version = 1
 		};
 
-		if (info->index >= VFIO_PCI_NUM_REGIONS + vdev->num_regions)
+		if (info.index >= VFIO_PCI_NUM_REGIONS + vdev->num_regions)
 			return -EINVAL;
-		info->index = array_index_nospec(
-			info->index, VFIO_PCI_NUM_REGIONS + vdev->num_regions);
+		info.index = array_index_nospec(
+			info.index, VFIO_PCI_NUM_REGIONS + vdev->num_regions);
 
-		i = info->index - VFIO_PCI_NUM_REGIONS;
+		i = info.index - VFIO_PCI_NUM_REGIONS;
 
-		info->offset = VFIO_PCI_INDEX_TO_OFFSET(info->index);
-		info->size = vdev->region[i].size;
-		info->flags = vdev->region[i].flags;
+		info.offset = VFIO_PCI_INDEX_TO_OFFSET(info.index);
+		info.size = vdev->region[i].size;
+		info.flags = vdev->region[i].flags;
 
 		cap_type.type = vdev->region[i].type;
 		cap_type.subtype = vdev->region[i].subtype;
 
-		ret = vfio_info_add_capability(caps, &cap_type.header,
+		ret = vfio_info_add_capability(&caps, &cap_type.header,
 					       sizeof(cap_type));
 		if (ret)
 			return ret;
 
 		if (vdev->region[i].ops->add_capability) {
 			ret = vdev->region[i].ops->add_capability(
-				vdev, &vdev->region[i], caps);
+				vdev, &vdev->region[i], &caps);
 			if (ret)
 				return ret;
 		}
 	}
 	}
-	return 0;
+
+	if (caps.size) {
+		info.flags |= VFIO_REGION_INFO_FLAG_CAPS;
+		if (info.argsz < sizeof(info) + caps.size) {
+			info.argsz = sizeof(info) + caps.size;
+			info.cap_offset = 0;
+		} else {
+			vfio_info_cap_shift(&caps, sizeof(info));
+			if (copy_to_user(arg + 1, caps.buf, caps.size)) {
+				kfree(caps.buf);
+				return -EFAULT;
+			}
+			info.cap_offset = sizeof(*arg);
+		}
+
+		kfree(caps.buf);
+	}
+
+	return copy_to_user(arg, &info, minsz) ? -EFAULT : 0;
 }
-EXPORT_SYMBOL_GPL(vfio_pci_ioctl_get_region_info);
 
 static int vfio_pci_ioctl_get_irq_info(struct vfio_pci_core_device *vdev,
 				       struct vfio_irq_info __user *arg)
@@ -1244,8 +1188,11 @@ static int vfio_pci_ioctl_get_irq_info(struct vfio_pci_core_device *vdev,
 	switch (info.index) {
 	case VFIO_PCI_INTX_IRQ_INDEX ... VFIO_PCI_MSIX_IRQ_INDEX:
 	case VFIO_PCI_REQ_IRQ_INDEX:
-	case VFIO_PCI_ERR_IRQ_INDEX:
 		break;
+	case VFIO_PCI_ERR_IRQ_INDEX:
+		if (pci_is_pcie(vdev->pdev))
+			break;
+		fallthrough;
 	default:
 		return -EINVAL;
 	}
@@ -1320,10 +1267,7 @@ static int vfio_pci_ioctl_reset(struct vfio_pci_core_device *vdev,
 	 */
 	vfio_pci_set_power_state(vdev, PCI_D0);
 
-	vfio_pci_dma_buf_move(vdev, true);
 	ret = pci_try_reset_function(vdev->pdev);
-	if (__vfio_pci_memory_enabled(vdev))
-		vfio_pci_dma_buf_move(vdev, false);
 	up_write(&vdev->memory_lock);
 
 	return ret;
@@ -1369,7 +1313,7 @@ static int vfio_pci_ioctl_get_pci_hot_reset_info(
 		goto header;
 	}
 
-	devices = kzalloc_objs(*devices, count);
+	devices = kcalloc(count, sizeof(*devices), GFP_KERNEL);
 	if (!devices)
 		return -ENOMEM;
 
@@ -1428,8 +1372,8 @@ vfio_pci_ioctl_pci_hot_reset_groups(struct vfio_pci_core_device *vdev,
 	if (array_count > count)
 		return -EINVAL;
 
-	group_fds = kzalloc_objs(*group_fds, array_count);
-	files = kzalloc_objs(*files, array_count);
+	group_fds = kcalloc(array_count, sizeof(*group_fds), GFP_KERNEL);
+	files = kcalloc(array_count, sizeof(*files), GFP_KERNEL);
 	if (!group_fds || !files) {
 		kfree(group_fds);
 		kfree(files);
@@ -1553,6 +1497,8 @@ long vfio_pci_core_ioctl(struct vfio_device *core_vdev, unsigned int cmd,
 		return vfio_pci_ioctl_get_irq_info(vdev, uarg);
 	case VFIO_DEVICE_GET_PCI_HOT_RESET_INFO:
 		return vfio_pci_ioctl_get_pci_hot_reset_info(vdev, uarg);
+	case VFIO_DEVICE_GET_REGION_INFO:
+		return vfio_pci_ioctl_get_region_info(vdev, uarg);
 	case VFIO_DEVICE_IOEVENTFD:
 		return vfio_pci_ioctl_ioeventfd(vdev, uarg);
 	case VFIO_DEVICE_PCI_HOT_RESET:
@@ -1567,10 +1513,11 @@ long vfio_pci_core_ioctl(struct vfio_device *core_vdev, unsigned int cmd,
 }
 EXPORT_SYMBOL_GPL(vfio_pci_core_ioctl);
 
-static int vfio_pci_core_feature_token(struct vfio_pci_core_device *vdev,
-				       u32 flags, uuid_t __user *arg,
-				       size_t argsz)
+static int vfio_pci_core_feature_token(struct vfio_device *device, u32 flags,
+				       uuid_t __user *arg, size_t argsz)
 {
+	struct vfio_pci_core_device *vdev =
+		container_of(device, struct vfio_pci_core_device, vdev);
 	uuid_t uuid;
 	int ret;
 
@@ -1597,23 +1544,16 @@ static int vfio_pci_core_feature_token(struct vfio_pci_core_device *vdev,
 int vfio_pci_core_ioctl_feature(struct vfio_device *device, u32 flags,
 				void __user *arg, size_t argsz)
 {
-	struct vfio_pci_core_device *vdev =
-		container_of(device, struct vfio_pci_core_device, vdev);
-
 	switch (flags & VFIO_DEVICE_FEATURE_MASK) {
 	case VFIO_DEVICE_FEATURE_LOW_POWER_ENTRY:
-		return vfio_pci_core_pm_entry(vdev, flags, arg, argsz);
+		return vfio_pci_core_pm_entry(device, flags, arg, argsz);
 	case VFIO_DEVICE_FEATURE_LOW_POWER_ENTRY_WITH_WAKEUP:
-		return vfio_pci_core_pm_entry_with_wakeup(vdev, flags,
+		return vfio_pci_core_pm_entry_with_wakeup(device, flags,
 							  arg, argsz);
 	case VFIO_DEVICE_FEATURE_LOW_POWER_EXIT:
-		return vfio_pci_core_pm_exit(vdev, flags, arg, argsz);
+		return vfio_pci_core_pm_exit(device, flags, arg, argsz);
 	case VFIO_DEVICE_FEATURE_PCI_VF_TOKEN:
-		return vfio_pci_core_feature_token(vdev, flags, arg, argsz);
-	case VFIO_DEVICE_FEATURE_DMA_BUF:
-		return vfio_pci_core_feature_dma_buf(vdev, flags, arg, argsz);
-	case VFIO_DEVICE_FEATURE_ZPCI_ERROR:
-		return vfio_pci_zdev_feature_err(device, flags, arg, argsz);
+		return vfio_pci_core_feature_token(device, flags, arg, argsz);
 	default:
 		return -ENOTTY;
 	}
@@ -1769,7 +1709,7 @@ static vm_fault_t vfio_pci_mmap_huge_fault(struct vm_fault *vmf,
 	struct vm_area_struct *vma = vmf->vma;
 	struct vfio_pci_core_device *vdev = vma->vm_private_data;
 	unsigned long addr = vmf->address & ~((PAGE_SIZE << order) - 1);
-	unsigned long pgoff = linear_page_delta(vma, addr);
+	unsigned long pgoff = (addr - vma->vm_start) >> PAGE_SHIFT;
 	unsigned long pfn = vma_to_pfn(vma) + pgoff;
 	vm_fault_t ret = VM_FAULT_FALLBACK;
 
@@ -1807,7 +1747,7 @@ int vfio_pci_core_mmap(struct vfio_device *core_vdev, struct vm_area_struct *vma
 	struct pci_dev *pdev = vdev->pdev;
 	unsigned int index;
 	u64 phys_len, req_len, pgoff, req_start;
-	void __iomem *bar_io;
+	int ret;
 
 	index = vma->vm_pgoff >> (VFIO_PCI_OFFSET_SHIFT - PAGE_SHIFT);
 
@@ -1841,11 +1781,21 @@ int vfio_pci_core_mmap(struct vfio_device *core_vdev, struct vm_area_struct *vma
 		return -EINVAL;
 
 	/*
-	 * Ensure the BAR resource region is reserved for use.
+	 * Even though we don't make use of the barmap for the mmap,
+	 * we need to request the region and the barmap tracks that.
 	 */
-	bar_io = vfio_pci_core_get_iomap(vdev, index);
-	if (IS_ERR(bar_io))
-		return PTR_ERR(bar_io);
+	if (!vdev->barmap[index]) {
+		ret = pci_request_selected_regions(pdev,
+						   1 << index, "vfio-pci");
+		if (ret)
+			return ret;
+
+		vdev->barmap[index] = pci_iomap(pdev, index, 0);
+		if (!vdev->barmap[index]) {
+			pci_release_selected_regions(pdev, 1 << index);
+			return -ENOMEM;
+		}
+	}
 
 	vma->vm_private_data = vdev;
 	vma->vm_page_prot = pgprot_noncached(vma->vm_page_prot);
@@ -2107,7 +2057,7 @@ static int vfio_pci_vf_init(struct vfio_pci_core_device *vdev)
 	if (!pdev->is_physfn)
 		return 0;
 
-	vdev->vf_token = kzalloc_obj(*vdev->vf_token);
+	vdev->vf_token = kzalloc(sizeof(*vdev->vf_token), GFP_KERNEL);
 	if (!vdev->vf_token)
 		return -ENOMEM;
 
@@ -2146,10 +2096,10 @@ static int vfio_pci_vga_init(struct vfio_pci_core_device *vdev)
 	if (ret)
 		return ret;
 
-	ret = vga_client_register(pdev, vfio_pci_set_decode, vdev);
+	ret = vga_client_register(pdev, vfio_pci_set_decode);
 	if (ret)
 		return ret;
-	vga_set_legacy_decoding(pdev, vfio_pci_set_decode(vdev, false));
+	vga_set_legacy_decoding(pdev, vfio_pci_set_decode(pdev, false));
 	return 0;
 }
 
@@ -2169,7 +2119,6 @@ int vfio_pci_core_init_dev(struct vfio_device *core_vdev)
 {
 	struct vfio_pci_core_device *vdev =
 		container_of(core_vdev, struct vfio_pci_core_device, vdev);
-	int ret;
 
 	vdev->pdev = to_pci_dev(core_vdev->dev);
 	vdev->irq_type = VFIO_PCI_NUM_IRQS;
@@ -2179,12 +2128,10 @@ int vfio_pci_core_init_dev(struct vfio_device *core_vdev)
 	INIT_LIST_HEAD(&vdev->dummy_resources_list);
 	INIT_LIST_HEAD(&vdev->ioeventfds_list);
 	INIT_LIST_HEAD(&vdev->sriov_pfs_item);
-	ret = pcim_p2pdma_init(vdev->pdev);
-	if (ret && ret != -EOPNOTSUPP)
-		return ret;
-	INIT_LIST_HEAD(&vdev->dmabufs);
 	init_rwsem(&vdev->memory_lock);
 	xa_init(&vdev->ctx);
+
+	vdev->disable_idle_d3 = disable_idle_d3;
 
 	return 0;
 }
@@ -2208,8 +2155,8 @@ int vfio_pci_core_register_device(struct vfio_pci_core_device *vdev)
 	struct device *dev = &pdev->dev;
 	int ret;
 
-	/* Drivers must set a name.  Required for sequestering SR-IOV VFs */
-	if (WARN_ON(!vdev->vdev.ops->name))
+	/* Drivers must set the vfio_pci_core_device to their drvdata */
+	if (WARN_ON(vdev != dev_get_drvdata(dev)))
 		return -EINVAL;
 
 	if (pdev->hdr_type != PCI_HEADER_TYPE_NORMAL)
@@ -2275,6 +2222,7 @@ int vfio_pci_core_register_device(struct vfio_pci_core_device *vdev)
 	 */
 	vfio_pci_set_power_state(vdev, PCI_D0);
 
+	dev->driver->pm = &vfio_pci_core_pm_ops;
 	pm_runtime_allow(dev);
 	if (!vdev->disable_idle_d3)
 		pm_runtime_put(dev);
@@ -2282,9 +2230,6 @@ int vfio_pci_core_register_device(struct vfio_pci_core_device *vdev)
 	ret = vfio_register_group_dev(&vdev->vdev);
 	if (ret)
 		goto out_power;
-
-	vfio_pci_core_debugfs_init(vdev);
-
 	return 0;
 
 out_power:
@@ -2315,8 +2260,10 @@ void vfio_pci_core_unregister_device(struct vfio_pci_core_device *vdev)
 }
 EXPORT_SYMBOL_GPL(vfio_pci_core_unregister_device);
 
-pci_ers_result_t vfio_pci_core_aer_err_detected(struct vfio_pci_core_device *vdev)
+pci_ers_result_t vfio_pci_core_aer_err_detected(struct pci_dev *pdev,
+						pci_channel_state_t state)
 {
+	struct vfio_pci_core_device *vdev = dev_get_drvdata(&pdev->dev);
 	struct vfio_pci_eventfd *eventfd;
 
 	rcu_read_lock();
@@ -2398,6 +2345,11 @@ out_unlock:
 	return ret;
 }
 EXPORT_SYMBOL_GPL(vfio_pci_core_sriov_configure);
+
+const struct pci_error_handlers vfio_pci_core_err_handlers = {
+	.error_detected = vfio_pci_core_aer_err_detected,
+};
+EXPORT_SYMBOL_GPL(vfio_pci_core_err_handlers);
 
 static bool vfio_dev_in_groups(struct vfio_device *vdev,
 			       struct vfio_pci_group_info *groups)
@@ -2551,7 +2503,6 @@ static int vfio_pci_dev_set_hot_reset(struct vfio_device_set *dev_set,
 			break;
 		}
 
-		vfio_pci_dma_buf_move(vdev, true);
 		vfio_pci_zap_bars(vdev);
 	}
 
@@ -2580,11 +2531,8 @@ static int vfio_pci_dev_set_hot_reset(struct vfio_device_set *dev_set,
 
 err_undo:
 	list_for_each_entry_from_reverse(vdev, &dev_set->device_list,
-					 vdev.dev_set_list) {
-		if (vdev->vdev.open_count && __vfio_pci_memory_enabled(vdev))
-			vfio_pci_dma_buf_move(vdev, false);
+					 vdev.dev_set_list)
 		up_write(&vdev->memory_lock);
-	}
 
 	list_for_each_entry(vdev, &dev_set->device_list, vdev.dev_set_list)
 		pm_runtime_put(&vdev->pdev->dev);
@@ -2647,10 +2595,18 @@ static void vfio_pci_dev_set_try_reset(struct vfio_device_set *dev_set)
 	}
 }
 
+void vfio_pci_core_set_params(bool is_nointxmask, bool is_disable_vga,
+			      bool is_disable_idle_d3)
+{
+	nointxmask = is_nointxmask;
+	disable_vga = is_disable_vga;
+	disable_idle_d3 = is_disable_idle_d3;
+}
+EXPORT_SYMBOL_GPL(vfio_pci_core_set_params);
+
 static void vfio_pci_core_cleanup(void)
 {
 	vfio_pci_uninit_perm_bits();
-	rcu_barrier();
 }
 
 static int __init vfio_pci_core_init(void)

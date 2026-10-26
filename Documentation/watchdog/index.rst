@@ -4,26 +4,22 @@
 Watchdog Support
 ================
 
-Kernel infrastructure
-=====================
-
 .. toctree::
     :maxdepth: 1
 
+    hpwdt
+    mlx-wdt
+    pcwd-watchdog
     watchdog-api
     watchdog-kernel-api
+    watchdog-parameters
     watchdog-pm
+    wdt
     convert_drivers_to_kernel_api
 
-Driver specific
-===============
+.. only::  subproject and html
 
-.. toctree::
-    :maxdepth: 1
+   Indices
+   =======
 
-    watchdog-parameters
-    hpwdt
-    ics-wdt
-    mlx-wdt
-    npcm_wdt
-    pcwd-watchdog
+   * :ref:`genindex`

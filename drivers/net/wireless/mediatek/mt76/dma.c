@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: BSD-3-Clause-Clear
+// SPDX-License-Identifier: ISC
 /*
  * Copyright (C) 2016 Felix Fietkau <nbd@nbd.name>
  */
@@ -693,8 +693,6 @@ mt76_dma_tx_queue_skb(struct mt76_phy *phy, struct mt76_queue *q,
 	if (!t)
 		goto free_skb;
 
-	t->phy_idx = phy->band_idx;
-	t->qid = qid;
 	txwi = mt76_get_txwi_ptr(dev, t);
 
 	skb->prev = skb->next = NULL;
@@ -839,7 +837,6 @@ mt76_dma_alloc_queue(struct mt76_dev *dev, struct mt76_queue *q,
 	q->ndesc = n_desc;
 	q->buf_size = bufsize;
 	q->hw_idx = idx;
-	q->dev = dev;
 
 	if (mt76_queue_is_wed_rro_ind(q))
 		size = sizeof(struct mt76_wed_rro_desc);
@@ -910,10 +907,6 @@ mt76_dma_rx_cleanup(struct mt76_dev *dev, struct mt76_queue *q)
 		    mt76_queue_is_wed_rro(q))
 			continue;
 
-		if (mt76_npu_device_active(dev) &&
-		    mt76_queue_is_wed_rro(q))
-			continue;
-
 		if (!mt76_queue_is_wed_rro_rxdmad_c(q) &&
 		    !mt76_queue_is_wed_rro_ind(q))
 			mt76_put_page_pool_buf(buf, false);
@@ -954,13 +947,6 @@ mt76_dma_rx_reset(struct mt76_dev *dev, enum mt76_rxq_id qid)
 
 	if (mtk_wed_device_active(&dev->mmio.wed) &&
 	    mt76_queue_is_wed_rro(q))
-		return;
-
-	if (mt76_npu_device_active(dev) &&
-	    mt76_queue_is_wed_rro(q))
-		return;
-
-	if (mt76_queue_is_npu_txfree(q))
 		return;
 
 	mt76_dma_sync_idx(dev, q);

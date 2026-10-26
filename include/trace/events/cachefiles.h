@@ -31,6 +31,10 @@ enum cachefiles_obj_ref_trace {
 	cachefiles_obj_see_lookup_failed,
 	cachefiles_obj_see_withdraw_cookie,
 	cachefiles_obj_see_withdrawal,
+	cachefiles_obj_get_ondemand_fd,
+	cachefiles_obj_put_ondemand_fd,
+	cachefiles_obj_get_read_req,
+	cachefiles_obj_put_read_req,
 };
 
 enum fscache_why_object_killed {
@@ -52,8 +56,6 @@ enum cachefiles_coherency_trace {
 	cachefiles_coherency_check_ok,
 	cachefiles_coherency_check_type,
 	cachefiles_coherency_check_xattr,
-	cachefiles_coherency_discontiguous,
-	cachefiles_coherency_remove,
 	cachefiles_coherency_set_fail,
 	cachefiles_coherency_set_ok,
 	cachefiles_coherency_vol_check_cmp,
@@ -65,11 +67,9 @@ enum cachefiles_coherency_trace {
 };
 
 enum cachefiles_trunc_trace {
-	cachefiles_trunc_clear_padding,
 	cachefiles_trunc_dio_adjust,
 	cachefiles_trunc_expand_tmpfile,
 	cachefiles_trunc_shrink,
-	cachefiles_trunc_zap,
 };
 
 enum cachefiles_prepare_read_trace {
@@ -84,14 +84,11 @@ enum cachefiles_prepare_read_trace {
 };
 
 enum cachefiles_error_trace {
-	cachefiles_trace_alignment_error,
-	cachefiles_trace_create_nospace,
 	cachefiles_trace_fallocate_error,
 	cachefiles_trace_getxattr_error,
 	cachefiles_trace_link_error,
 	cachefiles_trace_lookup_error,
 	cachefiles_trace_mkdir_error,
-	cachefiles_trace_mkdir_nospace,
 	cachefiles_trace_notify_change_error,
 	cachefiles_trace_open_error,
 	cachefiles_trace_read_error,
@@ -104,8 +101,6 @@ enum cachefiles_error_trace {
 	cachefiles_trace_trunc_error,
 	cachefiles_trace_unlink_error,
 	cachefiles_trace_write_error,
-	cachefiles_trace_write_nospace,
-	cachefiles_trace_write_nospace_2,
 };
 
 #endif
@@ -134,7 +129,11 @@ enum cachefiles_error_trace {
 	EM(cachefiles_obj_see_lookup_cookie,	"SEE lookup_cookie")	\
 	EM(cachefiles_obj_see_lookup_failed,	"SEE lookup_failed")	\
 	EM(cachefiles_obj_see_withdraw_cookie,	"SEE withdraw_cookie")	\
-	E_(cachefiles_obj_see_withdrawal,	"SEE withdrawal")
+	EM(cachefiles_obj_see_withdrawal,	"SEE withdrawal")	\
+	EM(cachefiles_obj_get_ondemand_fd,      "GET ondemand_fd")	\
+	EM(cachefiles_obj_put_ondemand_fd,      "PUT ondemand_fd")	\
+	EM(cachefiles_obj_get_read_req,		"GET read_req")		\
+	E_(cachefiles_obj_put_read_req,		"PUT read_req")
 
 #define cachefiles_coherency_traces					\
 	EM(cachefiles_coherency_check_aux,	"BAD aux ")		\
@@ -145,8 +144,6 @@ enum cachefiles_error_trace {
 	EM(cachefiles_coherency_check_ok,	"OK      ")		\
 	EM(cachefiles_coherency_check_type,	"BAD type")		\
 	EM(cachefiles_coherency_check_xattr,	"BAD xatt")		\
-	EM(cachefiles_coherency_discontiguous,	"--- gap ")		\
-	EM(cachefiles_coherency_remove,		"REMOVE  ")		\
 	EM(cachefiles_coherency_set_fail,	"SET fail")		\
 	EM(cachefiles_coherency_set_ok,		"SET ok  ")		\
 	EM(cachefiles_coherency_vol_check_cmp,	"VOL BAD cmp ")		\
@@ -157,11 +154,9 @@ enum cachefiles_error_trace {
 	E_(cachefiles_coherency_vol_set_ok,	"VOL SET ok  ")
 
 #define cachefiles_trunc_traces						\
-	EM(cachefiles_trunc_clear_padding,	"CLRPAD")		\
 	EM(cachefiles_trunc_dio_adjust,		"DIOADJ")		\
 	EM(cachefiles_trunc_expand_tmpfile,	"EXPTMP")		\
-	EM(cachefiles_trunc_shrink,		"SHRINK")		\
-	E_(cachefiles_trunc_zap,		"ZAP   ")
+	E_(cachefiles_trunc_shrink,		"SHRINK")
 
 #define cachefiles_prepare_read_traces					\
 	EM(cachefiles_trace_read_after_eof,	"after-eof ")		\
@@ -174,14 +169,11 @@ enum cachefiles_error_trace {
 	E_(cachefiles_trace_read_seek_nxio,	"seek-enxio")
 
 #define cachefiles_error_traces						\
-	EM(cachefiles_trace_alignment_error,	"align")		\
-	EM(cachefiles_trace_create_nospace,	"create-nospace")	\
 	EM(cachefiles_trace_fallocate_error,	"fallocate")		\
 	EM(cachefiles_trace_getxattr_error,	"getxattr")		\
 	EM(cachefiles_trace_link_error,		"link")			\
 	EM(cachefiles_trace_lookup_error,	"lookup")		\
 	EM(cachefiles_trace_mkdir_error,	"mkdir")		\
-	EM(cachefiles_trace_mkdir_nospace,	"mkdir-nospace")	\
 	EM(cachefiles_trace_notify_change_error, "notify_change")	\
 	EM(cachefiles_trace_open_error,		"open")			\
 	EM(cachefiles_trace_read_error,		"read")			\
@@ -193,9 +185,7 @@ enum cachefiles_error_trace {
 	EM(cachefiles_trace_tmpfile_error,	"tmpfile")		\
 	EM(cachefiles_trace_trunc_error,	"trunc")		\
 	EM(cachefiles_trace_unlink_error,	"unlink")		\
-	EM(cachefiles_trace_write_error,	"write")		\
-	EM(cachefiles_trace_write_nospace,	"write-nospace")	\
-	E_(cachefiles_trace_write_nospace_2,	"write-nospace-2")
+	E_(cachefiles_trace_write_error,	"write")
 
 
 /*
@@ -259,10 +249,10 @@ TRACE_EVENT(cachefiles_lookup,
 	    TP_ARGS(obj, dir, de),
 
 	    TP_STRUCT__entry(
-		    __field(u64,			dino)
-		    __field(u64,			ino)
 		    __field(unsigned int,		obj)
 		    __field(short,			error)
+		    __field(unsigned long,		dino)
+		    __field(unsigned long,		ino)
 			     ),
 
 	    TP_fast_assign(
@@ -273,7 +263,7 @@ TRACE_EVENT(cachefiles_lookup,
 		    __entry->error	= IS_ERR(de) ? PTR_ERR(de) : 0;
 			   ),
 
-	    TP_printk("o=%08x dB=%llx B=%llx e=%d",
+	    TP_printk("o=%08x dB=%lx B=%lx e=%d",
 		      __entry->obj, __entry->dino, __entry->ino, __entry->error)
 	    );
 
@@ -389,12 +379,12 @@ TRACE_EVENT(cachefiles_rename,
 
 TRACE_EVENT(cachefiles_coherency,
 	    TP_PROTO(struct cachefiles_object *obj,
-		     ino_t ino, uoff_t obj_size,
+		     ino_t ino,
 		     const void *disk_aux,
 		     enum cachefiles_content content,
 		     enum cachefiles_coherency_trace why),
 
-	    TP_ARGS(obj, ino, obj_size, disk_aux, content, why),
+	    TP_ARGS(obj, ino, disk_aux, content, why),
 
 	    /* Note that obj may be NULL */
 	    TP_STRUCT__entry(
@@ -402,7 +392,6 @@ TRACE_EVENT(cachefiles_coherency,
 		    __field(enum cachefiles_coherency_trace,	why)
 		    __field(enum cachefiles_content,		content)
 		    __field(u64,				ino)
-		    __field(u64,				obj_size)
 		    __field(u64,				aux)
 		    __field(u64,				disk_aux)
 			     ),
@@ -417,7 +406,6 @@ TRACE_EVENT(cachefiles_coherency,
 		    __entry->why	= why;
 		    __entry->content	= content;
 		    __entry->ino	= ino;
-		    __entry->obj_size	= obj_size;
 		    __entry->aux	= be64_to_cpup((__be64 *)obj->cookie->inline_aux);
 
 		    /* cachefiles_xattr::data is 2-byte aligned but not 8-byte aligned. */
@@ -432,11 +420,10 @@ TRACE_EVENT(cachefiles_coherency,
 		    }
 			   ),
 
-	    TP_printk("o=%08x %s B=%llx oz=%llx c=%u aux=%llx dsk=%llx",
+	    TP_printk("o=%08x %s B=%llx c=%u aux=%llx dsk=%llx",
 		      __entry->obj,
 		      __print_symbolic(__entry->why, cachefiles_coherency_traces),
 		      __entry->ino,
-		      __entry->obj_size,
 		      __entry->content,
 		      __entry->aux,
 		      __entry->disk_aux)
@@ -470,7 +457,7 @@ TRACE_EVENT(cachefiles_vol_coherency,
 
 TRACE_EVENT(cachefiles_prep_read,
 	    TP_PROTO(struct cachefiles_object *obj,
-		     uoff_t start,
+		     loff_t start,
 		     size_t len,
 		     unsigned short flags,
 		     enum netfs_io_source source,
@@ -485,7 +472,7 @@ TRACE_EVENT(cachefiles_prep_read,
 		    __field(enum netfs_io_source,	source)
 		    __field(enum cachefiles_prepare_read_trace,	why)
 		    __field(size_t,			len)
-		    __field(uoff_t,			start)
+		    __field(loff_t,			start)
 		    __field(unsigned int,		netfs_inode)
 		    __field(unsigned int,		cache_inode)
 			     ),
@@ -513,16 +500,16 @@ TRACE_EVENT(cachefiles_prep_read,
 TRACE_EVENT(cachefiles_read,
 	    TP_PROTO(struct cachefiles_object *obj,
 		     struct inode *backer,
-		     uoff_t start,
+		     loff_t start,
 		     size_t len),
 
 	    TP_ARGS(obj, backer, start, len),
 
 	    TP_STRUCT__entry(
-		    __field(unsigned int,	obj)
-		    __field(unsigned int,	backer)
-		    __field(size_t,		len)
-		    __field(uoff_t,		start)
+		    __field(unsigned int,			obj)
+		    __field(unsigned int,			backer)
+		    __field(size_t,				len)
+		    __field(loff_t,				start)
 			     ),
 
 	    TP_fast_assign(
@@ -542,16 +529,16 @@ TRACE_EVENT(cachefiles_read,
 TRACE_EVENT(cachefiles_write,
 	    TP_PROTO(struct cachefiles_object *obj,
 		     struct inode *backer,
-		     uoff_t start,
+		     loff_t start,
 		     size_t len),
 
 	    TP_ARGS(obj, backer, start, len),
 
 	    TP_STRUCT__entry(
-		    __field(unsigned int,	obj)
-		    __field(unsigned int,	backer)
-		    __field(size_t,		len)
-		    __field(uoff_t,		start)
+		    __field(unsigned int,			obj)
+		    __field(unsigned int,			backer)
+		    __field(size_t,				len)
+		    __field(loff_t,				start)
 			     ),
 
 	    TP_fast_assign(
@@ -570,7 +557,7 @@ TRACE_EVENT(cachefiles_write,
 
 TRACE_EVENT(cachefiles_trunc,
 	    TP_PROTO(struct cachefiles_object *obj, struct inode *backer,
-		     uoff_t from, uoff_t to, enum cachefiles_trunc_trace why),
+		     loff_t from, loff_t to, enum cachefiles_trunc_trace why),
 
 	    TP_ARGS(obj, backer, from, to, why),
 
@@ -578,8 +565,8 @@ TRACE_EVENT(cachefiles_trunc,
 		    __field(unsigned int,			obj)
 		    __field(unsigned int,			backer)
 		    __field(enum cachefiles_trunc_trace,	why)
-		    __field(uoff_t,				from)
-		    __field(uoff_t,				to)
+		    __field(loff_t,				from)
+		    __field(loff_t,				to)
 			     ),
 
 	    TP_fast_assign(
@@ -606,8 +593,8 @@ TRACE_EVENT(cachefiles_mark_active,
 
 	    /* Note that obj may be NULL */
 	    TP_STRUCT__entry(
-		    __field(u64,			inode)
 		    __field(unsigned int,		obj)
+		    __field(ino_t,			inode)
 			     ),
 
 	    TP_fast_assign(
@@ -615,7 +602,7 @@ TRACE_EVENT(cachefiles_mark_active,
 		    __entry->inode	= inode->i_ino;
 			   ),
 
-	    TP_printk("o=%08x B=%llx",
+	    TP_printk("o=%08x B=%lx",
 		      __entry->obj, __entry->inode)
 	    );
 
@@ -627,8 +614,8 @@ TRACE_EVENT(cachefiles_mark_failed,
 
 	    /* Note that obj may be NULL */
 	    TP_STRUCT__entry(
-		    __field(u64,			inode)
 		    __field(unsigned int,		obj)
+		    __field(ino_t,			inode)
 			     ),
 
 	    TP_fast_assign(
@@ -636,7 +623,7 @@ TRACE_EVENT(cachefiles_mark_failed,
 		    __entry->inode	= inode->i_ino;
 			   ),
 
-	    TP_printk("o=%08x B=%llx",
+	    TP_printk("o=%08x B=%lx",
 		      __entry->obj, __entry->inode)
 	    );
 
@@ -648,8 +635,8 @@ TRACE_EVENT(cachefiles_mark_inactive,
 
 	    /* Note that obj may be NULL */
 	    TP_STRUCT__entry(
-		    __field(u64,			inode)
 		    __field(unsigned int,		obj)
+		    __field(ino_t,			inode)
 			     ),
 
 	    TP_fast_assign(
@@ -657,7 +644,7 @@ TRACE_EVENT(cachefiles_mark_inactive,
 		    __entry->inode	= inode->i_ino;
 			   ),
 
-	    TP_printk("o=%08x B=%llx",
+	    TP_printk("o=%08x B=%lx",
 		      __entry->obj, __entry->inode)
 	    );
 
@@ -715,24 +702,178 @@ TRACE_EVENT(cachefiles_io_error,
 		      __entry->error)
 	    );
 
-TRACE_EVENT(cachefiles_no_space,
-	    TP_PROTO(struct cachefiles_object *obj, enum cachefiles_error_trace trace),
+TRACE_EVENT(cachefiles_ondemand_open,
+	    TP_PROTO(struct cachefiles_object *obj, struct cachefiles_msg *msg,
+		     struct cachefiles_open *load),
 
-	    TP_ARGS(obj, trace),
+	    TP_ARGS(obj, msg, load),
 
 	    TP_STRUCT__entry(
-		    __field(unsigned int,			obj)
-		    __field(enum cachefiles_error_trace,	trace)
+		    __field(unsigned int,	obj)
+		    __field(unsigned int,	msg_id)
+		    __field(unsigned int,	object_id)
+		    __field(unsigned int,	fd)
+		    __field(unsigned int,	flags)
 			     ),
 
 	    TP_fast_assign(
 		    __entry->obj	= obj ? obj->debug_id : 0;
-		    __entry->trace	= trace;
+		    __entry->msg_id	= msg->msg_id;
+		    __entry->object_id	= msg->object_id;
+		    __entry->fd		= load->fd;
+		    __entry->flags	= load->flags;
 			   ),
 
-	    TP_printk("o=%08x %s",
+	    TP_printk("o=%08x mid=%x oid=%x fd=%d f=%x",
 		      __entry->obj,
-		      __print_symbolic(__entry->trace, cachefiles_error_traces))
+		      __entry->msg_id,
+		      __entry->object_id,
+		      __entry->fd,
+		      __entry->flags)
+	    );
+
+TRACE_EVENT(cachefiles_ondemand_copen,
+	    TP_PROTO(struct cachefiles_object *obj, unsigned int msg_id,
+		     long len),
+
+	    TP_ARGS(obj, msg_id, len),
+
+	    TP_STRUCT__entry(
+		    __field(unsigned int,	obj)
+		    __field(unsigned int,	msg_id)
+		    __field(long,		len)
+			     ),
+
+	    TP_fast_assign(
+		    __entry->obj	= obj ? obj->debug_id : 0;
+		    __entry->msg_id	= msg_id;
+		    __entry->len	= len;
+			   ),
+
+	    TP_printk("o=%08x mid=%x l=%lx",
+		      __entry->obj,
+		      __entry->msg_id,
+		      __entry->len)
+	    );
+
+TRACE_EVENT(cachefiles_ondemand_close,
+	    TP_PROTO(struct cachefiles_object *obj, struct cachefiles_msg *msg),
+
+	    TP_ARGS(obj, msg),
+
+	    TP_STRUCT__entry(
+		    __field(unsigned int,	obj)
+		    __field(unsigned int,	msg_id)
+		    __field(unsigned int,	object_id)
+			     ),
+
+	    TP_fast_assign(
+		    __entry->obj	= obj ? obj->debug_id : 0;
+		    __entry->msg_id	= msg->msg_id;
+		    __entry->object_id	= msg->object_id;
+			   ),
+
+	    TP_printk("o=%08x mid=%x oid=%x",
+		      __entry->obj,
+		      __entry->msg_id,
+		      __entry->object_id)
+	    );
+
+TRACE_EVENT(cachefiles_ondemand_read,
+	    TP_PROTO(struct cachefiles_object *obj, struct cachefiles_msg *msg,
+		     struct cachefiles_read *load),
+
+	    TP_ARGS(obj, msg, load),
+
+	    TP_STRUCT__entry(
+		    __field(unsigned int,	obj)
+		    __field(unsigned int,	msg_id)
+		    __field(unsigned int,	object_id)
+		    __field(loff_t,		start)
+		    __field(size_t,		len)
+			     ),
+
+	    TP_fast_assign(
+		    __entry->obj	= obj ? obj->debug_id : 0;
+		    __entry->msg_id	= msg->msg_id;
+		    __entry->object_id	= msg->object_id;
+		    __entry->start	= load->off;
+		    __entry->len	= load->len;
+			   ),
+
+	    TP_printk("o=%08x mid=%x oid=%x s=%llx l=%zx",
+		      __entry->obj,
+		      __entry->msg_id,
+		      __entry->object_id,
+		      __entry->start,
+		      __entry->len)
+	    );
+
+TRACE_EVENT(cachefiles_ondemand_cread,
+	    TP_PROTO(struct cachefiles_object *obj, unsigned int msg_id),
+
+	    TP_ARGS(obj, msg_id),
+
+	    TP_STRUCT__entry(
+		    __field(unsigned int,	obj)
+		    __field(unsigned int,	msg_id)
+			     ),
+
+	    TP_fast_assign(
+		    __entry->obj	= obj ? obj->debug_id : 0;
+		    __entry->msg_id	= msg_id;
+			   ),
+
+	    TP_printk("o=%08x mid=%x",
+		      __entry->obj,
+		      __entry->msg_id)
+	    );
+
+TRACE_EVENT(cachefiles_ondemand_fd_write,
+	    TP_PROTO(struct cachefiles_object *obj, struct inode *backer,
+		     loff_t start, size_t len),
+
+	    TP_ARGS(obj, backer, start, len),
+
+	    TP_STRUCT__entry(
+		    __field(unsigned int,	obj)
+		    __field(unsigned int,	backer)
+		    __field(loff_t,		start)
+		    __field(size_t,		len)
+			     ),
+
+	    TP_fast_assign(
+		    __entry->obj	= obj ? obj->debug_id : 0;
+		    __entry->backer	= backer->i_ino;
+		    __entry->start	= start;
+		    __entry->len	= len;
+			   ),
+
+	    TP_printk("o=%08x iB=%x s=%llx l=%zx",
+		      __entry->obj,
+		      __entry->backer,
+		      __entry->start,
+		      __entry->len)
+	    );
+
+TRACE_EVENT(cachefiles_ondemand_fd_release,
+	    TP_PROTO(struct cachefiles_object *obj, int object_id),
+
+	    TP_ARGS(obj, object_id),
+
+	    TP_STRUCT__entry(
+		    __field(unsigned int,	obj)
+		    __field(unsigned int,	object_id)
+			     ),
+
+	    TP_fast_assign(
+		    __entry->obj	= obj ? obj->debug_id : 0;
+		    __entry->object_id	= object_id;
+			   ),
+
+	    TP_printk("o=%08x oid=%x",
+		      __entry->obj,
+		      __entry->object_id)
 	    );
 
 #endif /* _TRACE_CACHEFILES_H */

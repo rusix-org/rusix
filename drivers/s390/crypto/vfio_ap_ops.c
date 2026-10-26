@@ -980,7 +980,7 @@ static int vfio_ap_mdev_verify_no_sharing(struct ap_matrix_mdev *assignee,
  *
  * Return: One of the following values:
  * o the error returned from the ap_apqn_in_matrix_owned_by_def_drv() function,
- *   most likely -EBUSY indicating the ap_attr_mutex lock is already held.
+ *   most likely -EBUSY indicating the ap_perms_mutex lock is already held.
  * o EADDRNOTAVAIL if an APQN assigned to @matrix_mdev is reserved for the
  *		   zcrypt default driver.
  * o EADDRINUSE if an APQN assigned to @matrix_mdev is assigned to another mdev
@@ -1091,7 +1091,7 @@ static ssize_t assign_adapter_store(struct device *dev,
 	DECLARE_BITMAP(apm_filtered, AP_DEVICES);
 	struct ap_matrix_mdev *matrix_mdev = dev_get_drvdata(dev);
 
-	mutex_lock(&ap_attr_mutex);
+	mutex_lock(&ap_perms_mutex);
 	get_update_locks_for_mdev(matrix_mdev);
 
 	ret = kstrtoul(buf, 0, &apid);
@@ -1126,7 +1126,7 @@ static ssize_t assign_adapter_store(struct device *dev,
 	ret = count;
 done:
 	release_update_locks_for_mdev(matrix_mdev);
-	mutex_unlock(&ap_attr_mutex);
+	mutex_unlock(&ap_perms_mutex);
 
 	return ret;
 }
@@ -1315,7 +1315,7 @@ static ssize_t assign_domain_store(struct device *dev,
 	DECLARE_BITMAP(apm_filtered, AP_DEVICES);
 	struct ap_matrix_mdev *matrix_mdev = dev_get_drvdata(dev);
 
-	mutex_lock(&ap_attr_mutex);
+	mutex_lock(&ap_perms_mutex);
 	get_update_locks_for_mdev(matrix_mdev);
 
 	ret = kstrtoul(buf, 0, &apqi);
@@ -1350,7 +1350,7 @@ static ssize_t assign_domain_store(struct device *dev,
 	ret = count;
 done:
 	release_update_locks_for_mdev(matrix_mdev);
-	mutex_unlock(&ap_attr_mutex);
+	mutex_unlock(&ap_perms_mutex);
 
 	return ret;
 }
@@ -1730,7 +1730,7 @@ static ssize_t ap_config_store(struct device *dev, struct device_attribute *attr
 		return -ENOMEM;
 	rest = newbuf;
 
-	mutex_lock(&ap_attr_mutex);
+	mutex_lock(&ap_perms_mutex);
 	get_update_locks_for_mdev(matrix_mdev);
 
 	/* Save old state */
@@ -1791,7 +1791,7 @@ static ssize_t ap_config_store(struct device *dev, struct device_attribute *attr
 	}
 out:
 	release_update_locks_for_mdev(matrix_mdev);
-	mutex_unlock(&ap_attr_mutex);
+	mutex_unlock(&ap_perms_mutex);
 	kfree(newbuf);
 	return rc;
 }
@@ -1822,27 +1822,17 @@ static const struct attribute_group *vfio_ap_mdev_attr_groups[] = {
 
 /**
  * vfio_ap_mdev_set_kvm - sets all data for @matrix_mdev that are needed
- * to manage AP resources for the guest whose state is represented by
- * @kvm_file
+ * to manage AP resources for the guest whose state is represented by @kvm
  *
  * @matrix_mdev: a mediated matrix device
- * @kvm_file: the KVM VM file this vfio device is associated with
+ * @kvm: reference to KVM instance
  *
- * Return: 0 if no other mediated matrix device has a reference to the VM;
+ * Return: 0 if no other mediated matrix device has a reference to @kvm;
  * otherwise, returns an -EPERM.
  */
 static int vfio_ap_mdev_set_kvm(struct ap_matrix_mdev *matrix_mdev,
-				struct file *kvm_file)
+				struct kvm *kvm)
 {
-	struct kvm *kvm;
-
-	if (!kvm_file)
-		return -ENOENT;
-
-	kvm = file_to_kvm_s390(kvm_file);
-	if (!kvm)
-		return -ENOENT;
-
 	if (kvm->arch.crypto.crycbd) {
 		get_update_locks_for_kvm(kvm);
 		if (kvm->arch.crypto.pqap_hook) {
@@ -1851,6 +1841,7 @@ static int vfio_ap_mdev_set_kvm(struct ap_matrix_mdev *matrix_mdev,
 		}
 		kvm->arch.crypto.pqap_hook = &matrix_mdev->pqap_hook;
 
+		kvm_get_kvm(kvm);
 		matrix_mdev->kvm = kvm;
 		vfio_ap_mdev_update_guest_apcb(matrix_mdev);
 		release_update_locks_for_kvm(kvm);
@@ -1903,6 +1894,7 @@ static void vfio_ap_mdev_unset_kvm(struct ap_matrix_mdev *matrix_mdev)
 		matrix_mdev->kvm = NULL;
 
 		release_update_locks_for_kvm(kvm);
+		kvm_put_kvm(kvm);
 	}
 }
 
@@ -2464,7 +2456,7 @@ int vfio_ap_mdev_probe_queue(struct ap_device *apdev)
 	if (ret)
 		goto err_release_locks;
 
-	q = kzalloc_obj(*q);
+	q = kzalloc(sizeof(*q), GFP_KERNEL);
 	if (!q) {
 		ret = -ENOMEM;
 		goto err_remove_group;

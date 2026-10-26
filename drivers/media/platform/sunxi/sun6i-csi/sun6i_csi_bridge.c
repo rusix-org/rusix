@@ -13,6 +13,26 @@
 #include "sun6i_csi_bridge.h"
 #include "sun6i_csi_reg.h"
 
+/* Helpers */
+
+void sun6i_csi_bridge_dimensions(struct sun6i_csi_device *csi_dev,
+				 unsigned int *width, unsigned int *height)
+{
+	if (width)
+		*width = csi_dev->bridge.mbus_format.width;
+	if (height)
+		*height = csi_dev->bridge.mbus_format.height;
+}
+
+void sun6i_csi_bridge_format(struct sun6i_csi_device *csi_dev,
+			     u32 *mbus_code, u32 *field)
+{
+	if (mbus_code)
+		*mbus_code = csi_dev->bridge.mbus_format.code;
+	if (field)
+		*field = csi_dev->bridge.mbus_format.field;
+}
+
 /* Format */
 
 static const struct sun6i_csi_bridge_format sun6i_csi_bridge_formats[] = {
@@ -206,8 +226,7 @@ static void sun6i_csi_bridge_disable(struct sun6i_csi_device *csi_dev)
 }
 
 static void
-sun6i_csi_bridge_configure_parallel(struct sun6i_csi_device *csi_dev,
-				    const struct v4l2_mbus_framefmt *mbus_format)
+sun6i_csi_bridge_configure_parallel(struct sun6i_csi_device *csi_dev)
 {
 	struct device *dev = csi_dev->dev;
 	struct regmap *regmap = csi_dev->regmap;
@@ -215,8 +234,10 @@ sun6i_csi_bridge_configure_parallel(struct sun6i_csi_device *csi_dev,
 		&csi_dev->bridge.source_parallel.endpoint;
 	unsigned char bus_width = endpoint->bus.parallel.bus_width;
 	unsigned int flags = endpoint->bus.parallel.flags;
-	u32 field = mbus_format->field;
+	u32 field;
 	u32 value = SUN6I_CSI_IF_CFG_IF_CSI;
+
+	sun6i_csi_bridge_format(csi_dev, NULL, &field);
 
 	if (field == V4L2_FIELD_INTERLACED ||
 	    field == V4L2_FIELD_INTERLACED_TB ||
@@ -296,12 +317,13 @@ sun6i_csi_bridge_configure_parallel(struct sun6i_csi_device *csi_dev,
 }
 
 static void
-sun6i_csi_bridge_configure_mipi_csi2(struct sun6i_csi_device *csi_dev,
-				     const struct v4l2_mbus_framefmt *mbus_format)
+sun6i_csi_bridge_configure_mipi_csi2(struct sun6i_csi_device *csi_dev)
 {
 	struct regmap *regmap = csi_dev->regmap;
 	u32 value = SUN6I_CSI_IF_CFG_IF_MIPI;
-	u32 field = mbus_format->field;
+	u32 field;
+
+	sun6i_csi_bridge_format(csi_dev, NULL, &field);
 
 	if (field == V4L2_FIELD_INTERLACED ||
 	    field == V4L2_FIELD_INTERLACED_TB ||
@@ -313,20 +335,19 @@ sun6i_csi_bridge_configure_mipi_csi2(struct sun6i_csi_device *csi_dev,
 	regmap_write(regmap, SUN6I_CSI_IF_CFG_REG, value);
 }
 
-static void
-sun6i_csi_bridge_configure_format(struct sun6i_csi_device *csi_dev,
-				  const struct v4l2_mbus_framefmt *mbus_format)
+static void sun6i_csi_bridge_configure_format(struct sun6i_csi_device *csi_dev)
 {
 	struct regmap *regmap = csi_dev->regmap;
 	bool capture_streaming = csi_dev->capture.state.streaming;
 	const struct sun6i_csi_bridge_format *bridge_format;
 	const struct sun6i_csi_capture_format *capture_format;
-	u32 pixelformat;
-	u32 field = mbus_format->field;
+	u32 mbus_code, field, pixelformat;
 	u8 input_format, input_yuv_seq, output_format;
 	u32 value = 0;
 
-	bridge_format = sun6i_csi_bridge_format_find(mbus_format->code);
+	sun6i_csi_bridge_format(csi_dev, &mbus_code, &field);
+
+	bridge_format = sun6i_csi_bridge_format_find(mbus_code);
 	if (WARN_ON(!bridge_format))
 		return;
 
@@ -370,17 +391,16 @@ sun6i_csi_bridge_configure_format(struct sun6i_csi_device *csi_dev,
 }
 
 static void sun6i_csi_bridge_configure(struct sun6i_csi_device *csi_dev,
-				       struct sun6i_csi_bridge_source *source,
-				       const struct v4l2_mbus_framefmt *mbus_format)
+				       struct sun6i_csi_bridge_source *source)
 {
 	struct sun6i_csi_bridge *bridge = &csi_dev->bridge;
 
 	if (source == &bridge->source_parallel)
-		sun6i_csi_bridge_configure_parallel(csi_dev, mbus_format);
+		sun6i_csi_bridge_configure_parallel(csi_dev);
 	else
-		sun6i_csi_bridge_configure_mipi_csi2(csi_dev, mbus_format);
+		sun6i_csi_bridge_configure_mipi_csi2(csi_dev);
 
-	sun6i_csi_bridge_configure_format(csi_dev, mbus_format);
+	sun6i_csi_bridge_configure_format(csi_dev);
 }
 
 /* V4L2 Subdev */
@@ -395,8 +415,6 @@ static int sun6i_csi_bridge_s_stream(struct v4l2_subdev *subdev, int on)
 	struct sun6i_csi_bridge_source *source;
 	struct v4l2_subdev *source_subdev;
 	struct media_pad *remote_pad;
-	struct v4l2_subdev_state *state;
-	const struct v4l2_mbus_framefmt *mbus_format;
 	int ret;
 
 	/* Source */
@@ -415,10 +433,6 @@ static int sun6i_csi_bridge_s_stream(struct v4l2_subdev *subdev, int on)
 	else
 		source = &bridge->source_mipi_csi2;
 
-	/* Active State */
-
-	state = v4l2_subdev_lock_and_get_active_state(subdev);
-
 	if (!on) {
 		v4l2_subdev_call(source_subdev, video, s_stream, 0);
 		ret = 0;
@@ -429,7 +443,7 @@ static int sun6i_csi_bridge_s_stream(struct v4l2_subdev *subdev, int on)
 
 	ret = pm_runtime_resume_and_get(dev);
 	if (ret < 0)
-		goto unlock;
+		return ret;
 
 	/* Clear */
 
@@ -437,9 +451,7 @@ static int sun6i_csi_bridge_s_stream(struct v4l2_subdev *subdev, int on)
 
 	/* Configure */
 
-	mbus_format = v4l2_subdev_state_get_format(state,
-						   SUN6I_CSI_BRIDGE_PAD_SINK);
-	sun6i_csi_bridge_configure(csi_dev, source, mbus_format);
+	sun6i_csi_bridge_configure(csi_dev, source);
 
 	if (capture_streaming)
 		sun6i_csi_capture_configure(csi_dev);
@@ -460,8 +472,7 @@ static int sun6i_csi_bridge_s_stream(struct v4l2_subdev *subdev, int on)
 	if (ret && ret != -ENOIOCTLCMD)
 		goto disable;
 
-	ret = 0;
-	goto unlock;
+	return 0;
 
 disable:
 	if (capture_streaming)
@@ -471,8 +482,6 @@ disable:
 
 	pm_runtime_put(dev);
 
-unlock:
-	v4l2_subdev_unlock_state(state);
 	return ret;
 }
 
@@ -495,23 +504,21 @@ sun6i_csi_bridge_mbus_format_prepare(struct v4l2_mbus_framefmt *mbus_format)
 static int sun6i_csi_bridge_init_state(struct v4l2_subdev *subdev,
 				       struct v4l2_subdev_state *state)
 {
-	unsigned int pad;
+	struct sun6i_csi_device *csi_dev = v4l2_get_subdevdata(subdev);
+	unsigned int pad = SUN6I_CSI_BRIDGE_PAD_SINK;
+	struct v4l2_mbus_framefmt *mbus_format =
+		v4l2_subdev_state_get_format(state, pad);
+	struct mutex *lock = &csi_dev->bridge.lock;
 
-	/*
-	 * This subdev does not perform format conversion,
-	 * initialize both pads identically.
-	 */
-	for (pad = 0; pad < subdev->entity.num_pads; pad++) {
-		struct v4l2_mbus_framefmt *mbus_format;
+	mutex_lock(lock);
 
-		mbus_format = v4l2_subdev_state_get_format(state, pad);
+	mbus_format->code = sun6i_csi_bridge_formats[0].mbus_code;
+	mbus_format->width = 1280;
+	mbus_format->height = 720;
 
-		mbus_format->code = sun6i_csi_bridge_formats[0].mbus_code;
-		mbus_format->width = 1280;
-		mbus_format->height = 720;
+	sun6i_csi_bridge_mbus_format_prepare(mbus_format);
 
-		sun6i_csi_bridge_mbus_format_prepare(mbus_format);
-	}
+	mutex_unlock(lock);
 
 	return 0;
 }
@@ -529,33 +536,53 @@ sun6i_csi_bridge_enum_mbus_code(struct v4l2_subdev *subdev,
 	return 0;
 }
 
-static int sun6i_csi_bridge_set_fmt(struct v4l2_subdev *subdev,
-				    const struct v4l2_subdev_client_info *ci,
+static int sun6i_csi_bridge_get_fmt(struct v4l2_subdev *subdev,
 				    struct v4l2_subdev_state *state,
 				    struct v4l2_subdev_format *format)
 {
-	struct v4l2_mbus_framefmt *fmt;
+	struct sun6i_csi_device *csi_dev = v4l2_get_subdevdata(subdev);
+	struct v4l2_mbus_framefmt *mbus_format = &format->format;
+	struct mutex *lock = &csi_dev->bridge.lock;
 
-	/* The format on the source pad always matches the sink pad. */
-	if (format->pad != SUN6I_CSI_BRIDGE_PAD_SINK)
-		return v4l2_subdev_get_fmt(subdev, state, format);
+	mutex_lock(lock);
 
-	sun6i_csi_bridge_mbus_format_prepare(&format->format);
+	if (format->which == V4L2_SUBDEV_FORMAT_TRY)
+		*mbus_format = *v4l2_subdev_state_get_format(state,
+							     format->pad);
+	else
+		*mbus_format = csi_dev->bridge.mbus_format;
 
-	/* Set the format on the sink pad. */
-	fmt = v4l2_subdev_state_get_format(state, format->pad);
-	*fmt = format->format;
+	mutex_unlock(lock);
 
-	/* Propagate the format to the source pad. */
-	fmt = v4l2_subdev_state_get_format(state, SUN6I_CSI_BRIDGE_PAD_SOURCE);
-	*fmt = format->format;
+	return 0;
+}
+
+static int sun6i_csi_bridge_set_fmt(struct v4l2_subdev *subdev,
+				    struct v4l2_subdev_state *state,
+				    struct v4l2_subdev_format *format)
+{
+	struct sun6i_csi_device *csi_dev = v4l2_get_subdevdata(subdev);
+	struct v4l2_mbus_framefmt *mbus_format = &format->format;
+	struct mutex *lock = &csi_dev->bridge.lock;
+
+	mutex_lock(lock);
+
+	sun6i_csi_bridge_mbus_format_prepare(mbus_format);
+
+	if (format->which == V4L2_SUBDEV_FORMAT_TRY)
+		*v4l2_subdev_state_get_format(state, format->pad) =
+			*mbus_format;
+	else
+		csi_dev->bridge.mbus_format = *mbus_format;
+
+	mutex_unlock(lock);
 
 	return 0;
 }
 
 static const struct v4l2_subdev_pad_ops sun6i_csi_bridge_pad_ops = {
 	.enum_mbus_code	= sun6i_csi_bridge_enum_mbus_code,
-	.get_fmt	= v4l2_subdev_get_fmt,
+	.get_fmt	= sun6i_csi_bridge_get_fmt,
 	.set_fmt	= sun6i_csi_bridge_set_fmt,
 };
 
@@ -753,6 +780,8 @@ int sun6i_csi_bridge_setup(struct sun6i_csi_device *csi_dev)
 	};
 	int ret;
 
+	mutex_init(&bridge->lock);
+
 	/* V4L2 Subdev */
 
 	v4l2_subdev_init(subdev, &sun6i_csi_bridge_subdev_ops);
@@ -780,12 +809,6 @@ int sun6i_csi_bridge_setup(struct sun6i_csi_device *csi_dev)
 	if (ret < 0)
 		return ret;
 
-	/* V4L2 Subdev finalize */
-
-	ret = v4l2_subdev_init_finalize(subdev);
-	if (ret < 0)
-		goto error_media_entity;
-
 	/* V4L2 Subdev */
 
 	if (csi_dev->isp_available)
@@ -795,7 +818,7 @@ int sun6i_csi_bridge_setup(struct sun6i_csi_device *csi_dev)
 
 	if (ret) {
 		dev_err(dev, "failed to register v4l2 subdev: %d\n", ret);
-		goto error_subdev_finalize;
+		goto error_media_entity;
 	}
 
 	/* V4L2 Async */
@@ -829,9 +852,6 @@ error_v4l2_async_notifier:
 	else
 		v4l2_device_unregister_subdev(subdev);
 
-error_subdev_finalize:
-	v4l2_subdev_cleanup(subdev);
-
 error_media_entity:
 	media_entity_cleanup(&subdev->entity);
 
@@ -847,8 +867,6 @@ void sun6i_csi_bridge_cleanup(struct sun6i_csi_device *csi_dev)
 	v4l2_async_nf_cleanup(notifier);
 
 	v4l2_device_unregister_subdev(subdev);
-
-	v4l2_subdev_cleanup(subdev);
 
 	media_entity_cleanup(&subdev->entity);
 }

@@ -22,7 +22,7 @@ static bool should_quit;
 
 struct opts {
 	int port;
-	int ifindex;
+	int devid;
 	bool verbose;
 };
 
@@ -360,7 +360,7 @@ static void usage(const char *name, const char *miss)
 	if (miss)
 		fprintf(stderr, "Missing argument: %s\n", miss);
 
-	fprintf(stderr, "Usage: %s -p port [-v] [-i ifindex]\n", name);
+	fprintf(stderr, "Usage: %s -p port [-v] [-d psp-dev-id]\n", name);
 	exit(EXIT_FAILURE);
 }
 
@@ -368,7 +368,7 @@ static void parse_cmd_opts(int argc, char **argv, struct opts *opts)
 {
 	int opt;
 
-	while ((opt = getopt(argc, argv, "vp:i:")) != -1) {
+	while ((opt = getopt(argc, argv, "vp:d:")) != -1) {
 		switch (opt) {
 		case 'v':
 			opts->verbose = 1;
@@ -376,8 +376,8 @@ static void parse_cmd_opts(int argc, char **argv, struct opts *opts)
 		case 'p':
 			opts->port = atoi(optarg);
 			break;
-		case 'i':
-			opts->ifindex = atoi(optarg);
+		case 'd':
+			opts->devid = atoi(optarg);
 			break;
 		default:
 			usage(argv[0], NULL);
@@ -410,11 +410,12 @@ static int psp_dev_set_ena(struct ynl_sock *ys, __u32 dev_id, __u32 versions)
 int main(int argc, char **argv)
 {
 	struct psp_dev_get_list *dev_list;
+	bool devid_found = false;
 	__u32 ver_ena, ver_cap;
 	struct opts opts = {};
 	struct ynl_error yerr;
 	struct ynl_sock *ys;
-	int devid = -1;
+	int first_id = 0;
 	int ret;
 
 	parse_cmd_opts(argc, argv, &opts);
@@ -428,19 +429,20 @@ int main(int argc, char **argv)
 	}
 
 	dev_list = psp_dev_get_dump(ys);
-	if (ynl_dump_empty(dev_list) && ys->err.code)
-		goto err_close;
+	if (ynl_dump_empty(dev_list)) {
+		if (ys->err.code)
+			goto err_close;
+		fprintf(stderr, "No PSP devices\n");
+		goto err_close_silent;
+	}
 
 	ynl_dump_foreach(dev_list, d) {
-		if (opts.ifindex) {
-			if (d->ifindex != opts.ifindex)
-				continue;
-			devid = d->id;
+		if (opts.devid) {
+			devid_found = true;
 			ver_ena = d->psp_versions_ena;
 			ver_cap = d->psp_versions_cap;
-			break;
-		} else if (devid < 0) {
-			devid = d->id;
+		} else if (!first_id) {
+			first_id = d->id;
 			ver_ena = d->psp_versions_ena;
 			ver_cap = d->psp_versions_cap;
 		} else {
@@ -450,21 +452,23 @@ int main(int argc, char **argv)
 	}
 	psp_dev_get_list_free(dev_list);
 
-	if (opts.ifindex && devid < 0)
-		fprintf(stderr,
-			"WARN: PSP device with ifindex %d requested on cmdline, not found\n",
-			opts.ifindex);
+	if (opts.devid && !devid_found) {
+		fprintf(stderr, "PSP device %d requested on cmdline, not found\n",
+			opts.devid);
+		goto err_close_silent;
+	} else if (!opts.devid) {
+		opts.devid = first_id;
+	}
 
-	if (devid >= 0 && ver_ena != ver_cap) {
-		ret = psp_dev_set_ena(ys, devid, ver_cap);
+	if (ver_ena != ver_cap) {
+		ret = psp_dev_set_ena(ys, opts.devid, ver_cap);
 		if (ret)
 			goto err_close;
 	}
 
 	ret = run_responder(ys, &opts);
 
-	if (devid >= 0 && ver_ena != ver_cap &&
-	    psp_dev_set_ena(ys, devid, ver_ena))
+	if (ver_ena != ver_cap && psp_dev_set_ena(ys, opts.devid, ver_ena))
 		fprintf(stderr, "WARN: failed to set the PSP versions back\n");
 
 	ynl_sock_destroy(ys);

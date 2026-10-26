@@ -20,7 +20,6 @@
 #include <linux/uaccess.h>
 
 #include <asm/current.h>
-#include <asm/daifflags.h>
 #include <asm/debug-monitors.h>
 #include <asm/esr.h>
 #include <asm/exception.h>
@@ -222,12 +221,6 @@ static int hw_breakpoint_slot_setup(struct perf_event **slots, int max_slots,
 	return -ENOSPC;
 }
 
-/*
- * Configure hardware breakpoint registers from a perf event,
- * according to operation.
- *
- * Must be called with debug exceptions masked.
- */
 static int hw_breakpoint_control(struct perf_event *bp,
 				 enum hw_breakpoint_ops ops)
 {
@@ -293,24 +286,15 @@ static int hw_breakpoint_control(struct perf_event *bp,
 
 /*
  * Install a perf counter breakpoint.
- *
- * Perf can and will call this with debug exceptions unmasked.
- * Mask them to avoid triggering one while manipulating their registers.
  */
 int arch_install_hw_breakpoint(struct perf_event *bp)
 {
-	unsigned long daif = local_daif_save();
-	int ret = hw_breakpoint_control(bp, HW_BREAKPOINT_INSTALL);
-
-	local_daif_restore(daif);
-	return ret;
+	return hw_breakpoint_control(bp, HW_BREAKPOINT_INSTALL);
 }
 
 void arch_uninstall_hw_breakpoint(struct perf_event *bp)
 {
-	unsigned long daif = local_daif_save();
 	hw_breakpoint_control(bp, HW_BREAKPOINT_UNINSTALL);
-	local_daif_restore(daif);
 }
 
 static int get_hbp_len(u8 hbp_len)
@@ -602,10 +586,7 @@ int hw_breakpoint_arch_parse(struct perf_event *bp,
 /*
  * Enable/disable all of the breakpoints active at the specified
  * exception level at the register level.
- * This is used when single-stepping after a breakpoint exception or switching
- * threads.
- *
- * Must be called with debug exceptions masked.
+ * This is used when single-stepping after a breakpoint exception.
  */
 static void toggle_bp_registers(int reg, enum dbg_active_el el, int enable)
 {
@@ -927,11 +908,7 @@ bool try_step_suspended_breakpoints(struct pt_regs *regs)
 NOKPROBE_SYMBOL(try_step_suspended_breakpoints);
 
 /*
- * Context-switcher for restoring suspended CPU-bound breakpoints.
- *
- * Breakpoints of the previous task are uninstalled before
- * this function is called, in perf_event_task_sched_out(), and those
- * of the next task are installed after, in perf_event_task_sched_in().
+ * Context-switcher for restoring suspended breakpoints.
  */
 void hw_breakpoint_thread_switch(struct task_struct *next)
 {
@@ -945,7 +922,6 @@ void hw_breakpoint_thread_switch(struct task_struct *next)
 	 */
 
 	struct debug_info *current_debug_info, *next_debug_info;
-	unsigned long daif = local_daif_save();
 
 	current_debug_info = &current->thread.debug;
 	next_debug_info = &next->thread.debug;
@@ -961,8 +937,6 @@ void hw_breakpoint_thread_switch(struct task_struct *next)
 		toggle_bp_registers(AARCH64_DBG_REG_WCR,
 				    DBG_ACTIVE_EL0,
 				    !next_debug_info->wps_disabled);
-
-	local_daif_restore(daif);
 }
 
 /*

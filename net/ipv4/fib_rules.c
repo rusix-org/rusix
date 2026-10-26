@@ -303,12 +303,10 @@ static int fib4_rule_configure(struct fib_rule *rule, struct sk_buff *skb,
 	    fib4_nl2rule_dscp_mask(tb[FRA_DSCP_MASK], rule4, extack) < 0)
 		goto errout;
 
-	if (!net->ipv4.fib_has_custom_rules) {
-		/* split local/main if they are not already split */
-		err = fib_unmerge(net);
-		if (err)
-			goto errout;
-	}
+	/* split local/main if they are not already split */
+	err = fib_unmerge(net);
+	if (err)
+		goto errout;
 
 	if (rule->table == RT_TABLE_UNSPEC && !rule->l3mdev) {
 		if (rule->action == FR_ACT_TO_TBL) {
@@ -353,18 +351,27 @@ errout:
 	return err;
 }
 
-static void fib4_rule_delete(struct fib_rule *rule)
+static int fib4_rule_delete(struct fib_rule *rule)
 {
 	struct net *net = rule->fr_net;
+	int err;
+
+	/* split local/main if they are not already split */
+	err = fib_unmerge(net);
+	if (err)
+		goto errout;
 
 #ifdef CONFIG_IP_ROUTE_CLASSID
 	if (((struct fib4_rule *)rule)->tclassid)
 		atomic_dec(&net->ipv4.fib_num_tclassid_users);
 #endif
+	net->ipv4.fib_has_custom_rules = true;
 
 	if (net->ipv4.fib_rules_require_fldissect &&
 	    fib_rule_requires_fldissect(rule))
 		net->ipv4.fib_rules_require_fldissect--;
+errout:
+	return err;
 }
 
 static int fib4_rule_compare(struct fib_rule *rule, struct fib_rule_hdr *frh,
@@ -462,11 +469,6 @@ static void fib4_rule_flush_cache(struct fib_rules_ops *ops)
 	rt_cache_flush(ops->fro_net);
 }
 
-static bool fib4_rule_need_rtnl(struct net *net)
-{
-	return !net->ipv4.fib_has_custom_rules;
-}
-
 static const struct fib_rules_ops __net_initconst fib4_rules_ops_template = {
 	.family		= AF_INET,
 	.rule_size	= sizeof(struct fib4_rule),
@@ -480,7 +482,6 @@ static const struct fib_rules_ops __net_initconst fib4_rules_ops_template = {
 	.fill		= fib4_rule_fill,
 	.nlmsg_payload	= fib4_rule_nlmsg_payload,
 	.flush_cache	= fib4_rule_flush_cache,
-	.need_rtnl	= fib4_rule_need_rtnl,
 	.nlgroup	= RTNLGRP_IPV4_RULE,
 	.owner		= THIS_MODULE,
 };

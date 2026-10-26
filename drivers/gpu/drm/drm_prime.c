@@ -37,7 +37,6 @@
 #include <drm/drm_framebuffer.h>
 #include <drm/drm_gem.h>
 #include <drm/drm_prime.h>
-#include <drm/drm_print.h>
 
 #include "drm_internal.h"
 
@@ -100,7 +99,7 @@ int drm_prime_add_buf_handle(struct drm_prime_file_private *prime_fpriv,
 	struct drm_prime_member *member;
 	struct rb_node **p, *rb;
 
-	member = kmalloc_obj(*member);
+	member = kmalloc(sizeof(*member), GFP_KERNEL);
 	if (!member)
 		return -ENOMEM;
 
@@ -524,7 +523,7 @@ int drm_gem_prime_handle_to_fd(struct drm_device *dev,
 		return PTR_ERR(dmabuf);
 	}
 
-	dma_buf_fd_install(dmabuf, fd);
+	fd_install(fd, dmabuf->file);
 	*prime_fd = fd;
 	return 0;
 }
@@ -780,8 +779,8 @@ int drm_gem_prime_mmap(struct drm_gem_object *obj, struct vm_area_struct *vma)
 		return 0;
 	}
 
-	priv = kzalloc_obj(*priv);
-	fil = kzalloc_obj(*fil);
+	priv = kzalloc(sizeof(*priv), GFP_KERNEL);
+	fil = kzalloc(sizeof(*fil), GFP_KERNEL);
 	if (!priv || !fil) {
 		ret = -ENOMEM;
 		goto out;
@@ -854,12 +853,12 @@ struct sg_table *drm_prime_pages_to_sg(struct drm_device *dev,
 	size_t max_segment = 0;
 	int err;
 
-	sg = kmalloc_obj(struct sg_table);
+	sg = kmalloc(sizeof(struct sg_table), GFP_KERNEL);
 	if (!sg)
 		return ERR_PTR(-ENOMEM);
 
 	if (dev)
-		max_segment = dma_max_mapping_size(drm_dev_dma_dev(dev));
+		max_segment = dma_max_mapping_size(dev->dev);
 	if (max_segment == 0)
 		max_segment = UINT_MAX;
 	err = sg_alloc_table_from_pages_segment(sg, pages, nr_pages, 0,

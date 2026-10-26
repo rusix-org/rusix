@@ -6,6 +6,7 @@
 #include <linux/init.h>
 #include <linux/rv.h>
 #include <rv/instrumentation.h>
+#include <rv/da_monitor.h>
 
 #define MODULE_NAME "snep"
 
@@ -14,35 +15,36 @@
 #include <rv_trace.h>
 #include <monitors/sched/sched.h>
 
-#define RV_MON_TYPE RV_MON_PER_CPU
 #include "snep.h"
-#include <rv/da_monitor.h>
+
+static struct rv_monitor rv_snep;
+DECLARE_DA_MON_PER_CPU(snep, unsigned char);
 
 static void handle_preempt_disable(void *data, unsigned long ip, unsigned long parent_ip)
 {
-	da_handle_start_event(preempt_disable_snep);
+	da_handle_start_event_snep(preempt_disable_snep);
 }
 
 static void handle_preempt_enable(void *data, unsigned long ip, unsigned long parent_ip)
 {
-	da_handle_start_event(preempt_enable_snep);
+	da_handle_start_event_snep(preempt_enable_snep);
 }
 
 static void handle_schedule_entry(void *data, bool preempt)
 {
-	da_handle_event(schedule_entry_snep);
+	da_handle_event_snep(schedule_entry_snep);
 }
 
 static void handle_schedule_exit(void *data, bool is_switch)
 {
-	da_handle_start_event(schedule_exit_snep);
+	da_handle_start_event_snep(schedule_exit_snep);
 }
 
 static int enable_snep(void)
 {
 	int retval;
 
-	retval = da_monitor_init();
+	retval = da_monitor_init_snep();
 	if (retval)
 		return retval;
 
@@ -56,33 +58,33 @@ static int enable_snep(void)
 
 static void disable_snep(void)
 {
-	rv_this.enabled = 0;
+	rv_snep.enabled = 0;
 
 	rv_detach_trace_probe("snep", preempt_disable, handle_preempt_disable);
 	rv_detach_trace_probe("snep", preempt_enable, handle_preempt_enable);
 	rv_detach_trace_probe("snep", sched_entry_tp, handle_schedule_entry);
 	rv_detach_trace_probe("snep", sched_exit_tp, handle_schedule_exit);
 
-	da_monitor_destroy();
+	da_monitor_destroy_snep();
 }
 
-static struct rv_monitor rv_this = {
+static struct rv_monitor rv_snep = {
 	.name = "snep",
 	.description = "schedule does not enable preempt.",
 	.enable = enable_snep,
 	.disable = disable_snep,
-	.reset = da_monitor_reset_all,
+	.reset = da_monitor_reset_all_snep,
 	.enabled = 0,
 };
 
 static int __init register_snep(void)
 {
-	return rv_register_monitor(&rv_this, &rv_sched);
+	return rv_register_monitor(&rv_snep, &rv_sched);
 }
 
 static void __exit unregister_snep(void)
 {
-	rv_unregister_monitor(&rv_this);
+	rv_unregister_monitor(&rv_snep);
 }
 
 module_init(register_snep);

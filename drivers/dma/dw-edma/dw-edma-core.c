@@ -30,11 +30,6 @@ struct dw_edma_desc *vd2dw_edma_desc(struct virt_dma_desc *vd)
 	return container_of(vd, struct dw_edma_desc, vd);
 }
 
-enum dw_edma_irq_event {
-	DW_EDMA_IRQ_DONE	= BIT(0),
-	DW_EDMA_IRQ_ABORT	= BIT(1),
-};
-
 static inline
 u64 dw_edma_get_pci_address(struct dw_edma_chan *chan, phys_addr_t cpu_addr)
 {
@@ -46,63 +41,141 @@ u64 dw_edma_get_pci_address(struct dw_edma_chan *chan, phys_addr_t cpu_addr)
 	return cpu_addr;
 }
 
-static struct dw_edma_desc *
-dw_edma_alloc_desc(struct dw_edma_chan *chan, size_t nburst)
+static struct dw_edma_burst *dw_edma_alloc_burst(struct dw_edma_chunk *chunk)
+{
+	struct dw_edma_burst *burst;
+
+	burst = kzalloc(sizeof(*burst), GFP_NOWAIT);
+	if (unlikely(!burst))
+		return NULL;
+
+	INIT_LIST_HEAD(&burst->list);
+	if (chunk->burst) {
+		/* Create and add new element into the linked list */
+		chunk->bursts_alloc++;
+		list_add_tail(&burst->list, &chunk->burst->list);
+	} else {
+		/* List head */
+		chunk->bursts_alloc = 0;
+		chunk->burst = burst;
+	}
+
+	return burst;
+}
+
+static struct dw_edma_chunk *dw_edma_alloc_chunk(struct dw_edma_desc *desc)
+{
+	struct dw_edma_chip *chip = desc->chan->dw->chip;
+	struct dw_edma_chan *chan = desc->chan;
+	struct dw_edma_chunk *chunk;
+
+	chunk = kzalloc(sizeof(*chunk), GFP_NOWAIT);
+	if (unlikely(!chunk))
+		return NULL;
+
+	INIT_LIST_HEAD(&chunk->list);
+	chunk->chan = chan;
+	/* Toggling change bit (CB) in each chunk, this is a mechanism to
+	 * inform the eDMA HW block that this is a new linked list ready
+	 * to be consumed.
+	 *  - Odd chunks originate CB equal to 0
+	 *  - Even chunks originate CB equal to 1
+	 */
+	chunk->cb = !(desc->chunks_alloc % 2);
+	if (chan->dir == EDMA_DIR_WRITE) {
+		chunk->ll_region.paddr = chip->ll_region_wr[chan->id].paddr;
+		chunk->ll_region.vaddr = chip->ll_region_wr[chan->id].vaddr;
+	} else {
+		chunk->ll_region.paddr = chip->ll_region_rd[chan->id].paddr;
+		chunk->ll_region.vaddr = chip->ll_region_rd[chan->id].vaddr;
+	}
+
+	if (desc->chunk) {
+		/* Create and add new element into the linked list */
+		if (!dw_edma_alloc_burst(chunk)) {
+			kfree(chunk);
+			return NULL;
+		}
+		desc->chunks_alloc++;
+		list_add_tail(&chunk->list, &desc->chunk->list);
+	} else {
+		/* List head */
+		chunk->burst = NULL;
+		desc->chunks_alloc = 0;
+		desc->chunk = chunk;
+	}
+
+	return chunk;
+}
+
+static struct dw_edma_desc *dw_edma_alloc_desc(struct dw_edma_chan *chan)
 {
 	struct dw_edma_desc *desc;
 
-	desc = kzalloc_flex(*desc, burst, nburst, GFP_NOWAIT);
+	desc = kzalloc(sizeof(*desc), GFP_NOWAIT);
 	if (unlikely(!desc))
 		return NULL;
 
 	desc->chan = chan;
-	desc->nburst = nburst;
-	desc->cb = true;
+	if (!dw_edma_alloc_chunk(desc)) {
+		kfree(desc);
+		return NULL;
+	}
 
 	return desc;
 }
 
-static void vchan_free_desc(struct virt_dma_desc *vdesc)
+static void dw_edma_free_burst(struct dw_edma_chunk *chunk)
 {
-	kfree(vd2dw_edma_desc(vdesc));
+	struct dw_edma_burst *child, *_next;
+
+	/* Remove all the list elements */
+	list_for_each_entry_safe(child, _next, &chunk->burst->list, list) {
+		list_del(&child->list);
+		kfree(child);
+		chunk->bursts_alloc--;
+	}
+
+	/* Remove the list head */
+	kfree(child);
+	chunk->burst = NULL;
 }
 
-static void dw_edma_core_start(struct dw_edma_desc *desc, bool first)
+static void dw_edma_free_chunk(struct dw_edma_desc *desc)
 {
-	struct dw_edma_chan *chan = desc->chan;
-	size_t i = 0;
+	struct dw_edma_chunk *child, *_next;
 
-	if (chan->non_ll) {
-		chan->dw->core->non_ll_start(chan, &desc->burst[desc->start_burst]);
-		desc->done_burst = desc->start_burst;
-		desc->start_burst += 1;
+	if (!desc->chunk)
 		return;
+
+	/* Remove all the list elements */
+	list_for_each_entry_safe(child, _next, &desc->chunk->list, list) {
+		dw_edma_free_burst(child);
+		list_del(&child->list);
+		kfree(child);
+		desc->chunks_alloc--;
 	}
 
-	for (i = 0; i + desc->start_burst < desc->nburst; i++) {
-		u32 idx = i + desc->start_burst;
+	/* Remove the list head */
+	kfree(child);
+	desc->chunk = NULL;
+}
 
-		if (i == chan->ll_max)
-			break;
+static void dw_edma_free_desc(struct dw_edma_desc *desc)
+{
+	dw_edma_free_chunk(desc);
+	kfree(desc);
+}
 
-		dw_edma_core_ll_data(chan, &desc->burst[idx],
-				     i, desc->cb,
-				     idx == desc->nburst - 1 || i == chan->ll_max - 1);
-	}
-
-	desc->done_burst = desc->start_burst;
-	desc->start_burst += i;
-
-	dw_edma_core_ll_link(chan, i, desc->cb, chan->ll_region.paddr);
-
-	if (first)
-		dw_edma_core_ch_enable(chan);
-
-	dw_edma_core_ch_doorbell(chan);
+static void vchan_free_desc(struct virt_dma_desc *vdesc)
+{
+	dw_edma_free_desc(vd2dw_edma_desc(vdesc));
 }
 
 static int dw_edma_start_transfer(struct dw_edma_chan *chan)
 {
+	struct dw_edma *dw = chan->dw;
+	struct dw_edma_chunk *child;
 	struct dw_edma_desc *desc;
 	struct virt_dma_desc *vd;
 
@@ -114,9 +187,17 @@ static int dw_edma_start_transfer(struct dw_edma_chan *chan)
 	if (!desc)
 		return 0;
 
-	dw_edma_core_start(desc, !desc->start_burst);
+	child = list_first_entry_or_null(&desc->chunk->list,
+					 struct dw_edma_chunk, list);
+	if (!child)
+		return 0;
 
-	desc->cb = !desc->cb;
+	dw_edma_core_start(dw, child, !desc->xfer_sz);
+	desc->xfer_sz += child->ll_region.sz;
+	dw_edma_free_burst(child);
+	list_del(&child->list);
+	kfree(child);
+	desc->chunks_alloc--;
 
 	return 1;
 }
@@ -168,75 +249,15 @@ static void dw_edma_device_caps(struct dma_chan *dchan,
 	}
 }
 
-static enum dw_edma_ch_irq_mode
-dw_edma_get_default_irq_mode(struct dw_edma_chan *chan)
-{
-	struct dw_edma_chip *chip = chan->dw->chip;
-
-	return chip->flags & DW_EDMA_CHIP_LOCAL ? DW_EDMA_CH_IRQ_LOCAL :
-						  DW_EDMA_CH_IRQ_REMOTE;
-}
-
 static int dw_edma_device_config(struct dma_chan *dchan,
 				 struct dma_slave_config *config)
 {
 	struct dw_edma_chan *chan = dchan2dw_edma_chan(dchan);
-	bool cfg_non_ll;
-	int non_ll = 0;
-
-	chan->non_ll = false;
-	if (chan->dw->chip->mf == EDMA_MF_HDMA_NATIVE) {
-		if (config->peripheral_config &&
-		    config->peripheral_size != sizeof(int)) {
-			dev_err(dchan->device->dev,
-				"config param peripheral size mismatch\n");
-			return -EINVAL;
-		}
-
-		/*
-		 * When there is no valid LLP base address available then the
-		 * default DMA ops will use the non-LL mode.
-		 *
-		 * Cases where LL mode is enabled and client wants to use the
-		 * non-LL mode then also client can do so via providing the
-		 * peripheral_config param.
-		 */
-		cfg_non_ll = chan->dw->chip->cfg_non_ll;
-		if (config->peripheral_config) {
-			non_ll = *(int *)config->peripheral_config;
-
-			if (cfg_non_ll && !non_ll) {
-				dev_err(dchan->device->dev, "invalid configuration\n");
-				return -EINVAL;
-			}
-		}
-
-		if (cfg_non_ll || non_ll)
-			chan->non_ll = true;
-	} else if (config->peripheral_config) {
-		dev_err(dchan->device->dev,
-			"peripheral config param applicable only for HDMA\n");
-		return -EINVAL;
-	}
 
 	memcpy(&chan->config, config, sizeof(*config));
 	chan->configured = true;
 
 	return 0;
-}
-
-static struct dma_slave_config *
-dw_edma_device_get_config(struct dma_chan *dchan,
-			  struct dma_slave_config *config)
-{
-	struct dw_edma_chan *chan;
-
-	if (config)
-		return config;
-
-	chan = dchan2dw_edma_chan(dchan);
-
-	return &chan->config;
 }
 
 static int dw_edma_device_pause(struct dma_chan *dchan)
@@ -352,10 +373,8 @@ dw_edma_device_tx_status(struct dma_chan *dchan, dma_cookie_t cookie,
 	vd = vchan_find_desc(&chan->vc, cookie);
 	if (vd) {
 		desc = vd2dw_edma_desc(vd);
-
-		residue = desc->alloc_sz;
-		if (desc && desc->done_burst)
-			residue -= desc->burst[desc->done_burst - 1].xfer_sz;
+		if (desc)
+			residue = desc->alloc_sz - desc->xfer_sz;
 	}
 	spin_unlock_irqrestore(&chan->vc.lock, flags);
 
@@ -366,18 +385,18 @@ ret_residue:
 }
 
 static struct dma_async_tx_descriptor *
-dw_edma_device_transfer(struct dw_edma_transfer *xfer,
-			struct dma_slave_config *config)
+dw_edma_device_transfer(struct dw_edma_transfer *xfer)
 {
 	struct dw_edma_chan *chan = dchan2dw_edma_chan(xfer->dchan);
 	enum dma_transfer_direction dir = xfer->direction;
 	struct scatterlist *sg = NULL;
+	struct dw_edma_chunk *chunk;
 	struct dw_edma_burst *burst;
 	struct dw_edma_desc *desc;
 	u64 src_addr, dst_addr;
 	size_t fsz = 0;
-	size_t cnt = 0;
-	u32 i;
+	u32 cnt = 0;
+	int i;
 
 	if (!chan->configured)
 		return NULL;
@@ -433,12 +452,20 @@ dw_edma_device_transfer(struct dw_edma_transfer *xfer,
 		return NULL;
 	}
 
+	desc = dw_edma_alloc_desc(chan);
+	if (unlikely(!desc))
+		goto err_alloc;
+
+	chunk = dw_edma_alloc_chunk(desc);
+	if (unlikely(!chunk))
+		goto err_alloc;
+
 	if (xfer->type == EDMA_XFER_INTERLEAVED) {
 		src_addr = xfer->xfer.il->src_start;
 		dst_addr = xfer->xfer.il->dst_start;
 	} else {
-		src_addr = config->src_addr;
-		dst_addr = config->dst_addr;
+		src_addr = chan->config.src_addr;
+		dst_addr = chan->config.dst_addr;
 	}
 
 	if (dir == DMA_DEV_TO_MEM)
@@ -456,15 +483,19 @@ dw_edma_device_transfer(struct dw_edma_transfer *xfer,
 		fsz = xfer->xfer.il->frame_size;
 	}
 
-	desc = dw_edma_alloc_desc(chan, cnt);
-	if (unlikely(!desc))
-		return NULL;
-
 	for (i = 0; i < cnt; i++) {
 		if (xfer->type == EDMA_XFER_SCATTER_GATHER && !sg)
 			break;
 
-		burst = desc->burst + i;
+		if (chunk->bursts_alloc == chan->ll_max) {
+			chunk = dw_edma_alloc_chunk(desc);
+			if (unlikely(!chunk))
+				goto err_alloc;
+		}
+
+		burst = dw_edma_alloc_burst(chunk);
+		if (unlikely(!burst))
+			goto err_alloc;
 
 		if (xfer->type == EDMA_XFER_CYCLIC)
 			burst->sz = xfer->xfer.cyclic.len;
@@ -473,8 +504,8 @@ dw_edma_device_transfer(struct dw_edma_transfer *xfer,
 		else if (xfer->type == EDMA_XFER_INTERLEAVED)
 			burst->sz = xfer->xfer.il->sgl[i % fsz].size;
 
+		chunk->ll_region.sz += burst->sz;
 		desc->alloc_sz += burst->sz;
-		burst->xfer_sz = desc->alloc_sz;
 
 		if (dir == DMA_DEV_TO_MEM) {
 			burst->sar = src_addr;
@@ -529,14 +560,19 @@ dw_edma_device_transfer(struct dw_edma_transfer *xfer,
 	}
 
 	return vchan_tx_prep(&chan->vc, &desc->vd, xfer->flags);
+
+err_alloc:
+	if (desc)
+		dw_edma_free_desc(desc);
+
+	return NULL;
 }
 
 static struct dma_async_tx_descriptor *
-dw_edma_device_prep_config_sg(struct dma_chan *dchan, struct scatterlist *sgl,
-			      unsigned int len,
-			      enum dma_transfer_direction direction,
-			      unsigned long flags,
-			      struct dma_slave_config *config)
+dw_edma_device_prep_slave_sg(struct dma_chan *dchan, struct scatterlist *sgl,
+			     unsigned int len,
+			     enum dma_transfer_direction direction,
+			     unsigned long flags, void *context)
 {
 	struct dw_edma_transfer xfer;
 
@@ -547,10 +583,7 @@ dw_edma_device_prep_config_sg(struct dma_chan *dchan, struct scatterlist *sgl,
 	xfer.flags = flags;
 	xfer.type = EDMA_XFER_SCATTER_GATHER;
 
-	if (config && dw_edma_device_config(dchan, config))
-		return NULL;
-
-	return dw_edma_device_transfer(&xfer, dw_edma_device_get_config(dchan, config));
+	return dw_edma_device_transfer(&xfer);
 }
 
 static struct dma_async_tx_descriptor *
@@ -569,7 +602,7 @@ dw_edma_device_prep_dma_cyclic(struct dma_chan *dchan, dma_addr_t paddr,
 	xfer.flags = flags;
 	xfer.type = EDMA_XFER_CYCLIC;
 
-	return dw_edma_device_transfer(&xfer, dw_edma_device_get_config(dchan, NULL));
+	return dw_edma_device_transfer(&xfer);
 }
 
 static struct dma_async_tx_descriptor *
@@ -585,7 +618,7 @@ dw_edma_device_prep_interleaved_dma(struct dma_chan *dchan,
 	xfer.flags = flags;
 	xfer.type = EDMA_XFER_INTERLEAVED;
 
-	return dw_edma_device_transfer(&xfer, dw_edma_device_get_config(dchan, NULL));
+	return dw_edma_device_transfer(&xfer);
 }
 
 static void dw_hdma_set_callback_result(struct virt_dma_desc *vd,
@@ -599,14 +632,8 @@ static void dw_hdma_set_callback_result(struct virt_dma_desc *vd,
 		return;
 
 	desc = vd2dw_edma_desc(vd);
-	if (desc) {
-		residue = desc->alloc_sz;
-
-		if (result == DMA_TRANS_NOERROR)
-			residue -= desc->burst[desc->start_burst - 1].xfer_sz;
-		else if (desc->done_burst)
-			residue -= desc->burst[desc->done_burst - 1].xfer_sz;
-	}
+	if (desc)
+		residue = desc->alloc_sz - desc->xfer_sz;
 
 	res = &vd->tx_result;
 	res->result = result;
@@ -631,7 +658,7 @@ static void dw_edma_done_interrupt(struct dw_edma_chan *chan)
 		case EDMA_REQ_NONE:
 		case EDMA_REQ_PAUSE:
 			desc = vd2dw_edma_desc(vd);
-			if (desc->start_burst >= desc->nburst) {
+			if (!desc->chunks_alloc) {
 				dw_hdma_set_callback_result(vd,
 							    DMA_TRANS_NOERROR);
 				list_del(&vd->node);
@@ -681,177 +708,30 @@ static void dw_edma_abort_interrupt(struct dw_edma_chan *chan)
 	spin_unlock_irqrestore(&chan->vc.lock, flags);
 }
 
-static void dw_edma_irq_work(struct work_struct *work)
-{
-	struct dw_edma_chan *chan = container_of(work, struct dw_edma_chan,
-						 irq_work);
-	unsigned int events;
-
-	do {
-		events = atomic_xchg(&chan->irq_pending, 0);
-
-		if (events & DW_EDMA_IRQ_DONE)
-			dw_edma_done_interrupt(chan);
-		if (events & DW_EDMA_IRQ_ABORT)
-			dw_edma_abort_interrupt(chan);
-	} while (atomic_read(&chan->irq_pending));
-}
-
-static void dw_edma_queue_irq_work(struct dw_edma_chan *chan,
-				   enum dw_edma_irq_event event)
-{
-	atomic_or(event, &chan->irq_pending);
-	queue_work(chan->dw->wq, &chan->irq_work);
-}
-
-static void dw_edma_done_interrupt_deferred(struct dw_edma_chan *chan)
-{
-	dw_edma_queue_irq_work(chan, DW_EDMA_IRQ_DONE);
-}
-
-static void dw_edma_abort_interrupt_deferred(struct dw_edma_chan *chan)
-{
-	dw_edma_queue_irq_work(chan, DW_EDMA_IRQ_ABORT);
-}
-
-static void dw_edma_emul_irq_ack(struct irq_data *d)
-{
-	struct dw_edma *dw = irq_data_get_irq_chip_data(d);
-
-	dw_edma_core_ack_emulated_irq(dw);
-}
-
-/*
- * irq_chip implementation for interrupt-emulation doorbells.
- *
- * The emulated source has no mask/unmask mechanism. With handle_level_irq(),
- * the flow is therefore:
- *   1) .irq_ack() deasserts the source
- *   2) registered handlers (if any) are dispatched
- * Since deassertion is already done in .irq_ack(), handlers do not need to take
- * care of it, hence IRQCHIP_ONESHOT_SAFE.
- */
-static struct irq_chip dw_edma_emul_irqchip = {
-	.name		= "dw-edma-emul",
-	.irq_ack	= dw_edma_emul_irq_ack,
-	.flags		= IRQCHIP_ONESHOT_SAFE | IRQCHIP_SKIP_SET_WAKE,
-};
-
-static int dw_edma_emul_irq_alloc(struct dw_edma *dw)
-{
-	struct dw_edma_chip *chip = dw->chip;
-	int virq;
-
-	chip->db_irq = 0;
-	chip->db_offset = ~0;
-
-	if (chip->flags & DW_EDMA_CHIP_PARTIAL)
-		return 0;
-
-	/*
-	 * Only meaningful when the core provides the deassert sequence
-	 * for interrupt emulation.
-	 */
-	if (!dw->core->ack_emulated_irq)
-		return 0;
-
-	/*
-	 * Allocate a single, requestable Linux virtual IRQ number.
-	 * Use >= 1 so that 0 can remain a "not available" sentinel.
-	 */
-	virq = irq_alloc_desc(NUMA_NO_NODE);
-	if (virq < 0)
-		return virq;
-
-	irq_set_chip_and_handler(virq, &dw_edma_emul_irqchip, handle_level_irq);
-	irq_set_status_flags(virq, IRQ_LEVEL);
-	irq_set_chip_data(virq, dw);
-	irq_set_noprobe(virq);
-
-	chip->db_irq = virq;
-	chip->db_offset = dw_edma_core_db_offset(dw);
-
-	return 0;
-}
-
-static void dw_edma_emul_irq_free(struct dw_edma *dw)
-{
-	struct dw_edma_chip *chip = dw->chip;
-
-	if (!chip)
-		return;
-	if (chip->db_irq <= 0)
-		return;
-
-	irq_free_descs(chip->db_irq, 1);
-	chip->db_irq = 0;
-	chip->db_offset = ~0;
-}
-
-static inline irqreturn_t dw_edma_interrupt_emulated(void *data)
-{
-	struct dw_edma_irq *dw_irq = data;
-	struct dw_edma *dw = dw_irq->dw;
-	int db_irq = dw->chip->db_irq;
-
-	if (db_irq > 0) {
-		/*
-		 * Interrupt emulation may assert the IRQ line without updating the
-		 * normal DONE/ABORT status bits. With a shared IRQ handler we
-		 * cannot reliably detect such events by status registers alone, so
-		 * always perform the core-specific deassert sequence.
-		 */
-		generic_handle_irq(db_irq);
-		return IRQ_HANDLED;
-	}
-	return IRQ_NONE;
-}
-
-static inline irqreturn_t dw_edma_interrupt_write_inner(int irq, void *data)
+static inline irqreturn_t dw_edma_interrupt_write(int irq, void *data)
 {
 	struct dw_edma_irq *dw_irq = data;
 
 	return dw_edma_core_handle_int(dw_irq, EDMA_DIR_WRITE,
-				       dw_edma_done_interrupt_deferred,
-				       dw_edma_abort_interrupt_deferred);
-}
-
-static inline irqreturn_t dw_edma_interrupt_read_inner(int irq, void *data)
-{
-	struct dw_edma_irq *dw_irq = data;
-
-	return dw_edma_core_handle_int(dw_irq, EDMA_DIR_READ,
-				       dw_edma_done_interrupt_deferred,
-				       dw_edma_abort_interrupt_deferred);
-}
-
-static inline irqreturn_t dw_edma_interrupt_write(int irq, void *data)
-{
-	irqreturn_t ret = IRQ_NONE;
-
-	ret |= dw_edma_interrupt_write_inner(irq, data);
-	ret |= dw_edma_interrupt_emulated(data);
-
-	return ret;
+				       dw_edma_done_interrupt,
+				       dw_edma_abort_interrupt);
 }
 
 static inline irqreturn_t dw_edma_interrupt_read(int irq, void *data)
 {
-	irqreturn_t ret = IRQ_NONE;
+	struct dw_edma_irq *dw_irq = data;
 
-	ret |= dw_edma_interrupt_read_inner(irq, data);
-	ret |= dw_edma_interrupt_emulated(data);
-
-	return ret;
+	return dw_edma_core_handle_int(dw_irq, EDMA_DIR_READ,
+				       dw_edma_done_interrupt,
+				       dw_edma_abort_interrupt);
 }
 
-static inline irqreturn_t dw_edma_interrupt_common(int irq, void *data)
+static irqreturn_t dw_edma_interrupt_common(int irq, void *data)
 {
 	irqreturn_t ret = IRQ_NONE;
 
-	ret |= dw_edma_interrupt_write_inner(irq, data);
-	ret |= dw_edma_interrupt_read_inner(irq, data);
-	ret |= dw_edma_interrupt_emulated(data);
+	ret |= dw_edma_interrupt_write(irq, data);
+	ret |= dw_edma_interrupt_read(irq, data);
 
 	return ret;
 }
@@ -895,8 +775,6 @@ static void dw_edma_device_synchronize(struct dma_chan *dchan)
 	struct dw_edma_chan *chan = dchan2dw_edma_chan(dchan);
 
 	dw_edma_wait_termination(dchan);
-	cancel_work_sync(&chan->irq_work);
-	atomic_set(&chan->irq_pending, 0);
 	vchan_synchronize(&chan->vc);
 }
 
@@ -932,7 +810,6 @@ static int dw_edma_channel_setup(struct dw_edma *dw, u32 wr_alloc, u32 rd_alloc)
 		chan = &dw->chan[i];
 
 		chan->dw = dw;
-		chan->func_no = chip->func_no;
 
 		if (i < dw->wr_ch_cnt) {
 			chan->id = i;
@@ -945,16 +822,12 @@ static int dw_edma_channel_setup(struct dw_edma *dw, u32 wr_alloc, u32 rd_alloc)
 		chan->configured = false;
 		chan->request = EDMA_REQ_NONE;
 		chan->status = EDMA_ST_IDLE;
-		chan->irq_mode = dw_edma_get_default_irq_mode(chan);
-		INIT_WORK(&chan->irq_work, dw_edma_irq_work);
-		atomic_set(&chan->irq_pending, 0);
 
 		if (chan->dir == EDMA_DIR_WRITE)
-			chan->ll_region = chip->ll_region_wr[chan->id];
+			chan->ll_max = (chip->ll_region_wr[chan->id].sz / EDMA_LL_SZ);
 		else
-			chan->ll_region = chip->ll_region_rd[chan->id];
-
-		chan->ll_max = chan->ll_region.sz / EDMA_LL_SZ - 1;
+			chan->ll_max = (chip->ll_region_rd[chan->id].sz / EDMA_LL_SZ);
+		chan->ll_max -= 1;
 
 		dev_vdbg(dev, "L. List:\tChannel %s[%u] max_cnt=%u\n",
 			 str_write_read(chan->dir == EDMA_DIR_WRITE),
@@ -970,9 +843,9 @@ static int dw_edma_channel_setup(struct dw_edma *dw, u32 wr_alloc, u32 rd_alloc)
 		irq = &dw->irq[pos];
 
 		if (chan->dir == EDMA_DIR_WRITE)
-			bitmap_set(irq->wr_mask, chan->id, 1);
+			irq->wr_mask |= BIT(chan->id);
 		else
-			bitmap_set(irq->rd_mask, chan->id, 1);
+			irq->rd_mask |= BIT(chan->id);
 
 		memcpy(&chan->msi, &irq->msi, sizeof(chan->msi));
 
@@ -1015,7 +888,7 @@ static int dw_edma_channel_setup(struct dw_edma *dw, u32 wr_alloc, u32 rd_alloc)
 	dma->device_synchronize = dw_edma_device_synchronize;
 	dma->device_issue_pending = dw_edma_device_issue_pending;
 	dma->device_tx_status = dw_edma_device_tx_status;
-	dma->device_prep_config_sg = dw_edma_device_prep_config_sg;
+	dma->device_prep_slave_sg = dw_edma_device_prep_slave_sg;
 	dma->device_prep_dma_cyclic = dw_edma_device_prep_dma_cyclic;
 	dma->device_prep_interleaved_dma = dw_edma_device_prep_interleaved_dma;
 
@@ -1033,12 +906,19 @@ static inline void dw_edma_dec_irq_alloc(int *nr_irqs, u32 *alloc, u16 cnt)
 	}
 }
 
+static inline void dw_edma_add_irq_mask(u32 *mask, u32 alloc, u16 cnt)
+{
+	while (*mask * alloc < cnt)
+		(*mask)++;
+}
+
 static int dw_edma_irq_request(struct dw_edma *dw,
 			       u32 *wr_alloc, u32 *rd_alloc)
 {
 	struct dw_edma_chip *chip = dw->chip;
 	struct device *dev = dw->chip->dev;
-	struct msi_desc *msi_desc;
+	u32 wr_mask = 1;
+	u32 rd_mask = 1;
 	int i, err = 0;
 	u32 ch_cnt;
 	int irq;
@@ -1076,6 +956,9 @@ static int dw_edma_irq_request(struct dw_edma *dw,
 			dw_edma_dec_irq_alloc(&tmp, rd_alloc, dw->rd_ch_cnt);
 		}
 
+		dw_edma_add_irq_mask(&wr_mask, *wr_alloc, dw->wr_ch_cnt);
+		dw_edma_add_irq_mask(&rd_mask, *rd_alloc, dw->rd_ch_cnt);
+
 		for (i = 0; i < (*wr_alloc + *rd_alloc); i++) {
 			irq = chip->ops->irq_vector(dev, i);
 			dw->irq[i].dw = dw;
@@ -1087,12 +970,9 @@ static int dw_edma_irq_request(struct dw_edma *dw,
 					  &dw->irq[i]);
 			if (err)
 				goto err_irq_free;
-			msi_desc = irq_get_msi_desc(irq);
-			if (msi_desc) {
+
+			if (irq_get_msi_desc(irq))
 				get_cached_msi_msg(irq, &dw->irq[i].msi);
-				if (!msi_desc->pci.msi_attrib.is_msix)
-					dw->irq[i].msi.data = dw->irq[0].msi.data + i;
-			}
 		}
 
 		dw->nr_irqs = i;
@@ -1109,37 +989,12 @@ err_irq_free:
 	return err;
 }
 
-static int dw_edma_check_partial(struct dw_edma_chip *chip,
-				 u16 hw_wr_ch_cnt, u16 hw_rd_ch_cnt)
-{
-	if (!(chip->flags & DW_EDMA_CHIP_PARTIAL))
-		return 0;
-
-	if (chip->mf != EDMA_MF_EDMA_UNROLL &&
-	    chip->mf != EDMA_MF_HDMA_COMPAT)
-		return 0;
-
-	/*
-	 * Direction-wide registers are shared by all channels in that
-	 * direction, so a direction must have a single owner.
-	 */
-	if ((chip->ll_wr_cnt && chip->ll_wr_cnt != hw_wr_ch_cnt) ||
-	    (chip->ll_rd_cnt && chip->ll_rd_cnt != hw_rd_ch_cnt))
-		return -EOPNOTSUPP;
-
-	return 0;
-}
-
 int dw_edma_probe(struct dw_edma_chip *chip)
 {
 	struct device *dev;
 	struct dw_edma *dw;
-	u16 hw_wr_ch_cnt;
-	u16 hw_rd_ch_cnt;
 	u32 wr_alloc = 0;
 	u32 rd_alloc = 0;
-	u16 max_wr_cnt;
-	u16 max_rd_cnt;
 	int i, err;
 
 	if (!chip)
@@ -1149,50 +1004,26 @@ int dw_edma_probe(struct dw_edma_chip *chip)
 	if (!dev || !chip->ops)
 		return -EINVAL;
 
-	if (chip->flags & DW_EDMA_CHIP_PARTIAL) {
-		switch (chip->mf) {
-		case EDMA_MF_EDMA_UNROLL:
-		case EDMA_MF_HDMA_COMPAT:
-		case EDMA_MF_HDMA_NATIVE:
-			break;
-		default:
-			return -EOPNOTSUPP;
-		}
-	}
-
 	dw = devm_kzalloc(dev, sizeof(*dw), GFP_KERNEL);
 	if (!dw)
 		return -ENOMEM;
 
 	dw->chip = chip;
 
-	if (dw->chip->mf == EDMA_MF_HDMA_NATIVE) {
+	if (dw->chip->mf == EDMA_MF_HDMA_NATIVE)
 		dw_hdma_v0_core_register(dw);
-		max_wr_cnt = HDMA_MAX_WR_CH;
-		max_rd_cnt = HDMA_MAX_RD_CH;
-	} else {
+	else
 		dw_edma_v0_core_register(dw);
-		max_wr_cnt = EDMA_MAX_WR_CH;
-		max_rd_cnt = EDMA_MAX_RD_CH;
-	}
 
 	raw_spin_lock_init(&dw->lock);
 
-	/*
-	 * chip->ll_*_cnt describes the channels exposed by this instance. Keep
-	 * the usable hardware counts separate for partial ownership checks.
-	 */
-	hw_wr_ch_cnt = min(dw_edma_core_ch_count(dw, EDMA_DIR_WRITE),
-			   max_wr_cnt);
-	hw_rd_ch_cnt = min(dw_edma_core_ch_count(dw, EDMA_DIR_READ),
-			   max_rd_cnt);
+	dw->wr_ch_cnt = min_t(u16, chip->ll_wr_cnt,
+			      dw_edma_core_ch_count(dw, EDMA_DIR_WRITE));
+	dw->wr_ch_cnt = min_t(u16, dw->wr_ch_cnt, EDMA_MAX_WR_CH);
 
-	err = dw_edma_check_partial(chip, hw_wr_ch_cnt, hw_rd_ch_cnt);
-	if (err)
-		return err;
-
-	dw->wr_ch_cnt = min(chip->ll_wr_cnt, hw_wr_ch_cnt);
-	dw->rd_ch_cnt = min(chip->ll_rd_cnt, hw_rd_ch_cnt);
+	dw->rd_ch_cnt = min_t(u16, chip->ll_rd_cnt,
+			      dw_edma_core_ch_count(dw, EDMA_DIR_READ));
+	dw->rd_ch_cnt = min_t(u16, dw->rd_ch_cnt, EDMA_MAX_RD_CH);
 
 	if (!dw->wr_ch_cnt && !dw->rd_ch_cnt)
 		return -EINVAL;
@@ -1209,39 +1040,13 @@ int dw_edma_probe(struct dw_edma_chip *chip)
 	snprintf(dw->name, sizeof(dw->name), "dw-edma-core:%s",
 		 dev_name(chip->dev));
 
-	if (chip->flags & DW_EDMA_CHIP_PARTIAL) {
-		/*
-		 * Do not reset the shared controller, but drain stale state
-		 * from resources represented by this instance.
-		 */
-		err = dw_edma_core_quiesce(dw);
-		if (err)
-			return err;
-	} else {
-		/* Disable eDMA only when this instance owns the controller. */
-		dw_edma_core_off(dw);
-	}
-
-	/*
-	 * Deferred IRQ works are queued from the hard IRQ handlers, so the
-	 * workqueue must exist before any IRQ is requested.
-	 */
-	dw->wq = alloc_workqueue("dw-edma:%s", WQ_UNBOUND | WQ_HIGHPRI, 0,
-				 dev_name(chip->dev));
-	if (!dw->wq)
-		return -ENOMEM;
+	/* Disable eDMA, only to establish the ideal initial conditions */
+	dw_edma_core_off(dw);
 
 	/* Request IRQs */
 	err = dw_edma_irq_request(dw, &wr_alloc, &rd_alloc);
-	if (err) {
-		destroy_workqueue(dw->wq);
-		return err;
-	}
-
-	/* Allocate a dedicated virtual IRQ for interrupt-emulation doorbells */
-	err = dw_edma_emul_irq_alloc(dw);
 	if (err)
-		dev_warn(dev, "Failed to allocate emulation IRQ: %d\n", err);
+		return err;
 
 	/* Setup write/read channels */
 	err = dw_edma_channel_setup(dw, wr_alloc, rd_alloc);
@@ -1258,8 +1063,6 @@ int dw_edma_probe(struct dw_edma_chip *chip)
 err_irq_free:
 	for (i = (dw->nr_irqs - 1); i >= 0; i--)
 		free_irq(chip->ops->irq_vector(dev, i), &dw->irq[i]);
-	dw_edma_emul_irq_free(dw);
-	destroy_workqueue(dw->wq);
 
 	return err;
 }
@@ -1270,26 +1073,18 @@ int dw_edma_remove(struct dw_edma_chip *chip)
 	struct dw_edma_chan *chan, *_chan;
 	struct device *dev = chip->dev;
 	struct dw_edma *dw = chip->dw;
-	int i, err = 0;
+	int i;
 
 	/* Skip removal if no private data found */
 	if (!dw)
 		return -ENODEV;
 
-	if (chip->flags & DW_EDMA_CHIP_PARTIAL)
-		err = dw_edma_core_quiesce(dw);
-	else
-		dw_edma_core_off(dw);
+	/* Disable eDMA */
+	dw_edma_core_off(dw);
 
 	/* Free irqs */
 	for (i = (dw->nr_irqs - 1); i >= 0; i--)
 		free_irq(chip->ops->irq_vector(dev, i), &dw->irq[i]);
-	dw_edma_emul_irq_free(dw);
-
-	for (i = 0; i < dw->wr_ch_cnt + dw->rd_ch_cnt; i++)
-		cancel_work_sync(&dw->chan[i].irq_work);
-
-	destroy_workqueue(dw->wq);
 
 	/* Deregister eDMA device */
 	dma_async_device_unregister(&dw->dma);
@@ -1299,7 +1094,7 @@ int dw_edma_remove(struct dw_edma_chip *chip)
 		list_del(&chan->vc.chan.device_node);
 	}
 
-	return err;
+	return 0;
 }
 EXPORT_SYMBOL_GPL(dw_edma_remove);
 

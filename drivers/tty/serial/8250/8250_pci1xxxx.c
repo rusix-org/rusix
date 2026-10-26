@@ -12,7 +12,6 @@
 #include <linux/bits.h>
 #include <linux/circ_buf.h>
 #include <linux/device.h>
-#include <linux/err.h>
 #include <linux/errno.h>
 #include <linux/gfp_types.h>
 #include <linux/io.h>
@@ -153,7 +152,7 @@ struct pci1xxxx_8250 {
 	u8 dev_rev;
 	u8 pad[3];
 	void __iomem *membase;
-	struct uart_8250_port *uport[] __counted_by(nr);
+	int line[] __counted_by(nr);
 };
 
 static const struct serial_rs485 pci1xxxx_rs485_supported = {
@@ -552,8 +551,9 @@ static int pci1xxxx_handle_irq(struct uart_port *port)
 	return 1;
 }
 
-static bool pci1xxxx_port_suspend(struct uart_8250_port *up)
+static bool pci1xxxx_port_suspend(int line)
 {
+	struct uart_8250_port *up = serial8250_get_port(line);
 	struct uart_port *port = &up->port;
 	struct tty_port *tport = &port->state->port;
 	unsigned long flags;
@@ -578,8 +578,9 @@ static bool pci1xxxx_port_suspend(struct uart_8250_port *up)
 	return ret;
 }
 
-static void pci1xxxx_port_resume(struct uart_8250_port *up)
+static void pci1xxxx_port_resume(int line)
 {
+	struct uart_8250_port *up = serial8250_get_port(line);
 	struct uart_port *port = &up->port;
 	struct tty_port *tport = &port->state->port;
 	unsigned long flags;
@@ -607,9 +608,9 @@ static int pci1xxxx_suspend(struct device *dev)
 	int i;
 
 	for (i = 0; i < priv->nr; i++) {
-		if (priv->uport[i]) {
-			serial8250_suspend_port(priv->uport[i]);
-			wakeup |= pci1xxxx_port_suspend(priv->uport[i]);
+		if (priv->line[i] >= 0) {
+			serial8250_suspend_port(priv->line[i]);
+			wakeup |= pci1xxxx_port_suspend(priv->line[i]);
 		}
 	}
 
@@ -660,9 +661,9 @@ static int pci1xxxx_resume(struct device *dev)
 	iounmap(p);
 
 	for (i = 0; i < priv->nr; i++) {
-		if (priv->uport[i]) {
-			pci1xxxx_port_resume(priv->uport[i]);
-			serial8250_resume_port(priv->uport[i]);
+		if (priv->line[i] >= 0) {
+			pci1xxxx_port_resume(priv->line[i]);
+			serial8250_resume_port(priv->line[i]);
 		}
 	}
 
@@ -670,7 +671,7 @@ static int pci1xxxx_resume(struct device *dev)
 }
 
 static int pci1xxxx_setup(struct pci_dev *pdev,
-			  struct uart_8250_port *port, int port_idx, struct pci1xxxx_8250 *priv)
+			  struct uart_8250_port *port, int port_idx, int rev)
 {
 	int ret;
 
@@ -697,12 +698,12 @@ static int pci1xxxx_setup(struct pci_dev *pdev,
 	 * C0 and later revisions support Burst operation.
 	 * RTS workaround in mctrl is applicable only to B0.
 	 */
-	if (priv->dev_rev >= 0xC0)
+	if (rev >= 0xC0)
 		port->port.handle_irq = pci1xxxx_handle_irq;
-	else if (priv->dev_rev == 0xB0)
+	else if (rev == 0xB0)
 		port->port.set_mctrl = pci1xxxx_set_mctrl;
 
-	ret = serial8250_pci_setup_port(pdev, port, 0, PORT_OFFSET * port_idx, 0, priv->membase);
+	ret = serial8250_pci_setup_port(pdev, port, 0, PORT_OFFSET * port_idx, 0);
 	if (ret < 0)
 		return ret;
 
@@ -778,7 +779,7 @@ static int pci1xxxx_serial_probe(struct pci_dev *pdev,
 
 	nr_ports = pci1xxxx_get_num_ports(pdev);
 
-	priv = devm_kzalloc(dev, struct_size(priv, uport, nr_ports), GFP_KERNEL);
+	priv = devm_kzalloc(dev, struct_size(priv, line, nr_ports), GFP_KERNEL);
 	if (!priv)
 		return -ENOMEM;
 
@@ -811,6 +812,8 @@ static int pci1xxxx_serial_probe(struct pci_dev *pdev,
 		writeb(UART_PCI_CTRL_SET_MULTIPLE_MSI, priv->membase + UART_PCI_CTRL_REG);
 
 	for (i = 0; i < nr_ports; i++) {
+		priv->line[i] = -ENODEV;
+
 		port_idx = pci1xxxx_logical_to_physical_port_translate(subsys_dev, i);
 
 		if (num_vectors == max_vec_reqd)
@@ -818,21 +821,19 @@ static int pci1xxxx_serial_probe(struct pci_dev *pdev,
 		else
 			uart.port.irq = pci_irq_vector(pdev, 0);
 
-		rc = pci1xxxx_setup(pdev, &uart, port_idx, priv);
+		rc = pci1xxxx_setup(pdev, &uart, port_idx, priv->dev_rev);
 		if (rc) {
 			dev_warn(dev, "Failed to setup port %u\n", i);
 			continue;
 		}
 
-		struct uart_8250_port *uport = serial8250_register_8250_port(&uart);
-		if (IS_ERR(uport)) {
+		priv->line[i] = serial8250_register_8250_port(&uart);
+		if (priv->line[i] < 0) {
 			dev_warn(dev,
-				"Couldn't register serial port %lx, irq %d, type %d, error %pe\n",
-				uart.port.iobase, uart.port.irq, uart.port.iotype, uport);
-			continue;
+				"Couldn't register serial port %lx, irq %d, type %d, error %d\n",
+				uart.port.iobase, uart.port.irq, uart.port.iotype,
+				priv->line[i]);
 		}
-
-		priv->uport[i] = uport;
 	}
 
 	pci_set_drvdata(pdev, priv);
@@ -846,8 +847,8 @@ static void pci1xxxx_serial_remove(struct pci_dev *dev)
 	unsigned int i;
 
 	for (i = 0; i < priv->nr; i++) {
-		if (priv->uport[i])
-			serial8250_unregister_port(priv->uport[i]);
+		if (priv->line[i] >= 0)
+			serial8250_unregister_port(priv->line[i]);
 	}
 
 	pci_free_irq_vectors(dev);

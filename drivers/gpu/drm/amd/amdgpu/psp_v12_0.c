@@ -229,7 +229,7 @@ static int psp_v12_0_mode1_reset(struct psp_context *psp)
 			   MBOX_TOS_READY_MASK, 0);
 
 	if (ret) {
-		drm_info(adev_to_drm(adev), "psp is not working correctly before mode1 reset!\n");
+		DRM_INFO("psp is not working correctly before mode1 reset!\n");
 		return -EINVAL;
 	}
 
@@ -244,11 +244,11 @@ static int psp_v12_0_mode1_reset(struct psp_context *psp)
 			   0);
 
 	if (ret) {
-		drm_info(adev_to_drm(adev), "psp mode 1 reset failed!\n");
+		DRM_INFO("psp mode 1 reset failed!\n");
 		return -EINVAL;
 	}
 
-	drm_info(adev_to_drm(adev), "psp mode1 reset succeed\n");
+	DRM_INFO("psp mode1 reset succeed \n");
 
 	return 0;
 }

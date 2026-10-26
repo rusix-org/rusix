@@ -64,7 +64,7 @@ static int dibs_lo_register_dmb(struct dibs_dev *dibs, struct dibs_dmb *dmb,
 	if (sba_idx == DIBS_LO_MAX_DMBS)
 		return -ENOSPC;
 
-	dmb_node = kzalloc_obj(*dmb_node);
+	dmb_node = kzalloc(sizeof(*dmb_node), GFP_KERNEL);
 	if (!dmb_node) {
 		rc = -ENOMEM;
 		goto err_bit;
@@ -238,7 +238,6 @@ static int dibs_lo_move_data(struct dibs_dev *dibs, u64 dmb_tok,
 {
 	struct dibs_lo_dmb_node *rmb_node = NULL, *tmp_node;
 	struct dibs_lo_dev *ldev;
-	unsigned long flags;
 	u16 s_mask;
 	u8 client_id;
 	u32 sba_idx;
@@ -268,12 +267,12 @@ static int dibs_lo_move_data(struct dibs_dev *dibs, u64 dmb_tok,
 	if (!sf)
 		return 0;
 
-	spin_lock_irqsave(&dibs->lock, flags);
+	spin_lock(&dibs->lock);
 	client_id = dibs->dmb_clientid_arr[sba_idx];
 	s_mask = ror16(0x1000, idx);
 	if (likely(client_id != NO_DIBS_CLIENT && dibs->subs[client_id]))
 		dibs->subs[client_id]->ops->handle_irq(dibs, sba_idx, s_mask);
-	spin_unlock_irqrestore(&dibs->lock, flags);
+	spin_unlock(&dibs->lock);
 
 	return 0;
 }
@@ -310,7 +309,7 @@ static int dibs_lo_dev_probe(void)
 	struct dibs_dev *dibs;
 	int ret;
 
-	ldev = kzalloc_obj(*ldev);
+	ldev = kzalloc(sizeof(*ldev), GFP_KERNEL);
 	if (!ldev)
 		return -ENOMEM;
 

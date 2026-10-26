@@ -7,10 +7,11 @@
 
 #include <drm/drm_device.h>
 #include <drm/drm_file.h>
-#include <drm/drm_timeout.h>
+#include <drm/drm_utils.h>
 #include <uapi/drm/xe_drm.h>
 
 #include "xe_device.h"
+#include "xe_gt.h"
 #include "xe_macros.h"
 #include "xe_exec_queue.h"
 

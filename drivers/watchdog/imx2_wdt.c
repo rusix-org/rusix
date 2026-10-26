@@ -29,7 +29,6 @@
 #include <linux/of.h>
 #include <linux/platform_device.h>
 #include <linux/regmap.h>
-#include <linux/stringify.h>
 #include <linux/watchdog.h>
 
 #define DRIVER_NAME "imx2-wdt"
@@ -80,12 +79,12 @@ struct imx2_wdt_device {
 static bool nowayout = WATCHDOG_NOWAYOUT;
 module_param(nowayout, bool, 0);
 MODULE_PARM_DESC(nowayout, "Watchdog cannot be stopped once started (default="
-				__stringify(WATCHDOG_NOWAYOUT) ")");
+				__MODULE_STRING(WATCHDOG_NOWAYOUT) ")");
 
 static unsigned timeout;
 module_param(timeout, uint, 0);
 MODULE_PARM_DESC(timeout, "Watchdog timeout in seconds (default="
-				__stringify(IMX2_WDT_DEFAULT_TIME) ")");
+				__MODULE_STRING(IMX2_WDT_DEFAULT_TIME) ")");
 
 static const struct watchdog_info imx2_wdt_info = {
 	.identity = "imx2+ watchdog",

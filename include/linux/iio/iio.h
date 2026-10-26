@@ -10,7 +10,6 @@
 #include <linux/align.h>
 #include <linux/device.h>
 #include <linux/cdev.h>
-#include <linux/cleanup.h>
 #include <linux/compiler_types.h>
 #include <linux/minmax.h>
 #include <linux/slab.h>
@@ -177,31 +176,8 @@ struct iio_event_spec {
 };
 
 /**
- * define IIO_SCAN_FORMAT_SIGNED_INT - signed integer data format
- *
- * &iio_scan_type.format value for signed integers (two's complement).
- */
-#define IIO_SCAN_FORMAT_SIGNED_INT	's'
-
-/**
- * define IIO_SCAN_FORMAT_UNSIGNED_INT - unsigned integer data format
- *
- * &iio_scan_type.format value for unsigned integers.
- */
-#define IIO_SCAN_FORMAT_UNSIGNED_INT	'u'
-
-/**
- * define IIO_SCAN_FORMAT_FLOAT - floating-point data format
- *
- * &iio_scan_type.format value for IEEE 754 floating-point numbers.
- */
-#define IIO_SCAN_FORMAT_FLOAT		'f'
-
-/**
  * struct iio_scan_type - specification for channel data format in buffer
- * @sign:		Deprecated, use @format instead.
- * @format:		Data format, can have any of the IIO_SCAN_FORMAT_*
- *			values.
+ * @sign:		's' or 'u' to specify signed or unsigned
  * @realbits:		Number of valid bits of data
  * @storagebits:	Realbits + padding
  * @shift:		Shift right by this before masking out realbits.
@@ -212,10 +188,7 @@ struct iio_event_spec {
  * @endianness:		little or big endian
  */
 struct iio_scan_type {
-	union {
-		char sign;
-		char format;
-	};
+	char	sign;
 	u8	realbits;
 	u8	storagebits;
 	u8	shift;
@@ -264,10 +237,6 @@ struct iio_scan_type {
  * @ext_info:		Array of extended info attributes for this channel.
  *			The array is NULL terminated, the last element should
  *			have its name field set to NULL.
- * @parent:		Optional pointer to the parent channel spec for
- *			hierarchical channel relationships. When set, a read-only
- *			"parent" sysfs attribute is created containing the
- *			parent channel's sysfs name prefix (e.g. "in_voltage0").
  * @extend_name:	Allows labeling of channel attributes with an
  *			informative name. Note this has no effect codes etc,
  *			unlike modifiers.
@@ -313,7 +282,6 @@ struct iio_chan_spec {
 	const struct iio_event_spec *event_spec;
 	unsigned int		num_event_specs;
 	const struct iio_chan_spec_ext_info *ext_info;
-	const struct iio_chan_spec *parent;
 	const char		*extend_name;
 	const char		*datasheet_name;
 	unsigned int		modified:1;
@@ -358,15 +326,15 @@ static inline bool iio_channel_has_available(const struct iio_chan_spec *chan,
 		(chan->info_mask_shared_by_all_available & BIT(type));
 }
 
-#define IIO_CHAN_SOFT_TIMESTAMP(_si) (struct iio_chan_spec) {		\
+#define IIO_CHAN_SOFT_TIMESTAMP(_si) {					\
 	.type = IIO_TIMESTAMP,						\
 	.channel = -1,							\
 	.scan_index = _si,						\
 	.scan_type = {							\
 		.sign = 's',						\
-		.realbits = 64,						\
+		.realbits = 64,					\
 		.storagebits = 64,					\
-	},								\
+		},							\
 }
 
 s64 iio_get_time_ns(const struct iio_dev *indio_dev);
@@ -489,10 +457,6 @@ struct iio_trigger; /* forward declaration */
  * @update_scan_mode:	function to configure device and scan buffer when
  *			channels have changed
  * @debugfs_reg_access:	function to read or write register value of device
- * @debugfs_reg64_access: function to read or write 64-bit register value of
- *			device. debugfs_reg_access() and debugfs_reg64_access()
- *			are mutually exclusive, but the 64-bit variant has
- *			precedence in case both are implemented.
  * @fwnode_xlate:	fwnode based function pointer to obtain channel specifier index.
  * @hwfifo_set_watermark: function pointer to set the current hardware
  *			fifo watermark level; see hwfifo_* entries in
@@ -581,9 +545,6 @@ struct iio_info {
 	int (*debugfs_reg_access)(struct iio_dev *indio_dev,
 				  unsigned int reg, unsigned int writeval,
 				  unsigned int *readval);
-	int (*debugfs_reg64_access)(struct iio_dev *indio_dev,
-				    unsigned int reg, u64 writeval,
-				    u64 *readval);
 	int (*fwnode_xlate)(struct iio_dev *indio_dev,
 			    const struct fwnode_reference_args *iiospec);
 	int (*hwfifo_set_watermark)(struct iio_dev *indio_dev, unsigned int val);
@@ -622,8 +583,6 @@ struct iio_buffer_setup_ops {
  *			and owner
  * @buffer:		[DRIVER] any buffer present
  * @scan_bytes:		[INTERN] num bytes captured to be fed to buffer demux
- * @scan_timestamp_offset: [INTERN] cache of the offset (in bytes) for the
- *			   timestamp in the scan buffer
  * @available_scan_masks: [DRIVER] optional array of allowed bitmasks. Sort the
  *			   array in order of preference, the most preferred
  *			   masks first.
@@ -650,7 +609,6 @@ struct iio_dev {
 
 	struct iio_buffer		*buffer;
 	int				scan_bytes;
-	unsigned int			__private scan_timestamp_offset;
 
 	const unsigned long		*available_scan_masks;
 	unsigned int			__private masklength;
@@ -660,7 +618,7 @@ struct iio_dev {
 	struct iio_poll_func		*pollfunc;
 	struct iio_poll_func		*pollfunc_event;
 
-	struct iio_chan_spec const	*channels __counted_by_ptr(num_channels);
+	struct iio_chan_spec const	*channels;
 	int				num_channels;
 
 	const char			*name;
@@ -703,148 +661,34 @@ void iio_device_unregister(struct iio_dev *indio_dev);
 int __devm_iio_device_register(struct device *dev, struct iio_dev *indio_dev,
 			       struct module *this_mod);
 int iio_push_event(struct iio_dev *indio_dev, u64 ev_code, s64 timestamp);
-
-void __iio_dev_mode_lock(struct iio_dev *indio_dev) __acquires(indio_dev);
-void __iio_dev_mode_unlock(struct iio_dev *indio_dev) __releases(indio_dev);
+bool __iio_device_claim_direct(struct iio_dev *indio_dev);
+void __iio_device_release_direct(struct iio_dev *indio_dev);
 
 /*
  * Helper functions that allow claim and release of direct mode
  * in a fashion that doesn't generate many false positives from sparse.
  * Note this must remain static inline in the header so that sparse
- * can see the __acquires() and __releases() annotations.
- */
-
-/**
- * iio_device_claim_direct() - Keep device in direct mode
- * @indio_dev:	the iio_dev associated with the device
- *
- * If the device is in direct mode it is guaranteed to stay
- * that way until iio_device_release_direct() is called.
- *
- * Use with iio_device_release_direct().
- *
- * Returns: true on success, false on failure.
+ * can see the __acquire() marking. Revisit when sparse supports
+ * __cond_acquires()
  */
 static inline bool iio_device_claim_direct(struct iio_dev *indio_dev)
 {
-	__iio_dev_mode_lock(indio_dev);
-
-	if (iio_buffer_enabled(indio_dev)) {
-		__iio_dev_mode_unlock(indio_dev);
+	if (!__iio_device_claim_direct(indio_dev))
 		return false;
-	}
+
+	__acquire(iio_dev);
 
 	return true;
 }
 
-/**
- * iio_device_release_direct() - Releases claim on direct mode
- * @indio_dev:	the iio_dev associated with the device
- *
- * Release the claim. Device is no longer guaranteed to stay
- * in direct mode.
- *
- * Use with iio_device_claim_direct().
- */
-#define iio_device_release_direct(indio_dev) __iio_dev_mode_unlock(indio_dev)
-
-/**
- * iio_device_try_claim_buffer_mode() - Keep device in buffer mode
- * @indio_dev:	the iio_dev associated with the device
- *
- * If the device is in buffer mode it is guaranteed to stay
- * that way until iio_device_release_buffer_mode() is called.
- *
- * Use with iio_device_release_buffer_mode().
- *
- * Returns: true on success, false on failure.
- */
-static inline bool iio_device_try_claim_buffer_mode(struct iio_dev *indio_dev)
+static inline void iio_device_release_direct(struct iio_dev *indio_dev)
 {
-	__iio_dev_mode_lock(indio_dev);
-
-	if (!iio_buffer_enabled(indio_dev)) {
-		__iio_dev_mode_unlock(indio_dev);
-		return false;
-	}
-
-	return true;
+	__iio_device_release_direct(indio_dev);
+	__release(indio_dev);
 }
 
-/**
- * iio_device_release_buffer_mode() - releases claim on buffer mode
- * @indio_dev:	the iio_dev associated with the device
- *
- * Release the claim. Device is no longer guaranteed to stay
- * in buffer mode.
- *
- * Use with iio_device_try_claim_buffer_mode().
- */
-#define iio_device_release_buffer_mode(indio_dev) __iio_dev_mode_unlock(indio_dev)
-
-/*
- * These classes are not meant to be used directly by drivers (hence the
- * __priv__ prefix). Instead, documented wrapper macros are provided below to
- * enforce the use of ACQUIRE() or guard() semantics and avoid the problematic
- * scoped guard variants.
- */
-DEFINE_GUARD(__priv__iio_dev_mode_lock, struct iio_dev *,
-	     __iio_dev_mode_lock(_T), __iio_dev_mode_unlock(_T));
-DEFINE_GUARD_COND(__priv__iio_dev_mode_lock, _try_direct,
-		  iio_device_claim_direct(_T));
-
-/**
- * IIO_DEV_ACQUIRE_DIRECT_MODE() - Tries to acquire the direct mode lock with
- *				   automatic release
- * @dev: IIO device instance
- * @claim: Variable identifier to store acquire result
- *
- * Tries to acquire the direct mode lock with cleanup ACQUIRE() semantics and
- * automatically releases it at the end of the scope. It most be always paired
- * with IIO_DEV_ACQUIRE_FAILED(), for example (notice the scope braces)::
- *
- *	switch() {
- *	case IIO_CHAN_INFO_RAW: {
- *		IIO_DEV_ACQUIRE_DIRECT_MODE(indio_dev, claim);
- *		if (IIO_DEV_ACQUIRE_FAILED(claim))
- *			return -EBUSY;
- *
- *		...
- *	}
- *	case IIO_CHAN_INFO_SCALE:
- *		...
- *	...
- *	}
- *
- * Context: Can sleep
- */
-#define IIO_DEV_ACQUIRE_DIRECT_MODE(dev, claim) \
-	ACQUIRE(__priv__iio_dev_mode_lock_try_direct, claim)(dev)
-
-/**
- * IIO_DEV_ACQUIRE_FAILED() - ACQUIRE_ERR() wrapper
- * @claim: The claim variable passed to IIO_DEV_ACQUIRE_*_MODE()
- *
- * Return: true if failed to acquire the mode, otherwise false.
- */
-#define IIO_DEV_ACQUIRE_FAILED(claim) \
-	ACQUIRE_ERR(__priv__iio_dev_mode_lock_try_direct, &(claim))
-
-/**
- * IIO_DEV_GUARD_CURRENT_MODE() - Acquires the mode lock with automatic release
- * @dev: IIO device instance
- *
- * Acquires the mode lock with cleanup guard() semantics. It is usually paired
- * with iio_buffer_enabled().
- *
- * This should *not* be used to protect internal driver state and it's use in
- * general is *strongly* discouraged. Use any of the IIO_DEV_ACQUIRE_*_MODE()
- * variants.
- *
- * Context: Can sleep
- */
-#define IIO_DEV_GUARD_CURRENT_MODE(dev) \
-	guard(__priv__iio_dev_mode_lock)(dev)
+int iio_device_claim_buffer_mode(struct iio_dev *indio_dev);
+void iio_device_release_buffer_mode(struct iio_dev *indio_dev);
 
 extern const struct bus_type iio_bus_type;
 
@@ -1093,15 +937,6 @@ static inline const struct iio_scan_type
 static inline unsigned int iio_get_masklength(const struct iio_dev *indio_dev)
 {
 	return ACCESS_PRIVATE(indio_dev, masklength);
-}
-
-/**
- * iio_scan_timestamp_enabled - Is the timestamp channel in the current scan
- * @indio_dev: the IIO device to check
- */
-static inline bool iio_scan_timestamp_enabled(const struct iio_dev *indio_dev)
-{
-	return ACCESS_PRIVATE(indio_dev, scan_timestamp);
 }
 
 int iio_active_scan_mask_index(struct iio_dev *indio_dev);

@@ -83,7 +83,7 @@ static int scm_fp_copy(struct cmsghdr *cmsg, struct scm_fp_list **fplp)
 
 	if (!fpl)
 	{
-		fpl = kmalloc_obj(struct scm_fp_list, GFP_KERNEL_ACCOUNT);
+		fpl = kmalloc(sizeof(struct scm_fp_list), GFP_KERNEL_ACCOUNT);
 		if (!fpl)
 			return -ENOMEM;
 		*fplp = fpl;
@@ -149,7 +149,6 @@ EXPORT_SYMBOL(__scm_destroy);
 
 static inline int scm_replace_pid(struct scm_cookie *scm, struct pid *pid)
 {
-	struct pid *thread_pid;
 	int err;
 
 	/* drop all previous references */
@@ -159,18 +158,7 @@ static inline int scm_replace_pid(struct scm_cookie *scm, struct pid *pid)
 	if (unlikely(err))
 		return err;
 
-	/* A sender naming its own thread-group sends from the current thread. */
-	if (pid == task_tgid(current))
-		thread_pid = task_pid(current);
-	else
-		thread_pid = pid;
-
-	err = pidfs_register_pid(thread_pid);
-	if (unlikely(err))
-		return err;
-
-	scm->pid[PIDTYPE_TGID] = pid;
-	scm->pid[PIDTYPE_PID] = get_pid(thread_pid);
+	scm->pid = pid;
 	scm->creds.pid = pid_vnr(pid);
 	return 0;
 }
@@ -219,8 +207,7 @@ int __scm_send(struct socket *sock, struct msghdr *msg, struct scm_cookie *p)
 			if (err)
 				goto error;
 
-			if (!p->pid[PIDTYPE_TGID] ||
-			    pid_vnr(p->pid[PIDTYPE_TGID]) != creds.pid) {
+			if (!p->pid || pid_vnr(p->pid) != creds.pid) {
 				struct pid *pid;
 				err = -ESRCH;
 				pid = find_get_pid(creds.pid);
@@ -286,13 +273,17 @@ int put_cmsg(struct msghdr * msg, int level, int type, int len, void *data)
 
 		check_object_size(data, cmlen - sizeof(*cm), true);
 
-		scoped_user_write_access_size(cm, cmlen, efault) {
-			unsafe_put_user(cmlen, &cm->cmsg_len, efault);
-			unsafe_put_user(level, &cm->cmsg_level, efault);
-			unsafe_put_user(type, &cm->cmsg_type, efault);
-			unsafe_copy_to_user(CMSG_USER_DATA(cm), data,
-					    cmlen - sizeof(*cm), efault);
-		}
+		if (can_do_masked_user_access())
+			cm = masked_user_access_begin(cm);
+		else if (!user_write_access_begin(cm, cmlen))
+			goto efault;
+
+		unsafe_put_user(cmlen, &cm->cmsg_len, efault_end);
+		unsafe_put_user(level, &cm->cmsg_level, efault_end);
+		unsafe_put_user(type, &cm->cmsg_type, efault_end);
+		unsafe_copy_to_user(CMSG_USER_DATA(cm), data,
+				    cmlen - sizeof(*cm), efault_end);
+		user_write_access_end();
 	} else {
 		struct cmsghdr *cm = msg->msg_control;
 
@@ -310,6 +301,8 @@ int put_cmsg(struct msghdr * msg, int level, int type, int len, void *data)
 	msg->msg_controllen -= cmlen;
 	return 0;
 
+efault_end:
+	user_write_access_end();
 efault:
 	return -EFAULT;
 }
@@ -331,10 +324,8 @@ void put_cmsg_scm_timestamping64(struct msghdr *msg, struct scm_timestamping_int
 	int i;
 
 	for (i = 0; i < ARRAY_SIZE(tss.ts); i++) {
-		struct timespec64 tv = ktime_to_timespec64(tss_internal->ts[i]);
-
-		tss.ts[i].tv_sec = tv.tv_sec;
-		tss.ts[i].tv_nsec = tv.tv_nsec;
+		tss.ts[i].tv_sec = tss_internal->ts[i].tv_sec;
+		tss.ts[i].tv_nsec = tss_internal->ts[i].tv_nsec;
 	}
 
 	put_cmsg(msg, SOL_SOCKET, SO_TIMESTAMPING_NEW, sizeof(tss), &tss);
@@ -347,10 +338,8 @@ void put_cmsg_scm_timestamping(struct msghdr *msg, struct scm_timestamping_inter
 	int i;
 
 	for (i = 0; i < ARRAY_SIZE(tss.ts); i++) {
-		struct timespec64 tv = ktime_to_timespec64(tss_internal->ts[i]);
-
-		tss.ts[i].tv_sec = tv.tv_sec;
-		tss.ts[i].tv_nsec = tv.tv_nsec;
+		tss.ts[i].tv_sec = tss_internal->ts[i].tv_sec;
+		tss.ts[i].tv_nsec = tss_internal->ts[i].tv_nsec;
 	}
 
 	put_cmsg(msg, SOL_SOCKET, SO_TIMESTAMPING_OLD, sizeof(tss), &tss);
@@ -364,31 +353,7 @@ static int scm_max_fds(struct msghdr *msg)
 	return (msg->msg_controllen - sizeof(struct cmsghdr)) / sizeof(int);
 }
 
-int scm_recv_one_fd(struct file *f, int __user *ufd, unsigned int flags,
-		    bool notrunc)
-{
-	int error;
-
-	if (!ufd)
-		return -EFAULT;
-
-	error = security_file_receive(f);
-	if (error)
-		return notrunc ? put_user(error, ufd) : error;
-
-	FD_PREPARE(fdf, flags, get_file(f));
-	if (fdf->fd < 0)
-		return fdf->fd;
-
-	error = put_user(fdf->fd, ufd);
-	if (error)
-		return error;
-
-	__receive_sock(fdf->file);
-	return fd_publish(fdf);
-}
-
-void scm_detach_fds(struct msghdr *msg, struct scm_cookie *scm, bool notrunc)
+void scm_detach_fds(struct msghdr *msg, struct scm_cookie *scm)
 {
 	struct cmsghdr __user *cm =
 		(__force struct cmsghdr __user *)msg->msg_control_user;
@@ -402,12 +367,12 @@ void scm_detach_fds(struct msghdr *msg, struct scm_cookie *scm, bool notrunc)
 		return;
 
 	if (msg->msg_flags & MSG_CMSG_COMPAT) {
-		scm_detach_fds_compat(msg, scm, notrunc);
+		scm_detach_fds_compat(msg, scm);
 		return;
 	}
 
 	for (i = 0; i < fdmax; i++) {
-		err = scm_recv_one_fd(scm->fp->fp[i], cmsg_data + i, o_flags, notrunc);
+		err = scm_recv_one_fd(scm->fp->fp[i], cmsg_data + i, o_flags);
 		if (err < 0)
 			break;
 	}
@@ -499,15 +464,10 @@ static bool scm_has_secdata(struct sock *sk)
 }
 #endif
 
-static void scm_pidfd_recv(struct msghdr *msg, struct scm_cookie *scm,
-			   enum pid_type type, int cmsg_type)
+static void scm_pidfd_recv(struct msghdr *msg, struct scm_cookie *scm)
 {
-	unsigned int flags = PIDFD_STALE;
 	struct file *pidfd_file = NULL;
-	struct pid *pid;
 	int len, pidfd;
-
-	pid = scm->pid[type];
 
 	/* put_cmsg() doesn't return an error if CMSG is truncated,
 	 * that's why we need to opencode these checks here.
@@ -522,15 +482,12 @@ static void scm_pidfd_recv(struct msghdr *msg, struct scm_cookie *scm,
 		return;
 	}
 
-	if (!pid)
+	if (!scm->pid)
 		return;
 
-	if (type == PIDTYPE_PID)
-		flags |= PIDFD_THREAD;
+	pidfd = pidfd_prepare(scm->pid, PIDFD_STALE, &pidfd_file);
 
-	pidfd = pidfd_prepare(pid, flags, &pidfd_file);
-
-	if (put_cmsg(msg, SOL_SOCKET, cmsg_type, sizeof(int), &pidfd)) {
+	if (put_cmsg(msg, SOL_SOCKET, SCM_PIDFD, sizeof(int), &pidfd)) {
 		if (pidfd_file) {
 			put_unused_fd(pidfd);
 			fput(pidfd_file);
@@ -548,7 +505,7 @@ static bool __scm_recv_common(struct sock *sk, struct msghdr *msg,
 {
 	if (!msg->msg_control) {
 		if (sk->sk_scm_credentials || sk->sk_scm_pidfd ||
-		    sk->sk_scm_pidfd_thread || scm->fp || scm_has_secdata(sk))
+		    scm->fp || scm_has_secdata(sk))
 			msg->msg_flags |= MSG_CTRUNC;
 
 		scm_destroy(scm);
@@ -567,6 +524,9 @@ static bool __scm_recv_common(struct sock *sk, struct msghdr *msg,
 	}
 
 	scm_passec(sk, msg, scm);
+
+	if (scm->fp)
+		scm_detach_fds(msg, scm);
 
 	return true;
 }
@@ -587,18 +547,8 @@ void scm_recv_unix(struct socket *sock, struct msghdr *msg,
 	if (!__scm_recv_common(sock->sk, msg, scm, flags))
 		return;
 
-	if (scm->fp) {
-		struct unix_sock *u;
-
-		u = unix_sk(sock->sk);
-		scm_detach_fds(msg, scm, READ_ONCE(u->scm_rights_notrunc));
-	}
-
 	if (sock->sk->sk_scm_pidfd)
-		scm_pidfd_recv(msg, scm, PIDTYPE_TGID, SCM_PIDFD);
-
-	if (sock->sk->sk_scm_pidfd_thread)
-		scm_pidfd_recv(msg, scm, PIDTYPE_PID, SCM_PIDFD_THREAD);
+		scm_pidfd_recv(msg, scm);
 
 	scm_destroy_cred(scm);
 }

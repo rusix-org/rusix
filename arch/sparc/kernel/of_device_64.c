@@ -4,6 +4,7 @@
 #include <linux/dma-mapping.h>
 #include <linux/init.h>
 #include <linux/export.h>
+#include <linux/mod_devicetable.h>
 #include <linux/slab.h>
 #include <linux/errno.h>
 #include <linux/irq.h>
@@ -632,7 +633,7 @@ out:
 static struct platform_device * __init scan_one_device(struct device_node *dp,
 						 struct device *parent)
 {
-	struct platform_device *op = kzalloc_obj(*op);
+	struct platform_device *op = kzalloc(sizeof(*op), GFP_KERNEL);
 	const unsigned int *irq;
 	struct dev_archdata *sd;
 	int len, i;

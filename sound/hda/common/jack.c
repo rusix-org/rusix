@@ -76,11 +76,12 @@ static u32 read_pin_sense(struct hda_codec *codec, hda_nid_t nid, int dev_id)
 struct hda_jack_tbl *
 snd_hda_jack_tbl_get_mst(struct hda_codec *codec, hda_nid_t nid, int dev_id)
 {
-	struct hda_jack_tbl *jack;
+	struct hda_jack_tbl *jack = codec->jacktbl.list;
+	int i;
 
-	if (!nid)
+	if (!nid || !jack)
 		return NULL;
-	for (jack = codec->jacktbl; jack; jack = jack->next)
+	for (i = 0; i < codec->jacktbl.used; i++, jack++)
 		if (jack->nid == nid && jack->dev_id == dev_id)
 			return jack;
 	return NULL;
@@ -97,11 +98,12 @@ struct hda_jack_tbl *
 snd_hda_jack_tbl_get_from_tag(struct hda_codec *codec,
 			      unsigned char tag, int dev_id)
 {
-	struct hda_jack_tbl *jack;
+	struct hda_jack_tbl *jack = codec->jacktbl.list;
+	int i;
 
-	if (!tag)
+	if (!tag || !jack)
 		return NULL;
-	for (jack = codec->jacktbl; jack; jack = jack->next)
+	for (i = 0; i < codec->jacktbl.used; i++, jack++)
 		if (jack->tag == tag && jack->dev_id == dev_id)
 			return jack;
 	return NULL;
@@ -111,11 +113,12 @@ EXPORT_SYMBOL_GPL(snd_hda_jack_tbl_get_from_tag);
 static struct hda_jack_tbl *
 any_jack_tbl_get_from_nid(struct hda_codec *codec, hda_nid_t nid)
 {
-	struct hda_jack_tbl *jack;
+	struct hda_jack_tbl *jack = codec->jacktbl.list;
+	int i;
 
-	if (!nid)
+	if (!nid || !jack)
 		return NULL;
-	for (jack = codec->jacktbl; jack; jack = jack->next)
+	for (i = 0; i < codec->jacktbl.used; i++, jack++)
 		if (jack->nid == nid)
 			return jack;
 	return NULL;
@@ -139,19 +142,12 @@ snd_hda_jack_tbl_new(struct hda_codec *codec, hda_nid_t nid, int dev_id)
 
 	if (jack)
 		return jack;
-	jack = kzalloc_obj(*jack);
+	jack = snd_array_new(&codec->jacktbl);
 	if (!jack)
 		return NULL;
 	jack->nid = nid;
 	jack->dev_id = dev_id;
 	jack->jack_dirty = 1;
-	if (!codec->jacktbl)
-		codec->jacktbl = jack;
-	else
-		codec->jacktbl_last->next = jack;
-	codec->jacktbl_last = jack;
-	codec->jacktbl_used++;
-
 	if (existing_nid_jack) {
 		jack->tag = existing_nid_jack->tag;
 
@@ -162,7 +158,7 @@ snd_hda_jack_tbl_new(struct hda_codec *codec, hda_nid_t nid, int dev_id)
 		 */
 		jack->jack_detect = existing_nid_jack->jack_detect;
 	} else {
-		jack->tag = codec->jacktbl_used;
+		jack->tag = codec->jacktbl.used;
 	}
 
 	return jack;
@@ -170,9 +166,10 @@ snd_hda_jack_tbl_new(struct hda_codec *codec, hda_nid_t nid, int dev_id)
 
 void snd_hda_jack_tbl_disconnect(struct hda_codec *codec)
 {
-	struct hda_jack_tbl *jack;
+	struct hda_jack_tbl *jack = codec->jacktbl.list;
+	int i;
 
-	for (jack = codec->jacktbl; jack; jack = jack->next) {
+	for (i = 0; i < codec->jacktbl.used; i++, jack++) {
 		if (!codec->bus->shutdown && jack->jack)
 			snd_device_disconnect(codec->card, jack->jack);
 	}
@@ -180,31 +177,22 @@ void snd_hda_jack_tbl_disconnect(struct hda_codec *codec)
 
 void snd_hda_jack_tbl_clear(struct hda_codec *codec)
 {
-	struct hda_jack_tbl *jack, *jack_next;
+	struct hda_jack_tbl *jack = codec->jacktbl.list;
+	int i;
 
-	for (jack = codec->jacktbl; jack; jack = jack_next) {
+	for (i = 0; i < codec->jacktbl.used; i++, jack++) {
 		struct hda_jack_callback *cb, *next;
 
-		jack_next = jack->next;
-
-		if (jack->jack) {
-			/* fingers away from stale data */
-			jack->jack->private_data = NULL;
-			jack->jack->private_free = NULL;
-			/* free jack instances manually when clearing/reconfiguring */
-			if (!codec->bus->shutdown)
-				snd_device_free(codec->card, jack->jack);
-		}
+		/* free jack instances manually when clearing/reconfiguring */
+		if (!codec->bus->shutdown && jack->jack)
+			snd_device_free(codec->card, jack->jack);
 
 		for (cb = jack->callback; cb; cb = next) {
 			next = cb->next;
 			kfree(cb);
 		}
-		kfree(jack);
 	}
-
-	codec->jacktbl = codec->jacktbl_last = NULL;
-	codec->jacktbl_used = 0;
+	snd_array_free(&codec->jacktbl);
 }
 
 #define get_jack_plug_state(sense) !!(sense & AC_PINSENSE_PRESENCE)
@@ -250,9 +238,10 @@ static void jack_detect_update(struct hda_codec *codec,
  */
 void snd_hda_jack_set_dirty_all(struct hda_codec *codec)
 {
-	struct hda_jack_tbl *jack;
+	struct hda_jack_tbl *jack = codec->jacktbl.list;
+	int i;
 
-	for (jack = codec->jacktbl; jack; jack = jack->next)
+	for (i = 0; i < codec->jacktbl.used; i++, jack++)
 		if (jack->nid)
 			jack->jack_dirty = 1;
 }
@@ -346,7 +335,7 @@ snd_hda_jack_detect_enable_callback_mst(struct hda_codec *codec, hda_nid_t nid,
 	callback = find_callback_from_list(jack, func);
 
 	if (func && !callback) {
-		callback = kzalloc_obj(*callback);
+		callback = kzalloc(sizeof(*callback), GFP_KERNEL);
 		if (!callback)
 			return ERR_PTR(-ENOMEM);
 		callback->func = func;
@@ -400,15 +389,12 @@ EXPORT_SYMBOL_GPL(snd_hda_jack_detect_enable);
 int snd_hda_jack_set_gating_jack(struct hda_codec *codec, hda_nid_t gated_nid,
 				 hda_nid_t gating_nid)
 {
-	struct hda_jack_tbl *gated, *gating;
+	struct hda_jack_tbl *gated = snd_hda_jack_tbl_new(codec, gated_nid, 0);
+	struct hda_jack_tbl *gating =
+		snd_hda_jack_tbl_new(codec, gating_nid, 0);
 
 	WARN_ON(codec->dp_mst);
-	if (!snd_hda_jack_tbl_new(codec, gated_nid, 0) ||
-	    !snd_hda_jack_tbl_new(codec, gating_nid, 0))
-		return -ENOMEM;
 
-	gated = snd_hda_jack_tbl_get_mst(codec, gated_nid, 0);
-	gating = snd_hda_jack_tbl_get_mst(codec, gating_nid, 0);
 	if (!gated || !gating)
 		return -EINVAL;
 
@@ -489,17 +475,19 @@ EXPORT_SYMBOL_GPL(snd_hda_jack_set_button_state);
 void snd_hda_jack_report_sync(struct hda_codec *codec)
 {
 	struct hda_jack_tbl *jack;
-	int state;
+	int i, state;
 
 	/* update all jacks at first */
-	for (jack = codec->jacktbl; jack; jack = jack->next)
+	jack = codec->jacktbl.list;
+	for (i = 0; i < codec->jacktbl.used; i++, jack++)
 		if (jack->nid)
 			jack_detect_update(codec, jack);
 
 	/* report the updated jacks; it's done after updating all jacks
 	 * to make sure that all gating jacks properly have been set
 	 */
-	for (jack = codec->jacktbl; jack; jack = jack->next)
+	jack = codec->jacktbl.list;
+	for (i = 0; i < codec->jacktbl.used; i++, jack++)
 		if (jack->nid) {
 			if (!jack->jack || jack->block_report)
 				continue;
@@ -624,10 +612,10 @@ static int add_jack_kctl(struct hda_codec *codec, hda_nid_t nid,
 	if (base_name)
 		strscpy(name, base_name, sizeof(name));
 	else
-		snd_hda_get_pin_label(codec, nid, cfg, name, sizeof(name));
+		snd_hda_get_pin_label(codec, nid, cfg, name, sizeof(name), NULL);
 	if (phantom_jack)
 		/* Example final name: "Internal Mic Phantom Jack" */
-		hda_append_suffix(name, " Phantom", sizeof(name));
+		strncat(name, " Phantom", sizeof(name) - strlen(name) - 1);
 	err = snd_hda_jack_add_kctl(codec, nid, name, phantom_jack, 0, NULL);
 	if (err < 0)
 		return err;
@@ -767,10 +755,10 @@ EXPORT_SYMBOL_GPL(snd_hda_jack_unsol_event);
  */
 void snd_hda_jack_poll_all(struct hda_codec *codec)
 {
-	struct hda_jack_tbl *jack;
-	int changes = 0;
+	struct hda_jack_tbl *jack = codec->jacktbl.list;
+	int i, changes = 0;
 
-	for (jack = codec->jacktbl; jack; jack = jack->next) {
+	for (i = 0; i < codec->jacktbl.used; i++, jack++) {
 		unsigned int old_sense;
 		if (!jack->nid || !jack->jack_dirty || jack->phantom_jack)
 			continue;

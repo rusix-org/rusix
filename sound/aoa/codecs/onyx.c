@@ -32,7 +32,6 @@
 #include <linux/module.h>
 #include <linux/of.h>
 #include <linux/slab.h>
-#include <sound/asoundef.h>
 MODULE_AUTHOR("Johannes Berg <johannes@sipsolutions.net>");
 MODULE_LICENSE("GPL");
 MODULE_DESCRIPTION("pcm3052 (onyx) codec driver for snd-aoa");
@@ -515,36 +514,8 @@ static int onyx_spdif_put(struct snd_kcontrol *kcontrol,
 	return 1;
 }
 
-static int onyx_set_spdif_pcm_rate(struct onyx *onyx, unsigned int rate)
-{
-	u8 dig_info3, fs;
-
-	switch (rate) {
-	case 32000:
-		fs = IEC958_AES3_CON_FS_32000;
-		break;
-	case 44100:
-		fs = IEC958_AES3_CON_FS_44100;
-		break;
-	case 48000:
-		fs = IEC958_AES3_CON_FS_48000;
-		break;
-	default:
-		return -EINVAL;
-	}
-
-	if (onyx_read_register(onyx, ONYX_REG_DIG_INFO3, &dig_info3))
-		return -EBUSY;
-	dig_info3 = (dig_info3 & ~IEC958_AES3_CON_FS) | fs;
-	if (onyx_write_register(onyx, ONYX_REG_DIG_INFO3, dig_info3))
-		return -EBUSY;
-
-	return 0;
-}
-
 static const struct snd_kcontrol_new onyx_spdif_ctrl = {
-	.access =	SNDRV_CTL_ELEM_ACCESS_READWRITE |
-			SNDRV_CTL_ELEM_ACCESS_VOLATILE,
+	.access =	SNDRV_CTL_ELEM_ACCESS_READWRITE,
 	.iface =	SNDRV_CTL_ELEM_IFACE_PCM,
 	.name =		SNDRV_CTL_NAME_IEC958("",PLAYBACK,DEFAULT),
 	.info =		onyx_spdif_info,
@@ -724,9 +695,9 @@ static int onyx_prepare(struct codec_info_item *cii,
 	case 32000:
 	case 44100:
 	case 48000:
-		if (onyx->codec.connected & 2)
-			return onyx_set_spdif_pcm_rate(onyx,
-						       substream->runtime->rate);
+		/* these rates are ok for all outputs */
+		/* FIXME: program spdif channel control bits here so that
+		 *	  userspace doesn't have to if it only plays pcm! */
 		return 0;
 	default:
 		/* got some rate that the digital output can't do,
@@ -884,7 +855,7 @@ static int onyx_init_codec(struct aoa_codec *codec)
 	/* if no inputs are present... */
 	if ((onyx->codec.connected & 0xC) == 0) {
 		if (!onyx->codec_info)
-			onyx->codec_info = kmalloc_obj(struct codec_info);
+			onyx->codec_info = kmalloc(sizeof(struct codec_info), GFP_KERNEL);
 		if (!onyx->codec_info)
 			return -ENOMEM;
 		ci = onyx->codec_info;
@@ -895,7 +866,7 @@ static int onyx_init_codec(struct aoa_codec *codec)
 	/* if no outputs are present... */
 	if ((onyx->codec.connected & 3) == 0) {
 		if (!onyx->codec_info)
-			onyx->codec_info = kmalloc_obj(struct codec_info);
+			onyx->codec_info = kmalloc(sizeof(struct codec_info), GFP_KERNEL);
 		if (!onyx->codec_info)
 			return -ENOMEM;
 		ci = onyx->codec_info;
@@ -986,7 +957,7 @@ static int onyx_i2c_probe(struct i2c_client *client)
 	struct onyx *onyx;
 	u8 dummy;
 
-	onyx = kzalloc_obj(struct onyx);
+	onyx = kzalloc(sizeof(struct onyx), GFP_KERNEL);
 
 	if (!onyx)
 		return -ENOMEM;
@@ -1009,12 +980,10 @@ static int onyx_i2c_probe(struct i2c_client *client)
 	onyx->codec.node = of_node_get(node);
 
 	if (aoa_codec_register(&onyx->codec)) {
-		goto fail_put;
+		goto fail;
 	}
 	printk(KERN_DEBUG PFX "created and attached onyx instance\n");
 	return 0;
- fail_put:
-	of_node_put(onyx->codec.node);
  fail:
 	kfree(onyx);
 	return -ENODEV;

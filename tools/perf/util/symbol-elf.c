@@ -350,8 +350,7 @@ static bool get_ifunc_name(Elf *elf, struct dso *dso, GElf_Ehdr *ehdr,
 	sym = dso__find_symbol_nocache(dso, addr);
 
 	/* Expecting the address to be an IFUNC or IFUNC alias */
-	if (!sym || sym->start != addr ||
-	    (symbol__type(sym) != STT_GNU_IFUNC && !symbol__ifunc_alias(sym)))
+	if (!sym || sym->start != addr || (sym->type != STT_GNU_IFUNC && !sym->ifunc_alias))
 		return false;
 
 	snprintf(buf, buf_sz, "%s@plt", sym->name);
@@ -373,8 +372,10 @@ static bool get_plt_sizes(struct dso *dso, GElf_Ehdr *ehdr, GElf_Shdr *shdr_plt,
 		*plt_entry_size = 12;
 		return true;
 	case EM_AARCH64:
+		*plt_header_size = 32;
+		*plt_entry_size = 16;
+		return true;
 	case EM_LOONGARCH:
-	case EM_RISCV:
 		*plt_header_size = 32;
 		*plt_entry_size = 16;
 		return true;
@@ -1087,15 +1088,15 @@ void symsrc__destroy(struct symsrc *ss)
 	close(ss->fd);
 }
 
-static bool elf__needs_adjust_symbols(const GElf_Ehdr *ehdr)
+bool elf__needs_adjust_symbols(GElf_Ehdr ehdr)
 {
 	/*
 	 * Usually vmlinux is an ELF file with type ET_EXEC for most
 	 * architectures; except Arm64 kernel is linked with option
 	 * '-share', so need to check type ET_DYN.
 	 */
-	return ehdr->e_type == ET_EXEC || ehdr->e_type == ET_REL ||
-	       ehdr->e_type == ET_DYN;
+	return ehdr.e_type == ET_EXEC || ehdr.e_type == ET_REL ||
+	       ehdr.e_type == ET_DYN;
 }
 
 static Elf *read_gnu_debugdata(struct dso *dso, Elf *elf, const char *name, int *fd_ret)
@@ -1143,9 +1144,9 @@ static Elf *read_gnu_debugdata(struct dso *dso, Elf *elf, const char *name, int 
 		return NULL;
 	}
 
-	temp_fd = mkostemp(temp_filename, O_CLOEXEC);
+	temp_fd = mkstemp(temp_filename);
 	if (temp_fd < 0) {
-		pr_debug("%s: mkostemp: %m\n", __func__);
+		pr_debug("%s: mkstemp: %m\n", __func__);
 		*dso__load_errno(dso) = -errno;
 		fclose(wrapped);
 		return NULL;
@@ -1268,7 +1269,7 @@ int symsrc__init(struct symsrc *ss, struct dso *dso, const char *name,
 	if (dso__kernel(dso) == DSO_SPACE__USER)
 		ss->adjust_symbols = true;
 	else
-		ss->adjust_symbols = elf__needs_adjust_symbols(&ehdr);
+		ss->adjust_symbols = elf__needs_adjust_symbols(ehdr);
 
 	ss->name   = strdup(name);
 	if (!ss->name) {
@@ -1376,24 +1377,6 @@ static u64 ref_reloc(struct kmap *kmap)
 void __weak arch__sym_update(struct symbol *s __maybe_unused,
 		GElf_Sym *sym __maybe_unused) { }
 
-struct remap_kernel_ctx {
-	u64 sh_addr;
-	u64 sh_size;
-	u64 sh_offset;
-	struct kmap *kmap;
-};
-
-static int remap_kernel_cb(struct map *map, void *data)
-{
-	struct remap_kernel_ctx *ctx = data;
-
-	map__set_start(map, ctx->sh_addr + ref_reloc(ctx->kmap));
-	map__set_end(map, map__start(map) + ctx->sh_size);
-	map__set_pgoff(map, ctx->sh_offset);
-	map__set_mapping_type(map, MAPPING_TYPE__DSO);
-	return 0;
-}
-
 static int dso__process_kernel_symbol(struct dso *dso, struct map *map,
 				      GElf_Sym *sym, GElf_Shdr *shdr,
 				      struct maps *kmaps, struct kmap *kmap,
@@ -1424,15 +1407,22 @@ static int dso__process_kernel_symbol(struct dso *dso, struct map *map,
 		 * map to the kernel dso.
 		 */
 		if (*remap_kernel && dso__kernel(dso) && !kmodule) {
-			struct remap_kernel_ctx ctx = {
-				.sh_addr = shdr->sh_addr,
-				.sh_size = shdr->sh_size,
-				.sh_offset = shdr->sh_offset,
-				.kmap = kmap
-			};
-
 			*remap_kernel = false;
-			maps__mutate_mapping(kmaps, map, remap_kernel_cb, &ctx);
+			map__set_start(map, shdr->sh_addr + ref_reloc(kmap));
+			map__set_end(map, map__start(map) + shdr->sh_size);
+			map__set_pgoff(map, shdr->sh_offset);
+			map__set_mapping_type(map, MAPPING_TYPE__DSO);
+			/* Ensure maps are correctly ordered */
+			if (kmaps) {
+				int err;
+				struct map *tmp = map__get(map);
+
+				maps__remove(kmaps, map);
+				err = maps__insert(kmaps, map);
+				map__put(tmp);
+				if (err)
+					return err;
+			}
 		}
 
 		/*
@@ -1497,11 +1487,8 @@ static int dso__process_kernel_symbol(struct dso *dso, struct map *map,
 			map__set_mapping_type(curr_map, MAPPING_TYPE__IDENTITY);
 		}
 		dso__set_symtab_type(curr_dso, dso__symtab_type(dso));
-		if (maps__insert(kmaps, curr_map)) {
-			dso__put(curr_dso);
-			map__put(curr_map);
+		if (maps__insert(kmaps, curr_map))
 			return -1;
-		}
 		dsos__add(&maps__machine(kmaps)->dsos, curr_dso);
 		dso__set_loaded(curr_dso);
 		dso__put(*curr_dsop);
@@ -1638,11 +1625,9 @@ dso__load_sym_internal(struct dso *dso, struct map *map, struct symsrc *syms_ss,
 		if (!is_label && !elf_sym__filter(&sym))
 			continue;
 
-		/*
-		 * Reject ARM ELF "mapping symbols": these aren't unique and
+		/* Reject ARM ELF "mapping symbols": these aren't unique and
 		 * don't identify functions, so will confuse the profile
-		 * output:
-		 */
+		 * output: */
 		if (ehdr.e_machine == EM_ARM || ehdr.e_machine == EM_AARCH64) {
 			if (elf_name[0] == '$' && strchr("adtx", elf_name[1])
 			    && (elf_name[2] == '\0' || elf_name[2] == '.'))
@@ -1654,10 +1639,6 @@ dso__load_sym_internal(struct dso *dso, struct map *map, struct symsrc *syms_ss,
 			if (elf_name[0] == '$' && strchr("dx", elf_name[1]))
 				continue;
 		}
-
-		/* Reject kernel mapping symbols for kernel DSOs only */
-		if (dso__kernel(dso) && is_ignored_kernel_symbol(elf_name))
-			continue;
 
 		if (runtime_ss->opdsec && sym.st_shndx == runtime_ss->opdidx) {
 			u32 offset = sym.st_value - syms_ss->opdshdr.sh_addr;
@@ -1681,13 +1662,8 @@ dso__load_sym_internal(struct dso *dso, struct map *map, struct symsrc *syms_ss,
 			continue;
 
 		sec = elf_getscn(syms_ss->elf, sym.st_shndx);
-		if (!sec) {
-			if (dynsym && ehdr.e_shnum &&
-			    sym.st_shndx < SHN_LORESERVE &&
-			    sym.st_shndx >= ehdr.e_shnum)
-				continue;
+		if (!sec)
 			goto out_elf_end;
-		}
 
 		gelf_getshdr(sec, &shdr);
 
@@ -1784,7 +1760,7 @@ dso__load_sym_internal(struct dso *dso, struct map *map, struct symsrc *syms_ss,
 
 		arch__sym_update(f, &sym);
 
-		__symbols__insert(dso__symbols(curr_dso), f);
+		__symbols__insert(dso__symbols(curr_dso), f, dso__kernel(dso));
 		nr++;
 	}
 	dso__put(curr_dso);
@@ -2033,7 +2009,7 @@ static int kcore__init(struct kcore *kcore, char *filename, int elfclass,
 	kcore->elfclass = elfclass;
 
 	if (temp)
-		kcore->fd = mkostemp(filename, O_CLOEXEC);
+		kcore->fd = mkstemp(filename);
 	else
 		kcore->fd = open(filename, O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC, 0400);
 	if (kcore->fd == -1)
@@ -2219,10 +2195,6 @@ static int kcore_copy__process_kallsyms(void *arg, const char *name, char type,
 	struct kcore_copy_info *kci = arg;
 
 	if (!kallsyms__is_function(type))
-		return 0;
-
-	/* Ignore livepatch symbols */
-	if (is_livepatch_symbol(name))
 		return 0;
 
 	if (strchr(name, '[')) {

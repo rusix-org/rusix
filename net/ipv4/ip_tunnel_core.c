@@ -60,8 +60,8 @@ void iptunnel_xmit(struct sock *sk, struct rtable *rt, struct sk_buff *skb,
 
 	if (unlikely(dev_recursion_level() > IP_TUNNEL_RECURSION_LIMIT)) {
 		if (dev) {
-			net_crit_ratelimited("Dead loop on virtual device %s (net %llu), fix it urgently!\n",
-					     dev->name, dev_net(dev)->net_cookie);
+			net_crit_ratelimited("Dead loop on virtual device %s, fix it urgently!\n",
+					     dev->name);
 			DEV_STATS_INC(dev, tx_errors);
 		}
 		ip_rt_put(rt);
@@ -106,24 +106,19 @@ void iptunnel_xmit(struct sock *sk, struct rtable *rt, struct sk_buff *skb,
 }
 EXPORT_SYMBOL_GPL(iptunnel_xmit);
 
-enum skb_drop_reason
-__iptunnel_pull_header(struct sk_buff *skb, int hdr_len,
-		       __be16 inner_proto, bool raw_proto, bool xnet)
+int __iptunnel_pull_header(struct sk_buff *skb, int hdr_len,
+			   __be16 inner_proto, bool raw_proto, bool xnet)
 {
-	enum skb_drop_reason reason;
-
-	reason = pskb_may_pull_reason(skb, hdr_len);
-	if (unlikely(reason))
-		return reason;
+	if (unlikely(!pskb_may_pull(skb, hdr_len)))
+		return -ENOMEM;
 
 	skb_pull_rcsum(skb, hdr_len);
 
 	if (!raw_proto && inner_proto == htons(ETH_P_TEB)) {
 		struct ethhdr *eh;
 
-		reason = pskb_may_pull_reason(skb, ETH_HLEN);
-		if (unlikely(reason))
-			return reason;
+		if (unlikely(!pskb_may_pull(skb, ETH_HLEN)))
+			return -ENOMEM;
 
 		eh = (struct ethhdr *)skb->data;
 		if (likely(eth_proto_is_802_3(eh->h_proto)))
@@ -140,10 +135,7 @@ __iptunnel_pull_header(struct sk_buff *skb, int hdr_len,
 	skb_set_queue_mapping(skb, 0);
 	skb_scrub_packet(skb, xnet);
 
-	if (unlikely(iptunnel_pull_offloads(skb)))
-		return SKB_DROP_REASON_NOMEM;
-
-	return SKB_NOT_DROPPED_YET;
+	return iptunnel_pull_offloads(skb);
 }
 EXPORT_SYMBOL_GPL(__iptunnel_pull_header);
 

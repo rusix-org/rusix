@@ -8,7 +8,6 @@ obj-y += int_sqrt.o
 endif
 
 obj-$(CONFIG_CORDIC)		+= cordic.o
-obj-$(CONFIG_POLYNOMIAL)	+= polynomial.o
 obj-$(CONFIG_PRIME_NUMBERS)	+= prime_numbers.o
 obj-$(CONFIG_RATIONAL)		+= rational.o
 

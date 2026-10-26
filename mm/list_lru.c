@@ -15,28 +15,6 @@
 #include "slab.h"
 #include "internal.h"
 
-static inline void lock_list_lru(struct list_lru_one *l, bool irq,
-				 unsigned long *irq_flags)
-{
-	if (irq_flags)
-		spin_lock_irqsave(&l->lock, *irq_flags);
-	else if (irq)
-		spin_lock_irq(&l->lock);
-	else
-		spin_lock(&l->lock);
-}
-
-static inline void unlock_list_lru(struct list_lru_one *l, bool irq_off,
-				   unsigned long *irq_flags)
-{
-	if (irq_flags)
-		spin_unlock_irqrestore(&l->lock, *irq_flags);
-	else if (irq_off)
-		spin_unlock_irq(&l->lock);
-	else
-		spin_unlock(&l->lock);
-}
-
 #ifdef CONFIG_MEMCG
 static LIST_HEAD(memcg_list_lrus);
 static DEFINE_MUTEX(list_lrus_mutex);
@@ -82,23 +60,34 @@ list_lru_from_memcg_idx(struct list_lru *lru, int nid, int idx)
 	return &lru->node[nid].lru;
 }
 
+static inline bool lock_list_lru(struct list_lru_one *l, bool irq)
+{
+	if (irq)
+		spin_lock_irq(&l->lock);
+	else
+		spin_lock(&l->lock);
+	if (unlikely(READ_ONCE(l->nr_items) == LONG_MIN)) {
+		if (irq)
+			spin_unlock_irq(&l->lock);
+		else
+			spin_unlock(&l->lock);
+		return false;
+	}
+	return true;
+}
+
 static inline struct list_lru_one *
-lock_list_lru_of_memcg(struct list_lru *lru, int nid,
-		       struct mem_cgroup **memcg, bool irq,
-		       unsigned long *irq_flags, bool skip_empty)
+lock_list_lru_of_memcg(struct list_lru *lru, int nid, struct mem_cgroup *memcg,
+		       bool irq, bool skip_empty)
 {
 	struct list_lru_one *l;
 
 	rcu_read_lock();
 again:
-	l = list_lru_from_memcg_idx(lru, nid, memcg_kmem_id(*memcg));
-	if (likely(l)) {
-		lock_list_lru(l, irq, irq_flags);
-		if (likely(READ_ONCE(l->nr_items) != LONG_MIN)) {
-			rcu_read_unlock();
-			return l;
-		}
-		unlock_list_lru(l, irq, irq_flags);
+	l = list_lru_from_memcg_idx(lru, nid, memcg_kmem_id(memcg));
+	if (likely(l) && lock_list_lru(l, irq)) {
+		rcu_read_unlock();
+		return l;
 	}
 	/*
 	 * Caller may simply bail out if raced with reparenting or
@@ -108,9 +97,17 @@ again:
 		rcu_read_unlock();
 		return NULL;
 	}
-	VM_WARN_ON(!css_is_dying(&(*memcg)->css));
-	*memcg = parent_mem_cgroup(*memcg);
+	VM_WARN_ON(!css_is_dying(&memcg->css));
+	memcg = parent_mem_cgroup(memcg);
 	goto again;
+}
+
+static inline void unlock_list_lru(struct list_lru_one *l, bool irq_off)
+{
+	if (irq_off)
+		spin_unlock_irq(&l->lock);
+	else
+		spin_unlock(&l->lock);
 }
 #else
 static void list_lru_register(struct list_lru *lru)
@@ -138,110 +135,49 @@ list_lru_from_memcg_idx(struct list_lru *lru, int nid, int idx)
 }
 
 static inline struct list_lru_one *
-lock_list_lru_of_memcg(struct list_lru *lru, int nid,
-		       struct mem_cgroup **memcg, bool irq,
-		       unsigned long *irq_flags, bool skip_empty)
+lock_list_lru_of_memcg(struct list_lru *lru, int nid, struct mem_cgroup *memcg,
+		       bool irq, bool skip_empty)
 {
 	struct list_lru_one *l = &lru->node[nid].lru;
 
-	lock_list_lru(l, irq, irq_flags);
+	if (irq)
+		spin_lock_irq(&l->lock);
+	else
+		spin_lock(&l->lock);
 
 	return l;
 }
+
+static inline void unlock_list_lru(struct list_lru_one *l, bool irq_off)
+{
+	if (irq_off)
+		spin_unlock_irq(&l->lock);
+	else
+		spin_unlock(&l->lock);
+}
 #endif /* CONFIG_MEMCG */
-
-struct list_lru_one *list_lru_lock(struct list_lru *lru, int nid,
-				   struct mem_cgroup **memcg)
-{
-	return lock_list_lru_of_memcg(lru, nid, memcg, /*irq=*/false,
-				      /*irq_flags=*/NULL, /*skip_empty=*/false);
-}
-
-void list_lru_unlock(struct list_lru_one *l)
-{
-	unlock_list_lru(l, /*irq_off=*/false, /*irq_flags=*/NULL);
-}
-
-struct list_lru_one *list_lru_lock_irq(struct list_lru *lru, int nid,
-				       struct mem_cgroup **memcg)
-{
-	return lock_list_lru_of_memcg(lru, nid, memcg, /*irq=*/true,
-				      /*irq_flags=*/NULL, /*skip_empty=*/false);
-}
-
-void list_lru_unlock_irq(struct list_lru_one *l)
-{
-	unlock_list_lru(l, /*irq_off=*/true, /*irq_flags=*/NULL);
-}
-
-struct list_lru_one *list_lru_lock_irqsave(struct list_lru *lru, int nid,
-					   struct mem_cgroup **memcg,
-					   unsigned long *flags)
-{
-	return lock_list_lru_of_memcg(lru, nid, memcg, /*irq=*/true,
-				      /*irq_flags=*/flags, /*skip_empty=*/false);
-}
-
-void list_lru_unlock_irqrestore(struct list_lru_one *l, unsigned long *flags)
-{
-	unlock_list_lru(l, /*irq_off=*/true, /*irq_flags=*/flags);
-}
-
-bool __list_lru_add(struct list_lru *lru, struct list_lru_one *l,
-		    struct list_head *item, int nid,
-		    struct mem_cgroup *memcg)
-{
-	if (list_empty(item)) {
-		list_add_tail(item, &l->list);
-		/*
-		 * Set shrinker bit on the memcg that owns the locked
-		 * sublist - lock_list_lru_of_memcg() may have walked up
-		 * past a dying memcg, and the bit must be set there.
-		 */
-		if (!l->nr_items++)
-			set_shrinker_bit(memcg, nid, lru_shrinker_id(lru));
-		atomic_long_inc(&lru->node[nid].nr_items);
-		return true;
-	}
-	return false;
-}
-EXPORT_SYMBOL_GPL(list_lru_add);
-
-bool __list_lru_del(struct list_lru *lru, struct list_lru_one *l,
-		    struct list_head *item, int nid)
-{
-	if (!list_empty(item)) {
-		list_del_init(item);
-		l->nr_items--;
-		atomic_long_dec(&lru->node[nid].nr_items);
-		return true;
-	}
-	return false;
-}
 
 /* The caller must ensure the memcg lifetime. */
 bool list_lru_add(struct list_lru *lru, struct list_head *item, int nid,
 		  struct mem_cgroup *memcg)
 {
+	struct list_lru_node *nlru = &lru->node[nid];
 	struct list_lru_one *l;
-	bool ret;
 
-	l = list_lru_lock(lru, nid, &memcg);
-	ret = __list_lru_add(lru, l, item, nid, memcg);
-	list_lru_unlock(l);
-	return ret;
-}
-
-bool list_lru_add_irq(struct list_lru *lru, struct list_head *item,
-		      int nid, struct mem_cgroup *memcg)
-{
-	struct list_lru_one *l;
-	bool ret;
-
-	l = list_lru_lock_irq(lru, nid, &memcg);
-	ret = __list_lru_add(lru, l, item, nid, memcg);
-	list_lru_unlock_irq(l);
-	return ret;
+	l = lock_list_lru_of_memcg(lru, nid, memcg, false, false);
+	if (!l)
+		return false;
+	if (list_empty(item)) {
+		list_add_tail(item, &l->list);
+		/* Set shrinker bit if the first element was added */
+		if (!l->nr_items++)
+			set_shrinker_bit(memcg, nid, lru_shrinker_id(lru));
+		unlock_list_lru(l, false);
+		atomic_long_inc(&nlru->nr_items);
+		return true;
+	}
+	unlock_list_lru(l, false);
+	return false;
 }
 
 bool list_lru_add_obj(struct list_lru *lru, struct list_head *item)
@@ -251,7 +187,7 @@ bool list_lru_add_obj(struct list_lru *lru, struct list_head *item)
 
 	if (list_lru_memcg_aware(lru)) {
 		rcu_read_lock();
-		ret = list_lru_add(lru, item, nid, mem_cgroup_from_virt(item));
+		ret = list_lru_add(lru, item, nid, mem_cgroup_from_slab_obj(item));
 		rcu_read_unlock();
 	} else {
 		ret = list_lru_add(lru, item, nid, NULL);
@@ -265,13 +201,20 @@ EXPORT_SYMBOL_GPL(list_lru_add_obj);
 bool list_lru_del(struct list_lru *lru, struct list_head *item, int nid,
 		  struct mem_cgroup *memcg)
 {
+	struct list_lru_node *nlru = &lru->node[nid];
 	struct list_lru_one *l;
-	bool ret;
-
-	l = list_lru_lock(lru, nid, &memcg);
-	ret = __list_lru_del(lru, l, item, nid);
-	list_lru_unlock(l);
-	return ret;
+	l = lock_list_lru_of_memcg(lru, nid, memcg, false, false);
+	if (!l)
+		return false;
+	if (!list_empty(item)) {
+		list_del_init(item);
+		l->nr_items--;
+		unlock_list_lru(l, false);
+		atomic_long_dec(&nlru->nr_items);
+		return true;
+	}
+	unlock_list_lru(l, false);
+	return false;
 }
 
 bool list_lru_del_obj(struct list_lru *lru, struct list_head *item)
@@ -281,7 +224,7 @@ bool list_lru_del_obj(struct list_lru *lru, struct list_head *item)
 
 	if (list_lru_memcg_aware(lru)) {
 		rcu_read_lock();
-		ret = list_lru_del(lru, item, nid, mem_cgroup_from_virt(item));
+		ret = list_lru_del(lru, item, nid, mem_cgroup_from_slab_obj(item));
 		rcu_read_unlock();
 	} else {
 		ret = list_lru_del(lru, item, nid, NULL);
@@ -344,8 +287,7 @@ __list_lru_walk_one(struct list_lru *lru, int nid, struct mem_cgroup *memcg,
 	unsigned long isolated = 0;
 
 restart:
-	l = lock_list_lru_of_memcg(lru, nid, &memcg, /*irq=*/irq_off,
-				   /*irq_flags=*/NULL, /*skip_empty=*/true);
+	l = lock_list_lru_of_memcg(lru, nid, memcg, irq_off, true);
 	if (!l)
 		return isolated;
 	list_for_each_safe(item, n, &l->list) {
@@ -386,7 +328,7 @@ restart:
 			BUG();
 		}
 	}
-	unlock_list_lru(l, irq_off, NULL);
+	unlock_list_lru(l, irq_off);
 out:
 	return isolated;
 }
@@ -427,7 +369,7 @@ unsigned long list_lru_walk_node(struct list_lru *lru, int nid,
 
 		xa_for_each(&lru->xa, index, mlru) {
 			rcu_read_lock();
-			memcg = mem_cgroup_from_private_id(index);
+			memcg = mem_cgroup_from_id(index);
 			if (!mem_cgroup_tryget(memcg)) {
 				rcu_read_unlock();
 				continue;
@@ -465,7 +407,7 @@ static struct list_lru_memcg *memcg_init_list_lru_one(struct list_lru *lru, gfp_
 	int nid;
 	struct list_lru_memcg *mlru;
 
-	mlru = kmalloc_flex(*mlru, node, nr_node_ids, gfp);
+	mlru = kmalloc(struct_size(mlru, node, nr_node_ids), gfp);
 	if (!mlru)
 		return NULL;
 
@@ -571,13 +513,16 @@ static inline bool memcg_list_lru_allocated(struct mem_cgroup *memcg,
 	return idx < 0 || xa_load(&lru->xa, idx);
 }
 
-static int __memcg_list_lru_alloc(struct mem_cgroup *memcg,
-				  struct list_lru *lru, gfp_t gfp)
+int memcg_list_lru_alloc(struct mem_cgroup *memcg, struct list_lru *lru,
+			 gfp_t gfp)
 {
 	unsigned long flags;
 	struct list_lru_memcg *mlru = NULL;
 	struct mem_cgroup *pos, *parent;
 	XA_STATE(xas, &lru->xa, 0);
+
+	if (!list_lru_memcg_aware(lru) || memcg_list_lru_allocated(memcg, lru))
+		return 0;
 
 	gfp &= GFP_RECLAIM_MASK;
 	/*
@@ -619,38 +564,6 @@ static int __memcg_list_lru_alloc(struct mem_cgroup *memcg,
 
 	return xas_error(&xas);
 }
-
-int memcg_list_lru_alloc(struct mem_cgroup *memcg, struct list_lru *lru,
-			 gfp_t gfp)
-{
-	if (!list_lru_memcg_aware(lru) || memcg_list_lru_allocated(memcg, lru))
-		return 0;
-	return __memcg_list_lru_alloc(memcg, lru, gfp);
-}
-
-int folio_memcg_list_lru_alloc(struct folio *folio, struct list_lru *lru,
-			       gfp_t gfp)
-{
-	struct mem_cgroup *memcg;
-	int res;
-
-	if (!list_lru_memcg_aware(lru))
-		return 0;
-
-	/* Fast path when list_lru heads already exist */
-	rcu_read_lock();
-	memcg = folio_memcg(folio);
-	res = memcg_list_lru_allocated(memcg, lru);
-	rcu_read_unlock();
-	if (likely(res))
-		return 0;
-
-	/* Allocation may block, pin the memcg */
-	memcg = get_mem_cgroup_from_folio(folio);
-	res = __memcg_list_lru_alloc(memcg, lru, gfp);
-	mem_cgroup_put(memcg);
-	return res;
-}
 #else
 static inline void memcg_init_list_lru(struct list_lru *lru, bool memcg_aware)
 {
@@ -666,21 +579,16 @@ int __list_lru_init(struct list_lru *lru, bool memcg_aware, struct shrinker *shr
 	int i;
 
 #ifdef CONFIG_MEMCG
-	/*
-	 * If the shrinker fell back to being non-memcg-aware (e.g. with
-	 * cgroup.memory=nokmem), its id was never assigned and holds a
-	 * stale 0. Don't let set_shrinker_bit() act on it.
-	 */
-	if (shrinker && (shrinker->flags & SHRINKER_MEMCG_AWARE))
+	if (shrinker)
 		lru->shrinker_id = shrinker->id;
 	else
 		lru->shrinker_id = -1;
 
-	if (mem_cgroup_disabled() || mem_cgroup_kmem_disabled())
+	if (mem_cgroup_kmem_disabled())
 		memcg_aware = false;
 #endif
 
-	lru->node = kzalloc_objs(*lru->node, nr_node_ids);
+	lru->node = kcalloc(nr_node_ids, sizeof(*lru->node), GFP_KERNEL);
 	if (!lru->node)
 		return -ENOMEM;
 

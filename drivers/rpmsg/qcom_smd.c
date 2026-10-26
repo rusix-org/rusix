@@ -922,7 +922,7 @@ static struct rpmsg_endpoint *qcom_smd_create_ept(struct rpmsg_device *rpdev,
 		return NULL;
 	}
 
-	qsept = kzalloc_obj(*qsept);
+	qsept = kzalloc(sizeof(*qsept), GFP_KERNEL);
 	if (!qsept)
 		return NULL;
 
@@ -960,30 +960,28 @@ static void qcom_smd_destroy_ept(struct rpmsg_endpoint *ept)
 	kref_put(&ept->refcount, __ept_release);
 }
 
-static int qcom_smd_send(struct rpmsg_endpoint *ept, const void *data, int len)
+static int qcom_smd_send(struct rpmsg_endpoint *ept, void *data, int len)
 {
 	struct qcom_smd_endpoint *qsept = to_smd_endpoint(ept);
 
 	return __qcom_smd_send(qsept->qsch, data, len, true);
 }
 
-static int qcom_smd_trysend(struct rpmsg_endpoint *ept, const void *data, int len)
+static int qcom_smd_trysend(struct rpmsg_endpoint *ept, void *data, int len)
 {
 	struct qcom_smd_endpoint *qsept = to_smd_endpoint(ept);
 
 	return __qcom_smd_send(qsept->qsch, data, len, false);
 }
 
-static int qcom_smd_sendto(struct rpmsg_endpoint *ept, const void *data, int len,
-			   u32 dst)
+static int qcom_smd_sendto(struct rpmsg_endpoint *ept, void *data, int len, u32 dst)
 {
 	struct qcom_smd_endpoint *qsept = to_smd_endpoint(ept);
 
 	return __qcom_smd_send(qsept->qsch, data, len, true);
 }
 
-static int qcom_smd_trysendto(struct rpmsg_endpoint *ept, const void *data,
-			      int len, u32 dst)
+static int qcom_smd_trysendto(struct rpmsg_endpoint *ept, void *data, int len, u32 dst)
 {
 	struct qcom_smd_endpoint *qsept = to_smd_endpoint(ept);
 
@@ -1079,7 +1077,7 @@ static int qcom_smd_create_device(struct qcom_smd_channel *channel)
 
 	dev_dbg(&edge->dev, "registering '%s'\n", channel->name);
 
-	qsdev = kzalloc_obj(*qsdev);
+	qsdev = kzalloc(sizeof(*qsdev), GFP_KERNEL);
 	if (!qsdev)
 		return -ENOMEM;
 
@@ -1106,7 +1104,7 @@ static int qcom_smd_create_chrdev(struct qcom_smd_edge *edge)
 {
 	struct qcom_smd_device *qsdev;
 
-	qsdev = kzalloc_obj(*qsdev);
+	qsdev = kzalloc(sizeof(*qsdev), GFP_KERNEL);
 	if (!qsdev)
 		return -ENOMEM;
 
@@ -1134,7 +1132,7 @@ static struct qcom_smd_channel *qcom_smd_create_channel(struct qcom_smd_edge *ed
 	void *info;
 	int ret;
 
-	channel = kzalloc_obj(*channel);
+	channel = kzalloc(sizeof(*channel), GFP_KERNEL);
 	if (!channel)
 		return ERR_PTR(-ENOMEM);
 
@@ -1460,7 +1458,7 @@ static ssize_t rpmsg_name_show(struct device *dev,
 {
 	struct qcom_smd_edge *edge = to_smd_edge(dev);
 
-	return sysfs_emit(buf, "%s\n", edge->name);
+	return sprintf(buf, "%s\n", edge->name);
 }
 static DEVICE_ATTR_RO(rpmsg_name);
 
@@ -1486,7 +1484,7 @@ struct qcom_smd_edge *qcom_smd_register_edge(struct device *parent,
 	if (!qcom_smem_is_available())
 		return ERR_PTR(-EPROBE_DEFER);
 
-	edge = kzalloc_obj(*edge);
+	edge = kzalloc(sizeof(*edge), GFP_KERNEL);
 	if (!edge)
 		return ERR_PTR(-ENOMEM);
 

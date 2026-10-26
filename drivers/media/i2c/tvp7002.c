@@ -854,7 +854,6 @@ tvp7002_get_pad_format(struct v4l2_subdev *sd,
  */
 static int
 tvp7002_set_pad_format(struct v4l2_subdev *sd,
-		       const struct v4l2_subdev_client_info *ci,
 		       struct v4l2_subdev_state *sd_state,
 		       struct v4l2_subdev_format *fmt)
 {
@@ -1071,7 +1070,7 @@ static void tvp7002_remove(struct i2c_client *c)
 
 /* I2C Device ID table */
 static const struct i2c_device_id tvp7002_id[] = {
-	{ .name = "tvp7002" },
+	{ "tvp7002" },
 	{ }
 };
 MODULE_DEVICE_TABLE(i2c, tvp7002_id);

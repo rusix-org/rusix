@@ -4,7 +4,6 @@
  */
 #include <linux/export.h>
 #include <linux/phy.h>
-#include <linux/phy_port.h>
 #include <linux/of.h>
 
 #include "phylib.h"
@@ -18,7 +17,7 @@
  */
 const char *phy_speed_to_str(int speed)
 {
-	BUILD_BUG_ON_MSG(__ETHTOOL_LINK_MODE_MASK_NBITS != 125,
+	BUILD_BUG_ON_MSG(__ETHTOOL_LINK_MODE_MASK_NBITS != 121,
 		"Enum ethtool_link_mode_bit_indices and phylib are out of sync. "
 		"If a speed or mode has been added please update phy_speed_to_str "
 		"and the PHY settings array.\n");
@@ -48,8 +47,6 @@ const char *phy_speed_to_str(int speed)
 		return "50Gbps";
 	case SPEED_56000:
 		return "56Gbps";
-	case SPEED_80000:
-		return "80Gbps";
 	case SPEED_100000:
 		return "100Gbps";
 	case SPEED_200000:
@@ -58,8 +55,6 @@ const char *phy_speed_to_str(int speed)
 		return "400Gbps";
 	case SPEED_800000:
 		return "800Gbps";
-	case SPEED_1600000:
-		return "1600Gbps";
 	case SPEED_UNKNOWN:
 		return "Unknown";
 	default:
@@ -211,12 +206,7 @@ EXPORT_SYMBOL_GPL(phy_interface_num_ports);
 
 static void __set_phy_supported(struct phy_device *phydev, u32 max_speed)
 {
-	struct phy_port *port;
-
 	phy_caps_linkmode_max_speed(max_speed, phydev->supported);
-
-	phy_for_each_port(phydev, port)
-		phy_caps_linkmode_max_speed(max_speed, port->supported);
 }
 
 /**

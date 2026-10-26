@@ -20,12 +20,9 @@
 #include <net/dst.h>
 #include <net/ip.h>
 #include <net/sock.h>
-#include <net/dst_metadata.h>
 #include <net/tcp_states.h> /* for TCP_TIME_WAIT */
 #include <net/netfilter/nf_tables.h>
 #include <net/netfilter/nf_tables_core.h>
-#include <net/netfilter/nf_tables_ipv4.h>
-#include <net/netfilter/nf_tables_ipv6.h>
 #include <net/netfilter/nft_meta.h>
 #include <net/netfilter/nf_tables_offload.h>
 
@@ -117,12 +114,12 @@ nft_meta_get_eval_pkttype_lo(const struct nft_pktinfo *pkt,
 			nft_reg_store8(dest, PACKET_MULTICAST);
 			break;
 		default:
-			DEBUG_NET_WARN_ON_ONCE(1);
+			WARN_ON_ONCE(1);
 			return false;
 		}
 		break;
 	default:
-		DEBUG_NET_WARN_ON_ONCE(1);
+		WARN_ON_ONCE(1);
 		return false;
 	}
 
@@ -134,36 +131,33 @@ nft_meta_get_eval_skugid(enum nft_meta_keys key,
 			 u32 *dest,
 			 const struct nft_pktinfo *pkt)
 {
-	const struct sock *sk = skb_to_full_sk(pkt->skb);
-	const struct socket *sock;
-	const struct file *file;
+	struct sock *sk = skb_to_full_sk(pkt->skb);
+	struct socket *sock;
 
 	if (!sk || !sk_fullsock(sk) || !net_eq(nft_net(pkt), sock_net(sk)))
 		return false;
 
-	/* The sk pointer remains valid as long as the skb is. The sk_socket and
-	 * file pointer may become NULL if the socket is closed. Both structures
-	 * (including file->cred) are RCU freed which means they can be accessed
-	 * within a RCU read section.
-	 */
-	sock = READ_ONCE(sk->sk_socket);
-	file = sock ? READ_ONCE(sock->file) : NULL;
-	if (!file)
+	read_lock_bh(&sk->sk_callback_lock);
+	sock = sk->sk_socket;
+	if (!sock || !sock->file) {
+		read_unlock_bh(&sk->sk_callback_lock);
 		return false;
+	}
 
 	switch (key) {
 	case NFT_META_SKUID:
 		*dest = from_kuid_munged(sock_net(sk)->user_ns,
-					 file->f_cred->fsuid);
+					 sock->file->f_cred->fsuid);
 		break;
 	case NFT_META_SKGID:
 		*dest =	from_kgid_munged(sock_net(sk)->user_ns,
-					 file->f_cred->fsgid);
+					 sock->file->f_cred->fsgid);
 		break;
 	default:
 		break;
 	}
 
+	read_unlock_bh(&sk->sk_callback_lock);
 	return true;
 }
 
@@ -280,12 +274,11 @@ static bool nft_meta_get_eval_ifname(enum nft_meta_keys key, u32 *dest,
 static noinline bool
 nft_meta_get_eval_rtclassid(const struct sk_buff *skb, u32 *dest)
 {
-	const struct dst_entry *dst;
+	const struct dst_entry *dst = skb_dst(skb);
 
-	if (!skb_valid_dst(skb))
+	if (!dst)
 		return false;
 
-	dst = skb_dst(skb);
 	*dest = dst->tclassid;
 	return true;
 }
@@ -313,54 +306,6 @@ nft_meta_get_eval_sdifname(u32 *dest, const struct nft_pktinfo *pkt)
 	nft_meta_store_ifname(dest, dev);
 }
 
-static void nft_meta_pktinfo_may_update(struct nft_pktinfo *pkt)
-{
-	struct sk_buff *skb = pkt->skb;
-	struct vlan_ethhdr *veth;
-	__be16 ethertype;
-	int nhoff;
-
-	/* Is this an IP packet? Then, skip. */
-	if (pkt->flags)
-		return;
-
-	/* ... else maybe an IP packet over PPPoE or Q-in-Q? */
-	switch (skb->protocol) {
-	case htons(ETH_P_8021Q):
-		if (!pskb_may_pull(skb, skb_mac_offset(skb) + sizeof(*veth)))
-			return;
-
-		veth = (struct vlan_ethhdr *)skb_mac_header(skb);
-		nhoff = VLAN_HLEN;
-		ethertype = veth->h_vlan_encapsulated_proto;
-		break;
-	case htons(ETH_P_PPP_SES):
-		if (!nf_flow_pppoe_proto(skb, &ethertype))
-			return;
-
-		nhoff = PPPOE_SES_HLEN;
-		break;
-	default:
-		return;
-	}
-
-	nhoff += skb_network_offset(skb);
-	switch (ethertype) {
-	case htons(ETH_P_IP):
-		if (__nft_set_pktinfo_ipv4_validate(pkt, nhoff))
-			nft_set_pktinfo_unspec(pkt);
-		break;
-	case htons(ETH_P_IPV6):
-		if (__nft_set_pktinfo_ipv6_validate(pkt, nhoff))
-			nft_set_pktinfo_unspec(pkt);
-		break;
-	default:
-		break;
-	}
-
-	pkt->ethertype = ethertype;
-}
-
 void nft_meta_get_eval(const struct nft_expr *expr,
 		       struct nft_regs *regs,
 		       const struct nft_pktinfo *pkt)
@@ -374,14 +319,12 @@ void nft_meta_get_eval(const struct nft_expr *expr,
 		*dest = skb->len;
 		break;
 	case NFT_META_PROTOCOL:
-		nft_meta_pktinfo_may_update((struct nft_pktinfo *)pkt);
-		nft_reg_store16(dest, (__force u16)pkt->ethertype);
+		nft_reg_store16(dest, (__force u16)skb->protocol);
 		break;
 	case NFT_META_NFPROTO:
 		nft_reg_store8(dest, nft_pf(pkt));
 		break;
 	case NFT_META_L4PROTO:
-		nft_meta_pktinfo_may_update((struct nft_pktinfo *)pkt);
 		if (!(pkt->flags & NFT_PKTINFO_L4PROTO))
 			goto err;
 		nft_reg_store8(dest, pkt->tprot);
@@ -462,7 +405,7 @@ void nft_meta_get_eval(const struct nft_expr *expr,
 		nft_meta_get_eval_sdifname(dest, pkt);
 		break;
 	default:
-		DEBUG_NET_WARN_ON_ONCE(1);
+		WARN_ON(1);
 		goto err;
 	}
 	return;
@@ -508,15 +451,15 @@ void nft_meta_set_eval(const struct nft_expr *expr,
 		break;
 #endif
 	default:
-		DEBUG_NET_WARN_ON_ONCE(1);
+		WARN_ON(1);
 	}
 }
 EXPORT_SYMBOL_GPL(nft_meta_set_eval);
 
 const struct nla_policy nft_meta_policy[NFTA_META_MAX + 1] = {
-	[NFTA_META_DREG]	= NLA_POLICY_MAX(NLA_BE32, NFT_REG32_MAX),
+	[NFTA_META_DREG]	= { .type = NLA_U32 },
 	[NFTA_META_KEY]		= NLA_POLICY_MAX(NLA_BE32, 255),
-	[NFTA_META_SREG]	= NLA_POLICY_MAX(NLA_BE32, NFT_REG32_MAX),
+	[NFTA_META_SREG]	= { .type = NLA_U32 },
 };
 EXPORT_SYMBOL_GPL(nft_meta_policy);
 
@@ -889,7 +832,7 @@ void nft_meta_inner_eval(const struct nft_expr *expr,
 		nft_reg_store8(dest, tun_ctx->l4proto);
 		break;
 	default:
-		DEBUG_NET_WARN_ON_ONCE(1);
+		WARN_ON_ONCE(1);
 		goto err;
 	}
 	return;

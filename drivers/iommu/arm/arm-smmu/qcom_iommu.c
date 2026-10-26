@@ -306,14 +306,14 @@ static int qcom_iommu_init_domain(struct iommu_domain *domain,
 		ctx->domain = domain;
 	}
 
+	mutex_unlock(&qcom_domain->init_mutex);
+
 	/* Publish page table ops for map/unmap */
 	qcom_domain->pgtbl_ops = pgtbl_ops;
 
-	mutex_unlock(&qcom_domain->init_mutex);
-
 	return 0;
+
 out_clear_iommu:
-	free_io_pgtable_ops(pgtbl_ops);
 	qcom_domain->iommu = NULL;
 out_unlock:
 	mutex_unlock(&qcom_domain->init_mutex);
@@ -329,7 +329,7 @@ static struct iommu_domain *qcom_iommu_domain_alloc_paging(struct device *dev)
 	 * We can't really do anything meaningful until we've added a
 	 * master.
 	 */
-	qcom_domain = kzalloc_obj(*qcom_domain);
+	qcom_domain = kzalloc(sizeof(*qcom_domain), GFP_KERNEL);
 	if (!qcom_domain)
 		return NULL;
 
@@ -704,21 +704,18 @@ static int qcom_iommu_ctx_probe(struct platform_device *pdev)
 	/* clear IRQs before registering fault handler, just in case the
 	 * boot-loader left us a surprise:
 	 */
-	if (!ctx->secured_ctx) {
-		ret = pm_runtime_resume_and_get(dev->parent);
-		if (ret)
-			return ret;
+	if (!ctx->secured_ctx)
 		iommu_writel(ctx, ARM_SMMU_CB_FSR, iommu_readl(ctx, ARM_SMMU_CB_FSR));
-		pm_runtime_put_sync(dev->parent);
-	}
 
 	ret = devm_request_irq(dev, irq,
 			       qcom_iommu_fault,
 			       IRQF_SHARED,
 			       "qcom-iommu-fault",
 			       ctx);
-	if (ret)
+	if (ret) {
+		dev_err(dev, "failed to request IRQ %u\n", irq);
 		return ret;
+	}
 
 	ret = get_asid(dev->of_node);
 	if (ret < 0) {
@@ -764,10 +761,14 @@ static struct platform_driver qcom_iommu_ctx_driver = {
 
 static bool qcom_iommu_has_secure_context(struct qcom_iommu_dev *qcom_iommu)
 {
-	for_each_child_of_node_scoped(qcom_iommu->dev->of_node, child) {
+	struct device_node *child;
+
+	for_each_child_of_node(qcom_iommu->dev->of_node, child) {
 		if (of_device_is_compatible(child, "qcom,msm-iommu-v1-sec") ||
-		    of_device_is_compatible(child, "qcom,msm-iommu-v2-sec"))
+		    of_device_is_compatible(child, "qcom,msm-iommu-v2-sec")) {
+			of_node_put(child);
 			return true;
+		}
 	}
 
 	return false;
@@ -839,22 +840,20 @@ static int qcom_iommu_device_probe(struct platform_device *pdev)
 
 	platform_set_drvdata(pdev, qcom_iommu);
 
-	ret = devm_pm_runtime_enable(dev);
-	if (ret)
-		return ret;
+	pm_runtime_enable(dev);
 
 	/* register context bank devices, which are child nodes: */
 	ret = devm_of_platform_populate(dev);
 	if (ret) {
 		dev_err(dev, "Failed to populate iommu contexts\n");
-		return ret;
+		goto err_pm_disable;
 	}
 
 	ret = iommu_device_sysfs_add(&qcom_iommu->iommu, dev, NULL,
 				     dev_name(dev));
 	if (ret) {
 		dev_err(dev, "Failed to register iommu in sysfs\n");
-		return ret;
+		goto err_pm_disable;
 	}
 
 	ret = iommu_device_register(&qcom_iommu->iommu, &qcom_iommu_ops, dev);
@@ -864,19 +863,17 @@ static int qcom_iommu_device_probe(struct platform_device *pdev)
 	}
 
 	if (qcom_iommu->local_base) {
-		ret = pm_runtime_resume_and_get(dev);
-		if (ret)
-			goto err_iommu_unregister;
+		pm_runtime_get_sync(dev);
 		writel_relaxed(0xffffffff, qcom_iommu->local_base + SMMU_INTR_SEL_NS);
 		pm_runtime_put_sync(dev);
 	}
 
 	return 0;
 
-err_iommu_unregister:
-	iommu_device_unregister(&qcom_iommu->iommu);
 err_sysfs_remove:
 	iommu_device_sysfs_remove(&qcom_iommu->iommu);
+err_pm_disable:
+	pm_runtime_disable(dev);
 	return ret;
 }
 

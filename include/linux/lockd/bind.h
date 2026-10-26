@@ -10,12 +10,17 @@
 #ifndef LINUX_LOCKD_BIND_H
 #define LINUX_LOCKD_BIND_H
 
-struct file_lock;
-struct nfs_fh;
+#include <linux/lockd/nlm.h>
+/* need xdr-encoded error codes too, so... */
+#include <linux/lockd/xdr.h>
+#ifdef CONFIG_LOCKD_V4
+#include <linux/lockd/xdr4.h>
+#endif
+
+/* Dummy declarations */
 struct svc_rqst;
 struct rpc_task;
 struct rpc_clnt;
-struct super_block;
 struct module;
 
 /**
@@ -26,10 +31,12 @@ struct module;
  *          Implementations MUST be semantically equivalent to fput().
  */
 struct nlmsvc_binding {
-	struct module	*owner;
-	int		(*fopen)(struct svc_rqst *rqstp, struct nfs_fh *f,
-				 struct file **filp, int flags);
-	void		(*fclose)(struct file *filp);
+	struct module		*owner;
+	__be32			(*fopen)(struct svc_rqst *,
+						struct nfs_fh *,
+						struct file **,
+						int mode);
+	void			(*fclose)(struct file *);
 };
 
 extern const struct nlmsvc_binding __rcu *nlmsvc_ops;
@@ -57,7 +64,6 @@ struct nlmclnt_initdata {
 extern struct nlm_host *nlmclnt_init(const struct nlmclnt_initdata *nlm_init);
 extern void	nlmclnt_done(struct nlm_host *host);
 extern struct rpc_clnt *nlmclnt_rpc_clnt(struct nlm_host *host);
-extern void	nlmclnt_shutdown_rpc_clnt(struct nlm_host *host);
 
 /*
  * NLM client operations provide a means to modify RPC processing of NLM
@@ -81,11 +87,5 @@ struct nlmclnt_operations {
 extern int	nlmclnt_proc(struct nlm_host *host, int cmd, struct file_lock *fl, void *data);
 extern int	lockd_up(struct net *net, const struct cred *cred);
 extern void	lockd_down(struct net *net);
-
-/*
- * Cluster failover support
- */
-int nlmsvc_unlock_all_by_sb(struct super_block *sb);
-int nlmsvc_unlock_all_by_ip(struct sockaddr *server_addr);
 
 #endif /* LINUX_LOCKD_BIND_H */

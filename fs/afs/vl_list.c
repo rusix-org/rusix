@@ -15,7 +15,8 @@ struct afs_vlserver *afs_alloc_vlserver(const char *name, size_t name_len,
 	struct afs_vlserver *vlserver;
 	static atomic_t debug_ids;
 
-	vlserver = kzalloc_flex(*vlserver, name, name_len + 1);
+	vlserver = kzalloc(struct_size(vlserver, name, name_len + 1),
+			   GFP_KERNEL);
 	if (vlserver) {
 		refcount_set(&vlserver->ref, 1);
 		rwlock_init(&vlserver->lock);
@@ -51,7 +52,7 @@ struct afs_vlserver_list *afs_alloc_vlserver_list(unsigned int nr_servers)
 {
 	struct afs_vlserver_list *vllist;
 
-	vllist = kzalloc_flex(*vllist, servers, nr_servers);
+	vllist = kzalloc(struct_size(vllist, servers, nr_servers), GFP_KERNEL);
 	if (vllist) {
 		refcount_set(&vllist->ref, 1);
 		rwlock_init(&vllist->lock);
@@ -293,20 +294,8 @@ struct afs_vlserver_list *afs_extract_vlserver_list(struct afs_cell *cell,
 			afs_put_addrlist(old, afs_alist_trace_put_vlserver_old);
 		}
 
-		/* Check for duplicates in the server list */
-		for (j = 0; j < vllist->nr_servers; j++) {
-			struct afs_vlserver *s = vllist->servers[j].server;
 
-			if (s->name_len == server->name_len &&
-			    s->port == server->port &&
-			    strncasecmp(s->name, server->name, server->name_len) == 0) {
-				afs_put_vlserver(cell->net, server);
-				server = NULL;
-				break;
-			}
-		}
-		if (!server)
-			continue;
+		/* TODO: Might want to check for duplicates */
 
 		/* Insertion-sort by priority and weight */
 		for (j = 0; j < vllist->nr_servers; j++) {

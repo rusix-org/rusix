@@ -1029,16 +1029,10 @@ static const struct i2c_algorithm go7007_usb_algo = {
 	.functionality	= go7007_usb_functionality,
 };
 
-static const struct i2c_adapter_quirks go7007_usb_quirks = {
-	.max_write_len	= 12,
-	.max_read_len	= 15,
-};
-
 static struct i2c_adapter go7007_usb_adap_templ = {
 	.owner			= THIS_MODULE,
 	.name			= "WIS GO7007SB EZ-USB",
 	.algo			= &go7007_usb_algo,
-	.quirks			= &go7007_usb_quirks,
 };
 
 /********************* USB add/remove functions *********************/
@@ -1121,7 +1115,7 @@ static int go7007_usb_probe(struct usb_interface *intf,
 	if (go == NULL)
 		return -ENOMEM;
 
-	usb = kzalloc_obj(struct go7007_usb);
+	usb = kzalloc(sizeof(struct go7007_usb), GFP_KERNEL);
 	if (usb == NULL) {
 		kfree(go);
 		return -ENOMEM;
@@ -1326,8 +1320,6 @@ static int go7007_usb_probe(struct usb_interface *intf,
 	return 0;
 
 allocfail:
-	if (go->i2c_adapter_online)
-		i2c_del_adapter(&go->i2c_adapter);
 	go7007_usb_release(go);
 	kfree(go);
 	return -ENOMEM;

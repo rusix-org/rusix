@@ -359,7 +359,7 @@ static struct amt_source_node *amt_alloc_snode(struct amt_group_node *gnode,
 {
 	struct amt_source_node *snode;
 
-	snode = kzalloc_obj(*snode, GFP_ATOMIC);
+	snode = kzalloc(sizeof(*snode), GFP_ATOMIC);
 	if (!snode)
 		return NULL;
 
@@ -605,24 +605,24 @@ static void amt_send_discovery(struct amt_dev *amt)
 {
 	struct amt_header_discovery *amtd;
 	int hlen, tlen, offset;
+	struct socket *sock;
 	struct udphdr *udph;
 	struct sk_buff *skb;
 	struct iphdr *iph;
 	struct rtable *rt;
 	struct flowi4 fl4;
-	struct sock *sk;
 	u32 len;
 	int err;
 
 	rcu_read_lock();
-	sk = rcu_dereference(amt->sk);
-	if (!sk)
+	sock = rcu_dereference(amt->sock);
+	if (!sock)
 		goto out;
 
 	if (!netif_running(amt->stream_dev) || !netif_running(amt->dev))
 		goto out;
 
-	rt = ip_route_output_ports(amt->net, &fl4, sk,
+	rt = ip_route_output_ports(amt->net, &fl4, sock->sk,
 				   amt->discovery_ip, amt->local_ip,
 				   amt->gw_port, amt->relay_port,
 				   IPPROTO_UDP, 0,
@@ -658,7 +658,7 @@ static void amt_send_discovery(struct amt_dev *amt)
 	udph		= udp_hdr(skb);
 	udph->source	= amt->gw_port;
 	udph->dest	= amt->relay_port;
-	udp_set_len_short(udph, sizeof(*udph) + sizeof(*amtd));
+	udph->len	= htons(sizeof(*udph) + sizeof(*amtd));
 	udph->check	= 0;
 	offset = skb_transport_offset(skb);
 	skb->csum = skb_checksum(skb, offset, skb->len - offset, 0);
@@ -681,7 +681,7 @@ static void amt_send_discovery(struct amt_dev *amt)
 	skb->ip_summed = CHECKSUM_NONE;
 	ip_select_ident(amt->net, skb, NULL);
 	ip_send_check(iph);
-	err = ip_local_out(amt->net, sk, skb);
+	err = ip_local_out(amt->net, sock->sk, skb);
 	if (unlikely(net_xmit_eval(err)))
 		amt->dev->stats.tx_errors++;
 
@@ -694,27 +694,25 @@ static void amt_send_request(struct amt_dev *amt, bool v6)
 {
 	struct amt_header_request *amtrh;
 	int hlen, tlen, offset;
+	struct socket *sock;
 	struct udphdr *udph;
 	struct sk_buff *skb;
 	struct iphdr *iph;
 	struct rtable *rt;
 	struct flowi4 fl4;
-	__be32 remote_ip;
-	struct sock *sk;
 	u32 len;
 	int err;
 
 	rcu_read_lock();
-	remote_ip = READ_ONCE(amt->remote_ip);
-	sk = rcu_dereference(amt->sk);
-	if (!sk)
+	sock = rcu_dereference(amt->sock);
+	if (!sock)
 		goto out;
 
 	if (!netif_running(amt->stream_dev) || !netif_running(amt->dev))
 		goto out;
 
-	rt = ip_route_output_ports(amt->net, &fl4, sk,
-				   remote_ip, amt->local_ip,
+	rt = ip_route_output_ports(amt->net, &fl4, sock->sk,
+				   amt->remote_ip, amt->local_ip,
 				   amt->gw_port, amt->relay_port,
 				   IPPROTO_UDP, 0,
 				   amt->stream_dev->ifindex);
@@ -751,11 +749,11 @@ static void amt_send_request(struct amt_dev *amt, bool v6)
 	udph		= udp_hdr(skb);
 	udph->source	= amt->gw_port;
 	udph->dest	= amt->relay_port;
-	udp_set_len_short(udph, sizeof(*amtrh) + sizeof(*udph));
+	udph->len	= htons(sizeof(*amtrh) + sizeof(*udph));
 	udph->check	= 0;
 	offset = skb_transport_offset(skb);
 	skb->csum = skb_checksum(skb, offset, skb->len - offset, 0);
-	udph->check = csum_tcpudp_magic(amt->local_ip, remote_ip,
+	udph->check = csum_tcpudp_magic(amt->local_ip, amt->remote_ip,
 					sizeof(*udph) + sizeof(*amtrh),
 					IPPROTO_UDP, skb->csum);
 
@@ -766,7 +764,7 @@ static void amt_send_request(struct amt_dev *amt, bool v6)
 	iph->tos	= AMT_TOS;
 	iph->frag_off	= 0;
 	iph->ttl	= ip4_dst_hoplimit(&rt->dst);
-	iph->daddr	= remote_ip;
+	iph->daddr	= amt->remote_ip;
 	iph->saddr	= amt->local_ip;
 	iph->protocol	= IPPROTO_UDP;
 	iph->tot_len	= htons(len);
@@ -774,7 +772,7 @@ static void amt_send_request(struct amt_dev *amt, bool v6)
 	skb->ip_summed = CHECKSUM_NONE;
 	ip_select_ident(amt->net, skb, NULL);
 	ip_send_check(iph);
-	err = ip_local_out(amt->net, sk, skb);
+	err = ip_local_out(amt->net, sock->sk, skb);
 	if (unlikely(net_xmit_eval(err)))
 		amt->dev->stats.tx_errors++;
 
@@ -966,7 +964,7 @@ static void amt_event_send_request(struct amt_dev *amt)
 		amt->qi = AMT_INIT_REQ_TIMEOUT;
 		WRITE_ONCE(amt->ready4, false);
 		WRITE_ONCE(amt->ready6, false);
-		WRITE_ONCE(amt->remote_ip, 0);
+		amt->remote_ip = 0;
 		amt_update_gw_status(amt, AMT_STATUS_INIT, false);
 		amt->req_cnt = 0;
 		amt->nonce = 0;
@@ -1003,16 +1001,15 @@ static bool amt_send_membership_update(struct amt_dev *amt,
 				       struct sk_buff *skb,
 				       bool v6)
 {
-	__be32 remote_ip = READ_ONCE(amt->remote_ip);
 	struct amt_header_membership_update *amtmu;
+	struct socket *sock;
 	struct iphdr *iph;
 	struct flowi4 fl4;
 	struct rtable *rt;
-	struct sock *sk;
 	int err;
 
-	sk = rcu_dereference_bh(amt->sk);
-	if (!sk)
+	sock = rcu_dereference_bh(amt->sock);
+	if (!sock)
 		return true;
 
 	err = skb_cow_head(skb, LL_RESERVED_SPACE(amt->dev) + sizeof(*amtmu) +
@@ -1023,13 +1020,13 @@ static bool amt_send_membership_update(struct amt_dev *amt,
 	skb_reset_inner_headers(skb);
 	memset(&fl4, 0, sizeof(struct flowi4));
 	fl4.flowi4_oif         = amt->stream_dev->ifindex;
-	fl4.daddr              = remote_ip;
+	fl4.daddr              = amt->remote_ip;
 	fl4.saddr              = amt->local_ip;
 	fl4.flowi4_dscp        = inet_dsfield_to_dscp(AMT_TOS);
 	fl4.flowi4_proto       = IPPROTO_UDP;
 	rt = ip_route_output_key(amt->net, &fl4);
 	if (IS_ERR(rt)) {
-		netdev_dbg(amt->dev, "no route to %pI4\n", &remote_ip);
+		netdev_dbg(amt->dev, "no route to %pI4\n", &amt->remote_ip);
 		return true;
 	}
 
@@ -1044,7 +1041,7 @@ static bool amt_send_membership_update(struct amt_dev *amt,
 		skb_set_inner_protocol(skb, htons(ETH_P_IP));
 	else
 		skb_set_inner_protocol(skb, htons(ETH_P_IPV6));
-	udp_tunnel_xmit_skb(rt, sk, skb,
+	udp_tunnel_xmit_skb(rt, sock->sk, skb,
 			    fl4.saddr,
 			    fl4.daddr,
 			    AMT_TOS,
@@ -1065,14 +1062,14 @@ static void amt_send_multicast_data(struct amt_dev *amt,
 				    bool v6)
 {
 	struct amt_header_mcast_data *amtmd;
+	struct socket *sock;
 	struct sk_buff *skb;
 	struct iphdr *iph;
 	struct flowi4 fl4;
 	struct rtable *rt;
-	struct sock *sk;
 
-	sk = rcu_dereference_bh(amt->sk);
-	if (!sk)
+	sock = rcu_dereference_bh(amt->sock);
+	if (!sock)
 		return;
 
 	skb = skb_copy_expand(oskb, sizeof(*amtmd) + sizeof(*iph) +
@@ -1080,17 +1077,7 @@ static void amt_send_multicast_data(struct amt_dev *amt,
 	if (!skb)
 		return;
 
-	/* amt_dev_xmit() pulled the Ethernet header without moving the mac
-	 * header. The tunnelled payload has no link-layer header, so the
-	 * inner mac header must coincide with the inner IP header.
-	 */
-	skb_reset_mac_header(skb);
 	skb_reset_inner_headers(skb);
-	if (udp_tunnel_handle_offloads(skb, true)) {
-		kfree_skb(skb);
-		return;
-	}
-
 	memset(&fl4, 0, sizeof(struct flowi4));
 	fl4.flowi4_oif         = amt->stream_dev->ifindex;
 	fl4.daddr              = tunnel->ip4;
@@ -1112,7 +1099,7 @@ static void amt_send_multicast_data(struct amt_dev *amt,
 		skb_set_inner_protocol(skb, htons(ETH_P_IP));
 	else
 		skb_set_inner_protocol(skb, htons(ETH_P_IPV6));
-	udp_tunnel_xmit_skb(rt, sk, skb,
+	udp_tunnel_xmit_skb(rt, sock->sk, skb,
 			    fl4.saddr,
 			    fl4.daddr,
 			    AMT_TOS,
@@ -1131,13 +1118,13 @@ static bool amt_send_membership_query(struct amt_dev *amt,
 				      bool v6)
 {
 	struct amt_header_membership_query *amtmq;
+	struct socket *sock;
 	struct rtable *rt;
 	struct flowi4 fl4;
-	struct sock *sk;
 	int err;
 
-	sk = rcu_dereference_bh(amt->sk);
-	if (!sk)
+	sock = rcu_dereference_bh(amt->sock);
+	if (!sock)
 		return true;
 
 	err = skb_cow_head(skb, LL_RESERVED_SPACE(amt->dev) + sizeof(*amtmq) +
@@ -1171,7 +1158,7 @@ static bool amt_send_membership_query(struct amt_dev *amt,
 		skb_set_inner_protocol(skb, htons(ETH_P_IP));
 	else
 		skb_set_inner_protocol(skb, htons(ETH_P_IPV6));
-	udp_tunnel_xmit_skb(rt, sk, skb,
+	udp_tunnel_xmit_skb(rt, sock->sk, skb,
 			    fl4.saddr,
 			    fl4.daddr,
 			    AMT_TOS,
@@ -1302,12 +1289,8 @@ static int amt_parse_type(struct sk_buff *skb)
 {
 	struct amt_header *amth;
 
-	/* skb->data is the UDP header on receive, but the quoted IP header
-	 * when amt_err_lookup() parses an ICMP error, so pull up to the
-	 * transport header rather than from skb->data.
-	 */
-	if (!pskb_may_pull(skb, skb_transport_offset(skb) +
-			   sizeof(struct udphdr) + sizeof(struct amt_header)))
+	if (!pskb_may_pull(skb, sizeof(struct udphdr) +
+			   sizeof(struct amt_header)))
 		return -1;
 
 	amth = (struct amt_header *)(udp_hdr(skb) + 1);
@@ -2285,8 +2268,8 @@ static bool amt_advertisement_handler(struct amt_dev *amt, struct sk_buff *skb)
 	    amt->nonce != amta->nonce)
 		return true;
 
-	WRITE_ONCE(amt->remote_ip, amta->ip4);
-	netdev_dbg(amt->dev, "advertised remote ip = %pI4\n", &amta->ip4);
+	amt->remote_ip = amta->ip4;
+	netdev_dbg(amt->dev, "advertised remote ip = %pI4\n", &amt->remote_ip);
 	mod_delayed_work(amt_wq, &amt->req_wq, 0);
 
 	amt_update_gw_status(amt, AMT_STATUS_RECEIVED_ADVERTISEMENT, true);
@@ -2592,24 +2575,24 @@ static void amt_send_advertisement(struct amt_dev *amt, __be32 nonce,
 {
 	struct amt_header_advertisement *amta;
 	int hlen, tlen, offset;
+	struct socket *sock;
 	struct udphdr *udph;
 	struct sk_buff *skb;
 	struct iphdr *iph;
 	struct rtable *rt;
 	struct flowi4 fl4;
-	struct sock *sk;
 	u32 len;
 	int err;
 
 	rcu_read_lock();
-	sk = rcu_dereference(amt->sk);
-	if (!sk)
+	sock = rcu_dereference(amt->sock);
+	if (!sock)
 		goto out;
 
 	if (!netif_running(amt->stream_dev) || !netif_running(amt->dev))
 		goto out;
 
-	rt = ip_route_output_ports(amt->net, &fl4, sk,
+	rt = ip_route_output_ports(amt->net, &fl4, sock->sk,
 				   daddr, amt->local_ip,
 				   dport, amt->relay_port,
 				   IPPROTO_UDP, 0,
@@ -2646,7 +2629,7 @@ static void amt_send_advertisement(struct amt_dev *amt, __be32 nonce,
 	udph		= udp_hdr(skb);
 	udph->source	= amt->relay_port;
 	udph->dest	= dport;
-	udp_set_len_short(udph, sizeof(*amta) + sizeof(*udph));
+	udph->len	= htons(sizeof(*amta) + sizeof(*udph));
 	udph->check	= 0;
 	offset = skb_transport_offset(skb);
 	skb->csum = skb_checksum(skb, offset, skb->len - offset, 0);
@@ -2669,7 +2652,7 @@ static void amt_send_advertisement(struct amt_dev *amt, __be32 nonce,
 	skb->ip_summed = CHECKSUM_NONE;
 	ip_select_ident(amt->net, skb, NULL);
 	ip_send_check(iph);
-	err = ip_local_out(amt->net, sk, skb);
+	err = ip_local_out(amt->net, sock->sk, skb);
 	if (unlikely(net_xmit_eval(err)))
 		amt->dev->stats.tx_errors++;
 
@@ -2810,7 +2793,6 @@ drop:
 static int amt_rcv(struct sock *sk, struct sk_buff *skb)
 {
 	struct amt_dev *amt;
-	__be32 remote_ip;
 	__be32 saddr;
 	int type;
 	bool err;
@@ -2822,7 +2804,6 @@ static int amt_rcv(struct sock *sk, struct sk_buff *skb)
 		kfree_skb(skb);
 		goto out;
 	}
-	remote_ip = READ_ONCE(amt->remote_ip);
 
 	skb->dev = amt->dev;
 	saddr = ip_hdr(skb)->saddr;
@@ -2847,7 +2828,7 @@ static int amt_rcv(struct sock *sk, struct sk_buff *skb)
 			}
 			goto out;
 		case AMT_MSG_MULTICAST_DATA:
-			if (saddr != remote_ip) {
+			if (saddr != amt->remote_ip) {
 				netdev_dbg(amt->dev, "Invalid Relay IP\n");
 				err = true;
 				goto drop;
@@ -2858,7 +2839,7 @@ static int amt_rcv(struct sock *sk, struct sk_buff *skb)
 			else
 				goto out;
 		case AMT_MSG_MEMBERSHIP_QUERY:
-			if (saddr != remote_ip) {
+			if (saddr != amt->remote_ip) {
 				netdev_dbg(amt->dev, "Invalid Relay IP\n");
 				err = true;
 				goto drop;
@@ -2984,7 +2965,7 @@ drop:
 	return 0;
 }
 
-static struct sock *amt_create_sock(struct net *net, __be16 port)
+static struct socket *amt_create_sock(struct net *net, __be16 port)
 {
 	struct udp_port_cfg udp_conf;
 	struct socket *sock;
@@ -3000,17 +2981,17 @@ static struct sock *amt_create_sock(struct net *net, __be16 port)
 	if (err < 0)
 		return ERR_PTR(err);
 
-	return sock->sk;
+	return sock;
 }
 
 static int amt_socket_create(struct amt_dev *amt)
 {
 	struct udp_tunnel_sock_cfg tunnel_cfg;
-	struct sock *sk;
+	struct socket *sock;
 
-	sk = amt_create_sock(amt->net, amt->relay_port);
-	if (IS_ERR(sk))
-		return PTR_ERR(sk);
+	sock = amt_create_sock(amt->net, amt->relay_port);
+	if (IS_ERR(sock))
+		return PTR_ERR(sock);
 
 	/* Mark socket as an encapsulation socket */
 	memset(&tunnel_cfg, 0, sizeof(tunnel_cfg));
@@ -3019,9 +3000,9 @@ static int amt_socket_create(struct amt_dev *amt)
 	tunnel_cfg.encap_rcv = amt_rcv;
 	tunnel_cfg.encap_err_lookup = amt_err_lookup;
 	tunnel_cfg.encap_destroy = NULL;
-	setup_udp_tunnel_sock(amt->net, sk, &tunnel_cfg);
+	setup_udp_tunnel_sock(amt->net, sock, &tunnel_cfg);
 
-	rcu_assign_pointer(amt->sk, sk);
+	rcu_assign_pointer(amt->sock, sock);
 	return 0;
 }
 
@@ -3046,7 +3027,7 @@ static int amt_dev_open(struct net_device *dev)
 	}
 
 	amt->req_cnt = 0;
-	WRITE_ONCE(amt->remote_ip, 0);
+	amt->remote_ip = 0;
 	amt->nonce = 0;
 	get_random_bytes(&amt->key, sizeof(siphash_key_t));
 
@@ -3065,8 +3046,8 @@ static int amt_dev_stop(struct net_device *dev)
 {
 	struct amt_dev *amt = netdev_priv(dev);
 	struct amt_tunnel_list *tunnel, *tmp;
+	struct socket *sock;
 	struct sk_buff *skb;
-	struct sock *sk;
 	int i;
 
 	disable_delayed_work_sync(&amt->req_wq);
@@ -3074,11 +3055,11 @@ static int amt_dev_stop(struct net_device *dev)
 	cancel_delayed_work_sync(&amt->secret_wq);
 
 	/* shutdown */
-	sk = rtnl_dereference(amt->sk);
-	RCU_INIT_POINTER(amt->sk, NULL);
+	sock = rtnl_dereference(amt->sock);
+	RCU_INIT_POINTER(amt->sock, NULL);
 	synchronize_net();
-	if (sk)
-		udp_tunnel_sock_release(sk);
+	if (sock)
+		udp_tunnel_sock_release(sock);
 
 	cancel_work_sync(&amt->event_wq);
 	for (i = 0; i < AMT_MAX_EVENTS; i++) {
@@ -3091,7 +3072,7 @@ static int amt_dev_stop(struct net_device *dev)
 	amt->ready4 = false;
 	amt->ready6 = false;
 	amt->req_cnt = 0;
-	WRITE_ONCE(amt->remote_ip, 0);
+	amt->remote_ip = 0;
 
 	list_for_each_entry_safe(tunnel, tmp, &amt->tunnel_list, list) {
 		list_del_rcu(&tunnel->list);
@@ -3293,7 +3274,7 @@ static int amt_newlink(struct net_device *dev,
 					    "gateway port must not be 0");
 			goto err;
 		}
-		WRITE_ONCE(amt->remote_ip, 0);
+		amt->remote_ip = 0;
 		amt->discovery_ip = nla_get_in_addr(data[IFLA_AMT_DISCOVERY_IP]);
 		if (ipv4_is_loopback(amt->discovery_ip) ||
 		    ipv4_is_zeronet(amt->discovery_ip) ||
@@ -3359,10 +3340,8 @@ static size_t amt_get_size(const struct net_device *dev)
 
 static int amt_fill_info(struct sk_buff *skb, const struct net_device *dev)
 {
-	const struct amt_dev *amt = netdev_priv(dev);
-	__be32 remote_ip;
+	struct amt_dev *amt = netdev_priv(dev);
 
-	rcu_read_lock();
 	if (nla_put_u32(skb, IFLA_AMT_MODE, amt->mode))
 		goto nla_put_failure;
 	if (nla_put_be16(skb, IFLA_AMT_RELAY_PORT, amt->relay_port))
@@ -3375,19 +3354,15 @@ static int amt_fill_info(struct sk_buff *skb, const struct net_device *dev)
 		goto nla_put_failure;
 	if (nla_put_in_addr(skb, IFLA_AMT_DISCOVERY_IP, amt->discovery_ip))
 		goto nla_put_failure;
-
-	remote_ip = READ_ONCE(amt->remote_ip);
-	if (remote_ip)
-		if (nla_put_in_addr(skb, IFLA_AMT_REMOTE_IP, remote_ip))
+	if (amt->remote_ip)
+		if (nla_put_in_addr(skb, IFLA_AMT_REMOTE_IP, amt->remote_ip))
 			goto nla_put_failure;
 	if (nla_put_u32(skb, IFLA_AMT_MAX_TUNNELS, amt->max_tunnels))
 		goto nla_put_failure;
 
-	rcu_read_unlock();
 	return 0;
 
 nla_put_failure:
-	rcu_read_unlock();
 	return -EMSGSIZE;
 }
 

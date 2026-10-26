@@ -682,7 +682,7 @@ static int lan78xx_read_stats(struct lan78xx_net *dev,
 	u32 *src;
 	u32 *dst;
 
-	stats = kmalloc_obj(*stats);
+	stats = kmalloc(sizeof(*stats), GFP_KERNEL);
 	if (!stats)
 		return -ENOMEM;
 
@@ -1712,16 +1712,13 @@ static int lan78xx_ethtool_set_eeprom(struct net_device *netdev,
 	/* Invalid EEPROM_INDICATOR at offset zero will result in a failure
 	 * to load data from EEPROM
 	 */
-	if (ee->magic == LAN78XX_EEPROM_MAGIC) {
+	if (ee->magic == LAN78XX_EEPROM_MAGIC)
 		ret = lan78xx_write_raw_eeprom(dev, ee->offset, ee->len, data);
-	} else if ((ee->magic == LAN78XX_OTP_MAGIC) &&
+	else if ((ee->magic == LAN78XX_OTP_MAGIC) &&
 		 (ee->offset == 0) &&
 		 (ee->len == 512) &&
-		 (data[0] == OTP_INDICATOR_1)) {
+		 (data[0] == OTP_INDICATOR_1))
 		ret = lan78xx_write_raw_otp(dev, ee->offset, ee->len, data);
-	} else {
-		ret = -EINVAL;
-	}
 
 	usb_autopm_put_interface(dev->intf);
 
@@ -2900,7 +2897,6 @@ static int lan78xx_phy_init(struct lan78xx_net *dev)
 		phydev->irq = dev->domain_data.phyirq;
 	else
 		phydev->irq = PHY_POLL;
-	dev->mdiobus->irq[phydev->mdio.addr] = phydev->irq;
 	netdev_dbg(dev->net, "phydev->irq = %d\n", phydev->irq);
 
 	ret = phylink_connect_phy(dev->phylink, phydev);
@@ -3769,7 +3765,7 @@ static int lan78xx_bind(struct lan78xx_net *dev, struct usb_interface *intf)
 	int ret;
 	int i;
 
-	dev->data[0] = (unsigned long) kzalloc_obj(*pdata);
+	dev->data[0] = (unsigned long)kzalloc(sizeof(*pdata), GFP_KERNEL);
 
 	pdata = (struct lan78xx_priv *)(dev->data[0]);
 	if (!pdata) {
@@ -4575,6 +4571,7 @@ static void intr_complete(struct urb *urb)
 static void lan78xx_disconnect(struct usb_interface *intf)
 {
 	struct lan78xx_net *dev;
+	struct usb_device *udev;
 	struct net_device *net;
 
 	dev = usb_get_intfdata(intf);
@@ -4582,6 +4579,7 @@ static void lan78xx_disconnect(struct usb_interface *intf)
 	if (!dev)
 		return;
 
+	udev = interface_to_usbdev(intf);
 	net = dev->net;
 
 	rtnl_lock();
@@ -4608,6 +4606,7 @@ static void lan78xx_disconnect(struct usb_interface *intf)
 	usb_free_urb(dev->urb_intr);
 
 	free_netdev(net);
+	usb_put_dev(udev);
 }
 
 static void lan78xx_tx_timeout(struct net_device *net, unsigned int txqueue)
@@ -4669,11 +4668,13 @@ static int lan78xx_probe(struct usb_interface *intf,
 	u8 *buf = NULL;
 
 	udev = interface_to_usbdev(intf);
+	udev = usb_get_dev(udev);
 
 	netdev = alloc_etherdev(sizeof(struct lan78xx_net));
 	if (!netdev) {
 		dev_err(&intf->dev, "Error: OOM\n");
-		return -ENOMEM;
+		ret = -ENOMEM;
+		goto out1;
 	}
 
 	SET_NETDEV_DEV(netdev, &intf->dev);
@@ -4822,6 +4823,8 @@ out3:
 	lan78xx_free_tx_resources(dev);
 out2:
 	free_netdev(netdev);
+out1:
+	usb_put_dev(udev);
 
 	return ret;
 }

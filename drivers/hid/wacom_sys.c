@@ -72,10 +72,11 @@ static void wacom_wac_queue_flush(struct hid_device *hdev,
 {
 	while (!kfifo_is_empty(fifo)) {
 		int size = kfifo_peek_len(fifo);
-		u8 *buf __free(kfree) = kzalloc(size, GFP_ATOMIC);
+		u8 *buf;
 		unsigned int count;
 		int err;
 
+		buf = kzalloc(size, GFP_ATOMIC);
 		if (!buf) {
 			kfifo_skip(fifo);
 			continue;
@@ -88,6 +89,7 @@ static void wacom_wac_queue_flush(struct hid_device *hdev,
 			// to flush seems reasonable enough, however.
 			hid_warn(hdev, "%s: removed fifo entry with unexpected size\n",
 				 __func__);
+			kfree(buf);
 			continue;
 		}
 		err = hid_report_raw_event(hdev, HID_INPUT_REPORT, buf, size, size, false);
@@ -95,6 +97,8 @@ static void wacom_wac_queue_flush(struct hid_device *hdev,
 			hid_warn(hdev, "%s: unable to flush event due to error %d\n",
 				 __func__, err);
 		}
+
+		kfree(buf);
 	}
 }
 
@@ -758,47 +762,27 @@ static void wacom_retrieve_hid_descriptor(struct hid_device *hdev,
 struct wacom_hdev_data {
 	struct list_head list;
 	struct kref kref;
-	char phys[64];
-	__u32 vendor;
-	__u32 product;
-	__u32 device_type;
+	struct hid_device *dev;
 	struct wacom_shared shared;
 };
-
-static bool wacom_compare_device_paths(struct hid_device *hdev_a,
-				       const char *phys_b, char separator)
-{
-	const char *p1 = strrchr(hdev_a->phys, separator);
-	const char *p2 = strrchr(phys_b, separator);
-	int n1, n2;
-
-	if (!p1 || !p2)
-		return false;
-
-	n1 = p1 - hdev_a->phys;
-	n2 = p2 - phys_b;
-
-	if (n1 != n2 || n1 <= 0 || n2 <= 0)
-		return false;
-
-	return !strncmp(hdev_a->phys, phys_b, n1);
-}
 
 static LIST_HEAD(wacom_udev_list);
 static DEFINE_MUTEX(wacom_udev_list_lock);
 
 static bool wacom_are_sibling(struct hid_device *hdev,
-		struct wacom_hdev_data *data)
+		struct hid_device *sibling)
 {
 	struct wacom *wacom = hid_get_drvdata(hdev);
 	struct wacom_features *features = &wacom->wacom_wac.features;
+	struct wacom *sibling_wacom = hid_get_drvdata(sibling);
+	struct wacom_features *sibling_features = &sibling_wacom->wacom_wac.features;
 	__u32 oVid = features->oVid ? features->oVid : hdev->vendor;
 	__u32 oPid = features->oPid ? features->oPid : hdev->product;
 
 	/* The defined oVid/oPid must match that of the sibling */
-	if (features->oVid != HID_ANY_ID && data->vendor != oVid)
+	if (features->oVid != HID_ANY_ID && sibling->vendor != oVid)
 		return false;
-	if (features->oPid != HID_ANY_ID && data->product != oPid)
+	if (features->oPid != HID_ANY_ID && sibling->product != oPid)
 		return false;
 
 	/*
@@ -806,11 +790,11 @@ static bool wacom_are_sibling(struct hid_device *hdev,
 	 * device path, while those with different VID/PID must share
 	 * the same physical parent device path.
 	 */
-	if (hdev->vendor == data->vendor && hdev->product == data->product) {
-		if (!wacom_compare_device_paths(hdev, data->phys, '/'))
+	if (hdev->vendor == sibling->vendor && hdev->product == sibling->product) {
+		if (!hid_compare_device_paths(hdev, sibling, '/'))
 			return false;
 	} else {
-		if (!wacom_compare_device_paths(hdev, data->phys, '.'))
+		if (!hid_compare_device_paths(hdev, sibling, '.'))
 			return false;
 	}
 
@@ -823,7 +807,7 @@ static bool wacom_are_sibling(struct hid_device *hdev,
 	 * devices.
 	 */
 	if ((features->device_type & WACOM_DEVICETYPE_DIRECT) &&
-	    !(data->device_type & WACOM_DEVICETYPE_DIRECT))
+	    !(sibling_features->device_type & WACOM_DEVICETYPE_DIRECT))
 		return false;
 
 	/*
@@ -831,17 +815,17 @@ static bool wacom_are_sibling(struct hid_device *hdev,
 	 * devices.
 	 */
 	if (!(features->device_type & WACOM_DEVICETYPE_DIRECT) &&
-	    (data->device_type & WACOM_DEVICETYPE_DIRECT))
+	    (sibling_features->device_type & WACOM_DEVICETYPE_DIRECT))
 		return false;
 
 	/* Pen devices may only be siblings of touch devices */
 	if ((features->device_type & WACOM_DEVICETYPE_PEN) &&
-	    !(data->device_type & WACOM_DEVICETYPE_TOUCH))
+	    !(sibling_features->device_type & WACOM_DEVICETYPE_TOUCH))
 		return false;
 
 	/* Touch devices may only be siblings of pen devices */
 	if ((features->device_type & WACOM_DEVICETYPE_TOUCH) &&
-	    !(data->device_type & WACOM_DEVICETYPE_PEN))
+	    !(sibling_features->device_type & WACOM_DEVICETYPE_PEN))
 		return false;
 
 	/*
@@ -857,7 +841,7 @@ static struct wacom_hdev_data *wacom_get_hdev_data(struct hid_device *hdev)
 
 	/* Try to find an already-probed interface from the same device */
 	list_for_each_entry(data, &wacom_udev_list, list) {
-		if (wacom_compare_device_paths(hdev, data->phys, '/')) {
+		if (hid_compare_device_paths(hdev, data->dev, '/')) {
 			kref_get(&data->kref);
 			return data;
 		}
@@ -865,7 +849,7 @@ static struct wacom_hdev_data *wacom_get_hdev_data(struct hid_device *hdev)
 
 	/* Fallback to finding devices that appear to be "siblings" */
 	list_for_each_entry(data, &wacom_udev_list, list) {
-		if (wacom_are_sibling(hdev, data)) {
+		if (wacom_are_sibling(hdev, data->dev)) {
 			kref_get(&data->kref);
 			return data;
 		}
@@ -879,41 +863,29 @@ static void wacom_release_shared_data(struct kref *kref)
 	struct wacom_hdev_data *data =
 		container_of(kref, struct wacom_hdev_data, kref);
 
+	mutex_lock(&wacom_udev_list_lock);
 	list_del(&data->list);
+	mutex_unlock(&wacom_udev_list_lock);
+
 	kfree(data);
 }
 
 static void wacom_remove_shared_data(void *res)
 {
-	struct wacom *res_wacom = res;
+	struct wacom *wacom = res;
 	struct wacom_hdev_data *data;
-	struct wacom_wac *wacom_wac = &res_wacom->wacom_wac;
+	struct wacom_wac *wacom_wac = &wacom->wacom_wac;
 
 	if (wacom_wac->shared) {
 		data = container_of(wacom_wac->shared, struct wacom_hdev_data,
 				    shared);
 
-		scoped_guard(mutex, &wacom_udev_list_lock) {
-			struct hid_device *touch =
-				rcu_dereference_protected(wacom_wac->shared->touch,
-							  lockdep_is_held(&wacom_udev_list_lock));
-			struct hid_device *pen =
-				rcu_dereference_protected(wacom_wac->shared->pen,
-							  lockdep_is_held(&wacom_udev_list_lock));
+		if (wacom_wac->shared->touch == wacom->hdev)
+			wacom_wac->shared->touch = NULL;
+		else if (wacom_wac->shared->pen == wacom->hdev)
+			wacom_wac->shared->pen = NULL;
 
-			if (touch == res_wacom->hdev) {
-				rcu_assign_pointer(wacom_wac->shared->touch, NULL);
-				rcu_assign_pointer(wacom_wac->shared->touch_input, NULL);
-			} else if (pen == res_wacom->hdev) {
-				rcu_assign_pointer(wacom_wac->shared->pen, NULL);
-			}
-		}
-
-		synchronize_rcu();
-
-		if (kref_put_mutex(&data->kref, wacom_release_shared_data, &wacom_udev_list_lock))
-			mutex_unlock(&wacom_udev_list_lock);
-
+		kref_put(&data->kref, wacom_release_shared_data);
 		wacom_wac->shared = NULL;
 	}
 }
@@ -929,28 +901,29 @@ static int wacom_add_shared_data(struct hid_device *hdev)
 
 	data = wacom_get_hdev_data(hdev);
 	if (!data) {
-		data = kzalloc_obj(struct wacom_hdev_data);
+		data = kzalloc(sizeof(struct wacom_hdev_data), GFP_KERNEL);
 		if (!data) {
 			mutex_unlock(&wacom_udev_list_lock);
 			return -ENOMEM;
 		}
 
 		kref_init(&data->kref);
-		strscpy(data->phys, hdev->phys, sizeof(data->phys));
-		data->vendor = hdev->vendor;
-		data->product = hdev->product;
-		data->device_type = wacom_wac->features.device_type;
+		data->dev = hdev;
 		list_add_tail(&data->list, &wacom_udev_list);
 	}
 
-	wacom_wac->shared = &data->shared;
-
-	if (wacom_wac->has_mute_touch_switch)
-		WRITE_ONCE(wacom_wac->shared->has_mute_touch_switch, true);
-
 	mutex_unlock(&wacom_udev_list_lock);
 
+	wacom_wac->shared = &data->shared;
+
 	retval = devm_add_action_or_reset(&hdev->dev, wacom_remove_shared_data, wacom);
+	if (retval)
+		return retval;
+
+	if (wacom_wac->features.device_type & WACOM_DEVICETYPE_TOUCH)
+		wacom_wac->shared->touch = hdev;
+	else if (wacom_wac->features.device_type & WACOM_DEVICETYPE_PEN)
+		wacom_wac->shared->pen = hdev;
 
 	return retval;
 }
@@ -2375,86 +2348,28 @@ static void wacom_release_resources(struct wacom *wacom)
 
 static void wacom_set_shared_values(struct wacom_wac *wacom_wac)
 {
-	struct wacom *wacom = container_of(wacom_wac, struct wacom, wacom_wac);
-
-	guard(mutex)(&wacom_udev_list_lock);
+	if (wacom_wac->features.device_type & WACOM_DEVICETYPE_TOUCH) {
+		wacom_wac->shared->type = wacom_wac->features.type;
+		wacom_wac->shared->touch_input = wacom_wac->touch_input;
+	}
 
 	if (wacom_wac->has_mute_touch_switch) {
-		WRITE_ONCE(wacom_wac->shared->has_mute_touch_switch, true);
+		wacom_wac->shared->has_mute_touch_switch = true;
 		/* Hardware touch switch may be off. Wait until
 		 * we know the switch state to decide is_touch_on.
 		 * Softkey state should be initialized to "on" to
 		 * match historic default.
 		 */
 		if (wacom_wac->is_soft_touch_switch)
-			WRITE_ONCE(wacom_wac->shared->is_touch_on, true);
+			wacom_wac->shared->is_touch_on = true;
 	}
 
-	if (wacom_wac->features.device_type & WACOM_DEVICETYPE_TOUCH) {
-		struct hid_device *touch =
-			rcu_dereference_protected(wacom_wac->shared->touch,
-						  lockdep_is_held(&wacom_udev_list_lock));
-
-		if (touch == wacom->hdev || !touch) {
-			wacom_wac->shared->type = wacom_wac->features.type;
-			rcu_assign_pointer(wacom_wac->shared->touch, wacom->hdev);
-			rcu_assign_pointer(wacom_wac->shared->touch_input, wacom_wac->touch_input);
-		}
-	} else if (wacom_wac->features.device_type & WACOM_DEVICETYPE_PEN) {
-		rcu_assign_pointer(wacom_wac->shared->pen, wacom->hdev);
+	if (wacom_wac->shared->has_mute_touch_switch &&
+	    wacom_wac->shared->touch_input) {
+		set_bit(EV_SW, wacom_wac->shared->touch_input->evbit);
+		input_set_capability(wacom_wac->shared->touch_input, EV_SW,
+				     SW_MUTE_DEVICE);
 	}
-}
-
-static bool wacom_sibling_pending(struct wacom *wacom)
-{
-	const struct wacom_features *features = &wacom->wacom_wac.features;
-	struct hid_device *hdev = wacom->hdev;
-	struct usb_interface *sibling_intf;
-	int ifnum;
-
-	if (features->type != HID_GENERIC ||
-	    !(features->device_type & WACOM_DEVICETYPE_TOUCH))
-		return false;
-
-	if (wacom->wacom_wac.shared) {
-		if (rcu_access_pointer(wacom->wacom_wac.shared->pen))
-			return false;
-	}
-
-	if (!hid_is_usb(hdev) || !wacom->usbdev || !wacom->intf ||
-	    !wacom->intf->cur_altsetting)
-		return false;
-
-	ifnum = wacom->intf->cur_altsetting->desc.bInterfaceNumber;
-
-	/*
-	 * On composite Wacom devices, the Pen interface is always interface 0.
-	 * If the Touch interface is interface 0, there is no sibling Pen
-	 * interface on this device (standalone touch device).
-	 */
-	if (ifnum == 0)
-		return false;
-
-	/* Look for the sibling Pen interface at interface 0 */
-	sibling_intf = usb_ifnum_to_if(wacom->usbdev, 0);
-	if (!sibling_intf || !sibling_intf->cur_altsetting)
-		return false;
-
-	if (sibling_intf->cur_altsetting->desc.bInterfaceClass !=
-	    USB_INTERFACE_CLASS_HID)
-		return false;
-
-	if (sibling_intf->cur_altsetting->desc.bInterfaceSubClass == 1 &&
-	    (sibling_intf->cur_altsetting->desc.bInterfaceProtocol == 1 ||
-	     sibling_intf->cur_altsetting->desc.bInterfaceProtocol == 2))
-		return false;
-
-	/*
-	 * Interface 0 is a candidate HID interface on this composite device
-	 * whose probe has not completed yet (shared->pen is NULL). Defer until
-	 * interface 0 finishes probing and registers shared values.
-	 */
-	return true;
 }
 
 static int wacom_parse_and_register(struct wacom *wacom, bool wireless)
@@ -2534,11 +2449,6 @@ static int wacom_parse_and_register(struct wacom *wacom, bool wireless)
 	if (error)
 		goto fail;
 
-	if (wacom_sibling_pending(wacom)) {
-		error = -EPROBE_DEFER;
-		goto fail;
-	}
-
 	error = wacom_setup_inputs(wacom);
 	if (error)
 		goto fail;
@@ -2596,7 +2506,6 @@ static int wacom_parse_and_register(struct wacom *wacom, bool wireless)
 
 fail_hw_stop:
 	hid_hw_stop(hdev);
-	cancel_delayed_work_sync(&wacom->init_work);
 fail:
 	wacom_release_resources(wacom);
 	return error;
@@ -2884,19 +2793,16 @@ static void wacom_mode_change_work(struct work_struct *work)
 	bool is_direct = wacom->wacom_wac.is_direct_mode;
 	int error = 0;
 
-	struct hid_device *pen = rcu_access_pointer(shared->pen);
-	struct hid_device *touch = rcu_access_pointer(shared->touch);
-
-	if (pen) {
-		wacom1 = hid_get_drvdata(pen);
+	if (shared->pen) {
+		wacom1 = hid_get_drvdata(shared->pen);
 		wacom_release_resources(wacom1);
 		hid_hw_stop(wacom1->hdev);
 		wacom1->wacom_wac.has_mode_change = true;
 		wacom1->wacom_wac.is_direct_mode = is_direct;
 	}
 
-	if (touch) {
-		wacom2 = hid_get_drvdata(touch);
+	if (shared->touch) {
+		wacom2 = hid_get_drvdata(shared->touch);
 		wacom_release_resources(wacom2);
 		hid_hw_stop(wacom2->hdev);
 		wacom2->wacom_wac.has_mode_change = true;
@@ -3025,6 +2931,7 @@ static void wacom_remove(struct hid_device *hdev)
 		wacom_release_resources(wacom);
 }
 
+#ifdef CONFIG_PM
 static int wacom_resume(struct hid_device *hdev)
 {
 	struct wacom *wacom = hid_get_drvdata(hdev);
@@ -3044,6 +2951,7 @@ static int wacom_reset_resume(struct hid_device *hdev)
 {
 	return wacom_resume(hdev);
 }
+#endif /* CONFIG_PM */
 
 static struct hid_driver wacom_driver = {
 	.name =		"wacom",
@@ -3051,8 +2959,10 @@ static struct hid_driver wacom_driver = {
 	.probe =	wacom_probe,
 	.remove =	wacom_remove,
 	.report =	wacom_wac_report,
-	.resume =	pm_ptr(wacom_resume),
-	.reset_resume =	pm_ptr(wacom_reset_resume),
+#ifdef CONFIG_PM
+	.resume =	wacom_resume,
+	.reset_resume =	wacom_reset_resume,
+#endif
 	.raw_event =	wacom_raw_event,
 };
 module_hid_driver(wacom_driver);

@@ -20,6 +20,8 @@
 #include <asm/page.h>
 #include <asm/sections.h>
 
+#include <crypto/sha1.h>
+
 #include "kallsyms_internal.h"
 #include "kexec_internal.h"
 

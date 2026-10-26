@@ -387,7 +387,7 @@ static const struct cpcap_battery_config cpcap_battery_bw8x_data = {
  * Safe values for any lipo battery likely to fit into a mapphone
  * battery bay.
  */
-static const struct cpcap_battery_config cpcap_battery_unknown_data = {
+static const struct cpcap_battery_config cpcap_battery_unkown_data = {
 	.cd_factor = 0x3cc,
 	.info.technology = POWER_SUPPLY_TECHNOLOGY_LION,
 	.info.voltage_max_design = 4200000,
@@ -402,30 +402,6 @@ static int cpcap_battery_match_nvmem(struct device *dev, const void *data)
 		return 1;
 	else
 		return 0;
-}
-
-static void cpcap_battery_update_battery_data(struct cpcap_battery_ddata *ddata)
-{
-	struct power_supply_battery_info *info;
-
-	if (power_supply_get_battery_info(ddata->psy, &info) < 0)
-		return;
-
-	if (info->technology > 0)
-		ddata->config.info.technology = info->technology;
-
-	if (info->voltage_max_design_uv > 0)
-		ddata->config.info.voltage_max_design = info->voltage_max_design_uv;
-
-	if (info->voltage_min_design_uv > 0)
-		ddata->config.info.voltage_min_design = info->voltage_min_design_uv;
-
-	if (info->charge_full_design_uah > 0)
-		ddata->config.info.charge_full_design = info->charge_full_design_uah;
-
-	if (info->constant_charge_voltage_max_uv > 0)
-		ddata->config.bat.constant_charge_voltage_max_uv =
-			info->constant_charge_voltage_max_uv;
 }
 
 static void cpcap_battery_detect_battery_type(struct cpcap_battery_ddata *ddata)
@@ -456,11 +432,8 @@ static void cpcap_battery_detect_battery_type(struct cpcap_battery_ddata *ddata)
 		ddata->config = cpcap_battery_bw8x_data;
 		break;
 	default:
-		ddata->config = cpcap_battery_unknown_data;
+		ddata->config = cpcap_battery_unkown_data;
 	}
-
-	if (ddata->psy)
-		cpcap_battery_update_battery_data(ddata);
 }
 
 /**
@@ -957,8 +930,12 @@ static int cpcap_battery_init_irq(struct platform_device *pdev,
 					  cpcap_battery_irq_thread,
 					  IRQF_SHARED | IRQF_ONESHOT,
 					  name, ddata);
-	if (error)
+	if (error) {
+		dev_err(ddata->dev, "could not get irq %s: %i\n",
+			name, error);
+
 		return error;
+	}
 
 	d = devm_kzalloc(ddata->dev, sizeof(*d), GFP_KERNEL);
 	if (!d)
@@ -1202,4 +1179,3 @@ module_platform_driver(cpcap_battery_driver);
 MODULE_LICENSE("GPL v2");
 MODULE_AUTHOR("Tony Lindgren <tony@atomide.com>");
 MODULE_DESCRIPTION("CPCAP PMIC Battery Driver");
-MODULE_IMPORT_NS("IIO_CONSUMER");

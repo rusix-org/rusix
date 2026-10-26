@@ -32,7 +32,8 @@
  *
  */
 
-#define pr_fmt(fmt) "IPVS: " fmt
+#define KMSG_COMPONENT "IPVS"
+#define pr_fmt(fmt) KMSG_COMPONENT ": " fmt
 
 #include <linux/ip.h>
 #include <linux/module.h>
@@ -107,7 +108,7 @@ static void ip_vs_dest_set_insert(struct ip_vs_dest_set *set,
 		}
 	}
 
-	e = kmalloc_obj(*e, GFP_ATOMIC);
+	e = kmalloc(sizeof(*e), GFP_ATOMIC);
 	if (e == NULL)
 		return;
 
@@ -166,7 +167,7 @@ static inline struct ip_vs_dest *ip_vs_dest_set_min(struct ip_vs_dest_set *set)
 	/* select the first destination server, whose weight > 0 */
 	list_for_each_entry_rcu(e, &set->list, list) {
 		least = e->dest;
-		if (ip_vs_dest_is_overloaded(least))
+		if (least->flags & IP_VS_DEST_F_OVERLOAD)
 			continue;
 
 		if ((atomic_read(&least->weight) > 0) &&
@@ -181,7 +182,7 @@ static inline struct ip_vs_dest *ip_vs_dest_set_min(struct ip_vs_dest_set *set)
   nextstage:
 	list_for_each_entry_continue_rcu(e, &set->list, list) {
 		dest = e->dest;
-		if (ip_vs_dest_is_overloaded(dest))
+		if (dest->flags & IP_VS_DEST_F_OVERLOAD)
 			continue;
 
 		doh = ip_vs_dest_conn_overhead(dest);
@@ -366,7 +367,7 @@ ip_vs_lblcr_new(struct ip_vs_lblcr_table *tbl, const union nf_inet_addr *daddr,
 		if (atomic_read(&tbl->entries) >= tbl->max_size * 3 / 2)
 			return NULL;
 
-		en = kmalloc_obj(*en, GFP_ATOMIC);
+		en = kmalloc(sizeof(*en), GFP_ATOMIC);
 		if (!en)
 			return NULL;
 
@@ -513,7 +514,7 @@ static int ip_vs_lblcr_init_svc(struct ip_vs_service *svc)
 	/*
 	 *    Allocate the ip_vs_lblcr_table for this service
 	 */
-	tbl = kmalloc_obj(*tbl);
+	tbl = kmalloc(sizeof(*tbl), GFP_KERNEL);
 	if (tbl == NULL)
 		return -ENOMEM;
 
@@ -580,7 +581,7 @@ __ip_vs_lblcr_schedule(struct ip_vs_service *svc)
 	 * new connection.
 	 */
 	list_for_each_entry_rcu(dest, &svc->destinations, n_list) {
-		if (ip_vs_dest_is_overloaded(dest))
+		if (dest->flags & IP_VS_DEST_F_OVERLOAD)
 			continue;
 
 		if (atomic_read(&dest->weight) > 0) {
@@ -596,7 +597,7 @@ __ip_vs_lblcr_schedule(struct ip_vs_service *svc)
 	 */
   nextstage:
 	list_for_each_entry_continue_rcu(dest, &svc->destinations, n_list) {
-		if (ip_vs_dest_is_overloaded(dest))
+		if (dest->flags & IP_VS_DEST_F_OVERLOAD)
 			continue;
 
 		doh = ip_vs_dest_conn_overhead(dest);

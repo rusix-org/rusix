@@ -1,7 +1,5 @@
 # SPDX-License-Identifier: GPL-2.0+ OR MIT
 
-CFLAGS += $(KHDR_INCLUDES)
-
 TEST_PROGS := \
 	bridge_activity_notify.sh \
 	bridge_fdb_learning_limit.sh \
@@ -134,10 +132,6 @@ TEST_FILES := \
 	sch_tbf_etsprio.sh \
 	tc_common.sh \
 # end of TEST_FILES
-
-TEST_GEN_PROGS := \
-	ipmr
-# end of TEST_GEN_PROGS
 
 TEST_INCLUDES := \
 	$(wildcard ../lib/sh/*.sh) \

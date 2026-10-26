@@ -211,7 +211,7 @@ static int acp_pdm_dma_open(struct snd_soc_component *component,
 
 	runtime = substream->runtime;
 	adata = dev_get_drvdata(component->dev);
-	pdm_data = kzalloc_obj(*pdm_data);
+	pdm_data = kzalloc(sizeof(*pdm_data), GFP_KERNEL);
 	if (!pdm_data)
 		return -EINVAL;
 
@@ -233,13 +233,7 @@ static int acp_pdm_dma_open(struct snd_soc_component *component,
 
 	pdm_data->acp_base = adata->acp_base;
 	runtime->private_data = pdm_data;
-
-	/*
-	 * ASoC only marks the component as opened when .open() returns 0.
-	 * Since snd_pcm_hw_constraint_integer() may return 1, explicitly
-	 * return 0 to ensure .close() is not skipped on rollback.
-	 */
-	return 0;
+	return ret;
 }
 
 static int acp_pdm_dma_hw_params(struct snd_soc_component *component,
@@ -382,7 +376,7 @@ static const struct snd_soc_component_driver acp_pdm_component = {
 	.close			= acp_pdm_dma_close,
 	.hw_params		= acp_pdm_dma_hw_params,
 	.pointer		= acp_pdm_dma_pointer,
-	.pcm_new		= acp_pdm_dma_new,
+	.pcm_construct		= acp_pdm_dma_new,
 	.legacy_dai_naming	= 1,
 };
 

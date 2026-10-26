@@ -131,13 +131,12 @@ void __cpuidle default_idle_call(void)
 }
 
 static int call_cpuidle_s2idle(struct cpuidle_driver *drv,
-			       struct cpuidle_device *dev,
-			       u64 max_latency_ns)
+			       struct cpuidle_device *dev)
 {
 	if (current_clr_polling_and_test())
 		return -EBUSY;
 
-	return cpuidle_enter_s2idle(drv, dev, max_latency_ns);
+	return cpuidle_enter_s2idle(drv, dev);
 }
 
 static int call_cpuidle(struct cpuidle_driver *drv, struct cpuidle_device *dev,
@@ -214,13 +213,12 @@ static void cpuidle_idle_call(bool stop_tick)
 		u64 max_latency_ns;
 
 		if (idle_should_enter_s2idle()) {
-			max_latency_ns = cpu_wakeup_latency_qos_limit() *
-					 NSEC_PER_USEC;
 
-			entered_state = call_cpuidle_s2idle(drv, dev,
-							    max_latency_ns);
+			entered_state = call_cpuidle_s2idle(drv, dev);
 			if (entered_state > 0)
 				goto exit_idle;
+
+			max_latency_ns = U64_MAX;
 		} else {
 			max_latency_ns = dev->forced_idle_latency_limit_ns;
 		}
@@ -280,14 +278,6 @@ static void do_idle(void)
 	int cpu = smp_processor_id();
 	bool got_tick = false;
 
-	if (cpu_is_offline(cpu)) {
-		local_irq_disable();
-		/* All per-CPU kernel threads should be done by now. */
-		WARN_ON_ONCE(need_resched());
-		cpuhp_report_idle_dead();
-		arch_cpu_idle_dead();
-	}
-
 	/*
 	 * Check if we need to update blocked load
 	 */
@@ -338,6 +328,11 @@ static void do_idle(void)
 		 *   again to reprogram the tick.
 		 */
 		local_irq_disable();
+
+		if (cpu_is_offline(cpu)) {
+			cpuhp_report_idle_dead();
+			arch_cpu_idle_dead();
+		}
 
 		arch_cpu_idle_enter();
 		rcu_nocb_flush_deferred_wakeup();
@@ -478,20 +473,14 @@ static void wakeup_preempt_idle(struct rq *rq, struct task_struct *p, int flags)
 	resched_curr(rq);
 }
 
-static void update_curr_idle(struct rq *rq);
-
 static void put_prev_task_idle(struct rq *rq, struct task_struct *prev, struct task_struct *next)
 {
-	update_curr_idle(rq);
+	dl_server_update_idle_time(rq, prev);
 	scx_update_idle(rq, false, true);
-	update_rq_avg_idle(rq);
 }
 
-static void set_next_task_idle(struct rq *rq, struct task_struct *next, enum snt_e type)
+static void set_next_task_idle(struct rq *rq, struct task_struct *next, bool first)
 {
-	if (type == SNT_REPICK)
-		return;
-
 	update_idle_core(rq);
 	scx_update_idle(rq, true, true);
 	schedstat_inc(rq->sched_goidle);
@@ -504,15 +493,9 @@ static void set_next_task_idle(struct rq *rq, struct task_struct *next, enum snt
 	update_idle_rq_clock_pelt(rq);
 }
 
-struct task_struct *pick_task_idle(struct rq *rq, struct rq_flags *rf)
+struct task_struct *pick_task_idle(struct rq *rq)
 {
-	/*
-	 * Notify scx only on an idle-to-idle re-pick (the cpu was already idle).
-	 * A real task->idle transition is delivered by set_next_task_idle(), so
-	 * calling here too would duplicate it.
-	 */
-	if (scx_enabled() && is_idle_task(rq->curr))
-		scx_update_idle(rq, true, false);
+	scx_update_idle(rq, true, false);
 	return rq->idle;
 }
 
@@ -540,45 +523,28 @@ dequeue_task_idle(struct rq *rq, struct task_struct *p, int flags)
  */
 static void task_tick_idle(struct rq *rq, struct task_struct *curr, int queued)
 {
-	update_curr_idle(rq);
 }
 
-static void switching_to_idle(struct rq *rq, struct task_struct *p)
+static void switched_to_idle(struct rq *rq, struct task_struct *p)
 {
 	BUG();
 }
 
 static void
-prio_changed_idle(struct rq *rq, struct task_struct *p, u64 oldprio)
+prio_changed_idle(struct rq *rq, struct task_struct *p, int oldprio)
 {
-	if (p->prio == oldprio)
-		return;
-
 	BUG();
 }
 
 static void update_curr_idle(struct rq *rq)
 {
-	struct sched_entity *se = &rq->idle->se;
-	u64 now = rq_clock_task(rq);
-	s64 delta_exec;
-
-	delta_exec = now - se->exec_start;
-	if (unlikely(delta_exec <= 0))
-		return;
-
-	se->exec_start = now;
-
-	dl_server_update_idle(&rq->fair_server, delta_exec);
-#ifdef CONFIG_SCHED_CLASS_EXT
-	dl_server_update_idle(&rq->ext_server, delta_exec);
-#endif
 }
 
 /*
  * Simple, special scheduling class for the per-CPU idle tasks:
  */
 DEFINE_SCHED_CLASS(idle) = {
+
 	/* no enqueue/yield_task for idle tasks */
 
 	/* dequeue is not valid, we print a debug message there: */
@@ -597,6 +563,6 @@ DEFINE_SCHED_CLASS(idle) = {
 	.task_tick		= task_tick_idle,
 
 	.prio_changed		= prio_changed_idle,
-	.switching_to		= switching_to_idle,
+	.switched_to		= switched_to_idle,
 	.update_curr		= update_curr_idle,
 };

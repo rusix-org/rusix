@@ -3,47 +3,24 @@
 //! Implementation of [`Box`].
 
 #[allow(unused_imports)] // Used in doc comments.
-use super::allocator::{
-    KVmalloc,
-    Kmalloc,
-    Vmalloc,
-    VmallocPageIter, //
-};
+use super::allocator::{KVmalloc, Kmalloc, Vmalloc, VmallocPageIter};
+use super::{AllocError, Allocator, Flags, NumaNode};
+use core::alloc::Layout;
+use core::borrow::{Borrow, BorrowMut};
+use core::marker::PhantomData;
+use core::mem::ManuallyDrop;
+use core::mem::MaybeUninit;
+use core::ops::{Deref, DerefMut};
+use core::pin::Pin;
+use core::ptr::NonNull;
+use core::result::Result;
 
-use super::{
-    AllocError,
-    Allocator,
-    Flags,
-    NumaNode, //
-};
-
-use crate::{
-    fmt,
-    page::AsPageIter,
-    prelude::*,
-    types::ForeignOwnable, //
-};
-
-use core::{
-    alloc::Layout,
-    borrow::{
-        Borrow,
-        BorrowMut, //
-    },
-    marker::PhantomData,
-    mem::{
-        ManuallyDrop,
-        MaybeUninit, //
-    },
-    ops::{
-        Deref,
-        DerefMut, //
-    },
-    ptr::NonNull,
-    result::Result, //
-};
-
-use pin_init::ZeroableOption;
+use crate::ffi::c_void;
+use crate::fmt;
+use crate::init::InPlaceInit;
+use crate::page::AsPageIter;
+use crate::types::ForeignOwnable;
+use pin_init::{InPlaceWrite, Init, PinInit, ZeroableOption};
 
 /// The kernel's [`Box`] type -- a heap allocation for a single value of type `T`.
 ///
@@ -100,8 +77,33 @@ use pin_init::ZeroableOption;
 /// `self.0` is always properly aligned and either points to memory allocated with `A` or, for
 /// zero-sized types, is a dangling, well aligned pointer.
 #[repr(transparent)]
-#[derive(core::marker::CoercePointee)]
-pub struct Box<#[pointee] T: ?Sized, A: Allocator>(NonNull<T>, PhantomData<A>);
+#[cfg_attr(CONFIG_RUSTC_HAS_COERCE_POINTEE, derive(core::marker::CoercePointee))]
+pub struct Box<#[cfg_attr(CONFIG_RUSTC_HAS_COERCE_POINTEE, pointee)] T: ?Sized, A: Allocator>(
+    NonNull<T>,
+    PhantomData<A>,
+);
+
+// This is to allow coercion from `Box<T, A>` to `Box<U, A>` if `T` can be converted to the
+// dynamically-sized type (DST) `U`.
+#[cfg(not(CONFIG_RUSTC_HAS_COERCE_POINTEE))]
+impl<T, U, A> core::ops::CoerceUnsized<Box<U, A>> for Box<T, A>
+where
+    T: ?Sized + core::marker::Unsize<U>,
+    U: ?Sized,
+    A: Allocator,
+{
+}
+
+// This is to allow `Box<U, A>` to be dispatched on when `Box<T, A>` can be coerced into `Box<U,
+// A>`.
+#[cfg(not(CONFIG_RUSTC_HAS_COERCE_POINTEE))]
+impl<T, U, A> core::ops::DispatchFromDyn<Box<U, A>> for Box<T, A>
+where
+    T: ?Sized + core::marker::Unsize<U>,
+    U: ?Sized,
+    A: Allocator,
+{
+}
 
 /// Type alias for [`Box`] with a [`Kmalloc`] allocator.
 ///
@@ -279,27 +281,6 @@ where
         Ok(Box(ptr.cast(), PhantomData))
     }
 
-    /// Creates a new zero-initialized `Box<T, A>`.
-    ///
-    /// New memory is allocated with `A` and the [`__GFP_ZERO`] flag. The allocation may fail, in
-    /// which case an error is returned. For ZSTs no memory is allocated.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// let b = KBox::<[u8; 128]>::zeroed(GFP_KERNEL)?;
-    /// assert_eq!(*b, [0; 128]);
-    /// # Ok::<(), Error>(())
-    /// ```
-    pub fn zeroed(flags: Flags) -> Result<Self, AllocError>
-    where
-        T: Zeroable,
-    {
-        // SAFETY: `__GFP_ZERO` guarantees the memory is zeroed; `T: Zeroable` guarantees that
-        // all-zeroes is a valid bit pattern for `T`.
-        Ok(unsafe { Self::new_uninit(flags | __GFP_ZERO)?.assume_init() })
-    }
-
     /// Constructs a new `Pin<Box<T, A>>`. If `T` does not implement [`Unpin`], then `x` will be
     /// pinned in memory and can't be moved.
     #[inline]
@@ -318,10 +299,7 @@ where
     /// # Examples
     ///
     /// ```
-    /// use kernel::sync::{
-    ///     new_spinlock,
-    ///     SpinLock, //
-    /// };
+    /// use kernel::sync::{new_spinlock, SpinLock};
     ///
     /// struct Inner {
     ///     a: u32,
@@ -345,7 +323,7 @@ where
     /// }
     ///
     /// // Allocate a boxed slice of 10 `Example`s.
-    /// let s = KBox::pin_slice::<_, _, Error, _>(
+    /// let s = KBox::pin_slice(
     ///     | _i | Example::new(),
     ///     10,
     ///     GFP_KERNEL
@@ -355,16 +333,15 @@ where
     /// assert_eq!(s[3].d.lock().a, 20);
     /// # Ok::<(), Error>(())
     /// ```
-    pub fn pin_slice<Func, Item, E, E2>(
+    pub fn pin_slice<Func, Item, E>(
         mut init: Func,
         len: usize,
         flags: Flags,
     ) -> Result<Pin<Box<[T], A>>, E>
     where
         Func: FnMut(usize) -> Item,
-        Item: PinInit<T, E2>,
+        Item: PinInit<T, E>,
         E: From<AllocError>,
-        E: From<E2>,
     {
         let mut buffer = super::Vec::<T, A>::with_capacity(len, flags)?;
         for i in 0..len {
@@ -373,13 +350,13 @@ where
             // - `ptr` is a valid pointer to uninitialized memory.
             // - `ptr` is not used if an error is returned.
             // - `ptr` won't be moved until it is dropped, i.e. it is pinned.
-            unsafe { pin_init::raw_try_init(ptr, init(i))? };
+            unsafe { init(i).__pinned_init(ptr)? };
 
             // SAFETY:
             // - `i + 1 <= len`, hence we don't exceed the capacity, due to the call to
             //   `with_capacity()` above.
             // - The new value at index buffer.len() + 1 is the only element being added here, and
-            //   it has been initialized above by `raw_try_init(ptr, i)`.
+            //   it has been initialized above by `init(i).__pinned_init(ptr)`.
             unsafe { buffer.inc_len(1) };
         }
 
@@ -459,22 +436,20 @@ where
 {
     type Initialized = Box<T, A>;
 
-    #[inline]
     fn write_init<E>(mut self, init: impl Init<T, E>) -> Result<Self::Initialized, E> {
         let slot = self.as_mut_ptr();
         // SAFETY: When init errors/panics, slot will get deallocated but not dropped,
         // slot is valid.
-        unsafe { pin_init::raw_try_init(slot, init)? };
+        unsafe { init.__init(slot)? };
         // SAFETY: All fields have been initialized.
         Ok(unsafe { Box::assume_init(self) })
     }
 
-    #[inline]
     fn write_pin_init<E>(mut self, init: impl PinInit<T, E>) -> Result<Pin<Self::Initialized>, E> {
         let slot = self.as_mut_ptr();
         // SAFETY: When init errors/panics, slot will get deallocated but not dropped,
         // slot is valid and will not be moved, because we pin it later.
-        unsafe { pin_init::raw_try_init(slot, init)? };
+        unsafe { init.__pinned_init(slot)? };
         // SAFETY: All fields have been initialized.
         Ok(unsafe { Box::assume_init(self) }.into())
     }
@@ -505,7 +480,7 @@ where
 
 // SAFETY: The pointer returned by `into_foreign` comes from a well aligned
 // pointer to `T` allocated by `A`.
-unsafe impl<T, A> ForeignOwnable for Box<T, A>
+unsafe impl<T: 'static, A> ForeignOwnable for Box<T, A>
 where
     A: Allocator,
 {
@@ -515,14 +490,8 @@ where
         core::mem::align_of::<T>()
     };
 
-    type Borrowed<'a>
-        = &'a T
-    where
-        Self: 'a;
-    type BorrowedMut<'a>
-        = &'a mut T
-    where
-        Self: 'a;
+    type Borrowed<'a> = &'a T;
+    type BorrowedMut<'a> = &'a mut T;
 
     fn into_foreign(self) -> *mut c_void {
         Box::into_raw(self).cast()
@@ -550,19 +519,13 @@ where
 
 // SAFETY: The pointer returned by `into_foreign` comes from a well aligned
 // pointer to `T` allocated by `A`.
-unsafe impl<T, A> ForeignOwnable for Pin<Box<T, A>>
+unsafe impl<T: 'static, A> ForeignOwnable for Pin<Box<T, A>>
 where
     A: Allocator,
 {
     const FOREIGN_ALIGN: usize = <Box<T, A> as ForeignOwnable>::FOREIGN_ALIGN;
-    type Borrowed<'a>
-        = Pin<&'a T>
-    where
-        Self: 'a;
-    type BorrowedMut<'a>
-        = Pin<&'a mut T>
-    where
-        Self: 'a;
+    type Borrowed<'a> = Pin<&'a T>;
+    type BorrowedMut<'a> = Pin<&'a mut T>;
 
     fn into_foreign(self) -> *mut c_void {
         // SAFETY: We are still treating the box as pinned.
@@ -629,6 +592,7 @@ where
 ///
 /// ```
 /// # use core::borrow::Borrow;
+/// # use kernel::alloc::KBox;
 /// struct Foo<B: Borrow<u32>>(B);
 ///
 /// // Owned instance.
@@ -656,6 +620,7 @@ where
 ///
 /// ```
 /// # use core::borrow::BorrowMut;
+/// # use kernel::alloc::KBox;
 /// struct Foo<B: BorrowMut<u32>>(B);
 ///
 /// // Owned instance.
@@ -720,13 +685,9 @@ where
 /// # Examples
 ///
 /// ```
-/// use kernel::{
-///     alloc::allocator::VmallocPageIter,
-///     page::{
-///         AsPageIter,
-///         PAGE_SIZE, //
-///     }, //
-/// };
+/// # use kernel::prelude::*;
+/// use kernel::alloc::allocator::VmallocPageIter;
+/// use kernel::page::{AsPageIter, PAGE_SIZE};
 ///
 /// let mut vbox = VBox::new((), GFP_KERNEL)?;
 ///

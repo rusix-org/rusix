@@ -139,7 +139,7 @@ int ocfs2_get_block(struct inode *inode, sector_t iblock,
 			      (unsigned long long)iblock, bh_result, create);
 
 	if (OCFS2_I(inode)->ip_flags & OCFS2_INODE_SYSTEM_FILE)
-		mlog(ML_NOTICE, "get_block on system inode 0x%p (%llu)\n",
+		mlog(ML_NOTICE, "get_block on system inode 0x%p (%lu)\n",
 		     inode, inode->i_ino);
 
 	if (S_ISLNK(inode->i_mode)) {
@@ -825,7 +825,7 @@ static int ocfs2_alloc_write_ctxt(struct ocfs2_write_ctxt **wcp,
 	u32 cend;
 	struct ocfs2_write_ctxt *wc;
 
-	wc = kzalloc_obj(struct ocfs2_write_ctxt, GFP_NOFS);
+	wc = kzalloc(sizeof(struct ocfs2_write_ctxt), GFP_NOFS);
 	if (!wc)
 		return -ENOMEM;
 
@@ -1327,7 +1327,8 @@ retry:
 
 	if (new == NULL) {
 		spin_unlock(&oi->ip_lock);
-		new = kmalloc_obj(struct ocfs2_unwritten_extent, GFP_NOFS);
+		new = kmalloc(sizeof(struct ocfs2_unwritten_extent),
+			     GFP_NOFS);
 		if (new == NULL) {
 			ret = -ENOMEM;
 			goto out;
@@ -2081,7 +2082,7 @@ ocfs2_dio_alloc_write_ctx(struct buffer_head *bh, int *alloc)
 	if (bh->b_private)
 		return bh->b_private;
 
-	dwc = kmalloc_obj(struct ocfs2_dio_write_ctxt, GFP_NOFS);
+	dwc = kmalloc(sizeof(struct ocfs2_dio_write_ctxt), GFP_NOFS);
 	if (dwc == NULL)
 		return NULL;
 	INIT_LIST_HEAD(&dwc->dw_zero_list);
@@ -2148,7 +2149,7 @@ static int ocfs2_dio_wr_get_block(struct inode *inode, sector_t iblock,
 	    ((iblock + ((len - 1) >> i_blkbits)) > endblk))
 		len = (endblk - iblock + 1) << i_blkbits;
 
-	mlog(0, "get block of %llu at %llu:%u req %u\n",
+	mlog(0, "get block of %lu at %llu:%u req %u\n",
 			inode->i_ino, pos, len, total_len);
 
 	/*

@@ -59,6 +59,7 @@ static struct ffs_data *__must_check ffs_data_new(const char *dev_name)
 	__attribute__((malloc));
 
 /* Opened counter handling. */
+static void ffs_data_opened(struct ffs_data *ffs);
 static void ffs_data_closed(struct ffs_data *ffs);
 
 /* Called with ffs->mutex held; take over ownership of data. */
@@ -159,9 +160,7 @@ struct ffs_epfile {
 	struct mutex			mutex;
 
 	struct ffs_data			*ffs;
-	struct ffs_ep			*ep;		/* P: ffs->eps_lock */
-	struct ffs_epfile		*epfile_in;	/* P: ffs->eps_lock */
-	struct ffs_epfile		*epfile_out;	/* P: ffs->eps_lock */
+	struct ffs_ep			*ep;	/* P: ffs->eps_lock */
 
 	/*
 	 * Buffer for holding data from partial reads which may happen since
@@ -221,13 +220,12 @@ struct ffs_epfile {
 	struct ffs_buffer		*read_buffer;
 #define READ_BUFFER_DROP ((struct ffs_buffer *)ERR_PTR(-ESHUTDOWN))
 
-	char				name[8];
+	char				name[5];
 
 	unsigned char			in;	/* P: ffs->eps_lock */
 	unsigned char			isoc;	/* P: ffs->eps_lock */
 
-	u8				zlp_enabled; /* P: ffs->eps_lock */
-	bool				is_rw_proxy;
+	unsigned char			_pad;
 
 	/* Protects dmabufs */
 	struct mutex			dmabufs_mutex;
@@ -647,26 +645,15 @@ done_mutex:
 	return ret;
 }
 
-
-static void ffs_data_reset(struct ffs_data *ffs);
-
 static int ffs_ep0_open(struct inode *inode, struct file *file)
 {
-	struct ffs_data *ffs = inode->i_sb->s_fs_info;
+	struct ffs_data *ffs = inode->i_private;
 
-	spin_lock_irq(&ffs->eps_lock);
-	if (ffs->state == FFS_CLOSING) {
-		spin_unlock_irq(&ffs->eps_lock);
+	if (ffs->state == FFS_CLOSING)
 		return -EBUSY;
-	}
-	if (!ffs->opened++ && ffs->state == FFS_DEACTIVATED) {
-		ffs->state = FFS_CLOSING;
-		spin_unlock_irq(&ffs->eps_lock);
-		ffs_data_reset(ffs);
-	} else {
-		spin_unlock_irq(&ffs->eps_lock);
-	}
+
 	file->private_data = ffs;
+	ffs_data_opened(ffs);
 
 	return stream_open(inode, file);
 }
@@ -826,7 +813,7 @@ static void *ffs_build_sg_list(struct sg_table *sgt, size_t sz)
 		return NULL;
 
 	n_pages = PAGE_ALIGN(sz) >> PAGE_SHIFT;
-	pages = kvmalloc_objs(struct page *, n_pages);
+	pages = kvmalloc_array(n_pages, sizeof(struct page *), GFP_KERNEL);
 	if (!pages) {
 		vfree(vaddr);
 
@@ -975,7 +962,7 @@ static ssize_t __ffs_epfile_read_data(struct ffs_epfile *epfile,
 		data_len, ret);
 
 	data_len -= ret;
-	buf = kmalloc_flex(*buf, storage, data_len);
+	buf = kmalloc(struct_size(buf, storage, data_len), GFP_KERNEL);
 	if (!buf)
 		return -ENOMEM;
 	buf->length = data_len;
@@ -994,8 +981,9 @@ static ssize_t __ffs_epfile_read_data(struct ffs_epfile *epfile,
 	return ret;
 }
 
-static struct ffs_ep *ffs_epfile_wait_ep(struct ffs_epfile *epfile, struct file *file)
+static struct ffs_ep *ffs_epfile_wait_ep(struct file *file)
 {
+	struct ffs_epfile *epfile = file->private_data;
 	struct ffs_ep *ep;
 	int ret;
 
@@ -1022,22 +1010,17 @@ static ssize_t ffs_epfile_io(struct file *file, struct ffs_io_data *io_data)
 	char *data = NULL;
 	ssize_t ret, data_len = -EINVAL;
 	int halt;
-	bool is_rw_proxy = epfile->is_rw_proxy;
 
 	/* Are we still active? */
 	if (WARN_ON(epfile->ffs->state != FFS_ACTIVE))
 		return -ENODEV;
 
-	/* Proxy to base endpoint if rw_proxy */
-	if (is_rw_proxy)
-		epfile = io_data->read ? epfile->epfile_out : epfile->epfile_in;
-
-	ep = ffs_epfile_wait_ep(epfile, file);
+	ep = ffs_epfile_wait_ep(file);
 	if (IS_ERR(ep))
 		return PTR_ERR(ep);
 
 	/* Do we halt? */
-	halt = is_rw_proxy ? 0 : (!io_data->read == !epfile->in);
+	halt = (!io_data->read == !epfile->in);
 	if (halt && epfile->isoc)
 		return -EINVAL;
 
@@ -1134,8 +1117,6 @@ static ssize_t ffs_epfile_io(struct file *file, struct ffs_io_data *io_data)
 			req->buf = data;
 			req->num_sgs = 0;
 		}
-
-		req->zero = !io_data->read ? epfile->zlp_enabled : 0;
 		req->length = data_len;
 
 		io_data->buf = data;
@@ -1187,8 +1168,6 @@ static ssize_t ffs_epfile_io(struct file *file, struct ffs_io_data *io_data)
 			req->buf = data;
 			req->num_sgs = 0;
 		}
-
-		req->zero = !io_data->read ? epfile->zlp_enabled : 0;
 		req->length = data_len;
 
 		io_data->buf = data;
@@ -1227,28 +1206,14 @@ error:
 static int
 ffs_epfile_open(struct inode *inode, struct file *file)
 {
-	struct ffs_data *ffs = inode->i_sb->s_fs_info;
-	struct ffs_epfile *epfile;
+	struct ffs_epfile *epfile = inode->i_private;
 
-	spin_lock_irq(&ffs->eps_lock);
-	if (!ffs->opened) {
-		spin_unlock_irq(&ffs->eps_lock);
+	if (WARN_ON(epfile->ffs->state != FFS_ACTIVE))
 		return -ENODEV;
-	}
-	/*
-	 * we want the state to be FFS_ACTIVE; FFS_ACTIVE alone is
-	 * not enough, though - we might have been through FFS_CLOSING
-	 * and back to FFS_ACTIVE, with our file already removed.
-	 */
-	epfile = smp_load_acquire(&inode->i_private);
-	if (unlikely(ffs->state != FFS_ACTIVE || !epfile)) {
-		spin_unlock_irq(&ffs->eps_lock);
-		return -ENODEV;
-	}
-	ffs->opened++;
-	spin_unlock_irq(&ffs->eps_lock);
 
 	file->private_data = epfile;
+	ffs_data_opened(epfile->ffs);
+
 	return stream_open(inode, file);
 }
 
@@ -1271,7 +1236,7 @@ static ssize_t ffs_epfile_write_iter(struct kiocb *kiocb, struct iov_iter *from)
 	ssize_t res;
 
 	if (!is_sync_kiocb(kiocb)) {
-		p = kzalloc_obj(io_data);
+		p = kzalloc(sizeof(io_data), GFP_KERNEL);
 		if (!p)
 			return -ENOMEM;
 		p->aio = true;
@@ -1312,7 +1277,7 @@ static ssize_t ffs_epfile_read_iter(struct kiocb *kiocb, struct iov_iter *to)
 	ssize_t res;
 
 	if (!is_sync_kiocb(kiocb)) {
-		p = kzalloc_obj(io_data);
+		p = kzalloc(sizeof(io_data), GFP_KERNEL);
 		if (!p)
 			return -ENOMEM;
 		p->aio = true;
@@ -1365,7 +1330,9 @@ static void ffs_dmabuf_release(struct kref *ref)
 	struct dma_buf *dmabuf = attach->dmabuf;
 
 	pr_vdebug("FFS DMABUF release\n");
-	dma_buf_unmap_attachment_unlocked(attach, priv->sgt, priv->dir);
+	dma_resv_lock(dmabuf->resv, NULL);
+	dma_buf_unmap_attachment(attach, priv->sgt, priv->dir);
+	dma_resv_unlock(dmabuf->resv);
 
 	dma_buf_detach(attach->dmabuf, attach);
 	dma_buf_put(dmabuf);
@@ -1389,7 +1356,7 @@ static void ffs_dmabuf_put(struct dma_buf_attachment *attach)
 static int
 ffs_epfile_release(struct inode *inode, struct file *file)
 {
-	struct ffs_epfile *epfile = file->private_data;
+	struct ffs_epfile *epfile = inode->i_private;
 	struct ffs_dmabuf_priv *priv, *tmp;
 	struct ffs_data *ffs = epfile->ffs;
 
@@ -1554,7 +1521,7 @@ static int ffs_dmabuf_attach(struct file *file, int fd)
 		goto err_dmabuf_put;
 	}
 
-	priv = kzalloc_obj(*priv);
+	priv = kzalloc(sizeof(*priv), GFP_KERNEL);
 	if (!priv) {
 		err = -ENOMEM;
 		goto err_dmabuf_detach;
@@ -1677,7 +1644,7 @@ static int ffs_dmabuf_transfer(struct file *file,
 
 	priv = attach->importer_priv;
 
-	ep = ffs_epfile_wait_ep(epfile, file);
+	ep = ffs_epfile_wait_ep(file);
 	if (IS_ERR(ep)) {
 		ret = PTR_ERR(ep);
 		goto err_attachment_put;
@@ -1703,7 +1670,7 @@ static int ffs_dmabuf_transfer(struct file *file,
 	if (ret)
 		goto err_resv_unlock;
 
-	fence = kmalloc_obj(*fence);
+	fence = kmalloc(sizeof(*fence), GFP_KERNEL);
 	if (!fence) {
 		ret = -ENOMEM;
 		goto err_resv_unlock;
@@ -1743,7 +1710,6 @@ static int ffs_dmabuf_transfer(struct file *file,
 
 	/* Now that the dma_fence is in place, queue the transfer. */
 
-	usb_req->zero = epfile->zlp_enabled;
 	usb_req->length = req->length;
 	usb_req->buf = NULL;
 	usb_req->sg = priv->sgt->sgl;
@@ -1791,13 +1757,9 @@ static long ffs_epfile_ioctl(struct file *file, unsigned code,
 	struct ffs_epfile *epfile = file->private_data;
 	struct ffs_ep *ep;
 	int ret;
-	__u32 enable_zlp = 0;
 
 	if (WARN_ON(epfile->ffs->state != FFS_ACTIVE))
 		return -ENODEV;
-
-	if (epfile->is_rw_proxy)
-		return -ENOTTY;
 
 	switch (code) {
 	case FUNCTIONFS_DMABUF_ATTACH:
@@ -1827,29 +1789,12 @@ static long ffs_epfile_ioctl(struct file *file, unsigned code,
 
 		return ffs_dmabuf_transfer(file, &req);
 	}
-	/*
-	 * We handle this IOCTL before ffs_epfile_wait_ep() to allow userspace
-	 * to configure ZLP behavior immediately without blocking indefinitely
-	 * while waiting for the USB host to connect and enable the endpoint.
-	 */
-	case FUNCTIONFS_ENDPOINT_ENABLE_ZLP:
-		if (!epfile->in)
-			return -EINVAL;
-
-		if (copy_from_user(&enable_zlp, (void __user *)value, sizeof(enable_zlp)))
-			return -EFAULT;
-
-		spin_lock_irq(&epfile->ffs->eps_lock);
-		epfile->zlp_enabled = !!enable_zlp;
-		spin_unlock_irq(&epfile->ffs->eps_lock);
-
-		return 0;
 	default:
 		break;
 	}
 
 	/* Wait for endpoint to be enabled */
-	ep = ffs_epfile_wait_ep(epfile, file);
+	ep = ffs_epfile_wait_ep(file);
 	if (IS_ERR(ep))
 		return PTR_ERR(ep);
 
@@ -1975,18 +1920,17 @@ static int ffs_sb_create_file(struct super_block *sb, const char *name,
 	struct dentry	*dentry;
 	struct inode	*inode;
 
-	inode = ffs_sb_make_inode(sb, data, fops, NULL, &ffs->file_perms);
-	if (!inode)
+	dentry = d_alloc_name(sb->s_root, name);
+	if (!dentry)
 		return -ENOMEM;
-	dentry = simple_start_creating(sb->s_root, name);
-	if (IS_ERR(dentry)) {
-		iput(inode);
-		return PTR_ERR(dentry);
+
+	inode = ffs_sb_make_inode(sb, data, fops, NULL, &ffs->file_perms);
+	if (!inode) {
+		dput(dentry);
+		return -ENOMEM;
 	}
 
-	d_make_persistent(dentry, inode);
-
-	simple_done_creating(dentry);
+	d_add(dentry, inode);
 	return 0;
 }
 
@@ -2155,7 +2099,7 @@ static int ffs_fs_init_fs_context(struct fs_context *fc)
 {
 	struct ffs_sb_fill_data *ctx;
 
-	ctx = kzalloc_obj(struct ffs_sb_fill_data);
+	ctx = kzalloc(sizeof(struct ffs_sb_fill_data), GFP_KERNEL);
 	if (!ctx)
 		return -ENOMEM;
 
@@ -2170,17 +2114,16 @@ static int ffs_fs_init_fs_context(struct fs_context *fc)
 	return 0;
 }
 
+static void ffs_data_reset(struct ffs_data *ffs);
+
 static void
 ffs_fs_kill_sb(struct super_block *sb)
 {
-	kill_anon_super(sb);
+	kill_litter_super(sb);
 	if (sb->s_fs_info) {
 		struct ffs_data *ffs = sb->s_fs_info;
 		ffs->state = FFS_CLOSING;
 		ffs_data_reset(ffs);
-		// no configfs accesses from that point on,
-		// so no further schedule_work() is possible
-		cancel_work_sync(&ffs->reset_work);
 		ffs_data_put(ffs);
 	}
 }
@@ -2226,6 +2169,15 @@ static void ffs_data_get(struct ffs_data *ffs)
 	refcount_inc(&ffs->ref);
 }
 
+static void ffs_data_opened(struct ffs_data *ffs)
+{
+	if (atomic_add_return(1, &ffs->opened) == 1 &&
+			ffs->state == FFS_DEACTIVATED) {
+		ffs->state = FFS_CLOSING;
+		ffs_data_reset(ffs);
+	}
+}
+
 static void ffs_data_put(struct ffs_data *ffs)
 {
 	if (refcount_dec_and_test(&ffs->ref)) {
@@ -2243,35 +2195,34 @@ static void ffs_data_put(struct ffs_data *ffs)
 
 static void ffs_data_closed(struct ffs_data *ffs)
 {
-	spin_lock_irq(&ffs->eps_lock);
-	if (--ffs->opened) {	// not the last opener?
-		spin_unlock_irq(&ffs->eps_lock);
-		return;
-	}
-	if (ffs->no_disconnect) {
-		struct ffs_epfile *epfiles;
+	if (atomic_dec_and_test(&ffs->opened)) {
+		if (ffs->no_disconnect) {
+			struct ffs_epfile *epfiles;
+			unsigned long flags;
 
-		ffs->state = FFS_DEACTIVATED;
-		epfiles = ffs->epfiles;
-		ffs->epfiles = NULL;
-		spin_unlock_irq(&ffs->eps_lock);
+			ffs->state = FFS_DEACTIVATED;
+			spin_lock_irqsave(&ffs->eps_lock, flags);
+			epfiles = ffs->epfiles;
+			ffs->epfiles = NULL;
+			spin_unlock_irqrestore(&ffs->eps_lock,
+							flags);
 
-		if (epfiles)
-			ffs_epfiles_destroy(ffs->sb, epfiles,
-					 ffs->epfiles_count);
+			if (epfiles)
+				ffs_epfiles_destroy(ffs->sb, epfiles,
+						 ffs->eps_count);
 
-		if (ffs->setup_state == FFS_SETUP_PENDING)
-			__ffs_ep0_stall(ffs);
-	} else {
-		ffs->state = FFS_CLOSING;
-		spin_unlock_irq(&ffs->eps_lock);
-		ffs_data_reset(ffs);
+			if (ffs->setup_state == FFS_SETUP_PENDING)
+				__ffs_ep0_stall(ffs);
+		} else {
+			ffs->state = FFS_CLOSING;
+			ffs_data_reset(ffs);
+		}
 	}
 }
 
 static struct ffs_data *ffs_data_new(const char *dev_name)
 {
-	struct ffs_data *ffs = kzalloc_obj(*ffs);
+	struct ffs_data *ffs = kzalloc(sizeof *ffs, GFP_KERNEL);
 	if (!ffs)
 		return NULL;
 
@@ -2282,7 +2233,7 @@ static struct ffs_data *ffs_data_new(const char *dev_name)
 	}
 
 	refcount_set(&ffs->ref, 1);
-	ffs->opened = 0;
+	atomic_set(&ffs->opened, 0);
 	ffs->state = FFS_READ_DESCRIPTORS;
 	mutex_init(&ffs->mutex);
 	spin_lock_init(&ffs->eps_lock);
@@ -2317,7 +2268,7 @@ static void ffs_data_clear(struct ffs_data *ffs)
 	 * copy of epfile will save us from use-after-free.
 	 */
 	if (epfiles) {
-		ffs_epfiles_destroy(ffs->sb, epfiles, ffs->epfiles_count);
+		ffs_epfiles_destroy(ffs->sb, epfiles, ffs->eps_count);
 		ffs->epfiles = NULL;
 	}
 
@@ -2335,7 +2286,6 @@ static void ffs_data_reset(struct ffs_data *ffs)
 {
 	ffs_data_clear(ffs);
 
-	spin_lock_irq(&ffs->eps_lock);
 	ffs->raw_descs_data = NULL;
 	ffs->raw_descs = NULL;
 	ffs->raw_strings = NULL;
@@ -2359,7 +2309,6 @@ static void ffs_data_reset(struct ffs_data *ffs)
 	ffs->ms_os_descs_ext_prop_count = 0;
 	ffs->ms_os_descs_ext_prop_name_len = 0;
 	ffs->ms_os_descs_ext_prop_data_len = 0;
-	spin_unlock_irq(&ffs->eps_lock);
 }
 
 
@@ -2415,16 +2364,11 @@ static void functionfs_unbind(struct ffs_data *ffs)
 static int ffs_epfiles_create(struct ffs_data *ffs)
 {
 	struct ffs_epfile *epfile, *epfiles;
-	unsigned int i, count, epfiles_count;
+	unsigned i, count;
 	int err;
 
 	count = ffs->eps_count;
-	epfiles_count = count;
-	if (ffs->user_flags & FUNCTIONFS_RW_PROXY_EPS)
-		epfiles_count += count / 2;
-	ffs->epfiles_count = epfiles_count;
-
-	epfiles = kzalloc_objs(*epfiles, epfiles_count);
+	epfiles = kcalloc(count, sizeof(*epfiles), GFP_KERNEL);
 	if (!epfiles)
 		return -ENOMEM;
 
@@ -2447,39 +2391,8 @@ static int ffs_epfiles_create(struct ffs_data *ffs)
 		}
 	}
 
-	if (ffs->user_flags & FUNCTIONFS_RW_PROXY_EPS) {
-		struct ffs_epfile *comp = epfiles + count;
-
-		for (i = 0; i < count; i += 2, ++comp) {
-			struct ffs_epfile *ep1 = &epfiles[i];
-			struct ffs_epfile *ep2 = &epfiles[i + 1];
-			bool ep1_in = ffs->eps_addrmap[i + 1] & USB_ENDPOINT_DIR_MASK;
-
-			comp->ffs = ffs;
-			comp->is_rw_proxy = true;
-			comp->epfile_in = ep1_in ? ep1 : ep2;
-			comp->epfile_out = ep1_in ? ep2 : ep1;
-			mutex_init(&comp->mutex);
-			mutex_init(&comp->dmabufs_mutex);
-			INIT_LIST_HEAD(&comp->dmabufs);
-			snprintf(comp->name, sizeof(comp->name), "%s_rw",
-				 epfiles[i].name);
-			err = ffs_sb_create_file(ffs->sb, comp->name,
-						 comp, &ffs_epfile_operations);
-			if (err) {
-				ffs_epfiles_destroy(ffs->sb, epfiles, count + (i / 2));
-				return err;
-			}
-		}
-	}
-
 	ffs->epfiles = epfiles;
 	return 0;
-}
-
-static void clear_one(struct dentry *dentry)
-{
-	smp_store_release(&dentry->d_inode->i_private, NULL);
 }
 
 static void ffs_epfiles_destroy(struct super_block *sb,
@@ -2491,7 +2404,7 @@ static void ffs_epfiles_destroy(struct super_block *sb,
 	for (; count; --count, ++epfile) {
 		BUG_ON(mutex_is_locked(&epfile->mutex));
 		__ffs_epfile_read_buffer_free(epfile);
-		simple_remove_by_name(root, epfile->name, clear_one);
+		simple_remove_by_name(root, epfile->name, NULL);
 	}
 
 	kfree(epfiles);
@@ -3050,8 +2963,7 @@ static int __ffs_data_got_descs(struct ffs_data *ffs,
 			      FUNCTIONFS_VIRTUAL_ADDR |
 			      FUNCTIONFS_EVENTFD |
 			      FUNCTIONFS_ALL_CTRL_RECIP |
-			      FUNCTIONFS_CONFIG0_SETUP |
-			      FUNCTIONFS_RW_PROXY_EPS)) {
+			      FUNCTIONFS_CONFIG0_SETUP)) {
 			ret = -ENOSYS;
 			goto error;
 		}
@@ -3137,21 +3049,6 @@ static int __ffs_data_got_descs(struct ffs_data *ffs,
 	if (raw_descs == data || len) {
 		ret = -EINVAL;
 		goto error;
-	}
-
-	if (ffs->user_flags & FUNCTIONFS_RW_PROXY_EPS) {
-		if (ffs->eps_count % 2) {
-			ret = -EINVAL;
-			goto error;
-		}
-
-		for (i = 1; i < ffs->eps_count; i += 2) {
-			if ((ffs->eps_addrmap[i] & USB_ENDPOINT_DIR_MASK) ==
-			    (ffs->eps_addrmap[i + 1] & USB_ENDPOINT_DIR_MASK)) {
-				ret = -EINVAL;
-				goto error;
-			}
-		}
 	}
 
 	ffs->raw_descs_data	= _data;
@@ -3449,7 +3346,7 @@ static int __ffs_func_bind_do_descs(enum ffs_entity_type type, u8 *valuep,
 		struct usb_request *req;
 		struct usb_ep *ep;
 		u8 bEndpointAddress;
-		__le16 wMaxPacketSize;
+		u16 wMaxPacketSize;
 
 		/*
 		 * We back up bEndpointAddress because autoconfig overwrites
@@ -4129,7 +4026,7 @@ static void ffs_attr_release(struct config_item *item)
 	usb_put_function_instance(&opts->func_inst);
 }
 
-static const struct configfs_item_operations ffs_item_ops = {
+static struct configfs_item_operations ffs_item_ops = {
 	.release	= ffs_attr_release,
 };
 
@@ -4166,7 +4063,7 @@ static struct usb_function_instance *ffs_alloc_inst(void)
 	struct f_fs_opts *opts;
 	struct ffs_dev *dev;
 
-	opts = kzalloc_obj(*opts);
+	opts = kzalloc(sizeof(*opts), GFP_KERNEL);
 	if (!opts)
 		return ERR_PTR(-ENOMEM);
 
@@ -4242,7 +4139,7 @@ static struct usb_function *ffs_alloc(struct usb_function_instance *fi)
 {
 	struct ffs_function *func;
 
-	func = kzalloc_obj(*func);
+	func = kzalloc(sizeof(*func), GFP_KERNEL);
 	if (!func)
 		return ERR_PTR(-ENOMEM);
 
@@ -4273,7 +4170,7 @@ static struct ffs_dev *_ffs_alloc_dev(void)
 	if (_ffs_get_single_dev())
 			return ERR_PTR(-EBUSY);
 
-	dev = kzalloc_obj(*dev);
+	dev = kzalloc(sizeof(*dev), GFP_KERNEL);
 	if (!dev)
 		return ERR_PTR(-ENOMEM);
 

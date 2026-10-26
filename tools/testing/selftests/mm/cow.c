@@ -21,14 +21,15 @@
 #include <sys/wait.h>
 #include <linux/memfd.h>
 
-#include "local_config.h_gen"
+#include "local_config.h"
 #ifdef LOCAL_CONFIG_HAVE_LIBURING
 #include <liburing.h>
 #endif /* LOCAL_CONFIG_HAVE_LIBURING */
 
 #include "../../../../mm/gup_test.h"
-#include "kselftest.h"
+#include "../kselftest.h"
 #include "vm_util.h"
+#include "thp_settings.h"
 
 static size_t pagesize;
 static int pagemap_fd;
@@ -36,7 +37,7 @@ static size_t pmdsize;
 static int nr_thpsizes;
 static size_t thpsizes[20];
 static int nr_hugetlbsizes;
-static unsigned long hugetlbsizes[10];
+static size_t hugetlbsizes[10];
 static int gup_fd;
 static bool has_huge_zeropage;
 
@@ -72,18 +73,6 @@ static bool range_is_swapped(void *addr, size_t size)
 		if (!pagemap_is_swapped(pagemap_fd, addr))
 			return false;
 	return true;
-}
-
-static bool populate_page_checked(char *addr)
-{
-	bool ret;
-
-	FORCE_READ(*addr);
-	ret = pagemap_is_populated(pagemap_fd, addr);
-	if (!ret)
-		ksft_print_msg("Failed to populate page\n");
-
-	return ret;
 }
 
 struct comm_pipes {
@@ -201,7 +190,7 @@ static void do_test_cow_in_parent(char *mem, size_t size, bool do_mprotect,
 		log_test_result(KSFT_FAIL);
 		goto close_comm_pipes;
 	} else if (!ret) {
-		_exit(fn(mem, size, &comm_pipes));
+		exit(fn(mem, size, &comm_pipes));
 	}
 
 	while (read(comm_pipes.child_ready[0], &buf, 1) != 1)
@@ -332,7 +321,7 @@ static void do_test_vmsplice_in_parent(char *mem, size_t size,
 			;
 		/* Modify page content in the child. */
 		memset(mem, 0xff, size);
-		_exit(0);
+		exit(0);
 	}
 
 	if (!before_fork) {
@@ -479,7 +468,7 @@ static void do_test_iouring(char *mem, size_t size, bool use_fork)
 			write(comm_pipes.child_ready[1], "0", 1);
 			while (read(comm_pipes.parent_ready[0], &buf, 1) != 1)
 				;
-			_exit(0);
+			exit(0);
 		}
 
 		while (read(comm_pipes.child_ready[0], &buf, 1) != 1)
@@ -644,7 +633,7 @@ static void do_test_ro_pin(char *mem, size_t size, enum ro_pin_test test,
 			write(comm_pipes.child_ready[1], "0", 1);
 			while (read(comm_pipes.parent_ready[0], &buf, 1) != 1)
 				;
-			_exit(0);
+			exit(0);
 		}
 
 		/* Wait until our child is ready. */
@@ -955,7 +944,7 @@ static void do_run_with_thp(test_fn fn, enum thp_run thp_run, size_t thpsize)
 			log_test_result(KSFT_FAIL);
 			goto munmap;
 		} else if (!ret) {
-			_exit(0);
+			exit(0);
 		}
 		wait(&ret);
 		/* Allow for sharing all pages again. */
@@ -1346,13 +1335,13 @@ static void do_test_anon_thp_collapse(char *mem, size_t size,
 		switch (test) {
 		case ANON_THP_COLLAPSE_UNSHARED:
 		case ANON_THP_COLLAPSE_FULLY_SHARED:
-			_exit(child_memcmp_fn(mem, size, &comm_pipes));
+			exit(child_memcmp_fn(mem, size, &comm_pipes));
 			break;
 		case ANON_THP_COLLAPSE_LOWER_SHARED:
-			_exit(child_memcmp_fn(mem, size / 2, &comm_pipes));
+			exit(child_memcmp_fn(mem, size / 2, &comm_pipes));
 			break;
 		case ANON_THP_COLLAPSE_UPPER_SHARED:
-			_exit(child_memcmp_fn(mem + size / 2, size / 2,
+			exit(child_memcmp_fn(mem + size / 2, size / 2,
 					     &comm_pipes));
 			break;
 		default:
@@ -1560,10 +1549,8 @@ static void run_with_zeropage(non_anon_test_fn fn, const char *desc)
 	}
 
 	/* Read from the page to populate the shared zeropage. */
-	if (!populate_page_checked(mem) || !populate_page_checked(smem)) {
-		log_test_result(KSFT_FAIL);
-		goto munmap;
-	}
+	FORCE_READ(*mem);
+	FORCE_READ(*smem);
 
 	fn(mem, smem, pagesize);
 munmap:
@@ -1625,11 +1612,8 @@ static void run_with_huge_zeropage(non_anon_test_fn fn, const char *desc)
 	 * the first sub-page and test if we get another sub-page populated
 	 * automatically.
 	 */
-	if (!populate_page_checked(mem) || !populate_page_checked(smem)) {
-		log_test_result(KSFT_FAIL);
-		goto munmap;
-	}
-
+	FORCE_READ(*mem);
+	FORCE_READ(*smem);
 	if (!pagemap_is_populated(pagemap_fd, mem + pagesize) ||
 	    !pagemap_is_populated(pagemap_fd, smem + pagesize)) {
 		ksft_test_result_skip("Did not get THPs populated\n");
@@ -1679,10 +1663,8 @@ static void run_with_memfd(non_anon_test_fn fn, const char *desc)
 	}
 
 	/* Fault the page in. */
-	if (!populate_page_checked(mem) || !populate_page_checked(smem)) {
-		log_test_result(KSFT_FAIL);
-		goto munmap;
-	}
+	FORCE_READ(*mem);
+	FORCE_READ(*smem);
 
 	fn(mem, smem, pagesize);
 munmap:
@@ -1742,10 +1724,8 @@ static void run_with_tmpfile(non_anon_test_fn fn, const char *desc)
 	}
 
 	/* Fault the page in. */
-	if (!populate_page_checked(mem) || !populate_page_checked(smem)) {
-		log_test_result(KSFT_FAIL);
-		goto munmap;
-	}
+	FORCE_READ(*mem);
+	FORCE_READ(*smem);
 
 	fn(mem, smem, pagesize);
 munmap:
@@ -1798,10 +1778,8 @@ static void run_with_memfd_hugetlb(non_anon_test_fn fn, const char *desc,
 	}
 
 	/* Fault the page in. */
-	if (!populate_page_checked(mem) || !populate_page_checked(smem)) {
-		log_test_result(KSFT_FAIL);
-		goto munmap;
-	}
+	FORCE_READ(*mem);
+	FORCE_READ(*smem);
 
 	fn(mem, smem, hugetlbsize);
 munmap:
@@ -1885,21 +1863,21 @@ int main(int argc, char **argv)
 
 	ksft_print_header();
 
-	thp_save_settings();
-
 	pagesize = getpagesize();
 	pmdsize = read_pmd_pagesize();
 	if (pmdsize) {
 		/* Only if THP is supported. */
 		thp_read_settings(&default_settings);
 		default_settings.hugepages[sz2ord(pmdsize, pagesize)].enabled = THP_INHERIT;
+		thp_save_settings();
 		thp_push_settings(&default_settings);
 
 		ksft_print_msg("[INFO] detected PMD size: %zu KiB\n",
 			       pmdsize / 1024);
 		nr_thpsizes = detect_thp_sizes(thpsizes, ARRAY_SIZE(thpsizes));
 	}
-	nr_hugetlbsizes = hugetlb_setup(2, hugetlbsizes, ARRAY_SIZE(hugetlbsizes));
+	nr_hugetlbsizes = detect_hugetlb_page_sizes(hugetlbsizes,
+						    ARRAY_SIZE(hugetlbsizes));
 	has_huge_zeropage = detect_huge_zeropage();
 
 	ksft_set_plan(ARRAY_SIZE(anon_test_cases) * tests_per_anon_test_case() +
@@ -1914,6 +1892,11 @@ int main(int argc, char **argv)
 	run_anon_test_cases();
 	run_anon_thp_test_cases();
 	run_non_anon_test_cases();
+
+	if (pmdsize) {
+		/* Only if THP is supported. */
+		thp_restore_settings();
+	}
 
 	ksft_finished();
 }

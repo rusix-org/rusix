@@ -15,6 +15,7 @@
 #include <linux/gpio/consumer.h>
 #include <linux/i2c.h>
 #include <linux/log2.h>
+#include <linux/mod_devicetable.h>
 #include <linux/module.h>
 #include <linux/pm.h>
 #include <linux/property.h>
@@ -580,7 +581,6 @@ static int mt9p031_get_format(struct v4l2_subdev *subdev,
 }
 
 static int mt9p031_set_format(struct v4l2_subdev *subdev,
-			      const struct v4l2_subdev_client_info *ci,
 			      struct v4l2_subdev_state *sd_state,
 			      struct v4l2_subdev_format *format)
 {
@@ -619,7 +619,6 @@ static int mt9p031_set_format(struct v4l2_subdev *subdev,
 }
 
 static int mt9p031_get_selection(struct v4l2_subdev *subdev,
-				 const struct v4l2_subdev_client_info *ci,
 				 struct v4l2_subdev_state *sd_state,
 				 struct v4l2_subdev_selection *sel)
 {
@@ -644,7 +643,6 @@ static int mt9p031_get_selection(struct v4l2_subdev *subdev,
 }
 
 static int mt9p031_set_selection(struct v4l2_subdev *subdev,
-				 const struct v4l2_subdev_client_info *ci,
 				 struct v4l2_subdev_state *sd_state,
 				 struct v4l2_subdev_selection *sel)
 {
@@ -794,8 +792,7 @@ static int mt9p031_s_ctrl(struct v4l2_ctrl *ctrl)
 			data = (1 << 6) | (ctrl->val >> 1);
 		} else {
 			ctrl->val &= ~7;
-			data = ((ctrl->val - 64) >> 3) & 0x7f;
-			data = (data << 8) | (1 << 6) | 32;
+			data = ((ctrl->val - 64) << 5) | (1 << 6) | 32;
 		}
 
 		return mt9p031_write(client, MT9P031_GLOBAL_GAIN, data);
@@ -1182,10 +1179,6 @@ static int mt9p031_probe(struct i2c_client *client)
 
 	mt9p031->reset = devm_gpiod_get_optional(&client->dev, "reset",
 						 GPIOD_OUT_HIGH);
-	if (IS_ERR(mt9p031->reset)) {
-		ret = PTR_ERR(mt9p031->reset);
-		goto done;
-	}
 
 	ret = mt9p031_clk_setup(mt9p031);
 	if (ret)

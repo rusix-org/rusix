@@ -3,7 +3,7 @@
  * Copyright (C) 2016 Oracle.  All Rights Reserved.
  * Author: Darrick J. Wong <darrick.wong@oracle.com>
  */
-#include "xfs_platform.h"
+#include "xfs.h"
 #include "xfs_fs.h"
 #include "xfs_shared.h"
 #include "xfs_format.h"
@@ -34,8 +34,6 @@
 #include "xfs_rtalloc.h"
 #include "xfs_rtgroup.h"
 #include "xfs_metafile.h"
-#include "xfs_errortag.h"
-#include "xfs_error.h"
 
 /*
  * Copy on Write of Shared Blocks
@@ -347,9 +345,6 @@ xfs_reflink_convert_cow(
 	int			error;
 
 	ASSERT(count != 0);
-
-	if (XFS_TEST_ERROR(mp, XFS_ERRTAG_WB_COW_CONVERT_ERROR))
-		return -EIO;
 
 	xfs_ilock(ip, XFS_ILOCK_EXCL);
 	error = xfs_reflink_convert_cow_locked(ip, offset_fsb, count_fsb);
@@ -990,16 +985,16 @@ xfs_reflink_end_cow(
 	 * repeatedly cycles the ILOCK to allocate one transaction per remapped
 	 * extent.
 	 *
-	 * If we're being called by writeback then the folios will still
-	 * have the writeback flag set, which prevents races with reflink
-	 * remapping and truncate.  Reflink remapping prevents races with
-	 * writeback by taking the iolock and mmaplock before flushing
-	 * the folios and remapping, which means there won't be any further
-	 * writeback or page cache dirtying until the reflink completes.
+	 * If we're being called by writeback then the pages will still
+	 * have PageWriteback set, which prevents races with reflink remapping
+	 * and truncate.  Reflink remapping prevents races with writeback by
+	 * taking the iolock and mmaplock before flushing the pages and
+	 * remapping, which means there won't be any further writeback or page
+	 * cache dirtying until the reflink completes.
 	 *
 	 * We should never have two threads issuing writeback for the same file
 	 * region.  There are also have post-eof checks in the writeback
-	 * preparation code so that we don't bother writing out folios that are
+	 * preparation code so that we don't bother writing out pages that are
 	 * about to be truncated.
 	 *
 	 * If we're being called as part of directio write completion, the dio
@@ -1229,7 +1224,7 @@ xfs_reflink_set_inode_flag(
 		goto out_error;
 
 	/* Lock both files against IO */
-	if (I_INO(src) == I_INO(dest))
+	if (src->i_ino == dest->i_ino)
 		xfs_ilock(src, XFS_ILOCK_EXCL);
 	else
 		xfs_lock_two_inodes(src, XFS_ILOCK_EXCL, dest, XFS_ILOCK_EXCL);
@@ -1243,7 +1238,7 @@ xfs_reflink_set_inode_flag(
 	} else
 		xfs_iunlock(src, XFS_ILOCK_EXCL);
 
-	if (I_INO(src) == I_INO(dest))
+	if (src->i_ino == dest->i_ino)
 		goto commit_flags;
 
 	if (!xfs_is_reflink_inode(dest)) {

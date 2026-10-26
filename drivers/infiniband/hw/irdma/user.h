@@ -159,8 +159,8 @@ enum irdma_device_caps_const {
 	IRDMA_CEQE_SIZE =			1,
 	IRDMA_CQP_CTX_SIZE =			8,
 	IRDMA_SHADOW_AREA_SIZE =		8,
-	IRDMA_QUERY_FPM_BUF_SIZE =		200,
-	IRDMA_COMMIT_FPM_BUF_SIZE =		208,
+	IRDMA_QUERY_FPM_BUF_SIZE =		192,
+	IRDMA_COMMIT_FPM_BUF_SIZE =		192,
 	IRDMA_GATHER_STATS_BUF_SIZE =		1024,
 	IRDMA_MIN_IW_QP_ID =			0,
 	IRDMA_MAX_IW_QP_ID =			262143,
@@ -429,7 +429,6 @@ struct irdma_wqe_uk_ops {
 				   struct irdma_bind_window *op_info);
 };
 
-bool irdma_uk_cq_empty(struct irdma_cq_uk *cq);
 int irdma_uk_cq_poll_cmpl(struct irdma_cq_uk *cq,
 			  struct irdma_cq_poll_info *info);
 void irdma_uk_cq_request_notification(struct irdma_cq_uk *cq,
@@ -465,7 +464,6 @@ struct irdma_srq_uk {
 	u8 wqe_size;
 	u8 wqe_size_multiplier;
 	u8 deferred_flag;
-	spinlock_t *lock;
 };
 
 struct irdma_srq_uk_init_info {
@@ -483,8 +481,7 @@ struct irdma_sq_uk_wr_trk_info {
 	u64 wrid;
 	u32 wr_len;
 	u16 quanta;
-	u8 signaled;
-	u8 reserved[1];
+	u8 reserved[2];
 };
 
 struct irdma_qp_quanta {

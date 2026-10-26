@@ -21,8 +21,6 @@ struct gb_raw {
 	struct list_head list;
 	int list_data;
 	struct mutex list_lock;
-	struct rw_semaphore disconnect_lock;
-	bool disconnected;
 	struct cdev cdev;
 	struct device dev;
 };
@@ -74,7 +72,7 @@ static int receive_data(struct gb_raw *raw, u32 len, u8 *data)
 		goto exit;
 	}
 
-	raw_data = kmalloc_flex(*raw_data, data, len);
+	raw_data = kmalloc(struct_size(raw_data, data, len), GFP_KERNEL);
 	if (!raw_data) {
 		retval = -ENOMEM;
 		goto exit;
@@ -178,7 +176,7 @@ static int gb_raw_probe(struct gb_bundle *bundle,
 	if (minor < 0)
 		return minor;
 
-	raw = kzalloc_obj(*raw);
+	raw = kzalloc(sizeof(*raw), GFP_KERNEL);
 	if (!raw) {
 		ida_free(&minors, minor);
 		return -ENOMEM;
@@ -202,7 +200,6 @@ static int gb_raw_probe(struct gb_bundle *bundle,
 
 	INIT_LIST_HEAD(&raw->list);
 	mutex_init(&raw->list_lock);
-	init_rwsem(&raw->disconnect_lock);
 
 	raw->connection = connection;
 	greybus_set_drvdata(bundle, raw);
@@ -238,11 +235,6 @@ static void gb_raw_disconnect(struct gb_bundle *bundle)
 	struct raw_data *temp;
 
 	cdev_device_del(&raw->cdev, &raw->dev);
-
-	down_write(&raw->disconnect_lock);
-	raw->disconnected = true;
-	up_write(&raw->disconnect_lock);
-
 	gb_connection_disable(connection);
 	gb_connection_destroy(connection);
 
@@ -285,22 +277,11 @@ static ssize_t raw_write(struct file *file, const char __user *buf,
 	if (count > MAX_PACKET_SIZE)
 		return -E2BIG;
 
-	down_read(&raw->disconnect_lock);
-
-	if (raw->disconnected) {
-		retval = -ENODEV;
-		goto exit;
-	}
-
 	retval = gb_raw_send(raw, count, buf);
 	if (retval)
-		goto exit;
+		return retval;
 
-	retval = count;
-exit:
-	up_read(&raw->disconnect_lock);
-
-	return retval;
+	return count;
 }
 
 static ssize_t raw_read(struct file *file, char __user *buf, size_t count,

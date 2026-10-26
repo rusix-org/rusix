@@ -7,7 +7,6 @@
 // Author: Weidong Wang <wangweidong.a@awinic.com>
 //
 
-#include <linux/cleanup.h>
 #include <linux/crc32.h>
 #include <linux/firmware.h>
 #include <linux/gpio/consumer.h>
@@ -41,6 +40,109 @@ static const struct regmap_config aw88166_remap_config = {
 	.reg_format_endian = REGMAP_ENDIAN_LITTLE,
 	.val_format_endian = REGMAP_ENDIAN_BIG,
 };
+
+static int aw_dev_dsp_write_16bit(struct aw_device *aw_dev,
+		unsigned short dsp_addr, unsigned int dsp_data)
+{
+	int ret;
+
+	ret = regmap_write(aw_dev->regmap, AW88166_DSPMADD_REG, dsp_addr);
+	if (ret) {
+		dev_err(aw_dev->dev, "%s write addr error, ret=%d", __func__, ret);
+		return ret;
+	}
+
+	ret = regmap_write(aw_dev->regmap, AW88166_DSPMDAT_REG, (u16)dsp_data);
+	if (ret) {
+		dev_err(aw_dev->dev, "%s write data error, ret=%d", __func__, ret);
+		return ret;
+	}
+
+	return 0;
+}
+
+static int aw_dev_dsp_read_16bit(struct aw_device *aw_dev,
+		unsigned short dsp_addr, unsigned int *dsp_data)
+{
+	unsigned int temp_data;
+	int ret;
+
+	ret = regmap_write(aw_dev->regmap, AW88166_DSPMADD_REG, dsp_addr);
+	if (ret) {
+		dev_err(aw_dev->dev, "%s write error, ret=%d", __func__, ret);
+		return ret;
+	}
+
+	ret = regmap_read(aw_dev->regmap, AW88166_DSPMDAT_REG, &temp_data);
+	if (ret) {
+		dev_err(aw_dev->dev, "%s read error, ret=%d", __func__, ret);
+		return ret;
+	}
+	*dsp_data = temp_data;
+
+	return 0;
+}
+
+static int aw_dev_dsp_read_32bit(struct aw_device *aw_dev,
+		unsigned short dsp_addr, unsigned int *dsp_data)
+{
+	unsigned int temp_data;
+	int ret;
+
+	ret = regmap_write(aw_dev->regmap, AW88166_DSPMADD_REG, dsp_addr);
+	if (ret) {
+		dev_err(aw_dev->dev, "%s write error, ret=%d", __func__, ret);
+		return ret;
+	}
+
+	ret = regmap_read(aw_dev->regmap, AW88166_DSPMDAT_REG, &temp_data);
+	if (ret) {
+		dev_err(aw_dev->dev, "%s read error, ret=%d", __func__, ret);
+		return ret;
+	}
+	*dsp_data = temp_data;
+
+	ret = regmap_read(aw_dev->regmap, AW88166_DSPMDAT_REG, &temp_data);
+	if (ret) {
+		dev_err(aw_dev->dev, "%s read error, ret=%d", __func__, ret);
+		return ret;
+	}
+	*dsp_data |= (temp_data << 16);
+
+	return 0;
+}
+
+static int aw_dev_dsp_read(struct aw_device *aw_dev,
+		unsigned short dsp_addr, unsigned int *dsp_data, unsigned char data_type)
+{
+	u32 reg_value;
+	int ret;
+
+	mutex_lock(&aw_dev->dsp_lock);
+	switch (data_type) {
+	case AW88166_DSP_16_DATA:
+		ret = aw_dev_dsp_read_16bit(aw_dev, dsp_addr, dsp_data);
+		if (ret)
+			dev_err(aw_dev->dev, "read dsp_addr[0x%x] 16-bit failed", (u32)dsp_addr);
+		break;
+	case AW88166_DSP_32_DATA:
+		ret = aw_dev_dsp_read_32bit(aw_dev, dsp_addr, dsp_data);
+		if (ret)
+			dev_err(aw_dev->dev, "read dsp_addr[0x%x] 32-bit failed", (u32)dsp_addr);
+		break;
+	default:
+		dev_err(aw_dev->dev, "data type[%d] unsupported", data_type);
+		ret = -EINVAL;
+		break;
+	}
+
+	/* clear dsp chip select state */
+	if (regmap_read(aw_dev->regmap, AW88166_ID_REG, &reg_value))
+		dev_err(aw_dev->dev, "%s fail to clear chip state. ret=%d\n", __func__, ret);
+	mutex_unlock(&aw_dev->dsp_lock);
+
+	return ret;
+}
 
 static void aw_dev_pwd(struct aw_device *aw_dev, bool pwd)
 {
@@ -802,19 +904,25 @@ static int aw_dev_dsp_update_container(struct aw_device *aw_dev,
 	u32 tmp_len;
 	int i, ret;
 
+	mutex_lock(&aw_dev->dsp_lock);
 	ret = regmap_write(aw_dev->regmap, AW88166_DSPMADD_REG, base);
 	if (ret)
-		return ret;
+		goto error_operation;
 
 	for (i = 0; i < len; i += AW88166_MAX_RAM_WRITE_BYTE_SIZE) {
 		tmp_len = min(len - i, AW88166_MAX_RAM_WRITE_BYTE_SIZE);
 		ret = regmap_raw_write(aw_dev->regmap, AW88166_DSPMDAT_REG,
 					&data[i], tmp_len);
 		if (ret)
-			return ret;
+			goto error_operation;
 	}
+	mutex_unlock(&aw_dev->dsp_lock);
 
 	return 0;
+
+error_operation:
+	mutex_unlock(&aw_dev->dsp_lock);
+	return ret;
 }
 
 static int aw_dev_get_ra(struct aw_cali_desc *cali_desc)
@@ -825,7 +933,7 @@ static int aw_dev_get_ra(struct aw_cali_desc *cali_desc)
 	int ret;
 
 	ret = aw_dev_dsp_read(aw_dev, AW88166_DSP_REG_CFG_ADPZ_RA,
-				&dsp_ra, AW_DSP_32_DATA);
+				&dsp_ra, AW88166_DSP_32_DATA);
 	if (ret) {
 		dev_err(aw_dev->dev, "read ra error\n");
 		return ret;
@@ -882,25 +990,29 @@ static int aw_dev_check_sram(struct aw_device *aw_dev)
 {
 	unsigned int reg_val;
 
+	mutex_lock(&aw_dev->dsp_lock);
 	/* read dsp_rom_check_reg */
-	aw_dev_dsp_read(aw_dev, AW88166_DSP_ROM_CHECK_ADDR, &reg_val, AW_DSP_16_DATA);
+	aw_dev_dsp_read_16bit(aw_dev, AW88166_DSP_ROM_CHECK_ADDR, &reg_val);
 	if (reg_val != AW88166_DSP_ROM_CHECK_DATA) {
 		dev_err(aw_dev->dev, "check dsp rom failed, read[0x%x] != check[0x%x]\n",
 						reg_val, AW88166_DSP_ROM_CHECK_DATA);
-		return -EPERM;
+		goto error;
 	}
 
 	/* check dsp_cfg_base_addr */
-	aw_dev_dsp_write(aw_dev, AW88166_DSP_CFG_ADDR,
-				AW88166_DSP_ODD_NUM_BIT_TEST, AW_DSP_16_DATA);
-	aw_dev_dsp_read(aw_dev, AW88166_DSP_CFG_ADDR, &reg_val, AW_DSP_16_DATA);
+	aw_dev_dsp_write_16bit(aw_dev, AW88166_DSP_CFG_ADDR, AW88166_DSP_ODD_NUM_BIT_TEST);
+	aw_dev_dsp_read_16bit(aw_dev, AW88166_DSP_CFG_ADDR, &reg_val);
 	if (reg_val != AW88166_DSP_ODD_NUM_BIT_TEST) {
 		dev_err(aw_dev->dev, "check dsp cfg failed, read[0x%x] != write[0x%x]\n",
 						reg_val, AW88166_DSP_ODD_NUM_BIT_TEST);
-		return -EPERM;
+		goto error;
 	}
+	mutex_unlock(&aw_dev->dsp_lock);
 
 	return 0;
+error:
+	mutex_unlock(&aw_dev->dsp_lock);
+	return -EPERM;
 }
 
 static void aw_dev_select_memclk(struct aw_device *aw_dev, unsigned char flag)
@@ -1174,8 +1286,9 @@ static void aw88166_startup_work(struct work_struct *work)
 	struct aw88166 *aw88166 =
 		container_of(work, struct aw88166, start_work.work);
 
-	guard(mutex)(&aw88166->lock);
+	mutex_lock(&aw88166->lock);
 	aw88166_start_pa(aw88166);
+	mutex_unlock(&aw88166->lock);
 }
 
 static void aw88166_start(struct aw88166 *aw88166, bool sync_start)
@@ -1197,7 +1310,7 @@ static void aw88166_start(struct aw88166 *aw88166, bool sync_start)
 	if (sync_start == AW88166_SYNC_START)
 		aw88166_start_pa(aw88166);
 	else
-		queue_delayed_work(system_dfl_wq,
+		queue_delayed_work(system_wq,
 			&aw88166->start_work,
 			AW88166_START_WORK_DELAY_MS);
 }
@@ -1278,7 +1391,7 @@ static struct snd_soc_dai_driver aw88166_dai[] = {
 static int aw88166_get_fade_in_time(struct snd_kcontrol *kcontrol,
 	struct snd_ctl_elem_value *ucontrol)
 {
-	struct snd_soc_component *component = snd_kcontrol_chip(kcontrol);
+	struct snd_soc_component *component = snd_soc_kcontrol_component(kcontrol);
 	struct aw88166 *aw88166 = snd_soc_component_get_drvdata(component);
 	struct aw_device *aw_dev = aw88166->aw_pa;
 
@@ -1290,7 +1403,7 @@ static int aw88166_get_fade_in_time(struct snd_kcontrol *kcontrol,
 static int aw88166_set_fade_in_time(struct snd_kcontrol *kcontrol,
 	struct snd_ctl_elem_value *ucontrol)
 {
-	struct snd_soc_component *component = snd_kcontrol_chip(kcontrol);
+	struct snd_soc_component *component = snd_soc_kcontrol_component(kcontrol);
 	struct aw88166 *aw88166 = snd_soc_component_get_drvdata(component);
 	struct soc_mixer_control *mc =
 		(struct soc_mixer_control *)kcontrol->private_value;
@@ -1313,7 +1426,7 @@ static int aw88166_set_fade_in_time(struct snd_kcontrol *kcontrol,
 static int aw88166_get_fade_out_time(struct snd_kcontrol *kcontrol,
 	struct snd_ctl_elem_value *ucontrol)
 {
-	struct snd_soc_component *component = snd_kcontrol_chip(kcontrol);
+	struct snd_soc_component *component = snd_soc_kcontrol_component(kcontrol);
 	struct aw88166 *aw88166 = snd_soc_component_get_drvdata(component);
 	struct aw_device *aw_dev = aw88166->aw_pa;
 
@@ -1325,7 +1438,7 @@ static int aw88166_get_fade_out_time(struct snd_kcontrol *kcontrol,
 static int aw88166_set_fade_out_time(struct snd_kcontrol *kcontrol,
 	struct snd_ctl_elem_value *ucontrol)
 {
-	struct snd_soc_component *component = snd_kcontrol_chip(kcontrol);
+	struct snd_soc_component *component = snd_soc_kcontrol_component(kcontrol);
 	struct aw88166 *aw88166 = snd_soc_component_get_drvdata(component);
 	struct soc_mixer_control *mc =
 		(struct soc_mixer_control *)kcontrol->private_value;
@@ -1363,7 +1476,7 @@ static int aw88166_dev_set_profile_index(struct aw_device *aw_dev, int index)
 static int aw88166_profile_info(struct snd_kcontrol *kcontrol,
 			 struct snd_ctl_elem_info *uinfo)
 {
-	struct snd_soc_component *codec = snd_kcontrol_chip(kcontrol);
+	struct snd_soc_component *codec = snd_soc_kcontrol_component(kcontrol);
 	struct aw88166 *aw88166 = snd_soc_component_get_drvdata(codec);
 	char *prof_name;
 	int count, ret;
@@ -1398,7 +1511,7 @@ static int aw88166_profile_info(struct snd_kcontrol *kcontrol,
 static int aw88166_profile_get(struct snd_kcontrol *kcontrol,
 			struct snd_ctl_elem_value *ucontrol)
 {
-	struct snd_soc_component *codec = snd_kcontrol_chip(kcontrol);
+	struct snd_soc_component *codec = snd_soc_kcontrol_component(kcontrol);
 	struct aw88166 *aw88166 = snd_soc_component_get_drvdata(codec);
 
 	ucontrol->value.integer.value[0] = aw88166->aw_pa->prof_index;
@@ -1409,14 +1522,15 @@ static int aw88166_profile_get(struct snd_kcontrol *kcontrol,
 static int aw88166_profile_set(struct snd_kcontrol *kcontrol,
 		struct snd_ctl_elem_value *ucontrol)
 {
-	struct snd_soc_component *codec = snd_kcontrol_chip(kcontrol);
+	struct snd_soc_component *codec = snd_soc_kcontrol_component(kcontrol);
 	struct aw88166 *aw88166 = snd_soc_component_get_drvdata(codec);
 	int ret;
 
-	guard(mutex)(&aw88166->lock);
+	mutex_lock(&aw88166->lock);
 	ret = aw88166_dev_set_profile_index(aw88166->aw_pa, ucontrol->value.integer.value[0]);
 	if (ret) {
 		dev_dbg(codec->dev, "profile index does not change");
+		mutex_unlock(&aw88166->lock);
 		return 0;
 	}
 
@@ -1425,13 +1539,15 @@ static int aw88166_profile_set(struct snd_kcontrol *kcontrol,
 		aw88166_start(aw88166, AW88166_SYNC_START);
 	}
 
+	mutex_unlock(&aw88166->lock);
+
 	return 1;
 }
 
 static int aw88166_volume_get(struct snd_kcontrol *kcontrol,
 				struct snd_ctl_elem_value *ucontrol)
 {
-	struct snd_soc_component *codec = snd_kcontrol_chip(kcontrol);
+	struct snd_soc_component *codec = snd_soc_kcontrol_component(kcontrol);
 	struct aw88166 *aw88166 = snd_soc_component_get_drvdata(codec);
 	struct aw_volume_desc *vol_desc = &aw88166->aw_pa->volume_desc;
 
@@ -1443,7 +1559,7 @@ static int aw88166_volume_get(struct snd_kcontrol *kcontrol,
 static int aw88166_volume_set(struct snd_kcontrol *kcontrol,
 				struct snd_ctl_elem_value *ucontrol)
 {
-	struct snd_soc_component *codec = snd_kcontrol_chip(kcontrol);
+	struct snd_soc_component *codec = snd_soc_kcontrol_component(kcontrol);
 	struct aw88166 *aw88166 = snd_soc_component_get_drvdata(codec);
 	struct aw_volume_desc *vol_desc = &aw88166->aw_pa->volume_desc;
 	struct soc_mixer_control *mc =
@@ -1467,7 +1583,7 @@ static int aw88166_volume_set(struct snd_kcontrol *kcontrol,
 static int aw88166_get_fade_step(struct snd_kcontrol *kcontrol,
 				struct snd_ctl_elem_value *ucontrol)
 {
-	struct snd_soc_component *codec = snd_kcontrol_chip(kcontrol);
+	struct snd_soc_component *codec = snd_soc_kcontrol_component(kcontrol);
 	struct aw88166 *aw88166 = snd_soc_component_get_drvdata(codec);
 
 	ucontrol->value.integer.value[0] = aw88166->aw_pa->fade_step;
@@ -1478,7 +1594,7 @@ static int aw88166_get_fade_step(struct snd_kcontrol *kcontrol,
 static int aw88166_set_fade_step(struct snd_kcontrol *kcontrol,
 				struct snd_ctl_elem_value *ucontrol)
 {
-	struct snd_soc_component *codec = snd_kcontrol_chip(kcontrol);
+	struct snd_soc_component *codec = snd_soc_kcontrol_component(kcontrol);
 	struct aw88166 *aw88166 = snd_soc_component_get_drvdata(codec);
 	struct soc_mixer_control *mc =
 		(struct soc_mixer_control *)kcontrol->private_value;
@@ -1499,7 +1615,7 @@ static int aw88166_set_fade_step(struct snd_kcontrol *kcontrol,
 static int aw88166_re_get(struct snd_kcontrol *kcontrol,
 				struct snd_ctl_elem_value *ucontrol)
 {
-	struct snd_soc_component *codec = snd_kcontrol_chip(kcontrol);
+	struct snd_soc_component *codec = snd_soc_kcontrol_component(kcontrol);
 	struct aw88166 *aw88166 = snd_soc_component_get_drvdata(codec);
 	struct aw_device *aw_dev = aw88166->aw_pa;
 
@@ -1511,7 +1627,7 @@ static int aw88166_re_get(struct snd_kcontrol *kcontrol,
 static int aw88166_re_set(struct snd_kcontrol *kcontrol,
 				struct snd_ctl_elem_value *ucontrol)
 {
-	struct snd_soc_component *codec = snd_kcontrol_chip(kcontrol);
+	struct snd_soc_component *codec = snd_soc_kcontrol_component(kcontrol);
 	struct aw88166 *aw88166 = snd_soc_component_get_drvdata(codec);
 	struct soc_mixer_control *mc =
 		(struct soc_mixer_control *)kcontrol->private_value;
@@ -1570,44 +1686,42 @@ static int aw88166_dev_init(struct aw88166 *aw88166, struct aw_container *aw_cfg
 
 static int aw88166_request_firmware_file(struct aw88166 *aw88166)
 {
-	const struct firmware *cont __free(firmware) = NULL;
-	const char *fw_name;
+	const struct firmware *cont = NULL;
 	int ret;
 
 	aw88166->aw_pa->fw_status = AW88166_DEV_FW_FAILED;
 
-	if (device_property_read_string(aw88166->aw_pa->dev, "firmware-name", &fw_name) < 0)
-		fw_name = AW88166_ACF_FILE;
-
-	ret = request_firmware(&cont, fw_name, aw88166->aw_pa->dev);
+	ret = request_firmware(&cont, AW88166_ACF_FILE, aw88166->aw_pa->dev);
 	if (ret) {
-		dev_err(aw88166->aw_pa->dev, "request [%s] failed!\n", fw_name);
+		dev_err(aw88166->aw_pa->dev, "request [%s] failed!\n", AW88166_ACF_FILE);
 		return ret;
 	}
 
 	dev_dbg(aw88166->aw_pa->dev, "loaded %s - size: %zu\n",
-			fw_name, cont ? cont->size : 0);
+			AW88166_ACF_FILE, cont ? cont->size : 0);
 
 	aw88166->aw_cfg = devm_kzalloc(aw88166->aw_pa->dev,
 			struct_size(aw88166->aw_cfg, data, cont->size), GFP_KERNEL);
-	if (!aw88166->aw_cfg)
+	if (!aw88166->aw_cfg) {
+		release_firmware(cont);
 		return -ENOMEM;
-
+	}
 	aw88166->aw_cfg->len = (int)cont->size;
 	memcpy(aw88166->aw_cfg->data, cont->data, cont->size);
+	release_firmware(cont);
 
 	ret = aw88395_dev_load_acf_check(aw88166->aw_pa, aw88166->aw_cfg);
 	if (ret) {
-		dev_err(aw88166->aw_pa->dev, "load [%s] failed!\n", fw_name);
+		dev_err(aw88166->aw_pa->dev, "load [%s] failed!\n", AW88166_ACF_FILE);
 		return ret;
 	}
 
-	scoped_guard(mutex, &aw88166->lock) {
-		/* aw device init */
-		ret = aw88166_dev_init(aw88166, aw88166->aw_cfg);
-		if (ret)
-			dev_err(aw88166->aw_pa->dev, "dev init failed\n");
-	}
+	mutex_lock(&aw88166->lock);
+	/* aw device init */
+	ret = aw88166_dev_init(aw88166, aw88166->aw_cfg);
+	if (ret)
+		dev_err(aw88166->aw_pa->dev, "dev init failed\n");
+	mutex_unlock(&aw88166->lock);
 
 	return ret;
 }
@@ -1634,7 +1748,7 @@ static int aw88166_playback_event(struct snd_soc_dapm_widget *w,
 	struct snd_soc_component *component = snd_soc_dapm_to_component(w->dapm);
 	struct aw88166 *aw88166 = snd_soc_component_get_drvdata(component);
 
-	guard(mutex)(&aw88166->lock);
+	mutex_lock(&aw88166->lock);
 	switch (event) {
 	case SND_SOC_DAPM_PRE_PMU:
 		aw88166_start(aw88166, AW88166_ASYNC_START);
@@ -1645,6 +1759,7 @@ static int aw88166_playback_event(struct snd_soc_dapm_widget *w,
 	default:
 		break;
 	}
+	mutex_unlock(&aw88166->lock);
 
 	return 0;
 }
@@ -1795,7 +1910,7 @@ static int aw88166_i2c_probe(struct i2c_client *i2c)
 }
 
 static const struct i2c_device_id aw88166_i2c_id[] = {
-	{ .name = AW88166_I2C_NAME },
+	{ AW88166_I2C_NAME },
 	{ }
 };
 MODULE_DEVICE_TABLE(i2c, aw88166_i2c_id);

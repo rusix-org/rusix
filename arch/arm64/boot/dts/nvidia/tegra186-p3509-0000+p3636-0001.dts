@@ -671,6 +671,7 @@
 					vbus-gpios = <&gpio
 						      TEGRA186_MAIN_GPIO(L, 4)
 						      GPIO_ACTIVE_LOW>;
+					id-gpios = <&pmic 0 GPIO_ACTIVE_HIGH>;
 				};
 			};
 
@@ -1176,22 +1177,22 @@
 			};
 
 			cooling-maps {
-				map-critical {
+				cpu-critical {
 					cooling-device = <&fan 3 3>;
 					trip = <&cpu_trip_critical>;
 				};
 
-				map-hot {
+				cpu-hot {
 					cooling-device = <&fan 2 2>;
 					trip = <&cpu_trip_hot>;
 				};
 
-				map-active {
+				cpu-active {
 					cooling-device = <&fan 1 1>;
 					trip = <&cpu_trip_active>;
 				};
 
-				map-passive {
+				cpu-passive {
 					cooling-device = <&fan 0 0>;
 					trip = <&cpu_trip_passive>;
 				};

@@ -10,35 +10,13 @@
 
 extern bool is_forced_emulation_enabled;
 
-struct pte_masks {
-	u64 present;
-	u64 writable;
-	u64 user;
-	u64 readable;
-	u64 executable;
-	u64 accessed;
-	u64 dirty;
-	u64 huge;
-	u64 nx;
-	u64 c;
-	u64 s;
-
-	u64 always_set;
-};
-
-struct kvm_mmu_arch {
-	struct pte_masks pte_masks;
-};
-
-struct kvm_mmu;
-
 struct kvm_vm_arch {
-	gva_t gdt;
-	gva_t tss;
-	gva_t idt;
+	vm_vaddr_t gdt;
+	vm_vaddr_t tss;
+	vm_vaddr_t idt;
 
-	u64 c_bit;
-	u64 s_bit;
+	uint64_t c_bit;
+	uint64_t s_bit;
 	int sev_fd;
 	bool is_pt_protected;
 };
@@ -55,14 +33,14 @@ static inline bool __vm_arch_has_protected_memory(struct kvm_vm_arch *arch)
 do {											\
 	const typeof(mem) val = (__val);						\
 											\
-	if (!is_forced_emulation_enabled || kvm_random_bool(&kvm_rng)) {		\
+	if (!is_forced_emulation_enabled || guest_random_bool(&guest_rng)) {		\
 		(mem) = val;								\
-	} else if (kvm_random_bool(&kvm_rng)) {					\
+	} else if (guest_random_bool(&guest_rng)) {					\
 		__asm__ __volatile__(KVM_FEP "mov %1, %0"				\
 				     : "+m" (mem)					\
 				     : "r" (val) : "memory");				\
 	} else {									\
-		u64 __old = READ_ONCE(mem);					\
+		uint64_t __old = READ_ONCE(mem);					\
 											\
 		__asm__ __volatile__(KVM_FEP LOCK_PREFIX "cmpxchg %[new], %[ptr]"	\
 				     : [ptr] "+m" (mem), [old] "+a" (__old)		\

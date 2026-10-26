@@ -113,7 +113,7 @@ static struct sk_buff *mlx5e_test_get_udp_skb(struct mlx5e_priv *priv)
 	/* Fill UDP header */
 	udph->source = htons(9);
 	udph->dest = htons(9); /* Discard Protocol */
-	udp_set_len_short(udph, sizeof(struct mlx5ehdr) + sizeof(struct udphdr));
+	udph->len = htons(sizeof(struct mlx5ehdr) + sizeof(struct udphdr));
 	udph->check = 0;
 
 	/* Fill IP header */
@@ -166,10 +166,6 @@ mlx5e_test_loopback_validate(struct sk_buff *skb,
 	struct udphdr *udph;
 	struct iphdr *iph;
 
-	skb = skb_share_check(skb, GFP_ATOMIC);
-	if (!skb)
-		goto out;
-
 	if (skb_linearize(skb))
 		goto out;
 
@@ -218,7 +214,7 @@ static int mlx5e_test_loopback_setup(struct mlx5e_priv *priv,
 			return err;
 	}
 
-	err = mlx5e_modify_tirs_lb(priv->mdev, true, false);
+	err = mlx5e_refresh_tirs(priv, true, false);
 	if (err)
 		goto out;
 
@@ -247,7 +243,7 @@ static void mlx5e_test_loopback_cleanup(struct mlx5e_priv *priv,
 		mlx5_nic_vport_update_local_lb(priv->mdev, false);
 
 	dev_remove_pack(&lbtp->pt);
-	mlx5e_modify_tirs_lb(priv->mdev, false, false);
+	mlx5e_refresh_tirs(priv, false, false);
 }
 
 static int mlx5e_cond_loopback(struct mlx5e_priv *priv)
@@ -274,7 +270,7 @@ static int mlx5e_test_loopback(struct mlx5e_priv *priv)
 		return -ENODEV;
 	}
 
-	lbtp = kzalloc_obj(*lbtp);
+	lbtp = kzalloc(sizeof(*lbtp), GFP_KERNEL);
 	if (!lbtp)
 		return -ENOMEM;
 	lbtp->loopback_ok = false;

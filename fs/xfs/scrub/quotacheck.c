@@ -3,7 +3,7 @@
  * Copyright (c) 2020-2024 Oracle.  All Rights Reserved.
  * Author: Darrick J. Wong <djwong@kernel.org>
  */
-#include "xfs_platform.h"
+#include "xfs.h"
 #include "xfs_fs.h"
 #include "xfs_shared.h"
 #include "xfs_format.h"
@@ -86,7 +86,7 @@ xchk_setup_quotacheck(
 
 	xchk_fsgates_enable(sc, XCHK_FSGATES_QUOTA);
 
-	sc->buf = kzalloc_obj(struct xqcheck, XCHK_GFP_FLAGS);
+	sc->buf = kzalloc(sizeof(struct xqcheck), XCHK_GFP_FLAGS);
 	if (!sc->buf)
 		return -ENOMEM;
 
@@ -256,7 +256,7 @@ xqcheck_mod_live_ino_dqtrx(
 	dqa = rhashtable_lookup_fast(&xqc->shadow_dquot_acct, &p->tx_id,
 			xqcheck_dqacct_hash_params);
 	if (!dqa) {
-		dqa = kzalloc_obj(struct xqcheck_dqacct, XCHK_GFP_FLAGS);
+		dqa = kzalloc(sizeof(struct xqcheck_dqacct), XCHK_GFP_FLAGS);
 		if (!dqa)
 			goto out_abort;
 
@@ -401,7 +401,7 @@ xqcheck_collect_inode(
 	int			error = 0;
 
 	if (xfs_is_metadir_inode(ip) ||
-	    xfs_is_quota_inode(&tp->t_mountp->m_sb, I_INO(ip))) {
+	    xfs_is_quota_inode(&tp->t_mountp->m_sb, ip->i_ino)) {
 		/*
 		 * Quota files are never counted towards quota, so we do not
 		 * need to take the lock.  Files do not switch between the
@@ -565,7 +565,6 @@ xqcheck_compare_dquot(
 		return -ECANCELED;
 	}
 
-	mutex_lock(&dq->q_qlock);
 	mutex_lock(&xqc->lock);
 	error = xfarray_load_sparse(counts, dq->q_id, &xcdq);
 	if (error)
@@ -592,9 +591,7 @@ xqcheck_compare_dquot(
 		xchk_set_incomplete(xqc->sc);
 		error = -ECANCELED;
 	}
-out_unlock:
 	mutex_unlock(&xqc->lock);
-	mutex_unlock(&dq->q_qlock);
 	if (error)
 		return error;
 
@@ -602,6 +599,10 @@ out_unlock:
 		return -ECANCELED;
 
 	return 0;
+
+out_unlock:
+	mutex_unlock(&xqc->lock);
+	return error;
 }
 
 /*
@@ -637,7 +638,7 @@ xqcheck_walk_observations(
 			return error;
 
 		error = xqcheck_compare_dquot(xqc, dqtype, dq);
-		xfs_qm_dqrele(dq);
+		xfs_qm_dqput(dq);
 		if (error)
 			return error;
 
@@ -675,7 +676,7 @@ xqcheck_compare_dqtype(
 	xchk_dqiter_init(&cursor, sc, dqtype);
 	while ((error = xchk_dquot_iter(&cursor, &dq)) == 1) {
 		error = xqcheck_compare_dquot(xqc, dqtype, dq);
-		xfs_qm_dqrele(dq);
+		xfs_qm_dqput(dq);
 		if (error)
 			break;
 	}

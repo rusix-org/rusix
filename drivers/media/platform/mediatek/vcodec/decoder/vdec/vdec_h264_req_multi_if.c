@@ -570,7 +570,7 @@ static int vdec_h264_slice_setup_core_buffer_ext(struct vdec_h264_slice_inst *in
 	}
 
 	vb2_v4l2 = v4l2_m2m_next_dst_buf(ctx->m2m_ctx);
-	v4l2_m2m_buf_copy_metadata(&lat_buf->ts_info, vb2_v4l2);
+	v4l2_m2m_buf_copy_metadata(&lat_buf->ts_info, vb2_v4l2, true);
 
 	return 0;
 }
@@ -674,7 +674,7 @@ static int vdec_h264_slice_core_decode(struct vdec_lat_buf *lat_buf)
 	}
 
 	vb2_v4l2 = v4l2_m2m_next_dst_buf(ctx->m2m_ctx);
-	v4l2_m2m_buf_copy_metadata(&lat_buf->ts_info, vb2_v4l2);
+	v4l2_m2m_buf_copy_metadata(&lat_buf->ts_info, vb2_v4l2, true);
 
 	vdec_h264_slice_fill_decode_reflist(inst, &inst->vsi_core->h264_slice_params,
 					    share_info);
@@ -768,8 +768,7 @@ static int vdec_h264_slice_lat_decode_ext(void *h_vdec, struct mtk_vcodec_mem *b
 	src_buf_info = container_of(bs, struct mtk_video_dec_buf, bs_buffer);
 
 	lat_buf->src_buf_req = src_buf_info->m2m_buf.vb.vb2_buf.req_obj.req;
-	v4l2_m2m_buf_copy_metadata(&src_buf_info->m2m_buf.vb,
-				   &lat_buf->ts_info);
+	v4l2_m2m_buf_copy_metadata(&src_buf_info->m2m_buf.vb, &lat_buf->ts_info, true);
 
 	err = vdec_h264_slice_fill_decode_parameters(inst, share_info,
 						     &inst->vsi_ext->h264_slice_params);
@@ -901,8 +900,7 @@ static int vdec_h264_slice_lat_decode(void *h_vdec, struct mtk_vcodec_mem *bs,
 
 	inst->vsi->dec.nal_info = buf[nal_start_idx];
 	lat_buf->src_buf_req = src_buf_info->m2m_buf.vb.vb2_buf.req_obj.req;
-	v4l2_m2m_buf_copy_metadata(&src_buf_info->m2m_buf.vb,
-				   &lat_buf->ts_info);
+	v4l2_m2m_buf_copy_metadata(&src_buf_info->m2m_buf.vb, &lat_buf->ts_info, true);
 
 	err = vdec_h264_slice_fill_decode_parameters(inst, share_info,
 						     &inst->vsi->h264_slice_params);
@@ -1041,7 +1039,7 @@ static int vdec_h264_slice_single_decode_ext(void *h_vdec, struct mtk_vcodec_mem
 	inst->vsi_ctx_ext.dec.vdec_fb_va = (u64)(uintptr_t)fb;
 
 	v4l2_m2m_buf_copy_metadata(&src_buf_info->m2m_buf.vb,
-				   &dst_buf_info->m2m_buf.vb);
+				   &dst_buf_info->m2m_buf.vb, true);
 	err = get_vdec_sig_decode_parameters(inst);
 	if (err)
 		goto err_free_fb_out;
@@ -1137,7 +1135,7 @@ static int vdec_h264_slice_single_decode(void *h_vdec, struct mtk_vcodec_mem *bs
 	inst->vsi_ctx.dec.vdec_fb_va = (u64)(uintptr_t)fb;
 
 	v4l2_m2m_buf_copy_metadata(&src_buf_info->m2m_buf.vb,
-				   &dst_buf_info->m2m_buf.vb);
+				   &dst_buf_info->m2m_buf.vb, true);
 	err = get_vdec_sig_decode_parameters(inst);
 	if (err)
 		goto err_free_fb_out;
@@ -1208,7 +1206,7 @@ static int vdec_h264_slice_init(struct mtk_vcodec_dec_ctx *ctx)
 	int err, vsi_size;
 	unsigned char *temp;
 
-	inst = kzalloc_obj(*inst);
+	inst = kzalloc(sizeof(*inst), GFP_KERNEL);
 	if (!inst)
 		return -ENOMEM;
 

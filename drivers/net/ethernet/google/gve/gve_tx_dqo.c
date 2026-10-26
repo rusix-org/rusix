@@ -276,8 +276,9 @@ static int gve_tx_qpl_buf_init(struct gve_tx_ring *tx)
 		tx->dqo.qpl->num_entries;
 	int i;
 
-	tx->dqo.tx_qpl_buf_next = kvzalloc_objs(tx->dqo.tx_qpl_buf_next[0],
-						num_tx_qpl_bufs);
+	tx->dqo.tx_qpl_buf_next = kvcalloc(num_tx_qpl_bufs,
+					   sizeof(tx->dqo.tx_qpl_buf_next[0]),
+					   GFP_KERNEL);
 	if (!tx->dqo.tx_qpl_buf_next)
 		return -ENOMEM;
 
@@ -311,6 +312,7 @@ static int gve_tx_alloc_ring_dqo(struct gve_priv *priv,
 {
 	struct device *hdev = &priv->pdev->dev;
 	int num_pending_packets;
+	int qpl_page_cnt;
 	size_t bytes;
 	u32 qpl_id;
 	int i;
@@ -345,8 +347,9 @@ static int gve_tx_alloc_ring_dqo(struct gve_priv *priv,
 	num_pending_packets /= 2;
 
 	tx->dqo.num_pending_packets = min_t(int, num_pending_packets, S16_MAX);
-	tx->dqo.pending_packets = kvzalloc_objs(tx->dqo.pending_packets[0],
-						tx->dqo.num_pending_packets);
+	tx->dqo.pending_packets = kvcalloc(tx->dqo.num_pending_packets,
+					   sizeof(tx->dqo.pending_packets[0]),
+					   GFP_KERNEL);
 	if (!tx->dqo.pending_packets)
 		goto err;
 
@@ -391,9 +394,10 @@ static int gve_tx_alloc_ring_dqo(struct gve_priv *priv,
 
 	if (!cfg->raw_addressing) {
 		qpl_id = gve_tx_qpl_id(priv, tx->q_num);
+		qpl_page_cnt = priv->tx_pages_per_qpl;
 
 		tx->dqo.qpl = gve_alloc_queue_page_list(priv, qpl_id,
-							cfg->pages_per_qpl);
+							qpl_page_cnt);
 		if (!tx->dqo.qpl)
 			goto err;
 
@@ -423,7 +427,8 @@ int gve_tx_alloc_rings_dqo(struct gve_priv *priv,
 		return -EINVAL;
 	}
 
-	tx = kvzalloc_objs(struct gve_tx_ring, cfg->qcfg->max_queues);
+	tx = kvcalloc(cfg->qcfg->max_queues, sizeof(struct gve_tx_ring),
+		      GFP_KERNEL);
 	if (!tx)
 		return -ENOMEM;
 
@@ -1005,6 +1010,9 @@ static int gve_try_tx_skb(struct gve_priv *priv, struct gve_tx_ring *tx,
 	int num_buffer_descs;
 	int total_num_descs;
 
+	if (skb_is_gso(skb) && unlikely(ipv6_hopopt_jumbo_remove(skb)))
+		goto drop;
+
 	if (tx->dqo.qpl) {
 		/* We do not need to verify the number of buffers used per
 		 * packet or per segment in case of TSO as with 2K size buffers
@@ -1041,9 +1049,7 @@ static int gve_try_tx_skb(struct gve_priv *priv, struct gve_tx_ring *tx,
 	return 0;
 
 drop:
-	u64_stats_update_begin(&tx->statss);
 	tx->dropped_pkt++;
-	u64_stats_update_end(&tx->statss);
 	dev_kfree_skb_any(skb);
 	return 0;
 }
@@ -1349,11 +1355,7 @@ static void remove_miss_completions(struct gve_priv *priv,
 		/* This indicates the packet was dropped. */
 		dev_kfree_skb_any(pending_packet->skb);
 		pending_packet->skb = NULL;
-
-		u64_stats_update_begin(&tx->statss);
 		tx->dropped_pkt++;
-		u64_stats_update_end(&tx->statss);
-
 		net_err_ratelimited("%s: No reinjection completion was received for: %d.\n",
 				    priv->dev->name,
 				    (int)(pending_packet - tx->dqo.pending_packets));

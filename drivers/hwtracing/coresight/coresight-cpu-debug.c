@@ -451,10 +451,10 @@ err:
 	return ret;
 }
 
-static void debug_disable_func(void)
+static int debug_disable_func(void)
 {
 	struct debug_drvdata *drvdata;
-	int cpu;
+	int cpu, ret, err = 0;
 
 	/*
 	 * Disable debug power domains, records the error and keep
@@ -466,8 +466,12 @@ static void debug_disable_func(void)
 		if (!drvdata)
 			continue;
 
-		pm_runtime_put(drvdata->dev);
+		ret = pm_runtime_put(drvdata->dev);
+		if (ret < 0)
+			err = ret;
 	}
+
+	return err;
 }
 
 static ssize_t debug_func_knob_write(struct file *f,
@@ -488,7 +492,7 @@ static ssize_t debug_func_knob_write(struct file *f,
 	if (val)
 		ret = debug_enable_func();
 	else
-		debug_disable_func();
+		ret = debug_disable_func();
 
 	if (ret) {
 		pr_err("%s: unable to %s debug function: %d\n",
@@ -757,7 +761,8 @@ static struct platform_driver debug_platform_driver = {
 
 static int __init debug_init(void)
 {
-	return coresight_init_driver("debug", &debug_driver, &debug_platform_driver);
+	return coresight_init_driver("debug", &debug_driver, &debug_platform_driver,
+				     THIS_MODULE);
 }
 
 static void __exit debug_exit(void)

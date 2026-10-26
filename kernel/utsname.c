@@ -81,6 +81,7 @@ struct uts_namespace *copy_utsname(u64 flags,
 {
 	struct uts_namespace *new_ns;
 
+	BUG_ON(!old_ns);
 	get_uts_ns(old_ns);
 
 	if (!(flags & CLONE_NEWUTS))

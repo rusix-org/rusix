@@ -63,15 +63,18 @@ static int hiface_chip_create(struct usb_interface *intf,
 		return ret;
 	}
 
-	strscpy(card->driver, DRIVER_NAME);
+	strscpy(card->driver, DRIVER_NAME, sizeof(card->driver));
 
 	if (quirk && quirk->device_name)
-		strscpy(card->shortname, quirk->device_name);
+		strscpy(card->shortname, quirk->device_name, sizeof(card->shortname));
 	else
-		strscpy(card->shortname, "M2Tech generic audio");
+		strscpy(card->shortname, "M2Tech generic audio", sizeof(card->shortname));
 
-	len = scnprintf(card->longname, sizeof(card->longname), "%s at ", card->shortname);
-	usb_make_path(device, card->longname + len, sizeof(card->longname) - len);
+	strlcat(card->longname, card->shortname, sizeof(card->longname));
+	len = strlcat(card->longname, " at ", sizeof(card->longname));
+	if (len < sizeof(card->longname))
+		usb_make_path(device, card->longname + len,
+			      sizeof(card->longname) - len);
 
 	chip = card->private_data;
 	chip->dev = device;

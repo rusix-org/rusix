@@ -76,7 +76,7 @@ static inline int mr_call_vif_notifiers(struct net *net,
 					struct vif_device *vif,
 					struct net_device *vif_dev,
 					unsigned short vif_index, u32 tb_id,
-					atomic_t *ipmr_seq)
+					unsigned int *ipmr_seq)
 {
 	struct vif_entry_notifier_info info = {
 		.info = {
@@ -89,7 +89,7 @@ static inline int mr_call_vif_notifiers(struct net *net,
 	};
 
 	ASSERT_RTNL();
-	atomic_inc(ipmr_seq);
+	(*ipmr_seq)++;
 	return call_fib_notifiers(net, event_type, &info.info);
 }
 
@@ -198,7 +198,7 @@ static inline int mr_call_mfc_notifiers(struct net *net,
 					unsigned short family,
 					enum fib_event_type event_type,
 					struct mr_mfc *mfc, u32 tb_id,
-					atomic_t *ipmr_seq)
+					unsigned int *ipmr_seq)
 {
 	struct mfc_entry_notifier_info info = {
 		.info = {
@@ -208,7 +208,8 @@ static inline int mr_call_mfc_notifiers(struct net *net,
 		.tb_id = tb_id
 	};
 
-	atomic_inc(ipmr_seq);
+	ASSERT_RTNL();
+	(*ipmr_seq)++;
 	return call_fib_notifiers(net, event_type, &info.info);
 }
 
@@ -256,7 +257,7 @@ struct mr_table {
 	struct rhltable		mfc_hash;
 	struct list_head	mfc_cache_list;
 	int			maxvif;
-	u32			cache_resolve_queue_len;
+	atomic_t		cache_resolve_queue_len;
 	bool			mroute_do_assert;
 	bool			mroute_do_pim;
 	bool			mroute_do_wrvifwhole;

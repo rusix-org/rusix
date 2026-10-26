@@ -11,7 +11,6 @@
 #include <linux/pps_gen.h>
 #include <linux/cdev.h>
 #include <linux/device.h>
-#include <linux/mutex.h>
 
 /*
  * Global defines
@@ -45,7 +44,6 @@ struct pps_gen_source_info {
 /* The main struct */
 struct pps_gen_device {
 	const struct pps_gen_source_info *info;	/* PSS generator info */
-	struct mutex info_lock;			/* protects info */
 	bool enabled;				/* PSS generator status */
 
 	unsigned int event;
@@ -56,7 +54,7 @@ struct pps_gen_device {
 
 	unsigned int id;			/* PPS generator unique ID */
 	struct cdev cdev;
-	struct device dev;
+	struct device *dev;
 	struct fasync_struct *async_queue;	/* fasync method */
 	spinlock_t lock;
 };

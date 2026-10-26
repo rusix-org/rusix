@@ -2,7 +2,7 @@
 
 #include <linux/processor.h>
 
-__rust_helper void rust_helper_cpu_relax(void)
+void rust_helper_cpu_relax(void)
 {
 	cpu_relax();
 }

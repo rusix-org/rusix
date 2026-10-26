@@ -2,7 +2,6 @@
 /* Copyright(c) 2018-2019  Realtek Corporation
  */
 
-#include <linux/dmi.h>
 #include <linux/module.h>
 #include <linux/pci.h>
 #include "main.h"
@@ -1042,21 +1041,20 @@ static int rtw_pci_get_hw_rx_ring_nr(struct rtw_dev *rtwdev,
 static u32 rtw_pci_rx_napi(struct rtw_dev *rtwdev, struct rtw_pci *rtwpci,
 			   u8 hw_queue, u32 limit)
 {
-	struct rtw_pci_rx_ring *ring = &rtwpci->rx_rings[RTW_RX_QUEUE_MPDU];
 	const struct rtw_chip_info *chip = rtwdev->chip;
 	struct napi_struct *napi = &rtwpci->napi;
-	u32 pkt_desc_sz = chip->rx_pkt_desc_sz;
-	u32 buf_desc_sz = chip->rx_buf_desc_sz;
-	struct ieee80211_rx_status rx_status;
+	struct rtw_pci_rx_ring *ring = &rtwpci->rx_rings[RTW_RX_QUEUE_MPDU];
 	struct rtw_rx_pkt_stat pkt_stat;
+	struct ieee80211_rx_status rx_status;
 	struct sk_buff *skb, *new;
 	u32 cur_rp = ring->r.rp;
 	u32 count, rx_done = 0;
 	u32 pkt_offset;
-	dma_addr_t dma;
+	u32 pkt_desc_sz = chip->rx_pkt_desc_sz;
+	u32 buf_desc_sz = chip->rx_buf_desc_sz;
 	u32 new_len;
 	u8 *rx_desc;
-	int ret;
+	dma_addr_t dma;
 
 	count = rtw_pci_get_hw_rx_ring_nr(rtwdev, rtwpci);
 	count = min(count, limit);
@@ -1068,10 +1066,7 @@ static u32 rtw_pci_rx_napi(struct rtw_dev *rtwdev, struct rtw_pci *rtwpci,
 		dma_sync_single_for_cpu(rtwdev->dev, dma, RTK_PCI_RX_BUF_SIZE,
 					DMA_FROM_DEVICE);
 		rx_desc = skb->data;
-		ret = rtw_rx_query_rx_desc(rtwdev, rx_desc,
-					   &pkt_stat, &rx_status);
-		if (ret)
-			goto next_rp;
+		rtw_rx_query_rx_desc(rtwdev, rx_desc, &pkt_stat, &rx_status);
 
 		/* offset from rx_desc to payload */
 		pkt_offset = pkt_desc_sz + pkt_stat.drv_info_sz +
@@ -1754,73 +1749,6 @@ const struct pci_error_handlers rtw_pci_err_handler = {
 };
 EXPORT_SYMBOL(rtw_pci_err_handler);
 
-static int rtw_pci_disable_caps(const struct dmi_system_id *dmi)
-{
-	uintptr_t dis_caps = (uintptr_t)dmi->driver_data;
-
-	if (dis_caps & BIT(QUIRK_DIS_CAP_PCI_ASPM))
-		rtw_pci_disable_aspm = true;
-
-	if (dis_caps & BIT(QUIRK_DIS_CAP_LPS_DEEP))
-		rtw_disable_lps_deep_mode = true;
-
-	return 1;
-}
-
-static const struct dmi_system_id rtw_pci_quirks[] = {
-	{
-		.callback = rtw_pci_disable_caps,
-		.ident = "HP Notebook - P3S95EA#ACB",
-		.matches = {
-			DMI_MATCH(DMI_SYS_VENDOR, "HP"),
-			DMI_MATCH(DMI_PRODUCT_NAME, "HP Notebook"),
-			DMI_MATCH(DMI_PRODUCT_SKU, "P3S95EA#ACB"),
-		},
-		.driver_data = (void *)(BIT(QUIRK_DIS_CAP_PCI_ASPM) |
-					BIT(QUIRK_DIS_CAP_LPS_DEEP)),
-	},
-	{
-		.callback = rtw_pci_disable_caps,
-		.ident = "ASUS TUF Gaming A15 FA506II",
-		.matches = {
-			DMI_MATCH(DMI_SYS_VENDOR, "ASUSTeK COMPUTER INC."),
-			DMI_MATCH(DMI_BOARD_NAME, "FA506II"),
-		},
-		.driver_data = (void *)(BIT(QUIRK_DIS_CAP_PCI_ASPM) |
-					BIT(QUIRK_DIS_CAP_LPS_DEEP)),
-	},
-	{
-		.callback = rtw_pci_disable_caps,
-		.ident = "ASUS TUF Gaming A15 FA506IH",
-		.matches = {
-			DMI_MATCH(DMI_SYS_VENDOR, "ASUSTeK COMPUTER INC."),
-			DMI_MATCH(DMI_BOARD_NAME, "FA506IH"),
-		},
-		.driver_data = (void *)(BIT(QUIRK_DIS_CAP_PCI_ASPM) |
-					BIT(QUIRK_DIS_CAP_LPS_DEEP)),
-	},
-	{
-		.callback = rtw_pci_disable_caps,
-		.ident = "Dell Vostro 15 3530",
-		.matches = {
-			DMI_MATCH(DMI_SYS_VENDOR, "Dell Inc."),
-			DMI_MATCH(DMI_PRODUCT_NAME, "Vostro 15 3530"),
-		},
-		.driver_data = (void *)(BIT(QUIRK_DIS_CAP_PCI_ASPM) |
-					BIT(QUIRK_DIS_CAP_LPS_DEEP)),
-	},
-	{
-		.callback = rtw_pci_disable_caps,
-		.ident = "Lenovo IdeaPad S340-14IWL",
-		.matches = {
-			DMI_MATCH(DMI_SYS_VENDOR, "LENOVO"),
-			DMI_MATCH(DMI_PRODUCT_NAME, "81N4"),
-		},
-		.driver_data = (void *)BIT(QUIRK_DIS_CAP_PCI_ASPM),
-	},
-	{}
-};
-
 int rtw_pci_probe(struct pci_dev *pdev,
 		  const struct pci_device_id *id)
 {
@@ -1847,8 +1775,6 @@ int rtw_pci_probe(struct pci_dev *pdev,
 
 	rtwpci = (struct rtw_pci *)rtwdev->priv;
 	atomic_set(&rtwpci->link_usage, 1);
-
-	dmi_check_system(rtw_pci_quirks);
 
 	ret = rtw_core_init(rtwdev);
 	if (ret)

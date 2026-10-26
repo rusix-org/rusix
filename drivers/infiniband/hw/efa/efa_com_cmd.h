@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0 OR BSD-2-Clause */
 /*
- * Copyright 2018-2026 Amazon.com, Inc. or its affiliates. All rights reserved.
+ * Copyright 2018-2025 Amazon.com, Inc. or its affiliates. All rights reserved.
  */
 
 #ifndef _EFA_COM_CMD_H_
@@ -29,7 +29,6 @@ struct efa_com_create_qp_params {
 	u8 qp_type;
 	u8 sl;
 	u8 unsolicited_write_recv : 1;
-	u8 sq_64_bit_req_id : 1;
 };
 
 struct efa_com_create_qp_result {
@@ -80,7 +79,6 @@ struct efa_com_create_cq_params {
 	u8 entry_size_in_bytes;
 	u8 interrupt_mode_enabled : 1;
 	u8 set_src_addr : 1;
-	u8 sq_comp_64_bit_req_id : 1;
 };
 
 struct efa_com_create_cq_result {
@@ -108,7 +106,6 @@ struct efa_com_create_ah_result {
 
 struct efa_com_destroy_ah_params {
 	u16 ah;
-	u8 gid[EFA_GID_SIZE];
 	u16 pdn;
 };
 
@@ -130,7 +127,6 @@ struct efa_com_get_device_attr_result {
 	u32 max_cq;
 	u32 max_cq_depth; /* cqes */
 	u32 inline_buf_size;
-	u32 inline_buf_size_ex;
 	u32 max_mr;
 	u32 max_pd;
 	u32 max_ah;
@@ -148,9 +144,6 @@ struct efa_com_get_device_attr_result {
 	u16 min_sq_depth;
 	u16 max_link_speed_gbps;
 	u8 db_bar;
-	u32 max_event_counters;
-	u64 event_counter_max_val;
-	u32 supported_event_counter_qp_events;
 };
 
 struct efa_com_get_hw_hints_result {
@@ -204,12 +197,8 @@ struct efa_com_reg_mr_params {
 	 * address mapping
 	 */
 	u8 page_shift;
-	struct {
-		u8 local_write : 1;
-		u8 remote_write : 1;
-		u8 remote_read : 1;
-	} permissions;
-	u8 relaxed_ordering;
+	/* see permissions field of struct efa_admin_reg_mr_cmd */
+	u8 permissions;
 	u8 inline_pbl;
 	u8 indirect;
 };
@@ -310,37 +299,6 @@ union efa_com_get_stats_result {
 	struct efa_com_network_stats network_stats;
 };
 
-struct efa_com_create_event_counter_params {
-	dma_addr_t dma_addr;
-	u16 uarn;
-};
-
-struct efa_com_create_event_counter_result {
-	u32 cntr_handle;
-};
-
-struct efa_com_destroy_event_counter_params {
-	u32 cntr_handle;
-};
-
-struct efa_com_attach_event_counter_params {
-	u32 cntr_handle;
-	u32 qp_handle;
-	u32 events;
-};
-
-struct efa_com_detach_event_counter_params {
-	u32 cntr_handle;
-	u32 qp_handle;
-	u32 events;
-};
-
-struct efa_com_modify_event_counter_params {
-	u32 cntr_handle;
-	u8 operation;
-	u64 value;
-};
-
 int efa_com_create_qp(struct efa_com_dev *edev,
 		      struct efa_com_create_qp_params *params,
 		      struct efa_com_create_qp_result *res);
@@ -391,16 +349,5 @@ int efa_com_dealloc_uar(struct efa_com_dev *edev,
 int efa_com_get_stats(struct efa_com_dev *edev,
 		      struct efa_com_get_stats_params *params,
 		      union efa_com_get_stats_result *result);
-int efa_com_create_event_counter(struct efa_com_dev *edev,
-				 struct efa_com_create_event_counter_params *params,
-				 struct efa_com_create_event_counter_result *result);
-int efa_com_destroy_event_counter(struct efa_com_dev *edev,
-				  struct efa_com_destroy_event_counter_params *params);
-int efa_com_attach_event_counter(struct efa_com_dev *edev,
-				 struct efa_com_attach_event_counter_params *params);
-int efa_com_detach_event_counter(struct efa_com_dev *edev,
-				 struct efa_com_detach_event_counter_params *params);
-int efa_com_modify_event_counter(struct efa_com_dev *edev,
-				 struct efa_com_modify_event_counter_params *params);
 
 #endif /* _EFA_COM_CMD_H_ */

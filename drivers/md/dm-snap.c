@@ -354,7 +354,8 @@ static int init_origin_hash(void)
 {
 	int i;
 
-	_origins = kmalloc_objs(struct list_head, ORIGIN_HASH_SIZE);
+	_origins = kmalloc_array(ORIGIN_HASH_SIZE, sizeof(struct list_head),
+				 GFP_KERNEL);
 	if (!_origins) {
 		DMERR("unable to allocate memory for _origins");
 		return -ENOMEM;
@@ -362,7 +363,9 @@ static int init_origin_hash(void)
 	for (i = 0; i < ORIGIN_HASH_SIZE; i++)
 		INIT_LIST_HEAD(_origins + i);
 
-	_dm_origins = kmalloc_objs(struct list_head, ORIGIN_HASH_SIZE);
+	_dm_origins = kmalloc_array(ORIGIN_HASH_SIZE,
+				    sizeof(struct list_head),
+				    GFP_KERNEL);
 	if (!_dm_origins) {
 		DMERR("unable to allocate memory for _dm_origins");
 		kfree(_origins);
@@ -556,7 +559,7 @@ static int register_snapshot(struct dm_snapshot *snap)
 	struct block_device *bdev = snap->origin->bdev;
 	int r = 0;
 
-	new_o = kmalloc_obj(*new_o);
+	new_o = kmalloc(sizeof(*new_o), GFP_KERNEL);
 	if (!new_o)
 		return -ENOMEM;
 
@@ -663,7 +666,8 @@ static int dm_exception_table_init(struct dm_exception_table *et,
 
 	et->hash_shift = hash_shift;
 	et->hash_mask = size - 1;
-	et->table = kvmalloc_objs(struct dm_hlist_head, size);
+	et->table = kvmalloc_array(size, sizeof(struct dm_hlist_head),
+				   GFP_KERNEL);
 	if (!et->table)
 		return -ENOMEM;
 
@@ -766,7 +770,7 @@ static void dm_insert_exception(struct dm_exception_table *eh,
 				struct dm_exception *new_e)
 {
 	struct hlist_head *l;
-	struct dm_exception *e = NULL, *prev = NULL;
+	struct dm_exception *e = NULL;
 
 	l = &eh->table[exception_hash(eh, new_e->old_chunk)].head;
 
@@ -798,23 +802,21 @@ static void dm_insert_exception(struct dm_exception_table *eh,
 
 		if (new_e->old_chunk < e->old_chunk)
 			break;
-
-		prev = e;
 	}
 
 out:
-	if (e && new_e->old_chunk < e->old_chunk) {
-		/* Add before an existing exception */
-		hlist_add_before(&new_e->hash_list, &e->hash_list);
-	} else if (prev) {
-		/* Add to l's tail: prev is the last exception in this slot */
-		hlist_add_behind(&new_e->hash_list, &prev->hash_list);
-	} else {
+	if (!e) {
 		/*
 		 * Either the table doesn't support consecutive chunks or slot
 		 * l is empty.
 		 */
 		hlist_add_head(&new_e->hash_list, l);
+	} else if (new_e->old_chunk < e->old_chunk) {
+		/* Add before an existing exception */
+		hlist_add_before(&new_e->hash_list, &e->hash_list);
+	} else {
+		/* Add to l's tail: e is the last exception in this slot */
+		hlist_add_behind(&new_e->hash_list, &e->hash_list);
 	}
 }
 
@@ -913,7 +915,9 @@ static int init_hash_tables(struct dm_snapshot *s)
 
 static void merge_shutdown(struct dm_snapshot *s)
 {
-	clear_and_wake_up_bit(RUNNING_MERGE, &s->state_bits);
+	clear_bit_unlock(RUNNING_MERGE, &s->state_bits);
+	smp_mb__after_atomic();
+	wake_up_bit(&s->state_bits, RUNNING_MERGE);
 }
 
 static struct bio *__release_queued_bios_after_merge(struct dm_snapshot *s)
@@ -1248,7 +1252,7 @@ static int snapshot_ctr(struct dm_target *ti, unsigned int argc, char **argv)
 		origin_mode = BLK_OPEN_WRITE;
 	}
 
-	s = kzalloc_obj(*s);
+	s = kzalloc(sizeof(*s), GFP_KERNEL);
 	if (!s) {
 		ti->error = "Cannot allocate private snapshot structure";
 		r = -ENOMEM;
@@ -2636,7 +2640,7 @@ static int origin_ctr(struct dm_target *ti, unsigned int argc, char **argv)
 		return -EINVAL;
 	}
 
-	o = kmalloc_obj(struct dm_origin);
+	o = kmalloc(sizeof(struct dm_origin), GFP_KERNEL);
 	if (!o) {
 		ti->error = "Cannot allocate private origin structure";
 		r = -ENOMEM;

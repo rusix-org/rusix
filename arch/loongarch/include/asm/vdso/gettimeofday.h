@@ -12,8 +12,6 @@
 #include <asm/unistd.h>
 #include <asm/vdso/vdso.h>
 
-#ifdef CONFIG_GENERIC_GETTIMEOFDAY
-
 #define VDSO_HAS_CLOCK_GETRES		1
 
 static __always_inline long gettimeofday_fallback(
@@ -85,7 +83,11 @@ static __always_inline u64 __arch_get_hw_counter(s32 clock_mode,
 	return count;
 }
 
-#endif /* CONFIG_GENERIC_GETTIMEOFDAY */
+static inline bool loongarch_vdso_hres_capable(void)
+{
+	return true;
+}
+#define __arch_vdso_hres_capable loongarch_vdso_hres_capable
 
 #endif /* !__ASSEMBLER__ */
 

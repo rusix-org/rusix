@@ -364,7 +364,7 @@ struct ftrace_likely_data {
  * Optional: only supported since clang >= 18
  *
  *   gcc: https://gcc.gnu.org/bugzilla/show_bug.cgi?id=108896
- * clang: https://clang.llvm.org/docs/AttributeReference.html#counted-by-counted-by-or-null-sized-by-sized-by-or-null
+ * clang: https://github.com/llvm/llvm-project/pull/76348
  *
  * __bdos on clang < 19.1.2 can erroneously return 0:
  * https://github.com/llvm/llvm-project/pull/110497
@@ -376,22 +376,6 @@ struct ftrace_likely_data {
 # define __counted_by(member)		__attribute__((__counted_by__(member)))
 #else
 # define __counted_by(member)
-#endif
-
-/*
- * Runtime track number of objects pointed to by a pointer member for use by
- * CONFIG_FORTIFY_SOURCE and CONFIG_UBSAN_BOUNDS.
- *
- * Optional: only supported since gcc >= 16
- * Optional: only supported since clang >= 22
- *
- *   gcc: https://gcc.gnu.org/pipermail/gcc-patches/2025-April/681727.html
- * clang: https://clang.llvm.org/docs/AttributeReference.html#counted-by-counted-by-or-null-sized-by-sized-by-or-null
- */
-#ifdef CONFIG_CC_HAS_COUNTED_BY_PTR
-#define __counted_by_ptr(member)	__attribute__((__counted_by__(member)))
-#else
-#define __counted_by_ptr(member)
 #endif
 
 /*
@@ -417,26 +401,18 @@ struct ftrace_likely_data {
 #define __counted_by_be(member)	__counted_by(member)
 #endif
 
-/*
- * This designates the minimum number of elements a passed array parameter must
- * have. For example:
- *
- *     void some_function(u8 param[at_least 7]);
- *
- * If a caller passes an array with fewer than 7 elements, the compiler will
- * emit a warning.
- */
-#ifndef __CHECKER__
-#define at_least static
+/* Do not trap wrapping arithmetic within an annotated function. */
+#ifdef CONFIG_UBSAN_INTEGER_WRAP
+# define __signed_wrap __attribute__((no_sanitize("signed-integer-overflow")))
 #else
-#define at_least
+# define __signed_wrap
 #endif
 
 /* Section for code which can't be instrumented at all */
 #define __noinstr_section(section)					\
 	noinline notrace __attribute((__section__(section)))		\
 	__no_kcsan __no_sanitize_address __no_profile __no_sanitize_coverage \
-	__no_sanitize_memory
+	__no_sanitize_memory __signed_wrap
 
 #define noinstr __noinstr_section(".noinstr.text")
 
@@ -540,38 +516,6 @@ struct ftrace_likely_data {
 #endif
 
 /*
- * Optional: only supported since gcc >= 15, clang >= 19
- *
- *   gcc: https://gcc.gnu.org/onlinedocs/gcc/Other-Builtins.html#index-_005f_005fbuiltin_005fcounted_005fby_005fref
- * clang: https://clang.llvm.org/docs/LanguageExtensions.html#builtin-counted-by-ref
- */
-#if __has_builtin(__builtin_counted_by_ref) && \
-    !defined(CONFIG_CC_HAS_BROKEN_COUNTED_BY_REF)
-/**
- * __flex_counter() - Get pointer to counter member for the given
- *                    flexible array, if it was annotated with __counted_by()
- * @FAM: Pointer to flexible array member of an addressable struct instance
- *
- * For example, with:
- *
- *	struct foo {
- *		int counter;
- *		short array[] __counted_by(counter);
- *	} *p;
- *
- * __flex_counter(p->array) will resolve to &p->counter.
- *
- * Note that Clang may not allow this to be assigned to a separate
- * variable; it must be used directly.
- *
- * If p->array is unannotated, this returns (void *)NULL.
- */
-#define __flex_counter(FAM)	__builtin_counted_by_ref(FAM)
-#else
-#define __flex_counter(FAM)	((void *)NULL)
-#endif
-
-/*
  * Some versions of gcc do not mark 'asm goto' volatile:
  *
  *  https://gcc.gnu.org/bugzilla/show_bug.cgi?id=103979
@@ -584,26 +528,17 @@ struct ftrace_likely_data {
 
 /*
  * Clang has trouble with constraints with multiple
- * alternative behaviors ("g" , "rm" and "=rm").
+ * alternative behaviors (mainly "g" and "rm").
  */
 #ifndef ASM_INPUT_G
   #define ASM_INPUT_G "g"
   #define ASM_INPUT_RM "rm"
-  #define ASM_OUTPUT_RM "=rm"
 #endif
 
 #ifdef CONFIG_CC_HAS_ASM_INLINE
 #define asm_inline asm __inline
 #else
 #define asm_inline asm
-#endif
-
-#ifndef __ASSEMBLY__
-/*
- * Use __typeof_unqual__() when available.
- */
-#if CC_HAS_TYPEOF_UNQUAL || defined(__CHECKER__)
-# define USE_TYPEOF_UNQUAL 1
 #endif
 
 /* Are two types/vars the same type (ignoring qualifiers)? */
@@ -613,7 +548,6 @@ struct ftrace_likely_data {
  * __unqual_scalar_typeof(x) - Declare an unqualified scalar type, leaving
  *			       non-scalar types unchanged.
  */
-#ifndef USE_TYPEOF_UNQUAL
 /*
  * Prefer C11 _Generic for better compile-times and simpler code. Note: 'char'
  * is not type-compatible with 'signed char', and we define a separate case.
@@ -630,32 +564,6 @@ struct ftrace_likely_data {
 			 __scalar_type_to_expr_cases(int),		\
 			 __scalar_type_to_expr_cases(long),		\
 			 __scalar_type_to_expr_cases(long long),	\
-			 default: (x)))
-#else
-#define __unqual_scalar_typeof(x) __typeof_unqual__(x)
-#endif
-
-#include <asm/percpu_types.h>
-
-#endif /* !__ASSEMBLY__ */
-
-/*
- * __signed_scalar_typeof(x) - Declare a signed scalar type, leaving
- *			       non-scalar types unchanged.
- */
-
-#define __scalar_type_to_signed_cases(type)				\
-		unsigned type:	(signed type)0,				\
-		signed type:	(signed type)0
-
-#define __signed_scalar_typeof(x) typeof(				\
-		_Generic((x),						\
-			 char:	(signed char)0,				\
-			 __scalar_type_to_signed_cases(char),		\
-			 __scalar_type_to_signed_cases(short),		\
-			 __scalar_type_to_signed_cases(int),		\
-			 __scalar_type_to_signed_cases(long),		\
-			 __scalar_type_to_signed_cases(long long),	\
 			 default: (x)))
 
 /* Is this type a native word size -- useful for atomic operations */

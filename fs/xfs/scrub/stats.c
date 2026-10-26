@@ -3,7 +3,7 @@
  * Copyright (C) 2023 Oracle.  All Rights Reserved.
  * Author: Darrick J. Wong <djwong@kernel.org>
  */
-#include "xfs_platform.h"
+#include "xfs.h"
 #include "xfs_fs.h"
 #include "xfs_shared.h"
 #include "xfs_format.h"
@@ -29,7 +29,6 @@ struct xchk_scrub_stats {
 	uint32_t		incomplete;
 	uint32_t		warning;
 	uint32_t		retries;
-	uint32_t		runtime_errors;
 
 	/* repair stats */
 	uint32_t		repair_invocations;
@@ -111,7 +110,7 @@ xchk_stats_format(
 		spin_unlock(&css->css_lock);
 
 		ret = scnprintf(buf, remaining,
- "%s %u %u %u %u %u %u %u %u %u %llu %u %u %llu %u\n",
+ "%s %u %u %u %u %u %u %u %u %u %llu %u %u %llu\n",
 				name_map[i],
 				(unsigned int)fss.invocations,
 				(unsigned int)fss.clean,
@@ -125,8 +124,7 @@ xchk_stats_format(
 				(unsigned long long)fss.checktime_us,
 				(unsigned int)fss.repair_invocations,
 				(unsigned int)fss.repair_success,
-				(unsigned long long)fss.repairtime_us,
-				(unsigned int)fss.runtime_errors);
+				(unsigned long long)fss.repairtime_us);
 		if (ret <= 0)
 			break;
 
@@ -168,8 +166,7 @@ xchk_stats_estimate_bufsize(
 		ret += field_width + 1;
 	}
 
-	/* null byte for scnprintf */
-	return ret + 1;
+	return ret;
 }
 
 /* Clear all counters. */
@@ -210,17 +207,13 @@ xchk_stats_merge_one(
 	}
 
 	/* caller applies this same transformation after we return */
-	if (error == -EFSCORRUPTED || error == -EFSBADCRC) {
+	if (error == -EFSCORRUPTED || error == -EFSBADCRC)
 		sm_flags |= XFS_SCRUB_OFLAG_CORRUPT;
-		error = 0;
-	}
 
 	css = &cs->cs_stats[sm->sm_type];
 	spin_lock(&css->css_lock);
 	css->invocations++;
-	if (error)
-		css->runtime_errors++;
-	else if (!(sm_flags & XFS_SCRUB_OFLAG_UNCLEAN))
+	if (!(sm_flags & XFS_SCRUB_OFLAG_UNCLEAN))
 		css->clean++;
 	if (sm_flags & XFS_SCRUB_OFLAG_CORRUPT)
 		css->corrupt++;
@@ -301,7 +294,6 @@ out:
 }
 
 static const struct file_operations scrub_stats_fops = {
-	.owner			= THIS_MODULE,
 	.open			= simple_open,
 	.read			= xchk_scrub_stats_read,
 };
@@ -329,7 +321,6 @@ xchk_clear_scrub_stats_write(
 }
 
 static const struct file_operations clear_scrub_stats_fops = {
-	.owner			= THIS_MODULE,
 	.open			= simple_open,
 	.write			= xchk_clear_scrub_stats_write,
 };
@@ -415,7 +406,7 @@ xchk_mount_stats_alloc(
 	struct xchk_stats	*cs;
 	int			error;
 
-	cs = kvzalloc_obj(struct xchk_stats);
+	cs = kvzalloc(sizeof(struct xchk_stats), GFP_KERNEL);
 	if (!cs)
 		return -ENOMEM;
 

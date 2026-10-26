@@ -5,7 +5,6 @@
 
 #include <linux/clk.h>
 #include <linux/console.h>
-#include <linux/err.h>
 #include <linux/io.h>
 #include <linux/module.h>
 #include <linux/of.h>
@@ -32,7 +31,7 @@
 #define UNIPHIER_UART_DLR		(9 << (UNIPHIER_UART_REGSHIFT))
 
 struct uniphier8250_priv {
-	struct uart_8250_port *uport;
+	int line;
 	struct clk *clk;
 	spinlock_t atomic_write_lock;
 };
@@ -166,8 +165,10 @@ static int uniphier_uart_probe(struct platform_device *pdev)
 	int ret;
 
 	regs = platform_get_resource(pdev, IORESOURCE_MEM, 0);
-	if (!regs)
-		return dev_err_probe(dev, -EINVAL, "failed to get memory resource\n");
+	if (!regs) {
+		dev_err(dev, "failed to get memory resource\n");
+		return -EINVAL;
+	}
 
 	membase = devm_ioremap(dev, regs->start, resource_size(regs));
 	if (!membase)
@@ -179,10 +180,15 @@ static int uniphier_uart_probe(struct platform_device *pdev)
 
 	memset(&up, 0, sizeof(up));
 
-	priv->clk = devm_clk_get_enabled(dev, NULL);
-	if (IS_ERR(priv->clk))
-		return dev_err_probe(dev, PTR_ERR(priv->clk),
-				     "failed to get and enable clock\n");
+	priv->clk = devm_clk_get(dev, NULL);
+	if (IS_ERR(priv->clk)) {
+		dev_err(dev, "failed to get clock\n");
+		return PTR_ERR(priv->clk);
+	}
+
+	ret = clk_prepare_enable(priv->clk);
+	if (ret)
+		return ret;
 
 	up.port.uartclk = clk_get_rate(priv->clk);
 
@@ -213,9 +219,13 @@ static int uniphier_uart_probe(struct platform_device *pdev)
 	up.dl_read = uniphier_serial_dl_read;
 	up.dl_write = uniphier_serial_dl_write;
 
-	priv->uport = serial8250_register_8250_port(&up);
-	if (IS_ERR(priv->uport))
-		return dev_err_probe(dev, PTR_ERR(priv->uport), "failed to register 8250 port\n");
+	ret = serial8250_register_8250_port(&up);
+	if (ret < 0) {
+		dev_err(dev, "failed to register 8250 port\n");
+		clk_disable_unprepare(priv->clk);
+		return ret;
+	}
+	priv->line = ret;
 
 	platform_set_drvdata(pdev, priv);
 
@@ -226,15 +236,16 @@ static void uniphier_uart_remove(struct platform_device *pdev)
 {
 	struct uniphier8250_priv *priv = platform_get_drvdata(pdev);
 
-	serial8250_unregister_port(priv->uport);
+	serial8250_unregister_port(priv->line);
+	clk_disable_unprepare(priv->clk);
 }
 
 static int __maybe_unused uniphier_uart_suspend(struct device *dev)
 {
 	struct uniphier8250_priv *priv = dev_get_drvdata(dev);
-	struct uart_8250_port *up = priv->uport;
+	struct uart_8250_port *up = serial8250_get_port(priv->line);
 
-	serial8250_suspend_port(up);
+	serial8250_suspend_port(priv->line);
 
 	if (!uart_console(&up->port) || console_suspend_enabled)
 		clk_disable_unprepare(priv->clk);
@@ -245,7 +256,7 @@ static int __maybe_unused uniphier_uart_suspend(struct device *dev)
 static int __maybe_unused uniphier_uart_resume(struct device *dev)
 {
 	struct uniphier8250_priv *priv = dev_get_drvdata(dev);
-	struct uart_8250_port *up = priv->uport;
+	struct uart_8250_port *up = serial8250_get_port(priv->line);
 	int ret;
 
 	if (!uart_console(&up->port) || console_suspend_enabled) {
@@ -254,7 +265,7 @@ static int __maybe_unused uniphier_uart_resume(struct device *dev)
 			return ret;
 	}
 
-	serial8250_resume_port(up);
+	serial8250_resume_port(priv->line);
 
 	return 0;
 }

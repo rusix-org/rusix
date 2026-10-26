@@ -284,7 +284,7 @@ static struct iommu_domain *mtk_iommu_v1_domain_alloc_paging(struct device *dev)
 {
 	struct mtk_iommu_v1_domain *dom;
 
-	dom = kzalloc_obj(*dom);
+	dom = kzalloc(sizeof(*dom), GFP_KERNEL);
 	if (!dom)
 		return NULL;
 
@@ -645,9 +645,6 @@ static int mtk_iommu_v1_probe(struct platform_device *pdev)
 					     "mediatek,larbs", NULL);
 	if (larb_nr < 0)
 		return larb_nr;
-
-	if (larb_nr > MTK_LARB_NR_MAX)
-		return -EINVAL;
 
 	for (i = 0; i < larb_nr; i++) {
 		struct device_node *larbnode;

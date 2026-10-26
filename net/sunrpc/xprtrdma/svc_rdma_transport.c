@@ -107,10 +107,9 @@ void svc_rdma_xprt_deferred_close(struct svcxprt_rdma *rdma)
 {
 	svc_xprt_deferred_close(&rdma->sc_xprt);
 
-	/* Release parked sc_sq_ticket_wait and sc_send_wait waiters.
+	/* Release parked sc_send_wait waiters.
 	 * Once XPT_CLOSE is observed each returns -ENOTCONN.
 	 */
-	wake_up_all(&rdma->sc_sq_ticket_wait);
 	wake_up_all(&rdma->sc_send_wait);
 }
 
@@ -196,9 +195,7 @@ static struct svcxprt_rdma *svc_rdma_create_xprt(struct svc_serv *serv,
 	init_llist_head(&cma_xprt->sc_send_ctxts);
 	init_llist_head(&cma_xprt->sc_recv_ctxts);
 	init_llist_head(&cma_xprt->sc_rw_ctxts);
-	init_llist_head(&cma_xprt->sc_send_release_list);
 	init_waitqueue_head(&cma_xprt->sc_send_wait);
-	init_waitqueue_head(&cma_xprt->sc_sq_ticket_wait);
 
 	spin_lock_init(&cma_xprt->sc_lock);
 	spin_lock_init(&cma_xprt->sc_rq_dto_lock);
@@ -445,6 +442,7 @@ static struct svc_xprt *svc_rdma_accept(struct svc_xprt *xprt)
 	struct ib_qp_init_attr qp_attr;
 	struct ib_device *dev;
 	int ret = 0;
+	RPC_IFDEBUG(struct sockaddr *sap);
 
 	listen_rdma = container_of(xprt, struct svcxprt_rdma, sc_xprt);
 	clear_bit(XPT_CONN, &xprt->xpt_flags);
@@ -508,8 +506,6 @@ static struct svc_xprt *svc_rdma_accept(struct svc_xprt *xprt)
 	if (newxprt->sc_sq_depth > dev->attrs.max_qp_wr)
 		newxprt->sc_sq_depth = dev->attrs.max_qp_wr;
 	atomic_set(&newxprt->sc_sq_avail, newxprt->sc_sq_depth);
-	atomic_set(&newxprt->sc_sq_ticket_head, 0);
-	atomic_set(&newxprt->sc_sq_ticket_tail, 0);
 
 	newxprt->sc_pd = ib_alloc_pd(dev, 0);
 	if (IS_ERR(newxprt->sc_pd)) {
@@ -574,7 +570,8 @@ static struct svc_xprt *svc_rdma_accept(struct svc_xprt *xprt)
 	set_bit(RDMAXPRT_CONN_PENDING, &newxprt->sc_flags);
 	memset(&conn_param, 0, sizeof conn_param);
 	conn_param.responder_resources = 0;
-	conn_param.initiator_depth = min(newxprt->sc_ord, dev->attrs.max_qp_init_rd_atom);
+	conn_param.initiator_depth = min_t(int, newxprt->sc_ord,
+					   dev->attrs.max_qp_init_rd_atom);
 	if (!conn_param.initiator_depth) {
 		ret = -EINVAL;
 		trace_svcrdma_initdepth_err(newxprt, ret);
@@ -591,20 +588,18 @@ static struct svc_xprt *svc_rdma_accept(struct svc_xprt *xprt)
 		goto errout;
 	}
 
-	if (IS_ENABLED(CONFIG_SUNRPC_DEBUG)) {
-		struct sockaddr *sap;
-
-		dprintk("svcrdma: new connection accepted on device %s:\n", dev->name);
-		sap = (struct sockaddr *)&newxprt->sc_cm_id->route.addr.src_addr;
-		dprintk("    local address   : %pIS:%u\n", sap, rpc_get_port(sap));
-		sap = (struct sockaddr *)&newxprt->sc_cm_id->route.addr.dst_addr;
-		dprintk("    remote address  : %pIS:%u\n", sap, rpc_get_port(sap));
-		dprintk("    max_sge         : %u\n", newxprt->sc_max_send_sges);
-		dprintk("    sq_depth        : %d\n", newxprt->sc_sq_depth);
-		dprintk("    rdma_rw_ctxs    : %d\n", ctxts);
-		dprintk("    max_requests    : %d\n", newxprt->sc_max_requests);
-		dprintk("    ord             : %d\n", conn_param.initiator_depth);
-	}
+#if IS_ENABLED(CONFIG_SUNRPC_DEBUG)
+	dprintk("svcrdma: new connection accepted on device %s:\n", dev->name);
+	sap = (struct sockaddr *)&newxprt->sc_cm_id->route.addr.src_addr;
+	dprintk("    local address   : %pIS:%u\n", sap, rpc_get_port(sap));
+	sap = (struct sockaddr *)&newxprt->sc_cm_id->route.addr.dst_addr;
+	dprintk("    remote address  : %pIS:%u\n", sap, rpc_get_port(sap));
+	dprintk("    max_sge         : %d\n", newxprt->sc_max_send_sges);
+	dprintk("    sq_depth        : %d\n", newxprt->sc_sq_depth);
+	dprintk("    rdma_rw_ctxs    : %d\n", ctxts);
+	dprintk("    max_requests    : %d\n", newxprt->sc_max_requests);
+	dprintk("    ord             : %d\n", conn_param.initiator_depth);
+#endif
 
 	return &newxprt->sc_xprt;
 
@@ -643,11 +638,10 @@ static void svc_rdma_detach(struct svc_xprt *xprt)
 
 	/*
 	 * Most close paths go through svc_rdma_xprt_deferred_close(),
-	 * which wakes the SQ waitqueues. svc_xprt_close() reaches
+	 * which wakes the SQ waitqueue. svc_xprt_close() reaches
 	 * detach without that helper, so wake any threads parked in
-	 * svc_rdma_sq_wait() here as well.
+	 * the Send Queue here as well.
 	 */
-	wake_up_all(&rdma->sc_sq_ticket_wait);
 	wake_up_all(&rdma->sc_send_wait);
 }
 
@@ -671,7 +665,7 @@ static void svc_rdma_free(struct svc_xprt *xprt)
 	/* This blocks until the Completion Queues are empty */
 	if (rdma->sc_qp && !IS_ERR(rdma->sc_qp))
 		ib_drain_qp(rdma->sc_qp);
-	svc_rdma_send_ctxts_drain(rdma);
+	flush_workqueue(svcrdma_wq);
 
 	svc_rdma_flush_recv_queues(rdma);
 
@@ -711,8 +705,7 @@ static int svc_rdma_has_wspace(struct svc_xprt *xprt)
 	 * If there are already waiters on the SQ,
 	 * return false.
 	 */
-	if (waitqueue_active(&rdma->sc_send_wait) ||
-	    waitqueue_active(&rdma->sc_sq_ticket_wait))
+	if (waitqueue_active(&rdma->sc_send_wait))
 		return 0;
 
 	/* Otherwise return true. */

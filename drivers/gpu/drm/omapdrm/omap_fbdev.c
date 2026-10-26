@@ -7,15 +7,14 @@
 #include <linux/fb.h>
 
 #include <drm/clients/drm_client_setup.h>
-#include <drm/clients/drm_fbdev_helper.h>
 #include <drm/drm_drv.h>
 #include <drm/drm_crtc_helper.h>
+#include <drm/drm_fb_helper.h>
 #include <drm/drm_file.h>
 #include <drm/drm_fourcc.h>
 #include <drm/drm_framebuffer.h>
 #include <drm/drm_gem_framebuffer_helper.h>
 #include <drm/drm_managed.h>
-#include <drm/drm_print.h>
 #include <drm/drm_util.h>
 
 #include "omap_drv.h"
@@ -84,7 +83,7 @@ fallback:
 
 static int omap_fbdev_fb_mmap(struct fb_info *info, struct vm_area_struct *vma)
 {
-	vma->vm_page_prot = pgprot_writecombine(vma_get_page_prot(vma));
+	vma->vm_page_prot = pgprot_writecombine(vm_get_page_prot(vma->vm_flags));
 
 	return fb_deferred_io_mmap(info, vma);
 }
@@ -104,6 +103,8 @@ static void omap_fbdev_fb_destroy(struct fb_info *info)
 	drm_framebuffer_remove(fb);
 
 	drm_client_release(&helper->client);
+	drm_fb_helper_unprepare(helper);
+	kfree(helper);
 }
 
 /*

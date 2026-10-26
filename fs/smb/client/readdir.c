@@ -13,6 +13,7 @@
 #include <linux/pagemap.h>
 #include <linux/slab.h>
 #include <linux/stat.h>
+#include "cifspdu.h"
 #include "cifsglob.h"
 #include "cifsproto.h"
 #include "cifs_unicode.h"
@@ -73,6 +74,7 @@ cifs_prime_dcache(struct dentry *parent, struct qstr *name,
 	struct cifs_sb_info *cifs_sb = CIFS_SB(sb);
 	bool posix = cifs_sb_master_tcon(cifs_sb)->posix_extensions;
 	bool reparse_need_reval = false;
+	DECLARE_WAIT_QUEUE_HEAD_ONSTACK(wq);
 	int rc;
 
 	cifs_dbg(FYI, "%s: for %s\n", __func__, name->name);
@@ -96,7 +98,7 @@ retry:
 			default:
 				break;
 			}
-		} else if (fattr->cf_cifsattrs & ATTR_REPARSE_POINT) {
+		} else if (fattr->cf_cifsattrs & ATTR_REPARSE) {
 			reparse_need_reval = true;
 		}
 
@@ -104,7 +106,7 @@ retry:
 		    (fattr->cf_flags & CIFS_FATTR_NEED_REVAL))
 			return;
 
-		dentry = d_alloc_parallel(parent, name);
+		dentry = d_alloc_parallel(parent, name, &wq);
 	}
 	if (IS_ERR(dentry))
 		return;
@@ -136,14 +138,13 @@ retry:
 				 * reparse tag and ctime haven't changed.
 				 */
 				rc = 0;
-				if (fattr->cf_cifsattrs & ATTR_REPARSE_POINT) {
+				if (fattr->cf_cifsattrs & ATTR_REPARSE) {
 					if (likely(reparse_inode_match(inode, fattr))) {
 						fattr->cf_mode = inode->i_mode;
 						fattr->cf_rdev = inode->i_rdev;
 						fattr->cf_uid = inode->i_uid;
 						fattr->cf_gid = inode->i_gid;
-						fattr->cf_eof =
-							netfs_read_remote_i_size(inode);
+						fattr->cf_eof = CIFS_I(inode)->netfs.remote_i_size;
 						fattr->cf_symlink_target = NULL;
 					} else {
 						CIFS_I(inode)->time = 0;
@@ -177,7 +178,6 @@ cifs_fill_common_info(struct cifs_fattr *fattr, struct cifs_sb_info *cifs_sb)
 	struct cifs_open_info_data data = {
 		.reparse = { .tag = fattr->cf_cifstag, },
 	};
-	unsigned int sbflags;
 
 	fattr->cf_uid = cifs_sb->ctx->linux_uid;
 	fattr->cf_gid = cifs_sb->ctx->linux_gid;
@@ -190,7 +190,7 @@ cifs_fill_common_info(struct cifs_fattr *fattr, struct cifs_sb_info *cifs_sb)
 	 * TODO: go through all documented  reparse tags to see if we can
 	 * reasonably map some of them to directories vs. files vs. symlinks
 	 */
-	if ((fattr->cf_cifsattrs & ATTR_REPARSE_POINT) &&
+	if ((fattr->cf_cifsattrs & ATTR_REPARSE) &&
 	    cifs_reparse_point_to_fattr(cifs_sb, fattr, &data))
 		goto out_reparse;
 
@@ -216,12 +216,12 @@ out_reparse:
 	 * may look wrong since the inodes may not have timed out by the time
 	 * "ls" does a stat() call on them.
 	 */
-	sbflags = cifs_sb_flags(cifs_sb);
-	if (sbflags & (CIFS_MOUNT_CIFS_ACL | CIFS_MOUNT_MODE_FROM_SID))
+	if ((cifs_sb_flags(cifs_sb) & CIFS_MOUNT_CIFS_ACL) ||
+	    (cifs_sb_flags(cifs_sb) & CIFS_MOUNT_MODE_FROM_SID))
 		fattr->cf_flags |= CIFS_FATTR_NEED_REVAL;
 
-	if ((sbflags & CIFS_MOUNT_UNX_EMUL) &&
-	    (fattr->cf_cifsattrs & ATTR_SYSTEM)) {
+	if (cifs_sb_flags(cifs_sb) & CIFS_MOUNT_UNX_EMUL &&
+	    fattr->cf_cifsattrs & ATTR_SYSTEM) {
 		if (fattr->cf_eof == 0)  {
 			fattr->cf_mode &= ~S_IFMT;
 			fattr->cf_mode |= S_IFIFO;
@@ -260,7 +260,7 @@ cifs_posix_to_fattr(struct cifs_fattr *fattr, struct smb2_posix_info *info,
 	fattr->cf_nlink = le32_to_cpu(info->HardLinks);
 	fattr->cf_cifsattrs = le32_to_cpu(info->DosAttributes);
 
-	if (fattr->cf_cifsattrs & ATTR_REPARSE_POINT)
+	if (fattr->cf_cifsattrs & ATTR_REPARSE)
 		fattr->cf_cifstag = le32_to_cpu(info->ReparseTag);
 
 	/* The Mode field in the response can now include the file type as well */
@@ -327,7 +327,7 @@ static void cifs_fulldir_info_to_fattr(struct cifs_fattr *fattr,
 	__dir_info_to_fattr(fattr, info);
 
 	/* See MS-FSCC 2.4.14, 2.4.19 */
-	if (fattr->cf_cifsattrs & ATTR_REPARSE_POINT)
+	if (fattr->cf_cifsattrs & ATTR_REPARSE)
 		fattr->cf_cifstag = le32_to_cpu(di->EaSize);
 	cifs_fill_common_info(fattr, cifs_sb);
 }
@@ -357,21 +357,20 @@ static int
 _initiate_cifs_search(const unsigned int xid, struct file *file,
 		     const char *full_path)
 {
-	struct cifs_sb_info *cifs_sb = CIFS_SB(file);
-	struct tcon_link *tlink = NULL;
-	struct TCP_Server_Info *server;
-	struct cifsFileInfo *cifsFile;
-	struct cifs_tcon *tcon;
-	unsigned int sbflags;
 	__u16 search_flags;
 	int rc = 0;
+	struct cifsFileInfo *cifsFile;
+	struct cifs_sb_info *cifs_sb = CIFS_FILE_SB(file);
+	struct tcon_link *tlink = NULL;
+	struct cifs_tcon *tcon;
+	struct TCP_Server_Info *server;
 
 	if (file->private_data == NULL) {
 		tlink = cifs_sb_tlink(cifs_sb);
 		if (IS_ERR(tlink))
 			return PTR_ERR(tlink);
 
-		cifsFile = kzalloc_obj(struct cifsFileInfo);
+		cifsFile = kzalloc(sizeof(struct cifsFileInfo), GFP_KERNEL);
 		if (cifsFile == NULL) {
 			rc = -ENOMEM;
 			goto error_exit;
@@ -398,7 +397,6 @@ _initiate_cifs_search(const unsigned int xid, struct file *file,
 	cifs_dbg(FYI, "Full path: %s start at: %lld\n", full_path, file->f_pos);
 
 ffirst_retry:
-	sbflags = cifs_sb_flags(cifs_sb);
 	/* test for Unix extensions */
 	/* but now check for them on the share/mount not on the SMB session */
 	/* if (cap_unix(tcon->ses) { */
@@ -409,7 +407,7 @@ ffirst_retry:
 	else if ((tcon->ses->capabilities &
 		  tcon->ses->server->vals->cap_nt_find) == 0) {
 		cifsFile->srch_inf.info_level = SMB_FIND_FILE_INFO_STANDARD;
-	} else if (sbflags & CIFS_MOUNT_SERVER_INUM) {
+	} else if (cifs_sb_flags(cifs_sb) & CIFS_MOUNT_SERVER_INUM) {
 		cifsFile->srch_inf.info_level = SMB_FIND_FILE_ID_FULL_DIR_INFO;
 	} else /* not srvinos - BB fixme add check for backlevel? */ {
 		cifsFile->srch_inf.info_level = SMB_FIND_FILE_FULL_DIRECTORY_INFO;
@@ -425,8 +423,9 @@ ffirst_retry:
 
 	if (rc == 0) {
 		cifsFile->invalidHandle = false;
-	} else if (rc == -EOPNOTSUPP && (sbflags & CIFS_MOUNT_SERVER_INUM)) {
-		cifs_autodisable_serverino(cifs_sb, "Cannot retrieve inode number via query_dir_first", rc);
+	} else if ((rc == -EOPNOTSUPP) &&
+		   (cifs_sb_flags(cifs_sb) & CIFS_MOUNT_SERVER_INUM)) {
+		cifs_autodisable_serverino(cifs_sb);
 		goto ffirst_retry;
 	}
 error_exit:
@@ -456,20 +455,17 @@ initiate_cifs_search(const unsigned int xid, struct file *file,
 }
 
 /* return length of unicode string in bytes */
-static size_t cifs_unicode_bytelen(const char *str, size_t maxlen)
+static int cifs_unicode_bytelen(const char *str)
 {
+	int len;
 	const __le16 *ustr = (const __le16 *)str;
-	size_t len;
 
-	maxlen = umin(PATH_MAX + 1, maxlen / sizeof(__le16));
-	for (len = 0; len < maxlen; len++) {
+	for (len = 0; len <= PATH_MAX; len++) {
 		if (ustr[len] == 0)
-			return len * sizeof(__le16);
+			return len << 1;
 	}
-	len *= sizeof(__le16);
-	cifs_dbg(FYI, "%s: Unicode string not terminated within %zu bytes\n",
-		 __func__, len);
-	return len;
+	cifs_dbg(FYI, "Unicode string longer than PATH_MAX found\n");
+	return len << 1;
 }
 
 static char *nxt_dir_entry(char *old_entry, char *end_of_smb, int level)
@@ -535,13 +531,13 @@ static void cifs_fill_dirent_posix(struct cifs_dirent *de,
 }
 
 static void cifs_fill_dirent_unix(struct cifs_dirent *de,
-		const FILE_UNIX_INFO *info, bool is_unicode, size_t maxlen)
+		const FILE_UNIX_INFO *info, bool is_unicode)
 {
 	de->name = &info->FileName[0];
 	if (is_unicode)
-		de->namelen = cifs_unicode_bytelen(de->name, maxlen);
+		de->namelen = cifs_unicode_bytelen(de->name);
 	else
-		de->namelen = strnlen(de->name, min_t(size_t, maxlen, PATH_MAX));
+		de->namelen = strnlen(de->name, PATH_MAX);
 	de->resume_key = info->ResumeKey;
 	de->ino = le64_to_cpu(info->basic.UniqueId);
 }
@@ -563,7 +559,7 @@ static void cifs_fill_dirent_full(struct cifs_dirent *de,
 }
 
 static void cifs_fill_dirent_search(struct cifs_dirent *de,
-		const FILE_ID_FULL_DIR_INFO *info)
+		const SEARCH_ID_FULL_DIR_INFO *info)
 {
 	de->name = &info->FileName[0];
 	de->namelen = le32_to_cpu(info->FileNameLength);
@@ -589,49 +585,30 @@ static void cifs_fill_dirent_std(struct cifs_dirent *de,
 }
 
 static int cifs_fill_dirent(struct cifs_dirent *de, const void *info,
-			    const char *end, u16 level, bool is_unicode)
+		u16 level, bool is_unicode)
 {
-	size_t len = end > (const char *)info ? end - (const char *)info : 0;
-	size_t nul_len = 0;
-
 	memset(de, 0, sizeof(*de));
 
 	switch (level) {
 	case SMB_FIND_FILE_POSIX_INFO:
-		if (len < sizeof(struct smb2_posix_info))
-			goto too_short;
 		cifs_fill_dirent_posix(de, info);
 		break;
 	case SMB_FIND_FILE_UNIX:
-		if (len < offsetof(FILE_UNIX_INFO, FileName))
-			goto too_short;
-		cifs_fill_dirent_unix(de, info, is_unicode,
-				      len - offsetof(FILE_UNIX_INFO, FileName));
-		nul_len = is_unicode ? sizeof(__le16) : sizeof(__u8);
+		cifs_fill_dirent_unix(de, info, is_unicode);
 		break;
 	case SMB_FIND_FILE_DIRECTORY_INFO:
-		if (len < offsetof(FILE_DIRECTORY_INFO, FileName))
-			goto too_short;
 		cifs_fill_dirent_dir(de, info);
 		break;
 	case SMB_FIND_FILE_FULL_DIRECTORY_INFO:
-		if (len < offsetof(FILE_FULL_DIRECTORY_INFO, FileName))
-			goto too_short;
 		cifs_fill_dirent_full(de, info);
 		break;
 	case SMB_FIND_FILE_ID_FULL_DIR_INFO:
-		if (len < offsetof(FILE_ID_FULL_DIR_INFO, FileName))
-			goto too_short;
 		cifs_fill_dirent_search(de, info);
 		break;
 	case SMB_FIND_FILE_BOTH_DIRECTORY_INFO:
-		if (len < offsetof(FILE_BOTH_DIRECTORY_INFO, FileName))
-			goto too_short;
 		cifs_fill_dirent_both(de, info);
 		break;
 	case SMB_FIND_FILE_INFO_STANDARD:
-		if (len < offsetof(FIND_FILE_STANDARD_INFO, FileName))
-			goto too_short;
 		cifs_fill_dirent_std(de, info);
 		break;
 	default:
@@ -639,20 +616,7 @@ static int cifs_fill_dirent(struct cifs_dirent *de, const void *info,
 		return -EINVAL;
 	}
 
-	if (de->name &&
-	    (end < de->name ||
-	     (size_t)(end - de->name) < de->namelen + nul_len)) {
-		cifs_dbg(VFS, "%s: search entry name extends past end of SMB\n",
-			 __func__);
-		return -EINVAL;
-	}
-
 	return 0;
-
-too_short:
-	cifs_dbg(VFS, "%s: search entry extends past end of SMB\n",
-		 __func__);
-	return -EINVAL;
 }
 
 #define UNICODE_DOT cpu_to_le16(0x2e)
@@ -707,14 +671,10 @@ static int is_dir_changed(struct file *file)
 static int cifs_save_resume_key(const char *current_entry,
 	struct cifsFileInfo *file_info)
 {
-	struct TCP_Server_Info *server = tlink_tcon(file_info->tlink)->ses->server;
-	char *buf = file_info->srch_inf.ntwrk_buf_start;
-	const char *end = buf + server->ops->calc_smb_size(buf);
 	struct cifs_dirent de;
 	int rc;
 
-	rc = cifs_fill_dirent(&de, current_entry, end,
-			      file_info->srch_inf.info_level,
+	rc = cifs_fill_dirent(&de, current_entry, file_info->srch_inf.info_level,
 			      file_info->srch_inf.unicode);
 	if (!rc) {
 		file_info->srch_inf.presume_name = de.name;
@@ -742,7 +702,7 @@ find_cifs_entry(const unsigned int xid, struct cifs_tcon *tcon, loff_t pos,
 	loff_t first_entry_in_buffer;
 	loff_t index_to_find = pos;
 	struct cifsFileInfo *cfile = file->private_data;
-	struct cifs_sb_info *cifs_sb = CIFS_SB(file);
+	struct cifs_sb_info *cifs_sb = CIFS_FILE_SB(file);
 	struct TCP_Server_Info *server = tcon->ses->server;
 	/* check if index in the buffer */
 
@@ -782,8 +742,6 @@ find_cifs_entry(const unsigned int xid, struct cifs_tcon *tcon, loff_t pos,
 			if (cfile->srch_inf.smallBuf)
 				cifs_small_buf_release(cfile->srch_inf.
 						ntwrk_buf_start);
-			else if (cfile->srch_inf.is_dynamic_buf)
-				kfree(cfile->srch_inf.ntwrk_buf_start);
 			else
 				cifs_buf_release(cfile->srch_inf.
 						ntwrk_buf_start);
@@ -791,9 +749,6 @@ find_cifs_entry(const unsigned int xid, struct cifs_tcon *tcon, loff_t pos,
 			cfile->srch_inf.ntwrk_buf_start = NULL;
 			cfile->srch_inf.srch_entries_start = NULL;
 			cfile->srch_inf.last_entry = NULL;
-			cfile->srch_inf.presume_name = NULL;
-			cfile->srch_inf.resume_name_len = 0;
-			cfile->srch_inf.resume_key = 0;
 		}
 		rc = initiate_cifs_search(xid, file, full_path);
 		if (rc) {
@@ -831,7 +786,7 @@ find_cifs_entry(const unsigned int xid, struct cifs_tcon *tcon, loff_t pos,
 
 		if (cfile->srch_inf.ntwrk_buf_start == NULL) {
 			cifs_dbg(VFS, "ntwrk_buf_start is NULL during readdir\n");
-			return smb_EIO(smb_eio_trace_null_pointers);
+			return -EIO;
 		}
 
 		end_of_smb = cfile->srch_inf.ntwrk_buf_start +
@@ -945,7 +900,7 @@ static bool add_cached_dirent(struct cached_dirents *cde,
 		cde->is_failed = 1;
 		return false;
 	}
-	de = kzalloc_obj(*de, GFP_ATOMIC);
+	de = kzalloc(sizeof(*de), GFP_ATOMIC);
 	if (de == NULL) {
 		cde->is_failed = 1;
 		return false;
@@ -1012,15 +967,24 @@ static int cifs_filldir(char *find_entry, struct file *file,
 	struct cifs_sb_info *cifs_sb = CIFS_SB(sb);
 	struct cifs_dirent de = { NULL, };
 	struct cifs_fattr fattr;
-	unsigned int sbflags;
 	struct qstr name;
 	int rc = 0;
 
-	rc = cifs_fill_dirent(&de, find_entry, end_of_smb,
-			      file_info->srch_inf.info_level,
+	rc = cifs_fill_dirent(&de, find_entry, file_info->srch_inf.info_level,
 			      file_info->srch_inf.unicode);
 	if (rc)
 		return rc;
+
+	if (de.namelen > max_len) {
+		cifs_dbg(VFS, "bad search response length %zd past smb end\n",
+			 de.namelen);
+		return -EINVAL;
+	}
+
+	if (de.name + de.namelen > end_of_smb) {
+		cifs_dbg(VFS, "search entry name extends past end of SMB\n");
+		return -EINVAL;
+	}
 
 	/* skip . and .. since we added them first */
 	if (cifs_entry_is_dot(&de, file_info->srch_inf.unicode))
@@ -1072,15 +1036,15 @@ static int cifs_filldir(char *find_entry, struct file *file,
 		break;
 	}
 
-	sbflags = cifs_sb_flags(cifs_sb);
-	if (de.ino && (sbflags & CIFS_MOUNT_SERVER_INUM)) {
+	if (de.ino && (cifs_sb_flags(cifs_sb) & CIFS_MOUNT_SERVER_INUM)) {
 		fattr.cf_uniqueid = de.ino;
 	} else {
 		fattr.cf_uniqueid = iunique(sb, ROOT_I);
-		cifs_autodisable_serverino(cifs_sb, "Cannot retrieve inode number from readdir", 0);
+		cifs_autodisable_serverino(cifs_sb);
 	}
 
-	if ((sbflags & CIFS_MOUNT_MF_SYMLINKS) && couldbe_mf_symlink(&fattr))
+	if ((cifs_sb_flags(cifs_sb) & CIFS_MOUNT_MF_SYMLINKS) &&
+	    couldbe_mf_symlink(&fattr))
 		/*
 		 * trying to get the type and mode can be slow,
 		 * so just call those regular files for now, and mark
@@ -1111,7 +1075,7 @@ int cifs_readdir(struct file *file, struct dir_context *ctx)
 	const char *full_path;
 	void *page = alloc_dentry_path();
 	struct cached_fid *cfid = NULL;
-	struct cifs_sb_info *cifs_sb = CIFS_SB(file);
+	struct cifs_sb_info *cifs_sb = CIFS_FILE_SB(file);
 
 	xid = get_xid();
 

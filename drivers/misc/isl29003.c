@@ -383,7 +383,7 @@ static int isl29003_probe(struct i2c_client *client)
 	if (!i2c_check_functionality(adapter, I2C_FUNC_SMBUS_BYTE))
 		return -EIO;
 
-	data = kzalloc_obj(struct isl29003_data);
+	data = kzalloc(sizeof(struct isl29003_data), GFP_KERNEL);
 	if (!data)
 		return -ENOMEM;
 
@@ -416,6 +416,7 @@ static void isl29003_remove(struct i2c_client *client)
 	kfree(i2c_get_clientdata(client));
 }
 
+#ifdef CONFIG_PM_SLEEP
 static int isl29003_suspend(struct device *dev)
 {
 	struct i2c_client *client = to_i2c_client(dev);
@@ -440,18 +441,23 @@ static int isl29003_resume(struct device *dev)
 		data->power_state_before_suspend);
 }
 
-static DEFINE_SIMPLE_DEV_PM_OPS(isl29003_pm_ops, isl29003_suspend, isl29003_resume);
+static SIMPLE_DEV_PM_OPS(isl29003_pm_ops, isl29003_suspend, isl29003_resume);
+#define ISL29003_PM_OPS (&isl29003_pm_ops)
+
+#else
+#define ISL29003_PM_OPS NULL
+#endif /* CONFIG_PM_SLEEP */
 
 static const struct i2c_device_id isl29003_id[] = {
-	{ .name = "isl29003" },
-	{ }
+	{ "isl29003" },
+	{}
 };
 MODULE_DEVICE_TABLE(i2c, isl29003_id);
 
 static struct i2c_driver isl29003_driver = {
 	.driver = {
 		.name	= ISL29003_DRV_NAME,
-		.pm	= pm_sleep_ptr(&isl29003_pm_ops),
+		.pm	= ISL29003_PM_OPS,
 	},
 	.probe = isl29003_probe,
 	.remove	= isl29003_remove,

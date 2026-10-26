@@ -5,7 +5,8 @@
  * Authors: Carsten Otte, Stefan Weinhuber, Gerald Schaefer
  */
 
-#define pr_fmt(fmt) "dcssblk: " fmt
+#define KMSG_COMPONENT "dcssblk"
+#define pr_fmt(fmt) KMSG_COMPONENT ": " fmt
 
 #include <linux/module.h>
 #include <linux/moduleparam.h>
@@ -240,7 +241,9 @@ dcssblk_is_continuous(struct dcssblk_dev_info *dev_info)
 	if (dev_info->num_of_segments <= 1)
 		return 0;
 
-	sort_list = kzalloc_objs(struct segment_info, dev_info->num_of_segments);
+	sort_list = kcalloc(dev_info->num_of_segments,
+			    sizeof(struct segment_info),
+			    GFP_KERNEL);
 	if (sort_list == NULL)
 		return -ENOMEM;
 	i = 0;
@@ -308,7 +311,7 @@ dcssblk_load_segment(char *name, struct segment_info **seg_info)
 		return -EEXIST;
 
 	/* get a struct segment_info */
-	*seg_info = kzalloc_obj(struct segment_info);
+	*seg_info = kzalloc(sizeof(struct segment_info), GFP_KERNEL);
 	if (*seg_info == NULL)
 		return -ENOMEM;
 
@@ -604,7 +607,8 @@ dcssblk_add_store(struct device *dev, struct device_attribute *attr, const char 
 		 * get a struct dcssblk_dev_info
 		 */
 		if (num_of_segments == 0) {
-			dev_info = kzalloc_obj(struct dcssblk_dev_info);
+			dev_info = kzalloc(sizeof(struct dcssblk_dev_info),
+					GFP_KERNEL);
 			if (dev_info == NULL) {
 				rc = -ENOMEM;
 				goto out;
@@ -670,8 +674,8 @@ dcssblk_add_store(struct device *dev, struct device_attribute *attr, const char 
 	rc = dcssblk_assign_free_minor(dev_info);
 	if (rc)
 		goto release_gd;
-	scnprintf(dev_info->gd->disk_name, sizeof(dev_info->gd->disk_name),
-		  "dcssblk%d", dev_info->gd->first_minor);
+	sprintf(dev_info->gd->disk_name, "dcssblk%d",
+		dev_info->gd->first_minor);
 	list_add_tail(&dev_info->lh, &dcssblk_devices);
 
 	if (!try_module_get(THIS_MODULE)) {

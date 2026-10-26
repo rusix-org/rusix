@@ -37,20 +37,16 @@
 #include <linux/mm.h>
 #include <linux/mutex.h>
 #include <linux/of_irq.h>
-#include <linux/platform_device.h>
 #include <linux/scatterlist.h>
 #include <linux/slab.h>
 #include <linux/smp.h>
 #include <linux/uuid.h>
 #include <linux/xarray.h>
 
-#include <asm/virt.h>
-
 #include "common.h"
 
 #define FFA_DRIVER_VERSION	FFA_VERSION_1_2
 #define FFA_MIN_VERSION		FFA_VERSION_1_0
-#define FFA_PLATFORM_NAME	"arm-ffa"
 
 #define SENDER_ID_MASK		GENMASK(31, 16)
 #define RECEIVER_ID_MASK	GENMASK(15, 0)
@@ -94,7 +90,6 @@ static inline int ffa_to_linux_errno(int errno)
 
 struct ffa_pcpu_irq {
 	struct ffa_drv_info *info;
-	struct work_struct notif_pcpu_work;
 };
 
 struct ffa_drv_info {
@@ -115,6 +110,7 @@ struct ffa_drv_info {
 	unsigned int cpuhp_state;
 	struct ffa_pcpu_irq __percpu *irq_pcpu;
 	struct workqueue_struct *notif_pcpu_wq;
+	struct work_struct notif_pcpu_work;
 	struct work_struct sched_recv_irq_work;
 	struct xarray partition_info;
 	DECLARE_HASHTABLE(notifier_hash, ilog2(FFA_MAX_NOTIFICATIONS));
@@ -122,7 +118,6 @@ struct ffa_drv_info {
 };
 
 static struct ffa_drv_info *drv_info;
-static struct platform_device *ffa_pdev;
 
 /*
  * The driver must be able to support all the versions from the earliest
@@ -255,11 +250,6 @@ static int ffa_features(u32 func_feat_id, u32 input_props,
 }
 
 #define PARTITION_INFO_GET_RETURN_COUNT_ONLY	BIT(0)
-#define FFA_SUPPORTS_GET_COUNT_ONLY(version)	((version) > FFA_VERSION_1_0)
-#define FFA_PART_INFO_HAS_SIZE_IN_RESP(version)	((version) > FFA_VERSION_1_0)
-#define FFA_PART_INFO_HAS_UUID_IN_RESP(version)	((version) > FFA_VERSION_1_0)
-#define FFA_PART_INFO_HAS_EXEC_STATE_IN_RESP(version)	\
-	((version) > FFA_VERSION_1_0)
 
 /* buffer must be sizeof(struct ffa_partition_info) * num_partitions */
 static int
@@ -269,7 +259,7 @@ __ffa_partition_info_get(u32 uuid0, u32 uuid1, u32 uuid2, u32 uuid3,
 	int idx, count, flags = 0, sz, buf_sz;
 	ffa_value_t partition_info;
 
-	if (FFA_SUPPORTS_GET_COUNT_ONLY(drv_info->version) &&
+	if (drv_info->version > FFA_VERSION_1_0 &&
 	    (!buffer || !num_partitions)) /* Just get the count for now */
 		flags = PARTITION_INFO_GET_RETURN_COUNT_ONLY;
 
@@ -287,11 +277,12 @@ __ffa_partition_info_get(u32 uuid0, u32 uuid1, u32 uuid2, u32 uuid3,
 
 	count = partition_info.a2;
 
-	if (FFA_PART_INFO_HAS_SIZE_IN_RESP(drv_info->version)) {
+	if (drv_info->version > FFA_VERSION_1_0) {
 		buf_sz = sz = partition_info.a3;
 		if (sz > sizeof(*buffer))
 			buf_sz = sizeof(*buffer);
 	} else {
+		/* FFA_VERSION_1_0 lacks size in the response */
 		buf_sz = sz = 8;
 	}
 
@@ -441,7 +432,7 @@ ffa_partition_probe(const uuid_t *uuid, struct ffa_partition_info **buffer)
 	if (count <= 0)
 		return count;
 
-	pbuf = kzalloc_objs(*pbuf, count);
+	pbuf = kcalloc(count, sizeof(*pbuf), GFP_KERNEL);
 	if (!pbuf)
 		return -ENOMEM;
 
@@ -1416,7 +1407,7 @@ static int __ffa_notify_request(struct ffa_device *dev, bool is_per_vcpu,
 	if (notify_id >= FFA_MAX_NOTIFICATIONS)
 		return -EINVAL;
 
-	cb_info = kzalloc_obj(*cb_info);
+	cb_info = kzalloc(sizeof(*cb_info), GFP_KERNEL);
 	if (!cb_info)
 		return -ENOMEM;
 
@@ -1601,9 +1592,8 @@ ffa_self_notif_handle(u16 vcpu, bool is_per_vcpu, void *cb_data)
 
 static void notif_pcpu_irq_work_fn(struct work_struct *work)
 {
-	struct ffa_pcpu_irq *pcpu = container_of(work, struct ffa_pcpu_irq,
+	struct ffa_drv_info *info = container_of(work, struct ffa_drv_info,
 						 notif_pcpu_work);
-	struct ffa_drv_info *info = pcpu->info;
 
 	notif_get_and_handle(info);
 }
@@ -1719,7 +1709,7 @@ static int ffa_xa_add_partition_info(struct ffa_device *dev)
 		}
 	}
 
-	info = kzalloc_obj(*info);
+	info = kzalloc(sizeof(*info), GFP_KERNEL);
 	if (!info)
 		return ret;
 
@@ -1727,7 +1717,7 @@ static int ffa_xa_add_partition_info(struct ffa_device *dev)
 	info->dev = dev;
 
 	if (!phead) {
-		phead = kzalloc_obj(*phead);
+		phead = kzalloc(sizeof(*phead), GFP_KERNEL);
 		if (!phead)
 			goto free_out;
 
@@ -1757,7 +1747,7 @@ static int ffa_setup_host_partition(int vm_id)
 	int ret;
 
 	buf.id = vm_id;
-	ffa_dev = ffa_device_register(&buf, &ffa_drv_ops, &ffa_pdev->dev);
+	ffa_dev = ffa_device_register(&buf, &ffa_drv_ops);
 	if (!ffa_dev) {
 		pr_err("%s: failed to register host partition ID 0x%x\n",
 		       __func__, vm_id);
@@ -1809,7 +1799,7 @@ static int ffa_setup_partitions(void)
 	struct ffa_device *ffa_dev;
 	struct ffa_partition_info *pbuf, *tpbuf;
 
-	if (!FFA_PART_INFO_HAS_UUID_IN_RESP(drv_info->version)) {
+	if (drv_info->version == FFA_VERSION_1_0) {
 		ret = bus_register_notifier(&ffa_bus_type, &ffa_bus_nb);
 		if (ret)
 			pr_err("Failed to register FF-A bus notifiers\n");
@@ -1832,15 +1822,14 @@ static int ffa_setup_partitions(void)
 		 * provides UUID here for each partition as part of the
 		 * discovery API and the same is passed.
 		 */
-		ffa_dev = ffa_device_register(tpbuf, &ffa_drv_ops,
-					      &ffa_pdev->dev);
+		ffa_dev = ffa_device_register(tpbuf, &ffa_drv_ops);
 		if (!ffa_dev) {
 			pr_err("%s: failed to register partition ID 0x%x\n",
 			       __func__, tpbuf->id);
 			continue;
 		}
 
-		if (FFA_PART_INFO_HAS_EXEC_STATE_IN_RESP(drv_info->version) &&
+		if (drv_info->version > FFA_VERSION_1_0 &&
 		    !(tpbuf->properties & FFA_PARTITION_AARCH64_EXEC))
 			ffa_mode_32bit_set(ffa_dev);
 
@@ -1889,7 +1878,7 @@ static irqreturn_t notif_pend_irq_handler(int irq, void *irq_data)
 	struct ffa_drv_info *info = pcpu->info;
 
 	queue_work_on(smp_processor_id(), info->notif_pcpu_wq,
-		      &pcpu->notif_pcpu_work);
+		      &info->notif_pcpu_work);
 
 	return IRQ_HANDLED;
 }
@@ -2006,11 +1995,8 @@ static int ffa_init_pcpu_irq(void)
 	if (!irq_pcpu)
 		return -ENOMEM;
 
-	for_each_present_cpu(cpu) {
+	for_each_present_cpu(cpu)
 		per_cpu_ptr(irq_pcpu, cpu)->info = drv_info;
-		INIT_WORK(&per_cpu_ptr(irq_pcpu, cpu)->notif_pcpu_work,
-			  notif_pcpu_irq_work_fn);
-	}
 
 	drv_info->irq_pcpu = irq_pcpu;
 
@@ -2039,6 +2025,7 @@ static int ffa_init_pcpu_irq(void)
 	}
 
 	INIT_WORK(&drv_info->sched_recv_irq_work, ffa_sched_recv_irq_work_fn);
+	INIT_WORK(&drv_info->notif_pcpu_work, notif_pcpu_irq_work_fn);
 	drv_info->notif_pcpu_wq = create_workqueue("ffa_pcpu_irq_notification");
 	if (!drv_info->notif_pcpu_wq)
 		return -EINVAL;
@@ -2109,31 +2096,23 @@ cleanup:
 	ffa_notifications_cleanup();
 }
 
-static int ffa_probe(struct platform_device *pdev)
+static int __init ffa_init(void)
 {
 	int ret;
 	u32 buf_sz;
 	size_t rxtx_min_bufsz = SZ_4K, rxtx_max_bufsz = 0, rxtx_bufsz;
 
-	if (IS_BUILTIN(CONFIG_ARM_FFA_TRANSPORT) &&
-	    is_protected_kvm_enabled() && !is_pkvm_initialized())
-		return -EPROBE_DEFER;
-
 	ret = ffa_transport_init(&invoke_ffa_fn);
 	if (ret)
-		return ret == -EOPNOTSUPP ? -ENODEV : ret;
+		return ret;
 
-	drv_info = kzalloc_obj(*drv_info);
+	drv_info = kzalloc(sizeof(*drv_info), GFP_KERNEL);
 	if (!drv_info)
 		return -ENOMEM;
-	platform_set_drvdata(pdev, drv_info);
 
 	ret = ffa_version_check(&drv_info->version);
-	if (ret) {
-		if (ret == -EOPNOTSUPP)
-			ret = -ENODEV;
+	if (ret)
 		goto free_drv_info;
-	}
 
 	if (ffa_id_get(&drv_info->vm_id)) {
 		pr_err("failed to obtain VM id for self\n");
@@ -2202,57 +2181,19 @@ free_pages:
 		free_pages_exact(drv_info->tx_buffer, rxtx_bufsz);
 	free_pages_exact(drv_info->rx_buffer, rxtx_bufsz);
 free_drv_info:
-	platform_set_drvdata(pdev, NULL);
 	kfree(drv_info);
-	drv_info = NULL;
 	return ret;
 }
-
-static void ffa_remove(struct platform_device *pdev)
-{
-	struct ffa_drv_info *info = platform_get_drvdata(pdev);
-
-	ffa_notifications_cleanup();
-	ffa_partitions_cleanup();
-	ffa_rxtx_unmap();
-	free_pages_exact(info->tx_buffer, info->rxtx_bufsz);
-	free_pages_exact(info->rx_buffer, info->rxtx_bufsz);
-	kfree(info);
-	platform_set_drvdata(pdev, NULL);
-	drv_info = NULL;
-}
-
-static struct platform_driver ffa_driver = {
-	.probe = ffa_probe,
-	.remove = ffa_remove,
-	.shutdown = ffa_remove,
-	.driver = {
-		.name = FFA_PLATFORM_NAME,
-	},
-};
-
-static int __init ffa_init(void)
-{
-	int ret;
-
-	ffa_pdev = platform_device_register_simple(FFA_PLATFORM_NAME,
-						   PLATFORM_DEVID_NONE,
-						   NULL, 0);
-	if (IS_ERR(ffa_pdev))
-		return PTR_ERR(ffa_pdev);
-
-	ret = platform_driver_register(&ffa_driver);
-	if (ret)
-		platform_device_unregister(ffa_pdev);
-
-	return ret;
-}
-module_init(ffa_init);
+rootfs_initcall(ffa_init);
 
 static void __exit ffa_exit(void)
 {
-	platform_device_unregister(ffa_pdev);
-	platform_driver_unregister(&ffa_driver);
+	ffa_notifications_cleanup();
+	ffa_partitions_cleanup();
+	ffa_rxtx_unmap();
+	free_pages_exact(drv_info->tx_buffer, drv_info->rxtx_bufsz);
+	free_pages_exact(drv_info->rx_buffer, drv_info->rxtx_bufsz);
+	kfree(drv_info);
 }
 module_exit(ffa_exit);
 

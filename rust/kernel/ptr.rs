@@ -2,19 +2,11 @@
 
 //! Types and functions to work with pointers and addresses.
 
-pub mod projection;
-pub use crate::project_pointer as project;
-
-use core::mem::{
-    align_of,
-    size_of, //
-};
+use core::fmt::Debug;
+use core::mem::align_of;
 use core::num::NonZero;
 
-use crate::{
-    const_assert,
-    num::FromConst, //
-};
+use crate::build_assert;
 
 /// Type representing an alignment, which is always a power of two.
 ///
@@ -49,7 +41,7 @@ impl Alignment {
     /// ```
     #[inline(always)]
     pub const fn new<const ALIGN: usize>() -> Self {
-        const_assert!(
+        build_assert!(
             ALIGN.is_power_of_two(),
             "Provided alignment is not a power of two."
         );
@@ -90,6 +82,7 @@ impl Alignment {
     /// This is equivalent to [`align_of`], but with the return value provided as an [`Alignment`].
     #[inline(always)]
     pub const fn of<T>() -> Self {
+        #![allow(clippy::incompatible_msrv)]
         // This cannot panic since alignments are always powers of two.
         //
         // We unfortunately cannot use `new` as it would require the `generic_const_exprs` feature.
@@ -169,13 +162,6 @@ impl Alignment {
     }
 }
 
-impl<const V: i128> FromConst<V> for Alignment {
-    const VALUE: Self = match Alignment::new_checked(<usize as FromConst<V>>::VALUE) {
-        Some(alignment) => alignment,
-        None => panic!("constant is not a power of two"),
-    };
-}
-
 /// Trait for items that can be aligned against an [`Alignment`].
 pub trait Alignable: Sized {
     /// Aligns `self` down to `alignment`.
@@ -240,66 +226,3 @@ macro_rules! impl_alignable_uint {
 }
 
 impl_alignable_uint!(u8, u16, u32, u64, usize);
-
-/// Trait to represent compile-time known size information.
-///
-/// This is a generalization of [`size_of`] that works for dynamically sized types.
-pub trait KnownSize {
-    /// Minimum size of this type known at compile-time.
-    const MIN_SIZE: usize;
-
-    /// Minimum alignment of this type known at compile-time.
-    const MIN_ALIGN: Alignment;
-
-    /// Get the size of an object of this type in bytes, with the metadata of the given pointer.
-    fn size(p: *const Self) -> usize;
-}
-
-impl<T> KnownSize for T {
-    const MIN_SIZE: usize = size_of::<T>();
-    const MIN_ALIGN: Alignment = Alignment::of::<T>();
-
-    #[inline(always)]
-    fn size(_: *const Self) -> usize {
-        size_of::<T>()
-    }
-}
-
-impl<T> KnownSize for [T] {
-    const MIN_SIZE: usize = 0;
-    const MIN_ALIGN: Alignment = Alignment::of::<T>();
-
-    #[inline(always)]
-    fn size(p: *const Self) -> usize {
-        p.len() * size_of::<T>()
-    }
-}
-
-/// Aligns `value` up to `align`.
-///
-/// This is the const-compatible equivalent of [`Alignable::align_up`].
-///
-/// Returns [`None`] on overflow.
-///
-/// # Examples
-///
-/// ```
-/// use kernel::{
-///     ptr::{
-///         const_align_up,
-///         Alignment, //
-///     },
-///     sizes::SZ_4K, //
-/// };
-///
-/// assert_eq!(const_align_up(0x4f, Alignment::new::<16>()), Some(0x50));
-/// assert_eq!(const_align_up(0x40, Alignment::new::<16>()), Some(0x40));
-/// assert_eq!(const_align_up(1, Alignment::new::<SZ_4K>()), Some(SZ_4K));
-/// ```
-#[inline(always)]
-pub const fn const_align_up(value: usize, align: Alignment) -> Option<usize> {
-    match value.checked_add(align.as_usize() - 1) {
-        Some(v) => Some(v & align.mask()),
-        None => None,
-    }
-}

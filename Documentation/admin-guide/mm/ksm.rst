@@ -174,7 +174,7 @@ advisor_mode
         The section about ``advisor`` explains in detail how the scan time
         advisor works.
 
-advisor_max_cpu
+adivsor_max_cpu
         specifies the upper limit of the cpu percent usage of the ksmd
         background thread. The default is 70.
 
@@ -183,10 +183,10 @@ advisor_target_scan_time
         pages. The default value is 200 seconds.
 
 advisor_min_pages_to_scan
-        specifies the initial value of the ``pages_to_scan`` parameter of
-        the scan time advisor. The default is 500.
+        specifies the lower limit of the ``pages_to_scan`` parameter of the
+        scan time advisor. The default is 500.
 
-advisor_max_pages_to_scan
+adivsor_max_pages_to_scan
         specifies the upper limit of the ``pages_to_scan`` parameter of the
         scan time advisor. The default is 30000.
 

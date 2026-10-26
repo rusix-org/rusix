@@ -124,7 +124,8 @@ void __init mvebu_coreclk_setup(struct device_node *np,
 	if (desc->get_refclk_freq)
 		clk_data.clk_num += 1;
 
-	clk_data.clks = kzalloc_objs(*clk_data.clks, clk_data.clk_num);
+	clk_data.clks = kcalloc(clk_data.clk_num, sizeof(*clk_data.clks),
+				GFP_KERNEL);
 	if (WARN_ON(!clk_data.clks)) {
 		iounmap(base);
 		return;
@@ -189,10 +190,10 @@ DEFINE_SPINLOCK(ctrl_gating_lock);
 
 struct clk_gating_ctrl {
 	spinlock_t *lock;
+	struct clk **gates;
 	int num_gates;
 	void __iomem *base;
 	u32 saved_reg;
-	struct clk *gates[] __counted_by(num_gates);
 };
 
 static struct clk_gating_ctrl *ctrl;
@@ -257,20 +258,24 @@ void __init mvebu_clk_gating_setup(struct device_node *np,
 		clk_put(clk);
 	}
 
-	/* Count, allocate, and register clock gates */
-	for (n = 0; desc[n].name;)
-		n++;
-
-	ctrl = kzalloc_flex(*ctrl, gates, n);
+	ctrl = kzalloc(sizeof(*ctrl), GFP_KERNEL);
 	if (WARN_ON(!ctrl))
 		goto ctrl_out;
-
-	ctrl->num_gates = n;
 
 	/* lock must already be initialized */
 	ctrl->lock = &ctrl_gating_lock;
 
 	ctrl->base = base;
+
+	/* Count, allocate, and register clock gates */
+	for (n = 0; desc[n].name;)
+		n++;
+
+	ctrl->num_gates = n;
+	ctrl->gates = kcalloc(ctrl->num_gates, sizeof(*ctrl->gates),
+			      GFP_KERNEL);
+	if (WARN_ON(!ctrl->gates))
+		goto gates_out;
 
 	for (n = 0; n < ctrl->num_gates; n++) {
 		const char *parent =
@@ -286,6 +291,8 @@ void __init mvebu_clk_gating_setup(struct device_node *np,
 	register_syscore(&clk_gate_syscore);
 
 	return;
+gates_out:
+	kfree(ctrl);
 ctrl_out:
 	iounmap(base);
 }

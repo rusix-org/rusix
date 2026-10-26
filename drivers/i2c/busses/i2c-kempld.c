@@ -13,7 +13,6 @@
 #include <linux/i2c.h>
 #include <linux/delay.h>
 #include <linux/mfd/kempld.h>
-#include <linux/stringify.h>
 
 #define KEMPLD_I2C_PRELOW	0x0b
 #define KEMPLD_I2C_PREHIGH	0x0c
@@ -67,7 +66,7 @@ struct kempld_i2c_data {
 static unsigned int bus_frequency = KEMPLD_I2C_FREQ_STD;
 module_param(bus_frequency, uint, 0);
 MODULE_PARM_DESC(bus_frequency, "Set I2C bus frequency in kHz (default="
-				__stringify(KEMPLD_I2C_FREQ_STD)")");
+				__MODULE_STRING(KEMPLD_I2C_FREQ_STD)")");
 
 static int i2c_bus = -1;
 module_param(i2c_bus, int, 0);

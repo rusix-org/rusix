@@ -7,6 +7,7 @@
  */
 
 #include <linux/binfmts.h>
+#include <linux/compat.h>
 #include <linux/elf.h>
 #include <linux/errno.h>
 #include <linux/init.h>
@@ -18,10 +19,12 @@
 #include <linux/random.h>
 #include <linux/vdso_datastore.h>
 #include <vdso/datapage.h>
+#include <asm/vdso/vsyscall.h>
 #include <asm/alternative.h>
 #include <asm/vdso.h>
 
-extern char vdso_start[], vdso_end[];
+extern char vdso64_start[], vdso64_end[];
+extern char vdso32_start[], vdso32_end[];
 
 static int vdso_mremap(const struct vm_special_mapping *sm,
 		       struct vm_area_struct *vma)
@@ -30,7 +33,12 @@ static int vdso_mremap(const struct vm_special_mapping *sm,
 	return 0;
 }
 
-static struct vm_special_mapping vdso_mapping = {
+static struct vm_special_mapping vdso64_mapping = {
+	.name = "[vdso]",
+	.mremap = vdso_mremap,
+};
+
+static struct vm_special_mapping vdso32_mapping = {
 	.name = "[vdso]",
 	.mremap = vdso_mremap,
 };
@@ -45,6 +53,7 @@ early_initcall(vdso_getcpu_init); /* Must be called before SMP init */
 static int map_vdso(unsigned long addr, unsigned long vdso_mapping_len)
 {
 	unsigned long vvar_start, vdso_text_start, vdso_text_len;
+	struct vm_special_mapping *vdso_mapping;
 	struct mm_struct *mm = current->mm;
 	struct vm_area_struct *vma;
 	int rc;
@@ -53,7 +62,13 @@ static int map_vdso(unsigned long addr, unsigned long vdso_mapping_len)
 	if (mmap_write_lock_killable(mm))
 		return -EINTR;
 
-	vdso_text_len = vdso_end - vdso_start;
+	if (is_compat_task()) {
+		vdso_text_len = vdso32_end - vdso32_start;
+		vdso_mapping = &vdso32_mapping;
+	} else {
+		vdso_text_len = vdso64_end - vdso64_start;
+		vdso_mapping = &vdso64_mapping;
+	}
 	vvar_start = get_unmapped_area(NULL, addr, vdso_mapping_len, 0, 0);
 	rc = vvar_start;
 	if (IS_ERR_VALUE(vvar_start))
@@ -67,7 +82,7 @@ static int map_vdso(unsigned long addr, unsigned long vdso_mapping_len)
 	vma = _install_special_mapping(mm, vdso_text_start, vdso_text_len,
 				       VM_READ|VM_EXEC|VM_SEALED_SYSMAP|
 				       VM_MAYREAD|VM_MAYWRITE|VM_MAYEXEC,
-				       &vdso_mapping);
+				       vdso_mapping);
 	if (IS_ERR(vma)) {
 		do_munmap(mm, vvar_start, PAGE_SIZE, NULL);
 		rc = PTR_ERR(vma);
@@ -107,7 +122,13 @@ static unsigned long vdso_addr(unsigned long start, unsigned long len)
 
 unsigned long vdso_text_size(void)
 {
-	return PAGE_ALIGN(vdso_end - vdso_start);
+	unsigned long size;
+
+	if (is_compat_task())
+		size = vdso32_end - vdso32_start;
+	else
+		size = vdso64_end - vdso64_start;
+	return PAGE_ALIGN(size);
 }
 
 unsigned long vdso_size(void)
@@ -131,7 +152,7 @@ static struct page ** __init vdso_setup_pages(void *start, void *end)
 	struct page **pagelist;
 	int i;
 
-	pagelist = kzalloc_objs(struct page *, pages + 1);
+	pagelist = kcalloc(pages + 1, sizeof(struct page *), GFP_KERNEL);
 	if (!pagelist)
 		panic("%s: Cannot allocate page list for VDSO", __func__);
 	for (i = 0; i < pages; i++)
@@ -145,7 +166,7 @@ static void vdso_apply_alternatives(void)
 	struct alt_instr *start, *end;
 	const struct elf64_hdr *hdr;
 
-	hdr = (struct elf64_hdr *)vdso_start;
+	hdr = (struct elf64_hdr *)vdso64_start;
 	shdr = (void *)hdr + hdr->e_shoff;
 	alt = find_section(hdr, shdr, ".altinstructions");
 	if (!alt)
@@ -158,7 +179,9 @@ static void vdso_apply_alternatives(void)
 static int __init vdso_init(void)
 {
 	vdso_apply_alternatives();
-	vdso_mapping.pages = vdso_setup_pages(vdso_start, vdso_end);
+	vdso64_mapping.pages = vdso_setup_pages(vdso64_start, vdso64_end);
+	if (IS_ENABLED(CONFIG_COMPAT))
+		vdso32_mapping.pages = vdso_setup_pages(vdso32_start, vdso32_end);
 	return 0;
 }
 arch_initcall(vdso_init);

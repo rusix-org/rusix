@@ -1,4 +1,3 @@
-// SPDX-License-Identifier: LGPL-2.1
 /*
  *
  * Copyright IBM Corporation, 2012
@@ -7,6 +6,14 @@
  * Cgroup v2
  * Copyright (C) 2019 Red Hat, Inc.
  * Author: Giuseppe Scrivano <gscrivan@redhat.com>
+ *
+ * This program is free software; you can redistribute it and/or modify it
+ * under the terms of version 2.1 of the GNU Lesser General Public License
+ * as published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it would be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
  *
  */
 
@@ -142,7 +149,8 @@ hugetlb_cgroup_css_alloc(struct cgroup_subsys_state *parent_css)
 	struct hugetlb_cgroup *h_cgroup;
 	int node;
 
-	h_cgroup = kzalloc_flex(*h_cgroup, nodeinfo, nr_node_ids);
+	h_cgroup = kzalloc(struct_size(h_cgroup, nodeinfo, nr_node_ids),
+			   GFP_KERNEL);
 
 	if (!h_cgroup)
 		return ERR_PTR(-ENOMEM);
@@ -179,34 +187,6 @@ static void hugetlb_cgroup_css_free(struct cgroup_subsys_state *css)
 	hugetlb_cgroup_free(hugetlb_cgroup_from_css(css));
 }
 
-static void hugetlb_cgroup_move_usage(struct hugetlb_cgroup *from,
-				      struct hugetlb_cgroup *to,
-				      struct folio *from_folio,
-				      struct folio *to_folio)
-{
-	int idx = hstate_index(folio_hstate(from_folio));
-	unsigned long nr_pages = folio_nr_pages(from_folio);
-	int from_nid = folio_nid(from_folio);
-	int to_nid = folio_nid(to_folio);
-	unsigned long usage;
-
-	lockdep_assert_held(&hugetlb_lock);
-
-	if (!from || !to)
-		return;
-
-	if (from == to && from_nid == to_nid)
-		return;
-
-	usage = from->nodeinfo[from_nid]->usage[idx];
-	if (WARN_ON_ONCE(usage < nr_pages))
-		return;
-	WRITE_ONCE(from->nodeinfo[from_nid]->usage[idx], usage - nr_pages);
-
-	usage = to->nodeinfo[to_nid]->usage[idx];
-	WRITE_ONCE(to->nodeinfo[to_nid]->usage[idx], usage + nr_pages);
-}
-
 /*
  * Should be called with hugetlb_lock held.
  * Since we are holding hugetlb_lock, pages cannot get moved from
@@ -240,8 +220,6 @@ static void hugetlb_cgroup_move_parent(int idx, struct hugetlb_cgroup *h_cg,
 	counter = &h_cg->hugepage[idx];
 	/* Take the pages off the local counter */
 	page_counter_cancel(counter, nr_pages);
-
-	hugetlb_cgroup_move_usage(h_cg, parent, folio, folio);
 
 	set_hugetlb_cgroup(folio, parent);
 out:
@@ -847,7 +825,7 @@ hugetlb_cgroup_cfttypes_init(struct hstate *h, struct cftype *cft,
 	for (i = 0; i < tmpl_size; cft++, tmpl++, i++) {
 		*cft = *tmpl;
 		/* rebuild the name */
-		scnprintf(cft->name, MAX_CFTYPE_NAME, "%s.%s", buf, tmpl->name);
+		snprintf(cft->name, MAX_CFTYPE_NAME, "%s.%s", buf, tmpl->name);
 		/* rebuild the private */
 		cft->private = MEMFILE_PRIVATE(idx, tmpl->private);
 		/* rebuild the file_offset */
@@ -889,10 +867,10 @@ static void __init __hugetlb_cgroup_file_pre_init(void)
 	int cft_count;
 
 	cft_count = hugetlb_max_hstate * DFL_TMPL_SIZE + 1; /* add terminator */
-	dfl_files = kzalloc_objs(struct cftype, cft_count);
+	dfl_files = kcalloc(cft_count, sizeof(struct cftype), GFP_KERNEL);
 	BUG_ON(!dfl_files);
 	cft_count = hugetlb_max_hstate * LEGACY_TMPL_SIZE + 1; /* add terminator */
-	legacy_files = kzalloc_objs(struct cftype, cft_count);
+	legacy_files = kcalloc(cft_count, sizeof(struct cftype), GFP_KERNEL);
 	BUG_ON(!legacy_files);
 }
 
@@ -936,9 +914,6 @@ void hugetlb_cgroup_migrate(struct folio *old_folio, struct folio *new_folio)
 	/* move the h_cg details to new cgroup */
 	set_hugetlb_cgroup(new_folio, h_cg);
 	set_hugetlb_cgroup_rsvd(new_folio, h_cg_rsvd);
-
-	hugetlb_cgroup_move_usage(h_cg, h_cg, old_folio, new_folio);
-
 	list_move(&new_folio->lru, &h->hugepage_activelist);
 	spin_unlock_irq(&hugetlb_lock);
 }

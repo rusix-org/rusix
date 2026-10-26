@@ -85,7 +85,6 @@ my %default = (
 );
 
 my $test_log_start = 0;
-my $dry_run = 0;
 
 my $ktest_config = "ktest.conf";
 my $version;
@@ -103,7 +102,6 @@ my $build_options;
 my $final_post_ktest;
 my $post_ktest_done = 0;
 my $pre_ktest;
-my $pre_ktest_die;
 my $post_ktest;
 my $pre_test;
 my $pre_test_die;
@@ -286,7 +284,6 @@ my %option_map = (
     "BUILD_DIR"			=> \$builddir,
     "TEST_TYPE"			=> \$test_type,
     "PRE_KTEST"			=> \$pre_ktest,
-    "PRE_KTEST_DIE"		=> \$pre_ktest_die,
     "POST_KTEST"		=> \$post_ktest,
     "PRE_TEST"			=> \$pre_test,
     "PRE_TEST_DIE"		=> \$pre_test_die,
@@ -588,7 +585,7 @@ sub end_monitor;
 sub wait_for_monitor;
 
 sub _logit {
-    if (defined($opt{"LOG_FILE"}) && defined(fileno(LOG))) {
+    if (defined($opt{"LOG_FILE"})) {
 	print LOG @_;
     }
 }
@@ -914,14 +911,6 @@ sub set_variable {
     if (defined($command_tmp_vars{$lvalue})) {
 	return;
     }
-
-    # If a variable is undefined, treat an unescaped self-reference as empty.
-    if (!defined($variable{$lvalue})) {
-	$rvalue =~ s/(?<!\\)\$\{\Q$lvalue\E\}//g;
-	$rvalue =~ s/^\s+//;
-	$rvalue =~ s/\s+$//;
-    }
-
     if ($rvalue =~ /^\s*$/) {
 	delete $variable{$lvalue};
     } else {
@@ -1366,9 +1355,6 @@ sub read_config {
 	    print "$option\n";
 	}
 	print "Set IGNORE_UNUSED = 1 to have ktest ignore unused variables\n";
-	if ($dry_run) {
-	    return;
-	}
 	if (!read_yn "Do you want to continue?") {
 	    exit -1;
 	}
@@ -1506,13 +1492,12 @@ sub reboot {
     }
 
     if ($powercycle) {
-	start_monitor;
-	if (defined($time)) {
-		# Flush stale console output from the old kernel before power-cycling.
-		wait_for_monitor 1;
-	}
-
 	run_command "$power_cycle";
+
+	start_monitor;
+	# flush out current monitor
+	# May contain the reboot success line
+	wait_for_monitor 1;
 
     } else {
 	# Make sure everything has been written to disk
@@ -1633,11 +1618,6 @@ sub dodie {
 
     if (defined($opt{"LOG_FILE"})) {
 	print " See $opt{LOG_FILE} for more info.\n";
-    }
-
-    # Fatal paths bypass fail(), so STORE_FAILURES needs to be handled here.
-    if (defined($store_failures)) {
-	save_logs("fail", $store_failures);
     }
 
     if ($email_on_error) {
@@ -1878,12 +1858,6 @@ sub save_logs {
 	"testlog" => $testlog,
     );
 
-    if (defined($opt{"LOG_FILE"})) {
-	if (-f $opt{"LOG_FILE"}) {
-	    cp $opt{"LOG_FILE"}, "$dir/logfile";
-	}
-    }
-
     while (my ($name, $source) = each(%files)) {
 	if (-f "$source") {
 	    cp "$source", "$dir/$name" or
@@ -1959,10 +1933,7 @@ sub run_command {
     doprint("$command ... ");
     $start_time = time;
 
-    $pid = open(CMD, "-|",
-		"sh", "-c",
-		'command=$1; shift; exec 2>&1; eval "$command"',
-		"sh", $command) or
+    $pid = open(CMD, "$command 2>&1 |") or
 	(fail "unable to exec $command" and return 0);
 
     if (defined($opt{"LOG_FILE"})) {
@@ -4264,53 +4235,6 @@ sub set_test_option {
     return eval_option($name, $option, $i);
 }
 
-sub print_test_preamble {
-    my ($resolved) = @_;
-
-    doprint "\n\nSTARTING AUTOMATED TESTS\n\n";
-
-    for (my $i = 0, my $repeat = 1; $i <= $opt{"NUM_TESTS"}; $i += $repeat) {
-
-	if (!$i) {
-	    doprint "DEFAULT OPTIONS:\n";
-	} else {
-	    doprint "\nTEST $i OPTIONS";
-	    if (defined($repeat_tests{$i})) {
-		$repeat = $repeat_tests{$i};
-		doprint " ITERATE $repeat";
-	    }
-	    doprint "\n";
-	}
-
-	foreach my $option (sort keys %opt) {
-	    my $value;
-
-	    if ($option =~ /\[(\d+)\]$/) {
-		next if ($i != $1);
-
-		if ($resolved) {
-		    my $name = $option;
-		    $name =~ s/\[\d+\]$//;
-		    $value = set_test_option($name, $i);
-		} else {
-		    $value = $opt{$option};
-		}
-	    } else {
-		next if ($i);
-
-		if ($resolved) {
-		    $value = set_test_option($option, 0);
-		} else {
-		    $value = $opt{$option};
-		}
-	    }
-
-	    $value = "" if (!defined($value));
-	    doprint "$option = $value\n";
-	}
-    }
-}
-
 sub find_mailer {
     my ($mailer) = @_;
 
@@ -4410,8 +4334,6 @@ ktest.pl version: $VERSION
                     Sets global BUILD_NOCLEAN to 1
                 -D TEST_TYPE[2]=build
                     Sets TEST_TYPE of test 2 to "build"
-       --dry-run
-                Print resolved test options and exit without running tests.
 
 	        It can also override all temp variables.
                  -D USE_TEMP_DIR:=1
@@ -4443,9 +4365,6 @@ while ( $#ARGV >= 0 ) {
 	} else {
 	    $command_vars[$#command_vars + 1] = $val;
 	}
-    } elsif ( $ARGV[0] eq "--dry-run" ) {
-	$dry_run = 1;
-	shift;
     } elsif ( $ARGV[0] eq "-h" ) {
 	die_usage;
     } else {
@@ -4494,13 +4413,8 @@ EOF
 }
 read_config $ktest_config;
 
-if ($dry_run) {
-    print_test_preamble 1;
-    exit 0;
-}
-
 if (defined($opt{"LOG_FILE"})) {
-    $opt{"LOG_FILE"} = set_test_option("LOG_FILE", 1);
+    $opt{"LOG_FILE"} = eval_option("LOG_FILE", $opt{"LOG_FILE"}, -1);
 }
 
 # Append any configs entered in manually to the config file.
@@ -4530,7 +4444,31 @@ if (defined($opt{"LOG_FILE"})) {
     LOG->autoflush(1);
 }
 
-print_test_preamble 0;
+doprint "\n\nSTARTING AUTOMATED TESTS\n\n";
+
+for (my $i = 0, my $repeat = 1; $i <= $opt{"NUM_TESTS"}; $i += $repeat) {
+
+    if (!$i) {
+	doprint "DEFAULT OPTIONS:\n";
+    } else {
+	doprint "\nTEST $i OPTIONS";
+	if (defined($repeat_tests{$i})) {
+	    $repeat = $repeat_tests{$i};
+	    doprint " ITERATE $repeat";
+	}
+	doprint "\n";
+    }
+
+    foreach my $option (sort keys %opt) {
+	if ($option =~ /\[(\d+)\]$/) {
+	    next if ($i != $1);
+	} else {
+	    next if ($i);
+	}
+
+	doprint "$option = $opt{$option}\n";
+    }
+}
 
 $SIG{INT} = qw(cancel_test);
 
@@ -4577,11 +4515,7 @@ for (my $i = 1; $i <= $opt{"NUM_TESTS"}; $i++) {
     if ($i == 1) {
 	if (defined($pre_ktest)) {
 	    doprint "\n";
-	    my $ret = run_command $pre_ktest;
-	    if (!$ret && defined($pre_ktest_die) &&
-		$pre_ktest_die) {
-		dodie "failed to pre_ktest\n";
-	    }
+	    run_command $pre_ktest;
 	}
 	if ($email_when_started) {
 	    my $name = get_test_name;

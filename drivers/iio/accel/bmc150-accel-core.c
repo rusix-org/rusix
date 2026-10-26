@@ -851,7 +851,7 @@ static ssize_t bmc150_accel_get_fifo_watermark(struct device *dev,
 	wm = data->watermark;
 	mutex_unlock(&data->mutex);
 
-	return sysfs_emit(buf, "%d\n", wm);
+	return sprintf(buf, "%d\n", wm);
 }
 
 static ssize_t bmc150_accel_get_fifo_state(struct device *dev,
@@ -866,7 +866,7 @@ static ssize_t bmc150_accel_get_fifo_state(struct device *dev,
 	state = data->fifo_mode;
 	mutex_unlock(&data->mutex);
 
-	return sysfs_emit(buf, "%d\n", state);
+	return sprintf(buf, "%d\n", state);
 }
 
 static const struct iio_mount_matrix *
@@ -988,10 +988,8 @@ static int __bmc150_accel_fifo_flush(struct iio_dev *indio_dev,
 	do_div(sample_period, count);
 	tstamp = data->timestamp - (count - 1) * sample_period;
 
-	if (samples)
-		count = min3(count, samples, BMC150_ACCEL_FIFO_LENGTH);
-	else
-		count = min(count, BMC150_ACCEL_FIFO_LENGTH);
+	if (samples && count > samples)
+		count = samples;
 
 	count = min_t(u8, count, BMC150_ACCEL_FIFO_LENGTH);
 

@@ -766,6 +766,11 @@ static const dai_register_cb dai_register_cbs[] = {
 	mt8183_dai_memif_register,
 };
 
+static void mt8183_afe_release_reserved_mem(void *data)
+{
+	of_reserved_mem_device_release(data);
+}
+
 static int mt8183_afe_pcm_dev_probe(struct platform_device *pdev)
 {
 	struct mtk_base_afe *afe;
@@ -790,16 +795,24 @@ static int mt8183_afe_pcm_dev_probe(struct platform_device *pdev)
 	afe_priv = afe->platform_priv;
 	afe->dev = dev;
 
-	ret = devm_of_reserved_mem_device_init(dev);
+	ret = of_reserved_mem_device_init(dev);
 	if (ret) {
 		dev_info(dev, "no reserved memory found, pre-allocating buffers instead\n");
 		afe->preallocate_buffers = true;
+	} else {
+		ret = devm_add_action_or_reset(dev,
+					       mt8183_afe_release_reserved_mem,
+					       dev);
+		if (ret)
+			return ret;
 	}
 
 	/* initial audio related clock */
 	ret = mt8183_init_clock(afe);
-	if (ret)
+	if (ret) {
+		dev_err(dev, "init clock error\n");
 		return ret;
+	}
 
 	pm_runtime_enable(dev);
 
@@ -890,8 +903,10 @@ static int mt8183_afe_pcm_dev_probe(struct platform_device *pdev)
 
 	ret = devm_request_irq(dev, irq_id, mt8183_afe_irq_handler,
 			       IRQF_TRIGGER_NONE, "asys-isr", (void *)afe);
-	if (ret)
+	if (ret) {
+		dev_err(dev, "could not request_irq for asys-isr\n");
 		goto err_pm_disable;
+	}
 
 	/* init sub_dais */
 	INIT_LIST_HEAD(&afe->sub_dais);

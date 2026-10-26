@@ -3,7 +3,6 @@
  * tick internal variable and functions used by low/high res code
  */
 #include <linux/hrtimer.h>
-#include <linux/hrtimer_bases.h>
 #include <linux/tick.h>
 
 #include "timekeeping.h"
@@ -159,6 +158,7 @@ static inline void tick_nohz_init(void) { }
 #endif
 
 #ifdef CONFIG_NO_HZ_COMMON
+extern unsigned long tick_nohz_active;
 extern void timers_update_nohz(void);
 extern u64 get_jiffies_update(unsigned long *basej);
 # ifdef CONFIG_SMP
@@ -173,6 +173,7 @@ extern void timer_expire_remote(unsigned int cpu);
 # endif
 #else /* CONFIG_NO_HZ_COMMON */
 static inline void timers_update_nohz(void) { }
+#define tick_nohz_active (0)
 #endif
 
 DECLARE_PER_CPU(struct hrtimer_cpu_base, hrtimer_bases);

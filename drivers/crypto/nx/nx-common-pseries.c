@@ -747,7 +747,7 @@ static int nx842_OF_upd(struct property *new_prop)
 	int ret = 0;
 	unsigned long flags;
 
-	new_devdata = kzalloc_obj(*new_devdata, GFP_NOFS);
+	new_devdata = kzalloc(sizeof(*new_devdata), GFP_NOFS);
 	if (!new_devdata)
 		return -ENOMEM;
 
@@ -1035,11 +1035,12 @@ static int nx842_probe(struct vio_dev *viodev,
 	unsigned long flags;
 	int ret = 0;
 
-	new_devdata = kzalloc_obj(*new_devdata, GFP_NOFS);
+	new_devdata = kzalloc(sizeof(*new_devdata), GFP_NOFS);
 	if (!new_devdata)
 		return -ENOMEM;
 
-	new_devdata->counters = kzalloc_obj(*new_devdata->counters, GFP_NOFS);
+	new_devdata->counters = kzalloc(sizeof(*new_devdata->counters),
+			GFP_NOFS);
 	if (!new_devdata->counters) {
 		kfree(new_devdata);
 		return -ENOMEM;
@@ -1148,7 +1149,7 @@ static void __init nxcop_get_capabilities(void)
 	u64 feat;
 	int rc;
 
-	hv_caps = kmalloc_obj(*hv_caps);
+	hv_caps = kmalloc(sizeof(*hv_caps), GFP_KERNEL);
 	if (!hv_caps)
 		return;
 	/*
@@ -1167,7 +1168,7 @@ static void __init nxcop_get_capabilities(void)
 	/*
 	 * NX-GZIP feature available
 	 */
-	hv_nxc = kmalloc_obj(*hv_nxc);
+	hv_nxc = kmalloc(sizeof(*hv_nxc), GFP_KERNEL);
 	if (!hv_nxc)
 		return;
 	/*
@@ -1217,7 +1218,7 @@ static int __init nx842_pseries_init(void)
 	of_node_put(np);
 
 	RCU_INIT_POINTER(devdata, NULL);
-	new_devdata = kzalloc_obj(*new_devdata);
+	new_devdata = kzalloc(sizeof(*new_devdata), GFP_KERNEL);
 	if (!new_devdata)
 		return -ENOMEM;
 

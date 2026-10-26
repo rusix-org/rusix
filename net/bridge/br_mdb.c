@@ -819,7 +819,6 @@ static int br_mdb_add_group_src_fwd(const struct br_mdb_config *cfg,
 	struct br_mdb_config sg_cfg;
 	struct br_ip sg_ip;
 	u8 flags = 0;
-	int err;
 
 	sg_ip = cfg->group;
 	sg_ip.src = src_ip->src;
@@ -843,11 +842,7 @@ static int br_mdb_add_group_src_fwd(const struct br_mdb_config *cfg,
 	sg_cfg.filter_mode = MCAST_INCLUDE;
 	sg_cfg.rt_protocol = cfg->rt_protocol;
 	sg_cfg.nlflags = cfg->nlflags;
-	err = br_mdb_add_group_sg(&sg_cfg, sgmp, brmctx, flags, extack);
-	if (err)
-		br_multicast_del_group(sgmp);
-
-	return err;
+	return br_mdb_add_group_sg(&sg_cfg, sgmp, brmctx, flags, extack);
 }
 
 static int br_mdb_add_group_src(const struct br_mdb_config *cfg,
@@ -1052,7 +1047,6 @@ static int br_mdb_add_group(const struct br_mdb_config *cfg,
 	struct net_bridge_mcast *brmctx;
 	struct br_ip group = cfg->group;
 	unsigned char flags = 0;
-	int err;
 
 	brmctx = __br_mdb_choose_context(br, entry, extack);
 	if (!brmctx)
@@ -1079,13 +1073,9 @@ static int br_mdb_add_group(const struct br_mdb_config *cfg,
 		flags |= MDB_PG_FLAGS_PERMANENT;
 
 	if (br_multicast_is_star_g(&group))
-		err = br_mdb_add_group_star_g(cfg, mp, brmctx, flags, extack);
+		return br_mdb_add_group_star_g(cfg, mp, brmctx, flags, extack);
 	else
-		err = br_mdb_add_group_sg(cfg, mp, brmctx, flags, extack);
-	if (err)
-		br_multicast_del_group(mp);
-
-	return err;
+		return br_mdb_add_group_sg(cfg, mp, brmctx, flags, extack);
 }
 
 static int __br_mdb_add(const struct br_mdb_config *cfg,
@@ -1143,8 +1133,8 @@ static int br_mdb_config_src_list_init(struct nlattr *src_list,
 		return -EINVAL;
 	}
 
-	cfg->src_entries = kzalloc_objs(struct br_mdb_src_entry,
-					cfg->num_src_entries);
+	cfg->src_entries = kcalloc(cfg->num_src_entries,
+				   sizeof(struct br_mdb_src_entry), GFP_KERNEL);
 	if (!cfg->src_entries)
 		return -ENOMEM;
 

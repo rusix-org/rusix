@@ -10,7 +10,6 @@
 #include <linux/bitmap.h>
 #include "asm/bug.h"
 
-#include <linux/compiler.h>
 #include <linux/ctype.h>
 #include <linux/zalloc.h>
 #include <internal/cpumap.h>
@@ -41,16 +40,15 @@ bool perf_record_cpu_map_data__test_bit(int i,
 
 /* Read ith mask value from data into the given 64-bit sized bitmap */
 static void perf_record_cpu_map_data__read_one_mask(const struct perf_record_cpu_map_data *data,
-						    int i, unsigned long *bitmap,
-						    u16 long_size)
+						    int i, unsigned long *bitmap)
 {
 #if __SIZEOF_LONG__ == 8
-	if (long_size == 4)
+	if (data->mask32_data.long_size == 4)
 		bitmap[0] = data->mask32_data.mask[i];
 	else
 		bitmap[0] = data->mask64_data.mask[i];
 #else
-	if (long_size == 4) {
+	if (data->mask32_data.long_size == 4) {
 		bitmap[0] = data->mask32_data.mask[i];
 		bitmap[1] = 0;
 	} else {
@@ -66,27 +64,24 @@ static void perf_record_cpu_map_data__read_one_mask(const struct perf_record_cpu
 }
 static struct perf_cpu_map *cpu_map__from_entries(const struct perf_record_cpu_map_data *data)
 {
-	/* Snapshot nr — data is mmap'd and could change between reads */
-	u16 nr = READ_ONCE(data->cpus_data.nr);
 	struct perf_cpu_map *map;
 
-	map = perf_cpu_map__empty_new(nr);
+	map = perf_cpu_map__empty_new(data->cpus_data.nr);
 	if (!map)
 		return NULL;
 
-	for (unsigned int i = 0; i < nr; i++) {
-		u16 cpu = READ_ONCE(data->cpus_data.cpu[i]);
+	for (unsigned int i = 0; i < data->cpus_data.nr; i++) {
 		/*
 		 * Special treatment for -1, which is not real cpu number,
 		 * and we need to use (int) -1 to initialize map[i],
 		 * otherwise it would become 65535.
 		 */
-		if (cpu == (u16) -1) {
+		if (data->cpus_data.cpu[i] == (u16) -1) {
 			RC_CHK_ACCESS(map)->map[i].cpu = -1;
-		} else if (cpu < INT16_MAX) {
-			RC_CHK_ACCESS(map)->map[i].cpu = (int16_t) cpu;
+		} else if (data->cpus_data.cpu[i] < INT16_MAX) {
+			RC_CHK_ACCESS(map)->map[i].cpu = (int16_t) data->cpus_data.cpu[i];
 		} else {
-			pr_err("Invalid cpumap entry %u\n", cpu);
+			pr_err("Invalid cpumap entry %u\n", data->cpus_data.cpu[i]);
 			perf_cpu_map__put(map);
 			return NULL;
 		}
@@ -98,21 +93,11 @@ static struct perf_cpu_map *cpu_map__from_entries(const struct perf_record_cpu_m
 static struct perf_cpu_map *cpu_map__from_mask(const struct perf_record_cpu_map_data *data)
 {
 	DECLARE_BITMAP(local_copy, 64);
-	int weight = 0, mask_nr;
-	/* Snapshot before validation — data is mmap'd and could change */
-	u16 long_size = READ_ONCE(data->mask32_data.long_size);
+	int weight = 0, mask_nr = data->mask32_data.nr;
 	struct perf_cpu_map *map;
 
-	/* long_size must be 4 or 8; other values overflow cpus_per_i below */
-	if (long_size != 4 && long_size != 8) {
-		pr_warning("WARNING: cpu_map mask: unsupported long_size %u\n", long_size);
-		return NULL;
-	}
-
-	mask_nr = READ_ONCE(data->mask32_data.nr);
-
 	for (int i = 0; i < mask_nr; i++) {
-		perf_record_cpu_map_data__read_one_mask(data, i, local_copy, long_size);
+		perf_record_cpu_map_data__read_one_mask(data, i, local_copy);
 		weight += bitmap_weight(local_copy, 64);
 	}
 
@@ -121,14 +106,11 @@ static struct perf_cpu_map *cpu_map__from_mask(const struct perf_record_cpu_map_
 		return NULL;
 
 	for (int i = 0, j = 0; i < mask_nr; i++) {
-		int cpus_per_i = (i * long_size * BITS_PER_BYTE);
+		int cpus_per_i = (i * data->mask32_data.long_size  * BITS_PER_BYTE);
 		int cpu;
 
-		perf_record_cpu_map_data__read_one_mask(data, i, local_copy, long_size);
+		perf_record_cpu_map_data__read_one_mask(data, i, local_copy);
 		for_each_set_bit(cpu, local_copy, 64) {
-			/* Guard against more set bits than the first pass counted */
-			if (j >= weight)
-				break;
 			if (cpu + cpus_per_i < INT16_MAX) {
 				RC_CHK_ACCESS(map)->map[j++].cpu = cpu + cpus_per_i;
 			} else {
@@ -144,28 +126,18 @@ static struct perf_cpu_map *cpu_map__from_mask(const struct perf_record_cpu_map_
 
 static struct perf_cpu_map *cpu_map__from_range(const struct perf_record_cpu_map_data *data)
 {
-	/* Snapshot fields — data is mmap'd and could change between reads */
-	u16 start_cpu = READ_ONCE(data->range_cpu_data.start_cpu);
-	u16 end_cpu = READ_ONCE(data->range_cpu_data.end_cpu);
-	u16 any_cpu = READ_ONCE(data->range_cpu_data.any_cpu);
 	struct perf_cpu_map *map;
 	unsigned int i = 0;
 
-	if (end_cpu < start_cpu) {
-		pr_warning("WARNING: cpu_map range: end_cpu %u < start_cpu %u\n",
-			   end_cpu, start_cpu);
-		return NULL;
-	}
-
-	/* any_cpu is boolean (0 or 1), not a count — clamp to avoid inflated nr */
-	map = perf_cpu_map__empty_new(end_cpu - start_cpu + 1 + !!any_cpu);
+	map = perf_cpu_map__empty_new(data->range_cpu_data.end_cpu -
+				data->range_cpu_data.start_cpu + 1 + data->range_cpu_data.any_cpu);
 	if (!map)
 		return NULL;
 
-	if (any_cpu)
+	if (data->range_cpu_data.any_cpu)
 		RC_CHK_ACCESS(map)->map[i++].cpu = -1;
 
-	for (int cpu = start_cpu; cpu <= end_cpu;
+	for (int cpu = data->range_cpu_data.start_cpu; cpu <= data->range_cpu_data.end_cpu;
 	     i++, cpu++) {
 		if (cpu < INT16_MAX) {
 			RC_CHK_ACCESS(map)->map[i].cpu = cpu;
@@ -282,7 +254,7 @@ struct cpu_aggr_map *cpu_aggr_map__new(const struct perf_cpu_map *cpus,
 				       aggr_cpu_id_get_t get_id,
 				       void *data, bool needs_sort)
 {
-	unsigned int idx;
+	int idx;
 	struct perf_cpu cpu;
 	struct cpu_aggr_map *c = cpu_aggr_map__empty_new(perf_cpu_map__nr(cpus));
 
@@ -308,7 +280,7 @@ struct cpu_aggr_map *cpu_aggr_map__new(const struct perf_cpu_map *cpus,
 		}
 	}
 	/* Trim. */
-	if (c->nr != (int)perf_cpu_map__nr(cpus)) {
+	if (c->nr != perf_cpu_map__nr(cpus)) {
 		struct cpu_aggr_map *trimmed_c =
 			realloc(c,
 				sizeof(struct cpu_aggr_map) + sizeof(struct aggr_cpu_id) * c->nr);
@@ -682,9 +654,9 @@ size_t cpu_map__snprint(struct perf_cpu_map *map, char *buf, size_t size)
 
 #define COMMA first ? "" : ","
 
-	for (i = 0; i < (int)perf_cpu_map__nr(map) + 1; i++) {
+	for (i = 0; i < perf_cpu_map__nr(map) + 1; i++) {
 		struct perf_cpu cpu = { .cpu = INT16_MAX };
-		bool last = i == (int)perf_cpu_map__nr(map);
+		bool last = i == perf_cpu_map__nr(map);
 
 		if (!last)
 			cpu = perf_cpu_map__cpu(map, i);
@@ -730,18 +702,13 @@ static char hex_char(unsigned char val)
 
 size_t cpu_map__snprint_mask(struct perf_cpu_map *map, char *buf, size_t size)
 {
-	unsigned int idx;
+	int idx;
 	char *ptr = buf;
 	unsigned char *bitmap;
 	struct perf_cpu c, last_cpu = perf_cpu_map__max(map);
 
-	if (buf == NULL || size == 0)
+	if (buf == NULL)
 		return 0;
-
-	if (last_cpu.cpu < 0) {
-		buf[0] = '\0';
-		return 0;
-	}
 
 	bitmap = zalloc(last_cpu.cpu / 8 + 1);
 	if (bitmap == NULL) {
@@ -749,7 +716,7 @@ size_t cpu_map__snprint_mask(struct perf_cpu_map *map, char *buf, size_t size)
 		return 0;
 	}
 
-	perf_cpu_map__for_each_cpu_skip_any(c, idx, map)
+	perf_cpu_map__for_each_cpu(c, idx, map)
 		bitmap[c.cpu / 8] |= 1 << (c.cpu % 8);
 
 	for (int cpu = last_cpu.cpu / 4 * 4; cpu >= 0; cpu -= 4) {

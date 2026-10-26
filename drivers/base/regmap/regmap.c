@@ -115,8 +115,9 @@ bool regmap_cached(struct regmap *map, unsigned int reg)
 	if (map->max_register_is_set && reg > map->max_register)
 		return false;
 
-	scoped_guard(regmap, map)
-		ret = regcache_read(map, reg, &val);
+	map->lock(map->lock_arg);
+	ret = regcache_read(map, reg, &val);
+	map->unlock(map->lock_arg);
 	if (ret)
 		return false;
 
@@ -688,7 +689,7 @@ struct regmap *__regmap_init(struct device *dev,
 	if (!config)
 		goto err;
 
-	map = kzalloc_obj(*map);
+	map = kzalloc(sizeof(*map), GFP_KERNEL);
 	if (map == NULL) {
 		ret = -ENOMEM;
 		goto err;
@@ -812,7 +813,6 @@ struct regmap *__regmap_init(struct device *dev,
 	map->precious_reg = config->precious_reg;
 	map->writeable_noinc_reg = config->writeable_noinc_reg;
 	map->readable_noinc_reg = config->readable_noinc_reg;
-	map->reg_default_cb = config->reg_default_cb;
 	map->cache_type = config->cache_type;
 
 	spin_lock_init(&map->async_lock);
@@ -1116,7 +1116,7 @@ skip_format_initialization:
 			}
 		}
 
-		new = kzalloc_obj(*new);
+		new = kzalloc(sizeof(*new), GFP_KERNEL);
 		if (new == NULL) {
 			ret = -ENOMEM;
 			goto err_range;
@@ -1181,9 +1181,9 @@ err:
 }
 EXPORT_SYMBOL_GPL(__regmap_init);
 
-static void devm_regmap_release(void *regmap)
+static void devm_regmap_release(struct device *dev, void *res)
 {
-	regmap_exit(regmap);
+	regmap_exit(*(struct regmap **)res);
 }
 
 struct regmap *__devm_regmap_init(struct device *dev,
@@ -1193,17 +1193,20 @@ struct regmap *__devm_regmap_init(struct device *dev,
 				  struct lock_class_key *lock_key,
 				  const char *lock_name)
 {
-	struct regmap *regmap;
-	int ret;
+	struct regmap **ptr, *regmap;
+
+	ptr = devres_alloc(devm_regmap_release, sizeof(*ptr), GFP_KERNEL);
+	if (!ptr)
+		return ERR_PTR(-ENOMEM);
 
 	regmap = __regmap_init(dev, bus, bus_context, config,
 			       lock_key, lock_name);
-	if (IS_ERR(regmap))
-		return regmap;
-
-	ret = devm_add_action_or_reset(dev, devm_regmap_release, regmap);
-	if (ret)
-		return ERR_PTR(ret);
+	if (!IS_ERR(regmap)) {
+		*ptr = regmap;
+		devres_add(dev, ptr);
+	} else {
+		devres_free(ptr);
+	}
 
 	return regmap;
 }
@@ -1270,7 +1273,7 @@ int regmap_field_bulk_alloc(struct regmap *regmap,
 	struct regmap_field *rf;
 	int i;
 
-	rf = kzalloc_objs(*rf, num_fields);
+	rf = kcalloc(num_fields, sizeof(*rf), GFP_KERNEL);
 	if (!rf)
 		return -ENOMEM;
 
@@ -1380,7 +1383,7 @@ EXPORT_SYMBOL_GPL(devm_regmap_field_free);
 struct regmap_field *regmap_field_alloc(struct regmap *regmap,
 		struct reg_field reg_field)
 {
-	struct regmap_field *rm_field = kzalloc_obj(*rm_field);
+	struct regmap_field *rm_field = kzalloc(sizeof(*rm_field), GFP_KERNEL);
 
 	if (!rm_field)
 		return ERR_PTR(-ENOMEM);
@@ -1421,8 +1424,8 @@ int regmap_reinit_cache(struct regmap *map, const struct regmap_config *config)
 {
 	int ret;
 
-	regmap_debugfs_exit(map);
 	regcache_exit(map);
+	regmap_debugfs_exit(map);
 
 	map->max_register = config->max_register;
 	map->max_register_is_set = map->max_register ?: config->max_register_is_0;
@@ -1432,23 +1435,18 @@ int regmap_reinit_cache(struct regmap *map, const struct regmap_config *config)
 	map->precious_reg = config->precious_reg;
 	map->writeable_noinc_reg = config->writeable_noinc_reg;
 	map->readable_noinc_reg = config->readable_noinc_reg;
-	map->reg_default_cb = config->reg_default_cb;
 	map->cache_type = config->cache_type;
 
 	ret = regmap_set_name(map, config);
 	if (ret)
 		return ret;
 
+	regmap_debugfs_init(map);
+
 	map->cache_bypass = false;
 	map->cache_only = false;
 
-	ret = regcache_init(map, config);
-	if (ret)
-		return ret;
-
-	regmap_debugfs_init(map);
-
-	return 0;
+	return regcache_init(map, config);
 }
 EXPORT_SYMBOL_GPL(regmap_reinit_cache);
 
@@ -1462,8 +1460,9 @@ void regmap_exit(struct regmap *map)
 	struct regmap_async *async;
 
 	regmap_detach_dev(map->dev, map);
-	regmap_debugfs_exit(map);
 	regcache_exit(map);
+
+	regmap_debugfs_exit(map);
 	regmap_range_exit(map);
 	if (map->bus && map->bus->free_context)
 		map->bus->free_context(map->bus_context);
@@ -1979,12 +1978,18 @@ int _regmap_write(struct regmap *map, unsigned int reg,
  */
 int regmap_write(struct regmap *map, unsigned int reg, unsigned int val)
 {
+	int ret;
+
 	if (!IS_ALIGNED(reg, map->reg_stride))
 		return -EINVAL;
 
-	guard(regmap)(map);
+	map->lock(map->lock_arg);
 
-	return _regmap_write(map, reg, val);
+	ret = _regmap_write(map, reg, val);
+
+	map->unlock(map->lock_arg);
+
+	return ret;
 }
 EXPORT_SYMBOL_GPL(regmap_write);
 
@@ -2005,13 +2010,15 @@ int regmap_write_async(struct regmap *map, unsigned int reg, unsigned int val)
 	if (!IS_ALIGNED(reg, map->reg_stride))
 		return -EINVAL;
 
-	guard(regmap)(map);
+	map->lock(map->lock_arg);
 
 	map->async = true;
 
 	ret = _regmap_write(map, reg, val);
 
 	map->async = false;
+
+	map->unlock(map->lock_arg);
 
 	return ret;
 }
@@ -2074,14 +2081,20 @@ int _regmap_raw_write(struct regmap *map, unsigned int reg,
 int regmap_raw_write(struct regmap *map, unsigned int reg,
 		     const void *val, size_t val_len)
 {
+	int ret;
+
 	if (!regmap_can_raw_write(map))
 		return -EINVAL;
 	if (val_len % map->format.val_bytes)
 		return -EINVAL;
 
-	guard(regmap)(map);
+	map->lock(map->lock_arg);
 
-	return _regmap_raw_write(map, reg, val, val_len, false);
+	ret = _regmap_raw_write(map, reg, val, val_len, false);
+
+	map->unlock(map->lock_arg);
+
+	return ret;
 }
 EXPORT_SYMBOL_GPL(regmap_raw_write);
 
@@ -2199,17 +2212,21 @@ int regmap_noinc_write(struct regmap *map, unsigned int reg,
 	if (val_len == 0)
 		return -EINVAL;
 
-	guard(regmap)(map);
+	map->lock(map->lock_arg);
 
-	if (!regmap_volatile(map, reg) || !regmap_writeable_noinc(map, reg))
-		return -EINVAL;
+	if (!regmap_volatile(map, reg) || !regmap_writeable_noinc(map, reg)) {
+		ret = -EINVAL;
+		goto out_unlock;
+	}
 
 	/*
 	 * Use the accelerated operation if we can. The val drops the const
 	 * typing in order to facilitate code reuse in regmap_noinc_readwrite().
 	 */
-	if (map->bus->reg_noinc_write)
-		return regmap_noinc_readwrite(map, reg, (void *)val, val_len, true);
+	if (map->bus->reg_noinc_write) {
+		ret = regmap_noinc_readwrite(map, reg, (void *)val, val_len, true);
+		goto out_unlock;
+	}
 
 	while (val_len) {
 		if (map->max_raw_write && map->max_raw_write < val_len)
@@ -2218,12 +2235,14 @@ int regmap_noinc_write(struct regmap *map, unsigned int reg,
 			write_len = val_len;
 		ret = _regmap_raw_write(map, reg, val, write_len, true);
 		if (ret)
-			return ret;
+			goto out_unlock;
 		val = ((u8 *)val) + write_len;
 		val_len -= write_len;
 	}
 
-	return 0;
+out_unlock:
+	map->unlock(map->lock_arg);
+	return ret;
 }
 EXPORT_SYMBOL_GPL(regmap_noinc_write);
 
@@ -2339,8 +2358,7 @@ int regmap_bulk_write(struct regmap *map, unsigned int reg, const void *val,
 	 * single write operations.
 	 */
 	if (!map->write || !map->format.parse_inplace) {
-		guard(regmap)(map);
-
+		map->lock(map->lock_arg);
 		for (i = 0; i < val_count; i++) {
 			unsigned int ival;
 
@@ -2355,15 +2373,18 @@ int regmap_bulk_write(struct regmap *map, unsigned int reg, const void *val,
 				ival = *(u32 *)(val + (i * val_bytes));
 				break;
 			default:
-				return -EINVAL;
+				ret = -EINVAL;
+				goto out;
 			}
 
 			ret = _regmap_write(map,
 					    reg + regmap_get_offset(map, i),
 					    ival);
 			if (ret != 0)
-				return ret;
+				goto out;
 		}
+out:
+		map->unlock(map->lock_arg);
 	} else {
 		void *wval;
 
@@ -2633,9 +2654,15 @@ static int _regmap_multi_reg_write(struct regmap *map,
 int regmap_multi_reg_write(struct regmap *map, const struct reg_sequence *regs,
 			   int num_regs)
 {
-	guard(regmap)(map);
+	int ret;
 
-	return _regmap_multi_reg_write(map, regs, num_regs);
+	map->lock(map->lock_arg);
+
+	ret = _regmap_multi_reg_write(map, regs, num_regs);
+
+	map->unlock(map->lock_arg);
+
+	return ret;
 }
 EXPORT_SYMBOL_GPL(regmap_multi_reg_write);
 
@@ -2664,7 +2691,7 @@ int regmap_multi_reg_write_bypassed(struct regmap *map,
 	int ret;
 	bool bypass;
 
-	guard(regmap)(map);
+	map->lock(map->lock_arg);
 
 	bypass = map->cache_bypass;
 	map->cache_bypass = true;
@@ -2672,6 +2699,8 @@ int regmap_multi_reg_write_bypassed(struct regmap *map,
 	ret = _regmap_multi_reg_write(map, regs, num_regs);
 
 	map->cache_bypass = bypass;
+
+	map->unlock(map->lock_arg);
 
 	return ret;
 }
@@ -2694,7 +2723,7 @@ EXPORT_SYMBOL_GPL(regmap_multi_reg_write_bypassed);
  * If supported by the underlying bus the write will be scheduled
  * asynchronously, helping maximise I/O speed on higher speed buses
  * like SPI.  regmap_async_complete() can be called to ensure that all
- * asynchronous writes have been completed.
+ * asynchrnous writes have been completed.
  *
  * A value of zero will be returned on success, a negative errno will
  * be returned in error cases.
@@ -2709,13 +2738,15 @@ int regmap_raw_write_async(struct regmap *map, unsigned int reg,
 	if (!IS_ALIGNED(reg, map->reg_stride))
 		return -EINVAL;
 
-	guard(regmap)(map);
+	map->lock(map->lock_arg);
 
 	map->async = true;
 
 	ret = _regmap_raw_write(map, reg, val, val_len, false);
 
 	map->async = false;
+
+	map->unlock(map->lock_arg);
 
 	return ret;
 }
@@ -2833,12 +2864,18 @@ static int _regmap_read(struct regmap *map, unsigned int reg,
  */
 int regmap_read(struct regmap *map, unsigned int reg, unsigned int *val)
 {
+	int ret;
+
 	if (!IS_ALIGNED(reg, map->reg_stride))
 		return -EINVAL;
 
-	guard(regmap)(map);
+	map->lock(map->lock_arg);
 
-	return _regmap_read(map, reg, val);
+	ret = _regmap_read(map, reg, val);
+
+	map->unlock(map->lock_arg);
+
+	return ret;
 }
 EXPORT_SYMBOL_GPL(regmap_read);
 
@@ -2861,7 +2898,7 @@ int regmap_read_bypassed(struct regmap *map, unsigned int reg, unsigned int *val
 	if (!IS_ALIGNED(reg, map->reg_stride))
 		return -EINVAL;
 
-	guard(regmap)(map);
+	map->lock(map->lock_arg);
 
 	bypass = map->cache_bypass;
 	cache_only = map->cache_only;
@@ -2872,6 +2909,8 @@ int regmap_read_bypassed(struct regmap *map, unsigned int reg, unsigned int *val
 
 	map->cache_bypass = bypass;
 	map->cache_only = cache_only;
+
+	map->unlock(map->lock_arg);
 
 	return ret;
 }
@@ -2903,18 +2942,22 @@ int regmap_raw_read(struct regmap *map, unsigned int reg, void *val,
 	if (val_count == 0)
 		return -EINVAL;
 
-	guard(regmap)(map);
+	map->lock(map->lock_arg);
 
 	if (regmap_volatile_range(map, reg, val_count) || map->cache_bypass ||
 	    map->cache_type == REGCACHE_NONE) {
 		size_t chunk_count, chunk_bytes;
 		size_t chunk_regs = val_count;
 
-		if (!map->cache_bypass && map->cache_only)
-			return -EBUSY;
+		if (!map->cache_bypass && map->cache_only) {
+			ret = -EBUSY;
+			goto out;
+		}
 
-		if (!map->read)
-			return -ENOTSUPP;
+		if (!map->read) {
+			ret = -ENOTSUPP;
+			goto out;
+		}
 
 		if (map->use_single_read)
 			chunk_regs = 1;
@@ -2928,7 +2971,7 @@ int regmap_raw_read(struct regmap *map, unsigned int reg, void *val,
 		for (i = 0; i < chunk_count; i++) {
 			ret = _regmap_raw_read(map, reg, val, chunk_bytes, false);
 			if (ret != 0)
-				return ret;
+				goto out;
 
 			reg += regmap_get_offset(map, chunk_regs);
 			val += chunk_bytes;
@@ -2939,7 +2982,7 @@ int regmap_raw_read(struct regmap *map, unsigned int reg, void *val,
 		if (val_len) {
 			ret = _regmap_raw_read(map, reg, val, val_len, false);
 			if (ret != 0)
-				return ret;
+				goto out;
 		}
 	} else {
 		/* Otherwise go word by word for the cache; should be low
@@ -2949,13 +2992,16 @@ int regmap_raw_read(struct regmap *map, unsigned int reg, void *val,
 			ret = _regmap_read(map, reg + regmap_get_offset(map, i),
 					   &v);
 			if (ret != 0)
-				return ret;
+				goto out;
 
 			map->format.format_val(val + (i * val_bytes), v, 0);
 		}
 	}
 
-	return 0;
+ out:
+	map->unlock(map->lock_arg);
+
+	return ret;
 }
 EXPORT_SYMBOL_GPL(regmap_raw_read);
 
@@ -2996,10 +3042,12 @@ int regmap_noinc_read(struct regmap *map, unsigned int reg,
 	if (val_len == 0)
 		return -EINVAL;
 
-	guard(regmap)(map);
+	map->lock(map->lock_arg);
 
-	if (!regmap_volatile(map, reg) || !regmap_readable_noinc(map, reg))
-		return -EINVAL;
+	if (!regmap_volatile(map, reg) || !regmap_readable_noinc(map, reg)) {
+		ret = -EINVAL;
+		goto out_unlock;
+	}
 
 	/*
 	 * We have not defined the FIFO semantics for cache, as the
@@ -3007,12 +3055,16 @@ int regmap_noinc_read(struct regmap *map, unsigned int reg,
 	 * written value? Just avoid this by always reading the FIFO
 	 * even when using cache. Cache only will not work.
 	 */
-	if (!map->cache_bypass && map->cache_only)
-		return -EBUSY;
+	if (!map->cache_bypass && map->cache_only) {
+		ret = -EBUSY;
+		goto out_unlock;
+	}
 
 	/* Use the accelerated operation if we can */
-	if (map->bus->reg_noinc_read)
-		return regmap_noinc_readwrite(map, reg, val, val_len, false);
+	if (map->bus->reg_noinc_read) {
+		ret = regmap_noinc_readwrite(map, reg, val, val_len, false);
+		goto out_unlock;
+	}
 
 	while (val_len) {
 		if (map->max_raw_read && map->max_raw_read < val_len)
@@ -3021,12 +3073,14 @@ int regmap_noinc_read(struct regmap *map, unsigned int reg,
 			read_len = val_len;
 		ret = _regmap_raw_read(map, reg, val, read_len, true);
 		if (ret)
-			return ret;
+			goto out_unlock;
 		val = ((u8 *)val) + read_len;
 		val_len -= read_len;
 	}
 
-	return 0;
+out_unlock:
+	map->unlock(map->lock_arg);
+	return ret;
 }
 EXPORT_SYMBOL_GPL(regmap_noinc_read);
 
@@ -3096,20 +3150,22 @@ static int _regmap_bulk_read(struct regmap *map, unsigned int reg,
 	u8 *u8 = val;
 	int ret, i;
 
-	guard(regmap)(map);
+	map->lock(map->lock_arg);
 
 	for (i = 0; i < val_count; i++) {
 		unsigned int ival;
 
 		if (regs) {
-			if (!IS_ALIGNED(regs[i], map->reg_stride))
-				return -EINVAL;
+			if (!IS_ALIGNED(regs[i], map->reg_stride)) {
+				ret = -EINVAL;
+				goto out;
+			}
 			ret = _regmap_read(map, regs[i], &ival);
 		} else {
 			ret = _regmap_read(map, reg + regmap_get_offset(map, i), &ival);
 		}
 		if (ret != 0)
-			return ret;
+			goto out;
 
 		switch (map->format.val_bytes) {
 		case 4:
@@ -3122,11 +3178,13 @@ static int _regmap_bulk_read(struct regmap *map, unsigned int reg,
 			u8[i] = ival;
 			break;
 		default:
-			return -EINVAL;
+			ret = -EINVAL;
+			goto out;
 		}
 	}
-
-	return 0;
+out:
+	map->unlock(map->lock_arg);
+	return ret;
 }
 
 /**
@@ -3200,9 +3258,6 @@ static int _regmap_update_bits(struct regmap *map, unsigned int reg,
 		*change = false;
 
 	if (regmap_volatile(map, reg) && map->reg_update_bits) {
-		if (map->cache_only)
-			return -EBUSY;
-
 		reg = regmap_reg_addr(map, reg);
 		ret = map->reg_update_bits(map->bus_context, reg, mask, val);
 		if (ret == 0 && change)
@@ -3253,13 +3308,15 @@ int regmap_update_bits_base(struct regmap *map, unsigned int reg,
 {
 	int ret;
 
-	guard(regmap)(map);
+	map->lock(map->lock_arg);
 
 	map->async = async;
 
 	ret = _regmap_update_bits(map, reg, mask, val, change, force);
 
 	map->async = false;
+
+	map->unlock(map->lock_arg);
 
 	return ret;
 }
@@ -3382,25 +3439,30 @@ int regmap_register_patch(struct regmap *map, const struct reg_sequence *regs,
 	    num_regs))
 		return 0;
 
-	p = krealloc_array(map->patch, map->patch_regs + num_regs, sizeof(*p), GFP_KERNEL);
-	if (!p)
+	p = krealloc(map->patch,
+		     sizeof(struct reg_sequence) * (map->patch_regs + num_regs),
+		     GFP_KERNEL);
+	if (p) {
+		memcpy(p + map->patch_regs, regs, num_regs * sizeof(*regs));
+		map->patch = p;
+		map->patch_regs += num_regs;
+	} else {
 		return -ENOMEM;
-
-	memcpy(p + map->patch_regs, regs, num_regs * sizeof(*regs));
-	map->patch = p;
-	map->patch_regs += num_regs;
-
-	scoped_guard(regmap, map) {
-		bypass = map->cache_bypass;
-
-		map->cache_bypass = true;
-		map->async = true;
-
-		ret = _regmap_multi_reg_write(map, regs, num_regs);
-
-		map->async = false;
-		map->cache_bypass = bypass;
 	}
+
+	map->lock(map->lock_arg);
+
+	bypass = map->cache_bypass;
+
+	map->cache_bypass = true;
+	map->async = true;
+
+	ret = _regmap_multi_reg_write(map, regs, num_regs);
+
+	map->async = false;
+	map->cache_bypass = bypass;
+
+	map->unlock(map->lock_arg);
 
 	regmap_async_complete(map);
 

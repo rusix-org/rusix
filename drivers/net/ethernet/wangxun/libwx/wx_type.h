@@ -79,10 +79,7 @@
 #define WX_RX_LEN_ERROR_FRAMES_L     0x11978
 #define WX_RX_UNDERSIZE_FRAMES_GOOD  0x11938
 #define WX_RX_OVERSIZE_FRAMES_GOOD   0x1193C
-#define WX_MAC_LXOFFRXC              0x11988
-#define WX_MAC_LXONRXC               0x11E0C
-#define WX_MAC_LXOFFRXC_AML          0x11F80
-#define WX_MAC_LXONRXC_AML           0x11F84
+#define WX_MAC_LXONOFFRXC            0x11E0C
 
 /*********************** Receive DMA registers **************************/
 #define WX_RDM_VF_RE(_i)             (0x12004 + ((_i) * 4))
@@ -440,20 +437,12 @@ enum WX_MSCA_CMD_value {
 #define WX_PX_TR_WP(_i)              (0x03008 + ((_i) * 0x40))
 #define WX_PX_TR_RP(_i)              (0x0300C + ((_i) * 0x40))
 #define WX_PX_TR_CFG(_i)             (0x03010 + ((_i) * 0x40))
-#define WX_PX_TR_HEAD_ADDRL(_i)      (0x03028 + ((_i) * 0x40))
-#define WX_PX_TR_HEAD_ADDRH(_i)      (0x0302C + ((_i) * 0x40))
 /* Transmit Config masks */
 #define WX_PX_TR_CFG_ENABLE          BIT(0) /* Ena specific Tx Queue */
 #define WX_PX_TR_CFG_TR_SIZE_SHIFT   1 /* tx desc number per ring */
 #define WX_PX_TR_CFG_SWFLSH          BIT(26) /* Tx Desc. wr-bk flushing */
 #define WX_PX_TR_CFG_WTHRESH_SHIFT   16 /* shift to WTHRESH bits */
 #define WX_PX_TR_CFG_THRE_SHIFT      8
-#define WX_PX_TR_CFG_HEAD_WB         BIT(27)
-
-#define WX_PX_TR_RP_PV(q_per_pool, vf_number, vf_q_index) \
-		(WX_PX_TR_RP((q_per_pool) * (vf_number) + (vf_q_index)))
-#define WX_PX_TR_WP_PV(q_per_pool, vf_number, vf_q_index) \
-		(WX_PX_TR_WP((q_per_pool) * (vf_number) + (vf_q_index)))
 
 /* Receive DMA Registers */
 #define WX_PX_RR_BAL(_i)             (0x01000 + ((_i) * 0x40))
@@ -1027,7 +1016,6 @@ struct wx_tx_buffer {
 	DEFINE_DMA_UNMAP_LEN(len);
 	__be16 protocol;
 	u32 tx_flags;
-	u32 next_eop;
 };
 
 struct wx_rx_buffer {
@@ -1045,7 +1033,6 @@ struct wx_queue_stats {
 struct wx_tx_queue_stats {
 	u64 restart_queue;
 	u64 tx_busy;
-	u32 tx_done_old;
 };
 
 struct wx_rx_queue_stats {
@@ -1060,12 +1047,6 @@ struct wx_rx_queue_stats {
 /* iterator for handling rings in ring container */
 #define wx_for_each_ring(posm, headm) \
 	for (posm = (headm).ring; posm; posm = posm->next)
-
-enum wx_ring_state {
-	WX_TX_DETECT_HANG,
-	WX_HANG_CHECK_ARMED,
-	WX_RING_STATE_NBITS
-};
 
 struct wx_ring_container {
 	struct wx_ring *ring;           /* pointer to linked list of rings */
@@ -1086,11 +1067,8 @@ struct wx_ring {
 		struct wx_tx_buffer *tx_buffer_info;
 		struct wx_rx_buffer *rx_buffer_info;
 	};
-	DECLARE_BITMAP(state, WX_RING_STATE_NBITS);
 	u8 __iomem *tail;
 	dma_addr_t dma;                 /* phys. address of descriptor ring */
-	dma_addr_t headwb_dma;
-	u32 *headwb_mem;
 	unsigned int size;              /* length in bytes */
 
 	u16 count;                      /* amount of descriptors */
@@ -1165,18 +1143,9 @@ enum wx_isb_idx {
 	WX_ISB_MAX
 };
 
-/* Flow Control Settings */
-enum wx_fc_mode {
-	wx_fc_none = 0,
-	wx_fc_rx_pause,
-	wx_fc_tx_pause,
-	wx_fc_full
-};
-
 struct wx_fc_info {
 	u32 high_water; /* Flow Ctrl High-water */
 	u32 low_water; /* Flow Ctrl Low-water */
-	enum wx_fc_mode mode; /* Flow Control Mode */
 };
 
 /* Statistics counters collected by the MAC */
@@ -1193,8 +1162,7 @@ struct wx_hw_stats {
 	u64 mptc;
 	u64 roc;
 	u64 ruc;
-	u64 lxonrxc;
-	u64 lxoffrxc;
+	u64 lxonoffrxc;
 	u64 lxontxc;
 	u64 lxofftxc;
 	u64 o2bgptc;
@@ -1209,12 +1177,6 @@ struct wx_hw_stats {
 	u64 fdirmiss;
 };
 
-struct wx_last_stats {
-	u32 qmprc[128];
-	u32 lxoffrxc;
-	u32 lxonrxc;
-};
-
 enum wx_state {
 	WX_STATE_DOWN,
 	WX_STATE_RESETTING,
@@ -1222,8 +1184,6 @@ enum wx_state {
 	WX_STATE_PTP_RUNNING,
 	WX_STATE_PTP_TX_IN_PROGRESS,
 	WX_STATE_SERVICE_SCHED,
-	WX_STATE_DISABLED,
-	WX_STATE_RES_FREED,
 	WX_STATE_NBITS		/* must be last */
 };
 
@@ -1269,7 +1229,7 @@ struct wx_rss_flow_map {
 	u8 flag;
 };
 
-enum wx_flags {
+enum wx_pf_flags {
 	WX_FLAG_MULTI_64_FUNC,
 	WX_FLAG_SWFW_RING,
 	WX_FLAG_VMDQ_ENABLED,
@@ -1289,15 +1249,13 @@ enum wx_flags {
 	WX_FLAG_NEED_UPDATE_LINK,
 	WX_FLAG_NEED_DO_RESET,
 	WX_FLAG_RX_MERGE_ENABLED,
-	WX_FLAG_TXHEAD_WB_ENABLED,
-	WX_FLAG_NEED_PCIE_RECOVERY,
-	WX_FLAGS_NBITS               /* must be last */
+	WX_PF_FLAGS_NBITS               /* must be last */
 };
 
 struct wx {
 	unsigned long active_vlans[BITS_TO_LONGS(VLAN_N_VID)];
 	DECLARE_BITMAP(state, WX_STATE_NBITS);
-	DECLARE_BITMAP(flags, WX_FLAGS_NBITS);
+	DECLARE_BITMAP(flags, WX_PF_FLAGS_NBITS);
 
 	void *priv;
 	u8 __iomem *hw_addr;
@@ -1391,7 +1349,6 @@ struct wx {
 	bool default_up;
 
 	struct wx_hw_stats stats;
-	struct wx_last_stats last_stats;
 	spinlock_t hw_stats_lock; /* spinlock for accessing to hw stats */
 	u64 tx_busy;
 	u64 non_eop_descs;
@@ -1411,8 +1368,7 @@ struct wx {
 	void (*atr)(struct wx_ring *ring, struct wx_tx_buffer *first, u8 ptype);
 	void (*configure_fdir)(struct wx *wx);
 	int (*setup_tc)(struct net_device *netdev, u8 tc);
-	void (*do_reset)(struct net_device *netdev, bool reinit);
-	void (*down_suspend)(struct wx *wx);
+	void (*do_reset)(struct net_device *netdev);
 	int (*ptp_setup_sdp)(struct wx *wx);
 	void (*set_num_queues)(struct wx *wx);
 
@@ -1430,8 +1386,6 @@ struct wx {
 	unsigned long last_overflow_check;
 	unsigned long last_rx_ptp_check;
 	unsigned long ptp_tx_start;
-	/* protects ptp_tx_skb, ptp_tx_start and the in-progress state bit */
-	spinlock_t ptp_tx_lock;
 	seqlock_t hw_tc_lock; /* seqlock for ptp */
 	struct cyclecounter hw_cc;
 	struct timecounter hw_tc;
@@ -1442,8 +1396,6 @@ struct wx {
 
 	struct timer_list service_timer;
 	struct work_struct service_task;
-	struct work_struct reset_task;
-	struct workqueue_struct *reset_wq;
 	struct mutex reset_lock; /* mutex for reset */
 };
 
@@ -1507,18 +1459,6 @@ wr32ptp(struct wx *wx, u32 reg, u32 value)
 	return wr32(wx, reg + 0xB500, value);
 }
 
-static inline u32
-rd32_wrap(struct wx *wx, u32 reg, u32 *last)
-{
-	u32 val, delta;
-
-	val = rd32(wx, reg);
-	delta = val - *last;
-	*last = val;
-
-	return delta;
-}
-
 /* On some domestic CPU platforms, sometimes IO is not synchronized with
  * flushing memory, here use readl() to flush PCI read and write.
  */
@@ -1526,8 +1466,7 @@ rd32_wrap(struct wx *wx, u32 reg, u32 *last)
 
 #define wx_err(wx, fmt, arg...) \
 	dev_err(&(wx)->pdev->dev, fmt, ##arg)
-#define wx_warn(wx, fmt, arg...) \
-	dev_warn(&(wx)->pdev->dev, fmt, ##arg)
+
 #define wx_dbg(wx, fmt, arg...) \
 	dev_dbg(&(wx)->pdev->dev, fmt, ##arg)
 

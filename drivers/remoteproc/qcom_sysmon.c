@@ -628,7 +628,7 @@ struct qcom_sysmon *qcom_add_sysmon_subdev(struct rproc *rproc,
 	struct qcom_sysmon *sysmon;
 	int ret;
 
-	sysmon = kzalloc_obj(*sysmon);
+	sysmon = kzalloc(sizeof(*sysmon), GFP_KERNEL);
 	if (!sysmon)
 		return ERR_PTR(-ENOMEM);
 
@@ -662,6 +662,8 @@ struct qcom_sysmon *qcom_add_sysmon_subdev(struct rproc *rproc,
 						IRQF_TRIGGER_RISING | IRQF_ONESHOT,
 						"q6v5 shutdown-ack", sysmon);
 		if (ret) {
+			dev_err(sysmon->dev,
+				"failed to acquire shutdown-ack IRQ\n");
 			kfree(sysmon);
 			return ERR_PTR(ret);
 		}
@@ -675,7 +677,7 @@ struct qcom_sysmon *qcom_add_sysmon_subdev(struct rproc *rproc,
 		return ERR_PTR(ret);
 	}
 
-	qmi_add_lookup(&sysmon->qmi, QMI_SERVICE_ID_SSCTL, 0, 0);
+	qmi_add_lookup(&sysmon->qmi, 43, 0, 0);
 
 	sysmon->subdev.prepare = sysmon_prepare;
 	sysmon->subdev.start = sysmon_start;
@@ -733,25 +735,6 @@ bool qcom_sysmon_shutdown_acked(struct qcom_sysmon *sysmon)
 	return sysmon && sysmon->shutdown_acked;
 }
 EXPORT_SYMBOL_GPL(qcom_sysmon_shutdown_acked);
-
-bool qcom_sysmon_shutdown_irq_state(struct qcom_sysmon *sysmon)
-{
-	bool shutdown_state;
-	int ret;
-
-	if (!sysmon)
-		return false;
-
-	ret = irq_get_irqchip_state(sysmon->shutdown_irq,
-				    IRQCHIP_STATE_LINE_LEVEL, &shutdown_state);
-	if (ret) {
-		dev_warn(sysmon->dev, "failed to get shutdown_state: %d\n", ret);
-		return false;
-	}
-
-	return shutdown_state;
-}
-EXPORT_SYMBOL_GPL(qcom_sysmon_shutdown_irq_state);
 
 /**
  * sysmon_probe() - probe sys_mon channel

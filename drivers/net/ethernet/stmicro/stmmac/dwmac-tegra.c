@@ -325,7 +325,7 @@ static int tegra_mgbe_probe(struct platform_device *pdev)
 
 	plat->core_type = DWMAC_CORE_XGMAC;
 	plat->flags |= STMMAC_FLAG_TSO_EN;
-	plat->pmt = true;
+	plat->pmt = 1;
 	plat->bsp_priv = mgbe;
 
 	if (!plat->mdio_node)

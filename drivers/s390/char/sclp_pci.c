@@ -4,7 +4,8 @@
  *
  * Copyright IBM Corp. 2016
  */
-#define pr_fmt(fmt) "sclp_cmd: " fmt
+#define KMSG_COMPONENT "sclp_cmd"
+#define pr_fmt(fmt) KMSG_COMPONENT ": " fmt
 
 #include <linux/completion.h>
 #include <linux/export.h>
@@ -98,10 +99,6 @@ static int sclp_pci_check_report(struct zpci_report_error_header *report)
 	case SCLP_ERRNOTIFY_AQ_REPAIR:
 	case SCLP_ERRNOTIFY_AQ_INFO_LOG:
 	case SCLP_ERRNOTIFY_AQ_OPTICS_DATA:
-	case SCLP_ERRNOTIFY_AQ_NVME_SMART_LOG:
-	case SCLP_ERRNOTIFY_AQ_ADAPTER_INITIALIZED:
-	case SCLP_ERRNOTIFY_AQ_RECOVERABLE_ERROR:
-	case SCLP_ERRNOTIFY_AQ_TELEMETRY_DATA:
 		break;
 	default:
 		return -EINVAL;

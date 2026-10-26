@@ -10,6 +10,7 @@
 #include <linux/fs.h>
 #include <linux/pagemap.h>
 #include <linux/writeback.h>
+#include <linux/pagevec.h>
 #include <linux/netfs.h>
 #include <trace/events/netfs.h>
 #include "internal.h"
@@ -142,7 +143,7 @@ static void afs_issue_write_worker(struct work_struct *work)
 	afs_begin_vnode_operation(op);
 
 	op->store.write_iter	= &subreq->io_iter;
-	op->store.i_size	= umax(pos + len, netfs_read_remote_i_size(&vnode->netfs.inode));
+	op->store.i_size	= umax(pos + len, vnode->netfs.remote_i_size);
 	op->mtime		= inode_get_mtime(&vnode->netfs.inode);
 
 	afs_wait_for_operation(op);

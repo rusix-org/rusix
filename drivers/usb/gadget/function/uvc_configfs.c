@@ -12,7 +12,6 @@
 
 #include "uvc_configfs.h"
 
-#include <linux/hex.h>
 #include <linux/sort.h>
 #include <linux/usb/uvc.h>
 #include <linux/usb/video.h>
@@ -128,7 +127,7 @@ static void uvcg_config_item_release(struct config_item *item)
 	kfree(group);
 }
 
-static const struct configfs_item_operations uvcg_config_item_ops = {
+static struct configfs_item_operations uvcg_config_item_ops = {
 	.release	= uvcg_config_item_release,
 };
 
@@ -158,7 +157,7 @@ static int uvcg_config_create_group(struct config_group *parent,
 {
 	struct config_group *group;
 
-	group = kzalloc_obj(*group);
+	group = kzalloc(sizeof(*group), GFP_KERNEL);
 	if (!group)
 		return -ENOMEM;
 
@@ -270,7 +269,7 @@ static struct config_item *uvcg_control_header_make(struct config_group *group,
 {
 	struct uvcg_control_header *h;
 
-	h = kzalloc_obj(*h);
+	h = kzalloc(sizeof(*h), GFP_KERNEL);
 	if (!h)
 		return ERR_PTR(-ENOMEM);
 
@@ -285,7 +284,7 @@ static struct config_item *uvcg_control_header_make(struct config_group *group,
 	return &h->item;
 }
 
-static const struct configfs_group_operations uvcg_control_header_grp_ops = {
+static struct configfs_group_operations uvcg_control_header_grp_ops = {
 	.make_item		= uvcg_control_header_make,
 };
 
@@ -1233,7 +1232,7 @@ static void uvcg_extension_drop_link(struct config_item *src, struct config_item
 	mutex_unlock(su_mutex);
 }
 
-static const struct configfs_item_operations uvcg_extension_item_ops = {
+static struct configfs_item_operations uvcg_extension_item_ops = {
 	.release	= uvcg_extension_release,
 	.allow_link	= uvcg_extension_allow_link,
 	.drop_link	= uvcg_extension_drop_link,
@@ -1273,7 +1272,7 @@ static struct config_item *uvcg_extension_make(struct config_group *group, const
 	opts_item = group->cg_item.ci_parent->ci_parent;
 	opts = to_f_uvc_opts(opts_item);
 
-	xu = kzalloc_obj(*xu);
+	xu = kzalloc(sizeof(*xu), GFP_KERNEL);
 	if (!xu)
 		return ERR_PTR(-ENOMEM);
 
@@ -1298,7 +1297,7 @@ static struct config_item *uvcg_extension_make(struct config_group *group, const
 	return &xu->item;
 }
 
-static const struct configfs_group_operations uvcg_extensions_grp_ops = {
+static struct configfs_group_operations uvcg_extensions_grp_ops = {
 	.make_item	= uvcg_extension_make,
 	.drop_item	= uvcg_extension_drop,
 };
@@ -1414,7 +1413,7 @@ out:
 	mutex_unlock(su_mutex);
 }
 
-static const struct configfs_item_operations uvcg_control_class_item_ops = {
+static struct configfs_item_operations uvcg_control_class_item_ops = {
 	.release	= uvcg_config_item_release,
 	.allow_link	= uvcg_control_class_allow_link,
 	.drop_link	= uvcg_control_class_drop_link,
@@ -1437,7 +1436,7 @@ static int uvcg_control_class_create_children(struct config_group *parent)
 	for (i = 0; i < ARRAY_SIZE(names); ++i) {
 		struct uvcg_control_class_group *group;
 
-		group = kzalloc_obj(*group);
+		group = kzalloc(sizeof(*group), GFP_KERNEL);
 		if (!group)
 			return -ENOMEM;
 
@@ -1664,7 +1663,7 @@ static void uvcg_format_drop_link(struct config_item *src, struct config_item *t
 	mutex_unlock(su_mutex);
 }
 
-static const struct configfs_item_operations uvcg_format_item_operations = {
+static struct configfs_item_operations uvcg_format_item_operations = {
 	.release	= uvcg_config_item_release,
 	.allow_link	= uvcg_format_allow_link,
 	.drop_link	= uvcg_format_drop_link,
@@ -1785,7 +1784,7 @@ static int uvcg_streaming_header_allow_link(struct config_item *src,
 
 	uvcg_format_set_indices(to_config_group(target));
 
-	format_ptr = kzalloc_obj(*format_ptr);
+	format_ptr = kzalloc(sizeof(*format_ptr), GFP_KERNEL);
 	if (!format_ptr) {
 		ret = -ENOMEM;
 		goto out;
@@ -1840,7 +1839,7 @@ out:
 	mutex_unlock(su_mutex);
 }
 
-static const struct configfs_item_operations uvcg_streaming_header_item_ops = {
+static struct configfs_item_operations uvcg_streaming_header_item_ops = {
 	.release	= uvcg_config_item_release,
 	.allow_link	= uvcg_streaming_header_allow_link,
 	.drop_link	= uvcg_streaming_header_drop_link,
@@ -1899,7 +1898,7 @@ static struct config_item
 {
 	struct uvcg_streaming_header *h;
 
-	h = kzalloc_obj(*h);
+	h = kzalloc(sizeof(*h), GFP_KERNEL);
 	if (!h)
 		return ERR_PTR(-ENOMEM);
 
@@ -1914,7 +1913,7 @@ static struct config_item
 	return &h->item;
 }
 
-static const struct configfs_group_operations uvcg_streaming_header_grp_ops = {
+static struct configfs_group_operations uvcg_streaming_header_grp_ops = {
 	.make_item		= uvcg_streaming_header_make,
 };
 
@@ -2163,7 +2162,7 @@ static struct config_item *uvcg_frame_make(struct config_group *group,
 	struct config_item *opts_item;
 	struct uvcg_frame_ptr *frame_ptr;
 
-	h = kzalloc_obj(*h);
+	h = kzalloc(sizeof(*h), GFP_KERNEL);
 	if (!h)
 		return ERR_PTR(-ENOMEM);
 
@@ -2197,7 +2196,7 @@ static struct config_item *uvcg_frame_make(struct config_group *group,
 		return ERR_PTR(-EINVAL);
 	}
 
-	frame_ptr = kzalloc_obj(*frame_ptr);
+	frame_ptr = kzalloc(sizeof(*frame_ptr), GFP_KERNEL);
 	if (!frame_ptr) {
 		mutex_unlock(&opts->lock);
 		kfree(h);
@@ -2261,7 +2260,7 @@ static void uvcg_format_set_indices(struct config_group *fmt)
  * streaming/uncompressed/<NAME>
  */
 
-static const struct configfs_group_operations uvcg_uncompressed_group_ops = {
+static struct configfs_group_operations uvcg_uncompressed_group_ops = {
 	.make_item		= uvcg_frame_make,
 	.drop_item		= uvcg_frame_drop,
 };
@@ -2483,7 +2482,7 @@ static struct config_group *uvcg_uncompressed_make(struct config_group *group,
 	if (!color_match)
 		return ERR_PTR(-EINVAL);
 
-	h = kzalloc_obj(*h);
+	h = kzalloc(sizeof(*h), GFP_KERNEL);
 	if (!h)
 		return ERR_PTR(-ENOMEM);
 
@@ -2508,7 +2507,7 @@ static struct config_group *uvcg_uncompressed_make(struct config_group *group,
 	return &h->fmt.group;
 }
 
-static const struct configfs_group_operations uvcg_uncompressed_grp_ops = {
+static struct configfs_group_operations uvcg_uncompressed_grp_ops = {
 	.make_group		= uvcg_uncompressed_make,
 };
 
@@ -2525,7 +2524,7 @@ static const struct uvcg_config_group_type uvcg_uncompressed_grp_type = {
  * streaming/mjpeg/<NAME>
  */
 
-static const struct configfs_group_operations uvcg_mjpeg_group_ops = {
+static struct configfs_group_operations uvcg_mjpeg_group_ops = {
 	.make_item		= uvcg_frame_make,
 	.drop_item		= uvcg_frame_drop,
 };
@@ -2675,7 +2674,7 @@ static struct config_group *uvcg_mjpeg_make(struct config_group *group,
 	if (!color_match)
 		return ERR_PTR(-EINVAL);
 
-	h = kzalloc_obj(*h);
+	h = kzalloc(sizeof(*h), GFP_KERNEL);
 	if (!h)
 		return ERR_PTR(-ENOMEM);
 
@@ -2698,7 +2697,7 @@ static struct config_group *uvcg_mjpeg_make(struct config_group *group,
 	return &h->fmt.group;
 }
 
-static const struct configfs_group_operations uvcg_mjpeg_grp_ops = {
+static struct configfs_group_operations uvcg_mjpeg_grp_ops = {
 	.make_group		= uvcg_mjpeg_make,
 };
 
@@ -2715,7 +2714,7 @@ static const struct uvcg_config_group_type uvcg_mjpeg_grp_type = {
  * streaming/framebased/<NAME>
  */
 
-static const struct configfs_group_operations uvcg_framebased_group_ops = {
+static struct configfs_group_operations uvcg_framebased_group_ops = {
 	.make_item              = uvcg_frame_make,
 	.drop_item              = uvcg_frame_drop,
 };
@@ -2926,7 +2925,7 @@ static struct config_group *uvcg_framebased_make(struct config_group *group,
 	if (!color_match)
 		return ERR_PTR(-EINVAL);
 
-	h = kzalloc_obj(*h);
+	h = kzalloc(sizeof(*h), GFP_KERNEL);
 	if (!h)
 		return ERR_PTR(-ENOMEM);
 
@@ -2953,7 +2952,7 @@ static struct config_group *uvcg_framebased_make(struct config_group *group,
 	return &h->fmt.group;
 }
 
-static const struct configfs_group_operations uvcg_framebased_grp_ops = {
+static struct configfs_group_operations uvcg_framebased_grp_ops = {
 	.make_group             = uvcg_framebased_make,
 };
 
@@ -3056,7 +3055,7 @@ static void uvcg_color_matching_release(struct config_item *item)
 	kfree(color_match);
 }
 
-static const struct configfs_item_operations uvcg_color_matching_item_ops = {
+static struct configfs_item_operations uvcg_color_matching_item_ops = {
 	.release	= uvcg_color_matching_release,
 };
 
@@ -3075,7 +3074,7 @@ static struct config_group *uvcg_color_matching_make(struct config_group *group,
 {
 	struct uvcg_color_matching *color_match;
 
-	color_match = kzalloc_obj(*color_match);
+	color_match = kzalloc(sizeof(*color_match), GFP_KERNEL);
 	if (!color_match)
 		return ERR_PTR(-ENOMEM);
 
@@ -3089,7 +3088,7 @@ static struct config_group *uvcg_color_matching_make(struct config_group *group,
 	return &color_match->group;
 }
 
-static const struct configfs_group_operations uvcg_color_matching_grp_group_ops = {
+static struct configfs_group_operations uvcg_color_matching_grp_group_ops = {
 	.make_group	= uvcg_color_matching_make,
 };
 
@@ -3097,7 +3096,7 @@ static int uvcg_color_matching_create_children(struct config_group *parent)
 {
 	struct uvcg_color_matching *color_match;
 
-	color_match = kzalloc_obj(*color_match);
+	color_match = kzalloc(sizeof(*color_match), GFP_KERNEL);
 	if (!color_match)
 		return -ENOMEM;
 
@@ -3530,7 +3529,7 @@ out:
 	mutex_unlock(su_mutex);
 }
 
-static const struct configfs_item_operations uvcg_streaming_class_item_ops = {
+static struct configfs_item_operations uvcg_streaming_class_item_ops = {
 	.release	= uvcg_config_item_release,
 	.allow_link	= uvcg_streaming_class_allow_link,
 	.drop_link	= uvcg_streaming_class_drop_link,
@@ -3553,7 +3552,7 @@ static int uvcg_streaming_class_create_children(struct config_group *parent)
 	for (i = 0; i < ARRAY_SIZE(names); ++i) {
 		struct uvcg_streaming_class_group *group;
 
-		group = kzalloc_obj(*group);
+		group = kzalloc(sizeof(*group), GFP_KERNEL);
 		if (!group)
 			return -ENOMEM;
 
@@ -3698,7 +3697,7 @@ static void uvc_func_drop_link(struct config_item *src, struct config_item *tgt)
 	mutex_unlock(&opts->lock);
 }
 
-static const struct configfs_item_operations uvc_func_item_ops = {
+static struct configfs_item_operations uvc_func_item_ops = {
 	.release	= uvc_func_item_release,
 	.allow_link	= uvc_func_allow_link,
 	.drop_link	= uvc_func_drop_link,

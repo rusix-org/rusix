@@ -547,7 +547,7 @@ static int check_clk_sys(struct snd_soc_dapm_widget *source,
 static int wm8995_put_class_w(struct snd_kcontrol *kcontrol,
 			      struct snd_ctl_elem_value *ucontrol)
 {
-	struct snd_soc_component *component = snd_soc_dapm_kcontrol_to_component(kcontrol);
+	struct snd_soc_component *component = snd_soc_dapm_kcontrol_component(kcontrol);
 	int ret;
 
 	ret = snd_soc_dapm_put_volsw(kcontrol, ucontrol);
@@ -718,7 +718,7 @@ static int configure_aif_clock(struct snd_soc_component *component, int aif)
 
 static int configure_clock(struct snd_soc_component *component)
 {
-	struct snd_soc_dapm_context *dapm = snd_soc_component_to_dapm(component);
+	struct snd_soc_dapm_context *dapm = snd_soc_component_get_dapm(component);
 	struct wm8995_priv *wm8995;
 	int change, new;
 
@@ -1955,7 +1955,6 @@ static int wm8995_set_dai_sysclk(struct snd_soc_dai *dai,
 static int wm8995_set_bias_level(struct snd_soc_component *component,
 				 enum snd_soc_bias_level level)
 {
-	struct snd_soc_dapm_context *dapm = snd_soc_component_to_dapm(component);
 	struct wm8995_priv *wm8995;
 	int ret;
 
@@ -1965,7 +1964,7 @@ static int wm8995_set_bias_level(struct snd_soc_component *component,
 	case SND_SOC_BIAS_PREPARE:
 		break;
 	case SND_SOC_BIAS_STANDBY:
-		if (snd_soc_dapm_get_bias_level(dapm) == SND_SOC_BIAS_OFF) {
+		if (snd_soc_component_get_bias_level(component) == SND_SOC_BIAS_OFF) {
 			ret = regulator_bulk_enable(ARRAY_SIZE(wm8995->supplies),
 						    wm8995->supplies);
 			if (ret)
@@ -1993,17 +1992,23 @@ static int wm8995_set_bias_level(struct snd_soc_component *component,
 	return 0;
 }
 
-static int wm8995_hw_init(struct device *dev, struct wm8995_priv *wm8995)
+static int wm8995_probe(struct snd_soc_component *component)
 {
-	int i, ret;
+	struct wm8995_priv *wm8995;
+	int i;
+	int ret;
+
+	wm8995 = snd_soc_component_get_drvdata(component);
+	wm8995->component = component;
 
 	for (i = 0; i < ARRAY_SIZE(wm8995->supplies); i++)
 		wm8995->supplies[i].supply = wm8995_supply_names[i];
 
-	ret = devm_regulator_bulk_get(dev, ARRAY_SIZE(wm8995->supplies),
+	ret = devm_regulator_bulk_get(component->dev,
+				      ARRAY_SIZE(wm8995->supplies),
 				      wm8995->supplies);
 	if (ret) {
-		dev_err(dev, "Failed to request supplies: %d\n", ret);
+		dev_err(component->dev, "Failed to request supplies: %d\n", ret);
 		return ret;
 	}
 
@@ -2018,26 +2023,15 @@ static int wm8995_hw_init(struct device *dev, struct wm8995_priv *wm8995)
 
 	/* This should really be moved into the regulator core */
 	for (i = 0; i < ARRAY_SIZE(wm8995->supplies); i++) {
-		ret = devm_regulator_register_notifier(wm8995->supplies[i].consumer,
-						       &wm8995->disable_nb[i]);
+		ret = devm_regulator_register_notifier(
+						wm8995->supplies[i].consumer,
+						&wm8995->disable_nb[i]);
 		if (ret) {
-			dev_err(dev,
+			dev_err(component->dev,
 				"Failed to register regulator notifier: %d\n",
 				ret);
-			return ret;
 		}
 	}
-
-	return 0;
-}
-
-static int wm8995_probe(struct snd_soc_component *component)
-{
-	struct wm8995_priv *wm8995;
-	int ret;
-
-	wm8995 = snd_soc_component_get_drvdata(component);
-	wm8995->component = component;
 
 	ret = regulator_bulk_enable(ARRAY_SIZE(wm8995->supplies),
 				    wm8995->supplies);
@@ -2096,22 +2090,6 @@ err_reg_enable:
 #define WM8995_FORMATS (SNDRV_PCM_FMTBIT_S16_LE | SNDRV_PCM_FMTBIT_S20_3LE |\
 			SNDRV_PCM_FMTBIT_S24_LE | SNDRV_PCM_FMTBIT_S32_LE)
 
-static const u64 wm8995_selectable_formats[] = {
-	/* 1st priority */
-	SND_SOC_POSSIBLE_DAIFMT_I2S	|
-	SND_SOC_POSSIBLE_DAIFMT_RIGHT_J	|
-	SND_SOC_POSSIBLE_DAIFMT_LEFT_J	|
-	SND_SOC_POSSIBLE_DAIFMT_NB_NF	|
-	SND_SOC_POSSIBLE_DAIFMT_NB_IF	|
-	SND_SOC_POSSIBLE_DAIFMT_IB_NF	|
-	SND_SOC_POSSIBLE_DAIFMT_IB_IF,
-	/* 2nd priority */
-	SND_SOC_POSSIBLE_DAIFMT_DSP_A	|
-	SND_SOC_POSSIBLE_DAIFMT_DSP_B	|
-	SND_SOC_POSSIBLE_DAIFMT_NB_NF	|
-	SND_SOC_POSSIBLE_DAIFMT_IB_NF,
-};
-
 static const struct snd_soc_dai_ops wm8995_aif1_dai_ops = {
 	.set_sysclk = wm8995_set_dai_sysclk,
 	.set_fmt = wm8995_set_dai_fmt,
@@ -2120,8 +2098,6 @@ static const struct snd_soc_dai_ops wm8995_aif1_dai_ops = {
 	.set_pll = wm8995_set_fll,
 	.set_tristate = wm8995_set_tristate,
 	.no_capture_mute = 1,
-	.auto_selectable_formats = wm8995_selectable_formats,
-	.num_auto_selectable_formats = ARRAY_SIZE(wm8995_selectable_formats),
 };
 
 static const struct snd_soc_dai_ops wm8995_aif2_dai_ops = {
@@ -2132,8 +2108,6 @@ static const struct snd_soc_dai_ops wm8995_aif2_dai_ops = {
 	.set_pll = wm8995_set_fll,
 	.set_tristate = wm8995_set_tristate,
 	.no_capture_mute = 1,
-	.auto_selectable_formats = wm8995_selectable_formats,
-	.num_auto_selectable_formats = ARRAY_SIZE(wm8995_selectable_formats),
 };
 
 static const struct snd_soc_dai_ops wm8995_aif3_dai_ops = {
@@ -2241,10 +2215,6 @@ static int wm8995_spi_probe(struct spi_device *spi)
 		return ret;
 	}
 
-	ret = wm8995_hw_init(&spi->dev, wm8995);
-	if (ret)
-		return ret;
-
 	ret = devm_snd_soc_register_component(&spi->dev,
 				     &soc_component_dev_wm8995, wm8995_dai,
 				     ARRAY_SIZE(wm8995_dai));
@@ -2278,10 +2248,6 @@ static int wm8995_i2c_probe(struct i2c_client *i2c)
 		return ret;
 	}
 
-	ret = wm8995_hw_init(&i2c->dev, wm8995);
-	if (ret)
-		return ret;
-
 	ret = devm_snd_soc_register_component(&i2c->dev,
 				     &soc_component_dev_wm8995, wm8995_dai,
 				     ARRAY_SIZE(wm8995_dai));
@@ -2292,8 +2258,8 @@ static int wm8995_i2c_probe(struct i2c_client *i2c)
 }
 
 static const struct i2c_device_id wm8995_i2c_id[] = {
-	{ .name = "wm8995" },
-	{ }
+	{"wm8995"},
+	{}
 };
 
 MODULE_DEVICE_TABLE(i2c, wm8995_i2c_id);

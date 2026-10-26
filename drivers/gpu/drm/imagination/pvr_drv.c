@@ -14,7 +14,6 @@
 #include "pvr_rogue_defs.h"
 #include "pvr_rogue_fwif_client.h"
 #include "pvr_rogue_fwif_shared.h"
-#include "pvr_trace.h"
 #include "pvr_vm.h"
 
 #include <uapi/drm/pvr_drm.h>
@@ -30,6 +29,7 @@
 #include <linux/fs.h>
 #include <linux/kernel.h>
 #include <linux/list.h>
+#include <linux/mod_devicetable.h>
 #include <linux/module.h>
 #include <linux/moduleparam.h>
 #include <linux/of_device.h>
@@ -43,9 +43,8 @@
  *
  * This driver supports the following PowerVR/IMG graphics cores from Imagination Technologies:
  *
- * * AXE-1-16M (33.15.11.3)
- * * BXM-4-64 MC1 (36.52.104.182)
- * * BXS-4-64 MC1 (36.53.104.796)
+ * * AXE-1-16M (found in Texas Instruments AM62)
+ * * BXS-4-64 MC1 (found in Texas Instruments J721S2/AM68)
  */
 
 /**
@@ -515,8 +514,7 @@ copy_out:
 	if (err < 0)
 		return err;
 
-	if (args->size > sizeof(query))
-		args->size = sizeof(query);
+	args->size = sizeof(query);
 	return 0;
 }
 
@@ -597,8 +595,7 @@ copy_out:
 	if (err < 0)
 		return err;
 
-	if (args->size > sizeof(query))
-		args->size = sizeof(query);
+	args->size = sizeof(query);
 	return 0;
 }
 
@@ -1153,8 +1150,6 @@ pvr_ioctl_submit_jobs(struct drm_device *drm_dev, void *raw_args,
 	int idx;
 	int err;
 
-	trace_pvr_job_submit_ioctl(pvr_dev, args->jobs.count);
-
 	if (!drm_dev_enter(drm_dev, &idx))
 		return -EIO;
 
@@ -1316,7 +1311,7 @@ pvr_drm_driver_open(struct drm_device *drm_dev, struct drm_file *file)
 	struct pvr_device *pvr_dev = to_pvr_device(drm_dev);
 	struct pvr_file *pvr_file;
 
-	pvr_file = kzalloc_obj(*pvr_file);
+	pvr_file = kzalloc(sizeof(*pvr_file), GFP_KERNEL);
 	if (!pvr_file)
 		return -ENOMEM;
 
@@ -1379,7 +1374,7 @@ pvr_drm_driver_postclose(__always_unused struct drm_device *drm_dev,
 DEFINE_DRM_GEM_FOPS(pvr_drm_driver_fops);
 
 static struct drm_driver pvr_drm_driver = {
-	.driver_features = DRIVER_GEM | DRIVER_RENDER |
+	.driver_features = DRIVER_GEM | DRIVER_GEM_GPUVA | DRIVER_RENDER |
 			   DRIVER_SYNCOBJ | DRIVER_SYNCOBJ_TIMELINE,
 	.open = pvr_drm_driver_open,
 	.postclose = pvr_drm_driver_postclose,

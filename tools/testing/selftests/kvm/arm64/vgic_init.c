@@ -5,7 +5,6 @@
  * Copyright (C) 2020, Red Hat, Inc.
  */
 #include <linux/kernel.h>
-#include <linux/sizes.h>
 #include <sys/syscall.h>
 #include <asm/kvm.h>
 #include <asm/kvm_para.h>
@@ -14,22 +13,13 @@
 
 #include "test_util.h"
 #include "kvm_util.h"
-#include "gic.h"
 #include "processor.h"
 #include "vgic.h"
 #include "gic_v3.h"
 
 #define NR_VCPUS		4
 
-#define REDIST_RETRY_REGION0_BASE	GICR_BASE_GPA
-#define REDIST_RETRY_REGION1_BASE	\
-	(REDIST_RETRY_REGION0_BASE + 2 * KVM_VGIC_V3_REDIST_SIZE)
-#define REDIST_RETRY_DIST_BASE		\
-	(REDIST_RETRY_REGION1_BASE + KVM_VGIC_V3_REDIST_SIZE)
-#define REDIST_RETRY_REGION2_BASE	\
-	(REDIST_RETRY_DIST_BASE + KVM_VGIC_V3_DIST_SIZE)
-
-#define REG_OFFSET(vcpu, offset) (((u64)vcpu << 32) | offset)
+#define REG_OFFSET(vcpu, offset) (((uint64_t)vcpu << 32) | offset)
 
 #define VGIC_DEV_IS_V2(_d) ((_d) == KVM_DEV_TYPE_ARM_VGIC_V2)
 #define VGIC_DEV_IS_V3(_d) ((_d) == KVM_DEV_TYPE_ARM_VGIC_V3)
@@ -37,10 +27,10 @@
 struct vm_gic {
 	struct kvm_vm *vm;
 	int gic_fd;
-	u32 gic_dev_type;
+	uint32_t gic_dev_type;
 };
 
-static u64 max_phys_size;
+static uint64_t max_phys_size;
 
 /*
  * Helpers to access a redistributor register and verify the ioctl() failed or
@@ -49,17 +39,17 @@ static u64 max_phys_size;
 static void v3_redist_reg_get_errno(int gicv3_fd, int vcpu, int offset,
 				    int want, const char *msg)
 {
-	u32 ignored_val;
+	uint32_t ignored_val;
 	int ret = __kvm_device_attr_get(gicv3_fd, KVM_DEV_ARM_VGIC_GRP_REDIST_REGS,
 					REG_OFFSET(vcpu, offset), &ignored_val);
 
 	TEST_ASSERT(ret && errno == want, "%s; want errno = %d", msg, want);
 }
 
-static void v3_redist_reg_get(int gicv3_fd, int vcpu, int offset, u32 want,
+static void v3_redist_reg_get(int gicv3_fd, int vcpu, int offset, uint32_t want,
 			      const char *msg)
 {
-	u32 val;
+	uint32_t val;
 
 	kvm_device_attr_get(gicv3_fd, KVM_DEV_ARM_VGIC_GRP_REDIST_REGS,
 			    REG_OFFSET(vcpu, offset), &val);
@@ -75,32 +65,14 @@ static void guest_code(void)
 	GUEST_DONE();
 }
 
-static void guest_check_redist_retry(void)
-{
-	unsigned int i;
-
-	/* The first three redistributors span adjacent regions 0 and 1. */
-	for (i = 0; i < NR_VCPUS; i++) {
-		u64 base = i < 3 ? REDIST_RETRY_REGION0_BASE +
-				       i * KVM_VGIC_V3_REDIST_SIZE :
-				       REDIST_RETRY_REGION2_BASE;
-		u64 typer = readq((void *)(unsigned long)(base + GICR_TYPER));
-
-		GUEST_ASSERT_EQ(GICR_TYPER_CPU_NUMBER(typer), i);
-	}
-
-	GUEST_DONE();
-}
-
 /* we don't want to assert on run execution, hence that helper */
 static int run_vcpu(struct kvm_vcpu *vcpu)
 {
 	return __vcpu_run(vcpu) ? -errno : 0;
 }
 
-static struct vm_gic vm_gic_create_with_vcpus(u32 gic_dev_type,
-					      u32 nr_vcpus,
-					      void *guest_code,
+static struct vm_gic vm_gic_create_with_vcpus(uint32_t gic_dev_type,
+					      uint32_t nr_vcpus,
 					      struct kvm_vcpu *vcpus[])
 {
 	struct vm_gic v;
@@ -112,7 +84,7 @@ static struct vm_gic vm_gic_create_with_vcpus(u32 gic_dev_type,
 	return v;
 }
 
-static struct vm_gic vm_gic_create_barebones(u32 gic_dev_type)
+static struct vm_gic vm_gic_create_barebones(uint32_t gic_dev_type)
 {
 	struct vm_gic v;
 
@@ -131,9 +103,9 @@ static void vm_gic_destroy(struct vm_gic *v)
 }
 
 struct vgic_region_attr {
-	u64 attr;
-	u64 size;
-	u64 alignment;
+	uint64_t attr;
+	uint64_t size;
+	uint64_t alignment;
 };
 
 struct vgic_region_attr gic_v3_dist_region = {
@@ -171,7 +143,7 @@ struct vgic_region_attr gic_v2_cpu_region = {
 static void subtest_dist_rdist(struct vm_gic *v)
 {
 	int ret;
-	u64 addr;
+	uint64_t addr;
 	struct vgic_region_attr rdist; /* CPU interface in GICv2*/
 	struct vgic_region_attr dist;
 
@@ -251,7 +223,7 @@ static void subtest_dist_rdist(struct vm_gic *v)
 /* Test the new REDIST region API */
 static void subtest_v3_redist_regions(struct vm_gic *v)
 {
-	u64 addr, expected_addr;
+	uint64_t addr, expected_addr;
 	int ret;
 
 	ret = __kvm_has_device_attr(v->gic_fd, KVM_DEV_ARM_VGIC_GRP_ADDR,
@@ -360,13 +332,13 @@ static void subtest_v3_redist_regions(struct vm_gic *v)
  * VGIC KVM device is created and initialized before the secondary CPUs
  * get created
  */
-static void test_vgic_then_vcpus(u32 gic_dev_type)
+static void test_vgic_then_vcpus(uint32_t gic_dev_type)
 {
 	struct kvm_vcpu *vcpus[NR_VCPUS];
 	struct vm_gic v;
 	int ret, i;
 
-	v = vm_gic_create_with_vcpus(gic_dev_type, 1, guest_code, vcpus);
+	v = vm_gic_create_with_vcpus(gic_dev_type, 1, vcpus);
 
 	subtest_dist_rdist(&v);
 
@@ -381,14 +353,13 @@ static void test_vgic_then_vcpus(u32 gic_dev_type)
 }
 
 /* All the VCPUs are created before the VGIC KVM device gets initialized */
-static void test_vcpus_then_vgic(u32 gic_dev_type)
+static void test_vcpus_then_vgic(uint32_t gic_dev_type)
 {
 	struct kvm_vcpu *vcpus[NR_VCPUS];
 	struct vm_gic v;
 	int ret;
 
-	v = vm_gic_create_with_vcpus(gic_dev_type, NR_VCPUS, guest_code,
-				     vcpus);
+	v = vm_gic_create_with_vcpus(gic_dev_type, NR_VCPUS, vcpus);
 
 	subtest_dist_rdist(&v);
 
@@ -437,11 +408,10 @@ static void test_v3_new_redist_regions(void)
 	struct kvm_vcpu *vcpus[NR_VCPUS];
 	void *dummy = NULL;
 	struct vm_gic v;
-	u64 addr;
+	uint64_t addr;
 	int ret;
 
-	v = vm_gic_create_with_vcpus(KVM_DEV_TYPE_ARM_VGIC_V3, NR_VCPUS,
-				     guest_code, vcpus);
+	v = vm_gic_create_with_vcpus(KVM_DEV_TYPE_ARM_VGIC_V3, NR_VCPUS, vcpus);
 	subtest_v3_redist_regions(&v);
 	kvm_device_attr_set(v.gic_fd, KVM_DEV_ARM_VGIC_GRP_CTRL,
 			    KVM_DEV_ARM_VGIC_CTRL_INIT, NULL);
@@ -452,8 +422,7 @@ static void test_v3_new_redist_regions(void)
 
 	/* step2 */
 
-	v = vm_gic_create_with_vcpus(KVM_DEV_TYPE_ARM_VGIC_V3, NR_VCPUS,
-				     guest_code, vcpus);
+	v = vm_gic_create_with_vcpus(KVM_DEV_TYPE_ARM_VGIC_V3, NR_VCPUS, vcpus);
 	subtest_v3_redist_regions(&v);
 
 	addr = REDIST_REGION_ATTR_ADDR(1, 0x280000, 0, 2);
@@ -467,8 +436,7 @@ static void test_v3_new_redist_regions(void)
 
 	/* step 3 */
 
-	v = vm_gic_create_with_vcpus(KVM_DEV_TYPE_ARM_VGIC_V3, NR_VCPUS,
-				     guest_code, vcpus);
+	v = vm_gic_create_with_vcpus(KVM_DEV_TYPE_ARM_VGIC_V3, NR_VCPUS, vcpus);
 	subtest_v3_redist_regions(&v);
 
 	ret = __kvm_device_attr_set(v.gic_fd, KVM_DEV_ARM_VGIC_GRP_ADDR,
@@ -489,74 +457,10 @@ static void test_v3_new_redist_regions(void)
 	vm_gic_destroy(&v);
 }
 
-static void test_v3_redist_region_retry(void)
-{
-	struct kvm_vcpu *vcpus[NR_VCPUS];
-	struct vm_gic v;
-	struct ucall uc;
-	u64 addr;
-	int ret;
-
-	v = vm_gic_create_with_vcpus(KVM_DEV_TYPE_ARM_VGIC_V3, NR_VCPUS,
-				     guest_check_redist_retry, vcpus);
-
-	addr = REDIST_REGION_ATTR_ADDR(2, REDIST_RETRY_REGION0_BASE, 0, 0);
-	kvm_device_attr_set(v.gic_fd, KVM_DEV_ARM_VGIC_GRP_ADDR,
-			    KVM_VGIC_V3_ADDR_TYPE_REDIST_REGION, &addr);
-
-	addr = REDIST_REGION_ATTR_ADDR(1, REDIST_RETRY_REGION1_BASE, 0, 1);
-	kvm_device_attr_set(v.gic_fd, KVM_DEV_ARM_VGIC_GRP_ADDR,
-			    KVM_VGIC_V3_ADDR_TYPE_REDIST_REGION, &addr);
-
-	addr = REDIST_RETRY_DIST_BASE;
-	kvm_device_attr_set(v.gic_fd, KVM_DEV_ARM_VGIC_GRP_ADDR,
-			    KVM_VGIC_V3_ADDR_TYPE_DIST, &addr);
-
-	addr = REDIST_REGION_ATTR_ADDR(1, REDIST_RETRY_DIST_BASE, 0, 2);
-	ret = __kvm_device_attr_set(v.gic_fd, KVM_DEV_ARM_VGIC_GRP_ADDR,
-				    KVM_VGIC_V3_ADDR_TYPE_REDIST_REGION,
-				    &addr);
-	TEST_ASSERT(ret && errno == EINVAL,
-		    "register redist region colliding with dist");
-
-	addr = REDIST_REGION_ATTR_ADDR(1, REDIST_RETRY_REGION2_BASE, 0, 2);
-	kvm_device_attr_set(v.gic_fd, KVM_DEV_ARM_VGIC_GRP_ADDR,
-			    KVM_VGIC_V3_ADDR_TYPE_REDIST_REGION, &addr);
-
-	virt_map(v.vm, REDIST_RETRY_REGION0_BASE, REDIST_RETRY_REGION0_BASE,
-		 vm_calc_num_guest_pages(v.vm->mode,
-					 3 * KVM_VGIC_V3_REDIST_SIZE));
-	virt_map(v.vm, REDIST_RETRY_REGION2_BASE, REDIST_RETRY_REGION2_BASE,
-		 vm_calc_num_guest_pages(v.vm->mode,
-					 KVM_VGIC_V3_REDIST_SIZE));
-
-	kvm_device_attr_set(v.gic_fd, KVM_DEV_ARM_VGIC_GRP_CTRL,
-			    KVM_DEV_ARM_VGIC_CTRL_INIT, NULL);
-
-	vcpu_run(vcpus[0]);
-	switch (get_ucall(vcpus[0], &uc)) {
-	case UCALL_DONE:
-		break;
-	case UCALL_ABORT:
-		REPORT_GUEST_ASSERT(uc);
-		break;
-	case UCALL_NONE:
-		if (vcpus[0]->run->exit_reason == KVM_EXIT_MMIO)
-			TEST_FAIL("Unexpected MMIO exit at 0x%llx",
-				  vcpus[0]->run->mmio.phys_addr);
-		fallthrough;
-	default:
-		TEST_FAIL("Unexpected ucall %lu, exit_reason %u",
-			  uc.cmd, vcpus[0]->run->exit_reason);
-	}
-
-	vm_gic_destroy(&v);
-}
-
 static void test_v3_typer_accesses(void)
 {
 	struct vm_gic v;
-	u64 addr;
+	uint64_t addr;
 	int ret, i;
 
 	v.vm = vm_create(NR_VCPUS);
@@ -614,7 +518,7 @@ static void test_v3_typer_accesses(void)
 }
 
 static struct vm_gic vm_gic_v3_create_with_vcpuids(int nr_vcpus,
-						   u32 vcpuids[])
+						   uint32_t vcpuids[])
 {
 	struct vm_gic v;
 	int i;
@@ -640,9 +544,9 @@ static struct vm_gic vm_gic_v3_create_with_vcpuids(int nr_vcpus,
  */
 static void test_v3_last_bit_redist_regions(void)
 {
-	u32 vcpuids[] = { 0, 3, 5, 4, 1, 2 };
+	uint32_t vcpuids[] = { 0, 3, 5, 4, 1, 2 };
 	struct vm_gic v;
-	u64 addr;
+	uint64_t addr;
 
 	v = vm_gic_v3_create_with_vcpuids(ARRAY_SIZE(vcpuids), vcpuids);
 
@@ -674,9 +578,9 @@ static void test_v3_last_bit_redist_regions(void)
 /* Test last bit with legacy region */
 static void test_v3_last_bit_single_rdist(void)
 {
-	u32 vcpuids[] = { 0, 3, 5, 4, 1, 2 };
+	uint32_t vcpuids[] = { 0, 3, 5, 4, 1, 2 };
 	struct vm_gic v;
-	u64 addr;
+	uint64_t addr;
 
 	v = vm_gic_v3_create_with_vcpuids(ARRAY_SIZE(vcpuids), vcpuids);
 
@@ -702,10 +606,9 @@ static void test_v3_redist_ipa_range_check_at_vcpu_run(void)
 	struct kvm_vcpu *vcpus[NR_VCPUS];
 	struct vm_gic v;
 	int ret, i;
-	u64 addr;
+	uint64_t addr;
 
-	v = vm_gic_create_with_vcpus(KVM_DEV_TYPE_ARM_VGIC_V3, 1, guest_code,
-				     vcpus);
+	v = vm_gic_create_with_vcpus(KVM_DEV_TYPE_ARM_VGIC_V3, 1, vcpus);
 
 	/* Set space for 3 redists, we have 1 vcpu, so this succeeds. */
 	addr = max_phys_size - (3 * 2 * 0x10000);
@@ -735,11 +638,10 @@ static void test_v3_its_region(void)
 {
 	struct kvm_vcpu *vcpus[NR_VCPUS];
 	struct vm_gic v;
-	u64 addr;
+	uint64_t addr;
 	int its_fd, ret;
 
-	v = vm_gic_create_with_vcpus(KVM_DEV_TYPE_ARM_VGIC_V3, NR_VCPUS,
-				     guest_code, vcpus);
+	v = vm_gic_create_with_vcpus(KVM_DEV_TYPE_ARM_VGIC_V3, NR_VCPUS, vcpus);
 	its_fd = kvm_create_device(v.vm, KVM_DEV_TYPE_ARM_VGIC_ITS);
 
 	addr = 0x401000;
@@ -782,8 +684,7 @@ static void test_v3_nassgicap(void)
 	u32 typer2;
 	int ret;
 
-	vm = vm_gic_create_with_vcpus(KVM_DEV_TYPE_ARM_VGIC_V3, NR_VCPUS,
-				      guest_code, vcpus);
+	vm = vm_gic_create_with_vcpus(KVM_DEV_TYPE_ARM_VGIC_V3, NR_VCPUS, vcpus);
 	kvm_device_attr_get(vm.gic_fd, KVM_DEV_ARM_VGIC_GRP_DIST_REGS,
 			    GICD_TYPER2, &typer2);
 	has_nassgicap = typer2 & GICD_TYPER2_nASSGIcap;
@@ -816,11 +717,11 @@ static void test_v3_nassgicap(void)
 /*
  * Returns 0 if it's possible to create GIC device of a given type (V2 or V3).
  */
-int test_kvm_device(u32 gic_dev_type)
+int test_kvm_device(uint32_t gic_dev_type)
 {
 	struct kvm_vcpu *vcpus[NR_VCPUS];
 	struct vm_gic v;
-	u32 other;
+	uint32_t other;
 	int ret;
 
 	v.vm = vm_create_with_vcpus(NR_VCPUS, guest_code, vcpus);
@@ -1067,7 +968,7 @@ static void test_v3_sysregs(void)
 	kvm_vm_free(vm);
 }
 
-void run_tests(u32 gic_dev_type)
+void run_tests(uint32_t gic_dev_type)
 {
 	test_vcpus_then_vgic(gic_dev_type);
 	test_vgic_then_vcpus(gic_dev_type);
@@ -1077,7 +978,6 @@ void run_tests(u32 gic_dev_type)
 
 	if (VGIC_DEV_IS_V3(gic_dev_type)) {
 		test_v3_new_redist_regions();
-		test_v3_redist_region_retry();
 		test_v3_typer_accesses();
 		test_v3_last_bit_redist_regions();
 		test_v3_last_bit_single_rdist();

@@ -28,8 +28,6 @@ SECTIONS
 		TEXT_TEXT
 		SCHED_TEXT
 		LOCK_TEXT
-		IRQENTRY_TEXT
-		SOFTIRQENTRY_TEXT
 		*(.fixup)
 		*(.gnu.warning)
 	} :text
@@ -75,17 +73,6 @@ SECTIONS
 	DWARF_DEBUG
 	MODINFO
 	ELF_DETAILS
-
-	/*
-	 * gcc emits .eh_frame for Alpha even with
-	 * -fno-asynchronous-unwind-tables, and the kernel has no DWARF
-	 * unwinder to consume it.  The relocation sections are likewise
-	 * useless as the kernel image is not relocatable.
-	 */
-	/DISCARD/ : {
-		*(.eh_frame)
-		*(.rela .rela*)
-	}
 
 	DISCARDS
 }

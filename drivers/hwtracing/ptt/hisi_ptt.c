@@ -194,6 +194,7 @@ static int hisi_ptt_trace_start(struct hisi_ptt *hisi_ptt)
 {
 	struct hisi_ptt_trace_ctrl *ctrl = &hisi_ptt->trace_ctrl;
 	u32 val;
+	int i;
 
 	/* Check device idle before start trace */
 	if (!hisi_ptt_wait_trace_hw_idle(hisi_ptt)) {
@@ -220,6 +221,10 @@ static int hisi_ptt_trace_start(struct hisi_ptt *hisi_ptt)
 
 	/* Reset the index of current buffer */
 	hisi_ptt->trace_ctrl.buf_index = 0;
+
+	/* Zero the trace buffers */
+	for (i = 0; i < HISI_PTT_TRACE_BUF_CNT; i++)
+		memset(ctrl->trace_buf[i].addr, 0, HISI_PTT_TRACE_BUF_SIZE);
 
 	/* Clear the interrupt status */
 	writel(HISI_PTT_TRACE_INT_STAT_MASK, hisi_ptt->iobase + HISI_PTT_TRACE_INT_STAT);
@@ -385,7 +390,7 @@ hisi_ptt_alloc_add_filter(struct hisi_ptt *hisi_ptt, u16 devid, bool is_port)
 		return NULL;
 	}
 
-	filter = kzalloc_obj(*filter);
+	filter = kzalloc(sizeof(*filter), GFP_KERNEL);
 	if (!filter) {
 		pci_err(hisi_ptt->pdev, "failed to add filter for %s\n",
 			filter_name);
@@ -781,7 +786,7 @@ static ssize_t cpumask_show(struct device *dev, struct device_attribute *attr,
 	struct hisi_ptt *hisi_ptt = to_hisi_ptt(dev_get_drvdata(dev));
 	const cpumask_t *cpumask = cpumask_of_node(dev_to_node(&hisi_ptt->pdev->dev));
 
-	return sysfs_emit(buf, "%*pbl\n", cpumask_pr_args(cpumask));
+	return cpumap_print_to_pagebuf(true, buf, cpumask);
 }
 static DEVICE_ATTR_RO(cpumask);
 
@@ -1044,11 +1049,11 @@ static void *hisi_ptt_pmu_setup_aux(struct perf_event *event, void **pages,
 	if (nr_pages < HISI_PTT_TRACE_TOTAL_BUF_SIZE / PAGE_SIZE)
 		return NULL;
 
-	buf = kzalloc_obj(*buf);
+	buf = kzalloc(sizeof(*buf), GFP_KERNEL);
 	if (!buf)
 		return NULL;
 
-	pagelist = kzalloc_objs(*pagelist, nr_pages);
+	pagelist = kcalloc(nr_pages, sizeof(*pagelist), GFP_KERNEL);
 	if (!pagelist)
 		goto err;
 

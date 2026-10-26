@@ -115,6 +115,7 @@ void process_capture_routing_us144mkii(struct tascam_card *tascam,
 int us144mkii_configure_device_for_rate(struct tascam_card *tascam, int rate)
 {
 	struct usb_device *dev = tascam->dev;
+	u8 *rate_payload_buf __free(kfree) = NULL;
 	u16 rate_vendor_wValue;
 	int err = 0;
 	const u8 *current_payload_src;
@@ -147,8 +148,7 @@ int us144mkii_configure_device_for_rate(struct tascam_card *tascam, int rate)
 		return -EINVAL;
 	}
 
-	u8 *rate_payload_buf __free(kfree) =
-		kmemdup(current_payload_src, 3, GFP_KERNEL);
+	rate_payload_buf = kmemdup(current_payload_src, 3, GFP_KERNEL);
 	if (!rate_payload_buf)
 		return -ENOMEM;
 

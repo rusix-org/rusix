@@ -104,7 +104,7 @@ SEE ALSO
 ========
 **rtla-timerlat**\(1), **rtla-timerlat-top**\(1)
 
-`Timerlat tracer <https://docs.kernel.org/trace/timerlat-tracer.html>`__
+*timerlat* tracer documentation: <https://www.kernel.org/doc/html/latest/trace/timerlat-tracer.html>
 
 AUTHOR
 ======

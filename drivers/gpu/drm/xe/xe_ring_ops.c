@@ -11,9 +11,11 @@
 #include "instructions/xe_mi_commands.h"
 #include "regs/xe_engine_regs.h"
 #include "regs/xe_gt_regs.h"
-#include "xe_exec_queue.h"
-#include "xe_gt_types.h"
+#include "regs/xe_lrc_layout.h"
+#include "xe_exec_queue_types.h"
+#include "xe_gt.h"
 #include "xe_lrc.h"
+#include "xe_macros.h"
 #include "xe_sched_job.h"
 #include "xe_sriov.h"
 #include "xe_vm_types.h"
@@ -48,48 +50,15 @@ static u32 preparser_disable(bool state)
 	return MI_ARB_CHECK | BIT(8) | state;
 }
 
-static u32 *
-__emit_aux_table_inv(u32 *cmd, const struct xe_reg reg, u32 adj_offset)
+static int emit_aux_table_inv(struct xe_gt *gt, struct xe_reg reg,
+			      u32 *dw, int i)
 {
-	*cmd++ = MI_LOAD_REGISTER_IMM | MI_LRI_NUM_REGS(1) |
-		 MI_LRI_MMIO_REMAP_EN;
-	*cmd++ = reg.addr + adj_offset;
-	*cmd++ = AUX_INV;
-	*cmd++ = MI_SEMAPHORE_WAIT | MI_SEMW_REGISTER_POLL |
-		 MI_SEMW_POLL | MI_SEMW_COMPARE(SAD_EQ_SDD);
-	*cmd++ = 0;
-	*cmd++ = reg.addr + adj_offset;
-	*cmd++ = 0;
-	*cmd++ = 0;
+	dw[i++] = MI_LOAD_REGISTER_IMM | MI_LRI_NUM_REGS(1) | MI_LRI_MMIO_REMAP_EN;
+	dw[i++] = reg.addr + gt->mmio.adj_offset;
+	dw[i++] = AUX_INV;
+	dw[i++] = MI_NOOP;
 
-	return cmd;
-}
-
-static u32 *emit_aux_table_inv_render_compute(struct xe_gt *gt, u32 *cmd)
-{
-	return __emit_aux_table_inv(cmd, CCS_AUX_INV, gt->mmio.adj_offset);
-}
-
-static u32 *emit_aux_table_inv_video_decode(struct xe_gt *gt, u32 *cmd)
-{
-	return __emit_aux_table_inv(cmd, VD0_AUX_INV, gt->mmio.adj_offset);
-}
-
-static u32 *emit_aux_table_inv_video_enhance(struct xe_gt *gt, u32 *cmd)
-{
-	return __emit_aux_table_inv(cmd, VE0_AUX_INV, gt->mmio.adj_offset);
-}
-
-static int emit_aux_table_inv(struct xe_hw_engine *hwe, u32 *dw, int i)
-{
-	struct xe_gt *gt = hwe->gt;
-	u32 *(*emit)(struct xe_gt *gt, u32 *cmd) =
-		gt->ring_ops[hwe->class]->emit_aux_table_inv;
-
-	if (emit)
-		return emit(gt, dw + i) - dw;
-	else
-		return i;
+	return i;
 }
 
 static int emit_user_interrupt(u32 *dw, int i)
@@ -143,8 +112,9 @@ static int emit_bb_start(u64 batch_addr, u32 ppgtt_flag, u32 *dw, int i)
 
 static int emit_flush_invalidate(u32 addr, u32 val, u32 flush_flags, u32 *dw, int i)
 {
-	dw[i++] = MI_FLUSH_DW | MI_FLUSH_DW_OP_STOREDW | MI_FLUSH_IMM_DW |
-		  (flush_flags & MI_INVALIDATE_TLB);
+	dw[i++] = MI_FLUSH_DW | MI_FLUSH_DW_OP_STOREDW |
+		  MI_FLUSH_IMM_DW | (flush_flags & MI_INVALIDATE_TLB) ?: 0;
+
 	dw[i++] = addr | MI_FLUSH_DW_USE_GTT;
 	dw[i++] = 0;
 	dw[i++] = val;
@@ -165,11 +135,12 @@ emit_pipe_control(u32 *dw, int i, u32 bit_group_0, u32 bit_group_1, u32 offset, 
 	return i;
 }
 
-static int emit_pipe_invalidate(struct xe_exec_queue *q, u32 mask_flags,
-				bool invalidate_tlb, u32 *dw, int i)
+static int emit_pipe_invalidate(u32 mask_flags, bool invalidate_tlb, u32 *dw,
+				int i)
 {
 	u32 flags0 = 0;
-	u32 flags1 = PIPE_CONTROL_COMMAND_CACHE_INVALIDATE |
+	u32 flags1 = PIPE_CONTROL_CS_STALL |
+		PIPE_CONTROL_COMMAND_CACHE_INVALIDATE |
 		PIPE_CONTROL_INSTRUCTION_CACHE_INVALIDATE |
 		PIPE_CONTROL_TEXTURE_CACHE_INVALIDATE |
 		PIPE_CONTROL_VF_CACHE_INVALIDATE |
@@ -180,11 +151,6 @@ static int emit_pipe_invalidate(struct xe_exec_queue *q, u32 mask_flags,
 
 	if (invalidate_tlb)
 		flags1 |= PIPE_CONTROL_TLB_INVALIDATE;
-
-	if (xe_exec_queue_is_multi_queue(q))
-		flags0 |= PIPE_CONTROL0_QUEUE_DRAIN_MODE;
-	else
-		flags1 |= PIPE_CONTROL_CS_STALL;
 
 	flags1 &= ~mask_flags;
 
@@ -209,11 +175,10 @@ static int emit_store_imm_ppgtt_posted(u64 addr, u64 value,
 
 static int emit_render_cache_flush(struct xe_sched_job *job, u32 *dw, int i)
 {
-	struct xe_exec_queue *q = job->q;
-	struct xe_gt *gt = q->gt;
+	struct xe_gt *gt = job->q->gt;
 	struct xe_device *xe = gt_to_xe(gt);
 	bool lacks_render = !(gt->info.engine_mask & XE_HW_ENGINE_RCS_MASK);
-	u32 flags0, flags1;
+	u32 flags0, flags;
 
 	if (XE_GT_WA(gt, 14016712196))
 		i = emit_pipe_control(dw, i, 0, PIPE_CONTROL_DEPTH_CACHE_FLUSH,
@@ -230,42 +195,46 @@ static int emit_render_cache_flush(struct xe_sched_job *job, u32 *dw, int i)
 	 */
 	if (GRAPHICS_VERx100(xe) >= 2000)
 		flags0 |= PIPE_CONTROL0_UNTYPED_DATAPORT_CACHE_FLUSH;
-	flags1 = (PIPE_CONTROL_TILE_CACHE_FLUSH |
+	flags = (PIPE_CONTROL_CS_STALL |
+		 PIPE_CONTROL_TILE_CACHE_FLUSH |
 		 PIPE_CONTROL_RENDER_TARGET_CACHE_FLUSH |
 		 PIPE_CONTROL_DEPTH_CACHE_FLUSH |
 		 PIPE_CONTROL_DC_FLUSH_ENABLE |
 		 PIPE_CONTROL_FLUSH_ENABLE);
 
 	if (XE_GT_WA(gt, 1409600907))
-		flags1 |= PIPE_CONTROL_DEPTH_STALL;
+		flags |= PIPE_CONTROL_DEPTH_STALL;
 
 	if (lacks_render)
-		flags1 &= ~PIPE_CONTROL_3D_ARCH_FLAGS;
+		flags &= ~PIPE_CONTROL_3D_ARCH_FLAGS;
 	else if (job->q->class == XE_ENGINE_CLASS_COMPUTE)
-		flags1 &= ~PIPE_CONTROL_3D_ENGINE_FLAGS;
+		flags &= ~PIPE_CONTROL_3D_ENGINE_FLAGS;
 
-	if (xe_exec_queue_is_multi_queue(q))
-		flags0 |= PIPE_CONTROL0_QUEUE_DRAIN_MODE;
-	else
-		flags1 |= PIPE_CONTROL_CS_STALL;
-
-	return emit_pipe_control(dw, i, flags0, flags1, 0, 0);
+	return emit_pipe_control(dw, i, flags0, flags, 0, 0);
 }
 
-static int emit_pipe_imm_ggtt(struct xe_exec_queue *q, u32 addr, u32 value,
-			      bool stall_only, u32 *dw, int i)
+static int emit_pipe_control_to_ring_end(struct xe_hw_engine *hwe, u32 *dw, int i)
 {
-	u32 flags0 = 0, flags1 = PIPE_CONTROL_GLOBAL_GTT_IVB | PIPE_CONTROL_QW_WRITE;
+	if (hwe->class != XE_ENGINE_CLASS_RENDER)
+		return i;
+
+	if (XE_GT_WA(hwe->gt, 16020292621))
+		i = emit_pipe_control(dw, i, 0, PIPE_CONTROL_LRI_POST_SYNC,
+				      RING_NOPID(hwe->mmio_base).addr, 0);
+
+	return i;
+}
+
+static int emit_pipe_imm_ggtt(u32 addr, u32 value, bool stall_only, u32 *dw,
+			      int i)
+{
+	u32 flags = PIPE_CONTROL_CS_STALL | PIPE_CONTROL_GLOBAL_GTT_IVB |
+		    PIPE_CONTROL_QW_WRITE;
 
 	if (!stall_only)
-		flags1 |= PIPE_CONTROL_FLUSH_ENABLE;
+		flags |= PIPE_CONTROL_FLUSH_ENABLE;
 
-	if (xe_exec_queue_is_multi_queue(q))
-		flags0 |= PIPE_CONTROL0_QUEUE_DRAIN_MODE;
-	else
-		flags1 |= PIPE_CONTROL_CS_STALL;
-
-	return emit_pipe_control(dw, i, flags0, flags1, addr, value);
+	return emit_pipe_control(dw, i, 0, flags, addr, value);
 }
 
 static u32 get_ppgtt_flag(struct xe_sched_job *job)
@@ -276,73 +245,25 @@ static u32 get_ppgtt_flag(struct xe_sched_job *job)
 	return 0;
 }
 
-static int emit_copy_timestamp(struct xe_device *xe, struct xe_lrc *lrc,
-			       u32 *dw, int i)
+static int emit_copy_timestamp(struct xe_lrc *lrc, u32 *dw, int i)
 {
-	const struct xe_reg reg = xe_lrc_is_multi_queue(lrc) ?
-				   RING_QUEUE_TIMESTAMP(0) :
-				   RING_CTX_TIMESTAMP(0);
-
 	dw[i++] = MI_STORE_REGISTER_MEM | MI_SRM_USE_GGTT | MI_SRM_ADD_CS_OFFSET;
-	dw[i++] = reg.addr;
+	dw[i++] = RING_CTX_TIMESTAMP(0).addr;
 	dw[i++] = xe_lrc_ctx_job_timestamp_ggtt_addr(lrc);
 	dw[i++] = 0;
-
-	/*
-	 * Ensure CTX timestamp >= Job timestamp during VF sampling to avoid
-	 * arithmetic wraparound in TDR.
-	 */
-	if (IS_SRIOV_VF(xe)) {
-		dw[i++] = MI_STORE_REGISTER_MEM | MI_SRM_USE_GGTT |
-			MI_SRM_ADD_CS_OFFSET;
-		dw[i++] = reg.addr;
-		dw[i++] = xe_lrc_ctx_timestamp_ggtt_addr(lrc);
-		dw[i++] = 0;
-	}
-
-	return i;
-}
-
-static int emit_fake_watchdog(struct xe_lrc *lrc, u32 *dw, int i)
-{
-	/*
-	 * Setup a watchdog with impossible condition to always trigger an
-	 * hardware interrupt that would force the GuC to reset the engine.
-	 */
-
-	dw[i++] = MI_LOAD_REGISTER_IMM | MI_LRI_NUM_REGS(2) | MI_LRI_LRM_CS_MMIO;
-	dw[i++] = PR_CTR_THRSH(0).addr;
-	dw[i++] = 2; /* small threshold */
-	dw[i++] = PR_CTR_CTRL(0).addr;
-	dw[i++] = CTR_LOGIC_OP(START);
-
-	dw[i++] = MI_SEMAPHORE_WAIT | MI_SEMW_GGTT | MI_SEMW_POLL | MI_SEMW_COMPARE(SAD_EQ_SDD);
-	dw[i++] = 0xdead; /* this should never be seen */
-	dw[i++] = lower_32_bits(xe_lrc_ggtt_addr(lrc));
-	dw[i++] = upper_32_bits(xe_lrc_ggtt_addr(lrc));
-	dw[i++] = 0; /* unused token */
-
-	dw[i++] = MI_LOAD_REGISTER_IMM | MI_LRI_NUM_REGS(1) | MI_LRI_LRM_CS_MMIO;
-	dw[i++] = PR_CTR_CTRL(0).addr;
-	dw[i++] = CTR_LOGIC_OP(STOP);
 
 	return i;
 }
 
 /* for engines that don't require any special HW handling (no EUs, no aux inval, etc) */
 static void __emit_job_gen12_simple(struct xe_sched_job *job, struct xe_lrc *lrc,
-				    u64 batch_addr, u32 *head, u32 seqno)
+				    u64 batch_addr, u32 seqno)
 {
 	u32 dw[MAX_JOB_SIZE_DW], i = 0;
 	u32 ppgtt_flag = get_ppgtt_flag(job);
 	struct xe_gt *gt = job->q->gt;
 
-	*head = lrc->ring.tail;
-
-	if (job->ring_ops_force_reset)
-		i = emit_fake_watchdog(lrc, dw, i);
-
-	i = emit_copy_timestamp(gt_to_xe(gt), lrc, dw, i);
+	i = emit_copy_timestamp(lrc, dw, i);
 
 	if (job->ring_ops_flush_tlb) {
 		dw[i++] = preparser_disable(true);
@@ -381,33 +302,34 @@ static bool has_aux_ccs(struct xe_device *xe)
 	 * PVC is a special case that has no compression of either type
 	 * (FlatCCS or AuxCCS).  Also, AuxCCS is no longer used from Xe2
 	 * onward, so any future platforms with no FlatCCS will not have
-	 * AuxCCS, and we explicitly do not want to support it on MTL.
+	 * AuxCCS either.
 	 */
-	if (GRAPHICS_VERx100(xe) >= 1270 || xe->info.platform == XE_PVC)
+	if (GRAPHICS_VER(xe) >= 20 || xe->info.platform == XE_PVC)
 		return false;
 
 	return !xe->info.has_flat_ccs;
 }
 
 static void __emit_job_gen12_video(struct xe_sched_job *job, struct xe_lrc *lrc,
-				   u64 batch_addr, u32 *head, u32 seqno)
+				   u64 batch_addr, u32 seqno)
 {
 	u32 dw[MAX_JOB_SIZE_DW], i = 0;
 	u32 ppgtt_flag = get_ppgtt_flag(job);
 	struct xe_gt *gt = job->q->gt;
 	struct xe_device *xe = gt_to_xe(gt);
+	bool decode = job->q->class == XE_ENGINE_CLASS_VIDEO_DECODE;
 
-	*head = lrc->ring.tail;
-
-	if (job->ring_ops_force_reset)
-		i = emit_fake_watchdog(lrc, dw, i);
-
-	i = emit_copy_timestamp(xe, lrc, dw, i);
+	i = emit_copy_timestamp(lrc, dw, i);
 
 	dw[i++] = preparser_disable(true);
 
 	/* hsdes: 1809175790 */
-	i = emit_aux_table_inv(job->q->hwe, dw, i);
+	if (has_aux_ccs(xe)) {
+		if (decode)
+			i = emit_aux_table_inv(gt, VD0_AUX_INV, dw, i);
+		else
+			i = emit_aux_table_inv(gt, VE0_AUX_INV, dw, i);
+	}
 
 	if (job->ring_ops_flush_tlb)
 		i = emit_flush_imm_ggtt(xe_lrc_start_seqno_ggtt_addr(lrc),
@@ -442,8 +364,7 @@ static void __emit_job_gen12_video(struct xe_sched_job *job, struct xe_lrc *lrc,
 
 static void __emit_job_gen12_render_compute(struct xe_sched_job *job,
 					    struct xe_lrc *lrc,
-					    u64 batch_addr, u32 *head,
-					    u32 seqno)
+					    u64 batch_addr, u32 seqno)
 {
 	u32 dw[MAX_JOB_SIZE_DW], i = 0;
 	u32 ppgtt_flag = get_ppgtt_flag(job);
@@ -452,19 +373,7 @@ static void __emit_job_gen12_render_compute(struct xe_sched_job *job,
 	bool lacks_render = !(gt->info.engine_mask & XE_HW_ENGINE_RCS_MASK);
 	u32 mask_flags = 0;
 
-	*head = lrc->ring.tail;
-
-	if (job->ring_ops_force_reset)
-		i = emit_fake_watchdog(lrc, dw, i);
-
-	i = emit_copy_timestamp(xe, lrc, dw, i);
-
-	/*
-	 * On AuxCCS platforms the invalidation of the Aux table requires
-	 * quiescing the memory traffic beforehand.
-	 */
-	if (has_aux_ccs(xe))
-		i = emit_render_cache_flush(job, dw, i);
+	i = emit_copy_timestamp(lrc, dw, i);
 
 	dw[i++] = preparser_disable(true);
 	if (lacks_render)
@@ -473,10 +382,11 @@ static void __emit_job_gen12_render_compute(struct xe_sched_job *job,
 		mask_flags = PIPE_CONTROL_3D_ENGINE_FLAGS;
 
 	/* See __xe_pt_bind_vma() for a discussion on TLB invalidations. */
-	i = emit_pipe_invalidate(job->q, mask_flags, job->ring_ops_flush_tlb, dw, i);
+	i = emit_pipe_invalidate(mask_flags, job->ring_ops_flush_tlb, dw, i);
 
 	/* hsdes: 1809175790 */
-	i = emit_aux_table_inv(job->q->hwe, dw, i);
+	if (has_aux_ccs(xe))
+		i = emit_aux_table_inv(gt, CCS_AUX_INV, dw, i);
 
 	dw[i++] = preparser_disable(false);
 
@@ -495,105 +405,26 @@ static void __emit_job_gen12_render_compute(struct xe_sched_job *job,
 						job->user_fence.value,
 						dw, i);
 
-	i = emit_pipe_imm_ggtt(job->q, xe_lrc_seqno_ggtt_addr(lrc), seqno, lacks_render, dw, i);
+	i = emit_pipe_imm_ggtt(xe_lrc_seqno_ggtt_addr(lrc), seqno, lacks_render, dw, i);
 
 	i = emit_user_interrupt(dw, i);
+
+	i = emit_pipe_control_to_ring_end(job->q->hwe, dw, i);
 
 	xe_gt_assert(gt, i <= MAX_JOB_SIZE_DW);
 
 	xe_lrc_write_ring(lrc, dw, i * sizeof(*dw));
 }
 
-static int emit_ulls_preamble(struct xe_lrc *lrc, u32 *dw, int i, u32 seqno)
-{
-	u32 addr = xe_lrc_ulls_semaphore_ggtt_addr(lrc, seqno);
-
-	return emit_store_imm_ggtt(addr, LRC_MIGRATION_ULLS_SEMAPHORE_CLEAR,
-				   dw, i);
-}
-
-/*
- * Advance the ring tail from within the ring, so submitting the next ULLS job
- * needs nothing from the CPU beyond signalling the semaphore. All ULLS jobs
- * occupy exactly ULLS_JOB_SIZE_BYTES, so the tail the next job ends at is two
- * job slots on from where this job started, even though that job has not been
- * emitted yet. Both LRC and MMIO ring tail advanced in step.
- */
-static int emit_ulls_ring_tail(struct xe_gt *gt, struct xe_lrc *lrc, u32 *dw,
-			       int i, u32 head)
-{
-	u32 next_tail = (head + 2 * ULLS_JOB_SIZE_BYTES) & (lrc->ring.size - 1);
-
-	xe_gt_assert(gt, IS_ALIGNED(next_tail, 8));
-
-	i = emit_store_imm_ggtt(xe_lrc_ring_tail_ggtt_addr(lrc), next_tail,
-				dw, i);
-
-	dw[i++] = MI_LOAD_REGISTER_IMM | MI_LRI_NUM_REGS(1) |
-		MI_LRI_LRM_CS_MMIO;
-	dw[i++] = RING_TAIL(0).addr;
-	dw[i++] = next_tail;
-
-	return i;
-}
-
-/*
- * Park the engine on the next job's semaphore, then publish its tail.
- *
- * The tail must not be published before the wait. The command streamer
- * fetches ring contents up to the tail while parked, so it would fetch the
- * next job's slot while it still holds MI_NOOPs and execute those once
- * released, rather than the job the CPU writes there later. Publishing after
- * the wait keeps the slot beyond the tail until the job is in place.
- */
-static int emit_ulls_postamble(struct xe_gt *gt, struct xe_lrc *lrc, u32 *dw,
-			       int i, u32 seqno, u32 head)
-{
-	dw[i++] = MI_SEMAPHORE_WAIT |
-		MI_SEMW_GGTT |
-		MI_SEMW_POLL |
-		MI_SEMW_COMPARE(SAD_EQ_SDD);
-	dw[i++] = LRC_MIGRATION_ULLS_SEMAPHORE_SIGNAL;
-	dw[i++] = xe_lrc_ulls_semaphore_ggtt_addr(lrc, seqno + 1);
-	dw[i++] = 0;
-	dw[i++] = 0;
-
-	return emit_ulls_ring_tail(gt, lrc, dw, i, head);
-}
-
-/* Pad out to the fixed ULLS job size */
-static int emit_ulls_pad(struct xe_gt *gt, u32 *dw, int i)
-{
-	xe_gt_assert(gt, i <= ULLS_JOB_SIZE_DW);
-
-	while (i < ULLS_JOB_SIZE_DW)
-		dw[i++] = MI_NOOP;
-
-	return i;
-}
-
 static void emit_migration_job_gen12(struct xe_sched_job *job,
-				     struct xe_lrc *lrc, u32 *head,
-				     u32 seqno)
+				     struct xe_lrc *lrc, u32 seqno)
 {
-	struct xe_gt *gt = job->q->gt;
-	struct xe_device *xe = gt_to_xe(gt);
 	u32 saddr = xe_lrc_start_seqno_ggtt_addr(lrc);
 	u32 dw[MAX_JOB_SIZE_DW], i = 0;
 
-	*head = lrc->ring.tail;
-
-	xe_gt_assert(gt, !job->ring_ops_force_reset);
-
-	if (xe_sched_job_is_ulls(job))
-		i = emit_ulls_preamble(lrc, dw, i, seqno);
-
-	i = emit_copy_timestamp(xe, lrc, dw, i);
+	i = emit_copy_timestamp(lrc, dw, i);
 
 	i = emit_store_imm_ggtt(saddr, seqno, dw, i);
-
-	if (!xe_sched_job_ulls_has_batch(job))
-		goto seqno_write;
 
 	dw[i++] = MI_ARB_ON_OFF | MI_ARB_DISABLE; /* Enabled again below */
 
@@ -605,18 +436,11 @@ static void emit_migration_job_gen12(struct xe_sched_job *job,
 
 	i = emit_bb_start(job->ptrs[1].batch_addr, BIT(8), dw, i);
 
-seqno_write:
 	i = emit_flush_imm_ggtt(xe_lrc_seqno_ggtt_addr(lrc), seqno,
 				job->migrate_flush_flags,
 				dw, i);
 
 	i = emit_user_interrupt(dw, i);
-
-	if (xe_sched_job_ulls_parks(job))
-		i = emit_ulls_postamble(gt, lrc, dw, i, seqno, *head);
-
-	if (xe_sched_job_is_ulls(job))
-		i = emit_ulls_pad(gt, dw, i);
 
 	xe_gt_assert(job->q->gt, i <= MAX_JOB_SIZE_DW);
 
@@ -631,7 +455,6 @@ static void emit_job_gen12_gsc(struct xe_sched_job *job)
 
 	__emit_job_gen12_simple(job, job->q->lrc[0],
 				job->ptrs[0].batch_addr,
-				&job->ptrs[0].head,
 				xe_sched_job_lrc_seqno(job));
 }
 
@@ -641,7 +464,6 @@ static void emit_job_gen12_copy(struct xe_sched_job *job)
 
 	if (xe_sched_job_is_migration(job->q)) {
 		emit_migration_job_gen12(job, job->q->lrc[0],
-					 &job->ptrs[0].head,
 					 xe_sched_job_lrc_seqno(job));
 		return;
 	}
@@ -649,7 +471,6 @@ static void emit_job_gen12_copy(struct xe_sched_job *job)
 	for (i = 0; i < job->q->width; ++i)
 		__emit_job_gen12_simple(job, job->q->lrc[i],
 					job->ptrs[i].batch_addr,
-					&job->ptrs[i].head,
 					xe_sched_job_lrc_seqno(job));
 }
 
@@ -661,7 +482,6 @@ static void emit_job_gen12_video(struct xe_sched_job *job)
 	for (i = 0; i < job->q->width; ++i)
 		__emit_job_gen12_video(job, job->q->lrc[i],
 				       job->ptrs[i].batch_addr,
-				       &job->ptrs[i].head,
 				       xe_sched_job_lrc_seqno(job));
 }
 
@@ -672,7 +492,6 @@ static void emit_job_gen12_render_compute(struct xe_sched_job *job)
 	for (i = 0; i < job->q->width; ++i)
 		__emit_job_gen12_render_compute(job, job->q->lrc[i],
 						job->ptrs[i].batch_addr,
-						&job->ptrs[i].head,
 						xe_sched_job_lrc_seqno(job));
 }
 
@@ -684,11 +503,7 @@ static const struct xe_ring_ops ring_ops_gen12_copy = {
 	.emit_job = emit_job_gen12_copy,
 };
 
-static const struct xe_ring_ops ring_ops_gen12_video_decode = {
-	.emit_job = emit_job_gen12_video,
-};
-
-static const struct xe_ring_ops ring_ops_gen12_video_enhance = {
+static const struct xe_ring_ops ring_ops_gen12_video = {
 	.emit_job = emit_job_gen12_video,
 };
 
@@ -696,47 +511,20 @@ static const struct xe_ring_ops ring_ops_gen12_render_compute = {
 	.emit_job = emit_job_gen12_render_compute,
 };
 
-static const struct xe_ring_ops auxccs_ring_ops_gen12_video_decode = {
-	.emit_job = emit_job_gen12_video,
-	.emit_aux_table_inv = emit_aux_table_inv_video_decode,
-};
-
-static const struct xe_ring_ops auxccs_ring_ops_gen12_video_enhance = {
-	.emit_job = emit_job_gen12_video,
-	.emit_aux_table_inv = emit_aux_table_inv_video_enhance,
-};
-
-static const struct xe_ring_ops auxccs_ring_ops_gen12_render_compute = {
-	.emit_job = emit_job_gen12_render_compute,
-	.emit_aux_table_inv = emit_aux_table_inv_render_compute,
-};
-
 const struct xe_ring_ops *
 xe_ring_ops_get(struct xe_gt *gt, enum xe_engine_class class)
 {
-	struct xe_device *xe = gt_to_xe(gt);
-
 	switch (class) {
 	case XE_ENGINE_CLASS_OTHER:
 		return &ring_ops_gen12_gsc;
 	case XE_ENGINE_CLASS_COPY:
 		return &ring_ops_gen12_copy;
 	case XE_ENGINE_CLASS_VIDEO_DECODE:
-		if (has_aux_ccs(xe))
-			return &auxccs_ring_ops_gen12_video_decode;
-		else
-			return &ring_ops_gen12_video_decode;
 	case XE_ENGINE_CLASS_VIDEO_ENHANCE:
-		if (has_aux_ccs(xe))
-			return &auxccs_ring_ops_gen12_video_enhance;
-		else
-			return &ring_ops_gen12_video_enhance;
+		return &ring_ops_gen12_video;
 	case XE_ENGINE_CLASS_RENDER:
 	case XE_ENGINE_CLASS_COMPUTE:
-		if (has_aux_ccs(xe))
-			return &auxccs_ring_ops_gen12_render_compute;
-		else
-			return &ring_ops_gen12_render_compute;
+		return &ring_ops_gen12_render_compute;
 	default:
 		return NULL;
 	}

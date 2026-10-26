@@ -6,10 +6,8 @@
  * Author: Matthias Brugger <matthias.bgg@gmail.com>
  */
 #include <linux/clk.h>
-#include <linux/err.h>
 #include <linux/io.h>
 #include <linux/module.h>
-#include <linux/of.h>
 #include <linux/of_irq.h>
 #include <linux/of_platform.h>
 #include <linux/pinctrl/consumer.h>
@@ -21,7 +19,6 @@
 #include <linux/dma-mapping.h>
 #include <linux/tty.h>
 #include <linux/tty_flip.h>
-#include <linux/units.h>
 
 #include "8250.h"
 
@@ -69,7 +66,7 @@ enum dma_rx_status {
 #endif
 
 struct mtk8250_data {
-	struct uart_8250_port	*uport;
+	int			line;
 	unsigned int		rx_pos;
 	unsigned int		clk_count;
 	struct clk		*uart_clk;
@@ -432,7 +429,7 @@ mtk8250_set_termios(struct uart_port *port, struct ktermios *termios,
 static int __maybe_unused mtk8250_runtime_suspend(struct device *dev)
 {
 	struct mtk8250_data *data = dev_get_drvdata(dev);
-	struct uart_8250_port *up = data->uport;
+	struct uart_8250_port *up = serial8250_get_port(data->line);
 
 	/* wait until UART in idle status */
 	while
@@ -523,8 +520,7 @@ static int mtk8250_probe(struct platform_device *pdev)
 	struct uart_8250_port uart = {};
 	struct mtk8250_data *data;
 	struct resource *regs;
-	int irq, err, line;
-	struct fwnode_handle *fwnode = dev_fwnode(&pdev->dev);
+	int irq, err;
 
 	irq = platform_get_irq(pdev, 0);
 	if (irq < 0)
@@ -547,13 +543,12 @@ static int mtk8250_probe(struct platform_device *pdev)
 
 	data->clk_count = 0;
 
-	if (is_of_node(fwnode)) {
+	if (pdev->dev.of_node) {
 		err = mtk8250_probe_of(pdev, &uart.port, data);
 		if (err)
 			return err;
-	} else if (!fwnode) {
+	} else
 		return -ENODEV;
-	}
 
 	spin_lock_init(&uart.port.lock);
 	uart.port.mapbase = regs->start;
@@ -569,28 +564,20 @@ static int mtk8250_probe(struct platform_device *pdev)
 	uart.port.startup = mtk8250_startup;
 	uart.port.set_termios = mtk8250_set_termios;
 	uart.port.uartclk = clk_get_rate(data->uart_clk);
-	if (!uart.port.uartclk)
-		uart.port.uartclk = 26 * HZ_PER_MHZ;
 #ifdef CONFIG_SERIAL_8250_DMA
 	if (data->dma)
 		uart.dma = data->dma;
 #endif
 
-	if (is_of_node(fwnode)) {
-		line = of_alias_get_id(pdev->dev.of_node, "serial");
-		if (line >= 0)
-			uart.port.line = line;
-
-		/* Disable Rate Fix function */
-		writel(0x0, uart.port.membase +
+	/* Disable Rate Fix function */
+	writel(0x0, uart.port.membase +
 			(MTK_UART_RATE_FIX << uart.port.regshift));
-	}
 
 	platform_set_drvdata(pdev, data);
 
-	data->uport = serial8250_register_8250_port(&uart);
-	if (IS_ERR(data->uport))
-		return PTR_ERR(data->uport);
+	data->line = serial8250_register_8250_port(&uart);
+	if (data->line < 0)
+		return data->line;
 
 	data->rx_wakeup_irq = platform_get_irq_optional(pdev, 1);
 
@@ -606,7 +593,7 @@ static void mtk8250_remove(struct platform_device *pdev)
 
 	pm_runtime_get_sync(&pdev->dev);
 
-	serial8250_unregister_port(data->uport);
+	serial8250_unregister_port(data->line);
 
 	pm_runtime_disable(&pdev->dev);
 	pm_runtime_put_noidle(&pdev->dev);
@@ -618,7 +605,7 @@ static int __maybe_unused mtk8250_suspend(struct device *dev)
 	int irq = data->rx_wakeup_irq;
 	int err;
 
-	serial8250_suspend_port(data->uport);
+	serial8250_suspend_port(data->line);
 
 	pinctrl_pm_select_sleep_state(dev);
 	if (irq >= 0) {
@@ -628,7 +615,7 @@ static int __maybe_unused mtk8250_suspend(struct device *dev)
 				"failed to enable irq wake on IRQ %d: %d\n",
 				irq, err);
 			pinctrl_pm_select_default_state(dev);
-			serial8250_resume_port(data->uport);
+			serial8250_resume_port(data->line);
 			return err;
 		}
 	}
@@ -645,7 +632,7 @@ static int __maybe_unused mtk8250_resume(struct device *dev)
 		disable_irq_wake(irq);
 	pinctrl_pm_select_default_state(dev);
 
-	serial8250_resume_port(data->uport);
+	serial8250_resume_port(data->line);
 
 	return 0;
 }
@@ -662,19 +649,11 @@ static const struct of_device_id mtk8250_of_match[] = {
 };
 MODULE_DEVICE_TABLE(of, mtk8250_of_match);
 
-static const struct acpi_device_id mtk8250_acpi_match[] = {
-	{ "MTKI0511" },
-	{ "NVDA0240" },
-	{}
-};
-MODULE_DEVICE_TABLE(acpi, mtk8250_acpi_match);
-
 static struct platform_driver mtk8250_platform_driver = {
 	.driver = {
 		.name		= "mt6577-uart",
 		.pm		= &mtk8250_pm_ops,
 		.of_match_table	= mtk8250_of_match,
-		.acpi_match_table = mtk8250_acpi_match,
 	},
 	.probe			= mtk8250_probe,
 	.remove			= mtk8250_remove,

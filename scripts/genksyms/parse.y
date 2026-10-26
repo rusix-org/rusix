@@ -325,8 +325,8 @@ direct_declarator:
 		{ $$ = $4; }
 	| direct_declarator BRACKET_PHRASE
 		{ $$ = $2; }
-	| '(' attribute_opt declarator ')'
-		{ $$ = $4; }
+	| '(' declarator ')'
+		{ $$ = $3; }
 	;
 
 /* Nested declarators differ from regular declarators in that they do

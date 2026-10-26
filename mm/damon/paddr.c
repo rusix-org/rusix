@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: GPL-2.0
 /*
  * DAMON Code for The Physical Address Space
+ *
+ * Author: SeongJae Park <sj@kernel.org>
  */
 
 #define pr_fmt(fmt) "damon-pa: " fmt
@@ -37,7 +39,7 @@ static unsigned long damon_pa_core_addr(
 
 static void damon_pa_mkold(phys_addr_t paddr)
 {
-	struct folio *folio = damon_get_monitor_folio(PHYS_PFN(paddr));
+	struct folio *folio = damon_get_folio(PHYS_PFN(paddr));
 
 	if (!folio)
 		return;
@@ -47,11 +49,11 @@ static void damon_pa_mkold(phys_addr_t paddr)
 }
 
 static void __damon_pa_prepare_access_check(struct damon_region *r,
-		struct damon_ctx *ctx)
+		unsigned long addr_unit)
 {
-	r->sampling_addr = damon_rand(ctx, r->ar.start, r->ar.end);
+	r->sampling_addr = damon_rand(r->ar.start, r->ar.end);
 
-	damon_pa_mkold(damon_pa_phys_addr(r->sampling_addr, ctx->addr_unit));
+	damon_pa_mkold(damon_pa_phys_addr(r->sampling_addr, addr_unit));
 }
 
 static void damon_pa_prepare_access_checks(struct damon_ctx *ctx)
@@ -61,13 +63,13 @@ static void damon_pa_prepare_access_checks(struct damon_ctx *ctx)
 
 	damon_for_each_target(t, ctx) {
 		damon_for_each_region(r, t)
-			__damon_pa_prepare_access_check(r, ctx);
+			__damon_pa_prepare_access_check(r, ctx->addr_unit);
 	}
 }
 
 static bool damon_pa_young(phys_addr_t paddr)
 {
-	struct folio *folio = damon_get_monitor_folio(PHYS_PFN(paddr));
+	struct folio *folio = damon_get_folio(PHYS_PFN(paddr));
 	bool accessed;
 
 	if (!folio)
@@ -79,14 +81,14 @@ static bool damon_pa_young(phys_addr_t paddr)
 }
 
 static void __damon_pa_check_access(struct damon_region *r,
-		unsigned long addr_unit)
+		struct damon_attrs *attrs, unsigned long addr_unit)
 {
 	bool accessed;
 	phys_addr_t sampling_addr = damon_pa_phys_addr(
 			r->sampling_addr, addr_unit);
 
 	accessed = damon_pa_young(sampling_addr);
-	damon_update_region_access_rate(r, accessed);
+	damon_update_region_access_rate(r, accessed, attrs);
 }
 
 static unsigned int damon_pa_check_accesses(struct damon_ctx *ctx)
@@ -97,120 +99,13 @@ static unsigned int damon_pa_check_accesses(struct damon_ctx *ctx)
 
 	damon_for_each_target(t, ctx) {
 		damon_for_each_region(r, t) {
-			__damon_pa_check_access(r, ctx->addr_unit);
+			__damon_pa_check_access(
+					r, &ctx->attrs, ctx->addr_unit);
 			max_nr_accesses = max(r->nr_accesses, max_nr_accesses);
 		}
 	}
 
 	return max_nr_accesses;
-}
-
-static void damon_pa_prep_probes_region(struct damon_region *r,
-		struct damon_probe *probe, struct damon_ctx *ctx)
-{
-	struct damon_prep *p;
-
-	damon_for_each_prep(p, probe) {
-		switch (p->action) {
-		case DAMON_PREP_SET_PGIDLE:
-			damon_pa_mkold(damon_pa_phys_addr(r->sampling_addr,
-						ctx->addr_unit));
-			break;
-		default:
-			break;
-		}
-	}
-}
-
-static void damon_pa_prep_probes(struct damon_ctx *ctx, bool set_samples)
-{
-	struct damon_target *t;
-	struct damon_region *r;
-	struct damon_probe *p;
-
-	damon_for_each_target(t, ctx) {
-		damon_for_each_region(r, t) {
-			if (set_samples)
-				r->sampling_addr = damon_rand(ctx, r->ar.start,
-						r->ar.end);
-			damon_for_each_probe(p, ctx)
-				damon_pa_prep_probes_region(r, p, ctx);
-		}
-	}
-}
-
-static bool damon_pa_filter_match(struct damon_filter *filter,
-		struct folio *folio)
-{
-	bool matched = false;
-
-	switch (filter->type) {
-	case DAMON_FILTER_TYPE_PGIDLE_UNSET:
-		if (!folio)
-			matched = false;
-		else
-			matched = damon_folio_young(folio);
-		break;
-	case DAMON_FILTER_TYPE_PGIDLE_SET:
-		if (!folio)
-			matched = false;
-		else
-			matched = damon_folio_young(folio) == false;
-		break;
-	default:
-		return damon_ops_filter_match(filter, folio);
-	}
-	return matched == filter->matching;
-}
-
-static bool damon_pa_filter_pass(struct folio *folio, struct damon_probe *p)
-{
-	struct damon_filter *f;
-	bool pass = true;
-
-	damon_for_each_filter(f, p) {
-		if (damon_pa_filter_match(f, folio)) {
-			pass = f->allow;
-			break;
-		}
-		pass = !f->allow;
-	}
-	return pass;
-}
-
-static unsigned int damon_pa_apply_probes(struct damon_ctx *ctx,
-		bool set_samples, bool return_max_wsum)
-{
-	struct damon_target *t;
-	struct damon_region *r;
-	struct damon_probe *p;
-	unsigned int max_wsum = 0;
-
-	damon_for_each_target(t, ctx) {
-		damon_for_each_region(r, t) {
-			int i = 0;
-			phys_addr_t pa;
-			struct folio *folio;
-
-			if (set_samples)
-				r->sampling_addr = damon_rand(ctx, r->ar.start,
-						r->ar.end);
-			pa = damon_pa_phys_addr(r->sampling_addr,
-					ctx->addr_unit);
-			folio = damon_get_folio(PHYS_PFN(pa));
-			damon_for_each_probe(p, ctx) {
-				if (damon_pa_filter_pass(folio, p))
-					r->probe_hits[i]++;
-				i++;
-			}
-			if (folio)
-				folio_put(folio);
-			if (return_max_wsum)
-				max_wsum = max(damon_probe_hits_wsum(r, false,
-							false, ctx), max_wsum);
-		}
-	}
-	return max_wsum;
 }
 
 /*
@@ -249,7 +144,7 @@ static unsigned long damon_pa_pageout(struct damon_region *r,
 	LIST_HEAD(folio_list);
 	bool install_young_filter = true;
 	struct damos_filter *filter;
-	struct folio *folio = NULL;
+	struct folio *folio;
 
 	/* check access in page level again by default */
 	damos_for_each_ops_filter(filter, s) {
@@ -288,7 +183,7 @@ static unsigned long damon_pa_pageout(struct damon_region *r,
 		else
 			list_add(&folio->lru, &folio_list);
 put_folio:
-		addr = PFN_PHYS(folio_pfn(folio)) + folio_size(folio);
+		addr += folio_size(folio);
 		folio_put(folio);
 	}
 	if (install_young_filter)
@@ -299,13 +194,13 @@ put_folio:
 	return damon_pa_core_addr(applied * PAGE_SIZE, addr_unit);
 }
 
-static inline unsigned long damon_pa_de_activate(
+static inline unsigned long damon_pa_mark_accessed_or_deactivate(
 		struct damon_region *r, unsigned long addr_unit,
-		struct damos *s, bool activate,
+		struct damos *s, bool mark_accessed,
 		unsigned long *sz_filter_passed)
 {
 	phys_addr_t addr, applied = 0;
-	struct folio *folio = NULL;
+	struct folio *folio;
 
 	addr = damon_pa_phys_addr(r->ar.start, addr_unit);
 	while (addr < damon_pa_phys_addr(r->ar.end, addr_unit)) {
@@ -320,31 +215,33 @@ static inline unsigned long damon_pa_de_activate(
 		else
 			*sz_filter_passed += folio_size(folio) / addr_unit;
 
-		if (activate)
-			folio_activate(folio);
+		if (mark_accessed)
+			folio_mark_accessed(folio);
 		else
 			folio_deactivate(folio);
 		applied += folio_nr_pages(folio);
 put_folio:
-		addr = PFN_PHYS(folio_pfn(folio)) + folio_size(folio);
+		addr += folio_size(folio);
 		folio_put(folio);
 	}
 	s->last_applied = folio;
 	return damon_pa_core_addr(applied * PAGE_SIZE, addr_unit);
 }
 
-static unsigned long damon_pa_activate_pages(struct damon_region *r,
+static unsigned long damon_pa_mark_accessed(struct damon_region *r,
 		unsigned long addr_unit, struct damos *s,
 		unsigned long *sz_filter_passed)
 {
-	return damon_pa_de_activate(r, addr_unit, s, true, sz_filter_passed);
+	return damon_pa_mark_accessed_or_deactivate(r, addr_unit, s, true,
+			sz_filter_passed);
 }
 
 static unsigned long damon_pa_deactivate_pages(struct damon_region *r,
 		unsigned long addr_unit, struct damos *s,
 		unsigned long *sz_filter_passed)
 {
-	return damon_pa_de_activate(r, addr_unit, s, false, sz_filter_passed);
+	return damon_pa_mark_accessed_or_deactivate(r, addr_unit, s, false,
+			sz_filter_passed);
 }
 
 static unsigned long damon_pa_migrate(struct damon_region *r,
@@ -353,7 +250,7 @@ static unsigned long damon_pa_migrate(struct damon_region *r,
 {
 	phys_addr_t addr, applied;
 	LIST_HEAD(folio_list);
-	struct folio *folio = NULL;
+	struct folio *folio;
 
 	addr = damon_pa_phys_addr(r->ar.start, addr_unit);
 	while (addr < damon_pa_phys_addr(r->ar.end, addr_unit)) {
@@ -374,7 +271,7 @@ static unsigned long damon_pa_migrate(struct damon_region *r,
 				folio_is_file_lru(folio));
 		list_add(&folio->lru, &folio_list);
 put_folio:
-		addr = PFN_PHYS(folio_pfn(folio)) + folio_size(folio);
+		addr += folio_size(folio);
 		folio_put(folio);
 	}
 	applied = damon_migrate_pages(&folio_list, s->target_nid);
@@ -388,7 +285,7 @@ static unsigned long damon_pa_stat(struct damon_region *r,
 		unsigned long *sz_filter_passed)
 {
 	phys_addr_t addr;
-	struct folio *folio = NULL;
+	struct folio *folio;
 
 	if (!damos_ops_has_filter(s))
 		return 0;
@@ -403,7 +300,7 @@ static unsigned long damon_pa_stat(struct damon_region *r,
 
 		if (!damos_pa_filter_out(s, folio))
 			*sz_filter_passed += folio_size(folio) / addr_unit;
-		addr = PFN_PHYS(folio_pfn(folio)) + folio_size(folio);
+		addr += folio_size(folio);
 		folio_put(folio);
 	}
 	s->last_applied = folio;
@@ -420,7 +317,7 @@ static unsigned long damon_pa_apply_scheme(struct damon_ctx *ctx,
 	case DAMOS_PAGEOUT:
 		return damon_pa_pageout(r, aunit, scheme, sz_filter_passed);
 	case DAMOS_LRU_PRIO:
-		return damon_pa_activate_pages(r, aunit, scheme,
+		return damon_pa_mark_accessed(r, aunit, scheme,
 				sz_filter_passed);
 	case DAMOS_LRU_DEPRIO:
 		return damon_pa_deactivate_pages(r, aunit, scheme,
@@ -438,7 +335,8 @@ static unsigned long damon_pa_apply_scheme(struct damon_ctx *ctx,
 }
 
 static int damon_pa_scheme_score(struct damon_ctx *context,
-		struct damon_region *r, struct damos *scheme)
+		struct damon_target *t, struct damon_region *r,
+		struct damos *scheme)
 {
 	switch (scheme->action) {
 	case DAMOS_PAGEOUT:
@@ -466,14 +364,13 @@ static int __init damon_pa_initcall(void)
 		.update = NULL,
 		.prepare_access_checks = damon_pa_prepare_access_checks,
 		.check_accesses = damon_pa_check_accesses,
-		.prep_probes = damon_pa_prep_probes,
-		.apply_probes = damon_pa_apply_probes,
 		.target_valid = NULL,
+		.cleanup = NULL,
 		.apply_scheme = damon_pa_apply_scheme,
 		.get_scheme_score = damon_pa_scheme_score,
 	};
 
 	return damon_register_ops(&ops);
-}
+};
 
 subsys_initcall(damon_pa_initcall);

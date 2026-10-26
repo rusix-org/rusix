@@ -8,3 +8,10 @@ CD-ROM
     :maxdepth: 1
 
     cdrom-standard
+
+.. only::  subproject and html
+
+   Indices
+   =======
+
+   * :ref:`genindex`

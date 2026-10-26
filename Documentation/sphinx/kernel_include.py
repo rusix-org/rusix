@@ -87,8 +87,6 @@ import os.path
 import re
 import sys
 
-from difflib import get_close_matches
-
 from docutils import io, nodes, statemachine
 from docutils.statemachine import ViewList
 from docutils.parsers.rst import Directive, directives
@@ -97,17 +95,15 @@ from docutils.parsers.rst.directives.body import CodeBlock, NumberLines
 from sphinx.util import logging
 
 srctree = os.path.abspath(os.environ["srctree"])
-sys.path.insert(0, os.path.join(srctree, "tools/lib/python"))
+sys.path.insert(0, os.path.join(srctree, "tools/docs/lib"))
 
-from kdoc.parse_data_structs import ParseDataStructs
+from parse_data_structs import ParseDataStructs
 
 __version__ = "1.0"
 logger = logging.getLogger(__name__)
 
 RE_DOMAIN_REF = re.compile(r'\\ :(ref|c:type|c:func):`([^<`]+)(?:<([^>]+)>)?`\\')
 RE_SIMPLE_REF = re.compile(r'`([^`]+)`')
-RE_LINENO_REF = re.compile(r'^\s*-\s+LINENO_(\d+):\s+(.*)')
-RE_SPLIT_DOMAIN = re.compile(r"(.*)\.(.*)")
 
 def ErrorString(exc):  # Shamelessly stolen from docutils
     return f'{exc.__class__.__name}: {exc}'
@@ -216,16 +212,14 @@ class KernelInclude(Directive):
         - a TOC table containing cross references.
         """
         parser = ParseDataStructs()
+        parser.parse_file(path)
 
         if 'exception-file' in self.options:
             source_dir = os.path.dirname(os.path.abspath(
                 self.state_machine.input_lines.source(
                     self.lineno - self.state_machine.input_offset - 1)))
             exceptions_file = os.path.join(source_dir, self.options['exception-file'])
-        else:
-            exceptions_file = None
-
-        parser.parse_file(path, exceptions_file)
+            parser.process_exceptions(exceptions_file)
 
         # Store references on a symbol dict to be used at check time
         if 'warn-broken' in self.options:
@@ -248,32 +242,23 @@ class KernelInclude(Directive):
         # TOC output is a ReST file, not a literal. So, we can add line
         # numbers
 
-        startline = self.options.get('start-line', None)
-        endline = self.options.get('end-line', None)
+        rawtext = parser.gen_toc()
 
-        relpath = os.path.relpath(path, srctree)
+        include_lines = statemachine.string2lines(rawtext, tab_width,
+                                                  convert_whitespace=True)
+
+        # Append line numbers data
+
+        startline = self.options.get('start-line', None)
 
         result = ViewList()
-        for line in parser.gen_toc().split("\n"):
-            match = RE_LINENO_REF.match(line)
-            if not match:
-                result.append(line, path)
-                continue
+        if startline and startline > 0:
+            offset = startline - 1
+        else:
+            offset = 0
 
-            ln, ref = match.groups()
-            ln = int(ln)
-
-            # Filter line range if needed
-            if startline and (ln < startline):
-                continue
-
-            if endline and (ln > endline):
-                continue
-
-            # Sphinx numerates starting with zero, but text editors
-            # and other tools start from one
-            realln = ln + 1
-            result.append(f"- {ref}: {relpath}#{realln}", path, ln)
+        for ln, line in enumerate(include_lines, start=offset):
+            result.append(line, path, ln)
 
         self.state_machine.insert_input(result, path)
 
@@ -403,63 +388,6 @@ class KernelInclude(Directive):
 # ==============================================================================
 
 reported = set()
-DOMAIN_INFO = {}
-all_refs = {}
-
-def fill_domain_info(env):
-    """
-    Get supported reference types for each Sphinx domain and C namespaces
-    """
-    if DOMAIN_INFO:
-        return
-
-    for domain_name, domain_instance in env.domains.items():
-        try:
-            object_types = list(domain_instance.object_types.keys())
-            DOMAIN_INFO[domain_name] = object_types
-        except AttributeError:
-            # Ignore domains that we can't retrieve object types, if any
-            pass
-
-    for domain in DOMAIN_INFO.keys():
-        domain_obj = env.get_domain(domain)
-        for name, dispname, objtype, docname, anchor, priority in domain_obj.get_objects():
-            ref_name = name.lower()
-
-            if domain == "c":
-                if '.' in ref_name:
-                    ref_name = ref_name.split(".")[-1]
-
-            if not ref_name in all_refs:
-                all_refs[ref_name] = []
-
-            all_refs[ref_name].append(f"\t{domain}:{objtype}:`{name}` (from {docname})")
-
-def get_suggestions(app, env, node,
-                    original_target, original_domain, original_reftype):
-    """Check if target exists in the other domain or with different reftypes."""
-    original_target = original_target.lower()
-
-    # Remove namespace if present
-    if original_domain == "c":
-        if '.' in original_target:
-            original_target = original_target.split(".")[-1]
-
-    suggestions = []
-
-    # If name exists, propose exact name match on different domains
-    if original_target in all_refs:
-        return all_refs[original_target]
-
-    # If not found, get a close match, using difflib.
-    # Such method is based on Ratcliff-Obershelp Algorithm, which seeks
-    # for a close match within a certain distance. We're using the defaults
-    # here, e.g. cutoff=0.6, proposing 3 alternatives
-    matches = get_close_matches(original_target, all_refs.keys())
-    for match in matches:
-        suggestions += all_refs[match]
-
-    return suggestions
 
 def check_missing_refs(app, env, node, contnode):
     """Check broken refs for the files it creates xrefs"""
@@ -476,23 +404,17 @@ def check_missing_refs(app, env, node, contnode):
     if node.source not in xref_files:
         return None
 
-    fill_domain_info(env)
-
     target = node.get('reftarget', '')
     domain = node.get('refdomain', 'std')
     reftype = node.get('reftype', '')
 
-    msg = f"Invalid xref: {domain}:{reftype}:`{target}`"
+    msg = f"can't link to: {domain}:{reftype}:: {target}"
 
     # Don't duplicate warnings
     data = (node.source, msg)
     if data in reported:
         return None
     reported.add(data)
-
-    suggestions = get_suggestions(app, env, node, target, domain, reftype)
-    if suggestions:
-        msg += ". Possible alternatives:\n" + '\n'.join(suggestions)
 
     logger.warning(msg, location=node, type='ref', subtype='missing')
 

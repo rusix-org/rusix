@@ -24,6 +24,7 @@
 #include <linux/sched.h>
 #include <linux/platform_device.h>
 #include <linux/interrupt.h>
+#include <linux/mod_devicetable.h>
 #include <linux/syscore_ops.h>
 #include <asm/fsl_lbc.h>
 
@@ -282,7 +283,7 @@ static int fsl_lbc_ctrl_probe(struct platform_device *dev)
 		return -EFAULT;
 	}
 
-	fsl_lbc_ctrl_dev = kzalloc_obj(*fsl_lbc_ctrl_dev);
+	fsl_lbc_ctrl_dev = kzalloc(sizeof(*fsl_lbc_ctrl_dev), GFP_KERNEL);
 	if (!fsl_lbc_ctrl_dev)
 		return -ENOMEM;
 
@@ -362,7 +363,7 @@ static int fsl_lbc_syscore_suspend(void *data)
 	if (!lbc)
 		goto out;
 
-	ctrl->saved_regs = kmalloc_obj(struct fsl_lbc_regs);
+	ctrl->saved_regs = kmalloc(sizeof(struct fsl_lbc_regs), GFP_KERNEL);
 	if (!ctrl->saved_regs)
 		return -ENOMEM;
 

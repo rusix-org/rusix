@@ -1,0 +1,12 @@
+{
+  "status": "PASS",
+  "cases": [
+    "parameters",
+    "initial_devices",
+    "on_demand",
+    "independent_io",
+    "capacity"
+  ],
+  "qemu_exit": 0,
+  "variant": "defaults"
+}

@@ -1,0 +1,3 @@
+d54611d78c8cc5795b8b0bd202bc0a189e873f90cf70081ef033f82f45c01693  /out/builds/ci-brd-rust/.config
+a757de2420146a522805a701efa71c5aa5a074731a72def4265117741e0086f7  /out/builds/ci-brd-rust/arch/x86/boot/bzImage
+f10c411e32ab29b8e6f98c743452ca5a2fee3ef1ffa92bf4f1dd382e71132a92  /out/builds/ci-brd-rust/vmlinux

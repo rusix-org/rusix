@@ -88,15 +88,16 @@ static int
 copy_stack_frame(const struct stack_frame_user __user *fp,
 		 struct stack_frame_user *frame)
 {
-	int ret = 0;
+	int ret;
 
-	pagefault_disable();
-	scoped_user_read_access(fp, out) {
-		unsafe_get_user(frame->next_fp, &fp->next_fp, out);
-		unsafe_get_user(frame->ret_addr, &fp->ret_addr, out);
-	}
+	if (!__access_ok(fp, sizeof(*frame)))
+		return 0;
+
 	ret = 1;
-out:
+	pagefault_disable();
+	if (__get_user(frame->next_fp, &fp->next_fp) ||
+	    __get_user(frame->ret_addr, &fp->ret_addr))
+		ret = 0;
 	pagefault_enable();
 
 	return ret;

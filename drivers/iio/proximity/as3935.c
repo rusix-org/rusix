@@ -7,6 +7,7 @@
  */
 
 #include <linux/module.h>
+#include <linux/mod_devicetable.h>
 #include <linux/init.h>
 #include <linux/interrupt.h>
 #include <linux/delay.h>
@@ -428,8 +429,10 @@ static int as3935_probe(struct spi_device *spi)
 				dev_name(dev),
 				indio_dev);
 
-	if (ret)
+	if (ret) {
+		dev_err(dev, "unable to request irq\n");
 		return ret;
+	}
 
 	ret = devm_iio_device_register(dev, indio_dev);
 	if (ret < 0) {
@@ -446,7 +449,7 @@ static const struct of_device_id as3935_of_match[] = {
 MODULE_DEVICE_TABLE(of, as3935_of_match);
 
 static const struct spi_device_id as3935_id[] = {
-	{ .name = "as3935" },
+	{"as3935", 0},
 	{ }
 };
 MODULE_DEVICE_TABLE(spi, as3935_id);

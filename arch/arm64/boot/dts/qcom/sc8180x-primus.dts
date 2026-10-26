@@ -14,8 +14,6 @@
 #include "sc8180x.dtsi"
 #include "sc8180x-pmics.dtsi"
 
-/delete-node/ &gpu_mem;
-
 / {
 	model = "Qualcomm SC8180x Primus";
 	compatible = "qcom,sc8180x-primus", "qcom,sc8180x";
@@ -477,10 +475,11 @@
 
 &gpu {
 	status = "okay";
-};
 
-&gpu_zap_shader {
-	firmware-name = "qcom/sc8180x/qcdxkmsuc8180.mbn";
+	zap-shader {
+		memory-region = <&gpu_mem>;
+		firmware-name = "qcom/sc8180x/qcdxkmsuc8180.mbn";
+	};
 };
 
 &i2c1 {
@@ -592,6 +591,8 @@
 };
 
 &pcie1 {
+	perst-gpios = <&tlmm 175 GPIO_ACTIVE_LOW>;
+	wake-gpios = <&tlmm 177 GPIO_ACTIVE_HIGH>;
 	pinctrl-names = "default";
 	pinctrl-0 = <&pcie2_default_state>;
 
@@ -603,11 +604,6 @@
 	vdda-pll-supply = <&vreg_l3c_1p2>;
 
 	status = "okay";
-};
-
-&pcie1_port0 {
-	reset-gpios = <&tlmm 175 GPIO_ACTIVE_LOW>;
-	wake-gpios = <&tlmm 177 GPIO_ACTIVE_LOW>;
 };
 
 &pmc8180_pwrkey {
@@ -706,15 +702,15 @@
 };
 
 &usb_mp_qmpphy0 {
-	vdda-phy-supply = <&vreg_l5e_0p88>;
-	vdda-pll-supply = <&vreg_l3c_1p2>;
+	vdda-phy-supply = <&vreg_l3c_1p2>;
+	vdda-pll-supply = <&vreg_l5e_0p88>;
 
 	status = "okay";
 };
 
 &usb_mp_qmpphy1 {
-	vdda-phy-supply = <&vreg_l5e_0p88>;
-	vdda-pll-supply = <&vreg_l3c_1p2>;
+	vdda-phy-supply = <&vreg_l3c_1p2>;
+	vdda-pll-supply = <&vreg_l5e_0p88>;
 
 	status = "okay";
 };
@@ -728,8 +724,8 @@
 };
 
 &usb_prim_qmpphy {
-	vdda-phy-supply = <&vreg_l5e_0p88>;
-	vdda-pll-supply = <&vreg_l3c_1p2>;
+	vdda-phy-supply = <&vreg_l3c_1p2>;
+	vdda-pll-supply = <&vreg_l5e_0p88>;
 
 	orientation-switch;
 
@@ -765,8 +761,8 @@
 };
 
 &usb_sec_qmpphy {
-	vdda-phy-supply = <&vreg_l5e_0p88>;
-	vdda-pll-supply = <&vreg_l3c_1p2>;
+	vdda-phy-supply = <&vreg_l3c_1p2>;
+	vdda-pll-supply = <&vreg_l5e_0p88>;
 
 	orientation-switch;
 

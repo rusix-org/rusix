@@ -1,14 +1,12 @@
 // SPDX-License-Identifier: GPL-2.0+
 /*
- * Motorcomm 8511/8521/8522/8531/8531S/861x/8821 PHY driver.
+ * Motorcomm 8511/8521/8531/8531S/8821 PHY driver.
  *
  * Author: Peter Geis <pgwipeout@gmail.com>
  * Author: Frank <Frank.Sae@motor-comm.com>
  */
 
-#include <linux/clk.h>
 #include <linux/etherdevice.h>
-#include <linux/ethtool_netlink.h>
 #include <linux/kernel.h>
 #include <linux/module.h>
 #include <linux/phy.h>
@@ -16,11 +14,8 @@
 
 #define PHY_ID_YT8511		0x0000010a
 #define PHY_ID_YT8521		0x0000011a
-#define PHY_ID_YT8522		0x4f51e928
 #define PHY_ID_YT8531		0x4f51e91b
 #define PHY_ID_YT8531S		0x4f51e91a
-/* Live captured from YT921x switch internal MDIO bus */
-#define PHY_ID_INT861X		0x01e04281
 #define PHY_ID_YT8821		0x4f51ea19
 /* YT8521/YT8531S/YT8821 Register Overview
  *	UTP Register space	|	FIBER Register space
@@ -147,11 +142,6 @@
 #define YT8521_CLOCK_GATING_REG			0xC
 #define YT8521_CGR_RX_CLK_EN			BIT(12)
 
-/* Analog front-end control register 3 */
-#define YT8531S_EXT_AFE_CTRL3			0x12
-/* Analog front-end DAC clock enable */
-#define YT8531S_AFE_CTRL3_CLKDAC_AON		BIT(13)
-
 #define YT8521_EXTREG_SLEEP_CONTROL1_REG	0x27
 #define YT8521_ESC1R_SLEEP_SW			BIT(15)
 #define YT8521_ESC1R_PLLON_SLP			BIT(14)
@@ -237,13 +227,6 @@
 #define YT8521_LED_100_ON_EN			BIT(5)
 #define YT8521_LED_10_ON_EN			BIT(4)
 
-#define YT8522_EXTREG_SLEEP_CONTROL		0x2027
-#define YT8522_EN_SLEEP_SW			BIT(15)
-
-#define YT8522_EXTENDED_COMBO_CTRL		0x4000
-#define YT8522_RXDV_SEL				BIT(4)
-#define YT8522_RMII_EN				BIT(1)
-
 #define YTPHY_MISC_CONFIG_REG			0xA006
 #define YTPHY_MCR_FIBER_SPEED_MASK		BIT(0)
 #define YTPHY_MCR_FIBER_1000BX			(0x1 << 0)
@@ -300,19 +283,6 @@
 #define YT8531_SCR_CLK_SRC_CLOCK_FROM_DIGITAL	3
 #define YT8531_SCR_CLK_SRC_REF_25M		4
 #define YT8531_SCR_CLK_SRC_SSC_25M		5
-
-/* TDR (cable diagnostic) test control */
-#define YT861X_TDR_CTRL_REG			0x80
-#define YT861X_TDR_CTRL_START			BIT(0)
-
-#define YT861X_TDR_STATUS_REG			0x84
-#define YT861X_TDR_STATUS_BUSY			BIT(15)
-#define YT861X_TDR_STATUS_PAIR_OK		0
-#define YT861X_TDR_STATUS_PAIR_UNKNOWN		1
-#define YT861X_TDR_STATUS_PAIR_SHORT		2
-#define YT861X_TDR_STATUS_PAIR_OPEN		3
-
-#define YT861X_TDR_PAIR_LENGTH_REG(n)		(0x87 + (n))	/* in cm */
 
 #define YT8821_SDS_EXT_CSR_CTRL_REG			0x23
 #define YT8821_SDS_EXT_CSR_VCO_LDO_EN			BIT(15)
@@ -940,10 +910,6 @@ static int ytphy_rgmii_clk_delay_config(struct phy_device *phydev)
 		val |= FIELD_PREP(YT8521_RC1R_RX_DELAY_MASK, rx_reg) |
 		       FIELD_PREP(YT8521_RC1R_GE_TX_DELAY_MASK, tx_reg);
 		break;
-	case PHY_INTERFACE_MODE_GMII:
-		if (phydev->drv->phy_id != PHY_ID_YT8531S)
-			return -EOPNOTSUPP;
-		return 0;
 	default: /* do not support other modes */
 		return -EOPNOTSUPP;
 	}
@@ -1004,8 +970,7 @@ static u32 yt8531_get_ldo_vol(struct phy_device *phydev)
 {
 	u32 val;
 
-	val = ytphy_read_ext(phydev, YT8521_CHIP_CONFIG_REG);
-
+	val = ytphy_read_ext_with_lock(phydev, YT8521_CHIP_CONFIG_REG);
 	val = FIELD_GET(YT8531_RGMII_LDO_VOL_MASK, val);
 
 	return val <= YT8531_LDO_VOL_1V8 ? val : YT8531_LDO_VOL_1V8;
@@ -1041,11 +1006,10 @@ static int yt8531_set_ds(struct phy_device *phydev)
 		ds = YT8531_RGMII_RX_DS_DEFAULT;
 	}
 
-	ret = ytphy_modify_ext(phydev,
-			       YTPHY_PAD_DRIVE_STRENGTH_REG,
-			       YT8531_RGMII_RXC_DS_MASK,
-			       FIELD_PREP(YT8531_RGMII_RXC_DS_MASK, ds));
-
+	ret = ytphy_modify_ext_with_lock(phydev,
+					 YTPHY_PAD_DRIVE_STRENGTH_REG,
+					 YT8531_RGMII_RXC_DS_MASK,
+					 FIELD_PREP(YT8531_RGMII_RXC_DS_MASK, ds));
 	if (ret < 0)
 		return ret;
 
@@ -1065,11 +1029,10 @@ static int yt8531_set_ds(struct phy_device *phydev)
 	ds_field_low = FIELD_GET(GENMASK(1, 0), ds);
 	ds_field_low = FIELD_PREP(YT8531_RGMII_RXD_DS_LOW_MASK, ds_field_low);
 
-	ret = ytphy_modify_ext(phydev,
-			       YTPHY_PAD_DRIVE_STRENGTH_REG,
-			       YT8531_RGMII_RXD_DS_LOW_MASK | YT8531_RGMII_RXD_DS_HI_MASK,
-			       ds_field_low | ds_field_hi);
-
+	ret = ytphy_modify_ext_with_lock(phydev,
+					 YTPHY_PAD_DRIVE_STRENGTH_REG,
+					 YT8531_RGMII_RXD_DS_LOW_MASK | YT8531_RGMII_RXD_DS_HI_MASK,
+					 ds_field_low | ds_field_hi);
 	if (ret < 0)
 		return ret;
 
@@ -1086,7 +1049,6 @@ static int yt8521_probe(struct phy_device *phydev)
 {
 	struct device *dev = &phydev->mdio.dev;
 	struct yt8521_priv *priv;
-	struct clk *clk;
 	int chip_config;
 	u16 mask, val;
 	u32 freq;
@@ -1097,11 +1059,6 @@ static int yt8521_probe(struct phy_device *phydev)
 		return -ENOMEM;
 
 	phydev->priv = priv;
-
-	clk = devm_clk_get_optional_enabled(dev, NULL);
-	if (IS_ERR(clk))
-		return dev_err_probe(dev, PTR_ERR(clk),
-				     "failed to get and enable PHY clock\n");
 
 	chip_config = ytphy_read_ext_with_lock(phydev, YT8521_CHIP_CONFIG_REG);
 	if (chip_config < 0)
@@ -1208,14 +1165,8 @@ static int yt8521_probe(struct phy_device *phydev)
 static int yt8531_probe(struct phy_device *phydev)
 {
 	struct device *dev = &phydev->mdio.dev;
-	struct clk *clk;
 	u16 mask, val;
 	u32 freq;
-
-	clk = devm_clk_get_optional_enabled(dev, NULL);
-	if (IS_ERR(clk))
-		return dev_err_probe(dev, PTR_ERR(clk),
-				     "failed to get and enable PHY clock\n");
 
 	if (device_property_read_u32(dev, "motorcomm,clk-out-frequency-hz", &freq))
 		freq = YTPHY_DTS_OUTPUT_CLK_DIS;
@@ -1701,34 +1652,6 @@ static int yt8521_resume(struct phy_device *phydev)
 	return yt8521_modify_utp_fiber_bmcr(phydev, BMCR_PDOWN, 0);
 }
 
-static int __yt8521_config_init(struct phy_device *phydev)
-{
-	struct device *dev = &phydev->mdio.dev;
-	int ret = 0;
-
-	/* set rgmii delay mode */
-	if (phydev->interface != PHY_INTERFACE_MODE_SGMII) {
-		ret = ytphy_rgmii_clk_delay_config(phydev);
-		if (ret < 0)
-			return ret;
-	}
-
-	if (device_property_read_bool(dev, "motorcomm,auto-sleep-disabled")) {
-		/* disable auto sleep */
-		ret = ytphy_modify_ext(phydev, YT8521_EXTREG_SLEEP_CONTROL1_REG,
-				       YT8521_ESC1R_SLEEP_SW, 0);
-		if (ret < 0)
-			return ret;
-	}
-
-	if (device_property_read_bool(dev, "motorcomm,keep-pll-enabled"))
-		/* enable RXC clock when no wire plug */
-		return ytphy_modify_ext(phydev, YT8521_CLOCK_GATING_REG,
-					YT8521_CGR_RX_CLK_EN, 0);
-
-	return 0;
-}
-
 /**
  * yt8521_config_init() - called to initialize the PHY
  * @phydev: a pointer to a &struct phy_device
@@ -1737,40 +1660,36 @@ static int __yt8521_config_init(struct phy_device *phydev)
  */
 static int yt8521_config_init(struct phy_device *phydev)
 {
-	int old_page, ret = 0;
+	struct device *dev = &phydev->mdio.dev;
+	int old_page;
+	int ret = 0;
 
 	old_page = phy_select_page(phydev, YT8521_RSSR_UTP_SPACE);
 	if (old_page < 0)
 		goto err_restore_page;
 
-	ret = __yt8521_config_init(phydev);
-
-err_restore_page:
-	return phy_restore_page(phydev, old_page, ret);
-}
-
-static int yt8531s_config_init(struct phy_device *phydev)
-{
-	int old_page, ret = 0;
-
-	old_page = phy_select_page(phydev, YT8521_RSSR_UTP_SPACE);
-	if (old_page < 0)
-		goto err_restore_page;
-
-	ret = __yt8521_config_init(phydev);
-	if (ret)
-		goto err_restore_page;
-
-	if (phy_interface_is_rgmii(phydev)) {
-		ret = yt8531_set_ds(phydev);
-		if (ret)
+	/* set rgmii delay mode */
+	if (phydev->interface != PHY_INTERFACE_MODE_SGMII) {
+		ret = ytphy_rgmii_clk_delay_config(phydev);
+		if (ret < 0)
 			goto err_restore_page;
 	}
 
-	if (phydev->interface == PHY_INTERFACE_MODE_GMII)
-		ret = ytphy_modify_ext(phydev, YT8531S_EXT_AFE_CTRL3,
-				       0, YT8531S_AFE_CTRL3_CLKDAC_AON);
+	if (device_property_read_bool(dev, "motorcomm,auto-sleep-disabled")) {
+		/* disable auto sleep */
+		ret = ytphy_modify_ext(phydev, YT8521_EXTREG_SLEEP_CONTROL1_REG,
+				       YT8521_ESC1R_SLEEP_SW, 0);
+		if (ret < 0)
+			goto err_restore_page;
+	}
 
+	if (device_property_read_bool(dev, "motorcomm,keep-pll-enabled")) {
+		/* enable RXC clock when no wire plug */
+		ret = ytphy_modify_ext(phydev, YT8521_CLOCK_GATING_REG,
+				       YT8521_CGR_RX_CLK_EN, 0);
+		if (ret < 0)
+			goto err_restore_page;
+	}
 err_restore_page:
 	return phy_restore_page(phydev, old_page, ret);
 }
@@ -1902,41 +1821,9 @@ static int yt8531_config_init(struct phy_device *phydev)
 			return ret;
 	}
 
-	phy_lock_mdio_bus(phydev);
 	ret = yt8531_set_ds(phydev);
-	phy_unlock_mdio_bus(phydev);
 	if (ret < 0)
 		return ret;
-
-	return 0;
-}
-
-static int yt8522_config_init(struct phy_device *phydev)
-{
-	struct device *dev = &phydev->mdio.dev;
-	int ret, val;
-
-	val = ytphy_read_ext_with_lock(phydev, YT8522_EXTENDED_COMBO_CTRL);
-	if (val < 0)
-		return val;
-
-	if (val & YT8522_RMII_EN) {
-		val |= YT8522_RXDV_SEL;
-		ret = ytphy_write_ext_with_lock(phydev,
-						YT8522_EXTENDED_COMBO_CTRL,
-						val);
-		if (ret < 0)
-			return ret;
-	}
-
-	if (device_property_read_bool(dev, "motorcomm,auto-sleep-disabled")) {
-		/* disable auto sleep */
-		ret = ytphy_modify_ext_with_lock(phydev,
-						 YT8522_EXTREG_SLEEP_CONTROL,
-						 YT8522_EN_SLEEP_SW, 0);
-		if (ret < 0)
-			return ret;
-	}
 
 	return 0;
 }
@@ -2555,126 +2442,6 @@ static int yt8521_get_features(struct phy_device *phydev)
 }
 
 /**
- * yt861x_config_init() - apply the auto sleep setting to the PHY
- * @phydev: a pointer to a &struct phy_device
- *
- * Auto sleep is enabled by default and a BMCR soft reset does not restore it,
- * so apply the setting from config_init. It can be disabled with the
- * "motorcomm,auto-sleep-disabled" device property.
- *
- * Returns: 0 or negative errno code
- */
-static int yt861x_config_init(struct phy_device *phydev)
-{
-	bool sleep;
-
-	sleep = !device_property_read_bool(&phydev->mdio.dev,
-					   "motorcomm,auto-sleep-disabled");
-
-	return ytphy_modify_ext_with_lock(phydev,
-					 YT8521_EXTREG_SLEEP_CONTROL1_REG,
-					 YT8521_ESC1R_SLEEP_SW,
-					 sleep ? YT8521_ESC1R_SLEEP_SW : 0);
-}
-
-/**
- * yt861x_cable_test_start() - start a cable diagnostic (TDR) test
- * @phydev: a pointer to a &struct phy_device
- *
- * Returns: 0 or negative errno code
- */
-static int yt861x_cable_test_start(struct phy_device *phydev)
-{
-	int ret;
-
-	/* auto sleep would abort the TDR test */
-	ret = ytphy_modify_ext_with_lock(phydev,
-					 YT8521_EXTREG_SLEEP_CONTROL1_REG,
-					 YT8521_ESC1R_SLEEP_SW, 0);
-	if (ret)
-		return ret;
-
-	ret = ytphy_write_ext_with_lock(phydev, YT861X_TDR_CTRL_REG,
-					YT861X_TDR_CTRL_START);
-	if (ret) {
-		int err = yt861x_config_init(phydev);
-
-		if (err)
-			phydev_warn(phydev,
-				    "Failed to restore auto sleep: %d\n",
-				    err);
-	}
-
-	return ret;
-}
-
-/**
- * yt861x_cable_test_get_status() - report cable diagnostic test results
- * @phydev: a pointer to a &struct phy_device
- * @finished: set to true when the test is complete
- *
- * Returns: 0 or negative errno code
- */
-static int yt861x_cable_test_get_status(struct phy_device *phydev,
-					bool *finished)
-{
-	int status;
-	int ret;
-
-	*finished = false;
-
-	status = ytphy_read_ext_with_lock(phydev, YT861X_TDR_STATUS_REG);
-	if (status < 0)
-		return status;
-
-	if (status & YT861X_TDR_STATUS_BUSY)
-		return 0;
-
-	for (int pair = ETHTOOL_A_CABLE_PAIR_A; pair <= ETHTOOL_A_CABLE_PAIR_D;
-	     pair++) {
-		u8 code;
-
-		switch ((status >> (2 * pair)) & 0x3) {
-		case YT861X_TDR_STATUS_PAIR_OK:
-			code = ETHTOOL_A_CABLE_RESULT_CODE_OK;
-			break;
-		case YT861X_TDR_STATUS_PAIR_SHORT:
-			code = ETHTOOL_A_CABLE_RESULT_CODE_SAME_SHORT;
-			break;
-		case YT861X_TDR_STATUS_PAIR_OPEN:
-			code = ETHTOOL_A_CABLE_RESULT_CODE_OPEN;
-			break;
-		default:
-			code = ETHTOOL_A_CABLE_RESULT_CODE_UNSPEC;
-		}
-
-		ethnl_cable_test_result(phydev, pair, code);
-
-		if (code != ETHTOOL_A_CABLE_RESULT_CODE_OK &&
-		    code != ETHTOOL_A_CABLE_RESULT_CODE_UNSPEC) {
-			ret = ytphy_read_ext_with_lock(phydev,
-						       YT861X_TDR_PAIR_LENGTH_REG(pair));
-			if (ret >= 0)
-				ethnl_cable_test_fault_length(phydev, pair,
-							      ret);
-		}
-	}
-
-	/* the reset below does not restore auto sleep by itself */
-	ret = yt861x_config_init(phydev);
-	if (ret)
-		return ret;
-
-	ret = genphy_soft_reset(phydev);
-	if (ret)
-		return ret;
-
-	*finished = true;
-
-	return 0;
-}
-
-/**
  * yt8821_get_features - read mmd register to get 2.5G capability
  * @phydev: target phy_device struct
  *
@@ -3271,14 +3038,6 @@ static struct phy_driver motorcomm_phy_drvs[] = {
 		.led_hw_control_get = yt8521_led_hw_control_get,
 	},
 	{
-		PHY_ID_MATCH_EXACT(PHY_ID_YT8522),
-		.name		= "YT8522 100 Megabit Ethernet",
-		.config_aneg	= genphy_config_aneg,
-		.config_init	= yt8522_config_init,
-		.suspend	= genphy_suspend,
-		.resume		= genphy_resume,
-	},
-	{
 		PHY_ID_MATCH_EXACT(PHY_ID_YT8531),
 		.name		= "YT8531 Gigabit Ethernet",
 		.probe		= yt8531_probe,
@@ -3288,9 +3047,6 @@ static struct phy_driver motorcomm_phy_drvs[] = {
 		.get_wol	= ytphy_get_wol,
 		.set_wol	= yt8531_set_wol,
 		.link_change_notify = yt8531_link_change_notify,
-		.led_hw_is_supported = yt8521_led_hw_is_supported,
-		.led_hw_control_set = yt8521_led_hw_control_set,
-		.led_hw_control_get = yt8521_led_hw_control_get,
 	},
 	{
 		PHY_ID_MATCH_EXACT(PHY_ID_YT8531S),
@@ -3303,22 +3059,11 @@ static struct phy_driver motorcomm_phy_drvs[] = {
 		.set_wol	= ytphy_set_wol,
 		.config_aneg	= yt8521_config_aneg,
 		.aneg_done	= yt8521_aneg_done,
-		.config_init	= yt8531s_config_init,
+		.config_init	= yt8521_config_init,
 		.read_status	= yt8521_read_status,
 		.soft_reset	= yt8521_soft_reset,
 		.suspend	= yt8521_suspend,
 		.resume		= yt8521_resume,
-	},
-	{
-		PHY_ID_MATCH_EXACT(PHY_ID_INT861X),
-		.name			= "YT861x Internal Gigabit Ethernet",
-		.flags			= PHY_IS_INTERNAL,
-		.config_init		= yt861x_config_init,
-		.soft_reset		= genphy_soft_reset,
-		.suspend		= genphy_suspend,
-		.resume			= genphy_resume,
-		.cable_test_start	= yt861x_cable_test_start,
-		.cable_test_get_status	= yt861x_cable_test_get_status,
 	},
 	{
 		PHY_ID_MATCH_EXACT(PHY_ID_YT8821),
@@ -3341,7 +3086,7 @@ static struct phy_driver motorcomm_phy_drvs[] = {
 
 module_phy_driver(motorcomm_phy_drvs);
 
-MODULE_DESCRIPTION("Motorcomm 8511/8521/8531/8531S/861x/8821 PHY driver");
+MODULE_DESCRIPTION("Motorcomm 8511/8521/8531/8531S/8821 PHY driver");
 MODULE_AUTHOR("Peter Geis");
 MODULE_AUTHOR("Frank");
 MODULE_LICENSE("GPL");
@@ -3349,10 +3094,8 @@ MODULE_LICENSE("GPL");
 static const struct mdio_device_id __maybe_unused motorcomm_tbl[] = {
 	{ PHY_ID_MATCH_EXACT(PHY_ID_YT8511) },
 	{ PHY_ID_MATCH_EXACT(PHY_ID_YT8521) },
-	{ PHY_ID_MATCH_EXACT(PHY_ID_YT8522) },
 	{ PHY_ID_MATCH_EXACT(PHY_ID_YT8531) },
 	{ PHY_ID_MATCH_EXACT(PHY_ID_YT8531S) },
-	{ PHY_ID_MATCH_EXACT(PHY_ID_INT861X) },
 	{ PHY_ID_MATCH_EXACT(PHY_ID_YT8821) },
 	{ /* sentinel */ }
 };

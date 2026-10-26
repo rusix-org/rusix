@@ -19,7 +19,6 @@
 #include <linux/memcontrol.h>
 #include <linux/statfs.h>
 #include <linux/exportfs.h>
-#include <linux/pidfd.h>
 
 #include <asm/ioctls.h>
 
@@ -906,13 +905,25 @@ static ssize_t copy_event_to_user(struct fsnotify_group *group,
 		metadata.fd = fd >= 0 ? fd : FAN_NOFD;
 
 	if (pidfd_mode) {
-		unsigned int pidfd_flags = PIDFD_STALE;
+		/*
+		 * Complain if the FAN_REPORT_PIDFD and FAN_REPORT_TID mutual
+		 * exclusion is ever lifted. At the time of incoporating pidfd
+		 * support within fanotify, the pidfd API only supported the
+		 * creation of pidfds for thread-group leaders.
+		 */
+		WARN_ON_ONCE(FAN_GROUP_FLAG(group, FAN_REPORT_TID));
 
-		if (FAN_GROUP_FLAG(group, FAN_REPORT_TID))
-			pidfd_flags |= PIDFD_THREAD;
-
-		if (metadata.pid)
-			pidfd = pidfd_prepare(event->pid, pidfd_flags, &pidfd_file);
+		/*
+		 * The PIDTYPE_TGID check for an event->pid is performed
+		 * preemptively in an attempt to catch out cases where the event
+		 * listener reads events after the event generating process has
+		 * already terminated.  Depending on flag FAN_REPORT_FD_ERROR,
+		 * report either -ESRCH or FAN_NOPIDFD to the event listener in
+		 * those cases with all other pidfd creation errors reported as
+		 * the error code itself or as FAN_EPIDFD.
+		 */
+		if (metadata.pid && pid_has_task(event->pid, PIDTYPE_TGID))
+			pidfd = pidfd_prepare(event->pid, 0, &pidfd_file);
 
 		if (!FAN_GROUP_FLAG(group, FAN_REPORT_FD_ERROR) && pidfd < 0)
 			pidfd = pidfd == -ESRCH ? FAN_NOPIDFD : FAN_EPIDFD;
@@ -1555,7 +1566,7 @@ static struct fsnotify_event *fanotify_alloc_overflow_event(void)
 {
 	struct fanotify_event *oevent;
 
-	oevent = kmalloc_obj(*oevent, GFP_KERNEL_ACCOUNT);
+	oevent = kmalloc(sizeof(*oevent), GFP_KERNEL_ACCOUNT);
 	if (!oevent)
 		return NULL;
 
@@ -1579,20 +1590,16 @@ static struct hlist_head *fanotify_alloc_merge_hash(void)
 	return hash;
 }
 
-DEFINE_CLASS(fsnotify_group,
-	     struct fsnotify_group *,
-	     if (!IS_ERR_OR_NULL(_T)) fsnotify_destroy_group(_T),
-	     fsnotify_alloc_group(ops, flags),
-	     const struct fsnotify_ops *ops, int flags)
-
 /* fanotify syscalls */
 SYSCALL_DEFINE2(fanotify_init, unsigned int, flags, unsigned int, event_f_flags)
 {
 	struct user_namespace *user_ns = current_user_ns();
+	struct fsnotify_group *group;
 	int f_flags, fd;
 	unsigned int fid_mode = flags & FANOTIFY_FID_BITS;
 	unsigned int class = flags & FANOTIFY_CLASS_BITS;
 	unsigned int internal_flags = 0;
+	struct file *file;
 
 	pr_debug("%s: flags=%x event_f_flags=%x\n",
 		 __func__, flags, event_f_flags);
@@ -1622,6 +1629,14 @@ SYSCALL_DEFINE2(fanotify_init, unsigned int, flags, unsigned int, event_f_flags)
 #else
 	if (flags & ~FANOTIFY_INIT_FLAGS)
 #endif
+		return -EINVAL;
+
+	/*
+	 * A pidfd can only be returned for a thread-group leader; thus
+	 * FAN_REPORT_PIDFD and FAN_REPORT_TID need to remain mutually
+	 * exclusive.
+	 */
+	if ((flags & FAN_REPORT_PIDFD) && (flags & FAN_REPORT_TID))
 		return -EINVAL;
 
 	/* Don't allow mixing mnt events with inode events for now */
@@ -1669,29 +1684,36 @@ SYSCALL_DEFINE2(fanotify_init, unsigned int, flags, unsigned int, event_f_flags)
 	if (flags & FAN_NONBLOCK)
 		f_flags |= O_NONBLOCK;
 
-	CLASS(fsnotify_group, group)(&fanotify_fsnotify_ops,
-				     FSNOTIFY_GROUP_USER);
 	/* fsnotify_alloc_group takes a ref.  Dropped in fanotify_release */
-	if (IS_ERR(group))
+	group = fsnotify_alloc_group(&fanotify_fsnotify_ops,
+				     FSNOTIFY_GROUP_USER);
+	if (IS_ERR(group)) {
 		return PTR_ERR(group);
+	}
 
 	/* Enforce groups limits per user in all containing user ns */
 	group->fanotify_data.ucounts = inc_ucount(user_ns, current_euid(),
 						  UCOUNT_FANOTIFY_GROUPS);
-	if (!group->fanotify_data.ucounts)
-		return -EMFILE;
+	if (!group->fanotify_data.ucounts) {
+		fd = -EMFILE;
+		goto out_destroy_group;
+	}
 
 	group->fanotify_data.flags = flags | internal_flags;
 	group->memcg = get_mem_cgroup_from_mm(current->mm);
 	group->user_ns = get_user_ns(user_ns);
 
 	group->fanotify_data.merge_hash = fanotify_alloc_merge_hash();
-	if (!group->fanotify_data.merge_hash)
-		return -ENOMEM;
+	if (!group->fanotify_data.merge_hash) {
+		fd = -ENOMEM;
+		goto out_destroy_group;
+	}
 
 	group->overflow_event = fanotify_alloc_overflow_event();
-	if (unlikely(!group->overflow_event))
-		return -ENOMEM;
+	if (unlikely(!group->overflow_event)) {
+		fd = -ENOMEM;
+		goto out_destroy_group;
+	}
 
 	if (force_o_largefile())
 		event_f_flags |= O_LARGEFILE;
@@ -1710,7 +1732,8 @@ SYSCALL_DEFINE2(fanotify_init, unsigned int, flags, unsigned int, event_f_flags)
 		group->priority = FSNOTIFY_PRIO_PRE_CONTENT;
 		break;
 	default:
-		return -EINVAL;
+		fd = -EINVAL;
+		goto out_destroy_group;
 	}
 
 	BUILD_BUG_ON(!(FANOTIFY_ADMIN_INIT_FLAGS & FAN_UNLIMITED_QUEUE));
@@ -1721,15 +1744,27 @@ SYSCALL_DEFINE2(fanotify_init, unsigned int, flags, unsigned int, event_f_flags)
 	}
 
 	if (flags & FAN_ENABLE_AUDIT) {
+		fd = -EPERM;
 		if (!capable(CAP_AUDIT_WRITE))
-			return -EPERM;
+			goto out_destroy_group;
 	}
 
-	fd = FD_ADD(f_flags,
-		    anon_inode_getfile_fmode("[fanotify]", &fanotify_fops,
-					     group, f_flags, FMODE_NONOTIFY));
-	if (fd >= 0)
-		retain_and_null_ptr(group);
+	fd = get_unused_fd_flags(f_flags);
+	if (fd < 0)
+		goto out_destroy_group;
+
+	file = anon_inode_getfile_fmode("[fanotify]", &fanotify_fops, group,
+					f_flags, FMODE_NONOTIFY);
+	if (IS_ERR(file)) {
+		put_unused_fd(fd);
+		fd = PTR_ERR(file);
+		goto out_destroy_group;
+	}
+	fd_install(fd, file);
+	return fd;
+
+out_destroy_group:
+	fsnotify_destroy_group(group);
 	return fd;
 }
 
@@ -1837,7 +1872,7 @@ static int fanotify_events_supported(struct fsnotify_group *group,
 	/*
 	 * mount and sb marks are not allowed on kernel internal pseudo fs,
 	 * like pipe_mnt, because that would subscribe to events on all the
-	 * anonymous pipes in the system.
+	 * anonynous pipes in the system.
 	 *
 	 * SB_NOUSER covers all of the internal pseudo fs whose objects are not
 	 * exposed to user's mount namespace, but there are other SB_KERNMOUNT

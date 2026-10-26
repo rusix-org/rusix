@@ -35,7 +35,7 @@ static const struct daio_rsc_idx idx_20k1[NUM_DAIOTYP] = {
 	[LINEIM] = {.left = 0x1b5, .right = 0x1bd},
 	[SPDIFOO] = {.left = 0x20, .right = 0x21},
 	[SPDIFIO] = {.left = 0x15, .right = 0x1d},
-	[SPDIFI_BAY] = {.left = 0x95, .right = 0x9d},
+	[SPDIFI1] = {.left = 0x95, .right = 0x9d},
 };
 
 static const struct daio_rsc_idx idx_20k2[NUM_DAIOTYP] = {
@@ -45,7 +45,6 @@ static const struct daio_rsc_idx idx_20k2[NUM_DAIOTYP] = {
 	[LINEO4] = {.left = 0x70, .right = 0x71},
 	[LINEIM] = {.left = 0x45, .right = 0xc5},
 	[MIC]	 = {.left = 0x55, .right = 0xd5},
-	[RCA]	 = {.left = 0x30, .right = 0x31},
 	[SPDIFOO] = {.left = 0x00, .right = 0x01},
 	[SPDIFIO] = {.left = 0x05, .right = 0x85},
 };
@@ -106,7 +105,7 @@ static int daio_device_index(enum DAIOTYP type, struct hw *hw)
 		switch (type) {
 		case SPDIFOO:	return 0;
 		case SPDIFIO:	return 0;
-		case SPDIFI_BAY:	return 1;
+		case SPDIFI1:	return 1;
 		case LINEO1:	return 4;
 		case LINEO2:	return 7;
 		case LINEO3:	return 5;
@@ -120,13 +119,13 @@ static int daio_device_index(enum DAIOTYP type, struct hw *hw)
 		switch (type) {
 		case SPDIFOO:	return 0;
 		case SPDIFIO:	return 0;
+		case SPDIFI1:	return 1;
 		case LINEO1:	return 4;
 		case LINEO2:	return 7;
 		case LINEO3:	return 5;
 		case LINEO4:	return 6;
 		case LINEIM:	return 4;
 		case MIC:	return 5;
-		case RCA:	return 3;
 		default:
 			pr_err("ctxfi: Invalid type %d for hw20k2\n", type);
 			return -EINVAL;
@@ -167,7 +166,7 @@ static int dao_set_left_input(struct dao *dao, struct rsc *input)
 	struct daio *daio = &dao->daio;
 	int i;
 
-	entry = kzalloc_objs(*entry, daio->rscl.msr);
+	entry = kcalloc(daio->rscl.msr, sizeof(*entry), GFP_KERNEL);
 	if (!entry)
 		return -ENOMEM;
 
@@ -196,7 +195,7 @@ static int dao_set_right_input(struct dao *dao, struct rsc *input)
 	struct daio *daio = &dao->daio;
 	int i;
 
-	entry = kzalloc_objs(*entry, daio->rscr.msr);
+	entry = kcalloc(daio->rscr.msr, sizeof(*entry), GFP_KERNEL);
 	if (!entry)
 		return -ENOMEM;
 
@@ -544,7 +543,7 @@ static int get_daio_rsc(struct daio_mgr *mgr,
 	err = -ENOMEM;
 	/* Allocate mem for daio resource */
 	if (desc->output) {
-		struct dao *dao = kzalloc_obj(*dao);
+		struct dao *dao = kzalloc(sizeof(*dao), GFP_KERNEL);
 		if (!dao)
 			goto error;
 
@@ -556,7 +555,7 @@ static int get_daio_rsc(struct daio_mgr *mgr,
 
 		*rdaio = &dao->daio;
 	} else {
-		struct dai *dai = kzalloc_obj(*dai);
+		struct dai *dai = kzalloc(sizeof(*dai), GFP_KERNEL);
 		if (!dai)
 			goto error;
 
@@ -683,7 +682,7 @@ int daio_mgr_create(struct hw *hw, void **rdaio_mgr)
 	struct imapper *entry;
 
 	*rdaio_mgr = NULL;
-	daio_mgr = kzalloc_obj(*daio_mgr);
+	daio_mgr = kzalloc(sizeof(*daio_mgr), GFP_KERNEL);
 	if (!daio_mgr)
 		return -ENOMEM;
 
@@ -694,7 +693,7 @@ int daio_mgr_create(struct hw *hw, void **rdaio_mgr)
 	spin_lock_init(&daio_mgr->mgr_lock);
 	spin_lock_init(&daio_mgr->imap_lock);
 	INIT_LIST_HEAD(&daio_mgr->imappers);
-	entry = kzalloc_obj(*entry);
+	entry = kzalloc(sizeof(*entry), GFP_KERNEL);
 	if (!entry) {
 		err = -ENOMEM;
 		goto error2;

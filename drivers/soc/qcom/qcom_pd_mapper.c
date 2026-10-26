@@ -7,6 +7,7 @@
 
 #include <linux/auxiliary_bus.h>
 #include <linux/kernel.h>
+#include <linux/mod_devicetable.h>
 #include <linux/module.h>
 #include <linux/of.h>
 #include <linux/refcount.h>
@@ -76,7 +77,7 @@ static int qcom_pdm_add_service_domain(struct qcom_pdm_data *data,
 				return -EBUSY;
 		}
 	} else {
-		service = kzalloc_obj(*service);
+		service = kzalloc(sizeof(*service), GFP_KERNEL);
 		if (!service)
 			return -ENOMEM;
 
@@ -86,7 +87,7 @@ static int qcom_pdm_add_service_domain(struct qcom_pdm_data *data,
 		list_add_tail(&service->list, &data->services);
 	}
 
-	domain = kzalloc_obj(*domain);
+	domain = kzalloc(sizeof(*domain), GFP_KERNEL);
 	if (!domain) {
 		if (list_empty(&service->domains)) {
 			list_del(&service->list);
@@ -157,7 +158,7 @@ static void qcom_pdm_get_domain_list(struct qmi_handle *qmi,
 	u32 offset;
 	int ret;
 
-	rsp = kzalloc_obj(*rsp);
+	rsp = kzalloc(sizeof(*rsp), GFP_KERNEL);
 	if (!rsp)
 		return;
 
@@ -265,12 +266,6 @@ static const struct qcom_pdm_domain_data adsp_charger_pd = {
 	.services = { NULL },
 };
 
-static const struct qcom_pdm_domain_data adsp_ois_pd = {
-	.domain = "msm/adsp/ois_pd",
-	.instance_id = 74,
-	.services = { NULL, },
-};
-
 static const struct qcom_pdm_domain_data adsp_root_pd = {
 	.domain = "msm/adsp/root_pd",
 	.instance_id = 74,
@@ -307,24 +302,6 @@ static const struct qcom_pdm_domain_data msm8996_adsp_root_pd = {
 static const struct qcom_pdm_domain_data cdsp_root_pd = {
 	.domain = "msm/cdsp/root_pd",
 	.instance_id = 76,
-	.services = { NULL },
-};
-
-static const struct qcom_pdm_domain_data cdsp1_root_pd = {
-	.domain = "msm/cdsp1/root_pd",
-	.instance_id = 125,
-	.services = { NULL },
-};
-
-static const struct qcom_pdm_domain_data gpdsp_root_pd = {
-	.domain = "msm/gpdsp/root_pd",
-	.instance_id = 192,
-	.services = { NULL },
-};
-
-static const struct qcom_pdm_domain_data gpdsp1_root_pd = {
-	.domain = "msm/gpdsp1/root_pd",
-	.instance_id = 241,
 	.services = { NULL },
 };
 
@@ -383,24 +360,6 @@ static const struct qcom_pdm_domain_data mpss_wlan_pd = {
 	},
 };
 
-static const struct qcom_pdm_domain_data *glymur_domains[] = {
-	&adsp_audio_pd,
-	&adsp_root_pd,
-	&adsp_sensor_pd,
-	&cdsp_root_pd,
-	NULL,
-};
-
-static const struct qcom_pdm_domain_data *kaanapali_domains[] = {
-	&adsp_audio_pd,
-	&adsp_ois_pd,
-	&adsp_root_pd,
-	&adsp_sensor_pd,
-	&cdsp_root_pd,
-	&mpss_root_pd_gps,
-	NULL,
-};
-
 static const struct qcom_pdm_domain_data *msm8996_domains[] = {
 	&msm8996_adsp_audio_pd,
 	&msm8996_adsp_root_pd,
@@ -430,34 +389,6 @@ static const struct qcom_pdm_domain_data *qcs404_domains[] = {
 	&cdsp_root_pd,
 	&mpss_root_pd,
 	&mpss_wlan_pd,
-	NULL,
-};
-
-static const struct qcom_pdm_domain_data *qcs615_domains[] = {
-	&adsp_audio_pd,
-	&adsp_root_pd,
-	&adsp_sensor_pd,
-	&cdsp_root_pd,
-	&mpss_root_pd,
-	&mpss_wlan_pd,
-	NULL,
-};
-
-static const struct qcom_pdm_domain_data *qcs8300_domains[] = {
-	&adsp_audio_pd,
-	&adsp_root_pd,
-	&cdsp_root_pd,
-	&gpdsp_root_pd,
-	NULL,
-};
-
-static const struct qcom_pdm_domain_data *sa8775p_domains[] = {
-	&adsp_audio_pd,
-	&adsp_root_pd,
-	&cdsp_root_pd,
-	&cdsp1_root_pd,
-	&gpdsp_root_pd,
-	&gpdsp1_root_pd,
 	NULL,
 };
 
@@ -620,13 +551,7 @@ static const struct of_device_id qcom_pdm_domains[] __maybe_unused = {
 	{ .compatible = "qcom,apq8064", .data = NULL, },
 	{ .compatible = "qcom,apq8074", .data = NULL, },
 	{ .compatible = "qcom,apq8084", .data = NULL, },
-	{ .compatible = "qcom,eliza", .data = sm8550_domains, },
 	{ .compatible = "qcom,apq8096", .data = msm8996_domains, },
-	{ .compatible = "qcom,glymur", .data = glymur_domains, },
-	{ .compatible = "qcom,hawi", .data = kaanapali_domains, },
-	{ .compatible = "qcom,kaanapali", .data = kaanapali_domains, },
-	{ .compatible = "qcom,mahua", .data = glymur_domains, },
-	{ .compatible = "qcom,milos", .data = sm8550_domains, },
 	{ .compatible = "qcom,msm8226", .data = NULL, },
 	{ .compatible = "qcom,msm8909", .data = NULL, },
 	{ .compatible = "qcom,msm8916", .data = NULL, },
@@ -637,9 +562,6 @@ static const struct of_device_id qcom_pdm_domains[] __maybe_unused = {
 	{ .compatible = "qcom,qcm2290", .data = qcm2290_domains, },
 	{ .compatible = "qcom,qcm6490", .data = sc7280_domains, },
 	{ .compatible = "qcom,qcs404", .data = qcs404_domains, },
-	{ .compatible = "qcom,qcs615", .data = qcs615_domains, },
-	{ .compatible = "qcom,qcs8300", .data = qcs8300_domains, },
-	{ .compatible = "qcom,sa8775p", .data = sa8775p_domains, },
 	{ .compatible = "qcom,sc7180", .data = sc7180_domains, },
 	{ .compatible = "qcom,sc7280", .data = sc7280_domains, },
 	{ .compatible = "qcom,sc8180x", .data = sc8180x_domains, },
@@ -683,9 +605,15 @@ static struct qcom_pdm_data *qcom_pdm_start(void)
 	const struct qcom_pdm_domain_data * const *domains;
 	const struct of_device_id *match;
 	struct qcom_pdm_data *data;
+	struct device_node *root;
 	int ret, i;
 
-	match = of_machine_get_match(qcom_pdm_domains);
+	root = of_find_node_by_path("/");
+	if (!root)
+		return ERR_PTR(-ENODEV);
+
+	match = of_match_node(qcom_pdm_domains, root);
+	of_node_put(root);
 	if (!match) {
 		pr_notice("PDM: no support for the platform, userspace daemon might be required.\n");
 		return ERR_PTR(-ENODEV);
@@ -697,7 +625,7 @@ static struct qcom_pdm_data *qcom_pdm_start(void)
 		return ERR_PTR(-ENODEV);
 	}
 
-	data = kzalloc_obj(*data);
+	data = kzalloc(sizeof(*data), GFP_KERNEL);
 	if (!data)
 		return ERR_PTR(-ENOMEM);
 
@@ -718,7 +646,7 @@ static struct qcom_pdm_data *qcom_pdm_start(void)
 			goto err_stop;
 	}
 
-	ret = qmi_add_server(&data->handle, QMI_SERVICE_ID_SERVREG_LOC,
+	ret = qmi_add_server(&data->handle, SERVREG_LOCATOR_SERVICE,
 			     SERVREG_QMI_VERSION, SERVREG_QMI_INSTANCE);
 	if (ret) {
 		pr_err("PDM: error adding server %d\n", ret);

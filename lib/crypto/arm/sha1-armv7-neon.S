@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: GPL-2.0-or-later */
-/* ARM/NEON accelerated SHA-1 transform function
+/* sha1-armv7-neon.S - ARM/NEON accelerated SHA-1 transform function
  *
  * Copyright © 2013-2014 Jussi Kivilinna <jussi.kivilinna@iki.fi>
  */

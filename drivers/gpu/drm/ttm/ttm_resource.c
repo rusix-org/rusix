@@ -34,10 +34,9 @@
 #include <drm/ttm/ttm_resource.h>
 #include <drm/ttm/ttm_tt.h>
 
-#include <drm/drm_print.h>
 #include <drm/drm_util.h>
 
-/* Detach the cursor from the bulk move list */
+/* Detach the cursor from the bulk move list*/
 static void
 ttm_resource_cursor_clear_bulk(struct ttm_resource_cursor *cursor)
 {
@@ -105,9 +104,9 @@ void ttm_resource_cursor_init(struct ttm_resource_cursor *cursor,
  * ttm_resource_cursor_fini() - Finalize the LRU list cursor usage
  * @cursor: The struct ttm_resource_cursor to finalize.
  *
- * The function pulls the LRU list cursor off any lists it was previously
+ * The function pulls the LRU list cursor off any lists it was previusly
  * attached to. Needs to be called with the LRU lock held. The function
- * can be called multiple times after each other.
+ * can be called multiple times after eachother.
  */
 void ttm_resource_cursor_fini(struct ttm_resource_cursor *cursor)
 {
@@ -330,10 +329,10 @@ void ttm_resource_move_to_lru_tail(struct ttm_resource *res)
 }
 
 /**
- * ttm_resource_init - resource object constructor
- * @bo: buffer object this resource is allocated for
+ * ttm_resource_init - resource object constructure
+ * @bo: buffer object this resources is allocated for
  * @place: placement of the resource
- * @res: the resource object to initialize
+ * @res: the resource object to inistilize
  *
  * Initialize a new resource object. Counterpart of ttm_resource_fini().
  */
@@ -386,52 +385,33 @@ void ttm_resource_fini(struct ttm_resource_manager *man,
 }
 EXPORT_SYMBOL(ttm_resource_fini);
 
-/**
- * ttm_resource_try_charge - charge a resource manager's cgroup pool
- * @bo: buffer for which an allocation should be charged
- * @place: where the allocation is attempted to be placed
- * @ret_pool: on charge success, the pool that was charged
- * @ret_limit_pool: on charge failure, the pool responsible for the failure
- *
- * Should be used to charge cgroups before attempting resource allocation.
- * When charging succeeds, the value of ret_pool should be passed to
- * ttm_resource_alloc.
- *
- * Returns: 0 on charge success, negative errno on failure.
- */
-int ttm_resource_try_charge(struct ttm_buffer_object *bo,
-			    const struct ttm_place *place,
-			    struct dmem_cgroup_pool_state **ret_pool,
-			    struct dmem_cgroup_pool_state **ret_limit_pool)
-{
-	struct ttm_resource_manager *man =
-		ttm_manager_type(bo->bdev, place->mem_type);
-
-	if (!man->cg) {
-		*ret_pool = NULL;
-		if (ret_limit_pool)
-			*ret_limit_pool = NULL;
-		return 0;
-	}
-
-	return dmem_cgroup_try_charge(man->cg, bo->base.size, ret_pool,
-				      ret_limit_pool);
-}
-
 int ttm_resource_alloc(struct ttm_buffer_object *bo,
 		       const struct ttm_place *place,
 		       struct ttm_resource **res_ptr,
-		       struct dmem_cgroup_pool_state *charge_pool)
+		       struct dmem_cgroup_pool_state **ret_limit_pool)
 {
 	struct ttm_resource_manager *man =
 		ttm_manager_type(bo->bdev, place->mem_type);
+	struct dmem_cgroup_pool_state *pool = NULL;
 	int ret;
 
-	ret = man->func->alloc(man, bo, place, res_ptr);
-	if (ret)
-		return ret;
+	if (man->cg) {
+		ret = dmem_cgroup_try_charge(man->cg, bo->base.size, &pool, ret_limit_pool);
+		if (ret) {
+			if (ret == -EAGAIN)
+				ret = -ENOSPC;
+			return ret;
+		}
+	}
 
-	(*res_ptr)->css = charge_pool;
+	ret = man->func->alloc(man, bo, place, res_ptr);
+	if (ret) {
+		if (pool)
+			dmem_cgroup_uncharge(pool, bo->base.size);
+		return ret;
+	}
+
+	(*res_ptr)->css = pool;
 
 	spin_lock(&bo->bdev->lru_lock);
 	ttm_resource_add_bulk_move(*res_ptr, bo);
@@ -456,7 +436,7 @@ void ttm_resource_free(struct ttm_buffer_object *bo, struct ttm_resource **res)
 	man = ttm_manager_type(bo->bdev, (*res)->mem_type);
 	man->func->free(man, *res);
 	*res = NULL;
-	if (pool)
+	if (man->cg)
 		dmem_cgroup_uncharge(pool, bo->base.size);
 }
 EXPORT_SYMBOL(ttm_resource_free);
@@ -470,7 +450,7 @@ EXPORT_SYMBOL(ttm_resource_free);
  * @size: How many bytes the new allocation needs.
  *
  * Test if @res intersects with @place and @size. Used for testing if evictions
- * are valuable or not.
+ * are valueable or not.
  *
  * Returns true if the res placement intersects with @place and @size.
  */
@@ -480,6 +460,9 @@ bool ttm_resource_intersects(struct ttm_device *bdev,
 			     size_t size)
 {
 	struct ttm_resource_manager *man;
+
+	if (!res)
+		return false;
 
 	man = ttm_manager_type(bdev, res->mem_type);
 	if (!place || !man->func->intersects)
@@ -548,7 +531,7 @@ void ttm_resource_set_bo(struct ttm_resource *res,
  * @bdev: ttm device this manager belongs to
  * @size: size of managed resources in arbitrary units
  *
- * Initialize core parts of a manager object.
+ * Initialise core parts of a manager object.
  */
 void ttm_resource_manager_init(struct ttm_resource_manager *man,
 			       struct ttm_device *bdev,
@@ -556,23 +539,22 @@ void ttm_resource_manager_init(struct ttm_resource_manager *man,
 {
 	unsigned i;
 
+	spin_lock_init(&man->move_lock);
 	man->bdev = bdev;
 	man->size = size;
 	man->usage = 0;
 
 	for (i = 0; i < TTM_MAX_BO_PRIORITY; ++i)
 		INIT_LIST_HEAD(&man->lru[i]);
-	spin_lock_init(&man->eviction_lock);
-	for (i = 0; i < TTM_NUM_MOVE_FENCES; i++)
-		man->eviction_fences[i] = NULL;
+	man->move = NULL;
 }
 EXPORT_SYMBOL(ttm_resource_manager_init);
 
 /*
  * ttm_resource_manager_evict_all
  *
- * @bdev: device to use
- * @man: manager to use
+ * @bdev - device to use
+ * @man - manager to use
  *
  * Evict all the objects out of a memory manager until it is empty.
  * Part of memory manager cleanup sequence.
@@ -580,9 +562,12 @@ EXPORT_SYMBOL(ttm_resource_manager_init);
 int ttm_resource_manager_evict_all(struct ttm_device *bdev,
 				   struct ttm_resource_manager *man)
 {
-	struct ttm_operation_ctx ctx = { };
+	struct ttm_operation_ctx ctx = {
+		.interruptible = false,
+		.no_wait_gpu = false,
+	};
 	struct dma_fence *fence;
-	int ret, i;
+	int ret;
 
 	do {
 		ret = ttm_bo_evict_first(bdev, man, &ctx);
@@ -592,24 +577,18 @@ int ttm_resource_manager_evict_all(struct ttm_device *bdev,
 	if (ret && ret != -ENOENT)
 		return ret;
 
-	ret = 0;
+	spin_lock(&man->move_lock);
+	fence = dma_fence_get(man->move);
+	spin_unlock(&man->move_lock);
 
-	spin_lock(&man->eviction_lock);
-	for (i = 0; i < TTM_NUM_MOVE_FENCES; i++) {
-		fence = man->eviction_fences[i];
-		if (fence && !dma_fence_is_signaled(fence)) {
-			dma_fence_get(fence);
-			spin_unlock(&man->eviction_lock);
-			ret = dma_fence_wait(fence, false);
-			dma_fence_put(fence);
-			if (ret)
-				return ret;
-			spin_lock(&man->eviction_lock);
-		}
+	if (fence) {
+		ret = dma_fence_wait(fence, false);
+		dma_fence_put(fence);
+		if (ret)
+			return ret;
 	}
-	spin_unlock(&man->eviction_lock);
 
-	return ret;
+	return 0;
 }
 EXPORT_SYMBOL(ttm_resource_manager_evict_all);
 
@@ -623,9 +602,6 @@ EXPORT_SYMBOL(ttm_resource_manager_evict_all);
 uint64_t ttm_resource_manager_usage(struct ttm_resource_manager *man)
 {
 	uint64_t usage;
-
-	if (WARN_ON_ONCE(!man->bdev))
-		return 0;
 
 	spin_lock(&man->bdev->lru_lock);
 	usage = man->usage;
@@ -917,7 +893,7 @@ out_err:
 
 /**
  * ttm_kmap_iter_linear_io_fini - Clean up an iterator for linear io memory
- * @iter_io: The iterator to finalize
+ * @iter_io: The iterator to initialize
  * @bdev: The TTM device
  * @mem: The ttm resource representing the iomap.
  *
@@ -956,15 +932,15 @@ DEFINE_SHOW_ATTRIBUTE(ttm_resource_manager);
 /**
  * ttm_resource_manager_create_debugfs - Create debugfs entry for specified
  * resource manager.
- * @man: The TTM resource manager for which the debugfs stats file to be created
+ * @man: The TTM resource manager for which the debugfs stats file be creates
  * @parent: debugfs directory in which the file will reside
  * @name: The filename to create.
  *
- * This function sets up a debugfs file that can be used to look
+ * This function setups up a debugfs file that can be used to look
  * at debug statistics of the specified ttm_resource_manager.
  */
 void ttm_resource_manager_create_debugfs(struct ttm_resource_manager *man,
-					 struct dentry *parent,
+					 struct dentry * parent,
 					 const char *name)
 {
 #if defined(CONFIG_DEBUG_FS)
@@ -972,55 +948,3 @@ void ttm_resource_manager_create_debugfs(struct ttm_resource_manager *man,
 #endif
 }
 EXPORT_SYMBOL(ttm_resource_manager_create_debugfs);
-
-/**
- * ttm_resource_manager_dmem_reclaim() - dmem cgroup reclaim callback for TTM
- *                                       resource managers.
- * @pool: The dmem cgroup pool state for the cgroup being reclaimed.
- * @target_bytes: Number of bytes to try to free.
- * @priv: The &ttm_resource_manager pointer, passed as @init.reclaim_priv to
- *        dmem_cgroup_register_region().
- *
- * Drivers should use this as the @reclaim member of their own
- * &struct dmem_cgroup_ops, with the &ttm_resource_manager pointer as
- * @init.reclaim_priv.
- *
- * Return: 0 if some memory was freed, -ENOSPC if nothing was freed, or
- *         another negative error code on fatal failure.
- */
-int ttm_resource_manager_dmem_reclaim(struct dmem_cgroup_pool_state *pool,
-				      u64 target_bytes, void *priv)
-{
-	struct ttm_resource_manager *man = priv;
-	struct ttm_operation_ctx ctx = { .interruptible = true };
-	s64 freed;
-
-	freed = ttm_bo_evict_cgroup(man->bdev, man, pool, target_bytes, &ctx);
-	if (freed < 0)
-		return freed;
-
-	return freed > 0 ? 0 : -ENOSPC;
-}
-EXPORT_SYMBOL(ttm_resource_manager_dmem_reclaim);
-
-/**
- * ttm_resource_manager_set_dmem_region() - Associate a dmem cgroup region with a
- *                                        resource manager.
- * @man: The resource manager.
- * @region: The dmem cgroup region to associate, may be NULL or IS_ERR().
- *
- * When @region is valid, stores it in @man->cg so that TTM can look up the
- * associated pool during charging and eviction-target selection.  When
- * @region is %NULL, clears @man->cg to detach the region before teardown.
- * An IS_ERR() @region is ignored, leaving @man->cg unchanged.
- * The reclaim callback must be wired up using ttm_resource_manager_dmem_reclaim()
- * in the driver's own &struct dmem_cgroup_ops, with the manager pointer as
- * @init.reclaim_priv.
- */
-void ttm_resource_manager_set_dmem_region(struct ttm_resource_manager *man,
-					  struct dmem_cgroup_region *region)
-{
-	if (!IS_ERR(region))
-		man->cg = region;
-}
-EXPORT_SYMBOL(ttm_resource_manager_set_dmem_region);

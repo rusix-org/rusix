@@ -7,7 +7,7 @@
 #include <linux/etherdevice.h>
 #include <linux/crc32.h>
 #include <net/mac80211.h>
-#include "iwl-trans.h"
+#include "iwl-io.h"
 #include "iwl-prph.h"
 #include "fw-api.h"
 #include "mvm.h"
@@ -644,12 +644,11 @@ __le32 iwl_mvm_mac_ctxt_cmd_p2p_sta_get_oppps_ctwin(struct iwl_mvm *mvm,
 u32 iwl_mvm_mac_ctxt_cmd_sta_get_twt_policy(struct iwl_mvm *mvm,
 					    struct ieee80211_vif *vif)
 {
-	struct iwl_mvm_vif *mvmvif = iwl_mvm_vif_from_mac80211(vif);
 	u32 twt_policy = 0;
 
 	if (vif->bss_conf.twt_requester && IWL_MVM_USE_TWT)
 		twt_policy |= TWT_SUPPORTED;
-	if (mvmvif->ap_sta && mvmvif->ap_sta->twt_protected)
+	if (vif->bss_conf.twt_protected)
 		twt_policy |= PROTECTED_TWT_SUPPORTED;
 	if (vif->bss_conf.twt_broadcast)
 		twt_policy |= BROADCAST_TWT_SUPPORTED;
@@ -874,6 +873,7 @@ u8 iwl_mvm_mac_ctxt_get_lowest_rate(struct iwl_mvm *mvm,
 				    struct ieee80211_tx_info *info,
 				    struct ieee80211_vif *vif)
 {
+	struct iwl_mvm_vif *mvmvif = iwl_mvm_vif_from_mac80211(vif);
 	struct ieee80211_supported_band *sband;
 	unsigned long basic = vif->bss_conf.basic_rates;
 	u16 lowest_cck = IWL_RATE_COUNT, lowest_ofdm = IWL_RATE_COUNT;
@@ -882,6 +882,16 @@ u8 iwl_mvm_mac_ctxt_get_lowest_rate(struct iwl_mvm *mvm,
 	u8 band = info->band;
 	u8 rate;
 	u32 i;
+
+	if (link_id == IEEE80211_LINK_UNSPECIFIED && ieee80211_vif_is_mld(vif)) {
+		for (i = 0; i < ARRAY_SIZE(mvmvif->link); i++) {
+			if (!mvmvif->link[i])
+				continue;
+			/* shouldn't do this when >1 link is active */
+			WARN_ON_ONCE(link_id != IEEE80211_LINK_UNSPECIFIED);
+			link_id = i;
+		}
+	}
 
 	if (link_id < IEEE80211_LINK_UNSPECIFIED) {
 		struct ieee80211_bss_conf *link_conf;
@@ -932,13 +942,13 @@ u16 iwl_mvm_mac_ctxt_get_beacon_flags(const struct iwl_fw *fw, u8 rate_idx)
 	u16 flags = 0;
 
 	if (rate_idx <= IWL_LAST_CCK_RATE)
-		flags |= is_new_rate ? (u16)IWL_MAC_BEACON_CCK
-			  : (u16)IWL_MAC_BEACON_CCK_V1;
+		flags |= is_new_rate ? IWL_MAC_BEACON_CCK
+			  : IWL_MAC_BEACON_CCK_V1;
 
 	if (iwl_fw_lookup_cmd_ver(fw, TX_CMD, 0) > 8)
-		flags |= iwl_mvm_rate_idx_to_fw_idx(fw, rate_idx);
+		flags |= iwl_mvm_mac80211_idx_to_hwrate(fw, rate_idx);
 	else
-		flags |= iwl_mvm_rate_idx_to_plcp(rate_idx);
+		flags |= iwl_fw_rate_idx_to_plcp(rate_idx);
 
 	return flags;
 }
@@ -999,7 +1009,7 @@ static void iwl_mvm_mac_ctxt_set_tx(struct iwl_mvm *mvm,
 	else
 		rate_n_flags |= RATE_MCS_MOD_TYPE_LEGACY_OFDM;
 
-	rate_n_flags |= iwl_mvm_rate_idx_to_fw_idx(mvm->fw, rate);
+	rate_n_flags |= iwl_mvm_mac80211_idx_to_hwrate(mvm->fw, rate);
 
 	tx_params->rate_n_flags = iwl_mvm_v3_rate_to_fw(rate_n_flags,
 							mvm->fw_rates_ver);
@@ -1109,8 +1119,8 @@ static int iwl_mvm_mac_ctxt_send_beacon_v9(struct iwl_mvm *mvm,
 	if (iwl_mvm_enable_fils(mvm, vif, ctx)) {
 		flags |= iwl_fw_lookup_cmd_ver(mvm->fw, BEACON_TEMPLATE_CMD,
 					       0) > 10 ?
-			(u16)IWL_MAC_BEACON_FILS :
-			(u16)IWL_MAC_BEACON_FILS_V1;
+			IWL_MAC_BEACON_FILS :
+			IWL_MAC_BEACON_FILS_V1;
 		beacon_cmd.short_ssid =
 			cpu_to_le32(~crc32_le(~0, vif->cfg.ssid,
 					      vif->cfg.ssid_len));
@@ -1779,7 +1789,7 @@ void iwl_mvm_probe_resp_data_notif(struct iwl_mvm *mvm,
 			 notif->noa_attr.len_low))
 		return;
 
-	new_data = kzalloc_obj(*new_data);
+	new_data = kzalloc(sizeof(*new_data), GFP_KERNEL);
 	if (!new_data)
 		return;
 

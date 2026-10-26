@@ -4,7 +4,6 @@
  */
 
 #include <linux/export.h>
-#include <linux/kvm_types.h>
 
 #include <asm/asm.h>
 #include <asm/frame.h>
@@ -149,4 +148,5 @@ SYM_FUNC_START(asm_fred_entry_from_kvm)
 	RET
 
 SYM_FUNC_END(asm_fred_entry_from_kvm)
+EXPORT_SYMBOL_GPL(asm_fred_entry_from_kvm);
 #endif

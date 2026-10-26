@@ -720,7 +720,7 @@ static int h_msb_parallel_switch(struct memstick_dev *card,
 
 static int msb_switch_to_parallel(struct msb_data *msb);
 
-/* Reset the card, to guard against hw errors being treated as bad blocks */
+/* Reset the card, to guard against hw errors beeing treated as bad blocks */
 static int msb_reset(struct msb_data *msb, bool full)
 {
 
@@ -1203,7 +1203,8 @@ static int msb_read_boot_blocks(struct msb_data *msb)
 	dbg_verbose("Start of a scan for the boot blocks");
 
 	if (!msb->boot_page) {
-		page = kmalloc_objs(struct ms_boot_page, 2);
+		page = kmalloc_array(2, sizeof(struct ms_boot_page),
+				     GFP_KERNEL);
 		if (!page)
 			return -ENOMEM;
 
@@ -2154,7 +2155,7 @@ static int msb_probe(struct memstick_dev *card)
 	struct msb_data *msb;
 	int rc = 0;
 
-	msb = kzalloc_obj(struct msb_data);
+	msb = kzalloc(sizeof(struct msb_data), GFP_KERNEL);
 	if (!msb)
 		return -ENOMEM;
 	memstick_set_drvdata(card, msb);
@@ -2230,7 +2231,7 @@ static int msb_resume(struct memstick_dev *card)
 #endif
 	mutex_lock(&card->host->lock);
 
-	new_msb = kzalloc_obj(struct msb_data);
+	new_msb = kzalloc(sizeof(struct msb_data), GFP_KERNEL);
 	if (!new_msb)
 		goto out;
 

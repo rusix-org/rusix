@@ -23,9 +23,6 @@
 #include <linux/spi/spi.h>
 #include <trace/events/spi.h>
 
-#define SPI_ENGINE_REG_DATA_WIDTH		0x0C
-#define   SPI_ENGINE_REG_DATA_WIDTH_NUM_OF_SDIO_MASK	GENMASK(23, 16)
-#define   SPI_ENGINE_REG_DATA_WIDTH_MASK		GENMASK(15, 0)
 #define SPI_ENGINE_REG_OFFLOAD_MEM_ADDR_WIDTH	0x10
 #define SPI_ENGINE_REG_RESET			0x40
 
@@ -78,8 +75,6 @@
 #define SPI_ENGINE_CMD_REG_CLK_DIV		0x0
 #define SPI_ENGINE_CMD_REG_CONFIG		0x1
 #define SPI_ENGINE_CMD_REG_XFER_BITS		0x2
-#define SPI_ENGINE_CMD_REG_SDI_MASK		0x3
-#define SPI_ENGINE_CMD_REG_SDO_MASK		0x4
 
 #define SPI_ENGINE_MISC_SYNC			0x0
 #define SPI_ENGINE_MISC_SLEEP			0x1
@@ -109,10 +104,6 @@
 /* default sizes - can be changed when SPI Engine firmware is compiled */
 #define SPI_ENGINE_OFFLOAD_CMD_FIFO_SIZE	16
 #define SPI_ENGINE_OFFLOAD_SDO_FIFO_SIZE	16
-
-/* Extending SPI_MULTI_LANE_MODE values for optimizing messages. */
-#define SPI_ENGINE_MULTI_BUS_MODE_UNKNOWN	-1
-#define SPI_ENGINE_MULTI_BUS_MODE_CONFLICTING	-2
 
 struct spi_engine_program {
 	unsigned int length;
@@ -151,11 +142,6 @@ struct spi_engine_offload {
 	unsigned long flags;
 	unsigned int offload_num;
 	unsigned int spi_mode_config;
-	unsigned int multi_lane_mode;
-	u8 rx_primary_lane_mask;
-	u8 tx_primary_lane_mask;
-	u8 rx_all_lanes_mask;
-	u8 tx_all_lanes_mask;
 	u8 bits_per_word;
 };
 
@@ -178,25 +164,6 @@ struct spi_engine {
 	u32 offload_caps;
 	bool offload_requires_sync;
 };
-
-static void spi_engine_primary_lane_flag(struct spi_device *spi,
-					 u8 *rx_lane_flags, u8 *tx_lane_flags)
-{
-	*rx_lane_flags = BIT(spi->rx_lane_map[0]);
-	*tx_lane_flags = BIT(spi->tx_lane_map[0]);
-}
-
-static void spi_engine_all_lanes_flags(struct spi_device *spi,
-				       u8 *rx_lane_flags, u8 *tx_lane_flags)
-{
-	int i;
-
-	for (i = 0; i < spi->num_rx_lanes; i++)
-		*rx_lane_flags |= BIT(spi->rx_lane_map[i]);
-
-	for (i = 0; i < spi->num_tx_lanes; i++)
-		*tx_lane_flags |= BIT(spi->tx_lane_map[i]);
-}
 
 static void spi_engine_program_add_cmd(struct spi_engine_program *p,
 	bool dry, uint16_t cmd)
@@ -226,7 +193,7 @@ static unsigned int spi_engine_get_config(struct spi_device *spi)
 }
 
 static void spi_engine_gen_xfer(struct spi_engine_program *p, bool dry,
-				struct spi_transfer *xfer, u32 num_lanes)
+	struct spi_transfer *xfer)
 {
 	unsigned int len;
 
@@ -236,9 +203,6 @@ static void spi_engine_gen_xfer(struct spi_engine_program *p, bool dry,
 		len = xfer->len / 2;
 	else
 		len = xfer->len / 4;
-
-	if (xfer->multi_lane_mode == SPI_MULTI_LANE_MODE_STRIPE)
-		len /= num_lanes;
 
 	while (len) {
 		unsigned int n = min(len, 256U);
@@ -305,7 +269,6 @@ static int spi_engine_precompile_message(struct spi_message *msg)
 {
 	unsigned int clk_div, max_hz = msg->spi->controller->max_speed_hz;
 	struct spi_transfer *xfer;
-	int multi_lane_mode = SPI_ENGINE_MULTI_BUS_MODE_UNKNOWN;
 	u8 min_bits_per_word = U8_MAX;
 	u8 max_bits_per_word = 0;
 
@@ -321,24 +284,6 @@ static int spi_engine_precompile_message(struct spi_message *msg)
 			min_bits_per_word = min(min_bits_per_word, xfer->bits_per_word);
 			max_bits_per_word = max(max_bits_per_word, xfer->bits_per_word);
 		}
-
-		if (xfer->rx_buf || xfer->offload_flags & SPI_OFFLOAD_XFER_RX_STREAM ||
-		    xfer->tx_buf || xfer->offload_flags & SPI_OFFLOAD_XFER_TX_STREAM) {
-			switch (xfer->multi_lane_mode) {
-			case SPI_MULTI_LANE_MODE_SINGLE:
-			case SPI_MULTI_LANE_MODE_STRIPE:
-				break;
-			default:
-				/* Other modes, like mirror not supported */
-				return -EINVAL;
-			}
-
-			/* If all xfers have the same multi-lane mode, we can optimize. */
-			if (multi_lane_mode == SPI_ENGINE_MULTI_BUS_MODE_UNKNOWN)
-				multi_lane_mode = xfer->multi_lane_mode;
-			else if (multi_lane_mode != xfer->multi_lane_mode)
-				multi_lane_mode = SPI_ENGINE_MULTI_BUS_MODE_CONFLICTING;
-		}
 	}
 
 	/*
@@ -352,14 +297,6 @@ static int spi_engine_precompile_message(struct spi_message *msg)
 			priv->bits_per_word = min_bits_per_word;
 		else
 			priv->bits_per_word = 0;
-
-		priv->multi_lane_mode = multi_lane_mode;
-		spi_engine_primary_lane_flag(msg->spi,
-					     &priv->rx_primary_lane_mask,
-					     &priv->tx_primary_lane_mask);
-		spi_engine_all_lanes_flags(msg->spi,
-					   &priv->rx_all_lanes_mask,
-					   &priv->tx_all_lanes_mask);
 	}
 
 	return 0;
@@ -373,7 +310,6 @@ static void spi_engine_compile_message(struct spi_message *msg, bool dry,
 	struct spi_engine_offload *priv;
 	struct spi_transfer *xfer;
 	int clk_div, new_clk_div, inst_ns;
-	int prev_multi_lane_mode = SPI_MULTI_LANE_MODE_SINGLE;
 	bool keep_cs = false;
 	u8 bits_per_word = 0;
 
@@ -398,7 +334,6 @@ static void spi_engine_compile_message(struct spi_message *msg, bool dry,
 		 * in the same way.
 		 */
 		bits_per_word = priv->bits_per_word;
-		prev_multi_lane_mode = priv->multi_lane_mode;
 	} else {
 		spi_engine_program_add_cmd(p, dry,
 			SPI_ENGINE_CMD_WRITE(SPI_ENGINE_CMD_REG_CONFIG,
@@ -409,28 +344,6 @@ static void spi_engine_compile_message(struct spi_message *msg, bool dry,
 	spi_engine_gen_cs(p, dry, spi, !xfer->cs_off);
 
 	list_for_each_entry(xfer, &msg->transfers, transfer_list) {
-		if (xfer->rx_buf || xfer->offload_flags & SPI_OFFLOAD_XFER_RX_STREAM ||
-		    xfer->tx_buf || xfer->offload_flags & SPI_OFFLOAD_XFER_TX_STREAM) {
-			if (xfer->multi_lane_mode != prev_multi_lane_mode) {
-				u8 tx_lane_flags, rx_lane_flags;
-
-				if (xfer->multi_lane_mode == SPI_MULTI_LANE_MODE_STRIPE)
-					spi_engine_all_lanes_flags(spi, &rx_lane_flags,
-								   &tx_lane_flags);
-				else
-					spi_engine_primary_lane_flag(spi, &rx_lane_flags,
-								     &tx_lane_flags);
-
-				spi_engine_program_add_cmd(p, dry,
-					SPI_ENGINE_CMD_WRITE(SPI_ENGINE_CMD_REG_SDI_MASK,
-							     rx_lane_flags));
-				spi_engine_program_add_cmd(p, dry,
-					SPI_ENGINE_CMD_WRITE(SPI_ENGINE_CMD_REG_SDO_MASK,
-							     tx_lane_flags));
-			}
-			prev_multi_lane_mode = xfer->multi_lane_mode;
-		}
-
 		new_clk_div = host->max_speed_hz / xfer->effective_speed_hz;
 		if (new_clk_div != clk_div) {
 			clk_div = new_clk_div;
@@ -447,7 +360,7 @@ static void spi_engine_compile_message(struct spi_message *msg, bool dry,
 					bits_per_word));
 		}
 
-		spi_engine_gen_xfer(p, dry, xfer, spi->num_rx_lanes);
+		spi_engine_gen_xfer(p, dry, xfer);
 		spi_engine_gen_sleep(p, dry, spi_delay_to_ns(&xfer->delay, xfer),
 				     inst_ns, xfer->effective_speed_hz);
 
@@ -481,19 +394,6 @@ static void spi_engine_compile_message(struct spi_message *msg, bool dry,
 	if (clk_div != 1)
 		spi_engine_program_add_cmd(p, dry,
 			SPI_ENGINE_CMD_WRITE(SPI_ENGINE_CMD_REG_CLK_DIV, 0));
-
-	/* Restore single lane mode unless offload disable will restore it later. */
-	if (prev_multi_lane_mode == SPI_MULTI_LANE_MODE_STRIPE &&
-	    (!msg->offload || priv->multi_lane_mode != SPI_MULTI_LANE_MODE_STRIPE)) {
-		u8 rx_lane_flags, tx_lane_flags;
-
-		spi_engine_primary_lane_flag(spi, &rx_lane_flags, &tx_lane_flags);
-
-		spi_engine_program_add_cmd(p, dry,
-			SPI_ENGINE_CMD_WRITE(SPI_ENGINE_CMD_REG_SDI_MASK, rx_lane_flags));
-		spi_engine_program_add_cmd(p, dry,
-			SPI_ENGINE_CMD_WRITE(SPI_ENGINE_CMD_REG_SDO_MASK, tx_lane_flags));
-	}
 }
 
 static void spi_engine_xfer_next(struct spi_message *msg,
@@ -815,7 +715,7 @@ static int spi_engine_optimize_message(struct spi_message *msg)
 	p_dry.length = 0;
 	spi_engine_compile_message(msg, true, &p_dry);
 
-	p = kzalloc_flex(*p, instructions, p_dry.length + 1);
+	p = kzalloc(struct_size(p, instructions, p_dry.length + 1), GFP_KERNEL);
 	if (!p)
 		return -ENOMEM;
 
@@ -887,7 +787,6 @@ static int spi_engine_setup(struct spi_device *device)
 	struct spi_controller *host = device->controller;
 	struct spi_engine *spi_engine = spi_controller_get_devdata(host);
 	unsigned int reg;
-	int ret;
 
 	if (device->mode & SPI_CS_HIGH)
 		spi_engine->cs_inv |= BIT(spi_get_chipselect(device, 0));
@@ -900,19 +799,6 @@ static int spi_engine_setup(struct spi_device *device)
 	writel_relaxed(SPI_ENGINE_CMD_CS_INV(spi_engine->cs_inv),
 		       spi_engine->base + SPI_ENGINE_REG_CMD_FIFO);
 
-	if (host->num_data_lanes > 1) {
-		u8 rx_lane_flags, tx_lane_flags;
-
-		spi_engine_primary_lane_flag(device, &rx_lane_flags, &tx_lane_flags);
-
-		writel_relaxed(SPI_ENGINE_CMD_WRITE(SPI_ENGINE_CMD_REG_SDI_MASK,
-						    rx_lane_flags),
-			       spi_engine->base + SPI_ENGINE_REG_CMD_FIFO);
-		writel_relaxed(SPI_ENGINE_CMD_WRITE(SPI_ENGINE_CMD_REG_SDO_MASK,
-						    tx_lane_flags),
-			       spi_engine->base + SPI_ENGINE_REG_CMD_FIFO);
-	}
-
 	/*
 	 * In addition to setting the flags, we have to do a CS assert command
 	 * to make the new setting actually take effect.
@@ -923,15 +809,8 @@ static int spi_engine_setup(struct spi_device *device)
 	writel_relaxed(SPI_ENGINE_CMD_SYNC(1),
 		       spi_engine->base + SPI_ENGINE_REG_CMD_FIFO);
 
-	ret = readl_relaxed_poll_timeout(spi_engine->base + SPI_ENGINE_REG_SYNC_ID,
-					 reg, reg == 1, 1, 1 * USEC_PER_MSEC);
-
-	/* Clear the stale SYNC pending bit so it doesn't fire when the IRQ is later enabled. */
-	writel_relaxed(SPI_ENGINE_INT_SYNC, spi_engine->base + SPI_ENGINE_REG_INT_PENDING);
-	/* Read back to flush posted write. */
-	readl_relaxed(spi_engine->base + SPI_ENGINE_REG_INT_PENDING);
-
-	return ret;
+	return readl_relaxed_poll_timeout(spi_engine->base + SPI_ENGINE_REG_SYNC_ID,
+					  reg, reg == 1, 1, 1000);
 }
 
 static int spi_engine_transfer_one_message(struct spi_controller *host,
@@ -961,7 +840,7 @@ static int spi_engine_transfer_one_message(struct spi_controller *host,
 		struct spi_transfer *xfer;
 
 		list_for_each_entry(xfer, &msg->transfers, transfer_list)
-			trace_call__spi_transfer_start(msg, xfer);
+			trace_spi_transfer_start(msg, xfer);
 	}
 
 	spin_lock_irqsave(&spi_engine->lock, flags);
@@ -995,7 +874,7 @@ static int spi_engine_transfer_one_message(struct spi_controller *host,
 		struct spi_transfer *xfer;
 
 		list_for_each_entry(xfer, &msg->transfers, transfer_list)
-			trace_call__spi_transfer_stop(msg, xfer);
+			trace_spi_transfer_stop(msg, xfer);
 	}
 
 out:
@@ -1023,26 +902,11 @@ static int spi_engine_trigger_enable(struct spi_offload *offload)
 						    priv->bits_per_word),
 			       spi_engine->base + SPI_ENGINE_REG_CMD_FIFO);
 
-	if (priv->multi_lane_mode == SPI_MULTI_LANE_MODE_STRIPE) {
-		writel_relaxed(SPI_ENGINE_CMD_WRITE(SPI_ENGINE_CMD_REG_SDI_MASK,
-						    priv->rx_all_lanes_mask),
-			       spi_engine->base + SPI_ENGINE_REG_CMD_FIFO);
-		writel_relaxed(SPI_ENGINE_CMD_WRITE(SPI_ENGINE_CMD_REG_SDO_MASK,
-						    priv->tx_all_lanes_mask),
-			       spi_engine->base + SPI_ENGINE_REG_CMD_FIFO);
-	}
-
 	writel_relaxed(SPI_ENGINE_CMD_SYNC(1),
 		spi_engine->base + SPI_ENGINE_REG_CMD_FIFO);
 
 	ret = readl_relaxed_poll_timeout(spi_engine->base + SPI_ENGINE_REG_SYNC_ID,
-					 reg, reg == 1, 1, 1 * USEC_PER_MSEC);
-
-	/* Clear the stale SYNC pending bit so it doesn't fire when the IRQ is later enabled */
-	writel_relaxed(SPI_ENGINE_INT_SYNC, spi_engine->base + SPI_ENGINE_REG_INT_PENDING);
-	/* Read back to flush posted write. */
-	readl_relaxed(spi_engine->base + SPI_ENGINE_REG_INT_PENDING);
-
+					 reg, reg == 1, 1, 1000);
 	if (ret)
 		return ret;
 
@@ -1065,16 +929,6 @@ static void spi_engine_trigger_disable(struct spi_offload *offload)
 	reg &= ~SPI_ENGINE_OFFLOAD_CTRL_ENABLE;
 	writel_relaxed(reg, spi_engine->base +
 			    SPI_ENGINE_REG_OFFLOAD_CTRL(priv->offload_num));
-
-	/* Restore single-lane mode. */
-	if (priv->multi_lane_mode == SPI_MULTI_LANE_MODE_STRIPE) {
-		writel_relaxed(SPI_ENGINE_CMD_WRITE(SPI_ENGINE_CMD_REG_SDI_MASK,
-						    priv->rx_primary_lane_mask),
-			       spi_engine->base + SPI_ENGINE_REG_CMD_FIFO);
-		writel_relaxed(SPI_ENGINE_CMD_WRITE(SPI_ENGINE_CMD_REG_SDO_MASK,
-						    priv->tx_primary_lane_mask),
-			       spi_engine->base + SPI_ENGINE_REG_CMD_FIFO);
-	}
 }
 
 static struct dma_chan
@@ -1119,7 +973,7 @@ static int spi_engine_probe(struct platform_device *pdev)
 {
 	struct spi_engine *spi_engine;
 	struct spi_controller *host;
-	unsigned int version, data_width_reg_val;
+	unsigned int version;
 	int irq, ret;
 
 	irq = platform_get_irq(pdev, 0);
@@ -1188,15 +1042,13 @@ static int spi_engine_probe(struct platform_device *pdev)
 		return PTR_ERR(spi_engine->base);
 
 	version = readl(spi_engine->base + ADI_AXI_REG_VERSION);
-	if (ADI_AXI_PCORE_VER_MAJOR(version) > 2) {
+	if (ADI_AXI_PCORE_VER_MAJOR(version) != 1) {
 		dev_err(&pdev->dev, "Unsupported peripheral version %u.%u.%u\n",
 			ADI_AXI_PCORE_VER_MAJOR(version),
 			ADI_AXI_PCORE_VER_MINOR(version),
 			ADI_AXI_PCORE_VER_PATCH(version));
 		return -ENODEV;
 	}
-
-	data_width_reg_val = readl(spi_engine->base + SPI_ENGINE_REG_DATA_WIDTH);
 
 	if (adi_axi_pcore_ver_gteq(version, 1, 1)) {
 		unsigned int sizes = readl(spi_engine->base +
@@ -1228,6 +1080,7 @@ static int spi_engine_probe(struct platform_device *pdev)
 	if (ret)
 		return ret;
 
+	host->dev.of_node = pdev->dev.of_node;
 	host->mode_bits = SPI_CPOL | SPI_CPHA | SPI_3WIRE;
 	host->bits_per_word_mask = SPI_BPW_RANGE_MASK(1, 32);
 	host->max_speed_hz = clk_get_rate(spi_engine->ref_clk) / 2;
@@ -1244,9 +1097,6 @@ static int spi_engine_probe(struct platform_device *pdev)
 	}
 	if (adi_axi_pcore_ver_gteq(version, 1, 3))
 		host->mode_bits |= SPI_MOSI_IDLE_LOW | SPI_MOSI_IDLE_HIGH;
-	if (adi_axi_pcore_ver_gteq(version, 2, 0))
-		host->num_data_lanes = FIELD_GET(SPI_ENGINE_REG_DATA_WIDTH_NUM_OF_SDIO_MASK,
-						 data_width_reg_val);
 
 	if (host->max_speed_hz == 0)
 		return dev_err_probe(&pdev->dev, -EINVAL, "spi_clk rate is 0");

@@ -130,7 +130,7 @@ struct airq_iv *airq_iv_create(unsigned long bits, unsigned long flags,
 	struct airq_iv *iv;
 	unsigned long size;
 
-	iv = kzalloc_obj(*iv);
+	iv = kzalloc(sizeof(*iv), GFP_KERNEL);
 	if (!iv)
 		goto out;
 	iv->bits = bits;

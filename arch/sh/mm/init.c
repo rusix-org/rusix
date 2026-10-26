@@ -52,24 +52,26 @@ static pte_t *__get_pte_phys(unsigned long addr)
 	pmd_t *pmd;
 
 	pgd = pgd_offset_k(addr);
-	if (pgd_none(*pgd))
+	if (pgd_none(*pgd)) {
+		pgd_ERROR(*pgd);
 		return NULL;
+	}
 
 	p4d = p4d_alloc(NULL, pgd, addr);
 	if (unlikely(!p4d)) {
-		pr_err("allocating p4d table failed\n");
+		p4d_ERROR(*p4d);
 		return NULL;
 	}
 
 	pud = pud_alloc(NULL, p4d, addr);
 	if (unlikely(!pud)) {
-		pr_err("allocating pud table failed\n");
+		pud_ERROR(*pud);
 		return NULL;
 	}
 
 	pmd = pmd_alloc(NULL, pud, addr);
 	if (unlikely(!pmd)) {
-		pr_err("allocating pmd table failed\n");
+		pmd_ERROR(*pmd);
 		return NULL;
 	}
 
@@ -82,11 +84,7 @@ static void set_pte_phys(unsigned long addr, unsigned long phys, pgprot_t prot)
 
 	pte = __get_pte_phys(addr);
 	if (!pte_none(*pte)) {
-		char str[PTVAL_STR_MAX];
-
-		ptval_to_str(str, pte_val(*pte));
-		pr_err("unexpected set PTE at %lx in %s: bad pte %p(%s).\n",
-			addr, __func__, pte, str);
+		pte_ERROR(*pte);
 		return;
 	}
 
@@ -229,6 +227,8 @@ static void __init do_init_bootmem(void)
 	node_set_online(0);
 
 	plat_mem_setup();
+
+	sparse_init();
 }
 
 static void __init early_reserve_mem(void)
@@ -264,13 +264,9 @@ static void __init early_reserve_mem(void)
 	reserve_crashkernel();
 }
 
-void __init arch_zone_limits_init(unsigned long *max_zone_pfns)
-{
-	max_zone_pfns[ZONE_NORMAL] = max_low_pfn;
-}
-
 void __init paging_init(void)
 {
+	unsigned long max_zone_pfns[MAX_NR_ZONES];
 	unsigned long vaddr, end;
 
 	sh_mv.mv_mem_init();
@@ -324,6 +320,10 @@ void __init paging_init(void)
 	page_table_range_init(vaddr, end, swapper_pg_dir);
 
 	kmap_coherent_init();
+
+	memset(max_zone_pfns, 0, sizeof(max_zone_pfns));
+	max_zone_pfns[ZONE_NORMAL] = max_low_pfn;
+	free_area_init(max_zone_pfns);
 }
 
 unsigned int mem_init_done = 0;
@@ -332,6 +332,10 @@ void __init mem_init(void)
 {
 	/* Set this up early, so we can take care of the zero page */
 	cpu_cache_init();
+
+	/* clear the zero-page */
+	memset(empty_zero_page, 0, PAGE_SIZE);
+	__flush_wback_region(empty_zero_page, PAGE_SIZE);
 
 	vsyscall_init();
 

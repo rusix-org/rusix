@@ -161,7 +161,6 @@ static void vdpasim_do_reset(struct vdpasim *vdpasim, u32 flags)
 	}
 
 	vdpasim->running = false;
-	vdpasim->pending_kick = false;
 	spin_unlock(&vdpasim->iommu_lock);
 
 	vdpasim->features = 0;
@@ -252,21 +251,25 @@ struct vdpasim *vdpasim_create(struct vdpasim_dev_attr *dev_attr,
 	if (!vdpasim->config)
 		goto err_iommu;
 
-	vdpasim->vqs = kzalloc_objs(struct vdpasim_virtqueue, dev_attr->nvqs);
+	vdpasim->vqs = kcalloc(dev_attr->nvqs, sizeof(struct vdpasim_virtqueue),
+			       GFP_KERNEL);
 	if (!vdpasim->vqs)
 		goto err_iommu;
 
-	vdpasim->iommu = kmalloc_objs(*vdpasim->iommu, vdpasim->dev_attr.nas);
+	vdpasim->iommu = kmalloc_array(vdpasim->dev_attr.nas,
+				       sizeof(*vdpasim->iommu), GFP_KERNEL);
 	if (!vdpasim->iommu)
 		goto err_iommu;
 
-	vdpasim->iommu_pt = kmalloc_objs(*vdpasim->iommu_pt,
-					 vdpasim->dev_attr.nas);
+	vdpasim->iommu_pt = kmalloc_array(vdpasim->dev_attr.nas,
+					  sizeof(*vdpasim->iommu_pt), GFP_KERNEL);
 	if (!vdpasim->iommu_pt)
 		goto err_iommu;
 
-	for (i = 0; i < vdpasim->dev_attr.nas; i++) {
+	for (i = 0; i < vdpasim->dev_attr.nas; i++)
 		vhost_iotlb_init(&vdpasim->iommu[i], max_iotlb_entries, 0);
+
+	for (i = 0; i < vdpasim->dev_attr.nas; i++) {
 		ret = vhost_iotlb_add_range(&vdpasim->iommu[i], 0, ULONG_MAX,
 					    0, VHOST_MAP_RW);
 		if (ret)
@@ -733,11 +736,12 @@ static int vdpasim_dma_unmap(struct vdpa_device *vdpa, unsigned int asid,
 	if (asid >= vdpasim->dev_attr.nas)
 		return -EINVAL;
 
-	spin_lock(&vdpasim->iommu_lock);
 	if (vdpasim->iommu_pt[asid]) {
 		vhost_iotlb_reset(&vdpasim->iommu[asid]);
 		vdpasim->iommu_pt[asid] = false;
 	}
+
+	spin_lock(&vdpasim->iommu_lock);
 	vhost_iotlb_del_range(&vdpasim->iommu[asid], iova, iova + size - 1);
 	spin_unlock(&vdpasim->iommu_lock);
 

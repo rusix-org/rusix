@@ -3,6 +3,7 @@
 
 . "$(cd "$(dirname "$0")" && pwd)"/test_common.sh
 
+TID="generic_03"
 ERR_CODE=0
 
 _prep_test "null" "check dma & segment limits for zero copy"
@@ -23,5 +24,5 @@ fi
 if [ "$max_segment_size" != "32768" ]; then
 	ERR_CODE=255
 fi
-_cleanup_test
+_cleanup_test "null"
 _show_result $TID $ERR_CODE

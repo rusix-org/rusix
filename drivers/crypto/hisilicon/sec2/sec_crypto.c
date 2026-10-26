@@ -20,7 +20,7 @@
 #include "sec.h"
 #include "sec_crypto.h"
 
-#define SEC_PRIORITY		80
+#define SEC_PRIORITY		4001
 #define SEC_XTS_MIN_KEY_SIZE	(2 * AES_MIN_KEY_SIZE)
 #define SEC_XTS_MID_KEY_SIZE	(3 * AES_MIN_KEY_SIZE)
 #define SEC_XTS_MAX_KEY_SIZE	(2 * AES_MAX_KEY_SIZE)
@@ -568,11 +568,11 @@ static int sec_alloc_qp_ctx_resource(struct sec_ctx *ctx, struct sec_qp_ctx *qp_
 	struct device *dev = ctx->dev;
 	int ret = -ENOMEM;
 
-	qp_ctx->req_list = kzalloc_objs(struct sec_req *, q_depth);
+	qp_ctx->req_list = kcalloc(q_depth, sizeof(struct sec_req *), GFP_KERNEL);
 	if (!qp_ctx->req_list)
 		return ret;
 
-	qp_ctx->res = kzalloc_objs(struct sec_alg_res, q_depth);
+	qp_ctx->res = kcalloc(q_depth, sizeof(struct sec_alg_res), GFP_KERNEL);
 	if (!qp_ctx->res)
 		goto err_free_req_list;
 	qp_ctx->res->depth = q_depth;
@@ -668,14 +668,11 @@ static int sec_ctx_base_init(struct sec_ctx *ctx)
 	sec = container_of(ctx->qps[0]->qm, struct sec_dev, qm);
 	ctx->sec = sec;
 	ctx->dev = &sec->qm.pdev->dev;
+	ctx->hlf_q_num = sec->ctx_q_num >> 1;
 
 	ctx->pbuf_supported = ctx->sec->iommu_used;
-	if (sec->qm.ver < QM_HW_V3)
-		ctx->type_supported = SEC_BD_TYPE2;
-	else
-		ctx->type_supported = SEC_BD_TYPE3;
-
-	ctx->qp_ctx = kzalloc_objs(struct sec_qp_ctx, sec->ctx_q_num);
+	ctx->qp_ctx = kcalloc(sec->ctx_q_num, sizeof(struct sec_qp_ctx),
+			      GFP_KERNEL);
 	if (!ctx->qp_ctx) {
 		ret = -ENOMEM;
 		goto err_destroy_qps;
@@ -2071,10 +2068,13 @@ static int sec_skcipher_ctx_init(struct crypto_skcipher *tfm)
 	if (!ctx->qps)
 		return 0;
 
-	if (ctx->type_supported == SEC_BD_TYPE3)
-		ctx->req_op = &sec_skcipher_req_ops_v3;
-	else
+	if (ctx->sec->qm.ver < QM_HW_V3) {
+		ctx->type_supported = SEC_BD_TYPE2;
 		ctx->req_op = &sec_skcipher_req_ops;
+	} else {
+		ctx->type_supported = SEC_BD_TYPE3;
+		ctx->req_op = &sec_skcipher_req_ops_v3;
+	}
 
 	return 0;
 }
@@ -2101,11 +2101,13 @@ static int sec_aead_init(struct crypto_aead *tfm)
 	ret = sec_ctx_base_init(ctx);
 	if (ret)
 		return ret;
-
-	if (ctx->type_supported == SEC_BD_TYPE3)
-		ctx->req_op = &sec_aead_req_ops_v3;
-	else
+	if (ctx->sec->qm.ver < QM_HW_V3) {
+		ctx->type_supported = SEC_BD_TYPE2;
 		ctx->req_op = &sec_aead_req_ops;
+	} else {
+		ctx->type_supported = SEC_BD_TYPE3;
+		ctx->req_op = &sec_aead_req_ops_v3;
+	}
 
 	ret = sec_auth_init(ctx);
 	if (ret)

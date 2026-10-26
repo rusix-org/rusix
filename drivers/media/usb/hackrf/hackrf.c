@@ -665,7 +665,7 @@ static int hackrf_free_urbs(struct hackrf_dev *dev)
 
 static int hackrf_alloc_urbs(struct hackrf_dev *dev, bool rcv)
 {
-	int i;
+	int i, j;
 	unsigned int pipe;
 	usb_complete_t complete;
 
@@ -681,8 +681,11 @@ static int hackrf_alloc_urbs(struct hackrf_dev *dev, bool rcv)
 	for (i = 0; i < MAX_BULK_BUFS; i++) {
 		dev_dbg(dev->dev, "alloc urb=%d\n", i);
 		dev->urb_list[i] = usb_alloc_urb(0, GFP_KERNEL);
-		if (!dev->urb_list[i])
+		if (!dev->urb_list[i]) {
+			for (j = 0; j < i; j++)
+				usb_free_urb(dev->urb_list[j]);
 			return -ENOMEM;
+		}
 		usb_fill_bulk_urb(dev->urb_list[i],
 				dev->udev,
 				pipe,
@@ -1345,7 +1348,7 @@ static int hackrf_probe(struct usb_interface *intf,
 	int ret;
 	u8 u8tmp, buf[BUF_SIZE];
 
-	dev = kzalloc_obj(*dev);
+	dev = kzalloc(sizeof(*dev), GFP_KERNEL);
 	if (!dev) {
 		ret = -ENOMEM;
 		goto err;

@@ -25,7 +25,6 @@
 #include "dc_types.h"
 #include "core_types.h"
 #include "core_status.h"
-#include "dc.h"
 #include "dc_state.h"
 #include "dc_state_priv.h"
 #include "dc_stream_priv.h"
@@ -36,8 +35,8 @@
 #include "link_enc_cfg.h"
 
 #if defined(CONFIG_DRM_AMD_DC_FP)
-#include "dml2_wrapper/dml2_wrapper.h"
-#include "dml2_wrapper/dml2_internal_types.h"
+#include "dml2/dml2_wrapper.h"
+#include "dml2/dml2_internal_types.h"
 #endif
 
 #define DC_LOGGER \
@@ -196,7 +195,7 @@ struct dc_state *dc_state_create(struct dc *dc, struct dc_state_create_params *p
 {
 	struct dc_state *state;
 
-	state = kvzalloc_obj(struct dc_state);
+	state = kvzalloc(sizeof(struct dc_state), GFP_KERNEL);
 
 	if (!state)
 		return NULL;
@@ -206,33 +205,19 @@ struct dc_state *dc_state_create(struct dc *dc, struct dc_state_create_params *p
 	state->power_source = params ? params->power_source : DC_POWER_SOURCE_AC;
 
 #ifdef CONFIG_DRM_AMD_DC_FP
-	bool status;
-
 	if (dc->debug.using_dml2) {
-		DC_FP_START();
-		status = dml2_create(dc, &dc->dml2_options, &state->bw_ctx.dml2);
-		DC_FP_END();
-
-		if (!status) {
+		if (!dml2_create(dc, &dc->dml2_options, &state->bw_ctx.dml2)) {
 			dc_state_release(state);
 			return NULL;
 		}
 
-		if (dc->caps.dcmode_power_limits_present) {
-			bool dc_power_status;
-
-			DC_FP_START();
-			dc_power_status = dml2_create(dc, &dc->dml2_dc_power_options, &state->bw_ctx.dml2_dc_power_source);
-			DC_FP_END();
-
-			if (!dc_power_status) {
-				dc_state_release(state);
-				return NULL;
-			}
+		if (dc->caps.dcmode_power_limits_present && !dml2_create(dc, &dc->dml2_dc_power_options, &state->bw_ctx.dml2_dc_power_source)) {
+			dc_state_release(state);
+			return NULL;
 		}
-
 	}
-#endif // CONFIG_DRM_AMD_DC_FP
+#endif
+
 	kref_init(&state->refcount);
 
 	return state;
@@ -250,20 +235,14 @@ void dc_state_copy(struct dc_state *dst_state, struct dc_state *src_state)
 
 #ifdef CONFIG_DRM_AMD_DC_FP
 	dst_state->bw_ctx.dml2 = dst_dml2;
-	if (src_state->bw_ctx.dml2) {
-		DC_FP_START();
+	if (src_state->bw_ctx.dml2)
 		dml2_copy(dst_state->bw_ctx.dml2, src_state->bw_ctx.dml2);
-		DC_FP_END();
-	}
 
 	dst_state->bw_ctx.dml2_dc_power_source = dst_dml2_dc_power_source;
-
-	if (src_state->bw_ctx.dml2_dc_power_source) {
-		DC_FP_START();
+	if (src_state->bw_ctx.dml2_dc_power_source)
 		dml2_copy(dst_state->bw_ctx.dml2_dc_power_source, src_state->bw_ctx.dml2_dc_power_source);
-		DC_FP_END();
-	}
-#endif // CONFIG_DRM_AMD_DC_FP
+#endif
+
 	/* context refcount should not be overridden */
 	dst_state->refcount = refcount;
 }
@@ -272,42 +251,30 @@ struct dc_state *dc_state_create_copy(struct dc_state *src_state)
 {
 	struct dc_state *new_state;
 
-	new_state = kvmalloc_obj(struct dc_state);
+	new_state = kvmalloc(sizeof(struct dc_state),
+			GFP_KERNEL);
 	if (!new_state)
 		return NULL;
 
 	dc_state_copy_internal(new_state, src_state);
 
 #ifdef CONFIG_DRM_AMD_DC_FP
-	bool status;
-
 	new_state->bw_ctx.dml2 = NULL;
 	new_state->bw_ctx.dml2_dc_power_source = NULL;
 
-	if (src_state->bw_ctx.dml2) {
-		DC_FP_START();
-		status = dml2_create_copy(&new_state->bw_ctx.dml2, src_state->bw_ctx.dml2);
-		DC_FP_END();
-
-		if (!status) {
-			dc_state_release(new_state);
-			return NULL;
-		}
+	if (src_state->bw_ctx.dml2 &&
+			!dml2_create_copy(&new_state->bw_ctx.dml2, src_state->bw_ctx.dml2)) {
+		dc_state_release(new_state);
+		return NULL;
 	}
 
-
-	if (src_state->bw_ctx.dml2_dc_power_source) {
-		DC_FP_START();
-		status = dml2_create_copy(&new_state->bw_ctx.dml2_dc_power_source,
-					  src_state->bw_ctx.dml2_dc_power_source);
-		DC_FP_END();
-
-		if (!status) {
-			dc_state_release(new_state);
-			return NULL;
-		}
+	if (src_state->bw_ctx.dml2_dc_power_source &&
+			!dml2_create_copy(&new_state->bw_ctx.dml2_dc_power_source, src_state->bw_ctx.dml2_dc_power_source)) {
+		dc_state_release(new_state);
+		return NULL;
 	}
-#endif // CONFIG_DRM_AMD_DC_FP
+#endif
+
 	kref_init(&new_state->refcount);
 
 	return new_state;
@@ -360,10 +327,6 @@ void dc_state_destruct(struct dc_state *state)
 	}
 	state->phantom_plane_count = 0;
 
-	memset(state->probes, 0, sizeof(state->probes));
-	memset(state->probe_status, 0, sizeof(state->probe_status));
-	state->probe_count = 0;
-
 	state->stream_mask = 0;
 	memset(&state->res_ctx, 0, sizeof(state->res_ctx));
 	memset(&state->pp_display_cfg, 0, sizeof(state->pp_display_cfg));
@@ -389,13 +352,11 @@ static void dc_state_free(struct kref *kref)
 	dc_state_destruct(state);
 
 #ifdef CONFIG_DRM_AMD_DC_FP
-	DC_FP_START();
 	dml2_destroy(state->bw_ctx.dml2);
 	state->bw_ctx.dml2 = 0;
 
 	dml2_destroy(state->bw_ctx.dml2_dc_power_source);
 	state->bw_ctx.dml2_dc_power_source = 0;
-	DC_FP_END();
 #endif
 
 	kvfree(state);
@@ -414,7 +375,6 @@ enum dc_status dc_state_add_stream(
 		struct dc_state *state,
 		struct dc_stream_state *stream)
 {
-	(void)dc;
 	enum dc_status res;
 
 	DC_LOGGER_INIT(dc->ctx->logger);
@@ -466,6 +426,8 @@ enum dc_status dc_state_remove_stream(
 		dm_error("Context doesn't have stream %p !\n", stream);
 		return DC_ERROR_UNEXPECTED;
 	}
+
+	dc_stream_release_3dlut_for_stream(dc, stream);
 
 	dc_stream_release(state->streams[i]);
 	state->stream_count--;
@@ -681,67 +643,28 @@ bool dc_state_add_all_planes_for_stream(
 /* Private dc_state functions */
 
 /**
- * dc_state_get_status - Unified status readback for dc_state.
- * @status:  output object populated per options->types
- * @options: selects source state, status classes to fill, and optional filters
+ * dc_state_get_stream_status - Get stream status from given dc state
+ * @state: DC state to find the stream status in
+ * @stream: The stream to get the stream status for
  *
- * Return: DC_OK on success, DC_ERROR_UNEXPECTED if options or state is NULL.
- */
-enum dc_status dc_state_get_status(struct dc_state_status *status,
-		const struct dc_get_status_options *options)
-{
-	uint8_t i;
-
-	if (!status || !options || !options->state)
-		return DC_ERROR_UNEXPECTED;
-
-	if (options->types & DC_GET_STATUS_STREAM) {
-		status->stream_count = 0;
-		for (i = 0; i < options->state->stream_count; i++) {
-			if (options->stream &&
-					options->stream != options->state->streams[i])
-				continue;
-			status->stream_status[status->stream_count++] =
-					&options->state->stream_status[i];
-		}
-	}
-
-	if (options->types & DC_GET_STATUS_PROBE) {
-		status->probe_count = 0;
-		for (i = 0; i < options->state->probe_count; i++) {
-			if (options->probe &&
-					options->probe->type != options->state->probes[i].type)
-				continue;
-			status->probe_status[status->probe_count++] =
-					&options->state->probe_status[i];
-		}
-	}
-
-	return DC_OK;
-}
-
-/**
- * dc_state_get_stream_status - Shim for dc_state_get_status.
- * @state:  state to search
- * @stream: stream to find status for
- *
- * Return: pointer to the matching dc_stream_status, or NULL if not found.
+ * The given stream is expected to exist in the given dc state. Otherwise, NULL
+ * will be returned.
  */
 struct dc_stream_status *dc_state_get_stream_status(
 		struct dc_state *state,
 		const struct dc_stream_state *stream)
 {
-	struct dc_state_status status = {};
-	struct dc_get_status_options options = {
-		.state  = state,
-		.types  = DC_GET_STATUS_STREAM,
-		.stream = stream,
-	};
+	uint8_t i;
 
-	if (dc_state_get_status(&status, &options) != DC_OK)
+	if (state == NULL)
 		return NULL;
 
-	return status.stream_count > 0 ? status.stream_status[0] : NULL;
+	for (i = 0; i < state->stream_count; i++) {
+		if (stream == state->streams[i])
+			return &state->stream_status[i];
+	}
+
+	return NULL;
 }
 
 enum mall_stream_type dc_state_get_pipe_subvp_type(const struct dc_state *state,
@@ -827,7 +750,6 @@ struct dc_plane_state *dc_state_create_phantom_plane(const struct dc *dc,
 		struct dc_state *state,
 		struct dc_plane_state *main_plane)
 {
-	(void)main_plane;
 	struct dc_plane_state *phantom_plane = dc_create_plane_state(dc);
 
 	DC_LOGGER_INIT(dc->ctx->logger);
@@ -995,7 +917,7 @@ bool dc_state_remove_phantom_streams_and_planes(
 	const struct dc *dc,
 	struct dc_state *state)
 {
-	unsigned int i;
+	int i;
 	bool removed_phantom = false;
 	struct dc_stream_state *phantom_stream = NULL;
 
@@ -1020,7 +942,7 @@ void dc_state_release_phantom_streams_and_planes(
 	unsigned int phantom_count;
 	struct dc_stream_state *phantom_streams[MAX_PHANTOM_PIPES];
 	struct dc_plane_state *phantom_planes[MAX_PHANTOM_PIPES];
-	unsigned int i;
+	int i;
 
 	phantom_count = state->phantom_stream_count;
 	memcpy(phantom_streams, state->phantom_streams, sizeof(struct dc_stream_state *) * MAX_PHANTOM_PIPES);
@@ -1151,17 +1073,5 @@ bool dc_state_is_subvp_in_use(struct dc_state *state)
 			return true;
 	}
 
-	return false;
-}
-bool dc_state_is_alt_in_use(const struct dc *dc, const struct dc_state *state)
-{
-	uint32_t i;
-	const struct pipe_ctx *pipe;
-
-	for (i = 0; i < dc->res_pool->pipe_count; i++) {
-		pipe = &state->res_ctx.pipe_ctx[i];
-		if (pipe->p_state_type == P_STATE_ALT)
-			return true;
-	}
 	return false;
 }

@@ -201,7 +201,7 @@ static void group_adjust_blocks(struct super_block *sb, int group_no,
  * windows(start, end). Otherwise, it will only print out the "bad" windows,
  * those windows that overlap with their immediate neighbors.
  */
-#ifdef EXT2FS_DEBUG
+#if 1
 static void __rsv_window_dump(struct rb_root *root, int verbose,
 			      const char *fn)
 {
@@ -248,7 +248,7 @@ restart:
 	__rsv_window_dump((root), (verbose), __func__)
 #else
 #define rsv_window_dump(root, verbose) do {} while (0)
-#endif /* EXT2FS_DEBUG */
+#endif
 
 /**
  * goal_in_my_reservation()
@@ -334,7 +334,6 @@ search_reserve_window(struct rb_root *root, ext2_fsblk_t goal)
  */
 void ext2_rsv_window_add(struct super_block *sb,
 		    struct ext2_reserve_window_node *rsv)
-	__must_hold(&EXT2_SB(sb)->s_rsv_window_lock)
 {
 	struct rb_root *root = &EXT2_SB(sb)->s_rsv_window_root;
 	struct rb_node *node = &rsv->rsv_node;
@@ -374,7 +373,6 @@ void ext2_rsv_window_add(struct super_block *sb,
  */
 static void rsv_window_remove(struct super_block *sb,
 			      struct ext2_reserve_window_node *rsv)
-	__must_hold(&EXT2_SB(sb)->s_rsv_window_lock)
 {
 	rsv->rsv_start = EXT2_RESERVE_WINDOW_NOT_ALLOCATED;
 	rsv->rsv_end = EXT2_RESERVE_WINDOW_NOT_ALLOCATED;
@@ -416,13 +414,12 @@ static inline int rsv_is_empty(struct ext2_reserve_window *rsv)
  * Needs truncate_mutex protection prior to calling this function.
  */
 void ext2_init_block_alloc_info(struct inode *inode)
-	__must_hold(&EXT2_I(inode)->truncate_mutex)
 {
 	struct ext2_inode_info *ei = EXT2_I(inode);
 	struct ext2_block_alloc_info *block_i;
 	struct super_block *sb = inode->i_sb;
 
-	block_i = kmalloc_obj(*block_i);
+	block_i = kmalloc(sizeof(*block_i), GFP_KERNEL);
 	if (block_i) {
 		struct ext2_reserve_window_node *rsv = &block_i->rsv_window_node;
 
@@ -761,7 +758,6 @@ static int find_next_reservable_window(
 				struct super_block * sb,
 				ext2_fsblk_t start_block,
 				ext2_fsblk_t last_block)
-	__must_hold(&EXT2_SB(sb)->s_rsv_window_lock)
 {
 	struct rb_node *next;
 	struct ext2_reserve_window_node *rsv, *prev;

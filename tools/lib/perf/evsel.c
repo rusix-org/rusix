@@ -127,8 +127,7 @@ int perf_evsel__open(struct perf_evsel *evsel, struct perf_cpu_map *cpus,
 		     struct perf_thread_map *threads)
 {
 	struct perf_cpu cpu;
-	unsigned int idx;
-	int thread, err = 0;
+	int idx, thread, err = 0;
 
 	if (cpus == NULL) {
 		static struct perf_cpu_map *empty_cpu_map;
@@ -461,7 +460,7 @@ int perf_evsel__enable_cpu(struct perf_evsel *evsel, int cpu_map_idx)
 int perf_evsel__enable_thread(struct perf_evsel *evsel, int thread)
 {
 	struct perf_cpu cpu __maybe_unused;
-	unsigned int idx;
+	int idx;
 	int err;
 
 	perf_cpu_map__for_each_cpu(cpu, idx, evsel->cpus) {
@@ -500,13 +499,12 @@ int perf_evsel__disable(struct perf_evsel *evsel)
 
 int perf_evsel__apply_filter(struct perf_evsel *evsel, const char *filter)
 {
-	int err = 0;
+	int err = 0, i;
 
-	for (unsigned int i = 0; i < perf_cpu_map__nr(evsel->cpus) && !err; i++) {
+	for (i = 0; i < perf_cpu_map__nr(evsel->cpus) && !err; i++)
 		err = perf_evsel__run_ioctl(evsel,
 				     PERF_EVENT_IOC_SET_FILTER,
 				     (void *)filter, i);
-	}
 	return err;
 }
 

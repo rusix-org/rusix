@@ -43,7 +43,13 @@ unsigned int cal_debug;
 module_param_named(debug, cal_debug, uint, 0644);
 MODULE_PARM_DESC(debug, "activates debug info");
 
-bool cal_mc_api = 1;
+#ifdef CONFIG_VIDEO_TI_CAL_MC
+#define CAL_MC_API_DEFAULT 1
+#else
+#define CAL_MC_API_DEFAULT 0
+#endif
+
+bool cal_mc_api = CAL_MC_API_DEFAULT;
 module_param_named(mc_api, cal_mc_api, bool, 0444);
 MODULE_PARM_DESC(mc_api, "activates the MC API");
 
@@ -1006,7 +1012,7 @@ static struct cal_ctx *cal_ctx_create(struct cal_dev *cal, int inst)
 	struct cal_ctx *ctx;
 	int ret;
 
-	ctx = kzalloc_obj(*ctx);
+	ctx = kzalloc(sizeof(*ctx), GFP_KERNEL);
 	if (!ctx)
 		return NULL;
 
@@ -1101,7 +1107,8 @@ static int cal_init_camerarx_regmap(struct cal_dev *cal)
 		return 0;
 	}
 
-	dev_warn(cal->dev, "failed to get ti,camerrx-control: %pe\n", syscon);
+	dev_warn(cal->dev, "failed to get ti,camerrx-control: %ld\n",
+		 PTR_ERR(syscon));
 
 	/*
 	 * Backward DTS compatibility. If syscon entry is not present then
@@ -1222,8 +1229,6 @@ static int cal_probe(struct platform_device *pdev)
 
 	/* Create contexts. */
 	if (!cal_mc_api) {
-		dev_warn(cal->dev, "The legacy non-MC API is deprecated\n");
-
 		for (i = 0; i < cal->data->num_csi2_phy; ++i) {
 			struct cal_ctx *ctx;
 

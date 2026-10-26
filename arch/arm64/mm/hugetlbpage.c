@@ -36,12 +36,16 @@
  * huge pages could still be served from those areas.
  */
 #ifdef CONFIG_CMA
-unsigned int arch_hugetlb_cma_order(void)
+void __init arm64_hugetlb_cma_reserve(void)
 {
-	if (pud_sect_supported())
-		return PUD_SHIFT - PAGE_SHIFT;
+	int order;
 
-	return CONT_PMD_SHIFT - PAGE_SHIFT;
+	if (pud_sect_supported())
+		order = PUD_SHIFT - PAGE_SHIFT;
+	else
+		order = CONT_PMD_SHIFT - PAGE_SHIFT;
+
+	hugetlb_cma_reserve(order);
 }
 #endif /* CONFIG_CMA */
 
@@ -155,12 +159,11 @@ static pte_t get_clear_contig(struct mm_struct *mm,
 	pte_t pte, tmp_pte;
 	bool present;
 
-	pte = __ptep_get_and_clear_anysz(mm, addr, ptep, pgsize);
+	pte = __ptep_get_and_clear_anysz(mm, ptep, pgsize);
 	present = pte_present(pte);
 	while (--ncontig) {
 		ptep++;
-		addr += pgsize;
-		tmp_pte = __ptep_get_and_clear_anysz(mm, addr, ptep, pgsize);
+		tmp_pte = __ptep_get_and_clear_anysz(mm, ptep, pgsize);
 		if (present) {
 			if (pte_dirty(tmp_pte))
 				pte = pte_mkdirty(pte);
@@ -181,7 +184,7 @@ static pte_t get_clear_contig_flush(struct mm_struct *mm,
 	struct vm_area_struct vma = TLB_FLUSH_VMA(mm, 0);
 	unsigned long end = addr + (pgsize * ncontig);
 
-	__flush_hugetlb_tlb_range(&vma, addr, end, pgsize, TLBF_NOWALKCACHE);
+	__flush_hugetlb_tlb_range(&vma, addr, end, pgsize, true);
 	return orig_pte;
 }
 
@@ -204,12 +207,12 @@ static void clear_flush(struct mm_struct *mm,
 	unsigned long i, saddr = addr;
 
 	for (i = 0; i < ncontig; i++, addr += pgsize, ptep++)
-		__ptep_get_and_clear_anysz(mm, addr, ptep, pgsize);
+		__ptep_get_and_clear_anysz(mm, ptep, pgsize);
 
 	if (mm == &init_mm)
 		flush_tlb_kernel_range(saddr, addr);
 	else
-		__flush_hugetlb_tlb_range(&vma, saddr, addr, pgsize, TLBF_NOWALKCACHE);
+		__flush_hugetlb_tlb_range(&vma, saddr, addr, pgsize, true);
 }
 
 void set_huge_pte_at(struct mm_struct *mm, unsigned long addr,
@@ -222,8 +225,8 @@ void set_huge_pte_at(struct mm_struct *mm, unsigned long addr,
 	ncontig = num_contig_ptes(sz, &pgsize);
 
 	if (!pte_present(pte)) {
-		for (i = 0; i < ncontig; i++, ptep++, addr += pgsize)
-			__set_ptes_anysz(mm, addr, ptep, pte, 1, pgsize);
+		for (i = 0; i < ncontig; i++, ptep++)
+			__set_ptes_anysz(mm, ptep, pte, 1, pgsize);
 		return;
 	}
 
@@ -231,7 +234,7 @@ void set_huge_pte_at(struct mm_struct *mm, unsigned long addr,
 	if (pte_cont(pte) && pte_valid(__ptep_get(ptep)))
 		clear_flush(mm, addr, ptep, pgsize, ncontig);
 
-	__set_ptes_anysz(mm, addr, ptep, pte, ncontig, pgsize);
+	__set_ptes_anysz(mm, ptep, pte, ncontig, pgsize);
 }
 
 pte_t *huge_pte_alloc(struct mm_struct *mm, struct vm_area_struct *vma,
@@ -427,11 +430,11 @@ int huge_ptep_set_access_flags(struct vm_area_struct *vma,
 	pte_t orig_pte;
 
 	VM_WARN_ON(!pte_present(pte));
-	ncontig = num_contig_ptes(huge_page_size(hstate_vma(vma)), &pgsize);
 
 	if (!pte_cont(pte))
-		return __ptep_set_access_flags_anysz(vma, addr, ptep, pte,
-						     dirty, pgsize);
+		return __ptep_set_access_flags(vma, addr, ptep, pte, dirty);
+
+	ncontig = num_contig_ptes(huge_page_size(hstate_vma(vma)), &pgsize);
 
 	if (!__cont_access_flags_changed(ptep, pte, ncontig))
 		return 0;
@@ -446,7 +449,7 @@ int huge_ptep_set_access_flags(struct vm_area_struct *vma,
 	if (pte_young(orig_pte))
 		pte = pte_mkyoung(pte);
 
-	__set_ptes_anysz(mm, addr, ptep, pte, ncontig, pgsize);
+	__set_ptes_anysz(mm, ptep, pte, ncontig, pgsize);
 	return 1;
 }
 
@@ -470,7 +473,7 @@ void huge_ptep_set_wrprotect(struct mm_struct *mm,
 	pte = get_clear_contig_flush(mm, addr, ptep, pgsize, ncontig);
 	pte = pte_wrprotect(pte);
 
-	__set_ptes_anysz(mm, addr, ptep, pte, ncontig, pgsize);
+	__set_ptes_anysz(mm, ptep, pte, ncontig, pgsize);
 }
 
 pte_t huge_ptep_clear_flush(struct vm_area_struct *vma,

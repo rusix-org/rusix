@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause
 /*
- * Copyright (C) 2012-2014, 2018-2026 Intel Corporation
+ * Copyright (C) 2012-2014, 2018-2025 Intel Corporation
  * Copyright (C) 2013-2015 Intel Mobile Communications GmbH
  * Copyright (C) 2015-2017 Intel Deutschland GmbH
  */
@@ -99,14 +99,10 @@ static int iwl_mvm_create_skb(struct iwl_mvm *mvm, struct sk_buff *skb,
 	u8 mic_crc_len = u8_get_bits(desc->mac_flags1,
 				     IWL_RX_MPDU_MFLG1_MIC_CRC_LEN_MASK) << 1;
 
-	pad_len = desc->mac_flags2 & IWL_RX_MPDU_MFLG2_PAD ? 2 : 0;
-
-	if (IWL_FW_CHECK(mvm, len < hdrlen + crypt_len + pad_len + mic_crc_len,
-			 "invalid len (%d): hdrlen=%u, crypt_len=%u, pad_len=%u, mic_crc_len=%u\n",
-			 len, hdrlen, crypt_len, pad_len, mic_crc_len))
-		return -EINVAL;
-
-	len -= pad_len;
+	if (desc->mac_flags2 & IWL_RX_MPDU_MFLG2_PAD) {
+		len -= 2;
+		pad_len = 2;
+	}
 
 	/*
 	 * For non monitor interface strip the bytes the RADA might not have
@@ -114,7 +110,7 @@ static int iwl_mvm_create_skb(struct iwl_mvm *mvm, struct sk_buff *skb,
 	 * interface cannot exist with other interfaces, this removal is safe
 	 * and sufficient, in monitor mode there's no decryption being done.
 	 */
-	if (!ieee80211_hw_check(mvm->hw, RX_INCLUDES_FCS))
+	if (len > mic_crc_len && !ieee80211_hw_check(mvm->hw, RX_INCLUDES_FCS))
 		len -= mic_crc_len;
 
 	/* If frame is small enough to fit in skb->head, pull it completely.
@@ -247,7 +243,7 @@ static void iwl_mvm_pass_packet_to_mac80211(struct iwl_mvm *mvm,
 		return;
 	}
 
-	ieee80211_rx_napi(mvm->hw, sta ? &sta->deflink : NULL, skb, napi);
+	ieee80211_rx_napi(mvm->hw, sta, skb, napi);
 }
 
 static bool iwl_mvm_used_average_energy(struct iwl_mvm *mvm,
@@ -2168,17 +2164,7 @@ void iwl_mvm_rx_mpdu_mq(struct iwl_mvm *mvm, struct napi_struct *napi,
 	phy_data.phy_info = le16_to_cpu(desc->phy_info);
 	phy_data.d4 = desc->phy_data4;
 
-	if (IWL_FW_CHECK(mvm, len < sizeof(hdr->frame_control),
-			 "MPDU len (%u) is smaller than frame control\n",
-			 len))
-		return;
-
 	hdr = (void *)(pkt->data + desc_size);
-	if (IWL_FW_CHECK(mvm, len < ieee80211_hdrlen(hdr->frame_control),
-			 "MPDU len (%u) is smaller than header length (%u)\n",
-			 len, ieee80211_hdrlen(hdr->frame_control)))
-		return;
-
 	/* Dont use dev_alloc_skb(), we'll have enough headroom once
 	 * ieee80211_hdr pulled.
 	 */
@@ -2268,9 +2254,17 @@ void iwl_mvm_rx_mpdu_mq(struct iwl_mvm *mvm, struct napi_struct *napi,
 					  IWL_RX_MPDU_STATUS_STA_ID);
 
 		if (!WARN_ON_ONCE(sta_id >= mvm->fw->ucode_capa.num_stations)) {
+			struct ieee80211_link_sta *link_sta;
+
 			sta = rcu_dereference(mvm->fw_id_to_mac_id[sta_id]);
 			if (IS_ERR(sta))
 				sta = NULL;
+			link_sta = rcu_dereference(mvm->fw_id_to_link_sta[sta_id]);
+
+			if (sta && sta->valid_links && link_sta) {
+				rx_status->link_valid = 1;
+				rx_status->link_id = link_sta->link_id;
+			}
 		}
 	} else if (!is_multicast_ether_addr(hdr->addr2)) {
 		/*
@@ -2299,7 +2293,7 @@ void iwl_mvm_rx_mpdu_mq(struct iwl_mvm *mvm, struct napi_struct *napi,
 		struct iwl_fw_dbg_trigger_tlv *trig;
 		struct ieee80211_vif *vif = mvmsta->vif;
 
-		if (!mvm->tcm.paused &&
+		if (!mvm->tcm.paused && len >= sizeof(*hdr) &&
 		    !is_multicast_ether_addr(hdr->addr1) &&
 		    ieee80211_is_data(hdr->frame_control) &&
 		    time_after(jiffies, mvm->tcm.ts + MVM_TCM_PERIOD))
@@ -2427,6 +2421,7 @@ void iwl_mvm_rx_monitor_no_data(struct iwl_mvm *mvm, struct napi_struct *napi,
 	struct iwl_rx_packet *pkt = rxb_addr(rxb);
 	struct iwl_rx_no_data_ver_3 *desc = (void *)pkt->data;
 	u32 rssi;
+	struct ieee80211_sta *sta = NULL;
 	struct sk_buff *skb;
 	struct iwl_mvm_rx_phy_data phy_data;
 	u32 format;
@@ -2540,7 +2535,9 @@ void iwl_mvm_rx_monitor_no_data(struct iwl_mvm *mvm, struct napi_struct *napi,
 				      RX_NO_DATA_RX_VEC2_EHT_NSTS_MSK) + 1;
 	}
 
-	ieee80211_rx_napi(mvm->hw, NULL, skb, napi);
+	rcu_read_lock();
+	ieee80211_rx_napi(mvm->hw, sta, skb, napi);
+	rcu_read_unlock();
 }
 
 void iwl_mvm_rx_frame_release(struct iwl_mvm *mvm, struct napi_struct *napi,

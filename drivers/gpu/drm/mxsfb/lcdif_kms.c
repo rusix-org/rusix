@@ -26,7 +26,6 @@
 #include <drm/drm_gem_atomic_helper.h>
 #include <drm/drm_gem_dma_helper.h>
 #include <drm/drm_plane.h>
-#include <drm/drm_print.h>
 #include <drm/drm_vblank.h>
 
 #include "lcdif_drv.h"
@@ -338,8 +337,7 @@ static void lcdif_set_mode(struct lcdif_drm_private *lcdif, u32 bus_flags)
 	 * Downstream set it to 256B burst size to improve the memory
 	 * efficiency so set it here too.
 	 */
-	ctrl = CTRLDESCL0_3_STATE_CLEAR_VSYNC |
-	       CTRLDESCL0_3_P_SIZE(2) | CTRLDESCL0_3_T_SIZE(2) |
+	ctrl = CTRLDESCL0_3_P_SIZE(2) | CTRLDESCL0_3_T_SIZE(2) |
 	       CTRLDESCL0_3_PITCH(lcdif->crtc.primary->state->fb->pitches[0]);
 	writel(ctrl, lcdif->base + LCDC_V8_CTRLDESCL0_3);
 }
@@ -432,7 +430,7 @@ static void lcdif_crtc_mode_set_nofb(struct drm_crtc_state *crtc_state,
 }
 
 static int lcdif_crtc_atomic_check(struct drm_crtc *crtc,
-				   struct drm_atomic_commit *state)
+				   struct drm_atomic_state *state)
 {
 	struct drm_device *drm = crtc->dev;
 	struct drm_crtc_state *crtc_state = drm_atomic_get_new_crtc_state(state,
@@ -513,7 +511,7 @@ static int lcdif_crtc_atomic_check(struct drm_crtc *crtc,
 }
 
 static void lcdif_crtc_atomic_flush(struct drm_crtc *crtc,
-				    struct drm_atomic_commit *state)
+				    struct drm_atomic_state *state)
 {
 	struct lcdif_drm_private *lcdif = to_lcdif_drm_private(crtc->dev);
 	struct drm_pending_vblank_event *event;
@@ -538,7 +536,7 @@ static void lcdif_crtc_atomic_flush(struct drm_crtc *crtc,
 }
 
 static void lcdif_crtc_atomic_enable(struct drm_crtc *crtc,
-				     struct drm_atomic_commit *state)
+				     struct drm_atomic_state *state)
 {
 	struct lcdif_drm_private *lcdif = to_lcdif_drm_private(crtc->dev);
 	struct drm_crtc_state *new_cstate = drm_atomic_get_new_crtc_state(state, crtc);
@@ -568,7 +566,7 @@ static void lcdif_crtc_atomic_enable(struct drm_crtc *crtc,
 }
 
 static void lcdif_crtc_atomic_disable(struct drm_crtc *crtc,
-				      struct drm_atomic_commit *state)
+				      struct drm_atomic_state *state)
 {
 	struct lcdif_drm_private *lcdif = to_lcdif_drm_private(crtc->dev);
 	struct drm_device *drm = lcdif->drm;
@@ -596,17 +594,18 @@ static void lcdif_crtc_atomic_destroy_state(struct drm_crtc *crtc,
 	kfree(to_lcdif_crtc_state(state));
 }
 
-static struct drm_crtc_state *lcdif_crtc_create_state(struct drm_crtc *crtc)
+static void lcdif_crtc_reset(struct drm_crtc *crtc)
 {
 	struct lcdif_crtc_state *state;
 
-	state = kzalloc_obj(*state);
-	if (!state)
-		return ERR_PTR(-ENOMEM);
+	if (crtc->state)
+		lcdif_crtc_atomic_destroy_state(crtc, crtc->state);
 
-	__drm_atomic_helper_crtc_state_init(&state->base, crtc);
+	crtc->state = NULL;
 
-	return &state->base;
+	state = kzalloc(sizeof(*state), GFP_KERNEL);
+	if (state)
+		__drm_atomic_helper_crtc_reset(crtc, &state->base);
 }
 
 static struct drm_crtc_state *
@@ -618,7 +617,7 @@ lcdif_crtc_atomic_duplicate_state(struct drm_crtc *crtc)
 	if (WARN_ON(!crtc->state))
 		return NULL;
 
-	new = kzalloc_obj(*new);
+	new = kzalloc(sizeof(*new), GFP_KERNEL);
 	if (!new)
 		return NULL;
 
@@ -658,7 +657,7 @@ static const struct drm_crtc_helper_funcs lcdif_crtc_helper_funcs = {
 };
 
 static const struct drm_crtc_funcs lcdif_crtc_funcs = {
-	.atomic_create_state = lcdif_crtc_create_state,
+	.reset = lcdif_crtc_reset,
 	.destroy = drm_crtc_cleanup,
 	.set_config = drm_atomic_helper_set_config,
 	.page_flip = drm_atomic_helper_page_flip,
@@ -673,7 +672,7 @@ static const struct drm_crtc_funcs lcdif_crtc_funcs = {
  */
 
 static int lcdif_plane_atomic_check(struct drm_plane *plane,
-				    struct drm_atomic_commit *state)
+				    struct drm_atomic_state *state)
 {
 	struct drm_plane_state *plane_state = drm_atomic_get_new_plane_state(state,
 									     plane);
@@ -690,7 +689,7 @@ static int lcdif_plane_atomic_check(struct drm_plane *plane,
 }
 
 static void lcdif_plane_primary_atomic_update(struct drm_plane *plane,
-					      struct drm_atomic_commit *state)
+					      struct drm_atomic_state *state)
 {
 	struct lcdif_drm_private *lcdif = to_lcdif_drm_private(plane->dev);
 	struct drm_plane_state *new_pstate = drm_atomic_get_new_plane_state(state,
@@ -723,7 +722,7 @@ static const struct drm_plane_funcs lcdif_plane_funcs = {
 	.update_plane		= drm_atomic_helper_update_plane,
 	.disable_plane		= drm_atomic_helper_disable_plane,
 	.destroy		= drm_plane_cleanup,
-	.atomic_create_state = drm_atomic_helper_plane_create_state,
+	.reset			= drm_atomic_helper_plane_reset,
 	.atomic_duplicate_state	= drm_atomic_helper_plane_duplicate_state,
 	.atomic_destroy_state	= drm_atomic_helper_plane_destroy_state,
 };

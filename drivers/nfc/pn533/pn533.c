@@ -456,7 +456,7 @@ static int __pn533_send_async(struct pn533 *dev, u8 cmd_code,
 
 	dev_dbg(dev->dev, "Sending command 0x%x\n", cmd_code);
 
-	cmd = kzalloc_obj(*cmd);
+	cmd = kzalloc(sizeof(*cmd), GFP_KERNEL);
 	if (!cmd)
 		return -ENOMEM;
 
@@ -529,7 +529,7 @@ static int pn533_send_cmd_direct_async(struct pn533 *dev, u8 cmd_code,
 	struct pn533_cmd *cmd;
 	int rc;
 
-	cmd = kzalloc_obj(*cmd);
+	cmd = kzalloc(sizeof(*cmd), GFP_KERNEL);
 	if (!cmd)
 		return -ENOMEM;
 
@@ -749,10 +749,8 @@ static int pn533_target_found_type_a(struct nfc_target *nfc_tgt, u8 *tgt_data,
 
 struct pn533_target_felica {
 	u8 pol_res;
-	struct_group(sensf_res,
-		u8 opcode;
-		u8 nfcid2[NFC_NFCID2_MAXSIZE];
-	);
+	u8 opcode;
+	u8 nfcid2[NFC_NFCID2_MAXSIZE];
 	u8 pad[8];
 	/* optional */
 	u8 syst_code[];
@@ -789,8 +787,8 @@ static int pn533_target_found_felica(struct nfc_target *nfc_tgt, u8 *tgt_data,
 	else
 		nfc_tgt->supported_protocols = NFC_PROTO_FELICA_MASK;
 
-	memcpy(nfc_tgt->sensf_res, &tgt_felica->sensf_res, sizeof(tgt_felica->sensf_res));
-	nfc_tgt->sensf_res_len = sizeof(tgt_felica->sensf_res);
+	memcpy(nfc_tgt->sensf_res, &tgt_felica->opcode, 9);
+	nfc_tgt->sensf_res_len = 9;
 
 	memcpy(nfc_tgt->nfcid2, tgt_felica->nfcid2, NFC_NFCID2_MAXSIZE);
 	nfc_tgt->nfcid2_len = NFC_NFCID2_MAXSIZE;
@@ -2032,7 +2030,7 @@ static int pn533_dep_link_up(struct nfc_dev *nfc_dev, struct nfc_target *target,
 		*next = 0;
 	}
 
-	arg = kmalloc_obj(*arg);
+	arg = kmalloc(sizeof(*arg), GFP_KERNEL);
 	if (!arg) {
 		dev_kfree_skb(skb);
 		return -ENOMEM;
@@ -2279,7 +2277,7 @@ static int pn533_transceive(struct nfc_dev *nfc_dev,
 		goto error;
 	}
 
-	arg = kmalloc_obj(*arg);
+	arg = kmalloc(sizeof(*arg), GFP_KERNEL);
 	if (!arg) {
 		rc = -ENOMEM;
 		goto error;
@@ -2757,7 +2755,7 @@ struct pn533 *pn53x_common_init(u32 device_type,
 {
 	struct pn533 *priv;
 
-	priv = kzalloc_obj(*priv);
+	priv = kzalloc(sizeof(*priv), GFP_KERNEL);
 	if (!priv)
 		return ERR_PTR(-ENOMEM);
 

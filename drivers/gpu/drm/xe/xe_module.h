@@ -12,6 +12,7 @@ struct work_struct;
 
 /* Module modprobe variables */
 struct xe_modparam {
+	bool force_execlist;
 	bool probe_display;
 	int force_vram_bar_size;
 	int guc_log_level;
@@ -22,8 +23,7 @@ struct xe_modparam {
 #ifdef CONFIG_PCI_IOV
 	unsigned int max_vfs;
 #endif
-	unsigned int wedged_mode;
-	unsigned int num_pf_work;
+	int wedged_mode;
 	u32 svm_notifier_size;
 };
 

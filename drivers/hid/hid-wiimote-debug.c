@@ -7,13 +7,12 @@
 /*
  */
 
- #include <linux/cleanup.h>
- #include <linux/debugfs.h>
- #include <linux/module.h>
- #include <linux/seq_file.h>
- #include <linux/spinlock.h>
- #include <linux/uaccess.h>
- #include "hid-wiimote.h"
+#include <linux/debugfs.h>
+#include <linux/module.h>
+#include <linux/seq_file.h>
+#include <linux/spinlock.h>
+#include <linux/uaccess.h>
+#include "hid-wiimote.h"
 
 struct wiimote_debug {
 	struct wiimote_data *wdata;
@@ -26,6 +25,7 @@ static ssize_t wiidebug_eeprom_read(struct file *f, char __user *u, size_t s,
 {
 	struct wiimote_debug *dbg = f->private_data;
 	struct wiimote_data *wdata = dbg->wdata;
+	unsigned long flags;
 	ssize_t ret;
 	char buf[16];
 	__u16 size = 0;
@@ -41,19 +41,20 @@ static ssize_t wiidebug_eeprom_read(struct file *f, char __user *u, size_t s,
 	if (ret)
 		return ret;
 
-	scoped_guard(spinlock_irqsave, &wdata->state.lock) {
-		wdata->state.cmd_read_size = s;
-		wdata->state.cmd_read_buf = buf;
-		wiimote_cmd_set(wdata, WIIPROTO_REQ_RMEM, *off & 0xffff);
-		wiiproto_req_reeprom(wdata, *off, s);
-	}
+	spin_lock_irqsave(&wdata->state.lock, flags);
+	wdata->state.cmd_read_size = s;
+	wdata->state.cmd_read_buf = buf;
+	wiimote_cmd_set(wdata, WIIPROTO_REQ_RMEM, *off & 0xffff);
+	wiiproto_req_reeprom(wdata, *off, s);
+	spin_unlock_irqrestore(&wdata->state.lock, flags);
 
 	ret = wiimote_cmd_wait(wdata);
 	if (!ret)
 		size = wdata->state.cmd_read_size;
 
-	scoped_guard(spinlock_irqsave, &wdata->state.lock)
-		wdata->state.cmd_read_buf = NULL;
+	spin_lock_irqsave(&wdata->state.lock, flags);
+	wdata->state.cmd_read_buf = NULL;
+	spin_unlock_irqrestore(&wdata->state.lock, flags);
 
 	wiimote_cmd_release(wdata);
 
@@ -98,10 +99,12 @@ static int wiidebug_drm_show(struct seq_file *f, void *p)
 {
 	struct wiimote_debug *dbg = f->private;
 	const char *str = NULL;
+	unsigned long flags;
 	__u8 drm;
 
-	scoped_guard(spinlock_irqsave, &dbg->wdata->state.lock)
-		drm = dbg->wdata->state.drm;
+	spin_lock_irqsave(&dbg->wdata->state.lock, flags);
+	drm = dbg->wdata->state.drm;
+	spin_unlock_irqrestore(&dbg->wdata->state.lock, flags);
 
 	if (drm < WIIPROTO_REQ_MAX)
 		str = wiidebug_drmmap[drm];
@@ -123,6 +126,7 @@ static ssize_t wiidebug_drm_write(struct file *f, const char __user *u,
 {
 	struct seq_file *sf = f->private_data;
 	struct wiimote_debug *dbg = sf->private;
+	unsigned long flags;
 	char buf[16];
 	ssize_t len;
 	int i;
@@ -146,12 +150,12 @@ static ssize_t wiidebug_drm_write(struct file *f, const char __user *u,
 	if (i == WIIPROTO_REQ_MAX)
 		i = simple_strtoul(buf, NULL, 16);
 
-	scoped_guard(spinlock_irqsave, &dbg->wdata->state.lock) {
-		dbg->wdata->state.flags &= ~WIIPROTO_FLAG_DRM_LOCKED;
-		wiiproto_req_drm(dbg->wdata, (__u8) i);
-		if (i != WIIPROTO_REQ_NULL)
-			dbg->wdata->state.flags |= WIIPROTO_FLAG_DRM_LOCKED;
-	}
+	spin_lock_irqsave(&dbg->wdata->state.lock, flags);
+	dbg->wdata->state.flags &= ~WIIPROTO_FLAG_DRM_LOCKED;
+	wiiproto_req_drm(dbg->wdata, (__u8) i);
+	if (i != WIIPROTO_REQ_NULL)
+		dbg->wdata->state.flags |= WIIPROTO_FLAG_DRM_LOCKED;
+	spin_unlock_irqrestore(&dbg->wdata->state.lock, flags);
 
 	return len;
 }
@@ -168,8 +172,9 @@ static const struct file_operations wiidebug_drm_fops = {
 int wiidebug_init(struct wiimote_data *wdata)
 {
 	struct wiimote_debug *dbg;
+	unsigned long flags;
 
-	dbg = kzalloc_obj(*dbg);
+	dbg = kzalloc(sizeof(*dbg), GFP_KERNEL);
 	if (!dbg)
 		return -ENOMEM;
 
@@ -181,27 +186,27 @@ int wiidebug_init(struct wiimote_data *wdata)
 	dbg->drm = debugfs_create_file("drm", S_IRUSR,
 			dbg->wdata->hdev->debug_dir, dbg, &wiidebug_drm_fops);
 
-	debugfs_create_u8("player_id", S_IRUSR,
-		   dbg->wdata->hdev->debug_dir, &wdata->player_id);
-
-	scoped_guard(spinlock_irqsave, &wdata->state.lock)
-		wdata->debug = dbg;
+	spin_lock_irqsave(&wdata->state.lock, flags);
+	wdata->debug = dbg;
+	spin_unlock_irqrestore(&wdata->state.lock, flags);
 
 	return 0;
+
 }
 
 void wiidebug_deinit(struct wiimote_data *wdata)
 {
 	struct wiimote_debug *dbg = wdata->debug;
+	unsigned long flags;
 
 	if (!dbg)
 		return;
 
-	scoped_guard(spinlock_irqsave, &wdata->state.lock)
-		wdata->debug = NULL;
+	spin_lock_irqsave(&wdata->state.lock, flags);
+	wdata->debug = NULL;
+	spin_unlock_irqrestore(&wdata->state.lock, flags);
 
 	debugfs_remove(dbg->drm);
 	debugfs_remove(dbg->eeprom);
-	debugfs_lookup_and_remove("player_id", dbg->wdata->hdev->debug_dir);
 	kfree(dbg);
 }

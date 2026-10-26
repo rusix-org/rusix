@@ -713,7 +713,7 @@ static int nfp_test_nsp(struct net_device *netdev)
 		goto exit_close_nsp;
 	}
 
-	nspi = kzalloc_obj(*nspi);
+	nspi = kzalloc(sizeof(*nspi), GFP_KERNEL);
 	if (!nspi) {
 		err = -ENOMEM;
 		goto exit_close_nsp;
@@ -1440,19 +1440,15 @@ static int nfp_net_get_fs_loc(struct nfp_net *nn, struct ethtool_rxnfc *cmd,
 	return 0;
 }
 
-static u32 nfp_net_get_rx_ring_count(struct net_device *netdev)
-{
-	struct nfp_net *nn = netdev_priv(netdev);
-
-	return nn->dp.num_rx_rings;
-}
-
 static int nfp_net_get_rxnfc(struct net_device *netdev,
 			     struct ethtool_rxnfc *cmd, u32 *rule_locs)
 {
 	struct nfp_net *nn = netdev_priv(netdev);
 
 	switch (cmd->cmd) {
+	case ETHTOOL_GRXRINGS:
+		cmd->data = nn->dp.num_rx_rings;
+		return 0;
 	case ETHTOOL_GRXCLSRLCNT:
 		cmd->rule_cnt = nn->fs.count;
 		return 0;
@@ -1681,7 +1677,7 @@ static int nfp_net_fs_add(struct nfp_net *nn, struct ethtool_rxnfc *cmd)
 	if (unsupp_mask)
 		return -EOPNOTSUPP;
 
-	new = kzalloc_obj(*new);
+	new = kzalloc(sizeof(*new), GFP_KERNEL);
 	if (!new)
 		return -ENOMEM;
 
@@ -2516,7 +2512,6 @@ static const struct ethtool_ops nfp_net_ethtool_ops = {
 	.get_sset_count		= nfp_net_get_sset_count,
 	.get_rxnfc		= nfp_net_get_rxnfc,
 	.set_rxnfc		= nfp_net_set_rxnfc,
-	.get_rx_ring_count	= nfp_net_get_rx_ring_count,
 	.get_rxfh_indir_size	= nfp_net_get_rxfh_indir_size,
 	.get_rxfh_key_size	= nfp_net_get_rxfh_key_size,
 	.get_rxfh		= nfp_net_get_rxfh,

@@ -6,7 +6,8 @@
  *  Collection of EP11 misc functions used by zcrypt and pkey
  */
 
-#define pr_fmt(fmt) "zcrypt: " fmt
+#define KMSG_COMPONENT "zcrypt"
+#define pr_fmt(fmt) KMSG_COMPONENT ": " fmt
 
 #include <linux/export.h>
 #include <linux/init.h>

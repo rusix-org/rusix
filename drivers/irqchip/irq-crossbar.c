@@ -205,7 +205,7 @@ static int __init crossbar_of_init(struct device_node *node)
 	const __be32 *irqsr;
 	int ret = -ENOMEM;
 
-	cb = kzalloc_obj(*cb);
+	cb = kzalloc(sizeof(*cb), GFP_KERNEL);
 
 	if (!cb)
 		return ret;
@@ -274,7 +274,7 @@ static int __init crossbar_of_init(struct device_node *node)
 	}
 
 
-	cb->register_offsets = kzalloc_objs(int, max);
+	cb->register_offsets = kcalloc(max, sizeof(int), GFP_KERNEL);
 	if (!cb->register_offsets)
 		goto err_irq_map;
 

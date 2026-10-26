@@ -299,18 +299,17 @@ brcmf_msgbuf_init_pktids(u32 nr_array_entries,
 	struct brcmf_msgbuf_pktid *array;
 	struct brcmf_msgbuf_pktids *pktids;
 
-	array = kzalloc_objs(*array, nr_array_entries);
+	array = kcalloc(nr_array_entries, sizeof(*array), GFP_KERNEL);
 	if (!array)
 		return NULL;
 
-	pktids = kzalloc_obj(*pktids);
+	pktids = kzalloc(sizeof(*pktids), GFP_KERNEL);
 	if (!pktids) {
 		kfree(array);
 		return NULL;
 	}
 	pktids->array = array;
 	pktids->array_size = nr_array_entries;
-	pktids->direction = direction;
 
 	return pktids;
 }
@@ -561,28 +560,6 @@ brcmf_msgbuf_remove_flowring(struct brcmf_msgbuf *msgbuf, u16 flowid)
 	brcmf_flowring_delete(msgbuf->flow, flowid);
 }
 
-static bool brcmf_msgbuf_get_flowid(struct brcmf_msgbuf *msgbuf,
-				    u16 flow_ring_id, u16 *flowid)
-{
-	u32 id = flow_ring_id;
-
-	if (id < BRCMF_H2D_MSGRING_FLOWRING_IDSTART) {
-		bphy_err(msgbuf->drvr, "invalid flowring id %u\n",
-			 flow_ring_id);
-		return false;
-	}
-
-	id -= BRCMF_H2D_MSGRING_FLOWRING_IDSTART;
-	if (id >= msgbuf->max_flowrings) {
-		bphy_err(msgbuf->drvr, "invalid flowring id %u\n",
-			 flow_ring_id);
-		return false;
-	}
-
-	*flowid = id;
-	return true;
-}
-
 
 static struct brcmf_msgbuf_work_item *
 brcmf_msgbuf_dequeue_work(struct brcmf_msgbuf *msgbuf)
@@ -693,7 +670,7 @@ static u32 brcmf_msgbuf_flowring_create(struct brcmf_msgbuf *msgbuf, int ifidx,
 	u32 flowid;
 	ulong flags;
 
-	create = kzalloc_obj(*create, GFP_ATOMIC);
+	create = kzalloc(sizeof(*create), GFP_ATOMIC);
 	if (create == NULL)
 		return BRCMF_FLOWRING_INVALID_ID;
 
@@ -903,22 +880,16 @@ brcmf_msgbuf_process_txstatus(struct brcmf_msgbuf *msgbuf, void *buf)
 	struct msgbuf_tx_status *tx_status;
 	u32 idx;
 	struct sk_buff *skb;
-	u16 flow_ring_id;
 	u16 flowid;
 
 	tx_status = (struct msgbuf_tx_status *)buf;
 	idx = le32_to_cpu(tx_status->msg.request_id) - 1;
-	flow_ring_id = le16_to_cpu(tx_status->compl_hdr.flow_ring_id);
+	flowid = le16_to_cpu(tx_status->compl_hdr.flow_ring_id);
+	flowid -= BRCMF_H2D_MSGRING_FLOWRING_IDSTART;
 	skb = brcmf_msgbuf_get_pktid(msgbuf->drvr->bus_if->dev,
 				     msgbuf->tx_pktids, idx);
 	if (!skb)
 		return;
-
-	if (!brcmf_msgbuf_get_flowid(msgbuf, flow_ring_id, &flowid)) {
-		brcmf_txfinalize(brcmf_get_ifp(msgbuf->drvr, tx_status->msg.ifidx),
-				 skb, false);
-		return;
-	}
 
 	set_bit(flowid, msgbuf->txstatus_done_map);
 	commonring = msgbuf->flowrings[flowid];
@@ -1266,15 +1237,12 @@ brcmf_msgbuf_process_flow_ring_create_response(struct brcmf_msgbuf *msgbuf,
 	struct msgbuf_flowring_create_resp *flowring_create_resp;
 	u16 status;
 	u16 flowid;
-	u16 flow_ring_id;
 
 	flowring_create_resp = (struct msgbuf_flowring_create_resp *)buf;
 
-	flow_ring_id = le16_to_cpu(flowring_create_resp->compl_hdr.flow_ring_id);
+	flowid = le16_to_cpu(flowring_create_resp->compl_hdr.flow_ring_id);
+	flowid -= BRCMF_H2D_MSGRING_FLOWRING_IDSTART;
 	status =  le16_to_cpu(flowring_create_resp->compl_hdr.status);
-
-	if (!brcmf_msgbuf_get_flowid(msgbuf, flow_ring_id, &flowid))
-		return;
 
 	if (status) {
 		bphy_err(drvr, "Flowring creation failed, code %d\n", status);
@@ -1298,15 +1266,12 @@ brcmf_msgbuf_process_flow_ring_delete_response(struct brcmf_msgbuf *msgbuf,
 	struct msgbuf_flowring_delete_resp *flowring_delete_resp;
 	u16 status;
 	u16 flowid;
-	u16 flow_ring_id;
 
 	flowring_delete_resp = (struct msgbuf_flowring_delete_resp *)buf;
 
-	flow_ring_id = le16_to_cpu(flowring_delete_resp->compl_hdr.flow_ring_id);
+	flowid = le16_to_cpu(flowring_delete_resp->compl_hdr.flow_ring_id);
+	flowid -= BRCMF_H2D_MSGRING_FLOWRING_IDSTART;
 	status =  le16_to_cpu(flowring_delete_resp->compl_hdr.status);
-
-	if (!brcmf_msgbuf_get_flowid(msgbuf, flow_ring_id, &flowid))
-		return;
 
 	if (status) {
 		bphy_err(drvr, "Flowring deletion failed, code %d\n", status);
@@ -1574,7 +1539,7 @@ int brcmf_proto_msgbuf_attach(struct brcmf_pub *drvr)
 		if_msgbuf->max_flowrings = BRCMF_FLOWRING_HASHSIZE - 1;
 	}
 
-	msgbuf = kzalloc_obj(*msgbuf);
+	msgbuf = kzalloc(sizeof(*msgbuf), GFP_KERNEL);
 	if (!msgbuf)
 		goto fail;
 
@@ -1623,8 +1588,8 @@ int brcmf_proto_msgbuf_attach(struct brcmf_pub *drvr)
 	msgbuf->flowrings = (struct brcmf_commonring **)if_msgbuf->flowrings;
 	msgbuf->max_flowrings = if_msgbuf->max_flowrings;
 	msgbuf->flowring_dma_handle =
-		kzalloc_objs(*msgbuf->flowring_dma_handle,
-			     msgbuf->max_flowrings);
+		kcalloc(msgbuf->max_flowrings,
+			sizeof(*msgbuf->flowring_dma_handle), GFP_KERNEL);
 	if (!msgbuf->flowring_dma_handle)
 		goto fail;
 

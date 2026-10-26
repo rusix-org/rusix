@@ -33,7 +33,7 @@ static inline void bio_get_last_bvec(struct bio *bio, struct bio_vec *bv)
 
 	bio_advance_iter(bio, &iter, iter.bi_size);
 
-	if (!iter.bi_offset)
+	if (!iter.bi_bvec_done)
 		idx = iter.bi_idx - 1;
 	else	/* in the middle of bvec */
 		idx = iter.bi_idx;
@@ -41,11 +41,11 @@ static inline void bio_get_last_bvec(struct bio *bio, struct bio_vec *bv)
 	*bv = bio->bi_io_vec[idx];
 
 	/*
-	 * iter.bi_offset records actual length of the last bvec
+	 * iter.bi_bvec_done records actual length of the last bvec
 	 * if this bio ends in the middle of one io vector
 	 */
-	if (iter.bi_offset)
-		bv->bv_len = iter.bi_offset;
+	if (iter.bi_bvec_done)
+		bv->bv_len = iter.bi_bvec_done;
 }
 
 static inline bool bio_will_gap(struct request_queue *q,
@@ -95,13 +95,13 @@ static inline bool req_gap_front_merge(struct request *req, struct bio *bio)
 }
 
 /*
- * The maximum size that a bio can fit has to be aligned down to the
+ * The max size one bio can handle is UINT_MAX becasue bvec_iter.bi_size
+ * is defined as 'unsigned int', meantime it has to be aligned to with the
  * logical block size, which is the minimum accepted unit by hardware.
  */
 static unsigned int bio_allowed_max_sectors(const struct queue_limits *lim)
 {
-	return round_down(BIO_MAX_SIZE, lim->logical_block_size) >>
-			SECTOR_SHIFT;
+	return round_down(UINT_MAX, lim->logical_block_size) >> SECTOR_SHIFT;
 }
 
 /*
@@ -335,19 +335,12 @@ static inline unsigned int bvec_seg_gap(struct bio_vec *bvprv,
 int bio_split_io_at(struct bio *bio, const struct queue_limits *lim,
 		unsigned *segs, unsigned max_bytes, unsigned len_align_mask)
 {
-	struct bio_crypt_ctx *bc = bio_crypt_ctx(bio);
 	struct bio_vec bv, bvprv, *bvprvp = NULL;
 	unsigned nsegs = 0, bytes = 0, gaps = 0;
 	struct bvec_iter iter;
-	unsigned start_align_mask = lim->dma_alignment;
-
-	if (bc) {
-		start_align_mask |= (bc->bc_key->crypto_cfg.data_unit_size - 1);
-		len_align_mask |= (bc->bc_key->crypto_cfg.data_unit_size - 1);
-	}
 
 	bio_for_each_bvec(bv, bio, iter) {
-		if (bv.bv_offset & start_align_mask ||
+		if (bv.bv_offset & lim->dma_alignment ||
 		    bv.bv_len & len_align_mask)
 			return -EINVAL;
 
@@ -363,7 +356,7 @@ int bio_split_io_at(struct bio *bio, const struct queue_limits *lim,
 
 		if (nsegs < lim->max_segments &&
 		    bytes + bv.bv_len <= max_bytes &&
-		    bv.bv_offset + bv.bv_len <= lim->max_fast_segment_size) {
+		    bv.bv_offset + bv.bv_len <= lim->min_segment_size) {
 			nsegs++;
 			bytes += bv.bv_len;
 		} else {
@@ -513,7 +506,7 @@ unsigned int blk_recalc_rq_segments(struct request *rq)
 
 	rq_for_each_bvec(bv, rq, iter)
 		bvec_split_segs(&rq->q->limits, &bv, &nr_phys_segs, &bytes,
-				UINT_MAX, BIO_MAX_SIZE);
+				UINT_MAX, UINT_MAX);
 	return nr_phys_segs;
 }
 
@@ -545,7 +538,7 @@ static inline int ll_new_hw_segment(struct request *req, struct bio *bio,
 	if (!blk_cgroup_mergeable(req, bio))
 		goto no_merge;
 
-	if (unlikely(!blk_integrity_merge_bio(req->q, req, bio)))
+	if (blk_integrity_merge_bio(req->q, req, bio) == false)
 		goto no_merge;
 
 	/* discard request merge won't add new segment */
@@ -647,7 +640,7 @@ static int ll_merge_requests_fn(struct request_queue *q, struct request *req,
 	if (!blk_cgroup_mergeable(req, next->bio))
 		return 0;
 
-	if (unlikely(!blk_integrity_merge_rq(q, req, next)))
+	if (blk_integrity_merge_rq(q, req, next) == false)
 		return 0;
 
 	if (!bio_crypt_ctx_merge_rq(req, next))
@@ -721,7 +714,8 @@ static void blk_account_io_merge_request(struct request *req)
 	if (req->rq_flags & RQF_IO_STAT) {
 		part_stat_lock();
 		part_stat_inc(req->part, merges[op_stat_group(req_op(req))]);
-		bdev_dec_in_flight(req->part, req_op(req));
+		part_stat_local_dec(req->part,
+				    in_flight[op_is_write(req_op(req))]);
 		part_stat_unlock();
 	}
 }
@@ -902,7 +896,7 @@ bool blk_rq_merge_ok(struct request *rq, struct bio *bio)
 
 	if (!blk_cgroup_mergeable(rq, bio))
 		return false;
-	if (unlikely(!blk_integrity_merge_bio(rq->q, rq, bio)))
+	if (blk_integrity_merge_bio(rq->q, rq, bio) == false)
 		return false;
 	if (!bio_crypt_rq_ctx_compatible(rq, bio))
 		return false;
@@ -912,7 +906,7 @@ bool blk_rq_merge_ok(struct request *rq, struct bio *bio)
 		return false;
 	if (rq->bio->bi_ioprio != bio->bi_ioprio)
 		return false;
-	if (unlikely(!blk_atomic_write_mergeable_rq_bio(rq, bio)))
+	if (blk_atomic_write_mergeable_rq_bio(rq, bio) == false)
 		return false;
 
 	return true;

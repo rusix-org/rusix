@@ -426,7 +426,7 @@ static void uniphier_gpio_remove(struct platform_device *pdev)
 	irq_domain_remove(priv->domain);
 }
 
-static int uniphier_gpio_suspend(struct device *dev)
+static int __maybe_unused uniphier_gpio_suspend(struct device *dev)
 {
 	struct uniphier_gpio_priv *priv = dev_get_drvdata(dev);
 	unsigned int nbanks = uniphier_gpio_get_nbanks(priv->chip.ngpio);
@@ -448,7 +448,7 @@ static int uniphier_gpio_suspend(struct device *dev)
 	return 0;
 }
 
-static int uniphier_gpio_resume(struct device *dev)
+static int __maybe_unused uniphier_gpio_resume(struct device *dev)
 {
 	struct uniphier_gpio_priv *priv = dev_get_drvdata(dev);
 	unsigned int nbanks = uniphier_gpio_get_nbanks(priv->chip.ngpio);
@@ -473,7 +473,8 @@ static int uniphier_gpio_resume(struct device *dev)
 }
 
 static const struct dev_pm_ops uniphier_gpio_pm_ops = {
-	LATE_SYSTEM_SLEEP_PM_OPS(uniphier_gpio_suspend, uniphier_gpio_resume)
+	SET_LATE_SYSTEM_SLEEP_PM_OPS(uniphier_gpio_suspend,
+				     uniphier_gpio_resume)
 };
 
 static const struct of_device_id uniphier_gpio_match[] = {
@@ -488,7 +489,7 @@ static struct platform_driver uniphier_gpio_driver = {
 	.driver = {
 		.name = "uniphier-gpio",
 		.of_match_table = uniphier_gpio_match,
-		.pm = pm_sleep_ptr(&uniphier_gpio_pm_ops),
+		.pm = &uniphier_gpio_pm_ops,
 	},
 };
 module_platform_driver(uniphier_gpio_driver);

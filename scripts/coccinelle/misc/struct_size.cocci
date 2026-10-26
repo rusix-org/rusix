@@ -29,7 +29,9 @@ f
 expression E1, E2;
 identifier m;
 @@
-* sizeof(*E1) + (E2 * sizeof(*E1->m))
+(
+* (sizeof(*E1) + (E2 * sizeof(*E1->m)))
+)
 
 //----------------------------------------------------------
 //  For patch mode
@@ -53,7 +55,9 @@ expression E1, E2;
 identifier m;
 position p;
 @@
- sizeof(*E1)@p + (E2 * sizeof(*E1->m))
+(
+ (sizeof(*E1)@p + (E2 * sizeof(*E1->m)))
+)
 
 @script:python depends on org@
 p << r.p;

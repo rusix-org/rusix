@@ -3,7 +3,7 @@
  * Copyright (c) 2021-2024 Oracle.  All Rights Reserved.
  * Author: Darrick J. Wong <djwong@kernel.org>
  */
-#include "xfs_platform.h"
+#include "xfs.h"
 #include "xfs_fs.h"
 #include "xfs_shared.h"
 #include "xfs_format.h"
@@ -73,7 +73,9 @@ xfbtree_destroy(
 
 /* Compute the number of bytes available for records. */
 static inline unsigned int
-xfbtree_rec_bytes(void)
+xfbtree_rec_bytes(
+	struct xfs_mount		*mp,
+	const struct xfs_btree_ops	*ops)
 {
 	return XMBUF_BLOCKSIZE - XFS_BTREE_LBLOCK_CRC_LEN;
 }
@@ -116,7 +118,7 @@ xfbtree_init(
 	const struct xfs_btree_ops	*ops)
 {
 	unsigned long long		owner = xfbt->owner;
-	unsigned int			blocklen = xfbtree_rec_bytes();
+	unsigned int			blocklen = xfbtree_rec_bytes(mp, ops);
 	unsigned int			keyptr_len;
 	int				error;
 

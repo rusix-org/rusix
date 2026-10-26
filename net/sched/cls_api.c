@@ -84,7 +84,7 @@ tcf_exts_miss_cookie_base_alloc(struct tcf_exts *exts, struct tcf_proto *tp,
 	if (WARN_ON(!handle || !tp->ops->get_exts))
 		return -EINVAL;
 
-	n = kzalloc_obj(*n);
+	n = kzalloc(sizeof(*n), GFP_KERNEL);
 	if (!n)
 		return -ENOMEM;
 
@@ -377,7 +377,7 @@ static struct tcf_proto *tcf_proto_create(const char *kind, u32 protocol,
 	struct tcf_proto *tp;
 	int err;
 
-	tp = kzalloc_obj(*tp);
+	tp = kzalloc(sizeof(*tp), GFP_KERNEL);
 	if (!tp)
 		return ERR_PTR(-ENOBUFS);
 
@@ -517,7 +517,7 @@ static struct tcf_chain *tcf_chain_create(struct tcf_block *block,
 
 	ASSERT_BLOCK_LOCKED(block);
 
-	chain = kzalloc_obj(*chain);
+	chain = kzalloc(sizeof(*chain), GFP_KERNEL);
 	if (!chain)
 		return NULL;
 	list_add_tail_rcu(&chain->list, &block->chain_list);
@@ -933,7 +933,7 @@ tcf_chain0_head_change_cb_add(struct tcf_block *block,
 	struct tcf_filter_chain_list_item *item;
 	struct tcf_chain *chain0;
 
-	item = kmalloc_obj(*item);
+	item = kmalloc(sizeof(*item), GFP_KERNEL);
 	if (!item) {
 		NL_SET_ERR_MSG(extack, "Memory allocation for head change callback item failed");
 		return -ENOMEM;
@@ -1031,7 +1031,7 @@ static struct tcf_block *tcf_block_create(struct net *net, struct Qdisc *q,
 {
 	struct tcf_block *block;
 
-	block = kzalloc_obj(*block);
+	block = kzalloc(sizeof(*block), GFP_KERNEL);
 	if (!block) {
 		NL_SET_ERR_MSG(extack, "Memory allocation for block failed");
 		return ERR_PTR(-ENOMEM);
@@ -1443,7 +1443,7 @@ static int tcf_block_owner_add(struct tcf_block *block,
 {
 	struct tcf_block_owner_item *item;
 
-	item = kmalloc_obj(*item);
+	item = kmalloc(sizeof(*item), GFP_KERNEL);
 	if (!item)
 		return -ENOMEM;
 	item->q = q;
@@ -1881,15 +1881,15 @@ int tcf_classify(struct sk_buff *skb,
 			struct tc_skb_cb *cb = tc_skb_cb(skb);
 
 			ext = tc_skb_ext_alloc(skb);
-			if (!ext) {
+			if (WARN_ON_ONCE(!ext)) {
 				tcf_set_drop_reason(skb, SKB_DROP_REASON_NOMEM);
 				return TC_ACT_SHOT;
 			}
 			ext->chain = last_executed_chain;
 			ext->mru = cb->mru;
-			ext->post_ct = qdisc_skb_cb(skb)->post_ct;
-			ext->post_ct_snat = qdisc_skb_cb(skb)->post_ct_snat;
-			ext->post_ct_dnat = qdisc_skb_cb(skb)->post_ct_dnat;
+			ext->post_ct = cb->post_ct;
+			ext->post_ct_snat = cb->post_ct_snat;
+			ext->post_ct_dnat = cb->post_ct_dnat;
 			ext->zone = cb->zone;
 		}
 	}
@@ -2149,16 +2149,11 @@ retry:
 			    rtnl_held, extack);
 	if (ret <= 0) {
 		kfree_skb(skb);
-		if (ret != -EMSGSIZE)
-			return ERR_PTR(-EINVAL);
-		/* A u16 nest caps the dump, so once the skb is larger than
-		 * any valid message it can never serialize. Stop at the
-		 * bound instead of looping until alloc_skb() fails.
-		 */
-		if (size > U16_MAX + NLMSG_GOODSIZE)
-			return ERR_PTR(-EMSGSIZE);
-		size += NLMSG_GOODSIZE;
-		goto retry;
+		if (ret == -EMSGSIZE) {
+			size += NLMSG_GOODSIZE;
+			goto retry;
+		}
+		return ERR_PTR(-EINVAL);
 	}
 	return skb;
 }
@@ -2205,18 +2200,8 @@ static int tfilter_del_notify(struct net *net, struct sk_buff *oskb,
 	skb = tfilter_notify_prep(net, oskb, n, tp, block, q, parent, fh,
 				  RTM_DELTFILTER, portid, rtnl_held, extack);
 	if (IS_ERR(skb)) {
-		if (PTR_ERR(skb) != -EMSGSIZE) {
-			NL_SET_ERR_MSG(extack, "Failed to build del event notification");
-			return PTR_ERR(skb);
-		}
-		/* No notification can ever be built for this filter: drop
-		 * it rather than refuse the delete.
-		 */
-		err = tp->ops->delete(tp, fh, last, rtnl_held, extack);
-		if (!err)
-			NL_SET_ERR_MSG(extack,
-				       "Filter deleted; del event notification could not be built");
-		return err;
+		NL_SET_ERR_MSG(extack, "Failed to build del event notification");
+		return PTR_ERR(skb);
 	}
 
 	err = tp->ops->delete(tp, fh, last, rtnl_held, extack);
@@ -3400,8 +3385,8 @@ int tcf_exts_init_ex(struct tcf_exts *exts, struct net *net, int action,
 	 * This reference might be taken later from tcf_exts_get_net().
 	 */
 	exts->net = net;
-	exts->actions = kzalloc_objs(struct tc_action *, TCA_ACT_MAX_PRIO,
-				     GFP_KERNEL_ACCOUNT);
+	exts->actions = kcalloc(TCA_ACT_MAX_PRIO, sizeof(struct tc_action *),
+				GFP_KERNEL_ACCOUNT);
 	if (!exts->actions)
 		return -ENOMEM;
 #endif
@@ -3544,8 +3529,7 @@ int tcf_exts_dump(struct sk_buff *skb, struct tcf_exts *exts)
 			if (tcf_action_dump(skb, exts->actions, 0, 0, false)
 			    < 0)
 				goto nla_put_failure;
-			if (nla_nest_end_safe(skb, nest) < 0)
-				goto nla_put_failure;
+			nla_nest_end(skb, nest);
 		} else if (exts->police) {
 			struct tc_action *act = tcf_exts_first_act(exts);
 			nest = nla_nest_start_noflag(skb, exts->police);
@@ -3553,8 +3537,7 @@ int tcf_exts_dump(struct sk_buff *skb, struct tcf_exts *exts)
 				goto nla_put_failure;
 			if (tcf_action_dump_old(skb, act, 0, 0) < 0)
 				goto nla_put_failure;
-			if (nla_nest_end_safe(skb, nest) < 0)
-				goto nla_put_failure;
+			nla_nest_end(skb, nest);
 		}
 	}
 	return 0;
@@ -3582,8 +3565,7 @@ int tcf_exts_terse_dump(struct sk_buff *skb, struct tcf_exts *exts)
 
 	if (tcf_action_dump(skb, exts->actions, 0, 0, true) < 0)
 		goto nla_put_failure;
-	if (nla_nest_end_safe(skb, nest) < 0)
-		goto nla_put_failure;
+	nla_nest_end(skb, nest);
 	return 0;
 
 nla_put_failure:

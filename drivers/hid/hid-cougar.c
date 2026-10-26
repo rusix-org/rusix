@@ -166,7 +166,7 @@ static int cougar_bind_shared_data(struct hid_device *hdev,
 
 	shared = cougar_get_shared_data(hdev);
 	if (!shared) {
-		shared = kzalloc_obj(*shared);
+		shared = kzalloc(sizeof(*shared), GFP_KERNEL);
 		if (!shared) {
 			error = -ENOMEM;
 			goto out;
@@ -268,9 +268,6 @@ static int cougar_raw_event(struct hid_device *hdev, struct hid_report *report,
 		return 0;
 
 	if (!shared->enabled || !shared->input)
-		return -EPERM;
-
-	if (size <= COUGAR_FIELD_ACTION)
 		return -EPERM;
 
 	code = data[COUGAR_FIELD_CODE];

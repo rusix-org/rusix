@@ -5,19 +5,14 @@
 //! C header: [`include/linux/device.h`](srctree/include/linux/device.h)
 
 use crate::{
-    bindings,
-    fmt,
-    prelude::*,
+    bindings, fmt,
     sync::aref::ARef,
-    types::{
-        ForeignOwnable,
-        Opaque, //
-    }, //
+    types::{ForeignOwnable, Opaque},
 };
-use core::{
-    marker::PhantomData,
-    ptr, //
-};
+use core::{marker::PhantomData, ptr};
+
+#[cfg(CONFIG_PRINTK)]
+use crate::c_str;
 
 pub mod property;
 
@@ -54,8 +49,7 @@ pub mod property;
 /// reference is valid in. For instance, the [`Bound`] context guarantees that the [`Device`] is
 /// bound to a driver for the entire duration of the existence of a [`Device<Bound>`] reference.
 ///
-/// Other [`DeviceContext`] types besides [`Bound`] are [`Normal`], [`Core`], [`CoreInternal`] and
-/// [`BoundInternal`].
+/// Other [`DeviceContext`] types besides [`Bound`] are [`Normal`], [`Core`] and [`CoreInternal`].
 ///
 /// Unless selected otherwise [`Device`] defaults to the [`Normal`] [`DeviceContext`], which by
 /// itself has no additional requirements.
@@ -160,7 +154,7 @@ pub mod property;
 /// `bindings::device::release` is valid to be called from any thread, hence `ARef<Device>` can be
 /// dropped from any thread.
 ///
-/// [`AlwaysRefCounted`]: kernel::sync::aref::AlwaysRefCounted
+/// [`AlwaysRefCounted`]: kernel::types::AlwaysRefCounted
 /// [`impl_device_context_deref`]: kernel::impl_device_context_deref
 /// [`platform::Device`]: kernel::platform::Device
 #[repr(transparent)]
@@ -202,52 +196,21 @@ impl Device {
     }
 }
 
-impl<'a> Device<CoreInternal<'a>> {
+impl Device<CoreInternal> {
     /// Store a pointer to the bound driver's private data.
-    pub fn set_drvdata<T>(&self, data: impl PinInit<T, Error>) -> Result {
-        let data = KBox::pin_init(data, GFP_KERNEL)?;
-
+    pub fn set_drvdata(&self, data: impl ForeignOwnable) {
         // SAFETY: By the type invariants, `self.as_raw()` is a valid pointer to a `struct device`.
-        unsafe { bindings::dev_set_drvdata(self.as_raw(), data.into_foreign().cast()) };
-
-        Ok(())
+        unsafe { bindings::dev_set_drvdata(self.as_raw(), data.into_foreign().cast()) }
     }
 
     /// Take ownership of the private data stored in this [`Device`].
     ///
     /// # Safety
     ///
+    /// - Must only be called once after a preceding call to [`Device::set_drvdata`].
     /// - The type `T` must match the type of the `ForeignOwnable` previously stored by
     ///   [`Device::set_drvdata`].
-    pub(crate) unsafe fn drvdata_obtain<T>(&self) -> Option<Pin<KBox<T>>> {
-        // SAFETY: By the type invariants, `self.as_raw()` is a valid pointer to a `struct device`.
-        let ptr = unsafe { bindings::dev_get_drvdata(self.as_raw()) };
-
-        // SAFETY: By the type invariants, `self.as_raw()` is a valid pointer to a `struct device`.
-        unsafe { bindings::dev_set_drvdata(self.as_raw(), core::ptr::null_mut()) };
-
-        if ptr.is_null() {
-            return None;
-        }
-
-        // SAFETY:
-        // - If `ptr` is not NULL, it comes from a previous call to `into_foreign()`.
-        // - `dev_get_drvdata()` guarantees to return the same pointer given to `dev_set_drvdata()`
-        //   in `into_foreign()`.
-        Some(unsafe { Pin::<KBox<T>>::from_foreign(ptr.cast()) })
-    }
-}
-
-impl<Ctx: InternalBoundContext> Device<Ctx> {
-    /// Borrow the driver's private data bound to this [`Device`].
-    ///
-    /// # Safety
-    ///
-    /// - Must only be called after a preceding call to [`Device::set_drvdata`] and before the
-    ///   device is fully unbound.
-    /// - The type `T` must match the type of the `ForeignOwnable` previously stored by
-    ///   [`Device::set_drvdata`].
-    pub unsafe fn drvdata_borrow<T>(&self) -> Pin<&T> {
+    pub unsafe fn drvdata_obtain<T: ForeignOwnable>(&self) -> T {
         // SAFETY: By the type invariants, `self.as_raw()` is a valid pointer to a `struct device`.
         let ptr = unsafe { bindings::dev_get_drvdata(self.as_raw()) };
 
@@ -256,7 +219,27 @@ impl<Ctx: InternalBoundContext> Device<Ctx> {
         //   `into_foreign()`.
         // - `dev_get_drvdata()` guarantees to return the same pointer given to `dev_set_drvdata()`
         //   in `into_foreign()`.
-        unsafe { Pin::<KBox<T>>::borrow(ptr.cast()) }
+        unsafe { T::from_foreign(ptr.cast()) }
+    }
+
+    /// Borrow the driver's private data bound to this [`Device`].
+    ///
+    /// # Safety
+    ///
+    /// - Must only be called after a preceding call to [`Device::set_drvdata`] and before
+    ///   [`Device::drvdata_obtain`].
+    /// - The type `T` must match the type of the `ForeignOwnable` previously stored by
+    ///   [`Device::set_drvdata`].
+    pub unsafe fn drvdata_borrow<T: ForeignOwnable>(&self) -> T::Borrowed<'_> {
+        // SAFETY: By the type invariants, `self.as_raw()` is a valid pointer to a `struct device`.
+        let ptr = unsafe { bindings::dev_get_drvdata(self.as_raw()) };
+
+        // SAFETY:
+        // - By the safety requirements of this function, `ptr` comes from a previous call to
+        //   `into_foreign()`.
+        // - `dev_get_drvdata()` guarantees to return the same pointer given to `dev_set_drvdata()`
+        //   in `into_foreign()`.
+        unsafe { T::borrow(ptr.cast()) }
     }
 }
 
@@ -396,7 +379,7 @@ impl<Ctx: DeviceContext> Device<Ctx> {
             bindings::_dev_printk(
                 klevel.as_ptr().cast::<crate::ffi::c_char>(),
                 self.as_raw(),
-                c"%pA".as_char_ptr(),
+                c_str!("%pA").as_char_ptr(),
                 core::ptr::from_ref(&msg).cast::<crate::ffi::c_void>(),
             )
         };
@@ -415,17 +398,6 @@ impl<Ctx: DeviceContext> Device<Ctx> {
         // `struct fwnode_handle*` to a `*const FwNode` because `FwNode` is
         // defined as a `#[repr(transparent)]` wrapper around `fwnode_handle`.
         Some(unsafe { &*fwnode_handle.cast() })
-    }
-
-    /// Returns the name of the device.
-    ///
-    /// This is the kobject name of the device, or its initial name if the kobject is not yet
-    /// available.
-    #[inline]
-    pub fn name(&self) -> &CStr {
-        // SAFETY: By its type invariant `self.as_raw()` is a valid pointer to a `struct device`.
-        // The returned string is valid for the lifetime of the device.
-        unsafe { CStr::from_char_ptr(bindings::dev_name(self.as_raw())) }
     }
 }
 
@@ -454,17 +426,12 @@ unsafe impl Send for Device {}
 // synchronization in `struct device`.
 unsafe impl Sync for Device {}
 
-// SAFETY: Same as `Device<Normal>` -- the underlying `struct device` is the same; `Bound` is a
-// zero-sized type-state marker that does not affect thread safety.
-unsafe impl Sync for Device<Bound> {}
-
 /// Marker trait for the context or scope of a bus specific device.
 ///
 /// [`DeviceContext`] is a marker trait for types representing the context of a bus specific
 /// [`Device`].
 ///
-/// The specific device context types are: [`CoreInternal`], [`Core`], [`BoundInternal`], [`Bound`]
-/// and [`Normal`].
+/// The specific device context types are: [`CoreInternal`], [`Core`], [`Bound`] and [`Normal`].
 ///
 /// [`DeviceContext`] types are hierarchical, which means that there is a strict hierarchy that
 /// defines which [`DeviceContext`] type can be derived from another. For instance, any
@@ -473,11 +440,6 @@ unsafe impl Sync for Device<Bound> {}
 /// The following enumeration illustrates the dereference hierarchy of [`DeviceContext`] types.
 ///
 /// - [`CoreInternal`] => [`Core`] => [`Bound`] => [`Normal`]
-/// - [`BoundInternal`] => [`Bound`] => [`Normal`]
-///
-/// Both [`CoreInternal`] and [`BoundInternal`] implement the [`InternalBoundContext`] trait,
-/// which provides access to internal bus abstraction methods on [`Device`] that are not available
-/// to drivers.
 ///
 /// Bus devices can automatically implement the dereference hierarchy by using
 /// [`impl_device_context_deref`].
@@ -494,7 +456,7 @@ pub trait DeviceContext: private::Sealed {}
 /// [`Device<Normal>`]. It is the only [`DeviceContext`] for which it is valid to implement
 /// [`AlwaysRefCounted`] for.
 ///
-/// [`AlwaysRefCounted`]: kernel::sync::aref::AlwaysRefCounted
+/// [`AlwaysRefCounted`]: kernel::types::AlwaysRefCounted
 pub struct Normal;
 
 /// The [`Core`] context is the context of a bus specific device when it appears as argument of
@@ -504,11 +466,7 @@ pub struct Normal;
 /// callback it appears in. It is intended to be used for synchronization purposes. Bus device
 /// implementations can implement methods for [`Device<Core>`], such that they can only be called
 /// from bus callbacks.
-///
-/// The lifetime `'a` is for "lifetime branding" purpose. Callbacks need to polymorphic over this
-/// lifetime so the `&'bound Device<Core<'_>>` provided to them cannot outlive the scope of the
-/// function. For this reason, it needs to be invariant.
-pub struct Core<'a>(PhantomData<fn(&'a ()) -> &'a ()>);
+pub struct Core;
 
 /// Semantically the same as [`Core`], but reserved for internal usage of the corresponding bus
 /// abstraction.
@@ -519,21 +477,7 @@ pub struct Core<'a>(PhantomData<fn(&'a ()) -> &'a ()>);
 ///
 /// This context mainly exists to share generic [`Device`] infrastructure that should only be called
 /// from bus callbacks with bus abstractions, but without making them accessible for drivers.
-///
-/// Lifetime `'a` is invariant for the same reason as [`Core`].
-pub struct CoreInternal<'a>(PhantomData<fn(&'a ()) -> &'a ()>);
-
-/// Semantically the same as [`Bound`], but reserved for internal usage of the corresponding bus
-/// abstraction.
-///
-/// The internal bound context is intended to be used in exactly the same way as the [`Bound`]
-/// context, with the difference that this [`DeviceContext`] is internal to the corresponding bus
-/// abstraction.
-///
-/// This context exists for cases where the bus abstraction needs access to internal device
-/// infrastructure (such as [`Device::drvdata_borrow`]), where [`CoreInternal`] would not be
-/// justified.
-pub struct BoundInternal;
+pub struct CoreInternal;
 
 /// The [`Bound`] context is the [`DeviceContext`] of a bus specific device when it is guaranteed to
 /// be bound to a driver.
@@ -541,7 +485,7 @@ pub struct BoundInternal;
 /// The bound context indicates that for the entire duration of the lifetime of a [`Device<Bound>`]
 /// reference, the [`Device`] is guaranteed to be bound to a driver.
 ///
-/// Some APIs, such as [`dma::Coherent`] or [`Devres`] rely on the [`Device`] to be bound,
+/// Some APIs, such as [`dma::CoherentAllocation`] or [`Devres`] rely on the [`Device`] to be bound,
 /// which can be proven with the [`Bound`] device context.
 ///
 /// Any abstraction that can guarantee a scope where the corresponding bus device is bound, should
@@ -550,74 +494,22 @@ pub struct BoundInternal;
 ///
 /// [`Devres`]: kernel::devres::Devres
 /// [`Devres::access`]: kernel::devres::Devres::access
-/// [`dma::Coherent`]: kernel::dma::Coherent
+/// [`dma::CoherentAllocation`]: kernel::dma::CoherentAllocation
 pub struct Bound;
 
 mod private {
     pub trait Sealed {}
 
     impl Sealed for super::Bound {}
-    impl Sealed for super::BoundInternal {}
-    impl<'a> Sealed for super::Core<'a> {}
-    impl<'a> Sealed for super::CoreInternal<'a> {}
+    impl Sealed for super::Core {}
+    impl Sealed for super::CoreInternal {}
     impl Sealed for super::Normal {}
 }
 
 impl DeviceContext for Bound {}
-impl DeviceContext for BoundInternal {}
-impl<'a> DeviceContext for Core<'a> {}
-impl<'a> DeviceContext for CoreInternal<'a> {}
+impl DeviceContext for Core {}
+impl DeviceContext for CoreInternal {}
 impl DeviceContext for Normal {}
-
-/// Marker trait for [`DeviceContext`] types that have internal bound-level access.
-///
-/// This trait is implemented by [`CoreInternal`] and [`BoundInternal`], allowing methods that
-/// require internal bus abstraction access to a bound device to be generic over both contexts.
-///
-/// Methods bounded by this trait are available to bus abstractions but not to drivers.
-pub trait InternalBoundContext: DeviceContext {}
-impl<'a> InternalBoundContext for CoreInternal<'a> {}
-impl InternalBoundContext for BoundInternal {}
-
-impl<Ctx: DeviceContext> AsRef<Device<Ctx>> for Device<Ctx> {
-    #[inline]
-    fn as_ref(&self) -> &Device<Ctx> {
-        self
-    }
-}
-
-/// Convert device references to bus device references.
-///
-/// Bus devices can implement this trait to allow abstractions to provide the bus device in
-/// class device callbacks.
-///
-/// This must not be used by drivers and is intended for bus and class device abstractions only.
-///
-/// # Safety
-///
-/// `AsBusDevice::OFFSET` must be the offset of the embedded base `struct device` field within a
-/// bus device structure.
-pub unsafe trait AsBusDevice<Ctx: DeviceContext>: AsRef<Device<Ctx>> {
-    /// The relative offset to the device field.
-    ///
-    /// Use `offset_of!(bindings, field)` macro to avoid breakage.
-    const OFFSET: usize;
-
-    /// Convert a reference to [`Device`] into `Self`.
-    ///
-    /// # Safety
-    ///
-    /// `dev` must be contained in `Self`.
-    unsafe fn from_device(dev: &Device<Ctx>) -> &Self
-    where
-        Self: Sized,
-    {
-        let raw = dev.as_raw();
-        // SAFETY: `raw - Self::OFFSET` is guaranteed by the safety requirements
-        // to be a valid pointer to `Self`.
-        unsafe { &*raw.byte_sub(Self::OFFSET).cast::<Self>() }
-    }
-}
 
 /// # Safety
 ///
@@ -626,22 +518,6 @@ pub unsafe trait AsBusDevice<Ctx: DeviceContext>: AsRef<Device<Ctx>> {
 #[doc(hidden)]
 #[macro_export]
 macro_rules! __impl_device_context_deref {
-    (unsafe { $device:ident, <$lt:lifetime> $src:ty => $dst:ty }) => {
-        impl<$lt> ::core::ops::Deref for $device<$src> {
-            type Target = $device<$dst>;
-
-            fn deref(&self) -> &Self::Target {
-                let ptr: *const Self = self;
-
-                // CAST: `$device<$src>` and `$device<$dst>` transparently wrap the same type by the
-                // safety requirement of the macro.
-                let ptr = ptr.cast::<Self::Target>();
-
-                // SAFETY: `ptr` was derived from `&self`.
-                unsafe { &*ptr }
-            }
-        }
-    };
     (unsafe { $device:ident, $src:ty => $dst:ty }) => {
         impl ::core::ops::Deref for $device<$src> {
             type Target = $device<$dst>;
@@ -674,21 +550,14 @@ macro_rules! impl_device_context_deref {
         // `__impl_device_context_deref!`.
         ::kernel::__impl_device_context_deref!(unsafe {
             $device,
-            <'a> $crate::device::CoreInternal<'a> => $crate::device::Core<'a>
+            $crate::device::CoreInternal => $crate::device::Core
         });
 
         // SAFETY: This macro has the exact same safety requirement as
         // `__impl_device_context_deref!`.
         ::kernel::__impl_device_context_deref!(unsafe {
             $device,
-            <'a> $crate::device::Core<'a> => $crate::device::Bound
-        });
-
-        // SAFETY: This macro has the exact same safety requirement as
-        // `__impl_device_context_deref!`.
-        ::kernel::__impl_device_context_deref!(unsafe {
-            $device,
-            $crate::device::BoundInternal => $crate::device::Bound
+            $crate::device::Core => $crate::device::Bound
         });
 
         // SAFETY: This macro has the exact same safety requirement as
@@ -703,13 +572,6 @@ macro_rules! impl_device_context_deref {
 #[doc(hidden)]
 #[macro_export]
 macro_rules! __impl_device_context_into_aref {
-    (<$lt:lifetime> $src:ty, $device:tt) => {
-        impl<$lt> ::core::convert::From<&$device<$src>> for $crate::sync::aref::ARef<$device> {
-            fn from(dev: &$device<$src>) -> Self {
-                (&**dev).into()
-            }
-        }
-    };
     ($src:ty, $device:tt) => {
         impl ::core::convert::From<&$device<$src>> for $crate::sync::aref::ARef<$device> {
             fn from(dev: &$device<$src>) -> Self {
@@ -724,13 +586,8 @@ macro_rules! __impl_device_context_into_aref {
 #[macro_export]
 macro_rules! impl_device_context_into_aref {
     ($device:tt) => {
-        ::kernel::__impl_device_context_into_aref!(
-            <'a> $crate::device::CoreInternal<'a>, $device
-        );
-        ::kernel::__impl_device_context_into_aref!(
-            <'a> $crate::device::Core<'a>, $device
-        );
-        ::kernel::__impl_device_context_into_aref!($crate::device::BoundInternal, $device);
+        ::kernel::__impl_device_context_into_aref!($crate::device::CoreInternal, $device);
+        ::kernel::__impl_device_context_into_aref!($crate::device::Core, $device);
         ::kernel::__impl_device_context_into_aref!($crate::device::Bound, $device);
     };
 }
@@ -739,7 +596,9 @@ macro_rules! impl_device_context_into_aref {
 #[macro_export]
 macro_rules! dev_printk {
     ($method:ident, $dev:expr, $($f:tt)*) => {
-        $crate::device::Device::$method($dev.as_ref(), $crate::prelude::fmt!($($f)*))
+        {
+            ($dev).$method($crate::prelude::fmt!($($f)*));
+        }
     }
 }
 

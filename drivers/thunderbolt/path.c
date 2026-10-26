@@ -150,16 +150,21 @@ struct tb_path *tb_path_discover(struct tb_port *src, int src_hopid,
 		num_hops++;
 	}
 
-	path = kzalloc_flex(*path, hops, num_hops);
+	path = kzalloc(sizeof(*path), GFP_KERNEL);
 	if (!path)
 		return NULL;
 
-	path->path_length = num_hops;
-
 	path->name = name;
 	path->tb = src->sw->tb;
+	path->path_length = num_hops;
 	path->activated = true;
 	path->alloc_hopid = alloc_hopid;
+
+	path->hops = kcalloc(num_hops, sizeof(*path->hops), GFP_KERNEL);
+	if (!path->hops) {
+		kfree(path);
+		return NULL;
+	}
 
 	tb_dbg(path->tb, "discovering %s path starting from %llx:%u\n",
 	       path->name, tb_route(src->sw), src->port);
@@ -240,6 +245,10 @@ struct tb_path *tb_path_alloc(struct tb *tb, struct tb_port *src, int src_hopid,
 	size_t num_hops;
 	int i, ret;
 
+	path = kzalloc(sizeof(*path), GFP_KERNEL);
+	if (!path)
+		return NULL;
+
 	first_port = last_port = NULL;
 	i = 0;
 	tb_for_each_port_on_path(src, dst, in_port) {
@@ -250,17 +259,20 @@ struct tb_path *tb_path_alloc(struct tb *tb, struct tb_port *src, int src_hopid,
 	}
 
 	/* Check that src and dst are reachable */
-	if (first_port != src || last_port != dst)
+	if (first_port != src || last_port != dst) {
+		kfree(path);
 		return NULL;
+	}
 
 	/* Each hop takes two ports */
 	num_hops = i / 2;
 
-	path = kzalloc_flex(*path, hops, num_hops);
-	if (!path)
+	path->hops = kcalloc(num_hops, sizeof(*path->hops), GFP_KERNEL);
+	if (!path->hops) {
+		kfree(path);
 		return NULL;
+	}
 
-	path->path_length = num_hops;
 	path->alloc_hopid = true;
 
 	in_hopid = src_hopid;
@@ -327,6 +339,7 @@ struct tb_path *tb_path_alloc(struct tb *tb, struct tb_port *src, int src_hopid,
 	}
 
 	path->tb = tb;
+	path->path_length = num_hops;
 	path->name = name;
 
 	return path;
@@ -359,6 +372,7 @@ void tb_path_free(struct tb_path *path)
 		}
 	}
 
+	kfree(path->hops);
 	kfree(path);
 }
 
@@ -398,7 +412,7 @@ static int __tb_path_deactivate_hop(struct tb_port *port, int hop_index,
 		return ret;
 
 	/* Wait until it is drained */
-	timeout = ktime_add_ms(ktime_get(), port->pp_timeout_msec);
+	timeout = ktime_add_ms(ktime_get(), 500);
 	do {
 		ret = tb_port_read(port, &hop, TB_CFG_HOPS, 2 * hop_index, 2);
 		if (ret)
@@ -484,7 +498,7 @@ void tb_path_deactivate(struct tb_path *path)
  * tb_path_activate() - activate a path
  * @path: Path to activate
  *
- * Activate a path starting with the first hop and ending on the last hop. The
+ * Activate a path starting with the last hop and iterating backwards. The
  * caller must fill path->hops before calling tb_path_activate().
  *
  * Return: %0 on success, negative errno otherwise.
@@ -526,7 +540,7 @@ int tb_path_activate(struct tb_path *path)
 	}
 
 	/* Activate hops. */
-	for (i = 0; i < path->path_length; i++) {
+	for (i = path->path_length - 1; i >= 0; i--) {
 		struct tb_regs_hop hop = { 0 };
 
 		/* If it is left active deactivate it first */
@@ -576,7 +590,7 @@ int tb_path_activate(struct tb_path *path)
 		res = tb_port_write(path->hops[i].in_port, &hop, TB_CFG_HOPS,
 				    2 * path->hops[i].in_hop_index, 2);
 		if (res) {
-			__tb_path_deactivate_hops(path, 0);
+			__tb_path_deactivate_hops(path, i);
 			__tb_path_deallocate_nfc(path, 0);
 			goto err;
 		}
@@ -585,7 +599,7 @@ int tb_path_activate(struct tb_path *path)
 	tb_dbg(path->tb, "%s path activation complete\n", path->name);
 	return 0;
 err:
-	tb_warn(path->tb, "%s path activation failed: %d\n", path->name, res);
+	tb_WARN(path->tb, "%s path activation failed\n", path->name);
 	return res;
 }
 

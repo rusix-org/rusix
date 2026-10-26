@@ -137,7 +137,7 @@ struct dmatest_params {
  * @did_init:		module has been initialized completely
  * @last_error:		test has faced configuration issues
  */
-struct dmatest_info {
+static struct dmatest_info {
 	/* Test parameters */
 	struct dmatest_params	params;
 
@@ -147,9 +147,7 @@ struct dmatest_info {
 	int			last_error;
 	struct mutex		lock;
 	bool			did_init;
-};
-
-static struct dmatest_info test_info = {
+} test_info = {
 	.channels = LIST_HEAD_INIT(test_info.channels),
 	.lock = __MUTEX_INITIALIZER(test_info.lock),
 };
@@ -679,11 +677,11 @@ static int dmatest_func(void *data)
 
 	set_user_nice(current, 10);
 
-	srcs = kzalloc_objs(dma_addr_t, src->cnt);
+	srcs = kcalloc(src->cnt, sizeof(dma_addr_t), GFP_KERNEL);
 	if (!srcs)
 		goto err_dst;
 
-	dma_pq = kzalloc_objs(dma_addr_t, dst->cnt);
+	dma_pq = kcalloc(dst->cnt, sizeof(dma_addr_t), GFP_KERNEL);
 	if (!dma_pq)
 		goto err_srcs_array;
 
@@ -989,7 +987,7 @@ static int dmatest_add_threads(struct dmatest_info *info,
 		return -EINVAL;
 
 	for (i = 0; i < params->threads_per_chan; i++) {
-		thread = kzalloc_obj(struct dmatest_thread);
+		thread = kzalloc(sizeof(struct dmatest_thread), GFP_KERNEL);
 		if (!thread) {
 			pr_warn("No memory for %s-%s%u\n",
 				dma_chan_name(chan), op, i);
@@ -1027,7 +1025,7 @@ static int dmatest_add_channel(struct dmatest_info *info,
 	unsigned int		thread_count = 0;
 	int cnt;
 
-	dtc = kmalloc_obj(struct dmatest_chan);
+	dtc = kmalloc(sizeof(struct dmatest_chan), GFP_KERNEL);
 	if (!dtc) {
 		pr_warn("No memory for %s\n", dma_chan_name(chan));
 		return -ENOMEM;

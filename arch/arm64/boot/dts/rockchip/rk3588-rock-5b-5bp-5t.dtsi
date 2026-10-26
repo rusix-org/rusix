@@ -183,10 +183,6 @@
 };
 
 &hdmi0 {
-	frl-enable-gpios = <&gpio4 RK_PB1 GPIO_ACTIVE_LOW>;
-	pinctrl-0 = <&hdmim0_tx0_cec &hdmim0_tx0_hpd
-		     &hdmim0_tx0_scl &hdmim0_tx0_sda &hdmi0_tx_on_h>;
-	pinctrl-names = "default";
 	status = "okay";
 };
 
@@ -207,10 +203,8 @@
 };
 
 &hdmi1 {
-	frl-enable-gpios = <&gpio4 RK_PA1 GPIO_ACTIVE_LOW>;
 	pinctrl-0 = <&hdmim0_tx1_cec &hdmim0_tx1_hpd
-		     &hdmim1_tx1_scl &hdmim1_tx1_sda &hdmi1_tx_on_h>;
-	pinctrl-names = "default";
+		     &hdmim1_tx1_scl &hdmim1_tx1_sda>;
 	status = "okay";
 };
 
@@ -474,8 +468,7 @@
 
 &pcie2x1l0 {
 	pinctrl-names = "default";
-	pinctrl-0 = <&pcie2_0_rst>, <&pcie30x1m1_0_clkreqn>;
-	supports-clkreq;
+	pinctrl-0 = <&pcie2_0_rst>;
 	reset-gpios = <&gpio4 RK_PA5 GPIO_ACTIVE_HIGH>;
 	vpcie3v3-supply = <&vcc3v3_pcie2x1l0>;
 	status = "okay";
@@ -483,8 +476,7 @@
 
 &pcie2x1l2 {
 	pinctrl-names = "default";
-	pinctrl-0 = <&pcie2_2_rst>, <&pcie20x1m0_clkreqn>;
-	supports-clkreq;
+	pinctrl-0 = <&pcie2_2_rst>;
 	reset-gpios = <&gpio3 RK_PB0 GPIO_ACTIVE_HIGH>;
 	vpcie3v3-supply = <&vcc3v3_pcie2x1l2>;
 	status = "okay";
@@ -511,25 +503,9 @@
 };
 
 &pinctrl {
-	hdmi {
-		hdmi0_tx_on_h: hdmi0-tx-on-h {
-			rockchip,pins = <4 RK_PB1 RK_FUNC_GPIO &pcfg_pull_none>;
-		};
-
-		hdmi1_tx_on_h: hdmi1-tx-on-h {
-			rockchip,pins = <4 RK_PA1 RK_FUNC_GPIO &pcfg_pull_none>;
-		};
-	};
-
 	hym8563 {
 		hym8563_int: hym8563-int {
 			rockchip,pins = <0 RK_PB0 RK_FUNC_GPIO &pcfg_pull_none>;
-		};
-	};
-
-	mmc {
-		sdmmc_det_pin: sdmmc-det-pin {
-			rockchip,pins = <0 RK_PA4 RK_FUNC_GPIO &pcfg_pull_none>;
 		};
 	};
 
@@ -614,14 +590,14 @@
 };
 
 &sdmmc {
+	max-frequency = <200000000>;
 	no-sdio;
 	no-mmc;
 	bus-width = <4>;
+	cap-mmc-highspeed;
 	cap-sd-highspeed;
 	cd-gpios = <&gpio0 RK_PA4 GPIO_ACTIVE_LOW>;
 	disable-wp;
-	pinctrl-names = "default";
-	pinctrl-0 = <&sdmmc_bus4 &sdmmc_clk &sdmmc_cmd &sdmmc_det_pin>;
 	sd-uhs-sdr104;
 	vmmc-supply = <&vcc_3v3_s3>;
 	vqmmc-supply = <&vccio_sd_s0>;
@@ -974,7 +950,6 @@
 
 &uart2 {
 	pinctrl-0 = <&uart2m0_xfer>;
-	pinctrl-names = "default";
 	status = "okay";
 };
 

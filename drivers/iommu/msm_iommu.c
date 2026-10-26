@@ -306,7 +306,7 @@ static struct iommu_domain *msm_iommu_domain_alloc_paging(struct device *dev)
 {
 	struct msm_priv *priv;
 
-	priv = kzalloc_obj(*priv);
+	priv = kzalloc(sizeof(*priv), GFP_KERNEL);
 	if (!priv)
 		goto fail_nomem;
 
@@ -605,7 +605,7 @@ static int insert_iommu_master(struct device *dev,
 	int sid;
 
 	if (list_empty(&(*iommu)->ctx_list)) {
-		master = kzalloc_obj(*master, GFP_ATOMIC);
+		master = kzalloc(sizeof(*master), GFP_ATOMIC);
 		if (!master) {
 			dev_err(dev, "Failed to allocate iommu_master\n");
 			return -ENOMEM;
@@ -621,9 +621,6 @@ static int insert_iommu_master(struct device *dev,
 				 sid);
 			return 0;
 		}
-
-	if (master->num_mids >= MAX_NUM_MIDS)
-		return -ENOSPC;
 
 	master->mids[master->num_mids++] = spec->args[0];
 	return 0;

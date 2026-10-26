@@ -323,6 +323,9 @@ nf_ct_get_tuple(const struct sk_buff *skb,
 #endif
 	case IPPROTO_TCP:
 	case IPPROTO_UDP:
+#ifdef CONFIG_NF_CT_PROTO_UDPLITE
+	case IPPROTO_UDPLITE:
+#endif
 #ifdef CONFIG_NF_CT_PROTO_SCTP
 	case IPPROTO_SCTP:
 #endif
@@ -533,7 +536,7 @@ struct nf_conn *nf_ct_tmpl_alloc(struct net *net,
 		if (tmpl != p)
 			tmpl->proto.tmpl_padto = (char *)tmpl - (char *)p;
 	} else {
-		tmpl = kzalloc_obj(*tmpl, flags);
+		tmpl = kzalloc(sizeof(*tmpl), flags);
 		if (!tmpl)
 			return NULL;
 	}
@@ -579,13 +582,6 @@ static void destroy_gre_conntrack(struct nf_conn *ct)
 
 		rcu_read_unlock();
 	}
-#endif
-}
-
-static void warn_on_keymap_list_leak(const struct net *net)
-{
-#ifdef CONFIG_NF_CT_PROTO_GRE
-	WARN_ON_ONCE(!list_empty(&net->ct.nf_ct_proto.gre.keymap_list));
 #endif
 }
 
@@ -1031,7 +1027,7 @@ static int __nf_ct_resolve_clash(struct sk_buff *skb,
 		nf_conntrack_get(&ct->ct_general);
 
 		nf_ct_acct_merge(ct, ctinfo, loser_ct);
-		nf_reset_ct(skb);
+		nf_ct_put(loser_ct);
 		nf_ct_set(skb, ct, ctinfo);
 
 		NF_CT_STAT_INC(net, clash_resolve);
@@ -1169,6 +1165,7 @@ nf_ct_resolve_clash(struct sk_buff *skb, struct nf_conntrack_tuple_hash *h,
 		return ret;
 
 drop:
+	NF_CT_STAT_INC(net, drop);
 	NF_CT_STAT_INC(net, insert_failed);
 	return NF_DROP;
 }
@@ -1258,6 +1255,7 @@ __nf_conntrack_confirm(struct sk_buff *skb)
 		if (chainlen++ > max_chainlen) {
 chaintoolong:
 			NF_CT_STAT_INC(net, chaintoolong);
+			NF_CT_STAT_INC(net, insert_failed);
 			ret = NF_DROP;
 			goto dying;
 		}
@@ -1469,31 +1467,6 @@ static bool gc_worker_can_early_drop(const struct nf_conn *ct)
 	return false;
 }
 
-static void nf_ct_help_gc(struct nf_conn *ct)
-{
-	struct nf_conn_help *help;
-
-	if (!refcount_inc_not_zero(&ct->ct_general.use))
-		return;
-
-	/* load ->status after refcount increase */
-	smp_acquire__after_ctrl_dep();
-
-	if (!nf_ct_is_confirmed(ct) || nf_ct_is_dying(ct)) {
-		nf_ct_put(ct);
-		return;
-	}
-
-	/* re-check helper due to SLAB_TYPESAFE_BY_RCU */
-	if (test_bit(IPS_HELPER_BIT, &ct->status)) {
-		help = nfct_help(ct);
-		if (help)
-			nf_ct_expectation_gc(help);
-	}
-
-	nf_ct_put(ct);
-}
-
 static void gc_worker(struct work_struct *work)
 {
 	unsigned int i, hashsz, nf_conntrack_max95 = 0;
@@ -1566,13 +1539,7 @@ static void gc_worker(struct work_struct *work)
 			expires = (expires - (long)next_run) / ++count;
 			next_run += expires;
 
-			if (gc_worker_skip_ct(tmp))
-				continue;
-
-			if (test_bit(IPS_HELPER_BIT, &tmp->status))
-				nf_ct_help_gc(tmp);
-
-			if (nf_conntrack_max95 == 0)
+			if (nf_conntrack_max95 == 0 || gc_worker_skip_ct(tmp))
 				continue;
 
 			net = nf_ct_net(tmp);
@@ -1658,7 +1625,7 @@ __nf_conntrack_alloc(struct net *net,
 	/* We don't want any race condition at early drop stage */
 	ct_count = atomic_inc_return(&cnet->count);
 
-	if (unlikely(ct_count > nf_conntrack_max)) {
+	if (nf_conntrack_max && unlikely(ct_count > nf_conntrack_max)) {
 		if (!early_drop(net, hash)) {
 			if (!conntrack_gc_work.early_drop)
 				conntrack_gc_work.early_drop = true;
@@ -1732,7 +1699,6 @@ void nf_conntrack_free(struct nf_conn *ct)
 			nat_hook->remove_nat_bysrc(ct);
 	}
 
-	nf_ct_help_put(ct);
 	nf_ct_timeout_put(ct);
 	rcu_read_unlock();
 
@@ -1816,7 +1782,7 @@ init_conntrack(struct net *net, struct nf_conn *tmpl,
 			assign_helper = rcu_dereference(exp->assign_helper);
 			if (assign_helper) {
 				help = nf_ct_helper_ext_add(ct, GFP_ATOMIC);
-				if (help && refcount_inc_not_zero(&assign_helper->ct_refcnt))
+				if (help)
 					rcu_assign_pointer(help->helper, assign_helper);
 			}
 
@@ -1983,6 +1949,11 @@ static int nf_conntrack_handle_packet(struct nf_conn *ct,
 	case IPPROTO_ICMPV6:
 		return nf_conntrack_icmpv6_packet(ct, skb, ctinfo, state);
 #endif
+#ifdef CONFIG_NF_CT_PROTO_UDPLITE
+	case IPPROTO_UDPLITE:
+		return nf_conntrack_udplite_packet(ct, skb, dataoff,
+						   ctinfo, state);
+#endif
 #ifdef CONFIG_NF_CT_PROTO_SCTP
 	case IPPROTO_SCTP:
 		return nf_conntrack_sctp_packet(ct, skb, dataoff,
@@ -2065,10 +2036,9 @@ repeat:
 		if (ret == -NF_REPEAT)
 			goto repeat;
 
+		NF_CT_STAT_INC_ATOMIC(state->net, invalid);
 		if (ret == NF_DROP)
 			NF_CT_STAT_INC_ATOMIC(state->net, drop);
-		else
-			NF_CT_STAT_INC_ATOMIC(state->net, invalid);
 
 		ret = -ret;
 		goto out;
@@ -2410,7 +2380,7 @@ nf_ct_iterate_destroy(int (*iter)(struct nf_conn *i, void *data), void *data)
 
 		if (atomic_read(&cnet->count) == 0)
 			continue;
-		nf_queue_nf_hook_drop(net, NULL);
+		nf_queue_nf_hook_drop(net);
 	}
 	up_read(&net_rwsem);
 
@@ -2479,7 +2449,6 @@ void nf_conntrack_cleanup_net(struct net *net)
 void nf_conntrack_cleanup_net_list(struct list_head *net_exit_list)
 {
 	struct nf_ct_iter_data iter_data = {};
-	unsigned long start = jiffies;
 	struct net *net;
 	int busy;
 
@@ -2500,19 +2469,11 @@ i_see_dead_people:
 			busy = 1;
 	}
 	if (busy) {
-		DEBUG_NET_WARN_ONCE(time_after(jiffies, start + 60 * HZ),
-				    "conntrack cleanup blocked for 60s");
 		schedule();
 		goto i_see_dead_people;
 	}
 
-	/* must wait for current scan loop, worker also looks at
-	 * struct nf_conntrack_net, which is about to be free'd.
-	 */
-	flush_work(&conntrack_gc_work.dwork.work);
-
 	list_for_each_entry(net, net_exit_list, exit_list) {
-		warn_on_keymap_list_leak(net);
 		nf_conntrack_ecache_pernet_fini(net);
 		nf_conntrack_expect_pernet_fini(net);
 		free_percpu(net->ct.stat);
@@ -2533,7 +2494,7 @@ void *nf_ct_alloc_hashtable(unsigned int *sizep, int nulls)
 	if (nr_slots > (INT_MAX / sizeof(struct hlist_nulls_head)))
 		return NULL;
 
-	hash = kvzalloc_objs(struct hlist_nulls_head, nr_slots);
+	hash = kvcalloc(nr_slots, sizeof(struct hlist_nulls_head), GFP_KERNEL);
 
 	if (hash && nulls)
 		for (i = 0; i < nr_slots; i++)

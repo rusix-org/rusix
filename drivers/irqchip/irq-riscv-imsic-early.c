@@ -67,15 +67,15 @@ static int __init imsic_ipi_domain_init(void)
 		return 0;
 
 	/* Create IMSIC IPI multiplexing */
-	virq = ipi_mux_create(IPI_MAX, imsic_ipi_send);
+	virq = ipi_mux_create(IMSIC_NR_IPI, imsic_ipi_send);
 	if (virq <= 0)
 		return virq < 0 ? virq : -ENOMEM;
 
 	/* Set vIRQ range */
-	riscv_ipi_set_virq_range(virq, IPI_MAX);
+	riscv_ipi_set_virq_range(virq, IMSIC_NR_IPI);
 
 	/* Announce that IMSIC is providing IPIs */
-	pr_info("%pfwP: providing IPIs using interrupt %d\n", imsic->global.fwnode, IMSIC_IPI_ID);
+	pr_info("%pfwP: providing IPIs using interrupt %d\n", imsic->fwnode, IMSIC_IPI_ID);
 
 	return 0;
 }
@@ -92,8 +92,9 @@ static int __init imsic_ipi_domain_init(void) { return 0; }
  */
 static void imsic_handle_irq(struct irq_desc *desc)
 {
-	struct imsic_local_priv *lpriv = this_cpu_ptr(imsic->lpriv);
 	struct irq_chip *chip = irq_desc_get_chip(desc);
+	int cpu = smp_processor_id();
+	struct imsic_vector *vec;
 	unsigned long local_id;
 
 	/*
@@ -113,12 +114,16 @@ static void imsic_handle_irq(struct irq_desc *desc)
 			continue;
 		}
 
-		if (unlikely(local_id > imsic->global.nr_ids)) {
+		if (unlikely(!imsic->base_domain))
+			continue;
+
+		vec = imsic_vector_from_local_id(cpu, local_id);
+		if (!vec) {
 			pr_warn_ratelimited("vector not found for local ID 0x%lx\n", local_id);
 			continue;
 		}
 
-		generic_handle_irq(lpriv->vectors[local_id].irq);
+		generic_handle_irq(vec->irq);
 	}
 
 	chained_irq_exit(chip, desc);

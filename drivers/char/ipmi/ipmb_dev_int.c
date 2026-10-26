@@ -209,7 +209,7 @@ static void ipmb_handle_request(struct ipmb_dev *ipmb_dev)
 			REQUEST_QUEUE_MAX_LEN)
 		return;
 
-	queue_elem = kmalloc_obj(*queue_elem, GFP_ATOMIC);
+	queue_elem = kmalloc(sizeof(*queue_elem), GFP_ATOMIC);
 	if (!queue_elem)
 		return;
 
@@ -354,15 +354,15 @@ static void ipmb_remove(struct i2c_client *client)
 }
 
 static const struct i2c_device_id ipmb_id[] = {
-	{ .name = "ipmb-dev" },
-	{ }
+	{ "ipmb-dev" },
+	{}
 };
 MODULE_DEVICE_TABLE(i2c, ipmb_id);
 
 #ifdef CONFIG_ACPI
 static const struct acpi_device_id acpi_ipmb_id[] = {
-	{ .id = "IPMB0001" },
-	{ }
+	{ "IPMB0001", 0 },
+	{},
 };
 MODULE_DEVICE_TABLE(acpi, acpi_ipmb_id);
 #endif

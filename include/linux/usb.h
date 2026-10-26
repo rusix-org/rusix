@@ -2,7 +2,7 @@
 #ifndef __LINUX_USB_H
 #define __LINUX_USB_H
 
-#include <linux/device-id/usb.h>
+#include <linux/mod_devicetable.h>
 #include <linux/usb/ch9.h>
 
 #define USB_MAJOR			180
@@ -1303,7 +1303,8 @@ struct usb_driver {
  *	resume and suspend functions will be called in addition to the driver's
  *	own, so this part of the setup does not need to be replicated.
  *
- * USB device drivers must provide a name, other driver fields are optional.
+ * USB drivers must provide all the fields listed above except driver,
+ * match, and id_table.
  */
 struct usb_device_driver {
 	const char *name;
@@ -1369,10 +1370,8 @@ extern void usb_deregister(struct usb_driver *);
 	module_driver(__usb_driver, usb_register, \
 		       usb_deregister)
 
-#define usb_register_device_driver(new_udriver) \
-	__usb_register_device_driver(new_udriver, THIS_MODULE, KBUILD_MODNAME)
-extern int __usb_register_device_driver(struct usb_device_driver *,
-			struct module *, const char *);
+extern int usb_register_device_driver(struct usb_device_driver *,
+			struct module *);
 extern void usb_deregister_device_driver(struct usb_device_driver *);
 
 extern int usb_register_dev(struct usb_interface *intf,
@@ -1608,12 +1607,7 @@ typedef void (*usb_complete_t)(struct urb *);
  *
  * Completion Callbacks:
  *
- * The completion callback can occur in any context: process, interrupt,
- * BH, or anything else.  Also, interrupts may or may not be disabled on
- * the local CPU when the callback runs.  A completion handler routine
- * must not depend on any particular properties of its environment.
- *
- * One of the first
+ * The completion callback is made in_interrupt(), and one of the first
  * things that a completion handler should do is check the status field.
  * The status field is provided for all URBs.  It is used to report
  * unlinked URBs, and status for all non-ISO transfers.  It should not
@@ -2090,8 +2084,6 @@ static inline int usb_translate_errors(int error_code)
 	case -ENODEV:
 	case -EOPNOTSUPP:
 		return error_code;
-	case -ENOSPC:
-		return -EBUSY;
 	default:
 		return -EIO;
 	}

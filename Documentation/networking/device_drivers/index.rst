@@ -13,5 +13,13 @@ Contents:
    cellular/index
    ethernet/index
    fddi/index
+   hamradio/index
    wifi/index
    wwan/index
+
+.. only::  subproject and html
+
+   Indices
+   =======
+
+   * :ref:`genindex`

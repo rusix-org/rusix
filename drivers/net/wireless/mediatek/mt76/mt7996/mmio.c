@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: BSD-3-Clause-Clear
+// SPDX-License-Identifier: ISC
 /*
  * Copyright (C) 2022 MediaTek Inc.
  */
@@ -493,6 +493,9 @@ int mt7996_mmio_wed_init(struct mt7996_dev *dev, void *pdev_ptr,
 	if (hif2 && !mtk_wed_device_active(&dev->mt76.mmio.wed))
 		return 0;
 
+	dev->mt76.hwrro_mode = is_mt7996(&dev->mt76) ? MT76_HWRRO_V3
+						     : MT76_HWRRO_V3_1;
+
 	hif1_ofs = dev->hif2 ? MT_WFDMA0_PCIE1(0) - MT_WFDMA0(0) : 0;
 
 	if (hif2)
@@ -517,16 +520,23 @@ int mt7996_mmio_wed_init(struct mt7996_dev *dev, void *pdev_ptr,
 		wed->wlan.wpdma_tx = wed->wlan.phy_base + hif1_ofs +
 					     MT_TXQ_RING_BASE(0) +
 					     MT7996_TXQ_BAND2 * MT_RING_SIZE;
-		if (is_mt7996(&dev->mt76)) {
-			wed->wlan.txfree_tbit = ffs(MT_INT_RX_TXFREE_EXT) - 1;
-			wed->wlan.wpdma_txfree = wed->wlan.phy_base + hif1_ofs +
-						 MT_RXQ_RING_BASE(0) +
-						 MT7996_RXQ_TXFREE2 * MT_RING_SIZE;
+		if (mt7996_has_hwrro(dev)) {
+			if (is_mt7996(&dev->mt76)) {
+				wed->wlan.txfree_tbit = ffs(MT_INT_RX_TXFREE_EXT) - 1;
+				wed->wlan.wpdma_txfree = wed->wlan.phy_base + hif1_ofs +
+							 MT_RXQ_RING_BASE(0) +
+							 MT7996_RXQ_TXFREE2 * MT_RING_SIZE;
+			} else {
+				wed->wlan.txfree_tbit = ffs(MT_INT_RX_TXFREE_BAND1_EXT) - 1;
+				wed->wlan.wpdma_txfree = wed->wlan.phy_base + hif1_ofs +
+							 MT_RXQ_RING_BASE(0) +
+							 MT7996_RXQ_MCU_WA_EXT * MT_RING_SIZE;
+			}
 		} else {
-			wed->wlan.txfree_tbit = ffs(MT_INT_RX_TXFREE_BAND1_EXT) - 1;
 			wed->wlan.wpdma_txfree = wed->wlan.phy_base + hif1_ofs +
 						 MT_RXQ_RING_BASE(0) +
-						 MT7996_RXQ_MCU_WA_EXT * MT_RING_SIZE;
+						 MT7996_RXQ_MCU_WA_TRI * MT_RING_SIZE;
+			wed->wlan.txfree_tbit = ffs(MT_INT_RX_DONE_WA_TRI) - 1;
 		}
 
 		wed->wlan.wpdma_rx_glo = wed->wlan.phy_base + hif1_ofs + MT_WFDMA0_GLO_CFG;
@@ -537,7 +547,7 @@ int mt7996_mmio_wed_init(struct mt7996_dev *dev, void *pdev_ptr,
 		wed->wlan.id = MT7996_DEVICE_ID_2;
 		wed->wlan.tx_tbit[0] = ffs(MT_INT_TX_DONE_BAND2) - 1;
 	} else {
-		wed->wlan.hw_rro = true;
+		wed->wlan.hw_rro = mt7996_has_hwrro(dev);
 		wed->wlan.wpdma_int = wed->wlan.phy_base + MT_INT_SOURCE_CSR;
 		wed->wlan.wpdma_mask = wed->wlan.phy_base + MT_INT_MASK_CSR;
 		wed->wlan.wpdma_tx = wed->wlan.phy_base + MT_TXQ_RING_BASE(0) +
@@ -590,15 +600,23 @@ int mt7996_mmio_wed_init(struct mt7996_dev *dev, void *pdev_ptr,
 		wed->wlan.tx_tbit[0] = ffs(MT_INT_TX_DONE_BAND0) - 1;
 		wed->wlan.tx_tbit[1] = ffs(MT_INT_TX_DONE_BAND1) - 1;
 		if (is_mt7996(&dev->mt76)) {
-			wed->wlan.wpdma_txfree = wed->wlan.phy_base +
-						 MT_RXQ_RING_BASE(0) +
-						 MT7996_RXQ_TXFREE0 * MT_RING_SIZE;
-			wed->wlan.txfree_tbit = ffs(MT_INT_RX_TXFREE_MAIN) - 1;
+			if (mt7996_has_hwrro(dev)) {
+				wed->wlan.wpdma_txfree = wed->wlan.phy_base +
+							 MT_RXQ_RING_BASE(0) +
+							 MT7996_RXQ_TXFREE0 * MT_RING_SIZE;
+				wed->wlan.txfree_tbit = ffs(MT_INT_RX_TXFREE_MAIN) - 1;
+			} else {
+				wed->wlan.wpdma_txfree = wed->wlan.phy_base +
+							 MT_RXQ_RING_BASE(0) +
+							 MT7996_RXQ_MCU_WA_MAIN * MT_RING_SIZE;
+				wed->wlan.txfree_tbit = ffs(MT_INT_RX_DONE_WA_MAIN) - 1;
+			}
 		} else {
 			wed->wlan.txfree_tbit = ffs(MT_INT_RX_DONE_WA_MAIN) - 1;
 			wed->wlan.wpdma_txfree = wed->wlan.phy_base + MT_RXQ_RING_BASE(0) +
 						  MT7996_RXQ_MCU_WA_MAIN * MT_RING_SIZE;
 		}
+		dev->mt76.rx_token_size = MT7996_TOKEN_SIZE + wed->wlan.rx_npkt;
 
 		if (dev->hif2 && is_mt7992(&dev->mt76))
 			wed->wlan.id = 0x7992;
@@ -621,14 +639,9 @@ int mt7996_mmio_wed_init(struct mt7996_dev *dev, void *pdev_ptr,
 		wed->wlan.reset_complete = mt76_wed_reset_complete;
 	}
 
-	if (mtk_wed_device_attach(wed))
+	if (mtk_wed_device_attach(wed)) {
+		dev->mt76.hwrro_mode = MT76_HWRRO_OFF;
 		return 0;
-
-	if (!hif2) {
-		dev->mt76.hwrro_mode = is_mt7996(&dev->mt76) ? MT76_HWRRO_V3
-							     : MT76_HWRRO_V3_1;
-		dev->mt76.rx_token_size = MT7996_TOKEN_SIZE +
-					  wed->wlan.rx_npkt;
 	}
 
 	*irq = wed->irq;
@@ -723,18 +736,9 @@ void mt7996_dual_hif_set_irq_mask(struct mt7996_dev *dev, bool write_reg,
 static void mt7996_rx_poll_complete(struct mt76_dev *mdev,
 				    enum mt76_rxq_id q)
 {
-	if (q == MT_RXQ_NPU0 || q == MT_RXQ_NPU1) {
-		struct airoha_npu *npu;
+	struct mt7996_dev *dev = container_of(mdev, struct mt7996_dev, mt76);
 
-		npu = rcu_dereference(mdev->mmio.npu);
-		if (npu)
-			airoha_npu_wlan_enable_irq(npu, q - MT_RXQ_NPU0);
-	} else {
-		struct mt7996_dev *dev = container_of(mdev, struct mt7996_dev,
-						      mt76);
-
-		mt7996_irq_enable(dev, MT_INT_RX(q));
-	}
+	mt7996_irq_enable(dev, MT_INT_RX(q));
 }
 
 /* TODO: support 2/4/6/8 MSI-X vectors */
@@ -838,8 +842,7 @@ struct mt7996_dev *mt7996_mmio_probe(struct device *pdev,
 		.link_data_size = sizeof(struct mt7996_vif_link),
 		.drv_flags = MT_DRV_TXWI_NO_FREE |
 			     MT_DRV_AMSDU_OFFLOAD |
-			     MT_DRV_HW_MGMT_TXQ |
-			     MT_DRV_HW_PS_BUFFERING,
+			     MT_DRV_HW_MGMT_TXQ,
 		.survey_flags = SURVEY_INFO_TIME_TX |
 				SURVEY_INFO_TIME_RX |
 				SURVEY_INFO_TIME_BSS_RX,

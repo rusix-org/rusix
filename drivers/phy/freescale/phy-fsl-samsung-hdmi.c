@@ -570,20 +570,17 @@ const struct phy_config *fsl_samsung_hdmi_phy_find_settings(struct fsl_samsung_h
 	return fract_div_phy;
 }
 
-static int fsl_samsung_hdmi_phy_clk_determine_rate(struct clk_hw *hw,
-						   struct clk_rate_request *req)
+static long fsl_samsung_hdmi_phy_clk_round_rate(struct clk_hw *hw,
+						unsigned long rate, unsigned long *parent_rate)
 {
 	struct fsl_samsung_hdmi_phy *phy = to_fsl_samsung_hdmi_phy(hw);
-	const struct phy_config *target_settings = fsl_samsung_hdmi_phy_find_settings(phy,
-										      req->rate);
+	const struct phy_config *target_settings = fsl_samsung_hdmi_phy_find_settings(phy, rate);
 
 	if (target_settings == NULL)
 		return -EINVAL;
 
 	dev_dbg(phy->dev, "round_rate, closest rate = %u\n", target_settings->pixclk);
-	req->rate = target_settings->pixclk;
-
-	return 0;
+	return target_settings->pixclk;
 }
 
 static int fsl_samsung_hdmi_phy_clk_set_rate(struct clk_hw *hw,
@@ -602,7 +599,7 @@ static int fsl_samsung_hdmi_phy_clk_set_rate(struct clk_hw *hw,
 
 static const struct clk_ops phy_clk_ops = {
 	.recalc_rate = phy_clk_recalc_rate,
-	.determine_rate = fsl_samsung_hdmi_phy_clk_determine_rate,
+	.round_rate = fsl_samsung_hdmi_phy_clk_round_rate,
 	.set_rate = fsl_samsung_hdmi_phy_clk_set_rate,
 };
 
@@ -679,15 +676,12 @@ static int fsl_samsung_hdmi_phy_probe(struct platform_device *pdev)
 	return 0;
 
 register_clk_failed:
-	pm_runtime_disable(phy->dev);
-	pm_runtime_put_noidle(phy->dev);
 	return ret;
 }
 
 static void fsl_samsung_hdmi_phy_remove(struct platform_device *pdev)
 {
 	of_clk_del_provider(pdev->dev.of_node);
-	pm_runtime_disable(&pdev->dev);
 }
 
 static int __maybe_unused fsl_samsung_hdmi_phy_suspend(struct device *dev)

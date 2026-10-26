@@ -26,8 +26,7 @@ virtual report
 virtual context
 
 @r depends on context || org || report@
-type T;
-T x;
+expression x;
 @@
 
 (
@@ -57,26 +56,18 @@ T x;
 )
 
 @safe depends on context || org || report exists@
-r.T x;
+expression x;
 position p;
 @@
 
 (
  x = kmalloc(...)
 |
- x = kmalloc_obj(...)
-|
- x = kmalloc_objs(...)
-|
  x = kvasprintf(...)
 |
  x = kasprintf(...)
 |
  x = kzalloc(...)
-|
- x = kzalloc_obj(...)
-|
- x = kzalloc_objs(...)
 |
  x = kmalloc_array(...)
 |
@@ -114,7 +105,7 @@ position p;
 )
 
 @pb@
-r.T r.x;
+expression r.x;
 position p != safe.p;
 @@
 

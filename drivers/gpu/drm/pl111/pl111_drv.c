@@ -55,7 +55,6 @@
 #include <drm/drm_gem_framebuffer_helper.h>
 #include <drm/drm_of.h>
 #include <drm/drm_panel.h>
-#include <drm/drm_print.h>
 #include <drm/drm_probe_helper.h>
 #include <drm/drm_vblank.h>
 
@@ -99,7 +98,7 @@ static int pl111_modeset_init(struct drm_device *dev)
 		struct drm_panel *tmp_panel;
 		struct drm_bridge *tmp_bridge;
 
-		drm_dbg(dev, "checking endpoint %d\n", i);
+		dev_dbg(dev->dev, "checking endpoint %d\n", i);
 
 		ret = drm_of_find_panel_or_bridge(dev->dev->of_node,
 						  0, i,
@@ -115,18 +114,18 @@ static int pl111_modeset_init(struct drm_device *dev)
 				defer = true;
 			} else if (ret != -ENODEV) {
 				/* Continue, maybe something else is working */
-				drm_err(dev,
+				dev_err(dev->dev,
 					"endpoint %d returns %d\n", i, ret);
 			}
 		}
 
 		if (tmp_panel) {
-			drm_info(dev,
+			dev_info(dev->dev,
 				 "found panel on endpoint %d\n", i);
 			panel = tmp_panel;
 		}
 		if (tmp_bridge) {
-			drm_info(dev,
+			dev_info(dev->dev,
 				 "found bridge on endpoint %d\n", i);
 			bridge = tmp_bridge;
 		}
@@ -145,15 +144,14 @@ static int pl111_modeset_init(struct drm_device *dev)
 	if (panel) {
 		bridge = drm_panel_bridge_add_typed(panel,
 						    DRM_MODE_CONNECTOR_Unknown);
-		drm_panel_put(panel);
 		if (IS_ERR(bridge)) {
 			ret = PTR_ERR(bridge);
 			goto finish;
 		}
 	} else if (bridge) {
-		drm_info(dev, "Using non-panel bridge\n");
+		dev_info(dev->dev, "Using non-panel bridge\n");
 	} else {
-		drm_err(dev, "No bridge, exiting\n");
+		dev_err(dev->dev, "No bridge, exiting\n");
 		return -ENODEV;
 	}
 
@@ -165,18 +163,19 @@ static int pl111_modeset_init(struct drm_device *dev)
 
 	ret = pl111_display_init(dev);
 	if (ret != 0) {
-		drm_err(dev, "Failed to init display\n");
+		dev_err(dev->dev, "Failed to init display\n");
 		goto out_bridge;
 	}
 
-	ret = drm_bridge_attach(&priv->encoder, bridge, NULL, 0);
+	ret = drm_simple_display_pipe_attach_bridge(&priv->pipe,
+						    bridge);
 	if (ret)
 		return ret;
 
 	if (!priv->variant->broken_vblank) {
 		ret = drm_vblank_init(dev, 1);
 		if (ret != 0) {
-			drm_err(dev, "Failed to init vblank\n");
+			dev_err(dev->dev, "Failed to init vblank\n");
 			goto out_bridge;
 		}
 	}
@@ -256,13 +255,13 @@ static int pl111_amba_probe(struct amba_device *amba_dev,
 
 	ret = of_reserved_mem_device_init(dev);
 	if (!ret) {
-		drm_info(drm, "using device-specific reserved memory\n");
+		dev_info(dev, "using device-specific reserved memory\n");
 		priv->use_device_memory = true;
 	}
 
 	if (of_property_read_u32(dev->of_node, "max-memory-bandwidth",
 				 &priv->memory_bw)) {
-		drm_info(drm, "no max memory bandwidth specified, assume unlimited\n");
+		dev_info(dev, "no max memory bandwidth specified, assume unlimited\n");
 		priv->memory_bw = 0;
 	}
 
@@ -277,17 +276,17 @@ static int pl111_amba_probe(struct amba_device *amba_dev,
 
 	priv->regs = devm_ioremap_resource(dev, &amba_dev->res);
 	if (IS_ERR(priv->regs)) {
-		drm_err(drm, "%s failed mmio\n", __func__);
+		dev_err(dev, "%s failed mmio\n", __func__);
 		ret = PTR_ERR(priv->regs);
 		goto dev_put;
 	}
 
 	/* This may override some variant settings */
-	ret = pl111_versatile_init(drm, priv);
+	ret = pl111_versatile_init(dev, priv);
 	if (ret)
 		goto dev_put;
 
-	pl111_nomadik_init(drm);
+	pl111_nomadik_init(dev);
 
 	/* turn off interrupts before requesting the irq */
 	writel(0, priv->regs + priv->ienb);
@@ -295,7 +294,7 @@ static int pl111_amba_probe(struct amba_device *amba_dev,
 	ret = devm_request_irq(dev, amba_dev->irq[0], pl111_irq, 0,
 			       variant->name, priv);
 	if (ret != 0) {
-		drm_err(drm, "%s failed irq %d\n", __func__, ret);
+		dev_err(dev, "%s failed irq %d\n", __func__, ret);
 		goto dev_put;
 	}
 
@@ -341,9 +340,13 @@ static void pl111_amba_shutdown(struct amba_device *amba_dev)
  * This early variant lacks the 565 and 444 pixel formats.
  */
 static const u32 pl110_pixel_formats[] = {
+	DRM_FORMAT_ABGR8888,
 	DRM_FORMAT_XBGR8888,
+	DRM_FORMAT_ARGB8888,
 	DRM_FORMAT_XRGB8888,
+	DRM_FORMAT_ABGR1555,
 	DRM_FORMAT_XBGR1555,
+	DRM_FORMAT_ARGB1555,
 	DRM_FORMAT_XRGB1555,
 };
 
@@ -357,13 +360,19 @@ static const struct pl111_variant_data pl110_variant = {
 
 /* RealView, Versatile Express etc use this modern variant */
 static const u32 pl111_pixel_formats[] = {
+	DRM_FORMAT_ABGR8888,
 	DRM_FORMAT_XBGR8888,
+	DRM_FORMAT_ARGB8888,
 	DRM_FORMAT_XRGB8888,
 	DRM_FORMAT_BGR565,
 	DRM_FORMAT_RGB565,
+	DRM_FORMAT_ABGR1555,
 	DRM_FORMAT_XBGR1555,
+	DRM_FORMAT_ARGB1555,
 	DRM_FORMAT_XRGB1555,
+	DRM_FORMAT_ABGR4444,
 	DRM_FORMAT_XBGR4444,
+	DRM_FORMAT_ARGB4444,
 	DRM_FORMAT_XRGB4444,
 };
 
@@ -377,13 +386,19 @@ static const struct pl111_variant_data pl111_variant = {
 static const u32 pl110_nomadik_pixel_formats[] = {
 	DRM_FORMAT_RGB888,
 	DRM_FORMAT_BGR888,
+	DRM_FORMAT_ABGR8888,
 	DRM_FORMAT_XBGR8888,
+	DRM_FORMAT_ARGB8888,
 	DRM_FORMAT_XRGB8888,
 	DRM_FORMAT_BGR565,
 	DRM_FORMAT_RGB565,
+	DRM_FORMAT_ABGR1555,
 	DRM_FORMAT_XBGR1555,
+	DRM_FORMAT_ARGB1555,
 	DRM_FORMAT_XRGB1555,
+	DRM_FORMAT_ABGR4444,
 	DRM_FORMAT_XBGR4444,
+	DRM_FORMAT_ARGB4444,
 	DRM_FORMAT_XRGB4444,
 };
 

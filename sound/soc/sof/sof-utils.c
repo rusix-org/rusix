@@ -24,19 +24,11 @@
 
 int snd_sof_create_page_table(struct device *dev,
 			      struct snd_dma_buffer *dmab,
-			      struct snd_dma_buffer *page_table, size_t size)
+			      unsigned char *page_table, size_t size)
 {
 	int i, pages;
 
 	pages = snd_sgbuf_aligned_pages(size);
-
-	if (pages < 1 || page_table->bytes < sizeof(u32) ||
-	    pages > SOF_PAGE_TABLE_MAX_PFNS(page_table->bytes)) {
-		dev_err(dev,
-			"Can not store %d pages in a %zu bytes page table\n",
-			pages, page_table->bytes);
-		return -EINVAL;
-	}
 
 	dev_dbg(dev, "generating page table for %p size 0x%zx pages %d\n",
 		dmab->area, size, pages);
@@ -53,7 +45,7 @@ int snd_sof_create_page_table(struct device *dev,
 		u32 pfn = snd_sgbuf_get_addr(dmab, i * PAGE_SIZE) >> PAGE_SHIFT;
 		u8 *pg_table;
 
-		pg_table = (u8 *)(page_table->area + idx);
+		pg_table = (u8 *)(page_table + idx);
 
 		/*
 		 * pagetable compression:

@@ -598,7 +598,8 @@ megasas_alloc_cmdlist_fusion(struct megasas_instance *instance)
 	 * commands.
 	 */
 	fusion->cmd_list =
-		kzalloc_objs(struct megasas_cmd_fusion *, max_mpt_cmd);
+		kcalloc(max_mpt_cmd, sizeof(struct megasas_cmd_fusion *),
+			GFP_KERNEL);
 	if (!fusion->cmd_list) {
 		dev_err(&instance->pdev->dev,
 			"Failed from %s %d\n",  __func__, __LINE__);
@@ -606,7 +607,8 @@ megasas_alloc_cmdlist_fusion(struct megasas_instance *instance)
 	}
 
 	for (i = 0; i < max_mpt_cmd; i++) {
-		fusion->cmd_list[i] = kzalloc_obj(struct megasas_cmd_fusion);
+		fusion->cmd_list[i] = kzalloc(sizeof(struct megasas_cmd_fusion),
+					      GFP_KERNEL);
 		if (!fusion->cmd_list[i]) {
 			for (j = 0; j < i; j++)
 				kfree(fusion->cmd_list[j]);
@@ -1742,7 +1744,7 @@ static int megasas_alloc_ioc_init_frame(struct megasas_instance *instance)
 
 	fusion = instance->ctrl_context;
 
-	cmd = kzalloc_obj(struct megasas_cmd);
+	cmd = kzalloc(sizeof(struct megasas_cmd), GFP_KERNEL);
 
 	if (!cmd) {
 		dev_err(&instance->pdev->dev, "Failed from func: %s line: %d\n",
@@ -3612,15 +3614,6 @@ complete_cmd_fusion(struct megasas_instance *instance, u32 MSIxIndex,
 			complete(&cmd_fusion->done);
 			break;
 		case MPI2_FUNCTION_SCSI_IO_REQUEST:  /*Fast Path IO.*/
-			/*
-			 * Firmware can send stale/duplicate completions for
-			 * commands already returned to the pool. scmd_local
-			 * would be NULL for such cases. Skip processing to
-			 * avoid NULL pointer access.
-			 */
-			if (!scmd_local)
-				break;
-
 			/* Update load balancing info */
 			if (fusion->load_balance_info &&
 			    (megasas_priv(cmd_fusion->scmd)->status &
@@ -5305,7 +5298,8 @@ megasas_alloc_fusion_context(struct megasas_instance *instance)
 {
 	struct fusion_context *fusion;
 
-	instance->ctrl_context = kzalloc_obj(struct fusion_context);
+	instance->ctrl_context = kzalloc(sizeof(struct fusion_context),
+					 GFP_KERNEL);
 	if (!instance->ctrl_context) {
 		dev_err(&instance->pdev->dev, "Failed from %s %d\n",
 			__func__, __LINE__);

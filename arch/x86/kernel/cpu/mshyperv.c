@@ -19,7 +19,6 @@
 #include <linux/random.h>
 #include <asm/processor.h>
 #include <asm/hypervisor.h>
-#include <asm/cpuid/api.h>
 #include <hyperv/hvhdk.h>
 #include <asm/mshyperv.h>
 #include <asm/desc.h>
@@ -29,9 +28,9 @@
 #include <asm/apic.h>
 #include <asm/timer.h>
 #include <asm/reboot.h>
-#include <asm/msr.h>
 #include <asm/nmi.h>
 #include <clocksource/hyperv_timer.h>
+#include <asm/msr.h>
 #include <asm/numa.h>
 #include <asm/svm.h>
 
@@ -40,12 +39,6 @@ bool hv_nested;
 struct ms_hyperv_info ms_hyperv;
 
 #if IS_ENABLED(CONFIG_HYPERV)
-/*
- * When running with the paravisor, controls proxying the synthetic interrupts
- * from the host
- */
-static bool hv_para_sint_proxy;
-
 static inline unsigned int hv_get_nested_msr(unsigned int reg)
 {
 	if (hv_is_sint_msr(reg))
@@ -82,50 +75,16 @@ EXPORT_SYMBOL_GPL(hv_get_non_nested_msr);
 void hv_set_non_nested_msr(unsigned int reg, u64 value)
 {
 	if (hv_is_synic_msr(reg) && ms_hyperv.paravisor_present) {
-		/* The hypervisor will get the intercept. */
 		hv_ivm_msr_write(reg, value);
 
-		/* Using wrmsrq so the following goes to the paravisor. */
-		if (hv_is_sint_msr(reg)) {
-			union hv_synic_sint sint = { .as_uint64 = value };
-
-			sint.proxy = hv_para_sint_proxy;
-			native_wrmsrq(reg, sint.as_uint64);
-		}
+		/* Write proxy bit via wrmsl instruction */
+		if (hv_is_sint_msr(reg))
+			wrmsrq(reg, value | 1 << 20);
 	} else {
-		native_wrmsrq(reg, value);
+		wrmsrq(reg, value);
 	}
 }
 EXPORT_SYMBOL_GPL(hv_set_non_nested_msr);
-
-/*
- * Enable or disable proxying synthetic interrupts
- * to the paravisor.
- */
-void hv_para_set_sint_proxy(bool enable)
-{
-	hv_para_sint_proxy = enable;
-}
-
-/*
- * Get the SynIC register value from the paravisor.
- */
-u64 hv_para_get_synic_register(unsigned int reg)
-{
-	if (WARN_ON(!ms_hyperv.paravisor_present || !hv_is_synic_msr(reg)))
-		return ~0ULL;
-	return native_read_msr(reg);
-}
-
-/*
- * Set the SynIC register value with the paravisor.
- */
-void hv_para_set_synic_register(unsigned int reg, u64 val)
-{
-	if (WARN_ON(!ms_hyperv.paravisor_present || !hv_is_synic_msr(reg)))
-		return;
-	native_write_msr(reg, val);
-}
 
 u64 hv_get_msr(unsigned int reg)
 {
@@ -155,14 +114,12 @@ DEFINE_IDTENTRY_SYSVEC(sysvec_hyperv_callback)
 {
 	struct pt_regs *old_regs = set_irq_regs(regs);
 
-	inc_irq_stat(HYPERVISOR_CALLBACK);
+	inc_irq_stat(irq_hv_callback_count);
 	if (mshv_handler)
 		mshv_handler();
 
 	if (vmbus_handler)
 		vmbus_handler();
-
-	add_interrupt_randomness(HYPERVISOR_CALLBACK_VECTOR);
 
 	if (ms_hyperv.hints & HV_DEPRECATING_AEOI_RECOMMENDED)
 		apic_eoi();
@@ -194,7 +151,7 @@ DEFINE_IDTENTRY_SYSVEC(sysvec_hyperv_stimer0)
 {
 	struct pt_regs *old_regs = set_irq_regs(regs);
 
-	inc_irq_stat(HYPERV_STIMER0);
+	inc_irq_stat(hyperv_stimer0_count);
 	if (hv_stimer0_handler)
 		hv_stimer0_handler();
 	add_interrupt_randomness(HYPERV_STIMER0_VECTOR);
@@ -238,12 +195,8 @@ void hv_remove_crash_handler(void)
 #ifdef CONFIG_KEXEC_CORE
 static void hv_machine_shutdown(void)
 {
-	if (kexec_in_progress) {
-		hv_stimer_global_cleanup();
-
-		if (hv_kexec_handler)
-			hv_kexec_handler();
-	}
+	if (kexec_in_progress && hv_kexec_handler)
+		hv_kexec_handler();
 
 	/*
 	 * Call hv_cpu_die() on all the CPUs, otherwise later the hypervisor
@@ -262,7 +215,7 @@ static void hv_machine_shutdown(void)
 #endif /* CONFIG_KEXEC_CORE */
 
 #ifdef CONFIG_CRASH_DUMP
-static void hv_guest_crash_shutdown(struct pt_regs *regs)
+static void hv_machine_crash_shutdown(struct pt_regs *regs)
 {
 	if (hv_crash_handler)
 		hv_crash_handler(regs);
@@ -432,19 +385,12 @@ static void __init hv_smp_prepare_cpus(unsigned int max_cpus)
 	}
 
 #ifdef CONFIG_X86_64
-	/* If AP LPs exist, we are in a kexec'd kernel and VPs already exist */
-	if (num_present_cpus() == 1 || hv_lp_exists(1))
-		return;
-
 	for_each_present_cpu(i) {
 		if (i == 0)
 			continue;
 		ret = hv_call_add_logical_proc(numa_cpu_node(i), i, cpu_physical_id(i));
 		BUG_ON(ret);
 	}
-
-	ret = hv_call_notify_all_processors_started();
-	WARN_ON(ret);
 
 	for_each_present_cpu(i) {
 		if (i == 0)
@@ -492,44 +438,6 @@ int hv_get_hypervisor_version(union hv_hypervisor_version_info *info)
 }
 EXPORT_SYMBOL_GPL(hv_get_hypervisor_version);
 
-/*
- * Reserved vectors hard coded in the hypervisor. If used outside, the hypervisor
- * will either crash or hang or attempt to break into debugger.
- */
-static void hv_reserve_irq_vectors(void)
-{
-	#define HYPERV_DBG_FASTFAIL_VECTOR	0x29
-	#define HYPERV_DBG_ASSERT_VECTOR	0x2C
-	#define HYPERV_DBG_SERVICE_VECTOR	0x2D
-
-	/*
-	 * The hypervisor delivers these three to the NT HAL and refuses to
-	 * map a device interrupt to any of them.
-	 *
-	 * The hypervisor will provide a hint in the future when these
-	 * vectors become available to use.
-	 */
-	#define HAL_NT_APC_VECTOR		0x1F
-	#define HAL_NT_DPC_VECTOR		0x2F
-	#define HAL_NT_CLOCK_IPI_VECTOR		0xD2
-
-	if (cpu_feature_enabled(X86_FEATURE_FRED))
-		return;
-
-	if (test_and_set_bit(HYPERV_DBG_ASSERT_VECTOR, system_vectors) ||
-	    test_and_set_bit(HYPERV_DBG_SERVICE_VECTOR, system_vectors) ||
-	    test_and_set_bit(HYPERV_DBG_FASTFAIL_VECTOR, system_vectors) ||
-	    test_and_set_bit(HAL_NT_APC_VECTOR, system_vectors) ||
-	    test_and_set_bit(HAL_NT_DPC_VECTOR, system_vectors) ||
-	    test_and_set_bit(HAL_NT_CLOCK_IPI_VECTOR, system_vectors))
-		BUG();
-
-	pr_info("Hyper-V: reserve vectors: 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x\n",
-		HYPERV_DBG_ASSERT_VECTOR, HYPERV_DBG_SERVICE_VECTOR,
-		HYPERV_DBG_FASTFAIL_VECTOR, HAL_NT_APC_VECTOR,
-		HAL_NT_DPC_VECTOR, HAL_NT_CLOCK_IPI_VECTOR);
-}
-
 static void __init ms_hyperv_init_platform(void)
 {
 	int hv_max_functions_eax, eax;
@@ -561,12 +469,6 @@ static void __init ms_hyperv_init_platform(void)
 		 ms_hyperv.max_vp_index, ms_hyperv.max_lp_index);
 
 	hv_identify_partition_type();
-
-	if (hv_root_partition())
-		hv_reserve_irq_vectors();
-
-	if (cc_platform_has(CC_ATTR_SNP_SECURE_AVIC))
-		ms_hyperv.hints |= HV_DEPRECATING_AEOI_RECOMMENDED;
 
 	if (ms_hyperv.hints & HV_X64_HYPERV_NESTED) {
 		hv_nested = true;
@@ -676,14 +578,11 @@ static void __init ms_hyperv_init_platform(void)
 #endif
 
 #if IS_ENABLED(CONFIG_HYPERV)
-	if (hv_root_partition())
-		machine_ops.power_off = hv_machine_power_off;
 #if defined(CONFIG_KEXEC_CORE)
 	machine_ops.shutdown = hv_machine_shutdown;
 #endif
 #if defined(CONFIG_CRASH_DUMP)
-	if (!hv_root_partition())
-		machine_ops.crash_shutdown = hv_guest_crash_shutdown;
+	machine_ops.crash_shutdown = hv_machine_crash_shutdown;
 #endif
 #endif
 	/*
@@ -731,7 +630,9 @@ static void __init ms_hyperv_init_platform(void)
 	}
 
 	/* Install system interrupt handler for stimer0 */
-	sysvec_install(HYPERV_STIMER0_VECTOR, sysvec_hyperv_stimer0);
+	if (ms_hyperv.misc_features & HV_STIMER_DIRECT_MODE_AVAILABLE) {
+		sysvec_install(HYPERV_STIMER0_VECTOR, sysvec_hyperv_stimer0);
+	}
 
 # ifdef CONFIG_SMP
 	smp_ops.smp_prepare_boot_cpu = hv_smp_prepare_boot_cpu;

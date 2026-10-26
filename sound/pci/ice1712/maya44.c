@@ -668,7 +668,7 @@ static int maya44_init(struct snd_ice1712 *ice)
 	int i;
 	struct snd_maya44 *chip;
 
-	chip = kzalloc_obj(*chip);
+	chip = kzalloc(sizeof(*chip), GFP_KERNEL);
 	if (!chip)
 		return -ENOMEM;
 	mutex_init(&chip->mutex);

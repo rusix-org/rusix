@@ -1943,7 +1943,7 @@ sparx5_vcap_admin_alloc(struct sparx5 *sparx5, struct vcap_control *ctrl,
 {
 	struct vcap_admin *admin;
 
-	admin = kzalloc_obj(*admin);
+	admin = kzalloc(sizeof(*admin), GFP_KERNEL);
 	if (!admin)
 		return ERR_PTR(-ENOMEM);
 	INIT_LIST_HEAD(&admin->list);
@@ -2046,7 +2046,7 @@ int sparx5_vcap_init(struct sparx5 *sparx5)
 	 *   - Initialize VCAP blocks
 	 *   - Configure port keysets
 	 */
-	ctrl = kzalloc_obj(*ctrl);
+	ctrl = kzalloc(sizeof(*ctrl), GFP_KERNEL);
 	if (!ctrl)
 		return -ENOMEM;
 
@@ -2077,9 +2077,8 @@ int sparx5_vcap_init(struct sparx5 *sparx5)
 	dir = vcap_debugfs(sparx5->dev, sparx5->debugfs_root, ctrl);
 	for (idx = 0; idx < consts->n_ports; ++idx)
 		if (sparx5->ports[idx])
-			vcap_port_debugfs_portno(sparx5->dev, dir, ctrl,
-						 sparx5->ports[idx]->ndev,
-						 sparx5->ports[idx]->portno);
+			vcap_port_debugfs(sparx5->dev, dir, ctrl,
+					  sparx5->ports[idx]->ndev);
 
 	return err;
 }

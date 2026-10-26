@@ -14,7 +14,7 @@
 #include <linux/string.h>
 #include <linux/backing-dev.h>
 #include <linux/ramfs.h>
-#include <linux/folio_batch.h>
+#include <linux/pagevec.h>
 #include <linux/mman.h>
 #include <linux/sched.h>
 #include <linux/slab.h>
@@ -22,7 +22,7 @@
 #include <linux/uaccess.h>
 #include "internal.h"
 
-static int ramfs_nommu_setattr(const struct mnt_idmap *, struct dentry *, struct iattr *);
+static int ramfs_nommu_setattr(struct mnt_idmap *, struct dentry *, struct iattr *);
 static unsigned long ramfs_nommu_get_unmapped_area(struct file *file,
 						   unsigned long addr,
 						   unsigned long len,
@@ -69,9 +69,6 @@ int ramfs_nommu_expand_for_mapping(struct inode *inode, size_t newsize)
 	gfp_t gfp = mapping_gfp_mask(inode->i_mapping);
 
 	/* make various checks */
-	if (!newsize)
-		return 0;
-
 	order = get_order(newsize);
 	if (unlikely(order > MAX_PAGE_ORDER))
 		return -EFBIG;
@@ -161,7 +158,7 @@ static int ramfs_nommu_resize(struct inode *inode, loff_t newsize, loff_t size)
  * handle a change of attributes
  * - we're specifically interested in a change of size
  */
-static int ramfs_nommu_setattr(const struct mnt_idmap *idmap,
+static int ramfs_nommu_setattr(struct mnt_idmap *idmap,
 			       struct dentry *dentry, struct iattr *ia)
 {
 	struct inode *inode = d_inode(dentry);
@@ -267,7 +264,7 @@ out:
  */
 static int ramfs_nommu_mmap_prepare(struct vm_area_desc *desc)
 {
-	if (!is_nommu_shared_vma_flags(&desc->vma_flags))
+	if (!is_nommu_shared_mapping(desc->vm_flags))
 		return -ENOSYS;
 
 	file_accessed(desc->file);

@@ -18,6 +18,9 @@
 #include <linux/uaccess.h>
 #include "pegasus.h"
 
+/*
+ * Version Information
+ */
 #define DRIVER_AUTHOR "Petko Manolov <petkan@nucleusys.com>"
 #define DRIVER_DESC "Pegasus/Pegasus II USB Ethernet driver"
 
@@ -143,7 +146,7 @@ static int update_eth_regs_async(pegasus_t *pegasus)
 	struct urb *async_urb;
 	struct usb_ctrlrequest *req;
 
-	req = kmalloc_obj(struct usb_ctrlrequest, GFP_ATOMIC);
+	req = kmalloc(sizeof(struct usb_ctrlrequest), GFP_ATOMIC);
 	if (req == NULL)
 		return ret;
 
@@ -1320,18 +1323,14 @@ static void __init parse_id(char *id)
 	char *token, *name = NULL;
 	int dyn_id_index = ARRAY_SIZE(pegasus_ids) - 2;
 
-	token = strsep(&id, ":");
-	if (token)
+	if ((token = strsep(&id, ":")) != NULL)
 		name = token;
 	/* name now points to a null terminated string*/
-	token = strsep(&id, ":");
-	if (token && kstrtouint(token, 16, &vendor_id))
-		return;
-	token = strsep(&id, ":");
-	if (token && kstrtouint(token, 16, &device_id))
-		return;
-	if (id && *id && kstrtouint(id, 16, &flags))
-		return;
+	if ((token = strsep(&id, ":")) != NULL)
+		vendor_id = simple_strtoul(token, NULL, 16);
+	if ((token = strsep(&id, ":")) != NULL)
+		device_id = simple_strtoul(token, NULL, 16);
+	flags = simple_strtoul(id, NULL, 16);
 	pr_info("%s: new device %s, vendor ID 0x%04x, device ID 0x%04x, flags: 0x%x\n",
 		driver_name, name, vendor_id, device_id, flags);
 

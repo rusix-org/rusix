@@ -10,23 +10,20 @@ static void
 amd_get_mtrr(unsigned int reg, unsigned long *base,
 	     unsigned long *size, mtrr_type *type)
 {
-	unsigned long val;
-	struct msr msr;
+	unsigned long low, high;
 
-	rdmsrq(MSR_K6_UWCCR, msr.q);
+	rdmsr(MSR_K6_UWCCR, low, high);
 	/* Upper dword is region 1, lower is region 0 */
 	if (reg == 1)
-		val = msr.h;
-	else
-		val = msr.l;
+		low = high;
 	/* The base masks off on the right alignment */
-	*base = (val & 0xFFFE0000) >> PAGE_SHIFT;
+	*base = (low & 0xFFFE0000) >> PAGE_SHIFT;
 	*type = 0;
-	if (val & 1)
+	if (low & 1)
 		*type = MTRR_TYPE_UNCACHABLE;
-	if (val & 2)
+	if (low & 2)
 		*type = MTRR_TYPE_WRCOMB;
-	if (!(val & 3)) {
+	if (!(low & 3)) {
 		*size = 0;
 		return;
 	}
@@ -45,32 +42,29 @@ amd_get_mtrr(unsigned int reg, unsigned long *base,
 	 * +1              000 0000 0000 0100
 	 * *128K   ...
 	 */
-	val = (~val) & 0x1FFFC;
-	*size = (val + 4) << (15 - PAGE_SHIFT);
+	low = (~low) & 0x1FFFC;
+	*size = (low + 4) << (15 - PAGE_SHIFT);
 }
 
 /**
  * amd_set_mtrr - Set variable MTRR register on the local CPU.
- * @reg: The register to set.
- * @base: The base address of the region.
- * @size: The size of the region. If this is 0 the region is disabled.
- * @type: The type of the region.
+ *
+ * @reg The register to set.
+ * @base The base address of the region.
+ * @size The size of the region. If this is 0 the region is disabled.
+ * @type The type of the region.
  *
  * Returns nothing.
  */
 static void
 amd_set_mtrr(unsigned int reg, unsigned long base, unsigned long size, mtrr_type type)
 {
-	struct msr msr;
 	u32 regs[2];
 
 	/*
 	 * Low is MTRR0, High MTRR 1
 	 */
-	rdmsrq(MSR_K6_UWCCR, msr.q);
-	regs[0] = msr.l;
-	regs[1] = msr.h;
-
+	rdmsr(MSR_K6_UWCCR, regs[0], regs[1]);
 	/*
 	 * Blank to disable
 	 */
@@ -95,9 +89,7 @@ amd_set_mtrr(unsigned int reg, unsigned long base, unsigned long size, mtrr_type
 	 * disable local interrupts, write back the cache, set the mtrr
 	 */
 	wbinvd();
-	msr.l = regs[0];
-	msr.h = regs[1];
-	wrmsrq(MSR_K6_UWCCR, msr.q);
+	wrmsr(MSR_K6_UWCCR, regs[0], regs[1]);
 }
 
 static int

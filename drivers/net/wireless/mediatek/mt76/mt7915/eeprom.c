@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: BSD-3-Clause-Clear
+// SPDX-License-Identifier: ISC
 /* Copyright (C) 2020 MediaTek Inc. */
 
 #include <linux/firmware.h>
@@ -107,12 +107,6 @@ mt7915_eeprom_load_default(struct mt7915_dev *dev)
 
 	if (!fw || !fw->data) {
 		dev_err(dev->mt76.dev, "Invalid default bin\n");
-		ret = -EINVAL;
-		goto out;
-	}
-
-	if (fw->size < mt7915_eeprom_size(dev)) {
-		dev_err(dev->mt76.dev, "Invalid default bin size\n");
 		ret = -EINVAL;
 		goto out;
 	}

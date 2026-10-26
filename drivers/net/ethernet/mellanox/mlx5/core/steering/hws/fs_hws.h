@@ -19,7 +19,6 @@ struct mlx5_fs_hws_actions_pool {
 	struct xarray el2tol3tnl_pools;
 	struct xarray el2tol2tnl_pools;
 	struct xarray mh_pools;
-	struct mutex mh_pools_lock; /* serializes pool creation */
 	struct xarray table_dests;
 	struct xarray vport_vhca_dests;
 	struct xarray vport_dests;
@@ -117,5 +116,5 @@ static inline const struct mlx5_flow_cmds *mlx5_fs_cmd_get_hws_cmds(void)
 	return NULL;
 }
 
-#endif /* CONFIG_MLX5_HW_STEERING */
+#endif /* CONFIG_MLX5_HWS_STEERING */
 #endif

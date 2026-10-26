@@ -33,7 +33,7 @@
 
 /**
  * key_mask_hash - mask a valid hash value.
- * @hash: value to be masked
+ * @val: value to be masked
  *
  * We use hash values as offset in directories, so values %0 and %1 are
  * reserved for "." and "..". %2 is reserved for "end of readdir" marker. This

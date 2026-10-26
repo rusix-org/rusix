@@ -28,6 +28,7 @@
 #include <linux/mm_inline.h>
 #include <linux/writeback.h>
 #include <linux/backing-dev.h>
+#include <linux/pagevec.h>
 #include "internal.h"
 
 /*
@@ -645,24 +646,17 @@ out:
 }
 
 /**
- * __mpage_writepages - walk the list of dirty pages of the given address space
- * 			& writepage() all of them
+ * mpage_writepages - walk the list of dirty pages of the given address space & writepage() all of them
  * @mapping: address space structure to write
  * @wbc: subtract the number of written pages from *@wbc->nr_to_write
  * @get_block: the filesystem's block mapper function.
- * @write_folio: handler to call for each folio before calling
- *		 mpage_write_folio()
  *
  * This is a library function, which implements the writepages()
- * address_space_operation. It calls @write_folio handler for each folio. If
- * the handler returns value > 0, it calls mpage_write_folio() to do the
- * folio writeback.
+ * address_space_operation.
  */
 int
-__mpage_writepages(struct address_space *mapping,
-		   struct writeback_control *wbc, get_block_t get_block,
-		   int (*write_folio)(struct folio *folio,
-				      struct writeback_control *wbc))
+mpage_writepages(struct address_space *mapping,
+		struct writeback_control *wbc, get_block_t get_block)
 {
 	struct mpage_data mpd = {
 		.get_block	= get_block,
@@ -672,22 +666,11 @@ __mpage_writepages(struct address_space *mapping,
 	int error;
 
 	blk_start_plug(&plug);
-	while ((folio = writeback_iter(mapping, wbc, folio, &error))) {
-		if (write_folio) {
-			error = write_folio(folio, wbc);
-			/*
-			 * == 0 means folio is handled, < 0 means error. In
-			 * both cases hand back control to writeback_iter()
-			 */
-			if (error <= 0)
-				continue;
-			/* Let mpage_write_folio() handle the folio. */
-		}
+	while ((folio = writeback_iter(mapping, wbc, folio, &error)))
 		error = mpage_write_folio(wbc, folio, &mpd);
-	}
 	if (mpd.bio)
 		mpage_bio_submit_write(mpd.bio);
 	blk_finish_plug(&plug);
 	return error;
 }
-EXPORT_SYMBOL(__mpage_writepages);
+EXPORT_SYMBOL(mpage_writepages);

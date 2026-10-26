@@ -1,8 +1,11 @@
-// SPDX-License-Identifier: GPL-2.0
 /*
    RFCOMM implementation for Linux Bluetooth stack (BlueZ).
    Copyright (C) 2002 Maxim Krasnyansky <maxk@qualcomm.com>
    Copyright (C) 2002 Marcel Holtmann <marcel@holtmann.org>
+
+   This program is free software; you can redistribute it and/or modify
+   it under the terms of the GNU General Public License version 2 as
+   published by the Free Software Foundation;
 
    THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
    OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
@@ -298,7 +301,7 @@ static void rfcomm_dlc_clear_state(struct rfcomm_dlc *d)
 
 struct rfcomm_dlc *rfcomm_dlc_alloc(gfp_t prio)
 {
-	struct rfcomm_dlc *d = kzalloc_obj(*d, prio);
+	struct rfcomm_dlc *d = kzalloc(sizeof(*d), prio);
 
 	if (!d)
 		return NULL;
@@ -741,7 +744,7 @@ int rfcomm_dlc_get_modem_status(struct rfcomm_dlc *d, u8 *v24_sig)
 /* ---- RFCOMM sessions ---- */
 static struct rfcomm_session *rfcomm_session_add(struct socket *sock, int state)
 {
-	struct rfcomm_session *s = kzalloc_obj(*s);
+	struct rfcomm_session *s = kzalloc(sizeof(*s), GFP_KERNEL);
 
 	if (!s)
 		return NULL;
@@ -861,7 +864,7 @@ static struct socket *rfcomm_session_connect(bdaddr_t *src, bdaddr_t *dst,
 	addr.l2_psm    = cpu_to_le16(L2CAP_PSM_RFCOMM);
 	addr.l2_cid    = 0;
 	addr.l2_bdaddr_type = BDADDR_BREDR;
-	*err = kernel_connect(sock, (struct sockaddr_unsized *)&addr, sizeof(addr), O_NONBLOCK);
+	*err = kernel_connect(sock, (struct sockaddr *) &addr, sizeof(addr), O_NONBLOCK);
 	if (*err && *err != -EINPROGRESS)
 		goto failed;
 
@@ -1740,8 +1743,10 @@ static int rfcomm_recv_msc(struct rfcomm_session *s, int cr, struct sk_buff *skb
 		return 0;
 
 	if (cr) {
-		assign_bit(RFCOMM_TX_THROTTLED, &d->flags,
-			   msc->v24_sig & RFCOMM_V24_FC && !d->cfc);
+		if (msc->v24_sig & RFCOMM_V24_FC && !d->cfc)
+			set_bit(RFCOMM_TX_THROTTLED, &d->flags);
+		else
+			clear_bit(RFCOMM_TX_THROTTLED, &d->flags);
 
 		rfcomm_dlc_lock(d);
 
@@ -1836,12 +1841,9 @@ static int rfcomm_recv_data(struct rfcomm_session *s, u8 dlci, int pf, struct sk
 	}
 
 	if (pf && d->cfc) {
-		u8 *credits = skb_pull_data(skb, 1);
+		u8 credits = *(u8 *) skb->data; skb_pull(skb, 1);
 
-		if (!credits)
-			goto drop;
-
-		d->tx_credits += *credits;
+		d->tx_credits += credits;
 		if (d->tx_credits)
 			clear_bit(RFCOMM_TX_THROTTLED, &d->flags);
 	}
@@ -2237,10 +2239,8 @@ static void rfcomm_kill_listener(void)
 
 	BT_DBG("");
 
-	rfcomm_lock();
 	list_for_each_entry_safe(s, n, &session_list, list)
 		rfcomm_session_del(s);
-	rfcomm_unlock();
 }
 
 static int rfcomm_run(void *unused)

@@ -49,9 +49,6 @@ struct arch_mbm_state {
 #define ABMC_EXTENDED_EVT_ID		BIT(31)
 #define ABMC_EVT_ID			BIT(0)
 
-/* Setting bit 1 in MSR_IA32_L3_QOS_EXT_CFG enables the SDCIAE feature. */
-#define SDCIAE_ENABLE_BIT		1
-
 /**
  * struct rdt_hw_ctrl_domain - Arch private attributes of a set of CPUs that share
  *			       a resource for a control function
@@ -91,14 +88,6 @@ static inline struct rdt_hw_l3_mon_domain *resctrl_to_arch_mon_dom(struct rdt_l3
 }
 
 /**
- * struct rdt_perf_pkg_mon_domain - CPUs sharing an package scoped resctrl monitor resource
- * @hdr:	common header for different domain types
- */
-struct rdt_perf_pkg_mon_domain {
-	struct rdt_domain_hdr	hdr;
-};
-
-/**
  * struct msr_param - set a range of MSRs from a domain
  * @res:       The resource to use
  * @dom:       The domain to update
@@ -126,7 +115,6 @@ struct msr_param {
  * @mbm_width:		Monitor width, to detect and correct for overflow.
  * @cdp_enabled:	CDP state of this resource
  * @mbm_cntr_assign_enabled:	ABMC feature is enabled
- * @sdciae_enabled:	SDCIAE feature (backing "io_alloc") is enabled.
  *
  * Members of this structure are either private to the architecture
  * e.g. mbm_width, or accessed via helpers that provide abstraction. e.g.
@@ -141,7 +129,6 @@ struct rdt_hw_resource {
 	unsigned int		mbm_width;
 	bool			cdp_enabled;
 	bool			mbm_cntr_assign_enabled;
-	bool			sdciae_enabled;
 };
 
 static inline struct rdt_hw_resource *resctrl_to_arch_res(struct rdt_resource *r)
@@ -232,25 +219,5 @@ void __init intel_rdt_mbm_apply_quirk(void);
 
 void rdt_domain_reconfigure_cdp(struct rdt_resource *r);
 void resctrl_arch_mbm_cntr_assign_set_one(struct rdt_resource *r);
-
-#ifdef CONFIG_X86_CPU_RESCTRL_INTEL_AET
-bool intel_aet_get_events(void);
-void __exit intel_aet_exit(void);
-int intel_aet_read_event(int domid, u32 rmid, void *arch_priv, u64 *val);
-void intel_aet_mon_domain_setup(int cpu, int id, struct rdt_resource *r,
-				struct list_head *add_pos);
-bool intel_handle_aet_option(bool force_off, char *tok);
-#else
-static inline bool intel_aet_get_events(void) { return false; }
-static inline void __exit intel_aet_exit(void) { }
-static inline int intel_aet_read_event(int domid, u32 rmid, void *arch_priv, u64 *val)
-{
-	return -EINVAL;
-}
-
-static inline void intel_aet_mon_domain_setup(int cpu, int id, struct rdt_resource *r,
-					      struct list_head *add_pos) { }
-static inline bool intel_handle_aet_option(bool force_off, char *tok) { return false; }
-#endif
 
 #endif /* _ASM_X86_RESCTRL_INTERNAL_H */

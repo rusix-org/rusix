@@ -247,7 +247,8 @@ MODULE_ALIAS("rd");
 /* Legacy boot options - nonmodular */
 static int __init ramdisk_size(char *str)
 {
-	return kstrtoul(str, 0, &rd_size) == 0;
+	rd_size = simple_strtol(str, NULL, 0);
+	return 1;
 }
 __setup("ramdisk_size=", ramdisk_size);
 #endif
@@ -272,7 +273,7 @@ static struct brd_device *brd_find_or_alloc_device(int i)
 		}
 	}
 
-	brd = kzalloc_obj(*brd);
+	brd = kzalloc(sizeof(*brd), GFP_KERNEL);
 	if (!brd) {
 		mutex_unlock(&brd_devices_mutex);
 		return ERR_PTR(-ENOMEM);

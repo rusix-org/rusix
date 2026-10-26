@@ -163,13 +163,13 @@ static int ftpm_tee_match(struct tee_ioctl_version_data *ver, const void *data)
 }
 
 /**
- * ftpm_tee_probe_generic() - initialize the fTPM
+ * ftpm_tee_probe() - initialize the fTPM
  * @dev: the device description.
  *
  * Return:
  *	On success, 0. On failure, -errno.
  */
-static int ftpm_tee_probe_generic(struct device *dev)
+static int ftpm_tee_probe(struct device *dev)
 {
 	int rc;
 	struct tpm_chip *chip;
@@ -251,28 +251,21 @@ out_tee_session:
 	return rc;
 }
 
-static int ftpm_tee_probe(struct tee_client_device *tcdev)
-{
-	struct device *dev = &tcdev->dev;
-
-	return ftpm_tee_probe_generic(dev);
-}
-
 static int ftpm_plat_tee_probe(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
 
-	return ftpm_tee_probe_generic(dev);
+	return ftpm_tee_probe(dev);
 }
 
 /**
- * ftpm_tee_remove_generic() - remove the TPM device
+ * ftpm_tee_remove() - remove the TPM device
  * @dev: the device description.
  *
  * Return:
  *	0 always.
  */
-static void ftpm_tee_remove_generic(struct device *dev)
+static int ftpm_tee_remove(struct device *dev)
 {
 	struct ftpm_tee_private *pvt_data = dev_get_drvdata(dev);
 
@@ -292,20 +285,15 @@ static void ftpm_tee_remove_generic(struct device *dev)
 	tee_client_close_context(pvt_data->ctx);
 
 	/* memory allocated with devm_kzalloc() is freed automatically */
-}
 
-static void ftpm_tee_remove(struct tee_client_device *tcdev)
-{
-	struct device *dev = &tcdev->dev;
-
-	ftpm_tee_remove_generic(dev);
+	return 0;
 }
 
 static void ftpm_plat_tee_remove(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
 
-	ftpm_tee_remove_generic(dev);
+	ftpm_tee_remove(dev);
 }
 
 /**
@@ -347,11 +335,12 @@ static const struct tee_client_device_id optee_ftpm_id_table[] = {
 MODULE_DEVICE_TABLE(tee, optee_ftpm_id_table);
 
 static struct tee_client_driver ftpm_tee_driver = {
-	.probe		= ftpm_tee_probe,
-	.remove		= ftpm_tee_remove,
 	.id_table	= optee_ftpm_id_table,
 	.driver		= {
 		.name		= "optee-ftpm",
+		.bus		= &tee_bus_type,
+		.probe		= ftpm_tee_probe,
+		.remove		= ftpm_tee_remove,
 	},
 };
 
@@ -363,7 +352,7 @@ static int __init ftpm_mod_init(void)
 	if (rc)
 		return rc;
 
-	rc = tee_client_driver_register(&ftpm_tee_driver);
+	rc = driver_register(&ftpm_tee_driver.driver);
 	if (rc) {
 		platform_driver_unregister(&ftpm_tee_plat_driver);
 		return rc;
@@ -375,7 +364,7 @@ static int __init ftpm_mod_init(void)
 static void __exit ftpm_mod_exit(void)
 {
 	platform_driver_unregister(&ftpm_tee_plat_driver);
-	tee_client_driver_unregister(&ftpm_tee_driver);
+	driver_unregister(&ftpm_tee_driver.driver);
 }
 
 module_init(ftpm_mod_init);

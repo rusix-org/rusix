@@ -153,7 +153,8 @@ static void usb6fire_midi_free(struct midi_runtime *rt)
 int usb6fire_midi_init(struct sfire_chip *chip)
 {
 	int ret;
-	struct midi_runtime *rt = kzalloc_obj(struct midi_runtime);
+	struct midi_runtime *rt = kzalloc(sizeof(struct midi_runtime),
+			GFP_KERNEL);
 	struct comm_runtime *comm_rt = chip->comm;
 
 	if (!rt)

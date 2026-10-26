@@ -4,14 +4,10 @@
 
 //! Rust API for an ID pool backed by a [`BitmapVec`].
 
-use core::{
-    num::NonZero,
-    ops::Range, //
-};
-
 use crate::alloc::{AllocError, Flags};
 use crate::bitmap::BitmapVec;
-use crate::ptr::Alignment;
+
+const BITS_PER_LONG: usize = bindings::BITS_PER_LONG as usize;
 
 /// Represents a dynamic ID pool backed by a [`BitmapVec`].
 ///
@@ -29,22 +25,22 @@ use crate::ptr::Alignment;
 /// Basic usage
 ///
 /// ```
-/// use kernel::alloc::AllocError;
-/// use kernel::id_pool::{IdPool, UnusedId};
+/// use kernel::alloc::{AllocError, flags::GFP_KERNEL};
+/// use kernel::id_pool::IdPool;
 ///
-/// let mut pool = IdPool::with_capacity(64, GFP_KERNEL)?;
+/// let mut pool = IdPool::new(64, GFP_KERNEL)?;
 /// for i in 0..64 {
-///     assert_eq!(i, pool.find_unused_id(i).ok_or(ENOSPC)?.acquire());
+///     assert_eq!(i, pool.acquire_next_id(i).ok_or(ENOSPC)?);
 /// }
 ///
 /// pool.release_id(23);
-/// assert_eq!(23, pool.find_unused_id(0).ok_or(ENOSPC)?.acquire());
+/// assert_eq!(23, pool.acquire_next_id(0).ok_or(ENOSPC)?);
 ///
-/// assert!(pool.find_unused_id(0).is_none());  // time to realloc.
+/// assert_eq!(None, pool.acquire_next_id(0));  // time to realloc.
 /// let resizer = pool.grow_request().ok_or(ENOSPC)?.realloc(GFP_KERNEL)?;
 /// pool.grow(resizer);
 ///
-/// assert_eq!(pool.find_unused_id(0).ok_or(ENOSPC)?.acquire(), 64);
+/// assert_eq!(pool.acquire_next_id(0), Some(64));
 /// # Ok::<(), Error>(())
 /// ```
 ///
@@ -58,8 +54,8 @@ use crate::ptr::Alignment;
 /// fn get_id_maybe_realloc(guarded_pool: &SpinLock<IdPool>) -> Result<usize, AllocError> {
 ///     let mut pool = guarded_pool.lock();
 ///     loop {
-///         match pool.find_unused_id(0) {
-///             Some(index) => return Ok(index.acquire()),
+///         match pool.acquire_next_id(0) {
+///             Some(index) => return Ok(index),
 ///             None => {
 ///                 let alloc_request = pool.grow_request();
 ///                 drop(pool);
@@ -101,24 +97,13 @@ impl ReallocRequest {
 impl IdPool {
     /// Constructs a new [`IdPool`].
     ///
-    /// The pool will have a capacity of [`MAX_INLINE_LEN`].
+    /// A capacity below [`BITS_PER_LONG`] is adjusted to
+    /// [`BITS_PER_LONG`].
     ///
-    /// [`MAX_INLINE_LEN`]: BitmapVec::MAX_INLINE_LEN
+    /// [`BITS_PER_LONG`]: srctree/include/asm-generic/bitsperlong.h
     #[inline]
-    pub fn new() -> Self {
-        Self {
-            map: BitmapVec::new_inline(),
-        }
-    }
-
-    /// Constructs a new [`IdPool`] with space for a specific number of bits.
-    ///
-    /// A capacity below [`MAX_INLINE_LEN`] is adjusted to [`MAX_INLINE_LEN`].
-    ///
-    /// [`MAX_INLINE_LEN`]: BitmapVec::MAX_INLINE_LEN
-    #[inline]
-    pub fn with_capacity(num_ids: usize, flags: Flags) -> Result<Self, AllocError> {
-        let num_ids = usize::max(num_ids, BitmapVec::MAX_INLINE_LEN);
+    pub fn new(num_ids: usize, flags: Flags) -> Result<Self, AllocError> {
+        let num_ids = core::cmp::max(num_ids, BITS_PER_LONG);
         let map = BitmapVec::new(num_ids, flags)?;
         Ok(Self { map })
     }
@@ -131,34 +116,28 @@ impl IdPool {
 
     /// Returns a [`ReallocRequest`] if the [`IdPool`] can be shrunk, [`None`] otherwise.
     ///
-    /// The capacity of an [`IdPool`] cannot be shrunk below [`MAX_INLINE_LEN`].
+    /// The capacity of an [`IdPool`] cannot be shrunk below [`BITS_PER_LONG`].
     ///
-    /// [`MAX_INLINE_LEN`]: BitmapVec::MAX_INLINE_LEN
+    /// [`BITS_PER_LONG`]: srctree/include/asm-generic/bitsperlong.h
     ///
     /// # Examples
     ///
     /// ```
-    /// use kernel::{
-    ///     alloc::AllocError,
-    ///     bitmap::BitmapVec,
-    ///     id_pool::{
-    ///         IdPool,
-    ///         ReallocRequest,
-    ///     },
-    /// };
+    /// use kernel::alloc::{AllocError, flags::GFP_KERNEL};
+    /// use kernel::id_pool::{ReallocRequest, IdPool};
     ///
-    /// let mut pool = IdPool::with_capacity(1024, GFP_KERNEL)?;
+    /// let mut pool = IdPool::new(1024, GFP_KERNEL)?;
     /// let alloc_request = pool.shrink_request().ok_or(AllocError)?;
     /// let resizer = alloc_request.realloc(GFP_KERNEL)?;
     /// pool.shrink(resizer);
-    /// assert_eq!(pool.capacity(), BitmapVec::MAX_INLINE_LEN);
+    /// assert_eq!(pool.capacity(), kernel::bindings::BITS_PER_LONG as usize);
     /// # Ok::<(), AllocError>(())
     /// ```
     #[inline]
     pub fn shrink_request(&self) -> Option<ReallocRequest> {
         let cap = self.capacity();
-        // Shrinking below `MAX_INLINE_LEN` is never possible.
-        if cap <= BitmapVec::MAX_INLINE_LEN {
+        // Shrinking below [`BITS_PER_LONG`] is never possible.
+        if cap <= BITS_PER_LONG {
             return None;
         }
         // Determine if the bitmap can shrink based on the position of
@@ -167,13 +146,13 @@ impl IdPool {
         // bitmap should shrink to half its current size.
         let Some(bit) = self.map.last_bit() else {
             return Some(ReallocRequest {
-                num_ids: BitmapVec::MAX_INLINE_LEN,
+                num_ids: BITS_PER_LONG,
             });
         };
         if bit >= (cap / 4) {
             return None;
         }
-        let num_ids = usize::max(BitmapVec::MAX_INLINE_LEN, cap / 2);
+        let num_ids = usize::max(BITS_PER_LONG, cap / 2);
         Some(ReallocRequest { num_ids })
     }
 
@@ -198,13 +177,11 @@ impl IdPool {
 
     /// Returns a [`ReallocRequest`] for growing this [`IdPool`], if possible.
     ///
-    /// The capacity of an [`IdPool`] cannot be grown above [`MAX_LEN`].
-    ///
-    /// [`MAX_LEN`]: BitmapVec::MAX_LEN
+    /// The capacity of an [`IdPool`] cannot be grown above [`i32::MAX`].
     #[inline]
     pub fn grow_request(&self) -> Option<ReallocRequest> {
         let num_ids = self.capacity() * 2;
-        if num_ids > BitmapVec::MAX_LEN {
+        if num_ids > i32::MAX.try_into().unwrap() {
             return None;
         }
         Some(ReallocRequest { num_ids })
@@ -227,114 +204,23 @@ impl IdPool {
         self.map = resizer.new;
     }
 
-    /// Finds an unused ID in the bitmap.
+    /// Acquires a new ID by finding and setting the next zero bit in the
+    /// bitmap.
     ///
     /// Upon success, returns its index. Otherwise, returns [`None`]
-    /// to indicate that a [`Self::grow_request`] is needed. `offset` must be
-    /// within bounds.
-    ///
-    /// # Panics
-    ///
-    /// Panics if `CONFIG_RUST_BITMAP_HARDENED` is enabled and `offset` is out
-    /// of bounds.
+    /// to indicate that a [`Self::grow_request`] is needed.
     #[inline]
-    #[must_use]
-    pub fn find_unused_id(&mut self, offset: usize) -> Option<UnusedId<'_>> {
-        // INVARIANT: `next_zero_bit()` returns None or an integer less than `map.len()`
-        Some(UnusedId {
-            id: self.map.next_zero_bit(offset)?,
-            pool: self,
-        })
+    pub fn acquire_next_id(&mut self, offset: usize) -> Option<usize> {
+        let next_zero_bit = self.map.next_zero_bit(offset);
+        if let Some(nr) = next_zero_bit {
+            self.map.set_bit(nr);
+        }
+        next_zero_bit
     }
 
     /// Releases an ID.
-    ///
-    /// The `id` must be within bounds.
-    ///
-    /// # Panics
-    ///
-    /// Panics if `CONFIG_RUST_BITMAP_HARDENED` is enabled and `id` is out of
-    /// bounds.
     #[inline]
     pub fn release_id(&mut self, id: usize) {
         self.map.clear_bit(id);
-    }
-
-    /// Reserves a contiguous area of `count` IDs at or after `offset`.
-    ///
-    /// The start of the returned area is a multiple of `align`.
-    ///
-    /// Returns the reserved range upon success, or [`None`] if no such area could be found.
-    #[inline]
-    #[must_use]
-    pub fn reserve_ids(
-        &mut self,
-        offset: usize,
-        count: NonZero<usize>,
-        align: Alignment,
-    ) -> Option<Range<usize>> {
-        let start = self.map.next_zero_area(offset, count, align)?;
-        self.map.set(start, count);
-        Some(start..start + count.get())
-    }
-
-    /// Releases a contiguous area of IDs.
-    #[inline]
-    pub fn release_ids(&mut self, range: &Range<usize>) {
-        if let Some(nbits) = NonZero::new(range.len()) {
-            self.map.clear(range.start, nbits);
-        }
-    }
-}
-
-/// Represents an unused id in an [`IdPool`].
-///
-/// # Invariants
-///
-/// The value of `id` is less than `pool.map.len()`.
-pub struct UnusedId<'pool> {
-    id: usize,
-    pool: &'pool mut IdPool,
-}
-
-impl<'pool> UnusedId<'pool> {
-    /// Get the unused id as an usize.
-    ///
-    /// Be aware that the id has not yet been acquired in the pool. The
-    /// [`acquire`] method must be called to prevent others from taking the id.
-    ///
-    /// [`acquire`]: UnusedId::acquire()
-    #[inline]
-    #[must_use]
-    pub fn as_usize(&self) -> usize {
-        self.id
-    }
-
-    /// Get the unused id as an u32.
-    ///
-    /// Be aware that the id has not yet been acquired in the pool. The
-    /// [`acquire`] method must be called to prevent others from taking the id.
-    ///
-    /// [`acquire`]: UnusedId::acquire()
-    #[inline]
-    #[must_use]
-    pub fn as_u32(&self) -> u32 {
-        // CAST: By the type invariants:
-        // `self.id < pool.map.len() <= BitmapVec::MAX_LEN = i32::MAX`.
-        self.id as u32
-    }
-
-    /// Acquire the unused id.
-    #[inline]
-    pub fn acquire(self) -> usize {
-        self.pool.map.set_bit(self.id);
-        self.id
-    }
-}
-
-impl Default for IdPool {
-    #[inline]
-    fn default() -> Self {
-        Self::new()
     }
 }

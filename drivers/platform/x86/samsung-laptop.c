@@ -1671,7 +1671,7 @@ static int __init samsung_init(void)
 	if (!force && !dmi_check_system(samsung_dmi_table))
 		return -ENODEV;
 
-	samsung = kzalloc_obj(*samsung);
+	samsung = kzalloc(sizeof(*samsung), GFP_KERNEL);
 	if (!samsung)
 		return -ENOMEM;
 

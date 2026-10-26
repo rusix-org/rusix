@@ -310,21 +310,18 @@ epoll_put_uevent(__poll_t revents, __u64 data,
 	if (in_oabi_syscall()) {
 		struct oabi_epoll_event __user *oevent = (void __user *)uevent;
 
-		scoped_user_write_access(oevent, efault) {
-			unsafe_put_user(revents, &oevent->events, efault);
-			unsafe_put_user(data, &oevent->data, efault);
-		}
+		if (__put_user(revents, &oevent->events) ||
+		    __put_user(data, &oevent->data))
+			return NULL;
+
 		return (void __user *)(oevent+1);
 	}
 
-	scoped_user_write_access(uevent, efault) {
-		unsafe_put_user(revents, &uevent->events, efault);
-		unsafe_put_user(data, &uevent->data, efault);
-	}
-	return uevent+1;
+	if (__put_user(revents, &uevent->events) ||
+	    __put_user(data, &uevent->data))
+		return NULL;
 
-efault:
-	return NULL;
+	return uevent+1;
 }
 
 struct oabi_sembuf {
@@ -352,7 +349,7 @@ asmlinkage long sys_oabi_semtimedop(int semid,
 		return -E2BIG;
 	if (nsops < 1 || nsops > SEMOPM)
 		return -EINVAL;
-	sops = kvmalloc_objs(*sops, nsops);
+	sops = kvmalloc_array(nsops, sizeof(*sops), GFP_KERNEL);
 	if (!sops)
 		return -ENOMEM;
 	err = 0;

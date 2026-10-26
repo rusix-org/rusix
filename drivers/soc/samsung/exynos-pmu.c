@@ -6,6 +6,7 @@
 // Exynos - CPU PMU(Power Management Unit) support
 
 #include <linux/array_size.h>
+#include <linux/arm-smccc.h>
 #include <linux/bitmap.h>
 #include <linux/cpuhotplug.h>
 #include <linux/cpu_pm.h>
@@ -24,6 +25,14 @@
 
 #include "exynos-pmu.h"
 
+#define PMUALIVE_MASK			GENMASK(13, 0)
+#define TENSOR_SET_BITS			(BIT(15) | BIT(14))
+#define TENSOR_CLR_BITS			BIT(15)
+#define TENSOR_SMC_PMU_SEC_REG		0x82000504
+#define TENSOR_PMUREG_READ		0
+#define TENSOR_PMUREG_WRITE		1
+#define TENSOR_PMUREG_RMW		2
+
 struct exynos_pmu_context {
 	struct device *dev;
 	const struct exynos_pmu_data *pmu_data;
@@ -38,14 +47,131 @@ struct exynos_pmu_context {
 	unsigned long *in_cpuhp;
 	bool sys_insuspend;
 	bool sys_inreboot;
-	int cpuhp_prepare_state;
-	int cpuhp_online_state;
 };
 
 void __iomem *pmu_base_addr;
 static struct exynos_pmu_context *pmu_context;
 /* forward declaration */
 static struct platform_driver exynos_pmu_driver;
+
+/*
+ * Tensor SoCs are configured so that PMU_ALIVE registers can only be written
+ * from EL3, but are still read accessible. As Linux needs to write some of
+ * these registers, the following functions are provided and exposed via
+ * regmap.
+ *
+ * Note: This SMC interface is known to be implemented on gs101 and derivative
+ * SoCs.
+ */
+
+/* Write to a protected PMU register. */
+static int tensor_sec_reg_write(void *context, unsigned int reg,
+				unsigned int val)
+{
+	struct arm_smccc_res res;
+	unsigned long pmu_base = (unsigned long)context;
+
+	arm_smccc_smc(TENSOR_SMC_PMU_SEC_REG, pmu_base + reg,
+		      TENSOR_PMUREG_WRITE, val, 0, 0, 0, 0, &res);
+
+	/* returns -EINVAL if access isn't allowed or 0 */
+	if (res.a0)
+		pr_warn("%s(): SMC failed: %d\n", __func__, (int)res.a0);
+
+	return (int)res.a0;
+}
+
+/* Read/Modify/Write a protected PMU register. */
+static int tensor_sec_reg_rmw(void *context, unsigned int reg,
+			      unsigned int mask, unsigned int val)
+{
+	struct arm_smccc_res res;
+	unsigned long pmu_base = (unsigned long)context;
+
+	arm_smccc_smc(TENSOR_SMC_PMU_SEC_REG, pmu_base + reg,
+		      TENSOR_PMUREG_RMW, mask, val, 0, 0, 0, &res);
+
+	/* returns -EINVAL if access isn't allowed or 0 */
+	if (res.a0)
+		pr_warn("%s(): SMC failed: %d\n", __func__, (int)res.a0);
+
+	return (int)res.a0;
+}
+
+/*
+ * Read a protected PMU register. All PMU registers can be read by Linux.
+ * Note: The SMC read register is not used, as only registers that can be
+ * written are readable via SMC.
+ */
+static int tensor_sec_reg_read(void *context, unsigned int reg,
+			       unsigned int *val)
+{
+	*val = pmu_raw_readl(reg);
+	return 0;
+}
+
+/*
+ * For SoCs that have set/clear bit hardware this function can be used when
+ * the PMU register will be accessed by multiple masters.
+ *
+ * For example, to set bits 13:8 in PMU reg offset 0x3e80
+ * tensor_set_bits_atomic(ctx, 0x3e80, 0x3f00, 0x3f00);
+ *
+ * Set bit 8, and clear bits 13:9 PMU reg offset 0x3e80
+ * tensor_set_bits_atomic(0x3e80, 0x100, 0x3f00);
+ */
+static int tensor_set_bits_atomic(void *ctx, unsigned int offset, u32 val,
+				  u32 mask)
+{
+	int ret;
+	unsigned int i;
+
+	for (i = 0; i < 32; i++) {
+		if (!(mask & BIT(i)))
+			continue;
+
+		offset &= ~TENSOR_SET_BITS;
+
+		if (val & BIT(i))
+			offset |= TENSOR_SET_BITS;
+		else
+			offset |= TENSOR_CLR_BITS;
+
+		ret = tensor_sec_reg_write(ctx, offset, i);
+		if (ret)
+			return ret;
+	}
+	return 0;
+}
+
+static bool tensor_is_atomic(unsigned int reg)
+{
+	/*
+	 * Use atomic operations for PMU_ALIVE registers (offset 0~0x3FFF)
+	 * as the target registers can be accessed by multiple masters. SFRs
+	 * that don't support atomic are added to the switch statement below.
+	 */
+	if (reg > PMUALIVE_MASK)
+		return false;
+
+	switch (reg) {
+	case GS101_SYSIP_DAT0:
+	case GS101_SYSTEM_CONFIGURATION:
+		return false;
+	default:
+		return true;
+	}
+}
+
+static int tensor_sec_update_bits(void *ctx, unsigned int reg,
+				  unsigned int mask, unsigned int val)
+{
+
+	if (!tensor_is_atomic(reg))
+		return tensor_sec_reg_rmw(ctx, reg, mask, val);
+
+	return tensor_set_bits_atomic(ctx, reg, val, mask);
+}
 
 void pmu_raw_writel(u32 val, u32 offset)
 {
@@ -61,14 +187,11 @@ void exynos_sys_powerdown_conf(enum sys_powerdown mode)
 {
 	unsigned int i;
 	const struct exynos_pmu_data *pmu_data;
-	struct exynos_pmu_context *ctx;
 
-	/* Pairs with the smp_store_release() in exynos_pmu_probe(). */
-	ctx = smp_load_acquire(&pmu_context);
-	if (!ctx || !ctx->pmu_data)
+	if (!pmu_context || !pmu_context->pmu_data)
 		return;
 
-	pmu_data = ctx->pmu_data;
+	pmu_data = pmu_context->pmu_data;
 
 	if (pmu_data->powerdown_conf)
 		pmu_data->powerdown_conf(mode);
@@ -119,6 +242,11 @@ static const struct regmap_config regmap_pmu_intr = {
 	.reg_stride = 4,
 	.val_bits = 32,
 	.use_raw_spinlock = true,
+};
+
+static const struct exynos_pmu_data gs101_pmu_data = {
+	.pmu_secure = true,
+	.pmu_cpuhp = true,
 };
 
 /*
@@ -238,7 +366,6 @@ EXPORT_SYMBOL_GPL(exynos_get_pmu_regmap_by_phandle);
  * disabled and cpupm_lock held.
  */
 static int __gs101_cpu_pmu_online(unsigned int cpu)
-	__must_hold(&pmu_context->cpupm_lock)
 {
 	unsigned int cpuhint = smp_processor_id();
 	u32 reg, mask;
@@ -299,7 +426,6 @@ static int gs101_cpuhp_pmu_online(unsigned int cpu)
 
 /* Common function shared by both CPU hot plug and CPUIdle */
 static int __gs101_cpu_pmu_offline(unsigned int cpu)
-	__must_hold(&pmu_context->cpupm_lock)
 {
 	unsigned int cpuhint = smp_processor_id();
 	u32 reg, mask;
@@ -463,62 +589,22 @@ static int setup_cpuhp_and_cpuidle(struct device *dev)
 		gs101_cpuhp_pmu_online(cpu);
 
 	/* register CPU hotplug callbacks */
-	pmu_context->cpuhp_prepare_state = CPUHP_INVALID;
-	pmu_context->cpuhp_online_state = CPUHP_INVALID;
+	cpuhp_setup_state(CPUHP_BP_PREPARE_DYN,	"soc/exynos-pmu:prepare",
+			  gs101_cpuhp_pmu_online, NULL);
 
-	ret = cpuhp_setup_state(CPUHP_BP_PREPARE_DYN, "soc/exynos-pmu:prepare",
-				gs101_cpuhp_pmu_online, NULL);
-	if (ret < 0)
-		return ret;
-
-	pmu_context->cpuhp_prepare_state = ret;
-
-	ret = cpuhp_setup_state(CPUHP_AP_ONLINE_DYN, "soc/exynos-pmu:online",
-				NULL, gs101_cpuhp_pmu_offline);
-	if (ret < 0)
-		goto clean_cpuhp_state_prepare;
-
-	pmu_context->cpuhp_online_state = ret;
+	cpuhp_setup_state(CPUHP_AP_ONLINE_DYN, "soc/exynos-pmu:online",
+			  NULL, gs101_cpuhp_pmu_offline);
 
 	/* register CPU PM notifiers for cpuidle */
-	ret = cpu_pm_register_notifier(&gs101_cpu_pm_notifier);
-	if (ret)
-		goto clean_cpuhp_states;
-
-	ret = register_reboot_notifier(&exynos_cpupm_reboot_nb);
-	if (!ret)
-		/* Success */
-		return ret;
-
-	cpu_pm_unregister_notifier(&gs101_cpu_pm_notifier);
-
-clean_cpuhp_states:
-	cpuhp_remove_state(pmu_context->cpuhp_online_state);
-	pmu_context->cpuhp_online_state = CPUHP_INVALID;
-
-clean_cpuhp_state_prepare:
-	cpuhp_remove_state(pmu_context->cpuhp_prepare_state);
-	pmu_context->cpuhp_prepare_state = CPUHP_INVALID;
-
-	return ret;
-}
-
-static void destroy_cpuhp_and_cpuidle(void)
-{
-	cpu_pm_unregister_notifier(&gs101_cpu_pm_notifier);
-	unregister_reboot_notifier(&exynos_cpupm_reboot_nb);
-
-	if (pmu_context->cpuhp_prepare_state != CPUHP_INVALID)
-		cpuhp_remove_state(pmu_context->cpuhp_prepare_state);
-	if (pmu_context->cpuhp_online_state != CPUHP_INVALID)
-		cpuhp_remove_state(pmu_context->cpuhp_online_state);
+	cpu_pm_register_notifier(&gs101_cpu_pm_notifier);
+	register_reboot_notifier(&exynos_cpupm_reboot_nb);
+	return 0;
 }
 
 static int exynos_pmu_probe(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
 	struct regmap_config pmu_regmcfg;
-	struct exynos_pmu_context *ctx;
 	struct regmap *regmap;
 	struct resource *res;
 	int ret;
@@ -527,18 +613,11 @@ static int exynos_pmu_probe(struct platform_device *pdev)
 	if (IS_ERR(pmu_base_addr))
 		return PTR_ERR(pmu_base_addr);
 
-	ctx = devm_kzalloc(&pdev->dev, sizeof(struct exynos_pmu_context),
-			   GFP_KERNEL);
-	if (!ctx)
+	pmu_context = devm_kzalloc(&pdev->dev,
+			sizeof(struct exynos_pmu_context),
+			GFP_KERNEL);
+	if (!pmu_context)
 		return -ENOMEM;
-
-	/*
-	 * exynos_sys_powerdown_conf() gates on pmu_context and then writes
-	 * through pmu_base_addr, which is a separate global. Publish the
-	 * context with release semantics so that the mapping is visible to
-	 * a CPU that passes the gate.
-	 */
-	smp_store_release(&pmu_context, ctx);
 
 	res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
 	if (!res)
@@ -551,9 +630,6 @@ static int exynos_pmu_probe(struct platform_device *pdev)
 		pmu_regmcfg = regmap_smccfg;
 		pmu_regmcfg.max_register = resource_size(res) -
 					   pmu_regmcfg.reg_stride;
-		pmu_regmcfg.wr_table = pmu_context->pmu_data->wr_table;
-		pmu_regmcfg.rd_table = pmu_context->pmu_data->rd_table;
-
 		/* Need physical address for SMC call */
 		regmap = devm_regmap_init(dev, NULL,
 					  (void *)(uintptr_t)res->start,
@@ -593,12 +669,8 @@ static int exynos_pmu_probe(struct platform_device *pdev)
 
 	ret = devm_mfd_add_devices(dev, PLATFORM_DEVID_NONE, exynos_pmu_devs,
 				   ARRAY_SIZE(exynos_pmu_devs), NULL, 0, NULL);
-	if (ret) {
-		if (pmu_context->pmu_data && pmu_context->pmu_data->pmu_cpuhp)
-			destroy_cpuhp_and_cpuidle();
-
+	if (ret)
 		return ret;
-	}
 
 	if (devm_of_platform_populate(dev))
 		dev_err(dev, "Error populating children, reboot and poweroff might not work properly\n");

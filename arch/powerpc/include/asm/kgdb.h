@@ -25,6 +25,7 @@
 
 #define BREAK_INSTR_SIZE	4
 #define BUFMAX			((NUMREGBYTES * 2) + 512)
+#define OUTBUFMAX		((NUMREGBYTES * 2) + 512)
 
 #define BREAK_INSTR		0x7d821008	/* twge r2, r2 */
 

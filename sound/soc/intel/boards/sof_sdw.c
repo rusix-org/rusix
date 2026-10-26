@@ -231,20 +231,6 @@ static const struct dmi_system_id sof_sdw_quirk_table[] = {
 					RT711_JD1),
 	},
 	{
-		/*
-		 * Avell B.ON (OEM rebrand of NUC15 'Bishop County' LAPBC510 and
-		 * LAPBC710)
-		 */
-		.callback = sof_sdw_quirk_cb,
-		.matches = {
-			DMI_MATCH(DMI_SYS_VENDOR, "Avell High Performance"),
-			DMI_MATCH(DMI_PRODUCT_NAME, "B.ON"),
-		},
-		.driver_data = (void *)(SOF_SDW_TGL_HDMI |
-					SOC_SDW_PCH_DMIC |
-					RT711_JD1),
-	},
-	{
 		/* NUC15 'Rooks County' LAPRC510 and LAPRC710 skews */
 		.callback = sof_sdw_quirk_cb,
 		.matches = {
@@ -791,28 +777,6 @@ static const struct dmi_system_id sof_sdw_quirk_table[] = {
 		.callback = sof_sdw_quirk_cb,
 		.matches = {
 			DMI_MATCH(DMI_SYS_VENDOR, "Google"),
-			DMI_MATCH(DMI_PRODUCT_NAME, "Lapis"),
-		},
-		.driver_data = (void *)(SOC_SDW_CODEC_SPKR |
-					SOC_SDW_PCH_DMIC |
-					SOF_BT_OFFLOAD_SSP(2) |
-					SOF_SSP_BT_OFFLOAD_PRESENT),
-	},
-	{
-		.callback = sof_sdw_quirk_cb,
-		.matches = {
-			DMI_MATCH(DMI_SYS_VENDOR, "Google"),
-			DMI_MATCH(DMI_PRODUCT_NAME, "Francka"),
-		},
-		.driver_data = (void *)(SOC_SDW_CODEC_SPKR |
-					SOC_SDW_PCH_DMIC |
-					SOF_BT_OFFLOAD_SSP(2) |
-					SOF_SSP_BT_OFFLOAD_PRESENT),
-	},
-	{
-		.callback = sof_sdw_quirk_cb,
-		.matches = {
-			DMI_MATCH(DMI_SYS_VENDOR, "Google"),
 			DMI_MATCH(DMI_PRODUCT_FAMILY, "Google_Fatcat"),
 		},
 		.driver_data = (void *)(SOC_SDW_PCH_DMIC |
@@ -837,14 +801,6 @@ static const struct dmi_system_id sof_sdw_quirk_table[] = {
 					SOF_BT_OFFLOAD_SSP(2) |
 					SOF_SSP_BT_OFFLOAD_PRESENT),
 	},
-	/* Novalake devices*/
-	{
-		.callback = sof_sdw_quirk_cb,
-		.matches = {
-			DMI_MATCH(DMI_PRODUCT_FAMILY, "Intel_nvlrvp"),
-		},
-		.driver_data = (void *)(SOC_SDW_PCH_DMIC),
-	},
 	{}
 };
 
@@ -857,7 +813,6 @@ static const struct snd_pci_quirk sof_sdw_ssid_quirk_table[] = {
 	SND_PCI_QUIRK(0x17aa, 0x2348, "Lenovo P16", SOC_SDW_CODEC_MIC),
 	SND_PCI_QUIRK(0x17aa, 0x2349, "Lenovo P1", SOC_SDW_CODEC_MIC),
 	SND_PCI_QUIRK(0x17aa, 0x3821, "Lenovo 0x3821", SOC_SDW_SIDECAR_AMPS),
-	SND_PCI_QUIRK(0x17aa, 0x383c, "Lenovo 0x383c", SOC_SDW_SIDECAR_AMPS),
 	{}
 };
 
@@ -1178,21 +1133,14 @@ static int create_bt_dailinks(struct snd_soc_card *card,
 			      struct snd_soc_dai_link **dai_links, int *be_id)
 {
 	struct device *dev = card->dev;
-	struct snd_soc_acpi_mach *mach = dev_get_platdata(dev);
-	char *cpu_dai_name;
-	char *name;
-	int port;
-	int ret;
-
-	if (sof_sdw_quirk & SOF_SSP_BT_OFFLOAD_PRESENT)
-		port = (sof_sdw_quirk & SOF_BT_OFFLOAD_SSP_MASK) >> SOF_BT_OFFLOAD_SSP_SHIFT;
-	else
-		port = fls(mach->mach_params.bt_link_mask) - 1;
-
-	name = devm_kasprintf(dev, GFP_KERNEL, "SSP%d-BT", port);
-	cpu_dai_name = devm_kasprintf(dev, GFP_KERNEL, "SSP%d Pin", port);
+	int port = (sof_sdw_quirk & SOF_BT_OFFLOAD_SSP_MASK) >>
+			SOF_BT_OFFLOAD_SSP_SHIFT;
+	char *name = devm_kasprintf(dev, GFP_KERNEL, "SSP%d-BT", port);
+	char *cpu_dai_name = devm_kasprintf(dev, GFP_KERNEL, "SSP%d Pin", port);
 	if (!name || !cpu_dai_name)
 		return -ENOMEM;
+
+	int ret;
 
 	ret = asoc_sdw_init_simple_dai_link(dev, *dai_links, be_id, name,
 					    1, 1, cpu_dai_name, "dummy",
@@ -1202,34 +1150,6 @@ static int create_bt_dailinks(struct snd_soc_card *card,
 		return ret;
 
 	(*dai_links)++;
-
-	return 0;
-}
-
-static int create_echoref_dailink(struct snd_soc_card *card,
-				  struct snd_soc_dai_link **dai_links, int *be_id)
-{
-	struct device *dev = card->dev;
-	int ret;
-	char *name = devm_kasprintf(dev, GFP_KERNEL, "Loopback_Virtual");
-
-	if (!name)
-		return -ENOMEM;
-
-	/*
-	 * use dummy DAI names as this won't be connected to an actual DAI but just to establish a
-	 * fe <-> be connection for loopback capture for echo reference
-	 */
-	ret = asoc_sdw_init_simple_dai_link(dev, *dai_links, be_id, name,
-					    0, 1, "Loopback Virtual Pin", "dummy",
-					    snd_soc_dummy_dlc.name, snd_soc_dummy_dlc.dai_name,
-					    1, NULL, NULL);
-	if (ret)
-		return ret;
-
-	(*dai_links)++;
-
-	dev_dbg(dev, "Added echo reference DAI link\n");
 
 	return 0;
 }
@@ -1271,12 +1191,12 @@ static int sof_card_dai_links_create(struct snd_soc_card *card)
 	 * add one additional to act as a terminator such that code can iterate
 	 * until it hits an uninitialised DAI.
 	 */
-	sof_dais = kzalloc_objs(*sof_dais, num_ends + 1);
+	sof_dais = kcalloc(num_ends + 1, sizeof(*sof_dais), GFP_KERNEL);
 	if (!sof_dais)
 		return -ENOMEM;
 
 	/* One per endpoint, ie. each DAI on each codec/amp */
-	sof_ends = kzalloc_objs(*sof_ends, num_ends);
+	sof_ends = kcalloc(num_ends, sizeof(*sof_ends), GFP_KERNEL);
 	if (!sof_ends) {
 		ret = -ENOMEM;
 		goto err_dai;
@@ -1329,7 +1249,7 @@ static int sof_card_dai_links_create(struct snd_soc_card *card)
 		mach_params->dmic_num = DMIC_DEFAULT_CHANNELS;
 	}
 
-	if (sof_sdw_quirk & SOF_SSP_BT_OFFLOAD_PRESENT || mach_params->bt_link_mask)
+	if (sof_sdw_quirk & SOF_SSP_BT_OFFLOAD_PRESENT)
 		bt_num = 1;
 
 	dev_dbg(dev, "DAI link numbers: sdw %d, ssp %d, dmic %d, hdmi %d, bt: %d\n",
@@ -1342,12 +1262,8 @@ static int sof_card_dai_links_create(struct snd_soc_card *card)
 		goto err_end;
 	}
 
-	/*
-	 * allocate BE dailinks, add an extra DAI link for echo reference capture.
-	 * This should be the last DAI link and it is expected both for monolithic
-	 * and functional SOF topologies to support echo reference.
-	 */
-	num_links = sdw_be_num + ssp_num + dmic_num + hdmi_num + bt_num + 1;
+	/* allocate BE dailinks */
+	num_links = sdw_be_num + ssp_num + dmic_num + hdmi_num + bt_num;
 	dai_links = devm_kcalloc(dev, num_links, sizeof(*dai_links), GFP_KERNEL);
 	if (!dai_links) {
 		ret = -ENOMEM;
@@ -1390,17 +1306,10 @@ static int sof_card_dai_links_create(struct snd_soc_card *card)
 		goto err_end;
 
 	/* BT */
-	if (bt_num) {
+	if (sof_sdw_quirk & SOF_SSP_BT_OFFLOAD_PRESENT) {
 		ret = create_bt_dailinks(card, &dai_links, &be_id);
 		if (ret)
 			goto err_end;
-	}
-
-	/* dummy echo ref link. keep this as the last DAI link. The DAI link ID does not matter */
-	ret = create_echoref_dailink(card, &dai_links, &be_id);
-	if (ret) {
-		dev_err(dev, "failed to create echo ref dai link: %d\n", ret);
-		goto err_end;
 	}
 
 	WARN_ON(codec_conf != card->codec_conf + card->num_configs);
@@ -1483,12 +1392,12 @@ static int mc_probe(struct platform_device *pdev)
 	dmi_check_system(sof_sdw_quirk_table);
 
 	if (quirk_override != -1) {
-		dev_info(&pdev->dev, "Overriding quirk 0x%lx => 0x%x\n",
+		dev_info(card->dev, "Overriding quirk 0x%lx => 0x%x\n",
 			 sof_sdw_quirk, quirk_override);
 		sof_sdw_quirk = quirk_override;
 	}
 
-	log_quirks(&pdev->dev);
+	log_quirks(card->dev);
 
 	ctx->mc_quirk = sof_sdw_quirk;
 	/* reset amp_num to ensure amp_num++ starts from 0 in each probe */
@@ -1507,13 +1416,13 @@ static int mc_probe(struct platform_device *pdev)
 	for (i = 0; i < ctx->codec_info_list_count; i++)
 		amp_num += codec_info_list[i].amp_num;
 
-	card->components = devm_kasprintf(&pdev->dev, GFP_KERNEL,
+	card->components = devm_kasprintf(card->dev, GFP_KERNEL,
 					  " cfg-amp:%d", amp_num);
 	if (!card->components)
 		return -ENOMEM;
 
 	if (mach->mach_params.dmic_num) {
-		card->components = devm_kasprintf(&pdev->dev, GFP_KERNEL,
+		card->components = devm_kasprintf(card->dev, GFP_KERNEL,
 						  "%s mic:dmic cfg-mics:%d",
 						  card->components,
 						  mach->mach_params.dmic_num);
@@ -1524,7 +1433,7 @@ static int mc_probe(struct platform_device *pdev)
 	/* Register the card */
 	ret = devm_snd_soc_register_card(card->dev, card);
 	if (ret) {
-		dev_err_probe(&pdev->dev, ret, "snd_soc_register_card failed %d\n", ret);
+		dev_err_probe(card->dev, ret, "snd_soc_register_card failed %d\n", ret);
 		asoc_sdw_mc_dailink_exit_loop(card);
 		return ret;
 	}
@@ -1542,8 +1451,8 @@ static void mc_remove(struct platform_device *pdev)
 }
 
 static const struct platform_device_id mc_id_table[] = {
-	{ .name = "sof_sdw" },
-	{ }
+	{ "sof_sdw", },
+	{}
 };
 MODULE_DEVICE_TABLE(platform, mc_id_table);
 

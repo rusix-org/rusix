@@ -137,13 +137,6 @@ int adf_devmgr_add_dev(struct adf_accel_dev *accel_dev,
 
 	mutex_lock(&table_lock);
 	atomic_set(&accel_dev->ref_count, 0);
-	mutex_init(&accel_dev->state_lock);
-	/*
-	 * The VF2PF lock is used to send messages to the PF outside of the
-	 * device up/down cycle, so it must live as long as the accel device.
-	 */
-	if (accel_dev->is_vf)
-		mutex_init(&accel_dev->vf.vf2pf_lock);
 
 	/* PF on host or VF on guest - optimized to remove redundant is_vf */
 	if (!accel_dev->is_vf || !pf) {
@@ -166,7 +159,7 @@ int adf_devmgr_add_dev(struct adf_accel_dev *accel_dev,
 			goto unlock;
 		}
 		num_devices++;
-		map = kzalloc_obj(*map);
+		map = kzalloc(sizeof(*map), GFP_KERNEL);
 		if (!map) {
 			ret = -ENOMEM;
 			goto unlock;
@@ -198,7 +191,7 @@ int adf_devmgr_add_dev(struct adf_accel_dev *accel_dev,
 			goto unlock;
 		}
 
-		map = kzalloc_obj(*map);
+		map = kzalloc(sizeof(*map), GFP_KERNEL);
 		if (!map) {
 			ret = -ENOMEM;
 			goto unlock;
@@ -217,6 +210,7 @@ int adf_devmgr_add_dev(struct adf_accel_dev *accel_dev,
 		map->attached = true;
 		list_add_tail(&map->list, &vfs_table);
 	}
+	mutex_init(&accel_dev->state_lock);
 unlock:
 	mutex_unlock(&table_lock);
 	return ret;
@@ -263,8 +257,6 @@ void adf_devmgr_rm_dev(struct adf_accel_dev *accel_dev,
 		}
 	}
 unlock:
-	if (accel_dev->is_vf)
-		mutex_destroy(&accel_dev->vf.vf2pf_lock);
 	mutex_destroy(&accel_dev->state_lock);
 	list_del(&accel_dev->list);
 	mutex_unlock(&table_lock);

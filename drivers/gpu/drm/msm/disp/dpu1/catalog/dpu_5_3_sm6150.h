@@ -158,6 +158,7 @@ static const struct dpu_wb_cfg sm6150_wb[] = {
 		.num_formats = ARRAY_SIZE(wb2_formats_rgb_yuv),
 		.clk_ctrl = DPU_CLK_CTRL_WB2,
 		.xin_id = 6,
+		.vbif_idx = VBIF_RT,
 		.maxlinewidth = 2160,
 		.intr_wb_done = DPU_IRQ_IDX(MDP_SSPP_TOP0_INTR, 4),
 	},
@@ -185,7 +186,7 @@ static const struct dpu_intf_cfg sm6150_intf[] = {
 		.name = "intf_3", .id = INTF_3,
 		.base = 0x6b800, .len = 0x280,
 		.type = INTF_DP,
-		.controller_id = MSM_DP_CONTROLLER_0,	/* pair with intf_0 for DP MST */
+		.controller_id = MSM_DP_CONTROLLER_1,
 		.prog_fetch_lines_worst_case = 24,
 		.intr_underrun = DPU_IRQ_IDX(MDP_SSPP_TOP0_INTR, 30),
 		.intr_vsync = DPU_IRQ_IDX(MDP_SSPP_TOP0_INTR, 31),
@@ -245,7 +246,8 @@ const struct dpu_mdss_cfg dpu_sm6150_cfg = {
 	.wb = sm6150_wb,
 	.intf_count = ARRAY_SIZE(sm6150_intf),
 	.intf = sm6150_intf,
-	.vbif = &sdm845_vbif,
+	.vbif_count = ARRAY_SIZE(sdm845_vbif),
+	.vbif = sdm845_vbif,
 	.perf = &sm6150_perf_data,
 };
 

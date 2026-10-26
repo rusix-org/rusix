@@ -870,14 +870,10 @@ ssize_t nilfs_sufile_get_suinfo(struct inode *sufile, __u64 segnum, void *buf,
 
 	down_read(&NILFS_MDT(sufile)->mi_sem);
 
-	nsegs = nilfs_sufile_get_nsegments(sufile);
-	if (segnum >= nsegs) {
-		ret = 0;
-		goto out;
-	}
-
 	segusages_per_block = nilfs_sufile_segment_usages_per_block(sufile);
-	nsegs = min_t(unsigned long, nsegs - segnum, nsi);
+	nsegs = min_t(unsigned long,
+		      nilfs_sufile_get_nsegments(sufile) - segnum,
+		      nsi);
 	for (i = 0; i < nsegs; i += n, segnum += n) {
 		n = min_t(unsigned long,
 			  segusages_per_block -
@@ -1054,7 +1050,7 @@ ssize_t nilfs_sufile_set_suinfo(struct inode *sufile, void *buf,
  * len:		number of Bytes to trim from start
  * minlen:	minimum extent length in Bytes
  *
- * Description: nilfs_sufile_trim_fs goes through all segments containing bytes
+ * Decription: nilfs_sufile_trim_fs goes through all segments containing bytes
  * from start to start+len. start is rounded up to the next block boundary
  * and start+len is rounded down. For each clean segment blkdev_issue_discard
  * function is invoked.
@@ -1234,7 +1230,7 @@ int nilfs_sufile_read(struct super_block *sb, size_t susize,
 	sufile = nilfs_iget_locked(sb, NULL, NILFS_SUFILE_INO);
 	if (unlikely(!sufile))
 		return -ENOMEM;
-	if (!(inode_state_read_once(sufile) & I_NEW))
+	if (!(sufile->i_state & I_NEW))
 		goto out;
 
 	err = nilfs_mdt_init(sufile, NILFS_MDT_GFP, sizeof(*sui));

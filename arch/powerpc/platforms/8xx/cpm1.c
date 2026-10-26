@@ -489,7 +489,7 @@ int cpm1_gpiochip_add16(struct device *dev)
 	struct device_node *np = dev->of_node;
 	struct cpm1_gpio16_chip *cpm1_gc;
 	struct gpio_chip *gc;
-	u32 mask;
+	u16 mask;
 
 	cpm1_gc = devm_kzalloc(dev, sizeof(*cpm1_gc), GFP_KERNEL);
 	if (!cpm1_gc)
@@ -497,7 +497,7 @@ int cpm1_gpiochip_add16(struct device *dev)
 
 	spin_lock_init(&cpm1_gc->lock);
 
-	if (!of_property_read_u32(np, "fsl,cpm1-gpio-irq-mask", &mask)) {
+	if (!of_property_read_u16(np, "fsl,cpm1-gpio-irq-mask", &mask)) {
 		int i, j;
 
 		for (i = 0, j = 0; i < 16; i++)

@@ -480,9 +480,11 @@ int xt_check_proc_name(const char *name, unsigned int size)
 }
 EXPORT_SYMBOL(xt_check_proc_name);
 
-static int xt_check_match_common(struct xt_mtchk_param *par,
-				 unsigned int size, u16 proto, bool inv_proto)
+int xt_check_match(struct xt_mtchk_param *par,
+		   unsigned int size, u16 proto, bool inv_proto)
 {
+	int ret;
+
 	if (XT_ALIGN(par->match->matchsize) != size &&
 	    par->match->matchsize != -1) {
 		/*
@@ -531,14 +533,6 @@ static int xt_check_match_common(struct xt_mtchk_param *par,
 				    par->match->proto);
 		return -EINVAL;
 	}
-
-	return 0;
-}
-
-static int xt_checkentry_match(struct xt_mtchk_param *par)
-{
-	int ret;
-
 	if (par->match->checkentry != NULL) {
 		ret = par->match->checkentry(par);
 		if (ret < 0)
@@ -547,33 +541,7 @@ static int xt_checkentry_match(struct xt_mtchk_param *par)
 			/* Flag up potential errors. */
 			return -EIO;
 	}
-
 	return 0;
-}
-
-int xt_check_hooks_match(struct xt_mtchk_param *par)
-{
-	if (par->match->check_hooks != NULL)
-		return par->match->check_hooks(par);
-
-	return 0;
-}
-EXPORT_SYMBOL_GPL(xt_check_hooks_match);
-
-int xt_check_match(struct xt_mtchk_param *par,
-		   unsigned int size, u16 proto, bool inv_proto)
-{
-	int ret;
-
-	ret = xt_check_match_common(par, size, proto, inv_proto);
-	if (ret < 0)
-		return ret;
-
-	ret = xt_check_hooks_match(par);
-	if (ret < 0)
-		return ret;
-
-	return xt_checkentry_match(par);
 }
 EXPORT_SYMBOL_GPL(xt_check_match);
 
@@ -854,17 +822,13 @@ EXPORT_SYMBOL_GPL(xt_compat_match_to_user);
 
 /* non-compat version may have padding after verdict */
 struct compat_xt_standard_target {
-	/* Must be last as it ends in a flexible-array member. */
-	TRAILING_OVERLAP(struct compat_xt_entry_target, t, data,
-		compat_uint_t verdict;
-	);
+	struct compat_xt_entry_target t;
+	compat_uint_t verdict;
 };
 
 struct compat_xt_error_target {
-	/* Must be last as it ends in a flexible-array member. */
-	TRAILING_OVERLAP(struct compat_xt_entry_target, t, data,
-		char errorname[XT_FUNCTION_MAXNAMELEN];
-	);
+	struct compat_xt_entry_target t;
+	char errorname[XT_FUNCTION_MAXNAMELEN];
 };
 
 int xt_compat_check_entry_offsets(const void *base, const char *elems,
@@ -1047,9 +1011,11 @@ bool xt_find_jump_offset(const unsigned int *offsets,
 }
 EXPORT_SYMBOL(xt_find_jump_offset);
 
-static int xt_check_target_common(struct xt_tgchk_param *par,
-				  unsigned int size, u16 proto, bool inv_proto)
+int xt_check_target(struct xt_tgchk_param *par,
+		    unsigned int size, u16 proto, bool inv_proto)
 {
+	int ret;
+
 	if (XT_ALIGN(par->target->targetsize) != size) {
 		pr_err_ratelimited("%s_tables: %s.%u target: invalid size %u (kernel) != (user) %u\n",
 				   xt_prefix[par->family], par->target->name,
@@ -1094,23 +1060,6 @@ static int xt_check_target_common(struct xt_tgchk_param *par,
 				    par->target->proto);
 		return -EINVAL;
 	}
-
-	return 0;
-}
-
-int xt_check_hooks_target(struct xt_tgchk_param *par)
-{
-	if (par->target->check_hooks != NULL)
-		return par->target->check_hooks(par);
-
-	return 0;
-}
-EXPORT_SYMBOL_GPL(xt_check_hooks_target);
-
-static int xt_checkentry_target(struct xt_tgchk_param *par)
-{
-	int ret;
-
 	if (par->target->checkentry != NULL) {
 		ret = par->target->checkentry(par);
 		if (ret < 0)
@@ -1120,22 +1069,6 @@ static int xt_checkentry_target(struct xt_tgchk_param *par)
 			return -EIO;
 	}
 	return 0;
-}
-
-int xt_check_target(struct xt_tgchk_param *par,
-		    unsigned int size, u16 proto, bool inv_proto)
-{
-	int ret;
-
-	ret = xt_check_target_common(par, size, proto, inv_proto);
-	if (ret < 0)
-		return ret;
-
-	ret = xt_check_hooks_target(par);
-	if (ret < 0)
-		return ret;
-
-	return xt_checkentry_target(par);
 }
 EXPORT_SYMBOL_GPL(xt_check_target);
 
@@ -1920,9 +1853,9 @@ static const struct seq_operations xt_target_seq_ops = {
 	.show	= xt_target_seq_show,
 };
 
-#define FORMAT_TABLES	"%s_tables_names"
-#define	FORMAT_MATCHES	"%s_tables_matches"
-#define FORMAT_TARGETS	"%s_tables_targets"
+#define FORMAT_TABLES	"_tables_names"
+#define	FORMAT_MATCHES	"_tables_matches"
+#define FORMAT_TARGETS 	"_tables_targets"
 
 #endif /* CONFIG_PROC_FS */
 
@@ -1945,7 +1878,7 @@ xt_hook_ops_alloc(const struct xt_table *table, nf_hookfn *fn)
 	if (!num_hooks)
 		return ERR_PTR(-EINVAL);
 
-	ops = kzalloc_objs(*ops, num_hooks);
+	ops = kcalloc(num_hooks, sizeof(*ops), GFP_KERNEL);
 	if (ops == NULL)
 		return ERR_PTR(-ENOMEM);
 
@@ -1978,7 +1911,7 @@ int xt_register_template(const struct xt_table *table,
 	}
 
 	ret = -ENOMEM;
-	t = kzalloc_obj(*t);
+	t = kzalloc(sizeof(*t), GFP_KERNEL);
 	if (!t)
 		goto out_unlock;
 
@@ -2033,7 +1966,8 @@ int xt_proto_init(struct net *net, u_int8_t af)
 	root_uid = make_kuid(net->user_ns, 0);
 	root_gid = make_kgid(net->user_ns, 0);
 
-	snprintf(buf, sizeof(buf), FORMAT_TABLES, xt_prefix[af]);
+	strscpy(buf, xt_prefix[af], sizeof(buf));
+	strlcat(buf, FORMAT_TABLES, sizeof(buf));
 	proc = proc_create_net_data(buf, 0440, net->proc_net, &xt_table_seq_ops,
 			sizeof(struct seq_net_private),
 			(void *)(unsigned long)af);
@@ -2042,7 +1976,8 @@ int xt_proto_init(struct net *net, u_int8_t af)
 	if (uid_valid(root_uid) && gid_valid(root_gid))
 		proc_set_user(proc, root_uid, root_gid);
 
-	snprintf(buf, sizeof(buf), FORMAT_MATCHES, xt_prefix[af]);
+	strscpy(buf, xt_prefix[af], sizeof(buf));
+	strlcat(buf, FORMAT_MATCHES, sizeof(buf));
 	proc = proc_create_seq_private(buf, 0440, net->proc_net,
 			&xt_match_seq_ops, sizeof(struct nf_mttg_trav),
 			(void *)(unsigned long)af);
@@ -2051,7 +1986,8 @@ int xt_proto_init(struct net *net, u_int8_t af)
 	if (uid_valid(root_uid) && gid_valid(root_gid))
 		proc_set_user(proc, root_uid, root_gid);
 
-	snprintf(buf, sizeof(buf), FORMAT_TARGETS, xt_prefix[af]);
+	strscpy(buf, xt_prefix[af], sizeof(buf));
+	strlcat(buf, FORMAT_TARGETS, sizeof(buf));
 	proc = proc_create_seq_private(buf, 0440, net->proc_net,
 			 &xt_target_seq_ops, sizeof(struct nf_mttg_trav),
 			 (void *)(unsigned long)af);
@@ -2065,11 +2001,13 @@ int xt_proto_init(struct net *net, u_int8_t af)
 
 #ifdef CONFIG_PROC_FS
 out_remove_matches:
-	snprintf(buf, sizeof(buf), FORMAT_MATCHES, xt_prefix[af]);
+	strscpy(buf, xt_prefix[af], sizeof(buf));
+	strlcat(buf, FORMAT_MATCHES, sizeof(buf));
 	remove_proc_entry(buf, net->proc_net);
 
 out_remove_tables:
-	snprintf(buf, sizeof(buf), FORMAT_TABLES, xt_prefix[af]);
+	strscpy(buf, xt_prefix[af], sizeof(buf));
+	strlcat(buf, FORMAT_TABLES, sizeof(buf));
 	remove_proc_entry(buf, net->proc_net);
 out:
 	return -1;
@@ -2082,13 +2020,16 @@ void xt_proto_fini(struct net *net, u_int8_t af)
 #ifdef CONFIG_PROC_FS
 	char buf[XT_FUNCTION_MAXNAMELEN];
 
-	snprintf(buf, sizeof(buf), FORMAT_TABLES, xt_prefix[af]);
+	strscpy(buf, xt_prefix[af], sizeof(buf));
+	strlcat(buf, FORMAT_TABLES, sizeof(buf));
 	remove_proc_entry(buf, net->proc_net);
 
-	snprintf(buf, sizeof(buf), FORMAT_TARGETS, xt_prefix[af]);
+	strscpy(buf, xt_prefix[af], sizeof(buf));
+	strlcat(buf, FORMAT_TARGETS, sizeof(buf));
 	remove_proc_entry(buf, net->proc_net);
 
-	snprintf(buf, sizeof(buf), FORMAT_MATCHES, xt_prefix[af]);
+	strscpy(buf, xt_prefix[af], sizeof(buf));
+	strlcat(buf, FORMAT_MATCHES, sizeof(buf));
 	remove_proc_entry(buf, net->proc_net);
 #endif /*CONFIG_PROC_FS*/
 }
@@ -2192,7 +2133,7 @@ static int __init xt_init(void)
 		}
 	}
 
-	xt = kzalloc_objs(struct xt_af, NFPROTO_NUMPROTO);
+	xt = kcalloc(NFPROTO_NUMPROTO, sizeof(struct xt_af), GFP_KERNEL);
 	if (!xt)
 		return -ENOMEM;
 

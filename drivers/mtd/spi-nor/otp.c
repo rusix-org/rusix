@@ -25,7 +25,7 @@
  * Read a security register by using the SPINOR_OP_RSECR commands.
  *
  * In Winbond/GigaDevice datasheets the term "security register" stands for
- * a one-time-programmable memory area, consisting of multiple bytes (usually
+ * an one-time-programmable memory area, consisting of multiple bytes (usually
  * 256). Thus one "security register" maps to one OTP region.
  *
  * This method is used on GigaDevice and Winbond flashes.
@@ -175,24 +175,24 @@ static int spi_nor_otp_lock_bit_cr(unsigned int region)
  */
 int spi_nor_otp_lock_sr2(struct spi_nor *nor, unsigned int region)
 {
+	u8 *cr = nor->bouncebuf;
 	int ret, lock_bit;
-	u8 sr[2];
 
 	lock_bit = spi_nor_otp_lock_bit_cr(region);
 	if (lock_bit < 0)
 		return lock_bit;
 
-	ret = spi_nor_read_sr1_and_sr2(nor, sr);
+	ret = spi_nor_read_cr(nor, cr);
 	if (ret)
 		return ret;
 
 	/* no need to write the register if region is already locked */
-	if (sr[1] & lock_bit)
+	if (cr[0] & lock_bit)
 		return 0;
 
-	sr[1] |= lock_bit;
+	cr[0] |= lock_bit;
 
-	return spi_nor_write_sr1_and_sr2_and_check(nor, sr);
+	return spi_nor_write_16bit_cr_and_check(nor, cr[0]);
 }
 
 /**
@@ -207,18 +207,18 @@ int spi_nor_otp_lock_sr2(struct spi_nor *nor, unsigned int region)
  */
 int spi_nor_otp_is_locked_sr2(struct spi_nor *nor, unsigned int region)
 {
+	u8 *cr = nor->bouncebuf;
 	int ret, lock_bit;
-	u8 sr2;
 
 	lock_bit = spi_nor_otp_lock_bit_cr(region);
 	if (lock_bit < 0)
 		return lock_bit;
 
-	ret = spi_nor_read_sr2(nor, &sr2);
+	ret = spi_nor_read_cr(nor, cr);
 	if (ret)
 		return ret;
 
-	return sr2 & lock_bit;
+	return cr[0] & lock_bit;
 }
 
 static loff_t spi_nor_otp_region_start(const struct spi_nor *nor, unsigned int region)

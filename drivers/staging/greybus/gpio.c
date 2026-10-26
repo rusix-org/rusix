@@ -485,7 +485,8 @@ static int gb_gpio_controller_setup(struct gb_gpio_controller *ggc)
 	if (ret)
 		return ret;
 
-	ggc->lines = kzalloc_objs(*ggc->lines, ggc->line_max + 1);
+	ggc->lines = kcalloc(ggc->line_max + 1, sizeof(*ggc->lines),
+			     GFP_KERNEL);
 	if (!ggc->lines)
 		return -ENOMEM;
 
@@ -502,7 +503,7 @@ static int gb_gpio_probe(struct gbphy_device *gbphy_dev,
 	struct irq_chip *irqc;
 	int ret;
 
-	ggc = kzalloc_obj(*ggc);
+	ggc = kzalloc(sizeof(*ggc), GFP_KERNEL);
 	if (!ggc)
 		return -ENOMEM;
 

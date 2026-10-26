@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: BSD-3-Clause-Clear
+// SPDX-License-Identifier: ISC
 /* Copyright (C) 2020 MediaTek Inc. */
 
 #include <linux/etherdevice.h>
@@ -177,40 +177,15 @@ static const struct thermal_cooling_device_ops mt7915_thermal_ops = {
 	.set_cur_state = mt7915_thermal_set_cur_throttle_state,
 };
 
-static int mt7915_thermal_get_temp(struct thermal_zone_device *tz, int *temp)
-{
-	struct mt7915_phy *phy = thermal_zone_device_priv(tz);
-	int val;
-
-	mutex_lock(&phy->dev->mt76.mutex);
-	val = mt7915_mcu_get_temperature(phy);
-	mutex_unlock(&phy->dev->mt76.mutex);
-	if (val < 0)
-		return val;
-
-	*temp = val * 1000;
-	return 0;
-}
-
-static const struct thermal_zone_device_ops mt7915_tz_ops = {
-	.get_temp = mt7915_thermal_get_temp,
-};
-
 static void mt7915_unregister_thermal(struct mt7915_phy *phy)
 {
 	struct wiphy *wiphy = phy->mt76->hw->wiphy;
-
-	if (phy->tzone) {
-		devm_thermal_of_zone_unregister(phy->dev->mt76.dev, phy->tzone);
-		phy->tzone = NULL;
-	}
 
 	if (!phy->cdev)
 		return;
 
 	sysfs_remove_link(&wiphy->dev.kobj, "cooling_device");
 	thermal_cooling_device_unregister(phy->cdev);
-	phy->cdev = NULL;
 }
 
 static int mt7915_thermal_init(struct mt7915_phy *phy)
@@ -238,28 +213,12 @@ static int mt7915_thermal_init(struct mt7915_phy *phy)
 	phy->throttle_temp[MT7915_CRIT_TEMP_IDX] = MT7915_CRIT_TEMP;
 	phy->throttle_temp[MT7915_MAX_TEMP_IDX] = MT7915_MAX_TEMP;
 
-	phy->tzone = devm_thermal_of_zone_register(phy->dev->mt76.dev,
-						   phy->mt76->band_idx, phy,
-						   &mt7915_tz_ops);
-	if (IS_ERR(phy->tzone)) {
-		if (PTR_ERR(phy->tzone) != -ENODEV)
-			dev_warn(phy->dev->mt76.dev,
-				 "failed to register thermal zone %d: %ld\n",
-				 phy->mt76->band_idx, PTR_ERR(phy->tzone));
-		phy->tzone = NULL;
-	}
-
 	if (!IS_REACHABLE(CONFIG_HWMON))
 		return 0;
 
 	hwmon = devm_hwmon_device_register_with_groups(&wiphy->dev, name, phy,
 						       mt7915_hwmon_groups);
-	if (IS_ERR(hwmon)) {
-		mt7915_unregister_thermal(phy);
-		return PTR_ERR(hwmon);
-	}
-
-	return 0;
+	return PTR_ERR_OR_ZERO(hwmon);
 }
 
 static void mt7915_led_set_config(struct led_classdev *led_cdev,
@@ -330,8 +289,6 @@ static void __mt7915_init_txpower(struct mt7915_phy *phy,
 	int pwr_delta = mt7915_eeprom_get_power_delta(dev, sband->band);
 	struct mt76_power_limits limits;
 
-	phy->sku_limit_en = true;
-	phy->sku_path_en = true;
 	for (i = 0; i < sband->n_channels; i++) {
 		struct ieee80211_channel *chan = &sband->channels[i];
 		u32 target_power = 0;
@@ -348,11 +305,6 @@ static void __mt7915_init_txpower(struct mt7915_phy *phy,
 		target_power = mt76_get_rate_power_limits(phy->mt76, chan,
 							  &limits,
 							  target_power);
-
-		/* MT7915N can not enable Backoff table without setting value in dts */
-		if (!limits.path.ofdm[0])
-			phy->sku_path_en = false;
-
 		target_power += path_delta;
 		target_power = DIV_ROUND_UP(target_power, 2);
 		chan->max_power = min_t(int, chan->max_reg_power,

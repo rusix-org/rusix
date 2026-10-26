@@ -7,7 +7,6 @@
 
 #define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
 
-#include <linux/hex.h>
 #include <linux/slab.h>
 #include <crypto/skcipher.h>
 #include <crypto/hash.h>

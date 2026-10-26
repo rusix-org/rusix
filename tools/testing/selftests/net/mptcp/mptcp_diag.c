@@ -1,24 +1,20 @@
 // SPDX-License-Identifier: GPL-2.0
 /* Copyright (c) 2025, Kylin Software */
 
-#include <errno.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <unistd.h>
-
-#include <sys/socket.h>
-
-#include <arpa/inet.h>
-
-#include <netinet/in.h>
-
-#include <linux/compiler.h>
+#include <linux/sock_diag.h>
+#include <linux/rtnetlink.h>
 #include <linux/inet_diag.h>
 #include <linux/netlink.h>
-#include <linux/rtnetlink.h>
-#include <linux/sock_diag.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
 #include <linux/tcp.h>
+#include <arpa/inet.h>
+
+#include <unistd.h>
+#include <stdlib.h>
+#include <string.h>
+#include <errno.h>
+#include <stdio.h>
 
 #ifndef IPPROTO_MPTCP
 #define IPPROTO_MPTCP 262
@@ -91,7 +87,7 @@ enum {
 
 #define rta_getattr(type, value)		(*(type *)RTA_DATA(value))
 
-static void __noreturn die_perror(const char *msg)
+static void die_perror(const char *msg)
 {
 	perror(msg);
 	exit(1);
@@ -377,8 +373,7 @@ static void get_subflow_info(char *subflow_addrs)
 	int ret;
 	int fd;
 
-	ret = sscanf(subflow_addrs, "%63[^:]:%d %63[^:]:%d",
-		     saddr, &sport, daddr, &dport);
+	ret = sscanf(subflow_addrs, "%[^:]:%d %[^:]:%d", saddr, &sport, daddr, &dport);
 	if (ret != 4)
 		die_perror("IP PORT Pairs has style problems!");
 

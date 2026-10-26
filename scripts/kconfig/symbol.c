@@ -5,7 +5,6 @@
 
 #include <sys/types.h>
 #include <ctype.h>
-#include <errno.h>
 #include <stdlib.h>
 #include <string.h>
 #include <regex.h>
@@ -142,15 +141,8 @@ struct property *sym_get_range_prop(struct symbol *sym)
 	return NULL;
 }
 
-union range_value {
-	long long s;
-	unsigned long long u;
-};
-
-static union range_value sym_get_range_val(struct symbol *sym, int base)
+static long long sym_get_range_val(struct symbol *sym, int base)
 {
-	union range_value val;
-
 	sym_calc_value(sym);
 	switch (sym->type) {
 	case S_INT:
@@ -162,25 +154,15 @@ static union range_value sym_get_range_val(struct symbol *sym, int base)
 	default:
 		break;
 	}
-	if (base == 10)
-		val.s = strtoll(sym->curr.val, NULL, base);
-	else
-		/* HEX */
-		val.u = strtoull(sym->curr.val, NULL, base);
-	return val;
+	return strtoll(sym->curr.val, NULL, base);
 }
 
-/*
- * Return the nearest range bound for an out-of-range default value.
- * Return NULL if the value is valid or the symbol has no active range.
- */
-static struct symbol *sym_get_near_range_bound(struct symbol *sym,
-					  const char *value)
+static void sym_validate_range(struct symbol *sym)
 {
 	struct property *prop;
 	struct symbol *range_sym;
 	int base;
-	union range_value val, val2;
+	long long val, val2;
 
 	switch (sym->type) {
 	case S_INT:
@@ -190,40 +172,21 @@ static struct symbol *sym_get_near_range_bound(struct symbol *sym,
 		base = 16;
 		break;
 	default:
-		return NULL;
+		return;
 	}
 	prop = sym_get_range_prop(sym);
 	if (!prop)
-		return NULL;
-	if (base == 10)
-		val.s = strtoll(value, NULL, base);
-	else
-		val.u = strtoull(value, NULL, base);
+		return;
+	val = strtoll(sym->curr.val, NULL, base);
 	range_sym = prop->expr->left.sym;
 	val2 = sym_get_range_val(range_sym, base);
-
-	if (base == 10 && val.s >= val2.s) {
+	if (val >= val2) {
 		range_sym = prop->expr->right.sym;
 		val2 = sym_get_range_val(range_sym, base);
-		if (val.s <= val2.s)
-			return NULL;
-	} else if (base == 16 && val.u >= val2.u) {
-		range_sym = prop->expr->right.sym;
-		val2 = sym_get_range_val(range_sym, base);
-		if (val.u <= val2.u)
-			return NULL;
+		if (val <= val2)
+			return;
 	}
-
-	return range_sym;
-}
-
-static void sym_validate_range(struct symbol *sym)
-{
-	struct symbol *range_sym;
-
-	range_sym = sym_get_near_range_bound(sym, sym->curr.val);
-	if (range_sym)
-		sym->curr.val = range_sym->curr.val;
+	sym->curr.val = range_sym->curr.val;
 }
 
 static void sym_set_changed(struct symbol *sym)
@@ -748,26 +711,10 @@ bool sym_string_valid(struct symbol *sym, const char *str)
 	}
 }
 
-bool sym_string_check_bounds(struct symbol *sym, const char *str)
-{
-	errno = 0;
-
-	if (sym->type == S_INT)
-		strtoll(str, NULL, 10);
-	else if (sym->type == S_HEX)
-		strtoull(str, NULL, 16);
-	else
-		/* string */
-		return true;
-
-	return errno != ERANGE;
-}
-
 bool sym_string_within_range(struct symbol *sym, const char *str)
 {
 	struct property *prop;
 	long long val;
-	unsigned long long uval;
 
 	switch (sym->type) {
 	case S_STRING:
@@ -775,25 +722,21 @@ bool sym_string_within_range(struct symbol *sym, const char *str)
 	case S_INT:
 		if (!sym_string_valid(sym, str))
 			return false;
-		if (!sym_string_check_bounds(sym, str))
-			return false;
 		prop = sym_get_range_prop(sym);
 		if (!prop)
 			return true;
 		val = strtoll(str, NULL, 10);
-		return val >= sym_get_range_val(prop->expr->left.sym, 10).s &&
-		       val <= sym_get_range_val(prop->expr->right.sym, 10).s;
+		return val >= sym_get_range_val(prop->expr->left.sym, 10) &&
+		       val <= sym_get_range_val(prop->expr->right.sym, 10);
 	case S_HEX:
 		if (!sym_string_valid(sym, str))
-			return false;
-		if (!sym_string_check_bounds(sym, str))
 			return false;
 		prop = sym_get_range_prop(sym);
 		if (!prop)
 			return true;
-		uval = strtoull(str, NULL, 16);
-		return uval >= sym_get_range_val(prop->expr->left.sym, 16).u &&
-		       uval <= sym_get_range_val(prop->expr->right.sym, 16).u;
+		val = strtoll(str, NULL, 16);
+		return val >= sym_get_range_val(prop->expr->left.sym, 16) &&
+		       val <= sym_get_range_val(prop->expr->right.sym, 16);
 	case S_BOOLEAN:
 	case S_TRISTATE:
 		switch (str[0]) {
@@ -869,7 +812,7 @@ bool sym_set_string_value(struct symbol *sym, const char *newval)
 const char *sym_get_string_default(struct symbol *sym)
 {
 	struct property *prop;
-	struct symbol *ds, *range_sym;
+	struct symbol *ds;
 	const char *str = "";
 	tristate val;
 
@@ -887,6 +830,11 @@ const char *sym_get_string_default(struct symbol *sym)
 			val = EXPR_AND(expr_calc_value(prop->expr), prop->visible.tri);
 			break;
 		default:
+			/*
+			 * The following fails to handle the situation
+			 * where a default value is further limited by
+			 * the valid range.
+			 */
 			ds = prop_get_symbol(prop);
 			if (ds != NULL) {
 				sym_calc_value(ds);
@@ -930,11 +878,6 @@ const char *sym_get_string_default(struct symbol *sym)
 	default:
 		break;
 	}
-
-	range_sym = sym_get_near_range_bound(sym, str);
-	if (range_sym)
-		str = range_sym->curr.val;
-
 	return str;
 }
 
@@ -1253,7 +1196,6 @@ static struct symbol *sym_check_expr_deps(const struct expr *e)
 	case E_GTH:
 	case E_LEQ:
 	case E_LTH:
-	case E_RANGE:
 	case E_UNEQUAL:
 		sym = sym_check_deps(e->left.sym);
 		if (sym)
@@ -1301,9 +1243,7 @@ static struct symbol *sym_check_sym_deps(struct symbol *sym)
 		sym2 = sym_check_expr_deps(prop->visible.expr);
 		if (sym2)
 			break;
-		if (sym_is_choice(sym))
-			continue;
-		if (prop->type != P_DEFAULT && prop->type != P_RANGE)
+		if (prop->type != P_DEFAULT || sym_is_choice(sym))
 			continue;
 		stack.expr = &prop->expr;
 		sym2 = sym_check_expr_deps(prop->expr);

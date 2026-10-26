@@ -40,8 +40,8 @@
 static const char rocker_driver_name[] = "rocker";
 
 static const struct pci_device_id rocker_pci_id_table[] = {
-	{ PCI_VDEVICE(REDHAT, PCI_DEVICE_ID_REDHAT_ROCKER) },
-	{ }
+	{PCI_VDEVICE(REDHAT, PCI_DEVICE_ID_REDHAT_ROCKER), 0},
+	{0, }
 };
 
 struct rocker_wait {
@@ -66,7 +66,7 @@ static struct rocker_wait *rocker_wait_create(void)
 {
 	struct rocker_wait *wait;
 
-	wait = kzalloc_obj(*wait);
+	wait = kzalloc(sizeof(*wait), GFP_KERNEL);
 	if (!wait)
 		return NULL;
 	return wait;
@@ -435,7 +435,8 @@ static int rocker_dma_ring_create(const struct rocker *rocker,
 	info->type = type;
 	info->head = 0;
 	info->tail = 0;
-	info->desc_info = kzalloc_objs(*info->desc_info, info->size);
+	info->desc_info = kcalloc(info->size, sizeof(*info->desc_info),
+				  GFP_KERNEL);
 	if (!info->desc_info)
 		return -ENOMEM;
 
@@ -2154,7 +2155,7 @@ static int rocker_router_fib_event(struct notifier_block *nb,
 	if (info->family != AF_INET)
 		return NOTIFY_DONE;
 
-	fib_work = kzalloc_obj(*fib_work, GFP_ATOMIC);
+	fib_work = kzalloc(sizeof(*fib_work), GFP_ATOMIC);
 	if (WARN_ON(!fib_work))
 		return NOTIFY_BAD;
 
@@ -2647,7 +2648,9 @@ static int rocker_msix_init(struct rocker *rocker)
 	if (msix_entries != ROCKER_MSIX_VEC_COUNT(rocker->port_count))
 		return -EINVAL;
 
-	rocker->msix_entries = kmalloc_objs(struct msix_entry, msix_entries);
+	rocker->msix_entries = kmalloc_array(msix_entries,
+					     sizeof(struct msix_entry),
+					     GFP_KERNEL);
 	if (!rocker->msix_entries)
 		return -ENOMEM;
 
@@ -2761,7 +2764,7 @@ static int rocker_switchdev_event(struct notifier_block *unused,
 		return rocker_switchdev_port_attr_set_event(dev, ptr);
 
 	rocker_port = netdev_priv(dev);
-	switchdev_work = kzalloc_obj(*switchdev_work, GFP_ATOMIC);
+	switchdev_work = kzalloc(sizeof(*switchdev_work), GFP_ATOMIC);
 	if (WARN_ON(!switchdev_work))
 		return NOTIFY_BAD;
 
@@ -2847,7 +2850,7 @@ static int rocker_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 	struct rocker *rocker;
 	int err;
 
-	rocker = kzalloc_obj(*rocker);
+	rocker = kzalloc(sizeof(*rocker), GFP_KERNEL);
 	if (!rocker)
 		return -ENOMEM;
 
@@ -3134,7 +3137,7 @@ static int rocker_netevent_event(struct notifier_block *unused,
 
 	switch (event) {
 	case NETEVENT_NEIGH_UPDATE:
-		if (n->tbl != arp_table(&init_net))
+		if (n->tbl != &arp_tbl)
 			return NOTIFY_DONE;
 		dev = n->dev;
 		if (!rocker_port_dev_check(dev))

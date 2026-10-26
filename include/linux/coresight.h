@@ -141,10 +141,6 @@ struct csdev_access {
 		.base		= (_addr),	\
 	})
 
-#define CORESIGHT_DESC_CPU_BOUND	BIT(0)
-/* Device can't be activated from sysfs, only via Perf. */
-#define CORESIGHT_DESC_NO_SYSFS_MODE	BIT(1)
-
 /**
  * struct coresight_desc - description of a component required from drivers
  * @type:	as defined by @coresight_dev_type.
@@ -157,8 +153,6 @@ struct csdev_access {
  *		in the component's sysfs sub-directory.
  * @name:	name for the coresight device, also shown under sysfs.
  * @access:	Describe access to the device
- * @flags:	The descritpion flags.
- * @cpu:	The CPU this component is affined to.
  */
 struct coresight_desc {
 	enum coresight_dev_type type;
@@ -169,8 +163,6 @@ struct coresight_desc {
 	const struct attribute_group **groups;
 	const char *name;
 	struct csdev_access access;
-	u32 flags;
-	int cpu;
 };
 
 /**
@@ -259,7 +251,6 @@ struct coresight_trace_id_map {
  *		by @coresight_ops.
  * @access:	Device i/o access abstraction for this device.
  * @dev:	The device entity associated to this component.
- * @path:	Activated path pointer (only used for source device).
  * @mode:	The device mode, i.e sysFS, Perf or disabled. This is actually
  *		an 'enum cs_mode' but stored in an atomic type. Access is always
  *		through atomic APIs, ensuring SMP-safe synchronisation between
@@ -269,7 +260,6 @@ struct coresight_trace_id_map {
  *		device's spinlock when the coresight_mutex held and mode ==
  *		CS_MODE_SYSFS. Otherwise it must be accessed from inside the
  *		spinlock.
- * @cpu:	The CPU this component is affined to (-1 for not CPU bound).
  * @orphan:	true if the component has connections that haven't been linked.
  * @sysfs_sink_activated: 'true' when a sink has been selected for use via sysfs
  *		by writing a 1 to the 'enable_sink' file.  A sink can be
@@ -294,10 +284,8 @@ struct coresight_device {
 	const struct coresight_ops *ops;
 	struct csdev_access access;
 	struct device dev;
-	struct coresight_path *path;
 	atomic_t mode;
 	int refcnt;
-	int cpu;
 	bool orphan;
 	/* sink specific fields */
 	bool sysfs_sink_activated;
@@ -312,26 +300,29 @@ struct coresight_device {
 	struct list_head config_csdev_list;
 	raw_spinlock_t cscfg_csdev_lock;
 	void *active_cscfg_ctxt;
-	/* CORESIGHT_DESC_[x] flags */
-	u32 flags;
 };
 
 /*
  * coresight_dev_list - Mapping for devices to "name" index for device
  * names.
  *
- * @node:		Node on the global device index list.
  * @nr_idx:		Number of entries already allocated.
  * @pfx:		Prefix pattern for device name.
  * @fwnode_list:	Array of fwnode_handles associated with each allocated
  *			index, upto nr_idx entries.
  */
 struct coresight_dev_list {
-	struct list_head	node;
 	int			nr_idx;
-	char			*pfx;
+	const char		*pfx;
 	struct fwnode_handle	**fwnode_list;
 };
+
+#define DEFINE_CORESIGHT_DEVLIST(var, dev_pfx)				\
+static struct coresight_dev_list (var) = {				\
+						.pfx = dev_pfx,		\
+						.nr_idx = 0,		\
+						.fwnode_list = NULL,	\
+}
 
 #define to_coresight_device(d) container_of(d, struct coresight_device, dev)
 
@@ -348,9 +339,9 @@ struct coresight_path {
 };
 
 enum cs_mode {
-	CS_MODE_DISABLED = 0,
-	CS_MODE_SYSFS	 = BIT(0),
-	CS_MODE_PERF	 = BIT(1),
+	CS_MODE_DISABLED,
+	CS_MODE_SYSFS,
+	CS_MODE_PERF,
 };
 
 #define coresight_ops(csdev)	csdev->ops
@@ -372,7 +363,7 @@ enum cs_mode {
  */
 struct coresight_ops_sink {
 	int (*enable)(struct coresight_device *csdev, enum cs_mode mode,
-		      struct coresight_path *path);
+		      void *data);
 	int (*disable)(struct coresight_device *csdev);
 	void *(*alloc_buffer)(struct coresight_device *csdev,
 			      struct perf_event *event, void **pages,
@@ -401,12 +392,15 @@ struct coresight_ops_link {
 /**
  * struct coresight_ops_source - basic operations for a source
  * Operations available for sources.
+ * @cpu_id:	returns the value of the CPU number this component
+ *		is associated to.
  * @enable:	enables tracing for a source.
  * @disable:	disables tracing for a source.
  * @resume_perf: resumes tracing for a source in perf session.
  * @pause_perf:	pauses tracing for a source in perf session.
  */
 struct coresight_ops_source {
+	int (*cpu_id)(struct coresight_device *csdev);
 	int (*enable)(struct coresight_device *csdev, struct perf_event *event,
 		      enum cs_mode mode, struct coresight_path *path);
 	void (*disable)(struct coresight_device *csdev,
@@ -426,9 +420,8 @@ struct coresight_ops_source {
  */
 struct coresight_ops_helper {
 	int (*enable)(struct coresight_device *csdev, enum cs_mode mode,
-		      struct coresight_path *path);
-	int (*disable)(struct coresight_device *csdev,
-		       struct coresight_path *path);
+		      void *data);
+	int (*disable)(struct coresight_device *csdev, void *data);
 };
 
 
@@ -444,8 +437,6 @@ struct coresight_ops_panic {
 struct coresight_ops {
 	int (*trace_id)(struct coresight_device *csdev, enum cs_mode mode,
 			struct coresight_device *sink);
-	int (*pm_save_disable)(struct coresight_device *csdev);
-	void (*pm_restore_enable)(struct coresight_device *csdev);
 	const struct coresight_ops_sink *sink_ops;
 	const struct coresight_ops_link *link_ops;
 	const struct coresight_ops_source *source_ops;
@@ -615,12 +606,6 @@ static inline bool coresight_is_percpu_source(struct coresight_device *csdev)
 	       (csdev->subtype.source_subtype == CORESIGHT_DEV_SUBTYPE_SOURCE_PROC);
 }
 
-static inline bool coresight_is_software_source(struct coresight_device *csdev)
-{
-	return csdev && coresight_is_device_source(csdev) &&
-	       (csdev->subtype.source_subtype == CORESIGHT_DEV_SUBTYPE_SOURCE_SOFTWARE);
-}
-
 static inline bool coresight_is_percpu_sink(struct coresight_device *csdev)
 {
 	return csdev && (csdev->type == CORESIGHT_DEV_TYPE_SINK) &&
@@ -677,7 +662,8 @@ void coresight_clear_self_claim_tag(struct csdev_access *csa);
 void coresight_clear_self_claim_tag_unlocked(struct csdev_access *csa);
 void coresight_disclaim_device(struct coresight_device *csdev);
 void coresight_disclaim_device_unlocked(struct coresight_device *csdev);
-char *coresight_alloc_device_name(const char *prefix, struct device *dev);
+char *coresight_alloc_device_name(struct coresight_dev_list *devs,
+					 struct device *dev);
 
 bool coresight_loses_context_with_cpu(struct device *dev);
 
@@ -710,11 +696,8 @@ coresight_find_output_type(struct coresight_platform_data *pdata,
 			   enum coresight_dev_type type,
 			   union coresight_dev_subtype subtype);
 
-int coresight_init_driver_with_owner(const char *drv, struct amba_driver *amba_drv,
-				     struct platform_driver *pdev_drv, struct module *owner,
-				     const char *mod_name);
-#define coresight_init_driver(drv, amba_drv, pdev_drv) \
-	coresight_init_driver_with_owner(drv, amba_drv, pdev_drv, THIS_MODULE, KBUILD_MODNAME)
+int coresight_init_driver(const char *drv, struct amba_driver *amba_drv,
+			  struct platform_driver *pdev_drv, struct module *owner);
 
 void coresight_remove_driver(struct amba_driver *amba_drv,
 			     struct platform_driver *pdev_drv);

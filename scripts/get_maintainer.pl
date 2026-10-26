@@ -21,7 +21,6 @@ use Cwd;
 use File::Find;
 use File::Spec::Functions;
 use open qw(:std :encoding(UTF-8));
-use JSON::PP;
 
 my $cur_path = fastgetcwd() . '/';
 my $lk_path = "./";
@@ -69,7 +68,6 @@ my $pattern_depth = 0;
 my $self_test = undef;
 my $version = 0;
 my $help = 0;
-my $json = 0;
 my $find_maintainer_files = 0;
 my $maintainer_path;
 my $vcs_used = 0;
@@ -287,7 +285,6 @@ if (!GetOptions(
 		'find-maintainer-files' => \$find_maintainer_files,
 		'mpath|maintainer-path=s' => \$maintainer_path,
 		'self-test:s' => \$self_test,
-		'json!' => \$json,
 		'v|version' => \$version,
 		'h|help|usage' => \$help,
 		)) {
@@ -378,10 +375,8 @@ sub read_maintainer_file {
 	    ##Filename pattern matching
 	    if ($type eq "F" || $type eq "X") {
 		$value =~ s@\.@\\\.@g;       ##Convert . to \.
-		$value =~ s/\*\*/\x00/g;     ##Convert ** to placeholder
 		$value =~ s/\*/\.\*/g;       ##Convert * to .*
 		$value =~ s/\?/\./g;         ##Convert ? to .
-		$value =~ s/\x00/(?:.*)/g;   ##Convert placeholder to (?:.*)
 		##if pattern is a directory and it lacks a trailing slash, add one
 		if ((-d $value)) {
 		    $value =~ s@([^/])$@$1/@;
@@ -653,48 +648,39 @@ my %deduplicate_name_hash = ();
 my %deduplicate_address_hash = ();
 
 my @maintainers = get_maintainers();
+if (@maintainers) {
+    @maintainers = merge_email(@maintainers);
+    output(@maintainers);
+}
 
-@maintainers = merge_email(@maintainers) if (@maintainers);
-@scm = uniq(@scm) if ($scm);
-@substatus = uniq(@substatus) if ($output_substatus);
-@status = uniq(@status) if ($status);
-@subsystem = uniq(@subsystem) if ($subsystem);
-@web = uniq(@web) if ($web);
-@bug = uniq(@bug) if ($bug);
+if ($scm) {
+    @scm = uniq(@scm);
+    output(@scm);
+}
 
-if ($json) {
-    my @json_maintainers;
-    for my $m (@maintainers) {
-	my ($addr, $role);
-	if ($output_roles && $m =~ /^(.*?)\s+\((.+)\)\s*$/) {
-	    $addr = $1;
-	    $role = $2;
-	} else {
-	    $addr = $m;
-	}
-	my ($name, $email_addr) = parse_email($addr);
-	my %entry = (name => $name, email => $email_addr);
-	$entry{role} = $role if (defined $role && $role ne '');
-	push(@json_maintainers, \%entry);
-    }
+if ($output_substatus) {
+    @substatus = uniq(@substatus);
+    output(@substatus);
+}
 
-    my %result = (maintainers => \@json_maintainers);
-    $result{scm} = \@scm if ($scm);
-    $result{status} = \@status if ($status);
-    $result{subsystem} = \@subsystem if ($subsystem);
-    $result{web} = \@web if ($web);
-    $result{bug} = \@bug if ($bug);
+if ($status) {
+    @status = uniq(@status);
+    output(@status);
+}
 
-    my $json_encoder = JSON::PP->new->canonical->utf8;
-    print($json_encoder->encode(\%result) . "\n");
-} else {
-    output(@maintainers) if (@maintainers);
-    output(@scm) if ($scm);
-    output(@substatus) if ($output_substatus);
-    output(@status) if ($status);
-    output(@subsystem) if ($subsystem);
-    output(@web) if ($web);
-    output(@bug) if ($bug);
+if ($subsystem) {
+    @subsystem = uniq(@subsystem);
+    output(@subsystem);
+}
+
+if ($web) {
+    @web = uniq(@web);
+    output(@web);
+}
+
+if ($bug) {
+    @bug = uniq(@bug);
+    output(@bug);
 }
 
 exit($exit);
@@ -760,10 +746,8 @@ sub self_test {
 	if (($type eq "F" || $type eq "X") &&
 	    ($self_test eq "" || $self_test =~ /\bpatterns\b/)) {
 	    $value =~ s@\.@\\\.@g;       ##Convert . to \.
-	    $value =~ s/\*\*/\x00/g;     ##Convert ** to placeholder
 	    $value =~ s/\*/\.\*/g;       ##Convert * to .*
 	    $value =~ s/\?/\./g;         ##Convert ? to .
-	    $value =~ s/\x00/(?:.*)/g;   ##Convert placeholder to (?:.*)
 	    ##if pattern is a directory and it lacks a trailing slash, add one
 	    if ((-d $value)) {
 		$value =~ s@([^/])$@$1/@;
@@ -937,7 +921,7 @@ sub get_maintainers {
 				my $value_pd = ($value =~ tr@/@@);
 				my $file_pd = ($file  =~ tr@/@@);
 				$value_pd++ if (substr($value,-1,1) ne "/");
-				$value_pd = -1 if ($value =~ /^(\.\*|\(\?:\.\*\))/);
+				$value_pd = -1 if ($value =~ /^\.\*/);
 				if ($value_pd >= $file_pd &&
 				    range_is_maintained($start, $end) &&
 				    range_has_maintainer($start, $end)) {
@@ -971,7 +955,6 @@ sub get_maintainers {
 			$line =~ s/([^\\])\.([^\*])/$1\?$2/g;
 			$line =~ s/([^\\])\.$/$1\?/g;	##Convert . back to ?
 			$line =~ s/\\\./\./g;       	##Convert \. to .
-			$line =~ s/\(\?:\.\*\)/\*\*/g;	##Convert (?:.*) to **
 			$line =~ s/\.\*/\*/g;       	##Convert .* to *
 		    }
 		    my $count = $line =~ s/^([A-Z]):/$1:\t/g;
@@ -1065,7 +1048,7 @@ sub file_match_pattern {
 	if ($file =~ m@^$pattern@) {
 	    my $s1 = ($file =~ tr@/@@);
 	    my $s2 = ($pattern =~ tr@/@@);
-	    if ($s1 == $s2 || $pattern =~ /\(\?:/) {
+	    if ($s1 == $s2) {
 		return 1;
 	    }
 	}
@@ -1116,7 +1099,6 @@ Output type options:
   --separator [, ] => separator for multiple entries on 1 line
     using --separator also sets --nomultiline if --separator is not [, ]
   --multiline => print 1 entry per line
-  --json => output results as JSON
 
 Other options:
   --pattern-depth => Number of pattern directory traversals (default: 0 (all))

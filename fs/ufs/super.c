@@ -483,7 +483,8 @@ static int ufs_read_cylinder_structures(struct super_block *sb)
 	 * Read cylinder group (we read only first fragment from block
 	 * at this time) and prepare internal data structures for cg caching.
 	 */
-	sbi->s_ucg = kmalloc_objs(struct buffer_head *, uspi->s_ncg, GFP_NOFS);
+	sbi->s_ucg = kmalloc_array(uspi->s_ncg, sizeof(struct buffer_head *),
+				   GFP_NOFS);
 	if (!sbi->s_ucg)
 		goto failed;
 	for (i = 0; i < uspi->s_ncg; i++) 
@@ -502,7 +503,7 @@ static int ufs_read_cylinder_structures(struct super_block *sb)
 		ufs_print_cylinder_stuff(sb, (struct ufs_cylinder_group *) sbi->s_ucg[i]->b_data);
 	}
 	for (i = 0; i < UFS_MAX_GROUP_LOADED; i++) {
-		if (!(sbi->s_ucpi[i] = kmalloc_obj(struct ufs_cg_private_info, GFP_NOFS)))
+		if (!(sbi->s_ucpi[i] = kmalloc (sizeof(struct ufs_cg_private_info), GFP_NOFS)))
 			goto failed;
 		sbi->s_cgno[i] = UFS_CGNO_EMPTY;
 	}
@@ -672,7 +673,7 @@ void ufs_mark_sb_dirty(struct super_block *sb)
 	spin_lock(&sbi->work_lock);
 	if (!sbi->work_queued) {
 		delay = msecs_to_jiffies(dirty_writeback_interval * 10);
-		queue_delayed_work(system_dfl_long_wq, &sbi->sync_work, delay);
+		queue_delayed_work(system_long_wq, &sbi->sync_work, delay);
 		sbi->work_queued = 1;
 	}
 	spin_unlock(&sbi->work_lock);
@@ -743,7 +744,7 @@ static int ufs_fill_super(struct super_block *sb, struct fs_context *fc)
 	}
 #endif
 		
-	sbi = kzalloc_obj(struct ufs_sb_info);
+	sbi = kzalloc(sizeof(struct ufs_sb_info), GFP_KERNEL);
 	if (!sbi)
 		goto failed_nomem;
 	sb->s_fs_info = sbi;
@@ -768,7 +769,7 @@ static int ufs_fill_super(struct super_block *sb, struct fs_context *fc)
 		sbi->s_flavour = UFS_MOUNT_UFSTYPE_OLD;
 	}
 
-	uspi = kzalloc_obj(struct ufs_sb_private_info);
+	uspi = kzalloc(sizeof(struct ufs_sb_private_info), GFP_KERNEL);
 	sbi->s_uspi = uspi;
 	if (!uspi)
 		goto failed;
@@ -1438,7 +1439,7 @@ static int ufs_init_fs_context(struct fs_context *fc)
 {
 	struct ufs_fs_context *ctx;
 
-	ctx = kzalloc_obj(*ctx);
+	ctx = kzalloc(sizeof(*ctx), GFP_KERNEL);
 	if (!ctx)
 		return -ENOMEM;
 

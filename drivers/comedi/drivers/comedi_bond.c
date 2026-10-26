@@ -39,7 +39,6 @@
 
 #include <linux/module.h>
 #include <linux/string.h>
-#include <linux/seq_buf.h>
 #include <linux/slab.h>
 #include <linux/comedi.h>
 #include <linux/comedi/comedilib.h>
@@ -171,11 +170,10 @@ static int do_dev_config(struct comedi_device *dev, struct comedi_devconfig *it)
 {
 	struct comedi_bond_private *devpriv = dev->private;
 	DECLARE_BITMAP(devs_opened, COMEDI_NUM_BOARD_MINORS);
-	struct seq_buf s;
 	int i;
 
 	memset(&devs_opened, 0, sizeof(devs_opened));
-	seq_buf_init(&s, devpriv->name, sizeof(devpriv->name));
+	devpriv->name[0] = 0;
 	/*
 	 * Loop through all comedi devices specified on the command-line,
 	 * building our device list.
@@ -207,7 +205,7 @@ static int do_dev_config(struct comedi_device *dev, struct comedi_devconfig *it)
 		snprintf(file, sizeof(file), "/dev/comedi%d", minor);
 		file[sizeof(file) - 1] = 0;
 
-		d = comedi_open_from(file, dev->minor);
+		d = comedi_open(file);
 
 		if (!d) {
 			dev_err(dev->class_dev,
@@ -225,7 +223,7 @@ static int do_dev_config(struct comedi_device *dev, struct comedi_devconfig *it)
 					nchans, minor, sdev);
 				return -EINVAL;
 			}
-			bdev = kmalloc_obj(*bdev);
+			bdev = kmalloc(sizeof(*bdev), GFP_KERNEL);
 			if (!bdev)
 				return -ENOMEM;
 
@@ -252,9 +250,15 @@ static int do_dev_config(struct comedi_device *dev, struct comedi_devconfig *it)
 			}
 			devpriv->devs = devs;
 			devpriv->devs[devpriv->ndevs++] = bdev;
+			{
+				/* Append dev:subdev to devpriv->name */
+				char buf[20];
 
-			/* Append dev:subdev to devpriv->name */
-			seq_buf_printf(&s, "%u:%u ", bdev->minor, bdev->subdev);
+				snprintf(buf, sizeof(buf), "%u:%u ",
+					 bdev->minor, bdev->subdev);
+				strlcat(devpriv->name, buf,
+					sizeof(devpriv->name));
+			}
 		}
 	}
 
@@ -262,8 +266,6 @@ static int do_dev_config(struct comedi_device *dev, struct comedi_devconfig *it)
 		dev_err(dev->class_dev, "No channels found!\n");
 		return -EINVAL;
 	}
-
-	seq_buf_str(&s);
 
 	return 0;
 }
@@ -324,7 +326,7 @@ static void bonding_detach(struct comedi_device *dev)
 			if (!bdev)
 				continue;
 			if (!test_and_set_bit(bdev->minor, devs_closed))
-				comedi_close_from(bdev->dev, dev->minor);
+				comedi_close(bdev->dev);
 			kfree(bdev);
 		}
 		kfree(devpriv->devs);

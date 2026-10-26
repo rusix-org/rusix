@@ -14,6 +14,7 @@
 #include <linux/err.h>
 #include <linux/i2c.h>
 #include <linux/delay.h>
+#include <linux/mod_devicetable.h>
 #include <linux/module.h>
 #include <linux/property.h>
 
@@ -213,8 +214,10 @@ static int mb1232_probe(struct i2c_client *client)
 	if (data->irqnr > 0) {
 		ret = devm_request_irq(dev, data->irqnr, mb1232_handle_irq,
 				IRQF_TRIGGER_FALLING, id->name, indio_dev);
-		if (ret)
+		if (ret < 0) {
+			dev_err(dev, "request_irq: %d\n", ret);
 			return ret;
+		}
 	}
 
 	ret = devm_iio_triggered_buffer_setup(dev, indio_dev,
@@ -241,13 +244,13 @@ static const struct of_device_id of_mb1232_match[] = {
 MODULE_DEVICE_TABLE(of, of_mb1232_match);
 
 static const struct i2c_device_id mb1232_id[] = {
-	{ .name = "maxbotix-mb1202" },
-	{ .name = "maxbotix-mb1212" },
-	{ .name = "maxbotix-mb1222" },
-	{ .name = "maxbotix-mb1232" },
-	{ .name = "maxbotix-mb1242" },
-	{ .name = "maxbotix-mb7040" },
-	{ .name = "maxbotix-mb7137" },
+	{ "maxbotix-mb1202", },
+	{ "maxbotix-mb1212", },
+	{ "maxbotix-mb1222", },
+	{ "maxbotix-mb1232", },
+	{ "maxbotix-mb1242", },
+	{ "maxbotix-mb7040", },
+	{ "maxbotix-mb7137", },
 	{ }
 };
 MODULE_DEVICE_TABLE(i2c, mb1232_id);

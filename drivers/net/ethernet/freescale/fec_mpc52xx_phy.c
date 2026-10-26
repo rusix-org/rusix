@@ -74,7 +74,7 @@ static int mpc52xx_fec_mdio_probe(struct platform_device *of)
 	bus = mdiobus_alloc();
 	if (bus == NULL)
 		return -ENOMEM;
-	priv = kzalloc_obj(*priv);
+	priv = kzalloc(sizeof(*priv), GFP_KERNEL);
 	if (priv == NULL) {
 		err = -ENOMEM;
 		goto out_free;
@@ -150,5 +150,4 @@ struct platform_driver mpc52xx_fec_mdio_driver = {
 /* let fec driver call it, since this has to be registered before it */
 EXPORT_SYMBOL_GPL(mpc52xx_fec_mdio_driver);
 
-MODULE_DESCRIPTION("MPC52xx FEC MDIO bus driver");
 MODULE_LICENSE("Dual BSD/GPL");

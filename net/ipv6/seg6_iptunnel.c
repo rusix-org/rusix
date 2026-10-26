@@ -50,8 +50,6 @@ static size_t seg6_lwt_headroom(struct seg6_iptunnel_encap *tuninfo)
 struct seg6_lwt {
 	struct dst_cache cache_input;
 	struct dst_cache cache_output;
-	struct in6_addr tunsrc;
-	u32 table;
 	struct seg6_iptunnel_encap tuninfo[];
 };
 
@@ -68,8 +66,6 @@ seg6_encap_lwtunnel(struct lwtunnel_state *lwt)
 
 static const struct nla_policy seg6_iptunnel_policy[SEG6_IPTUNNEL_MAX + 1] = {
 	[SEG6_IPTUNNEL_SRH]	= { .type = NLA_BINARY },
-	[SEG6_IPTUNNEL_SRC]	= NLA_POLICY_EXACT_LEN(sizeof(struct in6_addr)),
-	[SEG6_IPTUNNEL_TABLE]	= { .type = NLA_U32 },
 };
 
 static int nla_put_srh(struct sk_buff *skb, int attrtype,
@@ -92,32 +88,23 @@ static int nla_put_srh(struct sk_buff *skb, int attrtype,
 }
 
 static void set_tun_src(struct net *net, struct net_device *dev,
-			struct in6_addr *daddr, struct in6_addr *saddr,
-			struct in6_addr *route_tunsrc)
+			struct in6_addr *daddr, struct in6_addr *saddr)
 {
 	struct seg6_pernet_data *sdata = seg6_pernet(net);
 	struct in6_addr *tun_src;
 
-	/* Priority order to select tunnel source address:
-	 *  1. per route source address (if configured)
-	 *  2. per network namespace source address (if configured)
-	 *  3. dynamic resolution
-	 */
-	if (route_tunsrc && !ipv6_addr_any(route_tunsrc)) {
-		memcpy(saddr, route_tunsrc, sizeof(struct in6_addr));
+	rcu_read_lock();
+
+	tun_src = rcu_dereference(sdata->tun_src);
+
+	if (!ipv6_addr_any(tun_src)) {
+		memcpy(saddr, tun_src, sizeof(struct in6_addr));
 	} else {
-		rcu_read_lock();
-		tun_src = rcu_dereference(sdata->tun_src);
-
-		if (!ipv6_addr_any(tun_src)) {
-			memcpy(saddr, tun_src, sizeof(struct in6_addr));
-		} else {
-			ipv6_dev_get_saddr(net, dev, daddr,
-					   IPV6_PREFER_SRC_PUBLIC, saddr);
-		}
-
-		rcu_read_unlock();
+		ipv6_dev_get_saddr(net, dev, daddr, IPV6_PREFER_SRC_PUBLIC,
+				   saddr);
 	}
+
+	rcu_read_unlock();
 }
 
 /* Compute flowlabel for outer IPv6 header */
@@ -139,8 +126,7 @@ static __be32 seg6_make_flowlabel(struct net *net, struct sk_buff *skb,
 }
 
 static int __seg6_do_srh_encap(struct sk_buff *skb, struct ipv6_sr_hdr *osrh,
-			       int proto, struct dst_entry *cache_dst,
-			       struct in6_addr *route_tunsrc)
+			       int proto, struct dst_entry *cache_dst)
 {
 	struct dst_entry *dst = skb_dst(skb);
 	struct net_device *dev = dst_dev(dst);
@@ -197,7 +183,7 @@ static int __seg6_do_srh_encap(struct sk_buff *skb, struct ipv6_sr_hdr *osrh,
 	isrh->nexthdr = proto;
 
 	hdr->daddr = isrh->segments[isrh->first_segment];
-	set_tun_src(net, dev, &hdr->daddr, &hdr->saddr, route_tunsrc);
+	set_tun_src(net, dev, &hdr->daddr, &hdr->saddr);
 
 #ifdef CONFIG_IPV6_SEG6_HMAC
 	if (sr_has_hmac(isrh)) {
@@ -217,15 +203,14 @@ static int __seg6_do_srh_encap(struct sk_buff *skb, struct ipv6_sr_hdr *osrh,
 /* encapsulate an IPv6 packet within an outer IPv6 header with a given SRH */
 int seg6_do_srh_encap(struct sk_buff *skb, struct ipv6_sr_hdr *osrh, int proto)
 {
-	return __seg6_do_srh_encap(skb, osrh, proto, NULL, NULL);
+	return __seg6_do_srh_encap(skb, osrh, proto, NULL);
 }
 EXPORT_SYMBOL_GPL(seg6_do_srh_encap);
 
 /* encapsulate an IPv6 packet within an outer IPv6 header with reduced SRH */
 static int seg6_do_srh_encap_red(struct sk_buff *skb,
 				 struct ipv6_sr_hdr *osrh, int proto,
-				 struct dst_entry *cache_dst,
-				 struct in6_addr *route_tunsrc)
+				 struct dst_entry *cache_dst)
 {
 	__u8 first_seg = osrh->first_segment;
 	struct dst_entry *dst = skb_dst(skb);
@@ -288,7 +273,7 @@ static int seg6_do_srh_encap_red(struct sk_buff *skb,
 	if (skip_srh) {
 		hdr->nexthdr = proto;
 
-		set_tun_src(net, dev, &hdr->daddr, &hdr->saddr, route_tunsrc);
+		set_tun_src(net, dev, &hdr->daddr, &hdr->saddr);
 		goto out;
 	}
 
@@ -324,7 +309,7 @@ static int seg6_do_srh_encap_red(struct sk_buff *skb,
 
 srcaddr:
 	isrh->nexthdr = proto;
-	set_tun_src(net, dev, &hdr->daddr, &hdr->saddr, route_tunsrc);
+	set_tun_src(net, dev, &hdr->daddr, &hdr->saddr);
 
 #ifdef CONFIG_IPV6_SEG6_HMAC
 	if (unlikely(!skip_srh && sr_has_hmac(isrh))) {
@@ -399,12 +384,9 @@ static int seg6_do_srh(struct sk_buff *skb, struct dst_entry *cache_dst)
 {
 	struct dst_entry *dst = skb_dst(skb);
 	struct seg6_iptunnel_encap *tinfo;
-	struct seg6_lwt *slwt;
-	unsigned int headroom;
 	int proto, err = 0;
 
-	slwt = seg6_lwt_lwtunnel(dst->lwtstate);
-	tinfo = slwt->tuninfo;
+	tinfo = seg6_encap_lwtunnel(dst->lwtstate);
 
 	switch (tinfo->mode) {
 	case SEG6_IPTUN_MODE_INLINE:
@@ -429,11 +411,11 @@ static int seg6_do_srh(struct sk_buff *skb, struct dst_entry *cache_dst)
 			return -EINVAL;
 
 		if (tinfo->mode == SEG6_IPTUN_MODE_ENCAP)
-			err = __seg6_do_srh_encap(skb, tinfo->srh, proto,
-						  cache_dst, &slwt->tunsrc);
+			err = __seg6_do_srh_encap(skb, tinfo->srh,
+						  proto, cache_dst);
 		else
-			err = seg6_do_srh_encap_red(skb, tinfo->srh, proto,
-						    cache_dst, &slwt->tunsrc);
+			err = seg6_do_srh_encap_red(skb, tinfo->srh,
+						    proto, cache_dst);
 
 		if (err)
 			return err;
@@ -447,25 +429,20 @@ static int seg6_do_srh(struct sk_buff *skb, struct dst_entry *cache_dst)
 		if (!skb_mac_header_was_set(skb))
 			return -EINVAL;
 
-		headroom = skb->mac_len + sizeof(struct ipv6hdr) +
-			   ipv6_optlen(tinfo->srh) +
-			   dst_dev_overhead(cache_dst, skb);
-
-		err = skb_cow_head(skb, headroom);
-		if (unlikely(err))
-			return err;
+		if (pskb_expand_head(skb, skb->mac_len, 0, GFP_ATOMIC) < 0)
+			return -ENOMEM;
 
 		skb_mac_header_rebuild(skb);
 		skb_push(skb, skb->mac_len);
 
 		if (tinfo->mode == SEG6_IPTUN_MODE_L2ENCAP)
 			err = __seg6_do_srh_encap(skb, tinfo->srh,
-						  IPPROTO_ETHERNET, cache_dst,
-						  &slwt->tunsrc);
+						  IPPROTO_ETHERNET,
+						  cache_dst);
 		else
 			err = seg6_do_srh_encap_red(skb, tinfo->srh,
-						    IPPROTO_ETHERNET, cache_dst,
-						    &slwt->tunsrc);
+						    IPPROTO_ETHERNET,
+						    cache_dst);
 
 		if (err)
 			return err;
@@ -486,73 +463,6 @@ int seg6_do_srh_inline(struct sk_buff *skb, struct ipv6_sr_hdr *osrh)
 	return __seg6_do_srh_inline(skb, osrh, NULL);
 }
 EXPORT_SYMBOL_GPL(seg6_do_srh_inline);
-
-/* look up a route in a specific FIB table.
- * Returns a refcounted dst, or NULL if the table does not exist.
- */
-static struct dst_entry *seg6_table_lookup(struct net *net,
-					   struct sk_buff *skb,
-					   struct flowi6 *fl6, u32 tbl_id)
-{
-	struct fib6_table *table;
-	struct rt6_info *rt;
-
-	table = fib6_get_table(net, tbl_id);
-	if (!table)
-		return NULL;
-
-	rt = ip6_pol_route(net, table, 0, fl6, skb, RT6_LOOKUP_F_HAS_SADDR);
-	return &rt->dst;
-}
-
-static void seg6_init_flowi6(struct sk_buff *skb, struct ipv6hdr *hdr,
-			     struct flowi6 *fl6)
-{
-	memset(fl6, 0, sizeof(*fl6));
-
-	fl6->daddr = hdr->daddr;
-	fl6->saddr = hdr->saddr;
-	fl6->flowlabel = ip6_flowinfo(hdr);
-	fl6->flowi6_mark = skb->mark;
-	fl6->flowi6_proto = hdr->nexthdr;
-}
-
-/* look up the route for the first SID on the input path and set it on the skb.
- * Returns the refcounted dst, or NULL if a reference could not be safely taken.
- */
-static struct dst_entry *seg6_input_route(struct net *net,
-					  struct sk_buff *skb,
-					  struct seg6_lwt *slwt)
-{
-	u32 table = slwt->table;
-
-	if (table) {
-		struct ipv6hdr *hdr = ipv6_hdr(skb);
-		struct dst_entry *dst;
-		struct flowi6 fl6;
-
-		seg6_init_flowi6(skb, hdr, &fl6);
-		fl6.flowi6_iif = skb->dev->ifindex;
-
-		dst = seg6_table_lookup(net, skb, &fl6, table);
-		if (!dst) {
-			dst = &net->ipv6.ip6_blk_hole_entry->dst;
-			dst_hold(dst);
-		}
-
-		skb_dst_drop(skb);
-		skb_dst_set(skb, dst);
-	} else {
-		ip6_route_input(skb);
-
-		/* ip6_route_input() sets a NOREF dst; force a refcount on it
-		 * before caching or further use.
-		 */
-		skb_dst_force(skb);
-	}
-
-	return skb_dst(skb);
-}
 
 static int seg6_input_finish(struct net *net, struct sock *sk,
 			     struct sk_buff *skb)
@@ -588,9 +498,15 @@ static int seg6_input_core(struct net *net, struct sock *sk,
 		goto drop;
 	}
 
-	if (unlikely(!dst)) {
-		dst = seg6_input_route(net, skb, slwt);
-		if (!dst) {
+	if (!dst) {
+		ip6_route_input(skb);
+
+		/* ip6_route_input() sets a NOREF dst; force a refcount on it
+		 * before caching or further use.
+		 */
+		skb_dst_force(skb);
+		dst = skb_dst(skb);
+		if (unlikely(!dst)) {
 			err = -ENETUNREACH;
 			goto drop;
 		}
@@ -647,29 +563,6 @@ static int seg6_input(struct sk_buff *skb)
 	return seg6_input_core(dev_net(skb->dev), NULL, skb);
 }
 
-/* look up the route for the first SID on the output path. Always returns a
- * refcounted dst.
- */
-static struct dst_entry *seg6_output_dst_lookup(struct net *net,
-						struct sk_buff *skb,
-						struct flowi6 *fl6,
-						struct seg6_lwt *slwt)
-{
-	struct dst_entry *dst;
-
-	if (slwt->table) {
-		dst = seg6_table_lookup(net, skb, fl6, slwt->table);
-		if (!dst) {
-			dst = &net->ipv6.ip6_blk_hole_entry->dst;
-			dst_hold(dst);
-		}
-	} else {
-		dst = ip6_route_output(net, NULL, fl6);
-	}
-
-	return dst;
-}
-
 static int seg6_output_core(struct net *net, struct sock *sk,
 			    struct sk_buff *skb)
 {
@@ -692,9 +585,14 @@ static int seg6_output_core(struct net *net, struct sock *sk,
 		struct ipv6hdr *hdr = ipv6_hdr(skb);
 		struct flowi6 fl6;
 
-		seg6_init_flowi6(skb, hdr, &fl6);
+		memset(&fl6, 0, sizeof(fl6));
+		fl6.daddr = hdr->daddr;
+		fl6.saddr = hdr->saddr;
+		fl6.flowlabel = ip6_flowinfo(hdr);
+		fl6.flowi6_mark = skb->mark;
+		fl6.flowi6_proto = hdr->nexthdr;
 
-		dst = seg6_output_dst_lookup(net, skb, &fl6, slwt);
+		dst = ip6_route_output(net, NULL, &fl6);
 		if (dst->error) {
 			err = dst->error;
 			goto drop;
@@ -762,11 +660,8 @@ static int seg6_build_state(struct net *net, struct nlattr *nla,
 	struct seg6_lwt *slwt;
 	int err;
 
-	if (family != AF_INET && family != AF_INET6) {
-		NL_SET_ERR_MSG(extack,
-			       "unsupported address family for SRv6 encapsulation");
+	if (family != AF_INET && family != AF_INET6)
 		return -EINVAL;
-	}
 
 	err = nla_parse_nested_deprecated(tb, SEG6_IPTUNNEL_MAX, nla,
 					  seg6_iptunnel_policy, extack);
@@ -774,7 +669,7 @@ static int seg6_build_state(struct net *net, struct nlattr *nla,
 	if (err < 0)
 		return err;
 
-	if (NL_REQ_ATTR_CHECK(extack, nla, tb, SEG6_IPTUNNEL_SRH))
+	if (!tb[SEG6_IPTUNNEL_SRH])
 		return -EINVAL;
 
 	tuninfo = nla_data(tb[SEG6_IPTUNNEL_SRH]);
@@ -785,24 +680,14 @@ static int seg6_build_state(struct net *net, struct nlattr *nla,
 	 */
 	min_size = sizeof(*tuninfo) + sizeof(struct ipv6_sr_hdr) +
 		   sizeof(struct in6_addr);
-	if (tuninfo_len < min_size) {
-		NL_SET_ERR_MSG_ATTR(extack, tb[SEG6_IPTUNNEL_SRH],
-				    "truncated IPv6 Segment Routing Header attribute");
+	if (tuninfo_len < min_size)
 		return -EINVAL;
-	}
 
 	switch (tuninfo->mode) {
 	case SEG6_IPTUN_MODE_INLINE:
-		if (family != AF_INET6) {
-			NL_SET_ERR_MSG_ATTR(extack, tb[SEG6_IPTUNNEL_SRH],
-					    "inline mode requires the IPv6 address family");
+		if (family != AF_INET6)
 			return -EINVAL;
-		}
 
-		if (tb[SEG6_IPTUNNEL_SRC]) {
-			NL_SET_ERR_MSG(extack, "incompatible mode for tunsrc");
-			return -EINVAL;
-		}
 		break;
 	case SEG6_IPTUN_MODE_ENCAP:
 		break;
@@ -813,19 +698,12 @@ static int seg6_build_state(struct net *net, struct nlattr *nla,
 	case SEG6_IPTUN_MODE_L2ENCAP_RED:
 		break;
 	default:
-		NL_SET_ERR_MSG_ATTR_FMT(extack, tb[SEG6_IPTUNNEL_SRH],
-					"invalid SRv6 encapsulation mode %d",
-					tuninfo->mode);
 		return -EINVAL;
 	}
 
 	/* verify that SRH is consistent */
-	if (!seg6_validate_srh(tuninfo->srh, tuninfo_len - sizeof(*tuninfo),
-			       false)) {
-		NL_SET_ERR_MSG_ATTR(extack, tb[SEG6_IPTUNNEL_SRH],
-				    "invalid IPv6 Segment Routing Header");
+	if (!seg6_validate_srh(tuninfo->srh, tuninfo_len - sizeof(*tuninfo), false))
 		return -EINVAL;
-	}
 
 	newts = lwtunnel_state_alloc(tuninfo_len + sizeof(*slwt));
 	if (!newts)
@@ -843,27 +721,6 @@ static int seg6_build_state(struct net *net, struct nlattr *nla,
 
 	memcpy(&slwt->tuninfo, tuninfo, tuninfo_len);
 
-	if (tb[SEG6_IPTUNNEL_SRC]) {
-		slwt->tunsrc = nla_get_in6_addr(tb[SEG6_IPTUNNEL_SRC]);
-
-		if (ipv6_addr_any(&slwt->tunsrc) ||
-		    ipv6_addr_is_multicast(&slwt->tunsrc) ||
-		    ipv6_addr_loopback(&slwt->tunsrc)) {
-			NL_SET_ERR_MSG(extack, "invalid tunsrc address");
-			err = -EINVAL;
-			goto err_destroy_output;
-		}
-	}
-
-	if (tb[SEG6_IPTUNNEL_TABLE]) {
-		slwt->table = nla_get_u32(tb[SEG6_IPTUNNEL_TABLE]);
-		if (!slwt->table) {
-			NL_SET_ERR_MSG(extack, "invalid lookup table");
-			err = -EINVAL;
-			goto err_destroy_output;
-		}
-	}
-
 	newts->type = LWTUNNEL_ENCAP_SEG6;
 	newts->flags |= LWTUNNEL_STATE_INPUT_REDIRECT;
 
@@ -877,8 +734,6 @@ static int seg6_build_state(struct net *net, struct nlattr *nla,
 
 	return 0;
 
-err_destroy_output:
-	dst_cache_destroy(&slwt->cache_output);
 err_destroy_input:
 	dst_cache_destroy(&slwt->cache_input);
 err_free_newts:
@@ -898,17 +753,8 @@ static int seg6_fill_encap_info(struct sk_buff *skb,
 				struct lwtunnel_state *lwtstate)
 {
 	struct seg6_iptunnel_encap *tuninfo = seg6_encap_lwtunnel(lwtstate);
-	struct seg6_lwt *slwt = seg6_lwt_lwtunnel(lwtstate);
 
 	if (nla_put_srh(skb, SEG6_IPTUNNEL_SRH, tuninfo))
-		return -EMSGSIZE;
-
-	if (!ipv6_addr_any(&slwt->tunsrc) &&
-	    nla_put_in6_addr(skb, SEG6_IPTUNNEL_SRC, &slwt->tunsrc))
-		return -EMSGSIZE;
-
-	if (slwt->table &&
-	    nla_put_u32(skb, SEG6_IPTUNNEL_TABLE, slwt->table))
 		return -EMSGSIZE;
 
 	return 0;
@@ -917,35 +763,17 @@ static int seg6_fill_encap_info(struct sk_buff *skb,
 static int seg6_encap_nlsize(struct lwtunnel_state *lwtstate)
 {
 	struct seg6_iptunnel_encap *tuninfo = seg6_encap_lwtunnel(lwtstate);
-	struct seg6_lwt *slwt = seg6_lwt_lwtunnel(lwtstate);
-	int nlsize;
 
-	nlsize = nla_total_size(SEG6_IPTUN_ENCAP_SIZE(tuninfo));
-
-	if (!ipv6_addr_any(&slwt->tunsrc))
-		nlsize += nla_total_size(sizeof(slwt->tunsrc));
-
-	if (slwt->table)
-		nlsize += nla_total_size(sizeof(u32));
-
-	return nlsize;
+	return nla_total_size(SEG6_IPTUN_ENCAP_SIZE(tuninfo));
 }
 
 static int seg6_encap_cmp(struct lwtunnel_state *a, struct lwtunnel_state *b)
 {
 	struct seg6_iptunnel_encap *a_hdr = seg6_encap_lwtunnel(a);
 	struct seg6_iptunnel_encap *b_hdr = seg6_encap_lwtunnel(b);
-	struct seg6_lwt *a_slwt = seg6_lwt_lwtunnel(a);
-	struct seg6_lwt *b_slwt = seg6_lwt_lwtunnel(b);
 	int len = SEG6_IPTUN_ENCAP_SIZE(a_hdr);
 
 	if (len != SEG6_IPTUN_ENCAP_SIZE(b_hdr))
-		return 1;
-
-	if (!ipv6_addr_equal(&a_slwt->tunsrc, &b_slwt->tunsrc))
-		return 1;
-
-	if (a_slwt->table != b_slwt->table)
 		return 1;
 
 	return memcmp(a_hdr, b_hdr, len);

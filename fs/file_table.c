@@ -30,8 +30,6 @@
 
 #include <linux/atomic.h>
 
-#include <asm/runtime-const.h>
-
 #include "internal.h"
 
 /* sysctl tunables... */
@@ -40,10 +38,8 @@ static struct files_stat_struct files_stat = {
 };
 
 /* SLAB cache for file structures */
-static struct kmem_cache *__filp_cache __ro_after_init;
-#define filp_cache runtime_const_ptr(__filp_cache)
-static struct kmem_cache *__bfilp_cache __ro_after_init;
-#define bfilp_cache runtime_const_ptr(__bfilp_cache)
+static struct kmem_cache *filp_cachep __ro_after_init;
+static struct kmem_cache *bfilp_cachep __ro_after_init;
 
 static struct percpu_counter nr_files __cacheline_aligned_in_smp;
 
@@ -89,7 +85,7 @@ static inline void backing_file_free(struct backing_file *ff)
 {
 	security_backing_file_free(&ff->file);
 	path_put(&ff->user_path);
-	kmem_cache_free(bfilp_cache, ff);
+	kmem_cache_free(bfilp_cachep, ff);
 }
 
 static inline void file_free(struct file *f)
@@ -101,7 +97,7 @@ static inline void file_free(struct file *f)
 	if (unlikely(f->f_mode & FMODE_BACKING)) {
 		backing_file_free(backing_file(f));
 	} else {
-		kmem_cache_free(filp_cache, f);
+		kmem_cache_free(filp_cachep, f);
 	}
 }
 
@@ -122,7 +118,7 @@ unsigned long get_max_files(void)
 }
 EXPORT_SYMBOL_GPL(get_max_files);
 
-#ifdef CONFIG_SYSCTL
+#if defined(CONFIG_SYSCTL) && defined(CONFIG_PROC_FS)
 
 /*
  * Handle nr_files sysctl
@@ -231,13 +227,13 @@ static int init_file(struct file *f, int flags, const struct cred *cred)
 }
 
 /* Find an unused file structure and return a pointer to it.
- * Returns an error pointer if some error happened, e.g., we exceed the file
+ * Returns an error pointer if some error happend e.g. we over file
  * structures limit, run out of memory or operation is not permitted.
  *
  * Be very careful using this.  You are responsible for
  * getting write access to any mount that you might assign
  * to this filp, if it is opened for write.  If this is not
- * done, the mount's writer count will be wrong
+ * done, you will imbalance int the mount's writer count
  * and a warning at __fput() time.
  */
 struct file *alloc_empty_file(int flags, const struct cred *cred)
@@ -259,13 +255,13 @@ struct file *alloc_empty_file(int flags, const struct cred *cred)
 			goto over;
 	}
 
-	f = kmem_cache_alloc(filp_cache, GFP_KERNEL);
+	f = kmem_cache_alloc(filp_cachep, GFP_KERNEL);
 	if (unlikely(!f))
 		return ERR_PTR(-ENOMEM);
 
 	error = init_file(f, flags, cred);
 	if (unlikely(error)) {
-		kmem_cache_free(filp_cache, f);
+		kmem_cache_free(filp_cachep, f);
 		return ERR_PTR(error);
 	}
 
@@ -293,13 +289,13 @@ struct file *alloc_empty_file_noaccount(int flags, const struct cred *cred)
 	struct file *f;
 	int error;
 
-	f = kmem_cache_alloc(filp_cache, GFP_KERNEL);
+	f = kmem_cache_alloc(filp_cachep, GFP_KERNEL);
 	if (unlikely(!f))
 		return ERR_PTR(-ENOMEM);
 
 	error = init_file(f, flags, cred);
 	if (unlikely(error)) {
-		kmem_cache_free(filp_cache, f);
+		kmem_cache_free(filp_cachep, f);
 		return ERR_PTR(error);
 	}
 
@@ -329,13 +325,13 @@ struct file *alloc_empty_backing_file(int flags, const struct cred *cred,
 	struct backing_file *ff;
 	int error;
 
-	ff = kmem_cache_alloc(bfilp_cache, GFP_KERNEL);
+	ff = kmem_cache_alloc(bfilp_cachep, GFP_KERNEL);
 	if (unlikely(!ff))
 		return ERR_PTR(-ENOMEM);
 
 	error = init_file(&ff->file, flags, cred);
 	if (unlikely(error)) {
-		kmem_cache_free(bfilp_cache, ff);
+		kmem_cache_free(bfilp_cachep, ff);
 		return ERR_PTR(error);
 	}
 
@@ -349,7 +345,6 @@ struct file *alloc_empty_backing_file(int flags, const struct cred *cred,
 
 	return &ff->file;
 }
-EXPORT_SYMBOL_GPL(alloc_empty_backing_file);
 
 /**
  * file_init_path - initialize a 'struct file' based on path
@@ -402,8 +397,6 @@ static struct file *alloc_file(const struct path *path, int flags,
 static inline int alloc_path_pseudo(const char *name, struct inode *inode,
 				    struct vfsmount *mnt, struct path *path)
 {
-	if (WARN_ON_ONCE(S_ISDIR(inode->i_mode)))
-		return -EINVAL;
 	path->dentry = d_alloc_pseudo(mnt->mnt_sb, &QSTR(name));
 	if (!path->dentry)
 		return -ENOMEM;
@@ -520,8 +513,7 @@ static void __fput(struct file *file)
 	dput(dentry);
 	if (unlikely(mode & FMODE_NEED_UNMOUNT))
 		dissolve_on_fput(mnt);
-	else
-		mntput(mnt);
+	mntput(mnt);
 out:
 	file_free(file);
 }
@@ -637,17 +629,14 @@ void __init files_init(void)
 		.freeptr_offset = offsetof(struct file, f_freeptr),
 	};
 
-	__filp_cache = kmem_cache_create("filp", sizeof(struct file), &args,
+	filp_cachep = kmem_cache_create("filp", sizeof(struct file), &args,
 				SLAB_HWCACHE_ALIGN | SLAB_PANIC |
 				SLAB_ACCOUNT | SLAB_TYPESAFE_BY_RCU);
-	runtime_const_init(ptr, __filp_cache);
 
 	args.freeptr_offset = offsetof(struct backing_file, bf_freeptr);
-	__bfilp_cache = kmem_cache_create("bfilp", sizeof(struct backing_file),
+	bfilp_cachep = kmem_cache_create("bfilp", sizeof(struct backing_file),
 				&args, SLAB_HWCACHE_ALIGN | SLAB_PANIC |
 				SLAB_ACCOUNT | SLAB_TYPESAFE_BY_RCU);
-	runtime_const_init(ptr, __bfilp_cache);
-
 	percpu_counter_init(&nr_files, 0, GFP_KERNEL);
 }
 

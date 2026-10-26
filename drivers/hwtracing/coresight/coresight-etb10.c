@@ -63,6 +63,8 @@
 #define ETB_FFSR_BIT		1
 #define ETB_FRAME_SIZE_WORDS	4
 
+DEFINE_CORESIGHT_DEVLIST(etb_devs, "etb");
+
 /**
  * struct etb_drvdata - specifics associated to an ETB component
  * @base:	memory mapped base address for this component.
@@ -165,13 +167,13 @@ out:
 	return ret;
 }
 
-static int etb_enable_perf(struct coresight_device *csdev, struct coresight_path *path)
+static int etb_enable_perf(struct coresight_device *csdev, void *data)
 {
 	int ret = 0;
 	pid_t pid;
 	unsigned long flags;
 	struct etb_drvdata *drvdata = dev_get_drvdata(csdev->dev.parent);
-	struct perf_output_handle *handle = path->handle;
+	struct perf_output_handle *handle = data;
 	struct cs_buffers *buf = etm_perf_sink_config(handle);
 
 	raw_spin_lock_irqsave(&drvdata->spinlock, flags);
@@ -222,7 +224,7 @@ out:
 }
 
 static int etb_enable(struct coresight_device *csdev, enum cs_mode mode,
-		      struct coresight_path *path)
+		      void *data)
 {
 	int ret;
 
@@ -231,7 +233,7 @@ static int etb_enable(struct coresight_device *csdev, enum cs_mode mode,
 		ret = etb_enable_sysfs(csdev);
 		break;
 	case CS_MODE_PERF:
-		ret = etb_enable_perf(csdev, path);
+		ret = etb_enable_perf(csdev, data);
 		break;
 	default:
 		ret = -EINVAL;
@@ -720,7 +722,7 @@ static int etb_probe(struct amba_device *adev, const struct amba_id *id)
 	struct resource *res = &adev->res;
 	struct coresight_desc desc = { 0 };
 
-	desc.name = coresight_alloc_device_name("etb", dev);
+	desc.name = coresight_alloc_device_name(&etb_devs, dev);
 	if (!desc.name)
 		return -ENOMEM;
 

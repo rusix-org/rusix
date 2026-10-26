@@ -205,7 +205,7 @@ static int liointc_init(phys_addr_t addr, unsigned long size, int revision,
 	struct irq_domain *domain;
 	struct liointc_priv *priv;
 
-	priv = kzalloc_obj(*priv);
+	priv = kzalloc(sizeof(*priv), GFP_KERNEL);
 	if (!priv)
 		return -ENOMEM;
 
@@ -394,9 +394,8 @@ static int __init acpi_cascade_irqdomain_init(void)
 
 int __init liointc_acpi_init(struct irq_domain *parent, struct acpi_madt_lio_pic *acpi_liointc)
 {
-	phys_addr_t addr = (phys_addr_t)acpi_liointc->address;
-	struct fwnode_handle *domain_handle;
 	int ret;
+	struct fwnode_handle *domain_handle;
 
 	parent_int_map[0] = acpi_liointc->cascade_map[0];
 	parent_int_map[1] = acpi_liointc->cascade_map[1];
@@ -404,13 +403,14 @@ int __init liointc_acpi_init(struct irq_domain *parent, struct acpi_madt_lio_pic
 	parent_irq[0] = irq_create_mapping(parent, acpi_liointc->cascade[0]);
 	parent_irq[1] = irq_create_mapping(parent, acpi_liointc->cascade[1]);
 
-	domain_handle = irq_domain_alloc_fwnode(&addr);
+	domain_handle = irq_domain_alloc_fwnode(&acpi_liointc->address);
 	if (!domain_handle) {
 		pr_err("Unable to allocate domain handle\n");
 		return -ENOMEM;
 	}
 
-	ret = liointc_init(addr, acpi_liointc->size, 1, domain_handle, NULL);
+	ret = liointc_init(acpi_liointc->address, acpi_liointc->size,
+			   1, domain_handle, NULL);
 	if (ret == 0)
 		ret = acpi_cascade_irqdomain_init();
 	else

@@ -691,7 +691,7 @@ static int pp_open(struct inode *inode, struct file *file)
 	if (minor >= PARPORT_MAX)
 		return -ENXIO;
 
-	pp = kmalloc_obj(struct pp_struct);
+	pp = kmalloc(sizeof(struct pp_struct), GFP_KERNEL);
 	if (!pp)
 		return -ENOMEM;
 

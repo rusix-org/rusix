@@ -939,8 +939,9 @@ static int mspro_block_read_attributes(struct memstick_dev *card)
 	} else
 		attr_count = attr->count;
 
-	msb->attr_group.attrs = kzalloc_objs(*msb->attr_group.attrs,
-					     attr_count + 1);
+	msb->attr_group.attrs = kcalloc(attr_count + 1,
+					sizeof(*msb->attr_group.attrs),
+					GFP_KERNEL);
 	if (!msb->attr_group.attrs) {
 		rc = -ENOMEM;
 		goto out_free_attr;
@@ -954,7 +955,7 @@ static int mspro_block_read_attributes(struct memstick_dev *card)
 	}
 
 	for (cnt = 0; cnt < attr_count; ++cnt) {
-		s_attr = kzalloc_obj(struct mspro_sys_attr);
+		s_attr = kzalloc(sizeof(struct mspro_sys_attr), GFP_KERNEL);
 		if (!s_attr) {
 			rc = -ENOMEM;
 			goto out_free_buffer;
@@ -1210,7 +1211,7 @@ static int mspro_block_probe(struct memstick_dev *card)
 	struct mspro_block_data *msb;
 	int rc = 0;
 
-	msb = kzalloc_obj(struct mspro_block_data);
+	msb = kzalloc(sizeof(struct mspro_block_data), GFP_KERNEL);
 	if (!msb)
 		return -ENOMEM;
 	memstick_set_drvdata(card, msb);
@@ -1297,7 +1298,7 @@ static int mspro_block_resume(struct memstick_dev *card)
 	unsigned char cnt;
 
 	mutex_lock(&host->lock);
-	new_msb = kzalloc_obj(struct mspro_block_data);
+	new_msb = kzalloc(sizeof(struct mspro_block_data), GFP_KERNEL);
 	if (!new_msb) {
 		rc = -ENOMEM;
 		goto out_unlock;

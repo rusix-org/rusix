@@ -17,9 +17,7 @@ $ref: thermal-sensor.yaml#
 
 properties:
   compatible:
-    enum:
-      - renesas,r9a08g045-tsu
-      - renesas,r9a08g046-tsu
+    const: renesas,r9a08g045-tsu
 
   reg:
     maxItems: 1

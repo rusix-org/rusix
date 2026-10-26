@@ -898,7 +898,7 @@ static struct mirror_set *alloc_context(unsigned int nr_mirrors,
 					struct dm_dirty_log *dl)
 {
 	struct mirror_set *ms =
-		kzalloc_flex(*ms, mirror, nr_mirrors);
+		kzalloc(struct_size(ms, mirror, nr_mirrors), GFP_KERNEL);
 
 	if (!ms) {
 		ti->error = "Cannot allocate mirror context";
@@ -1393,7 +1393,7 @@ static void mirror_resume(struct dm_target *ti)
  * we have encountered.
  *    A => Alive - No failures
  *    D => Dead - A write failure occurred leaving mirror out-of-sync
- *    S => Sync - A synchronization failure occurred, mirror out-of-sync
+ *    S => Sync - A sychronization failure occurred, mirror out-of-sync
  *    R => Read - A read failure occurred, mirror data unaffected
  *
  * Returns: <char>

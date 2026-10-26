@@ -14,7 +14,6 @@
 
 #include "wx_type.h"
 #include "wx_lib.h"
-#include "wx_err.h"
 #include "wx_ptp.h"
 #include "wx_hw.h"
 #include "wx_vf_lib.h"
@@ -180,13 +179,20 @@ static void wx_dma_sync_frag(struct wx_ring *rx_ring,
 
 static struct wx_rx_buffer *wx_get_rx_buffer(struct wx_ring *rx_ring,
 					     union wx_rx_desc *rx_desc,
-					     struct sk_buff **skb)
+					     struct sk_buff **skb,
+					     int *rx_buffer_pgcnt)
 {
 	struct wx_rx_buffer *rx_buffer;
 	unsigned int size;
 
 	rx_buffer = &rx_ring->rx_buffer_info[rx_ring->next_to_clean];
 	size = le16_to_cpu(rx_desc->wb.upper.length);
+
+#if (PAGE_SIZE < 8192)
+	*rx_buffer_pgcnt = page_count(rx_buffer->page);
+#else
+	*rx_buffer_pgcnt = 0;
+#endif
 
 	prefetchw(rx_buffer->page);
 	*skb = rx_buffer->skb;
@@ -215,7 +221,8 @@ skip_sync:
 
 static void wx_put_rx_buffer(struct wx_ring *rx_ring,
 			     struct wx_rx_buffer *rx_buffer,
-			     struct sk_buff *skb)
+			     struct sk_buff *skb,
+			     int rx_buffer_pgcnt)
 {
 	/* clear contents of rx_buffer */
 	rx_buffer->page = NULL;
@@ -678,6 +685,7 @@ static int wx_clean_rx_irq(struct wx_q_vector *q_vector,
 		struct wx_rx_buffer *rx_buffer;
 		union wx_rx_desc *rx_desc;
 		struct sk_buff *skb;
+		int rx_buffer_pgcnt;
 
 		/* return some buffers to hardware, one at a time is too slow */
 		if (cleaned_count >= WX_RX_BUFFER_WRITE) {
@@ -695,7 +703,7 @@ static int wx_clean_rx_irq(struct wx_q_vector *q_vector,
 		 */
 		dma_rmb();
 
-		rx_buffer = wx_get_rx_buffer(rx_ring, rx_desc, &skb);
+		rx_buffer = wx_get_rx_buffer(rx_ring, rx_desc, &skb, &rx_buffer_pgcnt);
 
 		/* retrieve a buffer from the ring */
 		skb = wx_build_skb(rx_ring, rx_buffer, rx_desc);
@@ -706,7 +714,7 @@ static int wx_clean_rx_irq(struct wx_q_vector *q_vector,
 			break;
 		}
 
-		wx_put_rx_buffer(rx_ring, rx_buffer, skb);
+		wx_put_rx_buffer(rx_ring, rx_buffer, skb, rx_buffer_pgcnt);
 		cleaned_count++;
 
 		/* place incomplete frames back on ring for completion */
@@ -743,37 +751,6 @@ static struct netdev_queue *wx_txring_txq(const struct wx_ring *ring)
 	return netdev_get_tx_queue(ring->netdev, ring->queue_index);
 }
 
-static u32 wx_get_tx_pending(struct wx_ring *ring)
-{
-	unsigned int head, tail;
-
-	head = ring->next_to_clean;
-	tail = ring->next_to_use;
-
-	return ((head <= tail) ? tail : tail + ring->count) - head;
-}
-
-static bool wx_check_tx_hang(struct wx_ring *ring)
-{
-	u32 tx_done_old = ring->tx_stats.tx_done_old;
-	u32 tx_pending = wx_get_tx_pending(ring);
-	u32 tx_done = ring->stats.packets;
-
-	if (!test_and_clear_bit(WX_TX_DETECT_HANG, ring->state))
-		return false;
-
-	if (tx_done_old == tx_done && tx_pending)
-		/* make sure it is true for two checks in a row */
-		return test_and_set_bit(WX_HANG_CHECK_ARMED, ring->state);
-
-	/* update completed stats and continue */
-	ring->tx_stats.tx_done_old = tx_done;
-	/* reset the countdown */
-	clear_bit(WX_HANG_CHECK_ARMED, ring->state);
-
-	return false;
-}
-
 /**
  * wx_clean_tx_irq - Reclaim resources after transmit completes
  * @q_vector: structure containing interrupt and ring information
@@ -807,22 +784,9 @@ static bool wx_clean_tx_irq(struct wx_q_vector *q_vector,
 		/* prevent any other reads prior to eop_desc */
 		smp_rmb();
 
-		if (tx_ring->headwb_mem) {
-			u32 head = *tx_ring->headwb_mem;
-
-			if (head == tx_ring->next_to_clean)
-				break;
-			else if (head > tx_ring->next_to_clean &&
-				 !(tx_buffer->next_eop >= tx_ring->next_to_clean &&
-				   tx_buffer->next_eop < head))
-				break;
-			else if (!(tx_buffer->next_eop >= tx_ring->next_to_clean ||
-				   tx_buffer->next_eop < head))
-				break;
-		} else if (!(eop_desc->wb.status & cpu_to_le32(WX_TXD_STAT_DD))) {
-			/* if DD is not set pending work has not been completed */
+		/* if DD is not set pending work has not been completed */
+		if (!(eop_desc->wb.status & cpu_to_le32(WX_TXD_STAT_DD)))
 			break;
-		}
 
 		/* clear next_to_watch to prevent false hangs */
 		tx_buffer->next_to_watch = NULL;
@@ -897,11 +861,6 @@ static bool wx_clean_tx_irq(struct wx_q_vector *q_vector,
 
 	netdev_tx_completed_queue(wx_txring_txq(tx_ring),
 				  total_packets, total_bytes);
-
-	if (wx_check_tx_hang(tx_ring)) {
-		wx_handle_tx_hang(tx_ring, i);
-		return true;
-	}
 
 #define TX_WAKE_THRESHOLD (DESC_NEEDED * 2)
 	if (unlikely(total_packets && netif_carrier_ok(tx_ring->netdev) &&
@@ -1165,10 +1124,6 @@ static int wx_tx_map(struct wx_ring *tx_ring,
 	/* set next_to_watch value indicating a packet is present */
 	first->next_to_watch = tx_desc;
 
-	/* set next_eop for amlite tx head wb */
-	if (tx_ring->headwb_mem)
-		first->next_eop = i;
-
 	i++;
 	if (i == tx_ring->count)
 		i = 0;
@@ -1200,11 +1155,9 @@ dma_error:
 		i--;
 	}
 
-	/* first->skb is released by the caller, which keeps a reference on it
-	 * until the PTP cleanup has compared it against wx->ptp_tx_skb. That
-	 * prevents the address from being reused by a newer request while the
-	 * comparison is pending.
-	 */
+	dev_kfree_skb_any(first->skb);
+	first->skb = NULL;
+
 	tx_ring->next_to_use = i;
 
 	return -ENOMEM;
@@ -1651,11 +1604,9 @@ static netdev_tx_t wx_xmit_frame_ring(struct sk_buff *skb,
 
 	if (unlikely(skb_shinfo(skb)->tx_flags & SKBTX_HW_TSTAMP) &&
 	    wx->ptp_clock) {
-		unsigned long flags;
-
-		spin_lock_irqsave(&wx->ptp_tx_lock, flags);
 		if (wx->tstamp_config.tx_type == HWTSTAMP_TX_ON &&
-		    !test_and_set_bit(WX_STATE_PTP_TX_IN_PROGRESS, wx->state)) {
+		    !test_and_set_bit_lock(WX_STATE_PTP_TX_IN_PROGRESS,
+					   wx->state)) {
 			skb_shinfo(skb)->tx_flags |= SKBTX_IN_PROGRESS;
 			tx_flags |= WX_TX_FLAGS_TSTAMP;
 			wx->ptp_tx_skb = skb_get(skb);
@@ -1663,7 +1614,6 @@ static netdev_tx_t wx_xmit_frame_ring(struct sk_buff *skb,
 		} else {
 			wx->tx_hwtstamp_skipped++;
 		}
-		spin_unlock_irqrestore(&wx->ptp_tx_lock, flags);
 	}
 
 	/* record initial flags and protocol */
@@ -1682,35 +1632,19 @@ static netdev_tx_t wx_xmit_frame_ring(struct sk_buff *skb,
 		wx->atr(tx_ring, first, ptype);
 
 	if (wx_tx_map(tx_ring, first, hdr_len))
-		goto out_drop;
+		goto cleanup_tx_tstamp;
 
 	return NETDEV_TX_OK;
 out_drop:
-	/* The frame never reached the hardware, so no timestamp will ever be
-	 * reported for it and the request has to be cancelled. The slot is
-	 * shared, though: wx_ptp_clear_tx_timestamp() or wx_ptp_tx_hang() may
-	 * have dropped our request already, and a transmit on another queue
-	 * can have claimed the slot since. Only cancel it while it is still
-	 * ours, otherwise we would free somebody else's skb and release their
-	 * in-progress bit.
-	 */
-	if (unlikely(tx_flags & WX_TX_FLAGS_TSTAMP)) {
-		struct sk_buff *ptp_tx_skb = NULL;
-		unsigned long flags;
-
-		spin_lock_irqsave(&wx->ptp_tx_lock, flags);
-		if (wx->ptp_tx_skb == skb) {
-			ptp_tx_skb = wx->ptp_tx_skb;
-			wx->ptp_tx_skb = NULL;
-			clear_bit(WX_STATE_PTP_TX_IN_PROGRESS, wx->state);
-			wx->tx_hwtstamp_errors++;
-		}
-		spin_unlock_irqrestore(&wx->ptp_tx_lock, flags);
-
-		dev_kfree_skb_any(ptp_tx_skb);
-	}
 	dev_kfree_skb_any(first->skb);
 	first->skb = NULL;
+cleanup_tx_tstamp:
+	if (unlikely(tx_flags & WX_TX_FLAGS_TSTAMP)) {
+		dev_kfree_skb_any(wx->ptp_tx_skb);
+		wx->ptp_tx_skb = NULL;
+		wx->tx_hwtstamp_errors++;
+		clear_bit_unlock(WX_STATE_PTP_TX_IN_PROGRESS, wx->state);
+	}
 
 	return NETDEV_TX_OK;
 }
@@ -1966,14 +1900,16 @@ static int wx_acquire_msix_vectors(struct wx *wx)
 	nvecs = min_t(int, nvecs, num_online_cpus());
 	nvecs = min_t(int, nvecs, wx->mac.max_msix_vectors);
 
-	wx->msix_q_entries = kzalloc_objs(struct msix_entry, nvecs);
+	wx->msix_q_entries = kcalloc(nvecs, sizeof(struct msix_entry),
+				     GFP_KERNEL);
 	if (!wx->msix_q_entries)
 		return -ENOMEM;
 
 	/* One for non-queue interrupts */
 	nvecs += 1;
 
-	wx->msix_entry = kzalloc_objs(struct msix_entry, 1);
+	wx->msix_entry = kcalloc(1, sizeof(struct msix_entry),
+				 GFP_KERNEL);
 	if (!wx->msix_entry) {
 		kfree(wx->msix_q_entries);
 		wx->msix_q_entries = NULL;
@@ -2156,7 +2092,8 @@ static int wx_alloc_q_vector(struct wx *wx,
 	/* note this will allocate space for the ring structure as well! */
 	ring_count = txr_count + rxr_count;
 
-	q_vector = kzalloc_flex(*q_vector, ring, ring_count);
+	q_vector = kzalloc(struct_size(q_vector, ring, ring_count),
+			   GFP_KERNEL);
 	if (!q_vector)
 		return -ENOMEM;
 
@@ -2800,16 +2737,6 @@ void wx_clean_all_tx_rings(struct wx *wx)
 }
 EXPORT_SYMBOL(wx_clean_all_tx_rings);
 
-static void wx_free_headwb_resources(struct wx_ring *tx_ring)
-{
-	if (!tx_ring->headwb_mem)
-		return;
-
-	dma_free_coherent(tx_ring->dev, sizeof(u32),
-			  tx_ring->headwb_mem, tx_ring->headwb_dma);
-	tx_ring->headwb_mem = NULL;
-}
-
 /**
  * wx_free_tx_resources - Free Tx Resources per Queue
  * @tx_ring: Tx descriptor ring for a specific queue
@@ -2829,8 +2756,6 @@ static void wx_free_tx_resources(struct wx_ring *tx_ring)
 	dma_free_coherent(tx_ring->dev, tx_ring->size,
 			  tx_ring->desc, tx_ring->dma);
 	tx_ring->desc = NULL;
-
-	wx_free_headwb_resources(tx_ring);
 }
 
 /**
@@ -2970,24 +2895,6 @@ err_setup_rx:
 	return err;
 }
 
-static void wx_setup_headwb_resources(struct wx_ring *tx_ring)
-{
-	struct wx *wx = netdev_priv(tx_ring->netdev);
-
-	if (!test_bit(WX_FLAG_TXHEAD_WB_ENABLED, wx->flags))
-		return;
-
-	if (!tx_ring->q_vector)
-		return;
-
-	tx_ring->headwb_mem = dma_alloc_coherent(tx_ring->dev,
-						 sizeof(u32),
-						 &tx_ring->headwb_dma,
-						 GFP_KERNEL);
-	if (!tx_ring->headwb_mem)
-		dev_info(tx_ring->dev, "Allocate headwb memory failed, disable it\n");
-}
-
 /**
  * wx_setup_tx_resources - allocate Tx resources (Descriptors)
  * @tx_ring: tx descriptor ring (for a specific queue) to setup
@@ -3027,8 +2934,6 @@ static int wx_setup_tx_resources(struct wx_ring *tx_ring)
 
 	if (!tx_ring->desc)
 		goto err;
-
-	wx_setup_headwb_resources(tx_ring);
 
 	tx_ring->next_to_use = 0;
 	tx_ring->next_to_clean = 0;
@@ -3172,7 +3077,7 @@ int wx_set_features(struct net_device *netdev, netdev_features_t features)
 	netdev->features = features;
 
 	if (changed & NETIF_F_HW_VLAN_CTAG_RX && wx->do_reset)
-		wx->do_reset(netdev, true);
+		wx->do_reset(netdev);
 	else if (changed & (NETIF_F_HW_VLAN_CTAG_RX | NETIF_F_HW_VLAN_CTAG_FILTER))
 		wx_set_rx_mode(netdev);
 
@@ -3222,7 +3127,7 @@ int wx_set_features(struct net_device *netdev, netdev_features_t features)
 
 out:
 	if (need_reset && wx->do_reset)
-		wx->do_reset(netdev, true);
+		wx->do_reset(netdev);
 
 	return 0;
 }
@@ -3288,30 +3193,6 @@ netdev_features_t wx_features_check(struct sk_buff *skb,
 				    netdev_features_t features)
 {
 	struct wx *wx = netdev_priv(netdev);
-	__be16 type = skb->protocol;
-	u16 vlan_depth = ETH_HLEN;
-	u32 vlan_num = 0;
-
-	if (skb_vlan_tag_present(skb))
-		vlan_num++;
-
-	while (eth_type_vlan(type)) {
-		struct vlan_hdr vhdr, *vh;
-
-		vh = skb_header_pointer(skb, vlan_depth, sizeof(vhdr), &vhdr);
-		if (unlikely(!vh))
-			break;
-
-		type = vh->h_vlan_encapsulated_proto;
-		vlan_depth += VLAN_HLEN;
-		vlan_num++;
-
-		if (vlan_num > 2) {
-			features &= ~(NETIF_F_HW_VLAN_CTAG_TX |
-				      NETIF_F_HW_VLAN_STAG_TX);
-			break;
-		}
-	}
 
 	if (!skb->encapsulation)
 		return features;
@@ -3333,8 +3214,8 @@ netdev_features_t wx_features_check(struct sk_buff *skb,
 }
 EXPORT_SYMBOL(wx_features_check);
 
-int wx_set_ring(struct wx *wx, u32 new_tx_count,
-		u32 new_rx_count, struct wx_ring *temp_ring)
+void wx_set_ring(struct wx *wx, u32 new_tx_count,
+		 u32 new_rx_count, struct wx_ring *temp_ring)
 {
 	int i, err = 0;
 
@@ -3356,7 +3237,7 @@ int wx_set_ring(struct wx *wx, u32 new_tx_count,
 					i--;
 					wx_free_tx_resources(&temp_ring[i]);
 				}
-				return err;
+				return;
 			}
 		}
 
@@ -3384,7 +3265,7 @@ int wx_set_ring(struct wx *wx, u32 new_tx_count,
 					i--;
 					wx_free_rx_resources(&temp_ring[i]);
 				}
-				return err;
+				return;
 			}
 		}
 
@@ -3396,7 +3277,6 @@ int wx_set_ring(struct wx *wx, u32 new_tx_count,
 
 		wx->rx_ring_count = new_rx_count;
 	}
-	return 0;
 }
 EXPORT_SYMBOL(wx_set_ring);
 
@@ -3430,24 +3310,6 @@ void wx_service_timer(struct timer_list *t)
 	wx_service_event_schedule(wx);
 }
 EXPORT_SYMBOL(wx_service_timer);
-
-void wx_soft_quiesce(struct wx *wx)
-{
-	if (!netif_running(wx->netdev) ||
-	    test_and_set_bit(WX_STATE_DOWN, wx->state))
-		return;
-
-	pci_clear_master(wx->pdev);
-	netif_tx_stop_all_queues(wx->netdev);
-	netif_carrier_off(wx->netdev);
-	netif_tx_disable(wx->netdev);
-	wx_napi_disable_all(wx);
-	wx_ptp_quiesce(wx);
-
-	clear_bit(WX_FLAG_NEED_DO_RESET, wx->flags);
-	timer_delete_sync(&wx->service_timer);
-}
-EXPORT_SYMBOL(wx_soft_quiesce);
 
 MODULE_DESCRIPTION("Common library for Wangxun(R) Ethernet drivers.");
 MODULE_LICENSE("GPL");

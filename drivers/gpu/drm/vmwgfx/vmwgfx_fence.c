@@ -47,8 +47,7 @@ struct vmw_event_fence_action {
 static struct vmw_fence_manager *
 fman_from_fence(struct vmw_fence_obj *fence)
 {
-	return container_of(fence->base.extern_lock, struct vmw_fence_manager,
-			    lock);
+	return container_of(fence->base.lock, struct vmw_fence_manager, lock);
 }
 
 static void vmw_fence_obj_destroy(struct dma_fence *f)
@@ -130,7 +129,7 @@ static const struct dma_fence_ops vmw_fence_ops = {
 
 struct vmw_fence_manager *vmw_fence_manager_init(struct vmw_private *dev_priv)
 {
-	struct vmw_fence_manager *fman = kzalloc_obj(*fman);
+	struct vmw_fence_manager *fman = kzalloc(sizeof(*fman), GFP_KERNEL);
 
 	if (unlikely(!fman))
 		return NULL;
@@ -252,7 +251,7 @@ int vmw_fence_create(struct vmw_fence_manager *fman,
 	struct vmw_fence_obj *fence;
 	int ret;
 
-	fence = kzalloc_obj(*fence);
+	fence = kzalloc(sizeof(*fence), GFP_KERNEL);
 	if (unlikely(!fence))
 		return -ENOMEM;
 
@@ -299,7 +298,7 @@ int vmw_user_fence_create(struct drm_file *file_priv,
 	struct vmw_fence_obj *tmp;
 	int ret;
 
-	ufence = kzalloc_obj(*ufence);
+	ufence = kzalloc(sizeof(*ufence), GFP_KERNEL);
 	if (unlikely(!ufence)) {
 		ret = -ENOMEM;
 		goto out_no_object;
@@ -527,12 +526,12 @@ int vmw_fence_obj_unref_ioctl(struct drm_device *dev, void *data,
 /**
  * vmw_event_fence_action_seq_passed
  *
- * @f: The struct dma_fence which provides timestamp for the action event
- * @cb: The struct dma_fence_cb callback for the action event.
+ * @action: The struct vmw_fence_action embedded in a struct
+ * vmw_event_fence_action.
  *
- * This function is called when the seqno of the fence has passed
- * and it is always called from atomic context.
- * It queues the event on the submitter's event list.
+ * This function is called when the seqno of the fence where @action is
+ * attached has passed. It queues the event on the submitter's event list.
+ * This function is always called from atomic context.
  */
 static void vmw_event_fence_action_seq_passed(struct dma_fence *f,
 					      struct dma_fence_cb *cb)
@@ -592,7 +591,7 @@ int vmw_event_fence_action_queue(struct drm_file *file_priv,
 	struct vmw_event_fence_action *eaction;
 	struct vmw_fence_manager *fman = fman_from_fence(fence);
 
-	eaction = kzalloc_obj(*eaction);
+	eaction = kzalloc(sizeof(*eaction), GFP_KERNEL);
 	if (unlikely(!eaction))
 		return -ENOMEM;
 
@@ -624,7 +623,7 @@ static int vmw_event_fence_action_create(struct drm_file *file_priv,
 	struct drm_device *dev = &fman->dev_priv->drm;
 	int ret;
 
-	event = kzalloc_obj(*event);
+	event = kzalloc(sizeof(*event), GFP_KERNEL);
 	if (unlikely(!event)) {
 		DRM_ERROR("Failed to allocate an event.\n");
 		ret = -ENOMEM;

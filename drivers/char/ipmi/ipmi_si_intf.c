@@ -39,7 +39,6 @@
 #include <linux/rcupdate.h>
 #include <linux/ipmi.h>
 #include <linux/ipmi_smi.h>
-#include <linux/workqueue.h>
 #include "ipmi_si.h"
 #include "ipmi_si_sm.h"
 #include <linux/string.h>
@@ -253,8 +252,6 @@ struct smi_info {
 
 	struct task_struct *thread;
 
-	struct work_struct init_work;
-
 	struct list_head link;
 };
 
@@ -275,7 +272,6 @@ static bool unload_when_empty = true;
 static int try_smi_init(struct smi_info *smi);
 static void cleanup_one_si(struct smi_info *smi_info);
 static void cleanup_ipmi_si(void);
-static void smi_init_work_fn(struct work_struct *work);
 
 #ifdef DEBUG_TIMING
 void debug_timestamp(struct smi_info *smi_info, char *msg)
@@ -283,7 +279,8 @@ void debug_timestamp(struct smi_info *smi_info, char *msg)
 	struct timespec64 t;
 
 	ktime_get_ts64(&t);
-	dev_dbg(smi_info->io.dev, "**%s: %ptSp\n", msg, &t);
+	dev_dbg(smi_info->io.dev, "**%s: %lld.%9.9ld\n",
+		msg, t.tv_sec, t.tv_nsec);
 }
 #else
 #define debug_timestamp(smi_info, x)
@@ -1970,11 +1967,10 @@ int ipmi_si_add_smi(struct si_sm_io *io)
 		}
 	}
 
-	new_smi = kzalloc_obj(*new_smi);
+	new_smi = kzalloc(sizeof(*new_smi), GFP_KERNEL);
 	if (!new_smi)
 		return -ENOMEM;
 	spin_lock_init(&new_smi->si_lock);
-	INIT_WORK(&new_smi->init_work, smi_init_work_fn);
 
 	new_smi->io = *io;
 
@@ -1987,12 +1983,7 @@ int ipmi_si_add_smi(struct si_sm_io *io)
 			dev_info(dup->io.dev,
 				 "Removing SMBIOS-specified %s state machine in favor of ACPI\n",
 				 si_to_str[new_smi->io.si_info->type]);
-			list_del(&dup->link);
-			mutex_unlock(&smi_infos_lock);
-
 			cleanup_one_si(dup);
-
-			mutex_lock(&smi_infos_lock);
 		} else {
 			dev_info(new_smi->io.dev,
 				 "%s-specified %s state machine: duplicate\n",
@@ -2010,12 +2001,8 @@ int ipmi_si_add_smi(struct si_sm_io *io)
 
 	list_add_tail(&new_smi->link, &smi_infos);
 
-	if (initialized) {
-		if (IS_ENABLED(CONFIG_IPMI_SI_ASYNC_INIT))
-			queue_work(system_dfl_wq, &new_smi->init_work);
-		else
-			rv = try_smi_init(new_smi);
-	}
+	if (initialized)
+		rv = try_smi_init(new_smi);
 out_err:
 	mutex_unlock(&smi_infos_lock);
 	return rv;
@@ -2188,15 +2175,6 @@ static bool __init ipmi_smi_info_same(struct smi_info *e1, struct smi_info *e2)
 		e1->io.addr_data == e2->io.addr_data);
 }
 
-static void smi_init_work_fn(struct work_struct *work)
-{
-	struct smi_info *smi = container_of(work, struct smi_info, init_work);
-
-	mutex_lock(&smi_infos_lock);
-	try_smi_init(smi);
-	mutex_unlock(&smi_infos_lock);
-}
-
 static int __init init_ipmi_si(void)
 {
 	struct smi_info *e, *e2;
@@ -2242,12 +2220,8 @@ static int __init init_ipmi_si(void)
 				break;
 			}
 		}
-		if (!dup) {
-			if (IS_ENABLED(CONFIG_IPMI_SI_ASYNC_INIT))
-				queue_work(system_unbound_wq, &e->init_work);
-			else
-				try_smi_init(e);
-		}
+		if (!dup)
+			try_smi_init(e);
 	}
 
 	/*
@@ -2280,12 +2254,8 @@ static int __init init_ipmi_si(void)
 				break;
 			}
 		}
-		if (!dup) {
-			if (IS_ENABLED(CONFIG_IPMI_SI_ASYNC_INIT))
-				queue_work(system_unbound_wq, &e->init_work);
-			else
-				try_smi_init(e);
-		}
+		if (!dup)
+			try_smi_init(e);
 	}
 
 	initialized = true;
@@ -2375,36 +2345,31 @@ static void shutdown_smi(void *send_info)
 }
 
 /*
- * Must be called with smi_info unlinked from smi_infos and smi_infos_lock released.
+ * Must be called with smi_infos_lock held, to serialize the
+ * smi_info->intf check.
  */
 static void cleanup_one_si(struct smi_info *smi_info)
 {
 	if (!smi_info)
 		return;
 
-	if (IS_ENABLED(CONFIG_IPMI_SI_ASYNC_INIT))
-		cancel_work_sync(&smi_info->init_work);
-
+	list_del(&smi_info->link);
 	ipmi_unregister_smi(smi_info->intf);
 	kfree(smi_info);
 }
 
 void ipmi_si_remove_by_dev(struct device *dev)
 {
-	struct smi_info *e = NULL, *tmp;
+	struct smi_info *e;
 
 	mutex_lock(&smi_infos_lock);
-	list_for_each_entry(tmp, &smi_infos, link) {
-		if (tmp->io.dev == dev) {
-			e = tmp;
-			list_del(&e->link);
+	list_for_each_entry(e, &smi_infos, link) {
+		if (e->io.dev == dev) {
+			cleanup_one_si(e);
 			break;
 		}
 	}
 	mutex_unlock(&smi_infos_lock);
-
-	if (e)
-		cleanup_one_si(e);
 }
 
 struct device *ipmi_si_remove_by_data(int addr_space, enum si_type si_type,
@@ -2413,7 +2378,6 @@ struct device *ipmi_si_remove_by_data(int addr_space, enum si_type si_type,
 	/* remove */
 	struct smi_info *e, *tmp_e;
 	struct device *dev = NULL;
-	LIST_HEAD(to_clean);
 
 	mutex_lock(&smi_infos_lock);
 	list_for_each_entry_safe(e, tmp_e, &smi_infos, link) {
@@ -2423,15 +2387,10 @@ struct device *ipmi_si_remove_by_data(int addr_space, enum si_type si_type,
 			continue;
 		if (e->io.addr_data == addr) {
 			dev = get_device(e->io.dev);
-			list_move_tail(&e->link, &to_clean);
+			cleanup_one_si(e);
 		}
 	}
 	mutex_unlock(&smi_infos_lock);
-
-	list_for_each_entry_safe(e, tmp_e, &to_clean, link) {
-		list_del(&e->link);
-		cleanup_one_si(e);
-	}
 
 	return dev;
 }
@@ -2439,7 +2398,6 @@ struct device *ipmi_si_remove_by_data(int addr_space, enum si_type si_type,
 static void cleanup_ipmi_si(void)
 {
 	struct smi_info *e, *tmp_e;
-	LIST_HEAD(to_clean);
 
 	if (!initialized)
 		return;
@@ -2453,13 +2411,9 @@ static void cleanup_ipmi_si(void)
 	ipmi_si_platform_shutdown();
 
 	mutex_lock(&smi_infos_lock);
-	list_splice_init(&smi_infos, &to_clean);
-	mutex_unlock(&smi_infos_lock);
-
-	list_for_each_entry_safe(e, tmp_e, &to_clean, link) {
-		list_del(&e->link);
+	list_for_each_entry_safe(e, tmp_e, &smi_infos, link)
 		cleanup_one_si(e);
-	}
+	mutex_unlock(&smi_infos_lock);
 
 	ipmi_si_hardcode_exit();
 	ipmi_si_hotmod_exit();

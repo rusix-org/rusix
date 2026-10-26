@@ -141,6 +141,7 @@ bool can_boost(struct insn *insn, void *addr)
 {
 	kprobe_opcode_t opcode;
 	insn_byte_t prefix;
+	int i;
 
 	if (search_exception_tables((unsigned long)addr))
 		return false;	/* Page fault may occur on this address. */
@@ -153,7 +154,7 @@ bool can_boost(struct insn *insn, void *addr)
 	if (insn->opcode.nbytes != 1)
 		return false;
 
-	for_each_insn_prefix(insn, prefix) {
+	for_each_insn_prefix(insn, i, prefix) {
 		insn_attr_t attr;
 
 		attr = inat_get_opcode_attribute(prefix);
@@ -760,6 +761,9 @@ static int arch_copy_kprobe(struct kprobe *p)
 int arch_prepare_kprobe(struct kprobe *p)
 {
 	int ret;
+
+	if (alternatives_text_reserved(p->addr, p->addr))
+		return -EINVAL;
 
 	if (!can_probe((unsigned long)p->addr))
 		return -EILSEQ;

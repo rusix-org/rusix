@@ -270,11 +270,13 @@ mvebu_corediv_clk_init(struct device_node *node,
 	clk_data.clk_num = soc_desc->ndescs;
 
 	/* clks holds the clock array */
-	clks = kzalloc_objs(struct clk *, clk_data.clk_num);
+	clks = kcalloc(clk_data.clk_num, sizeof(struct clk *),
+				GFP_KERNEL);
 	if (WARN_ON(!clks))
 		goto err_unmap;
 	/* corediv holds the clock specific array */
-	corediv = kzalloc_objs(struct clk_corediv, clk_data.clk_num);
+	corediv = kcalloc(clk_data.clk_num, sizeof(struct clk_corediv),
+				GFP_KERNEL);
 	if (WARN_ON(!corediv))
 		goto err_free_clks;
 

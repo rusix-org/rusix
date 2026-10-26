@@ -26,7 +26,7 @@ struct ccp_cmd;
 /**
  * ccp_present - check if a CCP device is present
  *
- * Returns: zero if a CCP device is present, -ENODEV otherwise.
+ * Returns zero if a CCP device is present, -ENODEV otherwise.
  */
 int ccp_present(void);
 
@@ -38,7 +38,7 @@ int ccp_present(void);
 /**
  * ccp_version - get the version of the CCP
  *
- * Returns: a positive version number, or zero if no CCP
+ * Returns a positive version number, or zero if no CCP
  */
 unsigned int ccp_version(void);
 
@@ -61,9 +61,9 @@ unsigned int ccp_version(void);
  * will be -EINPROGRESS. Any other "err" value during callback is
  * the result of the operation.
  *
- * Returns: The cmd has been successfully queued if:
- * * the return code is -EINPROGRESS or
- * * the return code is -EBUSY and CCP_CMD_MAY_BACKLOG flag is set
+ * The cmd has been successfully queued if:
+ *   the return code is -EINPROGRESS or
+ *   the return code is -EBUSY and CCP_CMD_MAY_BACKLOG flag is set
  */
 int ccp_enqueue_cmd(struct ccp_cmd *cmd);
 
@@ -89,7 +89,7 @@ static inline int ccp_enqueue_cmd(struct ccp_cmd *cmd)
 
 /***** AES engine *****/
 /**
- * enum ccp_aes_type - AES key size
+ * ccp_aes_type - AES key size
  *
  * @CCP_AES_TYPE_128: 128-bit key
  * @CCP_AES_TYPE_192: 192-bit key
@@ -99,12 +99,11 @@ enum ccp_aes_type {
 	CCP_AES_TYPE_128 = 0,
 	CCP_AES_TYPE_192,
 	CCP_AES_TYPE_256,
-	/* private: */
 	CCP_AES_TYPE__LAST,
 };
 
 /**
- * enum ccp_aes_mode - AES operation mode
+ * ccp_aes_mode - AES operation mode
  *
  * @CCP_AES_MODE_ECB: ECB mode
  * @CCP_AES_MODE_CBC: CBC mode
@@ -112,10 +111,6 @@ enum ccp_aes_type {
  * @CCP_AES_MODE_CFB: CFB mode
  * @CCP_AES_MODE_CTR: CTR mode
  * @CCP_AES_MODE_CMAC: CMAC mode
- * @CCP_AES_MODE_GHASH: GHASH mode
- * @CCP_AES_MODE_GCTR: GCTR mode
- * @CCP_AES_MODE_GCM: GCM mode
- * @CCP_AES_MODE_GMAC: GMAC mode
  */
 enum ccp_aes_mode {
 	CCP_AES_MODE_ECB = 0,
@@ -128,12 +123,11 @@ enum ccp_aes_mode {
 	CCP_AES_MODE_GCTR,
 	CCP_AES_MODE_GCM,
 	CCP_AES_MODE_GMAC,
-	/* private: */
 	CCP_AES_MODE__LAST,
 };
 
 /**
- * enum ccp_aes_action - AES operation mode
+ * ccp_aes_mode - AES operation mode
  *
  * @CCP_AES_ACTION_DECRYPT: AES decrypt operation
  * @CCP_AES_ACTION_ENCRYPT: AES encrypt operation
@@ -141,7 +135,6 @@ enum ccp_aes_mode {
 enum ccp_aes_action {
 	CCP_AES_ACTION_DECRYPT = 0,
 	CCP_AES_ACTION_ENCRYPT,
-	/* private: */
 	CCP_AES_ACTION__LAST,
 };
 /* Overloaded field */
@@ -153,7 +146,6 @@ enum ccp_aes_action {
  * @type: AES operation key size
  * @mode: AES operation mode
  * @action: AES operation (decrypt/encrypt)
- * @authsize: AES block request size
  * @key: key to be used for this AES operation
  * @key_len: length in bytes of key
  * @iv: IV to be used for this AES operation
@@ -164,7 +156,6 @@ enum ccp_aes_action {
  * @cmac_final: indicates final operation when running in CMAC mode
  * @cmac_key: K1/K2 key used in final CMAC operation
  * @cmac_key_len: length in bytes of cmac_key
- * @aad_len: length in bytes of Additional Authenticated Data
  *
  * Variables required to be set when calling ccp_enqueue_cmd():
  *   - type, mode, action, key, key_len, src, dst, src_len
@@ -201,7 +192,7 @@ struct ccp_aes_engine {
 
 /***** XTS-AES engine *****/
 /**
- * enum ccp_xts_aes_unit_size - XTS unit size
+ * ccp_xts_aes_unit_size - XTS unit size
  *
  * @CCP_XTS_AES_UNIT_SIZE_16: Unit size of 16 bytes
  * @CCP_XTS_AES_UNIT_SIZE_512: Unit size of 512 bytes
@@ -215,13 +206,11 @@ enum ccp_xts_aes_unit_size {
 	CCP_XTS_AES_UNIT_SIZE_1024,
 	CCP_XTS_AES_UNIT_SIZE_2048,
 	CCP_XTS_AES_UNIT_SIZE_4096,
-	/* private: */
 	CCP_XTS_AES_UNIT_SIZE__LAST,
 };
 
 /**
  * struct ccp_xts_aes_engine - CCP XTS AES operation
- * @type: ccp_aes_type - AES key size
  * @action: AES operation (decrypt/encrypt)
  * @unit_size: unit size of the XTS operation
  * @key: key to be used for this XTS AES operation
@@ -258,13 +247,11 @@ struct ccp_xts_aes_engine {
 
 /***** SHA engine *****/
 /**
- * enum ccp_sha_type - type of SHA operation
+ * ccp_sha_type - type of SHA operation
  *
  * @CCP_SHA_TYPE_1: SHA-1 operation
  * @CCP_SHA_TYPE_224: SHA-224 operation
  * @CCP_SHA_TYPE_256: SHA-256 operation
- * @CCP_SHA_TYPE_384: SHA-384 operation
- * @CCP_SHA_TYPE_512: SHA-512 operation
  */
 enum ccp_sha_type {
 	CCP_SHA_TYPE_1 = 1,
@@ -272,7 +259,6 @@ enum ccp_sha_type {
 	CCP_SHA_TYPE_256,
 	CCP_SHA_TYPE_384,
 	CCP_SHA_TYPE_512,
-	/* private: */
 	CCP_SHA_TYPE__LAST,
 };
 
@@ -398,7 +384,7 @@ struct ccp_rsa_engine {
 
 /***** Passthru engine *****/
 /**
- * enum ccp_passthru_bitwise - type of bitwise passthru operation
+ * ccp_passthru_bitwise - type of bitwise passthru operation
  *
  * @CCP_PASSTHRU_BITWISE_NOOP: no bitwise operation performed
  * @CCP_PASSTHRU_BITWISE_AND: perform bitwise AND of src with mask
@@ -412,12 +398,11 @@ enum ccp_passthru_bitwise {
 	CCP_PASSTHRU_BITWISE_OR,
 	CCP_PASSTHRU_BITWISE_XOR,
 	CCP_PASSTHRU_BITWISE_MASK,
-	/* private: */
 	CCP_PASSTHRU_BITWISE__LAST,
 };
 
 /**
- * enum ccp_passthru_byteswap - type of byteswap passthru operation
+ * ccp_passthru_byteswap - type of byteswap passthru operation
  *
  * @CCP_PASSTHRU_BYTESWAP_NOOP: no byte swapping performed
  * @CCP_PASSTHRU_BYTESWAP_32BIT: swap bytes within 32-bit words
@@ -427,7 +412,6 @@ enum ccp_passthru_byteswap {
 	CCP_PASSTHRU_BYTESWAP_NOOP = 0,
 	CCP_PASSTHRU_BYTESWAP_32BIT,
 	CCP_PASSTHRU_BYTESWAP_256BIT,
-	/* private: */
 	CCP_PASSTHRU_BYTESWAP__LAST,
 };
 
@@ -466,8 +450,8 @@ struct ccp_passthru_engine {
  * @byte_swap: byteswap operation to perform
  * @mask: mask to be applied to data
  * @mask_len: length in bytes of mask
- * @src_dma: data to be used for this operation
- * @dst_dma: data produced by this operation
+ * @src: data to be used for this operation
+ * @dst: data produced by this operation
  * @src_len: length in bytes of data used for this operation
  * @final: indicate final pass-through operation
  *
@@ -494,7 +478,7 @@ struct ccp_passthru_nomap_engine {
 #define CCP_ECC_MAX_OUTPUTS	3
 
 /**
- * enum ccp_ecc_function - type of ECC function
+ * ccp_ecc_function - type of ECC function
  *
  * @CCP_ECC_FUNCTION_MMUL_384BIT: 384-bit modular multiplication
  * @CCP_ECC_FUNCTION_MADD_384BIT: 384-bit modular addition
@@ -580,9 +564,8 @@ struct ccp_ecc_point_math {
  * @function: ECC function to perform
  * @mod: ECC modulus
  * @mod_len: length in bytes of modulus
- * @u: union for math parameters
- * @u.mm: module math parameters
- * @u.pm: point math parameters
+ * @mm: module math parameters
+ * @pm: point math parameters
  * @ecc_result: result of the ECC operation
  *
  * Variables required to be set when calling ccp_enqueue_cmd():
@@ -606,11 +589,11 @@ struct ccp_ecc_engine {
 
 
 /**
- * enum ccp_engine - CCP operation identifiers
+ * ccp_engine - CCP operation identifiers
  *
  * @CCP_ENGINE_AES: AES operation
- * @CCP_ENGINE_XTS_AES_128: 128-bit XTS AES operation
- * @CCP_ENGINE_DES3: 3DES operation
+ * @CCP_ENGINE_XTS_AES: 128-bit XTS AES operation
+ * @CCP_ENGINE_RSVD1: unused
  * @CCP_ENGINE_SHA: SHA operation
  * @CCP_ENGINE_RSA: RSA operation
  * @CCP_ENGINE_PASSTHRU: pass-through operation
@@ -626,7 +609,6 @@ enum ccp_engine {
 	CCP_ENGINE_PASSTHRU,
 	CCP_ENGINE_ZLIB_DECOMPRESS,
 	CCP_ENGINE_ECC,
-	/* private: */
 	CCP_ENGINE__LAST,
 };
 

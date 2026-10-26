@@ -588,7 +588,7 @@ static int h264_enc_init(struct mtk_vcodec_enc_ctx *ctx)
 	int ret = 0;
 	struct venc_h264_inst *inst;
 
-	inst = kzalloc_obj(*inst);
+	inst = kzalloc(sizeof(*inst), GFP_KERNEL);
 	if (!inst)
 		return -ENOMEM;
 

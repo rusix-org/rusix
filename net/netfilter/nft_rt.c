@@ -8,7 +8,6 @@
 #include <linux/netfilter.h>
 #include <linux/netfilter/nf_tables.h>
 #include <net/dst.h>
-#include <net/dst_metadata.h>
 #include <net/ip6_route.h>
 #include <net/route.h>
 #include <net/netfilter/nf_tables.h>
@@ -60,10 +59,9 @@ void nft_rt_get_eval(const struct nft_expr *expr,
 	u32 *dest = &regs->data[priv->dreg];
 	const struct dst_entry *dst;
 
-	if (!skb_valid_dst(skb))
-		goto err;
-
 	dst = skb_dst(skb);
+	if (!dst)
+		goto err;
 
 	switch (priv->key) {
 #ifdef CONFIG_IP_ROUTE_CLASSID
@@ -95,7 +93,7 @@ void nft_rt_get_eval(const struct nft_expr *expr,
 		break;
 #endif
 	default:
-		DEBUG_NET_WARN_ON_ONCE(1);
+		WARN_ON(1);
 		goto err;
 	}
 	return;
@@ -105,7 +103,7 @@ err:
 }
 
 static const struct nla_policy nft_rt_policy[NFTA_RT_MAX + 1] = {
-	[NFTA_RT_DREG]		= NLA_POLICY_MAX(NLA_BE32, NFT_REG32_MAX),
+	[NFTA_RT_DREG]		= { .type = NLA_U32 },
 	[NFTA_RT_KEY]		= NLA_POLICY_MAX(NLA_BE32, 255),
 };
 

@@ -192,6 +192,7 @@ static ssize_t b43legacy_debugfs_read(struct file *file, char __user *userbuf,
 	ssize_t ret;
 	char *buf;
 	const size_t bufsize = 1024 * 16; /* 16 KiB buffer */
+	const size_t buforder = get_order(bufsize);
 	int err = 0;
 
 	if (!count)
@@ -214,11 +215,12 @@ static ssize_t b43legacy_debugfs_read(struct file *file, char __user *userbuf,
 	dfile = fops_to_dfs_file(dev, dfops);
 
 	if (!dfile->buffer) {
-		buf = kzalloc(bufsize, GFP_KERNEL);
+		buf = (char *)__get_free_pages(GFP_KERNEL, buforder);
 		if (!buf) {
 			err = -ENOMEM;
 			goto out_unlock;
 		}
+		memset(buf, 0, bufsize);
 		if (dfops->take_irqlock) {
 			spin_lock_irq(&dev->wl->irq_lock);
 			ret = dfops->read(dev, buf, bufsize);
@@ -226,7 +228,7 @@ static ssize_t b43legacy_debugfs_read(struct file *file, char __user *userbuf,
 		} else
 			ret = dfops->read(dev, buf, bufsize);
 		if (ret <= 0) {
-			kfree(buf);
+			free_pages((unsigned long)buf, buforder);
 			err = ret;
 			goto out_unlock;
 		}
@@ -238,7 +240,7 @@ static ssize_t b43legacy_debugfs_read(struct file *file, char __user *userbuf,
 				      dfile->buffer,
 				      dfile->data_len);
 	if (*ppos >= dfile->data_len) {
-		kfree(dfile->buffer);
+		free_pages((unsigned long)dfile->buffer, buforder);
 		dfile->buffer = NULL;
 		dfile->data_len = 0;
 	}
@@ -259,7 +261,7 @@ static ssize_t b43legacy_debugfs_write(struct file *file,
 
 	if (!count)
 		return 0;
-	if (count >= PAGE_SIZE)
+	if (count > PAGE_SIZE)
 		return -E2BIG;
 	dev = file->private_data;
 	if (!dev)
@@ -277,7 +279,7 @@ static ssize_t b43legacy_debugfs_write(struct file *file,
 		goto out_unlock;
 	}
 
-	buf = kzalloc(PAGE_SIZE, GFP_KERNEL);
+	buf = (char *)get_zeroed_page(GFP_KERNEL);
 	if (!buf) {
 		err = -ENOMEM;
 		goto out_unlock;
@@ -296,7 +298,7 @@ static ssize_t b43legacy_debugfs_write(struct file *file,
 		goto out_freepage;
 
 out_freepage:
-	kfree(buf);
+	free_page((unsigned long)buf);
 out_unlock:
 	mutex_unlock(&dev->wl->mutex);
 
@@ -356,15 +358,15 @@ void b43legacy_debugfs_add_device(struct b43legacy_wldev *dev)
 	char devdir[16];
 
 	B43legacy_WARN_ON(!dev);
-	e = kzalloc_obj(*e);
+	e = kzalloc(sizeof(*e), GFP_KERNEL);
 	if (!e) {
 		b43legacyerr(dev->wl, "debugfs: add device OOM\n");
 		return;
 	}
 	e->dev = dev;
 	log = &e->txstatlog;
-	log->log = kzalloc_objs(struct b43legacy_txstatus,
-				B43legacy_NR_LOGGED_TXSTATUS);
+	log->log = kcalloc(B43legacy_NR_LOGGED_TXSTATUS,
+			   sizeof(struct b43legacy_txstatus), GFP_KERNEL);
 	if (!log->log) {
 		b43legacyerr(dev->wl, "debugfs: add device txstatus OOM\n");
 		kfree(e);

@@ -14,7 +14,7 @@
 #include <linux/page-flags.h>
 #include <linux/list.h>
 #include <linux/highmem.h>
-#include <linux/folio_batch.h>
+#include <linux/pagevec.h>
 #include <linux/gfp.h>
 #include "nilfs.h"
 #include "page.h"
@@ -154,7 +154,7 @@ void nilfs_folio_bug(struct folio *folio)
 {
 	struct buffer_head *bh, *head;
 	struct address_space *m;
-	u64 ino;
+	unsigned long ino;
 
 	if (unlikely(!folio)) {
 		printk(KERN_CRIT "NILFS_FOLIO_BUG(NULL)\n");
@@ -164,9 +164,10 @@ void nilfs_folio_bug(struct folio *folio)
 	m = folio->mapping;
 	ino = m ? m->host->i_ino : 0;
 
-	printk(KERN_CRIT "NILFS_FOLIO_BUG(%p): cnt=%d index#=%lu flags=0x%lx  mapping=%p ino=%llu\n",
-		folio, folio_ref_count(folio), folio->index, folio->flags.f,
-		m, ino);
+	printk(KERN_CRIT "NILFS_FOLIO_BUG(%p): cnt=%d index#=%llu flags=0x%lx "
+	       "mapping=%p ino=%lu\n",
+	       folio, folio_ref_count(folio),
+	       (unsigned long long)folio->index, folio->flags.f, m, ino);
 
 	head = folio_buffers(folio);
 	if (head) {
@@ -369,9 +370,8 @@ repeat:
 /**
  * nilfs_clear_dirty_pages - discard dirty pages in address space
  * @mapping: address space with dirty pages for discarding
- * @force: whether to clear the dirty state regardless of busy buffer heads
  */
-void nilfs_clear_dirty_pages(struct address_space *mapping, bool force)
+void nilfs_clear_dirty_pages(struct address_space *mapping)
 {
 	struct folio_batch fbatch;
 	unsigned int i;
@@ -392,7 +392,7 @@ void nilfs_clear_dirty_pages(struct address_space *mapping, bool force)
 			 * was acquired.  Skip processing in that case.
 			 */
 			if (likely(folio->mapping == mapping))
-				nilfs_clear_folio_dirty(folio, force);
+				nilfs_clear_folio_dirty(folio);
 
 			folio_unlock(folio);
 		}
@@ -404,16 +404,13 @@ void nilfs_clear_dirty_pages(struct address_space *mapping, bool force)
 /**
  * nilfs_clear_folio_dirty - discard dirty folio
  * @folio: dirty folio that will be discarded
- * @force: whether to clear the states regardless of busy buffer heads
  *
  * nilfs_clear_folio_dirty() clears working states including dirty state for
- * the folio and its buffers.  If the folio has buffers and force is false,
- * clear only if it is confirmed that none of the buffer heads are busy (none
- * have valid references and none are locked).  If force is true, the states
- * are cleared unconditionally, the caller should guarantee that the folio is
- * not being modified concurrently.
+ * the folio and its buffers.  If the folio has buffers, clear only if it is
+ * confirmed that none of the buffer heads are busy (none have valid
+ * references and none are locked).
  */
-void nilfs_clear_folio_dirty(struct folio *folio, bool force)
+void nilfs_clear_folio_dirty(struct folio *folio)
 {
 	struct buffer_head *bh, *head;
 
@@ -426,28 +423,24 @@ void nilfs_clear_folio_dirty(struct folio *folio, bool force)
 			 BIT(BH_Async_Write) | BIT(BH_NILFS_Volatile) |
 			 BIT(BH_NILFS_Checked) | BIT(BH_NILFS_Redirected) |
 			 BIT(BH_Delay));
-
-		if (!force) {
-			bool busy, invalidated = false;
+		bool busy, invalidated = false;
 
 recheck_buffers:
-			busy = false;
-			bh = head;
-			do {
-				if (atomic_read(&bh->b_count) |
-				    buffer_locked(bh)) {
-					busy = true;
-					break;
-				}
-			} while (bh = bh->b_this_page, bh != head);
-
-			if (busy) {
-				if (invalidated)
-					return;
-				invalidate_bh_lrus();
-				invalidated = true;
-				goto recheck_buffers;
+		busy = false;
+		bh = head;
+		do {
+			if (atomic_read(&bh->b_count) | buffer_locked(bh)) {
+				busy = true;
+				break;
 			}
+		} while (bh = bh->b_this_page, bh != head);
+
+		if (busy) {
+			if (invalidated)
+				return;
+			invalidate_bh_lrus();
+			invalidated = true;
+			goto recheck_buffers;
 		}
 
 		bh = head;

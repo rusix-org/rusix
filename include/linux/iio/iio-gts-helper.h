@@ -7,7 +7,6 @@
 #ifndef __IIO_GTS_HELPER__
 #define __IIO_GTS_HELPER__
 
-#include <linux/errno.h>
 #include <linux/types.h>
 
 struct device;
@@ -59,14 +58,14 @@ struct iio_itime_sel_mul {
 
 struct iio_gts {
 	u64 max_scale;
-	const struct iio_gain_sel_pair *hwgain_table __counted_by_ptr(num_hwgain);
+	const struct iio_gain_sel_pair *hwgain_table;
 	int num_hwgain;
-	const struct iio_itime_sel_mul *itime_table __counted_by_ptr(num_itime);
+	const struct iio_itime_sel_mul *itime_table;
 	int num_itime;
-	int **per_time_avail_scale_tables __counted_by_ptr(num_itime);
-	int *avail_all_scales_table __counted_by_ptr(num_avail_all_scales);
+	int **per_time_avail_scale_tables;
+	int *avail_all_scales_table;
 	int num_avail_all_scales;
-	int *avail_time_tables __counted_by_ptr(num_avail_time_tables);
+	int *avail_time_tables;
 	int num_avail_time_tables;
 };
 

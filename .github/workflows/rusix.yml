@@ -4,6 +4,13 @@ name: rusix verification
 # Keep this manual-only; normal verification runs locally in the pinned container.
 on:
   workflow_dispatch:
+    inputs:
+      profile:
+        description: One verification profile (hosted execution requires approval)
+        required: true
+        default: brd-rust
+        type: choice
+        options: [kunit, brd, brd-rust, brd-kunit, brd-ext4-c, brd-ext4-rust, server]
 
 permissions:
   contents: read
@@ -14,15 +21,11 @@ concurrency:
 
 jobs:
   verify:
-    name: x86_64 / ${{ matrix.profile }}
+    name: x86_64 / ${{ inputs.profile }}
     runs-on: ubuntu-24.04
     timeout-minutes: 60
-    strategy:
-      fail-fast: false
-      matrix:
-        profile: [kunit, brd, server]
     env:
-      RUSIX_CI_PROFILE: ${{ matrix.profile }}
+      RUSIX_CI_PROFILE: ${{ inputs.profile }}
     steps:
       - name: Prepare evidence directory
         shell: bash
@@ -35,7 +38,7 @@ jobs:
           fetch-depth: 1
           persist-credentials: false
       - name: Fetch pinned C reference
-        run: git fetch --no-tags --depth=1 origin 21a7f44fd0765fcc5194130b28767786eba1d1e7
+        run: git fetch --no-tags --depth=1 origin 2926d88bb7fc4608fd942453d929c39e4e5ec006
       - name: Build pinned toolchain image
         shell: bash
         run: |
@@ -44,18 +47,30 @@ jobs:
           docker build --platform linux/amd64 --progress plain \
             -t rusix-toolchain:ci rusix/ci 2>&1 \
             | tee "$RUSIX_CI_OUTPUT/logs/container-build.log"
+      - name: Build pinned ext4 utility image
+        if: startsWith(inputs.profile, 'brd-ext4-')
+        shell: bash
+        run: |
+          set -o pipefail
+          docker build --pull=false --build-arg TOOLCHAIN_IMAGE=rusix-toolchain:ci \
+            -t rusix-ext4:ci -f rusix/tests/brd-ext4/Dockerfile rusix/tests/brd-ext4 \
+            2>&1 | tee "$RUSIX_CI_OUTPUT/logs/ext4-container-build.log"
       - name: Build and test in container
         shell: bash
         run: |
           set -o pipefail
-          bash rusix/ci/run-container.sh rusix-toolchain:ci \
+          case "$RUSIX_CI_PROFILE" in
+            brd-ext4-*) image=rusix-ext4:ci ;;
+            *) image=rusix-toolchain:ci ;;
+          esac
+          bash rusix/ci/run-container.sh "$image" \
             "$RUSIX_CI_OUTPUT" "$RUSIX_CI_PROFILE" 2>&1 \
             | tee "$RUSIX_CI_OUTPUT/logs/ci-console.log"
       - name: Preserve evidence on success or failure
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: rusix-${{ matrix.profile }}-${{ github.run_id }}-${{ github.run_attempt }}
+          name: rusix-${{ inputs.profile }}-${{ github.run_id }}-${{ github.run_attempt }}
           retention-days: 30
           if-no-files-found: error
           path: |
@@ -63,5 +78,7 @@ jobs:
             ${{ env.RUSIX_CI_OUTPUT }}/builds/ci-*/arch/x86/boot/bzImage
             ${{ env.RUSIX_CI_OUTPUT }}/builds/brd-vm-*/init
             ${{ env.RUSIX_CI_OUTPUT }}/builds/brd-vm-*/initramfs.cpio
+            ${{ env.RUSIX_CI_OUTPUT }}/builds/ext4-vm-*/initramfs.cpio
+            ${{ env.RUSIX_CI_OUTPUT }}/builds/brd-parameters-vm-*/initramfs.cpio
             ${{ env.RUSIX_CI_OUTPUT }}/builds/ci-server/vmlinux
             ${{ env.RUSIX_CI_OUTPUT }}/builds/ci-server/vmlinux.map

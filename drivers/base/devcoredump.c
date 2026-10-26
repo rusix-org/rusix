@@ -381,7 +381,7 @@ void dev_coredumpm_timeout(struct device *dev, struct module *owner,
 	if (!try_module_get(owner))
 		goto free;
 
-	devcd = kzalloc_obj(*devcd, gfp);
+	devcd = kzalloc(sizeof(*devcd), gfp);
 	if (!devcd)
 		goto put_module;
 
@@ -471,3 +471,10 @@ static int __init devcoredump_init(void)
 	return class_register(&devcd_class);
 }
 __initcall(devcoredump_init);
+
+static void __exit devcoredump_exit(void)
+{
+	class_for_each_device(&devcd_class, NULL, NULL, devcd_free);
+	class_unregister(&devcd_class);
+}
+__exitcall(devcoredump_exit);

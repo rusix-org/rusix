@@ -73,31 +73,21 @@ struct sdw_msg {
 };
 
 /**
- * struct sdw_bpt_section - Message section structure
+ * struct sdw_btp_msg - Message structure
  * @addr: Start Register address accessed in the Slave
  * @len: number of bytes to transfer. More than 64Kb can be transferred
  * but a practical limit of SDW_BPT_MSG_MAX_BYTES is enforced.
- * @buf: section data buffer (filled by host for write, filled
- * by Peripheral hardware for reads)
- */
-struct sdw_bpt_section {
-	u32 addr;
-	u32 len;
-	u8 *buf;
-};
-
-/**
- * struct sdw_bpt_msg - Message structure
- * @sec: Pointer to array of sections
- * @sections: Number of sections in the array
  * @dev_num: Slave device number
  * @flags: transfer flags, indicate if xfer is read or write
+ * @buf: message data buffer (filled by host for write, filled
+ * by Peripheral hardware for reads)
  */
 struct sdw_bpt_msg {
-	struct sdw_bpt_section *sec;
-	int sections;
+	u32 addr;
+	u32 len;
 	u8 dev_num;
 	u8 flags;
+	u8 *buf;
 };
 
 #define SDW_DOUBLE_RATE_FACTOR		2
@@ -110,7 +100,7 @@ int sdw_find_row_index(int row);
 int sdw_find_col_index(int col);
 
 /**
- * struct sdw_port_runtime - Runtime port parameters for Master or Slave
+ * sdw_port_runtime: Runtime port parameters for Master or Slave
  *
  * @num: Port number. For audio streams, valid port number ranges from
  * [1,14]
@@ -133,7 +123,7 @@ struct sdw_port_runtime {
 };
 
 /**
- * struct sdw_slave_runtime - Runtime Stream parameters for Slave
+ * sdw_slave_runtime: Runtime Stream parameters for Slave
  *
  * @slave: Slave handle
  * @direction: Data direction for Slave
@@ -151,7 +141,7 @@ struct sdw_slave_runtime {
 };
 
 /**
- * struct sdw_master_runtime - Runtime stream parameters for Master
+ * sdw_master_runtime: Runtime stream parameters for Master
  *
  * @bus: Bus handle
  * @stream: Stream runtime handle

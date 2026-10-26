@@ -194,8 +194,7 @@ int kvm_pic_set_irq(struct kvm_kernel_irq_routing_entry *e, struct kvm *kvm,
 	int irq = e->irqchip.pin;
 	int ret, irq_level;
 
-	if (WARN_ON_ONCE(irq < 0 || irq >= PIC_NUM_PINS))
-		return -1;
+	BUG_ON(irq < 0 || irq >= PIC_NUM_PINS);
 
 	pic_lock(s);
 	irq_level = __kvm_irq_line_state(&s->irq_states[irq],
@@ -588,7 +587,7 @@ int kvm_pic_init(struct kvm *kvm)
 	struct kvm_pic *s;
 	int ret;
 
-	s = kzalloc_obj(struct kvm_pic, GFP_KERNEL_ACCOUNT);
+	s = kzalloc(sizeof(struct kvm_pic), GFP_KERNEL_ACCOUNT);
 	if (!s)
 		return -ENOMEM;
 	spin_lock_init(&s->lock);

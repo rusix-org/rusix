@@ -4,7 +4,6 @@
  */
 
 #include <linux/clk.h>
-#include <linux/devfreq.h>
 #include <linux/interconnect.h>
 #include <linux/pm_domain.h>
 #include <linux/pm_opp.h>
@@ -18,7 +17,6 @@
 
 int iris_set_icc_bw(struct iris_core *core, unsigned long icc_bw)
 {
-	u32 icc_ib_multiplier = core->iris_platform_data->icc_ib_multiplier;
 	unsigned long bw_kbps = 0, bw_prev = 0;
 	const struct icc_info *icc_tbl;
 	int ret = 0, i;
@@ -37,7 +35,6 @@ int iris_set_icc_bw(struct iris_core *core, unsigned long icc_bw)
 				return ret;
 
 			core->icc_tbl[i].avg_bw = bw_kbps;
-			core->icc_tbl[i].peak_bw = bw_kbps * icc_ib_multiplier;
 
 			core->power.icc_bw = bw_kbps;
 			break;
@@ -61,22 +58,11 @@ int iris_unset_icc_bw(struct iris_core *core)
 	return icc_bulk_set_bw(core->icc_count, core->icc_tbl);
 }
 
-int iris_opp_set_rate(struct device *dev, unsigned long freq)
-{
-	struct dev_pm_opp *opp __free(put_opp) =
-		devfreq_recommended_opp(dev, &freq, 0);
-
-	if (IS_ERR(opp))
-		return PTR_ERR(opp);
-
-	return dev_pm_opp_set_opp(dev, opp);
-}
-
 int iris_enable_power_domains(struct iris_core *core, struct device *pd_dev)
 {
 	int ret;
 
-	ret = iris_opp_set_rate(core->dev, ULONG_MAX);
+	ret = dev_pm_opp_set_rate(core->dev, ULONG_MAX);
 	if (ret)
 		return ret;
 
@@ -88,7 +74,7 @@ int iris_disable_power_domains(struct iris_core *core, struct device *pd_dev)
 	int ret;
 	int pm_ret;
 
-	ret = iris_opp_set_rate(core->dev, 0);
+	ret = dev_pm_opp_set_rate(core->dev, 0);
 
 	pm_ret = pm_runtime_put_sync(pd_dev);
 	if (!ret)
@@ -123,7 +109,7 @@ int iris_prepare_enable_clock(struct iris_core *core, enum platform_clk_type clk
 
 	clock = iris_get_clk_by_type(core, clk_type);
 	if (!clock)
-		return -ENOENT;
+		return -EINVAL;
 
 	return clk_prepare_enable(clock);
 }

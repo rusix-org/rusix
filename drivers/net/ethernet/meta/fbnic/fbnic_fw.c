@@ -212,7 +212,8 @@ static int fbnic_mbx_alloc_rx_msgs(struct fbnic_dev *fbd)
 	while (!err && count--) {
 		struct fbnic_tlv_msg *msg;
 
-		msg = (struct fbnic_tlv_msg *)__get_free_page(GFP_KERNEL);
+		msg = (struct fbnic_tlv_msg *)__get_free_page(GFP_ATOMIC |
+							      __GFP_NOWARN);
 		if (!msg) {
 			err = -ENOMEM;
 			break;
@@ -392,37 +393,6 @@ fbnic_fw_get_cmpl_by_type(struct fbnic_dev *fbd, u32 msg_type)
 }
 
 /**
- * fbnic_fw_xmit_test_msg - Create and transmit a test message to FW mailbox
- * @fbd: FBNIC device structure
- * @cmpl: fw completion struct
- *
- * Return: zero on success, negative value on failure
- *
- * Generates a single page mailbox test message and places it in the Tx
- * mailbox queue. Expectation is that the FW will validate that the nested
- * value matches the external values, and then will echo them back to us.
- *
- * Also sets a completion slot for use in the completion wait calls when
- * the cmpl arg is non-NULL.
- */
-int fbnic_fw_xmit_test_msg(struct fbnic_dev *fbd,
-			   struct fbnic_fw_completion *cmpl)
-{
-	struct fbnic_tlv_msg *test_msg;
-	int err;
-
-	test_msg = fbnic_tlv_test_create(fbd);
-	if (!test_msg)
-		return -ENOMEM;
-
-	err = fbnic_mbx_map_req_w_cmpl(fbd, test_msg, cmpl);
-	if (err)
-		free_page((unsigned long)test_msg);
-
-	return err;
-}
-
-/**
  * fbnic_fw_xmit_simple_msg - Transmit a simple single TLV message w/o data
  * @fbd: FBNIC device structure
  * @msg_type: ENUM value indicating message type to send
@@ -459,9 +429,8 @@ static int fbnic_fw_xmit_simple_msg(struct fbnic_dev *fbd, u32 msg_type)
 	return err;
 }
 
-static int fbnic_mbx_init_desc_ring(struct fbnic_dev *fbd, int mbx_idx)
+static void fbnic_mbx_init_desc_ring(struct fbnic_dev *fbd, int mbx_idx)
 {
-	u8 tlp_attr = fbd->relaxed_ord ? FBNIC_TLP_ATTR_RO : 0;
 	struct fbnic_fw_mbx *mbx = &fbd->mbx[mbx_idx];
 
 	mbx->ready = true;
@@ -470,28 +439,17 @@ static int fbnic_mbx_init_desc_ring(struct fbnic_dev *fbd, int mbx_idx)
 	case FBNIC_IPC_MBX_RX_IDX:
 		/* Enable DMA writes from the device */
 		wr32(fbd, FBNIC_PUL_OB_TLP_HDR_AW_CFG,
-		     FBNIC_PUL_OB_TLP_HDR_AW_CFG_BME |
-		     FIELD_PREP(FBNIC_PUL_OB_TLP_HDR_AW_CFG_RDE_ATTR,
-				tlp_attr) |
-		     FIELD_PREP(FBNIC_PUL_OB_TLP_HDR_AW_CFG_TQM_ATTR,
-				tlp_attr));
+		     FBNIC_PUL_OB_TLP_HDR_AW_CFG_BME);
 
 		/* Make sure we have a page for the FW to write to */
-		return fbnic_mbx_alloc_rx_msgs(fbd);
+		fbnic_mbx_alloc_rx_msgs(fbd);
+		break;
 	case FBNIC_IPC_MBX_TX_IDX:
 		/* Enable DMA reads from the device */
 		wr32(fbd, FBNIC_PUL_OB_TLP_HDR_AR_CFG,
-		     FBNIC_PUL_OB_TLP_HDR_AR_CFG_BME |
-		     FIELD_PREP(FBNIC_PUL_OB_TLP_HDR_AR_CFG_TDE_ATTR,
-				tlp_attr) |
-		     FIELD_PREP(FBNIC_PUL_OB_TLP_HDR_AR_CFG_RQM_ATTR,
-				tlp_attr) |
-		     FIELD_PREP(FBNIC_PUL_OB_TLP_HDR_AR_CFG_TQM_ATTR,
-				tlp_attr));
+		     FBNIC_PUL_OB_TLP_HDR_AR_CFG_BME);
 		break;
 	}
-
-	return 0;
 }
 
 static bool fbnic_mbx_event(struct fbnic_dev *fbd)
@@ -620,55 +578,11 @@ static int fbnic_fw_parse_bmc_addrs(u8 bmc_mac_addr[][ETH_ALEN],
 	return 0;
 }
 
-static int fbnic_fw_parse_bmc_cap(struct fbnic_dev *fbd,
-				  struct fbnic_tlv_msg **results)
-{
-	struct fbnic_tlv_msg *attr;
-	bool bmc_present = false;
-	u32 all_multi = 0;
-	int err;
-
-	/* FW reports the BMC present once its NC-SI channel is enabled, before
-	 * it has a MAC. No MAC array means nothing to program, so treat it as
-	 * absent rather than rejecting the message.
-	 */
-	attr = results[FBNIC_FW_CAP_RESP_BMC_PRESENT] ?
-	       results[FBNIC_FW_CAP_RESP_BMC_MAC_ARRAY] : NULL;
-	if (attr) {
-		err = fbnic_fw_parse_bmc_addrs(fbd->fw_cap.bmc_mac_addr,
-					       attr, 4);
-		if (err)
-			return err;
-
-		all_multi = fta_get_uint(results,
-					 FBNIC_FW_CAP_RESP_BMC_ALL_MULTI);
-		bmc_present = true;
-	} else {
-		memset(fbd->fw_cap.bmc_mac_addr, 0,
-		       sizeof(fbd->fw_cap.bmc_mac_addr));
-	}
-
-	/* all_multi is only read out of the message when a BMC is present, so
-	 * it is never set on its own and callers can test it without pairing
-	 * it with the presence check.
-	 */
-	assign_bit(FBNIC_FW_CAP_F_BMC_PRESENT, &fbd->fw_cap.state, bmc_present);
-	assign_bit(FBNIC_FW_CAP_F_BMC_ALL_MULTI, &fbd->fw_cap.state, all_multi);
-
-	/* Always assume we need a BMC reinit. The barrier orders the BMC state
-	 * published above ahead of the flag, pairing with the ordering implied
-	 * by the test_and_clear_bit() in fbnic_bmc_rpc_check().
-	 */
-	smp_mb__before_atomic();
-	set_bit(FBNIC_FW_CAP_F_BMC_TCAM_REINIT, &fbd->fw_cap.state);
-
-	return 0;
-}
-
 static int fbnic_fw_parse_cap_resp(void *opaque, struct fbnic_tlv_msg **results)
 {
+	u32 all_multi = 0, version = 0;
 	struct fbnic_dev *fbd = opaque;
-	u32 version = 0;
+	bool bmc_present;
 	int err;
 
 	version = fta_get_uint(results, FBNIC_FW_CAP_RESP_VERSION);
@@ -728,12 +642,36 @@ static int fbnic_fw_parse_cap_resp(void *opaque, struct fbnic_tlv_msg **results)
 	fbd->fw_cap.link_fec =
 		fta_get_uint(results, FBNIC_FW_CAP_RESP_FW_LINK_FEC);
 
-	err = fbnic_fw_parse_bmc_cap(fbd, results);
-	if (err)
-		return err;
+	bmc_present = !!results[FBNIC_FW_CAP_RESP_BMC_PRESENT];
+	if (bmc_present) {
+		struct fbnic_tlv_msg *attr;
+
+		attr = results[FBNIC_FW_CAP_RESP_BMC_MAC_ARRAY];
+		if (!attr)
+			return -EINVAL;
+
+		err = fbnic_fw_parse_bmc_addrs(fbd->fw_cap.bmc_mac_addr,
+					       attr, 4);
+		if (err)
+			return err;
+
+		all_multi =
+			fta_get_uint(results, FBNIC_FW_CAP_RESP_BMC_ALL_MULTI);
+	} else {
+		memset(fbd->fw_cap.bmc_mac_addr, 0,
+		       sizeof(fbd->fw_cap.bmc_mac_addr));
+	}
+
+	fbd->fw_cap.bmc_present = bmc_present;
+
+	if (results[FBNIC_FW_CAP_RESP_BMC_ALL_MULTI] || !bmc_present)
+		fbd->fw_cap.all_multi = all_multi;
 
 	fbd->fw_cap.anti_rollback_version =
 		fta_get_uint(results, FBNIC_FW_CAP_RESP_ANTI_ROLLBACK_VERSION);
+
+	/* Always assume we need a BMC reinit */
+	fbd->fw_cap.need_bmc_tcam_reinit = true;
 
 	return 0;
 }
@@ -952,11 +890,11 @@ msg_err:
  * @fbd: FBNIC device structure
  * @cmpl_data: Completion struct to store coredump
  * @offset: Offset into coredump requested
- * @length: Length of section of coredump to fetch
+ * @length: Length of section of cordeump to fetch
  *
  * Return: zero on success, negative errno on failure
  *
- * Asks the firmware to provide a section of the coredump back in a message.
+ * Asks the firmware to provide a section of the cordeump back in a message.
  * The response will have an offset and size matching the values provided.
  */
 int fbnic_fw_xmit_coredump_read_msg(struct fbnic_dev *fbd,
@@ -1630,29 +1568,7 @@ free_message:
 	return err;
 }
 
-static int
-fbnic_fw_parser_test(void *opaque, struct fbnic_tlv_msg **results)
-{
-	struct fbnic_fw_completion *cmpl;
-	struct fbnic_dev *fbd = opaque;
-	int err;
-
-	/* find cmpl */
-	cmpl = fbnic_fw_get_cmpl_by_type(fbd, FBNIC_TLV_MSG_ID_TEST);
-	if (!cmpl)
-		return -ENOSPC;
-
-	err = fbnic_tlv_parser_test(opaque, results);
-
-	cmpl->result = err;
-	complete(&cmpl->done);
-	fbnic_fw_put_cmpl(cmpl);
-
-	return err;
-}
-
 static const struct fbnic_tlv_parser fbnic_fw_tlv_parser[] = {
-	FBNIC_TLV_PARSER(TEST, fbnic_tlv_test_index, fbnic_fw_parser_test),
 	FBNIC_TLV_PARSER(FW_CAP_RESP, fbnic_fw_cap_resp_index,
 			 fbnic_fw_parse_cap_resp),
 	FBNIC_TLV_PARSER(OWNERSHIP_RESP, fbnic_ownership_resp_index,
@@ -1717,19 +1633,16 @@ static void fbnic_mbx_process_rx_msgs(struct fbnic_dev *fbd)
 		if (!length)
 			goto next_page;
 
-		/* Report descriptors with invalid message extents. */
-		if (length < sizeof(msg->hdr) || length > PAGE_SIZE) {
+		/* Report descriptors with length greater than page size */
+		if (length > PAGE_SIZE) {
 			dev_warn(fbd->dev,
 				 "Invalid mailbox descriptor length: %lld\n",
 				 length);
 			goto next_page;
 		}
 
-		if (!le16_to_cpu(msg->hdr.len) ||
-		    le16_to_cpu(msg->hdr.len) * sizeof(u32) > length) {
+		if (le16_to_cpu(msg->hdr.len) * sizeof(u32) > length)
 			dev_warn(fbd->dev, "Mailbox message length mismatch\n");
-			goto next_page;
-		}
 
 		/* If parsing fails dump contents of message to dmesg */
 		err = fbnic_tlv_msg_parse(fbd, msg, fbnic_fw_tlv_parser);
@@ -1799,11 +1712,8 @@ int fbnic_mbx_poll_tx_ready(struct fbnic_dev *fbd)
 	} while (!fbnic_mbx_event(fbd));
 
 	/* FW has shown signs of life. Enable DMA and start Tx/Rx */
-	for (i = 0; i < FBNIC_IPC_MBX_INDICES; i++) {
-		err = fbnic_mbx_init_desc_ring(fbd, i);
-		if (err)
-			goto clean_mbx;
-	}
+	for (i = 0; i < FBNIC_IPC_MBX_INDICES; i++)
+		fbnic_mbx_init_desc_ring(fbd, i);
 
 	/* Request an update from the firmware. This should overwrite
 	 * mgmt.version once we get the actual version from the firmware
@@ -1916,53 +1826,6 @@ void fbnic_mbx_flush_tx(struct fbnic_dev *fbd)
 	} while (time_is_after_jiffies(timeout));
 }
 
-/**
- * fbnic_fw_mbx_self_test() - verify firmware interface
- * @fbd: device to test
- *
- * This function tests the interfaces to/from the firmware.
- *
- * Return: See enum fbnic_fw_self_test_codes
- **/
-enum fbnic_fw_self_test_codes fbnic_fw_mbx_self_test(struct fbnic_dev *fbd)
-{
-	enum fbnic_fw_self_test_codes err;
-	struct fbnic_fw_completion *cmpl;
-
-	/* Skip test if FW interface is not present */
-	if (!fbnic_fw_present(fbd))
-		return FBNIC_TEST_FW_NO_FIRMWARE;
-
-	cmpl = fbnic_fw_alloc_cmpl(FBNIC_TLV_MSG_ID_TEST);
-	if (!cmpl)
-		return FBNIC_TEST_FW_NO_CMPL;
-
-	/* Load a test message onto the FW mailbox interface
-	 * and arm the completion.
-	 */
-	err = fbnic_fw_xmit_test_msg(fbd, cmpl);
-	if (err) {
-		err = FBNIC_TEST_FW_NO_XMIT;
-		goto exit_free;
-	}
-
-	/* Verify we received a message back */
-	if (!fbnic_mbx_wait_for_cmpl(cmpl)) {
-		err = FBNIC_TEST_FW_NO_MSG;
-		goto exit_cleanup;
-	}
-
-	/* Verify there were no parsing errors */
-	if (cmpl->result)
-		err = FBNIC_TEST_FW_PARSE;
-exit_cleanup:
-	fbnic_mbx_clear_cmpl(fbd, cmpl);
-exit_free:
-	fbnic_fw_put_cmpl(cmpl);
-
-	return err;
-}
-
 int fbnic_fw_xmit_rpc_macda_sync(struct fbnic_dev *fbd)
 {
 	struct fbnic_tlv_msg *mac_array;
@@ -2054,7 +1917,7 @@ int fbnic_fw_xmit_rpc_macda_sync(struct fbnic_dev *fbd)
 	if (err)
 		goto free_message;
 
-	/* Send message off to FW notifying it of current RPC config */
+	/* Send message of to FW notifying it of current RPC config */
 	err = fbnic_mbx_map_tlv_msg(fbd, msg);
 	if (err)
 		goto free_message;

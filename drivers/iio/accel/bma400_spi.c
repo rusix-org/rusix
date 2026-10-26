@@ -7,6 +7,7 @@
  */
 #include <linux/bits.h>
 #include <linux/init.h>
+#include <linux/mod_devicetable.h>
 #include <linux/module.h>
 #include <linux/regmap.h>
 #include <linux/spi/spi.h>
@@ -87,7 +88,7 @@ static int bma400_spi_probe(struct spi_device *spi)
 }
 
 static const struct spi_device_id bma400_spi_ids[] = {
-	{ .name = "bma400" },
+	{ "bma400", 0 },
 	{ }
 };
 MODULE_DEVICE_TABLE(spi, bma400_spi_ids);

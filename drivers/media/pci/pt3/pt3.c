@@ -529,7 +529,7 @@ static int pt3_alloc_adapter(struct pt3_board *pt3, int index)
 	struct pt3_adapter *adap;
 	struct dvb_adapter *da;
 
-	adap = kzalloc_obj(*adap);
+	adap = kzalloc(sizeof(*adap), GFP_KERNEL);
 	if (!adap)
 		return -ENOMEM;
 

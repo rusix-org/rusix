@@ -1034,7 +1034,7 @@ hfsc_change_class(struct Qdisc *sch, u32 classid, u32 parentid,
 	if (rsc == NULL && fsc == NULL)
 		return -EINVAL;
 
-	cl = kzalloc_obj(struct hfsc_class);
+	cl = kzalloc(sizeof(struct hfsc_class), GFP_KERNEL);
 	if (cl == NULL)
 		return -ENOBUFS;
 
@@ -1582,8 +1582,8 @@ hfsc_enqueue(struct sk_buff *skb, struct Qdisc *sch, struct sk_buff **to_free)
 		return err;
 	}
 
-	qstats_backlog_add(sch, len);
-	qdisc_qlen_inc(sch);
+	sch->qstats.backlog += len;
+	sch->q.qlen++;
 
 	if (first && !cl_in_el_or_vttree(cl)) {
 		if (cl->cl_flags & HFSC_RSC)
@@ -1672,7 +1672,7 @@ hfsc_dequeue(struct Qdisc *sch)
 
 	qdisc_bstats_update(sch, skb);
 	qdisc_qstats_backlog_dec(sch, skb);
-	qdisc_qlen_dec(sch);
+	sch->q.qlen--;
 
 	return skb;
 }

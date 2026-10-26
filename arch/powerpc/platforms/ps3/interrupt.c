@@ -184,7 +184,8 @@ static int ps3_virq_setup(enum ps3_cpu_binding cpu, unsigned long outlet,
 	if (!*virq) {
 		FAIL("%s:%d: irq_create_mapping failed: outlet %lu\n",
 			__func__, __LINE__, outlet);
-		return -ENOMEM;
+		result = -ENOMEM;
+		goto fail_create;
 	}
 
 	DBG("%s:%d: outlet %lu => cpu %u, virq %u\n", __func__, __LINE__,
@@ -195,12 +196,16 @@ static int ps3_virq_setup(enum ps3_cpu_binding cpu, unsigned long outlet,
 	if (result) {
 		FAIL("%s:%d: irq_set_chip_data failed\n",
 			__func__, __LINE__);
-		irq_dispose_mapping(*virq);
-		return result;
+		goto fail_set;
 	}
 
 	ps3_chip_mask(irq_get_irq_data(*virq));
 
+	return result;
+
+fail_set:
+	irq_dispose_mapping(*virq);
+fail_create:
 	return result;
 }
 
@@ -245,7 +250,7 @@ int ps3_irq_plug_setup(enum ps3_cpu_binding cpu, unsigned long outlet,
 
 	if (result) {
 		FAIL("%s:%d: ps3_virq_setup failed\n", __func__, __LINE__);
-		return result;
+		goto fail_setup;
 	}
 
 	pd = irq_get_chip_data(*virq);
@@ -258,10 +263,15 @@ int ps3_irq_plug_setup(enum ps3_cpu_binding cpu, unsigned long outlet,
 	if (result) {
 		FAIL("%s:%d: lv1_connect_irq_plug_ext failed: %s\n",
 		__func__, __LINE__, ps3_result(result));
-		ps3_virq_destroy(*virq);
-		return -EPERM;
+		result = -EPERM;
+		goto fail_connect;
 	}
 
+	return result;
+
+fail_connect:
+	ps3_virq_destroy(*virq);
+fail_setup:
 	return result;
 }
 EXPORT_SYMBOL_GPL(ps3_irq_plug_setup);

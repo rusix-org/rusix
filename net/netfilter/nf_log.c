@@ -317,7 +317,7 @@ EXPORT_SYMBOL_GPL(nf_log_buf_add);
 
 struct nf_log_buf *nf_log_buf_open(void)
 {
-	struct nf_log_buf *m = kmalloc_obj(*m, GFP_ATOMIC);
+	struct nf_log_buf *m = kmalloc(sizeof(*m), GFP_ATOMIC);
 
 	if (unlikely(!m)) {
 		local_bh_disable();
@@ -493,7 +493,7 @@ static int netfilter_log_sysctl_init(struct net *net)
 	if (!net_eq(net, &init_net)) {
 		table = kmemdup(nf_log_sysctl_table,
 				 sizeof(nf_log_sysctl_table),
-				 GFP_KERNEL_ACCOUNT);
+				 GFP_KERNEL);
 		if (!table)
 			goto err_alloc;
 	} else {

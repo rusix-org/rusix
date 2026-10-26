@@ -187,7 +187,7 @@ static struct adi_i3c_xfer *adi_i3c_master_alloc_xfer(struct adi_i3c_master *mas
 {
 	struct adi_i3c_xfer *xfer;
 
-	xfer = kzalloc_flex(*xfer, cmds, ncmds);
+	xfer = kzalloc(struct_size(xfer, cmds, ncmds), GFP_KERNEL);
 	if (!xfer)
 		return NULL;
 
@@ -246,7 +246,6 @@ static void adi_i3c_master_end_xfer_locked(struct adi_i3c_master *master,
 		if (cmd->cmd0 & REG_CMD_FIFO_0_RNW) {
 			rx_len = min_t(u32, REG_CMDR_FIFO_XFER_BYTES(cmdr), cmd->rx_len);
 			adi_i3c_master_rd_from_rx_fifo(master, cmd->rx_buf, rx_len);
-			cmd->rx_len = rx_len;
 		}
 		cmd->error = REG_CMDR_FIFO_ERROR(cmdr);
 	}
@@ -333,9 +332,10 @@ static int adi_i3c_master_send_ccc_cmd(struct i3c_master_controller *m,
 				       struct i3c_ccc_cmd *cmd)
 {
 	struct adi_i3c_master *master = to_adi_i3c_master(m);
+	struct adi_i3c_xfer *xfer __free(kfree) = NULL;
 	struct adi_i3c_cmd *ccmd;
 
-	struct adi_i3c_xfer *xfer __free(kfree) = adi_i3c_master_alloc_xfer(master, 1);
+	xfer = adi_i3c_master_alloc_xfer(master, 1);
 	if (!xfer)
 		return -ENOMEM;
 
@@ -361,24 +361,23 @@ static int adi_i3c_master_send_ccc_cmd(struct i3c_master_controller *m,
 		adi_i3c_master_unqueue_xfer(master, xfer);
 
 	cmd->err = adi_i3c_cmd_get_err(&xfer->cmds[0]);
-	if (!xfer->ret && cmd->rnw)
-		cmd->dests[0].payload.actual_len = ccmd->rx_len;
 
 	return xfer->ret;
 }
 
-static int adi_i3c_master_i3c_xfers(struct i3c_dev_desc *dev,
-				    struct i3c_xfer *xfers,
-				    int nxfers, enum i3c_xfer_mode mode)
+static int adi_i3c_master_priv_xfers(struct i3c_dev_desc *dev,
+				     struct i3c_priv_xfer *xfers,
+				     int nxfers)
 {
 	struct i3c_master_controller *m = i3c_dev_get_master(dev);
 	struct adi_i3c_master *master = to_adi_i3c_master(m);
+	struct adi_i3c_xfer *xfer __free(kfree) = NULL;
 	int i, ret;
 
 	if (!nxfers)
 		return 0;
 
-	struct adi_i3c_xfer *xfer __free(kfree) = adi_i3c_master_alloc_xfer(master, nxfers);
+	xfer = adi_i3c_master_alloc_xfer(master, nxfers);
 	if (!xfer)
 		return -ENOMEM;
 
@@ -462,7 +461,7 @@ static int adi_i3c_master_attach_i3c_dev(struct i3c_dev_desc *dev)
 	int slot;
 	u8 addr;
 
-	data = kzalloc_obj(*data);
+	data = kzalloc(sizeof(*data), GFP_KERNEL);
 	if (!data)
 		return -ENOMEM;
 
@@ -534,7 +533,7 @@ static int adi_i3c_master_attach_i2c_dev(struct i2c_dev_desc *dev)
 	if (slot < 0)
 		return slot;
 
-	data = kzalloc_obj(*data);
+	data = kzalloc(sizeof(*data), GFP_KERNEL);
 	if (!data)
 		return -ENOMEM;
 
@@ -658,7 +657,8 @@ static int adi_i3c_master_do_daa(struct i3c_master_controller *m)
 
 	writel(irq_mask, master->regs + REG_IRQ_MASK);
 
-	if (ret)
+	/* DAA always finishes with CE2_ERROR or NACK_RESP */
+	if (ret && ret != I3C_ERROR_M2)
 		return ret;
 
 	/* Add I3C devices discovered */
@@ -777,6 +777,7 @@ static int adi_i3c_master_i2c_xfers(struct i2c_dev_desc *dev,
 {
 	struct i3c_master_controller *m = i2c_dev_get_master(dev);
 	struct adi_i3c_master *master = to_adi_i3c_master(m);
+	struct adi_i3c_xfer *xfer __free(kfree) = NULL;
 	int i;
 
 	if (!nxfers)
@@ -785,8 +786,7 @@ static int adi_i3c_master_i2c_xfers(struct i2c_dev_desc *dev,
 		if (xfers[i].flags & I2C_M_TEN)
 			return -EOPNOTSUPP;
 	}
-
-	struct adi_i3c_xfer *xfer __free(kfree) = adi_i3c_master_alloc_xfer(master, nxfers);
+	xfer = adi_i3c_master_alloc_xfer(master, nxfers);
 	if (!xfer)
 		return -ENOMEM;
 
@@ -919,7 +919,7 @@ static const struct i3c_master_controller_ops adi_i3c_master_ops = {
 	.do_daa = adi_i3c_master_do_daa,
 	.supports_ccc_cmd = adi_i3c_master_supports_ccc_cmd,
 	.send_ccc_cmd = adi_i3c_master_send_ccc_cmd,
-	.i3c_xfers = adi_i3c_master_i3c_xfers,
+	.priv_xfers = adi_i3c_master_priv_xfers,
 	.i2c_xfers = adi_i3c_master_i2c_xfers,
 	.request_ibi = adi_i3c_master_request_ibi,
 	.enable_ibi = adi_i3c_master_enable_ibi,

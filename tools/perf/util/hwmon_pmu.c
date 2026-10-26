@@ -380,7 +380,7 @@ struct perf_pmu *hwmon_pmu__new(struct list_head *pmus, const char *hwmon_dir,
 		perf_pmu__delete(&hwm->pmu);
 		return NULL;
 	}
-	hwm->pmu.cpus = perf_cpu_map__new_int(0);
+	hwm->pmu.cpus = perf_cpu_map__new("0");
 	if (!hwm->pmu.cpus) {
 		perf_pmu__delete(&hwm->pmu);
 		return NULL;
@@ -446,12 +446,12 @@ static size_t hwmon_pmu__describe_items(struct hwmon_pmu *hwm, char *out_buf, si
 
 				buf[read_len] = '\0';
 				val = strtoll(buf, /*endptr=*/NULL, 10);
-				len += scnprintf(out_buf + len, out_buf_len - len, "%s%s%s=%g%s",
-						 len == 0 ? " " : ", ",
-						 hwmon_item_strs[bit],
-						 is_alarm ? "_alarm" : "",
-						 (double)val / 1000.0,
-						 hwmon_units[key.type]);
+				len += snprintf(out_buf + len, out_buf_len - len, "%s%s%s=%g%s",
+						len == 0 ? " " : ", ",
+						hwmon_item_strs[bit],
+						is_alarm ? "_alarm" : "",
+						(double)val / 1000.0,
+						hwmon_units[key.type]);
 			}
 			close(fd);
 		}

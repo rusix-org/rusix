@@ -11,7 +11,6 @@
 
 #include <linux/compiler.h>
 #include <asm/addrspace.h>
-#include <asm/asm.h>
 #include <asm/page.h>
 #include <asm/pgtable-bits.h>
 
@@ -23,81 +22,65 @@
 #include <asm-generic/pgtable-nop4d.h>
 #endif
 
-#ifdef CONFIG_HIGHMEM
-#include <asm/highmem.h>
-#endif
-
 #if CONFIG_PGTABLE_LEVELS == 2
-#define PGDIR_SHIFT	(PAGE_SHIFT + (PAGE_SHIFT - PTRLOG))
+#define PGDIR_SHIFT	(PAGE_SHIFT + (PAGE_SHIFT - 3))
 #elif CONFIG_PGTABLE_LEVELS == 3
-#define PMD_SHIFT	(PAGE_SHIFT + (PAGE_SHIFT - PTRLOG))
+#define PMD_SHIFT	(PAGE_SHIFT + (PAGE_SHIFT - 3))
 #define PMD_SIZE	(1UL << PMD_SHIFT)
 #define PMD_MASK	(~(PMD_SIZE-1))
-#define PGDIR_SHIFT	(PMD_SHIFT + (PAGE_SHIFT - PTRLOG))
+#define PGDIR_SHIFT	(PMD_SHIFT + (PAGE_SHIFT - 3))
 #elif CONFIG_PGTABLE_LEVELS == 4
-#define PMD_SHIFT	(PAGE_SHIFT + (PAGE_SHIFT - PTRLOG))
+#define PMD_SHIFT	(PAGE_SHIFT + (PAGE_SHIFT - 3))
 #define PMD_SIZE	(1UL << PMD_SHIFT)
 #define PMD_MASK	(~(PMD_SIZE-1))
-#define PUD_SHIFT	(PMD_SHIFT + (PAGE_SHIFT - PTRLOG))
+#define PUD_SHIFT	(PMD_SHIFT + (PAGE_SHIFT - 3))
 #define PUD_SIZE	(1UL << PUD_SHIFT)
 #define PUD_MASK	(~(PUD_SIZE-1))
-#define PGDIR_SHIFT	(PUD_SHIFT + (PAGE_SHIFT - PTRLOG))
+#define PGDIR_SHIFT	(PUD_SHIFT + (PAGE_SHIFT - 3))
 #endif
 
 #define PGDIR_SIZE	(1UL << PGDIR_SHIFT)
 #define PGDIR_MASK	(~(PGDIR_SIZE-1))
 
-#ifdef CONFIG_32BIT
-#define VA_BITS		32
-#else
-#define VA_BITS		(PGDIR_SHIFT + (PAGE_SHIFT - PTRLOG))
-#endif
+#define VA_BITS		(PGDIR_SHIFT + (PAGE_SHIFT - 3))
 
-#define PTRS_PER_PGD	(PAGE_SIZE >> PTRLOG)
+#define PTRS_PER_PGD	(PAGE_SIZE >> 3)
 #if CONFIG_PGTABLE_LEVELS > 3
-#define PTRS_PER_PUD	(PAGE_SIZE >> PTRLOG)
+#define PTRS_PER_PUD	(PAGE_SIZE >> 3)
 #endif
 #if CONFIG_PGTABLE_LEVELS > 2
-#define PTRS_PER_PMD	(PAGE_SIZE >> PTRLOG)
+#define PTRS_PER_PMD	(PAGE_SIZE >> 3)
 #endif
-#define PTRS_PER_PTE	(PAGE_SIZE >> PTRLOG)
+#define PTRS_PER_PTE	(PAGE_SIZE >> 3)
 
-#ifdef CONFIG_32BIT
-#define USER_PTRS_PER_PGD       (TASK_SIZE / PGDIR_SIZE)
-#else
 #define USER_PTRS_PER_PGD       ((TASK_SIZE64 / PGDIR_SIZE)?(TASK_SIZE64 / PGDIR_SIZE):1)
-#endif
 
 #ifndef __ASSEMBLER__
 
 #include <linux/mm_types.h>
 #include <linux/mmzone.h>
-#include <linux/vmemmap-optimization.h>
 #include <asm/fixmap.h>
 #include <asm/sparsemem.h>
 
 struct mm_struct;
 struct vm_area_struct;
 
-#ifdef CONFIG_32BIT
+/*
+ * ZERO_PAGE is a global shared page that is always zero; used
+ * for zero-mapped memory areas etc..
+ */
 
-#define VMALLOC_START	(vm_map_base + PCI_IOSIZE + (2 * PAGE_SIZE))
+extern unsigned long empty_zero_page[PAGE_SIZE / sizeof(unsigned long)];
 
-#ifdef CONFIG_HIGHMEM
-#define VMALLOC_END	(PKMAP_BASE - (2 * PAGE_SIZE))
-#else
-#define VMALLOC_END	(FIXADDR_START - (2 * PAGE_SIZE))
-#endif
+#define ZERO_PAGE(vaddr)	virt_to_page(empty_zero_page)
 
-#define PKMAP_BASE	(PKMAP_END - (PAGE_SIZE * LAST_PKMAP))
-#define PKMAP_END	((FIXADDR_START) & ~((LAST_PKMAP << PAGE_SHIFT)-1))
-
-#endif
-
-#ifdef CONFIG_64BIT
-
+/*
+ * TLB refill handlers may also map the vmalloc area into xkvrange.
+ * Avoid the first couple of pages so NULL pointer dereferences will
+ * still reliably trap.
+ */
 #define MODULES_VADDR	(vm_map_base + PCI_IOSIZE + (2 * PAGE_SIZE))
-#define MODULES_END	(MODULES_VADDR + SZ_2G) /* 256MB for text, rest for data */
+#define MODULES_END	(MODULES_VADDR + SZ_256M)
 
 #ifdef CONFIG_KFENCE
 #define KFENCE_AREA_SIZE	(((CONFIG_KFENCE_NUM_OBJECTS + 1) * 2 + 2) * PAGE_SIZE)
@@ -117,14 +100,11 @@ struct vm_area_struct;
 	 min(PTRS_PER_PGD * PTRS_PER_PUD * PTRS_PER_PMD * PTRS_PER_PTE * PAGE_SIZE, (1UL << cpu_vabits) / 2) - PMD_SIZE - VMEMMAP_SIZE - KFENCE_AREA_SIZE)
 #endif
 
-#define VMEMMAP_ALIGN	max(PMD_SIZE, MAX_FOLIO_VMEMMAP_ALIGN)
-#define vmemmap		((struct page *)(ALIGN(VMALLOC_END, VMEMMAP_ALIGN)))
+#define vmemmap		((struct page *)((VMALLOC_END + PMD_SIZE) & PMD_MASK))
 #define VMEMMAP_END	((unsigned long)vmemmap + VMEMMAP_SIZE - 1)
 
 #define KFENCE_AREA_START	(VMEMMAP_END + 1)
 #define KFENCE_AREA_END		(KFENCE_AREA_START + KFENCE_AREA_SIZE - 1)
-
-#endif
 
 /* Needed to limit get_free_mem_region() */
 #ifndef CONFIG_SPARSEMEM
@@ -135,6 +115,19 @@ struct vm_area_struct;
 
 #define ptep_get(ptep) READ_ONCE(*(ptep))
 #define pmdp_get(pmdp) READ_ONCE(*(pmdp))
+
+#define pte_ERROR(e) \
+	pr_err("%s:%d: bad pte %016lx.\n", __FILE__, __LINE__, pte_val(e))
+#ifndef __PAGETABLE_PMD_FOLDED
+#define pmd_ERROR(e) \
+	pr_err("%s:%d: bad pmd %016lx.\n", __FILE__, __LINE__, pmd_val(e))
+#endif
+#ifndef __PAGETABLE_PUD_FOLDED
+#define pud_ERROR(e) \
+	pr_err("%s:%d: bad pud %016lx.\n", __FILE__, __LINE__, pud_val(e))
+#endif
+#define pgd_ERROR(e) \
+	pr_err("%s:%d: bad pgd %016lx.\n", __FILE__, __LINE__, pgd_val(e))
 
 extern pte_t invalid_pte_table[PTRS_PER_PTE];
 
@@ -291,16 +284,7 @@ extern void kernel_pte_init(void *addr);
  * Encode/decode swap entries and swap PTEs. Swap PTEs are all PTEs that
  * are !pte_none() && !pte_present().
  *
- * Format of 32bit swap PTEs:
- *
- *   3 3 2 2 2 2 2 2 2 2 2 2 1 1 1 1 1 1 1 1 1 1
- *   1 0 9 8 7 6 5 4 3 2 1 0 9 8 7 6 5 4 3 2 1 0 9 8 7 6 5 4 3 2 1 0
- *   <------------ offset -------------> E <- type -> <-- zeroes -->
- *
- *   E is the exclusive marker that is not stored in swap entries.
- *   The zero'ed bits include _PAGE_PRESENT.
- *
- * Format of 64bit swap PTEs:
+ * Format of swap PTEs:
  *
  *   6 6 6 6 5 5 5 5 5 5 5 5 5 5 4 4 4 4 4 4 4 4 4 4 3 3 3 3 3 3 3 3
  *   3 2 1 0 9 8 7 6 5 4 3 2 1 0 9 8 7 6 5 4 3 2 1 0 9 8 7 6 5 4 3 2
@@ -313,27 +297,16 @@ extern void kernel_pte_init(void *addr);
  *   E is the exclusive marker that is not stored in swap entries.
  *   The zero'ed bits include _PAGE_PRESENT and _PAGE_PROTNONE.
  */
-
-#define __SWP_TYPE_BITS		(IS_ENABLED(CONFIG_32BIT) ? 5 : 7)
-#define __SWP_TYPE_MASK		((1UL << __SWP_TYPE_BITS) - 1)
-#define __SWP_TYPE_SHIFT	(IS_ENABLED(CONFIG_32BIT) ? 8 : 16)
-#define __SWP_OFFSET_SHIFT	(__SWP_TYPE_BITS + __SWP_TYPE_SHIFT + 1)
-
 static inline pte_t mk_swap_pte(unsigned long type, unsigned long offset)
-{
-	pte_t pte;
-	pte_val(pte) = ((type & __SWP_TYPE_MASK) << __SWP_TYPE_SHIFT) | (offset << __SWP_OFFSET_SHIFT);
-	return pte;
-}
+{ pte_t pte; pte_val(pte) = ((type & 0x7f) << 16) | (offset << 24); return pte; }
 
-#define __swp_type(x)		(((x).val >> __SWP_TYPE_SHIFT) & __SWP_TYPE_MASK)
-#define __swp_offset(x)		((x).val >> __SWP_OFFSET_SHIFT)
+#define __swp_type(x)		(((x).val >> 16) & 0x7f)
+#define __swp_offset(x)		((x).val >> 24)
 #define __swp_entry(type, offset) ((swp_entry_t) { pte_val(mk_swap_pte((type), (offset))) })
-
-#define __swp_entry_to_pte(x)	__pte((x).val)
-#define __swp_entry_to_pmd(x)	__pmd((x).val | _PAGE_HUGE)
 #define __pte_to_swp_entry(pte) ((swp_entry_t) { pte_val(pte) })
+#define __swp_entry_to_pte(x)	__pte((x).val)
 #define __pmd_to_swp_entry(pmd) ((swp_entry_t) { pmd_val(pmd) })
+#define __swp_entry_to_pmd(x)	__pmd((x).val | _PAGE_HUGE)
 
 static inline bool pte_swp_exclusive(pte_t pte)
 {
@@ -351,6 +324,8 @@ static inline pte_t pte_swp_clear_exclusive(pte_t pte)
 	pte_val(pte) &= ~_PAGE_SWP_EXCLUSIVE;
 	return pte;
 }
+
+extern void paging_init(void);
 
 #define pte_none(pte)		(!(pte_val(pte) & ~_PAGE_GLOBAL))
 #define pte_present(pte)	(pte_val(pte) & (_PAGE_PRESENT | _PAGE_PROTNONE))
@@ -618,7 +593,7 @@ static inline pmd_t pmdp_huge_get_and_clear(struct mm_struct *mm,
 
 #endif /* CONFIG_TRANSPARENT_HUGEPAGE */
 
-#ifdef CONFIG_ARCH_HAS_PTE_PROTNONE
+#ifdef CONFIG_NUMA_BALANCING
 static inline long pte_protnone(pte_t pte)
 {
 	return (pte_val(pte) & _PAGE_PROTNONE);
@@ -628,7 +603,7 @@ static inline long pmd_protnone(pmd_t pmd)
 {
 	return (pmd_val(pmd) & _PAGE_PROTNONE);
 }
-#endif /* CONFIG_ARCH_HAS_PTE_PROTNONE */
+#endif /* CONFIG_NUMA_BALANCING */
 
 #define pmd_leaf(pmd)		((pmd_val(pmd) & _PAGE_HUGE) != 0)
 #define pud_leaf(pud)		((pud_val(pud) & _PAGE_HUGE) != 0)

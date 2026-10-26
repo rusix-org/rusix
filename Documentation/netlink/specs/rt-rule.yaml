@@ -96,12 +96,10 @@ attribute-sets:
     attributes:
       -
         name: dst
-        type: binary
-        display-hint: ipv4-or-v6
+        type: u32
       -
         name: src
-        type: binary
-        display-hint: ipv4-or-v6
+        type: u32
       -
         name: iifname
         type: string

@@ -73,9 +73,8 @@ static struct class shost_class = {
  *	transition is illegal.
  **/
 int scsi_host_set_state(struct Scsi_Host *shost, enum scsi_host_state state)
-	__must_hold(&shost->host_lock)
 {
-	enum scsi_host_state oldstate = READ_ONCE(shost->shost_state);
+	enum scsi_host_state oldstate = shost->shost_state;
 
 	if (state == oldstate)
 		return 0;
@@ -146,7 +145,7 @@ int scsi_host_set_state(struct Scsi_Host *shost, enum scsi_host_state state)
 		}
 		break;
 	}
-	WRITE_ONCE(shost->shost_state, state);
+	shost->shost_state = state;
 	return 0;
 
  illegal:
@@ -168,14 +167,14 @@ void scsi_remove_host(struct Scsi_Host *shost)
 	unsigned long flags;
 
 	mutex_lock(&shost->scan_mutex);
-	spin_lock_irqsave(&shost->host_lock, flags);
+	spin_lock_irqsave(shost->host_lock, flags);
 	if (scsi_host_set_state(shost, SHOST_CANCEL))
 		if (scsi_host_set_state(shost, SHOST_CANCEL_RECOVERY)) {
-			spin_unlock_irqrestore(&shost->host_lock, flags);
+			spin_unlock_irqrestore(shost->host_lock, flags);
 			mutex_unlock(&shost->scan_mutex);
 			return;
 		}
-	spin_unlock_irqrestore(&shost->host_lock, flags);
+	spin_unlock_irqrestore(shost->host_lock, flags);
 
 	scsi_autopm_get_host(shost);
 	flush_workqueue(shost->tmf_work_q);
@@ -193,10 +192,10 @@ void scsi_remove_host(struct Scsi_Host *shost)
 	kref_put(&shost->tagset_refcnt, scsi_mq_free_tags);
 	wait_for_completion(&shost->tagset_freed);
 
-	spin_lock_irqsave(&shost->host_lock, flags);
+	spin_lock_irqsave(shost->host_lock, flags);
 	if (scsi_host_set_state(shost, SHOST_DEL))
 		BUG_ON(scsi_host_set_state(shost, SHOST_DEL_RECOVERY));
-	spin_unlock_irqrestore(&shost->host_lock, flags);
+	spin_unlock_irqrestore(shost->host_lock, flags);
 
 	transport_unregister_device(&shost->shost_gendev);
 	device_unregister(&shost->shost_dev);
@@ -232,12 +231,6 @@ int scsi_add_host_with_dma(struct Scsi_Host *shost, struct device *dev,
 		goto fail;
 	}
 
-	if (shost->nr_reserved_cmds && !sht->queue_reserved_command) {
-		shost_printk(KERN_ERR, shost,
-			     "nr_reserved_cmds set but no method to queue\n");
-		goto fail;
-	}
-
 	/* Use min_t(int, ...) in case shost->can_queue exceeds SHRT_MAX */
 	shost->cmd_per_lun = min_t(int, shost->cmd_per_lun,
 				   shost->can_queue);
@@ -253,8 +246,10 @@ int scsi_add_host_with_dma(struct Scsi_Host *shost, struct device *dev,
 
 	shost->dma_dev = dma_dev;
 
-	shost->max_sectors = min_not_zero(shost->max_sectors,
-			dma_max_mapping_size(dma_dev) >> SECTOR_SHIFT);
+	if (dma_dev->dma_mask) {
+		shost->max_sectors = min_t(unsigned int, shost->max_sectors,
+				dma_max_mapping_size(dma_dev) >> SECTOR_SHIFT);
+	}
 
 	error = scsi_mq_setup_tags(shost);
 	if (error)
@@ -277,8 +272,7 @@ int scsi_add_host_with_dma(struct Scsi_Host *shost, struct device *dev,
 	if (error)
 		goto out_disable_runtime_pm;
 
-	scoped_guard(spinlock_irq, &shost->host_lock)
-		scsi_host_set_state(shost, SHOST_RUNNING);
+	scsi_host_set_state(shost, SHOST_RUNNING);
 	get_device(shost->shost_gendev.parent);
 
 	device_enable_async_suspend(&shost->shost_dev);
@@ -313,14 +307,6 @@ int scsi_add_host_with_dma(struct Scsi_Host *shost, struct device *dev,
 	if (error)
 		goto out_del_dev;
 
-	if (shost->nr_reserved_cmds) {
-		shost->pseudo_sdev = scsi_get_pseudo_sdev(shost);
-		if (!shost->pseudo_sdev) {
-			error = -ENOMEM;
-			goto out_del_dev;
-		}
-	}
-
 	scsi_proc_host_add(shost);
 	scsi_autopm_put_host(shost);
 	return error;
@@ -352,7 +338,6 @@ EXPORT_SYMBOL(scsi_add_host_with_dma);
 static void scsi_host_dev_release(struct device *dev)
 {
 	struct Scsi_Host *shost = dev_to_shost(dev);
-	enum scsi_host_state state = scsi_get_host_state(shost);
 	struct device *parent = dev->parent;
 
 	/* Wait for functions invoked through call_rcu(&scmd->rcu, ...) */
@@ -366,7 +351,7 @@ static void scsi_host_dev_release(struct device *dev)
 	if (shost->work_q)
 		destroy_workqueue(shost->work_q);
 
-	if (state == SHOST_CREATED) {
+	if (shost->shost_state == SHOST_CREATED) {
 		/*
 		 * Free the shost_dev device name and remove the proc host dir
 		 * here if scsi_host_{alloc,put}() have been called but neither
@@ -382,7 +367,7 @@ static void scsi_host_dev_release(struct device *dev)
 
 	ida_free(&host_index_ida, shost->host_no);
 
-	if (state != SHOST_CREATED)
+	if (shost->shost_state != SHOST_CREATED)
 		put_device(parent);
 	kfree(shost);
 }
@@ -414,8 +399,9 @@ struct Scsi_Host *scsi_host_alloc(const struct scsi_host_template *sht, int priv
 	if (!shost)
 		return NULL;
 
-	scoped_guard(spinlock_init, &shost->host_lock)
-		shost->shost_state = SHOST_CREATED;
+	shost->host_lock = &shost->default_lock;
+	spin_lock_init(shost->host_lock);
+	shost->shost_state = SHOST_CREATED;
 	INIT_LIST_HEAD(&shost->__devices);
 	INIT_LIST_HEAD(&shost->__targets);
 	INIT_LIST_HEAD(&shost->eh_abort_list);
@@ -452,7 +438,6 @@ struct Scsi_Host *scsi_host_alloc(const struct scsi_host_template *sht, int priv
 	shost->hostt = sht;
 	shost->this_id = sht->this_id;
 	shost->can_queue = sht->can_queue;
-	shost->nr_reserved_cmds = sht->nr_reserved_cmds;
 	shost->sg_tablesize = sht->sg_tablesize;
 	shost->sg_prot_tablesize = sht->sg_prot_tablesize;
 	shost->cmd_per_lun = sht->cmd_per_lun;
@@ -602,7 +587,7 @@ EXPORT_SYMBOL(scsi_host_lookup);
  **/
 struct Scsi_Host *scsi_host_get(struct Scsi_Host *shost)
 {
-	if (scsi_get_host_state(shost) == SHOST_DEL ||
+	if ((shost->shost_state == SHOST_DEL) ||
 		!get_device(&shost->shost_gendev))
 		return NULL;
 	return shost;
@@ -621,15 +606,16 @@ static bool scsi_host_check_in_flight(struct request *rq, void *data)
 }
 
 /**
- * scsi_host_busy - Return the count of in-flight commands
- * @shost:	Pointer to Scsi_Host
+ * scsi_host_busy - Return the host busy counter
+ * @shost:	Pointer to Scsi_Host to inc.
  **/
 int scsi_host_busy(struct Scsi_Host *shost)
 {
 	int cnt = 0;
 
-	blk_mq_tagset_busy_iter(&shost->tag_set,
-				scsi_host_check_in_flight, &cnt);
+	if (shost->tag_set.ops)
+		blk_mq_tagset_busy_iter(&shost->tag_set,
+					scsi_host_check_in_flight, &cnt);
 	return cnt;
 }
 EXPORT_SYMBOL(scsi_host_busy);

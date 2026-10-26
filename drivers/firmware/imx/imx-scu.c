@@ -73,25 +73,14 @@ static int imx_sc_linux_errmap[IMX_SC_ERR_LAST] = {
 	-EACCES, /* IMX_SC_ERR_NOACCESS */
 	-EACCES, /* IMX_SC_ERR_LOCKED */
 	-ERANGE, /* IMX_SC_ERR_UNAVAILABLE */
-	-ENOENT, /* IMX_SC_ERR_NOTFOUND */
-	-ENODEV, /* IMX_SC_ERR_NOPOWER */
-	-ECOMM,	 /* IMX_SC_ERR_IPC */
+	-EEXIST, /* IMX_SC_ERR_NOTFOUND */
+	-EPERM,	 /* IMX_SC_ERR_NOPOWER */
+	-EPIPE,	 /* IMX_SC_ERR_IPC */
 	-EBUSY,	 /* IMX_SC_ERR_BUSY */
 	-EIO,	 /* IMX_SC_ERR_FAIL */
 };
 
 static struct imx_sc_ipc *imx_sc_ipc_handle;
-
-static void imx_scu_free_mbox_chan(void *data)
-{
-	mbox_free_channel(data);
-}
-
-static void imx_scu_clear_handle(void *data)
-{
-	if (imx_sc_ipc_handle == data)
-		imx_sc_ipc_handle = NULL;
-}
 
 static inline int imx_sc_to_linux_errno(int errno)
 {
@@ -332,23 +321,13 @@ static int imx_scu_probe(struct platform_device *pdev)
 		dev_dbg(dev, "request mbox chan %s\n", chan_name);
 		/* chan_name is not used anymore by framework */
 		kfree(chan_name);
-
-		ret = devm_add_action_or_reset(dev, imx_scu_free_mbox_chan,
-					       sc_chan->ch);
-		if (ret)
-			return ret;
 	}
 
 	sc_ipc->dev = dev;
-	ret = devm_mutex_init(dev, &sc_ipc->lock);
-	if (ret)
-		return ret;
+	mutex_init(&sc_ipc->lock);
 	init_completion(&sc_ipc->done);
 
 	imx_sc_ipc_handle = sc_ipc;
-	ret = devm_add_action_or_reset(dev, imx_scu_clear_handle, sc_ipc);
-	if (ret)
-		return ret;
 
 	ret = imx_scu_soc_init(dev);
 	if (ret)
@@ -361,11 +340,7 @@ static int imx_scu_probe(struct platform_device *pdev)
 
 	dev_info(dev, "NXP i.MX SCU Initialized\n");
 
-	ret = devm_of_platform_populate(dev);
-	if (ret)
-		of_platform_depopulate(dev);
-
-	return ret;
+	return devm_of_platform_populate(dev);
 }
 
 static const struct of_device_id imx_scu_match[] = {
@@ -377,7 +352,6 @@ static struct platform_driver imx_scu_driver = {
 	.driver = {
 		.name = "imx-scu",
 		.of_match_table = imx_scu_match,
-		.suppress_bind_attrs = true,
 	},
 	.probe = imx_scu_probe,
 };

@@ -12,7 +12,6 @@
 #include <linux/string.h>
 #include <asm/efi.h>
 #include <asm/setup.h>
-#include <video/edid.h>
 
 #include "efistub.h"
 
@@ -23,8 +22,6 @@ enum efi_cmdline_option {
 	EFI_CMDLINE_AUTO,
 	EFI_CMDLINE_LIST
 };
-
-static efi_guid_t graphics_output_guid = EFI_GRAPHICS_OUTPUT_PROTOCOL_GUID;
 
 static struct {
 	enum efi_cmdline_option option;
@@ -311,12 +308,12 @@ static u32 choose_mode_list(efi_graphics_output_protocol_t *gop)
 	efi_status_t status;
 
 	efi_printk("Available graphics modes are 0-%u\n", max_mode-1);
-	efi_char16_puts(L"  * = current mode\r\n"
-			 "  - = unusable mode\r\n");
+	efi_puts("  * = current mode\n"
+		 "  - = unusable mode\n");
 
 	choose_mode(gop, match_list, (void *)cur_mode);
 
-	efi_char16_puts(L"\r\nPress any key to continue (or wait 10 seconds)\r\n");
+	efi_puts("\nPress any key to continue (or wait 10 seconds)\n");
 	status = efi_wait_for_key(10 * EFI_USEC_PER_SEC, &key);
 	if (status != EFI_SUCCESS && status != EFI_TIMEOUT) {
 		efi_err("Unable to read key, continuing in 10 seconds\n");
@@ -370,31 +367,24 @@ static void find_bits(u32 mask, u8 *pos, u8 *size)
 	*size = __fls(mask) - *pos + 1;
 }
 
-static void setup_screen_info(struct screen_info *si, const efi_graphics_output_protocol_t *gop)
+static void
+setup_pixel_info(struct screen_info *si, u32 pixels_per_scan_line,
+		 efi_pixel_bitmask_t pixel_info, int pixel_format)
 {
-	const efi_graphics_output_protocol_mode_t *mode = efi_table_attr(gop, mode);
-	const efi_graphics_output_mode_info_t *info = efi_table_attr(mode, info);
-
-	si->orig_video_isVGA = VIDEO_TYPE_EFI;
-
-	si->lfb_width  = info->horizontal_resolution;
-	si->lfb_height = info->vertical_resolution;
-
-	efi_set_u64_split(efi_table_attr(mode, frame_buffer_base),
-			  &si->lfb_base, &si->ext_lfb_base);
-	if (si->ext_lfb_base)
-		si->capabilities |= VIDEO_CAPABILITY_64BIT_BASE;
-	si->pages = 1;
-
-	if (info->pixel_format == PIXEL_BIT_MASK) {
-		find_bits(info->pixel_information.red_mask, &si->red_pos, &si->red_size);
-		find_bits(info->pixel_information.green_mask, &si->green_pos, &si->green_size);
-		find_bits(info->pixel_information.blue_mask, &si->blue_pos, &si->blue_size);
-		find_bits(info->pixel_information.reserved_mask, &si->rsvd_pos, &si->rsvd_size);
-		si->lfb_depth = si->red_size + si->green_size + si->blue_size + si->rsvd_size;
-		si->lfb_linelength = (info->pixels_per_scan_line * si->lfb_depth) / 8;
+	if (pixel_format == PIXEL_BIT_MASK) {
+		find_bits(pixel_info.red_mask,
+			  &si->red_pos, &si->red_size);
+		find_bits(pixel_info.green_mask,
+			  &si->green_pos, &si->green_size);
+		find_bits(pixel_info.blue_mask,
+			  &si->blue_pos, &si->blue_size);
+		find_bits(pixel_info.reserved_mask,
+			  &si->rsvd_pos, &si->rsvd_size);
+		si->lfb_depth = si->red_size + si->green_size +
+			si->blue_size + si->rsvd_size;
+		si->lfb_linelength = (pixels_per_scan_line * si->lfb_depth) / 8;
 	} else {
-		if (info->pixel_format == PIXEL_RGB_RESERVED_8BIT_PER_COLOR) {
+		if (pixel_format == PIXEL_RGB_RESERVED_8BIT_PER_COLOR) {
 			si->red_pos   = 0;
 			si->blue_pos  = 16;
 		} else /* PIXEL_BGR_RESERVED_8BIT_PER_COLOR */ {
@@ -404,34 +394,20 @@ static void setup_screen_info(struct screen_info *si, const efi_graphics_output_
 
 		si->green_pos = 8;
 		si->rsvd_pos  = 24;
-		si->red_size = 8;
-		si->green_size = 8;
-		si->blue_size = 8;
-		si->rsvd_size = 8;
+		si->red_size = si->green_size =
+			si->blue_size = si->rsvd_size = 8;
+
 		si->lfb_depth = 32;
-		si->lfb_linelength = info->pixels_per_scan_line * 4;
+		si->lfb_linelength = pixels_per_scan_line * 4;
 	}
-
-	si->lfb_size = si->lfb_linelength * si->lfb_height;
-	si->capabilities |= VIDEO_CAPABILITY_SKIP_QUIRKS;
 }
 
-static void setup_edid_info(struct edid_info *edid, u32 gop_size_of_edid, u8 *gop_edid)
+static efi_graphics_output_protocol_t *find_gop(unsigned long num,
+						const efi_handle_t handles[])
 {
-	if (!gop_edid || gop_size_of_edid < 128)
-		memset(edid->dummy, 0, sizeof(edid->dummy));
-	else
-		memcpy(edid->dummy, gop_edid, min(gop_size_of_edid, sizeof(edid->dummy)));
-}
-
-static efi_handle_t find_handle_with_primary_gop(unsigned long num, const efi_handle_t handles[],
-						 efi_graphics_output_protocol_t **found_gop)
-{
-	static efi_guid_t console_out_device_guid = EFI_CONSOLE_OUT_DEVICE_GUID;
 	efi_graphics_output_protocol_t *first_gop;
-	efi_handle_t h, first_gop_handle;
+	efi_handle_t h;
 
-	first_gop_handle = NULL;
 	first_gop = NULL;
 
 	for_each_efi_handle(h, handles, num) {
@@ -442,7 +418,8 @@ static efi_handle_t find_handle_with_primary_gop(unsigned long num, const efi_ha
 		efi_graphics_output_mode_info_t *info;
 		void *dummy = NULL;
 
-		status = efi_bs_call(handle_protocol, h, &graphics_output_guid,
+		status = efi_bs_call(handle_protocol, h,
+				     &EFI_GRAPHICS_OUTPUT_PROTOCOL_GUID,
 				     (void **)&gop);
 		if (status != EFI_SUCCESS)
 			continue;
@@ -464,72 +441,61 @@ static efi_handle_t find_handle_with_primary_gop(unsigned long num, const efi_ha
 		 * don't bother looking any further.
 		 */
 		status = efi_bs_call(handle_protocol, h,
-				     &console_out_device_guid, &dummy);
-		if (status == EFI_SUCCESS) {
-			if (found_gop)
-				*found_gop = gop;
-			return h;
-		} else if (!first_gop_handle) {
-			first_gop_handle = h;
+				     &EFI_CONSOLE_OUT_DEVICE_GUID, &dummy);
+		if (status == EFI_SUCCESS)
+			return gop;
+
+		if (!first_gop)
 			first_gop = gop;
-		}
 	}
 
-	if (found_gop)
-		*found_gop = first_gop;
-	return first_gop_handle;
+	return first_gop;
 }
 
-efi_status_t efi_setup_graphics(struct screen_info *si, struct edid_info *edid)
+efi_status_t efi_setup_gop(struct screen_info *si)
 {
-	static efi_guid_t edid_active_guid = EFI_EDID_ACTIVE_PROTOCOL_GUID;
-	static efi_guid_t edid_discovered_guid = EFI_EDID_DISCOVERED_PROTOCOL_GUID;
 	efi_handle_t *handles __free(efi_pool) = NULL;
-	efi_handle_t handle;
+	efi_graphics_output_protocol_mode_t *mode;
+	efi_graphics_output_mode_info_t *info;
 	efi_graphics_output_protocol_t *gop;
 	efi_status_t status;
 	unsigned long num;
 
 	status = efi_bs_call(locate_handle_buffer, EFI_LOCATE_BY_PROTOCOL,
-			      &graphics_output_guid, NULL, &num, &handles);
+			      &EFI_GRAPHICS_OUTPUT_PROTOCOL_GUID, NULL, &num,
+			      &handles);
 	if (status != EFI_SUCCESS)
 		return status;
 
-	handle = find_handle_with_primary_gop(num, handles, &gop);
-	if (!handle)
+	gop = find_gop(num, handles);
+	if (!gop)
 		return EFI_NOT_FOUND;
 
 	/* Change mode if requested */
 	set_mode(gop);
 
 	/* EFI framebuffer */
-	if (si)
-		setup_screen_info(si, gop);
+	mode = efi_table_attr(gop, mode);
+	info = efi_table_attr(mode, info);
 
-	/* Display EDID for primary GOP */
-	if (edid) {
-		efi_edid_discovered_protocol_t *discovered_edid;
-		efi_edid_active_protocol_t *active_edid;
-		u32 gop_size_of_edid = 0;
-		u8 *gop_edid = NULL;
+	si->orig_video_isVGA = VIDEO_TYPE_EFI;
 
-		status = efi_bs_call(handle_protocol, handle, &edid_active_guid,
-				     (void **)&active_edid);
-		if (status == EFI_SUCCESS) {
-			gop_size_of_edid = efi_table_attr(active_edid, size_of_edid);
-			gop_edid = efi_table_attr(active_edid, edid);
-		} else {
-			status = efi_bs_call(handle_protocol, handle,
-					     &edid_discovered_guid,
-					     (void **)&discovered_edid);
-			if (status == EFI_SUCCESS) {
-				gop_size_of_edid = efi_table_attr(discovered_edid, size_of_edid);
-				gop_edid = efi_table_attr(discovered_edid, edid);
-			}
-		}
+	si->lfb_width  = info->horizontal_resolution;
+	si->lfb_height = info->vertical_resolution;
 
-		setup_edid_info(edid, gop_size_of_edid, gop_edid);
-	}
+	efi_set_u64_split(efi_table_attr(mode, frame_buffer_base),
+			  &si->lfb_base, &si->ext_lfb_base);
+	if (si->ext_lfb_base)
+		si->capabilities |= VIDEO_CAPABILITY_64BIT_BASE;
+
+	si->pages = 1;
+
+	setup_pixel_info(si, info->pixels_per_scan_line,
+			     info->pixel_information, info->pixel_format);
+
+	si->lfb_size = si->lfb_linelength * si->lfb_height;
+
+	si->capabilities |= VIDEO_CAPABILITY_SKIP_QUIRKS;
 
 	return EFI_SUCCESS;
 }

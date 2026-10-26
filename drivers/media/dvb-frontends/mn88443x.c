@@ -694,7 +694,8 @@ static int mn88443x_probe(struct i2c_client *client)
 
 	chip->mclk = devm_clk_get(dev, "mclk");
 	if (IS_ERR(chip->mclk) && !conf) {
-		dev_err(dev, "Failed to request mclk: %pe\n", chip->mclk);
+		dev_err(dev, "Failed to request mclk: %ld\n",
+			PTR_ERR(chip->mclk));
 		return PTR_ERR(chip->mclk);
 	}
 
@@ -708,8 +709,8 @@ static int mn88443x_probe(struct i2c_client *client)
 	chip->reset_gpio = devm_gpiod_get_optional(dev, "reset",
 						   GPIOD_OUT_HIGH);
 	if (IS_ERR(chip->reset_gpio)) {
-		dev_err(dev, "Failed to request reset_gpio: %pe\n",
-			chip->reset_gpio);
+		dev_err(dev, "Failed to request reset_gpio: %ld\n",
+			PTR_ERR(chip->reset_gpio));
 		return PTR_ERR(chip->reset_gpio);
 	}
 
@@ -787,10 +788,10 @@ static const struct of_device_id mn88443x_of_match[] = {
 MODULE_DEVICE_TABLE(of, mn88443x_of_match);
 
 static const struct i2c_device_id mn88443x_i2c_id[] = {
-	{ .name = "mn884433", .driver_data = (kernel_ulong_t)&mn88443x_spec_pri },
-	{ .name = "mn884434-0", .driver_data = (kernel_ulong_t)&mn88443x_spec_pri },
-	{ .name = "mn884434-1", .driver_data = (kernel_ulong_t)&mn88443x_spec_sec },
-	{ }
+	{ "mn884433",   (kernel_ulong_t)&mn88443x_spec_pri },
+	{ "mn884434-0", (kernel_ulong_t)&mn88443x_spec_pri },
+	{ "mn884434-1", (kernel_ulong_t)&mn88443x_spec_sec },
+	{}
 };
 MODULE_DEVICE_TABLE(i2c, mn88443x_i2c_id);
 

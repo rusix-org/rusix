@@ -40,7 +40,6 @@
 #include <linux/part_stat.h>
 #include <linux/sched/sysctl.h>
 #include <linux/blk-crypto.h>
-#include <linux/error-injection.h>
 
 #define CREATE_TRACE_POINTS
 #include <trace/events/block.h>
@@ -51,7 +50,6 @@
 #include "blk-cgroup.h"
 #include "blk-throttle.h"
 #include "blk-ioprio.h"
-#include "error-injection.h"
 
 struct dentry *blk_debugfs_root;
 
@@ -116,12 +114,12 @@ static const char *const blk_op_name[] = {
 #undef REQ_OP_NAME
 
 /**
- * blk_op_str - Return the string "name" for an operation REQ_OP_name.
- * @op: a request operation.
+ * blk_op_str - Return string XXX in the REQ_OP_XXX.
+ * @op: REQ_OP_XXX.
  *
- * Convert a request operation REQ_OP_name into the string "name". Useful for
- * debugging and tracing BIOs and requests. For an invalid request operation
- * code, the string "UNKNOWN" is returned.
+ * Description: Centralize block layer function to convert REQ_OP_XXX into
+ * string format. Useful in the debugging and tracing bio or request. For
+ * invalid REQ_OP_XXX it returns string "UNKNOWN".
  */
 inline const char *blk_op_str(enum req_op op)
 {
@@ -134,56 +132,39 @@ inline const char *blk_op_str(enum req_op op)
 }
 EXPORT_SYMBOL_GPL(blk_op_str);
 
-enum req_op str_to_blk_op(const char *op)
-{
-	int i;
-
-	for (i = 0; i < ARRAY_SIZE(blk_op_name); i++)
-		if (blk_op_name[i] && !strcmp(blk_op_name[i], op))
-			return (enum req_op)i;
-	return REQ_OP_LAST;
-}
-
-#define ENT(_tag, _errno, _desc)	\
-[BLK_STS_##_tag] = {				\
-	.errno		= _errno,		\
-	.tag		= __stringify(_tag),	\
-	.name		= _desc,		\
-}
 static const struct {
 	int		errno;
-	const char	*tag;
 	const char	*name;
 } blk_errors[] = {
-	ENT(OK,			0,		""),
-	ENT(NOTSUPP,		-EOPNOTSUPP,	"operation not supported"),
-	ENT(TIMEOUT,		-ETIMEDOUT,	"timeout"),
-	ENT(NOSPC,		-ENOSPC,	"critical space allocation"),
-	ENT(TRANSPORT,		-ENOLINK,	"recoverable transport"),
-	ENT(TARGET,		-EREMOTEIO,	"critical target"),
-	ENT(RESV_CONFLICT,	-EBADE,		"reservation conflict"),
-	ENT(MEDIUM,		-ENODATA,	"critical medium"),
-	ENT(PROTECTION,		-EILSEQ,	"protection"),
-	ENT(RESOURCE,		-ENOMEM,	"kernel resource"),
-	ENT(DEV_RESOURCE,	-EBUSY,		"device resource"),
-	ENT(AGAIN,		-EAGAIN,	"nonblocking retry"),
-	ENT(OFFLINE,		-ENODEV,	"device offline"),
+	[BLK_STS_OK]		= { 0,		"" },
+	[BLK_STS_NOTSUPP]	= { -EOPNOTSUPP, "operation not supported" },
+	[BLK_STS_TIMEOUT]	= { -ETIMEDOUT,	"timeout" },
+	[BLK_STS_NOSPC]		= { -ENOSPC,	"critical space allocation" },
+	[BLK_STS_TRANSPORT]	= { -ENOLINK,	"recoverable transport" },
+	[BLK_STS_TARGET]	= { -EREMOTEIO,	"critical target" },
+	[BLK_STS_RESV_CONFLICT]	= { -EBADE,	"reservation conflict" },
+	[BLK_STS_MEDIUM]	= { -ENODATA,	"critical medium" },
+	[BLK_STS_PROTECTION]	= { -EILSEQ,	"protection" },
+	[BLK_STS_RESOURCE]	= { -ENOMEM,	"kernel resource" },
+	[BLK_STS_DEV_RESOURCE]	= { -EBUSY,	"device resource" },
+	[BLK_STS_AGAIN]		= { -EAGAIN,	"nonblocking retry" },
+	[BLK_STS_OFFLINE]	= { -ENODEV,	"device offline" },
 
 	/* device mapper special case, should not leak out: */
-	ENT(DM_REQUEUE,		-EREMCHG,	"dm internal retry"),
+	[BLK_STS_DM_REQUEUE]	= { -EREMCHG, "dm internal retry" },
 
 	/* zone device specific errors */
-	ENT(ZONE_OPEN_RESOURCE, -ETOOMANYREFS,	"open zones exceeded"),
-	ENT(ZONE_ACTIVE_RESOURCE, -EOVERFLOW,	"active zones exceeded"),
+	[BLK_STS_ZONE_OPEN_RESOURCE]	= { -ETOOMANYREFS, "open zones exceeded" },
+	[BLK_STS_ZONE_ACTIVE_RESOURCE]	= { -EOVERFLOW, "active zones exceeded" },
 
 	/* Command duration limit device-side timeout */
-	ENT(DURATION_LIMIT,	-ETIME,		"duration limit exceeded"),
-	ENT(INVAL,		-EINVAL,	"invalid"),
+	[BLK_STS_DURATION_LIMIT]	= { -ETIME, "duration limit exceeded" },
+
+	[BLK_STS_INVAL]		= { -EINVAL,	"invalid" },
 
 	/* everything else not covered above: */
-	ENT(IOERR,		-EIO,		"I/O"),
+	[BLK_STS_IOERR]		= { -EIO,	"I/O" },
 };
-#undef ENT
 
 blk_status_t errno_to_blk_status(int errno)
 {
@@ -216,32 +197,7 @@ const char *blk_status_to_str(blk_status_t status)
 		return "<null>";
 	return blk_errors[idx].name;
 }
-
-const char *blk_status_to_tag(blk_status_t status)
-{
-	int idx = (__force int)status;
-
-	if (WARN_ON_ONCE(idx >= ARRAY_SIZE(blk_errors) || !blk_errors[idx].tag))
-		return "<null>";
-	return blk_errors[idx].tag;
-}
-
-blk_status_t tag_to_blk_status(const char *tag)
-{
-	int i;
-
-	for (i = 0; i < ARRAY_SIZE(blk_errors); i++) {
-		if (blk_errors[i].tag &&
-		    !strcmp(blk_errors[i].tag, tag))
-			return (__force blk_status_t)i;
-	}
-
-	/*
-	 * Return BLK_STS_OK for mismatches as this function is intended to
-	 * parse error status values.
-	 */
-	return BLK_STS_OK;
-}
+EXPORT_SYMBOL_GPL(blk_status_to_str);
 
 /**
  * blk_sync_queue - cancel any pending callbacks on a queue
@@ -507,7 +463,6 @@ struct request_queue *blk_alloc_queue(struct queue_limits *lim, int node_id)
 	fs_reclaim_release(GFP_KERNEL);
 
 	q->nr_requests = BLKDEV_DEFAULT_RQ;
-	q->async_depth = BLKDEV_DEFAULT_RQ;
 
 	return q;
 
@@ -670,6 +625,14 @@ static inline blk_status_t blk_check_zone_append(struct request_queue *q,
 
 static void __submit_bio(struct bio *bio)
 {
+	/* If plug is not used, add new plug here to cache nsecs time. */
+	struct blk_plug plug;
+
+	if (unlikely(!blk_crypto_bio_prep(bio)))
+		return;
+
+	blk_start_plug(&plug);
+
 	if (!bdev_test_flag(bio->bi_bdev, BD_HAS_SUBMIT_BIO)) {
 		blk_mq_submit_bio(bio);
 	} else if (likely(bio_queue_enter(bio) == 0)) {
@@ -682,6 +645,8 @@ static void __submit_bio(struct bio *bio)
 			disk->fops->submit_bio(bio);
 		blk_queue_exit(disk->queue);
 	}
+
+	blk_finish_plug(&plug);
 }
 
 /*
@@ -695,13 +660,13 @@ static void __submit_bio(struct bio *bio)
  *    bio_list of new bios to be added.  ->submit_bio() may indeed add some more
  *    bios through a recursive call to submit_bio_noacct.  If it did, we find a
  *    non-NULL value in bio_list and re-enter the loop from the top.
- *  - In this case we really did just take the bio off the top of the list (no
+ *  - In this case we really did just take the bio of the top of the list (no
  *    pretending) and so remove it from bio_list, and call into ->submit_bio()
  *    again.
  *
  * bio_list_on_stack[0] contains bios submitted by the current ->submit_bio.
  * bio_list_on_stack[1] contains bios that were submitted before the current
- *	->submit_bio(), but that haven't been processed yet.
+ *	->submit_bio, but that haven't been processed yet.
  */
 static void __submit_bio_noacct(struct bio *bio)
 {
@@ -762,9 +727,6 @@ static void __submit_bio_noacct_mq(struct bio *bio)
 
 void submit_bio_noacct_nocheck(struct bio *bio, bool split)
 {
-	if (unlikely(blk_error_inject(bio)))
-		return;
-
 	blk_cgroup_bio_start(bio);
 
 	if (!bio_flagged(bio, BIO_TRACE_COMPLETION)) {
@@ -779,8 +741,8 @@ void submit_bio_noacct_nocheck(struct bio *bio, bool split)
 	/*
 	 * We only want one ->submit_bio to be active at a time, else stack
 	 * usage with stacked devices could be a problem.  Use current->bio_list
-	 * to collect a list of requests submitted by a ->submit_bio method
-	 * while it is active, and then process them after it returned.
+	 * to collect a list of requests submited by a ->submit_bio method while
+	 * it is active, and then process them after it returned.
 	 */
 	if (current->bio_list) {
 		if (split)
@@ -829,13 +791,6 @@ void submit_bio_noacct(struct bio *bio)
 	 */
 	if ((bio->bi_opf & REQ_NOWAIT) && !bdev_nowait(bdev))
 		goto not_supported;
-
-	if (bio_has_crypt_ctx(bio)) {
-		if (WARN_ON_ONCE(!bio_has_data(bio)))
-			goto end_io;
-		if (!blk_crypto_supported(bio))
-			goto not_supported;
-	}
 
 	if (should_fail_bio(bio))
 		goto end_io;
@@ -898,17 +853,10 @@ void submit_bio_noacct(struct bio *bio)
 		if (!q->limits.max_write_zeroes_sectors)
 			goto not_supported;
 		break;
+	case REQ_OP_ZONE_RESET:
 	case REQ_OP_ZONE_OPEN:
 	case REQ_OP_ZONE_CLOSE:
-	case REQ_OP_ZONE_RESET:
 	case REQ_OP_ZONE_FINISH:
-		/*
-		 * Zone management operations require sequential zones that are
-		 * not offline nor read-only.
-		 */
-		if (!bdev_zone_mgmt_allowed(bdev, bio->bi_iter.bi_sector))
-			goto end_io;
-		break;
 	case REQ_OP_ZONE_RESET_ALL:
 		if (!bdev_is_zoned(bio->bi_bdev))
 			goto not_supported;
@@ -950,7 +898,7 @@ static void bio_set_ioprio(struct bio *bio)
  *
  * submit_bio() is used to submit I/O requests to block devices.  It is passed a
  * fully set up &struct bio that describes the I/O that needs to be done.  The
- * bio will be sent to the device described by the bi_bdev field.
+ * bio will be send to the device described by the bi_bdev field.
  *
  * The success/failure status of the request, along with notification of
  * completion, is delivered asynchronously through the ->bi_end_io() callback
@@ -1040,7 +988,7 @@ int iocb_bio_iopoll(struct kiocb *kiocb, struct io_comp_batch *iob,
 	 * point to a freshly allocated bio at this point.  If that happens
 	 * we have a few cases to consider:
 	 *
-	 *  1) the bio is being initialized and bi_bdev is NULL.  We can just
+	 *  1) the bio is beeing initialized and bi_bdev is NULL.  We can just
 	 *     simply nothing in this case
 	 *  2) the bio points to a not poll enabled device.  bio_poll will catch
 	 *     this and return 0
@@ -1086,7 +1034,7 @@ unsigned long bdev_start_io_acct(struct block_device *bdev, enum req_op op,
 {
 	part_stat_lock();
 	update_io_ticks(bdev, start_time, false);
-	bdev_inc_in_flight(bdev, op);
+	part_stat_local_inc(bdev, in_flight[op_is_write(op)]);
 	part_stat_unlock();
 
 	return start_time;
@@ -1117,7 +1065,7 @@ void bdev_end_io_acct(struct block_device *bdev, enum req_op op,
 	part_stat_inc(bdev, ios[sgrp]);
 	part_stat_add(bdev, sectors[sgrp], sectors);
 	part_stat_add(bdev, nsecs[sgrp], jiffies_to_nsecs(duration));
-	bdev_dec_in_flight(bdev, op);
+	part_stat_local_dec(bdev, in_flight[op_is_write(op)]);
 	part_stat_unlock();
 }
 EXPORT_SYMBOL(bdev_end_io_acct);
@@ -1314,6 +1262,7 @@ void blk_io_schedule(void)
 	else
 		io_schedule();
 }
+EXPORT_SYMBOL_GPL(blk_io_schedule);
 
 int __init blk_dev_init(void)
 {
@@ -1325,7 +1274,7 @@ int __init blk_dev_init(void)
 
 	/* used for unplugging and affects IO latency/throughput - HIGHPRI */
 	kblockd_workqueue = alloc_workqueue("kblockd",
-					    WQ_MEM_RECLAIM | WQ_HIGHPRI | WQ_PERCPU, 0);
+					    WQ_MEM_RECLAIM | WQ_HIGHPRI, 0);
 	if (!kblockd_workqueue)
 		panic("Failed to create kblockd\n");
 

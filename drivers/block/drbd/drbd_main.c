@@ -32,7 +32,6 @@
 #include <linux/memcontrol.h>
 #include <linux/mm_inline.h>
 #include <linux/slab.h>
-#include <linux/string.h>
 #include <linux/random.h>
 #include <linux/reboot.h>
 #include <linux/notifier.h>
@@ -733,9 +732,9 @@ int drbd_send_sync_param(struct drbd_peer_device *peer_device)
 	}
 
 	if (apv >= 88)
-		strscpy(p->verify_alg, nc->verify_alg);
+		strcpy(p->verify_alg, nc->verify_alg);
 	if (apv >= 89)
-		strscpy(p->csums_alg, nc->csums_alg);
+		strcpy(p->csums_alg, nc->csums_alg);
 	rcu_read_unlock();
 
 	return drbd_send_command(peer_device, sock, cmd, size, NULL, 0);
@@ -746,7 +745,6 @@ int __drbd_send_protocol(struct drbd_connection *connection, enum drbd_packet cm
 	struct drbd_socket *sock;
 	struct p_protocol *p;
 	struct net_conf *nc;
-	size_t integrity_alg_len;
 	int size, cf;
 
 	sock = &connection->data;
@@ -764,10 +762,8 @@ int __drbd_send_protocol(struct drbd_connection *connection, enum drbd_packet cm
 	}
 
 	size = sizeof(*p);
-	if (connection->agreed_pro_version >= 87) {
-		integrity_alg_len = strlen(nc->integrity_alg) + 1;
-		size += integrity_alg_len;
-	}
+	if (connection->agreed_pro_version >= 87)
+		size += strlen(nc->integrity_alg) + 1;
 
 	p->protocol      = cpu_to_be32(nc->wire_protocol);
 	p->after_sb_0p   = cpu_to_be32(nc->after_sb_0p);
@@ -782,7 +778,7 @@ int __drbd_send_protocol(struct drbd_connection *connection, enum drbd_packet cm
 	p->conn_flags    = cpu_to_be32(cf);
 
 	if (connection->agreed_pro_version >= 87)
-		strscpy(p->integrity_alg, nc->integrity_alg, integrity_alg_len);
+		strcpy(p->integrity_alg, nc->integrity_alg);
 	rcu_read_unlock();
 
 	return __conn_send_command(connection, sock, cmd, size, NULL, 0);
@@ -874,7 +870,7 @@ void drbd_gen_and_send_sync_uuid(struct drbd_peer_device *peer_device)
 	if (uuid && uuid != UUID_JUST_CREATED)
 		uuid = uuid + UUID_NEW_BM_OFFSET;
 	else
-		uuid = get_random_u64();
+		get_random_bytes(&uuid, sizeof(u64));
 	drbd_uuid_set(device, UI_BITMAP, uuid);
 	drbd_print_uuids(device, "updated sync UUID");
 	drbd_md_sync(device);
@@ -2324,7 +2320,7 @@ static void drbd_cleanup(void)
 	if (retry.wq)
 		destroy_workqueue(retry.wq);
 
-	genl_unregister_family(&drbd_nl_family);
+	drbd_genl_unregister();
 
 	idr_for_each_entry(&drbd_devices, device, i)
 		drbd_delete_device(device);
@@ -2514,7 +2510,7 @@ struct drbd_resource *drbd_create_resource(const char *name)
 {
 	struct drbd_resource *resource;
 
-	resource = kzalloc_obj(struct drbd_resource);
+	resource = kzalloc(sizeof(struct drbd_resource), GFP_KERNEL);
 	if (!resource)
 		goto fail;
 	resource->name = kstrdup(name, GFP_KERNEL);
@@ -2547,7 +2543,7 @@ struct drbd_connection *conn_create(const char *name, struct res_opts *res_opts)
 	struct drbd_resource *resource;
 	struct drbd_connection *connection;
 
-	connection = kzalloc_obj(struct drbd_connection);
+	connection = kzalloc(sizeof(struct drbd_connection), GFP_KERNEL);
 	if (!connection)
 		return NULL;
 
@@ -2556,7 +2552,7 @@ struct drbd_connection *conn_create(const char *name, struct res_opts *res_opts)
 	if (drbd_alloc_socket(&connection->meta))
 		goto fail;
 
-	connection->current_epoch = kzalloc_obj(struct drbd_epoch);
+	connection->current_epoch = kzalloc(sizeof(struct drbd_epoch), GFP_KERNEL);
 	if (!connection->current_epoch)
 		goto fail;
 
@@ -2670,7 +2666,7 @@ enum drbd_ret_code drbd_create_device(struct drbd_config_context *adm_ctx, unsig
 		return ERR_MINOR_OR_VOLUME_EXISTS;
 
 	/* GFP_KERNEL, we are outside of all write-out paths */
-	device = kzalloc_obj(struct drbd_device);
+	device = kzalloc(sizeof(struct drbd_device), GFP_KERNEL);
 	if (!device)
 		return ERR_NOMEM;
 	kref_init(&device->kref);
@@ -2729,7 +2725,7 @@ enum drbd_ret_code drbd_create_device(struct drbd_config_context *adm_ctx, unsig
 	INIT_LIST_HEAD(&device->peer_devices);
 	INIT_LIST_HEAD(&device->pending_bitmap_io);
 	for_each_connection(connection, resource) {
-		peer_device = kzalloc_obj(struct drbd_peer_device);
+		peer_device = kzalloc(sizeof(struct drbd_peer_device), GFP_KERNEL);
 		if (!peer_device)
 			goto out_idr_remove_from_resource;
 		peer_device->connection = connection;
@@ -2846,7 +2842,7 @@ static int __init drbd_init(void)
 	mutex_init(&resources_mutex);
 	INIT_LIST_HEAD(&drbd_resources);
 
-	err = genl_register_family(&drbd_nl_family);
+	err = drbd_genl_register();
 	if (err) {
 		pr_err("unable to register generic netlink family\n");
 		goto fail;
@@ -2876,7 +2872,7 @@ static int __init drbd_init(void)
 
 	pr_info("initialized. "
 	       "Version: " REL_VERSION " (api:%d/proto:%d-%d)\n",
-	       DRBD_FAMILY_VERSION, PRO_VERSION_MIN, PRO_VERSION_MAX);
+	       GENL_MAGIC_VERSION, PRO_VERSION_MIN, PRO_VERSION_MAX);
 	pr_info("%s\n", drbd_buildtag());
 	pr_info("registered as block device major %d\n", DRBD_MAJOR);
 	return 0; /* Success! */
@@ -3337,7 +3333,7 @@ void drbd_uuid_new_current(struct drbd_device *device) __must_hold(local)
 	u64 val;
 	unsigned long long bm_uuid;
 
-	val = get_random_u64();
+	get_random_bytes(&val, sizeof(u64));
 
 	spin_lock_irq(&device->ldev->md.uuid_lock);
 	bm_uuid = device->ldev->md.uuid[UI_BITMAP];

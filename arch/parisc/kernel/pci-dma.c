@@ -160,7 +160,8 @@ static inline void unmap_uncached_pte(pmd_t * pmd, unsigned long vaddr,
 	if (pmd_none(*pmd))
 		return;
 	if (pmd_bad(*pmd)) {
-		pmd_clear_bad(pmd);
+		pmd_ERROR(*pmd);
+		pmd_clear(pmd);
 		return;
 	}
 	pte = pte_offset_kernel(pmd, vaddr);
@@ -195,7 +196,8 @@ static inline void unmap_uncached_pmd(pgd_t * dir, unsigned long vaddr,
 	if (pgd_none(*dir))
 		return;
 	if (pgd_bad(*dir)) {
-		pgd_clear_bad(dir);
+		pgd_ERROR(*dir);
+		pgd_clear(dir);
 		return;
 	}
 	pmd = pmd_offset(pud_offset(p4d_offset(dir, vaddr), vaddr), vaddr);

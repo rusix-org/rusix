@@ -56,7 +56,6 @@ SECTIONS
 	.dynamic	: { *(.dynamic) }		:text :dynamic
 
 	.rodata		: { *(.rodata*) }		:text
-	.got		: { *(.got) }
 
 	_end = .;
 	PROVIDE(end = .);
@@ -95,16 +94,15 @@ PHDRS
 VERSION
 {
 	LINUX_2.6 {
-#ifdef CONFIG_GENERIC_GETTIMEOFDAY
+#ifndef CONFIG_MIPS_DISABLE_VDSO
 	global:
-#if _MIPS_SIM == _MIPS_SIM_ABI64 || defined(CONFIG_COMPAT_32BIT_TIME)
 		__vdso_clock_gettime;
+#ifdef CONFIG_MIPS_CLOCK_VSYSCALL
 		__vdso_gettimeofday;
-		__vdso_clock_getres;
 #endif
+		__vdso_clock_getres;
 #if _MIPS_SIM != _MIPS_SIM_ABI64
 		__vdso_clock_gettime64;
-		__vdso_clock_getres_time64;
 #endif
 #endif
 	local: *;

@@ -3,7 +3,7 @@
  * CAN driver for PEAK System PCAN-USB FD / PCAN-USB Pro FD adapter
  *
  * Copyright (C) 2013-2025 PEAK System-Technik GmbH
- * Author: Stéphane Grosjean <s.grosjean@peak-system.fr>
+ * Author: Stéphane Grosjean <stephane.grosjean@hms-networks.com>
  */
 #include <linux/ethtool.h>
 #include <linux/module.h>
@@ -977,7 +977,7 @@ static int pcan_usb_fd_init(struct peak_usb_device *dev)
 	/* do this for 1st channel only */
 	if (!dev->prev_siblings) {
 		/* allocate netdevices common structure attached to first one */
-		pdev->usb_if = kzalloc_obj(*pdev->usb_if);
+		pdev->usb_if = kzalloc(sizeof(*pdev->usb_if), GFP_KERNEL);
 		if (!pdev->usb_if)
 			goto err_out;
 

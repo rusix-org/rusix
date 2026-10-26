@@ -30,7 +30,8 @@
  * PASV response can not be NAT-ed) but Active FTP should work
  */
 
-#define pr_fmt(fmt) "IPVS: " fmt
+#define KMSG_COMPONENT "IPVS"
+#define pr_fmt(fmt) KMSG_COMPONENT ": " fmt
 
 #include <linux/module.h>
 #include <linux/types.h>
@@ -208,7 +209,7 @@ alter:
  * Use port 0 to expect connection from any port.
  */
 void ip_vs_nfct_expect_related(struct sk_buff *skb, struct nf_conn *ct,
-			       struct ip_vs_conn *cp, u8 proto,
+			       struct ip_vs_conn *cp, u_int8_t proto,
 			       const __be16 port, int from_rs)
 {
 	struct nf_conntrack_expect *exp;

@@ -149,10 +149,10 @@ MODULE_PARM_DESC(use_srq, "Use shared receive queue.");
 static int srq_size_set(const char *val, const struct kernel_param *kp);
 static const struct kernel_param_ops srq_size_ops = {
 	.set = srq_size_set,
-	.get = param_get_uint,
+	.get = param_get_int,
 };
 
-static unsigned int nvmet_rdma_srq_size = 1024;
+static int nvmet_rdma_srq_size = 1024;
 module_param_cb(srq_size, &srq_size_ops, &nvmet_rdma_srq_size, 0644);
 MODULE_PARM_DESC(srq_size, "set Shared Receive Queue (SRQ) size, should >= 256 (default: 1024)");
 
@@ -180,14 +180,13 @@ static const struct nvmet_fabrics_ops nvmet_rdma_ops;
 
 static int srq_size_set(const char *val, const struct kernel_param *kp)
 {
-	unsigned int n;
-	int ret;
+	int n = 0, ret;
 
-	ret = kstrtouint(val, 10, &n);
+	ret = kstrtoint(val, 10, &n);
 	if (ret != 0 || n < 256)
 		return -EINVAL;
 
-	return param_set_uint(val, kp);
+	return param_set_int(val, kp);
 }
 
 static int num_pages(int len)
@@ -223,7 +222,7 @@ nvmet_rdma_get_rsp(struct nvmet_rdma_queue *queue)
 	if (unlikely(!rsp)) {
 		int ret;
 
-		rsp = kzalloc_obj(*rsp);
+		rsp = kzalloc(sizeof(*rsp), GFP_KERNEL);
 		if (unlikely(!rsp))
 			return NULL;
 		ret = nvmet_rdma_alloc_rsp(queue->dev, rsp,
@@ -318,7 +317,7 @@ static int nvmet_rdma_alloc_cmd(struct nvmet_rdma_device *ndev,
 			struct nvmet_rdma_cmd *c, bool admin)
 {
 	/* NVMe command / RDMA RECV */
-	c->nvme_cmd = kmalloc_obj(*c->nvme_cmd);
+	c->nvme_cmd = kmalloc(sizeof(*c->nvme_cmd), GFP_KERNEL);
 	if (!c->nvme_cmd)
 		goto out;
 
@@ -368,7 +367,7 @@ nvmet_rdma_alloc_cmds(struct nvmet_rdma_device *ndev,
 	struct nvmet_rdma_cmd *cmds;
 	int ret = -EINVAL, i;
 
-	cmds = kvzalloc_objs(struct nvmet_rdma_cmd, nr_cmds);
+	cmds = kcalloc(nr_cmds, sizeof(struct nvmet_rdma_cmd), GFP_KERNEL);
 	if (!cmds)
 		goto out;
 
@@ -383,7 +382,7 @@ nvmet_rdma_alloc_cmds(struct nvmet_rdma_device *ndev,
 out_free:
 	while (--i >= 0)
 		nvmet_rdma_free_cmd(ndev, cmds + i, admin);
-	kvfree(cmds);
+	kfree(cmds);
 out:
 	return ERR_PTR(ret);
 }
@@ -395,14 +394,14 @@ static void nvmet_rdma_free_cmds(struct nvmet_rdma_device *ndev,
 
 	for (i = 0; i < nr_cmds; i++)
 		nvmet_rdma_free_cmd(ndev, cmds + i, admin);
-	kvfree(cmds);
+	kfree(cmds);
 }
 
 static int nvmet_rdma_alloc_rsp(struct nvmet_rdma_device *ndev,
 		struct nvmet_rdma_rsp *r, int tag)
 {
 	/* NVMe CQE / RDMA SEND */
-	r->req.cqe = kmalloc_obj(*r->req.cqe);
+	r->req.cqe = kmalloc(sizeof(*r->req.cqe), GFP_KERNEL);
 	if (!r->req.cqe)
 		goto out;
 
@@ -456,7 +455,8 @@ nvmet_rdma_alloc_rsps(struct nvmet_rdma_queue *queue)
 			NUMA_NO_NODE, false, true))
 		goto out;
 
-	queue->rsps = kvzalloc_objs(struct nvmet_rdma_rsp, nr_rsps);
+	queue->rsps = kcalloc(nr_rsps, sizeof(struct nvmet_rdma_rsp),
+			GFP_KERNEL);
 	if (!queue->rsps)
 		goto out_free_sbitmap;
 
@@ -473,7 +473,7 @@ nvmet_rdma_alloc_rsps(struct nvmet_rdma_queue *queue)
 out_free:
 	while (--i >= 0)
 		nvmet_rdma_free_rsp(ndev, &queue->rsps[i]);
-	kvfree(queue->rsps);
+	kfree(queue->rsps);
 out_free_sbitmap:
 	sbitmap_free(&queue->rsp_tags);
 out:
@@ -487,7 +487,7 @@ static void nvmet_rdma_free_rsps(struct nvmet_rdma_queue *queue)
 
 	for (i = 0; i < nr_rsps; i++)
 		nvmet_rdma_free_rsp(ndev, &queue->rsps[i]);
-	kvfree(queue->rsps);
+	kfree(queue->rsps);
 	sbitmap_free(&queue->rsp_tags);
 }
 
@@ -1105,7 +1105,7 @@ nvmet_rdma_init_srq(struct nvmet_rdma_device *ndev)
 	struct ib_srq *srq;
 	int ret, i;
 
-	nsrq = kzalloc_obj(*nsrq);
+	nsrq = kzalloc(sizeof(*nsrq), GFP_KERNEL);
 	if (!nsrq)
 		return ERR_PTR(-ENOMEM);
 
@@ -1161,10 +1161,10 @@ static int nvmet_rdma_init_srqs(struct nvmet_rdma_device *ndev)
 
 	ndev->srq_size = min(ndev->device->attrs.max_srq_wr,
 			     nvmet_rdma_srq_size);
-	ndev->srq_count = min_t(u32, ndev->device->num_comp_vectors,
-				ndev->device->attrs.max_srq);
+	ndev->srq_count = min(ndev->device->num_comp_vectors,
+			      ndev->device->attrs.max_srq);
 
-	ndev->srqs = kzalloc_objs(*ndev->srqs, ndev->srq_count);
+	ndev->srqs = kcalloc(ndev->srq_count, sizeof(*ndev->srqs), GFP_KERNEL);
 	if (!ndev->srqs)
 		return -ENOMEM;
 
@@ -1207,7 +1207,7 @@ nvmet_rdma_find_get_device(struct rdma_cm_id *cm_id)
 	struct nvmet_port *nport = port->nport;
 	struct nvmet_rdma_device *ndev;
 	int inline_page_count;
-	u32 inline_sge_count;
+	int inline_sge_count;
 	int ret;
 
 	mutex_lock(&device_list_mutex);
@@ -1217,15 +1217,13 @@ nvmet_rdma_find_get_device(struct rdma_cm_id *cm_id)
 			goto out_unlock;
 	}
 
-	ndev = kzalloc_obj(*ndev);
+	ndev = kzalloc(sizeof(*ndev), GFP_KERNEL);
 	if (!ndev)
 		goto out_err;
 
 	inline_page_count = num_pages(nport->inline_data_size);
 	inline_sge_count = max(cm_id->device->attrs.max_sge_rd,
-				cm_id->device->attrs.max_recv_sge);
-	if (inline_sge_count)
-		inline_sge_count--;
+				cm_id->device->attrs.max_recv_sge) - 1;
 	if (inline_page_count > inline_sge_count) {
 		pr_warn("inline_data_size %d cannot be supported by device %s. Reducing to %lu.\n",
 			nport->inline_data_size, cm_id->device->name,
@@ -1459,7 +1457,7 @@ nvmet_rdma_alloc_queue(struct nvmet_rdma_device *ndev,
 	struct nvmet_rdma_queue *queue;
 	int ret;
 
-	queue = kzalloc_obj(*queue);
+	queue = kzalloc(sizeof(*queue), GFP_KERNEL);
 	if (!queue) {
 		ret = NVME_RDMA_CM_NO_RSC;
 		goto out_reject;
@@ -1583,9 +1581,8 @@ static int nvmet_rdma_cm_accept(struct rdma_cm_id *cm_id,
 
 	param.rnr_retry_count = 7;
 	param.flow_control = 1;
-	param.initiator_depth = min3(p->initiator_depth,
-				     queue->dev->device->attrs.max_qp_init_rd_atom,
-				     U8_MAX);
+	param.initiator_depth = min_t(u8, p->initiator_depth,
+		queue->dev->device->attrs.max_qp_init_rd_atom);
 	param.private_data = &priv;
 	param.private_data_len = sizeof(priv);
 	priv.recfmt = cpu_to_le16(NVME_RDMA_CM_FMT_1_0);
@@ -1955,7 +1952,7 @@ static int nvmet_rdma_add_port(struct nvmet_port *nport)
 	__kernel_sa_family_t af;
 	int ret;
 
-	port = kzalloc_obj(*port);
+	port = kzalloc(sizeof(*port), GFP_KERNEL);
 	if (!port)
 		return -ENOMEM;
 

@@ -14,10 +14,10 @@ int refill_pi_state_cache(void)
 {
 	struct futex_pi_state *pi_state;
 
-	if (likely(current->futex.pi_state_cache))
+	if (likely(current->pi_state_cache))
 		return 0;
 
-	pi_state = kzalloc_obj(*pi_state);
+	pi_state = kzalloc(sizeof(*pi_state), GFP_KERNEL);
 
 	if (!pi_state)
 		return -ENOMEM;
@@ -28,17 +28,17 @@ int refill_pi_state_cache(void)
 	refcount_set(&pi_state->refcount, 1);
 	pi_state->key = FUTEX_KEY_INIT;
 
-	current->futex.pi_state_cache = pi_state;
+	current->pi_state_cache = pi_state;
 
 	return 0;
 }
 
 static struct futex_pi_state *alloc_pi_state(void)
 {
-	struct futex_pi_state *pi_state = current->futex.pi_state_cache;
+	struct futex_pi_state *pi_state = current->pi_state_cache;
 
 	WARN_ON(!pi_state);
-	current->futex.pi_state_cache = NULL;
+	current->pi_state_cache = NULL;
 
 	return pi_state;
 }
@@ -60,7 +60,7 @@ static void pi_state_update_owner(struct futex_pi_state *pi_state,
 	if (new_owner) {
 		raw_spin_lock(&new_owner->pi_lock);
 		WARN_ON(!list_empty(&pi_state->list));
-		list_add(&pi_state->list, &new_owner->futex.pi_state_list);
+		list_add(&pi_state->list, &new_owner->pi_state_list);
 		pi_state->owner = new_owner;
 		raw_spin_unlock(&new_owner->pi_lock);
 	}
@@ -96,7 +96,7 @@ void put_pi_state(struct futex_pi_state *pi_state)
 		raw_spin_unlock_irqrestore(&pi_state->pi_mutex.wait_lock, flags);
 	}
 
-	if (current->futex.pi_state_cache) {
+	if (current->pi_state_cache) {
 		kfree(pi_state);
 	} else {
 		/*
@@ -106,7 +106,7 @@ void put_pi_state(struct futex_pi_state *pi_state)
 		 */
 		pi_state->owner = NULL;
 		refcount_set(&pi_state->refcount, 1);
-		current->futex.pi_state_cache = pi_state;
+		current->pi_state_cache = pi_state;
 	}
 }
 
@@ -179,7 +179,7 @@ void put_pi_state(struct futex_pi_state *pi_state)
  *
  * p->pi_lock:
  *
- *	p->futex.pi_state_list -> pi_state->list, relation
+ *	p->pi_state_list -> pi_state->list, relation
  *	pi_mutex->owner -> pi_state->owner, relation
  *
  * pi_state->refcount:
@@ -390,8 +390,8 @@ static int handle_exit_race(u32 __user *uaddr, u32 uval)
 	 *    *uaddr = 0xC0000000;	     tsk = get_task(PID);
 	 *   }				     if (!tsk->flags & PF_EXITING) {
 	 *  ...				       attach();
-	 *  tsk->futex.state =               } else {
-	 *	FUTEX_STATE_DEAD;              if (tsk->futex.state !=
+	 *  tsk->futex_state =               } else {
+	 *	FUTEX_STATE_DEAD;              if (tsk->futex_state !=
 	 *					  FUTEX_STATE_DEAD)
 	 *				         return -EAGAIN;
 	 *				       return -ESRCH; <--- FAIL
@@ -433,14 +433,13 @@ static void __attach_to_pi_owner(struct task_struct *p, union futex_key *key,
 	 * Initialize the pi_mutex in locked state and make @p
 	 * the owner of it:
 	 */
-	__assume_ctx_lock(&pi_state->pi_mutex.wait_lock);
 	rt_mutex_init_proxy_locked(&pi_state->pi_mutex, p);
 
 	/* Store the key for possible exit cleanups: */
 	pi_state->key = *key;
 
 	WARN_ON(!list_empty(&pi_state->list));
-	list_add(&pi_state->list, &p->futex.pi_state_list);
+	list_add(&pi_state->list, &p->pi_state_list);
 	/*
 	 * Assignment without holding pi_state->pi_mutex.wait_lock is safe
 	 * because there is no concurrency as the object is not published yet.
@@ -491,7 +490,7 @@ static int attach_to_pi_owner(u32 __user *uaddr, u32 uval, union futex_key *key,
 	raw_spin_lock_irq(&p->pi_lock);
 
 	/* Validate that the task is ready for futex operations. */
-	if (unlikely(p->futex.state != FUTEX_STATE_OK)) {
+	if (unlikely(p->futex_state != FUTEX_STATE_OK)) {
 		/*
 		 * The task is on the way out. When state is FUTEX_STATE_EXITING
 		 * the cleanup is in progress. To avoid a live lock when the
@@ -502,7 +501,7 @@ static int attach_to_pi_owner(u32 __user *uaddr, u32 uval, union futex_key *key,
 		 * the mutex the waiter drops the reference count and
 		 * re-evaluates the situation.
 		 */
-		if (p->futex.state == FUTEX_STATE_EXITING) {
+		if (p->futex_state == FUTEX_STATE_EXITING) {
 			raw_spin_unlock_irq(&p->pi_lock);
 			*exiting = p;
 			return -EBUSY;
@@ -680,8 +679,6 @@ int futex_lock_pi_atomic(u32 __user *uaddr, struct futex_hash_bucket *hb,
 static int wake_futex_pi(u32 __user *uaddr, u32 uval,
 			 struct futex_pi_state *pi_state,
 			 struct rt_mutex_waiter *top_waiter)
-	__must_hold(&pi_state->pi_mutex.wait_lock)
-	__releases(&pi_state->pi_mutex.wait_lock)
 {
 	struct task_struct *new_owner;
 	bool postunlock = false;
@@ -738,8 +735,6 @@ out_unlock:
 
 static int __fixup_pi_state_owner(u32 __user *uaddr, struct futex_q *q,
 				  struct task_struct *argowner)
-	__must_hold(&q->pi_state->pi_mutex.wait_lock)
-	__must_hold(q->lock_ptr)
 {
 	struct futex_pi_state *pi_state = q->pi_state;
 	struct task_struct *oldowner, *newowner;
@@ -1038,7 +1033,6 @@ retry_private:
 				 * - EAGAIN: The user space value changed.
 				 */
 				futex_q_unlock(hb);
-				__release(q.lock_ptr);
 				/*
 				 * Handle the case where the owner is in the middle of
 				 * exiting. Wait for the exit to complete otherwise
@@ -1153,7 +1147,6 @@ no_block:
 		if (res)
 			ret = (res < 0) ? res : 0;
 
-		__release(&hb->lock);
 		futex_unqueue_pi(&q);
 		spin_unlock(q.lock_ptr);
 
@@ -1163,12 +1156,10 @@ no_block:
 
 out_unlock_put_key:
 		futex_q_unlock(hb);
-		__release(q.lock_ptr);
 		goto out;
 
 uaddr_faulted:
 		futex_q_unlock(hb);
-		__release(q.lock_ptr);
 
 		ret = fault_in_user_writeable(uaddr);
 		if (ret)
@@ -1193,7 +1184,7 @@ out:
  * This is the in-kernel slowpath: we look up the PI state (if any),
  * and do the rt-mutex unlock.
  */
-static int __futex_unlock_pi(u32 __user *uaddr, unsigned int flags)
+int futex_unlock_pi(u32 __user *uaddr, unsigned int flags)
 {
 	u32 curval, uval, vpid = task_pid_vnr(current);
 	union futex_key key = FUTEX_KEY_INIT;
@@ -1202,6 +1193,7 @@ static int __futex_unlock_pi(u32 __user *uaddr, unsigned int flags)
 
 	if (!IS_ENABLED(CONFIG_FUTEX_PI))
 		return -ENOSYS;
+
 retry:
 	if (get_user(uval, uaddr))
 		return -EFAULT;
@@ -1357,15 +1349,3 @@ pi_faulted:
 	return ret;
 }
 
-int futex_unlock_pi(u32 __user *uaddr, unsigned int flags, void __user *pop)
-{
-	int ret = __futex_unlock_pi(uaddr, flags);
-
-	if (ret || !(flags & FLAGS_ROBUST_UNLOCK))
-		return ret;
-
-	if (!futex_robust_list_clear_pending(pop, flags))
-		return -EFAULT;
-
-	return 0;
-}

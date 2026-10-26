@@ -129,7 +129,7 @@ static const struct super_operations ocfs2_sops = {
 	.statfs		= ocfs2_statfs,
 	.alloc_inode	= ocfs2_alloc_inode,
 	.free_inode	= ocfs2_free_inode,
-	.drop_inode	= inode_just_drop,
+	.drop_inode	= ocfs2_drop_inode,
 	.evict_inode	= ocfs2_evict_inode,
 	.sync_fs	= ocfs2_sync_fs,
 	.put_super	= ocfs2_put_super,
@@ -1200,7 +1200,7 @@ static int ocfs2_init_fs_context(struct fs_context *fc)
 {
 	struct mount_options *mopt;
 
-	mopt = kzalloc_obj(struct mount_options);
+	mopt = kzalloc(sizeof(struct mount_options), GFP_KERNEL);
 	if (!mopt)
 		return -EINVAL;
 
@@ -1224,6 +1224,7 @@ static struct file_system_type ocfs2_fs_type = {
 	.name           = "ocfs2",
 	.kill_sb        = kill_block_super,
 	.fs_flags       = FS_REQUIRES_DEV|FS_RENAME_DOES_D_MOVE,
+	.next           = NULL,
 	.init_fs_context = ocfs2_init_fs_context,
 	.parameters	= ocfs2_param_spec,
 };
@@ -1882,6 +1883,7 @@ static void ocfs2_dismount_volume(struct super_block *sb, int mnt_err)
 
 	ocfs2_delete_osb(osb);
 	kfree(osb);
+	sb->s_dev = 0;
 	sb->s_fs_info = NULL;
 }
 
@@ -1951,7 +1953,7 @@ static int ocfs2_initialize_super(struct super_block *sb,
 	struct ocfs2_super *osb;
 	u64 total_blocks;
 
-	osb = kzalloc_obj(struct ocfs2_super);
+	osb = kzalloc(sizeof(struct ocfs2_super), GFP_KERNEL);
 	if (!osb) {
 		status = -ENOMEM;
 		mlog_errno(status);
@@ -2120,7 +2122,7 @@ static int ocfs2_initialize_super(struct super_block *sb,
 		osb->osb_cluster_stack[0] = '\0';
 	}
 
-	osb->s_next_generation = get_random_u32();
+	get_random_bytes(&osb->s_next_generation, sizeof(u32));
 
 	/*
 	 * FIXME
@@ -2483,7 +2485,7 @@ static int ocfs2_handle_error(struct super_block *sb)
 		rv = -EIO;
 	} else { /* default option */
 		rv = -EROFS;
-		if (sb_rdonly(sb) && ocfs2_emergency_state(osb))
+		if (sb_rdonly(sb) && (ocfs2_is_soft_readonly(osb) || ocfs2_is_hard_readonly(osb)))
 			return rv;
 
 		pr_crit("OCFS2: File system is now read-only.\n");

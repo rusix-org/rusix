@@ -825,6 +825,9 @@ static int jpu_try_fmt(struct file *file, void *priv, struct v4l2_format *f)
 {
 	struct jpu_ctx *ctx = file_to_ctx(file);
 
+	if (!v4l2_m2m_get_vq(ctx->fh.m2m_ctx, f->type))
+		return -EINVAL;
+
 	return __jpu_try_fmt(ctx, NULL, &f->fmt.pix_mp, f->type);
 }
 
@@ -838,6 +841,8 @@ static int jpu_s_fmt(struct file *file, void *priv, struct v4l2_format *f)
 	int ret;
 
 	vq = v4l2_m2m_get_vq(m2m_ctx, f->type);
+	if (!vq)
+		return -EINVAL;
 
 	if (vb2_is_busy(vq)) {
 		v4l2_err(&ctx->jpu->v4l2_dev, "%s queue busy\n", __func__);
@@ -860,6 +865,9 @@ static int jpu_g_fmt(struct file *file, void *priv, struct v4l2_format *f)
 {
 	struct jpu_ctx *ctx = file_to_ctx(file);
 	struct jpu_q_data *q_data;
+
+	if (!v4l2_m2m_get_vq(ctx->fh.m2m_ctx, f->type))
+		return -EINVAL;
 
 	q_data = jpu_get_q_data(ctx, f->type);
 	f->fmt.pix_mp = q_data->format;
@@ -1212,7 +1220,7 @@ static int jpu_open(struct file *file)
 	struct jpu_ctx *ctx;
 	int ret;
 
-	ctx = kzalloc_obj(*ctx);
+	ctx = kzalloc(sizeof(*ctx), GFP_KERNEL);
 	if (!ctx)
 		return -ENOMEM;
 
@@ -1693,6 +1701,7 @@ static void jpu_remove(struct platform_device *pdev)
 	v4l2_device_unregister(&jpu->v4l2_dev);
 }
 
+#ifdef CONFIG_PM_SLEEP
 static int jpu_suspend(struct device *dev)
 {
 	struct jpu *jpu = dev_get_drvdata(dev);
@@ -1716,8 +1725,11 @@ static int jpu_resume(struct device *dev)
 
 	return 0;
 }
+#endif
 
-static DEFINE_SIMPLE_DEV_PM_OPS(jpu_pm_ops, jpu_suspend, jpu_resume);
+static const struct dev_pm_ops jpu_pm_ops = {
+	SET_SYSTEM_SLEEP_PM_OPS(jpu_suspend, jpu_resume)
+};
 
 static struct platform_driver jpu_driver = {
 	.probe = jpu_probe,
@@ -1725,7 +1737,7 @@ static struct platform_driver jpu_driver = {
 	.driver = {
 		.of_match_table = jpu_dt_ids,
 		.name = DRV_NAME,
-		.pm = pm_sleep_ptr(&jpu_pm_ops),
+		.pm = &jpu_pm_ops,
 	},
 };
 

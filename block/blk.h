@@ -4,7 +4,6 @@
 
 #include <linux/bio-integrity.h>
 #include <linux/blk-crypto.h>
-#include <linux/part_stat.h>
 #include <linux/lockdep.h>
 #include <linux/memblock.h>	/* for max_pfn/max_low_pfn */
 #include <linux/sched/sysctl.h>
@@ -50,18 +49,13 @@ struct blk_flush_queue *blk_alloc_flush_queue(int node, int cmd_size,
 					      gfp_t flags);
 void blk_free_flush_queue(struct blk_flush_queue *q);
 
-const char *blk_status_to_str(blk_status_t status);
-const char *blk_status_to_tag(blk_status_t status);
-blk_status_t tag_to_blk_status(const char *tag);
-enum req_op str_to_blk_op(const char *op);
-
 bool __blk_mq_unfreeze_queue(struct request_queue *q, bool force_atomic);
 bool blk_queue_start_drain(struct request_queue *q);
 bool __blk_freeze_queue_start(struct request_queue *q,
 			      struct task_struct *owner);
 int __bio_queue_enter(struct request_queue *q, struct bio *bio);
 void submit_bio_noacct_nocheck(struct bio *bio, bool split);
-int bio_submit_or_kill(struct bio *bio, unsigned int flags);
+void bio_await_chain(struct bio *bio);
 
 static inline bool blk_try_enter_queue(struct request_queue *q, bool pm)
 {
@@ -113,6 +107,11 @@ static inline void blk_wait_io(struct completion *done)
 
 struct block_device *blkdev_get_no_open(dev_t dev, bool autoload);
 void blkdev_put_no_open(struct block_device *bdev);
+
+#define BIO_INLINE_VECS 4
+struct bio_vec *bvec_alloc(mempool_t *pool, unsigned short *nr_vecs,
+		gfp_t gfp_mask);
+void bvec_free(mempool_t *pool, struct bio_vec *bv, unsigned short nr_vecs);
 
 bool bvec_try_merge_hw_page(struct request_queue *q, struct bio_vec *bv,
 		struct page *page, unsigned len, unsigned offset);
@@ -397,20 +396,12 @@ struct bio *bio_split_zone_append(struct bio *bio,
 static inline bool bio_may_need_split(struct bio *bio,
 		const struct queue_limits *lim)
 {
-	const struct bio_vec *bv;
-
 	if (lim->chunk_sectors)
 		return true;
-
-	if (!bio->bi_io_vec)
+	if (bio->bi_vcnt != 1)
 		return true;
-
-	bv = __bvec_iter_bvec(bio->bi_io_vec, bio->bi_iter);
-	if (bio->bi_iter.bi_size > bv->bv_len - bio->bi_iter.bi_offset)
-		return true;
-	if ((bv->bv_offset | bv->bv_len) & lim->dma_alignment)
-		return true;
-	return bv->bv_len + bv->bv_offset > lim->max_fast_segment_size;
+	return bio->bi_io_vec->bv_len + bio->bi_io_vec->bv_offset >
+		lim->min_segment_size;
 }
 
 /**
@@ -493,26 +484,6 @@ static inline void req_set_nomerge(struct request_queue *q, struct request *req)
 		q->last_merge = NULL;
 }
 
-static inline void bdev_inc_in_flight(struct block_device *bdev,
-				      enum req_op op)
-{
-	bool rw = op_is_write(op);
-
-	part_stat_local_inc(bdev, in_flight[rw]);
-	if (bdev_is_partition(bdev))
-		part_stat_local_inc(bdev_whole(bdev), in_flight[rw]);
-}
-
-static inline void bdev_dec_in_flight(struct block_device *bdev,
-				      enum req_op op)
-{
-	bool rw = op_is_write(op);
-
-	part_stat_local_dec(bdev, in_flight[rw]);
-	if (bdev_is_partition(bdev))
-		part_stat_local_dec(bdev_whole(bdev), in_flight[rw]);
-}
-
 /*
  * Internal io_context interface
  */
@@ -528,7 +499,7 @@ static inline void ioc_clear_queue(struct request_queue *q)
 
 #ifdef CONFIG_BLK_DEV_ZONED
 void disk_init_zone_resources(struct gendisk *disk);
-void disk_release_zone_resources(struct gendisk *disk);
+void disk_free_zone_resources(struct gendisk *disk);
 static inline bool bio_zone_write_plugging(struct bio *bio)
 {
 	return bio_flagged(bio, BIO_ZONE_WRITE_PLUGGING);
@@ -577,12 +548,11 @@ int blkdev_report_zones_ioctl(struct block_device *bdev, unsigned int cmd,
 		unsigned long arg);
 int blkdev_zone_mgmt_ioctl(struct block_device *bdev, blk_mode_t mode,
 		unsigned int cmd, unsigned long arg);
-bool bdev_zone_mgmt_allowed(struct block_device *bdev, sector_t sector);
 #else /* CONFIG_BLK_DEV_ZONED */
 static inline void disk_init_zone_resources(struct gendisk *disk)
 {
 }
-static inline void disk_release_zone_resources(struct gendisk *disk)
+static inline void disk_free_zone_resources(struct gendisk *disk)
 {
 }
 static inline bool bio_zone_write_plugging(struct bio *bio)
@@ -620,11 +590,6 @@ static inline int blkdev_zone_mgmt_ioctl(struct block_device *bdev,
 {
 	return -ENOTTY;
 }
-static inline bool bdev_zone_mgmt_allowed(struct block_device *bdev,
-					  sector_t sector)
-{
-	return false;
-}
 #endif /* CONFIG_BLK_DEV_ZONED */
 
 struct block_device *bdev_alloc(struct gendisk *disk, u8 partno);
@@ -649,6 +614,17 @@ void bdev_set_nr_sectors(struct block_device *bdev, sector_t sectors);
 
 struct gendisk *__alloc_disk_node(struct request_queue *q, int node_id,
 		struct lock_class_key *lkclass);
+
+/*
+ * Clean up a page appropriately, where the page may be pinned, may have a
+ * ref taken on it or neither.
+ */
+static inline void bio_release_page(struct bio *bio, struct page *page)
+{
+	if (bio_flagged(bio, BIO_PAGE_PINNED))
+		unpin_user_page(page);
+}
+
 struct request_queue *blk_alloc_queue(struct queue_limits *lim, int node_id);
 
 int disk_scan_partitions(struct gendisk *disk, blk_mode_t mode);
@@ -756,10 +732,8 @@ int bdev_open(struct block_device *bdev, blk_mode_t mode, void *holder,
 	      const struct blk_holder_ops *hops, struct file *bdev_file);
 int bdev_permission(dev_t dev, blk_mode_t mode, void *holder);
 
-void bio_integrity_generate(struct bio *bio);
-blk_status_t bio_integrity_verify(struct bio *bio,
-		struct bvec_iter *saved_iter);
-
+void blk_integrity_generate(struct bio *bio);
+void blk_integrity_verify_iter(struct bio *bio, struct bvec_iter *saved_iter);
 void blk_integrity_prepare(struct request *rq);
 void blk_integrity_complete(struct request *rq, unsigned int nr_bytes);
 
@@ -787,40 +761,5 @@ static inline void blk_unfreeze_release_lock(struct request_queue *q)
 {
 }
 #endif
-
-/*
- * debugfs directory and file creation can trigger fs reclaim, which can enter
- * back into the block layer request_queue. This can cause deadlock if the
- * queue is frozen. Use NOIO context together with debugfs_mutex to prevent fs
- * reclaim from triggering block I/O.
- */
-static inline void blk_debugfs_lock_nomemsave(struct request_queue *q)
-	__acquires(&q->debugfs_mutex)
-{
-	mutex_lock(&q->debugfs_mutex);
-}
-
-static inline void blk_debugfs_unlock_nomemrestore(struct request_queue *q)
-	__releases(&q->debugfs_mutex)
-{
-	mutex_unlock(&q->debugfs_mutex);
-}
-
-static inline unsigned int __must_check blk_debugfs_lock(struct request_queue *q)
-	__acquires(&q->debugfs_mutex)
-{
-	unsigned int memflags = memalloc_noio_save();
-
-	blk_debugfs_lock_nomemsave(q);
-	return memflags;
-}
-
-static inline void blk_debugfs_unlock(struct request_queue *q,
-				      unsigned int memflags)
-	__releases(&q->debugfs_mutex)
-{
-	blk_debugfs_unlock_nomemrestore(q);
-	memalloc_noio_restore(memflags);
-}
 
 #endif /* BLK_INTERNAL_H */

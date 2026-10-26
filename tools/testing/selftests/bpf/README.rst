@@ -77,7 +77,7 @@ In case of linker errors when running selftests, try using static linking:
 
 .. code-block:: console
 
-  $ LDLIBS=-static EXTRA_LDFLAGS=-static PKG_CONFIG='pkg-config --static' vmtest.sh
+  $ LDLIBS=-static PKG_CONFIG='pkg-config --static' vmtest.sh
 
 .. note:: Some distros may not support static linking.
 
@@ -187,7 +187,7 @@ The symptom for ``bpf_iter/netlink`` looks like
   ...
   15: (bf) r2 = r7
   16: (0f) r2 += r1
-  ; BPF_SEQ_PRINTF(seq, "%p %-3d ", s, s->sk_protocol);
+  ; BPF_SEQ_PRINTF(seq, "%pK %-3d ", s, s->sk_protocol);
   17: (7b) *(u64 *)(r7 +0) = r2
   only read is supported
 

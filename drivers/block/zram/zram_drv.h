@@ -15,7 +15,6 @@
 #ifndef _ZRAM_DRV_H_
 #define _ZRAM_DRV_H_
 
-#include <asm/byteorder.h>
 #include <linux/rwsem.h>
 #include <linux/zsmalloc.h>
 
@@ -59,19 +58,6 @@ enum zram_pageflags {
 };
 
 /*
- * The slot lock is a bit-wait lock on the whole __lock word, while
- * flags and ac_time alias that word as two u32s.  The lock bit must
- * land in the slot that ZRAM_ENTRY_LOCK reserves in attr.flags; on
- * 64-bit big-endian the flags word maps to the upper half of __lock,
- * so the bit position has to be shifted up.
- */
-#if defined(CONFIG_64BIT) && defined(__BIG_ENDIAN)
-#define ZRAM_ENTRY_LOCK_BIT  (ZRAM_ENTRY_LOCK + 32)
-#else
-#define ZRAM_ENTRY_LOCK_BIT  ZRAM_ENTRY_LOCK
-#endif
-
-/*
  * Allocated for each disk page.  We use bit-lock (ZRAM_ENTRY_LOCK bit
  * of flags) to save memory.  There can be plenty of entries and standard
  * locking primitives (e.g. mutex) will significantly increase sizeof()
@@ -79,15 +65,11 @@ enum zram_pageflags {
  */
 struct zram_table_entry {
 	unsigned long handle;
-	union {
-		unsigned long __lock;
-		struct attr {
-			u32 flags;
+	unsigned long flags;
 #ifdef CONFIG_ZRAM_TRACK_ENTRY_ACTIME
-			u32 ac_time;
+	ktime_t ac_time;
 #endif
-		} attr;
-	};
+	struct lockdep_map dep_map;
 };
 
 struct zram_stats {
@@ -120,14 +102,12 @@ struct zram_stats {
 
 struct zram {
 	struct zram_table_entry *table;
-	struct lockdep_map table_lock_map;
-	struct lock_class_key table_lock_key;
 	struct zs_pool *mem_pool;
 	struct zcomp *comps[ZRAM_MAX_COMPS];
 	struct zcomp_params params[ZRAM_MAX_COMPS];
 	struct gendisk *disk;
-	/* Locks the device either in exclusive or in shared mode */
-	struct rw_semaphore dev_lock;
+	/* Prevent concurrent execution of device init */
+	struct rw_semaphore init_lock;
 	/*
 	 * the number of pages zram can consume for storing compressed data
 	 */
@@ -140,6 +120,7 @@ struct zram {
 	 */
 	u64 disksize;	/* bytes */
 	const char *comp_algs[ZRAM_MAX_COMPS];
+	s8 num_active_comps;
 	/*
 	 * zram is claimed so open request will be failed
 	 */
@@ -147,8 +128,6 @@ struct zram {
 #ifdef CONFIG_ZRAM_WRITEBACK
 	struct file *backing_dev;
 	bool wb_limit_enable;
-	bool compressed_wb;
-	u32 wb_batch_size;
 	u64 bd_wb_limit;
 	struct block_device *bdev;
 	unsigned long *bitmap;
@@ -157,5 +136,6 @@ struct zram {
 #ifdef CONFIG_ZRAM_MEMORY_TRACKING
 	struct dentry *debugfs_dir;
 #endif
+	atomic_t pp_in_progress;
 };
 #endif

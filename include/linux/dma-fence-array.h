@@ -28,6 +28,7 @@ struct dma_fence_array_cb {
 /**
  * struct dma_fence_array - fence to represent an array of fences
  * @base: fence base class
+ * @lock: spinlock for fence handling
  * @num_fences: number of fences in the array
  * @num_pending: fences in the array still pending
  * @fences: array of the fences
@@ -37,6 +38,7 @@ struct dma_fence_array_cb {
 struct dma_fence_array {
 	struct dma_fence base;
 
+	spinlock_t lock;
 	unsigned num_fences;
 	atomic_t num_pending;
 	struct dma_fence **fences;
@@ -80,11 +82,13 @@ to_dma_fence_array(struct dma_fence *fence)
 struct dma_fence_array *dma_fence_array_alloc(int num_fences);
 void dma_fence_array_init(struct dma_fence_array *array,
 			  int num_fences, struct dma_fence **fences,
-			  u64 context, unsigned seqno);
+			  u64 context, unsigned seqno,
+			  bool signal_on_any);
 
 struct dma_fence_array *dma_fence_array_create(int num_fences,
 					       struct dma_fence **fences,
-					       u64 context, unsigned seqno);
+					       u64 context, unsigned seqno,
+					       bool signal_on_any);
 
 bool dma_fence_match_context(struct dma_fence *fence, u64 context);
 

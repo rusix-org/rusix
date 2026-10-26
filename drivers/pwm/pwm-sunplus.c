@@ -23,6 +23,7 @@
 #include <linux/clk.h>
 #include <linux/io.h>
 #include <linux/kernel.h>
+#include <linux/mod_devicetable.h>
 #include <linux/module.h>
 #include <linux/platform_device.h>
 #include <linux/pwm.h>
@@ -213,8 +214,8 @@ static int sunplus_pwm_probe(struct platform_device *pdev)
 }
 
 static const struct of_device_id sunplus_pwm_of_match[] = {
-	{ .compatible = "sunplus,sp7021-pwm" },
-	{ }
+	{ .compatible = "sunplus,sp7021-pwm", },
+	{}
 };
 MODULE_DEVICE_TABLE(of, sunplus_pwm_of_match);
 

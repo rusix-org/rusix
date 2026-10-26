@@ -520,7 +520,7 @@ static int ptp_probe(struct pci_dev *pdev,
 	struct ptp *ptp;
 	int err;
 
-	ptp = kzalloc_obj(*ptp);
+	ptp = kzalloc(sizeof(*ptp), GFP_KERNEL);
 	if (!ptp) {
 		err = -ENOMEM;
 		goto error;

@@ -14,7 +14,6 @@
 #include <linux/of_irq.h>
 #include <linux/platform_device.h>
 #include <linux/reboot.h>
-#include <linux/stringify.h>
 #include <linux/watchdog.h>
 
 #include "at91sam9_wdt.h"
@@ -43,12 +42,12 @@ static bool nowayout = WATCHDOG_NOWAYOUT;
 module_param(wdt_timeout, int, 0);
 MODULE_PARM_DESC(wdt_timeout,
 	"Watchdog timeout in seconds. (default = "
-	__stringify(WDT_DEFAULT_TIMEOUT) ")");
+	__MODULE_STRING(WDT_DEFAULT_TIMEOUT) ")");
 
 module_param(nowayout, bool, 0);
 MODULE_PARM_DESC(nowayout,
 	"Watchdog cannot be stopped once started (default="
-	__stringify(WATCHDOG_NOWAYOUT) ")");
+	__MODULE_STRING(WATCHDOG_NOWAYOUT) ")");
 
 static inline bool wdt_enabled(struct sama5d4_wdt *wdt)
 {
@@ -292,8 +291,10 @@ static int sama5d4_wdt_probe(struct platform_device *pdev)
 		ret = devm_request_irq(dev, irq, sama5d4_wdt_irq_handler,
 				       IRQF_SHARED | IRQF_IRQPOLL |
 				       IRQF_NO_SUSPEND, pdev->name, pdev);
-		if (ret)
+		if (ret) {
+			dev_err(dev, "cannot register interrupt handler\n");
 			return ret;
+		}
 	}
 
 	watchdog_init_timeout(wdd, wdt_timeout, dev);

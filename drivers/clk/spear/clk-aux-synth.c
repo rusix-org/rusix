@@ -147,7 +147,7 @@ struct clk *clk_register_aux(const char *aux_name, const char *gate_name,
 		return ERR_PTR(-EINVAL);
 	}
 
-	aux = kzalloc_obj(*aux);
+	aux = kzalloc(sizeof(*aux), GFP_KERNEL);
 	if (!aux)
 		return ERR_PTR(-ENOMEM);
 

@@ -130,32 +130,14 @@ cleanup:
 
 int bpftool_prog_sign(struct bpf_load_and_run_opts *opts)
 {
-	unsigned int signer_flags = CMS_NOCERTS | CMS_BINARY | CMS_NOSMIMECAP |
-#ifdef CMS_NO_SIGNING_TIME
-				    CMS_NO_SIGNING_TIME |
-#endif
-				    CMS_USE_KEYID | CMS_NOATTR;
-	const EVP_MD *cms_digest = EVP_sha256();
 	BIO *bd_in = NULL, *bd_out = NULL;
 	EVP_PKEY *private_key = NULL;
 	CMS_ContentInfo *cms = NULL;
 	long actual_sig_len = 0;
 	X509 *x509 = NULL;
-	void *data = NULL;
-	size_t data_sz;
 	int err = 0;
 
-	data_sz = (size_t)opts->insns_sz + opts->data_sz;
-	data = malloc(data_sz);
-	if (!data) {
-		err = -ENOMEM;
-		goto cleanup;
-	}
-	memcpy(data, opts->insns, opts->insns_sz);
-	if (opts->data_sz)
-		memcpy((char *)data + opts->insns_sz, opts->data, opts->data_sz);
-
-	bd_in = BIO_new_mem_buf(data, data_sz);
+	bd_in = BIO_new_mem_buf(opts->insns, opts->insns_sz);
 	if (!bd_in) {
 		err = -ENOMEM;
 		goto cleanup;
@@ -173,20 +155,6 @@ int bpftool_prog_sign(struct bpf_load_and_run_opts *opts)
 		goto cleanup;
 	}
 
-#if OPENSSL_VERSION_NUMBER >= 0x30000000L && OPENSSL_VERSION_NUMBER < 0x40000000L
-	if (EVP_PKEY_is_a(private_key, "ML-DSA-44") ||
-	    EVP_PKEY_is_a(private_key, "ML-DSA-65") ||
-	    EVP_PKEY_is_a(private_key, "ML-DSA-87")) {
-		/*
-		 * See workaround in 0ad9a71933e7 ("modsign: Enable ML-DSA
-		 * module signing"). Kernel only accepts sha512, see also
-		 * 8bbdeb7a25b4 ("pkcs7, x509: Add ML-DSA support").
-		 */
-		signer_flags &= ~CMS_NOATTR;
-		cms_digest = EVP_sha512();
-	}
-#endif
-
 	cms = CMS_sign(NULL, NULL, NULL, NULL,
 		       CMS_NOCERTS | CMS_PARTIAL | CMS_BINARY | CMS_DETACHED |
 			       CMS_STREAM);
@@ -195,7 +163,9 @@ int bpftool_prog_sign(struct bpf_load_and_run_opts *opts)
 		goto cleanup;
 	}
 
-	if (!CMS_add1_signer(cms, x509, private_key, cms_digest, signer_flags)) {
+	if (!CMS_add1_signer(cms, x509, private_key, EVP_sha256(),
+			     CMS_NOCERTS | CMS_BINARY | CMS_NOSMIMECAP |
+			     CMS_USE_KEYID | CMS_NOATTR)) {
 		err = -EINVAL;
 		goto cleanup;
 	}
@@ -211,7 +181,7 @@ int bpftool_prog_sign(struct bpf_load_and_run_opts *opts)
 		goto cleanup;
 	}
 
-	bd_out = BIO_new(BIO_s_mem());
+		bd_out = BIO_new(BIO_s_mem());
 	if (!bd_out) {
 		err = -ENOMEM;
 		goto cleanup;
@@ -245,7 +215,6 @@ cleanup:
 	X509_free(x509);
 	EVP_PKEY_free(private_key);
 	BIO_free(bd_in);
-	free(data);
 	DISPLAY_OSSL_ERR(err < 0);
 	return err;
 }

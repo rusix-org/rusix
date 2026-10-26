@@ -11,7 +11,6 @@
 #include <linux/module.h>
 #include <linux/platform_device.h>
 #include <linux/slab.h>
-#include <linux/stringify.h>
 #include <linux/watchdog.h>
 
 #define DEVICE_NAME "nct6694-wdt"
@@ -51,7 +50,7 @@ MODULE_PARM_DESC(pretimeout, "Watchdog pre-timeout in seconds");
 static bool nowayout = WATCHDOG_NOWAYOUT;
 module_param(nowayout, bool, 0);
 MODULE_PARM_DESC(nowayout, "Watchdog cannot be stopped once started (default="
-			   __stringify(WATCHDOG_NOWAYOUT) ")");
+			   __MODULE_STRING(WATCHDOG_NOWAYOUT) ")");
 
 enum {
 	NCT6694_ACTION_NONE = 0,

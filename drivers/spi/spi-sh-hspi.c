@@ -211,19 +211,28 @@ static int hspi_transfer_one_message(struct spi_controller *ctlr,
 
 static int hspi_probe(struct platform_device *pdev)
 {
+	struct resource *res;
 	struct spi_controller *ctlr;
 	struct hspi_priv *hspi;
 	struct clk *clk;
 	int ret;
 
-	ctlr = devm_spi_alloc_host(&pdev->dev, sizeof(*hspi));
+	/* get base addr */
+	res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
+	if (!res) {
+		dev_err(&pdev->dev, "invalid resource\n");
+		return -EINVAL;
+	}
+
+	ctlr = spi_alloc_host(&pdev->dev, sizeof(*hspi));
 	if (!ctlr)
 		return -ENOMEM;
 
 	clk = clk_get(&pdev->dev, NULL);
 	if (IS_ERR(clk)) {
 		dev_err(&pdev->dev, "couldn't get clock\n");
-		return PTR_ERR(clk);
+		ret = -EINVAL;
+		goto error0;
 	}
 
 	hspi = spi_controller_get_devdata(ctlr);
@@ -233,9 +242,10 @@ static int hspi_probe(struct platform_device *pdev)
 	hspi->ctlr	= ctlr;
 	hspi->dev	= &pdev->dev;
 	hspi->clk	= clk;
-	hspi->addr = devm_platform_ioremap_resource(pdev, 0);
-	if (IS_ERR(hspi->addr)) {
-		ret = PTR_ERR(hspi->addr);
+	hspi->addr	= devm_ioremap(hspi->dev,
+				       res->start, resource_size(res));
+	if (!hspi->addr) {
+		ret = -ENOMEM;
 		goto error1;
 	}
 
@@ -243,6 +253,7 @@ static int hspi_probe(struct platform_device *pdev)
 
 	ctlr->bus_num = pdev->id;
 	ctlr->mode_bits	= SPI_CPOL | SPI_CPHA;
+	ctlr->dev.of_node = pdev->dev.of_node;
 	ctlr->auto_runtime_pm = true;
 	ctlr->transfer_one_message = hspi_transfer_one_message;
 	ctlr->bits_per_word_mask = SPI_BPW_MASK(8);
@@ -259,6 +270,8 @@ static int hspi_probe(struct platform_device *pdev)
 	pm_runtime_disable(&pdev->dev);
  error1:
 	clk_put(clk);
+ error0:
+	spi_controller_put(ctlr);
 
 	return ret;
 }
@@ -267,11 +280,15 @@ static void hspi_remove(struct platform_device *pdev)
 {
 	struct hspi_priv *hspi = platform_get_drvdata(pdev);
 
+	spi_controller_get(hspi->ctlr);
+
 	spi_unregister_controller(hspi->ctlr);
 
 	pm_runtime_disable(&pdev->dev);
 
 	clk_put(hspi->clk);
+
+	spi_controller_put(hspi->ctlr);
 }
 
 static const struct of_device_id hspi_of_match[] = {

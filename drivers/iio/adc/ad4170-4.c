@@ -275,9 +275,9 @@ static const unsigned int ad4170_reg_size[] = {
 };
 
 enum ad4170_ref_buf {
-	AD4170_REF_BUF_PRE,	/* Pre-charge reference buffer */
-	AD4170_REF_BUF_FULL,	/* Full reference buffering */
-	AD4170_REF_BUF_BYPASS,	/* Bypass reference buffering */
+	AD4170_REF_BUF_PRE,	/* Pre-charge referrence buffer */
+	AD4170_REF_BUF_FULL,	/* Full referrence buffering */
+	AD4170_REF_BUF_BYPASS,	/* Bypass referrence buffering */
 };
 
 /* maps adi,positive/negative-reference-buffer property values to enum */
@@ -1699,29 +1699,34 @@ err_release:
 	return ret;
 }
 
-static const unsigned long gpio_masks[] = {
-	AD4170_GPIO_MODE_GPIO0_MSK,
-	AD4170_GPIO_MODE_GPIO1_MSK,
-	AD4170_GPIO_MODE_GPIO2_MSK,
-	AD4170_GPIO_MODE_GPIO3_MSK,
-};
-
 static int ad4170_gpio_direction_input(struct gpio_chip *gc, unsigned int offset)
 {
 	struct iio_dev *indio_dev = gpiochip_get_data(gc);
 	struct ad4170_state *st = iio_priv(indio_dev);
+	unsigned long gpio_mask;
 	int ret;
 
 	if (!iio_device_claim_direct(indio_dev))
 		return -EBUSY;
 
-	if (offset >= ARRAY_SIZE(gpio_masks)) {
+	switch (offset) {
+	case 0:
+		gpio_mask = AD4170_GPIO_MODE_GPIO0_MSK;
+		break;
+	case 1:
+		gpio_mask = AD4170_GPIO_MODE_GPIO1_MSK;
+		break;
+	case 2:
+		gpio_mask = AD4170_GPIO_MODE_GPIO2_MSK;
+		break;
+	case 3:
+		gpio_mask = AD4170_GPIO_MODE_GPIO3_MSK;
+		break;
+	default:
 		ret = -EINVAL;
 		goto err_release;
 	}
-
-	ret = regmap_update_bits(st->regmap, AD4170_GPIO_MODE_REG,
-				 gpio_masks[offset],
+	ret = regmap_update_bits(st->regmap, AD4170_GPIO_MODE_REG, gpio_mask,
 				 AD4170_GPIO_MODE_GPIO_INPUT << (2 * offset));
 
 err_release:
@@ -1735,6 +1740,7 @@ static int ad4170_gpio_direction_output(struct gpio_chip *gc,
 {
 	struct iio_dev *indio_dev = gpiochip_get_data(gc);
 	struct ad4170_state *st = iio_priv(indio_dev);
+	unsigned long gpio_mask;
 	int ret;
 
 	ret = ad4170_gpio_set(gc, offset, value);
@@ -1744,13 +1750,24 @@ static int ad4170_gpio_direction_output(struct gpio_chip *gc,
 	if (!iio_device_claim_direct(indio_dev))
 		return -EBUSY;
 
-	if (offset >= ARRAY_SIZE(gpio_masks)) {
+	switch (offset) {
+	case 0:
+		gpio_mask = AD4170_GPIO_MODE_GPIO0_MSK;
+		break;
+	case 1:
+		gpio_mask = AD4170_GPIO_MODE_GPIO1_MSK;
+		break;
+	case 2:
+		gpio_mask = AD4170_GPIO_MODE_GPIO2_MSK;
+		break;
+	case 3:
+		gpio_mask = AD4170_GPIO_MODE_GPIO3_MSK;
+		break;
+	default:
 		ret = -EINVAL;
 		goto err_release;
 	}
-
-	ret = regmap_update_bits(st->regmap, AD4170_GPIO_MODE_REG,
-				 gpio_masks[offset],
+	ret = regmap_update_bits(st->regmap, AD4170_GPIO_MODE_REG, gpio_mask,
 				 AD4170_GPIO_MODE_GPIO_OUTPUT << (2 * offset));
 
 err_release:
@@ -2956,7 +2973,7 @@ static int ad4170_probe(struct spi_device *spi)
 
 	if (spi->irq) {
 		ret = devm_request_irq(dev, spi->irq, &ad4170_irq_handler,
-				       IRQF_NO_THREAD, indio_dev->name, indio_dev);
+				       IRQF_ONESHOT, indio_dev->name, indio_dev);
 		if (ret)
 			return ret;
 
@@ -2979,9 +2996,9 @@ static int ad4170_probe(struct spi_device *spi)
 }
 
 static const struct spi_device_id ad4170_id_table[] = {
-	{ .name = "ad4170-4", .driver_data = (kernel_ulong_t)&ad4170_chip_info },
-	{ .name = "ad4190-4", .driver_data = (kernel_ulong_t)&ad4190_chip_info },
-	{ .name = "ad4195-4", .driver_data = (kernel_ulong_t)&ad4195_chip_info },
+	{ "ad4170-4", (kernel_ulong_t)&ad4170_chip_info },
+	{ "ad4190-4", (kernel_ulong_t)&ad4190_chip_info },
+	{ "ad4195-4", (kernel_ulong_t)&ad4195_chip_info },
 	{ }
 };
 MODULE_DEVICE_TABLE(spi, ad4170_id_table);

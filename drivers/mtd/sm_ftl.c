@@ -44,7 +44,8 @@ static ssize_t sm_attr_show(struct device *dev, struct device_attribute *attr,
 	struct sm_sysfs_attribute *sm_attr =
 		container_of(attr, struct sm_sysfs_attribute, dev_attr);
 
-	return sysfs_emit(buf, "%.*s", sm_attr->len, sm_attr->data);
+	strncpy(buf, sm_attr->data, sm_attr->len);
+	return sm_attr->len;
 }
 
 
@@ -64,7 +65,7 @@ static struct attribute_group *sm_create_sysfs_attributes(struct sm_ftl *ftl)
 
 	/* Initialize sysfs attributes */
 	vendor_attribute =
-		kzalloc_obj(struct sm_sysfs_attribute);
+		kzalloc(sizeof(struct sm_sysfs_attribute), GFP_KERNEL);
 	if (!vendor_attribute)
 		goto error2;
 
@@ -78,13 +79,14 @@ static struct attribute_group *sm_create_sysfs_attributes(struct sm_ftl *ftl)
 
 
 	/* Create array of pointers to the attributes */
-	attributes = kzalloc_objs(struct attribute *, NUM_ATTRIBUTES + 1);
+	attributes = kcalloc(NUM_ATTRIBUTES + 1, sizeof(struct attribute *),
+								GFP_KERNEL);
 	if (!attributes)
 		goto error3;
 	attributes[0] = &vendor_attribute->dev_attr.attr;
 
 	/* Finally create the attribute group */
-	attr_group = kzalloc_obj(struct attribute_group);
+	attr_group = kzalloc(sizeof(struct attribute_group), GFP_KERNEL);
 	if (!attr_group)
 		goto error4;
 	attr_group->attrs = attributes;
@@ -155,7 +157,7 @@ static int sm_read_lba(struct sm_oob *oob)
 	if (!memcmp(oob, erased_pattern, SM_OOB_SIZE))
 		return -1;
 
-	/* Now check if both copies of the LBA differ too much */
+	/* Now check is both copies of the LBA differ too much */
 	lba_test = *(uint16_t *)oob->lba_copy1 ^ *(uint16_t*)oob->lba_copy2;
 	if (lba_test && !is_power_of_2(lba_test))
 		return -2;
@@ -1133,7 +1135,7 @@ static void sm_add_mtd(struct mtd_blktrans_ops *tr, struct mtd_info *mtd)
 	struct sm_ftl *ftl;
 
 	/* Allocate & initialize our private structure */
-	ftl = kzalloc_flex(*ftl, cis_buffer, SM_SECTOR_SIZE);
+	ftl = kzalloc(sizeof(struct sm_ftl), GFP_KERNEL);
 	if (!ftl)
 		goto error1;
 
@@ -1145,28 +1147,34 @@ static void sm_add_mtd(struct mtd_blktrans_ops *tr, struct mtd_info *mtd)
 	/* Read media information */
 	if (sm_get_media_info(ftl, mtd)) {
 		dbg("found unsupported mtd device, aborting");
-		goto error1;
+		goto error2;
 	}
 
 
-	/* Allocate zone array, it will be initialized on demand */
-	ftl->zones = kzalloc_objs(struct ftl_zone, ftl->zone_count);
-	if (!ftl->zones)
+	/* Allocate temporary CIS buffer for read retry support */
+	ftl->cis_buffer = kzalloc(SM_SECTOR_SIZE, GFP_KERNEL);
+	if (!ftl->cis_buffer)
 		goto error2;
+
+	/* Allocate zone array, it will be initialized on demand */
+	ftl->zones = kcalloc(ftl->zone_count, sizeof(struct ftl_zone),
+								GFP_KERNEL);
+	if (!ftl->zones)
+		goto error3;
 
 	/* Allocate the cache*/
 	ftl->cache_data = kzalloc(ftl->block_size, GFP_KERNEL);
 
 	if (!ftl->cache_data)
-		goto error3;
+		goto error4;
 
 	sm_cache_init(ftl);
 
 
 	/* Allocate upper layer structure and initialize it */
-	trans = kzalloc_obj(struct mtd_blktrans_dev);
+	trans = kzalloc(sizeof(struct mtd_blktrans_dev), GFP_KERNEL);
 	if (!trans)
-		goto error4;
+		goto error5;
 
 	ftl->trans = trans;
 	trans->priv = ftl;
@@ -1179,12 +1187,12 @@ static void sm_add_mtd(struct mtd_blktrans_ops *tr, struct mtd_info *mtd)
 
 	if (sm_find_cis(ftl)) {
 		dbg("CIS not found on mtd device, aborting");
-		goto error5;
+		goto error6;
 	}
 
 	ftl->disk_attributes = sm_create_sysfs_attributes(ftl);
 	if (!ftl->disk_attributes)
-		goto error5;
+		goto error6;
 	trans->disk_attributes = ftl->disk_attributes;
 
 	sm_printk("Found %d MiB xD/SmartMedia FTL on mtd%d",
@@ -1201,15 +1209,17 @@ static void sm_add_mtd(struct mtd_blktrans_ops *tr, struct mtd_info *mtd)
 	/* Register device*/
 	if (add_mtd_blktrans_dev(trans)) {
 		dbg("error in mtdblktrans layer");
-		goto error5;
+		goto error6;
 	}
 	return;
-error5:
+error6:
 	kfree(trans);
-error4:
+error5:
 	kfree(ftl->cache_data);
-error3:
+error4:
 	kfree(ftl->zones);
+error3:
+	kfree(ftl->cis_buffer);
 error2:
 	kfree(ftl);
 error1:
@@ -1235,6 +1245,7 @@ static void sm_remove_dev(struct mtd_blktrans_dev *dev)
 	}
 
 	sm_delete_sysfs_attributes(ftl);
+	kfree(ftl->cis_buffer);
 	kfree(ftl->zones);
 	kfree(ftl->cache_data);
 	kfree(ftl);

@@ -482,7 +482,7 @@ static int fsl_espi_setup(struct spi_device *spi)
 	struct fsl_espi_cs *cs = spi_get_ctldata(spi);
 
 	if (!cs) {
-		cs = kzalloc_obj(*cs);
+		cs = kzalloc(sizeof(*cs), GFP_KERNEL);
 		if (!cs)
 			return -ENOMEM;
 		spi_set_ctldata(spi, cs);
@@ -580,6 +580,7 @@ static irqreturn_t fsl_espi_irq(s32 irq, void *context_data)
 	return IRQ_HANDLED;
 }
 
+#ifdef CONFIG_PM
 static int fsl_espi_runtime_suspend(struct device *dev)
 {
 	struct spi_controller *host = dev_get_drvdata(dev);
@@ -605,6 +606,7 @@ static int fsl_espi_runtime_resume(struct device *dev)
 
 	return 0;
 }
+#endif
 
 static size_t fsl_espi_max_message_size(struct spi_device *spi)
 {
@@ -665,7 +667,7 @@ static int fsl_espi_probe(struct device *dev, struct resource *mem,
 	struct fsl_espi *espi;
 	int ret;
 
-	host = devm_spi_alloc_host(dev, sizeof(struct fsl_espi));
+	host = spi_alloc_host(dev, sizeof(struct fsl_espi));
 	if (!host)
 		return -ENOMEM;
 
@@ -673,6 +675,7 @@ static int fsl_espi_probe(struct device *dev, struct resource *mem,
 
 	host->mode_bits = SPI_RX_DUAL | SPI_CPOL | SPI_CPHA | SPI_CS_HIGH |
 			  SPI_LSB_FIRST | SPI_LOOP;
+	host->dev.of_node = dev->of_node;
 	host->bits_per_word_mask = SPI_BPW_RANGE_MASK(4, 16);
 	host->setup = fsl_espi_setup;
 	host->cleanup = fsl_espi_cleanup;
@@ -688,7 +691,8 @@ static int fsl_espi_probe(struct device *dev, struct resource *mem,
 	espi->spibrg = fsl_get_sys_freq();
 	if (espi->spibrg == -1) {
 		dev_err(dev, "Can't get sys frequency!\n");
-		return -EINVAL;
+		ret = -EINVAL;
+		goto err_probe;
 	}
 	/* determined by clock divider fields DIV16/PM in register SPMODEx */
 	host->min_speed_hz = DIV_ROUND_UP(espi->spibrg, 4 * 16 * 16);
@@ -697,13 +701,15 @@ static int fsl_espi_probe(struct device *dev, struct resource *mem,
 	init_completion(&espi->done);
 
 	espi->reg_base = devm_ioremap_resource(dev, mem);
-	if (IS_ERR(espi->reg_base))
-		return PTR_ERR(espi->reg_base);
+	if (IS_ERR(espi->reg_base)) {
+		ret = PTR_ERR(espi->reg_base);
+		goto err_probe;
+	}
 
 	/* Register for SPI Interrupt */
 	ret = devm_request_irq(dev, irq, fsl_espi_irq, 0, "fsl_espi", espi);
 	if (ret)
-		return ret;
+		goto err_probe;
 
 	fsl_espi_init_regs(dev, true);
 
@@ -727,7 +733,8 @@ err_pm:
 	pm_runtime_put_noidle(dev);
 	pm_runtime_disable(dev);
 	pm_runtime_set_suspended(dev);
-
+err_probe:
+	spi_controller_put(host);
 	return ret;
 }
 
@@ -754,7 +761,7 @@ static int of_fsl_espi_probe(struct platform_device *ofdev)
 	unsigned int irq, num_cs;
 	int ret;
 
-	if (of_property_present(np, "mode")) {
+	if (of_property_read_bool(np, "mode")) {
 		dev_err(dev, "mode property is not supported on ESPI!\n");
 		return -EINVAL;
 	}
@@ -778,11 +785,16 @@ static void of_fsl_espi_remove(struct platform_device *dev)
 {
 	struct spi_controller *host = platform_get_drvdata(dev);
 
+	spi_controller_get(host);
+
 	spi_unregister_controller(host);
 
 	pm_runtime_disable(&dev->dev);
+
+	spi_controller_put(host);
 }
 
+#ifdef CONFIG_PM_SLEEP
 static int of_fsl_espi_suspend(struct device *dev)
 {
 	struct spi_controller *host = dev_get_drvdata(dev);
@@ -808,10 +820,12 @@ static int of_fsl_espi_resume(struct device *dev)
 
 	return spi_controller_resume(host);
 }
+#endif /* CONFIG_PM_SLEEP */
 
 static const struct dev_pm_ops espi_pm = {
-	RUNTIME_PM_OPS(fsl_espi_runtime_suspend, fsl_espi_runtime_resume, NULL)
-	SYSTEM_SLEEP_PM_OPS(of_fsl_espi_suspend, of_fsl_espi_resume)
+	SET_RUNTIME_PM_OPS(fsl_espi_runtime_suspend,
+			   fsl_espi_runtime_resume, NULL)
+	SET_SYSTEM_SLEEP_PM_OPS(of_fsl_espi_suspend, of_fsl_espi_resume)
 };
 
 static const struct of_device_id of_fsl_espi_match[] = {
@@ -824,7 +838,7 @@ static struct platform_driver fsl_espi_driver = {
 	.driver = {
 		.name = "fsl_espi",
 		.of_match_table = of_fsl_espi_match,
-		.pm = pm_ptr(&espi_pm),
+		.pm = &espi_pm,
 	},
 	.probe		= of_fsl_espi_probe,
 	.remove		= of_fsl_espi_remove,

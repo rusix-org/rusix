@@ -344,9 +344,7 @@ void send_buf(int fd, const void *buf, size_t len, int flags,
 		ret = send(fd, buf + nwritten, len - nwritten, flags);
 		timeout_check("send");
 
-		if (ret < 0 && errno == EINTR)
-			continue;
-		if (ret <= 0)
+		if (ret == 0 || (ret < 0 && errno != EINTR))
 			break;
 
 		nwritten += ret;
@@ -381,13 +379,7 @@ void send_buf(int fd, const void *buf, size_t len, int flags,
 	}
 }
 
-#define RECV_PEEK_RETRY_USEC (10 * 1000)
-
 /* Receive bytes in a buffer and check the return value.
- *
- * When MSG_PEEK is set, recv() is retried until it returns at least
- * expected_ret bytes. The function returns on error, EOF, or timeout
- * as usual.
  *
  * expected_ret:
  *  <0 Negative errno (for testing errors)
@@ -404,19 +396,8 @@ void recv_buf(int fd, void *buf, size_t len, int flags, ssize_t expected_ret)
 		ret = recv(fd, buf + nread, len - nread, flags);
 		timeout_check("recv");
 
-		if (ret < 0 && errno == EINTR)
-			continue;
-		if (ret <= 0)
+		if (ret == 0 || (ret < 0 && errno != EINTR))
 			break;
-
-		if (flags & MSG_PEEK) {
-			if (ret >= expected_ret) {
-				nread = ret;
-				break;
-			}
-			timeout_usleep(RECV_PEEK_RETRY_USEC);
-			continue;
-		}
 
 		nread += ret;
 	} while (nread < len);
@@ -479,15 +460,6 @@ void recv_byte(int fd, int expected_ret, int flags)
 
 	if (byte != 'A') {
 		fprintf(stderr, "unexpected byte read 0x%02x\n", byte);
-		exit(EXIT_FAILURE);
-	}
-}
-
-void expect_res(int res, int expected, const char *what)
-{
-	if (res != expected) {
-		fprintf(stderr, "%s: expected %d, got %d\n", what, expected,
-			res);
 		exit(EXIT_FAILURE);
 	}
 }

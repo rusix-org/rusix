@@ -349,12 +349,6 @@ enum ice_clk_src {
 	NUM_ICE_CLK_SRC
 };
 
-enum ice_synce_clk {
-	ICE_SYNCE_CLK0,
-	ICE_SYNCE_CLK1,
-	ICE_SYNCE_CLK_NUM
-};
-
 struct ice_ts_func_info {
 	/* Function specific info */
 	enum ice_tspll_freq time_ref;
@@ -529,8 +523,8 @@ struct ice_flash_info {
 	struct ice_nvm_info nvm;	/* NVM version information */
 	struct ice_netlist_info netlist;/* Netlist version info */
 	struct ice_bank_info banks;	/* Flash Bank information */
-	u32 flash_size;			/* Size of available flash in bytes */
 	u16 sr_words;			/* Shadow RAM size in words */
+	u32 flash_size;			/* Size of available flash in bytes */
 	u8 blank_nvm_mode;		/* is NVM empty (no FW present) */
 };
 
@@ -892,8 +886,6 @@ struct ice_ptp_hw {
 	u8 ports_per_phy;
 };
 
-#define ICE_E825_MAX_PHYS	2
-
 /* Port hardware description */
 struct ice_hw {
 	u8 __iomem *hw_addr;
@@ -1019,8 +1011,8 @@ struct ice_hw {
 	struct mutex fl_profs_locks[ICE_BLK_COUNT];	/* lock fltr profiles */
 	struct list_head fl_profs[ICE_BLK_COUNT];
 
-	/* ntuple filter info */
-	int ntuple_active_fltr_cnt;
+	/* Flow Director filter info */
+	int fdir_active_fltr;
 
 	struct mutex fdir_fltr_lock;	/* protect Flow Director */
 	struct list_head fdir_list_head;
@@ -1071,7 +1063,6 @@ struct ice_hw_port_stats {
 	u64 error_bytes;		/* errbc */
 	u64 mac_local_faults;		/* mlfc */
 	u64 mac_remote_faults;		/* mrfc */
-	u64 rx_len_errors;		/* rlec */
 	u64 link_xon_rx;		/* lxonrxc */
 	u64 link_xoff_rx;		/* lxoffrxc */
 	u64 link_xon_tx;		/* lxontxc */

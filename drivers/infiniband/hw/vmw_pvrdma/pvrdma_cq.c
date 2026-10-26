@@ -134,12 +134,13 @@ int pvrdma_create_cq(struct ib_cq *ibcq, const struct ib_cq_init_attr *attr,
 	cq->is_kernel = !udata;
 
 	if (!cq->is_kernel) {
-		ret = ib_copy_validate_udata_in(udata, ucmd, reserved);
-		if (ret)
+		if (ib_copy_from_udata(&ucmd, udata, sizeof(ucmd))) {
+			ret = -EFAULT;
 			goto err_cq;
+		}
 
-		cq->umem = ib_umem_get_va(ibdev, ucmd.buf_addr, ucmd.buf_size,
-					  IB_ACCESS_LOCAL_WRITE);
+		cq->umem = ib_umem_get(ibdev, ucmd.buf_addr, ucmd.buf_size,
+				       IB_ACCESS_LOCAL_WRITE);
 		if (IS_ERR(cq->umem)) {
 			ret = PTR_ERR(cq->umem);
 			goto err_cq;
@@ -203,10 +204,11 @@ int pvrdma_create_cq(struct ib_cq *ibcq, const struct ib_cq_init_attr *attr,
 		cq->uar = &context->uar;
 
 		/* Copy udata back. */
-		ret = ib_respond_udata(udata, cq_resp);
-		if (ret) {
+		if (ib_copy_to_udata(udata, &cq_resp, sizeof(cq_resp))) {
+			dev_warn(&dev->pdev->dev,
+				 "failed to copy back udata\n");
 			pvrdma_destroy_cq(&cq->ibcq, udata);
-			return ret;
+			return -EINVAL;
 		}
 	}
 

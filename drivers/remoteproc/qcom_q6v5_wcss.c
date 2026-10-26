@@ -96,6 +96,7 @@ struct wcss_data {
 	unsigned int crash_reason_smem;
 	u32 version;
 	bool aon_reset_required;
+	bool wcss_q6_reset_required;
 	const char *ssr_name;
 	const char *sysmon_name;
 	int ssctl_id;
@@ -133,6 +134,7 @@ struct q6v5_wcss {
 	struct reset_control *wcss_aon_reset;
 	struct reset_control *wcss_reset;
 	struct reset_control *wcss_q6_reset;
+	struct reset_control *wcss_q6_bcr_reset;
 
 	struct qcom_q6v5 q6v5;
 
@@ -307,7 +309,7 @@ static int q6v5_wcss_qcs404_power_on(struct q6v5_wcss *wcss)
 		return ret;
 
 	/* Remove reset to the WCNSS QDSP6SS */
-	reset_control_deassert(wcss->wcss_q6_reset);
+	reset_control_deassert(wcss->wcss_q6_bcr_reset);
 
 	/* Enable Q6SSTOP_AHBFABRIC_CBCR clock */
 	ret = clk_prepare_enable(wcss->ahbfabric_cbcr_clk);
@@ -801,10 +803,18 @@ static int q6v5_wcss_init_reset(struct q6v5_wcss *wcss,
 		return PTR_ERR(wcss->wcss_reset);
 	}
 
-	wcss->wcss_q6_reset = devm_reset_control_get_exclusive(dev, "wcss_q6_reset");
-	if (IS_ERR(wcss->wcss_q6_reset)) {
-		dev_err(wcss->dev, "unable to acquire wcss_q6_reset\n");
-		return PTR_ERR(wcss->wcss_q6_reset);
+	if (desc->wcss_q6_reset_required) {
+		wcss->wcss_q6_reset = devm_reset_control_get_exclusive(dev, "wcss_q6_reset");
+		if (IS_ERR(wcss->wcss_q6_reset)) {
+			dev_err(wcss->dev, "unable to acquire wcss_q6_reset\n");
+			return PTR_ERR(wcss->wcss_q6_reset);
+		}
+	}
+
+	wcss->wcss_q6_bcr_reset = devm_reset_control_get_exclusive(dev, "wcss_q6_bcr_reset");
+	if (IS_ERR(wcss->wcss_q6_bcr_reset)) {
+		dev_err(wcss->dev, "unable to acquire wcss_q6_bcr_reset\n");
+		return PTR_ERR(wcss->wcss_q6_bcr_reset);
 	}
 
 	return 0;
@@ -863,23 +873,28 @@ static int q6v5_wcss_init_mmio(struct q6v5_wcss *wcss,
 
 static int q6v5_alloc_memory_region(struct q6v5_wcss *wcss)
 {
+	struct reserved_mem *rmem = NULL;
+	struct device_node *node;
 	struct device *dev = wcss->dev;
-	struct resource res;
-	int ret;
 
-	ret = of_reserved_mem_region_to_resource(dev->of_node, 0, &res);
-	if (ret) {
+	node = of_parse_phandle(dev->of_node, "memory-region", 0);
+	if (node)
+		rmem = of_reserved_mem_lookup(node);
+	of_node_put(node);
+
+	if (!rmem) {
 		dev_err(dev, "unable to acquire memory-region\n");
-		return ret;
+		return -EINVAL;
 	}
 
-	wcss->mem_phys = res.start;
-	wcss->mem_reloc = res.start;
-	wcss->mem_size = resource_size(&res);
-	wcss->mem_region = devm_ioremap_resource_wc(dev, &res);
-	if (IS_ERR(wcss->mem_region)) {
-		dev_err(dev, "unable to map memory region: %pR\n", &res);
-		return PTR_ERR(wcss->mem_region);
+	wcss->mem_phys = rmem->base;
+	wcss->mem_reloc = rmem->base;
+	wcss->mem_size = rmem->size;
+	wcss->mem_region = devm_ioremap_wc(dev, wcss->mem_phys, wcss->mem_size);
+	if (!wcss->mem_region) {
+		dev_err(dev, "unable to map memory region: %pa+%pa\n",
+			&rmem->base, &rmem->size);
+		return -EBUSY;
 	}
 
 	return 0;
@@ -1051,6 +1066,7 @@ static const struct wcss_data wcss_ipq8074_res_init = {
 	.firmware_name = "IPQ8074/q6_fw.mdt",
 	.crash_reason_smem = WCSS_CRASH_REASON,
 	.aon_reset_required = true,
+	.wcss_q6_reset_required = true,
 	.ops = &q6v5_wcss_ipq8074_ops,
 	.requires_force_stop = true,
 };
@@ -1060,6 +1076,7 @@ static const struct wcss_data wcss_qcs404_res_init = {
 	.firmware_name = "wcnss.mdt",
 	.version = WCSS_QCS404,
 	.aon_reset_required = false,
+	.wcss_q6_reset_required = false,
 	.ssr_name = "mpss",
 	.sysmon_name = "wcnss",
 	.ssctl_id = 0x12,

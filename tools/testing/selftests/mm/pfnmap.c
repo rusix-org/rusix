@@ -22,15 +22,11 @@
 #include <sys/mman.h>
 #include <sys/wait.h>
 
-#include "kselftest_harness.h"
+#include "../kselftest_harness.h"
 #include "vm_util.h"
-
-#define DEV_MEM_NPAGES	2
 
 static sigjmp_buf sigjmp_buf_env;
 static char *file = "/dev/mem";
-static off_t file_offset;
-static int fd;
 
 static void signal_handler(int sig)
 {
@@ -39,15 +35,18 @@ static void signal_handler(int sig)
 
 static int test_read_access(char *addr, size_t size, size_t pagesize)
 {
+	size_t offs;
 	int ret;
 
 	if (signal(SIGSEGV, signal_handler) == SIG_ERR)
 		return -EINVAL;
 
 	ret = sigsetjmp(sigjmp_buf_env, 1);
-	if (!ret)
-		force_read_pages(addr, size/pagesize, pagesize);
-
+	if (!ret) {
+		for (offs = 0; offs < size; offs += pagesize)
+			/* Force a read that the compiler cannot optimize out. */
+			*((volatile char *)(addr + offs));
+	}
 	if (signal(SIGSEGV, SIG_DFL) == SIG_ERR)
 		return -EINVAL;
 
@@ -92,7 +91,7 @@ static int find_ram_target(off_t *offset,
 			break;
 
 		/* We need two pages. */
-		if (end > start + DEV_MEM_NPAGES * pagesize) {
+		if (end > start + 2 * pagesize) {
 			fclose(file);
 			*offset = start;
 			return 0;
@@ -101,48 +100,11 @@ static int find_ram_target(off_t *offset,
 	return -ENOENT;
 }
 
-static void pfnmap_init(void)
-{
-	size_t pagesize = getpagesize();
-	size_t size = DEV_MEM_NPAGES * pagesize;
-	void *addr;
-
-	if (strncmp(file, "/dev/mem", strlen("/dev/mem")) == 0) {
-		int err = find_ram_target(&file_offset, pagesize);
-
-		if (err)
-			ksft_exit_skip("Cannot find ram target in '/proc/iomem': %s\n",
-				       strerror(-err));
-	} else {
-		file_offset = 0;
-	}
-
-	fd = open(file, O_RDONLY);
-	if (fd < 0)
-		ksft_exit_skip("Cannot open '%s': %s\n", file, strerror(errno));
-
-	/*
-	 * Make sure we can map the file, and perform some basic checks; skip
-	 * the whole suite if anything goes wrong.
-	 * A fresh mapping is then created for every test case by
-	 * FIXTURE_SETUP(pfnmap).
-	 */
-	addr = mmap(NULL, size, PROT_READ, MAP_SHARED, fd, file_offset);
-	if (addr == MAP_FAILED)
-		ksft_exit_skip("Cannot mmap '%s': %s\n", file, strerror(errno));
-
-	if (!check_vmflag_pfnmap(addr))
-		ksft_exit_skip("Invalid file: '%s'. Not pfnmap'ed\n", file);
-
-	if (test_read_access(addr, size, pagesize))
-		ksft_exit_skip("Cannot read-access mmap'ed '%s'\n", file);
-
-	munmap(addr, size);
-}
-
 FIXTURE(pfnmap)
 {
+	off_t offset;
 	size_t pagesize;
+	int dev_mem_fd;
 	char *addr1;
 	size_t size1;
 	char *addr2;
@@ -153,10 +115,31 @@ FIXTURE_SETUP(pfnmap)
 {
 	self->pagesize = getpagesize();
 
-	self->size1 = DEV_MEM_NPAGES * self->pagesize;
+	if (strncmp(file, "/dev/mem", strlen("/dev/mem")) == 0) {
+		/* We'll require two physical pages throughout our tests ... */
+		if (find_ram_target(&self->offset, self->pagesize))
+			SKIP(return,
+				   "Cannot find ram target in '/proc/iomem'\n");
+	} else {
+		self->offset = 0;
+	}
+
+	self->dev_mem_fd = open(file, O_RDONLY);
+	if (self->dev_mem_fd < 0)
+		SKIP(return, "Cannot open '%s'\n", file);
+
+	self->size1 = self->pagesize * 2;
 	self->addr1 = mmap(NULL, self->size1, PROT_READ, MAP_SHARED,
-			   fd, file_offset);
-	ASSERT_NE(self->addr1, MAP_FAILED);
+			   self->dev_mem_fd, self->offset);
+	if (self->addr1 == MAP_FAILED)
+		SKIP(return, "Cannot mmap '%s'\n", file);
+
+	if (!check_vmflag_pfnmap(self->addr1))
+		SKIP(return, "Invalid file: '%s'. Not pfnmap'ed\n", file);
+
+	/* ... and want to be able to read from them. */
+	if (test_read_access(self->addr1, self->size1, self->pagesize))
+		SKIP(return, "Cannot read-access mmap'ed '%s'\n", file);
 
 	self->size2 = 0;
 	self->addr2 = MAP_FAILED;
@@ -168,6 +151,8 @@ FIXTURE_TEARDOWN(pfnmap)
 		munmap(self->addr2, self->size2);
 	if (self->addr1 != MAP_FAILED)
 		munmap(self->addr1, self->size1);
+	if (self->dev_mem_fd >= 0)
+		close(self->dev_mem_fd);
 }
 
 TEST_F(pfnmap, madvise_disallowed)
@@ -207,7 +192,7 @@ TEST_F(pfnmap, munmap_split)
 	 */
 	self->size2 = self->pagesize;
 	self->addr2 = mmap(NULL, self->pagesize, PROT_READ, MAP_SHARED,
-			   fd, file_offset);
+			   self->dev_mem_fd, self->offset);
 	ASSERT_NE(self->addr2, MAP_FAILED);
 }
 
@@ -277,12 +262,8 @@ int main(int argc, char **argv)
 		if (strcmp(argv[i], "--") == 0) {
 			if (i + 1 < argc && strlen(argv[i + 1]) > 0)
 				file = argv[i + 1];
-			argc = i;
-			break;
+			return test_harness_run(i, argv);
 		}
 	}
-
-	pfnmap_init();
-
 	return test_harness_run(argc, argv);
 }

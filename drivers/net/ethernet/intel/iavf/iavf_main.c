@@ -36,12 +36,12 @@ static const char iavf_copyright[] =
  *   Class, Class Mask, private data (not used) }
  */
 static const struct pci_device_id iavf_pci_tbl[] = {
-	{ PCI_VDEVICE(INTEL, IAVF_DEV_ID_VF) },
-	{ PCI_VDEVICE(INTEL, IAVF_DEV_ID_VF_HV) },
-	{ PCI_VDEVICE(INTEL, IAVF_DEV_ID_X722_VF) },
-	{ PCI_VDEVICE(INTEL, IAVF_DEV_ID_ADAPTIVE_VF) },
+	{PCI_VDEVICE(INTEL, IAVF_DEV_ID_VF), 0},
+	{PCI_VDEVICE(INTEL, IAVF_DEV_ID_VF_HV), 0},
+	{PCI_VDEVICE(INTEL, IAVF_DEV_ID_X722_VF), 0},
+	{PCI_VDEVICE(INTEL, IAVF_DEV_ID_ADAPTIVE_VF), 0},
 	/* required last entry */
-	{ }
+	{0, }
 };
 
 MODULE_DEVICE_TABLE(pci, iavf_pci_tbl);
@@ -746,7 +746,7 @@ iavf_vlan_filter *iavf_add_vlan(struct iavf_adapter *adapter,
 
 	f = iavf_find_vlan(adapter, vlan);
 	if (!f) {
-		f = kzalloc_obj(*f, GFP_ATOMIC);
+		f = kzalloc(sizeof(*f), GFP_ATOMIC);
 		if (!f)
 			goto clearout;
 
@@ -938,7 +938,7 @@ struct iavf_mac_filter *iavf_add_filter(struct iavf_adapter *adapter,
 
 	f = iavf_find_filter(adapter, macaddr);
 	if (!f) {
-		f = kzalloc_obj(*f, GFP_ATOMIC);
+		f = kzalloc(sizeof(*f), GFP_ATOMIC);
 		if (!f)
 			return f;
 
@@ -1184,28 +1184,20 @@ bool iavf_promiscuous_mode_changed(struct iavf_adapter *adapter)
 /**
  * iavf_set_rx_mode - NDO callback to set the netdev filters
  * @netdev: network interface device structure
- * @uc: snapshot of uc address list
- * @mc: snapshot of mc address list
- *
- * Return: 0 on success.
  **/
-static int iavf_set_rx_mode(struct net_device *netdev,
-			    struct netdev_hw_addr_list *uc,
-			    struct netdev_hw_addr_list *mc)
+static void iavf_set_rx_mode(struct net_device *netdev)
 {
 	struct iavf_adapter *adapter = netdev_priv(netdev);
 
 	spin_lock_bh(&adapter->mac_vlan_list_lock);
-	__hw_addr_sync_dev(uc, netdev, iavf_addr_sync, iavf_addr_unsync);
-	__hw_addr_sync_dev(mc, netdev, iavf_addr_sync, iavf_addr_unsync);
+	__dev_uc_sync(netdev, iavf_addr_sync, iavf_addr_unsync);
+	__dev_mc_sync(netdev, iavf_addr_sync, iavf_addr_unsync);
 	spin_unlock_bh(&adapter->mac_vlan_list_lock);
 
 	spin_lock_bh(&adapter->current_netdev_promisc_flags_lock);
 	if (iavf_promiscuous_mode_changed(adapter))
 		adapter->aq_required |= IAVF_FLAG_AQ_CONFIGURE_PROMISC_MODE;
 	spin_unlock_bh(&adapter->current_netdev_promisc_flags_lock);
-
-	return 0;
 }
 
 /**
@@ -1252,9 +1244,7 @@ static void iavf_configure(struct iavf_adapter *adapter)
 	struct net_device *netdev = adapter->netdev;
 	int i;
 
-	netif_addr_lock_bh(netdev);
-	iavf_set_rx_mode(netdev, &netdev->uc, &netdev->mc);
-	netif_addr_unlock_bh(netdev);
+	iavf_set_rx_mode(netdev);
 
 	iavf_configure_tx(adapter);
 	iavf_configure_rx(adapter);
@@ -1599,10 +1589,12 @@ static int iavf_alloc_queues(struct iavf_adapter *adapter)
 					  (int)(num_online_cpus()));
 
 
-	adapter->tx_rings = kzalloc_objs(struct iavf_ring, num_active_queues);
+	adapter->tx_rings = kcalloc(num_active_queues,
+				    sizeof(struct iavf_ring), GFP_KERNEL);
 	if (!adapter->tx_rings)
 		goto err_out;
-	adapter->rx_rings = kzalloc_objs(struct iavf_ring, num_active_queues);
+	adapter->rx_rings = kcalloc(num_active_queues,
+				    sizeof(struct iavf_ring), GFP_KERNEL);
 	if (!adapter->rx_rings)
 		goto err_out;
 
@@ -1665,7 +1657,8 @@ static int iavf_set_interrupt_capability(struct iavf_adapter *adapter)
 	v_budget = min_t(int, pairs + NONQ_VECS,
 			 (int)adapter->vf_res->max_vectors);
 
-	adapter->msix_entries = kzalloc_objs(struct msix_entry, v_budget);
+	adapter->msix_entries = kcalloc(v_budget,
+					sizeof(struct msix_entry), GFP_KERNEL);
 	if (!adapter->msix_entries) {
 		err = -ENOMEM;
 		goto out;
@@ -1823,7 +1816,8 @@ static int iavf_alloc_q_vectors(struct iavf_adapter *adapter)
 	struct iavf_q_vector *q_vector;
 
 	num_q_vectors = adapter->num_msix_vectors - NONQ_VECS;
-	adapter->q_vectors = kzalloc_objs(*q_vector, num_q_vectors);
+	adapter->q_vectors = kcalloc(num_q_vectors, sizeof(*q_vector),
+				     GFP_KERNEL);
 	if (!adapter->q_vectors)
 		return -ENOMEM;
 
@@ -4152,7 +4146,7 @@ static int iavf_configure_clsflower(struct iavf_adapter *adapter,
 		return -EINVAL;
 	}
 
-	filter = kzalloc_obj(*filter);
+	filter = kzalloc(sizeof(*filter), GFP_KERNEL);
 	if (!filter)
 		return -ENOMEM;
 	filter->cookie = cls_flower->cookie;
@@ -4267,7 +4261,7 @@ static int iavf_add_cls_u32(struct iavf_adapter *adapter,
 		return -EOPNOTSUPP;
 	}
 
-	fltr = kzalloc_obj(*fltr);
+	fltr = kzalloc(sizeof(*fltr), GFP_KERNEL);
 	if (!fltr)
 		return -ENOMEM;
 
@@ -5187,7 +5181,7 @@ static const struct net_device_ops iavf_netdev_ops = {
 	.ndo_open		= iavf_open,
 	.ndo_stop		= iavf_close,
 	.ndo_start_xmit		= iavf_xmit_frame,
-	.ndo_set_rx_mode_async	= iavf_set_rx_mode,
+	.ndo_set_rx_mode	= iavf_set_rx_mode,
 	.ndo_validate_addr	= eth_validate_addr,
 	.ndo_set_mac_address	= iavf_set_mac,
 	.ndo_change_mtu		= iavf_change_mtu,

@@ -7,7 +7,6 @@
 #include <drm/drm_atomic_helper.h>
 #include <drm/drm_drv.h>
 #include <drm/drm_gem_atomic_helper.h>
-#include <drm/drm_print.h>
 #include <drm/drm_probe_helper.h>
 
 #include "mgag200_drv.h"
@@ -76,19 +75,12 @@ static void mgag200_g200se_set_hiprilvl(struct mga_device *mdev,
 		unsigned int bpp;
 		unsigned long mb;
 
-		switch (format->format) {
-		case DRM_FORMAT_XRGB8888:
-		case DRM_FORMAT_RGB888:
+		if (format->cpp[0] * 8 > 16)
 			bpp = 32;
-			break;
-		case DRM_FORMAT_RGB565:
-		case DRM_FORMAT_XRGB1555:
+		else if (format->cpp[0] * 8 > 8)
 			bpp = 16;
-			break;
-		case DRM_FORMAT_C8:
+		else
 			bpp = 8;
-			break;
-		}
 
 		mb = (mode->clock * bpp) / 1000;
 		if (mb > 3100)
@@ -120,7 +112,7 @@ static void mgag200_g200se_set_hiprilvl(struct mga_device *mdev,
  */
 
 static int mgag200_g200se_00_pixpllc_atomic_check(struct drm_crtc *crtc,
-						  struct drm_atomic_commit *new_state)
+						  struct drm_atomic_state *new_state)
 {
 	static const unsigned int vcomax = 320000;
 	static const unsigned int vcomin = 160000;
@@ -176,7 +168,7 @@ static int mgag200_g200se_00_pixpllc_atomic_check(struct drm_crtc *crtc,
 }
 
 static void mgag200_g200se_00_pixpllc_atomic_update(struct drm_crtc *crtc,
-						    struct drm_atomic_commit *old_state)
+						    struct drm_atomic_state *old_state)
 {
 	struct drm_device *dev = crtc->dev;
 	struct mga_device *mdev = to_mga_device(dev);
@@ -203,7 +195,7 @@ static void mgag200_g200se_00_pixpllc_atomic_update(struct drm_crtc *crtc,
 }
 
 static int mgag200_g200se_04_pixpllc_atomic_check(struct drm_crtc *crtc,
-						  struct drm_atomic_commit *new_state)
+						  struct drm_atomic_state *new_state)
 {
 	static const unsigned int vcomax = 1600000;
 	static const unsigned int vcomin = 800000;
@@ -277,7 +269,7 @@ static int mgag200_g200se_04_pixpllc_atomic_check(struct drm_crtc *crtc,
 }
 
 static void mgag200_g200se_04_pixpllc_atomic_update(struct drm_crtc *crtc,
-						    struct drm_atomic_commit *old_state)
+						    struct drm_atomic_state *old_state)
 {
 	struct drm_device *dev = crtc->dev;
 	struct mga_device *mdev = to_mga_device(dev);
@@ -321,7 +313,7 @@ static const struct drm_plane_funcs mgag200_g200se_primary_plane_funcs = {
 };
 
 static void mgag200_g200se_crtc_helper_atomic_enable(struct drm_crtc *crtc,
-						     struct drm_atomic_commit *old_state)
+						     struct drm_atomic_state *old_state)
 {
 	struct drm_device *dev = crtc->dev;
 	struct mga_device *mdev = to_mga_device(dev);

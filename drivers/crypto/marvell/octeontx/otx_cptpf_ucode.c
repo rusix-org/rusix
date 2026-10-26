@@ -10,7 +10,6 @@
 
 #include <linux/ctype.h>
 #include <linux/firmware.h>
-#include <linux/string.h>
 #include <linux/string_choices.h>
 #include "otx_cpt_common.h"
 #include "otx_cptpf_ucode.h"
@@ -99,31 +98,39 @@ static int dev_supports_eng_type(struct otx_cpt_eng_grps *eng_grps,
 static void set_ucode_filename(struct otx_cpt_ucode *ucode,
 			       const char *filename)
 {
-	strscpy(ucode->filename, filename);
+	strscpy(ucode->filename, filename, OTX_CPT_UCODE_NAME_LENGTH);
 }
 
 static char *get_eng_type_str(int eng_type)
 {
+	char *str = "unknown";
+
 	switch (eng_type) {
 	case OTX_CPT_SE_TYPES:
-		return "SE";
+		str = "SE";
+		break;
+
 	case OTX_CPT_AE_TYPES:
-		return "AE";
-	default:
-		return "unknown";
+		str = "AE";
+		break;
 	}
+	return str;
 }
 
 static char *get_ucode_type_str(int ucode_type)
 {
+	char *str = "unknown";
+
 	switch (ucode_type) {
 	case (1 << OTX_CPT_SE_TYPES):
-		return "SE";
+		str = "SE";
+		break;
+
 	case (1 << OTX_CPT_AE_TYPES):
-		return "AE";
-	default:
-		return "unknown";
+		str = "AE";
+		break;
 	}
+	return str;
 }
 
 static int get_ucode_type(struct otx_cpt_ucode_hdr *ucode_hdr, int *ucode_type)
@@ -132,7 +139,7 @@ static int get_ucode_type(struct otx_cpt_ucode_hdr *ucode_hdr, int *ucode_type)
 	u32 i, val = 0;
 	u8 nn;
 
-	strscpy(tmp_ver_str, ucode_hdr->ver_str);
+	strscpy(tmp_ver_str, ucode_hdr->ver_str, OTX_CPT_UCODE_VER_STR_SZ);
 	for (i = 0; i < strlen(tmp_ver_str); i++)
 		tmp_ver_str[i] = tolower(tmp_ver_str[i]);
 
@@ -311,7 +318,7 @@ static int process_tar_file(struct device *dev,
 		return -EINVAL;
 	}
 
-	tar_info = kzalloc_obj(struct tar_ucode_info_t);
+	tar_info = kzalloc(sizeof(struct tar_ucode_info_t), GFP_KERNEL);
 	if (!tar_info)
 		return -ENOMEM;
 
@@ -405,7 +412,7 @@ static struct tar_arch_info_t *load_tar_archive(struct device *dev,
 	size_t tar_size;
 	int ret;
 
-	tar_arch = kzalloc_obj(struct tar_arch_info_t);
+	tar_arch = kzalloc(sizeof(struct tar_arch_info_t), GFP_KERNEL);
 	if (!tar_arch)
 		return NULL;
 
@@ -502,12 +509,13 @@ EXPORT_SYMBOL_GPL(otx_cpt_uc_supports_eng_type);
 static void print_ucode_info(struct otx_cpt_eng_grp_info *eng_grp,
 			     char *buf, int size)
 {
-	if (eng_grp->mirror.is_ena)
+	if (eng_grp->mirror.is_ena) {
 		scnprintf(buf, size, "%s (shared with engine_group%d)",
 			  eng_grp->g->grp[eng_grp->mirror.idx].ucode[0].ver_str,
 			  eng_grp->mirror.idx);
-	else
-		strscpy(buf, eng_grp->ucode[0].ver_str, size);
+	} else {
+		scnprintf(buf, size, "%s", eng_grp->ucode[0].ver_str);
+	}
 }
 
 static void print_engs_info(struct otx_cpt_eng_grp_info *eng_grp,
@@ -1310,7 +1318,7 @@ static ssize_t ucode_load_store(struct device *dev,
 {
 	struct otx_cpt_engines engs[OTX_CPT_MAX_ETYPES_PER_GRP] = { {0} };
 	char *ucode_filename[OTX_CPT_MAX_ETYPES_PER_GRP];
-	char tmp_buf[OTX_CPT_UCODE_NAME_LENGTH];
+	char tmp_buf[OTX_CPT_UCODE_NAME_LENGTH] = { 0 };
 	char *start, *val, *err_msg, *tmp;
 	struct otx_cpt_eng_grps *eng_grps;
 	int grp_idx = 0, ret = -EINVAL;
@@ -1318,11 +1326,12 @@ static ssize_t ucode_load_store(struct device *dev,
 	int del_grp_idx = -1;
 	int ucode_idx = 0;
 
-	if (strscpy_pad(tmp_buf, buf) < 0)
+	if (count >= OTX_CPT_UCODE_NAME_LENGTH)
 		return -EINVAL;
 
 	eng_grps = container_of(attr, struct otx_cpt_eng_grps, ucode_load_attr);
 	err_msg = "Invalid engine group format";
+	strscpy(tmp_buf, buf, OTX_CPT_UCODE_NAME_LENGTH);
 	start = tmp_buf;
 
 	has_se = has_ie = has_ae = false;

@@ -1542,7 +1542,7 @@ static void init_gfx_chip_info(int chip_type)
 		else
 			viaparinfo->chip_info->gfx_chip_revision =
 			CLE266_REVISION_CX;
-		/* restore original CR4F value */
+		/* restore orignal CR4F value */
 		viafb_write_reg(CR4F, VIACR, tmp);
 	}
 

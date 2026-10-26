@@ -223,9 +223,6 @@ static irqreturn_t atmio16d_interrupt(int irq, void *d)
 	struct comedi_subdevice *s = dev->read_subdev;
 	unsigned short val;
 
-	if (!dev->attached)
-		return IRQ_NONE;
-
 	val = inw(dev->iobase + AD_FIFO_REG);
 	comedi_buf_write_samples(s, &val, 1);
 	comedi_handle_events(dev, s);
@@ -577,8 +574,7 @@ static int atmio16d_attach(struct comedi_device *dev,
 	struct comedi_subdevice *s;
 	int ret;
 
-	ret = comedi_check_request_region(dev, it->options[0], 0x20,
-					  0, 0x3ff, 32);
+	ret = comedi_request_region(dev, it->options[0], 0x20);
 	if (ret)
 		return ret;
 
@@ -593,9 +589,7 @@ static int atmio16d_attach(struct comedi_device *dev,
 	/* reset the atmio16d hardware */
 	reset_atmio16d(dev);
 
-	/* only irqs 3, 4, 5, 6, 7, 9, 10, 11, 12, 14, and 15 are valid */
-	if (it->options[1] >= 3 && it->options[1] <= 15 &&
-	    (1 << it->options[1]) & 0xdef8) {
+	if (it->options[1]) {
 		ret = request_irq(it->options[1], atmio16d_interrupt, 0,
 				  dev->board_name, dev);
 		if (ret == 0)

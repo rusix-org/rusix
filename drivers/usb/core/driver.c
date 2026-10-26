@@ -57,7 +57,7 @@ ssize_t usb_store_new_id(struct usb_dynids *dynids,
 	if (fields < 2)
 		return -EINVAL;
 
-	dynid = kzalloc_obj(*dynid);
+	dynid = kzalloc(sizeof(*dynid), GFP_KERNEL);
 	if (!dynid)
 		return -ENOMEM;
 
@@ -410,6 +410,7 @@ static int usb_probe_interface(struct device *dev)
 	return error;
 
  err:
+	usb_set_intfdata(intf, NULL);
 	intf->needs_remote_wakeup = 0;
 	intf->condition = USB_INTERFACE_UNBOUND;
 
@@ -496,6 +497,7 @@ static int usb_unbind_interface(struct device *dev)
 	} else {
 		intf->needs_altsetting0 = 1;
 	}
+	usb_set_intfdata(intf, NULL);
 
 	intf->condition = USB_INTERFACE_UNBOUND;
 	intf->needs_remote_wakeup = 0;
@@ -642,7 +644,6 @@ void usb_driver_release_interface(struct usb_driver *driver,
 	} else {
 		device_lock(dev);
 		usb_unbind_interface(dev);
-		dev_set_drvdata(dev, NULL);
 		dev->driver = NULL;
 		device_unlock(dev);
 	}
@@ -983,10 +984,9 @@ bool is_usb_device_driver(const struct device_driver *drv)
 }
 
 /**
- * __usb_register_device_driver - register a USB device (not interface) driver
+ * usb_register_device_driver - register a USB device (not interface) driver
  * @new_udriver: USB operations for the device driver
  * @owner: module owner of this driver.
- * @mod_name: module name string
  *
  * Registers a USB device driver with the USB core.  The list of
  * unattached devices will be rescanned whenever a new driver is
@@ -994,8 +994,8 @@ bool is_usb_device_driver(const struct device_driver *drv)
  *
  * Return: A negative error code on failure and 0 on success.
  */
-int __usb_register_device_driver(struct usb_device_driver *new_udriver,
-		struct module *owner, const char *mod_name)
+int usb_register_device_driver(struct usb_device_driver *new_udriver,
+		struct module *owner)
 {
 	int retval = 0;
 
@@ -1007,7 +1007,6 @@ int __usb_register_device_driver(struct usb_device_driver *new_udriver,
 	new_udriver->driver.probe = usb_probe_device;
 	new_udriver->driver.remove = usb_unbind_device;
 	new_udriver->driver.owner = owner;
-	new_udriver->driver.mod_name = mod_name;
 	new_udriver->driver.dev_groups = new_udriver->dev_groups;
 
 	retval = driver_register(&new_udriver->driver);
@@ -1028,7 +1027,7 @@ int __usb_register_device_driver(struct usb_device_driver *new_udriver,
 
 	return retval;
 }
-EXPORT_SYMBOL_GPL(__usb_register_device_driver);
+EXPORT_SYMBOL_GPL(usb_register_device_driver);
 
 /**
  * usb_deregister_device_driver - unregister a USB device (not interface) driver
@@ -1820,11 +1819,13 @@ EXPORT_SYMBOL_GPL(usb_autopm_put_interface);
 void usb_autopm_put_interface_async(struct usb_interface *intf)
 {
 	struct usb_device	*udev = interface_to_usbdev(intf);
+	int			status;
 
 	usb_mark_last_busy(udev);
-	pm_runtime_put(&intf->dev);
-	dev_vdbg(&intf->dev, "%s: cnt %d\n",
-			__func__, atomic_read(&intf->dev.power.usage_count));
+	status = pm_runtime_put(&intf->dev);
+	dev_vdbg(&intf->dev, "%s: cnt %d -> %d\n",
+			__func__, atomic_read(&intf->dev.power.usage_count),
+			status);
 }
 EXPORT_SYMBOL_GPL(usb_autopm_put_interface_async);
 

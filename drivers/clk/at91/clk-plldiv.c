@@ -91,7 +91,7 @@ at91_clk_register_plldiv(struct regmap *regmap, const char *name,
 	struct clk_init_data init;
 	int ret;
 
-	plldiv = kzalloc_obj(*plldiv);
+	plldiv = kzalloc(sizeof(*plldiv), GFP_KERNEL);
 	if (!plldiv)
 		return ERR_PTR(-ENOMEM);
 

@@ -57,10 +57,7 @@ int xillybus_init_chrdev(struct device *dev,
 	size_t namelen;
 	struct xilly_unit *unit, *u;
 
-	if (num_nodes <= 0 || num_nodes > XILLYBUS_MAX_NODES || !idt || !prefix || !dev)
-		return -ENODEV;
-
-	unit = kzalloc_obj(*unit);
+	unit = kzalloc(sizeof(*unit), GFP_KERNEL);
 
 	if (!unit)
 		return -ENOMEM;
@@ -71,12 +68,6 @@ int xillybus_init_chrdev(struct device *dev,
 		snprintf(unit->name, UNITNAMELEN, "%s", prefix);
 
 	for (i = 0; enumerate; i++) {
-		if (i > 99) {
-			dev_err(dev, "Failed to obtain unique unit name\n");
-			rc = -ENODEV;
-			goto fail_obtain;
-		}
-
 		snprintf(unit->name, UNITNAMELEN, "%s_%02d",
 			 prefix, i);
 
@@ -224,14 +215,9 @@ EXPORT_SYMBOL(xillybus_cleanup_chrdev);
 int xillybus_find_inode(struct inode *inode,
 			void **private_data, int *index)
 {
-	int minor, major;
+	int minor = iminor(inode);
+	int major = imajor(inode);
 	struct xilly_unit *unit = NULL, *iter;
-
-	if (!inode || !private_data || !index)
-		return -ENODEV;
-
-	minor = iminor(inode);
-	major = imajor(inode);
 
 	mutex_lock(&unit_mutex);
 

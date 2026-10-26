@@ -39,7 +39,6 @@
 #include "nfsd.h"
 #include "state.h"
 #include "netns.h"
-#include "stats.h"
 #include "trace.h"
 #include "xdr4cb.h"
 #include "xdr4.h"
@@ -892,84 +891,6 @@ static void encode_stateowner(struct xdr_stream *xdr, struct nfs4_stateowner *so
 	xdr_encode_opaque(p, so->so_owner.data, so->so_owner.len);
 }
 
-static void nfs4_xdr_enc_cb_notify(struct rpc_rqst *req,
-				   struct xdr_stream *xdr,
-				   const void *data)
-{
-	const struct nfsd4_callback *cb = data;
-	struct nfsd4_cb_notify *ncn = container_of(cb, struct nfsd4_cb_notify, ncn_cb);
-	struct nfs4_delegation *dp = container_of(ncn, struct nfs4_delegation, dl_cb_notify);
-	struct nfs4_cb_compound_hdr hdr = {
-		.ident = 0,
-		.minorversion = cb->cb_clp->cl_minorversion,
-	};
-	struct CB_NOTIFY4args args;
-	unsigned int start;
-
-	WARN_ON_ONCE(hdr.minorversion == 0);
-
-	encode_cb_compound4args(xdr, &hdr);
-	encode_cb_sequence4args(xdr, cb, &hdr);
-
-	/*
-	 * nfsd4_cb_notify_prepare() sized the payload against a single page,
-	 * but did not account for the compound, sequence, stateid, and
-	 * filehandle encoded here. If the variable-length encode overflows the
-	 * backchannel send buffer, roll back to before the operation so that a
-	 * truncated CB_NOTIFY is never placed on the wire.
-	 */
-	start = xdr_stream_pos(xdr);
-
-	if (xdr_stream_encode_u32(xdr, OP_CB_NOTIFY) < 0)
-		goto out_err;
-
-	args.cna_stateid.seqid = dp->dl_stid.sc_stateid.si_generation;
-	memcpy(&args.cna_stateid.other, &dp->dl_stid.sc_stateid.si_opaque,
-	       ARRAY_SIZE(args.cna_stateid.other));
-	args.cna_fh.len = dp->dl_stid.sc_file->fi_fhandle.fh_size;
-	args.cna_fh.data = dp->dl_stid.sc_file->fi_fhandle.fh_raw;
-	args.cna_changes.count = ncn->ncn_nf_cnt;
-	args.cna_changes.element = ncn->ncn_nf;
-	if (!xdrgen_encode_CB_NOTIFY4args(xdr, &args))
-		goto out_err;
-
-	hdr.nops++;
-	encode_cb_nops(&hdr);
-	return;
-
-out_err:
-	/*
-	 * Drop the CB_NOTIFY op and emit a valid CB_SEQUENCE-only compound so
-	 * the client still advances its slot. Flag the failure so the done
-	 * handler recalls the delegation and the missed notification is not
-	 * silently lost. The flag is written here in the transmit path and read
-	 * in the done handler; the two are serialized phases of the same
-	 * rpc_task, so no additional barrier is needed.
-	 */
-	ncn->ncn_encode_err = true;
-	xdr_truncate_encode(xdr, start);
-	encode_cb_nops(&hdr);
-}
-
-static int nfs4_xdr_dec_cb_notify(struct rpc_rqst *rqstp,
-				  struct xdr_stream *xdr,
-				  void *data)
-{
-	struct nfsd4_callback *cb = data;
-	struct nfs4_cb_compound_hdr hdr;
-	int status;
-
-	status = decode_cb_compound4res(xdr, &hdr);
-	if (unlikely(status))
-		return status;
-
-	status = decode_cb_sequence4res(xdr, cb);
-	if (unlikely(status || cb->cb_seq_status))
-		return status;
-
-	return decode_cb_op_status(xdr, OP_CB_NOTIFY, &cb->cb_status);
-}
-
 static void nfs4_xdr_enc_cb_notify_lock(struct rpc_rqst *req,
 					struct xdr_stream *xdr,
 					const void *data)
@@ -1121,7 +1042,7 @@ static int nfs4_xdr_dec_cb_offload(struct rpc_rqst *rqstp,
 	.p_decode  = nfs4_xdr_dec_##restype,				\
 	.p_arglen  = NFS4_enc_##argtype##_sz,				\
 	.p_replen  = NFS4_dec_##restype##_sz,				\
-	.p_statidx = NFSPROC4_CLNT_##proc,				\
+	.p_statidx = NFSPROC4_CB_##call,				\
 	.p_name    = #proc,						\
 }
 
@@ -1131,21 +1052,45 @@ static const struct rpc_procinfo nfs4_cb_procedures[] = {
 #ifdef CONFIG_NFSD_PNFS
 	PROC(CB_LAYOUT,	COMPOUND,	cb_layout,	cb_layout),
 #endif
-	PROC(CB_NOTIFY,		COMPOUND,	cb_notify,	cb_notify),
 	PROC(CB_NOTIFY_LOCK,	COMPOUND,	cb_notify_lock,	cb_notify_lock),
 	PROC(CB_OFFLOAD,	COMPOUND,	cb_offload,	cb_offload),
 	PROC(CB_RECALL_ANY,	COMPOUND,	cb_recall_any,	cb_recall_any),
 	PROC(CB_GETATTR,	COMPOUND,	cb_getattr,	cb_getattr),
 };
 
-#define NFS4_CB_PROGRAM	0x40000000
-#define NFS4_CB_VERSION	1
+static unsigned int nfs4_cb_counts[ARRAY_SIZE(nfs4_cb_procedures)];
+static const struct rpc_version nfs_cb_version4 = {
+/*
+ * Note on the callback rpc program version number: despite language in rfc
+ * 5661 section 18.36.3 requiring servers to use 4 in this field, the
+ * official xdr descriptions for both 4.0 and 4.1 specify version 1, and
+ * in practice that appears to be what implementations use.  The section
+ * 18.36.3 language is expected to be fixed in an erratum.
+ */
+	.number			= 1,
+	.nrprocs		= ARRAY_SIZE(nfs4_cb_procedures),
+	.procs			= nfs4_cb_procedures,
+	.counts			= nfs4_cb_counts,
+};
 
-struct nfsd_net_cb {
-	struct rpc_version	version4;
-	const struct rpc_version *versions[NFS4_CB_VERSION + 1];
-	struct rpc_program	program;
-	struct rpc_stat		stat;
+static const struct rpc_version *nfs_cb_version[2] = {
+	[1] = &nfs_cb_version4,
+};
+
+static const struct rpc_program cb_program;
+
+static struct rpc_stat cb_stats = {
+	.program		= &cb_program
+};
+
+#define NFS4_CALLBACK 0x40000000
+static const struct rpc_program cb_program = {
+	.name			= "nfs4_cb",
+	.number			= NFS4_CALLBACK,
+	.nrvers			= ARRAY_SIZE(nfs_cb_version),
+	.version		= nfs_cb_version,
+	.stats			= &cb_stats,
+	.pipe_dir_name		= "nfsd4_cb",
 };
 
 static int max_cb_time(struct net *net)
@@ -1221,7 +1166,6 @@ static const struct cred *get_backchannel_cred(struct nfs4_client *clp, struct r
 
 static int setup_callback_client(struct nfs4_client *clp, struct nfs4_cb_conn *conn, struct nfsd4_session *ses)
 {
-	struct nfsd_net *nn = net_generic(clp->net, nfsd_net_id);
 	int maxtime = max_cb_time(clp->net);
 	struct rpc_timeout	timeparms = {
 		.to_initval	= maxtime,
@@ -1234,14 +1178,14 @@ static int setup_callback_client(struct nfs4_client *clp, struct nfs4_cb_conn *c
 		.addrsize	= conn->cb_addrlen,
 		.saddress	= (struct sockaddr *) &conn->cb_saddr,
 		.timeout	= &timeparms,
-		.version	= NFS4_CB_VERSION,
+		.program	= &cb_program,
+		.version	= 1,
 		.flags		= (RPC_CLNT_CREATE_NOPING | RPC_CLNT_CREATE_QUIET),
 		.cred		= current_cred(),
 	};
 	struct rpc_clnt *client;
 	const struct cred *cred;
 
-	args.program = &nn->nfsd_cb->program;
 	if (clp->cl_minorversion == 0) {
 		if (!clp->cl_cred.cr_principal &&
 		    (clp->cl_cred.cr_flavor >= RPC_AUTH_GSS_KRB5)) {
@@ -1446,16 +1390,6 @@ static void nfsd41_destroy_cb(struct nfsd4_callback *cb)
 	else
 		clear_bit(NFSD4_CALLBACK_RUNNING, &cb->cb_flags);
 
-	/*
-	 * Order the clear of NFSD4_CALLBACK_RUNNING above before the ->release()
-	 * callback below. A release op may re-check producer-side state to decide
-	 * whether to requeue itself (see nfsd4_cb_notify_release()), and that
-	 * check must not be reordered ahead of the clear. The plain clear_bit()
-	 * path carries no ordering; clear_and_wake_up_bit() already issues this
-	 * barrier internally, so the extra one is harmless there.
-	 */
-	smp_mb__after_atomic();
-
 	if (cb->cb_ops && cb->cb_ops->release)
 		cb->cb_ops->release(cb);
 	nfsd41_cb_inflight_end(clp);
@@ -1491,7 +1425,7 @@ void nfsd41_cb_referring_call(struct nfsd4_callback *cb,
 		}
 	}
 	if (!found) {
-		rcl = kmalloc_obj(*rcl);
+		rcl = kmalloc(sizeof(*rcl), GFP_KERNEL);
 		if (!rcl)
 			return;
 		memcpy(rcl->rcl_sessionid.data, sessionid->data,
@@ -1510,7 +1444,7 @@ void nfsd41_cb_referring_call(struct nfsd4_callback *cb,
 		}
 	}
 	if (!found) {
-		rc = kmalloc_obj(*rc);
+		rc = kmalloc(sizeof(*rc), GFP_KERNEL);
 		if (!rc)
 			goto out;
 		rc->rc_sequenceid = seqno;
@@ -1880,10 +1814,7 @@ nfsd4_run_cb_work(struct work_struct *work)
 
 	if (!test_and_clear_bit(NFSD4_CALLBACK_REQUEUE, &cb->cb_flags)) {
 		if (cb->cb_ops && cb->cb_ops->prepare)
-			if (!cb->cb_ops->prepare(cb)) {
-				nfsd41_destroy_cb(cb);
-				return;
-			}
+			cb->cb_ops->prepare(cb);
 	}
 
 	cb->cb_msg.rpc_cred = clp->cl_cb_cred;
@@ -1922,97 +1853,11 @@ void nfsd4_init_cb(struct nfsd4_callback *cb, struct nfs4_client *clp,
 bool nfsd4_run_cb(struct nfsd4_callback *cb)
 {
 	struct nfs4_client *clp = cb->cb_clp;
-	struct nfsd_net *nn = net_generic(clp->net, nfsd_net_id);
-	const struct nfsd4_callback_ops *ops = cb->cb_ops;
-	u32 minorversion = clp->cl_minorversion;
 	bool queued;
 
 	nfsd41_cb_inflight_begin(clp);
 	queued = nfsd4_queue_cb(cb);
-	if (queued) {
-		if (ops) {
-			nfsd_stats_cb_op_inc(nn, ops->opcode);
-			/*
-			 * Minorversion > 0 callbacks prepend a CB_SEQUENCE op
-			 * (see encode_cb_sequence4args()); count it like the
-			 * forechannel counts SEQUENCE, so it isn't perpetually
-			 * reported as zero.  CB_NULL probes (ops == NULL) carry
-			 * no CB_SEQUENCE -- and on 4.1+ they are dropped without
-			 * sending any RPC (see nfsd4_run_cb_work()) -- so they
-			 * must not be counted here.
-			 */
-			if (minorversion > 0)
-				nfsd_stats_cb_op_inc(nn, OP_CB_SEQUENCE);
-		}
-	} else {
+	if (!queued)
 		nfsd41_cb_inflight_end(clp);
-	}
 	return queued;
-}
-
-/**
- * nfsd_net_cb_shutdown - release per-netns callback RPC program resources
- * @nn: NFS server network namespace
- *
- * Frees resources allocated by nfsd_net_cb_init().
- */
-void nfsd_net_cb_shutdown(struct nfsd_net *nn)
-{
-	struct nfsd_net_cb *cb = nn->nfsd_cb;
-
-	if (cb) {
-		kfree(cb->version4.counts);
-		kfree(cb);
-		nn->nfsd_cb = NULL;
-	}
-}
-
-/**
- * nfsd_net_cb_init - initialize per-netns callback RPC program
- * @nn: NFS server network namespace
- *
- * Sets up the callback RPC program, version table, procedure
- * counts, and statistics structure for @nn. Caller must release
- * these resources using nfsd_net_cb_shutdown().
- *
- * Return: 0 on success, or -ENOMEM if allocation fails.
- */
-int nfsd_net_cb_init(struct nfsd_net *nn)
-{
-	struct nfsd_net_cb *cb;
-
-	cb = kzalloc_obj(*cb);
-	if (!cb)
-		return -ENOMEM;
-
-	cb->version4.counts = kzalloc_objs(unsigned int,
-			ARRAY_SIZE(nfs4_cb_procedures));
-	if (!cb->version4.counts) {
-		kfree(cb);
-		return -ENOMEM;
-	}
-	/*
-	 * Note on the callback rpc program version number: despite language
-	 * in rfc 5661 section 18.36.3 requiring servers to use 4 in this
-	 * field, the official xdr descriptions for both 4.0 and 4.1 specify
-	 * version 1, and in practice that appears to be what implementations
-	 * use. The section 18.36.3 language is expected to be fixed in an
-	 * erratum.
-	 */
-	cb->version4.number = NFS4_CB_VERSION;
-	cb->version4.nrprocs = ARRAY_SIZE(nfs4_cb_procedures);
-	cb->version4.procs = nfs4_cb_procedures;
-	cb->versions[NFS4_CB_VERSION] = &cb->version4;
-
-	cb->program.name = "nfs4_cb";
-	cb->program.number = NFS4_CB_PROGRAM;
-	cb->program.nrvers = ARRAY_SIZE(cb->versions);
-	cb->program.version = &cb->versions[0];
-	cb->program.pipe_dir_name = "nfsd4_cb";
-	cb->program.stats = &cb->stat;
-	cb->stat.program = &cb->program;
-
-	nn->nfsd_cb = cb;
-
-	return 0;
 }

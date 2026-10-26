@@ -103,11 +103,12 @@ blk_stat_alloc_callback(void (*timer_fn)(struct blk_stat_callback *),
 {
 	struct blk_stat_callback *cb;
 
-	cb = kmalloc_obj(*cb);
+	cb = kmalloc(sizeof(*cb), GFP_KERNEL);
 	if (!cb)
 		return NULL;
 
-	cb->stat = kmalloc_objs(struct blk_rq_stat, buckets);
+	cb->stat = kmalloc_array(buckets, sizeof(struct blk_rq_stat),
+				 GFP_KERNEL);
 	if (!cb->stat) {
 		kfree(cb);
 		return NULL;
@@ -206,7 +207,7 @@ struct blk_queue_stats *blk_alloc_queue_stats(void)
 {
 	struct blk_queue_stats *stats;
 
-	stats = kmalloc_obj(*stats);
+	stats = kmalloc(sizeof(*stats), GFP_KERNEL);
 	if (!stats)
 		return NULL;
 

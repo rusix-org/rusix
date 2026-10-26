@@ -1260,10 +1260,6 @@ static int nfp_ct_do_nft_merge(struct nfp_fl_ct_zone_entry *zt,
 err_nft_ct_offload:
 	nfp_fl_ct_del_offload(zt->priv->app, nft_m_entry->tc_flower_cookie,
 			      nft_m_entry->netdev);
-	WARN_ON_ONCE(rhashtable_remove_fast(&zt->nft_merge_tb,
-					    &nft_m_entry->hash_node,
-					    nfp_nft_ct_merge_params));
-	zt->nft_merge_count--;
 err_nft_ct_merge_insert:
 	list_del(&nft_m_entry->tc_merge_list);
 	list_del(&nft_m_entry->nft_flow_list);
@@ -1359,7 +1355,7 @@ nfp_fl_ct_zone_entry *get_nfp_zone_entry(struct nfp_flower_priv *priv,
 		if (IS_ERR(zt) || zt->priv)
 			return zt;
 	} else {
-		zt = kzalloc_obj(*zt);
+		zt = kzalloc(sizeof(*zt), GFP_KERNEL);
 		if (!zt)
 			return ERR_PTR(-ENOMEM);
 	}
@@ -1491,7 +1487,7 @@ nfp_fl_ct_flow_entry *nfp_fl_ct_add_flow(struct nfp_fl_ct_zone_entry *zt,
 	struct flow_action_entry *act;
 	int err, i;
 
-	entry = kzalloc_obj(*entry);
+	entry = kzalloc(sizeof(*entry), GFP_KERNEL);
 	if (!entry)
 		return ERR_PTR(-ENOMEM);
 
@@ -1505,7 +1501,7 @@ nfp_fl_ct_flow_entry *nfp_fl_ct_add_flow(struct nfp_fl_ct_zone_entry *zt,
 	 * to do a full copy instead of just a reference.
 	 */
 	if (is_nft) {
-		nft_match = kzalloc_obj(*nft_match);
+		nft_match = kzalloc(sizeof(*nft_match), GFP_KERNEL);
 		if (!nft_match) {
 			err = -ENOMEM;
 			goto err_pre_ct_act;

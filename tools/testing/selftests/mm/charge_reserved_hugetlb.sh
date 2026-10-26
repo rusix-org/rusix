@@ -11,11 +11,6 @@ if [[ $(id -u) -ne 0 ]]; then
   exit $ksft_skip
 fi
 
-if ! command -v killall >/dev/null 2>&1; then
-  echo "killall not available. Skipping..."
-  exit $ksft_skip
-fi
-
 nr_hugepgs=$(cat /proc/sys/vm/nr_hugepages)
 trap 'echo "$nr_hugepgs" > /proc/sys/vm/nr_hugepages' EXIT INT TERM
 
@@ -94,15 +89,6 @@ function get_machine_hugepage_size() {
 }
 
 MB=$(get_machine_hugepage_size)
-if (( MB >= 1024 )); then
-        # For 1GB hugepages
-        UNIT="GB"
-        MB_DISPLAY=$((MB / 1024))
-else
-        # For 2MB hugepages
-        UNIT="MB"
-        MB_DISPLAY=$MB
-fi
 
 function setup_cgroup() {
   local name="$1"
@@ -112,12 +98,11 @@ function setup_cgroup() {
   mkdir $cgroup_path/$name
 
   echo writing cgroup limit: "$cgroup_limit"
-  echo "$cgroup_limit" > \
-	  $cgroup_path/$name/hugetlb.${MB_DISPLAY}${UNIT}.$fault_limit_file
+  echo "$cgroup_limit" >$cgroup_path/$name/hugetlb.${MB}MB.$fault_limit_file
 
-  echo writing reservation limit: "$reservation_limit"
+  echo writing reseravation limit: "$reservation_limit"
   echo "$reservation_limit" > \
-    $cgroup_path/$name/hugetlb.${MB_DISPLAY}${UNIT}.$reservation_limit_file
+    $cgroup_path/$name/hugetlb.${MB}MB.$reservation_limit_file
 
   if [ -e "$cgroup_path/$name/cpuset.cpus" ]; then
     echo 0 >$cgroup_path/$name/cpuset.cpus
@@ -127,50 +112,41 @@ function setup_cgroup() {
   fi
 }
 
-function wait_for_file_value() {
-  local path="$1"
-  local expect="$2"
-  local max_tries=60
-
-  if [[ ! -r "$path" ]]; then
-    echo "ERROR: cannot read '$path', missing or permission denied"
-    return 1
-  fi
-
-  for ((i=1; i<=max_tries; i++)); do
-    local cur="$(cat "$path")"
-    if [[ "$cur" == "$expect" ]]; then
-      return 0
-    fi
-    echo "Waiting for $path to become '$expect' (current: '$cur') (try $i/$max_tries)"
-    sleep 1
-  done
-
-  echo "ERROR: timeout waiting for $path to become '$expect'"
-  return 1
-}
-
 function wait_for_hugetlb_memory_to_get_depleted() {
   local cgroup="$1"
-  local path="$cgroup_path/$cgroup/hugetlb.${MB_DISPLAY}${UNIT}.$reservation_usage_file"
-
-  wait_for_file_value "$path" "0"
+  local path="$cgroup_path/$cgroup/hugetlb.${MB}MB.$reservation_usage_file"
+  # Wait for hugetlbfs memory to get depleted.
+  while [ $(cat $path) != 0 ]; do
+    echo Waiting for hugetlb memory to get depleted.
+    cat $path
+    sleep 0.5
+  done
 }
 
 function wait_for_hugetlb_memory_to_get_reserved() {
   local cgroup="$1"
   local size="$2"
-  local path="$cgroup_path/$cgroup/hugetlb.${MB_DISPLAY}${UNIT}.$reservation_usage_file"
 
-  wait_for_file_value "$path" "$size"
+  local path="$cgroup_path/$cgroup/hugetlb.${MB}MB.$reservation_usage_file"
+  # Wait for hugetlbfs memory to get written.
+  while [ $(cat $path) != $size ]; do
+    echo Waiting for hugetlb memory reservation to reach size $size.
+    cat $path
+    sleep 0.5
+  done
 }
 
 function wait_for_hugetlb_memory_to_get_written() {
   local cgroup="$1"
   local size="$2"
-  local path="$cgroup_path/$cgroup/hugetlb.${MB_DISPLAY}${UNIT}.$fault_usage_file"
 
-  wait_for_file_value "$path" "$size"
+  local path="$cgroup_path/$cgroup/hugetlb.${MB}MB.$fault_usage_file"
+  # Wait for hugetlbfs memory to get written.
+  while [ $(cat $path) != $size ]; do
+    echo Waiting for hugetlb memory to reach size $size.
+    cat $path
+    sleep 0.5
+  done
 }
 
 function write_hugetlbfs_and_get_usage() {
@@ -190,8 +166,8 @@ function write_hugetlbfs_and_get_usage() {
   hugetlb_difference=0
   reserved_difference=0
 
-  local hugetlb_usage=$cgroup_path/$cgroup/hugetlb.${MB_DISPLAY}${UNIT}.$fault_usage_file
-  local reserved_usage=$cgroup_path/$cgroup/hugetlb.${MB_DISPLAY}${UNIT}.$reservation_usage_file
+  local hugetlb_usage=$cgroup_path/$cgroup/hugetlb.${MB}MB.$fault_usage_file
+  local reserved_usage=$cgroup_path/$cgroup/hugetlb.${MB}MB.$reservation_usage_file
 
   local hugetlb_before=$(cat $hugetlb_usage)
   local reserved_before=$(cat $reserved_usage)
@@ -322,10 +298,8 @@ function run_test() {
 
   cleanup_hugetlb_memory "hugetlb_cgroup_test"
 
-  local final_hugetlb=$(cat \
-	 $cgroup_path/hugetlb_cgroup_test/hugetlb.${MB_DISPLAY}${UNIT}.$fault_usage_file)
-  local final_reservation=$(cat \
-	  $cgroup_path/hugetlb_cgroup_test/hugetlb.${MB_DISPLAY}${UNIT}.$reservation_usage_file)
+  local final_hugetlb=$(cat $cgroup_path/hugetlb_cgroup_test/hugetlb.${MB}MB.$fault_usage_file)
+  local final_reservation=$(cat $cgroup_path/hugetlb_cgroup_test/hugetlb.${MB}MB.$reservation_usage_file)
 
   echo $hugetlb_difference
   echo $reserved_difference
@@ -381,14 +355,10 @@ function run_multiple_cgroup_test() {
   reservation_failed1=$reservation_failed
   oom_killed1=$oom_killed
 
-  local cgroup1_hugetlb_usage=\
-	  $cgroup_path/hugetlb_cgroup_test1/hugetlb.${MB_DISPLAY}${UNIT}.$fault_usage_file
-  local cgroup1_reservation_usage=\
-	  $cgroup_path/hugetlb_cgroup_test1/hugetlb.${MB_DISPLAY}${UNIT}.$reservation_usage_file
-  local cgroup2_hugetlb_usage=\
-	  $cgroup_path/hugetlb_cgroup_test2/hugetlb.${MB_DISPLAY}${UNIT}.$fault_usage_file
-  local cgroup2_reservation_usage=\
-	  $cgroup_path/hugetlb_cgroup_test2/hugetlb.${MB_DISPLAY}${UNIT}.$reservation_usage_file
+  local cgroup1_hugetlb_usage=$cgroup_path/hugetlb_cgroup_test1/hugetlb.${MB}MB.$fault_usage_file
+  local cgroup1_reservation_usage=$cgroup_path/hugetlb_cgroup_test1/hugetlb.${MB}MB.$reservation_usage_file
+  local cgroup2_hugetlb_usage=$cgroup_path/hugetlb_cgroup_test2/hugetlb.${MB}MB.$fault_usage_file
+  local cgroup2_reservation_usage=$cgroup_path/hugetlb_cgroup_test2/hugetlb.${MB}MB.$reservation_usage_file
 
   local usage_before_second_write=$(cat $cgroup1_hugetlb_usage)
   local reservation_usage_before_second_write=$(cat $cgroup1_reservation_usage)

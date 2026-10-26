@@ -18,6 +18,9 @@
 
 #define MAX_INLINE_NEST 1024
 
+/* If addr2line doesn't return data for 5 seconds then timeout. */
+int addr2line_timeout_ms = 5 * 1000;
+
 static int filename_split(char *filename, unsigned int *line_nr)
 {
 	char *sep;
@@ -87,16 +90,16 @@ static struct child_process *addr2line_subprocess_init(const char *addr2line_pat
 	return a2l;
 }
 
-enum cmd_a2l_style {
+enum a2l_style {
 	BROKEN,
 	GNU_BINUTILS,
 	LLVM,
 };
 
-static enum cmd_a2l_style cmd_addr2line_configure(struct child_process *a2l, const char *dso_name)
+static enum a2l_style addr2line_configure(struct child_process *a2l, const char *dso_name)
 {
 	static bool cached;
-	static enum cmd_a2l_style style;
+	static enum a2l_style style;
 
 	if (!cached) {
 		char buf[128];
@@ -120,7 +123,7 @@ static enum cmd_a2l_style cmd_addr2line_configure(struct child_process *a2l, con
 			lines = 3;
 			pr_debug3("Detected binutils addr2line style\n");
 		} else {
-			if (!symbol_conf.addr2line_disable_warn) {
+			if (!symbol_conf.disable_add2line_warn) {
 				char *output = NULL;
 				size_t output_len;
 
@@ -146,7 +149,7 @@ static enum cmd_a2l_style cmd_addr2line_configure(struct child_process *a2l, con
 }
 
 static int read_addr2line_record(struct io *io,
-				 enum cmd_a2l_style style,
+				 enum a2l_style style,
 				 const char *dso_name,
 				 u64 addr,
 				 bool first,
@@ -295,7 +298,7 @@ int cmd__addr2line(const char *dso_name, u64 addr,
 	char buf[128];
 	ssize_t written;
 	struct io io = { .eof = false };
-	enum cmd_a2l_style cmd_a2l_style;
+	enum a2l_style a2l_style;
 
 	if (!a2l) {
 		if (!filename__has_section(dso_name, ".debug_line"))
@@ -307,12 +310,12 @@ int cmd__addr2line(const char *dso_name, u64 addr,
 	}
 
 	if (a2l == NULL) {
-		if (!symbol_conf.addr2line_disable_warn)
+		if (!symbol_conf.disable_add2line_warn)
 			pr_warning("%s %s: addr2line_subprocess_init failed\n", __func__, dso_name);
 		goto out;
 	}
-	cmd_a2l_style = cmd_addr2line_configure(a2l, dso_name);
-	if (cmd_a2l_style == BROKEN)
+	a2l_style = addr2line_configure(a2l, dso_name);
+	if (a2l_style == BROKEN)
 		goto out;
 
 	/*
@@ -327,16 +330,16 @@ int cmd__addr2line(const char *dso_name, u64 addr,
 	len = snprintf(buf, sizeof(buf), "%016"PRIx64"\n,\n", addr);
 	written = len > 0 ? write(a2l->in, buf, len) : -1;
 	if (written != len) {
-		if (!symbol_conf.addr2line_disable_warn)
+		if (!symbol_conf.disable_add2line_warn)
 			pr_warning("%s %s: could not send request\n", __func__, dso_name);
 		goto out;
 	}
 	io__init(&io, a2l->out, buf, sizeof(buf));
-	io.timeout_ms = symbol_conf.addr2line_timeout_ms;
-	switch (read_addr2line_record(&io, cmd_a2l_style, dso_name, addr, /*first=*/true,
+	io.timeout_ms = addr2line_timeout_ms;
+	switch (read_addr2line_record(&io, a2l_style, dso_name, addr, /*first=*/true,
 				      &record_function, &record_filename, &record_line_nr)) {
 	case -1:
-		if (!symbol_conf.addr2line_disable_warn)
+		if (!symbol_conf.disable_add2line_warn)
 			pr_warning("%s %s: could not read first record\n", __func__, dso_name);
 		goto out;
 	case 0:
@@ -348,11 +351,11 @@ int cmd__addr2line(const char *dso_name, u64 addr,
 		 * binutils, also force a non-zero address as we're no longer
 		 * reading that record.
 		 */
-		switch (read_addr2line_record(&io, cmd_a2l_style, dso_name,
+		switch (read_addr2line_record(&io, a2l_style, dso_name,
 					      /*addr=*/1, /*first=*/true,
 					      NULL, NULL, NULL)) {
 		case -1:
-			if (!symbol_conf.addr2line_disable_warn)
+			if (!symbol_conf.disable_add2line_warn)
 				pr_warning("%s %s: could not read sentinel record\n",
 					   __func__, dso_name);
 			break;
@@ -360,7 +363,7 @@ int cmd__addr2line(const char *dso_name, u64 addr,
 			/* The sentinel as expected. */
 			break;
 		default:
-			if (!symbol_conf.addr2line_disable_warn)
+			if (!symbol_conf.disable_add2line_warn)
 				pr_warning("%s %s: unexpected record instead of sentinel",
 					   __func__, dso_name);
 			break;
@@ -394,7 +397,7 @@ int cmd__addr2line(const char *dso_name, u64 addr,
 	 * as we're reading records beyond the first.
 	 */
 	while ((record_status = read_addr2line_record(&io,
-						      cmd_a2l_style,
+						      a2l_style,
 						      dso_name,
 						      /*addr=*/1,
 						      /*first=*/false,

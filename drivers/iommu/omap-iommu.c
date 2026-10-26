@@ -311,7 +311,7 @@ static struct cr_regs *iotlb_alloc_cr(struct omap_iommu *obj,
 		return ERR_PTR(-EINVAL);
 	}
 
-	cr = kmalloc_obj(*cr);
+	cr = kmalloc(sizeof(*cr), GFP_KERNEL);
 	if (!cr)
 		return ERR_PTR(-ENOMEM);
 
@@ -1395,7 +1395,8 @@ static int omap_iommu_attach_init(struct device *dev,
 	if (!odomain->num_iommus)
 		return -ENODEV;
 
-	odomain->iommus = kzalloc_objs(*iommu, odomain->num_iommus, GFP_ATOMIC);
+	odomain->iommus = kcalloc(odomain->num_iommus, sizeof(*iommu),
+				  GFP_ATOMIC);
 	if (!odomain->iommus)
 		return -ENOMEM;
 
@@ -1563,7 +1564,7 @@ static struct iommu_domain *omap_iommu_domain_alloc_paging(struct device *dev)
 {
 	struct omap_iommu_domain *omap_domain;
 
-	omap_domain = kzalloc_obj(*omap_domain);
+	omap_domain = kzalloc(sizeof(*omap_domain), GFP_KERNEL);
 	if (!omap_domain)
 		return NULL;
 
@@ -1655,7 +1656,7 @@ static struct iommu_device *omap_iommu_probe_device(struct device *dev)
 	if (num_iommus < 0)
 		return ERR_PTR(-ENODEV);
 
-	arch_data = kzalloc_objs(*arch_data, num_iommus + 1);
+	arch_data = kcalloc(num_iommus + 1, sizeof(*arch_data), GFP_KERNEL);
 	if (!arch_data)
 		return ERR_PTR(-ENOMEM);
 
@@ -1667,8 +1668,8 @@ static struct iommu_device *omap_iommu_probe_device(struct device *dev)
 		}
 
 		pdev = of_find_device_by_node(np);
-		of_node_put(np);
 		if (!pdev) {
+			of_node_put(np);
 			kfree(arch_data);
 			return ERR_PTR(-ENODEV);
 		}
@@ -1676,11 +1677,14 @@ static struct iommu_device *omap_iommu_probe_device(struct device *dev)
 		oiommu = platform_get_drvdata(pdev);
 		put_device(&pdev->dev);
 		if (!oiommu) {
+			of_node_put(np);
 			kfree(arch_data);
 			return ERR_PTR(-EINVAL);
 		}
 
 		tmp->iommu_dev = oiommu;
+
+		of_node_put(np);
 	}
 
 	dev_iommu_priv_set(dev, arch_data);

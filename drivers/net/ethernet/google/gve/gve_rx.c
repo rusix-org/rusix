@@ -278,6 +278,7 @@ int gve_rx_alloc_ring_gqi(struct gve_priv *priv,
 	struct device *hdev = &priv->pdev->dev;
 	u32 slots = cfg->ring_size;
 	int filled_pages;
+	int qpl_page_cnt;
 	u32 qpl_id = 0;
 	size_t bytes;
 	int err;
@@ -313,8 +314,10 @@ int gve_rx_alloc_ring_gqi(struct gve_priv *priv,
 
 	if (!rx->data.raw_addressing) {
 		qpl_id = gve_get_rx_qpl_id(cfg->qcfg_tx, rx->q_num);
+		qpl_page_cnt = cfg->ring_size;
+
 		rx->data.qpl = gve_alloc_queue_page_list(priv, qpl_id,
-							 cfg->pages_per_qpl);
+							 qpl_page_cnt);
 		if (!rx->data.qpl) {
 			err = -ENOMEM;
 			goto abort_with_copy_pool;
@@ -387,7 +390,8 @@ int gve_rx_alloc_rings_gqi(struct gve_priv *priv,
 	int err = 0;
 	int i, j;
 
-	rx = kvzalloc_objs(struct gve_rx_ring, cfg->qcfg_rx->max_queues);
+	rx = kvcalloc(cfg->qcfg_rx->max_queues, sizeof(struct gve_rx_ring),
+		      GFP_KERNEL);
 	if (!rx)
 		return -ENOMEM;
 

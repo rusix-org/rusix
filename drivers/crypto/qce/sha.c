@@ -6,7 +6,6 @@
 #include <linux/device.h>
 #include <linux/dma-mapping.h>
 #include <linux/interrupt.h>
-#include <linux/string.h>
 #include <crypto/internal/hash.h>
 
 #include "common.h"
@@ -183,8 +182,10 @@ static int qce_ahash_update(struct ahash_request *req)
 	struct qce_sha_reqctx *rctx = ahash_request_ctx_dma(req);
 	struct qce_alg_template *tmpl = to_ahash_tmpl(req->base.tfm);
 	struct qce_device *qce = tmpl->qce;
-	unsigned int total;
+	struct scatterlist *sg_last, *sg;
+	unsigned int total, len;
 	unsigned int hash_later;
+	unsigned int nbytes;
 	unsigned int blocksize;
 
 	blocksize = crypto_tfm_alg_blocksize(crypto_ahash_tfm(tfm));
@@ -232,8 +233,28 @@ static int qce_ahash_update(struct ahash_request *req)
 	if (!hash_later)
 		hash_later = blocksize;
 
-	scatterwalk_map_and_copy(rctx->buf, req->src, req->nbytes - hash_later,
-				 hash_later, 0);
+	if (hash_later) {
+		unsigned int src_offset = req->nbytes - hash_later;
+		scatterwalk_map_and_copy(rctx->buf, req->src, src_offset,
+					 hash_later, 0);
+	}
+
+	/* here nbytes is multiple of blocksize */
+	nbytes = total - hash_later;
+
+	len = rctx->buflen;
+	sg = sg_last = req->src;
+
+	while (len < nbytes && sg) {
+		if (len + sg_dma_len(sg) > nbytes)
+			break;
+		len += sg_dma_len(sg);
+		sg_last = sg;
+		sg = sg_next(sg);
+	}
+
+	if (!sg_last)
+		return -EINVAL;
 
 	if (rctx->buflen) {
 		sg_init_table(rctx->sg, 2);
@@ -242,8 +263,7 @@ static int qce_ahash_update(struct ahash_request *req)
 		req->src = rctx->sg;
 	}
 
-	/* hash only complete blocks */
-	req->nbytes = total - hash_later;
+	req->nbytes = nbytes;
 	rctx->buflen = hash_later;
 
 	return qce->async_req_enqueue(tmpl->qce, &req->base);
@@ -413,7 +433,7 @@ static int qce_ahash_register_one(const struct qce_ahash_def *def,
 	struct crypto_alg *base;
 	int ret;
 
-	tmpl = kzalloc_obj(*tmpl);
+	tmpl = kzalloc(sizeof(*tmpl), GFP_KERNEL);
 	if (!tmpl)
 		return -ENOMEM;
 
@@ -443,8 +463,9 @@ static int qce_ahash_register_one(const struct qce_ahash_def *def,
 	base->cra_module = THIS_MODULE;
 	base->cra_init = qce_ahash_cra_init;
 
-	strscpy(base->cra_name, def->name);
-	strscpy(base->cra_driver_name, def->drv_name);
+	snprintf(base->cra_name, CRYPTO_MAX_ALG_NAME, "%s", def->name);
+	snprintf(base->cra_driver_name, CRYPTO_MAX_ALG_NAME, "%s",
+		 def->drv_name);
 
 	INIT_LIST_HEAD(&tmpl->entry);
 	tmpl->crypto_alg_type = CRYPTO_ALG_TYPE_AHASH;
@@ -480,13 +501,14 @@ static int qce_ahash_register(struct qce_device *qce)
 
 	for (i = 0; i < ARRAY_SIZE(ahash_def); i++) {
 		ret = qce_ahash_register_one(&ahash_def[i], qce);
-		if (ret) {
-			qce_ahash_unregister(qce);
-			return ret;
-		}
+		if (ret)
+			goto err;
 	}
 
 	return 0;
+err:
+	qce_ahash_unregister(qce);
+	return ret;
 }
 
 const struct qce_algo_ops ahash_ops = {

@@ -30,7 +30,6 @@ properties:
           - realtek,rtl8390-gpio
           - realtek,rtl9300-gpio
           - realtek,rtl9310-gpio
-          - realtek,rtl9607-gpio
       - const: realtek,otto-gpio
 
   reg: true
@@ -39,8 +38,6 @@ properties:
     const: 2
 
   gpio-controller: true
-
-  gpio-ranges: true
 
   ngpios:
     minimum: 1

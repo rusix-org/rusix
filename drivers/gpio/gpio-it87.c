@@ -362,7 +362,7 @@ static int __init it87_gpio_init(void)
 	 */
 	labels = kcalloc(it87_gpio->chip.ngpio, sizeof("it87_gpXY"),
 								GFP_KERNEL);
-	labels_table = kcalloc(it87_gpio->chip.ngpio, sizeof(*labels_table),
+	labels_table = kcalloc(it87_gpio->chip.ngpio, sizeof(const char *),
 								GFP_KERNEL);
 
 	if (!labels || !labels_table) {

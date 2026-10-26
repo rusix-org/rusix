@@ -675,6 +675,11 @@ int smc_ib_create_queue_pair(struct smc_link *lnk)
 		.recv_cq = lnk->smcibdev->roce_cq_recv,
 		.srq = NULL,
 		.cap = {
+				/* include unsolicited rdma_writes as well,
+				 * there are max. 2 RDMA_WRITE per 1 WR_SEND
+				 */
+			.max_send_wr = SMC_WR_BUF_CNT * 3,
+			.max_recv_wr = SMC_WR_BUF_CNT * 3,
 			.max_send_sge = SMC_IB_MAX_SEND_SGE,
 			.max_recv_sge = lnk->wr_rx_sge_cnt,
 			.max_inline_data = 0,
@@ -684,11 +689,6 @@ int smc_ib_create_queue_pair(struct smc_link *lnk)
 	};
 	int rc;
 
-	/* include unsolicited rdma_writes as well,
-	 * there are max. 2 RDMA_WRITE per 1 WR_SEND
-	 */
-	qp_attr.cap.max_send_wr = 3 * lnk->lgr->max_send_wr;
-	qp_attr.cap.max_recv_wr = lnk->lgr->max_recv_wr;
 	lnk->roce_qp = ib_create_qp(lnk->roce_pd, &qp_attr);
 	rc = PTR_ERR_OR_ZERO(lnk->roce_qp);
 	if (IS_ERR(lnk->roce_qp))
@@ -950,7 +950,7 @@ static int smc_ib_add_dev(struct ib_device *ibdev)
 	if (ibdev->node_type != RDMA_NODE_IB_CA)
 		return -EOPNOTSUPP;
 
-	smcibdev = kzalloc_obj(*smcibdev);
+	smcibdev = kzalloc(sizeof(*smcibdev), GFP_KERNEL);
 	if (!smcibdev)
 		return -ENOMEM;
 

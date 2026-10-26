@@ -4,15 +4,11 @@
 #ifndef _FBNIC_TXRX_H_
 #define _FBNIC_TXRX_H_
 
-#include <linux/bitfield.h>
 #include <linux/netdevice.h>
 #include <linux/skbuff.h>
-#include <linux/time64.h>
 #include <linux/types.h>
 #include <linux/u64_stats_sync.h>
 #include <net/xdp.h>
-
-#include "fbnic_csr.h"
 
 struct fbnic_net;
 
@@ -53,19 +49,12 @@ struct fbnic_net;
 #define FBNIC_RX_USECS_DEFAULT		30
 #define FBNIC_RX_FRAMES_DEFAULT		0
 
-#define FBNIC_RX_CQE_NSECS_MIN		1000
-#define FBNIC_RX_CQE_NSECS_DEFAULT	2000
-#define FBNIC_RX_CQE_NSECS_MAX \
-	((u32)(((u64)FIELD_MAX(FBNIC_QM_RCQ_CTL0_COAL_WAIT) * NSEC_PER_SEC) / \
-	       FBNIC_CLOCK_FREQ))
-
 #define FBNIC_RX_TROOM \
 	SKB_DATA_ALIGN(sizeof(struct skb_shared_info))
 #define FBNIC_RX_HROOM_PAD		128
 #define FBNIC_RX_HROOM \
 	(ALIGN(FBNIC_RX_TROOM + FBNIC_RX_HROOM_PAD, 128) - FBNIC_RX_TROOM)
 #define FBNIC_RX_PAD			0
-#define FBNIC_RX_PAYLD_ALIGN		128
 #define FBNIC_RX_PAYLD_OFFSET		0
 #define FBNIC_RX_PAYLD_PG_CL		0
 
@@ -132,7 +121,6 @@ struct fbnic_ring {
 	u16 size_mask;			/* Size of ring in descriptors - 1 */
 	u8 q_idx;			/* Logical netdev ring index */
 	u8 flags;			/* Ring flags (FBNIC_RING_F_*) */
-	u8 bd_page_shift;		/* BDQ: ilog2(page_size / 4096) */
 
 	u32 head, tail;			/* Head/Tail of ring */
 
@@ -168,7 +156,6 @@ struct fbnic_napi_vector {
 	struct napi_struct napi;
 	struct device *dev;		/* Device for DMA unmapping */
 	struct fbnic_dev *fbd;
-	struct dentry *dbg_nv;
 
 	u16 v_idx;
 	u8 txt_count;
@@ -178,11 +165,6 @@ struct fbnic_napi_vector {
 };
 
 extern const struct netdev_queue_mgmt_ops fbnic_queue_mgmt_ops;
-
-static inline u16 fbnic_bd_page_count(const struct fbnic_ring *bdq)
-{
-	return 1U << bdq->bd_page_shift;
-}
 
 netdev_tx_t fbnic_xmit_frame(struct sk_buff *skb, struct net_device *dev);
 netdev_features_t
@@ -210,12 +192,9 @@ void fbnic_napi_disable(struct fbnic_net *fbn);
 void fbnic_config_drop_mode(struct fbnic_net *fbn, bool tx_pause);
 void fbnic_enable(struct fbnic_net *fbn);
 void fbnic_disable(struct fbnic_net *fbn);
-void fbnic_dbg_up(struct fbnic_net *fbn);
-void fbnic_dbg_down(struct fbnic_net *fbn);
 void fbnic_flush(struct fbnic_net *fbn);
 void fbnic_fill(struct fbnic_net *fbn);
 
-u32 __iomem *fbnic_ring_csr_base(const struct fbnic_ring *ring);
 void fbnic_napi_depletion_check(struct net_device *netdev);
 int fbnic_wait_all_queues_idle(struct fbnic_dev *fbd, bool may_fail);
 
@@ -224,6 +203,4 @@ static inline int fbnic_napi_idx(const struct fbnic_napi_vector *nv)
 	return nv->v_idx - FBNIC_NON_NAPI_VECTORS;
 }
 
-void fbnic_dbg_nv_init(struct fbnic_napi_vector *nv);
-void fbnic_dbg_nv_exit(struct fbnic_napi_vector *nv);
 #endif /* _FBNIC_TXRX_H_ */

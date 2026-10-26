@@ -21,11 +21,6 @@
 
 #define NI_CHILD_NODE_INFO	0x004
 #define NI_CHILD_PTR(n)		(0x008 + (n) * 4)
-#define NI_NUM_SUB_FEATURES	0x100
-#define NI_SUB_FEATURE_TYPE(n)	(0x108 + (n) * 8)
-#define NI_SUB_FEATURE_PTR(n)	(0x10c + (n) * 8)
-
-#define NI_SUB_FEATURE_TYPE_FCU	0x2
 
 #define NI700_PMUSELA		0x00c
 
@@ -38,10 +33,9 @@
 #define NI_PIDR2_VERSION	GENMASK(7, 4)
 
 /* PMU node */
-#define NI700_PMEVCNTR(n)	(0x008 + (n) * 8)
-#define NI700_PMCCNTR_L		0x0f8
-#define NI_PMEVCNTR(n)		(0x200 + (n) * 8)
-#define NI_PMCCNTR_L		0x2f8
+#define NI_PMEVCNTR(n)		(0x008 + (n) * 8)
+#define NI_PMCCNTR_L		0x0f8
+#define NI_PMCCNTR_U		0x0fc
 #define NI_PMEVTYPER(n)		(0x400 + (n) * 4)
 #define NI_PMEVTYPER_NODE_TYPE	GENMASK(12, 9)
 #define NI_PMEVTYPER_NODE_ID	GENMASK(8, 0)
@@ -72,8 +66,6 @@
 enum ni_part {
 	PART_NI_700 = 0x43b,
 	PART_NI_710AE = 0x43d,
-	PART_NOC_S3 = 0x43f,
-	PART_SI_L1 = 0x455,
 };
 
 enum ni_node_type {
@@ -87,10 +79,6 @@ enum ni_node_type {
 	NI_HSNI,
 	NI_HMNI,
 	NI_PMNI,
-	NI_TSNI,
-	NI_TMNI,
-	NI_CMNI = 0x0e,
-	NI_MCN = 0x63,
 };
 
 struct arm_ni_node {
@@ -191,9 +179,6 @@ static struct attribute *arm_ni_event_attrs[] = {
 	NI_EVENT_ATTR(hsni, NI_HSNI),
 	NI_EVENT_ATTR(hmni, NI_HMNI),
 	NI_EVENT_ATTR(pmni, NI_PMNI),
-	NI_EVENT_ATTR(tsni, NI_TSNI),
-	NI_EVENT_ATTR(tmni, NI_TMNI),
-	NI_EVENT_ATTR(cmni, NI_CMNI),
 	NULL
 };
 
@@ -239,7 +224,7 @@ static ssize_t arm_ni_cpumask_show(struct device *dev,
 {
 	struct arm_ni *ni = cd_to_ni(pmu_to_cd(dev_get_drvdata(dev)));
 
-	return sysfs_emit(buf, "%*pbl\n", cpumask_pr_args(cpumask_of(ni->cpu)));
+	return cpumap_print_to_pagebuf(true, buf, cpumask_of(ni->cpu));
 }
 
 static struct device_attribute arm_ni_cpumask_attr =
@@ -323,15 +308,9 @@ static int arm_ni_validate_group(struct perf_event *event)
 	return 0;
 }
 
-static bool arm_ni_is_7xx(const struct arm_ni *ni)
-{
-	return ni->part == PART_NI_700 || ni->part == PART_NI_710AE;
-}
-
 static int arm_ni_event_init(struct perf_event *event)
 {
 	struct arm_ni_cd *cd = pmu_to_cd(event->pmu);
-	struct arm_ni *ni;
 
 	if (event->attr.type != event->pmu->type)
 		return -ENOENT;
@@ -339,10 +318,7 @@ static int arm_ni_event_init(struct perf_event *event)
 	if (is_sampling_event(event))
 		return -EINVAL;
 
-	ni = cd_to_ni(cd);
-	event->cpu = ni->cpu;
-	event->hw.flags = arm_ni_is_7xx(ni);
-
+	event->cpu = cd_to_ni(cd)->cpu;
 	if (NI_EVENT_TYPE(event) == NI_PMU)
 		return arm_ni_validate_group(event);
 
@@ -356,16 +332,16 @@ static int arm_ni_event_init(struct perf_event *event)
 	return -EINVAL;
 }
 
-static u64 arm_ni_read_ccnt(void __iomem *pmccntr)
+static u64 arm_ni_read_ccnt(struct arm_ni_cd *cd)
 {
 	u64 l, u_old, u_new;
 	int retries = 3; /* 1st time unlucky, 2nd improbable, 3rd just broken */
 
-	u_new = readl_relaxed(pmccntr + 4);
+	u_new = readl_relaxed(cd->pmu_base + NI_PMCCNTR_U);
 	do {
 		u_old = u_new;
-		l = readl_relaxed(pmccntr);
-		u_new = readl_relaxed(pmccntr + 4);
+		l = readl_relaxed(cd->pmu_base + NI_PMCCNTR_L);
+		u_new = readl_relaxed(cd->pmu_base + NI_PMCCNTR_U);
 	} while (u_new != u_old && --retries);
 	WARN_ON(!retries);
 
@@ -374,6 +350,7 @@ static u64 arm_ni_read_ccnt(void __iomem *pmccntr)
 
 static void arm_ni_event_read(struct perf_event *event)
 {
+	struct arm_ni_cd *cd = pmu_to_cd(event->pmu);
 	struct hw_perf_event *hw = &event->hw;
 	u64 count, prev;
 	bool ccnt = hw->idx == NI_CCNT_IDX;
@@ -381,9 +358,9 @@ static void arm_ni_event_read(struct perf_event *event)
 	do {
 		prev = local64_read(&hw->prev_count);
 		if (ccnt)
-			count = arm_ni_read_ccnt((void __iomem *)event->hw.event_base);
+			count = arm_ni_read_ccnt(cd);
 		else
-			count = readl_relaxed((void __iomem *)event->hw.event_base);
+			count = readl_relaxed(cd->pmu_base + NI_PMEVCNTR(hw->idx));
 	} while (local64_cmpxchg(&hw->prev_count, prev, count) != prev);
 
 	count -= prev;
@@ -408,16 +385,16 @@ static void arm_ni_event_stop(struct perf_event *event, int flags)
 		arm_ni_event_read(event);
 }
 
-static void arm_ni_init_ccnt(struct hw_perf_event *hw)
+static void arm_ni_init_ccnt(struct arm_ni_cd *cd)
 {
-	local64_set(&hw->prev_count, S64_MIN);
-	lo_hi_writeq_relaxed(S64_MIN, (void __iomem *)hw->event_base);
+	local64_set(&cd->ccnt->hw.prev_count, S64_MIN);
+	lo_hi_writeq_relaxed(S64_MIN, cd->pmu_base + NI_PMCCNTR_L);
 }
 
-static void arm_ni_init_evcnt(struct hw_perf_event *hw)
+static void arm_ni_init_evcnt(struct arm_ni_cd *cd, int idx)
 {
-	local64_set(&hw->prev_count, S32_MIN);
-	writel_relaxed(S32_MIN, (void __iomem *)hw->event_base);
+	local64_set(&cd->evcnt[idx]->hw.prev_count, S32_MIN);
+	writel_relaxed(S32_MIN, cd->pmu_base + NI_PMEVCNTR(idx));
 }
 
 static int arm_ni_event_add(struct perf_event *event, int flags)
@@ -432,10 +409,8 @@ static int arm_ni_event_add(struct perf_event *event, int flags)
 		if (cd->ccnt)
 			return -ENOSPC;
 		hw->idx = NI_CCNT_IDX;
-		hw->event_base = (unsigned long)cd->pmu_base +
-				 (hw->flags ? NI700_PMCCNTR_L : NI_PMCCNTR_L);
 		cd->ccnt = event;
-		arm_ni_init_ccnt(hw);
+		arm_ni_init_ccnt(cd);
 	} else {
 		hw->idx = 0;
 		while (cd->evcnt[hw->idx]) {
@@ -445,9 +420,7 @@ static int arm_ni_event_add(struct perf_event *event, int flags)
 		cd->evcnt[hw->idx] = event;
 		unit = (void *)hw->config_base;
 		unit->event[hw->idx] = NI_EVENT_EVENTID(event);
-		hw->event_base = (unsigned long)cd->pmu_base +
-				 (hw->flags ? NI700_PMEVCNTR(hw->idx) : NI_PMEVCNTR(hw->idx));
-		arm_ni_init_evcnt(hw);
+		arm_ni_init_evcnt(cd, hw->idx);
 		lo_hi_writeq_relaxed(le64_to_cpu(unit->pmusel), unit->pmusela);
 
 		reg = FIELD_PREP(NI_PMEVTYPER_NODE_TYPE, type) |
@@ -484,7 +457,7 @@ static irqreturn_t arm_ni_handle_irq(int irq, void *dev_id)
 			ret = IRQ_HANDLED;
 			if (!(WARN_ON(!cd->ccnt))) {
 				arm_ni_event_read(cd->ccnt);
-				arm_ni_init_ccnt(&cd->ccnt->hw);
+				arm_ni_init_ccnt(cd);
 			}
 		}
 		for (int i = 0; i < NI_NUM_COUNTERS; i++) {
@@ -493,7 +466,7 @@ static irqreturn_t arm_ni_handle_irq(int irq, void *dev_id)
 			ret = IRQ_HANDLED;
 			if (!(WARN_ON(!cd->evcnt[i]))) {
 				arm_ni_event_read(cd->evcnt[i]);
-				arm_ni_init_evcnt(&cd->evcnt[i]->hw);
+				arm_ni_init_evcnt(cd, i);
 			}
 		}
 		writel_relaxed(reg, cd->pmu_base + NI_PMOVSCLR);
@@ -501,25 +474,6 @@ static irqreturn_t arm_ni_handle_irq(int irq, void *dev_id)
 			return ret;
 		cd += cd->irq_friend;
 	}
-}
-
-static void __iomem *arm_ni_get_pmusel(struct arm_ni *ni, void __iomem *unit_base)
-{
-	u32 type, ptr, num;
-
-	if (arm_ni_is_7xx(ni))
-		return unit_base + NI700_PMUSELA;
-
-	num = readl_relaxed(unit_base + NI_NUM_SUB_FEATURES);
-	for (int i = 0; i < num; i++) {
-		type = readl_relaxed(unit_base + NI_SUB_FEATURE_TYPE(i));
-		if (type != NI_SUB_FEATURE_TYPE_FCU)
-			continue;
-		ptr = readl_relaxed(unit_base + NI_SUB_FEATURE_PTR(i));
-		return ni->base + ptr;
-	}
-	/* Should be impossible */
-	return NULL;
 }
 
 static int arm_ni_init_cd(struct arm_ni *ni, struct arm_ni_node *node, u64 res_start)
@@ -558,17 +512,12 @@ static int arm_ni_init_cd(struct arm_ni *ni, struct arm_ni_node *node, u64 res_s
 		case NI_HSNI:
 		case NI_HMNI:
 		case NI_PMNI:
-		case NI_TSNI:
-		case NI_TMNI:
-		case NI_CMNI:
-			unit->pmusela = arm_ni_get_pmusel(ni, unit_base);
+			unit->pmusela = unit_base + NI700_PMUSELA;
 			writel_relaxed(1, unit->pmusela);
 			if (readl_relaxed(unit->pmusela) != 1)
 				dev_info(ni->dev, "No access to node 0x%04x%04x\n", unit->id, unit->type);
 			else
 				unit->ns = true;
-			break;
-		case NI_MCN:
 			break;
 		default:
 			/*
@@ -700,8 +649,6 @@ static int arm_ni_probe(struct platform_device *pdev)
 	switch (part) {
 	case PART_NI_700:
 	case PART_NI_710AE:
-	case PART_NOC_S3:
-	case PART_SI_L1:
 		break;
 	default:
 		dev_WARN(&pdev->dev, "Unknown part number: 0x%03x, this may go badly\n", part);

@@ -1512,11 +1512,11 @@ static int ar5523_load_firmware(struct usb_device *dev)
 		return -ENOENT;
 	}
 
-	txblock = kzalloc_obj(*txblock);
+	txblock = kzalloc(sizeof(*txblock), GFP_KERNEL);
 	if (!txblock)
 		goto out;
 
-	rxblock = kmalloc_obj(*rxblock);
+	rxblock = kmalloc(sizeof(*rxblock), GFP_KERNEL);
 	if (!rxblock)
 		goto out_free_txblock;
 

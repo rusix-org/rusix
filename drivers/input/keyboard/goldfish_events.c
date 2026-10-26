@@ -179,8 +179,8 @@ MODULE_DEVICE_TABLE(of, goldfish_events_of_match);
 
 #ifdef CONFIG_ACPI
 static const struct acpi_device_id goldfish_events_acpi_match[] = {
-	{ .id = "GFSH0002" },
-	{ }
+	{ "GFSH0002", 0 },
+	{ },
 };
 MODULE_DEVICE_TABLE(acpi, goldfish_events_acpi_match);
 #endif

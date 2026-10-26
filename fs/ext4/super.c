@@ -48,7 +48,6 @@
 #include <linux/fsnotify.h>
 #include <linux/fs_context.h>
 #include <linux/fs_parser.h>
-#include <linux/fserror.h>
 
 #include "ext4.h"
 #include "ext4_extents.h"	/* Needed for trace points definition */
@@ -161,7 +160,7 @@ MODULE_ALIAS("ext3");
 
 
 static inline void __ext4_read_bh(struct buffer_head *bh, blk_opf_t op_flags,
-				  bio_end_io_t end_io, bool simu_fail)
+				  bh_end_io_t *end_io, bool simu_fail)
 {
 	if (simu_fail) {
 		clear_buffer_uptodate(bh);
@@ -176,13 +175,13 @@ static inline void __ext4_read_bh(struct buffer_head *bh, blk_opf_t op_flags,
 	 */
 	clear_buffer_verified(bh);
 
-	if (!end_io)
-		end_io = bh_end_read;
-	bh_submit(bh, REQ_OP_READ | op_flags, end_io);
+	bh->b_end_io = end_io ? end_io : end_buffer_read_sync;
+	get_bh(bh);
+	submit_bh(REQ_OP_READ | op_flags, bh);
 }
 
 void ext4_read_bh_nowait(struct buffer_head *bh, blk_opf_t op_flags,
-			 bio_end_io_t end_io, bool simu_fail)
+			 bh_end_io_t *end_io, bool simu_fail)
 {
 	BUG_ON(!buffer_locked(bh));
 
@@ -194,7 +193,7 @@ void ext4_read_bh_nowait(struct buffer_head *bh, blk_opf_t op_flags,
 }
 
 int ext4_read_bh(struct buffer_head *bh, blk_opf_t op_flags,
-		 bio_end_io_t end_io, bool simu_fail)
+		 bh_end_io_t *end_io, bool simu_fail)
 {
 	BUG_ON(!buffer_locked(bh));
 
@@ -521,7 +520,6 @@ static bool ext4_journalled_writepage_needs_redirty(struct jbd2_inode *jinode,
 {
 	struct buffer_head *bh, *head;
 	struct journal_head *jh;
-	transaction_t *trans = READ_ONCE(jinode->i_transaction);
 
 	bh = head = folio_buffers(folio);
 	do {
@@ -540,7 +538,7 @@ static bool ext4_journalled_writepage_needs_redirty(struct jbd2_inode *jinode,
 		 */
 		jh = bh2jh(bh);
 		if (buffer_dirty(bh) ||
-		    (jh && (jh->b_transaction != trans ||
+		    (jh && (jh->b_transaction != jinode->i_transaction ||
 			    jh->b_next_transaction)))
 			return true;
 	} while ((bh = bh->b_this_page) != head);
@@ -551,19 +549,14 @@ static bool ext4_journalled_writepage_needs_redirty(struct jbd2_inode *jinode,
 static int ext4_journalled_submit_inode_data_buffers(struct jbd2_inode *jinode)
 {
 	struct address_space *mapping = jinode->i_vfs_inode->i_mapping;
-	loff_t range_start, range_end;
 	struct writeback_control wbc = {
-		.sync_mode = WB_SYNC_ALL,
+		.sync_mode =  WB_SYNC_ALL,
 		.nr_to_write = LONG_MAX,
-	};
+		.range_start = jinode->i_dirty_start,
+		.range_end = jinode->i_dirty_end,
+        };
 	struct folio *folio = NULL;
 	int error;
-
-	if (!jbd2_jinode_get_dirty_range(jinode, &range_start, &range_end))
-		return 0;
-
-	wbc.range_start = range_start;
-	wbc.range_end = range_end;
 
 	/*
 	 * writeback_iter() already checks for dirty pages and calls
@@ -705,7 +698,7 @@ static void ext4_handle_error(struct super_block *sb, bool force_ro, int error,
 		WARN_ON_ONCE(1);
 
 	if (!continue_fs && !ext4_emergency_ro(sb) && journal)
-		jbd2_journal_abort(journal, -error);
+		jbd2_journal_abort(journal, -EIO);
 
 	if (!bdev_read_only(sb->s_bdev)) {
 		save_error_info(sb, error, ino, block, func, line);
@@ -831,8 +824,7 @@ void __ext4_error(struct super_block *sb, const char *function,
 		       sb->s_id, function, line, current->comm, &vaf);
 		va_end(args);
 	}
-	fserror_report_metadata(sb, error ? -abs(error) : -EFSCORRUPTED,
-				GFP_ATOMIC);
+	fsnotify_sb_error(sb, NULL, error ? error : EFSCORRUPTED);
 
 	ext4_handle_error(sb, force_ro, error, 0, block, function, line);
 }
@@ -854,19 +846,17 @@ void __ext4_error_inode(struct inode *inode, const char *function,
 		vaf.va = &args;
 		if (block)
 			printk(KERN_CRIT "EXT4-fs error (device %s): %s:%d: "
-			       "inode #%llu: block %llu: comm %s: %pV\n",
+			       "inode #%lu: block %llu: comm %s: %pV\n",
 			       inode->i_sb->s_id, function, line, inode->i_ino,
 			       block, current->comm, &vaf);
 		else
 			printk(KERN_CRIT "EXT4-fs error (device %s): %s:%d: "
-			       "inode #%llu: comm %s: %pV\n",
+			       "inode #%lu: comm %s: %pV\n",
 			       inode->i_sb->s_id, function, line, inode->i_ino,
 			       current->comm, &vaf);
 		va_end(args);
 	}
-	fserror_report_file_metadata(inode,
-				     error ? -abs(error) : -EFSCORRUPTED,
-				     GFP_ATOMIC);
+	fsnotify_sb_error(inode->i_sb, inode, error ? error : EFSCORRUPTED);
 
 	ext4_handle_error(inode->i_sb, false, error, inode->i_ino, block,
 			  function, line);
@@ -894,19 +884,19 @@ void __ext4_error_file(struct file *file, const char *function,
 		vaf.va = &args;
 		if (block)
 			printk(KERN_CRIT
-			       "EXT4-fs error (device %s): %s:%d: inode #%llu: "
+			       "EXT4-fs error (device %s): %s:%d: inode #%lu: "
 			       "block %llu: comm %s: path %s: %pV\n",
 			       inode->i_sb->s_id, function, line, inode->i_ino,
 			       block, current->comm, path, &vaf);
 		else
 			printk(KERN_CRIT
-			       "EXT4-fs error (device %s): %s:%d: inode #%llu: "
+			       "EXT4-fs error (device %s): %s:%d: inode #%lu: "
 			       "comm %s: path %s: %pV\n",
 			       inode->i_sb->s_id, function, line, inode->i_ino,
 			       current->comm, path, &vaf);
 		va_end(args);
 	}
-	fserror_report_file_metadata(inode, -EFSCORRUPTED, GFP_ATOMIC);
+	fsnotify_sb_error(inode->i_sb, inode, EFSCORRUPTED);
 
 	ext4_handle_error(inode->i_sb, false, EFSCORRUPTED, inode->i_ino, block,
 			  function, line);
@@ -975,8 +965,7 @@ void __ext4_std_error(struct super_block *sb, const char *function,
 		printk(KERN_CRIT "EXT4-fs error (device %s) in %s:%d: %s\n",
 		       sb->s_id, function, line, errstr);
 	}
-	fserror_report_metadata(sb, errno ? -abs(errno) : -EFSCORRUPTED,
-				GFP_ATOMIC);
+	fsnotify_sb_error(sb, NULL, errno ? errno : EFSCORRUPTED);
 
 	ext4_handle_error(sb, false, -errno, 0, 0, function, line);
 }
@@ -1041,14 +1030,14 @@ void __ext4_warning_inode(const struct inode *inode, const char *function,
 	vaf.fmt = fmt;
 	vaf.va = &args;
 	printk(KERN_WARNING "EXT4-fs warning (device %s): %s:%d: "
-	       "inode #%llu: comm %s: %pV\n", inode->i_sb->s_id,
+	       "inode #%lu: comm %s: %pV\n", inode->i_sb->s_id,
 	       function, line, inode->i_ino, current->comm, &vaf);
 	va_end(args);
 }
 
 void __ext4_grp_locked_error(const char *function, unsigned int line,
 			     struct super_block *sb, ext4_group_t grp,
-			     u64 ino, ext4_fsblk_t block,
+			     unsigned long ino, ext4_fsblk_t block,
 			     const char *fmt, ...)
 __releases(bitlock)
 __acquires(bitlock)
@@ -1067,7 +1056,7 @@ __acquires(bitlock)
 		printk(KERN_CRIT "EXT4-fs error (device %s): %s:%d: group %u, ",
 		       sb->s_id, function, line, grp);
 		if (ino)
-			printk(KERN_CONT "inode %llu: ", ino);
+			printk(KERN_CONT "inode %lu: ", ino);
 		if (block)
 			printk(KERN_CONT "block %llu:",
 			       (unsigned long long) block);
@@ -1176,7 +1165,7 @@ static void dump_orphan_list(struct super_block *sb, struct ext4_sb_info *sbi)
 	list_for_each(l, &sbi->s_orphan) {
 		struct inode *inode = orphan_list_entry(l);
 		printk(KERN_ERR "  "
-		       "inode %s:%llu at %p: mode %o, nlink %d, next %d\n",
+		       "inode %s:%lu at %p: mode %o, nlink %d, next %d\n",
 		       inode->i_sb->s_id, inode->i_ino, inode,
 		       inode->i_mode, inode->i_nlink,
 		       NEXT_ORPHAN(inode));
@@ -1279,14 +1268,6 @@ static void ext4_flex_groups_free(struct ext4_sb_info *sbi)
 	}
 }
 
-static void ext4_put_sbi_rcu(struct rcu_head *head)
-{
-	struct ext4_sb_info *sbi = container_of(head, struct ext4_sb_info, s_rcu);
-
-	ext4_es_destroy_stats(sbi);
-	kfree(sbi);
-}
-
 static void ext4_put_super(struct super_block *sb)
 {
 	struct ext4_sb_info *sbi = EXT4_SB(sb);
@@ -1311,8 +1292,6 @@ static void ext4_put_super(struct super_block *sb)
 			 &sb->s_uuid);
 
 	ext4_unregister_li_request(sb);
-	/* Drain deferred EA inode iputs while quota is still active. */
-	flush_delayed_work(&sbi->s_ea_inode_work);
 	ext4_quotas_off(sb, EXT4_MAXQUOTAS);
 
 	destroy_workqueue(sbi->rsv_conversion_wq);
@@ -1382,6 +1361,7 @@ static void ext4_put_super(struct super_block *sb)
 	ext4_stop_mmpd(sbi);
 
 	brelse(sbi->s_sbh);
+	sb->s_fs_info = NULL;
 	/*
 	 * Now that we are completely done shutting down the
 	 * superblock, we need to actually destroy the kobject.
@@ -1394,8 +1374,7 @@ static void ext4_put_super(struct super_block *sb)
 #if IS_ENABLED(CONFIG_UNICODE)
 	utf8_unload(sb->s_encoding);
 #endif
-	/* ext4_get_link() reads the sbi and the counters in rcu pathwalk */
-	call_rcu(&sbi->s_rcu, ext4_put_sbi_rcu);
+	kfree(sbi);
 }
 
 static struct kmem_cache *ext4_inode_cachep;
@@ -1424,7 +1403,6 @@ static struct inode *ext4_alloc_inode(struct super_block *sb)
 	ei->i_es_all_nr = 0;
 	ei->i_es_shk_nr = 0;
 	ei->i_es_shrink_lblk = 0;
-	ei->i_es_seq = 0;
 	ei->i_reserved_data_blocks = 0;
 	spin_lock_init(&(ei->i_block_reservation_lock));
 	ext4_init_pending_tree(&ei->i_pending_tree);
@@ -1433,13 +1411,6 @@ static struct inode *ext4_alloc_inode(struct super_block *sb)
 	memset(&ei->i_dquot, 0, sizeof(ei->i_dquot));
 #endif
 	ei->jinode = NULL;
-	/*
-	 * Reinitialize xattr_sem every allocation because EA inodes
-	 * share this space with i_ea_iput_node (via union) which may
-	 * have overwritten the semaphore when the slab object was
-	 * previously used as an EA inode.
-	 */
-	init_rwsem(&ei->xattr_sem);
 	INIT_LIST_HEAD(&ei->i_rsv_conversion_list);
 	spin_lock_init(&ei->i_completed_io_lock);
 	ei->i_sync_tid = 0;
@@ -1447,10 +1418,6 @@ static struct inode *ext4_alloc_inode(struct super_block *sb)
 	INIT_WORK(&ei->i_rsv_conversion_work, ext4_end_io_rsv_work);
 	ext4_fc_init_inode(&ei->vfs_inode);
 	spin_lock_init(&ei->i_fc_lock);
-	ei->i_metadata_bhs = NULL;
-#ifdef CONFIG_LOCKDEP
-	lockdep_set_subclass(&ei->i_data_sem, I_DATA_SEM_NORMAL);
-#endif
 	return &ei->vfs_inode;
 }
 
@@ -1468,9 +1435,8 @@ static int ext4_drop_inode(struct inode *inode)
 static void ext4_free_in_core_inode(struct inode *inode)
 {
 	fscrypt_free_inode(inode);
-	kfree(ext4_i_metadata_bhs(inode));
 	if (!list_empty(&(EXT4_I(inode)->i_fc_list))) {
-		pr_warn("%s: inode %llu still in fc list",
+		pr_warn("%s: inode %ld still in fc list",
 			__func__, inode->i_ino);
 	}
 	kmem_cache_free(ext4_inode_cachep, EXT4_I(inode));
@@ -1480,7 +1446,7 @@ static void ext4_destroy_inode(struct inode *inode)
 {
 	if (ext4_inode_orphan_tracked(inode)) {
 		ext4_msg(inode->i_sb, KERN_ERR,
-			 "Inode %llu (%p): inode tracked as orphan!",
+			 "Inode %lu (%p): inode tracked as orphan!",
 			 inode->i_ino, EXT4_I(inode));
 		print_hex_dump(KERN_INFO, "", DUMP_PREFIX_ADDRESS, 16, 4,
 				EXT4_I(inode), sizeof(struct ext4_inode_info),
@@ -1491,7 +1457,7 @@ static void ext4_destroy_inode(struct inode *inode)
 	if (!(EXT4_SB(inode->i_sb)->s_mount_state & EXT4_ERROR_FS) &&
 	    WARN_ON_ONCE(EXT4_I(inode)->i_reserved_data_blocks))
 		ext4_msg(inode->i_sb, KERN_ERR,
-			 "Inode %llu (%p): i_reserved_data_blocks (%u) not cleared!",
+			 "Inode %lu (%p): i_reserved_data_blocks (%u) not cleared!",
 			 inode->i_ino, EXT4_I(inode),
 			 EXT4_I(inode)->i_reserved_data_blocks);
 }
@@ -1506,29 +1472,26 @@ static void init_once(void *foo)
 	struct ext4_inode_info *ei = foo;
 
 	INIT_LIST_HEAD(&ei->i_orphan);
+	init_rwsem(&ei->xattr_sem);
 	init_rwsem(&ei->i_data_sem);
 	inode_init_once(&ei->vfs_inode);
 	ext4_fc_init_inode(&ei->vfs_inode);
 #ifdef CONFIG_FS_ENCRYPTION
 	ei->i_crypt_info = NULL;
 #endif
+#ifdef CONFIG_FS_VERITY
+	ei->i_verity_info = NULL;
+#endif
 }
 
 static int __init init_inodecache(void)
 {
-	struct kmem_cache_args args = {
-		.useroffset = offsetof(struct ext4_inode_info, i_data),
-		.usersize = sizeof_field(struct ext4_inode_info, i_data),
-		.use_freeptr_offset = true,
-		.freeptr_offset = offsetof(struct ext4_inode_info, i_flags),
-		.ctor = init_once,
-	};
-
-	ext4_inode_cachep = kmem_cache_create("ext4_inode_cache",
-				sizeof(struct ext4_inode_info),
-				&args,
-				SLAB_RECLAIM_ACCOUNT | SLAB_ACCOUNT);
-
+	ext4_inode_cachep = kmem_cache_create_usercopy("ext4_inode_cache",
+				sizeof(struct ext4_inode_info), 0,
+				SLAB_RECLAIM_ACCOUNT | SLAB_ACCOUNT,
+				offsetof(struct ext4_inode_info, i_data),
+				sizeof_field(struct ext4_inode_info, i_data),
+				init_once);
 	if (ext4_inode_cachep == NULL)
 		return -ENOMEM;
 	return 0;
@@ -1546,34 +1509,10 @@ static void destroy_inodecache(void)
 
 void ext4_clear_inode(struct inode *inode)
 {
-	struct mapping_metadata_bhs *mmb = ext4_i_metadata_bhs(inode);
-
 	ext4_fc_del(inode);
-	if (mmb)
-		mmb_invalidate(mmb);
+	invalidate_inode_buffers(inode);
 	clear_inode(inode);
 	ext4_discard_preallocations(inode);
-	/*
-	 * We must remove the inode from the hash before ext4_free_inode()
-	 * clears the bit in inode bitmap as otherwise another process reusing
-	 * the inode will block in insert_inode_hash() waiting for inode
-	 * eviction to complete while holding transaction handle open, but
-	 * ext4_evict_inode() still running for that inode could block waiting
-	 * for transaction commit if the inode is marked as IS_SYNC => deadlock.
-	 *
-	 * Removing the inode from the hash here is safe. There are two cases
-	 * to consider:
-	 * 1) The inode still has references to it (i_nlink > 0). In that case
-	 * we are keeping the inode and once we remove the inode from the hash,
-	 * iget() can create the new inode structure for the same inode number
-	 * and we are fine with that as all IO on behalf of the inode is
-	 * finished.
-	 * 2) We are deleting the inode (i_nlink == 0). In that case inode
-	 * number cannot be reused until ext4_free_inode() clears the bit in
-	 * the inode bitmap, at which point all IO is done and reuse is fine
-	 * again.
-	 */
-	remove_inode_hash(inode);
 	ext4_es_remove_extent(inode, 0, EXT_MAX_BLOCKS);
 	dquot_drop(inode);
 	if (EXT4_I(inode)->jinode) {
@@ -1583,6 +1522,7 @@ void ext4_clear_inode(struct inode *inode)
 		EXT4_I(inode)->jinode = NULL;
 	}
 	fscrypt_put_encryption_info(inode);
+	fsverity_cleanup_inode(inode);
 }
 
 static struct inode *ext4_nfs_get_inode(struct super_block *sb,
@@ -1624,13 +1564,9 @@ static int ext4_nfs_commit_metadata(struct inode *inode)
 	struct writeback_control wbc = {
 		.sync_mode = WB_SYNC_ALL
 	};
-	int ret;
 
 	trace_ext4_nfs_commit_metadata(inode);
-	ret = ext4_write_inode(inode, &wbc);
-	if (!ret && inode_state_read_once(inode) & I_METADATA_WRITEBACK)
-		ret = ext4_sync_inode_metadata(inode, &wbc);
-	return ret;
+	return ext4_write_inode(inode, &wbc);
 }
 
 #ifdef CONFIG_QUOTA
@@ -1687,7 +1623,6 @@ static const struct super_operations ext4_sops = {
 	.free_inode	= ext4_free_in_core_inode,
 	.destroy_inode	= ext4_destroy_inode,
 	.write_inode	= ext4_write_inode,
-	.sync_inode_metadata = ext4_sync_inode_metadata,
 	.dirty_inode	= ext4_dirty_inode,
 	.drop_inode	= ext4_drop_inode,
 	.evict_inode	= ext4_evict_inode,
@@ -2068,7 +2003,7 @@ int ext4_init_fs_context(struct fs_context *fc)
 {
 	struct ext4_fs_context *ctx;
 
-	ctx = kzalloc_obj(struct ext4_fs_context);
+	ctx = kzalloc(sizeof(struct ext4_fs_context), GFP_KERNEL);
 	if (!ctx)
 		return -ENOMEM;
 
@@ -2548,11 +2483,11 @@ static int parse_apply_sb_mount_options(struct super_block *sb,
 	if (strscpy_pad(s_mount_opts, sbi->s_es->s_mount_opts) < 0)
 		return -E2BIG;
 
-	fc = kzalloc_obj(struct fs_context);
+	fc = kzalloc(sizeof(struct fs_context), GFP_KERNEL);
 	if (!fc)
 		return -ENOMEM;
 
-	s_ctx = kzalloc_obj(struct ext4_fs_context);
+	s_ctx = kzalloc(sizeof(struct ext4_fs_context), GFP_KERNEL);
 	if (!s_ctx)
 		goto out_free;
 
@@ -3705,12 +3640,10 @@ int ext4_feature_set_ok(struct super_block *sb, int readonly)
 }
 
 /*
- * This function is called once a day by default if we have errors logged
- * on the file system.
- * Use the err_report_sec sysfs attribute to disable or adjust its call
- * freequency.
+ * This function is called once a day if we have errors logged
+ * on the file system
  */
-void print_daily_error_info(struct timer_list *t)
+static void print_daily_error_info(struct timer_list *t)
 {
 	struct ext4_sb_info *sbi = timer_container_of(sbi, t, s_err_report);
 	struct super_block *sb = sbi->s_sb;
@@ -3750,9 +3683,7 @@ void print_daily_error_info(struct timer_list *t)
 			       le64_to_cpu(es->s_last_error_block));
 		printk(KERN_CONT "\n");
 	}
-
-	if (sbi->s_err_report_sec)
-		mod_timer(&sbi->s_err_report, jiffies + secs_to_jiffies(sbi->s_err_report_sec));
+	mod_timer(&sbi->s_err_report, jiffies + 24*60*60*HZ);  /* Once a day */
 }
 
 /* Find next suitable group and run ext4_init_inode_table */
@@ -4021,7 +3952,7 @@ static int ext4_li_info_new(void)
 {
 	struct ext4_lazy_init *eli = NULL;
 
-	eli = kzalloc_obj(*eli);
+	eli = kzalloc(sizeof(*eli), GFP_KERNEL);
 	if (!eli)
 		return -ENOMEM;
 
@@ -4040,7 +3971,7 @@ static struct ext4_li_request *ext4_li_request_new(struct super_block *sb,
 {
 	struct ext4_li_request *elr;
 
-	elr = kzalloc_obj(*elr);
+	elr = kzalloc(sizeof(*elr), GFP_KERNEL);
 	if (!elr)
 		return NULL;
 
@@ -4262,7 +4193,7 @@ int ext4_calculate_overhead(struct super_block *sb)
 	unsigned int j_blocks, j_inum = le32_to_cpu(es->s_journal_inum);
 	ext4_group_t i, ngroups = ext4_get_groups_count(sb);
 	ext4_fsblk_t overhead = 0;
-	char *buf = kvmalloc(sb->s_blocksize, GFP_NOFS | __GFP_ZERO);
+	char *buf = (char *) get_zeroed_page(GFP_NOFS);
 
 	if (!buf)
 		return -ENOMEM;
@@ -4287,7 +4218,7 @@ int ext4_calculate_overhead(struct super_block *sb)
 		blks = count_overhead(sb, i, buf);
 		overhead += blks;
 		if (blks)
-			memset(buf, 0, sb->s_blocksize);
+			memset(buf, 0, PAGE_SIZE);
 		cond_resched();
 	}
 
@@ -4310,7 +4241,7 @@ int ext4_calculate_overhead(struct super_block *sb)
 	}
 	sbi->s_overhead = overhead;
 	smp_wmb();
-	kvfree(buf);
+	free_page((unsigned long) buf);
 	return 0;
 }
 
@@ -4387,7 +4318,7 @@ static struct ext4_sb_info *ext4_alloc_sbi(struct super_block *sb)
 {
 	struct ext4_sb_info *sbi;
 
-	sbi = kzalloc_obj(*sbi);
+	sbi = kzalloc(sizeof(*sbi), GFP_KERNEL);
 	if (!sbi)
 		return NULL;
 
@@ -4395,7 +4326,7 @@ static struct ext4_sb_info *ext4_alloc_sbi(struct super_block *sb)
 					   NULL, NULL);
 
 	sbi->s_blockgroup_lock =
-		kzalloc_obj(struct blockgroup_lock);
+		kzalloc(sizeof(struct blockgroup_lock), GFP_KERNEL);
 
 	if (!sbi->s_blockgroup_lock)
 		goto err_out;
@@ -4463,7 +4394,8 @@ static void ext4_set_def_opts(struct super_block *sb,
 	    ((def_mount_opts & EXT4_DEFM_NODELALLOC) == 0))
 		set_opt(sb, DELALLOC);
 
-	set_opt(sb, DIOREAD_NOLOCK);
+	if (sb->s_blocksize <= PAGE_SIZE)
+		set_opt(sb, DIOREAD_NOLOCK);
 }
 
 static int ext4_handle_clustersize(struct super_block *sb)
@@ -4499,9 +4431,8 @@ static int ext4_handle_clustersize(struct super_block *sb)
 		sbi->s_cluster_bits = 0;
 	}
 	sbi->s_clusters_per_group = le32_to_cpu(es->s_clusters_per_group);
-	if (sbi->s_clusters_per_group > sb->s_blocksize * 8 ||
-	    sbi->s_clusters_per_group & 7) {
-		ext4_msg(sb, KERN_ERR, "invalid #clusters per group: %lu",
+	if (sbi->s_clusters_per_group > sb->s_blocksize * 8) {
+		ext4_msg(sb, KERN_ERR, "#clusters per group too big: %lu",
 			 sbi->s_clusters_per_group);
 		return -EINVAL;
 	}
@@ -4569,7 +4500,6 @@ static void ext4_fast_commit_init(struct super_block *sb)
 	sbi->s_fc_ineligible_tid = 0;
 	mutex_init(&sbi->s_fc_lock);
 	memset(&sbi->s_fc_stats, 0, sizeof(sbi->s_fc_stats));
-	memset(&sbi->s_fc_snap_stats, 0, sizeof(sbi->s_fc_snap_stats));
 	sbi->s_fc_replay_state.fc_regions = NULL;
 	sbi->s_fc_replay_state.fc_regions_size = 0;
 	sbi->s_fc_replay_state.fc_regions_used = 0;
@@ -4905,7 +4835,7 @@ static int ext4_check_geometry(struct super_block *sb,
 		return -EINVAL;
 	}
 	sbi->s_groups_count = blocks_count;
-	sbi->s_blockfile_groups = min(sbi->s_groups_count,
+	sbi->s_blockfile_groups = min_t(ext4_group_t, sbi->s_groups_count,
 			(EXT4_MAX_BLOCK_FILE_PHYS / EXT4_BLOCKS_PER_GROUP(sb)));
 	if (((u64)sbi->s_groups_count * sbi->s_inodes_per_group) !=
 	    le32_to_cpu(es->s_inodes_count)) {
@@ -4940,7 +4870,9 @@ static int ext4_group_desc_init(struct super_block *sb,
 		}
 	}
 	rcu_assign_pointer(sbi->s_group_desc,
-			   kvmalloc_objs(struct buffer_head *, db_count));
+			   kvmalloc_array(db_count,
+					  sizeof(struct buffer_head *),
+					  GFP_KERNEL));
 	if (sbi->s_group_desc == NULL) {
 		ext4_msg(sb, KERN_ERR, "not enough memory");
 		return -ENOMEM;
@@ -5065,7 +4997,6 @@ out:
 static int ext4_check_journal_data_mode(struct super_block *sb)
 {
 	if (test_opt(sb, DATA_FLAGS) == EXT4_MOUNT_JOURNAL_DATA) {
-		printk(KERN_WARNING "EXT4-fs: The data=journal mount option is deprecated and support will be removed in January 2028\n");
 		printk_once(KERN_WARNING "EXT4-fs: Warning: mounting with "
 			    "data=journal disables delayed allocation, "
 			    "dioread_nolock, O_DIRECT and fast_commit support!\n");
@@ -5112,41 +5043,6 @@ static const char *ext4_has_journal_option(struct super_block *sb)
 	if (test_opt(sb, DATA_ERR_ABORT))
 		return "data_err=abort";
 	return NULL;
-}
-
-/*
- * Limit the maximum folio order to 2048 blocks to prevent overestimation
- * of reserve handle credits during the folio writeback in environments
- * where the PAGE_SIZE exceeds 4KB.
- */
-#define EXT4_MAX_PAGECACHE_ORDER(sb)		\
-		umin(MAX_PAGECACHE_ORDER, (11 + (sb)->s_blocksize_bits - PAGE_SHIFT))
-static void ext4_set_max_mapping_order(struct super_block *sb)
-{
-	struct ext4_sb_info *sbi = EXT4_SB(sb);
-
-	if (test_opt(sb, DATA_FLAGS) == EXT4_MOUNT_JOURNAL_DATA)
-		sbi->s_max_folio_order = sbi->s_min_folio_order;
-	else
-		sbi->s_max_folio_order = EXT4_MAX_PAGECACHE_ORDER(sb);
-}
-
-static int ext4_check_large_folio(struct super_block *sb)
-{
-	const char *err_str = NULL;
-
-	if (ext4_has_feature_encrypt(sb))
-		err_str = "encrypt";
-
-	if (!err_str) {
-		ext4_set_max_mapping_order(sb);
-	} else if (sb->s_blocksize > PAGE_SIZE) {
-		ext4_msg(sb, KERN_ERR, "bs(%lu) > ps(%lu) unsupported for %s",
-			 sb->s_blocksize, PAGE_SIZE, err_str);
-		return -EINVAL;
-	}
-
-	return 0;
 }
 
 static int ext4_load_super(struct super_block *sb, ext4_fsblk_t *lsb,
@@ -5216,8 +5112,11 @@ static int ext4_load_super(struct super_block *sb, ext4_fsblk_t *lsb,
 	 * If the default block size is not the same as the real block size,
 	 * we need to reload it.
 	 */
-	if (sb->s_blocksize == blocksize)
-		goto success;
+	if (sb->s_blocksize == blocksize) {
+		*lsb = logical_sb_block;
+		sbi->s_sbh = bh;
+		return 0;
+	}
 
 	/*
 	 * bh must be released before kill_bdev(), otherwise
@@ -5248,9 +5147,6 @@ static int ext4_load_super(struct super_block *sb, ext4_fsblk_t *lsb,
 		ext4_msg(sb, KERN_ERR, "Magic mismatch, very weird!");
 		goto out;
 	}
-
-success:
-	sbi->s_min_folio_order = get_order(blocksize);
 	*lsb = logical_sb_block;
 	sbi->s_sbh = bh;
 	return 0;
@@ -5334,10 +5230,8 @@ static int ext4_block_group_meta_init(struct super_block *sb, int silent)
 		return -EINVAL;
 	}
 	if (sbi->s_inodes_per_group < sbi->s_inodes_per_block ||
-	    sbi->s_inodes_per_group > sb->s_blocksize * 8 ||
-	    sbi->s_inodes_per_group & 7 ||
-	    sbi->s_inodes_per_group % sbi->s_inodes_per_block) {
-		ext4_msg(sb, KERN_ERR, "invalid inodes per group: %lu",
+	    sbi->s_inodes_per_group > sb->s_blocksize * 8) {
+		ext4_msg(sb, KERN_ERR, "invalid inodes per group: %lu\n",
 			 sbi->s_inodes_per_group);
 		return -EINVAL;
 	}
@@ -5426,10 +5320,6 @@ static int __ext4_fill_super(struct fs_context *fc, struct super_block *sb)
 		goto failed_mount;
 
 	ext4_apply_options(fc, sb);
-
-	err = ext4_check_large_folio(sb);
-	if (err < 0)
-		goto failed_mount;
 
 	err = ext4_encoding_init(sb, es);
 	if (err)
@@ -5524,8 +5414,6 @@ static int __ext4_fill_super(struct fs_context *fc, struct super_block *sb)
 	needs_recovery = (es->s_last_orphan != 0 ||
 			  ext4_has_feature_orphan_present(sb) ||
 			  ext4_has_feature_journal_needs_recovery(sb));
-
-	ext4_init_ea_inode_work(sbi);
 
 	if (ext4_has_feature_mmp(sb) && !sb_rdonly(sb)) {
 		err = ext4_multi_mount_protect(sb, le64_to_cpu(es->s_mmp_block));
@@ -5755,12 +5643,8 @@ static int __ext4_fill_super(struct fs_context *fc, struct super_block *sb)
 		clear_opt(sb, DISCARD);
 	}
 
-	if (es->s_error_count) {
-		sbi->s_err_report_sec = 5*60;	/* first time  5 minutes */
-		mod_timer(&sbi->s_err_report,
-				  jiffies + secs_to_jiffies(sbi->s_err_report_sec));
-	}
-	sbi->s_err_report_sec = 24*60*60; /* Once a day */
+	if (es->s_error_count)
+		mod_timer(&sbi->s_err_report, jiffies + 300*HZ); /* 5 minutes */
 
 	/* Enable message ratelimiting. Default is 10 messages per 5 secs. */
 	ratelimit_state_init(&sbi->s_err_ratelimit_state, 5 * HZ, 10);
@@ -5777,8 +5661,6 @@ static int __ext4_fill_super(struct fs_context *fc, struct super_block *sb)
 	return 0;
 
 failed_mount9:
-	/* Drain deferred EA inode iputs before quota shutdown */
-	flush_delayed_work(&sbi->s_ea_inode_work);
 	ext4_quotas_off(sb, EXT4_MAXQUOTAS);
 failed_mount8: __maybe_unused
 	ext4_release_orphan_info(sb);
@@ -5799,8 +5681,6 @@ failed_mount4:
 	if (EXT4_SB(sb)->rsv_conversion_wq)
 		destroy_workqueue(EXT4_SB(sb)->rsv_conversion_wq);
 failed_mount_wq:
-	/* Drain deferred EA inode iputs before freeing structures */
-	flush_delayed_work(&sbi->s_ea_inode_work);
 	ext4_xattr_destroy_cache(sbi->s_ea_inode_cache);
 	sbi->s_ea_inode_cache = NULL;
 
@@ -5811,10 +5691,7 @@ failed_mount_wq:
 		ext4_journal_destroy(sbi, sbi->s_journal);
 	}
 failed_mount3a:
-	/* Drain deferred EA inode iputs from journal replay */
-	flush_delayed_work(&sbi->s_ea_inode_work);
 	ext4_es_unregister_shrinker(sbi);
-	ext4_es_destroy_stats(sbi);
 failed_mount3:
 	/* flush s_sb_upd_work before sbi destroy */
 	flush_work(&sbi->s_sb_upd_work);
@@ -5834,7 +5711,7 @@ failed_mount:
 	brelse(sbi->s_sbh);
 	if (sbi->s_journal_bdev_file) {
 		invalidate_bdev(file_bdev(sbi->s_journal_bdev_file));
-		fs_bdev_file_release(sbi->s_journal_bdev_file, sb);
+		bdev_fput(sbi->s_journal_bdev_file);
 	}
 out_fail:
 	invalidate_bdev(sb->s_bdev);
@@ -5951,11 +5828,6 @@ static struct inode *ext4_get_journal_inode(struct super_block *sb,
 		return ERR_PTR(-EFSCORRUPTED);
 	}
 
-#ifdef CONFIG_LOCKDEP
-	lockdep_set_subclass(&EXT4_I(journal_inode)->i_data_sem,
-			     I_DATA_SEM_JOURNAL);
-#endif
-
 	ext4_debug("Journal inode found at %p: %lld bytes\n",
 		  journal_inode, journal_inode->i_size);
 	return journal_inode;
@@ -5976,7 +5848,7 @@ static int ext4_journal_bmap(journal_t *journal, sector_t *block)
 		ext4_msg(journal->j_inode->i_sb, KERN_CRIT,
 			 "journal bmap failed: block %llu ret %d\n",
 			 *block, ret);
-		jbd2_journal_abort(journal, ret ? ret : -EFSCORRUPTED);
+		jbd2_journal_abort(journal, ret ? ret : -EIO);
 		return ret;
 	}
 	*block = map.m_pblk;
@@ -6018,13 +5890,13 @@ static struct file *ext4_get_journal_blkdev(struct super_block *sb,
 	struct ext4_super_block *es;
 	int errno;
 
-	bdev_file = fs_bdev_file_open_by_dev(j_dev,
+	bdev_file = bdev_file_open_by_dev(j_dev,
 		BLK_OPEN_READ | BLK_OPEN_WRITE | BLK_OPEN_RESTRICT_WRITES,
-		sb, sb);
+		sb, &fs_holder_ops);
 	if (IS_ERR(bdev_file)) {
 		ext4_msg(sb, KERN_ERR,
-			 "failed to open journal device unknown-block(%u,%u) %pe",
-			 MAJOR(j_dev), MINOR(j_dev), bdev_file);
+			 "failed to open journal device unknown-block(%u,%u) %ld",
+			 MAJOR(j_dev), MINOR(j_dev), PTR_ERR(bdev_file));
 		return bdev_file;
 	}
 
@@ -6080,7 +5952,7 @@ static struct file *ext4_get_journal_blkdev(struct super_block *sb,
 out_bh:
 	brelse(bh);
 out_bdev:
-	fs_bdev_file_release(bdev_file, sb);
+	bdev_fput(bdev_file);
 	return ERR_PTR(errno);
 }
 
@@ -6119,7 +5991,7 @@ static journal_t *ext4_open_dev_journal(struct super_block *sb,
 out_journal:
 	ext4_journal_destroy(EXT4_SB(sb), journal);
 out_bdev:
-	fs_bdev_file_release(bdev_file, sb);
+	bdev_fput(bdev_file);
 	return ERR_PTR(errno);
 }
 
@@ -6318,11 +6190,10 @@ static void ext4_update_super(struct super_block *sb)
 				ext4_errno_to_code(sbi->s_last_error_code);
 		/*
 		 * Start the daily error reporting function if it hasn't been
-		 * started already and sbi->s_err_report_sec is not zero
+		 * started already
 		 */
-		if (!es->s_error_count && !sbi->s_err_report_sec)
-			mod_timer(&sbi->s_err_report,
-					  jiffies + secs_to_jiffies(sbi->s_err_report_sec));
+		if (!es->s_error_count)
+			mod_timer(&sbi->s_err_report, jiffies + 24*60*60*HZ);
 		le32_add_cpu(&es->s_error_count, sbi->s_add_error_count);
 		sbi->s_add_error_count = 0;
 	}
@@ -6362,10 +6233,12 @@ static int ext4_commit_super(struct super_block *sb)
 		clear_buffer_write_io_error(sbh);
 		set_buffer_uptodate(sbh);
 	}
+	get_bh(sbh);
 	/* Clear potential dirty bit if it was journalled update */
 	clear_buffer_dirty(sbh);
-	bh_submit(sbh, REQ_OP_WRITE | REQ_SYNC |
-		  (test_opt(sb, BARRIER) ? REQ_FUA : 0), bh_end_write);
+	sbh->b_end_io = end_buffer_write_sync;
+	submit_bh(REQ_OP_WRITE | REQ_SYNC |
+		  (test_opt(sb, BARRIER) ? REQ_FUA : 0), sbh);
 	wait_on_buffer(sbh);
 	if (buffer_write_io_error(sbh)) {
 		ext4_msg(sb, KERN_ERR, "I/O error while writing "
@@ -6484,7 +6357,6 @@ static int ext4_sync_fs(struct super_block *sb, int wait)
 
 	trace_ext4_sync_fs(sb, wait);
 	flush_workqueue(sbi->rsv_conversion_wq);
-	flush_delayed_work(&sbi->s_ea_inode_work);
 	/*
 	 * Writeback quota in non-journalled quota case - journalled quota has
 	 * no dirty dquots
@@ -7537,7 +7409,7 @@ static void ext4_kill_sb(struct super_block *sb)
 	kill_block_super(sb);
 
 	if (bdev_file)
-		fs_bdev_file_release(bdev_file, sb);
+		bdev_fput(bdev_file);
 }
 
 static struct file_system_type ext4_fs_type = {
@@ -7546,8 +7418,7 @@ static struct file_system_type ext4_fs_type = {
 	.init_fs_context	= ext4_init_fs_context,
 	.parameters		= ext4_param_specs,
 	.kill_sb		= ext4_kill_sb,
-	.fs_flags		= FS_REQUIRES_DEV | FS_ALLOW_IDMAP | FS_MGTIME |
-				  FS_LBS,
+	.fs_flags		= FS_REQUIRES_DEV | FS_ALLOW_IDMAP | FS_MGTIME,
 };
 MODULE_ALIAS_FS("ext4");
 
@@ -7569,7 +7440,7 @@ static int __init ext4_init_fs(void)
 	if (err)
 		goto out7;
 
-	err = ext4_init_verity_caches();
+	err = ext4_init_post_read_processing();
 	if (err)
 		goto out6;
 
@@ -7618,7 +7489,7 @@ out3:
 out4:
 	ext4_exit_pageio();
 out5:
-	ext4_exit_verity_caches();
+	ext4_exit_post_read_processing();
 out6:
 	ext4_exit_pending();
 out7:
@@ -7639,7 +7510,7 @@ static void __exit ext4_exit_fs(void)
 	ext4_exit_sysfs();
 	ext4_exit_system_zone();
 	ext4_exit_pageio();
-	ext4_exit_verity_caches();
+	ext4_exit_post_read_processing();
 	ext4_exit_es();
 	ext4_exit_pending();
 }

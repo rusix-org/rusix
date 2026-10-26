@@ -19,7 +19,7 @@
 
 #include "ux500_msp_i2s.h"
 
- /* Protocol descriptors */
+ /* Protocol desciptors */
 static const struct msp_protdesc prot_descs[] = {
 	{ /* I2S */
 		MSP_SINGLE_PHASE,

@@ -169,8 +169,6 @@ int pci_claim_resource(struct pci_dev *dev, int resource)
 		return -EBUSY;
 	}
 
-	pci_dbg(dev, "%s %pR: claiming\n", res_name, res);
-
 	return 0;
 }
 EXPORT_SYMBOL(pci_claim_resource);
@@ -248,53 +246,6 @@ static int pci_revert_fw_address(struct resource *res, struct pci_dev *dev,
 	return 0;
 }
 
-resource_size_t pci_resource_alignment(const struct pci_dev *dev,
-				       const struct resource *res)
-{
-	int resno = pci_resource_num(dev, res);
-
-	if (pci_resource_is_iov(resno))
-		return pci_sriov_resource_alignment(dev, resno);
-	if (dev->class >> 8 == PCI_CLASS_BRIDGE_CARDBUS)
-		return pci_cardbus_resource_alignment(res);
-	return resource_alignment(res);
-}
-
-/*
- * For mem bridge windows, try to relocate tail remainder space to space
- * before res->start if there's enough free space there. This enables
- * tighter packing for resources.
- */
-resource_size_t pci_align_resource(struct pci_dev *dev,
-				   const struct resource *res,
-				   const struct resource *empty_res,
-				   resource_size_t size,
-				   resource_size_t align)
-{
-	resource_size_t remainder, start_addr;
-
-	if (!(res->flags & IORESOURCE_MEM))
-		return res->start;
-
-	if (IS_ALIGNED(size, align))
-		return res->start;
-
-	remainder = size - ALIGN_DOWN(size, align);
-	/* Don't mess with size that doesn't align with window size granularity */
-	if (!IS_ALIGNED(remainder, pci_min_window_alignment(dev->bus, res->flags)))
-		return res->start;
-	/* Try to place remainder that doesn't fill align before */
-	if (res->start < remainder)
-		return res->start;
-	start_addr = res->start - remainder;
-	if (empty_res->start > start_addr)
-		return res->start;
-
-	pci_dbg(dev, "%pR: moving candidate start address below align to %llx\n",
-		res, (unsigned long long)start_addr);
-	return start_addr;
-}
-
 /*
  * We don't have to worry about legacy ISA devices, so nothing to do here.
  * This is marked as __weak because multiple architectures define it; it should
@@ -302,13 +253,10 @@ resource_size_t pci_align_resource(struct pci_dev *dev,
  */
 resource_size_t __weak pcibios_align_resource(void *data,
 					      const struct resource *res,
-					      const struct resource *empty_res,
 					      resource_size_t size,
 					      resource_size_t align)
 {
-	struct pci_dev *dev = data;
-
-	return pci_align_resource(dev, res, empty_res, size, align);
+       return res->start;
 }
 
 static int __pci_assign_resource(struct pci_bus *bus, struct pci_dev *dev,
@@ -413,7 +361,7 @@ int pci_assign_resource(struct pci_dev *dev, int resno)
 
 	res->flags &= ~IORESOURCE_UNSET;
 	res->flags &= ~IORESOURCE_STARTALIGN;
-	if (pci_resource_is_bridge_win(resno))
+	if (resno >= PCI_BRIDGE_RESOURCES && resno <= PCI_BRIDGE_RESOURCE_END)
 		res->flags &= ~IORESOURCE_DISABLED;
 
 	pci_info(dev, "%s %pR: assigned\n", res_name, res);

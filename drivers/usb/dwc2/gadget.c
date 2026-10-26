@@ -397,7 +397,7 @@ static struct usb_request *dwc2_hsotg_ep_alloc_request(struct usb_ep *ep,
 {
 	struct dwc2_hsotg_req *req;
 
-	req = kzalloc_obj(*req, flags);
+	req = kzalloc(sizeof(*req), flags);
 	if (!req)
 		return NULL;
 
@@ -658,7 +658,7 @@ static int dwc2_hsotg_write_fifo(struct dwc2_hsotg *hsotg,
 }
 
 /**
- * get_ep_limit - get the maximum data length for this endpoint
+ * get_ep_limit - get the maximum data legnth for this endpoint
  * @hs_ep: The endpoint
  *
  * Return the maximum data that can be queued in one go on a given endpoint
@@ -1780,7 +1780,6 @@ static int dwc2_hsotg_process_req_feature(struct dwc2_hsotg *hsotg,
 	struct dwc2_hsotg_ep *ep;
 	int ret;
 	bool halted;
-	u32 otgctl;
 	u32 recip;
 	u32 wValue;
 	u32 wIndex;
@@ -1809,36 +1808,6 @@ static int dwc2_hsotg_process_req_feature(struct dwc2_hsotg *hsotg,
 				return -EINVAL;
 
 			hsotg->test_mode = wIndex >> 8;
-			break;
-		case USB_DEVICE_B_HNP_ENABLE:
-			if (!hsotg->params.otg_caps.hnp_support)
-				return -ENOENT;
-			if (!set)
-				return -EINVAL;
-
-			otgctl = dwc2_readl(hsotg, GOTGCTL);
-			otgctl |= GOTGCTL_DEVHNPEN;
-			dwc2_writel(hsotg, otgctl, GOTGCTL);
-			hsotg->gadget.b_hnp_enable = 1;
-			dev_dbg(hsotg->dev, "HNP enabled\n");
-			break;
-		case USB_DEVICE_A_HNP_SUPPORT:
-			if (!hsotg->params.otg_caps.hnp_support)
-				return -ENOENT;
-			if (!set)
-				return -EINVAL;
-
-			hsotg->gadget.a_hnp_support = 1;
-			dev_dbg(hsotg->dev, "a_hnp_support set\n");
-			break;
-		case USB_DEVICE_A_ALT_HNP_SUPPORT:
-			if (!hsotg->params.otg_caps.hnp_support)
-				return -ENOENT;
-			if (!set)
-				return -EINVAL;
-
-			hsotg->gadget.a_alt_hnp_support = 1;
-			dev_dbg(hsotg->dev, "a_alt_hnp_support set\n");
 			break;
 		default:
 			return -ENOENT;
@@ -2298,7 +2267,6 @@ static void dwc2_hsotg_rx_data(struct dwc2_hsotg *hsotg, int ep_idx, int size)
 	int to_read;
 	int max_req;
 	int read_ptr;
-	u32 drain;
 
 	if (!hs_req) {
 		u32 epctl = dwc2_readl(hsotg, DOEPCTL(ep_idx));
@@ -2318,46 +2286,30 @@ static void dwc2_hsotg_rx_data(struct dwc2_hsotg *hsotg, int ep_idx, int size)
 	to_read = size;
 	read_ptr = hs_req->req.actual;
 	max_req = hs_req->req.length - read_ptr;
-	drain = 0;
 
 	dev_dbg(hsotg->dev, "%s: read %d/%d, done %d/%d\n",
 		__func__, to_read, max_req, read_ptr, hs_req->req.length);
 
 	if (to_read > max_req) {
 		/*
-		 * More data appeared than we were willing to deal with in
-		 * this request.  Keep only what fits in the request buffer
-		 * and discard the rest from the FIFO, instead of overwriting
-		 * bytes past the request buffer (a 64-byte packet into a
-		 * request with one byte left used to over-write 63 bytes past
-		 * its end).
+		 * more data appeared than we where willing
+		 * to deal with in this request.
 		 */
-		dev_dbg(hsotg->dev, "%s: packet %d > request space %d, dropping %d\n",
-			__func__, to_read, max_req, to_read - max_req);
-		drain = DIV_ROUND_UP(to_read - max_req, 4);
-		to_read = max_req;
+
+		/* currently we don't deal this */
+		WARN_ON_ONCE(1);
 	}
 
 	hs_ep->total_data += to_read;
 	hs_req->req.actual += to_read;
+	to_read = DIV_ROUND_UP(to_read, 4);
 
 	/*
-	 * Copy word-at-a-time so the request buffer is exactly filled and
-	 * never over-run by the 4-byte rounding of the previous FIFO bulk
-	 * read (which could also emit up to 3 bytes past the buffer end).
+	 * note, we might over-write the buffer end by 3 bytes depending on
+	 * alignment of the data.
 	 */
-	while (to_read > 0) {
-		u32 word = dwc2_readl(hsotg, EPFIFO(ep_idx));
-		unsigned int chunk = min_t(unsigned int, to_read, 4);
-
-		memcpy(hs_req->req.buf + read_ptr, &word, chunk);
-		read_ptr += chunk;
-		to_read -= chunk;
-	}
-
-	/* drain the discarded bytes so the next FIFO event is a fresh packet */
-	while (drain-- > 0)
-		(void)dwc2_readl(hsotg, EPFIFO(ep_idx));
+	dwc2_readl_rep(hsotg, EPFIFO(ep_idx),
+		       hs_req->req.buf + read_ptr, to_read);
 }
 
 /**
@@ -3370,13 +3322,6 @@ void dwc2_hsotg_disconnect(struct dwc2_hsotg *hsotg)
 	hsotg->connected = 0;
 	hsotg->test_mode = 0;
 
-	if (hsotg->params.otg_caps.hnp_support) {
-		hsotg->gadget.b_hnp_enable = 0;
-		hsotg->gadget.a_hnp_support = 0;
-		hsotg->gadget.a_alt_hnp_support = 0;
-		dwc2_clear_bit(hsotg, GOTGCTL, GOTGCTL_DEVHNPEN);
-	}
-
 	/* all endpoints should be shutdown */
 	for (ep = 0; ep < hsotg->num_of_eps; ep++) {
 		if (hsotg->eps_in[ep])
@@ -3471,18 +3416,9 @@ void dwc2_hsotg_core_init_disconnected(struct dwc2_hsotg *hsotg,
 	usbcfg &= ~GUSBCFG_TOUTCAL_MASK;
 	usbcfg |= GUSBCFG_TOUTCAL(7);
 
-	/*
-	 * Configure HNP/SRP capability from params (same idea as
-	 * dwc2_gusbcfg_init() for host). Unconditionally clearing these
-	 * bits leaves an HNP-capable OTG gadget unable to negotiate.
-	 */
+	/* remove the HNP/SRP and set the PHY */
 	usbcfg &= ~(GUSBCFG_SRPCAP | GUSBCFG_HNPCAP);
-	if (hsotg->params.otg_caps.hnp_support &&
-	    hsotg->params.otg_caps.srp_support)
-		usbcfg |= GUSBCFG_HNPCAP;
-	if (hsotg->params.otg_caps.srp_support)
-		usbcfg |= GUSBCFG_SRPCAP;
-	dwc2_writel(hsotg, usbcfg, GUSBCFG);
+        dwc2_writel(hsotg, usbcfg, GUSBCFG);
 
 	dwc2_phy_init(hsotg, true);
 
@@ -5117,8 +5053,10 @@ int dwc2_gadget_init(struct dwc2_hsotg *hsotg)
 
 	ret = devm_request_irq(hsotg->dev, hsotg->irq, dwc2_hsotg_irq,
 			       IRQF_SHARED, dev_name(hsotg->dev), hsotg);
-	if (ret < 0)
+	if (ret < 0) {
+		dev_err(dev, "cannot claim IRQ for gadget\n");
 		return ret;
+	}
 
 	/* hsotg->num_of_eps holds number of EPs other than ep0 */
 
@@ -5563,7 +5501,7 @@ int dwc2_gadget_exit_hibernation(struct dwc2_hsotg *hsotg,
 	dwc2_hib_restore_common(hsotg, rem_wakeup, 0);
 
 	if (!reset) {
-		/* Clear all pending interrupts */
+		/* Clear all pending interupts */
 		dwc2_writel(hsotg, 0xffffffff, GINTSTS);
 	}
 
@@ -5612,7 +5550,7 @@ int dwc2_gadget_exit_hibernation(struct dwc2_hsotg *hsotg,
 	}
 	/* Wait for interrupts which must be cleared */
 	mdelay(2);
-	/* Clear all pending interrupts */
+	/* Clear all pending interupts */
 	dwc2_writel(hsotg, 0xffffffff, GINTSTS);
 
 	/* Restore global registers */

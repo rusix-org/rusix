@@ -44,7 +44,6 @@ const _: &str = include!(concat!(
 
 #[macro_export]
 #[doc(hidden)]
-#[cfg(not(testlib))]
 #[cfg(CONFIG_JUMP_LABEL)]
 macro_rules! arch_static_branch {
     ($key:path, $keytyp:ty, $field:ident, $branch:expr) => {'my_label: {
@@ -60,17 +59,6 @@ macro_rules! arch_static_branch {
 
         break 'my_label false;
     }};
-}
-
-#[macro_export]
-#[doc(hidden)]
-#[cfg(testlib)]
-#[cfg(CONFIG_JUMP_LABEL)]
-macro_rules! arch_static_branch {
-    ($key:path, $keytyp:ty, $field:ident, $branch:expr) => {
-        // The asm falls through until patched, which never happens on the host.
-        false
-    };
 }
 
 #[cfg(CONFIG_JUMP_LABEL)]

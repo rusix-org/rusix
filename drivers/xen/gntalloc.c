@@ -70,14 +70,14 @@
 #include <xen/gntalloc.h>
 #include <xen/events.h>
 
-static unsigned int limit = 1024;
-module_param(limit, uint, 0644);
+static int limit = 1024;
+module_param(limit, int, 0644);
 MODULE_PARM_DESC(limit, "Maximum number of grants that may be allocated by "
 		"the gntalloc device");
 
 static LIST_HEAD(gref_list);
 static DEFINE_MUTEX(gref_mutex);
-static unsigned int gref_size;
+static int gref_size;
 
 struct notify_info {
 	uint16_t pgoff:12;    /* Bits 0-11: Offset of the byte to clear */
@@ -128,7 +128,7 @@ static int add_grefs(struct ioctl_gntalloc_alloc_gref *op,
 
 	readonly = !(op->flags & GNTALLOC_FLAG_WRITABLE);
 	for (i = 0; i < op->count; i++) {
-		gref = kzalloc_obj(*gref);
+		gref = kzalloc(sizeof(*gref), GFP_KERNEL);
 		if (!gref) {
 			rc = -ENOMEM;
 			goto undo;
@@ -229,7 +229,7 @@ static int gntalloc_open(struct inode *inode, struct file *filp)
 {
 	struct gntalloc_file_private_data *priv;
 
-	priv = kzalloc_obj(*priv);
+	priv = kzalloc(sizeof(*priv), GFP_KERNEL);
 	if (!priv)
 		goto out_nomem;
 	INIT_LIST_HEAD(&priv->list);
@@ -510,7 +510,7 @@ static int gntalloc_mmap(struct file *filp, struct vm_area_struct *vma)
 		return -EINVAL;
 	}
 
-	vm_priv = kmalloc_obj(*vm_priv);
+	vm_priv = kmalloc(sizeof(*vm_priv), GFP_KERNEL);
 	if (!vm_priv)
 		return -ENOMEM;
 

@@ -19,9 +19,12 @@ static void l2_guest_code(struct svm_test_data *svm)
 
 static void l1_guest_code(struct svm_test_data *svm, struct idt_entry *idt)
 {
+	#define L2_GUEST_STACK_SIZE 64
+	unsigned long l2_guest_stack[L2_GUEST_STACK_SIZE];
 	struct vmcb *vmcb = svm->vmcb;
 
-	generic_svm_setup(svm, l2_guest_code);
+	generic_svm_setup(svm, l2_guest_code,
+			  &l2_guest_stack[L2_GUEST_STACK_SIZE]);
 
 	vmcb->control.intercept &= ~(BIT(INTERCEPT_SHUTDOWN));
 
@@ -39,7 +42,7 @@ static void l1_guest_code(struct svm_test_data *svm, struct idt_entry *idt)
 int main(int argc, char *argv[])
 {
 	struct kvm_vcpu *vcpu;
-	gva_t svm_gva;
+	vm_vaddr_t svm_gva;
 	struct kvm_vm *vm;
 
 	TEST_REQUIRE(kvm_cpu_has(X86_FEATURE_SVM));

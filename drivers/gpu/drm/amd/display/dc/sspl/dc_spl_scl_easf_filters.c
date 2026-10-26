@@ -2252,8 +2252,7 @@ static const uint16_t *spl_get_easf_filter_6tap_64p(struct spl_fixed31_32 ratio)
 		return easf_filter_6tap_64p_ratio_1_00_s1_12;
 }
 
-const uint16_t *SPL_NAMESPACE(spl_dscl_get_easf_filter_coeffs_64p(
-	int taps, struct spl_fixed31_32 ratio))
+const uint16_t *spl_dscl_get_easf_filter_coeffs_64p(int taps, struct spl_fixed31_32 ratio)
 {
 	if (taps == 6)
 		return spl_get_easf_filter_6tap_64p(ratio);
@@ -2328,8 +2327,7 @@ static const uint16_t *spl_get_easf_filter_6tap_64p_s1_10(struct spl_fixed31_32 
 		return easf_filter_6tap_64p_ratio_1_00;
 }
 
-const uint16_t *SPL_NAMESPACE(spl_dscl_get_easf_filter_coeffs_64p_s1_10(
-	int taps, struct spl_fixed31_32 ratio))
+const uint16_t *spl_dscl_get_easf_filter_coeffs_64p_s1_10(int taps, struct spl_fixed31_32 ratio)
 {
 	if (taps == 6)
 		return spl_get_easf_filter_6tap_64p_s1_10(ratio);
@@ -2344,39 +2342,39 @@ const uint16_t *SPL_NAMESPACE(spl_dscl_get_easf_filter_coeffs_64p_s1_10(
 	}
 }
 
-void SPL_NAMESPACE(spl_set_filters_data(struct dscl_prog_data *dscl_prog_data,
+void spl_set_filters_data(struct dscl_prog_data *dscl_prog_data,
 		const struct spl_scaler_data *data, bool enable_easf_v,
-		bool enable_easf_h))
+		bool enable_easf_h)
 {
 	/*
 	 * Old coefficients calculated scaling ratio = input / output
 	 * New coefficients are calculated based on = output / input
 	 */
 	if (enable_easf_h) {
-		dscl_prog_data->filter_h = SPL_NAMESPACE(spl_dscl_get_easf_filter_coeffs_64p(
-			data->taps.h_taps, data->recip_ratios.horz));
+		dscl_prog_data->filter_h = spl_dscl_get_easf_filter_coeffs_64p(
+			data->taps.h_taps, data->recip_ratios.horz);
 
-		dscl_prog_data->filter_h_c = SPL_NAMESPACE(spl_dscl_get_easf_filter_coeffs_64p(
-			data->taps.h_taps_c, data->recip_ratios.horz_c));
+		dscl_prog_data->filter_h_c = spl_dscl_get_easf_filter_coeffs_64p(
+			data->taps.h_taps_c, data->recip_ratios.horz_c);
 	} else {
-		dscl_prog_data->filter_h = SPL_NAMESPACE(spl_dscl_get_filter_coeffs_64p(
-			data->taps.h_taps, data->ratios.horz));
+		dscl_prog_data->filter_h = spl_dscl_get_filter_coeffs_64p(
+			data->taps.h_taps, data->ratios.horz);
 
-		dscl_prog_data->filter_h_c = SPL_NAMESPACE(spl_dscl_get_filter_coeffs_64p(
-			data->taps.h_taps_c, data->ratios.horz_c));
+		dscl_prog_data->filter_h_c = spl_dscl_get_filter_coeffs_64p(
+			data->taps.h_taps_c, data->ratios.horz_c);
 	}
 	if (enable_easf_v) {
-		dscl_prog_data->filter_v = SPL_NAMESPACE(spl_dscl_get_easf_filter_coeffs_64p(
-			data->taps.v_taps, data->recip_ratios.vert));
+		dscl_prog_data->filter_v = spl_dscl_get_easf_filter_coeffs_64p(
+			data->taps.v_taps, data->recip_ratios.vert);
 
-		dscl_prog_data->filter_v_c = SPL_NAMESPACE(spl_dscl_get_easf_filter_coeffs_64p(
-			data->taps.v_taps_c, data->recip_ratios.vert_c));
+		dscl_prog_data->filter_v_c = spl_dscl_get_easf_filter_coeffs_64p(
+			data->taps.v_taps_c, data->recip_ratios.vert_c);
 	} else {
-		dscl_prog_data->filter_v = SPL_NAMESPACE(spl_dscl_get_filter_coeffs_64p(
-			data->taps.v_taps, data->ratios.vert));
+		dscl_prog_data->filter_v = spl_dscl_get_filter_coeffs_64p(
+			data->taps.v_taps, data->ratios.vert);
 
-		dscl_prog_data->filter_v_c = SPL_NAMESPACE(spl_dscl_get_filter_coeffs_64p(
-			data->taps.v_taps_c, data->ratios.vert_c));
+		dscl_prog_data->filter_v_c = spl_dscl_get_filter_coeffs_64p(
+			data->taps.v_taps_c, data->ratios.vert_c);
 	}
 }
 
@@ -2408,7 +2406,7 @@ static uint32_t spl_easf_get_scale_ratio_to_reg_value(struct spl_fixed31_32 rati
 	}
 	return value;
 }
-uint32_t SPL_NAMESPACE(spl_get_v_bf3_mode(struct spl_fixed31_32 ratio))
+uint32_t spl_get_v_bf3_mode(struct spl_fixed31_32 ratio)
 {
 	uint32_t value;
 	unsigned int num_entries = sizeof(easf_v_bf3_mode_lookup) /
@@ -2417,7 +2415,7 @@ uint32_t SPL_NAMESPACE(spl_get_v_bf3_mode(struct spl_fixed31_32 ratio))
 		easf_v_bf3_mode_lookup, num_entries);
 	return value;
 }
-uint32_t SPL_NAMESPACE(spl_get_h_bf3_mode(struct spl_fixed31_32 ratio))
+uint32_t spl_get_h_bf3_mode(struct spl_fixed31_32 ratio)
 {
 	uint32_t value;
 	unsigned int num_entries = sizeof(easf_h_bf3_mode_lookup) /
@@ -2426,7 +2424,7 @@ uint32_t SPL_NAMESPACE(spl_get_h_bf3_mode(struct spl_fixed31_32 ratio))
 		easf_h_bf3_mode_lookup, num_entries);
 	return value;
 }
-uint32_t SPL_NAMESPACE(spl_get_reducer_gain6(int taps, struct spl_fixed31_32 ratio))
+uint32_t spl_get_reducer_gain6(int taps, struct spl_fixed31_32 ratio)
 {
 	uint32_t value;
 	unsigned int num_entries;
@@ -2445,7 +2443,7 @@ uint32_t SPL_NAMESPACE(spl_get_reducer_gain6(int taps, struct spl_fixed31_32 rat
 		value = 0;
 	return value;
 }
-uint32_t SPL_NAMESPACE(spl_get_reducer_gain4(int taps, struct spl_fixed31_32 ratio))
+uint32_t spl_get_reducer_gain4(int taps, struct spl_fixed31_32 ratio)
 {
 	uint32_t value;
 	unsigned int num_entries;
@@ -2464,7 +2462,7 @@ uint32_t SPL_NAMESPACE(spl_get_reducer_gain4(int taps, struct spl_fixed31_32 rat
 		value = 0;
 	return value;
 }
-uint32_t SPL_NAMESPACE(spl_get_gainRing6(int taps, struct spl_fixed31_32 ratio))
+uint32_t spl_get_gainRing6(int taps, struct spl_fixed31_32 ratio)
 {
 	uint32_t value;
 	unsigned int num_entries;
@@ -2483,7 +2481,7 @@ uint32_t SPL_NAMESPACE(spl_get_gainRing6(int taps, struct spl_fixed31_32 ratio))
 		value = 0;
 	return value;
 }
-uint32_t SPL_NAMESPACE(spl_get_gainRing4(int taps, struct spl_fixed31_32 ratio))
+uint32_t spl_get_gainRing4(int taps, struct spl_fixed31_32 ratio)
 {
 	uint32_t value;
 	unsigned int num_entries;
@@ -2502,8 +2500,7 @@ uint32_t SPL_NAMESPACE(spl_get_gainRing4(int taps, struct spl_fixed31_32 ratio))
 		value = 0;
 	return value;
 }
-uint32_t SPL_NAMESPACE(spl_get_3tap_dntilt_uptilt_offset(
-	int taps, struct spl_fixed31_32 ratio))
+uint32_t spl_get_3tap_dntilt_uptilt_offset(int taps, struct spl_fixed31_32 ratio)
 {
 	uint32_t value;
 	unsigned int num_entries;
@@ -2517,7 +2514,7 @@ uint32_t SPL_NAMESPACE(spl_get_3tap_dntilt_uptilt_offset(
 		value = 0;
 	return value;
 }
-uint32_t SPL_NAMESPACE(spl_get_3tap_uptilt_maxval(int taps, struct spl_fixed31_32 ratio))
+uint32_t spl_get_3tap_uptilt_maxval(int taps, struct spl_fixed31_32 ratio)
 {
 	uint32_t value;
 	unsigned int num_entries;
@@ -2531,7 +2528,7 @@ uint32_t SPL_NAMESPACE(spl_get_3tap_uptilt_maxval(int taps, struct spl_fixed31_3
 		value = 0;
 	return value;
 }
-uint32_t SPL_NAMESPACE(spl_get_3tap_dntilt_slope(int taps, struct spl_fixed31_32 ratio))
+uint32_t spl_get_3tap_dntilt_slope(int taps, struct spl_fixed31_32 ratio)
 {
 	uint32_t value;
 	unsigned int num_entries;
@@ -2545,7 +2542,7 @@ uint32_t SPL_NAMESPACE(spl_get_3tap_dntilt_slope(int taps, struct spl_fixed31_32
 		value = 0;
 	return value;
 }
-uint32_t SPL_NAMESPACE(spl_get_3tap_uptilt1_slope(int taps, struct spl_fixed31_32 ratio))
+uint32_t spl_get_3tap_uptilt1_slope(int taps, struct spl_fixed31_32 ratio)
 {
 	uint32_t value;
 	unsigned int num_entries;
@@ -2559,7 +2556,7 @@ uint32_t SPL_NAMESPACE(spl_get_3tap_uptilt1_slope(int taps, struct spl_fixed31_3
 		value = 0;
 	return value;
 }
-uint32_t SPL_NAMESPACE(spl_get_3tap_uptilt2_slope(int taps, struct spl_fixed31_32 ratio))
+uint32_t spl_get_3tap_uptilt2_slope(int taps, struct spl_fixed31_32 ratio)
 {
 	uint32_t value;
 	unsigned int num_entries;
@@ -2573,7 +2570,7 @@ uint32_t SPL_NAMESPACE(spl_get_3tap_uptilt2_slope(int taps, struct spl_fixed31_3
 		value = 0;
 	return value;
 }
-uint32_t SPL_NAMESPACE(spl_get_3tap_uptilt2_offset(int taps, struct spl_fixed31_32 ratio))
+uint32_t spl_get_3tap_uptilt2_offset(int taps, struct spl_fixed31_32 ratio)
 {
 	uint32_t value;
 	unsigned int num_entries;

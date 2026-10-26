@@ -8,7 +8,7 @@
  *	http://www.linux-mtd.infradead.org/doc/nand.html
  *
  *  Copyright (C) 2000 Steven J. Hill (sjhill@realitydiluted.com)
- *		  2002-2006 Thomas Gleixner (tglx@kernel.org)
+ *		  2002-2006 Thomas Gleixner (tglx@linutronix.de)
  *
  *  Credits:
  *	David Woodhouse for adding multichip support
@@ -43,7 +43,6 @@
 #include <linux/mtd/partitions.h>
 #include <linux/of.h>
 #include <linux/gpio/consumer.h>
-#include <linux/cleanup.h>
 
 #include "internals.h"
 
@@ -1063,7 +1062,7 @@ static int nand_choose_interface_config(struct nand_chip *chip)
 	if (!nand_controller_can_setup_interface(chip))
 		return 0;
 
-	iface = kzalloc_obj(*iface);
+	iface = kzalloc(sizeof(*iface), GFP_KERNEL);
 	if (!iface)
 		return -ENOMEM;
 
@@ -4705,16 +4704,16 @@ static void nand_resume(struct mtd_info *mtd)
 {
 	struct nand_chip *chip = mtd_to_nand(mtd);
 
-	scoped_guard(mutex, &chip->lock) {
-		if (chip->suspended) {
-			if (chip->ops.resume)
-				chip->ops.resume(chip);
-			chip->suspended = 0;
-		} else {
-			pr_err("%s called for a chip which is not in suspended state\n",
-				__func__);
-		}
+	mutex_lock(&chip->lock);
+	if (chip->suspended) {
+		if (chip->ops.resume)
+			chip->ops.resume(chip);
+		chip->suspended = 0;
+	} else {
+		pr_err("%s called for a chip which is not in suspended state\n",
+			__func__);
 	}
+	mutex_unlock(&chip->lock);
 
 	wake_up_all(&chip->resume_wq);
 }
@@ -5440,8 +5439,8 @@ static int of_get_nand_secure_regions(struct nand_chip *chip)
 		return nr_elem;
 
 	chip->nr_secure_regions = nr_elem / 2;
-	chip->secure_regions = kzalloc_objs(*chip->secure_regions,
-					    chip->nr_secure_regions);
+	chip->secure_regions = kcalloc(chip->nr_secure_regions, sizeof(*chip->secure_regions),
+				       GFP_KERNEL);
 	if (!chip->secure_regions)
 		return -ENOMEM;
 
@@ -6205,7 +6204,7 @@ static int nand_scan_tail(struct nand_chip *chip)
 	/*
 	 * FIXME: some NAND manufacturer drivers expect the first die to be
 	 * selected when manufacturer->init() is called. They should be fixed
-	 * to explicitly select the relevant die when interacting with the NAND
+	 * to explictly select the relevant die when interacting with the NAND
 	 * chip.
 	 */
 	nand_select_target(chip, 0);
@@ -6605,5 +6604,5 @@ EXPORT_SYMBOL_GPL(nand_cleanup);
 
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Steven J. Hill <sjhill@realitydiluted.com>");
-MODULE_AUTHOR("Thomas Gleixner <tglx@kernel.org>");
+MODULE_AUTHOR("Thomas Gleixner <tglx@linutronix.de>");
 MODULE_DESCRIPTION("Generic NAND flash driver code");

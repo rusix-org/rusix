@@ -40,7 +40,6 @@ struct nvkm_rm_api {
 		void (*drop_send_user_shared_data)(struct nvkm_gsp *);
 		void (*drop_post_nocat_record)(struct nvkm_gsp *);
 		u32 (*sr_data_size)(struct nvkm_gsp *);
-		int (*gcx_ready)(struct nvkm_gsp *gsp);
 	} *gsp;
 
 	const struct nvkm_rm_api_rpc {
@@ -130,7 +129,7 @@ struct nvkm_rm_api {
 	} *ce, *nvdec, *nvenc, *nvjpg, *ofa;
 
 	const struct nvkm_rm_api_gr {
-		int (*get_ctxbufs_and_zcull_info)(struct r535_gr *);
+		int (*get_ctxbufs_info)(struct r535_gr *);
 		struct {
 			int (*init)(struct r535_gr *);
 			void (*fini)(struct r535_gr *);
@@ -175,8 +174,6 @@ int r535_gr_chan_new(struct nvkm_gr *, struct nvkm_chan *, const struct nvkm_ocl
 int r535_gr_promote_ctx(struct r535_gr *, bool golden, struct nvkm_vmm *,
 			struct nvkm_memory **pctxbuf_mem, struct nvkm_vma **pctxbuf_vma,
 			struct nvkm_gsp_object *chan);
-int r570_gsp_gcx_ready(struct nvkm_gsp *gsp);
-int r535_gsp_get_static_memsys_info(struct nvkm_gsp *gsp);
 extern const struct nvkm_rm_api_engine r535_nvdec;
 extern const struct nvkm_rm_api_engine r535_nvenc;
 extern const struct nvkm_rm_api_engine r535_nvjpg;

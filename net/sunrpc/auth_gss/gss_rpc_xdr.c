@@ -244,13 +244,13 @@ static int gssx_dec_option_array(struct xdr_stream *xdr,
 		return 0;
 
 	/* we recognize only 1 currently: CREDS_VALUE */
-	oa->data = kmalloc_obj(struct gssx_option);
+	oa->data = kmalloc(sizeof(struct gssx_option), GFP_KERNEL);
 	if (!oa->data)
 		return -ENOMEM;
 
 	oa->count = 1;
 
-	creds = kzalloc_obj(struct svc_cred);
+	creds = kzalloc(sizeof(struct svc_cred), GFP_KERNEL);
 	if (!creds) {
 		err = -ENOMEM;
 		goto free_oa;

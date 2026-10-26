@@ -693,7 +693,7 @@ static void igmp6_group_added(struct ifmcaddr6 *mc)
 		return;
 
 	if (!(mc->mca_flags&MAF_LOADED)) {
-		WRITE_ONCE(mc->mca_flags, mc->mca_flags | MAF_LOADED);
+		mc->mca_flags |= MAF_LOADED;
 		if (ndisc_mc_map(&mc->mca_addr, buf, dev, 0) == 0)
 			dev_mc_add(dev, buf);
 	}
@@ -729,7 +729,7 @@ static void igmp6_group_dropped(struct ifmcaddr6 *mc)
 		return;
 
 	if (mc->mca_flags&MAF_LOADED) {
-		WRITE_ONCE(mc->mca_flags, mc->mca_flags & ~MAF_LOADED);
+		mc->mca_flags &= ~MAF_LOADED;
 		if (ndisc_mc_map(&mc->mca_addr, buf, dev, 0) == 0)
 			dev_mc_del(dev, buf);
 	}
@@ -757,7 +757,7 @@ static void mld_add_delrec(struct inet6_dev *idev, struct ifmcaddr6 *im)
 	 * for deleted items allows change reports to use common code with
 	 * non-deleted or query-response MCA's.
 	 */
-	pmc = kzalloc_obj(*pmc);
+	pmc = kzalloc(sizeof(*pmc), GFP_KERNEL);
 	if (!pmc)
 		return;
 
@@ -887,7 +887,7 @@ static struct ifmcaddr6 *mca_alloc(struct inet6_dev *idev,
 
 	mc_assert_locked(idev);
 
-	mc = kzalloc_obj(*mc);
+	mc = kzalloc(sizeof(*mc), GFP_KERNEL);
 	if (!mc)
 		return NULL;
 
@@ -905,7 +905,7 @@ static struct ifmcaddr6 *mca_alloc(struct inet6_dev *idev,
 
 	if (ipv6_addr_is_ll_all_nodes(&mc->mca_addr) ||
 	    IPV6_ADDR_MC_SCOPE(&mc->mca_addr) < IPV6_ADDR_SCOPE_LINKLOCAL)
-		WRITE_ONCE(mc->mca_flags, mc->mca_flags | MAF_NOREPORT);
+		mc->mca_flags |= MAF_NOREPORT;
 
 	return mc;
 }
@@ -927,7 +927,6 @@ static void inet6_ifmcaddr_notify(struct net_device *dev,
 
 	skb = nlmsg_new(NLMSG_ALIGN(sizeof(struct ifaddrmsg)) +
 			nla_total_size(sizeof(struct in6_addr)) +
-			nla_total_size(sizeof(u32)) +
 			nla_total_size(sizeof(struct ifa_cacheinfo)),
 			GFP_KERNEL);
 	if (!skb)
@@ -1194,7 +1193,7 @@ static void igmp6_group_queried(struct ifmcaddr6 *ma, unsigned long resptime)
 
 	if (!mod_delayed_work(mld_wq, &ma->mca_work, delay))
 		refcount_inc(&ma->mca_refcnt);
-	WRITE_ONCE(ma->mca_flags, ma->mca_flags | MAF_TIMER_RUNNING);
+	ma->mca_flags |= MAF_TIMER_RUNNING;
 }
 
 /* mark EXCLUDE-mode sources */
@@ -1222,7 +1221,7 @@ static bool mld_xmarksources(struct ifmcaddr6 *pmc, int nsrcs,
 			}
 		}
 	}
-	WRITE_ONCE(pmc->mca_flags, pmc->mca_flags & ~MAF_GSQUERY);
+	pmc->mca_flags &= ~MAF_GSQUERY;
 	if (scount == nsrcs)	/* all sources excluded */
 		return false;
 	return true;
@@ -1254,10 +1253,10 @@ static bool mld_marksources(struct ifmcaddr6 *pmc, int nsrcs,
 		}
 	}
 	if (!scount) {
-		WRITE_ONCE(pmc->mca_flags, pmc->mca_flags & ~MAF_GSQUERY);
+		pmc->mca_flags &= ~MAF_GSQUERY;
 		return false;
 	}
-	WRITE_ONCE(pmc->mca_flags, pmc->mca_flags | MAF_GSQUERY);
+	pmc->mca_flags |= MAF_GSQUERY;
 	return true;
 }
 
@@ -1345,7 +1344,20 @@ static void mld_update_qi(struct inet6_dev *idev,
 	 *  - 9.12. Older Version Querier Present Timeout
 	 *    (the [Query Interval] in the last Query received)
 	 */
-	idev->mc_qi = mldv2_qqi(mlh2) * HZ;
+	unsigned long mc_qqi;
+
+	if (mlh2->mld2q_qqic < 128) {
+		mc_qqi = mlh2->mld2q_qqic;
+	} else {
+		unsigned long mc_man, mc_exp;
+
+		mc_exp = MLDV2_QQIC_EXP(mlh2->mld2q_qqic);
+		mc_man = MLDV2_QQIC_MAN(mlh2->mld2q_qqic);
+
+		mc_qqi = (mc_man | 0x10) << (mc_exp + 3);
+	}
+
+	idev->mc_qi = mc_qqi * HZ;
 }
 
 static void mld_update_qri(struct inet6_dev *idev,
@@ -1355,7 +1367,7 @@ static void mld_update_qri(struct inet6_dev *idev,
 	 *  - 5.1.3. Maximum Response Code
 	 *  - 9.3. Query Response Interval
 	 */
-	idev->mc_qri = msecs_to_jiffies(mldv2_mrd(mlh2));
+	idev->mc_qri = msecs_to_jiffies(mldv2_mrc(mlh2));
 }
 
 static int mld_process_v1(struct inet6_dev *idev, struct mld_msg *mld,
@@ -1407,7 +1419,7 @@ static int mld_process_v1(struct inet6_dev *idev, struct mld_msg *mld,
 static void mld_process_v2(struct inet6_dev *idev, struct mld2_query *mld,
 			   unsigned long *max_delay)
 {
-	*max_delay = max(msecs_to_jiffies(mldv2_mrd(mld)), 1UL);
+	*max_delay = max(msecs_to_jiffies(mldv2_mrc(mld)), 1UL);
 
 	mld_update_qrv(idev, mld);
 	mld_update_qi(idev, mld);
@@ -1531,25 +1543,18 @@ static void __mld_query_work(struct sk_buff *skb)
 		}
 	} else {
 		for_each_mc_mclock(idev, ma) {
-			unsigned int flags;
-
 			if (!ipv6_addr_equal(&group, &ma->mca_addr))
 				continue;
-			flags = ma->mca_flags;
-
-			if (flags & MAF_TIMER_RUNNING) {
+			if (ma->mca_flags & MAF_TIMER_RUNNING) {
 				/* gsquery <- gsquery && mark */
 				if (!mark)
-					WRITE_ONCE(ma->mca_flags,
-						   flags & ~MAF_GSQUERY);
+					ma->mca_flags &= ~MAF_GSQUERY;
 			} else {
 				/* gsquery <- mark */
 				if (mark)
-					WRITE_ONCE(ma->mca_flags,
-						   flags | MAF_GSQUERY);
+					ma->mca_flags |= MAF_GSQUERY;
 				else
-					WRITE_ONCE(ma->mca_flags,
-						   flags & ~MAF_GSQUERY);
+					ma->mca_flags &= ~MAF_GSQUERY;
 			}
 			if (!(ma->mca_flags & MAF_GSQUERY) ||
 			    mld_marksources(ma, ntohs(mlh2->mld2q_nsrcs), mlh2->mld2q_srcs))
@@ -1662,9 +1667,8 @@ static void __mld_report_work(struct sk_buff *skb)
 		if (ipv6_addr_equal(&ma->mca_addr, &mld->mld_mca)) {
 			if (cancel_delayed_work(&ma->mca_work))
 				refcount_dec(&ma->mca_refcnt);
-			WRITE_ONCE(ma->mca_flags,
-				   ma->mca_flags & ~(MAF_LAST_REPORTER |
-						     MAF_TIMER_RUNNING));
+			ma->mca_flags &= ~(MAF_LAST_REPORTER |
+					   MAF_TIMER_RUNNING);
 			break;
 		}
 	}
@@ -2063,10 +2067,8 @@ empty_source:
 	if (pgr)
 		pgr->grec_nsrcs = htons(scount);
 
-	if (isquery) {
-		/* clear query state */
-		WRITE_ONCE(pmc->mca_flags, pmc->mca_flags & ~MAF_GSQUERY);
-	}
+	if (isquery)
+		pmc->mca_flags &= ~MAF_GSQUERY;	/* clear query state */
 	return skb;
 }
 
@@ -2456,7 +2458,7 @@ static int ip6_mc_add1_src(struct ifmcaddr6 *pmc, int sfmode,
 		psf_prev = psf;
 	}
 	if (!psf) {
-		psf = kzalloc_obj(*psf);
+		psf = kzalloc(sizeof(*psf), GFP_KERNEL);
 		if (!psf)
 			return -ENOBUFS;
 
@@ -2541,7 +2543,7 @@ static int sf_setstate(struct ifmcaddr6 *pmc)
 				    &psf->sf_addr))
 					break;
 			if (!dpsf) {
-				dpsf = kmalloc_obj(*dpsf);
+				dpsf = kmalloc(sizeof(*dpsf), GFP_KERNEL);
 				if (!dpsf)
 					continue;
 				*dpsf = *psf;
@@ -2645,7 +2647,7 @@ static void ip6_mc_clear_src(struct ifmcaddr6 *pmc)
 
 static void igmp6_join_group(struct ifmcaddr6 *ma)
 {
-	unsigned long delay, interval;
+	unsigned long delay;
 
 	mc_assert_locked(ma->idev);
 
@@ -2654,21 +2656,16 @@ static void igmp6_join_group(struct ifmcaddr6 *ma)
 
 	igmp6_send(&ma->mca_addr, ma->idev->dev, ICMPV6_MGM_REPORT);
 
-	interval = unsolicited_report_interval(ma->idev);
-	delay = interval;
+	delay = get_random_u32_below(unsolicited_report_interval(ma->idev));
 
 	if (cancel_delayed_work(&ma->mca_work)) {
 		refcount_dec(&ma->mca_refcnt);
 		delay = ma->mca_work.timer.expires - jiffies;
 	}
 
-	if (delay >= interval)
-		delay = get_random_u32_below(interval);
-
 	if (!mod_delayed_work(mld_wq, &ma->mca_work, delay))
 		refcount_inc(&ma->mca_refcnt);
-	WRITE_ONCE(ma->mca_flags, ma->mca_flags |
-		   MAF_TIMER_RUNNING | MAF_LAST_REPORTER);
+	ma->mca_flags |= MAF_TIMER_RUNNING | MAF_LAST_REPORTER;
 }
 
 static int ip6_mc_leave_src(struct sock *sk, struct ipv6_mc_socklist *iml,
@@ -2769,8 +2766,8 @@ static void mld_mca_work(struct work_struct *work)
 		igmp6_send(&ma->mca_addr, ma->idev->dev, ICMPV6_MGM_REPORT);
 	else
 		mld_send_report(ma->idev, ma);
-	WRITE_ONCE(ma->mca_flags, (ma->mca_flags | MAF_LAST_REPORTER) &
-		   ~MAF_TIMER_RUNNING);
+	ma->mca_flags |=  MAF_LAST_REPORTER;
+	ma->mca_flags &= ~MAF_TIMER_RUNNING;
 	mutex_unlock(&ma->idev->mc_lock);
 
 	ma_put(ma);
@@ -3028,16 +3025,14 @@ static int igmp6_mc_seq_show(struct seq_file *seq, void *v)
 {
 	struct ifmcaddr6 *im = (struct ifmcaddr6 *)v;
 	struct igmp6_mc_iter_state *state = igmp6_mc_seq_private(seq);
-	unsigned int mca_flags = READ_ONCE(im->mca_flags);
-	long delta = READ_ONCE(im->mca_work.timer.expires) - jiffies;
 
 	seq_printf(seq,
 		   "%-4d %-15s %pi6 %5d %08X %ld\n",
 		   state->dev->ifindex, state->dev->name,
 		   &im->mca_addr,
-		   READ_ONCE(im->mca_users), mca_flags,
-		   (mca_flags & MAF_TIMER_RUNNING) ?
-		   jiffies_delta_to_clock_t(delta) : 0);
+		   READ_ONCE(im->mca_users), im->mca_flags,
+		   (im->mca_flags & MAF_TIMER_RUNNING) ?
+		   jiffies_to_clock_t(im->mca_work.timer.expires - jiffies) : 0);
 	return 0;
 }
 

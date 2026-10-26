@@ -23,7 +23,7 @@ struct xfer_on_bus {
 static bool find_dest_adap(struct vivid_dev *dev,
 			   struct cec_adapter *adap, u8 dest)
 {
-	unsigned int i;
+	unsigned int i, j;
 
 	if (dest >= 0xf)
 		return false;
@@ -33,12 +33,13 @@ static bool find_dest_adap(struct vivid_dev *dev,
 	    cec_has_log_addr(dev->cec_rx_adap, dest))
 		return true;
 
-	for (i = 0; i < dev->num_inputs; i++) {
+	for (i = 0, j = 0; i < dev->num_inputs; i++) {
 		unsigned int menu_idx =
 			dev->input_is_connected_to_output[i];
 
 		if (dev->input_type[i] != HDMI)
 			continue;
+		j++;
 		if (menu_idx < FIXED_MENU_ITEMS)
 			continue;
 
@@ -112,7 +113,7 @@ static void adjust_sfts(struct vivid_dev *dev)
 int vivid_cec_bus_thread(void *_dev)
 {
 	u32 last_sft;
-	unsigned int i;
+	unsigned int i, j;
 	unsigned int dest;
 	ktime_t start, end;
 	s64 delta_us, retry_us;
@@ -209,12 +210,13 @@ int vivid_cec_bus_thread(void *_dev)
 		if (first_status == CEC_TX_STATUS_OK) {
 			if (xfers_on_bus[first_idx].adap != dev->cec_rx_adap)
 				cec_received_msg(dev->cec_rx_adap, &first_msg);
-			for (i = 0; i < dev->num_inputs; i++) {
+			for (i = 0, j = 0; i < dev->num_inputs; i++) {
 				unsigned int menu_idx =
 					dev->input_is_connected_to_output[i];
 
 				if (dev->input_type[i] != HDMI)
 					continue;
+				j++;
 				if (menu_idx < FIXED_MENU_ITEMS)
 					continue;
 

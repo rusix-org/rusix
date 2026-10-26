@@ -55,11 +55,9 @@ bool kunit_autorun(void)
 	return autorun_param;
 }
 
-#define PARAM_FROM_CONFIG(config) (config[0] ? config : NULL)
-
-static char *filter_glob_param = PARAM_FROM_CONFIG(CONFIG_KUNIT_DEFAULT_FILTER_GLOB);
-static char *filter_param = PARAM_FROM_CONFIG(CONFIG_KUNIT_DEFAULT_FILTER);
-static char *filter_action_param = PARAM_FROM_CONFIG(CONFIG_KUNIT_DEFAULT_FILTER_ACTION);
+static char *filter_glob_param;
+static char *filter_param;
+static char *filter_action_param;
 
 module_param_named(filter_glob, filter_glob_param, charp, 0600);
 MODULE_PARM_DESC(filter_glob,
@@ -141,7 +139,7 @@ kunit_filter_glob_tests(const struct kunit_suite *const suite, const char *test_
 	if (!copy)
 		return ERR_PTR(-ENOMEM);
 
-	filtered = kzalloc_objs(*filtered, n + 1);
+	filtered = kcalloc(n + 1, sizeof(*filtered), GFP_KERNEL);
 	if (!filtered) {
 		kfree(copy);
 		return ERR_PTR(-ENOMEM);
@@ -189,7 +187,7 @@ kunit_filter_suites(const struct kunit_suite_set *suite_set,
 
 	const size_t max = suite_set->end - suite_set->start;
 
-	copy = kzalloc_objs(*copy, max);
+	copy = kcalloc(max, sizeof(*copy), GFP_KERNEL);
 	if (!copy) { /* won't be able to run anything, return an empty set */
 		return filtered;
 	}
@@ -204,7 +202,7 @@ kunit_filter_suites(const struct kunit_suite_set *suite_set,
 	/* Parse attribute filters */
 	if (filters) {
 		filter_count = kunit_get_filter_count(filters);
-		parsed_filters = kzalloc_objs(*parsed_filters, filter_count);
+		parsed_filters = kcalloc(filter_count, sizeof(*parsed_filters), GFP_KERNEL);
 		if (!parsed_filters) {
 			*err = -ENOMEM;
 			goto free_parsed_glob;
@@ -371,7 +369,7 @@ static void kunit_handle_shutdown(void)
 
 }
 
-void kunit_run_all_tests(void)
+int kunit_run_all_tests(void)
 {
 	struct kunit_suite_set suite_set = {NULL, NULL};
 	struct kunit_suite_set filtered_suite_set = {NULL, NULL};
@@ -382,7 +380,7 @@ void kunit_run_all_tests(void)
 		__kunit_suites_start, __kunit_suites_end,
 	};
 	size_t init_num_suites = init_suite_set.end - init_suite_set.start;
-	int err;
+	int err = 0;
 
 	if (init_num_suites > 0) {
 		suite_set = kunit_merge_suite_sets(init_suite_set, normal_suite_set);
@@ -432,6 +430,7 @@ free_out:
 
 out:
 	kunit_handle_shutdown();
+	return err;
 }
 
 #if IS_BUILTIN(CONFIG_KUNIT_TEST)

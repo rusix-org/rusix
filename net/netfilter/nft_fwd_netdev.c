@@ -100,7 +100,6 @@ static void nft_fwd_neigh_eval(const struct nft_expr *expr,
 	int oif = regs->data[priv->sreg_dev];
 	unsigned int verdict = NF_STOLEN;
 	struct sk_buff *skb = pkt->skb;
-	int nhoff = skb_network_offset(skb);
 	struct net_device *dev;
 	unsigned int hh_len;
 	int neigh_table;
@@ -113,7 +112,7 @@ static void nft_fwd_neigh_eval(const struct nft_expr *expr,
 			verdict = NFT_BREAK;
 			goto out;
 		}
-		if (skb_ensure_writable(skb, nhoff + sizeof(*iph))) {
+		if (skb_try_make_writable(skb, sizeof(*iph))) {
 			verdict = NF_DROP;
 			goto out;
 		}
@@ -134,7 +133,7 @@ static void nft_fwd_neigh_eval(const struct nft_expr *expr,
 			verdict = NFT_BREAK;
 			goto out;
 		}
-		if (skb_ensure_writable(skb, nhoff + sizeof(*ip6h))) {
+		if (skb_try_make_writable(skb, sizeof(*ip6h))) {
 			verdict = NF_DROP;
 			goto out;
 		}

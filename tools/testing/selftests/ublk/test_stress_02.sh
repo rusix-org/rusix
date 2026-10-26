@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: GPL-2.0
 
 . "$(cd "$(dirname "$0")" && pwd)"/test_common.sh
+TID="stress_02"
 ERR_CODE=0
 
 if ! _have_program fio; then
@@ -31,5 +32,5 @@ for nr_queue in 1 4; do
 	wait
 done
 
-_cleanup_test
+_cleanup_test "stress"
 _show_result $TID $ERR_CODE

@@ -1906,7 +1906,7 @@ tegra_xudc_ep_alloc_request(struct usb_ep *usb_ep, gfp_t gfp)
 {
 	struct tegra_xudc_request *req;
 
-	req = kzalloc_obj(*req, gfp);
+	req = kzalloc(sizeof(*req), gfp);
 	if (!req)
 		return NULL;
 
@@ -3803,8 +3803,11 @@ static int tegra_xudc_probe(struct platform_device *pdev)
 
 	err = devm_request_irq(&pdev->dev, xudc->irq, tegra_xudc_irq, 0,
 			       dev_name(&pdev->dev), xudc);
-	if (err < 0)
+	if (err < 0) {
+		dev_err(xudc->dev, "failed to claim IRQ#%u: %d\n", xudc->irq,
+			err);
 		return err;
+	}
 
 	xudc->clks = devm_kcalloc(&pdev->dev, xudc->soc->num_clks, sizeof(*xudc->clks),
 				  GFP_KERNEL);

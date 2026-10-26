@@ -48,8 +48,8 @@ MODULE_PARM_DESC(enable, "Enable Digigram " CARD_NAME " soundcard.");
  */
 
 static const struct pci_device_id snd_mixart_ids[] = {
-	{ PCI_VDEVICE(MOTOROLA, 0x0003) }, /* MC8240 */
-	{ }
+	{ PCI_VDEVICE(MOTOROLA, 0x0003), 0, }, /* MC8240 */
+	{ 0, }
 };
 
 MODULE_DEVICE_TABLE(pci, snd_mixart_ids);
@@ -255,7 +255,7 @@ snd_mixart_add_ref_pipe(struct snd_mixart *chip, int pcm_number, int capture,
 			"add_ref_pipe audio chip(%d) pcm(%d)\n",
 			chip->chip_idx, pcm_number);
 
-		buf = kmalloc_obj(*buf);
+		buf = kmalloc(sizeof(*buf), GFP_KERNEL);
 		if (!buf)
 			return NULL;
 
@@ -1017,7 +1017,7 @@ static int snd_mixart_create(struct mixart_mgr *mgr, struct snd_card *card, int 
 		.dev_free = snd_mixart_chip_dev_free,
 	};
 
-	chip = kzalloc_obj(*chip);
+	chip = kzalloc(sizeof(*chip), GFP_KERNEL);
 	if (!chip)
 		return -ENOMEM;
 
@@ -1243,7 +1243,7 @@ static int snd_mixart_probe(struct pci_dev *pci,
 
 	/*
 	 */
-	mgr = kzalloc_obj(*mgr);
+	mgr = kzalloc(sizeof(*mgr), GFP_KERNEL);
 	if (! mgr) {
 		pci_disable_device(pci);
 		return -ENOMEM;

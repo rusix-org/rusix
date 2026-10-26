@@ -5,7 +5,6 @@
 #include <linux/mlx5/mlx5_ifc.h>
 #include <linux/xarray.h>
 #include <linux/if_vlan.h>
-#include <linux/iopoll.h>
 
 #include "en.h"
 #include "lib/aso.h"
@@ -75,7 +74,6 @@ struct mlx5e_macsec_rx_sc;
 struct mlx5e_macsec_rx_sc_xarray_element {
 	u32 fs_id;
 	struct mlx5e_macsec_rx_sc *rx_sc;
-	struct rcu_head rcu_head;
 };
 
 struct mlx5e_macsec_rx_sc {
@@ -166,7 +164,7 @@ static int mlx5e_macsec_aso_reg_mr(struct mlx5_core_dev *mdev, struct mlx5e_macs
 	dma_addr_t dma_addr;
 	int err;
 
-	umr = kzalloc_obj(*umr);
+	umr = kzalloc(sizeof(*umr), GFP_KERNEL);
 	if (!umr) {
 		err = -ENOMEM;
 		return err;
@@ -531,7 +529,7 @@ static int mlx5e_macsec_add_txsa(struct macsec_context *ctx)
 		goto out;
 	}
 
-	tx_sa = kzalloc_obj(*tx_sa);
+	tx_sa = kzalloc(sizeof(*tx_sa), GFP_KERNEL);
 	if (!tx_sa) {
 		err = -ENOMEM;
 		goto out;
@@ -702,13 +700,13 @@ static int mlx5e_macsec_add_rxsc(struct macsec_context *ctx)
 		goto out;
 	}
 
-	rx_sc = kzalloc_obj(*rx_sc);
+	rx_sc = kzalloc(sizeof(*rx_sc), GFP_KERNEL);
 	if (!rx_sc) {
 		err = -ENOMEM;
 		goto out;
 	}
 
-	sc_xarray_element = kzalloc_obj(*sc_xarray_element);
+	sc_xarray_element = kzalloc(sizeof(*sc_xarray_element), GFP_KERNEL);
 	if (!sc_xarray_element) {
 		err = -ENOMEM;
 		goto destroy_rx_sc;
@@ -840,7 +838,7 @@ static void macsec_del_rxsc_ctx(struct mlx5e_macsec *macsec, struct mlx5e_macsec
 	list_del_rcu(&rx_sc->rx_sc_list_element);
 	xa_erase(&macsec->sc_xarray, rx_sc->sc_xarray_element->fs_id);
 	dst_release(&rx_sc->md_dst->dst);
-	kfree_rcu(rx_sc->sc_xarray_element, rcu_head);
+	kfree(rx_sc->sc_xarray_element);
 	kfree_rcu_mightsleep(rx_sc);
 }
 
@@ -922,7 +920,7 @@ static int mlx5e_macsec_add_rxsa(struct macsec_context *ctx)
 		goto out;
 	}
 
-	rx_sa = kzalloc_obj(*rx_sa);
+	rx_sa = kzalloc(sizeof(*rx_sa), GFP_KERNEL);
 	if (!rx_sa) {
 		err = -ENOMEM;
 		goto out;
@@ -1103,7 +1101,7 @@ static int mlx5e_macsec_add_secy(struct macsec_context *ctx)
 		goto out;
 	}
 
-	macsec_device = kzalloc_obj(*macsec_device);
+	macsec_device = kzalloc(sizeof(*macsec_device), GFP_KERNEL);
 	if (!macsec_device) {
 		err = -ENOMEM;
 		goto out;
@@ -1396,8 +1394,7 @@ static int macsec_aso_set_arm_event(struct mlx5_core_dev *mdev, struct mlx5e_mac
 			   MLX5_ACCESS_ASO_OPC_MOD_MACSEC);
 	macsec_aso_build_ctrl(aso, &aso_wqe->aso_ctrl, in);
 	mlx5_aso_post_wqe(maso, false, &aso_wqe->ctrl);
-	read_poll_timeout(mlx5_aso_poll_cq, err, !err, 10, 10 * USEC_PER_MSEC,
-			  false, maso, false);
+	err = mlx5_aso_poll_cq(maso, false);
 	mutex_unlock(&aso->aso_lock);
 
 	return err;
@@ -1409,6 +1406,7 @@ static int macsec_aso_query(struct mlx5_core_dev *mdev, struct mlx5e_macsec *mac
 	struct mlx5e_macsec_aso *aso;
 	struct mlx5_aso_wqe *aso_wqe;
 	struct mlx5_aso *maso;
+	unsigned long expires;
 	int err;
 
 	aso = &macsec->aso;
@@ -1422,8 +1420,12 @@ static int macsec_aso_query(struct mlx5_core_dev *mdev, struct mlx5e_macsec *mac
 	macsec_aso_build_wqe_ctrl_seg(aso, &aso_wqe->aso_ctrl, NULL);
 
 	mlx5_aso_post_wqe(maso, false, &aso_wqe->ctrl);
-	read_poll_timeout(mlx5_aso_poll_cq, err, !err, 10, 10 * USEC_PER_MSEC,
-			  false, maso, false);
+	expires = jiffies + msecs_to_jiffies(10);
+	do {
+		err = mlx5_aso_poll_cq(maso, false);
+		if (err)
+			usleep_range(2, 10);
+	} while (err && time_is_after_jiffies(expires));
 
 	if (err)
 		goto err_out;
@@ -1575,7 +1577,7 @@ static int macsec_obj_change_event(struct notifier_block *nb, unsigned long even
 	if (obj_type != MLX5_GENERAL_OBJECT_TYPES_MACSEC)
 		return NOTIFY_DONE;
 
-	async_work = kzalloc_obj(*async_work, GFP_ATOMIC);
+	async_work = kzalloc(sizeof(*async_work), GFP_ATOMIC);
 	if (!async_work)
 		return NOTIFY_DONE;
 
@@ -1742,7 +1744,7 @@ int mlx5e_macsec_init(struct mlx5e_priv *priv)
 		return 0;
 	}
 
-	macsec = kzalloc_obj(*macsec);
+	macsec = kzalloc(sizeof(*macsec), GFP_KERNEL);
 	if (!macsec)
 		return -ENOMEM;
 

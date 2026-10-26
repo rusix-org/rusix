@@ -270,7 +270,7 @@ next:
 			goto out;
 	}
 	if (!rd) {
-		rd = kmalloc_obj(struct hfsplus_readdir_data);
+		rd = kmalloc(sizeof(struct hfsplus_readdir_data), GFP_KERNEL);
 		if (!rd) {
 			err = -ENOMEM;
 			goto out;
@@ -307,7 +307,7 @@ static int hfsplus_link(struct dentry *src_dentry, struct inode *dst_dir,
 	if (!S_ISREG(inode->i_mode))
 		return -EPERM;
 
-	hfs_dbg("src_dir->i_ino %llu, dst_dir->i_ino %llu, inode->i_ino %llu\n",
+	hfs_dbg("src_dir->i_ino %lu, dst_dir->i_ino %lu, inode->i_ino %lu\n",
 		src_dir->i_ino, dst_dir->i_ino, inode->i_ino);
 
 	mutex_lock(&sbi->vh_mutex);
@@ -379,7 +379,7 @@ static int hfsplus_unlink(struct inode *dir, struct dentry *dentry)
 	if (HFSPLUS_IS_RSRC(inode))
 		return -EPERM;
 
-	hfs_dbg("dir->i_ino %llu, inode->i_ino %llu\n",
+	hfs_dbg("dir->i_ino %lu, inode->i_ino %lu\n",
 		dir->i_ino, inode->i_ino);
 
 	mutex_lock(&sbi->vh_mutex);
@@ -387,7 +387,7 @@ static int hfsplus_unlink(struct inode *dir, struct dentry *dentry)
 	if (inode->i_ino == cnid &&
 	    atomic_read(&HFSPLUS_I(inode)->opencnt)) {
 		str.name = name;
-		str.len = sprintf(name, "temp%llu", inode->i_ino);
+		str.len = sprintf(name, "temp%lu", inode->i_ino);
 		res = hfsplus_rename_cat(inode->i_ino,
 					 dir, &dentry->d_name,
 					 sbi->hidden_dir, &str);
@@ -460,7 +460,7 @@ out:
 	return res;
 }
 
-static int hfsplus_symlink(const struct mnt_idmap *idmap, struct inode *dir,
+static int hfsplus_symlink(struct mnt_idmap *idmap, struct inode *dir,
 			   struct dentry *dentry, const char *symname)
 {
 	struct hfsplus_sb_info *sbi = HFSPLUS_SB(dir->i_sb);
@@ -471,9 +471,6 @@ static int hfsplus_symlink(const struct mnt_idmap *idmap, struct inode *dir,
 	inode = hfsplus_new_inode(dir->i_sb, dir, S_IFLNK | S_IRWXUGO);
 	if (!inode)
 		goto out;
-
-	hfs_dbg("dir->i_ino %llu, inode->i_ino %llu\n",
-		dir->i_ino, inode->i_ino);
 
 	res = page_symlink(inode, symname, strlen(symname) + 1);
 	if (res)
@@ -511,7 +508,7 @@ out:
 	return res;
 }
 
-static int hfsplus_mknod(const struct mnt_idmap *idmap, struct inode *dir,
+static int hfsplus_mknod(struct mnt_idmap *idmap, struct inode *dir,
 			 struct dentry *dentry, umode_t mode, dev_t rdev)
 {
 	struct hfsplus_sb_info *sbi = HFSPLUS_SB(dir->i_sb);
@@ -522,9 +519,6 @@ static int hfsplus_mknod(const struct mnt_idmap *idmap, struct inode *dir,
 	inode = hfsplus_new_inode(dir->i_sb, dir, mode);
 	if (!inode)
 		goto out;
-
-	hfs_dbg("dir->i_ino %llu, inode->i_ino %llu\n",
-		dir->i_ino, inode->i_ino);
 
 	if (S_ISBLK(mode) || S_ISCHR(mode) || S_ISFIFO(mode) || S_ISSOCK(mode))
 		init_special_inode(inode, mode, rdev);
@@ -561,19 +555,19 @@ out:
 	return res;
 }
 
-static int hfsplus_create(const struct mnt_idmap *idmap, struct inode *dir,
-			  struct dentry *dentry, umode_t mode)
+static int hfsplus_create(struct mnt_idmap *idmap, struct inode *dir,
+			  struct dentry *dentry, umode_t mode, bool excl)
 {
 	return hfsplus_mknod(&nop_mnt_idmap, dir, dentry, mode, 0);
 }
 
-static struct dentry *hfsplus_mkdir(const struct mnt_idmap *idmap, struct inode *dir,
+static struct dentry *hfsplus_mkdir(struct mnt_idmap *idmap, struct inode *dir,
 				    struct dentry *dentry, umode_t mode)
 {
-	return ERR_PTR(hfsplus_mknod(&nop_mnt_idmap, dir, dentry, mode, 0));
+	return ERR_PTR(hfsplus_mknod(&nop_mnt_idmap, dir, dentry, mode | S_IFDIR, 0));
 }
 
-static int hfsplus_rename(const struct mnt_idmap *idmap,
+static int hfsplus_rename(struct mnt_idmap *idmap,
 			  struct inode *old_dir, struct dentry *old_dentry,
 			  struct inode *new_dir, struct dentry *new_dentry,
 			  unsigned int flags)
@@ -597,22 +591,11 @@ static int hfsplus_rename(const struct mnt_idmap *idmap,
 				 old_dir, &old_dentry->d_name,
 				 new_dir, &new_dentry->d_name);
 	if (!res) {
-		struct inode *inode = d_inode(old_dentry);
-
 		new_dentry->d_fsdata = old_dentry->d_fsdata;
 
-		inode_set_ctime_current(inode);
-		mark_inode_dirty(inode);
-
 		res = hfsplus_cat_write_inode(old_dir);
-		if (res)
-			return res;
-
-		res = hfsplus_cat_write_inode(new_dir);
-		if (res)
-			return res;
-
-		res = hfsplus_cat_write_inode(inode);
+		if (!res)
+			res = hfsplus_cat_write_inode(new_dir);
 	}
 	return res;
 }

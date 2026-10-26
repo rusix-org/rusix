@@ -97,8 +97,7 @@ static u8	mptfcInternalCtx = MPT_MAX_PROTOCOL_DRIVERS;
 
 static int mptfc_target_alloc(struct scsi_target *starget);
 static int mptfc_sdev_init(struct scsi_device *sdev);
-static enum scsi_qc_status mptfc_qcmd(struct Scsi_Host *shost,
-				      struct scsi_cmnd *SCpnt);
+static int mptfc_qcmd(struct Scsi_Host *shost, struct scsi_cmnd *SCpnt);
 static void mptfc_target_destroy(struct scsi_target *starget);
 static void mptfc_set_rport_loss_tmo(struct fc_rport *rport, uint32_t timeout);
 static void mptfc_remove(struct pci_dev *pdev);
@@ -196,20 +195,20 @@ mptfc_block_error_handler(struct fc_rport *rport)
 
 	hd = shost_priv(shost);
 	ioc = hd->ioc;
-	spin_lock_irqsave(&shost->host_lock, flags);
+	spin_lock_irqsave(shost->host_lock, flags);
 	while ((ready = fc_remote_port_chkready(rport) >> 16) == DID_IMM_RETRY
 	 || (loops > 0 && ioc->active == 0)) {
-		spin_unlock_irqrestore(&shost->host_lock, flags);
+		spin_unlock_irqrestore(shost->host_lock, flags);
 		dfcprintk (ioc, printk(MYIOC_s_DEBUG_FMT
 			"mptfc_block_error_handler.%d: %s, port status is "
 			"%x, active flag %d, deferring recovery.\n",
 			ioc->name, ioc->sh->host_no,
 			dev_name(&rport->dev), ready, ioc->active));
 		msleep(1000);
-		spin_lock_irqsave(&shost->host_lock, flags);
+		spin_lock_irqsave(shost->host_lock, flags);
 		loops --;
 	}
-	spin_unlock_irqrestore(&shost->host_lock, flags);
+	spin_unlock_irqrestore(shost->host_lock, flags);
 
 	if (ready == DID_NO_CONNECT || ioc->active == 0) {
 		dfcprintk (ioc, printk(MYIOC_s_DEBUG_FMT
@@ -484,7 +483,7 @@ mptfc_register_dev(MPT_ADAPTER *ioc, int channel, FCDevicePage0_t *pg0)
 		}
 	}
 	if (new_ri) {	/* allocate one */
-		ri = kzalloc_obj(struct mptfc_rport_info);
+		ri = kzalloc(sizeof(struct mptfc_rport_info), GFP_KERNEL);
 		if (!ri)
 			return;
 		list_add_tail(&ri->list, &ioc->fc_rports);
@@ -572,7 +571,7 @@ mptfc_target_alloc(struct scsi_target *starget)
 	struct mptfc_rport_info *ri;
 	int			rc;
 
-	vtarget = kzalloc_obj(VirtTarget);
+	vtarget = kzalloc(sizeof(VirtTarget), GFP_KERNEL);
 	if (!vtarget)
 		return -ENOMEM;
 	starget->hostdata = vtarget;
@@ -650,7 +649,7 @@ mptfc_sdev_init(struct scsi_device *sdev)
 	hd = shost_priv(sdev->host);
 	ioc = hd->ioc;
 
-	vdevice = kzalloc_obj(VirtDevice);
+	vdevice = kzalloc(sizeof(VirtDevice), GFP_KERNEL);
 	if (!vdevice) {
 		printk(MYIOC_s_ERR_FMT "sdev_init kmalloc(%zd) FAILED!\n",
 				ioc->name, sizeof(VirtDevice));
@@ -677,8 +676,8 @@ mptfc_sdev_init(struct scsi_device *sdev)
 	return 0;
 }
 
-static enum scsi_qc_status mptfc_qcmd(struct Scsi_Host *shost,
-				      struct scsi_cmnd *SCpnt)
+static int
+mptfc_qcmd(struct Scsi_Host *shost, struct scsi_cmnd *SCpnt)
 {
 	struct mptfc_rport_info	*ri;
 	struct fc_rport	*rport = starget_to_rport(scsi_target(SCpnt->device));

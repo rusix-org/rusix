@@ -27,6 +27,14 @@
 		#interrupt-cells = <2>;
 	};
 
+	gpf6: gpf6-gpio-bank {
+		gpio-controller;
+		#gpio-cells = <2>;
+
+		interrupt-controller;
+		#interrupt-cells = <2>;
+	};
+
 	gpf4: gpf4-gpio-bank {
 		gpio-controller;
 		#gpio-cells = <2>;
@@ -36,14 +44,6 @@
 	};
 
 	gpf5: gpf5-gpio-bank {
-		gpio-controller;
-		#gpio-cells = <2>;
-
-		interrupt-controller;
-		#interrupt-cells = <2>;
-	};
-
-	gpf6: gpf6-gpio-bank {
 		gpio-controller;
 		#gpio-cells = <2>;
 

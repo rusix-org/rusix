@@ -5,22 +5,20 @@
  *   Documentation/trace/rv/deterministic_automata.rst
  */
 
-#define MONITOR_NAME scpd
-
 enum states_scpd {
-	cant_sched_scpd,
+	cant_sched_scpd = 0,
 	can_sched_scpd,
-	state_max_scpd,
+	state_max_scpd
 };
 
 #define INVALID_STATE state_max_scpd
 
 enum events_scpd {
-	preempt_disable_scpd,
+	preempt_disable_scpd = 0,
 	preempt_enable_scpd,
 	schedule_entry_scpd,
 	schedule_exit_scpd,
-	event_max_scpd,
+	event_max_scpd
 };
 
 struct automaton_scpd {
@@ -34,13 +32,13 @@ struct automaton_scpd {
 static const struct automaton_scpd automaton_scpd = {
 	.state_names = {
 		"cant_sched",
-		"can_sched",
+		"can_sched"
 	},
 	.event_names = {
 		"preempt_disable",
 		"preempt_enable",
 		"schedule_entry",
-		"schedule_exit",
+		"schedule_exit"
 	},
 	.function = {
 		{     can_sched_scpd,     INVALID_STATE,     INVALID_STATE,     INVALID_STATE },

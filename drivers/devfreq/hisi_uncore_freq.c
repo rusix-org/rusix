@@ -9,7 +9,6 @@
 #include <linux/bits.h>
 #include <linux/cleanup.h>
 #include <linux/devfreq.h>
-#include <linux/devfreq-governor.h>
 #include <linux/device.h>
 #include <linux/dev_printk.h>
 #include <linux/errno.h>
@@ -18,6 +17,7 @@
 #include <linux/ktime.h>
 #include <linux/mailbox_client.h>
 #include <linux/module.h>
+#include <linux/mod_devicetable.h>
 #include <linux/mutex.h>
 #include <linux/platform_device.h>
 #include <linux/pm_opp.h>
@@ -25,6 +25,8 @@
 #include <linux/topology.h>
 #include <linux/units.h>
 #include <acpi/pcc.h>
+
+#include "governor.h"
 
 struct hisi_uncore_pcc_data {
 	u16 status;
@@ -474,7 +476,7 @@ static int hisi_uncore_mark_related_cpus(struct hisi_uncore_freq *uncore,
 		return -EINVAL;
 
 	len = rc;
-	u32 *num __free(kfree) = kzalloc_objs(*num, len);
+	u32 *num __free(kfree) = kcalloc(len, sizeof(*num), GFP_KERNEL);
 	if (!num)
 		return -ENOMEM;
 
@@ -540,7 +542,7 @@ static ssize_t related_cpus_show(struct device *dev,
 {
 	struct hisi_uncore_freq *uncore = dev_get_drvdata(dev->parent);
 
-	return sysfs_emit(buf, "%*pbl\n", cpumask_pr_args(&uncore->related_cpus));
+	return cpumap_print_to_pagebuf(true, buf, &uncore->related_cpus);
 }
 
 static DEVICE_ATTR_RO(related_cpus);

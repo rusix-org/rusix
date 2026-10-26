@@ -474,7 +474,10 @@ static void hns3_update_limit_promisc_mode(struct net_device *netdev,
 {
 	struct hnae3_handle *handle = hns3_get_handle(netdev);
 
-	assign_bit(HNAE3_PFLAG_LIMIT_PROMISC, &handle->priv_flags, enable);
+	if (enable)
+		set_bit(HNAE3_PFLAG_LIMIT_PROMISC, &handle->priv_flags);
+	else
+		clear_bit(HNAE3_PFLAG_LIMIT_PROMISC, &handle->priv_flags);
 
 	hns3_request_update_promisc_mode(handle);
 }
@@ -984,13 +987,6 @@ static int hns3_get_rxfh_fields(struct net_device *netdev,
 	return -EOPNOTSUPP;
 }
 
-static u32 hns3_get_rx_ring_count(struct net_device *netdev)
-{
-	struct hnae3_handle *h = hns3_get_handle(netdev);
-
-	return h->kinfo.num_tqps;
-}
-
 static int hns3_get_rxnfc(struct net_device *netdev,
 			  struct ethtool_rxnfc *cmd,
 			  u32 *rule_locs)
@@ -998,6 +994,9 @@ static int hns3_get_rxnfc(struct net_device *netdev,
 	struct hnae3_handle *h = hns3_get_handle(netdev);
 
 	switch (cmd->cmd) {
+	case ETHTOOL_GRXRINGS:
+		cmd->data = h->kinfo.num_tqps;
+		return 0;
 	case ETHTOOL_GRXCLSRLCNT:
 		if (h->ae_algo->ops->get_fd_rule_cnt)
 			return h->ae_algo->ops->get_fd_rule_cnt(h, cmd);
@@ -1095,8 +1094,8 @@ static struct hns3_enet_ring *hns3_backup_ringparam(struct hns3_nic_priv *priv)
 	struct hns3_enet_ring *tmp_rings;
 	int i;
 
-	tmp_rings = kzalloc_objs(struct hns3_enet_ring,
-				 handle->kinfo.num_tqps * 2);
+	tmp_rings = kcalloc(handle->kinfo.num_tqps * 2,
+			    sizeof(struct hns3_enet_ring), GFP_KERNEL);
 	if (!tmp_rings)
 		return NULL;
 
@@ -1207,7 +1206,10 @@ static int hns3_set_tx_push(struct net_device *netdev, u32 tx_push)
 	netdev_dbg(netdev, "Changing tx push from %s to %s\n",
 		   str_on_off(old_state), str_on_off(tx_push));
 
-	assign_bit(HNS3_NIC_STATE_TX_PUSH_ENABLE, &priv->state, tx_push);
+	if (tx_push)
+		set_bit(HNS3_NIC_STATE_TX_PUSH_ENABLE, &priv->state);
+	else
+		clear_bit(HNS3_NIC_STATE_TX_PUSH_ENABLE, &priv->state);
 
 	return 0;
 }
@@ -1889,12 +1891,6 @@ static int hns3_get_tunable(struct net_device *netdev,
 	case ETHTOOL_TX_COPYBREAK_BUF_SIZE:
 		*(u32 *)data = h->kinfo.tx_spare_buf_size;
 		break;
-	case ETHTOOL_PFC_PREVENTION_TOUT:
-		if (!h->ae_algo->ops->get_pfc_prevention_tout)
-			return -EOPNOTSUPP;
-
-		ret = h->ae_algo->ops->get_pfc_prevention_tout(h, (u16 *)data);
-		break;
 	default:
 		ret = -EOPNOTSUPP;
 		break;
@@ -2020,12 +2016,6 @@ static int hns3_set_tunable(struct net_device *netdev,
 			netdev_info(netdev, "the active tx spare buf size is %u, due to page order\n",
 				    priv->ring->tx_spare->len);
 
-		break;
-	case ETHTOOL_PFC_PREVENTION_TOUT:
-		if (!h->ae_algo->ops->set_pfc_prevention_tout)
-			return -EOPNOTSUPP;
-
-		ret = h->ae_algo->ops->set_pfc_prevention_tout(h, *(u16 *)data);
 		break;
 	default:
 		ret = -EOPNOTSUPP;
@@ -2157,7 +2147,6 @@ static const struct ethtool_ops hns3vf_ethtool_ops = {
 	.get_sset_count = hns3_get_sset_count,
 	.get_rxnfc = hns3_get_rxnfc,
 	.set_rxnfc = hns3_set_rxnfc,
-	.get_rx_ring_count = hns3_get_rx_ring_count,
 	.get_rxfh_key_size = hns3_get_rss_key_size,
 	.get_rxfh_indir_size = hns3_get_rss_indir_size,
 	.get_rxfh = hns3_get_rss,
@@ -2197,7 +2186,6 @@ static const struct ethtool_ops hns3_ethtool_ops = {
 	.get_sset_count = hns3_get_sset_count,
 	.get_rxnfc = hns3_get_rxnfc,
 	.set_rxnfc = hns3_set_rxnfc,
-	.get_rx_ring_count = hns3_get_rx_ring_count,
 	.get_rxfh_key_size = hns3_get_rss_key_size,
 	.get_rxfh_indir_size = hns3_get_rss_indir_size,
 	.get_rxfh = hns3_get_rss,

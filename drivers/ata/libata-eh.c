@@ -477,7 +477,6 @@ static void ata_eh_clear_action(struct ata_link *link, struct ata_device *dev,
  *	EH context.
  */
 void ata_eh_acquire(struct ata_port *ap)
-	__acquires(&ap->host->eh_mutex)
 {
 	mutex_lock(&ap->host->eh_mutex);
 	WARN_ON_ONCE(ap->host->eh_owner);
@@ -495,7 +494,6 @@ void ata_eh_acquire(struct ata_port *ap)
  *	EH context.
  */
 void ata_eh_release(struct ata_port *ap)
-	__releases(&ap->host->eh_mutex)
 {
 	WARN_ON_ONCE(ap->host->eh_owner != current);
 	ap->host->eh_owner = NULL;
@@ -570,27 +568,21 @@ void ata_scsi_error(struct Scsi_Host *host)
 {
 	struct ata_port *ap = ata_shost_to_port(host);
 	unsigned long flags;
-	int nr_timedout;
 	LIST_HEAD(eh_work_q);
 
-	spin_lock_irqsave(&host->host_lock, flags);
+	spin_lock_irqsave(host->host_lock, flags);
 	list_splice_init(&host->eh_cmd_q, &eh_work_q);
-	spin_unlock_irqrestore(&host->host_lock, flags);
+	spin_unlock_irqrestore(host->host_lock, flags);
 
-	/*
-	 * First check what errors we got with ata_scsi_cmd_error_handler().
-	 * If we had no command timeouts and EH is not scheduled for this port,
-	 * meaning that we do not have any failed command, then there is no
-	 * need to go through the full port error handling. We only need to
-	 * flush the completed commands we have.
-	 */
-	nr_timedout = ata_scsi_cmd_error_handler(host, ap, &eh_work_q);
-	if (nr_timedout || ata_port_eh_scheduled(ap))
-		ata_scsi_port_error_handler(host, ap);
-	else
-		scsi_eh_flush_done_q(&ap->eh_done_q);
+	ata_scsi_cmd_error_handler(host, ap, &eh_work_q);
 
+	/* If we timed raced normal completion and there is nothing to
+	   recover nr_timedout == 0 why exactly are we doing error recovery ? */
+	ata_scsi_port_error_handler(host, ap);
+
+	/* finish or retry handled scmd's and clean up */
 	WARN_ON(!list_empty(&eh_work_q));
+
 }
 
 /**
@@ -602,11 +594,9 @@ void ata_scsi_error(struct Scsi_Host *host)
  * process the given list of commands and return those finished to the
  * ap->eh_done_q.  This function is the first part of the libata error
  * handler which processes a given list of failed commands.
- *
- * Return the number of commands that timed out.
  */
-int ata_scsi_cmd_error_handler(struct Scsi_Host *host, struct ata_port *ap,
-			       struct list_head *eh_work_q)
+void ata_scsi_cmd_error_handler(struct Scsi_Host *host, struct ata_port *ap,
+				struct list_head *eh_work_q)
 {
 	int i;
 	unsigned long flags;
@@ -696,8 +686,6 @@ int ata_scsi_cmd_error_handler(struct Scsi_Host *host, struct ata_port *ap,
 	ap->eh_tries = ATA_EH_MAX_TRIES;
 
 	spin_unlock_irqrestore(ap->lock, flags);
-
-	return nr_timedout;
 }
 EXPORT_SYMBOL(ata_scsi_cmd_error_handler);
 
@@ -812,7 +800,7 @@ void ata_scsi_port_error_handler(struct Scsi_Host *host, struct ata_port *ap)
 		ap->pflags &= ~ATA_PFLAG_LOADING;
 	else if ((ap->pflags & ATA_PFLAG_SCSI_HOTPLUG) &&
 		!(ap->flags & ATA_FLAG_SAS_HOST))
-		queue_delayed_work(system_dfl_long_wq, &ap->hotplug_task, 0);
+		schedule_delayed_work(&ap->hotplug_task, 0);
 
 	if (ap->pflags & ATA_PFLAG_RECOVERED)
 		ata_port_info(ap, "EH complete\n");
@@ -1221,10 +1209,9 @@ static void __ata_eh_qc_complete(struct ata_queued_cmd *qc)
  *	Indicate to the mid and upper layers that an ATA command has
  *	completed.  To be used from EH.
  */
-static void ata_eh_qc_complete(struct ata_queued_cmd *qc)
+void ata_eh_qc_complete(struct ata_queued_cmd *qc)
 {
 	struct scsi_cmnd *scmd = qc->scsicmd;
-
 	scmd->retries = scmd->allowed;
 	__ata_eh_qc_complete(qc);
 }
@@ -1240,10 +1227,9 @@ static void ata_eh_qc_complete(struct ata_queued_cmd *qc)
  *	scmd->allowed is incremented for commands which get retried
  *	due to unrelated failures (qc->err_mask is zero).
  */
-static void ata_eh_qc_retry(struct ata_queued_cmd *qc)
+void ata_eh_qc_retry(struct ata_queued_cmd *qc)
 {
 	struct scsi_cmnd *scmd = qc->scsicmd;
-
 	if (!qc->err_mask)
 		scmd->allowed++;
 	__ata_eh_qc_complete(qc);
@@ -1516,13 +1502,11 @@ static bool ata_eh_request_sense(struct ata_queued_cmd *qc)
 	err_mask = ata_exec_internal(dev, &tf, NULL, DMA_NONE, NULL, 0, 0);
 	/* Ignore err_mask; ATA_ERR might be set */
 	if (tf.status & ATA_SENSE) {
-		u16 sense_code = scsi_sense_code(tf.lbam, tf.lbal);
-
-		if (ata_scsi_sense_is_valid(tf.lbah, sense_code)) {
+		if (ata_scsi_sense_is_valid(tf.lbah, tf.lbam, tf.lbal)) {
 			/* Set sense without also setting scsicmd->result */
-			scsi_set_sense_buffer(dev->flags & ATA_DFLAG_D_SENSE,
-					      cmd->sense_buffer, tf.lbah,
-					      sense_code);
+			scsi_build_sense_buffer(dev->flags & ATA_DFLAG_D_SENSE,
+						cmd->sense_buffer, tf.lbah,
+						tf.lbam, tf.lbal);
 			qc->flags |= ATA_QCFLAG_SENSE_VALID;
 			return true;
 		}
@@ -2096,8 +2080,7 @@ out:
 			continue;
 
 		/* This success command had sense data, but we failed to get. */
-		ata_scsi_set_sense(dev, qc->scsicmd, ABORTED_COMMAND,
-				   NO_ADDITIONAL_SENSE_INFORMATION);
+		ata_scsi_set_sense(dev, qc->scsicmd, ABORTED_COMMAND, 0, 0);
 		qc->flags |= ATA_QCFLAG_SENSE_VALID;
 	}
 	ata_eh_done(link, dev, ATA_EH_GET_SUCCESS_SENSE);
@@ -2829,10 +2812,10 @@ static bool ata_eh_followup_srst_needed(struct ata_link *link, int rc)
 	return false;
 }
 
-int ata_eh_reset(struct ata_port *ap, struct ata_link *link, int classify,
+int ata_eh_reset(struct ata_link *link, int classify,
 		 struct ata_reset_operations *reset_ops)
-	__must_hold(&ap->host->eh_mutex)
 {
+	struct ata_port *ap = link->ap;
 	struct ata_link *slave = ap->slave_link;
 	struct ata_eh_context *ehc = &link->eh_context;
 	struct ata_eh_context *sehc = slave ? &slave->eh_context : NULL;
@@ -3179,7 +3162,7 @@ int ata_eh_reset(struct ata_port *ap, struct ata_link *link, int classify,
 	    sata_scr_read(link, SCR_STATUS, &sstatus))
 		rc = -ERESTART;
 
-	if (try >= max_tries || rc == -ENODEV) {
+	if (try >= max_tries) {
 		/*
 		 * Thaw host port even if reset failed, so that the port
 		 * can be retried on the next phy event.  This risks
@@ -3814,7 +3797,6 @@ static int ata_eh_handle_dev_fail(struct ata_device *dev, int err)
  */
 int ata_eh_recover(struct ata_port *ap, struct ata_reset_operations *reset_ops,
 		   struct ata_link **r_failed_link)
-	__must_hold(&ap->host->eh_mutex)
 {
 	struct ata_link *link;
 	struct ata_device *dev;
@@ -3881,8 +3863,7 @@ int ata_eh_recover(struct ata_port *ap, struct ata_reset_operations *reset_ops,
 		if (!(ehc->i.action & ATA_EH_RESET))
 			continue;
 
-		rc = ata_eh_reset(ap, link, ata_link_nr_vacant(link),
-				  reset_ops);
+		rc = ata_eh_reset(link, ata_link_nr_vacant(link), reset_ops);
 		if (rc) {
 			ata_link_err(link, "reset failed, giving up\n");
 			goto out;
@@ -4112,7 +4093,6 @@ void ata_eh_finish(struct ata_port *ap)
  *	Kernel thread context (may sleep).
  */
 void ata_std_error_handler(struct ata_port *ap)
-	__must_hold(&ap->host->eh_mutex)
 {
 	struct ata_reset_operations *reset_ops = &ap->ops->reset;
 	struct ata_link *link = &ap->link;

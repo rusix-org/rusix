@@ -871,14 +871,14 @@ static int atmel_spi_next_xfer_dma_submit(struct spi_controller *host,
 	rxdesc->callback_param = host;
 
 	/* Submit and fire RX and TX with TX last so we're ready to read! */
-	cookie = dmaengine_submit(rxdesc);
+	cookie = rxdesc->tx_submit(rxdesc);
 	if (dma_submit_error(cookie))
 		goto err_dma;
-	cookie = dmaengine_submit(txdesc);
+	cookie = txdesc->tx_submit(txdesc);
 	if (dma_submit_error(cookie))
 		goto err_dma;
-	dma_async_issue_pending(rxchan);
-	dma_async_issue_pending(txchan);
+	rxchan->device->device_issue_pending(rxchan);
+	txchan->device->device_issue_pending(txchan);
 
 	return 0;
 
@@ -1340,7 +1340,7 @@ static int atmel_spi_setup(struct spi_device *spi)
 
 	asd = spi->controller_state;
 	if (!asd) {
-		asd = kzalloc_obj(struct atmel_spi_device);
+		asd = kzalloc(sizeof(struct atmel_spi_device), GFP_KERNEL);
 		if (!asd)
 			return -ENOMEM;
 
@@ -1568,7 +1568,7 @@ static int atmel_spi_probe(struct platform_device *pdev)
 		return PTR_ERR(clk);
 
 	/* setup spi core then atmel-specific driver state */
-	host = devm_spi_alloc_host(&pdev->dev, sizeof(*as));
+	host = spi_alloc_host(&pdev->dev, sizeof(*as));
 	if (!host)
 		return -ENOMEM;
 
@@ -1576,6 +1576,7 @@ static int atmel_spi_probe(struct platform_device *pdev)
 	host->use_gpio_descriptors = true;
 	host->mode_bits = SPI_CPOL | SPI_CPHA | SPI_CS_HIGH;
 	host->bits_per_word_mask = SPI_BPW_RANGE_MASK(8, 16);
+	host->dev.of_node = pdev->dev.of_node;
 	host->bus_num = pdev->id;
 	host->num_chipselect = 4;
 	host->setup = atmel_spi_setup;
@@ -1595,15 +1596,18 @@ static int atmel_spi_probe(struct platform_device *pdev)
 
 	as->pdev = pdev;
 	as->regs = devm_platform_get_and_ioremap_resource(pdev, 0, &regs);
-	if (IS_ERR(as->regs))
-		return PTR_ERR(as->regs);
-
+	if (IS_ERR(as->regs)) {
+		ret = PTR_ERR(as->regs);
+		goto out_unmap_regs;
+	}
 	as->phybase = regs->start;
 	as->irq = irq;
 	as->clk = clk;
 	as->gclk = devm_clk_get_optional(&pdev->dev, "spi_gclk");
-	if (IS_ERR(as->gclk))
-		return PTR_ERR(as->gclk);
+	if (IS_ERR(as->gclk)) {
+		ret = PTR_ERR(as->gclk);
+		goto out_unmap_regs;
+	}
 
 	init_completion(&as->xfer_completion);
 
@@ -1613,10 +1617,11 @@ static int atmel_spi_probe(struct platform_device *pdev)
 	as->use_pdc = false;
 	if (as->caps.has_dma_support) {
 		ret = atmel_spi_configure_dma(host, as);
-		if (ret == 0)
+		if (ret == 0) {
 			as->use_dma = true;
-		else if (ret == -EPROBE_DEFER)
-			return ret;
+		} else if (ret == -EPROBE_DEFER) {
+			goto out_unmap_regs;
+		}
 	} else if (as->caps.has_pdc_support) {
 		as->use_pdc = true;
 	}
@@ -1632,12 +1637,12 @@ static int atmel_spi_probe(struct platform_device *pdev)
 					0, dev_name(&pdev->dev), host);
 	}
 	if (ret)
-		return ret;
+		goto out_unmap_regs;
 
 	/* Initialize the hardware */
 	ret = clk_prepare_enable(clk);
 	if (ret)
-		return ret;
+		goto out_free_irq;
 
 	/*
 	 * In cases where the peripheral clock is higher,the FLEX_SPI_CSRx.SCBR
@@ -1686,7 +1691,9 @@ out_free_dma:
 		clk_disable_unprepare(as->gclk);
 out_disable_clk:
 	clk_disable_unprepare(clk);
-
+out_free_irq:
+out_unmap_regs:
+	spi_controller_put(host);
 	return ret;
 }
 
@@ -1694,6 +1701,8 @@ static void atmel_spi_remove(struct platform_device *pdev)
 {
 	struct spi_controller	*host = platform_get_drvdata(pdev);
 	struct atmel_spi	*as = spi_controller_get_devdata(host);
+
+	spi_controller_get(host);
 
 	pm_runtime_get_sync(&pdev->dev);
 
@@ -1715,6 +1724,8 @@ static void atmel_spi_remove(struct platform_device *pdev)
 
 	pm_runtime_put_noidle(&pdev->dev);
 	pm_runtime_disable(&pdev->dev);
+
+	spi_controller_put(host);
 }
 
 static int atmel_spi_runtime_suspend(struct device *dev)

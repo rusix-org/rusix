@@ -13,6 +13,7 @@
 #include <linux/io.h>
 #include <linux/kernel.h>
 #include <linux/module.h>
+#include <linux/mod_devicetable.h>
 #include <linux/platform_device.h>
 #include <linux/property.h>
 
@@ -508,7 +509,8 @@ static int axi_fan_control_probe(struct platform_device *pdev)
 					IRQF_ONESHOT | IRQF_TRIGGER_HIGH,
 					NULL, ctl);
 	if (ret)
-		return ret;
+		return dev_err_probe(&pdev->dev, ret,
+				     "failed to request an irq\n");
 
 	return 0;
 }

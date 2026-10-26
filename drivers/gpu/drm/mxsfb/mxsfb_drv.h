@@ -46,8 +46,6 @@ struct mxsfb_drm_private {
 	struct drm_connector		*connector;
 	struct drm_bridge		*bridge;
 
-	u32				bus_format;
-
 	bool				crc_active;
 };
 

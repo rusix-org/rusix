@@ -22,7 +22,8 @@
 
 
 static int ext4_da_convert_inline_data_to_extent(struct address_space *mapping,
-						 struct inode *inode);
+						 struct inode *inode,
+						 void **fsdata);
 
 static int ext4_get_inline_size(struct inode *inode)
 {
@@ -118,7 +119,7 @@ int ext4_get_max_inline_size(struct inode *inode)
 	error = ext4_get_inode_loc(inode, &iloc);
 	if (error) {
 		ext4_error_inode_err(inode, __func__, __LINE__, 0, -error,
-				     "can't get inode location %llu",
+				     "can't get inode location %lu",
 				     inode->i_ino);
 		return 0;
 	}
@@ -511,7 +512,7 @@ static int ext4_read_inline_folio(struct inode *inode, struct folio *folio)
 	BUG_ON(folio->index);
 
 	if (!EXT4_I(inode)->i_inline_off) {
-		ext4_warning(inode->i_sb, "inode %llu doesn't have inline data.",
+		ext4_warning(inode->i_sb, "inode %lu doesn't have inline data.",
 			     inode->i_ino);
 		goto out;
 	}
@@ -696,7 +697,7 @@ int ext4_generic_write_inline_data(struct address_space *mapping,
 					  struct inode *inode,
 					  loff_t pos, unsigned len,
 					  struct folio **foliop,
-					  bool da)
+					  void **fsdata, bool da)
 {
 	int ret;
 	handle_t *handle;
@@ -727,7 +728,7 @@ retry_journal:
 			return ext4_convert_inline_data_to_extent(mapping, inode);
 		}
 
-		ret = ext4_da_convert_inline_data_to_extent(mapping, inode);
+		ret = ext4_da_convert_inline_data_to_extent(mapping, inode, fsdata);
 		if (ret == -ENOSPC &&
 		    ext4_should_retry_alloc(inode->i_sb, &retries))
 			goto retry_journal;
@@ -787,7 +788,7 @@ int ext4_try_to_write_inline_data(struct address_space *mapping,
 	if (pos + len > ext4_get_max_inline_size(inode))
 		return ext4_convert_inline_data_to_extent(mapping, inode);
 	return ext4_generic_write_inline_data(mapping, inode, pos, len,
-					      foliop, false);
+					      foliop, NULL, false);
 }
 
 int ext4_write_inline_data_end(struct inode *inode, loff_t pos, unsigned len,
@@ -894,7 +895,8 @@ out:
  *    need to start the journal since the file's metadata isn't changed now.
  */
 static int ext4_da_convert_inline_data_to_extent(struct address_space *mapping,
-						 struct inode *inode)
+						 struct inode *inode,
+						 void **fsdata)
 {
 	int ret = 0, inline_size;
 	struct folio *folio;
@@ -932,6 +934,7 @@ static int ext4_da_convert_inline_data_to_extent(struct address_space *mapping,
 	folio_mark_dirty(folio);
 	folio_mark_uptodate(folio);
 	ext4_clear_inode_state(inode, EXT4_STATE_MAY_INLINE_DATA);
+	*fsdata = (void *)CONVERT_INLINE_DATA;
 
 out:
 	up_read(&EXT4_I(inode)->xattr_sem);
@@ -951,7 +954,7 @@ void ext4_show_inline_dir(struct inode *dir, struct buffer_head *bh,
 	struct ext4_dir_entry_2 *de = inline_start;
 	void *dlimit = inline_start + inline_size;
 
-	trace_printk("inode %llu\n", dir->i_ino);
+	trace_printk("inode %lu\n", dir->i_ino);
 	offset = 0;
 	while ((void *)de < dlimit) {
 		de_len = ext4_rec_len_from_disk(de->rec_len, inline_size);
@@ -1088,7 +1091,7 @@ static void ext4_restore_inline_data(handle_t *handle, struct inode *inode,
 	ret = ext4_create_inline_data(handle, inode, inline_size);
 	if (ret) {
 		ext4_msg(inode->i_sb, KERN_EMERG,
-			"error restoring inline_data for inode -- potential data loss! (inode %llu, error %d)",
+			"error restoring inline_data for inode -- potential data loss! (inode %lu, error %d)",
 			inode->i_ino, ret);
 		return;
 	}
@@ -1766,7 +1769,7 @@ bool empty_inline_dir(struct inode *dir, int *has_inline_data)
 	err = ext4_get_inode_loc(dir, &iloc);
 	if (err) {
 		EXT4_ERROR_INODE_ERR(dir, -err,
-				     "error %d getting inode %llu block",
+				     "error %d getting inode %lu block",
 				     err, dir->i_ino);
 		return false;
 	}
@@ -1781,7 +1784,7 @@ bool empty_inline_dir(struct inode *dir, int *has_inline_data)
 	de = (struct ext4_dir_entry_2 *)ext4_raw_inode(&iloc)->i_block;
 	if (!le32_to_cpu(de->inode)) {
 		ext4_warning(dir->i_sb,
-			     "bad inline directory (dir #%llu) - no `..'",
+			     "bad inline directory (dir #%lu) - no `..'",
 			     dir->i_ino);
 		goto out;
 	}
@@ -1795,7 +1798,7 @@ bool empty_inline_dir(struct inode *dir, int *has_inline_data)
 					 iloc.bh, inline_pos,
 					 inline_size, offset)) {
 			ext4_warning(dir->i_sb,
-				     "bad inline directory (dir #%llu) - "
+				     "bad inline directory (dir #%lu) - "
 				     "inode %u, rec_len %u, name_len %d"
 				     "inline size %d",
 				     dir->i_ino, le32_to_cpu(de->inode),

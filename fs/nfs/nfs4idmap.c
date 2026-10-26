@@ -306,12 +306,15 @@ static ssize_t nfs_idmap_get_key(const char *name, size_t namelen,
 				 const char *type, void *data,
 				 size_t data_size, struct idmap *idmap)
 {
+	const struct cred *saved_cred;
 	struct key *rkey;
 	const struct user_key_payload *payload;
 	ssize_t ret;
 
-	scoped_with_creds(id_resolver_cache)
-		rkey = nfs_idmap_request_key(name, namelen, type, idmap);
+	saved_cred = override_creds(id_resolver_cache);
+	rkey = nfs_idmap_request_key(name, namelen, type, idmap);
+	revert_creds(saved_cred);
+
 	if (IS_ERR(rkey)) {
 		ret = PTR_ERR(rkey);
 		goto out;
@@ -445,7 +448,7 @@ nfs_idmap_new(struct nfs_client *clp)
 	struct rpc_pipe *pipe;
 	int error;
 
-	idmap = kzalloc_obj(*idmap);
+	idmap = kzalloc(sizeof(*idmap), GFP_KERNEL);
 	if (idmap == NULL)
 		return -ENOMEM;
 
@@ -579,7 +582,7 @@ static int nfs_idmap_legacy_upcall(struct key *authkey, void *aux)
 
 	/* msg and im are freed in idmap_pipe_destroy_msg */
 	ret = -ENOMEM;
-	data = kzalloc_obj(*data);
+	data = kzalloc(sizeof(*data), GFP_KERNEL);
 	if (!data)
 		goto out1;
 

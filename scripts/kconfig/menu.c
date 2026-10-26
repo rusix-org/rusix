@@ -127,18 +127,8 @@ static struct expr *rewrite_m(struct expr *e)
 	return e;
 }
 
-void menu_add_dep(struct expr *dep, struct expr *cond)
+void menu_add_dep(struct expr *dep)
 {
-	if (cond) {
-		/*
-		 * We have "depends on X if Y" and we want:
-		 *	Y != n --> X
-		 *	Y == n --> y
-		 * That simplifies to: (X || (Y == n))
-		 */
-		dep = expr_alloc_or(dep,
-				expr_trans_compare(cond, E_EQUAL, &symbol_no));
-	}
 	current_entry->dep = expr_alloc_and(current_entry->dep, dep);
 }
 
@@ -234,42 +224,17 @@ void menu_add_symbol(enum prop_type type, struct symbol *sym, struct expr *dep)
 	menu_add_prop(type, expr_alloc_symbol(sym), dep);
 }
 
-/* Validate the sym2 value for numeric sym. */
-static int menu_validate_number(struct symbol *sym, struct symbol *sym2,
-				const struct property *prop)
+static int menu_validate_number(struct symbol *sym, struct symbol *sym2)
 {
-	if (sym->type != S_INT && sym->type != S_HEX)
-		return 0;
-
-	if (sym2->type == sym->type)
-		return 0;
-
-	if (sym2->type != S_UNKNOWN ||
-		!sym_string_valid(sym, sym2->name)) {
-		fprintf(stderr, "%s:%d: error: '%s' is an invalid value for '%s'\n",
-			prop->filename, prop->lineno, sym2->name,
-			sym_type_name(sym->type));
-		return 1;
-	}
-
-	if (!sym_string_check_bounds(sym, sym2->name)) {
-		fprintf(stderr,
-			"%s:%d: error: %s constant '%s' is outside the 64-bit %s bounds\n",
-			prop->filename, prop->lineno, sym_type_name(sym->type),
-			sym2->name, sym->type == S_INT ? "signed" : "unsigned");
-
-		return 1;
-	}
-
-	return 0;
+	return sym2->type == S_INT || sym2->type == S_HEX ||
+	       (sym2->type == S_UNKNOWN && sym_string_valid(sym, sym2->name));
 }
 
-static int sym_check_prop(struct symbol *sym)
+static void sym_check_prop(struct symbol *sym)
 {
 	struct property *prop;
 	struct symbol *sym2;
 	char *use;
-	int errors = 0;
 
 	for (prop = sym->prop; prop; prop = prop->next) {
 		switch (prop->type) {
@@ -283,7 +248,10 @@ static int sym_check_prop(struct symbol *sym)
 				break;
 			sym2 = prop_get_symbol(prop);
 			if (sym->type == S_HEX || sym->type == S_INT) {
-				errors += menu_validate_number(sym, sym2, prop);
+				if (!menu_validate_number(sym, sym2))
+					prop_warn(prop,
+					    "'%s': number is invalid",
+					    sym->name);
 			}
 			if (sym_is_choice(sym)) {
 				struct menu *choice = sym_get_choice_menu(sym2);
@@ -309,33 +277,27 @@ static int sym_check_prop(struct symbol *sym)
 				    "'%s' has wrong type. '%s' only "
 				    "accept arguments of bool and "
 				    "tristate type", sym2->name, use);
-			if (sym_is_choice_value(sym2))
-				prop_warn(prop,
-					  "config symbol '%s' uses %s for '%s', but '%s' is a choice value",
-					  sym->name, use, sym2->name, sym2->name);
 			break;
 		case P_RANGE:
 			if (sym->type != S_INT && sym->type != S_HEX)
 				prop_warn(prop, "range is only allowed "
 						"for int or hex symbols");
-			errors += menu_validate_number(sym, prop->expr->left.sym, prop);
-			errors += menu_validate_number(sym, prop->expr->right.sym, prop);
+			if (!menu_validate_number(sym, prop->expr->left.sym) ||
+			    !menu_validate_number(sym, prop->expr->right.sym))
+				prop_warn(prop, "range is invalid");
 			break;
 		default:
 			;
 		}
 	}
-
-	return errors;
 }
 
-static int _menu_finalize(struct menu *parent, bool inside_choice)
+static void _menu_finalize(struct menu *parent, bool inside_choice)
 {
 	struct menu *menu, *last_menu;
 	struct symbol *sym;
 	struct property *prop;
 	struct expr *basedep, *dep, *dep2;
-	int errors = 0;
 
 	sym = parent->sym;
 	if (parent->list) {
@@ -421,7 +383,7 @@ static int _menu_finalize(struct menu *parent, bool inside_choice)
 		 * moving on
 		 */
 		for (menu = parent->list; menu; menu = menu->next)
-			errors += _menu_finalize(menu, sym && sym_is_choice(sym));
+			_menu_finalize(menu, sym && sym_is_choice(sym));
 	} else if (!inside_choice && sym) {
 		/*
 		 * Automatic submenu creation. If sym is a symbol and A, B, C,
@@ -456,19 +418,9 @@ static int _menu_finalize(struct menu *parent, bool inside_choice)
 			if (!expr_contains_symbol(dep, sym))
 				/* No dependency, quit */
 				break;
-			/*
-			 * Note that it's actually possible to depend on both
-			 * 'SYM!=y' and 'SYM=y', so we need to first check if
-			 * it's a positive dependency before checking if it's
-			 * a negative dependency. See example:
-			 * 'SFC && MTD && !(SFC=y && MTD=m)'
-			 */
 			if (expr_depends_symbol(dep, sym))
 				/* Absolute dependency, put in submenu */
 				goto next;
-			if (expr_contains_symbol_negated(dep, sym))
-				/* Negative dependency, quit */
-				break;
 
 			/*
 			 * Also consider it a dependency on sym if our
@@ -489,7 +441,7 @@ static int _menu_finalize(struct menu *parent, bool inside_choice)
 			}
 			/* Superset, put in submenu */
 		next:
-			errors += _menu_finalize(menu, false);
+			_menu_finalize(menu, false);
 			menu->parent = parent;
 			last_menu = menu;
 		}
@@ -547,16 +499,14 @@ static int _menu_finalize(struct menu *parent, bool inside_choice)
 			menu_warn(parent, "config symbol defined without type");
 
 		/* Check properties connected to this symbol */
-		errors += sym_check_prop(sym);
+		sym_check_prop(sym);
 		sym->flags |= SYMBOL_WARNED;
 	}
-
-	return errors;
 }
 
-int menu_finalize(void)
+void menu_finalize(void)
 {
-	return _menu_finalize(&rootmenu, false);
+	_menu_finalize(&rootmenu, false);
 }
 
 bool menu_has_prompt(const struct menu *menu)

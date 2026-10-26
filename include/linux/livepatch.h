@@ -13,7 +13,6 @@
 #include <linux/ftrace.h>
 #include <linux/completion.h>
 #include <linux/list.h>
-#include <linux/livepatch_external.h>
 #include <linux/livepatch_sched.h>
 
 #if IS_ENABLED(CONFIG_LIVEPATCH)
@@ -33,7 +32,6 @@
  * @kobj:	kobject for sysfs resources
  * @node:	list node for klp_object func_list
  * @stack_node:	list node for klp_ops func_stack list
- * @obj:	back pointer to the owning object
  * @old_size:	size of the old function
  * @new_size:	size of the new function
  * @nop:        temporary patch to use the original code again; dyn. allocated
@@ -73,11 +71,34 @@ struct klp_func {
 	struct kobject kobj;
 	struct list_head node;
 	struct list_head stack_node;
-	struct klp_object *obj;
 	unsigned long old_size, new_size;
 	bool nop;
 	bool patched;
 	bool transition;
+};
+
+struct klp_object;
+
+/**
+ * struct klp_callbacks - pre/post live-(un)patch callback structure
+ * @pre_patch:		executed before code patching
+ * @post_patch:		executed after code patching
+ * @pre_unpatch:	executed before code unpatching
+ * @post_unpatch:	executed after code unpatching
+ * @post_unpatch_enabled:	flag indicating if post-unpatch callback
+ * 				should run
+ *
+ * All callbacks are optional.  Only the pre-patch callback, if provided,
+ * will be unconditionally executed.  If the parent klp_object fails to
+ * patch for any reason, including a non-zero error status returned from
+ * the pre-patch callback, no further callbacks will be executed.
+ */
+struct klp_callbacks {
+	int (*pre_patch)(struct klp_object *obj);
+	void (*post_patch)(struct klp_object *obj);
+	void (*pre_unpatch)(struct klp_object *obj);
+	void (*post_unpatch)(struct klp_object *obj);
+	bool post_unpatch_enabled;
 };
 
 /**
@@ -88,7 +109,6 @@ struct klp_func {
  * @kobj:	kobject for sysfs resources
  * @func_list:	dynamic list of the function entries
  * @node:	list node for klp_patch obj_list
- * @patch:	back pointer to the owning patch
  * @mod:	kernel module associated with the patched object
  *		(NULL for vmlinux)
  * @dynamic:    temporary object for nop functions; dynamically allocated
@@ -104,7 +124,6 @@ struct klp_object {
 	struct kobject kobj;
 	struct list_head func_list;
 	struct list_head node;
-	struct klp_patch *patch;
 	struct module *mod;
 	bool dynamic;
 	bool patched;
@@ -178,9 +197,6 @@ int klp_enable_patch(struct klp_patch *);
 /* Called from the module loader during module coming/going states */
 int klp_module_coming(struct module *mod);
 void klp_module_going(struct module *mod);
-
-void *klp_find_section_by_name(const struct module *mod, const char *name,
-			       size_t *sec_size);
 
 void klp_copy_process(struct task_struct *child);
 void klp_update_patch_state(struct task_struct *task);

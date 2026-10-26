@@ -612,10 +612,9 @@ static int __init tomoyo_init(void)
 }
 
 DEFINE_LSM(tomoyo) = {
-	.id = &tomoyo_lsmid,
+	.name = "tomoyo",
 	.enabled = &tomoyo_enabled,
 	.flags = LSM_FLAG_LEGACY_MAJOR,
 	.blobs = &tomoyo_blob_sizes,
 	.init = tomoyo_init,
-	.initcall_fs = tomoyo_interface_init,
 };

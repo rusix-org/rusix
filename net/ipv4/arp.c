@@ -79,7 +79,6 @@
 #include <linux/socket.h>
 #include <linux/sockios.h>
 #include <linux/errno.h>
-#include <linux/hex.h>
 #include <linux/in.h>
 #include <linux/mm.h>
 #include <linux/inet.h>
@@ -109,6 +108,7 @@
 #include <net/sock.h>
 #include <net/arp.h>
 #include <net/ax25.h>
+#include <net/netrom.h>
 #include <net/dst_metadata.h>
 #include <net/ip_tunnels.h>
 
@@ -149,7 +149,7 @@ static const struct neigh_ops arp_direct_ops = {
 	.connected_output =	neigh_direct_output,
 };
 
-static struct neigh_table arp_tbl = {
+struct neigh_table arp_tbl = {
 	.family		= AF_INET,
 	.key_len	= 4,
 	.protocol	= cpu_to_be16(ETH_P_IP),
@@ -182,6 +182,7 @@ static struct neigh_table arp_tbl = {
 	.gc_thresh2	= 512,
 	.gc_thresh3	= 1024,
 };
+EXPORT_SYMBOL(arp_tbl);
 
 int arp_mc_map(__be32 addr, u8 *haddr, struct net_device *dev, int dir)
 {
@@ -221,18 +222,14 @@ static bool arp_key_eq(const struct neighbour *neigh, const void *pkey)
 
 static int arp_constructor(struct neighbour *neigh)
 {
-	struct net_device *dev = neigh->dev;
-	struct net *net = dev_net(dev);
-	u32 inaddr_any = INADDR_ANY;
-	struct neigh_parms *parms;
-	struct in_device *in_dev;
-	struct neigh_table *tbl;
 	__be32 addr;
-
-	tbl = arp_table(net);
+	struct net_device *dev = neigh->dev;
+	struct in_device *in_dev;
+	struct neigh_parms *parms;
+	u32 inaddr_any = INADDR_ANY;
 
 	if (dev->flags & (IFF_LOOPBACK | IFF_POINTOPOINT))
-		memcpy(neigh->primary_key, &inaddr_any, tbl->key_len);
+		memcpy(neigh->primary_key, &inaddr_any, arp_tbl.key_len);
 
 	addr = *(__be32 *)neigh->primary_key;
 	rcu_read_lock();
@@ -242,7 +239,7 @@ static int arp_constructor(struct neighbour *neigh)
 		return -EINVAL;
 	}
 
-	neigh->type = inet_addr_type_dev_table(net, dev, addr);
+	neigh->type = inet_addr_type_dev_table(dev_net(dev), dev, addr);
 
 	parms = in_dev->arp_parms;
 	__neigh_parms_put(neigh->parms);
@@ -704,24 +701,24 @@ static bool arp_is_garp(struct net *net, struct net_device *dev,
 
 static int arp_process(struct net *net, struct sock *sk, struct sk_buff *skb)
 {
-	struct neigh_table *tbl = arp_table(net);
-	struct dst_entry *reply_dst = NULL;
 	struct net_device *dev = skb->dev;
-	unsigned char *sha, *tha = NULL;
-	struct in_device *in_dev;
-	u16 dev_type = dev->type;
-	unsigned char *arp_ptr;
-	bool is_garp = false;
-	struct neighbour *n;
+	struct in_device *in_dev = __in_dev_get_rcu(dev);
 	struct arphdr *arp;
+	unsigned char *arp_ptr;
 	struct rtable *rt;
+	unsigned char *sha;
+	unsigned char *tha = NULL;
 	__be32 sip, tip;
+	u16 dev_type = dev->type;
 	int addr_type;
+	struct neighbour *n;
+	struct dst_entry *reply_dst = NULL;
+	bool is_garp = false;
 
 	/* arp_rcv below verifies the ARP header and verifies the device
 	 * is ARP'able.
 	 */
-	in_dev = __in_dev_get_rcu(dev);
+
 	if (!in_dev)
 		goto out_free_skb;
 
@@ -853,7 +850,7 @@ static int arp_process(struct net *net, struct sock *sk, struct sk_buff *skb)
 			if (!dont_send && IN_DEV_ARPFILTER(in_dev))
 				dont_send = arp_filter(sip, tip, dev);
 			if (!dont_send) {
-				n = neigh_event_ns(tbl, sha, &sip, dev);
+				n = neigh_event_ns(&arp_tbl, sha, &sip, dev);
 				if (n) {
 					arp_send_dst(ARPOP_REPLY, ETH_P_ARP,
 						     sip, dev, tip, sha,
@@ -868,8 +865,8 @@ static int arp_process(struct net *net, struct sock *sk, struct sk_buff *skb)
 			    (arp_fwd_proxy(in_dev, dev, rt) ||
 			     arp_fwd_pvlan(in_dev, dev, rt, sip, tip) ||
 			     (rt->dst.dev != dev &&
-			      pneigh_lookup(tbl, &tip, dev)))) {
-				n = neigh_event_ns(tbl, sha, &sip, dev);
+			      pneigh_lookup(&arp_tbl, net, &tip, dev)))) {
+				n = neigh_event_ns(&arp_tbl, sha, &sip, dev);
 				if (n)
 					neigh_release(n);
 
@@ -881,7 +878,7 @@ static int arp_process(struct net *net, struct sock *sk, struct sk_buff *skb)
 						     dev->dev_addr, sha,
 						     reply_dst);
 				} else {
-					pneigh_enqueue(tbl,
+					pneigh_enqueue(&arp_tbl,
 						       in_dev->arp_parms, skb);
 					goto out_free_dst;
 				}
@@ -892,7 +889,7 @@ static int arp_process(struct net *net, struct sock *sk, struct sk_buff *skb)
 
 	/* Update our ARP tables */
 
-	n = ipv4_neigh_lookup(dev, &sip);
+	n = __neigh_lookup(&arp_tbl, &sip, dev, 0);
 
 	addr_type = -1;
 	if (n || arp_accept(in_dev, sip)) {
@@ -911,14 +908,9 @@ static int arp_process(struct net *net, struct sock *sk, struct sk_buff *skb)
 		      (addr_type == RTN_UNICAST ||
 		       (addr_type < 0 &&
 			/* postpone calculation to as late as possible */
-			inet_addr_type_dev_table(net, dev, sip) == RTN_UNICAST))))) {
-			n = ipv4_neigh_lookup(dev, &sip);
-			if (!n) {
-				n = ipv4_neigh_create(dev, &sip);
-				if (IS_ERR(n))
-					n = NULL;
-			}
-		}
+			inet_addr_type_dev_table(net, dev, sip) ==
+				RTN_UNICAST)))))
+			n = __neigh_lookup(&arp_tbl, &sip, dev, 1);
 	}
 
 	if (n) {
@@ -1085,10 +1077,9 @@ static int arp_req_set_proxy(struct net *net, struct net_device *dev, int on)
 }
 
 static int arp_req_set_public(struct net *net, struct arpreq *r,
-			      struct net_device *dev)
+		struct net_device *dev)
 {
 	__be32 mask = ((struct sockaddr_in *)&r->arp_netmask)->sin_addr.s_addr;
-	struct neigh_table *tbl = arp_table(net);
 
 	if (!dev && (r->arp_flags & ATF_COM)) {
 		dev = dev_getbyhwaddr(net, r->arp_ha.sa_family,
@@ -1099,7 +1090,7 @@ static int arp_req_set_public(struct net *net, struct arpreq *r,
 	if (mask) {
 		__be32 ip = ((struct sockaddr_in *)&r->arp_pa)->sin_addr.s_addr;
 
-		return pneigh_create(tbl, &ip, dev, 0, 0, false);
+		return pneigh_create(&arp_tbl, net, &ip, dev, 0, 0, false);
 	}
 
 	return arp_req_set_proxy(net, dev, 1);
@@ -1142,9 +1133,7 @@ static int arp_req_set(struct net *net, struct arpreq *r)
 
 	ip = ((struct sockaddr_in *)&r->arp_pa)->sin_addr.s_addr;
 
-	neigh = ipv4_neigh_lookup(dev, &ip);
-	if (!neigh)
-		neigh = ipv4_neigh_create(dev, &ip);
+	neigh = __neigh_lookup_errno(&arp_tbl, &ip, dev);
 	err = PTR_ERR(neigh);
 	if (!IS_ERR(neigh)) {
 		unsigned int state = NUD_STALE;
@@ -1190,7 +1179,7 @@ static int arp_req_get(struct net *net, struct arpreq *r)
 	if (IS_ERR(dev))
 		return PTR_ERR(dev);
 
-	neigh = ipv4_neigh_lookup(dev, &ip);
+	neigh = neigh_lookup(&arp_tbl, &ip, dev);
 	if (!neigh)
 		return -ENXIO;
 
@@ -1201,7 +1190,7 @@ static int arp_req_get(struct net *net, struct arpreq *r)
 
 	read_lock_bh(&neigh->lock);
 	memcpy(r->arp_ha.sa_data, neigh->ha,
-	       min(dev->addr_len, sizeof(r->arp_ha.sa_data)));
+	       min(dev->addr_len, sizeof(r->arp_ha.sa_data_min)));
 	r->arp_flags = arp_state_to_flags(neigh);
 	read_unlock_bh(&neigh->lock);
 
@@ -1215,13 +1204,11 @@ static int arp_req_get(struct net *net, struct arpreq *r)
 
 int arp_invalidate(struct net_device *dev, __be32 ip, bool force)
 {
-	struct neighbour *neigh;
+	struct neighbour *neigh = neigh_lookup(&arp_tbl, &ip, dev);
 	int err = -ENXIO;
+	struct neigh_table *tbl = &arp_tbl;
 
-	neigh = ipv4_neigh_lookup(dev, &ip);
 	if (neigh) {
-		struct neigh_table *tbl = neigh->tbl;
-
 		if ((READ_ONCE(neigh->nud_state) & NUD_VALID) && !force) {
 			neigh_release(neigh);
 			return 0;
@@ -1231,25 +1218,24 @@ int arp_invalidate(struct net_device *dev, __be32 ip, bool force)
 			err = neigh_update(neigh, NULL, NUD_FAILED,
 					   NEIGH_UPDATE_F_OVERRIDE|
 					   NEIGH_UPDATE_F_ADMIN, 0);
-		spin_lock_bh(&tbl->lock);
+		write_lock_bh(&tbl->lock);
 		neigh_release(neigh);
 		neigh_remove_one(neigh);
-		spin_unlock_bh(&tbl->lock);
+		write_unlock_bh(&tbl->lock);
 	}
 
 	return err;
 }
 
 static int arp_req_delete_public(struct net *net, struct arpreq *r,
-				 struct net_device *dev)
+		struct net_device *dev)
 {
 	__be32 mask = ((struct sockaddr_in *)&r->arp_netmask)->sin_addr.s_addr;
-	struct neigh_table *tbl = arp_table(net);
 
 	if (mask) {
 		__be32 ip = ((struct sockaddr_in *)&r->arp_pa)->sin_addr.s_addr;
 
-		return pneigh_delete(tbl, &ip, dev);
+		return pneigh_delete(&arp_tbl, net, &ip, dev);
 	}
 
 	return arp_req_set_proxy(net, dev, 0);
@@ -1340,22 +1326,18 @@ static int arp_netdev_event(struct notifier_block *this, unsigned long event,
 {
 	struct net_device *dev = netdev_notifier_info_to_dev(ptr);
 	struct netdev_notifier_change_info *change_info;
-	struct net *net = dev_net(dev);
 	struct in_device *in_dev;
-	struct neigh_table *tbl;
 	bool evict_nocarrier;
-
-	tbl = arp_table(net);
 
 	switch (event) {
 	case NETDEV_CHANGEADDR:
-		neigh_changeaddr(tbl, dev);
-		rt_cache_flush(net);
+		neigh_changeaddr(&arp_tbl, dev);
+		rt_cache_flush(dev_net(dev));
 		break;
 	case NETDEV_CHANGE:
 		change_info = ptr;
 		if (change_info->flags_changed & IFF_NOARP)
-			neigh_changeaddr(tbl, dev);
+			neigh_changeaddr(&arp_tbl, dev);
 
 		in_dev = __in_dev_get_rtnl(dev);
 		if (!in_dev)
@@ -1364,7 +1346,7 @@ static int arp_netdev_event(struct notifier_block *this, unsigned long event,
 			evict_nocarrier = IN_DEV_ARP_EVICT_NOCARRIER(in_dev);
 
 		if (evict_nocarrier && !netif_carrier_ok(dev))
-			neigh_carrier_down(tbl, dev);
+			neigh_carrier_down(&arp_tbl, dev);
 		break;
 	default:
 		break;
@@ -1383,9 +1365,7 @@ static struct notifier_block arp_netdev_notifier = {
  */
 void arp_ifdown(struct net_device *dev)
 {
-	struct neigh_table *tbl = arp_table(dev_net(dev));
-
-	neigh_ifdown(tbl, dev);
+	neigh_ifdown(&arp_tbl, dev);
 }
 
 
@@ -1500,12 +1480,10 @@ static int arp_seq_show(struct seq_file *seq, void *v)
 
 static void *arp_seq_start(struct seq_file *seq, loff_t *pos)
 {
-	struct neigh_table *tbl = arp_table(seq_file_net(seq));
-
 	/* Don't want to confuse "arp -a" w/ magic entries,
 	 * so we tell the generic iterator to skip NUD_NOARP.
 	 */
-	return neigh_seq_start(seq, pos, tbl, NEIGH_SEQ_SKIP_NOARP);
+	return neigh_seq_start(seq, pos, &arp_tbl, NEIGH_SEQ_SKIP_NOARP);
 }
 
 static const struct seq_operations arp_seq_ops = {
@@ -1518,47 +1496,15 @@ static const struct seq_operations arp_seq_ops = {
 
 static int __net_init arp_net_init(struct net *net)
 {
-	int err;
-
-	err = neigh_table_register(net, &arp_tbl, NEIGH_ARP_TABLE);
-	if (err)
-		goto err;
-
-#ifdef CONFIG_PROC_FS
-#ifdef CONFIG_SYSCTL
-	err = neigh_sysctl_register(NULL, &arp_table(net)->parms, NULL);
-	if (err)
-		goto err_sysctl;
-#endif
-
 	if (!proc_create_net("arp", 0444, net->proc_net, &arp_seq_ops,
-			     sizeof(struct neigh_seq_state))) {
-		err = -ENOMEM;
-		goto err_proc_create;
-	}
-#endif
-
+			sizeof(struct neigh_seq_state)))
+		return -ENOMEM;
 	return 0;
-
-#ifdef CONFIG_PROC_FS
-err_proc_create:
-#ifdef CONFIG_SYSCTL
-	neigh_sysctl_unregister(&arp_table(net)->parms);
-err_sysctl:
-#endif
-	neigh_table_unregister(net, NEIGH_ARP_TABLE);
-#endif
-err:
-	return err;
 }
 
 static void __net_exit arp_net_exit(struct net *net)
 {
 	remove_proc_entry("arp", net->proc_net);
-#ifdef CONFIG_SYSCTL
-	neigh_sysctl_unregister(&arp_table(net)->parms);
-#endif
-	neigh_table_unregister(net, NEIGH_ARP_TABLE);
 }
 
 static struct pernet_operations arp_net_ops = {
@@ -1568,9 +1514,12 @@ static struct pernet_operations arp_net_ops = {
 
 void __init arp_init(void)
 {
-	if (register_pernet_subsys(&arp_net_ops))
-		panic("Cannot allocate arp table\n");
+	neigh_table_init(NEIGH_ARP_TABLE, &arp_tbl);
 
 	dev_add_pack(&arp_packet_type);
+	register_pernet_subsys(&arp_net_ops);
+#ifdef CONFIG_SYSCTL
+	neigh_sysctl_register(NULL, &arp_tbl.parms, NULL);
+#endif
 	register_netdevice_notifier(&arp_netdev_notifier);
 }

@@ -66,16 +66,14 @@ void ext4_mark_bitmap_end(int start_bit, int end_bit, char *bitmap)
 		memset(bitmap + (i >> 3), 0xff, (end_bit - i) >> 3);
 }
 
-void ext4_end_bitmap_read(struct bio *bio)
+void ext4_end_bitmap_read(struct buffer_head *bh, int uptodate)
 {
-	struct buffer_head *bh;
-	bool uptodate = bio_endio_bh(bio, &bh);
-
 	if (uptodate) {
 		set_buffer_uptodate(bh);
 		set_bitmap_uptodate(bh);
 	}
 	unlock_buffer(bh);
+	put_bh(bh);
 }
 
 static int ext4_validate_inode_bitmap(struct super_block *sb,
@@ -254,14 +252,14 @@ void ext4_free_inode(handle_t *handle, struct inode *inode)
 		       "nonexistent device\n", __func__, __LINE__);
 		return;
 	}
-	if (icount_read_once(inode) > 1) {
-		ext4_msg(sb, KERN_ERR, "%s:%d: inode #%llu: count=%d",
+	if (icount_read(inode) > 1) {
+		ext4_msg(sb, KERN_ERR, "%s:%d: inode #%lu: count=%d",
 			 __func__, __LINE__, inode->i_ino,
-			 icount_read_once(inode));
+			 icount_read(inode));
 		return;
 	}
 	if (inode->i_nlink) {
-		ext4_msg(sb, KERN_ERR, "%s:%d: inode #%llu: nlink=%d\n",
+		ext4_msg(sb, KERN_ERR, "%s:%d: inode #%lu: nlink=%d\n",
 			 __func__, __LINE__, inode->i_ino, inode->i_nlink);
 		return;
 	}
@@ -633,7 +631,7 @@ static int find_group_other(struct super_block *sb, struct inode *parent,
 	 *
 	 * So add our directory's i_ino into the starting point for the hash.
 	 */
-	*group = (*group + (unsigned int)parent->i_ino) % ngroups;
+	*group = (*group + parent->i_ino) % ngroups;
 
 	/*
 	 * Use a quadratic hash to find a group with a free inode and some free
@@ -930,7 +928,7 @@ static int ext4_xattr_credits_for_new_inode(struct inode *dir, mode_t mode,
  * For other inodes, search forward from the parent directory's block
  * group to find a free inode.
  */
-struct inode *__ext4_new_inode(const struct mnt_idmap *idmap,
+struct inode *__ext4_new_inode(struct mnt_idmap *idmap,
 			       handle_t *handle, struct inode *dir,
 			       umode_t mode, const struct qstr *qstr,
 			       __u32 goal, uid_t *owner, __u32 i_flags,
@@ -1285,7 +1283,7 @@ got:
 		 * twice.
 		 */
 		err = -EIO;
-		ext4_error(sb, "failed to insert inode %llu: doubly allocated?",
+		ext4_error(sb, "failed to insert inode %lu: doubly allocated?",
 			   inode->i_ino);
 		ext4_mark_group_bitmap_corrupted(sb, group,
 					EXT4_GROUP_INFO_IBITMAP_CORRUPT);
@@ -1356,7 +1354,7 @@ got:
 		goto fail_free_drop;
 	}
 
-	ext4_debug("allocating inode %llu\n", inode->i_ino);
+	ext4_debug("allocating inode %lu\n", inode->i_ino);
 	trace_ext4_allocate_inode(inode, dir, mode);
 	brelse(inode_bitmap_bh);
 	return ret;

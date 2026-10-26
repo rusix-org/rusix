@@ -13,7 +13,6 @@
 #include <linux/err.h>
 #include <linux/init.h>
 #include <linux/io.h>
-#include <linux/module.h>
 #include <linux/of.h>
 #include <linux/platform_device.h>
 #include <linux/seq_file.h>
@@ -833,14 +832,18 @@ int tegra_pinctrl_probe(struct platform_device *pdev,
 	int fn, gn, gfn;
 	unsigned long backup_regs_size = 0;
 
-	pmx = devm_kzalloc(&pdev->dev,
-			struct_size(pmx, pingroup_configs, soc_data->ngroups), GFP_KERNEL);
+	pmx = devm_kzalloc(&pdev->dev, sizeof(*pmx), GFP_KERNEL);
 	if (!pmx)
 		return -ENOMEM;
 
 	pmx->dev = &pdev->dev;
 	pmx->soc = soc_data;
-	pmx->num_pingroup_configs = soc_data->ngroups;
+
+	pmx->pingroup_configs = devm_kcalloc(&pdev->dev,
+					     pmx->soc->ngroups, sizeof(*pmx->pingroup_configs),
+					     GFP_KERNEL);
+	if (!pmx->pingroup_configs)
+		return -ENOMEM;
 
 	/*
 	 * Each mux group will appear in 4 functions' list of groups.
@@ -937,4 +940,3 @@ int tegra_pinctrl_probe(struct platform_device *pdev,
 
 	return 0;
 }
-EXPORT_SYMBOL_GPL(tegra_pinctrl_probe);

@@ -792,8 +792,7 @@
 
 		clocks = <&isp 0>;
 		clock-names = "extclk";
-		assigned-clocks = <&isp 0>;
-		assigned-clock-rates = <9600000>;
+		clock-frequency = <9600000>;
 
 		reset-gpio = <&gpio4 6 GPIO_ACTIVE_HIGH>; /* 102 */
 

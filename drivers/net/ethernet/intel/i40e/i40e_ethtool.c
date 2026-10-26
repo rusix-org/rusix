@@ -2120,7 +2120,8 @@ static int i40e_set_ringparam(struct net_device *netdev,
 		netdev_info(netdev,
 			    "Changing Tx descriptor count from %d to %d.\n",
 			    vsi->tx_rings[0]->count, new_tx_count);
-		tx_rings = kzalloc_objs(struct i40e_ring, tx_alloc_queue_pairs);
+		tx_rings = kcalloc(tx_alloc_queue_pairs,
+				   sizeof(struct i40e_ring), GFP_KERNEL);
 		if (!tx_rings) {
 			err = -ENOMEM;
 			goto done;
@@ -2158,8 +2159,8 @@ static int i40e_set_ringparam(struct net_device *netdev,
 		netdev_info(netdev,
 			    "Changing Rx descriptor count from %d to %d\n",
 			    vsi->rx_rings[0]->count, new_rx_count);
-		rx_rings = kzalloc_objs(struct i40e_ring,
-					vsi->alloc_queue_pairs);
+		rx_rings = kcalloc(vsi->alloc_queue_pairs,
+				   sizeof(struct i40e_ring), GFP_KERNEL);
 		if (!rx_rings) {
 			err = -ENOMEM;
 			goto free_tx;
@@ -2614,7 +2615,7 @@ static u64 i40e_eeprom_test(struct net_device *netdev, u64 *data)
 	netif_info(pf, hw, netdev, "eeprom test\n");
 	*data = i40e_diag_eeprom_test(&pf->hw);
 
-	/* forcibly clear the NVM Update state machine */
+	/* forcebly clear the NVM Update state machine */
 	pf->hw.nvmupd_state = I40E_NVMUPD_STATE_INIT;
 
 	return *data;
@@ -3509,20 +3510,6 @@ no_input_set:
 }
 
 /**
- * i40e_get_rx_ring_count - get RX ring count
- * @netdev: network interface device structure
- *
- * Return: number of RX rings.
- **/
-static u32 i40e_get_rx_ring_count(struct net_device *netdev)
-{
-	struct i40e_netdev_priv *np = netdev_priv(netdev);
-	struct i40e_vsi *vsi = np->vsi;
-
-	return vsi->rss_size;
-}
-
-/**
  * i40e_get_rxnfc - command to get RX flow classification rules
  * @netdev: network interface device structure
  * @cmd: ethtool rxnfc command
@@ -3539,6 +3526,10 @@ static int i40e_get_rxnfc(struct net_device *netdev, struct ethtool_rxnfc *cmd,
 	int ret = -EOPNOTSUPP;
 
 	switch (cmd->cmd) {
+	case ETHTOOL_GRXRINGS:
+		cmd->data = vsi->rss_size;
+		ret = 0;
+		break;
 	case ETHTOOL_GRXCLSRLCNT:
 		cmd->rule_cnt = pf->fdir_pf_active_filters;
 		/* report total rule count */
@@ -3624,7 +3615,6 @@ static int i40e_set_rxfh_fields(struct net_device *netdev,
 		   ((u64)i40e_read_rx_ctl(hw, I40E_PFQF_HENA(1)) << 32);
 	DECLARE_BITMAP(flow_pctypes, FLOW_PCTYPES_SIZE);
 	u64 i_set, i_setc;
-	u8 flow_id;
 
 	bitmap_zero(flow_pctypes, FLOW_PCTYPES_SIZE);
 
@@ -3708,14 +3698,20 @@ static int i40e_set_rxfh_fields(struct net_device *netdev,
 		return -EINVAL;
 	}
 
-	for_each_set_bit(flow_id, flow_pctypes, FLOW_PCTYPES_SIZE) {
-		i_setc = (u64)i40e_read_rx_ctl(hw, I40E_GLQF_HASH_INSET(0, flow_id)) |
-			 ((u64)i40e_read_rx_ctl(hw, I40E_GLQF_HASH_INSET(1, flow_id)) << 32);
-		i_set = i40e_get_rss_hash_bits(&pf->hw, nfc, i_setc);
+	if (bitmap_weight(flow_pctypes, FLOW_PCTYPES_SIZE)) {
+		u8 flow_id;
 
-		i40e_write_rx_ctl(hw, I40E_GLQF_HASH_INSET(0, flow_id), (u32)i_set);
-		i40e_write_rx_ctl(hw, I40E_GLQF_HASH_INSET(1, flow_id), (u32)(i_set >> 32));
-		hena |= BIT_ULL(flow_id);
+		for_each_set_bit(flow_id, flow_pctypes, FLOW_PCTYPES_SIZE) {
+			i_setc = (u64)i40e_read_rx_ctl(hw, I40E_GLQF_HASH_INSET(0, flow_id)) |
+				 ((u64)i40e_read_rx_ctl(hw, I40E_GLQF_HASH_INSET(1, flow_id)) << 32);
+			i_set = i40e_get_rss_hash_bits(&pf->hw, nfc, i_setc);
+
+			i40e_write_rx_ctl(hw, I40E_GLQF_HASH_INSET(0, flow_id),
+					  (u32)i_set);
+			i40e_write_rx_ctl(hw, I40E_GLQF_HASH_INSET(1, flow_id),
+					  (u32)(i_set >> 32));
+			hena |= BIT_ULL(flow_id);
+		}
 	}
 
 	i40e_write_rx_ctl(hw, I40E_PFQF_HENA(0), (u32)hena);
@@ -3970,7 +3966,7 @@ static int i40e_add_flex_offset(struct list_head *flex_pit_list,
 {
 	struct i40e_flex_pit *new_pit, *entry;
 
-	new_pit = kzalloc_obj(*entry);
+	new_pit = kzalloc(sizeof(*entry), GFP_KERNEL);
 	if (!new_pit)
 		return -ENOMEM;
 
@@ -4861,7 +4857,7 @@ static int i40e_add_fdir_ethtool(struct i40e_vsi *vsi,
 		q_index = ring;
 	}
 
-	input = kzalloc_obj(*input);
+	input = kzalloc(sizeof(*input), GFP_KERNEL);
 
 	if (!input)
 		return -ENOMEM;
@@ -5263,7 +5259,10 @@ static int i40e_set_priv_flags(struct net_device *dev, u32 flags)
 		    test_bit(priv_flag->bitno, orig_flags) != new_val)
 			return -EOPNOTSUPP;
 
-		assign_bit(priv_flag->bitno, new_flags, new_val);
+		if (new_val)
+			set_bit(priv_flag->bitno, new_flags);
+		else
+			clear_bit(priv_flag->bitno, new_flags);
 	}
 
 	if (pf->hw.pf_id != 0)
@@ -5281,7 +5280,10 @@ static int i40e_set_priv_flags(struct net_device *dev, u32 flags)
 		    test_bit(priv_flag->bitno, orig_flags) != new_val)
 			return -EOPNOTSUPP;
 
-		assign_bit(priv_flag->bitno, new_flags, new_val);
+		if (new_val)
+			set_bit(priv_flag->bitno, new_flags);
+		else
+			clear_bit(priv_flag->bitno, new_flags);
 	}
 
 flags_complete:
@@ -5805,7 +5807,6 @@ static const struct ethtool_ops i40e_ethtool_ops = {
 	.set_msglevel		= i40e_set_msglevel,
 	.get_rxnfc		= i40e_get_rxnfc,
 	.set_rxnfc		= i40e_set_rxnfc,
-	.get_rx_ring_count	= i40e_get_rx_ring_count,
 	.self_test		= i40e_diag_test,
 	.get_strings		= i40e_get_strings,
 	.get_eee		= i40e_get_eee,

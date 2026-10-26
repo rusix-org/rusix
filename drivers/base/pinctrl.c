@@ -14,8 +14,6 @@
 #include <linux/pinctrl/consumer.h>
 #include <linux/slab.h>
 
-#include "base.h"
-
 /**
  * pinctrl_bind_pins() - called by the device core before probe
  * @dev: the device that is just about to probe
@@ -24,7 +22,7 @@ int pinctrl_bind_pins(struct device *dev)
 {
 	int ret;
 
-	if (dev_of_node_reused(dev))
+	if (dev->of_node_reused)
 		return 0;
 
 	dev->pins = devm_kzalloc(dev, sizeof(*(dev->pins)), GFP_KERNEL);

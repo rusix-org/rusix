@@ -438,7 +438,7 @@ struct irdma_cqp_request *irdma_alloc_and_get_cqp_request(struct irdma_cqp *cqp,
 	}
 	spin_unlock_irqrestore(&cqp->req_lock, flags);
 	if (!cqp_request) {
-		cqp_request = kzalloc_obj(*cqp_request, GFP_ATOMIC);
+		cqp_request = kzalloc(sizeof(*cqp_request), GFP_ATOMIC);
 		if (cqp_request) {
 			cqp_request->dynamic = true;
 			if (wait)
@@ -453,7 +453,6 @@ struct irdma_cqp_request *irdma_alloc_and_get_cqp_request(struct irdma_cqp *cqp,
 	cqp_request->waiting = wait;
 	refcount_set(&cqp_request->refcnt, 1);
 	memset(&cqp_request->compl_info, 0, sizeof(cqp_request->compl_info));
-	memset(&cqp_request->info, 0, sizeof(cqp_request->info));
 
 	return cqp_request;
 }
@@ -572,7 +571,7 @@ void irdma_cleanup_pending_cqp_op(struct irdma_pci_f *rf)
 	}
 }
 
-int irdma_get_timeout_threshold(struct irdma_sc_dev *dev)
+static int irdma_get_timeout_threshold(struct irdma_sc_dev *dev)
 {
 	u16 time_s = dev->vc_caps.cqp_timeout_s;
 
@@ -828,8 +827,7 @@ void irdma_cq_rem_ref(struct ib_cq *ibcq)
 		return;
 	}
 
-	/* May be asynchronously sampled by CEQ ISR without holding tbl lock. */
-	WRITE_ONCE(iwdev->rf->cq_table[iwcq->cq_num], NULL);
+	iwdev->rf->cq_table[iwcq->cq_num] = NULL;
 	spin_unlock_irqrestore(&iwdev->rf->cqtable_lock, flags);
 	complete(&iwcq->free_cq);
 }
@@ -1069,6 +1067,7 @@ int irdma_cqp_qp_create_cmd(struct irdma_sc_dev *dev, struct irdma_sc_qp *qp)
 
 	cqp_info = &cqp_request->info;
 	qp_info = &cqp_request->info.in.u.qp_create.info;
+	memset(qp_info, 0, sizeof(*qp_info));
 	qp_info->cq_num_valid = true;
 	qp_info->next_iwarp_state = IRDMA_QP_STATE_RTS;
 	cqp_info->cqp_cmd = IRDMA_OP_QP_CREATE;
@@ -1349,6 +1348,7 @@ int irdma_cqp_qp_destroy_cmd(struct irdma_sc_dev *dev, struct irdma_sc_qp *qp)
 		return -ENOMEM;
 
 	cqp_info = &cqp_request->info;
+	memset(cqp_info, 0, sizeof(*cqp_info));
 	cqp_info->cqp_cmd = IRDMA_OP_QP_DESTROY;
 	cqp_info->post_sq = 1;
 	cqp_info->in.u.qp_destroy.qp = qp;
@@ -1754,6 +1754,7 @@ int irdma_cqp_gather_stats_cmd(struct irdma_sc_dev *dev,
 		return -ENOMEM;
 
 	cqp_info = &cqp_request->info;
+	memset(cqp_info, 0, sizeof(*cqp_info));
 	cqp_info->cqp_cmd = IRDMA_OP_STATS_GATHER;
 	cqp_info->post_sq = 1;
 	cqp_info->in.u.stats_gather.info = pestat->gather_info;
@@ -1793,6 +1794,7 @@ int irdma_cqp_stats_inst_cmd(struct irdma_sc_vsi *vsi, u8 cmd,
 		return -ENOMEM;
 
 	cqp_info = &cqp_request->info;
+	memset(cqp_info, 0, sizeof(*cqp_info));
 	cqp_info->cqp_cmd = cmd;
 	cqp_info->post_sq = 1;
 	cqp_info->in.u.stats_manage.info = *stats_info;
@@ -1893,6 +1895,7 @@ int irdma_cqp_ws_node_cmd(struct irdma_sc_dev *dev, u8 cmd,
 		return -ENOMEM;
 
 	cqp_info = &cqp_request->info;
+	memset(cqp_info, 0, sizeof(*cqp_info));
 	cqp_info->cqp_cmd = cmd;
 	cqp_info->post_sq = 1;
 	cqp_info->in.u.ws_node.info = *node_info;
@@ -2029,7 +2032,7 @@ int irdma_puda_create_ah(struct irdma_sc_dev *dev,
 	struct irdma_pci_f *rf = dev_to_rf(dev);
 	int err;
 
-	ah = kzalloc_obj(*ah, GFP_ATOMIC);
+	ah = kzalloc(sizeof(*ah), GFP_ATOMIC);
 	*ah_ret = ah;
 	if (!ah)
 		return -ENOMEM;
@@ -2244,7 +2247,7 @@ void irdma_pble_free_paged_mem(struct irdma_chunk *chunk)
 				 chunk->pg_cnt);
 
 done:
-	kvfree(chunk->dmainfo.dmaaddrs);
+	kfree(chunk->dmainfo.dmaaddrs);
 	chunk->dmainfo.dmaaddrs = NULL;
 	vfree(chunk->vaddr);
 	chunk->vaddr = NULL;
@@ -2261,7 +2264,7 @@ int irdma_pble_get_paged_mem(struct irdma_chunk *chunk, u32 pg_cnt)
 	u32 size;
 	void *va;
 
-	chunk->dmainfo.dmaaddrs = kvzalloc(pg_cnt << 3, GFP_KERNEL);
+	chunk->dmainfo.dmaaddrs = kzalloc(pg_cnt << 3, GFP_KERNEL);
 	if (!chunk->dmainfo.dmaaddrs)
 		return -ENOMEM;
 
@@ -2282,7 +2285,7 @@ int irdma_pble_get_paged_mem(struct irdma_chunk *chunk, u32 pg_cnt)
 
 	return 0;
 err:
-	kvfree(chunk->dmainfo.dmaaddrs);
+	kfree(chunk->dmainfo.dmaaddrs);
 	chunk->dmainfo.dmaaddrs = NULL;
 
 	return -ENOMEM;
@@ -2357,6 +2360,24 @@ void irdma_ib_qp_event(struct irdma_qp *iwqp, enum irdma_qp_event_type event)
 	iwqp->ibqp.event_handler(&ibevent, iwqp->ibqp.qp_context);
 }
 
+bool irdma_cq_empty(struct irdma_cq *iwcq)
+{
+	struct irdma_cq_uk *ukcq;
+	u64 qword3;
+	__le64 *cqe;
+	u8 polarity;
+
+	ukcq  = &iwcq->sc_cq.cq_uk;
+	if (ukcq->avoid_mem_cflct)
+		cqe = IRDMA_GET_CURRENT_EXTENDED_CQ_ELEM(ukcq);
+	else
+		cqe = IRDMA_GET_CURRENT_CQ_ELEM(ukcq);
+	get_64bit_val(cqe, 24, &qword3);
+	polarity = (u8)FIELD_GET(IRDMA_CQ_VALID, qword3);
+
+	return polarity != ukcq->polarity;
+}
+
 void irdma_remove_cmpls_list(struct irdma_cq *iwcq)
 {
 	struct irdma_cmpl_gen *cmpl_node;
@@ -2418,8 +2439,6 @@ void irdma_generate_flush_completions(struct irdma_qp *iwqp)
 	struct irdma_qp_uk *qp = &iwqp->sc_qp.qp_uk;
 	struct irdma_ring *sq_ring = &qp->sq_ring;
 	struct irdma_ring *rq_ring = &qp->rq_ring;
-	struct irdma_cq *iwscq = iwqp->iwscq;
-	struct irdma_cq *iwrcq = iwqp->iwrcq;
 	struct irdma_cmpl_gen *cmpl;
 	__le64 *sw_wqe;
 	u64 wqe_qword;
@@ -2427,16 +2446,16 @@ void irdma_generate_flush_completions(struct irdma_qp *iwqp)
 	bool compl_generated = false;
 	unsigned long flags1;
 
-	spin_lock_irqsave(&iwscq->lock, flags1);
-	if (irdma_uk_cq_empty(&iwscq->sc_cq.cq_uk)) {
+	spin_lock_irqsave(&iwqp->iwscq->lock, flags1);
+	if (irdma_cq_empty(iwqp->iwscq)) {
 		unsigned long flags2;
 
 		spin_lock_irqsave(&iwqp->lock, flags2);
 		while (IRDMA_RING_MORE_WORK(*sq_ring)) {
-			cmpl = kzalloc_obj(*cmpl, GFP_ATOMIC);
+			cmpl = kzalloc(sizeof(*cmpl), GFP_ATOMIC);
 			if (!cmpl) {
 				spin_unlock_irqrestore(&iwqp->lock, flags2);
-				spin_unlock_irqrestore(&iwscq->lock, flags1);
+				spin_unlock_irqrestore(&iwqp->iwscq->lock, flags1);
 				return;
 			}
 
@@ -2455,32 +2474,32 @@ void irdma_generate_flush_completions(struct irdma_qp *iwqp)
 				kfree(cmpl);
 				continue;
 			}
-			ibdev_dbg(iwscq->ibcq.device,
+			ibdev_dbg(iwqp->iwscq->ibcq.device,
 				  "DEV: %s: adding wr_id = 0x%llx SQ Completion to list qp_id=%d\n",
 				  __func__, cmpl->cpi.wr_id, qp->qp_id);
-			list_add_tail(&cmpl->list, &iwscq->cmpl_generated);
+			list_add_tail(&cmpl->list, &iwqp->iwscq->cmpl_generated);
 			compl_generated = true;
 		}
 		spin_unlock_irqrestore(&iwqp->lock, flags2);
-		spin_unlock_irqrestore(&iwscq->lock, flags1);
+		spin_unlock_irqrestore(&iwqp->iwscq->lock, flags1);
 		if (compl_generated)
-			irdma_comp_handler(iwscq);
+			irdma_comp_handler(iwqp->iwscq);
 	} else {
-		spin_unlock_irqrestore(&iwscq->lock, flags1);
+		spin_unlock_irqrestore(&iwqp->iwscq->lock, flags1);
 		mod_delayed_work(iwqp->iwdev->cleanup_wq, &iwqp->dwork_flush,
 				 msecs_to_jiffies(IRDMA_FLUSH_DELAY_MS));
 	}
 
-	spin_lock_irqsave(&iwrcq->lock, flags1);
-	if (irdma_uk_cq_empty(&iwrcq->sc_cq.cq_uk)) {
+	spin_lock_irqsave(&iwqp->iwrcq->lock, flags1);
+	if (irdma_cq_empty(iwqp->iwrcq)) {
 		unsigned long flags2;
 
 		spin_lock_irqsave(&iwqp->lock, flags2);
 		while (IRDMA_RING_MORE_WORK(*rq_ring)) {
-			cmpl = kzalloc_obj(*cmpl, GFP_ATOMIC);
+			cmpl = kzalloc(sizeof(*cmpl), GFP_ATOMIC);
 			if (!cmpl) {
 				spin_unlock_irqrestore(&iwqp->lock, flags2);
-				spin_unlock_irqrestore(&iwrcq->lock, flags1);
+				spin_unlock_irqrestore(&iwqp->iwrcq->lock, flags1);
 				return;
 			}
 
@@ -2492,20 +2511,20 @@ void irdma_generate_flush_completions(struct irdma_qp *iwqp)
 			cmpl->cpi.q_type = IRDMA_CQE_QTYPE_RQ;
 			/* remove the RQ WR by moving RQ tail */
 			IRDMA_RING_SET_TAIL(*rq_ring, rq_ring->tail + 1);
-			ibdev_dbg(iwrcq->ibcq.device,
+			ibdev_dbg(iwqp->iwrcq->ibcq.device,
 				  "DEV: %s: adding wr_id = 0x%llx RQ Completion to list qp_id=%d, wqe_idx=%d\n",
 				  __func__, cmpl->cpi.wr_id, qp->qp_id,
 				  wqe_idx);
-			list_add_tail(&cmpl->list, &iwrcq->cmpl_generated);
+			list_add_tail(&cmpl->list, &iwqp->iwrcq->cmpl_generated);
 
 			compl_generated = true;
 		}
 		spin_unlock_irqrestore(&iwqp->lock, flags2);
-		spin_unlock_irqrestore(&iwrcq->lock, flags1);
+		spin_unlock_irqrestore(&iwqp->iwrcq->lock, flags1);
 		if (compl_generated)
-			irdma_comp_handler(iwrcq);
+			irdma_comp_handler(iwqp->iwrcq);
 	} else {
-		spin_unlock_irqrestore(&iwrcq->lock, flags1);
+		spin_unlock_irqrestore(&iwqp->iwrcq->lock, flags1);
 		mod_delayed_work(iwqp->iwdev->cleanup_wq, &iwqp->dwork_flush,
 				 msecs_to_jiffies(IRDMA_FLUSH_DELAY_MS));
 	}

@@ -16,7 +16,6 @@
 #include <linux/kernel.h>
 #include <linux/init.h>
 #include <linux/module.h>
-#include <linux/net.h>
 #include <linux/platform_device.h>
 #include <linux/spinlock.h>
 #include <linux/slab.h>
@@ -559,7 +558,7 @@ static int gmac_setup_txqs(struct net_device *netdev)
 
 	rwptr_reg = port->dma_base + GMAC_SW_TX_QUEUE0_PTR_REG;
 
-	skb_tab = kzalloc_objs(*skb_tab, len);
+	skb_tab = kcalloc(len, sizeof(*skb_tab), GFP_KERNEL);
 	if (!skb_tab)
 		return -ENOMEM;
 
@@ -737,8 +736,7 @@ gmac_get_queue_page(struct gemini_ethernet *geth,
 	mapping = addr & PAGE_MASK;
 
 	if (!geth->freeq_pages) {
-		dev_err_ratelimited(geth->dev,
-				    "try to get page with no page list\n");
+		dev_err(geth->dev, "try to get page with no page list\n");
 		return NULL;
 	}
 
@@ -946,7 +944,8 @@ static int geth_setup_freeq(struct gemini_ethernet *geth)
 	}
 
 	/* Allocate a mapping to page look-up index */
-	geth->freeq_pages = kzalloc_objs(*geth->freeq_pages, pages);
+	geth->freeq_pages = kcalloc(pages, sizeof(*geth->freeq_pages),
+				    GFP_KERNEL);
 	if (!geth->freeq_pages)
 		goto err_freeq;
 	geth->num_freeq_pages = pages;
@@ -1443,7 +1442,7 @@ update_exit:
 }
 
 static unsigned int gmac_rx(struct net_device *netdev, unsigned int budget,
-			    unsigned int *freeq_consumed, bool *reschedule)
+			    unsigned int *freeq_consumed)
 {
 	struct gemini_ethernet_port *port = netdev_priv(netdev);
 	unsigned short m = (1 << port->rxq_order) - 1;
@@ -1451,8 +1450,6 @@ static unsigned int gmac_rx(struct net_device *netdev, unsigned int budget,
 	void __iomem *ptr_reg = port->rxq_rwptr;
 	unsigned int frag_nr = port->rx_frag_nr;
 	struct sk_buff *skb = port->rx_skb;
-	/* Bound malformed chains while allowing maximum fragments per frame. */
-	unsigned int desc_limit = budget * MAX_SKB_FRAGS;
 	unsigned int consumed = 0;
 	unsigned int frame_len, frag_len;
 	struct gmac_rxdesc *rx = NULL;
@@ -1479,7 +1476,7 @@ static unsigned int gmac_rx(struct net_device *netdev, unsigned int budget,
 	r = rw.bits.rptr;
 	w = rw.bits.wptr;
 
-	while (budget && consumed < desc_limit && w != r) {
+	while (budget && w != r) {
 		page = NULL;
 		rx = port->rxq_ring + r;
 		word0 = rx->word0;
@@ -1506,18 +1503,15 @@ static unsigned int gmac_rx(struct net_device *netdev, unsigned int budget,
 		}
 
 		if (!mapping) {
-			if (net_ratelimit())
-				netdev_err(netdev,
-					   "rxq[%u]: HW BUG: zero DMA desc\n",
-					   r);
+			netdev_err(netdev,
+				   "rxq[%u]: HW BUG: zero DMA desc\n", r);
 			goto err_drop;
 		}
 
 		/* Freeq pointers are one page off */
 		gpage = gmac_get_queue_page(geth, port, mapping + PAGE_SIZE);
 		if (!gpage) {
-			dev_err_ratelimited(geth->dev,
-					    "could not find mapping\n");
+			dev_err(geth->dev, "could not find mapping\n");
 			goto err_drop;
 		}
 		page = gpage->page;
@@ -1542,7 +1536,7 @@ static unsigned int gmac_rx(struct net_device *netdev, unsigned int budget,
 		if (frag_nr == MAX_SKB_FRAGS)
 			goto err_drop;
 
-		if (frag_len == 0 && net_ratelimit())
+		if (frag_len == 0)
 			netdev_err(netdev, "Received fragment with len = 0\n");
 
 		skb_fill_page_desc(skb, frag_nr, page, page_offs, frag_len);
@@ -1586,7 +1580,6 @@ next_desc:
 	port->rx_frag_nr = frag_nr;
 	port->rx_dropping = dropping;
 	*freeq_consumed = consumed;
-	*reschedule = budget && w != r;
 	writew(r, ptr_reg);
 	return received;
 }
@@ -1598,13 +1591,12 @@ static int gmac_napi_poll(struct napi_struct *napi, int budget)
 	unsigned int freeq_threshold;
 	unsigned int freeq_consumed;
 	unsigned int received;
-	bool reschedule;
 
 	freeq_threshold = 1 << (geth->freeq_order - 1);
 	u64_stats_update_begin(&port->rx_stats_syncp);
 
-	received = gmac_rx(napi->dev, budget, &freeq_consumed, &reschedule);
-	if (!reschedule && received < budget)
+	received = gmac_rx(napi->dev, budget, &freeq_consumed);
+	if (received < budget)
 		++port->rx_napi_exits;
 
 	u64_stats_update_end(&port->rx_stats_syncp);
@@ -1615,11 +1607,10 @@ static int gmac_napi_poll(struct napi_struct *napi, int budget)
 		geth_fill_freeq(geth, true);
 	}
 
-	if (!reschedule && received < budget &&
-	    napi_complete_done(napi, received))
+	if (received < budget && napi_complete_done(napi, received))
 		gmac_enable_rx_irq(napi->dev, 1);
 
-	return reschedule ? budget : received;
+	return received;
 }
 
 static void gmac_dump_dma_state(struct net_device *netdev)

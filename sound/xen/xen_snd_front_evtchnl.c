@@ -270,8 +270,9 @@ int xen_snd_front_evtchnl_create_all(struct xen_snd_front_info *front_info,
 	int d, ret = 0;
 
 	front_info->evt_pairs =
-			kzalloc_objs(struct xen_snd_front_evtchnl_pair,
-				     num_streams);
+			kcalloc(num_streams,
+				sizeof(struct xen_snd_front_evtchnl_pair),
+				GFP_KERNEL);
 	if (!front_info->evt_pairs)
 		return -ENOMEM;
 

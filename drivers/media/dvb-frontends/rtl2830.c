@@ -807,7 +807,7 @@ static int rtl2830_probe(struct i2c_client *client)
 	}
 
 	/* allocate memory for the internal state */
-	dev = kzalloc_obj(*dev);
+	dev = kzalloc(sizeof(*dev), GFP_KERNEL);
 	if (dev == NULL) {
 		ret = -ENOMEM;
 		goto err;
@@ -876,8 +876,8 @@ static void rtl2830_remove(struct i2c_client *client)
 }
 
 static const struct i2c_device_id rtl2830_id_table[] = {
-	{ .name = "rtl2830" },
-	{ }
+	{ "rtl2830" },
+	{}
 };
 MODULE_DEVICE_TABLE(i2c, rtl2830_id_table);
 

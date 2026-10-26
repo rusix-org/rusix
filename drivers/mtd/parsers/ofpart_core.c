@@ -23,17 +23,13 @@ struct fixed_partitions_quirks {
 	int (*post_parse)(struct mtd_info *mtd, struct mtd_partition *parts, int nr_parts);
 };
 
-#ifdef CONFIG_MTD_OF_PARTS_BCM4908
 static struct fixed_partitions_quirks bcm4908_partitions_quirks = {
 	.post_parse = bcm4908_partitions_post_parse,
 };
-#endif
 
-#ifdef CONFIG_MTD_OF_PARTS_LINKSYS_NS
 static struct fixed_partitions_quirks linksys_ns_partitions_quirks = {
 	.post_parse = linksys_ns_partitions_post_parse,
 };
-#endif
 
 static const struct of_device_id parse_ofpart_match_table[];
 
@@ -102,7 +98,7 @@ static int parse_fixed_partitions(struct mtd_info *master,
 		return 0;
 	}
 
-	parts = kzalloc_objs(*parts, nr_parts);
+	parts = kcalloc(nr_parts, sizeof(*parts), GFP_KERNEL);
 	if (!parts) {
 		if (dedicated)
 			of_node_put(ofpart_node);
@@ -208,12 +204,8 @@ static const struct of_device_id parse_ofpart_match_table[] = {
 	/* Generic */
 	{ .compatible = "fixed-partitions" },
 	/* Customized */
-#ifdef CONFIG_MTD_OF_PARTS_BCM4908
 	{ .compatible = "brcm,bcm4908-partitions", .data = &bcm4908_partitions_quirks, },
-#endif
-#ifdef CONFIG_MTD_OF_PARTS_LINKSYS_NS
 	{ .compatible = "linksys,ns-partitions", .data = &linksys_ns_partitions_quirks, },
-#endif
 	{},
 };
 MODULE_DEVICE_TABLE(of, parse_ofpart_match_table);
@@ -249,7 +241,7 @@ static int parse_ofoldpart_partitions(struct mtd_info *master,
 
 	nr_parts = plen / sizeof(part[0]);
 
-	parts = kzalloc_objs(*parts, nr_parts);
+	parts = kcalloc(nr_parts, sizeof(*parts), GFP_KERNEL);
 	if (!parts)
 		return -ENOMEM;
 

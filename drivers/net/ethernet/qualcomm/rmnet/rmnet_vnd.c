@@ -4,11 +4,9 @@
  * RMNET Data virtual network driver
  */
 
-#include <linux/capability.h>
 #include <linux/etherdevice.h>
 #include <linux/ethtool.h>
 #include <linux/if_arp.h>
-#include <linux/netlink.h>
 #include <net/pkt_sched.h>
 #include "rmnet_config.h"
 #include "rmnet_handlers.h"
@@ -242,16 +240,9 @@ static int rmnet_set_coalesce(struct net_device *dev,
 			      struct netlink_ext_ack *extack)
 {
 	struct rmnet_priv *priv = netdev_priv(dev);
-	struct net_device *real_dev = priv->real_dev;
 	struct rmnet_port *port;
 
-	if (!ns_capable(dev_net(real_dev)->user_ns, CAP_NET_ADMIN)) {
-		NL_SET_ERR_MSG_MOD(extack,
-				   "request modifies device in another netns");
-		return -EPERM;
-	}
-
-	port = rmnet_get_port_rtnl(real_dev);
+	port = rmnet_get_port_rtnl(priv->real_dev);
 
 	if (kernel_coal->tx_aggr_max_frames < 1 || kernel_coal->tx_aggr_max_frames > 64)
 		return -EINVAL;
@@ -341,7 +332,7 @@ int rmnet_vnd_newlink(u8 id, struct net_device *rmnet_dev,
 
 		rmnet_dev->rtnl_link_ops = &rmnet_link_ops;
 
-		WRITE_ONCE(priv->mux_id, id);
+		priv->mux_id = id;
 
 		netdev_dbg(rmnet_dev, "rmnet dev created\n");
 	}

@@ -255,8 +255,8 @@ static void garp_pdu_queue(struct garp_applicant *app)
 	garp_pdu_append_end_mark(app);
 	garp_pdu_append_end_mark(app);
 
-	llc_pdu_header_init(app->pdu, LLC_SAP_BSPAN, LLC_SAP_BSPAN,
-			    LLC_PDU_CMD);
+	llc_pdu_header_init(app->pdu, LLC_PDU_TYPE_U, LLC_SAP_BSPAN,
+			    LLC_SAP_BSPAN, LLC_PDU_CMD);
 	llc_pdu_init_as_ui_cmd(app->pdu);
 	llc_mac_hdr_init(app->pdu, app->dev->dev_addr,
 			 app->app->proto.group_address);
@@ -452,7 +452,6 @@ static int garp_pdu_parse_attr(struct garp_applicant *app, struct sk_buff *skb,
 
 	if (!pskb_may_pull(skb, ga->len))
 		return -1;
-	ga = (struct garp_attr_hdr *)skb->data;
 	skb_pull(skb, ga->len);
 	dlen = ga->len - sizeof(*ga);
 
@@ -493,7 +492,6 @@ static int garp_pdu_parse_attr(struct garp_applicant *app, struct sk_buff *skb,
 static int garp_pdu_parse_msg(struct garp_applicant *app, struct sk_buff *skb)
 {
 	const struct garp_msg_hdr *gm;
-	u8 attrtype;
 
 	if (!pskb_may_pull(skb, sizeof(*gm)))
 		return -1;
@@ -501,10 +499,9 @@ static int garp_pdu_parse_msg(struct garp_applicant *app, struct sk_buff *skb)
 	if (gm->attrtype == 0)
 		return -1;
 	skb_pull(skb, sizeof(*gm));
-	attrtype = gm->attrtype;
 
 	while (skb->len > 0) {
-		if (garp_pdu_parse_attr(app, skb, attrtype) < 0)
+		if (garp_pdu_parse_attr(app, skb, gm->attrtype) < 0)
 			return -1;
 		if (garp_pdu_parse_end_mark(skb) < 0)
 			break;
@@ -550,7 +547,7 @@ static int garp_init_port(struct net_device *dev)
 {
 	struct garp_port *port;
 
-	port = kzalloc_obj(*port);
+	port = kzalloc(sizeof(*port), GFP_KERNEL);
 	if (!port)
 		return -ENOMEM;
 	rcu_assign_pointer(dev->garp_port, port);
@@ -584,7 +581,7 @@ int garp_init_applicant(struct net_device *dev, struct garp_application *appl)
 	}
 
 	err = -ENOMEM;
-	app = kzalloc_obj(*app);
+	app = kzalloc(sizeof(*app), GFP_KERNEL);
 	if (!app)
 		goto err2;
 

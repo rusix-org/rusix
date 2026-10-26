@@ -494,7 +494,7 @@ static int i5k_amb_probe(struct platform_device *pdev)
 	struct resource *reso;
 	int i, res;
 
-	data = kzalloc_obj(*data);
+	data = kzalloc(sizeof(*data), GFP_KERNEL);
 	if (!data)
 		return -ENOMEM;
 

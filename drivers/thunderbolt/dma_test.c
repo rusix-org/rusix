@@ -87,6 +87,7 @@ static const char * const dma_test_result_names[] = {
  * @error_code: Error code of the last run
  * @complete: Used to wait for the Rx to complete
  * @lock: Lock serializing access to this structure
+ * @debugfs_dir: dentry of this dma_test
  */
 struct dma_test {
 	const struct tb_service *svc;
@@ -107,6 +108,7 @@ struct dma_test {
 	enum dma_test_test_error error_code;
 	struct completion complete;
 	struct mutex lock;
+	struct dentry *debugfs_dir;
 };
 
 /* DMA test property directory UUID: 3188cd10-6523-4a5a-a682-fdca07a248d8 */
@@ -155,8 +157,6 @@ static int dma_test_start_rings(struct dma_test *dt)
 		dt->tx_ring = ring;
 		e2e_tx_hop = ring->hop;
 
-		tb_ring_throttling(ring, 128000);
-
 		ret = tb_xdomain_alloc_out_hopid(xd, -1);
 		if (ret < 0) {
 			dma_test_free_rings(dt);
@@ -164,7 +164,6 @@ static int dma_test_start_rings(struct dma_test *dt)
 		}
 
 		dt->tx_hopid = ret;
-
 	}
 
 	if (dt->packets_to_receive) {
@@ -182,8 +181,6 @@ static int dma_test_start_rings(struct dma_test *dt)
 		}
 
 		dt->rx_ring = ring;
-
-		tb_ring_throttling(ring, 128000);
 
 		ret = tb_xdomain_alloc_in_hopid(xd, -1);
 		if (ret < 0) {
@@ -215,17 +212,17 @@ static void dma_test_stop_rings(struct dma_test *dt)
 {
 	int ret;
 
+	if (dt->rx_ring)
+		tb_ring_stop(dt->rx_ring);
+	if (dt->tx_ring)
+		tb_ring_stop(dt->tx_ring);
+
 	ret = tb_xdomain_disable_paths(dt->xd, dt->tx_hopid,
 				       dt->tx_ring ? dt->tx_ring->hop : -1,
 				       dt->rx_hopid,
 				       dt->rx_ring ? dt->rx_ring->hop : -1);
 	if (ret)
 		dev_warn(&dt->svc->dev, "failed to disable DMA paths\n");
-
-	if (dt->rx_ring)
-		tb_ring_stop(dt->rx_ring);
-	if (dt->tx_ring)
-		tb_ring_stop(dt->tx_ring);
 
 	dma_test_free_rings(dt);
 }
@@ -270,7 +267,7 @@ static int dma_test_submit_rx(struct dma_test *dt, size_t npackets)
 		struct dma_test_frame *tf;
 		dma_addr_t dma_addr;
 
-		tf = kzalloc_obj(*tf);
+		tf = kzalloc(sizeof(*tf), GFP_KERNEL);
 		if (!tf)
 			return -ENOMEM;
 
@@ -321,7 +318,7 @@ static int dma_test_submit_tx(struct dma_test *dt, size_t npackets)
 		struct dma_test_frame *tf;
 		dma_addr_t dma_addr;
 
-		tf = kzalloc_obj(*tf);
+		tf = kzalloc(sizeof(*tf), GFP_KERNEL);
 		if (!tf)
 			return -ENOMEM;
 
@@ -622,21 +619,21 @@ DEFINE_SHOW_ATTRIBUTE(status);
 
 static void dma_test_debugfs_init(struct tb_service *svc)
 {
-	struct dentry *debugfs_dir;
+	struct dma_test *dt = tb_service_get_drvdata(svc);
 
-	debugfs_dir = debugfs_create_dir("dma_test", svc->debugfs_dir);
+	dt->debugfs_dir = debugfs_create_dir("dma_test", svc->debugfs_dir);
 
-	debugfs_create_file("lanes", 0600, debugfs_dir, svc, &lanes_fops);
-	debugfs_create_file("speed", 0600, debugfs_dir, svc, &speed_fops);
-	debugfs_create_file("packets_to_receive", 0600, debugfs_dir, svc,
+	debugfs_create_file("lanes", 0600, dt->debugfs_dir, svc, &lanes_fops);
+	debugfs_create_file("speed", 0600, dt->debugfs_dir, svc, &speed_fops);
+	debugfs_create_file("packets_to_receive", 0600, dt->debugfs_dir, svc,
 			    &packets_to_receive_fops);
-	debugfs_create_file("packets_to_send", 0600, debugfs_dir, svc,
+	debugfs_create_file("packets_to_send", 0600, dt->debugfs_dir, svc,
 			    &packets_to_send_fops);
-	debugfs_create_file("status", 0400, debugfs_dir, svc, &status_fops);
-	debugfs_create_file("test", 0200, debugfs_dir, svc, &test_fops);
+	debugfs_create_file("status", 0400, dt->debugfs_dir, svc, &status_fops);
+	debugfs_create_file("test", 0200, dt->debugfs_dir, svc, &test_fops);
 }
 
-static int dma_test_probe(struct tb_service *svc)
+static int dma_test_probe(struct tb_service *svc, const struct tb_service_id *id)
 {
 	struct tb_xdomain *xd = tb_service_parent(svc);
 	struct dma_test *dt;
@@ -661,7 +658,7 @@ static void dma_test_remove(struct tb_service *svc)
 	struct dma_test *dt = tb_service_get_drvdata(svc);
 
 	mutex_lock(&dt->lock);
-	debugfs_lookup_and_remove("dma_test", svc->debugfs_dir);
+	debugfs_remove_recursive(dt->debugfs_dir);
 	mutex_unlock(&dt->lock);
 }
 
@@ -689,7 +686,7 @@ static const struct dev_pm_ops dma_test_pm_ops = {
 
 static const struct tb_service_id dma_test_ids[] = {
 	{ TB_SERVICE("dma_test", 1) },
-	{ }
+	{ },
 };
 MODULE_DEVICE_TABLE(tbsvc, dma_test_ids);
 

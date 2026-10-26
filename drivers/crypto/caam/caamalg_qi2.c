@@ -19,14 +19,13 @@
 #include <linux/dma-mapping.h>
 #include <linux/fsl/mc.h>
 #include <linux/kernel.h>
-#include <linux/string.h>
 #include <linux/string_choices.h>
 #include <soc/fsl/dpaa2-io.h>
 #include <soc/fsl/dpaa2-fd.h>
 #include <crypto/xts.h>
 #include <linux/unaligned.h>
 
-#define CAAM_CRA_PRIORITY	100
+#define CAAM_CRA_PRIORITY	2000
 
 /* max key is sum of AES_MAX_KEY_SIZE, max split key size */
 #define CAAM_MAX_KEY_SIZE	(AES_MAX_KEY_SIZE + CTR_RFC3686_NONCE_SIZE + \
@@ -961,8 +960,6 @@ static int skcipher_setkey(struct crypto_skcipher *skcipher, const u8 *key,
 	ctx->cdata.keylen = keylen;
 	ctx->cdata.key_virt = key;
 	ctx->cdata.key_inline = true;
-	ctx->cdata.plain_keylen = keylen;
-	ctx->cdata.key_cmd_opt = 0;
 
 	/* skcipher_encrypt shared descriptor */
 	flc = &ctx->flc[ENCRYPT];
@@ -3227,14 +3224,14 @@ static int hash_digest_key(struct caam_hash_ctx *ctx, u32 *keylen, u8 *key,
 	int ret = -ENOMEM;
 	struct dpaa2_fl_entry *in_fle, *out_fle;
 
-	req_ctx = kzalloc_obj(*req_ctx);
+	req_ctx = kzalloc(sizeof(*req_ctx), GFP_KERNEL);
 	if (!req_ctx)
 		return -ENOMEM;
 
 	in_fle = &req_ctx->fd_flt[1];
 	out_fle = &req_ctx->fd_flt[0];
 
-	flc = kzalloc_obj(*flc);
+	flc = kzalloc(sizeof(*flc), GFP_KERNEL);
 	if (!flc)
 		goto err_flc;
 
@@ -4639,7 +4636,7 @@ static struct caam_hash_alg *caam_hash_alloc(struct device *dev,
 	struct ahash_alg *halg;
 	struct crypto_alg *alg;
 
-	t_alg = kzalloc_obj(*t_alg);
+	t_alg = kzalloc(sizeof(*t_alg), GFP_KERNEL);
 	if (!t_alg)
 		return ERR_PTR(-ENOMEM);
 
@@ -4648,12 +4645,16 @@ static struct caam_hash_alg *caam_hash_alloc(struct device *dev,
 	alg = &halg->halg.base;
 
 	if (keyed) {
-		strscpy(alg->cra_name, template->hmac_name);
-		strscpy(alg->cra_driver_name, template->hmac_driver_name);
+		snprintf(alg->cra_name, CRYPTO_MAX_ALG_NAME, "%s",
+			 template->hmac_name);
+		snprintf(alg->cra_driver_name, CRYPTO_MAX_ALG_NAME, "%s",
+			 template->hmac_driver_name);
 		t_alg->is_hmac = true;
 	} else {
-		strscpy(alg->cra_name, template->name);
-		strscpy(alg->cra_driver_name, template->driver_name);
+		snprintf(alg->cra_name, CRYPTO_MAX_ALG_NAME, "%s",
+			 template->name);
+		snprintf(alg->cra_driver_name, CRYPTO_MAX_ALG_NAME, "%s",
+			 template->driver_name);
 		t_alg->ahash_alg.setkey = NULL;
 		t_alg->is_hmac = false;
 	}
@@ -5043,21 +5044,10 @@ static int __cold dpaa2_dpseci_setup(struct fsl_mc_device *ls_dev)
 	dev_info(dev, "dpseci v%d.%d\n", priv->major_ver, priv->minor_ver);
 
 	if (DPSECI_VER(priv->major_ver, priv->minor_ver) > DPSECI_VER(5, 3)) {
-		int enabled;
-
-		err = dpseci_is_enabled(priv->mc_io, 0, ls_dev->mc_handle,
-					&enabled);
+		err = dpseci_reset(priv->mc_io, 0, ls_dev->mc_handle);
 		if (err) {
-			dev_err(dev, "dpseci_is_enabled() failed\n");
+			dev_err(dev, "dpseci_reset() failed\n");
 			goto err_get_vers;
-		}
-
-		if (enabled) {
-			err = dpseci_reset(priv->mc_io, 0, ls_dev->mc_handle);
-			if (err) {
-				dev_err(dev, "dpseci_reset() failed\n");
-				goto err_get_vers;
-			}
 		}
 	}
 

@@ -80,13 +80,14 @@ snd_seq_oss_synth_init(void)
  * registration of the synth device
  */
 int
-snd_seq_oss_synth_probe(struct snd_seq_device *dev)
+snd_seq_oss_synth_probe(struct device *_dev)
 {
+	struct snd_seq_device *dev = to_seq_dev(_dev);
 	int i;
 	struct seq_oss_synth *rec;
 	struct snd_seq_oss_reg *reg = SNDRV_SEQ_DEVICE_ARGPTR(dev);
 
-	rec = kzalloc_obj(*rec);
+	rec = kzalloc(sizeof(*rec), GFP_KERNEL);
 	if (!rec)
 		return -ENOMEM;
 	rec->seq_device = -1;
@@ -127,9 +128,10 @@ snd_seq_oss_synth_probe(struct snd_seq_device *dev)
 }
 
 
-void
-snd_seq_oss_synth_remove(struct snd_seq_device *dev)
+int
+snd_seq_oss_synth_remove(struct device *_dev)
 {
+	struct snd_seq_device *dev = to_seq_dev(_dev);
 	int index;
 	struct seq_oss_synth *rec = dev->driver_data;
 
@@ -140,7 +142,7 @@ snd_seq_oss_synth_remove(struct snd_seq_device *dev)
 		}
 		if (index >= max_synth_devs) {
 			pr_err("ALSA: seq_oss: can't unregister synth\n");
-			return;
+			return -EINVAL;
 		}
 		synth_devs[index] = NULL;
 		if (index == max_synth_devs - 1) {
@@ -158,6 +160,8 @@ snd_seq_oss_synth_remove(struct snd_seq_device *dev)
 
 	snd_use_lock_sync(&rec->use_lock);
 	kfree(rec);
+
+	return 0;
 }
 
 
@@ -213,8 +217,7 @@ snd_seq_oss_synth_setup(struct seq_oss_devinfo *dp)
 		}
 		info->nr_voices = rec->nr_voices;
 		if (info->nr_voices > 0) {
-			info->ch = kzalloc_objs(struct seq_oss_chinfo,
-						info->nr_voices);
+			info->ch = kcalloc(info->nr_voices, sizeof(struct seq_oss_chinfo), GFP_KERNEL);
 			if (!info->ch) {
 				rec->oper.close(&info->arg);
 				module_put(rec->oper.owner);
@@ -365,6 +368,7 @@ reset_channels(struct seq_oss_synthinfo *info)
 void
 snd_seq_oss_synth_reset(struct seq_oss_devinfo *dp, int dev)
 {
+	struct seq_oss_synth *rec __free(seq_oss_synth) = NULL;
 	struct seq_oss_synthinfo *info;
 
 	info = get_synthinfo_nospec(dp, dev);
@@ -387,8 +391,7 @@ snd_seq_oss_synth_reset(struct seq_oss_devinfo *dp, int dev)
 		return;
 	}
 
-	struct seq_oss_synth *rec __free(seq_oss_synth) =
-		get_sdev(dev);
+	rec = get_sdev(dev);
 	if (rec == NULL)
 		return;
 	if (rec->oper.reset) {
@@ -412,6 +415,7 @@ int
 snd_seq_oss_synth_load_patch(struct seq_oss_devinfo *dp, int dev, int fmt,
 			    const char __user *buf, int p, int c)
 {
+	struct seq_oss_synth *rec __free(seq_oss_synth) = NULL;
 	struct seq_oss_synthinfo *info;
 
 	info = get_synthinfo_nospec(dp, dev);
@@ -420,9 +424,7 @@ snd_seq_oss_synth_load_patch(struct seq_oss_devinfo *dp, int dev, int fmt,
 
 	if (info->is_midi)
 		return 0;
-
-	struct seq_oss_synth *rec __free(seq_oss_synth) =
-		get_synthdev(dp, dev);
+	rec = get_synthdev(dp, dev);
 	if (!rec)
 		return -ENXIO;
 
@@ -438,9 +440,9 @@ snd_seq_oss_synth_load_patch(struct seq_oss_devinfo *dp, int dev, int fmt,
 struct seq_oss_synthinfo *
 snd_seq_oss_synth_info(struct seq_oss_devinfo *dp, int dev)
 {
-	struct seq_oss_synth *rec __free(seq_oss_synth) =
-		get_synthdev(dp, dev);
+	struct seq_oss_synth *rec __free(seq_oss_synth) = NULL;
 
+	rec = get_synthdev(dp, dev);
 	if (rec)
 		return get_synthinfo_nospec(dp, dev);
 	return NULL;
@@ -493,14 +495,13 @@ snd_seq_oss_synth_addr(struct seq_oss_devinfo *dp, int dev, struct snd_seq_event
 int
 snd_seq_oss_synth_ioctl(struct seq_oss_devinfo *dp, int dev, unsigned int cmd, unsigned long addr)
 {
+	struct seq_oss_synth *rec __free(seq_oss_synth) = NULL;
 	struct seq_oss_synthinfo *info;
 
 	info = get_synthinfo_nospec(dp, dev);
 	if (!info || info->is_midi)
 		return -ENXIO;
-
-	struct seq_oss_synth *rec __free(seq_oss_synth) =
-		get_synthdev(dp, dev);
+	rec = get_synthdev(dp, dev);
 	if (!rec)
 		return -ENXIO;
 	if (rec->oper.ioctl == NULL)
@@ -574,9 +575,10 @@ snd_seq_oss_synth_info_read(struct snd_info_buffer *buf)
 
 	snd_iprintf(buf, "\nNumber of synth devices: %d\n", max_synth_devs);
 	for (i = 0; i < max_synth_devs; i++) {
+		struct seq_oss_synth *rec __free(seq_oss_synth) = NULL;
+
 		snd_iprintf(buf, "\nsynth %d: ", i);
-		struct seq_oss_synth *rec __free(seq_oss_synth) =
-			get_sdev(i);
+		rec = get_sdev(i);
 		if (rec == NULL) {
 			snd_iprintf(buf, "*empty*\n");
 			continue;

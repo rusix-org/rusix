@@ -102,7 +102,7 @@ enum cifs_param {
 	Opt_forcegid,
 	Opt_noblocksend,
 	Opt_noautotune,
-	Opt_lease,
+	Opt_nolease,
 	Opt_nosparse,
 	Opt_hard,
 	Opt_soft,
@@ -294,8 +294,6 @@ struct smb3_fs_context {
 	bool domainauto:1;
 	bool rdma:1;
 	bool multichannel:1;
-	bool multichannel_specified:1; /* true if user specified multichannel or nomultichannel */
-	bool max_channels_specified:1; /* true if user specified max_channels */
 	bool use_client_guid:1;
 	/* reuse existing guid for multichannel */
 	u8 client_guid[SMB2_CLIENT_GUID_SIZE];
@@ -374,7 +372,7 @@ int smb3_fs_context_dup(struct smb3_fs_context *new_ctx,
 			struct smb3_fs_context *ctx);
 int smb3_sync_session_ctx_passwords(struct cifs_sb_info *cifs_sb,
 				    struct cifs_ses *ses);
-unsigned int smb3_update_mnt_flags(struct cifs_sb_info *cifs_sb);
+void smb3_update_mnt_flags(struct cifs_sb_info *cifs_sb);
 
 /*
  * max deferred close timeout (jiffies) - 2^30

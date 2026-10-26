@@ -231,7 +231,7 @@ static struct hh_flow_state *alloc_new_hh(struct list_head *head,
 		return NULL;
 	}
 	/* Create new entry. */
-	flow = kzalloc_obj(struct hh_flow_state, GFP_ATOMIC);
+	flow = kzalloc(sizeof(struct hh_flow_state), GFP_ATOMIC);
 	if (!flow)
 		return NULL;
 
@@ -360,7 +360,7 @@ static unsigned int hhf_drop(struct Qdisc *sch, struct sk_buff **to_free)
 	if (bucket->head) {
 		struct sk_buff *skb = dequeue_head(bucket);
 
-		qdisc_qlen_dec(sch);
+		sch->q.qlen--;
 		qdisc_qstats_backlog_dec(sch, skb);
 		qdisc_drop(skb, sch, to_free);
 	}
@@ -400,8 +400,7 @@ static int hhf_enqueue(struct sk_buff *skb, struct Qdisc *sch,
 		}
 		bucket->deficit = weight * q->quantum;
 	}
-	qdisc_qlen_inc(sch);
-	if (sch->q.qlen <= sch->limit)
+	if (++sch->q.qlen <= sch->limit)
 		return NET_XMIT_SUCCESS;
 
 	prev_backlog = sch->qstats.backlog;
@@ -444,7 +443,7 @@ begin:
 
 	if (bucket->head) {
 		skb = dequeue_head(bucket);
-		qdisc_qlen_dec(sch);
+		sch->q.qlen--;
 		qdisc_qstats_backlog_dec(sch, skb);
 	}
 
@@ -636,7 +635,8 @@ static int hhf_init(struct Qdisc *sch, struct nlattr *opt,
 
 	if (!q->hh_flows) {
 		/* Initialize heavy-hitter flow table. */
-		q->hh_flows = kvzalloc_objs(struct list_head, HH_FLOWS_CNT);
+		q->hh_flows = kvcalloc(HH_FLOWS_CNT, sizeof(struct list_head),
+				       GFP_KERNEL);
 		if (!q->hh_flows)
 			return -ENOMEM;
 		for (i = 0; i < HH_FLOWS_CNT; i++)

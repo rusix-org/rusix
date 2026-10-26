@@ -112,7 +112,7 @@ static int __init nfhd_init_one(int id, u32 blocks, u32 bsize)
 		return -EINVAL;
 	}
 
-	dev = kmalloc_obj(struct nfhd_device);
+	dev = kmalloc(sizeof(struct nfhd_device), GFP_KERNEL);
 	if (!dev)
 		goto out;
 
@@ -132,8 +132,7 @@ static int __init nfhd_init_one(int id, u32 blocks, u32 bsize)
 	dev->disk->minors = 16;
 	dev->disk->fops = &nfhd_ops;
 	dev->disk->private_data = dev;
-	snprintf(dev->disk->disk_name, sizeof(dev->disk->disk_name), "nfhd%u",
-		 dev_id);
+	sprintf(dev->disk->disk_name, "nfhd%u", dev_id);
 	set_capacity(dev->disk, (sector_t)blocks * (bsize / 512));
 	err = add_disk(dev->disk);
 	if (err)

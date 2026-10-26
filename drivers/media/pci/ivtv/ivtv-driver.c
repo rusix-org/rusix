@@ -60,9 +60,11 @@ EXPORT_SYMBOL(ivtv_ext_init);
 
 /* add your revision and whatnot here */
 static const struct pci_device_id ivtv_pci_tbl[] = {
-	{ PCI_VDEVICE(ICOMP, PCI_DEVICE_ID_IVTV15) },
-	{ PCI_VDEVICE(ICOMP, PCI_DEVICE_ID_IVTV16) },
-	{ }
+	{PCI_VENDOR_ID_ICOMP, PCI_DEVICE_ID_IVTV15,
+	 PCI_ANY_ID, PCI_ANY_ID, 0, 0, 0},
+	{PCI_VENDOR_ID_ICOMP, PCI_DEVICE_ID_IVTV16,
+	 PCI_ANY_ID, PCI_ANY_ID, 0, 0, 0},
+	{0,}
 };
 
 MODULE_DEVICE_TABLE(pci,ivtv_pci_tbl);
@@ -951,7 +953,7 @@ static int ivtv_probe(struct pci_dev *pdev, const struct pci_device_id *pci_id)
 	int vbi_buf_size;
 	struct ivtv *itv;
 
-	itv = kzalloc_obj(struct ivtv);
+	itv = kzalloc(sizeof(struct ivtv), GFP_KERNEL);
 	if (itv == NULL)
 		return -ENOMEM;
 	itv->pdev = pdev;

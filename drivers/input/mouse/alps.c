@@ -12,7 +12,6 @@
  * tpconfig utility (by C. Scott Ananian and Bruce Kall).
  */
 
-#include "linux/workqueue.h"
 #include <linux/slab.h>
 #include <linux/input.h>
 #include <linux/input/mt.h>
@@ -1453,7 +1452,7 @@ err_free_input:
 static void alps_register_bare_ps2_mouse(struct work_struct *work)
 {
 	struct alps_data *priv = container_of(work, struct alps_data,
-					      dev3_register_work);
+					      dev3_register_work.work);
 	int error;
 
 	guard(mutex)(&alps_mutex);
@@ -1486,7 +1485,8 @@ static void alps_report_bare_ps2_packet(struct psmouse *psmouse,
 	} else if (unlikely(IS_ERR_OR_NULL(priv->dev3))) {
 		/* Register dev3 mouse if we received PS/2 packet first time */
 		if (!IS_ERR(priv->dev3))
-			schedule_work(&priv->dev3_register_work);
+			psmouse_queue_work(psmouse, &priv->dev3_register_work,
+					   0);
 		return;
 	} else {
 		dev = priv->dev3;
@@ -2975,7 +2975,7 @@ static void alps_disconnect(struct psmouse *psmouse)
 
 	psmouse_reset(psmouse);
 	timer_shutdown_sync(&priv->timer);
-	disable_work_sync(&priv->dev3_register_work);
+	disable_delayed_work_sync(&priv->dev3_register_work);
 	if (priv->dev2)
 		input_unregister_device(priv->dev2);
 	if (!IS_ERR_OR_NULL(priv->dev3))
@@ -3147,7 +3147,8 @@ int alps_init(struct psmouse *psmouse)
 
 	priv->psmouse = psmouse;
 
-	INIT_WORK(&priv->dev3_register_work, alps_register_bare_ps2_mouse);
+	INIT_DELAYED_WORK(&priv->dev3_register_work,
+			  alps_register_bare_ps2_mouse);
 
 	psmouse->protocol_handler = alps_process_byte;
 	psmouse->poll = alps_poll;
@@ -3205,7 +3206,7 @@ int alps_detect(struct psmouse *psmouse, bool set_properties)
 	 */
 	psmouse_reset(psmouse);
 
-	priv = kzalloc_obj(*priv);
+	priv = kzalloc(sizeof(*priv), GFP_KERNEL);
 	if (!priv)
 		return -ENOMEM;
 

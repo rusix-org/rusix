@@ -9,6 +9,7 @@
 #include <linux/device.h>
 #include <linux/err.h>
 #include <linux/math.h>
+#include <linux/mod_devicetable.h>
 #include <linux/module.h>
 #include <linux/platform_device.h>
 #include <linux/property.h>
@@ -50,14 +51,12 @@ static int spi_offload_trigger_pwm_validate(struct spi_offload_trigger *trigger,
 	wf.period_length_ns = DIV_ROUND_UP_ULL(NSEC_PER_SEC, periodic->frequency_hz);
 	/* REVISIT: 50% duty-cycle for now - may add config parameter later */
 	wf.duty_length_ns = wf.period_length_ns / 2;
-	wf.duty_offset_ns = periodic->offset_ns;
 
 	ret = pwm_round_waveform_might_sleep(st->pwm, &wf);
 	if (ret < 0)
 		return ret;
 
 	periodic->frequency_hz = DIV_ROUND_UP_ULL(NSEC_PER_SEC, wf.period_length_ns);
-	periodic->offset_ns = wf.duty_offset_ns;
 
 	return 0;
 }
@@ -78,7 +77,6 @@ static int spi_offload_trigger_pwm_enable(struct spi_offload_trigger *trigger,
 	wf.period_length_ns = DIV_ROUND_UP_ULL(NSEC_PER_SEC, periodic->frequency_hz);
 	/* REVISIT: 50% duty-cycle for now - may add config parameter later */
 	wf.duty_length_ns = wf.period_length_ns / 2;
-	wf.duty_offset_ns = periodic->offset_ns;
 
 	return pwm_set_waveform_might_sleep(st->pwm, &wf, false);
 }

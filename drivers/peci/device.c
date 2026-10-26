@@ -170,7 +170,7 @@ int peci_device_create(struct peci_controller *controller, u8 addr)
 		return ret;
 	}
 
-	device = kzalloc_obj(*device);
+	device = kzalloc(sizeof(*device), GFP_KERNEL);
 	if (!device)
 		return -ENOMEM;
 

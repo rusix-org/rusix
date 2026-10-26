@@ -49,7 +49,6 @@
 #include <rdma/ib_addr.h>
 #include <rdma/ib_smi.h>
 #include <rdma/ib_user_verbs.h>
-#include <rdma/uverbs_ioctl.h>
 
 #include "pvrdma.h"
 
@@ -253,9 +252,10 @@ int pvrdma_create_qp(struct ib_qp *ibqp, struct ib_qp_init_attr *init_attr,
 			dev_dbg(&dev->pdev->dev,
 				"create queuepair from user space\n");
 
-			ret = ib_copy_validate_udata_in(udata, ucmd, qp_addr);
-			if (ret)
+			if (ib_copy_from_udata(&ucmd, udata, sizeof(ucmd))) {
+				ret = -EFAULT;
 				goto err_qp;
+			}
 
 			/* Userspace supports qpn and qp handles? */
 			if (dev->dsr_version >= PVRDMA_QPHANDLE_VERSION &&
@@ -268,10 +268,9 @@ int pvrdma_create_qp(struct ib_qp *ibqp, struct ib_qp_init_attr *init_attr,
 
 			if (!is_srq) {
 				/* set qp->sq.wqe_cnt, shift, buf_size.. */
-				qp->rumem = ib_umem_get_va(ibqp->device,
-							   ucmd.rbuf_addr,
-							   ucmd.rbuf_size,
-							   IB_ACCESS_LOCAL_WRITE);
+				qp->rumem = ib_umem_get(ibqp->device,
+							ucmd.rbuf_addr,
+							ucmd.rbuf_size, 0);
 				if (IS_ERR(qp->rumem)) {
 					ret = PTR_ERR(qp->rumem);
 					goto err_qp;
@@ -282,9 +281,8 @@ int pvrdma_create_qp(struct ib_qp *ibqp, struct ib_qp_init_attr *init_attr,
 				qp->srq = to_vsrq(init_attr->srq);
 			}
 
-			qp->sumem = ib_umem_get_va(ibqp->device, ucmd.sbuf_addr,
-						   ucmd.sbuf_size,
-						   IB_ACCESS_LOCAL_WRITE);
+			qp->sumem = ib_umem_get(ibqp->device, ucmd.sbuf_addr,
+						ucmd.sbuf_size, 0);
 			if (IS_ERR(qp->sumem)) {
 				if (!is_srq)
 					ib_umem_release(qp->rumem);
@@ -408,10 +406,12 @@ int pvrdma_create_qp(struct ib_qp *ibqp, struct ib_qp_init_attr *init_attr,
 		qp_resp.qpn = qp->ibqp.qp_num;
 		qp_resp.qp_handle = qp->qp_handle;
 
-		ret = ib_respond_udata(udata, qp_resp);
-		if (ret) {
+		if (ib_copy_to_udata(udata, &qp_resp,
+				     min(udata->outlen, sizeof(qp_resp)))) {
+			dev_warn(&dev->pdev->dev,
+				 "failed to copy back udata\n");
 			__pvrdma_destroy_qp(dev, qp);
-			return ret;
+			return -EINVAL;
 		}
 	}
 

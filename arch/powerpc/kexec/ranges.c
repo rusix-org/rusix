@@ -513,7 +513,7 @@ out:
  */
 int get_usable_memory_ranges(struct crash_mem **mem_ranges)
 {
-	int ret, i;
+	int ret;
 
 	/*
 	 * Early boot failure observed on guests when low memory (first memory
@@ -525,13 +525,6 @@ int get_usable_memory_ranges(struct crash_mem **mem_ranges)
 	ret = add_mem_range(mem_ranges, 0, crashk_res.end + 1);
 	if (ret)
 		goto out;
-
-	for (i = 0; i < crashk_cma_cnt; i++) {
-		ret = add_mem_range(mem_ranges, crashk_cma_ranges[i].start,
-				    crashk_cma_ranges[i].end - crashk_cma_ranges[i].start + 1);
-		if (ret)
-			goto out;
-	}
 
 	ret = add_rtas_mem_range(mem_ranges);
 	if (ret)
@@ -551,22 +544,6 @@ out:
 #endif /* CONFIG_KEXEC_FILE */
 
 #ifdef CONFIG_CRASH_DUMP
-int arch_crash_exclude_mem_range(struct crash_mem **mem_ranges,
-				 unsigned long long mstart,
-				 unsigned long long mend)
-{
-	struct crash_mem *tmem = *mem_ranges;
-
-	/* Reallocate memory ranges if there is no space to split ranges */
-	if (tmem && (tmem->nr_ranges == tmem->max_nr_ranges)) {
-		tmem = realloc_mem_ranges(mem_ranges);
-		if (!tmem)
-			return -ENOMEM;
-	}
-
-	return crash_exclude_mem_range(tmem, mstart, mend);
-}
-
 /**
  * get_crash_memory_ranges - Get crash memory ranges. This list includes
  *                           first/crashing kernel's memory regions that
@@ -578,6 +555,7 @@ int arch_crash_exclude_mem_range(struct crash_mem **mem_ranges,
 int get_crash_memory_ranges(struct crash_mem **mem_ranges)
 {
 	phys_addr_t base, end;
+	struct crash_mem *tmem;
 	u64 i;
 	int ret;
 
@@ -602,7 +580,16 @@ int get_crash_memory_ranges(struct crash_mem **mem_ranges)
 			sort_memory_ranges(*mem_ranges, true);
 	}
 
-	ret = crash_exclude_core_ranges(mem_ranges);
+	/* Reallocate memory ranges if there is no space to split ranges */
+	tmem = *mem_ranges;
+	if (tmem && (tmem->nr_ranges == tmem->max_nr_ranges)) {
+		tmem = realloc_mem_ranges(mem_ranges);
+		if (!tmem)
+			goto out;
+	}
+
+	/* Exclude crashkernel region */
+	ret = crash_exclude_mem_range(tmem, crashk_res.start, crashk_res.end);
 	if (ret)
 		goto out;
 
@@ -629,6 +616,91 @@ int get_crash_memory_ranges(struct crash_mem **mem_ranges)
 out:
 	if (ret)
 		pr_err("Failed to setup crash memory ranges\n");
+	return ret;
+}
+
+/**
+ * remove_mem_range - Removes the given memory range from the range list.
+ * @mem_ranges:    Range list to remove the memory range to.
+ * @base:          Base address of the range to remove.
+ * @size:          Size of the memory range to remove.
+ *
+ * (Re)allocates memory, if needed.
+ *
+ * Returns 0 on success, negative errno on error.
+ */
+int remove_mem_range(struct crash_mem **mem_ranges, u64 base, u64 size)
+{
+	u64 end;
+	int ret = 0;
+	unsigned int i;
+	u64 mstart, mend;
+	struct crash_mem *mem_rngs = *mem_ranges;
+
+	if (!size)
+		return 0;
+
+	/*
+	 * Memory range are stored as start and end address, use
+	 * the same format to do remove operation.
+	 */
+	end = base + size - 1;
+
+	for (i = 0; i < mem_rngs->nr_ranges; i++) {
+		mstart = mem_rngs->ranges[i].start;
+		mend = mem_rngs->ranges[i].end;
+
+		/*
+		 * Memory range to remove is not part of this range entry
+		 * in the memory range list
+		 */
+		if (!(base >= mstart && end <= mend))
+			continue;
+
+		/*
+		 * Memory range to remove is equivalent to this entry in the
+		 * memory range list. Remove the range entry from the list.
+		 */
+		if (base == mstart && end == mend) {
+			for (; i < mem_rngs->nr_ranges - 1; i++) {
+				mem_rngs->ranges[i].start = mem_rngs->ranges[i+1].start;
+				mem_rngs->ranges[i].end = mem_rngs->ranges[i+1].end;
+			}
+			mem_rngs->nr_ranges--;
+			goto out;
+		}
+		/*
+		 * Start address of the memory range to remove and the
+		 * current memory range entry in the list is same. Just
+		 * move the start address of the current memory range
+		 * entry in the list to end + 1.
+		 */
+		else if (base == mstart) {
+			mem_rngs->ranges[i].start = end + 1;
+			goto out;
+		}
+		/*
+		 * End address of the memory range to remove and the
+		 * current memory range entry in the list is same.
+		 * Just move the end address of the current memory
+		 * range entry in the list to base - 1.
+		 */
+		else if (end == mend)  {
+			mem_rngs->ranges[i].end = base - 1;
+			goto out;
+		}
+		/*
+		 * Memory range to remove is not at the edge of current
+		 * memory range entry. Split the current memory entry into
+		 * two half.
+		 */
+		else {
+			size = mem_rngs->ranges[i].end - end + 1;
+			mem_rngs->ranges[i].end = base - 1;
+			ret = add_mem_range(mem_ranges, end + 1, size);
+		}
+	}
+out:
 	return ret;
 }
 #endif /* CONFIG_CRASH_DUMP */

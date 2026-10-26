@@ -102,7 +102,7 @@ static void mmio_pipe_open(struct trace_iterator *iter)
 
 	trace_seq_puts(s, "VERSION 20070824\n");
 
-	hiter = kzalloc_obj(*hiter);
+	hiter = kzalloc(sizeof(*hiter), GFP_KERNEL);
 	if (!hiter)
 		return;
 
@@ -244,15 +244,12 @@ static enum print_line_t mmio_print_map(struct trace_iterator *iter)
 static enum print_line_t mmio_print_mark(struct trace_iterator *iter)
 {
 	struct trace_entry *entry = iter->ent;
-	struct print_entry *print;
-	const char *msg;
+	struct print_entry *print = (struct print_entry *)entry;
+	const char *msg		= print->buf;
 	struct trace_seq *s	= &iter->seq;
 	unsigned long long t	= ns2usecs(iter->ts);
 	unsigned long usec_rem	= do_div(t, USEC_PER_SEC);
 	unsigned secs		= (unsigned long)t;
-
-	trace_assign_type(print, entry);
-	msg = print->buf;
 
 	/* The trailing newline must be in the message. */
 	trace_seq_printf(s, "MARK %u.%06lu %s", secs, usec_rem, msg);

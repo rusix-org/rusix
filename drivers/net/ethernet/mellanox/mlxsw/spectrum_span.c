@@ -87,7 +87,7 @@ int mlxsw_sp_span_init(struct mlxsw_sp *mlxsw_sp)
 		return -EIO;
 
 	entries_count = MLXSW_CORE_RES_GET(mlxsw_sp->core, MAX_SPAN);
-	span = kzalloc_flex(*span, entries, entries_count);
+	span = kzalloc(struct_size(span, entries, entries_count), GFP_KERNEL);
 	if (!span)
 		return -ENOMEM;
 	refcount_set(&span->policer_id_base_ref_count, 0);
@@ -224,31 +224,18 @@ struct mlxsw_sp_span_entry_ops mlxsw_sp_span_entry_ops_phys = {
 	.deconfigure = mlxsw_sp_span_entry_phys_deconfigure,
 };
 
-static int mlxsw_sp_span_dmac(int family,
+static int mlxsw_sp_span_dmac(struct neigh_table *tbl,
 			      const void *pkey,
 			      struct net_device *dev,
 			      unsigned char dmac[ETH_ALEN])
 {
-	struct neighbour *neigh;
+	struct neighbour *neigh = neigh_lookup(tbl, pkey, dev);
 	int err = 0;
 
-#if IS_ENABLED(CONFIG_IPV6_GRE)
-	if (family == AF_INET6) {
-		neigh = ipv6_neigh_lookup(dev, pkey);
-		if (!neigh) {
-			neigh = ipv6_neigh_create(dev, pkey);
-			if (IS_ERR(neigh))
-				return PTR_ERR(neigh);
-		}
-	} else
-#endif
-	{
-		neigh = ipv4_neigh_lookup(dev, pkey);
-		if (!neigh) {
-			neigh = ipv4_neigh_create(dev, pkey);
-			if (IS_ERR(neigh))
-				return PTR_ERR(neigh);
-		}
+	if (!neigh) {
+		neigh = neigh_create(tbl, pkey, dev);
+		if (IS_ERR(neigh))
+			return PTR_ERR(neigh);
 	}
 
 	neigh_event_send(neigh, NULL);
@@ -368,7 +355,8 @@ mlxsw_sp_span_entry_tunnel_parms_common(struct net_device *edev,
 					union mlxsw_sp_l3addr saddr,
 					union mlxsw_sp_l3addr daddr,
 					union mlxsw_sp_l3addr gw,
-					__u8 ttl, int family,
+					__u8 ttl,
+					struct neigh_table *tbl,
 					struct mlxsw_sp_span_parms *sparmsp)
 {
 	unsigned char dmac[ETH_ALEN];
@@ -377,7 +365,7 @@ mlxsw_sp_span_entry_tunnel_parms_common(struct net_device *edev,
 	if (mlxsw_sp_l3addr_is_zero(gw))
 		gw = daddr;
 
-	if (!edev || mlxsw_sp_span_dmac(family, &gw, edev, dmac))
+	if (!edev || mlxsw_sp_span_dmac(tbl, &gw, edev, dmac))
 		goto unoffloadable;
 
 	if (is_vlan_dev(edev))
@@ -481,10 +469,9 @@ mlxsw_sp_span_entry_gretap4_parms(struct mlxsw_sp *mlxsw_sp,
 		return mlxsw_sp_span_entry_unoffloadable(sparmsp);
 
 	l3edev = mlxsw_sp_span_gretap4_route(to_dev, &saddr.addr4, &gw.addr4);
-
 	return mlxsw_sp_span_entry_tunnel_parms_common(l3edev, saddr, daddr, gw,
 						       tparm.iph.ttl,
-						       AF_INET, sparmsp);
+						       &arp_tbl, sparmsp);
 }
 
 static int
@@ -587,10 +574,9 @@ mlxsw_sp_span_entry_gretap6_parms(struct mlxsw_sp *mlxsw_sp,
 		return mlxsw_sp_span_entry_unoffloadable(sparmsp);
 
 	l3edev = mlxsw_sp_span_gretap6_route(to_dev, &saddr.addr6, &gw.addr6);
-
 	return mlxsw_sp_span_entry_tunnel_parms_common(l3edev, saddr, daddr, gw,
 						       tparm.hop_limit,
-						       AF_INET6, sparmsp);
+						       &nd_tbl, sparmsp);
 }
 
 static int
@@ -1134,7 +1120,7 @@ mlxsw_sp_span_analyzed_port_create(struct mlxsw_sp_span *span,
 	struct mlxsw_sp_span_analyzed_port *analyzed_port;
 	int err;
 
-	analyzed_port = kzalloc_obj(*analyzed_port);
+	analyzed_port = kzalloc(sizeof(*analyzed_port), GFP_KERNEL);
 	if (!analyzed_port)
 		return ERR_PTR(-ENOMEM);
 
@@ -1519,7 +1505,7 @@ mlxsw_sp_span_trigger_entry_create(struct mlxsw_sp_span *span,
 	struct mlxsw_sp_span_trigger_entry *trigger_entry;
 	int err;
 
-	trigger_entry = kzalloc_obj(*trigger_entry);
+	trigger_entry = kzalloc(sizeof(*trigger_entry), GFP_KERNEL);
 	if (!trigger_entry)
 		return ERR_PTR(-ENOMEM);
 
@@ -1734,7 +1720,7 @@ static int mlxsw_sp2_span_init(struct mlxsw_sp *mlxsw_sp)
 static int mlxsw_sp2_span_policer_id_base_set(struct mlxsw_sp *mlxsw_sp,
 					      u16 policer_id_base)
 {
-	char mogcr_pl[MLXSW_REG_MOGCR_LEN] = {0};
+	char mogcr_pl[MLXSW_REG_MOGCR_LEN];
 	int err;
 
 	err = mlxsw_reg_query(mlxsw_sp->core, MLXSW_REG(mogcr), mogcr_pl);

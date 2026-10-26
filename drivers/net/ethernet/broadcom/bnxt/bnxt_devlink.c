@@ -1086,8 +1086,7 @@ static int bnxt_hwrm_nvm_req(struct bnxt *bp, u32 param_id, void *msg,
 }
 
 static int bnxt_dl_nvm_param_get(struct devlink *dl, u32 id,
-				 struct devlink_param_gset_ctx *ctx,
-				 struct netlink_ext_ack *extack)
+				 struct devlink_param_gset_ctx *ctx)
 {
 	struct bnxt *bp = bnxt_get_bp_from_dl(dl);
 	struct hwrm_nvm_get_variable_input *req;
@@ -1123,7 +1122,7 @@ static int bnxt_dl_nvm_param_set(struct devlink *dl, u32 id,
 }
 
 static int bnxt_dl_roce_validate(struct devlink *dl, u32 id,
-				 union devlink_param_value *val,
+				 union devlink_param_value val,
 				 struct netlink_ext_ack *extack)
 {
 	const struct bnxt_dl_nvm_param nvm_roce_cap = {0, NVM_OFF_RDMA_CAPABLE,
@@ -1149,7 +1148,7 @@ static int bnxt_dl_roce_validate(struct devlink *dl, u32 id,
 }
 
 static int bnxt_dl_msix_validate(struct devlink *dl, u32 id,
-				 union devlink_param_value *val,
+				 union devlink_param_value val,
 				 struct netlink_ext_ack *extack)
 {
 	int max_val = -1;
@@ -1160,7 +1159,7 @@ static int bnxt_dl_msix_validate(struct devlink *dl, u32 id,
 	if (id == DEVLINK_PARAM_GENERIC_ID_MSIX_VEC_PER_PF_MIN)
 		max_val = BNXT_MSIX_VEC_MIN_MAX;
 
-	if (val->vu32 > max_val) {
+	if (val.vu32 > max_val) {
 		NL_SET_ERR_MSG_MOD(extack, "MSIX value is exceeding the range");
 		return -EINVAL;
 	}
@@ -1169,8 +1168,7 @@ static int bnxt_dl_msix_validate(struct devlink *dl, u32 id,
 }
 
 static int bnxt_remote_dev_reset_get(struct devlink *dl, u32 id,
-				     struct devlink_param_gset_ctx *ctx,
-				     struct netlink_ext_ack *extack)
+				     struct devlink_param_gset_ctx *ctx)
 {
 	struct bnxt *bp = bnxt_get_bp_from_dl(dl);
 

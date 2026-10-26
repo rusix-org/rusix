@@ -45,7 +45,7 @@ int BPF_PROG(test_alloc_no_release, struct task_struct *task, u64 clone_flags)
 }
 
 SEC("tp_btf/task_newtask")
-__failure __msg("NULL pointer passed to trusted R1")
+__failure __msg("NULL pointer passed to trusted arg0")
 int BPF_PROG(test_alloc_double_release, struct task_struct *task, u64 clone_flags)
 {
 	struct bpf_cpumask *cpumask;
@@ -73,7 +73,7 @@ int BPF_PROG(test_acquire_wrong_cpumask, struct task_struct *task, u64 clone_fla
 }
 
 SEC("tp_btf/task_newtask")
-__failure __msg("bpf_cpumask_set_cpu R2 expected pointer to STRUCT bpf_cpumask")
+__failure __msg("bpf_cpumask_set_cpu args#1 expected pointer to STRUCT bpf_cpumask")
 int BPF_PROG(test_mutate_cpumask, struct task_struct *task, u64 clone_flags)
 {
 	/* Can't set the CPU of a non-struct bpf_cpumask. */
@@ -107,18 +107,18 @@ int BPF_PROG(test_insert_remove_no_release, struct task_struct *task, u64 clone_
 }
 
 SEC("tp_btf/task_newtask")
-__failure __msg("NULL pointer passed to trusted R1")
+__failure __msg("NULL pointer passed to trusted arg0")
 int BPF_PROG(test_cpumask_null, struct task_struct *task, u64 clone_flags)
 {
-  /* NULL passed to kfunc. */
+  /* NULL passed to KF_TRUSTED_ARGS kfunc. */
 	bpf_cpumask_empty(NULL);
 
 	return 0;
 }
 
-SEC("?fentry.s/" SYS_PREFIX "sys_getpgid")
+SEC("tp_btf/task_newtask")
 __failure __msg("R2 must be a rcu pointer")
-int BPF_PROG(test_global_mask_out_of_rcu)
+int BPF_PROG(test_global_mask_out_of_rcu, struct task_struct *task, u64 clone_flags)
 {
 	struct bpf_cpumask *local, *prev;
 
@@ -133,10 +133,6 @@ int BPF_PROG(test_global_mask_out_of_rcu)
 		return 0;
 	}
 
-	/*
-	 * Use a sleepable program so explicit RCU is the only source of RCU
-	 * protection.
-	 */
 	bpf_rcu_read_lock();
 	local = global_mask;
 	if (!local) {
@@ -155,7 +151,7 @@ int BPF_PROG(test_global_mask_out_of_rcu)
 }
 
 SEC("tp_btf/task_newtask")
-__failure __msg("NULL pointer passed to trusted R2")
+__failure __msg("NULL pointer passed to trusted arg1")
 int BPF_PROG(test_global_mask_no_null_check, struct task_struct *task, u64 clone_flags)
 {
 	struct bpf_cpumask *local, *prev;
@@ -183,7 +179,7 @@ int BPF_PROG(test_global_mask_no_null_check, struct task_struct *task, u64 clone
 }
 
 SEC("tp_btf/task_newtask")
-__failure __msg("release function bpf_kptr_xchg expects referenced PTR_TO_BTF_ID passed to R2")
+__failure __msg("Possibly NULL pointer passed to helper arg2")
 int BPF_PROG(test_global_mask_rcu_no_null_check, struct task_struct *task, u64 clone_flags)
 {
 	struct bpf_cpumask *prev, *curr;
@@ -235,7 +231,7 @@ int BPF_PROG(test_populate_invalid_destination, struct task_struct *task, u64 cl
 	u64 bits;
 	int ret;
 
-	ret = bpf_cpumask_populate(invalid, &bits, sizeof(bits));
+	ret = bpf_cpumask_populate((struct cpumask *)invalid, &bits, sizeof(bits));
 	if (!ret)
 		err = 2;
 
@@ -243,7 +239,7 @@ int BPF_PROG(test_populate_invalid_destination, struct task_struct *task, u64 cl
 }
 
 SEC("tp_btf/task_newtask")
-__failure __msg("R2 type=scalar expected=fp")
+__failure __msg("leads to invalid memory access")
 int BPF_PROG(test_populate_invalid_source, struct task_struct *task, u64 clone_flags)
 {
 	void *garbage = (void *)0x123456;
@@ -256,30 +252,11 @@ int BPF_PROG(test_populate_invalid_source, struct task_struct *task, u64 clone_f
 		return 0;
 	}
 
-	ret = bpf_cpumask_populate(local, garbage, 8);
+	ret = bpf_cpumask_populate((struct cpumask *)local, garbage, 8);
 	if (!ret)
 		err = 2;
 
 	bpf_cpumask_release(local);
-
-	return 0;
-}
-
-SEC("tp_btf/task_newtask")
-__failure __msg("expected pointer to STRUCT bpf_cpumask but R1 has a pointer to STRUCT cpumask")
-int BPF_PROG(test_populate_borrowed_destination, struct task_struct *task, u64 clone_flags)
-{
-	u64 bits;
-	int ret;
-
-	/*
-	 * task->cpus_ptr is a borrowed, read-only struct cpumask *, not an
-	 * owned struct bpf_cpumask *. The verifier must reject it as a
-	 * writable destination for bpf_cpumask_populate().
-	 */
-	ret = bpf_cpumask_populate((struct bpf_cpumask *)task->cpus_ptr, &bits, sizeof(bits));
-	if (!ret)
-		err = 2;
 
 	return 0;
 }

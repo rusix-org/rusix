@@ -286,12 +286,12 @@ static void __trace_find_cmdline(int pid, char comm[])
 	int tpid;
 
 	if (!pid) {
-		strscpy(comm, "<idle>", TASK_COMM_LEN);
+		strcpy(comm, "<idle>");
 		return;
 	}
 
 	if (WARN_ON_ONCE(pid < 0)) {
-		strscpy(comm, "<XXX>", TASK_COMM_LEN);
+		strcpy(comm, "<XXX>");
 		return;
 	}
 
@@ -304,7 +304,7 @@ static void __trace_find_cmdline(int pid, char comm[])
 			return;
 		}
 	}
-	strscpy(comm, "<...>", TASK_COMM_LEN);
+	strcpy(comm, "<...>");
 }
 
 void trace_find_cmdline(int pid, char comm[])
@@ -444,7 +444,8 @@ int trace_alloc_tgid_map(void)
 		return 0;
 
 	tgid_map_max = init_pid_ns.pid_max;
-	map = kvzalloc_objs(*tgid_map, tgid_map_max + 1);
+	map = kvcalloc(tgid_map_max + 1, sizeof(*tgid_map),
+		       GFP_KERNEL);
 	if (!map)
 		return -ENOMEM;
 

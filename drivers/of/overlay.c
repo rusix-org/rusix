@@ -260,7 +260,7 @@ static struct property *dup_and_fixup_symbol_prop(
 	if (target_path_len == 1 && target_path[0] == '/' && path_tail_len)
 		target_path_len = 0;
 
-	new_prop = kzalloc_obj(*new_prop);
+	new_prop = kzalloc(sizeof(*new_prop), GFP_KERNEL);
 	if (!new_prop)
 		goto err_free_target_path;
 
@@ -270,8 +270,8 @@ static struct property *dup_and_fixup_symbol_prop(
 	if (!new_prop->name || !new_prop->value)
 		goto err_free_new_prop;
 
-	memcpy(new_prop->value, target_path, target_path_len);
-	memcpy(new_prop->value + target_path_len, path_tail, path_tail_len);
+	strcpy(new_prop->value, target_path);
+	strcpy(new_prop->value + target_path_len, path_tail);
 
 	of_property_set_flag(new_prop, OF_DYNAMIC);
 
@@ -797,7 +797,7 @@ static int init_overlay_changeset(struct overlay_changeset *ovcs,
 		of_node_put(node);
 	}
 
-	fragments = kzalloc_objs(*fragments, cnt);
+	fragments = kcalloc(cnt, sizeof(*fragments), GFP_KERNEL);
 	if (!fragments) {
 		ret = -ENOMEM;
 		goto err_out;
@@ -1033,7 +1033,7 @@ int of_overlay_fdt_apply(const void *overlay_fdt, u32 overlay_fdt_size,
 	if (overlay_fdt_size < size)
 		return -EINVAL;
 
-	ovcs = kzalloc_obj(*ovcs);
+	ovcs = kzalloc(sizeof(*ovcs), GFP_KERNEL);
 	if (!ovcs)
 		return -ENOMEM;
 
@@ -1214,9 +1214,6 @@ int of_overlay_remove(int *ovcs_id)
 	struct overlay_changeset *ovcs;
 	int ret, ret_apply, ret_tmp;
 
-	if (*ovcs_id == 0)
-		return 0;
-
 	if (devicetree_corrupt()) {
 		pr_err("suspect devicetree state, refuse to remove overlay\n");
 		ret = -EBUSY;
@@ -1282,3 +1279,26 @@ out:
 	return ret;
 }
 EXPORT_SYMBOL_GPL(of_overlay_remove);
+
+/**
+ * of_overlay_remove_all() - Reverts and frees all overlay changesets
+ *
+ * Removes all overlays from the system in the correct order.
+ *
+ * Return: 0 on success, or a negative error number
+ */
+int of_overlay_remove_all(void)
+{
+	struct overlay_changeset *ovcs, *ovcs_n;
+	int ret;
+
+	/* the tail of list is guaranteed to be safe to remove */
+	list_for_each_entry_safe_reverse(ovcs, ovcs_n, &ovcs_list, ovcs_list) {
+		ret = of_overlay_remove(&ovcs->id);
+		if (ret)
+			return ret;
+	}
+
+	return 0;
+}
+EXPORT_SYMBOL_GPL(of_overlay_remove_all);

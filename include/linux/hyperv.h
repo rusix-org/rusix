@@ -21,7 +21,7 @@
 #include <linux/timer.h>
 #include <linux/completion.h>
 #include <linux/device.h>
-#include <linux/device-id/hv_vmbus.h>
+#include <linux/mod_devicetable.h>
 #include <linux/interrupt.h>
 #include <linux/reciprocal_div.h>
 #include <hyperv/hvhdk.h>
@@ -70,8 +70,7 @@
  */
 enum hv_gpadl_type {
 	HV_GPADL_BUFFER,
-	HV_GPADL_RING,
-	HV_GPADL_BUFFER_DECRYPTED
+	HV_GPADL_RING
 };
 
 /* Single-page buffer */
@@ -261,8 +260,9 @@ static inline u32 hv_get_avail_to_write_percent(
  * 5 . 2  (Windows Server 2019, RS5)
  * 5 . 3  (Windows Server 2022)
  *
- * The WS2008, WIN7, WIN8, and WIN8_1 versions are listed here for
- * completeness but are no longer supported in the Linux kernel.
+ * The WS2008 and WIN7 versions are listed here for
+ * completeness but are no longer supported in the
+ * Linux kernel.
  */
 
 #define VMBUS_MAKE_VERSION(MAJ, MIN)	((((u32)MAJ) << 16) | (MIN))
@@ -1015,8 +1015,8 @@ struct vmbus_channel {
 	/* The max size of a packet on this channel */
 	u32 max_pkt_size;
 
-	/*  function to mmap ring buffer memory to the channel's sysfs ring attribute */
-	int (*mmap_prepare_ring_buffer)(struct vmbus_channel *channel, struct vm_area_desc *desc);
+	/* function to mmap ring buffer memory to the channel's sysfs ring attribute */
+	int (*mmap_ring_buffer)(struct vmbus_channel *channel, struct vm_area_struct *vma);
 
 	/* boolean to control visibility of sysfs for ring buffer */
 	bool ring_sysfs_visible;
@@ -1205,20 +1205,8 @@ extern int vmbus_establish_gpadl(struct vmbus_channel *channel,
 				      u32 size,
 				      struct vmbus_gpadl *gpadl);
 
-extern int vmbus_establish_gpadl_caller_decrypted(struct vmbus_channel *channel,
-						  void *kbuffer,
-						  u32 size,
-						  struct vmbus_gpadl *gpadl);
-
 extern int vmbus_teardown_gpadl(struct vmbus_channel *channel,
 				     struct vmbus_gpadl *gpadl);
-
-extern void *vmbus_alloc_buffer(struct vmbus_channel *channel,
-				u32 size,
-				struct page ***chunks_out,
-				u32 *chunk_cnt_out);
-
-extern void vmbus_free_buffer(void *addr, struct page **chunks, u32 chunk_cnt);
 
 void vmbus_reset_channel_cb(struct vmbus_channel *channel);
 
@@ -1299,14 +1287,6 @@ struct hv_device {
 #define device_to_hv_device(d)	container_of_const(d, struct hv_device, device)
 #define drv_to_hv_drv(d)	container_of_const(d, struct hv_driver, driver)
 
-static inline u32 hv_build_logical_dev_id_prefix(struct hv_device *hdev)
-{
-	return ((u32)hdev->dev_instance.b[5] << 24) |
-	       ((u32)hdev->dev_instance.b[4] << 16) |
-	       ((u32)hdev->dev_instance.b[7] << 8) |
-	       (hdev->dev_instance.b[6] & 0xf8u);
-}
-
 static inline void hv_set_drvdata(struct hv_device *dev, void *data)
 {
 	dev_set_drvdata(&dev->device, data);
@@ -1318,12 +1298,6 @@ static inline void *hv_get_drvdata(struct hv_device *dev)
 }
 
 struct device *hv_get_vmbus_root_device(void);
-
-#if IS_ENABLED(CONFIG_HYPERV_VMBUS)
-bool hv_vmbus_exists(void);
-#else
-static inline bool hv_vmbus_exists(void) { return false; }
-#endif
 
 struct hv_ring_buffer_debug_info {
 	u32 current_interrupt_mask;

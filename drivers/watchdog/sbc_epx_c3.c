@@ -25,7 +25,6 @@
 #include <linux/ioport.h>
 #include <linux/uaccess.h>
 #include <linux/io.h>
-#include <linux/stringify.h>
 
 static int epx_c3_alive;
 
@@ -34,7 +33,7 @@ static int epx_c3_alive;
 static bool nowayout = WATCHDOG_NOWAYOUT;
 module_param(nowayout, bool, 0);
 MODULE_PARM_DESC(nowayout, "Watchdog cannot be stopped once started (default="
-					__stringify(WATCHDOG_NOWAYOUT) ")");
+					__MODULE_STRING(WATCHDOG_NOWAYOUT) ")");
 
 #define EPXC3_WATCHDOG_CTL_REG 0x1ee /* write 1 to enable, 0 to disable */
 #define EPXC3_WATCHDOG_PET_REG 0x1ef /* write anything to pet once enabled */

@@ -22,7 +22,6 @@
 #include <linux/err.h>
 #include <linux/of.h>
 #include <linux/of_device.h>
-#include <linux/stringify.h>
 
 /* RSTOUT mask register physical address for Orion5x, Kirkwood and Dove */
 #define ORION_RSTOUT_MASK_OFFSET	0x20108
@@ -607,10 +606,6 @@ static int orion_wdt_probe(struct platform_device *pdev)
 
 	/* Request the IRQ only after the watchdog is disabled */
 	irq = platform_get_irq_optional(pdev, 0);
-	if (irq < 0 && irq != -ENXIO) {
-		ret = irq;
-		goto disable_clk;
-	}
 	if (irq > 0) {
 		/*
 		 * Not all supported platforms specify an interrupt for the
@@ -618,22 +613,22 @@ static int orion_wdt_probe(struct platform_device *pdev)
 		 */
 		ret = devm_request_irq(&pdev->dev, irq, orion_wdt_irq, 0,
 				       pdev->name, dev);
-		if (ret < 0)
+		if (ret < 0) {
+			dev_err(&pdev->dev, "failed to request IRQ\n");
 			goto disable_clk;
+		}
 	}
 
 	/* Optional 2nd interrupt for pretimeout */
 	irq = platform_get_irq_optional(pdev, 1);
-	if (irq < 0 && irq != -ENXIO) {
-		ret = irq;
-		goto disable_clk;
-	}
 	if (irq > 0) {
 		orion_wdt_info.options |= WDIOF_PRETIMEOUT;
 		ret = devm_request_irq(&pdev->dev, irq, orion_wdt_pre_irq,
 				       0, pdev->name, dev);
-		if (ret < 0)
+		if (ret < 0) {
+			dev_err(&pdev->dev, "failed to request IRQ\n");
 			goto disable_clk;
+		}
 	}
 
 
@@ -688,7 +683,7 @@ MODULE_PARM_DESC(heartbeat, "Initial watchdog heartbeat in seconds");
 
 module_param(nowayout, bool, 0);
 MODULE_PARM_DESC(nowayout, "Watchdog cannot be stopped once started (default="
-				__stringify(WATCHDOG_NOWAYOUT) ")");
+				__MODULE_STRING(WATCHDOG_NOWAYOUT) ")");
 
 MODULE_LICENSE("GPL v2");
 MODULE_ALIAS("platform:orion_wdt");

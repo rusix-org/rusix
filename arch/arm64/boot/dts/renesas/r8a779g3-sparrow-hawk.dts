@@ -289,11 +289,6 @@
 };
 
 /* Page 27 / DSI to Display */
-&dsc {
-	status = "okay";
-};
-
-/* Page 27 / DSI to Display */
 &dsi1 {
 	status = "okay";
 
@@ -503,7 +498,6 @@
 	#size-cells = <0>;
 	pinctrl-0 = <&i2c3_pins>;
 	pinctrl-names = "default";
-	status = "okay";
 };
 
 /* Page 31 / IO_CN */
@@ -512,7 +506,6 @@
 	#size-cells = <0>;
 	pinctrl-0 = <&i2c4_pins>;
 	pinctrl-names = "default";
-	status = "okay";
 };
 
 /* Page 18 / POWER_CORE and Page 19 / POWER_PMIC */
@@ -552,10 +545,6 @@
 			remote-endpoint = <&da7212_endpoint>;
 		};
 	};
-};
-
-&otp {
-	bootph-all;
 };
 
 /* Page 26 / 2230 Key M M.2 */
@@ -642,7 +631,6 @@
 	hscif0_pins: hscif0 {
 		groups = "hscif0_data", "hscif0_ctrl";
 		function = "hscif0";
-		bootph-all;
 	};
 
 	/* Page 23 / DEBUG */
@@ -705,12 +693,6 @@
 		function = "intc_ex";
 	};
 
-	/* Page 30 / Audio_Codec */
-	msiof1_pins: msiof1 {
-		groups = "msiof1_clk", "msiof1_sync", "msiof1_txd", "msiof1_rxd";
-		function = "msiof1";
-	};
-
 	/* Page 31 / FAN */
 	pwm0_pins: pwm0 {
 		groups = "pwm0";
@@ -760,6 +742,12 @@
 		groups = "mmc_data4", "mmc_ctrl";
 		function = "mmc";
 		power-source = <1800>;
+	};
+
+	/* Page 30 / Audio_Codec */
+	msiof1_pins: sound {
+		groups = "msiof1_clk", "msiof1_sync", "msiof1_txd", "msiof1_rxd";
+		function = "msiof1";
 	};
 
 	/* Page 30 / Audio_Codec */

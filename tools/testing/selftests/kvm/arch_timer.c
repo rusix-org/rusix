@@ -78,14 +78,14 @@ static void *test_vcpu_run(void *arg)
 	return NULL;
 }
 
-static u32 test_get_pcpu(void)
+static uint32_t test_get_pcpu(void)
 {
-	u32 pcpu;
+	uint32_t pcpu;
 	unsigned int nproc_conf;
 	cpu_set_t online_cpuset;
 
 	nproc_conf = get_nprocs_conf();
-	kvm_sched_getaffinity(0, sizeof(cpu_set_t), &online_cpuset);
+	sched_getaffinity(0, sizeof(cpu_set_t), &online_cpuset);
 
 	/* Randomly find an available pCPU to place a vCPU on */
 	do {
@@ -98,7 +98,7 @@ static u32 test_get_pcpu(void)
 static int test_migrate_vcpu(unsigned int vcpu_idx)
 {
 	int ret;
-	u32 new_pcpu = test_get_pcpu();
+	uint32_t new_pcpu = test_get_pcpu();
 
 	pr_debug("Migrating vCPU: %u to pCPU: %u\n", vcpu_idx, new_pcpu);
 
@@ -141,27 +141,33 @@ static void test_run(struct kvm_vm *vm)
 {
 	pthread_t pt_vcpu_migration;
 	unsigned int i;
+	int ret;
 
 	pthread_mutex_init(&vcpu_done_map_lock, NULL);
 	vcpu_done_map = bitmap_zalloc(test_args.nr_vcpus);
 	TEST_ASSERT(vcpu_done_map, "Failed to allocate vcpu done bitmap");
 
-	for (i = 0; i < (unsigned long)test_args.nr_vcpus; i++)
-		kvm_pthread_create(&pt_vcpu_run[i], NULL, test_vcpu_run,
-				   (void *)(unsigned long)i);
+	for (i = 0; i < (unsigned long)test_args.nr_vcpus; i++) {
+		ret = pthread_create(&pt_vcpu_run[i], NULL, test_vcpu_run,
+				     (void *)(unsigned long)i);
+		TEST_ASSERT(!ret, "Failed to create vCPU-%d pthread", i);
+	}
 
 	/* Spawn a thread to control the vCPU migrations */
 	if (test_args.migration_freq_ms) {
 		srand(time(NULL));
 
-		kvm_pthread_create(&pt_vcpu_migration, NULL, test_vcpu_migration, NULL);
+		ret = pthread_create(&pt_vcpu_migration, NULL,
+					test_vcpu_migration, NULL);
+		TEST_ASSERT(!ret, "Failed to create the migration pthread");
 	}
 
+
 	for (i = 0; i < test_args.nr_vcpus; i++)
-		kvm_pthread_join(pt_vcpu_run[i], NULL);
+		pthread_join(pt_vcpu_run[i], NULL);
 
 	if (test_args.migration_freq_ms)
-		kvm_pthread_join(pt_vcpu_migration, NULL);
+		pthread_join(pt_vcpu_migration, NULL);
 
 	bitmap_free(vcpu_done_map);
 }

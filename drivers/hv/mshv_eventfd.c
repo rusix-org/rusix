@@ -129,8 +129,8 @@ static int mshv_vp_irq_try_set_vector(struct mshv_vp *vp, u32 vector)
 
 	new_iv.vector[new_iv.vector_count++] = vector;
 
-	if (!try_cmpxchg(&vp->vp_register_page->interrupt_vectors.as_uint64,
-			 &iv.as_uint64, new_iv.as_uint64))
+	if (cmpxchg(&vp->vp_register_page->interrupt_vectors.as_uint64,
+		    iv.as_uint64, new_iv.as_uint64) != iv.as_uint64)
 		return -EAGAIN;
 
 	return 0;
@@ -304,13 +304,13 @@ static int mshv_irqfd_wakeup(wait_queue_entry_t *wait, unsigned int mode,
 {
 	struct mshv_irqfd *irqfd = container_of(wait, struct mshv_irqfd,
 						irqfd_wait);
-	__poll_t flags = key_to_poll(key);
+	unsigned long flags = (unsigned long)key;
 	int idx;
 	unsigned int seq;
 	struct mshv_partition *pt = irqfd->irqfd_partn;
 	int ret = 0;
 
-	if (flags & EPOLLIN) {
+	if (flags & POLLIN) {
 		u64 cnt;
 
 		eventfd_ctx_do_read(irqfd->irqfd_eventfd_ctx, &cnt);
@@ -329,7 +329,7 @@ static int mshv_irqfd_wakeup(wait_queue_entry_t *wait, unsigned int mode,
 		ret = 1;
 	}
 
-	if (flags & EPOLLHUP) {
+	if (flags & POLLHUP) {
 		/* The eventfd is closing, detach from the partition */
 		unsigned long flags;
 
@@ -395,13 +395,13 @@ static int mshv_irqfd_assign(struct mshv_partition *pt,
 {
 	struct eventfd_ctx *eventfd = NULL, *resamplefd = NULL;
 	struct mshv_irqfd *irqfd, *tmp;
-	__poll_t events;
+	unsigned int events;
 	int ret;
 	int idx;
 
 	CLASS(fd, f)(args->fd);
 
-	irqfd = kzalloc_obj(*irqfd);
+	irqfd = kzalloc(sizeof(*irqfd), GFP_KERNEL);
 	if (!irqfd)
 		return -ENOMEM;
 
@@ -446,7 +446,7 @@ static int mshv_irqfd_assign(struct mshv_partition *pt,
 		}
 
 		if (!irqfd->irqfd_resampler) {
-			rp = kzalloc_obj(*rp, GFP_KERNEL_ACCOUNT);
+			rp = kzalloc(sizeof(*rp), GFP_KERNEL_ACCOUNT);
 			if (!rp) {
 				ret = -ENOMEM;
 				mutex_unlock(&pt->irqfds_resampler_lock);
@@ -516,7 +516,7 @@ static int mshv_irqfd_assign(struct mshv_partition *pt,
 	 */
 	events = vfs_poll(fd_file(f), &irqfd->irqfd_polltbl);
 
-	if (events & EPOLLIN)
+	if (events & POLLIN)
 		mshv_assert_irq_slow(irqfd);
 
 	srcu_read_unlock(&pt->pt_irq_srcu, idx);
@@ -609,7 +609,7 @@ static void mshv_irqfd_release(struct mshv_partition *pt)
 
 int mshv_irqfd_wq_init(void)
 {
-	irqfd_cleanup_wq = alloc_workqueue("mshv-irqfd-cleanup", WQ_PERCPU, 0);
+	irqfd_cleanup_wq = alloc_workqueue("mshv-irqfd-cleanup", 0, 0);
 	if (!irqfd_cleanup_wq)
 		return -ENOMEM;
 
@@ -718,7 +718,7 @@ static int mshv_assign_ioeventfd(struct mshv_partition *pt,
 	if (IS_ERR(eventfd))
 		return PTR_ERR(eventfd);
 
-	p = kzalloc_obj(*p);
+	p = kzalloc(sizeof(*p), GFP_KERNEL);
 	if (!p) {
 		ret = -ENOMEM;
 		goto fail;
@@ -744,14 +744,6 @@ static int mshv_assign_ioeventfd(struct mshv_partition *pt,
 	ret = mshv_register_doorbell(pt->pt_id, ioeventfd_mmio_write,
 				     (void *)pt, p->iovntfd_addr,
 				     p->iovntfd_datamatch, doorbell_flags);
-
-	trace_mshv_assign_ioeventfd(pt->pt_id, p->iovntfd_addr,
-				    p->iovntfd_length,
-				    p->iovntfd_datamatch,
-				    p->iovntfd_wildcard,
-				    p->iovntfd_eventfd,
-				    ret);
-
 	if (ret < 0)
 		goto unlock_fail;
 
@@ -798,12 +790,6 @@ static int mshv_deassign_ioeventfd(struct mshv_partition *pt,
 		if (!p->iovntfd_wildcard &&
 		    p->iovntfd_datamatch != args->datamatch)
 			continue;
-
-		trace_mshv_deassign_ioeventfd(pt->pt_id, p->iovntfd_addr,
-					      p->iovntfd_length,
-					      p->iovntfd_datamatch,
-					      p->iovntfd_wildcard,
-					      p->iovntfd_eventfd);
 
 		hlist_del_rcu(&p->iovntfd_hnode);
 		synchronize_rcu();

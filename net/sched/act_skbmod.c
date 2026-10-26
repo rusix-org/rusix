@@ -91,7 +91,7 @@ out:
 	return p->action;
 
 drop:
-	qstats_cpu_overlimit_inc(d->common.cpu_qstats);
+	qstats_overlimit_inc(this_cpu_ptr(d->common.cpu_qstats));
 	return TC_ACT_SHOT;
 }
 
@@ -189,7 +189,7 @@ static int tcf_skbmod_init(struct net *net, struct nlattr *nla,
 
 	d = to_skbmod(*a);
 
-	p = kzalloc_obj(struct tcf_skbmod_params);
+	p = kzalloc(sizeof(struct tcf_skbmod_params), GFP_KERNEL);
 	if (unlikely(!p)) {
 		err = -ENOMEM;
 		goto put_chain;
@@ -279,21 +279,12 @@ nla_put_failure:
 	return -1;
 }
 
-static size_t tcf_skbmod_get_fill_size(const struct tc_action *act)
-{
-	return nla_total_size(sizeof(struct tc_skbmod)) /* TCA_SKBMOD_PARMS */
-		+ nla_total_size(ETH_ALEN) /* TCA_SKBMOD_DMAC */
-		+ nla_total_size(ETH_ALEN) /* TCA_SKBMOD_SMAC */
-		+ nla_total_size(sizeof(u16)); /* TCA_SKBMOD_ETYPE */
-}
-
 static struct tc_action_ops act_skbmod_ops = {
 	.kind		=	"skbmod",
 	.id		=	TCA_ACT_SKBMOD,
 	.owner		=	THIS_MODULE,
 	.act		=	tcf_skbmod_act,
 	.dump		=	tcf_skbmod_dump,
-	.get_fill_size	=	tcf_skbmod_get_fill_size,
 	.init		=	tcf_skbmod_init,
 	.cleanup	=	tcf_skbmod_cleanup,
 	.size		=	sizeof(struct tcf_skbmod),

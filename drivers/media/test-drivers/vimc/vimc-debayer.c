@@ -240,7 +240,6 @@ static void vimc_debayer_adjust_sink_fmt(struct v4l2_mbus_framefmt *fmt)
 }
 
 static int vimc_debayer_set_fmt(struct v4l2_subdev *sd,
-				const struct v4l2_subdev_client_info *ci,
 				struct v4l2_subdev_state *sd_state,
 				struct v4l2_subdev_format *fmt)
 {
@@ -565,7 +564,7 @@ static struct vimc_ent_device *vimc_debayer_add(struct vimc_device *vimc,
 	int ret;
 
 	/* Allocate the vdebayer struct */
-	vdebayer = kzalloc_obj(*vdebayer);
+	vdebayer = kzalloc(sizeof(*vdebayer), GFP_KERNEL);
 	if (!vdebayer)
 		return ERR_PTR(-ENOMEM);
 

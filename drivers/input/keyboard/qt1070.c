@@ -133,7 +133,8 @@ static int qt1070_probe(struct i2c_client *client)
 	int i;
 	int err;
 
-	if (!i2c_check_functionality(client->adapter, I2C_FUNC_SMBUS_BYTE)) {
+	err = i2c_check_functionality(client->adapter, I2C_FUNC_SMBUS_BYTE);
+	if (!err) {
 		dev_err(&client->dev, "%s adapter not supported\n",
 			dev_driver_string(&client->adapter->dev));
 		return -ENODEV;
@@ -233,7 +234,7 @@ static int qt1070_resume(struct device *dev)
 static DEFINE_SIMPLE_DEV_PM_OPS(qt1070_pm_ops, qt1070_suspend, qt1070_resume);
 
 static const struct i2c_device_id qt1070_id[] = {
-	{ .name = "qt1070" },
+	{ "qt1070" },
 	{ }
 };
 MODULE_DEVICE_TABLE(i2c, qt1070_id);

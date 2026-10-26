@@ -26,6 +26,7 @@
 #include "verbs.h"
 #include "aspm.h"
 #include "affinity.h"
+#include "vnic.h"
 #include "exp_rcv.h"
 #include "netdev.h"
 
@@ -348,7 +349,7 @@ int hfi1_create_ctxtdata(struct hfi1_pportdata *ppd, int numa,
 		 * We do this here because we have to take into account all
 		 * the RcvArray entries that previous context would have
 		 * taken and we have to account for any extra groups assigned
-		 * to the static (kernel) or dynamic (user) contexts.
+		 * to the static (kernel) or dynamic (vnic/user) contexts.
 		 */
 		if (ctxt < dd->first_dyn_alloc_ctxt) {
 			if (ctxt < kctxt_ngroups) {
@@ -643,7 +644,7 @@ void hfi1_init_pportdata(struct pci_dev *pdev, struct hfi1_pportdata *ppd,
 
 	spin_lock_init(&ppd->cc_state_lock);
 	spin_lock_init(&ppd->cc_log_lock);
-	cc_state = kzalloc_obj(*cc_state);
+	cc_state = kzalloc(sizeof(*cc_state), GFP_KERNEL);
 	RCU_INIT_POINTER(ppd->cc_state, cc_state);
 	if (!cc_state)
 		goto bail;
@@ -738,27 +739,31 @@ static int create_workqueues(struct hfi1_devdata *dd)
 
 	for (pidx = 0; pidx < dd->num_pports; ++pidx) {
 		ppd = dd->pport + pidx;
-		ppd->hfi1_wq =
-			alloc_workqueue(
-			    "hfi%d_%d",
-			    WQ_SYSFS | WQ_HIGHPRI | WQ_CPU_INTENSIVE | WQ_MEM_RECLAIM |
-			    WQ_PERCPU,
-			    HFI1_MAX_ACTIVE_WORKQUEUE_ENTRIES,
-			    dd->unit, pidx);
-		if (!ppd->hfi1_wq)
-			goto wq_error;
-		/*
-		 * Make the link workqueue single-threaded to enforce
-		 * serialization.
-		 */
-		ppd->link_wq =
-			alloc_workqueue(
-			    "hfi_link_%d_%d",
-			    WQ_SYSFS | WQ_MEM_RECLAIM | WQ_UNBOUND,
-			    1, /* max_active */
-			    dd->unit, pidx);
-		if (!ppd->link_wq)
-			goto wq_error;
+		if (!ppd->hfi1_wq) {
+			ppd->hfi1_wq =
+				alloc_workqueue(
+				    "hfi%d_%d",
+				    WQ_SYSFS | WQ_HIGHPRI | WQ_CPU_INTENSIVE |
+				    WQ_MEM_RECLAIM,
+				    HFI1_MAX_ACTIVE_WORKQUEUE_ENTRIES,
+				    dd->unit, pidx);
+			if (!ppd->hfi1_wq)
+				goto wq_error;
+		}
+		if (!ppd->link_wq) {
+			/*
+			 * Make the link workqueue single-threaded to enforce
+			 * serialization.
+			 */
+			ppd->link_wq =
+				alloc_workqueue(
+				    "hfi_link_%d_%d",
+				    WQ_SYSFS | WQ_MEM_RECLAIM | WQ_UNBOUND,
+				    1, /* max_active */
+				    dd->unit, pidx);
+			if (!ppd->link_wq)
+				goto wq_error;
+		}
 	}
 	return 0;
 wq_error:
@@ -844,6 +849,7 @@ int hfi1_init(struct hfi1_devdata *dd, int reinit)
 	dd->process_pio_send = hfi1_verbs_send_pio;
 	dd->process_dma_send = hfi1_verbs_send_dma;
 	dd->pio_inline_send = pio_copy;
+	dd->process_vnic_dma_send = hfi1_vnic_send_dma;
 
 	if (is_ax(dd)) {
 		atomic_set(&dd->drop_packet, DROP_PACKET_ON);
@@ -1286,7 +1292,7 @@ static struct hfi1_devdata *hfi1_alloc_devdata(struct pci_dev *pdev,
 		goto bail;
 	}
 
-	dd->comp_vect = kzalloc_obj(*dd->comp_vect);
+	dd->comp_vect = kzalloc(sizeof(*dd->comp_vect), GFP_KERNEL);
 	if (!dd->comp_vect) {
 		ret = -ENOMEM;
 		goto bail;
@@ -1549,28 +1555,41 @@ static void postinit_cleanup(struct hfi1_devdata *dd)
 	hfi1_dev_affinity_clean_up(dd);
 
 	hfi1_pcie_ddcleanup(dd);
+	hfi1_pcie_cleanup(dd->pcidev);
 
 	cleanup_device_data(dd);
+
+	hfi1_free_devdata(dd);
 }
 
 static int init_one(struct pci_dev *pdev, const struct pci_device_id *ent)
 {
-	int ret;
+	int ret = 0, j, pidx, initfail;
 	struct hfi1_devdata *dd;
+	struct hfi1_pportdata *ppd;
 
 	/* First, lock the non-writable module parameters */
 	HFI1_CAP_LOCK();
 
+	/* Allocate the dd so we can get to work */
+	dd = hfi1_alloc_devdata(pdev, NUM_IB_PORTS *
+				sizeof(struct hfi1_pportdata));
+	if (IS_ERR(dd)) {
+		ret = PTR_ERR(dd);
+		goto bail;
+	}
+
 	/* Validate some global module parameters */
-	ret = hfi1_validate_rcvhdrcnt(pdev, rcvhdrcnt);
+	ret = hfi1_validate_rcvhdrcnt(dd, rcvhdrcnt);
 	if (ret)
-		return ret;
+		goto bail;
 
 	/* use the encoding function as a sanitization check */
 	if (!encode_rcv_header_entry_size(hfi1_hdrq_entsize)) {
-		dev_err(&pdev->dev, "Invalid HdrQ Entry size %u\n",
-			hfi1_hdrq_entsize);
-		return -EINVAL;
+		dd_dev_err(dd, "Invalid HdrQ Entry size %u\n",
+			   hfi1_hdrq_entsize);
+		ret = -EINVAL;
+		goto bail;
 	}
 
 	/* The receive eager buffer size must be set before the receive
@@ -1590,75 +1609,88 @@ static int init_one(struct pci_dev *pdev, const struct pci_device_id *ent)
 			clamp_val(eager_buffer_size,
 				  MIN_EAGER_BUFFER * 8,
 				  MAX_EAGER_BUFFER_TOTAL);
-		pci_info(pdev, "Eager buffer size %u\n", eager_buffer_size);
+		dd_dev_info(dd, "Eager buffer size %u\n",
+			    eager_buffer_size);
 	} else {
-		dev_err(&pdev->dev, "Invalid Eager buffer size of 0\n");
-		return -EINVAL;
+		dd_dev_err(dd, "Invalid Eager buffer size of 0\n");
+		ret = -EINVAL;
+		goto bail;
 	}
 
 	/* restrict value of hfi1_rcvarr_split */
 	hfi1_rcvarr_split = clamp_val(hfi1_rcvarr_split, 0, 100);
 
-	ret = hfi1_pcie_init(pdev);
+	ret = hfi1_pcie_init(dd);
 	if (ret)
-		return ret;
-
-	/* Allocate the dd so we can get to work */
-	dd = hfi1_alloc_devdata(pdev, NUM_IB_PORTS *
-				sizeof(struct hfi1_pportdata));
-	if (IS_ERR(dd)) {
-		ret = PTR_ERR(dd);
-		goto clean_pcie;
-	}
+		goto bail;
 
 	ret = create_workqueues(dd);
 	if (ret)
 		goto free_devdata;
 
 	/*
-	 * Do device-specific initialization, function table setup, etc.
+	 * Do device-specific initialization, function table setup, dd
+	 * allocation, etc.
 	 */
 	ret = hfi1_init_dd(dd);
 	if (ret)
 		goto destroy_workqueues; /* error already printed */
 
 	/* do the generic initialization */
-	ret = hfi1_init(dd, 0);
-	if (ret)
-		goto free_rx;
+	initfail = hfi1_init(dd, 0);
 
 	ret = hfi1_register_ib_device(dd);
-	if (ret)
-		goto free_rx;
 
 	/*
 	 * Now ready for use.  this should be cleared whenever we
-	 * detect a reset, or initiate one.
+	 * detect a reset, or initiate one.  If earlier failure,
+	 * we still create devices, so diags, etc. can be used
+	 * to determine cause of problem.
 	 */
-	dd->flags |= HFI1_INITTED;
+	if (!initfail && !ret)
+		dd->flags |= HFI1_INITTED;
 
-	ret = hfi1_device_create(dd);
-	if (ret)
-		dd_dev_err(dd, "Failed to create /dev devices: %pe\n",
-			   ERR_PTR(ret));
+	j = hfi1_device_create(dd);
+	if (j)
+		dd_dev_err(dd, "Failed to create /dev devices: %d\n", -j);
+
+	if (initfail || ret) {
+		msix_clean_up_interrupts(dd);
+		stop_timers(dd);
+		for (pidx = 0; pidx < dd->num_pports; ++pidx) {
+			hfi1_quiet_serdes(dd->pport + pidx);
+			ppd = dd->pport + pidx;
+			if (ppd->hfi1_wq) {
+				destroy_workqueue(ppd->hfi1_wq);
+				ppd->hfi1_wq = NULL;
+			}
+			if (ppd->link_wq) {
+				destroy_workqueue(ppd->link_wq);
+				ppd->link_wq = NULL;
+			}
+		}
+		if (!j)
+			hfi1_device_remove(dd);
+		if (!ret)
+			hfi1_unregister_ib_device(dd);
+		hfi1_free_rx(dd);
+		postinit_cleanup(dd);
+		if (initfail)
+			ret = initfail;
+		goto bail;	/* everything already cleaned */
+	}
 
 	sdma_start(dd);
 	hfi1_dbg_ibdev_init(&dd->verbs_dev);
 
 	return 0;
 
-free_rx:
-	hfi1_free_rx(dd);
-	shutdown_device(dd);
-	stop_timers(dd);
-	postinit_cleanup(dd);
-
 destroy_workqueues:
 	destroy_workqueues(dd);
 free_devdata:
 	hfi1_free_devdata(dd);
-clean_pcie:
 	hfi1_pcie_cleanup(pdev);
+bail:
 	return ret;
 }
 
@@ -1698,11 +1730,11 @@ static void remove_one(struct pci_dev *pdev)
 	 * clear dma engines, etc.
 	 */
 	shutdown_device(dd);
-	stop_timers(dd);
-	postinit_cleanup(dd);
 	destroy_workqueues(dd);
-	hfi1_free_devdata(dd);
-	hfi1_pcie_cleanup(pdev);
+
+	stop_timers(dd);
+
+	postinit_cleanup(dd);
 }
 
 static void shutdown_one(struct pci_dev *pdev)

@@ -24,7 +24,6 @@
 #include <linux/page_owner.h>
 #include <linux/psi.h>
 #include <linux/cpuset.h>
-#include "page_alloc.h"
 #include "internal.h"
 
 #ifdef CONFIG_COMPACTION
@@ -83,7 +82,7 @@ static inline bool is_via_compact_memory(int order) { return false; }
 
 static struct page *mark_allocated_noprof(struct page *page, unsigned int order, gfp_t gfp_flags)
 {
-	post_alloc_hook(page, order, __GFP_MOVABLE, ALLOC_DEFAULT);
+	post_alloc_hook(page, order, __GFP_MOVABLE);
 	set_page_refcounted(page);
 	return page;
 }
@@ -519,24 +518,6 @@ static bool compact_lock_irqsave(spinlock_t *lock, unsigned long *flags,
 	return true;
 }
 
-static struct lruvec *
-compact_folio_lruvec_lock_irqsave(struct folio *folio, unsigned long *flags,
-				  struct compact_control *cc)
-{
-	struct lruvec *lruvec;
-
-	rcu_read_lock();
-retry:
-	lruvec = folio_lruvec(folio);
-	compact_lock_irqsave(&lruvec->lru_lock, flags, cc);
-	if (unlikely(lruvec_memcg(lruvec) != folio_memcg(folio))) {
-		spin_unlock_irqrestore(&lruvec->lru_lock, *flags);
-		goto retry;
-	}
-
-	return lruvec;
-}
-
 /*
  * Compaction requires the taking of some coarse locks that are potentially
  * very heavily contended. The lock should be periodically unlocked to avoid
@@ -645,6 +626,7 @@ static unsigned long isolate_freepages_block(struct compact_control *cc,
 		isolated = __isolate_free_page(page, order);
 		if (!isolated)
 			break;
+		set_page_private(page, order);
 
 		nr_scanned += isolated - 1;
 		total_isolated += isolated;
@@ -857,7 +839,7 @@ isolate_migratepages_block(struct compact_control *cc, unsigned long low_pfn,
 {
 	pg_data_t *pgdat = cc->zone->zone_pgdat;
 	unsigned long nr_scanned = 0, nr_isolated = 0;
-	struct lruvec *lruvec = NULL;
+	struct lruvec *lruvec;
 	unsigned long flags = 0;
 	struct lruvec *locked = NULL;
 	struct folio *folio = NULL;
@@ -931,7 +913,7 @@ isolate_migratepages_block(struct compact_control *cc, unsigned long low_pfn,
 		 */
 		if (!(low_pfn % COMPACT_CLUSTER_MAX)) {
 			if (locked) {
-				lruvec_unlock_irqrestore(locked, flags);
+				unlock_page_lruvec_irqrestore(locked, flags);
 				locked = NULL;
 			}
 
@@ -982,7 +964,7 @@ isolate_migratepages_block(struct compact_control *cc, unsigned long low_pfn,
 			}
 			/* for alloc_contig case */
 			if (locked) {
-				lruvec_unlock_irqrestore(locked, flags);
+				unlock_page_lruvec_irqrestore(locked, flags);
 				locked = NULL;
 			}
 
@@ -1071,7 +1053,7 @@ isolate_migratepages_block(struct compact_control *cc, unsigned long low_pfn,
 			if (unlikely(page_has_movable_ops(page)) &&
 			    !PageMovableOpsIsolated(page)) {
 				if (locked) {
-					lruvec_unlock_irqrestore(locked, flags);
+					unlock_page_lruvec_irqrestore(locked, flags);
 					locked = NULL;
 				}
 
@@ -1123,7 +1105,7 @@ isolate_migratepages_block(struct compact_control *cc, unsigned long low_pfn,
 		 * To minimise LRU disruption, the caller can indicate with
 		 * ISOLATE_ASYNC_MIGRATE that it only wants to isolate pages
 		 * it will be able to migrate without blocking - clean pages
-		 * for the most part.  Writeback would require blocking.
+		 * for the most part.  PageWriteback would require blocking.
 		 */
 		if ((mode & ISOLATE_ASYNC_MIGRATE) && folio_test_writeback(folio))
 			goto isolate_fail_put;
@@ -1171,16 +1153,17 @@ isolate_migratepages_block(struct compact_control *cc, unsigned long low_pfn,
 		if (!folio_test_clear_lru(folio))
 			goto isolate_fail_put;
 
-		if (locked)
-			lruvec = folio_lruvec(folio);
+		lruvec = folio_lruvec(folio);
 
 		/* If we already hold the lock, we can skip some rechecking */
-		if (lruvec != locked || !locked) {
+		if (lruvec != locked) {
 			if (locked)
-				lruvec_unlock_irqrestore(locked, flags);
+				unlock_page_lruvec_irqrestore(locked, flags);
 
-			lruvec = compact_folio_lruvec_lock_irqsave(folio, &flags, cc);
+			compact_lock_irqsave(&lruvec->lru_lock, &flags, cc);
 			locked = lruvec;
+
+			lruvec_memcg_debug(lruvec, folio);
 
 			/*
 			 * Try get exclusive access under lock. If marked for
@@ -1243,7 +1226,7 @@ isolate_success_no_list:
 isolate_fail_put:
 		/* Avoid potential deadlock in freeing page under lru_lock */
 		if (locked) {
-			lruvec_unlock_irqrestore(locked, flags);
+			unlock_page_lruvec_irqrestore(locked, flags);
 			locked = NULL;
 		}
 		folio_put(folio);
@@ -1259,7 +1242,7 @@ isolate_fail:
 		 */
 		if (nr_isolated) {
 			if (locked) {
-				lruvec_unlock_irqrestore(locked, flags);
+				unlock_page_lruvec_irqrestore(locked, flags);
 				locked = NULL;
 			}
 			putback_movable_pages(&cc->migratepages);
@@ -1291,7 +1274,7 @@ isolate_fail:
 
 isolate_abort:
 	if (locked)
-		lruvec_unlock_irqrestore(locked, flags);
+		unlock_page_lruvec_irqrestore(locked, flags);
 	if (folio) {
 		folio_set_lru(folio);
 		folio_put(folio);
@@ -1649,6 +1632,7 @@ static void fast_isolate_freepages(struct compact_control *cc)
 		/* Isolate the page if available */
 		if (page) {
 			if (__isolate_free_page(page, order)) {
+				set_page_private(page, order);
 				nr_isolated = 1 << order;
 				nr_scanned += nr_isolated - 1;
 				total_isolated += nr_isolated;
@@ -1877,10 +1861,11 @@ again:
 		size >>= 1;
 
 		list_add(&freepage[size].lru, &cc->freepages[start_order]);
+		set_page_private(&freepage[size], start_order);
 	}
 	dst = (struct folio *)freepage;
 
-	post_alloc_hook(&dst->page, order, __GFP_MOVABLE, ALLOC_DEFAULT);
+	post_alloc_hook(&dst->page, order, __GFP_MOVABLE);
 	set_page_refcounted(&dst->page);
 	if (order)
 		prep_compound_page(&dst->page, order);
@@ -2369,8 +2354,7 @@ static enum compact_result __compact_finished(struct compact_control *cc)
 		 * Job done if allocation would steal freepages from
 		 * other migratetype buddy lists.
 		 */
-		if (find_suitable_fallback(area, order, migratetype, true, NULL)
-		    == FALLBACK_FOUND)
+		if (find_suitable_fallback(area, order, migratetype, true) >= 0)
 			/*
 			 * Movable pages are OK in any pageblock. If we are
 			 * stealing for a non-movable allocation, make sure
@@ -2477,7 +2461,7 @@ bool compaction_suitable(struct zone *zone, int order, unsigned long watermark,
 
 /* Used by direct reclaimers */
 bool compaction_zonelist_suitable(struct alloc_context *ac, int order,
-		int alloc_flags, gfp_t gfp_mask)
+		int alloc_flags)
 {
 	struct zone *zone;
 	struct zoneref *z;
@@ -2489,10 +2473,6 @@ bool compaction_zonelist_suitable(struct alloc_context *ac, int order,
 	for_each_zone_zonelist_nodemask(zone, z, ac->zonelist,
 				ac->highest_zoneidx, ac->nodemask) {
 		unsigned long available;
-
-		if (cpusets_enabled() && (alloc_flags & ALLOC_CPUSET) &&
-		    !__cpuset_zone_allowed(zone, gfp_mask))
-			continue;
 
 		/*
 		 * Do not consider all the reclaimable memory because we do not
@@ -3197,6 +3177,7 @@ static int kcompactd(void *p)
 	long default_timeout = msecs_to_jiffies(HPAGE_FRAG_CHECK_INTERVAL_MSEC);
 	long timeout = default_timeout;
 
+	current->flags |= PF_KCOMPACTD;
 	set_freezable();
 
 	pgdat->kcompactd_max_order = 0;
@@ -3253,14 +3234,10 @@ static int kcompactd(void *p)
 			pgdat->proactive_compact_trigger = false;
 	}
 
+	current->flags &= ~PF_KCOMPACTD;
+
 	return 0;
 }
-
-bool current_is_kcompactd(void)
-{
-	return kthread_func(current) == kcompactd;
-}
-EXPORT_SYMBOL_GPL(current_is_kcompactd);
 
 /*
  * This kcompactd start function will be called by init and node-hot-add.

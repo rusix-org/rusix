@@ -31,7 +31,6 @@
 union dc_plane_status_update_flags {
 	struct {
 		uint32_t address : 1;
-		uint32_t histogram : 1;
 	} bits;
 	uint32_t raw;
 };

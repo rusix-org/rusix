@@ -4,7 +4,6 @@
  */
 #include <linux/sunrpc/svc.h>
 #include <linux/blkdev.h>
-#include <linux/fs_struct.h>
 #include <linux/nfs4.h>
 #include <linux/nfs_fs.h>
 #include <linux/nfs_xdr.h>
@@ -366,30 +365,21 @@ static struct file *
 bl_open_path(struct pnfs_block_volume *v, const char *prefix)
 {
 	struct file *bdev_file;
-	const char *devname __free(kfree) = NULL;
+	const char *devname;
 
 	devname = kasprintf(GFP_KERNEL, "/dev/disk/by-id/%s%*phN",
 			prefix, v->scsi.designator_len, v->scsi.designator);
 	if (!devname)
 		return ERR_PTR(-ENOMEM);
 
-	if (tsk_is_kthread(current)) {
-		scoped_with_init_fs()
-			bdev_file = bdev_file_open_by_path(devname,
-					BLK_OPEN_READ | BLK_OPEN_WRITE,
+	bdev_file = bdev_file_open_by_path(devname, BLK_OPEN_READ | BLK_OPEN_WRITE,
 					NULL, NULL);
-	} else {
-		bdev_file = bdev_file_open_by_path(devname,
-				BLK_OPEN_READ | BLK_OPEN_WRITE, NULL, NULL);
-	}
 	if (IS_ERR(bdev_file)) {
 		dprintk("failed to open device %s (%ld)\n",
 			devname, PTR_ERR(bdev_file));
-	} else {
-		pr_info("pNFS: using block device %s\n",
-			file_bdev(bdev_file)->bd_disk->disk_name);
 	}
 
+	kfree(devname);
 	return bdev_file;
 }
 
@@ -474,8 +464,8 @@ bl_parse_concat(struct nfs_server *server, struct pnfs_block_dev *d,
 	u64 len = 0;
 	int ret, i;
 
-	d->children = kzalloc_objs(struct pnfs_block_dev,
-				   v->concat.volumes_count, gfp_mask);
+	d->children = kcalloc(v->concat.volumes_count,
+			sizeof(struct pnfs_block_dev), gfp_mask);
 	if (!d->children)
 		return -ENOMEM;
 
@@ -506,8 +496,8 @@ bl_parse_stripe(struct nfs_server *server, struct pnfs_block_dev *d,
 	u64 len = 0;
 	int ret, i;
 
-	d->children = kzalloc_objs(struct pnfs_block_dev,
-				   v->stripe.volumes_count, gfp_mask);
+	d->children = kcalloc(v->stripe.volumes_count,
+			sizeof(struct pnfs_block_dev), gfp_mask);
 	if (!d->children)
 		return -ENOMEM;
 
@@ -578,7 +568,8 @@ bl_alloc_deviceid_node(struct nfs_server *server, struct pnfs_device *pdev,
 		goto out_free_scratch;
 	nr_volumes = be32_to_cpup(p++);
 
-	volumes = kzalloc_objs(struct pnfs_block_volume, nr_volumes, gfp_mask);
+	volumes = kcalloc(nr_volumes, sizeof(struct pnfs_block_volume),
+			  gfp_mask);
 	if (!volumes)
 		goto out_free_scratch;
 
@@ -588,7 +579,7 @@ bl_alloc_deviceid_node(struct nfs_server *server, struct pnfs_device *pdev,
 			goto out_free_volumes;
 	}
 
-	top = kzalloc_obj(*top, gfp_mask);
+	top = kzalloc(sizeof(*top), gfp_mask);
 	if (!top)
 		goto out_free_volumes;
 

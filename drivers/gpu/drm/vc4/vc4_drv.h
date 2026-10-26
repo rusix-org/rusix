@@ -212,8 +212,13 @@ struct vc4_dev {
 
 	struct work_struct overflow_mem_work;
 
+	int power_refcount;
+
 	/* Set to true when the load tracker is active. */
 	bool load_tracker_enabled;
+
+	/* Mutex controlling the power refcount. */
+	struct mutex power_lock;
 
 	struct {
 		struct timer_list timer;
@@ -289,13 +294,6 @@ struct vc4_v3d {
 	struct platform_device *pdev;
 	void __iomem *regs;
 	struct clk *clk;
-
-	/* Reset line for the V3D block, used to recover from a GPU hang.
-	 * NULL if the device tree does not describe one, in which case the
-	 * GPU cannot be reset.
-	 */
-	struct reset_control *reset;
-
 	struct debugfs_regset32 regset;
 };
 
@@ -377,9 +375,9 @@ struct vc4_hvs_state {
 #define to_vc4_hvs_state(_state)				\
 	container_of_const(_state, struct vc4_hvs_state, base)
 
-struct vc4_hvs_state *vc4_hvs_get_global_state(struct drm_atomic_commit *state);
-struct vc4_hvs_state *vc4_hvs_get_old_global_state(const struct drm_atomic_commit *state);
-struct vc4_hvs_state *vc4_hvs_get_new_global_state(const struct drm_atomic_commit *state);
+struct vc4_hvs_state *vc4_hvs_get_global_state(struct drm_atomic_state *state);
+struct vc4_hvs_state *vc4_hvs_get_old_global_state(const struct drm_atomic_state *state);
+struct vc4_hvs_state *vc4_hvs_get_new_global_state(const struct drm_atomic_state *state);
 
 struct vc4_plane {
 	struct drm_plane base;
@@ -480,12 +478,12 @@ struct vc4_encoder {
 	enum vc4_encoder_type type;
 	u32 clock_select;
 
-	void (*pre_crtc_configure)(struct drm_encoder *encoder, struct drm_atomic_commit *state);
-	void (*pre_crtc_enable)(struct drm_encoder *encoder, struct drm_atomic_commit *state);
-	void (*post_crtc_enable)(struct drm_encoder *encoder, struct drm_atomic_commit *state);
+	void (*pre_crtc_configure)(struct drm_encoder *encoder, struct drm_atomic_state *state);
+	void (*pre_crtc_enable)(struct drm_encoder *encoder, struct drm_atomic_state *state);
+	void (*post_crtc_enable)(struct drm_encoder *encoder, struct drm_atomic_state *state);
 
-	void (*post_crtc_disable)(struct drm_encoder *encoder, struct drm_atomic_commit *state);
-	void (*post_crtc_powerdown)(struct drm_encoder *encoder, struct drm_atomic_commit *state);
+	void (*post_crtc_disable)(struct drm_encoder *encoder, struct drm_atomic_state *state);
+	void (*post_crtc_powerdown)(struct drm_encoder *encoder, struct drm_atomic_state *state);
 };
 
 #define to_vc4_encoder(_encoder)				\
@@ -793,7 +791,10 @@ struct vc4_exec_info {
 struct vc4_file {
 	struct vc4_dev *dev;
 
-	struct xarray perfmons;
+	struct {
+		struct idr idr;
+		struct mutex lock;
+	} perfmon;
 
 	bool bin_bo_used;
 };
@@ -947,11 +948,11 @@ int vc4_page_flip(struct drm_crtc *crtc,
 		  uint32_t flags,
 		  struct drm_modeset_acquire_ctx *ctx);
 int vc4_crtc_atomic_check(struct drm_crtc *crtc,
-			  struct drm_atomic_commit *state);
+			  struct drm_atomic_state *state);
 struct drm_crtc_state *vc4_crtc_duplicate_state(struct drm_crtc *crtc);
 void vc4_crtc_destroy_state(struct drm_crtc *crtc,
 			    struct drm_crtc_state *state);
-struct drm_crtc_state *vc4_crtc_create_state(struct drm_crtc *crtc);
+void vc4_crtc_reset(struct drm_crtc *crtc);
 void vc4_crtc_handle_vblank(struct vc4_crtc *crtc);
 void vc4_crtc_send_vblank(struct drm_crtc *crtc);
 int vc4_crtc_late_register(struct drm_crtc *crtc);
@@ -1027,11 +1028,11 @@ struct vc4_hvs *__vc4_hvs_alloc(struct vc4_dev *vc4,
 void vc4_hvs_stop_channel(struct vc4_hvs *hvs, unsigned int output);
 int vc4_hvs_get_fifo_from_output(struct vc4_hvs *hvs, unsigned int output);
 u8 vc4_hvs_get_fifo_frame_count(struct vc4_hvs *hvs, unsigned int fifo);
-int vc4_hvs_atomic_check(struct drm_crtc *crtc, struct drm_atomic_commit *state);
-void vc4_hvs_atomic_begin(struct drm_crtc *crtc, struct drm_atomic_commit *state);
-void vc4_hvs_atomic_enable(struct drm_crtc *crtc, struct drm_atomic_commit *state);
-void vc4_hvs_atomic_disable(struct drm_crtc *crtc, struct drm_atomic_commit *state);
-void vc4_hvs_atomic_flush(struct drm_crtc *crtc, struct drm_atomic_commit *state);
+int vc4_hvs_atomic_check(struct drm_crtc *crtc, struct drm_atomic_state *state);
+void vc4_hvs_atomic_begin(struct drm_crtc *crtc, struct drm_atomic_state *state);
+void vc4_hvs_atomic_enable(struct drm_crtc *crtc, struct drm_atomic_state *state);
+void vc4_hvs_atomic_disable(struct drm_crtc *crtc, struct drm_atomic_state *state);
+void vc4_hvs_atomic_flush(struct drm_crtc *crtc, struct drm_atomic_state *state);
 void vc4_hvs_dump_state(struct vc4_hvs *hvs);
 void vc4_hvs_unmask_underrun(struct vc4_hvs *hvs, int channel);
 void vc4_hvs_mask_underrun(struct vc4_hvs *hvs, int channel);
@@ -1058,7 +1059,6 @@ int vc4_v3d_bin_bo_get(struct vc4_dev *vc4, bool *used);
 void vc4_v3d_bin_bo_put(struct vc4_dev *vc4);
 int vc4_v3d_pm_get(struct vc4_dev *vc4);
 void vc4_v3d_pm_put(struct vc4_dev *vc4);
-void vc4_v3d_init_hw(struct drm_device *dev);
 int vc4_v3d_debugfs_init(struct drm_minor *minor);
 
 /* vc4_validate.c */

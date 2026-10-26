@@ -369,8 +369,8 @@ struct dm_buffer {
  *  - IO
  *  - Eviction or cache sizing.
  *
- * cache_get() and cache_put_and_wake() are threadsafe, you do not need
- * to protect these calls with a surrounding mutex.  All the other
+ * cache_get() and cache_put() are threadsafe, you do not need to
+ * protect these calls with a surrounding mutex.  All the other
  * methods are not threadsafe; they do use locking primitives, but
  * only enough to ensure get/put are threadsafe.
  */
@@ -391,7 +391,7 @@ struct dm_buffer_cache {
 	 */
 	unsigned int num_locks;
 	bool no_sleep;
-	struct buffer_tree trees[] __counted_by(num_locks);
+	struct buffer_tree trees[];
 };
 
 static DEFINE_STATIC_KEY_FALSE(no_sleep_enabled);
@@ -401,51 +401,36 @@ static inline unsigned int cache_index(sector_t block, unsigned int num_locks)
 	return dm_hash_locks_index(block, num_locks);
 }
 
-/* Get the buffer tree in the cache for the given block.  Doesn't lock it. */
-static inline struct buffer_tree *cache_get_tree(struct dm_buffer_cache *bc,
-						 sector_t block)
-{
-	return &bc->trees[cache_index(block, bc->num_locks)];
-}
-
-/* Lock the given buffer tree in the cache for reading. */
-static inline void cache_read_lock(struct dm_buffer_cache *bc,
-				   struct buffer_tree *tree)
+static inline void cache_read_lock(struct dm_buffer_cache *bc, sector_t block)
 {
 	if (static_branch_unlikely(&no_sleep_enabled) && bc->no_sleep)
-		read_lock_bh(&tree->u.spinlock);
+		read_lock_bh(&bc->trees[cache_index(block, bc->num_locks)].u.spinlock);
 	else
-		down_read(&tree->u.lock);
+		down_read(&bc->trees[cache_index(block, bc->num_locks)].u.lock);
 }
 
-/* Unlock the given buffer tree in the cache for reading. */
-static inline void cache_read_unlock(struct dm_buffer_cache *bc,
-				     struct buffer_tree *tree)
+static inline void cache_read_unlock(struct dm_buffer_cache *bc, sector_t block)
 {
 	if (static_branch_unlikely(&no_sleep_enabled) && bc->no_sleep)
-		read_unlock_bh(&tree->u.spinlock);
+		read_unlock_bh(&bc->trees[cache_index(block, bc->num_locks)].u.spinlock);
 	else
-		up_read(&tree->u.lock);
+		up_read(&bc->trees[cache_index(block, bc->num_locks)].u.lock);
 }
 
-/* Lock the given buffer tree in the cache for writing. */
-static inline void cache_write_lock(struct dm_buffer_cache *bc,
-				    struct buffer_tree *tree)
+static inline void cache_write_lock(struct dm_buffer_cache *bc, sector_t block)
 {
 	if (static_branch_unlikely(&no_sleep_enabled) && bc->no_sleep)
-		write_lock_bh(&tree->u.spinlock);
+		write_lock_bh(&bc->trees[cache_index(block, bc->num_locks)].u.spinlock);
 	else
-		down_write(&tree->u.lock);
+		down_write(&bc->trees[cache_index(block, bc->num_locks)].u.lock);
 }
 
-/* Unlock the given buffer tree in the cache for writing. */
-static inline void cache_write_unlock(struct dm_buffer_cache *bc,
-				      struct buffer_tree *tree)
+static inline void cache_write_unlock(struct dm_buffer_cache *bc, sector_t block)
 {
 	if (static_branch_unlikely(&no_sleep_enabled) && bc->no_sleep)
-		write_unlock_bh(&tree->u.spinlock);
+		write_unlock_bh(&bc->trees[cache_index(block, bc->num_locks)].u.spinlock);
 	else
-		up_write(&tree->u.lock);
+		up_write(&bc->trees[cache_index(block, bc->num_locks)].u.lock);
 }
 
 /*
@@ -617,21 +602,37 @@ static void __cache_inc_buffer(struct dm_buffer *b)
 	WRITE_ONCE(b->last_accessed, jiffies);
 }
 
-static struct dm_buffer *cache_get(struct dm_buffer_cache *bc,
-				   struct buffer_tree *tree, sector_t block)
+static struct dm_buffer *cache_get(struct dm_buffer_cache *bc, sector_t block)
 {
 	struct dm_buffer *b;
 
-	/* Assuming tree == cache_get_tree(bc, block) */
-	cache_read_lock(bc, tree);
-	b = __cache_get(&tree->root, block);
+	cache_read_lock(bc, block);
+	b = __cache_get(&bc->trees[cache_index(block, bc->num_locks)].root, block);
 	if (b) {
 		lru_reference(&b->lru);
 		__cache_inc_buffer(b);
 	}
-	cache_read_unlock(bc, tree);
+	cache_read_unlock(bc, block);
 
 	return b;
+}
+
+/*--------------*/
+
+/*
+ * Returns true if the hold count hits zero.
+ * threadsafe
+ */
+static bool cache_put(struct dm_buffer_cache *bc, struct dm_buffer *b)
+{
+	bool r;
+
+	cache_read_lock(bc, b->block);
+	BUG_ON(!atomic_read(&b->hold_count));
+	r = atomic_dec_and_test(&b->hold_count);
+	cache_read_unlock(bc, b->block);
+
+	return r;
 }
 
 /*--------------*/
@@ -680,7 +681,7 @@ static struct dm_buffer *__cache_evict(struct dm_buffer_cache *bc, int list_mode
 
 	b = le_to_buffer(le);
 	/* __evict_pred will have locked the appropriate tree. */
-	rb_erase(&b->node, &cache_get_tree(bc, b->block)->root);
+	rb_erase(&b->node, &bc->trees[cache_index(b->block, bc->num_locks)].root);
 
 	return b;
 }
@@ -703,17 +704,15 @@ static struct dm_buffer *cache_evict(struct dm_buffer_cache *bc, int list_mode,
 /*
  * Mark a buffer as clean or dirty. Not threadsafe.
  */
-static void cache_mark(struct dm_buffer_cache *bc, struct buffer_tree *tree,
-		       struct dm_buffer *b, int list_mode)
+static void cache_mark(struct dm_buffer_cache *bc, struct dm_buffer *b, int list_mode)
 {
-	/* Assuming tree == cache_get_tree(bc, b->block) */
-	cache_write_lock(bc, tree);
+	cache_write_lock(bc, b->block);
 	if (list_mode != b->list_mode) {
 		lru_remove(&bc->lru[b->list_mode], &b->lru);
 		b->list_mode = list_mode;
 		lru_insert(&bc->lru[b->list_mode], &b->lru);
 	}
-	cache_write_unlock(bc, tree);
+	cache_write_unlock(bc, b->block);
 }
 
 /*--------------*/
@@ -839,21 +838,19 @@ static bool __cache_insert(struct rb_root *root, struct dm_buffer *b)
 	return true;
 }
 
-static bool cache_insert(struct dm_buffer_cache *bc, struct buffer_tree *tree,
-			 struct dm_buffer *b)
+static bool cache_insert(struct dm_buffer_cache *bc, struct dm_buffer *b)
 {
 	bool r;
 
 	if (WARN_ON_ONCE(b->list_mode >= LIST_SIZE))
 		return false;
 
-	/* Assuming tree == cache_get_tree(bc, b->block) */
-	cache_write_lock(bc, tree);
+	cache_write_lock(bc, b->block);
 	BUG_ON(atomic_read(&b->hold_count) != 1);
-	r = __cache_insert(&tree->root, b);
+	r = __cache_insert(&bc->trees[cache_index(b->block, bc->num_locks)].root, b);
 	if (r)
 		lru_insert(&bc->lru[b->list_mode], &b->lru);
-	cache_write_unlock(bc, tree);
+	cache_write_unlock(bc, b->block);
 
 	return r;
 }
@@ -866,23 +863,21 @@ static bool cache_insert(struct dm_buffer_cache *bc, struct buffer_tree *tree,
  *
  * Not threadsafe.
  */
-static bool cache_remove(struct dm_buffer_cache *bc, struct buffer_tree *tree,
-			 struct dm_buffer *b)
+static bool cache_remove(struct dm_buffer_cache *bc, struct dm_buffer *b)
 {
 	bool r;
 
-	/* Assuming tree == cache_get_tree(bc, b->block) */
-	cache_write_lock(bc, tree);
+	cache_write_lock(bc, b->block);
 
 	if (atomic_read(&b->hold_count) != 1) {
 		r = false;
 	} else {
 		r = true;
-		rb_erase(&b->node, &tree->root);
+		rb_erase(&b->node, &bc->trees[cache_index(b->block, bc->num_locks)].root);
 		lru_remove(&bc->lru[b->list_mode], &b->lru);
 	}
 
-	cache_write_unlock(bc, tree);
+	cache_write_unlock(bc, b->block);
 
 	return r;
 }
@@ -1044,6 +1039,12 @@ static unsigned long dm_bufio_default_cache_size;
  */
 static unsigned long dm_bufio_cache_size;
 
+/*
+ * A copy of dm_bufio_cache_size because dm_bufio_cache_size can change
+ * at any time.  If it disagrees, the user has changed cache size.
+ */
+static unsigned long dm_bufio_cache_size_latch;
+
 static DEFINE_SPINLOCK(global_spinlock);
 
 static unsigned int dm_bufio_max_age; /* No longer does anything */
@@ -1070,7 +1071,7 @@ static int dm_bufio_client_count;
 static LIST_HEAD(dm_bufio_all_clients);
 
 /*
- * This mutex protects dm_bufio_client_count
+ * This mutex protects dm_bufio_cache_size_latch and dm_bufio_client_count
  */
 static DEFINE_MUTEX(dm_bufio_clients_lock);
 
@@ -1086,17 +1087,6 @@ static void buffer_record_stack(struct dm_buffer *b)
 #endif
 
 /*----------------------------------------------------------------*/
-
-static unsigned long dm_budio_get_cache_size(void)
-{
-	unsigned long s = READ_ONCE(dm_bufio_cache_size);
-	if (unlikely(!s)) {
-		unsigned long d = dm_bufio_default_cache_size;
-		(void)cmpxchg(&dm_bufio_cache_size, 0, d);
-		s = d;
-	}
-	return s;
-}
 
 static void adjust_total_allocated(struct dm_buffer *b, bool unlink)
 {
@@ -1125,11 +1115,33 @@ static void adjust_total_allocated(struct dm_buffer *b, bool unlink)
 		dm_bufio_peak_allocated = dm_bufio_current_allocated;
 
 	if (!unlink) {
-		if (dm_bufio_current_allocated > dm_budio_get_cache_size())
+		if (dm_bufio_current_allocated > dm_bufio_cache_size)
 			queue_work(dm_bufio_wq, &dm_bufio_replacement_work);
 	}
 
 	spin_unlock(&global_spinlock);
+}
+
+/*
+ * Change the number of clients and recalculate per-client limit.
+ */
+static void __cache_size_refresh(void)
+{
+	if (WARN_ON(!mutex_is_locked(&dm_bufio_clients_lock)))
+		return;
+	if (WARN_ON(dm_bufio_client_count < 0))
+		return;
+
+	dm_bufio_cache_size_latch = READ_ONCE(dm_bufio_cache_size);
+
+	/*
+	 * Use default if set to 0 and report the actual cache size used.
+	 */
+	if (!dm_bufio_cache_size_latch) {
+		(void)cmpxchg(&dm_bufio_cache_size, 0,
+			      dm_bufio_default_cache_size);
+		dm_bufio_cache_size_latch = dm_bufio_default_cache_size;
+	}
 }
 
 /*
@@ -1601,7 +1613,7 @@ static struct dm_buffer *__alloc_buffer_wait_no_callback(struct dm_bufio_client 
 	 * be allocated.
 	 */
 	while (1) {
-		if (dm_budio_get_cache_size() != 1) {
+		if (dm_bufio_cache_size_latch != 1) {
 			b = alloc_buffer(c, GFP_NOWAIT | __GFP_NORETRY | __GFP_NOMEMALLOC);
 			if (b)
 				return b;
@@ -1610,7 +1622,7 @@ static struct dm_buffer *__alloc_buffer_wait_no_callback(struct dm_bufio_client 
 		if (nf == NF_PREFETCH)
 			return NULL;
 
-		if (dm_budio_get_cache_size() != 1 && !tried_noio_alloc) {
+		if (dm_bufio_cache_size_latch != 1 && !tried_noio_alloc) {
 			dm_bufio_unlock(c);
 			b = alloc_buffer(c, GFP_NOIO | __GFP_NORETRY | __GFP_NOMEMALLOC | __GFP_NOWARN);
 			dm_bufio_lock(c);
@@ -1731,22 +1743,14 @@ static void __check_watermark(struct dm_bufio_client *c,
  *--------------------------------------------------------------
  */
 
-static void cache_put_and_wake(struct dm_bufio_client *c,
-			       struct buffer_tree *tree, struct dm_buffer *b)
+static void cache_put_and_wake(struct dm_bufio_client *c, struct dm_buffer *b)
 {
-	bool wake;
-
-	/* Assuming tree == cache_get_tree(&c->cache, b->block) */
-	cache_read_lock(&c->cache, tree);
-	BUG_ON(!atomic_read(&b->hold_count));
-	wake = atomic_dec_and_test(&b->hold_count);
-	cache_read_unlock(&c->cache, tree);
-
 	/*
 	 * Relying on waitqueue_active() is racey, but we sleep
 	 * with schedule_timeout anyway.
 	 */
-	if (wake && unlikely(waitqueue_active(&c->free_buffer_wait)))
+	if (cache_put(&c->cache, b) &&
+	    unlikely(waitqueue_active(&c->free_buffer_wait)))
 		wake_up(&c->free_buffer_wait);
 }
 
@@ -1754,8 +1758,7 @@ static void cache_put_and_wake(struct dm_bufio_client *c,
  * This assumes you have already checked the cache to see if the buffer
  * is already present (it will recheck after dropping the lock for allocation).
  */
-static struct dm_buffer *__bufio_new(struct dm_bufio_client *c,
-				     struct buffer_tree *tree, sector_t block,
+static struct dm_buffer *__bufio_new(struct dm_bufio_client *c, sector_t block,
 				     enum new_flag nf, int *need_submit,
 				     struct list_head *write_list)
 {
@@ -1775,7 +1778,7 @@ static struct dm_buffer *__bufio_new(struct dm_bufio_client *c,
 	 * We've had a period where the mutex was unlocked, so need to
 	 * recheck the buffer tree.
 	 */
-	b = cache_get(&c->cache, tree, block);
+	b = cache_get(&c->cache, block);
 	if (b) {
 		__free_buffer_wake(new_b);
 		goto found_buffer;
@@ -1803,13 +1806,13 @@ static struct dm_buffer *__bufio_new(struct dm_bufio_client *c,
 	 * is set.  Otherwise another thread could get it and use
 	 * it before it had been read.
 	 */
-	cache_insert(&c->cache, tree, b);
+	cache_insert(&c->cache, b);
 
 	return b;
 
 found_buffer:
 	if (nf == NF_PREFETCH) {
-		cache_put_and_wake(c, tree, b);
+		cache_put_and_wake(c, b);
 		return NULL;
 	}
 
@@ -1821,7 +1824,7 @@ found_buffer:
 	 * the same buffer, it would deadlock if we waited.
 	 */
 	if (nf == NF_GET && unlikely(test_bit_acquire(B_READING, &b->state))) {
-		cache_put_and_wake(c, tree, b);
+		cache_put_and_wake(c, b);
 		return NULL;
 	}
 
@@ -1855,7 +1858,6 @@ static void *new_read(struct dm_bufio_client *c, sector_t block,
 		      enum new_flag nf, struct dm_buffer **bp,
 		      unsigned short ioprio)
 {
-	struct buffer_tree *tree;
 	int need_submit = 0;
 	struct dm_buffer *b;
 
@@ -1867,11 +1869,10 @@ static void *new_read(struct dm_bufio_client *c, sector_t block,
 	 * Fast path, hopefully the block is already in the cache.  No need
 	 * to get the client lock for this.
 	 */
-	tree = cache_get_tree(&c->cache, block);
-	b = cache_get(&c->cache, tree, block);
+	b = cache_get(&c->cache, block);
 	if (b) {
 		if (nf == NF_PREFETCH) {
-			cache_put_and_wake(c, tree, b);
+			cache_put_and_wake(c, b);
 			return NULL;
 		}
 
@@ -1883,7 +1884,7 @@ static void *new_read(struct dm_bufio_client *c, sector_t block,
 		 * the same buffer, it would deadlock if we waited.
 		 */
 		if (nf == NF_GET && unlikely(test_bit_acquire(B_READING, &b->state))) {
-			cache_put_and_wake(c, tree, b);
+			cache_put_and_wake(c, b);
 			return NULL;
 		}
 	}
@@ -1893,7 +1894,7 @@ static void *new_read(struct dm_bufio_client *c, sector_t block,
 			return NULL;
 
 		dm_bufio_lock(c);
-		b = __bufio_new(c, tree, block, nf, &need_submit, &write_list);
+		b = __bufio_new(c, block, nf, &need_submit, &write_list);
 		dm_bufio_unlock(c);
 	}
 
@@ -1980,20 +1981,18 @@ static void __dm_bufio_prefetch(struct dm_bufio_client *c,
 	blk_start_plug(&plug);
 
 	for (; n_blocks--; block++) {
-		struct buffer_tree *tree;
-		struct dm_buffer *b;
 		int need_submit;
+		struct dm_buffer *b;
 
-		tree = cache_get_tree(&c->cache, block);
-		b = cache_get(&c->cache, tree, block);
+		b = cache_get(&c->cache, block);
 		if (b) {
 			/* already in cache */
-			cache_put_and_wake(c, tree, b);
+			cache_put_and_wake(c, b);
 			continue;
 		}
 
 		dm_bufio_lock(c);
-		b = __bufio_new(c, tree, block, NF_PREFETCH, &need_submit,
+		b = __bufio_new(c, block, NF_PREFETCH, &need_submit,
 				&write_list);
 		if (unlikely(!list_empty(&write_list))) {
 			dm_bufio_unlock(c);
@@ -2038,7 +2037,6 @@ EXPORT_SYMBOL_GPL(dm_bufio_prefetch_with_ioprio);
 void dm_bufio_release(struct dm_buffer *b)
 {
 	struct dm_bufio_client *c = b->c;
-	struct buffer_tree *tree = cache_get_tree(&c->cache, b->block);
 
 	/*
 	 * If there were errors on the buffer, and the buffer is not
@@ -2052,7 +2050,7 @@ void dm_bufio_release(struct dm_buffer *b)
 		dm_bufio_lock(c);
 
 		/* cache remove can fail if there are other holders */
-		if (cache_remove(&c->cache, tree, b)) {
+		if (cache_remove(&c->cache, b)) {
 			__free_buffer_wake(b);
 			dm_bufio_unlock(c);
 			return;
@@ -2061,7 +2059,7 @@ void dm_bufio_release(struct dm_buffer *b)
 		dm_bufio_unlock(c);
 	}
 
-	cache_put_and_wake(c, tree, b);
+	cache_put_and_wake(c, b);
 }
 EXPORT_SYMBOL_GPL(dm_bufio_release);
 
@@ -2080,8 +2078,7 @@ void dm_bufio_mark_partial_buffer_dirty(struct dm_buffer *b,
 	if (!test_and_set_bit(B_DIRTY, &b->state)) {
 		b->dirty_start = start;
 		b->dirty_end = end;
-		cache_mark(&c->cache, cache_get_tree(&c->cache, b->block), b,
-			   LIST_DIRTY);
+		cache_mark(&c->cache, b, LIST_DIRTY);
 	} else {
 		if (start < b->dirty_start)
 			b->dirty_start = start;
@@ -2146,7 +2143,6 @@ int dm_bufio_write_dirty_buffers(struct dm_bufio_client *c)
 	lru_iter_begin(&c->cache.lru[LIST_DIRTY], &it);
 	while ((e = lru_iter_next(&it, is_writing, c))) {
 		struct dm_buffer *b = le_to_buffer(e);
-		struct buffer_tree *tree;
 		__cache_inc_buffer(b);
 
 		BUG_ON(test_bit(B_READING, &b->state));
@@ -2160,12 +2156,10 @@ int dm_bufio_write_dirty_buffers(struct dm_bufio_client *c)
 			wait_on_bit_io(&b->state, B_WRITING, TASK_UNINTERRUPTIBLE);
 		}
 
-		tree = cache_get_tree(&c->cache, b->block);
-
 		if (!test_bit(B_DIRTY, &b->state) && !test_bit(B_WRITING, &b->state))
-			cache_mark(&c->cache, tree, b, LIST_CLEAN);
+			cache_mark(&c->cache, b, LIST_CLEAN);
 
-		cache_put_and_wake(c, tree, b);
+		cache_put_and_wake(c, b);
 
 		cond_resched();
 	}
@@ -2235,18 +2229,17 @@ EXPORT_SYMBOL_GPL(dm_bufio_issue_discard);
 
 static void forget_buffer(struct dm_bufio_client *c, sector_t block)
 {
-	struct buffer_tree *tree = cache_get_tree(&c->cache, block);
 	struct dm_buffer *b;
 
-	b = cache_get(&c->cache, tree, block);
+	b = cache_get(&c->cache, block);
 	if (b) {
 		if (likely(!smp_load_acquire(&b->state))) {
-			if (cache_remove(&c->cache, tree, b))
+			if (cache_remove(&c->cache, b))
 				__free_buffer_wake(b);
 			else
-				cache_put_and_wake(c, tree, b);
+				cache_put_and_wake(c, b);
 		} else {
-			cache_put_and_wake(c, tree, b);
+			cache_put_and_wake(c, b);
 		}
 	}
 }
@@ -2409,10 +2402,8 @@ static void __scan(struct dm_bufio_client *c)
 
 	for (l = 0; l < LIST_SIZE; l++) {
 		while (true) {
-			if (count - freed <= retain_target) {
+			if (count - freed <= retain_target)
 				atomic_long_set(&c->need_shrink, 0);
-				break;
-			}
 			if (!atomic_long_read(&c->need_shrink))
 				break;
 
@@ -2498,7 +2489,7 @@ struct dm_bufio_client *dm_bufio_client_create(struct block_device *bdev, unsign
 	}
 
 	num_locks = dm_num_hash_locks();
-	c = kzalloc_flex(*c, cache.trees, num_locks);
+	c = kzalloc(sizeof(*c) + (num_locks * sizeof(struct buffer_tree)), GFP_KERNEL);
 	if (!c) {
 		r = -ENOMEM;
 		goto bad_client;
@@ -2529,13 +2520,6 @@ struct dm_bufio_client *dm_bufio_client_create(struct block_device *bdev, unsign
 
 	init_waitqueue_head(&c->free_buffer_wait);
 	c->async_write_error = 0;
-
-	/*
-	 * A client with no buffers yet is not holding the oldest buffer in
-	 * the system; leaving this zeroed would claim exactly that and keep
-	 * the client pinned at the front of dm_bufio_all_clients.
-	 */
-	c->oldest_buffer = jiffies;
 
 	c->dm_io = dm_io_client_create();
 	if (IS_ERR(c->dm_io)) {
@@ -2599,6 +2583,7 @@ struct dm_bufio_client *dm_bufio_client_create(struct block_device *bdev, unsign
 	mutex_lock(&dm_bufio_clients_lock);
 	dm_bufio_client_count++;
 	list_add(&c->client_list, &dm_bufio_all_clients);
+	__cache_size_refresh();
 	mutex_unlock(&dm_bufio_clients_lock);
 
 	return c;
@@ -2640,6 +2625,7 @@ void dm_bufio_client_destroy(struct dm_bufio_client *c)
 
 	list_del(&c->client_list);
 	dm_bufio_client_count--;
+	__cache_size_refresh();
 
 	mutex_unlock(&dm_bufio_clients_lock);
 
@@ -2769,23 +2755,9 @@ static unsigned long __evict_a_few(unsigned long nr_buffers)
 
 	dm_bufio_unlock(c);
 
-	if (count) {
+	if (count)
 		c->oldest_buffer = oldest_buffer;
-		__insert_client(c);
-	} else {
-		/*
-		 * We evicted nothing, so 'oldest_buffer' tells us nothing new
-		 * and the client keeps its old, possibly very stale, value.
-		 * Requeue it at the back rather than by that value, otherwise
-		 * __insert_client() would put it straight back at the front
-		 * and every subsequent call would pop this same client again,
-		 * never reaching any of the others.
-		 *
-		 * This leaves the list slightly out of order, which is fine -
-		 * it is only ever an approximation.
-		 */
-		list_add_tail(&c->client_list, &dm_bufio_all_clients);
-	}
+	__insert_client(c);
 
 	return count;
 }
@@ -2808,25 +2780,13 @@ static void check_watermarks(void)
 
 static void evict_old(void)
 {
-	unsigned long cs = dm_budio_get_cache_size();
-	unsigned long threshold = cs - cs / DM_BUFIO_LOW_WATERMARK_RATIO;
-	int unproductive = 0;
+	unsigned long threshold = dm_bufio_cache_size -
+		dm_bufio_cache_size / DM_BUFIO_LOW_WATERMARK_RATIO;
 
 	mutex_lock(&dm_bufio_clients_lock);
 	while (dm_bufio_current_allocated > threshold) {
-		if (__evict_a_few(64)) {
-			unproductive = 0;
-		} else {
-			/*
-			 * This client had nothing to give.  Try the others
-			 * before giving up: one idle client, or one whose
-			 * buffers are all held, must not stop us evicting
-			 * from everybody else.  Stop once a whole sweep of
-			 * the client list has freed nothing.
-			 */
-			if (++unproductive >= dm_bufio_client_count)
-				break;
-		}
+		if (!__evict_a_few(64))
+			break;
 		cond_resched();
 	}
 	mutex_unlock(&dm_bufio_clients_lock);
@@ -2870,8 +2830,10 @@ static int __init dm_bufio_init(void)
 #endif
 
 	dm_bufio_default_cache_size = mem;
-	if (!dm_bufio_cache_size)
-		dm_bufio_cache_size = mem;
+
+	mutex_lock(&dm_bufio_clients_lock);
+	__cache_size_refresh();
+	mutex_unlock(&dm_bufio_clients_lock);
 
 	dm_bufio_wq = alloc_workqueue("dm_bufio_cache",
 				      WQ_MEM_RECLAIM | WQ_PERCPU, 0);

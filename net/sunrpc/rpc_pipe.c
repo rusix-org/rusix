@@ -511,7 +511,7 @@ struct rpc_pipe *rpc_mkpipe_data(const struct rpc_pipe_ops *ops, int flags)
 {
 	struct rpc_pipe *pipe;
 
-	pipe = kzalloc_obj(struct rpc_pipe);
+	pipe = kzalloc(sizeof(struct rpc_pipe), GFP_KERNEL);
 	if (!pipe)
 		return ERR_PTR(-ENOMEM);
 	init_pipe(pipe);
@@ -536,16 +536,17 @@ static int rpc_new_file(struct dentry *parent,
 
 	inode = rpc_get_inode(dir->i_sb, S_IFREG | mode);
 	if (unlikely(!inode)) {
-		simple_done_creating(dentry);
+		dput(dentry);
+		inode_unlock(dir);
 		return -ENOMEM;
 	}
 	inode->i_ino = iunique(dir->i_sb, 100);
 	if (i_fop)
 		inode->i_fop = i_fop;
 	rpc_inode_setowner(inode, private);
-	d_make_persistent(dentry, inode);
+	d_instantiate(dentry, inode);
 	fsnotify_create(dir, dentry);
-	simple_done_creating(dentry);
+	inode_unlock(dir);
 	return 0;
 }
 
@@ -562,17 +563,18 @@ static struct dentry *rpc_new_dir(struct dentry *parent,
 
 	inode = rpc_get_inode(dir->i_sb, S_IFDIR | mode);
 	if (unlikely(!inode)) {
-		simple_done_creating(dentry);
+		dput(dentry);
+		inode_unlock(dir);
 		return ERR_PTR(-ENOMEM);
 	}
 
 	inode->i_ino = iunique(dir->i_sb, 100);
 	inc_nlink(dir);
-	d_make_persistent(dentry, inode);
+	d_instantiate(dentry, inode);
 	fsnotify_mkdir(dir, dentry);
-	simple_done_creating(dentry);
+	inode_unlock(dir);
 
-	return dentry; // borrowed
+	return dentry;
 }
 
 static int rpc_populate(struct dentry *parent,
@@ -655,7 +657,8 @@ int rpc_mkpipe_dentry(struct dentry *parent, const char *name,
 
 	inode = rpc_get_inode(dir->i_sb, umode);
 	if (unlikely(!inode)) {
-		simple_done_creating(dentry);
+		dput(dentry);
+		inode_unlock(dir);
 		err = -ENOMEM;
 		goto failed;
 	}
@@ -665,10 +668,10 @@ int rpc_mkpipe_dentry(struct dentry *parent, const char *name,
 	rpci->private = private;
 	rpci->pipe = pipe;
 	rpc_inode_setowner(inode, private);
-	pipe->dentry = dentry; // borrowed
-	d_make_persistent(dentry, inode);
+	d_instantiate(dentry, inode);
+	pipe->dentry = dentry;
 	fsnotify_create(dir, dentry);
-	simple_done_creating(dentry);
+	inode_unlock(dir);
 	return 0;
 
 failed:
@@ -1203,7 +1206,7 @@ static void rpc_kill_sb(struct super_block *sb)
 					   sb);
 	mutex_unlock(&sn->pipefs_sb_lock);
 out:
-	kill_anon_super(sb);
+	kill_litter_super(sb);
 	put_net(net);
 }
 

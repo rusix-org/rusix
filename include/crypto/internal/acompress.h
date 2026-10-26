@@ -42,7 +42,6 @@
  *
  * @base:	Common crypto API algorithm data structure
  * @calg:	Cmonn algorithm data structure shared with scomp
- * @COMP_ALG_COMMON: see struct comp_alg_common
  */
 struct acomp_alg {
 	int (*compress)(struct acomp_req *req);
@@ -192,12 +191,11 @@ static inline bool crypto_acomp_req_virt(struct crypto_acomp *tfm)
 void crypto_acomp_free_streams(struct crypto_acomp_streams *s);
 int crypto_acomp_alloc_streams(struct crypto_acomp_streams *s);
 
-#define crypto_acomp_lock_stream_bh(...) __acquire_ret(_crypto_acomp_lock_stream_bh(__VA_ARGS__), &__ret->lock);
-struct crypto_acomp_stream *_crypto_acomp_lock_stream_bh(
-		struct crypto_acomp_streams *s) __acquires_ret;
+struct crypto_acomp_stream *crypto_acomp_lock_stream_bh(
+	struct crypto_acomp_streams *s) __acquires(stream);
 
 static inline void crypto_acomp_unlock_stream_bh(
-	struct crypto_acomp_stream *stream) __releases(&stream->lock)
+	struct crypto_acomp_stream *stream) __releases(stream)
 {
 	spin_unlock_bh(&stream->lock);
 }

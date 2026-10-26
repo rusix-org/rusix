@@ -17,7 +17,6 @@
 #include <linux/io.h>
 #include <linux/module.h>
 #include <linux/mutex.h>
-#include <linux/mux/consumer.h>
 #include <linux/of.h>
 #include <linux/phy/phy.h>
 #include <linux/platform_device.h>
@@ -142,7 +141,6 @@ struct rcar_gen3_chan {
 	struct device *dev;	/* platform_device's device */
 	const struct rcar_gen3_phy_drv_data *phy_data;
 	struct extcon_dev *extcon;
-	struct reset_control *rstc;
 	struct rcar_gen3_phy rphys[NUM_OF_PHYS];
 	struct regulator *vbus;
 	struct work_struct work;
@@ -330,11 +328,13 @@ static void rcar_gen3_init_from_a_peri_to_a_host(struct rcar_gen3_chan *ch)
 static bool rcar_gen3_check_id(struct rcar_gen3_chan *ch)
 {
 	if (ch->phy_data->vblvl_ctrl) {
-		u32 val = readl(ch->base + USB2_ADPCTRL);
-		bool vbus_valid = val & USB2_ADPCTRL_VBUSVALID;
-		bool device = val & USB2_ADPCTRL_IDDIG;
+		bool vbus_valid;
+		bool device;
 
-		return device == vbus_valid;
+		device = !!(readl(ch->base + USB2_ADPCTRL) & USB2_ADPCTRL_IDDIG);
+		vbus_valid = !!(readl(ch->base + USB2_ADPCTRL) & USB2_ADPCTRL_VBUSVALID);
+
+		return vbus_valid ? device : !device;
 	}
 
 	if (!ch->uses_otg_pins)
@@ -941,10 +941,6 @@ static const struct of_device_id rcar_gen3_phy_usb2_match_table[] = {
 		.data = &rz_g3s_phy_usb2_data,
 	},
 	{
-		.compatible = "renesas,usb2-phy-r9a08g046",
-		.data = &rz_g3s_phy_usb2_data,
-	},
-	{
 		.compatible = "renesas,usb2-phy-r9a09g057",
 		.data = &rz_v2h_phy_usb2_data,
 	},
@@ -1018,24 +1014,35 @@ static void rcar_gen3_reset_assert(void *data)
 static int rcar_gen3_phy_usb2_init_bus(struct rcar_gen3_chan *channel)
 {
 	struct device *dev = channel->dev;
+	struct reset_control *rstc;
 	int ret;
 	u32 val;
 
-	if (!channel->phy_data->init_bus)
-		return 0;
+	rstc = devm_reset_control_array_get_shared(dev);
+	if (IS_ERR(rstc))
+		return PTR_ERR(rstc);
 
 	ret = pm_runtime_resume_and_get(dev);
 	if (ret)
 		return ret;
+
+	ret = reset_control_deassert(rstc);
+	if (ret)
+		goto rpm_put;
+
+	ret = devm_add_action_or_reset(dev, rcar_gen3_reset_assert, rstc);
+	if (ret)
+		goto rpm_put;
 
 	val = readl(channel->base + USB2_AHB_BUS_CTR);
 	val &= ~USB2_AHB_BUS_CTR_MBL_MASK;
 	val |= USB2_AHB_BUS_CTR_MBL_INCR4;
 	writel(val, channel->base + USB2_AHB_BUS_CTR);
 
+rpm_put:
 	pm_runtime_put(dev);
 
-	return 0;
+	return ret;
 }
 
 static int rcar_gen3_phy_usb2_regulator_endisable(struct regulator_dev *rdev,
@@ -1176,7 +1183,6 @@ static int rcar_gen3_phy_usb2_probe(struct platform_device *pdev)
 	struct device *dev = &pdev->dev;
 	struct rcar_gen3_chan *channel;
 	struct phy_provider *provider;
-	struct mux_state *mux_state;
 	int ret = 0, i, irq;
 
 	if (!dev->of_node) {
@@ -1209,54 +1215,41 @@ static int rcar_gen3_phy_usb2_probe(struct platform_device *pdev)
 		}
 	}
 
-	channel->rstc = devm_reset_control_array_get_optional_shared(dev);
-	if (IS_ERR(channel->rstc))
-		return PTR_ERR(channel->rstc);
-
-	ret = reset_control_deassert(channel->rstc);
-	if (ret)
-		return ret;
-
-	ret = devm_add_action_or_reset(dev, rcar_gen3_reset_assert, channel->rstc);
-	if (ret)
-		return ret;
-
 	/*
 	 * devm_phy_create() will call pm_runtime_enable(&phy->dev);
 	 * And then, phy-core will manage runtime pm for this device.
 	 */
-	ret = devm_pm_runtime_enable(dev);
-	if (ret)
-		return dev_err_probe(dev, ret, "Failed to enable pm_runtime\n");
+	pm_runtime_enable(dev);
 
 	channel->phy_data = of_device_get_match_data(dev);
-	if (!channel->phy_data)
-		return -EINVAL;
+	if (!channel->phy_data) {
+		ret = -EINVAL;
+		goto error;
+	}
 
 	platform_set_drvdata(pdev, channel);
 	channel->dev = dev;
 
-	ret = rcar_gen3_phy_usb2_init_bus(channel);
-	if (ret)
-		return ret;
+	if (channel->phy_data->init_bus) {
+		ret = rcar_gen3_phy_usb2_init_bus(channel);
+		if (ret)
+			goto error;
+	}
 
 	spin_lock_init(&channel->lock);
 	init_waitqueue_head(&channel->otg_init_done);
 	for (i = 0; i < NUM_OF_PHYS; i++) {
 		channel->rphys[i].phy = devm_phy_create(dev, NULL,
 							channel->phy_data->phy_usb2_ops);
-		if (IS_ERR(channel->rphys[i].phy))
-			return dev_err_probe(dev, PTR_ERR(channel->rphys[i].phy),
-					     "Failed to create USB2 PHY\n");
-
+		if (IS_ERR(channel->rphys[i].phy)) {
+			dev_err(dev, "Failed to create USB2 PHY\n");
+			ret = PTR_ERR(channel->rphys[i].phy);
+			goto error;
+		}
 		channel->rphys[i].ch = channel;
 		channel->rphys[i].int_enable_bits = rcar_gen3_int_enable[i];
 		phy_set_drvdata(channel->rphys[i].phy, &channel->rphys[i]);
 	}
-
-	mux_state = devm_mux_state_get_optional_selected(dev, NULL);
-	if (IS_ERR(mux_state))
-		return dev_err_probe(dev, PTR_ERR(mux_state), "Failed to get USB mux\n");
 
 	if (channel->phy_data->no_adp_ctrl && channel->is_otg_channel) {
 		ret = rcar_gen3_phy_usb2_vbus_regulator_register(channel);
@@ -1266,36 +1259,44 @@ static int rcar_gen3_phy_usb2_probe(struct platform_device *pdev)
 		channel->vbus = devm_regulator_get_optional(dev, "vbus");
 	}
 	if (IS_ERR(channel->vbus)) {
-		if (PTR_ERR(channel->vbus) == -EPROBE_DEFER)
-			return PTR_ERR(channel->vbus);
-
+		if (PTR_ERR(channel->vbus) == -EPROBE_DEFER) {
+			ret = PTR_ERR(channel->vbus);
+			goto error;
+		}
 		channel->vbus = NULL;
 	}
 
 	irq = platform_get_irq_optional(pdev, 0);
 	if (irq < 0 && irq != -ENXIO) {
-		return irq;
+		ret = irq;
+		goto error;
 	} else if (irq > 0) {
 		INIT_WORK(&channel->work, rcar_gen3_phy_usb2_work);
 		ret = devm_request_irq(dev, irq, rcar_gen3_phy_usb2_irq,
 				       IRQF_SHARED, dev_name(dev), channel);
-		if (ret < 0)
-			return dev_err_probe(dev, ret,
-					     "Failed to request irq (%d)\n",
-					     irq);
+		if (ret < 0) {
+			dev_err(dev, "Failed to request irq (%d)\n", irq);
+			goto error;
+		}
 	}
 
 	provider = devm_of_phy_provider_register(dev, rcar_gen3_phy_usb2_xlate);
 	if (IS_ERR(provider)) {
-		return dev_err_probe(dev, PTR_ERR(provider),
-				     "Failed to register PHY provider\n");
+		dev_err(dev, "Failed to register PHY provider\n");
+		ret = PTR_ERR(provider);
+		goto error;
 	} else if (channel->is_otg_channel) {
 		ret = device_create_file(dev, &dev_attr_role);
 		if (ret < 0)
-			return ret;
+			goto error;
 	}
 
 	return 0;
+
+error:
+	pm_runtime_disable(dev);
+
+	return ret;
 }
 
 static void rcar_gen3_phy_usb2_remove(struct platform_device *pdev)
@@ -1304,40 +1305,14 @@ static void rcar_gen3_phy_usb2_remove(struct platform_device *pdev)
 
 	if (channel->is_otg_channel)
 		device_remove_file(&pdev->dev, &dev_attr_role);
-}
 
-static int rcar_gen3_phy_usb2_suspend(struct device *dev)
-{
-	struct rcar_gen3_chan *channel = dev_get_drvdata(dev);
-
-	return reset_control_assert(channel->rstc);
-}
-
-static int rcar_gen3_phy_usb2_resume(struct device *dev)
-{
-	struct rcar_gen3_chan *channel = dev_get_drvdata(dev);
-	int ret;
-
-	ret = reset_control_deassert(channel->rstc);
-	if (ret)
-		return ret;
-
-	ret = rcar_gen3_phy_usb2_init_bus(channel);
-	if (ret)
-		reset_control_assert(channel->rstc);
-
-	return ret;
-}
-
-static DEFINE_SIMPLE_DEV_PM_OPS(rcar_gen3_phy_usb2_pm_ops,
-				rcar_gen3_phy_usb2_suspend,
-				rcar_gen3_phy_usb2_resume);
+	pm_runtime_disable(&pdev->dev);
+};
 
 static struct platform_driver rcar_gen3_phy_usb2_driver = {
 	.driver = {
 		.name		= "phy_rcar_gen3_usb2",
 		.of_match_table	= rcar_gen3_phy_usb2_match_table,
-		.pm		= pm_ptr(&rcar_gen3_phy_usb2_pm_ops),
 	},
 	.probe	= rcar_gen3_phy_usb2_probe,
 	.remove = rcar_gen3_phy_usb2_remove,

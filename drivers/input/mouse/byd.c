@@ -314,8 +314,10 @@ static psmouse_ret_t byd_process_byte(struct psmouse *psmouse)
 		break;
 	}
 	default:
-		psmouse_warn(psmouse, "Unrecognized Z: pkt = %*ph\n",
-			     4, psmouse->packet);
+		psmouse_warn(psmouse,
+			     "Unrecognized Z: pkt = %02x %02x %02x %02x\n",
+			     psmouse->packet[0], psmouse->packet[1],
+			     psmouse->packet[2], psmouse->packet[3]);
 		return PSMOUSE_BAD_DATA;
 	}
 
@@ -469,7 +471,7 @@ int byd_init(struct psmouse *psmouse)
 	if (byd_reset_touchpad(psmouse))
 		return -EIO;
 
-	priv = kzalloc_obj(*priv);
+	priv = kzalloc(sizeof(*priv), GFP_KERNEL);
 	if (!priv)
 		return -ENOMEM;
 

@@ -271,8 +271,7 @@ static struct connection *__find_con(int nodeid, int r)
 {
 	struct connection *con;
 
-	hlist_for_each_entry_srcu(con, &connection_hash[r], list,
-			srcu_read_lock_held(&connections_srcu)) {
+	hlist_for_each_entry_rcu(con, &connection_hash[r], list) {
 		if (con->nodeid == nodeid)
 			return con;
 	}
@@ -306,7 +305,7 @@ static struct connection *nodeid2con(int nodeid, gfp_t alloc)
 	if (con || !alloc)
 		return con;
 
-	con = kzalloc_obj(*con, alloc);
+	con = kzalloc(sizeof(*con), alloc);
 	if (!con)
 		return NULL;
 
@@ -427,8 +426,7 @@ static int addr_to_nodeid(struct sockaddr_storage *addr, int *nodeid,
 
 	idx = srcu_read_lock(&connections_srcu);
 	for (i = 0; i < CONN_HASH_SIZE; i++) {
-		hlist_for_each_entry_srcu(con, &connection_hash[i], list,
-				srcu_read_lock_held(&connections_srcu)) {
+		hlist_for_each_entry_rcu(con, &connection_hash[i], list) {
 			WARN_ON_ONCE(!con->addr_count);
 
 			spin_lock(&con->addrs_lock);
@@ -519,11 +517,13 @@ static void lowcomms_write_space(struct sock *sk)
 {
 	struct connection *con = sock2con(sk);
 
-	sk_clear_nospace(sk);
+	clear_bit(SOCK_NOSPACE, &con->sock->flags);
 
 	spin_lock_bh(&con->writequeue_lock);
-	if (test_and_clear_bit(CF_APP_LIMITED, &con->flags))
+	if (test_and_clear_bit(CF_APP_LIMITED, &con->flags)) {
 		con->sock->sk->sk_write_pending--;
+		clear_bit(SOCKWQ_ASYNC_NOSPACE, &con->sock->flags);
+	}
 
 	lowcomms_queue_swork(con);
 	spin_unlock_bh(&con->writequeue_lock);
@@ -838,7 +838,7 @@ static struct processqueue_entry *new_processqueue_entry(int nodeid,
 {
 	struct processqueue_entry *pentry;
 
-	pentry = kmalloc_obj(*pentry, GFP_NOFS);
+	pentry = kmalloc(sizeof(*pentry), GFP_NOFS);
 	if (!pentry)
 		return NULL;
 
@@ -1052,7 +1052,7 @@ static int accept_from_sock(void)
 		struct connection *othercon = newcon->othercon;
 
 		if (!othercon) {
-			othercon = kzalloc_obj(*othercon, GFP_NOFS);
+			othercon = kzalloc(sizeof(*othercon), GFP_NOFS);
 			if (!othercon) {
 				log_print("failed to allocate incoming socket");
 				up_write(&newcon->sock_lock);
@@ -1126,7 +1126,7 @@ static void writequeue_entry_complete(struct writequeue_entry *e, int completed)
 static int sctp_bind_addrs(struct socket *sock, __be16 port)
 {
 	struct sockaddr_storage localaddr;
-	struct sockaddr_unsized *addr = (struct sockaddr_unsized *)&localaddr;
+	struct sockaddr *addr = (struct sockaddr *)&localaddr;
 	int i, addr_len, result = 0;
 
 	for (i = 0; i < dlm_local_count; i++) {
@@ -1134,7 +1134,7 @@ static int sctp_bind_addrs(struct socket *sock, __be16 port)
 		make_sockaddr(&localaddr, port, &addr_len);
 
 		if (!i)
-			result = kernel_bind(sock, addr, addr_len);
+			result = kernel_bind(sock, (struct sockaddr_unsized *)addr, addr_len);
 		else
 			result = sock_bind_add(sock->sk, addr, addr_len);
 
@@ -1389,12 +1389,12 @@ static int send_to_sock(struct connection *con)
 	if (ret == -EAGAIN || ret == 0) {
 		lock_sock(con->sock->sk);
 		spin_lock_bh(&con->writequeue_lock);
-		if (test_bit(SOCK_NOSPACE, &con->sock->flags) &&
+		if (test_bit(SOCKWQ_ASYNC_NOSPACE, &con->sock->flags) &&
 		    !test_and_set_bit(CF_APP_LIMITED, &con->flags)) {
 			/* Notify TCP that we're limited by the
 			 * application window size.
 			 */
-			sk_set_nospace(con->sock->sk);
+			set_bit(SOCK_NOSPACE, &con->sock->sk->sk_socket->flags);
 			con->sock->sk->sk_write_pending++;
 
 			clear_bit(CF_SEND_PENDING, &con->flags);
@@ -1599,7 +1599,7 @@ static int dlm_connect(struct connection *con)
 
 	log_print_ratelimited("connecting to %d", con->nodeid);
 	make_sockaddr(&addr, dlm_config.ci_tcp_port, &addr_len);
-	result = kernel_connect(sock, (struct sockaddr_unsized *)&addr, addr_len, 0);
+	result = kernel_connect(sock, (struct sockaddr *)&addr, addr_len, 0);
 	switch (result) {
 	case -EINPROGRESS:
 		/* not an error */
@@ -1729,8 +1729,7 @@ void dlm_lowcomms_shutdown(void)
 
 	idx = srcu_read_lock(&connections_srcu);
 	for (i = 0; i < CONN_HASH_SIZE; i++) {
-		hlist_for_each_entry_srcu(con, &connection_hash[i], list,
-				srcu_read_lock_held(&connections_srcu)) {
+		hlist_for_each_entry_rcu(con, &connection_hash[i], list) {
 			shutdown_connection(con, true);
 			stop_connection_io(con);
 			flush_workqueue(process_workqueue);
@@ -1969,8 +1968,7 @@ void dlm_lowcomms_exit(void)
 
 	idx = srcu_read_lock(&connections_srcu);
 	for (i = 0; i < CONN_HASH_SIZE; i++) {
-		hlist_for_each_entry_srcu(con, &connection_hash[i], list,
-				srcu_read_lock_held(&connections_srcu)) {
+		hlist_for_each_entry_rcu(con, &connection_hash[i], list) {
 			spin_lock(&connections_lock);
 			hlist_del_rcu(&con->list);
 			spin_unlock(&connections_lock);
@@ -1982,5 +1980,4 @@ void dlm_lowcomms_exit(void)
 		}
 	}
 	srcu_read_unlock(&connections_srcu, idx);
-	srcu_barrier(&connections_srcu);
 }

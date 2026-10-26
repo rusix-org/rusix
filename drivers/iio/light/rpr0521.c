@@ -10,6 +10,7 @@
  */
 
 #include <linux/module.h>
+#include <linux/mod_devicetable.h>
 #include <linux/cleanup.h>
 #include <linux/init.h>
 #include <linux/i2c.h>
@@ -987,8 +988,11 @@ static int rpr0521_probe(struct i2c_client *client)
 			rpr0521_drdy_irq_handler, rpr0521_drdy_irq_thread,
 			IRQF_TRIGGER_FALLING | IRQF_ONESHOT,
 			"rpr0521_event", indio_dev);
-		if (ret)
+		if (ret < 0) {
+			dev_err(&client->dev, "request irq %d for trigger0 failed\n",
+				client->irq);
 			goto err_pm_disable;
+			}
 
 		ret = devm_iio_trigger_register(indio_dev->dev.parent,
 						data->drdy_trigger0);
@@ -1068,10 +1072,7 @@ static int rpr0521_runtime_resume(struct device *dev)
 	struct rpr0521_data *data = iio_priv(indio_dev);
 	int ret;
 
-	ret = regcache_sync(data->regmap);
-	if (ret < 0)
-		return ret;
-
+	regcache_sync(data->regmap);
 	if (data->als_ps_need_en) {
 		ret = rpr0521_als_enable(data, RPR0521_MODE_ALS_ENABLE);
 		if (ret < 0)
@@ -1101,7 +1102,7 @@ static const struct acpi_device_id rpr0521_acpi_match[] = {
 MODULE_DEVICE_TABLE(acpi, rpr0521_acpi_match);
 
 static const struct i2c_device_id rpr0521_id[] = {
-	{ .name = "rpr0521" },
+	{ "rpr0521" },
 	{ }
 };
 

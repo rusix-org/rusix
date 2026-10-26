@@ -9,8 +9,6 @@
 
 int msm_context_set_sysprof(struct msm_context *ctx, struct msm_gpu *gpu, int sysprof)
 {
-	guard(rwsem_write)(&ctx->ctxlock);
-
 	/*
 	 * Since pm_runtime and sysprof_active are both refcounts, we
 	 * call apply the new value first, and then unwind the previous
@@ -44,7 +42,7 @@ int msm_context_set_sysprof(struct msm_context *ctx, struct msm_gpu *gpu, int sy
 
 	/* Some gpu families require additional setup for sysprof */
 	if (gpu->funcs->sysprof_setup)
-		gpu->funcs->sysprof_setup(gpu, false);
+		gpu->funcs->sysprof_setup(gpu);
 
 	ctx->sysprof = sysprof;
 
@@ -68,7 +66,6 @@ void __msm_context_destroy(struct kref *kref)
 	drm_gpuvm_put(ctx->vm);
 	kfree(ctx->comm);
 	kfree(ctx->cmdline);
-	kfree(ctx->perfctx);
 	kfree(ctx);
 }
 
@@ -95,15 +92,18 @@ struct msm_gpu_submitqueue *msm_submitqueue_get(struct msm_context *ctx,
 	if (!ctx)
 		return NULL;
 
-	guard(rwsem_read)(&ctx->ctxlock);
+	read_lock(&ctx->queuelock);
 
 	list_for_each_entry(entry, &ctx->submitqueues, node) {
 		if (entry->id == id) {
 			kref_get(&entry->ref);
+			read_unlock(&ctx->queuelock);
+
 			return entry;
 		}
 	}
 
+	read_unlock(&ctx->queuelock);
 	return NULL;
 }
 
@@ -151,7 +151,7 @@ get_sched_entity(struct msm_context *ctx, struct msm_ringbuffer *ring,
 		struct drm_gpu_scheduler *sched = &ring->sched;
 		int ret;
 
-		entity = kzalloc_obj(*ctx->entities[idx]);
+		entity = kzalloc(sizeof(*ctx->entities[idx]), GFP_KERNEL);
 
 		ret = drm_sched_entity_init(entity, sched_prio, &sched, 1, NULL);
 		if (ret) {
@@ -174,7 +174,6 @@ int msm_submitqueue_create(struct drm_device *drm, struct msm_context *ctx,
 	struct msm_drm_private *priv = drm->dev_private;
 	struct msm_gpu_submitqueue *queue;
 	enum drm_sched_priority sched_prio;
-	struct drm_gpuvm *vm = NULL;
 	unsigned ring_nr;
 	int ret;
 
@@ -186,11 +185,6 @@ int msm_submitqueue_create(struct drm_device *drm, struct msm_context *ctx,
 
 	if (flags & MSM_SUBMITQUEUE_VM_BIND) {
 		unsigned sz;
-
-		vm = msm_context_vm(drm, ctx);
-
-		if (!vm)
-			return UERR(ENOMEM, drm, "no VM");
 
 		/* Not allowed for kernel managed VMs (ie. kernel allocs VA) */
 		if (!msm_context_is_vmbind(ctx))
@@ -213,7 +207,7 @@ int msm_submitqueue_create(struct drm_device *drm, struct msm_context *ctx,
 		if (ret)
 			return ret;
 
-		queue = kzalloc_obj(*queue);
+		queue = kzalloc(sizeof(*queue), GFP_KERNEL);
 	}
 
 	if (!queue)
@@ -223,7 +217,7 @@ int msm_submitqueue_create(struct drm_device *drm, struct msm_context *ctx,
 	queue->flags = flags;
 
 	if (flags & MSM_SUBMITQUEUE_VM_BIND) {
-		struct drm_gpu_scheduler *sched = &to_msm_vm(vm)->sched;
+		struct drm_gpu_scheduler *sched = &to_msm_vm(msm_context_vm(drm, ctx))->sched;
 
 		queue->entity = &queue->_vm_bind_entity[0];
 
@@ -242,7 +236,7 @@ int msm_submitqueue_create(struct drm_device *drm, struct msm_context *ctx,
 		return ret;
 	}
 
-	guard(rwsem_write)(&ctx->ctxlock);
+	write_lock(&ctx->queuelock);
 
 	queue->ctx = msm_context_get(ctx);
 	queue->id = ctx->queueid++;
@@ -255,6 +249,8 @@ int msm_submitqueue_create(struct drm_device *drm, struct msm_context *ctx,
 	mutex_init(&queue->lock);
 
 	list_add_tail(&queue->node, &ctx->submitqueues);
+
+	write_unlock(&ctx->queuelock);
 
 	return 0;
 }
@@ -338,16 +334,19 @@ int msm_submitqueue_remove(struct msm_context *ctx, u32 id)
 	if (!id)
 		return -ENOENT;
 
-	guard(rwsem_write)(&ctx->ctxlock);
+	write_lock(&ctx->queuelock);
 
 	list_for_each_entry(entry, &ctx->submitqueues, node) {
 		if (entry->id == id) {
 			list_del(&entry->node);
+			write_unlock(&ctx->queuelock);
+
 			msm_submitqueue_put(entry);
 			return 0;
 		}
 	}
 
+	write_unlock(&ctx->queuelock);
 	return -ENOENT;
 }
 

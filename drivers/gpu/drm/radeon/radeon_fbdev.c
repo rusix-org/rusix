@@ -29,9 +29,9 @@
 #include <linux/pm_runtime.h>
 #include <linux/vga_switcheroo.h>
 
-#include <drm/clients/drm_fbdev_helper.h>
 #include <drm/drm_crtc_helper.h>
 #include <drm/drm_drv.h>
+#include <drm/drm_fb_helper.h>
 #include <drm/drm_fourcc.h>
 #include <drm/drm_framebuffer.h>
 #include <drm/drm_gem_framebuffer_helper.h>
@@ -154,6 +154,7 @@ static int radeon_fbdev_fb_open(struct fb_info *info, int user)
 	return 0;
 
 err_pm_runtime_mark_last_busy:
+	pm_runtime_mark_last_busy(rdev_to_drm(rdev)->dev);
 	pm_runtime_put_autosuspend(rdev_to_drm(rdev)->dev);
 	return ret;
 }
@@ -163,6 +164,7 @@ static int radeon_fbdev_fb_release(struct fb_info *info, int user)
 	struct drm_fb_helper *fb_helper = info->par;
 	struct radeon_device *rdev = fb_helper->dev->dev_private;
 
+	pm_runtime_mark_last_busy(rdev_to_drm(rdev)->dev);
 	pm_runtime_put_autosuspend(rdev_to_drm(rdev)->dev);
 
 	return 0;
@@ -182,6 +184,8 @@ static void radeon_fbdev_fb_destroy(struct fb_info *info)
 	radeon_fbdev_destroy_pinned_object(gobj);
 
 	drm_client_release(&fb_helper->client);
+	drm_fb_helper_unprepare(fb_helper);
+	kfree(fb_helper);
 }
 
 static const struct fb_ops radeon_fbdev_fb_ops = {
@@ -228,7 +232,7 @@ int radeon_fbdev_driver_fbdev_probe(struct drm_fb_helper *fb_helper,
 	}
 	rbo = gem_to_radeon_bo(gobj);
 
-	fb = kzalloc_obj(*fb);
+	fb = kzalloc(sizeof(*fb), GFP_KERNEL);
 	if (!fb) {
 		ret = -ENOMEM;
 		goto err_radeon_fbdev_destroy_pinned_object;
@@ -273,4 +277,21 @@ err_kfree:
 err_radeon_fbdev_destroy_pinned_object:
 	radeon_fbdev_destroy_pinned_object(gobj);
 	return ret;
+}
+
+bool radeon_fbdev_robj_is_fb(struct radeon_device *rdev, struct radeon_bo *robj)
+{
+	struct drm_fb_helper *fb_helper = rdev_to_drm(rdev)->fb_helper;
+	struct drm_gem_object *gobj;
+
+	if (!fb_helper)
+		return false;
+
+	gobj = drm_gem_fb_get_obj(fb_helper->fb, 0);
+	if (!gobj)
+		return false;
+	if (gobj != &robj->tbo.base)
+		return false;
+
+	return true;
 }

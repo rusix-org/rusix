@@ -683,7 +683,7 @@ out:
 	return err;
 }
 
-static int llcp_sock_connect(struct socket *sock, struct sockaddr_unsized *_addr,
+static int llcp_sock_connect(struct socket *sock, struct sockaddr *_addr,
 			     int len, int flags)
 {
 	struct sock *sk = sock->sk;

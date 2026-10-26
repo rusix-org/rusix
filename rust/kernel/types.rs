@@ -11,12 +11,7 @@ use core::{
 };
 use pin_init::{PinInit, Wrapper, Zeroable};
 
-#[doc(hidden)]
-pub mod for_lt;
-pub use for_lt::{
-    CovariantForLt,
-    ForLt, //
-};
+pub use crate::sync::aref::{ARef, AlwaysRefCounted};
 
 /// Used to transfer ownership to and from foreign (non-Rust) languages.
 ///
@@ -34,14 +29,10 @@ pub unsafe trait ForeignOwnable: Sized {
     const FOREIGN_ALIGN: usize;
 
     /// Type used to immutably borrow a value that is currently foreign-owned.
-    type Borrowed<'a>
-    where
-        Self: 'a;
+    type Borrowed<'a>;
 
     /// Type used to mutably borrow a value that is currently foreign-owned.
-    type BorrowedMut<'a>
-    where
-        Self: 'a;
+    type BorrowedMut<'a>;
 
     /// Converts a Rust-owned object to a foreign-owned one.
     ///
@@ -298,6 +289,7 @@ impl<T, F: FnOnce(T)> Drop for ScopeGuard<T, F> {
 /// # Examples
 ///
 /// ```
+/// # #![expect(unreachable_pub, clippy::disallowed_names)]
 /// use kernel::types::Opaque;
 /// # // Emulate a C struct binding which is from C, maybe uninitialized or not, only the C side
 /// # // knows.
@@ -420,13 +412,13 @@ impl<T> Opaque<T> {
 
 impl<T> Wrapper<T> for Opaque<T> {
     /// Create an opaque pin-initializer from the given pin-initializer.
-    fn pin_init<E>(init: impl PinInit<T, E>) -> impl PinInit<Self, E> {
-        Self::try_ffi_init(|slot: *mut T| {
+    fn pin_init<E>(slot: impl PinInit<T, E>) -> impl PinInit<Self, E> {
+        Self::try_ffi_init(|ptr: *mut T| {
             // SAFETY:
-            //   - `slot` is a valid pointer to uninitialized memory,
+            //   - `ptr` is a valid pointer to uninitialized memory,
             //   - `slot` is not accessed on error,
             //   - `slot` is pinned in memory.
-            unsafe { pin_init::raw_try_init(slot, init) }
+            unsafe { PinInit::<T, E>::__pinned_init(slot, ptr) }
         })
     }
 }

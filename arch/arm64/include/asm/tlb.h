@@ -53,8 +53,7 @@ static inline int tlb_get_level(struct mmu_gather *tlb)
 static inline void tlb_flush(struct mmu_gather *tlb)
 {
 	struct vm_area_struct vma = TLB_FLUSH_VMA(tlb->mm, 0);
-	tlbf_t flags = (tlb->freed_tables || tlb->unshared_tables) ?
-			TLBF_NONE : TLBF_NOWALKCACHE;
+	bool last_level = !(tlb->freed_tables || tlb->unshared_tables);
 	unsigned long stride = tlb_get_unmap_size(tlb);
 	int tlb_level = tlb_get_level(tlb);
 
@@ -64,13 +63,13 @@ static inline void tlb_flush(struct mmu_gather *tlb)
 	 * reallocate our ASID without invalidating the entire TLB.
 	 */
 	if (tlb->fullmm) {
-		if (tlb->freed_tables)
+		if (!last_level)
 			flush_tlb_mm(tlb->mm);
 		return;
 	}
 
 	__flush_tlb_range(&vma, tlb->start, tlb->end, stride,
-			  tlb_level, flags);
+			  last_level, tlb_level);
 }
 
 static inline void __pte_free_tlb(struct mmu_gather *tlb, pgtable_t pte,

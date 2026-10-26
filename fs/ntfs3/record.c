@@ -71,7 +71,7 @@ static __le16 mi_new_attt_id(struct ntfs_inode *ni, struct mft_inode *mi)
 int mi_get(struct ntfs_sb_info *sbi, CLST rno, struct mft_inode **mi)
 {
 	int err;
-	struct mft_inode *m = kzalloc_obj(struct mft_inode, GFP_NOFS);
+	struct mft_inode *m = kzalloc(sizeof(struct mft_inode), GFP_NOFS);
 
 	if (!m)
 		return -ENOMEM;
@@ -649,7 +649,7 @@ bool mi_resize_attr(struct mft_inode *mi, struct ATTRIB *attr, int bytes)
  * If failed record is not changed.
  */
 int mi_pack_runs(struct mft_inode *mi, struct ATTRIB *attr,
-		 const struct runs_tree *run, CLST len)
+		 struct runs_tree *run, CLST len)
 {
 	int err = 0;
 	struct ntfs_sb_info *sbi = mi->sbi;

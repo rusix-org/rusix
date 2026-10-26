@@ -110,6 +110,37 @@ int snd_soc_put_enum_double(struct snd_kcontrol *kcontrol,
 }
 EXPORT_SYMBOL_GPL(snd_soc_put_enum_double);
 
+static int sdca_soc_q78_reg_to_ctl(struct soc_mixer_control *mc, unsigned int reg_val,
+				   unsigned int mask, unsigned int shift, int max,
+				   bool sx)
+{
+	int val = reg_val;
+
+	if (WARN_ON(!mc->shift))
+		return -EINVAL;
+
+	val = sign_extend32(val, mc->sign_bit);
+	val = (((val * 100) >> 8) / (int)mc->shift);
+	val -= mc->min;
+
+	return val & mask;
+}
+
+static unsigned int sdca_soc_q78_ctl_to_reg(struct soc_mixer_control *mc, int val,
+					 unsigned int mask, unsigned int shift, int max)
+{
+	unsigned int ret_val;
+	int reg_val;
+
+	if (WARN_ON(!mc->shift))
+		return -EINVAL;
+
+	reg_val = val + mc->min;
+	ret_val = (int)((reg_val * mc->shift) << 8) / 100;
+
+	return ret_val & mask;
+}
+
 static int soc_mixer_reg_to_ctl(struct soc_mixer_control *mc, unsigned int reg_val,
 				unsigned int mask, unsigned int shift, int max,
 				bool sx)
@@ -203,19 +234,27 @@ static int soc_put_volsw(struct snd_kcontrol *kcontrol,
 			 struct snd_ctl_elem_value *ucontrol,
 			 struct soc_mixer_control *mc, int mask, int max)
 {
+	unsigned int (*ctl_to_reg)(struct soc_mixer_control *, int, unsigned int, unsigned int, int);
 	struct snd_soc_component *component = snd_kcontrol_chip(kcontrol);
 	unsigned int val1, val_mask;
 	unsigned int val2 = 0;
 	bool double_r = false;
 	int ret;
 
+	if (mc->sdca_q78) {
+		ctl_to_reg = sdca_soc_q78_ctl_to_reg;
+		val_mask = mask;
+	} else {
+		ctl_to_reg = soc_mixer_ctl_to_reg;
+		val_mask = mask << mc->shift;
+	}
+
 	ret = soc_mixer_valid_ctl(mc, ucontrol->value.integer.value[0], max);
 	if (ret)
 		return ret;
 
-	val1 = soc_mixer_ctl_to_reg(mc, ucontrol->value.integer.value[0],
+	val1 = ctl_to_reg(mc, ucontrol->value.integer.value[0],
 				    mask, mc->shift, max);
-	val_mask = mask << mc->shift;
 
 	if (snd_soc_volsw_is_stereo(mc)) {
 		ret = soc_mixer_valid_ctl(mc, ucontrol->value.integer.value[1], max);
@@ -223,14 +262,10 @@ static int soc_put_volsw(struct snd_kcontrol *kcontrol,
 			return ret;
 
 		if (mc->reg == mc->rreg) {
-			val1 |= soc_mixer_ctl_to_reg(mc,
-						     ucontrol->value.integer.value[1],
-						     mask, mc->rshift, max);
+			val1 |= ctl_to_reg(mc, ucontrol->value.integer.value[1], mask, mc->rshift, max);
 			val_mask |= mask << mc->rshift;
 		} else {
-			val2 = soc_mixer_ctl_to_reg(mc,
-						    ucontrol->value.integer.value[1],
-						    mask, mc->shift, max);
+			val2 = ctl_to_reg(mc, ucontrol->value.integer.value[1], mask, mc->shift, max);
 			double_r = true;
 		}
 	}
@@ -254,21 +289,28 @@ static int soc_get_volsw(struct snd_kcontrol *kcontrol,
 			 struct snd_ctl_elem_value *ucontrol,
 			 struct soc_mixer_control *mc, int mask, int max, bool sx)
 {
+	int (*reg_to_ctl)(struct soc_mixer_control *, unsigned int, unsigned int,
+			  unsigned int, int, bool);
 	struct snd_soc_component *component = snd_kcontrol_chip(kcontrol);
 	unsigned int reg_val;
 	int val;
 
+	if (mc->sdca_q78)
+		reg_to_ctl = sdca_soc_q78_reg_to_ctl;
+	else
+		reg_to_ctl = soc_mixer_reg_to_ctl;
+
 	reg_val = snd_soc_component_read(component, mc->reg);
-	val = soc_mixer_reg_to_ctl(mc, reg_val, mask, mc->shift, max, sx);
+	val = reg_to_ctl(mc, reg_val, mask, mc->shift, max, sx);
 
 	ucontrol->value.integer.value[0] = val;
 
 	if (snd_soc_volsw_is_stereo(mc)) {
 		if (mc->reg == mc->rreg) {
-			val = soc_mixer_reg_to_ctl(mc, reg_val, mask, mc->rshift, max, sx);
+			val = reg_to_ctl(mc, reg_val, mask, mc->rshift, max, sx);
 		} else {
 			reg_val = snd_soc_component_read(component, mc->rreg);
-			val = soc_mixer_reg_to_ctl(mc, reg_val, mask, mc->shift, max, sx);
+			val = reg_to_ctl(mc, reg_val, mask, mc->shift, max, sx);
 		}
 
 		ucontrol->value.integer.value[1] = val;
@@ -305,8 +347,8 @@ EXPORT_SYMBOL_GPL(snd_soc_info_volsw);
  * Callback to provide information about a single mixer control, or a double
  * mixer control that spans 2 registers of the SX TLV type. SX TLV controls
  * have a range that represents both positive and negative values either side
- * of zero but without a sign bit. min is the register value representing the
- * minimum volume, max is the number of volume steps.
+ * of zero but without a sign bit. min is the minimum register value, max is
+ * the number of steps.
  *
  * Returns 0 for success.
  */
@@ -406,19 +448,19 @@ EXPORT_SYMBOL_GPL(snd_soc_put_volsw_sx);
 static int snd_soc_clip_to_platform_max(struct snd_kcontrol *kctl)
 {
 	struct soc_mixer_control *mc = (struct soc_mixer_control *)kctl->private_value;
-	struct snd_ctl_elem_value *uctl __free(kfree) = NULL;
+	struct snd_ctl_elem_value *uctl;
 	int ret;
 
 	if (!mc->platform_max)
 		return 0;
 
-	uctl = kzalloc_obj(*uctl);
+	uctl = kzalloc(sizeof(*uctl), GFP_KERNEL);
 	if (!uctl)
 		return -ENOMEM;
 
 	ret = kctl->get(kctl, uctl);
 	if (ret < 0)
-		return ret;
+		goto out;
 
 	if (uctl->value.integer.value[0] > mc->platform_max)
 		uctl->value.integer.value[0] = mc->platform_max;
@@ -428,10 +470,10 @@ static int snd_soc_clip_to_platform_max(struct snd_kcontrol *kctl)
 		uctl->value.integer.value[1] = mc->platform_max;
 
 	ret = kctl->put(kctl, uctl);
-	if (ret < 0)
-		return ret;
 
-	return 0;
+out:
+	kfree(uctl);
+	return ret;
 }
 
 /**
@@ -461,10 +503,6 @@ int snd_soc_limit_volume(struct snd_soc_card *card, const char *name, int max)
 			mc->platform_max = max;
 			ret = snd_soc_clip_to_platform_max(kctl);
 		}
-	} else {
-		/* Some cards blindly add limits for multiple variants. */
-		dev_dbg(card->dev, "Volume limit for unknown control '%s'\n",
-			name);
 	}
 
 	return ret;
@@ -476,10 +514,9 @@ int snd_soc_bytes_info(struct snd_kcontrol *kcontrol,
 {
 	struct snd_soc_component *component = snd_kcontrol_chip(kcontrol);
 	struct soc_bytes *params = (void *)kcontrol->private_value;
-	int val_bytes = snd_soc_component_regmap_val_bytes(component);
 
 	uinfo->type = SNDRV_CTL_ELEM_TYPE_BYTES;
-	uinfo->count = params->num_regs * val_bytes;
+	uinfo->count = params->num_regs * component->val_bytes;
 
 	return 0;
 }
@@ -490,28 +527,27 @@ int snd_soc_bytes_get(struct snd_kcontrol *kcontrol,
 {
 	struct snd_soc_component *component = snd_kcontrol_chip(kcontrol);
 	struct soc_bytes *params = (void *)kcontrol->private_value;
-	int val_bytes = snd_soc_component_regmap_val_bytes(component);
 	int ret;
 
 	if (component->regmap)
 		ret = regmap_raw_read(component->regmap, params->base,
 				      ucontrol->value.bytes.data,
-				      params->num_regs * val_bytes);
+				      params->num_regs * component->val_bytes);
 	else
 		ret = -EINVAL;
 
 	/* Hide any masked bytes to ensure consistent data reporting */
 	if (ret == 0 && params->mask) {
-		switch (val_bytes) {
+		switch (component->val_bytes) {
 		case 1:
 			ucontrol->value.bytes.data[0] &= ~params->mask;
 			break;
 		case 2:
-			((__be16 *)(&ucontrol->value.bytes.data))[0]
+			((u16 *)(&ucontrol->value.bytes.data))[0]
 				&= cpu_to_be16(~params->mask);
 			break;
 		case 4:
-			((__be32 *)(&ucontrol->value.bytes.data))[0]
+			((u32 *)(&ucontrol->value.bytes.data))[0]
 				&= cpu_to_be32(~params->mask);
 			break;
 		default:
@@ -528,14 +564,13 @@ int snd_soc_bytes_put(struct snd_kcontrol *kcontrol,
 {
 	struct snd_soc_component *component = snd_kcontrol_chip(kcontrol);
 	struct soc_bytes *params = (void *)kcontrol->private_value;
-	int val_bytes = snd_soc_component_regmap_val_bytes(component);
 	unsigned int val, mask;
 	int ret, len;
 
 	if (!component->regmap || !params->num_regs)
 		return -EINVAL;
 
-	len = params->num_regs * val_bytes;
+	len = params->num_regs * component->val_bytes;
 
 	void *data __free(kfree) = kmemdup(ucontrol->value.bytes.data, len,
 					   GFP_KERNEL | GFP_DMA);
@@ -554,7 +589,7 @@ int snd_soc_bytes_put(struct snd_kcontrol *kcontrol,
 
 		val &= params->mask;
 
-		switch (val_bytes) {
+		switch (component->val_bytes) {
 		case 1:
 			((u8 *)data)[0] &= ~params->mask;
 			((u8 *)data)[0] |= val;
@@ -677,10 +712,9 @@ int snd_soc_get_xr_sx(struct snd_kcontrol *kcontrol,
 	struct snd_soc_component *component = snd_kcontrol_chip(kcontrol);
 	struct soc_mreg_control *mc =
 		(struct soc_mreg_control *)kcontrol->private_value;
-	int val_bytes = snd_soc_component_regmap_val_bytes(component);
 	unsigned int regbase = mc->regbase;
 	unsigned int regcount = mc->regcount;
-	unsigned int regwshift = val_bytes * BITS_PER_BYTE;
+	unsigned int regwshift = component->val_bytes * BITS_PER_BYTE;
 	unsigned int regwmask = GENMASK(regwshift - 1, 0);
 	unsigned long mask = GENMASK(mc->nbits - 1, 0);
 	long val = 0;
@@ -722,10 +756,9 @@ int snd_soc_put_xr_sx(struct snd_kcontrol *kcontrol,
 	struct snd_soc_component *component = snd_kcontrol_chip(kcontrol);
 	struct soc_mreg_control *mc =
 		(struct soc_mreg_control *)kcontrol->private_value;
-	int val_bytes = snd_soc_component_regmap_val_bytes(component);
 	unsigned int regbase = mc->regbase;
 	unsigned int regcount = mc->regcount;
-	unsigned int regwshift = val_bytes * BITS_PER_BYTE;
+	unsigned int regwshift = component->val_bytes * BITS_PER_BYTE;
 	unsigned int regwmask = GENMASK(regwshift - 1, 0);
 	unsigned long mask = GENMASK(mc->nbits - 1, 0);
 	long val = ucontrol->value.integer.value[0];

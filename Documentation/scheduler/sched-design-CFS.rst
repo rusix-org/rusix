@@ -183,8 +183,9 @@ This is the (partial) list of the hooks:
 
  - yield_task(...)
 
-   This function yields the CPU by moving the currently running task's position back
-   in the runqueue, so that other runnable tasks get scheduled first.
+   This function is basically just a dequeue followed by an enqueue, unless the
+   compat_yield sysctl is turned on; in that case, it places the scheduling
+   entity at the right-most end of the red-black tree.
 
  - wakeup_preempt(...)
 

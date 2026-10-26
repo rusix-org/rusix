@@ -981,7 +981,8 @@ static int bcm_enet_open(struct net_device *dev)
 	priv->tx_desc_alloc_size = size;
 	priv->tx_desc_cpu = p;
 
-	priv->tx_skb = kzalloc_objs(struct sk_buff *, priv->tx_ring_size);
+	priv->tx_skb = kcalloc(priv->tx_ring_size, sizeof(struct sk_buff *),
+			       GFP_KERNEL);
 	if (!priv->tx_skb) {
 		ret = -ENOMEM;
 		goto out_free_tx_ring;
@@ -1564,7 +1565,7 @@ static int bcm_enet_set_pauseparam(struct net_device *dev,
 
 	if (priv->has_phy) {
 		if (ecmd->autoneg && (ecmd->rx_pause != ecmd->tx_pause)) {
-			/* asymmetric pause mode not supported,
+			/* asymetric pause mode not supported,
 			 * actually possible but integrated PHY has RO
 			 * asym_pause bit */
 			return -EINVAL;
@@ -2148,7 +2149,8 @@ static int bcm_enetsw_open(struct net_device *dev)
 	priv->tx_desc_alloc_size = size;
 	priv->tx_desc_cpu = p;
 
-	priv->tx_skb = kzalloc_objs(struct sk_buff *, priv->tx_ring_size);
+	priv->tx_skb = kcalloc(priv->tx_ring_size, sizeof(struct sk_buff *),
+			       GFP_KERNEL);
 	if (!priv->tx_skb) {
 		dev_err(kdev, "cannot allocate tx skb queue\n");
 		ret = -ENOMEM;

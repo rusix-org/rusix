@@ -6,7 +6,6 @@
 #include <linux/delay.h>
 #include <linux/pci.h>
 #include <linux/pci-doe.h>
-#include <cxl/pci.h>
 #include <linux/aer.h>
 #include <cxlpci.h>
 #include <cxlmem.h>
@@ -42,14 +41,14 @@ static int pci_get_port_num(struct pci_dev *pdev)
 }
 
 /**
- * devm_cxl_add_dport_by_dev - allocate a dport by dport device
+ * __devm_cxl_add_dport_by_dev - allocate a dport by dport device
  * @port: cxl_port that hosts the dport
  * @dport_dev: 'struct device' of the dport
  *
  * Returns the allocated dport on success or ERR_PTR() of -errno on error
  */
-struct cxl_dport *devm_cxl_add_dport_by_dev(struct cxl_port *port,
-					    struct device *dport_dev)
+struct cxl_dport *__devm_cxl_add_dport_by_dev(struct cxl_port *port,
+					      struct device *dport_dev)
 {
 	struct cxl_register_map map;
 	struct pci_dev *pdev;
@@ -70,7 +69,86 @@ struct cxl_dport *devm_cxl_add_dport_by_dev(struct cxl_port *port,
 	device_lock_assert(&port->dev);
 	return devm_cxl_add_dport(port, dport_dev, port_num, map.resource);
 }
-EXPORT_SYMBOL_NS_GPL(devm_cxl_add_dport_by_dev, "CXL");
+EXPORT_SYMBOL_NS_GPL(__devm_cxl_add_dport_by_dev, "CXL");
+
+struct cxl_walk_context {
+	struct pci_bus *bus;
+	struct cxl_port *port;
+	int type;
+	int error;
+	int count;
+};
+
+static int match_add_dports(struct pci_dev *pdev, void *data)
+{
+	struct cxl_walk_context *ctx = data;
+	struct cxl_port *port = ctx->port;
+	int type = pci_pcie_type(pdev);
+	struct cxl_register_map map;
+	struct cxl_dport *dport;
+	u32 lnkcap, port_num;
+	int rc;
+
+	if (pdev->bus != ctx->bus)
+		return 0;
+	if (!pci_is_pcie(pdev))
+		return 0;
+	if (type != ctx->type)
+		return 0;
+	if (pci_read_config_dword(pdev, pci_pcie_cap(pdev) + PCI_EXP_LNKCAP,
+				  &lnkcap))
+		return 0;
+
+	rc = cxl_find_regblock(pdev, CXL_REGLOC_RBI_COMPONENT, &map);
+	if (rc)
+		dev_dbg(&port->dev, "failed to find component registers\n");
+
+	port_num = FIELD_GET(PCI_EXP_LNKCAP_PN, lnkcap);
+	dport = devm_cxl_add_dport(port, &pdev->dev, port_num, map.resource);
+	if (IS_ERR(dport)) {
+		ctx->error = PTR_ERR(dport);
+		return PTR_ERR(dport);
+	}
+	ctx->count++;
+
+	return 0;
+}
+
+/**
+ * devm_cxl_port_enumerate_dports - enumerate downstream ports of the upstream port
+ * @port: cxl_port whose ->uport_dev is the upstream of dports to be enumerated
+ *
+ * Returns a positive number of dports enumerated or a negative error
+ * code.
+ */
+int devm_cxl_port_enumerate_dports(struct cxl_port *port)
+{
+	struct pci_bus *bus = cxl_port_to_pci_bus(port);
+	struct cxl_walk_context ctx;
+	int type;
+
+	if (!bus)
+		return -ENXIO;
+
+	if (pci_is_root_bus(bus))
+		type = PCI_EXP_TYPE_ROOT_PORT;
+	else
+		type = PCI_EXP_TYPE_DOWNSTREAM;
+
+	ctx = (struct cxl_walk_context) {
+		.port = port,
+		.bus = bus,
+		.type = type,
+	};
+	pci_walk_bus(bus, match_add_dports, &ctx);
+
+	if (ctx.count == 0)
+		return -ENODEV;
+	if (ctx.error)
+		return ctx.error;
+	return ctx.count;
+}
+EXPORT_SYMBOL_NS_GPL(devm_cxl_port_enumerate_dports, "CXL");
 
 static int cxl_dvsec_mem_range_valid(struct cxl_dev_state *cxlds, int id)
 {
@@ -87,12 +165,12 @@ static int cxl_dvsec_mem_range_valid(struct cxl_dev_state *cxlds, int id)
 	i = 1;
 	do {
 		rc = pci_read_config_dword(pdev,
-					   d + PCI_DVSEC_CXL_RANGE_SIZE_LOW(id),
+					   d + CXL_DVSEC_RANGE_SIZE_LOW(id),
 					   &temp);
 		if (rc)
-			return pcibios_err_to_errno(rc);
+			return rc;
 
-		valid = FIELD_GET(PCI_DVSEC_CXL_MEM_INFO_VALID, temp);
+		valid = FIELD_GET(CXL_DVSEC_MEM_INFO_VALID, temp);
 		if (valid)
 			break;
 		msleep(1000);
@@ -122,11 +200,11 @@ static int cxl_dvsec_mem_range_active(struct cxl_dev_state *cxlds, int id)
 	/* Check MEM ACTIVE bit, up to 60s timeout by default */
 	for (i = media_ready_timeout; i; i--) {
 		rc = pci_read_config_dword(
-			pdev, d + PCI_DVSEC_CXL_RANGE_SIZE_LOW(id), &temp);
+			pdev, d + CXL_DVSEC_RANGE_SIZE_LOW(id), &temp);
 		if (rc)
-			return pcibios_err_to_errno(rc);
+			return rc;
 
-		active = FIELD_GET(PCI_DVSEC_CXL_MEM_ACTIVE, temp);
+		active = FIELD_GET(CXL_DVSEC_MEM_ACTIVE, temp);
 		if (active)
 			break;
 		msleep(1000);
@@ -155,11 +233,11 @@ int cxl_await_media_ready(struct cxl_dev_state *cxlds)
 	u16 cap;
 
 	rc = pci_read_config_word(pdev,
-				  d + PCI_DVSEC_CXL_CAP, &cap);
+				  d + CXL_DVSEC_CAP_OFFSET, &cap);
 	if (rc)
-		return pcibios_err_to_errno(rc);
+		return rc;
 
-	hdm_count = FIELD_GET(PCI_DVSEC_CXL_HDM_COUNT, cap);
+	hdm_count = FIELD_GET(CXL_DVSEC_HDM_COUNT_MASK, cap);
 	for (i = 0; i < hdm_count; i++) {
 		rc = cxl_dvsec_mem_range_valid(cxlds, i);
 		if (rc)
@@ -187,18 +265,18 @@ static int cxl_set_mem_enable(struct cxl_dev_state *cxlds, u16 val)
 	u16 ctrl;
 	int rc;
 
-	rc = pci_read_config_word(pdev, d + PCI_DVSEC_CXL_CTRL, &ctrl);
-	if (rc)
-		return pcibios_err_to_errno(rc);
+	rc = pci_read_config_word(pdev, d + CXL_DVSEC_CTRL_OFFSET, &ctrl);
+	if (rc < 0)
+		return rc;
 
-	if ((ctrl & PCI_DVSEC_CXL_MEM_ENABLE) == val)
+	if ((ctrl & CXL_DVSEC_MEM_ENABLE) == val)
 		return 1;
-	ctrl &= ~PCI_DVSEC_CXL_MEM_ENABLE;
+	ctrl &= ~CXL_DVSEC_MEM_ENABLE;
 	ctrl |= val;
 
-	rc = pci_write_config_word(pdev, d + PCI_DVSEC_CXL_CTRL, ctrl);
-	if (rc)
-		return pcibios_err_to_errno(rc);
+	rc = pci_write_config_word(pdev, d + CXL_DVSEC_CTRL_OFFSET, ctrl);
+	if (rc < 0)
+		return rc;
 
 	return 0;
 }
@@ -212,7 +290,7 @@ static int devm_cxl_enable_mem(struct device *host, struct cxl_dev_state *cxlds)
 {
 	int rc;
 
-	rc = cxl_set_mem_enable(cxlds, PCI_DVSEC_CXL_MEM_ENABLE);
+	rc = cxl_set_mem_enable(cxlds, CXL_DVSEC_MEM_ENABLE);
 	if (rc < 0)
 		return rc;
 	if (rc > 0)
@@ -274,11 +352,11 @@ int cxl_dvsec_rr_decode(struct cxl_dev_state *cxlds,
 		return -ENXIO;
 	}
 
-	rc = pci_read_config_word(pdev, d + PCI_DVSEC_CXL_CAP, &cap);
+	rc = pci_read_config_word(pdev, d + CXL_DVSEC_CAP_OFFSET, &cap);
 	if (rc)
-		return pcibios_err_to_errno(rc);
+		return rc;
 
-	if (!(cap & PCI_DVSEC_CXL_MEM_CAPABLE)) {
+	if (!(cap & CXL_DVSEC_MEM_CAPABLE)) {
 		dev_dbg(dev, "Not MEM Capable\n");
 		return -ENXIO;
 	}
@@ -289,7 +367,7 @@ int cxl_dvsec_rr_decode(struct cxl_dev_state *cxlds,
 	 * driver is for a spec defined class code which must be CXL.mem
 	 * capable, there is no point in continuing to enable CXL.mem.
 	 */
-	hdm_count = FIELD_GET(PCI_DVSEC_CXL_HDM_COUNT, cap);
+	hdm_count = FIELD_GET(CXL_DVSEC_HDM_COUNT_MASK, cap);
 	if (!hdm_count || hdm_count > 2)
 		return -EINVAL;
 
@@ -298,11 +376,11 @@ int cxl_dvsec_rr_decode(struct cxl_dev_state *cxlds,
 	 * disabled, and they will remain moot after the HDM Decoder
 	 * capability is enabled.
 	 */
-	rc = pci_read_config_word(pdev, d + PCI_DVSEC_CXL_CTRL, &ctrl);
+	rc = pci_read_config_word(pdev, d + CXL_DVSEC_CTRL_OFFSET, &ctrl);
 	if (rc)
-		return pcibios_err_to_errno(rc);
+		return rc;
 
-	info->mem_enabled = FIELD_GET(PCI_DVSEC_CXL_MEM_ENABLE, ctrl);
+	info->mem_enabled = FIELD_GET(CXL_DVSEC_MEM_ENABLE, ctrl);
 	if (!info->mem_enabled)
 		return 0;
 
@@ -315,35 +393,35 @@ int cxl_dvsec_rr_decode(struct cxl_dev_state *cxlds,
 			return rc;
 
 		rc = pci_read_config_dword(
-			pdev, d + PCI_DVSEC_CXL_RANGE_SIZE_HIGH(i), &temp);
+			pdev, d + CXL_DVSEC_RANGE_SIZE_HIGH(i), &temp);
 		if (rc)
-			return pcibios_err_to_errno(rc);
+			return rc;
 
 		size = (u64)temp << 32;
 
 		rc = pci_read_config_dword(
-			pdev, d + PCI_DVSEC_CXL_RANGE_SIZE_LOW(i), &temp);
+			pdev, d + CXL_DVSEC_RANGE_SIZE_LOW(i), &temp);
 		if (rc)
-			return pcibios_err_to_errno(rc);
+			return rc;
 
-		size |= temp & PCI_DVSEC_CXL_MEM_SIZE_LOW;
+		size |= temp & CXL_DVSEC_MEM_SIZE_LOW_MASK;
 		if (!size) {
 			continue;
 		}
 
 		rc = pci_read_config_dword(
-			pdev, d + PCI_DVSEC_CXL_RANGE_BASE_HIGH(i), &temp);
+			pdev, d + CXL_DVSEC_RANGE_BASE_HIGH(i), &temp);
 		if (rc)
-			return pcibios_err_to_errno(rc);
+			return rc;
 
 		base = (u64)temp << 32;
 
 		rc = pci_read_config_dword(
-			pdev, d + PCI_DVSEC_CXL_RANGE_BASE_LOW(i), &temp);
+			pdev, d + CXL_DVSEC_RANGE_BASE_LOW(i), &temp);
 		if (rc)
-			return pcibios_err_to_errno(rc);
+			return rc;
 
-		base |= temp & PCI_DVSEC_CXL_MEM_BASE_LOW;
+		base |= temp & CXL_DVSEC_MEM_BASE_LOW_MASK;
 
 		info->dvsec_range[ranges++] = (struct range) {
 			.start = base,
@@ -697,63 +775,6 @@ bool cxl_endpoint_decoder_reset_detected(struct cxl_port *port)
 }
 EXPORT_SYMBOL_NS_GPL(cxl_endpoint_decoder_reset_detected, "CXL");
 
-static int cxl_rcrb_get_comp_regs(struct pci_dev *pdev,
-				  struct cxl_register_map *map,
-				  struct cxl_dport *dport)
-{
-	resource_size_t component_reg_phys;
-
-	*map = (struct cxl_register_map) {
-		.host = &pdev->dev,
-		.resource = CXL_RESOURCE_NONE,
-	};
-
-	component_reg_phys = cxl_rcd_component_reg_phys(&pdev->dev, dport);
-	if (component_reg_phys == CXL_RESOURCE_NONE)
-		return -ENXIO;
-
-	map->resource = component_reg_phys;
-	map->reg_type = CXL_REGLOC_RBI_COMPONENT;
-	map->max_size = CXL_COMPONENT_REG_BLOCK_SIZE;
-
-	return 0;
-}
-
-int cxl_pci_setup_regs(struct pci_dev *pdev, enum cxl_regloc_type type,
-		       struct cxl_register_map *map)
-{
-	int rc;
-
-	rc = cxl_find_regblock(pdev, type, map);
-
-	/*
-	 * If the Register Locator DVSEC does not exist, check if it
-	 * is an RCH and try to extract the Component Registers from
-	 * an RCRB.
-	 */
-	if (rc && type == CXL_REGLOC_RBI_COMPONENT && is_cxl_restricted(pdev)) {
-		struct cxl_dport *dport;
-		struct cxl_port *port __free(put_cxl_port) =
-			cxl_pci_find_port(pdev, &dport);
-		if (!port)
-			return -EPROBE_DEFER;
-
-		rc = cxl_rcrb_get_comp_regs(pdev, map, dport);
-		if (rc)
-			return rc;
-
-		rc = cxl_dport_map_rcd_linkcap(pdev, dport);
-		if (rc)
-			return rc;
-
-	} else if (rc) {
-		return rc;
-	}
-
-	return cxl_setup_regs(map);
-}
-EXPORT_SYMBOL_NS_GPL(cxl_pci_setup_regs, "CXL");
-
 int cxl_pci_get_bandwidth(struct pci_dev *pdev, struct access_coordinate *c)
 {
 	int speed, bw;
@@ -808,7 +829,7 @@ u16 cxl_gpf_get_dvsec(struct device *dev)
 		is_port = false;
 
 	dvsec = pci_find_dvsec_capability(pdev, PCI_VENDOR_ID_CXL,
-			is_port ? PCI_DVSEC_CXL_PORT_GPF : PCI_DVSEC_CXL_DEVICE_GPF);
+			is_port ? CXL_DVSEC_PORT_GPF : CXL_DVSEC_DEVICE_GPF);
 	if (!dvsec)
 		dev_warn(dev, "%s GPF DVSEC not present\n",
 			 is_port ? "Port" : "Device");
@@ -824,14 +845,14 @@ static int update_gpf_port_dvsec(struct pci_dev *pdev, int dvsec, int phase)
 
 	switch (phase) {
 	case 1:
-		offset = PCI_DVSEC_CXL_PORT_GPF_PHASE_1_CONTROL;
-		base = PCI_DVSEC_CXL_PORT_GPF_PHASE_1_TMO_BASE;
-		scale = PCI_DVSEC_CXL_PORT_GPF_PHASE_1_TMO_SCALE;
+		offset = CXL_DVSEC_PORT_GPF_PHASE_1_CONTROL_OFFSET;
+		base = CXL_DVSEC_PORT_GPF_PHASE_1_TMO_BASE_MASK;
+		scale = CXL_DVSEC_PORT_GPF_PHASE_1_TMO_SCALE_MASK;
 		break;
 	case 2:
-		offset = PCI_DVSEC_CXL_PORT_GPF_PHASE_2_CONTROL;
-		base = PCI_DVSEC_CXL_PORT_GPF_PHASE_2_TMO_BASE;
-		scale = PCI_DVSEC_CXL_PORT_GPF_PHASE_2_TMO_SCALE;
+		offset = CXL_DVSEC_PORT_GPF_PHASE_2_CONTROL_OFFSET;
+		base = CXL_DVSEC_PORT_GPF_PHASE_2_TMO_BASE_MASK;
+		scale = CXL_DVSEC_PORT_GPF_PHASE_2_TMO_SCALE_MASK;
 		break;
 	default:
 		return -EINVAL;
@@ -877,14 +898,6 @@ int cxl_gpf_port_setup(struct cxl_dport *dport)
 
 	return 0;
 }
-
-struct cxl_walk_context {
-	struct pci_bus *bus;
-	struct cxl_port *port;
-	int type;
-	int error;
-	int count;
-};
 
 static int count_dports(struct pci_dev *pdev, void *data)
 {

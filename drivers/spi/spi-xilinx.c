@@ -416,11 +416,11 @@ static int xilinx_spi_probe(struct platform_device *pdev)
 		bits_per_word = pdata->bits_per_word;
 		force_irq = pdata->force_irq;
 	} else {
-		device_property_read_u32(&pdev->dev, "xlnx,num-ss-bits",
-					 &num_cs);
-		ret = device_property_read_u32(&pdev->dev,
-					       "xlnx,num-transfer-bits",
-					       &bits_per_word);
+		of_property_read_u32(pdev->dev.of_node, "xlnx,num-ss-bits",
+					  &num_cs);
+		ret = of_property_read_u32(pdev->dev.of_node,
+					   "xlnx,num-transfer-bits",
+					   &bits_per_word);
 		if (ret)
 			bits_per_word = 8;
 	}
@@ -458,9 +458,10 @@ static int xilinx_spi_probe(struct platform_device *pdev)
 
 	host->bus_num = pdev->id;
 	host->num_chipselect = num_cs;
+	host->dev.of_node = pdev->dev.of_node;
 
 	/*
-	 * Detect endianness on the IP via loop bit in CR. Detection
+	 * Detect endianess on the IP via loop bit in CR. Detection
 	 * must be done before reset is sent because incorrect reset
 	 * value generates error interrupt.
 	 * Setup little endian helper functions first and try to use them
@@ -481,7 +482,7 @@ static int xilinx_spi_probe(struct platform_device *pdev)
 	xspi->bytes_per_word = bits_per_word / 8;
 	xspi->buffer_size = xilinx_spi_find_buffer_size(xspi);
 
-	xspi->irq = platform_get_irq_optional(pdev, 0);
+	xspi->irq = platform_get_irq(pdev, 0);
 	if (xspi->irq < 0 && xspi->irq != -ENXIO) {
 		return xspi->irq;
 	} else if (xspi->irq >= 0) {
@@ -526,6 +527,8 @@ static void xilinx_spi_remove(struct platform_device *pdev)
 	xspi->write_fn(0, regs_base + XIPIF_V123B_IIER_OFFSET);
 	/* Disable the global IPIF interrupt */
 	xspi->write_fn(0, regs_base + XIPIF_V123B_DGIER_OFFSET);
+
+	spi_controller_put(xspi->bitbang.ctlr);
 }
 
 /* work with hotplug and coldplug */

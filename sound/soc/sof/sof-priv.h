@@ -256,18 +256,6 @@ struct snd_sof_dsp_ops {
 	/* pcm ack */
 	int (*pcm_ack)(struct snd_sof_dev *sdev, struct snd_pcm_substream *substream); /* optional */
 
-	int (*compr_open)(struct snd_sof_dev *sdev, struct snd_compr_stream *cstream);
-	int (*compr_close)(struct snd_sof_dev *sdev, struct snd_compr_stream *cstream);
-	int (*compr_hw_params)(struct snd_sof_dev *sdev, struct snd_compr_stream *cstream,
-			       struct snd_compr_params *params,
-			       struct snd_sof_platform_stream_params *platform_params);
-	int (*compr_hw_free)(struct snd_sof_dev *sdev, struct snd_compr_stream *cstream);
-	int (*compr_trigger)(struct snd_sof_dev *sdev, struct snd_compr_stream *cstream,
-			     int cmd);
-	int (*compr_pointer)(struct snd_sof_dev *sdev, struct snd_compr_stream *cstream,
-			     struct snd_compr_tstamp64 *tstamp);
-	u64 (*compr_get_dai_frame_counter)(struct snd_sof_dev *sdev,
-					   struct snd_compr_stream *cstream);
 	/*
 	 * optional callback to retrieve the number of frames left/arrived from/to
 	 * the DSP on the DAI side (link/codec/DMIC/etc).
@@ -594,8 +582,6 @@ struct snd_sof_dev {
 	wait_queue_head_t boot_wait;
 	enum sof_fw_state fw_state;
 	bool first_boot;
-	/* mutex to protect DSP firmware boot (except initial, probe time boot */
-	struct mutex dsp_fw_boot_mutex;
 
 	/* work queue in case the probe is implemented in two steps */
 	struct work_struct probe_work;
@@ -719,7 +705,6 @@ int snd_sof_suspend(struct device *dev);
 int snd_sof_dsp_power_down_notify(struct snd_sof_dev *sdev);
 int snd_sof_prepare(struct device *dev);
 void snd_sof_complete(struct device *dev);
-int snd_sof_boot_dsp_firmware(struct snd_sof_dev *sdev);
 
 void snd_sof_new_platform_drv(struct snd_sof_dev *sdev);
 

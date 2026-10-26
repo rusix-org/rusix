@@ -11,44 +11,23 @@ static int memblock_debug = 1;
 
 #define pr_warn_ratelimited(fmt, ...)    printf(fmt, ##__VA_ARGS__)
 
-#define K(x) ((x) << (PAGE_SHIFT-10))
-
 bool mirrored_kernelcore = false;
 
 struct page {};
-static inline void *page_address(struct page *page)
+
+void memblock_free_pages(struct page *page, unsigned long pfn,
+			 unsigned int order)
 {
-	BUG();
-	return page;
 }
 
-static inline struct page *virt_to_page(void *virt)
+static inline void accept_memory(phys_addr_t start, unsigned long size)
 {
-	BUG();
-	return virt;
 }
 
-#define for_each_valid_pfn(pfn, start_pfn, end_pfn)			 \
-	for ((pfn) = (start_pfn); (pfn) < (end_pfn); (pfn)++)
-
-static inline void *kasan_reset_tag(const void *addr)
+static inline unsigned long free_reserved_area(void *start, void *end,
+					       int poison, const char *s)
 {
-	return (void *)addr;
-}
-
-static inline bool __is_kernel(unsigned long addr)
-{
-	return false;
-}
-
-#define for_each_valid_pfn(pfn, start_pfn, end_pfn)                     \
-       for ((pfn) = (start_pfn); (pfn) < (end_pfn); (pfn)++)
-
-#define __SetPageReserved(p)	((void)(p))
-
-static inline bool kho_scratch_overlap(phys_addr_t phys, size_t size)
-{
-	return false;
+	return 0;
 }
 
 #endif

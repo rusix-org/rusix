@@ -15,14 +15,12 @@
 VERSION {
 	LINUX_2.6 {
 	global:
-#ifdef CONFIG_COMPAT_32BIT_TIME
 		clock_gettime;
 		__vdso_clock_gettime;
+		__vdso_clock_gettime_stick;
 		gettimeofday;
 		__vdso_gettimeofday;
-#endif
-		clock_gettime64;
-		__vdso_clock_gettime64;
+		__vdso_gettimeofday_stick;
 	local: *;
 	};
 }

@@ -111,9 +111,6 @@ build-test:
 build-test-tarball:
 	@$(MAKE) -f tests/make REUSE_FEATURES_DUMP=1 MK=Makefile SET_PARALLEL=1 --no-print-directory out
 
-check-headers:
-	@./check-headers.sh
-
 #
 # All other targets get passed through:
 #
@@ -121,4 +118,4 @@ check-headers:
 	$(print_msg)
 	$(make)
 
-.PHONY: tags TAGS FORCE Makefile build-test build-test-tarball check-headers
+.PHONY: tags TAGS FORCE Makefile

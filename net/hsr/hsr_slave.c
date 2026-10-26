@@ -201,7 +201,7 @@ int hsr_add_port(struct hsr_priv *hsr, struct net_device *dev,
 	if (port)
 		return -EBUSY;	/* This port already exists */
 
-	port = kzalloc_obj(*port);
+	port = kzalloc(sizeof(*port), GFP_KERNEL);
 	if (!port)
 		return -ENOMEM;
 
@@ -248,11 +248,7 @@ void hsr_del_port(struct hsr_port *port)
 		if (port->type == HSR_PT_SLAVE_A || port->type == HSR_PT_SLAVE_B)
 			vlan_vids_del_by_dev(port->dev, master->dev);
 		netdev_upper_dev_unlink(port->dev, master->dev);
-		if (hsr->prot_version == PRP_V1 &&
-		    port->type == HSR_PT_SLAVE_B) {
-			eth_hw_addr_set(port->dev, port->original_macaddress);
-			call_netdevice_notifiers(NETDEV_CHANGEADDR, port->dev);
-		}
+		eth_hw_addr_set(port->dev, port->original_macaddress);
 	}
 
 	kfree_rcu(port, rcu);

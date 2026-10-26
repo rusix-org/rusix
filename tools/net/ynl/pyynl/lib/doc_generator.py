@@ -109,7 +109,8 @@ class RstFormatters:
                     'fixed-header': 'definition',
                     'nested-attributes': 'attribute-set',
                     'struct': 'definition'}
-        prefix = mappings.get(prefix, prefix)
+        if prefix in mappings:
+            prefix = mappings[prefix]
         return f":ref:`{namespace}-{prefix}-{name}`"
 
     def rst_header(self) -> str:
@@ -165,13 +166,13 @@ class YnlDocGenerator:
                 continue
             lines.append(self.fmt.rst_paragraph(self.fmt.bold(key), level + 1))
             if key in ['request', 'reply']:
-                lines.append(self.parse_op_attributes(do_dict[key], level + 1) + "\n")
+                lines.append(self.parse_do_attributes(do_dict[key], level + 1) + "\n")
             else:
                 lines.append(self.fmt.headroom(level + 2) + do_dict[key] + "\n")
 
         return "\n".join(lines)
 
-    def parse_op_attributes(self, attrs: Dict[str, Any], level: int = 0) -> str:
+    def parse_do_attributes(self, attrs: Dict[str, Any], level: int = 0) -> str:
         """Parse 'attributes' section"""
         if "attributes" not in attrs:
             return ""
@@ -183,7 +184,7 @@ class YnlDocGenerator:
 
     def parse_operations(self, operations: List[Dict[str, Any]], namespace: str) -> str:
         """Parse operations block"""
-        preprocessed = ["name", "doc", "title", "do", "dump", "flags", "event"]
+        preprocessed = ["name", "doc", "title", "do", "dump", "flags"]
         linkable = ["fixed-header", "attribute-set"]
         lines = []
 
@@ -216,9 +217,6 @@ class YnlDocGenerator:
             if "dump" in operation:
                 lines.append(self.fmt.rst_paragraph(":dump:", 0))
                 lines.append(self.parse_do(operation["dump"], 0))
-            if "event" in operation:
-                lines.append(self.fmt.rst_paragraph(":event:", 0))
-                lines.append(self.parse_op_attributes(operation["event"], 0))
 
             # New line after fields
             lines.append("\n")

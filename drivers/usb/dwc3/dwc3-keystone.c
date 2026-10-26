@@ -144,8 +144,11 @@ static int kdwc3_probe(struct platform_device *pdev)
 
 	error = devm_request_irq(dev, irq, dwc3_keystone_interrupt, IRQF_SHARED,
 			dev_name(dev), kdwc);
-	if (error)
+	if (error) {
+		dev_err(dev, "failed to request IRQ #%d --> %d\n",
+				irq, error);
 		goto err_irq;
+	}
 
 	kdwc3_enable_irqs(kdwc);
 

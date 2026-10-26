@@ -109,8 +109,7 @@ unsigned long f2fs_shrink_scan(struct shrinker *shrink,
 		freed += f2fs_shrink_age_extent_tree(sbi, nr >> 2);
 
 		/* shrink read extent cache entries */
-		if (freed < nr)
-			freed += f2fs_shrink_read_extent_tree(sbi, nr >> 2);
+		freed += f2fs_shrink_read_extent_tree(sbi, nr >> 2);
 
 		/* shrink clean nat cache entries */
 		if (freed < nr)

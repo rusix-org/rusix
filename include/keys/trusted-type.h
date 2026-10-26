@@ -19,11 +19,7 @@
 
 #define MIN_KEY_SIZE			32
 #define MAX_KEY_SIZE			128
-#if IS_ENABLED(CONFIG_TRUSTED_KEYS_PKWM)
-#define MAX_BLOB_SIZE			1152
-#else
-#define MAX_BLOB_SIZE                   512
-#endif
+#define MAX_BLOB_SIZE			512
 #define MAX_PCRINFO_SIZE		64
 #define MAX_DIGEST_SIZE			64
 
@@ -39,7 +35,17 @@ struct trusted_key_payload {
 
 struct trusted_key_options {
 	uint16_t keytype;
-	void *private;
+	uint32_t keyhandle;
+	unsigned char keyauth[TPM_DIGEST_SIZE];
+	uint32_t blobauth_len;
+	unsigned char blobauth[TPM_DIGEST_SIZE];
+	uint32_t pcrinfo_len;
+	unsigned char pcrinfo[MAX_PCRINFO_SIZE];
+	int pcrlock;
+	uint32_t hash;
+	uint32_t policydigest_len;
+	unsigned char policydigest[MAX_DIGEST_SIZE];
+	uint32_t policyhandle;
 };
 
 struct trusted_key_ops {
@@ -72,21 +78,18 @@ struct trusted_key_source {
 
 extern struct key_type key_type_trusted;
 
-#ifdef CONFIG_TRUSTED_KEYS_DEBUG
-extern bool trusted_debug;
+#define TRUSTED_DEBUG 0
 
+#if TRUSTED_DEBUG
 static inline void dump_payload(struct trusted_key_payload *p)
 {
-	if (!trusted_debug)
-		return;
-
-	pr_debug("key_len %d\n", p->key_len);
-	print_hex_dump_debug("key ", DUMP_PREFIX_NONE,
-			     16, 1, p->key, p->key_len, 0);
-	pr_debug("bloblen %d\n", p->blob_len);
-	print_hex_dump_debug("blob ", DUMP_PREFIX_NONE,
-			     16, 1, p->blob, p->blob_len, 0);
-	pr_debug("migratable %d\n", p->migratable);
+	pr_info("key_len %d\n", p->key_len);
+	print_hex_dump(KERN_INFO, "key ", DUMP_PREFIX_NONE,
+		       16, 1, p->key, p->key_len, 0);
+	pr_info("bloblen %d\n", p->blob_len);
+	print_hex_dump(KERN_INFO, "blob ", DUMP_PREFIX_NONE,
+		       16, 1, p->blob, p->blob_len, 0);
+	pr_info("migratable %d\n", p->migratable);
 }
 #else
 static inline void dump_payload(struct trusted_key_payload *p)

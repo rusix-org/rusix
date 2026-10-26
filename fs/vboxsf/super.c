@@ -122,7 +122,7 @@ static int vboxsf_fill_super(struct super_block *sb, struct fs_context *fc)
 	if (!fc->source)
 		return -EINVAL;
 
-	sbi = kzalloc_obj(*sbi);
+	sbi = kzalloc(sizeof(*sbi), GFP_KERNEL);
 	if (!sbi)
 		return -ENOMEM;
 
@@ -184,13 +184,6 @@ static int vboxsf_fill_super(struct super_block *sb, struct fs_context *fc)
 	err = vboxsf_stat(sbi, &root_path, &sbi->root_info);
 	if (err)
 		goto fail_unmap;
-
-	/*
-	 * A failed query leaves sbi->case_insensitive false, so the
-	 * mount defaults to reporting case-sensitive behavior. Do not
-	 * fail the mount over an advisory attribute.
-	 */
-	vboxsf_query_case_sensitive(sbi);
 
 	sb->s_magic = VBOXSF_SUPER_MAGIC;
 	sb->s_blocksize = 1024;
@@ -434,7 +427,7 @@ static int vboxsf_init_fs_context(struct fs_context *fc)
 {
 	struct vboxsf_fs_context *ctx;
 
-	ctx = kzalloc_obj(*ctx);
+	ctx = kzalloc(sizeof(*ctx), GFP_KERNEL);
 	if (!ctx)
 		return -ENOMEM;
 

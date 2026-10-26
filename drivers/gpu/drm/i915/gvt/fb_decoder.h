@@ -38,6 +38,8 @@
 
 #include <linux/types.h>
 
+#include "display/intel_display_limits.h"
+
 struct intel_vgpu;
 
 #define _PLANE_CTL_FORMAT_SHIFT		24

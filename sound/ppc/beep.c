@@ -208,7 +208,7 @@ int snd_pmac_attach_beep(struct snd_pmac *chip)
 	void *dmabuf;
 	int err = -ENOMEM;
 
-	beep = kzalloc_obj(*beep);
+	beep = kzalloc(sizeof(*beep), GFP_KERNEL);
 	if (! beep)
 		return -ENOMEM;
 	dmabuf = dma_alloc_coherent(&chip->pdev->dev, BEEP_BUFLEN * 4,

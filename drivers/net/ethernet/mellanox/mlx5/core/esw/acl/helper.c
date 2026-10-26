@@ -58,7 +58,7 @@ int esw_egress_acl_vlan_create(struct mlx5_eswitch *esw,
 	if (vport->egress.allowed_vlan)
 		return -EEXIST;
 
-	spec = kvzalloc_obj(*spec);
+	spec = kvzalloc(sizeof(*spec), GFP_KERNEL);
 	if (!spec)
 		return -ENOMEM;
 

@@ -622,7 +622,8 @@ static int allocate_actors_buffer(struct power_allocator_params *params,
 		goto clean_state;
 	}
 
-	params->power = kzalloc_objs(struct power_actor, num_actors);
+	params->power = kcalloc(num_actors, sizeof(struct power_actor),
+				GFP_KERNEL);
 	if (!params->power) {
 		ret = -ENOMEM;
 		goto clean_state;
@@ -660,14 +661,9 @@ static void power_allocator_update_tz(struct thermal_zone_device *tz,
 				      enum thermal_notify_event reason)
 {
 	struct power_allocator_params *params = tz->governor_data;
-	const struct thermal_trip_desc *td;
+	const struct thermal_trip_desc *td = trip_to_trip_desc(params->trip_max);
 	struct thermal_instance *instance;
 	int num_actors = 0;
-
-	if (!params->trip_max)
-		return;
-
-	td = trip_to_trip_desc(params->trip_max);
 
 	switch (reason) {
 	case THERMAL_TZ_BIND_CDEV:
@@ -703,7 +699,7 @@ static int power_allocator_bind(struct thermal_zone_device *tz)
 	struct power_allocator_params *params;
 	int ret;
 
-	params = kzalloc_obj(*params);
+	params = kzalloc(sizeof(*params), GFP_KERNEL);
 	if (!params)
 		return -ENOMEM;
 
@@ -712,20 +708,22 @@ static int power_allocator_bind(struct thermal_zone_device *tz)
 	ret = check_power_actors(tz, params);
 	if (ret < 0) {
 		dev_warn(&tz->device, "power_allocator: binding failed\n");
-		goto free_params;
+		kfree(params);
+		return ret;
 	}
 
 	ret = allocate_actors_buffer(params, ret);
 	if (ret) {
 		dev_warn(&tz->device, "power_allocator: allocation failed\n");
-		goto free_params;
+		kfree(params);
+		return ret;
 	}
 
 	if (!tz->tzp) {
-		tz->tzp = kzalloc_obj(*tz->tzp);
+		tz->tzp = kzalloc(sizeof(*tz->tzp), GFP_KERNEL);
 		if (!tz->tzp) {
 			ret = -ENOMEM;
-			goto free_power;
+			goto free_params;
 		}
 
 		params->allocated_tzp = true;
@@ -749,9 +747,8 @@ static int power_allocator_bind(struct thermal_zone_device *tz)
 
 	return 0;
 
-free_power:
-	kfree(params->power);
 free_params:
+	kfree(params->power);
 	kfree(params);
 
 	return ret;

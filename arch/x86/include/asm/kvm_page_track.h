@@ -44,15 +44,13 @@ struct kvm_page_track_notifier_node {
 				    struct kvm_page_track_notifier_node *node);
 };
 
-struct file;
-
-int kvm_page_track_register_notifier(struct file *file,
+int kvm_page_track_register_notifier(struct kvm *kvm,
 				     struct kvm_page_track_notifier_node *n);
-void kvm_page_track_unregister_notifier(struct file *file,
+void kvm_page_track_unregister_notifier(struct kvm *kvm,
 					struct kvm_page_track_notifier_node *n);
 
-int kvm_write_track_add_gfn(struct file *file, gfn_t gfn);
-int kvm_write_track_remove_gfn(struct file *file, gfn_t gfn);
+int kvm_write_track_add_gfn(struct kvm *kvm, gfn_t gfn);
+int kvm_write_track_remove_gfn(struct kvm *kvm, gfn_t gfn);
 #else
 /*
  * Allow defining a node in a structure even if page tracking is disabled, e.g.

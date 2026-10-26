@@ -18,6 +18,7 @@
 #include <linux/i2c.h>
 #include <linux/platform_device.h>
 #include <linux/firmware.h>
+#include <linux/gpio.h>
 #include <sound/core.h>
 #include <sound/pcm.h>
 #include <sound/pcm_params.h>
@@ -337,8 +338,6 @@ static const struct reg_default rt1318_reg[] = {
 	{ 0xdd08, 0x40 },
 	{ 0xdd12, 0x00 },
 	{ 0xdd35, 0x00 },
-	{ 0xdd93, 0x00 },
-	{ 0xdd94, 0x64 },
 	{ 0xddb5, 0x00 },
 	{ 0xddb6, 0x40 },
 	{ 0xddb7, 0x00 },
@@ -347,6 +346,8 @@ static const struct reg_default rt1318_reg[] = {
 	{ 0xddc6, 0x00 },
 	{ 0xddc7, 0x00 },
 	{ 0xddc8, 0x00 },
+	{ 0xdd93, 0x00 },
+	{ 0xdd94, 0x64 },
 	{ 0xdf00, 0x00 },
 	{ 0xdf5f, 0x00 },
 	{ 0xdf60, 0x00 },
@@ -504,7 +505,7 @@ static int rt1318_dac_event(struct snd_soc_dapm_widget *w,
 static int rt1318_dvol_put(struct snd_kcontrol *kcontrol,
 		struct snd_ctl_elem_value *ucontrol)
 {
-	struct snd_soc_component *component = snd_kcontrol_chip(kcontrol);
+	struct snd_soc_component *component = snd_soc_kcontrol_component(kcontrol);
 	struct rt1318_priv *rt1318 = snd_soc_component_get_drvdata(component);
 
 	rt1318->rt1318_dvol = ucontrol->value.integer.value[0];
@@ -527,7 +528,7 @@ static int rt1318_dvol_put(struct snd_kcontrol *kcontrol,
 static int rt1318_dvol_get(struct snd_kcontrol *kcontrol,
 		struct snd_ctl_elem_value *ucontrol)
 {
-	struct snd_soc_component *component = snd_kcontrol_chip(kcontrol);
+	struct snd_soc_component *component = snd_soc_kcontrol_component(kcontrol);
 	struct rt1318_priv *rt1318 = snd_soc_component_get_drvdata(component);
 
 	ucontrol->value.integer.value[0] = rt1318->rt1318_dvol;
@@ -1075,7 +1076,8 @@ static int rt1318_resume(struct snd_soc_component *component)
 	struct rt1318_priv *rt1318 = snd_soc_component_get_drvdata(component);
 
 	regcache_cache_only(rt1318->regmap, false);
-	return regcache_sync(rt1318->regmap);
+	regcache_sync(rt1318->regmap);
+	return 0;
 }
 #else
 #define rt1318_suspend NULL
@@ -1086,22 +1088,12 @@ static int rt1318_resume(struct snd_soc_component *component)
 #define RT1318_FORMATS (SNDRV_PCM_FMTBIT_S16_LE | SNDRV_PCM_FMTBIT_S20_3LE | \
 			SNDRV_PCM_FMTBIT_S24_LE | SNDRV_PCM_FMTBIT_S8)
 
-static const u64 rt1318_selectable_formats =
-	SND_SOC_POSSIBLE_DAIFMT_I2S	|
-	SND_SOC_POSSIBLE_DAIFMT_LEFT_J	|
-	SND_SOC_POSSIBLE_DAIFMT_DSP_A	|
-	SND_SOC_POSSIBLE_DAIFMT_DSP_B	|
-	SND_SOC_POSSIBLE_DAIFMT_NB_NF	|
-	SND_SOC_POSSIBLE_DAIFMT_IB_NF;
-
 static const struct snd_soc_dai_ops rt1318_aif_dai_ops = {
 	.hw_params = rt1318_hw_params,
 	.set_fmt = rt1318_set_dai_fmt,
 	.set_sysclk = rt1318_set_dai_sysclk,
 	.set_pll = rt1318_set_dai_pll,
 	.set_tdm_slot = rt1318_set_tdm_slot,
-	.auto_selectable_formats = &rt1318_selectable_formats,
-	.num_auto_selectable_formats = 1,
 };
 
 static struct snd_soc_dai_driver rt1318_dai[] = {
@@ -1148,7 +1140,7 @@ static const struct regmap_config rt1318_regmap = {
 };
 
 static const struct i2c_device_id rt1318_i2c_id[] = {
-	{ .name = "rt1318" },
+	{ "rt1318" },
 	{ }
 };
 MODULE_DEVICE_TABLE(i2c, rt1318_i2c_id);

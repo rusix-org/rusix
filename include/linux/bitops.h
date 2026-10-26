@@ -179,11 +179,9 @@ static inline __u8 ror8(__u8 word, unsigned int shift)
 /**
  * sign_extend32 - sign extend a 32-bit value using specified bit as sign-bit
  * @value: value to sign extend
- * @index: 0 based bit index (0 <= index < 32) to sign bit
+ * @index: 0 based bit index (0<=index<32) to sign bit
  *
  * This is safe to use for 16- and 8-bit types as well.
- *
- * Return: 32-bit sign extended value
  */
 static __always_inline __s32 sign_extend32(__u32 value, int index)
 {
@@ -194,11 +192,7 @@ static __always_inline __s32 sign_extend32(__u32 value, int index)
 /**
  * sign_extend64 - sign extend a 64-bit value using specified bit as sign-bit
  * @value: value to sign extend
- * @index: 0 based bit index (0 <= index < 64) to sign bit
- *
- * This is safe to use for 32-, 16- and 8-bit types as well.
- *
- * Return: 64-bit sign extended value
+ * @index: 0 based bit index (0<=index<64) to sign bit
  */
 static __always_inline __s64 sign_extend64(__u64 value, int index)
 {
@@ -236,7 +230,7 @@ static inline int get_count_order_long(unsigned long l)
 
 /**
  * parity8 - get the parity of an u8 value
- * @val: the value to be examined
+ * @value: the value to be examined
  *
  * Determine the parity of the u8 argument.
  *

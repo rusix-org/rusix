@@ -49,7 +49,6 @@
 #define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
 
 #include <linux/ethtool.h>
-#include <linux/uio.h>
 #include <linux/filter.h>
 #include <linux/types.h>
 #include <linux/mm.h>
@@ -398,10 +397,6 @@ static inline struct page * __pure pgv_to_page(void *addr)
 	return virt_to_page(addr);
 }
 
-/* Timestamp bits that may be set in addition to the frame state */
-static const u32 tp_status_ts_mask = TP_STATUS_TS_SOFTWARE |
-				     TP_STATUS_TS_RAW_HARDWARE;
-
 static void __packet_set_status(struct packet_sock *po, void *frame, int status)
 {
 	union tpacket_uhdr h;
@@ -523,7 +518,6 @@ static void *packet_lookup_frame(const struct packet_sock *po,
 {
 	unsigned int pg_vec_pos, frame_offset;
 	union tpacket_uhdr h;
-	u32 mask = 0;
 
 	pg_vec_pos = position / rb->frames_per_block;
 	frame_offset = position % rb->frames_per_block;
@@ -531,10 +525,7 @@ static void *packet_lookup_frame(const struct packet_sock *po,
 	h.raw = rb->pg_vec[pg_vec_pos].buffer +
 		(frame_offset * rb->frame_size);
 
-	if (rb == &po->tx_ring && status == TP_STATUS_AVAILABLE)
-		mask = tp_status_ts_mask;
-
-	if (status != (__packet_get_status(po, h.raw) & ~mask))
+	if (status != __packet_get_status(po, h.raw))
 		return NULL;
 
 	return h.raw;
@@ -582,9 +573,8 @@ static __be16 vlan_get_protocol_dgram(const struct sk_buff *skb)
 	__be16 proto = skb->protocol;
 
 	if (unlikely(eth_type_vlan(proto)))
-		proto = vlan_get_protocol_offset_inline(skb, proto,
-							skb_mac_offset(skb),
-							NULL);
+		proto = __vlan_get_protocol_offset(skb, proto,
+						   skb_mac_offset(skb), NULL);
 
 	return proto;
 }
@@ -1735,7 +1725,7 @@ static int fanout_add(struct sock *sk, struct fanout_args *args)
 	if (type == PACKET_FANOUT_ROLLOVER ||
 	    (type_flags & PACKET_FANOUT_FLAG_ROLLOVER)) {
 		err = -ENOMEM;
-		rollover = kzalloc_obj(*rollover);
+		rollover = kzalloc(sizeof(*rollover), GFP_KERNEL);
 		if (!rollover)
 			goto out;
 		atomic_long_set(&rollover->num, 0);
@@ -1778,7 +1768,8 @@ static int fanout_add(struct sock *sk, struct fanout_args *args)
 			/* legacy PACKET_FANOUT_MAX */
 			args->max_num_members = 256;
 		err = -ENOMEM;
-		match = kvzalloc_flex(*match, arr, args->max_num_members);
+		match = kvzalloc(struct_size(match, arr, args->max_num_members),
+				 GFP_KERNEL);
 		if (!match)
 			goto out;
 		write_pnet(&match->net, sock_net(sk));
@@ -1951,7 +1942,8 @@ static void packet_parse_headers(struct sk_buff *skb, struct socket *sock)
 	/* On TX skb->data is the L2 header; anchor it for all socket types. */
 	skb_reset_mac_header(skb);
 
-	if (!skb->protocol && sock->type == SOCK_RAW)
+	if ((!skb->protocol || skb->protocol == htons(ETH_P_ALL)) &&
+	    sock->type == SOCK_RAW)
 		skb->protocol = dev_parse_header_protocol(skb);
 
 	skb_probe_transport_header(skb);
@@ -2621,8 +2613,7 @@ static int tpacket_fill_skb(struct packet_sock *po, struct sk_buff *skb,
 	struct page *page;
 	int err;
 
-	if (proto != htons(ETH_P_ALL))
-		skb->protocol = proto;
+	skb->protocol = proto;
 	skb->dev = dev;
 	skb->priority = sockc->priority;
 	skb->mark = sockc->mark;
@@ -2685,6 +2676,8 @@ static int tpacket_fill_skb(struct packet_sock *po, struct sk_buff *skb,
 
 	if (unlikely(!skb->len))
 		return -EINVAL;
+
+	packet_parse_headers(skb, sock);
 
 	return tp_len;
 }
@@ -2925,12 +2918,8 @@ tpacket_error:
 				tp_len = -EINVAL;
 				goto tpacket_error;
 			}
-		}
-
-		packet_parse_headers(skb, po->sk.sk_socket);
-
-		if (has_vnet_hdr)
 			virtio_net_hdr_set_proto(skb, &vnet_hdr);
+		}
 
 		uarg = kmalloc(sizeof(*uarg), GFP_KERNEL);
 		if (unlikely(!uarg)) {
@@ -2958,7 +2947,7 @@ tpacket_error:
 		if (unlikely(err != 0)) {
 			if (err > 0)
 				err = net_xmit_errno(err);
-			if (err && (__packet_get_status(po, ph) & ~tp_status_ts_mask) ==
+			if (err && __packet_get_status(po, ph) ==
 				   TP_STATUS_AVAILABLE) {
 				/* skb was destructed already */
 				skb = NULL;
@@ -3132,8 +3121,7 @@ static int packet_snd(struct socket *sock, struct msghdr *msg, size_t len)
 		goto out_free;
 	}
 
-	if (proto != htons(ETH_P_ALL))
-		skb->protocol = proto;
+	skb->protocol = proto;
 	skb->dev = dev;
 	skb->priority = sockc.priority;
 	skb->mark = sockc.mark;
@@ -3142,17 +3130,15 @@ static int packet_snd(struct socket *sock, struct msghdr *msg, size_t len)
 	if (unlikely(extra_len == 4))
 		skb->no_fcs = 1;
 
+	packet_parse_headers(skb, sock);
+
 	if (vnet_hdr_sz) {
 		err = virtio_net_hdr_to_skb(skb, &vnet_hdr, vio_le());
 		if (err)
 			goto out_free;
 		len += vnet_hdr_sz;
-	}
-
-	packet_parse_headers(skb, sock);
-
-	if (vnet_hdr_sz)
 		virtio_net_hdr_set_proto(skb, &vnet_hdr);
+	}
 
 	err = packet_xmit(po, skb);
 
@@ -3365,7 +3351,7 @@ static int packet_bind_spkt(struct socket *sock, struct sockaddr_unsized *uaddr,
 {
 	struct sock *sk = sock->sk;
 	struct sockaddr *sa = (struct sockaddr *)uaddr;
-	char name[sizeof(sa->sa_data) + 1];
+	char name[sizeof(sa->sa_data_min) + 1];
 
 	/*
 	 *	Check legality
@@ -3376,8 +3362,8 @@ static int packet_bind_spkt(struct socket *sock, struct sockaddr_unsized *uaddr,
 	/* uaddr->sa_data comes from the userspace, it's not guaranteed to be
 	 * zero-terminated.
 	 */
-	memcpy(name, sa->sa_data, sizeof(sa->sa_data));
-	name[sizeof(sa->sa_data)] = 0;
+	memcpy(name, sa->sa_data, sizeof(sa->sa_data_min));
+	name[sizeof(sa->sa_data_min)] = 0;
 
 	return packet_do_bind(sk, name, 0, 0);
 }
@@ -3662,11 +3648,11 @@ static int packet_getname_spkt(struct socket *sock, struct sockaddr *uaddr,
 		return -EOPNOTSUPP;
 
 	uaddr->sa_family = AF_PACKET;
-	memset(uaddr->sa_data, 0, sizeof(uaddr->sa_data));
+	memset(uaddr->sa_data, 0, sizeof(uaddr->sa_data_min));
 	rcu_read_lock();
 	dev = dev_get_by_index_rcu(sock_net(sk), READ_ONCE(pkt_sk(sk)->ifindex));
 	if (dev)
-		strscpy(uaddr->sa_data, dev->name, sizeof(uaddr->sa_data));
+		strscpy(uaddr->sa_data, dev->name, sizeof(uaddr->sa_data_min));
 	rcu_read_unlock();
 
 	return sizeof(*uaddr);
@@ -3773,7 +3759,7 @@ static int packet_mc_add(struct sock *sk, struct packet_mreq_max *mreq)
 		goto done;
 
 	err = -ENOBUFS;
-	i = kmalloc_obj(*i);
+	i = kmalloc(sizeof(*i), GFP_KERNEL);
 	if (i == NULL)
 		goto done;
 
@@ -4131,7 +4117,7 @@ packet_setsockopt(struct socket *sock, int level, int optname, sockptr_t optval,
 }
 
 static int packet_getsockopt(struct socket *sock, int level, int optname,
-			     sockopt_t *opt)
+			     char __user *optval, int __user *optlen)
 {
 	int len;
 	int val, lv = sizeof(val);
@@ -4145,7 +4131,8 @@ static int packet_getsockopt(struct socket *sock, int level, int optname,
 	if (level != SOL_PACKET)
 		return -ENOPROTOOPT;
 
-	len = opt->optlen;
+	if (get_user(len, optlen))
+		return -EFAULT;
 
 	if (len < 0)
 		return -EINVAL;
@@ -4194,7 +4181,7 @@ static int packet_getsockopt(struct socket *sock, int level, int optname,
 			len = sizeof(int);
 		if (len < sizeof(int))
 			return -EINVAL;
-		if (copy_from_iter(&val, len, &opt->iter_in) != len)
+		if (copy_from_user(&val, optval, len))
 			return -EFAULT;
 		switch (val) {
 		case TPACKET_V1:
@@ -4250,8 +4237,9 @@ static int packet_getsockopt(struct socket *sock, int level, int optname,
 
 	if (len > lv)
 		len = lv;
-	opt->optlen = len;
-	if (copy_to_iter(data, len, &opt->iter_out) != len)
+	if (put_user(len, optlen))
+		return -EFAULT;
+	if (copy_to_user(optval, data, len))
 		return -EFAULT;
 	return 0;
 }
@@ -4829,7 +4817,7 @@ static const struct proto_ops packet_ops = {
 	.listen =	sock_no_listen,
 	.shutdown =	sock_no_shutdown,
 	.setsockopt =	packet_setsockopt,
-	.getsockopt_iter =	packet_getsockopt,
+	.getsockopt =	packet_getsockopt,
 	.sendmsg =	packet_sendmsg,
 	.recvmsg =	packet_recvmsg,
 	.mmap =		packet_mmap,
@@ -4871,13 +4859,16 @@ static void packet_seq_stop(struct seq_file *seq, void *v)
 static int packet_seq_show(struct seq_file *seq, void *v)
 {
 	if (v == SEQ_START_TOKEN)
-		seq_puts(seq, "sk RefCnt Type Proto  Iface R Rmem   User   Inode\n");
+		seq_printf(seq,
+			   "%*sRefCnt Type Proto  Iface R Rmem   User   Inode\n",
+			   IS_ENABLED(CONFIG_64BIT) ? -17 : -9, "sk");
 	else {
 		struct sock *s = sk_entry(v);
 		const struct packet_sock *po = pkt_sk(s);
 
 		seq_printf(seq,
-			   "0  %-6d %-4d %04x   %-5d %1d %-6u %-6u %-6llu\n",
+			   "%pK %-6d %-4d %04x   %-5d %1d %-6u %-6u %-6lu\n",
+			   s,
 			   refcount_read(&s->sk_refcnt),
 			   s->sk_type,
 			   ntohs(READ_ONCE(po->num)),

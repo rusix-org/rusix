@@ -511,13 +511,6 @@ static int bcmasp_netfilt_wr_to_hw(struct bcmasp_priv *priv,
 	return 0;
 }
 
-static bool bcmasp_netfilt_is_companion(struct bcmasp_priv *priv, int i)
-{
-	return i > 0 && (i % 2) &&
-	       priv->net_filters[i].wake_filter &&
-	       priv->net_filters[i - 1].wake_filter;
-}
-
 void bcmasp_netfilt_suspend(struct bcmasp_intf *intf)
 {
 	struct bcmasp_priv *priv = intf->parent;
@@ -531,7 +524,9 @@ void bcmasp_netfilt_suspend(struct bcmasp_intf *intf)
 		    priv->net_filters[i].port != intf->port)
 			continue;
 
-		if (bcmasp_netfilt_is_companion(priv, i))
+		if (i > 0 && (i % 2) &&
+		    priv->net_filters[i].wake_filter &&
+		    priv->net_filters[i - 1].wake_filter)
 			continue;
 
 		ret = bcmasp_netfilt_wr_to_hw(priv, &priv->net_filters[i]);
@@ -561,7 +556,9 @@ int bcmasp_netfilt_get_all_active(struct bcmasp_intf *intf, u32 *rule_locs,
 		    priv->net_filters[i].port != intf->port)
 			continue;
 
-		if (bcmasp_netfilt_is_companion(priv, i))
+		if (i > 0 && (i % 2) &&
+		    priv->net_filters[i].wake_filter &&
+		    priv->net_filters[i - 1].wake_filter)
 			continue;
 
 		if (j == *rule_cnt)
@@ -586,7 +583,9 @@ int bcmasp_netfilt_get_active(struct bcmasp_intf *intf)
 			continue;
 
 		/* Skip over a wake filter pair */
-		if (bcmasp_netfilt_is_companion(priv, i))
+		if (i > 0 && (i % 2) &&
+		    priv->net_filters[i].wake_filter &&
+		    priv->net_filters[i - 1].wake_filter)
 			continue;
 
 		cnt++;
@@ -606,9 +605,6 @@ bool bcmasp_netfilt_check_dup(struct bcmasp_intf *intf,
 	for (i = 0; i < priv->num_net_filters; i++) {
 		if (!priv->net_filters[i].claimed ||
 		    priv->net_filters[i].port != intf->port)
-			continue;
-
-		if (bcmasp_netfilt_is_companion(priv, i))
 			continue;
 
 		cur = &priv->net_filters[i].fs;
@@ -663,7 +659,7 @@ bool bcmasp_netfilt_check_dup(struct bcmasp_intf *intf,
 }
 
 /* If no network filter found, return open filter.
- * If no more open filters return error.
+ * If no more open filters return NULL
  */
 struct bcmasp_net_filter *bcmasp_netfilt_get_init(struct bcmasp_intf *intf,
 						  u32 loc, bool wake_filter,
@@ -673,55 +669,45 @@ struct bcmasp_net_filter *bcmasp_netfilt_get_init(struct bcmasp_intf *intf,
 	struct bcmasp_priv *priv = intf->parent;
 	int i, open_index = -1;
 
-	if (!init) {
-		if (loc == RX_CLS_LOC_ANY || loc >= priv->num_net_filters)
-			return ERR_PTR(-EINVAL);
-
-		if (priv->net_filters[loc].claimed &&
-		    priv->net_filters[loc].port == intf->port &&
-		    !bcmasp_netfilt_is_companion(priv, loc))
-			return &priv->net_filters[loc];
-
-		return ERR_PTR(-ENOENT);
-	}
-
+	/* Check whether we exceed the filter table capacity */
 	if (loc != RX_CLS_LOC_ANY && loc >= priv->num_net_filters)
 		return ERR_PTR(-EINVAL);
 
 	/* If the filter location is busy (already claimed) and we are initializing
 	 * the filter (insertion), return a busy error code.
 	 */
-	if (loc != RX_CLS_LOC_ANY) {
-		if (priv->net_filters[loc].claimed)
-			return ERR_PTR(-EBUSY);
+	if (loc != RX_CLS_LOC_ANY && init && priv->net_filters[loc].claimed)
+		return ERR_PTR(-EBUSY);
 
-		/* We need two filters for wake-up, so we cannot use an odd filter */
-		if (wake_filter) {
-			if ((loc % 2) || loc + 1 >= priv->num_net_filters)
-				return ERR_PTR(-EINVAL);
-			if (priv->net_filters[loc + 1].claimed)
-				return ERR_PTR(-EBUSY);
-		}
-		open_index = loc;
-	} else {
-		for (i = 0; i < priv->num_net_filters; i++) {
-			/* Wake filter consolidates two filters to cover more bytes.
-			 * Wake filter is open if:
-			 * 1. It is an even filter
-			 * 2. The current and next filter is not claimed
-			 */
-			if (wake_filter) {
-				if (!(i % 2) && (i + 1 < priv->num_net_filters) &&
-				    !priv->net_filters[i].claimed &&
-				    !priv->net_filters[i + 1].claimed) {
-					open_index = i;
-					break;
-				}
-			} else if (!priv->net_filters[i].claimed) {
-				open_index = i;
-				break;
-			}
-		}
+	/* We need two filters for wake-up, so we cannot use an odd filter */
+	if (wake_filter && loc != RX_CLS_LOC_ANY && (loc % 2))
+		return ERR_PTR(-EINVAL);
+
+	/* Initialize the loop index based on the desired location or from 0 */
+	i = loc == RX_CLS_LOC_ANY ? 0 : loc;
+
+	for ( ; i < priv->num_net_filters; i++) {
+		/* Found matching network filter */
+		if (!init &&
+		    priv->net_filters[i].claimed &&
+		    priv->net_filters[i].hw_index == i &&
+		    priv->net_filters[i].port == intf->port)
+			return &priv->net_filters[i];
+
+		/* If we don't need a new filter or new filter already found */
+		if (!init || open_index >= 0)
+			continue;
+
+		/* Wake filter conslidates two filters to cover more bytes
+		 * Wake filter is open if...
+		 * 1. It is an even filter
+		 * 2. The current and next filter is not claimed
+		 */
+		if (wake_filter && !(i % 2) && !priv->net_filters[i].claimed &&
+		    !priv->net_filters[i + 1].claimed)
+			open_index = i;
+		else if (!priv->net_filters[i].claimed)
+			open_index = i;
 	}
 
 	if (open_index >= 0) {
@@ -730,20 +716,16 @@ struct bcmasp_net_filter *bcmasp_netfilt_get_init(struct bcmasp_intf *intf,
 		nfilter->port = intf->port;
 		nfilter->ch = intf->channel + priv->tx_chan_offset;
 		nfilter->hw_index = open_index;
-
-		if (wake_filter) {
-			/* Claim next filter */
-			priv->net_filters[open_index + 1].claimed = true;
-			priv->net_filters[open_index + 1].wake_filter = true;
-			priv->net_filters[open_index + 1].hw_index = open_index + 1;
-			priv->net_filters[open_index + 1].port = intf->port;
-			priv->net_filters[open_index + 1].ch = intf->channel +
-							       priv->tx_chan_offset;
-			nfilter->wake_filter = true;
-		}
 	}
 
-	return nfilter ? nfilter : ERR_PTR(-ENOSPC);
+	if (wake_filter && open_index >= 0) {
+		/* Claim next filter */
+		priv->net_filters[open_index + 1].claimed = true;
+		priv->net_filters[open_index + 1].wake_filter = true;
+		nfilter->wake_filter = true;
+	}
+
+	return nfilter ? nfilter : ERR_PTR(-EINVAL);
 }
 
 void bcmasp_netfilt_release(struct bcmasp_intf *intf,
@@ -751,8 +733,7 @@ void bcmasp_netfilt_release(struct bcmasp_intf *intf,
 {
 	struct bcmasp_priv *priv = intf->parent;
 
-	if (nfilt->wake_filter && !(nfilt->hw_index % 2) &&
-	    nfilt->hw_index + 1 < priv->num_net_filters) {
+	if (nfilt->wake_filter) {
 		memset(&priv->net_filters[nfilt->hw_index + 1], 0,
 		       sizeof(struct bcmasp_net_filter));
 	}
@@ -1100,10 +1081,15 @@ static irqreturn_t bcmasp_isr_wol(int irq, void *data)
 	struct bcmasp_priv *priv = data;
 	u32 status;
 
+	/* No L3 IRQ, so we good */
+	if (priv->wol_irq <= 0)
+		goto irq_handled;
+
 	status = wakeup_intr2_core_rl(priv, ASP_WAKEUP_INTR2_STATUS) &
 		~wakeup_intr2_core_rl(priv, ASP_WAKEUP_INTR2_MASK_STATUS);
 	wakeup_intr2_core_wl(priv, status, ASP_WAKEUP_INTR2_CLEAR);
 
+irq_handled:
 	pm_wakeup_event(&priv->pdev->dev, 0);
 	return IRQ_HANDLED;
 }
@@ -1228,7 +1214,7 @@ static const struct of_device_id bcmasp_of_match[] = {
 	{ .compatible = "brcm,asp-v2.1", .data = &v21_plat_data },
 	{ .compatible = "brcm,asp-v2.2", .data = &v22_plat_data },
 	{ .compatible = "brcm,asp-v3.0", .data = &v30_plat_data },
-	{ /* sentinel */ }
+	{ /* sentinel */ },
 };
 MODULE_DEVICE_TABLE(of, bcmasp_of_match);
 
@@ -1236,7 +1222,7 @@ static const struct of_device_id bcmasp_mdio_of_match[] = {
 	{ .compatible = "brcm,asp-v2.1-mdio", },
 	{ .compatible = "brcm,asp-v2.2-mdio", },
 	{ .compatible = "brcm,asp-v3.0-mdio", },
-	{ /* sentinel */ }
+	{ /* sentinel */ },
 };
 MODULE_DEVICE_TABLE(of, bcmasp_mdio_of_match);
 

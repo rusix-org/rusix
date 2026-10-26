@@ -187,7 +187,8 @@ void fbtft_register_backlight(struct fbtft_par *par)
 				       &fbtft_bl_ops, &bl_props);
 	if (IS_ERR(bd)) {
 		dev_err(par->info->device,
-			"cannot register backlight device (%pe)\n", bd);
+			"cannot register backlight device (%ld)\n",
+			PTR_ERR(bd));
 		return;
 	}
 	par->info->bl_dev = bd;
@@ -300,6 +301,12 @@ static void fbtft_mkdirty(struct fb_info *info, int y, int height)
 	struct fb_deferred_io *fbdefio = info->fbdefio;
 	unsigned long flags;
 
+	/* special case, needed ? */
+	if (y == -1) {
+		y = 0;
+		height = info->var.yres;
+	}
+
 	/* Mark display lines/area as dirty */
 	spin_lock_irqsave(&par->dirty_lock, flags);
 	if (y < par->dirty_lines_start)
@@ -359,9 +366,9 @@ static int fbtft_fb_setcolreg(unsigned int regno, unsigned int red,
 	unsigned int val;
 	int ret = 1;
 
-	fb_dbg(info,
-	       "regno=%u, red=0x%X, green=0x%X, blue=0x%X, trans=0x%X\n",
-	       regno, red, green, blue, transp);
+	dev_dbg(info->dev,
+		"%s(regno=%u, red=0x%X, green=0x%X, blue=0x%X, trans=0x%X)\n",
+		__func__, regno, red, green, blue, transp);
 
 	switch (info->fix.visual) {
 	case FB_VISUAL_TRUECOLOR:
@@ -385,7 +392,8 @@ static int fbtft_fb_blank(int blank, struct fb_info *info)
 	struct fbtft_par *par = info->par;
 	int ret = -EINVAL;
 
-	fb_dbg(info, "blank=%d\n", blank);
+	dev_dbg(info->dev, "%s(blank=%d)\n",
+		__func__, blank);
 
 	if (!par->fbtftops.blank)
 		return ret;
@@ -407,12 +415,9 @@ static int fbtft_fb_blank(int blank, struct fb_info *info)
 static void fbtft_ops_damage_range(struct fb_info *info, off_t off, size_t len)
 {
 	struct fbtft_par *par = info->par;
-	u32 start, end;
 
-	start = off / info->fix.line_length;
-	end = (off + len - 1) / info->fix.line_length;
-
-	par->fbtftops.mkdirty(info, start, end - start + 1);
+	/* TODO: only mark changed area update all for now */
+	par->fbtftops.mkdirty(info, -1, 0);
 }
 
 static void fbtft_ops_damage_area(struct fb_info *info, u32 x, u32 y, u32 width, u32 height)
@@ -789,11 +794,11 @@ int fbtft_register_framebuffer(struct fb_info *fb_info)
 	if (spi)
 		sprintf(text2, ", spi%d.%d at %d MHz", spi->controller->bus_num,
 			spi_get_chipselect(spi, 0), spi->max_speed_hz / 1000000);
-	fb_dbg(fb_info,
-	       "%s frame buffer, %dx%d, %d KiB video memory%s, fps=%lu%s\n",
-	       fb_info->fix.id, fb_info->var.xres, fb_info->var.yres,
-	       fb_info->fix.smem_len >> 10, text1,
-	       HZ / fb_info->fbdefio->delay, text2);
+	dev_info(fb_info->dev,
+		 "%s frame buffer, %dx%d, %d KiB video memory%s, fps=%lu%s\n",
+		 fb_info->fix.id, fb_info->var.xres, fb_info->var.yres,
+		 fb_info->fix.smem_len >> 10, text1,
+		 HZ / fb_info->fbdefio->delay, text2);
 
 	/* Turn on backlight if available */
 	if (fb_info->bl_dev) {

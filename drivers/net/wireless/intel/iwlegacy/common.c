@@ -907,7 +907,8 @@ il_init_channel_map(struct il_priv *il)
 	D_EEPROM("Parsing data for %d channels.\n", il->channel_count);
 
 	il->channel_info =
-	    kzalloc_objs(struct il_channel_info, il->channel_count);
+	    kcalloc(il->channel_count, sizeof(struct il_channel_info),
+		    GFP_KERNEL);
 	if (!il->channel_info) {
 		IL_ERR("Could not allocate channel_info\n");
 		il->channel_count = 0;
@@ -2179,8 +2180,8 @@ il_remove_station(struct il_priv *il, const u8 sta_id, const u8 * addr)
 	il->stations[sta_id].used &= ~IL_STA_DRIVER_ACTIVE;
 
 	il->num_stations--;
-	if (WARN_ON(il->num_stations < 0))
-		il->num_stations = 0;
+
+	BUG_ON(il->num_stations < 0);
 
 	spin_unlock_irqrestore(&il->sta_lock, flags);
 
@@ -2328,8 +2329,7 @@ il_dealloc_bcast_stations(struct il_priv *il)
 
 		il->stations[i].used = 0;
 		il->num_stations--;
-		if (WARN_ON(il->num_stations < 0))
-			il->num_stations = 0;
+		BUG_ON(il->num_stations < 0);
 		kfree(il->stations[i].lq);
 		il->stations[i].lq = NULL;
 	}
@@ -2969,7 +2969,9 @@ il_tx_queue_alloc(struct il_priv *il, struct il_tx_queue *txq, u32 id)
 	/* Driver ilate data, only for Tx (not command) queues,
 	 * not shared with device. */
 	if (id != il->cmd_queue) {
-		txq->skbs = kzalloc_objs(struct sk_buff *, TFD_QUEUE_SIZE_MAX);
+		txq->skbs = kcalloc(TFD_QUEUE_SIZE_MAX,
+				    sizeof(struct sk_buff *),
+				    GFP_KERNEL);
 		if (!txq->skbs) {
 			IL_ERR("Fail to alloc skbs\n");
 			goto error;
@@ -3022,9 +3024,9 @@ il_tx_queue_init(struct il_priv *il, u32 txq_id)
 	}
 
 	txq->meta =
-	    kzalloc_objs(struct il_cmd_meta, actual_slots);
+	    kcalloc(actual_slots, sizeof(struct il_cmd_meta), GFP_KERNEL);
 	txq->cmd =
-	    kzalloc_objs(struct il_device_cmd *, actual_slots);
+	    kcalloc(actual_slots, sizeof(struct il_device_cmd *), GFP_KERNEL);
 
 	if (!txq->meta || !txq->cmd)
 		goto out_free_arrays;
@@ -3442,11 +3444,12 @@ il_init_geos(struct il_priv *il)
 	}
 
 	channels =
-	    kzalloc_objs(struct ieee80211_channel, il->channel_count);
+	    kcalloc(il->channel_count, sizeof(struct ieee80211_channel),
+		    GFP_KERNEL);
 	if (!channels)
 		return -ENOMEM;
 
-	rates = kzalloc_objs(*rates, RATE_COUNT_LEGACY);
+	rates = kcalloc(RATE_COUNT_LEGACY, sizeof(*rates), GFP_KERNEL);
 	if (!rates) {
 		kfree(channels);
 		return -ENOMEM;
@@ -4608,7 +4611,9 @@ il_alloc_txq_mem(struct il_priv *il)
 {
 	if (!il->txq)
 		il->txq =
-		    kzalloc_objs(struct il_tx_queue, il->cfg->num_of_queues);
+		    kcalloc(il->cfg->num_of_queues,
+			    sizeof(struct il_tx_queue),
+			    GFP_KERNEL);
 	if (!il->txq) {
 		IL_ERR("Not enough memory for txq\n");
 		return -ENOMEM;

@@ -139,7 +139,7 @@ static int __init wpcm450_aic_of_init(struct device_node *node,
 	if (parent)
 		return -EINVAL;
 
-	aic = kzalloc_obj(*aic);
+	aic = kzalloc(sizeof(*aic), GFP_KERNEL);
 	if (!aic)
 		return -ENOMEM;
 

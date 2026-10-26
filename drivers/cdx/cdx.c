@@ -168,7 +168,7 @@ static int cdx_unregister_device(struct device *dev,
 	return 0;
 }
 
-static void cdx_unregister_devices(const struct bus_type *bus)
+static void cdx_unregister_devices(struct bus_type *bus)
 {
 	/* Reset all the devices attached to cdx bus */
 	bus_for_each_dev(bus, NULL, NULL, cdx_unregister_device);
@@ -577,6 +577,7 @@ static ssize_t rescan_store(const struct bus_type *bus,
 {
 	struct cdx_controller *cdx;
 	struct platform_device *pd;
+	struct device_node *np;
 	bool val;
 
 	if (kstrtobool(buf, &val) < 0)
@@ -585,16 +586,19 @@ static ssize_t rescan_store(const struct bus_type *bus,
 	if (!val)
 		return -EINVAL;
 
-	guard(mutex)(&cdx_controller_lock);
+	mutex_lock(&cdx_controller_lock);
 
 	/* Unregister all the devices on the bus */
 	cdx_unregister_devices(&cdx_bus_type);
 
 	/* Rescan all the devices */
-	for_each_compatible_node_scoped(np, NULL, compat_node_name) {
+	for_each_compatible_node(np, NULL, compat_node_name) {
 		pd = of_find_device_by_node(np);
-		if (!pd)
-			return -EINVAL;
+		if (!pd) {
+			of_node_put(np);
+			count = -EINVAL;
+			goto unlock;
+		}
 
 		cdx = platform_get_drvdata(pd);
 		if (cdx && cdx->controller_registered && cdx->ops->scan)
@@ -602,6 +606,9 @@ static ssize_t rescan_store(const struct bus_type *bus,
 
 		put_device(&pd->dev);
 	}
+
+unlock:
+	mutex_unlock(&cdx_controller_lock);
 
 	return count;
 }
@@ -613,7 +620,7 @@ static struct attribute *cdx_bus_attrs[] = {
 };
 ATTRIBUTE_GROUPS(cdx_bus);
 
-const struct bus_type cdx_bus_type = {
+struct bus_type cdx_bus_type = {
 	.name		= "cdx",
 	.driver_override = true,
 	.match		= cdx_bus_match,
@@ -762,7 +769,7 @@ int cdx_device_add(struct cdx_dev_params *dev_params)
 	struct cdx_device *cdx_dev;
 	int ret, i;
 
-	cdx_dev = kzalloc_obj(*cdx_dev);
+	cdx_dev = kzalloc(sizeof(*cdx_dev), GFP_KERNEL);
 	if (!cdx_dev)
 		return -ENOMEM;
 
@@ -849,7 +856,7 @@ struct device *cdx_bus_add(struct cdx_controller *cdx, u8 bus_num)
 	struct cdx_device *cdx_dev;
 	int ret;
 
-	cdx_dev = kzalloc_obj(*cdx_dev);
+	cdx_dev = kzalloc(sizeof(*cdx_dev), GFP_KERNEL);
 	if (!cdx_dev)
 		return NULL;
 

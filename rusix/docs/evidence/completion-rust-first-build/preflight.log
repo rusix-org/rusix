@@ -1,0 +1,33 @@
+/usr/bin/make
+/usr/bin/gcc
+/usr/lib/llvm-19/bin/clang
+/usr/lib/llvm-19/bin/ld.lld
+/usr/lib/llvm-19/bin/llvm-ar
+/usr/lib/llvm-19/bin/llvm-nm
+/usr/lib/llvm-19/bin/llvm-objcopy
+/usr/lib/llvm-19/bin/llvm-objdump
+/usr/lib/llvm-19/bin/llvm-readelf
+/usr/lib/llvm-19/bin/llvm-strip
+/usr/bin/rustc
+/usr/bin/cargo
+/usr/bin/rustfmt
+/usr/bin/bindgen
+/usr/bin/flex
+/usr/bin/bison
+/usr/bin/bc
+/usr/bin/cpio
+/usr/bin/perl
+/usr/bin/python3
+/usr/bin/pkg-config
+/usr/bin/pahole
+/usr/bin/qemu-system-x86_64
+rustc 1.85.1 (4eb161250 2025-03-15) (built from a source tarball)
+binary: rustc
+commit-hash: 4eb161250e340c8f48f66e2b929ef4a5bed7c181
+commit-date: 2025-03-15
+host: x86_64-unknown-linux-gnu
+release: 1.85.1
+LLVM version: 19.1.7
+make: Entering directory '/src'
+Rust is available!
+make: Leaving directory '/src'

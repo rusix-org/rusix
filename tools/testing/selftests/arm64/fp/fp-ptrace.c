@@ -27,7 +27,7 @@
 #include <asm/sve_context.h>
 #include <asm/ptrace.h>
 
-#include "kselftest.h"
+#include "../../kselftest.h"
 
 #include "fp-ptrace.h"
 
@@ -114,6 +114,23 @@ static void handle_alarm(int sig, siginfo_t *info, void *context)
 {
 	got_alarm = true;
 }
+
+#ifdef CONFIG_CPU_BIG_ENDIAN
+static __uint128_t arm64_cpu_to_le128(__uint128_t x)
+{
+	u64 a = swab64(x);
+	u64 b = swab64(x >> 64);
+
+	return ((__uint128_t)a << 64) | b;
+}
+#else
+static __uint128_t arm64_cpu_to_le128(__uint128_t x)
+{
+	return x;
+}
+#endif
+
+#define arm64_le128_to_cpu(x) arm64_cpu_to_le128(x)
 
 static bool sve_supported(void)
 {
@@ -915,7 +932,7 @@ static void fpsimd_to_sve(__uint128_t *v, char *z, int vl)
 
 	for (i = 0; i < __SVE_NUM_ZREGS; i++) {
 		p = (__uint128_t *)&z[__SVE_ZREG_OFFSET(vq, i)];
-		*p = v[i];
+		*p = arm64_cpu_to_le128(v[i]);
 	}
 }
 
@@ -1089,7 +1106,7 @@ static bool sve_write_supported(struct test_config *config)
 
 static bool sve_write_fpsimd_supported(struct test_config *config)
 {
-	if (!sve_supported() && !sme_supported())
+	if (!sve_supported())
 		return false;
 
 	if ((config->svcr_in & SVCR_ZA) != (config->svcr_expected & SVCR_ZA))
@@ -1248,6 +1265,9 @@ static void sve_write_fpsimd(pid_t child, struct test_config *config)
 
 	vl = vl_expected(config);
 	vq = __sve_vq_from_vl(vl);
+
+	if (!vl)
+		return;
 
 	iov.iov_len = SVE_PT_SIZE(vq, SVE_PT_REGS_FPSIMD);
 	iov.iov_base = malloc(iov.iov_len);

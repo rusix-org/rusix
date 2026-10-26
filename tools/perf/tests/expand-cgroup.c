@@ -8,7 +8,6 @@
 #include "parse-events.h"
 #include "pmu-events/pmu-events.h"
 #include "pfm.h"
-#include "target.h"
 #include <subcmd/parse-options.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -28,7 +27,7 @@ static int test_expand_events(struct evlist *evlist)
 
 	TEST_ASSERT_VAL("evlist is empty", !evlist__empty(evlist));
 
-	nr_events = evlist__nr_entries(evlist);
+	nr_events = evlist->core.nr_entries;
 	ev_name = calloc(nr_events, sizeof(*ev_name));
 	if (ev_name == NULL) {
 		pr_debug("memory allocation failure\n");
@@ -54,7 +53,7 @@ static int test_expand_events(struct evlist *evlist)
 	}
 
 	ret = TEST_FAIL;
-	if (evlist__nr_entries(evlist) != nr_events * nr_cgrps) {
+	if (evlist->core.nr_entries != nr_events * nr_cgrps) {
 		pr_debug("event count doesn't match\n");
 		goto out;
 	}
@@ -100,13 +99,12 @@ out:	for (i = 0; i < nr_events; i++)
 static int expand_default_events(void)
 {
 	int ret;
-	struct target target = {};
-	struct evlist *evlist = evlist__new_default(&target, /*sample_callchains=*/false);
+	struct evlist *evlist = evlist__new_default();
 
 	TEST_ASSERT_VAL("failed to get evlist", evlist);
 
 	ret = test_expand_events(evlist);
-	evlist__put(evlist);
+	evlist__delete(evlist);
 	return ret;
 }
 
@@ -133,7 +131,7 @@ static int expand_group_events(void)
 	ret = test_expand_events(evlist);
 out:
 	parse_events_error__exit(&err);
-	evlist__put(evlist);
+	evlist__delete(evlist);
 	return ret;
 }
 
@@ -164,7 +162,7 @@ static int expand_libpfm_events(void)
 
 	ret = test_expand_events(evlist);
 out:
-	evlist__put(evlist);
+	evlist__delete(evlist);
 	return ret;
 }
 
@@ -179,8 +177,7 @@ static int expand_metric_events(void)
 	TEST_ASSERT_VAL("failed to get evlist", evlist);
 
 	pme_test = find_core_metrics_table("testarch", "testcpu");
-	ret = metricgroup__parse_groups_test(evlist, pme_test, metric_str,
-					     /*cputype_filter=*/false);
+	ret = metricgroup__parse_groups_test(evlist, pme_test, metric_str);
 	if (ret < 0) {
 		pr_debug("failed to parse '%s' metric\n", metric_str);
 		goto out;
@@ -189,7 +186,7 @@ static int expand_metric_events(void)
 	ret = test_expand_events(evlist);
 
 out:
-	evlist__put(evlist);
+	evlist__delete(evlist);
 	return ret;
 }
 

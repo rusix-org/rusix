@@ -141,16 +141,19 @@ struct gntdev_grant_map *gntdev_alloc_map(struct gntdev_priv *priv, int count,
 	struct gntdev_grant_map *add;
 	int i;
 
-	add = kzalloc_obj(*add);
+	add = kzalloc(sizeof(*add), GFP_KERNEL);
 	if (NULL == add)
 		return NULL;
 
-	add->grants    = kvmalloc_objs(add->grants[0], count);
-	add->map_ops   = kvmalloc_objs(add->map_ops[0], count);
-	add->unmap_ops = kvmalloc_objs(add->unmap_ops[0], count);
-	add->pages     = kvzalloc_objs(add->pages[0], count);
+	add->grants    = kvmalloc_array(count, sizeof(add->grants[0]),
+					GFP_KERNEL);
+	add->map_ops   = kvmalloc_array(count, sizeof(add->map_ops[0]),
+					GFP_KERNEL);
+	add->unmap_ops = kvmalloc_array(count, sizeof(add->unmap_ops[0]),
+					GFP_KERNEL);
+	add->pages     = kvcalloc(count, sizeof(add->pages[0]), GFP_KERNEL);
 	add->being_removed =
-		kvzalloc_objs(add->being_removed[0], count);
+		kvcalloc(count, sizeof(add->being_removed[0]), GFP_KERNEL);
 	if (NULL == add->grants    ||
 	    NULL == add->map_ops   ||
 	    NULL == add->unmap_ops ||
@@ -158,8 +161,10 @@ struct gntdev_grant_map *gntdev_alloc_map(struct gntdev_priv *priv, int count,
 	    NULL == add->being_removed)
 		goto err;
 	if (xen_pv_domain()) {
-		add->kmap_ops   = kvmalloc_objs(add->kmap_ops[0], count);
-		add->kunmap_ops = kvmalloc_objs(add->kunmap_ops[0], count);
+		add->kmap_ops   = kvmalloc_array(count, sizeof(add->kmap_ops[0]),
+						 GFP_KERNEL);
+		add->kunmap_ops = kvmalloc_array(count, sizeof(add->kunmap_ops[0]),
+						 GFP_KERNEL);
 		if (NULL == add->kmap_ops || NULL == add->kunmap_ops)
 			goto err;
 	}
@@ -174,7 +179,8 @@ struct gntdev_grant_map *gntdev_alloc_map(struct gntdev_priv *priv, int count,
 	if (dma_flags & (GNTDEV_DMA_FLAG_WC | GNTDEV_DMA_FLAG_COHERENT)) {
 		struct gnttab_dma_alloc_args args;
 
-		add->frames = kvzalloc_objs(add->frames[0], count);
+		add->frames = kvcalloc(count, sizeof(add->frames[0]),
+				       GFP_KERNEL);
 		if (!add->frames)
 			goto err;
 
@@ -581,7 +587,7 @@ static int gntdev_open(struct inode *inode, struct file *flip)
 {
 	struct gntdev_priv *priv;
 
-	priv = kzalloc_obj(*priv);
+	priv = kzalloc(sizeof(*priv), GFP_KERNEL);
 	if (!priv)
 		return -ENOMEM;
 
@@ -849,13 +855,13 @@ static int gntdev_copy(struct gntdev_copy_batch *batch)
 		if (status == GNTST_okay)
 			continue;
 
-		if (get_user(old_status, batch->status[i]))
+		if (__get_user(old_status, batch->status[i]))
 			return -EFAULT;
 
 		if (old_status != GNTST_okay)
 			continue;
 
-		if (put_user(status, batch->status[i]))
+		if (__put_user(status, batch->status[i]))
 			return -EFAULT;
 	}
 
@@ -970,7 +976,7 @@ static long gntdev_ioctl_grant_copy(struct gntdev_priv *priv, void __user *u)
 
 	mutex_lock(&priv->batch_lock);
 	if (!priv->batch) {
-		batch = kmalloc_obj(*batch);
+		batch = kmalloc(sizeof(*batch), GFP_KERNEL);
 	} else {
 		batch = priv->batch;
 		priv->batch = batch->next;
@@ -1065,13 +1071,6 @@ static int gntdev_mmap(struct file *flip, struct vm_area_struct *vma)
 
 	if ((vma->vm_flags & VM_WRITE) && !(vma->vm_flags & VM_SHARED))
 		return -EINVAL;
-
-	/*
-	 * Private mappings of foreign grant pages must never become
-	 * writable: they would take the COW path on granted pages.
-	 */
-	if (!(vma->vm_flags & VM_SHARED))
-		vm_flags_clear(vma, VM_MAYWRITE);
 
 	pr_debug("map %d+%d at %lx (pgoff %lx)\n",
 		 index, count, vma->vm_start, vma->vm_pgoff);

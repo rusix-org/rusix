@@ -46,22 +46,27 @@ static int write_mmp_block_thawed(struct super_block *sb,
 
 	ext4_mmp_csum_set(sb, mmp);
 	lock_buffer(bh);
-	bh_submit(bh, REQ_OP_WRITE | REQ_SYNC | REQ_META | REQ_PRIO,
-			bh_end_write);
+	bh->b_end_io = end_buffer_write_sync;
+	get_bh(bh);
+	submit_bh(REQ_OP_WRITE | REQ_SYNC | REQ_META | REQ_PRIO, bh);
 	wait_on_buffer(bh);
-	if (unlikely(buffer_write_io_error(bh)))
+	if (unlikely(!buffer_uptodate(bh)))
 		return -EIO;
 	return 0;
 }
 
 static int write_mmp_block(struct super_block *sb, struct buffer_head *bh)
 {
+	int err;
+
 	/*
 	 * We protect against freezing so that we don't create dirty buffers
 	 * on frozen filesystem.
 	 */
-	scoped_guard(super_write, sb)
-		return write_mmp_block_thawed(sb, bh);
+	sb_start_write(sb);
+	err = write_mmp_block_thawed(sb, bh);
+	sb_end_write(sb);
+	return err;
 }
 
 /*

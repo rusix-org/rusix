@@ -50,3 +50,10 @@ Driver documentation
    vesafb
    viafb
    vt8623fb
+
+.. only::  subproject and html
+
+   Indices
+   =======
+
+   * :ref:`genindex`

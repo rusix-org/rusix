@@ -34,7 +34,6 @@
 #include <linux/platform_device.h>
 #include <linux/mutex.h>
 #include <linux/freezer.h>
-#include <linux/umh.h>
 
 #include "windfarm.h"
 

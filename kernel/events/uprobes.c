@@ -54,7 +54,7 @@ static struct mutex uprobes_mmap_mutex[UPROBES_HASH_SZ];
 DEFINE_STATIC_PERCPU_RWSEM(dup_mmap_sem);
 
 /* Covers return_instance's uprobe lifetime. */
-DEFINE_STATIC_SRCU_FAST_UPDOWN(uretprobes_srcu);
+DEFINE_STATIC_SRCU(uretprobes_srcu);
 
 /* Have a copy of original instruction */
 #define UPROBE_COPY_INSN	0
@@ -79,7 +79,7 @@ struct uprobe {
 	 * The generic code assumes that it has two members of unknown type
 	 * owned by the arch-specific code:
 	 *
-	 *	insn -	copy_insn() saves the original instruction here for
+	 * 	insn -	copy_insn() saves the original instruction here for
 	 *		arch_uprobe_analyze_insn().
 	 *
 	 *	ixol -	potentially modified instruction to execute out of
@@ -107,8 +107,8 @@ static LIST_HEAD(delayed_uprobe_list);
  * allocated.
  */
 struct xol_area {
-	wait_queue_head_t		wq;		/* if all slots are busy */
-	unsigned long			*bitmap;	/* 0 = free slot */
+	wait_queue_head_t 		wq;		/* if all slots are busy */
+	unsigned long 			*bitmap;	/* 0 = free slot */
 
 	struct page			*page;
 	/*
@@ -116,7 +116,7 @@ struct xol_area {
 	 * itself.  The probed process or a naughty kernel module could make
 	 * the vma go away, and we must handle that reasonably gracefully.
 	 */
-	unsigned long			vaddr;		/* Page(s) of instruction slots */
+	unsigned long 			vaddr;		/* Page(s) of instruction slots */
 };
 
 static void uprobe_warn(struct task_struct *t, const char *msg)
@@ -144,14 +144,12 @@ static bool valid_vma(struct vm_area_struct *vma, bool is_register)
 
 static unsigned long offset_to_vaddr(struct vm_area_struct *vma, loff_t offset)
 {
-	return vma->vm_start + offset -
-		((loff_t)vma_start_pgoff(vma) << PAGE_SHIFT);
+	return vma->vm_start + offset - ((loff_t)vma->vm_pgoff << PAGE_SHIFT);
 }
 
 static loff_t vaddr_to_offset(struct vm_area_struct *vma, unsigned long vaddr)
 {
-	return ((loff_t)vma_start_pgoff(vma) << PAGE_SHIFT) +
-		(vaddr - vma->vm_start);
+	return ((loff_t)vma->vm_pgoff << PAGE_SHIFT) + (vaddr - vma->vm_start);
 }
 
 /**
@@ -181,16 +179,16 @@ bool __weak is_trap_insn(uprobe_opcode_t *insn)
 
 void uprobe_copy_from_page(struct page *page, unsigned long vaddr, void *dst, int len)
 {
-	void *kaddr = kmap_local_page(page);
+	void *kaddr = kmap_atomic(page);
 	memcpy(dst, kaddr + (vaddr & ~PAGE_MASK), len);
-	kunmap_local(kaddr);
+	kunmap_atomic(kaddr);
 }
 
 static void copy_to_page(struct page *page, unsigned long vaddr, const void *src, int len)
 {
-	void *kaddr = kmap_local_page(page);
+	void *kaddr = kmap_atomic(page);
 	memcpy(kaddr + (vaddr & ~PAGE_MASK), src, len);
-	kunmap_local(kaddr);
+	kunmap_atomic(kaddr);
 }
 
 static int verify_opcode(struct page *page, unsigned long vaddr, uprobe_opcode_t *insn,
@@ -240,7 +238,7 @@ static int delayed_uprobe_add(struct uprobe *uprobe, struct mm_struct *mm)
 	if (delayed_uprobe_check(uprobe, mm))
 		return 0;
 
-	du = kzalloc_obj(*du);
+	du  = kzalloc(sizeof(*du), GFP_KERNEL);
 	if (!du)
 		return -ENOMEM;
 
@@ -325,7 +323,7 @@ __update_ref_ctr(struct mm_struct *mm, unsigned long vaddr, short d)
 		return ret == 0 ? -EBUSY : ret;
 	}
 
-	kaddr = kmap_local_page(page);
+	kaddr = kmap_atomic(page);
 	ptr = kaddr + (vaddr & ~PAGE_MASK);
 
 	if (unlikely(*ptr + d < 0)) {
@@ -338,7 +336,7 @@ __update_ref_ctr(struct mm_struct *mm, unsigned long vaddr, short d)
 	*ptr += d;
 	ret = 0;
 out:
-	kunmap_local(kaddr);
+	kunmap_atomic(kaddr);
 	put_page(page);
 	return ret;
 }
@@ -346,7 +344,7 @@ out:
 static void update_ref_ctr_warn(struct uprobe *uprobe,
 				struct mm_struct *mm, short d)
 {
-	pr_warn("ref_ctr %s failed for inode: 0x%llx offset: "
+	pr_warn("ref_ctr %s failed for inode: 0x%lx offset: "
 		"0x%llx ref_ctr_offset: 0x%llx of mm: 0x%p\n",
 		d > 0 ? "increment" : "decrement", uprobe->inode->i_ino,
 		(unsigned long long) uprobe->offset,
@@ -513,7 +511,7 @@ int uprobe_write(struct arch_uprobe *auprobe, struct vm_area_struct *vma,
 
 	uprobe = container_of(auprobe, struct uprobe, arch);
 
-	if (WARN_ON_ONCE(!vma_is_cow_mapping(vma)))
+	if (WARN_ON_ONCE(!is_cow_mapping(vma->vm_flags)))
 		return -EINVAL;
 
 	/*
@@ -709,13 +707,12 @@ static void put_uprobe(struct uprobe *uprobe)
 }
 
 /* Initialize hprobe as SRCU-protected "leased" uprobe */
-static void hprobe_init_leased(struct hprobe *hprobe, struct uprobe *uprobe,
-			       struct srcu_ctr __percpu *srcu_scp)
+static void hprobe_init_leased(struct hprobe *hprobe, struct uprobe *uprobe, int srcu_idx)
 {
 	WARN_ON(!uprobe);
 	hprobe->state = HPROBE_LEASED;
 	hprobe->uprobe = uprobe;
-	hprobe->srcu_scp = srcu_scp;
+	hprobe->srcu_idx = srcu_idx;
 }
 
 /* Initialize hprobe as refcounted ("stable") uprobe (uprobe can be NULL). */
@@ -723,7 +720,7 @@ static void hprobe_init_stable(struct hprobe *hprobe, struct uprobe *uprobe)
 {
 	hprobe->state = uprobe ? HPROBE_STABLE : HPROBE_GONE;
 	hprobe->uprobe = uprobe;
-	hprobe->srcu_scp = NULL;
+	hprobe->srcu_idx = -1;
 }
 
 /*
@@ -760,7 +757,7 @@ static void hprobe_finalize(struct hprobe *hprobe, enum hprobe_state hstate)
 {
 	switch (hstate) {
 	case HPROBE_LEASED:
-		srcu_up_read_fast(&uretprobes_srcu, hprobe->srcu_scp);
+		__srcu_read_unlock(&uretprobes_srcu, hprobe->srcu_idx);
 		break;
 	case HPROBE_STABLE:
 		put_uprobe(hprobe->uprobe);
@@ -832,7 +829,7 @@ static struct uprobe *hprobe_expire(struct hprobe *hprobe, bool get)
 		 */
 		if (try_cmpxchg(&hprobe->state, &hstate, uprobe ? HPROBE_STABLE : HPROBE_GONE)) {
 			/* We won the race, we are the ones to unlock SRCU */
-			srcu_up_read_fast(&uretprobes_srcu, hprobe->srcu_scp);
+			__srcu_read_unlock(&uretprobes_srcu, hprobe->srcu_idx);
 			return get && uprobe ? get_uprobe(uprobe) : uprobe;
 		}
 
@@ -985,7 +982,7 @@ static struct uprobe *insert_uprobe(struct uprobe *uprobe)
 static void
 ref_ctr_mismatch_warn(struct uprobe *cur_uprobe, struct uprobe *uprobe)
 {
-	pr_warn("ref_ctr_offset mismatch. inode: 0x%llx offset: 0x%llx "
+	pr_warn("ref_ctr_offset mismatch. inode: 0x%lx offset: 0x%llx "
 		"ref_ctr_offset(old): 0x%llx ref_ctr_offset(new): 0x%llx\n",
 		uprobe->inode->i_ino, (unsigned long long) uprobe->offset,
 		(unsigned long long) cur_uprobe->ref_ctr_offset,
@@ -997,7 +994,7 @@ static struct uprobe *alloc_uprobe(struct inode *inode, loff_t offset,
 {
 	struct uprobe *uprobe, *cur_uprobe;
 
-	uprobe = kzalloc_obj(struct uprobe);
+	uprobe = kzalloc(sizeof(struct uprobe), GFP_KERNEL);
 	if (!uprobe)
 		return ERR_PTR(-ENOMEM);
 
@@ -1213,7 +1210,7 @@ build_map_info(struct address_space *mapping, loff_t offset, bool is_register)
 
  again:
 	i_mmap_lock_read(mapping);
-	mapping_rmap_tree_foreach(vma, mapping, pgoff, pgoff) {
+	vma_interval_tree_foreach(vma, &mapping->i_mmap, pgoff, pgoff) {
 		if (!valid_vma(vma, is_register))
 			continue;
 
@@ -1222,8 +1219,8 @@ build_map_info(struct address_space *mapping, loff_t offset, bool is_register)
 			 * Needs GFP_NOWAIT to avoid i_mmap_rwsem recursion through
 			 * reclaim. This is optimistic, no harm done if it fails.
 			 */
-			prev = kmalloc_obj(struct map_info,
-					   GFP_NOWAIT | __GFP_NOMEMALLOC);
+			prev = kmalloc(sizeof(struct map_info),
+					GFP_NOWAIT | __GFP_NOMEMALLOC);
 			if (prev)
 				prev->next = NULL;
 		}
@@ -1255,7 +1252,7 @@ build_map_info(struct address_space *mapping, loff_t offset, bool is_register)
 	}
 
 	do {
-		info = kmalloc_obj(struct map_info);
+		info = kmalloc(sizeof(struct map_info), GFP_KERNEL);
 		if (!info) {
 			curr = ERR_PTR(-ENOMEM);
 			goto out;
@@ -1485,7 +1482,7 @@ static int unapply_uprobe(struct uprobe *uprobe, struct mm_struct *mm)
 		    file_inode(vma->vm_file) != uprobe->inode)
 			continue;
 
-		offset = (loff_t)vma_start_pgoff(vma) << PAGE_SHIFT;
+		offset = (loff_t)vma->vm_pgoff << PAGE_SHIFT;
 		if (uprobe->offset <  offset ||
 		    uprobe->offset >= offset + vma->vm_end - vma->vm_start)
 			continue;
@@ -1758,7 +1755,7 @@ static struct xol_area *__create_xol_area(unsigned long vaddr)
 	struct xol_area *area;
 	void *insns;
 
-	area = kzalloc_obj(*area);
+	area = kzalloc(sizeof(*area), GFP_KERNEL);
 	if (unlikely(!area))
 		goto out;
 
@@ -1809,6 +1806,14 @@ static struct xol_area *get_xol_area(void)
 	return area;
 }
 
+void __weak arch_uprobe_clear_state(struct mm_struct *mm)
+{
+}
+
+void __weak arch_uprobe_init_state(struct mm_struct *mm)
+{
+}
+
 /*
  * uprobe_clear_state - Free the area allocated for slots.
  */
@@ -1819,6 +1824,8 @@ void uprobe_clear_state(struct mm_struct *mm)
 	mutex_lock(&delayed_uprobe_lock);
 	delayed_uprobe_remove(NULL, mm);
 	mutex_unlock(&delayed_uprobe_lock);
+
+	arch_uprobe_clear_state(mm);
 
 	if (!area)
 		return;
@@ -2038,7 +2045,7 @@ static void ri_timer(struct timer_list *timer)
 	struct return_instance *ri;
 
 	/* SRCU protects uprobe from reuse for the cmpxchg() inside hprobe_expire(). */
-	guard(srcu_fast_updown)(&uretprobes_srcu);
+	guard(srcu)(&uretprobes_srcu);
 	/* RCU protects return_instance from freeing. */
 	guard(rcu)();
 
@@ -2062,7 +2069,7 @@ static struct uprobe_task *alloc_utask(void)
 {
 	struct uprobe_task *utask;
 
-	utask = kzalloc_obj(*utask);
+	utask = kzalloc(sizeof(*utask), GFP_KERNEL);
 	if (!utask)
 		return NULL;
 
@@ -2095,7 +2102,7 @@ static struct return_instance *alloc_return_instance(struct uprobe_task *utask)
 	if (ri)
 		return ri;
 
-	ri = kzalloc_obj(*ri);
+	ri = kzalloc(sizeof(*ri), GFP_KERNEL);
 	if (!ri)
 		return ZERO_SIZE_PTR;
 
@@ -2135,7 +2142,7 @@ static int dup_utask(struct task_struct *t, struct uprobe_task *o_utask)
 	t->utask = n_utask;
 
 	/* protect uprobes from freeing, we'll need try_get_uprobe() them */
-	guard(srcu_fast_updown)(&uretprobes_srcu);
+	guard(srcu)(&uretprobes_srcu);
 
 	p = &n_utask->return_instances;
 	for (o = o_utask->return_instances; o; o = o->next) {
@@ -2247,8 +2254,8 @@ static void prepare_uretprobe(struct uprobe *uprobe, struct pt_regs *regs,
 {
 	struct uprobe_task *utask = current->utask;
 	unsigned long orig_ret_vaddr, trampoline_vaddr;
-	struct srcu_ctr __percpu *srcu_scp;
 	bool chained;
+	int srcu_idx;
 
 	if (!get_xol_area())
 		goto free;
@@ -2286,12 +2293,8 @@ static void prepare_uretprobe(struct uprobe *uprobe, struct pt_regs *regs,
 		orig_ret_vaddr = utask->return_instances->orig_ret_vaddr;
 	}
 
-	/*
-	 * Use srcu_down_read_fast() because the SRCU lock survives a switch to
-	 * user space and can be unlocked from a different context by ri_timer()
-	 * or dup_utask().
-	 */
-	srcu_scp = srcu_down_read_fast(&uretprobes_srcu);
+	/* __srcu_read_lock() because SRCU lock survives switch to user space */
+	srcu_idx = __srcu_read_lock(&uretprobes_srcu);
 
 	ri->func = instruction_pointer(regs);
 	ri->stack = user_stack_pointer(regs);
@@ -2300,7 +2303,7 @@ static void prepare_uretprobe(struct uprobe *uprobe, struct pt_regs *regs,
 
 	utask->depth++;
 
-	hprobe_init_leased(&ri->hprobe, uprobe, srcu_scp);
+	hprobe_init_leased(&ri->hprobe, uprobe, srcu_idx);
 	ri->next = utask->return_instances;
 	rcu_assign_pointer(utask->return_instances, ri);
 
@@ -2404,7 +2407,7 @@ static int is_trap_at_addr(struct mm_struct *mm, unsigned long vaddr)
 		return -EINVAL;
 
 	pagefault_disable();
-	result = get_user(opcode, (uprobe_opcode_t __user *)vaddr);
+	result = __get_user(opcode, (uprobe_opcode_t __user *)vaddr);
 	pagefault_enable();
 
 	if (likely(result == 0))
@@ -2450,8 +2453,7 @@ static struct uprobe *find_active_uprobe_speculative(unsigned long bp_vaddr)
 	if (!vm_file)
 		return NULL;
 
-	offset = (loff_t)(vma_start_pgoff(vma) << PAGE_SHIFT) +
-		(bp_vaddr - vma->vm_start);
+	offset = (loff_t)(vma->vm_pgoff << PAGE_SHIFT) + (bp_vaddr - vma->vm_start);
 	uprobe = find_uprobe_rcu(vm_file->f_inode, offset);
 	if (!uprobe)
 		return NULL;

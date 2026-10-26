@@ -502,12 +502,14 @@ static int st_sensors_read_axis_data(struct iio_dev *indio_dev,
 
 	byte_for_channel = DIV_ROUND_UP(ch->scan_type.realbits +
 					ch->scan_type.shift, 8);
-	outdata = sdata->buffer_data;
+	outdata = kmalloc(byte_for_channel, GFP_DMA | GFP_KERNEL);
+	if (!outdata)
+		return -ENOMEM;
 
 	err = regmap_bulk_read(sdata->regmap, ch->address,
 			       outdata, byte_for_channel);
 	if (err < 0)
-		return err;
+		goto st_sensors_free_memory;
 
 	if (byte_for_channel == 1) {
 		tmp = *outdata;
@@ -526,7 +528,10 @@ static int st_sensors_read_axis_data(struct iio_dev *indio_dev,
 	}
 	*data = sign_extend32(tmp, BYTES_TO_BITS(byte_for_channel) - 1);
 
-	return 0;
+st_sensors_free_memory:
+	kfree(outdata);
+
+	return err;
 }
 
 int st_sensors_read_info_raw(struct iio_dev *indio_dev,

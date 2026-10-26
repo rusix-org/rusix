@@ -1297,15 +1297,8 @@ static int exynos5_dmc_init_clks(struct exynos5_dmc *dmc)
 	if (ret)
 		return ret;
 
-	ret = clk_prepare_enable(dmc->fout_bpll);
-	if (ret)
-		return ret;
-
-	ret = clk_prepare_enable(dmc->mout_bpll);
-	if (ret) {
-		clk_disable_unprepare(dmc->fout_bpll);
-		return ret;
-	}
+	clk_prepare_enable(dmc->fout_bpll);
+	clk_prepare_enable(dmc->mout_bpll);
 
 	/*
 	 * Some bootloaders do not set clock routes correctly.

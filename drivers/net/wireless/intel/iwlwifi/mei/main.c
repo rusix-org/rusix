@@ -703,7 +703,7 @@ static void iwl_mei_handle_csme_filters(struct mei_cl_device *cldev,
 		rcu_dereference_protected(mei->filters,
 					  lockdep_is_held(&iwl_mei_mutex));
 
-	new_filters = kzalloc_obj(*new_filters);
+	new_filters = kzalloc(sizeof(*new_filters), GFP_KERNEL);
 	if (!new_filters)
 		return;
 
@@ -887,7 +887,7 @@ static void iwl_mei_handle_nvm(struct mei_cl_device *cldev,
 	int i;
 
 	kfree(mei->nvm);
-	mei->nvm = kzalloc_obj(*mei_nvm);
+	mei->nvm = kzalloc(sizeof(*mei_nvm), GFP_KERNEL);
 	if (!mei->nvm)
 		return;
 
@@ -1041,14 +1041,11 @@ static void iwl_mei_read_from_q(const u8 *q_head, u32 q_sz,
 	u32 rd = *_rd;
 
 	if (rd + len <= q_sz) {
-		if (buf)
-			memcpy(buf, q_head + rd, len);
+		memcpy(buf, q_head + rd, len);
 		rd += len;
 	} else {
-		if (buf) {
-			memcpy(buf, q_head + rd, q_sz - rd);
-			memcpy(buf + q_sz - rd, q_head, len - (q_sz - rd));
-		}
+		memcpy(buf, q_head + rd, q_sz - rd);
+		memcpy(buf + q_sz - rd, q_head, len - (q_sz - rd));
 		rd = len - (q_sz - rd);
 	}
 
@@ -1089,29 +1086,24 @@ static void iwl_mei_handle_sap_data(struct mei_cl_device *cldev,
 			break;
 		}
 
-		valid_rx_sz -= len;
-
 		if (len < sizeof(*ethhdr)) {
 			dev_err(&cldev->dev,
 				"Data len is smaller than an ethernet header? len = %d\n",
 				len);
-			iwl_mei_read_from_q(q_head, q_sz, &rd, wr, NULL, len);
-			continue;
 		}
+
+		valid_rx_sz -= len;
 
 		if (le16_to_cpu(hdr.type) != SAP_MSG_DATA_PACKET) {
 			dev_err(&cldev->dev, "Unsupported Rx data: type %d, len %d\n",
 				le16_to_cpu(hdr.type), len);
-			iwl_mei_read_from_q(q_head, q_sz, &rd, wr, NULL, len);
 			continue;
 		}
 
 		/* We need enough room for the WiFi header + SNAP + IV */
 		skb = netdev_alloc_skb(netdev, len + QOS_HDR_IV_SNAP_LEN);
-		if (!skb) {
-			iwl_mei_read_from_q(q_head, q_sz, &rd, wr, NULL, len);
+		if (!skb)
 			continue;
-		}
 
 		skb_reserve(skb, QOS_HDR_IV_SNAP_LEN);
 		ethhdr = skb_push(skb, sizeof(*ethhdr));

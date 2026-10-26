@@ -126,7 +126,13 @@ static struct v4l2_m2m_queue_ctx *get_queue_ctx(struct v4l2_m2m_ctx *m2m_ctx,
 struct vb2_queue *v4l2_m2m_get_vq(struct v4l2_m2m_ctx *m2m_ctx,
 				       enum v4l2_buf_type type)
 {
-	return &get_queue_ctx(m2m_ctx, type)->q;
+	struct v4l2_m2m_queue_ctx *q_ctx;
+
+	q_ctx = get_queue_ctx(m2m_ctx, type);
+	if (!q_ctx)
+		return NULL;
+
+	return &q_ctx->q;
 }
 EXPORT_SYMBOL(v4l2_m2m_get_vq);
 
@@ -1037,6 +1043,8 @@ static int v4l2_m2m_register_entity(struct media_device *mdev,
 {
 	struct media_entity *entity;
 	struct media_pad *pads;
+	char *name;
+	unsigned int len;
 	int num_pads;
 	int ret;
 
@@ -1069,10 +1077,12 @@ static int v4l2_m2m_register_entity(struct media_device *mdev,
 		entity->info.dev.major = VIDEO_MAJOR;
 		entity->info.dev.minor = vdev->minor;
 	}
-	entity->name = kasprintf(GFP_KERNEL, "%s-%s", vdev->name,
-				 m2m_entity_name[type]);
-	if (!entity->name)
+	len = strlen(vdev->name) + 2 + strlen(m2m_entity_name[type]);
+	name = kmalloc(len, GFP_KERNEL);
+	if (!name)
 		return -ENOMEM;
+	snprintf(name, len, "%s-%s", vdev->name, m2m_entity_name[type]);
+	entity->name = name;
 	entity->function = function;
 
 	ret = media_entity_pads_init(entity, num_pads, pads);
@@ -1190,7 +1200,7 @@ struct v4l2_m2m_dev *v4l2_m2m_init(const struct v4l2_m2m_ops *m2m_ops)
 	if (!m2m_ops || WARN_ON(!m2m_ops->device_run))
 		return ERR_PTR(-EINVAL);
 
-	m2m_dev = kzalloc_obj(*m2m_dev);
+	m2m_dev = kzalloc(sizeof *m2m_dev, GFP_KERNEL);
 	if (!m2m_dev)
 		return ERR_PTR(-ENOMEM);
 
@@ -1238,7 +1248,7 @@ struct v4l2_m2m_ctx *v4l2_m2m_ctx_init(struct v4l2_m2m_dev *m2m_dev,
 	struct v4l2_m2m_queue_ctx *out_q_ctx, *cap_q_ctx;
 	int ret;
 
-	m2m_ctx = kzalloc_obj(*m2m_ctx);
+	m2m_ctx = kzalloc(sizeof *m2m_ctx, GFP_KERNEL);
 	if (!m2m_ctx)
 		return ERR_PTR(-ENOMEM);
 
@@ -1298,6 +1308,8 @@ void v4l2_m2m_buf_queue(struct v4l2_m2m_ctx *m2m_ctx,
 	unsigned long flags;
 
 	q_ctx = get_queue_ctx(m2m_ctx, vbuf->vb2_buf.vb2_queue->type);
+	if (!q_ctx)
+		return;
 
 	spin_lock_irqsave(&q_ctx->rdy_spinlock, flags);
 	list_add_tail(&b->list, &q_ctx->rdy_queue);
@@ -1307,9 +1319,14 @@ void v4l2_m2m_buf_queue(struct v4l2_m2m_ctx *m2m_ctx,
 EXPORT_SYMBOL_GPL(v4l2_m2m_buf_queue);
 
 void v4l2_m2m_buf_copy_metadata(const struct vb2_v4l2_buffer *out_vb,
-				struct vb2_v4l2_buffer *cap_vb)
+				struct vb2_v4l2_buffer *cap_vb,
+				bool copy_frame_flags)
 {
-	const u32 mask = V4L2_BUF_FLAG_TIMECODE | V4L2_BUF_FLAG_TSTAMP_SRC_MASK;
+	u32 mask = V4L2_BUF_FLAG_TIMECODE | V4L2_BUF_FLAG_TSTAMP_SRC_MASK;
+
+	if (copy_frame_flags)
+		mask |= V4L2_BUF_FLAG_KEYFRAME | V4L2_BUF_FLAG_PFRAME |
+			V4L2_BUF_FLAG_BFRAME;
 
 	cap_vb->vb2_buf.timestamp = out_vb->vb2_buf.timestamp;
 
@@ -1394,6 +1411,8 @@ int v4l2_m2m_ioctl_remove_bufs(struct file *file, void *priv,
 	struct v4l2_fh *fh = file_to_v4l2_fh(file);
 	struct vb2_queue *q = v4l2_m2m_get_vq(fh->m2m_ctx, remove->type);
 
+	if (!q)
+		return -EINVAL;
 	if (q->type != remove->type)
 		return -EINVAL;
 

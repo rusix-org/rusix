@@ -59,9 +59,14 @@ static inline int gb_pm_runtime_get_sync(struct gb_bundle *bundle)
 	return 0;
 }
 
-static inline void gb_pm_runtime_put_autosuspend(struct gb_bundle *bundle)
+static inline int gb_pm_runtime_put_autosuspend(struct gb_bundle *bundle)
 {
-	pm_runtime_put_autosuspend(&bundle->dev);
+	int retval;
+
+	pm_runtime_mark_last_busy(&bundle->dev);
+	retval = pm_runtime_put_autosuspend(&bundle->dev);
+
+	return retval;
 }
 
 static inline void gb_pm_runtime_get_noresume(struct gb_bundle *bundle)
@@ -77,7 +82,8 @@ static inline void gb_pm_runtime_put_noidle(struct gb_bundle *bundle)
 #else
 static inline int gb_pm_runtime_get_sync(struct gb_bundle *bundle)
 { return 0; }
-static inline void gb_pm_runtime_put_autosuspend(struct gb_bundle *bundle) {}
+static inline int gb_pm_runtime_put_autosuspend(struct gb_bundle *bundle)
+{ return 0; }
 
 static inline void gb_pm_runtime_get_noresume(struct gb_bundle *bundle) {}
 static inline void gb_pm_runtime_put_noidle(struct gb_bundle *bundle) {}

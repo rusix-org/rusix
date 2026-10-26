@@ -387,8 +387,11 @@ EXPORT_SYMBOL_GPL(cpsw_ethtool_op_begin);
 void cpsw_ethtool_op_complete(struct net_device *ndev)
 {
 	struct cpsw_priv *priv = netdev_priv(ndev);
+	int ret;
 
-	pm_runtime_put(priv->cpsw->dev);
+	ret = pm_runtime_put(priv->cpsw->dev);
+	if (ret < 0)
+		cpsw_err(priv, drv, "ethtool complete failed %d\n", ret);
 }
 EXPORT_SYMBOL_GPL(cpsw_ethtool_op_complete);
 

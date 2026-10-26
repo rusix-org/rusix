@@ -138,8 +138,7 @@ static int cros_ec_xfer_command(struct cros_ec_device *ec_dev, struct cros_ec_co
 	return ret;
 }
 
-static int cros_ec_wait_until_complete(struct cros_ec_device *ec_dev,
-				       struct cros_ec_command *orig_msg)
+static int cros_ec_wait_until_complete(struct cros_ec_device *ec_dev, uint32_t *result)
 {
 	DEFINE_RAW_FLEX(struct cros_ec_command, msg, data,
 			sizeof(struct ec_response_get_comms_status));
@@ -162,41 +161,23 @@ static int cros_ec_wait_until_complete(struct cros_ec_device *ec_dev,
 		if (ret < 0)
 			return ret;
 
-		orig_msg->result = msg->result;
+		*result = msg->result;
 		if (msg->result != EC_RES_SUCCESS)
 			return ret;
 
-		if (ret == 0)
-			return -EPROTO;
-
-		if (!(status->flags & EC_COMMS_STATUS_PROCESSING)) {
-			u32 orig_cmd, orig_outsize, orig_version;
-
-			/* If no response payload is expected, return 0. */
-			if (orig_msg->insize == 0)
-				return 0;
-
-			/*
-			 * Request the response using EC_CMD_RESEND_RESPONSE.
-			 * Restore the original message fields so it appears
-			 * to be a direct response to the original command.
-			 */
-			orig_cmd = orig_msg->command;
-			orig_outsize = orig_msg->outsize;
-			orig_version = orig_msg->version;
-
-			orig_msg->command = EC_CMD_RESEND_RESPONSE;
-			orig_msg->outsize = 0;
-			orig_msg->version = 0;
-			ret = cros_ec_xfer_command(ec_dev, orig_msg);
-			orig_msg->command = orig_cmd;
-			orig_msg->outsize = orig_outsize;
-			orig_msg->version = orig_version;
-			return ret;
+		if (ret == 0) {
+			ret = -EPROTO;
+			break;
 		}
+
+		if (!(status->flags & EC_COMMS_STATUS_PROCESSING))
+			return ret;
 	}
 
-	return -EAGAIN;
+	if (i >= EC_COMMAND_RETRIES)
+		ret = -EAGAIN;
+
+	return ret;
 }
 
 static int cros_ec_send_command(struct cros_ec_device *ec_dev, struct cros_ec_command *msg)
@@ -204,7 +185,7 @@ static int cros_ec_send_command(struct cros_ec_device *ec_dev, struct cros_ec_co
 	int ret = cros_ec_xfer_command(ec_dev, msg);
 
 	if (msg->result == EC_RES_IN_PROGRESS)
-		ret = cros_ec_wait_until_complete(ec_dev, msg);
+		ret = cros_ec_wait_until_complete(ec_dev, &msg->result);
 
 	return ret;
 }
@@ -966,27 +947,6 @@ u32 cros_ec_get_host_event(struct cros_ec_device *ec_dev)
 EXPORT_SYMBOL(cros_ec_get_host_event);
 
 /**
- * cros_ec_read_features() - Read EC features
- *
- * @ec: EC device.
- *
- * Return: >= 0 on success, negative error number on failure.
- */
-int cros_ec_read_features(struct cros_ec_dev *ec)
-{
-	int ret = cros_ec_cmd(ec->ec_dev, 0, EC_CMD_GET_FEATURES + ec->cmd_offset,
-			      NULL, 0, &ec->features, sizeof(ec->features));
-
-	if (ret < 0) {
-		dev_warn(ec->dev, "cannot get EC features: %d\n", ret);
-		memset(&ec->features, 0, sizeof(ec->features));
-	}
-
-	return ret;
-}
-EXPORT_SYMBOL_GPL(cros_ec_read_features);
-
-/**
  * cros_ec_check_features() - Test for the presence of EC features
  *
  * @ec: EC device, does not have to be connected directly to the AP,
@@ -1000,10 +960,17 @@ EXPORT_SYMBOL_GPL(cros_ec_read_features);
 bool cros_ec_check_features(struct cros_ec_dev *ec, int feature)
 {
 	struct ec_response_get_features *features = &ec->features;
+	int ret;
 
 	if (features->flags[0] == -1U && features->flags[1] == -1U) {
 		/* features bitmap not read yet */
-		cros_ec_read_features(ec);
+		ret = cros_ec_cmd(ec->ec_dev, 0, EC_CMD_GET_FEATURES + ec->cmd_offset,
+				  NULL, 0, features, sizeof(*features));
+		if (ret < 0) {
+			dev_warn(ec->dev, "cannot get EC features: %d\n", ret);
+			memset(features, 0, sizeof(*features));
+		}
+
 		dev_dbg(ec->dev, "EC features %08x %08x\n",
 			features->flags[0], features->flags[1]);
 	}

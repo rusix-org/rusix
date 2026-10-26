@@ -484,10 +484,11 @@
 
 &gpu {
 	status = "okay";
-};
 
-&gpu_zap_shader {
-	firmware-name = "qcom/sm8250/a650_zap.mbn";
+	zap-shader {
+		memory-region = <&gpu_mem>;
+		firmware-name = "qcom/sm8250/a650_zap.mbn";
+	};
 };
 
 &i2c1 {
@@ -862,8 +863,8 @@
 &usb_1_qmpphy {
 	status = "okay";
 
-	vdda-phy-supply = <&vreg_l18a_0p9>;
-	vdda-pll-supply = <&vreg_l9a_1p2>;
+	vdda-phy-supply = <&vreg_l9a_1p2>;
+	vdda-pll-supply = <&vreg_l18a_0p9>;
 };
 
 &usb_2 {
@@ -885,8 +886,8 @@
 &usb_2_qmpphy {
 	status = "okay";
 
-	vdda-phy-supply = <&vreg_l18a_0p9>;
-	vdda-pll-supply = <&vreg_l9a_1p2>;
+	vdda-phy-supply = <&vreg_l9a_1p2>;
+	vdda-pll-supply = <&vreg_l18a_0p9>;
 };
 
 &venus {

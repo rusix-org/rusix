@@ -50,7 +50,7 @@ int input_mt_init_slots(struct input_dev *dev, unsigned int num_slots,
 		return -EINVAL;
 
 	struct input_mt *mt __free(kfree) =
-			kzalloc_flex(*mt, slots, num_slots);
+			kzalloc(struct_size(mt, slots, num_slots), GFP_KERNEL);
 	if (!mt)
 		return -ENOMEM;
 
@@ -84,7 +84,7 @@ int input_mt_init_slots(struct input_dev *dev, unsigned int num_slots,
 		__set_bit(INPUT_PROP_SEMI_MT, dev->propbit);
 	if (flags & INPUT_MT_TRACK) {
 		unsigned int n2 = num_slots * num_slots;
-		mt->red = kzalloc_objs(*mt->red, n2);
+		mt->red = kcalloc(n2, sizeof(*mt->red), GFP_KERNEL);
 		if (!mt->red)
 			return -ENOMEM;
 	}
@@ -126,8 +126,9 @@ EXPORT_SYMBOL(input_mt_destroy_slots);
  *
  * Reports a contact via ABS_MT_TRACKING_ID, and optionally
  * ABS_MT_TOOL_TYPE. If active is true and the slot is currently
- * inactive, a new tracking id is assigned to the slot. The tool
- * type is only reported if the corresponding absbit field is set.
+ * inactive, or if the tool type is changed, a new tracking id is
+ * assigned to the slot. The tool type is only reported if the
+ * corresponding absbit field is set.
  *
  * Returns true if contact is active.
  */

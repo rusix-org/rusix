@@ -167,12 +167,9 @@ static int __cci_ace_get_port(struct device_node *dn, int type)
 	cci_portn = of_parse_phandle(dn, "cci-control-port", 0);
 	for (i = 0; i < nb_cci_ports; i++) {
 		ace_match = ports[i].type == type;
-		if (ace_match && cci_portn == ports[i].dn) {
-			of_node_put(cci_portn);
+		if (ace_match && cci_portn == ports[i].dn)
 			return i;
-		}
 	}
-	of_node_put(cci_portn);
 	return -ENODEV;
 }
 
@@ -202,7 +199,6 @@ static void cci_ace_init_ports(void)
 			continue;
 
 		port = __cci_ace_get_port(cpun, ACE_PORT);
-		of_node_put(cpun);
 		if (port < 0)
 			continue;
 
@@ -455,7 +451,7 @@ static int cci_probe_ports(struct device_node *np)
 
 	nb_cci_ports = cci_config->nb_ace + cci_config->nb_ace_lite;
 
-	ports = kzalloc_objs(*ports, nb_cci_ports);
+	ports = kcalloc(nb_cci_ports, sizeof(*ports), GFP_KERNEL);
 	if (!ports)
 		return -ENOMEM;
 

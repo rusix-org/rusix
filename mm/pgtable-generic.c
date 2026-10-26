@@ -14,8 +14,7 @@
 #include <linux/swapops.h>
 #include <linux/mm_inline.h>
 #include <linux/iommu.h>
-#include <linux/pgalloc.h>
-
+#include <asm/pgalloc.h>
 #include <asm/tlb.h>
 
 /*
@@ -26,20 +25,14 @@
 
 void pgd_clear_bad(pgd_t *pgd)
 {
-	char str[PTVAL_STR_MAX];
-
-	ptval_to_str(str, pgd_val(*pgd));
-	pr_err("bad pgd %s.\n", str);
+	pgd_ERROR(*pgd);
 	pgd_clear(pgd);
 }
 
 #ifndef __PAGETABLE_P4D_FOLDED
 void p4d_clear_bad(p4d_t *p4d)
 {
-	char str[PTVAL_STR_MAX];
-
-	ptval_to_str(str, p4d_val(*p4d));
-	pr_err("bad p4d %s.\n", str);
+	p4d_ERROR(*p4d);
 	p4d_clear(p4d);
 }
 #endif
@@ -47,10 +40,7 @@ void p4d_clear_bad(p4d_t *p4d)
 #ifndef __PAGETABLE_PUD_FOLDED
 void pud_clear_bad(pud_t *pud)
 {
-	char str[PTVAL_STR_MAX];
-
-	ptval_to_str(str, pud_val(*pud));
-	pr_err("bad pud %s.\n", str);
+	pud_ERROR(*pud);
 	pud_clear(pud);
 }
 #endif
@@ -62,10 +52,7 @@ void pud_clear_bad(pud_t *pud)
  */
 void pmd_clear_bad(pmd_t *pmd)
 {
-	char str[PTVAL_STR_MAX];
-
-	ptval_to_str(str, pmd_val(*pmd));
-	pr_err("bad pmd %s.\n", str);
+	pmd_ERROR(*pmd);
 	pmd_clear(pmd);
 }
 
@@ -93,11 +80,10 @@ int ptep_set_access_flags(struct vm_area_struct *vma,
 #endif
 
 #ifndef __HAVE_ARCH_PTEP_CLEAR_YOUNG_FLUSH
-bool ptep_clear_flush_young(struct vm_area_struct *vma,
-		unsigned long address, pte_t *ptep)
+int ptep_clear_flush_young(struct vm_area_struct *vma,
+			   unsigned long address, pte_t *ptep)
 {
-	bool young;
-
+	int young;
 	young = ptep_test_and_clear_young(vma, address, ptep);
 	if (young)
 		flush_tlb_page(vma, address);
@@ -136,11 +122,10 @@ int pmdp_set_access_flags(struct vm_area_struct *vma,
 #endif
 
 #ifndef __HAVE_ARCH_PMDP_CLEAR_YOUNG_FLUSH
-bool pmdp_clear_flush_young(struct vm_area_struct *vma,
-		unsigned long address, pmd_t *pmdp)
+int pmdp_clear_flush_young(struct vm_area_struct *vma,
+			   unsigned long address, pmd_t *pmdp)
 {
-	bool young;
-
+	int young;
 	VM_BUG_ON(address & ~HPAGE_PMD_MASK);
 	young = pmdp_test_and_clear_young(vma, address, pmdp);
 	if (young)
@@ -294,7 +279,7 @@ static unsigned long pmdp_get_lockless_start(void) { return 0; }
 static void pmdp_get_lockless_end(unsigned long irqflags) { }
 #endif
 
-pte_t *__pte_offset_map(pmd_t *pmd, unsigned long addr, pmd_t *pmdvalp)
+pte_t *___pte_offset_map(pmd_t *pmd, unsigned long addr, pmd_t *pmdvalp)
 {
 	unsigned long irqflags;
 	pmd_t pmdval;
@@ -306,7 +291,7 @@ pte_t *__pte_offset_map(pmd_t *pmd, unsigned long addr, pmd_t *pmdvalp)
 
 	if (pmdvalp)
 		*pmdvalp = pmdval;
-	if (unlikely(pmd_none(pmdval) || !pmd_present(pmdval)))
+	if (unlikely(pmd_none(pmdval) || pmd_is_migration_entry(pmdval)))
 		goto nomap;
 	if (unlikely(pmd_trans_huge(pmdval)))
 		goto nomap;
@@ -346,12 +331,13 @@ pte_t *pte_offset_map_rw_nolock(struct mm_struct *mm, pmd_t *pmd,
 }
 
 /*
- * pte_offset_map_lock(mm, pmd, addr, ptlp) is usually called with the pmd
- * pointer for addr, reached by walking down the mm's pgd, p4d, pud for addr:
- * either while holding mmap_lock or vma lock for read or for write; or in
- * truncate or rmap context, while holding file's i_mmap_lock or anon_vma lock
- * for read (or for write). In a few cases, it may be used with pmd pointing to
- * a pmd_t already copied to or constructed on the stack.
+ * pte_offset_map_lock(mm, pmd, addr, ptlp), and its internal implementation
+ * __pte_offset_map_lock() below, is usually called with the pmd pointer for
+ * addr, reached by walking down the mm's pgd, p4d, pud for addr: either while
+ * holding mmap_lock or vma lock for read or for write; or in truncate or rmap
+ * context, while holding file's i_mmap_lock or anon_vma lock for read (or for
+ * write). In a few cases, it may be used with pmd pointing to a pmd_t already
+ * copied to or constructed on the stack.
  *
  * When successful, it returns the pte pointer for addr, with its page table
  * kmapped if necessary (when CONFIG_HIGHPTE), and locked against concurrent
@@ -397,20 +383,13 @@ pte_t *pte_offset_map_rw_nolock(struct mm_struct *mm, pmd_t *pmd,
  * Note: "RO" / "RW" expresses the intended semantics, not that the *kmap* will
  * be read-only/read-write protected.
  *
- * Note that free_pgtables(), used after unmapping detached vmas or when exiting
- * the whole mm, does not take a page table lock before freeing a page table.
- *
- * As page table freeing itself is RCU-safe, page table readers can safely run
- * concurrently with page table teardown.
- *
- * However, writers CANNOT as, without a lock being held, nothing prevents
- * concurrent teardown.
- *
- * Also note that the PGD itself is freed at mmdrop() time, not under RCU - so
- * the walker must keep the mm alive either by pinning the mm or the VMA.
+ * Note that free_pgtables(), used after unmapping detached vmas, or when
+ * exiting the whole mm, does not take page table lock before freeing a page
+ * table, and may not use RCU at all: "outsiders" like khugepaged should avoid
+ * pte_offset_map() and co once the vma is detached from mm or mm_users is zero.
  */
-pte_t *pte_offset_map_lock(struct mm_struct *mm, pmd_t *pmd,
-			   unsigned long addr, spinlock_t **ptlp)
+pte_t *__pte_offset_map_lock(struct mm_struct *mm, pmd_t *pmd,
+			     unsigned long addr, spinlock_t **ptlp)
 {
 	spinlock_t *ptl;
 	pmd_t pmdval;

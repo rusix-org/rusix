@@ -8,7 +8,6 @@
 #include <dt-bindings/bus/moxtet.h>
 #include <linux/bitops.h>
 #include <linux/debugfs.h>
-#include <linux/hex.h>
 #include <linux/interrupt.h>
 #include <linux/module.h>
 #include <linux/moxtet.h>
@@ -145,7 +144,7 @@ moxtet_alloc_device(struct moxtet *moxtet)
 	if (!get_device(moxtet->dev))
 		return NULL;
 
-	dev = kzalloc_obj(*dev);
+	dev = kzalloc(sizeof(*dev), GFP_KERNEL);
 	if (!dev) {
 		put_device(moxtet->dev);
 		return NULL;

@@ -205,9 +205,7 @@ static int dwc3_ti_init(struct dwc3_am62 *am62)
 
 	dwc3_ti_writel(am62, USBSS_PHY_CONFIG, reg);
 
-	ret = clk_prepare_enable(am62->usb2_refclk);
-	if (ret)
-		return ret;
+	clk_prepare_enable(am62->usb2_refclk);
 
 	/* Set mode valid bit to indicate role is valid */
 	reg = dwc3_ti_readl(am62, USBSS_MODE_CONTROL);
@@ -294,6 +292,7 @@ static int dwc3_ti_probe(struct platform_device *pdev)
 	/* Setting up autosuspend */
 	pm_runtime_set_autosuspend_delay(dev, DWC3_AM62_AUTOSUSPEND_DELAY);
 	pm_runtime_use_autosuspend(dev);
+	pm_runtime_mark_last_busy(dev);
 	pm_runtime_put_autosuspend(dev);
 	return 0;
 
@@ -364,19 +363,14 @@ static int dwc3_ti_resume_common(struct device *dev)
 {
 	struct dwc3_am62 *am62 = dev_get_drvdata(dev);
 	u32 reg;
-	int ret;
 
 	reg = dwc3_ti_readl(am62, USBSS_DEBUG_CFG);
 	if (reg != USBSS_DEBUG_CFG_DISABLED) {
 		/* lost power/context */
-		ret = dwc3_ti_init(am62);
-		if (ret)
-			return ret;
+		dwc3_ti_init(am62);
 	} else {
 		dwc3_ti_writel(am62, USBSS_DEBUG_CFG, USBSS_DEBUG_CFG_OFF);
-		ret = clk_prepare_enable(am62->usb2_refclk);
-		if (ret)
-			return ret;
+		clk_prepare_enable(am62->usb2_refclk);
 	}
 
 	if (device_may_wakeup(dev)) {

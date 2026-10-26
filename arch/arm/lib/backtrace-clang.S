@@ -107,10 +107,8 @@ ENDPROC(c_backtrace)
 
 /*
  * Switches the current frame to be the frame for dump_stack.
- * (Only in case of current task using current registers)
  */
-		cmp	frame, fp
-		addeq	frame, sp, #24		@ switch to false frame
+		add	frame, sp, #24		@ switch to false frame
 for_each_frame:	tst	frame, mask		@ Check for address exceptions
 		bne	no_frame
 

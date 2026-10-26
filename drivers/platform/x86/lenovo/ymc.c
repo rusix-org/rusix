@@ -28,22 +28,6 @@ static bool force;
 module_param(force, bool, 0444);
 MODULE_PARM_DESC(force, "Force loading on boards without a convertible DMI chassis-type");
 
-static const struct dmi_system_id lenovo_ymc_nosupport_dmi_table[] = {
-	{
-		/*
-		 * Yoga Book 9 14IAH10: SW_TABLET_MODE is reported by the
-		 * yb9-kbdock driver.  Suppress lenovo-ymc on this machine to
-		 * avoid userspace seeing two input nodes that both advertise
-		 * the SW_TABLET_MODE capability.
-		 */
-		.matches = {
-			DMI_MATCH(DMI_SYS_VENDOR, "LENOVO"),
-			DMI_MATCH(DMI_PRODUCT_NAME, "83KJ"),
-		},
-	},
-	{ }
-};
-
 static const struct dmi_system_id allowed_chasis_types_dmi_table[] = {
 	{
 		.matches = {
@@ -123,9 +107,6 @@ static int lenovo_ymc_probe(struct wmi_device *wdev, const void *ctx)
 	struct input_dev *input_dev;
 	int err;
 
-	if (dmi_check_system(lenovo_ymc_nosupport_dmi_table))
-		return -ENODEV;
-
 	if (!dmi_check_system(allowed_chasis_types_dmi_table)) {
 		if (force)
 			dev_info(&wdev->dev, "Force loading Lenovo YMC support\n");
@@ -178,7 +159,6 @@ static struct wmi_driver lenovo_ymc_driver = {
 		.name = "lenovo-ymc",
 	},
 	.id_table = lenovo_ymc_wmi_id_table,
-	.min_event_size = sizeof(u32),
 	.probe = lenovo_ymc_probe,
 	.notify = lenovo_ymc_notify,
 };

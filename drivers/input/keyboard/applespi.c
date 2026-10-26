@@ -1259,6 +1259,7 @@ applespi_register_touchpad_device(struct applespi_data *applespi,
 
 	touchpad_input_dev->name = "Apple SPI Touchpad";
 	touchpad_input_dev->phys = "applespi/input1";
+	touchpad_input_dev->dev.parent = &applespi->spi->dev;
 	touchpad_input_dev->id.bustype = BUS_SPI;
 	touchpad_input_dev->id.vendor = SYNAPTICS_VENDOR_ID;
 	touchpad_input_dev->id.product =
@@ -1685,6 +1686,7 @@ static int applespi_probe(struct spi_device *spi)
 
 	applespi->keyboard_input_dev->name = "Apple SPI Keyboard";
 	applespi->keyboard_input_dev->phys = "applespi/input0";
+	applespi->keyboard_input_dev->dev.parent = &spi->dev;
 	applespi->keyboard_input_dev->id.bustype = BUS_SPI;
 
 	applespi->keyboard_input_dev->evbit[0] =
@@ -1902,7 +1904,7 @@ static int applespi_resume(struct device *dev)
 }
 
 static const struct acpi_device_id applespi_acpi_match[] = {
-	{ .id = "APP000D" },
+	{ "APP000D", 0 },
 	{ }
 };
 MODULE_DEVICE_TABLE(acpi, applespi_acpi_match);

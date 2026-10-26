@@ -59,7 +59,6 @@
 #include <xen/swiotlb-xen.h>
 #include <xen/balloon.h>
 #ifdef CONFIG_X86
-#include <asm/cpuid/api.h>
 #include <asm/xen/cpuid.h>
 #endif
 #include <xen/mem-reservation.h>
@@ -557,7 +556,7 @@ static void gnttab_add_deferred(grant_ref_t ref, struct page *page)
 	gfp_t gfp = (in_atomic() || irqs_disabled()) ? GFP_ATOMIC : GFP_KERNEL;
 	uint64_t leaked, deferred;
 
-	entry = kmalloc_obj(*entry, gfp);
+	entry = kmalloc(sizeof(*entry), gfp);
 	if (!page) {
 		unsigned long gfn = gnttab_interface->read_frame(ref);
 
@@ -832,7 +831,7 @@ int gnttab_setup_auto_xlat_frames(phys_addr_t addr)
 			&addr);
 		return -ENOMEM;
 	}
-	pfn = kzalloc_objs(pfn[0], max_nr_gframes);
+	pfn = kcalloc(max_nr_gframes, sizeof(pfn[0]), GFP_KERNEL);
 	if (!pfn) {
 		memunmap(vaddr);
 		return -ENOMEM;
@@ -863,20 +862,20 @@ EXPORT_SYMBOL_GPL(gnttab_free_auto_xlat_frames);
 
 int gnttab_pages_set_private(int nr_pages, struct page **pages)
 {
-#if BITS_PER_LONG < 64
 	int i;
 
 	for (i = 0; i < nr_pages; i++) {
+#if BITS_PER_LONG < 64
 		struct xen_page_foreign *foreign;
 
-		foreign = kzalloc_obj(*foreign);
+		foreign = kzalloc(sizeof(*foreign), GFP_KERNEL);
 		if (!foreign)
 			return -ENOMEM;
 
 		set_page_private(pages[i], (unsigned long)foreign);
-	}
 #endif
-	/* Data is stored in page->private on 64-bit */
+		SetPagePrivate(pages[i]);
+	}
 
 	return 0;
 }
@@ -1031,11 +1030,12 @@ void gnttab_pages_clear_private(int nr_pages, struct page **pages)
 	int i;
 
 	for (i = 0; i < nr_pages; i++) {
+		if (PagePrivate(pages[i])) {
 #if BITS_PER_LONG < 64
-		if (page_private(pages[i]))
 			kfree((void *)page_private(pages[i]));
 #endif
-		set_page_private(pages[i], 0);
+			ClearPagePrivate(pages[i]);
+		}
 	}
 }
 EXPORT_SYMBOL_GPL(gnttab_pages_clear_private);
@@ -1204,7 +1204,7 @@ void gnttab_foreach_grant_in_range(struct page *page,
 	unsigned int glen;
 	unsigned long xen_pfn;
 
-	len = min(PAGE_SIZE - offset, len);
+	len = min_t(unsigned int, PAGE_SIZE - offset, len);
 	goffset = xen_offset_in_page(offset);
 
 	xen_pfn = page_to_xen_pfn(page) + XEN_PFN_DOWN(offset);
@@ -1405,7 +1405,7 @@ static int gnttab_map_frames_v2(xen_pfn_t *frames, unsigned int nr_gframes)
 	/* No need for kzalloc as it is initialized in following hypercall
 	 * GNTTABOP_get_status_frames.
 	 */
-	sframes = kmalloc_array(nr_sframes, sizeof(*sframes), GFP_ATOMIC);
+	sframes = kmalloc_array(nr_sframes, sizeof(uint64_t), GFP_ATOMIC);
 	if (!sframes)
 		return -ENOMEM;
 
@@ -1477,7 +1477,7 @@ static int gnttab_map(unsigned int start_idx, unsigned int end_idx)
 	/* No need for kzalloc as it is initialized in following hypercall
 	 * GNTTABOP_setup_table.
 	 */
-	frames = kmalloc_objs(*frames, nr_gframes, GFP_ATOMIC);
+	frames = kmalloc_array(nr_gframes, sizeof(unsigned long), GFP_ATOMIC);
 	if (!frames)
 		return -ENOMEM;
 
@@ -1579,7 +1579,7 @@ static int gnttab_setup(void)
 	}
 	return gnttab_map(0, nr_grant_frames - 1);
 }
-#ifdef CONFIG_HIBERNATE_CALLBACKS
+
 int gnttab_resume(void)
 {
 	gnttab_request_version();
@@ -1592,7 +1592,6 @@ int gnttab_suspend(void)
 		gnttab_interface->unmap_frames();
 	return 0;
 }
-#endif
 
 static int gnttab_expand(unsigned int req_entries)
 {
@@ -1636,7 +1635,9 @@ int gnttab_init(void)
 	 */
 	max_nr_glist_frames = max_nr_grefs / RPP;
 
-	gnttab_list = kmalloc_objs(grant_ref_t *, max_nr_glist_frames);
+	gnttab_list = kmalloc_array(max_nr_glist_frames,
+				    sizeof(grant_ref_t *),
+				    GFP_KERNEL);
 	if (gnttab_list == NULL)
 		return -ENOMEM;
 

@@ -431,6 +431,7 @@ static int mtu3_probe(struct platform_device *pdev)
 	}
 
 	device_enable_async_suspend(dev);
+	pm_runtime_mark_last_busy(dev);
 	pm_runtime_put_autosuspend(dev);
 	pm_runtime_forbid(dev);
 
@@ -544,8 +545,7 @@ static int mtu3_suspend_common(struct device *dev, pm_message_t msg)
 
 	ssusb_phy_power_off(ssusb);
 	clk_bulk_disable_unprepare(BULK_CLKS_CNT, ssusb->clks);
-	if (device_may_wakeup(dev) && (ssusb->is_host || PMSG_IS_AUTO(msg)))
-		ssusb_wakeup_set(ssusb, true);
+	ssusb_wakeup_set(ssusb, true);
 	return 0;
 
 sleep_err:

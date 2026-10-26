@@ -150,35 +150,12 @@ void futex_wake_mark(struct wake_q_head *wake_q, struct futex_q *q)
 }
 
 /*
- * If requested, clear the robust list pending op and unlock the futex
- */
-static bool futex_robust_unlock(u32 __user *uaddr, unsigned int flags, void __user *pop)
-{
-	if (!(flags & FLAGS_ROBUST_UNLOCK))
-		return true;
-
-	/* First unlock the futex, which requires release semantics. */
-	scoped_user_write_access(uaddr, efault)
-		unsafe_atomic_store_release_user(0, uaddr, efault);
-
-	/*
-	 * Clear the pending list op now. If that fails, then the task is in
-	 * deeper trouble as the robust list head is usually part of the TLS.
-	 * The chance of survival is close to zero.
-	 */
-	return futex_robust_list_clear_pending(pop, flags);
-
-efault:
-	return false;
-}
-
-/*
  * Wake up waiters matching bitset queued on this futex (uaddr).
  */
-int futex_wake(u32 __user *uaddr, unsigned int flags, void __user *pop, int nr_wake, u32 bitset)
+int futex_wake(u32 __user *uaddr, unsigned int flags, int nr_wake, u32 bitset)
 {
-	union futex_key key = FUTEX_KEY_INIT;
 	struct futex_q *this, *next;
+	union futex_key key = FUTEX_KEY_INIT;
 	DEFINE_WAKE_Q(wake_q);
 	int ret;
 
@@ -188,9 +165,6 @@ int futex_wake(u32 __user *uaddr, unsigned int flags, void __user *pop, int nr_w
 	ret = get_futex_key(uaddr, flags, &key, FUTEX_READ);
 	if (unlikely(ret != 0))
 		return ret;
-
-	if (!futex_robust_unlock(uaddr, flags, pop))
-		return -EFAULT;
 
 	if ((flags & FLAGS_STRICT) && !nr_wake)
 		return 0;
@@ -383,7 +357,7 @@ void futex_do_wait(struct futex_q *q, struct hrtimer_sleeper *timeout)
 		 * flagged for rescheduling. Only call schedule if there
 		 * is no timeout, or if it has yet to expire.
 		 */
-		if (!timeout || hrtimer_sleeper_task_get(timeout))
+		if (!timeout || timeout->task)
 			schedule();
 	}
 	__set_current_state(TASK_RUNNING);
@@ -492,7 +466,6 @@ retry:
 			}
 
 			futex_q_unlock(hb);
-			__release(q->lock_ptr);
 		}
 		__set_current_state(TASK_RUNNING);
 
@@ -539,7 +512,7 @@ retry:
 static void futex_sleep_multiple(struct futex_vector *vs, unsigned int count,
 				 struct hrtimer_sleeper *to)
 {
-	if (to && !hrtimer_sleeper_task_get(to))
+	if (to && !to->task)
 		return;
 
 	for (; count; count--, vs++) {
@@ -590,7 +563,7 @@ int futex_wait_multiple(struct futex_vector *vs, unsigned int count,
 		if (ret >= 0)
 			return ret;
 
-		if (to && !hrtimer_sleeper_task_get(to))
+		if (to && !to->task)
 			return -ETIMEDOUT;
 		else if (signal_pending(current))
 			return -ERESTARTSYS;
@@ -660,7 +633,6 @@ retry_private:
 
 		if (ret) {
 			futex_q_unlock(hb);
-			__release(q->lock_ptr);
 
 			ret = get_user(uval, uaddr);
 			if (ret)
@@ -674,13 +646,11 @@ retry_private:
 
 		if (uval != val) {
 			futex_q_unlock(hb);
-			__release(q->lock_ptr);
 			return -EWOULDBLOCK;
 		}
 
 		if (key2 && futex_match(&q->key, key2)) {
 			futex_q_unlock(hb);
-			__release(q->lock_ptr);
 			return -EINVAL;
 		}
 
@@ -725,7 +695,7 @@ retry:
 	if (!futex_unqueue(&q))
 		return 0;
 
-	if (to && !hrtimer_sleeper_task_get(to))
+	if (to && !to->task)
 		return -ETIMEDOUT;
 
 	/*
@@ -773,11 +743,12 @@ int futex_wait(u32 __user *uaddr, unsigned int flags, u32 val, ktime_t *abs_time
 static long futex_wait_restart(struct restart_block *restart)
 {
 	u32 __user *uaddr = restart->futex.uaddr;
-	ktime_t *tp = NULL;
+	ktime_t t, *tp = NULL;
 
-	if (restart->futex.flags & FLAGS_HAS_TIMEOUT)
-		tp = &restart->futex.time;
-
+	if (restart->futex.flags & FLAGS_HAS_TIMEOUT) {
+		t = restart->futex.time;
+		tp = &t;
+	}
 	restart->fn = do_no_restart_syscall;
 
 	return (long)futex_wait(uaddr, restart->futex.flags,

@@ -181,7 +181,6 @@ static void ops_exit_rtnl_list(const struct list_head *ops_list,
 				ops->exit_rtnl(net, &dev_kill_list);
 		}
 
-		unregister_netdevice_queue_many_net(net, &dev_kill_list);
 		__rtnl_net_unlock(net);
 	}
 
@@ -396,7 +395,6 @@ static __net_init void preinit_net_sysctl(struct net *net)
 	net->core.sysctl_optmem_max = 128 * 1024;
 	net->core.sysctl_txrehash = SOCK_TXREHASH_ENABLED;
 	net->core.sysctl_tstamp_allow_data = 1;
-	net->core.sysctl_txq_reselection = msecs_to_jiffies(1000);
 }
 
 /* init code that must occur even if setup_net() is not called. */
@@ -406,7 +404,7 @@ static __net_init void preinit_net(struct net *net, struct user_namespace *user_
 	ref_tracker_dir_init(&net->refcnt_tracker, 128, "net_refcnt");
 	ref_tracker_dir_init(&net->notrefcnt_tracker, 128, "net_notrefcnt");
 
-	net->hash_mix = get_random_u32();
+	get_random_bytes(&net->hash_mix, sizeof(u32));
 	net->dev_base_seq = 1;
 	net->user_ns = user_ns;
 
@@ -417,9 +415,6 @@ static __net_init void preinit_net(struct net *net, struct user_namespace *user_
 #ifdef CONFIG_DEBUG_NET_SMALL_RTNL
 	mutex_init(&net->rtnl_mutex);
 	lock_set_cmp_fn(&net->rtnl_mutex, rtnl_net_lock_cmp_fn, NULL);
-	INIT_WORK(&net->rtnl_work, rtnl_net_work_func);
-	INIT_LIST_HEAD(&net->dev_unreg_head);
-	spin_lock_init(&net->dev_unreg_lock);
 #endif
 
 	INIT_LIST_HEAD(&net->ptype_all);
@@ -437,7 +432,7 @@ static __net_init int setup_net(struct net *net)
 	LIST_HEAD(net_exit_list);
 	int error = 0;
 
-	net->net_cookie = ns_tree_gen_id(net);
+	net->net_cookie = ns_tree_gen_id(&net->ns);
 
 	list_for_each_entry(ops, &pernet_list, list) {
 		error = ops_init(ops, net);
@@ -489,7 +484,7 @@ static struct net *net_alloc(void)
 		goto out_free;
 
 #ifdef CONFIG_KEYS
-	net->key_domain = kzalloc_obj(struct key_tag);
+	net->key_domain = kzalloc(sizeof(struct key_tag), GFP_KERNEL);
 	if (!net->key_domain)
 		goto out_free_2;
 	refcount_set(&net->key_domain->usage, 1);
@@ -541,10 +536,12 @@ void net_passive_dec(struct net *net)
 	}
 }
 
-void net_drop_ns(struct ns_common *ns)
+void net_drop_ns(void *p)
 {
-	if (ns)
-		net_passive_dec(to_net_ns(ns));
+	struct net *net = (struct net *)p;
+
+	if (net)
+		net_passive_dec(net);
 }
 
 struct net *copy_net_ns(u64 flags,
@@ -626,10 +623,9 @@ void net_ns_get_ownership(const struct net *net, kuid_t *uid, kgid_t *gid)
 }
 EXPORT_SYMBOL_GPL(net_ns_get_ownership);
 
-static void unhash_nsid(struct net *last)
+static void unhash_nsid(struct net *net, struct net *last)
 {
-	struct net *tmp, *peer;
-
+	struct net *tmp;
 	/* This function is only called from cleanup_net() work,
 	 * and this work is the only process, that may delete
 	 * a net from net_namespace_list. So, when the below
@@ -637,26 +633,22 @@ static void unhash_nsid(struct net *last)
 	 * use for_each_net_rcu() or net_rwsem.
 	 */
 	for_each_net(tmp) {
-		int id = 0;
+		int id;
 
 		spin_lock(&tmp->nsid_lock);
-		while ((peer = idr_get_next(&tmp->netns_ids, &id))) {
-			int curr_id = id;
-
-			id++;
-			if (!peer->is_dying)
-				continue;
-
-			idr_remove(&tmp->netns_ids, curr_id);
-			spin_unlock(&tmp->nsid_lock);
-			rtnl_net_notifyid(tmp, RTM_DELNSID, curr_id, 0, NULL,
-					  GFP_KERNEL);
-			spin_lock(&tmp->nsid_lock);
-		}
+		id = __peernet2id(tmp, net);
+		if (id >= 0)
+			idr_remove(&tmp->netns_ids, id);
 		spin_unlock(&tmp->nsid_lock);
+		if (id >= 0)
+			rtnl_net_notifyid(tmp, RTM_DELNSID, id, 0, NULL,
+					  GFP_KERNEL);
 		if (tmp == last)
 			break;
 	}
+	spin_lock(&net->nsid_lock);
+	idr_destroy(&net->netns_ids);
+	spin_unlock(&net->nsid_lock);
 }
 
 static LLIST_HEAD(cleanup_list);
@@ -681,7 +673,6 @@ static void cleanup_net(struct work_struct *work)
 	llist_for_each_entry(net, net_kill_list, cleanup_list) {
 		ns_tree_remove(net);
 		list_del_rcu(&net->list);
-		net->is_dying = true;
 	}
 	/* Cache last net. After we unlock rtnl, no one new net
 	 * added to net_namespace_list can assign nsid pointer
@@ -696,10 +687,8 @@ static void cleanup_net(struct work_struct *work)
 	last = list_last_entry(&net_namespace_list, struct net, list);
 	up_write(&net_rwsem);
 
-	unhash_nsid(last);
-
 	llist_for_each_entry(net, net_kill_list, cleanup_list) {
-		idr_destroy(&net->netns_ids);
+		unhash_nsid(net, last);
 		list_add_tail(&net->exit_list, &net_exit_list);
 	}
 
@@ -1233,12 +1222,14 @@ static void __init netns_ipv4_struct_check(void)
 				      sysctl_tcp_wmem);
 	CACHELINE_ASSERT_GROUP_MEMBER(struct netns_ipv4, netns_ipv4_read_tx,
 				      sysctl_ip_fwd_use_pmtu);
+	CACHELINE_ASSERT_GROUP_SIZE(struct netns_ipv4, netns_ipv4_read_tx, 33);
+
+	/* TXRX readonly hotpath cache lines */
+	CACHELINE_ASSERT_GROUP_MEMBER(struct netns_ipv4, netns_ipv4_read_txrx,
+				      sysctl_tcp_moderate_rcvbuf);
+	CACHELINE_ASSERT_GROUP_SIZE(struct netns_ipv4, netns_ipv4_read_txrx, 1);
 
 	/* RX readonly hotpath cache line */
-	CACHELINE_ASSERT_GROUP_MEMBER(struct netns_ipv4, netns_ipv4_read_rx,
-				      sysctl_tcp_moderate_rcvbuf);
-	CACHELINE_ASSERT_GROUP_MEMBER(struct netns_ipv4, netns_ipv4_read_rx,
-				      sysctl_tcp_rcvbuf_low_rtt);
 	CACHELINE_ASSERT_GROUP_MEMBER(struct netns_ipv4, netns_ipv4_read_rx,
 				      sysctl_ip_early_demux);
 	CACHELINE_ASSERT_GROUP_MEMBER(struct netns_ipv4, netns_ipv4_read_rx,
@@ -1249,6 +1240,7 @@ static void __init netns_ipv4_struct_check(void)
 				      sysctl_tcp_reordering);
 	CACHELINE_ASSERT_GROUP_MEMBER(struct netns_ipv4, netns_ipv4_read_rx,
 				      sysctl_tcp_rmem);
+	CACHELINE_ASSERT_GROUP_SIZE(struct netns_ipv4, netns_ipv4_read_rx, 22);
 }
 #endif
 

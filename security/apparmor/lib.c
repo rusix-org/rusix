@@ -20,8 +20,8 @@
 #include "include/perms.h"
 #include "include/policy.h"
 
-const struct aa_perms nullperms;
-const struct aa_perms allperms = { .allow = ALL_PERMS_MASK,
+struct aa_perms nullperms;
+struct aa_perms allperms = { .allow = ALL_PERMS_MASK,
 			     .quiet = ALL_PERMS_MASK,
 			     .hide = ALL_PERMS_MASK };
 
@@ -30,7 +30,7 @@ struct val_table_ent {
 	int value;
 };
 
-static const struct val_table_ent debug_values_table[] = {
+static struct val_table_ent debug_values_table[] = {
 	{ "N", DEBUG_NONE },
 	{ "none", DEBUG_NONE },
 	{ "n", DEBUG_NONE },
@@ -44,16 +44,13 @@ static const struct val_table_ent debug_values_table[] = {
 	{ "domain", DEBUG_DOMAIN },
 	{ "policy", DEBUG_POLICY },
 	{ "interface", DEBUG_INTERFACE },
-	{ "unpack", DEBUG_UNPACK },
-	{ "tags", DEBUG_TAGS },
 	{ NULL, 0 }
 };
 
-static const struct val_table_ent *
-val_table_find_ent(const struct val_table_ent *table,
-		   const char *name, size_t len)
+static struct val_table_ent *val_table_find_ent(struct val_table_ent *table,
+						const char *name, size_t len)
 {
-	const struct val_table_ent *entry;
+	struct val_table_ent *entry;
 
 	for (entry = table; entry->str != NULL; entry++) {
 		if (strncmp(entry->str, name, len) == 0 &&
@@ -65,7 +62,7 @@ val_table_find_ent(const struct val_table_ent *table,
 
 int aa_parse_debug_params(const char *str)
 {
-	const struct val_table_ent *ent;
+	struct val_table_ent *ent;
 	const char *next;
 	int val = 0;
 
@@ -121,18 +118,18 @@ int aa_print_debug_params(char *buffer)
 
 bool aa_resize_str_table(struct aa_str_table *t, int newsize, gfp_t gfp)
 {
-	struct aa_str_table_ent *n;
+	char **n;
 	int i;
 
 	if (t->size == newsize)
 		return true;
-	n = kzalloc_objs(*n, newsize, gfp);
+	n = kcalloc(newsize, sizeof(*n), gfp);
 	if (!n)
 		return false;
 	for (i = 0; i < min(t->size, newsize); i++)
 		n[i] = t->table[i];
 	for (; i < t->size; i++)
-		kfree_sensitive(t->table[i].strs);
+		kfree_sensitive(t->table[i]);
 	if (newsize > t->size)
 		memset(&n[t->size], 0, (newsize-t->size)*sizeof(*n));
 	kfree_sensitive(t->table);
@@ -143,10 +140,10 @@ bool aa_resize_str_table(struct aa_str_table *t, int newsize, gfp_t gfp)
 }
 
 /**
- * aa_destroy_str_table - free entries str table
+ * aa_free_str_table - free entries str table
  * @t: the string table to free  (MAYBE NULL)
  */
-void aa_destroy_str_table(struct aa_str_table *t)
+void aa_free_str_table(struct aa_str_table *t)
 {
 	int i;
 
@@ -155,7 +152,7 @@ void aa_destroy_str_table(struct aa_str_table *t)
 			return;
 
 		for (i = 0; i < t->size; i++)
-			kfree_sensitive(t->table[i].strs);
+			kfree_sensitive(t->table[i]);
 		kfree_sensitive(t->table);
 		t->table = NULL;
 		t->size = 0;
@@ -236,7 +233,7 @@ __counted char *aa_str_alloc(int size, gfp_t gfp)
 {
 	struct counted_str *str;
 
-	str = kmalloc_flex(*str, name, size, gfp);
+	str = kmalloc(struct_size(str, name, size), gfp);
 	if (!str)
 		return NULL;
 
@@ -361,16 +358,8 @@ void aa_audit_perm_mask(struct audit_buffer *ab, u32 mask, const char *chrs,
  *
  * TODO: split into profile and ns based flags for when accumulating perms
  */
-void aa_apply_modes_to_perms(const struct aa_profile *profile,
-			     struct aa_perms *perms)
+void aa_apply_modes_to_perms(struct aa_profile *profile, struct aa_perms *perms)
 {
-	if (KILL_MODE(profile))
-		perms->kill = ~perms->allow;
-	else if (COMPLAIN_MODE(profile))
-		perms->complain |= ~(perms->allow | perms->deny);
-	else if (USER_MODE(profile))
-		perms->prompt |= ~(perms->allow | perms->deny);
-
 	switch (AUDIT_MODE(profile)) {
 	case AUDIT_ALL:
 		perms->audit = ALL_PERMS_MASK;
@@ -382,15 +371,19 @@ void aa_apply_modes_to_perms(const struct aa_profile *profile,
 		perms->audit = 0;
 		fallthrough;
 	case AUDIT_QUIET_DENIED:
-		perms->quiet |= ~perms->allow;
-		break;
-	case AUDIT_QUIET_ALLOWED:
-		perms->quiet |= perms->complain | perms->allow;
+		perms->quiet = ALL_PERMS_MASK;
 		break;
 	}
+
+	if (KILL_MODE(profile))
+		perms->kill = ALL_PERMS_MASK;
+	else if (COMPLAIN_MODE(profile))
+		perms->complain = ALL_PERMS_MASK;
+	else if (USER_MODE(profile))
+		perms->prompt = ALL_PERMS_MASK;
 }
 
-void aa_profile_match_label(const struct aa_profile *profile,
+void aa_profile_match_label(struct aa_profile *profile,
 			    struct aa_ruleset *rules,
 			    struct aa_label *label,
 			    int type, u32 request, struct aa_perms *perms)
@@ -422,11 +415,11 @@ void aa_profile_match_label(const struct aa_profile *profile,
  *       error code will indicate whether there was an explicit deny
  *	 with a positive value.
  */
-int aa_check_perms(struct aa_profile *profile, const struct aa_perms *perms,
+int aa_check_perms(struct aa_profile *profile, struct aa_perms *perms,
 		   u32 request, struct apparmor_audit_data *ad,
 		   void (*cb)(struct audit_buffer *, void *))
 {
-	int error;
+	int type, error;
 	u32 denied = request & (~perms->allow | perms->deny);
 
 	if (likely(!denied)) {
@@ -435,9 +428,17 @@ int aa_check_perms(struct aa_profile *profile, const struct aa_perms *perms,
 		if (!request || !ad)
 			return 0;
 
+		type = AUDIT_APPARMOR_AUDIT;
 		error = 0;
 	} else {
 		error = -EACCES;
+
+		if (denied & perms->kill)
+			type = AUDIT_APPARMOR_KILL;
+		else if (denied == (denied & perms->complain))
+			type = AUDIT_APPARMOR_ALLOWED;
+		else
+			type = AUDIT_APPARMOR_DENIED;
 
 		if (denied == (denied & perms->hide))
 			error = -ENOENT;
@@ -446,8 +447,6 @@ int aa_check_perms(struct aa_profile *profile, const struct aa_perms *perms,
 		if (!ad || !denied)
 			return error;
 	}
-
-	int type = aa_select_audit_type(denied, perms);
 
 	if (ad) {
 		ad->subj_label = &profile->label;
@@ -511,4 +510,3 @@ void aa_policy_destroy(struct aa_policy *policy)
 	/* don't free name as its a subset of hname */
 	aa_put_str(policy->hname);
 }
-

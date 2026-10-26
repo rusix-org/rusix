@@ -76,11 +76,11 @@
  * the use of a binary-search tree, where each node contains at least
  * the following members:
  *
- *   typedef u64 sparsebit_idx_t;
- *   typedef u64 sparsebit_num_t;
+ *   typedef uint64_t sparsebit_idx_t;
+ *   typedef uint64_t sparsebit_num_t;
  *
  *   sparsebit_idx_t idx;
- *   u32 mask;
+ *   uint32_t mask;
  *   sparsebit_num_t num_after;
  *
  * The idx member contains the bit index of the first bit described by this
@@ -162,7 +162,7 @@
 
 #define DUMP_LINE_MAX 100 /* Does not include indent amount */
 
-typedef u32 mask_t;
+typedef uint32_t mask_t;
 #define MASK_BITS (sizeof(mask_t) * CHAR_BIT)
 
 struct node {
@@ -2056,9 +2056,9 @@ unsigned char get8(void)
 	return ch;
 }
 
-u64 get64(void)
+uint64_t get64(void)
 {
-	u64 x;
+	uint64_t x;
 
 	x = get8();
 	x = (x << 8) | get8();
@@ -2074,9 +2074,9 @@ int main(void)
 {
 	s = sparsebit_alloc();
 	for (;;) {
-		u8 op = get8() & 0xf;
-		u64 first = get64();
-		u64 last = get64();
+		uint8_t op = get8() & 0xf;
+		uint64_t first = get64();
+		uint64_t last = get64();
 
 		operate(op, first, last);
 	}

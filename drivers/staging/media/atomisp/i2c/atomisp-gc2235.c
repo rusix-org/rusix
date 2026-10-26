@@ -433,7 +433,7 @@ static int power_up(struct v4l2_subdev *sd)
 			goto fail_power;
 	}
 
-	fsleep(5000);
+	msleep(5);
 	return 0;
 
 fail_clk:
@@ -491,7 +491,7 @@ static int gc2235_s_power(struct v4l2_subdev *sd, int on)
 	return ret;
 }
 
-static int gc2235_startup(struct v4l2_subdev *sd)
+static int startup(struct v4l2_subdev *sd)
 {
 	struct gc2235_device *dev = to_gc2235_sensor(sd);
 	struct i2c_client *client = v4l2_get_subdevdata(sd);
@@ -520,7 +520,6 @@ static int gc2235_startup(struct v4l2_subdev *sd)
 }
 
 static int gc2235_set_fmt(struct v4l2_subdev *sd,
-			  const struct v4l2_subdev_client_info *ci,
 			  struct v4l2_subdev_state *sd_state,
 			  struct v4l2_subdev_format *format)
 {
@@ -557,7 +556,7 @@ static int gc2235_set_fmt(struct v4l2_subdev *sd,
 		return 0;
 	}
 
-	ret = gc2235_startup(sd);
+	ret = startup(sd);
 	if (ret) {
 		dev_err(&client->dev, "gc2235 startup err\n");
 		goto err;
@@ -795,7 +794,7 @@ static int gc2235_probe(struct i2c_client *client)
 	int ret;
 	unsigned int i;
 
-	dev = kzalloc_obj(*dev);
+	dev = kzalloc(sizeof(*dev), GFP_KERNEL);
 	if (!dev)
 		return -ENOMEM;
 
@@ -858,8 +857,8 @@ err_unregister_subdev:
 }
 
 static const struct acpi_device_id gc2235_acpi_match[] = {
-	{ .id = "INT33F8" },
-	{ }
+	{ "INT33F8" },
+	{},
 };
 MODULE_DEVICE_TABLE(acpi, gc2235_acpi_match);
 

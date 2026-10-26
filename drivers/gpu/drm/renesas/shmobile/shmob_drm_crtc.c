@@ -21,14 +21,15 @@
 #include <drm/drm_bridge_connector.h>
 #include <drm/drm_crtc.h>
 #include <drm/drm_crtc_helper.h>
-#include <drm/drm_encoder.h>
 #include <drm/drm_fb_dma_helper.h>
 #include <drm/drm_fourcc.h>
 #include <drm/drm_framebuffer.h>
 #include <drm/drm_gem_dma_helper.h>
 #include <drm/drm_modeset_helper.h>
 #include <drm/drm_modeset_helper_vtables.h>
+#include <drm/drm_panel.h>
 #include <drm/drm_probe_helper.h>
+#include <drm/drm_simple_kms_helper.h>
 #include <drm/drm_vblank.h>
 
 #include <video/videomode.h>
@@ -197,7 +198,7 @@ static inline struct shmob_drm_crtc *to_shmob_crtc(struct drm_crtc *crtc)
 }
 
 static void shmob_drm_crtc_atomic_enable(struct drm_crtc *crtc,
-					 struct drm_atomic_commit *state)
+					 struct drm_atomic_state *state)
 {
 	struct shmob_drm_crtc *scrtc = to_shmob_crtc(crtc);
 	struct shmob_drm_device *sdev = to_shmob_device(crtc->dev);
@@ -255,7 +256,7 @@ static void shmob_drm_crtc_atomic_enable(struct drm_crtc *crtc,
 }
 
 static void shmob_drm_crtc_atomic_disable(struct drm_crtc *crtc,
-					  struct drm_atomic_commit *state)
+					  struct drm_atomic_state *state)
 {
 	struct shmob_drm_crtc *scrtc = to_shmob_crtc(crtc);
 	struct shmob_drm_device *sdev = to_shmob_device(crtc->dev);
@@ -278,7 +279,7 @@ static void shmob_drm_crtc_atomic_disable(struct drm_crtc *crtc,
 }
 
 static void shmob_drm_crtc_atomic_flush(struct drm_crtc *crtc,
-					struct drm_atomic_commit *state)
+					struct drm_atomic_state *state)
 {
 	struct drm_pending_vblank_event *event;
 	struct drm_device *dev = crtc->dev;
@@ -363,7 +364,7 @@ static void shmob_drm_disable_vblank(struct drm_crtc *crtc)
 }
 
 static const struct drm_crtc_funcs crtc_funcs = {
-	.atomic_create_state = drm_atomic_helper_crtc_create_state,
+	.reset = drm_atomic_helper_crtc_reset,
 	.destroy = drm_crtc_cleanup,
 	.set_config = drm_atomic_helper_set_config,
 	.page_flip = shmob_drm_crtc_page_flip,
@@ -435,10 +436,6 @@ static const struct drm_encoder_helper_funcs encoder_helper_funcs = {
 	.mode_fixup = shmob_drm_encoder_mode_fixup,
 };
 
-static const struct drm_encoder_funcs shmob_encoder_funcs = {
-	.destroy = drm_encoder_cleanup,
-};
-
 /* -----------------------------------------------------------------------------
  * Encoder
  */
@@ -446,12 +443,13 @@ static const struct drm_encoder_funcs shmob_encoder_funcs = {
 int shmob_drm_encoder_create(struct shmob_drm_device *sdev)
 {
 	struct drm_encoder *encoder = &sdev->encoder;
+	struct drm_bridge *bridge;
 	int ret;
 
 	encoder->possible_crtcs = 1;
 
-	ret = drm_encoder_init(&sdev->ddev, encoder, &shmob_encoder_funcs,
-			       DRM_MODE_ENCODER_DPI, NULL);
+	ret = drm_simple_encoder_init(&sdev->ddev, encoder,
+				      DRM_MODE_ENCODER_DPI);
 	if (ret < 0)
 		return ret;
 
@@ -461,8 +459,7 @@ int shmob_drm_encoder_create(struct shmob_drm_device *sdev)
 	}
 
 	/* Create a panel bridge */
-	struct drm_bridge *bridge __free(drm_bridge_put) =
-		of_drm_get_bridge_by_endpoint(sdev->dev->of_node, 0, 0);
+	bridge = devm_drm_of_get_bridge(sdev->dev, sdev->dev->of_node, 0, 0);
 	if (IS_ERR(bridge))
 		return PTR_ERR(bridge);
 
@@ -554,7 +551,7 @@ shmob_drm_connector_init(struct shmob_drm_device *sdev,
 		return ERR_PTR(-EINVAL);
 	}
 
-	scon = kzalloc_obj(*scon);
+	scon = kzalloc(sizeof(*scon), GFP_KERNEL);
 	if (!scon)
 		return ERR_PTR(-ENOMEM);
 
@@ -586,13 +583,6 @@ shmob_drm_connector_init(struct shmob_drm_device *sdev,
 
 	drm_connector_helper_add(connector, &connector_helper_funcs);
 
-	ret = drm_connector_attach_encoder(connector, encoder);
-	if (ret < 0) {
-		drm_connector_cleanup(connector);
-		kfree(scon);
-		return ERR_PTR(ret);
-	}
-
 	return connector;
 }
 
@@ -604,6 +594,7 @@ int shmob_drm_connector_create(struct shmob_drm_device *sdev,
 			       struct drm_encoder *encoder)
 {
 	struct drm_connector *connector;
+	int ret;
 
 	if (sdev->pdata)
 		connector = shmob_drm_connector_init(sdev, encoder);
@@ -615,9 +606,17 @@ int shmob_drm_connector_create(struct shmob_drm_device *sdev,
 		return PTR_ERR(connector);
 	}
 
+	ret = drm_connector_attach_encoder(connector, encoder);
+	if (ret < 0)
+		goto error;
+
 	connector->dpms = DRM_MODE_DPMS_OFF;
 
 	sdev->connector = connector;
 
 	return 0;
+
+error:
+	drm_connector_cleanup(connector);
+	return ret;
 }

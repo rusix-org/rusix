@@ -42,7 +42,6 @@
 #include <linux/memblock.h>
 #include <linux/swiotlb.h>
 #include <linux/seq_buf.h>
-#include <linux/sched/cputime.h>
 
 #include <asm/mmu.h>
 #include <asm/processor.h>
@@ -85,6 +84,9 @@ DEFINE_STATIC_KEY_FALSE(shared_processor);
 EXPORT_SYMBOL(shared_processor);
 
 #ifdef CONFIG_PARAVIRT_TIME_ACCOUNTING
+struct static_key paravirt_steal_enabled;
+struct static_key paravirt_steal_rq_enabled;
+
 static bool steal_acc = true;
 static int __init parse_no_stealacc(char *arg)
 {
@@ -682,8 +684,7 @@ enum get_iov_fw_value_index {
 	WDW_SIZE      = 3     /*  Get Window Size */
 };
 
-static resource_size_t pseries_get_iov_fw_value(const struct pci_dev *dev,
-						int resno,
+static resource_size_t pseries_get_iov_fw_value(struct pci_dev *dev, int resno,
 						enum get_iov_fw_value_index value)
 {
 	const int *indexes;
@@ -813,7 +814,7 @@ static void pseries_pci_fixup_iov_resources(struct pci_dev *pdev)
 		pseries_disable_sriov_resources(pdev);
 }
 
-static resource_size_t pseries_pci_iov_resource_alignment(const struct pci_dev *pdev,
+static resource_size_t pseries_pci_iov_resource_alignment(struct pci_dev *pdev,
 							  int resno)
 {
 	const __be32 *reg;
@@ -876,9 +877,9 @@ static void __init pSeries_setup_arch(void)
 			static_branch_enable(&shared_processor);
 			pv_spinlocks_init();
 #ifdef CONFIG_PARAVIRT_TIME_ACCOUNTING
-			static_branch_inc(&paravirt_steal_enabled);
+			static_key_slow_inc(&paravirt_steal_enabled);
 			if (steal_acc)
-				static_branch_inc(&paravirt_steal_rq_enabled);
+				static_key_slow_inc(&paravirt_steal_rq_enabled);
 #endif
 		}
 

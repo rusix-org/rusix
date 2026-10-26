@@ -52,11 +52,11 @@ find_acceptable_alias(struct dentry *result,
 
 	inode = result->d_inode;
 	spin_lock(&inode->i_lock);
-	for_each_alias(dentry, inode) {
-		if (!dget_alias_ilocked(dentry))
-			continue;
+	hlist_for_each_entry(dentry, &inode->i_dentry, d_u.d_alias) {
+		dget(dentry);
 		spin_unlock(&inode->i_lock);
-		dput(toput);
+		if (toput)
+			dput(toput);
 		if (dentry != result && acceptable(context, dentry)) {
 			dput(result);
 			return dentry;
@@ -66,7 +66,8 @@ find_acceptable_alias(struct dentry *result,
 	}
 	spin_unlock(&inode->i_lock);
 
-	dput(toput);
+	if (toput)
+		dput(toput);
 	return NULL;
 }
 
@@ -129,12 +130,12 @@ static struct dentry *reconnect_one(struct vfsmount *mnt,
 		parent = mnt->mnt_sb->s_export_op->get_parent(dentry);
 
 	if (IS_ERR(parent)) {
-		dprintk("get_parent of %llu failed, err %ld\n",
+		dprintk("get_parent of %lu failed, err %ld\n",
 			dentry->d_inode->i_ino, PTR_ERR(parent));
 		return parent;
 	}
 
-	dprintk("%s: find name of %llu in %llu\n", __func__,
+	dprintk("%s: find name of %lu in %lu\n", __func__,
 		dentry->d_inode->i_ino, parent->d_inode->i_ino);
 	err = exportfs_get_name(mnt, parent, nbuf, dentry);
 	if (err == -ENOENT)
@@ -252,8 +253,7 @@ static bool filldir_one(struct dir_context *ctx, const char *name, int len,
 		container_of(ctx, struct getdents_callback, ctx);
 
 	buf->sequence++;
-	if (buf->ino == ino && len <= NAME_MAX &&
-	    !name_is_dot_dotdot(name, len)) {
+	if (buf->ino == ino && len <= NAME_MAX && !is_dot_dotdot(name, len)) {
 		memcpy(buf->name, name, len);
 		buf->name[len] = '\0';
 		buf->found = 1;

@@ -279,7 +279,7 @@ int file_reader(__u64 offset, char *buf, int len, void *arg)
 	return pread(fd, buf, len, offset);
 }
 
-/* Sanity checks are performed after reading each header version below. */
+/* XXX Need to sanity-check the values read from the header */
 
 int read_cow_header(int (*reader)(__u64, char *, int, void *), void *arg,
 		    __u32 *version_out, char **backing_file_out,
@@ -325,12 +325,6 @@ int read_cow_header(int (*reader)(__u64, char *, int, void *), void *arg,
 		*sectorsize_out = header->v1.sectorsize;
 		*bitmap_offset_out = sizeof(header->v1);
 		*align_out = *sectorsize_out;
-		if (!memchr(header->v1.backing_file, '\0',
-			    sizeof(header->v1.backing_file))) {
-			cow_printf("%s - V1 backing_file not terminated\n",
-				   __func__);
-			goto out;
-		}
 		file = header->v1.backing_file;
 	}
 	else if (version == 2) {
@@ -344,12 +338,6 @@ int read_cow_header(int (*reader)(__u64, char *, int, void *), void *arg,
 		*sectorsize_out = be32toh(header->v2.sectorsize);
 		*bitmap_offset_out = sizeof(header->v2);
 		*align_out = *sectorsize_out;
-		if (!memchr(header->v2.backing_file, '\0',
-			    sizeof(header->v2.backing_file))) {
-			cow_printf("%s - V2 backing_file not terminated\n",
-				   __func__);
-			goto out;
-		}
 		file = header->v2.backing_file;
 	}
 	/* This is very subtle - see above at union cow_header definition */
@@ -366,15 +354,8 @@ int read_cow_header(int (*reader)(__u64, char *, int, void *), void *arg,
 		if (*align_out == 0) {
 			cow_printf("read_cow_header - invalid COW header, "
 				   "align == 0\n");
-			goto out;
 		}
 		*bitmap_offset_out = ROUND_UP(sizeof(header->v3), *align_out);
-		if (!memchr(header->v3.backing_file, '\0',
-			    sizeof(header->v3.backing_file))) {
-			cow_printf("%s - V3 backing_file not terminated\n",
-				   __func__);
-			goto out;
-		}
 		file = header->v3.backing_file;
 	}
 	else if (version == 3) {
@@ -404,25 +385,12 @@ int read_cow_header(int (*reader)(__u64, char *, int, void *), void *arg,
 		if (*align_out == 0) {
 			cow_printf("read_cow_header - invalid COW header, "
 				   "align == 0\n");
-			goto out;
 		}
 		*bitmap_offset_out = ROUND_UP(sizeof(header->v3_b), *align_out);
-		if (!memchr(header->v3_b.backing_file, '\0',
-			    sizeof(header->v3_b.backing_file))) {
-			cow_printf("%s - V3 backing_file not terminated\n",
-				   __func__);
-			goto out;
-		}
 		file = header->v3_b.backing_file;
 	}
 	else {
 		cow_printf("read_cow_header - invalid COW version\n");
-		goto out;
-	}
-
-	if (*sectorsize_out <= 0) {
-		cow_printf("%s - invalid sectorsize %d\n", __func__,
-			   *sectorsize_out);
 		goto out;
 	}
 	err = -ENOMEM;

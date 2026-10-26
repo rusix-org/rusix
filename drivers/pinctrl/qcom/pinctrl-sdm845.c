@@ -37,6 +37,7 @@
 		.io_reg = base + 0x4 + REG_SIZE * id,		\
 		.intr_cfg_reg = base + 0x8 + REG_SIZE * id,	\
 		.intr_status_reg = base + 0xc + REG_SIZE * id,	\
+		.intr_target_reg = base + 0x8 + REG_SIZE * id,	\
 		.mux_bit = 2,			\
 		.pull_bit = 0,			\
 		.drv_bit = 6,			\
@@ -62,6 +63,7 @@
 		.io_reg = 0,				\
 		.intr_cfg_reg = 0,			\
 		.intr_status_reg = 0,			\
+		.intr_target_reg = 0,			\
 		.mux_bit = -1,				\
 		.pull_bit = pull,			\
 		.drv_bit = drv,				\
@@ -86,6 +88,7 @@
 		.io_reg = offset + 0x4,			\
 		.intr_cfg_reg = 0,			\
 		.intr_status_reg = 0,			\
+		.intr_target_reg = 0,			\
 		.mux_bit = -1,				\
 		.pull_bit = 3,				\
 		.drv_bit = 0,				\
@@ -1339,7 +1342,6 @@ static const struct of_device_id sdm845_pinctrl_of_match[] = {
 	{ .compatible = "qcom,sdm845-pinctrl", },
 	{ },
 };
-MODULE_DEVICE_TABLE(of, sdm845_pinctrl_of_match);
 
 static struct platform_driver sdm845_pinctrl_driver = {
 	.driver = {
@@ -1365,3 +1367,4 @@ module_exit(sdm845_pinctrl_exit);
 
 MODULE_DESCRIPTION("QTI sdm845 pinctrl driver");
 MODULE_LICENSE("GPL v2");
+MODULE_DEVICE_TABLE(of, sdm845_pinctrl_of_match);

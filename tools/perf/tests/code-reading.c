@@ -4,7 +4,6 @@
 #include <linux/kernel.h>
 #include <linux/rbtree.h>
 #include <linux/types.h>
-#include <linux/zalloc.h>
 #include <inttypes.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -44,7 +43,7 @@
 struct tested_section {
 	struct rb_node rb_node;
 	u64 addr;
-	char *path;
+	char path[PATH_MAX];
 };
 
 static bool tested_code_insert_or_exists(const char *path, u64 addr,
@@ -80,11 +79,7 @@ static bool tested_code_insert_or_exists(const char *path, u64 addr,
 		return true;
 
 	data->addr = addr;
-	data->path = strdup(path);
-	if (!data->path) {
-		free(data);
-		return true;
-	}
+	strlcpy(data->path, path, sizeof(data->path));
 	rb_link_node(&data->rb_node, parent, node);
 	rb_insert_color(&data->rb_node, tested_sections);
 	return false;
@@ -99,7 +94,6 @@ static void tested_sections__free(struct rb_root *root)
 						     rb_node);
 
 		rb_erase(node, root);
-		free(ts->path);
 		free(ts);
 	}
 }
@@ -592,8 +586,8 @@ static int process_events(struct machine *machine, struct evlist *evlist,
 	struct mmap *md;
 	int i, ret;
 
-	for (i = 0; i < evlist__core(evlist)->nr_mmaps; i++) {
-		md = &evlist__mmap(evlist)[i];
+	for (i = 0; i < evlist->core.nr_mmaps; i++) {
+		md = &evlist->mmap[i];
 		if (perf_mmap__read_init(&md->core) < 0)
 			continue;
 
@@ -708,7 +702,7 @@ static int do_test_code_reading(bool try_kcore)
 	struct map *map;
 	bool have_vmlinux, have_kcore;
 	struct dso *dso;
-	const char *events[] = { "cpu-cycles", "cpu-cycles:u", "cpu-clock", "cpu-clock:u", NULL };
+	const char *events[] = { "cycles", "cycles:u", "cpu-clock", "cpu-clock:u", NULL };
 	int evidx = 0;
 	struct perf_env host_env;
 
@@ -781,7 +775,7 @@ static int do_test_code_reading(bool try_kcore)
 			goto out_put;
 		}
 
-		perf_evlist__set_maps(evlist__core(evlist), cpus, threads);
+		perf_evlist__set_maps(&evlist->core, cpus, threads);
 
 		str = events[evidx];
 		pr_debug("Parsing event '%s'\n", str);
@@ -809,8 +803,8 @@ static int do_test_code_reading(bool try_kcore)
 				pr_debug("perf_evlist__open() failed!\n%s\n", errbuf);
 			}
 
-			perf_evlist__set_maps(evlist__core(evlist), NULL, NULL);
-			evlist__put(evlist);
+			perf_evlist__set_maps(&evlist->core, NULL, NULL);
+			evlist__delete(evlist);
 			evlist = NULL;
 			continue;
 		}
@@ -820,7 +814,7 @@ static int do_test_code_reading(bool try_kcore)
 	if (events[evidx] == NULL)
 		goto out_put;
 
-	ret = evlist__do_mmap(evlist, UINT_MAX);
+	ret = evlist__mmap(evlist, UINT_MAX);
 	if (ret < 0) {
 		pr_debug("evlist__mmap failed\n");
 		goto out_put;
@@ -847,7 +841,7 @@ static int do_test_code_reading(bool try_kcore)
 out_put:
 	thread__put(thread);
 out_err:
-	evlist__put(evlist);
+	evlist__delete(evlist);
 	perf_cpu_map__put(cpus);
 	perf_thread_map__put(threads);
 	machine__delete(machine);

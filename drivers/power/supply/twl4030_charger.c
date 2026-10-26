@@ -1063,13 +1063,19 @@ static int twl4030_bci_probe(struct platform_device *pdev)
 	ret = devm_request_threaded_irq(&pdev->dev, bci->irq_chg, NULL,
 			twl4030_charger_interrupt, IRQF_ONESHOT, pdev->name,
 			bci);
-	if (ret < 0)
+	if (ret < 0) {
+		dev_err(&pdev->dev, "could not request irq %d, status %d\n",
+			bci->irq_chg, ret);
 		return ret;
+	}
 
 	ret = devm_request_threaded_irq(&pdev->dev, bci->irq_bci, NULL,
 			twl4030_bci_interrupt, IRQF_ONESHOT, pdev->name, bci);
-	if (ret < 0)
+	if (ret < 0) {
+		dev_err(&pdev->dev, "could not request irq %d, status %d\n",
+			bci->irq_bci, ret);
 		return ret;
+	}
 
 	/* Enable interrupts now. */
 	reg = ~(u32)(TWL4030_ICHGLOW | TWL4030_ICHGEOC | TWL4030_TBATOR2 |
@@ -1146,4 +1152,3 @@ MODULE_AUTHOR("Gražvydas Ignotas");
 MODULE_DESCRIPTION("TWL4030 Battery Charger Interface driver");
 MODULE_LICENSE("GPL");
 MODULE_ALIAS("platform:twl4030_bci");
-MODULE_IMPORT_NS("IIO_CONSUMER");

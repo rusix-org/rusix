@@ -25,7 +25,6 @@
 #include <linux/init.h>
 #include <linux/module.h>
 #include <linux/platform_device.h>
-#include <linux/slab.h>
 
 #include <drm/drm_drv.h>
 
@@ -45,7 +44,7 @@ static const struct drm_driver amdgpu_xcp_driver = {
 	.minor = 0,
 };
 
-static u8 pdev_num;
+static int8_t pdev_num;
 static struct xcp_device *xcp_dev[MAX_XCP_PLATFORM_DEVICE];
 static DEFINE_MUTEX(xcp_mutex);
 
@@ -53,13 +52,8 @@ int amdgpu_xcp_drm_dev_alloc(struct drm_device **ddev)
 {
 	struct platform_device *pdev;
 	struct xcp_device *pxcp_dev;
-	char *dev_name;
+	char dev_name[20];
 	int ret, i;
-
-	if (!ddev)
-		return -EINVAL;
-
-	BUILD_BUG_ON(MAX_XCP_PLATFORM_DEVICE >= U8_MAX);
 
 	guard(mutex)(&xcp_mutex);
 
@@ -74,12 +68,8 @@ int amdgpu_xcp_drm_dev_alloc(struct drm_device **ddev)
 	if (i >= MAX_XCP_PLATFORM_DEVICE)
 		return -ENODEV;
 
-	dev_name = kasprintf(GFP_KERNEL, "amdgpu_xcp_%d", i);
-	if (!dev_name)
-		return -ENOMEM;
-
+	snprintf(dev_name, sizeof(dev_name), "amdgpu_xcp_%d", i);
 	pdev = platform_device_register_simple(dev_name, -1, NULL, 0);
-	kfree(dev_name);
 	if (IS_ERR(pdev))
 		return PTR_ERR(pdev);
 
@@ -110,7 +100,7 @@ out_unregister:
 }
 EXPORT_SYMBOL(amdgpu_xcp_drm_dev_alloc);
 
-static void free_xcp_dev(uint8_t index)
+static void free_xcp_dev(int8_t index)
 {
 	if ((index < MAX_XCP_PLATFORM_DEVICE) && (xcp_dev[index])) {
 		struct platform_device *pdev = xcp_dev[index]->pdev;
@@ -119,18 +109,17 @@ static void free_xcp_dev(uint8_t index)
 		platform_device_unregister(pdev);
 
 		xcp_dev[index] = NULL;
-		if (pdev_num > 0)
-			pdev_num--;
+		pdev_num--;
 	}
 }
 
 void amdgpu_xcp_drm_dev_free(struct drm_device *ddev)
 {
-	uint8_t i;
+	int8_t i;
 
 	guard(mutex)(&xcp_mutex);
 
-	for (i = 0; pdev_num && i < MAX_XCP_PLATFORM_DEVICE; i++) {
+	for (i = 0; i < MAX_XCP_PLATFORM_DEVICE; i++) {
 		if ((xcp_dev[i]) && (&xcp_dev[i]->drm == ddev)) {
 			free_xcp_dev(i);
 			break;
@@ -141,7 +130,7 @@ EXPORT_SYMBOL(amdgpu_xcp_drm_dev_free);
 
 void amdgpu_xcp_drv_release(void)
 {
-	uint8_t i;
+	int8_t i;
 
 	guard(mutex)(&xcp_mutex);
 

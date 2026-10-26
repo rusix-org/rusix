@@ -201,7 +201,7 @@ static int sprd_thm_temp_to_rawdata(int temp, struct sprd_thermal_sensor *sen)
 	 */
 	val = (temp + sen->cal_offset) / sen->cal_slope;
 
-	return min(val, SPRD_THM_RAW_DATA_HIGH - 1);
+	return clamp(val, val, (u32)(SPRD_THM_RAW_DATA_HIGH - 1));
 }
 
 static int sprd_thm_read_temp(struct thermal_zone_device *tz, int *temp)
@@ -393,12 +393,6 @@ static int sprd_thm_probe(struct platform_device *pdev)
 		ret = of_property_read_u32(sen_child, "reg", &sen->id);
 		if (ret) {
 			dev_err(&pdev->dev, "get sensor reg failed");
-			goto of_put;
-		}
-
-		if (sen->id < 0 || sen->id >= SPRD_THM_MAX_SENSOR) {
-			dev_err(&pdev->dev, "invalid sensor id %d\n", sen->id);
-			ret = -EINVAL;
 			goto of_put;
 		}
 

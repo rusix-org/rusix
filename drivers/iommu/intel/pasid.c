@@ -50,7 +50,7 @@ int intel_pasid_alloc_table(struct device *dev)
 	if (WARN_ON(info->pasid_table))
 		return -EEXIST;
 
-	pasid_table = kzalloc_obj(*pasid_table);
+	pasid_table = kzalloc(sizeof(*pasid_table), GFP_KERNEL);
 	if (!pasid_table)
 		return -ENOMEM;
 
@@ -282,7 +282,7 @@ void intel_pasid_tear_down_entry(struct intel_iommu *iommu, struct device *dev,
 	pasid_cache_invalidation_with_pasid(iommu, did, pasid);
 
 	if (pgtt == PASID_ENTRY_PGTT_PT || pgtt == PASID_ENTRY_PGTT_FL_ONLY)
-		qi_flush_piotlb_all(iommu, did, pasid);
+		qi_flush_piotlb(iommu, did, pasid, 0, -1, 0);
 	else
 		iommu->flush.flush_iotlb(iommu, did, 0, 0, DMA_TLB_DSI_FLUSH);
 
@@ -308,7 +308,7 @@ static void pasid_flush_caches(struct intel_iommu *iommu,
 
 	if (cap_caching_mode(iommu->cap)) {
 		pasid_cache_invalidation_with_pasid(iommu, did, pasid);
-		qi_flush_piotlb_all(iommu, did, pasid);
+		qi_flush_piotlb(iommu, did, pasid, 0, -1, 0);
 	} else {
 		iommu_flush_write_buffer(iommu);
 	}
@@ -342,7 +342,7 @@ static void intel_pasid_flush_present(struct intel_iommu *iommu,
 	 *      Addr[63:12]=0x7FFFFFFF_FFFFF) to affected functions
 	 */
 	pasid_cache_invalidation_with_pasid(iommu, did, pasid);
-	qi_flush_piotlb_all(iommu, did, pasid);
+	qi_flush_piotlb(iommu, did, pasid, 0, -1, 0);
 
 	devtlb_invalidation_with_pasid(iommu, dev, pasid);
 }
@@ -371,7 +371,7 @@ static void pasid_pte_config_first_level(struct intel_iommu *iommu,
 
 	pasid_set_domain_id(pte, did);
 	pasid_set_address_width(pte, iommu->agaw);
-	pasid_set_page_snoop(pte, flags & PASID_FLAG_PWSNP);
+	pasid_set_page_snoop(pte, !!ecap_smpwc(iommu->ecap));
 
 	/* Setup Present and PASID Granular Transfer Type: */
 	pasid_set_translation_type(pte, PASID_ENTRY_PGTT_FL_ONLY);
@@ -422,22 +422,19 @@ int intel_pasid_setup_first_level(struct intel_iommu *iommu, struct device *dev,
  */
 static void pasid_pte_config_second_level(struct intel_iommu *iommu,
 					  struct pasid_entry *pte,
-					  struct dmar_domain *domain, u16 did)
+					  u64 pgd_val, int agaw, u16 did,
+					  bool dirty_tracking)
 {
-	struct pt_iommu_vtdss_hw_info pt_info;
-
 	lockdep_assert_held(&iommu->lock);
 
-	pt_iommu_vtdss_hw_info(&domain->sspt, &pt_info);
 	pasid_clear_entry(pte);
 	pasid_set_domain_id(pte, did);
-	pasid_set_slptr(pte, pt_info.ssptptr);
-	pasid_set_address_width(pte, pt_info.aw);
+	pasid_set_slptr(pte, pgd_val);
+	pasid_set_address_width(pte, agaw);
 	pasid_set_translation_type(pte, PASID_ENTRY_PGTT_SL_ONLY);
 	pasid_set_fault_enable(pte);
-	pasid_set_page_snoop(pte, !(domain->sspt.vtdss_pt.common.features &
-				    BIT(PT_FEAT_DMA_INCOHERENT)));
-	if (domain->dirty_tracking)
+	pasid_set_page_snoop(pte, !!ecap_smpwc(iommu->ecap));
+	if (dirty_tracking)
 		pasid_set_ssade(pte);
 
 	pasid_set_present(pte);
@@ -448,8 +445,9 @@ int intel_pasid_setup_second_level(struct intel_iommu *iommu,
 				   struct device *dev, u32 pasid)
 {
 	struct pasid_entry *pte;
+	struct dma_pte *pgd;
+	u64 pgd_val;
 	u16 did;
-
 
 	/*
 	 * If hardware advertises no support for second level
@@ -461,6 +459,8 @@ int intel_pasid_setup_second_level(struct intel_iommu *iommu,
 		return -EINVAL;
 	}
 
+	pgd = domain->pgd;
+	pgd_val = virt_to_phys(pgd);
 	did = domain_id_iommu(domain, iommu);
 
 	spin_lock(&iommu->lock);
@@ -475,7 +475,8 @@ int intel_pasid_setup_second_level(struct intel_iommu *iommu,
 		return -EBUSY;
 	}
 
-	pasid_pte_config_second_level(iommu, pte, domain, did);
+	pasid_pte_config_second_level(iommu, pte, pgd_val, domain->agaw,
+				      did, domain->dirty_tracking);
 	spin_unlock(&iommu->lock);
 
 	pasid_flush_caches(iommu, pte, pasid, did);
@@ -618,17 +619,15 @@ void intel_pasid_setup_page_snoop_control(struct intel_iommu *iommu,
 	intel_pasid_flush_present(iommu, dev, pasid, did, pte);
 }
 
-static void pasid_pte_config_nested(struct intel_iommu *iommu,
-				    struct pasid_entry *pte,
-				    struct iommu_hwpt_vtd_s1 *s1_cfg,
-				    struct dmar_domain *s2_domain,
-				    u16 did)
+static void pasid_pte_config_nestd(struct intel_iommu *iommu,
+				   struct pasid_entry *pte,
+				   struct iommu_hwpt_vtd_s1 *s1_cfg,
+				   struct dmar_domain *s2_domain,
+				   u16 did)
 {
-	struct pt_iommu_vtdss_hw_info pt_info;
+	struct dma_pte *pgd = s2_domain->pgd;
 
 	lockdep_assert_held(&iommu->lock);
-
-	pt_iommu_vtdss_hw_info(&s2_domain->sspt, &pt_info);
 
 	pasid_clear_entry(pte);
 
@@ -649,12 +648,11 @@ static void pasid_pte_config_nested(struct intel_iommu *iommu,
 	if (s2_domain->force_snooping)
 		pasid_set_pgsnp(pte);
 
-	pasid_set_slptr(pte, pt_info.ssptptr);
+	pasid_set_slptr(pte, virt_to_phys(pgd));
 	pasid_set_fault_enable(pte);
 	pasid_set_domain_id(pte, did);
-	pasid_set_address_width(pte, pt_info.aw);
-	pasid_set_page_snoop(pte, !(s2_domain->sspt.vtdss_pt.common.features &
-				    BIT(PT_FEAT_DMA_INCOHERENT)));
+	pasid_set_address_width(pte, s2_domain->agaw);
+	pasid_set_page_snoop(pte, !!ecap_smpwc(iommu->ecap));
 	if (s2_domain->dirty_tracking)
 		pasid_set_ssade(pte);
 	pasid_set_translation_type(pte, PASID_ENTRY_PGTT_NESTED);
@@ -720,7 +718,7 @@ int intel_pasid_setup_nested(struct intel_iommu *iommu, struct device *dev,
 		return -EBUSY;
 	}
 
-	pasid_pte_config_nested(iommu, pte, s1_cfg, s2_domain, did);
+	pasid_pte_config_nestd(iommu, pte, s1_cfg, s2_domain, did);
 	spin_unlock(&iommu->lock);
 
 	pasid_flush_caches(iommu, pte, pasid, did);

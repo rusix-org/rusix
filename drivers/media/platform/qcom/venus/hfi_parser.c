@@ -205,11 +205,11 @@ static int parse_codecs(struct venus_core *core, void *data)
 	core->dec_codecs = codecs->dec_codecs;
 	core->enc_codecs = codecs->enc_codecs;
 
-	if (core->res->dec_codec_blacklist)
-		core->dec_codecs &= ~core->res->dec_codec_blacklist;
-
-	if (core->res->enc_codec_blacklist)
-		core->enc_codecs &= ~core->res->enc_codec_blacklist;
+	if (IS_V1(core)) {
+		core->dec_codecs &= ~HFI_VIDEO_CODEC_HEVC;
+		core->dec_codecs &= ~HFI_VIDEO_CODEC_SPARK;
+		core->enc_codecs &= ~HFI_VIDEO_CODEC_HEVC;
+	}
 
 	return sizeof(*codecs);
 }

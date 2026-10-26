@@ -1021,9 +1021,8 @@ mlxsw_sp_fid_port_vid_list_add(struct mlxsw_sp_fid *fid, u16 local_port,
 			       u16 vid)
 {
 	struct mlxsw_sp_fid_port_vid *port_vid, *tmp_port_vid;
-	struct list_head *insert_before = &fid->port_vid_list;
 
-	port_vid = kzalloc_obj(*port_vid);
+	port_vid = kzalloc(sizeof(*port_vid), GFP_KERNEL);
 	if (!port_vid)
 		return -ENOMEM;
 
@@ -1031,13 +1030,11 @@ mlxsw_sp_fid_port_vid_list_add(struct mlxsw_sp_fid *fid, u16 local_port,
 	port_vid->vid = vid;
 
 	list_for_each_entry(tmp_port_vid, &fid->port_vid_list, list) {
-		if (tmp_port_vid->local_port > local_port) {
-			insert_before = &tmp_port_vid->list;
+		if (tmp_port_vid->local_port > local_port)
 			break;
-		}
 	}
 
-	list_add_tail(&port_vid->list, insert_before);
+	list_add_tail(&port_vid->list, &tmp_port_vid->list);
 	return 0;
 }
 
@@ -2298,7 +2295,7 @@ mlxsw_sp_fids_init(struct mlxsw_sp *mlxsw_sp,
 	struct mlxsw_sp_fid_core *fid_core;
 	int err, i;
 
-	fid_core = kzalloc_obj(*mlxsw_sp->fid_core);
+	fid_core = kzalloc(sizeof(*mlxsw_sp->fid_core), GFP_KERNEL);
 	if (!fid_core)
 		return -ENOMEM;
 	mlxsw_sp->fid_core = fid_core;

@@ -44,10 +44,6 @@
 	status = "okay";
 };
 
-&bsec {
-	bootph-all;
-};
-
 &usart2 {
 	status = "okay";
 };

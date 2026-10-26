@@ -424,7 +424,7 @@ static struct o2net_sock_container *sc_alloc(struct o2nm_node *node)
 	int status = 0;
 
 	page = alloc_page(GFP_NOFS);
-	sc = kzalloc_obj(*sc, GFP_NOFS);
+	sc = kzalloc(sizeof(*sc), GFP_NOFS);
 	if (sc == NULL || page == NULL)
 		goto out;
 
@@ -834,7 +834,7 @@ int o2net_register_handler(u32 msg_type, u32 key, u32 max_len,
 		goto out;
 	}
 
-       	nmh = kzalloc_obj(struct o2net_msg_handler, GFP_NOFS);
+       	nmh = kzalloc(sizeof(struct o2net_msg_handler), GFP_NOFS);
 	if (nmh == NULL) {
 		ret = -ENOMEM;
 		goto out;
@@ -1094,14 +1094,14 @@ int o2net_send_message_vec(u32 msg_type, u32 key, struct kvec *caller_vec,
 	o2net_set_nst_sock_container(&nst, sc);
 
 	veclen = caller_veclen + 1;
-	vec = kmalloc_objs(struct kvec, veclen, GFP_ATOMIC);
+	vec = kmalloc_array(veclen, sizeof(struct kvec), GFP_ATOMIC);
 	if (vec == NULL) {
 		mlog(0, "failed to %zu element kvec!\n", veclen);
 		ret = -ENOMEM;
 		goto out;
 	}
 
-	msg = kmalloc_obj(struct o2net_msg, GFP_ATOMIC);
+	msg = kmalloc(sizeof(struct o2net_msg), GFP_ATOMIC);
 	if (!msg) {
 		mlog(0, "failed to allocate a o2net_msg!\n");
 		ret = -ENOMEM;
@@ -1668,7 +1668,7 @@ static void o2net_start_connect(struct work_struct *work)
 	remoteaddr.sin_port = node->nd_ipv4_port;
 
 	ret = sc->sc_sock->ops->connect(sc->sc_sock,
-					(struct sockaddr_unsized *)&remoteaddr,
+					(struct sockaddr *)&remoteaddr,
 					sizeof(remoteaddr),
 					O_NONBLOCK);
 	if (ret == -EINPROGRESS)

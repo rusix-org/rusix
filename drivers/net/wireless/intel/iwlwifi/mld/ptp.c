@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause
 /*
- * Copyright (C) 2025 - 2026 Intel Corporation
+ * Copyright (C) 2025 Intel Corporation
  */
 
 #include "mld.h"
@@ -18,6 +18,16 @@
 #define IWL_PTP_GP2_WRAP	0x100000000ULL
 #define IWL_PTP_WRAP_TIME	(3600 * HZ)
 #define IWL_PTP_WRAP_THRESHOLD_USEC	(5000)
+
+static int iwl_mld_get_systime(struct iwl_mld *mld, u32 *gp2)
+{
+	*gp2 = iwl_read_prph(mld->trans, mld->trans->mac_cfg->base->gp2_reg_addr);
+
+	if (*gp2 == 0x5a5a5a5a)
+		return -EINVAL;
+
+	return 0;
+}
 
 static void iwl_mld_ptp_update_new_read(struct iwl_mld *mld, u32 gp2)
 {
@@ -240,8 +250,7 @@ iwl_mld_phc_get_crosstimestamp(struct ptp_clock_info *ptp,
 	/* System (wall) time */
 	ktime_t sys_time;
 
-	if (xtstamp->clock_id != CLOCK_REALTIME)
-		return -ENOTSUPP;
+	memset(xtstamp, 0, sizeof(struct system_device_crosststamp));
 
 	ret = iwl_mld_get_crosstimestamp_fw(mld, &gp2, &sys_time);
 	if (ret) {
@@ -261,7 +270,7 @@ iwl_mld_phc_get_crosstimestamp(struct ptp_clock_info *ptp,
 
 	/* System monotonic raw time is not used */
 	xtstamp->device = ns_to_ktime(gp2_ns);
-	xtstamp->sys_systime = sys_time;
+	xtstamp->sys_realtime = sys_time;
 
 	return ret;
 }
@@ -292,12 +301,10 @@ void iwl_mld_ptp_init(struct iwl_mld *mld)
 	mld->ptp_data.ptp_clock =
 		ptp_clock_register(&mld->ptp_data.ptp_clock_info, mld->dev);
 
-	if (IS_ERR(mld->ptp_data.ptp_clock)) {
+	if (IS_ERR_OR_NULL(mld->ptp_data.ptp_clock)) {
 		IWL_ERR(mld, "Failed to register PHC clock (%ld)\n",
 			PTR_ERR(mld->ptp_data.ptp_clock));
 		mld->ptp_data.ptp_clock = NULL;
-	} else if (!mld->ptp_data.ptp_clock) {
-		IWL_DEBUG_INFO(mld, "PTP module unavailable on this kernel\n");
 	} else {
 		IWL_DEBUG_INFO(mld, "Registered PHC clock: %s, with index: %d\n",
 			       mld->ptp_data.ptp_clock_info.name,

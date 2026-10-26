@@ -10,7 +10,6 @@
 #include "fbnic.h"
 #include "fbnic_fw.h"
 #include "fbnic_tlv.h"
-#include "fbnic_txrx.h"
 
 #define FBNIC_SN_STR_LEN	24
 
@@ -179,7 +178,7 @@ fbnic_flash_start(struct fbnic_dev *fbd, struct pldmfw_component *component)
 		goto cmpl_free;
 
 	/* Wait for firmware to ack firmware upgrade start */
-	if (fbnic_mbx_wait_for_cmpl(cmpl))
+	if (wait_for_completion_timeout(&cmpl->done, 10 * HZ))
 		err = cmpl->result;
 	else
 		err = -ETIMEDOUT;
@@ -253,7 +252,7 @@ fbnic_flash_component(struct pldmfw *context,
 		goto err_no_msg;
 
 	while (offset < size) {
-		if (!fbnic_mbx_wait_for_cmpl(cmpl)) {
+		if (!wait_for_completion_timeout(&cmpl->done, 15 * HZ)) {
 			err = -ETIMEDOUT;
 			break;
 		}
@@ -391,7 +390,7 @@ static int fbnic_fw_reporter_dump(struct devlink_health_reporter *reporter,
 				   "Failed to transmit core dump info msg");
 		goto cmpl_free;
 	}
-	if (!fbnic_mbx_wait_for_cmpl(fw_cmpl)) {
+	if (!wait_for_completion_timeout(&fw_cmpl->done, 2 * HZ)) {
 		NL_SET_ERR_MSG_MOD(extack,
 				   "Timed out waiting on core dump info");
 		err = -ETIMEDOUT;
@@ -448,7 +447,7 @@ static int fbnic_fw_reporter_dump(struct devlink_health_reporter *reporter,
 				goto cmpl_cleanup;
 		}
 
-		if (fbnic_mbx_wait_for_cmpl(fw_cmpl)) {
+		if (wait_for_completion_timeout(&fw_cmpl->done, 2 * HZ)) {
 			reinit_completion(&fw_cmpl->done);
 		} else {
 			NL_SET_ERR_MSG_FMT_MOD(extack,
@@ -648,8 +647,6 @@ struct fbnic_dev *fbnic_devlink_alloc(struct pci_dev *pdev)
 	fbd->dsn = pci_get_dsn(pdev);
 	fbd->mps = pcie_get_mps(pdev);
 	fbd->readrq = pcie_get_readrq(pdev);
-	fbd->relaxed_ord = pcie_relaxed_ordering_enabled(pdev);
-	fbd->rx_cqe_nsecs = FBNIC_RX_CQE_NSECS_DEFAULT;
 
 	fbd->mac_addr_boundary = FBNIC_RPC_TCAM_MACDA_DEFAULT_BOUNDARY;
 

@@ -92,8 +92,11 @@ static struct skcipher_alg cast5_algs[] = {
 
 static int __init cast5_init(void)
 {
-	if (!boot_cpu_has(X86_FEATURE_AVX)) {
-		pr_info("AVX instructions are not detected.\n");
+	const char *feature_name;
+
+	if (!cpu_has_xfeatures(XFEATURE_MASK_SSE | XFEATURE_MASK_YMM,
+				&feature_name)) {
+		pr_info("CPU feature '%s' is not supported.\n", feature_name);
 		return -ENODEV;
 	}
 

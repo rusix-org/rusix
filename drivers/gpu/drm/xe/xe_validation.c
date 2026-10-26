@@ -2,6 +2,7 @@
 /*
  * Copyright © 2024 Intel Corporation
  */
+#include "xe_bo.h"
 #include <drm/drm_exec.h>
 #include <drm/drm_gem.h>
 #include <drm/drm_gpuvm.h>
@@ -156,7 +157,7 @@ int xe_validation_ctx_init(struct xe_validation_ctx *ctx, struct xe_validation_d
 
 #ifdef CONFIG_DEBUG_WW_MUTEX_SLOWPATH
 /*
- * This abuses ww_mutex internals and should be
+ * This abuses both drm_exec and ww_mutex internals and should be
  * replaced by checking for -EDEADLK when we can make TTM
  * stop converting -EDEADLK to -ENOMEM.
  * An alternative is to not have exhaustive eviction with
@@ -164,7 +165,7 @@ int xe_validation_ctx_init(struct xe_validation_ctx *ctx, struct xe_validation_d
  */
 static bool xe_validation_contention_injected(struct drm_exec *exec)
 {
-	return !!drm_exec_ticket(exec)->contending_lock;
+	return !!exec->ticket.contending_lock;
 }
 
 #else

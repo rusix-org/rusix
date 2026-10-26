@@ -531,23 +531,17 @@ int picolcd_init_framebuffer(struct picolcd_data *data)
 		goto err_cleanup;
 	}
 
-	error = fb_deferred_io_init(info);
-	if (error) {
-		dev_err(dev, "failed to initialize deferred I/O\n");
-		goto err_sysfs;
-	}
-
+	fb_deferred_io_init(info);
 	error = register_framebuffer(info);
 	if (error) {
 		dev_err(dev, "failed to register framebuffer\n");
-		goto err_defio;
+		goto err_sysfs;
 	}
 	return 0;
 
-err_defio:
-	fb_deferred_io_cleanup(info);
 err_sysfs:
 	device_remove_file(dev, &dev_attr_fb_update_rate);
+	fb_deferred_io_cleanup(info);
 err_cleanup:
 	data->fb_info    = NULL;
 

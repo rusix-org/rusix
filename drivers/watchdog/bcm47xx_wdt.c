@@ -21,7 +21,6 @@
 #include <linux/watchdog.h>
 #include <linux/timer.h>
 #include <linux/jiffies.h>
-#include <linux/stringify.h>
 
 #define DRV_NAME		"bcm47xx_wdt"
 
@@ -34,12 +33,12 @@ static bool nowayout = WATCHDOG_NOWAYOUT;
 
 module_param(timeout, int, 0);
 MODULE_PARM_DESC(timeout, "Watchdog time in seconds. (default="
-				__stringify(WDT_DEFAULT_TIME) ")");
+				__MODULE_STRING(WDT_DEFAULT_TIME) ")");
 
 module_param(nowayout, bool, 0);
 MODULE_PARM_DESC(nowayout,
 		"Watchdog cannot be stopped once started (default="
-				__stringify(WATCHDOG_NOWAYOUT) ")");
+				__MODULE_STRING(WATCHDOG_NOWAYOUT) ")");
 
 static inline struct bcm47xx_wdt *bcm47xx_wdt_get(struct watchdog_device *wdd)
 {

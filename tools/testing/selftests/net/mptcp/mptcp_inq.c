@@ -28,7 +28,6 @@
 
 #include <linux/tcp.h>
 #include <linux/sockios.h>
-#include <linux/compiler.h>
 
 #ifndef IPPROTO_MPTCP
 #define IPPROTO_MPTCP 262
@@ -41,7 +40,7 @@ static int pf = AF_INET;
 static int proto_tx = IPPROTO_MPTCP;
 static int proto_rx = IPPROTO_MPTCP;
 
-static void __noreturn die_perror(const char *msg)
+static void die_perror(const char *msg)
 {
 	perror(msg);
 	exit(1);
@@ -53,7 +52,7 @@ static void die_usage(int r)
 	exit(r);
 }
 
-static void __noreturn xerror(const char *fmt, ...)
+static void xerror(const char *fmt, ...)
 {
 	va_list ap;
 

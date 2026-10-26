@@ -317,9 +317,11 @@ static int imx_pgc_power_up(struct generic_pm_domain *genpd)
 	u32 reg_val, pgc;
 	int ret;
 
-	ret = pm_runtime_resume_and_get(domain->dev);
-	if (ret < 0)
+	ret = pm_runtime_get_sync(domain->dev);
+	if (ret < 0) {
+		pm_runtime_put_noidle(domain->dev);
 		return ret;
+	}
 
 	if (!IS_ERR(domain->regulator)) {
 		ret = regulator_enable(domain->regulator);
@@ -1395,20 +1397,26 @@ static void imx_pgc_domain_remove(struct platform_device *pdev)
 #ifdef CONFIG_PM_SLEEP
 static int imx_pgc_domain_suspend(struct device *dev)
 {
+	int ret;
+
 	/*
 	 * This may look strange, but is done so the generic PM_SLEEP code
 	 * can power down our domain and more importantly power it up again
 	 * after resume, without tripping over our usage of runtime PM to
 	 * power up/down the nested domains.
 	 */
-	return pm_runtime_resume_and_get(dev);
+	ret = pm_runtime_get_sync(dev);
+	if (ret < 0) {
+		pm_runtime_put_noidle(dev);
+		return ret;
+	}
+
+	return 0;
 }
 
 static int imx_pgc_domain_resume(struct device *dev)
 {
-	pm_runtime_put(dev);
-
-	return 0;
+	return pm_runtime_put(dev);
 }
 #endif
 

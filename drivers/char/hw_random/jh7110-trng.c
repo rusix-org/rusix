@@ -303,7 +303,8 @@ static int starfive_trng_probe(struct platform_device *pdev)
 	ret = devm_request_irq(&pdev->dev, irq, starfive_trng_irq, 0, pdev->name,
 			       (void *)trng);
 	if (ret)
-		return ret;
+		return dev_err_probe(&pdev->dev, ret,
+				     "Failed to register interrupt handler\n");
 
 	trng->hclk = devm_clk_get(&pdev->dev, "hclk");
 	if (IS_ERR(trng->hclk))
@@ -320,17 +321,9 @@ static int starfive_trng_probe(struct platform_device *pdev)
 		return dev_err_probe(&pdev->dev, PTR_ERR(trng->rst),
 				     "Error getting hardware reset line\n");
 
-	ret = clk_prepare_enable(trng->hclk);
-	if (ret)
-		return ret;
-
-	ret = clk_prepare_enable(trng->ahb);
-	if (ret)
-		goto disable_hclk;
-
-	ret = reset_control_deassert(trng->rst);
-	if (ret)
-		goto disable_ahb;
+	clk_prepare_enable(trng->hclk);
+	clk_prepare_enable(trng->ahb);
+	reset_control_deassert(trng->rst);
 
 	trng->rng.name = dev_driver_string(&pdev->dev);
 	trng->rng.init = starfive_trng_init;
@@ -350,18 +343,13 @@ static int starfive_trng_probe(struct platform_device *pdev)
 		pm_runtime_disable(&pdev->dev);
 
 		reset_control_assert(trng->rst);
-		ret = dev_err_probe(&pdev->dev, ret, "Failed to register hwrng\n");
-		goto disable_ahb;
+		clk_disable_unprepare(trng->ahb);
+		clk_disable_unprepare(trng->hclk);
+
+		return dev_err_probe(&pdev->dev, ret, "Failed to register hwrng\n");
 	}
 
 	return 0;
-
-disable_ahb:
-	clk_disable_unprepare(trng->ahb);
-disable_hclk:
-	clk_disable_unprepare(trng->hclk);
-
-	return ret;
 }
 
 static int __maybe_unused starfive_trng_suspend(struct device *dev)
@@ -377,17 +365,11 @@ static int __maybe_unused starfive_trng_suspend(struct device *dev)
 static int __maybe_unused starfive_trng_resume(struct device *dev)
 {
 	struct starfive_trng *trng = dev_get_drvdata(dev);
-	int ret;
 
-	ret = clk_prepare_enable(trng->hclk);
-	if (ret)
-		return ret;
+	clk_prepare_enable(trng->hclk);
+	clk_prepare_enable(trng->ahb);
 
-	ret = clk_prepare_enable(trng->ahb);
-	if (ret)
-		clk_disable_unprepare(trng->hclk);
-
-	return ret;
+	return 0;
 }
 
 static const struct dev_pm_ops starfive_trng_pm_ops = {

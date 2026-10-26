@@ -47,6 +47,8 @@ properties:
   panel-timing: true
   port: true
 
+additionalProperties: false
+
 required:
   - compatible
   - data-mapping
@@ -54,8 +56,6 @@ required:
   - height-mm
   - panel-timing
   - port
-
-additionalProperties: false
 
 examples:
   - |+

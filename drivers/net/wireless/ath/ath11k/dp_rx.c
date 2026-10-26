@@ -4,10 +4,10 @@
  * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 
-#include <linux/fips.h>
 #include <linux/ieee80211.h>
 #include <linux/kernel.h>
 #include <linux/skbuff.h>
+#include <crypto/hash.h>
 #include "core.h"
 #include "debug.h"
 #include "debugfs_htt_stats.h"
@@ -762,9 +762,6 @@ static void ath11k_dp_rx_tid_del_func(struct ath11k_dp *dp, void *ctx,
 	struct ath11k_base *ab = dp->ab;
 	struct dp_rx_tid *rx_tid = ctx;
 	struct dp_reo_cache_flush_elem *elem, *tmp;
-	struct list_head flush_list;
-
-	INIT_LIST_HEAD(&flush_list);
 
 	if (status == HAL_REO_CMD_DRAIN) {
 		goto free_desc;
@@ -775,7 +772,7 @@ static void ath11k_dp_rx_tid_del_func(struct ath11k_dp *dp, void *ctx,
 		return;
 	}
 
-	elem = kzalloc_obj(*elem, GFP_ATOMIC);
+	elem = kzalloc(sizeof(*elem), GFP_ATOMIC);
 	if (!elem)
 		goto free_desc;
 
@@ -786,24 +783,22 @@ static void ath11k_dp_rx_tid_del_func(struct ath11k_dp *dp, void *ctx,
 	list_add_tail(&elem->list, &dp->reo_cmd_cache_flush_list);
 	dp->reo_cmd_cache_flush_count++;
 
-	/* identify aged REO desc that needs removal */
+	/* Flush and invalidate aged REO desc from HW cache */
 	list_for_each_entry_safe(elem, tmp, &dp->reo_cmd_cache_flush_list,
 				 list) {
 		if (dp->reo_cmd_cache_flush_count > DP_REO_DESC_FREE_THRESHOLD ||
 		    time_after(jiffies, elem->ts +
 			       msecs_to_jiffies(DP_REO_DESC_FREE_TIMEOUT_MS))) {
-			list_move_tail(&elem->list, &flush_list);
+			list_del(&elem->list);
 			dp->reo_cmd_cache_flush_count--;
+			spin_unlock_bh(&dp->reo_cmd_lock);
+
+			ath11k_dp_reo_cache_flush(ab, &elem->data);
+			kfree(elem);
+			spin_lock_bh(&dp->reo_cmd_lock);
 		}
 	}
 	spin_unlock_bh(&dp->reo_cmd_lock);
-
-	/* remove aged REO desc from HW */
-	list_for_each_entry_safe(elem, tmp, &flush_list, list) {
-		ath11k_dp_reo_cache_flush(ab, &elem->data);
-		list_del(&elem->list);
-		kfree(elem);
-	}
 
 	return;
 free_desc:
@@ -1546,7 +1541,7 @@ struct htt_ppdu_stats_info *ath11k_dp_htt_get_ppdu_desc(struct ath11k *ar,
 		}
 	}
 
-	ppdu_info = kzalloc_obj(*ppdu_info, GFP_ATOMIC);
+	ppdu_info = kzalloc(sizeof(*ppdu_info), GFP_ATOMIC);
 	if (!ppdu_info)
 		return NULL;
 
@@ -1766,7 +1761,6 @@ static int ath11k_dp_rx_msdu_coalesce(struct ath11k *ar,
 	int buf_first_hdr_len, buf_first_len;
 	struct hal_rx_desc *ldesc;
 	int space_extra, rem_len, buf_len;
-	bool is_continuation;
 	u32 hal_rx_desc_sz = ar->ab->hw_params.hal_desc_sz;
 
 	/* As the msdu is spread across multiple rx buffers,
@@ -1816,8 +1810,7 @@ static int ath11k_dp_rx_msdu_coalesce(struct ath11k *ar,
 	rem_len = msdu_len - buf_first_len;
 	while ((skb = __skb_dequeue(msdu_list)) != NULL && rem_len > 0) {
 		rxcb = ATH11K_SKB_RXCB(skb);
-		is_continuation = rxcb->is_continuation;
-		if (is_continuation)
+		if (rxcb->is_continuation)
 			buf_len = DP_RX_BUFFER_SIZE - hal_rx_desc_sz;
 		else
 			buf_len = rem_len;
@@ -1835,7 +1828,7 @@ static int ath11k_dp_rx_msdu_coalesce(struct ath11k *ar,
 		dev_kfree_skb_any(skb);
 
 		rem_len -= buf_len;
-		if (!is_continuation)
+		if (!rxcb->is_continuation)
 			break;
 	}
 
@@ -2505,7 +2498,7 @@ static void ath11k_dp_rx_deliver_msdu(struct ath11k *ar, struct napi_struct *nap
 	    !(is_mcbc && rx_status->flag & RX_FLAG_DECRYPTED))
 		rx_status->flag |= RX_FLAG_8023;
 
-	ieee80211_rx_napi(ar->hw, pubsta ? &pubsta->deflink : NULL, msdu, napi);
+	ieee80211_rx_napi(ar->hw, pubsta, msdu, napi);
 }
 
 static bool ath11k_dp_rx_check_nwifi_hdr_len_valid(struct ath11k_base *ab,
@@ -3216,13 +3209,16 @@ static void ath11k_dp_rx_frag_timer(struct timer_list *timer)
 int ath11k_peer_rx_frag_setup(struct ath11k *ar, const u8 *peer_mac, int vdev_id)
 {
 	struct ath11k_base *ab = ar->ab;
+	struct crypto_shash *tfm;
 	struct ath11k_peer *peer;
 	struct dp_rx_tid *rx_tid;
 	int i;
 
-	if (fips_enabled) {
-		ath11k_warn(ab, "This driver is disabled due to FIPS\n");
-		return -ENOENT;
+	tfm = crypto_alloc_shash("michael_mic", 0, 0);
+	if (IS_ERR(tfm)) {
+		ath11k_warn(ab, "failed to allocate michael_mic shash: %ld\n",
+			    PTR_ERR(tfm));
+		return PTR_ERR(tfm);
 	}
 
 	spin_lock_bh(&ab->base_lock);
@@ -3231,6 +3227,7 @@ int ath11k_peer_rx_frag_setup(struct ath11k *ar, const u8 *peer_mac, int vdev_id
 	if (!peer) {
 		ath11k_warn(ab, "failed to find the peer to set up fragment info\n");
 		spin_unlock_bh(&ab->base_lock);
+		crypto_free_shash(tfm);
 		return -ENOENT;
 	}
 
@@ -3241,10 +3238,52 @@ int ath11k_peer_rx_frag_setup(struct ath11k *ar, const u8 *peer_mac, int vdev_id
 		skb_queue_head_init(&rx_tid->rx_frags);
 	}
 
+	peer->tfm_mmic = tfm;
 	peer->dp_setup_done = true;
 	spin_unlock_bh(&ab->base_lock);
 
 	return 0;
+}
+
+static int ath11k_dp_rx_h_michael_mic(struct crypto_shash *tfm, u8 *key,
+				      struct ieee80211_hdr *hdr, u8 *data,
+				      size_t data_len, u8 *mic)
+{
+	SHASH_DESC_ON_STACK(desc, tfm);
+	u8 mic_hdr[16] = {};
+	u8 tid = 0;
+	int ret;
+
+	if (!tfm)
+		return -EINVAL;
+
+	desc->tfm = tfm;
+
+	ret = crypto_shash_setkey(tfm, key, 8);
+	if (ret)
+		goto out;
+
+	ret = crypto_shash_init(desc);
+	if (ret)
+		goto out;
+
+	/* TKIP MIC header */
+	memcpy(mic_hdr, ieee80211_get_DA(hdr), ETH_ALEN);
+	memcpy(mic_hdr + ETH_ALEN, ieee80211_get_SA(hdr), ETH_ALEN);
+	if (ieee80211_is_data_qos(hdr->frame_control))
+		tid = ieee80211_get_tid(hdr);
+	mic_hdr[12] = tid;
+
+	ret = crypto_shash_update(desc, mic_hdr, 16);
+	if (ret)
+		goto out;
+	ret = crypto_shash_update(desc, data, data_len);
+	if (ret)
+		goto out;
+	ret = crypto_shash_final(desc, mic);
+out:
+	shash_desc_zero(desc);
+	return ret;
 }
 
 static int ath11k_dp_rx_h_verify_tkip_mic(struct ath11k *ar, struct ath11k_peer *peer,
@@ -3255,7 +3294,7 @@ static int ath11k_dp_rx_h_verify_tkip_mic(struct ath11k *ar, struct ath11k_peer 
 	struct ieee80211_key_conf *key_conf;
 	struct ieee80211_hdr *hdr;
 	u8 mic[IEEE80211_CCMP_MIC_LEN];
-	int head_len, tail_len;
+	int head_len, tail_len, ret;
 	size_t data_len;
 	u32 hdr_len, hal_rx_desc_sz = ar->ab->hw_params.hal_desc_sz;
 	u8 *key, *data;
@@ -3281,8 +3320,8 @@ static int ath11k_dp_rx_h_verify_tkip_mic(struct ath11k *ar, struct ath11k_peer 
 	data_len = msdu->len - head_len - tail_len;
 	key = &key_conf->key[NL80211_TKIP_DATA_OFFSET_RX_MIC_KEY];
 
-	michael_mic(key, hdr, data, data_len, mic);
-	if (memcmp(mic, data + data_len, IEEE80211_CCMP_MIC_LEN))
+	ret = ath11k_dp_rx_h_michael_mic(peer->tfm_mmic, key, hdr, data, data_len, mic);
+	if (ret || memcmp(mic, data + data_len, IEEE80211_CCMP_MIC_LEN))
 		goto mic_fail;
 
 	return 0;
@@ -4056,15 +4095,6 @@ static bool ath11k_dp_rx_h_tkip_mic_err(struct ath11k *ar, struct sk_buff *msdu,
 
 	l3pad_bytes = ath11k_dp_rx_h_msdu_end_l3pad(ar->ab, desc);
 	msdu_len = ath11k_dp_rx_h_msdu_start_msdu_len(ar->ab, desc);
-
-	if (unlikely(hal_rx_desc_sz + l3pad_bytes + msdu_len > DP_RX_BUFFER_SIZE)) {
-		ath11k_dbg(ab, ATH11K_DBG_DATA,
-			   "invalid msdu len in tkip mic err %u\n", msdu_len);
-		ath11k_dbg_dump(ab, ATH11K_DBG_DATA, NULL, "", desc,
-				sizeof(*desc));
-		return true;
-	}
-
 	skb_put(msdu, hal_rx_desc_sz + l3pad_bytes + msdu_len);
 	skb_pull(msdu, hal_rx_desc_sz + l3pad_bytes);
 
@@ -5500,7 +5530,7 @@ static int ath11k_dp_rx_full_mon_prepare_mpdu(struct ath11k_dp *dp,
 					      struct sk_buff *head,
 					      struct sk_buff *tail)
 {
-	mon_mpdu = kzalloc_obj(*mon_mpdu, GFP_ATOMIC);
+	mon_mpdu = kzalloc(sizeof(*mon_mpdu), GFP_ATOMIC);
 	if (!mon_mpdu)
 		return -ENOMEM;
 

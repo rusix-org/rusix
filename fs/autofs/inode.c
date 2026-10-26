@@ -13,7 +13,7 @@ struct autofs_info *autofs_new_ino(struct autofs_sb_info *sbi)
 {
 	struct autofs_info *ino;
 
-	ino = kzalloc_obj(*ino);
+	ino = kzalloc(sizeof(*ino), GFP_KERNEL);
 	if (ino) {
 		INIT_LIST_HEAD(&ino->active);
 		INIT_LIST_HEAD(&ino->expiring);
@@ -59,7 +59,7 @@ void autofs_kill_sb(struct super_block *sb)
 	}
 
 	pr_debug("shutting down\n");
-	kill_anon_super(sb);
+	kill_litter_super(sb);
 	if (sbi)
 		kfree_rcu(sbi, rcu);
 }
@@ -96,7 +96,7 @@ static int autofs_show_options(struct seq_file *m, struct dentry *root)
 		seq_puts(m, ",ignore");
 #ifdef CONFIG_CHECKPOINT_RESTORE
 	if (sbi->pipe)
-		seq_printf(m, ",pipe_ino=%llu", file_inode(sbi->pipe)->i_ino);
+		seq_printf(m, ",pipe_ino=%ld", file_inode(sbi->pipe)->i_ino);
 	else
 		seq_puts(m, ",pipe_ino=-1");
 #endif
@@ -246,7 +246,7 @@ static struct autofs_sb_info *autofs_alloc_sbi(void)
 {
 	struct autofs_sb_info *sbi;
 
-	sbi = kzalloc_obj(*sbi);
+	sbi = kzalloc(sizeof(*sbi), GFP_KERNEL);
 	if (!sbi)
 		return NULL;
 
@@ -255,7 +255,6 @@ static struct autofs_sb_info *autofs_alloc_sbi(void)
 	sbi->min_proto = AUTOFS_MIN_PROTO_VERSION;
 	sbi->max_proto = AUTOFS_MAX_PROTO_VERSION;
 	sbi->pipefd = -1;
-	sbi->mnt_ns_id = to_ns_common(current->nsproxy->mnt_ns)->ns_id;
 
 	set_autofs_type_indirect(&sbi->type);
 	mutex_init(&sbi->wq_mutex);
@@ -411,7 +410,7 @@ int autofs_init_fs_context(struct fs_context *fc)
 	struct autofs_fs_context *ctx;
 	struct autofs_sb_info *sbi;
 
-	ctx = kzalloc_obj(struct autofs_fs_context);
+	ctx = kzalloc(sizeof(struct autofs_fs_context), GFP_KERNEL);
 	if (!ctx)
 		goto nomem;
 

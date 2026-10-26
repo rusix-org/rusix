@@ -13,17 +13,15 @@
 #include <linux/iosys-map.h>
 #include <linux/export.h>
 
-#include <drm/clients/drm_fbdev_helper.h>
 #include <drm/drm_atomic.h>
 #include <drm/drm_atomic_helper.h>
-#include <drm/drm_blend.h>
 #include <drm/drm_edid.h>
+#include <drm/drm_fb_helper.h>
 #include <drm/drm_fourcc.h>
 #include <drm/drm_framebuffer.h>
 #include <drm/drm_gem_atomic_helper.h>
 #include <drm/drm_gem_framebuffer_helper.h>
 #include <drm/drm_plane_helper.h>
-#include <drm/drm_print.h>
 #include <drm/drm_probe_helper.h>
 
 #include "hgsmi_channels.h"
@@ -220,17 +218,17 @@ static void vbox_crtc_set_base_and_mode(struct drm_crtc *crtc,
 }
 
 static void vbox_crtc_atomic_enable(struct drm_crtc *crtc,
-				    struct drm_atomic_commit *state)
+				    struct drm_atomic_state *state)
 {
 }
 
 static void vbox_crtc_atomic_disable(struct drm_crtc *crtc,
-				     struct drm_atomic_commit *state)
+				     struct drm_atomic_state *state)
 {
 }
 
 static void vbox_crtc_atomic_flush(struct drm_crtc *crtc,
-				   struct drm_atomic_commit *state)
+				   struct drm_atomic_state *state)
 {
 }
 
@@ -251,21 +249,21 @@ static const struct drm_crtc_funcs vbox_crtc_funcs = {
 	.page_flip = drm_atomic_helper_page_flip,
 	/* .gamma_set = vbox_crtc_gamma_set, */
 	.destroy = vbox_crtc_destroy,
-	.atomic_create_state = drm_atomic_helper_crtc_create_state,
+	.reset = drm_atomic_helper_crtc_reset,
 	.atomic_duplicate_state = drm_atomic_helper_crtc_duplicate_state,
 	.atomic_destroy_state = drm_atomic_helper_crtc_destroy_state,
 };
 
 static int vbox_primary_atomic_check(struct drm_plane *plane,
-				     struct drm_atomic_commit *state)
+				     struct drm_atomic_state *state)
 {
 	struct drm_plane_state *new_state = drm_atomic_get_new_plane_state(state,
 									   plane);
 	struct drm_crtc_state *crtc_state = NULL;
 
 	if (new_state->crtc) {
-		crtc_state = drm_atomic_get_new_crtc_state(state,
-							   new_state->crtc);
+		crtc_state = drm_atomic_get_existing_crtc_state(state,
+								new_state->crtc);
 		if (WARN_ON(!crtc_state))
 			return -EINVAL;
 	}
@@ -277,7 +275,7 @@ static int vbox_primary_atomic_check(struct drm_plane *plane,
 }
 
 static void vbox_primary_atomic_update(struct drm_plane *plane,
-				       struct drm_atomic_commit *state)
+				       struct drm_atomic_state *state)
 {
 	struct drm_plane_state *new_state = drm_atomic_get_new_plane_state(state,
 									   plane);
@@ -323,7 +321,7 @@ static void vbox_primary_atomic_update(struct drm_plane *plane,
 }
 
 static void vbox_primary_atomic_disable(struct drm_plane *plane,
-					struct drm_atomic_commit *state)
+					struct drm_atomic_state *state)
 {
 	struct drm_plane_state *old_state = drm_atomic_get_old_plane_state(state,
 									   plane);
@@ -336,7 +334,7 @@ static void vbox_primary_atomic_disable(struct drm_plane *plane,
 }
 
 static int vbox_cursor_atomic_check(struct drm_plane *plane,
-				    struct drm_atomic_commit *state)
+				    struct drm_atomic_state *state)
 {
 	struct drm_plane_state *new_state = drm_atomic_get_new_plane_state(state,
 									   plane);
@@ -346,8 +344,8 @@ static int vbox_cursor_atomic_check(struct drm_plane *plane,
 	int ret;
 
 	if (new_state->crtc) {
-		crtc_state = drm_atomic_get_new_crtc_state(state,
-							   new_state->crtc);
+		crtc_state = drm_atomic_get_existing_crtc_state(state,
+								new_state->crtc);
 		if (WARN_ON(!crtc_state))
 			return -EINVAL;
 	}
@@ -388,7 +386,7 @@ static void copy_cursor_image(u8 *src, u8 *dst, u32 width, u32 height,
 }
 
 static void vbox_cursor_atomic_update(struct drm_plane *plane,
-				      struct drm_atomic_commit *state)
+				      struct drm_atomic_state *state)
 {
 	struct drm_plane_state *old_state = drm_atomic_get_old_plane_state(state,
 									   plane);
@@ -439,7 +437,7 @@ static void vbox_cursor_atomic_update(struct drm_plane *plane,
 }
 
 static void vbox_cursor_atomic_disable(struct drm_plane *plane,
-				       struct drm_atomic_commit *state)
+				       struct drm_atomic_state *state)
 {
 	struct drm_plane_state *old_state = drm_atomic_get_old_plane_state(state,
 									   plane);
@@ -499,7 +497,7 @@ static const struct drm_plane_funcs vbox_primary_plane_funcs = {
 	.update_plane	= drm_atomic_helper_update_plane,
 	.disable_plane	= drm_atomic_helper_disable_plane,
 	.destroy	= drm_plane_helper_destroy,
-	.atomic_create_state = drm_atomic_helper_plane_create_state,
+	.reset		= drm_atomic_helper_plane_reset,
 	.atomic_duplicate_state = drm_atomic_helper_plane_duplicate_state,
 	.atomic_destroy_state = drm_atomic_helper_plane_destroy_state,
 };
@@ -529,7 +527,7 @@ static struct drm_plane *vbox_create_plane(struct vbox_private *vbox,
 		return ERR_PTR(-EINVAL);
 	}
 
-	plane = kzalloc_obj(*plane);
+	plane = kzalloc(sizeof(*plane), GFP_KERNEL);
 	if (!plane)
 		return ERR_PTR(-ENOMEM);
 
@@ -540,9 +538,6 @@ static struct drm_plane *vbox_create_plane(struct vbox_private *vbox,
 		goto free_plane;
 
 	drm_plane_helper_add(plane, helper_funcs);
-
-	drm_plane_create_blend_mode_property(plane,
-					     BIT(DRM_MODE_BLEND_COVERAGE));
 
 	return plane;
 
@@ -566,7 +561,7 @@ static struct vbox_crtc *vbox_crtc_init(struct drm_device *dev, unsigned int i)
 	if (ret)
 		return ERR_PTR(ret);
 
-	vbox_crtc = kzalloc_obj(*vbox_crtc);
+	vbox_crtc = kzalloc(sizeof(*vbox_crtc), GFP_KERNEL);
 	if (!vbox_crtc)
 		return ERR_PTR(-ENOMEM);
 
@@ -626,7 +621,7 @@ static struct drm_encoder *vbox_encoder_init(struct drm_device *dev,
 {
 	struct vbox_encoder *vbox_encoder;
 
-	vbox_encoder = kzalloc_obj(*vbox_encoder);
+	vbox_encoder = kzalloc(sizeof(*vbox_encoder), GFP_KERNEL);
 	if (!vbox_encoder)
 		return NULL;
 
@@ -812,7 +807,7 @@ static int vbox_connector_init(struct drm_device *dev,
 	struct vbox_connector *vbox_connector;
 	struct drm_connector *connector;
 
-	vbox_connector = kzalloc_obj(*vbox_connector);
+	vbox_connector = kzalloc(sizeof(*vbox_connector), GFP_KERNEL);
 	if (!vbox_connector)
 		return -ENOMEM;
 

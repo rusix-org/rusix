@@ -37,10 +37,7 @@ properties:
     maxItems: 20
 
   memory-region:
-    minItems: 1
-    items:
-      - description: Firmware-loaded codec carveout
-      - description: IOMMU IOVA reservation region
+    maxItems: 1
 
   power-domains:
     minItems: 1
@@ -49,6 +46,21 @@ properties:
   power-domain-names:
     minItems: 1
     maxItems: 4
+
+  video-firmware:
+    type: object
+    additionalProperties: false
+
+    description: |
+      Firmware subnode is needed when the platform does not
+      have TrustZone.
+
+    properties:
+      iommus:
+        maxItems: 1
+
+    required:
+      - iommus
 
 required:
   - reg

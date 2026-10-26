@@ -20,13 +20,11 @@ struct jit_ctx {
 	union loongarch_instruction *image;
 	union loongarch_instruction *ro_image;
 	u32 stack_size;
-	u64 arena_vm_start;
-	u64 user_vm_start;
 };
 
 struct jit_data {
 	struct bpf_binary_header *header;
-	struct bpf_binary_header *ro_header;
+	u8 *image;
 	struct jit_ctx ctx;
 };
 
@@ -156,7 +154,7 @@ static inline void move_imm(struct jit_ctx *ctx, enum loongarch_gpr rd, long imm
 	/* ori rd, $zero, imm_11_0 */
 	if (is_unsigned_imm12(imm)) {
 		emit_insn(ctx, ori, rd, LOONGARCH_GPR_ZERO, imm);
-		return;
+		goto zext;
 	}
 
 	/* lu52id rd, $zero, imm_63_52 */

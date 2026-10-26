@@ -551,10 +551,12 @@ static int imx6ul_tsc_suspend(struct device *dev)
 	struct imx6ul_tsc *tsc = platform_get_drvdata(pdev);
 	struct input_dev *input_dev = tsc->input;
 
-	guard(mutex)(&input_dev->mutex);
+	mutex_lock(&input_dev->mutex);
 
 	if (input_device_enabled(input_dev))
 		imx6ul_tsc_stop(tsc);
+
+	mutex_unlock(&input_dev->mutex);
 
 	return 0;
 }
@@ -564,17 +566,16 @@ static int imx6ul_tsc_resume(struct device *dev)
 	struct platform_device *pdev = to_platform_device(dev);
 	struct imx6ul_tsc *tsc = platform_get_drvdata(pdev);
 	struct input_dev *input_dev = tsc->input;
-	int error;
+	int retval = 0;
 
-	guard(mutex)(&input_dev->mutex);
+	mutex_lock(&input_dev->mutex);
 
-	if (input_device_enabled(input_dev)) {
-		error = imx6ul_tsc_start(tsc);
-		if (error)
-			return error;
-	}
+	if (input_device_enabled(input_dev))
+		retval = imx6ul_tsc_start(tsc);
 
-	return 0;
+	mutex_unlock(&input_dev->mutex);
+
+	return retval;
 }
 
 static DEFINE_SIMPLE_DEV_PM_OPS(imx6ul_tsc_pm_ops,

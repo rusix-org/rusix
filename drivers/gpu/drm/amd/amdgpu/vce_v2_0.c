@@ -37,14 +37,9 @@
 #include "oss/oss_2_0_d.h"
 #include "oss/oss_2_0_sh_mask.h"
 
-
-/* Use 24K to be safe. The FW supposedly only requires 23744 bytes. */
-#define VCE_V2_0_DATA_ENTRY_SIZE (24 * 1024)
-
 #define VCE_V2_0_FW_SIZE	(256 * 1024)
 #define VCE_V2_0_STACK_SIZE	(64 * 1024)
-#define VCE_V2_0_DATA_SIZE	(VCE_V2_0_DATA_ENTRY_SIZE * (AMDGPU_MAX_VCE_HANDLES + 1))
-
+#define VCE_V2_0_DATA_SIZE	(23552 * AMDGPU_MAX_VCE_HANDLES)
 #define VCE_STATUS_VCPU_REPORT_FW_LOADED_MASK	0x02
 
 static void vce_v2_0_set_ring_funcs(struct amdgpu_device *adev);
@@ -188,7 +183,7 @@ static void vce_v2_0_mc_resume(struct amdgpu_device *adev)
 	WREG32(mmVCE_LMI_VCPU_CACHE_40BIT_BAR, (adev->vce.gpu_addr >> 8));
 
 	offset = AMDGPU_VCE_FIRMWARE_OFFSET;
-	size = VCE_V2_0_FW_SIZE - AMDGPU_VCE_FIRMWARE_OFFSET;
+	size = VCE_V2_0_FW_SIZE;
 	WREG32(mmVCE_VCPU_CACHE_OFFSET0, offset & 0x7fffffff);
 	WREG32(mmVCE_VCPU_CACHE_SIZE0, size);
 
@@ -285,7 +280,7 @@ static int vce_v2_0_stop(struct amdgpu_device *adev)
 
 
 	if (vce_v2_0_lmi_clean(adev)) {
-		drm_info(adev_to_drm(adev), "VCE is not idle\n");
+		DRM_INFO("VCE is not idle \n");
 		return 0;
 	}
 
@@ -294,7 +289,7 @@ static int vce_v2_0_stop(struct amdgpu_device *adev)
 		return -EINVAL;
 
 	if (vce_v2_0_wait_for_idle(ip_block)) {
-		drm_info(adev_to_drm(adev), "VCE is busy, Can't set clock gating");
+		DRM_INFO("VCE is busy, Can't set clock gating");
 		return 0;
 	}
 
@@ -412,11 +407,6 @@ static void vce_v2_0_enable_mgcg(struct amdgpu_device *adev, bool enable,
 static int vce_v2_0_early_init(struct amdgpu_ip_block *ip_block)
 {
 	struct amdgpu_device *adev = ip_block->adev;
-	int r;
-
-	r = amdgpu_vce_early_init(adev);
-	if (r)
-		return r;
 
 	adev->vce.num_rings = 2;
 
@@ -486,7 +476,7 @@ static int vce_v2_0_hw_init(struct amdgpu_ip_block *ip_block)
 			return r;
 	}
 
-	drm_info(adev_to_drm(adev), "VCE initialized successfully.\n");
+	DRM_INFO("VCE initialized successfully.\n");
 
 	return 0;
 }
@@ -633,6 +623,7 @@ static const struct amd_ip_funcs vce_v2_0_ip_funcs = {
 	.hw_fini = vce_v2_0_hw_fini,
 	.suspend = vce_v2_0_suspend,
 	.resume = vce_v2_0_resume,
+	.is_idle = vce_v2_0_is_idle,
 	.wait_for_idle = vce_v2_0_wait_for_idle,
 	.soft_reset = vce_v2_0_soft_reset,
 	.set_clockgating_state = vce_v2_0_set_clockgating_state,

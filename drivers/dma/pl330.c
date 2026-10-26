@@ -502,7 +502,6 @@ struct pl330_dmac {
 	struct dma_pl330_chan *peripherals; /* keep at end */
 	int quirks;
 
-	struct dentry		*dbgfs;
 	struct reset_control	*rstc;
 	struct reset_control	*rstc_ocp;
 };
@@ -1888,7 +1887,8 @@ static int dmac_alloc_threads(struct pl330_dmac *pl330)
 	int i;
 
 	/* Allocate 1 Manager and 'chans' Channel threads */
-	pl330->channels = kzalloc_objs(*thrd, 1 + chans);
+	pl330->channels = kcalloc(1 + chans, sizeof(*thrd),
+					GFP_KERNEL);
 	if (!pl330->channels)
 		return -ENOMEM;
 
@@ -2133,8 +2133,10 @@ static void pl330_tasklet(struct tasklet_struct *t)
 	spin_unlock_irqrestore(&pch->lock, flags);
 
 	/* If work list empty, power down */
-	if (power_down)
+	if (power_down) {
+		pm_runtime_mark_last_busy(pch->dmac->ddma.dev);
 		pm_runtime_put_autosuspend(pch->dmac->ddma.dev);
+	}
 }
 
 static struct dma_chan *of_dma_pl330_xlate(struct of_phandle_args *dma_spec,
@@ -2311,6 +2313,7 @@ static int pl330_terminate_all(struct dma_chan *chan)
 	list_splice_tail_init(&pch->work_list, &pl330->desc_pool);
 	list_splice_tail_init(&pch->completed_list, &pl330->desc_pool);
 	spin_unlock_irqrestore(&pch->lock, flags);
+	pm_runtime_mark_last_busy(pl330->ddma.dev);
 	if (power_down)
 		pm_runtime_put_autosuspend(pl330->ddma.dev);
 	pm_runtime_put_autosuspend(pl330->ddma.dev);
@@ -2344,6 +2347,7 @@ static int pl330_pause(struct dma_chan *chan)
 			desc->status = PAUSED;
 	}
 	spin_unlock_irqrestore(&pch->lock, flags);
+	pm_runtime_mark_last_busy(pl330->ddma.dev);
 	pm_runtime_put_autosuspend(pl330->ddma.dev);
 
 	return 0;
@@ -2367,6 +2371,7 @@ static void pl330_free_chan_resources(struct dma_chan *chan)
 		list_splice_tail_init(&pch->work_list, &pch->dmac->desc_pool);
 
 	spin_unlock_irqrestore(&pl330->lock, flags);
+	pm_runtime_mark_last_busy(pch->dmac->ddma.dev);
 	pm_runtime_put_autosuspend(pch->dmac->ddma.dev);
 	pl330_unprep_slave_fifo(pch);
 }
@@ -2548,7 +2553,7 @@ static int add_desc(struct list_head *pool, spinlock_t *lock,
 	unsigned long flags;
 	int i;
 
-	desc = kzalloc_objs(*desc, count, flg);
+	desc = kcalloc(count, sizeof(*desc), flg);
 	if (!desc)
 		return 0;
 
@@ -2953,22 +2958,12 @@ DEFINE_SHOW_ATTRIBUTE(pl330_debugfs);
 
 static inline void init_pl330_debugfs(struct pl330_dmac *pl330)
 {
-	pl330->dbgfs = debugfs_create_file(dev_name(pl330->ddma.dev),
-					   S_IFREG | 0444, NULL, pl330,
-					   &pl330_debugfs_fops);
-}
-
-static inline void deinit_pl330_debugfs(struct pl330_dmac *pl330)
-{
-	debugfs_remove(pl330->dbgfs);
-	pl330->dbgfs = NULL;
+	debugfs_create_file(dev_name(pl330->ddma.dev),
+			    S_IFREG | 0444, NULL, pl330,
+			    &pl330_debugfs_fops);
 }
 #else
 static inline void init_pl330_debugfs(struct pl330_dmac *pl330)
-{
-}
-
-static inline void deinit_pl330_debugfs(struct pl330_dmac *pl330)
 {
 }
 #endif
@@ -3103,7 +3098,7 @@ pl330_probe(struct amba_device *adev, const struct amba_id *id)
 
 	pl330->num_peripherals = num_chan;
 
-	pl330->peripherals = kzalloc_objs(*pch, num_chan);
+	pl330->peripherals = kcalloc(num_chan, sizeof(*pch), GFP_KERNEL);
 	if (!pl330->peripherals) {
 		ret = -ENOMEM;
 		goto probe_err2;
@@ -3181,6 +3176,7 @@ pl330_probe(struct amba_device *adev, const struct amba_id *id)
 	pm_runtime_irq_safe(&adev->dev);
 	pm_runtime_use_autosuspend(&adev->dev);
 	pm_runtime_set_autosuspend_delay(&adev->dev, PL330_AUTOSUSPEND_DELAY);
+	pm_runtime_mark_last_busy(&adev->dev);
 	pm_runtime_put_autosuspend(&adev->dev);
 
 	return 0;
@@ -3214,8 +3210,6 @@ static void pl330_remove(struct amba_device *adev)
 	struct pl330_dmac *pl330 = amba_get_drvdata(adev);
 	struct dma_pl330_chan *pch, *_p;
 	int i, irq;
-
-	deinit_pl330_debugfs(pl330);
 
 	pm_runtime_get_noresume(pl330->ddma.dev);
 

@@ -45,8 +45,7 @@ static struct cs5535_mfgpt_chip {
 int cs5535_mfgpt_toggle_event(struct cs5535_mfgpt_timer *timer, int cmp,
 		int event, int enable)
 {
-	uint32_t msr, mask;
-	struct msr val;
+	uint32_t msr, mask, value, dummy;
 	int shift = (cmp == MFGPT_CMP1) ? 0 : 8;
 
 	if (!timer) {
@@ -83,14 +82,14 @@ int cs5535_mfgpt_toggle_event(struct cs5535_mfgpt_timer *timer, int cmp,
 		return -EIO;
 	}
 
-	rdmsrq(msr, val.q);
+	rdmsr(msr, value, dummy);
 
 	if (enable)
-		val.l |= mask;
+		value |= mask;
 	else
-		val.l &= ~mask;
+		value &= ~mask;
 
-	wrmsrq(msr, val.q);
+	wrmsr(msr, value, dummy);
 	return 0;
 }
 EXPORT_SYMBOL_GPL(cs5535_mfgpt_toggle_event);
@@ -98,7 +97,7 @@ EXPORT_SYMBOL_GPL(cs5535_mfgpt_toggle_event);
 int cs5535_mfgpt_set_irq(struct cs5535_mfgpt_timer *timer, int cmp, int *irq,
 		int enable)
 {
-	struct msr zsel, lpc;
+	uint32_t zsel, lpc, dummy;
 	int shift;
 
 	if (!timer) {
@@ -114,31 +113,30 @@ int cs5535_mfgpt_set_irq(struct cs5535_mfgpt_timer *timer, int cmp, int *irq,
 	 * IRQ of the 1st. This can only happen if forcing an IRQ, calling this
 	 * with *irq==0 is safe. Currently there _are_ no 2 drivers.
 	 */
-	rdmsrq(MSR_PIC_ZSEL_LOW, zsel.q);
+	rdmsr(MSR_PIC_ZSEL_LOW, zsel, dummy);
 	shift = ((cmp == MFGPT_CMP1 ? 0 : 4) + timer->nr % 4) * 4;
-	if (((zsel.l >> shift) & 0xF) == 2)
+	if (((zsel >> shift) & 0xF) == 2)
 		return -EIO;
 
 	/* Choose IRQ: if none supplied, keep IRQ already set or use default */
 	if (!*irq)
-		*irq = (zsel.l >> shift) & 0xF;
+		*irq = (zsel >> shift) & 0xF;
 	if (!*irq)
 		*irq = CONFIG_CS5535_MFGPT_DEFAULT_IRQ;
 
 	/* Can't use IRQ if it's 0 (=disabled), 2, or routed to LPC */
 	if (*irq < 1 || *irq == 2 || *irq > 15)
 		return -EIO;
-	rdmsrq(MSR_PIC_IRQM_LPC, lpc.q);
-	if (lpc.l & (1 << *irq))
+	rdmsr(MSR_PIC_IRQM_LPC, lpc, dummy);
+	if (lpc & (1 << *irq))
 		return -EIO;
 
 	/* All chosen and checked - go for it */
 	if (cs5535_mfgpt_toggle_event(timer, cmp, MFGPT_EVENT_IRQ, enable))
 		return -EIO;
 	if (enable) {
-		zsel.l = (zsel.l & ~(0xF << shift)) | (*irq << shift);
-		zsel.h = lpc.h;
-		wrmsrq(MSR_PIC_ZSEL_LOW, zsel.q);
+		zsel = (zsel & ~(0xF << shift)) | (*irq << shift);
+		wrmsr(MSR_PIC_ZSEL_LOW, zsel, dummy);
 	}
 
 	return 0;
@@ -189,7 +187,7 @@ struct cs5535_mfgpt_timer *cs5535_mfgpt_alloc_timer(int timer_nr, int domain)
 	if (timer_nr < 0)
 		goto done;
 
-	timer = kmalloc_obj(*timer);
+	timer = kmalloc(sizeof(*timer), GFP_KERNEL);
 	if (!timer) {
 		/* aw hell */
 		spin_lock_irqsave(&mfgpt->lock, flags);
@@ -251,8 +249,11 @@ EXPORT_SYMBOL_GPL(cs5535_mfgpt_write);
  */
 static void reset_all_timers(void)
 {
+	uint32_t val, dummy;
+
 	/* The following undocumented bit resets the MFGPT timers */
-	wrmsrq(MSR_MFGPT_SETUP, 0xff);
+	val = 0xFF; dummy = 0;
+	wrmsr(MSR_MFGPT_SETUP, val, dummy);
 }
 
 /*

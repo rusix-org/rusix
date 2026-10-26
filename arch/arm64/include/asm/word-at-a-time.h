@@ -7,6 +7,8 @@
 
 #include <linux/uaccess.h>
 
+#ifndef __AARCH64EB__
+
 #include <linux/bitops.h>
 #include <linux/wordpart.h>
 
@@ -33,6 +35,10 @@ static inline unsigned long zero_bytemask(unsigned long bits)
 	bits = (bits - 1) & ~bits;
 	return bits >> 7;
 }
+
+#else	/* __AARCH64EB__ */
+#include <asm-generic/word-at-a-time.h>
+#endif
 
 /*
  * Load an unaligned word from kernel space.

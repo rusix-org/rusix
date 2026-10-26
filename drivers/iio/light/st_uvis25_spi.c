@@ -9,6 +9,7 @@
 
 #include <linux/kernel.h>
 #include <linux/module.h>
+#include <linux/mod_devicetable.h>
 #include <linux/spi/spi.h>
 #include <linux/slab.h>
 #include <linux/regmap.h>
@@ -46,7 +47,7 @@ static const struct of_device_id st_uvis25_spi_of_match[] = {
 MODULE_DEVICE_TABLE(of, st_uvis25_spi_of_match);
 
 static const struct spi_device_id st_uvis25_spi_id_table[] = {
-	{ .name = ST_UVIS25_DEV_NAME },
+	{ ST_UVIS25_DEV_NAME },
 	{ }
 };
 MODULE_DEVICE_TABLE(spi, st_uvis25_spi_id_table);

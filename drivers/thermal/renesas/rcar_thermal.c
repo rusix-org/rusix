@@ -446,8 +446,10 @@ static int rcar_thermal_probe(struct platform_device *pdev)
 
 		ret = devm_request_irq(dev, irq, rcar_thermal_irq,
 				       IRQF_SHARED, dev_name(dev), common);
-		if (ret)
+		if (ret) {
+			dev_err(dev, "irq request failed\n");
 			goto error_unregister;
+		}
 
 		/* update ENR bits */
 		if (chip->irq_per_ch)
@@ -527,6 +529,7 @@ error_unregister:
 	return ret;
 }
 
+#ifdef CONFIG_PM_SLEEP
 static int rcar_thermal_suspend(struct device *dev)
 {
 	struct rcar_thermal_common *common = dev_get_drvdata(dev);
@@ -559,14 +562,15 @@ static int rcar_thermal_resume(struct device *dev)
 
 	return 0;
 }
+#endif
 
-static DEFINE_SIMPLE_DEV_PM_OPS(rcar_thermal_pm_ops, rcar_thermal_suspend,
-				rcar_thermal_resume);
+static SIMPLE_DEV_PM_OPS(rcar_thermal_pm_ops, rcar_thermal_suspend,
+			 rcar_thermal_resume);
 
 static struct platform_driver rcar_thermal_driver = {
 	.driver	= {
 		.name	= "rcar_thermal",
-		.pm = pm_sleep_ptr(&rcar_thermal_pm_ops),
+		.pm = &rcar_thermal_pm_ops,
 		.of_match_table = rcar_thermal_dt_ids,
 	},
 	.probe		= rcar_thermal_probe,

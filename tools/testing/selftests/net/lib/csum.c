@@ -2,7 +2,8 @@
 
 /* Test hardware checksum offload: Rx + Tx, IPv4 + IPv6, TCP + UDP.
  *
- * The test runs on two machines to exercise the NIC.
+ * The test runs on two machines to exercise the NIC. For this reason it
+ * is not integrated in kselftests.
  *
  *     CMD=$((./csum -[46] -[tu] -S $SADDR -D $DADDR -[RT] -r 1 $EXTRA_ARGS))
  *
@@ -235,8 +236,7 @@ static void *build_packet_udp(void *_uh)
 		uh->source = 0;
 		uh->source = checksum(uh, IPPROTO_UDP, sizeof(*uh) + cfg_payload_len);
 
-		fprintf(stderr, "%s: changing sport: %hu -> %hu\n",
-			cfg_do_tx ? "tx" : "rx",
+		fprintf(stderr, "tx: changing sport: %hu -> %hu\n",
 			cfg_port_src, ntohs(uh->source));
 		cfg_port_src = ntohs(uh->source);
 	}
@@ -249,8 +249,7 @@ static void *build_packet_udp(void *_uh)
 	if (cfg_bad_csum)
 		uh->check = ~uh->check;
 
-	if (cfg_do_tx)
-		fprintf(stderr, "tx: sending checksum: 0x%x\n", uh->check);
+	fprintf(stderr, "tx: sending checksum: 0x%x\n", uh->check);
 	return uh + 1;
 }
 
@@ -572,35 +571,14 @@ static int recv_prepare_packet(void)
 static int recv_udp(int fd)
 {
 	static char buf[MAX_PAYLOAD_LEN];
-	struct sockaddr_storage addr;
-	socklen_t addrlen;
 	int ret, count = 0;
 
 	while (1) {
-		addrlen = sizeof(addr);
-		ret = recvfrom(fd, buf, sizeof(buf), MSG_DONTWAIT,
-			       (struct sockaddr *)&addr, &addrlen);
+		ret = recv(fd, buf, sizeof(buf), MSG_DONTWAIT);
 		if (ret == -1 && errno == EAGAIN)
 			break;
 		if (ret == -1)
 			error(1, errno, "recv r");
-
-		if (cfg_family == PF_INET) {
-			struct sockaddr_in *sin = (void *)&addr;
-
-			if (sin->sin_addr.s_addr != cfg_saddr4.sin_addr.s_addr)
-				continue;
-			if (sin->sin_port != htons(cfg_port_src))
-				continue;
-		} else {
-			struct sockaddr_in6 *sin6 = (void *)&addr;
-
-			if (memcmp(&sin6->sin6_addr, &cfg_saddr6.sin6_addr,
-				   sizeof(sin6->sin6_addr)))
-				continue;
-			if (sin6->sin6_port != htons(cfg_port_src))
-				continue;
-		}
 
 		fprintf(stderr, "rx: udp: len=%u\n", ret);
 		count++;
@@ -642,9 +620,6 @@ static int recv_verify_packet_tcp(void *th, int len)
 	if (len < sizeof(*tcph) || tcph->dest != htons(cfg_port_dst))
 		return -1;
 
-	if (tcph->source != htons(cfg_port_src))
-		return -1;
-
 	return recv_verify_csum(th, len, ntohs(tcph->source), tcph->check);
 }
 
@@ -672,9 +647,6 @@ static int recv_verify_packet_udp(void *th, int len)
 		return recv_verify_packet_udp_encap(udph + 1,
 						    len - sizeof(*udph));
 
-	if (udph->source != htons(cfg_port_src))
-		return -1;
-
 	return recv_verify_csum(th, len, ntohs(udph->source), udph->check);
 }
 
@@ -685,9 +657,6 @@ static int recv_verify_packet_ipv4(void *nh, int len)
 	uint16_t ip_len;
 
 	if (len < sizeof(*iph) || iph->protocol != proto)
-		return -1;
-
-	if (iph->saddr != cfg_saddr4.sin_addr.s_addr)
 		return -1;
 
 	ip_len = ntohs(iph->tot_len);
@@ -709,9 +678,6 @@ static int recv_verify_packet_ipv6(void *nh, int len)
 	uint16_t payload_len;
 
 	if (len < sizeof(*ip6h) || ip6h->nexthdr != proto)
-		return -1;
-
-	if (memcmp(&ip6h->saddr, &cfg_saddr6.sin6_addr, sizeof(ip6h->saddr)))
 		return -1;
 
 	payload_len = ntohs(ip6h->payload_len);
@@ -741,7 +707,7 @@ static uint32_t recv_get_packet_csum_status(struct msghdr *msg)
 			      cm->cmsg_level, cm->cmsg_type);
 
 		if (cm->cmsg_len != CMSG_LEN(sizeof(struct tpacket_auxdata)))
-			error(1, 0, "cmsg: len=%zu expected=%zu",
+			error(1, 0, "cmsg: len=%lu expected=%lu",
 			      cm->cmsg_len, CMSG_LEN(sizeof(struct tpacket_auxdata)));
 
 		aux = (void *)CMSG_DATA(cm);
@@ -974,9 +940,6 @@ static void do_tx(void)
 			cfg_payload_len = rand() % MAX_PAYLOAD_LEN;
 			buf = build_packet(_buf, sizeof(_buf), &len);
 		}
-
-		/* avoid bursting */
-		usleep(20);
 	}
 
 	if (close(fd))
@@ -988,14 +951,6 @@ static void do_rx(int fdp, int fdr)
 	unsigned long count_udp = 0, count_pkt = 0;
 	long tleft, tstop;
 	struct pollfd pfd;
-
-	if (!cfg_do_tx && cfg_zero_sum) {
-		static char _buf[MAX_HEADER_LEN + MAX_PAYLOAD_LEN];
-		int len;
-
-		/* calculate source port that causes csum to add up to zero */
-		build_packet(_buf, sizeof(_buf), &len);
-	}
 
 	tstop = gettimeofday_ms() + cfg_timeout_ms;
 	tleft = cfg_timeout_ms;

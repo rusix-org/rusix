@@ -208,10 +208,7 @@ static void hisi_spi_flush_fifo(struct hisi_spi *hs)
 			break;
 		}
 
-	} while (hisi_spi_busy(hs) && --limit);
-
-	if (!limit)
-		dev_warn_ratelimited(hs->dev, "SPI busy timeout\n");
+	} while (hisi_spi_busy(hs) && limit--);
 }
 
 /* Disable the controller and all interrupts */
@@ -439,7 +436,7 @@ static int hisi_spi_setup(struct spi_device *spi)
 	/* Only alloc on first setup */
 	chip = spi_get_ctldata(spi);
 	if (!chip) {
-		chip = kzalloc_obj(*chip);
+		chip = kzalloc(sizeof(*chip), GFP_KERNEL);
 		if (!chip)
 			return -ENOMEM;
 		spi_set_ctldata(spi, chip);
@@ -463,7 +460,6 @@ static int hisi_spi_probe(struct platform_device *pdev)
 	struct device *dev = &pdev->dev;
 	struct spi_controller *host;
 	struct hisi_spi *hs;
-	u32 num_cs;
 	int ret, irq;
 
 	irq = platform_get_irq(pdev, 0);
@@ -496,11 +492,10 @@ static int hisi_spi_probe(struct platform_device *pdev)
 	if (host->max_speed_hz == 0)
 		return dev_err_probe(dev, -EINVAL, "spi-max-frequency can't be 0\n");
 
-	ret = device_property_read_u32(dev, "num-cs", &num_cs);
+	ret = device_property_read_u16(dev, "num-cs",
+					&host->num_chipselect);
 	if (ret)
 		host->num_chipselect = DEFAULT_NUM_CS;
-	else
-		host->num_chipselect = num_cs;
 
 	host->use_gpio_descriptors = true;
 	host->mode_bits = SPI_CPOL | SPI_CPHA | SPI_CS_HIGH | SPI_LOOP;
@@ -510,6 +505,7 @@ static int hisi_spi_probe(struct platform_device *pdev)
 	host->cleanup = hisi_spi_cleanup;
 	host->transfer_one = hisi_spi_transfer_one;
 	host->handle_err = hisi_spi_handle_err;
+	host->dev.fwnode = dev->fwnode;
 	host->min_speed_hz = DIV_ROUND_UP(host->max_speed_hz, CLK_DIV_MAX);
 
 	hisi_spi_hw_init(hs);

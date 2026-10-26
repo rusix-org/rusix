@@ -37,10 +37,8 @@ static struct irq_chip jcore_aic;
 
 static void handle_jcore_irq(struct irq_desc *desc)
 {
-	if (irq_is_percpu_devid(irq_desc_get_irq(desc)))
+	if (irqd_is_per_cpu(irq_desc_get_irq_data(desc)))
 		handle_percpu_devid_irq(desc);
-	else if (irqd_is_per_cpu(irq_desc_get_irq_data(desc)))
-		handle_percpu_irq(desc);
 	else
 		handle_simple_irq(desc);
 }

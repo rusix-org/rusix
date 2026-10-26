@@ -37,9 +37,6 @@ properties:
   clocks:
     maxItems: 1
 
-  resets:
-    maxItems: 1
-
   microchip,ext-vbus-drv:
     description:
       Some ULPI USB PHYs do not support an internal VBUS supply and driving

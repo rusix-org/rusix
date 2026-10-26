@@ -12,7 +12,6 @@
 #include <linux/interrupt.h>
 #include <linux/kernel.h>
 #include <linux/module.h>
-#include <linux/hex.h>
 #include <linux/ioport.h>
 #include <linux/pci.h>
 #include <linux/proc_fs.h>
@@ -3991,7 +3990,8 @@ static void ksz_update_timer(struct ksz_timer_info *info)
  */
 static int ksz_alloc_soft_desc(struct ksz_desc_info *desc_info, int transmit)
 {
-	desc_info->ring = kzalloc_objs(struct ksz_desc, desc_info->alloc);
+	desc_info->ring = kcalloc(desc_info->alloc, sizeof(struct ksz_desc),
+				  GFP_KERNEL);
 	if (!desc_info->ring)
 		return 1;
 	hw_init_desc(desc_info, transmit);
@@ -6576,7 +6576,7 @@ static int pcidev_init(struct pci_dev *pdev, const struct pci_device_id *id)
 
 	result = -ENOMEM;
 
-	info = kzalloc_obj(struct platform_info);
+	info = kzalloc(sizeof(struct platform_info), GFP_KERNEL);
 	if (!info)
 		goto pcidev_init_dev_err;
 
@@ -6629,7 +6629,7 @@ static int pcidev_init(struct pci_dev *pdev, const struct pci_device_id *id)
 			mib_port_count = SWITCH_PORT_NUM;
 		}
 		hw->mib_port_cnt = TOTAL_PORT_NUM;
-		hw->ksz_switch = kzalloc_obj(struct ksz_switch);
+		hw->ksz_switch = kzalloc(sizeof(struct ksz_switch), GFP_KERNEL);
 		if (!hw->ksz_switch)
 			goto pcidev_init_alloc_err;
 
@@ -6839,9 +6839,11 @@ static int __maybe_unused pcidev_suspend(struct device *dev_d)
 static char pcidev_name[] = "ksz884xp";
 
 static const struct pci_device_id pcidev_table[] = {
-	{ PCI_VDEVICE(MICREL_KS, 0x8841) },
-	{ PCI_VDEVICE(MICREL_KS, 0x8842) },
-	{ }
+	{ PCI_VENDOR_ID_MICREL_KS, 0x8841,
+		PCI_ANY_ID, PCI_ANY_ID, 0, 0, 0 },
+	{ PCI_VENDOR_ID_MICREL_KS, 0x8842,
+		PCI_ANY_ID, PCI_ANY_ID, 0, 0, 0 },
+	{ 0 }
 };
 
 MODULE_DEVICE_TABLE(pci, pcidev_table);

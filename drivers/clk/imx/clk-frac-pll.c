@@ -213,7 +213,7 @@ struct clk_hw *imx_clk_hw_frac_pll(const char *name,
 	struct clk_hw *hw;
 	int ret;
 
-	pll = kzalloc_obj(*pll);
+	pll = kzalloc(sizeof(*pll), GFP_KERNEL);
 	if (!pll)
 		return ERR_PTR(-ENOMEM);
 

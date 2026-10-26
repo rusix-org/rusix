@@ -66,7 +66,6 @@ static uint8_t is_cp_desired_hdcp1(struct mod_hdcp *hdcp)
 
 	return is_auth_needed &&
 			!hdcp->connection.link.adjust.hdcp1.disable &&
-			!is_frl_hdcp(hdcp) &&
 			!hdcp->connection.is_hdcp1_revoked;
 }
 
@@ -355,7 +354,7 @@ enum mod_hdcp_status mod_hdcp_add_display(struct mod_hdcp *hdcp,
 	/* reset retry counters */
 	reset_retry_counts(hdcp);
 
-	/* reset trace */
+	/* reset error trace */
 	memset(&hdcp->connection.trace, 0, sizeof(hdcp->connection.trace));
 
 	/* add display to connection */
@@ -401,7 +400,7 @@ enum mod_hdcp_status mod_hdcp_remove_display(struct mod_hdcp *hdcp,
 	/* clear retry counters */
 	reset_retry_counts(hdcp);
 
-	/* reset trace */
+	/* reset error trace */
 	memset(&hdcp->connection.trace, 0, sizeof(hdcp->connection.trace));
 
 	/* remove display */
@@ -465,7 +464,7 @@ enum mod_hdcp_status mod_hdcp_update_display(struct mod_hdcp *hdcp,
 	/* clear retry counters */
 	reset_retry_counts(hdcp);
 
-	/* reset trace */
+	/* reset error trace */
 	memset(&hdcp->connection.trace, 0, sizeof(hdcp->connection.trace));
 
 	/* set new adjustment */
@@ -585,7 +584,6 @@ enum mod_hdcp_operation_mode mod_hdcp_signal_type_to_operation_mode(
 	switch (signal) {
 	case SIGNAL_TYPE_DVI_SINGLE_LINK:
 	case SIGNAL_TYPE_HDMI_TYPE_A:
-	case SIGNAL_TYPE_HDMI_FRL:
 		mode = MOD_HDCP_MODE_DEFAULT;
 		break;
 	case SIGNAL_TYPE_EDP:

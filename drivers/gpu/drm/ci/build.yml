@@ -1,6 +1,6 @@
 .build:
   extends:
-    - .build-rules
+    - .container+build-rules
   stage: build-only
   artifacts:
     paths:
@@ -133,10 +133,6 @@ debian-arm32-asan:
   rules:
     - when: never
 
-debian-x86_64-msan:
-  rules:
-    - when: never
-
 debian-arm64:
   rules:
     - when: never
@@ -157,7 +153,7 @@ debian-arm64-ubsan:
   rules:
     - when: never
 
-debian-build-x86_64:
+debian-build-testing:
   rules:
     - when: never
 
@@ -181,11 +177,23 @@ debian-release:
   rules:
     - when: never
 
-debian-riscv64:
+debian-s390x:
   rules:
     - when: never
 
-debian-s390x:
+debian-testing:
+  rules:
+    - when: never
+
+debian-testing-asan:
+  rules:
+    - when: never
+
+debian-testing-msan:
+  rules:
+    - when: never
+
+debian-testing-ubsan:
   rules:
     - when: never
 
@@ -194,18 +202,6 @@ debian-vulkan:
     - when: never
 
 debian-x86_32:
-  rules:
-    - when: never
-
-debian-x86_64:
-  rules:
-    - when: never
-
-debian-x86_64-asan:
-  rules:
-    - when: never
-
-debian-x86_64-ubsan:
   rules:
     - when: never
 

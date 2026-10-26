@@ -73,7 +73,7 @@ static struct vmu_block *ofs_to_block(unsigned long src_ofs,
 	if (num > card->parts[partition].numblocks)
 		goto failed;
 
-	vblock = kmalloc_obj(struct vmu_block);
+	vblock = kmalloc(sizeof(struct vmu_block), GFP_KERNEL);
 	if (!vblock)
 		goto failed;
 
@@ -539,7 +539,7 @@ static void vmu_queryblocks(struct mapleq *mq)
 	mtd_cur->_sync = vmu_flash_sync;
 	mtd_cur->writesize = card->blocklen;
 
-	mpart = kmalloc_obj(struct mdev_part);
+	mpart = kmalloc(sizeof(struct mdev_part), GFP_KERNEL);
 	if (!mpart)
 		goto fail_mpart;
 
@@ -549,7 +549,7 @@ static void vmu_queryblocks(struct mapleq *mq)
 	mtd_cur->owner = THIS_MODULE;
 	mtd_cur->dev.parent = &mdev->dev;
 
-	pcache = kzalloc_obj(struct vmu_cache);
+	pcache = kzalloc(sizeof(struct vmu_cache), GFP_KERNEL);
 	if (!pcache)
 		goto fail_cache_create;
 	part_cur->pcache = pcache;

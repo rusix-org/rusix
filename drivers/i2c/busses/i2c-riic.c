@@ -554,7 +554,8 @@ static int riic_i2c_probe(struct platform_device *pdev)
 
 		ret = devm_request_irq(dev, irq, irq_desc->isr, 0, irq_desc->name, riic);
 		if (ret)
-			return ret;
+			return dev_err_probe(dev, ret, "failed to request irq %s\n",
+					     irq_desc->name);
 	}
 
 
@@ -724,10 +725,8 @@ static int riic_i2c_resume_noirq(struct device *dev)
 		return ret;
 
 	ret = pm_runtime_force_resume(dev);
-	if (ret) {
-		reset_control_assert(riic->rstc);
+	if (ret)
 		return ret;
-	}
 
 	ret = riic_init_hw(riic);
 	if (ret) {

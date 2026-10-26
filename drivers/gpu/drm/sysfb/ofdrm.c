@@ -5,7 +5,6 @@
 #include <linux/overflow.h>
 #include <linux/pci.h>
 #include <linux/platform_device.h>
-#include <linux/pm.h>
 
 #include <drm/clients/drm_client_setup.h>
 #include <drm/drm_atomic.h>
@@ -22,9 +21,7 @@
 #include <drm/drm_gem_framebuffer_helper.h>
 #include <drm/drm_gem_shmem_helper.h>
 #include <drm/drm_managed.h>
-#include <drm/drm_modeset_helper.h>
 #include <drm/drm_modeset_helper_vtables.h>
-#include <drm/drm_print.h>
 #include <drm/drm_probe_helper.h>
 
 #include "drm_sysfb_helper.h"
@@ -229,7 +226,7 @@ static const u8 *display_get_edid_of(struct drm_device *dev, struct device_node 
 {
 	int ret = of_property_read_u8_array(of_node, "EDID", buf, EDID_LENGTH);
 
-	if (ret || drm_edid_header_is_valid(buf) != 8)
+	if (ret)
 		return NULL;
 	return buf;
 }
@@ -728,7 +725,7 @@ static const struct drm_plane_funcs ofdrm_primary_plane_funcs = {
 	.destroy = drm_plane_cleanup,
 };
 
-static void ofdrm_crtc_helper_atomic_flush(struct drm_crtc *crtc, struct drm_atomic_commit *state)
+static void ofdrm_crtc_helper_atomic_flush(struct drm_crtc *crtc, struct drm_atomic_state *state)
 {
 	struct ofdrm_device *odev = ofdrm_device_of_dev(crtc->dev);
 	struct drm_crtc_state *crtc_state = drm_atomic_get_new_crtc_state(state, crtc);
@@ -828,7 +825,6 @@ static struct ofdrm_device *ofdrm_device_create(struct drm_driver *drv,
 	enum ofdrm_model model;
 	bool big_endian;
 	int width, height, depth, linebytes;
-	unsigned int panel_width, panel_height;
 	const struct drm_format_info *format;
 	u64 address;
 	const u8 *edid;
@@ -999,19 +995,6 @@ static struct ofdrm_device *ofdrm_device_create(struct drm_driver *drv,
 		sysfb->fb_gamma_lut_size = OFDRM_GAMMA_LUT_SIZE;
 	sysfb->edid = edid;
 
-	panel_width = width;
-	panel_height = height;
-
-	if (sysfb->edid) {
-		const struct drm_edid *drm_edid;
-
-		drm_edid = drm_edid_alloc(sysfb->edid, EDID_LENGTH);
-		if (drm_edid) {
-			drm_edid_detect_panel_size(drm_edid, &panel_width, &panel_height);
-			drm_edid_free(drm_edid);
-		}
-	}
-
 	drm_dbg(dev, "display mode={" DRM_MODE_FMT "}\n", DRM_MODE_ARG(&sysfb->fb_mode));
 	drm_dbg(dev, "framebuffer format=%p4cc, size=%dx%d, linebytes=%d byte\n",
 		&format->format, width, height, linebytes);
@@ -1083,7 +1066,7 @@ static struct ofdrm_device *ofdrm_device_create(struct drm_driver *drv,
 	drm_connector_helper_add(connector, &ofdrm_connector_helper_funcs);
 	drm_connector_set_panel_orientation_with_quirk(connector,
 						       DRM_MODE_PANEL_ORIENTATION_UNKNOWN,
-						       panel_width, panel_height);
+						       width, height);
 	if (edid)
 		drm_connector_attach_edid_property(connector);
 
@@ -1116,22 +1099,6 @@ static struct drm_driver ofdrm_driver = {
 /*
  * Platform driver
  */
-
-static int ofdrm_pm_suspend(struct device *dev)
-{
-	struct drm_device *drm = dev_get_drvdata(dev);
-
-	return drm_mode_config_helper_suspend(drm);
-}
-
-static int ofdrm_pm_resume(struct device *dev)
-{
-	struct drm_device *drm = dev_get_drvdata(dev);
-
-	return drm_mode_config_helper_resume(drm);
-}
-
-static DEFINE_SIMPLE_DEV_PM_OPS(ofdrm_pm_ops, ofdrm_pm_suspend, ofdrm_pm_resume);
 
 static int ofdrm_probe(struct platform_device *pdev)
 {
@@ -1172,7 +1139,6 @@ static struct platform_driver ofdrm_platform_driver = {
 	.driver = {
 		.name = "of-display",
 		.of_match_table = ofdrm_of_match_display,
-		.pm = pm_sleep_ptr(&ofdrm_pm_ops),
 	},
 	.probe = ofdrm_probe,
 	.remove = ofdrm_remove,

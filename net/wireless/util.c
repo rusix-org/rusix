@@ -90,7 +90,7 @@ u32 ieee80211_channel_to_freq_khz(int chan, enum nl80211_band band)
 		/* see 802.11ax D6.1 27.3.23.2 */
 		if (chan == 2)
 			return MHZ_TO_KHZ(5935);
-		if (chan <= 253)
+		if (chan <= 233)
 			return MHZ_TO_KHZ(5950 + chan * 5);
 		break;
 	case NL80211_BAND_60GHZ:
@@ -241,8 +241,10 @@ bool cfg80211_supported_cipher_suite(struct wiphy *wiphy, u32 cipher)
 	return false;
 }
 
-static bool cfg80211_igtk_cipher_supported(struct wiphy *wiphy)
+static bool
+cfg80211_igtk_cipher_supported(struct cfg80211_registered_device *rdev)
 {
+	struct wiphy *wiphy = &rdev->wiphy;
 	int i;
 
 	for (i = 0; i < wiphy->n_cipher_suites; i++) {
@@ -258,124 +260,40 @@ static bool cfg80211_igtk_cipher_supported(struct wiphy *wiphy)
 	return false;
 }
 
-bool cfg80211_cigtk_supported(struct wireless_dev *wdev,
-			      struct genl_info *info)
+bool cfg80211_valid_key_idx(struct cfg80211_registered_device *rdev,
+			    int key_idx, bool pairwise)
 {
-	const struct wiphy_iftype_ext_capab *ext_capab =
-		cfg80211_get_iftype_ext_capa(wdev->wiphy, wdev->iftype);
+	int max_key_idx;
 
-	if (ext_capab && ext_capab->cip_supported)
-		return true;
+	if (pairwise)
+		max_key_idx = 3;
+	else if (wiphy_ext_feature_isset(&rdev->wiphy,
+					 NL80211_EXT_FEATURE_BEACON_PROTECTION) ||
+		 wiphy_ext_feature_isset(&rdev->wiphy,
+					 NL80211_EXT_FEATURE_BEACON_PROTECTION_CLIENT))
+		max_key_idx = 7;
+	else if (cfg80211_igtk_cipher_supported(rdev))
+		max_key_idx = 5;
+	else
+		max_key_idx = 3;
 
-	if (info)
-		GENL_SET_ERR_MSG(info,
-				 "Control Integrity Protocol not supported");
-
-	return false;
-}
-
-bool cfg80211_valid_key_idx(struct wireless_dev *wdev,
-			    int key_idx, enum nl80211_key_type type,
-			    const u8 *mac_addr)
-{
-	if (WARN_ON(!wdev))
+	if (key_idx < 0 || key_idx > max_key_idx)
 		return false;
 
-	if (key_idx < 0)
-		return false;
-
-	/*
-	 * Can't differentiate ciphers here so allow 0..3.
-	 * Pairwise keys must be for a station (MAC address given).
-	 */
-	if (type == NL80211_KEYTYPE_PAIRWISE) {
-		if (!mac_addr)
-			return false;
-
-		return key_idx < 4;
-	}
-
-	/* Check the wdev/iftype supports CIGTK */
-	if (type == NL80211_KEYTYPE_CIGTK) {
-		if (!cfg80211_cigtk_supported(wdev, NULL))
-			return false;
-
-		if (key_idx >= 2)
-			return false;
-
-		/* fallthrough for mac_addr checks */
-	}
-
-	/*
-	 * For group keys, mac_addr==NULL means setting a group key
-	 * for TX, which is only supported on some interface types,
-	 * except for STATION/P2P_CLIENT, where it's setting the RX
-	 * key with the current AP (for legacy reasons.)
-	 *
-	 * Apart from that exception, a non-NULL mac_addr means RX
-	 * key being set.
-	 */
-
-	switch (wdev->iftype) {
-	case NL80211_IFTYPE_ADHOC:
-		if (!(wdev->wiphy->flags & WIPHY_FLAG_IBSS_RSN))
-			return false;
-		fallthrough;
-	case NL80211_IFTYPE_MESH_POINT:
-		/* no support for IGTK/BIGTK (yet?) */
-		return key_idx < 4;
-	case NL80211_IFTYPE_NAN_DATA:
-		/* these always need to support per-STA GTK */
-		return key_idx < 4;
-	case NL80211_IFTYPE_NAN:
-		/* no data */
-		if (key_idx < 4)
-			return false;
-		/* NAN reused this flag */
-		if (wiphy_ext_feature_isset(wdev->wiphy,
-					    NL80211_EXT_FEATURE_BEACON_PROTECTION))
-			return key_idx <= 7;
-		return key_idx <= 5;
-	case NL80211_IFTYPE_STATION:
-	case NL80211_IFTYPE_P2P_CLIENT:
-		/* see note about exception above */
-		if (mac_addr)
-			return false;
-		/* BIGTK support implies IGTK support */
-		if (wiphy_ext_feature_isset(wdev->wiphy,
-					    NL80211_EXT_FEATURE_BEACON_PROTECTION_CLIENT))
-			return key_idx <= 7;
-		fallthrough;
-	case NL80211_IFTYPE_AP:
-	case NL80211_IFTYPE_P2P_GO:
-		/* no RX with [B]IGTK */
-		if (mac_addr)
-			return false;
-		if (wiphy_ext_feature_isset(wdev->wiphy,
-					    NL80211_EXT_FEATURE_BEACON_PROTECTION))
-			return key_idx <= 7;
-		fallthrough;
-	case NL80211_IFTYPE_AP_VLAN:
-		/* no RX with GTK */
-		if (mac_addr)
-			return false;
-		if (cfg80211_igtk_cipher_supported(wdev->wiphy))
-			return key_idx <= 5;
-		return key_idx <= 3;
-	default:
-		return false;
-	}
+	return true;
 }
 
 int cfg80211_validate_key_settings(struct cfg80211_registered_device *rdev,
-				   struct wireless_dev *wdev,
 				   struct key_params *params, int key_idx,
-				   enum nl80211_key_type type,
-				   const u8 *mac_addr)
+				   bool pairwise, const u8 *mac_addr)
 {
-	bool pairwise = type == NL80211_KEYTYPE_PAIRWISE;
+	if (!cfg80211_valid_key_idx(rdev, key_idx, pairwise))
+		return -EINVAL;
 
-	if (!cfg80211_valid_key_idx(wdev, key_idx, type, mac_addr))
+	if (!pairwise && mac_addr && !(rdev->wiphy.flags & WIPHY_FLAG_IBSS_RSN))
+		return -EINVAL;
+
+	if (pairwise && !mac_addr)
 		return -EINVAL;
 
 	switch (params->cipher) {
@@ -425,26 +343,6 @@ int cfg80211_validate_key_settings(struct cfg80211_registered_device *rdev,
 	default:
 		break;
 	}
-
-	switch (params->cipher) {
-	case WLAN_CIPHER_SUITE_WEP40:
-	case WLAN_CIPHER_SUITE_WEP104:
-	case WLAN_CIPHER_SUITE_TKIP:
-		if (wdev->valid_links)
-			return -EINVAL;
-		break;
-	default:
-		break;
-	}
-
-	/*
-	 * Per Wi-Fi Aware v4.0 section 7.1.2, NAN Data interfaces
-	 * shall only use CCMP-128 or GCMP-256.
-	 */
-	if (wdev->iftype == NL80211_IFTYPE_NAN_DATA &&
-	    params->cipher != WLAN_CIPHER_SUITE_CCMP &&
-	    params->cipher != WLAN_CIPHER_SUITE_GCMP_256)
-		return -EINVAL;
 
 	switch (params->cipher) {
 	case WLAN_CIPHER_SUITE_WEP40:
@@ -525,21 +423,6 @@ int cfg80211_validate_key_settings(struct cfg80211_registered_device *rdev,
 
 	if (!cfg80211_supported_cipher_suite(&rdev->wiphy, params->cipher))
 		return -EINVAL;
-
-	if (params->ltf_keyseed) {
-		if (!wiphy_ext_feature_isset(&rdev->wiphy,
-					     NL80211_EXT_FEATURE_SECURE_LTF) ||
-		    !wiphy_ext_feature_isset(&rdev->wiphy,
-					     NL80211_EXT_FEATURE_SET_KEY_LTF_SEED))
-			return -EOPNOTSUPP;
-
-		/*
-		 * LTF key seed is pairwise key material and must only be
-		 * used with a pairwise key
-		 */
-		if (!pairwise)
-			return -EINVAL;
-	}
 
 	return 0;
 }
@@ -742,9 +625,8 @@ int ieee80211_data_to_8023_exthdr(struct sk_buff *skb, struct ethhdr *ehdr,
 	case cpu_to_le16(0):
 		if (iftype != NL80211_IFTYPE_ADHOC &&
 		    iftype != NL80211_IFTYPE_STATION &&
-		    iftype != NL80211_IFTYPE_OCB &&
-		    iftype != NL80211_IFTYPE_NAN_DATA)
-			return -1;
+		    iftype != NL80211_IFTYPE_OCB)
+				return -1;
 		break;
 	}
 
@@ -1231,7 +1113,7 @@ void cfg80211_upload_connect_keys(struct wireless_dev *wdev)
 	for (i = 0; i < 4; i++) {
 		if (!wdev->connect_keys->params[i].cipher)
 			continue;
-		if (rdev_add_key(rdev, wdev, -1, i, NL80211_KEYTYPE_GROUP, NULL,
+		if (rdev_add_key(rdev, dev, -1, i, false, NULL,
 				 &wdev->connect_keys->params[i])) {
 			netdev_err(dev, "failed to set key %d\n", i);
 			continue;
@@ -1276,18 +1158,11 @@ void cfg80211_process_wdev_events(struct wireless_dev *wdev)
 						!ev->dc.locally_generated);
 			break;
 		case EVENT_IBSS_JOINED:
-			__cfg80211_ibss_joined(wdev->netdev, ev->ij.bss);
+			__cfg80211_ibss_joined(wdev->netdev, ev->ij.bssid,
+					       ev->ij.channel);
 			break;
 		case EVENT_STOPPED:
-			/*
-			 * for NAN interfaces cfg80211_leave must be called but
-			 * locking here doesn't allow this.
-			 */
-			if (WARN_ON(wdev->iftype == NL80211_IFTYPE_NAN))
-				break;
-
-			cfg80211_leave_locked(wiphy_to_rdev(wdev->wiphy), wdev,
-					      ev->link_id);
+			cfg80211_leave(wiphy_to_rdev(wdev->wiphy), wdev);
 			break;
 		case EVENT_PORT_AUTHORIZED:
 			__cfg80211_port_authorized(wdev, ev->pa.peer_addr,
@@ -1326,17 +1201,9 @@ int cfg80211_change_iface(struct cfg80211_registered_device *rdev,
 	if (otype == NL80211_IFTYPE_AP_VLAN)
 		return -EOPNOTSUPP;
 
-	/*
-	 * for NAN interfaces cfg80211_leave must be called for leaving,
-	 * but locking here doesn't allow this.
-	 */
-	if (otype == NL80211_IFTYPE_NAN)
-		return -EOPNOTSUPP;
-
 	/* cannot change into P2P device or NAN */
 	if (ntype == NL80211_IFTYPE_P2P_DEVICE ||
-	    ntype == NL80211_IFTYPE_NAN ||
-	    ntype == NL80211_IFTYPE_PD)
+	    ntype == NL80211_IFTYPE_NAN)
 		return -EOPNOTSUPP;
 
 	if (!rdev->ops->change_virtual_intf ||
@@ -1354,7 +1221,7 @@ int cfg80211_change_iface(struct cfg80211_registered_device *rdev,
 		dev->ieee80211_ptr->use_4addr = false;
 		rdev_set_qos_map(rdev, dev, NULL);
 
-		cfg80211_leave_locked(rdev, dev->ieee80211_ptr, -1);
+		cfg80211_leave(rdev, dev->ieee80211_ptr);
 
 		cfg80211_process_rdev_events(rdev);
 		cfg80211_mlme_purge_registrations(dev->ieee80211_ptr);
@@ -1382,7 +1249,6 @@ int cfg80211_change_iface(struct cfg80211_registered_device *rdev,
 		case NL80211_IFTYPE_OCB:
 		case NL80211_IFTYPE_P2P_CLIENT:
 		case NL80211_IFTYPE_ADHOC:
-		case NL80211_IFTYPE_NAN_DATA:
 			dev->priv_flags |= IFF_DONT_BRIDGE;
 			break;
 		case NL80211_IFTYPE_P2P_GO:
@@ -1401,7 +1267,6 @@ int cfg80211_change_iface(struct cfg80211_registered_device *rdev,
 		case NL80211_IFTYPE_P2P_DEVICE:
 		case NL80211_IFTYPE_WDS:
 		case NL80211_IFTYPE_NAN:
-		case NL80211_IFTYPE_PD:
 			WARN_ON(1);
 			break;
 		}
@@ -2413,6 +2278,9 @@ bool ieee80211_chandef_to_operating_class(struct cfg80211_chan_def *chandef,
 	case NL80211_CHAN_WIDTH_80P80:
 		vht_opclass = 130;
 		break;
+	case NL80211_CHAN_WIDTH_10:
+	case NL80211_CHAN_WIDTH_5:
+		return false; /* unsupported for now */
 	default:
 		vht_opclass = 0;
 		break;
@@ -2817,7 +2685,7 @@ int cfg80211_get_station(struct net_device *dev, const u8 *mac_addr,
 
 	guard(wiphy)(&rdev->wiphy);
 
-	return rdev_get_station(rdev, wdev, mac_addr, sinfo);
+	return rdev_get_station(rdev, dev, mac_addr, sinfo);
 }
 EXPORT_SYMBOL(cfg80211_get_station);
 
@@ -2861,8 +2729,8 @@ bool cfg80211_does_bw_fit_range(const struct ieee80211_freq_range *freq_range,
 int cfg80211_link_sinfo_alloc_tid_stats(struct link_station_info *link_sinfo,
 					gfp_t gfp)
 {
-	link_sinfo->pertid = kzalloc_objs(*link_sinfo->pertid,
-					  IEEE80211_NUM_TIDS + 1, gfp);
+	link_sinfo->pertid = kcalloc(IEEE80211_NUM_TIDS + 1,
+				     sizeof(*link_sinfo->pertid), gfp);
 	if (!link_sinfo->pertid)
 		return -ENOMEM;
 
@@ -2872,8 +2740,9 @@ EXPORT_SYMBOL(cfg80211_link_sinfo_alloc_tid_stats);
 
 int cfg80211_sinfo_alloc_tid_stats(struct station_info *sinfo, gfp_t gfp)
 {
-	sinfo->pertid = kzalloc_objs(*(sinfo->pertid), IEEE80211_NUM_TIDS + 1,
-				     gfp);
+	sinfo->pertid = kcalloc(IEEE80211_NUM_TIDS + 1,
+				sizeof(*(sinfo->pertid)),
+				gfp);
 	if (!sinfo->pertid)
 		return -ENOMEM;
 
@@ -3128,8 +2997,9 @@ cfg80211_get_iftype_ext_capa(struct wiphy *wiphy, enum nl80211_iftype type)
 }
 EXPORT_SYMBOL(cfg80211_get_iftype_ext_capa);
 
-bool ieee80211_radio_freq_range_valid(const struct wiphy_radio *radio,
-				      u32 freq, u32 width)
+static bool
+ieee80211_radio_freq_range_valid(const struct wiphy_radio *radio,
+				 u32 freq, u32 width)
 {
 	const struct wiphy_radio_freq_range *r;
 	int i;
@@ -3143,7 +3013,6 @@ bool ieee80211_radio_freq_range_valid(const struct wiphy_radio *radio,
 
 	return false;
 }
-EXPORT_SYMBOL(ieee80211_radio_freq_range_valid);
 
 bool cfg80211_radio_chandef_valid(const struct wiphy_radio *radio,
 				  const struct cfg80211_chan_def *chandef)

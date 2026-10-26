@@ -7,6 +7,7 @@
 #include "originator.h"
 #include "main.h"
 
+#include <linux/atomic.h>
 #include <linux/container_of.h>
 #include <linux/err.h>
 #include <linux/errno.h>
@@ -53,9 +54,8 @@ struct batadv_orig_node *
 batadv_orig_hash_find(struct batadv_priv *bat_priv, const void *data)
 {
 	struct batadv_hashtable *hash = bat_priv->orig_hash;
-	struct batadv_orig_node *orig_node_tmp = NULL;
-	struct batadv_orig_node *orig_node;
 	struct hlist_head *head;
+	struct batadv_orig_node *orig_node, *orig_node_tmp = NULL;
 	int index;
 
 	if (!hash)
@@ -109,8 +109,7 @@ struct batadv_orig_node_vlan *
 batadv_orig_node_vlan_get(struct batadv_orig_node *orig_node,
 			  unsigned short vid)
 {
-	struct batadv_orig_node_vlan *vlan = NULL;
-	struct batadv_orig_node_vlan *tmp;
+	struct batadv_orig_node_vlan *vlan = NULL, *tmp;
 
 	rcu_read_lock();
 	hlist_for_each_entry_rcu(tmp, &orig_node->vlan_list, list) {
@@ -180,7 +179,7 @@ batadv_orig_node_vlan_new(struct batadv_orig_node *orig_node,
 	if (vlan)
 		goto out;
 
-	vlan = kzalloc_obj(*vlan, GFP_ATOMIC);
+	vlan = kzalloc(sizeof(*vlan), GFP_ATOMIC);
 	if (!vlan)
 		goto out;
 
@@ -284,9 +283,9 @@ void batadv_hardif_neigh_release(struct kref *ref)
  */
 void batadv_neigh_node_release(struct kref *ref)
 {
-	struct batadv_neigh_ifinfo *neigh_ifinfo;
-	struct batadv_neigh_node *neigh_node;
 	struct hlist_node *node_tmp;
+	struct batadv_neigh_node *neigh_node;
+	struct batadv_neigh_ifinfo *neigh_ifinfo;
 
 	neigh_node = container_of(ref, struct batadv_neigh_node, refcount);
 
@@ -316,8 +315,8 @@ struct batadv_neigh_node *
 batadv_orig_router_get(struct batadv_orig_node *orig_node,
 		       const struct batadv_hard_iface *if_outgoing)
 {
-	struct batadv_neigh_node *router = NULL;
 	struct batadv_orig_ifinfo *orig_ifinfo;
+	struct batadv_neigh_node *router = NULL;
 
 	rcu_read_lock();
 	hlist_for_each_entry_rcu(orig_ifinfo, &orig_node->ifinfo_list, list) {
@@ -375,8 +374,7 @@ struct batadv_orig_ifinfo *
 batadv_orig_ifinfo_get(struct batadv_orig_node *orig_node,
 		       struct batadv_hard_iface *if_outgoing)
 {
-	struct batadv_orig_ifinfo *orig_ifinfo = NULL;
-	struct batadv_orig_ifinfo *tmp;
+	struct batadv_orig_ifinfo *tmp, *orig_ifinfo = NULL;
 
 	rcu_read_lock();
 	hlist_for_each_entry_rcu(tmp, &orig_node->ifinfo_list,
@@ -419,7 +417,7 @@ batadv_orig_ifinfo_new(struct batadv_orig_node *orig_node,
 	if (orig_ifinfo)
 		goto out;
 
-	orig_ifinfo = kzalloc_obj(*orig_ifinfo, GFP_ATOMIC);
+	orig_ifinfo = kzalloc(sizeof(*orig_ifinfo), GFP_ATOMIC);
 	if (!orig_ifinfo)
 		goto out;
 
@@ -442,7 +440,7 @@ out:
 }
 
 /**
- * batadv_neigh_ifinfo_get() - find the ifinfo from a neigh_node
+ * batadv_neigh_ifinfo_get() - find the ifinfo from an neigh_node
  * @neigh: the neigh node to be queried
  * @if_outgoing: the interface for which the ifinfo should be acquired
  *
@@ -454,8 +452,8 @@ struct batadv_neigh_ifinfo *
 batadv_neigh_ifinfo_get(struct batadv_neigh_node *neigh,
 			struct batadv_hard_iface *if_outgoing)
 {
-	struct batadv_neigh_ifinfo *neigh_ifinfo = NULL;
-	struct batadv_neigh_ifinfo *tmp_neigh_ifinfo;
+	struct batadv_neigh_ifinfo *neigh_ifinfo = NULL,
+				   *tmp_neigh_ifinfo;
 
 	rcu_read_lock();
 	hlist_for_each_entry_rcu(tmp_neigh_ifinfo, &neigh->ifinfo_list,
@@ -475,7 +473,7 @@ batadv_neigh_ifinfo_get(struct batadv_neigh_node *neigh,
 }
 
 /**
- * batadv_neigh_ifinfo_new() - search and possibly create a neigh_ifinfo object
+ * batadv_neigh_ifinfo_new() - search and possibly create an neigh_ifinfo object
  * @neigh: the neigh node to be queried
  * @if_outgoing: the interface for which the ifinfo should be acquired
  *
@@ -497,7 +495,7 @@ batadv_neigh_ifinfo_new(struct batadv_neigh_node *neigh,
 	if (neigh_ifinfo)
 		goto out;
 
-	neigh_ifinfo = kzalloc_obj(*neigh_ifinfo, GFP_ATOMIC);
+	neigh_ifinfo = kzalloc(sizeof(*neigh_ifinfo), GFP_ATOMIC);
 	if (!neigh_ifinfo)
 		goto out;
 
@@ -533,8 +531,7 @@ batadv_neigh_node_get(const struct batadv_orig_node *orig_node,
 		      const struct batadv_hard_iface *hard_iface,
 		      const u8 *addr)
 {
-	struct batadv_neigh_node *tmp_neigh_node;
-	struct batadv_neigh_node *res = NULL;
+	struct batadv_neigh_node *tmp_neigh_node, *res = NULL;
 
 	rcu_read_lock();
 	hlist_for_each_entry_rcu(tmp_neigh_node, &orig_node->neigh_list, list) {
@@ -578,7 +575,7 @@ batadv_hardif_neigh_create(struct batadv_hard_iface *hard_iface,
 	if (hardif_neigh)
 		goto out;
 
-	hardif_neigh = kzalloc_obj(*hardif_neigh, GFP_ATOMIC);
+	hardif_neigh = kzalloc(sizeof(*hardif_neigh), GFP_ATOMIC);
 	if (!hardif_neigh)
 		goto out;
 
@@ -638,8 +635,7 @@ struct batadv_hardif_neigh_node *
 batadv_hardif_neigh_get(const struct batadv_hard_iface *hard_iface,
 			const u8 *neigh_addr)
 {
-	struct batadv_hardif_neigh_node *hardif_neigh = NULL;
-	struct batadv_hardif_neigh_node *tmp_hardif_neigh;
+	struct batadv_hardif_neigh_node *tmp_hardif_neigh, *hardif_neigh = NULL;
 
 	rcu_read_lock();
 	hlist_for_each_entry_rcu(tmp_hardif_neigh,
@@ -673,8 +669,8 @@ batadv_neigh_node_create(struct batadv_orig_node *orig_node,
 			 struct batadv_hard_iface *hard_iface,
 			 const u8 *neigh_addr)
 {
-	struct batadv_hardif_neigh_node *hardif_neigh = NULL;
 	struct batadv_neigh_node *neigh_node;
+	struct batadv_hardif_neigh_node *hardif_neigh = NULL;
 
 	spin_lock_bh(&orig_node->neigh_list_lock);
 
@@ -687,7 +683,7 @@ batadv_neigh_node_create(struct batadv_orig_node *orig_node,
 	if (!hardif_neigh)
 		goto out;
 
-	neigh_node = kzalloc_obj(*neigh_node, GFP_ATOMIC);
+	neigh_node = kzalloc(sizeof(*neigh_node), GFP_ATOMIC);
 	if (!neigh_node)
 		goto out;
 
@@ -698,11 +694,8 @@ batadv_neigh_node_create(struct batadv_orig_node *orig_node,
 	kref_get(&hard_iface->refcount);
 	ether_addr_copy(neigh_node->addr, neigh_addr);
 	neigh_node->if_incoming = hard_iface;
+	neigh_node->orig_node = orig_node;
 	neigh_node->last_seen = jiffies;
-
-#ifdef CONFIG_BATMAN_ADV_BATMAN_V
-	ACCESS_PRIVATE(neigh_node, orig_node_id) = orig_node;
-#endif
 
 	/* increment unique neighbor refcount */
 	kref_get(&hardif_neigh->refcount);
@@ -758,8 +751,7 @@ batadv_neigh_node_get_or_create(struct batadv_orig_node *orig_node,
  */
 int batadv_hardif_neigh_dump(struct sk_buff *msg, struct netlink_callback *cb)
 {
-	struct batadv_hard_iface *primary_if;
-	struct batadv_hard_iface *hard_iface;
+	struct batadv_hard_iface *primary_if, *hard_iface;
 	struct net_device *mesh_iface;
 	struct batadv_priv *bat_priv;
 	int ret;
@@ -856,12 +848,12 @@ static void batadv_orig_node_free_rcu(struct rcu_head *rcu)
  */
 void batadv_orig_node_release(struct kref *ref)
 {
-	struct batadv_orig_ifinfo *last_candidate;
-	struct batadv_orig_ifinfo *orig_ifinfo;
+	struct hlist_node *node_tmp;
 	struct batadv_neigh_node *neigh_node;
 	struct batadv_orig_node *orig_node;
+	struct batadv_orig_ifinfo *orig_ifinfo;
 	struct batadv_orig_node_vlan *vlan;
-	struct hlist_node *node_tmp;
+	struct batadv_orig_ifinfo *last_candidate;
 
 	orig_node = container_of(ref, struct batadv_orig_node, refcount);
 
@@ -904,17 +896,17 @@ void batadv_orig_node_release(struct kref *ref)
  */
 void batadv_originator_free(struct batadv_priv *bat_priv)
 {
-	spinlock_t *list_lock; /* spinlock to protect write access */
 	struct batadv_hashtable *hash = bat_priv->orig_hash;
-	struct batadv_orig_node *orig_node;
 	struct hlist_node *node_tmp;
 	struct hlist_head *head;
+	spinlock_t *list_lock; /* spinlock to protect write access */
+	struct batadv_orig_node *orig_node;
 	u32 i;
 
 	if (!hash)
 		return;
 
-	disable_delayed_work_sync(&bat_priv->orig_work);
+	cancel_delayed_work_sync(&bat_priv->orig_work);
 
 	bat_priv->orig_hash = NULL;
 
@@ -955,7 +947,7 @@ struct batadv_orig_node *batadv_orig_node_new(struct batadv_priv *bat_priv,
 	batadv_dbg(BATADV_DBG_BATMAN, bat_priv,
 		   "Creating new originator: %pM\n", addr);
 
-	orig_node = kzalloc_obj(*orig_node, GFP_ATOMIC);
+	orig_node = kzalloc(sizeof(*orig_node), GFP_ATOMIC);
 	if (!orig_node)
 		return NULL;
 
@@ -974,7 +966,7 @@ struct batadv_orig_node *batadv_orig_node_new(struct batadv_priv *bat_priv,
 	orig_node->bat_priv = bat_priv;
 	ether_addr_copy(orig_node->orig, addr);
 	batadv_dat_init_orig_node_addr(orig_node);
-	WRITE_ONCE(orig_node->last_ttvn, 0);
+	atomic_set(&orig_node->last_ttvn, 0);
 	orig_node->tt_buff = NULL;
 	orig_node->tt_buff_len = 0;
 	orig_node->last_seen = jiffies;
@@ -1039,6 +1031,7 @@ batadv_purge_neigh_ifinfo(struct batadv_priv *bat_priv,
 
 		/* don't purge if the interface is not (going) down */
 		if (if_outgoing->if_status != BATADV_IF_INACTIVE &&
+		    if_outgoing->if_status != BATADV_IF_NOT_IN_USE &&
 		    if_outgoing->if_status != BATADV_IF_TO_BE_REMOVED)
 			continue;
 
@@ -1082,6 +1075,7 @@ batadv_purge_orig_ifinfo(struct batadv_priv *bat_priv,
 
 		/* don't purge if the interface is not (going) down */
 		if (if_outgoing->if_status != BATADV_IF_INACTIVE &&
+		    if_outgoing->if_status != BATADV_IF_NOT_IN_USE &&
 		    if_outgoing->if_status != BATADV_IF_TO_BE_REMOVED)
 			continue;
 
@@ -1115,11 +1109,11 @@ static bool
 batadv_purge_orig_neighbors(struct batadv_priv *bat_priv,
 			    struct batadv_orig_node *orig_node)
 {
-	struct batadv_hard_iface *if_incoming;
-	struct batadv_neigh_node *neigh_node;
 	struct hlist_node *node_tmp;
+	struct batadv_neigh_node *neigh_node;
 	bool neigh_purged = false;
 	unsigned long last_seen;
+	struct batadv_hard_iface *if_incoming;
 
 	spin_lock_bh(&orig_node->neigh_list_lock);
 
@@ -1131,8 +1125,10 @@ batadv_purge_orig_neighbors(struct batadv_priv *bat_priv,
 
 		if (batadv_has_timed_out(last_seen, BATADV_PURGE_TIMEOUT) ||
 		    if_incoming->if_status == BATADV_IF_INACTIVE ||
+		    if_incoming->if_status == BATADV_IF_NOT_IN_USE ||
 		    if_incoming->if_status == BATADV_IF_TO_BE_REMOVED) {
 			if (if_incoming->if_status == BATADV_IF_INACTIVE ||
+			    if_incoming->if_status == BATADV_IF_NOT_IN_USE ||
 			    if_incoming->if_status == BATADV_IF_TO_BE_REMOVED)
 				batadv_dbg(BATADV_DBG_BATMAN, bat_priv,
 					   "neighbor purge: originator %pM, neighbor: %pM, iface: %s\n",
@@ -1173,9 +1169,8 @@ batadv_find_best_neighbor(struct batadv_priv *bat_priv,
 			  struct batadv_orig_node *orig_node,
 			  struct batadv_hard_iface *if_outgoing)
 {
+	struct batadv_neigh_node *best = NULL, *neigh;
 	struct batadv_algo_ops *bao = bat_priv->algo_ops;
-	struct batadv_neigh_node *best = NULL;
-	struct batadv_neigh_node *neigh;
 
 	rcu_read_lock();
 	hlist_for_each_entry_rcu(neigh, &orig_node->neigh_list, list) {
@@ -1210,9 +1205,8 @@ static bool batadv_purge_orig_node(struct batadv_priv *bat_priv,
 {
 	struct batadv_neigh_node *best_neigh_node;
 	struct batadv_hard_iface *hard_iface;
+	bool changed_ifinfo, changed_neigh;
 	struct list_head *iter;
-	bool changed_ifinfo;
-	bool changed_neigh;
 
 	if (batadv_has_timed_out(orig_node->last_seen,
 				 2 * BATADV_PURGE_TIMEOUT)) {
@@ -1264,11 +1258,11 @@ static bool batadv_purge_orig_node(struct batadv_priv *bat_priv,
  */
 void batadv_purge_orig_ref(struct batadv_priv *bat_priv)
 {
-	spinlock_t *list_lock; /* spinlock to protect write access */
 	struct batadv_hashtable *hash = bat_priv->orig_hash;
-	struct batadv_orig_node *orig_node;
 	struct hlist_node *node_tmp;
 	struct hlist_head *head;
+	spinlock_t *list_lock; /* spinlock to protect write access */
+	struct batadv_orig_node *orig_node;
 	u32 i;
 
 	if (!hash)
@@ -1303,13 +1297,6 @@ void batadv_purge_orig_ref(struct batadv_priv *bat_priv)
 	batadv_gw_election(bat_priv);
 }
 
-/**
- * batadv_purge_orig() - periodic worker to purge stale originator entries
- * @work: delayed work embedded in the bat_priv
- *
- * Invoke batadv_purge_orig_ref() to drop stale originators and reschedule the
- * next run after BATADV_ORIG_WORK_PERIOD milliseconds.
- */
 static void batadv_purge_orig(struct work_struct *work)
 {
 	struct delayed_work *delayed_work;
@@ -1333,8 +1320,7 @@ static void batadv_purge_orig(struct work_struct *work)
  */
 int batadv_orig_dump(struct sk_buff *msg, struct netlink_callback *cb)
 {
-	struct batadv_hard_iface *primary_if;
-	struct batadv_hard_iface *hard_iface;
+	struct batadv_hard_iface *primary_if, *hard_iface;
 	struct net_device *mesh_iface;
 	struct batadv_priv *bat_priv;
 	int ret;

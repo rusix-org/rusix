@@ -3,7 +3,7 @@
  * Copyright (c) 2000-2002,2005 Silicon Graphics, Inc.
  * All Rights Reserved.
  */
-#include "xfs_platform.h"
+#include "xfs.h"
 #include "xfs_fs.h"
 #include "xfs_shared.h"
 #include "xfs_format.h"
@@ -371,7 +371,7 @@ xfs_btree_check_ptr(
 		case XFS_BTREE_TYPE_INODE:
 			xfs_err(cur->bc_mp,
 "Inode %llu fork %d: Corrupt %sbt pointer at level %d index %d.",
-				I_INO(cur->bc_ino.ip),
+				cur->bc_ino.ip->i_ino,
 				cur->bc_ino.whichfork, cur->bc_ops->name,
 				level, index);
 			break;
@@ -1305,7 +1305,7 @@ xfs_btree_owner(
 	case XFS_BTREE_TYPE_MEM:
 		return cur->bc_mem.xfbtree->owner;
 	case XFS_BTREE_TYPE_INODE:
-		return I_INO(cur->bc_ino.ip);
+		return cur->bc_ino.ip->i_ino;
 	case XFS_BTREE_TYPE_AG:
 		return cur->bc_group->xg_gno;
 	default:
@@ -2994,6 +2994,7 @@ struct xfs_btree_split_args {
 	struct xfs_btree_cur	**curp;
 	int			*stat;		/* success/failure */
 	int			result;
+	bool			kswapd;	/* allocation in kswapd context */
 	struct completion	*done;
 	struct work_struct	work;
 };
@@ -3007,24 +3008,33 @@ xfs_btree_split_worker(
 {
 	struct xfs_btree_split_args	*args = container_of(work,
 						struct xfs_btree_split_args, work);
-	unsigned int		nofs_flags;
+	unsigned long		pflags;
+	unsigned long		new_pflags = 0;
 
 	/*
-	 * Don't use xfs_trans_set_context() here: it would overwrite the
-	 * caller's saved NOFS state in tp->t_pflags. Use a local scope.
+	 * we are in a transaction context here, but may also be doing work
+	 * in kswapd context, and hence we may need to inherit that state
+	 * temporarily to ensure that we don't block waiting for memory reclaim
+	 * in any way.
 	 */
-	nofs_flags = memalloc_nofs_save();
+	if (args->kswapd)
+		new_pflags |= PF_MEMALLOC | PF_KSWAPD;
+
+	current_set_flags_nested(&pflags, new_pflags);
+	xfs_trans_set_context(args->cur->bc_tp);
 
 	args->result = __xfs_btree_split(args->cur, args->level, args->ptrp,
 					 args->key, args->curp, args->stat);
 
-	memalloc_nofs_restore(nofs_flags);
+	xfs_trans_clear_context(args->cur->bc_tp);
+	current_restore_flags_nested(&pflags, new_pflags);
 
 	/*
 	 * Do not access args after complete() has run here. We don't own args
 	 * and the owner may run and free args before we return here.
 	 */
 	complete(args->done);
+
 }
 
 /*
@@ -3068,7 +3078,7 @@ xfs_btree_split(
 	args.curp = curp;
 	args.stat = stat;
 	args.done = &done;
-
+	args.kswapd = current_is_kswapd();
 	INIT_WORK_ONSTACK(&args.work, xfs_btree_split_worker);
 	queue_work(xfs_alloc_wq, &args.work);
 	wait_for_completion(&done);
@@ -3119,7 +3129,7 @@ xfs_btree_promote_leaf_iroot(
 	 */
 	broot = cur->bc_ops->broot_realloc(cur, 1);
 	xfs_btree_init_block(cur->bc_mp, broot, cur->bc_ops,
-			cur->bc_nlevels - 1, 1, I_INO(cur->bc_ino.ip));
+			cur->bc_nlevels - 1, 1, cur->bc_ino.ip->i_ino);
 
 	pp = xfs_btree_ptr_addr(cur, 1, broot);
 	kp = xfs_btree_key_addr(cur, 1, broot);
@@ -3233,7 +3243,8 @@ xfs_btree_new_iroot(
 	if (level > 0)
 		aptr = *xfs_btree_ptr_addr(cur, 1, block);
 	else
-		aptr.l = cpu_to_be64(XFS_INODE_TO_FSB(cur->bc_ino.ip));
+		aptr.l = cpu_to_be64(XFS_INO_TO_FSB(cur->bc_mp,
+				cur->bc_ino.ip->i_ino));
 
 	/* Allocate the new block. If we can't do it, we're toast. Give up. */
 	error = xfs_btree_alloc_block(cur, &aptr, &nptr, stat);
@@ -3816,7 +3827,7 @@ xfs_btree_demote_leaf_child(
 	 */
 	broot = cur->bc_ops->broot_realloc(cur, numrecs);
 	xfs_btree_init_block(cur->bc_mp, broot, cur->bc_ops, 0, numrecs,
-			I_INO(cur->bc_ino.ip));
+			cur->bc_ino.ip->i_ino);
 
 	rp = xfs_btree_rec_addr(cur, 1, broot);
 	crp = xfs_btree_rec_addr(cur, 1, cblock);
@@ -5597,8 +5608,9 @@ xfs_btree_alloc_metafile_block(
 
 	ASSERT(xfs_is_metadir_inode(ip));
 
-	xfs_rmap_inode_bmbt_owner(&args.oinfo, ip, cur->bc_ino.whichfork);
-	error = xfs_alloc_vextent_start_ag(&args, XFS_INODE_TO_FSB(ip));
+	xfs_rmap_ino_bmbt_owner(&args.oinfo, ip->i_ino, cur->bc_ino.whichfork);
+	error = xfs_alloc_vextent_start_ag(&args,
+			XFS_INO_TO_FSB(cur->bc_mp, ip->i_ino));
 	if (error)
 		return error;
 	if (args.fsbno == NULLFSBLOCK) {
@@ -5629,7 +5641,7 @@ xfs_btree_free_metafile_block(
 
 	ASSERT(xfs_is_metadir_inode(ip));
 
-	xfs_rmap_inode_bmbt_owner(&oinfo, ip, cur->bc_ino.whichfork);
+	xfs_rmap_ino_bmbt_owner(&oinfo, ip->i_ino, cur->bc_ino.whichfork);
 	error = xfs_free_extent_later(tp, fsbno, 1, &oinfo, XFS_AG_RESV_METAFILE,
 			0);
 	if (error)

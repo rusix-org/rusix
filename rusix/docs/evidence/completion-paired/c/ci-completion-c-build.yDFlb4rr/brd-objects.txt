@@ -1,0 +1,1 @@
+/out/builds/ci-completion-c/drivers/block/brd_rust.o

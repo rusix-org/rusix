@@ -537,7 +537,7 @@ static int associate_dev(struct us_data *us, struct usb_interface *intf)
 	usb_set_intfdata(intf, us);
 
 	/* Allocate the control/setup and DMA-mapped buffers */
-	us->cr = kmalloc_obj(*us->cr);
+	us->cr = kmalloc(sizeof(*us->cr), GFP_KERNEL);
 	if (!us->cr)
 		return -ENOMEM;
 
@@ -1100,10 +1100,8 @@ int usb_stor_probe2(struct us_data *us)
 	int result;
 	struct device *dev = &us->pusb_intf->dev;
 
-	/* Make sure the transport, its reset method, and the protocol
-	 * have all been set
-	 */
-	if (!us->transport || !us->transport_reset || !us->proto_handler) {
+	/* Make sure the transport and protocol have both been set */
+	if (!us->transport || !us->proto_handler) {
 		result = -ENXIO;
 		goto BadDevice;
 	}

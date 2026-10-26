@@ -23,7 +23,6 @@
 #include <drm/drm_blend.h>
 #include <drm/drm_fourcc.h>
 #include <drm/drm_framebuffer.h>
-#include <drm/drm_print.h>
 #include <drm/drm_vblank.h>
 #include <drm/exynos_drm.h>
 
@@ -989,7 +988,7 @@ static void fimd_trigger(struct device *dev)
 {
 	struct fimd_context *ctx = dev_get_drvdata(dev);
 	const struct fimd_driver_data *driver_data = ctx->driver_data;
-	void __iomem *timing_base = ctx->regs + driver_data->timing_base;
+	void *timing_base = ctx->regs + driver_data->timing_base;
 	u32 reg;
 
 	 /*
@@ -1325,7 +1324,6 @@ static int exynos_fimd_resume(struct device *dev)
 		DRM_DEV_ERROR(dev,
 			      "Failed to prepare_enable the lcd clk [%d]\n",
 			      ret);
-		clk_disable_unprepare(ctx->bus_clk);
 		return ret;
 	}
 

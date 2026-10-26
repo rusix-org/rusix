@@ -373,7 +373,7 @@ static struct user_event_group *user_event_group_create(void)
 {
 	struct user_event_group *group;
 
-	group = kzalloc_obj(*group);
+	group = kzalloc(sizeof(*group), GFP_KERNEL);
 
 	if (!group)
 		return NULL;
@@ -662,7 +662,7 @@ static bool user_event_enabler_dup(struct user_event_enabler *orig,
 	if (unlikely(test_bit(ENABLE_VAL_FREEING_BIT, ENABLE_BITOPS(orig))))
 		return true;
 
-	enabler = kzalloc_obj(*enabler, GFP_NOWAIT | __GFP_ACCOUNT);
+	enabler = kzalloc(sizeof(*enabler), GFP_NOWAIT | __GFP_ACCOUNT);
 
 	if (!enabler)
 		return false;
@@ -731,7 +731,7 @@ static struct user_event_mm *user_event_mm_alloc(struct task_struct *t)
 {
 	struct user_event_mm *user_mm;
 
-	user_mm = kzalloc_obj(*user_mm, GFP_KERNEL_ACCOUNT);
+	user_mm = kzalloc(sizeof(*user_mm), GFP_KERNEL_ACCOUNT);
 
 	if (!user_mm)
 		return NULL;
@@ -920,7 +920,7 @@ static struct user_event_enabler
 	if (!user_mm)
 		return NULL;
 
-	enabler = kzalloc_obj(*enabler, GFP_KERNEL_ACCOUNT);
+	enabler = kzalloc(sizeof(*enabler), GFP_KERNEL_ACCOUNT);
 
 	if (!enabler)
 		goto out;
@@ -1069,7 +1069,7 @@ static int user_field_array_size(const char *type)
 
 static int user_field_size(const char *type)
 {
-	/* long is not allowed from a user, since it's ambiguous in size */
+	/* long is not allowed from a user, since it's ambigious in size */
 	if (strcmp(type, "s64") == 0)
 		return sizeof(s64);
 	if (strcmp(type, "u64") == 0)
@@ -1107,7 +1107,7 @@ static int user_field_size(const char *type)
 	if (str_has_prefix(type, "__rel_loc "))
 		return sizeof(u32);
 
-	/* Unknown basic type, error */
+	/* Uknown basic type, error */
 	return -EINVAL;
 }
 
@@ -1140,7 +1140,7 @@ static int user_event_add_field(struct user_event *user, const char *type,
 	struct ftrace_event_field *field;
 	int validator_flags = 0;
 
-	field = kmalloc_obj(*field, GFP_KERNEL_ACCOUNT);
+	field = kmalloc(sizeof(*field), GFP_KERNEL_ACCOUNT);
 
 	if (!field)
 		return -ENOMEM;
@@ -1159,7 +1159,7 @@ add_validator:
 	if (strstr(type, "char") != NULL)
 		validator_flags |= VALIDATOR_ENSURE_NULL;
 
-	validator = kmalloc_obj(*validator, GFP_KERNEL_ACCOUNT);
+	validator = kmalloc(sizeof(*validator), GFP_KERNEL_ACCOUNT);
 
 	if (!validator) {
 		kfree(field);
@@ -1476,7 +1476,12 @@ static struct trace_event_functions user_event_funcs = {
 
 static int user_event_set_call_visible(struct user_event *user, bool visible)
 {
-	CLASS(prepare_creds, cred)();
+	int ret;
+	const struct cred *old_cred;
+	struct cred *cred;
+
+	cred = prepare_creds();
+
 	if (!cred)
 		return -ENOMEM;
 
@@ -1491,12 +1496,17 @@ static int user_event_set_call_visible(struct user_event *user, bool visible)
 	 */
 	cred->fsuid = GLOBAL_ROOT_UID;
 
-	scoped_with_creds(cred) {
-		if (visible)
-			return trace_add_event_call(&user->call);
+	old_cred = override_creds(cred);
 
-		return trace_remove_event_call(&user->call);
-	}
+	if (visible)
+		ret = trace_add_event_call(&user->call);
+	else
+		ret = trace_remove_event_call(&user->call);
+
+	revert_creds(old_cred);
+	put_cred(cred);
+
+	return ret;
 }
 
 static int destroy_user_event(struct user_event *user)
@@ -1855,7 +1865,7 @@ static int user_event_show(struct seq_file *m, struct dyn_event *ev)
 
 	list_for_each_entry_reverse(field, head, link) {
 		if (depth == 0)
-			seq_putc(m, ' ');
+			seq_puts(m, " ");
 		else
 			seq_puts(m, "; ");
 
@@ -1867,7 +1877,7 @@ static int user_event_show(struct seq_file *m, struct dyn_event *ev)
 		depth++;
 	}
 
-	seq_putc(m, '\n');
+	seq_puts(m, "\n");
 
 	return 0;
 }
@@ -2147,7 +2157,7 @@ static int user_event_parse(struct user_event_group *group, char *name,
 		return 0;
 	}
 
-	user = kzalloc_obj(*user, GFP_KERNEL_ACCOUNT);
+	user = kzalloc(sizeof(*user), GFP_KERNEL_ACCOUNT);
 
 	if (!user)
 		return -ENOMEM;
@@ -2357,7 +2367,7 @@ static int user_events_open(struct inode *node, struct file *file)
 	if (!group)
 		return -ENOENT;
 
-	info = kzalloc_obj(*info, GFP_KERNEL_ACCOUNT);
+	info = kzalloc(sizeof(*info), GFP_KERNEL_ACCOUNT);
 
 	if (!info)
 		return -ENOMEM;
@@ -2507,7 +2517,7 @@ static long user_events_ioctl_reg(struct user_event_file_info *info,
 	/*
 	 * Prevent users from using the same address and bit multiple times
 	 * within the same mm address space. This can cause unexpected behavior
-	 * for user processes that is far easier to debug if this is explicitly
+	 * for user processes that is far easier to debug if this is explictly
 	 * an error upon registering.
 	 */
 	if (current_user_event_enabler_exists((unsigned long)reg.enable_addr,
@@ -2823,7 +2833,7 @@ static int user_seq_show(struct seq_file *m, void *p)
 	hash_for_each(group->register_table, i, user, node) {
 		status = user->status;
 
-		seq_puts(m, EVENT_TP_NAME(user));
+		seq_printf(m, "%s", EVENT_TP_NAME(user));
 
 		if (status != 0) {
 			seq_puts(m, " # Used by");
@@ -2836,13 +2846,13 @@ static int user_seq_show(struct seq_file *m, void *p)
 			busy++;
 		}
 
-		seq_putc(m, '\n');
+		seq_puts(m, "\n");
 		active++;
 	}
 
 	mutex_unlock(&group->reg_mutex);
 
-	seq_putc(m, '\n');
+	seq_puts(m, "\n");
 	seq_printf(m, "Active: %d\n", active);
 	seq_printf(m, "Busy: %d\n", busy);
 

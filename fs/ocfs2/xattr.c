@@ -49,13 +49,9 @@
 #include "ocfs2_trace.h"
 
 struct ocfs2_xattr_def_value_root {
-	/* Must be last as it ends in a flexible-array member. */
-	TRAILING_OVERLAP(struct ocfs2_xattr_value_root, xv, xr_list.l_recs,
-		struct ocfs2_extent_rec		er;
-	);
+	struct ocfs2_xattr_value_root	xv;
+	struct ocfs2_extent_rec		er;
 };
-static_assert(offsetof(struct ocfs2_xattr_def_value_root, xv.xr_list.l_recs) ==
-	      offsetof(struct ocfs2_xattr_def_value_root, er));
 
 struct ocfs2_xattr_bucket {
 	/* The inode these xattrs are associated with */
@@ -324,7 +320,7 @@ static struct ocfs2_xattr_bucket *ocfs2_xattr_bucket_new(struct inode *inode)
 
 	BUG_ON(blks > OCFS2_XATTR_MAX_BLOCKS_PER_BUCKET);
 
-	bucket = kzalloc_obj(struct ocfs2_xattr_bucket, GFP_NOFS);
+	bucket = kzalloc(sizeof(struct ocfs2_xattr_bucket), GFP_NOFS);
 	if (bucket) {
 		bucket->bu_inode = inode;
 		bucket->bu_blocks = blks;
@@ -390,12 +386,6 @@ static int ocfs2_init_xattr_bucket(struct ocfs2_xattr_bucket *bucket,
 	return rc;
 }
 
-static int ocfs2_validate_xattr_entries_flat(struct super_block *sb, u64 blkno,
-					     struct ocfs2_xattr_header *xh,
-					     size_t region_size);
-static int ocfs2_validate_xattr_bucket(struct ocfs2_xattr_bucket *bucket,
-				       u64 blkno);
-
 /* Read the xattr bucket at xb_blkno */
 static int ocfs2_read_xattr_bucket(struct ocfs2_xattr_bucket *bucket,
 				   u64 xb_blkno)
@@ -414,8 +404,6 @@ static int ocfs2_read_xattr_bucket(struct ocfs2_xattr_bucket *bucket,
 		spin_unlock(&OCFS2_SB(bucket->bu_inode->i_sb)->osb_xattr_lock);
 		if (rc)
 			mlog_errno(rc);
-		else
-			rc = ocfs2_validate_xattr_bucket(bucket, xb_blkno);
 	}
 
 	if (rc)
@@ -515,22 +503,6 @@ static int ocfs2_validate_xattr_block(struct super_block *sb,
 				   "Extended attribute block #%llu has an invalid xb_fs_generation of #%u\n",
 				   (unsigned long long)bh->b_blocknr,
 				   le32_to_cpu(xb->xb_fs_generation));
-	}
-
-	if (!(le16_to_cpu(xb->xb_flags) & OCFS2_XATTR_INDEXED)) {
-		size_t region_offset =
-			offsetof(struct ocfs2_xattr_block, xb_attrs.xb_header);
-
-		if (bh->b_size < region_offset)
-			return ocfs2_error(sb,
-					   "Invalid xattr block %llu: block size %zu is too small\n",
-					   (unsigned long long)bh->b_blocknr,
-					   bh->b_size);
-
-		return ocfs2_validate_xattr_entries_flat(sb, bh->b_blocknr,
-							 &xb->xb_attrs.xb_header,
-							 bh->b_size -
-							 region_offset);
 	}
 
 	return 0;
@@ -981,216 +953,15 @@ static int ocfs2_xattr_list_entries(struct inode *inode,
 	return result;
 }
 
-static int ocfs2_validate_xattr_entries_flat(struct super_block *sb, u64 blkno,
-					     struct ocfs2_xattr_header *xh,
-					     size_t region_size)
-{
-	u16 xattr_count = le16_to_cpu(xh->xh_count);
-	size_t entries_limit = region_size;
-	size_t nv_limit = region_size;
-	size_t max_entries;
-	int i;
-
-	if (region_size < sizeof(*xh))
-		return ocfs2_error(sb,
-				   "Invalid xattr in block %llu: region size %zu is too small\n",
-				   (unsigned long long)blkno, region_size);
-
-	max_entries = (entries_limit - sizeof(*xh)) /
-		      sizeof(struct ocfs2_xattr_entry);
-
-	if (xattr_count > max_entries)
-		return ocfs2_error(sb,
-				   "Invalid xattr in block %llu: entry count %u exceeds maximum %zu\n",
-				   (unsigned long long)blkno,
-				   xattr_count, max_entries);
-
-	for (i = 0; i < xattr_count; i++) {
-		struct ocfs2_xattr_entry *xe = &xh->xh_entries[i];
-		size_t name_offset = le16_to_cpu(xe->xe_name_offset);
-		size_t value_offset;
-
-		if (name_offset > nv_limit ||
-		    xe->xe_name_len > nv_limit - name_offset)
-			return ocfs2_error(sb,
-					   "Invalid xattr in block %llu: entry %d name is out of bounds\n",
-					   (unsigned long long)blkno, i);
-
-		value_offset = name_offset + OCFS2_XATTR_SIZE(xe->xe_name_len);
-		if (value_offset > nv_limit)
-			return ocfs2_error(sb,
-					   "Invalid xattr in block %llu: entry %d value starts out of bounds\n",
-					   (unsigned long long)blkno, i);
-
-		if (ocfs2_xattr_is_local(xe)) {
-			if (le64_to_cpu(xe->xe_value_size) >
-			    nv_limit - value_offset)
-				return ocfs2_error(sb,
-						   "Invalid xattr in block %llu: entry %d value is out of bounds\n",
-						   (unsigned long long)blkno,
-						   i);
-		} else if (sizeof(struct ocfs2_xattr_value_root) >
-			   nv_limit - value_offset) {
-			return ocfs2_error(sb,
-					   "Invalid xattr in block %llu: entry %d value root is out of bounds\n",
-					   (unsigned long long)blkno, i);
-		}
-	}
-
-	return 0;
-}
-
-static int ocfs2_xattr_ibody_lookup_header_raw(struct super_block *sb,
-					       u64 blkno,
-					       struct ocfs2_dinode *di,
-					       struct ocfs2_xattr_header **header,
-					       u16 *inline_size_ret)
-{
-	struct ocfs2_xattr_header *xh;
-	u16 xattr_count;
-	size_t max_entries;
-	u16 inline_size = le16_to_cpu(di->i_xattr_inline_size);
-
-	if (inline_size > sb->s_blocksize ||
-	    inline_size < sizeof(struct ocfs2_xattr_header)) {
-		ocfs2_error(sb,
-			    "Invalid inode %llu: xattr inline size %u\n",
-			    (unsigned long long)blkno, inline_size);
-		return -EFSCORRUPTED;
-	}
-
-	xh = (struct ocfs2_xattr_header *)
-		((void *)di + sb->s_blocksize - inline_size);
-
-	xattr_count = le16_to_cpu(xh->xh_count);
-	max_entries = (inline_size - sizeof(struct ocfs2_xattr_header)) /
-		      sizeof(struct ocfs2_xattr_entry);
-
-	if (xattr_count > max_entries) {
-		ocfs2_error(sb,
-			    "xattr entry count %u exceeds maximum %zu in inode %llu\n",
-			    xattr_count, max_entries,
-			    (unsigned long long)blkno);
-		return -EFSCORRUPTED;
-	}
-
-	*header = xh;
-	if (inline_size_ret)
-		*inline_size_ret = inline_size;
-
-	return 0;
-}
-
-int ocfs2_validate_inode_xattr(struct super_block *sb, u64 blkno,
-			       struct ocfs2_dinode *di)
-{
-	struct ocfs2_xattr_header *xh;
-	u16 inline_size;
-	int ret;
-
-	if (!(le16_to_cpu(di->i_dyn_features) & OCFS2_INLINE_XATTR_FL))
-		return 0;
-
-	ret = ocfs2_xattr_ibody_lookup_header_raw(sb, blkno, di, &xh,
-						  &inline_size);
-	if (ret)
-		return ret;
-
-	return ocfs2_validate_xattr_entries_flat(sb, blkno, xh, inline_size);
-}
-
-static int ocfs2_validate_xattr_bucket(struct ocfs2_xattr_bucket *bucket,
-				       u64 blkno)
-{
-	struct super_block *sb = bucket->bu_inode->i_sb;
-	struct ocfs2_xattr_header *xh = bucket_xh(bucket);
-	u16 xattr_count = le16_to_cpu(xh->xh_count);
-	size_t region_size = (size_t)sb->s_blocksize * bucket->bu_blocks;
-	size_t entries_limit = sb->s_blocksize;
-	size_t nv_limit = sb->s_blocksize;
-	size_t max_entries;
-	int i;
-
-	if (region_size < sizeof(*xh))
-		return ocfs2_error(sb,
-				   "Invalid xattr bucket %llu: region size %zu is too small\n",
-				   (unsigned long long)blkno, region_size);
-
-	if (entries_limit < sizeof(*xh))
-		return ocfs2_error(sb,
-				   "Invalid xattr bucket %llu: entries limit %zu is too small\n",
-				   (unsigned long long)blkno,
-				   entries_limit);
-
-	max_entries = (entries_limit - sizeof(*xh)) /
-		      sizeof(struct ocfs2_xattr_entry);
-
-	if (xattr_count > max_entries)
-		return ocfs2_error(sb,
-				   "Invalid xattr bucket %llu: entry count %u exceeds maximum %zu\n",
-				   (unsigned long long)blkno,
-				   xattr_count, max_entries);
-
-	for (i = 0; i < xattr_count; i++) {
-		struct ocfs2_xattr_entry *xe = &xh->xh_entries[i];
-		size_t name_offset = le16_to_cpu(xe->xe_name_offset);
-		size_t block_off = name_offset >> sb->s_blocksize_bits;
-		size_t block_offset = name_offset % nv_limit;
-		size_t value_offset;
-
-		if (name_offset >= region_size || block_off >= bucket->bu_blocks)
-			return ocfs2_error(sb,
-					   "Invalid xattr bucket %llu: entry %d name is out of bounds\n",
-					   (unsigned long long)blkno, i);
-
-		if (xe->xe_name_len > nv_limit - block_offset)
-			return ocfs2_error(sb,
-					   "Invalid xattr bucket %llu: entry %d name crosses block boundary\n",
-					   (unsigned long long)blkno, i);
-
-		value_offset = block_offset + OCFS2_XATTR_SIZE(xe->xe_name_len);
-		if (value_offset > nv_limit)
-			return ocfs2_error(sb,
-					   "Invalid xattr bucket %llu: entry %d value starts out of bounds\n",
-					   (unsigned long long)blkno, i);
-
-		if (ocfs2_xattr_is_local(xe)) {
-			if (le64_to_cpu(xe->xe_value_size) >
-			    nv_limit - value_offset)
-				return ocfs2_error(sb,
-						   "Invalid xattr bucket %llu: entry %d value is out of bounds\n",
-						   (unsigned long long)blkno,
-						   i);
-		} else if (sizeof(struct ocfs2_xattr_value_root) >
-			   nv_limit - value_offset) {
-			return ocfs2_error(sb,
-					   "Invalid xattr bucket %llu: entry %d value root is out of bounds\n",
-					   (unsigned long long)blkno, i);
-		}
-	}
-
-	return 0;
-}
-
-static int ocfs2_xattr_ibody_lookup_header(struct inode *inode,
-					   struct ocfs2_dinode *di,
-					   struct ocfs2_xattr_header **header)
-{
-	return ocfs2_xattr_ibody_lookup_header_raw(inode->i_sb,
-						   OCFS2_I(inode)->ip_blkno,
-						   di, header, NULL);
-}
-
 int ocfs2_has_inline_xattr_value_outside(struct inode *inode,
 					 struct ocfs2_dinode *di)
 {
 	struct ocfs2_xattr_header *xh;
-	int ret;
 	int i;
 
-	ret = ocfs2_xattr_ibody_lookup_header(inode, di, &xh);
-	if (ret)
-		return 1;
+	xh = (struct ocfs2_xattr_header *)
+		 ((void *)di + inode->i_sb->s_blocksize -
+		 le16_to_cpu(di->i_xattr_inline_size));
 
 	for (i = 0; i < le16_to_cpu(xh->xh_count); i++)
 		if (!ocfs2_xattr_is_local(&xh->xh_entries[i]))
@@ -1211,9 +982,9 @@ static int ocfs2_xattr_ibody_list(struct inode *inode,
 	if (!(oi->ip_dyn_features & OCFS2_INLINE_XATTR_FL))
 		return ret;
 
-	ret = ocfs2_xattr_ibody_lookup_header(inode, di, &header);
-	if (ret)
-		return ret;
+	header = (struct ocfs2_xattr_header *)
+		 ((void *)di + inode->i_sb->s_blocksize -
+		 le16_to_cpu(di->i_xattr_inline_size));
 
 	ret = ocfs2_xattr_list_entries(inode, header, buffer, buffer_size);
 
@@ -1406,9 +1177,8 @@ static int ocfs2_xattr_ibody_get(struct inode *inode,
 		return -ENODATA;
 
 	xs->end = (void *)di + inode->i_sb->s_blocksize;
-	ret = ocfs2_xattr_ibody_lookup_header(inode, di, &xs->header);
-	if (ret)
-		return ret;
+	xs->header = (struct ocfs2_xattr_header *)
+			(xs->end - le16_to_cpu(di->i_xattr_inline_size));
 	xs->base = (void *)xs->header;
 	xs->here = xs->header->xh_entries;
 
@@ -2178,7 +1948,8 @@ static void ocfs2_xa_remove_entry(struct ocfs2_xa_loc *loc)
 	ocfs2_xa_wipe_namevalue(loc);
 	loc->xl_entry = NULL;
 
-	count = le16_to_cpu(xh->xh_count) - 1;
+	le16_add_cpu(&xh->xh_count, -1);
+	count = le16_to_cpu(xh->xh_count);
 
 	/*
 	 * Only zero out the entry if there are more remaining.  This is
@@ -2193,8 +1964,6 @@ static void ocfs2_xa_remove_entry(struct ocfs2_xa_loc *loc)
 		memset(&xh->xh_entries[count], 0,
 		       sizeof(struct ocfs2_xattr_entry));
 	}
-
-	xh->xh_count = cpu_to_le16(count);
 }
 
 /*
@@ -2672,9 +2441,9 @@ static int ocfs2_xattr_ibody_remove(struct inode *inode,
 		.vb_access = ocfs2_journal_access_di,
 	};
 
-	ret = ocfs2_xattr_ibody_lookup_header(inode, di, &header);
-	if (ret)
-		return ret;
+	header = (struct ocfs2_xattr_header *)
+		 ((void *)di + inode->i_sb->s_blocksize -
+		 le16_to_cpu(di->i_xattr_inline_size));
 
 	ret = ocfs2_remove_value_outside(inode, &vb, header,
 					 ref_ci, ref_root_bh);
@@ -2933,14 +2702,12 @@ static int ocfs2_xattr_ibody_find(struct inode *inode,
 
 	xs->xattr_bh = xs->inode_bh;
 	xs->end = (void *)di + inode->i_sb->s_blocksize;
-	if (oi->ip_dyn_features & OCFS2_INLINE_XATTR_FL) {
-		ret = ocfs2_xattr_ibody_lookup_header(inode, di, &xs->header);
-		if (ret)
-			return ret;
-	} else {
+	if (oi->ip_dyn_features & OCFS2_INLINE_XATTR_FL)
+		xs->header = (struct ocfs2_xattr_header *)
+			(xs->end - le16_to_cpu(di->i_xattr_inline_size));
+	else
 		xs->header = (struct ocfs2_xattr_header *)
 			(xs->end - OCFS2_SB(inode->i_sb)->s_xattr_inline_size);
-	}
 	xs->base = (void *)xs->header;
 	xs->here = xs->header->xh_entries;
 
@@ -3148,7 +2915,7 @@ static int ocfs2_create_xattr_block(struct inode *inode,
 	/* Initialize ocfs2_xattr_block */
 	xblk = (struct ocfs2_xattr_block *)new_bh->b_data;
 	memset(xblk, 0, inode->i_sb->s_blocksize);
-	strscpy(xblk->xb_signature, OCFS2_XATTR_BLOCK_SIGNATURE);
+	strcpy((void *)xblk, OCFS2_XATTR_BLOCK_SIGNATURE);
 	xblk->xb_suballoc_slot = cpu_to_le16(ctxt->meta_ac->ac_alloc_slot);
 	xblk->xb_suballoc_loc = cpu_to_le64(suballoc_loc);
 	xblk->xb_suballoc_bit = cpu_to_le16(suballoc_bit_start);
@@ -3956,7 +3723,7 @@ static int ocfs2_xattr_get_rec(struct inode *inode,
 
 		if (el->l_tree_depth) {
 			ret = ocfs2_error(inode->i_sb,
-					  "Inode %llu has non zero tree depth in xattr tree block %llu\n",
+					  "Inode %lu has non zero tree depth in xattr tree block %llu\n",
 					  inode->i_ino,
 					  (unsigned long long)eb_bh->b_blocknr);
 			goto out;
@@ -3973,7 +3740,7 @@ static int ocfs2_xattr_get_rec(struct inode *inode,
 	}
 
 	if (!e_blkno) {
-		ret = ocfs2_error(inode->i_sb, "Inode %llu has bad extent record (%u, %u, 0) in xattr\n",
+		ret = ocfs2_error(inode->i_sb, "Inode %lu has bad extent record (%u, %u, 0) in xattr\n",
 				  inode->i_ino,
 				  le32_to_cpu(rec->e_cpos),
 				  ocfs2_rec_clusters(el, rec));
@@ -6218,16 +5985,13 @@ static int ocfs2_xattr_inline_attach_refcount(struct inode *inode,
 				struct ocfs2_cached_dealloc_ctxt *dealloc)
 {
 	struct ocfs2_dinode *di = (struct ocfs2_dinode *)fe_bh->b_data;
-	struct ocfs2_xattr_header *header;
-	int ret;
+	struct ocfs2_xattr_header *header = (struct ocfs2_xattr_header *)
+				(fe_bh->b_data + inode->i_sb->s_blocksize -
+				le16_to_cpu(di->i_xattr_inline_size));
 	struct ocfs2_xattr_value_buf vb = {
 		.vb_bh = fe_bh,
 		.vb_access = ocfs2_journal_access_di,
 	};
-
-	ret = ocfs2_xattr_ibody_lookup_header(inode, di, &header);
-	if (ret)
-		return ret;
 
 	return ocfs2_xattr_attach_refcount_normal(inode, &vb, header,
 						  ref_ci, ref_root_bh, dealloc);
@@ -6600,7 +6364,7 @@ static int ocfs2_reflink_xattr_header(handle_t *handle,
 	trace_ocfs2_reflink_xattr_header((unsigned long long)old_bh->b_blocknr,
 					 le16_to_cpu(xh->xh_count));
 
-	last = &new_xh->xh_entries[le16_to_cpu(new_xh->xh_count)] - 1;
+	last = &new_xh->xh_entries[le16_to_cpu(new_xh->xh_count)];
 	for (i = 0, j = 0; i < le16_to_cpu(xh->xh_count); i++, j++) {
 		xe = &xh->xh_entries[i];
 
@@ -6713,10 +6477,12 @@ static int ocfs2_reflink_xattr_inline(struct ocfs2_xattr_reflink *args)
 	handle_t *handle;
 	struct ocfs2_super *osb = OCFS2_SB(args->old_inode->i_sb);
 	struct ocfs2_dinode *di = (struct ocfs2_dinode *)args->old_bh->b_data;
-	int inline_size;
-	int header_off;
-	struct ocfs2_xattr_header *xh;
-	struct ocfs2_xattr_header *new_xh;
+	int inline_size = le16_to_cpu(di->i_xattr_inline_size);
+	int header_off = osb->sb->s_blocksize - inline_size;
+	struct ocfs2_xattr_header *xh = (struct ocfs2_xattr_header *)
+					(args->old_bh->b_data + header_off);
+	struct ocfs2_xattr_header *new_xh = (struct ocfs2_xattr_header *)
+					(args->new_bh->b_data + header_off);
 	struct ocfs2_alloc_context *meta_ac = NULL;
 	struct ocfs2_inode_info *new_oi;
 	struct ocfs2_dinode *new_di;
@@ -6724,15 +6490,6 @@ static int ocfs2_reflink_xattr_inline(struct ocfs2_xattr_reflink *args)
 		.vb_bh = args->new_bh,
 		.vb_access = ocfs2_journal_access_di,
 	};
-
-	ret = ocfs2_xattr_ibody_lookup_header(args->old_inode, di, &xh);
-	if (ret)
-		goto out;
-
-	inline_size = le16_to_cpu(di->i_xattr_inline_size);
-	header_off = osb->sb->s_blocksize - inline_size;
-	new_xh = (struct ocfs2_xattr_header *)
-		(args->new_bh->b_data + header_off);
 
 	ret = ocfs2_reflink_lock_xattr_allocators(osb, xh, args->ref_root_bh,
 						  &credits, &meta_ac);
@@ -7500,7 +7257,7 @@ static int ocfs2_xattr_security_get(const struct xattr_handler *handler,
 }
 
 static int ocfs2_xattr_security_set(const struct xattr_handler *handler,
-				    const struct mnt_idmap *idmap,
+				    struct mnt_idmap *idmap,
 				    struct dentry *unused, struct inode *inode,
 				    const char *name, const void *value,
 				    size_t size, int flags)
@@ -7595,7 +7352,7 @@ static int ocfs2_xattr_trusted_get(const struct xattr_handler *handler,
 }
 
 static int ocfs2_xattr_trusted_set(const struct xattr_handler *handler,
-				   const struct mnt_idmap *idmap,
+				   struct mnt_idmap *idmap,
 				   struct dentry *unused, struct inode *inode,
 				   const char *name, const void *value,
 				   size_t size, int flags)
@@ -7626,7 +7383,7 @@ static int ocfs2_xattr_user_get(const struct xattr_handler *handler,
 }
 
 static int ocfs2_xattr_user_set(const struct xattr_handler *handler,
-				const struct mnt_idmap *idmap,
+				struct mnt_idmap *idmap,
 				struct dentry *unused, struct inode *inode,
 				const char *name, const void *value,
 				size_t size, int flags)

@@ -39,9 +39,6 @@
 #include "dccg.h"
 #include "clk_mgr.h"
 #include "reg_helper.h"
-#include "dcn10/dcn10_hubbub.h"
-#include "dio/dcn10/dcn10_dio.h"
-
 
 #define CTX \
 	hws->ctx
@@ -133,8 +130,7 @@ static void plane_address_in_gpu_space_to_uma(struct dce_hwseq *hwseq,
 	}
 }
 
-void dcn201_prepare_plane_addr_update(const struct dc *dc, struct pipe_ctx *pipe_ctx,
-		struct dc_plane_address *addr_to_program, bool *flip_immediate)
+void dcn201_update_plane_addr(const struct dc *dc, struct pipe_ctx *pipe_ctx)
 {
 	bool addr_patched = false;
 	PHYSICAL_ADDRESS_LOC addr;
@@ -150,9 +146,10 @@ void dcn201_prepare_plane_addr_update(const struct dc *dc, struct pipe_ctx *pipe
 
 	plane_address_in_gpu_space_to_uma(hws, &uma);
 
-	/* snapshot the UMA-converted address before the stereo patch is restored */
-	*addr_to_program = uma;
-	*flip_immediate = plane_state->flip_immediate;
+	pipe_ctx->plane_res.hubp->funcs->hubp_program_surface_flip_and_addr(
+			pipe_ctx->plane_res.hubp,
+			&uma,
+			plane_state->flip_immediate);
 
 	plane_state->status.requested_address = plane_state->address;
 
@@ -161,23 +158,6 @@ void dcn201_prepare_plane_addr_update(const struct dc *dc, struct pipe_ctx *pipe
 
 	if (addr_patched)
 		pipe_ctx->plane_state->address.grph_stereo.left_addr = addr;
-}
-
-void dcn201_update_plane_addr(const struct dc *dc, struct pipe_ctx *pipe_ctx)
-{
-	struct dc_plane_address address;
-	bool flip_immediate;
-
-	if (pipe_ctx->plane_state == NULL)
-		return;
-
-	dcn201_prepare_plane_addr_update(dc, pipe_ctx, &address, &flip_immediate);
-
-	pipe_ctx->plane_res.hubp->funcs->hubp_program_surface_flip_and_addr(
-			pipe_ctx->plane_res.hubp,
-			&address,
-			flip_immediate,
-			pipe_ctx->plane_state->dcc.enable);
 }
 
 /* Blank pixel data during initialization */
@@ -214,8 +194,7 @@ void dcn201_init_blank(
 			&black_color,
 			otg_active_width,
 			otg_active_height,
-			0,
-			dc->debug.disable_dynamic_expansion_for_test_pattern);
+			0);
 
 	hws->funcs.wait_for_blank_complete(opp);
 }
@@ -380,13 +359,13 @@ void dcn201_init_hw(struct dc *dc)
 	}
 
 	/* power AFMT HDMI memory TODO: may move to dis/en output save power*/
-	if (dc->res_pool->dio && dc->res_pool->dio->funcs->mem_pwr_ctrl)
-		dc->res_pool->dio->funcs->mem_pwr_ctrl(dc->res_pool->dio, false);
+	REG_WRITE(DIO_MEM_PWR_CTRL, 0);
 
 	if (!dc->debug.disable_clock_gate) {
 		/* enable all DCN clock gating */
-		if (dc->res_pool->dccg && dc->res_pool->dccg->funcs && dc->res_pool->dccg->funcs->allow_clock_gating)
-			dc->res_pool->dccg->funcs->allow_clock_gating(dc->res_pool->dccg, true);
+		REG_WRITE(DCCG_GATE_DISABLE_CNTL, 0);
+
+		REG_WRITE(DCCG_GATE_DISABLE_CNTL2, 0);
 
 		REG_UPDATE(DCFCLK_CNTL, DCFCLK_GATE_DIS, 0);
 	}
@@ -503,7 +482,7 @@ void dcn201_update_mpcc(struct dc *dc, struct pipe_ctx *pipe_ctx)
 	mpcc_id = dpp_id;
 
 	/* If there is no full update, don't need to touch MPC tree*/
-	if (!pipe_ctx->plane_state->update_bits.full_update) {
+	if (!pipe_ctx->plane_state->update_flags.bits.full_update) {
 		dc->hwss.update_visual_confirm_color(dc, pipe_ctx, mpcc_id);
 		mpc->funcs->update_blending(mpc, &blnd_cfg, mpcc_id);
 		return;
@@ -543,27 +522,35 @@ void dcn201_update_mpcc(struct dc *dc, struct pipe_ctx *pipe_ctx)
 	hubp->mpcc_id = mpcc_id;
 }
 
-void dcn201_tg_lock(struct tg_lock_params *params)
+void dcn201_pipe_control_lock(
+	struct dc *dc,
+	struct pipe_ctx *pipe,
+	bool lock)
 {
-	struct dce_hwseq *hws = params->dc->hwseq;
+	struct dce_hwseq *hws = dc->hwseq;
+	/* use TG master update lock to lock everything on the TG
+	 * therefore only top pipe need to lock
+	 */
+	if (pipe->top_pipe)
+		return;
 
-	if (params->dc->debug.sanity_checks)
-		hws->funcs.verify_allow_pstate_change_high(params->dc);
+	if (dc->debug.sanity_checks)
+		hws->funcs.verify_allow_pstate_change_high(dc);
 
-	if (params->triplebuffer_flips) {
-		if (params->lock)
-			params->tg->funcs->triplebuffer_lock(params->tg);
+	if (pipe->plane_state != NULL && pipe->plane_state->triplebuffer_flips) {
+		if (lock)
+			pipe->stream_res.tg->funcs->triplebuffer_lock(pipe->stream_res.tg);
 		else
-			params->tg->funcs->triplebuffer_unlock(params->tg);
+			pipe->stream_res.tg->funcs->triplebuffer_unlock(pipe->stream_res.tg);
 	} else {
-		if (params->lock)
-			params->tg->funcs->lock(params->tg);
+		if (lock)
+			pipe->stream_res.tg->funcs->lock(pipe->stream_res.tg);
 		else
-			params->tg->funcs->unlock(params->tg);
+			pipe->stream_res.tg->funcs->unlock(pipe->stream_res.tg);
 	}
 
-	if (params->dc->debug.sanity_checks)
-		hws->funcs.verify_allow_pstate_change_high(params->dc);
+	if (dc->debug.sanity_checks)
+		hws->funcs.verify_allow_pstate_change_high(dc);
 }
 
 void dcn201_set_cursor_attribute(struct pipe_ctx *pipe_ctx)

@@ -13,6 +13,4 @@ the required changes compared to a non-PREEMPT_RT configuration.
 
    theory
    differences
-   hardware
    architecture-porting
-   kernel-configuration

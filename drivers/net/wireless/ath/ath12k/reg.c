@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: BSD-3-Clause-Clear
 /*
  * Copyright (c) 2018-2021 The Linux Foundation. All rights reserved.
- * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
+ * Copyright (c) 2021-2025 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 #include <linux/rtnetlink.h>
 #include "core.h"
@@ -33,9 +33,7 @@ static bool ath12k_regdom_changes(struct ieee80211_hw *hw, char *alpha2)
 {
 	const struct ieee80211_regdomain *regd;
 
-	guard(rcu)();
-
-	regd = get_wiphy_regdom(hw->wiphy);
+	regd = rcu_dereference_rtnl(hw->wiphy->regd);
 	/* This can happen during wiphy registration where the previous
 	 * user request is received before we update the regd received
 	 * from firmware.
@@ -124,7 +122,9 @@ ath12k_reg_notifier(struct wiphy *wiphy, struct regulatory_request *request)
 					    "failed set INIT Country code: %d\n", ret);
 		}
 
+		wiphy_lock(wiphy);
 		ath12k_mac_11d_scan_stop(ar);
+		wiphy_unlock(wiphy);
 
 		ar->regdom_set_by_user = true;
 	}
@@ -170,7 +170,7 @@ int ath12k_reg_update_chan_list(struct ath12k *ar, bool wait)
 		return -EINVAL;
 	}
 
-	arg = kzalloc_flex(*arg, channel, num_channels);
+	arg = kzalloc(struct_size(arg, channel, num_channels), GFP_KERNEL);
 
 	if (!arg)
 		return -ENOMEM;

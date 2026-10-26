@@ -10,7 +10,6 @@
 
 / {
 	compatible = "fsl,mpc8308rdb";
-	model = "fsl,mpc8308rdb";
 	#address-cells = <1>;
 	#size-cells = <1>;
 
@@ -39,7 +38,7 @@
 		};
 	};
 
-	memory@0 {
+	memory {
 		device_type = "memory";
 		reg = <0x00000000 0x08000000>;	// 128MB at 0
 	};

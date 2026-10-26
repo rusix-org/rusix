@@ -603,7 +603,7 @@ static bool skb_nfct_cached(struct net *net,
 		if (nf_ct_is_confirmed(ct))
 			nf_ct_delete(ct, 0, 0);
 
-		nf_reset_ct(skb);
+		nf_ct_put(ct);
 		nf_ct_set(skb, NULL, 0);
 		return false;
 	}
@@ -757,7 +757,8 @@ static int __ovs_ct_lookup(struct net *net, struct sw_flow_key *key,
 
 		/* Associate skb with specified zone. */
 		if (tmpl) {
-			nf_reset_ct(skb);
+			ct = nf_ct_get(skb, &ctinfo);
+			nf_ct_put(ct);
 			nf_conntrack_get(&tmpl->ct_general);
 			nf_ct_set(skb, tmpl, IP_CT_NEW);
 		}
@@ -891,8 +892,7 @@ static void ct_limit_set(const struct ovs_ct_limit_info *info,
 	struct hlist_head *head;
 
 	head = ct_limit_hash_bucket(info, new_ct_limit->zone);
-	hlist_for_each_entry_rcu(ct_limit, head, hlist_node,
-				 lockdep_ovsl_is_held()) {
+	hlist_for_each_entry_rcu(ct_limit, head, hlist_node) {
 		if (ct_limit->zone == new_ct_limit->zone) {
 			hlist_replace_rcu(&ct_limit->hlist_node,
 					  &new_ct_limit->hlist_node);
@@ -1095,7 +1095,12 @@ int ovs_ct_execute(struct net *net, struct sk_buff *skb,
 
 int ovs_ct_clear(struct sk_buff *skb, struct sw_flow_key *key)
 {
-	nf_reset_ct(skb);
+	enum ip_conntrack_info ctinfo;
+	struct nf_conn *ct;
+
+	ct = nf_ct_get(skb, &ctinfo);
+
+	nf_ct_put(ct);
 	nf_ct_set(skb, NULL, IP_CT_UNTRACKED);
 
 	if (key)
@@ -1603,13 +1608,14 @@ static int ovs_ct_limit_init(struct net *net, struct ovs_net *ovs_net)
 	struct ovs_ct_limit_info *info;
 	int i, err;
 
-	info = kmalloc_obj(*info);
+	info = kmalloc(sizeof(*info), GFP_KERNEL);
 	if (!info)
 		return -ENOMEM;
 
 	info->default_limit = OVS_CT_LIMIT_DEFAULT;
 	info->limits =
-		kmalloc_objs(struct hlist_head, CT_LIMIT_HASH_BUCKETS);
+		kmalloc_array(CT_LIMIT_HASH_BUCKETS, sizeof(struct hlist_head),
+			      GFP_KERNEL);
 	if (!info->limits) {
 		kfree(info);
 		return -ENOMEM;
@@ -1719,7 +1725,8 @@ static int ovs_ct_limit_set_zone_limit(struct ovs_net *ovs_net,
 		} else {
 			struct ovs_ct_limit *ct_limit;
 
-			ct_limit = kmalloc_obj(*ct_limit, GFP_KERNEL_ACCOUNT);
+			ct_limit = kmalloc(sizeof(*ct_limit),
+					   GFP_KERNEL_ACCOUNT);
 			if (!ct_limit)
 				return -ENOMEM;
 

@@ -85,7 +85,6 @@ MODULE_LICENSE("GPL");
 #define MT_INPUTMODE_TOUCHPAD		0x03
 
 #define MT_BUTTONTYPE_CLICKPAD		0
-#define MT_BUTTONTYPE_PRESSUREPAD	1
 
 enum latency_mode {
 	HID_LATENCY_NORMAL = 0,
@@ -182,7 +181,6 @@ struct mt_device {
 	__u8 inputmode_value;	/* InputMode HID feature value */
 	__u8 maxcontacts;
 	bool is_buttonpad;	/* is this device a button pad? */
-	bool is_pressurepad;	/* is this device a pressurepad? */
 	bool is_haptic_touchpad;	/* is this device a haptic touchpad? */
 	bool serial_maybe;	/* need to check for serial protocol */
 
@@ -588,14 +586,8 @@ static void mt_feature_mapping(struct hid_device *hdev,
 		}
 
 		mt_get_feature(hdev, field->report);
-		switch (field->value[usage->usage_index]) {
-		case MT_BUTTONTYPE_CLICKPAD:
+		if (field->value[usage->usage_index] == MT_BUTTONTYPE_CLICKPAD)
 			td->is_buttonpad = true;
-			break;
-		case MT_BUTTONTYPE_PRESSUREPAD:
-			td->is_pressurepad = true;
-			break;
-		}
 
 		break;
 	case 0xff0000c5:
@@ -1340,18 +1332,21 @@ static void mt_touch_report(struct hid_device *hid,
 	 * Includes multi-packet support where subsequent
 	 * packets are sent with zero contactcount.
 	 */
-	if (contact_count > 0)
-		app->num_expected = contact_count;
-	else if (app->num_received == 0 && app->prev_scantime != scantime) {
+	if (contact_count >= 0) {
 		/*
-		 * New multi-report frame:
-		 *
 		 * For Win8 PTPs the first packet (td->num_received == 0) may
 		 * have a contactcount of 0 if there only is a button event.
-		 *
-		 * Some other devices use a sentinel frame with 0 to release all contacts
+		 * We double check that this is not a continuation packet
+		 * of a possible multi-packet frame be checking that the
+		 * timestamp has changed.
 		 */
-		app->num_expected = 0;
+		if ((app->quirks & MT_QUIRK_WIN8_PTP_BUTTONS) &&
+		    app->num_received == 0 &&
+		    app->prev_scantime != scantime)
+			app->num_expected = contact_count;
+		/* A non 0 contact count always indicates a first packet */
+		else if (contact_count)
+			app->num_expected = contact_count;
 	}
 	app->prev_scantime = scantime;
 
@@ -1455,8 +1450,6 @@ static int mt_touch_input_configured(struct hid_device *hdev,
 
 	if (td->is_buttonpad)
 		__set_bit(INPUT_PROP_BUTTONPAD, input->propbit);
-	if (td->is_pressurepad)
-		__set_bit(INPUT_PROP_PRESSUREPAD, input->propbit);
 
 	if (!td->active_slots) {
 		td->active_slots = devm_kcalloc(&td->hdev->dev,
@@ -2205,8 +2198,16 @@ static int mt_probe(struct hid_device *hdev, const struct hid_device_id *id)
 
 	mt_set_modes(hdev, HID_LATENCY_NORMAL, TOUCHPAD_REPORT_ALL);
 
-	if (!td->is_haptic_touchpad)
+	if (td->is_haptic_touchpad) {
+		if (hid_haptic_init(hdev, &td->haptic)) {
+			dev_warn(&hdev->dev, "Cannot allocate haptic for %s\n",
+				 hdev->name);
+			td->is_haptic_touchpad = false;
+			devm_kfree(&hdev->dev, td->haptic);
+		}
+	} else {
 		devm_kfree(&hdev->dev, td->haptic);
+	}
 
 	return 0;
 }

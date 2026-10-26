@@ -585,7 +585,7 @@ at91_ep_alloc_request(struct usb_ep *_ep, gfp_t gfp_flags)
 {
 	struct at91_request *req;
 
-	req = kzalloc_obj(struct at91_request, gfp_flags);
+	req = kzalloc(sizeof (struct at91_request), gfp_flags);
 	if (!req)
 		return NULL;
 
@@ -1558,6 +1558,7 @@ static int at91_start(struct usb_gadget *gadget,
 
 	udc = container_of(gadget, struct at91_udc, gadget);
 	udc->driver = driver;
+	udc->gadget.dev.of_node = udc->pdev->dev.of_node;
 	udc->enabled = 1;
 	udc->gadget.is_selfpowered = 1;
 

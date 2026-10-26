@@ -305,7 +305,7 @@ static int decode_lockers(void **p, void *end, u8 *type, char **tag,
 		return ret;
 
 	ceph_decode_32_safe(p, end, *num_lockers, err_inval);
-	*lockers = kzalloc_objs(**lockers, *num_lockers, GFP_NOIO);
+	*lockers = kcalloc(*num_lockers, sizeof(**lockers), GFP_NOIO);
 	if (!*lockers)
 		return -ENOMEM;
 

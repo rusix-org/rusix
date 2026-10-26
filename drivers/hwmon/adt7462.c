@@ -12,6 +12,7 @@
 #include <linux/hwmon.h>
 #include <linux/hwmon-sysfs.h>
 #include <linux/err.h>
+#include <linux/mod_devicetable.h>
 #include <linux/mutex.h>
 #include <linux/log2.h>
 #include <linux/slab.h>
@@ -1809,7 +1810,7 @@ static int adt7462_probe(struct i2c_client *client)
 }
 
 static const struct i2c_device_id adt7462_id[] = {
-	{ .name = "adt7462" },
+	{ "adt7462" },
 	{ }
 };
 MODULE_DEVICE_TABLE(i2c, adt7462_id);

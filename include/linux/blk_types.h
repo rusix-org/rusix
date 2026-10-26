@@ -66,7 +66,7 @@ struct block_device {
 	int			bd_holders;
 	struct kobject		*bd_holder_dir;
 
-	atomic_t		bd_fsfreeze_count; /* >0 freeze requests, <0 freeze deniers */
+	atomic_t		bd_fsfreeze_count; /* number of freeze requests */
 	struct mutex		bd_fsfreeze_mutex; /* serialize freeze/thaw */
 
 	struct partition_meta_info *bd_meta_info;
@@ -232,8 +232,6 @@ struct bio {
 
 	atomic_t		__bi_remaining;
 
-	/* The actual vec list, preserved by bio_reset() */
-	struct bio_vec		*bi_io_vec;
 	struct bvec_iter	bi_iter;
 
 	union {
@@ -273,22 +271,17 @@ struct bio {
 	 * Everything starting with bi_max_vecs will be preserved by bio_reset()
 	 */
 
-	/*
-	 * Number of elements in `bi_io_vec` that were allocated for this bio.
-	 * Only used by the bio submitter to make `bio_add_page` fail once full
-	 * and to free the `bi_io_vec` allocation. Must not be used in drivers
-	 * and does not hold a useful value for cloned bios.
-	 */
-	unsigned short		bi_max_vecs;
+	unsigned short		bi_max_vecs;	/* max bvl_vecs we can hold */
 
 	atomic_t		__bi_cnt;	/* pin count */
+
+	struct bio_vec		*bi_io_vec;	/* the actual vec list */
 
 	struct bio_set		*bi_pool;
 };
 
 #define BIO_RESET_BYTES		offsetof(struct bio, bi_max_vecs)
-#define BIO_MAX_SIZE		UINT_MAX /* max value of bi_iter.bi_size */
-#define BIO_MAX_SECTORS		(BIO_MAX_SIZE >> SECTOR_SHIFT)
+#define BIO_MAX_SECTORS		(UINT_MAX >> SECTOR_SHIFT)
 
 static inline struct bio_vec *bio_inline_vecs(struct bio *bio)
 {
@@ -322,7 +315,6 @@ enum {
 	BIO_REMAPPED,
 	BIO_ZONE_WRITE_PLUGGING, /* bio handled through zone write plugging */
 	BIO_EMULATES_ZONE_APPEND, /* bio emulates a zone append operation */
-	BIO_COMPLETE_IN_TASK, /* complete bi_end_io() in task context */
 	BIO_FLAG_LAST
 };
 
@@ -346,33 +338,32 @@ typedef __u32 __bitwise blk_mq_req_flags_t;
  * meaning.
  */
 enum req_op {
-	/** @REQ_OP_READ: read sectors from the device */
+	/* read sectors from the device */
 	REQ_OP_READ		= (__force blk_opf_t)0,
-	/** @REQ_OP_WRITE: write sectors to the device */
+	/* write sectors to the device */
 	REQ_OP_WRITE		= (__force blk_opf_t)1,
-	/** @REQ_OP_FLUSH: flush the volatile write cache */
+	/* flush the volatile write cache */
 	REQ_OP_FLUSH		= (__force blk_opf_t)2,
-	/** @REQ_OP_DISCARD: discard sectors */
+	/* discard sectors */
 	REQ_OP_DISCARD		= (__force blk_opf_t)3,
-	/** @REQ_OP_SECURE_ERASE: securely erase sectors */
+	/* securely erase sectors */
 	REQ_OP_SECURE_ERASE	= (__force blk_opf_t)5,
-	/** @REQ_OP_ZONE_APPEND: write data at the current zone write pointer */
+	/* write data at the current zone write pointer */
 	REQ_OP_ZONE_APPEND	= (__force blk_opf_t)7,
-	/** @REQ_OP_WRITE_ZEROES: write the zero filled sector many times */
+	/* write the zero filled sector many times */
 	REQ_OP_WRITE_ZEROES	= (__force blk_opf_t)9,
-	/** @REQ_OP_ZONE_OPEN: Open a zone */
+	/* Open a zone */
 	REQ_OP_ZONE_OPEN	= (__force blk_opf_t)11,
-	/** @REQ_OP_ZONE_CLOSE: Close a zone */
+	/* Close a zone */
 	REQ_OP_ZONE_CLOSE	= (__force blk_opf_t)13,
-	/** @REQ_OP_ZONE_FINISH: Transition a zone to full */
+	/* Transition a zone to full */
 	REQ_OP_ZONE_FINISH	= (__force blk_opf_t)15,
-	/** @REQ_OP_ZONE_RESET: reset a zone write pointer */
+	/* reset a zone write pointer */
 	REQ_OP_ZONE_RESET	= (__force blk_opf_t)17,
-	/** @REQ_OP_ZONE_RESET_ALL: reset all the zone present on the device */
+	/* reset all the zone present on the device */
 	REQ_OP_ZONE_RESET_ALL	= (__force blk_opf_t)19,
 
 	/* Driver private requests */
-	/* private: */
 	REQ_OP_DRV_IN		= (__force blk_opf_t)34,
 	REQ_OP_DRV_OUT		= (__force blk_opf_t)35,
 
@@ -402,6 +393,7 @@ enum req_flag_bits {
 	__REQ_DRV,		/* for driver use */
 	__REQ_FS_PRIVATE,	/* for file system (submitter) use */
 	__REQ_ATOMIC,		/* for atomic write operations */
+	__REQ_P2PDMA,		/* contains P2P DMA pages */
 	/*
 	 * Command specific flags, keep last:
 	 */
@@ -434,6 +426,7 @@ enum req_flag_bits {
 #define REQ_DRV		(__force blk_opf_t)(1ULL << __REQ_DRV)
 #define REQ_FS_PRIVATE	(__force blk_opf_t)(1ULL << __REQ_FS_PRIVATE)
 #define REQ_ATOMIC	(__force blk_opf_t)(1ULL << __REQ_ATOMIC)
+#define REQ_P2PDMA	(__force blk_opf_t)(1ULL << __REQ_P2PDMA)
 
 #define REQ_NOUNMAP	(__force blk_opf_t)(1ULL << __REQ_NOUNMAP)
 

@@ -290,24 +290,25 @@ static u16 omap_mcbsp_get_rx_delay(struct omap_mcbsp *mcbsp)
 
 static int omap_mcbsp_request(struct omap_mcbsp *mcbsp)
 {
-	void *reg_cache __free(kfree) = kzalloc(mcbsp->reg_cache_size, GFP_KERNEL);
+	void *reg_cache;
 	int err;
 
+	reg_cache = kzalloc(mcbsp->reg_cache_size, GFP_KERNEL);
 	if (!reg_cache)
 		return -ENOMEM;
 
-	scoped_guard(spinlock, &mcbsp->lock) {
-		if (!mcbsp->free) {
-			dev_err(mcbsp->dev, "McBSP%d is currently in use\n", mcbsp->id);
-			return -EBUSY;
-		}
-
-		mcbsp->free = false;
-		mcbsp->reg_cache = reg_cache;
-		reg_cache = NULL;
+	spin_lock(&mcbsp->lock);
+	if (!mcbsp->free) {
+		dev_err(mcbsp->dev, "McBSP%d is currently in use\n", mcbsp->id);
+		err = -EBUSY;
+		goto err_kfree;
 	}
 
-	if (mcbsp->pdata->ops && mcbsp->pdata->ops->request)
+	mcbsp->free = false;
+	mcbsp->reg_cache = reg_cache;
+	spin_unlock(&mcbsp->lock);
+
+	if(mcbsp->pdata->ops && mcbsp->pdata->ops->request)
 		mcbsp->pdata->ops->request(mcbsp->id - 1);
 
 	/*
@@ -322,40 +323,43 @@ static int omap_mcbsp_request(struct omap_mcbsp *mcbsp)
 				  "McBSP", (void *)mcbsp);
 		if (err != 0) {
 			dev_err(mcbsp->dev, "Unable to request IRQ\n");
+			goto err_clk_disable;
 		}
 	} else {
 		err = request_irq(mcbsp->tx_irq, omap_mcbsp_tx_irq_handler, 0,
 				  "McBSP TX", (void *)mcbsp);
 		if (err != 0) {
 			dev_err(mcbsp->dev, "Unable to request TX IRQ\n");
-		} else {
-			err = request_irq(mcbsp->rx_irq, omap_mcbsp_rx_irq_handler, 0,
-					  "McBSP RX", (void *)mcbsp);
-			if (err != 0) {
-				dev_err(mcbsp->dev, "Unable to request RX IRQ\n");
-				free_irq(mcbsp->tx_irq, (void *)mcbsp);
-			}
-		}
-	}
-
-	if (err != 0) {
-		if (mcbsp->pdata->ops && mcbsp->pdata->ops->free)
-			mcbsp->pdata->ops->free(mcbsp->id - 1);
-
-		/* Disable wakeup behavior */
-		if (mcbsp->pdata->has_wakeup)
-			MCBSP_WRITE(mcbsp, WAKEUPEN, 0);
-
-		scoped_guard(spinlock, &mcbsp->lock) {
-			reg_cache = mcbsp->reg_cache;
-			mcbsp->free = true;
-			mcbsp->reg_cache = NULL;
+			goto err_clk_disable;
 		}
 
-		return err;
+		err = request_irq(mcbsp->rx_irq, omap_mcbsp_rx_irq_handler, 0,
+				  "McBSP RX", (void *)mcbsp);
+		if (err != 0) {
+			dev_err(mcbsp->dev, "Unable to request RX IRQ\n");
+			goto err_free_irq;
+		}
 	}
 
 	return 0;
+err_free_irq:
+	free_irq(mcbsp->tx_irq, (void *)mcbsp);
+err_clk_disable:
+	if(mcbsp->pdata->ops && mcbsp->pdata->ops->free)
+		mcbsp->pdata->ops->free(mcbsp->id - 1);
+
+	/* Disable wakeup behavior */
+	if (mcbsp->pdata->has_wakeup)
+		MCBSP_WRITE(mcbsp, WAKEUPEN, 0);
+
+	spin_lock(&mcbsp->lock);
+	mcbsp->free = true;
+	mcbsp->reg_cache = NULL;
+err_kfree:
+	spin_unlock(&mcbsp->lock);
+	kfree(reg_cache);
+
+	return err;
 }
 
 static void omap_mcbsp_free(struct omap_mcbsp *mcbsp)
@@ -391,13 +395,13 @@ static void omap_mcbsp_free(struct omap_mcbsp *mcbsp)
 	if (!mcbsp_omap1())
 		omap2_mcbsp_set_clks_src(mcbsp, MCBSP_CLKS_PRCM_SRC);
 
-	scoped_guard(spinlock, &mcbsp->lock) {
-		if (mcbsp->free)
-			dev_err(mcbsp->dev, "McBSP%d was not reserved\n", mcbsp->id);
-		else
-			mcbsp->free = true;
-		mcbsp->reg_cache = NULL;
-	}
+	spin_lock(&mcbsp->lock);
+	if (mcbsp->free)
+		dev_err(mcbsp->dev, "McBSP%d was not reserved\n", mcbsp->id);
+	else
+		mcbsp->free = true;
+	mcbsp->reg_cache = NULL;
+	spin_unlock(&mcbsp->lock);
 
 	kfree(reg_cache);
 }
@@ -577,11 +581,15 @@ static ssize_t dma_op_mode_store(struct device *dev,
 	if (i < 0)
 		return i;
 
-	guard(spinlock_irq)(&mcbsp->lock);
+	spin_lock_irq(&mcbsp->lock);
 	if (!mcbsp->free) {
-		return -EBUSY;
+		size = -EBUSY;
+		goto unlock;
 	}
 	mcbsp->dma_op_mode = i;
+
+unlock:
+	spin_unlock_irq(&mcbsp->lock);
 
 	return size;
 }
@@ -1237,7 +1245,7 @@ static int omap_mcbsp_dai_set_dai_sysclk(struct snd_soc_dai *cpu_dai,
 		break;
 	case OMAP_MCBSP_SYSCLK_CLKR_EXT:
 		regs->pcr0	|= SCLKME;
-		/* Disable output on CLKR pin in master mode */
+		/* Disable ouput on CLKR pin in master mode */
 		regs->pcr0	&= ~CLKRM;
 		break;
 	default:
@@ -1269,16 +1277,6 @@ static int omap_mcbsp_remove(struct snd_soc_dai *dai)
 	return 0;
 }
 
-static const u64 mcbsp_mcbsp_selectable_formats =
-	SND_SOC_POSSIBLE_DAIFMT_I2S	|
-	SND_SOC_POSSIBLE_DAIFMT_LEFT_J	|
-	SND_SOC_POSSIBLE_DAIFMT_DSP_A	|
-	SND_SOC_POSSIBLE_DAIFMT_DSP_B	|
-	SND_SOC_POSSIBLE_DAIFMT_NB_NF	|
-	SND_SOC_POSSIBLE_DAIFMT_NB_IF	|
-	SND_SOC_POSSIBLE_DAIFMT_IB_NF	|
-	SND_SOC_POSSIBLE_DAIFMT_IB_IF;
-
 static const struct snd_soc_dai_ops mcbsp_dai_ops = {
 	.probe		= omap_mcbsp_probe,
 	.remove		= omap_mcbsp_remove,
@@ -1291,8 +1289,6 @@ static const struct snd_soc_dai_ops mcbsp_dai_ops = {
 	.set_fmt	= omap_mcbsp_dai_set_dai_fmt,
 	.set_clkdiv	= omap_mcbsp_dai_set_clkdiv,
 	.set_sysclk	= omap_mcbsp_dai_set_dai_sysclk,
-	.auto_selectable_formats	= &mcbsp_mcbsp_selectable_formats,
-	.num_auto_selectable_formats	= 1,
 };
 
 static struct snd_soc_dai_driver omap_mcbsp_dai = {

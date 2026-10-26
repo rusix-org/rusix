@@ -18,7 +18,6 @@
 #include <linux/interrupt.h>
 #include <linux/io-pgtable.h>
 #include <linux/iopoll.h>
-#include <linux/jump_label.h>
 #include <linux/module.h>
 #include <linux/msi.h>
 #include <linux/of.h>
@@ -27,7 +26,6 @@
 #include <linux/pci.h>
 #include <linux/pci-ats.h>
 #include <linux/platform_device.h>
-#include <linux/sort.h>
 #include <linux/string_choices.h>
 #include <kunit/visibility.h>
 #include <uapi/linux/iommufd.h>
@@ -40,21 +38,8 @@ module_param(disable_msipolling, bool, 0444);
 MODULE_PARM_DESC(disable_msipolling,
 	"Disable MSI-based polling for CMD_SYNC completion.");
 
-static unsigned int cmdq_max_n_shift = CMDQ_MAX_SZ_SHIFT;
-module_param(cmdq_max_n_shift, uint, 0444);
-MODULE_PARM_DESC(cmdq_max_n_shift,
-	"Cap on the command queue depth, as log2 of the number of entries. Defaults to the hardware maximum; the queue never shrinks below one page. A kdump kernel always uses one page.");
-
 static const struct iommu_ops arm_smmu_ops;
 static struct iommu_dirty_ops arm_smmu_dirty_ops;
-
-/*
- * Repeat every {CFGI,TLBI};CMD_SYNC command sequence so that the second
- * issue executes only after the first issue's CMD_SYNC has completed.
- * Does not apply to ATC_INV. The key is global and is enabled from DT
- * probe on affected hardware (currently Tegra264 only).
- */
-static DEFINE_STATIC_KEY_FALSE(arm_smmu_erratum_repeat_tlbi_cfgi_key);
 
 enum arm_smmu_msi_index {
 	EVTQ_MSI_INDEX,
@@ -96,7 +81,6 @@ DEFINE_MUTEX(arm_smmu_asid_lock);
 static struct arm_smmu_option_prop arm_smmu_options[] = {
 	{ ARM_SMMU_OPT_SKIP_PREFETCH, "hisilicon,broken-prefetch-cmd" },
 	{ ARM_SMMU_OPT_PAGE0_REGS_ONLY, "cavium,cn9900-broken-page1-regspace"},
-	{ ARM_SMMU_OPT_OVR_INSTCFG_DATA, "arm,instdata-override"},
 	{ 0, NULL},
 };
 
@@ -123,7 +107,6 @@ static const char * const event_class_str[] = {
 };
 
 static int arm_smmu_alloc_cd_tables(struct arm_smmu_master *master);
-static bool arm_smmu_ats_supported(struct arm_smmu_master *master);
 
 static void parse_driver_options(struct arm_smmu_device *smmu)
 {
@@ -187,8 +170,8 @@ static void queue_sync_cons_out(struct arm_smmu_queue *q)
 
 static void queue_inc_cons(struct arm_smmu_ll_queue *q)
 {
-	u32 cons = Q_POS(q, q->cons) + 1;
-	q->cons = Q_OVF(q->cons) | Q_POS(q, cons);
+	u32 cons = (Q_WRP(q, q->cons) | Q_IDX(q, q->cons)) + 1;
+	q->cons = Q_OVF(q->cons) | Q_WRP(q, cons) | Q_IDX(q, cons);
 }
 
 static void queue_sync_cons_ovf(struct arm_smmu_queue *q)
@@ -198,7 +181,8 @@ static void queue_sync_cons_ovf(struct arm_smmu_queue *q)
 	if (likely(Q_OVF(llq->prod) == Q_OVF(llq->cons)))
 		return;
 
-	llq->cons = Q_OVF(llq->prod) | Q_POS(llq, llq->cons);
+	llq->cons = Q_OVF(llq->prod) | Q_WRP(llq, llq->cons) |
+		      Q_IDX(llq, llq->cons);
 	queue_sync_cons_out(q);
 }
 
@@ -223,8 +207,8 @@ static int queue_sync_prod_in(struct arm_smmu_queue *q)
 
 static u32 queue_inc_prod_n(struct arm_smmu_ll_queue *q, int n)
 {
-	u32 prod = Q_POS(q, q->prod) + n;
-	return Q_OVF(q->prod) | Q_POS(q, prod);
+	u32 prod = (Q_WRP(q, q->prod) | Q_IDX(q, q->prod)) + n;
+	return Q_OVF(q->prod) | Q_WRP(q, prod) | Q_IDX(q, prod);
 }
 
 static void queue_poll_init(struct arm_smmu_device *smmu,
@@ -282,13 +266,115 @@ static int queue_remove_raw(struct arm_smmu_queue *q, u64 *ent)
 }
 
 /* High-level queue accessors */
+static int arm_smmu_cmdq_build_cmd(u64 *cmd, struct arm_smmu_cmdq_ent *ent)
+{
+	memset(cmd, 0, 1 << CMDQ_ENT_SZ_SHIFT);
+	cmd[0] |= FIELD_PREP(CMDQ_0_OP, ent->opcode);
+
+	switch (ent->opcode) {
+	case CMDQ_OP_TLBI_EL2_ALL:
+	case CMDQ_OP_TLBI_NSNH_ALL:
+		break;
+	case CMDQ_OP_PREFETCH_CFG:
+		cmd[0] |= FIELD_PREP(CMDQ_PREFETCH_0_SID, ent->prefetch.sid);
+		break;
+	case CMDQ_OP_CFGI_CD:
+		cmd[0] |= FIELD_PREP(CMDQ_CFGI_0_SSID, ent->cfgi.ssid);
+		fallthrough;
+	case CMDQ_OP_CFGI_STE:
+		cmd[0] |= FIELD_PREP(CMDQ_CFGI_0_SID, ent->cfgi.sid);
+		cmd[1] |= FIELD_PREP(CMDQ_CFGI_1_LEAF, ent->cfgi.leaf);
+		break;
+	case CMDQ_OP_CFGI_CD_ALL:
+		cmd[0] |= FIELD_PREP(CMDQ_CFGI_0_SID, ent->cfgi.sid);
+		break;
+	case CMDQ_OP_CFGI_ALL:
+		/* Cover the entire SID range */
+		cmd[1] |= FIELD_PREP(CMDQ_CFGI_1_RANGE, 31);
+		break;
+	case CMDQ_OP_TLBI_NH_VA:
+		cmd[0] |= FIELD_PREP(CMDQ_TLBI_0_VMID, ent->tlbi.vmid);
+		fallthrough;
+	case CMDQ_OP_TLBI_EL2_VA:
+		cmd[0] |= FIELD_PREP(CMDQ_TLBI_0_NUM, ent->tlbi.num);
+		cmd[0] |= FIELD_PREP(CMDQ_TLBI_0_SCALE, ent->tlbi.scale);
+		cmd[0] |= FIELD_PREP(CMDQ_TLBI_0_ASID, ent->tlbi.asid);
+		cmd[1] |= FIELD_PREP(CMDQ_TLBI_1_LEAF, ent->tlbi.leaf);
+		cmd[1] |= FIELD_PREP(CMDQ_TLBI_1_TTL, ent->tlbi.ttl);
+		cmd[1] |= FIELD_PREP(CMDQ_TLBI_1_TG, ent->tlbi.tg);
+		cmd[1] |= ent->tlbi.addr & CMDQ_TLBI_1_VA_MASK;
+		break;
+	case CMDQ_OP_TLBI_S2_IPA:
+		cmd[0] |= FIELD_PREP(CMDQ_TLBI_0_NUM, ent->tlbi.num);
+		cmd[0] |= FIELD_PREP(CMDQ_TLBI_0_SCALE, ent->tlbi.scale);
+		cmd[0] |= FIELD_PREP(CMDQ_TLBI_0_VMID, ent->tlbi.vmid);
+		cmd[1] |= FIELD_PREP(CMDQ_TLBI_1_LEAF, ent->tlbi.leaf);
+		cmd[1] |= FIELD_PREP(CMDQ_TLBI_1_TTL, ent->tlbi.ttl);
+		cmd[1] |= FIELD_PREP(CMDQ_TLBI_1_TG, ent->tlbi.tg);
+		cmd[1] |= ent->tlbi.addr & CMDQ_TLBI_1_IPA_MASK;
+		break;
+	case CMDQ_OP_TLBI_NH_ASID:
+		cmd[0] |= FIELD_PREP(CMDQ_TLBI_0_ASID, ent->tlbi.asid);
+		fallthrough;
+	case CMDQ_OP_TLBI_NH_ALL:
+	case CMDQ_OP_TLBI_S12_VMALL:
+		cmd[0] |= FIELD_PREP(CMDQ_TLBI_0_VMID, ent->tlbi.vmid);
+		break;
+	case CMDQ_OP_TLBI_EL2_ASID:
+		cmd[0] |= FIELD_PREP(CMDQ_TLBI_0_ASID, ent->tlbi.asid);
+		break;
+	case CMDQ_OP_ATC_INV:
+		cmd[0] |= FIELD_PREP(CMDQ_0_SSV, ent->substream_valid);
+		cmd[0] |= FIELD_PREP(CMDQ_ATC_0_GLOBAL, ent->atc.global);
+		cmd[0] |= FIELD_PREP(CMDQ_ATC_0_SSID, ent->atc.ssid);
+		cmd[0] |= FIELD_PREP(CMDQ_ATC_0_SID, ent->atc.sid);
+		cmd[1] |= FIELD_PREP(CMDQ_ATC_1_SIZE, ent->atc.size);
+		cmd[1] |= ent->atc.addr & CMDQ_ATC_1_ADDR_MASK;
+		break;
+	case CMDQ_OP_PRI_RESP:
+		cmd[0] |= FIELD_PREP(CMDQ_0_SSV, ent->substream_valid);
+		cmd[0] |= FIELD_PREP(CMDQ_PRI_0_SSID, ent->pri.ssid);
+		cmd[0] |= FIELD_PREP(CMDQ_PRI_0_SID, ent->pri.sid);
+		cmd[1] |= FIELD_PREP(CMDQ_PRI_1_GRPID, ent->pri.grpid);
+		switch (ent->pri.resp) {
+		case PRI_RESP_DENY:
+		case PRI_RESP_FAIL:
+		case PRI_RESP_SUCC:
+			break;
+		default:
+			return -EINVAL;
+		}
+		cmd[1] |= FIELD_PREP(CMDQ_PRI_1_RESP, ent->pri.resp);
+		break;
+	case CMDQ_OP_RESUME:
+		cmd[0] |= FIELD_PREP(CMDQ_RESUME_0_SID, ent->resume.sid);
+		cmd[0] |= FIELD_PREP(CMDQ_RESUME_0_RESP, ent->resume.resp);
+		cmd[1] |= FIELD_PREP(CMDQ_RESUME_1_STAG, ent->resume.stag);
+		break;
+	case CMDQ_OP_CMD_SYNC:
+		if (ent->sync.msiaddr) {
+			cmd[0] |= FIELD_PREP(CMDQ_SYNC_0_CS, CMDQ_SYNC_0_CS_IRQ);
+			cmd[1] |= ent->sync.msiaddr & CMDQ_SYNC_1_MSIADDR_MASK;
+		} else {
+			cmd[0] |= FIELD_PREP(CMDQ_SYNC_0_CS, CMDQ_SYNC_0_CS_SEV);
+		}
+		cmd[0] |= FIELD_PREP(CMDQ_SYNC_0_MSH, ARM_SMMU_SH_ISH);
+		cmd[0] |= FIELD_PREP(CMDQ_SYNC_0_MSIATTR, ARM_SMMU_MEMATTR_OIWB);
+		break;
+	default:
+		return -ENOENT;
+	}
+
+	return 0;
+}
+
 static struct arm_smmu_cmdq *arm_smmu_get_cmdq(struct arm_smmu_device *smmu,
-					       struct arm_smmu_cmd *cmd)
+					       struct arm_smmu_cmdq_ent *ent)
 {
 	struct arm_smmu_cmdq *cmdq = NULL;
 
 	if (smmu->impl_ops && smmu->impl_ops->get_secondary_cmdq)
-		cmdq = smmu->impl_ops->get_secondary_cmdq(smmu, cmd);
+		cmdq = smmu->impl_ops->get_secondary_cmdq(smmu, ent);
 
 	return cmdq ?: &smmu->cmdq;
 }
@@ -302,29 +388,26 @@ static bool arm_smmu_cmdq_needs_busy_polling(struct arm_smmu_device *smmu,
 	return smmu->options & ARM_SMMU_OPT_TEGRA241_CMDQV;
 }
 
-static void arm_smmu_cmdq_build_sync_cmd(struct arm_smmu_cmd *cmd,
-					 struct arm_smmu_device *smmu,
+static void arm_smmu_cmdq_build_sync_cmd(u64 *cmd, struct arm_smmu_device *smmu,
 					 struct arm_smmu_cmdq *cmdq, u32 prod)
 {
 	struct arm_smmu_queue *q = &cmdq->q;
-	u64 msiaddr = 0;
-	unsigned int cs;
+	struct arm_smmu_cmdq_ent ent = {
+		.opcode = CMDQ_OP_CMD_SYNC,
+	};
 
 	/*
 	 * Beware that Hi16xx adds an extra 32 bits of goodness to its MSI
 	 * payload, so the write will zero the entire command on that platform.
 	 */
-	if (arm_smmu_cmdq_needs_busy_polling(smmu, cmdq)) {
-		cs = CMDQ_SYNC_0_CS_NONE;
-	} else if (smmu->options & ARM_SMMU_OPT_MSIPOLL) {
-		cs = CMDQ_SYNC_0_CS_IRQ;
-		msiaddr = q->base_dma + Q_IDX(&q->llq, prod) *
-			  q->ent_dwords * 8;
-	} else {
-		cs = CMDQ_SYNC_0_CS_SEV;
+	if (smmu->options & ARM_SMMU_OPT_MSIPOLL) {
+		ent.sync.msiaddr = q->base_dma + Q_IDX(&q->llq, prod) *
+				   q->ent_dwords * 8;
 	}
 
-	*cmd = arm_smmu_make_cmd_sync(cs, msiaddr);
+	arm_smmu_cmdq_build_cmd(cmd, &ent);
+	if (arm_smmu_cmdq_needs_busy_polling(smmu, cmdq))
+		u64p_replace_bits(cmd, CMDQ_SYNC_0_CS_NONE, CMDQ_SYNC_0_CS);
 }
 
 void __arm_smmu_cmdq_skip_err(struct arm_smmu_device *smmu,
@@ -337,10 +420,14 @@ void __arm_smmu_cmdq_skip_err(struct arm_smmu_device *smmu,
 		[CMDQ_ERR_CERROR_ATC_INV_IDX]	= "ATC invalidate timeout",
 	};
 	struct arm_smmu_queue *q = &cmdq->q;
+
 	int i;
-	struct arm_smmu_cmd cmd;
+	u64 cmd[CMDQ_ENT_DWORDS];
 	u32 cons = readl_relaxed(q->cons_reg);
 	u32 idx = FIELD_GET(CMDQ_CONS_ERR, cons);
+	struct arm_smmu_cmdq_ent cmd_sync = {
+		.opcode = CMDQ_OP_CMD_SYNC,
+	};
 
 	dev_err(smmu->dev, "CMDQ error (cons 0x%08x): %s\n", cons,
 		idx < ARRAY_SIZE(cerror_str) ?  cerror_str[idx] : "Unknown");
@@ -368,18 +455,17 @@ void __arm_smmu_cmdq_skip_err(struct arm_smmu_device *smmu,
 	 * We may have concurrent producers, so we need to be careful
 	 * not to touch any of the shadow cmdq state.
 	 */
-	queue_read(cmd.data, Q_ENT(q, cons), q->ent_dwords);
+	queue_read(cmd, Q_ENT(q, cons), q->ent_dwords);
 	dev_err(smmu->dev, "skipping command in error state:\n");
-	for (i = 0; i < ARRAY_SIZE(cmd.data); ++i)
-		dev_err(smmu->dev, "\t0x%016llx\n", (unsigned long long)cmd.data[i]);
+	for (i = 0; i < ARRAY_SIZE(cmd); ++i)
+		dev_err(smmu->dev, "\t0x%016llx\n", (unsigned long long)cmd[i]);
 
 	/* Convert the erroneous command into a CMD_SYNC */
-	cmd = arm_smmu_make_cmd_sync(
-		arm_smmu_cmdq_needs_busy_polling(smmu, cmdq) ?
-			CMDQ_SYNC_0_CS_NONE : CMDQ_SYNC_0_CS_SEV,
-		0);
+	arm_smmu_cmdq_build_cmd(cmd, &cmd_sync);
+	if (arm_smmu_cmdq_needs_busy_polling(smmu, cmdq))
+		u64p_replace_bits(cmd, CMDQ_SYNC_0_CS_NONE, CMDQ_SYNC_0_CS);
 
-	queue_write(Q_ENT(q, cons), cmd.data, q->ent_dwords);
+	queue_write(Q_ENT(q, cons), cmd, q->ent_dwords);
 }
 
 static void arm_smmu_cmdq_skip_err(struct arm_smmu_device *smmu)
@@ -679,8 +765,7 @@ static int arm_smmu_cmdq_poll_until_sync(struct arm_smmu_device *smmu,
 	return __arm_smmu_cmdq_poll_until_consumed(smmu, cmdq, llq);
 }
 
-static void arm_smmu_cmdq_write_entries(struct arm_smmu_cmdq *cmdq,
-					struct arm_smmu_cmd *cmds,
+static void arm_smmu_cmdq_write_entries(struct arm_smmu_cmdq *cmdq, u64 *cmds,
 					u32 prod, int n)
 {
 	int i;
@@ -690,9 +775,10 @@ static void arm_smmu_cmdq_write_entries(struct arm_smmu_cmdq *cmdq,
 	};
 
 	for (i = 0; i < n; ++i) {
+		u64 *cmd = &cmds[i * CMDQ_ENT_DWORDS];
+
 		prod = queue_inc_prod_n(&llq, i);
-		queue_write(Q_ENT(&cmdq->q, prod), cmds[i].data,
-			    ARRAY_SIZE(cmds[i].data));
+		queue_write(Q_ENT(&cmdq->q, prod), cmd, CMDQ_ENT_DWORDS);
 	}
 }
 
@@ -712,12 +798,11 @@ static void arm_smmu_cmdq_write_entries(struct arm_smmu_cmdq *cmdq,
  *   insert their own list of commands then all of the commands from one
  *   CPU will appear before any of the commands from the other CPU.
  */
-int __arm_smmu_cmdq_issue_cmdlist(struct arm_smmu_device *smmu,
-				  struct arm_smmu_cmdq *cmdq,
-				  struct arm_smmu_cmd *cmds, int n,
-				  bool sync)
+int arm_smmu_cmdq_issue_cmdlist(struct arm_smmu_device *smmu,
+				struct arm_smmu_cmdq *cmdq, u64 *cmds, int n,
+				bool sync)
 {
-	struct arm_smmu_cmd cmd_sync;
+	u64 cmd_sync[CMDQ_ENT_DWORDS];
 	u32 prod;
 	unsigned long flags;
 	bool owner;
@@ -760,9 +845,8 @@ int __arm_smmu_cmdq_issue_cmdlist(struct arm_smmu_device *smmu,
 	arm_smmu_cmdq_write_entries(cmdq, cmds, llq.prod, n);
 	if (sync) {
 		prod = queue_inc_prod_n(&llq, n);
-		arm_smmu_cmdq_build_sync_cmd(&cmd_sync, smmu, cmdq, prod);
-		queue_write(Q_ENT(&cmdq->q, prod), cmd_sync.data,
-			    ARRAY_SIZE(cmd_sync.data));
+		arm_smmu_cmdq_build_sync_cmd(cmd_sync, smmu, cmdq, prod);
+		queue_write(Q_ENT(&cmdq->q, prod), cmd_sync, CMDQ_ENT_DWORDS);
 
 		/*
 		 * In order to determine completion of our CMD_SYNC, we must
@@ -834,118 +918,72 @@ int __arm_smmu_cmdq_issue_cmdlist(struct arm_smmu_device *smmu,
 	return ret;
 }
 
-bool arm_smmu_erratum_repeat_tlbi_cfgi(void)
+static int __arm_smmu_cmdq_issue_cmd(struct arm_smmu_device *smmu,
+				     struct arm_smmu_cmdq_ent *ent,
+				     bool sync)
 {
-	return static_branch_unlikely(&arm_smmu_erratum_repeat_tlbi_cfgi_key);
-}
+	u64 cmd[CMDQ_ENT_DWORDS];
 
-static bool arm_smmu_erratum_cmd_needs_repeating(struct arm_smmu_cmd *cmd)
-{
-	u8 opcode;
+	if (unlikely(arm_smmu_cmdq_build_cmd(cmd, ent))) {
+		dev_warn(smmu->dev, "ignoring unknown CMDQ opcode 0x%x\n",
+			 ent->opcode);
+		return -EINVAL;
+	}
 
-	if (!arm_smmu_erratum_repeat_tlbi_cfgi())
-		return false;
-
-	opcode = FIELD_GET(CMDQ_0_OP, cmd->data[0]);
-	return opcode >= CMDQ_OP_CFGI_STE && opcode < CMDQ_OP_ATC_INV;
-}
-
-int arm_smmu_cmdq_issue_cmdlist(struct arm_smmu_device *smmu,
-				struct arm_smmu_cmdq *cmdq,
-				struct arm_smmu_cmd *cmds, int n,
-				bool sync)
-{
-	int ret = __arm_smmu_cmdq_issue_cmdlist(smmu, cmdq, cmds, n, sync);
-
-	/*
-	 * A bare CMD_SYNC can be issued with n == 0 (e.g. an empty
-	 * batch_submit()), in which case there is no cmds[0] to inspect
-	 * and nothing to repeat.
-	 */
-	if (!n || ret || !sync)
-		return ret;
-
-	if (arm_smmu_erratum_cmd_needs_repeating(&cmds[0]))
-		ret = __arm_smmu_cmdq_issue_cmdlist(smmu, cmdq, cmds, n, sync);
-
-	return ret;
-}
-
-static int arm_smmu_cmdq_issue_cmd_p(struct arm_smmu_device *smmu,
-				     struct arm_smmu_cmd *cmd, bool sync)
-{
 	return arm_smmu_cmdq_issue_cmdlist(
-		smmu, arm_smmu_get_cmdq(smmu, cmd), cmd, 1, sync);
+		smmu, arm_smmu_get_cmdq(smmu, ent), cmd, 1, sync);
 }
 
-#define arm_smmu_cmdq_issue_cmd(smmu, cmd)                      \
-	({                                                      \
-		struct arm_smmu_cmd __cmd = cmd;                \
-		arm_smmu_cmdq_issue_cmd_p(smmu, &__cmd, false); \
-	})
+static int arm_smmu_cmdq_issue_cmd(struct arm_smmu_device *smmu,
+				   struct arm_smmu_cmdq_ent *ent)
+{
+	return __arm_smmu_cmdq_issue_cmd(smmu, ent, false);
+}
 
-#define arm_smmu_cmdq_issue_cmd_with_sync(smmu, cmd)           \
-	({                                                     \
-		struct arm_smmu_cmd __cmd = cmd;               \
-		arm_smmu_cmdq_issue_cmd_p(smmu, &__cmd, true); \
-	})
+static int arm_smmu_cmdq_issue_cmd_with_sync(struct arm_smmu_device *smmu,
+					     struct arm_smmu_cmdq_ent *ent)
+{
+	return __arm_smmu_cmdq_issue_cmd(smmu, ent, true);
+}
 
-static void arm_smmu_cmdq_batch_init_cmd(struct arm_smmu_device *smmu,
-					 struct arm_smmu_cmdq_batch *cmds,
-					 struct arm_smmu_cmd *cmd)
+static void arm_smmu_cmdq_batch_init(struct arm_smmu_device *smmu,
+				     struct arm_smmu_cmdq_batch *cmds,
+				     struct arm_smmu_cmdq_ent *ent)
 {
 	cmds->num = 0;
-	cmds->cmdq = arm_smmu_get_cmdq(smmu, cmd);
+	cmds->cmdq = arm_smmu_get_cmdq(smmu, ent);
 }
 
-static bool arm_smmu_cmdq_batch_force_sync(struct arm_smmu_device *smmu,
-					   struct arm_smmu_cmdq_batch *cmds,
-					   struct arm_smmu_cmd *cmd)
+static void arm_smmu_cmdq_batch_add(struct arm_smmu_device *smmu,
+				    struct arm_smmu_cmdq_batch *cmds,
+				    struct arm_smmu_cmdq_ent *cmd)
 {
-	/* The batch's pre-assigned cmdq doesn't support the new command */
-	if (!arm_smmu_cmdq_supports_cmd(cmds->cmdq, cmd))
-		return true;
+	bool unsupported_cmd = !arm_smmu_cmdq_supports_cmd(cmds->cmdq, cmd);
+	bool force_sync = (cmds->num == CMDQ_BATCH_ENTRIES - 1) &&
+			  (smmu->options & ARM_SMMU_OPT_CMDQ_FORCE_SYNC);
+	int index;
 
-	/* Arm erratum 2812531 */
-	if (cmds->num == CMDQ_BATCH_ENTRIES - 1 &&
-	    (smmu->options & ARM_SMMU_OPT_CMDQ_FORCE_SYNC))
-		return true;
-
-	/*
-	 * See the description at arm_smmu_erratum_repeat_tlbi_cfgi_key. Batches
-	 * never mix CFGI/TLBI with others, so checking cmds[0] alone is enough.
-	 */
-	if (cmds->num == CMDQ_BATCH_ENTRIES &&
-	    arm_smmu_erratum_cmd_needs_repeating(&cmds->cmds[0]))
-		return true;
-
-	return false;
-}
-
-static void arm_smmu_cmdq_batch_add_cmd_p(struct arm_smmu_device *smmu,
-					  struct arm_smmu_cmdq_batch *cmds,
-					  struct arm_smmu_cmd *cmd)
-{
-	if (arm_smmu_cmdq_batch_force_sync(smmu, cmds, cmd)) {
+	if (force_sync || unsupported_cmd) {
 		arm_smmu_cmdq_issue_cmdlist(smmu, cmds->cmdq, cmds->cmds,
 					    cmds->num, true);
-		arm_smmu_cmdq_batch_init_cmd(smmu, cmds, cmd);
+		arm_smmu_cmdq_batch_init(smmu, cmds, cmd);
 	}
 
 	if (cmds->num == CMDQ_BATCH_ENTRIES) {
 		arm_smmu_cmdq_issue_cmdlist(smmu, cmds->cmdq, cmds->cmds,
 					    cmds->num, false);
-		arm_smmu_cmdq_batch_init_cmd(smmu, cmds, cmd);
+		arm_smmu_cmdq_batch_init(smmu, cmds, cmd);
 	}
 
-	cmds->cmds[cmds->num++] = *cmd;
-}
+	index = cmds->num * CMDQ_ENT_DWORDS;
+	if (unlikely(arm_smmu_cmdq_build_cmd(&cmds->cmds[index], cmd))) {
+		dev_warn(smmu->dev, "ignoring unknown CMDQ opcode 0x%x\n",
+			 cmd->opcode);
+		return;
+	}
 
-#define arm_smmu_cmdq_batch_add_cmd(smmu, cmds, cmd)               \
-	({                                                         \
-		struct arm_smmu_cmd __cmd = cmd;                   \
-		arm_smmu_cmdq_batch_add_cmd_p(smmu, cmds, &__cmd); \
-	})
+	cmds->num++;
+}
 
 static int arm_smmu_cmdq_batch_submit(struct arm_smmu_device *smmu,
 				      struct arm_smmu_cmdq_batch *cmds)
@@ -957,29 +995,29 @@ static int arm_smmu_cmdq_batch_submit(struct arm_smmu_device *smmu,
 static void arm_smmu_page_response(struct device *dev, struct iopf_fault *unused,
 				   struct iommu_page_response *resp)
 {
+	struct arm_smmu_cmdq_ent cmd = {0};
 	struct arm_smmu_master *master = dev_iommu_priv_get(dev);
-	u8 resume_resp;
+	int sid = master->streams[0].id;
 
 	if (WARN_ON(!master->stall_enabled))
 		return;
 
+	cmd.opcode		= CMDQ_OP_RESUME;
+	cmd.resume.sid		= sid;
+	cmd.resume.stag		= resp->grpid;
 	switch (resp->code) {
 	case IOMMU_PAGE_RESP_INVALID:
 	case IOMMU_PAGE_RESP_FAILURE:
-		resume_resp = CMDQ_RESUME_0_RESP_ABORT;
+		cmd.resume.resp = CMDQ_RESUME_0_RESP_ABORT;
 		break;
 	case IOMMU_PAGE_RESP_SUCCESS:
-		resume_resp = CMDQ_RESUME_0_RESP_RETRY;
+		cmd.resume.resp = CMDQ_RESUME_0_RESP_RETRY;
 		break;
 	default:
-		resume_resp = CMDQ_RESUME_0_RESP_TERM;
 		break;
 	}
 
-	arm_smmu_cmdq_issue_cmd(master->smmu,
-				arm_smmu_make_cmd_resume(master->streams[0].id,
-							 resp->grpid,
-							 resume_resp));
+	arm_smmu_cmdq_issue_cmd(master->smmu, &cmd);
 	/*
 	 * Don't send a SYNC, it doesn't do anything for RESUME or PRI_RESP.
 	 * RESUME consumption guarantees that the stalled transaction will be
@@ -988,279 +1026,17 @@ static void arm_smmu_page_response(struct device *dev, struct iopf_fault *unused
 	 */
 }
 
-/* Invalidation array manipulation functions */
-static inline struct arm_smmu_inv *
-arm_smmu_invs_iter_next(struct arm_smmu_invs *invs, size_t next, size_t *idx)
-{
-	while (true) {
-		if (next >= invs->num_invs) {
-			*idx = next;
-			return NULL;
-		}
-		if (!READ_ONCE(invs->inv[next].users)) {
-			next++;
-			continue;
-		}
-		*idx = next;
-		return &invs->inv[next];
-	}
-}
-
-/**
- * arm_smmu_invs_for_each_entry - Iterate over all non-trash entries in invs
- * @invs: the base invalidation array
- * @idx: a stack variable of 'size_t', to store the array index
- * @cur: a stack variable of 'struct arm_smmu_inv *'
- */
-#define arm_smmu_invs_for_each_entry(invs, idx, cur)                           \
-	for (cur = arm_smmu_invs_iter_next(invs, 0, &(idx)); cur;              \
-	     cur = arm_smmu_invs_iter_next(invs, idx + 1, &(idx)))
-
-static int arm_smmu_inv_cmp(const struct arm_smmu_inv *inv_l,
-			    const struct arm_smmu_inv *inv_r)
-{
-	if (inv_l->smmu != inv_r->smmu)
-		return cmp_int((uintptr_t)inv_l->smmu, (uintptr_t)inv_r->smmu);
-	if (inv_l->type != inv_r->type)
-		return cmp_int(inv_l->type, inv_r->type);
-	if (inv_l->id != inv_r->id)
-		return cmp_int(inv_l->id, inv_r->id);
-	if (arm_smmu_inv_is_ats(inv_l))
-		return cmp_int(inv_l->ssid, inv_r->ssid);
-	return 0;
-}
-
-static inline int arm_smmu_invs_iter_next_cmp(struct arm_smmu_invs *invs_l,
-					      size_t next_l, size_t *idx_l,
-					      struct arm_smmu_invs *invs_r,
-					      size_t next_r, size_t *idx_r)
-{
-	struct arm_smmu_inv *cur_l =
-		arm_smmu_invs_iter_next(invs_l, next_l, idx_l);
-
-	/*
-	 * We have to update the idx_r manually, because the invs_r cannot call
-	 * arm_smmu_invs_iter_next() as the invs_r never sets any users counter.
-	 */
-	*idx_r = next_r;
-
-	/*
-	 * Compare of two sorted arrays items. If one side is past the end of
-	 * the array, return the other side to let it run out the iteration.
-	 *
-	 * If the left entry is empty, return 1 to pick the right entry.
-	 * If the right entry is empty, return -1 to pick the left entry.
-	 */
-	if (!cur_l)
-		return 1;
-	if (next_r >= invs_r->num_invs)
-		return -1;
-	return arm_smmu_inv_cmp(cur_l, &invs_r->inv[next_r]);
-}
-
-static void arm_smmu_invs_update_caps(struct arm_smmu_invs *invs,
-				      const struct arm_smmu_inv *inv)
-{
-	if (arm_smmu_inv_is_ats(inv))
-		invs->has_ats = true;
-
-	if (inv->smmu->features & ARM_SMMU_FEAT_RANGE_INV) {
-		invs->has_range_inv = true;
-		if (inv->smmu->options & ARM_SMMU_OPT_FULL_CONT_RANGE_INV)
-			invs->has_full_cont_range_inv = true;
-	}
-}
-
-/**
- * arm_smmu_invs_for_each_cmp - Iterate over two sorted arrays computing for
- *                              arm_smmu_invs_merge() or arm_smmu_invs_unref()
- * @invs_l: the base invalidation array
- * @idx_l: a stack variable of 'size_t', to store the base array index
- * @invs_r: the build_invs array as to_merge or to_unref
- * @idx_r: a stack variable of 'size_t', to store the build_invs index
- * @cmp: a stack variable of 'int', to store return value (-1, 0, or 1)
- */
-#define arm_smmu_invs_for_each_cmp(invs_l, idx_l, invs_r, idx_r, cmp)          \
-	for (idx_l = idx_r = 0,                                                \
-	     cmp = arm_smmu_invs_iter_next_cmp(invs_l, 0, &(idx_l),            \
-					       invs_r, 0, &(idx_r));           \
-	     idx_l < invs_l->num_invs || idx_r < invs_r->num_invs;             \
-	     cmp = arm_smmu_invs_iter_next_cmp(                                \
-		     invs_l, idx_l + (cmp <= 0 ? 1 : 0), &(idx_l),             \
-		     invs_r, idx_r + (cmp >= 0 ? 1 : 0), &(idx_r)))
-
-/**
- * arm_smmu_invs_merge() - Merge @to_merge into @invs and generate a new array
- * @invs: the base invalidation array
- * @to_merge: an array of invalidations to merge
- *
- * Return: a newly allocated array on success, or ERR_PTR
- *
- * This function must be locked and serialized with arm_smmu_invs_unref() and
- * arm_smmu_invs_purge(), but do not lockdep on any lock for KUNIT test.
- *
- * Both @invs and @to_merge must be sorted, to ensure the returned array will be
- * sorted as well.
- *
- * Caller is responsible for freeing the @invs and the returned new one.
- *
- * Entries marked as trash will be purged in the returned array.
- */
-VISIBLE_IF_KUNIT
-struct arm_smmu_invs *arm_smmu_invs_merge(struct arm_smmu_invs *invs,
-					  struct arm_smmu_invs *to_merge)
-{
-	struct arm_smmu_invs *new_invs;
-	struct arm_smmu_inv *new;
-	size_t num_invs = 0;
-	size_t i, j;
-	int cmp;
-
-	arm_smmu_invs_for_each_cmp(invs, i, to_merge, j, cmp)
-		num_invs++;
-
-	new_invs = arm_smmu_invs_alloc(num_invs);
-	if (!new_invs)
-		return ERR_PTR(-ENOMEM);
-
-	new = new_invs->inv;
-	arm_smmu_invs_for_each_cmp(invs, i, to_merge, j, cmp) {
-		if (cmp < 0) {
-			*new = invs->inv[i];
-		} else if (cmp == 0) {
-			*new = invs->inv[i];
-			WRITE_ONCE(new->users, READ_ONCE(new->users) + 1);
-		} else {
-			*new = to_merge->inv[j];
-			WRITE_ONCE(new->users, 1);
-		}
-
-		/*
-		 * Check that the new array is sorted. This also validates that
-		 * to_merge is sorted.
-		 */
-		if (new != new_invs->inv)
-			WARN_ON_ONCE(arm_smmu_inv_cmp(new - 1, new) == 1);
-		arm_smmu_invs_update_caps(new_invs, new);
-		new++;
-	}
-
-	WARN_ON(new != new_invs->inv + new_invs->num_invs);
-
-	return new_invs;
-}
-EXPORT_SYMBOL_IF_KUNIT(arm_smmu_invs_merge);
-
-/**
- * arm_smmu_invs_unref() - Find in @invs for all entries in @to_unref, decrease
- *                         the user counts without deletions
- * @invs: the base invalidation array
- * @to_unref: an array of invalidations to decrease their user counts
- *
- * Return: the number of trash entries in the array, for arm_smmu_invs_purge()
- *
- * This function will not fail. Any entry with users=0 will be marked as trash,
- * and caller will be notified about the trashed entry via @to_unref by setting
- * a users=0.
- *
- * All tailing trash entries in the array will be dropped. And the size of the
- * array will be trimmed properly. All trash entries in-between will remain in
- * the @invs until being completely deleted by the next arm_smmu_invs_merge()
- * or an arm_smmu_invs_purge() function call.
- *
- * This function must be locked and serialized with arm_smmu_invs_merge() and
- * arm_smmu_invs_purge(), but do not lockdep on any mutex for KUNIT test.
- *
- * Note that the final @invs->num_invs might not reflect the actual number of
- * invalidations due to trash entries. Any reader should take the read lock to
- * iterate each entry and check its users counter till the last entry.
- */
-VISIBLE_IF_KUNIT
-void arm_smmu_invs_unref(struct arm_smmu_invs *invs,
-			 struct arm_smmu_invs *to_unref)
-{
-	unsigned long flags;
-	size_t num_invs = 0;
-	size_t i, j;
-	int cmp;
-
-	arm_smmu_invs_for_each_cmp(invs, i, to_unref, j, cmp) {
-		if (cmp < 0) {
-			/* not found in to_unref, leave alone */
-			num_invs = i + 1;
-		} else if (cmp == 0) {
-			int users = READ_ONCE(invs->inv[i].users) - 1;
-
-			if (WARN_ON(users < 0))
-				continue;
-
-			/* same item */
-			WRITE_ONCE(invs->inv[i].users, users);
-			if (users) {
-				WRITE_ONCE(to_unref->inv[j].users, 1);
-				num_invs = i + 1;
-				continue;
-			}
-
-			/* Notify the caller about the trash entry */
-			WRITE_ONCE(to_unref->inv[j].users, 0);
-			invs->num_trashes++;
-		} else {
-			/* item in to_unref is not in invs or already a trash */
-			WARN_ON(true);
-		}
-	}
-
-	/* Exclude any tailing trash */
-	invs->num_trashes -= invs->num_invs - num_invs;
-
-	/* The lock is required to fence concurrent ATS operations. */
-	write_lock_irqsave(&invs->rwlock, flags);
-	WRITE_ONCE(invs->num_invs, num_invs); /* Remove tailing trash entries */
-	write_unlock_irqrestore(&invs->rwlock, flags);
-}
-EXPORT_SYMBOL_IF_KUNIT(arm_smmu_invs_unref);
-
-/**
- * arm_smmu_invs_purge() - Purge all the trash entries in the @invs
- * @invs: the base invalidation array
- *
- * Return: a newly allocated array on success removing all the trash entries, or
- *         NULL if there is no trash entry in the array or if allocation failed
- *
- * This function must be locked and serialized with arm_smmu_invs_merge() and
- * arm_smmu_invs_unref(), but do not lockdep on any lock for KUNIT test.
- *
- * Caller is responsible for freeing the @invs and the returned new one.
- */
-VISIBLE_IF_KUNIT
-struct arm_smmu_invs *arm_smmu_invs_purge(struct arm_smmu_invs *invs)
-{
-	struct arm_smmu_invs *new_invs;
-	struct arm_smmu_inv *inv;
-	size_t i, num_invs = 0;
-
-	if (WARN_ON(invs->num_invs < invs->num_trashes))
-		return NULL;
-	if (!invs->num_invs || !invs->num_trashes)
-		return NULL;
-
-	new_invs = arm_smmu_invs_alloc(invs->num_invs - invs->num_trashes);
-	if (!new_invs)
-		return NULL;
-
-	arm_smmu_invs_for_each_entry(invs, i, inv) {
-		new_invs->inv[num_invs] = *inv;
-		arm_smmu_invs_update_caps(new_invs, inv);
-		num_invs++;
-	}
-
-	WARN_ON(num_invs != new_invs->num_invs);
-	return new_invs;
-}
-EXPORT_SYMBOL_IF_KUNIT(arm_smmu_invs_purge);
-
 /* Context descriptor manipulation functions */
+void arm_smmu_tlb_inv_asid(struct arm_smmu_device *smmu, u16 asid)
+{
+	struct arm_smmu_cmdq_ent cmd = {
+		.opcode	= smmu->features & ARM_SMMU_FEAT_E2H ?
+			CMDQ_OP_TLBI_EL2_ASID : CMDQ_OP_TLBI_NH_ASID,
+		.tlbi.asid = asid,
+	};
+
+	arm_smmu_cmdq_issue_cmd_with_sync(smmu, &cmd);
+}
 
 /*
  * Based on the value of ent report which bits of the STE the HW will access. It
@@ -1287,8 +1063,7 @@ void arm_smmu_get_ste_used(const __le64 *ent, __le64 *used_bits)
 			cpu_to_le64(STRTAB_STE_1_S1DSS | STRTAB_STE_1_S1CIR |
 				    STRTAB_STE_1_S1COR | STRTAB_STE_1_S1CSH |
 				    STRTAB_STE_1_S1STALLD | STRTAB_STE_1_STRW |
-				    STRTAB_STE_1_EATS | STRTAB_STE_1_MEV |
-				    STRTAB_STE_1_INSTCFG);
+				    STRTAB_STE_1_EATS | STRTAB_STE_1_MEV);
 		used_bits[2] |= cpu_to_le64(STRTAB_STE_2_S2VMID);
 
 		/*
@@ -1304,8 +1079,7 @@ void arm_smmu_get_ste_used(const __le64 *ent, __le64 *used_bits)
 	if (cfg & BIT(1)) {
 		used_bits[1] |=
 			cpu_to_le64(STRTAB_STE_1_S2FWB | STRTAB_STE_1_EATS |
-				    STRTAB_STE_1_SHCFG | STRTAB_STE_1_MEV |
-				    STRTAB_STE_1_INSTCFG);
+				    STRTAB_STE_1_SHCFG | STRTAB_STE_1_MEV);
 		used_bits[2] |=
 			cpu_to_le64(STRTAB_STE_2_S2VMID | STRTAB_STE_2_VTCR |
 				    STRTAB_STE_2_S2AA64 | STRTAB_STE_2_S2ENDI |
@@ -1516,14 +1290,19 @@ static void arm_smmu_sync_cd(struct arm_smmu_master *master,
 	size_t i;
 	struct arm_smmu_cmdq_batch cmds;
 	struct arm_smmu_device *smmu = master->smmu;
-	struct arm_smmu_cmd cmd = arm_smmu_make_cmd_cfgi_cd(0, ssid, leaf);
+	struct arm_smmu_cmdq_ent cmd = {
+		.opcode	= CMDQ_OP_CFGI_CD,
+		.cfgi	= {
+			.ssid	= ssid,
+			.leaf	= leaf,
+		},
+	};
 
-	arm_smmu_cmdq_batch_init_cmd(smmu, &cmds, &cmd);
-	for (i = 0; i < master->num_streams; i++)
-		arm_smmu_cmdq_batch_add_cmd(
-			smmu, &cmds,
-			arm_smmu_make_cmd_cfgi_cd(master->streams[i].id, ssid,
-						  leaf));
+	arm_smmu_cmdq_batch_init(smmu, &cmds, &cmd);
+	for (i = 0; i < master->num_streams; i++) {
+		cmd.cfgi.sid = master->streams[i].id;
+		arm_smmu_cmdq_batch_add(smmu, &cmds, &cmd);
+	}
 
 	arm_smmu_cmdq_batch_submit(smmu, &cmds);
 }
@@ -1532,9 +1311,6 @@ static void arm_smmu_write_cd_l1_desc(struct arm_smmu_cdtab_l1 *dst,
 				      dma_addr_t l2ptr_dma)
 {
 	u64 val = (l2ptr_dma & CTXDESC_L1_DESC_L2PTR_MASK) | CTXDESC_L1_DESC_V;
-
-	/* Ensure the zero-cleared L2 table is fully visible. */
-	dma_wmb();
 
 	/* The HW has 64 bit atomicity with stores to the L2 CD table */
 	WRITE_ONCE(dst->l2ptr, cpu_to_le64(val));
@@ -1713,11 +1489,8 @@ void arm_smmu_clear_cd(struct arm_smmu_master *master, ioasid_t ssid)
 	if (!arm_smmu_cdtab_allocated(&master->cd_table))
 		return;
 	cdptr = arm_smmu_get_cd_ptr(master, ssid);
-	if (!cdptr) {
-		/* Only ats_always_on allows a NULL CD on default substream */
-		WARN_ON(!master->ats_always_on || ssid);
+	if (WARN_ON(!cdptr))
 		return;
-	}
 	arm_smmu_write_cd_entry(master, ssid, cdptr, &target);
 }
 
@@ -1730,22 +1503,6 @@ static int arm_smmu_alloc_cd_tables(struct arm_smmu_master *master)
 	struct arm_smmu_ctx_desc_cfg *cd_table = &master->cd_table;
 
 	cd_table->s1cdmax = master->ssid_bits;
-
-	/*
-	 * When a device doesn't support PASID (non default SSID), ssid_bits is
-	 * set to 0. This also sets S1CDMAX to 0, which disables the substreams
-	 * and ignores the S1DSS field.
-	 *
-	 * On the other hand, if a device demands ATS to be always on even when
-	 * its default substream is IOMMU bypassed, it has to use EATS that is
-	 * only effective with an STE (CFG=S1translate, S1DSS=Bypass). For such
-	 * use cases, S1CDMAX has to be !0, in order to make use of S1DSS/EATS.
-	 *
-	 * Set S1CDMAX no lower than 1. This would add a dummy substream in the
-	 * CD table but it should never be used by an actual CD.
-	 */
-	if (master->ats_always_on)
-		cd_table->s1cdmax = max_t(u8, cd_table->s1cdmax, 1);
 	max_contexts = 1 << cd_table->s1cdmax;
 
 	if (!(smmu->features & ARM_SMMU_FEAT_2_LVL_CDTAB) ||
@@ -1764,8 +1521,9 @@ static int arm_smmu_alloc_cd_tables(struct arm_smmu_master *master)
 		cd_table->l2.num_l1_ents =
 			DIV_ROUND_UP(max_contexts, CTXDESC_L2_ENTRIES);
 
-		cd_table->l2.l2ptrs = kzalloc_objs(*cd_table->l2.l2ptrs,
-						   cd_table->l2.num_l1_ents);
+		cd_table->l2.l2ptrs = kcalloc(cd_table->l2.num_l1_ents,
+					     sizeof(*cd_table->l2.l2ptrs),
+					     GFP_KERNEL);
 		if (!cd_table->l2.l2ptrs)
 			return -ENOMEM;
 
@@ -1825,9 +1583,6 @@ static void arm_smmu_write_strtab_l1_desc(struct arm_smmu_strtab_l1 *dst,
 	val |= FIELD_PREP(STRTAB_L1_DESC_SPAN, STRTAB_SPLIT + 1);
 	val |= l2ptr_dma & STRTAB_L1_DESC_L2PTR_MASK;
 
-	/* Ensure the new L2 table is fully visible. */
-	dma_wmb();
-
 	/* The HW has 64 bit atomicity with stores to the L2 STE table */
 	WRITE_ONCE(dst->l2ptr, cpu_to_le64(val));
 }
@@ -1841,10 +1596,15 @@ static void arm_smmu_ste_writer_sync_entry(struct arm_smmu_entry_writer *writer)
 {
 	struct arm_smmu_ste_writer *ste_writer =
 		container_of(writer, struct arm_smmu_ste_writer, writer);
+	struct arm_smmu_cmdq_ent cmd = {
+		.opcode	= CMDQ_OP_CFGI_STE,
+		.cfgi	= {
+			.sid	= ste_writer->sid,
+			.leaf	= true,
+		},
+	};
 
-	arm_smmu_cmdq_issue_cmd_with_sync(
-		writer->master->smmu,
-		arm_smmu_make_cmd_cfgi_ste(ste_writer->sid, true));
+	arm_smmu_cmdq_issue_cmd_with_sync(writer->master->smmu, &cmd);
 }
 
 static const struct arm_smmu_entry_writer_ops arm_smmu_ste_writer_ops = {
@@ -1869,9 +1629,15 @@ static void arm_smmu_write_ste(struct arm_smmu_master *master, u32 sid,
 	arm_smmu_write_entry(&ste_writer.writer, ste->data, target->data);
 
 	/* It's likely that we'll want to use the new STE soon */
-	if (!(smmu->options & ARM_SMMU_OPT_SKIP_PREFETCH))
-		arm_smmu_cmdq_issue_cmd(smmu,
-					arm_smmu_make_cmd_prefetch_cfg(sid));
+	if (!(smmu->options & ARM_SMMU_OPT_SKIP_PREFETCH)) {
+		struct arm_smmu_cmdq_ent
+			prefetch_cmd = { .opcode = CMDQ_OP_PREFETCH_CFG,
+					 .prefetch = {
+						 .sid = sid,
+					 } };
+
+		arm_smmu_cmdq_issue_cmd(smmu, &prefetch_cmd);
+	}
 }
 
 void arm_smmu_make_abort_ste(struct arm_smmu_ste *target)
@@ -1924,11 +1690,7 @@ void arm_smmu_make_cdtable_ste(struct arm_smmu_ste *target,
 			 STRTAB_STE_1_S1STALLD :
 			 0) |
 		FIELD_PREP(STRTAB_STE_1_EATS,
-			   ats_enabled ? STRTAB_STE_1_EATS_TRANS : 0) |
-		FIELD_PREP(STRTAB_STE_1_INSTCFG,
-			   smmu->options & ARM_SMMU_OPT_OVR_INSTCFG_DATA ?
-				   STRTAB_STE_1_INSTCFG_DATA :
-				   STRTAB_STE_1_INSTCFG_INCOMING));
+			   ats_enabled ? STRTAB_STE_1_EATS_TRANS : 0));
 
 	if ((smmu->features & ARM_SMMU_FEAT_ATTR_TYPES_OVR) &&
 	    s1dss == STRTAB_STE_1_S1DSS_BYPASS)
@@ -1980,11 +1742,7 @@ void arm_smmu_make_s2_domain_ste(struct arm_smmu_ste *target,
 
 	target->data[1] = cpu_to_le64(
 		FIELD_PREP(STRTAB_STE_1_EATS,
-			   ats_enabled ? STRTAB_STE_1_EATS_TRANS : 0) |
-		FIELD_PREP(STRTAB_STE_1_INSTCFG,
-			   smmu->options & ARM_SMMU_OPT_OVR_INSTCFG_DATA ?
-				   STRTAB_STE_1_INSTCFG_DATA :
-				   STRTAB_STE_1_INSTCFG_INCOMING));
+			   ats_enabled ? STRTAB_STE_1_EATS_TRANS : 0));
 
 	if (pgtbl_cfg->quirks & IO_PGTABLE_QUIRK_ARM_S2FWB)
 		target->data[1] |= cpu_to_le64(STRTAB_STE_1_S2FWB);
@@ -2304,10 +2062,20 @@ static void arm_smmu_handle_ppr(struct arm_smmu_device *smmu, u64 *evt)
 		 evt[0] & PRIQ_0_PERM_EXEC ? "X" : "",
 		 evt[1] & PRIQ_1_ADDR_MASK);
 
-	if (last)
-		arm_smmu_cmdq_issue_cmd(
-			smmu, arm_smmu_make_cmd_pri_resp(sid, ssid, ssv, grpid,
-							 PRI_RESP_DENY));
+	if (last) {
+		struct arm_smmu_cmdq_ent cmd = {
+			.opcode			= CMDQ_OP_PRI_RESP,
+			.substream_valid	= ssv,
+			.pri			= {
+				.sid	= sid,
+				.ssid	= ssid,
+				.grpid	= grpid,
+				.resp	= PRI_RESP_DENY,
+			},
+		};
+
+		arm_smmu_cmdq_issue_cmd(smmu, &cmd);
+	}
 }
 
 static irqreturn_t arm_smmu_priq_thread(int irq, void *dev)
@@ -2395,8 +2163,9 @@ static irqreturn_t arm_smmu_combined_irq_handler(int irq, void *dev)
 	return IRQ_WAKE_THREAD;
 }
 
-static struct arm_smmu_cmd arm_smmu_atc_inv_to_cmd(u32 sid, int ssid,
-						   struct arm_smmu_tlbi *tlbi)
+static void
+arm_smmu_atc_inv_to_cmd(int ssid, unsigned long iova, size_t size,
+			struct arm_smmu_cmdq_ent *cmd)
 {
 	size_t log2_span;
 	size_t span_mask;
@@ -2418,8 +2187,19 @@ static struct arm_smmu_cmd arm_smmu_atc_inv_to_cmd(u32 sid, int ssid,
 	 * This has the unpleasant side-effect of invalidating all PASID-tagged
 	 * ATC entries within the address range.
 	 */
-	page_start = tlbi->iova >> inval_grain_shift;
-	page_end = (tlbi->iova + tlbi->size - 1) >> inval_grain_shift;
+	*cmd = (struct arm_smmu_cmdq_ent) {
+		.opcode			= CMDQ_OP_ATC_INV,
+		.substream_valid	= (ssid != IOMMU_NO_PASID),
+		.atc.ssid		= ssid,
+	};
+
+	if (!size) {
+		cmd->atc.size = ATC_INV_SIZE_ALL;
+		return;
+	}
+
+	page_start	= iova >> inval_grain_shift;
+	page_end	= (iova + size - 1) >> inval_grain_shift;
 
 	/*
 	 * In an ATS Invalidate Request, the address must be aligned on the
@@ -2446,455 +2226,235 @@ static struct arm_smmu_cmd arm_smmu_atc_inv_to_cmd(u32 sid, int ssid,
 
 	page_start	&= ~span_mask;
 
-	return arm_smmu_make_cmd_atc_inv(sid, ssid,
-					 page_start << inval_grain_shift,
-					 log2_span);
+	cmd->atc.addr	= page_start << inval_grain_shift;
+	cmd->atc.size	= log2_span;
 }
 
 static int arm_smmu_atc_inv_master(struct arm_smmu_master *master,
 				   ioasid_t ssid)
 {
 	int i;
-	struct arm_smmu_cmd cmd;
+	struct arm_smmu_cmdq_ent cmd;
 	struct arm_smmu_cmdq_batch cmds;
 
-	cmd = arm_smmu_make_cmd_atc_inv_all(0, IOMMU_NO_PASID);
-	arm_smmu_cmdq_batch_init_cmd(master->smmu, &cmds, &cmd);
-	for (i = 0; i < master->num_streams; i++)
-		arm_smmu_cmdq_batch_add_cmd(
-			master->smmu, &cmds,
-			arm_smmu_make_cmd_atc_inv_all(master->streams[i].id,
-						      ssid));
+	arm_smmu_atc_inv_to_cmd(ssid, 0, 0, &cmd);
+
+	arm_smmu_cmdq_batch_init(master->smmu, &cmds, &cmd);
+	for (i = 0; i < master->num_streams; i++) {
+		cmd.atc.sid = master->streams[i].id;
+		arm_smmu_cmdq_batch_add(master->smmu, &cmds, &cmd);
+	}
 
 	return arm_smmu_cmdq_batch_submit(master->smmu, &cmds);
+}
+
+int arm_smmu_atc_inv_domain(struct arm_smmu_domain *smmu_domain,
+			    unsigned long iova, size_t size)
+{
+	struct arm_smmu_master_domain *master_domain;
+	int i;
+	unsigned long flags;
+	struct arm_smmu_cmdq_ent cmd = {
+		.opcode = CMDQ_OP_ATC_INV,
+	};
+	struct arm_smmu_cmdq_batch cmds;
+
+	if (!(smmu_domain->smmu->features & ARM_SMMU_FEAT_ATS))
+		return 0;
+
+	/*
+	 * Ensure that we've completed prior invalidation of the main TLBs
+	 * before we read 'nr_ats_masters' in case of a concurrent call to
+	 * arm_smmu_enable_ats():
+	 *
+	 *	// unmap()			// arm_smmu_enable_ats()
+	 *	TLBI+SYNC			atomic_inc(&nr_ats_masters);
+	 *	smp_mb();			[...]
+	 *	atomic_read(&nr_ats_masters);	pci_enable_ats() // writel()
+	 *
+	 * Ensures that we always see the incremented 'nr_ats_masters' count if
+	 * ATS was enabled at the PCI device before completion of the TLBI.
+	 */
+	smp_mb();
+	if (!atomic_read(&smmu_domain->nr_ats_masters))
+		return 0;
+
+	arm_smmu_cmdq_batch_init(smmu_domain->smmu, &cmds, &cmd);
+
+	spin_lock_irqsave(&smmu_domain->devices_lock, flags);
+	list_for_each_entry(master_domain, &smmu_domain->devices,
+			    devices_elm) {
+		struct arm_smmu_master *master = master_domain->master;
+
+		if (!master->ats_enabled)
+			continue;
+
+		if (master_domain->nested_ats_flush) {
+			/*
+			 * If a S2 used as a nesting parent is changed we have
+			 * no option but to completely flush the ATC.
+			 */
+			arm_smmu_atc_inv_to_cmd(IOMMU_NO_PASID, 0, 0, &cmd);
+		} else {
+			arm_smmu_atc_inv_to_cmd(master_domain->ssid, iova, size,
+						&cmd);
+		}
+
+		for (i = 0; i < master->num_streams; i++) {
+			cmd.atc.sid = master->streams[i].id;
+			arm_smmu_cmdq_batch_add(smmu_domain->smmu, &cmds, &cmd);
+		}
+	}
+	spin_unlock_irqrestore(&smmu_domain->devices_lock, flags);
+
+	return arm_smmu_cmdq_batch_submit(smmu_domain->smmu, &cmds);
 }
 
 /* IO_PGTABLE API */
 static void arm_smmu_tlb_inv_context(void *cookie)
 {
 	struct arm_smmu_domain *smmu_domain = cookie;
+	struct arm_smmu_device *smmu = smmu_domain->smmu;
+	struct arm_smmu_cmdq_ent cmd;
 
 	/*
-	 * If the DMA API is running in non-strict mode then another CPU could
-	 * have changed the page table and not invoked any flush op. Instead the
-	 * other CPU will do an atomic_read() and this CPU will have done an
-	 * atomic_write(). That handshake is enough to acquire the page table
-	 * writes from the other CPU.
-	 *
-	 * All command execution has a dma_wmb() to release all the in-memory
-	 * structures written by this CPU, that barrier must also release the
-	 * writes acquired from all the other CPUs too.
-	 *
-	 * There are other barriers and atomics on this path, but the above is
-	 * the essential mechanism for ensuring that HW sees the page table
-	 * writes from another CPU before it executes the IOTLB invalidation.
+	 * NOTE: when io-pgtable is in non-strict mode, we may get here with
+	 * PTEs previously cleared by unmaps on the current CPU not yet visible
+	 * to the SMMU. We are relying on the dma_wmb() implicit during cmd
+	 * insertion to guarantee those are observed before the TLBI. Do be
+	 * careful, 007.
 	 */
-	arm_smmu_domain_inv(smmu_domain);
-}
-
-/*
- * Check address alignment for TTL hint per SMMUv3 H.a Section 4.4.1. Address
- * bits below the alignment must be zero, otherwise UNPREDICTABLE.
- */
-static bool arm_smmu_ttl_addr_aligned(u64 address, unsigned int tg,
-				      unsigned int ttl)
-{
-	unsigned int pgsz_lg2 = arm_smmu_pt_level_to_lg2sz(tg, 3 - ttl);
-
-	return !(address & GENMASK_U64(pgsz_lg2 - 1, 0));
-}
-
-struct arm_smmu_range_inv {
-	u64 start_tg;
-	/* Normal integer, not encoded. 0 means 0.*/
-	u64 num;
-	unsigned int scale;
-};
-
-static unsigned int arm_smmu_range_inv_calc_scale(u64 num_tg)
-{
-	return fls64((num_tg - 1) / (CMDQ_TLBI_RANGE_NUM_MAX + 1));
-}
-
-static u64 arm_smmu_range_inv_calc_num(u64 num_tg, unsigned int scale)
-{
-	return DIV_ROUND_UP_ULL(num_tg, 1ULL << scale);
-}
-
-/*
- * Initialize the smallest range invalidation covering num_tg and ending at
- * last_tg.
- */
-static struct arm_smmu_range_inv arm_smmu_range_inv_init_end(u64 last_tg,
-							     u64 num_tg)
-{
-	struct arm_smmu_range_inv range_inv = {};
-
-	if (!num_tg)
-		return range_inv;
-
-	range_inv.scale = arm_smmu_range_inv_calc_scale(num_tg);
-	range_inv.num = arm_smmu_range_inv_calc_num(num_tg, range_inv.scale);
-	range_inv.start_tg = last_tg - ((range_inv.num << range_inv.scale) - 1);
-	return range_inv;
-}
-
-static void
-arm_smmu_tlbi_add_range_cmd(struct arm_smmu_tlbi *tlbi,
-			    const struct arm_smmu_range_inv *range_inv, u8 ttl,
-			    u8 tg_enc)
-{
-	struct arm_smmu_cmd *cmd = &tlbi->range.cmds[tlbi->range.num_cmds++];
-	unsigned int tgsz_lg2 = tg_enc * 2 + 10;
-	u64 iova = range_inv->start_tg << tgsz_lg2;
-	unsigned int num = range_inv->num - 1;
-
-	/* 16K granule TTL=1 is reserved (Section 4.4.1) */
-	if (WARN_ON(tgsz_lg2 == 14 && ttl == 1))
-		ttl = 0;
-
-	/* Verify address alignment for the TTL hint */
-	if (ttl && !arm_smmu_ttl_addr_aligned(iova, tgsz_lg2, ttl))
-		ttl = 0;
-
-	/*
-	 * SMMUv3 H.a Section 4.4.1: TG!=0, NUM==0, SCALE==0, TTL==0 is Reserved
-	 * and causes CERROR_ILL. Single tg uses NUM=0, SCALE=0 with a TTL hint
-	 * to target only the exact leaf entry.
-	 *
-	 * For a single tg invalidation a 0 TTL can come from places like the
-	 * SVA path that don't have enough information to get a TTL, or as a
-	 * side of effect of the splitting.
-	 *
-	 * A single-TG invalidation cannot reach this point if it is part of a
-	 * CONT group, so it is safe to transform it into a single invalidation.
-	 * The ARM_SMMU_OPT_FULL_CONT_RANGE_INV errata does not apply.
-	 */
-	if (!num && !range_inv->scale && !ttl)
-		tg_enc = 0;
-
-	cmd->data[0] = FIELD_PREP(CMDQ_TLBI_0_NUM, num) |
-		       FIELD_PREP(CMDQ_TLBI_0_SCALE, range_inv->scale);
-	cmd->data[1] = FIELD_PREP(CMDQ_TLBI_1_LEAF, tlbi->leaf_only) |
-		       FIELD_PREP(CMDQ_TLBI_1_TTL, ttl) |
-		       FIELD_PREP(CMDQ_TLBI_1_TG, tg_enc) | iova;
-}
-
-/*
- * Generate up to two range TLBI command payloads covering [iova, iova+size).
- * Sets use_full_inv if the range is too large to represent.
- *
- * Normally the first range invalidation is the largest representable span which
- * does not exceed the requested range. If necessary, the second range
- * invalidation is the smallest representable range covering the remainder and
- * is anchored at the end. Any excess coverage from the second range
- * invalidation overlaps the first instead of exceeding the requested range.
- *
- * For SVA on an invs containing an SMMU with ARM_SMMU_OPT_FULL_CONT_RANGE_INV,
- * produce only a single range invalidation and overinvalidate so any potential CONT is
- * covered by one command.
- */
-static void arm_smmu_tlbi_calc_range(struct arm_smmu_tlbi *tlbi,
-				     bool single_range_inv)
-{
-	u8 tgsz_lg2 = tlbi->tgsz_lg2;
-	struct arm_smmu_range_inv first = { .start_tg = tlbi->iova >>
-							tgsz_lg2 };
-	u64 last_tg = (tlbi->iova + tlbi->size - 1) >> tgsz_lg2;
-	u64 num_tg = last_tg - first.start_tg + 1;
-	u8 tg_enc = (tgsz_lg2 - 10) / 2;
-	struct arm_smmu_range_inv trail;
-	u8 ttl = 0;
-
-	/*
-	 * Determine what level the granule is at. For non-leaf, both io-pgtable
-	 * and SVA pass a nominal last-level granule because they don't know
-	 * what level(s) actually apply, so leave TTL=0.
-	 */
-	if (tlbi->leaf_only)
-		ttl = 4 - ((ilog2(tlbi->iopte_size) - 3) / (tgsz_lg2 - 3));
-
-	/*
-	 * The spec defines the invalidated range as:
-	 *   Range = ((NUM+1) * 2^SCALE) * Translation_Granule_Size
-	 * NUM is 5 bits, so (NUM+1) covers 1..32 granules. Find the smallest
-	 * SCALE at which a single command could cover num_tg.
-	 *
-	 * Unlike other IOMMUs the spec has no alignment requirement on the
-	 * address beyond alignment to tg (so long as TTL=0).
-	 */
-	first.scale = arm_smmu_range_inv_calc_scale(num_tg);
-	if (first.scale > 31) {
-		/* Range too large for a single command do full invalidation */
-		tlbi->range.use_full_inv = true;
-		return;
-	}
-
-	if (single_range_inv) {
-		/*
-		 * Produce a single invalidation by rounding up and disabling
-		 * the trailer.
-		 */
-		first.num = arm_smmu_range_inv_calc_num(num_tg, first.scale);
-		trail.num = 0;
+	if (smmu_domain->stage == ARM_SMMU_DOMAIN_S1) {
+		arm_smmu_tlb_inv_asid(smmu, smmu_domain->cd.asid);
 	} else {
-		/*
-		 * Produce two invalidations by rounding down and adding a
-		 * second trailing range invalidation anchored at the end.
-		 */
-		first.num = num_tg >> first.scale;
-		trail = arm_smmu_range_inv_init_end(
-			last_tg, num_tg - ((u64)first.num << first.scale));
+		cmd.opcode	= CMDQ_OP_TLBI_S12_VMALL;
+		cmd.tlbi.vmid	= smmu_domain->s2_cfg.vmid;
+		arm_smmu_cmdq_issue_cmd_with_sync(smmu, &cmd);
 	}
-	arm_smmu_tlbi_add_range_cmd(tlbi, &first, ttl, tg_enc);
-
-	if (trail.num)
-		arm_smmu_tlbi_add_range_cmd(tlbi, &trail, ttl, tg_enc);
+	arm_smmu_atc_inv_domain(smmu_domain, 0, 0);
 }
 
-/*
- * One TLBI command per IOTLB entry, assuming the entries are all at least
- * iopte_granule sized. Sets use_full_inv if too many commands would be needed
- * which indicates too high a latency. The threshold is similar to MAX_DVM_OPS
- * in arch/arm64/include/asm/tlbflush.h for the 4k PAGE_SIZE.
- */
-static void arm_smmu_tlbi_calc_single(struct arm_smmu_tlbi *tlbi)
+static void __arm_smmu_tlb_inv_range(struct arm_smmu_cmdq_ent *cmd,
+				     unsigned long iova, size_t size,
+				     size_t granule,
+				     struct arm_smmu_domain *smmu_domain)
 {
-	unsigned long num_ops = tlbi->size / tlbi->iopte_size;
+	struct arm_smmu_device *smmu = smmu_domain->smmu;
+	unsigned long end = iova + size, num_pages = 0, tg = 0;
+	size_t inv_range = granule;
+	struct arm_smmu_cmdq_batch cmds;
 
-	if (!num_ops || num_ops > 512) {
-		tlbi->single.use_full_inv = true;
+	if (!size)
 		return;
-	}
-	tlbi->single.num = num_ops;
-}
 
-static void arm_smmu_inv_all_cmd(struct arm_smmu_inv *inv,
-				 struct arm_smmu_cmdq_batch *cmds,
-				 struct arm_smmu_cmd *cmd)
-{
-	u64p_replace_bits(&cmd->data[0], inv->nsize_opcode, CMDQ_0_OP);
-	arm_smmu_cmdq_batch_add_cmd_p(inv->smmu, cmds, cmd);
-}
+	if (smmu->features & ARM_SMMU_FEAT_RANGE_INV) {
+		/* Get the leaf page size */
+		tg = __ffs(smmu_domain->domain.pgsize_bitmap);
 
-/*
- * Used by non INV_TYPE_ATS* invalidations. Returns true if it fell back to
- * full invalidation using nsize_opcode.
- */
-static bool arm_smmu_inv_to_cmdq_batch(struct arm_smmu_inv *inv,
-				       struct arm_smmu_cmdq_batch *cmds,
-				       struct arm_smmu_cmd *cmd,
-				       struct arm_smmu_tlbi *tlbi)
-{
-	u64 iova = tlbi->iova;
-	unsigned int i;
+		num_pages = size >> tg;
 
-	if (inv->smmu->features & ARM_SMMU_FEAT_RANGE_INV) {
-		if (tlbi->range.use_full_inv) {
-			arm_smmu_inv_all_cmd(inv, cmds, cmd);
-			return true;
-		}
-		for (i = 0; i < tlbi->range.num_cmds; i++) {
-			struct arm_smmu_cmd range_cmd = tlbi->range.cmds[i];
+		/* Convert page size of 12,14,16 (log2) to 1,2,3 */
+		cmd->tlbi.tg = (tg - 10) / 2;
 
-			range_cmd.data[0] |= cmd->data[0];
-			range_cmd.data[1] |= cmd->data[1];
-			arm_smmu_cmdq_batch_add_cmd_p(inv->smmu, cmds,
-						      &range_cmd);
-		}
-		return false;
-	}
-
-	if (tlbi->single.use_full_inv) {
-		arm_smmu_inv_all_cmd(inv, cmds, cmd);
-		return true;
-	}
-
-	for (i = 0; i < tlbi->single.num; i++) {
-		cmd->data[1] = FIELD_PREP(CMDQ_TLBI_1_LEAF, tlbi->leaf_only) |
-			       (iova & ~GENMASK_U64(11, 0));
-		iova += tlbi->iopte_size;
-		arm_smmu_cmdq_batch_add_cmd_p(inv->smmu, cmds, cmd);
-	}
-	return false;
-}
-
-static inline bool arm_smmu_invs_end_batch(struct arm_smmu_inv *cur,
-					   struct arm_smmu_inv *next)
-{
-	/* Changing smmu means changing command queue */
-	if (cur->smmu != next->smmu)
-		return true;
-	/* The batch for S2 TLBI must be done before nested S1 ASIDs */
-	if (cur->type != INV_TYPE_S2_VMID_S1_CLEAR &&
-	    next->type == INV_TYPE_S2_VMID_S1_CLEAR)
-		return true;
-	/* ATS must be after a sync of the S1/S2 invalidations */
-	if (!arm_smmu_inv_is_ats(cur) && arm_smmu_inv_is_ats(next))
-		return true;
-	return false;
-}
-
-static void arm_smmu_domain_tlbi_inv(struct arm_smmu_tlbi *tlbi,
-				     struct arm_smmu_invs *invs)
-{
-	struct arm_smmu_inv *used_s12_vmall = NULL;
-	struct arm_smmu_cmdq_batch cmds = {};
-	struct arm_smmu_inv *cur;
-	struct arm_smmu_inv *end;
-
-	cur = invs->inv;
-	end = cur + READ_ONCE(invs->num_invs);
-	/* Skip any leading entry marked as a trash */
-	for (; cur != end; cur++)
-		if (READ_ONCE(cur->users))
-			break;
-	while (cur != end) {
-		struct arm_smmu_device *smmu = cur->smmu;
 		/*
-		 * Pick size_opcode to run arm_smmu_get_cmdq(). This can
-		 * be changed to nsize_opcode, which would result in the
-		 * same CMDQ pointer.
+		 * Determine what level the granule is at. For non-leaf, both
+		 * io-pgtable and SVA pass a nominal last-level granule because
+		 * they don't know what level(s) actually apply, so ignore that
+		 * and leave TTL=0. However for various errata reasons we still
+		 * want to use a range command, so avoid the SVA corner case
+		 * where both scale and num could be 0 as well.
 		 */
-		struct arm_smmu_cmd cmd =
-			arm_smmu_make_cmd_op(cur->size_opcode);
-		struct arm_smmu_inv *next;
+		if (cmd->tlbi.leaf)
+			cmd->tlbi.ttl = 4 - ((ilog2(granule) - 3) / (tg - 3));
+		else if ((num_pages & CMDQ_TLBI_RANGE_NUM_MAX) == 1)
+			num_pages++;
+	}
 
-		if (!cmds.num)
-			arm_smmu_cmdq_batch_init_cmd(smmu, &cmds, &cmd);
+	arm_smmu_cmdq_batch_init(smmu, &cmds, cmd);
 
-		switch (cur->type) {
-		case INV_TYPE_S1_ASID:
-			cmd = arm_smmu_make_cmd_tlbi(cur->size_opcode,
-						     cur->id, 0);
-			arm_smmu_inv_to_cmdq_batch(cur, &cmds, &cmd, tlbi);
-			break;
-		case INV_TYPE_S2_VMID:
-			cmd = arm_smmu_make_cmd_tlbi(cur->size_opcode, 0,
-						     cur->id);
-			if (arm_smmu_inv_to_cmdq_batch(cur, &cmds, &cmd, tlbi))
-				used_s12_vmall = cur + 1;
-			break;
-		case INV_TYPE_S2_VMID_S1_CLEAR:
+	while (iova < end) {
+		if (smmu->features & ARM_SMMU_FEAT_RANGE_INV) {
 			/*
-			 * S2_VMID used CMDQ_OP_TLBI_S12_VMALL which already
-			 * flushed S1 entries. These two types always come in
-			 * pairs and arm_smmu_inv_cmp() ensures that they are
-			 * consecutive in the list for the same SMMU. There may
-			 * be several pairings so check this is paired with the
-			 * one that did the full invalidation.
+			 * On each iteration of the loop, the range is 5 bits
+			 * worth of the aligned size remaining.
+			 * The range in pages is:
+			 *
+			 * range = (num_pages & (0x1f << __ffs(num_pages)))
 			 */
-			if (used_s12_vmall == cur)
-				break;
-			arm_smmu_cmdq_batch_add_cmd(
-				smmu, &cmds,
-				arm_smmu_make_cmd_tlbi(cur->size_opcode, 0,
-						       cur->id));
-			break;
-		case INV_TYPE_ATS:
-			arm_smmu_cmdq_batch_add_cmd(
-				smmu, &cmds,
-				arm_smmu_atc_inv_to_cmd(cur->id, cur->ssid,
-							tlbi));
-			break;
-		case INV_TYPE_ATS_FULL:
-			arm_smmu_cmdq_batch_add_cmd(
-				smmu, &cmds,
-				arm_smmu_make_cmd_atc_inv_all(cur->id,
-							      IOMMU_NO_PASID));
-			break;
-		default:
-			WARN_ON_ONCE(1);
-			break;
+			unsigned long scale, num;
+
+			/* Determine the power of 2 multiple number of pages */
+			scale = __ffs(num_pages);
+			cmd->tlbi.scale = scale;
+
+			/* Determine how many chunks of 2^scale size we have */
+			num = (num_pages >> scale) & CMDQ_TLBI_RANGE_NUM_MAX;
+			cmd->tlbi.num = num - 1;
+
+			/* range is num * 2^scale * pgsize */
+			inv_range = num << (scale + tg);
+
+			/* Clear out the lower order bits for the next iteration */
+			num_pages -= num << scale;
 		}
 
-		/* Skip any trash entry in-between */
-		for (next = cur + 1; next != end; next++)
-			if (READ_ONCE(next->users))
-				break;
-
-		if (cmds.num &&
-		    (next == end || arm_smmu_invs_end_batch(cur, next))) {
-			arm_smmu_cmdq_batch_submit(smmu, &cmds);
-			cmds.num = 0;
-		}
-		cur = next;
+		cmd->tlbi.addr = iova;
+		arm_smmu_cmdq_batch_add(smmu, &cmds, cmd);
+		iova += inv_range;
 	}
+	arm_smmu_cmdq_batch_submit(smmu, &cmds);
 }
 
-/*
- * Perform the invalidation with the parameters described by tlbi on everything
- * caching for smmu_domain. tlbi is an on-stack structure that contains both the
- * input description and working memory for this function it must be discarded
- * after this returns.
- */
-void arm_smmu_domain_tlbi(struct arm_smmu_tlbi *tlbi,
-			  struct arm_smmu_domain *smmu_domain)
+static void arm_smmu_tlb_inv_range_domain(unsigned long iova, size_t size,
+					  size_t granule, bool leaf,
+					  struct arm_smmu_domain *smmu_domain)
 {
-	struct arm_smmu_invs *invs;
+	struct arm_smmu_cmdq_ent cmd = {
+		.tlbi = {
+			.leaf	= leaf,
+		},
+	};
 
-	if (!tlbi->single.use_full_inv)
-		arm_smmu_tlbi_calc_single(tlbi);
-
-	/*
-	 * An invalidation request must follow some IOPTE change and then load
-	 * an invalidation array. In the meantime, a domain attachment mutates
-	 * the array and then stores an STE/CD asking SMMU HW to acquire those
-	 * changed IOPTEs.
-	 *
-	 * When running alone, a domain attachment relies on the dma_wmb() in
-	 * arm_smmu_write_entry() used by arm_smmu_install_ste_for_dev().
-	 *
-	 * But in a race, these two can be interdependent, making it a special
-	 * case requiring an additional smp_mb() for the write->read ordering.
-	 * Pairing with the dma_wmb() in arm_smmu_install_ste_for_dev(), this
-	 * makes sure that IOPTE update prior to this point is visible to SMMU
-	 * hardware before we load the updated invalidation array.
-	 *
-	 *  [CPU0]                        | [CPU1]
-	 *  change IOPTE on new domain:   |
-	 *  arm_smmu_domain_tlbi() {      | arm_smmu_install_new_domain_invs()
-	 *    smp_mb(); // ensures IOPTE  | arm_smmu_install_ste_for_dev {
-	 *              // seen by SMMU   |   dma_wmb(); // ensures invs update
-	 *    // load the updated invs    |              // before updating STE
-	 *    invs = rcu_dereference();   |   STE = TTB0;
-	 *    ...                         |   ...
-	 *  }                             | }
-	 */
-	smp_mb();
-
-	rcu_read_lock();
-	invs = rcu_dereference(smmu_domain->invs);
-
-	/*
-	 * Only precompute range invalidation commands when they will be used.
-	 * The invs generation ensures this matches the instances being
-	 * invalidated.
-	 */
-	if (invs->has_range_inv) {
-		if (!tlbi->range.use_full_inv) {
-			arm_smmu_tlbi_calc_range(
-				tlbi,
-				smmu_domain->stage == ARM_SMMU_DOMAIN_SVA &&
-					invs->has_full_cont_range_inv);
-		}
-	}
-
-	/*
-	 * Avoid locking unless ATS is being used. No ATC invalidation can be
-	 * going on after a domain is detached.
-	 */
-	if (invs->has_ats) {
-		unsigned long flags;
-
-		read_lock_irqsave(&invs->rwlock, flags);
-		arm_smmu_domain_tlbi_inv(tlbi, invs);
-		read_unlock_irqrestore(&invs->rwlock, flags);
+	if (smmu_domain->stage == ARM_SMMU_DOMAIN_S1) {
+		cmd.opcode	= smmu_domain->smmu->features & ARM_SMMU_FEAT_E2H ?
+				  CMDQ_OP_TLBI_EL2_VA : CMDQ_OP_TLBI_NH_VA;
+		cmd.tlbi.asid	= smmu_domain->cd.asid;
 	} else {
-		arm_smmu_domain_tlbi_inv(tlbi, invs);
+		cmd.opcode	= CMDQ_OP_TLBI_S2_IPA;
+		cmd.tlbi.vmid	= smmu_domain->s2_cfg.vmid;
+	}
+	__arm_smmu_tlb_inv_range(&cmd, iova, size, granule, smmu_domain);
+
+	if (smmu_domain->nest_parent) {
+		/*
+		 * When the S2 domain changes all the nested S1 ASIDs have to be
+		 * flushed too.
+		 */
+		cmd.opcode = CMDQ_OP_TLBI_NH_ALL;
+		arm_smmu_cmdq_issue_cmd_with_sync(smmu_domain->smmu, &cmd);
 	}
 
-	rcu_read_unlock();
+	/*
+	 * Unfortunately, this can't be leaf-only since we may have
+	 * zapped an entire table.
+	 */
+	arm_smmu_atc_inv_domain(smmu_domain, iova, size);
+}
+
+void arm_smmu_tlb_inv_range_asid(unsigned long iova, size_t size, int asid,
+				 size_t granule, bool leaf,
+				 struct arm_smmu_domain *smmu_domain)
+{
+	struct arm_smmu_cmdq_ent cmd = {
+		.opcode	= smmu_domain->smmu->features & ARM_SMMU_FEAT_E2H ?
+			  CMDQ_OP_TLBI_EL2_VA : CMDQ_OP_TLBI_NH_VA,
+		.tlbi = {
+			.asid	= asid,
+			.leaf	= leaf,
+		},
+	};
+
+	__arm_smmu_tlb_inv_range(&cmd, iova, size, granule, smmu_domain);
 }
 
 static void arm_smmu_tlb_inv_page_nosync(struct iommu_iotlb_gather *gather,
@@ -2907,23 +2467,10 @@ static void arm_smmu_tlb_inv_page_nosync(struct iommu_iotlb_gather *gather,
 	iommu_iotlb_gather_add_page(domain, gather, iova, granule);
 }
 
-/*
- * Called by io-pgtable-arm.c for each single table level it wants to remove.
- * size is the size of the table level and granule is the tg in bytes. This must
- * clear the walk cache and any leaves within the range.
- */
 static void arm_smmu_tlb_inv_walk(unsigned long iova, size_t size,
 				  size_t granule, void *cookie)
 {
-	struct arm_smmu_domain *smmu_domain = cookie;
-	struct arm_smmu_tlbi tlbi = {
-		.tgsz_lg2 = smmu_domain->tgsz_lg2,
-		.iova = iova,
-		.size = size,
-		.iopte_size = 1 << smmu_domain->tgsz_lg2,
-	};
-
-	arm_smmu_domain_tlbi(&tlbi, smmu_domain);
+	arm_smmu_tlb_inv_range_domain(iova, size, granule, false, cookie);
 }
 
 static const struct iommu_flush_ops arm_smmu_flush_ops = {
@@ -2955,8 +2502,6 @@ static bool arm_smmu_capable(struct device *dev, enum iommu_cap cap)
 		return true;
 	case IOMMU_CAP_DIRTY_TRACKING:
 		return arm_smmu_dbm_capable(master->smmu);
-	case IOMMU_CAP_PCI_ATS_SUPPORTED:
-		return arm_smmu_ats_supported(master);
 	default:
 		return false;
 	}
@@ -2985,21 +2530,13 @@ static bool arm_smmu_enforce_cache_coherency(struct iommu_domain *domain)
 struct arm_smmu_domain *arm_smmu_domain_alloc(void)
 {
 	struct arm_smmu_domain *smmu_domain;
-	struct arm_smmu_invs *new_invs;
 
-	smmu_domain = kzalloc_obj(*smmu_domain);
+	smmu_domain = kzalloc(sizeof(*smmu_domain), GFP_KERNEL);
 	if (!smmu_domain)
 		return ERR_PTR(-ENOMEM);
 
-	new_invs = arm_smmu_invs_alloc(0);
-	if (!new_invs) {
-		kfree(smmu_domain);
-		return ERR_PTR(-ENOMEM);
-	}
-
 	INIT_LIST_HEAD(&smmu_domain->devices);
 	spin_lock_init(&smmu_domain->devices_lock);
-	rcu_assign_pointer(smmu_domain->invs, new_invs);
 
 	return smmu_domain;
 }
@@ -3023,7 +2560,7 @@ static void arm_smmu_domain_free_paging(struct iommu_domain *domain)
 			ida_free(&smmu->vmid_map, cfg->vmid);
 	}
 
-	arm_smmu_domain_free(smmu_domain);
+	kfree(smmu_domain);
 }
 
 static int arm_smmu_domain_finalise_s1(struct arm_smmu_device *smmu,
@@ -3082,7 +2619,7 @@ static int arm_smmu_domain_finalise(struct arm_smmu_domain *smmu_domain,
 				     ARM_SMMU_FEAT_VAX) ? 52 : 48;
 
 		pgtbl_cfg.ias = min_t(unsigned long, ias, VA_BITS);
-		pgtbl_cfg.oas = smmu->oas;
+		pgtbl_cfg.oas = smmu->ias;
 		if (enable_dirty)
 			pgtbl_cfg.quirks |= IO_PGTABLE_QUIRK_ARM_HD;
 		fmt = ARM_64_LPAE_S1;
@@ -3092,7 +2629,7 @@ static int arm_smmu_domain_finalise(struct arm_smmu_domain *smmu_domain,
 	case ARM_SMMU_DOMAIN_S2:
 		if (enable_dirty)
 			return -EOPNOTSUPP;
-		pgtbl_cfg.ias = smmu->oas;
+		pgtbl_cfg.ias = smmu->ias;
 		pgtbl_cfg.oas = smmu->oas;
 		fmt = ARM_64_LPAE_S2;
 		finalise_stage_fn = arm_smmu_domain_finalise_s2;
@@ -3109,7 +2646,6 @@ static int arm_smmu_domain_finalise(struct arm_smmu_domain *smmu_domain,
 		return -ENOMEM;
 
 	smmu_domain->domain.pgsize_bitmap = pgtbl_cfg.pgsize_bitmap;
-	smmu_domain->tgsz_lg2 = __ffs(pgtbl_cfg.pgsize_bitmap);
 	smmu_domain->domain.geometry.aperture_end = (1UL << pgtbl_cfg.ias) - 1;
 	smmu_domain->domain.geometry.force_aperture = true;
 	if (enable_dirty && smmu_domain->stage == ARM_SMMU_DOMAIN_S1)
@@ -3199,13 +2735,8 @@ static void arm_smmu_enable_ats(struct arm_smmu_master *master)
 	 * ATC invalidation of PASID 0 causes the entire ATC to be flushed.
 	 */
 	arm_smmu_atc_inv_master(master, IOMMU_NO_PASID);
-
-	 /*
-	  * Since pci_prepare_ats() has already verified the HW capability
-	  * and programmed the STE, pci_enable_ats() should not fail here.
-	  */
-	WARN(pci_enable_ats(pdev, stu),
-	     "%s: Failed to enable ATS (STU %zu)\n", dev_name(master->dev), stu);
+	if (pci_enable_ats(pdev, stu))
+		dev_err(master->dev, "Failed to enable ATS (STU %zu)\n", stu);
 }
 
 static int arm_smmu_enable_pasid(struct arm_smmu_master *master)
@@ -3347,118 +2878,9 @@ static void arm_smmu_disable_iopf(struct arm_smmu_master *master,
 		iopf_queue_remove_device(master->smmu->evtq.iopf, master->dev);
 }
 
-static struct arm_smmu_inv *
-arm_smmu_master_build_inv(struct arm_smmu_master *master,
-			  enum arm_smmu_inv_type type, u32 id, ioasid_t ssid)
-{
-	struct arm_smmu_invs *build_invs = master->build_invs;
-	struct arm_smmu_inv *cur, inv = {
-		.smmu = master->smmu,
-		.type = type,
-		.id = id,
-	};
-
-	if (WARN_ON(build_invs->num_invs >= build_invs->max_invs))
-		return NULL;
-	cur = &build_invs->inv[build_invs->num_invs];
-	build_invs->num_invs++;
-
-	*cur = inv;
-	switch (type) {
-	case INV_TYPE_S1_ASID:
-		/*
-		 * For S1 page tables the driver always uses VMID=0, and the
-		 * invalidation logic for this type will set it as well.
-		 */
-		if (master->smmu->features & ARM_SMMU_FEAT_E2H) {
-			cur->size_opcode = CMDQ_OP_TLBI_EL2_VA;
-			cur->nsize_opcode = CMDQ_OP_TLBI_EL2_ASID;
-		} else {
-			cur->size_opcode = CMDQ_OP_TLBI_NH_VA;
-			cur->nsize_opcode = CMDQ_OP_TLBI_NH_ASID;
-		}
-		break;
-	case INV_TYPE_S2_VMID:
-		cur->size_opcode = CMDQ_OP_TLBI_S2_IPA;
-		cur->nsize_opcode = CMDQ_OP_TLBI_S12_VMALL;
-		break;
-	case INV_TYPE_S2_VMID_S1_CLEAR:
-		cur->size_opcode = cur->nsize_opcode = CMDQ_OP_TLBI_NH_ALL;
-		break;
-	case INV_TYPE_ATS:
-	case INV_TYPE_ATS_FULL:
-		cur->size_opcode = cur->nsize_opcode = CMDQ_OP_ATC_INV;
-		cur->ssid = ssid;
-		break;
-	}
-
-	return cur;
-}
-
-/*
- * Use the preallocated scratch array at master->build_invs, to build a to_merge
- * or to_unref array, to pass into a following arm_smmu_invs_merge/unref() call.
- *
- * Do not free the returned invs array. It is reused, and will be overwritten by
- * the next arm_smmu_master_build_invs() call.
- */
-static struct arm_smmu_invs *
-arm_smmu_master_build_invs(struct arm_smmu_master *master, bool ats_enabled,
-			   ioasid_t ssid, struct arm_smmu_domain *smmu_domain)
-{
-	const bool nesting = smmu_domain->nest_parent;
-	size_t i;
-
-	iommu_group_mutex_assert(master->dev);
-
-	master->build_invs->num_invs = 0;
-
-	switch (smmu_domain->stage) {
-	case ARM_SMMU_DOMAIN_SVA:
-	case ARM_SMMU_DOMAIN_S1:
-		if (!arm_smmu_master_build_inv(master, INV_TYPE_S1_ASID,
-					       smmu_domain->cd.asid,
-					       IOMMU_NO_PASID))
-			return NULL;
-		break;
-	case ARM_SMMU_DOMAIN_S2:
-		if (!arm_smmu_master_build_inv(master, INV_TYPE_S2_VMID,
-					       smmu_domain->s2_cfg.vmid,
-					       IOMMU_NO_PASID))
-			return NULL;
-		break;
-	default:
-		WARN_ON(true);
-		return NULL;
-	}
-
-	/* All the nested S1 ASIDs have to be flushed when S2 parent changes */
-	if (nesting) {
-		if (!arm_smmu_master_build_inv(
-			    master, INV_TYPE_S2_VMID_S1_CLEAR,
-			    smmu_domain->s2_cfg.vmid, IOMMU_NO_PASID))
-			return NULL;
-	}
-
-	for (i = 0; ats_enabled && i < master->num_streams; i++) {
-		/*
-		 * If an S2 used as a nesting parent is changed we have no
-		 * option but to completely flush the ATC.
-		 */
-		if (!arm_smmu_master_build_inv(
-			    master, nesting ? INV_TYPE_ATS_FULL : INV_TYPE_ATS,
-			    master->streams[i].id, ssid))
-			return NULL;
-	}
-
-	/* Note this build_invs must have been sorted */
-
-	return master->build_invs;
-}
-
-static struct arm_smmu_master_domain *
-arm_smmu_remove_master_domain(struct arm_smmu_master *master,
-			      struct iommu_domain *domain, ioasid_t ssid)
+static void arm_smmu_remove_master_domain(struct arm_smmu_master *master,
+					  struct iommu_domain *domain,
+					  ioasid_t ssid)
 {
 	struct arm_smmu_domain *smmu_domain = to_smmu_domain_devices(domain);
 	struct arm_smmu_master_domain *master_domain;
@@ -3466,7 +2888,7 @@ arm_smmu_remove_master_domain(struct arm_smmu_master *master,
 	unsigned long flags;
 
 	if (!smmu_domain)
-		return NULL;
+		return;
 
 	if (domain->type == IOMMU_DOMAIN_NESTED)
 		nested_ats_flush = to_smmu_nested_domain(domain)->enable_ats;
@@ -3481,152 +2903,8 @@ arm_smmu_remove_master_domain(struct arm_smmu_master *master,
 	}
 	spin_unlock_irqrestore(&smmu_domain->devices_lock, flags);
 
-	/* arm_smmu_attach_release() will free it */
-	return master_domain;
-}
-
-/* Release the old master_domain detached by arm_smmu_remove_master_domain() */
-void arm_smmu_attach_release(struct arm_smmu_attach_state *state)
-{
-	struct arm_smmu_master_domain *master_domain = state->old_master_domain;
-	struct arm_smmu_master *master = state->master;
-
-	iommu_group_mutex_assert(master->dev);
-
-	if (!master_domain)
-		return;
-
 	arm_smmu_disable_iopf(master, master_domain);
 	kfree(master_domain);
-	state->old_master_domain = NULL;
-}
-
-/*
- * During attachment, the updates of the two domain->invs arrays are sequenced:
- *  1. new domain updates its invs array, merging master->build_invs
- *  2. new domain starts to include the master during its invalidation
- *  3. master updates its STE switching from the old domain to the new domain
- *  4. old domain still includes the master during its invalidation
- *  5. old domain updates its invs array, unreferencing master->build_invs
- *
- * For 1 and 5, prepare the two updated arrays in advance, handling any changes
- * that can possibly fail. So the actual update of either 1 or 5 won't fail.
- * arm_smmu_asid_lock ensures that the old invs in the domains are intact while
- * we are sequencing to update them.
- */
-static int arm_smmu_attach_prepare_invs(struct arm_smmu_attach_state *state,
-					struct iommu_domain *new_domain)
-{
-	struct arm_smmu_domain *old_smmu_domain =
-		to_smmu_domain_devices(state->old_domain);
-	struct arm_smmu_domain *new_smmu_domain =
-		to_smmu_domain_devices(new_domain);
-	struct arm_smmu_master *master = state->master;
-	ioasid_t ssid = state->ssid;
-
-	/*
-	 * At this point a NULL domain indicates the domain doesn't use the
-	 * IOTLB, see to_smmu_domain_devices().
-	 */
-	if (new_smmu_domain) {
-		struct arm_smmu_inv_state *invst = &state->new_domain_invst;
-		struct arm_smmu_invs *build_invs;
-
-		invst->invs_ptr = &new_smmu_domain->invs;
-		invst->old_invs = rcu_dereference_protected(
-			new_smmu_domain->invs,
-			lockdep_is_held(&arm_smmu_asid_lock));
-		build_invs = arm_smmu_master_build_invs(
-			master, state->ats_enabled, ssid, new_smmu_domain);
-		if (!build_invs)
-			return -EINVAL;
-
-		invst->new_invs =
-			arm_smmu_invs_merge(invst->old_invs, build_invs);
-		if (IS_ERR(invst->new_invs))
-			return PTR_ERR(invst->new_invs);
-	}
-
-	if (old_smmu_domain) {
-		struct arm_smmu_inv_state *invst = &state->old_domain_invst;
-
-		invst->invs_ptr = &old_smmu_domain->invs;
-		/* A re-attach case might have a different ats_enabled state */
-		if (new_smmu_domain == old_smmu_domain)
-			invst->old_invs = state->new_domain_invst.new_invs;
-		else
-			invst->old_invs = rcu_dereference_protected(
-				old_smmu_domain->invs,
-				lockdep_is_held(&arm_smmu_asid_lock));
-		/* For old_smmu_domain, new_invs points to master->build_invs */
-		invst->new_invs = arm_smmu_master_build_invs(
-			master, master->ats_enabled, ssid, old_smmu_domain);
-	}
-
-	return 0;
-}
-
-/* Must be installed before arm_smmu_install_ste_for_dev() */
-static void
-arm_smmu_install_new_domain_invs(struct arm_smmu_attach_state *state)
-{
-	struct arm_smmu_inv_state *invst = &state->new_domain_invst;
-
-	if (!invst->invs_ptr)
-		return;
-
-	rcu_assign_pointer(*invst->invs_ptr, invst->new_invs);
-	kfree_rcu(invst->old_invs, rcu);
-}
-
-static void arm_smmu_inv_flush_iotlb_tag(struct arm_smmu_inv *inv)
-{
-	switch (inv->type) {
-	case INV_TYPE_S1_ASID:
-		arm_smmu_cmdq_issue_cmd_with_sync(
-			inv->smmu,
-			arm_smmu_make_cmd_tlbi(inv->nsize_opcode, inv->id, 0));
-		break;
-	case INV_TYPE_S2_VMID:
-		/* S2_VMID using nsize_opcode covers S2_VMID_S1_CLEAR */
-		arm_smmu_cmdq_issue_cmd_with_sync(
-			inv->smmu,
-			arm_smmu_make_cmd_tlbi(inv->nsize_opcode, 0, inv->id));
-		break;
-	default:
-		return;
-	}
-}
-
-/* Should be installed after arm_smmu_install_ste_for_dev() */
-static void
-arm_smmu_install_old_domain_invs(struct arm_smmu_attach_state *state)
-{
-	struct arm_smmu_inv_state *invst = &state->old_domain_invst;
-	struct arm_smmu_invs *old_invs = invst->old_invs;
-	struct arm_smmu_invs *new_invs;
-
-	lockdep_assert_held(&arm_smmu_asid_lock);
-
-	if (!invst->invs_ptr)
-		return;
-
-	arm_smmu_invs_unref(old_invs, invst->new_invs);
-	/*
-	 * When an IOTLB tag (the first entry in invs->new_invs) is no longer used,
-	 * it means the ASID or VMID will no longer be invalidated by map/unmap and
-	 * must be cleaned right now. The rule is that any ASID/VMID not in an invs
-	 * array must be left cleared in the IOTLB.
-	 */
-	if (!READ_ONCE(invst->new_invs->inv[0].users))
-		arm_smmu_inv_flush_iotlb_tag(&invst->new_invs->inv[0]);
-
-	new_invs = arm_smmu_invs_purge(old_invs);
-	if (!new_invs)
-		return;
-
-	rcu_assign_pointer(*invst->invs_ptr, new_invs);
-	kfree_rcu(old_invs, rcu);
 }
 
 /*
@@ -3686,19 +2964,15 @@ int arm_smmu_attach_prepare(struct arm_smmu_attach_state *state,
 				     arm_smmu_ats_supported(master);
 	}
 
-	ret = arm_smmu_attach_prepare_invs(state, new_domain);
-	if (ret)
-		return ret;
-
 	if (smmu_domain) {
 		if (new_domain->type == IOMMU_DOMAIN_NESTED) {
 			ret = arm_smmu_attach_prepare_vmaster(
 				state, to_smmu_nested_domain(new_domain));
 			if (ret)
-				goto err_unprepare_invs;
+				return ret;
 		}
 
-		master_domain = kzalloc_obj(*master_domain);
+		master_domain = kzalloc(sizeof(*master_domain), GFP_KERNEL);
 		if (!master_domain) {
 			ret = -ENOMEM;
 			goto err_free_vmaster;
@@ -3743,8 +3017,6 @@ int arm_smmu_attach_prepare(struct arm_smmu_attach_state *state,
 			atomic_inc(&smmu_domain->nr_ats_masters);
 		list_add(&master_domain->devices_elm, &smmu_domain->devices);
 		spin_unlock_irqrestore(&smmu_domain->devices_lock, flags);
-
-		arm_smmu_install_new_domain_invs(state);
 	}
 
 	if (!state->ats_enabled && master->ats_enabled) {
@@ -3764,8 +3036,6 @@ err_free_master_domain:
 	kfree(master_domain);
 err_free_vmaster:
 	kfree(state->vmaster);
-err_unprepare_invs:
-	kfree(state->new_domain_invst.new_invs);
 	return ret;
 }
 
@@ -3796,9 +3066,7 @@ void arm_smmu_attach_commit(struct arm_smmu_attach_state *state)
 		arm_smmu_atc_inv_master(master, IOMMU_NO_PASID);
 	}
 
-	state->old_master_domain = arm_smmu_remove_master_domain(
-		master, state->old_domain, state->ssid);
-	arm_smmu_install_old_domain_invs(state);
+	arm_smmu_remove_master_domain(master, state->old_domain, state->ssid);
 	master->ats_enabled = state->ats_enabled;
 }
 
@@ -3865,14 +3133,10 @@ static int arm_smmu_attach_dev(struct iommu_domain *domain, struct device *dev,
 		arm_smmu_install_ste_for_dev(master, &target);
 		arm_smmu_clear_cd(master, IOMMU_NO_PASID);
 		break;
-	default:
-		WARN_ON(true);
-		break;
 	}
 
 	arm_smmu_attach_commit(&state);
 	mutex_unlock(&arm_smmu_asid_lock);
-	arm_smmu_attach_release(&state);
 	return 0;
 }
 
@@ -3929,8 +3193,7 @@ int arm_smmu_set_pasid(struct arm_smmu_master *master,
 		       struct arm_smmu_domain *smmu_domain, ioasid_t pasid,
 		       struct arm_smmu_cd *cd, struct iommu_domain *old)
 {
-	struct iommu_domain *sid_domain =
-		iommu_driver_get_domain_for_dev(master->dev);
+	struct iommu_domain *sid_domain = iommu_get_domain_for_dev(master->dev);
 	struct arm_smmu_attach_state state = {
 		.master = master,
 		.ssid = pasid,
@@ -3955,10 +3218,8 @@ int arm_smmu_set_pasid(struct arm_smmu_master *master,
 
 	mutex_lock(&arm_smmu_asid_lock);
 	ret = arm_smmu_attach_prepare(&state, &smmu_domain->domain);
-	if (ret) {
-		mutex_unlock(&arm_smmu_asid_lock);
-		return ret;
-	}
+	if (ret)
+		goto out_unlock;
 
 	/*
 	 * We don't want to obtain to the asid_lock too early, so fix up the
@@ -3972,9 +3233,10 @@ int arm_smmu_set_pasid(struct arm_smmu_master *master,
 	arm_smmu_update_ste(master, sid_domain, state.ats_enabled);
 
 	arm_smmu_attach_commit(&state);
+
+out_unlock:
 	mutex_unlock(&arm_smmu_asid_lock);
-	arm_smmu_attach_release(&state);
-	return 0;
+	return ret;
 }
 
 static int arm_smmu_blocking_set_dev_pasid(struct iommu_domain *new_domain,
@@ -3983,22 +3245,13 @@ static int arm_smmu_blocking_set_dev_pasid(struct iommu_domain *new_domain,
 {
 	struct arm_smmu_domain *smmu_domain = to_smmu_domain(old_domain);
 	struct arm_smmu_master *master = dev_iommu_priv_get(dev);
-	struct arm_smmu_attach_state state = {
-		.master = master,
-		.old_domain = old_domain,
-		.ssid = pasid,
-	};
 
 	mutex_lock(&arm_smmu_asid_lock);
-	arm_smmu_attach_prepare_invs(&state, NULL);
 	arm_smmu_clear_cd(master, pasid);
 	if (master->ats_enabled)
 		arm_smmu_atc_inv_master(master, pasid);
-	state.old_master_domain = arm_smmu_remove_master_domain(
-		master, &smmu_domain->domain, pasid);
-	arm_smmu_install_old_domain_invs(&state);
+	arm_smmu_remove_master_domain(master, &smmu_domain->domain, pasid);
 	mutex_unlock(&arm_smmu_asid_lock);
-	arm_smmu_attach_release(&state);
 
 	/*
 	 * When the last user of the CD table goes away downgrade the STE back
@@ -4006,13 +3259,10 @@ static int arm_smmu_blocking_set_dev_pasid(struct iommu_domain *new_domain,
 	 */
 	if (!arm_smmu_ssids_in_use(&master->cd_table)) {
 		struct iommu_domain *sid_domain =
-			iommu_driver_get_domain_for_dev(master->dev);
-		bool ats_always_on = master->ats_always_on &&
-				     sid_domain->type != IOMMU_DOMAIN_BLOCKED;
-		bool downgrade = sid_domain->type == IOMMU_DOMAIN_IDENTITY ||
-				 sid_domain->type == IOMMU_DOMAIN_BLOCKED;
+			iommu_get_domain_for_dev(master->dev);
 
-		if (!ats_always_on && downgrade)
+		if (sid_domain->type == IOMMU_DOMAIN_IDENTITY ||
+		    sid_domain->type == IOMMU_DOMAIN_BLOCKED)
 			sid_domain->ops->attach_dev(sid_domain, dev,
 						    sid_domain);
 	}
@@ -4031,8 +3281,6 @@ static void arm_smmu_attach_dev_ste(struct iommu_domain *domain,
 		.old_domain = old_domain,
 		.ssid = IOMMU_NO_PASID,
 	};
-	bool ats_always_on = master->ats_always_on &&
-			     s1dss != STRTAB_STE_1_S1DSS_TERMINATE;
 
 	/*
 	 * Do not allow any ASID to be changed while are working on the STE,
@@ -4044,7 +3292,7 @@ static void arm_smmu_attach_dev_ste(struct iommu_domain *domain,
 	 * If the CD table is not in use we can use the provided STE, otherwise
 	 * we use a cdtable STE with the provided S1DSS.
 	 */
-	if (ats_always_on || arm_smmu_ssids_in_use(&master->cd_table)) {
+	if (arm_smmu_ssids_in_use(&master->cd_table)) {
 		/*
 		 * If a CD table has to be present then we need to run with ATS
 		 * on because we have to assume a PASID is using ATS. For
@@ -4061,7 +3309,6 @@ static void arm_smmu_attach_dev_ste(struct iommu_domain *domain,
 	arm_smmu_install_ste_for_dev(master, ste);
 	arm_smmu_attach_commit(&state);
 	mutex_unlock(&arm_smmu_asid_lock);
-	arm_smmu_attach_release(&state);
 
 	/*
 	 * This has to be done after removing the master from the
@@ -4177,7 +3424,7 @@ arm_smmu_domain_alloc_paging_flags(struct device *dev, u32 flags,
 	return &smmu_domain->domain;
 
 err_free:
-	arm_smmu_domain_free(smmu_domain);
+	kfree(smmu_domain);
 	return ERR_PTR(ret);
 }
 
@@ -4218,18 +3465,13 @@ static void arm_smmu_iotlb_sync(struct iommu_domain *domain,
 				struct iommu_iotlb_gather *gather)
 {
 	struct arm_smmu_domain *smmu_domain = to_smmu_domain(domain);
-	struct arm_smmu_tlbi tlbi = {
-		.tgsz_lg2 = smmu_domain->tgsz_lg2,
-		.iova = gather->start,
-		.size = gather->end - gather->start + 1,
-		.iopte_size = gather->pgsize,
-		.leaf_only = true,
-	};
 
 	if (!gather->pgsize)
 		return;
 
-	arm_smmu_domain_tlbi(&tlbi, smmu_domain);
+	arm_smmu_tlb_inv_range_domain(gather->start,
+				      gather->end - gather->start + 1,
+				      gather->pgsize, true, smmu_domain);
 }
 
 static phys_addr_t
@@ -4274,64 +3516,27 @@ static int arm_smmu_init_sid_strtab(struct arm_smmu_device *smmu, u32 sid)
 	return 0;
 }
 
-static int arm_smmu_stream_id_cmp(const void *_l, const void *_r)
-{
-	const typeof_member(struct arm_smmu_stream, id) *l = _l;
-	const typeof_member(struct arm_smmu_stream, id) *r = _r;
-
-	return cmp_int(*l, *r);
-}
-
 static int arm_smmu_insert_master(struct arm_smmu_device *smmu,
 				  struct arm_smmu_master *master)
 {
 	int i;
 	int ret = 0;
 	struct iommu_fwspec *fwspec = dev_iommu_fwspec_get(master->dev);
-	bool ats_supported = dev_is_pci(master->dev) &&
-			     pci_ats_supported(to_pci_dev(master->dev));
 
-	master->streams = kzalloc_objs(*master->streams, fwspec->num_ids);
+	master->streams = kcalloc(fwspec->num_ids, sizeof(*master->streams),
+				  GFP_KERNEL);
 	if (!master->streams)
 		return -ENOMEM;
 	master->num_streams = fwspec->num_ids;
-
-	if (!ats_supported) {
-		/* Base case has 1 ASID entry or maximum 2 VMID entries */
-		master->build_invs = arm_smmu_invs_alloc(2);
-	} else {
-		/* ATS case adds num_ids of entries, on top of the base case */
-		master->build_invs = arm_smmu_invs_alloc(2 + fwspec->num_ids);
-	}
-	if (!master->build_invs) {
-		kfree(master->streams);
-		return -ENOMEM;
-	}
-
-	for (i = 0; i < fwspec->num_ids; i++) {
-		struct arm_smmu_stream *new_stream = &master->streams[i];
-
-		new_stream->id = fwspec->ids[i];
-		new_stream->master = master;
-	}
-
-	/* Put the ids into order for sorted to_merge/to_unref arrays */
-	sort(master->streams, master->num_streams,
-	     sizeof(master->streams[0]), arm_smmu_stream_id_cmp,
-	     NULL);
-
-	/*
-	 * Clear after sorting: RB_CLEAR_NODE() records the node's own address,
-	 * which sort_nonatomic() invalidates by relocating the entries.
-	 */
-	for (i = 0; i < fwspec->num_ids; i++)
-		RB_CLEAR_NODE(&master->streams[i].node);
 
 	mutex_lock(&smmu->streams_mutex);
 	for (i = 0; i < fwspec->num_ids; i++) {
 		struct arm_smmu_stream *new_stream = &master->streams[i];
 		struct rb_node *existing;
-		u32 sid = new_stream->id;
+		u32 sid = fwspec->ids[i];
+
+		new_stream->id = sid;
+		new_stream->master = master;
 
 		ret = arm_smmu_init_sid_strtab(smmu, sid);
 		if (ret)
@@ -4359,11 +3564,8 @@ static int arm_smmu_insert_master(struct arm_smmu_device *smmu,
 
 	if (ret) {
 		for (i--; i >= 0; i--)
-			if (!RB_EMPTY_NODE(&master->streams[i].node))
-				rb_erase(&master->streams[i].node,
-					 &smmu->streams);
+			rb_erase(&master->streams[i].node, &smmu->streams);
 		kfree(master->streams);
-		kfree(master->build_invs);
 	}
 	mutex_unlock(&smmu->streams_mutex);
 
@@ -4381,50 +3583,10 @@ static void arm_smmu_remove_master(struct arm_smmu_master *master)
 
 	mutex_lock(&smmu->streams_mutex);
 	for (i = 0; i < fwspec->num_ids; i++)
-		if (!RB_EMPTY_NODE(&master->streams[i].node))
-			rb_erase(&master->streams[i].node, &smmu->streams);
+		rb_erase(&master->streams[i].node, &smmu->streams);
 	mutex_unlock(&smmu->streams_mutex);
 
 	kfree(master->streams);
-	kfree(master->build_invs);
-}
-
-static int arm_smmu_master_prepare_ats(struct arm_smmu_master *master)
-{
-	bool s1p = master->smmu->features & ARM_SMMU_FEAT_TRANS_S1;
-	unsigned int stu = __ffs(master->smmu->pgsize_bitmap);
-	struct pci_dev *pdev;
-	int ret;
-
-	if (!dev_is_pci(master->dev))
-		return 0;
-	pdev = to_pci_dev(master->dev);
-
-	if (!arm_smmu_ats_supported(master)) {
-		if (pci_ats_required(pdev)) {
-			dev_err_once(master->dev, "SMMU doesn't support ATS\n");
-			return -EOPNOTSUPP;
-		}
-		return 0;
-	}
-
-	ret = pci_prepare_ats(pdev, stu);
-	if (ret || !pci_ats_required(pdev))
-		return ret;
-
-	/*
-	 * S1DSS is required for ATS to be always on for identity domain cases.
-	 * However, the S1DSS field is ignored if !IDR0_S1P or !IDR1_SSIDSIZE.
-	 */
-	if (!s1p || !master->smmu->ssid_bits) {
-		dev_err_once(master->dev,
-			     "SMMU doesn't support ATS to be always on\n");
-		return -EOPNOTSUPP;
-	}
-
-	master->ats_always_on = true;
-
-	return arm_smmu_alloc_cd_tables(master);
 }
 
 static struct iommu_device *arm_smmu_probe_device(struct device *dev)
@@ -4441,7 +3603,7 @@ static struct iommu_device *arm_smmu_probe_device(struct device *dev)
 	if (!smmu)
 		return ERR_PTR(-ENODEV);
 
-	master = kzalloc_obj(*master);
+	master = kzalloc(sizeof(*master), GFP_KERNEL);
 	if (!master)
 		return ERR_PTR(-ENOMEM);
 
@@ -4475,15 +3637,14 @@ static struct iommu_device *arm_smmu_probe_device(struct device *dev)
 	    smmu->features & ARM_SMMU_FEAT_STALL_FORCE)
 		master->stall_enabled = true;
 
-	ret = arm_smmu_master_prepare_ats(master);
-	if (ret)
-		goto err_disable_pasid;
+	if (dev_is_pci(dev)) {
+		unsigned int stu = __ffs(smmu->pgsize_bitmap);
+
+		pci_prepare_ats(to_pci_dev(dev), stu);
+	}
 
 	return &smmu->iommu;
 
-err_disable_pasid:
-	arm_smmu_disable_pasid(master);
-	arm_smmu_remove_master(master);
 err_free_master:
 	kfree(master);
 	return ERR_PTR(ret);
@@ -4492,8 +3653,17 @@ err_free_master:
 static void arm_smmu_release_device(struct device *dev)
 {
 	struct arm_smmu_master *master = dev_iommu_priv_get(dev);
+	struct iommu_domain *old_domain = iommu_get_domain_for_dev(dev);
 
 	WARN_ON(master->iopf_refcount);
+
+	/* Put the STE back to what arm_smmu_init_strtab() sets */
+	if (dev->iommu->require_direct)
+		arm_smmu_attach_dev_identity(&arm_smmu_identity_domain, dev,
+					     old_domain);
+	else
+		arm_smmu_attach_dev_blocked(&arm_smmu_blocked_domain, dev,
+					    old_domain);
 
 	arm_smmu_disable_pasid(master);
 	arm_smmu_remove_master(master);
@@ -4585,7 +3755,6 @@ static int arm_smmu_def_domain_type(struct device *dev)
 static const struct iommu_ops arm_smmu_ops = {
 	.identity_domain	= &arm_smmu_identity_domain,
 	.blocked_domain		= &arm_smmu_blocked_domain,
-	.release_domain		= &arm_smmu_blocked_domain,
 	.capable		= arm_smmu_capable,
 	.hw_info		= arm_smmu_hw_info,
 	.domain_alloc_sva       = arm_smmu_sva_domain_alloc,
@@ -4620,56 +3789,6 @@ static struct iommu_dirty_ops arm_smmu_dirty_ops = {
 };
 
 /* Probing and initialisation functions */
-
-/**
- * arm_smmu_queue_max_n_shift() - pick the log2 depth of a queue
- * @hw_max_n_shift: log2 depth the hardware advertises in IDR1
- * @ent_sz_shift: log2 of the queue entry size in bytes
- * @limit_n_shift: log2 depth to cap the queue at
- *
- * A kdump capture kernel gets one page worth of entries whatever the limit.
- *
- * @limit_n_shift is floored at one page, because coherent DMA is page
- * granular: a shallower queue occupies the same memory as one that fills the
- * page, and arm_smmu_init_one_queue() stops shrinking at a page too.
- */
-static u32 arm_smmu_queue_max_n_shift(u32 hw_max_n_shift, u32 ent_sz_shift,
-				      u32 limit_n_shift)
-{
-	u32 floor_n_shift = PAGE_SHIFT - ent_sz_shift;
-
-	if (is_kdump_kernel())
-		return min(hw_max_n_shift, floor_n_shift);
-
-	limit_n_shift = max(limit_n_shift, floor_n_shift);
-	return min(hw_max_n_shift, limit_n_shift);
-}
-
-static inline u32 arm_smmu_evtq_max_n_shift(u32 hw_max_n_shift)
-{
-	/* Capped to ensure natural alignment */
-	return arm_smmu_queue_max_n_shift(hw_max_n_shift, EVTQ_ENT_SZ_SHIFT,
-					  EVTQ_MAX_SZ_SHIFT);
-}
-
-static inline u32 arm_smmu_priq_max_n_shift(u32 hw_max_n_shift)
-{
-	/* Capped to ensure natural alignment */
-	return arm_smmu_queue_max_n_shift(hw_max_n_shift, PRIQ_ENT_SZ_SHIFT,
-					  PRIQ_MAX_SZ_SHIFT);
-}
-
-/*
- * Command queues are also allocated by the Tegra241 CMDQV for its VCMDQs, which
- * need the same depth decision.
- */
-u32 arm_smmu_cmdq_max_n_shift(u32 hw_max_n_shift)
-{
-	/* Capped to ensure natural alignment */
-	return arm_smmu_queue_max_n_shift(hw_max_n_shift, CMDQ_ENT_SZ_SHIFT,
-					  min(CMDQ_MAX_SZ_SHIFT, cmdq_max_n_shift));
-}
-
 int arm_smmu_init_one_queue(struct arm_smmu_device *smmu,
 			    struct arm_smmu_queue *q, void __iomem *page,
 			    unsigned long prod_off, unsigned long cons_off,
@@ -4681,7 +3800,7 @@ int arm_smmu_init_one_queue(struct arm_smmu_device *smmu,
 		qsz = ((1 << q->llq.max_n_shift) * dwords) << 3;
 		q->base = dmam_alloc_coherent(smmu->dev, qsz, &q->base_dma,
 					      GFP_KERNEL);
-		if (q->base || qsz <= PAGE_SIZE)
+		if (q->base || qsz < PAGE_SIZE)
 			break;
 
 		q->llq.max_n_shift--;
@@ -5103,6 +4222,7 @@ static int arm_smmu_device_reset(struct arm_smmu_device *smmu)
 {
 	int ret;
 	u32 reg, enables;
+	struct arm_smmu_cmdq_ent cmd;
 
 	/* Clear CR0 and sync (disables SMMU and queue processing) */
 	reg = readl_relaxed(smmu->base + ARM_SMMU_CR0);
@@ -5149,16 +4269,17 @@ static int arm_smmu_device_reset(struct arm_smmu_device *smmu)
 	}
 
 	/* Invalidate any cached configuration */
-	arm_smmu_cmdq_issue_cmd_with_sync(smmu, arm_smmu_make_cmd_cfgi_all());
+	cmd.opcode = CMDQ_OP_CFGI_ALL;
+	arm_smmu_cmdq_issue_cmd_with_sync(smmu, &cmd);
 
 	/* Invalidate any stale TLB entries */
 	if (smmu->features & ARM_SMMU_FEAT_HYP) {
-		arm_smmu_cmdq_issue_cmd_with_sync(
-			smmu, arm_smmu_make_cmd_op(CMDQ_OP_TLBI_EL2_ALL));
+		cmd.opcode = CMDQ_OP_TLBI_EL2_ALL;
+		arm_smmu_cmdq_issue_cmd_with_sync(smmu, &cmd);
 	}
 
-	arm_smmu_cmdq_issue_cmd_with_sync(
-		smmu, arm_smmu_make_cmd_op(CMDQ_OP_TLBI_NSNH_ALL));
+	cmd.opcode = CMDQ_OP_TLBI_NSNH_ALL;
+	arm_smmu_cmdq_issue_cmd_with_sync(smmu, &cmd);
 
 	/* Event queue */
 	writeq_relaxed(smmu->evtq.q.q_base, smmu->base + ARM_SMMU_EVTQ_BASE);
@@ -5233,8 +4354,6 @@ static int arm_smmu_device_reset(struct arm_smmu_device *smmu)
 #define IIDR_IMPLEMENTER_ARM		0x43b
 #define IIDR_PRODUCTID_ARM_MMU_600	0x483
 #define IIDR_PRODUCTID_ARM_MMU_700	0x487
-#define IIDR_PRODUCTID_ARM_MMU_L1	0x48a
-#define IIDR_PRODUCTID_ARM_MMU_S3	0x498
 
 static void arm_smmu_device_iidr_probe(struct arm_smmu_device *smmu)
 {
@@ -5259,28 +4378,11 @@ static void arm_smmu_device_iidr_probe(struct arm_smmu_device *smmu)
 				smmu->features &= ~ARM_SMMU_FEAT_NESTING;
 			break;
 		case IIDR_PRODUCTID_ARM_MMU_700:
-			/* Many errata... */
+			/* Arm erratum 2812531 */
 			smmu->features &= ~ARM_SMMU_FEAT_BTM;
-			if (variant < 1 || revision < 1) {
-				/* Arm erratum 2812531 */
-				smmu->options |= ARM_SMMU_OPT_CMDQ_FORCE_SYNC;
-				/* Arm errata 2268618, 2812531 */
-				smmu->features &= ~ARM_SMMU_FEAT_NESTING;
-			}
-			/* Arm errata 3777127 */
-			smmu->options |= ARM_SMMU_OPT_FULL_CONT_RANGE_INV;
-			break;
-		case IIDR_PRODUCTID_ARM_MMU_L1:
-			/* Arm errata 3878312 */
-			smmu->features &= ~ARM_SMMU_FEAT_BTM;
-			break;
-		case IIDR_PRODUCTID_ARM_MMU_S3:
-			/* Arm errata 3995052 */
-			smmu->features &= ~ARM_SMMU_FEAT_BTM;
-			/* Arm errata 3673557 */
-			if (variant < 1 || (variant == 1 && revision < 1))
-				smmu->options |=
-					ARM_SMMU_OPT_FULL_CONT_RANGE_INV;
+			smmu->options |= ARM_SMMU_OPT_CMDQ_FORCE_SYNC;
+			/* Arm errata 2268618, 2812531 */
+			smmu->features &= ~ARM_SMMU_FEAT_NESTING;
 			break;
 		}
 		break;
@@ -5403,7 +4505,13 @@ static int arm_smmu_device_hw_probe(struct arm_smmu_device *smmu)
 	}
 
 	/* We only support the AArch64 table format at present */
-	if (!(FIELD_GET(IDR0_TTF, reg) & IDR0_TTF_AARCH64)) {
+	switch (FIELD_GET(IDR0_TTF, reg)) {
+	case IDR0_TTF_AARCH32_64:
+		smmu->ias = 40;
+		fallthrough;
+	case IDR0_TTF_AARCH64:
+		break;
+	default:
 		dev_err(smmu->dev, "AArch64 table format not supported!\n");
 		return -ENXIO;
 	}
@@ -5422,14 +4530,9 @@ static int arm_smmu_device_hw_probe(struct arm_smmu_device *smmu)
 	if (reg & IDR1_ATTR_TYPES_OVR)
 		smmu->features |= ARM_SMMU_FEAT_ATTR_TYPES_OVR;
 
-	if ((smmu->options & ARM_SMMU_OPT_OVR_INSTCFG_DATA) &&
-	    !(reg & IDR1_ATTR_PERMS_OVR)) {
-		dev_err(smmu->dev, "Inst/Data attribute override not supported\n");
-		return -ENXIO;
-	}
-
-	smmu->cmdq.q.llq.max_n_shift =
-		arm_smmu_cmdq_max_n_shift(FIELD_GET(IDR1_CMDQS, reg));
+	/* Queue sizes, capped to ensure natural alignment */
+	smmu->cmdq.q.llq.max_n_shift = min_t(u32, CMDQ_MAX_SZ_SHIFT,
+					     FIELD_GET(IDR1_CMDQS, reg));
 	if (smmu->cmdq.q.llq.max_n_shift <= ilog2(CMDQ_BATCH_ENTRIES)) {
 		/*
 		 * We don't support splitting up batches, so one batch of
@@ -5442,10 +4545,10 @@ static int arm_smmu_device_hw_probe(struct arm_smmu_device *smmu)
 		return -ENXIO;
 	}
 
-	smmu->evtq.q.llq.max_n_shift =
-		arm_smmu_evtq_max_n_shift(FIELD_GET(IDR1_EVTQS, reg));
-	smmu->priq.q.llq.max_n_shift =
-		arm_smmu_priq_max_n_shift(FIELD_GET(IDR1_PRIQS, reg));
+	smmu->evtq.q.llq.max_n_shift = min_t(u32, EVTQ_MAX_SZ_SHIFT,
+					     FIELD_GET(IDR1_EVTQS, reg));
+	smmu->priq.q.llq.max_n_shift = min_t(u32, PRIQ_MAX_SZ_SHIFT,
+					     FIELD_GET(IDR1_PRIQS, reg));
 
 	/* SID/SSID sizes */
 	smmu->ssid_bits = FIELD_GET(IDR1_SSIDSIZE, reg);
@@ -5474,9 +4577,6 @@ static int arm_smmu_device_hw_probe(struct arm_smmu_device *smmu)
 
 	/* Maximum number of outstanding stalls */
 	smmu->evtq.max_stalls = FIELD_GET(IDR5_STALL_MAX, reg);
-
-	if (reg & IDR5_DS)
-		smmu->features |= ARM_SMMU_FEAT_DS;
 
 	/* Page sizes */
 	if (reg & IDR5_GRAN64K)
@@ -5524,6 +4624,8 @@ static int arm_smmu_device_hw_probe(struct arm_smmu_device *smmu)
 		dev_warn(smmu->dev,
 			 "failed to set DMA mask for table walker\n");
 
+	smmu->ias = max(smmu->ias, smmu->oas);
+
 	if ((smmu->features & ARM_SMMU_FEAT_TRANS_S1) &&
 	    (smmu->features & ARM_SMMU_FEAT_TRANS_S2))
 		smmu->features |= ARM_SMMU_FEAT_NESTING;
@@ -5533,39 +4635,10 @@ static int arm_smmu_device_hw_probe(struct arm_smmu_device *smmu)
 	if (arm_smmu_sva_supported(smmu))
 		smmu->features |= ARM_SMMU_FEAT_SVA;
 
-	dev_info(smmu->dev, "oas %lu-bit (features 0x%08x)\n",
-		 smmu->oas, smmu->features);
+	dev_info(smmu->dev, "ias %lu-bit, oas %lu-bit (features 0x%08x)\n",
+		 smmu->ias, smmu->oas, smmu->features);
 	return 0;
 }
-
-#ifdef CONFIG_TEGRA241_CMDQV
-static void tegra_cmdqv_dt_probe(struct device_node *smmu_node,
-				 struct arm_smmu_device *smmu)
-{
-	struct platform_device *pdev;
-	struct device_node *np;
-
-	np = of_parse_phandle(smmu_node, "nvidia,cmdqv", 0);
-	if (!np)
-		return;
-
-	/* Tegra241 CMDQV driver is responsible for put_device() */
-	pdev = of_find_device_by_node(np);
-	of_node_put(np);
-	if (!pdev)
-		return;
-
-	smmu->impl_dev = &pdev->dev;
-	smmu->options |= ARM_SMMU_OPT_TEGRA241_CMDQV;
-	dev_dbg(smmu->dev, "found companion CMDQV device: %s\n",
-		dev_name(smmu->impl_dev));
-}
-#else
-static void tegra_cmdqv_dt_probe(struct device_node *smmu_node,
-				 struct arm_smmu_device *smmu)
-{
-}
-#endif
 
 #ifdef CONFIG_ACPI
 #ifdef CONFIG_TEGRA241_CMDQV
@@ -5579,11 +4652,10 @@ static void acpi_smmu_dsdt_probe_tegra241_cmdqv(struct acpi_iort_node *node,
 	adev = acpi_dev_get_first_match_dev("NVDA200C", uid, -1);
 	if (adev) {
 		/* Tegra241 CMDQV driver is responsible for put_device() */
-		smmu->impl_dev = acpi_bus_get_primary_device(adev);
+		smmu->impl_dev = &adev->dev;
 		smmu->options |= ARM_SMMU_OPT_TEGRA241_CMDQV;
 		dev_info(smmu->dev, "found companion CMDQV device: %s\n",
 			 dev_name(smmu->impl_dev));
-		acpi_dev_put(adev);
 	}
 	kfree(uid);
 }
@@ -5674,11 +4746,6 @@ static int arm_smmu_device_dt_probe(struct platform_device *pdev,
 
 	if (of_dma_is_coherent(dev->of_node))
 		smmu->features |= ARM_SMMU_FEAT_COHERENCY;
-
-	if (of_device_is_compatible(dev->of_node, "nvidia,tegra264-smmu")) {
-		tegra_cmdqv_dt_probe(dev->of_node, smmu);
-		static_branch_enable(&arm_smmu_erratum_repeat_tlbi_cfgi_key);
-	}
 
 	return ret;
 }
@@ -5905,7 +4972,7 @@ static void arm_smmu_device_shutdown(struct platform_device *pdev)
 {
 	struct arm_smmu_device *smmu = platform_get_drvdata(pdev);
 
-	arm_smmu_disable_action(smmu);
+	arm_smmu_device_disable(smmu);
 }
 
 static const struct of_device_id arm_smmu_of_match[] = {

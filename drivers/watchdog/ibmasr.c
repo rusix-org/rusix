@@ -21,7 +21,6 @@
 #include <linux/dmi.h>
 #include <linux/io.h>
 #include <linux/uaccess.h>
-#include <linux/stringify.h>
 
 
 enum {
@@ -414,7 +413,7 @@ module_exit(ibmasr_exit);
 module_param(nowayout, bool, 0);
 MODULE_PARM_DESC(nowayout,
 	"Watchdog cannot be stopped once started (default="
-				__stringify(WATCHDOG_NOWAYOUT) ")");
+				__MODULE_STRING(WATCHDOG_NOWAYOUT) ")");
 
 MODULE_DESCRIPTION("IBM Automatic Server Restart driver");
 MODULE_AUTHOR("Andrey Panin");

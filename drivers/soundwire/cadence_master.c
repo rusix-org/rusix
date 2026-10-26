@@ -14,6 +14,7 @@
 #include <linux/interrupt.h>
 #include <linux/io.h>
 #include <linux/module.h>
+#include <linux/mod_devicetable.h>
 #include <linux/pm_runtime.h>
 #include <linux/soundwire/sdw_registers.h>
 #include <linux/soundwire/sdw.h>
@@ -1860,7 +1861,7 @@ int cdns_set_sdw_stream(struct snd_soc_dai *dai,
 		}
 
 		/* allocate and set dai_runtime info */
-		dai_runtime = kzalloc_obj(*dai_runtime);
+		dai_runtime = kzalloc(sizeof(*dai_runtime), GFP_KERNEL);
 		if (!dai_runtime)
 			return -ENOMEM;
 
@@ -2108,40 +2109,9 @@ static unsigned int sdw_cdns_read_pdi1_buffer_size(unsigned int actual_data_size
 	return total * 2;
 }
 
-int sdw_cdns_bpt_find_bandwidth(int command, /* 0: write, 1: read */
-				int row, int col, int frame_rate,
-				unsigned int *tx_dma_bandwidth,
-				unsigned int *rx_dma_bandwidth)
-{
-	unsigned int bpt_bits = row * (col - 1);
-	unsigned int bpt_bytes = bpt_bits >> 3;
-	unsigned int pdi0_buffer_size;
-	unsigned int pdi1_buffer_size;
-	unsigned int data_per_frame;
-
-	data_per_frame = sdw_cdns_bra_actual_data_size(bpt_bytes);
-	if (!data_per_frame)
-		return -EINVAL;
-
-	if (command == 0) {
-		pdi0_buffer_size = sdw_cdns_write_pdi0_buffer_size(data_per_frame);
-		pdi1_buffer_size = SDW_CDNS_WRITE_PDI1_BUFFER_SIZE;
-	} else {
-		pdi0_buffer_size = SDW_CDNS_READ_PDI0_BUFFER_SIZE;
-		pdi1_buffer_size = sdw_cdns_read_pdi1_buffer_size(data_per_frame);
-	}
-
-	*tx_dma_bandwidth = pdi0_buffer_size * 8 * frame_rate;
-	*rx_dma_bandwidth = pdi1_buffer_size * 8 * frame_rate;
-
-	return 0;
-}
-EXPORT_SYMBOL(sdw_cdns_bpt_find_bandwidth);
-
 int sdw_cdns_bpt_find_buffer_sizes(int command, /* 0: write, 1: read */
 				   int row, int col, unsigned int data_bytes,
 				   unsigned int requested_bytes_per_frame,
-				   unsigned int bra_block_alignment,
 				   unsigned int *data_per_frame, unsigned int *pdi0_buffer_size,
 				   unsigned int *pdi1_buffer_size, unsigned int *num_frames)
 {
@@ -2159,6 +2129,9 @@ int sdw_cdns_bpt_find_buffer_sizes(int command, /* 0: write, 1: read */
 	if (!actual_bpt_bytes)
 		return -EINVAL;
 
+	if (data_bytes < actual_bpt_bytes)
+		actual_bpt_bytes = data_bytes;
+
 	/*
 	 * the caller may want to set the number of bytes per frame,
 	 * allow when possible
@@ -2166,20 +2139,7 @@ int sdw_cdns_bpt_find_buffer_sizes(int command, /* 0: write, 1: read */
 	if (requested_bytes_per_frame < actual_bpt_bytes)
 		actual_bpt_bytes = requested_bytes_per_frame;
 
-	if (bra_block_alignment) {
-		/* align to a multiple of bra_block_alignment */
-		if (actual_bpt_bytes < bra_block_alignment) {
-			pr_err("effective bytes per frame %u is smaller than block alignment %u\n",
-			       actual_bpt_bytes, bra_block_alignment);
-			return -EINVAL;
-		}
-		actual_bpt_bytes -= (actual_bpt_bytes % bra_block_alignment);
-	}
-
 	*data_per_frame = actual_bpt_bytes;
-
-	if (data_bytes < actual_bpt_bytes)
-		actual_bpt_bytes = data_bytes;
 
 	if (command == 0) {
 		/*
@@ -2349,20 +2309,17 @@ static int sdw_cdns_prepare_read_pd0_buffer(u8 *header, unsigned int header_size
 
 #define CDNS_BPT_ROLLING_COUNTER_START 1
 
-int sdw_cdns_prepare_write_dma_buffer(u8 dev_num, struct sdw_bpt_section *sec, int num_sec,
-				      int data_per_frame, u8 *dma_buffer,
-				      int dma_buffer_size, int *dma_buffer_total_bytes)
+int sdw_cdns_prepare_write_dma_buffer(u8 dev_num, u32 start_register, u8 *data, int data_size,
+				      int data_per_frame, u8 *dma_buffer, int dma_buffer_size,
+				      int *dma_buffer_total_bytes)
 {
 	int total_dma_data_written = 0;
 	u8 *p_dma_buffer = dma_buffer;
 	u8 header[SDW_CDNS_BRA_HDR];
-	unsigned int start_register;
-	unsigned int section_size;
 	int dma_data_written;
-	u8 *p_data;
+	u8 *p_data = data;
 	u8 counter;
 	int ret;
-	int i;
 
 	counter = CDNS_BPT_ROLLING_COUNTER_START;
 
@@ -2370,61 +2327,47 @@ int sdw_cdns_prepare_write_dma_buffer(u8 dev_num, struct sdw_bpt_section *sec, i
 	header[0] |= GENMASK(7, 6);	/* header is active */
 	header[0] |= (dev_num << 2);
 
-	for (i = 0; i < num_sec; i++) {
-		start_register = sec[i].addr;
-		section_size = sec[i].len;
-		p_data = sec[i].buf;
+	while (data_size >= data_per_frame) {
+		header[1] = data_per_frame;
+		header[2] = start_register >> 24 & 0xFF;
+		header[3] = start_register >> 16 & 0xFF;
+		header[4] = start_register >> 8 & 0xFF;
+		header[5] = start_register >> 0 & 0xFF;
 
-		while (section_size >= data_per_frame) {
-			header[0] &= ~BIT(0);
-			header[0] |= (data_per_frame >> 8) & BIT(0);
-			header[1] = data_per_frame & 0xFF;
-			header[2] = start_register >> 24 & 0xFF;
-			header[3] = start_register >> 16 & 0xFF;
-			header[4] = start_register >> 8 & 0xFF;
-			header[5] = start_register >> 0 & 0xFF;
+		ret = sdw_cdns_prepare_write_pd0_buffer(header, SDW_CDNS_BRA_HDR,
+							p_data, data_per_frame,
+							p_dma_buffer, dma_buffer_size,
+							&dma_data_written, counter);
+		if (ret < 0)
+			return ret;
 
-			ret = sdw_cdns_prepare_write_pd0_buffer(header, SDW_CDNS_BRA_HDR,
-								p_data, data_per_frame,
-								p_dma_buffer, dma_buffer_size,
-								&dma_data_written, counter);
-			if (ret < 0)
-				return ret;
+		counter++;
 
-			counter++;
+		p_data += data_per_frame;
+		data_size -= data_per_frame;
 
-			p_data += data_per_frame;
-			section_size -= data_per_frame;
+		p_dma_buffer += dma_data_written;
+		dma_buffer_size -= dma_data_written;
+		total_dma_data_written += dma_data_written;
 
-			p_dma_buffer += dma_data_written;
-			dma_buffer_size -= dma_data_written;
-			total_dma_data_written += dma_data_written;
+		start_register += data_per_frame;
+	}
 
-			start_register += data_per_frame;
-		}
+	if (data_size) {
+		header[1] = data_size;
+		header[2] = start_register >> 24 & 0xFF;
+		header[3] = start_register >> 16 & 0xFF;
+		header[4] = start_register >> 8 & 0xFF;
+		header[5] = start_register >> 0 & 0xFF;
 
-		if (section_size) {
-			header[0] &= ~BIT(0);
-			header[0] |= (section_size >> 8) & BIT(0);
-			header[1] = section_size & 0xFF;
-			header[2] = start_register >> 24 & 0xFF;
-			header[3] = start_register >> 16 & 0xFF;
-			header[4] = start_register >> 8 & 0xFF;
-			header[5] = start_register >> 0 & 0xFF;
+		ret = sdw_cdns_prepare_write_pd0_buffer(header, SDW_CDNS_BRA_HDR,
+							p_data, data_size,
+							p_dma_buffer, dma_buffer_size,
+							&dma_data_written, counter);
+		if (ret < 0)
+			return ret;
 
-			ret = sdw_cdns_prepare_write_pd0_buffer(header, SDW_CDNS_BRA_HDR,
-								p_data, section_size,
-								p_dma_buffer, dma_buffer_size,
-								&dma_data_written, counter);
-			if (ret < 0)
-				return ret;
-
-			counter++;
-
-			p_dma_buffer += dma_data_written;
-			dma_buffer_size -= dma_data_written;
-			total_dma_data_written += dma_data_written;
-		}
+		total_dma_data_written += dma_data_written;
 	}
 
 	*dma_buffer_total_bytes = total_dma_data_written;
@@ -2433,19 +2376,16 @@ int sdw_cdns_prepare_write_dma_buffer(u8 dev_num, struct sdw_bpt_section *sec, i
 }
 EXPORT_SYMBOL(sdw_cdns_prepare_write_dma_buffer);
 
-int sdw_cdns_prepare_read_dma_buffer(u8 dev_num, struct sdw_bpt_section *sec, int num_sec,
+int sdw_cdns_prepare_read_dma_buffer(u8 dev_num, u32 start_register, int data_size,
 				     int data_per_frame, u8 *dma_buffer, int dma_buffer_size,
-				     int *dma_buffer_total_bytes, unsigned int fake_size)
+				     int *dma_buffer_total_bytes)
 {
 	int total_dma_data_written = 0;
 	u8 *p_dma_buffer = dma_buffer;
 	u8 header[SDW_CDNS_BRA_HDR];
-	unsigned int start_register;
-	unsigned int data_size;
 	int dma_data_written;
 	u8 counter;
 	int ret;
-	int i;
 
 	counter = CDNS_BPT_ROLLING_COUNTER_START;
 
@@ -2453,64 +2393,13 @@ int sdw_cdns_prepare_read_dma_buffer(u8 dev_num, struct sdw_bpt_section *sec, in
 	header[0] |= GENMASK(7, 6);	/* header is active */
 	header[0] |= (dev_num << 2);
 
-	for (i = 0; i < num_sec; i++) {
-		start_register = sec[i].addr;
-		data_size = sec[i].len;
-		while (data_size >= data_per_frame) {
-			header[0] &= ~BIT(0);
-			header[0] |= (data_per_frame >> 8) & BIT(0);
-			header[1] = data_per_frame & 0xFF;
-			header[2] = start_register >> 24 & 0xFF;
-			header[3] = start_register >> 16 & 0xFF;
-			header[4] = start_register >> 8 & 0xFF;
-			header[5] = start_register >> 0 & 0xFF;
+	while (data_size >= data_per_frame) {
+		header[1] = data_per_frame;
+		header[2] = start_register >> 24 & 0xFF;
+		header[3] = start_register >> 16 & 0xFF;
+		header[4] = start_register >> 8 & 0xFF;
+		header[5] = start_register >> 0 & 0xFF;
 
-			ret = sdw_cdns_prepare_read_pd0_buffer(header, SDW_CDNS_BRA_HDR,
-							       p_dma_buffer, dma_buffer_size,
-							       &dma_data_written, counter);
-			if (ret < 0)
-				return ret;
-
-			counter++;
-
-			data_size -= data_per_frame;
-
-			p_dma_buffer += dma_data_written;
-			dma_buffer_size -= dma_data_written;
-			total_dma_data_written += dma_data_written;
-
-			start_register += data_per_frame;
-		}
-
-		if (data_size) {
-			header[0] &= ~BIT(0);
-			header[0] |= (data_size >> 8) & BIT(0);
-			header[1] = data_size & 0xFF;
-			header[2] = start_register >> 24 & 0xFF;
-			header[3] = start_register >> 16 & 0xFF;
-			header[4] = start_register >> 8 & 0xFF;
-			header[5] = start_register >> 0 & 0xFF;
-
-			ret = sdw_cdns_prepare_read_pd0_buffer(header, SDW_CDNS_BRA_HDR,
-							       p_dma_buffer, dma_buffer_size,
-							       &dma_data_written, counter);
-			if (ret < 0)
-				return ret;
-
-			counter++;
-
-			p_dma_buffer += dma_data_written;
-			dma_buffer_size -= dma_data_written;
-			total_dma_data_written += dma_data_written;
-		}
-	}
-
-	/* Add fake frame */
-	header[0] &= ~GENMASK(7, 6);	/* Set inactive flag in BPT/BRA frame heade */
-	while (fake_size >= data_per_frame) {
-		header[0] &= ~BIT(0);
-		header[0] |= (data_per_frame >> 8) & BIT(0);
-		header[1] = data_per_frame & 0xFF;
 		ret = sdw_cdns_prepare_read_pd0_buffer(header, SDW_CDNS_BRA_HDR, p_dma_buffer,
 						       dma_buffer_size, &dma_data_written,
 						       counter);
@@ -2519,26 +2408,28 @@ int sdw_cdns_prepare_read_dma_buffer(u8 dev_num, struct sdw_bpt_section *sec, in
 
 		counter++;
 
-		fake_size -= data_per_frame;
+		data_size -= data_per_frame;
+
 		p_dma_buffer += dma_data_written;
 		dma_buffer_size -= dma_data_written;
 		total_dma_data_written += dma_data_written;
+
+		start_register += data_per_frame;
 	}
 
-	if (fake_size) {
-		header[0] &= ~BIT(0);
-		header[0] |= (fake_size >> 8) & BIT(0);
-		header[1] = fake_size & 0xFF;
+	if (data_size) {
+		header[1] = data_size;
+		header[2] = start_register >> 24 & 0xFF;
+		header[3] = start_register >> 16 & 0xFF;
+		header[4] = start_register >> 8 & 0xFF;
+		header[5] = start_register >> 0 & 0xFF;
+
 		ret = sdw_cdns_prepare_read_pd0_buffer(header, SDW_CDNS_BRA_HDR, p_dma_buffer,
 						       dma_buffer_size, &dma_data_written,
 						       counter);
 		if (ret < 0)
 			return ret;
 
-		counter++;
-
-		p_dma_buffer += dma_data_written;
-		dma_buffer_size -= dma_data_written;
 		total_dma_data_written += dma_data_written;
 	}
 
@@ -2619,14 +2510,14 @@ int sdw_cdns_check_write_response(struct device *dev, u8 *dma_buffer,
 		ret = check_frame_start(header, counter);
 		if (ret < 0) {
 			dev_err(dev, "%s: bad frame %d/%d start header %x\n",
-				__func__, i + 1, num_frames, header);
+				__func__, i, num_frames, header);
 			return ret;
 		}
 
 		ret = check_frame_end(footer);
 		if (ret < 0) {
 			dev_err(dev, "%s: bad frame %d/%d end footer %x\n",
-				__func__, i + 1, num_frames, footer);
+				__func__, i, num_frames, footer);
 			return ret;
 		}
 
@@ -2673,12 +2564,9 @@ static u8 extract_read_data(u32 *data, int num_bytes, u8 *buffer)
 }
 
 int sdw_cdns_check_read_response(struct device *dev, u8 *dma_buffer, int dma_buffer_size,
-				 struct sdw_bpt_section *sec, int num_sec, int num_frames,
-				 int data_per_frame)
+				 u8 *buffer, int buffer_size, int num_frames, int data_per_frame)
 {
 	int total_num_bytes = 0;
-	int buffer_size = 0;
-	int sec_index;
 	u32 *p_data;
 	u8 *p_buf;
 	int counter;
@@ -2692,10 +2580,7 @@ int sdw_cdns_check_read_response(struct device *dev, u8 *dma_buffer, int dma_buf
 
 	counter = CDNS_BPT_ROLLING_COUNTER_START;
 	p_data = (u32 *)dma_buffer;
-
-	sec_index = 0;
-	p_buf = sec[sec_index].buf;
-	buffer_size = sec[sec_index].len;
+	p_buf = buffer;
 
 	for (i = 0; i < num_frames; i++) {
 		header = *p_data++;
@@ -2703,7 +2588,7 @@ int sdw_cdns_check_read_response(struct device *dev, u8 *dma_buffer, int dma_buf
 		ret = check_frame_start(header, counter);
 		if (ret < 0) {
 			dev_err(dev, "%s: bad frame %d/%d start header %x\n",
-				__func__, i + 1, num_frames, header);
+				__func__, i, num_frames, header);
 			return ret;
 		}
 
@@ -2718,7 +2603,7 @@ int sdw_cdns_check_read_response(struct device *dev, u8 *dma_buffer, int dma_buf
 
 		if (crc != expected_crc) {
 			dev_err(dev, "%s: bad frame %d/%d crc %#x expected %#x\n",
-				__func__, i + 1, num_frames, crc, expected_crc);
+				__func__, i, num_frames, crc, expected_crc);
 			return -EIO;
 		}
 
@@ -2729,24 +2614,12 @@ int sdw_cdns_check_read_response(struct device *dev, u8 *dma_buffer, int dma_buf
 		ret = check_frame_end(footer);
 		if (ret < 0) {
 			dev_err(dev, "%s: bad frame %d/%d end footer %x\n",
-				__func__, i + 1, num_frames, footer);
+				__func__, i, num_frames, footer);
 			return ret;
 		}
 
 		counter++;
 		counter &= GENMASK(3, 0);
-
-		if (buffer_size == total_num_bytes && (i + 1) < num_frames) {
-			sec_index++;
-			if (sec_index >= num_sec) {
-				dev_err(dev, "%s: incorrect section index %d i %d\n",
-					__func__, sec_index, i);
-				return -EINVAL;
-			}
-			p_buf = sec[sec_index].buf;
-			buffer_size = sec[sec_index].len;
-			total_num_bytes = 0;
-		}
 	}
 	return 0;
 }

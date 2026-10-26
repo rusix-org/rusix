@@ -125,7 +125,6 @@ DECLARE_PCI_FIXUP_FINAL(PCI_ANY_ID, PCI_ANY_ID, pcibios_fixup_final);
 
 resource_size_t
 pcibios_align_resource(void *data, const struct resource *res,
-		       const struct resource *empty_res,
 		       resource_size_t size, resource_size_t align)
 {
 	struct pci_dev *dev = data;
@@ -221,7 +220,7 @@ static void pdev_save_srm_config(struct pci_dev *dev)
 		printed = 1;
 	}
 
-	tmp = kmalloc_obj(*tmp);
+	tmp = kmalloc(sizeof(*tmp), GFP_KERNEL);
 	if (!tmp) {
 		printk(KERN_ERR "%s: kmalloc() failed!\n", __func__);
 		return;

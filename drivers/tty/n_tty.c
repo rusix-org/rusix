@@ -324,9 +324,12 @@ static void reset_buffer_flags(struct n_tty_data *ldata)
 
 static void n_tty_packet_mode_flush(struct tty_struct *tty)
 {
+	unsigned long flags;
+
 	if (tty->link->ctrl.packet) {
-		scoped_guard(spinlock_irqsave, &tty->ctrl.lock)
-			tty->ctrl.pktstatus |= TIOCPKT_FLUSHREAD;
+		spin_lock_irqsave(&tty->ctrl.lock, flags);
+		tty->ctrl.pktstatus |= TIOCPKT_FLUSHREAD;
+		spin_unlock_irqrestore(&tty->ctrl.lock, flags);
 		wake_up_interruptible(&tty->link->read_wait);
 	}
 }
@@ -346,12 +349,13 @@ static void n_tty_packet_mode_flush(struct tty_struct *tty)
  */
 static void n_tty_flush_buffer(struct tty_struct *tty)
 {
-	guard(rwsem_write)(&tty->termios_rwsem);
+	down_write(&tty->termios_rwsem);
 	reset_buffer_flags(tty->disc_data);
 	n_tty_kick_worker(tty);
 
 	if (tty->link)
 		n_tty_packet_mode_flush(tty);
+	up_write(&tty->termios_rwsem);
 }
 
 /**
@@ -733,22 +737,24 @@ static void commit_echoes(struct tty_struct *tty)
 	size_t nr, old, echoed;
 	size_t head;
 
-	scoped_guard(mutex, &ldata->output_lock) {
-		head = ldata->echo_head;
-		ldata->echo_mark = head;
-		old = ldata->echo_commit - ldata->echo_tail;
+	mutex_lock(&ldata->output_lock);
+	head = ldata->echo_head;
+	ldata->echo_mark = head;
+	old = ldata->echo_commit - ldata->echo_tail;
 
-		/*
-		 * Process committed echoes if the accumulated # of bytes is over the threshold
-		 * (and try again each time another block is accumulated)
-		 */
-		nr = head - ldata->echo_tail;
-		if (nr < ECHO_COMMIT_WATERMARK || (nr % ECHO_BLOCK > old % ECHO_BLOCK))
-			return;
-
-		ldata->echo_commit = head;
-		echoed = __process_echoes(tty);
+	/* Process committed echoes if the accumulated # of bytes
+	 * is over the threshold (and try again each time another
+	 * block is accumulated) */
+	nr = head - ldata->echo_tail;
+	if (nr < ECHO_COMMIT_WATERMARK ||
+	    (nr % ECHO_BLOCK > old % ECHO_BLOCK)) {
+		mutex_unlock(&ldata->output_lock);
+		return;
 	}
+
+	ldata->echo_commit = head;
+	echoed = __process_echoes(tty);
+	mutex_unlock(&ldata->output_lock);
 
 	if (echoed && tty->ops->flush_chars)
 		tty->ops->flush_chars(tty);
@@ -762,10 +768,10 @@ static void process_echoes(struct tty_struct *tty)
 	if (ldata->echo_mark == ldata->echo_tail)
 		return;
 
-	scoped_guard(mutex, &ldata->output_lock) {
-		ldata->echo_commit = ldata->echo_mark;
-		echoed = __process_echoes(tty);
-	}
+	mutex_lock(&ldata->output_lock);
+	ldata->echo_commit = ldata->echo_mark;
+	echoed = __process_echoes(tty);
+	mutex_unlock(&ldata->output_lock);
 
 	if (echoed && tty->ops->flush_chars)
 		tty->ops->flush_chars(tty);
@@ -780,9 +786,10 @@ static void flush_echoes(struct tty_struct *tty)
 	    ldata->echo_commit == ldata->echo_head)
 		return;
 
-	guard(mutex)(&ldata->output_lock);
+	mutex_lock(&ldata->output_lock);
 	ldata->echo_commit = ldata->echo_head;
 	__process_echoes(tty);
+	mutex_unlock(&ldata->output_lock);
 }
 
 /**
@@ -1071,19 +1078,18 @@ static void isig(int sig, struct tty_struct *tty)
 	if (L_NOFLSH(tty)) {
 		/* signal only */
 		__isig(sig, tty);
-		return;
-	}
 
-	/* signal and flush */
-	up_read(&tty->termios_rwsem);
-	scoped_guard(rwsem_write, &tty->termios_rwsem) {
+	} else { /* signal and flush */
+		up_read(&tty->termios_rwsem);
+		down_write(&tty->termios_rwsem);
+
 		__isig(sig, tty);
 
 		/* clear echo buffer */
-		scoped_guard(mutex, &ldata->output_lock) {
-			ldata->echo_head = ldata->echo_tail = 0;
-			ldata->echo_mark = ldata->echo_commit = 0;
-		}
+		mutex_lock(&ldata->output_lock);
+		ldata->echo_head = ldata->echo_tail = 0;
+		ldata->echo_mark = ldata->echo_commit = 0;
+		mutex_unlock(&ldata->output_lock);
 
 		/* clear output buffer */
 		tty_driver_flush_buffer(tty);
@@ -1094,8 +1100,10 @@ static void isig(int sig, struct tty_struct *tty)
 		/* notify pty master of flush */
 		if (tty->link)
 			n_tty_packet_mode_flush(tty);
+
+		up_write(&tty->termios_rwsem);
+		down_read(&tty->termios_rwsem);
 	}
-	down_read(&tty->termios_rwsem);
 }
 
 /**
@@ -1675,7 +1683,7 @@ n_tty_receive_buf_common(struct tty_struct *tty, const u8 *cp, const u8 *fp,
 	size_t n, rcvd = 0;
 	int room, overflow;
 
-	guard(rwsem_read)(&tty->termios_rwsem);
+	down_read(&tty->termios_rwsem);
 
 	do {
 		/*
@@ -1743,6 +1751,8 @@ n_tty_receive_buf_common(struct tty_struct *tty, const u8 *cp, const u8 *fp,
 		if (!chars_in_buffer(tty))
 			n_tty_kick_worker(tty);
 	}
+
+	up_read(&tty->termios_rwsem);
 
 	return rcvd;
 }
@@ -1869,9 +1879,10 @@ static void n_tty_close(struct tty_struct *tty)
 	if (tty->link)
 		n_tty_packet_mode_flush(tty);
 
-	guard(rwsem_write)(&tty->termios_rwsem);
+	down_write(&tty->termios_rwsem);
 	vfree(ldata);
 	tty->disc_data = NULL;
+	up_write(&tty->termios_rwsem);
 }
 
 /**
@@ -2236,10 +2247,10 @@ static ssize_t n_tty_read(struct tty_struct *tty, struct file *file, u8 *kbuf,
 			u8 cs;
 			if (kb != kbuf)
 				break;
-			scoped_guard(spinlock_irq, &tty->link->ctrl.lock) {
-				cs = tty->link->ctrl.pktstatus;
-				tty->link->ctrl.pktstatus = 0;
-			}
+			spin_lock_irq(&tty->link->ctrl.lock);
+			cs = tty->link->ctrl.pktstatus;
+			tty->link->ctrl.pktstatus = 0;
+			spin_unlock_irq(&tty->link->ctrl.lock);
 			*kb++ = cs;
 			nr--;
 			break;
@@ -2346,7 +2357,7 @@ static ssize_t n_tty_write(struct tty_struct *tty, struct file *file,
 			return retval;
 	}
 
-	guard(rwsem_read)(&tty->termios_rwsem);
+	down_read(&tty->termios_rwsem);
 
 	/* Write out any echoed characters that are still pending */
 	process_echoes(tty);
@@ -2384,8 +2395,9 @@ static ssize_t n_tty_write(struct tty_struct *tty, struct file *file,
 			struct n_tty_data *ldata = tty->disc_data;
 
 			while (nr > 0) {
-				scoped_guard(mutex, &ldata->output_lock)
-					num = tty->ops->write(tty, b, nr);
+				mutex_lock(&ldata->output_lock);
+				num = tty->ops->write(tty, b, nr);
+				mutex_unlock(&ldata->output_lock);
 				if (num < 0) {
 					retval = num;
 					goto break_out;
@@ -2412,7 +2424,7 @@ break_out:
 	remove_wait_queue(&tty->write_wait, &wait);
 	if (nr && tty->fasync)
 		set_bit(TTY_DO_WRITE_WAKEUP, &tty->flags);
-
+	up_read(&tty->termios_rwsem);
 	return (b - buf) ? b - buf : retval;
 }
 
@@ -2486,11 +2498,12 @@ static int n_tty_ioctl(struct tty_struct *tty, unsigned int cmd,
 	case TIOCOUTQ:
 		return put_user(tty_chars_in_buffer(tty), (int __user *) arg);
 	case TIOCINQ:
-		scoped_guard(rwsem_write, &tty->termios_rwsem)
-			if (L_ICANON(tty) && !L_EXTPROC(tty))
-				num = inq_canon(ldata);
-			else
-				num = read_cnt(ldata);
+		down_write(&tty->termios_rwsem);
+		if (L_ICANON(tty) && !L_EXTPROC(tty))
+			num = inq_canon(ldata);
+		else
+			num = read_cnt(ldata);
+		up_write(&tty->termios_rwsem);
 		return put_user(num, (unsigned int __user *) arg);
 	default:
 		return n_tty_ioctl_helper(tty, cmd, arg);

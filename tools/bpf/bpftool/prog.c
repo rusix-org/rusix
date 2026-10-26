@@ -348,7 +348,7 @@ static void show_prog_metadata(int fd, __u32 num_maps)
 			t_var = btf__type_by_id(btf, vsi->type);
 			name = btf__name_by_offset(btf, t_var->name_off);
 
-			if (!has_metadata_prefix(name) || btf_var_is_piece(btf, vsi))
+			if (!has_metadata_prefix(name))
 				continue;
 
 			if (!printed_header) {
@@ -377,7 +377,7 @@ static void show_prog_metadata(int fd, __u32 num_maps)
 			t_var = btf__type_by_id(btf, vsi->type);
 			name = btf__name_by_offset(btf, t_var->name_off);
 
-			if (!has_metadata_prefix(name) || btf_var_is_piece(btf, vsi))
+			if (!has_metadata_prefix(name))
 				continue;
 
 			if (!printed_header) {
@@ -1119,66 +1119,21 @@ enum prog_tracelog_mode {
 	TRACE_STDERR,
 };
 
-static void exit_stream(int signo)
-{
-	_exit(0);
-}
-
-/* Consumes prog_fd. */
 static int
 prog_tracelog_stream(int prog_fd, enum prog_tracelog_mode mode)
 {
-	const struct sigaction act = { .sa_handler = exit_stream };
-	const int signals[] = { SIGHUP, SIGINT, SIGTERM };
 	FILE *file = mode == TRACE_STDOUT ? stdout : stderr;
 	int stream_id = mode == TRACE_STDOUT ? 1 : 2;
 	char buf[512];
-	unsigned int i;
-	int fd, ret;
+	int ret;
 
-	if (!wait_output) {
-		do {
-			ret = bpf_prog_stream_read(prog_fd, stream_id, buf, sizeof(buf), NULL);
-			if (ret > 0)
-				fwrite(buf, sizeof(buf[0]), ret, file);
-		} while (ret > 0);
-		if (ret < 0)
-			p_err("failed to read stream: %s", strerror(-ret));
-		close(prog_fd);
-		goto out;
-	}
+	ret = 0;
+	do {
+		ret = bpf_prog_stream_read(prog_fd, stream_id, buf, sizeof(buf), NULL);
+		if (ret > 0)
+			fwrite(buf, sizeof(buf[0]), ret, file);
+	} while (ret > 0);
 
-	fd = bpf_prog_stream_open(prog_fd, stream_id, NULL);
-	/*
-	 * The stream descriptor does not keep the program alive. Drop the
-	 * program reference so that reads return EOF once the program is gone.
-	 */
-	close(prog_fd);
-	if (fd == -EINVAL) {
-		/* The bpf() syscall rejects unknown commands with EINVAL. */
-		p_err("waiting for stream output is not supported by this kernel");
-		return -1;
-	}
-	if (fd < 0) {
-		p_err("failed to open stream: %s", strerror(-fd));
-		return -1;
-	}
-
-	/*
-	 * Exit from the handler like the trace pipe variant does. A flag checked
-	 * between reads would miss a signal that lands before read() blocks and
-	 * only end the loop at the next print.
-	 */
-	for (i = 0; i < ARRAY_SIZE(signals); i++)
-		sigaction(signals[i], &act, NULL);
-	while ((ret = read(fd, buf, sizeof(buf))) > 0) {
-		fwrite(buf, sizeof(buf[0]), ret, file);
-		fflush(file);
-	}
-	if (ret < 0)
-		p_err("failed to read stream: %s", strerror(errno));
-	close(fd);
-out:
 	fflush(file);
 	return ret ? -1 : 0;
 }
@@ -1499,7 +1454,7 @@ static int do_run(int argc, char **argv)
 
 	err = bpf_prog_test_run_opts(fd, &test_attr);
 	if (err) {
-		p_err("failed to run program: %s", bpf_strerror(errno));
+		p_err("failed to run program: %s", strerror(errno));
 		goto free_ctx_out;
 	}
 
@@ -1814,7 +1769,7 @@ offload_dev:
 		}
 
 		if (prog_type == BPF_PROG_TYPE_XDP && xdpmeta_ifindex) {
-			bpf_program__add_flags(pos, BPF_F_XDP_DEV_BOUND_ONLY);
+			bpf_program__set_flags(pos, BPF_F_XDP_DEV_BOUND_ONLY);
 			bpf_program__set_ifindex(pos, xdpmeta_ifindex);
 		} else {
 			bpf_program__set_ifindex(pos, offload_ifindex);
@@ -2107,52 +2062,37 @@ static int do_profile(int argc, char **argv)
 
 #include "profiler.skel.h"
 
-enum ratio_metric {
-	METRIC_NONE = -2,
-	METRIC_RUN_CNT = -1,
-	METRIC_CYCLES = 0,
-	METRIC_INSTRUCTIONS = 1,
-	METRIC_L1D_LOADS = 2,
-	METRIC_LLC_MISSES = 3,
-	METRIC_ITLB_MISSES = 4,
-	METRIC_DTLB_MISSES = 5,
-};
-
 struct profile_metric {
 	const char *name;
 	struct bpf_perf_event_value val;
-	__u64 scaled_val;
 	struct perf_event_attr attr;
 	bool selected;
 
 	/* calculate ratios like instructions per cycle */
-	const enum ratio_metric ratio_metric;
+	const int ratio_metric; /* 0 for N/A, 1 for index 0 (cycles) */
 	const char *ratio_desc;
 	const float ratio_mul;
 } metrics[] = {
-	[METRIC_CYCLES] = {
+	{
 		.name = "cycles",
 		.attr = {
 			.type = PERF_TYPE_HARDWARE,
 			.config = PERF_COUNT_HW_CPU_CYCLES,
 			.exclude_user = 1,
 		},
-		.ratio_metric = METRIC_RUN_CNT,
-		.ratio_desc = "cycles per run",
-		.ratio_mul = 1.0,
 	},
-	[METRIC_INSTRUCTIONS] = {
+	{
 		.name = "instructions",
 		.attr = {
 			.type = PERF_TYPE_HARDWARE,
 			.config = PERF_COUNT_HW_INSTRUCTIONS,
 			.exclude_user = 1,
 		},
-		.ratio_metric = METRIC_CYCLES,
+		.ratio_metric = 1,
 		.ratio_desc = "insns per cycle",
 		.ratio_mul = 1.0,
 	},
-	[METRIC_L1D_LOADS] = {
+	{
 		.name = "l1d_loads",
 		.attr = {
 			.type = PERF_TYPE_HW_CACHE,
@@ -2162,9 +2102,8 @@ struct profile_metric {
 				(PERF_COUNT_HW_CACHE_RESULT_ACCESS << 16),
 			.exclude_user = 1,
 		},
-		.ratio_metric = METRIC_NONE,
 	},
-	[METRIC_LLC_MISSES] = {
+	{
 		.name = "llc_misses",
 		.attr = {
 			.type = PERF_TYPE_HW_CACHE,
@@ -2174,11 +2113,11 @@ struct profile_metric {
 				(PERF_COUNT_HW_CACHE_RESULT_MISS << 16),
 			.exclude_user = 1
 		},
-		.ratio_metric = METRIC_INSTRUCTIONS,
+		.ratio_metric = 2,
 		.ratio_desc = "LLC misses per million insns",
 		.ratio_mul = 1e6,
 	},
-	[METRIC_ITLB_MISSES] = {
+	{
 		.name = "itlb_misses",
 		.attr = {
 			.type = PERF_TYPE_HW_CACHE,
@@ -2188,11 +2127,11 @@ struct profile_metric {
 				(PERF_COUNT_HW_CACHE_RESULT_MISS << 16),
 			.exclude_user = 1
 		},
-		.ratio_metric = METRIC_INSTRUCTIONS,
+		.ratio_metric = 2,
 		.ratio_desc = "itlb misses per million insns",
 		.ratio_mul = 1e6,
 	},
-	[METRIC_DTLB_MISSES] = {
+	{
 		.name = "dtlb_misses",
 		.attr = {
 			.type = PERF_TYPE_HW_CACHE,
@@ -2202,16 +2141,13 @@ struct profile_metric {
 				(PERF_COUNT_HW_CACHE_RESULT_MISS << 16),
 			.exclude_user = 1
 		},
-		.ratio_metric = METRIC_INSTRUCTIONS,
+		.ratio_metric = 2,
 		.ratio_desc = "dtlb misses per million insns",
 		.ratio_mul = 1e6,
 	},
 };
 
 static __u64 profile_total_count;
-static int profile_cpu_cnt;
-static int *profile_cpu_ids;
-static int profile_cpu_id_span;
 
 #define MAX_NUM_PROFILE_METRICS 4
 
@@ -2246,9 +2182,9 @@ static int profile_parse_metrics(int argc, char **argv)
 	return selected_cnt;
 }
 
-static int profile_read_values(struct profiler_bpf *obj)
+static void profile_read_values(struct profiler_bpf *obj)
 {
-	__u32 m, cpu, num_cpu = profile_cpu_cnt;
+	__u32 m, cpu, num_cpu = obj->rodata->num_cpu;
 	int reading_map_fd, count_map_fd;
 	__u64 counts[num_cpu];
 	__u32 key = 0;
@@ -2256,11 +2192,15 @@ static int profile_read_values(struct profiler_bpf *obj)
 
 	reading_map_fd = bpf_map__fd(obj->maps.accum_readings);
 	count_map_fd = bpf_map__fd(obj->maps.counts);
+	if (reading_map_fd < 0 || count_map_fd < 0) {
+		p_err("failed to get fd for map");
+		return;
+	}
 
 	err = bpf_map_lookup_elem(count_map_fd, &key, counts);
 	if (err) {
 		p_err("failed to read count_map: %s", strerror(errno));
-		return err;
+		return;
 	}
 
 	profile_total_count = 0;
@@ -2268,37 +2208,24 @@ static int profile_read_values(struct profiler_bpf *obj)
 		profile_total_count += counts[cpu];
 
 	for (m = 0; m < ARRAY_SIZE(metrics); m++) {
-		struct bpf_perf_event_value values[num_cpu], *val;
-		double scale;
+		struct bpf_perf_event_value values[num_cpu];
 
 		if (!metrics[m].selected)
 			continue;
 
 		err = bpf_map_lookup_elem(reading_map_fd, &key, values);
 		if (err) {
-			p_err("failed to read reading_map: %s", strerror(errno));
-			return err;
+			p_err("failed to read reading_map: %s",
+			      strerror(errno));
+			return;
 		}
-
 		for (cpu = 0; cpu < num_cpu; cpu++) {
-			val = &values[cpu];
-			if (counts[cpu] && !val->running) {
-				p_err("perf event %s was not counted on CPU %d",
-				      metrics[m].name, profile_cpu_ids[cpu]);
-				return -EAGAIN;
-			}
-			metrics[m].val.enabled += val->enabled;
-			metrics[m].val.running += val->running;
-			metrics[m].val.counter += val->counter;
-			if (val->running) {
-				/* Scale values to account for perf event multiplexing. */
-				scale = (double)val->enabled / val->running;
-				metrics[m].scaled_val += val->counter * scale;
-			}
+			metrics[m].val.counter += values[cpu].counter;
+			metrics[m].val.enabled += values[cpu].enabled;
+			metrics[m].val.running += values[cpu].running;
 		}
 		key++;
 	}
-	return 0;
 }
 
 static void profile_print_readings_json(void)
@@ -2315,7 +2242,6 @@ static void profile_print_readings_json(void)
 		jsonw_lluint_field(json_wtr, "value", metrics[m].val.counter);
 		jsonw_lluint_field(json_wtr, "enabled", metrics[m].val.enabled);
 		jsonw_lluint_field(json_wtr, "running", metrics[m].val.running);
-		jsonw_lluint_field(json_wtr, "value_scaled", metrics[m].scaled_val);
 
 		jsonw_end_object(json_wtr);
 	}
@@ -2324,34 +2250,24 @@ static void profile_print_readings_json(void)
 
 static void profile_print_readings_plain(void)
 {
-	__u32 i;
+	__u32 m;
 
 	printf("\n%18llu %-20s\n", profile_total_count, "run_cnt");
-	for (i = 0; i < ARRAY_SIZE(metrics); i++) {
-		struct profile_metric *m = &metrics[i];
-		struct bpf_perf_event_value *val = &m->val;
+	for (m = 0; m < ARRAY_SIZE(metrics); m++) {
+		struct bpf_perf_event_value *val = &metrics[m].val;
 		int r;
-		__u64 ratio;
 
-		if (!m->selected)
+		if (!metrics[m].selected)
 			continue;
-		printf("%18llu %-20s", m->scaled_val, m->name);
+		printf("%18llu %-20s", val->counter, metrics[m].name);
 
-		r = m->ratio_metric;
-		switch (r) {
-		case METRIC_RUN_CNT:
-			ratio = profile_total_count;
-			break;
-		case METRIC_NONE:
-			ratio = 0;
-			break;
-		default:
-			ratio = metrics[r].scaled_val;
-		}
-		if (ratio) {
+		r = metrics[m].ratio_metric - 1;
+		if (r >= 0 && metrics[r].selected &&
+		    metrics[r].val.counter > 0) {
 			printf("# %8.2f %-30s",
-			       m->scaled_val * m->ratio_mul / ratio,
-			       m->ratio_desc);
+			       val->counter * metrics[m].ratio_mul /
+			       metrics[r].val.counter,
+			       metrics[m].ratio_desc);
 		} else {
 			printf("%-41s", "");
 		}
@@ -2434,7 +2350,7 @@ static char *profile_tgt_name;
 static int *profile_perf_events;
 static int profile_perf_event_cnt;
 
-static void profile_close_perf_events(void)
+static void profile_close_perf_events(struct profiler_bpf *obj)
 {
 	int i;
 
@@ -2442,115 +2358,89 @@ static void profile_close_perf_events(void)
 		close(profile_perf_events[i]);
 
 	free(profile_perf_events);
-	profile_perf_events = NULL;
 	profile_perf_event_cnt = 0;
 }
 
-static int profile_open_perf_event(int mid, int cpu,
-				   int map_fd, int group_fd, __u32 map_key)
+static int profile_open_perf_event(int mid, int cpu, int map_fd)
 {
-	struct perf_event_attr attr = metrics[mid].attr;
-	bool group_leader = group_fd < 0;
 	int pmu_fd;
-	int err;
 
-	attr.disabled = group_leader;
-	pmu_fd = syscall(__NR_perf_event_open, &attr, -1 /* pid */, cpu,
-			 group_fd, 0);
+	pmu_fd = syscall(__NR_perf_event_open, &metrics[mid].attr,
+			 -1 /*pid*/, cpu, -1 /*group_fd*/, 0);
 	if (pmu_fd < 0) {
-		err = -errno;
-		if (errno == ENODEV && group_leader)
-			p_info("cpu %d may be offline, skip profiling.", cpu);
-		return err;
+		if (errno == ENODEV) {
+			p_info("cpu %d may be offline, skip %s profiling.",
+				cpu, metrics[mid].name);
+			profile_perf_event_cnt++;
+			return 0;
+		}
+		return -1;
 	}
 
-	if (bpf_map_update_elem(map_fd, &map_key, &pmu_fd, BPF_ANY)) {
-		err = -errno;
+	if (bpf_map_update_elem(map_fd,
+				&profile_perf_event_cnt,
+				&pmu_fd, BPF_ANY) ||
+	    ioctl(pmu_fd, PERF_EVENT_IOC_ENABLE, 0)) {
 		close(pmu_fd);
-		return err;
+		return -1;
 	}
 
 	profile_perf_events[profile_perf_event_cnt++] = pmu_fd;
-	return pmu_fd;
+	return 0;
 }
 
 static int profile_open_perf_events(struct profiler_bpf *obj)
 {
-	__u32 map_key;
 	unsigned int cpu, m;
-	int group_fd, map_fd, pmu_fd;
-	int err;
+	int map_fd;
 
-	profile_perf_events = calloc(profile_cpu_cnt * obj->rodata->num_metric,
-				     sizeof(*profile_perf_events));
+	profile_perf_events = calloc(
+		obj->rodata->num_cpu * obj->rodata->num_metric, sizeof(int));
 	if (!profile_perf_events) {
 		p_err("failed to allocate memory for perf_event array: %s",
 		      strerror(errno));
-		return -ENOMEM;
+		return -1;
+	}
+	map_fd = bpf_map__fd(obj->maps.events);
+	if (map_fd < 0) {
+		p_err("failed to get fd for events map");
+		return -1;
 	}
 
-	map_fd = bpf_map__fd(obj->maps.events);
-	for (cpu = 0; cpu < (unsigned int)profile_cpu_cnt; cpu++) {
-		int cpu_id = profile_cpu_ids[cpu];
-
-		group_fd = -1;
-		map_key = cpu_id;
-		for (m = 0; m < ARRAY_SIZE(metrics); m++) {
-			if (!metrics[m].selected)
-				continue;
-
-			pmu_fd = profile_open_perf_event(m, cpu_id, map_fd, group_fd,
-						     map_key);
-			if (pmu_fd == -ENODEV && group_fd < 0)
-				break;
-			if (pmu_fd < 0) {
-				p_err("failed to add event %s to group on CPU %d: %s",
-				      metrics[m].name, cpu_id, strerror(-pmu_fd));
-				return pmu_fd;
-			}
-			if (group_fd < 0)
-				group_fd = pmu_fd;
-			map_key += profile_cpu_id_span;
-		}
-		if (group_fd < 0)
+	for (m = 0; m < ARRAY_SIZE(metrics); m++) {
+		if (!metrics[m].selected)
 			continue;
-		if (ioctl(group_fd, PERF_EVENT_IOC_ENABLE, PERF_IOC_FLAG_GROUP)) {
-			err = -errno;
-			p_err("failed to enable perf event group on CPU %d: %s",
-			      cpu_id, strerror(-err));
-			return err;
+		for (cpu = 0; cpu < obj->rodata->num_cpu; cpu++) {
+			if (profile_open_perf_event(m, cpu, map_fd)) {
+				p_err("failed to create event %s on cpu %u",
+				      metrics[m].name, cpu);
+				return -1;
+			}
 		}
 	}
 	return 0;
 }
 
-static int profile_print_and_cleanup(void)
+static void profile_print_and_cleanup(void)
 {
-	int err;
-
-	profile_close_perf_events();
-	err = profile_read_values(profile_obj);
-	if (!err)
-		profile_print_readings();
+	profile_close_perf_events(profile_obj);
+	profile_read_values(profile_obj);
+	profile_print_readings();
 	profiler_bpf__destroy(profile_obj);
 
 	close(profile_tgt_fd);
 	free(profile_tgt_name);
-	free(profile_cpu_ids);
-	profile_cpu_ids = NULL;
-	profile_cpu_cnt = 0;
-	profile_cpu_id_span = 0;
-	return err;
 }
 
 static void int_exit(int signo)
 {
-	exit(!!profile_print_and_cleanup());
+	profile_print_and_cleanup();
+	exit(0);
 }
 
 static int do_profile(int argc, char **argv)
 {
-	int num_metric, err = -1;
+	int num_metric, num_cpu, err = -1;
 	struct bpf_program *prog;
 	unsigned long duration;
 	char *endptr;
@@ -2581,12 +2471,11 @@ static int do_profile(int argc, char **argv)
 	if (num_metric <= 0)
 		goto out;
 
-	profile_cpu_cnt = get_possible_cpu_ids(&profile_cpu_ids);
-	if (profile_cpu_cnt <= 0) {
+	num_cpu = libbpf_num_possible_cpus();
+	if (num_cpu <= 0) {
 		p_err("failed to identify number of CPUs");
 		goto out;
 	}
-	profile_cpu_id_span = profile_cpu_ids[profile_cpu_cnt - 1] + 1;
 
 	profile_obj = profiler_bpf__open();
 	if (!profile_obj) {
@@ -2594,12 +2483,11 @@ static int do_profile(int argc, char **argv)
 		goto out;
 	}
 
+	profile_obj->rodata->num_cpu = num_cpu;
 	profile_obj->rodata->num_metric = num_metric;
-	profile_obj->rodata->cpu_id_span = profile_cpu_id_span;
 
 	/* adjust map sizes */
-	bpf_map__set_max_entries(profile_obj->maps.events,
-				 num_metric * profile_cpu_id_span);
+	bpf_map__set_max_entries(profile_obj->maps.events, num_metric * num_cpu);
 	bpf_map__set_max_entries(profile_obj->maps.fentry_readings, num_metric);
 	bpf_map__set_max_entries(profile_obj->maps.accum_readings, num_metric);
 	bpf_map__set_max_entries(profile_obj->maps.counts, 1);
@@ -2637,18 +2525,15 @@ static int do_profile(int argc, char **argv)
 	signal(SIGINT, int_exit);
 
 	sleep(duration);
-	return profile_print_and_cleanup();
+	profile_print_and_cleanup();
+	return 0;
 
 out:
-	profile_close_perf_events();
+	profile_close_perf_events(profile_obj);
 	if (profile_obj)
 		profiler_bpf__destroy(profile_obj);
 	close(profile_tgt_fd);
 	free(profile_tgt_name);
-	free(profile_cpu_ids);
-	profile_cpu_ids = NULL;
-	profile_cpu_cnt = 0;
-	profile_cpu_id_span = 0;
 	return err;
 }
 
@@ -2698,14 +2583,13 @@ static int do_help(int argc, char **argv)
 		"                 cgroup/getsockname_unix | cgroup/sendmsg4 | cgroup/sendmsg6 |\n"
 		"                 cgroup/sendmsg_unix | cgroup/recvmsg4 | cgroup/recvmsg6 | cgroup/recvmsg_unix |\n"
 		"                 cgroup/getsockopt | cgroup/setsockopt | cgroup/sock_release |\n"
-		"                 struct_ops | fentry | fexit | fsession | freplace | sk_lookup }\n"
+		"                 struct_ops | fentry | fexit | freplace | sk_lookup }\n"
 		"       ATTACH_TYPE := { sk_msg_verdict | sk_skb_verdict | sk_skb_stream_verdict |\n"
 		"                        sk_skb_stream_parser | flow_dissector }\n"
 		"       METRIC := { cycles | instructions | l1d_loads | llc_misses | itlb_misses | dtlb_misses }\n"
 		"       " HELP_SPEC_OPTIONS " |\n"
 		"                    {-f|--bpffs} | {-m|--mapcompat} | {-n|--nomount} |\n"
-		"                    {-L|--use-loader} | [ {-S|--sign } {-k} <private_key.pem> {-i} <certificate.x509> ] |\n"
-		"                    {-w|--wait} }\n"
+		"                    {-L|--use-loader} | [ {-S|--sign } {-k} <private_key.pem> {-i} <certificate.x509> ] \n"
 		"",
 		bin_name, argv[-2]);
 

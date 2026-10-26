@@ -49,7 +49,6 @@
 #include <rdma/ib_addr.h>
 #include <rdma/ib_smi.h>
 #include <rdma/ib_user_verbs.h>
-#include <rdma/uverbs_ioctl.h>
 
 #include "pvrdma.h"
 
@@ -142,12 +141,12 @@ int pvrdma_create_srq(struct ib_srq *ibsrq, struct ib_srq_init_attr *init_attr,
 	dev_dbg(&dev->pdev->dev,
 		"create shared receive queue from user space\n");
 
-	ret = ib_copy_validate_udata_in(udata, ucmd, reserved);
-	if (ret)
+	if (ib_copy_from_udata(&ucmd, udata, sizeof(ucmd))) {
+		ret = -EFAULT;
 		goto err_srq;
+	}
 
-	srq->umem = ib_umem_get_va(ibsrq->device, ucmd.buf_addr, ucmd.buf_size,
-				   IB_ACCESS_LOCAL_WRITE);
+	srq->umem = ib_umem_get(ibsrq->device, ucmd.buf_addr, ucmd.buf_size, 0);
 	if (IS_ERR(srq->umem)) {
 		ret = PTR_ERR(srq->umem);
 		goto err_srq;
@@ -196,10 +195,10 @@ int pvrdma_create_srq(struct ib_srq *ibsrq, struct ib_srq_init_attr *init_attr,
 	spin_unlock_irqrestore(&dev->srq_tbl_lock, flags);
 
 	/* Copy udata back. */
-	ret = ib_respond_udata(udata, srq_resp);
-	if (ret) {
+	if (ib_copy_to_udata(udata, &srq_resp, sizeof(srq_resp))) {
+		dev_warn(&dev->pdev->dev, "failed to copy back udata\n");
 		pvrdma_destroy_srq(&srq->ibsrq, udata);
-		return ret;
+		return -EINVAL;
 	}
 
 	return 0;

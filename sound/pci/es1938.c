@@ -222,8 +222,8 @@ struct es1938 {
 static irqreturn_t snd_es1938_interrupt(int irq, void *dev_id);
 
 static const struct pci_device_id snd_es1938_ids[] = {
-	{ PCI_VDEVICE(ESS, 0x1969) },   /* Solo-1 */
-	{ }
+	{ PCI_VDEVICE(ESS, 0x1969), 0, },   /* Solo-1 */
+	{ 0, }
 };
 
 MODULE_DEVICE_TABLE(pci, snd_es1938_ids);
@@ -1683,11 +1683,11 @@ static int snd_es1938_mixer(struct es1938 *chip)
 }
        
 
-static int snd_es1938_probe(struct pci_dev *pci,
-			    const struct pci_device_id *pci_id)
+static int __snd_es1938_probe(struct pci_dev *pci,
+			      const struct pci_device_id *pci_id)
 {
 	static int dev;
-	struct snd_card *card __free(snd_card_free) = NULL;
+	struct snd_card *card;
 	struct es1938 *chip;
 	struct snd_opl3 *opl3;
 	int idx, err;
@@ -1759,9 +1759,14 @@ static int snd_es1938_probe(struct pci_dev *pci,
 		return err;
 
 	pci_set_drvdata(pci, card);
-	card = NULL; /* probe succeeded, don't release as error */
 	dev++;
 	return 0;
+}
+
+static int snd_es1938_probe(struct pci_dev *pci,
+			    const struct pci_device_id *pci_id)
+{
+	return snd_card_free_on_error(&pci->dev, __snd_es1938_probe(pci, pci_id));
 }
 
 static struct pci_driver es1938_driver = {

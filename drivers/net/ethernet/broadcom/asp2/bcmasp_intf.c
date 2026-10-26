@@ -15,14 +15,9 @@
 #include <linux/platform_device.h>
 #include <net/ip.h>
 #include <net/ipv6.h>
-#include <net/netdev_queues.h>
-#include <net/page_pool/helpers.h>
 
 #include "bcmasp.h"
 #include "bcmasp_intf_defs.h"
-
-#define BCMASP_TX_STOP_THRS	(MAX_SKB_FRAGS + 1)
-#define BCMASP_TX_START_THRS	(2 * MAX_SKB_FRAGS)
 
 static int incr_ring(int index, int ring_count)
 {
@@ -147,13 +142,19 @@ static void bcmasp_clean_txcb(struct bcmasp_intf *intf, int index)
 	txcb->last = false;
 }
 
-static int bcmasp_tx_avail(struct bcmasp_intf *intf)
+static int tx_spb_ring_full(struct bcmasp_intf *intf, int cnt)
 {
-	int used = (READ_ONCE(intf->tx_spb_index) -
-		    READ_ONCE(intf->tx_spb_clean_index) + DESC_RING_COUNT) %
-		   DESC_RING_COUNT;
+	int next_index, i;
 
-	return DESC_RING_COUNT - used - 1;
+	/* Check if we have enough room for cnt descriptors */
+	next_index = intf->tx_spb_index;
+	for (i = 0; i < cnt; i++) {
+		next_index = incr_ring(next_index, DESC_RING_COUNT);
+		if (next_index == intf->tx_spb_clean_index)
+			return 1;
+	}
+
+	return 0;
 }
 
 static struct sk_buff *bcmasp_csum_offload(struct net_device *dev,
@@ -231,27 +232,57 @@ help:
 	return skb;
 }
 
+static unsigned long bcmasp_rx_edpkt_dma_rq(struct bcmasp_intf *intf)
+{
+	return rx_edpkt_dma_rq(intf, RX_EDPKT_DMA_VALID);
+}
+
+static void bcmasp_rx_edpkt_cfg_wq(struct bcmasp_intf *intf, dma_addr_t addr)
+{
+	rx_edpkt_cfg_wq(intf, addr, RX_EDPKT_RING_BUFFER_READ);
+}
+
+static void bcmasp_rx_edpkt_dma_wq(struct bcmasp_intf *intf, dma_addr_t addr)
+{
+	rx_edpkt_dma_wq(intf, addr, RX_EDPKT_DMA_READ);
+}
+
+static unsigned long bcmasp_tx_spb_dma_rq(struct bcmasp_intf *intf)
+{
+	return tx_spb_dma_rq(intf, TX_SPB_DMA_READ);
+}
+
+static void bcmasp_tx_spb_dma_wq(struct bcmasp_intf *intf, dma_addr_t addr)
+{
+	tx_spb_dma_wq(intf, addr, TX_SPB_DMA_VALID);
+}
+
+static const struct bcmasp_intf_ops bcmasp_intf_ops = {
+	.rx_desc_read = bcmasp_rx_edpkt_dma_rq,
+	.rx_buffer_write = bcmasp_rx_edpkt_cfg_wq,
+	.rx_desc_write = bcmasp_rx_edpkt_dma_wq,
+	.tx_read = bcmasp_tx_spb_dma_rq,
+	.tx_write = bcmasp_tx_spb_dma_wq,
+};
+
 static netdev_tx_t bcmasp_xmit(struct sk_buff *skb, struct net_device *dev)
 {
 	struct bcmasp_intf *intf = netdev_priv(dev);
-	unsigned int total_bytes, size, min_size;
+	unsigned int total_bytes, size;
 	int spb_index, nr_frags, i, j;
 	struct bcmasp_tx_cb *txcb;
 	dma_addr_t mapping, valid;
 	struct bcmasp_desc *desc;
-	struct netdev_queue *txq;
 	bool csum_hw = false;
 	struct device *kdev;
 	skb_frag_t *frag;
 
 	kdev = &intf->parent->pdev->dev;
-	txq = netdev_get_tx_queue(dev, 0);
 
 	nr_frags = skb_shinfo(skb)->nr_frags;
 
-	if (unlikely(bcmasp_tx_avail(intf) < nr_frags + 1)) {
-		netif_txq_try_stop(txq, bcmasp_tx_avail(intf),
-				   BCMASP_TX_START_THRS);
+	if (tx_spb_ring_full(intf, nr_frags + 1)) {
+		netif_stop_queue(dev);
 		if (net_ratelimit())
 			netdev_err(dev, "Tx Ring Full!\n");
 		return NETDEV_TX_BUSY;
@@ -263,21 +294,16 @@ static netdev_tx_t bcmasp_xmit(struct sk_buff *skb, struct net_device *dev)
 	if (!skb)
 		return NETDEV_TX_OK;
 
-	min_size = ETH_ZLEN + ETH_FCS_LEN;
-	if (csum_hw)
-		min_size += sizeof(struct bcmasp_pkt_offload);
-
-	if (skb->len < min_size) {
-		if (skb_put_padto(skb, min_size))
-			return NETDEV_TX_OK;
-		nr_frags = skb_shinfo(skb)->nr_frags;
-	}
-
 	spb_index = intf->tx_spb_index;
 	valid = intf->tx_spb_dma_valid;
 	for (i = 0; i <= nr_frags; i++) {
 		if (!i) {
 			size = skb_headlen(skb);
+			if (!nr_frags && size < (ETH_ZLEN + ETH_FCS_LEN)) {
+				if (skb_put_padto(skb, ETH_ZLEN + ETH_FCS_LEN))
+					return NETDEV_TX_OK;
+				size = skb->len;
+			}
 			mapping = dma_map_single(kdev, skb->data, size,
 						 DMA_TO_DEVICE);
 		} else {
@@ -291,11 +317,6 @@ static netdev_tx_t bcmasp_xmit(struct sk_buff *skb, struct net_device *dev)
 			intf->mib.tx_dma_failed++;
 			spb_index = intf->tx_spb_index;
 			for (j = 0; j < i; j++) {
-				txcb = &intf->tx_cbs[spb_index];
-				dma_unmap_single(kdev,
-						 dma_unmap_addr(txcb, dma_addr),
-						 dma_unmap_len(txcb, dma_len),
-						 DMA_TO_DEVICE);
 				bcmasp_clean_txcb(intf, spb_index);
 				spb_index = incr_ring(spb_index,
 						      DESC_RING_COUNT);
@@ -344,50 +365,53 @@ static netdev_tx_t bcmasp_xmit(struct sk_buff *skb, struct net_device *dev)
 	 */
 	wmb();
 
-	WRITE_ONCE(intf->tx_spb_index, spb_index);
+	intf->tx_spb_index = spb_index;
 	intf->tx_spb_dma_valid = valid;
-
-	netdev_tx_sent_queue(txq, total_bytes);
 
 	skb_tx_timestamp(skb);
 
-	tx_spb_dma_wq(intf, intf->tx_spb_dma_valid, TX_SPB_DMA_VALID);
+	bcmasp_intf_tx_write(intf, intf->tx_spb_dma_valid);
 
-	netif_txq_maybe_stop(txq, bcmasp_tx_avail(intf),
-			     BCMASP_TX_STOP_THRS, BCMASP_TX_START_THRS);
+	if (tx_spb_ring_full(intf, MAX_SKB_FRAGS + 1))
+		netif_stop_queue(dev);
 
 	return NETDEV_TX_OK;
 }
 
-static void umac_reset_and_init(struct bcmasp_intf *intf,
-				const unsigned char *addr)
+static void bcmasp_netif_start(struct net_device *dev)
 {
-	struct phy_device *phydev = intf->ndev->phydev;
-	u32 mac0, mac1;
+	struct bcmasp_intf *intf = netdev_priv(dev);
 
+	bcmasp_set_rx_mode(dev);
+	napi_enable(&intf->tx_napi);
+	napi_enable(&intf->rx_napi);
+
+	bcmasp_enable_rx_irq(intf, 1);
+	bcmasp_enable_tx_irq(intf, 1);
+	bcmasp_enable_phy_irq(intf, 1);
+
+	phy_start(dev->phydev);
+}
+
+static void umac_reset(struct bcmasp_intf *intf)
+{
 	umac_wl(intf, 0x0, UMC_CMD);
 	umac_wl(intf, UMC_CMD_SW_RESET, UMC_CMD);
 	usleep_range(10, 100);
 	/* We hold the umac in reset and bring it out of
 	 * reset when phy link is up.
 	 */
+}
 
-	umac_wl(intf, 0x800, UMC_FRM_LEN);
-	umac_wl(intf, 0xffff, UMC_PAUSE_CNTRL);
-	umac_wl(intf, 0x800, UMC_RX_MAX_PKT_SZ);
-
-	mac0 = (addr[0] << 24) | (addr[1] << 16) | (addr[2] << 8) |
-		addr[3];
-	mac1 = (addr[4] << 8) | addr[5];
+static void umac_set_hw_addr(struct bcmasp_intf *intf,
+			     const unsigned char *addr)
+{
+	u32 mac0 = (addr[0] << 24) | (addr[1] << 16) | (addr[2] << 8) |
+		    addr[3];
+	u32 mac1 = (addr[4] << 8) | addr[5];
 
 	umac_wl(intf, mac0, UMC_MAC0);
 	umac_wl(intf, mac1, UMC_MAC1);
-
-	/* Reset shadow values since we reset the umac */
-	intf->old_duplex = -1;
-	intf->old_link = -1;
-	intf->old_pause = -1;
-	phydev->eee_cfg.tx_lpi_timer = umac_rl(intf, UMC_EEE_LPI_TIMER);
 }
 
 static void umac_enable_set(struct bcmasp_intf *intf, u32 mask,
@@ -411,18 +435,23 @@ static void umac_enable_set(struct bcmasp_intf *intf, u32 mask,
 		usleep_range(1000, 2000);
 }
 
-static int bcmasp_tx_reclaim(struct bcmasp_intf *intf, unsigned int *bytes_out)
+static void umac_init(struct bcmasp_intf *intf)
+{
+	umac_wl(intf, 0x800, UMC_FRM_LEN);
+	umac_wl(intf, 0xffff, UMC_PAUSE_CNTRL);
+	umac_wl(intf, 0x800, UMC_RX_MAX_PKT_SZ);
+}
+
+static int bcmasp_tx_reclaim(struct bcmasp_intf *intf)
 {
 	struct bcmasp_intf_stats64 *stats = &intf->stats64;
 	struct device *kdev = &intf->parent->pdev->dev;
-	unsigned int bytes_compl = 0;
+	unsigned long read, released = 0;
 	struct bcmasp_tx_cb *txcb;
 	struct bcmasp_desc *desc;
-	unsigned long read;
 	dma_addr_t mapping;
-	int packets = 0;
 
-	read = tx_spb_dma_rq(intf, TX_SPB_DMA_READ);
+	read = bcmasp_intf_tx_read(intf);
 	while (intf->tx_spb_dma_read != read) {
 		txcb = &intf->tx_cbs[intf->tx_spb_clean_index];
 		mapping = dma_unmap_addr(txcb, dma_addr);
@@ -438,9 +467,6 @@ static int bcmasp_tx_reclaim(struct bcmasp_intf *intf, unsigned int *bytes_out)
 			u64_stats_inc(&stats->tx_packets);
 			u64_stats_add(&stats->tx_bytes, txcb->bytes_sent);
 			u64_stats_update_end(&stats->syncp);
-
-			bytes_compl += txcb->bytes_sent;
-			packets++;
 		}
 
 		desc = &intf->tx_spb_cpu[intf->tx_spb_clean_index];
@@ -451,36 +477,32 @@ static int bcmasp_tx_reclaim(struct bcmasp_intf *intf, unsigned int *bytes_out)
 			  intf->tx_spb_clean_index);
 
 		bcmasp_clean_txcb(intf, intf->tx_spb_clean_index);
+		released++;
 
-		WRITE_ONCE(intf->tx_spb_clean_index,
-			   incr_ring(intf->tx_spb_clean_index, DESC_RING_COUNT));
+		intf->tx_spb_clean_index = incr_ring(intf->tx_spb_clean_index,
+						     DESC_RING_COUNT);
 		intf->tx_spb_dma_read = incr_first_byte(intf->tx_spb_dma_read,
 							intf->tx_spb_dma_addr,
 							DESC_RING_COUNT);
 	}
 
-	if (bytes_out)
-		*bytes_out = bytes_compl;
-
-	return packets;
+	return released;
 }
 
 static int bcmasp_tx_poll(struct napi_struct *napi, int budget)
 {
 	struct bcmasp_intf *intf =
 		container_of(napi, struct bcmasp_intf, tx_napi);
-	struct netdev_queue *txq = netdev_get_tx_queue(intf->ndev, 0);
-	unsigned int bytes = 0;
-	int packets;
+	int released = 0;
 
-	packets = bcmasp_tx_reclaim(intf, &bytes);
-
-	netif_txq_completed_wake(txq, packets, bytes,
-				 bcmasp_tx_avail(intf), BCMASP_TX_START_THRS);
+	released = bcmasp_tx_reclaim(intf);
 
 	napi_complete(&intf->tx_napi);
 
 	bcmasp_enable_tx_irq(intf, 1);
+
+	if (released)
+		netif_wake_queue(intf->ndev);
 
 	return 0;
 }
@@ -495,27 +517,23 @@ static int bcmasp_rx_poll(struct napi_struct *napi, int budget)
 	struct bcmasp_desc *desc;
 	struct sk_buff *skb;
 	dma_addr_t valid;
-	struct page *page;
 	void *data;
 	u64 flags;
 	u32 len;
 
-	/* Hardware advances DMA_VALID as it writes each descriptor
-	 * (RBUF_4K streaming mode); software chases with rx_edpkt_dma_read.
-	 */
-	valid = rx_edpkt_dma_rq(intf, RX_EDPKT_DMA_VALID) + 1;
+	valid = bcmasp_intf_rx_desc_read(intf) + 1;
 	if (valid == intf->rx_edpkt_dma_addr + DESC_RING_SIZE)
 		valid = intf->rx_edpkt_dma_addr;
 
 	while ((processed < budget) && (valid != intf->rx_edpkt_dma_read)) {
 		desc = &intf->rx_edpkt_cpu[intf->rx_edpkt_index];
 
-		/* Ensure the descriptor has been fully written to DRAM by
-		 * the hardware before the CPU reads it.
+		/* Ensure that descriptor has been fully written to DRAM by
+		 * hardware before reading by the CPU
 		 */
 		rmb();
 
-		/* Locate the packet data inside the streaming ring buffer. */
+		/* Calculate virt addr by offsetting from physical addr */
 		data = intf->rx_ring_cpu +
 			(DESC_ADDR(desc->buf) - intf->rx_ring_dma);
 
@@ -540,45 +558,20 @@ static int bcmasp_rx_poll(struct napi_struct *napi, int budget)
 					DMA_FROM_DEVICE);
 
 		len = desc->size;
-		if (unlikely(len < 2 + ETH_HLEN + (intf->crc_fwd ? ETH_FCS_LEN : 0))) {
-			u64_stats_update_begin(&stats->syncp);
-			u64_stats_inc(&stats->rx_dropped);
-			u64_stats_update_end(&stats->syncp);
-			goto next;
-		}
 
-		/* Allocate a page pool page as the SKB data area so the
-		 * kernel can recycle it efficiently after the packet is
-		 * consumed, avoiding repeated slab allocations.
-		 */
-		page = page_pool_dev_alloc_pages(intf->rx_page_pool);
-		if (!page) {
-			u64_stats_update_begin(&stats->syncp);
-			u64_stats_inc(&stats->rx_dropped);
-			u64_stats_update_end(&stats->syncp);
-			intf->mib.alloc_rx_skb_failed++;
-			goto next;
-		}
-
-		skb = napi_build_skb(page_address(page), PAGE_SIZE);
+		skb = napi_alloc_skb(napi, len);
 		if (!skb) {
 			u64_stats_update_begin(&stats->syncp);
 			u64_stats_inc(&stats->rx_dropped);
 			u64_stats_update_end(&stats->syncp);
 			intf->mib.alloc_rx_skb_failed++;
-			page_pool_recycle_direct(intf->rx_page_pool, page);
+
 			goto next;
 		}
 
-		/* Reserve headroom then copy the full descriptor payload
-		 * (hardware prepends a 2-byte alignment pad at the start).
-		 */
-		skb_reserve(skb, NET_SKB_PAD);
 		skb_put(skb, len);
 		memcpy(skb->data, data, len);
-		skb_mark_for_recycle(skb);
 
-		/* Skip the 2-byte hardware alignment pad. */
 		skb_pull(skb, 2);
 		len -= 2;
 		if (likely(intf->crc_fwd)) {
@@ -600,9 +593,8 @@ static int bcmasp_rx_poll(struct napi_struct *napi, int budget)
 		u64_stats_update_end(&stats->syncp);
 
 next:
-		/* Return this portion of the streaming ring buffer to HW. */
-		rx_edpkt_cfg_wq(intf, (DESC_ADDR(desc->buf) + desc->size),
-				RX_EDPKT_RING_BUFFER_READ);
+		bcmasp_intf_rx_buffer_write(intf, (DESC_ADDR(desc->buf) +
+					    desc->size));
 
 		processed++;
 		intf->rx_edpkt_dma_read =
@@ -613,7 +605,7 @@ next:
 						 DESC_RING_COUNT);
 	}
 
-	rx_edpkt_dma_wq(intf, intf->rx_edpkt_dma_read, RX_EDPKT_DMA_READ);
+	bcmasp_intf_rx_desc_write(intf, intf->rx_edpkt_dma_read);
 
 	if (processed < budget && napi_complete_done(&intf->rx_napi, processed))
 		bcmasp_enable_rx_irq(intf, 1);
@@ -704,31 +696,12 @@ static void bcmasp_adj_link(struct net_device *dev)
 		phy_print_status(phydev);
 }
 
-static struct page_pool *
-bcmasp_rx_page_pool_create(struct bcmasp_intf *intf)
-{
-	struct page_pool_params pp_params = {
-		.order		= 0,
-		.flags		= 0,
-		.pool_size	= NUM_4K_BUFFERS,
-		.nid		= NUMA_NO_NODE,
-		.dev		= &intf->parent->pdev->dev,
-		.napi		= &intf->rx_napi,
-		.netdev		= intf->ndev,
-		.offset		= 0,
-		.max_len	= PAGE_SIZE,
-	};
-
-	return page_pool_create(&pp_params);
-}
-
-static int bcmasp_alloc_rx_buffers(struct bcmasp_intf *intf)
+static int bcmasp_alloc_buffers(struct bcmasp_intf *intf)
 {
 	struct device *kdev = &intf->parent->pdev->dev;
 	struct page *buffer_pg;
-	int ret;
 
-	/* Contiguous streaming ring that hardware writes packet data into. */
+	/* Alloc RX */
 	intf->rx_buf_order = get_order(RING_BUFFER_SIZE);
 	buffer_pg = alloc_pages(GFP_KERNEL, intf->rx_buf_order);
 	if (!buffer_pg)
@@ -737,55 +710,13 @@ static int bcmasp_alloc_rx_buffers(struct bcmasp_intf *intf)
 	intf->rx_ring_cpu = page_to_virt(buffer_pg);
 	intf->rx_ring_dma = dma_map_page(kdev, buffer_pg, 0, RING_BUFFER_SIZE,
 					 DMA_FROM_DEVICE);
-	if (dma_mapping_error(kdev, intf->rx_ring_dma)) {
-		ret = -ENOMEM;
-		goto free_ring_pages;
-	}
-
-	/* Page pool for SKB data areas (copy targets, not DMA buffers). */
-	intf->rx_page_pool = bcmasp_rx_page_pool_create(intf);
-	if (IS_ERR(intf->rx_page_pool)) {
-		ret = PTR_ERR(intf->rx_page_pool);
-		intf->rx_page_pool = NULL;
-		goto free_ring_dma;
-	}
-
-	return 0;
-
-free_ring_dma:
-	dma_unmap_page(kdev, intf->rx_ring_dma, RING_BUFFER_SIZE,
-		       DMA_FROM_DEVICE);
-free_ring_pages:
-	__free_pages(buffer_pg, intf->rx_buf_order);
-	return ret;
-}
-
-static void bcmasp_reclaim_rx_buffers(struct bcmasp_intf *intf)
-{
-	struct device *kdev = &intf->parent->pdev->dev;
-
-	page_pool_destroy(intf->rx_page_pool);
-	intf->rx_page_pool = NULL;
-	dma_unmap_page(kdev, intf->rx_ring_dma, RING_BUFFER_SIZE,
-		       DMA_FROM_DEVICE);
-	__free_pages(virt_to_page(intf->rx_ring_cpu), intf->rx_buf_order);
-}
-
-static int bcmasp_alloc_buffers(struct bcmasp_intf *intf)
-{
-	struct device *kdev = &intf->parent->pdev->dev;
-	int ret;
-
-	/* Alloc RX */
-	ret = bcmasp_alloc_rx_buffers(intf);
-	if (ret)
-		return ret;
+	if (dma_mapping_error(kdev, intf->rx_ring_dma))
+		goto free_rx_buffer;
 
 	intf->rx_edpkt_cpu = dma_alloc_coherent(kdev, DESC_RING_SIZE,
-						&intf->rx_edpkt_dma_addr,
-						GFP_KERNEL);
+						&intf->rx_edpkt_dma_addr, GFP_KERNEL);
 	if (!intf->rx_edpkt_cpu)
-		goto free_rx_buffers;
+		goto free_rx_buffer_dma;
 
 	/* Alloc TX */
 	intf->tx_spb_cpu = dma_alloc_coherent(kdev, DESC_RING_SIZE,
@@ -793,7 +724,8 @@ static int bcmasp_alloc_buffers(struct bcmasp_intf *intf)
 	if (!intf->tx_spb_cpu)
 		goto free_rx_edpkt_dma;
 
-	intf->tx_cbs = kzalloc_objs(struct bcmasp_tx_cb, DESC_RING_COUNT);
+	intf->tx_cbs = kcalloc(DESC_RING_COUNT, sizeof(struct bcmasp_tx_cb),
+			       GFP_KERNEL);
 	if (!intf->tx_cbs)
 		goto free_tx_spb_dma;
 
@@ -805,8 +737,11 @@ free_tx_spb_dma:
 free_rx_edpkt_dma:
 	dma_free_coherent(kdev, DESC_RING_SIZE, intf->rx_edpkt_cpu,
 			  intf->rx_edpkt_dma_addr);
-free_rx_buffers:
-	bcmasp_reclaim_rx_buffers(intf);
+free_rx_buffer_dma:
+	dma_unmap_page(kdev, intf->rx_ring_dma, RING_BUFFER_SIZE,
+		       DMA_FROM_DEVICE);
+free_rx_buffer:
+	__free_pages(buffer_pg, intf->rx_buf_order);
 
 	return -ENOMEM;
 }
@@ -818,7 +753,9 @@ static void bcmasp_reclaim_free_buffers(struct bcmasp_intf *intf)
 	/* RX buffers */
 	dma_free_coherent(kdev, DESC_RING_SIZE, intf->rx_edpkt_cpu,
 			  intf->rx_edpkt_dma_addr);
-	bcmasp_reclaim_rx_buffers(intf);
+	dma_unmap_page(kdev, intf->rx_ring_dma, RING_BUFFER_SIZE,
+		       DMA_FROM_DEVICE);
+	__free_pages(virt_to_page(intf->rx_ring_cpu), intf->rx_buf_order);
 
 	/* TX buffers */
 	dma_free_coherent(kdev, DESC_RING_SIZE, intf->tx_spb_cpu,
@@ -837,7 +774,7 @@ static void bcmasp_init_rx(struct bcmasp_intf *intf)
 	/* Make sure channels are disabled */
 	rx_edpkt_cfg_wl(intf, 0x0, RX_EDPKT_CFG_ENABLE);
 
-	/* Streaming data ring: hardware writes raw packet bytes here. */
+	/* Rx SPB */
 	rx_edpkt_cfg_wq(intf, intf->rx_ring_dma, RX_EDPKT_RING_BUFFER_READ);
 	rx_edpkt_cfg_wq(intf, intf->rx_ring_dma, RX_EDPKT_RING_BUFFER_WRITE);
 	rx_edpkt_cfg_wq(intf, intf->rx_ring_dma, RX_EDPKT_RING_BUFFER_BASE);
@@ -846,9 +783,7 @@ static void bcmasp_init_rx(struct bcmasp_intf *intf)
 	rx_edpkt_cfg_wq(intf, intf->rx_ring_dma_valid,
 			RX_EDPKT_RING_BUFFER_VALID);
 
-	/* EDPKT descriptor ring: hardware fills descriptors pointing into
-	 * the streaming ring buffer above (RBUF_4K mode).
-	 */
+	/* EDPKT */
 	rx_edpkt_cfg_wl(intf, (RX_EDPKT_CFG_CFG0_RBUF_4K <<
 			RX_EDPKT_CFG_CFG0_DBUF_SHIFT) |
 		       (RX_EDPKT_CFG_CFG0_64_ALN <<
@@ -875,7 +810,6 @@ static void bcmasp_init_tx(struct bcmasp_intf *intf)
 	intf->tx_spb_index = 0;
 	intf->tx_spb_clean_index = 0;
 	memset(intf->tx_cbs, 0, sizeof(struct bcmasp_tx_cb) * DESC_RING_COUNT);
-	netdev_tx_reset_queue(netdev_get_tx_queue(intf->ndev, 0));
 
 	/* Make sure channels are disabled */
 	tx_spb_ctrl_wl(intf, 0x0, TX_SPB_CTRL_ENABLE);
@@ -946,15 +880,7 @@ static void bcmasp_rgmii_mode_en_set(struct bcmasp_intf *intf, bool enable)
 	rgmii_wl(intf, reg, RGMII_OOB_CNTRL);
 }
 
-static void bcmasp_phy_hw_unprepare(struct bcmasp_intf *intf)
-{
-	if (intf->internal_phy)
-		bcmasp_ephy_enable_set(intf, false);
-	else
-		bcmasp_rgmii_mode_en_set(intf, false);
-}
-
-static void bcmasp_netif_deinit(struct net_device *dev, bool stop_phy)
+static void bcmasp_netif_deinit(struct net_device *dev)
 {
 	struct bcmasp_intf *intf = netdev_priv(dev);
 	u32 reg, timeout = 1000;
@@ -973,12 +899,11 @@ static void bcmasp_netif_deinit(struct net_device *dev, bool stop_phy)
 	} while (timeout-- > 0);
 	tx_spb_dma_wl(intf, 0x0, TX_SPB_DMA_FIFO_CTRL);
 
-	bcmasp_tx_reclaim(intf, NULL);
+	bcmasp_tx_reclaim(intf);
 
 	umac_enable_set(intf, UMC_CMD_TX_EN, 0);
 
-	if (stop_phy)
-		phy_stop(dev->phydev);
+	phy_stop(dev->phydev);
 
 	umac_enable_set(intf, UMC_CMD_RX_EN, 0);
 
@@ -1006,13 +931,17 @@ static int bcmasp_stop(struct net_device *dev)
 	/* Stop tx from updating HW */
 	netif_tx_disable(dev);
 
-	bcmasp_netif_deinit(dev, true);
+	bcmasp_netif_deinit(dev);
 
 	bcmasp_reclaim_free_buffers(intf);
 
 	phy_disconnect(dev->phydev);
 
-	bcmasp_phy_hw_unprepare(intf);
+	/* Disable internal EPHY or external PHY */
+	if (intf->internal_phy)
+		bcmasp_ephy_enable_set(intf, false);
+	else
+		bcmasp_rgmii_mode_en_set(intf, false);
 
 	/* Disable the interface clocks */
 	bcmasp_core_clock_set_intf(intf, false);
@@ -1022,14 +951,9 @@ static int bcmasp_stop(struct net_device *dev)
 	return 0;
 }
 
-static void bcmasp_phy_hw_prepare(struct bcmasp_intf *intf)
+static void bcmasp_configure_port(struct bcmasp_intf *intf)
 {
 	u32 reg, id_mode_dis = 0;
-
-	if (intf->internal_phy)
-		bcmasp_ephy_enable_set(intf, true);
-	else
-		bcmasp_rgmii_mode_en_set(intf, true);
 
 	reg = rgmii_rl(intf, RGMII_PORT_CNTRL);
 	reg &= ~RGMII_PORT_MODE_MASK;
@@ -1065,8 +989,26 @@ static void bcmasp_phy_hw_prepare(struct bcmasp_intf *intf)
 	rgmii_wl(intf, reg, RGMII_OOB_CNTRL);
 }
 
-static phy_interface_t bcmasp_phy_iface_for_connect(phy_interface_t mode)
+static int bcmasp_netif_init(struct net_device *dev, bool phy_connect)
 {
+	struct bcmasp_intf *intf = netdev_priv(dev);
+	phy_interface_t phy_iface = intf->phy_interface;
+	u32 phy_flags = PHY_BRCM_AUTO_PWRDWN_ENABLE |
+			PHY_BRCM_DIS_TXCRXC_NOENRGY |
+			PHY_BRCM_IDDQ_SUSPEND;
+	struct phy_device *phydev = NULL;
+	int ret;
+
+	/* Always enable interface clocks */
+	bcmasp_core_clock_set_intf(intf, true);
+
+	/* Enable internal PHY or external PHY before any MAC activity */
+	if (intf->internal_phy)
+		bcmasp_ephy_enable_set(intf, true);
+	else
+		bcmasp_rgmii_mode_en_set(intf, true);
+	bcmasp_configure_port(intf);
+
 	/* This is an ugly quirk but we have not been correctly
 	 * interpreting the phy_interface values and we have done that
 	 * across different drivers, so at least we are consistent in
@@ -1092,43 +1034,46 @@ static phy_interface_t bcmasp_phy_iface_for_connect(phy_interface_t mode)
 	 * affected because they use different phy_interface_t values
 	 * or the Generic PHY driver.
 	 */
-	switch (mode) {
+	switch (phy_iface) {
 	case PHY_INTERFACE_MODE_RGMII:
-		return PHY_INTERFACE_MODE_RGMII_ID;
+		phy_iface = PHY_INTERFACE_MODE_RGMII_ID;
+		break;
 	case PHY_INTERFACE_MODE_RGMII_TXID:
-		return PHY_INTERFACE_MODE_RGMII_RXID;
+		phy_iface = PHY_INTERFACE_MODE_RGMII_RXID;
+		break;
 	default:
-		return mode;
+		break;
 	}
-}
 
-static int bcmasp_phy_attach(struct bcmasp_intf *intf)
-{
-	u32 phy_flags = PHY_BRCM_AUTO_PWRDWN_ENABLE |
-			PHY_BRCM_DIS_TXCRXC_NOENRGY |
-			PHY_BRCM_IDDQ_SUSPEND;
-	struct phy_device *phydev;
-	phy_interface_t phy_iface;
+	if (phy_connect) {
+		phydev = of_phy_connect(dev, intf->phy_dn,
+					bcmasp_adj_link, phy_flags,
+					phy_iface);
+		if (!phydev) {
+			ret = -ENODEV;
+			netdev_err(dev, "could not attach to PHY\n");
+			goto err_phy_disable;
+		}
 
-	phy_iface = bcmasp_phy_iface_for_connect(intf->phy_interface);
-	phydev = of_phy_connect(intf->ndev, intf->phy_dn,
-				bcmasp_adj_link, phy_flags,
-				phy_iface);
-	if (!phydev) {
-		netdev_err(intf->ndev, "could not attach to PHY\n");
-		return -ENODEV;
+		if (intf->internal_phy)
+			dev->phydev->irq = PHY_MAC_INTERRUPT;
+
+		/* Indicate that the MAC is responsible for PHY PM */
+		phydev->mac_managed_pm = true;
+
+		/* Set phylib's copy of the LPI timer */
+		phydev->eee_cfg.tx_lpi_timer = umac_rl(intf, UMC_EEE_LPI_TIMER);
 	}
-	if (intf->internal_phy)
-		intf->ndev->phydev->irq = PHY_MAC_INTERRUPT;
 
-	phydev->mac_managed_pm = true;
+	umac_reset(intf);
 
-	return 0;
-}
+	umac_init(intf);
 
-static void bcmasp_netif_init(struct net_device *dev)
-{
-	struct bcmasp_intf *intf = netdev_priv(dev);
+	umac_set_hw_addr(intf, dev->dev_addr);
+
+	intf->old_duplex = -1;
+	intf->old_link = -1;
+	intf->old_pause = -1;
 
 	bcmasp_init_tx(intf);
 	netif_napi_add_tx(intf->ndev, &intf->tx_napi, bcmasp_tx_poll);
@@ -1140,13 +1085,18 @@ static void bcmasp_netif_init(struct net_device *dev)
 
 	intf->crc_fwd = !!(umac_rl(intf, UMC_CMD) & UMC_CMD_CRC_FWD);
 
-	bcmasp_set_rx_mode(dev);
-	napi_enable(&intf->tx_napi);
-	napi_enable(&intf->rx_napi);
+	bcmasp_netif_start(dev);
 
-	bcmasp_enable_rx_irq(intf, 1);
-	bcmasp_enable_tx_irq(intf, 1);
-	bcmasp_enable_phy_irq(intf, 1);
+	netif_start_queue(dev);
+
+	return 0;
+
+err_phy_disable:
+	if (intf->internal_phy)
+		bcmasp_ephy_enable_set(intf, false);
+	else
+		bcmasp_rgmii_mode_en_set(intf, false);
+	return ret;
 }
 
 static int bcmasp_open(struct net_device *dev)
@@ -1164,30 +1114,14 @@ static int bcmasp_open(struct net_device *dev)
 	if (ret)
 		goto err_free_mem;
 
-	bcmasp_core_clock_set_intf(intf, true);
-
-	bcmasp_phy_hw_prepare(intf);
-
-	ret = bcmasp_phy_attach(intf);
-	if (ret)
-		goto err_phy_attach;
-
-	umac_reset_and_init(intf, dev->dev_addr);
-
-	dev->phydev->eee_cfg.tx_lpi_timer = umac_rl(intf, UMC_EEE_LPI_TIMER);
-
-	bcmasp_netif_init(dev);
-
-	phy_start(dev->phydev);
-
-	netif_start_queue(dev);
+	ret = bcmasp_netif_init(dev, true);
+	if (ret) {
+		clk_disable_unprepare(intf->parent->clk);
+		goto err_free_mem;
+	}
 
 	return ret;
 
-err_phy_attach:
-	bcmasp_phy_hw_unprepare(intf);
-	bcmasp_core_clock_set_intf(intf, false);
-	clk_disable_unprepare(intf->parent->clk);
 err_free_mem:
 	bcmasp_reclaim_free_buffers(intf);
 
@@ -1316,7 +1250,7 @@ struct bcmasp_intf *bcmasp_interface_create(struct bcmasp_priv *priv,
 				 ndev_dn->name);
 			goto err_free_netdev;
 		}
-		intf->phy_dn = of_node_get(ndev_dn);
+		intf->phy_dn = ndev_dn;
 	}
 
 	/* Map resource */
@@ -1339,6 +1273,7 @@ struct bcmasp_intf *bcmasp_interface_create(struct bcmasp_priv *priv,
 	}
 
 	SET_NETDEV_DEV(ndev, dev);
+	intf->ops = &bcmasp_intf_ops;
 	ndev->netdev_ops = &bcmasp_netdev_ops;
 	ndev->ethtool_ops = &bcmasp_ethtool_ops;
 	intf->msg_enable = netif_msg_init(-1, NETIF_MSG_DRV |
@@ -1356,7 +1291,6 @@ struct bcmasp_intf *bcmasp_interface_create(struct bcmasp_priv *priv,
 err_deregister_fixed_link:
 	if (of_phy_is_fixed_link(ndev_dn))
 		of_phy_deregister_fixed_link(ndev_dn);
-	of_node_put(intf->phy_dn);
 err_free_netdev:
 	free_netdev(ndev);
 err:
@@ -1369,7 +1303,6 @@ void bcmasp_interface_destroy(struct bcmasp_intf *intf)
 		unregister_netdev(intf->ndev);
 	if (of_phy_is_fixed_link(intf->ndev_dn))
 		of_phy_deregister_fixed_link(intf->ndev_dn);
-	of_node_put(intf->phy_dn);
 	free_netdev(intf->ndev);
 }
 
@@ -1405,8 +1338,10 @@ static void bcmasp_suspend_to_wol(struct bcmasp_intf *intf)
 
 	umac_enable_set(intf, UMC_CMD_RX_EN, 1);
 
-	wakeup_intr2_core_wl(intf->parent, 0xffffffff,
-			     ASP_WAKEUP_INTR2_MASK_CLEAR);
+	if (intf->parent->wol_irq > 0) {
+		wakeup_intr2_core_wl(intf->parent, 0xffffffff,
+				     ASP_WAKEUP_INTR2_MASK_CLEAR);
+	}
 
 	if (ndev->phydev && ndev->phydev->eee_cfg.eee_enabled &&
 	    intf->parent->eee_fixup)
@@ -1419,33 +1354,28 @@ int bcmasp_interface_suspend(struct bcmasp_intf *intf)
 {
 	struct device *kdev = &intf->parent->pdev->dev;
 	struct net_device *dev = intf->ndev;
-	bool wake;
 
 	if (!netif_running(dev))
 		return 0;
 
 	netif_device_detach(dev);
 
-	wake = device_may_wakeup(kdev) && intf->wolopts;
+	bcmasp_netif_deinit(dev);
 
-	bcmasp_netif_deinit(dev, !wake);
-
-	if (wake) {
-		/* Disable phy status updates while suspending */
-		mutex_lock(&dev->phydev->lock);
-		dev->phydev->state = PHY_READY;
-		mutex_unlock(&dev->phydev->lock);
-		cancel_delayed_work_sync(&dev->phydev->state_queue);
-
-		bcmasp_suspend_to_wol(intf);
-	} else {
-		bcmasp_phy_hw_unprepare(intf);
+	if (!intf->wolopts) {
+		if (intf->internal_phy)
+			bcmasp_ephy_enable_set(intf, false);
+		else
+			bcmasp_rgmii_mode_en_set(intf, false);
 
 		/* If Wake-on-LAN is disabled, we can safely
 		 * disable the network interface clocks.
 		 */
 		bcmasp_core_clock_set_intf(intf, false);
 	}
+
+	if (device_may_wakeup(kdev) && intf->wolopts)
+		bcmasp_suspend_to_wol(intf);
 
 	clk_disable_unprepare(intf->parent->clk);
 
@@ -1464,17 +1394,16 @@ static void bcmasp_resume_from_wol(struct bcmasp_intf *intf)
 	reg &= ~UMC_MPD_CTRL_MPD_EN;
 	umac_wl(intf, reg, UMC_MPD_CTRL);
 
-	wakeup_intr2_core_wl(intf->parent, 0xffffffff,
-			     ASP_WAKEUP_INTR2_MASK_SET);
+	if (intf->parent->wol_irq > 0) {
+		wakeup_intr2_core_wl(intf->parent, 0xffffffff,
+				     ASP_WAKEUP_INTR2_MASK_SET);
+	}
 }
 
 int bcmasp_interface_resume(struct bcmasp_intf *intf)
 {
-	struct device *kdev = &intf->parent->pdev->dev;
 	struct net_device *dev = intf->ndev;
-	bool wake;
 	int ret;
-	u32 reg;
 
 	if (!netif_running(dev))
 		return 0;
@@ -1483,41 +1412,17 @@ int bcmasp_interface_resume(struct bcmasp_intf *intf)
 	if (ret)
 		return ret;
 
-	wake = device_may_wakeup(kdev) && intf->wolopts;
+	ret = bcmasp_netif_init(dev, false);
+	if (ret)
+		goto out;
 
-	bcmasp_core_clock_set_intf(intf, true);
-
-	/* The interface might be HW reset in some suspend modes, so we may
-	 * need to restore the UNIMAC/PHY if that is the case.
-	 */
-	reg = umac_rl(intf, UMC_CMD);
-	if (wake && (reg & UMC_CMD_RX_EN)) {
-		umac_enable_set(intf, UMC_CMD_TX_EN, 1);
-		bcmasp_resume_from_wol(intf);
-	} else {
-		bcmasp_phy_hw_prepare(intf);
-		umac_reset_and_init(intf, dev->dev_addr);
-	}
-
-	bcmasp_netif_init(dev);
-
-	if (wake) {
-		/* If HW was reset, reprogram the unimac/PHY before resuming
-		 * link status tracking to avoid racing the state machine.
-		 */
-		if (!(reg & UMC_CMD_RX_EN))
-			bcmasp_adj_link(dev);
-
-		/* Resume link status tracking */
-		mutex_lock(&dev->phydev->lock);
-		dev->phydev->state = dev->phydev->link ? PHY_RUNNING : PHY_NOLINK;
-		mutex_unlock(&dev->phydev->lock);
-		phy_trigger_machine(dev->phydev);
-	} else {
-		phy_start(dev->phydev);
-	}
+	bcmasp_resume_from_wol(intf);
 
 	netif_device_attach(dev);
 
 	return 0;
+
+out:
+	clk_disable_unprepare(intf->parent->clk);
+	return ret;
 }

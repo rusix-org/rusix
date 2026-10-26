@@ -3,7 +3,7 @@
  * Copyright (c) 2000-2002,2005 Silicon Graphics, Inc.
  * All Rights Reserved.
  */
-#include "xfs_platform.h"
+#include "xfs.h"
 #include "xfs_fs.h"
 #include "xfs_shared.h"
 #include "xfs_format.h"
@@ -413,7 +413,7 @@ xfs_ialloc_inode_init(
 				xfs_trans_ordered_buf(tp, fbuf);
 			}
 		} else {
-			xfs_buf_set_uptodate(fbuf);
+			fbuf->b_flags |= XBF_DONE;
 			xfs_buf_delwri_queue(fbuf, buffer_list);
 			xfs_buf_relse(fbuf);
 		}
@@ -615,7 +615,7 @@ xfs_inobt_insert_sprec(
 
 	trace_xfs_irec_merge_post(pag, nrec);
 
-	error = xfs_inobt_rec_check_count(nrec);
+	error = xfs_inobt_rec_check_count(mp, nrec);
 	if (error)
 		goto error;
 
@@ -733,10 +733,6 @@ xfs_ialloc_ag_alloc(
 							igeo->maxicount)
 		return -ENOSPC;
 	args.minlen = args.maxlen = igeo->ialloc_blks;
-
-	/* Allow space for the inode btree to split. */
-	args.minleft = igeo->inobt_maxlevels;
-
 	/*
 	 * First try to allocate inodes contiguous with the last-allocated
 	 * chunk of inodes.  If the filesystem is striped, this will fill
@@ -768,6 +764,8 @@ xfs_ialloc_ag_alloc(
 		args.alignment = 1;
 		args.minalignslop = igeo->cluster_align - 1;
 
+		/* Allow space for the inode btree to split. */
+		args.minleft = igeo->inobt_maxlevels;
 		error = xfs_alloc_vextent_exact_bno(&args,
 				xfs_agbno_to_fsb(pag, args.agbno));
 		if (error)
@@ -806,6 +804,10 @@ xfs_ialloc_ag_alloc(
 		 * Allocate a fixed-size extent of inodes.
 		 */
 		args.prod = 1;
+		/*
+		 * Allow space for the inode btree to split.
+		 */
+		args.minleft = igeo->inobt_maxlevels;
 		error = xfs_alloc_vextent_near_bno(&args,
 				xfs_agbno_to_fsb(pag,
 					be32_to_cpu(agi->agi_root)));
@@ -1073,7 +1075,7 @@ xfs_dialloc_check_ino(
 	if (error)
 		return -EAGAIN;
 
-	error = xfs_read_icluster(pag, tp, imap.im_agbno, &bp);
+	error = xfs_imap_to_bp(pag_mount(pag), tp, &imap, &bp);
 	if (error)
 		return -EAGAIN;
 
@@ -1626,20 +1628,12 @@ xfs_dialloc_ag(
 	 */
 	rec.ir_free &= ~XFS_INOBT_MASK(offset);
 	rec.ir_freecount--;
-	if (rec.ir_freecount) {
+	if (rec.ir_freecount)
 		error = xfs_inobt_update(cur, &rec);
-		if (error)
-			goto error_cur;
-	} else {
+	else
 		error = xfs_btree_delete(cur, &i);
-		if (error)
-			goto error_cur;
-		if (XFS_IS_CORRUPT(mp, i != 1)) {
-			xfs_btree_mark_sick(cur);
-			error = -EFSCORRUPTED;
-			goto error_cur;
-		}
-	}
+	if (error)
+		goto error_cur;
 
 	/*
 	 * The finobt has now been updated appropriately. We haven't updated the
@@ -1876,7 +1870,7 @@ xfs_dialloc_pick_ag(
 	if (S_ISDIR(mode))
 		return (atomic_inc_return(&mp->m_agirotor) - 1) % mp->m_maxagi;
 
-	start_agno = XFS_INODE_TO_AGNO(dp);
+	start_agno = XFS_INO_TO_AGNO(mp, dp->i_ino);
 	if (start_agno >= mp->m_maxagi)
 		start_agno = 0;
 
@@ -1901,7 +1895,7 @@ xfs_dialloc(
 	struct xfs_perag	*pag;
 	struct xfs_ino_geometry	*igeo = M_IGEO(mp);
 	xfs_ino_t		ino = NULLFSINO;
-	xfs_ino_t		parent = args->pip ? I_INO(args->pip) : 0;
+	xfs_ino_t		parent = args->pip ? args->pip->i_ino : 0;
 	xfs_agnumber_t		agno;
 	xfs_agnumber_t		start_agno;
 	umode_t			mode = args->mode & S_IFMT;
@@ -2172,11 +2166,6 @@ xfs_difree_inobt(
 				__func__, error);
 			goto error0;
 		}
-		if (XFS_IS_CORRUPT(mp, i != 1)) {
-			xfs_btree_mark_sick(cur);
-			error = -EFSCORRUPTED;
-			goto error0;
-		}
 
 		error = xfs_difree_inode_chunk(tp, pag, &rec);
 		if (error)
@@ -2303,11 +2292,7 @@ xfs_difree_finobt(
 		error = xfs_btree_delete(cur, &i);
 		if (error)
 			goto error;
-		if (XFS_IS_CORRUPT(mp, i != 1)) {
-			xfs_btree_mark_sick(cur);
-			error = -EFSCORRUPTED;
-			goto error;
-		}
+		ASSERT(i == 1);
 	} else {
 		error = xfs_inobt_update(cur, &rec);
 		if (error)
@@ -2526,37 +2511,43 @@ xfs_imap(
 	 * inodes in stale state on disk. Hence we have to do a btree lookup
 	 * in all cases where an untrusted inode number is passed.
 	 */
-	if (!(flags & XFS_IGET_UNTRUSTED)) {
-		/*
-		 * If the inode cluster size is the same or smaller than the
-		 * blocksize, get to the buffer by simple arithmetics.
-		 */
-		if (M_IGEO(mp)->blocks_per_cluster == 1) {
-			cluster_agbno = agbno;
-			offset = XFS_INO_TO_OFFSET(mp, ino);
-			ASSERT(offset < mp->m_sb.sb_inopblock);
-			goto out;
-		}
-
-		/*
-		 * If the inode chunks are aligned, use simple maths to find the
-		 * location.
-		 */
-		if (M_IGEO(mp)->inoalign_mask) {
-			offset_agbno = agbno & M_IGEO(mp)->inoalign_mask;
-			chunk_agbno = agbno - offset_agbno;
-			goto out_map;
-		}
-
-		/*
-		 * Otherwise we have to do a btree lookup to find the location.
-		 */
+	if (flags & XFS_IGET_UNTRUSTED) {
+		error = xfs_imap_lookup(pag, tp, agino, agbno,
+					&chunk_agbno, &offset_agbno, flags);
+		if (error)
+			return error;
+		goto out_map;
 	}
 
-	error = xfs_imap_lookup(pag, tp, agino, agbno, &chunk_agbno,
-			&offset_agbno, flags);
-	if (error)
-		return error;
+	/*
+	 * If the inode cluster size is the same as the blocksize or
+	 * smaller we get to the buffer by simple arithmetics.
+	 */
+	if (M_IGEO(mp)->blocks_per_cluster == 1) {
+		offset = XFS_INO_TO_OFFSET(mp, ino);
+		ASSERT(offset < mp->m_sb.sb_inopblock);
+
+		imap->im_blkno = xfs_agbno_to_daddr(pag, agbno);
+		imap->im_len = XFS_FSB_TO_BB(mp, 1);
+		imap->im_boffset = (unsigned short)(offset <<
+							mp->m_sb.sb_inodelog);
+		return 0;
+	}
+
+	/*
+	 * If the inode chunks are aligned then use simple maths to
+	 * find the location. Otherwise we have to do a btree
+	 * lookup to find the location.
+	 */
+	if (M_IGEO(mp)->inoalign_mask) {
+		offset_agbno = agbno & M_IGEO(mp)->inoalign_mask;
+		chunk_agbno = agbno - offset_agbno;
+	} else {
+		error = xfs_imap_lookup(pag, tp, agino, agbno,
+					&chunk_agbno, &offset_agbno, flags);
+		if (error)
+			return error;
+	}
 
 out_map:
 	ASSERT(agbno >= chunk_agbno);
@@ -2565,14 +2556,24 @@ out_map:
 		 M_IGEO(mp)->blocks_per_cluster);
 	offset = ((agbno - cluster_agbno) * mp->m_sb.sb_inopblock) +
 		XFS_INO_TO_OFFSET(mp, ino);
-out:
-	imap->im_agbno = cluster_agbno;
+
+	imap->im_blkno = xfs_agbno_to_daddr(pag, cluster_agbno);
+	imap->im_len = XFS_FSB_TO_BB(mp, M_IGEO(mp)->blocks_per_cluster);
 	imap->im_boffset = (unsigned short)(offset << mp->m_sb.sb_inodelog);
-	if (imap->im_agbno + M_IGEO(mp)->blocks_per_cluster >
-	    pag_group(pag)->xg_block_count) {
-		xfs_alert(mp, "inode cluster out of range: %u/%u > %u",
-			imap->im_agbno, M_IGEO(mp)->blocks_per_cluster,
-			pag_group(pag)->xg_block_count);
+
+	/*
+	 * If the inode number maps to a block outside the bounds
+	 * of the file system then return NULL rather than calling
+	 * read_buf and panicing when we get an error from the
+	 * driver.
+	 */
+	if ((imap->im_blkno + imap->im_len) >
+	    XFS_FSB_TO_BB(mp, mp->m_sb.sb_dblocks)) {
+		xfs_alert(mp,
+	"%s: (im_blkno (0x%llx) + im_len (0x%llx)) > sb_dblocks (0x%llx)",
+			__func__, (unsigned long long) imap->im_blkno,
+			(unsigned long long) imap->im_len,
+			XFS_FSB_TO_BB(mp, mp->m_sb.sb_dblocks));
 		return -EINVAL;
 	}
 	return 0;
@@ -2860,11 +2861,6 @@ xfs_ialloc_count_ondisk(
 		error = xfs_inobt_get_rec(cur, &irec, &has_record);
 		if (error)
 			return error;
-		if (XFS_IS_CORRUPT(cur->bc_mp, has_record != 1)) {
-			xfs_btree_mark_sick(cur);
-			return -EFSCORRUPTED;
-		}
-
 		if (irec.ir_startino > high)
 			break;
 
@@ -3096,7 +3092,6 @@ xfs_ialloc_calc_rootino(
 {
 	struct xfs_ino_geometry	*igeo = M_IGEO(mp);
 	xfs_agblock_t		first_bno;
-	unsigned int		min_free;
 
 	/*
 	 * Pre-calculate the geometry of AG 0.  We know what it looks like
@@ -3115,8 +3110,7 @@ xfs_ialloc_calc_rootino(
 	first_bno += 1;
 
 	/* ...the initial AGFL... */
-	xfs_alloc_freelist(mp, NULL, &min_free, NULL);
-	first_bno += min_free;
+	first_bno += xfs_alloc_min_freelist(mp, NULL);
 
 	/* ...the free inode btree root... */
 	if (xfs_has_finobt(mp))

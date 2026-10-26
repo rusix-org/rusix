@@ -8,12 +8,13 @@
 #include <drm/drm_debugfs.h>
 #include <drm/drm_managed.h>
 
-#include "xe_device_types.h"
-#include "xe_gt_types.h"
+#include "xe_device.h"
+#include "xe_gt.h"
 #include "xe_guc.h"
 #include "xe_guc_ct.h"
 #include "xe_guc_log.h"
 #include "xe_guc_pc.h"
+#include "xe_macros.h"
 #include "xe_pm.h"
 
 /*
@@ -69,20 +70,18 @@ static int guc_debugfs_show(struct seq_file *m, void *data)
 	struct xe_gt *gt = grandparent->d_inode->i_private;
 	struct xe_device *xe = gt_to_xe(gt);
 	int (*print)(struct xe_guc *, struct drm_printer *) = node->info_ent->data;
+	int ret;
 
-	guard(xe_pm_runtime)(xe);
-	return print(&gt->uc.guc, &p);
+	xe_pm_runtime_get(xe);
+	ret = print(&gt->uc.guc, &p);
+	xe_pm_runtime_put(xe);
+
+	return ret;
 }
 
 static int guc_log(struct xe_guc *guc, struct drm_printer *p)
 {
 	xe_guc_log_print(&guc->log, p);
-	return 0;
-}
-
-static int guc_log_lfd(struct xe_guc *guc, struct drm_printer *p)
-{
-	xe_guc_log_print_lfd(&guc->log, p);
 	return 0;
 }
 
@@ -122,7 +121,6 @@ static const struct drm_info_list slpc_debugfs_list[] = {
 /* everything else should be added here */
 static const struct drm_info_list pf_only_debugfs_list[] = {
 	{ "guc_log", .show = guc_debugfs_show, .data = guc_log },
-	{ "guc_log_lfd", .show = guc_debugfs_show, .data = guc_log_lfd },
 	{ "guc_log_dmesg", .show = guc_debugfs_show, .data = guc_log_dmesg },
 };
 

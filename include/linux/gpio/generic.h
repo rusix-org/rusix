@@ -3,15 +3,9 @@
 #ifndef __LINUX_GPIO_GENERIC_H
 #define __LINUX_GPIO_GENERIC_H
 
-#include <linux/bits.h>
-#include <linux/bug.h>
 #include <linux/cleanup.h>
-#include <linux/container_of.h>
-#include <linux/errno.h>
-#include <linux/spinlock.h>
-#include <linux/types.h>
-
 #include <linux/gpio/driver.h>
+#include <linux/spinlock.h>
 
 struct device;
 

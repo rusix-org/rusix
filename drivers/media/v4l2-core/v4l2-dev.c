@@ -146,7 +146,7 @@ static inline int devnode_find(struct video_device *vdev, int from, int to)
 
 struct video_device *video_device_alloc(void)
 {
-	return kzalloc_obj(struct video_device);
+	return kzalloc(sizeof(struct video_device), GFP_KERNEL);
 }
 EXPORT_SYMBOL(video_device_alloc);
 
@@ -1032,11 +1032,6 @@ int __video_register_device(struct video_device *vdev,
 	vdev->minor = i + minor_offset;
 	vdev->num = nr;
 
-	if (WARN_ON(vdev->minor >= VIDEO_NUM_DEVICES)) {
-		mutex_unlock(&videodev_lock);
-		return -EINVAL;
-	}
-
 	/* Should not happen since we thought this minor was free */
 	if (WARN_ON(video_devices[vdev->minor])) {
 		mutex_unlock(&videodev_lock);
@@ -1075,20 +1070,6 @@ int __video_register_device(struct video_device *vdev,
 	mutex_lock(&videodev_lock);
 	ret = device_register(&vdev->dev);
 	if (ret < 0) {
-		/*
-		 * We should do a put_device() here, but the problem is that
-		 * the V4L2 API expects drivers to call video_device_release()
-		 * on error, and so both put_device() and video_device_release
-		 * would kfree vdev.
-		 *
-		 * The proper solution would be to split this function into
-		 * two parts: initialization and registration, and then rework
-		 * all drivers.
-		 *
-		 * Until then just skip the put_device and free everything.
-		 * This will result in a small memory leak, which is better
-		 * than a double-free.
-		 */
 		mutex_unlock(&videodev_lock);
 		pr_err("%s: device_register failed\n", __func__);
 		goto cleanup;

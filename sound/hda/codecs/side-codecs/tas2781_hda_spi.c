@@ -2,7 +2,7 @@
 //
 // TAS2781 HDA SPI driver
 //
-// Copyright 2024 - 2026 Texas Instruments, Inc.
+// Copyright 2024 - 2025 Texas Instruments, Inc.
 //
 // Author: Baojun Xu <baojun.xu@ti.com>
 
@@ -14,6 +14,7 @@
 #include <linux/crc32.h>
 #include <linux/efi.h>
 #include <linux/firmware.h>
+#include <linux/mod_devicetable.h>
 #include <linux/module.h>
 #include <linux/mutex.h>
 #include <linux/pm_runtime.h>
@@ -40,6 +41,9 @@
 #define TASDEVICE_RANGE_MAX_SIZE	(256 * 128)
 #define TASDEVICE_WIN_LEN		128
 #define TAS2781_SPI_MAX_FREQ		(4 * HZ_PER_MHZ)
+/* Flag of calibration registers address. */
+#define TASDEVICE_CALIBRATION_REG_ADDRESS	BIT(7)
+#define TASDEV_UEFI_CALI_REG_ADDR_FLG	BIT(7)
 
 /* System Reset Check Register */
 #define TAS2781_REG_CLK_CONFIG		TASDEVICE_REG(0x0, 0x0, 0x5c)
@@ -189,15 +193,15 @@ static void tas2781_spi_reset(struct tasdevice_priv *tas_dev)
 		gpiod_set_value_cansleep(tas_dev->reset, 0);
 		fsleep(800);
 		gpiod_set_value_cansleep(tas_dev->reset, 1);
+	} else {
+		ret = tasdevice_dev_write(tas_dev, tas_dev->index,
+			TASDEVICE_REG_SWRESET, TASDEVICE_REG_SWRESET_RESET);
+		if (ret < 0) {
+			dev_err(tas_dev->dev, "dev sw-reset fail, %d\n", ret);
+			return;
+		}
+		fsleep(1000);
 	}
-
-	ret = tasdevice_dev_write(tas_dev, tas_dev->index,
-		TASDEVICE_REG_SWRESET, TASDEVICE_REG_SWRESET_RESET);
-	if (ret < 0) {
-		dev_err(tas_dev->dev, "dev sw-reset fail, %d\n", ret);
-		return;
-	}
-	fsleep(1000);
 }
 
 static int tascodec_spi_init(struct tasdevice_priv *tas_priv,
@@ -328,6 +332,7 @@ static int tas2781_read_acpi(struct tas2781_hda *tas_hda,
 {
 	struct tasdevice_priv *p = tas_hda->priv;
 	struct acpi_device *adev;
+	struct device *physdev;
 	u32 values[HDA_MAX_COMPONENTS];
 	const char *property;
 	size_t nval;
@@ -340,8 +345,7 @@ static int tas2781_read_acpi(struct tas2781_hda *tas_hda,
 	}
 
 	strscpy(p->dev_name, hid, sizeof(p->dev_name));
-
-	struct device *physdev __free(put_device) = acpi_bus_get_primary_device(adev);
+	physdev = get_device(acpi_get_first_physical_node(adev));
 	acpi_dev_put(adev);
 	if (!physdev)
 		return -ENODEV;
@@ -381,11 +385,13 @@ static int tas2781_read_acpi(struct tas2781_hda *tas_hda,
 			goto err;
 		}
 	}
+	put_device(physdev);
 
 	return 0;
-
 err:
 	dev_err(p->dev, "read acpi error, ret: %d\n", ret);
+	put_device(physdev);
+
 	return ret;
 }
 
@@ -398,11 +404,11 @@ static void tas2781_hda_playback_hook(struct device *dev, int action)
 		pm_runtime_get_sync(dev);
 		guard(mutex)(&tas_priv->codec_lock);
 		if (tas_priv->fw_state == TASDEVICE_DSP_FW_ALL_OK)
-			tasdevice_tuning_switch(tas_hda->priv, 0, false);
+			tasdevice_tuning_switch(tas_hda->priv, 0);
 	} else if (action == HDA_GEN_PCM_ACT_CLOSE) {
 		guard(mutex)(&tas_priv->codec_lock);
 		if (tas_priv->fw_state == TASDEVICE_DSP_FW_ALL_OK)
-			tasdevice_tuning_switch(tas_priv, 1, false);
+			tasdevice_tuning_switch(tas_priv, 1);
 		pm_runtime_put_autosuspend(dev);
 	}
 }
@@ -591,7 +597,7 @@ static int tas2781_hda_spi_snd_ctls(struct tas2781_hda *h)
 		return rc;
 	}
 	i++;
-	snprintf(name, sizeof(name), "Force Speaker-%d FW Load", p->index);
+	snprintf(name, sizeof(name), "Froce Speaker-%d FW Load", p->index);
 	tas2781_snd_ctls[i].name = name;
 	h_priv->snd_ctls[i] = snd_ctl_new1(&tas2781_snd_ctls[i], p);
 	rc = snd_ctl_add(c->card, h_priv->snd_ctls[i]);
@@ -639,7 +645,7 @@ static void tasdev_fw_ready(const struct firmware *fmw, void *context)
 	struct hda_codec *codec = tas_priv->codec;
 	int ret;
 
-	guard(pm_runtime_active_auto)(tas_priv->dev);
+	pm_runtime_get_sync(tas_priv->dev);
 	guard(mutex)(&tas_priv->codec_lock);
 
 	ret = tasdevice_rca_parser(tas_priv, fmw);
@@ -696,6 +702,7 @@ static void tasdev_fw_ready(const struct firmware *fmw, void *context)
 	tas2781_save_calibration(tas_hda);
 out:
 	release_firmware(fmw);
+	pm_runtime_put_autosuspend(tas_hda->priv->dev);
 }
 
 static int tas2781_hda_bind(struct device *dev, struct device *master,
@@ -716,7 +723,7 @@ static int tas2781_hda_bind(struct device *dev, struct device *master,
 
 	codec = parent->codec;
 
-	guard(pm_runtime_active_auto)(dev);
+	pm_runtime_get_sync(dev);
 
 	comp->dev = dev;
 
@@ -727,8 +734,7 @@ static int tas2781_hda_bind(struct device *dev, struct device *master,
 	if (!ret)
 		comp->playback_hook = tas2781_hda_playback_hook;
 
-	/* Only HP Laptop support SPI-based TAS2781 */
-	tas_hda->catlog_id = HP;
+	pm_runtime_put_autosuspend(dev);
 
 	return ret;
 }
@@ -797,7 +803,6 @@ static int tas2781_hda_spi_probe(struct spi_device *spi)
 	}
 	if (strstr(dev_name(&spi->dev), "TXNW2781")) {
 		device_name = "TXNW2781";
-		tas_hda->priv->chip_id = TAS2781;
 	} else {
 		dev_err(tas_priv->dev, "Unmatched spi dev %s\n",
 			dev_name(&spi->dev));
@@ -846,7 +851,7 @@ static int tas2781_runtime_suspend(struct device *dev)
 
 	if (tas_priv->fw_state == TASDEVICE_DSP_FW_ALL_OK
 		&& tas_priv->playback_started)
-		tasdevice_tuning_switch(tas_priv, 1, false);
+		tasdevice_tuning_switch(tas_priv, 1);
 
 	tas_priv->tasdevice[tas_priv->index].cur_book = -1;
 	tas_priv->tasdevice[tas_priv->index].cur_conf = -1;
@@ -863,7 +868,7 @@ static int tas2781_runtime_resume(struct device *dev)
 
 	if (tas_priv->fw_state == TASDEVICE_DSP_FW_ALL_OK
 		&& tas_priv->playback_started)
-		tasdevice_tuning_switch(tas_priv, 0, false);
+		tasdevice_tuning_switch(tas_priv, 0);
 
 	return 0;
 }
@@ -881,7 +886,7 @@ static int tas2781_system_suspend(struct device *dev)
 	/* Shutdown chip before system suspend */
 	if (tas_priv->fw_state == TASDEVICE_DSP_FW_ALL_OK
 		&& tas_priv->playback_started)
-		tasdevice_tuning_switch(tas_priv, 1, false);
+		tasdevice_tuning_switch(tas_priv, 1);
 
 	return 0;
 }
@@ -916,7 +921,7 @@ static int tas2781_system_resume(struct device *dev)
 		tas_priv->fw_state = TASDEVICE_DSP_FW_ALL_OK;
 
 		if (tas_priv->playback_started)
-			tasdevice_tuning_switch(tas_priv, 0, false);
+			tasdevice_tuning_switch(tas_priv, 0);
 	}
 
 	return ret;

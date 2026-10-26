@@ -15,7 +15,6 @@
 #include <linux/namei.h>
 #include <linux/file.h>
 #include <uapi/linux/mount.h>
-#include <linux/audit.h>
 #include "internal.h"
 #include "mount.h"
 
@@ -103,7 +102,7 @@ static int fscontext_create_fd(struct fs_context *fc, unsigned int o_flags)
 
 static int fscontext_alloc_log(struct fs_context *fc)
 {
-	fc->log.log = kzalloc_obj(*fc->log.log);
+	fc->log.log = kzalloc(sizeof(*fc->log.log), GFP_KERNEL);
 	if (!fc->log.log)
 		return -ENOMEM;
 	refcount_set(&fc->log.log->usage, 1);
@@ -134,8 +133,6 @@ SYSCALL_DEFINE2(fsopen, const char __user *, _fs_name, unsigned int, flags)
 	fs_name = strndup_user(_fs_name, PAGE_SIZE);
 	if (IS_ERR(fs_name))
 		return PTR_ERR(fs_name);
-
-	audit_log_fsopen(fs_name);
 
 	fs_type = get_fs_type(fs_name);
 	kfree(fs_name);
@@ -184,14 +181,17 @@ SYSCALL_DEFINE3(fspick, int, dfd, const char __user *, path, unsigned int, flags
 		lookup_flags &= ~LOOKUP_FOLLOW;
 	if (flags & FSPICK_NO_AUTOMOUNT)
 		lookup_flags &= ~LOOKUP_AUTOMOUNT;
-	CLASS(filename_flags, filename)(path,
-			 (flags & FSPICK_EMPTY_PATH) ? LOOKUP_EMPTY : 0);
-	ret = filename_lookup(dfd, filename, lookup_flags, &target, NULL);
+	if (flags & FSPICK_EMPTY_PATH)
+		lookup_flags |= LOOKUP_EMPTY;
+	ret = user_path_at(dfd, path, lookup_flags, &target);
 	if (ret < 0)
 		goto err;
 
 	ret = -EINVAL;
 	if (target.mnt->mnt_root != target.dentry)
+		goto err_path;
+	/* kernel-internal superblocks are nobody's to reconfigure */
+	if (target.dentry->d_sb->s_flags & SB_NOUSER)
 		goto err_path;
 
 	fc = fs_context_for_reconfigure(target.dentry, 0, 0);
@@ -407,6 +407,16 @@ SYSCALL_DEFINE5(fsconfig,
 		return -EINVAL;
 
 	fc = fd_file(f)->private_data;
+	if (fc->ops == &legacy_fs_context_ops) {
+		switch (cmd) {
+		case FSCONFIG_SET_BINARY:
+		case FSCONFIG_SET_PATH:
+		case FSCONFIG_SET_PATH_EMPTY:
+		case FSCONFIG_SET_FD:
+		case FSCONFIG_CMD_CREATE_EXCL:
+			return -EOPNOTSUPP;
+		}
+	}
 
 	if (_key) {
 		param.key = strndup_user(_key, 256);

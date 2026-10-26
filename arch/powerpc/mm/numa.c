@@ -432,7 +432,7 @@ static void __init initialize_form2_numa_distance_lookup_table(void)
 
 static int __init find_primary_domain_index(void)
 {
-	int index = -1;
+	int index;
 	struct device_node *root;
 
 	/*
@@ -502,9 +502,12 @@ static int __init find_primary_domain_index(void)
 		distance_ref_points_depth = MAX_DISTANCE_REF_POINTS;
 	}
 
-err:
 	of_node_put(root);
 	return index;
+
+err:
+	of_node_put(root);
+	return -1;
 }
 
 static void __init get_n_mem_cells(int *n_addr_cells, int *n_size_cells)
@@ -889,32 +892,12 @@ static int __init numa_setup_drmem_lmb(struct drmem_lmb *lmb,
 	return 0;
 }
 
-/*
- * If hierarchy extends beyond primary_domain_index + 1, then next
- * level corresponds to coregroup.
- */
-static int detect_and_enable_coregroup(const __be32 *associativity, int index)
-{
-	if (!associativity || index == -1)
-		goto out;
-
-	index = of_read_number(associativity, 1);
-
-	if (index > primary_domain_index + 1) {
-		coregroup_enabled = 1;
-		return index;
-	}
-out:
-	coregroup_enabled = 0;
-	return -1;
-}
-
 static int __init parse_numa_properties(void)
 {
 	struct device_node *memory, *pci;
-	int default_nid = 0, index = 0;
-	const __be32 *associativity;
+	int default_nid = 0;
 	unsigned long i;
+	const __be32 *associativity;
 
 	if (numa_enabled == 0) {
 		pr_warn("disabled by user\n");
@@ -947,6 +930,7 @@ static int __init parse_numa_properties(void)
 	 */
 	for_each_present_cpu(i) {
 		__be32 vphn_assoc[VPHN_ASSOC_BUFSIZE];
+		struct device_node *cpu;
 		int nid = NUMA_NO_NODE;
 
 		memset(vphn_assoc, 0, VPHN_ASSOC_BUFSIZE * sizeof(__be32));
@@ -954,9 +938,7 @@ static int __init parse_numa_properties(void)
 		if (__vphn_get_associativity(i, vphn_assoc) == 0) {
 			nid = associativity_to_nid(vphn_assoc);
 			initialize_form1_numa_distance(vphn_assoc);
-			index = detect_and_enable_coregroup(vphn_assoc, index);
 		} else {
-			struct device_node *cpu;
 
 			/*
 			 * Don't fall back to default_nid yet -- we will plug
@@ -969,7 +951,6 @@ static int __init parse_numa_properties(void)
 			associativity = of_get_associativity(cpu);
 			if (associativity) {
 				nid = associativity_to_nid(associativity);
-				index = detect_and_enable_coregroup(associativity, index);
 				initialize_form1_numa_distance(associativity);
 			}
 			of_node_put(cpu);
@@ -1232,6 +1213,8 @@ void __init initmem_init(void)
 		setup_node_data(nid, start_pfn, end_pfn);
 	}
 
+	sparse_init();
+
 	/*
 	 * We need the numa_cpu_lookup_table to be accurate for all CPUs,
 	 * even before we online them, so that we can use cpu_to_{node,mem}
@@ -1450,26 +1433,9 @@ void find_and_update_cpu_nid(int cpu)
 	pr_debug("%s:%d cpu %d nid %d\n", __func__, __LINE__, cpu, new_nid);
 }
 
-static int topology_update_init(void)
-{
-	topology_inited = 1;
-	return 0;
-}
-device_initcall(topology_update_init);
-
-#else
-static long vphn_get_associativity(unsigned long cpu,
-					__be32 *associativity)
-{
-	return -1;
-}
-#endif /* CONFIG_PPC_SPLPAR */
-
 int cpu_to_coregroup_id(int cpu)
 {
-	int coregroup_id = cpu_to_core_id(cpu);
-	struct device_node *cpunode = NULL;
-	const __be32 *associativity;
+	__be32 associativity[VPHN_ASSOC_BUFSIZE] = {0};
 	int index;
 
 	if (cpu < 0 || cpu > nr_cpu_ids)
@@ -1478,31 +1444,24 @@ int cpu_to_coregroup_id(int cpu)
 	if (!coregroup_enabled)
 		goto out;
 
-	if (firmware_has_feature(FW_FEATURE_VPHN)) {
-		__be32 tmp[VPHN_ASSOC_BUFSIZE] = {0};
+	if (!firmware_has_feature(FW_FEATURE_VPHN))
+		goto out;
 
-		if (vphn_get_associativity(cpu, tmp))
-			goto out;
-
-		associativity = tmp;
-
-	} else {
-		cpunode = of_get_cpu_node(cpu, NULL);
-		if (!cpunode)
-			goto out;
-
-		associativity = of_get_associativity(cpunode);
-	}
-	if (!associativity)
+	if (vphn_get_associativity(cpu, associativity))
 		goto out;
 
 	index = of_read_number(associativity, 1);
 	if (index > primary_domain_index + 1)
-		coregroup_id = of_read_number(&associativity[index - 1], 1);
+		return of_read_number(&associativity[index - 1], 1);
 
 out:
-	if (cpunode)
-		of_node_put(cpunode);
-
-	return coregroup_id;
+	return cpu_to_core_id(cpu);
 }
+
+static int topology_update_init(void)
+{
+	topology_inited = 1;
+	return 0;
+}
+device_initcall(topology_update_init);
+#endif /* CONFIG_PPC_SPLPAR */

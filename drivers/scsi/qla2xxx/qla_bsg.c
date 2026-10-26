@@ -11,8 +11,6 @@
 #include <linux/delay.h>
 #include <linux/bsg-lib.h>
 
-static int qla28xx_validate_flash_image(struct bsg_job *bsg_job);
-
 static void qla2xxx_free_fcport_work(struct work_struct *work)
 {
 	struct fc_port *fcport = container_of(work, typeof(*fcport),
@@ -1425,13 +1423,22 @@ qla24xx_iidma(struct bsg_job *bsg_job)
 
 static int
 qla2x00_optrom_setup(struct bsg_job *bsg_job, scsi_qla_host_t *vha,
-	uint32_t start, uint8_t is_update)
+	uint8_t is_update)
 {
+	struct fc_bsg_request *bsg_request = bsg_job->request;
+	uint32_t start = 0;
 	int valid = 0;
 	struct qla_hw_data *ha = vha->hw;
 
 	if (unlikely(pci_channel_offline(ha->pdev)))
 		return -EINVAL;
+
+	start = bsg_request->rqst_data.h_vendor.vendor_cmd[1];
+	if (start > ha->optrom_size) {
+		ql_log(ql_log_warn, vha, 0x7055,
+		    "start %d > optrom_size %d.\n", start, ha->optrom_size);
+		return -EINVAL;
+	}
 
 	if (ha->optrom_state != QLA_SWAITING) {
 		ql_log(ql_log_info, vha, 0x7056,
@@ -1440,79 +1447,42 @@ qla2x00_optrom_setup(struct bsg_job *bsg_job, scsi_qla_host_t *vha,
 	}
 
 	ha->optrom_region_start = start;
-
-	if (IS_QLA29XX(ha)) {
-		if (start > ha->optrom_size) {
-			ql_log(ql_log_warn, vha, 0x7055,
-			    "start %d > optrom_size %d.\n", start,
-			    ha->optrom_size);
+	ql_dbg(ql_dbg_user, vha, 0x7057, "is_update=%d.\n", is_update);
+	if (is_update) {
+		if (ha->optrom_size == OPTROM_SIZE_2300 && start == 0)
+			valid = 1;
+		else if (start == (ha->flt_region_boot * 4) ||
+		    start == (ha->flt_region_fw * 4))
+			valid = 1;
+		else if (IS_QLA24XX_TYPE(ha) || IS_QLA25XX(ha) ||
+		    IS_CNA_CAPABLE(ha) || IS_QLA2031(ha) || IS_QLA27XX(ha) ||
+		    IS_QLA28XX(ha))
+			valid = 1;
+		if (!valid) {
+			ql_log(ql_log_warn, vha, 0x7058,
+			    "Invalid start region 0x%x/0x%x.\n", start,
+			    bsg_job->request_payload.payload_len);
 			return -EINVAL;
 		}
 
-		if (is_update) {
-			ha->optrom_region_size = start +
-			    bsg_job->request_payload.payload_len >
-			    ha->optrom_size ?
-			    ha->optrom_size - start :
-			    bsg_job->request_payload.payload_len;
-			ha->optrom_state = QLA_SWRITING;
-		} else {
-			ha->optrom_region_size = start +
-			    bsg_job->reply_payload.payload_len >
-			    ha->optrom_size ?
-			    ha->optrom_size - start :
-			    bsg_job->reply_payload.payload_len;
-			ha->optrom_state = QLA_SREADING;
-		}
+		ha->optrom_region_size = start +
+		    bsg_job->request_payload.payload_len > ha->optrom_size ?
+		    ha->optrom_size - start :
+		    bsg_job->request_payload.payload_len;
+		ha->optrom_state = QLA_SWRITING;
 	} else {
-		if (start > ha->optrom_size) {
-			ql_log(ql_log_warn, vha, 0x7055,
-			    "start %d > optrom_size %d.\n", start,
-			    ha->optrom_size);
-			return -EINVAL;
-		}
-
-		ql_dbg(ql_dbg_user, vha, 0x7057,
-		    "is_update=%d.\n", is_update);
-		if (is_update) {
-			if (ha->optrom_size == OPTROM_SIZE_2300 && start == 0)
-				valid = 1;
-			else if (start == (ha->flt_region_boot * 4) ||
-			    start == (ha->flt_region_fw * 4))
-				valid = 1;
-			else if (IS_QLA24XX_TYPE(ha) || IS_QLA25XX(ha) ||
-			    IS_CNA_CAPABLE(ha) || IS_QLA2031(ha) ||
-			    IS_QLA27XX(ha) || IS_QLA28XX(ha))
-				valid = 1;
-			if (!valid) {
-				ql_log(ql_log_warn, vha, 0x7058,
-				    "Invalid start region 0x%x/0x%x.\n",
-				    start,
-				    bsg_job->request_payload.payload_len);
-				return -EINVAL;
-			}
-
-			ha->optrom_region_size = start +
-			    bsg_job->request_payload.payload_len >
-			    ha->optrom_size ?
-			    ha->optrom_size - start :
-			    bsg_job->request_payload.payload_len;
-			ha->optrom_state = QLA_SWRITING;
-		} else {
-			ha->optrom_region_size = start +
-			    bsg_job->reply_payload.payload_len >
-			    ha->optrom_size ?
-			    ha->optrom_size - start :
-			    bsg_job->reply_payload.payload_len;
-			ha->optrom_state = QLA_SREADING;
-		}
+		ha->optrom_region_size = start +
+		    bsg_job->reply_payload.payload_len > ha->optrom_size ?
+		    ha->optrom_size - start :
+		    bsg_job->reply_payload.payload_len;
+		ha->optrom_state = QLA_SREADING;
 	}
 
 	ha->optrom_buffer = vzalloc(ha->optrom_region_size);
 	if (!ha->optrom_buffer) {
 		ql_log(ql_log_warn, vha, 0x7059,
-		    "%s: Unable to allocate memory for optrom retrieval (%x)\n",
-		    __func__, ha->optrom_region_size);
+		    "Read: Unable to allocate memory for optrom retrieval "
+		    "(%x)\n", ha->optrom_region_size);
 
 		ha->optrom_state = QLA_SWAITING;
 		return -ENOMEM;
@@ -1524,31 +1494,21 @@ qla2x00_optrom_setup(struct bsg_job *bsg_job, scsi_qla_host_t *vha,
 static int
 qla2x00_read_optrom(struct bsg_job *bsg_job)
 {
-	struct fc_bsg_request *bsg_request = bsg_job->request;
 	struct fc_bsg_reply *bsg_reply = bsg_job->reply;
 	struct Scsi_Host *host = fc_bsg_to_shost(bsg_job);
 	scsi_qla_host_t *vha = shost_priv(host);
 	struct qla_hw_data *ha = vha->hw;
-	uint32_t start;
 	int rval = 0;
 
 	if (bsg_job->request_len <
 	    sizeof(struct fc_bsg_request) + 2 * sizeof(uint32_t))
 		return -EINVAL;
 
-	start = bsg_request->rqst_data.h_vendor.vendor_cmd[1];
-
 	if (ha->flags.nic_core_reset_hdlr_active)
 		return -EBUSY;
 
-	if (IS_QLA29XX(ha)) {
-		ql_log(ql_log_warn, vha, 0x7070,
-		    "Legacy optrom read not supported on 29xx.\n");
-		return -EINVAL;
-	}
-
 	mutex_lock(&ha->optrom_mutex);
-	rval = qla2x00_optrom_setup(bsg_job, vha, start, 0);
+	rval = qla2x00_optrom_setup(bsg_job, vha, 0);
 	if (rval) {
 		mutex_unlock(&ha->optrom_mutex);
 		return rval;
@@ -1575,22 +1535,18 @@ qla2x00_read_optrom(struct bsg_job *bsg_job)
 static int
 qla2x00_update_optrom(struct bsg_job *bsg_job)
 {
-	struct fc_bsg_request *bsg_request = bsg_job->request;
 	struct fc_bsg_reply *bsg_reply = bsg_job->reply;
 	struct Scsi_Host *host = fc_bsg_to_shost(bsg_job);
 	scsi_qla_host_t *vha = shost_priv(host);
 	struct qla_hw_data *ha = vha->hw;
-	uint32_t start;
 	int rval = 0;
 
 	if (bsg_job->request_len <
 	    sizeof(struct fc_bsg_request) + 2 * sizeof(uint32_t))
 		return -EINVAL;
 
-	start = bsg_request->rqst_data.h_vendor.vendor_cmd[1];
-
 	mutex_lock(&ha->optrom_mutex);
-	rval = qla2x00_optrom_setup(bsg_job, vha, start, 1);
+	rval = qla2x00_optrom_setup(bsg_job, vha, 1);
 	if (rval) {
 		mutex_unlock(&ha->optrom_mutex);
 		return rval;
@@ -1620,379 +1576,6 @@ qla2x00_update_optrom(struct bsg_job *bsg_job)
 		bsg_job_done(bsg_job, bsg_reply->result,
 			     bsg_reply->reply_payload_rcv_len);
 	return rval;
-}
-
-/**
- * qla29xx_bsg_flash_block_read - Read flash block for QLA29XX.
- * @bsg_job: BSG job structure.
- *
- * Returns 0 on success, error code on failure.
- */
-static int qla29xx_bsg_flash_block_read(struct bsg_job *bsg_job)
-{
-	struct fc_bsg_request *bsg_req = bsg_job->request;
-	struct fc_bsg_reply *bsg_reply = bsg_job->reply;
-	struct Scsi_Host *host = fc_bsg_to_shost(bsg_job);
-	scsi_qla_host_t *vha = shost_priv(host);
-	struct qla_hw_data *ha = vha->hw;
-	struct qla_block_rw *brcmd;
-	void *buf;
-	uint16_t opts = 0;
-	int rval = 0;
-
-	if (bsg_job->request_len < sizeof(struct fc_bsg_request) +
-	    2 * sizeof(uint32_t) + sizeof(struct qla_block_rw))
-		return -EINVAL;
-
-	brcmd =
-	(struct qla_block_rw *)&bsg_req->rqst_data.h_vendor.vendor_cmd[2];
-
-	ql_log(ql_log_info, vha, 0x7062,
-	       "%s: region 0x%x options 0x%x rw_length 0x%x offset 0x%x chunk_length 0x%x\n",
-		__func__, brcmd->region, brcmd->options, brcmd->rw_length,
-		brcmd->region_offset, brcmd->chunk_length);
-
-	if (brcmd->region > U16_MAX) {
-		ql_log(ql_log_warn, vha, 0x7066,
-		       "%s: invalid region 0x%x\n", __func__, brcmd->region);
-		return -EINVAL;
-	}
-
-	mutex_lock(&ha->optrom_mutex);
-	rval = qla2x00_optrom_setup(bsg_job, vha, brcmd->region_offset, 0);
-	if (rval) {
-		mutex_unlock(&ha->optrom_mutex);
-		return rval;
-	}
-
-	check_and_set_mbc_bits(brcmd->options, opts, QLA_IS_TIM, BIT_15);
-	check_and_set_mbc_bits(brcmd->options, opts, QLA_IS_SECURE, BIT_7);
-	check_and_set_mbc_bits(brcmd->options, opts, QLA_UPDATE_MBR, BIT_8);
-
-	if (!ha->isp_ops->read_optrom_region) {
-		vfree(ha->optrom_buffer);
-		ha->optrom_buffer = NULL;
-		ha->optrom_state = QLA_SWAITING;
-		mutex_unlock(&ha->optrom_mutex);
-		return -EINVAL;
-	}
-
-	buf = ha->isp_ops->read_optrom_region(vha, brcmd->region, opts,
-				ha->optrom_buffer, ha->optrom_region_start,
-				ha->optrom_region_size);
-	if (!buf) {
-		ql_log(ql_log_warn, vha, 0x7063,
-			"%s failed to read flash region 0x%x\n",
-			__func__, brcmd->region);
-		bsg_reply->result = -EINVAL;
-		bsg_reply->reply_data.vendor_reply.vendor_rsp[0] =
-							EXT_STATUS_MAILBOX;
-		bsg_reply->reply_payload_rcv_len = 0;
-	} else {
-		bsg_reply->result = DID_OK;
-		bsg_reply->reply_data.vendor_reply.vendor_rsp[0] =
-			EXT_STATUS_OK;
-
-		ql_dump_buffer(ql_dbg_user + ql_dbg_verbose, vha, 0x72a6,
-			       ha->optrom_buffer, ha->optrom_region_size);
-
-		sg_copy_from_buffer(bsg_job->reply_payload.sg_list,
-				    bsg_job->reply_payload.sg_cnt,
-				    ha->optrom_buffer,
-				    ha->optrom_region_size);
-
-		bsg_reply->reply_payload_rcv_len = ha->optrom_region_size;
-	}
-	vfree(ha->optrom_buffer);
-	ha->optrom_buffer = NULL;
-	ha->optrom_state = QLA_SWAITING;
-	mutex_unlock(&ha->optrom_mutex);
-	bsg_job_done(bsg_job, bsg_reply->result,
-		     bsg_reply->reply_payload_rcv_len);
-
-	return 0;
-}
-
-/**
- * qla29xx_bsg_flash_block_write - Write flash block for QLA29XX.
- * @bsg_job: BSG job structure.
- *
- * Returns 0 on success, error code on failure.
- */
-static int qla29xx_bsg_flash_block_write(struct bsg_job *bsg_job)
-{
-	struct fc_bsg_request *bsg_req = bsg_job->request;
-	struct fc_bsg_reply *bsg_reply = bsg_job->reply;
-	struct Scsi_Host *host = fc_bsg_to_shost(bsg_job);
-	scsi_qla_host_t *vha = shost_priv(host);
-	struct qla_hw_data *ha = vha->hw;
-	struct qla_block_rw *bwcmd;
-	uint16_t opts = 0;
-	int rval = 0;
-
-	if (bsg_job->request_len < sizeof(struct fc_bsg_request) +
-	    2 * sizeof(uint32_t) + sizeof(struct qla_block_rw))
-		return -EINVAL;
-
-	bwcmd =
-	   (struct qla_block_rw *)&bsg_req->rqst_data.h_vendor.vendor_cmd[2];
-
-	ql_log(ql_log_info, vha, 0x7064,
-	       "%s: region 0x%x options 0x%x rw_length 0x%x offset 0x%x chunk_length 0x%x\n",
-		__func__, bwcmd->region, bwcmd->options, bwcmd->rw_length,
-		bwcmd->region_offset, bwcmd->chunk_length);
-
-	if (bwcmd->region > U16_MAX) {
-		ql_log(ql_log_warn, vha, 0x7067,
-		       "%s: invalid region 0x%x\n", __func__, bwcmd->region);
-		return -EINVAL;
-	}
-
-	mutex_lock(&ha->optrom_mutex);
-	rval = qla2x00_optrom_setup(bsg_job, vha, bwcmd->region_offset, 1);
-	if (rval) {
-		mutex_unlock(&ha->optrom_mutex);
-		return rval;
-	}
-
-	sg_copy_to_buffer(bsg_job->request_payload.sg_list,
-			bsg_job->request_payload.sg_cnt, ha->optrom_buffer,
-			ha->optrom_region_size);
-
-	ql_dump_buffer(ql_dbg_user + ql_dbg_verbose, vha, 0x73a6,
-		       ha->optrom_buffer, ha->optrom_region_size);
-
-	check_and_set_mbc_bits(bwcmd->options, opts, QLA_IS_TIM, BIT_15);
-	check_and_set_mbc_bits(bwcmd->options, opts, QLA_IS_SECURE, BIT_7);
-	check_and_set_mbc_bits(bwcmd->options, opts, QLA_UPDATE_MBR, BIT_8);
-
-	if (!ha->isp_ops->write_optrom_region) {
-		vfree(ha->optrom_buffer);
-		ha->optrom_buffer = NULL;
-		ha->optrom_state = QLA_SWAITING;
-		mutex_unlock(&ha->optrom_mutex);
-		return -EINVAL;
-	}
-
-	rval = ha->isp_ops->write_optrom_region(vha, bwcmd->region, opts,
-				ha->optrom_buffer, ha->optrom_region_start,
-				ha->optrom_region_size);
-	if (rval) {
-		ql_log(ql_log_warn, vha, 0x7065,
-			"%s failed to write flash %x\n", __func__, rval);
-		bsg_reply->result = -EINVAL;
-		bsg_reply->reply_data.vendor_reply.vendor_rsp[0] =
-							EXT_STATUS_MAILBOX;
-	} else {
-		bsg_reply->result = DID_OK;
-		bsg_reply->reply_data.vendor_reply.vendor_rsp[0] =
-			EXT_STATUS_OK;
-	}
-	vfree(ha->optrom_buffer);
-	ha->optrom_buffer = NULL;
-	ha->optrom_state = QLA_SWAITING;
-	mutex_unlock(&ha->optrom_mutex);
-	bsg_job->reply_len = sizeof(struct fc_bsg_reply);
-	bsg_job_done(bsg_job, bsg_reply->result,
-			bsg_reply->reply_payload_rcv_len);
-	return 0;
-}
-
-static int
-qla29xx_mpi_optrom_setup(struct bsg_job *bsg_job, scsi_qla_host_t *vha,
-	uint32_t start, uint8_t is_update)
-{
-	struct qla_hw_data *ha = vha->hw;
-
-	if (unlikely(pci_channel_offline(ha->pdev)))
-		return -EINVAL;
-
-	if (ha->optrom_state != QLA_SWAITING) {
-		ql_log(ql_log_info, vha, 0x7068,
-		       "optrom_state %d.\n", ha->optrom_state);
-		return -EBUSY;
-	}
-
-	ha->optrom_region_start = start;
-	if (is_update) {
-		ha->optrom_region_size = bsg_job->request_payload.payload_len;
-		ha->optrom_state = QLA_SWRITING;
-	} else {
-		ha->optrom_region_size = bsg_job->reply_payload.payload_len;
-		ha->optrom_state = QLA_SREADING;
-	}
-
-	ha->optrom_buffer = vzalloc(ha->optrom_region_size);
-	if (!ha->optrom_buffer) {
-		ql_log(ql_log_warn, vha, 0x7069,
-		       "%s: Unable to allocate memory for optrom retrieval (%x)\n",
-		       __func__, ha->optrom_region_size);
-		ha->optrom_state = QLA_SWAITING;
-		return -ENOMEM;
-	}
-
-	return 0;
-}
-
-static int qla2900_bsg_dump_mpi(struct bsg_job *bsg_job)
-{
-	struct fc_bsg_request *bsg_req = bsg_job->request;
-	struct fc_bsg_reply *bsg_reply = bsg_job->reply;
-	struct Scsi_Host *host = fc_bsg_to_shost(bsg_job);
-	scsi_qla_host_t *vha = shost_priv(host);
-	struct qla_hw_data *ha = vha->hw;
-	struct qla_load_dump_mpi *dmcmd;
-	uint16_t opts = 0;
-	int rval = 0;
-
-	if (bsg_job->request_len < sizeof(struct fc_bsg_request) +
-	    2 * sizeof(uint32_t) + sizeof(struct qla_load_dump_mpi))
-		return -EINVAL;
-
-	if (!IS_QLA29XX(ha)) {
-		ql_log(ql_log_warn, vha, 0x706c,
-		       "%s: MPI dump not supported on this adapter.\n",
-		       __func__);
-		return -EINVAL;
-	}
-
-	dmcmd =
-	(struct qla_load_dump_mpi *)&bsg_req->rqst_data.h_vendor.vendor_cmd[2];
-
-	ql_log(ql_log_info, vha, 0xffff,
-	       "%s: mpi_address 0x%x mpi options 0x%x length 0x%x\n",
-		__func__, dmcmd->mpi_address, dmcmd->options, dmcmd->length);
-
-	mutex_lock(&ha->optrom_mutex);
-	rval = qla29xx_mpi_optrom_setup(bsg_job, vha, dmcmd->mpi_address, 1);
-	if (rval) {
-		mutex_unlock(&ha->optrom_mutex);
-		return rval;
-	}
-
-	sg_copy_to_buffer(bsg_job->request_payload.sg_list,
-			  bsg_job->request_payload.sg_cnt, ha->optrom_buffer,
-			  ha->optrom_region_size);
-
-	ql_dump_buffer(ql_dbg_init, vha, 0x00d7, ha->optrom_buffer,
-			ha->optrom_region_size);
-
-	check_and_set_mbc_bits(dmcmd->options, opts, QLA_LDM_SECURE_ENABLE,
-			       BIT_3);
-	check_and_set_mbc_bits(dmcmd->options, opts, QLA_LDM_OTP_PROV, BIT_4);
-	check_and_set_mbc_bits(dmcmd->options, opts, QLA_LDM_DEV_CSR, BIT_5);
-	check_and_set_mbc_bits(dmcmd->options, opts, QLA_LDM_AUTH_CMD_BIN,
-			       BIT_6);
-	check_and_set_mbc_bits(dmcmd->options, opts, QLA_LDM_MLDSA_ALGO,
-			       BIT_9);
-
-	rval = qla29xx_mpi_optrom_data(vha, opts, ha->optrom_buffer,
-				       ha->optrom_region_start,
-				       ha->optrom_region_size,
-				       QLA29XX_MPI_OP_DUMP);
-	if (rval) {
-		ql_log(ql_log_warn, vha, 0xffff,
-			"%s failed mpi dump %x\n", __func__, rval);
-		bsg_reply->result = -EINVAL;
-		bsg_reply->reply_data.vendor_reply.vendor_rsp[0] =
-							EXT_STATUS_MAILBOX;
-	} else {
-		bsg_reply->result = DID_OK;
-		bsg_reply->reply_data.vendor_reply.vendor_rsp[0] =
-			EXT_STATUS_OK;
-	}
-
-	vfree(ha->optrom_buffer);
-	ha->optrom_buffer = NULL;
-	ha->optrom_state = QLA_SWAITING;
-	mutex_unlock(&ha->optrom_mutex);
-	bsg_job->reply_len = sizeof(struct fc_bsg_reply);
-	bsg_job_done(bsg_job, bsg_reply->result,
-			bsg_reply->reply_payload_rcv_len);
-	return 0;
-}
-
-static int qla2900_bsg_load_mpi(struct bsg_job *bsg_job)
-{
-	struct fc_bsg_request *bsg_req = bsg_job->request;
-	struct fc_bsg_reply *bsg_reply = bsg_job->reply;
-	struct Scsi_Host *host = fc_bsg_to_shost(bsg_job);
-	scsi_qla_host_t *vha = shost_priv(host);
-	struct qla_hw_data *ha = vha->hw;
-	struct qla_load_dump_mpi *lmcmd;
-	uint16_t opts = 0;
-	int rval = 0;
-
-	if (bsg_job->request_len < sizeof(struct fc_bsg_request) +
-	    2 * sizeof(uint32_t) + sizeof(struct qla_load_dump_mpi))
-		return -EINVAL;
-
-	if (!IS_QLA29XX(ha)) {
-		ql_log(ql_log_warn, vha, 0x706d,
-		       "%s: MPI load not supported on this adapter.\n",
-		       __func__);
-		return -EINVAL;
-	}
-
-	lmcmd =
-	(struct qla_load_dump_mpi *)&bsg_req->rqst_data.h_vendor.vendor_cmd[2];
-
-	ql_log(ql_log_info, vha, 0xffff,
-	       "%s: mpi_address 0x%x mpi options 0x%x length 0x%x\n",
-		__func__, lmcmd->mpi_address, lmcmd->options, lmcmd->length);
-
-	mutex_lock(&ha->optrom_mutex);
-	rval = qla29xx_mpi_optrom_setup(bsg_job, vha, lmcmd->mpi_address, 0);
-	if (rval) {
-		mutex_unlock(&ha->optrom_mutex);
-		return rval;
-	}
-
-	check_and_set_mbc_bits(lmcmd->options, opts, QLA_LDM_SECURE_ENABLE,
-			       BIT_3);
-	check_and_set_mbc_bits(lmcmd->options, opts, QLA_LDM_DEV_CSR, BIT_5);
-	check_and_set_mbc_bits(lmcmd->options, opts, QLA_LDM_SHADOW_REGS,
-			       BIT_7);
-	check_and_set_mbc_bits(lmcmd->options, opts, QLA_LDM_CA_CSR, BIT_8);
-	check_and_set_mbc_bits(lmcmd->options, opts, QLA_LDM_MLDSA_ALGO,
-			       BIT_9);
-	check_and_set_mbc_bits(lmcmd->options, opts, QLA_LDM_MLDSA_SIGNATURE,
-			       BIT_10);
-
-	rval = qla29xx_mpi_optrom_data(vha, opts, ha->optrom_buffer,
-				       ha->optrom_region_start,
-				       ha->optrom_region_size,
-				       QLA29XX_MPI_OP_LOAD);
-	if (rval) {
-		ql_log(ql_log_warn, vha, 0xffff,
-			"%s failed mpi load %x\n", __func__, rval);
-		bsg_reply->result = -EINVAL;
-		bsg_reply->reply_data.vendor_reply.vendor_rsp[0] =
-							EXT_STATUS_MAILBOX;
-	} else {
-		bsg_reply->result = DID_OK;
-		bsg_reply->reply_data.vendor_reply.vendor_rsp[0] =
-			EXT_STATUS_OK;
-	}
-
-	ql_dump_buffer(ql_dbg_init, vha, 0x00d7, ha->optrom_buffer,
-			ha->optrom_region_size);
-
-	sg_copy_from_buffer(bsg_job->reply_payload.sg_list,
-			    bsg_job->reply_payload.sg_cnt,
-			    ha->optrom_buffer,
-			    ha->optrom_region_size);
-
-	bsg_reply->reply_payload_rcv_len = ha->optrom_region_size;
-	vfree(ha->optrom_buffer);
-	ha->optrom_buffer = NULL;
-	ha->optrom_state = QLA_SWAITING;
-	mutex_unlock(&ha->optrom_mutex);
-	bsg_job->reply_len = sizeof(struct fc_bsg_reply);
-	bsg_job_done(bsg_job, bsg_reply->result,
-		     bsg_reply->reply_payload_rcv_len);
-
-	return 0;
 }
 
 static int
@@ -2660,7 +2243,7 @@ qla27xx_get_flash_upd_cap(struct bsg_job *bsg_job)
 	struct qla_hw_data *ha = vha->hw;
 	struct qla_flash_update_caps cap;
 
-	if (!(IS_QLA27XX(ha)) && !IS_QLA28XX(ha) && !IS_QLA29XX(ha))
+	if (!(IS_QLA27XX(ha)) && !IS_QLA28XX(ha))
 		return -EPERM;
 
 	memset(&cap, 0, sizeof(cap));
@@ -2693,7 +2276,7 @@ qla27xx_set_flash_upd_cap(struct bsg_job *bsg_job)
 	uint64_t online_fw_attr = 0;
 	struct qla_flash_update_caps cap;
 
-	if (!IS_QLA27XX(ha) && !IS_QLA28XX(ha) && !IS_QLA29XX(ha))
+	if (!IS_QLA27XX(ha) && !IS_QLA28XX(ha))
 		return -EPERM;
 
 	memset(&cap, 0, sizeof(cap));
@@ -2741,7 +2324,7 @@ qla27xx_get_bbcr_data(struct bsg_job *bsg_job)
 	uint8_t domain, area, al_pa, state;
 	int rval;
 
-	if (!IS_QLA27XX(ha) && !IS_QLA28XX(ha) && !IS_QLA29XX(ha))
+	if (!IS_QLA27XX(ha) && !IS_QLA28XX(ha))
 		return -EPERM;
 
 	memset(&bbcr, 0, sizeof(bbcr));
@@ -2857,10 +2440,10 @@ qla2x00_do_dport_diagnostics(struct bsg_job *bsg_job)
 	struct qla_dport_diag *dd;
 
 	if (!IS_QLA83XX(vha->hw) && !IS_QLA27XX(vha->hw) &&
-	    !IS_QLA28XX(vha->hw) && !IS_QLA29XX(vha->hw))
+	    !IS_QLA28XX(vha->hw))
 		return -EPERM;
 
-	dd = kzalloc_obj(*dd);
+	dd = kzalloc(sizeof(*dd), GFP_KERNEL);
 	if (!dd) {
 		ql_log(ql_log_warn, vha, 0x70db,
 		    "Failed to allocate memory for dport.\n");
@@ -2906,7 +2489,7 @@ qla2x00_do_dport_diagnostics_v2(struct bsg_job *bsg_job)
 	if (!IS_DPORT_CAPABLE(vha->hw))
 		return -EPERM;
 
-	dd = kzalloc_obj(*dd);
+	dd = kzalloc(sizeof(*dd), GFP_KERNEL);
 	if (!dd)
 		return -ENOMEM;
 
@@ -2983,13 +2566,8 @@ qla2x00_get_flash_image_status(struct bsg_job *bsg_job)
 	struct qla_active_regions regions = { };
 	struct active_regions active_regions = { };
 
-	if (IS_QLA29XX(ha))
-		return -EPERM;
-
-	if (IS_QLA27XX(ha) || IS_QLA28XX(ha)) {
-		qla27xx_get_active_image(vha, &active_regions);
-		regions.global_image = active_regions.global;
-	}
+	qla27xx_get_active_image(vha, &active_regions);
+	regions.global_image = active_regions.global;
 
 	if (IS_QLA27XX(ha))
 		regions.nvme_params = QLA27XX_PRIMARY_IMAGE;
@@ -3023,33 +2601,6 @@ qla2x00_get_flash_image_status(struct bsg_job *bsg_job)
 }
 
 static int
-qla2x00_get_drv_attr(struct bsg_job *bsg_job)
-{
-	scsi_qla_host_t *vha = shost_priv(fc_bsg_to_shost(bsg_job));
-	struct qla_drv_attr drv_attr;
-	struct fc_bsg_reply *bsg_reply = bsg_job->reply;
-	struct qla_hw_data *ha = vha->hw;
-
-	memset(&drv_attr, 0, sizeof(struct qla_drv_attr));
-	if (!IS_QLA29XX(ha))
-		drv_attr.ext_attributes |= QLA_IMG_SET_VALID_SUPPORT;
-
-
-	sg_copy_from_buffer(bsg_job->reply_payload.sg_list,
-			bsg_job->reply_payload.sg_cnt, &drv_attr,
-			sizeof(struct qla_drv_attr));
-
-	bsg_reply->reply_payload_rcv_len = sizeof(struct qla_drv_attr);
-	bsg_reply->reply_data.vendor_reply.vendor_rsp[0] = EXT_STATUS_OK;
-
-	bsg_job->reply_len = sizeof(struct fc_bsg_reply);
-	bsg_reply->result = DID_OK << 16;
-	bsg_job_done(bsg_job, bsg_reply->result, bsg_reply->reply_payload_rcv_len);
-
-	return 0;
-}
-
-static int
 qla2x00_manage_host_stats(struct bsg_job *bsg_job)
 {
 	scsi_qla_host_t *vha = shost_priv(fc_bsg_to_shost(bsg_job));
@@ -3071,7 +2622,7 @@ qla2x00_manage_host_stats(struct bsg_job *bsg_job)
 		return -EIO;
 	}
 
-	req_data = kzalloc_obj(*req_data);
+	req_data = kzalloc(sizeof(*req_data), GFP_KERNEL);
 	if (!req_data) {
 		ql_log(ql_log_warn, vha, 0x0000, "req_data memory allocation failure.\n");
 		return -ENOMEM;
@@ -3142,7 +2693,7 @@ qla2x00_get_host_stats(struct bsg_job *bsg_job)
 		return -EIO;
 	}
 
-	req_data = kzalloc_obj(*req_data);
+	req_data = kzalloc(sizeof(*req_data), GFP_KERNEL);
 	if (!req_data) {
 		ql_log(ql_log_warn, vha, 0x0000, "req_data memory allocation failure.\n");
 		return -ENOMEM;
@@ -3249,7 +2800,7 @@ qla2x00_get_tgt_stats(struct bsg_job *bsg_job)
 		return -EIO;
 	}
 
-	req_data = kzalloc_obj(*req_data);
+	req_data = kzalloc(sizeof(*req_data), GFP_KERNEL);
 	if (!req_data) {
 		ql_log(ql_log_warn, vha, 0x0000, "req_data memory allocation failure.\n");
 		return -ENOMEM;
@@ -3332,7 +2883,7 @@ qla2x00_manage_host_port(struct bsg_job *bsg_job)
 		return -EIO;
 	}
 
-	req_data = kzalloc_obj(*req_data);
+	req_data = kzalloc(sizeof(*req_data), GFP_KERNEL);
 	if (!req_data) {
 		ql_log(ql_log_warn, vha, 0x0000, "req_data memory allocation failure.\n");
 		return -ENOMEM;
@@ -3444,12 +2995,6 @@ qla2x00_process_vendor_specific(struct scsi_qla_host *vha, struct bsg_job *bsg_j
 	case QL_VND_GET_FLASH_UPDATE_CAPS:
 		return qla27xx_get_flash_upd_cap(bsg_job);
 
-	case QL_VND_GET_DRV_ATTR:
-		return qla2x00_get_drv_attr(bsg_job);
-
-	case QL_VND_IMG_SET_VALID:
-		return qla28xx_validate_flash_image(bsg_job);
-
 	case QL_VND_SET_FLASH_UPDATE_CAPS:
 		return qla27xx_set_flash_upd_cap(bsg_job);
 
@@ -3486,18 +3031,6 @@ qla2x00_process_vendor_specific(struct scsi_qla_host *vha, struct bsg_job *bsg_j
 
 	case QL_VND_MBX_PASSTHRU:
 		return qla2x00_mailbox_passthru(bsg_job);
-
-	case QL_VND_READ_FLASH_BLOCK:
-		return qla29xx_bsg_flash_block_read(bsg_job);
-
-	case QL_VND_WRITE_FLASH_BLOCK:
-		return qla29xx_bsg_flash_block_write(bsg_job);
-
-	case QL_VND_LOAD_MPI:
-		return qla2900_bsg_load_mpi(bsg_job);
-
-	case QL_VND_DUMP_MPI:
-		return qla2900_bsg_dump_mpi(bsg_job);
 
 	default:
 		return -ENOSYS;
@@ -3778,94 +3311,4 @@ int qla2x00_mailbox_passthru(struct bsg_job *bsg_job)
 	kfree(req_data);
 
 	return ret;
-}
-
-static int
-qla28xx_do_validate_flash_image(struct bsg_job *bsg_job, uint16_t *state)
-{
-	struct fc_bsg_request *bsg_request = bsg_job->request;
-	scsi_qla_host_t *vha = shost_priv(fc_bsg_to_shost(bsg_job));
-	uint16_t mstate[16];
-	uint16_t mpi_state = 0;
-	uint16_t img_idx;
-	int rval = QLA_SUCCESS;
-
-	memset(mstate, 0, sizeof(mstate));
-
-	rval = qla2x00_get_firmware_state(vha, mstate);
-	if (rval != QLA_SUCCESS) {
-		ql_log(ql_log_warn, vha, 0xffff,
-				"MBC to get MPI state failed (%d)\n", rval);
-		rval = -EINVAL;
-		goto exit_flash_img;
-	}
-
-	mpi_state = mstate[11];
-
-	if (!(mpi_state & BIT_9 && mpi_state & BIT_8 && mpi_state & BIT_15)) {
-		ql_log(ql_log_warn, vha, 0xffff,
-				"MPI firmware state failed (0x%02x)\n", mpi_state);
-		rval = -EINVAL;
-		goto exit_flash_img;
-	}
-
-	rval = qla81xx_fac_semaphore_access(vha, FAC_SEMAPHORE_LOCK);
-	if (rval != QLA_SUCCESS) {
-		ql_log(ql_log_warn, vha, 0xffff,
-				"Unable to lock flash semaphore.");
-		goto exit_flash_img;
-	}
-
-	img_idx = bsg_request->rqst_data.h_vendor.vendor_cmd[1];
-
-	rval = qla_mpipt_validate_fw(vha, img_idx, state);
-	if (rval != QLA_SUCCESS) {
-		ql_log(ql_log_warn, vha, 0xffff,
-				"Failed to validate Firmware image index [0x%x].\n",
-				img_idx);
-	}
-
-	qla81xx_fac_semaphore_access(vha, FAC_SEMAPHORE_UNLOCK);
-
-exit_flash_img:
-	return rval;
-}
-
-static int qla28xx_validate_flash_image(struct bsg_job *bsg_job)
-{
-	scsi_qla_host_t *vha = shost_priv(fc_bsg_to_shost(bsg_job));
-	struct fc_bsg_reply *bsg_reply = bsg_job->reply;
-	struct qla_hw_data *ha = vha->hw;
-	uint16_t state = 0;
-	int rval = 0;
-
-	if (!IS_QLA28XX(ha) || vha->vp_idx != 0)
-		return -EPERM;
-
-	if (bsg_job->request_len <
-	    sizeof(struct fc_bsg_request) + 2 * sizeof(uint32_t))
-		return -EINVAL;
-
-	mutex_lock(&ha->optrom_mutex);
-	rval = qla28xx_do_validate_flash_image(bsg_job, &state);
-	if (rval)
-		rval = -EINVAL;
-	mutex_unlock(&ha->optrom_mutex);
-
-	bsg_job->reply_len = sizeof(struct fc_bsg_reply);
-
-	if (rval)
-		bsg_reply->reply_data.vendor_reply.vendor_rsp[0] =
-			(state == 39) ? EXT_STATUS_IMG_SET_VALID_ERR :
-			EXT_STATUS_IMG_SET_CONFIG_ERR;
-	else
-		bsg_reply->reply_data.vendor_reply.vendor_rsp[0] = EXT_STATUS_OK;
-
-	bsg_reply->result = DID_OK << 16;
-	bsg_reply->reply_payload_rcv_len = 0;
-	bsg_job->reply_len = sizeof(struct fc_bsg_reply);
-	bsg_job_done(bsg_job, bsg_reply->result,
-		     bsg_reply->reply_payload_rcv_len);
-
-	return QLA_SUCCESS;
 }

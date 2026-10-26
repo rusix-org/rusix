@@ -68,19 +68,8 @@ struct mpsse_quirk {
 	unsigned long dir_out;            /* Bitmask of valid output pins */
 };
 
-static struct mpsse_quirk bryx_brik_quirk = {
-	.names = {
-		[3] = "Push to Talk",
-		[5] = "Channel Activity",
-	},
-	.dir_out = BIT(3),	/* Push to Talk     */
-	.dir_in  = BIT(5),	/* Channel Activity */
-};
-
 static const struct usb_device_id gpio_mpsse_table[] = {
 	{ USB_DEVICE(0x0c52, 0xa064) },   /* SeaLevel Systems, Inc. */
-	{ USB_DEVICE(0x0403, 0x6988),     /* FTDI, assigned to Bryx */
-	  .driver_info = (kernel_ulong_t)&bryx_brik_quirk},
 	{ }                               /* Terminating entry */
 };
 
@@ -341,8 +330,9 @@ static int gpio_mpsse_direction_input(struct gpio_chip *chip,
 
 	guard(mutex)(&priv->io_mutex);
 	priv->gpio_dir[bank] &= ~BIT(bank_offset);
+	gpio_mpsse_set_bank(priv, bank);
 
-	return gpio_mpsse_set_bank(priv, bank);
+	return 0;
 }
 
 static int gpio_mpsse_get_direction(struct gpio_chip *chip,
@@ -521,7 +511,7 @@ static void gpio_mpsse_irq_enable(struct irq_data *irqd)
 		 * Can't be devm because it uses a non-raw spinlock (illegal in
 		 * this context, where a raw spinlock is held by our caller)
 		 */
-		worker = kzalloc_obj(*worker, GFP_NOWAIT);
+		worker = kzalloc(sizeof(*worker), GFP_NOWAIT);
 		if (!worker)
 			return;
 
@@ -563,6 +553,13 @@ static void gpio_mpsse_ida_remove(void *data)
 	struct mpsse_priv *priv = data;
 
 	ida_free(&gpio_mpsse_ida, priv->id);
+}
+
+static void gpio_mpsse_usb_put_dev(void *data)
+{
+	struct mpsse_priv *priv = data;
+
+	usb_put_dev(priv->udev);
 }
 
 static int mpsse_init_valid_mask(struct gpio_chip *chip,
@@ -608,7 +605,11 @@ static int gpio_mpsse_probe(struct usb_interface *interface,
 
 	INIT_LIST_HEAD(&priv->workers);
 
-	priv->udev = interface_to_usbdev(interface);
+	priv->udev = usb_get_dev(interface_to_usbdev(interface));
+	err = devm_add_action_or_reset(dev, gpio_mpsse_usb_put_dev, priv);
+	if (err)
+		return err;
+
 	priv->intf = interface;
 	priv->intf_id = interface->cur_altsetting->desc.bInterfaceNumber;
 

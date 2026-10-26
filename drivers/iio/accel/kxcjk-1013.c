@@ -8,6 +8,7 @@
 #include <linux/interrupt.h>
 #include <linux/delay.h>
 #include <linux/bitops.h>
+#include <linux/mod_devicetable.h>
 #include <linux/module.h>
 #include <linux/slab.h>
 #include <linux/string.h>
@@ -1547,7 +1548,6 @@ static void kxcjk1013_remove(struct i2c_client *client)
 
 	iio_device_unregister(indio_dev);
 
-	pm_runtime_dont_use_autosuspend(&client->dev);
 	pm_runtime_disable(&client->dev);
 	pm_runtime_set_suspended(&client->dev);
 
@@ -1630,11 +1630,11 @@ static const struct dev_pm_ops kxcjk1013_pm_ops = {
 };
 
 static const struct i2c_device_id kxcjk1013_id[] = {
-	{ .name = "kxcjk1013", .driver_data = (kernel_ulong_t)&kxcjk1013_info },
-	{ .name = "kxcj91008", .driver_data = (kernel_ulong_t)&kxcj91008_info },
-	{ .name = "kxtj21009", .driver_data = (kernel_ulong_t)&kxtj21009_info },
-	{ .name = "kxtf9", .driver_data = (kernel_ulong_t)&kxtf9_info },
-	{ .name = "kx023-1025", .driver_data = (kernel_ulong_t)&kx0231025_info },
+	{ "kxcjk1013",  (kernel_ulong_t)&kxcjk1013_info },
+	{ "kxcj91008",  (kernel_ulong_t)&kxcj91008_info },
+	{ "kxtj21009",  (kernel_ulong_t)&kxtj21009_info },
+	{ "kxtf9", (kernel_ulong_t)&kxtf9_info },
+	{ "kx023-1025", (kernel_ulong_t)&kx0231025_info },
 	{ }
 };
 MODULE_DEVICE_TABLE(i2c, kxcjk1013_id);

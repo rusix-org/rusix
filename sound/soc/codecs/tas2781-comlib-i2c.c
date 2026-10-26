@@ -2,11 +2,10 @@
 //
 // TAS2563/TAS2781 Common functions for HDA and ASoC Audio drivers based on I2C
 //
-// Copyright 2025 - 2026 Texas Instruments, Inc.
+// Copyright 2025 Texas Instruments, Inc.
 //
 // Author: Shenghao Ding <shenghao-ding@ti.com>
 
-#include <linux/cleanup.h>
 #include <linux/crc8.h>
 #include <linux/firmware.h>
 #include <linux/gpio/consumer.h>
@@ -131,7 +130,7 @@ int tasdevice_dev_update_bits(
 		ret = regmap_update_bits(map, TASDEVICE_PGRG(reg),
 			mask, value);
 		if (ret < 0)
-			TAS_REG_ERR_LOG(tas_priv->dev, chn, reg, ret);
+			dev_err(tas_priv->dev, "%s, E=%d\n", __func__, ret);
 	} else {
 		dev_err(tas_priv->dev, "%s, no such channel(%d)\n", __func__,
 			chn);
@@ -343,7 +342,7 @@ int tascodec_init(struct tasdevice_priv *tas_priv, void *codec,
 	/* Codec Lock Hold to ensure that codec_probe and firmware parsing and
 	 * loading do not simultaneously execute.
 	 */
-	guard(mutex)(&tas_priv->codec_lock);
+	mutex_lock(&tas_priv->codec_lock);
 
 	if (tas_priv->name_prefix)
 		scnprintf(tas_priv->rca_binaryname, 64, "%s-%sRCA%d.bin",
@@ -361,6 +360,8 @@ int tascodec_init(struct tasdevice_priv *tas_priv, void *codec,
 		dev_err(tas_priv->dev, "request_firmware_nowait err:0x%08x\n",
 			ret);
 
+	/* Codec Lock Release*/
+	mutex_unlock(&tas_priv->codec_lock);
 	return ret;
 }
 EXPORT_SYMBOL_GPL(tascodec_init);

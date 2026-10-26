@@ -10,7 +10,6 @@
 #include <linux/string.h>
 #include <linux/errno.h>
 #include <linux/skbuff.h>
-#include <linux/unaligned.h>
 #include <linux/rtnetlink.h>
 #include <linux/module.h>
 #include <linux/init.h>
@@ -29,10 +28,9 @@ static int skbmark_encode(struct sk_buff *skb, void *skbdata,
 
 static int skbmark_decode(struct sk_buff *skb, void *data, u16 len)
 {
-	if (len != sizeof(u32))
-		return -EINVAL;
+	u32 ifemark = *(u32 *)data;
 
-	skb->mark = get_unaligned_be32(data);
+	skb->mark = ntohl(ifemark);
 	return 0;
 }
 

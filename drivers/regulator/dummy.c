@@ -56,7 +56,7 @@ static int dummy_regulator_probe(struct faux_device *fdev)
 	return 0;
 }
 
-static struct faux_device_ops dummy_regulator_driver = {
+struct faux_device_ops dummy_regulator_driver = {
 	.probe = dummy_regulator_probe,
 };
 

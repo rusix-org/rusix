@@ -34,7 +34,6 @@ static const struct pci_device_id slic_id_tbl[] = {
 		     PCI_DEVICE_ID_ALACRITECH_OASIS) },
 	{ 0 }
 };
-MODULE_DEVICE_TABLE(pci, slic_id_tbl);
 
 static const char slic_stats_strings[][ETH_GSTRING_LEN] = {
 	"rx_packets",
@@ -193,7 +192,7 @@ static int slic_new_upr(struct slic_device *sdev, unsigned int type,
 {
 	struct slic_upr *upr;
 
-	upr = kmalloc_obj(*upr, GFP_ATOMIC);
+	upr = kmalloc(sizeof(*upr), GFP_ATOMIC);
 	if (!upr)
 		return -ENOMEM;
 	upr->type = type;
@@ -379,8 +378,8 @@ static void slic_xmit_complete(struct slic_device *sdev)
 	smp_wmb();
 
 	u64_stats_update_begin(&sdev->stats.syncp);
-	u64_stats_add(&sdev->stats.tx_bytes, bytes);
-	u64_stats_add(&sdev->stats.tx_packets, frames);
+	sdev->stats.tx_bytes += bytes;
+	sdev->stats.tx_packets += frames;
 	u64_stats_update_end(&sdev->stats.syncp);
 
 	netif_tx_lock(dev);
@@ -616,8 +615,8 @@ static void slic_handle_receive(struct slic_device *sdev, unsigned int todo,
 	}
 
 	u64_stats_update_begin(&sdev->stats.syncp);
-	u64_stats_add(&sdev->stats.rx_bytes, bytes);
-	u64_stats_add(&sdev->stats.rx_packets, frames);
+	sdev->stats.rx_bytes += bytes;
+	sdev->stats.rx_packets += frames;
 	u64_stats_update_end(&sdev->stats.syncp);
 
 	slic_refill_rx_queue(sdev, GFP_ATOMIC);
@@ -814,7 +813,7 @@ static int slic_init_stat_queue(struct slic_device *sdev)
 
 free_descs:
 	while (i--) {
-		dma_free_coherent(&sdev->pdev->dev, size,
+		dma_free_coherent(&sdev->pdev->dev, stq->mem_size,
 				  stq->descs[i] - stq->addr_offset[i],
 				  stq->paddr[i] - stq->addr_offset[i]);
 	}
@@ -846,7 +845,7 @@ static int slic_init_tx_queue(struct slic_device *sdev)
 	txq->put_idx = 0;
 	txq->done_idx = 0;
 
-	txq->txbuffs = kzalloc_objs(*buff, txq->len);
+	txq->txbuffs = kcalloc(txq->len, sizeof(*buff), GFP_KERNEL);
 	if (!txq->txbuffs)
 		return -ENOMEM;
 
@@ -923,7 +922,7 @@ static int slic_init_rx_queue(struct slic_device *sdev)
 	rxq->done_idx = 0;
 	rxq->put_idx = 0;
 
-	buff = kzalloc_objs(*buff, rxq->len);
+	buff = kcalloc(rxq->len, sizeof(*buff), GFP_KERNEL);
 	if (!buff)
 		return -ENOMEM;
 

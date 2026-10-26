@@ -10,41 +10,20 @@
 //! - The command to be run, as this firmware can perform several tasks ;
 //! - The ucode signature, so the GSP falcon can run FWSEC in HS mode.
 
-pub(crate) mod bootloader;
-
 use core::marker::PhantomData;
+use core::mem::{align_of, size_of};
+use core::ops::Deref;
 
-use kernel::{
-    device::{
-        self,
-        Device, //
-    },
-    prelude::*,
-    transmute::{
-        AsBytes,
-        FromBytes, //
-    },
-};
+use kernel::device::{self, Device};
+use kernel::prelude::*;
+use kernel::transmute::FromBytes;
 
-use crate::{
-    falcon::{
-        gsp::Gsp,
-        Falcon,
-        FalconBromParams,
-        FalconDmaLoadTarget,
-        FalconDmaLoadable,
-        FalconFirmware, //
-    },
-    firmware::{
-        FalconUCodeDesc,
-        FirmwareObject,
-        FirmwareSignature,
-        Signed,
-        Unsigned, //
-    },
-    num::FromSafeCast,
-    vbios::Vbios,
-};
+use crate::dma::DmaObject;
+use crate::driver::Bar0;
+use crate::falcon::gsp::Gsp;
+use crate::falcon::{Falcon, FalconBromParams, FalconFirmware, FalconLoadParams, FalconLoadTarget};
+use crate::firmware::{FalconUCodeDescV3, FirmwareDmaObject, FirmwareSignature, Signed, Unsigned};
+use crate::vbios::Vbios;
 
 const NVFW_FALCON_APPIF_ID_DMEMMAPPER: u32 = 0x4;
 
@@ -56,7 +35,7 @@ struct FalconAppifHdrV1 {
     entry_size: u8,
     entry_count: u8,
 }
-// SAFETY: Any byte sequence is valid for this struct.
+// SAFETY: any byte sequence is valid for this struct.
 unsafe impl FromBytes for FalconAppifHdrV1 {}
 
 #[repr(C, packed)]
@@ -65,7 +44,7 @@ struct FalconAppifV1 {
     id: u32,
     dmem_base: u32,
 }
-// SAFETY: Any byte sequence is valid for this struct.
+// SAFETY: any byte sequence is valid for this struct.
 unsafe impl FromBytes for FalconAppifV1 {}
 
 #[derive(Debug)]
@@ -89,10 +68,8 @@ struct FalconAppifDmemmapperV3 {
     ucode_cmd_mask1: u32,
     multi_tgt_tbl: u32,
 }
-// SAFETY: Any byte sequence is valid for this struct.
+// SAFETY: any byte sequence is valid for this struct.
 unsafe impl FromBytes for FalconAppifDmemmapperV3 {}
-// SAFETY: This struct doesn't contain uninitialized bytes and doesn't have interior mutability.
-unsafe impl AsBytes for FalconAppifDmemmapperV3 {}
 
 #[derive(Debug)]
 #[repr(C, packed)]
@@ -103,10 +80,8 @@ struct ReadVbios {
     size: u32,
     flags: u32,
 }
-// SAFETY: Any byte sequence is valid for this struct.
+// SAFETY: any byte sequence is valid for this struct.
 unsafe impl FromBytes for ReadVbios {}
-// SAFETY: This struct doesn't contain uninitialized bytes and doesn't have interior mutability.
-unsafe impl AsBytes for ReadVbios {}
 
 #[derive(Debug)]
 #[repr(C, packed)]
@@ -117,10 +92,8 @@ struct FrtsRegion {
     size: u32,
     ftype: u32,
 }
-// SAFETY: Any byte sequence is valid for this struct.
+// SAFETY: any byte sequence is valid for this struct.
 unsafe impl FromBytes for FrtsRegion {}
-// SAFETY: This struct doesn't contain uninitialized bytes and doesn't have interior mutability.
-unsafe impl AsBytes for FrtsRegion {}
 
 const NVFW_FRTS_CMD_REGION_TYPE_FB: u32 = 2;
 
@@ -129,10 +102,8 @@ struct FrtsCmd {
     read_vbios: ReadVbios,
     frts_region: FrtsRegion,
 }
-// SAFETY: Any byte sequence is valid for this struct.
+// SAFETY: any byte sequence is valid for this struct.
 unsafe impl FromBytes for FrtsCmd {}
-// SAFETY: This struct doesn't contain uninitialized bytes and doesn't have interior mutability.
-unsafe impl AsBytes for FrtsCmd {}
 
 const NVFW_FALCON_APPIF_DMEMMAPPER_CMD_FRTS: u32 = 0x15;
 const NVFW_FALCON_APPIF_DMEMMAPPER_CMD_SB: u32 = 0x19;
@@ -143,6 +114,7 @@ pub(crate) enum FwsecCommand {
     /// image into it.
     Frts { frts_addr: u64, frts_size: u64 },
     /// Asks [`FwsecFirmware`] to load pre-OS apps on the PMU.
+    #[expect(dead_code)]
     Sb,
 }
 
@@ -170,42 +142,88 @@ impl AsRef<[u8]> for Bcrt30Rsa3kSignature {
 
 impl FirmwareSignature<FwsecFirmware> for Bcrt30Rsa3kSignature {}
 
+/// Reinterpret the area starting from `offset` in `fw` as an instance of `T` (which must implement
+/// [`FromBytes`]) and return a reference to it.
+///
+/// # Safety
+///
+/// Callers must ensure that the region of memory returned is not written for as long as the
+/// returned reference is alive.
+///
+/// TODO[TRSM][COHA]: Remove this and `transmute_mut` once `CoherentAllocation::as_slice` is
+/// available and we have a way to transmute objects implementing FromBytes, e.g.:
+/// https://lore.kernel.org/lkml/20250330234039.29814-1-christiansantoslima21@gmail.com/
+unsafe fn transmute<'a, 'b, T: Sized + FromBytes>(
+    fw: &'a DmaObject,
+    offset: usize,
+) -> Result<&'b T> {
+    if offset + size_of::<T>() > fw.size() {
+        return Err(EINVAL);
+    }
+    if (fw.start_ptr() as usize + offset) % align_of::<T>() != 0 {
+        return Err(EINVAL);
+    }
+
+    // SAFETY: we have checked that the pointer is properly aligned that its pointed memory is
+    // large enough the contains an instance of `T`, which implements `FromBytes`.
+    Ok(unsafe { &*(fw.start_ptr().add(offset).cast::<T>()) })
+}
+
+/// Reinterpret the area starting from `offset` in `fw` as a mutable instance of `T` (which must
+/// implement [`FromBytes`]) and return a reference to it.
+///
+/// # Safety
+///
+/// Callers must ensure that the region of memory returned is not read or written for as long as
+/// the returned reference is alive.
+unsafe fn transmute_mut<'a, 'b, T: Sized + FromBytes>(
+    fw: &'a mut DmaObject,
+    offset: usize,
+) -> Result<&'b mut T> {
+    if offset + size_of::<T>() > fw.size() {
+        return Err(EINVAL);
+    }
+    if (fw.start_ptr_mut() as usize + offset) % align_of::<T>() != 0 {
+        return Err(EINVAL);
+    }
+
+    // SAFETY: we have checked that the pointer is properly aligned that its pointed memory is
+    // large enough the contains an instance of `T`, which implements `FromBytes`.
+    Ok(unsafe { &mut *(fw.start_ptr_mut().add(offset).cast::<T>()) })
+}
+
 /// The FWSEC microcode, extracted from the BIOS and to be run on the GSP falcon.
 ///
 /// It is responsible for e.g. carving out the WPR2 region as the first step of the GSP bootflow.
 pub(crate) struct FwsecFirmware {
     /// Descriptor of the firmware.
-    desc: FalconUCodeDesc,
-    /// Object containing the firmware binary.
-    ucode: FirmwareObject<Self, Signed>,
+    desc: FalconUCodeDescV3,
+    /// GPU-accessible DMA object containing the firmware.
+    ucode: FirmwareDmaObject<Self, Signed>,
 }
 
-impl FalconDmaLoadable for FwsecFirmware {
-    fn as_slice(&self) -> &[u8] {
-        self.ucode.0.as_slice()
+impl FalconLoadParams for FwsecFirmware {
+    fn imem_load_params(&self) -> FalconLoadTarget {
+        FalconLoadTarget {
+            src_start: 0,
+            dst_start: self.desc.imem_phys_base,
+            len: self.desc.imem_load_size,
+        }
     }
 
-    fn imem_sec_load_params(&self) -> FalconDmaLoadTarget {
-        self.desc.imem_sec_load_params()
+    fn dmem_load_params(&self) -> FalconLoadTarget {
+        FalconLoadTarget {
+            src_start: self.desc.imem_load_size,
+            dst_start: self.desc.dmem_phys_base,
+            len: self.desc.dmem_load_size,
+        }
     }
-
-    fn imem_ns_load_params(&self) -> Option<FalconDmaLoadTarget> {
-        self.desc.imem_ns_load_params()
-    }
-
-    fn dmem_load_params(&self) -> FalconDmaLoadTarget {
-        self.desc.dmem_load_params()
-    }
-}
-
-impl FalconFirmware for FwsecFirmware {
-    type Target = Gsp;
 
     fn brom_params(&self) -> FalconBromParams {
         FalconBromParams {
-            pkc_data_offset: self.desc.pkc_data_offset(),
-            engine_id_mask: self.desc.engine_id_mask(),
-            ucode_id: self.desc.ucode_id(),
+            pkc_data_offset: self.desc.pkc_data_offset,
+            engine_id_mask: self.desc.engine_id_mask,
+            ucode_id: self.desc.ucode_id,
         }
     }
 
@@ -214,100 +232,91 @@ impl FalconFirmware for FwsecFirmware {
     }
 }
 
-impl FirmwareObject<FwsecFirmware, Unsigned> {
-    fn new_fwsec(bios: &Vbios, cmd: FwsecCommand) -> Result<Self> {
+impl Deref for FwsecFirmware {
+    type Target = DmaObject;
+
+    fn deref(&self) -> &Self::Target {
+        &self.ucode.0
+    }
+}
+
+impl FalconFirmware for FwsecFirmware {
+    type Target = Gsp;
+}
+
+impl FirmwareDmaObject<FwsecFirmware, Unsigned> {
+    fn new_fwsec(dev: &Device<device::Bound>, bios: &Vbios, cmd: FwsecCommand) -> Result<Self> {
         let desc = bios.fwsec_image().header()?;
-        let mut ucode = KVVec::new();
-        ucode.extend_from_slice(bios.fwsec_image().ucode(&desc)?, GFP_KERNEL)?;
+        let ucode = bios.fwsec_image().ucode(desc)?;
+        let mut dma_object = DmaObject::from_data(dev, ucode)?;
 
-        let hdr_offset = desc
-            .imem_load_size()
-            .checked_add(desc.interface_offset())
-            .map(usize::from_safe_cast)
-            .ok_or(EINVAL)?;
-
-        let hdr = ucode
-            .get(hdr_offset..)
-            .and_then(FalconAppifHdrV1::from_bytes_prefix)
-            .ok_or(EINVAL)?
-            .0;
+        let hdr_offset = (desc.imem_load_size + desc.interface_offset) as usize;
+        // SAFETY: we have exclusive access to `dma_object`.
+        let hdr: &FalconAppifHdrV1 = unsafe { transmute(&dma_object, hdr_offset) }?;
 
         if hdr.version != 1 {
             return Err(EINVAL);
         }
 
         // Find the DMEM mapper section in the firmware.
-        for i in 0..usize::from(hdr.entry_count) {
-            // CALC: hdr_offset + header_size + i * entry_size.
-            let entry_offset = hdr_offset
-                .checked_add(usize::from(hdr.header_size))
-                .and_then(|o| o.checked_add(i.checked_mul(usize::from(hdr.entry_size))?))
-                .ok_or(EINVAL)?;
-
-            let app = ucode
-                .get(entry_offset..)
-                .and_then(FalconAppifV1::from_bytes_prefix)
-                .ok_or(EINVAL)?
-                .0;
+        for i in 0..hdr.entry_count as usize {
+            let app: &FalconAppifV1 =
+            // SAFETY: we have exclusive access to `dma_object`.
+            unsafe {
+                transmute(
+                    &dma_object,
+                    hdr_offset + hdr.header_size as usize + i * hdr.entry_size as usize
+                )
+            }?;
 
             if app.id != NVFW_FALCON_APPIF_ID_DMEMMAPPER {
                 continue;
             }
-            let dmem_base = app.dmem_base;
 
-            let dmem_mapper_offset = desc
-                .imem_load_size()
-                .checked_add(dmem_base)
-                .map(usize::from_safe_cast)
-                .ok_or(EINVAL)?;
+            // SAFETY: we have exclusive access to `dma_object`.
+            let dmem_mapper: &mut FalconAppifDmemmapperV3 = unsafe {
+                transmute_mut(
+                    &mut dma_object,
+                    (desc.imem_load_size + app.dmem_base) as usize,
+                )
+            }?;
 
-            let dmem_mapper = ucode
-                .get_mut(dmem_mapper_offset..)
-                .and_then(FalconAppifDmemmapperV3::from_bytes_mut_prefix)
-                .ok_or(EINVAL)?
-                .0;
-
-            dmem_mapper.init_cmd = match cmd {
-                FwsecCommand::Frts { .. } => NVFW_FALCON_APPIF_DMEMMAPPER_CMD_FRTS,
-                FwsecCommand::Sb => NVFW_FALCON_APPIF_DMEMMAPPER_CMD_SB,
-            };
-            let cmd_in_buffer_offset = dmem_mapper.cmd_in_buffer_offset;
-
-            let frts_cmd_offset = desc
-                .imem_load_size()
-                .checked_add(cmd_in_buffer_offset)
-                .map(usize::from_safe_cast)
-                .ok_or(EINVAL)?;
-
-            let frts_cmd = ucode
-                .get_mut(frts_cmd_offset..)
-                .and_then(FrtsCmd::from_bytes_mut_prefix)
-                .ok_or(EINVAL)?
-                .0;
+            // SAFETY: we have exclusive access to `dma_object`.
+            let frts_cmd: &mut FrtsCmd = unsafe {
+                transmute_mut(
+                    &mut dma_object,
+                    (desc.imem_load_size + dmem_mapper.cmd_in_buffer_offset) as usize,
+                )
+            }?;
 
             frts_cmd.read_vbios = ReadVbios {
                 ver: 1,
-                hdr: u32::try_from(size_of::<ReadVbios>())?,
+                hdr: size_of::<ReadVbios>() as u32,
                 addr: 0,
                 size: 0,
                 flags: 2,
             };
-            if let FwsecCommand::Frts {
-                frts_addr,
-                frts_size,
-            } = cmd
-            {
-                frts_cmd.frts_region = FrtsRegion {
-                    ver: 1,
-                    hdr: u32::try_from(size_of::<FrtsRegion>())?,
-                    addr: u32::try_from(frts_addr >> 12)?,
-                    size: u32::try_from(frts_size >> 12)?,
-                    ftype: NVFW_FRTS_CMD_REGION_TYPE_FB,
-                };
-            }
+
+            dmem_mapper.init_cmd = match cmd {
+                FwsecCommand::Frts {
+                    frts_addr,
+                    frts_size,
+                } => {
+                    frts_cmd.frts_region = FrtsRegion {
+                        ver: 1,
+                        hdr: size_of::<FrtsRegion>() as u32,
+                        addr: (frts_addr >> 12) as u32,
+                        size: (frts_size >> 12) as u32,
+                        ftype: NVFW_FRTS_CMD_REGION_TYPE_FB,
+                    };
+
+                    NVFW_FALCON_APPIF_DMEMMAPPER_CMD_FRTS
+                }
+                FwsecCommand::Sb => NVFW_FALCON_APPIF_DMEMMAPPER_CMD_SB,
+            };
 
             // Return early as we found and patched the DMEMMAPPER region.
-            return Ok(Self(ucode, PhantomData));
+            return Ok(Self(dma_object, PhantomData));
         }
 
         Err(ENOTSUPP)
@@ -319,23 +328,20 @@ impl FwsecFirmware {
     /// command.
     pub(crate) fn new(
         dev: &Device<device::Bound>,
-        falcon: &Falcon<'_, Gsp>,
+        falcon: &Falcon<Gsp>,
+        bar: &Bar0,
         bios: &Vbios,
         cmd: FwsecCommand,
     ) -> Result<Self> {
-        let ucode_dma = FirmwareObject::<Self, _>::new_fwsec(bios, cmd)?;
+        let ucode_dma = FirmwareDmaObject::<Self, _>::new_fwsec(dev, bios, cmd)?;
 
         // Patch signature if needed.
         let desc = bios.fwsec_image().header()?;
-        let ucode_signed = if desc.signature_count() != 0 {
-            let sig_base_img = desc
-                .imem_load_size()
-                .checked_add(desc.pkc_data_offset())
-                .map(usize::from_safe_cast)
-                .ok_or(EINVAL)?;
-            let desc_sig_versions = u32::from(desc.signature_versions());
+        let ucode_signed = if desc.signature_count != 0 {
+            let sig_base_img = (desc.imem_load_size + desc.pkc_data_offset) as usize;
+            let desc_sig_versions = u32::from(desc.signature_versions);
             let reg_fuse_version =
-                falcon.signature_reg_fuse_version(desc.engine_id_mask(), desc.ucode_id())?;
+                falcon.signature_reg_fuse_version(bar, desc.engine_id_mask, desc.ucode_id)?;
             dev_dbg!(
                 dev,
                 "desc_sig_versions: {:#x}, reg_fuse_version: {}\n",
@@ -363,13 +369,13 @@ impl FwsecFirmware {
                 // Mask of the bits of `desc_sig_versions` to preserve.
                 let reg_fuse_version_mask = reg_fuse_version_bit.wrapping_sub(1);
 
-                usize::from_safe_cast((desc_sig_versions & reg_fuse_version_mask).count_ones())
+                (desc_sig_versions & reg_fuse_version_mask).count_ones() as usize
             };
 
             dev_dbg!(dev, "patching signature with index {}\n", signature_idx);
             let signature = bios
                 .fwsec_image()
-                .sigs(&desc)
+                .sigs(desc)
                 .and_then(|sigs| sigs.get(signature_idx).ok_or(EINVAL))?;
 
             ucode_dma.patch_signature(signature, sig_base_img)?
@@ -378,25 +384,27 @@ impl FwsecFirmware {
         };
 
         Ok(FwsecFirmware {
-            desc,
+            desc: desc.clone(),
             ucode: ucode_signed,
         })
     }
 
     /// Loads the FWSEC firmware into `falcon` and execute it.
-    ///
-    /// This must only be called on chipsets that do not need the FWSEC bootloader. On chipsets
-    /// where the bootloader is required, use [`bootloader::FwsecFirmwareWithBl`] instead.
-    pub(crate) fn run(&self, dev: &Device<device::Bound>, falcon: &Falcon<'_, Gsp>) -> Result<()> {
+    pub(crate) fn run(
+        &self,
+        dev: &Device<device::Bound>,
+        falcon: &Falcon<Gsp>,
+        bar: &Bar0,
+    ) -> Result<()> {
         // Reset falcon, load the firmware, and run it.
         falcon
-            .reset()
+            .reset(bar)
             .inspect_err(|e| dev_err!(dev, "Failed to reset GSP falcon: {:?}\n", e))?;
         falcon
-            .load(self)
+            .dma_load(bar, self)
             .inspect_err(|e| dev_err!(dev, "Failed to load FWSEC firmware: {:?}\n", e))?;
         let (mbox0, _) = falcon
-            .boot(Some(0), None)
+            .boot(bar, Some(0), None)
             .inspect_err(|e| dev_err!(dev, "Failed to boot FWSEC firmware: {:?}\n", e))?;
         if mbox0 != 0 {
             dev_err!(dev, "FWSEC firmware returned error {}\n", mbox0);

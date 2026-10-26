@@ -454,7 +454,7 @@ static int ti_qspi_dma_xfer(struct ti_qspi *qspi, dma_addr_t dma_dst,
 
 	tx->callback = ti_qspi_dma_callback;
 	tx->callback_param = qspi;
-	cookie = dmaengine_submit(tx);
+	cookie = tx->tx_submit(tx);
 	reinit_completion(&qspi->transfer_complete);
 
 	ret = dma_submit_error(cookie);
@@ -765,7 +765,7 @@ static int ti_qspi_probe(struct platform_device *pdev)
 	int ret = 0, num_cs, irq;
 	dma_cap_mask_t mask;
 
-	host = devm_spi_alloc_host(&pdev->dev, sizeof(*qspi));
+	host = spi_alloc_host(&pdev->dev, sizeof(*qspi));
 	if (!host)
 		return -ENOMEM;
 
@@ -775,6 +775,7 @@ static int ti_qspi_probe(struct platform_device *pdev)
 	host->setup = ti_qspi_setup;
 	host->auto_runtime_pm = true;
 	host->transfer_one_message = ti_qspi_start_transfer_one;
+	host->dev.of_node = pdev->dev.of_node;
 	host->bits_per_word_mask = SPI_BPW_MASK(32) | SPI_BPW_MASK(16) |
 				   SPI_BPW_MASK(8);
 	host->mem_ops = &ti_qspi_mem_ops;
@@ -793,7 +794,8 @@ static int ti_qspi_probe(struct platform_device *pdev)
 		r = platform_get_resource(pdev, IORESOURCE_MEM, 0);
 		if (r == NULL) {
 			dev_err(&pdev->dev, "missing platform data\n");
-			return -ENODEV;
+			ret = -ENODEV;
+			goto free_host;
 		}
 	}
 
@@ -811,22 +813,28 @@ static int ti_qspi_probe(struct platform_device *pdev)
 		qspi->mmap_size = resource_size(res_mmap);
 
 	irq = platform_get_irq(pdev, 0);
-	if (irq < 0)
-		return irq;
+	if (irq < 0) {
+		ret = irq;
+		goto free_host;
+	}
 
 	mutex_init(&qspi->list_lock);
 
 	qspi->base = devm_ioremap_resource(&pdev->dev, r);
-	if (IS_ERR(qspi->base))
-		return PTR_ERR(qspi->base);
+	if (IS_ERR(qspi->base)) {
+		ret = PTR_ERR(qspi->base);
+		goto free_host;
+	}
 
 
 	if (of_property_present(np, "syscon-chipselects")) {
 		qspi->ctrl_base =
 			syscon_regmap_lookup_by_phandle_args(np, "syscon-chipselects",
 							     1, &qspi->ctrl_reg);
-		if (IS_ERR(qspi->ctrl_base))
-			return PTR_ERR(qspi->ctrl_base);
+		if (IS_ERR(qspi->ctrl_base)) {
+			ret = PTR_ERR(qspi->ctrl_base);
+			goto free_host;
+		}
 	}
 
 	qspi->fclk = devm_clk_get(&pdev->dev, "fck");
@@ -883,16 +891,14 @@ no_dma:
 	qspi->current_cs = -1;
 
 	ret = spi_register_controller(host);
-	if (ret)
-		goto err_free_dma;
+	if (!ret)
+		return 0;
 
-	return 0;
-
-err_free_dma:
 	ti_qspi_dma_cleanup(qspi);
 
 	pm_runtime_disable(&pdev->dev);
-
+free_host:
+	spi_controller_put(host);
 	return ret;
 }
 
@@ -900,12 +906,16 @@ static void ti_qspi_remove(struct platform_device *pdev)
 {
 	struct ti_qspi *qspi = platform_get_drvdata(pdev);
 
+	spi_controller_get(qspi->host);
+
 	spi_unregister_controller(qspi->host);
 
 	pm_runtime_put_sync(&pdev->dev);
 	pm_runtime_disable(&pdev->dev);
 
 	ti_qspi_dma_cleanup(qspi);
+
+	spi_controller_put(qspi->host);
 }
 
 static const struct dev_pm_ops ti_qspi_pm_ops = {

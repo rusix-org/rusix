@@ -6,8 +6,6 @@
  */
 
 #include <linux/bitfield.h>
-#include <linux/delay.h>
-#include <linux/gpio/consumer.h>
 #include <linux/iopoll.h>
 #include <linux/interrupt.h>
 #include <linux/mdio.h>
@@ -64,10 +62,9 @@
 #define STATUS0_RESETC_POLL_DELAY		1000
 #define STATUS0_RESETC_POLL_TIMEOUT		1000000
 
-#define OA_TC6_REG_MMS_MASK		GENMASK(19, 16)
-
 /* Internal structure for MAC-PHY drivers */
 struct oa_tc6 {
+	struct device *dev;
 	struct net_device *netdev;
 	struct phy_device *phydev;
 	struct mii_bus *mdiobus;
@@ -89,8 +86,6 @@ struct oa_tc6 {
 	bool int_flag;
 	bool disable_traffic;
 	bool prot_ctrl;
-	enum oa_tc6_quirk_flag quirk_flags;
-	struct gpio_desc *reset_gpio;
 };
 
 enum oa_tc6_header_type {
@@ -349,27 +344,6 @@ int oa_tc6_read_register(struct oa_tc6 *tc6, u32 address, u32 *value)
 EXPORT_SYMBOL_GPL(oa_tc6_read_register);
 
 /**
- * oa_tc6_read_register_mms - function for reading a MAC-PHY register in a
- * specified memory map.
- * @tc6: oa_tc6 struct.
- * @mms: Memory map selector for the register.
- * @address: register address of the MAC-PHY to be read.
- * @value: value read from the @address register address of the MAC-PHY.
- *
- * Return: 0 on success or a negative error code on failure.
- */
-int oa_tc6_read_register_mms(struct oa_tc6 *tc6, u8 mms, u16 address,
-			     u32 *value)
-{
-	u32 mms_reg;
-
-	mms_reg = FIELD_PREP(OA_TC6_REG_MMS_MASK, mms) | address;
-
-	return oa_tc6_read_registers(tc6, mms_reg, value, 1);
-}
-EXPORT_SYMBOL_GPL(oa_tc6_read_register_mms);
-
-/**
  * oa_tc6_write_registers - function for writing multiple consecutive registers.
  * @tc6: oa_tc6 struct.
  * @address: address of the first register to be written in the MAC-PHY.
@@ -412,27 +386,6 @@ int oa_tc6_write_register(struct oa_tc6 *tc6, u32 address, u32 value)
 	return oa_tc6_write_registers(tc6, address, &value, 1);
 }
 EXPORT_SYMBOL_GPL(oa_tc6_write_register);
-
-/**
- * oa_tc6_write_register_mms - function for writing a MAC-PHY register in a
- * specified memory map.
- * @tc6: oa_tc6 struct.
- * @mms: Memory map selector for the register.
- * @address: register address of the MAC-PHY to be written.
- * @value: value to be written in the @address register address of the MAC-PHY.
- *
- * Return: 0 on success or a negative error code on failure.
- */
-int oa_tc6_write_register_mms(struct oa_tc6 *tc6, u8 mms, u16 address,
-			      u32 value)
-{
-	u32 mms_reg;
-
-	mms_reg = FIELD_PREP(OA_TC6_REG_MMS_MASK, mms) | address;
-
-	return oa_tc6_write_registers(tc6, mms_reg, &value, 1);
-}
-EXPORT_SYMBOL_GPL(oa_tc6_write_register_mms);
 
 static int oa_tc6_check_phy_reg_direct_access_capability(struct oa_tc6 *tc6)
 {
@@ -497,39 +450,36 @@ static int oa_tc6_get_phy_c45_mms(int devnum)
 	}
 }
 
-int oa_tc6_mdiobus_read_c45(struct mii_bus *bus, int addr, int devnum,
-			    int regnum)
+static int oa_tc6_mdiobus_read_c45(struct mii_bus *bus, int addr, int devnum,
+				   int regnum)
 {
 	struct oa_tc6 *tc6 = bus->priv;
 	u32 regval;
-	int mms;
 	int ret;
 
-	mms = oa_tc6_get_phy_c45_mms(devnum);
-	if (mms < 0)
-		return mms;
+	ret = oa_tc6_get_phy_c45_mms(devnum);
+	if (ret < 0)
+		return ret;
 
-	ret = oa_tc6_read_register_mms(tc6, mms, regnum, &regval);
+	ret = oa_tc6_read_register(tc6, (ret << 16) | regnum, &regval);
 	if (ret)
 		return ret;
 
 	return regval;
 }
-EXPORT_SYMBOL_GPL(oa_tc6_mdiobus_read_c45);
 
-int oa_tc6_mdiobus_write_c45(struct mii_bus *bus, int addr, int devnum,
-			     int regnum, u16 val)
+static int oa_tc6_mdiobus_write_c45(struct mii_bus *bus, int addr, int devnum,
+				    int regnum, u16 val)
 {
 	struct oa_tc6 *tc6 = bus->priv;
-	int mms;
+	int ret;
 
-	mms = oa_tc6_get_phy_c45_mms(devnum);
-	if (mms < 0)
-		return mms;
+	ret = oa_tc6_get_phy_c45_mms(devnum);
+	if (ret < 0)
+		return ret;
 
-	return oa_tc6_write_register_mms(tc6, mms, regnum, val);
+	return oa_tc6_write_register(tc6, (ret << 16) | regnum, val);
 }
-EXPORT_SYMBOL_GPL(oa_tc6_mdiobus_write_c45);
 
 static int oa_tc6_mdiobus_register(struct oa_tc6 *tc6)
 {
@@ -557,7 +507,7 @@ static int oa_tc6_mdiobus_register(struct oa_tc6 *tc6)
 	tc6->mdiobus->read_c45 = oa_tc6_mdiobus_read_c45;
 	tc6->mdiobus->write_c45 = oa_tc6_mdiobus_write_c45;
 	tc6->mdiobus->name = "oa-tc6-mdiobus";
-	tc6->mdiobus->parent = &tc6->spi->dev;
+	tc6->mdiobus->parent = tc6->dev;
 
 	snprintf(tc6->mdiobus->id, ARRAY_SIZE(tc6->mdiobus->id), "%s",
 		 dev_name(&tc6->spi->dev));
@@ -581,9 +531,6 @@ static void oa_tc6_mdiobus_unregister(struct oa_tc6 *tc6)
 static int oa_tc6_phy_init(struct oa_tc6 *tc6)
 {
 	int ret;
-
-	if (tc6->quirk_flags & OA_TC6_BROKEN_PHY)
-		return 0;
 
 	ret = oa_tc6_check_phy_reg_direct_access_capability(tc6);
 	if (ret) {
@@ -621,9 +568,6 @@ static int oa_tc6_phy_init(struct oa_tc6 *tc6)
 
 static void oa_tc6_phy_exit(struct oa_tc6 *tc6)
 {
-	if (tc6->quirk_flags & OA_TC6_BROKEN_PHY)
-		return;
-
 	phy_disconnect(tc6->phydev);
 	oa_tc6_mdiobus_unregister(tc6);
 }
@@ -1453,20 +1397,18 @@ static int oa_tc6_check_ctrl_protection(struct oa_tc6 *tc6)
  * oa_tc6_init - allocates and initializes oa_tc6 structure.
  * @spi: device with which data will be exchanged.
  * @netdev: network device interface structure.
- * @quirks: device specific modifiers for the OA TC6 protocol.
  *
  * Return: pointer reference to the oa_tc6 structure if the MAC-PHY
- * initialization is successful otherwise an ERR_PTR.
+ * initialization is successful otherwise NULL.
  */
-struct oa_tc6 *oa_tc6_init(struct spi_device *spi, struct net_device *netdev,
-			   struct oa_tc6_quirks *quirks)
+struct oa_tc6 *oa_tc6_init(struct spi_device *spi, struct net_device *netdev)
 {
 	struct oa_tc6 *tc6;
 	int ret;
 
 	tc6 = devm_kzalloc(&spi->dev, sizeof(*tc6), GFP_KERNEL);
 	if (!tc6)
-		return ERR_PTR(-ENOMEM);
+		return NULL;
 
 	tc6->spi = spi;
 	tc6->netdev = netdev;
@@ -1474,82 +1416,62 @@ struct oa_tc6 *oa_tc6_init(struct spi_device *spi, struct net_device *netdev,
 	mutex_init(&tc6->spi_ctrl_lock);
 	spin_lock_init(&tc6->tx_skb_lock);
 
-	if (quirks)
-		tc6->quirk_flags = quirks->quirk_flags;
-
 	/* Set the SPI controller to pump at realtime priority */
 	tc6->spi->rt = true;
-	ret = spi_setup(tc6->spi);
-	if (ret < 0)
-		return ERR_PTR(ret);
+	if (spi_setup(tc6->spi) < 0)
+		return NULL;
 
 	tc6->spi_ctrl_tx_buf = devm_kzalloc(&tc6->spi->dev,
 					    OA_TC6_CTRL_SPI_BUF_SIZE,
 					    GFP_KERNEL);
 	if (!tc6->spi_ctrl_tx_buf)
-		return ERR_PTR(-ENOMEM);
+		return NULL;
 
 	tc6->spi_ctrl_rx_buf = devm_kzalloc(&tc6->spi->dev,
 					    OA_TC6_CTRL_SPI_BUF_SIZE,
 					    GFP_KERNEL);
 	if (!tc6->spi_ctrl_rx_buf)
-		return ERR_PTR(-ENOMEM);
+		return NULL;
 
 	tc6->spi_data_tx_buf = devm_kzalloc(&tc6->spi->dev,
 					    OA_TC6_SPI_DATA_BUF_SIZE,
 					    GFP_KERNEL);
 	if (!tc6->spi_data_tx_buf)
-		return ERR_PTR(-ENOMEM);
+		return NULL;
 
 	tc6->spi_data_rx_buf = devm_kzalloc(&tc6->spi->dev,
 					    OA_TC6_SPI_DATA_BUF_SIZE,
 					    GFP_KERNEL);
 	if (!tc6->spi_data_rx_buf)
-		return ERR_PTR(-ENOMEM);
-
-	tc6->reset_gpio = devm_gpiod_get_optional(&spi->dev, "reset",
-						  GPIOD_OUT_HIGH);
-	if (IS_ERR(tc6->reset_gpio))
-		return ERR_PTR(dev_err_probe(&spi->dev,
-					     PTR_ERR(tc6->reset_gpio),
-					     "failed to get reset gpio\n"));
-
-	if (tc6->reset_gpio) {
-		/* Keep the reset asserted for 10 us and then allow 1 ms of
-		 * settle time for the crystal oscillator startup.
-		 */
-		fsleep(10);
-		gpiod_set_value_cansleep(tc6->reset_gpio, 0);
-		fsleep(1000);
-	}
+		return NULL;
 
 	/* Check the PROTE bit status so that we can reset the device */
 	ret = oa_tc6_check_ctrl_protection(tc6);
 	if (ret) {
 		dev_err(&tc6->spi->dev,
 			"Failed to check the protection mode: %d\n", ret);
-		return ERR_PTR(ret);
+		return NULL;
 	}
 
 	ret = oa_tc6_sw_reset_macphy(tc6);
 	if (ret) {
 		dev_err(&tc6->spi->dev,
 			"MAC-PHY software reset failed: %d\n", ret);
-		return ERR_PTR(ret);
+		return NULL;
 	}
 
 	ret = oa_tc6_unmask_macphy_error_interrupts(tc6);
 	if (ret) {
 		dev_err(&tc6->spi->dev,
 			"MAC-PHY error interrupts unmask failed: %d\n", ret);
-		return ERR_PTR(ret);
+		return NULL;
 	}
 
 	ret = oa_tc6_phy_init(tc6);
 	if (ret) {
 		dev_err(&tc6->spi->dev,
 			"MAC internal PHY initialization failed: %d\n", ret);
-		return ERR_PTR(ret);
+		return NULL;
 	}
 
 	ret = oa_tc6_enable_data_transfer(tc6);
@@ -1590,7 +1512,7 @@ struct oa_tc6 *oa_tc6_init(struct spi_device *spi, struct net_device *netdev,
 
 phy_exit:
 	oa_tc6_phy_exit(tc6);
-	return ERR_PTR(ret);
+	return NULL;
 }
 EXPORT_SYMBOL_GPL(oa_tc6_init);
 

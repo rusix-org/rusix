@@ -4,14 +4,13 @@
 #include <linux/iosys-map.h>
 #include <linux/rwsem.h>
 
-#include <drm/drm_print.h>
 #include <drm/panthor_drm.h>
 
 #include "panthor_device.h"
 #include "panthor_gem.h"
-#include "panthor_gpu_regs.h"
 #include "panthor_heap.h"
 #include "panthor_mmu.h"
+#include "panthor_regs.h"
 
 /*
  * The GPU heap context is an opaque structure used by the GPU to track the
@@ -145,7 +144,7 @@ static int panthor_alloc_heap_chunk(struct panthor_heap_pool *pool,
 	struct panthor_heap_chunk_header *hdr;
 	int ret;
 
-	chunk = kmalloc_obj(*chunk);
+	chunk = kmalloc(sizeof(*chunk), GFP_KERNEL);
 	if (!chunk)
 		return -ENOMEM;
 
@@ -303,7 +302,7 @@ int panthor_heap_create(struct panthor_heap_pool *pool,
 	if (!vm)
 		return -EINVAL;
 
-	heap = kzalloc_obj(*heap);
+	heap = kzalloc(sizeof(*heap), GFP_KERNEL);
 	if (!heap) {
 		ret = -ENOMEM;
 		goto err_put_vm;
@@ -541,7 +540,7 @@ panthor_heap_pool_create(struct panthor_device *ptdev, struct panthor_vm *vm)
 	struct panthor_heap_pool *pool;
 	int ret = 0;
 
-	pool = kzalloc_obj(*pool);
+	pool = kzalloc(sizeof(*pool), GFP_KERNEL);
 	if (!pool)
 		return ERR_PTR(-ENOMEM);
 

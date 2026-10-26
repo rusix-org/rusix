@@ -12,9 +12,10 @@
 #include <stdint.h>
 #include <err.h>
 
-#include "kselftest.h"
+#include "../kselftest.h"
 #include <include/vdso/time64.h>
 #include "vm_util.h"
+#include "thp_settings.h"
 
 #define KSM_SYSFS_PATH "/sys/kernel/mm/ksm/"
 #define KSM_FP(s) (KSM_SYSFS_PATH s)
@@ -173,7 +174,7 @@ static void  *allocate_memory(void *ptr, int prot, int mapping, char data, size_
 {
 	void *map_ptr = mmap(ptr, map_size, PROT_WRITE, mapping, -1, 0);
 
-	if (map_ptr == MAP_FAILED) {
+	if (!map_ptr) {
 		ksft_perror("mmap");
 		return NULL;
 	}

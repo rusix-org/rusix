@@ -321,10 +321,10 @@ static u32 rtw89_pci_get_rx_skb_idx(struct rtw89_dev *rtwdev,
 static u32 rtw89_pci_rxbd_deliver_skbs(struct rtw89_dev *rtwdev,
 				       struct rtw89_pci_rx_ring *rx_ring)
 {
-	struct rtw89_rx_desc_info *desc_info = &rx_ring->deliver_desc;
+	struct rtw89_rx_desc_info *desc_info = &rx_ring->diliver_desc;
 	struct rtw89_pci_dma_ring *bd_ring = &rx_ring->bd_ring;
 	const struct rtw89_pci_info *info = rtwdev->pci_info;
-	struct sk_buff *new = rx_ring->deliver_skb;
+	struct sk_buff *new = rx_ring->diliver_skb;
 	struct rtw89_pci_rx_info *rx_info;
 	struct sk_buff *skb;
 	u32 rxinfo_size = sizeof(struct rtw89_pci_rxbd_info);
@@ -370,7 +370,7 @@ static u32 rtw89_pci_rxbd_deliver_skbs(struct rtw89_dev *rtwdev,
 		if (!new)
 			goto err_sync_device;
 
-		rx_ring->deliver_skb = new;
+		rx_ring->diliver_skb = new;
 
 		/* first segment has RX desc */
 		offset = desc_info->offset + desc_info->rxd_len;
@@ -392,7 +392,7 @@ static u32 rtw89_pci_rxbd_deliver_skbs(struct rtw89_dev *rtwdev,
 	}
 	if (ls) {
 		rtw89_core_rx(rtwdev, desc_info, new);
-		rx_ring->deliver_skb = NULL;
+		rx_ring->diliver_skb = NULL;
 		desc_info->ready = false;
 	}
 
@@ -404,7 +404,7 @@ err_sync_device:
 err_free_resource:
 	if (new)
 		dev_kfree_skb_any(new);
-	rx_ring->deliver_skb = NULL;
+	rx_ring->diliver_skb = NULL;
 	desc_info->ready = false;
 
 	return cnt;
@@ -464,7 +464,7 @@ static void rtw89_pci_tx_status(struct rtw89_dev *rtwdev,
 	struct rtw89_tx_skb_data *skb_data = RTW89_TX_SKB_CB(skb);
 	struct ieee80211_tx_info *info;
 
-	if (rtw89_core_tx_wait_complete(rtwdev, skb_data, tx_status))
+	if (rtw89_core_tx_wait_complete(rtwdev, skb_data, tx_status == RTW89_TX_DONE))
 		return;
 
 	info = IEEE80211_SKB_CB(skb);
@@ -969,9 +969,6 @@ static irqreturn_t rtw89_pci_interrupt_threadfn(int irq, void *dev)
 
 	if (unlikely(isrs.halt_c2h_isrs & isr_def->isr_wdt_timeout))
 		rtw89_ser_notify(rtwdev, MAC_AX_ERR_L2_ERR_WDT_TIMEOUT_INT);
-
-	if (unlikely(isrs.halt_c2h_isrs & isr_def->isr_sps_ocp))
-		rtw89_warn(rtwdev, "SPS OCP alarm 0x%x\n", isrs.halt_c2h_isrs);
 
 	if (unlikely(rtwpci->under_recovery))
 		goto enable_intr;
@@ -1840,8 +1837,8 @@ static void rtw89_pci_reset_trx_rings(struct rtw89_dev *rtwdev)
 		else
 			bd_ring->wp = 0;
 		bd_ring->rp = 0;
-		rx_ring->deliver_skb = NULL;
-		rx_ring->deliver_desc.ready = false;
+		rx_ring->diliver_skb = NULL;
+		rx_ring->diliver_desc.ready = false;
 		rx_ring->target_rx_tag = 0;
 
 		if (info->group_bd_addr) {
@@ -3326,10 +3323,6 @@ static bool rtw89_pci_is_dac_compatible_bridge(struct rtw89_dev *rtwdev)
 		if (bridge->device == 0x2806)
 			return true;
 		break;
-	case PCI_VENDOR_ID_SPACEMIT:
-		if (bridge->device == PCI_DEVICE_ID_SPACEMIT_K3)
-			return true;
-		break;
 	}
 
 	return false;
@@ -3719,8 +3712,8 @@ static int rtw89_pci_alloc_rx_ring(struct rtw89_dev *rtwdev,
 		rx_ring->bd_ring.wp = 0;
 	rx_ring->bd_ring.rp = 0;
 	rx_ring->buf_sz = buf_sz;
-	rx_ring->deliver_skb = NULL;
-	rx_ring->deliver_desc.ready = false;
+	rx_ring->diliver_skb = NULL;
+	rx_ring->diliver_desc.ready = false;
 	rx_ring->target_rx_tag = 0;
 
 	for (i = 0; i < len; i++) {
@@ -4026,8 +4019,7 @@ static void rtw89_pci_recovery_intr_mask_v3(struct rtw89_dev *rtwdev)
 	struct rtw89_pci *rtwpci = (struct rtw89_pci *)rtwdev->priv;
 
 	rtwpci->ind_intrs = B_BE_HS0_IND_INT_EN0;
-	rtwpci->halt_c2h_intrs = B_BE_HALT_C2H_INT_EN | B_BE_WDT_TIMEOUT_INT_EN |
-				 B_BE_SPSANA_OCP_INT_EN | B_BE_SPS_OCP_INT_EN;
+	rtwpci->halt_c2h_intrs = B_BE_HALT_C2H_INT_EN | B_BE_WDT_TIMEOUT_INT_EN;
 	rtwpci->intrs[0] = 0;
 	rtwpci->intrs[1] = 0;
 }
@@ -4037,8 +4029,7 @@ static void rtw89_pci_default_intr_mask_v3(struct rtw89_dev *rtwdev)
 	struct rtw89_pci *rtwpci = (struct rtw89_pci *)rtwdev->priv;
 
 	rtwpci->ind_intrs = B_BE_HS0_IND_INT_EN0;
-	rtwpci->halt_c2h_intrs = B_BE_HALT_C2H_INT_EN | B_BE_WDT_TIMEOUT_INT_EN |
-				 B_BE_SPSANA_OCP_INT_EN | B_BE_SPS_OCP_INT_EN;
+	rtwpci->halt_c2h_intrs = B_BE_HALT_C2H_INT_EN | B_BE_WDT_TIMEOUT_INT_EN;
 	rtwpci->intrs[0] = 0;
 	rtwpci->intrs[1] = B_BE_PCIE_RDU_CH1_IMR |
 			   B_BE_PCIE_RDU_CH0_IMR |
@@ -4384,20 +4375,10 @@ static void rtw89_pci_l1ss_cfg(struct rtw89_dev *rtwdev)
 static void rtw89_pci_cpl_timeout_cfg(struct rtw89_dev *rtwdev)
 {
 	struct rtw89_pci *rtwpci = (struct rtw89_pci *)rtwdev->priv;
-	enum rtw89_core_chip_id chip_id = rtwdev->chip->chip_id;
-	struct rtw89_hal *hal = &rtwdev->hal;
 	struct pci_dev *pdev = rtwpci->pdev;
-	bool dis = true;
 
-	if (chip_id == RTL8922D && hal->cid == RTL8922D_CID7090)
-		dis = false;
-
-	if (dis)
-		pcie_capability_set_word(pdev, PCI_EXP_DEVCTL2,
-					 PCI_EXP_DEVCTL2_COMP_TMOUT_DIS);
-	else
-		pcie_capability_clear_word(pdev, PCI_EXP_DEVCTL2,
-					   PCI_EXP_DEVCTL2_COMP_TMOUT_DIS);
+	pcie_capability_set_word(pdev, PCI_EXP_DEVCTL2,
+				 PCI_EXP_DEVCTL2_COMP_TMOUT_DIS);
 }
 
 static int rtw89_pci_poll_io_idle_ax(struct rtw89_dev *rtwdev)
@@ -4690,7 +4671,6 @@ const struct rtw89_pci_isr_def rtw89_pci_isr_ax = {
 	.isr_rdu = B_AX_RDU_INT,
 	.isr_halt_c2h = B_AX_HALT_C2H_INT_EN,
 	.isr_wdt_timeout = B_AX_WDT_TIMEOUT_INT_EN,
-	.isr_sps_ocp = 0,
 	.isr_clear_rpq = {R_AX_PCIE_HISR00, B_AX_RPQDMA_INT | B_AX_RPQBD_FULL_INT},
 	.isr_clear_rxq = {R_AX_PCIE_HISR00, B_AX_RXP1DMA_INT | B_AX_RXDMA_INT |
 					    B_AX_RDU_INT},
@@ -4766,49 +4746,6 @@ static const struct rtw89_hci_ops rtw89_pci_ops = {
 	.rst_bdram	= rtw89_pci_reset_bdram,
 };
 
-static void rtw89_pci_d3cold_quirks(struct rtw89_dev *rtwdev, struct pci_dev *pdev)
-{
-	static const struct dmi_system_id d3cold_quirks[] = {
-		{
-			.ident = "ASUS EXPERTBOOK B3406CMA",
-			.matches = {
-				DMI_MATCH(DMI_BOARD_VENDOR, "ASUS"),
-				DMI_MATCH(DMI_BOARD_NAME, "B3406CMA"),
-			},
-		},
-		{
-			.ident = "ASUS EXPERTBOOK B3606CMA",
-			.matches = {
-				DMI_MATCH(DMI_BOARD_VENDOR, "ASUS"),
-				DMI_MATCH(DMI_BOARD_NAME, "B3606CMA"),
-			},
-		},
-		{
-			.ident = "ASUS EXPERTBOOK P3406CMA",
-			.matches = {
-				DMI_MATCH(DMI_BOARD_VENDOR, "ASUS"),
-				DMI_MATCH(DMI_BOARD_NAME, "P3406CMA"),
-			},
-		},
-		{
-			.ident = "ASUS EXPERTBOOK P3606CMA",
-			.matches = {
-				DMI_MATCH(DMI_BOARD_VENDOR, "ASUS"),
-				DMI_MATCH(DMI_BOARD_NAME, "P3606CMA"),
-			},
-		},
-		{},
-	};
-	const struct dmi_system_id *match;
-
-	match = dmi_first_match(d3cold_quirks);
-	if (!match)
-		return;
-
-	rtw89_debug(rtwdev, RTW89_DBG_STATE, "Disable D3Cold on %s\n", match->ident);
-	pci_d3cold_disable(pdev);
-}
-
 int rtw89_pci_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 {
 	struct rtw89_dev *rtwdev;
@@ -4819,7 +4756,8 @@ int rtw89_pci_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 	info = (const struct rtw89_driver_info *)id->driver_data;
 
 	rtwdev = rtw89_alloc_ieee80211_hw(&pdev->dev,
-					  sizeof(struct rtw89_pci), info);
+					  sizeof(struct rtw89_pci),
+					  info->chip, info->variant);
 	if (!rtwdev) {
 		dev_err(&pdev->dev, "failed to allocate hw\n");
 		return -ENOMEM;
@@ -4834,7 +4772,6 @@ int rtw89_pci_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 	rtwdev->hci.rpwm_addr = pci_info->rpwm_addr;
 	rtwdev->hci.cpwm_addr = pci_info->cpwm_addr;
 
-	rtw89_pci_d3cold_quirks(rtwdev, pdev);
 	rtw89_check_quirks(rtwdev, info->quirks);
 	rtw89_check_pci_ssid_quirks(rtwdev, pdev, pci_info->ssid_quirks);
 

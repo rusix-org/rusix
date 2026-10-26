@@ -11,7 +11,6 @@
 #include <linux/kernel.h>
 #include <linux/backlight.h>
 #include <linux/adb.h>
-#include <linux/of.h>
 #include <linux/pmu.h>
 #include <linux/atomic.h>
 #include <linux/export.h>

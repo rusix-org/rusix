@@ -6,13 +6,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-/**
- * struct perf_cpu - wrapper around a CPU number.
- * @cpu: CPU number, -1 for the "any CPU"/dummy value.
- *
- * int16_t limits this to 32767 CPUs.  Widening to int requires a libperf
- * ABI bump — see tools/lib/perf/TODO for the full scope.
- */
+/** A wrapper around a CPU to avoid confusion with the perf_cpu_map's map's indices. */
 struct perf_cpu {
 	int16_t cpu;
 };
@@ -55,7 +49,7 @@ LIBPERF_API void perf_cpu_map__put(struct perf_cpu_map *map);
  * perf_cpu_map__cpu - get the CPU value at the given index. Returns -1 if index
  *                     is invalid.
  */
-LIBPERF_API struct perf_cpu perf_cpu_map__cpu(const struct perf_cpu_map *cpus, unsigned int idx);
+LIBPERF_API struct perf_cpu perf_cpu_map__cpu(const struct perf_cpu_map *cpus, int idx);
 /**
  * perf_cpu_map__nr - for an empty map returns 1, as perf_cpu_map__cpu returns a
  *                    cpu of -1 for an invalid index, this makes an empty map
@@ -63,7 +57,7 @@ LIBPERF_API struct perf_cpu perf_cpu_map__cpu(const struct perf_cpu_map *cpus, u
  *                    the result is the number CPUs in the map plus one if the
  *                    "any CPU"/dummy value is present.
  */
-LIBPERF_API unsigned int perf_cpu_map__nr(const struct perf_cpu_map *cpus);
+LIBPERF_API int perf_cpu_map__nr(const struct perf_cpu_map *cpus);
 /**
  * perf_cpu_map__has_any_cpu_or_is_empty - is map either empty or has the "any CPU"/dummy value.
  */

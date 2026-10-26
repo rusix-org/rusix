@@ -89,7 +89,7 @@ static void report_access(const char *access, struct task_struct *target,
 		return;
 	}
 
-	info = kmalloc_obj(*info, GFP_ATOMIC);
+	info = kmalloc(sizeof(*info), GFP_ATOMIC);
 	if (!info)
 		return;
 	init_task_work(&info->work, __report_access);
@@ -143,7 +143,7 @@ static int yama_ptracer_add(struct task_struct *tracer,
 {
 	struct ptrace_relation *relation, *added;
 
-	added = kmalloc_obj(*added);
+	added = kmalloc(sizeof(*added), GFP_KERNEL);
 	if (!added)
 		return -ENOMEM;
 
@@ -476,6 +476,6 @@ static int __init yama_init(void)
 }
 
 DEFINE_LSM(yama) = {
-	.id = &yama_lsmid,
+	.name = "yama",
 	.init = yama_init,
 };

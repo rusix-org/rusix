@@ -157,7 +157,7 @@ static int tcf_police_init(struct net *net, struct nlattr *nla,
 		goto failure;
 	}
 
-	new = kzalloc_obj(*new);
+	new = kzalloc(sizeof(*new), GFP_KERNEL);
 	if (unlikely(!new)) {
 		err = -ENOMEM;
 		goto failure;
@@ -313,7 +313,7 @@ TC_INDIRECT_SCOPE int tcf_police_act(struct sk_buff *skb,
 	}
 
 inc_overlimits:
-	qstats_cpu_overlimit_inc(police->common.cpu_qstats);
+	qstats_overlimit_inc(this_cpu_ptr(police->common.cpu_qstats));
 inc_drops:
 	if (ret == TC_ACT_SHOT)
 		qstats_cpu_drop_inc(police->common.cpu_qstats);

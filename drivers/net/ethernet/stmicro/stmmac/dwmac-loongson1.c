@@ -38,6 +38,8 @@
 #define GMAC_SHUT		BIT(6)
 
 #define PHY_INTF_SELI		GENMASK(30, 28)
+#define PHY_INTF_MII		FIELD_PREP(PHY_INTF_SELI, 0)
+#define PHY_INTF_RMII		FIELD_PREP(PHY_INTF_SELI, 4)
 
 struct ls1x_dwmac {
 	struct plat_stmmacenet_data *plat_dat;
@@ -48,7 +50,7 @@ struct ls1x_dwmac {
 struct ls1x_data {
 	int (*setup)(struct platform_device *pdev,
 		     struct plat_stmmacenet_data *plat_dat);
-	int (*init)(struct device *dev, void *bsp_priv);
+	int (*init)(struct platform_device *pdev, void *bsp_priv);
 };
 
 static int ls1b_dwmac_setup(struct platform_device *pdev,
@@ -79,7 +81,7 @@ static int ls1b_dwmac_setup(struct platform_device *pdev,
 	return 0;
 }
 
-static int ls1b_dwmac_syscon_init(struct device *dev, void *priv)
+static int ls1b_dwmac_syscon_init(struct platform_device *pdev, void *priv)
 {
 	struct ls1x_dwmac *dwmac = priv;
 	struct plat_stmmacenet_data *plat = dwmac->plat_dat;
@@ -98,7 +100,7 @@ static int ls1b_dwmac_syscon_init(struct device *dev, void *priv)
 					   GMAC0_USE_TXCLK | GMAC0_USE_PWM01);
 			break;
 		default:
-			dev_err(dev, "Unsupported PHY mode %u\n",
+			dev_err(&pdev->dev, "Unsupported PHY mode %u\n",
 				plat->phy_interface);
 			return -EOPNOTSUPP;
 		}
@@ -122,7 +124,7 @@ static int ls1b_dwmac_syscon_init(struct device *dev, void *priv)
 					   GMAC1_USE_TXCLK | GMAC1_USE_PWM23);
 			break;
 		default:
-			dev_err(dev, "Unsupported PHY mode %u\n",
+			dev_err(&pdev->dev, "Unsupported PHY mode %u\n",
 				plat->phy_interface);
 			return -EOPNOTSUPP;
 		}
@@ -133,23 +135,27 @@ static int ls1b_dwmac_syscon_init(struct device *dev, void *priv)
 	return 0;
 }
 
-static int ls1c_dwmac_syscon_init(struct device *dev, void *priv)
+static int ls1c_dwmac_syscon_init(struct platform_device *pdev, void *priv)
 {
 	struct ls1x_dwmac *dwmac = priv;
 	struct plat_stmmacenet_data *plat = dwmac->plat_dat;
 	struct regmap *regmap = dwmac->regmap;
-	int phy_intf_sel;
 
-	phy_intf_sel = stmmac_get_phy_intf_sel(plat->phy_interface);
-	if (phy_intf_sel != PHY_INTF_SEL_GMII_MII &&
-	    phy_intf_sel != PHY_INTF_SEL_RMII) {
-		dev_err(dev, "Unsupported PHY-mode %u\n",
+	switch (plat->phy_interface) {
+	case PHY_INTERFACE_MODE_MII:
+		regmap_update_bits(regmap, LS1X_SYSCON1, PHY_INTF_SELI,
+				   PHY_INTF_MII);
+		break;
+	case PHY_INTERFACE_MODE_RMII:
+		regmap_update_bits(regmap, LS1X_SYSCON1, PHY_INTF_SELI,
+				   PHY_INTF_RMII);
+		break;
+	default:
+		dev_err(&pdev->dev, "Unsupported PHY-mode %u\n",
 			plat->phy_interface);
 		return -EOPNOTSUPP;
 	}
 
-	regmap_update_bits(regmap, LS1X_SYSCON1, PHY_INTF_SELI,
-			   FIELD_PREP(PHY_INTF_SELI, phy_intf_sel));
 	regmap_update_bits(regmap, LS1X_SYSCON0, GMAC0_SHUT, 0);
 
 	return 0;

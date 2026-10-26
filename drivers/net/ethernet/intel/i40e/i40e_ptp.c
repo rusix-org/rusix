@@ -24,6 +24,9 @@
 #define I40E_PTP_1GB_INCVAL_MULT	20
 #define I40E_ISGN			0x80000000
 
+#define I40E_PRTTSYN_CTL1_TSYNTYPE_V1  BIT(I40E_PRTTSYN_CTL1_TSYNTYPE_SHIFT)
+#define I40E_PRTTSYN_CTL1_TSYNTYPE_V2  (2 << \
+					I40E_PRTTSYN_CTL1_TSYNTYPE_SHIFT)
 #define I40E_SUBDEV_ID_25G_PTP_PIN	0xB
 
 enum i40e_ptp_pin {
@@ -1130,7 +1133,7 @@ int i40e_ptp_alloc_pins(struct i40e_pf *pf)
 		return 0;
 
 	pf->ptp_pins =
-		kzalloc_obj(struct i40e_ptp_pins_settings);
+		kzalloc(sizeof(struct i40e_ptp_pins_settings), GFP_KERNEL);
 
 	if (!pf->ptp_pins) {
 		dev_warn(&pf->pdev->dev, "Cannot allocate memory for PTP pins structure.\n");
@@ -1217,7 +1220,7 @@ static int i40e_ptp_set_timestamp_mode(struct i40e_pf *pf,
 		pf->ptp_rx = true;
 		tsyntype = I40E_PRTTSYN_CTL1_V1MESSTYPE0_MASK |
 			   I40E_PRTTSYN_CTL1_TSYNTYPE_V1 |
-			   I40E_PRTTSYN_CTL1_UDP_ENA_319;
+			   I40E_PRTTSYN_CTL1_UDP_ENA_MASK;
 		config->rx_filter = HWTSTAMP_FILTER_PTP_V1_L4_EVENT;
 		break;
 	case HWTSTAMP_FILTER_PTP_V2_EVENT:
@@ -1234,9 +1237,9 @@ static int i40e_ptp_set_timestamp_mode(struct i40e_pf *pf,
 	case HWTSTAMP_FILTER_PTP_V2_L2_DELAY_REQ:
 		pf->ptp_rx = true;
 		tsyntype = I40E_PRTTSYN_CTL1_V2MESSTYPE0_MASK |
-			   I40E_PRTTSYN_CTL1_TSYNTYPE_V2_EVENT;
+			   I40E_PRTTSYN_CTL1_TSYNTYPE_V2;
 		if (test_bit(I40E_HW_CAP_PTP_L4, pf->hw.caps)) {
-			tsyntype |= I40E_PRTTSYN_CTL1_UDP_ENA_319;
+			tsyntype |= I40E_PRTTSYN_CTL1_UDP_ENA_MASK;
 			config->rx_filter = HWTSTAMP_FILTER_PTP_V2_EVENT;
 		} else {
 			config->rx_filter = HWTSTAMP_FILTER_PTP_V2_L2_EVENT;
@@ -1342,8 +1345,9 @@ static int i40e_init_pin_config(struct i40e_pf *pf)
 	pf->ptp_caps.pps = 1;
 	pf->ptp_caps.n_per_out = 2;
 
-	pf->ptp_caps.pin_config = kzalloc_objs(*pf->ptp_caps.pin_config,
-					       pf->ptp_caps.n_pins);
+	pf->ptp_caps.pin_config = kcalloc(pf->ptp_caps.n_pins,
+					  sizeof(*pf->ptp_caps.pin_config),
+					  GFP_KERNEL);
 	if (!pf->ptp_caps.pin_config)
 		return -ENOMEM;
 

@@ -93,8 +93,6 @@ struct hisi_l3c_pmu_ext {
 	bool support_ext;
 };
 
-static enum cpuhp_state hisi_l3c_pmu_cpuhp_state;
-
 static bool support_ext(struct hisi_l3c_pmu *pmu)
 {
 	struct hisi_l3c_pmu_ext *l3c_pmu_ext = pmu->l3c_pmu.dev_info->private;
@@ -606,7 +604,8 @@ static int hisi_l3c_pmu_init_ext(struct hisi_pmu *l3c_pmu, struct platform_devic
 				       IRQF_NOBALANCING | IRQF_NO_THREAD,
 				       irqname, l3c_pmu);
 		if (ret < 0)
-			return ret;
+			return dev_err_probe(&pdev->dev, ret,
+				"Fail to request EXT IRQ: %d.\n", irq);
 
 		hisi_l3c_pmu->ext_irq[i] = irq;
 	}
@@ -846,7 +845,8 @@ static int hisi_l3c_pmu_probe(struct platform_device *pdev)
 	if (!name)
 		return -ENOMEM;
 
-	ret = cpuhp_state_add_instance(hisi_l3c_pmu_cpuhp_state, &l3c_pmu->node);
+	ret = cpuhp_state_add_instance(CPUHP_AP_PERF_ARM_HISI_L3_ONLINE,
+				       &l3c_pmu->node);
 	if (ret) {
 		dev_err(&pdev->dev, "Error %d registering hotplug\n", ret);
 		return ret;
@@ -858,7 +858,7 @@ static int hisi_l3c_pmu_probe(struct platform_device *pdev)
 	if (ret) {
 		dev_err(l3c_pmu->dev, "L3C PMU register failed!\n");
 		cpuhp_state_remove_instance_nocalls(
-			hisi_l3c_pmu_cpuhp_state, &l3c_pmu->node);
+			CPUHP_AP_PERF_ARM_HISI_L3_ONLINE, &l3c_pmu->node);
 	}
 
 	return ret;
@@ -869,7 +869,7 @@ static void hisi_l3c_pmu_remove(struct platform_device *pdev)
 	struct hisi_pmu *l3c_pmu = platform_get_drvdata(pdev);
 
 	perf_pmu_unregister(&l3c_pmu->pmu);
-	cpuhp_state_remove_instance_nocalls(hisi_l3c_pmu_cpuhp_state,
+	cpuhp_state_remove_instance_nocalls(CPUHP_AP_PERF_ARM_HISI_L3_ONLINE,
 					    &l3c_pmu->node);
 }
 
@@ -939,20 +939,20 @@ static int hisi_l3c_pmu_offline_cpu(unsigned int cpu, struct hlist_node *node)
 
 static int __init hisi_l3c_pmu_module_init(void)
 {
-	int ret = cpuhp_setup_state_multi(CPUHP_AP_ONLINE_DYN,
+	int ret;
+
+	ret = cpuhp_setup_state_multi(CPUHP_AP_PERF_ARM_HISI_L3_ONLINE,
 				      "AP_PERF_ARM_HISI_L3_ONLINE",
 				      hisi_l3c_pmu_online_cpu,
 				      hisi_l3c_pmu_offline_cpu);
-	if (ret < 0) {
+	if (ret) {
 		pr_err("L3C PMU: Error setup hotplug, ret = %d\n", ret);
 		return ret;
 	}
 
-	hisi_l3c_pmu_cpuhp_state = ret;
-
 	ret = platform_driver_register(&hisi_l3c_pmu_driver);
 	if (ret)
-		cpuhp_remove_multi_state(hisi_l3c_pmu_cpuhp_state);
+		cpuhp_remove_multi_state(CPUHP_AP_PERF_ARM_HISI_L3_ONLINE);
 
 	return ret;
 }
@@ -961,7 +961,7 @@ module_init(hisi_l3c_pmu_module_init);
 static void __exit hisi_l3c_pmu_module_exit(void)
 {
 	platform_driver_unregister(&hisi_l3c_pmu_driver);
-	cpuhp_remove_multi_state(hisi_l3c_pmu_cpuhp_state);
+	cpuhp_remove_multi_state(CPUHP_AP_PERF_ARM_HISI_L3_ONLINE);
 }
 module_exit(hisi_l3c_pmu_module_exit);
 

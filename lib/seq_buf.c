@@ -76,8 +76,6 @@ int seq_buf_vprintf(struct seq_buf *s, const char *fmt, va_list args)
 			s->len += len;
 			return 0;
 		}
-		/* vsnprintf() wrote as much as fits, so none of it is stale */
-		s->len = s->size;
 	}
 	seq_buf_set_overflow(s);
 	return -1;
@@ -130,7 +128,7 @@ void seq_buf_do_printk(struct seq_buf *s, const char *lvl)
 	}
 
 	/* No trailing LF */
-	if (*start)
+	if (start < s->buffer + s->len)
 		printk("%s%s\n", lvl, start);
 }
 EXPORT_SYMBOL_GPL(seq_buf_do_printk);
@@ -166,8 +164,6 @@ int seq_buf_bprintf(struct seq_buf *s, const char *fmt, const u32 *binary)
 			s->len += ret;
 			return 0;
 		}
-		/* bstr_printf() wrote as much as fits, so none of it is stale */
-		s->len = s->size;
 	}
 	seq_buf_set_overflow(s);
 	return -1;
@@ -179,9 +175,7 @@ int seq_buf_bprintf(struct seq_buf *s, const char *fmt, const u32 *binary)
  * @s: seq_buf descriptor
  * @str: simple string to record
  *
- * Copy a simple string into the sequence buffer. If @str does not fit,
- * as much of it as fits is copied, followed by a null byte, as
- * seq_buf_printf() does.
+ * Copy a simple string into the sequence buffer.
  *
  * Returns: zero on success, -1 on overflow.
  */
@@ -199,11 +193,6 @@ int seq_buf_puts(struct seq_buf *s, const char *str)
 		/* Don't count the trailing null byte against the capacity */
 		s->len += len - 1;
 		return 0;
-	}
-	/* Copy what fits, so the buffer never holds stale bytes */
-	if (s->len < s->size) {
-		strscpy(s->buffer + s->len, str, s->size - s->len);
-		s->len = s->size;
 	}
 	seq_buf_set_overflow(s);
 	return -1;
@@ -240,7 +229,7 @@ EXPORT_SYMBOL_GPL(seq_buf_putc);
  *
  * There may be cases where raw memory needs to be written into the
  * buffer and a strcpy() would not work. Using this function allows
- * for such cases. If @mem does not fit, as much of it as fits is copied.
+ * for such cases.
  *
  * Returns: zero on success, -1 on overflow.
  */
@@ -253,15 +242,9 @@ int seq_buf_putmem(struct seq_buf *s, const void *mem, unsigned int len)
 		s->len += len;
 		return 0;
 	}
-	/* Copy what fits, so the buffer never holds stale bytes */
-	if (s->len < s->size) {
-		memcpy(s->buffer + s->len, mem, s->size - s->len);
-		s->len = s->size;
-	}
 	seq_buf_set_overflow(s);
 	return -1;
 }
-EXPORT_SYMBOL_GPL(seq_buf_putmem);
 
 #define MAX_MEMHEX_BYTES	8U
 #define HEX_CHARS		(MAX_MEMHEX_BYTES*2 + 1)
@@ -315,7 +298,6 @@ int seq_buf_putmem_hex(struct seq_buf *s, const void *mem,
 	}
 	return 0;
 }
-EXPORT_SYMBOL_GPL(seq_buf_putmem_hex);
 
 /**
  * seq_buf_path - copy a path into the sequence buffer
@@ -338,7 +320,7 @@ int seq_buf_path(struct seq_buf *s, const struct path *path, const char *esc)
 	if (size) {
 		char *p = d_path(path, buf, size);
 		if (!IS_ERR(p)) {
-			char *end = seq_mangle_path(buf, p, esc);
+			char *end = mangle_path(buf, p, esc);
 			if (end)
 				res = end - buf;
 		}
@@ -347,7 +329,6 @@ int seq_buf_path(struct seq_buf *s, const struct path *path, const char *esc)
 
 	return res;
 }
-EXPORT_SYMBOL_GPL(seq_buf_path);
 
 /**
  * seq_buf_to_user - copy the sequence buffer to user space
@@ -409,13 +390,12 @@ int seq_buf_to_user(struct seq_buf *s, char __user *ubuf, size_t start, int cnt)
  *
  * Function is an analogue of print_hex_dump() and thus has similar interface.
  *
- * linebuf size is maximal length for one line::
- *
- *	32 * 3 - maximum bytes per line, each printed into 2 chars + 1 for
- *		 separating space
- *	2 - spaces separating hex dump and ASCII representation
- *	32 - ASCII representation
- *	1 - terminating '\0'
+ * linebuf size is maximal length for one line.
+ * 32 * 3 - maximum bytes per line, each printed into 2 chars + 1 for
+ *	separating space
+ * 2 - spaces separating hex dump and ASCII representation
+ * 32 - ASCII representation
+ * 1 - terminating '\0'
  *
  * Returns: zero on success, -1 on overflow.
  */

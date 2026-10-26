@@ -330,7 +330,7 @@ struct regmap *devm_regmap_init_sch56xx(struct device *dev, struct mutex *lock, 
 	if (config->reg_bits != 16 && config->val_bits != 8)
 		return ERR_PTR(-EOPNOTSUPP);
 
-	context = kzalloc_obj(*context);
+	context = kzalloc(sizeof(*context), GFP_KERNEL);
 	if (!context)
 		return ERR_PTR(-ENOMEM);
 

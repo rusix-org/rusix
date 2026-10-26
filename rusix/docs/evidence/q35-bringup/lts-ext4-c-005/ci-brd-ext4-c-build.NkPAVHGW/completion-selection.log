@@ -1,0 +1,8 @@
+implementation=completion-c
+/out/builds/ci-brd-ext4-c/kernel/sched/build_utility.o
+/out/builds/ci-brd-ext4-c/kernel/sched/build_utility.o
+0000000000002a80 T complete
+/out/builds/ci-brd-ext4-c/vmlinux
+ffffffff812943f0 T complete
+002e509a111d473ccfb166b34e54a5c3c9b30d24451f64d831f895b930c29ecd  /src/kernel/sched/completion.c
+686ead81526c374206c9acfd10d9f0e42991dca047d130b3d1e295af792d89cf  /out/builds/ci-brd-ext4-c/kernel/sched/build_utility.o

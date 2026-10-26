@@ -1,8 +1,8 @@
 # Kernel migration inventory
 
 [ADR 0002](adr/0002.md) governs contracts, divergence and removal of executing C.
-No subsystem divergence point has been declared. Existing evidence uses
-`21a7f44fd0765fcc5194130b28767786eba1d1e7`; the LTS transition remains pending.
+No subsystem divergence point has been declared. New integration work uses the
+pinned Linux 6.18.58 baseline; earlier evidence retains its recorded source.
 
 ## Integer square root
 
@@ -26,15 +26,34 @@ when the declared target and export mechanism no longer require them.
 
 ## RAM-backed block driver
 
-**C baseline verified; Rust driver not implemented.** Six x86_64 SMP cases:
-[manifest](evidence/brd-c-baseline/manifest.json). [BRD.md](BRD.md) owns the pinned
-C contract, proposed ownership design, upstream API research and unresolved
+**Paired x86_64 q35 BRD verification passes** at `9d1c1ca5dd`:
+[manifest](evidence/brd-q35/manifest.json) records block6, ext4 six cases, six
+parameter boots and partition5, with identical fixtures and only driver selection
+differing between configs. Nine ownership tests also pass. The negative-parameter
+exception and residual C boundaries remain; no complete-subsystem claim follows.
+The driver/store live in `drivers/block/brd_rust.rs` and `brd_rust/store.rs`;
+`rust/kernel/block/{bio,bio_disk}.rs` provide transitional interfaces.
+Six x86_64 SMP baseline cases: [manifest](evidence/lts-baseline/manifest.json). [BRD.md](BRD.md) owns the pinned
+C contract, implemented ownership design, upstream API research and unresolved
 safety obligations. [Probe instructions](../tests/brd-contract/README.md) reproduce
 that baseline; [Phase 1](PHASE1.md) defines replacement gates. Existing mq APIs
 and upstream rnull are not substitutes for the bio-based stateful BRD contract.
 
-## Next core boundary
+## Completion: opt-in partial core migration
 
-After BRD, investigate completion ownership and wait/wakeup as specified in
-[the roadmap](ROADMAP.md). GCD/LCM remain unimplemented, deferred investigations;
-they are not migration progress or the next implementation target.
+[`complete()`](../../kernel/sched/completion_rust.rs) has an opt-in Rust
+translation (`0e7d592fed`, default off, x86_64). Local `completion-c`/`completion-rust`
+profiles pass all nine completion cases on each implementation, also alongside
+nine BRD ownership cases, on q35. Linked object/symbol checks verify selection.
+[Paired evidence](evidence/completion-paired/manifest.json) records source and
+remaining coverage gaps. C still owns layout/init/reset, other
+completion operations, wait loops, raw locks, swait and scheduler integration.
+The scoped kernel LKMM atomic counter shares the existing raw lock with C writers;
+no Rust reference covers the enclosing mutable C object.
+
+The [ownership experiment](../experiments/completion/README.md) owns the contract,
+remaining dependencies and current nine-case inventory: five behavior cases,
+one layout case and three worker cases. Historical six-case i440fx evidence does
+not cover those workers or Rust selection. No completed subsystem or divergence
+point is claimed. GCD/LCM remain deferred; [the roadmap](ROADMAP.md) prioritizes
+this ownership/wait-wakeup boundary after BRD.

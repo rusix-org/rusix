@@ -16,8 +16,6 @@
 #include <linux/platform_device.h>
 #include <linux/sched/clock.h>
 
-#include <drm/drm_print.h>
-
 #include "v3d_drv.h"
 #include "v3d_regs.h"
 #include "v3d_trace.h"
@@ -50,7 +48,7 @@ v3d_overflow_mem_work(struct work_struct *work)
 	unsigned long irqflags;
 
 	if (IS_ERR(bo)) {
-		drm_err(dev, "Couldn't allocate binner overflow mem\n");
+		DRM_ERROR("Couldn't allocate binner overflow mem\n");
 		return;
 	}
 	obj = &bo->base.base;
@@ -90,12 +88,9 @@ v3d_irq_signal_fence(struct v3d_dev *v3d, enum v3d_queue q,
 		     void (*trace_irq)(struct drm_device *, uint64_t))
 {
 	struct v3d_queue_state *queue = &v3d->queue[q];
-	struct v3d_job *job = queue->active_job;
-	struct v3d_fence *fence = to_v3d_fence(job->irq_fence);
+	struct v3d_fence *fence = to_v3d_fence(queue->active_job->irq_fence);
 
-	v3d_perfmon_stop(v3d, job->perfmon, true);
-
-	v3d_job_update_stats(job);
+	v3d_job_update_stats(queue->active_job, q);
 	trace_irq(&v3d->drm, fence->seqno);
 
 	queue->active_job = NULL;
@@ -143,7 +138,7 @@ v3d_irq(int irq, void *arg)
 	 * always-allowed mode.
 	 */
 	if (v3d->ver < V3D_GEN_71 && (intsts & V3D_INT_GMPV))
-		drm_err(&v3d->drm, "GMP violation\n");
+		dev_err(v3d->drm.dev, "GMP violation\n");
 
 	/* V3D 4.2 wires the hub and core IRQs together, so if we &
 	 * didn't see the common one then check hub for MMU IRQs.
@@ -229,7 +224,7 @@ v3d_hub_irq(int irq, void *arg)
 			}
 		}
 
-		drm_dbg(&v3d->drm, "MMU error from client %s (0x%x) at 0x%llx%s%s%s\n",
+		dev_err(v3d->drm.dev, "MMU error from client %s (0x%x) at 0x%llx%s%s%s\n",
 			client, axi_id, (long long)vio_addr,
 			((intsts & V3D_HUB_INT_MMU_WRV) ?
 			 ", write violation" : ""),
@@ -241,7 +236,7 @@ v3d_hub_irq(int irq, void *arg)
 	}
 
 	if (v3d->ver >= V3D_GEN_71 && (intsts & V3D_V7_HUB_INT_GMPV)) {
-		drm_err(&v3d->drm, "GMP Violation\n");
+		dev_err(v3d->drm.dev, "GMP Violation\n");
 		status = IRQ_HANDLED;
 	}
 
@@ -251,9 +246,16 @@ v3d_hub_irq(int irq, void *arg)
 int
 v3d_irq_init(struct v3d_dev *v3d)
 {
-	int irq, ret;
+	int irq, ret, core;
 
 	INIT_WORK(&v3d->overflow_mem_work, v3d_overflow_mem_work);
+
+	/* Clear any pending interrupts someone might have left around
+	 * for us.
+	 */
+	for (core = 0; core < v3d->cores; core++)
+		V3D_CORE_WRITE(core, V3D_CTL_INT_CLR, V3D_CORE_IRQS(v3d->ver));
+	V3D_WRITE(V3D_HUB_INT_CLR, V3D_HUB_IRQS(v3d->ver));
 
 	irq = platform_get_irq_optional(v3d_to_pdev(v3d), 1);
 	if (irq == -EPROBE_DEFER)
@@ -292,6 +294,7 @@ v3d_irq_init(struct v3d_dev *v3d)
 			goto fail;
 	}
 
+	v3d_irq_enable(v3d);
 	return 0;
 
 fail:
@@ -304,11 +307,6 @@ void
 v3d_irq_enable(struct v3d_dev *v3d)
 {
 	int core;
-
-	/* Clear any pending interrupts someone might have left around for us. */
-	for (core = 0; core < v3d->cores; core++)
-		V3D_CORE_WRITE(core, V3D_CTL_INT_CLR, V3D_CORE_IRQS(v3d->ver));
-	V3D_WRITE(V3D_HUB_INT_CLR, V3D_HUB_IRQS(v3d->ver));
 
 	/* Enable our set of interrupts, masking out any others. */
 	for (core = 0; core < v3d->cores; core++) {

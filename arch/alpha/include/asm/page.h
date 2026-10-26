@@ -6,24 +6,12 @@
 #include <asm/pal.h>
 #include <vdso/page.h>
 
-#ifdef CONFIG_HUGETLB_PAGE
-/*
- * The default huge page is the largest granularity hint block, 4MB. All
- * three hint sizes are registered as hstates, hence HUGE_MAX_HSTATE, which
- * linux/hugetlb.h needs before it includes asm/hugetlb.h.
- */
-#define HPAGE_SHIFT		22
-#define HPAGE_SIZE		(_AC(1, UL) << HPAGE_SHIFT)
-#define HPAGE_MASK		(~(HPAGE_SIZE - 1))
-#define HUGETLB_PAGE_ORDER	(HPAGE_SHIFT - PAGE_SHIFT)
-#define HUGE_MAX_HSTATE		3
-#endif
-
-#ifndef __ASSEMBLER__
+#ifndef __ASSEMBLY__
 
 #define STRICT_MM_TYPECHECKS
 
 extern void clear_page(void *page);
+#define clear_user_page(page, vaddr, pg)	clear_page(page)
 
 #define vma_alloc_zeroed_movable_folio(vma, vaddr) \
 	vma_alloc_folio(GFP_HIGHUSER_MOVABLE | __GFP_ZERO, 0, vma, vaddr)
@@ -86,7 +74,7 @@ typedef struct page *pgtable_t;
 #define PAGE_OFFSET		0xfffffc0000000000
 #endif
 
-#endif /* !__ASSEMBLER__ */
+#endif /* !__ASSEMBLY__ */
 
 #define __pa(x)			((unsigned long) (x) - PAGE_OFFSET)
 #define __va(x)			((void *)((unsigned long) (x) + PAGE_OFFSET))

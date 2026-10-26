@@ -118,7 +118,12 @@ int skb_gro_receive(struct sk_buff *p, struct sk_buff *skb)
 
 	if (unlikely(p->len + len >= GRO_LEGACY_MAX_SIZE)) {
 		if (NAPI_GRO_CB(skb)->proto != IPPROTO_TCP ||
-		    p->encapsulation)
+		    NAPI_GRO_CB(skb)->encap_mark ||
+		    p->encapsulation ||
+		    (p->protocol == htons(ETH_P_IPV6) &&
+		     p->mac_header < sizeof(struct hop_jumbo_hdr)) ||
+		    (p->protocol != htons(ETH_P_IPV6) &&
+		     p->protocol != htons(ETH_P_IP)))
 			return -E2BIG;
 	}
 
@@ -187,10 +192,6 @@ int skb_gro_receive(struct sk_buff *p, struct sk_buff *skb)
 	}
 
 merge:
-	/* skb_segment() cannot split the linear part of a frag_list member. */
-	if (unlikely(headlen > offset + skb_shinfo(p)->gso_size))
-		return -E2BIG;
-
 	/* sk ownership - if any - completely transferred to the aggregated packet */
 	skb->destructor = NULL;
 	skb->sk = NULL;

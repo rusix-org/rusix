@@ -1305,6 +1305,7 @@ static const struct net_device_ops ctucan_netdev_ops = {
 	.ndo_open	= ctucan_open,
 	.ndo_stop	= ctucan_close,
 	.ndo_start_xmit	= ctucan_start_xmit,
+	.ndo_change_mtu	= can_change_mtu,
 };
 
 static const struct ethtool_ops ctucan_ethtool_ops = {

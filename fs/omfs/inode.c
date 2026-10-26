@@ -14,7 +14,6 @@
 #include <linux/writeback.h>
 #include <linux/seq_file.h>
 #include <linux/crc-itu-t.h>
-#include <linux/fs_struct.h>
 #include <linux/fs_context.h>
 #include <linux/fs_parser.h>
 #include "omfs.h"
@@ -145,7 +144,7 @@ static int __omfs_write_inode(struct inode *inode, int wait)
 	mark_buffer_dirty(bh);
 	if (wait) {
 		sync_dirty_buffer(bh);
-		if (buffer_write_io_error(bh))
+		if (buffer_req(bh) && !buffer_uptodate(bh))
 			sync_failed = 1;
 	}
 
@@ -159,7 +158,7 @@ static int __omfs_write_inode(struct inode *inode, int wait)
 		mark_buffer_dirty(bh2);
 		if (wait) {
 			sync_dirty_buffer(bh2);
-			if (buffer_write_io_error(bh2))
+			if (buffer_req(bh2) && !buffer_uptodate(bh2))
 				sync_failed = 1;
 		}
 		brelse(bh2);
@@ -213,7 +212,7 @@ struct inode *omfs_iget(struct super_block *sb, ino_t ino)
 	inode = iget_locked(sb, ino);
 	if (!inode)
 		return ERR_PTR(-ENOMEM);
-	if (!(inode_state_read_once(inode) & I_NEW))
+	if (!(inode->i_state & I_NEW))
 		return inode;
 
 	bh = omfs_bread(inode->i_sb, ino);
@@ -464,7 +463,7 @@ static int omfs_fill_super(struct super_block *sb, struct fs_context *fc)
 	int ret = -EINVAL;
 	int silent = fc->sb_flags & SB_SILENT;
 
-	sbi = kzalloc_obj(struct omfs_sb_info);
+	sbi = kzalloc(sizeof(struct omfs_sb_info), GFP_KERNEL);
 	if (!sbi)
 		return -ENOMEM;
 
@@ -620,7 +619,7 @@ static int omfs_init_fs_context(struct fs_context *fc)
 {
 	struct omfs_mount_options *opts;
 
-	opts = kzalloc_obj(*opts);
+	opts = kzalloc(sizeof(*opts), GFP_KERNEL);
 	if (!opts)
 		return -ENOMEM;
 

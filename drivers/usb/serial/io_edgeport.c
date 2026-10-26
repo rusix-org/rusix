@@ -25,12 +25,12 @@
  *
  */
 
-#include <linux/atomic.h>
 #include <linux/kernel.h>
 #include <linux/jiffies.h>
 #include <linux/errno.h>
 #include <linux/slab.h>
 #include <linux/tty.h>
+#include <linux/tty_driver.h>
 #include <linux/tty_flip.h>
 #include <linux/module.h>
 #include <linux/spinlock.h>
@@ -501,7 +501,7 @@ static int get_epic_descriptor(struct edgeport_serial *ep)
 
 	ep->is_epic = 0;
 
-	epic = kmalloc_obj(*epic);
+	epic = kmalloc(sizeof(*epic), GFP_KERNEL);
 	if (!epic)
 		return -ENOMEM;
 
@@ -2718,7 +2718,7 @@ static int edge_startup(struct usb_serial *serial)
 	dev = serial->dev;
 
 	/* create our private serial structure */
-	edge_serial = kzalloc_obj(struct edgeport_serial);
+	edge_serial = kzalloc(sizeof(struct edgeport_serial), GFP_KERNEL);
 	if (!edge_serial)
 		return -ENOMEM;
 
@@ -2960,7 +2960,7 @@ static int edge_port_probe(struct usb_serial_port *port)
 {
 	struct edgeport_port *edge_port;
 
-	edge_port = kzalloc_obj(*edge_port);
+	edge_port = kzalloc(sizeof(*edge_port), GFP_KERNEL);
 	if (!edge_port)
 		return -ENOMEM;
 

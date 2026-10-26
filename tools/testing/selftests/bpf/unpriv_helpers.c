@@ -72,8 +72,8 @@ static int config_contains(const char *pat)
 
 static bool cmdline_contains(const char *pat)
 {
-	int fd, cnt, ret = false;
 	char cmdline[4096], *c;
+	int fd, ret = false;
 
 	fd = open("/proc/cmdline", O_RDONLY);
 	if (fd < 0) {
@@ -81,15 +81,14 @@ static bool cmdline_contains(const char *pat)
 		return false;
 	}
 
-	cnt = read(fd, cmdline, sizeof(cmdline) - 1);
-	if (cnt < 0) {
+	if (read(fd, cmdline, sizeof(cmdline) - 1) < 0) {
 		perror("read /proc/cmdline");
 		goto out;
 	}
 
-	cmdline[cnt] = '\0';
+	cmdline[sizeof(cmdline) - 1] = '\0';
 	for (c = strtok(cmdline, " \n"); c; c = strtok(NULL, " \n")) {
-		if (strcmp(c, pat))
+		if (strncmp(c, pat, strlen(c)))
 			continue;
 		ret = true;
 		break;
@@ -111,8 +110,9 @@ static int get_mitigations_off(void)
 	return !enabled_in_config;
 }
 
-bool get_unpriv_sysctl_disabled(void)
+bool get_unpriv_disabled(void)
 {
+	int mitigations_off;
 	bool disabled;
 	char buf[2];
 	FILE *fd;
@@ -126,12 +126,8 @@ bool get_unpriv_sysctl_disabled(void)
 		disabled = true;
 	}
 
-	return disabled;
-}
-
-bool get_unpriv_mitigations_disabled(void)
-{
-	int mitigations_off;
+	if (disabled)
+		return true;
 
 	/*
 	 * Some unpriv tests rely on spectre mitigations being on.
@@ -145,19 +141,4 @@ bool get_unpriv_mitigations_disabled(void)
 		return true;
 	}
 	return mitigations_off;
-}
-
-bool get_unpriv_disabled(void)
-{
-	return get_unpriv_sysctl_disabled() || get_unpriv_mitigations_disabled();
-}
-
-bool get_kasan_jit_enabled(void)
-{
-	return config_contains("CONFIG_BPF_JIT_KASAN=y") == 1;
-}
-
-bool get_kasan_multi_shot_enabled(void)
-{
-	return cmdline_contains("kasan_multi_shot");
 }

@@ -35,7 +35,6 @@
 #include <asm/trace/irq_vectors.h>
 #include <asm/kexec.h>
 #include <asm/reboot.h>
-#include <asm/virt.h>
 
 /*
  *	Some notes on x86 processor bugs affecting SMP operation:
@@ -125,7 +124,7 @@ static int smp_stop_nmi_callback(unsigned int val, struct pt_regs *regs)
 	if (raw_smp_processor_id() == atomic_read(&stopping_cpu))
 		return NMI_HANDLED;
 
-	x86_virt_emergency_disable_virtualization_cpu();
+	cpu_emergency_disable_virtualization();
 	stop_this_cpu(NULL);
 
 	return NMI_HANDLED;
@@ -137,7 +136,7 @@ static int smp_stop_nmi_callback(unsigned int val, struct pt_regs *regs)
 DEFINE_IDTENTRY_SYSVEC(sysvec_reboot)
 {
 	apic_eoi();
-	x86_virt_emergency_disable_virtualization_cpu();
+	cpu_emergency_disable_virtualization();
 	stop_this_cpu(NULL);
 }
 
@@ -250,7 +249,7 @@ DEFINE_IDTENTRY_SYSVEC_SIMPLE(sysvec_reschedule_ipi)
 {
 	apic_eoi();
 	trace_reschedule_entry(RESCHEDULE_VECTOR);
-	inc_irq_stat(RESCHEDULE);
+	inc_irq_stat(irq_resched_count);
 	scheduler_ipi();
 	trace_reschedule_exit(RESCHEDULE_VECTOR);
 }
@@ -259,7 +258,7 @@ DEFINE_IDTENTRY_SYSVEC(sysvec_call_function)
 {
 	apic_eoi();
 	trace_call_function_entry(CALL_FUNCTION_VECTOR);
-	inc_irq_stat(CALL_FUNCTION);
+	inc_irq_stat(irq_call_count);
 	generic_smp_call_function_interrupt();
 	trace_call_function_exit(CALL_FUNCTION_VECTOR);
 }
@@ -268,7 +267,7 @@ DEFINE_IDTENTRY_SYSVEC(sysvec_call_function_single)
 {
 	apic_eoi();
 	trace_call_function_single_entry(CALL_FUNCTION_SINGLE_VECTOR);
-	inc_irq_stat(CALL_FUNCTION);
+	inc_irq_stat(irq_call_count);
 	generic_smp_call_function_single_interrupt();
 	trace_call_function_single_exit(CALL_FUNCTION_SINGLE_VECTOR);
 }

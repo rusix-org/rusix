@@ -2,19 +2,11 @@
 
 .. _lirc_header:
 
-*****************
-LIRC uAPI symbols
-*****************
-
-.. contents:: Table of Contents
-   :depth: 2
-   :local:
-
-
+****************
+LIRC Header File
+****************
 
 .. kernel-include:: include/uapi/linux/lirc.h
     :generate-cross-refs:
     :exception-file: lirc.h.rst.exceptions
-    :toc:
-    :warn-broken:
 

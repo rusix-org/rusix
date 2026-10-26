@@ -22,15 +22,12 @@
 /* use raw logging */
 #ifdef CS_DEBUG_RAW
 #define CS_LOG_RAW_FRAMES
-#define CS_PKT_MON	1
 #ifdef CS_RAW_PACKED
 #define CS_RAW_DEBUG_FLAGS (OCSD_DFRMTR_UNPACKED_RAW_OUT | \
 			    OCSD_DFRMTR_PACKED_RAW_OUT)
 #else
 #define CS_RAW_DEBUG_FLAGS (OCSD_DFRMTR_UNPACKED_RAW_OUT)
 #endif
-#else
-#define CS_PKT_MON	0
 #endif
 
 /*
@@ -535,7 +532,7 @@ cs_etm_decoder__set_tid(struct cs_etm_queue *etmq,
 	/*
 	 * Process the PE_CONTEXT packets if we have a valid contextID or VMID.
 	 * If the kernel is running at EL2, the PID is traced in CONTEXTIDR_EL2
-	 * as VMID, Format attribute 'contextid2' is set in this case.
+	 * as VMID, Bit ETM_OPT_CTXTID2 is set in this case.
 	 */
 	switch (cs_etm__get_pid_fmt(etmq)) {
 	case CS_ETM_PIDFMT_CTXTID:
@@ -580,7 +577,6 @@ static ocsd_datapath_resp_t cs_etm_decoder__gen_trace_elem_printer(
 				const ocsd_generic_trace_elem *elem)
 {
 	ocsd_datapath_resp_t resp = OCSD_RESP_CONT;
-	ocsd_gen_trc_elem_t type;
 	struct cs_etm_decoder *decoder = (struct cs_etm_decoder *) context;
 	struct cs_etm_queue *etmq = decoder->data;
 	struct cs_etm_packet_queue *packet_queue;
@@ -590,29 +586,52 @@ static ocsd_datapath_resp_t cs_etm_decoder__gen_trace_elem_printer(
 	if (!packet_queue)
 		return OCSD_RESP_FATAL_SYS_ERR;
 
-	type = elem->elem_type;
-
-	if (type == OCSD_GEN_TRC_ELEM_EO_TRACE ||
-	    type == OCSD_GEN_TRC_ELEM_NO_SYNC ||
-	    type == OCSD_GEN_TRC_ELEM_TRACE_ON)
+	switch (elem->elem_type) {
+	case OCSD_GEN_TRC_ELEM_UNKNOWN:
+		break;
+	case OCSD_GEN_TRC_ELEM_EO_TRACE:
+	case OCSD_GEN_TRC_ELEM_NO_SYNC:
+	case OCSD_GEN_TRC_ELEM_TRACE_ON:
 		resp = cs_etm_decoder__buffer_discontinuity(etmq, packet_queue,
 							    trace_chan_id);
-	else if (type == OCSD_GEN_TRC_ELEM_INSTR_RANGE)
+		break;
+	case OCSD_GEN_TRC_ELEM_INSTR_RANGE:
 		resp = cs_etm_decoder__buffer_range(etmq, packet_queue, elem,
 						    trace_chan_id);
-	else if (type == OCSD_GEN_TRC_ELEM_EXCEPTION)
+		break;
+	case OCSD_GEN_TRC_ELEM_EXCEPTION:
 		resp = cs_etm_decoder__buffer_exception(etmq, packet_queue, elem,
 							trace_chan_id);
-	else if (type == OCSD_GEN_TRC_ELEM_EXCEPTION_RET)
+		break;
+	case OCSD_GEN_TRC_ELEM_EXCEPTION_RET:
 		resp = cs_etm_decoder__buffer_exception_ret(etmq, packet_queue,
 							    trace_chan_id);
-	else if (type == OCSD_GEN_TRC_ELEM_TIMESTAMP)
+		break;
+	case OCSD_GEN_TRC_ELEM_TIMESTAMP:
 		resp = cs_etm_decoder__do_hard_timestamp(etmq, elem,
 							 trace_chan_id,
 							 indx);
-	else if (type == OCSD_GEN_TRC_ELEM_PE_CONTEXT)
+		break;
+	case OCSD_GEN_TRC_ELEM_PE_CONTEXT:
 		resp = cs_etm_decoder__set_tid(etmq, packet_queue,
 					       elem, trace_chan_id);
+		break;
+	/* Unused packet types */
+	case OCSD_GEN_TRC_ELEM_I_RANGE_NOPATH:
+	case OCSD_GEN_TRC_ELEM_ADDR_NACC:
+	case OCSD_GEN_TRC_ELEM_CYCLE_COUNT:
+	case OCSD_GEN_TRC_ELEM_ADDR_UNKNOWN:
+	case OCSD_GEN_TRC_ELEM_EVENT:
+	case OCSD_GEN_TRC_ELEM_SWTRACE:
+	case OCSD_GEN_TRC_ELEM_CUSTOM:
+	case OCSD_GEN_TRC_ELEM_SYNC_MARKER:
+	case OCSD_GEN_TRC_ELEM_MEMTRANS:
+#if (OCSD_VER_NUM >= 0x010400)
+	case OCSD_GEN_TRC_ELEM_INSTRUMENTATION:
+#endif
+	default:
+		break;
+	}
 
 	return resp;
 }
@@ -678,7 +697,7 @@ cs_etm_decoder__create_etm_decoder(struct cs_etm_decoder_params *d_params,
 					   trace_config, &csid))
 			return -1;
 
-		if (ocsd_dt_set_pkt_protocol_printer(decoder->dcd_tree, csid, CS_PKT_MON))
+		if (ocsd_dt_set_pkt_protocol_printer(decoder->dcd_tree, csid, 0))
 			return -1;
 
 		return 0;

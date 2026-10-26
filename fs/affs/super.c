@@ -88,7 +88,7 @@ void affs_mark_sb_dirty(struct super_block *sb)
 	spin_lock(&sbi->work_lock);
 	if (!sbi->work_queued) {
 	       delay = msecs_to_jiffies(dirty_writeback_interval * 10);
-	       queue_delayed_work(system_dfl_long_wq, &sbi->sb_work, delay);
+	       queue_delayed_work(system_long_wq, &sbi->sb_work, delay);
 	       sbi->work_queued = 1;
 	}
 	spin_unlock(&sbi->work_lock);
@@ -327,7 +327,7 @@ static int affs_fill_super(struct super_block *sb, struct fs_context *fc)
 	sb->s_time_min = sys_tz.tz_minuteswest * 60 + AFFS_EPOCH_DELTA;
 	sb->s_time_max = 86400LL * U32_MAX + 86400 + sb->s_time_min;
 
-	sbi = kzalloc_obj(struct affs_sb_info);
+	sbi = kzalloc(sizeof(struct affs_sb_info), GFP_KERNEL);
 	if (!sbi)
 		return -ENOMEM;
 
@@ -617,7 +617,7 @@ static int affs_init_fs_context(struct fs_context *fc)
 {
 	struct affs_context *ctx;
 
-	ctx = kzalloc_obj(struct affs_context);
+	ctx = kzalloc(sizeof(struct affs_context), GFP_KERNEL);
 	if (!ctx)
 		return -ENOMEM;
 

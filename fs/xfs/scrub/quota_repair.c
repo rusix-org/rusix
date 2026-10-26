@@ -3,7 +3,7 @@
  * Copyright (C) 2018-2023 Oracle.  All Rights Reserved.
  * Author: Darrick J. Wong <djwong@kernel.org>
  */
-#include "xfs_platform.h"
+#include "xfs.h"
 #include "xfs_fs.h"
 #include "xfs_shared.h"
 #include "xfs_format.h"
@@ -116,8 +116,8 @@ xrep_quota_item_bmap(
 	int			error;
 
 	/* The computed file offset should always be valid. */
-	if (!xfs_verify_fileoff(offset)) {
-		ASSERT(xfs_verify_fileoff(offset));
+	if (!xfs_verify_fileoff(mp, offset)) {
+		ASSERT(xfs_verify_fileoff(mp, offset));
 		return -EFSCORRUPTED;
 	}
 	dq->q_fileoffset = offset;
@@ -184,26 +184,30 @@ xrep_quota_item(
 	/*
 	 * We might need to fix holes in the bmap record for the storage
 	 * backing this dquot, so we need to lock the dquot and the quota file.
+	 * dqiterate gave us a locked dquot, so drop the dquot lock to get the
+	 * ILOCK_EXCL.
 	 */
+	xfs_dqunlock(dq);
 	xchk_ilock(sc, XFS_ILOCK_EXCL);
-	mutex_lock(&dq->q_qlock);
+	xfs_dqlock(dq);
+
 	error = xrep_quota_item_bmap(sc, dq, &dirty);
 	xchk_iunlock(sc, XFS_ILOCK_EXCL);
 	if (error)
-		goto out_unlock_dquot;
+		return error;
 
 	/* Check the limits. */
-	if (dq->q_blk.hardlimit && dq->q_blk.softlimit > dq->q_blk.hardlimit) {
+	if (dq->q_blk.softlimit > dq->q_blk.hardlimit) {
 		dq->q_blk.softlimit = dq->q_blk.hardlimit;
 		dirty = true;
 	}
 
-	if (dq->q_ino.hardlimit && dq->q_ino.softlimit > dq->q_ino.hardlimit) {
+	if (dq->q_ino.softlimit > dq->q_ino.hardlimit) {
 		dq->q_ino.softlimit = dq->q_ino.hardlimit;
 		dirty = true;
 	}
 
-	if (dq->q_rtb.hardlimit && dq->q_rtb.softlimit > dq->q_rtb.hardlimit) {
+	if (dq->q_rtb.softlimit > dq->q_rtb.hardlimit) {
 		dq->q_rtb.softlimit = dq->q_rtb.hardlimit;
 		dirty = true;
 	}
@@ -242,18 +246,19 @@ xrep_quota_item(
 	xrep_quota_item_timer(sc, &dq->q_rtb, &dirty);
 
 	if (!dirty)
-		goto out_unlock_dquot;
+		return 0;
 
 	trace_xrep_dquot_item(sc->mp, dq->q_type, dq->q_id);
 
 	dq->q_flags |= XFS_DQFLAG_DIRTY;
 	xfs_trans_dqjoin(sc->tp, dq);
-	xfs_qm_adjust_dqenforcement(dq);
+	if (dq->q_id) {
+		xfs_qm_adjust_dqlimits(dq);
+		xfs_qm_adjust_dqtimers(dq);
+	}
 	xfs_trans_log_dquot(sc->tp, dq);
-	return xfs_trans_roll(&sc->tp);
-
-out_unlock_dquot:
-	mutex_unlock(&dq->q_qlock);
+	error = xfs_trans_roll(&sc->tp);
+	xfs_dqlock(dq);
 	return error;
 }
 
@@ -272,9 +277,6 @@ xrep_quota_fix_timer(
 	time64_t		new_timer;
 	uint32_t		t;
 
-	/* never reset the default quota timer */
-	if (ddq->d_id == 0)
-		return;
 	if (!soft || count <= soft || *timer != 0)
 		return;
 
@@ -297,6 +299,7 @@ xrep_quota_block(
 	xfs_dqid_t		id)
 {
 	struct xfs_dqblk	*dqblk;
+	struct xfs_disk_dquot	*ddq;
 	struct xfs_quotainfo	*qi = sc->mp->m_quotainfo;
 	struct xfs_def_quota	*defq = xfs_get_defquota(qi, dqtype);
 	struct xfs_buf		*bp = NULL;
@@ -318,21 +321,14 @@ xrep_quota_block(
 		break;
 	case 0:
 		dqblk = bp->b_addr;
-		error = 0;
+		ddq = &dqblk[0].dd_diskdq;
 
 		/*
 		 * If there's nothing that would impede a dqiterate, we're
 		 * done.
 		 */
-		for (i = 0; i < qi->qi_dqperchunk; i++, dqblk++) {
-			struct xfs_disk_dquot	*ddq = &dqblk->dd_diskdq;
-
-			if ((ddq->d_type & XFS_DQTYPE_REC_MASK) != dqtype ||
-			    id + i != be32_to_cpu(ddq->d_id))
-				error++;
-		}
-
-		if (!error) {
+		if ((ddq->d_type & XFS_DQTYPE_REC_MASK) == dqtype &&
+		    id == be32_to_cpu(ddq->d_id)) {
 			xfs_trans_brelse(sc->tp, bp);
 			return 0;
 		}
@@ -345,9 +341,7 @@ xrep_quota_block(
 	dqblk = bp->b_addr;
 	bp->b_ops = &xfs_dquot_buf_ops;
 	for (i = 0; i < qi->qi_dqperchunk; i++, dqblk++) {
-		struct xfs_disk_dquot	*ddq = &dqblk->dd_diskdq;
-		bool			was_bigtime =
-				!!(ddq->d_type & XFS_DQTYPE_BIGTIME);
+		ddq = &dqblk->dd_diskdq;
 
 		trace_xrep_disk_dquot(sc->mp, dqtype, id + i);
 
@@ -356,21 +350,8 @@ xrep_quota_block(
 		ddq->d_type = dqtype;
 		ddq->d_id = cpu_to_be32(id + i);
 
-		if (xfs_has_bigtime(sc->mp) && ddq->d_id) {
-			/*
-			 * If something was broken with this dquot and it was a
-			 * non-bigtime dquot, we'll grant everyone a fresh
-			 * grace period by zeroing the timer field rather than
-			 * try to interpret what might be garbage.
-			 */
-			if (!was_bigtime) {
-				ddq->d_btimer = 0;
-				ddq->d_itimer = 0;
-				ddq->d_rtbtimer = 0;
-			}
-
+		if (xfs_has_bigtime(sc->mp) && ddq->d_id)
 			ddq->d_type |= XFS_DQTYPE_BIGTIME;
-		}
 
 		xrep_quota_fix_timer(sc->mp, ddq, ddq->d_blk_softlimit,
 				ddq->d_bcount, &ddq->d_btimer,
@@ -440,9 +421,7 @@ xrep_quota_data_fork(
 	/* Check for data fork problems that apply only to quota files. */
 	max_dqid_off = XFS_DQ_ID_MAX / qi->qi_dqperchunk;
 	ifp = xfs_ifork_ptr(sc->ip, XFS_DATA_FORK);
-	xfs_iext_first(ifp, &icur);
-
-	while (xfs_iext_get_extent(ifp, &icur, &irec)) {
+	for_each_xfs_iext(ifp, &icur, &irec) {
 		if (isnullstartblock(irec.br_startblock)) {
 			error = -EFSCORRUPTED;
 			goto out;
@@ -466,35 +445,16 @@ xrep_quota_data_fork(
 
 			error = xfs_bmapi_write(sc->tp, sc->ip,
 					irec.br_startoff, irec.br_blockcount,
-					XFS_BMAPI_CONVERT | XFS_BMAPI_ZERO, 0,
-					&nrec, &nmap);
+					XFS_BMAPI_CONVERT, 0, &nrec, &nmap);
 			if (error)
 				goto out;
 			ASSERT(nrec.br_startoff == irec.br_startoff);
 			ASSERT(nrec.br_blockcount == irec.br_blockcount);
 
-			/*
-			 * We just zeroed the ondisk dquot, so counts could be
-			 * wrong.  Schedule a quotacheck to fix that.
-			 */
-			xrep_force_quotacheck(sc, dqtype);
 			error = xfs_defer_finish(&sc->tp);
 			if (error)
 				goto out;
-
-			/*
-			 * Set cursor to the next block past the extent we just
-			 * converted because bmapi write could have merged
-			 * records.
-			 */
-			if (!xfs_iext_lookup_extent(sc->ip, ifp,
-					irec.br_startoff + irec.br_blockcount,
-					&icur, &irec))
-				break;
-			continue;
 		}
-
-		xfs_iext_next(ifp, &icur);
 	}
 
 	if (!joined) {
@@ -559,7 +519,7 @@ xrep_quota_problems(
 	xchk_dqiter_init(&cursor, sc, dqtype);
 	while ((error = xchk_dquot_iter(&cursor, &dq)) == 1) {
 		error = xrep_quota_item(&rqi, dq);
-		xfs_qm_dqrele(dq);
+		xfs_qm_dqput(dq);
 		if (error)
 			break;
 	}

@@ -153,7 +153,7 @@ struct dm_dirty_log *dm_dirty_log_create(const char *type_name,
 	struct dm_dirty_log_type *type;
 	struct dm_dirty_log *log;
 
-	log = kmalloc_obj(*log);
+	log = kmalloc(sizeof(*log), GFP_KERNEL);
 	if (!log)
 		return NULL;
 
@@ -406,7 +406,7 @@ static int create_log_context(struct dm_dirty_log *log, struct dm_target *ti,
 		return -EINVAL;
 	}
 
-	lc = kmalloc_obj(*lc);
+	lc = kmalloc(sizeof(*lc), GFP_KERNEL);
 	if (!lc) {
 		DMWARN("couldn't allocate core log");
 		return -ENOMEM;

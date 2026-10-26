@@ -5,7 +5,6 @@
 
 #include <linux/acpi.h>
 #include <linux/module.h>
-#include <linux/platform_device.h>
 #include <linux/slab.h>
 
 MODULE_DESCRIPTION("Intel Rapid Start Technology Driver");
@@ -100,14 +99,9 @@ static struct device_attribute irst_timeout_attr = {
 	.store = irst_store_wakeup_time
 };
 
-static int irst_probe(struct platform_device *pdev)
+static int irst_add(struct acpi_device *acpi)
 {
-	struct acpi_device *acpi;
 	int error;
-
-	acpi = ACPI_COMPANION(&pdev->dev);
-	if (!acpi)
-		return -ENODEV;
 
 	error = device_create_file(&acpi->dev, &irst_timeout_attr);
 	if (unlikely(error))
@@ -120,10 +114,8 @@ static int irst_probe(struct platform_device *pdev)
 	return error;
 }
 
-static void irst_remove(struct platform_device *pdev)
+static void irst_remove(struct acpi_device *acpi)
 {
-	struct acpi_device *acpi = ACPI_COMPANION(&pdev->dev);
-
 	device_remove_file(&acpi->dev, &irst_wakeup_attr);
 	device_remove_file(&acpi->dev, &irst_timeout_attr);
 }
@@ -133,15 +125,16 @@ static const struct acpi_device_id irst_ids[] = {
 	{"", 0}
 };
 
-static struct platform_driver irst_driver = {
-	.probe = irst_probe,
-	.remove = irst_remove,
-	.driver = {
-		.name = "intel_rapid_start",
-		.acpi_match_table = irst_ids,
+static struct acpi_driver irst_driver = {
+	.name = "intel_rapid_start",
+	.class = "intel_rapid_start",
+	.ids = irst_ids,
+	.ops = {
+		.add = irst_add,
+		.remove = irst_remove,
 	},
 };
 
-module_platform_driver(irst_driver);
+module_acpi_driver(irst_driver);
 
 MODULE_DEVICE_TABLE(acpi, irst_ids);

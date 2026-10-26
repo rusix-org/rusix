@@ -267,7 +267,7 @@ static void mlx4_ib_qp_event(struct mlx4_qp *qp, enum mlx4_event type)
 	if (!ibqp->event_handler)
 		goto out_no_handler;
 
-	qpe_work = kzalloc_obj(*qpe_work, GFP_ATOMIC);
+	qpe_work = kzalloc(sizeof(*qpe_work), GFP_ATOMIC);
 	if (!qpe_work)
 		goto out_no_handler;
 
@@ -472,12 +472,14 @@ static int alloc_proxy_bufs(struct ib_device *dev, struct mlx4_ib_qp *qp)
 	int i;
 
 	qp->sqp_proxy_rcv =
-		kmalloc_objs(struct mlx4_ib_buf, qp->rq.wqe_cnt);
+		kmalloc_array(qp->rq.wqe_cnt, sizeof(struct mlx4_ib_buf),
+			      GFP_KERNEL);
 	if (!qp->sqp_proxy_rcv)
 		return -ENOMEM;
 	for (i = 0; i < qp->rq.wqe_cnt; i++) {
 		qp->sqp_proxy_rcv[i].addr =
-			kmalloc_obj(struct mlx4_ib_proxy_sqp_hdr);
+			kmalloc(sizeof (struct mlx4_ib_proxy_sqp_hdr),
+				GFP_KERNEL);
 		if (!qp->sqp_proxy_rcv[i].addr)
 			goto err;
 		qp->sqp_proxy_rcv[i].map =
@@ -681,7 +683,7 @@ static int create_qp_rss(struct mlx4_ib_dev *dev,
 	qp->mtt = (to_mqp(
 		   (struct ib_qp *)init_attr->rwq_ind_tbl->ind_tbl[0]))->mtt;
 
-	qp->rss_ctx = kzalloc_obj(*qp->rss_ctx);
+	qp->rss_ctx = kzalloc(sizeof(*qp->rss_ctx), GFP_KERNEL);
 	if (!qp->rss_ctx) {
 		err = -ENOMEM;
 		goto err_qp_alloc;
@@ -709,7 +711,8 @@ static int _mlx4_ib_create_qp_rss(struct ib_pd *pd, struct mlx4_ib_qp *qp,
 				  struct ib_qp_init_attr *init_attr,
 				  struct ib_udata *udata)
 {
-	struct mlx4_ib_create_qp_rss ucmd;
+	struct mlx4_ib_create_qp_rss ucmd = {};
+	size_t required_cmd_sz;
 	int err;
 
 	if (!udata) {
@@ -720,17 +723,30 @@ static int _mlx4_ib_create_qp_rss(struct ib_pd *pd, struct mlx4_ib_qp *qp,
 	if (udata->outlen)
 		return -EOPNOTSUPP;
 
-	err = ib_copy_validate_udata_in_cm(udata, ucmd, reserved1, 0);
-	if (err) {
+	required_cmd_sz = offsetof(typeof(ucmd), reserved1) +
+					sizeof(ucmd.reserved1);
+	if (udata->inlen < required_cmd_sz) {
+		pr_debug("invalid inlen\n");
+		return -EINVAL;
+	}
+
+	if (ib_copy_from_udata(&ucmd, udata, min(sizeof(ucmd), udata->inlen))) {
 		pr_debug("copy failed\n");
-		return err;
+		return -EFAULT;
 	}
 
 	if (memchr_inv(ucmd.reserved, 0, sizeof(ucmd.reserved)))
 		return -EOPNOTSUPP;
 
-	if (ucmd.reserved1)
+	if (ucmd.comp_mask || ucmd.reserved1)
 		return -EOPNOTSUPP;
+
+	if (udata->inlen > sizeof(ucmd) &&
+	    !ib_is_udata_cleared(udata, sizeof(ucmd),
+				 udata->inlen - sizeof(ucmd))) {
+		pr_debug("inlen is not supported\n");
+		return -EOPNOTSUPP;
+	}
 
 	if (init_attr->qp_type != IB_QPT_RAW_PACKET) {
 		pr_debug("RSS QP with unsupported QP type %d\n",
@@ -777,7 +793,7 @@ static int mlx4_ib_alloc_wqn(struct mlx4_ib_ucontext *context,
 					 struct mlx4_wqn_range, list);
 
 	if (!range || (range->refcount == range->size) || range->dirty) {
-		range = kzalloc_obj(*range);
+		range = kzalloc(sizeof(*range), GFP_KERNEL);
 		if (!range) {
 			err = -ENOMEM;
 			goto out;
@@ -854,6 +870,7 @@ static int create_rq(struct ib_pd *pd, struct ib_qp_init_attr *init_attr,
 	unsigned long flags;
 	int range_size;
 	struct mlx4_ib_create_wq wq;
+	size_t copy_len;
 	int shift;
 	int n;
 
@@ -866,11 +883,15 @@ static int create_rq(struct ib_pd *pd, struct ib_qp_init_attr *init_attr,
 
 	qp->state = IB_QPS_RESET;
 
-	err = ib_copy_validate_udata_in_cm(udata, wq, comp_mask, 0);
-	if (err)
-		goto err;
+	copy_len = min(sizeof(struct mlx4_ib_create_wq), udata->inlen);
 
-	if (wq.reserved[0] || wq.reserved[1] || wq.reserved[2]) {
+	if (ib_copy_from_udata(&wq, udata, copy_len)) {
+		err = -EFAULT;
+		goto err;
+	}
+
+	if (wq.comp_mask || wq.reserved[0] || wq.reserved[1] ||
+	    wq.reserved[2]) {
 		pr_debug("user command isn't supported\n");
 		err = -EOPNOTSUPP;
 		goto err;
@@ -897,7 +918,7 @@ static int create_rq(struct ib_pd *pd, struct ib_qp_init_attr *init_attr,
 	qp->buf_size = (qp->rq.wqe_cnt << qp->rq.wqe_shift) +
 		       (qp->sq.wqe_cnt << qp->sq.wqe_shift);
 
-	qp->umem = ib_umem_get_va(pd->device, wq.buf_addr, qp->buf_size, 0);
+	qp->umem = ib_umem_get(pd->device, wq.buf_addr, qp->buf_size, 0);
 	if (IS_ERR(qp->umem)) {
 		err = PTR_ERR(qp->umem);
 		goto err;
@@ -1030,7 +1051,7 @@ static int create_qp_common(struct ib_pd *pd, struct ib_qp_init_attr *init_attr,
 	    qp_type == MLX4_IB_QPT_GSI ||
 	    (qp_type & (MLX4_IB_QPT_PROXY_SMI | MLX4_IB_QPT_PROXY_SMI_OWNER |
 			MLX4_IB_QPT_PROXY_GSI | MLX4_IB_QPT_TUN_SMI_OWNER))) {
-		qp->sqp = kzalloc_obj(struct mlx4_ib_sqp);
+		qp->sqp = kzalloc(sizeof(struct mlx4_ib_sqp), GFP_KERNEL);
 		if (!qp->sqp)
 			return -ENOMEM;
 	}
@@ -1048,12 +1069,16 @@ static int create_qp_common(struct ib_pd *pd, struct ib_qp_init_attr *init_attr,
 
 	if (udata) {
 		struct mlx4_ib_create_qp ucmd;
+		size_t copy_len;
 		int shift;
 		int n;
 
-		err = ib_copy_validate_udata_in(udata, ucmd, sq_no_prefetch);
-		if (err)
+		copy_len = sizeof(struct mlx4_ib_create_qp);
+
+		if (ib_copy_from_udata(&ucmd, udata, copy_len)) {
+			err = -EFAULT;
 			goto err;
+		}
 
 		qp->inl_recv_sz = ucmd.inl_recv_sz;
 
@@ -1080,7 +1105,7 @@ static int create_qp_common(struct ib_pd *pd, struct ib_qp_init_attr *init_attr,
 			goto err;
 
 		qp->umem =
-			ib_umem_get_va(pd->device, ucmd.buf_addr, qp->buf_size, 0);
+			ib_umem_get(pd->device, ucmd.buf_addr, qp->buf_size, 0);
 		if (IS_ERR(qp->umem)) {
 			err = PTR_ERR(qp->umem);
 			goto err;
@@ -1947,7 +1972,7 @@ static int create_qp_lb_counter(struct mlx4_ib_dev *dev, struct mlx4_ib_qp *qp)
 	if (err)
 		return err;
 
-	new_counter_index = kmalloc_obj(*new_counter_index);
+	new_counter_index = kmalloc(sizeof(*new_counter_index), GFP_KERNEL);
 	if (!new_counter_index) {
 		mlx4_counter_free(dev->dev, tmp_idx);
 		return -ENOMEM;
@@ -2140,7 +2165,7 @@ static int __mlx4_ib_modify_qp(void *src, enum mlx4_ib_source_type src_type,
 	    IB_LINK_LAYER_ETHERNET)
 		return -ENOTSUPP;
 
-	context = kzalloc_obj(*context);
+	context = kzalloc(sizeof *context, GFP_KERNEL);
 	if (!context)
 		return -ENOMEM;
 
@@ -4107,10 +4132,25 @@ struct ib_wq *mlx4_ib_create_wq(struct ib_pd *pd,
 	struct mlx4_dev *dev = to_mdev(pd->device)->dev;
 	struct ib_qp_init_attr ib_qp_init_attr = {};
 	struct mlx4_ib_qp *qp;
-	int err;
+	struct mlx4_ib_create_wq ucmd;
+	int err, required_cmd_sz;
 
 	if (!udata)
 		return ERR_PTR(-EINVAL);
+
+	required_cmd_sz = offsetof(typeof(ucmd), comp_mask) +
+			  sizeof(ucmd.comp_mask);
+	if (udata->inlen < required_cmd_sz) {
+		pr_debug("invalid inlen\n");
+		return ERR_PTR(-EINVAL);
+	}
+
+	if (udata->inlen > sizeof(ucmd) &&
+	    !ib_is_udata_cleared(udata, sizeof(ucmd),
+				 udata->inlen - sizeof(ucmd))) {
+		pr_debug("inlen is not supported\n");
+		return ERR_PTR(-EOPNOTSUPP);
+	}
 
 	if (udata->outlen)
 		return ERR_PTR(-EOPNOTSUPP);
@@ -4127,7 +4167,7 @@ struct ib_wq *mlx4_ib_create_wq(struct ib_pd *pd,
 		return ERR_PTR(-EOPNOTSUPP);
 	}
 
-	qp = kzalloc_obj(*qp);
+	qp = kzalloc(sizeof(*qp), GFP_KERNEL);
 	if (!qp)
 		return ERR_PTR(-ENOMEM);
 
@@ -4230,15 +4270,25 @@ int mlx4_ib_modify_wq(struct ib_wq *ibwq, struct ib_wq_attr *wq_attr,
 		      u32 wq_attr_mask, struct ib_udata *udata)
 {
 	struct mlx4_ib_qp *qp = to_mqp((struct ib_qp *)ibwq);
-	struct mlx4_ib_modify_wq ucmd;
+	struct mlx4_ib_modify_wq ucmd = {};
+	size_t required_cmd_sz;
 	enum ib_wq_state cur_state, new_state;
-	int err;
+	int err = 0;
 
-	err = ib_copy_validate_udata_in_cm(udata, ucmd, reserved, 0);
-	if (err)
-		return err;
+	required_cmd_sz = offsetof(typeof(ucmd), reserved) +
+				   sizeof(ucmd.reserved);
+	if (udata->inlen < required_cmd_sz)
+		return -EINVAL;
 
-	if (ucmd.reserved)
+	if (udata->inlen > sizeof(ucmd) &&
+	    !ib_is_udata_cleared(udata, sizeof(ucmd),
+				 udata->inlen - sizeof(ucmd)))
+		return -EOPNOTSUPP;
+
+	if (ib_copy_from_udata(&ucmd, udata, min(sizeof(ucmd), udata->inlen)))
+		return -EFAULT;
+
+	if (ucmd.comp_mask || ucmd.reserved)
 		return -EOPNOTSUPP;
 
 	if (wq_attr_mask & IB_WQ_FLAGS)
@@ -4297,9 +4347,10 @@ int mlx4_ib_create_rwq_ind_table(struct ib_rwq_ind_table *rwq_ind_table,
 	size_t min_resp_len;
 	int i, err = 0;
 
-	err = ib_is_udata_in_empty(udata);
-	if (err)
-		return err;
+	if (udata->inlen > 0 &&
+	    !ib_is_udata_cleared(udata, 0,
+				 udata->inlen))
+		return -EOPNOTSUPP;
 
 	min_resp_len = offsetof(typeof(resp), reserved) + sizeof(resp.reserved);
 	if (udata->outlen && udata->outlen < min_resp_len)
@@ -4331,7 +4382,7 @@ int mlx4_ib_create_rwq_ind_table(struct ib_rwq_ind_table *rwq_ind_table,
 	if (udata->outlen) {
 		resp.response_length = offsetof(typeof(resp), response_length) +
 					sizeof(resp.response_length);
-		err = ib_respond_udata(udata, resp);
+		err = ib_copy_to_udata(udata, &resp, resp.response_length);
 	}
 
 	return err;

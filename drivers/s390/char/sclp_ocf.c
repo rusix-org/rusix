@@ -6,7 +6,8 @@
  *    Author(s): Martin Schwidefsky <schwidefsky@de.ibm.com>
  */
 
-#define pr_fmt(fmt) "sclp_ocf: " fmt
+#define KMSG_COMPONENT "sclp_ocf"
+#define pr_fmt(fmt) KMSG_COMPONENT ": " fmt
 
 #include <linux/export.h>
 #include <linux/kernel.h>

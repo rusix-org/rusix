@@ -8729,8 +8729,9 @@ static int tg3_mem_tx_acquire(struct tg3 *tp)
 		tnapi++;
 
 	for (i = 0; i < tp->txq_cnt; i++, tnapi++) {
-		tnapi->tx_buffers = kzalloc_objs(struct tg3_tx_ring_info,
-						 TG3_TX_RING_SIZE);
+		tnapi->tx_buffers = kcalloc(TG3_TX_RING_SIZE,
+					    sizeof(struct tg3_tx_ring_info),
+					    GFP_KERNEL);
 		if (!tnapi->tx_buffers)
 			goto err_out;
 
@@ -12718,17 +12719,29 @@ static int tg3_get_sset_count(struct net_device *dev, int sset)
 	}
 }
 
-static u32 tg3_get_rx_ring_count(struct net_device *dev)
+static int tg3_get_rxnfc(struct net_device *dev, struct ethtool_rxnfc *info,
+			 u32 *rules __always_unused)
 {
 	struct tg3 *tp = netdev_priv(dev);
 
 	if (!tg3_flag(tp, SUPPORT_MSIX))
-		return 1;
+		return -EOPNOTSUPP;
 
-	if (netif_running(tp->dev))
-		return tp->rxq_cnt;
+	switch (info->cmd) {
+	case ETHTOOL_GRXRINGS:
+		if (netif_running(tp->dev))
+			info->data = tp->rxq_cnt;
+		else {
+			info->data = num_online_cpus();
+			if (info->data > TG3_RSS_MAX_NUM_QS)
+				info->data = TG3_RSS_MAX_NUM_QS;
+		}
 
-	return min_t(u32, netif_get_num_default_rss_queues(), tp->rxq_max);
+		return 0;
+
+	default:
+		return -EOPNOTSUPP;
+	}
 }
 
 static u32 tg3_get_rxfh_indir_size(struct net_device *dev)
@@ -14255,7 +14268,7 @@ static const struct ethtool_ops tg3_ethtool_ops = {
 	.get_coalesce		= tg3_get_coalesce,
 	.set_coalesce		= tg3_set_coalesce,
 	.get_sset_count		= tg3_get_sset_count,
-	.get_rx_ring_count	= tg3_get_rx_ring_count,
+	.get_rxnfc		= tg3_get_rxnfc,
 	.get_rxfh_indir_size    = tg3_get_rxfh_indir_size,
 	.get_rxfh		= tg3_get_rxfh,
 	.set_rxfh		= tg3_set_rxfh,
@@ -16248,65 +16261,6 @@ static bool tg3_10_100_only_device(struct tg3 *tp,
 	return false;
 }
 
-static int tg3_fw_byteorder(struct tg3 *tp, u32 *misc_ctrl_reg)
-{
-	struct pci_dev *pdev = tp->pdev;
-	u32 prodid, expected_prodid, normalized, readback;
-	int reg, err;
-
-	/* Prefer the normal revision marker before testing the swapped state. */
-	if (pdev->device != TG3PCI_DEVICE_TIGON3_5718 ||
-	    (*misc_ctrl_reg >> 28) == ASIC_REV_USE_PROD_ID_REG ||
-	    (swab32(*misc_ctrl_reg) >> 28) != ASIC_REV_USE_PROD_ID_REG ||
-	    !(swab32(*misc_ctrl_reg) & MISC_HOST_CTRL_BYTE_SWAP))
-		return 0;
-
-	/* Standard PCI fields are normal; verify the swapped vendor registers. */
-	reg = TG3PCI_GEN2_PRODID_ASICREV;
-	err = pci_read_config_dword(pdev, reg, &prodid);
-	if (err)
-		goto config_error;
-	expected_prodid = swab32(prodid);
-	if ((expected_prodid >> 12) != ASIC_REV_5717) {
-		dev_err(&pdev->dev, "unexpected swapped BCM5718 product ID %08x\n",
-			prodid);
-		return -ENODEV;
-	}
-
-	normalized = (swab32(*misc_ctrl_reg) & MISC_HOST_CTRL_CHIPREV) |
-		     tp->misc_host_ctrl;
-	reg = TG3PCI_MISC_HOST_CTRL;
-	err = pci_write_config_dword(pdev, reg, swab32(normalized));
-	if (err)
-		goto config_error;
-	err = pci_read_config_dword(pdev, reg, &readback);
-	if (err)
-		goto config_error;
-	if (readback != normalized) {
-		dev_err(&pdev->dev, "BCM5718 host-control readback mismatch %08x\n",
-			readback);
-		return -EIO;
-	}
-
-	reg = TG3PCI_GEN2_PRODID_ASICREV;
-	err = pci_read_config_dword(pdev, reg, &prodid);
-	if (err)
-		goto config_error;
-	if (prodid != expected_prodid) {
-		dev_err(&pdev->dev, "BCM5718 product-ID readback mismatch %08x\n",
-			prodid);
-		return -EIO;
-	}
-	*misc_ctrl_reg = readback;
-	dev_dbg(&pdev->dev, "normalized firmware register byte order\n");
-	return 0;
-
-config_error:
-	dev_err(&pdev->dev, "BCM5718 PCI config access at %#x failed (%d)\n",
-		reg, err);
-	return pcibios_err_to_errno(err);
-}
-
 static int tg3_get_invariants(struct tg3 *tp, const struct pci_device_id *ent)
 {
 	u32 misc_ctrl_reg;
@@ -16331,17 +16285,8 @@ static int tg3_get_invariants(struct tg3 *tp, const struct pci_device_id *ent)
 	 * sure that indirect register accesses are enabled before
 	 * the first operation.
 	 */
-	err = pci_read_config_dword(tp->pdev, TG3PCI_MISC_HOST_CTRL,
-				    &misc_ctrl_reg);
-	if (err && tp->pdev->device == TG3PCI_DEVICE_TIGON3_5718) {
-		dev_err(&tp->pdev->dev, "PCI host-control read failed (%d)\n",
-			err);
-		return pcibios_err_to_errno(err);
-	}
-	err = tg3_fw_byteorder(tp, &misc_ctrl_reg);
-	if (err)
-		return err;
-
+	pci_read_config_dword(tp->pdev, TG3PCI_MISC_HOST_CTRL,
+			      &misc_ctrl_reg);
 	tp->misc_host_ctrl |= (misc_ctrl_reg &
 			       MISC_HOST_CTRL_CHIPREV);
 	pci_write_config_dword(tp->pdev, TG3PCI_MISC_HOST_CTRL,
@@ -18295,12 +18240,6 @@ static const struct dmi_system_id tg3_restart_aer_quirk_table[] = {
 		.matches = {
 			DMI_MATCH(DMI_SYS_VENDOR, "Dell Inc."),
 			DMI_MATCH(DMI_PRODUCT_NAME, "PowerEdge R750"),
-		},
-	},
-	{
-		.matches = {
-			DMI_MATCH(DMI_SYS_VENDOR, "datto"),
-			DMI_MATCH(DMI_PRODUCT_NAME, "SIRIS 5 1U Server"),
 		},
 	},
 	{}

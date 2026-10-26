@@ -212,7 +212,7 @@ static int hclge_get_ring_chain_from_mbx(
 	cur_chain = ring_chain;
 
 	for (i = 1; i < ring_num; i++) {
-		new_chain = kzalloc_obj(*new_chain);
+		new_chain = kzalloc(sizeof(*new_chain), GFP_KERNEL);
 		if (!new_chain)
 			goto err;
 
@@ -341,8 +341,11 @@ static void hclge_set_vf_promisc_mode(struct hclge_vport *vport,
 	vport->vf_info.request_mc_en = req->msg.en_mc;
 	vport->vf_info.request_bc_en = req->msg.en_bc;
 
-	assign_bit(HNAE3_PFLAG_LIMIT_PROMISC, &handle->priv_flags,
-		   req->msg.en_limit_promisc);
+	if (req->msg.en_limit_promisc)
+		set_bit(HNAE3_PFLAG_LIMIT_PROMISC, &handle->priv_flags);
+	else
+		clear_bit(HNAE3_PFLAG_LIMIT_PROMISC,
+			  &handle->priv_flags);
 
 	set_bit(HCLGE_VPORT_STATE_PROMISC_CHANGE, &vport->state);
 	hclge_task_schedule(hdev, 0);

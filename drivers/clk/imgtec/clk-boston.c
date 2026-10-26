@@ -58,7 +58,8 @@ static void __init clk_boston_setup(struct device_node *np)
 	cpu_div = ext_field(mmcmdiv, BOSTON_PLAT_MMCMDIV_CLK1DIV);
 	cpu_freq = mult_frac(in_freq, mul, cpu_div);
 
-	onecell = kzalloc_flex(*onecell, hws, BOSTON_CLK_COUNT);
+	onecell = kzalloc(struct_size(onecell, hws, BOSTON_CLK_COUNT),
+			  GFP_KERNEL);
 	if (!onecell)
 		return;
 

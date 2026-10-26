@@ -4,12 +4,10 @@
 #include <inttypes.h>
 #include <regex.h>
 #include <stdlib.h>
-#include <string.h>
 #include "callchain.h"
 #include "debug.h"
 #include "dso.h"
 #include "env.h"
-#include "dwarf-regs.h"
 #include "event.h"
 #include "evsel.h"
 #include "hist.h"
@@ -79,13 +77,14 @@ int machine__init(struct machine *machine, const char *root_dir, pid_t pid)
 	int err = -ENOMEM;
 
 	memset(machine, 0, sizeof(*machine));
-	RB_CLEAR_NODE(&machine->rb_node);
-	dsos__init(&machine->dsos);
-	threads__init(&machine->threads);
-
 	machine->kmaps = maps__new(machine);
 	if (machine->kmaps == NULL)
-		goto out;
+		return -ENOMEM;
+
+	RB_CLEAR_NODE(&machine->rb_node);
+	dsos__init(&machine->dsos);
+
+	threads__init(&machine->threads);
 
 	machine->vdso_info = NULL;
 	machine->env = NULL;
@@ -123,11 +122,11 @@ int machine__init(struct machine *machine, const char *root_dir, pid_t pid)
 
 out:
 	if (err) {
-		maps__zput(machine->kmaps);
+		zfree(&machine->kmaps);
 		zfree(&machine->root_dir);
 		zfree(&machine->mmap_name);
 	}
-	return err;
+	return 0;
 }
 
 static struct machine *__machine__new_host(struct perf_env *host_env, bool kernel_maps)
@@ -137,10 +136,7 @@ static struct machine *__machine__new_host(struct perf_env *host_env, bool kerne
 	if (!machine)
 		return NULL;
 
-	if (machine__init(machine, "", HOST_KERNEL_ID) != 0) {
-		free(machine);
-		return NULL;
-	}
+	machine__init(machine, "", HOST_KERNEL_ID);
 
 	if (kernel_maps && machine__create_kernel_maps(machine) < 0) {
 		free(machine);
@@ -233,12 +229,10 @@ void machine__delete(struct machine *machine)
 	}
 }
 
-int machines__init(struct machines *machines)
+void machines__init(struct machines *machines)
 {
-	int err = machine__init(&machines->host, "", HOST_KERNEL_ID);
-
+	machine__init(&machines->host, "", HOST_KERNEL_ID);
 	machines->guests = RB_ROOT_CACHED;
-	return err;
 }
 
 void machines__exit(struct machines *machines)
@@ -741,14 +735,8 @@ static int machine__process_ksymbol_register(struct machine *machine,
 {
 	struct symbol *sym;
 	struct dso *dso = NULL;
-	struct map *map;
+	struct map *map = maps__find(machine__kernel_maps(machine), event->ksymbol.addr);
 	int err = 0;
-
-	/* Ignore mapping symbols in ksymbol events - check early before any state mutation */
-	if (is_ignored_kernel_symbol(event->ksymbol.name))
-		return 0;
-
-	map = maps__find(machine__kernel_maps(machine), event->ksymbol.addr);
 
 	if (!map) {
 		dso = dso__new(event->ksymbol.name);
@@ -808,10 +796,6 @@ static int machine__process_ksymbol_unregister(struct machine *machine,
 	struct symbol *sym;
 	struct map *map;
 
-	/* Ignore mapping symbols in ksymbol events */
-	if (is_ignored_kernel_symbol(event->ksymbol.name))
-		return 0;
-
 	map = maps__find(machine__kernel_maps(machine), event->ksymbol.addr);
 	if (!map)
 		return 0;
@@ -835,11 +819,6 @@ int machine__process_ksymbol(struct machine *machine __maybe_unused,
 {
 	if (dump_trace)
 		perf_event__fprintf_ksymbol(event, stdout);
-
-	if (event->header.size < offsetof(struct perf_record_ksymbol, name) + 2 ||
-	    !memchr(event->ksymbol.name, '\0',
-		    event->header.size - offsetof(struct perf_record_ksymbol, name)))
-		return -EINVAL;
 
 	/* no need to process non-JIT BPF as it cannot get samples */
 	if (event->ksymbol.len == 0)
@@ -1105,7 +1084,7 @@ static u64 find_entry_trampoline(struct dso *dso)
 	unsigned int i;
 
 	for (; sym; sym = dso__next_symbol(sym)) {
-		if (symbol__binding(sym) != STB_GLOBAL)
+		if (sym->binding != STB_GLOBAL)
 			continue;
 		for (i = 0; i < ARRAY_SIZE(syms); i++) {
 			if (!strcmp(sym->name, syms[i]))
@@ -1559,30 +1538,22 @@ static void machine__set_kernel_mmap(struct machine *machine,
 		map__set_end(machine->vmlinux_map, ~0ULL);
 }
 
-struct kernel_mmap_mutation_ctx {
-	u64 start;
-	u64 end;
-};
-
-static int kernel_mmap_mutate_cb(struct map *map, void *data)
-{
-	struct kernel_mmap_mutation_ctx *ctx = data;
-
-	map__set_start(map, ctx->start);
-	map__set_end(map, ctx->end);
-	if (ctx->start == 0 && ctx->end == 0)
-		map__set_end(map, ~0ULL);
-	return 0;
-}
-
 static int machine__update_kernel_mmap(struct machine *machine,
-				       u64 start, u64 end)
+				     u64 start, u64 end)
 {
-	struct kernel_mmap_mutation_ctx ctx = { .start = start, .end = end };
+	struct map *orig, *updated;
+	int err;
 
-	return maps__mutate_mapping(machine__kernel_maps(machine),
-				     machine->vmlinux_map,
-				     kernel_mmap_mutate_cb, &ctx);
+	orig = machine->vmlinux_map;
+	updated = map__get(orig);
+
+	machine->vmlinux_map = updated;
+	maps__remove(machine__kernel_maps(machine), orig);
+	machine__set_kernel_mmap(machine, start, end);
+	err = maps__insert(machine__kernel_maps(machine), updated);
+	map__put(orig);
+
+	return err;
 }
 
 int machine__create_kernel_maps(struct machine *machine)
@@ -1656,24 +1627,10 @@ static bool machine__uses_kcore(struct machine *machine)
 	return dsos__for_each_dso(&machine->dsos, machine__uses_kcore_cb, NULL) != 0 ? true : false;
 }
 
-static bool machine__is(struct machine *machine, uint16_t e_machine)
-{
-	if (!machine)
-		return false;
-
-	if (!machine->env) {
-		if (machine__is_host(machine))
-			return e_machine == EM_HOST;
-		return false;
-	}
-
-	return perf_env__e_machine(machine->env, NULL) == e_machine;
-}
-
 static bool perf_event__is_extra_kernel_mmap(struct machine *machine,
 					     struct extra_kernel_map *xm)
 {
-	return machine__is(machine, EM_X86_64) &&
+	return machine__is(machine, "x86_64") &&
 	       is_entry_trampoline(xm->name);
 }
 
@@ -2076,7 +2033,7 @@ static void ip__resolve_ams(struct thread *thread,
 	ams->addr = ip;
 	ams->al_addr = al.addr;
 	ams->al_level = al.level;
-	ams->ms.thread = thread__get(al.thread);
+	ams->ms.maps = maps__get(al.maps);
 	ams->ms.sym = al.sym;
 	ams->ms.map = map__get(al.map);
 	ams->phys_addr = 0;
@@ -2097,7 +2054,7 @@ static void ip__resolve_data(struct thread *thread,
 	ams->addr = addr;
 	ams->al_addr = al.addr;
 	ams->al_level = al.level;
-	ams->ms.thread = thread__get(al.thread);
+	ams->ms.maps = maps__get(al.maps);
 	ams->ms.sym = al.sym;
 	ams->ms.map = map__get(al.map);
 	ams->phys_addr = phys_addr;
@@ -2150,59 +2107,6 @@ struct iterations {
 	u64 cycles;
 };
 
-static int append_inlines(struct callchain_cursor *cursor, struct map_symbol *ms, u64 ip,
-			bool branch, struct branch_flags *flags, int nr_loop_iter,
-			u64 iter_cycles, u64 branch_from)
-{
-	struct symbol *sym = ms->sym;
-	struct map *map = ms->map;
-	struct inline_node *inline_node;
-	struct inline_list *ilist;
-	struct dso *dso;
-	u64 addr;
-	int ret = 1;
-	struct map_symbol ilist_ms;
-	bool first = true;
-
-	if (!symbol_conf.inline_name || !map || !sym)
-		return ret;
-
-	addr = map__dso_map_ip(map, ip);
-	addr = map__rip_2objdump(map, addr);
-	dso = map__dso(map);
-
-	inline_node = inlines__tree_find(dso__inlined_nodes(dso), addr);
-	if (!inline_node) {
-		inline_node = dso__parse_addr_inlines(dso, addr, sym);
-		if (!inline_node)
-			return ret;
-		inlines__tree_insert(dso__inlined_nodes(dso), inline_node);
-	}
-
-	ilist_ms = (struct map_symbol) {
-		.thread = thread__get(ms->thread),
-		.map = map__get(map),
-	};
-	list_for_each_entry(ilist, &inline_node->val, list) {
-		ilist_ms.sym = ilist->symbol;
-		if (first) {
-			ret = callchain_cursor_append(cursor, ip, &ilist_ms,
-						      branch, flags, nr_loop_iter,
-						      iter_cycles, branch_from, ilist->srcline);
-		} else {
-			ret = callchain_cursor_append(cursor, ip, &ilist_ms, false,
-						      NULL, 0, 0, 0, ilist->srcline);
-		}
-		first = false;
-
-		if (ret != 0)
-			return ret;
-	}
-	map_symbol__exit(&ilist_ms);
-
-	return ret;
-}
-
 static int add_callchain_ip(struct thread *thread,
 			    struct callchain_cursor *cursor,
 			    struct symbol **parent,
@@ -2237,7 +2141,6 @@ static int add_callchain_ip(struct thread *thread,
 				*cpumode = PERF_RECORD_MISC_KERNEL;
 				break;
 			case PERF_CONTEXT_USER:
-			case PERF_CONTEXT_USER_DEFERRED:
 				*cpumode = PERF_RECORD_MISC_USER;
 				break;
 			default:
@@ -2280,14 +2183,9 @@ static int add_callchain_ip(struct thread *thread,
 		iter_cycles = iter->cycles;
 	}
 
-	ms.thread = thread__get(al.thread);
+	ms.maps = maps__get(al.maps);
 	ms.map = map__get(al.map);
 	ms.sym = al.sym;
-
-	if (append_inlines(cursor, &ms, ip, branch, flags, nr_loop_iter,
-			   iter_cycles, branch_from) == 0)
-		goto out;
-
 	srcline = callchain_srcline(&ms, al.addr);
 	err = callchain_cursor_append(cursor, ip, &ms,
 				      branch, flags, nr_loop_iter,
@@ -2443,7 +2341,7 @@ static void save_lbr_cursor_node(struct thread *thread,
 	map_symbol__exit(&lbr_stitch->prev_lbr_cursor[idx].ms);
 	memcpy(&lbr_stitch->prev_lbr_cursor[idx], cursor->curr,
 	       sizeof(struct callchain_cursor_node));
-	lbr_stitch->prev_lbr_cursor[idx].ms.thread = thread__get(cursor->curr->ms.thread);
+	lbr_stitch->prev_lbr_cursor[idx].ms.maps = maps__get(cursor->curr->ms.maps);
 	lbr_stitch->prev_lbr_cursor[idx].ms.map = map__get(cursor->curr->ms.map);
 
 	lbr_stitch->prev_lbr_cursor[idx].valid = true;
@@ -2483,14 +2381,8 @@ static int lbr_callchain_add_lbr_ip(struct thread *thread,
 	}
 
 	if (callee) {
-		/*
-		 * Set the (first) leaf function's IP to sample->ip (the
-		 * location of the sample) but if not recorded use entries.to
-		 */
-		if (sample->ip)
-			ip = sample->ip;
-		else
-			ip = entries[0].to;
+		/* Add LBR ip from first entries.to */
+		ip = entries[0].to;
 		flags = &entries[0].flags;
 		*branch_from = entries[0].from;
 		err = add_callchain_ip(thread, cursor, parent,
@@ -2543,14 +2435,8 @@ static int lbr_callchain_add_lbr_ip(struct thread *thread,
 	}
 
 	if (lbr_nr > 0) {
-		/*
-		 * Set the (first) leaf function's IP to sample->ip (the
-		 * location of the sample) but if not recorded use entries.to
-		 */
-		if (sample->ip)
-			ip = sample->ip;
-		else
-			ip = entries[0].to;
+		/* Add LBR ip from first entries.to */
+		ip = entries[0].to;
 		flags = &entries[0].flags;
 		*branch_from = entries[0].from;
 		err = add_callchain_ip(thread, cursor, parent,
@@ -2668,8 +2554,7 @@ static bool has_stitched_lbr(struct thread *thread,
 		memcpy(&stitch_node->cursor, &lbr_stitch->prev_lbr_cursor[i],
 		       sizeof(struct callchain_cursor_node));
 
-		stitch_node->cursor.ms.thread =
-			thread__get(lbr_stitch->prev_lbr_cursor[i].ms.thread);
+		stitch_node->cursor.ms.maps = maps__get(lbr_stitch->prev_lbr_cursor[i].ms.maps);
 		stitch_node->cursor.ms.map = map__get(lbr_stitch->prev_lbr_cursor[i].ms.map);
 
 		if (callee)
@@ -2830,7 +2715,7 @@ static int find_prev_cpumode(struct ip_callchain *chain, struct thread *thread,
 static u64 get_leaf_frame_caller(struct perf_sample *sample,
 		struct thread *thread, int usr_idx)
 {
-	if (thread__e_machine(thread, /*machine=*/NULL, /*e_flags=*/NULL) == EM_AARCH64)
+	if (machine__normalized_is(maps__machine(thread__maps(thread)), "arm64"))
 		return get_leaf_frame_caller_aarch64(sample, thread, usr_idx);
 	else
 		return 0;
@@ -2838,13 +2723,13 @@ static u64 get_leaf_frame_caller(struct perf_sample *sample,
 
 static int thread__resolve_callchain_sample(struct thread *thread,
 					    struct callchain_cursor *cursor,
+					    struct evsel *evsel,
 					    struct perf_sample *sample,
 					    struct symbol **parent,
 					    struct addr_location *root_al,
 					    int max_stack,
 					    bool symbols)
 {
-	struct evsel *evsel = sample->evsel;
 	struct branch_stack *branch = sample->branch_stack;
 	struct branch_entry *entries = perf_sample__branch_entries(sample);
 	struct ip_callchain *chain = sample->callchain;
@@ -3019,6 +2904,49 @@ check_calls:
 	return 0;
 }
 
+static int append_inlines(struct callchain_cursor *cursor, struct map_symbol *ms, u64 ip)
+{
+	struct symbol *sym = ms->sym;
+	struct map *map = ms->map;
+	struct inline_node *inline_node;
+	struct inline_list *ilist;
+	struct dso *dso;
+	u64 addr;
+	int ret = 1;
+	struct map_symbol ilist_ms;
+
+	if (!symbol_conf.inline_name || !map || !sym)
+		return ret;
+
+	addr = map__dso_map_ip(map, ip);
+	addr = map__rip_2objdump(map, addr);
+	dso = map__dso(map);
+
+	inline_node = inlines__tree_find(dso__inlined_nodes(dso), addr);
+	if (!inline_node) {
+		inline_node = dso__parse_addr_inlines(dso, addr, sym);
+		if (!inline_node)
+			return ret;
+		inlines__tree_insert(dso__inlined_nodes(dso), inline_node);
+	}
+
+	ilist_ms = (struct map_symbol) {
+		.maps = maps__get(ms->maps),
+		.map = map__get(map),
+	};
+	list_for_each_entry(ilist, &inline_node->val, list) {
+		ilist_ms.sym = ilist->symbol;
+		ret = callchain_cursor_append(cursor, ip, &ilist_ms, false,
+					      NULL, 0, 0, 0, ilist->srcline);
+
+		if (ret != 0)
+			return ret;
+	}
+	map_symbol__exit(&ilist_ms);
+
+	return ret;
+}
+
 static int unwind_entry(struct unwind_entry *entry, void *arg)
 {
 	struct callchain_cursor *cursor = arg;
@@ -3028,8 +2956,7 @@ static int unwind_entry(struct unwind_entry *entry, void *arg)
 	if (symbol_conf.hide_unresolved && entry->ms.sym == NULL)
 		return 0;
 
-	if (append_inlines(cursor, &entry->ms, entry->ip, /*branch=*/false, /*branch_flags=*/NULL,
-			   /*nr_loop_iter=*/0, /*iter_cycles=*/0, /*branch_from=*/0) == 0)
+	if (append_inlines(cursor, &entry->ms, entry->ip) == 0)
 		return 0;
 
 	/*
@@ -3046,11 +2973,10 @@ static int unwind_entry(struct unwind_entry *entry, void *arg)
 
 static int thread__resolve_callchain_unwind(struct thread *thread,
 					    struct callchain_cursor *cursor,
+					    struct evsel *evsel,
 					    struct perf_sample *sample,
 					    int max_stack, bool symbols)
 {
-	struct evsel *evsel = sample->evsel;
-
 	/* Can we do dwarf post unwind? */
 	if (!((evsel->core.attr.sample_type & PERF_SAMPLE_REGS_USER) &&
 	      (evsel->core.attr.sample_type & PERF_SAMPLE_STACK_USER)))
@@ -3070,6 +2996,7 @@ static int thread__resolve_callchain_unwind(struct thread *thread,
 
 int __thread__resolve_callchain(struct thread *thread,
 				struct callchain_cursor *cursor,
+				struct evsel *evsel,
 				struct perf_sample *sample,
 				struct symbol **parent,
 				struct addr_location *root_al,
@@ -3085,22 +3012,22 @@ int __thread__resolve_callchain(struct thread *thread,
 
 	if (callchain_param.order == ORDER_CALLEE) {
 		ret = thread__resolve_callchain_sample(thread, cursor,
-						       sample,
+						       evsel, sample,
 						       parent, root_al,
 						       max_stack, symbols);
 		if (ret)
 			return ret;
 		ret = thread__resolve_callchain_unwind(thread, cursor,
-						       sample,
+						       evsel, sample,
 						       max_stack, symbols);
 	} else {
 		ret = thread__resolve_callchain_unwind(thread, cursor,
-						       sample,
+						       evsel, sample,
 						       max_stack, symbols);
 		if (ret)
 			return ret;
 		ret = thread__resolve_callchain_sample(thread, cursor,
-						       sample,
+						       evsel, sample,
 						       parent, root_al,
 						       max_stack, symbols);
 	}
@@ -3201,6 +3128,20 @@ int machine__set_current_tid(struct machine *machine, int cpu, pid_t pid,
 	return 0;
 }
 
+/*
+ * Compares the raw arch string. N.B. see instead perf_env__arch() or
+ * machine__normalized_is() if a normalized arch is needed.
+ */
+bool machine__is(struct machine *machine, const char *arch)
+{
+	return machine && !strcmp(perf_env__raw_arch(machine->env), arch);
+}
+
+bool machine__normalized_is(struct machine *machine, const char *arch)
+{
+	return machine && !strcmp(perf_env__arch(machine->env), arch);
+}
+
 int machine__nr_cpus_avail(struct machine *machine)
 {
 	return machine ? perf_env__nr_cpus_avail(machine->env) : 0;
@@ -3227,7 +3168,7 @@ int machine__get_kernel_start(struct machine *machine)
 		 * start of kernel text, but still above 2^63. So leave
 		 * kernel_start = 1ULL << 63 for x86_64.
 		 */
-		if (!err && !machine__is(machine, EM_X86_64))
+		if (!err && !machine__is(machine, "x86_64"))
 			machine->kernel_start = map__start(map);
 	}
 	return err;

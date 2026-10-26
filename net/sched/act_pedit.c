@@ -18,7 +18,6 @@
 #include <linux/slab.h>
 #include <linux/overflow.h>
 #include <linux/unaligned.h>
-#include <net/ip.h>
 #include <net/ipv6.h>
 #include <net/netlink.h>
 #include <net/pkt_sched.h>
@@ -54,7 +53,7 @@ static struct tcf_pedit_key_ex *tcf_pedit_keys_ex_parse(struct nlattr *nla,
 	if (!nla)
 		return NULL;
 
-	keys_ex = kzalloc_objs(*k, n);
+	keys_ex = kcalloc(n, sizeof(*k), GFP_KERNEL);
 	if (!keys_ex)
 		return ERR_PTR(-ENOMEM);
 
@@ -226,7 +225,7 @@ static int tcf_pedit_init(struct net *net, struct nlattr *nla,
 		goto out_release;
 	}
 
-	nparms = kzalloc_obj(*nparms);
+	nparms = kzalloc(sizeof(*nparms), GFP_KERNEL);
 	if (!nparms) {
 		ret = -ENOMEM;
 		goto out_release;
@@ -331,9 +330,6 @@ static int pedit_l4_skb_offset(struct sk_buff *skb, int *hoffset, const int head
 		const struct iphdr *iph = skb_header_pointer(skb, noff, sizeof(_iph), &_iph);
 
 		if (!iph)
-			goto out;
-		if (iph->ihl < 5 || iph->protocol != header_type ||
-		    (iph->frag_off & htons(IP_OFFSET)))
 			goto out;
 		*hoffset = noff + iph->ihl * 4;
 		ret = 0;

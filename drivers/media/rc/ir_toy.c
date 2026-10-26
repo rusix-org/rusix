@@ -55,6 +55,7 @@ enum state {
 
 struct irtoy {
 	struct device *dev;
+	struct usb_device *usbdev;
 
 	struct rc_dev *rc;
 	struct urb *urb_in, *urb_out;
@@ -372,7 +373,7 @@ static int irtoy_tx_carrier(struct rc_dev *rc, uint32_t carrier)
 	u8 buf[3];
 	int err;
 
-	if (carrier < 11800 || carrier > 3000000)
+	if (carrier < 11800)
 		return -EINVAL;
 
 	buf[0] = 0x06;
@@ -392,24 +393,35 @@ static int irtoy_probe(struct usb_interface *intf,
 {
 	struct usb_host_interface *idesc = intf->cur_altsetting;
 	struct usb_device *usbdev = interface_to_usbdev(intf);
-	struct usb_endpoint_descriptor *ep_in, *ep_out;
+	struct usb_endpoint_descriptor *ep_in = NULL;
+	struct usb_endpoint_descriptor *ep_out = NULL;
+	struct usb_endpoint_descriptor *ep = NULL;
 	struct irtoy *irtoy;
 	struct rc_dev *rc;
 	struct urb *urb;
-	int pipe, err;
+	int i, pipe, err = -ENOMEM;
 
-	err = usb_find_common_endpoints(idesc, &ep_in, &ep_out, NULL, NULL);
-	if (err || usb_endpoint_maxp(ep_in) != MAX_PACKET ||
-	    usb_endpoint_maxp(ep_out) != MAX_PACKET) {
+	for (i = 0; i < idesc->desc.bNumEndpoints; i++) {
+		ep = &idesc->endpoint[i].desc;
+
+		if (!ep_in && usb_endpoint_is_bulk_in(ep) &&
+		    usb_endpoint_maxp(ep) == MAX_PACKET)
+			ep_in = ep;
+
+		if (!ep_out && usb_endpoint_is_bulk_out(ep) &&
+		    usb_endpoint_maxp(ep) == MAX_PACKET)
+			ep_out = ep;
+	}
+
+	if (!ep_in || !ep_out) {
 		dev_err(&intf->dev, "required endpoints not found\n");
 		return -ENODEV;
 	}
 
-	irtoy = kzalloc_obj(*irtoy);
+	irtoy = kzalloc(sizeof(*irtoy), GFP_KERNEL);
 	if (!irtoy)
 		return -ENOMEM;
 
-	err = -ENOMEM;
 	irtoy->in = kmalloc(MAX_PACKET,  GFP_KERNEL);
 	if (!irtoy->in)
 		goto free_irtoy;
@@ -440,6 +452,7 @@ static int irtoy_probe(struct usb_interface *intf,
 			  irtoy_out_callback, irtoy);
 
 	irtoy->dev = &intf->dev;
+	irtoy->usbdev = usbdev;
 	irtoy->rc = rc;
 	irtoy->urb_out = urb;
 	irtoy->pulse = true;

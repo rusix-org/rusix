@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause */
 /*
  * Copyright (C) 2017 Intel Deutschland GmbH
- * Copyright (C) 2018-2026 Intel Corporation
+ * Copyright (C) 2018-2025 Intel Corporation
  */
 #ifndef __iwl_fw_runtime_h__
 #define __iwl_fw_runtime_h__
@@ -106,29 +106,20 @@ struct iwl_txf_iter_data {
  * @cur_fw_img: current firmware image, must be maintained by
  *	the driver by calling &iwl_fw_set_current_image()
  * @dump: debug dump data
- * @ap_type_cmd: AP type tables (for enablement on 6 GHz)
- * @ap_type_cmd_valid: if &ap_type_cmd is valid
- * @uefi_tables_lock_status: the status of the WIFI GUID UEFI variables lock,
- *	see &enum iwl_uefi_cnv_guid_status.
- *	Trust the UEFI variables if locked or in test mode.
+ * @uats_table: AP type table
+ * @uats_valid: is AP type table valid
+ * @uefi_tables_lock_status: The status of the WIFI GUID UEFI variables lock:
+ *	0: Unlocked, 1 and 2: Locked.
+ *	Only read the UEFI variables if locked.
  * @sar_profiles: sar profiles as read from WRDS/EWRD BIOS tables
- * @sar_standalone_profiles: standalone sar profiles as read from
- *	WSSS/EWSS BIOS tables (for Wi-Fi HB/UHB without concurrent BT)
- * @wrds_table_revision: revision of WRDS BIOS table
- * @ewrd_table_revision: revision of EWRD BIOS table
  * @geo_profiles: geographic profiles as read from WGDS BIOS table
- * @geo_bios_source: see &enum bios_source
  * @phy_filters: specific phy filters as read from WPFC BIOS table
  * @ppag_bios_rev: PPAG BIOS revision
  * @ppag_bios_source: see &enum bios_source
- * @dsm_funcs_valid: bitmap indicating which DSM values are valid,
+ * @acpi_dsm_funcs_valid: bitmap indicating which DSM values are valid,
  *	zero (default initialization) means it hasn't been read yet,
  *	and BIT(0) is set when it has since function 0 also has this
- *	bitmap and is always supported.
- *	If the bit is set for a specific function, then the corresponding
- *	entry in &dsm_values is valid.
- * @dsm_values: cache of the DSM values. The validity of each entry is
- *	determined by &dsm_funcs_valid.
+ *	bitmap and is always supported
  * @geo_enabled: WGDS table is present
  * @geo_num_profiles: number of geo profiles
  * @geo_rev: geo profiles table revision
@@ -146,13 +137,6 @@ struct iwl_txf_iter_data {
  * @timestamp.seq: timestamp marking sequence
  * @timestamp.delay: timestamp marking worker delay
  * @tpc_enabled: TPC enabled
- * @dsm_source: one of &enum bios_source. UEFI, ACPI or NONE
- * @dsm_revision: the revision of the DSM table
- * @wbem_source: one of &enum bios_source for the WBEM table
- * @wbem_revision: the revision of the WBEM table
- * @puncturing_source: one of &enum bios_source for the puncturing table
- * @puncturing_revision: the revision of the puncturing table
- * @bios_puncturing: per-country puncturing enablement bitmap from BIOS
  */
 struct iwl_fw_runtime {
 	struct iwl_trans *trans;
@@ -210,14 +194,10 @@ struct iwl_fw_runtime {
 	bool tpc_enabled;
 #endif /* CONFIG_IWLWIFI_DEBUGFS */
 	struct iwl_sar_profile sar_profiles[BIOS_SAR_MAX_PROFILE_NUM];
-	struct iwl_sar_profile sar_standalone_profiles[BIOS_SAR_MAX_PROFILE_NUM];
-	u8 wrds_table_revision;
-	u8 ewrd_table_revision;
 	u8 sar_chain_a_profile;
 	u8 sar_chain_b_profile;
 	u8 reduced_power_flags;
 	struct iwl_geo_profile geo_profiles[BIOS_GEO_MAX_PROFILE_NUM];
-	enum bios_source geo_bios_source;
 	u32 geo_rev;
 	u32 geo_num_profiles;
 	bool geo_enabled;
@@ -227,23 +207,14 @@ struct iwl_fw_runtime {
 	u8 ppag_bios_source;
 	struct iwl_sar_offset_mapping_cmd sgom_table;
 	bool sgom_enabled;
-	struct iwl_mcc_allowed_ap_type_cmd ap_type_cmd;
-	bool ap_type_cmd_valid;
+	struct iwl_mcc_allowed_ap_type_cmd uats_table;
+	bool uats_valid;
 	u8 uefi_tables_lock_status;
 	struct iwl_phy_specific_cfg phy_filters;
-	enum bios_source dsm_source;
-	u8 dsm_revision;
 
-#if defined(CONFIG_ACPI) || defined(CONFIG_EFI)
-	u32 dsm_funcs_valid;
-	u32 dsm_values[DSM_FUNC_NUM_FUNCS];
+#ifdef CONFIG_ACPI
+	u32 acpi_dsm_funcs_valid;
 #endif
-
-	enum bios_source wbem_source;
-	u8 wbem_revision;
-	enum bios_source puncturing_source;
-	u8 puncturing_revision;
-	u32 bios_puncturing;
 };
 
 void iwl_fw_runtime_init(struct iwl_fw_runtime *fwrt, struct iwl_trans *trans,

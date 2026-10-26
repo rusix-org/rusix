@@ -128,8 +128,8 @@ struct sur40_image_header {
 /* polling interval (ms) */
 #define POLL_INTERVAL 1
 
-/* maximum number of contacts */
-#define MAX_CONTACTS 52
+/* maximum number of contacts FIXME: this is a guess? */
+#define MAX_CONTACTS 64
 
 /* control commands */
 #define SUR40_GET_VERSION 0xb0 /* 12 bytes string    */
@@ -538,15 +538,15 @@ static void sur40_process_video(struct sur40_state *sur40)
 		return;
 
 	/* get a new buffer from the list */
-	scoped_guard(spinlock, &sur40->qlock) {
-		if (list_empty(&sur40->buf_list)) {
-			dev_dbg(sur40->dev, "buffer queue empty\n");
-			return;
-		}
-		new_buf = list_first_entry(&sur40->buf_list,
-					   struct sur40_buffer, list);
-		list_del(&new_buf->list);
+	spin_lock(&sur40->qlock);
+	if (list_empty(&sur40->buf_list)) {
+		dev_dbg(sur40->dev, "buffer queue empty\n");
+		spin_unlock(&sur40->qlock);
+		return;
 	}
+	new_buf = list_entry(sur40->buf_list.next, struct sur40_buffer, list);
+	list_del(&new_buf->list);
+	spin_unlock(&sur40->qlock);
 
 	dev_dbg(sur40->dev, "buffer acquired\n");
 
@@ -672,7 +672,7 @@ static int sur40_probe(struct usb_interface *interface,
 		return -ENODEV;
 
 	/* Allocate memory for our device state and initialize it. */
-	sur40 = kzalloc_obj(*sur40);
+	sur40 = kzalloc(sizeof(*sur40), GFP_KERNEL);
 	if (!sur40)
 		return -ENOMEM;
 
@@ -891,8 +891,9 @@ static void sur40_buffer_queue(struct vb2_buffer *vb)
 	struct sur40_state *sur40 = vb2_get_drv_priv(vb->vb2_queue);
 	struct sur40_buffer *buf = (struct sur40_buffer *)vb;
 
-	guard(spinlock)(&sur40->qlock);
+	spin_lock(&sur40->qlock);
 	list_add_tail(&buf->list, &sur40->buf_list);
+	spin_unlock(&sur40->qlock);
 }
 
 static void return_all_buffers(struct sur40_state *sur40,
@@ -900,12 +901,12 @@ static void return_all_buffers(struct sur40_state *sur40,
 {
 	struct sur40_buffer *buf, *node;
 
-	guard(spinlock)(&sur40->qlock);
-
+	spin_lock(&sur40->qlock);
 	list_for_each_entry_safe(buf, node, &sur40->buf_list, list) {
 		vb2_buffer_done(&buf->vb.vb2_buf, state);
 		list_del(&buf->list);
 	}
+	spin_unlock(&sur40->qlock);
 }
 
 /*

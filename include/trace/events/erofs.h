@@ -81,33 +81,34 @@ TRACE_EVENT(erofs_fill_inode,
 
 TRACE_EVENT(erofs_read_folio,
 
-	TP_PROTO(struct inode *inode, struct folio *folio, bool raw),
+	TP_PROTO(struct folio *folio, bool raw),
 
-	TP_ARGS(inode, folio, raw),
+	TP_ARGS(folio, raw),
 
 	TP_STRUCT__entry(
 		__field(dev_t,		dev	)
 		__field(erofs_nid_t,    nid     )
 		__field(int,		dir	)
 		__field(pgoff_t,	index	)
-		__field(unsigned int,	order	)
+		__field(int,		uptodate)
 		__field(bool,		raw	)
 	),
 
 	TP_fast_assign(
-		__entry->dev	= inode->i_sb->s_dev;
-		__entry->nid	= EROFS_I(inode)->nid;
-		__entry->dir	= S_ISDIR(inode->i_mode);
+		__entry->dev	= folio->mapping->host->i_sb->s_dev;
+		__entry->nid	= EROFS_I(folio->mapping->host)->nid;
+		__entry->dir	= S_ISDIR(folio->mapping->host->i_mode);
 		__entry->index	= folio->index;
-		__entry->order	= folio_order(folio);
+		__entry->uptodate = folio_test_uptodate(folio);
 		__entry->raw = raw;
 	),
 
-	TP_printk("dev = (%d,%d), nid = %llu, %s, index = %lu, order = %u, raw = %d",
+	TP_printk("dev = (%d,%d), nid = %llu, %s, index = %lu, uptodate = %d "
+		"raw = %d",
 		show_dev_nid(__entry),
 		show_file_type(__entry->dir),
 		(unsigned long)__entry->index,
-		__entry->order,
+		__entry->uptodate,
 		__entry->raw)
 );
 

@@ -4,7 +4,6 @@
 #include <generated/utsrelease.h>
 #include <linux/crash_dump.h>
 #include <linux/net/intel/libie/pctype.h>
-#include <linux/net/intel/libie/rx.h>
 #include <linux/if_bridge.h>
 #include <linux/if_macvlan.h>
 #include <linux/module.h>
@@ -64,43 +63,40 @@ static bool i40e_is_total_port_shutdown_enabled(struct i40e_pf *pf);
  *   Class, Class Mask, private data (not used) }
  */
 static const struct pci_device_id i40e_pci_tbl[] = {
-	{ PCI_VDEVICE(INTEL, I40E_DEV_ID_SFP_XL710) },
-	{ PCI_VDEVICE(INTEL, I40E_DEV_ID_QEMU) },
-	{ PCI_VDEVICE(INTEL, I40E_DEV_ID_KX_B) },
-	{ PCI_VDEVICE(INTEL, I40E_DEV_ID_KX_C) },
-	{ PCI_VDEVICE(INTEL, I40E_DEV_ID_QSFP_A) },
-	{ PCI_VDEVICE(INTEL, I40E_DEV_ID_QSFP_B) },
-	{ PCI_VDEVICE(INTEL, I40E_DEV_ID_QSFP_C) },
-	{ PCI_VDEVICE(INTEL, I40E_DEV_ID_1G_BASE_T_BC) },
-	{ PCI_VDEVICE(INTEL, I40E_DEV_ID_10G_BASE_T) },
-	{ PCI_VDEVICE(INTEL, I40E_DEV_ID_10G_BASE_T4) },
-	{ PCI_VDEVICE(INTEL, I40E_DEV_ID_10G_BASE_T_BC) },
-	{ PCI_VDEVICE(INTEL, I40E_DEV_ID_10G_SFP) },
+	{PCI_VDEVICE(INTEL, I40E_DEV_ID_SFP_XL710), 0},
+	{PCI_VDEVICE(INTEL, I40E_DEV_ID_QEMU), 0},
+	{PCI_VDEVICE(INTEL, I40E_DEV_ID_KX_B), 0},
+	{PCI_VDEVICE(INTEL, I40E_DEV_ID_KX_C), 0},
+	{PCI_VDEVICE(INTEL, I40E_DEV_ID_QSFP_A), 0},
+	{PCI_VDEVICE(INTEL, I40E_DEV_ID_QSFP_B), 0},
+	{PCI_VDEVICE(INTEL, I40E_DEV_ID_QSFP_C), 0},
+	{PCI_VDEVICE(INTEL, I40E_DEV_ID_1G_BASE_T_BC), 0},
+	{PCI_VDEVICE(INTEL, I40E_DEV_ID_10G_BASE_T), 0},
+	{PCI_VDEVICE(INTEL, I40E_DEV_ID_10G_BASE_T4), 0},
+	{PCI_VDEVICE(INTEL, I40E_DEV_ID_10G_BASE_T_BC), 0},
+	{PCI_VDEVICE(INTEL, I40E_DEV_ID_10G_SFP), 0},
 	/*
 	 * This ID conflicts with ipw2200, but the devices can be differentiated
 	 * because i40e devices use PCI_CLASS_NETWORK_ETHERNET and ipw2200
 	 * devices use PCI_CLASS_NETWORK_OTHER.
 	 */
-	{
-		PCI_DEVICE(PCI_VENDOR_ID_INTEL, I40E_DEV_ID_10G_B),
-		.class = PCI_CLASS_NETWORK_ETHERNET << 8,
-		.class_mask = 0xffff00,
-	},
-	{ PCI_VDEVICE(INTEL, I40E_DEV_ID_KX_X722) },
-	{ PCI_VDEVICE(INTEL, I40E_DEV_ID_QSFP_X722) },
-	{ PCI_VDEVICE(INTEL, I40E_DEV_ID_SFP_X722) },
-	{ PCI_VDEVICE(INTEL, I40E_DEV_ID_1G_BASE_T_X722) },
-	{ PCI_VDEVICE(INTEL, I40E_DEV_ID_10G_BASE_T_X722) },
-	{ PCI_VDEVICE(INTEL, I40E_DEV_ID_SFP_I_X722) },
-	{ PCI_VDEVICE(INTEL, I40E_DEV_ID_SFP_X722_A) },
-	{ PCI_VDEVICE(INTEL, I40E_DEV_ID_20G_KR2) },
-	{ PCI_VDEVICE(INTEL, I40E_DEV_ID_20G_KR2_A) },
-	{ PCI_VDEVICE(INTEL, I40E_DEV_ID_X710_N3000) },
-	{ PCI_VDEVICE(INTEL, I40E_DEV_ID_XXV710_N3000) },
-	{ PCI_VDEVICE(INTEL, I40E_DEV_ID_25G_B) },
-	{ PCI_VDEVICE(INTEL, I40E_DEV_ID_25G_SFP28) },
+	{PCI_DEVICE(PCI_VENDOR_ID_INTEL, I40E_DEV_ID_10G_B),
+		PCI_CLASS_NETWORK_ETHERNET << 8, 0xffff00, 0},
+	{PCI_VDEVICE(INTEL, I40E_DEV_ID_KX_X722), 0},
+	{PCI_VDEVICE(INTEL, I40E_DEV_ID_QSFP_X722), 0},
+	{PCI_VDEVICE(INTEL, I40E_DEV_ID_SFP_X722), 0},
+	{PCI_VDEVICE(INTEL, I40E_DEV_ID_1G_BASE_T_X722), 0},
+	{PCI_VDEVICE(INTEL, I40E_DEV_ID_10G_BASE_T_X722), 0},
+	{PCI_VDEVICE(INTEL, I40E_DEV_ID_SFP_I_X722), 0},
+	{PCI_VDEVICE(INTEL, I40E_DEV_ID_SFP_X722_A), 0},
+	{PCI_VDEVICE(INTEL, I40E_DEV_ID_20G_KR2), 0},
+	{PCI_VDEVICE(INTEL, I40E_DEV_ID_20G_KR2_A), 0},
+	{PCI_VDEVICE(INTEL, I40E_DEV_ID_X710_N3000), 0},
+	{PCI_VDEVICE(INTEL, I40E_DEV_ID_XXV710_N3000), 0},
+	{PCI_VDEVICE(INTEL, I40E_DEV_ID_25G_B), 0},
+	{PCI_VDEVICE(INTEL, I40E_DEV_ID_25G_SFP28), 0},
 	/* required last entry */
-	{ }
+	{0, }
 };
 MODULE_DEVICE_TABLE(pci, i40e_pci_tbl);
 
@@ -1466,7 +1462,7 @@ static int i40e_correct_mac_vlan_filters(struct i40e_vsi *vsi,
 				return -ENOMEM;
 
 			/* Create a temporary i40e_new_mac_filter */
-			new = kzalloc_obj(*new, GFP_ATOMIC);
+			new = kzalloc(sizeof(*new), GFP_ATOMIC);
 			if (!new)
 				return -ENOMEM;
 
@@ -1578,7 +1574,7 @@ static int i40e_correct_vf_mac_vlan_filters(struct i40e_vsi *vsi,
 			if (!add_head)
 				return -ENOMEM;
 			/* Create a temporary i40e_new_mac_filter */
-			new_mac = kzalloc_obj(*new_mac, GFP_ATOMIC);
+			new_mac = kzalloc(sizeof(*new_mac), GFP_ATOMIC);
 			if (!new_mac)
 				return -ENOMEM;
 			new_mac->f = add_head;
@@ -1655,7 +1651,7 @@ struct i40e_mac_filter *i40e_add_filter(struct i40e_vsi *vsi,
 
 	f = i40e_find_filter(vsi, macaddr, vlan);
 	if (!f) {
-		f = kzalloc_obj(*f, GFP_ATOMIC);
+		f = kzalloc(sizeof(*f), GFP_ATOMIC);
 		if (!f)
 			return NULL;
 
@@ -2412,12 +2408,10 @@ void i40e_aqc_add_filters(struct i40e_vsi *vsi, const char *vsi_name,
 
 	if (fcnt != num_add) {
 		if (vsi->type == I40E_VSI_MAIN) {
-			if (!test_and_set_bit(__I40E_VSI_OVERFLOW_PROMISC,
-					      vsi->state)) {
-				dev_warn(&vsi->back->pdev->dev,
-					 "Error %s adding RX filters on %s, promiscuous mode forced on\n",
-					 libie_aq_str(aq_status), vsi_name);
-			}
+			set_bit(__I40E_VSI_OVERFLOW_PROMISC, vsi->state);
+			dev_warn(&vsi->back->pdev->dev,
+				 "Error %s adding RX filters on %s, promiscuous mode forced on\n",
+				 libie_aq_str(aq_status), vsi_name);
 		} else if (vsi->type == I40E_VSI_SRIOV ||
 			   vsi->type == I40E_VSI_VMDQ1 ||
 			   vsi->type == I40E_VSI_VMDQ2) {
@@ -2467,11 +2461,10 @@ i40e_aqc_broadcast_filter(struct i40e_vsi *vsi, const char *vsi_name,
 	}
 
 	if (aq_ret) {
-		if (!test_and_set_bit(__I40E_VSI_OVERFLOW_PROMISC, vsi->state)) {
-			dev_warn(&vsi->back->pdev->dev,
-				 "Error %s, forcing overflow promiscuous on %s\n",
-				 libie_aq_str(hw->aq.asq_last_status), vsi_name);
-		}
+		set_bit(__I40E_VSI_OVERFLOW_PROMISC, vsi->state);
+		dev_warn(&vsi->back->pdev->dev,
+			 "Error %s, forcing overflow promiscuous on %s\n",
+			 libie_aq_str(hw->aq.asq_last_status), vsi_name);
 	}
 
 	return aq_ret;
@@ -2613,7 +2606,7 @@ int i40e_sync_vsi_filters(struct i40e_vsi *vsi)
 			}
 			if (f->state == I40E_FILTER_NEW) {
 				/* Create a temporary i40e_new_mac_filter */
-				new = kzalloc_obj(*new, GFP_ATOMIC);
+				new = kzalloc(sizeof(*new), GFP_ATOMIC);
 				if (!new)
 					goto err_no_memory_locked;
 
@@ -3626,7 +3619,7 @@ static int i40e_configure_rx_ring(struct i40e_ring *ring)
 	}
 
 skip:
-	xdp_init_buff(&ring->xdp_ctx.xdp, xdp_frame_sz, &ring->xdp_rxq);
+	xdp_init_buff(&ring->xdp, xdp_frame_sz, &ring->xdp_rxq);
 
 	rx_ctx.dbuff = DIV_ROUND_UP(ring->rx_buf_len,
 				    BIT_ULL(I40E_RXQ_CTX_DBUFF_SHIFT));
@@ -4868,10 +4861,16 @@ static void i40e_control_rx_q(struct i40e_pf *pf, int pf_q, bool enable)
  **/
 int i40e_control_wait_rx_q(struct i40e_pf *pf, int pf_q, bool enable)
 {
+	int ret = 0;
+
 	i40e_control_rx_q(pf, pf_q, enable);
 
 	/* wait for the change to finish */
-	return i40e_pf_rxq_wait(pf, pf_q, enable);
+	ret = i40e_pf_rxq_wait(pf, pf_q, enable);
+	if (ret)
+		return ret;
+
+	return ret;
 }
 
 /**
@@ -6694,7 +6693,7 @@ static int i40e_configure_queue_channels(struct i40e_vsi *vsi)
 	vsi->tc_seid_map[0] = vsi->seid;
 	for (i = 1; i < I40E_MAX_TRAFFIC_CLASS; i++) {
 		if (vsi->tc_config.enabled_tc & BIT(i)) {
-			ch = kzalloc_obj(*ch);
+			ch = kzalloc(sizeof(*ch), GFP_KERNEL);
 			if (!ch) {
 				ret = -ENOMEM;
 				goto err_free;
@@ -7970,7 +7969,7 @@ static int i40e_setup_macvlans(struct i40e_vsi *vsi, u16 macvlan_cnt, u16 qcnt,
 	/* Create channels for macvlans */
 	INIT_LIST_HEAD(&vsi->macvlan_list);
 	for (i = 0; i < macvlan_cnt; i++) {
-		ch = kzalloc_obj(*ch);
+		ch = kzalloc(sizeof(*ch), GFP_KERNEL);
 		if (!ch) {
 			ret = -ENOMEM;
 			goto err_free;
@@ -8082,7 +8081,7 @@ static void *i40e_fwd_add(struct net_device *netdev, struct net_device *vdev)
 		return ERR_PTR(-EBUSY);
 
 	/* create the fwd struct */
-	fwd = kzalloc_obj(*fwd);
+	fwd = kzalloc(sizeof(*fwd), GFP_KERNEL);
 	if (!fwd)
 		return ERR_PTR(-ENOMEM);
 
@@ -8843,7 +8842,7 @@ static int i40e_configure_clsflower(struct i40e_vsi *vsi,
 		clear_bit(I40E_FLAG_FD_SB_TO_CLOUD_FILTER, vsi->back->flags);
 	}
 
-	filter = kzalloc_obj(*filter);
+	filter = kzalloc(sizeof(*filter), GFP_KERNEL);
 	if (!filter)
 		return -ENOMEM;
 
@@ -11548,7 +11547,7 @@ static int i40e_vsi_mem_alloc(struct i40e_pf *pf, enum i40e_vsi_type type)
 	}
 	pf->next_vsi = ++i;
 
-	vsi = kzalloc_obj(*vsi);
+	vsi = kzalloc(sizeof(*vsi), GFP_KERNEL);
 	if (!vsi) {
 		ret = -ENOMEM;
 		goto unlock_pf;
@@ -11719,7 +11718,7 @@ static int i40e_alloc_rings(struct i40e_vsi *vsi)
 	/* Set basic values in the rings to be used later during open() */
 	for (i = 0; i < vsi->alloc_queue_pairs; i++) {
 		/* allocate space for both Tx and Rx in one shot */
-		ring = kzalloc_objs(struct i40e_ring, qpv);
+		ring = kcalloc(qpv, sizeof(struct i40e_ring), GFP_KERNEL);
 		if (!ring)
 			goto err_out;
 
@@ -11922,7 +11921,8 @@ static int i40e_init_msix(struct i40e_pf *pf)
 	     "Calculation of remaining vectors underflowed. This is an accounting bug when determining total MSI-X vectors.\n");
 
 	v_budget += pf->num_lan_msix;
-	pf->msix_entries = kzalloc_objs(struct msix_entry, v_budget);
+	pf->msix_entries = kcalloc(v_budget, sizeof(struct msix_entry),
+				   GFP_KERNEL);
 	if (!pf->msix_entries)
 		return -ENOMEM;
 
@@ -12035,7 +12035,7 @@ static int i40e_vsi_alloc_q_vector(struct i40e_vsi *vsi, int v_idx)
 	struct i40e_q_vector *q_vector;
 
 	/* allocate q_vector */
-	q_vector = kzalloc_obj(struct i40e_q_vector);
+	q_vector = kzalloc(sizeof(struct i40e_q_vector), GFP_KERNEL);
 	if (!q_vector)
 		return -ENOMEM;
 
@@ -13586,53 +13586,6 @@ static int i40e_xdp(struct net_device *dev,
 	}
 }
 
-static int i40e_xdp_rx_hash(const struct xdp_md *_ctx, u32 *hash,
-			    enum xdp_rss_hash_type *rss_type)
-{
-	const struct i40e_xdp_buff *ctx = (const void *)_ctx;
-	const union i40e_rx_desc *desc = ctx->desc;
-	struct libeth_rx_pt rx_ptype;
-	u8 raw_rx_ptype;
-	u64 status;
-
-	status = le64_to_cpu(desc->wb.qword1.status_error_len);
-	raw_rx_ptype = FIELD_GET(I40E_RXD_QW1_PTYPE_MASK, status);
-	rx_ptype = libie_rx_pt_parse(raw_rx_ptype);
-
-	if (!libeth_rx_pt_has_hash(ctx->xdp.rxq->dev, rx_ptype) ||
-	    FIELD_GET(I40E_RX_DESC_STATUS_FLTSTAT_MASK, status) !=
-		    I40E_RX_DESC_FLTSTAT_RSS_HASH)
-		return -ENODATA;
-
-	*hash = le32_to_cpu(desc->wb.qword0.hi_dword.rss);
-	*rss_type = rx_ptype.hash_type;
-
-	return 0;
-}
-
-static int i40e_xdp_rx_vlan_tag(const struct xdp_md *_ctx, __be16 *vlan_proto,
-				u16 *vlan_tci)
-{
-	const struct i40e_xdp_buff *ctx = (const void *)_ctx;
-	const union i40e_rx_desc *desc = ctx->desc;
-	u64 status;
-
-	status = le64_to_cpu(desc->wb.qword1.status_error_len);
-
-	if (!(status & BIT(I40E_RX_DESC_STATUS_L2TAG1P_SHIFT)))
-		return -ENODATA;
-
-	*vlan_proto = cpu_to_be16(ETH_P_8021Q);
-	*vlan_tci = le16_to_cpu(desc->wb.qword0.lo_dword.l2tag1);
-
-	return 0;
-}
-
-static const struct xdp_metadata_ops i40e_xdp_metadata_ops = {
-	.xmo_rx_hash		= i40e_xdp_rx_hash,
-	.xmo_rx_vlan_tag	= i40e_xdp_rx_vlan_tag,
-};
-
 static const struct net_device_ops i40e_netdev_ops = {
 	.ndo_open		= i40e_open,
 	.ndo_stop		= i40e_close,
@@ -13835,7 +13788,6 @@ static int i40e_config_netdev(struct i40e_vsi *vsi)
 	i40e_vsi_config_netdev_tc(vsi, vsi->tc_config.enabled_tc);
 
 	netdev->netdev_ops = &i40e_netdev_ops;
-	netdev->xdp_metadata_ops = &i40e_xdp_metadata_ops;
 	netdev->watchdog_timeo = 5 * HZ;
 	i40e_set_ethtool_ops(netdev);
 
@@ -14635,7 +14587,7 @@ static int i40e_veb_mem_alloc(struct i40e_pf *pf)
 		goto err_alloc_veb;  /* out of VEB slots! */
 	}
 
-	veb = kzalloc_obj(*veb);
+	veb = kzalloc(sizeof(*veb), GFP_KERNEL);
 	if (!veb) {
 		ret = -ENOMEM;
 		goto err_alloc_veb;
@@ -15495,7 +15447,8 @@ static int i40e_init_recovery_mode(struct i40e_pf *pf, struct i40e_hw *hw)
 		pf->num_alloc_vsi = pf->hw.func_caps.num_vsis;
 
 	/* Set up the vsi struct and our local tracking of the MAIN PF vsi. */
-	pf->vsi = kzalloc_objs(struct i40e_vsi *, pf->num_alloc_vsi);
+	pf->vsi = kcalloc(pf->num_alloc_vsi, sizeof(struct i40e_vsi *),
+			  GFP_KERNEL);
 	if (!pf->vsi) {
 		err = -ENOMEM;
 		goto err_switch_setup;
@@ -15918,7 +15871,8 @@ static int i40e_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 	}
 
 	/* Set up the *vsi struct and our local tracking of the MAIN PF vsi. */
-	pf->vsi = kzalloc_objs(struct i40e_vsi *, pf->num_alloc_vsi);
+	pf->vsi = kcalloc(pf->num_alloc_vsi, sizeof(struct i40e_vsi *),
+			  GFP_KERNEL);
 	if (!pf->vsi) {
 		err = -ENOMEM;
 		goto err_switch_setup;
@@ -16157,7 +16111,6 @@ static int i40e_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 	/* Unwind what we've done if something failed in the setup */
 err_vsis:
 	set_bit(__I40E_DOWN, pf->state);
-	i40e_ptp_stop(pf);
 	i40e_clear_interrupt_scheme(pf);
 	kfree(pf->vsi);
 err_switch_setup:

@@ -69,7 +69,7 @@ mlx5e_int_port_create_rx_rule(struct mlx5_eswitch *esw,
 	struct mlx5_flow_spec *spec;
 	void *misc;
 
-	spec = kvzalloc_obj(*spec);
+	spec = kvzalloc(sizeof(*spec), GFP_KERNEL);
 	if (!spec)
 		return ERR_PTR(-ENOMEM);
 
@@ -167,7 +167,7 @@ mlx5e_int_port_add(struct mlx5e_tc_int_port_priv *priv,
 		return ERR_PTR(-ENOSPC);
 	}
 
-	int_port = kzalloc_obj(*int_port);
+	int_port = kzalloc(sizeof(*int_port), GFP_KERNEL);
 	if (!int_port)
 		return ERR_PTR(-ENOMEM);
 
@@ -307,20 +307,18 @@ mlx5e_tc_int_port_init(struct mlx5e_priv *priv)
 {
 	struct mlx5_eswitch *esw = priv->mdev->priv.eswitch;
 	struct mlx5e_tc_int_port_priv *int_port_priv;
-	u8 mapping_id[MLX5_SW_IMAGE_GUID_MAX_BYTES];
-	u8 id_len;
+	u64 mapping_id;
 
 	if (!mlx5e_tc_int_port_supported(esw))
 		return NULL;
 
-	int_port_priv = kzalloc_obj(*int_port_priv);
+	int_port_priv = kzalloc(sizeof(*int_port_priv), GFP_KERNEL);
 	if (!int_port_priv)
 		return NULL;
 
-	mlx5_query_nic_sw_system_image_guid(priv->mdev, mapping_id, &id_len);
+	mapping_id = mlx5_query_nic_system_image_guid(priv->mdev);
 
-	int_port_priv->metadata_mapping = mapping_create_for_id(mapping_id, id_len,
-								MAPPING_TYPE_INT_PORT,
+	int_port_priv->metadata_mapping = mapping_create_for_id(mapping_id, MAPPING_TYPE_INT_PORT,
 								sizeof(u32) * 2,
 								(1 << ESW_VPORT_BITS) - 1, true);
 	if (IS_ERR(int_port_priv->metadata_mapping)) {

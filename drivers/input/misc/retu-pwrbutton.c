@@ -57,6 +57,7 @@ static int retu_pwrbutton_probe(struct platform_device *pdev)
 		return -ENOMEM;
 
 	idev->name = "retu-pwrbutton";
+	idev->dev.parent = &pdev->dev;
 
 	input_set_capability(idev, EV_KEY, KEY_POWER);
 	input_set_drvdata(idev, rdev);

@@ -27,7 +27,7 @@
  * and thus @kobj should have a namespace tag associated with it.  Returns
  * %NULL otherwise.
  */
-const struct ns_common *kobject_namespace(const struct kobject *kobj)
+const void *kobject_namespace(const struct kobject *kobj)
 {
 	const struct kobj_ns_type_operations *ns_ops = kobj_ns_ops(kobj);
 
@@ -765,7 +765,7 @@ static struct kobject *kobject_create(void)
 {
 	struct kobject *kobj;
 
-	kobj = kzalloc_obj(*kobj);
+	kobj = kzalloc(sizeof(*kobj), GFP_KERNEL);
 	if (!kobj)
 		return NULL;
 
@@ -823,11 +823,9 @@ static ssize_t kobj_attr_show(struct kobject *kobj, struct attribute *attr,
 	struct kobj_attribute *kattr;
 	ssize_t ret = -EIO;
 
-	kattr = container_of_const(attr, struct kobj_attribute, attr);
+	kattr = container_of(attr, struct kobj_attribute, attr);
 	if (kattr->show)
 		ret = kattr->show(kobj, kattr, buf);
-	else if (kattr->show_const)
-		ret = kattr->show_const(kobj, kattr, buf);
 	return ret;
 }
 
@@ -837,11 +835,9 @@ static ssize_t kobj_attr_store(struct kobject *kobj, struct attribute *attr,
 	struct kobj_attribute *kattr;
 	ssize_t ret = -EIO;
 
-	kattr = container_of_const(attr, struct kobj_attribute, attr);
+	kattr = container_of(attr, struct kobj_attribute, attr);
 	if (kattr->store)
 		ret = kattr->store(kobj, kattr, buf, count);
-	else if (kattr->store_const)
-		ret = kattr->store_const(kobj, kattr, buf, count);
 	return ret;
 }
 
@@ -855,7 +851,7 @@ EXPORT_SYMBOL_GPL(kobj_sysfs_ops);
  * kset_register() - Initialize and add a kset.
  * @k: kset.
  *
- * NOTE: On error, the kset.kobj.name allocated by kobject_set_name()
+ * NOTE: On error, the kset.kobj.name allocated by() kobj_set_name()
  * is freed, it can not be used any more.
  */
 int kset_register(struct kset *k)
@@ -966,7 +962,7 @@ static struct kset *kset_create(const char *name,
 	struct kset *kset;
 	int retval;
 
-	kset = kzalloc_obj(*kset);
+	kset = kzalloc(sizeof(*kset), GFP_KERNEL);
 	if (!kset)
 		return NULL;
 	retval = kobject_set_name(&kset->kobj, "%s", name);
@@ -1087,9 +1083,9 @@ bool kobj_ns_current_may_mount(enum kobj_ns_type type)
 	return may_mount;
 }
 
-struct ns_common *kobj_ns_grab_current(enum kobj_ns_type type)
+void *kobj_ns_grab_current(enum kobj_ns_type type)
 {
-	struct ns_common *ns = NULL;
+	void *ns = NULL;
 
 	spin_lock(&kobj_ns_type_lock);
 	if (kobj_ns_type_is_valid(type) && kobj_ns_ops_tbl[type])
@@ -1100,7 +1096,7 @@ struct ns_common *kobj_ns_grab_current(enum kobj_ns_type type)
 }
 EXPORT_SYMBOL_GPL(kobj_ns_grab_current);
 
-void kobj_ns_drop(enum kobj_ns_type type, struct ns_common *ns)
+void kobj_ns_drop(enum kobj_ns_type type, void *ns)
 {
 	spin_lock(&kobj_ns_type_lock);
 	if (kobj_ns_type_is_valid(type) &&

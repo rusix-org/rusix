@@ -26,13 +26,10 @@ static int build_body(struct rv_jit_context *ctx, bool extra_pass, int *offset)
 		int ret;
 
 		ret = bpf_jit_emit_insn(insn, ctx, extra_pass);
+		if (ret > 0)
+			i++; /* skip the next instruction */
 		if (offset)
 			offset[i] = ctx->ninsns;
-		if (ret > 0) {
-			i++; /* skip the next instruction */
-			if (offset)
-				offset[i] = ctx->ninsns;
-		}
 		if (ret < 0)
 			return ret;
 	}
@@ -44,23 +41,32 @@ bool bpf_jit_needs_zext(void)
 	return true;
 }
 
-struct bpf_prog *bpf_int_jit_compile(struct bpf_verifier_env *env, struct bpf_prog *prog)
+struct bpf_prog *bpf_int_jit_compile(struct bpf_prog *prog)
 {
 	unsigned int prog_size = 0, extable_size = 0;
-	bool extra_pass = false;
+	bool tmp_blinded = false, extra_pass = false;
+	struct bpf_prog *tmp, *orig_prog = prog;
 	int pass = 0, prev_ninsns = 0, i;
 	struct rv_jit_data *jit_data;
 	struct rv_jit_context *ctx;
-	u16 stack_arg_cnt;
 
 	if (!prog->jit_requested)
-		return prog;
+		return orig_prog;
+
+	tmp = bpf_jit_blind_constants(prog);
+	if (IS_ERR(tmp))
+		return orig_prog;
+	if (tmp != prog) {
+		tmp_blinded = true;
+		prog = tmp;
+	}
 
 	jit_data = prog->aux->jit_data;
 	if (!jit_data) {
-		jit_data = kzalloc_obj(*jit_data);
+		jit_data = kzalloc(sizeof(*jit_data), GFP_KERNEL);
 		if (!jit_data) {
-			return prog;
+			prog = orig_prog;
+			goto out;
 		}
 		prog->aux->jit_data = jit_data;
 	}
@@ -73,23 +79,19 @@ struct bpf_prog *bpf_int_jit_compile(struct bpf_verifier_env *env, struct bpf_pr
 		goto skip_init_ctx;
 	}
 
-	if (bpf_prog_uses_arena_insns(prog)) {
-		ctx->arena_vm_start = bpf_arena_get_kern_vm_start(prog->aux->arena);
-		ctx->user_vm_start = bpf_arena_get_user_vm_start(prog->aux->arena);
+	ctx->arena_vm_start = bpf_arena_get_kern_vm_start(prog->aux->arena);
+	ctx->user_vm_start = bpf_arena_get_user_vm_start(prog->aux->arena);
+	ctx->prog = prog;
+	ctx->offset = kcalloc(prog->len, sizeof(int), GFP_KERNEL);
+	if (!ctx->offset) {
+		prog = orig_prog;
+		goto out_offset;
 	}
 
-	stack_arg_cnt = bpf_out_stack_arg_cnt(env, prog);
-	/* First 3 stack args in regs, rest on stack */
-	ctx->stack_arg_sz = stack_arg_cnt > RV_EXTRA_STK_ARGS ?
-			    round_up((stack_arg_cnt - RV_EXTRA_STK_ARGS) * 8, STACK_ALIGN) : 0;
-
-	ctx->prog = prog;
-	ctx->offset = kvzalloc_objs(int, prog->len);
-	if (!ctx->offset)
+	if (build_body(ctx, extra_pass, NULL)) {
+		prog = orig_prog;
 		goto out_offset;
-
-	if (build_body(ctx, extra_pass, NULL))
-		goto out_offset;
+	}
 
 	for (i = 0; i < prog->len; i++) {
 		prev_ninsns += 32;
@@ -103,8 +105,10 @@ struct bpf_prog *bpf_int_jit_compile(struct bpf_verifier_env *env, struct bpf_pr
 		bpf_jit_build_prologue(ctx, bpf_is_subprog(prog));
 		ctx->prologue_len = ctx->ninsns;
 
-		if (build_body(ctx, extra_pass, ctx->offset))
+		if (build_body(ctx, extra_pass, ctx->offset)) {
+			prog = orig_prog;
 			goto out_offset;
+		}
 
 		ctx->epilogue_offset = ctx->ninsns;
 		bpf_jit_build_epilogue(ctx);
@@ -123,8 +127,10 @@ struct bpf_prog *bpf_int_jit_compile(struct bpf_verifier_env *env, struct bpf_pr
 							  &jit_data->header, &jit_data->image,
 							  bpf_fill_ill_insns,
 							  bpf_prog_was_classic(prog));
-			if (!jit_data->ro_header)
+			if (!jit_data->ro_header) {
+				prog = orig_prog;
 				goto out_offset;
+			}
 
 			/*
 			 * Use the image(RW) for writing the JITed instructions. But also save
@@ -145,6 +151,7 @@ struct bpf_prog *bpf_int_jit_compile(struct bpf_verifier_env *env, struct bpf_pr
 
 	if (i == NR_JIT_ITERATIONS) {
 		pr_err("bpf-jit: image did not converge in <%d passes!\n", i);
+		prog = orig_prog;
 		goto out_free_hdr;
 	}
 
@@ -157,53 +164,42 @@ skip_init_ctx:
 	ctx->nexentries = 0;
 
 	bpf_jit_build_prologue(ctx, bpf_is_subprog(prog));
-	if (build_body(ctx, extra_pass, NULL))
+	if (build_body(ctx, extra_pass, NULL)) {
+		prog = orig_prog;
 		goto out_free_hdr;
+	}
 	bpf_jit_build_epilogue(ctx);
 
 	if (bpf_jit_enable > 1)
 		bpf_jit_dump(prog->len, prog_size, pass, ctx->insns);
-
-	if (!prog->is_func || extra_pass) {
-		if (WARN_ON(bpf_jit_binary_pack_finalize(jit_data->ro_header, jit_data->header))) {
-			/* ro_header has been freed */
-			jit_data->ro_header = NULL;
-			jit_data->header = NULL;
-			goto out_free_hdr;
-		}
-	}
 
 	prog->bpf_func = (void *)ctx->ro_insns + cfi_get_offset();
 	prog->jited = 1;
 	prog->jited_len = prog_size - cfi_get_offset();
 
 	if (!prog->is_func || extra_pass) {
+		if (WARN_ON(bpf_jit_binary_pack_finalize(jit_data->ro_header, jit_data->header))) {
+			/* ro_header has been freed */
+			jit_data->ro_header = NULL;
+			prog = orig_prog;
+			goto out_offset;
+		}
 		for (i = 0; i < prog->len; i++)
 			ctx->offset[i] = ninsns_rvoff(ctx->offset[i]);
 		bpf_prog_fill_jited_linfo(prog, ctx->offset);
-
-		/*
-		 * bpf_prog_update_insn_ptrs() wants the start of each insn, so
-		 * shift ctx->offset[] by one and get insn 0 from the prologue.
-		 */
-		for (i = prog->len - 1; i > 0; i--)
-			ctx->offset[i] = ctx->offset[i - 1];
-		ctx->offset[0] = ninsns_rvoff(ctx->prologue_len);
-		bpf_prog_update_insn_ptrs(prog, ctx->offset, jit_data->ro_image);
 out_offset:
-		kvfree(ctx->offset);
+		kfree(ctx->offset);
 		kfree(jit_data);
 		prog->aux->jit_data = NULL;
 	}
+out:
 
+	if (tmp_blinded)
+		bpf_jit_prog_release_other(prog, prog == orig_prog ?
+					   tmp : orig_prog);
 	return prog;
 
 out_free_hdr:
-	if (extra_pass) {
-		prog->bpf_func = NULL;
-		prog->jited = 0;
-		prog->jited_len = 0;
-	}
 	if (jit_data->header) {
 		bpf_arch_text_copy(&jit_data->ro_header->size, &jit_data->header->size,
 				   sizeof(jit_data->header->size));
@@ -255,10 +251,9 @@ void bpf_jit_free(struct bpf_prog *prog)
 		 */
 		if (jit_data) {
 			bpf_jit_binary_pack_finalize(jit_data->ro_header, jit_data->header);
-			kvfree(jit_data->ctx.offset);
+			kfree(jit_data->ctx.offset);
 			kfree(jit_data);
 		}
-		prog->bpf_func = (void *)prog->bpf_func - cfi_get_offset();
 		hdr = bpf_jit_binary_pack_hdr(prog);
 		bpf_jit_binary_pack_free(hdr, NULL);
 		WARN_ON_ONCE(!bpf_prog_kallsyms_verify_off(prog));

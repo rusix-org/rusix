@@ -126,7 +126,6 @@
 
 	dvi-encoder {
 		compatible = "ti,tfp410";
-		ti,deskew = <0>;
 
 		ports {
 			#address-cells = <1>;
@@ -328,7 +327,7 @@
 		};
 	};
 
-	flash: flash@1 {
+	flash: at45db321d@1 {
 		#address-cells = <1>;
 		#size-cells = <1>;
 		compatible = "atmel,at45db321d", "atmel,at45", "atmel,dataflash";

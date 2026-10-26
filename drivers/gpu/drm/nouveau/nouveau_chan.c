@@ -156,7 +156,7 @@ nouveau_channel_prep(struct nouveau_cli *cli,
 	u32 target;
 	int ret;
 
-	chan = *pchan = kzalloc_obj(*chan);
+	chan = *pchan = kzalloc(sizeof(*chan), GFP_KERNEL);
 	if (!chan)
 		return -ENOMEM;
 
@@ -552,7 +552,7 @@ nouveau_channels_init(struct nouveau_drm *drm)
 
 	drm->chan_nr = drm->chan_total = channels->data;
 	drm->runl_nr = fls64(runlists->data);
-	drm->runl = kzalloc_objs(*drm->runl, drm->runl_nr);
+	drm->runl = kcalloc(drm->runl_nr, sizeof(*drm->runl), GFP_KERNEL);
 	if (!drm->runl)
 		return -ENOMEM;
 

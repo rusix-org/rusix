@@ -67,7 +67,7 @@ struct rtrack {
 
 static struct radio_isa_card *rtrack_alloc(void)
 {
-	struct rtrack *rt = kzalloc_obj(struct rtrack);
+	struct rtrack *rt = kzalloc(sizeof(struct rtrack), GFP_KERNEL);
 
 	if (rt)
 		rt->curvol = 0xff;

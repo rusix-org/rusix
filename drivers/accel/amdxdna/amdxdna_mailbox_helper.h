@@ -6,6 +6,7 @@
 #ifndef _AMDXDNA_MAILBOX_HELPER_H
 #define _AMDXDNA_MAILBOX_HELPER_H
 
+#define TX_TIMEOUT 2000 /* milliseconds */
 #define RX_TIMEOUT 5000 /* milliseconds */
 
 struct amdxdna_dev;
@@ -15,18 +16,16 @@ struct xdna_notify {
 	u32			*data;
 	size_t			size;
 	int			error;
-	u32			*status;
 };
 
-#define DECLARE_XDNA_MSG_COMMON(name, op, s)				\
+#define DECLARE_XDNA_MSG_COMMON(name, op, status)			\
 	struct name##_req	req = { 0 };				\
-	struct name##_resp	resp = { .status = s };			\
+	struct name##_resp	resp = { status	};			\
 	struct xdna_notify	hdl = {					\
 		.error = 0,						\
 		.data = (u32 *)&resp,					\
 		.size = sizeof(resp),					\
 		.comp = COMPLETION_INITIALIZER_ONSTACK(hdl.comp),	\
-		.status = (u32 *)&resp.status,				\
 	};								\
 	struct xdna_mailbox_msg msg = {					\
 		.send_data = (u8 *)&req,				\

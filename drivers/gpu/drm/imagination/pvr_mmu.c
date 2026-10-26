@@ -134,8 +134,8 @@ int pvr_mmu_flush_exec(struct pvr_device *pvr_dev, bool wait)
 	if (!drm_dev_enter(from_pvr_device(pvr_dev), &idx))
 		return -EIO;
 
-	/* Can't flush MMU if the firmware hasn't been initialised yet. */
-	if (!READ_ONCE(pvr_dev->fw_dev.initialised))
+	/* Can't flush MMU if the firmware hasn't booted yet. */
+	if (!pvr_dev->fw_dev.booted)
 		goto err_drm_dev_exit;
 
 	cmd_mmu_cache_data->cache_flags =
@@ -1829,7 +1829,7 @@ pvr_page_table_l0_get_or_insert(struct pvr_mmu_op_context *op_ctx,
  */
 struct pvr_mmu_context *pvr_mmu_context_create(struct pvr_device *pvr_dev)
 {
-	struct pvr_mmu_context *ctx = kzalloc_obj(*ctx);
+	struct pvr_mmu_context *ctx = kzalloc(sizeof(*ctx), GFP_KERNEL);
 	int err;
 
 	if (!ctx)
@@ -1878,7 +1878,8 @@ pvr_page_table_l1_alloc(struct pvr_mmu_context *ctx)
 {
 	int err;
 
-	struct pvr_page_table_l1 *table = kzalloc_obj(*table);
+	struct pvr_page_table_l1 *table =
+		kzalloc(sizeof(*table), GFP_KERNEL);
 
 	if (!table)
 		return ERR_PTR(-ENOMEM);
@@ -1906,7 +1907,8 @@ pvr_page_table_l0_alloc(struct pvr_mmu_context *ctx)
 {
 	int err;
 
-	struct pvr_page_table_l0 *table = kzalloc_obj(*table);
+	struct pvr_page_table_l0 *table =
+		kzalloc(sizeof(*table), GFP_KERNEL);
 
 	if (!table)
 		return ERR_PTR(-ENOMEM);
@@ -2352,7 +2354,8 @@ pvr_mmu_op_context_create(struct pvr_mmu_context *ctx, struct sg_table *sgt,
 {
 	int err;
 
-	struct pvr_mmu_op_context *op_ctx = kzalloc_obj(*op_ctx);
+	struct pvr_mmu_op_context *op_ctx =
+		kzalloc(sizeof(*op_ctx), GFP_KERNEL);
 
 	if (!op_ctx)
 		return ERR_PTR(-ENOMEM);

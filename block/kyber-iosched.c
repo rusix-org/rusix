@@ -47,8 +47,9 @@ enum {
 	 * asynchronous requests, we reserve 25% of requests for synchronous
 	 * operations.
 	 */
-	KYBER_DEFAULT_ASYNC_PERCENT = 75,
+	KYBER_ASYNC_PERCENT = 75,
 };
+
 /*
  * Maximum device-wide depth for each scheduling domain.
  *
@@ -155,6 +156,9 @@ struct kyber_queue_data {
 	 * device-wide, limited by these tokens.
 	 */
 	struct sbitmap_queue domain_tokens[KYBER_NUM_DOMAINS];
+
+	/* Number of allowed async requests. */
+	unsigned int async_depth;
 
 	struct kyber_cpu_latency __percpu *cpu_latency;
 
@@ -397,48 +401,38 @@ err:
 
 static void kyber_depth_updated(struct request_queue *q)
 {
-	blk_mq_set_min_shallow_depth(q, q->async_depth);
+	struct kyber_queue_data *kqd = q->elevator->elevator_data;
+
+	kqd->async_depth = q->nr_requests * KYBER_ASYNC_PERCENT / 100U;
+	blk_mq_set_min_shallow_depth(q, kqd->async_depth);
 }
 
 static int kyber_init_sched(struct request_queue *q, struct elevator_queue *eq)
-{
-	blk_stat_enable_accounting(q);
-
-	blk_queue_flag_clear(QUEUE_FLAG_SQ_SCHED, q);
-
-	q->elevator = eq;
-	q->async_depth = q->nr_requests * KYBER_DEFAULT_ASYNC_PERCENT / 100;
-	kyber_depth_updated(q);
-
-	return 0;
-}
-
-static void *kyber_alloc_sched_data(struct request_queue *q)
 {
 	struct kyber_queue_data *kqd;
 
 	kqd = kyber_queue_data_alloc(q);
 	if (IS_ERR(kqd))
-		return NULL;
+		return PTR_ERR(kqd);
 
-	return kqd;
+	blk_stat_enable_accounting(q);
+
+	blk_queue_flag_clear(QUEUE_FLAG_SQ_SCHED, q);
+
+	eq->elevator_data = kqd;
+	q->elevator = eq;
+	kyber_depth_updated(q);
+
+	return 0;
 }
 
 static void kyber_exit_sched(struct elevator_queue *e)
 {
 	struct kyber_queue_data *kqd = e->elevator_data;
+	int i;
 
 	timer_shutdown_sync(&kqd->timer);
 	blk_stat_disable_accounting(kqd->q);
-}
-
-static void kyber_free_sched_data(void *elv_data)
-{
-	struct kyber_queue_data *kqd = elv_data;
-	int i;
-
-	if (!kqd)
-		return;
 
 	for (i = 0; i < KYBER_NUM_DOMAINS; i++)
 		sbitmap_queue_free(&kqd->domain_tokens[i]);
@@ -546,8 +540,15 @@ static void rq_clear_domain_token(struct kyber_queue_data *kqd,
 
 static void kyber_limit_depth(blk_opf_t opf, struct blk_mq_alloc_data *data)
 {
-	if (!blk_mq_is_sync_read(opf))
-		data->shallow_depth = data->q->async_depth;
+	/*
+	 * We use the scheduler tags as per-hardware queue queueing tokens.
+	 * Async requests can be limited at this stage.
+	 */
+	if (!blk_mq_is_sync_read(opf)) {
+		struct kyber_queue_data *kqd = data->q->elevator->elevator_data;
+
+		data->shallow_depth = kqd->async_depth;
+	}
 }
 
 static bool kyber_bio_merge(struct request_queue *q, struct bio *bio,
@@ -882,9 +883,6 @@ static const struct elv_fs_entry kyber_sched_attrs[] = {
 };
 #undef KYBER_LAT_ATTR
 
-#define HCTX_FROM_SEQ_FILE(m) ((struct blk_mq_hw_ctx *)(m)->private)
-#define KYBER_HCTX_DATA(hctx) ((struct kyber_hctx_data *)(hctx)->sched_data)
-
 #ifdef CONFIG_BLK_DEBUG_FS
 #define KYBER_DEBUGFS_DOMAIN_ATTRS(domain, name)			\
 static int kyber_##name##_tokens_show(void *data, struct seq_file *m)	\
@@ -897,7 +895,7 @@ static int kyber_##name##_tokens_show(void *data, struct seq_file *m)	\
 }									\
 									\
 static void *kyber_##name##_rqs_start(struct seq_file *m, loff_t *pos)	\
-	__acquires(&KYBER_HCTX_DATA(HCTX_FROM_SEQ_FILE(m))->lock)	\
+	__acquires(&khd->lock)						\
 {									\
 	struct blk_mq_hw_ctx *hctx = m->private;			\
 	struct kyber_hctx_data *khd = hctx->sched_data;			\
@@ -916,7 +914,7 @@ static void *kyber_##name##_rqs_next(struct seq_file *m, void *v,	\
 }									\
 									\
 static void kyber_##name##_rqs_stop(struct seq_file *m, void *v)	\
-	__releases(&KYBER_HCTX_DATA(HCTX_FROM_SEQ_FILE(m))->lock)	\
+	__releases(&khd->lock)						\
 {									\
 	struct blk_mq_hw_ctx *hctx = m->private;			\
 	struct kyber_hctx_data *khd = hctx->sched_data;			\
@@ -946,6 +944,15 @@ KYBER_DEBUGFS_DOMAIN_ATTRS(KYBER_DISCARD, discard)
 KYBER_DEBUGFS_DOMAIN_ATTRS(KYBER_OTHER, other)
 #undef KYBER_DEBUGFS_DOMAIN_ATTRS
 
+static int kyber_async_depth_show(void *data, struct seq_file *m)
+{
+	struct request_queue *q = data;
+	struct kyber_queue_data *kqd = q->elevator->elevator_data;
+
+	seq_printf(m, "%u\n", kqd->async_depth);
+	return 0;
+}
+
 static int kyber_cur_domain_show(void *data, struct seq_file *m)
 {
 	struct blk_mq_hw_ctx *hctx = data;
@@ -971,6 +978,7 @@ static const struct blk_mq_debugfs_attr kyber_queue_debugfs_attrs[] = {
 	KYBER_QUEUE_DOMAIN_ATTRS(write),
 	KYBER_QUEUE_DOMAIN_ATTRS(discard),
 	KYBER_QUEUE_DOMAIN_ATTRS(other),
+	{"async_depth", 0400, kyber_async_depth_show},
 	{},
 };
 #undef KYBER_QUEUE_DOMAIN_ATTRS
@@ -996,8 +1004,6 @@ static struct elevator_type kyber_sched = {
 		.exit_sched = kyber_exit_sched,
 		.init_hctx = kyber_init_hctx,
 		.exit_hctx = kyber_exit_hctx,
-		.alloc_sched_data = kyber_alloc_sched_data,
-		.free_sched_data = kyber_free_sched_data,
 		.limit_depth = kyber_limit_depth,
 		.bio_merge = kyber_bio_merge,
 		.prepare_request = kyber_prepare_request,

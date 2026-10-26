@@ -11,7 +11,6 @@
 #include <linux/timer.h>
 #include <linux/vmalloc.h>
 #include <linux/highmem.h>
-#include <linux/sysfs.h>
 
 #include "hfi.h"
 #include "common.h"
@@ -938,7 +937,7 @@ ssize_t sdma_set_cpu_to_sde_map(struct sdma_engine *sde, const char *buf,
 		rht_node = rhashtable_lookup_fast(dd->sdma_rht, &cpu,
 						  sdma_rht_params);
 		if (!rht_node) {
-			rht_node = kzalloc_obj(*rht_node);
+			rht_node = kzalloc(sizeof(*rht_node), GFP_KERNEL);
 			if (!rht_node) {
 				ret = -ENOMEM;
 				goto out;
@@ -1050,7 +1049,7 @@ ssize_t sdma_get_cpu_to_sde_map(struct sdma_engine *sde, char *buf)
 	if (cpumask_empty(&sde->cpu_mask))
 		snprintf(buf, PAGE_SIZE, "%s\n", "empty");
 	else
-		sysfs_emit(buf, "%*pbl\n", cpumask_pr_args(&sde->cpu_mask));
+		cpumap_print_to_pagebuf(true, buf, &sde->cpu_mask);
 	mutex_unlock(&process_to_sde_mutex);
 	return strnlen(buf, PAGE_SIZE);
 }
@@ -1256,7 +1255,6 @@ void sdma_clean(struct hfi1_devdata *dd, size_t num_engines)
 {
 	size_t i;
 	struct sdma_engine *sde;
-	struct sdma_vl_map *map;
 
 	if (dd->sdma_pad_dma) {
 		dma_free_coherent(&dd->pcidev->dev, SDMA_PAD,
@@ -1293,11 +1291,10 @@ void sdma_clean(struct hfi1_devdata *dd, size_t num_engines)
 	}
 	if (rcu_access_pointer(dd->sdma_map)) {
 		spin_lock_irq(&dd->sde_map_lock);
-		map = rcu_access_pointer(dd->sdma_map);
+		sdma_map_free(rcu_access_pointer(dd->sdma_map));
 		RCU_INIT_POINTER(dd->sdma_map, NULL);
 		spin_unlock_irq(&dd->sde_map_lock);
 		synchronize_rcu();
-		sdma_map_free(map);
 	}
 	kfree(dd->per_sdma);
 	dd->per_sdma = NULL;
@@ -1484,7 +1481,7 @@ int sdma_init(struct hfi1_devdata *dd, u8 port)
 	if (ret < 0)
 		goto bail;
 
-	tmp_sdma_rht = kzalloc_obj(*tmp_sdma_rht);
+	tmp_sdma_rht = kzalloc(sizeof(*tmp_sdma_rht), GFP_KERNEL);
 	if (!tmp_sdma_rht) {
 		ret = -ENOMEM;
 		goto bail;
@@ -1569,9 +1566,6 @@ void sdma_exit(struct hfi1_devdata *dd)
 		 * it is not running.
 		 */
 		sdma_finalput(&sde->state);
-		cancel_work_sync(&sde->err_halt_worker);
-		tasklet_kill(&sde->sdma_hw_clean_up_task);
-		cancel_work_sync(&sde->flush_worker);
 	}
 }
 
@@ -3023,7 +3017,7 @@ static int _extend_sdma_tx_descs(struct hfi1_devdata *dd, struct sdma_txreq *tx)
 	if (unlikely(tx->num_desc == MAX_DESC))
 		goto enomem;
 
-	descp = kmalloc_objs(struct sdma_desc, MAX_DESC, GFP_ATOMIC);
+	descp = kmalloc_array(MAX_DESC, sizeof(struct sdma_desc), GFP_ATOMIC);
 	if (!descp)
 		goto enomem;
 	tx->descp = descp;

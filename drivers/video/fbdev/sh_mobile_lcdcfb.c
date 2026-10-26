@@ -1042,11 +1042,7 @@ static int sh_mobile_lcdc_start(struct sh_mobile_lcdc_priv *priv)
 			ch->defio.deferred_io = sh_mobile_lcdc_deferred_io;
 			ch->defio.delay = msecs_to_jiffies(tmp);
 			ch->info->fbdefio = &ch->defio;
-			ret = fb_deferred_io_init(ch->info);
-			if (ret) {
-				ch->info->fbdefio = NULL;
-				return ret;
-			}
+			fb_deferred_io_init(ch->info);
 		}
 
 		sh_mobile_lcdc_display_on(ch);
@@ -1341,23 +1337,18 @@ overlay_rop3_store(struct device *dev, struct device_attribute *attr,
 	return count;
 }
 
-static struct device_attribute dev_attr_ovl_alpha =
-	__ATTR(ovl_alpha, 0644, overlay_alpha_show, overlay_alpha_store);
-static struct device_attribute dev_attr_ovl_mode =
-	__ATTR(ovl_mode, 0644, overlay_mode_show, overlay_mode_store);
-static struct device_attribute dev_attr_ovl_position =
-	__ATTR(ovl_position, 0644, overlay_position_show, overlay_position_store);
-static struct device_attribute dev_attr_ovl_rop3 =
-	__ATTR(ovl_rop3, 0644, overlay_rop3_show, overlay_rop3_store);
+static DEVICE_ATTR_RW(overlay_alpha);
+static DEVICE_ATTR_RW(overlay_mode);
+static DEVICE_ATTR_RW(overlay_position);
+static DEVICE_ATTR_RW(overlay_rop3);
 
 static struct attribute *overlay_sysfs_attrs[] = {
-	&dev_attr_ovl_alpha.attr,
-	&dev_attr_ovl_mode.attr,
-	&dev_attr_ovl_position.attr,
-	&dev_attr_ovl_rop3.attr,
+	&dev_attr_overlay_alpha.attr,
+	&dev_attr_overlay_mode.attr,
+	&dev_attr_overlay_position.attr,
+	&dev_attr_overlay_rop3.attr,
 	NULL,
 };
-
 ATTRIBUTE_GROUPS(overlay_sysfs);
 
 static const struct fb_fix_screeninfo sh_mobile_lcdc_overlay_fix  = {
@@ -1516,10 +1507,9 @@ sh_mobile_lcdc_overlay_fb_unregister(struct sh_mobile_lcdc_overlay *ovl)
 {
 	struct fb_info *info = ovl->info;
 
-	if (!info || !dev_of_fbinfo(info))
+	if (info == NULL || info->dev == NULL)
 		return;
 
-	device_remove_groups(dev_of_fbinfo(info), overlay_sysfs_groups);
 	unregister_framebuffer(ovl->info);
 }
 
@@ -1536,15 +1526,6 @@ sh_mobile_lcdc_overlay_fb_register(struct sh_mobile_lcdc_overlay *ovl)
 	ret = register_framebuffer(info);
 	if (ret < 0)
 		return ret;
-
-	/* The framebuffer device is optional, see fb_device_create(). */
-	if (dev_of_fbinfo(info)) {
-		ret = device_add_groups(dev_of_fbinfo(info), overlay_sysfs_groups);
-		if (ret < 0) {
-			unregister_framebuffer(info);
-			return ret;
-		}
-	}
 
 	dev_info(lcdc->dev, "registered %s/overlay %u as %dx%d %dbpp.\n",
 		 dev_name(lcdc->dev), ovl->index, info->var.xres,
@@ -2525,7 +2506,7 @@ static int sh_mobile_lcdc_probe(struct platform_device *pdev)
 		return -ENOENT;
 	}
 
-	priv = kzalloc_obj(*priv);
+	priv = kzalloc(sizeof(*priv), GFP_KERNEL);
 	if (!priv)
 		return -ENOMEM;
 
@@ -2653,6 +2634,7 @@ err1:
 static struct platform_driver sh_mobile_lcdc_driver = {
 	.driver		= {
 		.name		= "sh_mobile_lcdc_fb",
+		.dev_groups	= overlay_sysfs_groups,
 		.pm		= &sh_mobile_lcdc_dev_pm_ops,
 	},
 	.probe		= sh_mobile_lcdc_probe,

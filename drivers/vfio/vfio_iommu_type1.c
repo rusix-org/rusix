@@ -36,6 +36,7 @@
 #include <linux/uaccess.h>
 #include <linux/vfio.h>
 #include <linux/workqueue.h>
+#include <linux/notifier.h>
 #include <linux/mm_inline.h>
 #include <linux/overflow.h>
 #include "vfio.h"
@@ -94,7 +95,6 @@ struct vfio_dma {
 	bool			lock_cap;	/* capable(CAP_IPC_LOCK) */
 	bool			vaddr_invalid;
 	bool			has_rsvd;	/* has 1 or more rsvd pfns */
-	bool			has_non_rsvd;	/* has 1 or more !rsvd pfns */
 	struct task_struct	*task;
 	struct rb_root		pfn_list;	/* Ex-user pinned pfn list */
 	unsigned long		*bitmap;
@@ -388,7 +388,7 @@ static int vfio_add_to_pfn_list(struct vfio_dma *dma, dma_addr_t iova,
 {
 	struct vfio_pfn *vpfn;
 
-	vpfn = kzalloc_obj(*vpfn);
+	vpfn = kzalloc(sizeof(*vpfn), GFP_KERNEL);
 	if (!vpfn)
 		return -ENOMEM;
 
@@ -792,7 +792,6 @@ static long vfio_pin_pages_remote(struct vfio_dma *dma, unsigned long vaddr,
 
 out:
 	dma->has_rsvd |= rsvd;
-	dma->has_non_rsvd |= !rsvd;
 	ret = vfio_lock_acct(dma, lock_acct, false);
 
 unpin_out:
@@ -823,13 +822,11 @@ static long vfio_unpin_pages_remote(struct vfio_dma *dma, dma_addr_t iova,
 	long unlocked = 0, locked = vpfn_pages(dma, iova, npage);
 
 	if (dma->has_rsvd) {
-		if (dma->has_non_rsvd) {
-			unsigned long i;
+		unsigned long i;
 
-			for (i = 0; i < npage; i++)
-				if (put_pfn(pfn++, dma->prot))
-					unlocked++;
-		}
+		for (i = 0; i < npage; i++)
+			if (put_pfn(pfn++, dma->prot))
+				unlocked++;
 	} else {
 		put_valid_unreserved_pfns(pfn, npage, dma->prot);
 		unlocked = npage;
@@ -1100,7 +1097,7 @@ static size_t unmap_unpin_fast(struct vfio_domain *domain,
 			       struct iommu_iotlb_gather *iotlb_gather)
 {
 	size_t unmapped = 0;
-	struct vfio_regions *entry = kzalloc_obj(*entry);
+	struct vfio_regions *entry = kzalloc(sizeof(*entry), GFP_KERNEL);
 
 	if (entry) {
 		unmapped = iommu_unmap_fast(domain->domain, iova, len,
@@ -1756,7 +1753,7 @@ static int vfio_dma_do_map(struct vfio_iommu *iommu,
 		goto out_unlock;
 	}
 
-	dma = kzalloc_obj(*dma);
+	dma = kzalloc(sizeof(*dma), GFP_KERNEL);
 	if (!dma) {
 		ret = -ENOMEM;
 		goto out_unlock;
@@ -2020,7 +2017,7 @@ static int vfio_iommu_iova_insert(struct list_head *head,
 {
 	struct vfio_iova *region;
 
-	region = kmalloc_obj(*region);
+	region = kmalloc(sizeof(*region), GFP_KERNEL);
 	if (!region)
 		return -ENOMEM;
 
@@ -2262,7 +2259,7 @@ static int vfio_iommu_type1_attach_group(void *iommu_data,
 		goto out_unlock;
 
 	ret = -ENOMEM;
-	group = kzalloc_obj(*group);
+	group = kzalloc(sizeof(*group), GFP_KERNEL);
 	if (!group)
 		goto out_unlock;
 	group->iommu_group = iommu_group;
@@ -2281,7 +2278,7 @@ static int vfio_iommu_type1_attach_group(void *iommu_data,
 	}
 
 	ret = -ENOMEM;
-	domain = kzalloc_obj(*domain);
+	domain = kzalloc(sizeof(*domain), GFP_KERNEL);
 	if (!domain)
 		goto out_free_group;
 
@@ -2628,7 +2625,7 @@ static void *vfio_iommu_type1_open(unsigned long arg)
 {
 	struct vfio_iommu *iommu;
 
-	iommu = kzalloc_obj(*iommu);
+	iommu = kzalloc(sizeof(*iommu), GFP_KERNEL);
 	if (!iommu)
 		return ERR_PTR(-ENOMEM);
 

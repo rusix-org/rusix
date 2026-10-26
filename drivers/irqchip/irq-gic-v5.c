@@ -5,7 +5,6 @@
 
 #define pr_fmt(fmt)	"GICv5: " fmt
 
-#include <linux/acpi_iort.h>
 #include <linux/cpuhotplug.h>
 #include <linux/idr.h>
 #include <linux/irqdomain.h>
@@ -87,13 +86,25 @@ static void gicv5_ppi_priority_init(void)
 
 static void gicv5_hwirq_init(irq_hw_number_t hwirq, u8 priority, u8 hwirq_type)
 {
-	u64 cdpri;
+	u64 cdpri, cdaff;
+	u16 iaffid;
+	int ret;
 
 	if (hwirq_type == GICV5_HWIRQ_TYPE_LPI || hwirq_type == GICV5_HWIRQ_TYPE_SPI) {
 		cdpri = FIELD_PREP(GICV5_GIC_CDPRI_PRIORITY_MASK, priority)	|
 			FIELD_PREP(GICV5_GIC_CDPRI_TYPE_MASK, hwirq_type)	|
 			FIELD_PREP(GICV5_GIC_CDPRI_ID_MASK, hwirq);
 		gic_insn(cdpri, CDPRI);
+
+		ret = gicv5_irs_cpu_to_iaffid(smp_processor_id(), &iaffid);
+
+		if (WARN_ON_ONCE(ret))
+			return;
+
+		cdaff = FIELD_PREP(GICV5_GIC_CDAFF_IAFFID_MASK, iaffid)		|
+			FIELD_PREP(GICV5_GIC_CDAFF_TYPE_MASK, hwirq_type)	|
+			FIELD_PREP(GICV5_GIC_CDAFF_ID_MASK, hwirq);
+		gic_insn(cdaff, CDAFF);
 	}
 }
 
@@ -485,23 +496,6 @@ static bool gicv5_ppi_irq_is_level(irq_hw_number_t hwirq)
 	return !!(read_ppi_sysreg_s(hwirq, PPI_HM) & bit);
 }
 
-static int gicv5_ppi_irq_set_type(struct irq_data *d, unsigned int type)
-{
-	/*
-	 * GICv5's PPIs do not have a configurable trigger or handling
-	 * mode. Check that the attempt to set a type matches what the
-	 * hardware reports in the HMR, and error on a mismatch.
-	 */
-
-	if (type & IRQ_TYPE_EDGE_BOTH && gicv5_ppi_irq_is_level(d->hwirq))
-		return -EINVAL;
-
-	if (type & IRQ_TYPE_LEVEL_MASK && !gicv5_ppi_irq_is_level(d->hwirq))
-		return -EINVAL;
-
-	return 0;
-}
-
 static int gicv5_ppi_irq_set_vcpu_affinity(struct irq_data *d, void *vcpu)
 {
 	if (vcpu)
@@ -517,7 +511,6 @@ static const struct irq_chip gicv5_ppi_irq_chip = {
 	.irq_mask		= gicv5_ppi_irq_mask,
 	.irq_unmask		= gicv5_ppi_irq_unmask,
 	.irq_eoi		= gicv5_ppi_irq_eoi,
-	.irq_set_type		= gicv5_ppi_irq_set_type,
 	.irq_get_irqchip_state	= gicv5_ppi_irq_get_irqchip_state,
 	.irq_set_irqchip_state	= gicv5_ppi_irq_set_irqchip_state,
 	.irq_set_vcpu_affinity	= gicv5_ppi_irq_set_vcpu_affinity,
@@ -536,7 +529,6 @@ static const struct irq_chip gicv5_spi_irq_chip = {
 	.irq_get_irqchip_state	= gicv5_spi_irq_get_irqchip_state,
 	.irq_set_irqchip_state	= gicv5_spi_irq_set_irqchip_state,
 	.flags			= IRQCHIP_SET_TYPE_MASKED |
-				  IRQCHIP_AFFINITY_PRE_STARTUP |
 				  IRQCHIP_SKIP_SET_WAKE	  |
 				  IRQCHIP_MASK_ON_SUSPEND,
 };
@@ -550,8 +542,7 @@ static const struct irq_chip gicv5_lpi_irq_chip = {
 	.irq_retrigger		= gicv5_lpi_irq_retrigger,
 	.irq_get_irqchip_state	= gicv5_lpi_irq_get_irqchip_state,
 	.irq_set_irqchip_state	= gicv5_lpi_irq_set_irqchip_state,
-	.flags			= IRQCHIP_AFFINITY_PRE_STARTUP |
-				  IRQCHIP_SKIP_SET_WAKE	  |
+	.flags			= IRQCHIP_SKIP_SET_WAKE	  |
 				  IRQCHIP_MASK_ON_SUSPEND,
 };
 
@@ -574,36 +565,16 @@ static __always_inline int gicv5_irq_domain_translate(struct irq_domain *d,
 						      unsigned int *type,
 						      const u8 hwirq_type)
 {
-	unsigned int hwirq_trigger;
-	u8 fwspec_irq_type;
+	if (!is_of_node(fwspec->fwnode))
+		return -EINVAL;
 
-	if (is_of_node(fwspec->fwnode)) {
+	if (fwspec->param_count < 3)
+		return -EINVAL;
 
-		if (fwspec->param_count < 3)
-			return -EINVAL;
+	if (fwspec->param[0] != hwirq_type)
+		return -EINVAL;
 
-		fwspec_irq_type = fwspec->param[0];
-
-		if (fwspec->param[0] != hwirq_type)
-			return -EINVAL;
-
-		*hwirq = fwspec->param[1];
-		hwirq_trigger = fwspec->param[2];
-	}
-
-	if (is_fwnode_irqchip(fwspec->fwnode)) {
-
-		if (fwspec->param_count != 2)
-			return -EINVAL;
-
-		fwspec_irq_type = FIELD_GET(GICV5_HWIRQ_TYPE, fwspec->param[0]);
-
-		if (fwspec_irq_type != hwirq_type)
-			return -EINVAL;
-
-		*hwirq = FIELD_GET(GICV5_HWIRQ_ID, fwspec->param[0]);
-		hwirq_trigger = fwspec->param[1];
-	}
+	*hwirq = fwspec->param[1];
 
 	switch (hwirq_type) {
 	case GICV5_HWIRQ_TYPE_PPI:
@@ -615,7 +586,7 @@ static __always_inline int gicv5_irq_domain_translate(struct irq_domain *d,
 							 IRQ_TYPE_EDGE_RISING;
 		break;
 	case GICV5_HWIRQ_TYPE_SPI:
-		*type = hwirq_trigger & IRQ_TYPE_SENSE_MASK;
+		*type = fwspec->param[2] & IRQ_TYPE_SENSE_MASK;
 		break;
 	default:
 		BUILD_BUG_ON(1);
@@ -675,18 +646,10 @@ static void gicv5_irq_domain_free(struct irq_domain *domain, unsigned int virq,
 static int gicv5_irq_ppi_domain_select(struct irq_domain *d, struct irq_fwspec *fwspec,
 				       enum irq_domain_bus_token bus_token)
 {
-	u32 hwirq_type;
-
 	if (fwspec->fwnode != d->fwnode)
 		return 0;
 
-	if (is_of_node(fwspec->fwnode))
-		hwirq_type = fwspec->param[0];
-
-	if (is_fwnode_irqchip(fwspec->fwnode))
-		hwirq_type = FIELD_GET(GICV5_HWIRQ_TYPE, fwspec->param[0]);
-
-	if (hwirq_type != GICV5_HWIRQ_TYPE_PPI)
+	if (fwspec->param[0] != GICV5_HWIRQ_TYPE_PPI)
 		return 0;
 
 	return (d == gicv5_global_data.ppi_domain);
@@ -741,18 +704,10 @@ static int gicv5_irq_spi_domain_alloc(struct irq_domain *domain, unsigned int vi
 static int gicv5_irq_spi_domain_select(struct irq_domain *d, struct irq_fwspec *fwspec,
 				       enum irq_domain_bus_token bus_token)
 {
-	u32 hwirq_type;
-
 	if (fwspec->fwnode != d->fwnode)
 		return 0;
 
-	if (is_of_node(fwspec->fwnode))
-		hwirq_type = fwspec->param[0];
-
-	if (is_fwnode_irqchip(fwspec->fwnode))
-		hwirq_type = FIELD_GET(GICV5_HWIRQ_TYPE, fwspec->param[0]);
-
-	if (hwirq_type != GICV5_HWIRQ_TYPE_SPI)
+	if (fwspec->param[0] != GICV5_HWIRQ_TYPE_SPI)
 		return 0;
 
 	return (d == gicv5_global_data.spi_domain);
@@ -1122,138 +1077,35 @@ static void gicv5_set_cpuif_idbits(void)
 #ifdef CONFIG_KVM
 static struct gic_kvm_info gic_v5_kvm_info __initdata;
 
-static int __init gic_setup_kvm_info(unsigned int maint_irq)
+static void __init gic_of_setup_kvm_info(struct device_node *node)
 {
-	struct gicv5_irs_chip_data *irs_data = gicv5_irs_get_chip_data();
-
-	/*
-	 * If we don't have native GICv5 virtualisation support, then
-	 * we also don't have FEAT_GCIE_LEGACY - the architecture
-	 * forbids this combination.
-	 */
-	if (!gicv5_global_data.virt_capable) {
-		pr_info("GIC implementation is not virtualization capable\n");
-		return -ENODEV;
-	}
-
-	if (WARN_ON(!irs_data))
-		return -ENODEV;
-
 	gic_v5_kvm_info.type = GIC_V5;
-	gic_v5_kvm_info.gicv5_irs.base = irs_data->irs_base;
-	gic_v5_kvm_info.gicv5_irs.non_coherent = !!(irs_data->flags & IRS_FLAGS_NON_COHERENT);
 
 	/* GIC Virtual CPU interface maintenance interrupt */
 	gic_v5_kvm_info.no_maint_irq_mask = false;
-	gic_v5_kvm_info.maint_irq = maint_irq;
-
-	/*
-	 * We require an MI if we have legacy support, but don't, otherwise.
-	 * Given that there's an existing flag to convey that an MI isn't
-	 * needed, we (ab)use it to tell KVM that the MI isn't needed if we
-	 * don't support legacy.
-	 *
-	 * The check for ARM64_HAS_GICV5_LEGACY explicitly doesn't use
-	 * cpus_have_final_cap() here as we run too early.
-	 */
-	if (!cpus_have_cap(ARM64_HAS_GICV5_LEGACY) && !gic_v5_kvm_info.maint_irq)
-		gic_v5_kvm_info.no_maint_irq_mask = true;
-
-	vgic_set_kvm_info(&gic_v5_kvm_info);
-	return 0;
-}
-
-static void __init gic_of_setup_kvm_info(struct device_node *node)
-{
-	unsigned int maint_irq;
-
-	/* GIC Virtual CPU interface maintenance interrupt */
-	maint_irq = irq_of_parse_and_map(node, 0);
-	if (gic_setup_kvm_info(maint_irq))
-		irq_dispose_mapping(maint_irq);
-}
-
-#ifdef CONFIG_ACPI
-struct gicv5_acpi_kvm_info {
-	u32 maint_irq;
-	bool valid;
-};
-
-static struct gicv5_acpi_kvm_info acpi_v5_kvm_info __initdata;
-
-static int __init gic_acpi_parse_virt_madt_gicc(union acpi_subtable_headers *header,
-						const unsigned long end)
-{
-	struct acpi_madt_generic_interrupt *gicc =
-		(struct acpi_madt_generic_interrupt *)header;
-
-	if (!(gicc->flags &
-	      (ACPI_MADT_ENABLED | ACPI_MADT_GICC_ONLINE_CAPABLE)))
-		return 0;
-
-	if (gicc->flags & ACPI_MADT_VGIC_IRQ_MODE)
-		pr_warn_once(FW_BUG "MI wrongly advertised as Edge-triggered\n");
-
-	if (!acpi_v5_kvm_info.valid) {
-		acpi_v5_kvm_info.valid = true;
-		acpi_v5_kvm_info.maint_irq = gicc->vgic_interrupt;
-		return 0;
-	}
-
-	if (acpi_v5_kvm_info.maint_irq != gicc->vgic_interrupt)
-		pr_warn_once(FW_BUG "MI not the same on all CPUs\n");
-
-	return 0;
-}
-
-static bool __init gic_acpi_collect_virt_info(void)
-{
-	acpi_table_parse_madt(ACPI_MADT_TYPE_GENERIC_INTERRUPT,
-			      gic_acpi_parse_virt_madt_gicc, 0);
-
-	return acpi_v5_kvm_info.valid;
-}
-
-static void __init gic_acpi_setup_kvm_info(void)
-{
-	int irq = 0;
-
-	if (!gic_acpi_collect_virt_info()) {
-		pr_warn("Unable to get hardware information used for virtualization\n");
+	gic_v5_kvm_info.maint_irq = irq_of_parse_and_map(node, 0);
+	if (!gic_v5_kvm_info.maint_irq) {
+		pr_warn("cannot find GICv5 virtual CPU interface maintenance interrupt\n");
 		return;
 	}
 
-	if (acpi_v5_kvm_info.maint_irq) {
-		irq = acpi_register_gsi(NULL, acpi_v5_kvm_info.maint_irq,
-					ACPI_LEVEL_SENSITIVE,
-					ACPI_ACTIVE_HIGH);
-		if (irq <= 0) {
-			pr_warn("Failed to register GSI for GICv5 maintenance IRQ\n");
-			irq = 0;
-		}
-	}
-
-	if (gic_setup_kvm_info(irq) && irq)
-		acpi_unregister_gsi(acpi_v5_kvm_info.maint_irq);
+	vgic_set_kvm_info(&gic_v5_kvm_info);
 }
-#endif // CONFIG_ACPI
 #else
 static inline void __init gic_of_setup_kvm_info(struct device_node *node)
 {
 }
-
-#ifdef CONFIG_ACPI
-static inline void __init gic_acpi_setup_kvm_info(void)
-{
-}
-#endif
 #endif // CONFIG_KVM
 
-static int __init gicv5_init_common(struct fwnode_handle *parent_domain)
+static int __init gicv5_of_init(struct device_node *node, struct device_node *parent)
 {
-	int ret = gicv5_init_domains(parent_domain);
+	int ret = gicv5_irs_of_probe(node);
 	if (ret)
 		return ret;
+
+	ret = gicv5_init_domains(of_fwnode_handle(node));
+	if (ret)
+		goto out_irs;
 
 	gicv5_set_cpuif_pribits();
 	gicv5_set_cpuif_idbits();
@@ -1265,105 +1117,30 @@ static int __init gicv5_init_common(struct fwnode_handle *parent_domain)
 	if (ret)
 		goto out_int;
 
-	ret = gicv5_irs_enable();
+	ret = set_handle_irq(gicv5_handle_irq);
 	if (ret)
 		goto out_int;
 
-	if (set_handle_irq(gicv5_handle_irq))
-		panic("GICv5: unable to install root IRQ handler\n");
+	ret = gicv5_irs_enable();
+	if (ret)
+		goto out_handle;
 
 	gicv5_smp_init();
 
 	gicv5_irs_its_probe();
-	return 0;
-
-out_int:
-	gicv5_cpu_disable_interrupts();
-	gicv5_free_domains();
-	return ret;
-}
-
-static int __init gicv5_of_init(struct device_node *node, struct device_node *parent)
-{
-	int ret = gicv5_irs_of_probe(node);
-	if (ret)
-		return ret;
-
-	ret = gicv5_init_common(of_fwnode_handle(node));
-	if (ret)
-		goto out_irs;
 
 	gic_of_setup_kvm_info(node);
 
 	return 0;
+
+out_handle:
+	set_handle_irq(NULL);
+out_int:
+	gicv5_cpu_disable_interrupts();
+	gicv5_free_domains();
 out_irs:
 	gicv5_irs_remove();
 
 	return ret;
 }
 IRQCHIP_DECLARE(gic_v5, "arm,gic-v5", gicv5_of_init);
-
-#ifdef CONFIG_ACPI
-static bool __init acpi_validate_gic_table(struct acpi_subtable_header *header,
-					   struct acpi_probe_entry *ape)
-{
-	struct acpi_madt_gicv5_irs *irs = (struct acpi_madt_gicv5_irs *)header;
-
-	return (irs->version == ape->driver_data);
-}
-
-static struct fwnode_handle *gsi_domain_handle;
-
-static struct fwnode_handle *gic_v5_get_gsi_domain_id(u32 gsi)
-{
-	if (FIELD_GET(GICV5_GSI_IC_TYPE, gsi) == GICV5_GSI_IWB_TYPE)
-		return iort_iwb_handle_fwnode(FIELD_GET(GICV5_GSI_IWB_FRAME_ID, gsi));
-
-	return gsi_domain_handle;
-}
-
-static acpi_handle gic_v5_get_gsi_handle(u32 gsi)
-{
-	if (FIELD_GET(GICV5_GSI_IC_TYPE, gsi) == GICV5_GSI_IWB_TYPE)
-		return iort_iwb_handle(FIELD_GET(GICV5_GSI_IWB_FRAME_ID, gsi));
-
-	return NULL;
-}
-
-static int __init gic_acpi_init(union acpi_subtable_headers *header, const unsigned long end)
-{
-	struct acpi_madt_gicv5_irs *irs = (struct acpi_madt_gicv5_irs *)header;
-	int ret;
-
-	if (gsi_domain_handle)
-		return 0;
-
-	gsi_domain_handle = irq_domain_alloc_fwnode(&irs->config_base_address);
-	if (!gsi_domain_handle)
-		return -ENOMEM;
-
-	ret = gicv5_irs_acpi_probe();
-	if (ret)
-		goto out_fwnode;
-
-	ret = gicv5_init_common(gsi_domain_handle);
-	if (ret)
-		goto out_irs;
-
-	acpi_set_irq_model(ACPI_IRQ_MODEL_GIC_V5, gic_v5_get_gsi_domain_id,
-			   gic_v5_get_gsi_handle);
-
-	gic_acpi_setup_kvm_info();
-
-	return 0;
-
-out_irs:
-	gicv5_irs_remove();
-out_fwnode:
-	irq_domain_free_fwnode(gsi_domain_handle);
-	return ret;
-}
-IRQCHIP_ACPI_DECLARE(gic_v5, ACPI_MADT_TYPE_GICV5_IRS,
-		     acpi_validate_gic_table, ACPI_MADT_GIC_VERSION_V5,
-		     gic_acpi_init);
-#endif

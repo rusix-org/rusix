@@ -22,7 +22,6 @@
 #include <drm/drm_framebuffer.h>
 #include <drm/drm_ioctl.h>
 #include <drm/drm_prime.h>
-#include <drm/drm_print.h>
 #include <drm/drm_vblank.h>
 
 #if IS_ENABLED(CONFIG_ARM_DMA_USE_IOMMU)
@@ -44,7 +43,7 @@
 #define CDMA_GATHER_FETCHES_MAX_NB 16383
 
 static int tegra_atomic_check(struct drm_device *drm,
-			      struct drm_atomic_commit *state)
+			      struct drm_atomic_state *state)
 {
 	int err;
 
@@ -62,7 +61,7 @@ static const struct drm_mode_config_funcs tegra_drm_mode_config_funcs = {
 };
 
 static void tegra_atomic_post_commit(struct drm_device *drm,
-				     struct drm_atomic_commit *old_state)
+				     struct drm_atomic_state *old_state)
 {
 	struct drm_crtc_state *old_crtc_state __maybe_unused;
 	struct drm_crtc *crtc;
@@ -72,7 +71,7 @@ static void tegra_atomic_post_commit(struct drm_device *drm,
 		tegra_crtc_atomic_post_commit(crtc, old_state);
 }
 
-static void tegra_atomic_commit_tail(struct drm_atomic_commit *old_state)
+static void tegra_atomic_commit_tail(struct drm_atomic_state *old_state)
 {
 	struct drm_device *drm = old_state->dev;
 	struct tegra_drm *tegra = drm->dev_private;
@@ -104,7 +103,7 @@ static int tegra_drm_open(struct drm_device *drm, struct drm_file *filp)
 {
 	struct tegra_drm_file *fpriv;
 
-	fpriv = kzalloc_obj(*fpriv);
+	fpriv = kzalloc(sizeof(*fpriv), GFP_KERNEL);
 	if (!fpriv)
 		return -ENOMEM;
 
@@ -212,7 +211,7 @@ int tegra_drm_submit(struct tegra_drm_context *context,
 	 */
 	num_refs = num_cmdbufs + num_relocs * 2;
 
-	refs = kmalloc_objs(*refs, num_refs);
+	refs = kmalloc_array(num_refs, sizeof(*refs), GFP_KERNEL);
 	if (!refs) {
 		err = -ENOMEM;
 		goto put;
@@ -465,7 +464,7 @@ static int tegra_open_channel(struct drm_device *drm, void *data,
 	struct tegra_drm_client *client;
 	int err = -ENODEV;
 
-	context = kzalloc_obj(*context);
+	context = kzalloc(sizeof(*context), GFP_KERNEL);
 	if (!context)
 		return -ENOMEM;
 
@@ -1147,7 +1146,7 @@ static int host1x_drm_probe(struct host1x_device *dev)
 	if (IS_ERR(drm))
 		return PTR_ERR(drm);
 
-	tegra = kzalloc_obj(*tegra);
+	tegra = kzalloc(sizeof(*tegra), GFP_KERNEL);
 	if (!tegra) {
 		err = -ENOMEM;
 		goto put;
@@ -1301,7 +1300,7 @@ put:
 	return err;
 }
 
-static void host1x_drm_remove(struct host1x_device *dev)
+static int host1x_drm_remove(struct host1x_device *dev)
 {
 	struct drm_device *drm = dev_get_drvdata(&dev->dev);
 	struct tegra_drm *tegra = drm->dev_private;
@@ -1330,6 +1329,8 @@ static void host1x_drm_remove(struct host1x_device *dev)
 
 	kfree(tegra);
 	drm_dev_put(drm);
+
+	return 0;
 }
 
 static void host1x_drm_shutdown(struct host1x_device *dev)
@@ -1358,12 +1359,10 @@ static SIMPLE_DEV_PM_OPS(host1x_drm_pm_ops, host1x_drm_suspend,
 
 static const struct of_device_id host1x_drm_subdevs[] = {
 	{ .compatible = "nvidia,tegra20-dc", },
-	{ .compatible = "nvidia,tegra20-dsi", },
 	{ .compatible = "nvidia,tegra20-hdmi", },
 	{ .compatible = "nvidia,tegra20-gr2d", },
 	{ .compatible = "nvidia,tegra20-gr3d", },
 	{ .compatible = "nvidia,tegra30-dc", },
-	{ .compatible = "nvidia,tegra30-dsi", },
 	{ .compatible = "nvidia,tegra30-hdmi", },
 	{ .compatible = "nvidia,tegra30-gr2d", },
 	{ .compatible = "nvidia,tegra30-gr3d", },
@@ -1384,7 +1383,6 @@ static const struct of_device_id host1x_drm_subdevs[] = {
 	{ .compatible = "nvidia,tegra210-sor1", },
 	{ .compatible = "nvidia,tegra210-vic", },
 	{ .compatible = "nvidia,tegra210-nvdec", },
-	{ .compatible = "nvidia,tegra210-nvjpg", },
 	{ .compatible = "nvidia,tegra186-display", },
 	{ .compatible = "nvidia,tegra186-dc", },
 	{ .compatible = "nvidia,tegra186-sor", },
@@ -1398,7 +1396,6 @@ static const struct of_device_id host1x_drm_subdevs[] = {
 	{ .compatible = "nvidia,tegra194-nvdec", },
 	{ .compatible = "nvidia,tegra234-vic", },
 	{ .compatible = "nvidia,tegra234-nvdec", },
-	{ .compatible = "nvidia,tegra264-vic", },
 	{ /* sentinel */ }
 };
 
@@ -1424,7 +1421,6 @@ static struct platform_driver * const drivers[] = {
 	&tegra_gr3d_driver,
 	&tegra_vic_driver,
 	&tegra_nvdec_driver,
-	&tegra_nvjpg_driver,
 };
 
 static int __init host1x_drm_init(void)

@@ -1081,11 +1081,23 @@ vmxnet3_set_rss_hash_opt(struct net_device *netdev,
 	return 0;
 }
 
-static u32 vmxnet3_get_rx_ring_count(struct net_device *netdev)
+static int
+vmxnet3_get_rxnfc(struct net_device *netdev, struct ethtool_rxnfc *info,
+		  u32 *rules)
 {
 	struct vmxnet3_adapter *adapter = netdev_priv(netdev);
+	int err = 0;
 
-	return adapter->num_rx_queues;
+	switch (info->cmd) {
+	case ETHTOOL_GRXRINGS:
+		info->data = adapter->num_rx_queues;
+		break;
+	default:
+		err = -EOPNOTSUPP;
+		break;
+	}
+
+	return err;
 }
 
 #ifdef VMXNET3_RSS
@@ -1323,7 +1335,7 @@ static const struct ethtool_ops vmxnet3_ethtool_ops = {
 	.get_ethtool_stats = vmxnet3_get_ethtool_stats,
 	.get_ringparam     = vmxnet3_get_ringparam,
 	.set_ringparam     = vmxnet3_set_ringparam,
-	.get_rx_ring_count = vmxnet3_get_rx_ring_count,
+	.get_rxnfc         = vmxnet3_get_rxnfc,
 #ifdef VMXNET3_RSS
 	.get_rxfh_indir_size = vmxnet3_get_rss_indir_size,
 	.get_rxfh          = vmxnet3_get_rss,

@@ -6,9 +6,6 @@
 #include <linux/types.h>
 #include <linux/netdevice.h>
 #include <net/protocol.h>
-#ifdef CONFIG_RPS
-#include <net/rps-types.h>
-#endif
 
 struct skb_defer_node {
 	struct llist_head	defer_list;
@@ -36,7 +33,7 @@ struct net_hotdata {
 	struct kmem_cache	*skbuff_fclone_cache;
 	struct kmem_cache	*skb_small_head_cache;
 #ifdef CONFIG_RPS
-	rps_tag_ptr		rps_sock_flow_table;
+	struct rps_sock_flow_table __rcu *rps_sock_flow_table;
 	u32			rps_cpu_mask;
 #endif
 	struct skb_defer_node __percpu *skb_defer_nodes;
@@ -45,7 +42,6 @@ struct net_hotdata {
 	int			netdev_budget_usecs;
 	int			tstamp_prequeue;
 	int			max_backlog;
-	int			qdisc_max_burst;
 	int			dev_tx_weight;
 	int			dev_rx_weight;
 	int			sysctl_max_skb_frags;

@@ -262,7 +262,6 @@ struct usdt_manager {
 	bool has_bpf_cookie;
 	bool has_sema_refcnt;
 	bool has_uprobe_multi;
-	bool has_uprobe_syscall;
 };
 
 struct usdt_manager *usdt_manager_new(struct bpf_object *obj)
@@ -302,13 +301,6 @@ struct usdt_manager *usdt_manager_new(struct bpf_object *obj)
 	 * usdt probes.
 	 */
 	man->has_uprobe_multi = kernel_supports(obj, FEAT_UPROBE_MULTI_LINK);
-
-	/*
-	 * Detect kernel support for uprobe() syscall, it's presence means we can
-	 * take advantage of faster nop10 uprobe handling.
-	 * Added in: 56101b69c919 ("uprobes/x86: Add uprobe syscall to speed up uprobe")
-	 */
-	man->has_uprobe_syscall = kernel_supports(obj, FEAT_UPROBE_SYSCALL);
 	return man;
 }
 
@@ -327,7 +319,7 @@ static int sanity_check_usdt_elf(Elf *elf, const char *path)
 	int endianness;
 
 	if (elf_kind(elf) != ELF_K_ELF) {
-		pr_warn("usdt: unrecognized ELF kind %u for '%s'\n", elf_kind(elf), path);
+		pr_warn("usdt: unrecognized ELF kind %d for '%s'\n", elf_kind(elf), path);
 		return -EBADF;
 	}
 
@@ -438,9 +430,8 @@ static int parse_elf_segs(Elf *elf, const char *path, struct elf_seg **segs, siz
 		}
 
 		pr_debug("usdt: discovered PHDR #%d in '%s': vaddr 0x%lx memsz 0x%lx offset 0x%lx type 0x%lx flags 0x%lx\n",
-			 i, path,
-			 (unsigned long)phdr.p_vaddr, (unsigned long)phdr.p_memsz, (unsigned long)phdr.p_offset,
-			 (unsigned long)phdr.p_type, (unsigned long)phdr.p_flags);
+			 i, path, (long)phdr.p_vaddr, (long)phdr.p_memsz, (long)phdr.p_offset,
+			 (long)phdr.p_type, (long)phdr.p_flags);
 		if (phdr.p_type != PT_LOAD)
 			continue;
 
@@ -602,38 +593,13 @@ static int parse_usdt_note(GElf_Nhdr *nhdr, const char *data, size_t name_off,
 
 static int parse_usdt_spec(struct usdt_spec *spec, const struct usdt_note *note, __u64 usdt_cookie);
 
-#if defined(__x86_64__)
-static bool has_nop_combo(int fd, long off)
-{
-	unsigned char nop_combo[11] = {
-		0x90, 0x66, 0x2e, 0x0f, 0x1f, 0x84, 0x00, 0x00, 0x00, 0x00, 0x00,
-	};
-	long page_sz = getpagesize();
-	unsigned char buf[11];
-
-	/* the kernel can't attach to a nop10 that crosses a page boundary */
-	if ((off + 1) % page_sz + 10 > page_sz)
-		return false;
-	if (pread(fd, buf, 11, off) != 11)
-		return false;
-	return memcmp(buf, nop_combo, 11) == 0;
-}
-#else
-static bool has_nop_combo(int fd, long off)
-{
-	return false;
-}
-#endif
-
-static int collect_usdt_targets(struct usdt_manager *man, struct elf_fd *elf_fd, const char *path,
-				pid_t pid, const char *usdt_provider, const char *usdt_name,
-				__u64 usdt_cookie, struct usdt_target **out_targets,
-				size_t *out_target_cnt)
+static int collect_usdt_targets(struct usdt_manager *man, Elf *elf, const char *path, pid_t pid,
+				const char *usdt_provider, const char *usdt_name, __u64 usdt_cookie,
+				struct usdt_target **out_targets, size_t *out_target_cnt)
 {
 	size_t off, name_off, desc_off, seg_cnt = 0, vma_seg_cnt = 0, target_cnt = 0;
 	struct elf_seg *segs = NULL, *vma_segs = NULL;
 	struct usdt_target *targets = NULL, *target;
-	Elf *elf = elf_fd->elf;
 	long base_addr = 0;
 	Elf_Scn *notes_scn, *base_scn;
 	GElf_Shdr base_shdr, notes_shdr;
@@ -724,14 +690,14 @@ static int collect_usdt_targets(struct usdt_manager *man, struct elf_fd *elf_fd,
 		if (!seg) {
 			err = -ESRCH;
 			pr_warn("usdt: failed to find ELF program segment for '%s:%s' in '%s' at IP 0x%lx\n",
-				usdt_provider, usdt_name, path, (unsigned long)usdt_abs_ip);
+				usdt_provider, usdt_name, path, usdt_abs_ip);
 			goto err_out;
 		}
 		if (!seg->is_exec) {
 			err = -ESRCH;
 			pr_warn("usdt: matched ELF binary '%s' segment [0x%lx, 0x%lx) for '%s:%s' at IP 0x%lx is not executable\n",
-				path, (unsigned long)seg->start, (unsigned long)seg->end, usdt_provider, usdt_name,
-				(unsigned long)usdt_abs_ip);
+				path, seg->start, seg->end, usdt_provider, usdt_name,
+				usdt_abs_ip);
 			goto err_out;
 		}
 		/* translate from virtual address to file offset */
@@ -771,7 +737,7 @@ static int collect_usdt_targets(struct usdt_manager *man, struct elf_fd *elf_fd,
 			if (!seg) {
 				err = -ESRCH;
 				pr_warn("usdt: failed to find shared lib memory segment for '%s:%s' in '%s' at relative IP 0x%lx\n",
-					usdt_provider, usdt_name, path, (unsigned long)usdt_rel_ip);
+					usdt_provider, usdt_name, path, usdt_rel_ip);
 				goto err_out;
 			}
 
@@ -780,10 +746,8 @@ static int collect_usdt_targets(struct usdt_manager *man, struct elf_fd *elf_fd,
 
 		pr_debug("usdt: probe for '%s:%s' in %s '%s': addr 0x%lx base 0x%lx (resolved abs_ip 0x%lx rel_ip 0x%lx) args '%s' in segment [0x%lx, 0x%lx) at offset 0x%lx\n",
 			 usdt_provider, usdt_name, ehdr.e_type == ET_EXEC ? "exec" : "lib ", path,
-			 (unsigned long)note.loc_addr, (unsigned long)note.base_addr,
-			 (unsigned long)usdt_abs_ip, (unsigned long)usdt_rel_ip, note.args,
-			 (unsigned long)(seg ? seg->start : 0), (unsigned long)(seg ? seg->end : 0),
-			 (unsigned long)(seg ? seg->offset : 0));
+			 note.loc_addr, note.base_addr, usdt_abs_ip, usdt_rel_ip, note.args,
+			 seg ? seg->start : 0, seg ? seg->end : 0, seg ? seg->offset : 0);
 
 		/* Adjust semaphore address to be a file offset */
 		if (note.sema_addr) {
@@ -798,14 +762,14 @@ static int collect_usdt_targets(struct usdt_manager *man, struct elf_fd *elf_fd,
 			if (!seg) {
 				err = -ESRCH;
 				pr_warn("usdt: failed to find ELF loadable segment with semaphore of '%s:%s' in '%s' at 0x%lx\n",
-					usdt_provider, usdt_name, path, (unsigned long)note.sema_addr);
+					usdt_provider, usdt_name, path, note.sema_addr);
 				goto err_out;
 			}
 			if (seg->is_exec) {
 				err = -ESRCH;
 				pr_warn("usdt: matched ELF binary '%s' segment [0x%lx, 0x%lx] for semaphore of '%s:%s' at 0x%lx is executable\n",
-					path, (unsigned long)seg->start, (unsigned long)seg->end, usdt_provider, usdt_name,
-					(unsigned long)note.sema_addr);
+					path, seg->start, seg->end, usdt_provider, usdt_name,
+					note.sema_addr);
 				goto err_out;
 			}
 
@@ -813,8 +777,8 @@ static int collect_usdt_targets(struct usdt_manager *man, struct elf_fd *elf_fd,
 
 			pr_debug("usdt: sema  for '%s:%s' in %s '%s': addr 0x%lx base 0x%lx (resolved 0x%lx) in segment [0x%lx, 0x%lx] at offset 0x%lx\n",
 				 usdt_provider, usdt_name, ehdr.e_type == ET_EXEC ? "exec" : "lib ",
-				 path, (unsigned long)note.sema_addr, (unsigned long)note.base_addr, (unsigned long)usdt_sema_off,
-				 (unsigned long)seg->start, (unsigned long)seg->end, (unsigned long)seg->offset);
+				 path, note.sema_addr, note.base_addr, usdt_sema_off,
+				 seg->start, seg->end, seg->offset);
 		}
 
 		/* Record adjusted addresses and offsets and parse USDT spec */
@@ -827,16 +791,6 @@ static int collect_usdt_targets(struct usdt_manager *man, struct elf_fd *elf_fd,
 
 		target = &targets[target_cnt];
 		memset(target, 0, sizeof(*target));
-
-		/*
-		 * We have uprobe syscall and usdt with nop,nop10 instructions combo,
-		 * so we can place the uprobe directly on nop10 (+1) and get this probe
-		 * optimized.
-		 */
-		if (man->has_uprobe_syscall && has_nop_combo(elf_fd->fd, usdt_rel_ip)) {
-			usdt_abs_ip++;
-			usdt_rel_ip++;
-		}
 
 		target->abs_ip = usdt_abs_ip;
 		target->rel_ip = usdt_rel_ip;
@@ -1052,7 +1006,7 @@ struct bpf_link *usdt_manager_attach_usdt(struct usdt_manager *man, const struct
 	/* discover USDT in given binary, optionally limiting
 	 * activations to a given PID, if pid > 0
 	 */
-	err = collect_usdt_targets(man, &elf_fd, path, pid, usdt_provider, usdt_name,
+	err = collect_usdt_targets(man, elf_fd.elf, path, pid, usdt_provider, usdt_name,
 				   usdt_cookie, &targets, &target_cnt);
 	if (err <= 0) {
 		err = (err == 0) ? -ENOENT : err;
@@ -1124,7 +1078,7 @@ struct bpf_link *usdt_manager_attach_usdt(struct usdt_manager *man, const struct
 				        spec_id, usdt_provider, usdt_name, path);
 			} else {
 				pr_warn("usdt: failed to map IP 0x%lx to spec #%d for '%s:%s' in '%s': %s\n",
-					(unsigned long)target->abs_ip, spec_id, usdt_provider, usdt_name,
+					target->abs_ip, spec_id, usdt_provider, usdt_name,
 					path, errstr(err));
 			}
 			goto err_out;
@@ -1429,6 +1383,8 @@ static int parse_usdt_arg(const char *arg_str, int arg_num, struct usdt_arg_spec
 }
 
 #elif defined(__s390x__)
+
+/* Do not support __s390__ for now, since user_pt_regs is broken with -m31. */
 
 static int parse_usdt_arg(const char *arg_str, int arg_num, struct usdt_arg_spec *arg, int *arg_sz)
 {

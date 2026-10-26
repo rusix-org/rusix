@@ -17,26 +17,33 @@
  * For internal zone reports bypassing the top BIO submission path.
  */
 static int dm_blk_do_report_zones(struct mapped_device *md, struct dm_table *t,
-				  unsigned int nr_zones,
-				  struct dm_report_zones_args *args)
+				  sector_t sector, unsigned int nr_zones,
+				  report_zones_cb cb, void *data)
 {
+	struct gendisk *disk = md->disk;
+	int ret;
+	struct dm_report_zones_args args = {
+		.next_sector = sector,
+		.orig_data = data,
+		.orig_cb = cb,
+	};
+
 	do {
 		struct dm_target *tgt;
-		int ret;
 
-		tgt = dm_table_find_target(t, args->next_sector);
+		tgt = dm_table_find_target(t, args.next_sector);
 		if (WARN_ON_ONCE(!tgt->type->report_zones))
 			return -EIO;
 
-		args->tgt = tgt;
-		ret = tgt->type->report_zones(tgt, args,
-					      nr_zones - args->zone_idx);
+		args.tgt = tgt;
+		ret = tgt->type->report_zones(tgt, &args,
+					      nr_zones - args.zone_idx);
 		if (ret < 0)
 			return ret;
-	} while (args->zone_idx < nr_zones &&
-		 args->next_sector < get_capacity(md->disk));
+	} while (args.zone_idx < nr_zones &&
+		 args.next_sector < get_capacity(disk));
 
-	return args->zone_idx;
+	return args.zone_idx;
 }
 
 /*
@@ -45,8 +52,7 @@ static int dm_blk_do_report_zones(struct mapped_device *md, struct dm_table *t,
  * generally implemented by targets using dm_report_zones().
  */
 int dm_blk_report_zones(struct gendisk *disk, sector_t sector,
-			unsigned int nr_zones,
-			struct blk_report_zones_args *args)
+			unsigned int nr_zones, report_zones_cb cb, void *data)
 {
 	struct mapped_device *md = disk->private_data;
 	struct dm_table *map;
@@ -72,14 +78,9 @@ int dm_blk_report_zones(struct gendisk *disk, sector_t sector,
 		map = zone_revalidate_map;
 	}
 
-	if (map) {
-		struct dm_report_zones_args dm_args = {
-			.disk = md->disk,
-			.next_sector = sector,
-			.rep_args = args,
-		};
-		ret = dm_blk_do_report_zones(md, map, nr_zones, &dm_args);
-	}
+	if (map)
+		ret = dm_blk_do_report_zones(md, map, sector, nr_zones, cb,
+					     data);
 
 do_put_table:
 	if (put_table)
@@ -115,18 +116,7 @@ static int dm_report_zones_cb(struct blk_zone *zone, unsigned int idx,
 	}
 
 	args->next_sector = zone->start + zone->len;
-
-	/* If we have an internal callback, call it first. */
-	if (args->cb) {
-		int ret;
-
-		ret = args->cb(zone, args->zone_idx, args->data);
-		if (ret)
-			return ret;
-	}
-
-	return disk_report_zone(args->disk, zone, args->zone_idx++,
-				args->rep_args);
+	return args->orig_cb(zone, args->zone_idx++, args->orig_data);
 }
 
 /*
@@ -205,6 +195,8 @@ int dm_revalidate_zones(struct dm_table *t, struct request_queue *q)
 		disk->nr_zones = nr_zones;
 		return ret;
 	}
+
+	md->nr_zones = disk->nr_zones;
 
 	return 0;
 }
@@ -447,10 +439,13 @@ void dm_finalize_zone_settings(struct dm_table *t, struct queue_limits *lim)
 	struct mapped_device *md = t->md;
 
 	if (lim->features & BLK_FEAT_ZONED) {
-		assign_bit(DMF_EMULATE_ZONE_APPEND, &md->flags,
-			   !dm_table_supports_zone_append(t));
+		if (dm_table_supports_zone_append(t))
+			clear_bit(DMF_EMULATE_ZONE_APPEND, &md->flags);
+		else
+			set_bit(DMF_EMULATE_ZONE_APPEND, &md->flags);
 	} else {
 		clear_bit(DMF_EMULATE_ZONE_APPEND, &md->flags);
+		md->nr_zones = 0;
 		md->disk->nr_zones = 0;
 	}
 }
@@ -500,15 +495,10 @@ int dm_zone_get_reset_bitmap(struct mapped_device *md, struct dm_table *t,
 			     sector_t sector, unsigned int nr_zones,
 			     unsigned long *need_reset)
 {
-	struct dm_report_zones_args args = {
-		.disk = md->disk,
-		.next_sector = sector,
-		.cb = dm_zone_need_reset_cb,
-		.data = need_reset,
-	};
 	int ret;
 
-	ret = dm_blk_do_report_zones(md, t, nr_zones, &args);
+	ret = dm_blk_do_report_zones(md, t, sector, nr_zones,
+				     dm_zone_need_reset_cb, need_reset);
 	if (ret != nr_zones) {
 		DMERR("Get %s zone reset bitmap failed\n",
 		      md->disk->disk_name);

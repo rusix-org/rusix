@@ -44,9 +44,10 @@
 
 struct mlx5e_flow_steering {
 	struct work_struct		set_rx_mode_work;
-	bool				rx_mode_active;
+	bool				state_destroy;
 	bool				vlan_strip_disable;
 	struct mlx5_core_dev		*mdev;
+	struct net_device		*netdev;
 	struct mlx5_flow_namespace      *ns;
 	struct mlx5_flow_namespace      *egress_ns;
 #ifdef CONFIG_MLX5_EN_RXNFC
@@ -127,7 +128,7 @@ static void mlx5e_add_l2_to_hash(struct hlist_head *hash, const u8 *addr)
 		return;
 	}
 
-	hn = kzalloc_obj(*hn, GFP_ATOMIC);
+	hn = kzalloc(sizeof(*hn), GFP_ATOMIC);
 	if (!hn)
 		return;
 
@@ -294,7 +295,7 @@ static int mlx5e_add_vlan_rule(struct mlx5e_flow_steering *fs,
 	struct mlx5_flow_spec *spec;
 	int err = 0;
 
-	spec = kvzalloc_obj(*spec);
+	spec = kvzalloc(sizeof(*spec), GFP_KERNEL);
 	if (!spec)
 		return -ENOMEM;
 
@@ -371,7 +372,7 @@ mlx5e_add_trap_rule(struct mlx5_flow_table *ft, int trap_id, int tir_num)
 	struct mlx5_flow_handle *rule;
 	struct mlx5_flow_spec *spec;
 
-	spec = kvzalloc_obj(*spec);
+	spec = kvzalloc(sizeof(*spec), GFP_KERNEL);
 	if (!spec)
 		return ERR_PTR(-ENOMEM);
 	spec->flow_context.flags |= FLOW_CONTEXT_HAS_TAG;
@@ -560,7 +561,7 @@ static void mlx5e_del_vlan_rules(struct mlx5e_flow_steering *fs)
 	for_each_set_bit(i, fs->vlan->active_svlans, VLAN_N_VID)
 		mlx5e_fs_del_vlan_rule(fs, MLX5E_VLAN_RULE_TYPE_MATCH_STAG_VID, i);
 
-	WARN_ON_ONCE(fs->rx_mode_active);
+	WARN_ON_ONCE(fs->state_destroy);
 
 	mlx5e_remove_vlan_trap(fs);
 
@@ -609,26 +610,20 @@ static void mlx5e_execute_l2_action(struct mlx5e_flow_steering *fs,
 }
 
 static void mlx5e_sync_netdev_addr(struct mlx5e_flow_steering *fs,
-				   struct net_device *netdev,
-				   struct netdev_hw_addr_list *uc,
-				   struct netdev_hw_addr_list *mc)
+				   struct net_device *netdev)
 {
 	struct netdev_hw_addr *ha;
 
-	if (!uc || !mc) {
-		netif_addr_lock_bh(netdev);
-		mlx5e_sync_netdev_addr(fs, netdev, &netdev->uc, &netdev->mc);
-		netif_addr_unlock_bh(netdev);
-		return;
-	}
+	netif_addr_lock_bh(netdev);
 
 	mlx5e_add_l2_to_hash(fs->l2.netdev_uc, netdev->dev_addr);
-
-	netdev_hw_addr_list_for_each(ha, uc)
+	netdev_for_each_uc_addr(ha, netdev)
 		mlx5e_add_l2_to_hash(fs->l2.netdev_uc, ha->addr);
 
-	netdev_hw_addr_list_for_each(ha, mc)
+	netdev_for_each_mc_addr(ha, netdev)
 		mlx5e_add_l2_to_hash(fs->l2.netdev_mc, ha->addr);
+
+	netif_addr_unlock_bh(netdev);
 }
 
 static void mlx5e_fill_addr_array(struct mlx5e_flow_steering *fs, int list_type,
@@ -730,9 +725,7 @@ static void mlx5e_apply_netdev_addr(struct mlx5e_flow_steering *fs)
 }
 
 static void mlx5e_handle_netdev_addr(struct mlx5e_flow_steering *fs,
-				     struct net_device *netdev,
-				     struct netdev_hw_addr_list *uc,
-				     struct netdev_hw_addr_list *mc)
+				     struct net_device *netdev)
 {
 	struct mlx5e_l2_hash_node *hn;
 	struct hlist_node *tmp;
@@ -743,8 +736,8 @@ static void mlx5e_handle_netdev_addr(struct mlx5e_flow_steering *fs,
 	mlx5e_for_each_hash_node(hn, tmp, fs->l2.netdev_mc, i)
 		hn->action = MLX5E_ACTION_DEL;
 
-	if (fs->rx_mode_active)
-		mlx5e_sync_netdev_addr(fs, netdev, uc, mc);
+	if (fs->state_destroy)
+		mlx5e_sync_netdev_addr(fs, netdev);
 
 	mlx5e_apply_netdev_addr(fs);
 }
@@ -761,7 +754,7 @@ static int mlx5e_add_promisc_rule(struct mlx5e_flow_steering *fs)
 	struct mlx5_flow_spec *spec;
 	int err = 0;
 
-	spec = kvzalloc_obj(*spec);
+	spec = kvzalloc(sizeof(*spec), GFP_KERNEL);
 	if (!spec)
 		return -ENOMEM;
 	dest.type = MLX5_FLOW_DESTINATION_TYPE_FLOW_TABLE;
@@ -828,19 +821,11 @@ static void mlx5e_destroy_promisc_table(struct mlx5e_flow_steering *fs)
 }
 
 void mlx5e_fs_set_rx_mode_work(struct mlx5e_flow_steering *fs,
-			       struct net_device *netdev,
-			       struct netdev_hw_addr_list *uc,
-			       struct netdev_hw_addr_list *mc)
+			       struct net_device *netdev)
 {
-	struct mlx5e_priv *priv = netdev_priv(netdev);
 	struct mlx5e_l2_table *ea = &fs->l2;
 
-	if (mlx5e_is_uplink_rep(priv)) {
-		mlx5e_handle_netdev_addr(fs, netdev, uc, mc);
-		goto update_vport_context;
-	}
-
-	bool rx_mode_enable    = fs->rx_mode_active;
+	bool rx_mode_enable  = fs->state_destroy;
 	bool promisc_enabled   = rx_mode_enable && (netdev->flags & IFF_PROMISC);
 	bool allmulti_enabled  = rx_mode_enable && (netdev->flags & IFF_ALLMULTI);
 	bool broadcast_enabled = rx_mode_enable;
@@ -866,7 +851,7 @@ void mlx5e_fs_set_rx_mode_work(struct mlx5e_flow_steering *fs,
 	if (enable_broadcast)
 		mlx5e_add_l2_flow_rule(fs, &ea->broadcast, MLX5E_FULLMATCH);
 
-	mlx5e_handle_netdev_addr(fs, netdev, uc, mc);
+	mlx5e_handle_netdev_addr(fs, netdev);
 
 	if (disable_broadcast)
 		mlx5e_del_l2_flow_rule(fs, &ea->broadcast);
@@ -879,7 +864,6 @@ void mlx5e_fs_set_rx_mode_work(struct mlx5e_flow_steering *fs,
 	ea->allmulti_enabled  = allmulti_enabled;
 	ea->broadcast_enabled = broadcast_enabled;
 
-update_vport_context:
 	mlx5e_vport_context_update(fs, netdev);
 }
 
@@ -1000,10 +984,7 @@ static int mlx5e_add_l2_flow_rule(struct mlx5e_flow_steering *fs,
 	u8 *mc_dmac;
 	u8 *mv_dmac;
 
-	if (!ft)
-		return -EINVAL;
-
-	spec = kvzalloc_obj(*spec);
+	spec = kvzalloc(sizeof(*spec), GFP_KERNEL);
 	if (!spec)
 		return -ENOMEM;
 
@@ -1058,7 +1039,7 @@ static int mlx5e_create_l2_table_groups(struct mlx5e_l2_table *l2_table)
 	int err;
 	u8 *mc;
 
-	ft->g = kzalloc_objs(*ft->g, MLX5E_NUM_L2_GROUPS);
+	ft->g = kcalloc(MLX5E_NUM_L2_GROUPS, sizeof(*ft->g), GFP_KERNEL);
 	if (!ft->g)
 		return -ENOMEM;
 	in = kvzalloc(inlen, GFP_KERNEL);
@@ -1270,7 +1251,7 @@ static int mlx5e_fs_create_vlan_table(struct mlx5e_flow_steering *fs)
 	if (IS_ERR(ft->t))
 		return PTR_ERR(ft->t);
 
-	ft->g = kzalloc_objs(*ft->g, MLX5E_NUM_VLAN_GROUPS);
+	ft->g = kcalloc(MLX5E_NUM_VLAN_GROUPS, sizeof(*ft->g), GFP_KERNEL);
 	if (!ft->g) {
 		err = -ENOMEM;
 		goto err_destroy_vlan_table;
@@ -1413,7 +1394,7 @@ void mlx5e_destroy_flow_steering(struct mlx5e_flow_steering *fs, bool ntuple,
 
 static int mlx5e_fs_vlan_alloc(struct mlx5e_flow_steering *fs)
 {
-	fs->vlan = kvzalloc_obj(*fs->vlan);
+	fs->vlan = kvzalloc(sizeof(*fs->vlan), GFP_KERNEL);
 	if (!fs->vlan)
 		return -ENOMEM;
 	return 0;
@@ -1479,18 +1460,18 @@ static void mlx5e_fs_debugfs_init(struct mlx5e_flow_steering *fs,
 
 struct mlx5e_flow_steering *mlx5e_fs_init(const struct mlx5e_profile *profile,
 					  struct mlx5_core_dev *mdev,
-					  bool rx_mode_active,
+					  bool state_destroy,
 					  struct dentry *dfs_root)
 {
 	struct mlx5e_flow_steering *fs;
 	int err;
 
-	fs = kvzalloc_obj(*fs);
+	fs = kvzalloc(sizeof(*fs), GFP_KERNEL);
 	if (!fs)
 		goto err;
 
 	fs->mdev = mdev;
-	fs->rx_mode_active = rx_mode_active;
+	fs->state_destroy = state_destroy;
 	if (mlx5e_profile_feature_cap(profile, FS_VLAN)) {
 		err = mlx5e_fs_vlan_alloc(fs);
 		if (err)
@@ -1606,10 +1587,9 @@ void mlx5e_fs_set_accel_tcp(struct mlx5e_flow_steering *fs, struct mlx5e_accel_f
 }
 #endif
 
-void mlx5e_fs_set_rx_mode_active(struct mlx5e_flow_steering *fs,
-				 bool rx_mode_active)
+void mlx5e_fs_set_state_destroy(struct mlx5e_flow_steering *fs, bool state_destroy)
 {
-	fs->rx_mode_active = rx_mode_active;
+	fs->state_destroy = state_destroy;
 }
 
 void mlx5e_fs_set_vlan_strip_disable(struct mlx5e_flow_steering *fs,

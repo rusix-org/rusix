@@ -155,7 +155,6 @@ static ssize_t force_suspend_write(struct file *file,
 }
 
 static const struct file_operations force_suspend_fops = {
-	.owner		= THIS_MODULE,
 	.open		= simple_open,
 	.read		= force_suspend_read,
 	.write		= force_suspend_write,
@@ -195,7 +194,6 @@ static ssize_t force_wakeup_write(struct file *file,
 }
 
 static const struct file_operations force_wakeup_fops = {
-	.owner		= THIS_MODULE,
 	.open		= simple_open,
 	.read		= force_wakeup_read,
 	.write		= force_wakeup_write,
@@ -265,7 +263,6 @@ static ssize_t aosp_capable_write(struct file *file,
 }
 
 static const struct file_operations aosp_capable_fops = {
-	.owner		= THIS_MODULE,
 	.open		= simple_open,
 	.read		= aosp_capable_read,
 	.write		= aosp_capable_write,
@@ -389,7 +386,6 @@ static ssize_t force_devcd_write(struct file *file, const char __user *user_buf,
 }
 
 static const struct file_operations force_devcoredump_fops = {
-	.owner		= THIS_MODULE,
 	.open		= simple_open,
 	.write		= force_devcd_write,
 };
@@ -654,7 +650,7 @@ static int vhci_open(struct inode *inode, struct file *file)
 {
 	struct vhci_data *data;
 
-	data = kzalloc_obj(*data);
+	data = kzalloc(sizeof(*data), GFP_KERNEL);
 	if (!data)
 		return -ENOMEM;
 

@@ -184,7 +184,7 @@ static int rvu_cgx_send_link_info(int cgx_id, int lmac_id, struct rvu *rvu)
 	unsigned long flags;
 	int err;
 
-	qentry = kmalloc_obj(*qentry);
+	qentry = kmalloc(sizeof(*qentry), GFP_KERNEL);
 	if (!qentry)
 		return -ENOMEM;
 
@@ -215,7 +215,7 @@ static int cgx_lmac_postevent(struct cgx_link_event *event, void *data)
 	struct rvu *rvu = data;
 
 	/* post event to the event queue */
-	qentry = kmalloc_obj(*qentry, GFP_ATOMIC);
+	qentry = kmalloc(sizeof(*qentry), GFP_ATOMIC);
 	if (!qentry)
 		return -ENOMEM;
 	qentry->link_event = *event;
@@ -1354,18 +1354,6 @@ void rvu_mac_reset(struct rvu *rvu, u16 pcifunc)
 
 	if (mac_ops->mac_reset(cgxd, lmac, !is_vf(pcifunc)))
 		dev_err(rvu->dev, "Failed to reset MAC\n");
-}
-
-u64 rvu_cgx_get_dmacflt_dropped_pktcnt(void *cgxd, int lmac_id)
-{
-	struct mac_ops *mac_ops;
-
-	mac_ops = get_mac_ops(cgxd);
-
-	if (!mac_ops || !mac_ops->get_dmacflt_dropped_pktcnt)
-		return 0;
-
-	return mac_ops->get_dmacflt_dropped_pktcnt(cgxd, lmac_id);
 }
 
 /* Do not allow CGX-mapped VFs to overwrite PKIND when special parse kinds

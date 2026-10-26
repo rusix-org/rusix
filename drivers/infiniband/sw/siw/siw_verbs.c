@@ -102,7 +102,7 @@ int siw_alloc_ucontext(struct ib_ucontext *base_ctx, struct ib_udata *udata)
 		rv = -EINVAL;
 		goto err_out;
 	}
-	rv = ib_respond_udata(udata, uresp);
+	rv = ib_copy_to_udata(udata, &uresp, sizeof(uresp));
 	if (rv)
 		goto err_out;
 
@@ -130,11 +130,11 @@ int siw_query_device(struct ib_device *base_dev, struct ib_device_attr *attr,
 		     struct ib_udata *udata)
 {
 	struct siw_device *sdev = to_siw_dev(base_dev);
-	int rv;
 
-	rv = ib_no_udata_io(udata);
-	if (rv)
-		return rv;
+	if (udata->inlen || udata->outlen)
+		return -EINVAL;
+
+	memset(attr, 0, sizeof(*attr));
 
 	/* Revisit atomic caps if RFC 7306 gets supported */
 	attr->atomic_cap = 0;
@@ -274,7 +274,7 @@ siw_mmap_entry_insert(struct siw_ucontext *uctx,
 		      void *address, size_t length,
 		      u64 *offset)
 {
-	struct siw_user_mmap_entry *entry = kzalloc_obj(*entry);
+	struct siw_user_mmap_entry *entry = kzalloc(sizeof(*entry), GFP_KERNEL);
 	int rv;
 
 	*offset = SIW_INVAL_UOBJ_KEY;
@@ -479,7 +479,7 @@ int siw_create_qp(struct ib_qp *ibqp, struct ib_qp_init_attr *attrs,
 			rv = -EINVAL;
 			goto err_out_xa;
 		}
-		rv = ib_respond_udata(udata, uresp);
+		rv = ib_copy_to_udata(udata, &uresp, sizeof(uresp));
 		if (rv)
 			goto err_out_xa;
 	}
@@ -1209,7 +1209,7 @@ int siw_create_cq(struct ib_cq *base_cq, const struct ib_cq_init_attr *attr,
 			rv = -EINVAL;
 			goto err_out;
 		}
-		rv = ib_respond_udata(udata, uresp);
+		rv = ib_copy_to_udata(udata, &uresp, sizeof(uresp));
 		if (rv)
 			goto err_out;
 	}
@@ -1364,7 +1364,7 @@ struct ib_mr *siw_reg_user_mr(struct ib_pd *pd, u64 start, u64 len,
 		umem = NULL;
 		goto err_out;
 	}
-	mr = kzalloc_obj(*mr);
+	mr = kzalloc(sizeof(*mr), GFP_KERNEL);
 	if (!mr) {
 		rv = -ENOMEM;
 		goto err_out;
@@ -1377,7 +1377,11 @@ struct ib_mr *siw_reg_user_mr(struct ib_pd *pd, u64 start, u64 len,
 		struct siw_uresp_reg_mr uresp = {};
 		struct siw_mem *mem = mr->mem;
 
-		rv = ib_copy_validate_udata_in(udata, ureq, pad);
+		if (udata->inlen < sizeof(ureq)) {
+			rv = -EINVAL;
+			goto err_out;
+		}
+		rv = ib_copy_from_udata(&ureq, udata, sizeof(ureq));
 		if (rv)
 			goto err_out;
 
@@ -1390,7 +1394,7 @@ struct ib_mr *siw_reg_user_mr(struct ib_pd *pd, u64 start, u64 len,
 			rv = -EINVAL;
 			goto err_out;
 		}
-		rv = ib_respond_udata(udata, uresp);
+		rv = ib_copy_to_udata(udata, &uresp, sizeof(uresp));
 		if (rv)
 			goto err_out;
 	}
@@ -1441,7 +1445,7 @@ struct ib_mr *siw_alloc_mr(struct ib_pd *pd, enum ib_mr_type mr_type,
 		pbl = NULL;
 		goto err_out;
 	}
-	mr = kzalloc_obj(*mr);
+	mr = kzalloc(sizeof(*mr), GFP_KERNEL);
 	if (!mr) {
 		rv = -ENOMEM;
 		goto err_out;
@@ -1556,7 +1560,7 @@ struct ib_mr *siw_get_dma_mr(struct ib_pd *pd, int rights)
 		rv = -ENOMEM;
 		goto err_out;
 	}
-	mr = kzalloc_obj(*mr);
+	mr = kzalloc(sizeof(*mr), GFP_KERNEL);
 	if (!mr) {
 		rv = -ENOMEM;
 		goto err_out;
@@ -1650,7 +1654,7 @@ int siw_create_srq(struct ib_srq *base_srq,
 			rv = -EINVAL;
 			goto err_out;
 		}
-		rv = ib_respond_udata(udata, uresp);
+		rv = ib_copy_to_udata(udata, &uresp, sizeof(uresp));
 		if (rv)
 			goto err_out;
 	}

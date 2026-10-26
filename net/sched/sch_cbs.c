@@ -96,8 +96,8 @@ static int cbs_child_enqueue(struct sk_buff *skb, struct Qdisc *sch,
 	if (err != NET_XMIT_SUCCESS)
 		return err;
 
-	qstats_backlog_add(sch, len);
-	qdisc_qlen_inc(sch);
+	sch->qstats.backlog += len;
+	sch->q.qlen++;
 
 	return NET_XMIT_SUCCESS;
 }
@@ -168,7 +168,7 @@ static struct sk_buff *cbs_child_dequeue(struct Qdisc *sch, struct Qdisc *child)
 
 	qdisc_qstats_backlog_dec(sch, skb);
 	qdisc_bstats_update(sch, skb);
-	qdisc_qlen_dec(sch);
+	sch->q.qlen--;
 
 	return skb;
 }
@@ -243,20 +243,6 @@ static struct sk_buff *cbs_dequeue(struct Qdisc *sch)
 	return q->dequeue(sch);
 }
 
-static void cbs_reset(struct Qdisc *sch)
-{
-	struct cbs_sched_data *q = qdisc_priv(sch);
-
-	/* Nothing to do if we couldn't create the underlying qdisc */
-	if (!q->qdisc)
-		return;
-
-	qdisc_reset(q->qdisc);
-	qdisc_watchdog_cancel(&q->watchdog);
-	q->credits = 0;
-	q->last = 0;
-}
-
 static const struct nla_policy cbs_policy[TCA_CBS_MAX + 1] = {
 	[TCA_CBS_PARMS]	= { .len = sizeof(struct tc_cbs_qopt) },
 };
@@ -327,7 +313,7 @@ static void cbs_set_port_rate(struct net_device *dev, struct cbs_sched_data *q)
 	s64 port_rate;
 	int err;
 
-	err = netif_get_link_ksettings(dev, &ecmd);
+	err = __ethtool_get_link_ksettings(dev, &ecmd);
 	if (err < 0)
 		goto skip;
 
@@ -340,7 +326,7 @@ skip:
 	atomic64_set(&q->port_rate, port_rate);
 	netdev_dbg(dev, "cbs: set %s's port_rate to: %lld, linkspeed: %d\n",
 		   dev->name, (long long)atomic64_read(&q->port_rate),
-		   speed);
+		   ecmd.base.speed);
 }
 
 static int cbs_dev_notifier(struct notifier_block *nb, unsigned long event,
@@ -554,7 +540,7 @@ static struct Qdisc_ops cbs_qdisc_ops __read_mostly = {
 	.dequeue	=	cbs_dequeue,
 	.peek		=	qdisc_peek_dequeued,
 	.init		=	cbs_init,
-	.reset		=	cbs_reset,
+	.reset		=	qdisc_reset_queue,
 	.destroy	=	cbs_destroy,
 	.change		=	cbs_change,
 	.dump		=	cbs_dump,

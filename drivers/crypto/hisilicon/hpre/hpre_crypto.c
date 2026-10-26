@@ -21,15 +21,19 @@ struct hpre_ctx;
 #define HPRE_CRYPTO_ALG_PRI	1000
 #define HPRE_ALIGN_SZ		64
 #define HPRE_BITS_2_BYTES_SHIFT	3
+#define HPRE_RSA_512BITS_KSZ	64
+#define HPRE_RSA_1536BITS_KSZ	192
 #define HPRE_CRT_PRMS		5
 #define HPRE_CRT_Q		2
 #define HPRE_CRT_P		3
 #define HPRE_CRT_INV		4
 #define HPRE_DH_G_FLAG		0x02
 #define HPRE_TRY_SEND_TIMES	100
+#define HPRE_INVLD_REQ_ID		(-1)
 
 #define HPRE_SQE_ALG_BITS	5
 #define HPRE_SQE_DONE_SHIFT	30
+#define HPRE_DH_MAX_P_SZ	512
 
 #define HPRE_DFX_SEC_TO_US	1000000
 #define HPRE_DFX_US_TO_NS	1000
@@ -52,6 +56,7 @@ struct hpre_ctx;
 #define HPRE_DRV_RSA_MASK_CAP		BIT(0)
 #define HPRE_DRV_DH_MASK_CAP		BIT(1)
 #define HPRE_DRV_ECDH_MASK_CAP		BIT(2)
+#define HPRE_DRV_X25519_MASK_CAP	BIT(5)
 
 static DEFINE_MUTEX(hpre_algs_lock);
 static unsigned int hpre_available_devs;
@@ -130,9 +135,9 @@ struct hpre_asym_request {
 		struct kpp_request *dh;
 		struct kpp_request *ecdh;
 	} areq;
+	int err;
 	hpre_cb cb;
 	struct timespec64 req_time;
-	u32 flags;
 };
 
 static inline unsigned int hpre_align_sz(void)
@@ -181,7 +186,6 @@ static int hpre_prepare_dma_buf(struct hpre_asym_request *hpre_req,
 				struct scatterlist *data, unsigned int len,
 				int is_src, dma_addr_t *tmp)
 {
-	gfp_t gfp = hpre_req->flags & CRYPTO_TFM_REQ_MAY_SLEEP ? GFP_KERNEL : GFP_ATOMIC;
 	struct hpre_ctx *ctx = hpre_req->ctx;
 	struct device *dev = ctx->dev;
 	void *ptr;
@@ -191,7 +195,7 @@ static int hpre_prepare_dma_buf(struct hpre_asym_request *hpre_req,
 	if (unlikely(shift < 0))
 		return -EINVAL;
 
-	ptr = dma_alloc_coherent(dev, ctx->key_sz, tmp, gfp);
+	ptr = dma_alloc_coherent(dev, ctx->key_sz, tmp, GFP_ATOMIC);
 	if (unlikely(!ptr))
 		return -ENOMEM;
 
@@ -415,7 +419,6 @@ static int hpre_msg_request_set(struct hpre_ctx *ctx, void *req, bool is_rsa)
 		h_req = PTR_ALIGN(tmp, hpre_align_sz());
 		h_req->cb = hpre_rsa_cb;
 		h_req->areq.rsa = akreq;
-		h_req->flags = akreq->base.flags;
 		msg = &h_req->req;
 		memset(msg, 0, sizeof(*msg));
 	} else {
@@ -430,7 +433,6 @@ static int hpre_msg_request_set(struct hpre_ctx *ctx, void *req, bool is_rsa)
 		h_req = PTR_ALIGN(tmp, hpre_align_sz());
 		h_req->cb = hpre_dh_cb;
 		h_req->areq.dh = kreq;
-		h_req->flags = kreq->base.flags;
 		msg = &h_req->req;
 		memset(msg, 0, sizeof(*msg));
 		msg->key = cpu_to_le64(ctx->dh.dma_xa_p);
@@ -718,7 +720,7 @@ static void hpre_dh_exit_tfm(struct crypto_kpp *tfm)
 
 static void hpre_rsa_drop_leading_zeros(const char **ptr, size_t *len)
 {
-	while (*len && !**ptr) {
+	while (!**ptr && *len) {
 		(*ptr)++;
 		(*len)--;
 	}
@@ -1325,9 +1327,17 @@ static int ecdh_gen_privkey(struct hpre_ctx *ctx, struct ecdh *params)
 	struct device *dev = ctx->dev;
 	int ret;
 
-	ret = crypto_stdrng_get_bytes(params->key, params->key_size);
+	ret = crypto_get_default_rng();
+	if (ret) {
+		dev_err(dev, "failed to get default rng, ret = %d!\n", ret);
+		return ret;
+	}
+
+	ret = crypto_rng_get_bytes(crypto_default_rng, (u8 *)params->key,
+				   params->key_size);
+	crypto_put_default_rng();
 	if (ret)
-		dev_err(dev, "failed to get random bytes, ret = %d!\n", ret);
+		dev_err(dev, "failed to get rng, ret = %d!\n", ret);
 
 	return ret;
 }
@@ -1405,6 +1415,8 @@ static void hpre_ecdh_hw_data_clr_all(struct hpre_ctx *ctx,
 	if (unlikely(dma_mapping_error(dev, dma)))
 		return;
 
+	if (req->dst)
+		dma_free_coherent(dev, ctx->key_sz << 1, req->dst, dma);
 	if (dst)
 		dma_unmap_single(dev, dma, ctx->key_sz << 1, DMA_FROM_DEVICE);
 }
@@ -1448,14 +1460,13 @@ static int hpre_ecdh_msg_request_set(struct hpre_ctx *ctx,
 
 	if (req->dst_len < ctx->key_sz << 1) {
 		req->dst_len = ctx->key_sz << 1;
-		return -EOVERFLOW;
+		return -EINVAL;
 	}
 
 	tmp = kpp_request_ctx(req);
 	h_req = PTR_ALIGN(tmp, hpre_align_sz());
 	h_req->cb = hpre_ecdh_cb;
 	h_req->areq.ecdh = req;
-	h_req->flags = req->base.flags;
 	msg = &h_req->req;
 	memset(msg, 0, sizeof(*msg));
 	msg->in = cpu_to_le64(DMA_MAPPING_ERROR);
@@ -1474,7 +1485,6 @@ static int hpre_ecdh_msg_request_set(struct hpre_ctx *ctx,
 static int hpre_ecdh_src_data_init(struct hpre_asym_request *hpre_req,
 				   struct scatterlist *data, unsigned int len)
 {
-	gfp_t gfp = hpre_req->flags & CRYPTO_TFM_REQ_MAY_SLEEP ? GFP_KERNEL : GFP_ATOMIC;
 	struct hpre_sqe *msg = &hpre_req->req;
 	struct hpre_ctx *ctx = hpre_req->ctx;
 	struct device *dev = ctx->dev;
@@ -1488,7 +1498,7 @@ static int hpre_ecdh_src_data_init(struct hpre_asym_request *hpre_req,
 	if (unlikely(shift < 0))
 		return -EINVAL;
 
-	ptr = dma_alloc_coherent(dev, ctx->key_sz << 2, &dma, gfp);
+	ptr = dma_alloc_coherent(dev, ctx->key_sz << 2, &dma, GFP_KERNEL);
 	if (unlikely(!ptr))
 		return -ENOMEM;
 
@@ -1510,13 +1520,13 @@ static int hpre_ecdh_dst_data_init(struct hpre_asym_request *hpre_req,
 	struct device *dev = ctx->dev;
 	dma_addr_t dma;
 
-	if (unlikely(!data || !sg_is_last(data))) {
-		dev_err(dev, "data is illegal!\n");
+	if (unlikely(!data || !sg_is_last(data) || len != ctx->key_sz << 1)) {
+		dev_err(dev, "data or data length is illegal!\n");
 		return -EINVAL;
 	}
 
 	hpre_req->dst = NULL;
-	dma = dma_map_single(dev, sg_virt(data), ctx->key_sz << 1, DMA_FROM_DEVICE);
+	dma = dma_map_single(dev, sg_virt(data), len, DMA_FROM_DEVICE);
 	if (unlikely(dma_mapping_error(dev, dma))) {
 		dev_err(dev, "dma map data err!\n");
 		return -ENOMEM;

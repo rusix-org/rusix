@@ -198,6 +198,7 @@ query the reset line status using reset_control_status().
                reset_control_rearm
                reset_control_put
                of_reset_control_get_count
+               of_reset_control_array_get
                devm_reset_control_array_get
                reset_control_get_count
 
@@ -213,7 +214,8 @@ devm_reset_controller_register().
    :internal:
 
 .. kernel-doc:: drivers/reset/core.c
-   :functions: fwnode_reset_simple_xlate
+   :functions: of_reset_simple_xlate
                reset_controller_register
                reset_controller_unregister
                devm_reset_controller_register
+               reset_controller_add_lookup

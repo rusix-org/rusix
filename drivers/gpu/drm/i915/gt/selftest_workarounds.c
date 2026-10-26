@@ -1064,9 +1064,6 @@ static int live_isolated_whitelist(void *arg)
 	enum intel_engine_id id;
 	int i, err = 0;
 
-	if (IS_DG2(gt->i915) || IS_METEORLAKE(gt->i915))
-		return 0;
-
 	/*
 	 * Check that a write into a whitelist register works, but
 	 * invisible to a second context.
@@ -1207,7 +1204,7 @@ live_gpu_reset_workarounds(void *arg)
 	if (!intel_has_gpu_reset(gt))
 		return 0;
 
-	lists = kzalloc_obj(*lists);
+	lists = kzalloc(sizeof(*lists), GFP_KERNEL);
 	if (!lists)
 		return -ENOMEM;
 
@@ -1251,7 +1248,7 @@ live_engine_reset_workarounds(void *arg)
 	if (!intel_has_reset_engine(gt))
 		return 0;
 
-	lists = kzalloc_obj(*lists);
+	lists = kzalloc(sizeof(*lists), GFP_KERNEL);
 	if (!lists)
 		return -ENOMEM;
 

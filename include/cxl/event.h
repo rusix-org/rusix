@@ -287,10 +287,10 @@ struct cxl_cper_prot_err_work_data {
 
 #ifdef CONFIG_ACPI_APEI_GHES
 int cxl_cper_register_work(struct work_struct *work);
-void cxl_cper_unregister_work(struct work_struct *work);
+int cxl_cper_unregister_work(struct work_struct *work);
 int cxl_cper_kfifo_get(struct cxl_cper_work_data *wd);
-void cxl_cper_register_prot_err_work(struct work_struct *work);
-void cxl_cper_unregister_prot_err_work(void);
+int cxl_cper_register_prot_err_work(struct work_struct *work);
+int cxl_cper_unregister_prot_err_work(struct work_struct *work);
 int cxl_cper_prot_err_kfifo_get(struct cxl_cper_prot_err_work_data *wd);
 #else
 static inline int cxl_cper_register_work(struct work_struct *work)
@@ -298,13 +298,22 @@ static inline int cxl_cper_register_work(struct work_struct *work)
 	return 0;
 }
 
-static inline void cxl_cper_unregister_work(struct work_struct *work) { }
+static inline int cxl_cper_unregister_work(struct work_struct *work)
+{
+	return 0;
+}
 static inline int cxl_cper_kfifo_get(struct cxl_cper_work_data *wd)
 {
 	return 0;
 }
-static inline void cxl_cper_register_prot_err_work(struct work_struct *work) { }
-static inline void cxl_cper_unregister_prot_err_work(void) { }
+static inline int cxl_cper_register_prot_err_work(struct work_struct *work)
+{
+	return 0;
+}
+static inline int cxl_cper_unregister_prot_err_work(struct work_struct *work)
+{
+	return 0;
+}
 static inline int cxl_cper_prot_err_kfifo_get(struct cxl_cper_prot_err_work_data *wd)
 {
 	return 0;
@@ -312,20 +321,10 @@ static inline int cxl_cper_prot_err_kfifo_get(struct cxl_cper_prot_err_work_data
 #endif
 
 #ifdef CONFIG_ACPI_APEI_PCIEAER
-int cxl_cper_sec_prot_err_valid(struct cxl_cper_sec_prot_err *prot_err, u32 len);
-int cxl_cper_setup_prot_err_work_data(struct cxl_cper_prot_err_work_data *wd,
-				      struct cxl_cper_sec_prot_err *prot_err,
-				      int severity);
+int cxl_cper_sec_prot_err_valid(struct cxl_cper_sec_prot_err *prot_err);
 #else
 static inline int
-cxl_cper_sec_prot_err_valid(struct cxl_cper_sec_prot_err *prot_err, u32 len)
-{
-	return -EOPNOTSUPP;
-}
-static inline int
-cxl_cper_setup_prot_err_work_data(struct cxl_cper_prot_err_work_data *wd,
-				  struct cxl_cper_sec_prot_err *prot_err,
-				  int severity)
+cxl_cper_sec_prot_err_valid(struct cxl_cper_sec_prot_err *prot_err)
 {
 	return -EOPNOTSUPP;
 }

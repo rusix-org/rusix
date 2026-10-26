@@ -5,6 +5,7 @@
 
 #include <stdlib.h>
 #include "lkc.h"
+#include "images.h"
 
 #include <gtk/gtk.h>
 
@@ -950,24 +951,12 @@ static void fixup_rootmenu(struct menu *menu)
 }
 
 /* Main Window Initialization */
-static void replace_button_icon(GtkWidget *widget, const char *filename)
+static void replace_button_icon(GtkWidget *widget, const char * const xpm[])
 {
 	GdkPixbuf *pixbuf;
 	GtkWidget *image;
-	GError *err = NULL;
 
-	char *env = getenv(SRCTREE);
-	gchar *path = g_strconcat(env ? env : g_get_current_dir(), "/scripts/kconfig/icons/", filename, NULL);
-
-	pixbuf = gdk_pixbuf_new_from_file(path, &err);
-	g_free(path);
-
-	if (err) {
-		g_warning("Failed to load icon %s: %s", filename, err->message);
-		g_error_free(err);
-		return;
-	}
-
+	pixbuf = gdk_pixbuf_new_from_xpm_data((const char **)xpm);
 	image = gtk_image_new_from_pixbuf(pixbuf);
 	g_object_unref(pixbuf);
 
@@ -1089,17 +1078,17 @@ static void init_main_window(const gchar *glade_file)
 	single_btn = GTK_WIDGET(gtk_builder_get_object(builder, "button4"));
 	g_signal_connect(single_btn, "clicked",
 			 G_CALLBACK(on_single_clicked), NULL);
-	replace_button_icon(single_btn, "single_view.xpm");
+	replace_button_icon(single_btn, xpm_single_view);
 
 	split_btn = GTK_WIDGET(gtk_builder_get_object(builder, "button5"));
 	g_signal_connect(split_btn, "clicked",
 			 G_CALLBACK(on_split_clicked), NULL);
-	replace_button_icon(split_btn, "split_view.xpm");
+	replace_button_icon(split_btn, xpm_split_view);
 
 	full_btn = GTK_WIDGET(gtk_builder_get_object(builder, "button6"));
 	g_signal_connect(full_btn, "clicked",
 			 G_CALLBACK(on_full_clicked), NULL);
-	replace_button_icon(full_btn, "tree_view.xpm");
+	replace_button_icon(full_btn, xpm_tree_view);
 
 	widget = GTK_WIDGET(gtk_builder_get_object(builder, "button7"));
 	g_signal_connect(widget, "clicked",
@@ -1280,17 +1269,7 @@ static void init_right_tree(void)
 	g_signal_connect(G_OBJECT(renderer), "edited",
 			 G_CALLBACK(renderer_edited), tree2_w);
 
-	char *env = getenv(SRCTREE);
-	gchar *path = g_strconcat(env ? env : g_get_current_dir(), "/scripts/kconfig/icons/menu.xpm", NULL);
-	GError *err = NULL;
-
-	pix_menu = gdk_pixbuf_new_from_file(path, &err);
-	g_free(path);
-
-	if (err) {
-		g_warning("Failed to load menu icon: %s", err->message);
-		g_error_free(err);
-	}
+	pix_menu = gdk_pixbuf_new_from_xpm_data((const char **)xpm_menu);
 
 	for (i = 0; i < COL_VALUE; i++) {
 		column = gtk_tree_view_get_column(view, i);

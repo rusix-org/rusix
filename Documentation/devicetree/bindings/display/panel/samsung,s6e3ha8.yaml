@@ -22,6 +22,10 @@ properties:
   reg:
     maxItems: 1
 
+  reset-gpios: true
+
+  port: true
+
   vdd3-supply:
     description: VDD regulator
 

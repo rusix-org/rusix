@@ -55,6 +55,8 @@
 #define TPS23881_REG_TPON	BIT(0)
 #define TPS23881_REG_FWREV	0x41
 #define TPS23881_REG_DEVID	0x43
+#define TPS23881_REG_DEVID_MASK	0xF0
+#define TPS23881_DEVICE_ID	0x02
 #define TPS23881_REG_CHAN1_CLASS	0x4c
 #define TPS23881_REG_SRAM_CTRL	0x60
 #define TPS23881_REG_SRAM_DATA	0x61
@@ -523,7 +525,8 @@ tps23881_pi_get_pw_limit_ranges(struct pse_controller_dev *pcdev, int id,
 {
 	struct ethtool_c33_pse_pw_limit_range *c33_pw_limit_ranges;
 
-	c33_pw_limit_ranges = kzalloc_obj(*c33_pw_limit_ranges);
+	c33_pw_limit_ranges = kzalloc(sizeof(*c33_pw_limit_ranges),
+				      GFP_KERNEL);
 	if (!c33_pw_limit_ranges)
 		return -ENOMEM;
 
@@ -1009,28 +1012,8 @@ static const struct pse_controller_ops tps23881_ops = {
 	.pi_get_pw_req = tps23881_pi_get_pw_req,
 };
 
-struct tps23881_info {
-	u8 dev_id;	/* device ID and silicon revision */
-	const char *fw_parity_name;	/* parity code firmware file name */
-	const char *fw_sram_name;	/* SRAM code firmware file name */
-};
-
-enum tps23881_model {
-	TPS23881,
-	TPS23881B,
-};
-
-static const struct tps23881_info tps23881_info[] = {
-	[TPS23881] = {
-		.dev_id = 0x22,
-		.fw_parity_name = "ti/tps23881/tps23881-parity-14.bin",
-		.fw_sram_name = "ti/tps23881/tps23881-sram-14.bin",
-	},
-	[TPS23881B] = {
-		.dev_id = 0x24,
-		/* skip SRAM load, ROM provides Clause 145 hardware-level support */
-	},
-};
+static const char fw_parity_name[] = "ti/tps23881/tps23881-parity-14.bin";
+static const char fw_sram_name[] = "ti/tps23881/tps23881-sram-14.bin";
 
 struct tps23881_fw_conf {
 	u8 reg;
@@ -1102,17 +1085,16 @@ out:
 	return ret;
 }
 
-static int tps23881_flash_sram_fw(struct i2c_client *client,
-				  const struct tps23881_info *info)
+static int tps23881_flash_sram_fw(struct i2c_client *client)
 {
 	int ret;
 
-	ret = tps23881_flash_sram_fw_part(client, info->fw_parity_name,
+	ret = tps23881_flash_sram_fw_part(client, fw_parity_name,
 					  tps23881_fw_parity_conf);
 	if (ret)
 		return ret;
 
-	ret = tps23881_flash_sram_fw_part(client, info->fw_sram_name,
+	ret = tps23881_flash_sram_fw_part(client, fw_sram_name,
 					  tps23881_fw_sram_conf);
 	if (ret)
 		return ret;
@@ -1430,7 +1412,6 @@ static int tps23881_setup_irq(struct tps23881_priv *priv, int irq)
 static int tps23881_i2c_probe(struct i2c_client *client)
 {
 	struct device *dev = &client->dev;
-	const struct tps23881_info *info;
 	struct tps23881_priv *priv;
 	struct gpio_desc *reset;
 	int ret;
@@ -1440,10 +1421,6 @@ static int tps23881_i2c_probe(struct i2c_client *client)
 		dev_err(dev, "i2c check functionality failed\n");
 		return -ENXIO;
 	}
-
-	info = i2c_get_match_data(client);
-	if (!info)
-		return -EINVAL;
 
 	priv = devm_kzalloc(dev, sizeof(*priv), GFP_KERNEL);
 	if (!priv)
@@ -1463,7 +1440,7 @@ static int tps23881_i2c_probe(struct i2c_client *client)
 		 * to Load TPS2388x SRAM and Parity Code over I2C" (Rev E))
 		 * indicates we should delay that programming by at least 50ms. So
 		 * we'll wait the entire 50ms here to ensure we're safe to go to the
-		 * SRAM loading procedure.
+		 * SRAM loading proceedure.
 		 */
 		msleep(50);
 	}
@@ -1472,27 +1449,20 @@ static int tps23881_i2c_probe(struct i2c_client *client)
 	if (ret < 0)
 		return ret;
 
-	if (ret != info->dev_id) {
+	if (FIELD_GET(TPS23881_REG_DEVID_MASK, ret) != TPS23881_DEVICE_ID) {
 		dev_err(dev, "Wrong device ID\n");
 		return -ENXIO;
 	}
 
-	if (info->fw_sram_name) {
-		ret = tps23881_flash_sram_fw(client, info);
-		if (ret < 0)
-			return ret;
-	}
+	ret = tps23881_flash_sram_fw(client);
+	if (ret < 0)
+		return ret;
 
 	ret = i2c_smbus_read_byte_data(client, TPS23881_REG_FWREV);
 	if (ret < 0)
 		return ret;
 
-	if (ret == 0xFF) {
-		dev_err(&client->dev, "Device entered safe mode\n");
-		return -ENXIO;
-	}
-	dev_info(&client->dev, "Firmware revision 0x%x%s\n", ret,
-		 ret == 0x00 ? " (ROM firmware)" : "");
+	dev_info(&client->dev, "Firmware revision 0x%x\n", ret);
 
 	/* Set configuration B, 16 bit access on a single device address */
 	ret = i2c_smbus_read_byte_data(client, TPS23881_REG_GEN_MASK);
@@ -1520,25 +1490,21 @@ static int tps23881_i2c_probe(struct i2c_client *client)
 				     "failed to register PSE controller\n");
 	}
 
-	return tps23881_setup_irq(priv, client->irq);
+	ret = tps23881_setup_irq(priv, client->irq);
+	if (ret)
+		return ret;
+
+	return ret;
 }
 
 static const struct i2c_device_id tps23881_id[] = {
-	{ .name = "tps23881", .driver_data = (kernel_ulong_t)&tps23881_info[TPS23881] },
-	{ .name = "tps23881b", .driver_data = (kernel_ulong_t)&tps23881_info[TPS23881B] },
+	{ "tps23881" },
 	{ }
 };
 MODULE_DEVICE_TABLE(i2c, tps23881_id);
 
 static const struct of_device_id tps23881_of_match[] = {
-	{
-		.compatible = "ti,tps23881",
-		.data = &tps23881_info[TPS23881]
-	},
-	{
-		.compatible = "ti,tps23881b",
-		.data = &tps23881_info[TPS23881B]
-	},
+	{ .compatible = "ti,tps23881", },
 	{ },
 };
 MODULE_DEVICE_TABLE(of, tps23881_of_match);

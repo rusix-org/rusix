@@ -5,7 +5,6 @@ TEST_PROGS = basic_features.sh
 TEST_FILES = virtio_net_common.sh
 
 TEST_INCLUDES = \
-	$(wildcard ../../../net/lib/sh/*.sh) \
 	../../../net/forwarding/lib.sh \
 	../../../net/lib.sh \
 # end of TEST_INCLUDES

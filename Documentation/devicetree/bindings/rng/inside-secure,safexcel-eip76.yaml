@@ -4,7 +4,7 @@
 $id: http://devicetree.org/schemas/rng/inside-secure,safexcel-eip76.yaml#
 $schema: http://devicetree.org/meta-schemas/core.yaml#
 
-title: Inside-Secure SafeXcel EIP-76 HWRNG Module
+title: Inside-Secure HWRNG Module
 
 maintainers:
   - Jayesh Choudhary <j-choudhary@ti.com>
@@ -44,6 +44,7 @@ properties:
       - const: core
       - const: reg
 
+
 allOf:
   - if:
       properties:
@@ -56,6 +57,7 @@ allOf:
     then:
       required:
         - interrupts
+
 
 required:
   - compatible

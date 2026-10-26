@@ -57,11 +57,12 @@ static int cistpl_vers_1(struct mmc_card *card, struct sdio_func *func,
 		return -ENOMEM;
 
 	string = (char*)(buffer + nr_strings);
-	memcpy(string, buf, size);
 
 	for (i = 0; i < nr_strings; i++) {
 		buffer[i] = string;
-		string = strchr(string, 0) + 1;
+		strcpy(string, buf);
+		string += strlen(string) + 1;
+		buf += strlen(buf) + 1;
 	}
 
 	if (func) {

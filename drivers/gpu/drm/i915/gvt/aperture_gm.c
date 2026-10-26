@@ -34,15 +34,10 @@
  *
  */
 
-#include <linux/string_choices.h>
-
-#include <drm/drm_print.h>
-
-#include "gt/intel_ggtt_fencing.h"
-
-#include "gvt.h"
 #include "i915_drv.h"
 #include "i915_reg.h"
+#include "gt/intel_ggtt_fencing.h"
+#include "gvt.h"
 
 static int alloc_gm(struct intel_vgpu *vgpu, bool high_gm)
 {
@@ -78,7 +73,7 @@ static int alloc_gm(struct intel_vgpu *vgpu, bool high_gm)
 	mutex_unlock(&gt->ggtt->vm.mutex);
 	if (ret)
 		gvt_err("fail to alloc %s gm space from host\n",
-			str_high_low(high_gm));
+			high_gm ? "high" : "low");
 
 	return ret;
 }

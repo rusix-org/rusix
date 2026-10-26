@@ -641,15 +641,15 @@ int u_audio_start_capture(struct g_audio *audio_dev)
 	ret = config_ep_by_speed(gadget, &audio_dev->func, ep_fback);
 	if (ret < 0) {
 		dev_err(dev, "config_ep_by_speed in_ep_fback failed (%d)\n", ret);
-		goto err_out_ep;
+		return ret; // TODO: Clean up out_ep
 	}
 
+	prm->fb_ep_enabled = true;
 	ret = usb_ep_enable(ep_fback);
 	if (ret < 0) {
 		dev_err(dev, "usb_ep_enable failed for in_ep_fback (%d)\n", ret);
-		goto err_out_ep;
+		return ret; // TODO: Clean up out_ep
 	}
-	prm->fb_ep_enabled = true;
 	req_len = ep_fback->maxpacket;
 
 	req_fback = usb_ep_alloc_request(ep_fback, GFP_ATOMIC);
@@ -680,12 +680,6 @@ int u_audio_start_capture(struct g_audio *audio_dev)
 		dev_err(dev, "%s:%d Error!\n", __func__, __LINE__);
 
 	return 0;
-
-err_out_ep:
-	set_active(prm, false);
-	free_ep(prm, ep);
-
-	return ret;
 }
 EXPORT_SYMBOL_GPL(u_audio_start_capture);
 
@@ -1211,7 +1205,7 @@ int g_audio_setup(struct g_audio *g_audio, const char *pcm_name,
 	if (!g_audio)
 		return -EINVAL;
 
-	uac = kzalloc_obj(*uac);
+	uac = kzalloc(sizeof(*uac), GFP_KERNEL);
 	if (!uac)
 		return -ENOMEM;
 	g_audio->uac = uac;
@@ -1229,8 +1223,9 @@ int g_audio_setup(struct g_audio *g_audio, const char *pcm_name,
 		prm->max_psize = g_audio->out_ep_maxpsize;
 		prm->srate = params->c_srates[0];
 
-		prm->reqs = kzalloc_objs(struct usb_request *,
-					 params->req_number);
+		prm->reqs = kcalloc(params->req_number,
+				    sizeof(struct usb_request *),
+				    GFP_KERNEL);
 		if (!prm->reqs) {
 			err = -ENOMEM;
 			goto fail;
@@ -1253,8 +1248,9 @@ int g_audio_setup(struct g_audio *g_audio, const char *pcm_name,
 		prm->max_psize = g_audio->in_ep_maxpsize;
 		prm->srate = params->p_srates[0];
 
-		prm->reqs = kzalloc_objs(struct usb_request *,
-					 params->req_number);
+		prm->reqs = kcalloc(params->req_number,
+				    sizeof(struct usb_request *),
+				    GFP_KERNEL);
 		if (!prm->reqs) {
 			err = -ENOMEM;
 			goto fail;

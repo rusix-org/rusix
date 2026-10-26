@@ -62,13 +62,13 @@ static void gud_connector_backlight_update_status_work(struct work_struct *work)
 	struct drm_connector_state *connector_state;
 	struct drm_device *drm = connector->dev;
 	struct drm_modeset_acquire_ctx ctx;
-	struct drm_atomic_commit *state;
+	struct drm_atomic_state *state;
 	int idx, ret;
 
 	if (!drm_dev_enter(drm, &idx))
 		return;
 
-	state = drm_atomic_commit_alloc(drm);
+	state = drm_atomic_state_alloc(drm);
 	if (!state) {
 		ret = -ENOMEM;
 		goto exit;
@@ -89,12 +89,12 @@ retry:
 	ret = drm_atomic_commit(state);
 out:
 	if (ret == -EDEADLK) {
-		drm_atomic_commit_clear(state);
+		drm_atomic_state_clear(state);
 		drm_modeset_backoff(&ctx);
 		goto retry;
 	}
 
-	drm_atomic_commit_put(state);
+	drm_atomic_state_put(state);
 
 	drm_modeset_drop_locks(&ctx);
 	drm_modeset_acquire_fini(&ctx);
@@ -246,7 +246,7 @@ static int gud_connector_get_modes(struct drm_connector *connector)
 	if (drm_edid && edid_ctx.edid_override)
 		goto out;
 
-	reqmodes = kmalloc_objs(*reqmodes, GUD_CONNECTOR_MAX_NUM_MODES);
+	reqmodes = kmalloc_array(GUD_CONNECTOR_MAX_NUM_MODES, sizeof(*reqmodes), GFP_KERNEL);
 	if (!reqmodes)
 		goto out;
 
@@ -285,7 +285,7 @@ out:
 }
 
 static int gud_connector_atomic_check(struct drm_connector *connector,
-				      struct drm_atomic_commit *state)
+				      struct drm_atomic_state *state)
 {
 	struct drm_connector_state *new_state;
 	struct drm_crtc_state *new_crtc_state;
@@ -487,7 +487,7 @@ static int gud_connector_add_properties(struct gud_device *gdrm, struct gud_conn
 	unsigned int i, num_properties;
 	int ret;
 
-	properties = kzalloc_objs(*properties, GUD_CONNECTOR_PROPERTIES_MAX_NUM);
+	properties = kcalloc(GUD_CONNECTOR_PROPERTIES_MAX_NUM, sizeof(*properties), GFP_KERNEL);
 	if (!properties)
 		return -ENOMEM;
 
@@ -569,11 +569,11 @@ static int gud_connector_add_properties(struct gud_device *gdrm, struct gud_conn
 			continue; /* not a DRM property */
 
 		property = gud_connector_property_lookup(connector, prop);
-		if (drm_WARN_ON(drm, IS_ERR(property)))
+		if (WARN_ON(IS_ERR(property)))
 			continue;
 
 		state_val = gud_connector_tv_state_val(prop, &gconn->initial_tv_state);
-		if (drm_WARN_ON(drm, IS_ERR(state_val)))
+		if (WARN_ON(IS_ERR(state_val)))
 			continue;
 
 		*state_val = val;
@@ -601,7 +601,7 @@ int gud_connector_fill_properties(struct drm_connector_state *connector_state,
 			unsigned int *state_val;
 
 			state_val = gud_connector_tv_state_val(prop, &connector_state->tv);
-			if (drm_WARN_ON_ONCE(connector_state->connector->dev, IS_ERR(state_val)))
+			if (WARN_ON_ONCE(IS_ERR(state_val)))
 				return PTR_ERR(state_val);
 
 			val = *state_val;
@@ -627,7 +627,7 @@ static int gud_connector_create(struct gud_device *gdrm, unsigned int index,
 	int ret, connector_type;
 	u32 flags;
 
-	gconn = kzalloc_obj(*gconn);
+	gconn = kzalloc(sizeof(*gconn), GFP_KERNEL);
 	if (!gconn)
 		return -ENOMEM;
 
@@ -675,7 +675,7 @@ static int gud_connector_create(struct gud_device *gdrm, unsigned int index,
 		return ret;
 	}
 
-	if (drm_WARN_ON(drm, connector->index != index))
+	if (WARN_ON(connector->index != index))
 		return -EINVAL;
 
 	if (flags & GUD_CONNECTOR_FLAGS_POLL_STATUS)
@@ -706,7 +706,7 @@ int gud_get_connectors(struct gud_device *gdrm)
 	unsigned int i, num_connectors;
 	int ret;
 
-	descs = kmalloc_objs(*descs, GUD_CONNECTORS_MAX_NUM);
+	descs = kmalloc_array(GUD_CONNECTORS_MAX_NUM, sizeof(*descs), GFP_KERNEL);
 	if (!descs)
 		return -ENOMEM;
 

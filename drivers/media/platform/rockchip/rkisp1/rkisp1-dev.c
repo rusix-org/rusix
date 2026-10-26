@@ -187,6 +187,7 @@ static int rkisp1_subdev_notifier_register(struct rkisp1_device *rkisp1)
 {
 	struct v4l2_async_notifier *ntf = &rkisp1->notifier;
 	struct fwnode_handle *fwnode = dev_fwnode(rkisp1->dev);
+	struct fwnode_handle *ep;
 	unsigned int index = 0;
 	int ret = 0;
 
@@ -194,7 +195,7 @@ static int rkisp1_subdev_notifier_register(struct rkisp1_device *rkisp1)
 
 	ntf->ops = &rkisp1_subdev_notifier_ops;
 
-	fwnode_graph_for_each_endpoint_scoped(fwnode, ep) {
+	fwnode_graph_for_each_endpoint(fwnode, ep) {
 		struct fwnode_handle *port;
 		struct v4l2_fwnode_endpoint vep = { };
 		struct rkisp1_sensor_async *rk_asd;
@@ -285,6 +286,7 @@ static int rkisp1_subdev_notifier_register(struct rkisp1_device *rkisp1)
 	}
 
 	if (ret) {
+		fwnode_handle_put(ep);
 		v4l2_async_nf_cleanup(ntf);
 		return ret;
 	}

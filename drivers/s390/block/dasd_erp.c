@@ -120,7 +120,7 @@ dasd_default_erp_action(struct dasd_ccw_req *cqr)
  */
 struct dasd_ccw_req *dasd_default_erp_postaction(struct dasd_ccw_req *cqr)
 {
-	int success, aborted;
+	int success;
 	unsigned long startclk, stopclk;
 	struct dasd_device *startdev;
 	unsigned int proc_bytes;
@@ -128,7 +128,6 @@ struct dasd_ccw_req *dasd_default_erp_postaction(struct dasd_ccw_req *cqr)
 	BUG_ON(cqr->refers == NULL || cqr->function == NULL);
 
 	success = cqr->status == DASD_CQR_DONE;
-	aborted = cqr->status == DASD_CQR_ABORTED;
 	startclk = cqr->startclk;
 	stopclk = cqr->stopclk;
 	startdev = cqr->startdev;
@@ -151,10 +150,7 @@ struct dasd_ccw_req *dasd_default_erp_postaction(struct dasd_ccw_req *cqr)
 	cqr->stopclk = stopclk;
 	cqr->startdev = startdev;
 	cqr->proc_bytes = proc_bytes;
-	if (aborted)
-		/* base request is owned by the ESE format replacement CQR */
-		cqr->status = DASD_CQR_ABORTED;
-	else if (success)
+	if (success)
 		cqr->status = DASD_CQR_DONE;
 	else {
 		cqr->status = DASD_CQR_FAILED;

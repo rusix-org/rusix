@@ -23,14 +23,11 @@ struct bsg_set {
 	struct bsg_device	*bd;
 	bsg_job_fn		*job_fn;
 	bsg_timeout_fn		*timeout_fn;
-	unsigned int		reply_len;
 };
 
 static int bsg_transport_sg_io_fn(struct request_queue *q, struct sg_io_v4 *hdr,
 		bool open_for_write, unsigned int timeout)
 {
-	struct bsg_set *bset =
-		container_of(q->tag_set, struct bsg_set, tag_set);
 	struct bsg_job *job;
 	struct request *rq;
 	struct bio *bio;
@@ -53,7 +50,7 @@ static int bsg_transport_sg_io_fn(struct request_queue *q, struct sg_io_v4 *hdr,
 	reply = job->reply;
 	memset(job, 0, sizeof(*job));
 	job->reply = reply;
-	job->reply_len = bset->reply_len;
+	job->reply_len = SCSI_SENSE_BUFFERSIZE;
 	job->dd_data = job + 1;
 
 	job->request_len = hdr->request_len;
@@ -302,12 +299,11 @@ out:
 
 /* called right after the request is allocated for the request_queue */
 static int bsg_init_rq(struct blk_mq_tag_set *set, struct request *req,
-		       unsigned int hctx_idx, int numa_node)
+		       unsigned int hctx_idx, unsigned int numa_node)
 {
-	struct bsg_set *bset = container_of(set, struct bsg_set, tag_set);
 	struct bsg_job *job = blk_mq_rq_to_pdu(req);
 
-	job->reply = kzalloc(bset->reply_len, GFP_KERNEL);
+	job->reply = kzalloc(SCSI_SENSE_BUFFERSIZE, GFP_KERNEL);
 	if (!job->reply)
 		return -ENOMEM;
 	return 0;
@@ -362,25 +358,22 @@ static const struct blk_mq_ops bsg_mq_ops = {
  * @job_fn: bsg job handler
  * @timeout: timeout handler function pointer
  * @dd_job_size: size of LLD data needed for each job
- * @reply_len: size of the reply buffer needed for each job
  */
 struct request_queue *bsg_setup_queue(struct device *dev, const char *name,
 		struct queue_limits *lim, bsg_job_fn *job_fn,
-		bsg_timeout_fn *timeout, int dd_job_size,
-		unsigned int reply_len)
+		bsg_timeout_fn *timeout, int dd_job_size)
 {
 	struct bsg_set *bset;
 	struct blk_mq_tag_set *set;
 	struct request_queue *q;
 	int ret = -ENOMEM;
 
-	bset = kzalloc_obj(*bset);
+	bset = kzalloc(sizeof(*bset), GFP_KERNEL);
 	if (!bset)
 		return ERR_PTR(-ENOMEM);
 
 	bset->job_fn = job_fn;
 	bset->timeout_fn = timeout;
-	bset->reply_len = reply_len;
 
 	set = &bset->tag_set;
 	set->ops = &bsg_mq_ops;
@@ -400,7 +393,7 @@ struct request_queue *bsg_setup_queue(struct device *dev, const char *name,
 
 	blk_queue_rq_timeout(q, BLK_DEFAULT_SG_TIMEOUT);
 
-	bset->bd = bsg_register_queue(q, dev, name, bsg_transport_sg_io_fn, NULL);
+	bset->bd = bsg_register_queue(q, dev, name, bsg_transport_sg_io_fn);
 	if (IS_ERR(bset->bd)) {
 		ret = PTR_ERR(bset->bd);
 		goto out_cleanup_queue;

@@ -6,7 +6,6 @@
 //          Amadeusz Slawinski <amadeuszx.slawinski@linux.intel.com>
 //
 
-#include <linux/cleanup.h>
 #include <linux/firmware.h>
 #include <linux/kfifo.h>
 #include <linux/slab.h>
@@ -49,12 +48,13 @@ int avs_get_module_entry(struct avs_dev *adev, const guid_t *uuid, struct avs_mo
 {
 	int idx;
 
-	guard(mutex)(&adev->modres_mutex);
+	mutex_lock(&adev->modres_mutex);
 
 	idx = avs_module_entry_index(adev, uuid);
 	if (idx >= 0)
 		memcpy(entry, &adev->mods_info->entries[idx], sizeof(*entry));
 
+	mutex_unlock(&adev->modres_mutex);
 	return (idx < 0) ? idx : 0;
 }
 
@@ -62,12 +62,13 @@ int avs_get_module_id_entry(struct avs_dev *adev, u32 module_id, struct avs_modu
 {
 	int idx;
 
-	guard(mutex)(&adev->modres_mutex);
+	mutex_lock(&adev->modres_mutex);
 
 	idx = avs_module_id_entry_index(adev, module_id);
 	if (idx >= 0)
 		memcpy(entry, &adev->mods_info->entries[idx], sizeof(*entry));
 
+	mutex_unlock(&adev->modres_mutex);
 	return (idx < 0) ? idx : 0;
 }
 
@@ -85,12 +86,13 @@ bool avs_is_module_ida_empty(struct avs_dev *adev, u32 module_id)
 	bool ret = false;
 	int idx;
 
-	guard(mutex)(&adev->modres_mutex);
+	mutex_lock(&adev->modres_mutex);
 
 	idx = avs_module_id_entry_index(adev, module_id);
 	if (idx >= 0)
 		ret = ida_is_empty(adev->mod_idas[idx]);
 
+	mutex_unlock(&adev->modres_mutex);
 	return ret;
 }
 
@@ -116,15 +118,13 @@ avs_module_ida_alloc(struct avs_dev *adev, struct avs_mods_info *newinfo, bool p
 	int i;
 
 	if (!purge && oldinfo) {
-		if (oldinfo->count >= newinfo->count) {
-			dev_warn(adev->dev, "modules info underflow, old: %d, new: %d\n",
+		if (oldinfo->count >= newinfo->count)
+			dev_warn(adev->dev, "refreshing %d modules info with %d\n",
 				 oldinfo->count, newinfo->count);
-			return -EPROTO;
-		}
 		tocopy_count = oldinfo->count;
 	}
 
-	ida_ptrs = kzalloc_objs(*ida_ptrs, newinfo->count);
+	ida_ptrs = kcalloc(newinfo->count, sizeof(*ida_ptrs), GFP_KERNEL);
 	if (!ida_ptrs)
 		return -ENOMEM;
 
@@ -132,7 +132,7 @@ avs_module_ida_alloc(struct avs_dev *adev, struct avs_mods_info *newinfo, bool p
 		memcpy(ida_ptrs, adev->mod_idas, tocopy_count * sizeof(*ida_ptrs));
 
 	for (i = tocopy_count; i < newinfo->count; i++) {
-		ida_ptrs[i] = kzalloc_obj(**ida_ptrs);
+		ida_ptrs[i] = kzalloc(sizeof(**ida_ptrs), GFP_KERNEL);
 		if (!ida_ptrs[i]) {
 			while (i--)
 				kfree(ida_ptrs[i]);
@@ -163,57 +163,68 @@ int avs_module_info_init(struct avs_dev *adev, bool purge)
 	if (ret)
 		return AVS_IPC_RET(ret);
 
-	guard(mutex)(&adev->modres_mutex);
+	mutex_lock(&adev->modres_mutex);
 
 	ret = avs_module_ida_alloc(adev, info, purge);
 	if (ret < 0) {
 		dev_err(adev->dev, "initialize module idas failed: %d\n", ret);
-		return ret;
+		goto exit;
 	}
 
 	/* Refresh current information with newly received table. */
 	kfree(adev->mods_info);
 	adev->mods_info = info;
 
+exit:
+	mutex_unlock(&adev->modres_mutex);
 	return ret;
 }
 
 void avs_module_info_free(struct avs_dev *adev)
 {
-	guard(mutex)(&adev->modres_mutex);
+	mutex_lock(&adev->modres_mutex);
 
 	avs_module_ida_destroy(adev);
 	kfree(adev->mods_info);
 	adev->mods_info = NULL;
+
+	mutex_unlock(&adev->modres_mutex);
 }
 
 int avs_module_id_alloc(struct avs_dev *adev, u16 module_id)
 {
-	int idx, max_id;
+	int ret, idx, max_id;
 
-	guard(mutex)(&adev->modres_mutex);
+	mutex_lock(&adev->modres_mutex);
 
 	idx = avs_module_id_entry_index(adev, module_id);
 	if (idx == -ENOENT) {
 		dev_err(adev->dev, "invalid module id: %d", module_id);
-		return -EINVAL;
+		ret = -EINVAL;
+		goto exit;
 	}
 	max_id = adev->mods_info->entries[idx].instance_max_count - 1;
-
-	return ida_alloc_max(adev->mod_idas[idx], max_id, GFP_KERNEL);
+	ret = ida_alloc_max(adev->mod_idas[idx], max_id, GFP_KERNEL);
+exit:
+	mutex_unlock(&adev->modres_mutex);
+	return ret;
 }
 
 void avs_module_id_free(struct avs_dev *adev, u16 module_id, u8 instance_id)
 {
 	int idx;
 
-	guard(mutex)(&adev->modres_mutex);
+	mutex_lock(&adev->modres_mutex);
 
 	idx = avs_module_id_entry_index(adev, module_id);
-	if (idx == -ENOENT)
+	if (idx == -ENOENT) {
 		dev_err(adev->dev, "invalid module id: %d", module_id);
-	else
-		ida_free(adev->mod_idas[idx], instance_id);
+		goto exit;
+	}
+
+	ida_free(adev->mod_idas[idx], instance_id);
+exit:
+	mutex_unlock(&adev->modres_mutex);
 }
 
 /*
@@ -235,7 +246,7 @@ int avs_request_firmware(struct avs_dev *adev, const struct firmware **fw_p, con
 	}
 
 	/* FW is not loaded, let's load it now and add to the list */
-	entry = kzalloc_obj(*entry);
+	entry = kzalloc(sizeof(*entry), GFP_KERNEL);
 	if (!entry)
 		return -ENOMEM;
 

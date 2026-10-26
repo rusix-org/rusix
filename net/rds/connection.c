@@ -180,7 +180,6 @@ static struct rds_connection *__rds_conn_create(struct net *net,
 	struct rds_connection *conn, *parent = NULL;
 	struct hlist_head *head = rds_conn_bucket(laddr, faddr);
 	struct rds_transport *loop_trans;
-	struct rds_conn_path *free_cp = NULL;
 	unsigned long flags;
 	int ret, i;
 	int npaths = (trans->t_mp_capable ? RDS_MPATH_WORKERS : 1);
@@ -208,7 +207,7 @@ static struct rds_connection *__rds_conn_create(struct net *net,
 		conn = ERR_PTR(-ENOMEM);
 		goto out;
 	}
-	conn->c_path = kzalloc_objs(struct rds_conn_path, npaths, gfp);
+	conn->c_path = kcalloc(npaths, sizeof(struct rds_conn_path), gfp);
 	if (!conn->c_path) {
 		kmem_cache_free(rds_conn_slab, conn);
 		conn = ERR_PTR(-ENOMEM);
@@ -276,22 +275,11 @@ static struct rds_connection *__rds_conn_create(struct net *net,
 
 	conn->c_trans = trans;
 
-	/* The transport may just have been swapped for loopback; size the
-	 * set of paths - which is also what rds_conn_destroy() tears down
-	 * again - by the transport the connection actually uses.
-	 */
-	npaths = (trans->t_mp_capable ? RDS_MPATH_WORKERS : 1);
-
 	init_waitqueue_head(&conn->c_hs_waitq);
 	for (i = 0; i < npaths; i++) {
 		__rds_conn_path_init(conn, &conn->c_path[i],
 				     is_outgoing);
 		conn->c_path[i].cp_index = i;
-		conn->c_path[i].cp_wq =
-			alloc_ordered_workqueue("krds_cp_wq#%lu/%d", 0,
-						rds_conn_count, i);
-		if (!conn->c_path[i].cp_wq)
-			conn->c_path[i].cp_wq = rds_wq;
 	}
 	rcu_read_lock();
 	if (rds_destroy_pending(conn))
@@ -300,7 +288,7 @@ static struct rds_connection *__rds_conn_create(struct net *net,
 		ret = trans->conn_alloc(conn, GFP_ATOMIC);
 	if (ret) {
 		rcu_read_unlock();
-		free_cp = conn->c_path;
+		kfree(conn->c_path);
 		kmem_cache_free(rds_conn_slab, conn);
 		conn = ERR_PTR(ret);
 		goto out;
@@ -323,7 +311,7 @@ static struct rds_connection *__rds_conn_create(struct net *net,
 		/* Creating passive conn */
 		if (parent->c_passive) {
 			trans->conn_free(conn->c_path[0].cp_transport_data);
-			free_cp = conn->c_path;
+			kfree(conn->c_path);
 			kmem_cache_free(rds_conn_slab, conn);
 			conn = parent->c_passive;
 		} else {
@@ -350,7 +338,7 @@ static struct rds_connection *__rds_conn_create(struct net *net,
 				if (cp->cp_transport_data)
 					trans->conn_free(cp->cp_transport_data);
 			}
-			free_cp = conn->c_path;
+			kfree(conn->c_path);
 			kmem_cache_free(rds_conn_slab, conn);
 			conn = found;
 		} else {
@@ -365,13 +353,6 @@ static struct rds_connection *__rds_conn_create(struct net *net,
 	rcu_read_unlock();
 
 out:
-	if (free_cp) {
-		for (i = 0; i < npaths; i++)
-			if (free_cp[i].cp_wq != rds_wq)
-				destroy_workqueue(free_cp[i].cp_wq);
-		kfree(free_cp);
-	}
-
 	return conn;
 }
 
@@ -506,19 +487,10 @@ void rds_conn_shutdown(struct rds_conn_path *cp)
 	rcu_read_lock();
 	if (!hlist_unhashed(&conn->c_hash_node)) {
 		rcu_read_unlock();
-		if (conn->c_trans->t_mp_capable &&
-		    cp->cp_index == 0)
-			rds_send_ping(conn, 0);
 		rds_queue_reconnect(cp);
 	} else {
 		rcu_read_unlock();
 	}
-
-	/* we do not hold the socket lock here but it is safe because
-	 * fan-out is disabled when calling conn_slots_available()
-	 */
-	if (conn->c_trans->conn_slots_available)
-		conn->c_trans->conn_slots_available(conn, false);
 }
 
 /* destroy a single rds_conn_path. rds_conn_destroy() iterates over
@@ -553,11 +525,6 @@ static void rds_conn_path_destroy(struct rds_conn_path *cp)
 	WARN_ON(delayed_work_pending(&cp->cp_recv_w));
 	WARN_ON(delayed_work_pending(&cp->cp_conn_w));
 	WARN_ON(work_pending(&cp->cp_down_w));
-
-	if (cp->cp_wq != rds_wq) {
-		destroy_workqueue(cp->cp_wq);
-		cp->cp_wq = NULL;
-	}
 
 	cp->cp_conn->c_trans->conn_free(cp->cp_transport_data);
 }
@@ -1001,7 +968,7 @@ void rds_conn_path_drop(struct rds_conn_path *cp, bool destroy)
 		rcu_read_unlock();
 		return;
 	}
-	queue_work(cp->cp_wq, &cp->cp_down_w);
+	queue_work(rds_wq, &cp->cp_down_w);
 	rcu_read_unlock();
 }
 EXPORT_SYMBOL_GPL(rds_conn_path_drop);
@@ -1026,7 +993,7 @@ void rds_conn_path_connect_if_down(struct rds_conn_path *cp)
 	}
 	if (rds_conn_path_state(cp) == RDS_CONN_DOWN &&
 	    !test_and_set_bit(RDS_RECONNECT_PENDING, &cp->cp_flags))
-		queue_delayed_work(cp->cp_wq, &cp->cp_conn_w, 0);
+		queue_delayed_work(rds_wq, &cp->cp_conn_w, 0);
 	rcu_read_unlock();
 }
 EXPORT_SYMBOL_GPL(rds_conn_path_connect_if_down);

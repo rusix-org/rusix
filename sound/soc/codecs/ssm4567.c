@@ -369,7 +369,6 @@ static int ssm4567_set_bias_level(struct snd_soc_component *component,
 	enum snd_soc_bias_level level)
 {
 	struct ssm4567 *ssm4567 = snd_soc_component_get_drvdata(component);
-	struct snd_soc_dapm_context *dapm = snd_soc_component_to_dapm(component);
 	int ret = 0;
 
 	switch (level) {
@@ -378,7 +377,7 @@ static int ssm4567_set_bias_level(struct snd_soc_component *component,
 	case SND_SOC_BIAS_PREPARE:
 		break;
 	case SND_SOC_BIAS_STANDBY:
-		if (snd_soc_dapm_get_bias_level(dapm) == SND_SOC_BIAS_OFF)
+		if (snd_soc_component_get_bias_level(component) == SND_SOC_BIAS_OFF)
 			ret = ssm4567_set_power(ssm4567, true);
 		break;
 	case SND_SOC_BIAS_OFF:
@@ -389,24 +388,11 @@ static int ssm4567_set_bias_level(struct snd_soc_component *component,
 	return ret;
 }
 
-static const u64 ssm4567_selectable_formats =
-	SND_SOC_POSSIBLE_DAIFMT_I2S	|
-	SND_SOC_POSSIBLE_DAIFMT_LEFT_J	|
-	SND_SOC_POSSIBLE_DAIFMT_DSP_A	|
-	SND_SOC_POSSIBLE_DAIFMT_DSP_B	|
-	SND_SOC_POSSIBLE_DAIFMT_PDM	|
-	SND_SOC_POSSIBLE_DAIFMT_NB_NF	|
-	SND_SOC_POSSIBLE_DAIFMT_NB_IF	|
-	SND_SOC_POSSIBLE_DAIFMT_IB_NF	|
-	SND_SOC_POSSIBLE_DAIFMT_IB_IF;
-
 static const struct snd_soc_dai_ops ssm4567_dai_ops = {
 	.hw_params	= ssm4567_hw_params,
 	.mute_stream	= ssm4567_mute,
 	.set_fmt	= ssm4567_set_dai_fmt,
 	.set_tdm_slot	= ssm4567_set_tdm_slot,
-	.auto_selectable_formats	= &ssm4567_selectable_formats,
-	.num_auto_selectable_formats	= 1,
 	.no_capture_mute = 1,
 };
 
@@ -485,7 +471,7 @@ static int ssm4567_i2c_probe(struct i2c_client *i2c)
 }
 
 static const struct i2c_device_id ssm4567_i2c_ids[] = {
-	{ .name = "ssm4567" },
+	{ "ssm4567" },
 	{ }
 };
 MODULE_DEVICE_TABLE(i2c, ssm4567_i2c_ids);

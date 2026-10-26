@@ -199,7 +199,7 @@ static struct auxiliary_device *adev_alloc(struct peci_cpu *priv, int idx)
 	const char *name;
 	int ret;
 
-	adev = kzalloc_obj(*adev);
+	adev = kzalloc(sizeof(*adev), GFP_KERNEL);
 	if (!adev)
 		return ERR_PTR(-ENOMEM);
 
@@ -320,10 +320,6 @@ static const struct peci_device_id peci_cpu_device_ids[] = {
 	{ /* Sapphire Rapids Xeon */
 		.x86_vfm = INTEL_SAPPHIRERAPIDS_X,
 		.data	= "spr",
-	},
-	{ /* Emerald Rapids Xeon */
-		.x86_vfm  = INTEL_EMERALDRAPIDS_X,
-		.data  = "emr",
 	},
 	{ }
 };

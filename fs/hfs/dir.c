@@ -155,7 +155,7 @@ static int hfs_readdir(struct file *file, struct dir_context *ctx)
 			goto out;
 	}
 	if (!rd) {
-		rd = kmalloc_obj(struct hfs_readdir_data);
+		rd = kmalloc(sizeof(struct hfs_readdir_data), GFP_KERNEL);
 		if (!rd) {
 			err = -ENOMEM;
 			goto out;
@@ -183,8 +183,8 @@ static int hfs_dir_release(struct inode *inode, struct file *file)
  * a directory and return a corresponding inode, given the inode for
  * the directory and the name (and its length) of the new file.
  */
-static int hfs_create(const struct mnt_idmap *idmap, struct inode *dir,
-		      struct dentry *dentry, umode_t mode)
+static int hfs_create(struct mnt_idmap *idmap, struct inode *dir,
+		      struct dentry *dentry, umode_t mode, bool excl)
 {
 	struct inode *inode;
 	int res;
@@ -213,13 +213,13 @@ static int hfs_create(const struct mnt_idmap *idmap, struct inode *dir,
  * in a directory, given the inode for the parent directory and the
  * name (and its length) of the new directory.
  */
-static struct dentry *hfs_mkdir(const struct mnt_idmap *idmap, struct inode *dir,
+static struct dentry *hfs_mkdir(struct mnt_idmap *idmap, struct inode *dir,
 				struct dentry *dentry, umode_t mode)
 {
 	struct inode *inode;
 	int res;
 
-	inode = hfs_new_inode(dir, &dentry->d_name, mode);
+	inode = hfs_new_inode(dir, &dentry->d_name, S_IFDIR | mode);
 	if (IS_ERR(inode))
 		return ERR_CAST(inode);
 
@@ -281,7 +281,7 @@ static int hfs_remove(struct inode *dir, struct dentry *dentry)
  * new file/directory.
  * XXX: how do you handle must_be dir?
  */
-static int hfs_rename(const struct mnt_idmap *idmap, struct inode *old_dir,
+static int hfs_rename(struct mnt_idmap *idmap, struct inode *old_dir,
 		      struct dentry *old_dentry, struct inode *new_dir,
 		      struct dentry *new_dentry, unsigned int flags)
 {
@@ -300,15 +300,10 @@ static int hfs_rename(const struct mnt_idmap *idmap, struct inode *old_dir,
 	res = hfs_cat_move(d_inode(old_dentry)->i_ino,
 			   old_dir, &old_dentry->d_name,
 			   new_dir, &new_dentry->d_name);
-	if (!res) {
-		struct inode *inode = d_inode(old_dentry);
-
+	if (!res)
 		hfs_cat_build_key(old_dir->i_sb,
-				  (btree_key *)&HFS_I(inode)->cat_key,
+				  (btree_key *)&HFS_I(d_inode(old_dentry))->cat_key,
 				  new_dir->i_ino, &new_dentry->d_name);
-		inode_set_ctime_current(inode);
-		mark_inode_dirty(inode);
-	}
 	return res;
 }
 
@@ -327,5 +322,4 @@ const struct inode_operations hfs_dir_inode_operations = {
 	.rmdir		= hfs_remove,
 	.rename		= hfs_rename,
 	.setattr	= hfs_inode_setattr,
-	.fileattr_get	= hfs_fileattr_get,
 };

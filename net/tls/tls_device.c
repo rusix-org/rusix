@@ -143,7 +143,7 @@ static void destroy_record(struct tls_record_info *record)
 	int i;
 
 	for (i = 0; i < record->num_frags; i++)
-		netmem_dec_ref(skb_frag_netmem(&record->frags[i]));
+		__skb_frag_unref(&record->frags[i], false);
 	kfree(record);
 }
 
@@ -346,7 +346,7 @@ static int tls_create_new_record(struct tls_offload_context_tx *offload_ctx,
 	struct tls_record_info *record;
 	skb_frag_t *frag;
 
-	record = kmalloc_obj(*record);
+	record = kmalloc(sizeof(*record), GFP_KERNEL);
 	if (!record)
 		return -ENOMEM;
 
@@ -373,8 +373,7 @@ static int tls_do_allocation(struct sock *sk,
 	if (!offload_ctx->open_record) {
 		if (unlikely(!skb_page_frag_refill(prepend_size, pfrag,
 						   sk->sk_allocation))) {
-			if (!sk->sk_bypass_prot_mem)
-				READ_ONCE(sk->sk_prot)->enter_memory_pressure(sk);
+			READ_ONCE(sk->sk_prot)->enter_memory_pressure(sk);
 			sk_stream_moderate_sndbuf(sk);
 			return -ENOMEM;
 		}
@@ -462,7 +461,7 @@ static int tls_push_data(struct sock *sk,
 	/* TLS_HEADER_SIZE is not counted as part of the TLS record, and
 	 * we need to leave room for an authentication tag.
 	 */
-	max_open_record_len = tls_ctx->tx_max_payload_len +
+	max_open_record_len = TLS_MAX_PAYLOAD_SIZE +
 			      prot->prepend_size;
 	do {
 		rc = tls_do_allocation(sk, ctx, pfrag, prot->prepend_size);
@@ -783,15 +782,8 @@ void tls_device_rx_resync_new_rec(struct sock *sk, u32 rcd_len, u32 seq)
 
 	if (tls_ctx->rx_conf != TLS_HW)
 		return;
-
-	/* The parser also runs in process context, without an RCU read lock.
-	 * Protect the driver's resync_async state before checking the flags:
-	 * device-down sets DEGRADED and waits for synchronize_net() before
-	 * freeing it, without taking the socket lock.
-	 */
-	rcu_read_lock();
 	if (unlikely(test_bit(TLS_RX_DEV_DEGRADED, &tls_ctx->flags)))
-		goto out;
+		return;
 
 	prot = &tls_ctx->prot_info;
 	rx_ctx = tls_offload_ctx_rx(tls_ctx);
@@ -806,11 +798,11 @@ void tls_device_rx_resync_new_rec(struct sock *sk, u32 rcd_len, u32 seq)
 
 		if (likely(!is_req_pending) || req_seq != seq ||
 		    !atomic64_try_cmpxchg(&rx_ctx->resync_req, &resync_req, 0))
-			goto out;
+			return;
 		break;
 	case TLS_OFFLOAD_SYNC_TYPE_CORE_NEXT_HINT:
 		if (likely(!rx_ctx->resync_nh_do_now))
-			goto out;
+			return;
 
 		/* head of next rec is already in, note that the sock_inq will
 		 * include the currently parsed message when called from parser
@@ -819,7 +811,7 @@ void tls_device_rx_resync_new_rec(struct sock *sk, u32 rcd_len, u32 seq)
 		if (sock_data > rcd_len) {
 			trace_tls_device_rx_resync_nh_delay(sk, sock_data,
 							    rcd_len);
-			goto out;
+			return;
 		}
 
 		rx_ctx->resync_nh_do_now = 0;
@@ -830,18 +822,16 @@ void tls_device_rx_resync_new_rec(struct sock *sk, u32 rcd_len, u32 seq)
 		resync_req = atomic64_read(&rx_ctx->resync_async->req);
 		is_req_pending = resync_req;
 		if (likely(!is_req_pending))
-			goto out;
+			return;
 
 		if (!tls_device_rx_resync_async(rx_ctx->resync_async,
 						resync_req, &seq, &rcd_delta))
-			goto out;
+			return;
 		tls_bigint_subtract(rcd_sn, rcd_delta);
 		break;
 	}
 
 	tls_device_resync_rx(tls_ctx, sk, seq, rcd_sn);
-out:
-	rcu_read_unlock();
 }
 
 static void tls_device_core_ctrl_rx_resync(struct tls_context *tls_ctx,
@@ -1052,7 +1042,7 @@ static struct tls_offload_context_tx *alloc_offload_ctx_tx(struct tls_context *c
 	struct tls_offload_context_tx *offload_ctx;
 	__be64 rcd_sn;
 
-	offload_ctx = kzalloc_obj(*offload_ctx);
+	offload_ctx = kzalloc(sizeof(*offload_ctx), GFP_KERNEL);
 	if (!offload_ctx)
 		return NULL;
 
@@ -1122,7 +1112,7 @@ int tls_set_device_offload(struct sock *sk)
 	memcpy(ctx->tx.iv + cipher_desc->salt, iv, cipher_desc->iv);
 	memcpy(ctx->tx.rec_seq, rec_seq, cipher_desc->rec_seq);
 
-	start_marker_record = kmalloc_obj(*start_marker_record);
+	start_marker_record = kmalloc(sizeof(*start_marker_record), GFP_KERNEL);
 	if (!start_marker_record) {
 		rc = -ENOMEM;
 		goto release_netdev;
@@ -1236,7 +1226,7 @@ int tls_set_device_offload_rx(struct sock *sk, struct tls_context *ctx)
 		goto release_lock;
 	}
 
-	context = kzalloc_obj(*context);
+	context = kzalloc(sizeof(*context), GFP_KERNEL);
 	if (!context) {
 		rc = -ENOMEM;
 		goto release_lock;
@@ -1399,15 +1389,16 @@ static int tls_dev_event(struct notifier_block *this, unsigned long event,
 	case NETDEV_FEAT_CHANGE:
 		if (netif_is_bond_master(dev))
 			return NOTIFY_DONE;
-		if  (!dev->tlsdev_ops ||
-		     !dev->tlsdev_ops->tls_dev_add ||
-		     !dev->tlsdev_ops->tls_dev_del)
-			return NOTIFY_BAD;
 		if ((dev->features & NETIF_F_HW_TLS_RX) &&
 		    !dev->tlsdev_ops->tls_dev_resync)
 			return NOTIFY_BAD;
 
-		return NOTIFY_DONE;
+		if  (dev->tlsdev_ops &&
+		     dev->tlsdev_ops->tls_dev_add &&
+		     dev->tlsdev_ops->tls_dev_del)
+			return NOTIFY_DONE;
+		else
+			return NOTIFY_BAD;
 	case NETDEV_DOWN:
 		return tls_device_down(dev);
 	}

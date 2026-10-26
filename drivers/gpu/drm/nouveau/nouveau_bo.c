@@ -144,7 +144,7 @@ nouveau_bo_del_ttm(struct ttm_buffer_object *bo)
 	nouveau_bo_del_io_reserve_lru(bo);
 	nv10_bo_put_tile_region(dev, nvbo->tile, NULL);
 
-	if (drm_gem_is_imported(&bo->base))
+	if (bo->base.import_attach)
 		drm_prime_gem_destroy(&bo->base, bo->sg);
 
 	/*
@@ -222,7 +222,7 @@ nouveau_bo_alloc(struct nouveau_cli *cli, u64 *size, int *align, u32 domain,
 		return ERR_PTR(-EINVAL);
 	}
 
-	nvbo = kzalloc_obj(struct nouveau_bo);
+	nvbo = kzalloc(sizeof(struct nouveau_bo), GFP_KERNEL);
 	if (!nvbo)
 		return ERR_PTR(-ENOMEM);
 

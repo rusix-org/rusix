@@ -428,7 +428,7 @@ static void set_aperture(struct pm2fb_par *p, u32 depth)
 	}
 #endif
 
-	/* We don't use aperture two, so this may be superfluous */
+	/* We don't use aperture two, so this may be superflous */
 	pm2_WR(p, PM2R_APERTURE_TWO, PM2F_APERTURE_STANDARD);
 }
 
@@ -1749,10 +1749,13 @@ static void pm2fb_remove(struct pci_dev *pdev)
 }
 
 static const struct pci_device_id pm2fb_id_table[] = {
-	{ PCI_VDEVICE(TI, PCI_DEVICE_ID_TI_TVP4020) },
-	{ PCI_VDEVICE(3DLABS, PCI_DEVICE_ID_3DLABS_PERMEDIA2) },
-	{ PCI_VDEVICE(3DLABS, PCI_DEVICE_ID_3DLABS_PERMEDIA2V) },
-	{ }
+	{ PCI_VENDOR_ID_TI, PCI_DEVICE_ID_TI_TVP4020,
+	  PCI_ANY_ID, PCI_ANY_ID, 0, 0, 0 },
+	{ PCI_VENDOR_ID_3DLABS, PCI_DEVICE_ID_3DLABS_PERMEDIA2,
+	  PCI_ANY_ID, PCI_ANY_ID, 0, 0, 0 },
+	{ PCI_VENDOR_ID_3DLABS, PCI_DEVICE_ID_3DLABS_PERMEDIA2V,
+	  PCI_ANY_ID, PCI_ANY_ID, 0, 0, 0 },
+	{ 0, }
 };
 
 static struct pci_driver pm2fb_driver = {

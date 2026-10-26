@@ -1810,10 +1810,10 @@ doc_probe_device(struct docg3_cascade *cascade, int floor, struct device *dev)
 	struct mtd_info *mtd;
 
 	ret = -ENOMEM;
-	docg3 = kzalloc_obj(struct docg3);
+	docg3 = kzalloc(sizeof(struct docg3), GFP_KERNEL);
 	if (!docg3)
 		goto nomem1;
-	mtd = kzalloc_obj(struct mtd_info);
+	mtd = kzalloc(sizeof(struct mtd_info), GFP_KERNEL);
 	if (!mtd)
 		goto nomem2;
 	mtd->priv = docg3;
@@ -1884,7 +1884,7 @@ static void doc_release_device(struct mtd_info *mtd)
 
 /**
  * docg3_resume - Awakens docg3 floor
- * @pdev: platform device
+ * @pdev: platfrom device
  *
  * Returns 0 (always successful)
  */
@@ -1963,7 +1963,7 @@ static int docg3_suspend(struct platform_device *pdev, pm_message_t state)
  * @pdev: platform device
  *
  * Probes for a G3 chip at the specified IO space in the platform data
- * resources. The floor 0 must be available.
+ * ressources. The floor 0 must be available.
  *
  * Returns 0 on success, -ENOMEM, -ENXIO on error
  */
@@ -1971,15 +1971,25 @@ static int __init docg3_probe(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
 	struct mtd_info *mtd;
+	struct resource *ress;
 	void __iomem *base;
 	int ret, floor;
 	struct docg3_cascade *cascade;
 
-	base = devm_platform_ioremap_resource(pdev, 0);
-	if (IS_ERR(base))
-		return PTR_ERR(base);
+	ret = -ENXIO;
+	ress = platform_get_resource(pdev, IORESOURCE_MEM, 0);
+	if (!ress) {
+		dev_err(dev, "No I/O memory resource defined\n");
+		return ret;
+	}
 
 	ret = -ENOMEM;
+	base = devm_ioremap(dev, ress->start, DOC_IOSPACE_SIZE);
+	if (!base) {
+		dev_err(dev, "devm_ioremap dev failed\n");
+		return ret;
+	}
+
 	cascade = devm_kcalloc(dev, DOC_MAX_NBFLOORS, sizeof(*cascade),
 			       GFP_KERNEL);
 	if (!cascade)

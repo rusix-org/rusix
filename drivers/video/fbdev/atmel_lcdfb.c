@@ -21,6 +21,7 @@
 #include <linux/gpio/consumer.h>
 #include <linux/module.h>
 #include <linux/of.h>
+#include <linux/of_device.h>
 #include <video/of_videomode.h>
 #include <video/of_display_timing.h>
 #include <linux/regulator/consumer.h>
@@ -55,7 +56,7 @@ struct atmel_lcdfb_info {
 
 	struct atmel_lcdfb_pdata pdata;
 
-	const struct atmel_lcdfb_config *config;
+	struct atmel_lcdfb_config *config;
 	struct regulator	*reg_lcd;
 };
 
@@ -929,7 +930,8 @@ static int atmel_lcdfb_of_init(struct atmel_lcdfb_info *sinfo)
 	int ret;
 	int i;
 
-	sinfo->config = of_device_get_match_data(dev);
+	sinfo->config = (struct atmel_lcdfb_config*)
+		of_match_device(atmel_lcdfb_dt_ids, dev)->data;
 
 	display_np = of_parse_phandle(np, "display", 0);
 	if (!display_np) {
@@ -1060,7 +1062,7 @@ static int atmel_lcdfb_probe(struct platform_device *pdev)
 	info->fbops = &atmel_lcdfb_ops;
 
 	info->fix = atmel_lcdfb_fix;
-	strscpy(info->fix.id, sinfo->pdev->name);
+	strcpy(info->fix.id, sinfo->pdev->name);
 
 	/* Enable LCDC Clocks */
 	sinfo->bus_clk = clk_get(dev, "hclk");
@@ -1146,15 +1148,16 @@ static int atmel_lcdfb_probe(struct platform_device *pdev)
 	/* Initialize PWM for contrast or backlight ("off") */
 	init_contrast(sinfo);
 
-	/* Some LCDC recovery operations require process context. */
-	INIT_WORK(&sinfo->task, atmel_lcdfb_task);
-
 	/* interrupt */
 	ret = request_irq(sinfo->irq_base, atmel_lcdfb_interrupt, 0, pdev->name, info);
 	if (ret) {
 		dev_err(dev, "request_irq failed: %d\n", ret);
 		goto unmap_mmio;
 	}
+
+	/* Some operations on the LCDC might sleep and
+	 * require a preemptible task context */
+	INIT_WORK(&sinfo->task, atmel_lcdfb_task);
 
 	ret = atmel_lcdfb_init_fbinfo(sinfo);
 	if (ret < 0) {
@@ -1191,8 +1194,8 @@ reset_drvdata:
 	dev_set_drvdata(dev, NULL);
 	fb_dealloc_cmap(&info->cmap);
 unregister_irqs:
-	free_irq(sinfo->irq_base, info);
 	cancel_work_sync(&sinfo->task);
+	free_irq(sinfo->irq_base, info);
 unmap_mmio:
 	exit_backlight(sinfo);
 	iounmap(sinfo->mmio);
@@ -1229,7 +1232,6 @@ static void atmel_lcdfb_remove(struct platform_device *pdev)
 		return;
 	sinfo = info->par;
 
-	free_irq(sinfo->irq_base, info);
 	cancel_work_sync(&sinfo->task);
 	exit_backlight(sinfo);
 	atmel_lcdfb_power_control(sinfo, 0);
@@ -1238,6 +1240,7 @@ static void atmel_lcdfb_remove(struct platform_device *pdev)
 	clk_put(sinfo->lcdc_clk);
 	clk_put(sinfo->bus_clk);
 	fb_dealloc_cmap(&info->cmap);
+	free_irq(sinfo->irq_base, info);
 	iounmap(sinfo->mmio);
  	release_mem_region(info->fix.mmio_start, info->fix.mmio_len);
 	if (platform_get_resource(pdev, IORESOURCE_MEM, 1)) {

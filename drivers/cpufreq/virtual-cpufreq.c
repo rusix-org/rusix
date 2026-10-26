@@ -164,11 +164,14 @@ static int virt_cpufreq_get_freq_info(struct cpufreq_policy *policy)
 		policy->cpuinfo.min_freq = 1;
 		policy->cpuinfo.max_freq = virt_cpufreq_get_perftbl_entry(policy->cpu, 0);
 
-		policy->cur = policy->cpuinfo.max_freq;
+		policy->min = policy->cpuinfo.min_freq;
+		policy->max = policy->cpuinfo.max_freq;
+
+		policy->cur = policy->max;
 		return 0;
 	}
 
-	table = kzalloc_objs(*table, num_perftbl_entries + 1);
+	table = kcalloc(num_perftbl_entries + 1, sizeof(*table), GFP_KERNEL);
 	if (!table)
 		return -ENOMEM;
 

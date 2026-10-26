@@ -120,7 +120,7 @@ struct mock_phc *mock_phc_create(struct device *dev)
 	struct mock_phc *phc;
 	int err;
 
-	phc = kzalloc_obj(*phc);
+	phc = kzalloc(sizeof(*phc), GFP_KERNEL);
 	if (!phc) {
 		err = -ENOMEM;
 		goto out;

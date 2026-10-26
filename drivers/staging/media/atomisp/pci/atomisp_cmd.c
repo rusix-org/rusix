@@ -811,7 +811,7 @@ void atomisp_buf_done(struct atomisp_sub_device *asd, int error,
 			/* New global dvs 6axis config should be blocked
 			 * here if there's a buffer with per-frame parameters
 			 * pending in CSS frame buffer queue.
-			 * This is to avoid zooming vibration since global
+			 * This is to aviod zooming vibration since global
 			 * parameters take effect immediately while
 			 * per-frame parameters are taken after previous
 			 * buffers in CSS got processed.
@@ -974,7 +974,7 @@ irqreturn_t atomisp_isr_thread(int irq, void *isp_ptr)
 	 * to a FIFO, then process the event in the FIFO.
 	 * This will not have issue in single stream mode, but it do have some
 	 * issue in multiple stream case. The issue is that
-	 * ia_css_pipe_dequeue_buffer() will not return the correct buffer in
+	 * ia_css_pipe_dequeue_buffer() will not return the corrent buffer in
 	 * a specific pipe.
 	 *
 	 * This is due to ia_css_pipe_dequeue_buffer() does not take the
@@ -1380,10 +1380,8 @@ static void atomisp_update_grid_info(struct atomisp_sub_device *asd,
 	if (atomisp_css_get_grid_info(asd, pipe_id))
 		return;
 
-	/*
-	 * We must free all buffers because they no longer match
-	 * the grid size.
-	 */
+	/* We must free all buffers because they no longer match
+	   the grid size. */
 	atomisp_css_free_stat_buffers(asd);
 
 	err = atomisp_alloc_css_stat_bufs(asd, ATOMISP_INPUT_STREAM_GENERAL);
@@ -1395,10 +1393,8 @@ static void atomisp_update_grid_info(struct atomisp_sub_device *asd,
 	if (atomisp_alloc_3a_output_buf(asd)) {
 		/* Failure for 3A buffers does not influence DIS buffers */
 		if (asd->params.s3a_output_bytes != 0) {
-			/*
-			 * For SOC sensor happens s3a_output_bytes == 0,
-			 * using if condition to exclude false error log
-			 */
+			/* For SOC sensor happens s3a_output_bytes == 0,
+			 * using if condition to exclude false error log */
 			dev_err(isp->dev, "Failed to allocate memory for 3A statistics\n");
 		}
 		goto err;
@@ -1419,6 +1415,7 @@ static void atomisp_update_grid_info(struct atomisp_sub_device *asd,
 
 err:
 	atomisp_css_free_stat_buffers(asd);
+	return;
 }
 
 static void atomisp_curr_user_grid_info(struct atomisp_sub_device *asd,
@@ -1578,7 +1575,7 @@ int atomisp_set_dis_vector(struct atomisp_sub_device *asd,
 }
 
 /*
- * Function to set/get image stabilization statistics
+ * Function to set/get image stablization statistics
  */
 int atomisp_get_dis_stat(struct atomisp_sub_device *asd,
 			 struct atomisp_dis_statistics *stats)
@@ -1689,11 +1686,9 @@ int atomisp_3a_stat(struct atomisp_sub_device *asd, int flag,
 		return -EINVAL;
 
 	if (atomisp_compare_grid(asd, &config->grid_info) != 0) {
-		/*
-		 * If the grid info in the argument differs from the current
-		 * grid info, we tell the caller to reset the grid size and
-		 * try again.
-		 */
+		/* If the grid info in the argument differs from the current
+		   grid info, we tell the caller to reset the grid size and
+		   try again. */
 		return -EAGAIN;
 	}
 
@@ -1767,13 +1762,15 @@ int atomisp_calculate_real_zoom_region(struct atomisp_sub_device *asd,
 		return -EINVAL;
 	}
 
-	if (dz_config->zoom_region.width == asd->sensor_array_res.width ||
-	    dz_config->zoom_region.height == asd->sensor_array_res.height) {
+	if (dz_config->zoom_region.resolution.width
+	    == asd->sensor_array_res.width
+	    || dz_config->zoom_region.resolution.height
+	    == asd->sensor_array_res.height) {
 		/*no need crop region*/
-		dz_config->zoom_region.left = 0;
-		dz_config->zoom_region.top = 0;
-		dz_config->zoom_region.width = eff_res.width;
-		dz_config->zoom_region.height = eff_res.height;
+		dz_config->zoom_region.origin.x = 0;
+		dz_config->zoom_region.origin.y = 0;
+		dz_config->zoom_region.resolution.width = eff_res.width;
+		dz_config->zoom_region.resolution.height = eff_res.height;
 		return 0;
 	}
 
@@ -1784,14 +1781,18 @@ int atomisp_calculate_real_zoom_region(struct atomisp_sub_device *asd,
 	 */
 
 	if (!IS_ISP2401) {
-		dz_config->zoom_region.left = dz_config->zoom_region.left *
-					      eff_res.width / asd->sensor_array_res.width;
-		dz_config->zoom_region.top = dz_config->zoom_region.top *
-					     eff_res.height / asd->sensor_array_res.height;
-		dz_config->zoom_region.width = dz_config->zoom_region.width *
-					       eff_res.width / asd->sensor_array_res.width;
-		dz_config->zoom_region.height = dz_config->zoom_region.height *
-						eff_res.height / asd->sensor_array_res.height;
+		dz_config->zoom_region.origin.x = dz_config->zoom_region.origin.x
+						  * eff_res.width
+						  / asd->sensor_array_res.width;
+		dz_config->zoom_region.origin.y = dz_config->zoom_region.origin.y
+						  * eff_res.height
+						  / asd->sensor_array_res.height;
+		dz_config->zoom_region.resolution.width = dz_config->zoom_region.resolution.width
+							  * eff_res.width
+							  / asd->sensor_array_res.width;
+		dz_config->zoom_region.resolution.height = dz_config->zoom_region.resolution.height
+							  * eff_res.height
+							  / asd->sensor_array_res.height;
 		/*
 		 * Set same ratio of crop region resolution and current pipe output
 		 * resolution
@@ -1818,62 +1819,62 @@ int atomisp_calculate_real_zoom_region(struct atomisp_sub_device *asd,
 				   - asd->sensor_array_res.width
 				   * out_res.height / out_res.width;
 			h_offset = h_offset / 2;
-			if (dz_config->zoom_region.top < h_offset)
-				dz_config->zoom_region.top = 0;
+			if (dz_config->zoom_region.origin.y < h_offset)
+				dz_config->zoom_region.origin.y = 0;
 			else
-				dz_config->zoom_region.top =
-					dz_config->zoom_region.top - h_offset;
+				dz_config->zoom_region.origin.y = dz_config->zoom_region.origin.y - h_offset;
 			w_offset = 0;
 		} else {
 			w_offset = asd->sensor_array_res.width
 				   - asd->sensor_array_res.height
 				   * out_res.width / out_res.height;
 			w_offset = w_offset / 2;
-			if (dz_config->zoom_region.left < w_offset)
-				dz_config->zoom_region.left = 0;
+			if (dz_config->zoom_region.origin.x < w_offset)
+				dz_config->zoom_region.origin.x = 0;
 			else
-				dz_config->zoom_region.left =
-					dz_config->zoom_region.left - w_offset;
+				dz_config->zoom_region.origin.x = dz_config->zoom_region.origin.x - w_offset;
 			h_offset = 0;
 		}
-		dz_config->zoom_region.left = dz_config->zoom_region.left *
-			eff_res.width /
-			(asd->sensor_array_res.width - 2 * w_offset);
-		dz_config->zoom_region.top = dz_config->zoom_region.top *
-			eff_res.height /
-			(asd->sensor_array_res.height - 2 * h_offset);
-		dz_config->zoom_region.width = dz_config->zoom_region.width *
-			eff_res.width /
-			(asd->sensor_array_res.width - 2 * w_offset);
-		dz_config->zoom_region.height = dz_config->zoom_region.height *
-			eff_res.height /
-			(asd->sensor_array_res.height - 2 * h_offset);
+		dz_config->zoom_region.origin.x = dz_config->zoom_region.origin.x
+						  * eff_res.width
+						  / (asd->sensor_array_res.width - 2 * w_offset);
+		dz_config->zoom_region.origin.y = dz_config->zoom_region.origin.y
+						  * eff_res.height
+						  / (asd->sensor_array_res.height - 2 * h_offset);
+		dz_config->zoom_region.resolution.width = dz_config->zoom_region.resolution.width
+						  * eff_res.width
+						  / (asd->sensor_array_res.width - 2 * w_offset);
+		dz_config->zoom_region.resolution.height = dz_config->zoom_region.resolution.height
+						  * eff_res.height
+						  / (asd->sensor_array_res.height - 2 * h_offset);
 	}
 
-	if (out_res.width * dz_config->zoom_region.height >
-	    dz_config->zoom_region.width * out_res.height) {
-		dz_config->zoom_region.height = dz_config->zoom_region.width *
-						out_res.height / out_res.width;
+	if (out_res.width * dz_config->zoom_region.resolution.height
+	    > dz_config->zoom_region.resolution.width * out_res.height) {
+		dz_config->zoom_region.resolution.height =
+		    dz_config->zoom_region.resolution.width
+		    * out_res.height / out_res.width;
 	} else {
-		dz_config->zoom_region.width = dz_config->zoom_region.height *
-					       out_res.width / out_res.height;
+		dz_config->zoom_region.resolution.width =
+		    dz_config->zoom_region.resolution.height
+		    * out_res.width / out_res.height;
 	}
 	dev_dbg(asd->isp->dev,
 		"%s crop region:(%d,%d),(%d,%d) eff_res(%d, %d) array_size(%d,%d) out_res(%d, %d)\n",
-		__func__, dz_config->zoom_region.left,
-		dz_config->zoom_region.top,
-		dz_config->zoom_region.width,
-		dz_config->zoom_region.height,
+		__func__, dz_config->zoom_region.origin.x,
+		dz_config->zoom_region.origin.y,
+		dz_config->zoom_region.resolution.width,
+		dz_config->zoom_region.resolution.height,
 		eff_res.width, eff_res.height,
 		asd->sensor_array_res.width,
 		asd->sensor_array_res.height,
 		out_res.width, out_res.height);
 
-	if ((dz_config->zoom_region.left +
-	     dz_config->zoom_region.width
+	if ((dz_config->zoom_region.origin.x +
+	     dz_config->zoom_region.resolution.width
 	     > eff_res.width) ||
-	    (dz_config->zoom_region.top +
-	     dz_config->zoom_region.height
+	    (dz_config->zoom_region.origin.y +
+	     dz_config->zoom_region.resolution.height
 	     > eff_res.height))
 		return -EINVAL;
 
@@ -1898,10 +1899,10 @@ static bool atomisp_check_zoom_region(
 
 	config.width = asd->sensor_array_res.width;
 	config.height = asd->sensor_array_res.height;
-	w = dz_config->zoom_region.left +
-	    dz_config->zoom_region.width;
-	h = dz_config->zoom_region.top +
-	    dz_config->zoom_region.height;
+	w = dz_config->zoom_region.origin.x +
+	    dz_config->zoom_region.resolution.width;
+	h = dz_config->zoom_region.origin.y +
+	    dz_config->zoom_region.resolution.height;
 
 	if ((w <= config.width) && (h <= config.height) && w > 0 && h > 0)
 		flag = true;
@@ -1909,10 +1910,10 @@ static bool atomisp_check_zoom_region(
 		/* setting error zoom region */
 		dev_err(asd->isp->dev,
 			"%s zoom region ERROR:dz_config:(%d,%d),(%d,%d)array_res(%d, %d)\n",
-			__func__, dz_config->zoom_region.left,
-			dz_config->zoom_region.top,
-			dz_config->zoom_region.width,
-			dz_config->zoom_region.height,
+			__func__, dz_config->zoom_region.origin.x,
+			dz_config->zoom_region.origin.y,
+			dz_config->zoom_region.resolution.width,
+			dz_config->zoom_region.resolution.height,
 			config.width, config.height);
 
 	return flag;
@@ -2031,8 +2032,8 @@ static unsigned int long copy_from_compatible(void *to, const void *from,
 {
 	if (from_user)
 		return copy_from_user(to, (void __user *)from, n);
-
-	memcpy(to, from, n);
+	else
+		memcpy(to, from, n);
 	return 0;
 }
 
@@ -2461,11 +2462,9 @@ int atomisp_css_cp_dvs2_coefs(struct atomisp_sub_device *asd,
 		if (sizeof(*cur) != sizeof(coefs->grid) ||
 		    memcmp(&coefs->grid, cur, sizeof(coefs->grid))) {
 			dev_err(asd->isp->dev, "dvs grid mismatch!\n");
-			/*
-			 * If the grid info in the argument differs from the current
-			 * grid info, we tell the caller to reset the grid size and
-			 * try again.
-			 */
+			/* If the grid info in the argument differs from the current
+			grid info, we tell the caller to reset the grid size and
+			try again. */
 			return -EAGAIN;
 		}
 
@@ -2961,9 +2960,12 @@ int atomisp_set_parameters(struct video_device *vdev,
 		 * are ready, the parameters will be set to CSS.
 		 * per-frame setting only works for the main output frame.
 		 */
-		param = kvzalloc_obj(*param);
-		if (!param)
+		param = kvzalloc(sizeof(*param), GFP_KERNEL);
+		if (!param) {
+			dev_err(asd->isp->dev, "%s: failed to alloc params buffer\n",
+				__func__);
 			return -ENOMEM;
+		}
 		css_param = &param->params;
 	}
 
@@ -3026,11 +3028,9 @@ int atomisp_param(struct atomisp_sub_device *asd, int flag,
 
 		atomisp_curr_user_grid_info(asd, &config->info);
 
-		/*
-		 * We always return the resolution and stride even if there is
+		/* We always return the resolution and stride even if there is
 		 * no valid metadata. This allows the caller to get the
-		 * information needed to allocate user-space buffers.
-		 */
+		 * information needed to allocate user-space buffers. */
 		config->metadata_config.metadata_height = asd->
 			stream_env[ATOMISP_INPUT_STREAM_GENERAL].stream_info.
 			metadata_info.resolution.height;
@@ -3235,7 +3235,7 @@ int atomisp_bad_pixel_param(struct atomisp_sub_device *asd, int flag,
 }
 
 /*
- * Function to enable/disable video image stabilization
+ * Function to enable/disable video image stablization
  */
 int atomisp_video_stable(struct atomisp_sub_device *asd, int flag,
 			 __s32 *value)
@@ -3280,10 +3280,8 @@ atomisp_bytesperline_to_padded_width(unsigned int bytesperline,
 		return bytesperline / 2;
 	case IA_CSS_FRAME_FORMAT_RGBA888:
 		return bytesperline / 4;
-	/*
-	 * The following cases could be removed, but we leave them
-	 * in to document the formats that are included.
-	 */
+	/* The following cases could be removed, but we leave them
+	   in to document the formats that are included. */
 	case IA_CSS_FRAME_FORMAT_NV11:
 	case IA_CSS_FRAME_FORMAT_NV12:
 	case IA_CSS_FRAME_FORMAT_NV16:
@@ -3319,11 +3317,9 @@ atomisp_v4l2_framebuffer_to_css_frame(const struct v4l2_framebuffer *arg,
 	padded_width = atomisp_bytesperline_to_padded_width(
 			   arg->fmt.bytesperline, sh_format);
 
-	/*
-	 * Note: the padded width on an ia_css_frame is in elements, not in
-	 * bytes. The RAW frame we use here should always be a 16bit RAW
-	 * frame. This is why we bytesperline/2 is equal to the padded with
-	 */
+	/* Note: the padded width on an ia_css_frame is in elements, not in
+	   bytes. The RAW frame we use here should always be a 16bit RAW
+	   frame. This is why we bytesperline/2 is equal to the padded with */
 	if (ia_css_frame_allocate(&res, arg->fmt.width, arg->fmt.height,
 				       sh_format, padded_width, 0)) {
 		ret = -ENOMEM;
@@ -3744,16 +3740,14 @@ static int atomisp_set_sensor_crop_and_fmt(struct atomisp_device *isp,
 	sel.r.left = ((input->native_rect.width - sel.r.width) / 2) & ~1;
 	sel.r.top = ((input->native_rect.height - sel.r.height) / 2) & ~1;
 
-	ret = v4l2_subdev_call(input->sensor, pad, set_selection, NULL,
-			       sd_state, &sel);
+	ret = v4l2_subdev_call(input->sensor, pad, set_selection, sd_state, &sel);
 	if (ret)
 		dev_err(isp->dev, "Error setting crop to (%d,%d)/%ux%u: %d\n",
 			sel.r.left, sel.r.top, sel.r.width, sel.r.height, ret);
 
 set_fmt:
 	if (ret == 0) {
-		ret = v4l2_subdev_call(input->sensor, pad, set_fmt, NULL,
-				       sd_state, &format);
+		ret = v4l2_subdev_call(input->sensor, pad, set_fmt, sd_state, &format);
 		dev_dbg(isp->dev, "Set sensor format ret: %d size %dx%d\n",
 			ret, format.format.width, format.format.height);
 	}
@@ -3766,16 +3760,13 @@ set_fmt:
 		sd_state = v4l2_subdev_lock_and_get_active_state(input->sensor_isp);
 
 		format.pad = SENSOR_ISP_PAD_SINK;
-		ret = v4l2_subdev_call(input->sensor_isp, pad, set_fmt, NULL,
-				       sd_state, &format);
+		ret = v4l2_subdev_call(input->sensor_isp, pad, set_fmt, sd_state, &format);
 		dev_dbg(isp->dev, "Set sensor ISP sink format ret: %d size %dx%d\n",
 			ret, format.format.width, format.format.height);
 
 		if (ret == 0) {
 			format.pad = SENSOR_ISP_PAD_SOURCE;
-			ret = v4l2_subdev_call(input->sensor_isp, pad,
-					       set_fmt, NULL, sd_state,
-					       &format);
+			ret = v4l2_subdev_call(input->sensor_isp, pad, set_fmt, sd_state, &format);
 			dev_dbg(isp->dev, "Set sensor ISP source format ret: %d size %dx%d\n",
 				ret, format.format.width, format.format.height);
 		}
@@ -3787,8 +3778,7 @@ set_fmt:
 	/* Propagate new fmt to CSI port */
 	if (ret == 0 && which == V4L2_SUBDEV_FORMAT_ACTIVE) {
 		format.pad = CSI2_PAD_SINK;
-		ret = v4l2_subdev_call(input->csi_port, pad, set_fmt, NULL,
-				       NULL, &format);
+		ret = v4l2_subdev_call(input->csi_port, pad, set_fmt, NULL, &format);
 		if (ret)
 			return ret;
 	}
@@ -3936,10 +3926,8 @@ static inline int atomisp_set_sensor_mipi_to_isp(
 		    asd->stream_env[stream_id].isys_info[1].height);
 	}
 
-	/*
-	 * Compatibility for sensors which provide no media bus code
-	 * in s_mbus_framefmt() nor support pad formats.
-	 */
+	/* Compatibility for sensors which provide no media bus code
+	 * in s_mbus_framefmt() nor support pad formats. */
 	if (mipi_info && mipi_info->input_format != -1) {
 		bayer_order = mipi_info->raw_bayer_order;
 
@@ -4016,7 +4004,7 @@ static int css_input_resolution_changed(struct atomisp_sub_device *asd,
 	struct atomisp_metadata_buf *md_buf = NULL, *_md_buf;
 	unsigned int i;
 
-	dev_dbg(asd->isp->dev, "%s: to %ux%u\n", __func__,
+	dev_dbg(asd->isp->dev, "css_input_resolution_changed to %ux%u\n",
 		ffmt->width, ffmt->height);
 
 	if (IS_ISP2401)
@@ -4397,10 +4385,8 @@ int atomisp_set_fmt(struct video_device *vdev, struct v4l2_format *f)
 			ATOMISP_SUBDEV_PAD_SINK,
 			V4L2_SEL_TGT_CROP);
 
-	/*
-	 * Try to enable YUV downscaling if ISP input is 10 % (either
-	 * width or height) bigger than the desired result.
-	 */
+	/* Try to enable YUV downscaling if ISP input is 10 % (either
+	 * width or height) bigger than the desired result. */
 	if (!IS_MOFD ||
 	    isp_sink_crop.width * 9 / 10 < f->fmt.pix.width ||
 	    isp_sink_crop.height * 9 / 10 < f->fmt.pix.height ||

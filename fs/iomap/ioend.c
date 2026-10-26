@@ -2,12 +2,10 @@
 /*
  * Copyright (c) 2016-2025 Christoph Hellwig.
  */
-#include <linux/bio-integrity.h>
 #include <linux/iomap.h>
 #include <linux/list_sort.h>
 #include <linux/pagemap.h>
 #include <linux/writeback.h>
-#include <linux/fserror.h>
 #include "internal.h"
 #include "trace.h"
 
@@ -25,12 +23,10 @@ struct iomap_ioend *iomap_init_ioend(struct inode *inode,
 	ioend->io_parent = NULL;
 	INIT_LIST_HEAD(&ioend->io_list);
 	ioend->io_flags = ioend_flags;
-	ioend->io_bvec_offset = bio->bi_iter.bi_offset;
 	ioend->io_inode = inode;
 	ioend->io_offset = file_offset;
 	ioend->io_size = bio->bi_iter.bi_size;
 	ioend->io_sector = bio->bi_iter.bi_sector;
-	ioend->io_vi = NULL;
 	ioend->io_private = NULL;
 	return ioend;
 }
@@ -41,7 +37,7 @@ EXPORT_SYMBOL_GPL(iomap_init_ioend);
  * state, release holds on bios, and finally free up memory.  Do not use the
  * ioend after this.
  */
-static u32 iomap_finish_ioend_buffered_write(struct iomap_ioend *ioend)
+static u32 iomap_finish_ioend_buffered(struct iomap_ioend *ioend)
 {
 	struct inode *inode = ioend->io_inode;
 	struct bio *bio = &ioend->io_bio;
@@ -52,7 +48,7 @@ static u32 iomap_finish_ioend_buffered_write(struct iomap_ioend *ioend)
 		mapping_set_error(inode->i_mapping, ioend->io_error);
 		if (!bio_flagged(bio, BIO_QUIET)) {
 			pr_err_ratelimited(
-"%s: writeback error on inode %llu, offset %lld, sector %llu",
+"%s: writeback error on inode %lu, offset %lld, sector %llu",
 				inode->i_sb->s_id, inode->i_ino,
 				ioend->io_offset, ioend->io_sector);
 		}
@@ -60,17 +56,10 @@ static u32 iomap_finish_ioend_buffered_write(struct iomap_ioend *ioend)
 
 	/* walk all folios in bio, ending page IO on them */
 	bio_for_each_folio_all(fi, bio) {
-		if (ioend->io_error)
-			fserror_report_io(inode, FSERR_BUFFERED_WRITE,
-					  folio_pos(fi.folio) + fi.offset,
-					  fi.length, ioend->io_error,
-					  GFP_ATOMIC);
 		iomap_finish_folio_write(inode, fi.folio, fi.length);
 		folio_count++;
 	}
 
-	if (bio_integrity(bio))
-		fs_bio_integrity_free(bio);
 	bio_put(bio);	/* frees the ioend */
 	return folio_count;
 }
@@ -79,10 +68,8 @@ static void ioend_writeback_end_bio(struct bio *bio)
 {
 	struct iomap_ioend *ioend = iomap_ioend_from_bio(bio);
 
-	if (bio->bi_status && bio_complete_in_task(bio))
-		return;
 	ioend->io_error = blk_status_to_errno(bio->bi_status);
-	iomap_finish_ioend_buffered_write(ioend);
+	iomap_finish_ioend_buffered(ioend);
 }
 
 /*
@@ -106,8 +93,6 @@ int iomap_ioend_writeback_submit(struct iomap_writepage_ctx *wpc, int error)
 		return error;
 	}
 
-	if (ioend->io_flags & IOMAP_IOEND_INTEGRITY)
-		fs_bio_integrity_generate(&ioend->io_bio);
 	submit_bio(&ioend->io_bio);
 	return 0;
 }
@@ -129,13 +114,10 @@ static struct iomap_ioend *iomap_alloc_ioend(struct iomap_writepage_ctx *wpc,
 }
 
 static bool iomap_can_add_to_ioend(struct iomap_writepage_ctx *wpc, loff_t pos,
-		unsigned int map_len, u16 ioend_flags)
+		u16 ioend_flags)
 {
 	struct iomap_ioend *ioend = wpc->wb_ctx;
 
-	if (ioend->io_bio.bi_iter.bi_size >
-	    iomap_max_bio_size(&wpc->iomap) - map_len)
-		return false;
 	if (ioend_flags & IOMAP_IOEND_BOUNDARY)
 		return false;
 	if ((ioend_flags & IOMAP_IOEND_NOMERGE_FLAGS) !=
@@ -172,7 +154,7 @@ ssize_t iomap_add_to_ioend(struct iomap_writepage_ctx *wpc, struct folio *folio,
 {
 	struct iomap_ioend *ioend = wpc->wb_ctx;
 	size_t poff = offset_in_folio(folio, pos);
-	unsigned int ioend_flags = iomap_ioend_flags(&wpc->iomap);
+	unsigned int ioend_flags = 0;
 	unsigned int map_len = min_t(u64, dirty_len,
 		wpc->iomap.offset + wpc->iomap.length - pos);
 	int error;
@@ -182,33 +164,31 @@ ssize_t iomap_add_to_ioend(struct iomap_writepage_ctx *wpc, struct folio *folio,
 	WARN_ON_ONCE(!folio->private && map_len < dirty_len);
 
 	switch (wpc->iomap.type) {
-	case IOMAP_HOLE:
-		return map_len;
 	case IOMAP_UNWRITTEN:
+		ioend_flags |= IOMAP_IOEND_UNWRITTEN;
+		break;
 	case IOMAP_MAPPED:
 		break;
+	case IOMAP_HOLE:
+		return map_len;
 	default:
 		WARN_ON_ONCE(1);
 		return -EIO;
 	}
 
+	if (wpc->iomap.flags & IOMAP_F_SHARED)
+		ioend_flags |= IOMAP_IOEND_SHARED;
+	if (folio_test_dropbehind(folio))
+		ioend_flags |= IOMAP_IOEND_DONTCACHE;
 	if (pos == wpc->iomap.offset && (wpc->iomap.flags & IOMAP_F_BOUNDARY))
 		ioend_flags |= IOMAP_IOEND_BOUNDARY;
 
-	if (!ioend || !iomap_can_add_to_ioend(wpc, pos, map_len, ioend_flags)) {
+	if (!ioend || !iomap_can_add_to_ioend(wpc, pos, ioend_flags)) {
 new_ioend:
 		if (ioend) {
 			error = wpc->ops->writeback_submit(wpc, 0);
-			if (error) {
-				/*
-				 * ->writeback_submit() completed the ioend
-				 * with an error, so drop the stale context;
-				 * iomap_writepages() would otherwise submit
-				 * it a second time.
-				 */
-				wpc->wb_ctx = NULL;
+			if (error)
 				return error;
-			}
 		}
 		wpc->wb_ctx = ioend = iomap_alloc_ioend(wpc, pos, ioend_flags);
 	}
@@ -216,8 +196,7 @@ new_ioend:
 	if (!bio_add_folio(&ioend->io_bio, folio, map_len, poff))
 		goto new_ioend;
 
-	if (folio_test_dropbehind(folio))
-		bio_set_flag(&ioend->io_bio, BIO_COMPLETE_IN_TASK);
+	iomap_start_folio_write(wpc->inode, folio, map_len);
 
 	/*
 	 * Clamp io_offset and io_size to the incore EOF so that ondisk
@@ -273,16 +252,6 @@ new_ioend:
 }
 EXPORT_SYMBOL_GPL(iomap_add_to_ioend);
 
-#ifdef CONFIG_BLK_DEV_INTEGRITY
-int iomap_ioend_integrity_verify(struct iomap_ioend *ioend)
-{
-	struct bvec_iter data_iter = BVEC_ITER_IOEND(ioend);
-
-	return fs_bio_integrity_verify(&ioend->io_bio, &data_iter);
-}
-EXPORT_SYMBOL_GPL(iomap_ioend_integrity_verify);
-#endif /* CONFIG_BLK_DEV_INTEGRITY */
-
 static u32 iomap_finish_ioend(struct iomap_ioend *ioend, int error)
 {
 	if (ioend->io_parent) {
@@ -297,12 +266,9 @@ static u32 iomap_finish_ioend(struct iomap_ioend *ioend, int error)
 
 	if (!atomic_dec_and_test(&ioend->io_remaining))
 		return 0;
-
 	if (ioend->io_flags & IOMAP_IOEND_DIRECT)
 		return iomap_finish_ioend_direct(ioend);
-	if (bio_op(&ioend->io_bio) == REQ_OP_READ)
-		return iomap_finish_ioend_buffered_read(ioend);
-	return iomap_finish_ioend_buffered_write(ioend);
+	return iomap_finish_ioend_buffered(ioend);
 }
 
 /*
@@ -341,17 +307,7 @@ EXPORT_SYMBOL_GPL(iomap_finish_ioends);
 static bool iomap_ioend_can_merge(struct iomap_ioend *ioend,
 		struct iomap_ioend *next)
 {
-	/*
-	 * There is no point in merging reads as there is no completion
-	 * processing that can be easily batched up for them.
-	 */
-	if (bio_op(&ioend->io_bio) == REQ_OP_READ ||
-	    bio_op(&next->io_bio) == REQ_OP_READ)
-		return false;
-
 	if (ioend->io_bio.bi_status != next->io_bio.bi_status)
-		return false;
-	if (ioend->io_private != next->io_private)
 		return false;
 	if (next->io_flags & IOMAP_IOEND_BOUNDARY)
 		return false;
@@ -475,96 +431,6 @@ struct iomap_ioend *iomap_split_ioend(struct iomap_ioend *ioend,
 	return split_ioend;
 }
 EXPORT_SYMBOL_GPL(iomap_split_ioend);
-
-void iomap_bounce_read(struct iomap_ioend *orig_ioend, unsigned int minsize,
-		void (*submit_ioend)(struct iomap_ioend *ioend))
-{
-	struct inode *inode = orig_ioend->io_inode;
-	struct bio *orig_bio = &orig_ioend->io_bio;
-	loff_t file_offset = orig_ioend->io_offset;
-	sector_t sector = orig_ioend->io_sector;
-	size_t total_len = round_up(orig_ioend->io_size, minsize);
-
-	WARN_ON_ONCE(!(orig_ioend->io_flags & IOMAP_IOEND_DIRECT));
-
-	/* We can't poll a bio that is not passed on to hardware */
-	orig_bio->bi_opf &= ~REQ_POLLED;
-
-	do {
-		struct iomap_ioend *ioend;
-		struct bio *bio;
-		int error;
-
-		bio = bio_alloc_bioset(orig_bio->bi_bdev,
-				min(total_len / minsize, BIO_MAX_VECS),
-				orig_bio->bi_opf, GFP_KERNEL,
-				&iomap_ioend_split_bioset);
-		error = bio_alloc_bounce_folios(bio, total_len, minsize);
-		if (error) {
-			bio_put(bio);
-			orig_bio->bi_status = errno_to_blk_status(error);
-			break;
-		}
-		bio->bi_ioprio = orig_bio->bi_ioprio;
-		bio->bi_write_hint = orig_bio->bi_write_hint;
-		bio->bi_write_stream = orig_bio->bi_write_stream;
-		bio->bi_iter.bi_sector = sector;
-
-		ioend = iomap_init_ioend(inode, bio, file_offset,
-				orig_ioend->io_flags);
-
-		total_len -= bio->bi_iter.bi_size;
-		file_offset += bio->bi_iter.bi_size;
-		sector += (bio->bi_iter.bi_size >> SECTOR_SHIFT);
-
-		bio->bi_private = orig_bio;
-		bio_inc_remaining(orig_bio);
-		submit_ioend(ioend);
-	} while (total_len > 0);
-
-	bio_endio(&orig_ioend->io_bio);
-}
-EXPORT_SYMBOL_GPL(iomap_bounce_read);
-
-static void iomap_ioend_unbounce(struct iomap_ioend *orig_ioend,
-		struct iomap_ioend *ioend)
-{
-	struct bio *orig_bio = &orig_ioend->io_bio;
-	struct iov_iter to;
-	struct bio_vec *bv;
-	int i;
-
-	iov_iter_bvec(&to, ITER_DEST, orig_bio->bi_io_vec, orig_bio->bi_vcnt,
-			orig_ioend->io_size);
-	to.iov_offset = orig_ioend->io_bvec_offset;
-
-	if (ioend->io_offset != orig_ioend->io_offset) {
-		WARN_ON_ONCE(ioend->io_offset < orig_ioend->io_offset);
-		iov_iter_advance(&to, ioend->io_offset - orig_ioend->io_offset);
-	}
-
-	/* copying to pinned pages should always work */
-	bio_for_each_bvec_all(bv, &ioend->io_bio, i)
-		WARN_ON_ONCE(copy_to_iter(bvec_virt(bv), bv->bv_len, &to) !=
-				bv->bv_len);
-}
-
-void iomap_bounce_read_end_io(struct iomap_ioend *ioend, struct bio *orig_bio,
-		int error)
-{
-	if (error)
-		orig_bio->bi_status = errno_to_blk_status(error);
-	else
-		iomap_ioend_unbounce(iomap_ioend_from_bio(orig_bio), ioend);
-
-	bio_free_folios(&ioend->io_bio);
-	if (bio_integrity(&ioend->io_bio))
-		fs_bio_integrity_free(&ioend->io_bio);
-	bio_put(&ioend->io_bio);
-
-	bio_endio(orig_bio);
-}
-EXPORT_SYMBOL_GPL(iomap_bounce_read_end_io);
 
 static int __init iomap_ioend_init(void)
 {

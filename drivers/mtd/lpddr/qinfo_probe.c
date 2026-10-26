@@ -120,7 +120,7 @@ out:
 static int lpddr_chip_setup(struct map_info *map, struct lpddr_private *lpddr)
 {
 
-	lpddr->qinfo = kzalloc_obj(struct qinfo_chip);
+	lpddr->qinfo = kzalloc(sizeof(struct qinfo_chip), GFP_KERNEL);
 	if (!lpddr->qinfo)
 		return 0;
 
@@ -167,7 +167,8 @@ static struct lpddr_private *lpddr_probe_chip(struct map_info *map)
 	lpddr.numchips = 1;
 
 	numvirtchips = lpddr.numchips * lpddr.qinfo->HWPartsNum;
-	retlpddr = kzalloc_flex(*retlpddr, chips, numvirtchips);
+	retlpddr = kzalloc(struct_size(retlpddr, chips, numvirtchips),
+			   GFP_KERNEL);
 	if (!retlpddr)
 		return NULL;
 

@@ -502,28 +502,15 @@ static void write_sb_page(struct bitmap *bitmap, unsigned long pg_index,
 static void md_bitmap_file_kick(struct bitmap *bitmap);
 
 #ifdef CONFIG_MD_BITMAP_FILE
-static void end_bitmap_write(struct bio *bio)
-{
-	struct buffer_head *bh;
-	bool uptodate = bio_endio_bh(bio, &bh);
-	struct bitmap *bitmap = bh->b_private;
-
-	if (!uptodate)
-		set_bit(BITMAP_WRITE_ERROR, &bitmap->flags);
-	if (atomic_dec_and_test(&bitmap->pending_writes))
-		wake_up(&bitmap->write_wait);
-}
-
 static void write_file_page(struct bitmap *bitmap, struct page *page, int wait)
 {
-	struct folio *folio = page_folio(page);
-	struct buffer_head *bh = folio_buffers(folio);
+	struct buffer_head *bh = page_buffers(page);
 
 	while (bh && bh->b_blocknr) {
 		atomic_inc(&bitmap->pending_writes);
 		set_buffer_locked(bh);
 		set_buffer_mapped(bh);
-		bh_submit(bh, REQ_OP_WRITE | REQ_SYNC, end_bitmap_write);
+		submit_bh(REQ_OP_WRITE | REQ_SYNC, bh);
 		bh = bh->b_this_page;
 	}
 
@@ -532,17 +519,31 @@ static void write_file_page(struct bitmap *bitmap, struct page *page, int wait)
 			   atomic_read(&bitmap->pending_writes) == 0);
 }
 
+static void end_bitmap_write(struct buffer_head *bh, int uptodate)
+{
+	struct bitmap *bitmap = bh->b_private;
+
+	if (!uptodate)
+		set_bit(BITMAP_WRITE_ERROR, &bitmap->flags);
+	if (atomic_dec_and_test(&bitmap->pending_writes))
+		wake_up(&bitmap->write_wait);
+}
+
 static void free_buffers(struct page *page)
 {
-	struct folio *folio = page_folio(page);
-	struct buffer_head *bh = folio_detach_private(folio);
+	struct buffer_head *bh;
 
+	if (!PagePrivate(page))
+		return;
+
+	bh = page_buffers(page);
 	while (bh) {
 		struct buffer_head *next = bh->b_this_page;
 		free_buffer_head(bh);
 		bh = next;
 	}
-	folio_put(folio);
+	detach_page_private(page);
+	put_page(page);
 }
 
 /* read a page from a file.
@@ -557,7 +558,6 @@ static int read_file_page(struct file *file, unsigned long index,
 {
 	int ret = 0;
 	struct inode *inode = file_inode(file);
-	struct folio *folio = page_folio(page);
 	struct buffer_head *bh;
 	sector_t block, blk_cur;
 	unsigned long blocksize = i_blocksize(inode);
@@ -565,12 +565,12 @@ static int read_file_page(struct file *file, unsigned long index,
 	pr_debug("read bitmap file (%dB @ %llu)\n", (int)PAGE_SIZE,
 		 (unsigned long long)index << PAGE_SHIFT);
 
-	bh = folio_alloc_buffers(folio, blocksize, GFP_NOFS | __GFP_ACCOUNT);
+	bh = alloc_page_buffers(page, blocksize);
 	if (!bh) {
 		ret = -ENOMEM;
 		goto out;
 	}
-	folio_attach_private(folio, bh);
+	attach_page_private(page, bh);
 	blk_cur = index << (PAGE_SHIFT - inode->i_blkbits);
 	while (bh) {
 		block = blk_cur;
@@ -592,11 +592,12 @@ static int read_file_page(struct file *file, unsigned long index,
 			else
 				count -= blocksize;
 
+			bh->b_end_io = end_bitmap_write;
 			bh->b_private = bitmap;
 			atomic_inc(&bitmap->pending_writes);
 			set_buffer_locked(bh);
 			set_buffer_mapped(bh);
-			bh_submit(bh, REQ_OP_READ, end_bitmap_write);
+			submit_bh(REQ_OP_READ, bh);
 		}
 		blk_cur++;
 		bh = bh->b_this_page;
@@ -1025,7 +1026,8 @@ static int md_bitmap_storage_alloc(struct bitmap_storage *store,
 	num_pages = DIV_ROUND_UP(bytes, PAGE_SIZE);
 	offset = slot_number * num_pages;
 
-	store->filemap = kmalloc_objs(struct page *, num_pages);
+	store->filemap = kmalloc_array(num_pages, sizeof(struct page *),
+				       GFP_KERNEL);
 	if (!store->filemap)
 		return -ENOMEM;
 
@@ -1728,13 +1730,6 @@ static void bitmap_start_write(struct mddev *mddev, sector_t offset,
 	}
 }
 
-static void bitmap_prepare_range(struct mddev *mddev, sector_t *offset,
-				 unsigned long *sectors, bool discard)
-{
-	if (mddev->pers->bitmap_sector)
-		mddev->pers->bitmap_sector(mddev, offset, sectors);
-}
-
 static void bitmap_end_write(struct mddev *mddev, sector_t offset,
 			     unsigned long sectors)
 {
@@ -2127,7 +2122,7 @@ static struct bitmap *__bitmap_create(struct mddev *mddev, int slot)
 		return ERR_PTR(-EBUSY);
 	}
 
-	bitmap = kzalloc_obj(*bitmap);
+	bitmap = kzalloc(sizeof(*bitmap), GFP_KERNEL);
 	if (!bitmap)
 		return ERR_PTR(-ENOMEM);
 
@@ -2442,7 +2437,7 @@ static int __bitmap_resize(struct bitmap *bitmap, sector_t blocks,
 
 	pages = DIV_ROUND_UP(chunks, PAGE_COUNTER_RATIO);
 
-	new_bp = kzalloc_objs(*new_bp, pages);
+	new_bp = kcalloc(pages, sizeof(*new_bp), GFP_KERNEL);
 	ret = -ENOMEM;
 	if (!new_bp) {
 		md_bitmap_file_unmap(&store);
@@ -3086,7 +3081,6 @@ static struct bitmap_operations bitmap_ops = {
 	.flush			= bitmap_flush,
 	.write_all		= bitmap_write_all,
 	.dirty_bits		= bitmap_dirty_bits,
-	.prepare_range		= bitmap_prepare_range,
 	.unplug			= bitmap_unplug,
 	.daemon_work		= bitmap_daemon_work,
 

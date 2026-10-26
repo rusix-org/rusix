@@ -25,15 +25,13 @@ bool xchk_fblock_xref_process_error(struct xfs_scrub *sc,
 void xchk_block_set_preen(struct xfs_scrub *sc,
 		struct xfs_buf *bp);
 void xchk_ino_set_preen(struct xfs_scrub *sc, xfs_ino_t ino);
-void xchk_fblock_set_preen(struct xfs_scrub *sc,
-		int whichfork, xfs_fileoff_t offset);
 
 void xchk_set_corrupt(struct xfs_scrub *sc);
 void xchk_block_set_corrupt(struct xfs_scrub *sc,
 		struct xfs_buf *bp);
 void xchk_ino_set_corrupt(struct xfs_scrub *sc, xfs_ino_t ino);
 #define xchk_ip_set_corrupt(_sc, _ip) \
-	xchk_ino_set_corrupt((_sc), I_INO(_ip))
+	xchk_ino_set_corrupt((_sc), (_ip)->i_ino)
 void xchk_fblock_set_corrupt(struct xfs_scrub *sc, int whichfork,
 		xfs_fileoff_t offset);
 #ifdef CONFIG_XFS_QUOTA
@@ -74,6 +72,7 @@ int xchk_setup_ag_rmapbt(struct xfs_scrub *sc);
 int xchk_setup_ag_refcountbt(struct xfs_scrub *sc);
 int xchk_setup_inode(struct xfs_scrub *sc);
 int xchk_setup_inode_bmap(struct xfs_scrub *sc);
+int xchk_setup_inode_bmap_data(struct xfs_scrub *sc);
 int xchk_setup_directory(struct xfs_scrub *sc);
 int xchk_setup_xattr(struct xfs_scrub *sc);
 int xchk_setup_symlink(struct xfs_scrub *sc);
@@ -109,8 +108,9 @@ xchk_ino_dqattach(struct xfs_scrub *sc)
 int xchk_setup_fscounters(struct xfs_scrub *sc);
 int xchk_setup_nlinks(struct xfs_scrub *sc);
 
-void xchk_ag_free(struct xfs_scrub *sc);
-int xchk_ag_init(struct xfs_scrub *sc, xfs_agnumber_t agno);
+void xchk_ag_free(struct xfs_scrub *sc, struct xchk_ag *sa);
+int xchk_ag_init(struct xfs_scrub *sc, xfs_agnumber_t agno,
+		struct xchk_ag *sa);
 int xchk_perag_drain_and_lock(struct xfs_scrub *sc);
 
 /*
@@ -121,9 +121,10 @@ int xchk_perag_drain_and_lock(struct xfs_scrub *sc);
 static inline int
 xchk_ag_init_existing(
 	struct xfs_scrub	*sc,
-	xfs_agnumber_t		agno)
+	xfs_agnumber_t		agno,
+	struct xchk_ag		*sa)
 {
-	int			error = xchk_ag_init(sc, agno);
+	int			error = xchk_ag_init(sc, agno, sa);
 
 	return error == -ENOENT ? -EFSCORRUPTED : error;
 }
@@ -135,34 +136,38 @@ xchk_ag_init_existing(
 				 XFS_RTGLOCK_RMAP | \
 				 XFS_RTGLOCK_REFCOUNT)
 
-int xchk_rtgroup_init(struct xfs_scrub *sc, xfs_rgnumber_t rgno);
+int xchk_rtgroup_init(struct xfs_scrub *sc, xfs_rgnumber_t rgno,
+		struct xchk_rt *sr);
 
 static inline int
 xchk_rtgroup_init_existing(
 	struct xfs_scrub	*sc,
-	xfs_rgnumber_t		rgno)
+	xfs_rgnumber_t		rgno,
+	struct xchk_rt		*sr)
 {
-	int			error = xchk_rtgroup_init(sc, rgno);
+	int			error = xchk_rtgroup_init(sc, rgno, sr);
 
 	return error == -ENOENT ? -EFSCORRUPTED : error;
 }
 
-int xchk_rtgroup_lock(struct xfs_scrub *sc, unsigned int rtglock_flags);
-void xchk_rtgroup_unlock(struct xfs_scrub *sc);
-void xchk_rtgroup_btcur_free(struct xfs_scrub *sc);
-void xchk_rtgroup_free(struct xfs_scrub *sc);
+int xchk_rtgroup_lock(struct xfs_scrub *sc, struct xchk_rt *sr,
+		unsigned int rtglock_flags);
+void xchk_rtgroup_unlock(struct xchk_rt *sr);
+void xchk_rtgroup_btcur_free(struct xchk_rt *sr);
+void xchk_rtgroup_free(struct xfs_scrub *sc, struct xchk_rt *sr);
 #else
-# define xchk_rtgroup_init(sc, rgno)			(-EFSCORRUPTED)
-# define xchk_rtgroup_init_existing(sc, rgno)		(-EFSCORRUPTED)
-# define xchk_rtgroup_lock(sc, lockflags)		(-EFSCORRUPTED)
-# define xchk_rtgroup_unlock(sc)			do { } while (0)
-# define xchk_rtgroup_btcur_free(sc)			do { } while (0)
-# define xchk_rtgroup_free(sc)				do { } while (0)
+# define xchk_rtgroup_init(sc, rgno, sr)		(-EFSCORRUPTED)
+# define xchk_rtgroup_init_existing(sc, rgno, sr)	(-EFSCORRUPTED)
+# define xchk_rtgroup_lock(sc, sr, lockflags)		(-EFSCORRUPTED)
+# define xchk_rtgroup_unlock(sr)			do { } while (0)
+# define xchk_rtgroup_btcur_free(sr)			do { } while (0)
+# define xchk_rtgroup_free(sc, sr)			do { } while (0)
 #endif /* CONFIG_XFS_RT */
 
-int xchk_ag_read_headers(struct xfs_scrub *sc, xfs_agnumber_t agno);
-void xchk_ag_btcur_free(struct xfs_scrub *sc);
-void xchk_ag_btcur_init(struct xfs_scrub *sc);
+int xchk_ag_read_headers(struct xfs_scrub *sc, xfs_agnumber_t agno,
+		struct xchk_ag *sa);
+void xchk_ag_btcur_free(struct xchk_ag *sa);
+void xchk_ag_btcur_init(struct xfs_scrub *sc, struct xchk_ag *sa);
 int xchk_count_rmap_ownedby_ag(struct xfs_scrub *sc, struct xfs_btree_cur *cur,
 		const struct xfs_owner_info *oinfo, xfs_filblks_t *blocks);
 

@@ -4,7 +4,7 @@
  * Derived from the PCAN project file driver/src/pcan_pccard.c
  *
  * Copyright (C) 2006-2025 PEAK System-Technik GmbH
- * Author: Stéphane Grosjean <s.grosjean@peak-system.fr>
+ * Author: Stéphane Grosjean <stephane.grosjean@hms-networks.com>
  */
 #include <linux/kernel.h>
 #include <linux/module.h>
@@ -19,7 +19,7 @@
 #include <linux/can/dev.h>
 #include "sja1000.h"
 
-MODULE_AUTHOR("Stéphane Grosjean <s.grosjean@peak-system.fr>");
+MODULE_AUTHOR("Stéphane Grosjean <stephane.grosjean@hms-networks.com>");
 MODULE_DESCRIPTION("CAN driver for PEAK-System PCAN-PC Cards");
 MODULE_LICENSE("GPL v2");
 
@@ -650,7 +650,7 @@ static int pcan_probe(struct pcmcia_device *pdev)
 		goto probe_err_1;
 	}
 
-	card = kzalloc_obj(struct pcan_pccard);
+	card = kzalloc(sizeof(struct pcan_pccard), GFP_KERNEL);
 	if (!card) {
 		err = -ENOMEM;
 		goto probe_err_2;

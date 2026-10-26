@@ -35,7 +35,7 @@
 #include "dce112/dce112_resource.h"
 
 #include "dce110/dce110_resource.h"
-#include "dio/virtual/virtual_stream_encoder.h"
+#include "virtual/virtual_stream_encoder.h"
 #include "dce120/dce120_timing_generator.h"
 #include "irq/dce120/irq_service_dce120.h"
 #include "dce/dce_opp.h"
@@ -428,7 +428,7 @@ static struct output_pixel_processor *dce120_opp_create(
 	uint32_t inst)
 {
 	struct dce110_opp *opp =
-		kzalloc_obj(struct dce110_opp);
+		kzalloc(sizeof(struct dce110_opp), GFP_KERNEL);
 
 	if (!opp)
 		return NULL;
@@ -442,7 +442,7 @@ static struct dce_aux *dce120_aux_engine_create(
 	uint32_t inst)
 {
 	struct aux_engine_dce110 *aux_engine =
-		kzalloc_obj(struct aux_engine_dce110);
+		kzalloc(sizeof(struct aux_engine_dce110), GFP_KERNEL);
 
 	if (!aux_engine)
 		return NULL;
@@ -480,7 +480,7 @@ static struct dce_i2c_hw *dce120_i2c_hw_create(
 	uint32_t inst)
 {
 	struct dce_i2c_hw *dce_i2c_hw =
-		kzalloc_obj(struct dce_i2c_hw);
+		kzalloc(sizeof(struct dce_i2c_hw), GFP_KERNEL);
 
 	if (!dce_i2c_hw)
 		return NULL;
@@ -491,7 +491,6 @@ static struct dce_i2c_hw *dce120_i2c_hw_create(
 	return dce_i2c_hw;
 }
 static const struct bios_registers bios_regs = {
-	.BIOS_SCRATCH_0 = mmBIOS_SCRATCH_0 + NBIO_BASE(mmBIOS_SCRATCH_0_BASE_IDX),
 	.BIOS_SCRATCH_3 = mmBIOS_SCRATCH_3 + NBIO_BASE(mmBIOS_SCRATCH_3_BASE_IDX),
 	.BIOS_SCRATCH_6 = mmBIOS_SCRATCH_6 + NBIO_BASE(mmBIOS_SCRATCH_6_BASE_IDX)
 };
@@ -527,11 +526,8 @@ static const struct dc_plane_cap plane_cap = {
 };
 
 static const struct dc_debug_options debug_defaults = {
-	.disable_clock_gate = true,
-};
-
-static const struct dc_check_config config_defaults = {
-	.enable_legacy_fast_update = true,
+		.disable_clock_gate = true,
+		.enable_legacy_fast_update = true,
 };
 
 static struct clock_source *dce120_clock_source_create(
@@ -541,7 +537,8 @@ static struct clock_source *dce120_clock_source_create(
 	const struct dce110_clk_src_regs *regs,
 	bool dp_clk_src)
 {
-	struct dce110_clk_src *clk_src = kzalloc_obj(*clk_src);
+	struct dce110_clk_src *clk_src =
+		kzalloc(sizeof(*clk_src), GFP_KERNEL);
 
 	if (!clk_src)
 		return NULL;
@@ -582,7 +579,7 @@ static struct timing_generator *dce120_timing_generator_create(
 		const struct dce110_timing_generator_offsets *offsets)
 {
 	struct dce110_timing_generator *tg110 =
-		kzalloc_obj(struct dce110_timing_generator);
+		kzalloc(sizeof(struct dce110_timing_generator), GFP_KERNEL);
 
 	if (!tg110)
 		return NULL;
@@ -626,7 +623,7 @@ static void dce120_resource_destruct(struct dce110_resource_pool *pool)
 		}
 	}
 
-	for (i = 0; i < (unsigned int)pool->base.res_cap->num_ddc; i++) {
+	for (i = 0; i < pool->base.res_cap->num_ddc; i++) {
 		if (pool->base.engines[i] != NULL)
 			dce110_engine_destroy(&pool->base.engines[i]);
 		if (pool->base.hw_i2cs[i] != NULL) {
@@ -712,9 +709,8 @@ static struct link_encoder *dce120_link_encoder_create(
 	struct dc_context *ctx,
 	const struct encoder_init_data *enc_init_data)
 {
-	(void)ctx;
 	struct dce110_link_encoder *enc110 =
-		kzalloc_obj(struct dce110_link_encoder);
+		kzalloc(sizeof(struct dce110_link_encoder), GFP_KERNEL);
 	int link_regs_id;
 
 	if (!enc110)
@@ -737,7 +733,7 @@ static struct link_encoder *dce120_link_encoder_create(
 static struct panel_cntl *dce120_panel_cntl_create(const struct panel_cntl_init_data *init_data)
 {
 	struct dce_panel_cntl *panel_cntl =
-		kzalloc_obj(struct dce_panel_cntl);
+		kzalloc(sizeof(struct dce_panel_cntl), GFP_KERNEL);
 
 	if (!panel_cntl)
 		return NULL;
@@ -754,7 +750,7 @@ static struct panel_cntl *dce120_panel_cntl_create(const struct panel_cntl_init_
 static struct input_pixel_processor *dce120_ipp_create(
 	struct dc_context *ctx, uint32_t inst)
 {
-	struct dce_ipp *ipp = kzalloc_obj(struct dce_ipp);
+	struct dce_ipp *ipp = kzalloc(sizeof(struct dce_ipp), GFP_KERNEL);
 
 	if (!ipp) {
 		BREAK_TO_DEBUGGER();
@@ -771,7 +767,7 @@ static struct stream_encoder *dce120_stream_encoder_create(
 	struct dc_context *ctx)
 {
 	struct dce110_stream_encoder *enc110 =
-		kzalloc_obj(struct dce110_stream_encoder);
+		kzalloc(sizeof(struct dce110_stream_encoder), GFP_KERNEL);
 
 	if (!enc110)
 		return NULL;
@@ -814,7 +810,7 @@ static const struct dce_hwseq_mask dce121_hwseq_mask = {
 static struct dce_hwseq *dce120_hwseq_create(
 	struct dc_context *ctx)
 {
-	struct dce_hwseq *hws = kzalloc_obj(struct dce_hwseq);
+	struct dce_hwseq *hws = kzalloc(sizeof(struct dce_hwseq), GFP_KERNEL);
 
 	if (hws) {
 		hws->ctx = ctx;
@@ -828,7 +824,7 @@ static struct dce_hwseq *dce120_hwseq_create(
 static struct dce_hwseq *dce121_hwseq_create(
 	struct dc_context *ctx)
 {
-	struct dce_hwseq *hws = kzalloc_obj(struct dce_hwseq);
+	struct dce_hwseq *hws = kzalloc(sizeof(struct dce_hwseq), GFP_KERNEL);
 
 	if (hws) {
 		hws->ctx = ctx;
@@ -876,7 +872,8 @@ static struct mem_input *dce120_mem_input_create(
 	struct dc_context *ctx,
 	uint32_t inst)
 {
-	struct dce_mem_input *dce_mi = kzalloc_obj(struct dce_mem_input);
+	struct dce_mem_input *dce_mi = kzalloc(sizeof(struct dce_mem_input),
+					       GFP_KERNEL);
 
 	if (!dce_mi) {
 		BREAK_TO_DEBUGGER();
@@ -892,7 +889,7 @@ static struct transform *dce120_transform_create(
 	uint32_t inst)
 {
 	struct dce_transform *transform =
-		kzalloc_obj(struct dce_transform);
+		kzalloc(sizeof(struct dce_transform), GFP_KERNEL);
 
 	if (!transform)
 		return NULL;
@@ -927,7 +924,7 @@ static void bw_calcs_data_update_from_pplib(struct dc *dc)
 	struct dm_pp_clock_levels_with_latency eng_clks = {0};
 	struct dm_pp_clock_levels_with_latency mem_clks = {0};
 	struct dm_pp_wm_sets_with_clock_ranges clk_ranges = {0};
-	unsigned int i;
+	int i;
 	unsigned int clk;
 	unsigned int latency;
 	/*original logic in dal3*/
@@ -1082,7 +1079,7 @@ static bool dce120_resource_construct(
 	/* TODO: Fill more data from GreenlandAsicCapability.cpp */
 	pool->base.pipe_count = res_cap.num_timing_generator;
 	pool->base.timing_generator_count = pool->base.res_cap->num_timing_generator;
-	pool->base.underlay_pipe_index = (unsigned int)NO_UNDERLAY_PIPE;
+	pool->base.underlay_pipe_index = NO_UNDERLAY_PIPE;
 
 	dc->caps.max_downscale_ratio = 200;
 	dc->caps.i2c_speed_in_khz = 100;
@@ -1093,7 +1090,6 @@ static bool dce120_resource_construct(
 	dc->caps.psp_setup_panel_mode = true;
 	dc->caps.extended_aux_timeout_support = false;
 	dc->debug = debug_defaults;
-	dc->check_config = config_defaults;
 
 	/*************************************************
 	 *  Create resources                             *
@@ -1227,7 +1223,7 @@ static bool dce120_resource_construct(
 		j++;
 	}
 
-	for (i = 0; i < (unsigned int)pool->base.res_cap->num_ddc; i++) {
+	for (i = 0; i < pool->base.res_cap->num_ddc; i++) {
 		pool->base.engines[i] = dce120_aux_engine_create(ctx, i);
 		if (pool->base.engines[i] == NULL) {
 			BREAK_TO_DEBUGGER();
@@ -1296,7 +1292,7 @@ struct resource_pool *dce120_create_resource_pool(
 	struct dc *dc)
 {
 	struct dce110_resource_pool *pool =
-		kzalloc_obj(struct dce110_resource_pool);
+		kzalloc(sizeof(struct dce110_resource_pool), GFP_KERNEL);
 
 	if (!pool)
 		return NULL;

@@ -23,17 +23,16 @@
 
 #include <linux/module.h>
 #include <linux/platform_device.h>
-#include <linux/reset.h>
+#include <linux/pm_runtime.h>
 #include <linux/device.h>
 #include <linux/io.h>
 #include <linux/sched/signal.h>
 #include <linux/dma-fence-array.h>
 
 #include <drm/drm_exec.h>
-#include <drm/drm_print.h>
 #include <drm/drm_syncobj.h>
-#include <drm/drm_timeout.h>
 
+#include "uapi/drm/vc4_drm.h"
 #include "vc4_drv.h"
 #include "vc4_regs.h"
 #include "vc4_trace.h"
@@ -111,7 +110,7 @@ vc4_get_hang_state_ioctl(struct drm_device *dev, void *data,
 	state->bo = get_state->bo;
 	memcpy(get_state, state, sizeof(*state));
 
-	bo_state = kzalloc_objs(*bo_state, state->bo_count);
+	bo_state = kcalloc(state->bo_count, sizeof(*bo_state), GFP_KERNEL);
 	if (!bo_state) {
 		ret = -ENOMEM;
 		goto err_free;
@@ -162,7 +161,7 @@ vc4_save_hang_state(struct drm_device *dev)
 	unsigned long irqflags;
 	unsigned int i, j, k, unref_list_count;
 
-	kernel_state = kzalloc_objs(*kernel_state, 1);
+	kernel_state = kcalloc(1, sizeof(*kernel_state), GFP_KERNEL);
 	if (!kernel_state)
 		return;
 
@@ -186,8 +185,8 @@ vc4_save_hang_state(struct drm_device *dev)
 		state->bo_count += exec[i]->bo_count + unref_list_count;
 	}
 
-	kernel_state->bo = kzalloc_objs(*kernel_state->bo, state->bo_count,
-					GFP_ATOMIC);
+	kernel_state->bo = kcalloc(state->bo_count,
+				   sizeof(*kernel_state->bo), GFP_ATOMIC);
 
 	if (!kernel_state->bo)
 		goto err_free_state;
@@ -293,22 +292,19 @@ err_free_state:
 static void
 vc4_reset(struct drm_device *dev)
 {
-	struct vc4_v3d *v3d = to_vc4_dev(dev)->v3d;
-	int ret;
+	struct vc4_dev *vc4 = to_vc4_dev(dev);
 
-	vc4_irq_disable(dev);
+	DRM_INFO("Resetting GPU.\n");
 
-	if (v3d->reset) {
-		drm_info(dev, "Resetting GPU.\n");
-
-		ret = reset_control_reset(v3d->reset);
-		if (ret)
-			drm_err(dev, "Failed to reset the GPU: %d\n", ret);
-
-		vc4_v3d_init_hw(dev);
-	} else {
-		drm_info_once(dev, "No reset line; GPU state is not reset.\n");
+	mutex_lock(&vc4->power_lock);
+	if (vc4->power_refcount) {
+		/* Power the device off and back on the by dropping the
+		 * reference on runtime PM.
+		 */
+		pm_runtime_put_sync_suspend(&vc4->v3d->pdev->dev);
+		pm_runtime_get_sync(&vc4->v3d->pdev->dev);
 	}
+	mutex_unlock(&vc4->power_lock);
 
 	vc4_irq_reset(dev);
 
@@ -324,19 +320,10 @@ vc4_reset_work(struct work_struct *work)
 {
 	struct vc4_dev *vc4 =
 		container_of(work, struct vc4_dev, hangcheck.reset_work);
-	int ret;
-
-	/* Make sure the device is not suspended during the reset. */
-	ret = vc4_v3d_pm_get(vc4);
-	if (ret) {
-		drm_err(&vc4->base, "Failed to resume V3D for GPU reset: %d\n", ret);
-		return;
-	}
 
 	vc4_save_hang_state(&vc4->base);
-	vc4_reset(&vc4->base);
 
-	vc4_v3d_pm_put(vc4);
+	vc4_reset(&vc4->base);
 }
 
 static void
@@ -637,7 +624,7 @@ vc4_queue_submit(struct drm_device *dev, struct vc4_exec_info *exec,
 	unsigned long irqflags;
 	struct vc4_fence *fence;
 
-	fence = kzalloc_obj(*fence);
+	fence = kzalloc(sizeof(*fence), GFP_KERNEL);
 	if (!fence)
 		return -ENOMEM;
 	fence->dev = dev;
@@ -989,7 +976,7 @@ vc4_wait_bo_ioctl(struct drm_device *dev, void *data,
 	int ret;
 	struct drm_vc4_wait_bo *args = data;
 	unsigned long timeout_jiffies =
-		drm_timeout_rel_to_jiffies(args->timeout_ns);
+		usecs_to_jiffies(div_u64(args->timeout_ns, 1000));
 	ktime_t start = ktime_get();
 	u64 delta_ns;
 
@@ -1064,7 +1051,7 @@ vc4_submit_cl_ioctl(struct drm_device *dev, void *data,
 		return -EINVAL;
 	}
 
-	exec = kzalloc_objs(*exec, 1);
+	exec = kcalloc(1, sizeof(*exec), GFP_KERNEL);
 	if (!exec)
 		return -ENOMEM;
 
@@ -1196,6 +1183,10 @@ int vc4_gem_init(struct drm_device *dev)
 
 	INIT_WORK(&vc4->job_done_work, vc4_job_done_work);
 
+	ret = drmm_mutex_init(dev, &vc4->power_lock);
+	if (ret)
+		return ret;
+
 	INIT_LIST_HEAD(&vc4->purgeable.list);
 
 	ret = drmm_mutex_init(dev, &vc4->purgeable.lock);
@@ -1267,7 +1258,7 @@ int vc4_gem_madvise_ioctl(struct drm_device *dev, void *data,
 	/* Not sure it's safe to purge imported BOs. Let's just assume it's
 	 * not until proven otherwise.
 	 */
-	if (drm_gem_is_imported(gem_obj)) {
+	if (gem_obj->import_attach) {
 		DRM_DEBUG("madvise not supported on imported BOs\n");
 		ret = -EINVAL;
 		goto out_put_gem;

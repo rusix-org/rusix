@@ -747,9 +747,8 @@ static int edid_write_vga_segment(struct v4l2_subdev *sd)
 		return -EIO;
 	}
 
-	/* enable hotplug after 143 ms */
-	schedule_delayed_work(&state->delayed_work_enable_hotplug,
-			      V4L2_SET_EDID_HPD_LOW_JIFFIES);
+	/* enable hotplug after 200 ms */
+	schedule_delayed_work(&state->delayed_work_enable_hotplug, HZ / 5);
 
 	return 0;
 }
@@ -831,9 +830,8 @@ static int edid_write_hdmi_segment(struct v4l2_subdev *sd, u8 port)
 	}
 	cec_s_phys_addr(state->cec_adap, parent_pa, false);
 
-	/* enable hotplug after 143 ms */
-	schedule_delayed_work(&state->delayed_work_enable_hotplug,
-			      V4L2_SET_EDID_HPD_LOW_JIFFIES);
+	/* enable hotplug after 200 ms */
+	schedule_delayed_work(&state->delayed_work_enable_hotplug, HZ / 5);
 
 	return 0;
 }
@@ -2112,7 +2110,6 @@ static int adv7842_get_format(struct v4l2_subdev *sd,
 }
 
 static int adv7842_set_format(struct v4l2_subdev *sd,
-			      const struct v4l2_subdev_client_info *ci,
 			      struct v4l2_subdev_state *sd_state,
 			      struct v4l2_subdev_format *format)
 {
@@ -3472,8 +3469,8 @@ static struct i2c_client *adv7842_dummy_client(struct v4l2_subdev *sd, const cha
 
 	cp = i2c_new_dummy_device(client->adapter, io_read(sd, io_reg) >> 1);
 	if (IS_ERR(cp)) {
-		v4l2_err(sd, "register %s on i2c addr 0x%x failed with %pe\n",
-			 desc, addr, cp);
+		v4l2_err(sd, "register %s on i2c addr 0x%x failed with %ld\n",
+			 desc, addr, PTR_ERR(cp));
 		cp = NULL;
 	}
 
@@ -3678,7 +3675,7 @@ static void adv7842_remove(struct i2c_client *client)
 /* ----------------------------------------------------------------------- */
 
 static const struct i2c_device_id adv7842_id[] = {
-	{ .name = "adv7842" },
+	{ "adv7842" },
 	{ }
 };
 MODULE_DEVICE_TABLE(i2c, adv7842_id);

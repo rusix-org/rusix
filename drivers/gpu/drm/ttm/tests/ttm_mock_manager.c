@@ -4,7 +4,6 @@
  */
 
 #include <linux/export.h>
-#include <linux/module.h>
 
 #include <drm/ttm/ttm_resource.h>
 #include <drm/ttm/ttm_device.h>
@@ -35,7 +34,7 @@ static int ttm_mock_manager_alloc(struct ttm_resource_manager *man,
 	u64 lpfn, fpfn, alloc_size;
 	int err;
 
-	mock_res = kzalloc_obj(*mock_res);
+	mock_res = kzalloc(sizeof(*mock_res), GFP_KERNEL);
 
 	if (!mock_res)
 		return -ENOMEM;
@@ -100,7 +99,7 @@ int ttm_mock_manager_init(struct ttm_device *bdev, u32 mem_type, u32 size)
 	struct ttm_resource_manager *base;
 	int err;
 
-	manager = kzalloc_obj(*manager);
+	manager = kzalloc(sizeof(*manager), GFP_KERNEL);
 	if (!manager)
 		return -ENOMEM;
 
@@ -194,7 +193,7 @@ int ttm_bad_manager_init(struct ttm_device *bdev, u32 mem_type, u32 size)
 {
 	struct ttm_resource_manager *man;
 
-	man = kzalloc_obj(*man);
+	man = kzalloc(sizeof(*man), GFP_KERNEL);
 	if (!man)
 		return -ENOMEM;
 

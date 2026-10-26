@@ -673,8 +673,7 @@ int mmc_switch(struct mmc_card *card, u8 set, u8 index, u8 value,
 }
 EXPORT_SYMBOL_GPL(mmc_switch);
 
-int mmc_send_tuning_timeout(struct mmc_host *host, u32 opcode, int *cmd_error,
-			    u32 timeout_ms)
+int mmc_send_tuning(struct mmc_host *host, u32 opcode, int *cmd_error)
 {
 	struct mmc_request mrq = {};
 	struct mmc_command cmd = {};
@@ -708,7 +707,12 @@ int mmc_send_tuning_timeout(struct mmc_host *host, u32 opcode, int *cmd_error,
 	data.blocks = 1;
 	data.flags = MMC_DATA_READ;
 
-	data.timeout_ns = timeout_ms * NSEC_PER_MSEC;
+	/*
+	 * According to the tuning specs, Tuning process
+	 * is normally shorter 40 executions of CMD19,
+	 * and timeout value should be shorter than 150 ms
+	 */
+	data.timeout_ns = 150 * NSEC_PER_MSEC;
 
 	data.sg = &sg;
 	data.sg_len = 1;
@@ -735,18 +739,6 @@ int mmc_send_tuning_timeout(struct mmc_host *host, u32 opcode, int *cmd_error,
 out:
 	kfree(data_buf);
 	return err;
-}
-EXPORT_SYMBOL_GPL(mmc_send_tuning_timeout);
-
-int mmc_send_tuning(struct mmc_host *host, u32 opcode, int *cmd_error)
-{
-	/*
-	 * The eMMC and SD specs give the tuning process an overall
-	 * budget of 150 ms.  mmc_send_tuning() simply applies that as
-	 * the timeout of every single tuning command.  Drivers which
-	 * want a different timeout can use mmc_send_tuning_timeout().
-	 */
-	return mmc_send_tuning_timeout(host, opcode, cmd_error, 150);
 }
 EXPORT_SYMBOL_GPL(mmc_send_tuning);
 

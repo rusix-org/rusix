@@ -726,8 +726,7 @@ static void scan_core_topology(int *map, struct topology *t, int nr_cpus)
 
 static int str_to_bitmap(char *s, cpumask_t *b, int nr_cpus)
 {
-	unsigned int idx;
-	int ret = 0;
+	int idx, ret = 0;
 	struct perf_cpu_map *map;
 	struct perf_cpu cpu;
 

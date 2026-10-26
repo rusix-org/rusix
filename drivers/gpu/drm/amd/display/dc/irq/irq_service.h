@@ -90,13 +90,4 @@ bool hpd1_ack(
 	struct irq_service *irq_service,
 	const struct irq_source_info *info);
 
-bool dal_irq_service_dummy_set(
-	struct irq_service *irq_service,
-	const struct irq_source_info *info,
-	bool enable);
-
-bool dal_irq_service_dummy_ack(
-	struct irq_service *irq_service,
-	const struct irq_source_info *info);
-
 #endif

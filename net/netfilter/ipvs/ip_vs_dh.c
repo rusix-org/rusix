@@ -30,7 +30,8 @@
  *
  */
 
-#define pr_fmt(fmt) "IPVS: " fmt
+#define KMSG_COMPONENT "IPVS"
+#define pr_fmt(fmt) KMSG_COMPONENT ": " fmt
 
 #include <linux/ip.h>
 #include <linux/slab.h>
@@ -153,7 +154,7 @@ static int ip_vs_dh_init_svc(struct ip_vs_service *svc)
 	struct ip_vs_dh_state *s;
 
 	/* allocate the DH table for this service */
-	s = kzalloc_obj(struct ip_vs_dh_state);
+	s = kzalloc(sizeof(struct ip_vs_dh_state), GFP_KERNEL);
 	if (s == NULL)
 		return -ENOMEM;
 
@@ -196,6 +197,16 @@ static int ip_vs_dh_dest_changed(struct ip_vs_service *svc,
 
 
 /*
+ *      If the dest flags is set with IP_VS_DEST_F_OVERLOAD,
+ *      consider that the server is overloaded here.
+ */
+static inline int is_overloaded(struct ip_vs_dest *dest)
+{
+	return dest->flags & IP_VS_DEST_F_OVERLOAD;
+}
+
+
+/*
  *      Destination hashing scheduling
  */
 static struct ip_vs_dest *
@@ -209,8 +220,10 @@ ip_vs_dh_schedule(struct ip_vs_service *svc, const struct sk_buff *skb,
 
 	s = (struct ip_vs_dh_state *) svc->sched_data;
 	dest = ip_vs_dh_get(svc->af, s, &iph->daddr);
-	if (!dest || atomic_read(&dest->weight) <= 0 ||
-	    ip_vs_dest_is_overloaded(dest)) {
+	if (!dest ||
+	    !(dest->cflags & IP_VS_DEST_CF_AVAILABLE)
+	    || atomic_read(&dest->weight) <= 0
+	    || is_overloaded(dest)) {
 		ip_vs_scheduler_err(svc, "no destination available");
 		return NULL;
 	}

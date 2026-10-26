@@ -27,7 +27,7 @@
 /* Data fields for EX_TYPE_UACCESS_CPY */
 #define EX_DATA_UACCESS_WRITE	BIT(0)
 
-#ifdef __ASSEMBLER__
+#ifdef __ASSEMBLY__
 
 #define __ASM_EXTABLE_RAW(insn, fixup, type, data)	\
 	.pushsection	__ex_table, "a";		\
@@ -77,7 +77,7 @@
 	__ASM_EXTABLE_RAW(\insn, \fixup, EX_TYPE_UACCESS_CPY, \uaccess_is_write)
 	.endm
 
-#else /* __ASSEMBLER__ */
+#else /* __ASSEMBLY__ */
 
 #include <linux/stringify.h>
 
@@ -132,6 +132,6 @@
 			    EX_DATA_REG(ADDR, addr)				\
 			  ")")
 
-#endif /* __ASSEMBLER__ */
+#endif /* __ASSEMBLY__ */
 
 #endif /* __ASM_ASM_EXTABLE_H */

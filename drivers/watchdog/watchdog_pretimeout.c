@@ -119,7 +119,7 @@ int watchdog_register_governor(struct watchdog_governor *gov)
 	struct watchdog_pretimeout *p;
 	struct governor_priv *priv;
 
-	priv = kzalloc_obj(*priv);
+	priv = kzalloc(sizeof(*priv), GFP_KERNEL);
 	if (!priv)
 		return -ENOMEM;
 
@@ -185,7 +185,7 @@ int watchdog_register_pretimeout(struct watchdog_device *wdd)
 	if (!watchdog_have_pretimeout(wdd))
 		return 0;
 
-	p = kzalloc_obj(*p);
+	p = kzalloc(sizeof(*p), GFP_KERNEL);
 	if (!p)
 		return -ENOMEM;
 

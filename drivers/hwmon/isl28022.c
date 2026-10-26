@@ -338,28 +338,21 @@ DEFINE_SHOW_ATTRIBUTE(shunt_voltage);
  */
 static int isl28022_read_properties(struct device *dev, struct isl28022_data *data)
 {
-	const char *propname;
 	u32 val;
 	int err;
 
-	propname = "shunt-resistor-micro-ohms";
-	if (device_property_present(dev, propname)) {
-		err = device_property_read_u32(dev, propname, &val);
-		if (err)
-			return err;
-	} else {
+	err = device_property_read_u32(dev, "shunt-resistor-micro-ohms", &val);
+	if (err == -EINVAL)
 		val = 10000;
-	}
+	else if (err < 0)
+		return err;
 	data->shunt = val;
 
-	propname = "renesas,shunt-range-microvolt";
-	if (device_property_present(dev, propname)) {
-		err = device_property_read_u32(dev, propname, &val);
-		if (err)
-			return err;
-	} else {
+	err = device_property_read_u32(dev, "renesas,shunt-range-microvolt", &val);
+	if (err == -EINVAL)
 		val = 320000;
-	}
+	else if (err < 0)
+		return err;
 
 	switch (val) {
 	case 40000:
@@ -383,19 +376,20 @@ static int isl28022_read_properties(struct device *dev, struct isl28022_data *da
 			goto shunt_invalid;
 		break;
 	default:
-		return dev_err_probe(dev, -EINVAL, "%s invalid value %u\n", propname, val);
+		return dev_err_probe(dev, -EINVAL,
+				     "renesas,shunt-range-microvolt invalid value %d\n",
+				     val);
 	}
 
-	propname = "renesas,average-samples";
-	if (device_property_present(dev, propname)) {
-		err = device_property_read_u32(dev, propname, &val);
-		if (err)
-			return err;
-	} else {
+	err = device_property_read_u32(dev, "renesas,average-samples", &val);
+	if (err == -EINVAL)
 		val = 1;
-	}
+	else if (err < 0)
+		return err;
 	if (val > 128 || hweight32(val) != 1)
-		return dev_err_probe(dev, -EINVAL, "%s invalid value %u\n", propname, val);
+		return dev_err_probe(dev, -EINVAL,
+				     "renesas,average-samples invalid value %d\n",
+				     val);
 
 	data->average = val;
 
@@ -475,7 +469,7 @@ static int isl28022_probe(struct i2c_client *client)
 }
 
 static const struct i2c_device_id isl28022_ids[] = {
-	{ .name = "isl28022" },
+	{ "isl28022" },
 	{ /* LIST END */ }
 };
 MODULE_DEVICE_TABLE(i2c, isl28022_ids);

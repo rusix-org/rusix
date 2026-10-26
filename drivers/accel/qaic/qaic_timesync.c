@@ -1,12 +1,11 @@
 // SPDX-License-Identifier: GPL-2.0-only
+/* Copyright (c) 2023 Qualcomm Innovation Center, Inc. All rights reserved. */
 
-/* Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries. */
-
-#include <linux/device-id/mhi.h>
 #include <linux/io.h>
 #include <linux/kernel.h>
 #include <linux/math64.h>
 #include <linux/mhi.h>
+#include <linux/mod_devicetable.h>
 #include <linux/module.h>
 #include <linux/time64.h>
 #include <linux/timer.h>
@@ -172,13 +171,6 @@ mod_timer:
 		dev_err(mqtsdev->dev, "%s mod_timer error:%d\n", __func__, ret);
 }
 
-void qaic_mqts_ch_stop_timer(struct mhi_device *mhi_dev)
-{
-	struct mqts_dev *mqtsdev = dev_get_drvdata(&mhi_dev->dev);
-
-	timer_delete_sync(&mqtsdev->timer);
-}
-
 static int qaic_timesync_probe(struct mhi_device *mhi_dev, const struct mhi_device_id *id)
 {
 	struct qaic_device *qdev = pci_get_drvdata(to_pci_dev(mhi_dev->mhi_cntrl->cntrl_dev));
@@ -186,7 +178,7 @@ static int qaic_timesync_probe(struct mhi_device *mhi_dev, const struct mhi_devi
 	struct timer_list *timer;
 	int ret;
 
-	mqtsdev = kzalloc_obj(*mqtsdev);
+	mqtsdev = kzalloc(sizeof(*mqtsdev), GFP_KERNEL);
 	if (!mqtsdev) {
 		ret = -ENOMEM;
 		goto out;
@@ -197,7 +189,7 @@ static int qaic_timesync_probe(struct mhi_device *mhi_dev, const struct mhi_devi
 	mqtsdev->qdev = qdev;
 	mqtsdev->dev = &qdev->pdev->dev;
 
-	mqtsdev->sync_msg = kzalloc_obj(*mqtsdev->sync_msg);
+	mqtsdev->sync_msg = kzalloc(sizeof(*mqtsdev->sync_msg), GFP_KERNEL);
 	if (!mqtsdev->sync_msg) {
 		ret = -ENOMEM;
 		goto free_mqts_dev;
@@ -214,7 +206,6 @@ static int qaic_timesync_probe(struct mhi_device *mhi_dev, const struct mhi_devi
 	timer->expires = jiffies + msecs_to_jiffies(timesync_delay_ms);
 	add_timer(timer);
 	dev_set_drvdata(&mhi_dev->dev, mqtsdev);
-	qdev->mqts_ch = mhi_dev;
 
 	return 0;
 
@@ -230,7 +221,6 @@ static void qaic_timesync_remove(struct mhi_device *mhi_dev)
 {
 	struct mqts_dev *mqtsdev = dev_get_drvdata(&mhi_dev->dev);
 
-	mqtsdev->qdev->mqts_ch = NULL;
 	timer_delete_sync(&mqtsdev->timer);
 	mhi_unprepare_from_transfer(mqtsdev->mhi_dev);
 	kfree(mqtsdev->sync_msg);
@@ -276,7 +266,7 @@ static void qaic_boot_timesync_worker(struct work_struct *work)
 
 	switch (data.hdr.msg_type) {
 	case QAIC_TS_CMD_TO_HOST:
-		req = kzalloc_obj(*req);
+		req = kzalloc(sizeof(*req), GFP_KERNEL);
 		if (!req)
 			break;
 
@@ -305,7 +295,7 @@ static int qaic_boot_timesync_queue_resp(struct mhi_device *mhi_dev, struct qaic
 	struct qts_resp *resp;
 	int ret;
 
-	resp = kzalloc_obj(*resp);
+	resp = kzalloc(sizeof(*resp), GFP_KERNEL);
 	if (!resp)
 		return -ENOMEM;
 

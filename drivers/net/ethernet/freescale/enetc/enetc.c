@@ -14,21 +14,12 @@
 
 u32 enetc_port_mac_rd(struct enetc_si *si, u32 reg)
 {
-	/* ENETC with pseudo MAC does not have Ethernet MAC
-	 * port registers.
-	 */
-	if (enetc_is_pseudo_mac(si))
-		return 0;
-
 	return enetc_port_rd(&si->hw, reg);
 }
 EXPORT_SYMBOL_GPL(enetc_port_mac_rd);
 
 void enetc_port_mac_wr(struct enetc_si *si, u32 reg, u32 val)
 {
-	if (enetc_is_pseudo_mac(si))
-		return;
-
 	enetc_port_wr(&si->hw, reg, val);
 	if (si->hw_features & ENETC_SI_F_QBU)
 		enetc_port_wr(&si->hw, reg + si->drvdata->pmac_offset, val);
@@ -88,7 +79,10 @@ void enetc_set_congestion_mode(struct enetc_ndev_priv *priv, bool enable)
 
 	spin_lock(&si->gen_lock);
 
-	assign_bit(ENETC_RXBDR_CM, &priv->flags, enable);
+	if (enable)
+		set_bit(ENETC_RXBDR_CM, &priv->flags);
+	else
+		clear_bit(ENETC_RXBDR_CM, &priv->flags);
 
 	for (int i = 0; i < priv->num_rx_rings; i++) {
 		u32 old_rbmr = enetc_rxbdr_rd(hw, i, ENETC_RBMR);
@@ -2299,7 +2293,7 @@ enetc_alloc_tx_resources(struct enetc_ndev_priv *priv)
 	struct enetc_bdr_resource *tx_res;
 	int i, err;
 
-	tx_res = kzalloc_objs(*tx_res, priv->num_tx_rings);
+	tx_res = kcalloc(priv->num_tx_rings, sizeof(*tx_res), GFP_KERNEL);
 	if (!tx_res)
 		return ERR_PTR(-ENOMEM);
 
@@ -2371,7 +2365,7 @@ enetc_alloc_rx_resources(struct enetc_ndev_priv *priv, bool extended)
 	struct enetc_bdr_resource *rx_res;
 	int i, err;
 
-	rx_res = kzalloc_objs(*rx_res, priv->num_rx_rings);
+	rx_res = kcalloc(priv->num_rx_rings, sizeof(*rx_res), GFP_KERNEL);
 	if (!rx_res)
 		return ERR_PTR(-ENOMEM);
 
@@ -2500,7 +2494,7 @@ static int enetc_setup_default_rss_table(struct enetc_si *si, int num_groups)
 	int *rss_table;
 	int i;
 
-	rss_table = kmalloc_objs(*rss_table, si->num_rss);
+	rss_table = kmalloc_array(si->num_rss, sizeof(*rss_table), GFP_KERNEL);
 	if (!rss_table)
 		return -ENOMEM;
 
@@ -2593,7 +2587,8 @@ int enetc_alloc_si_resources(struct enetc_ndev_priv *priv)
 {
 	struct enetc_si *si = priv->si;
 
-	priv->cls_rules = kzalloc_objs(*priv->cls_rules, si->num_fs_entries);
+	priv->cls_rules = kcalloc(si->num_fs_entries, sizeof(*priv->cls_rules),
+				  GFP_KERNEL);
 	if (!priv->cls_rules)
 		return -ENOMEM;
 
@@ -2932,31 +2927,11 @@ static void enetc_clear_interrupts(struct enetc_ndev_priv *priv)
 static int enetc_phylink_connect(struct net_device *ndev)
 {
 	struct enetc_ndev_priv *priv = netdev_priv(ndev);
-	struct enetc_si *si = priv->si;
 	struct ethtool_keee edata;
 	int err;
 
 	if (!priv->phylink) {
 		/* phy-less mode */
-		if (!si->ops->vf_reg_link_status_notifier)
-			goto carrier_on;
-
-		/* For phy-less VFs on ENETC v4, attempt to register a link
-		 * status notifier with the PF via the VSI-to-PSI messaging
-		 * channel. If registration succeeds, the PF will immediately
-		 * send the current link status and broadcast future link
-		 * transitions; carrier state is then managed in
-		 * enetc_vf_msg_handle_link_status(). If registration fails,
-		 * fall back to the LS1028A behaviour and assert carrier
-		 * unconditionally via netif_carrier_on().
-		 */
-		if (!si->ops->vf_reg_link_status_notifier(si))
-			return 0;
-
-		dev_warn(&ndev->dev,
-			 "Link status notifier registration failed\n");
-
-carrier_on:
 		netif_carrier_on(ndev);
 		return 0;
 	}
@@ -3041,6 +3016,10 @@ int enetc_open(struct net_device *ndev)
 	if (err)
 		goto err_setup_irqs;
 
+	err = enetc_phylink_connect(ndev);
+	if (err)
+		goto err_phy_connect;
+
 	tx_res = enetc_alloc_tx_resources(priv);
 	if (IS_ERR(tx_res)) {
 		err = PTR_ERR(tx_res);
@@ -3053,10 +3032,6 @@ int enetc_open(struct net_device *ndev)
 		goto err_alloc_rx;
 	}
 
-	err = enetc_phylink_connect(ndev);
-	if (err)
-		goto err_phy_connect;
-
 	enetc_tx_onestep_tstamp_init(priv);
 	enetc_assign_tx_resources(priv, tx_res);
 	enetc_assign_rx_resources(priv, rx_res);
@@ -3065,11 +3040,12 @@ int enetc_open(struct net_device *ndev)
 
 	return 0;
 
-err_phy_connect:
-	enetc_free_rx_resources(rx_res, priv->num_rx_rings);
 err_alloc_rx:
 	enetc_free_tx_resources(tx_res, priv->num_tx_rings);
 err_alloc_tx:
+	if (priv->phylink)
+		phylink_disconnect_phy(priv->phylink);
+err_phy_connect:
 	enetc_free_irqs(priv);
 err_setup_irqs:
 	clk_disable_unprepare(priv->ref_clk);
@@ -3109,7 +3085,6 @@ EXPORT_SYMBOL_GPL(enetc_stop);
 int enetc_close(struct net_device *ndev)
 {
 	struct enetc_ndev_priv *priv = netdev_priv(ndev);
-	struct enetc_si *si = priv->si;
 
 	enetc_stop(ndev);
 
@@ -3117,20 +3092,6 @@ int enetc_close(struct net_device *ndev)
 		phylink_stop(priv->phylink);
 		phylink_disconnect_phy(priv->phylink);
 	} else {
-		if (!si->ops->vf_unreg_link_status_notifier)
-			goto carrier_off;
-
-		/* No need to check whether the previous registration was
-		 * successful. Sending the deregistration message has no
-		 * impact; the PF side simply clears the corresponding bit
-		 * in link_status_ms_mask for the VF.
-		 */
-		if (!si->ops->vf_unreg_link_status_notifier(si))
-			goto carrier_off;
-
-		dev_warn(&ndev->dev,
-			 "Link status notifier unregistration failed\n");
-carrier_off:
 		netif_carrier_off(ndev);
 	}
 
@@ -3469,8 +3430,7 @@ int enetc_hwtstamp_set(struct net_device *ndev,
 		new_offloads |= ENETC_F_TX_TSTAMP;
 		break;
 	case HWTSTAMP_TX_ONESTEP_SYNC:
-		if (!enetc_si_is_pf(priv->si) ||
-		    enetc_is_pseudo_mac(priv->si))
+		if (!enetc_si_is_pf(priv->si))
 			return -EOPNOTSUPP;
 
 		new_offloads &= ~ENETC_F_TX_TSTAMP_MASK;
@@ -3543,7 +3503,7 @@ static int enetc_int_vector_init(struct enetc_ndev_priv *priv, int i,
 	struct enetc_bdr *bdr;
 	int j, err;
 
-	v = kzalloc_flex(*v, tx_ring, v_tx_rings);
+	v = kzalloc(struct_size(v, tx_ring, v_tx_rings), GFP_KERNEL);
 	if (!v)
 		return -ENOMEM;
 
@@ -3812,23 +3772,9 @@ static const struct enetc_drvdata enetc4_pf_data = {
 	.eth_ops = &enetc4_pf_ethtool_ops,
 };
 
-static const struct enetc_drvdata enetc4_ppm_data = {
-	.sysclk_freq = ENETC_CLK_333M,
-	.tx_csum = true,
-	.max_frags = ENETC4_MAX_SKB_FRAGS,
-	.eth_ops = &enetc4_ppm_ethtool_ops,
-};
-
 static const struct enetc_drvdata enetc_vf_data = {
 	.sysclk_freq = ENETC_CLK_400M,
 	.max_frags = ENETC_MAX_SKB_FRAGS,
-	.eth_ops = &enetc_vf_ethtool_ops,
-};
-
-static const struct enetc_drvdata enetc4_vf_data = {
-	.sysclk_freq = ENETC_CLK_333M,
-	.tx_csum = true,
-	.max_frags = ENETC4_MAX_SKB_FRAGS,
 	.eth_ops = &enetc_vf_ethtool_ops,
 };
 
@@ -3844,23 +3790,6 @@ static const struct enetc_platform_info enetc_info[] = {
 	{ .revision = ENETC_REV_1_0,
 	  .dev_id = ENETC_DEV_ID_VF,
 	  .data = &enetc_vf_data,
-	},
-	{ .revision = ENETC_REV_4_1,
-	  .dev_id = NXP_ENETC_VF_DEV_ID,
-	  .data = &enetc4_vf_data,
-	},
-	{
-	  .revision = ENETC_REV_4_3,
-	  .dev_id = NXP_ENETC_PPM_DEV_ID,
-	  .data = &enetc4_ppm_data,
-	},
-	{ .revision = ENETC_REV_4_3,
-	  .dev_id = NXP_ENETC_PF_DEV_ID,
-	  .data = &enetc4_pf_data,
-	},
-	{ .revision = ENETC_REV_4_3,
-	  .dev_id = NXP_ENETC_VF_DEV_ID,
-	  .data = &enetc4_vf_data,
 	},
 };
 

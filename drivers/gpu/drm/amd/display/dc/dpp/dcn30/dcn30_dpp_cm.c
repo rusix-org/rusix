@@ -1,8 +1,6 @@
 /*
  * Copyright 2020 Advanced Micro Devices, Inc.
  *
- * SPDX-License-Identifier: MIT
- *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
  * to deal in the Software without restriction, including without limitation
@@ -42,7 +40,7 @@
 #define FN(reg_name, field_name) \
 	dpp->tf_shift->field_name, dpp->tf_mask->field_name
 
-void dpp3_enable_cm_block(
+static void dpp3_enable_cm_block(
 		struct dpp *dpp_base)
 {
 	struct dcn3_dpp *dpp = TO_DCN30_DPP(dpp_base);
@@ -56,7 +54,7 @@ void dpp3_enable_cm_block(
 	REG_UPDATE(CM_CONTROL, CM_BYPASS, cm_bypass_mode);
 }
 
-enum dc_lut_mode dpp30_get_gamcor_current(struct dpp *dpp_base)
+static enum dc_lut_mode dpp30_get_gamcor_current(struct dpp *dpp_base)
 {
 	enum dc_lut_mode mode = LUT_BYPASS;
 	uint32_t state_mode;
@@ -76,13 +74,12 @@ enum dc_lut_mode dpp30_get_gamcor_current(struct dpp *dpp_base)
 	return mode;
 }
 
-void dpp3_program_gammcor_lut(
+static void dpp3_program_gammcor_lut(
 		struct dpp *dpp_base,
 		const struct pwl_result_data *rgb,
 		uint32_t num,
 		bool is_ram_a)
 {
-	(void)is_ram_a;
 	uint32_t i;
 	struct dcn3_dpp *dpp = TO_DCN30_DPP(dpp_base);
 	uint32_t last_base_value_red = rgb[num-1].red_reg + rgb[num-1].delta_red_reg;
@@ -135,10 +132,7 @@ static void dpp3_power_on_gamcor_lut(
 	if (dpp_base->ctx->dc->debug.enable_mem_low_power.bits.cm) {
 		if (power_on) {
 			REG_UPDATE(CM_MEM_PWR_CTRL, GAMCOR_MEM_PWR_FORCE, 0);
-			if (dpp_base->ctx->dc->caps.ips_v2_support)
-				REG_UPDATE(CM_MEM_PWR_CTRL, GAMCOR_MEM_PWR_DIS, 1);
 			REG_WAIT(CM_MEM_PWR_STATUS, GAMCOR_MEM_PWR_STATE, 0, 1, 5);
-			dpp_base->deferred_reg_writes.bits.disable_gamcor = false;
 		} else {
 			dpp_base->ctx->dc->optimized_required = true;
 			dpp_base->deferred_reg_writes.bits.disable_gamcor = true;
@@ -171,7 +165,7 @@ void dpp3_program_cm_bias(
 			CM_BIAS_CB_B, bias_params->cm_bias_cb_b);
 }
 
-void dpp3_gamcor_reg_field(
+static void dpp3_gamcor_reg_field(
 		struct dcn3_dpp *dpp,
 		struct dcn3_xfer_func_reg *reg)
 {
@@ -204,7 +198,7 @@ void dpp3_gamcor_reg_field(
 	reg->masks.exp_resion_start_segment = dpp->tf_mask->CM_GAMCOR_RAMA_EXP_REGION_START_SEGMENT_B;
 }
 
-void dpp3_configure_gamcor_lut(
+static void dpp3_configure_gamcor_lut(
 		struct dpp *dpp_base,
 		bool is_ram_a)
 {
@@ -320,7 +314,7 @@ void dpp3_set_hdr_multiplier(
 static void program_gamut_remap(
 		struct dcn3_dpp *dpp,
 		const uint16_t *regval,
-		unsigned int select)
+		int select)
 {
 	uint16_t selection = 0;
 	struct color_matrices_reg gam_regs;
@@ -382,7 +376,7 @@ void dpp3_cm_set_gamut_remap(
 {
 	struct dcn3_dpp *dpp = TO_DCN30_DPP(dpp_base);
 	int i = 0;
-	uint32_t gamut_mode;
+	int gamut_mode;
 
 	if (adjust->gamut_adjust_type != GRAPHICS_GAMUT_ADJUST_TYPE_SW)
 		/* Bypass if type is bypass or hw */
@@ -394,8 +388,8 @@ void dpp3_cm_set_gamut_remap(
 		for (i = 0; i < 12; i++)
 			arr_matrix[i] = adjust->temperature_matrix[i];
 
-		convert_float_matrix(arr_reg_val, arr_matrix,
-				CM_GAMUT_REMAP_COEF_FORMAT_S2_13, 12);
+		convert_float_matrix(
+			arr_reg_val, arr_matrix, 12);
 
 		//current coefficient set in use
 		REG_GET(CM_GAMUT_REMAP_CONTROL, CM_GAMUT_REMAP_MODE_CURRENT, &gamut_mode);
@@ -462,6 +456,6 @@ void dpp3_cm_get_gamut_remap(struct dpp *dpp_base,
 	}
 
 	adjust->gamut_adjust_type = GRAPHICS_GAMUT_ADJUST_TYPE_SW;
-	convert_hw_matrix(adjust->temperature_matrix, arr_reg_val,
-			CM_GAMUT_REMAP_COEF_FORMAT_S2_13, ARRAY_SIZE(arr_reg_val));
+	convert_hw_matrix(adjust->temperature_matrix,
+			  arr_reg_val, ARRAY_SIZE(arr_reg_val));
 }

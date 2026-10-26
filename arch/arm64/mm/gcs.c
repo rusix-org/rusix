@@ -12,7 +12,19 @@
 
 static unsigned long alloc_gcs(unsigned long addr, unsigned long size)
 {
-	return vm_mmap_shadow_stack(addr, size, 0);
+	int flags = MAP_ANONYMOUS | MAP_PRIVATE;
+	struct mm_struct *mm = current->mm;
+	unsigned long mapped_addr, unused;
+
+	if (addr)
+		flags |= MAP_FIXED_NOREPLACE;
+
+	mmap_write_lock(mm);
+	mapped_addr = do_mmap(NULL, addr, size, PROT_READ, flags,
+			      VM_SHADOW_STACK | VM_WRITE, 0, &unused, NULL);
+	mmap_write_unlock(mm);
+
+	return mapped_addr;
 }
 
 static unsigned long gcs_size(unsigned long size)

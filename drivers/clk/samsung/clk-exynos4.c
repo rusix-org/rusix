@@ -11,6 +11,7 @@
 #include <linux/slab.h>
 #include <linux/clk-provider.h>
 #include <linux/io.h>
+#include <linux/mod_devicetable.h>
 #include <linux/of.h>
 #include <linux/of_address.h>
 
@@ -1360,12 +1361,12 @@ static void __init exynos4_clk_init(struct device_node *np,
 					ARRAY_SIZE(exynos4x12_plls));
 	}
 
-	samsung_cmu_register_clocks(ctx, &cmu_info_exynos4, np);
+	samsung_cmu_register_clocks(ctx, &cmu_info_exynos4);
 
 	if (exynos4_soc == EXYNOS4210) {
-		samsung_cmu_register_clocks(ctx, &cmu_info_exynos4210, np);
+		samsung_cmu_register_clocks(ctx, &cmu_info_exynos4210);
 	} else {
-		samsung_cmu_register_clocks(ctx, &cmu_info_exynos4x12, np);
+		samsung_cmu_register_clocks(ctx, &cmu_info_exynos4x12);
 		if (soc == EXYNOS4412)
 			samsung_clk_register_cpu(ctx, exynos4412_cpu_clks,
 					ARRAY_SIZE(exynos4412_cpu_clks));
@@ -1377,15 +1378,15 @@ static void __init exynos4_clk_init(struct device_node *np,
 	if (soc == EXYNOS4212 || soc == EXYNOS4412)
 		exynos4x12_core_down_clock();
 
-	samsung_clk_extended_sleep_init(reg_base, NULL,
+	samsung_clk_extended_sleep_init(reg_base,
 			exynos4_clk_regs, ARRAY_SIZE(exynos4_clk_regs),
 			src_mask_suspend, ARRAY_SIZE(src_mask_suspend));
 	if (exynos4_soc == EXYNOS4210)
-		samsung_clk_extended_sleep_init(reg_base, NULL,
+		samsung_clk_extended_sleep_init(reg_base,
 		    exynos4210_clk_save, ARRAY_SIZE(exynos4210_clk_save),
 		    src_mask_suspend_e4210, ARRAY_SIZE(src_mask_suspend_e4210));
 	else
-		samsung_clk_sleep_init(reg_base, NULL, exynos4x12_clk_save,
+		samsung_clk_sleep_init(reg_base, exynos4x12_clk_save,
 				       ARRAY_SIZE(exynos4x12_clk_save));
 
 	samsung_clk_of_add_provider(np, ctx);

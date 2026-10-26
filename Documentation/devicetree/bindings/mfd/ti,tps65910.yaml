@@ -97,9 +97,7 @@ properties:
     patternProperties:
       "^(vrtc|vio|vpll|vdac|vmmc|vbb|vddctrl)$":
         type: object
-        allOf:
-          - $ref: /schemas/regulator/regulator.yaml#
-          - $ref: /schemas/regulator/nvidia,tegra-regulators-coupling.yaml#
+        $ref: /schemas/regulator/regulator.yaml#
         properties:
           ti,regulator-ext-sleep-control:
             description: |
@@ -112,9 +110,7 @@ properties:
 
       "^(vdd[1-3]|vaux([1-2]|33)|vdig[1-2])$":
         type: object
-        allOf:
-          - $ref: /schemas/regulator/regulator.yaml#
-          - $ref: /schemas/regulator/nvidia,tegra-regulators-coupling.yaml#
+        $ref: /schemas/regulator/regulator.yaml#
         properties:
           ti,regulator-ext-sleep-control:
             description: |
@@ -127,9 +123,7 @@ properties:
 
       "^ldo[1-8]$":
         type: object
-        allOf:
-          - $ref: /schemas/regulator/regulator.yaml#
-          - $ref: /schemas/regulator/nvidia,tegra-regulators-coupling.yaml#
+        $ref: /schemas/regulator/regulator.yaml#
         properties:
           ti,regulator-ext-sleep-control:
             description: |
@@ -172,6 +166,9 @@ patternProperties:
 required:
   - compatible
   - reg
+  - interrupts
+  - interrupt-controller
+  - '#interrupt-cells'
   - gpio-controller
   - '#gpio-cells'
   - regulators
@@ -214,7 +211,7 @@ examples:
             compatible = "ti,tps65910";
             reg = <0x2d>;
             interrupt-parent = <&intc>;
-            interrupts = <0 118 0x04>;
+            interrupts = < 0 118 0x04 >;
 
             #gpio-cells = <2>;
             gpio-controller;

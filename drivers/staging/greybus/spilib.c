@@ -160,8 +160,7 @@ static struct spi_transfer *get_next_xfer(struct spi_transfer *xfer,
 
 /* Routines to transfer data */
 static struct gb_operation *gb_spi_operation_create(struct gb_spilib *spi,
-						    struct gb_connection *connection,
-						    struct spi_message *msg)
+		struct gb_connection *connection, struct spi_message *msg)
 {
 	struct gb_spi_transfer_request *request;
 	struct spi_device *dev = msg->spi;
@@ -548,10 +547,13 @@ int gb_spilib_master_init(struct gb_connection *connection, struct device *dev,
 
 	return 0;
 
-exit_spi_unregister:
-	spi_unregister_controller(ctlr);
 exit_spi_put:
 	spi_controller_put(ctlr);
+
+	return ret;
+
+exit_spi_unregister:
+	spi_unregister_controller(ctlr);
 
 	return ret;
 }
@@ -562,7 +564,6 @@ void gb_spilib_master_exit(struct gb_connection *connection)
 	struct spi_controller *ctlr = gb_connection_get_data(connection);
 
 	spi_unregister_controller(ctlr);
-	spi_controller_put(ctlr);
 }
 EXPORT_SYMBOL_GPL(gb_spilib_master_exit);
 

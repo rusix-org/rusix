@@ -128,7 +128,7 @@ static int gb_vibrator_probe(struct gb_bundle *bundle,
 	if (cport_desc->protocol_id != GREYBUS_PROTOCOL_VIBRATOR)
 		return -ENODEV;
 
-	vib = kzalloc_obj(*vib);
+	vib = kzalloc(sizeof(*vib), GFP_KERNEL);
 	if (!vib)
 		return -ENOMEM;
 
@@ -161,7 +161,7 @@ static int gb_vibrator_probe(struct gb_bundle *bundle,
 	dev = device_create(&vibrator_class, &bundle->dev,
 			    MKDEV(0, 0), vib, "vibrator%d", vib->minor);
 	if (IS_ERR(dev)) {
-		retval = PTR_ERR(dev);
+		retval = -EINVAL;
 		goto err_ida_remove;
 	}
 	vib->dev = dev;

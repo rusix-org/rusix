@@ -1,8 +1,11 @@
-// SPDX-License-Identifier: GPL-2.0
 /*
    RFCOMM implementation for Linux Bluetooth stack (BlueZ).
    Copyright (C) 2002 Maxim Krasnyansky <maxk@qualcomm.com>
    Copyright (C) 2002 Marcel Holtmann <marcel@holtmann.org>
+
+   This program is free software; you can redistribute it and/or modify
+   it under the terms of the GNU General Public License version 2 as
+   published by the Free Software Foundation;
 
    THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
    OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
@@ -25,7 +28,6 @@
 #include <linux/export.h>
 #include <linux/debugfs.h>
 #include <linux/sched/signal.h>
-#include <linux/uio.h>
 
 #include <net/bluetooth/bluetooth.h>
 #include <net/bluetooth/hci_core.h>
@@ -63,7 +65,6 @@ static void rfcomm_sk_data_ready(struct rfcomm_dlc *d, struct sk_buff *skb)
 }
 
 static void rfcomm_sk_state_change(struct rfcomm_dlc *d, int err)
-	__must_hold(&d->lock)
 {
 	struct sock *sk = d->owner, *parent;
 
@@ -383,8 +384,7 @@ done:
 	return err;
 }
 
-static int rfcomm_sock_connect(struct socket *sock, struct sockaddr_unsized *addr,
-			       int alen, int flags)
+static int rfcomm_sock_connect(struct socket *sock, struct sockaddr *addr, int alen, int flags)
 {
 	struct sockaddr_rc *sa = (struct sockaddr_rc *) addr;
 	struct sock *sk = sock->sk;
@@ -724,7 +724,10 @@ static int rfcomm_sock_setsockopt(struct socket *sock, int level, int optname,
 		if (err)
 			break;
 
-		assign_bit(BT_SK_DEFER_SETUP, &bt_sk(sk)->flags, opt);
+		if (opt)
+			set_bit(BT_SK_DEFER_SETUP, &bt_sk(sk)->flags);
+		else
+			clear_bit(BT_SK_DEFER_SETUP, &bt_sk(sk)->flags);
 
 		break;
 
@@ -737,8 +740,7 @@ static int rfcomm_sock_setsockopt(struct socket *sock, int level, int optname,
 	return err;
 }
 
-static int rfcomm_sock_getsockopt_old(struct socket *sock, int optname,
-				      sockopt_t *sopt)
+static int rfcomm_sock_getsockopt_old(struct socket *sock, int optname, char __user *optval, int __user *optlen)
 {
 	struct sock *sk = sock->sk;
 	struct sock *l2cap_sk;
@@ -750,7 +752,8 @@ static int rfcomm_sock_getsockopt_old(struct socket *sock, int optname,
 
 	BT_DBG("sk %p", sk);
 
-	len = sopt->optlen;
+	if (get_user(len, optlen))
+		return -EFAULT;
 
 	lock_sock(sk);
 
@@ -779,8 +782,7 @@ static int rfcomm_sock_getsockopt_old(struct socket *sock, int optname,
 		if (rfcomm_pi(sk)->role_switch)
 			opt |= RFCOMM_LM_MASTER;
 
-		if (copy_to_iter(&opt, sizeof(opt), &sopt->iter_out) !=
-		    sizeof(opt))
+		if (put_user(opt, (u32 __user *) optval))
 			err = -EFAULT;
 
 		break;
@@ -802,7 +804,7 @@ static int rfcomm_sock_getsockopt_old(struct socket *sock, int optname,
 		memcpy(cinfo.dev_class, conn->hcon->dev_class, 3);
 
 		len = min(len, sizeof(cinfo));
-		if (copy_to_iter(&cinfo, len, &sopt->iter_out) != len)
+		if (copy_to_user(optval, (char *) &cinfo, len))
 			err = -EFAULT;
 
 		break;
@@ -816,24 +818,23 @@ static int rfcomm_sock_getsockopt_old(struct socket *sock, int optname,
 	return err;
 }
 
-static int rfcomm_sock_getsockopt(struct socket *sock, int level, int optname,
-				  sockopt_t *sopt)
+static int rfcomm_sock_getsockopt(struct socket *sock, int level, int optname, char __user *optval, int __user *optlen)
 {
 	struct sock *sk = sock->sk;
 	struct bt_security sec;
 	int err = 0;
 	size_t len;
-	u32 opt;
 
 	BT_DBG("sk %p", sk);
 
 	if (level == SOL_RFCOMM)
-		return rfcomm_sock_getsockopt_old(sock, optname, sopt);
+		return rfcomm_sock_getsockopt_old(sock, optname, optval, optlen);
 
 	if (level != SOL_BLUETOOTH)
 		return -ENOPROTOOPT;
 
-	len = sopt->optlen;
+	if (get_user(len, optlen))
+		return -EFAULT;
 
 	lock_sock(sk);
 
@@ -848,7 +849,7 @@ static int rfcomm_sock_getsockopt(struct socket *sock, int level, int optname,
 		sec.key_size = 0;
 
 		len = min(len, sizeof(sec));
-		if (copy_to_iter(&sec, len, &sopt->iter_out) != len)
+		if (copy_to_user(optval, (char *) &sec, len))
 			err = -EFAULT;
 
 		break;
@@ -859,9 +860,8 @@ static int rfcomm_sock_getsockopt(struct socket *sock, int level, int optname,
 			break;
 		}
 
-		opt = test_bit(BT_SK_DEFER_SETUP, &bt_sk(sk)->flags);
-		if (copy_to_iter(&opt, sizeof(opt), &sopt->iter_out) !=
-		    sizeof(opt))
+		if (put_user(test_bit(BT_SK_DEFER_SETUP, &bt_sk(sk)->flags),
+			     (u32 __user *) optval))
 			err = -EFAULT;
 
 		break;
@@ -1050,7 +1050,7 @@ static const struct proto_ops rfcomm_sock_ops = {
 	.recvmsg	= rfcomm_sock_recvmsg,
 	.shutdown	= rfcomm_sock_shutdown,
 	.setsockopt	= rfcomm_sock_setsockopt,
-	.getsockopt_iter = rfcomm_sock_getsockopt,
+	.getsockopt	= rfcomm_sock_getsockopt,
 	.ioctl		= rfcomm_sock_ioctl,
 	.gettstamp	= sock_gettstamp,
 	.poll		= bt_sock_poll,

@@ -861,7 +861,7 @@ marvel_agp_setup(alpha_agp_info *agp)
 	if (!alpha_agpgart_size)
 		return -ENOMEM;
 
-	aper = kmalloc_obj(*aper);
+	aper = kmalloc(sizeof(*aper), GFP_KERNEL);
 	if (aper == NULL) return -ENOMEM;
 
 	aper->arena = agp->hose->sg_pci;
@@ -1059,7 +1059,7 @@ marvel_agp_info(void)
 	/*
 	 * Allocate the info structure.
 	 */
-	agp = kmalloc_obj(*agp);
+	agp = kmalloc(sizeof(*agp), GFP_KERNEL);
 	if (!agp)
 		return NULL;
 

@@ -697,7 +697,7 @@ static void mlx5_ib_fill_counters(struct mlx5_ib_dev *dev,
 				  u32 port_num)
 {
 	bool is_vport = is_mdev_switchdev_mode(dev->mdev) &&
-			port_num != MLX5_VPORT_HOST_PF;
+			port_num != MLX5_VPORT_PF;
 	const struct mlx5_ib_counter *names;
 	int j = 0, i, size;
 
@@ -742,9 +742,11 @@ static void mlx5_ib_fill_counters(struct mlx5_ib_dev *dev,
 	names = is_vport ? vport_roce_accl_cnts : roce_accl_cnts;
 	size = is_vport ? ARRAY_SIZE(vport_roce_accl_cnts) :
 			  ARRAY_SIZE(roce_accl_cnts);
-	for (i = 0; i < size; i++, j++) {
-		descs[j].name = names[i].name;
-		offsets[j] = names[i].offset;
+	if (MLX5_CAP_GEN(dev->mdev, roce_accl)) {
+		for (i = 0; i < size; i++, j++) {
+			descs[j].name = names[i].name;
+			offsets[j] = names[i].offset;
+		}
 	}
 
 	if (is_vport)
@@ -800,7 +802,7 @@ static int __mlx5_ib_alloc_counters(struct mlx5_ib_dev *dev,
 				    struct mlx5_ib_counters *cnts, u32 port_num)
 {
 	bool is_vport = is_mdev_switchdev_mode(dev->mdev) &&
-			port_num != MLX5_VPORT_HOST_PF;
+			port_num != MLX5_VPORT_PF;
 	u32 num_counters, num_op_counters = 0, size;
 
 	size = is_vport ? ARRAY_SIZE(vport_basic_q_cnts) :
@@ -824,7 +826,8 @@ static int __mlx5_ib_alloc_counters(struct mlx5_ib_dev *dev,
 
 	size = is_vport ? ARRAY_SIZE(vport_roce_accl_cnts) :
 			  ARRAY_SIZE(roce_accl_cnts);
-	num_counters += size;
+	if (MLX5_CAP_GEN(dev->mdev, roce_accl))
+		num_counters += size;
 
 	cnts->num_q_counters = num_counters;
 
@@ -855,11 +858,13 @@ static int __mlx5_ib_alloc_counters(struct mlx5_ib_dev *dev,
 skip_non_qcounters:
 	cnts->num_op_counters = num_op_counters;
 	num_counters += num_op_counters;
-	cnts->descs = kzalloc_objs(struct rdma_stat_desc, num_counters);
+	cnts->descs = kcalloc(num_counters,
+			      sizeof(struct rdma_stat_desc), GFP_KERNEL);
 	if (!cnts->descs)
 		return -ENOMEM;
 
-	cnts->offsets = kzalloc_objs(*cnts->offsets, num_counters);
+	cnts->offsets = kcalloc(num_counters,
+				sizeof(*cnts->offsets), GFP_KERNEL);
 	if (!cnts->offsets)
 		goto err;
 
@@ -1069,7 +1074,9 @@ int mlx5_ib_flow_counters_set_data(struct ib_counters *ibcounters,
 		if (cntrs_data->ncounters > MAX_COUNTERS_NUM)
 			return -EINVAL;
 
-		desc_data = kzalloc_objs(*desc_data, cntrs_data->ncounters);
+		desc_data = kcalloc(cntrs_data->ncounters,
+				    sizeof(*desc_data),
+				    GFP_KERNEL);
 		if (!desc_data)
 			return  -ENOMEM;
 

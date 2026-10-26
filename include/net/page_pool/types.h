@@ -22,9 +22,9 @@
 					*/
 #define PP_FLAG_SYSTEM_POOL	BIT(2) /* Global system page_pool */
 
-/* Allow unreadable netmem in this page_pool. Drivers setting this must be able
- * to support unreadable netmem, where netmem_address() returns NULL. This flag
- * should not be set for header page_pools.
+/* Allow unreadable (net_iov backed) netmem in this page_pool. Drivers setting
+ * this must be able to support unreadable netmem, where netmem_address() would
+ * return NULL. This flag should not be set for header page_pools.
  *
  * If the driver sets PP_FLAG_ALLOW_UNREADABLE_NETMEM, it should also set
  * page_pool_params.slow.queue_idx.
@@ -44,8 +44,6 @@
  * use-case.  The NAPI budget is 64 packets.  After a NAPI poll the RX
  * ring is usually refilled and the max consumed elements will be 64,
  * thus a natural max size of objects needed in the cache.
- * The refill watermark is set to 64 for 4KB pages,
- * and scales to balance its size in bytes across page sizes.
  *
  * Keeping room for more objects, is due to XDP_DROP use-case.  As
  * XDP_DROP allows the opportunity to recycle objects directly into
@@ -53,15 +51,8 @@
  * cache is already full (or partly full) then the XDP_DROP recycles
  * would have to take a slower code path.
  */
-#if PAGE_SIZE >= SZ_64K
-#define PP_ALLOC_CACHE_REFILL	4
-#elif PAGE_SIZE >= SZ_16K
-#define PP_ALLOC_CACHE_REFILL	16
-#else
+#define PP_ALLOC_CACHE_SIZE	128
 #define PP_ALLOC_CACHE_REFILL	64
-#endif
-
-#define PP_ALLOC_CACHE_SIZE	(PP_ALLOC_CACHE_REFILL * 2)
 struct pp_alloc_cache {
 	u32 count;
 	netmem_ref cache[PP_ALLOC_CACHE_SIZE];

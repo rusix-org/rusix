@@ -327,6 +327,11 @@ int asix_read_phy_addr(struct usbnet *dev, bool internal)
 	if (ret < 0)
 		goto error;
 
+	if (ret < 2) {
+		ret = -EIO;
+		goto error;
+	}
+
 	offset = (internal ? 1 : 0);
 	ret = buf[offset];
 
@@ -724,6 +729,14 @@ int asix_set_eeprom(struct net_device *net, struct ethtool_eeprom *eeprom,
 free:
 	kfree(eeprom_buff);
 	return ret;
+}
+
+void asix_get_drvinfo(struct net_device *net, struct ethtool_drvinfo *info)
+{
+	/* Inherit standard device info */
+	usbnet_get_drvinfo(net, info);
+	strscpy(info->driver, DRIVER_NAME, sizeof(info->driver));
+	strscpy(info->version, DRIVER_VERSION, sizeof(info->version));
 }
 
 int asix_set_mac_address(struct net_device *net, void *p)

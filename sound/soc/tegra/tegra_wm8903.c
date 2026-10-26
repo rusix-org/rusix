@@ -56,7 +56,6 @@ static int tegra_wm8903_init(struct snd_soc_pcm_runtime *rtd)
 {
 	struct tegra_machine *machine = snd_soc_card_get_drvdata(rtd->card);
 	struct snd_soc_card *card = rtd->card;
-	struct snd_soc_dapm_context *dapm = snd_soc_card_to_dapm(card);
 	int err;
 
 	/*
@@ -97,7 +96,7 @@ static int tegra_wm8903_init(struct snd_soc_pcm_runtime *rtd)
 				  SND_JACK_MICROPHONE, shrt);
 	}
 
-	snd_soc_dapm_force_enable_pin(dapm, "MICBIAS");
+	snd_soc_dapm_force_enable_pin(&card->dapm, "MICBIAS");
 
 	return 0;
 }

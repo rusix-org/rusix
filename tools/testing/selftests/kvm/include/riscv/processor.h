@@ -25,7 +25,8 @@
 #define GET_RM(insn)            (((insn) & INSN_MASK_FUNCT3) >> INSN_SHIFT_FUNCT3)
 #define GET_CSR_NUM(insn)       (((insn) & INSN_CSR_MASK) >> INSN_CSR_SHIFT)
 
-static inline u64 __kvm_reg_id(u64 type, u64 subtype, u64 idx, u64 size)
+static inline uint64_t __kvm_reg_id(uint64_t type, uint64_t subtype,
+				    uint64_t idx, uint64_t size)
 {
 	return KVM_REG_RISCV | type | subtype | idx | size;
 }
@@ -61,14 +62,14 @@ static inline u64 __kvm_reg_id(u64 type, u64 subtype, u64 idx, u64 size)
 						     KVM_REG_RISCV_SBI_SINGLE,		\
 						     idx, KVM_REG_SIZE_ULONG)
 
-bool __vcpu_has_ext(struct kvm_vcpu *vcpu, u64 ext);
+bool __vcpu_has_ext(struct kvm_vcpu *vcpu, uint64_t ext);
 
-static inline bool __vcpu_has_isa_ext(struct kvm_vcpu *vcpu, u64 isa_ext)
+static inline bool __vcpu_has_isa_ext(struct kvm_vcpu *vcpu, uint64_t isa_ext)
 {
 	return __vcpu_has_ext(vcpu, RISCV_ISA_EXT_REG(isa_ext));
 }
 
-static inline bool __vcpu_has_sbi_ext(struct kvm_vcpu *vcpu, u64 sbi_ext)
+static inline bool __vcpu_has_sbi_ext(struct kvm_vcpu *vcpu, uint64_t sbi_ext)
 {
 	return __vcpu_has_ext(vcpu, RISCV_SBI_EXT_REG(sbi_ext));
 }
@@ -190,7 +191,5 @@ static inline void local_irq_disable(void)
 {
 	csr_clear(CSR_SSTATUS, SR_SIE);
 }
-
-unsigned long riscv64_get_satp_mode(void);
 
 #endif /* SELFTEST_KVM_PROCESSOR_H */

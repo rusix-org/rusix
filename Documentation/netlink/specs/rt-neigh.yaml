@@ -194,7 +194,7 @@ attribute-sets:
       -
         name: dst
         type: binary
-        display-hint: ipv4-or-v6
+        display-hint: ipv4
       -
         name: lladdr
         type: binary
@@ -342,7 +342,7 @@ attribute-sets:
         name: interval-probe-time-ms
         type: u64
         checks:
-          min: 1000
+          min: 1
           max: 86400000
 
 operations:

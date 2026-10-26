@@ -48,6 +48,7 @@
  */
 
 #include <linux/module.h>
+#include <linux/mod_devicetable.h>
 #include <linux/interrupt.h>
 #include <linux/kernel.h>
 #include <linux/spinlock.h>
@@ -659,7 +660,7 @@ static int get_free_pipe_id_locked(struct goldfish_pipe_dev *dev)
 		 */
 		u32 new_capacity = 2 * dev->pipes_capacity;
 		struct goldfish_pipe **pipes =
-			kzalloc_objs(*pipes, new_capacity, GFP_ATOMIC);
+			kcalloc(new_capacity, sizeof(*pipes), GFP_ATOMIC);
 		if (!pipes)
 			return -ENOMEM;
 		memcpy(pipes, dev->pipes, sizeof(*pipes) * dev->pipes_capacity);
@@ -698,7 +699,7 @@ static int goldfish_pipe_open(struct inode *inode, struct file *file)
 	int status;
 
 	/* Allocate new pipe kernel object */
-	struct goldfish_pipe *pipe = kzalloc_obj(*pipe);
+	struct goldfish_pipe *pipe = kzalloc(sizeof(*pipe), GFP_KERNEL);
 
 	if (!pipe)
 		return -ENOMEM;
@@ -708,11 +709,12 @@ static int goldfish_pipe_open(struct inode *inode, struct file *file)
 	init_waitqueue_head(&pipe->wake_queue);
 
 	/*
-	 * The command buffer is passed to the host as a physical address, so
-	 * it must be physically contiguous, which kmalloc() guarantees.
+	 * Command buffer needs to be allocated on its own page to make sure
+	 * it is physically contiguous in host's address space.
 	 */
 	BUILD_BUG_ON(sizeof(struct goldfish_pipe_command) > PAGE_SIZE);
-	pipe->command_buffer = kmalloc_obj(*pipe->command_buffer);
+	pipe->command_buffer =
+		(struct goldfish_pipe_command *)__get_free_page(GFP_KERNEL);
 	if (!pipe->command_buffer) {
 		status = -ENOMEM;
 		goto err_pipe;
@@ -748,7 +750,7 @@ err_cmd:
 	dev->pipes[id] = NULL;
 err_id_locked:
 	spin_unlock_irqrestore(&dev->lock, flags);
-	kfree(pipe->command_buffer);
+	free_page((unsigned long)pipe->command_buffer);
 err_pipe:
 	kfree(pipe);
 	return status;
@@ -769,7 +771,7 @@ static int goldfish_pipe_release(struct inode *inode, struct file *filp)
 	spin_unlock_irqrestore(&dev->lock, flags);
 
 	filp->private_data = NULL;
-	kfree(pipe->command_buffer);
+	free_page((unsigned long)pipe->command_buffer);
 	kfree(pipe);
 	return 0;
 }
@@ -824,7 +826,8 @@ static int goldfish_pipe_device_init(struct platform_device *pdev,
 	dev->pdev_dev = &pdev->dev;
 	dev->first_signalled_pipe = NULL;
 	dev->pipes_capacity = INITIAL_PIPES_CAPACITY;
-	dev->pipes = kzalloc_objs(*dev->pipes, dev->pipes_capacity);
+	dev->pipes = kcalloc(dev->pipes_capacity, sizeof(*dev->pipes),
+			     GFP_KERNEL);
 	if (!dev->pipes) {
 		misc_deregister(&dev->miscdev);
 		return -ENOMEM;
@@ -832,12 +835,13 @@ static int goldfish_pipe_device_init(struct platform_device *pdev,
 
 	/*
 	 * We're going to pass two buffers, open_command_params and
-	 * signalled_pipe_buffers, to the host as physical addresses. This means
-	 * each of those buffers needs to be physically contiguous, which
-	 * kmalloc() guarantees.
+	 * signalled_pipe_buffers, to the host. This means each of those buffers
+	 * needs to be contained in a single physical page. The easiest choice
+	 * is to just allocate a page and place the buffers in it.
 	 */
 	BUILD_BUG_ON(sizeof(struct goldfish_pipe_dev_buffers) > PAGE_SIZE);
-	dev->buffers = kmalloc_obj(*dev->buffers);
+	dev->buffers = (struct goldfish_pipe_dev_buffers *)
+		__get_free_page(GFP_KERNEL);
 	if (!dev->buffers) {
 		kfree(dev->pipes);
 		misc_deregister(&dev->miscdev);
@@ -865,7 +869,7 @@ static void goldfish_pipe_device_deinit(struct platform_device *pdev,
 {
 	misc_deregister(&dev->miscdev);
 	kfree(dev->pipes);
-	kfree(dev->buffers);
+	free_page((unsigned long)dev->buffers);
 }
 
 static int goldfish_pipe_probe(struct platform_device *pdev)

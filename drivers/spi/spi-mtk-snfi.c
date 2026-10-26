@@ -675,7 +675,7 @@ static int mtk_snand_ecc_init_ctx(struct nand_device *nand)
 	if (ret)
 		return ret;
 
-	ecc_cfg = kzalloc_obj(*ecc_cfg);
+	ecc_cfg = kzalloc(sizeof(*ecc_cfg), GFP_KERNEL);
 	if (!ecc_cfg)
 		return -ENOMEM;
 
@@ -1447,14 +1447,14 @@ static int mtk_snand_probe(struct platform_device *pdev)
 	ret = nand_ecc_register_on_host_hw_engine(&ms->ecc_eng);
 	if (ret) {
 		dev_err(&pdev->dev, "failed to register ecc engine.\n");
-		goto free_buf;
+		goto release_ecc;
 	}
 
 	ret = devm_add_action_or_reset(&pdev->dev, mtk_unregister_ecc_engine,
 				       &ms->ecc_eng);
 	if (ret) {
 		dev_err_probe(&pdev->dev, ret, "failed to add ECC unregister action\n");
-		goto free_buf;
+		goto release_ecc;
 	}
 
 	ctlr->num_chipselect = 1;
@@ -1462,15 +1462,14 @@ static int mtk_snand_probe(struct platform_device *pdev)
 	ctlr->mem_caps = &mtk_snand_mem_caps;
 	ctlr->bits_per_word_mask = SPI_BPW_MASK(8);
 	ctlr->mode_bits = SPI_RX_DUAL | SPI_RX_QUAD | SPI_TX_DUAL | SPI_TX_QUAD;
+	ctlr->dev.of_node = pdev->dev.of_node;
 	ret = spi_register_controller(ctlr);
 	if (ret) {
 		dev_err(&pdev->dev, "spi_register_controller failed.\n");
-		goto free_buf;
+		goto release_ecc;
 	}
 
 	return 0;
-free_buf:
-	kfree(ms->buf);
 release_ecc:
 	mtk_ecc_release(ms->ecc);
 	return ret;

@@ -22,12 +22,8 @@ pub use self::kvec::Vec;
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
 pub struct AllocError;
 
-use crate::prelude::*;
-
-use core::{
-    alloc::Layout,
-    ptr::NonNull, //
-};
+use crate::error::{code::EINVAL, Result};
+use core::{alloc::Layout, ptr::NonNull};
 
 /// Flags to be used when allocating memory.
 ///
@@ -114,6 +110,50 @@ pub mod flags {
     pub const __GFP_NOWARN: Flags = Flags(bindings::__GFP_NOWARN);
 }
 
+/// Runs a synchronous closure with I/O and filesystem reclaim disabled for this task.
+///
+/// Allocations inside `f` (including callees) inherit the NOIO policy even if
+/// their explicit flags are [`flags::GFP_KERNEL`]. This does not turn a blocking
+/// allocation into a nonblocking one; use [`flags::GFP_NOWAIT`] where required.
+/// The previous task policy is restored before this function returns.
+///
+/// No guard is exposed to the caller. Nested calls restore in strict reverse
+/// order on the same task, including if the closure returns an error. Creating
+/// a future in `f` does not apply this policy to later polling of that future:
+/// only the synchronous execution of `f` is covered. This avoids retaining a
+/// task-scoped guard across a generator suspension or moving it to another task.
+///
+/// This follows the scoped policy of the upstream memalloc proposal, while
+/// deliberately avoiding its public guard/macro lifetime interface.
+/// See <https://lists.openwall.net/linux-kernel/2026/06/05/1016> and its review
+/// <https://lists.openwall.net/linux-kernel/2026/06/06/240>.
+pub fn with_noio<T>(f: impl FnOnce() -> T) -> T {
+    // This owner is inaccessible to `f`: it cannot be forgotten, returned,
+    // reordered with another scope, or captured in an async state machine.
+    struct Restore {
+        flags: u32,
+        _not_thread_safe: crate::types::NotThreadSafe,
+    }
+
+    impl Drop for Restore {
+        fn drop(&mut self) {
+            // SAFETY: `flags` is from this call's save on the same task. The
+            // synchronous call frame enforces LIFO nesting; the private owner
+            // cannot escape. Kernel Rust panics abort rather than unwind.
+            unsafe { bindings::memalloc_noio_restore(self.flags) };
+        }
+    }
+
+    // SAFETY: The C helper modifies only the current task's allocation policy.
+    let restore = Restore {
+        flags: unsafe { bindings::memalloc_noio_save() },
+        _not_thread_safe: crate::types::NotThreadSafe,
+    };
+    let result = f();
+    drop(restore);
+    result
+}
+
 /// Non Uniform Memory Access (NUMA) node identifier.
 #[derive(Clone, Copy, PartialEq)]
 pub struct NumaNode(i32);
@@ -129,12 +169,6 @@ impl NumaNode {
             return Err(EINVAL);
         }
         Ok(Self(node))
-    }
-
-    /// Returns the raw NUMA node identifier as an `i32`.
-    #[inline]
-    pub fn id(&self) -> i32 {
-        self.0
     }
 }
 
@@ -276,4 +310,35 @@ pub(crate) fn dangling_from_layout(layout: Layout) -> NonNull<u8> {
 
     // SAFETY: `layout.align()` (and hence `ptr`) is guaranteed to be non-zero.
     unsafe { NonNull::new_unchecked(ptr) }
+}
+
+#[macros::kunit_tests(rusix_noio_scope)]
+mod noio_tests {
+    use super::*;
+
+    fn saved_noio_bit() -> u32 {
+        // SAFETY: Probe the current task by a balanced, immediately nested
+        // save/restore pair. No scope escapes and no task switch is introduced.
+        let flags = unsafe { bindings::memalloc_noio_save() };
+        // SAFETY: `flags` comes from the immediately preceding same-task save.
+        unsafe { bindings::memalloc_noio_restore(flags) };
+        flags
+    }
+
+    #[test]
+    fn nested_scopes_restore_task_policy_on_error() {
+        let before = saved_noio_bit();
+        let result: Result = with_noio(|| {
+            assert_eq!(saved_noio_bit(), 0);
+            let inner: Result = with_noio(|| {
+                assert_eq!(saved_noio_bit(), 0);
+                Err(EINVAL)
+            });
+            assert_eq!(inner, Err(EINVAL));
+            assert_eq!(saved_noio_bit(), 0);
+            Err(EINVAL)
+        });
+        assert_eq!(result, Err(EINVAL));
+        assert_eq!(saved_noio_bit(), before);
+    }
 }

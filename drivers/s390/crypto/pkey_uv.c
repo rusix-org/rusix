@@ -5,7 +5,8 @@
  *  Copyright IBM Corp. 2024
  */
 
-#define pr_fmt(fmt) "pkey: " fmt
+#define KMSG_COMPONENT "pkey"
+#define pr_fmt(fmt) KMSG_COMPONENT ": " fmt
 
 #include <linux/cpufeature.h>
 #include <linux/init.h>
@@ -291,7 +292,7 @@ static int __init pkey_uv_init(void)
 	if (!test_bit_inv(BIT_UVC_CMD_RETR_SECRET, uv_info.inst_calls_list))
 		return -ENODEV;
 
-	uv_list = kmalloc_obj(*uv_list);
+	uv_list = kmalloc(sizeof(*uv_list), GFP_KERNEL);
 	if (!uv_list)
 		return -ENOMEM;
 

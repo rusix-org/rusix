@@ -10,7 +10,6 @@
 
 #include <linux/list.h>
 #include <linux/spinlock.h>
-#include <linux/string.h>
 #include <linux/module.h>
 #include <linux/slab.h>
 #include <linux/kmod.h>
@@ -18,7 +17,6 @@
 #include <linux/kobject.h>
 #include <linux/sysfs.h>
 #include <linux/sysctl.h>
-#include <linux/umh.h>
 
 #include "ocfs2_fs.h"
 
@@ -329,7 +327,8 @@ int ocfs2_cluster_connect(const char *stack_name,
 		goto out;
 	}
 
-	new_conn = kzalloc_obj(struct ocfs2_cluster_connection);
+	new_conn = kzalloc(sizeof(struct ocfs2_cluster_connection),
+			   GFP_KERNEL);
 	if (!new_conn) {
 		rc = -ENOMEM;
 		goto out;
@@ -671,7 +670,7 @@ static int __init ocfs2_stack_glue_init(void)
 {
 	int ret;
 
-	strscpy(cluster_stack_name, OCFS2_STACK_PLUGIN_O2CB);
+	strcpy(cluster_stack_name, OCFS2_STACK_PLUGIN_O2CB);
 
 	ocfs2_table_header = register_sysctl("fs/ocfs2/nm", ocfs2_nm_table);
 	if (!ocfs2_table_header) {

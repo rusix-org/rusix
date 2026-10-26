@@ -58,9 +58,9 @@ int __pfault_init(void)
 		return rc;
 	diag_stat_inc(DIAG_STAT_X258);
 	asm_inline volatile(
-		"0:	diag	%[refbk],%[rc],0x258\n"
-		"1:\n"
-		EX_TABLE_INSN(0b, 1b)
+		"	diag	%[refbk],%[rc],0x258\n"
+		"0:	nopr	%%r7\n"
+		EX_TABLE(0b, 0b)
 		: [rc] "+d" (rc)
 		: [refbk] "a" (virt_to_phys(&pfault_init_refbk)), "m" (pfault_init_refbk)
 		: "cc");
@@ -80,9 +80,9 @@ void __pfault_fini(void)
 		return;
 	diag_stat_inc(DIAG_STAT_X258);
 	asm_inline volatile(
-		"0:	diag	%[refbk],0,0x258\n"
-		"1:\n"
-		EX_TABLE_INSN(0b, 1b)
+		"	diag	%[refbk],0,0x258\n"
+		"0:	nopr	%%r7\n"
+		EX_TABLE(0b, 0b)
 		:
 		: [refbk] "a" (virt_to_phys(&pfault_fini_refbk)), "m" (pfault_fini_refbk)
 		: "cc");
@@ -199,7 +199,8 @@ block:
 			 * return to userspace schedule() to block.
 			 */
 			__set_current_state(TASK_UNINTERRUPTIBLE);
-			set_need_resched_current();
+			set_tsk_need_resched(tsk);
+			set_preempt_need_resched();
 		}
 	}
 out:

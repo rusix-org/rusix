@@ -364,7 +364,6 @@ static int gelic_card_init_chain(struct gelic_card *card,
  * gelic_descr_prepare_rx - reinitializes a rx descriptor
  * @card: card structure
  * @descr: descriptor to re-init
- * @napi_mode: is it running in napi poll
  *
  * return 0 on success, <0 on failure
  *
@@ -375,8 +374,7 @@ static int gelic_card_init_chain(struct gelic_card *card,
  * must be a multiple of GELIC_NET_RXBUF_ALIGN.
  */
 static int gelic_descr_prepare_rx(struct gelic_card *card,
-				  struct gelic_descr *descr,
-				  bool napi_mode)
+				  struct gelic_descr *descr)
 {
 	static const unsigned int rx_skb_size =
 		ALIGN(GELIC_NET_MAX_FRAME, GELIC_NET_RXBUF_ALIGN) +
@@ -394,10 +392,7 @@ static int gelic_descr_prepare_rx(struct gelic_card *card,
 	descr->hw_regs.payload.dev_addr = 0;
 	descr->hw_regs.payload.size = 0;
 
-	if (napi_mode)
-		descr->skb = napi_alloc_skb(&card->napi, rx_skb_size);
-	else
-		descr->skb = netdev_alloc_skb(*card->netdev, rx_skb_size);
+	descr->skb = netdev_alloc_skb(*card->netdev, rx_skb_size);
 	if (!descr->skb) {
 		descr->hw_regs.payload.dev_addr = 0; /* tell DMAC don't touch memory */
 		return -ENOMEM;
@@ -469,7 +464,7 @@ static int gelic_card_fill_rx_chain(struct gelic_card *card)
 
 	do {
 		if (!descr->skb) {
-			ret = gelic_descr_prepare_rx(card, descr, false);
+			ret = gelic_descr_prepare_rx(card, descr);
 			if (ret)
 				goto rewind;
 		}
@@ -969,7 +964,7 @@ static void gelic_net_pass_skb_up(struct gelic_descr *descr,
 	netdev->stats.rx_bytes += skb->len;
 
 	/* pass skb up to stack */
-	napi_gro_receive(&card->napi, skb);
+	netif_receive_skb(skb);
 }
 
 /**
@@ -1074,7 +1069,7 @@ refill:
 	/*
 	 * this call can fail, propagate the error
 	 */
-	prepare_rx_ret = gelic_descr_prepare_rx(card, descr, true);
+	prepare_rx_ret = gelic_descr_prepare_rx(card, descr);
 	if (prepare_rx_ret)
 		return prepare_rx_ret;
 

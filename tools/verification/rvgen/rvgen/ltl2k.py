@@ -4,7 +4,6 @@
 from pathlib import Path
 from . import generator
 from . import ltl2ba
-from .automata import AutomataError
 
 COLUMN_LIMIT = 100
 
@@ -44,17 +43,13 @@ def abbreviate_atoms(atoms: list[str]) -> list[str]:
         skip = ["is", "by", "or", "and"]
         return '_'.join([x[:2] for x in s.lower().split('_') if x not in skip])
 
-    def find_share_length(atom: str) -> int:
-        for i in range(len(atom), -1, -1):
-            if sum(a.startswith(atom[:i]) for a in atoms) > 1:
-                return i
-        return 0
-
     abbrs = []
     for atom in atoms:
-        share_len = find_share_length(atom)
-        share = atom[:share_len]
-        unique = atom[share_len:]
+        for i in range(len(atom), -1, -1):
+            if sum(a.startswith(atom[:i]) for a in atoms) > 1:
+                break
+        share = atom[:i]
+        unique = atom[i:]
         abbrs.append((shorten(share) + shorten(unique)))
     return abbrs
 
@@ -65,23 +60,20 @@ class ltl2k(generator.Monitor):
         if MonitorType != "per_task":
             raise NotImplementedError("Only per_task monitor is supported for LTL")
         super().__init__(extra_params)
-        try:
-            with open(file_path) as f:
-                self.atoms, self.ba, self.ltl = ltl2ba.create_graph(f.read())
-        except OSError as exc:
-            raise AutomataError(exc.strerror) from exc
+        with open(file_path) as f:
+            self.atoms, self.ba, self.ltl = ltl2ba.create_graph(f.read())
         self.atoms_abbr = abbreviate_atoms(self.atoms)
         self.name = extra_params.get("model_name")
         if not self.name:
             self.name = Path(file_path).stem
 
-    def _fill_states(self) -> list[str]:
+    def _fill_states(self) -> str:
         buf = [
             "enum ltl_buchi_state {",
         ]
 
         for node in self.ba:
-            buf.append(f"\tS{node.id},")
+            buf.append("\tS%i," % node.id)
         buf.append("\tRV_NUM_BA_STATES")
         buf.append("};")
         buf.append("static_assert(RV_NUM_BA_STATES <= RV_MAX_BA_STATES);")
@@ -90,7 +82,7 @@ class ltl2k(generator.Monitor):
     def _fill_atoms(self):
         buf = ["enum ltl_atom {"]
         for a in sorted(self.atoms):
-            buf.append(f"\tLTL_{a},")
+            buf.append("\tLTL_%s," % a)
         buf.append("\tLTL_NUM_ATOM")
         buf.append("};")
         buf.append("static_assert(LTL_NUM_ATOM <= RV_MAX_LTL_ATOM);")
@@ -104,7 +96,7 @@ class ltl2k(generator.Monitor):
         ]
 
         for name in self.atoms_abbr:
-            buf.append(f"\t\t\"{name}\",")
+            buf.append("\t\t\"%s\"," % name)
 
         buf.extend([
             "\t};",
@@ -121,19 +113,19 @@ class ltl2k(generator.Monitor):
                 continue
 
             if isinstance(node.op, ltl2ba.AndOp):
-                buf.append(f"\tbool {node} = {node.op.left} && {node.op.right};")
+                buf.append("\tbool %s = %s && %s;" % (node, node.op.left, node.op.right))
                 required_values |= {str(node.op.left), str(node.op.right)}
             elif isinstance(node.op, ltl2ba.OrOp):
-                buf.append(f"\tbool {node} = {node.op.left} || {node.op.right};")
+                buf.append("\tbool %s = %s || %s;" % (node, node.op.left, node.op.right))
                 required_values |= {str(node.op.left), str(node.op.right)}
             elif isinstance(node.op, ltl2ba.NotOp):
-                buf.append(f"\tbool {node} = !{node.op.child};")
+                buf.append("\tbool %s = !%s;" % (node, node.op.child))
                 required_values.add(str(node.op.child))
 
         for atom in self.atoms:
             if atom.lower() not in required_values:
                 continue
-            buf.append(f"\tbool {atom.lower()} = test_bit(LTL_{atom}, mon->atoms);")
+            buf.append("\tbool %s = test_bit(LTL_%s, mon->atoms);" % (atom.lower(), atom))
 
         buf.reverse()
 
@@ -161,7 +153,7 @@ class ltl2k(generator.Monitor):
         ])
 
         for node in self.ba:
-            buf.append(f"\tcase S{node.id}:")
+            buf.append("\tcase S%i:" % node.id)
 
             for o in sorted(node.outgoing):
                 line   = "\t\tif "
@@ -171,7 +163,7 @@ class ltl2k(generator.Monitor):
                 lines = break_long_line(line, indent)
                 buf.extend(lines)
 
-                buf.append(f"\t\t\t__set_bit(S{o.id}, next);")
+                buf.append("\t\t\t__set_bit(S%i, next);" % o.id)
             buf.append("\t\tbreak;")
         buf.extend([
             "\t}",
@@ -205,7 +197,7 @@ class ltl2k(generator.Monitor):
             lines = break_long_line(line, indent)
             buf.extend(lines)
 
-            buf.append(f"\t\t__set_bit(S{node.id}, mon->states);")
+            buf.append("\t\t__set_bit(S%i, mon->states);" % node.id)
         buf.append("}")
         return buf
 
@@ -213,21 +205,23 @@ class ltl2k(generator.Monitor):
         buff = []
         buff.append("static void handle_example_event(void *data, /* XXX: fill header */)")
         buff.append("{")
-        buff.append(f"\tltl_atom_update(task, LTL_{self.atoms[0]}, true/false);")
+        buff.append("\tltl_atom_update(task, LTL_%s, true/false);" % self.atoms[0])
         buff.append("}")
         buff.append("")
         return '\n'.join(buff)
 
     def fill_tracepoint_attach_probe(self):
-        return f"\trv_attach_trace_probe(\"{self.name}\", /* XXX: tracepoint */, handle_example_event);"
+        return "\trv_attach_trace_probe(\"%s\", /* XXX: tracepoint */, handle_example_event);" \
+                % self.name
 
     def fill_tracepoint_detach_helper(self):
-        return f"\trv_detach_trace_probe(\"{self.name}\", /* XXX: tracepoint */, handle_example_event);"
+        return "\trv_detach_trace_probe(\"%s\", /* XXX: tracepoint */, handle_sample_event);" \
+                % self.name
 
     def fill_atoms_init(self):
         buff = []
         for a in self.atoms:
-            buff.append(f"\tltl_atom_set(mon, LTL_{a}, true/false);")
+            buff.append("\tltl_atom_set(mon, LTL_%s, true/false);" % a)
         return '\n'.join(buff)
 
     def fill_model_h(self):

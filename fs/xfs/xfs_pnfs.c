@@ -2,7 +2,7 @@
 /*
  * Copyright (c) 2014 Christoph Hellwig.
  */
-#include "xfs_platform.h"
+#include "xfs.h"
 #include "xfs_shared.h"
 #include "xfs_format.h"
 #include "xfs_log_format.h"
@@ -13,7 +13,6 @@
 #include "xfs_bmap.h"
 #include "xfs_iomap.h"
 #include "xfs_pnfs.h"
-#include <linux/exportfs_block.h>
 
 /*
  * Ensure that we do not have any outstanding pNFS layouts that can be used by
@@ -46,22 +45,11 @@ xfs_break_leased_layouts(
 	return error;
 }
 
-static expfs_block_layouts_t
-xfs_fs_layouts_supported(
-	struct super_block	*sb)
-{
-	expfs_block_layouts_t	supported = EXPFS_BLOCK_IN_BAND_ID;
-
-	if (exportfs_bdev_supports_out_of_band_id(sb->s_bdev))
-		supported |= EXPFS_BLOCK_OUT_OF_BAND_ID;
-	return supported;
-}
-
 /*
  * Get a unique ID including its location so that the client can identify
  * the exported device.
  */
-static int
+int
 xfs_fs_get_uuid(
 	struct super_block	*sb,
 	u8			*buf,
@@ -116,7 +104,7 @@ xfs_fs_map_update_inode(
 /*
  * Get a layout for the pNFS client.
  */
-static int
+int
 xfs_fs_map_blocks(
 	struct inode		*inode,
 	loff_t			offset,
@@ -130,6 +118,7 @@ xfs_fs_map_blocks(
 	struct xfs_bmbt_irec	imap;
 	xfs_fileoff_t		offset_fsb, end_fsb;
 	loff_t			limit;
+	int			bmapi_flags = XFS_BMAPI_ENTIRE;
 	int			nimaps = 1;
 	uint			lock_flags;
 	int			error = 0;
@@ -183,33 +172,14 @@ xfs_fs_map_blocks(
 	offset_fsb = XFS_B_TO_FSBT(mp, offset);
 
 	lock_flags = xfs_ilock_data_map_shared(ip);
-	/*
-	 * Map to the end of the extent that covers the start of the range,
-	 * so that a client doing I/O in pieces gets a layout it can use for
-	 * the pieces that follow.  Never map anything before the start of
-	 * the range: nfsd calls in here once per extent of a LAYOUTGET, for
-	 * the range that is left after the previous extent, and the mapping
-	 * can change in between, so a mapping that reaches back can overlap
-	 * one already in the layout.  Don't extend the mapping past EOF
-	 * beyond the range either: xfs_free_eofblocks() can free blocks past
-	 * EOF without breaking the layout.
-	 */
 	error = xfs_bmapi_read(ip, offset_fsb, end_fsb - offset_fsb,
-				&imap, &nimaps, XFS_BMAPI_ENTIRE);
-	if (error) {
-		xfs_iunlock(ip, lock_flags);
-		goto out_unlock;
-	}
-	if (nimaps)
-		xfs_trim_extent(&imap, offset_fsb,
-				max_t(xfs_fileoff_t, end_fsb,
-				      XFS_B_TO_FSB(mp, XFS_ISIZE(ip))) -
-				offset_fsb);
+				&imap, &nimaps, bmapi_flags);
 	seq = xfs_iomap_inode_sequence(ip, 0);
 
 	ASSERT(!nimaps || imap.br_startblock != DELAYSTARTBLOCK);
 
-	if (write && (!nimaps || imap.br_startblock == HOLESTARTBLOCK)) {
+	if (!error && write &&
+	    (!nimaps || imap.br_startblock == HOLESTARTBLOCK)) {
 		if (offset + length > XFS_ISIZE(ip))
 			end_fsb = xfs_iomap_eof_align_last_fsb(ip, end_fsb);
 		else if (nimaps && imap.br_startblock == HOLESTARTBLOCK)
@@ -282,27 +252,28 @@ xfs_pnfs_validate_isize(
  * to manually flush the cache here similar to what the fsync code path does
  * for datasyncs on files that have no dirty metadata.
  */
-static int
+int
 xfs_fs_commit_blocks(
 	struct inode		*inode,
 	struct iomap		*maps,
 	int			nr_maps,
-	loff_t			new_size)
+	struct iattr		*iattr)
 {
 	struct xfs_inode	*ip = XFS_I(inode);
 	struct xfs_mount	*mp = ip->i_mount;
 	struct xfs_trans	*tp;
-	struct timespec64	now;
 	bool			update_isize = false;
 	int			error, i;
 	loff_t			size;
 
+	ASSERT(iattr->ia_valid & (ATTR_ATIME|ATTR_CTIME|ATTR_MTIME));
+
 	xfs_ilock(ip, XFS_IOLOCK_EXCL);
 
 	size = i_size_read(inode);
-	if (new_size > size) {
+	if ((iattr->ia_valid & ATTR_SIZE) && iattr->ia_size > size) {
 		update_isize = true;
-		size = new_size;
+		size = iattr->ia_size;
 	}
 
 	for (i = 0; i < nr_maps; i++) {
@@ -347,13 +318,11 @@ xfs_fs_commit_blocks(
 	xfs_trans_ijoin(tp, ip, XFS_ILOCK_EXCL);
 	xfs_trans_log_inode(tp, ip, XFS_ILOG_CORE);
 
-	now = inode_set_ctime_current(inode);
-	inode_set_atime_to_ts(inode, now);
-	inode_set_mtime_to_ts(inode, now);
-
+	ASSERT(!(iattr->ia_valid & (ATTR_UID | ATTR_GID)));
+	setattr_copy(&nop_mnt_idmap, inode, iattr);
 	if (update_isize) {
-		i_size_write(inode, new_size);
-		ip->i_disk_size = new_size;
+		i_size_write(inode, iattr->ia_size);
+		ip->i_disk_size = iattr->ia_size;
 	}
 
 	xfs_trans_set_sync(tp);
@@ -363,10 +332,3 @@ out_drop_iolock:
 	xfs_iunlock(ip, XFS_IOLOCK_EXCL);
 	return error;
 }
-
-const struct exportfs_block_ops xfs_export_block_ops = {
-	.layouts_supported	= xfs_fs_layouts_supported,
-	.get_uuid		= xfs_fs_get_uuid,
-	.map_blocks		= xfs_fs_map_blocks,
-	.commit_blocks		= xfs_fs_commit_blocks,
-};

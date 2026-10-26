@@ -1,6 +1,5 @@
 // SPDX-License-Identifier: GPL-2.0-only
 
-#include <kunit/visibility.h>
 #include <linux/export.h>
 #include <linux/nsproxy.h>
 #include <linux/slab.h>
@@ -163,6 +162,9 @@ int create_user_ns(struct cred *new)
 	ns_tree_add(ns);
 	return 0;
 fail_keyring:
+#ifdef CONFIG_PERSISTENT_KEYRINGS
+	key_put(ns->persistent_keyring_register);
+#endif
 	ns_common_free(ns);
 fail_free:
 	kmem_cache_free(user_ns_cachep, ns);
@@ -276,8 +278,8 @@ static int cmp_map_id(const void *k, const void *e)
  * map_id_range_down_max - Find idmap via binary search in ordered idmap array.
  * Can only be called if number of mappings exceeds UID_GID_MAP_MAX_BASE_EXTENTS.
  */
-static const struct uid_gid_extent *
-map_id_range_down_max(unsigned extents, const struct uid_gid_map *map, u32 id, u32 count)
+static struct uid_gid_extent *
+map_id_range_down_max(unsigned extents, struct uid_gid_map *map, u32 id, u32 count)
 {
 	struct idmap_key key;
 
@@ -294,8 +296,8 @@ map_id_range_down_max(unsigned extents, const struct uid_gid_map *map, u32 id, u
  * Can only be called if number of mappings is equal or less than
  * UID_GID_MAP_MAX_BASE_EXTENTS.
  */
-static const struct uid_gid_extent *
-map_id_range_down_base(unsigned extents, const struct uid_gid_map *map, u32 id, u32 count)
+static struct uid_gid_extent *
+map_id_range_down_base(unsigned extents, struct uid_gid_map *map, u32 id, u32 count)
 {
 	unsigned idx;
 	u32 first, last, id2;
@@ -313,9 +315,9 @@ map_id_range_down_base(unsigned extents, const struct uid_gid_map *map, u32 id, 
 	return NULL;
 }
 
-static u32 map_id_range_down(const struct uid_gid_map *map, u32 id, u32 count)
+static u32 map_id_range_down(struct uid_gid_map *map, u32 id, u32 count)
 {
-	const struct uid_gid_extent *extent;
+	struct uid_gid_extent *extent;
 	unsigned extents = map->nr_extents;
 	smp_rmb();
 
@@ -333,7 +335,7 @@ static u32 map_id_range_down(const struct uid_gid_map *map, u32 id, u32 count)
 	return id;
 }
 
-u32 map_id_down(const struct uid_gid_map *map, u32 id)
+u32 map_id_down(struct uid_gid_map *map, u32 id)
 {
 	return map_id_range_down(map, id, 1);
 }
@@ -343,8 +345,8 @@ u32 map_id_down(const struct uid_gid_map *map, u32 id)
  * Can only be called if number of mappings is equal or less than
  * UID_GID_MAP_MAX_BASE_EXTENTS.
  */
-static const struct uid_gid_extent *
-map_id_range_up_base(unsigned extents, const struct uid_gid_map *map, u32 id, u32 count)
+static struct uid_gid_extent *
+map_id_range_up_base(unsigned extents, struct uid_gid_map *map, u32 id, u32 count)
 {
 	unsigned idx;
 	u32 first, last, id2;
@@ -366,8 +368,8 @@ map_id_range_up_base(unsigned extents, const struct uid_gid_map *map, u32 id, u3
  * map_id_up_max - Find idmap via binary search in ordered idmap array.
  * Can only be called if number of mappings exceeds UID_GID_MAP_MAX_BASE_EXTENTS.
  */
-static const struct uid_gid_extent *
-map_id_range_up_max(unsigned extents, const struct uid_gid_map *map, u32 id, u32 count)
+static struct uid_gid_extent *
+map_id_range_up_max(unsigned extents, struct uid_gid_map *map, u32 id, u32 count)
 {
 	struct idmap_key key;
 
@@ -379,9 +381,9 @@ map_id_range_up_max(unsigned extents, const struct uid_gid_map *map, u32 id, u32
 		       sizeof(struct uid_gid_extent), cmp_map_id);
 }
 
-u32 map_id_range_up(const struct uid_gid_map *map, u32 id, u32 count)
+u32 map_id_range_up(struct uid_gid_map *map, u32 id, u32 count)
 {
-	const struct uid_gid_extent *extent;
+	struct uid_gid_extent *extent;
 	unsigned extents = map->nr_extents;
 	smp_rmb();
 
@@ -399,7 +401,7 @@ u32 map_id_range_up(const struct uid_gid_map *map, u32 id, u32 count)
 	return id;
 }
 
-u32 map_id_up(const struct uid_gid_map *map, u32 id)
+u32 map_id_up(struct uid_gid_map *map, u32 id)
 {
 	return map_id_range_up(map, id, 1);
 }
@@ -780,13 +782,11 @@ static bool mappings_overlap(struct uid_gid_map *new_map,
 }
 
 /*
- * uid_gid_map_insert_extent - Safely insert a new idmap extent into
- * struct uid_gid_map.
+ * insert_extent - Safely insert a new idmap extent into struct uid_gid_map.
  * Takes care to allocate a 4K block of memory if the number of mappings exceeds
  * UID_GID_MAP_MAX_BASE_EXTENTS.
  */
-VISIBLE_IF_KUNIT int uid_gid_map_insert_extent(struct uid_gid_map *map,
-					       struct uid_gid_extent *extent)
+static int insert_extent(struct uid_gid_map *map, struct uid_gid_extent *extent)
 {
 	struct uid_gid_extent *dest;
 
@@ -794,8 +794,9 @@ VISIBLE_IF_KUNIT int uid_gid_map_insert_extent(struct uid_gid_map *map,
 		struct uid_gid_extent *forward;
 
 		/* Allocate memory for 340 mappings. */
-		forward = kmalloc_objs(struct uid_gid_extent,
-				       UID_GID_MAP_MAX_EXTENTS);
+		forward = kmalloc_array(UID_GID_MAP_MAX_EXTENTS,
+					sizeof(struct uid_gid_extent),
+					GFP_KERNEL);
 		if (!forward)
 			return -ENOMEM;
 
@@ -809,20 +810,15 @@ VISIBLE_IF_KUNIT int uid_gid_map_insert_extent(struct uid_gid_map *map,
 		map->reverse = NULL;
 	}
 
-	/*
-	 * nr_extents must be updated before the extent and forward arrays are
-	 * accessed, otherwise KSAN will assert an out-of-bounds error.
-	 */
-	map->nr_extents++;
-	if (map->nr_extents <= UID_GID_MAP_MAX_BASE_EXTENTS)
-		dest = &map->extent[map->nr_extents - 1];
+	if (map->nr_extents < UID_GID_MAP_MAX_BASE_EXTENTS)
+		dest = &map->extent[map->nr_extents];
 	else
-		dest = &map->forward[map->nr_extents - 1];
+		dest = &map->forward[map->nr_extents];
 
 	*dest = *extent;
+	map->nr_extents++;
 	return 0;
 }
-EXPORT_SYMBOL_IF_KUNIT(uid_gid_map_insert_extent);
 
 /* cmp function to sort() forward mappings */
 static int cmp_extents_forward(const void *a, const void *b)
@@ -855,10 +851,10 @@ static int cmp_extents_reverse(const void *a, const void *b)
 }
 
 /*
- * uid_gid_map_sort - Sorts an array of idmap entries.
+ * sort_idmaps - Sorts an array of idmap entries.
  * Can only be called if number of mappings exceeds UID_GID_MAP_MAX_BASE_EXTENTS.
  */
-VISIBLE_IF_KUNIT int uid_gid_map_sort(struct uid_gid_map *map)
+static int sort_idmaps(struct uid_gid_map *map)
 {
 	if (map->nr_extents <= UID_GID_MAP_MAX_BASE_EXTENTS)
 		return 0;
@@ -879,7 +875,6 @@ VISIBLE_IF_KUNIT int uid_gid_map_sort(struct uid_gid_map *map)
 
 	return 0;
 }
-EXPORT_SYMBOL_IF_KUNIT(uid_gid_map_sort);
 
 /**
  * verify_root_map() - check the uid 0 mapping
@@ -933,26 +928,6 @@ static bool verify_root_map(const struct file *file,
 	}
 
 	return true;
-}
-
-/*
- * Parse the decimal u32 at *pos, up to the next whitespace or NUL, and
- * leave *pos pointing at that character.
- */
-static int map_parse_u32(char **pos, u32 *res)
-{
-	char *end = *pos;
-	char c;
-	int ret;
-
-	while (*end && !isspace(*end))
-		end++;
-	c = *end;
-	*end = '\0';
-	ret = kstrtou32(*pos, 10, res);
-	*end = c;
-	*pos = end;
-	return ret;
 }
 
 static ssize_t map_write(struct file *file, const char __user *buf,
@@ -1027,20 +1002,17 @@ static ssize_t map_write(struct file *file, const char __user *buf,
 		}
 
 		pos = skip_spaces(pos);
-		if (map_parse_u32(&pos, &extent.first))
-			goto out;
+		extent.first = simple_strtoul(pos, &pos, 10);
 		if (!isspace(*pos))
 			goto out;
 
 		pos = skip_spaces(pos);
-		if (map_parse_u32(&pos, &extent.lower_first))
-			goto out;
+		extent.lower_first = simple_strtoul(pos, &pos, 10);
 		if (!isspace(*pos))
 			goto out;
 
 		pos = skip_spaces(pos);
-		if (map_parse_u32(&pos, &extent.count))
-			goto out;
+		extent.count = simple_strtoul(pos, &pos, 10);
 		if (*pos && !isspace(*pos))
 			goto out;
 
@@ -1071,7 +1043,7 @@ static ssize_t map_write(struct file *file, const char __user *buf,
 		    (next_line != NULL))
 			goto out;
 
-		ret = uid_gid_map_insert_extent(&new_map, &extent);
+		ret = insert_extent(&new_map, &extent);
 		if (ret < 0)
 			goto out;
 		ret = -EINVAL;
@@ -1115,7 +1087,7 @@ static ssize_t map_write(struct file *file, const char __user *buf,
 	 * If we want to use binary search for lookup, this clones the extent
 	 * array and sorts both copies.
 	 */
-	ret = uid_gid_map_sort(&new_map);
+	ret = sort_idmaps(&new_map);
 	if (ret < 0)
 		goto out;
 

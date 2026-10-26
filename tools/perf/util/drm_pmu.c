@@ -10,12 +10,10 @@
 #include <api/io.h>
 #include <ctype.h>
 #include <dirent.h>
-#include <errno.h>
 #include <fcntl.h>
 #include <unistd.h>
 #include <linux/unistd.h>
 #include <linux/kcmp.h>
-#include <linux/string.h>
 #include <linux/zalloc.h>
 #include <sys/stat.h>
 #include <sys/syscall.h>
@@ -121,7 +119,7 @@ static struct drm_pmu *add_drm_pmu(struct list_head *pmus, char *line, size_t li
 		return NULL;
 	}
 
-	drm->pmu.cpus = perf_cpu_map__new_int(0);
+	drm->pmu.cpus = perf_cpu_map__new("0");
 	if (!drm->pmu.cpus) {
 		perf_pmu__delete(&drm->pmu);
 		return NULL;
@@ -129,6 +127,11 @@ static struct drm_pmu *add_drm_pmu(struct list_head *pmus, char *line, size_t li
 	return drm;
 }
 
+
+static bool starts_with(const char *str, const char *prefix)
+{
+	return !strncmp(prefix, str, strlen(prefix));
+}
 
 static int add_event(struct drm_pmu_event **events, int *num_events,
 		     const char *line, enum drm_pmu_unit unit, const char *desc)
@@ -170,7 +173,7 @@ static int read_drm_pmus_cb(void *args, int fdinfo_dir_fd, const char *fd_name)
 	}
 
 	while (io__getline(&io, &line, &line_len) > 0) {
-		if (strstarts(line, "drm-driver:")) {
+		if (starts_with(line, "drm-driver:")) {
 			drm = add_drm_pmu(pmus, line, line_len);
 			if (!drm)
 				break;
@@ -180,59 +183,59 @@ static int read_drm_pmus_cb(void *args, int fdinfo_dir_fd, const char *fd_name)
 		 * Note the string matching below is alphabetical, with more
 		 * specific matches appearing before less specific.
 		 */
-		if (strstarts(line, "drm-active-")) {
+		if (starts_with(line, "drm-active-")) {
 			add_event(&events, &num_events, line, DRM_PMU_UNIT_BYTES,
 				  "Total memory active in one or more engines");
 			continue;
 		}
-		if (strstarts(line, "drm-cycles-")) {
+		if (starts_with(line, "drm-cycles-")) {
 			add_event(&events, &num_events, line, DRM_PMU_UNIT_CYCLES,
 				"Busy cycles");
 			continue;
 		}
-		if (strstarts(line, "drm-engine-capacity-")) {
+		if (starts_with(line, "drm-engine-capacity-")) {
 			add_event(&events, &num_events, line, DRM_PMU_UNIT_CAPACITY,
 				"Engine capacity");
 			continue;
 		}
-		if (strstarts(line, "drm-engine-")) {
+		if (starts_with(line, "drm-engine-")) {
 			add_event(&events, &num_events, line, DRM_PMU_UNIT_NS,
 				  "Utilization in ns");
 			continue;
 		}
-		if (strstarts(line, "drm-maxfreq-")) {
+		if (starts_with(line, "drm-maxfreq-")) {
 			add_event(&events, &num_events, line, DRM_PMU_UNIT_HZ,
 				  "Maximum frequency");
 			continue;
 		}
-		if (strstarts(line, "drm-purgeable-")) {
+		if (starts_with(line, "drm-purgeable-")) {
 			add_event(&events, &num_events, line, DRM_PMU_UNIT_BYTES,
 				  "Size of resident and purgeable memory buffers");
 			continue;
 		}
-		if (strstarts(line, "drm-resident-")) {
+		if (starts_with(line, "drm-resident-")) {
 			add_event(&events, &num_events, line, DRM_PMU_UNIT_BYTES,
 				  "Size of resident memory buffers");
 			continue;
 		}
-		if (strstarts(line, "drm-shared-")) {
+		if (starts_with(line, "drm-shared-")) {
 			add_event(&events, &num_events, line, DRM_PMU_UNIT_BYTES,
 				  "Size of shared memory buffers");
 			continue;
 		}
-		if (strstarts(line, "drm-total-cycles-")) {
+		if (starts_with(line, "drm-total-cycles-")) {
 			add_event(&events, &num_events, line, DRM_PMU_UNIT_BYTES,
 				  "Total busy cycles");
 			continue;
 		}
-		if (strstarts(line, "drm-total-")) {
+		if (starts_with(line, "drm-total-")) {
 			add_event(&events, &num_events, line, DRM_PMU_UNIT_BYTES,
 				  "Size of shared and private memory");
 			continue;
 		}
-		if (verbose > 1 && strstarts(line, "drm-") &&
-		    !strstarts(line, "drm-client-id:") &&
-		    !strstarts(line, "drm-pdev:"))
+		if (verbose > 1 && starts_with(line, "drm-") &&
+		    !starts_with(line, "drm-client-id:") &&
+		    !starts_with(line, "drm-pdev:"))
 			pr_debug("Unhandled DRM PMU fdinfo line match '%s'\n", line);
 	}
 	if (drm) {
@@ -257,7 +260,7 @@ bool drm_pmu__have_event(const struct perf_pmu *pmu, const char *name)
 {
 	struct drm_pmu *drm = container_of(pmu, struct drm_pmu, pmu);
 
-	if (!strstarts(name, "drm-"))
+	if (!starts_with(name, "drm-"))
 		return false;
 
 	for (int i = 0; i < drm->num_events; i++) {

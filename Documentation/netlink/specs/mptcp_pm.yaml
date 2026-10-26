@@ -15,7 +15,6 @@ definitions:
     type: enum
     name: event-type
     enum-name: mptcp-event-type
-    doc: Netlink MPTCP event types
     name-prefix: mptcp-event-
     entries:
       -

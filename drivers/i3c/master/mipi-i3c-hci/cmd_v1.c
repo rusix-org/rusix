@@ -15,6 +15,7 @@
 #include "dat.h"
 #include "dct.h"
 
+
 /*
  * Address Assignment Command
  */
@@ -98,6 +99,7 @@
 #define CMD_M0_MIPI_CMD				   W0_MASK(11,  8)
 #define CMD_M0_VENDOR_INFO_PRESENT		   W0_BIT_( 7)
 #define CMD_M0_TID(v)			FIELD_PREP(W0_MASK( 6,  3), v)
+
 
 /* Data Transfer Speed and Mode */
 enum hci_cmd_mode {
@@ -331,10 +333,12 @@ static int hci_cmd_v1_daa(struct i3c_hci *hci)
 			CMD_A0_ROC | CMD_A0_TOC;
 		xfer->cmd_desc[1] = 0;
 		xfer->completion = &done;
-		xfer->timeout = HZ;
-		ret = i3c_hci_process_xfer(hci, xfer, 1);
-		if (ret)
+		hci->io->queue_xfer(hci, xfer, 1);
+		if (!wait_for_completion_timeout(&done, HZ) &&
+		    hci->io->dequeue_xfer(hci, xfer, 1)) {
+			ret = -ETIMEDOUT;
 			break;
+		}
 		if ((RESP_STATUS(xfer->response) == RESP_ERR_ADDR_HEADER ||
 		     RESP_STATUS(xfer->response) == RESP_ERR_NACK) &&
 		    RESP_DATA_LENGTH(xfer->response) == 1) {

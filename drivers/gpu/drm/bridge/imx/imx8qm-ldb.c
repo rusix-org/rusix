@@ -201,7 +201,7 @@ imx8qm_ldb_bridge_mode_set(struct drm_bridge *bridge,
 }
 
 static void imx8qm_ldb_bridge_atomic_enable(struct drm_bridge *bridge,
-					    struct drm_atomic_commit *state)
+					    struct drm_atomic_state *state)
 {
 	struct ldb_channel *ldb_ch = bridge->driver_private;
 	struct ldb *ldb = ldb_ch->ldb;
@@ -247,7 +247,7 @@ static void imx8qm_ldb_bridge_atomic_enable(struct drm_bridge *bridge,
 }
 
 static void imx8qm_ldb_bridge_atomic_disable(struct drm_bridge *bridge,
-					     struct drm_atomic_commit *state)
+					     struct drm_atomic_state *state)
 {
 	struct ldb_channel *ldb_ch = bridge->driver_private;
 	struct ldb *ldb = ldb_ch->ldb;
@@ -280,7 +280,9 @@ static void imx8qm_ldb_bridge_atomic_disable(struct drm_bridge *bridge,
 	clk_disable_unprepare(imx8qm_ldb->clk_bypass);
 	clk_disable_unprepare(imx8qm_ldb->clk_pixel);
 
-	pm_runtime_put(dev);
+	ret = pm_runtime_put(dev);
+	if (ret < 0)
+		DRM_DEV_ERROR(dev, "failed to put runtime PM: %d\n", ret);
 }
 
 static const u32 imx8qm_ldb_bus_output_fmts[] = {
@@ -319,7 +321,7 @@ imx8qm_ldb_bridge_atomic_get_input_bus_fmts(struct drm_bridge *bridge,
 
 	*num_input_fmts = 1;
 
-	input_fmts = kmalloc_obj(*input_fmts);
+	input_fmts = kmalloc(sizeof(*input_fmts), GFP_KERNEL);
 	if (!input_fmts)
 		return NULL;
 
@@ -389,7 +391,7 @@ imx8qm_ldb_bridge_mode_valid(struct drm_bridge *bridge,
 static const struct drm_bridge_funcs imx8qm_ldb_bridge_funcs = {
 	.atomic_duplicate_state	= drm_atomic_helper_bridge_duplicate_state,
 	.atomic_destroy_state	= drm_atomic_helper_bridge_destroy_state,
-	.atomic_create_state	= drm_atomic_helper_bridge_create_state,
+	.atomic_reset		= drm_atomic_helper_bridge_reset,
 	.mode_valid		= imx8qm_ldb_bridge_mode_valid,
 	.attach			= ldb_bridge_attach_helper,
 	.atomic_check		= imx8qm_ldb_bridge_atomic_check,

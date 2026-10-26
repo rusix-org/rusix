@@ -122,7 +122,7 @@ static int ps2mult_create_port(struct ps2mult *psm, int i)
 	struct serio *mx_serio = psm->mx_serio;
 	struct serio *serio;
 
-	serio = kzalloc_obj(*serio);
+	serio = kzalloc(sizeof(*serio), GFP_KERNEL);
 	if (!serio)
 		return -ENOMEM;
 
@@ -160,7 +160,7 @@ static int ps2mult_connect(struct serio *serio, struct serio_driver *drv)
 	if (!serio->write)
 		return -EINVAL;
 
-	psm = kzalloc_obj(*psm);
+	psm = kzalloc(sizeof(*psm), GFP_KERNEL);
 	if (!psm)
 		return -ENOMEM;
 

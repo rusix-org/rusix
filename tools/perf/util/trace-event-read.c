@@ -15,7 +15,6 @@
 #include <fcntl.h>
 #include <unistd.h>
 #include <errno.h>
-#include <limits.h>
 
 #include "trace-event.h"
 #include "debug.h"
@@ -72,16 +71,12 @@ static ssize_t do_read(void *data, size_t size)
 static void skip(size_t size)
 {
 	char buf[BUFSIZ];
-	ssize_t ret;
+	size_t r;
 
 	while (size) {
-		size_t len = size > BUFSIZ ? BUFSIZ : size;
-
-		ret = do_read(buf, len);
-		if (ret <= 0)
-			break;
-
-		size -= ret;
+		r = size > BUFSIZ ? BUFSIZ : size;
+		do_read(buf, r);
+		size -= r;
 	}
 }
 
@@ -184,11 +179,6 @@ static int read_ftrace_printk(struct tep_handle *pevent)
 	size = read4(pevent);
 	if (!size)
 		return 0;
-
-	if (size == UINT_MAX) {
-		pr_debug("invalid ftrace printk size\n");
-		return -1;
-	}
 
 	buf = malloc(size + 1);
 	if (buf == NULL)
@@ -366,11 +356,6 @@ static int read_saved_cmdline(struct tep_handle *pevent)
 	size = read8(pevent);
 	if (!size)
 		return 0;
-
-	if (size == ULLONG_MAX) {
-		pr_debug("invalid saved cmdline size");
-		return -1;
-	}
 
 	buf = malloc(size + 1);
 	if (buf == NULL) {

@@ -13,10 +13,8 @@
 #include <drm/drm_drv.h>
 #include <drm/drm_fbdev_ttm.h>
 #include <drm/drm_gem_framebuffer_helper.h>
-#include <drm/drm_gem_ttm_helper.h>
 #include <drm/drm_ioctl.h>
 #include <drm/drm_modeset_helper.h>
-#include <drm/drm_print.h>
 #include <drm/drm_probe_helper.h>
 #include <drm/drm_vblank.h>
 
@@ -46,7 +44,7 @@ static const struct drm_driver lsdc_drm_driver = {
 
 	.debugfs_init = lsdc_debugfs_init,
 	.dumb_create = lsdc_dumb_create,
-	.dumb_map_offset = drm_gem_ttm_dumb_map_offset,
+	.dumb_map_offset = lsdc_dumb_map_offset,
 	.gem_prime_import_sg_table = lsdc_prime_import_sg_table,
 	DRM_FBDEV_TTM_DRIVER_OPS,
 };
@@ -254,7 +252,7 @@ lsdc_create_device(struct pci_dev *pdev,
 
 /* For multiple GPU driver instance co-exixt in the system */
 
-static unsigned int lsdc_vga_set_decode(void *data, bool state)
+static unsigned int lsdc_vga_set_decode(struct pci_dev *pdev, bool state)
 {
 	return VGA_RSRC_NORMAL_IO | VGA_RSRC_NORMAL_MEM;
 }
@@ -291,7 +289,7 @@ static int lsdc_pci_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 
 	pci_set_drvdata(pdev, ddev);
 
-	vga_client_register(pdev, lsdc_vga_set_decode, NULL);
+	vga_client_register(pdev, lsdc_vga_set_decode);
 
 	drmm_kms_helper_poll_init(ddev);
 
@@ -444,8 +442,8 @@ static const struct dev_pm_ops lsdc_pm_ops = {
 };
 
 static const struct pci_device_id lsdc_pciid_list[] = {
-	{ PCI_VDEVICE(LOONGSON, 0x7a06), .driver_data = CHIP_LS7A1000 },
-	{ PCI_VDEVICE(LOONGSON, 0x7a36), .driver_data = CHIP_LS7A2000 },
+	{PCI_VDEVICE(LOONGSON, 0x7a06), CHIP_LS7A1000},
+	{PCI_VDEVICE(LOONGSON, 0x7a36), CHIP_LS7A2000},
 	{ }
 };
 

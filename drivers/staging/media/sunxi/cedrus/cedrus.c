@@ -361,7 +361,7 @@ static int cedrus_open(struct file *file)
 	if (mutex_lock_interruptible(&dev->dev_mutex))
 		return -ERESTARTSYS;
 
-	ctx = kzalloc_obj(*ctx);
+	ctx = kzalloc(sizeof(*ctx), GFP_KERNEL);
 	if (!ctx) {
 		mutex_unlock(&dev->dev_mutex);
 		return -ENOMEM;
@@ -696,10 +696,6 @@ static const struct of_device_id cedrus_dt_match[] = {
 	},
 	{
 		.compatible = "allwinner,sun50i-h6-video-engine",
-		.data = &sun50i_h6_cedrus_variant,
-	},
-	{
-		.compatible = "allwinner,sun50i-h616-video-engine",
 		.data = &sun50i_h6_cedrus_variant,
 	},
 	{ /* sentinel */ }

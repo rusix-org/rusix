@@ -103,7 +103,7 @@ required:
   - arm,vexpress,config-bridge
 
 patternProperties:
-  '^clock-controller.*$':
+  'clk[0-9]*$':
     type: object
     description:
       clocks
@@ -137,12 +137,8 @@ patternProperties:
       - arm,vexpress-sysreg,func
       - "#clock-cells"
 
-  "^regulator-.+$":
+  "^volt-.+$":
     $ref: /schemas/regulator/regulator.yaml#
-    description:
-      If regulator-min-microvolt and regulator-max-microvolt do not both
-      define a range, the supply is treated as fixed and only its voltage
-      can be read.
     properties:
       compatible:
         const: arm,vexpress-volt
@@ -276,7 +272,7 @@ examples:
         compatible = "arm,vexpress,config-bus";
         arm,vexpress,config-bridge = <&v2m_sysreg>;
 
-        clock-controller {
+        clk0 {
             compatible = "arm,vexpress-osc";
             arm,vexpress-sysreg,func = <1 0>;
             #clock-cells = <0>;

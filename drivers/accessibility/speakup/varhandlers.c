@@ -1,6 +1,5 @@
 // SPDX-License-Identifier: GPL-2.0
 #include <linux/ctype.h>
-#include <linux/string.h>
 #include "spk_types.h"
 #include "spk_priv.h"
 #include "speakup.h"
@@ -266,10 +265,10 @@ int spk_set_string_var(const char *page, struct st_var_header *var, int len)
 		if (!var->p_val)
 			var->p_val = var_data->u.s.default_val;
 		if (var->p_val != var_data->u.s.default_val)
-			strscpy((char *)var->p_val, var_data->u.s.default_val, MAXVARLEN + 1);
+			strcpy((char *)var->p_val, var_data->u.s.default_val);
 		return -ERESTART;
 	} else if (var->p_val) {
-		strscpy((char *)var->p_val, page, MAXVARLEN + 1);
+		strcpy((char *)var->p_val, page);
 	} else {
 		return -E2BIG;
 	}

@@ -19,7 +19,6 @@
 #include <linux/sched.h>
 #include <linux/topology.h>
 #include <asm/processor.h>
-#include <asm/cpuid/api.h>
 #include <asm/msr.h>
 
 MODULE_DESCRIPTION("AMD Family 15h CPU processor power monitor");
@@ -373,14 +372,15 @@ static void tweak_runavg_range(struct pci_dev *pdev)
 		REG_TDP_RUNNING_AVERAGE, val);
 }
 
-static int fam15h_power_resume(struct device *dev)
+#ifdef CONFIG_PM
+static int fam15h_power_resume(struct pci_dev *pdev)
 {
-	struct pci_dev *pdev = to_pci_dev(dev);
 	tweak_runavg_range(pdev);
 	return 0;
 }
-
-static DEFINE_SIMPLE_DEV_PM_OPS(fam15h_power_ops, NULL, fam15h_power_resume);
+#else
+#define fam15h_power_resume NULL
+#endif
 
 static int fam15h_power_init_data(struct pci_dev *f4,
 				  struct fam15h_power_data *data)
@@ -493,7 +493,7 @@ static struct pci_driver fam15h_power_driver = {
 	.name = "fam15h_power",
 	.id_table = fam15h_power_id_table,
 	.probe = fam15h_power_probe,
-	.driver.pm = &fam15h_power_ops,
+	.resume = fam15h_power_resume,
 };
 
 module_pci_driver(fam15h_power_driver);

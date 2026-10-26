@@ -98,6 +98,10 @@
 	status = "okay";
 };
 
+&amix {
+	status = "okay";
+};
+
 &asrc0 {
 	status = "okay";
 };
@@ -122,6 +126,8 @@
 	xceiver-supply = <&reg_can2_supply>;
 	status = "okay";
 };
+
+/* TODO: GPU */
 
 /* Apalis I2C1 */
 &i2c2 {
@@ -243,10 +249,7 @@
 	status = "okay";
 };
 
-/* Apalis BKL1_PWM */
-&pwm_lvds1 {
-	status = "okay";
-};
+/* TODO: Apalis BKL1_PWM */
 
 /* Apalis DAP1 */
 &sai1 {
@@ -271,11 +274,7 @@
 	status = "okay";
 };
 
-/* Apalis USBH2, Apalis USBH3 and on-module Wi-Fi via on-module HSIC Hub */
-&usbh1 {
-	vbus-supply = <&reg_usb_host_vbus>;
-	status = "okay";
-};
+/* TODO: Apalis USBH2, Apalis USBH3 and on-module Wi-Fi via on-module HSIC Hub */
 
 /* Apalis USBO1 */
 &usbotg1 {

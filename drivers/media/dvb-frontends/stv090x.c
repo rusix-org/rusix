@@ -85,7 +85,7 @@ static struct stv090x_dev *append_internal(struct stv090x_internal *internal)
 	struct stv090x_dev *new_dev;
 	struct stv090x_dev *temp_dev;
 
-	new_dev = kmalloc_obj(struct stv090x_dev);
+	new_dev = kmalloc(sizeof(struct stv090x_dev), GFP_KERNEL);
 	if (new_dev != NULL) {
 		new_dev->internal = internal;
 		new_dev->next_dev = NULL;
@@ -3902,8 +3902,6 @@ static int stv090x_recv_slave_reply(struct dvb_frontend *fe, struct dvb_diseqc_s
 
 	if (rx_end) {
 		reply->msg_len = STV090x_GETFIELD_Px(reg, FIFO_BYTENBR_FIELD);
-		if (reply->msg_len > sizeof(reply->msg))
-			reply->msg_len = sizeof(reply->msg);
 		for (i = 0; i < reply->msg_len; i++)
 			reply->msg[i] = STV090x_READ_DEMOD(state, DISRXDATA);
 	}
@@ -4908,7 +4906,7 @@ static int stv090x_setup_compound(struct stv090x_state *state)
 		state->internal->num_used++;
 		dprintk(FE_INFO, 1, "Found Internal Structure!");
 	} else {
-		state->internal = kmalloc_obj(*state->internal);
+		state->internal = kmalloc(sizeof(*state->internal), GFP_KERNEL);
 		if (!state->internal)
 			goto error;
 		temp_int = append_internal(state->internal);
@@ -5004,7 +5002,7 @@ static int stv090x_probe(struct i2c_client *client)
 
 	struct stv090x_state *state = NULL;
 
-	state = kzalloc_obj(*state);
+	state = kzalloc(sizeof(*state), GFP_KERNEL);
 	if (!state) {
 		ret = -ENOMEM;
 		goto error;
@@ -5052,7 +5050,7 @@ struct dvb_frontend *stv090x_attach(struct stv090x_config *config,
 	int ret = 0;
 	struct stv090x_state *state = NULL;
 
-	state = kzalloc_obj(*state);
+	state = kzalloc(sizeof(*state), GFP_KERNEL);
 	if (!state)
 		goto error;
 
@@ -5081,8 +5079,8 @@ error:
 EXPORT_SYMBOL_GPL(stv090x_attach);
 
 static const struct i2c_device_id stv090x_id_table[] = {
-	{ .name = "stv090x" },
-	{ }
+	{ "stv090x" },
+	{}
 };
 MODULE_DEVICE_TABLE(i2c, stv090x_id_table);
 

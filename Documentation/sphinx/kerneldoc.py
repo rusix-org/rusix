@@ -42,14 +42,10 @@ from sphinx.util import logging
 from pprint import pformat
 
 srctree = os.path.abspath(os.environ["srctree"])
-sys.path.insert(0, os.path.join(srctree, "tools/lib/python"))
+sys.path.insert(0, os.path.join(srctree, "scripts/lib/kdoc"))
 
-from kdoc.kdoc_files import KernelFiles
-from kdoc.kdoc_output import RestFormat
-
-# Used when verbose is active to show how to reproduce kernel-doc
-# issues via command line
-kerneldoc_bin = "tools/docs/kernel-doc"
+from kdoc_files import KernelFiles
+from kdoc_output import RestFormat
 
 __version__  = '1.0'
 kfiles = None
@@ -99,7 +95,7 @@ class KernelDocDirective(Directive):
     def handle_args(self):
 
         env = self.state.document.settings.env
-        cmd = [kerneldoc_bin, '-rst', '-enable-lineno']
+        cmd = [env.config.kerneldoc_bin, '-rst', '-enable-lineno']
 
         filename = env.config.kerneldoc_srctree + '/' + self.arguments[0]
 
@@ -194,7 +190,35 @@ class KernelDocDirective(Directive):
 
         return cmd
 
-    def parse_msg(self, filename, node, out):
+    def run_cmd(self, cmd):
+        """
+        Execute an external kernel-doc command.
+        """
+
+        env = self.state.document.settings.env
+        node = nodes.section()
+
+        p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        out, err = p.communicate()
+
+        out, err = codecs.decode(out, 'utf-8'), codecs.decode(err, 'utf-8')
+
+        if p.returncode != 0:
+            sys.stderr.write(err)
+
+            logger.warning("kernel-doc '%s' failed with return code %d"
+                                % (" ".join(cmd), p.returncode))
+            return [nodes.error(None, nodes.paragraph(text = "kernel-doc missing"))]
+        elif env.config.kerneldoc_verbosity > 0:
+            sys.stderr.write(err)
+
+        filenames = self.parse_args["file_list"]
+        for filename in filenames:
+            self.parse_msg(filename, node, out, cmd)
+
+        return node.children
+
+    def parse_msg(self, filename, node, out, cmd):
         """
         Handles a kernel-doc output for a given file
         """
@@ -220,7 +244,7 @@ class KernelDocDirective(Directive):
 
         self.do_parse(result, node)
 
-    def run_kdoc(self, kfiles):
+    def run_kdoc(self, cmd, kfiles):
         """
         Execute kernel-doc classes directly instead of running as a separate
         command.
@@ -234,17 +258,23 @@ class KernelDocDirective(Directive):
         filenames = self.parse_args["file_list"]
 
         for filename, out in kfiles.msg(**self.msg_args, filenames=filenames):
-            self.parse_msg(filename, node, out)
+            self.parse_msg(filename, node, out, cmd)
 
         return node.children
 
     def run(self):
+        global kfiles
+
         cmd = self.handle_args()
         if self.verbose >= 1:
             logger.info(cmd_str(cmd))
 
         try:
-            return self.run_kdoc(kfiles)
+            if kfiles:
+                return self.run_kdoc(cmd, kfiles)
+            else:
+                return self.run_cmd(cmd)
+
         except Exception as e:  # pylint: disable=W0703
             logger.warning("kernel-doc '%s' processing failed with: %s" %
                            (cmd_str(cmd), pformat(e)))
@@ -256,11 +286,19 @@ class KernelDocDirective(Directive):
 
 def setup_kfiles(app):
     global kfiles
-    out_style = RestFormat()
-    kfiles = KernelFiles(out_style=out_style, logger=logger)
+
+    kerneldoc_bin = app.env.config.kerneldoc_bin
+
+    if kerneldoc_bin and kerneldoc_bin.endswith("kernel-doc.py"):
+        print("Using Python kernel-doc")
+        out_style = RestFormat()
+        kfiles = KernelFiles(out_style=out_style, logger=logger)
+    else:
+        print(f"Using {kerneldoc_bin}")
 
 
 def setup(app):
+    app.add_config_value('kerneldoc_bin', None, 'env')
     app.add_config_value('kerneldoc_srctree', None, 'env')
     app.add_config_value('kerneldoc_verbosity', 1, 'env')
 

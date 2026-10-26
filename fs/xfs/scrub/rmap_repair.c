@@ -3,7 +3,7 @@
  * Copyright (c) 2018-2024 Oracle.  All Rights Reserved.
  * Author: Darrick J. Wong <djwong@kernel.org>
  */
-#include "xfs_platform.h"
+#include "xfs.h"
 #include "xfs_fs.h"
 #include "xfs_shared.h"
 #include "xfs_format.h"
@@ -172,7 +172,7 @@ xrep_setup_ag_rmapbt(
 	if (error)
 		return error;
 
-	rr = kzalloc_obj(struct xrep_rmap, XCHK_GFP_FLAGS);
+	rr = kzalloc(sizeof(struct xrep_rmap), XCHK_GFP_FLAGS);
 	if (!rr)
 		return -ENOMEM;
 
@@ -570,7 +570,7 @@ xrep_rmap_scan_ifork(
 	int			whichfork)
 {
 	struct xrep_rmap_ifork	rf = {
-		.accum		= { .rm_owner = I_INO(ip), },
+		.accum		= { .rm_owner = ip->i_ino, },
 		.rr		= rr,
 		.whichfork	= whichfork,
 	};
@@ -910,7 +910,7 @@ xrep_rmap_find_rmaps(
 	int			error;
 
 	/* Find all the per-AG metadata. */
-	xrep_ag_btcur_init(sc);
+	xrep_ag_btcur_init(sc, &sc->sa);
 
 	error = xrep_rmap_find_inode_rmaps(rr);
 	if (error)
@@ -926,7 +926,7 @@ xrep_rmap_find_rmaps(
 
 	error = xrep_rmap_find_log_rmaps(rr);
 end_agscan:
-	xchk_ag_btcur_free(sc);
+	xchk_ag_btcur_free(&sc->sa);
 	if (error)
 		return error;
 
@@ -1109,7 +1109,6 @@ xrep_rmap_try_reserve(
 		return error;
 
 	error = xfs_agfl_walk(sc->mp, agf, agfl_bp, xrep_rmap_walk_agfl, &ra);
-	xfs_trans_brelse(sc->tp, agfl_bp);
 	if (error)
 		return error;
 
@@ -1167,9 +1166,9 @@ xrep_rmap_reserve_space(
 	} while (!done);
 
 	/* Emit rmaps for everything in the free space bitmap. */
-	xrep_ag_btcur_init(rr->sc);
+	xrep_ag_btcur_init(rr->sc, &rr->sc->sa);
 	error = xrep_rmap_stash_bitmap(rr, &freesp_blocks, &XFS_RMAP_OINFO_AG);
-	xchk_ag_btcur_free(rr->sc);
+	xchk_ag_btcur_free(&rr->sc->sa);
 
 out_bitmap:
 	xagb_bitmap_destroy(&freesp_blocks);

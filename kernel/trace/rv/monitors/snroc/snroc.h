@@ -5,21 +5,19 @@
  *   Documentation/trace/rv/deterministic_automata.rst
  */
 
-#define MONITOR_NAME snroc
-
 enum states_snroc {
-	other_context_snroc,
+	other_context_snroc = 0,
 	own_context_snroc,
-	state_max_snroc,
+	state_max_snroc
 };
 
 #define INVALID_STATE state_max_snroc
 
 enum events_snroc {
-	sched_set_state_snroc,
+	sched_set_state_snroc = 0,
 	sched_switch_in_snroc,
 	sched_switch_out_snroc,
-	event_max_snroc,
+	event_max_snroc
 };
 
 struct automaton_snroc {
@@ -33,12 +31,12 @@ struct automaton_snroc {
 static const struct automaton_snroc automaton_snroc = {
 	.state_names = {
 		"other_context",
-		"own_context",
+		"own_context"
 	},
 	.event_names = {
 		"sched_set_state",
 		"sched_switch_in",
-		"sched_switch_out",
+		"sched_switch_out"
 	},
 	.function = {
 		{      INVALID_STATE,  own_context_snroc,       INVALID_STATE },

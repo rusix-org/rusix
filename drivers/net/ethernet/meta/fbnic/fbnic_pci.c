@@ -135,23 +135,17 @@ void fbnic_up(struct fbnic_net *fbn)
 
 	fbnic_rss_reinit_hw(fbn->fbd, fbn);
 
-	netif_addr_lock_bh(fbn->netdev);
-	__fbnic_set_rx_mode(fbn->fbd, &fbn->netdev->uc, &fbn->netdev->mc);
-	netif_addr_unlock_bh(fbn->netdev);
+	__fbnic_set_rx_mode(fbn->fbd);
 
 	/* Enable Tx/Rx processing */
 	fbnic_napi_enable(fbn);
 	netif_tx_wake_all_queues(fbn->netdev);
 
 	fbnic_service_task_start(fbn);
-
-	fbnic_dbg_up(fbn);
 }
 
 void fbnic_down_noidle(struct fbnic_net *fbn)
 {
-	fbnic_dbg_down(fbn);
-
 	fbnic_service_task_stop(fbn);
 
 	/* Disable Tx/Rx Processing */
@@ -182,9 +176,7 @@ static int fbnic_fw_config_after_crash(struct fbnic_dev *fbd)
 	}
 
 	fbnic_rpc_reset_valid_entries(fbd);
-	netif_addr_lock_bh(fbd->netdev);
-	__fbnic_set_rx_mode(fbd, &fbd->netdev->uc, &fbd->netdev->mc);
-	netif_addr_unlock_bh(fbd->netdev);
+	__fbnic_set_rx_mode(fbd);
 
 	return 0;
 }
@@ -193,7 +185,7 @@ static void fbnic_health_check(struct fbnic_dev *fbd)
 {
 	struct fbnic_fw_mbx *tx_mbx = &fbd->mbx[FBNIC_IPC_MBX_TX_IDX];
 
-	/* As long as the heart is beating the FW is healthy */
+	/* As long as the heart is beating the FW is healty */
 	if (fbd->fw_heartbeat_enabled)
 		return;
 
@@ -204,7 +196,7 @@ static void fbnic_health_check(struct fbnic_dev *fbd)
 	if (tx_mbx->head != tx_mbx->tail)
 		return;
 
-	fbnic_devlink_fw_report(fbd, "Firmware crash detected!");
+	fbnic_devlink_fw_report(fbd, "Firmware crashed detected!");
 	fbnic_devlink_otp_check(fbd, "error detected after firmware recovery");
 
 	if (fbnic_fw_config_after_crash(fbd))
@@ -215,17 +207,10 @@ static void fbnic_service_task(struct work_struct *work)
 {
 	struct fbnic_dev *fbd = container_of(to_delayed_work(work),
 					     struct fbnic_dev, service_task);
-	struct net_device *netdev = fbd->netdev;
-
-	if (netif_running(netdev))
-		fbnic_phylink_pmd_training_complete_notify(netdev);
 
 	rtnl_lock();
 
 	fbnic_get_hw_stats32(fbd);
-
-	if (fbd->ps_timeout && fbnic_mac_check_tx_pause(fbd))
-		fbnic_mac_ps_protect_handler(fbd);
 
 	fbnic_fw_check_heartbeat(fbd);
 
@@ -239,7 +224,7 @@ static void fbnic_service_task(struct work_struct *work)
 		netdev_unlock(fbd->netdev);
 	}
 
-	if (netif_running(netdev))
+	if (netif_running(fbd->netdev))
 		schedule_delayed_work(&fbd->service_task, HZ);
 
 	rtnl_unlock();
@@ -276,6 +261,8 @@ static int fbnic_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 	}
 
 	err = dma_set_mask_and_coherent(&pdev->dev, DMA_BIT_MASK(46));
+	if (err)
+		err = dma_set_mask_and_coherent(&pdev->dev, DMA_BIT_MASK(32));
 	if (err) {
 		dev_err(&pdev->dev, "DMA configuration failed: %d\n", err);
 		return err;
@@ -300,8 +287,6 @@ static int fbnic_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 
 	/* Populate driver with hardware-specific info and handlers */
 	fbd->max_num_queues = info->max_num_queues;
-
-	fbd->ps_timeout = FBNIC_MAC_PS_TO_DEFAULT_MS;
 
 	pci_set_master(pdev);
 	pci_save_state(pdev);
@@ -352,9 +337,6 @@ static int fbnic_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 		goto init_failure_mode;
 	}
 
-	if (fbnic_mdiobus_create(fbd))
-		goto init_failure_mode;
-
 	netdev = fbnic_netdev_alloc(fbd);
 	if (!netdev) {
 		dev_err(&pdev->dev, "Netdev allocation failed\n");
@@ -400,7 +382,7 @@ free_fbd:
  * @pdev: PCI device information struct
  *
  * Called by the PCI subsystem to alert the driver that it should release
- * a PCI device.  This could be caused by a Hot-Plug event, or because the
+ * a PCI device.  The could be caused by a Hot-Plug event, or because the
  * driver is going to be removed from memory.
  **/
 static void fbnic_remove(struct pci_dev *pdev)

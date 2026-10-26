@@ -287,7 +287,7 @@ static int test__hists_link(struct test_suite *test __maybe_unused, int subtest 
 {
 	int err = -1;
 	struct hists *hists, *first_hists;
-	struct machines machines = { 0 };
+	struct machines machines;
 	struct machine *machine = NULL;
 	struct evsel *evsel, *first;
 	struct evlist *evlist = evlist__new();
@@ -303,8 +303,7 @@ static int test__hists_link(struct test_suite *test __maybe_unused, int subtest 
 		goto out;
 
 	err = TEST_FAIL;
-	if (machines__init(&machines))
-		goto out;
+	machines__init(&machines);
 
 	/* setup threads/dso/map/symbols also */
 	machine = setup_fake_machine(&machines);
@@ -353,7 +352,7 @@ static int test__hists_link(struct test_suite *test __maybe_unused, int subtest 
 
 out:
 	/* tear down everything */
-	evlist__put(evlist);
+	evlist__delete(evlist);
 	reset_output_field();
 	machines__exit(&machines);
 	put_fake_samples();

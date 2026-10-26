@@ -142,7 +142,7 @@ static bool is_not(const char *str)
 }
 
 /**
- * struct prog_entry - a single entry in the filter program
+ * struct prog_entry - a singe entry in the filter program
  * @target:	     Index to jump to on a branch (actually one minus the index)
  * @when_to_branch:  The value of the result of the predicate to do a branch
  * @pred:	     The predicate to execute.
@@ -482,17 +482,18 @@ predicate_parse(const char *str, int nr_parens, int nr_preds,
 	int len;
 	int N = 0;
 	int i;
-	int nr_preds_alloc = nr_preds + 2; /* For TRUE and FALSE */
 
-	op_stack = kmalloc_objs(*op_stack, nr_parens);
+	nr_preds += 2; /* For TRUE and FALSE */
+
+	op_stack = kmalloc_array(nr_parens, sizeof(*op_stack), GFP_KERNEL);
 	if (!op_stack)
 		return ERR_PTR(-ENOMEM);
-	prog_stack = kzalloc_objs(*prog_stack, nr_preds_alloc);
+	prog_stack = kcalloc(nr_preds, sizeof(*prog_stack), GFP_KERNEL);
 	if (!prog_stack) {
 		parse_error(pe, -ENOMEM, 0);
 		goto out_free;
 	}
-	inverts = kmalloc_array(nr_preds_alloc, sizeof(*inverts), GFP_KERNEL);
+	inverts = kmalloc_array(nr_preds, sizeof(*inverts), GFP_KERNEL);
 	if (!inverts) {
 		parse_error(pe, -ENOMEM, 0);
 		goto out_free;
@@ -511,7 +512,7 @@ predicate_parse(const char *str, int nr_parens, int nr_preds,
 
 		switch (*next) {
 		case '(':					/* #2 */
-			if (top - op_stack >= nr_parens - 1) {
+			if (top - op_stack > nr_parens) {
 				ret = -EINVAL;
 				goto out_free;
 			}
@@ -1213,7 +1214,7 @@ static void append_filter_err(struct trace_array *tr,
 	if (WARN_ON(!filter->filter_string))
 		return;
 
-	s = kmalloc_obj(*s);
+	s = kmalloc(sizeof(*s), GFP_KERNEL);
 	if (!s)
 		return;
 	trace_seq_init(s);
@@ -1375,7 +1376,7 @@ static void free_filter_list_tasks(struct rcu_head *rhp)
 	struct filter_head *filter_list = container_of(rhp, struct filter_head, rcu);
 
 	INIT_RCU_WORK(&filter_list->rwork, free_filter_list_work);
-	queue_rcu_work(system_dfl_wq, &filter_list->rwork);
+	queue_rcu_work(system_wq, &filter_list->rwork);
 }
 
 /*
@@ -1394,13 +1395,13 @@ static void try_delay_free_filter(struct event_filter *filter)
 	struct filter_head *head;
 	struct filter_list *item;
 
-	head = kmalloc_obj(*head);
+	head = kmalloc(sizeof(*head), GFP_KERNEL);
 	if (!head)
 		goto free_now;
 
 	INIT_LIST_HEAD(&head->list);
 
-	item = kmalloc_obj(*item);
+	item = kmalloc(sizeof(*item), GFP_KERNEL);
 	if (!item) {
 		kfree(head);
 		goto free_now;
@@ -1442,7 +1443,7 @@ static void filter_free_subsystem_filters(struct trace_subsystem_dir *dir,
 	struct filter_head *head;
 	struct filter_list *item;
 
-	head = kmalloc_obj(*head);
+	head = kmalloc(sizeof(*head), GFP_KERNEL);
 	if (!head)
 		goto free_now;
 
@@ -1451,7 +1452,7 @@ static void filter_free_subsystem_filters(struct trace_subsystem_dir *dir,
 	list_for_each_entry(file, &tr->events, list) {
 		if (file->system != dir)
 			continue;
-		item = kmalloc_obj(*item);
+		item = kmalloc(sizeof(*item), GFP_KERNEL);
 		if (!item)
 			goto free_now;
 		item->filter = event_filter(file);
@@ -1459,7 +1460,7 @@ static void filter_free_subsystem_filters(struct trace_subsystem_dir *dir,
 		event_clear_filter(file);
 	}
 
-	item = kmalloc_obj(*item);
+	item = kmalloc(sizeof(*item), GFP_KERNEL);
 	if (!item)
 		goto free_now;
 
@@ -1708,7 +1709,7 @@ static int parse_pred(const char *str, void *data,
 
 	s = i;
 
-	pred = kzalloc_obj(*pred);
+	pred = kzalloc(sizeof(*pred), GFP_KERNEL);
 	if (!pred)
 		return -ENOMEM;
 
@@ -1819,7 +1820,7 @@ static int parse_pred(const char *str, void *data,
 			goto err_free;
 		}
 
-		pred->regex = kzalloc_obj(*pred->regex);
+		pred->regex = kzalloc(sizeof(*pred->regex), GFP_KERNEL);
 		if (!pred->regex)
 			goto err_mem;
 		pred->regex->len = len;
@@ -1984,7 +1985,7 @@ static int parse_pred(const char *str, void *data,
 			goto err_free;
 		}
 
-		pred->regex = kzalloc_obj(*pred->regex);
+		pred->regex = kzalloc(sizeof(*pred->regex), GFP_KERNEL);
 		if (!pred->regex)
 			goto err_mem;
 		pred->regex->len = len;
@@ -2261,7 +2262,7 @@ static int process_system_preds(struct trace_subsystem_dir *dir,
 	bool fail = true;
 	int err;
 
-	filter_list = kmalloc_obj(*filter_list);
+	filter_list = kmalloc(sizeof(*filter_list), GFP_KERNEL);
 	if (!filter_list)
 		return -ENOMEM;
 
@@ -2272,7 +2273,7 @@ static int process_system_preds(struct trace_subsystem_dir *dir,
 		if (file->system != dir)
 			continue;
 
-		filter = kzalloc_obj(*filter);
+		filter = kzalloc(sizeof(*filter), GFP_KERNEL);
 		if (!filter)
 			goto fail_mem;
 
@@ -2289,7 +2290,7 @@ static int process_system_preds(struct trace_subsystem_dir *dir,
 			event_set_filtered_flag(file);
 
 
-		filter_item = kzalloc_obj(*filter_item);
+		filter_item = kzalloc(sizeof(*filter_item), GFP_KERNEL);
 		if (!filter_item)
 			goto fail_mem;
 
@@ -2343,14 +2344,14 @@ static int create_filter_start(char *filter_string, bool set_str,
 	if (WARN_ON_ONCE(*pse || *filterp))
 		return -EINVAL;
 
-	filter = kzalloc_obj(*filter);
+	filter = kzalloc(sizeof(*filter), GFP_KERNEL);
 	if (filter && set_str) {
 		filter->filter_string = kstrdup(filter_string, GFP_KERNEL);
 		if (!filter->filter_string)
 			err = -ENOMEM;
 	}
 
-	pe = kzalloc_obj(*pe);
+	pe = kzalloc(sizeof(*pe), GFP_KERNEL);
 
 	if (!filter || !pe || err) {
 		kfree(pe);

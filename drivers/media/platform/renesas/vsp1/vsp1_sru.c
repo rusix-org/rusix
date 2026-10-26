@@ -7,10 +7,8 @@
  * Contact: Laurent Pinchart (laurent.pinchart@ideasonboard.com)
  */
 
-#include <linux/cleanup.h>
 #include <linux/device.h>
 #include <linux/gfp.h>
-#include <linux/mutex.h>
 
 #include <media/v4l2-subdev.h>
 
@@ -108,35 +106,47 @@ static const struct v4l2_ctrl_config sru_intensity_control = {
  * V4L2 Subdevice Operations
  */
 
-static const unsigned int sru_codes[] = {
-	MEDIA_BUS_FMT_ARGB8888_1X32,
-	MEDIA_BUS_FMT_AYUV8_1X32,
-};
+static int sru_enum_mbus_code(struct v4l2_subdev *subdev,
+			      struct v4l2_subdev_state *sd_state,
+			      struct v4l2_subdev_mbus_code_enum *code)
+{
+	static const unsigned int codes[] = {
+		MEDIA_BUS_FMT_ARGB8888_1X32,
+		MEDIA_BUS_FMT_AYUV8_1X32,
+	};
+
+	return vsp1_subdev_enum_mbus_code(subdev, sd_state, code, codes,
+					  ARRAY_SIZE(codes));
+}
 
 static int sru_enum_frame_size(struct v4l2_subdev *subdev,
 			       struct v4l2_subdev_state *sd_state,
 			       struct v4l2_subdev_frame_size_enum *fse)
 {
 	struct vsp1_sru *sru = to_sru(subdev);
-	int ret;
+	struct v4l2_subdev_state *state;
+	struct v4l2_mbus_framefmt *format;
+	int ret = 0;
 
-	ret = vsp1_subdev_enum_frame_size(subdev, sd_state, fse);
-	if (ret)
-		return ret;
+	state = vsp1_entity_get_state(&sru->entity, sd_state, fse->which);
+	if (!state)
+		return -EINVAL;
 
-	if (fse->pad == SRU_PAD_SOURCE) {
-		struct v4l2_subdev_state *state;
-		struct v4l2_mbus_framefmt *format;
+	format = v4l2_subdev_state_get_format(state, SRU_PAD_SINK);
 
-		state = vsp1_entity_get_state(&sru->entity, sd_state,
-					      fse->which);
-		if (!state)
-			return -EINVAL;
+	mutex_lock(&sru->entity.lock);
 
-		format = v4l2_subdev_state_get_format(state, SRU_PAD_SINK);
+	if (fse->index || fse->code != format->code) {
+		ret = -EINVAL;
+		goto done;
+	}
 
-		guard(mutex)(&sru->entity.lock);
-
+	if (fse->pad == SRU_PAD_SINK) {
+		fse->min_width = SRU_MIN_SIZE;
+		fse->max_width = SRU_MAX_SIZE;
+		fse->min_height = SRU_MIN_SIZE;
+		fse->max_height = SRU_MAX_SIZE;
+	} else {
 		fse->min_width = format->width;
 		fse->min_height = format->height;
 		if (format->width <= SRU_MAX_SIZE / 2 &&
@@ -149,7 +159,9 @@ static int sru_enum_frame_size(struct v4l2_subdev *subdev,
 		}
 	}
 
-	return 0;
+done:
+	mutex_unlock(&sru->entity.lock);
+	return ret;
 }
 
 static void sru_try_format(struct vsp1_sru *sru,
@@ -210,19 +222,21 @@ static void sru_try_format(struct vsp1_sru *sru,
 }
 
 static int sru_set_format(struct v4l2_subdev *subdev,
-			  const struct v4l2_subdev_client_info *ci,
 			  struct v4l2_subdev_state *sd_state,
 			  struct v4l2_subdev_format *fmt)
 {
 	struct vsp1_sru *sru = to_sru(subdev);
 	struct v4l2_subdev_state *state;
 	struct v4l2_mbus_framefmt *format;
+	int ret = 0;
 
-	guard(mutex)(&sru->entity.lock);
+	mutex_lock(&sru->entity.lock);
 
 	state = vsp1_entity_get_state(&sru->entity, sd_state, fmt->which);
-	if (!state)
-		return -EINVAL;
+	if (!state) {
+		ret = -EINVAL;
+		goto done;
+	}
 
 	sru_try_format(sru, state, fmt->pad, &fmt->format);
 
@@ -237,18 +251,19 @@ static int sru_set_format(struct v4l2_subdev *subdev,
 		sru_try_format(sru, state, SRU_PAD_SOURCE, format);
 	}
 
-	return 0;
+done:
+	mutex_unlock(&sru->entity.lock);
+	return ret;
 }
 
 static const struct v4l2_subdev_pad_ops sru_pad_ops = {
-	.enum_mbus_code = vsp1_subdev_enum_mbus_code,
+	.enum_mbus_code = sru_enum_mbus_code,
 	.enum_frame_size = sru_enum_frame_size,
 	.get_fmt = vsp1_subdev_get_pad_format,
 	.set_fmt = sru_set_format,
 };
 
 static const struct v4l2_subdev_ops sru_ops = {
-	.core	= &vsp1_entity_core_ops,
 	.pad    = &sru_pad_ops,
 };
 
@@ -355,12 +370,6 @@ struct vsp1_sru *vsp1_sru_create(struct vsp1_device *vsp1)
 
 	sru->entity.ops = &sru_entity_ops;
 	sru->entity.type = VSP1_ENTITY_SRU;
-	sru->entity.codes = sru_codes;
-	sru->entity.num_codes = ARRAY_SIZE(sru_codes);
-	sru->entity.min_width = SRU_MIN_SIZE;
-	sru->entity.max_width = SRU_MAX_SIZE;
-	sru->entity.min_height = SRU_MIN_SIZE;
-	sru->entity.max_height = SRU_MAX_SIZE;
 
 	ret = vsp1_entity_init(vsp1, &sru->entity, "sru", 2, &sru_ops,
 			       MEDIA_ENT_F_PROC_VIDEO_SCALER);

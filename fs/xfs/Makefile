@@ -88,10 +88,8 @@ xfs-y				+= xfs_aops.o \
 				   xfs_globals.o \
 				   xfs_handle.o \
 				   xfs_health.o \
-				   xfs_healthmon.o \
 				   xfs_icache.o \
 				   xfs_ioctl.o \
-				   xfs_ioend.o \
 				   xfs_iomap.o \
 				   xfs_iops.o \
 				   xfs_inode.o \
@@ -107,7 +105,6 @@ xfs-y				+= xfs_aops.o \
 				   xfs_symlink.o \
 				   xfs_sysfs.o \
 				   xfs_trans.o \
-				   xfs_verify_media.o \
 				   xfs_xattr.o
 
 # low-level transaction/log code

@@ -87,7 +87,7 @@ static void radeon_gem_object_free(struct drm_gem_object *gobj)
 
 	if (robj) {
 		radeon_mn_unregister(robj);
-		ttm_bo_fini(&robj->tbo);
+		ttm_bo_put(&robj->tbo);
 	}
 }
 
@@ -111,7 +111,7 @@ int radeon_gem_object_create(struct radeon_device *rdev, unsigned long size,
 	 */
 	max_size = rdev->mc.gtt_size - rdev->gart_pin_size;
 	if (size > max_size) {
-		DRM_DEBUG("Allocation size %luMb bigger than %luMb limit\n",
+		DRM_DEBUG("Allocation size %ldMb bigger than %ldMb limit\n",
 			  size >> 20, max_size >> 20);
 		return -ENOMEM;
 	}
@@ -561,7 +561,7 @@ int radeon_gem_set_tiling_ioctl(struct drm_device *dev, void *data,
 	struct radeon_bo *robj;
 	int r = 0;
 
-	DRM_DEBUG("%u \n", args->handle);
+	DRM_DEBUG("%d \n", args->handle);
 	gobj = drm_gem_object_lookup(filp, args->handle);
 	if (gobj == NULL)
 		return -ENOENT;
@@ -895,7 +895,7 @@ static int radeon_debugfs_gem_info_show(struct seq_file *m, void *unused)
 			placement = " CPU";
 			break;
 		}
-		seq_printf(m, "bo[0x%08x] %8lukB %8luMB %s pid %8lu\n",
+		seq_printf(m, "bo[0x%08x] %8ldkB %8ldMB %s pid %8ld\n",
 			   i, radeon_bo_size(rbo) >> 10, radeon_bo_size(rbo) >> 20,
 			   placement, (unsigned long)rbo->pid);
 		i++;

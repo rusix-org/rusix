@@ -51,7 +51,7 @@ struct afs_server_list *afs_alloc_server_list(struct afs_volume *volume,
 			newrep++;
 	}
 
-	slist = kzalloc_flex(*slist, servers, nr_servers);
+	slist = kzalloc(struct_size(slist, servers, nr_servers), GFP_KERNEL);
 	if (!slist)
 		goto error;
 

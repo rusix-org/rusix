@@ -358,12 +358,6 @@ struct sk_buff;
  */
 #define GSO_BY_FRAGS	0xFFFF
 
-/* All frags in an skb must either all be struct page-backed or all belong to
- * the same memory provider instance (e.g. the same devmem binding or io_uring
- * area). Mixing page and memory-provider frags, or mixing frags from different
- * memory providers within a single skb (including via coalescing), is not
- * allowed.
- */
 typedef struct skb_frag {
 	netmem_ref netmem;
 	unsigned int len;
@@ -639,9 +633,9 @@ struct skb_shared_info {
  *
  * Transport layers send out clones of payload skbs they hold for
  * retransmissions. To allow lower layers of the stack to prepend their headers
- * we split &skb_shared_info.dataref into two parts.
- * The lower 30 bits count the overall number of references.
- * Bit 30 indicates whether one of the references is payload-only.
+ * we split &skb_shared_info.dataref into two halves.
+ * The lower 16 bits count the overall number of references.
+ * The higher 16 bits indicate how many of the references are payload-only.
  * skb_header_cloned() checks if skb is allowed to add / write the headers.
  *
  * The creator of the skb (e.g. TCP) marks its skb as &sk_buff.nohdr
@@ -661,7 +655,7 @@ struct skb_shared_info {
  * Having multiple payload-only skbs with different lengths of hdr_len is not
  * possible. The payload-only skbs should never leave their owner.
  */
-#define SKB_DATAREF_SHIFT 30
+#define SKB_DATAREF_SHIFT 16
 #define SKB_DATAREF_MASK ((1 << SKB_DATAREF_SHIFT) - 1)
 
 
@@ -1042,6 +1036,8 @@ struct sk_buff {
 	__u16			tc_index;	/* traffic control index */
 #endif
 
+	u16			alloc_cpu;
+
 	union {
 		__wsum		csum;
 		struct {
@@ -1088,11 +1084,11 @@ struct sk_buff {
 	__u16			network_header;
 	__u16			mac_header;
 
-	struct kcov_common_handle_id kcov_handle;
+#ifdef CONFIG_KCOV
+	u64			kcov_handle;
+#endif
 
 	); /* end headers group */
-
-	u16			alloc_cpu;
 
 	/* These elements must be at the end, see alloc_skb() for details.  */
 	sk_buff_data_t		tail;
@@ -1319,8 +1315,7 @@ static inline bool skb_data_unref(const struct sk_buff *skb,
 	return true;
 }
 
-void __fix_address sk_skb_reason_drop(const struct sock *sk,
-				      struct sk_buff *skb,
+void __fix_address sk_skb_reason_drop(struct sock *sk, struct sk_buff *skb,
 				      enum skb_drop_reason reason);
 
 static inline void
@@ -2131,14 +2126,14 @@ static inline struct sk_buff *skb_share_check(struct sk_buff *skb, gfp_t pri)
 }
 
 /*
- *	Copy cloned buffers into a new sk_buff. We effectively do COW on
+ *	Copy shared buffers into a new sk_buff. We effectively do COW on
  *	packets to handle cases where we have a local reader and forward
  *	and a couple of other messy ones. The normal one is tcpdumping
  *	a packet that's being forwarded.
  */
 
 /**
- *	skb_unclone_full - make a private copy of a cloned buffer
+ *	skb_unshare - make a copy of a shared buffer
  *	@skb: buffer to check
  *	@pri: priority for memory allocation
  *
@@ -2148,13 +2143,10 @@ static inline struct sk_buff *skb_share_check(struct sk_buff *skb, gfp_t pri)
  *	the original buffer is returned. When called with a spinlock held or
  *	from interrupt state @pri must be %GFP_ATOMIC
  *
- *	Unlike skb_unclone(), the paged data is copied as well. A buffer with
- *	skb->users > 1 that is not a clone is returned as is, use
- *	skb_share_check() for that case.
- *
  *	%NULL is returned on a memory allocation failure.
  */
-static inline struct sk_buff *skb_unclone_full(struct sk_buff *skb, gfp_t pri)
+static inline struct sk_buff *skb_unshare(struct sk_buff *skb,
+					  gfp_t pri)
 {
 	might_sleep_if(gfpflags_allow_blocking(pri));
 	if (skb_cloned(skb)) {
@@ -2598,9 +2590,8 @@ static inline void skb_len_add(struct sk_buff *skb, int delta)
  *
  * Does not take any additional reference on the fragment.
  */
-static __always_inline void
-__skb_fill_netmem_desc(struct sk_buff *skb, int i, netmem_ref netmem,
-		       int off, int size)
+static inline void __skb_fill_netmem_desc(struct sk_buff *skb, int i,
+					  netmem_ref netmem, int off, int size)
 {
 	struct page *page;
 
@@ -2622,16 +2613,14 @@ __skb_fill_netmem_desc(struct sk_buff *skb, int i, netmem_ref netmem,
 		skb->pfmemalloc = true;
 }
 
-static __always_inline void
-__skb_fill_page_desc(struct sk_buff *skb, int i, struct page *page,
-		     int off, int size)
+static inline void __skb_fill_page_desc(struct sk_buff *skb, int i,
+					struct page *page, int off, int size)
 {
 	__skb_fill_netmem_desc(skb, i, page_to_netmem(page), off, size);
 }
 
-static __always_inline void
-skb_fill_netmem_desc(struct sk_buff *skb, int i, netmem_ref netmem,
-		     int off, int size)
+static inline void skb_fill_netmem_desc(struct sk_buff *skb, int i,
+					netmem_ref netmem, int off, int size)
 {
 	__skb_fill_netmem_desc(skb, i, netmem, off, size);
 	skb_shinfo(skb)->nr_frags = i + 1;
@@ -2651,9 +2640,8 @@ skb_fill_netmem_desc(struct sk_buff *skb, int i, netmem_ref netmem,
  *
  * Does not take any additional reference on the fragment.
  */
-static __always_inline void
-skb_fill_page_desc(struct sk_buff *skb, int i, struct page *page,
-		   int off, int size)
+static inline void skb_fill_page_desc(struct sk_buff *skb, int i,
+				      struct page *page, int off, int size)
 {
 	skb_fill_netmem_desc(skb, i, page_to_netmem(page), off, size);
 }
@@ -2679,17 +2667,8 @@ static inline void skb_fill_page_desc_noacc(struct sk_buff *skb, int i,
 	shinfo->nr_frags = i + 1;
 }
 
-static inline void skb_add_rx_frag_netmem(struct sk_buff *skb, int i,
-					  netmem_ref netmem, int off,
-					  int size, unsigned int truesize)
-{
-	DEBUG_NET_WARN_ON_ONCE(size > truesize);
-
-	skb_fill_netmem_desc(skb, i, netmem, off, size);
-	skb->len += size;
-	skb->data_len += size;
-	skb->truesize += truesize;
-}
+void skb_add_rx_frag_netmem(struct sk_buff *skb, int i, netmem_ref netmem,
+			    int off, int size, unsigned int truesize);
 
 static inline void skb_add_rx_frag(struct sk_buff *skb, int i,
 				   struct page *page, int off, int size,
@@ -2819,13 +2798,12 @@ static inline void *__skb_push(struct sk_buff *skb, unsigned int len)
 	DEBUG_NET_WARN_ON_ONCE(len > INT_MAX);
 
 	skb->data -= len;
-	DEBUG_NET_WARN_ON_ONCE(skb->data < skb->head);
 	skb->len  += len;
 	return skb->data;
 }
 
 void *skb_pull(struct sk_buff *skb, unsigned int len);
-static __always_inline void *__skb_pull(struct sk_buff *skb, unsigned int len)
+static inline void *__skb_pull(struct sk_buff *skb, unsigned int len)
 {
 	DEBUG_NET_WARN_ON_ONCE(len > INT_MAX);
 
@@ -2850,7 +2828,7 @@ void *skb_pull_data(struct sk_buff *skb, size_t len);
 
 void *__pskb_pull_tail(struct sk_buff *skb, int delta);
 
-static __always_inline enum skb_drop_reason
+static inline enum skb_drop_reason
 pskb_may_pull_reason(struct sk_buff *skb, unsigned int len)
 {
 	DEBUG_NET_WARN_ON_ONCE(len > INT_MAX);
@@ -2868,13 +2846,12 @@ pskb_may_pull_reason(struct sk_buff *skb, unsigned int len)
 	return SKB_NOT_DROPPED_YET;
 }
 
-static __always_inline bool
-pskb_may_pull(struct sk_buff *skb, unsigned int len)
+static inline bool pskb_may_pull(struct sk_buff *skb, unsigned int len)
 {
 	return pskb_may_pull_reason(skb, len) == SKB_NOT_DROPPED_YET;
 }
 
-static __always_inline void *pskb_pull(struct sk_buff *skb, unsigned int len)
+static inline void *pskb_pull(struct sk_buff *skb, unsigned int len)
 {
 	if (!pskb_may_pull(skb, len))
 		return NULL;
@@ -3364,7 +3341,7 @@ static inline int __pskb_trim(struct sk_buff *skb, unsigned int len)
 	return 0;
 }
 
-static __always_inline int pskb_trim(struct sk_buff *skb, unsigned int len)
+static inline int pskb_trim(struct sk_buff *skb, unsigned int len)
 {
 	skb_might_realloc(skb);
 	return (len < skb->len) ? __pskb_trim(skb, len) : 0;
@@ -3407,7 +3384,7 @@ static inline int __skb_grow(struct sk_buff *skb, unsigned int len)
  *	destructor function and make the @skb unowned. The buffer continues
  *	to exist but is no longer charged to its former owner.
  */
-static __always_inline void skb_orphan(struct sk_buff *skb)
+static inline void skb_orphan(struct sk_buff *skb)
 {
 	if (skb->destructor) {
 		skb->destructor(skb);
@@ -3594,7 +3571,7 @@ static inline struct page *__dev_alloc_pages_noprof(gfp_t gfp_mask,
 	 * 3.  If requesting a order 0 page it will not be compound
 	 *     due to the check to see if order has a value in prep_new_page
 	 * 4.  __GFP_MEMALLOC is ignored if __GFP_NOMEMALLOC is set due to
-	 *     code in alloc_flags_slowpath() that should be enforcing this.
+	 *     code in gfp_to_alloc_flags that should be enforcing this.
 	 */
 	gfp_mask |= __GFP_COMP | __GFP_MEMALLOC;
 
@@ -3786,17 +3763,6 @@ static inline void *skb_frag_address_safe(const skb_frag_t *frag)
 }
 
 /**
- * skb_frag_phys - gets the physical address of the data in a paged fragment
- * @frag: the paged fragment buffer
- *
- * Returns: the physical address of the data within @frag.
- */
-static inline phys_addr_t skb_frag_phys(const skb_frag_t *frag)
-{
-	return page_to_phys(skb_frag_page(frag)) + skb_frag_off(frag);
-}
-
-/**
  * skb_frag_page_copy() - sets the page in a fragment from another fragment
  * @fragto: skb fragment where page is set
  * @fragfrom: skb fragment page is copied from
@@ -3825,12 +3791,9 @@ static inline dma_addr_t __skb_frag_dma_map(struct device *dev,
 					    size_t offset, size_t size,
 					    enum dma_data_direction dir)
 {
-	dma_addr_t addr;
-
 	if (skb_frag_is_net_iov(frag)) {
-		addr = netmem_dma_addr_decode(
-			netmem_get_dma_addr(frag->netmem));
-		return addr + offset + frag->offset;
+		return netmem_to_net_iov(frag->netmem)->dma_addr + offset +
+		       frag->offset;
 	}
 	return dma_map_page(dev, skb_frag_page(frag),
 			    skb_frag_off(frag) + offset, size, dir);
@@ -4085,8 +4048,8 @@ __skb_postpull_rcsum(struct sk_buff *skb, const void *start, unsigned int len,
  *	update the CHECKSUM_COMPLETE checksum, or set ip_summed to
  *	CHECKSUM_NONE so that it can be recomputed from scratch.
  */
-static __always_inline void
-skb_postpull_rcsum(struct sk_buff *skb, const void *start, unsigned int len)
+static inline void skb_postpull_rcsum(struct sk_buff *skb,
+				      const void *start, unsigned int len)
 {
 	if (skb->ip_summed == CHECKSUM_COMPLETE)
 		skb->csum = wsum_negate(csum_partial(start, len,
@@ -4345,7 +4308,7 @@ __skb_header_pointer(const struct sk_buff *skb, int offset, int len,
 	return buffer;
 }
 
-static __always_inline void * __must_check
+static inline void * __must_check
 skb_header_pointer(const struct sk_buff *skb, int offset, int len, void *buffer)
 {
 	return __skb_header_pointer(skb, offset, len, skb->data,
@@ -4520,7 +4483,7 @@ DECLARE_STATIC_KEY_FALSE(netstamp_needed_key);
 /* It is used in the ingress path to clear the delivery_time.
  * If needed, set the skb->tstamp to the (rcv) timestamp.
  */
-static __always_inline void skb_clear_delivery_time(struct sk_buff *skb)
+static inline void skb_clear_delivery_time(struct sk_buff *skb)
 {
 	if (skb->tstamp_type) {
 		skb->tstamp_type = SKB_CLOCK_REALTIME;
@@ -4547,8 +4510,7 @@ static inline ktime_t skb_tstamp(const struct sk_buff *skb)
 	return skb->tstamp;
 }
 
-static __always_inline ktime_t
-skb_tstamp_cond(const struct sk_buff *skb, bool cond)
+static inline ktime_t skb_tstamp_cond(const struct sk_buff *skb, bool cond)
 {
 	if (skb->tstamp_type != SKB_CLOCK_MONOTONIC && skb->tstamp)
 		return skb->tstamp;
@@ -4629,81 +4591,6 @@ static inline void skb_metadata_set(struct sk_buff *skb, u8 meta_len)
 static inline void skb_metadata_clear(struct sk_buff *skb)
 {
 	skb_metadata_set(skb, 0);
-}
-
-/**
- * skb_data_move - Move packet data and metadata after skb_push() or skb_pull().
- * @skb: packet to operate on
- * @len: number of bytes pushed or pulled from &sk_buff->data
- * @n: number of bytes to memmove() from pre-push/pull &sk_buff->data
- *
- * Moves @n bytes of packet data, can be zero, and all bytes of skb metadata.
- *
- * Assumes metadata is located immediately before &sk_buff->data prior to the
- * push/pull, and that sufficient headroom exists to hold it after an
- * skb_push(). Otherwise, metadata is cleared and a one-time warning is issued.
- *
- * Prefer skb_postpull_data_move() or skb_postpush_data_move() to calling this
- * helper directly.
- */
-static inline void skb_data_move(struct sk_buff *skb, const int len,
-				 const unsigned int n)
-{
-	const u8 meta_len = skb_metadata_len(skb);
-	u8 *meta, *meta_end;
-
-	if (!len || (!n && !meta_len))
-		return;
-
-	if (!meta_len)
-		goto no_metadata;
-
-	meta_end = skb_metadata_end(skb);
-	meta = meta_end - meta_len;
-
-	if (WARN_ON_ONCE(meta_end + len != skb->data ||
-			 meta_len > skb_headroom(skb))) {
-		skb_metadata_clear(skb);
-		goto no_metadata;
-	}
-
-	memmove(meta + len, meta, meta_len + n);
-	return;
-
-no_metadata:
-	memmove(skb->data, skb->data - len, n);
-}
-
-/**
- * skb_postpull_data_move - Move packet data and metadata after skb_pull().
- * @skb: packet to operate on
- * @len: number of bytes pulled from &sk_buff->data
- * @n: number of bytes to memmove() from pre-pull &sk_buff->data
- *
- * See skb_data_move() for details.
- */
-static inline void skb_postpull_data_move(struct sk_buff *skb,
-					  const unsigned int len,
-					  const unsigned int n)
-{
-	DEBUG_NET_WARN_ON_ONCE(len > INT_MAX);
-	skb_data_move(skb, len, n);
-}
-
-/**
- * skb_postpush_data_move - Move packet data and metadata after skb_push().
- * @skb: packet to operate on
- * @len: number of bytes pushed onto &sk_buff->data
- * @n: number of bytes to memmove() from pre-push &sk_buff->data
- *
- * See skb_data_move() for details.
- */
-static inline void skb_postpush_data_move(struct sk_buff *skb,
-					  const unsigned int len,
-					  const unsigned int n)
-{
-	DEBUG_NET_WARN_ON_ONCE(len > INT_MAX);
-	skb_data_move(skb, -len, n);
 }
 
 struct sk_buff *skb_clone_sk(struct sk_buff *skb);
@@ -4830,7 +4717,7 @@ static inline void __skb_decr_checksum_unnecessary(struct sk_buff *skb)
 	}
 }
 
-static __always_inline void __skb_incr_checksum_unnecessary(struct sk_buff *skb)
+static inline void __skb_incr_checksum_unnecessary(struct sk_buff *skb)
 {
 	if (skb->ip_summed == CHECKSUM_UNNECESSARY) {
 		if (skb->csum_level < SKB_MAX_CSUM_LEVEL)
@@ -5031,7 +4918,6 @@ static inline unsigned long skb_get_nfct(const struct sk_buff *skb)
 static inline void skb_set_nfct(struct sk_buff *skb, unsigned long nfct)
 {
 #if IS_ENABLED(CONFIG_NF_CONNTRACK)
-	DEBUG_NET_WARN_ON_ONCE(skb->_nfct & NFCT_PTRMASK);
 	skb->slow_gro |= !!nfct;
 	skb->_nfct = nfct;
 #endif
@@ -5056,9 +4942,6 @@ enum skb_ext_id {
 #endif
 #if IS_ENABLED(CONFIG_INET_PSP)
 	SKB_EXT_PSP,
-#endif
-#if IS_ENABLED(CONFIG_CAN)
-	SKB_EXT_CAN,
 #endif
 	SKB_EXT_NUM, /* must be last */
 };
@@ -5339,7 +5222,7 @@ static inline void skb_decrease_gso_size(struct skb_shared_info *shinfo,
 
 void __skb_warn_lro_forwarding(const struct sk_buff *skb);
 
-static __always_inline bool skb_warn_if_lro(const struct sk_buff *skb)
+static inline bool skb_warn_if_lro(const struct sk_buff *skb)
 {
 	/* LRO sets gso_size but not gso_type, whereas if GSO is really
 	 * wanted then gso_type will be set. */
@@ -5466,14 +5349,20 @@ static inline void skb_reset_csum_not_inet(struct sk_buff *skb)
 }
 
 static inline void skb_set_kcov_handle(struct sk_buff *skb,
-				       struct kcov_common_handle_id kcov_handle)
+				       const u64 kcov_handle)
 {
+#ifdef CONFIG_KCOV
 	skb->kcov_handle = kcov_handle;
+#endif
 }
 
-static inline struct kcov_common_handle_id skb_get_kcov_handle(struct sk_buff *skb)
+static inline u64 skb_get_kcov_handle(struct sk_buff *skb)
 {
+#ifdef CONFIG_KCOV
 	return skb->kcov_handle;
+#else
+	return 0;
+#endif
 }
 
 static inline void skb_mark_for_recycle(struct sk_buff *skb)

@@ -11,16 +11,15 @@
 #include <uapi/drm/xe_drm.h>
 #include <linux/delay.h>
 
+#include "xe_bo.h"
 #include "xe_device.h"
 #include "xe_exec_queue.h"
 #include "xe_hw_engine_group.h"
 #include "xe_macros.h"
-#include "xe_pm.h"
 #include "xe_ring_ops_types.h"
 #include "xe_sched_job.h"
 #include "xe_sync.h"
 #include "xe_svm.h"
-#include "xe_trace.h"
 #include "xe_vm.h"
 
 /**
@@ -33,7 +32,7 @@
  * - Binding at exec time
  * - Flow controlling the ring at exec time
  *
- * In Xe we avoid all of this complication by not allowing a BO list to be
+ * In XE we avoid all of this complication by not allowing a BO list to be
  * passed into an exec, using the dma-buf implicit sync uAPI, have binds as
  * separate operations, and using the DRM scheduler to flow control the ring.
  * Let's deep dive on each of these.
@@ -120,11 +119,11 @@ int xe_exec_ioctl(struct drm_device *dev, void *data, struct drm_file *file)
 	u64 addresses[XE_HW_ENGINE_MAX_INSTANCE];
 	struct drm_gpuvm_exec vm_exec = {.extra.fn = xe_exec_fn};
 	struct drm_exec *exec = &vm_exec.exec;
-	u32 i, num_syncs, num_in_sync = 0, num_ufence = 0;
+	u32 i, num_syncs, num_ufence = 0;
 	struct xe_validation_ctx ctx;
 	struct xe_sched_job *job;
 	struct xe_vm *vm;
-	bool write_locked;
+	bool write_locked, skip_retry = false;
 	int err = 0;
 	struct xe_hw_engine_group *group;
 	enum xe_hw_engine_group_execution_mode mode, previous_mode;
@@ -155,14 +154,8 @@ int xe_exec_ioctl(struct drm_device *dev, void *data, struct drm_file *file)
 		goto err_exec_queue;
 	}
 
-	if (atomic_read(&q->job_cnt) >= XE_MAX_JOB_COUNT_PER_EXEC_QUEUE) {
-		trace_xe_exec_queue_reach_max_job_count(q, XE_MAX_JOB_COUNT_PER_EXEC_QUEUE);
-		err = -EAGAIN;
-		goto err_exec_queue;
-	}
-
 	if (args->num_syncs) {
-		syncs = kzalloc_objs(*syncs, args->num_syncs);
+		syncs = kcalloc(args->num_syncs, sizeof(*syncs), GFP_KERNEL);
 		if (!syncs) {
 			err = -ENOMEM;
 			goto err_exec_queue;
@@ -182,9 +175,6 @@ int xe_exec_ioctl(struct drm_device *dev, void *data, struct drm_file *file)
 
 		if (xe_sync_is_ufence(&syncs[num_syncs]))
 			num_ufence++;
-
-		if (!num_in_sync && xe_sync_needs_wait(&syncs[num_syncs]))
-			num_in_sync++;
 	}
 
 	if (XE_IOCTL_DBG(xe, num_ufence > 1)) {
@@ -205,9 +195,7 @@ int xe_exec_ioctl(struct drm_device *dev, void *data, struct drm_file *file)
 	mode = xe_hw_engine_group_find_exec_mode(q);
 
 	if (mode == EXEC_MODE_DMA_FENCE) {
-		err = xe_hw_engine_group_get_mode(group, mode, &previous_mode,
-						  syncs, num_in_sync ?
-						  num_syncs : 0);
+		err = xe_hw_engine_group_get_mode(group, mode, &previous_mode);
 		if (err)
 			goto err_syncs;
 	}
@@ -261,7 +249,7 @@ retry:
 	 * on task freezing during suspend / hibernate, the call will
 	 * return -ERESTARTSYS and the IOCTL will be rerun.
 	 */
-	err = xe_pm_block_on_suspend(xe);
+	err = wait_for_completion_interruptible(&xe->pm_block);
 	if (err)
 		goto err_unlock_list;
 
@@ -276,6 +264,12 @@ retry:
 	if (xe_vm_is_closed_or_banned(q->vm)) {
 		drm_warn(&xe->drm, "Trying to schedule after vm is closed or banned\n");
 		err = -ECANCELED;
+		goto err_exec;
+	}
+
+	if (xe_exec_queue_is_lr(q) && xe_exec_queue_ring_full(q)) {
+		err = -EWOULDBLOCK;	/* Aliased to -EAGAIN */
+		skip_retry = true;
 		goto err_exec;
 	}
 
@@ -317,6 +311,10 @@ retry:
 		goto err_put_job;
 
 	if (!xe_vm_in_lr_mode(vm)) {
+		err = xe_sched_job_last_fence_add_dep(job, vm);
+		if (err)
+			goto err_put_job;
+
 		err = xe_svm_notifier_lock_interruptible(vm);
 		if (err)
 			goto err_put_job;
@@ -341,13 +339,18 @@ retry:
 		xe_sched_job_init_user_fence(job, &syncs[i]);
 	}
 
+	if (xe_exec_queue_is_lr(q))
+		q->ring_ops->emit_job(job);
 	if (!xe_vm_in_lr_mode(vm))
 		xe_exec_queue_last_fence_set(q, vm, &job->drm.s_fence->finished);
 	xe_sched_job_push(job);
 	xe_vm_reactivate_rebind(vm);
 
-	if (!err && !xe_vm_in_lr_mode(vm))
-		xe_vm_bump_lru(vm, exec);
+	if (!err && !xe_vm_in_lr_mode(vm)) {
+		spin_lock(&xe->ttm.lru_lock);
+		ttm_lru_bulk_move_tail(&vm->lru_bulk_move);
+		spin_unlock(&xe->ttm.lru_lock);
+	}
 
 	if (mode == EXEC_MODE_LR)
 		xe_hw_engine_group_resume_faulting_lr_jobs(group);
@@ -363,7 +366,7 @@ err_exec:
 		xe_validation_ctx_fini(&ctx);
 err_unlock_list:
 	up_read(&vm->lock);
-	if (err == -EAGAIN)
+	if (err == -EAGAIN && !skip_retry)
 		goto retry;
 err_hw_exec_mode:
 	if (mode == EXEC_MODE_DMA_FENCE)

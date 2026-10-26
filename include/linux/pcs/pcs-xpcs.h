@@ -38,9 +38,7 @@ enum dw_xpcs_pma_id {
 	DW_XPCS_PMA_GEN4_6G_ID,
 	DW_XPCS_PMA_GEN5_10G_ID,
 	DW_XPCS_PMA_GEN5_12G_ID,
-	WX_TXGBE_XPCS_PMA_10G_ID = 0xfc806000,
-	/* Meta Platforms OUI 88:25:08, model 0, revision 0 */
-	MP_FBNIC_XPCS_PMA_100G_ID = 0x46904000,
+	WX_TXGBE_XPCS_PMA_10G_ID = 0x0018fc80,
 };
 
 struct dw_xpcs_info {

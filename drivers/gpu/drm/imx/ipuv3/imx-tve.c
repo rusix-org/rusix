@@ -314,7 +314,7 @@ static void imx_tve_connector_destroy(struct drm_connector *connector)
 static const struct drm_connector_funcs imx_tve_connector_funcs = {
 	.fill_modes = drm_helper_probe_single_connector_modes,
 	.destroy = imx_tve_connector_destroy,
-	.atomic_create_state = drm_atomic_helper_connector_create_state,
+	.reset = drm_atomic_helper_connector_reset,
 	.atomic_duplicate_state = drm_atomic_helper_connector_duplicate_state,
 	.atomic_destroy_state = drm_atomic_helper_connector_destroy_state,
 };
@@ -368,20 +368,17 @@ static unsigned long clk_tve_di_recalc_rate(struct clk_hw *hw,
 	return 0;
 }
 
-static int clk_tve_di_determine_rate(struct clk_hw *hw,
-				     struct clk_rate_request *req)
+static long clk_tve_di_round_rate(struct clk_hw *hw, unsigned long rate,
+				  unsigned long *prate)
 {
 	unsigned long div;
 
-	div = req->best_parent_rate / req->rate;
+	div = *prate / rate;
 	if (div >= 4)
-		req->rate = req->best_parent_rate / 4;
+		return *prate / 4;
 	else if (div >= 2)
-		req->rate = req->best_parent_rate / 2;
-	else
-		req->rate = req->best_parent_rate;
-
-	return 0;
+		return *prate / 2;
+	return *prate;
 }
 
 static int clk_tve_di_set_rate(struct clk_hw *hw, unsigned long rate,
@@ -412,7 +409,7 @@ static int clk_tve_di_set_rate(struct clk_hw *hw, unsigned long rate,
 }
 
 static const struct clk_ops clk_tve_di_ops = {
-	.determine_rate = clk_tve_di_determine_rate,
+	.round_rate = clk_tve_di_round_rate,
 	.set_rate = clk_tve_di_set_rate,
 	.recalc_rate = clk_tve_di_recalc_rate,
 };
@@ -690,3 +687,4 @@ module_platform_driver(imx_tve_driver);
 MODULE_DESCRIPTION("i.MX Television Encoder driver");
 MODULE_AUTHOR("Philipp Zabel, Pengutronix");
 MODULE_LICENSE("GPL");
+MODULE_ALIAS("platform:imx-tve");

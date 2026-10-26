@@ -15,11 +15,11 @@
 #include <linux/mutex.h>
 #include <linux/sunrpc/svc.h>
 #include <linux/sunrpc/addr.h>
+#include <linux/lockd/lockd.h>
+#include <linux/lockd/share.h>
 #include <linux/module.h>
 #include <linux/mount.h>
-
-#include "lockd.h"
-#include "share.h"
+#include <uapi/linux/nfs2.h>
 
 #define NLMDBG_FACILITY		NLMDBG_SVCSUBS
 
@@ -47,7 +47,7 @@ static inline void nlm_debug_print_file(char *msg, struct nlm_file *file)
 {
 	struct inode *inode = nlmsvc_file_inode(file);
 
-	dprintk("lockd: %s %s/%llu\n",
+	dprintk("lockd: %s %s/%ld\n",
 		msg, inode->i_sb->s_id, inode->i_ino);
 }
 #else
@@ -66,7 +66,7 @@ static inline unsigned int file_hash(struct nfs_fh *f)
 {
 	unsigned int tmp=0;
 	int i;
-	for (i = 0; i < LOCKD_FH_HASH_SIZE; i++)
+	for (i=0; i<NFS2_FHSIZE;i++)
 		tmp += f->data[i];
 	return tmp & (FILE_NRHASH - 1);
 }
@@ -83,60 +83,49 @@ int lock_to_openmode(struct file_lock *lock)
  * We have to make sure we have the right credential to open
  * the file.
  *
- * @mode is O_RDONLY, O_WRONLY, or O_RDWR. O_RDWR means success
- * is achieved with EITHER O_RDONLY or O_WRONLY; it does not
- * require both.
+ * mode can be O_RDONLY(0), O_WRONLY(1) or O_RDWR(2). The latter
+ * means success can be achieved with EITHER O_RDONLY or O_WRONLY.
+ * It does NOT mean both read and write are required.
  */
 static __be32 nlm_do_fopen(struct svc_rqst *rqstp,
 			   struct nlm_file *file, int mode)
 {
 	const struct nlmsvc_binding *ops;
-	__be32 nlmerr = nlm__int__failed;
+	__be32 nfserr = nlm_lck_denied_nolocks;
 	__be32 deferred = 0;
-	int error;
+	struct file **fp;
 	int m;
 
 	rcu_read_lock();
 	ops = rcu_dereference(nlmsvc_ops);
 	if (!ops || !try_module_get(ops->owner)) {
 		rcu_read_unlock();
-		return nlm__int__failed;
+		return nlm_lck_denied_nolocks;
 	}
 	rcu_read_unlock();
 
-	for (m = O_RDONLY; m <= O_WRONLY; m++) {
-		struct file **fp = &file->f_file[m];
-
+	for (m = O_RDONLY ; m <= O_WRONLY ; m++) {
 		if (mode != O_RDWR && mode != m)
 			continue;
+
+		fp = &file->f_file[m];
 		if (*fp) {
 			module_put(ops->owner);
-			return nlm_granted;
+			return 0;
 		}
-
-		error = ops->fopen(rqstp, &file->f_handle, fp, m);
-		if (!error) {
+		nfserr = ops->fopen(rqstp, &file->f_handle, fp, m);
+		if (!nfserr) {
 			module_put(ops->owner);
-			return nlm_granted;
+			return 0;
 		}
-
-		dprintk("lockd: open failed (errno %d)\n", error);
-		switch (error) {
-		case -EWOULDBLOCK:
-			nlmerr = nlm__int__drop_reply;
-			deferred = nlmerr;
-			break;
-		case -ESTALE:
-			nlmerr = nlm__int__stale_fh;
-			break;
-		default:
-			nlmerr = nlm__int__failed;
-			break;
-		}
+		if (nfserr == nlm_drop_reply)
+			deferred = nfserr;
 	}
-
 	module_put(ops->owner);
-	return deferred ? deferred : nlmerr;
+	if (deferred)
+		return deferred;
+	dprintk("lockd: open failed (error %d)\n", ntohl(nfserr));
+	return nfserr;
 }
 
 /*
@@ -145,7 +134,7 @@ static __be32 nlm_do_fopen(struct svc_rqst *rqstp,
  */
 __be32
 nlm_lookup_file(struct svc_rqst *rqstp, struct nlm_file **result,
-		struct lockd_lock *lock, int mode)
+		struct nlm_lock *lock, int mode)
 {
 	struct nlm_file	*file;
 	unsigned int	hash;
@@ -170,7 +159,7 @@ nlm_lookup_file(struct svc_rqst *rqstp, struct nlm_file **result,
 	nlm_debug_print_fh("creating file for", &lock->fh);
 
 	nfserr = nlm_lck_denied_nolocks;
-	file = kzalloc_obj(*file);
+	file = kzalloc(sizeof(*file), GFP_KERNEL);
 	if (!file)
 		goto out_free;
 

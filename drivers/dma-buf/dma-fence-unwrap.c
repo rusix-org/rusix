@@ -93,9 +93,9 @@ static int fence_cmp(const void *_a, const void *_b)
  *
  * Return: Number of unique fences remaining in the array.
  */
-size_t dma_fence_dedup_array(struct dma_fence **fences, size_t num_fences)
+int dma_fence_dedup_array(struct dma_fence **fences, int num_fences)
 {
-	size_t i, j;
+	int i, j;
 
 	if (!num_fences)
 		return 0;
@@ -118,14 +118,14 @@ size_t dma_fence_dedup_array(struct dma_fence **fences, size_t num_fences)
 EXPORT_SYMBOL_GPL(dma_fence_dedup_array);
 
 /* Implementation for the dma_fence_merge() marco, don't use directly */
-struct dma_fence *__dma_fence_unwrap_merge(size_t num_fences,
+struct dma_fence *__dma_fence_unwrap_merge(unsigned int num_fences,
 					   struct dma_fence **fences,
 					   struct dma_fence_unwrap *iter)
 {
 	struct dma_fence *tmp, *unsignaled = NULL, **array;
 	struct dma_fence_array *result;
 	ktime_t timestamp;
-	size_t i, count;
+	int i, count;
 
 	count = 0;
 	timestamp = ns_to_ktime(0);
@@ -158,7 +158,7 @@ struct dma_fence *__dma_fence_unwrap_merge(size_t num_fences,
 
 	dma_fence_put(unsignaled);
 
-	array = kmalloc_objs(*array, count);
+	array = kmalloc_array(count, sizeof(*array), GFP_KERNEL);
 	if (!array)
 		return NULL;
 
@@ -183,7 +183,8 @@ struct dma_fence *__dma_fence_unwrap_merge(size_t num_fences,
 
 	if (count > 1) {
 		result = dma_fence_array_create(count, array,
-						dma_fence_context_alloc(1), 1);
+						dma_fence_context_alloc(1),
+						1, false);
 		if (!result) {
 			for (i = 0; i < count; i++)
 				dma_fence_put(array[i]);

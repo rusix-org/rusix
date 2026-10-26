@@ -18,7 +18,6 @@
 #include <linux/err.h>
 #include <linux/slab.h>
 #include <linux/string.h>
-#include <linux/string_choices.h>
 #include <linux/jiffies.h>
 
 #include "thermal_core.h"
@@ -30,7 +29,7 @@ type_show(struct device *dev, struct device_attribute *attr, char *buf)
 {
 	struct thermal_zone_device *tz = to_thermal_zone(dev);
 
-	return sysfs_emit(buf, "%s\n", tz->type);
+	return sprintf(buf, "%s\n", tz->type);
 }
 
 static ssize_t
@@ -42,7 +41,7 @@ temp_show(struct device *dev, struct device_attribute *attr, char *buf)
 	ret = thermal_zone_get_temp(tz, &temperature);
 
 	if (!ret)
-		return sysfs_emit(buf, "%d\n", temperature);
+		return sprintf(buf, "%d\n", temperature);
 
 	if (ret == -EAGAIN)
 		return -ENODATA;
@@ -57,8 +56,10 @@ mode_show(struct device *dev, struct device_attribute *attr, char *buf)
 
 	guard(thermal_zone)(tz);
 
-	return sysfs_emit(buf, "%s\n",
-		str_enabled_disabled(tz->mode == THERMAL_DEVICE_ENABLED));
+	if (tz->mode == THERMAL_DEVICE_ENABLED)
+		return sprintf(buf, "enabled\n");
+
+	return sprintf(buf, "disabled\n");
 }
 
 static ssize_t
@@ -82,7 +83,7 @@ mode_store(struct device *dev, struct device_attribute *attr,
 }
 
 #define thermal_trip_of_attr(_ptr_, _attr_)				\
-	({								\
+	({ 								\
 		struct thermal_trip_desc *td;				\
 									\
 		td = container_of(_ptr_, struct thermal_trip_desc,	\
@@ -96,7 +97,7 @@ trip_point_type_show(struct device *dev, struct device_attribute *attr,
 {
 	struct thermal_trip *trip = thermal_trip_of_attr(attr, type);
 
-	return sysfs_emit(buf, "%s\n", thermal_trip_type_name(trip->type));
+	return sprintf(buf, "%s\n", thermal_trip_type_name(trip->type));
 }
 
 static ssize_t
@@ -141,7 +142,7 @@ trip_point_temp_show(struct device *dev, struct device_attribute *attr,
 {
 	struct thermal_trip *trip = thermal_trip_of_attr(attr, temp);
 
-	return sysfs_emit(buf, "%d\n", READ_ONCE(trip->temperature));
+	return sprintf(buf, "%d\n", READ_ONCE(trip->temperature));
 }
 
 static ssize_t
@@ -187,7 +188,7 @@ trip_point_hyst_show(struct device *dev, struct device_attribute *attr,
 {
 	struct thermal_trip *trip = thermal_trip_of_attr(attr, hyst);
 
-	return sysfs_emit(buf, "%d\n", READ_ONCE(trip->hysteresis));
+	return sprintf(buf, "%d\n", READ_ONCE(trip->hysteresis));
 }
 
 static ssize_t
@@ -198,7 +199,7 @@ policy_store(struct device *dev, struct device_attribute *attr,
 	char name[THERMAL_NAME_LENGTH];
 	int ret;
 
-	strscpy(name, buf);
+	snprintf(name, sizeof(name), "%s", buf);
 
 	ret = thermal_zone_device_set_policy(tz, name);
 	if (!ret)
@@ -212,7 +213,7 @@ policy_show(struct device *dev, struct device_attribute *devattr, char *buf)
 {
 	struct thermal_zone_device *tz = to_thermal_zone(dev);
 
-	return sysfs_emit(buf, "%s\n", tz->governor->name);
+	return sprintf(buf, "%s\n", tz->governor->name);
 }
 
 static ssize_t
@@ -259,7 +260,7 @@ sustainable_power_show(struct device *dev, struct device_attribute *devattr,
 	struct thermal_zone_device *tz = to_thermal_zone(dev);
 
 	if (tz->tzp)
-		return sysfs_emit(buf, "%u\n", tz->tzp->sustainable_power);
+		return sprintf(buf, "%u\n", tz->tzp->sustainable_power);
 	else
 		return -EIO;
 }
@@ -290,7 +291,7 @@ sustainable_power_store(struct device *dev, struct device_attribute *devattr,
 	struct thermal_zone_device *tz = to_thermal_zone(dev);		\
 									\
 	if (tz->tzp)							\
-		return sysfs_emit(buf, "%d\n", tz->tzp->name);		\
+		return sprintf(buf, "%d\n", tz->tzp->name);		\
 	else								\
 		return -EIO;						\
 	}								\
@@ -391,7 +392,7 @@ static int create_trip_attrs(struct thermal_zone_device *tz)
 	struct attribute **attrs;
 	int i;
 
-	attrs = kzalloc_objs(*attrs, tz->num_trips * 3 + 1);
+	attrs = kcalloc(tz->num_trips * 3 + 1, sizeof(*attrs), GFP_KERNEL);
 	if (!attrs)
 		return -ENOMEM;
 
@@ -464,7 +465,7 @@ int thermal_zone_create_device_groups(struct thermal_zone_device *tz)
 	/* we need one extra for trips and the NULL to terminate the array */
 	size = ARRAY_SIZE(thermal_zone_attribute_groups) + 2;
 	/* This also takes care of API requirement to be NULL terminated */
-	groups = kzalloc_objs(*groups, size);
+	groups = kcalloc(size, sizeof(*groups), GFP_KERNEL);
 	if (!groups)
 		return -ENOMEM;
 
@@ -504,7 +505,7 @@ cdev_type_show(struct device *dev, struct device_attribute *attr, char *buf)
 {
 	struct thermal_cooling_device *cdev = to_cooling_device(dev);
 
-	return sysfs_emit(buf, "%s\n", cdev->type);
+	return sprintf(buf, "%s\n", cdev->type);
 }
 
 static ssize_t max_state_show(struct device *dev, struct device_attribute *attr,
@@ -512,7 +513,7 @@ static ssize_t max_state_show(struct device *dev, struct device_attribute *attr,
 {
 	struct thermal_cooling_device *cdev = to_cooling_device(dev);
 
-	return sysfs_emit(buf, "%ld\n", cdev->max_state);
+	return sprintf(buf, "%ld\n", cdev->max_state);
 }
 
 static ssize_t cur_state_show(struct device *dev, struct device_attribute *attr,
@@ -525,7 +526,7 @@ static ssize_t cur_state_show(struct device *dev, struct device_attribute *attr,
 	ret = cdev->ops->get_cur_state(cdev, &state);
 	if (ret)
 		return ret;
-	return sysfs_emit(buf, "%ld\n", state);
+	return sprintf(buf, "%ld\n", state);
 }
 
 static ssize_t
@@ -536,9 +537,11 @@ cur_state_store(struct device *dev, struct device_attribute *attr,
 	unsigned long state;
 	int result;
 
-	result = kstrtoul(buf, 10, &state);
-	if (result < 0)
-		return result;
+	if (sscanf(buf, "%ld\n", &state) != 1)
+		return -EINVAL;
+
+	if ((long)state < 0)
+		return -EINVAL;
 
 	/* Requested state should be less than max_state + 1 */
 	if (state > cdev->max_state)
@@ -635,7 +638,7 @@ static ssize_t total_trans_show(struct device *dev,
 		return 0;
 
 	spin_lock(&stats->lock);
-	ret = sysfs_emit(buf, "%u\n", stats->total_trans);
+	ret = sprintf(buf, "%u\n", stats->total_trans);
 	spin_unlock(&stats->lock);
 
 	return ret;
@@ -661,8 +664,8 @@ time_in_state_ms_show(struct device *dev, struct device_attribute *attr,
 	update_time_in_state(stats);
 
 	for (i = 0; i <= cdev->max_state; i++) {
-		len += sysfs_emit_at(buf, len, "state%u\t%llu\n", i,
-				     ktime_to_ms(stats->time_in_state[i]));
+		len += sprintf(buf + len, "state%u\t%llu\n", i,
+			       ktime_to_ms(stats->time_in_state[i]));
 	}
 	spin_unlock(&stats->lock);
 
@@ -706,7 +709,7 @@ static ssize_t trans_table_show(struct device *dev,
 	struct thermal_cooling_device *cdev = to_cooling_device(dev);
 	struct cooling_dev_stats *stats;
 	ssize_t len = 0;
-	int i, j, copied;
+	int i, j;
 
 	guard(cooling_dev)(cdev);
 
@@ -714,40 +717,41 @@ static ssize_t trans_table_show(struct device *dev,
 	if (!stats)
 		return -ENODATA;
 
-	len += sysfs_emit_at(buf, len, " From  :    To\n");
-	len += sysfs_emit_at(buf, len, "       : ");
+	len += snprintf(buf + len, PAGE_SIZE - len, " From  :    To\n");
+	len += snprintf(buf + len, PAGE_SIZE - len, "       : ");
 	for (i = 0; i <= cdev->max_state; i++) {
-		copied = sysfs_emit_at(buf, len, "state%2u  ", i);
-		if (!copied)
-			goto buf_full;
-		len += copied;
+		if (len >= PAGE_SIZE)
+			break;
+		len += snprintf(buf + len, PAGE_SIZE - len, "state%2u  ", i);
 	}
-	len += sysfs_emit_at(buf, len, "\n");
+	if (len >= PAGE_SIZE)
+		return PAGE_SIZE;
+
+	len += snprintf(buf + len, PAGE_SIZE - len, "\n");
 
 	for (i = 0; i <= cdev->max_state; i++) {
-		copied = sysfs_emit_at(buf, len, "state%2u:", i);
-		if (!copied)
-			goto buf_full;
-		len += copied;
+		if (len >= PAGE_SIZE)
+			break;
+
+		len += snprintf(buf + len, PAGE_SIZE - len, "state%2u:", i);
 
 		for (j = 0; j <= cdev->max_state; j++) {
-			copied = sysfs_emit_at(buf, len, "%8u ",
+			if (len >= PAGE_SIZE)
+				break;
+			len += snprintf(buf + len, PAGE_SIZE - len, "%8u ",
 				stats->trans_table[i * (cdev->max_state + 1) + j]);
-			if (!copied)
-				goto buf_full;
-			len += copied;
 		}
-		copied = sysfs_emit_at(buf, len, "\n");
-		if (!copied)
-			goto buf_full;
-		len += copied;
+		if (len >= PAGE_SIZE)
+			break;
+		len += snprintf(buf + len, PAGE_SIZE - len, "\n");
+	}
+
+	if (len >= PAGE_SIZE) {
+		pr_warn_once("Thermal transition table exceeds PAGE_SIZE. Disabling\n");
+		len = -EFBIG;
 	}
 
 	return len;
-
-buf_full:
-	pr_warn_once("Thermal transition table exceeds PAGE_SIZE. Disabling\n");
-	return -EFBIG;
 }
 
 static DEVICE_ATTR_RO(total_trans);
@@ -842,7 +846,7 @@ trip_point_show(struct device *dev, struct device_attribute *attr, char *buf)
 
 	instance = container_of(attr, struct thermal_instance, attr);
 
-	return sysfs_emit(buf, "%d\n", thermal_zone_trip_id(tz, instance->trip));
+	return sprintf(buf, "%d\n", thermal_zone_trip_id(tz, instance->trip));
 }
 
 ssize_t
@@ -852,7 +856,7 @@ weight_show(struct device *dev, struct device_attribute *attr, char *buf)
 
 	instance = container_of(attr, struct thermal_instance, weight_attr);
 
-	return sysfs_emit(buf, "%d\n", instance->weight);
+	return sprintf(buf, "%d\n", instance->weight);
 }
 
 ssize_t weight_store(struct device *dev, struct device_attribute *attr,

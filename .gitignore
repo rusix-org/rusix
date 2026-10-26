@@ -13,7 +13,6 @@
 .*
 *.a
 *.asn1.[ch]
-*.bc
 *.bin
 *.bz2
 *.c.[012]*.*
@@ -28,7 +27,6 @@
 *.gcno
 *.gcda
 *.gz
-*.header-check
 *.i
 *.ko
 *.lex.c
@@ -43,14 +41,12 @@
 *.o.*
 *.patch
 *.pyc
-*.rlib
 *.rmeta
 *.rpm
 *.rsi
 *.s
 *.so
 *.so.dbg
-*.spdx.json
 *.su
 *.symtypes
 *.tab.[ch]
@@ -59,7 +55,6 @@
 *.zst
 Module.symvers
 dtbs-list
-builtin.order
 modules.order
 
 #
@@ -71,12 +66,11 @@ modules.order
 /vmlinux.32
 /vmlinux.map
 /vmlinux.symvers
-/vmlinux.thinlto-index
 /vmlinux.unstripped
-/vmlinux.BTF.inline
 /vmlinux-gdb.py
 /vmlinuz
 /System.map
+/Module.markers
 /modules.builtin
 /modules.builtin.modinfo
 /modules.builtin.ranges
@@ -105,7 +99,6 @@ modules.order
 #
 # pacman files (make pacman-pkg)
 #
-/*.pkg.*.sig
 /PKGBUILD
 /pacman/
 
@@ -190,9 +183,3 @@ sphinx_*/
 
 # Rust analyzer configuration
 /rust-project.json
-
-# rustc error message long types
-*.long-type-*.txt
-
-# bc language scripts (not LLVM bitcode)
-!kernel/time/timeconst.bc

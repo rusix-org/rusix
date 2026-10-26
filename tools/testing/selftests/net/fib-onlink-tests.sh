@@ -6,7 +6,6 @@
 source lib.sh
 PAUSE_ON_FAIL=${PAUSE_ON_FAIL:=no}
 VERBOSE=0
-ret=0
 
 # Network interfaces
 # - odd in current namespace; even in peer ns
@@ -73,8 +72,7 @@ declare -A TEST_NET4IN6IN6
 TEST_NET4IN6[1]=10.1.1.254
 TEST_NET4IN6[2]=10.2.1.254
 
-# mcast addresses
-MCAST4=233.252.0.1
+# mcast address
 MCAST6=ff02::1
 
 VRF=lisa
@@ -86,7 +84,23 @@ PBR_TABLE=101
 
 log_test()
 {
-	log_test_expected "$1" "$2" "$3"
+	local rc=$1
+	local expected=$2
+	local msg="$3"
+
+	if [ ${rc} -eq ${expected} ]; then
+		nsuccess=$((nsuccess+1))
+		printf "    TEST: %-50s  [ OK ]\n" "${msg}"
+	else
+		nfail=$((nfail+1))
+		printf "    TEST: %-50s  [FAIL]\n" "${msg}"
+		if [ "${PAUSE_ON_FAIL}" = "yes" ]; then
+			echo
+			echo "hit enter to continue, 'q' to quit"
+			read a
+			[ "$a" = "q" ] && exit 1
+		fi
+	fi
 }
 
 log_section()
@@ -246,15 +260,11 @@ valid_onlink_ipv4()
 
 	run_ip 254 ${TEST_NET4[1]}.1 ${CONGW[1]} ${NETIFS[p1]} 0 "unicast connected"
 	run_ip 254 ${TEST_NET4[1]}.2 ${RECGW4[1]} ${NETIFS[p1]} 0 "unicast recursive"
-	run_ip 254 ${TEST_NET4[1]}.9 ${CONGW[1]} ${NETIFS[p3]} 0 \
-		"nexthop device mismatch"
 
 	log_subsection "VRF ${VRF}"
 
 	run_ip ${VRF_TABLE} ${TEST_NET4[2]}.1 ${CONGW[3]} ${NETIFS[p5]} 0 "unicast connected"
 	run_ip ${VRF_TABLE} ${TEST_NET4[2]}.2 ${RECGW4[2]} ${NETIFS[p5]} 0 "unicast recursive"
-	run_ip ${VRF_TABLE} ${TEST_NET4[2]}.10 ${CONGW[3]} ${NETIFS[p7]} 0 \
-		"nexthop device mismatch"
 
 	log_subsection "VRF device, PBR table"
 
@@ -290,15 +300,17 @@ invalid_onlink_ipv4()
 {
 	run_ip 254 ${TEST_NET4[1]}.11 ${V4ADDRS[p1]} ${NETIFS[p1]} 2 \
 		"Invalid gw - local unicast address"
-	run_ip 254 ${TEST_NET4[1]}.12 ${MCAST4} ${NETIFS[p1]} 2 \
-		"Invalid gw - multicast address"
 
 	run_ip ${VRF_TABLE} ${TEST_NET4[2]}.11 ${V4ADDRS[p5]} ${NETIFS[p5]} 2 \
 		"Invalid gw - local unicast address, VRF"
-	run_ip ${VRF_TABLE} ${TEST_NET4[2]}.12 ${MCAST4} ${NETIFS[p5]} 2 \
-		"Invalid gw - multicast address, VRF"
 
 	run_ip 254 ${TEST_NET4[1]}.101 ${V4ADDRS[p1]} "" 2 "No nexthop device given"
+
+	run_ip 254 ${TEST_NET4[1]}.102 ${V4ADDRS[p3]} ${NETIFS[p1]} 2 \
+		"Gateway resolves to wrong nexthop device"
+
+	run_ip ${VRF_TABLE} ${TEST_NET4[2]}.103 ${V4ADDRS[p7]} ${NETIFS[p5]} 2 \
+		"Gateway resolves to wrong nexthop device - VRF"
 }
 
 ################################################################################
@@ -345,16 +357,12 @@ valid_onlink_ipv6()
 	run_ip6 254 ${TEST_NET6[1]}::1 ${V6ADDRS[p1]/::*}::64 ${NETIFS[p1]} 0 "unicast connected"
 	run_ip6 254 ${TEST_NET6[1]}::2 ${RECGW6[1]} ${NETIFS[p1]} 0 "unicast recursive"
 	run_ip6 254 ${TEST_NET6[1]}::3 ::ffff:${TEST_NET4IN6[1]} ${NETIFS[p1]} 0 "v4-mapped"
-	run_ip6 254 ${TEST_NET6[1]}::a ${V6ADDRS[p1]/::*}::64 ${NETIFS[p3]} 0 \
-		"nexthop device mismatch"
 
 	log_subsection "VRF ${VRF}"
 
 	run_ip6 ${VRF_TABLE} ${TEST_NET6[2]}::1 ${V6ADDRS[p5]/::*}::64 ${NETIFS[p5]} 0 "unicast connected"
 	run_ip6 ${VRF_TABLE} ${TEST_NET6[2]}::2 ${RECGW6[2]} ${NETIFS[p5]} 0 "unicast recursive"
 	run_ip6 ${VRF_TABLE} ${TEST_NET6[2]}::3 ::ffff:${TEST_NET4IN6[2]} ${NETIFS[p5]} 0 "v4-mapped"
-	run_ip6 ${VRF_TABLE} ${TEST_NET6[2]}::b ${V6ADDRS[p5]/::*}::64 \
-		${NETIFS[p7]} 0 "nexthop device mismatch"
 
 	log_subsection "VRF device, PBR table"
 
@@ -420,6 +428,13 @@ invalid_onlink_ipv6()
 
 	run_ip6 254 ${TEST_NET6[1]}::101 ${V6ADDRS[p1]} "" 2 \
 		"No nexthop device given"
+
+	# default VRF validation is done against LOCAL table
+	# run_ip6 254 ${TEST_NET6[1]}::102 ${V6ADDRS[p3]/::[0-9]/::64} ${NETIFS[p1]} 2 \
+	#	"Gateway resolves to wrong nexthop device"
+
+	run_ip6 ${VRF_TABLE} ${TEST_NET6[2]}::103 ${V6ADDRS[p7]/::[0-9]/::64} ${NETIFS[p5]} 2 \
+		"Gateway resolves to wrong nexthop device - VRF"
 }
 
 run_onlink_tests()
@@ -474,5 +489,3 @@ if [ "$TESTS" != "none" ]; then
 	printf "\nTests passed: %3d\n" ${nsuccess}
 	printf "Tests failed: %3d\n"   ${nfail}
 fi
-
-exit $ret

@@ -5,6 +5,7 @@
 
 #include <linux/clk-provider.h>
 #include <linux/module.h>
+#include <linux/mod_devicetable.h>
 #include <linux/of.h>
 #include <linux/platform_device.h>
 #include <linux/regmap.h>
@@ -1555,7 +1556,7 @@ static const struct regmap_config cam_cc_qcs615_regmap_config = {
 	.fast_io = true,
 };
 
-static const struct qcom_cc_driver_data cam_cc_qcs615_driver_data = {
+static struct qcom_cc_driver_data cam_cc_qcs615_driver_data = {
 	.alpha_plls = cam_cc_qcs615_plls,
 	.num_alpha_plls = ARRAY_SIZE(cam_cc_qcs615_plls),
 };

@@ -196,7 +196,7 @@ static int hvs_channel_readable_payload(struct vmbus_channel *chan)
 
 	if (readable > HVS_PKT_LEN(0)) {
 		/* At least we have 1 byte to read. We don't need to return
-		 * the exact readable bytes: see vsock_connectible_recvmsg() ->
+		 * the exact readable bytes: see vsock_stream_recvmsg() ->
 		 * vsock_stream_has_data().
 		 */
 		return 1;
@@ -410,6 +410,7 @@ static void hvs_open_connection(struct vmbus_channel *chan)
 
 	if (conn_from_host) {
 		new->sk_state = TCP_ESTABLISHED;
+		sk_acceptq_added(sk);
 
 		hvs_new->vm_srv_id = *if_type;
 		hvs_new->host_srv_id = *if_instance;
@@ -443,7 +444,7 @@ static int hvs_sock_init(struct vsock_sock *vsk, struct vsock_sock *psk)
 	struct hvsock *hvs;
 	struct sock *sk = sk_vsock(vsk);
 
-	hvs = kzalloc_obj(*hvs);
+	hvs = kzalloc(sizeof(*hvs), GFP_KERNEL);
 	if (!hvs)
 		return -ENOMEM;
 
@@ -569,7 +570,7 @@ static int hvs_dgram_enqueue(struct vsock_sock *vsk,
 	return -EOPNOTSUPP;
 }
 
-static bool hvs_dgram_allow(struct vsock_sock *vsk, u32 cid, u32 port)
+static bool hvs_dgram_allow(u32 cid, u32 port)
 {
 	return false;
 }
@@ -656,7 +657,7 @@ static ssize_t hvs_stream_enqueue(struct vsock_sock *vsk, struct msghdr *msg,
 
 	BUILD_BUG_ON(sizeof(*send_buf) != HV_HYP_PAGE_SIZE);
 
-	send_buf = kmalloc_obj(*send_buf);
+	send_buf = kmalloc(sizeof(*send_buf), GFP_KERNEL);
 	if (!send_buf)
 		return -ENOMEM;
 
@@ -768,11 +769,8 @@ static bool hvs_stream_is_active(struct vsock_sock *vsk)
 	return hvs->chan != NULL;
 }
 
-static bool hvs_stream_allow(struct vsock_sock *vsk, u32 cid, u32 port)
+static bool hvs_stream_allow(u32 cid, u32 port)
 {
-	if (!vsock_net_mode_global(vsk))
-		return false;
-
 	if (cid == VMADDR_CID_HOST)
 		return true;
 
@@ -960,6 +958,9 @@ static struct hv_driver hvs_drv = {
 static int __init hvs_init(void)
 {
 	int ret;
+
+	if (vmbus_proto_version < VERSION_WIN10)
+		return -ENODEV;
 
 	ret = vmbus_driver_register(&hvs_drv);
 	if (ret != 0)

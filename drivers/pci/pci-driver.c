@@ -49,7 +49,7 @@ static int do_pci_add_dynid(struct pci_driver *drv,
 {
 	struct pci_dynid *dynid, *existing_dynid;
 
-	dynid = kzalloc_obj(*dynid);
+	dynid = kzalloc(sizeof(*dynid), GFP_KERNEL);
 	if (!dynid)
 		return -ENOMEM;
 
@@ -333,8 +333,9 @@ struct drv_dev_and_id {
 	const struct pci_device_id *id;
 };
 
-static int local_pci_probe(struct drv_dev_and_id *ddi)
+static long local_pci_probe(void *_ddi)
 {
+	struct drv_dev_and_id *ddi = _ddi;
 	struct pci_dev *pci_dev = ddi->dev;
 	struct pci_driver *pci_drv = ddi->drv;
 	struct device *dev = &pci_dev->dev;
@@ -368,21 +369,6 @@ static int local_pci_probe(struct drv_dev_and_id *ddi)
 	return 0;
 }
 
-static struct workqueue_struct *pci_probe_wq;
-
-struct pci_probe_arg {
-	struct drv_dev_and_id *ddi;
-	struct work_struct work;
-	int ret;
-};
-
-static void local_pci_probe_callback(struct work_struct *work)
-{
-	struct pci_probe_arg *arg = container_of(work, struct pci_probe_arg, work);
-
-	arg->ret = local_pci_probe(arg->ddi);
-}
-
 static bool pci_physfn_is_probed(struct pci_dev *dev)
 {
 #ifdef CONFIG_PCI_IOV
@@ -407,53 +393,38 @@ static int pci_call_probe(struct pci_driver *drv, struct pci_dev *dev,
 	dev->is_probed = 1;
 
 	cpu_hotplug_disable();
+
 	/*
 	 * Prevent nesting work_on_cpu() for the case where a Virtual Function
 	 * device is probed from work_on_cpu() of the Physical device.
 	 */
 	if (node < 0 || node >= MAX_NUMNODES || !node_online(node) ||
 	    pci_physfn_is_probed(dev)) {
-		error = local_pci_probe(&ddi);
+		cpu = nr_cpu_ids;
 	} else {
-		struct pci_probe_arg arg = { .ddi = &ddi };
+		cpumask_var_t wq_domain_mask;
 
-		INIT_WORK_ONSTACK(&arg.work, local_pci_probe_callback);
-		/*
-		 * The target election and the enqueue of the work must be within
-		 * the same RCU read side section so that when the workqueue pool
-		 * is flushed after a housekeeping cpumask update, further readers
-		 * are guaranteed to queue the probing work to the appropriate
-		 * targets.
-		 */
-		rcu_read_lock();
-		cpu = cpumask_any_and(cpumask_of_node(node),
-				      housekeeping_cpumask(HK_TYPE_DOMAIN));
-
-		if (cpu < nr_cpu_ids) {
-			struct workqueue_struct *wq = pci_probe_wq;
-
-			if (WARN_ON_ONCE(!wq))
-				wq = system_percpu_wq;
-			queue_work_on(cpu, wq, &arg.work);
-			rcu_read_unlock();
-			flush_work(&arg.work);
-			error = arg.ret;
-		} else {
-			rcu_read_unlock();
-			error = local_pci_probe(&ddi);
+		if (!zalloc_cpumask_var(&wq_domain_mask, GFP_KERNEL)) {
+			error = -ENOMEM;
+			goto out;
 		}
+		cpumask_and(wq_domain_mask,
+			    housekeeping_cpumask(HK_TYPE_WQ),
+			    housekeeping_cpumask(HK_TYPE_DOMAIN));
 
-		destroy_work_on_stack(&arg.work);
+		cpu = cpumask_any_and(cpumask_of_node(node),
+				      wq_domain_mask);
+		free_cpumask_var(wq_domain_mask);
 	}
 
+	if (cpu < nr_cpu_ids)
+		error = work_on_cpu(cpu, local_pci_probe, &ddi);
+	else
+		error = local_pci_probe(&ddi);
+out:
 	dev->is_probed = 0;
 	cpu_hotplug_enable();
 	return error;
-}
-
-void pci_probe_flush_workqueue(void)
-{
-	flush_workqueue(pci_probe_wq);
 }
 
 /**
@@ -818,52 +789,6 @@ static void pci_pm_complete(struct device *dev)
 
 #endif /* !CONFIG_PM_SLEEP */
 
-#if defined(CONFIG_SUSPEND) || defined(CONFIG_HIBERNATE_CALLBACKS)
-/**
- * pci_pm_suspend_noirq_common - prepare a device to enter a low-power state
- * @pci_dev: pci device
- *
- * Save the device state and decide whether bus-level power management should
- * skipped. Returns true if bus-level power management should be skipped,
- * false otherwise.
- */
-static bool pci_pm_suspend_noirq_common(struct pci_dev *pci_dev)
-{
-	if (!pci_dev->state_saved) {
-		pci_save_state(pci_dev);
-
-		/*
-		 * If the device is a bridge with a child in D0 below it,
-		 * it needs to stay in D0, so check skip_bus_pm to avoid
-		 * putting it into a low-power state in that case.
-		 */
-		if (!pci_dev->skip_bus_pm && pci_power_manageable(pci_dev))
-			pci_prepare_to_sleep(pci_dev);
-	}
-
-	pci_dbg(pci_dev, "PCI PM: Sleep power state: %s\n",
-		pci_power_name(pci_dev->current_state));
-
-	if (pci_dev->current_state == PCI_D0) {
-		pci_dev->skip_bus_pm = true;
-		/*
-		 * Per PCI PM r1.2, table 6-1, a bridge must be in D0 if any
-		 * downstream device is in D0, so avoid changing the power state
-		 * of the parent bridge by setting the skip_bus_pm flag for it.
-		 */
-		if (pci_dev->bus->self)
-			pci_dev->bus->self->skip_bus_pm = true;
-	}
-
-	if (pci_dev->skip_bus_pm && pm_suspend_no_platform()) {
-		pci_dbg(pci_dev, "PCI PM: Skipped\n");
-		return true;
-	}
-
-	return false;
-}
-#endif /* CONFIG_SUSPEND || CONFIG_HIBERNATE_CALLBACKS */
-
 #ifdef CONFIG_SUSPEND
 static void pcie_pme_root_status_cleanup(struct pci_dev *pci_dev)
 {
@@ -953,7 +878,6 @@ static int pci_pm_suspend_noirq(struct device *dev)
 {
 	struct pci_dev *pci_dev = to_pci_dev(dev);
 	const struct dev_pm_ops *pm = dev->driver ? dev->driver->pm : NULL;
-	bool skip_bus_pm;
 
 	if (dev_pm_skip_suspend(dev))
 		return 0;
@@ -984,10 +908,36 @@ static int pci_pm_suspend_noirq(struct device *dev)
 		}
 	}
 
-	skip_bus_pm = pci_pm_suspend_noirq_common(pci_dev);
+	if (!pci_dev->state_saved) {
+		pci_save_state(pci_dev);
 
-	if (skip_bus_pm)
+		/*
+		 * If the device is a bridge with a child in D0 below it,
+		 * it needs to stay in D0, so check skip_bus_pm to avoid
+		 * putting it into a low-power state in that case.
+		 */
+		if (!pci_dev->skip_bus_pm && pci_power_manageable(pci_dev))
+			pci_prepare_to_sleep(pci_dev);
+	}
+
+	pci_dbg(pci_dev, "PCI PM: Suspend power state: %s\n",
+		pci_power_name(pci_dev->current_state));
+
+	if (pci_dev->current_state == PCI_D0) {
+		pci_dev->skip_bus_pm = true;
+		/*
+		 * Per PCI PM r1.2, table 6-1, a bridge must be in D0 if any
+		 * downstream device is in D0, so avoid changing the power state
+		 * of the parent bridge by setting the skip_bus_pm flag for it.
+		 */
+		if (pci_dev->bus->self)
+			pci_dev->bus->self->skip_bus_pm = true;
+	}
+
+	if (pci_dev->skip_bus_pm && pm_suspend_no_platform()) {
+		pci_dbg(pci_dev, "PCI PM: Skipped\n");
 		goto Fixup;
+	}
 
 set_unknown:
 	pci_pm_set_unknown_state(pci_dev);
@@ -1209,6 +1159,8 @@ static int pci_pm_thaw(struct device *dev)
 		pci_pm_reenable_device(pci_dev);
 	}
 
+	pci_dev->state_saved = false;
+
 	return error;
 }
 
@@ -1216,8 +1168,6 @@ static int pci_pm_poweroff(struct device *dev)
 {
 	struct pci_dev *pci_dev = to_pci_dev(dev);
 	const struct dev_pm_ops *pm = dev->driver ? dev->driver->pm : NULL;
-
-	pci_dev->skip_bus_pm = false;
 
 	if (pci_has_legacy_pm_support(pci_dev))
 		return pci_legacy_suspend(dev, PMSG_HIBERNATE);
@@ -1261,7 +1211,6 @@ static int pci_pm_poweroff_noirq(struct device *dev)
 {
 	struct pci_dev *pci_dev = to_pci_dev(dev);
 	const struct dev_pm_ops *pm = dev->driver ? dev->driver->pm : NULL;
-	bool skip_bus_pm;
 
 	if (dev_pm_skip_suspend(dev))
 		return 0;
@@ -1275,26 +1224,16 @@ static int pci_pm_poweroff_noirq(struct device *dev)
 	}
 
 	if (pm->poweroff_noirq) {
-		pci_power_t prev = pci_dev->current_state;
 		int error;
 
 		error = pm->poweroff_noirq(dev);
 		suspend_report_result(dev, pm->poweroff_noirq, error);
 		if (error)
 			return error;
-
-		if (!pci_dev->state_saved && pci_dev->current_state != PCI_D0
-		    && pci_dev->current_state != PCI_UNKNOWN) {
-			pci_WARN_ONCE(pci_dev, pci_dev->current_state != prev,
-				      "PCI PM: State of device not saved by %pS\n",
-				      pm->poweroff_noirq);
-			goto Fixup;
-		}
 	}
 
-	skip_bus_pm = pci_pm_suspend_noirq_common(pci_dev);
-	if (skip_bus_pm)
-		goto Fixup;
+	if (!pci_dev->state_saved && !pci_has_subordinate(pci_dev))
+		pci_prepare_to_sleep(pci_dev);
 
 	/*
 	 * The reason for doing this here is the same as for the analogous code
@@ -1303,7 +1242,6 @@ static int pci_pm_poweroff_noirq(struct device *dev)
 	if (pci_dev->class == PCI_CLASS_SERIAL_USB_EHCI)
 		pci_write_config_word(pci_dev, PCI_COMMAND, 0);
 
-Fixup:
 	pci_fixup_device(pci_fixup_suspend_late, pci_dev);
 
 	return 0;
@@ -1313,14 +1251,9 @@ static int pci_pm_restore_noirq(struct device *dev)
 {
 	struct pci_dev *pci_dev = to_pci_dev(dev);
 	const struct dev_pm_ops *pm = dev->driver ? dev->driver->pm : NULL;
-	pci_power_t prev_state = pci_dev->current_state;
-	bool skip_bus_pm = pci_dev->skip_bus_pm;
 
 	pci_pm_default_resume_early(pci_dev);
 	pci_fixup_device(pci_fixup_resume_early, pci_dev);
-
-	if (!skip_bus_pm && prev_state == PCI_D3cold)
-		pci_pm_bridge_power_up_actions(pci_dev);
 
 	if (pci_has_legacy_pm_support(pci_dev))
 		return 0;
@@ -1806,13 +1739,37 @@ const struct bus_type pci_bus_type = {
 };
 EXPORT_SYMBOL(pci_bus_type);
 
+#ifdef CONFIG_PCIEPORTBUS
+static int pcie_port_bus_match(struct device *dev, const struct device_driver *drv)
+{
+	struct pcie_device *pciedev;
+	const struct pcie_port_service_driver *driver;
+
+	if (drv->bus != &pcie_port_bus_type || dev->bus != &pcie_port_bus_type)
+		return 0;
+
+	pciedev = to_pcie_device(dev);
+	driver = to_service_driver(drv);
+
+	if (driver->service != pciedev->service)
+		return 0;
+
+	if (driver->port_type != PCIE_ANY_PORT &&
+	    driver->port_type != pci_pcie_type(pciedev->port))
+		return 0;
+
+	return 1;
+}
+
+const struct bus_type pcie_port_bus_type = {
+	.name		= "pci_express",
+	.match		= pcie_port_bus_match,
+};
+#endif
+
 static int __init pci_driver_init(void)
 {
 	int ret;
-
-	pci_probe_wq = alloc_workqueue("sync_wq", WQ_PERCPU, 0);
-	if (!pci_probe_wq)
-		return -ENOMEM;
 
 	ret = bus_register(&pci_bus_type);
 	if (ret)

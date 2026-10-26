@@ -11,6 +11,7 @@
 /* Load init_shadow_call_stack to gp. */
 .macro scs_load_init_stack
 	la	gp, init_shadow_call_stack
+	XIP_FIXUP_OFFSET gp
 .endm
 
 /* Load the per-CPU IRQ shadow call stack to gp. */

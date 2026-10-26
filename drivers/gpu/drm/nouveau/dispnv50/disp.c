@@ -40,6 +40,7 @@
 #include <drm/drm_atomic_helper.h>
 #include <drm/drm_edid.h>
 #include <drm/drm_eld.h>
+#include <drm/drm_fb_helper.h>
 #include <drm/drm_fixed.h>
 #include <drm/drm_probe_helper.h>
 #include <drm/drm_vblank.h>
@@ -427,7 +428,7 @@ nv50_outp_atomic_check(struct drm_encoder *encoder,
 }
 
 struct nouveau_connector *
-nv50_outp_get_new_connector(struct drm_atomic_commit *state, struct nouveau_encoder *outp)
+nv50_outp_get_new_connector(struct drm_atomic_state *state, struct nouveau_encoder *outp)
 {
 	struct drm_connector *connector;
 	struct drm_connector_state *connector_state;
@@ -443,7 +444,7 @@ nv50_outp_get_new_connector(struct drm_atomic_commit *state, struct nouveau_enco
 }
 
 struct nouveau_connector *
-nv50_outp_get_old_connector(struct drm_atomic_commit *state, struct nouveau_encoder *outp)
+nv50_outp_get_old_connector(struct drm_atomic_state *state, struct nouveau_encoder *outp)
 {
 	struct drm_connector *connector;
 	struct drm_connector_state *connector_state;
@@ -459,7 +460,7 @@ nv50_outp_get_old_connector(struct drm_atomic_commit *state, struct nouveau_enco
 }
 
 static struct nouveau_crtc *
-nv50_outp_get_new_crtc(const struct drm_atomic_commit *state, const struct nouveau_encoder *outp)
+nv50_outp_get_new_crtc(const struct drm_atomic_state *state, const struct nouveau_encoder *outp)
 {
 	struct drm_crtc *crtc;
 	struct drm_crtc_state *crtc_state;
@@ -478,7 +479,7 @@ nv50_outp_get_new_crtc(const struct drm_atomic_commit *state, const struct nouve
  * DAC
  *****************************************************************************/
 static void
-nv50_dac_atomic_disable(struct drm_encoder *encoder, struct drm_atomic_commit *state)
+nv50_dac_atomic_disable(struct drm_encoder *encoder, struct drm_atomic_state *state)
 {
 	struct nouveau_encoder *nv_encoder = nouveau_encoder(encoder);
 	struct nv50_core *core = nv50_disp(encoder->dev)->core;
@@ -489,7 +490,7 @@ nv50_dac_atomic_disable(struct drm_encoder *encoder, struct drm_atomic_commit *s
 }
 
 static void
-nv50_dac_atomic_enable(struct drm_encoder *encoder, struct drm_atomic_commit *state)
+nv50_dac_atomic_enable(struct drm_encoder *encoder, struct drm_atomic_state *state)
 {
 	struct nouveau_encoder *nv_encoder = nouveau_encoder(encoder);
 	struct nouveau_crtc *nv_crtc = nv50_outp_get_new_crtc(state, nv_encoder);
@@ -749,7 +750,7 @@ nv50_audio_disable(struct drm_encoder *encoder, struct nouveau_crtc *nv_crtc)
 
 static void
 nv50_audio_enable(struct drm_encoder *encoder, struct nouveau_crtc *nv_crtc,
-		  struct nouveau_connector *nv_connector, struct drm_atomic_commit *state,
+		  struct nouveau_connector *nv_connector, struct drm_atomic_state *state,
 		  struct drm_display_mode *mode)
 {
 	struct nouveau_drm *drm = nouveau_drm(encoder->dev);
@@ -775,7 +776,7 @@ nv50_audio_enable(struct drm_encoder *encoder, struct nouveau_crtc *nv_crtc,
  *****************************************************************************/
 static void
 nv50_hdmi_enable(struct drm_encoder *encoder, struct nouveau_crtc *nv_crtc,
-		 struct nouveau_connector *nv_connector, struct drm_atomic_commit *state,
+		 struct nouveau_connector *nv_connector, struct drm_atomic_state *state,
 		 struct drm_display_mode *mode, bool hda)
 {
 	struct nouveau_drm *drm = nouveau_drm(encoder->dev);
@@ -891,7 +892,7 @@ struct nouveau_encoder *nv50_real_outp(struct drm_encoder *encoder)
 }
 
 static void
-nv50_msto_cleanup(struct drm_atomic_commit *state,
+nv50_msto_cleanup(struct drm_atomic_state *state,
 		  struct drm_dp_mst_topology_state *new_mst_state,
 		  struct drm_dp_mst_topology_mgr *mgr,
 		  struct nv50_msto *msto)
@@ -924,7 +925,7 @@ nv50_msto_cleanup(struct drm_atomic_commit *state,
 }
 
 static void
-nv50_msto_prepare(struct drm_atomic_commit *state,
+nv50_msto_prepare(struct drm_atomic_state *state,
 		  struct drm_dp_mst_topology_state *mst_state,
 		  struct drm_dp_mst_topology_mgr *mgr,
 		  struct nv50_msto *msto)
@@ -963,7 +964,7 @@ nv50_msto_atomic_check(struct drm_encoder *encoder,
 		       struct drm_crtc_state *crtc_state,
 		       struct drm_connector_state *conn_state)
 {
-	struct drm_atomic_commit *state = crtc_state->state;
+	struct drm_atomic_state *state = crtc_state->state;
 	struct drm_connector *connector = conn_state->connector;
 	struct drm_dp_mst_topology_state *mst_state;
 	struct nv50_mstc *mstc = nv50_mstc(connector);
@@ -1023,7 +1024,7 @@ nv50_dp_bpc_to_depth(unsigned int bpc)
 }
 
 static void
-nv50_msto_atomic_enable(struct drm_encoder *encoder, struct drm_atomic_commit *state)
+nv50_msto_atomic_enable(struct drm_encoder *encoder, struct drm_atomic_state *state)
 {
 	struct nv50_msto *msto = nv50_msto(encoder);
 	struct nv50_head *head = msto->head;
@@ -1072,7 +1073,7 @@ nv50_msto_atomic_enable(struct drm_encoder *encoder, struct drm_atomic_commit *s
 }
 
 static void
-nv50_msto_atomic_disable(struct drm_encoder *encoder, struct drm_atomic_commit *state)
+nv50_msto_atomic_disable(struct drm_encoder *encoder, struct drm_atomic_state *state)
 {
 	struct nv50_msto *msto = nv50_msto(encoder);
 	struct nv50_mstc *mstc = msto->mstc;
@@ -1114,7 +1115,7 @@ nv50_msto_new(struct drm_device *dev, struct nv50_head *head, int id)
 	struct nv50_msto *msto;
 	int ret;
 
-	msto = kzalloc_obj(*msto);
+	msto = kzalloc(sizeof(*msto), GFP_KERNEL);
 	if (!msto)
 		return ERR_PTR(-ENOMEM);
 
@@ -1133,7 +1134,7 @@ nv50_msto_new(struct drm_device *dev, struct nv50_head *head, int id)
 
 static struct drm_encoder *
 nv50_mstc_atomic_best_encoder(struct drm_connector *connector,
-			      struct drm_atomic_commit *state)
+			      struct drm_atomic_state *state)
 {
 	struct drm_connector_state *connector_state = drm_atomic_get_new_connector_state(state,
 											 connector);
@@ -1191,7 +1192,7 @@ nv50_mstc_get_modes(struct drm_connector *connector)
 
 static int
 nv50_mstc_atomic_check(struct drm_connector *connector,
-		       struct drm_atomic_commit *state)
+		       struct drm_atomic_state *state)
 {
 	struct nv50_mstc *mstc = nv50_mstc(connector);
 	struct drm_dp_mst_topology_mgr *mgr = &mstc->mstm->mgr;
@@ -1266,7 +1267,7 @@ nv50_mstc_new(struct nv50_mstm *mstm, struct drm_dp_mst_port *port,
 	struct nv50_mstc *mstc;
 	int ret;
 
-	if (!(mstc = *pmstc = kzalloc_obj(*mstc)))
+	if (!(mstc = *pmstc = kzalloc(sizeof(*mstc), GFP_KERNEL)))
 		return -ENOMEM;
 	mstc->mstm = mstm;
 	mstc->port = port;
@@ -1300,7 +1301,7 @@ nv50_mstc_new(struct nv50_mstm *mstm, struct drm_dp_mst_port *port,
 }
 
 static void
-nv50_mstm_cleanup(struct drm_atomic_commit *state,
+nv50_mstm_cleanup(struct drm_atomic_state *state,
 		  struct drm_dp_mst_topology_state *mst_state,
 		  struct nv50_mstm *mstm)
 {
@@ -1329,7 +1330,7 @@ nv50_mstm_cleanup(struct drm_atomic_commit *state,
 }
 
 static void
-nv50_mstm_prepare(struct drm_atomic_commit *state,
+nv50_mstm_prepare(struct drm_atomic_state *state,
 		  struct drm_dp_mst_topology_state *mst_state,
 		  struct nv50_mstm *mstm)
 {
@@ -1519,7 +1520,7 @@ nv50_mstm_new(struct nouveau_encoder *outp, struct drm_dp_aux *aux, int aux_max,
 	struct nv50_mstm *mstm;
 	int ret;
 
-	if (!(mstm = *pmstm = kzalloc_obj(*mstm)))
+	if (!(mstm = *pmstm = kzalloc(sizeof(*mstm), GFP_KERNEL)))
 		return -ENOMEM;
 	mstm->outp = outp;
 	mstm->mgr.cbs = &nv50_mstm;
@@ -1561,7 +1562,7 @@ nv50_sor_update(struct nouveau_encoder *nv_encoder, u8 head,
  * fixed time delay from the vbios…
  */
 static void
-nv50_sor_atomic_disable(struct drm_encoder *encoder, struct drm_atomic_commit *state)
+nv50_sor_atomic_disable(struct drm_encoder *encoder, struct drm_atomic_state *state)
 {
 	struct nouveau_encoder *nv_encoder = nouveau_encoder(encoder);
 	struct nv50_head *head = nv50_head(nv_encoder->crtc);
@@ -1740,7 +1741,7 @@ nv50_sor_dp_watermark_sst(struct nouveau_encoder *outp,
 }
 
 static void
-nv50_sor_atomic_enable(struct drm_encoder *encoder, struct drm_atomic_commit *state)
+nv50_sor_atomic_enable(struct drm_encoder *encoder, struct drm_atomic_state *state)
 {
 	struct nouveau_encoder *nv_encoder = nouveau_encoder(encoder);
 	struct nouveau_crtc *nv_crtc = nv50_outp_get_new_crtc(state, nv_encoder);
@@ -1802,8 +1803,8 @@ nv50_sor_atomic_enable(struct drm_encoder *encoder, struct drm_atomic_commit *st
 			lvds_dual = bios->fp.dual_link;
 			lvds_8bpc = bios->fp.if_is_24bit;
 		} else {
-			if (nv_connector->spwg_links) {
-				if (nv_connector->spwg_links == 2)
+			if (nv_connector->type == DCB_CONNECTOR_LVDS_SPWG) {
+				if (((u8 *)nv_connector->edid)[121] == 2)
 					lvds_dual = true;
 			} else
 			if (mode->clock >= bios->fp.duallink_transition_clk) {
@@ -1966,7 +1967,7 @@ nv50_pior_atomic_check(struct drm_encoder *encoder,
 }
 
 static void
-nv50_pior_atomic_disable(struct drm_encoder *encoder, struct drm_atomic_commit *state)
+nv50_pior_atomic_disable(struct drm_encoder *encoder, struct drm_atomic_state *state)
 {
 	struct nouveau_encoder *nv_encoder = nouveau_encoder(encoder);
 	struct nv50_core *core = nv50_disp(encoder->dev)->core;
@@ -1977,7 +1978,7 @@ nv50_pior_atomic_disable(struct drm_encoder *encoder, struct drm_atomic_commit *
 }
 
 static void
-nv50_pior_atomic_enable(struct drm_encoder *encoder, struct drm_atomic_commit *state)
+nv50_pior_atomic_enable(struct drm_encoder *encoder, struct drm_atomic_state *state)
 {
 	struct nouveau_encoder *nv_encoder = nouveau_encoder(encoder);
 	struct nouveau_crtc *nv_crtc = nv50_outp_get_new_crtc(state, nv_encoder);
@@ -2098,7 +2099,7 @@ nv50_pior_create(struct nouveau_encoder *nv_encoder)
  *****************************************************************************/
 
 static void
-nv50_disp_atomic_commit_core(struct drm_atomic_commit *state, u32 *interlock)
+nv50_disp_atomic_commit_core(struct drm_atomic_state *state, u32 *interlock)
 {
 	struct drm_dp_mst_topology_mgr *mgr;
 	struct drm_dp_mst_topology_state *mst_state;
@@ -2149,7 +2150,7 @@ nv50_disp_atomic_commit_core(struct drm_atomic_commit *state, u32 *interlock)
 }
 
 static void
-nv50_disp_atomic_commit_wndw(struct drm_atomic_commit *state, u32 *interlock)
+nv50_disp_atomic_commit_wndw(struct drm_atomic_state *state, u32 *interlock)
 {
 	struct drm_plane_state *new_plane_state;
 	struct drm_plane *plane;
@@ -2165,7 +2166,7 @@ nv50_disp_atomic_commit_wndw(struct drm_atomic_commit *state, u32 *interlock)
 }
 
 static void
-nv50_disp_atomic_commit_tail(struct drm_atomic_commit *state)
+nv50_disp_atomic_commit_tail(struct drm_atomic_state *state)
 {
 	struct drm_device *dev = state->dev;
 	struct drm_crtc_state *new_crtc_state, *old_crtc_state;
@@ -2407,7 +2408,7 @@ nv50_disp_atomic_commit_tail(struct drm_atomic_commit *state)
 	drm_atomic_helper_commit_hw_done(state);
 	drm_atomic_helper_cleanup_planes(dev, state);
 	drm_atomic_helper_commit_cleanup_done(state);
-	drm_atomic_commit_put(state);
+	drm_atomic_state_put(state);
 
 	/* Drop the RPM ref we got from nv50_disp_atomic_commit() */
 	pm_runtime_mark_last_busy(dev->dev);
@@ -2417,14 +2418,14 @@ nv50_disp_atomic_commit_tail(struct drm_atomic_commit *state)
 static void
 nv50_disp_atomic_commit_work(struct work_struct *work)
 {
-	struct drm_atomic_commit *state =
+	struct drm_atomic_state *state =
 		container_of(work, typeof(*state), commit_work);
 	nv50_disp_atomic_commit_tail(state);
 }
 
 static int
 nv50_disp_atomic_commit(struct drm_device *dev,
-			struct drm_atomic_commit *state, bool nonblock)
+			struct drm_atomic_state *state, bool nonblock)
 {
 	struct drm_plane_state *new_plane_state;
 	struct drm_plane *plane;
@@ -2464,7 +2465,7 @@ nv50_disp_atomic_commit(struct drm_device *dev,
 			nv50_wndw_ntfy_enable(wndw, asyw);
 	}
 
-	drm_atomic_commit_get(state);
+	drm_atomic_state_get(state);
 
 	/*
 	 * Grab another RPM ref for the commit tail, which will release the
@@ -2473,7 +2474,7 @@ nv50_disp_atomic_commit(struct drm_device *dev,
 	pm_runtime_get_noresume(dev->dev);
 
 	if (nonblock)
-		queue_work(system_dfl_wq, &state->commit_work);
+		queue_work(system_unbound_wq, &state->commit_work);
 	else
 		nv50_disp_atomic_commit_tail(state);
 
@@ -2495,7 +2496,7 @@ nv50_disp_outp_atomic_add(struct nv50_atom *atom, struct drm_encoder *encoder)
 			return outp;
 	}
 
-	outp = kzalloc_obj(*outp);
+	outp = kzalloc(sizeof(*outp), GFP_KERNEL);
 	if (!outp)
 		return ERR_PTR(-ENOMEM);
 
@@ -2559,7 +2560,7 @@ nv50_disp_outp_atomic_check_set(struct nv50_atom *atom,
 }
 
 static int
-nv50_disp_atomic_check(struct drm_device *dev, struct drm_atomic_commit *state)
+nv50_disp_atomic_check(struct drm_device *dev, struct drm_atomic_state *state)
 {
 	struct nv50_atom *atom = nv50_atom(state);
 	struct nv50_core *core = nv50_disp(dev)->core;
@@ -2617,7 +2618,7 @@ nv50_disp_atomic_check(struct drm_device *dev, struct drm_atomic_commit *state)
 }
 
 static void
-nv50_disp_atomic_state_clear(struct drm_atomic_commit *state)
+nv50_disp_atomic_state_clear(struct drm_atomic_state *state)
 {
 	struct nv50_atom *atom = nv50_atom(state);
 	struct nv50_outp_atom *outp, *outt;
@@ -2627,23 +2628,23 @@ nv50_disp_atomic_state_clear(struct drm_atomic_commit *state)
 		kfree(outp);
 	}
 
-	drm_atomic_commit_default_clear(state);
+	drm_atomic_state_default_clear(state);
 }
 
 static void
-nv50_disp_atomic_state_free(struct drm_atomic_commit *state)
+nv50_disp_atomic_state_free(struct drm_atomic_state *state)
 {
 	struct nv50_atom *atom = nv50_atom(state);
-	drm_atomic_commit_default_release(&atom->state);
+	drm_atomic_state_default_release(&atom->state);
 	kfree(atom);
 }
 
-static struct drm_atomic_commit *
+static struct drm_atomic_state *
 nv50_disp_atomic_state_alloc(struct drm_device *dev)
 {
 	struct nv50_atom *atom;
-	if (!(atom = kzalloc_obj(*atom)) ||
-	    drm_atomic_commit_init(dev, &atom->state) < 0) {
+	if (!(atom = kzalloc(sizeof(*atom), GFP_KERNEL)) ||
+	    drm_atomic_state_init(dev, &atom->state) < 0) {
 		kfree(atom);
 		return NULL;
 	}
@@ -2767,7 +2768,6 @@ nv50_display_read_hw_state(struct nouveau_drm *drm)
 {
 	struct drm_device *dev = drm->dev;
 	struct drm_encoder *encoder;
-	struct drm_plane *plane;
 	struct drm_modeset_acquire_ctx ctx;
 	struct nv50_disp *disp = nv50_disp(dev);
 	int ret;
@@ -2780,9 +2780,6 @@ nv50_display_read_hw_state(struct nouveau_drm *drm)
 
 		nv50_display_read_hw_or_state(dev, disp, nouveau_encoder(encoder));
 	}
-
-	drm_for_each_plane(plane, dev)
-		nv50_wndw_default_state(nv50_wndw(plane));
 
 	DRM_MODESET_LOCK_ALL_END(dev, ctx, ret);
 }
@@ -2836,7 +2833,7 @@ nv50_display_create(struct drm_device *dev)
 	int ret, i;
 	bool has_mst = false;
 
-	disp = kzalloc_obj(*disp);
+	disp = kzalloc(sizeof(*disp), GFP_KERNEL);
 	if (!disp)
 		return -ENOMEM;
 
@@ -2903,7 +2900,7 @@ nv50_display_create(struct drm_device *dev)
 	for_each_set_bit(i, &disp->disp->outp_mask, sizeof(disp->disp->outp_mask) * 8) {
 		struct nouveau_encoder *outp;
 
-		outp = kzalloc_obj(*outp);
+		outp = kzalloc(sizeof(*outp), GFP_KERNEL);
 		if (!outp)
 			break;
 
@@ -2924,7 +2921,7 @@ nv50_display_create(struct drm_device *dev)
 		outp->base.base.possible_clones = 0;
 		outp->conn = nouveau_connector(connector);
 
-		outp->dcb = kzalloc_obj(*outp->dcb);
+		outp->dcb = kzalloc(sizeof(*outp->dcb), GFP_KERNEL);
 		if (!outp->dcb)
 			break;
 

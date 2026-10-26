@@ -3,6 +3,7 @@
 
 . "$(cd "$(dirname "$0")" && pwd)"/test_common.sh
 
+TID="generic_07"
 ERR_CODE=0
 
 if ! _have_program fio; then
@@ -23,5 +24,5 @@ if [ "$ERR_CODE" -eq 0 ]; then
 	ERR_CODE=$?
 fi
 
-_cleanup_test
+_cleanup_test "generic"
 _show_result $TID $ERR_CODE

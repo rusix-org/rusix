@@ -2078,7 +2078,7 @@ static int aureon_init(struct snd_ice1712 *ice)
 	struct aureon_spec *spec;
 	int i, err;
 
-	spec = kzalloc_obj(*spec);
+	spec = kzalloc(sizeof(*spec), GFP_KERNEL);
 	if (!spec)
 		return -ENOMEM;
 	ice->spec = spec;
@@ -2093,7 +2093,7 @@ static int aureon_init(struct snd_ice1712 *ice)
 	}
 
 	/* to remember the register values of CS8415 */
-	ice->akm = kzalloc_obj(struct snd_akm4xxx);
+	ice->akm = kzalloc(sizeof(struct snd_akm4xxx), GFP_KERNEL);
 	if (!ice->akm)
 		return -ENOMEM;
 	ice->akm_codecs = 1;

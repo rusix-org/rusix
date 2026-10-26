@@ -227,9 +227,6 @@ struct device_config {
 	bool compression;
 	struct thread_count_config thread_counts;
 	block_count_t max_discard_blocks;
-	block_count_t slab_blocks;
-	int index_memory;
-	bool index_sparse;
 };
 
 enum vdo_completion_type {

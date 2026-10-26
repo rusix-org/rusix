@@ -325,11 +325,8 @@ static int read_header(struct pstore *ps, int *new_snapshot)
 	}
 
 	ps->io_client = dm_io_client_create();
-	if (IS_ERR(ps->io_client)) {
-		r = PTR_ERR(ps->io_client);
-		ps->io_client = NULL;
-		return r;
-	}
+	if (IS_ERR(ps->io_client))
+		return PTR_ERR(ps->io_client);
 
 	r = alloc_area(ps);
 	if (r)
@@ -629,7 +626,8 @@ static int persistent_read_metadata(struct dm_exception_store *store,
 	 */
 	ps->exceptions_per_area = (ps->store->chunk_size << SECTOR_SHIFT) /
 				  sizeof(struct disk_exception);
-	ps->callbacks = kvzalloc_objs(*ps->callbacks, ps->exceptions_per_area);
+	ps->callbacks = kvcalloc(ps->exceptions_per_area,
+				 sizeof(*ps->callbacks), GFP_KERNEL);
 	if (!ps->callbacks)
 		return -ENOMEM;
 
@@ -856,7 +854,7 @@ static int persistent_ctr(struct dm_exception_store *store, char *options)
 	int r;
 
 	/* allocate the pstore */
-	ps = kzalloc_obj(*ps);
+	ps = kzalloc(sizeof(*ps), GFP_KERNEL);
 	if (!ps)
 		return -ENOMEM;
 

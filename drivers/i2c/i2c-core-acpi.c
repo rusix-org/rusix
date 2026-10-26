@@ -84,11 +84,8 @@ static int i2c_acpi_resource_count(struct acpi_resource *ares, void *data)
  * i2c_acpi_client_count - Count the number of I2cSerialBus resources
  * @adev:	ACPI device
  *
- * Return:
- * The number of I2cSerialBus resources in the ACPI-device's
+ * Returns the number of I2cSerialBus resources in the ACPI-device's
  * resource-list; or a negative error code.
- *
- * Specifically returns -ENOENT when no resources found.
  */
 int i2c_acpi_client_count(struct acpi_device *adev)
 {
@@ -100,7 +97,7 @@ int i2c_acpi_client_count(struct acpi_device *adev)
 		return ret;
 
 	acpi_dev_free_resource_list(&r);
-	return count ?: -ENOENT;
+	return count;
 }
 EXPORT_SYMBOL_GPL(i2c_acpi_client_count);
 
@@ -131,6 +128,15 @@ static int i2c_acpi_fill_info(struct acpi_resource *ares, void *data)
 	return 1;
 }
 
+static const struct acpi_device_id i2c_acpi_ignored_device_ids[] = {
+	/*
+	 * ACPI video acpi_devices, which are handled by the acpi-video driver
+	 * sometimes contain a SERIAL_TYPE_I2C ACPI resource, ignore these.
+	 */
+	{ ACPI_VIDEO_HID, 0 },
+	{}
+};
+
 struct i2c_acpi_irq_context {
 	int irq;
 	bool wake_capable;
@@ -149,11 +155,7 @@ static int i2c_acpi_do_lookup(struct acpi_device *adev,
 	if (!acpi_dev_ready_for_enumeration(adev))
 		return -ENODEV;
 
-	/*
-	 * ACPI video devices, which are handled by the acpi-video driver,
-	 * sometimes contain a SERIAL_TYPE_I2C ACPI resource, ignore these.
-	 */
-	if (acpi_dev_is_video_device(adev))
+	if (acpi_match_device_ids(adev, i2c_acpi_ignored_device_ids) == 0)
 		return -ENODEV;
 
 	memset(info, 0, sizeof(*info));
@@ -163,12 +165,9 @@ static int i2c_acpi_do_lookup(struct acpi_device *adev,
 	INIT_LIST_HEAD(&resource_list);
 	ret = acpi_dev_get_resources(adev, &resource_list,
 				     i2c_acpi_fill_info, lookup);
-	if (ret < 0)
-		return ret;
-
 	acpi_dev_free_resource_list(&resource_list);
 
-	if (!info->addr)
+	if (ret < 0 || !info->addr)
 		return -EINVAL;
 
 	return 0;
@@ -352,8 +351,8 @@ static const struct acpi_device_id i2c_acpi_force_400khz_device_ids[] = {
 	 * at 400KHz (as can be expected of any recent i2c hw) so we force
 	 * the speed of the bus to 400 KHz if a Silead device is present.
 	 */
-	{ .id = "MSSL1680" },
-	{ }
+	{ "MSSL1680", 0 },
+	{}
 };
 
 static const struct acpi_device_id i2c_acpi_force_100khz_device_ids[] = {
@@ -371,13 +370,9 @@ static const struct acpi_device_id i2c_acpi_force_100khz_device_ids[] = {
 	 * the device works without issues on Windows at what is expected to be
 	 * a 400KHz frequency. The root cause of the issue is not known.
 	 */
-	{ .id = "ASUE140D" },
-	{ .id = "DELL0A86" },
-	{ .id = "DLL0945" },
-	{ .id = "ELAN0678" },
-	{ .id = "ELAN06FA" },
-	{ .id = "ELAN1300" },
-	{ }
+	{ "DLL0945", 0 },
+	{ "ELAN06FA", 0 },
+	{}
 };
 
 static acpi_status i2c_acpi_lookup_speed(acpi_handle handle, u32 level,
@@ -609,7 +604,7 @@ static int acpi_gsb_i2c_read_bytes(struct i2c_client *client,
 	msgs[0].buf = &cmd;
 
 	msgs[1].addr = client->addr;
-	msgs[1].flags = client->flags | I2C_M_RD | I2C_M_DMA_SAFE;
+	msgs[1].flags = client->flags | I2C_M_RD;
 	msgs[1].len = data_len;
 	msgs[1].buf = buffer;
 
@@ -650,7 +645,7 @@ static int acpi_gsb_i2c_write_bytes(struct i2c_client *client,
 	memcpy(buffer + 1, data, data_len);
 
 	msgs[0].addr = client->addr;
-	msgs[0].flags = client->flags | I2C_M_DMA_SAFE;
+	msgs[0].flags = client->flags;
 	msgs[0].len = data_len + 1;
 	msgs[0].buf = buffer;
 
@@ -688,7 +683,7 @@ i2c_acpi_space_handler(u32 function, acpi_physical_address command,
 	if (ACPI_FAILURE(ret))
 		return ret;
 
-	client = kzalloc_obj(*client);
+	client = kzalloc(sizeof(*client), GFP_KERNEL);
 	if (!client) {
 		ret = AE_NO_MEMORY;
 		goto err;
@@ -798,7 +793,8 @@ int i2c_acpi_install_space_handler(struct i2c_adapter *adapter)
 	if (!handle)
 		return -ENODEV;
 
-	data = kzalloc_obj(struct i2c_acpi_handler_data);
+	data = kzalloc(sizeof(struct i2c_acpi_handler_data),
+			    GFP_KERNEL);
 	if (!data)
 		return -ENOMEM;
 

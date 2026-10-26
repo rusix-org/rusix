@@ -47,7 +47,7 @@
 
 #include <linux/platform_device.h>
 
-#include <drm/drm_print.h>
+#include <drm/drm_drv.h>
 
 #include "vc4_drv.h"
 #include "vc4_regs.h"
@@ -245,6 +245,23 @@ vc4_irq(int irq, void *arg)
 	return status;
 }
 
+static void
+vc4_irq_prepare(struct drm_device *dev)
+{
+	struct vc4_dev *vc4 = to_vc4_dev(dev);
+
+	if (!vc4->v3d)
+		return;
+
+	init_waitqueue_head(&vc4->job_wait_queue);
+	INIT_WORK(&vc4->overflow_mem_work, vc4_overflow_mem_work);
+
+	/* Clear any pending interrupts someone might have left around
+	 * for us.
+	 */
+	V3D_WRITE(V3D_INTCTL, V3D_DRIVER_IRQS);
+}
+
 void
 vc4_irq_enable(struct drm_device *dev)
 {
@@ -280,7 +297,7 @@ vc4_irq_disable(struct drm_device *dev)
 	V3D_WRITE(V3D_INTCTL, V3D_DRIVER_IRQS);
 
 	/* Finish any interrupt handler still in flight. */
-	disable_irq(vc4->irq);
+	synchronize_irq(vc4->irq);
 
 	cancel_work_sync(&vc4->overflow_mem_work);
 }
@@ -288,21 +305,23 @@ vc4_irq_disable(struct drm_device *dev)
 int vc4_irq_install(struct drm_device *dev, int irq)
 {
 	struct vc4_dev *vc4 = to_vc4_dev(dev);
+	int ret;
 
 	if (WARN_ON_ONCE(vc4->gen > VC4_GEN_4))
-		return -ENODEV;
-
-	if (!vc4->v3d)
 		return -ENODEV;
 
 	if (irq == IRQ_NOTCONNECTED)
 		return -ENOTCONN;
 
-	init_waitqueue_head(&vc4->job_wait_queue);
-	INIT_WORK(&vc4->overflow_mem_work, vc4_overflow_mem_work);
+	vc4_irq_prepare(dev);
 
-	return devm_request_irq(dev->dev, irq, vc4_irq, IRQF_NO_AUTOEN,
-				dev_name(dev->dev), dev);
+	ret = request_irq(irq, vc4_irq, 0, dev->driver->name, dev);
+	if (ret)
+		return ret;
+
+	vc4_irq_enable(dev);
+
+	return 0;
 }
 
 void vc4_irq_uninstall(struct drm_device *dev)
@@ -313,6 +332,7 @@ void vc4_irq_uninstall(struct drm_device *dev)
 		return;
 
 	vc4_irq_disable(dev);
+	free_irq(vc4->irq, dev);
 }
 
 /** Reinitializes interrupt registers when a GPU reset is performed. */
@@ -328,9 +348,10 @@ void vc4_irq_reset(struct drm_device *dev)
 	V3D_WRITE(V3D_INTCTL, V3D_DRIVER_IRQS);
 
 	/*
-	 * Turn all our interrupts on. Binner out of memory is the only
-	 * one we expect to trigger at this point, since the reset cleared
-	 * the overflow memory address and none has been supplied yet.
+	 * Turn all our interrupts on.  Binner out of memory is the
+	 * only one we expect to trigger at this point, since we've
+	 * just come from poweron and haven't supplied any overflow
+	 * memory yet.
 	 */
 	V3D_WRITE(V3D_INTENA, V3D_DRIVER_IRQS);
 

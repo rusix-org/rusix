@@ -31,14 +31,10 @@
  *
  */
 
-#include <linux/vmalloc.h>
-
-#include <drm/drm_print.h>
-
-#include "gvt.h"
 #include "i915_drv.h"
+#include "gvt.h"
 #include "i915_pvinfo.h"
-#include "sched_policy.h"
+#include <linux/vmalloc.h>
 
 void populate_pvinfo_page(struct intel_vgpu *vgpu)
 {
@@ -113,11 +109,13 @@ int intel_gvt_init_vgpu_types(struct intel_gvt *gvt)
 	unsigned int num_types = ARRAY_SIZE(intel_vgpu_configs);
 	unsigned int i;
 
-	gvt->types = kzalloc_objs(struct intel_vgpu_type, num_types);
+	gvt->types = kcalloc(num_types, sizeof(struct intel_vgpu_type),
+			     GFP_KERNEL);
 	if (!gvt->types)
 		return -ENOMEM;
 
-	gvt->mdev_types = kzalloc_objs(*gvt->mdev_types, num_types);
+	gvt->mdev_types = kcalloc(num_types, sizeof(*gvt->mdev_types),
+			     GFP_KERNEL);
 	if (!gvt->mdev_types)
 		goto out_free_types;
 

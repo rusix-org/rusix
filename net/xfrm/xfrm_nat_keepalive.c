@@ -100,7 +100,7 @@ static int nat_keepalive_send_ipv6(struct sk_buff *skb,
 	local_lock_nested_bh(&nat_keepalive_sk_ipv6.bh_lock);
 	sk = this_cpu_read(nat_keepalive_sk_ipv6.sock);
 	sock_net_set(sk, net);
-	dst = ip6_dst_lookup_flow(net, sk, &fl6, NULL);
+	dst = ipv6_stub->ipv6_dst_lookup_flow(net, sk, &fl6, NULL);
 	if (IS_ERR(dst)) {
 		local_unlock_nested_bh(&nat_keepalive_sk_ipv6.bh_lock);
 		kfree_skb(skb);
@@ -108,7 +108,7 @@ static int nat_keepalive_send_ipv6(struct sk_buff *skb,
 	}
 
 	skb_dst_set(skb, dst);
-	err = ip6_xmit(sk, skb, &fl6, skb->mark, NULL, 0, 0);
+	err = ipv6_stub->ip6_xmit(sk, skb, &fl6, skb->mark, NULL, 0, 0);
 	sock_net_set(sk, &init_net);
 	local_unlock_nested_bh(&nat_keepalive_sk_ipv6.bh_lock);
 	return err;
@@ -135,7 +135,7 @@ static void nat_keepalive_send(struct nat_keepalive *ka)
 	uh = skb_push(skb, sizeof(*uh));
 	uh->source = ka->encap_sport;
 	uh->dest = ka->encap_dport;
-	udp_set_len_short(uh, skb->len);
+	uh->len = htons(skb->len);
 	uh->check = 0;
 
 	skb->mark = ka->smark;

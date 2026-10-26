@@ -19,10 +19,10 @@
 #include <stdio.h>
 #include <limits.h>
 
-#include "common.h"
+#include "utils.h"
 
 #define MAX_MSG_LENGTH	1024
-bool config_debug;
+int config_debug;
 
 /*
  * err_msg - print an error message to the stderr
@@ -55,21 +55,6 @@ void debug_msg(const char *fmt, ...)
 	va_end(ap);
 
 	fprintf(stderr, "%s", message);
-}
-
-/*
- * fatal - print an error message and EOL to stderr and exit with ERROR
- */
-void fatal(const char *fmt, ...)
-{
-	va_list ap;
-
-	va_start(ap, fmt);
-	vfprintf(stderr, fmt, ap);
-	va_end(ap);
-	fprintf(stderr, "\n");
-
-	exit(ERROR);
 }
 
 /*
@@ -108,204 +93,60 @@ void get_duration(time_t start_time, char *output, int output_size)
 }
 
 /*
- * cpu_list_iterate - parse a cpu list and call a function on each element
+ * parse_cpu_set - parse a cpu_list filling cpu_set_t argument
  *
- * If callback returns a non-zero value, the iteration is stopped.
+ * Receives a cpu list, like 1-3,5 (cpus 1, 2, 3, 5), and then set
+ * filling cpu_set_t argument.
  *
- * Returns the number of cpus in the list (including duplicates) on success,
- * callback return value on break, and -1 on error.
+ * Returns 1 on success, 0 otherwise.
  */
-int cpu_list_iterate(const char *cpu_list, int (*callback)(int, void *), void *data)
+int parse_cpu_set(char *cpu_list, cpu_set_t *set)
 {
 	const char *p;
-	int i, cpu, end_cpu, count = 0, retval;
+	int end_cpu;
+	int nr_cpus;
+	int cpu;
+	int i;
 
-	for (p = cpu_list; *p && *p != '\n'; ) {
+	CPU_ZERO(set);
+
+	nr_cpus = sysconf(_SC_NPROCESSORS_CONF);
+
+	for (p = cpu_list; *p; ) {
 		cpu = atoi(p);
-		if (cpu < 0 || (!cpu && *p != '0'))
-			return -1;
+		if (cpu < 0 || (!cpu && *p != '0') || cpu >= nr_cpus)
+			goto err;
 
 		while (isdigit(*p))
 			p++;
 		if (*p == '-') {
 			p++;
 			end_cpu = atoi(p);
-			if (end_cpu < cpu || (!end_cpu && *p != '0'))
-				return -1;
+			if (end_cpu < cpu || (!end_cpu && *p != '0') || end_cpu >= nr_cpus)
+				goto err;
 			while (isdigit(*p))
 				p++;
 		} else
 			end_cpu = cpu;
 
-		for (i = cpu; i <= end_cpu; i++) {
-			retval = callback(i, data);
-			if (retval)
-				return retval;
-			++count;
+		if (cpu == end_cpu) {
+			debug_msg("cpu_set: adding cpu %d\n", cpu);
+			CPU_SET(cpu, set);
+		} else {
+			for (i = cpu; i <= end_cpu; i++) {
+				debug_msg("cpu_set: adding cpu %d\n", i);
+				CPU_SET(i, set);
+			}
 		}
 
 		if (*p == ',')
 			p++;
 	}
 
-	return count;
-}
-
-static int max_cpu_callback(int i, void *data)
-{
-	int *max_cpu = data;
-
-	if (i > *max_cpu)
-		*max_cpu = i;
-
 	return 0;
-}
-
-/*
- * get_max_cpu_from_list - get the maximum CPU in a CPU list
- *
- * Returns maximum CPU number, or -1 on error
- */
-int get_max_cpu_from_list(const char *cpu_list)
-{
-	int max_cpu = -1;
-
-	if (cpu_list_iterate(cpu_list, max_cpu_callback, &max_cpu) < 0)
-		return -1;
-
-	return max_cpu;
-}
-
-
-static int tmp_cpu_set_callback(int i, void *data)
-{
-	bool *cpu_set = data;
-
-	cpu_set[i] = true;
-
-	return 0;
-}
-
-/*
- * get_possible_cpus - get the number of possible CPUs from sysfs
- *
- * Parse /sys/devices/system/cpu/possible to determine the number of
- * possible CPUs. Only contiguous zero-based CPUs lists are accepted.
- *
- * Returns the number of possible CPUs, or a negative value on error:
- * - -1 if the file is unreadable,
- * - -2 if parsing failed,
- * - -3 if the cpu list is non-zero-based or non-contiguous.
- */
-int get_possible_cpus(void)
-{
-	char *str = NULL;
-	size_t len = 0;
-	int nr_cpus = 0, max_cpu = -1, i;
-	FILE *fp;
-	bool *cpu_set;
-
-	fp = fopen("/sys/devices/system/cpu/possible", "r");
-	if (!fp)
-		return -1;
-
-	if (getline(&str, &len, fp) < 1) {
-		/* cpu string should be at least 1 character */
-		if (str)
-			free(str);
-		fclose(fp);
-		return -1;
-	}
-
-	fclose(fp);
-
-	/* get maximum cpu number */
-	if (cpu_list_iterate(str, max_cpu_callback, &max_cpu) < 0) {
-		free(str);
-		return -2;
-	}
-
-	if (max_cpu < 0 || max_cpu == INT_MAX) {
-		/* empty or bogus cpu list */
-		free(str);
-		return -2;
-	}
-
-	/* get max cpu using dynamic array, as nr_cpus might be > 1024 */
-	cpu_set = calloc(max_cpu + 1, sizeof(bool));
-	if (!cpu_set) {
-		free(str);
-		return -2;
-	}
-	if (cpu_list_iterate(str, tmp_cpu_set_callback, cpu_set) < 0) {
-		free(str);
-		free(cpu_set);
-		return -2;
-	}
-	for (i = 0; i <= max_cpu; i++) {
-		if (cpu_set[i])
-			++nr_cpus;
-	}
-	free(cpu_set);
-
-	free(str);
-
-	if (max_cpu >= nr_cpus)
-		/* rtla assumes cpu < nr_cpus for all cpus */
-		return -3;
-
-	return nr_cpus;
-}
-
-static int cpu_set_callback(int i, void *data)
-{
-	cpu_set_t *set = data;
-
-	if (i >= nr_cpus || i >= CPU_SETSIZE)
-		return -1;
-
-	debug_msg("cpu_set: adding cpu %d\n", i);
-	CPU_SET(i, set);
-
-	return 0;
-}
-
-/*
- * parse_cpu_set - parse a cpu_list filling cpu_set_t argument
- *
- * Receives a cpu list, like 1-3,5 (cpus 1, 2, 3, 5), and then set
- * filling cpu_set_t argument.
- *
- * Returns 0 on success, 1 otherwise.
- */
-int parse_cpu_set(char *cpu_list, cpu_set_t *set)
-{
-	CPU_ZERO(set);
-
-	if (cpu_list_iterate(cpu_list, cpu_set_callback, set) < 0) {
-		debug_msg("Error parsing the cpu set %s\n", cpu_list);
-		return 1;
-	}
-
-	return 0;
-}
-
-/*
- * parse_stack_format - parse the stack format
- *
- * Return: the stack format on success, -1 otherwise.
- */
-int parse_stack_format(char *arg)
-{
-	if (!strcmp(arg, "truncate"))
-		return STACK_FORMAT_TRUNCATE;
-	if (!strcmp(arg, "skip"))
-		return STACK_FORMAT_SKIP;
-	if (!strcmp(arg, "full"))
-		return STACK_FORMAT_FULL;
-
-	debug_msg("Error parsing the stack format %s\n", arg);
-	return -1;
+err:
+	debug_msg("Error parsing the cpu set %s\n", cpu_list);
+	return 1;
 }
 
 /*
@@ -343,21 +184,6 @@ long parse_seconds_duration(char *val)
 }
 
 /*
- * match_time_unit - check if str starts with unit followed by end-of-string or ':'
- *
- * This allows the time unit parser to work both in standalone duration strings
- * like "100ms" and in colon-delimited SCHED_DEADLINE specifications like
- * "d:10ms:100ms", while still rejecting malformed input like "100msx".
- */
-static bool match_time_unit(const char *str, const char *unit)
-{
-	size_t len = strlen(unit);
-
-	return strncmp(str, unit, len) == 0 &&
-	       (str[len] == '\0' || str[len] == ':');
-}
-
-/*
  * parse_ns_duration - parse duration with ns/us/ms/s converting it to nanoseconds
  */
 long parse_ns_duration(char *val)
@@ -368,15 +194,15 @@ long parse_ns_duration(char *val)
 	t = strtol(val, &end, 10);
 
 	if (end) {
-		if (match_time_unit(end, "ns")) {
+		if (!strncmp(end, "ns", 2)) {
 			return t;
-		} else if (match_time_unit(end, "us")) {
+		} else if (!strncmp(end, "us", 2)) {
 			t *= 1000;
 			return t;
-		} else if (match_time_unit(end, "ms")) {
+		} else if (!strncmp(end, "ms", 2)) {
 			t *= 1000 * 1000;
 			return t;
-		} else if (match_time_unit(end, "s")) {
+		} else if (!strncmp(end, "s", 1)) {
 			t *= 1000 * 1000 * 1000;
 			return t;
 		}
@@ -453,7 +279,7 @@ static int procfs_is_workload_pid(const char *comm_prefix, struct dirent *proc_e
 		return 0;
 
 	/* check if the string is a pid */
-	for (t_name = proc_entry->d_name; *t_name; t_name++) {
+	for (t_name = proc_entry->d_name; t_name; t_name++) {
 		if (!isdigit(*t_name))
 			break;
 	}
@@ -474,8 +300,8 @@ static int procfs_is_workload_pid(const char *comm_prefix, struct dirent *proc_e
 	if (retval <= 0)
 		return 0;
 
-	buffer[MAX_PATH-1] = '\0';
-	if (!str_has_prefix(buffer, comm_prefix))
+	retval = strncmp(comm_prefix, buffer, strlen(comm_prefix));
+	if (retval)
 		return 0;
 
 	/* comm already have \n */
@@ -718,6 +544,7 @@ int save_cpu_idle_disable_state(unsigned int cpu)
 	unsigned int nr_states;
 	unsigned int state;
 	int disabled;
+	int nr_cpus;
 
 	nr_states = cpuidle_state_count(cpu);
 
@@ -725,6 +552,7 @@ int save_cpu_idle_disable_state(unsigned int cpu)
 		return 0;
 
 	if (saved_cpu_idle_disable_state == NULL) {
+		nr_cpus = sysconf(_SC_NPROCESSORS_CONF);
 		saved_cpu_idle_disable_state = calloc(nr_cpus, sizeof(unsigned int *));
 		if (!saved_cpu_idle_disable_state)
 			return -1;
@@ -801,9 +629,12 @@ int restore_cpu_idle_disable_state(unsigned int cpu)
 void free_cpu_idle_disable_states(void)
 {
 	int cpu;
+	int nr_cpus;
 
 	if (!saved_cpu_idle_disable_state)
 		return;
+
+	nr_cpus = sysconf(_SC_NPROCESSORS_CONF);
 
 	for (cpu = 0; cpu < nr_cpus; cpu++) {
 		free(saved_cpu_idle_disable_state[cpu]);
@@ -903,7 +734,6 @@ static int get_self_cgroup(char *self_cg, int sizeof_self_cg)
 	if (fd < 0)
 		return 0;
 
-	memset(path, 0, sizeof(path));
 	retval = read(fd, path, MAX_PATH);
 
 	close(fd);
@@ -911,7 +741,6 @@ static int get_self_cgroup(char *self_cg, int sizeof_self_cg)
 	if (retval <= 0)
 		return 0;
 
-	path[MAX_PATH-1] = '\0';
 	start = path;
 
 	start = strstr(start, ":");
@@ -947,57 +776,7 @@ static int get_self_cgroup(char *self_cg, int sizeof_self_cg)
 }
 
 /*
- * open_cgroup_procs - Open the cgroup.procs file for the given cgroup
- *
- * If cgroup argument is not NULL, the cgroup.procs file for that cgroup
- * will be opened. Otherwise, the cgroup of the calling, i.e., rtla, thread
- * will be used.
- *
- * Supports cgroup v2.
- *
- * Returns the file descriptor on success, -1 otherwise.
- */
-static int open_cgroup_procs(const char *cgroup)
-{
-	char cgroup_path[MAX_PATH - strlen("/cgroup.procs")];
-	char cgroup_procs[MAX_PATH];
-	int retval;
-	int cg_fd;
-	size_t cg_path_len;
-
-	retval = find_mount("cgroup2", cgroup_path, sizeof(cgroup_path));
-	if (!retval) {
-		err_msg("Did not find cgroupv2 mount point\n");
-		return -1;
-	}
-
-	cg_path_len = strlen(cgroup_path);
-
-	if (!cgroup) {
-		retval = get_self_cgroup(&cgroup_path[cg_path_len],
-				sizeof(cgroup_path) - cg_path_len);
-		if (!retval) {
-			err_msg("Did not find self cgroup\n");
-			return -1;
-		}
-	} else {
-		snprintf(&cgroup_path[cg_path_len],
-				sizeof(cgroup_path) - cg_path_len, "%s/", cgroup);
-	}
-
-	snprintf(cgroup_procs, MAX_PATH, "%s/cgroup.procs", cgroup_path);
-
-	debug_msg("Using cgroup path at: %s\n", cgroup_procs);
-
-	cg_fd = open(cgroup_procs, O_RDWR);
-	if (cg_fd < 0)
-		return -1;
-
-	return cg_fd;
-}
-
-/*
- * set_pid_cgroup - Set cgroup to pid_t pid
+ * set_comm_cgroup - Set cgroup to pid_t pid
  *
  * If cgroup argument is not NULL, the threads will move to the given cgroup.
  * Otherwise, the cgroup of the calling, i.e., rtla, thread will be used.
@@ -1008,11 +787,35 @@ static int open_cgroup_procs(const char *cgroup)
  */
 int set_pid_cgroup(pid_t pid, const char *cgroup)
 {
+	char cgroup_path[MAX_PATH - strlen("/cgroup.procs")];
+	char cgroup_procs[MAX_PATH];
 	char pid_str[24];
 	int retval;
 	int cg_fd;
 
-	cg_fd = open_cgroup_procs(cgroup);
+	retval = find_mount("cgroup2", cgroup_path, sizeof(cgroup_path));
+	if (!retval) {
+		err_msg("Did not find cgroupv2 mount point\n");
+		return 0;
+	}
+
+	if (!cgroup) {
+		retval = get_self_cgroup(&cgroup_path[strlen(cgroup_path)],
+				sizeof(cgroup_path) - strlen(cgroup_path));
+		if (!retval) {
+			err_msg("Did not find self cgroup\n");
+			return 0;
+		}
+	} else {
+		snprintf(&cgroup_path[strlen(cgroup_path)],
+				sizeof(cgroup_path) - strlen(cgroup_path), "%s/", cgroup);
+	}
+
+	snprintf(cgroup_procs, MAX_PATH, "%s/cgroup.procs", cgroup_path);
+
+	debug_msg("Using cgroup path at: %s\n", cgroup_procs);
+
+	cg_fd = open(cgroup_procs, O_RDWR);
 	if (cg_fd < 0)
 		return 0;
 
@@ -1042,6 +845,8 @@ int set_pid_cgroup(pid_t pid, const char *cgroup)
  */
 int set_comm_cgroup(const char *comm_prefix, const char *cgroup)
 {
+	char cgroup_path[MAX_PATH - strlen("/cgroup.procs")];
+	char cgroup_procs[MAX_PATH];
 	struct dirent *proc_entry;
 	DIR *procfs;
 	int retval;
@@ -1053,7 +858,29 @@ int set_comm_cgroup(const char *comm_prefix, const char *cgroup)
 		return 0;
 	}
 
-	cg_fd = open_cgroup_procs(cgroup);
+	retval = find_mount("cgroup2", cgroup_path, sizeof(cgroup_path));
+	if (!retval) {
+		err_msg("Did not find cgroupv2 mount point\n");
+		return 0;
+	}
+
+	if (!cgroup) {
+		retval = get_self_cgroup(&cgroup_path[strlen(cgroup_path)],
+				sizeof(cgroup_path) - strlen(cgroup_path));
+		if (!retval) {
+			err_msg("Did not find self cgroup\n");
+			return 0;
+		}
+	} else {
+		snprintf(&cgroup_path[strlen(cgroup_path)],
+				sizeof(cgroup_path) - strlen(cgroup_path), "%s/", cgroup);
+	}
+
+	snprintf(cgroup_procs, MAX_PATH, "%s/cgroup.procs", cgroup_path);
+
+	debug_msg("Using cgroup path at: %s\n", cgroup_procs);
+
+	cg_fd = open(cgroup_procs, O_RDWR);
 	if (cg_fd < 0)
 		return 0;
 
@@ -1140,6 +967,32 @@ int auto_house_keeping(cpu_set_t *monitored_cpus)
 	return 1;
 }
 
+/**
+ * parse_optional_arg - Parse optional argument value
+ *
+ * Parse optional argument value, which can be in the form of:
+ * -sarg, -s/--long=arg, -s/--long arg
+ *
+ * Returns arg value if found, NULL otherwise.
+ */
+char *parse_optional_arg(int argc, char **argv)
+{
+	if (optarg) {
+		if (optarg[0] == '=') {
+			/* skip the = */
+			return &optarg[1];
+		} else {
+			return optarg;
+		}
+	/* parse argument of form -s [arg] and --long [arg]*/
+	} else if (optind < argc && argv[optind][0] != '-') {
+		/* consume optind */
+		return argv[optind++];
+	} else {
+		return NULL;
+	}
+}
+
 /*
  * strtoi - convert string to integer with error checking
  *
@@ -1160,39 +1013,4 @@ int strtoi(const char *s, int *res)
 
 	*res = (int) lres;
 	return 0;
-}
-
-static inline void fatal_alloc(void)
-{
-	fatal("Error allocating memory\n");
-}
-
-void *calloc_fatal(size_t n, size_t size)
-{
-	void *p = calloc(n, size);
-
-	if (!p)
-		fatal_alloc();
-
-	return p;
-}
-
-void *reallocarray_fatal(void *p, size_t n, size_t size)
-{
-	p = reallocarray(p, n, size);
-
-	if (!p)
-		fatal_alloc();
-
-	return p;
-}
-
-char *strdup_fatal(const char *s)
-{
-	char *p = strdup(s);
-
-	if (!p)
-		fatal_alloc();
-
-	return p;
 }

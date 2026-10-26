@@ -19,9 +19,9 @@
 #include <linux/dma-buf.h>
 
 #include <drm/drm_fourcc.h>
-#include <drm/drm_print.h>
 
 #include "vc4_drv.h"
+#include "uapi/drm/vc4_drm.h"
 
 static const struct drm_gem_object_funcs vc4_gem_object_funcs;
 
@@ -204,7 +204,8 @@ static struct list_head *vc4_get_cache_list_for_size(struct drm_device *dev,
 		struct list_head *new_list;
 		uint32_t i;
 
-		new_list = kvmalloc_objs(struct list_head, new_size);
+		new_list = kmalloc_array(new_size, sizeof(struct list_head),
+					 GFP_KERNEL);
 		if (!new_list)
 			return NULL;
 
@@ -224,7 +225,7 @@ static struct list_head *vc4_get_cache_list_for_size(struct drm_device *dev,
 		for (i = vc4->bo_cache.size_list_size; i < new_size; i++)
 			INIT_LIST_HEAD(&new_list[i]);
 
-		kvfree(vc4->bo_cache.size_list);
+		kfree(vc4->bo_cache.size_list);
 		vc4->bo_cache.size_list = new_list;
 		vc4->bo_cache.size_list_size = new_size;
 	}
@@ -303,8 +304,7 @@ static void vc4_bo_purge(struct drm_gem_object *obj)
 
 	drm_vma_node_unmap(&obj->vma_node, dev->anon_inode->i_mapping);
 
-	dma_free_wc(drm_dev_dma_dev(dev), obj->size, bo->base.vaddr,
-		    bo->base.dma_addr);
+	dma_free_wc(dev->dev, obj->size, bo->base.vaddr, bo->base.dma_addr);
 	bo->base.vaddr = NULL;
 	bo->madv = __VC4_MADV_PURGED;
 }
@@ -399,7 +399,7 @@ struct drm_gem_object *vc4_create_object(struct drm_device *dev, size_t size)
 	if (WARN_ON_ONCE(vc4->gen > VC4_GEN_4))
 		return ERR_PTR(-ENODEV);
 
-	bo = kzalloc_obj(*bo);
+	bo = kzalloc(sizeof(*bo), GFP_KERNEL);
 	if (!bo)
 		return ERR_PTR(-ENOMEM);
 
@@ -556,7 +556,7 @@ static void vc4_free_object(struct drm_gem_object *gem_bo)
 	mutex_lock(&vc4->bo_lock);
 	/* If the object references someone else's memory, we can't cache it.
 	 */
-	if (drm_gem_is_imported(gem_bo)) {
+	if (gem_bo->import_attach) {
 		vc4_bo_destroy(bo);
 		goto out;
 	}
@@ -1021,7 +1021,8 @@ int vc4_bo_cache_init(struct drm_device *dev)
 	 * use.  This lets us avoid a bunch of string reallocation in
 	 * the kernel's draw and BO allocation paths.
 	 */
-	vc4->bo_labels = kzalloc_objs(*vc4->bo_labels, VC4_BO_TYPE_COUNT);
+	vc4->bo_labels = kcalloc(VC4_BO_TYPE_COUNT, sizeof(*vc4->bo_labels),
+				 GFP_KERNEL);
 	if (!vc4->bo_labels)
 		return -ENOMEM;
 	vc4->num_labels = VC4_BO_TYPE_COUNT;
@@ -1053,7 +1054,7 @@ static void vc4_bo_cache_destroy(struct drm_device *dev, void *unused)
 	cancel_work_sync(&vc4->bo_cache.time_work);
 
 	vc4_bo_cache_purge(dev);
-	kvfree(vc4->bo_cache.size_list);
+	kfree(vc4->bo_cache.size_list);
 
 	for (i = 0; i < vc4->num_labels; i++) {
 		if (vc4->bo_labels[i].num_allocated) {

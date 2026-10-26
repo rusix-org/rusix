@@ -721,7 +721,7 @@ static int intel_dg_nvm_init_mtd(struct intel_dg_nvm *nvm, struct device *device
 	nvm->mtd.erasesize = SZ_4K; /* 4K bytes granularity */
 	nvm->mtd.size = nvm->size;
 
-	parts = kzalloc_objs(*parts, nvm->nregions);
+	parts = kcalloc(nvm->nregions, sizeof(*parts), GFP_KERNEL);
 	if (!parts)
 		return -ENOMEM;
 
@@ -765,7 +765,7 @@ static int intel_dg_mtd_probe(struct auxiliary_device *aux_dev,
 		return -ENODEV;
 	}
 
-	nvm = kzalloc_flex(*nvm, regions, nregions);
+	nvm = kzalloc(struct_size(nvm, regions, nregions), GFP_KERNEL);
 	if (!nvm)
 		return -ENOMEM;
 

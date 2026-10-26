@@ -62,7 +62,7 @@ static const unsigned char sht3x_cmd_read_serial_number[]      = { 0x37, 0x80 };
 #define SHT3X_MAX_HUMIDITY     100000
 
 enum sht3x_chips {
-	sht3x = 1,
+	sht3x,
 	sts3x,
 };
 
@@ -932,27 +932,15 @@ static int sht3x_probe(struct i2c_client *client)
 
 /* device ID table */
 static const struct i2c_device_id sht3x_ids[] = {
-	{ .name = "sht3x", .driver_data = sht3x },
-	{ .name = "sts3x", .driver_data = sts3x },
-	{ .name = "sht85", .driver_data = sht3x },
-	{ }
+	{"sht3x", sht3x},
+	{"sts3x", sts3x},
+	{}
 };
 
 MODULE_DEVICE_TABLE(i2c, sht3x_ids);
 
-static const struct of_device_id sht3x_of_match[] = {
-	{ .compatible = "sensirion,sht30", .data = (void *)(uintptr_t)sht3x },
-	{ .compatible = "sensirion,sts30", .data = (void *)(uintptr_t)sts3x },
-	{ }
-};
-
-MODULE_DEVICE_TABLE(of, sht3x_of_match);
-
 static struct i2c_driver sht3x_i2c_driver = {
-	.driver = {
-		.name = "sht3x",
-		.of_match_table = sht3x_of_match,
-	},
+	.driver.name = "sht3x",
 	.probe       = sht3x_probe,
 	.id_table    = sht3x_ids,
 };

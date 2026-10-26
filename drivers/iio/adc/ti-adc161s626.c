@@ -11,6 +11,7 @@
  */
 
 #include <linux/module.h>
+#include <linux/mod_devicetable.h>
 #include <linux/init.h>
 #include <linux/err.h>
 #include <linux/spi/spi.h>
@@ -229,8 +230,8 @@ static const struct of_device_id ti_adc_dt_ids[] = {
 MODULE_DEVICE_TABLE(of, ti_adc_dt_ids);
 
 static const struct spi_device_id ti_adc_id[] = {
-	{ .name = "adc141s626", .driver_data = TI_ADC141S626 },
-	{ .name = "adc161s626", .driver_data = TI_ADC161S626 },
+	{ "adc141s626", TI_ADC141S626 },
+	{ "adc161s626", TI_ADC161S626 },
 	{ }
 };
 MODULE_DEVICE_TABLE(spi, ti_adc_id);

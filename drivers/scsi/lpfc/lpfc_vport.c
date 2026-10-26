@@ -787,7 +787,8 @@ lpfc_create_vport_work_array(struct lpfc_hba *phba)
 	struct lpfc_vport *port_iterator;
 	struct lpfc_vport **vports;
 	int index = 0;
-	vports = kzalloc_objs(struct lpfc_vport *, phba->max_vports + 1);
+	vports = kcalloc(phba->max_vports + 1, sizeof(struct lpfc_vport *),
+			 GFP_KERNEL);
 	if (vports == NULL)
 		return NULL;
 	spin_lock_irq(&phba->port_list_lock);

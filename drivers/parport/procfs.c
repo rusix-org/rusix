@@ -26,7 +26,7 @@
 
 #include <linux/uaccess.h>
 
-#ifdef CONFIG_SYSCTL
+#if defined(CONFIG_SYSCTL) && defined(CONFIG_PROC_FS)
 
 #define PARPORT_MIN_TIMESLICE_VALUE 1ul 
 #define PARPORT_MAX_TIMESLICE_VALUE ((unsigned long) HZ)
@@ -560,7 +560,7 @@ static void __exit parport_default_proc_unregister(void)
 	parport_bus_exit();
 }
 
-#else /* CONFIG_SYSCTL */
+#else /* no sysctl or no procfs*/
 
 int parport_proc_register(struct parport *pp)
 {
@@ -591,7 +591,7 @@ static void __exit parport_default_proc_unregister (void)
 {
 	parport_bus_exit();
 }
-#endif /* CONFIG_SYSCTL */
+#endif
 
 subsys_initcall(parport_default_proc_register)
 module_exit(parport_default_proc_unregister)

@@ -44,22 +44,16 @@
 #include <drm/drm_module.h>
 #include <drm/drm_modeset_helper.h>
 #include <drm/drm_prime.h>
-#include <drm/drm_print.h>
 #include <drm/drm_probe_helper.h>
 
 #include "qxl_object.h"
 
 static const struct pci_device_id pciidlist[] = {
-	{
-		PCI_DEVICE(0x1b36, 0x0100),
-		.class = PCI_CLASS_DISPLAY_VGA << 8,
-		.class_mask = 0xffff00
-	}, {
-		PCI_DEVICE(0x1b36, 0x0100),
-		.class = PCI_CLASS_DISPLAY_OTHER << 8,
-		.class_mask = 0xffff00
-	},
-	{ },
+	{ 0x1b36, 0x100, PCI_ANY_ID, PCI_ANY_ID, PCI_CLASS_DISPLAY_VGA << 8,
+	  0xffff00, 0 },
+	{ 0x1b36, 0x100, PCI_ANY_ID, PCI_ANY_ID, PCI_CLASS_DISPLAY_OTHER << 8,
+	  0xffff00, 0 },
+	{ 0, 0, 0 },
 };
 MODULE_DEVICE_TABLE(pci, pciidlist);
 
@@ -123,13 +117,12 @@ qxl_pci_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 	/* Complete initialization. */
 	ret = drm_dev_register(&qdev->ddev, ent->driver_data);
 	if (ret)
-		goto poll_fini;
+		goto modeset_cleanup;
 
 	drm_client_setup(&qdev->ddev, NULL);
 	return 0;
 
-poll_fini:
-	drm_kms_helper_poll_fini(&qdev->ddev);
+modeset_cleanup:
 	qxl_modeset_fini(qdev);
 unload:
 	qxl_device_fini(qdev);
@@ -160,7 +153,6 @@ qxl_pci_remove(struct pci_dev *pdev)
 {
 	struct drm_device *dev = pci_get_drvdata(pdev);
 
-	drm_kms_helper_poll_fini(dev);
 	drm_dev_unregister(dev);
 	drm_atomic_helper_shutdown(dev);
 	if (pci_is_vga(pdev) && pdev->revision < 5)

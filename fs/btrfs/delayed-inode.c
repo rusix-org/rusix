@@ -6,7 +6,6 @@
 
 #include <linux/slab.h>
 #include <linux/iversion.h>
-#include <linux/error-injection.h>
 #include "ctree.h"
 #include "fs.h"
 #include "messages.h"
@@ -233,19 +232,19 @@ static void btrfs_dequeue_delayed_node(struct btrfs_delayed_root *root,
 }
 
 static struct btrfs_delayed_node *btrfs_first_delayed_node(
-			struct btrfs_fs_info *fs_info,
+			struct btrfs_delayed_root *delayed_root,
 			struct btrfs_ref_tracker *tracker)
 {
 	struct btrfs_delayed_node *node;
 
-	spin_lock(&fs_info->delayed_root.lock);
-	node = list_first_entry_or_null(&fs_info->delayed_root.node_list,
+	spin_lock(&delayed_root->lock);
+	node = list_first_entry_or_null(&delayed_root->node_list,
 					struct btrfs_delayed_node, n_list);
 	if (node) {
 		refcount_inc(&node->refs);
 		btrfs_delayed_node_ref_tracker_alloc(node, tracker, GFP_ATOMIC);
 	}
-	spin_unlock(&fs_info->delayed_root.lock);
+	spin_unlock(&delayed_root->lock);
 
 	return node;
 }
@@ -258,7 +257,7 @@ static struct btrfs_delayed_node *btrfs_next_delayed_node(
 	struct list_head *p;
 	struct btrfs_delayed_node *next = NULL;
 
-	delayed_root = &node->root->fs_info->delayed_root;
+	delayed_root = node->root->fs_info->delayed_root;
 	spin_lock(&delayed_root->lock);
 	if (!test_bit(BTRFS_DELAYED_NODE_IN_LIST, &node->flags)) {
 		/* not in the list */
@@ -288,7 +287,7 @@ static void __btrfs_release_delayed_node(
 	if (!delayed_node)
 		return;
 
-	delayed_root = &delayed_node->root->fs_info->delayed_root;
+	delayed_root = delayed_node->root->fs_info->delayed_root;
 
 	mutex_lock(&delayed_node->mutex);
 	if (delayed_node->count)
@@ -350,7 +349,7 @@ static struct btrfs_delayed_item *btrfs_alloc_delayed_item(u16 data_len,
 {
 	struct btrfs_delayed_item *item;
 
-	item = kmalloc_flex(*item, data, data_len, GFP_NOFS);
+	item = kmalloc(struct_size(item, data, data_len), GFP_NOFS);
 	if (item) {
 		item->data_len = data_len;
 		item->type = type;
@@ -426,7 +425,7 @@ static int __btrfs_add_delayed_item(struct btrfs_delayed_node *delayed_node,
 		delayed_node->index_cnt = ins->index + 1;
 
 	delayed_node->count++;
-	atomic_inc(&delayed_node->root->fs_info->delayed_root.items);
+	atomic_inc(&delayed_node->root->fs_info->delayed_root->items);
 	return 0;
 }
 
@@ -444,6 +443,7 @@ static void __btrfs_remove_delayed_item(struct btrfs_delayed_item *delayed_item)
 {
 	struct btrfs_delayed_node *delayed_node = delayed_item->delayed_node;
 	struct rb_root_cached *root;
+	struct btrfs_delayed_root *delayed_root;
 
 	/* Not inserted, ignore it. */
 	if (RB_EMPTY_NODE(&delayed_item->rb_node))
@@ -451,6 +451,8 @@ static void __btrfs_remove_delayed_item(struct btrfs_delayed_item *delayed_item)
 
 	/* If it's in a rbtree, then we need to have delayed node locked. */
 	lockdep_assert_held(&delayed_node->mutex);
+
+	delayed_root = delayed_node->root->fs_info->delayed_root;
 
 	if (delayed_item->type == BTRFS_DELAYED_INSERTION_ITEM)
 		root = &delayed_node->ins_root;
@@ -460,7 +462,8 @@ static void __btrfs_remove_delayed_item(struct btrfs_delayed_item *delayed_item)
 	rb_erase_cached(&delayed_item->rb_node, root);
 	RB_CLEAR_NODE(&delayed_item->rb_node);
 	delayed_node->count--;
-	finish_one_item(&delayed_node->root->fs_info->delayed_root);
+
+	finish_one_item(delayed_root);
 }
 
 static void btrfs_release_delayed_item(struct btrfs_delayed_item *item)
@@ -597,10 +600,12 @@ static int btrfs_delayed_inode_reserve_metadata(
 	 */
 	if (!src_rsv || (!trans->bytes_reserved &&
 			 src_rsv->type != BTRFS_BLOCK_RSV_DELALLOC)) {
-		ret = btrfs_qgroup_reserve_meta_prealloc(root, num_bytes, true, true);
+		ret = btrfs_qgroup_reserve_meta(root, num_bytes,
+					  BTRFS_QGROUP_RSV_META_PREALLOC, true);
 		if (ret < 0)
 			return ret;
-		ret = btrfs_block_rsv_add(dst_rsv, num_bytes, BTRFS_RESERVE_NO_FLUSH);
+		ret = btrfs_block_rsv_add(fs_info, dst_rsv, num_bytes,
+					  BTRFS_RESERVE_NO_FLUSH);
 		/* NO_FLUSH could only fail with -ENOSPC */
 		ASSERT(ret == 0 || ret == -ENOSPC);
 		if (ret)
@@ -686,7 +691,7 @@ static int btrfs_insert_delayed_item(struct btrfs_trans_handle *trans,
 	/*
 	 * For delayed items to insert, we track reserved metadata bytes based
 	 * on the number of leaves that we will use.
-	 * See btrfs_insert_delayed_dir_index_prealloc() and
+	 * See btrfs_insert_delayed_dir_index() and
 	 * btrfs_delayed_item_reserve_metadata()).
 	 */
 	ASSERT(first_item->bytes_reserved == 0);
@@ -975,21 +980,30 @@ static int btrfs_delete_delayed_items(struct btrfs_trans_handle *trans,
 
 static void btrfs_release_delayed_inode(struct btrfs_delayed_node *delayed_node)
 {
+	struct btrfs_delayed_root *delayed_root;
+
 	if (delayed_node &&
 	    test_bit(BTRFS_DELAYED_NODE_INODE_DIRTY, &delayed_node->flags)) {
 		ASSERT(delayed_node->root);
 		clear_bit(BTRFS_DELAYED_NODE_INODE_DIRTY, &delayed_node->flags);
 		delayed_node->count--;
-		finish_one_item(&delayed_node->root->fs_info->delayed_root);
+
+		delayed_root = delayed_node->root->fs_info->delayed_root;
+		finish_one_item(delayed_root);
 	}
 }
 
 static void btrfs_release_delayed_iref(struct btrfs_delayed_node *delayed_node)
 {
+
 	if (test_and_clear_bit(BTRFS_DELAYED_NODE_DEL_IREF, &delayed_node->flags)) {
+		struct btrfs_delayed_root *delayed_root;
+
 		ASSERT(delayed_node->root);
 		delayed_node->count--;
-		finish_one_item(&delayed_node->root->fs_info->delayed_root);
+
+		delayed_root = delayed_node->root->fs_info->delayed_root;
+		finish_one_item(delayed_root);
 	}
 }
 
@@ -1136,6 +1150,7 @@ __btrfs_commit_inode_delayed_items(struct btrfs_trans_handle *trans,
 static int __btrfs_run_delayed_items(struct btrfs_trans_handle *trans, int nr)
 {
 	struct btrfs_fs_info *fs_info = trans->fs_info;
+	struct btrfs_delayed_root *delayed_root;
 	struct btrfs_delayed_node *curr_node, *prev_node;
 	struct btrfs_ref_tracker curr_delayed_node_tracker, prev_delayed_node_tracker;
 	struct btrfs_path *path;
@@ -1153,7 +1168,9 @@ static int __btrfs_run_delayed_items(struct btrfs_trans_handle *trans, int nr)
 	block_rsv = trans->block_rsv;
 	trans->block_rsv = &fs_info->delayed_block_rsv;
 
-	curr_node = btrfs_first_delayed_node(fs_info, &curr_delayed_node_tracker);
+	delayed_root = fs_info->delayed_root;
+
+	curr_node = btrfs_first_delayed_node(delayed_root, &curr_delayed_node_tracker);
 	while (curr_node && (!count || nr--)) {
 		ret = __btrfs_commit_inode_delayed_items(trans, path,
 							 curr_node);
@@ -1383,7 +1400,7 @@ static int btrfs_wq_run_delayed_node(struct btrfs_delayed_root *delayed_root,
 {
 	struct btrfs_async_delayed_work *async_work;
 
-	async_work = kmalloc_obj(*async_work, GFP_NOFS);
+	async_work = kmalloc(sizeof(*async_work), GFP_NOFS);
 	if (!async_work)
 		return -ENOMEM;
 
@@ -1400,7 +1417,7 @@ void btrfs_assert_delayed_root_empty(struct btrfs_fs_info *fs_info)
 	struct btrfs_ref_tracker delayed_node_tracker;
 	struct btrfs_delayed_node *node;
 
-	node = btrfs_first_delayed_node(fs_info, &delayed_node_tracker);
+	node = btrfs_first_delayed_node( fs_info->delayed_root, &delayed_node_tracker);
 	if (WARN_ON(node)) {
 		btrfs_delayed_node_ref_tracker_free(node,
 						    &delayed_node_tracker);
@@ -1423,7 +1440,7 @@ static bool could_end_wait(struct btrfs_delayed_root *delayed_root, int seq)
 
 void btrfs_balance_delayed_items(struct btrfs_fs_info *fs_info)
 {
-	struct btrfs_delayed_root *delayed_root = &fs_info->delayed_root;
+	struct btrfs_delayed_root *delayed_root = fs_info->delayed_root;
 
 	if ((atomic_read(&delayed_root->items) < BTRFS_DELAYED_BACKGROUND) ||
 		btrfs_workqueue_normal_congested(fs_info->delayed_workers))
@@ -1469,92 +1486,34 @@ static void btrfs_release_dir_index_item_space(struct btrfs_trans_handle *trans)
 	trans->bytes_reserved -= bytes;
 }
 
-/*
- * Pre-allocate a delayed node and delayed item for a dir index insertion and
- * copy the name into the item. Call this before modifying the btree so that
- * ENOMEM can be returned before any on-disk state has changed.
- *
- * The returned prealloc is consumed by either
- * btrfs_insert_delayed_dir_index_prealloc() or
- * btrfs_free_delayed_dir_index_prealloc(); it must not be used afterwards.
- *
- * Returns a prealloc on success, ERR_PTR on allocation failure.
- */
-struct btrfs_dir_index_prealloc *btrfs_prealloc_delayed_dir_index(struct btrfs_inode *dir,
-								  const char *name,
-								  int name_len)
+/* Will return 0, -ENOMEM or -EEXIST (index number collision, unexpected). */
+int btrfs_insert_delayed_dir_index(struct btrfs_trans_handle *trans,
+				   const char *name, int name_len,
+				   struct btrfs_inode *dir,
+				   const struct btrfs_disk_key *disk_key, u8 flags,
+				   u64 index)
 {
-	struct btrfs_dir_index_prealloc *prealloc;
-	struct btrfs_delayed_node *node;
-	struct btrfs_delayed_item *item;
-
-	prealloc = kzalloc_obj(*prealloc, GFP_NOFS);
-	if (!prealloc)
-		return ERR_PTR(-ENOMEM);
-
-	node = btrfs_get_or_create_delayed_node(dir, &prealloc->tracker);
-	if (IS_ERR(node)) {
-		kfree(prealloc);
-		return ERR_CAST(node);
-	}
-
-	item = btrfs_alloc_delayed_item(sizeof(struct btrfs_dir_item) + name_len,
-					node, BTRFS_DELAYED_INSERTION_ITEM);
-	if (!item) {
-		btrfs_release_delayed_node(node, &prealloc->tracker);
-		kfree(prealloc);
-		return ERR_PTR(-ENOMEM);
-	}
-
-	memcpy(item->data + sizeof(struct btrfs_dir_item), name, name_len);
-
-	prealloc->node = node;
-	prealloc->item = item;
-	return prealloc;
-}
-ALLOW_ERROR_INJECTION(btrfs_prealloc_delayed_dir_index, ERRNO);
-
-/*
- * Free resources from btrfs_prealloc_delayed_dir_index() when the btree
- * insertion failed and we will not commit the delayed dir index. Does nothing
- * if @prealloc is NULL.
- */
-void btrfs_free_delayed_dir_index_prealloc(struct btrfs_trans_handle *trans,
-					   struct btrfs_dir_index_prealloc *prealloc)
-{
-	if (!prealloc)
-		return;
-
-	btrfs_release_delayed_item(prealloc->item);
-	btrfs_release_dir_index_item_space(trans);
-	btrfs_release_delayed_node(prealloc->node, &prealloc->tracker);
-	kfree(prealloc);
-}
-
-/*
- * Commit a pre-allocated delayed dir index item. @prealloc must have been
- * returned by btrfs_prealloc_delayed_dir_index(). This populates the item,
- * adds it to the delayed node's rb-tree, and reserves metadata space. It
- * cannot fail with ENOMEM. @prealloc is freed here in all cases.
- *
- * Return 0 or -EEXIST (index number collision, unexpected).
- */
-int btrfs_insert_delayed_dir_index_prealloc(struct btrfs_trans_handle *trans,
-					    struct btrfs_inode *dir,
-					    struct btrfs_dir_index_prealloc *prealloc,
-					    const struct btrfs_disk_key *disk_key,
-					    u8 flags, u64 index)
-{
-	struct btrfs_delayed_node *delayed_node = prealloc->node;
-	struct btrfs_ref_tracker *tracker = &prealloc->tracker;
-	struct btrfs_delayed_item *delayed_item = prealloc->item;
 	struct btrfs_fs_info *fs_info = trans->fs_info;
 	const unsigned int leaf_data_size = BTRFS_LEAF_DATA_SIZE(fs_info);
-	const int name_len = delayed_item->data_len - sizeof(struct btrfs_dir_item);
+	struct btrfs_delayed_node *delayed_node;
+	struct btrfs_ref_tracker delayed_node_tracker;
+	struct btrfs_delayed_item *delayed_item;
 	struct btrfs_dir_item *dir_item;
 	bool reserve_leaf_space;
 	u32 data_len;
 	int ret;
+
+	delayed_node = btrfs_get_or_create_delayed_node(dir, &delayed_node_tracker);
+	if (IS_ERR(delayed_node))
+		return PTR_ERR(delayed_node);
+
+	delayed_item = btrfs_alloc_delayed_item(sizeof(*dir_item) + name_len,
+						delayed_node,
+						BTRFS_DELAYED_INSERTION_ITEM);
+	if (!delayed_item) {
+		ret = -ENOMEM;
+		goto release_node;
+	}
 
 	delayed_item->index = index;
 
@@ -1564,7 +1523,7 @@ int btrfs_insert_delayed_dir_index_prealloc(struct btrfs_trans_handle *trans,
 	btrfs_set_stack_dir_data_len(dir_item, 0);
 	btrfs_set_stack_dir_name_len(dir_item, name_len);
 	btrfs_set_stack_dir_flags(dir_item, flags);
-	/* Name was already copied by btrfs_prealloc_delayed_dir_index(). */
+	memcpy((char *)(dir_item + 1), name, name_len);
 
 	data_len = delayed_item->data_len + sizeof(struct btrfs_item);
 
@@ -1581,12 +1540,10 @@ int btrfs_insert_delayed_dir_index_prealloc(struct btrfs_trans_handle *trans,
 	ret = __btrfs_add_delayed_item(delayed_node, delayed_item);
 	if (unlikely(ret)) {
 		btrfs_err(trans->fs_info,
-"error adding delayed dir index item, name: %.*s, index: %llu, root: %llu, dir: %llu, dir->index_cnt: %llu, delayed_node->index_cnt: %llu, error: %pe",
-			  name_len,
-			  (const char *)(dir_item + 1),
-			  index, btrfs_root_id(delayed_node->root),
+"error adding delayed dir index item, name: %.*s, index: %llu, root: %llu, dir: %llu, dir->index_cnt: %llu, delayed_node->index_cnt: %llu, error: %d",
+			  name_len, name, index, btrfs_root_id(delayed_node->root),
 			  delayed_node->inode_id, dir->index_cnt,
-			  delayed_node->index_cnt, ERR_PTR(ret));
+			  delayed_node->index_cnt, ret);
 		btrfs_release_delayed_item(delayed_item);
 		btrfs_release_dir_index_item_space(trans);
 		mutex_unlock(&delayed_node->mutex);
@@ -1622,9 +1579,7 @@ int btrfs_insert_delayed_dir_index_prealloc(struct btrfs_trans_handle *trans,
 	mutex_unlock(&delayed_node->mutex);
 
 release_node:
-	/* Must release the node before freeing @tracker's containing struct. */
-	btrfs_release_delayed_node(delayed_node, tracker);
-	kfree(prealloc);
+	btrfs_release_delayed_node(delayed_node, &delayed_node_tracker);
 	return ret;
 }
 
@@ -1643,7 +1598,7 @@ static bool btrfs_delete_delayed_insertion_item(struct btrfs_delayed_node *node,
 	/*
 	 * For delayed items to insert, we track reserved metadata bytes based
 	 * on the number of leaves that we will use.
-	 * See btrfs_insert_delayed_dir_index_prealloc() and
+	 * See btrfs_insert_delayed_dir_index() and
 	 * btrfs_delayed_item_reserve_metadata()).
 	 */
 	ASSERT(item->bytes_reserved == 0);
@@ -1707,8 +1662,8 @@ int btrfs_delete_delayed_dir_index(struct btrfs_trans_handle *trans,
 	 */
 	if (ret < 0) {
 		btrfs_err(trans->fs_info,
-"metadata reservation failed for delayed dir item deletion, index: %llu, root: %llu, inode: %llu, error: %pe",
-			  index, btrfs_root_id(node->root), node->inode_id, ERR_PTR(ret));
+"metadata reservation failed for delayed dir item deletion, index: %llu, root: %llu, inode: %llu, error: %d",
+			  index, btrfs_root_id(node->root), node->inode_id, ret);
 		btrfs_release_delayed_item(item);
 		goto end;
 	}
@@ -1717,8 +1672,8 @@ int btrfs_delete_delayed_dir_index(struct btrfs_trans_handle *trans,
 	ret = __btrfs_add_delayed_item(node, item);
 	if (unlikely(ret)) {
 		btrfs_err(trans->fs_info,
-"failed to add delayed dir index item, root: %llu, inode: %llu, index: %llu, error: %pe",
-			  btrfs_root_id(node->root), node->inode_id, index, ERR_PTR(ret));
+"failed to add delayed dir index item, root: %llu, inode: %llu, index: %llu, error: %d",
+			  btrfs_root_id(node->root), node->inode_id, index, ret);
 		btrfs_delayed_item_release_metadata(dir->root, item);
 		btrfs_release_delayed_item(item);
 	}
@@ -2015,7 +1970,7 @@ int btrfs_delayed_update_inode(struct btrfs_trans_handle *trans,
 	fill_stack_inode_item(trans, &delayed_node->inode_item, inode);
 	set_bit(BTRFS_DELAYED_NODE_INODE_DIRTY, &delayed_node->flags);
 	delayed_node->count++;
-	atomic_inc(&root->fs_info->delayed_root.items);
+	atomic_inc(&root->fs_info->delayed_root->items);
 release_node:
 	mutex_unlock(&delayed_node->mutex);
 	btrfs_release_delayed_node(delayed_node, &delayed_node_tracker);
@@ -2055,10 +2010,13 @@ int btrfs_delayed_delete_inode_ref(struct btrfs_inode *inode)
 	 *   It is very rare.
 	 */
 	mutex_lock(&delayed_node->mutex);
-	if (!test_and_set_bit(BTRFS_DELAYED_NODE_DEL_IREF, &delayed_node->flags)) {
-		delayed_node->count++;
-		atomic_inc(&fs_info->delayed_root.items);
-	}
+	if (test_bit(BTRFS_DELAYED_NODE_DEL_IREF, &delayed_node->flags))
+		goto release_node;
+
+	set_bit(BTRFS_DELAYED_NODE_DEL_IREF, &delayed_node->flags);
+	delayed_node->count++;
+	atomic_inc(&fs_info->delayed_root->items);
+release_node:
 	mutex_unlock(&delayed_node->mutex);
 	btrfs_release_delayed_node(delayed_node, &delayed_node_tracker);
 	return 0;
@@ -2163,7 +2121,8 @@ void btrfs_destroy_delayed_inodes(struct btrfs_fs_info *fs_info)
 	struct btrfs_delayed_node *curr_node, *prev_node;
 	struct btrfs_ref_tracker curr_delayed_node_tracker, prev_delayed_node_tracker;
 
-	curr_node = btrfs_first_delayed_node(fs_info, &curr_delayed_node_tracker);
+	curr_node = btrfs_first_delayed_node(fs_info->delayed_root,
+					     &curr_delayed_node_tracker);
 	while (curr_node) {
 		__btrfs_kill_delayed_node(curr_node);
 

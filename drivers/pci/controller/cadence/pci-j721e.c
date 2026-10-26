@@ -202,11 +202,9 @@ static int j721e_pcie_set_link_speed(struct j721e_pcie *pcie,
 	int ret;
 
 	link_speed = of_pci_get_max_link_speed(np);
-	if ((link_speed < 2) ||
-	    (pcie_get_link_speed(link_speed) == PCI_SPEED_UNKNOWN))
+	if (link_speed < 2)
 		link_speed = 2;
 
-	pcie->cdns_pcie->max_link_speed = link_speed;
 	val = link_speed - 1;
 	ret = regmap_update_bits(syscon, offset, GENERATION_SEL_MASK, val);
 	if (ret)
@@ -479,6 +477,7 @@ static int j721e_pcie_probe(struct platform_device *pdev)
 	struct j721e_pcie *pcie;
 	struct cdns_pcie_rc *rc = NULL;
 	struct cdns_pcie_ep *ep = NULL;
+	struct gpio_desc *gpiod;
 	void __iomem *base;
 	u32 num_lanes;
 	u32 mode;
@@ -590,12 +589,12 @@ static int j721e_pcie_probe(struct platform_device *pdev)
 
 	switch (mode) {
 	case PCI_MODE_RC:
-		pcie->reset_gpio = devm_gpiod_get_optional(dev, "reset", GPIOD_OUT_LOW);
-		if (IS_ERR(pcie->reset_gpio)) {
-			ret = dev_err_probe(dev, PTR_ERR(pcie->reset_gpio),
-					    "Failed to get reset GPIO\n");
+		gpiod = devm_gpiod_get_optional(dev, "reset", GPIOD_OUT_LOW);
+		if (IS_ERR(gpiod)) {
+			ret = dev_err_probe(dev, PTR_ERR(gpiod), "Failed to get reset GPIO\n");
 			goto err_get_sync;
 		}
+		pcie->reset_gpio = gpiod;
 
 		ret = cdns_pcie_init_phy(dev, cdns_pcie);
 		if (ret) {
@@ -617,9 +616,9 @@ static int j721e_pcie_probe(struct platform_device *pdev)
 		 * This shall ensure that the power and the reference clock
 		 * are stable.
 		 */
-		if (pcie->reset_gpio) {
+		if (gpiod) {
 			msleep(PCIE_T_PVPERL_MS);
-			gpiod_set_value_cansleep(pcie->reset_gpio, 1);
+			gpiod_set_value_cansleep(gpiod, 1);
 		}
 
 		if (IS_ENABLED(CONFIG_PCI_J721E_HOST)) {

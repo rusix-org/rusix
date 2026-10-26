@@ -2,7 +2,7 @@
 /*
  * Performance events ring-buffer code:
  *
- *  Copyright (C) 2008 Linutronix GmbH, Thomas Gleixner <tglx@kernel.org>
+ *  Copyright (C) 2008 Thomas Gleixner <tglx@linutronix.de>
  *  Copyright (C) 2008-2011 Red Hat, Inc., Ingo Molnar
  *  Copyright (C) 2008-2011 Red Hat, Inc., Peter Zijlstra
  *  Copyright  ©  2009 Paul Mackerras, IBM Corp. <paulus@au1.ibm.com>
@@ -634,10 +634,11 @@ static struct page *rb_alloc_aux_page(int node, int order)
 		/*
 		 * Communicate the allocation size to the driver:
 		 * if we managed to secure a high-order allocation,
-		 * set its first page's private to this order, otherwise page's
-		 * private remains zero.
+		 * set its first page's private to this order;
+		 * !PagePrivate(page) means it's just a normal page.
 		 */
 		split_page(page, order);
+		SetPagePrivate(page);
 		set_page_private(page, order);
 	}
 
@@ -648,7 +649,7 @@ static void rb_free_aux_page(struct perf_buffer *rb, int idx)
 {
 	struct page *page = virt_to_page(rb->aux_pages[idx]);
 
-	set_page_private(page, 0);
+	ClearPagePrivate(page);
 	__free_page(page);
 }
 

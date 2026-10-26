@@ -16,7 +16,6 @@
 #include <linux/dcache.h>
 #include <linux/workqueue.h>
 
-#include "lib.h"
 
 struct aa_load_ent {
 	struct list_head list;
@@ -129,11 +128,10 @@ struct aa_loaddata {
 	char *data;
 };
 
-int aa_unpack(struct aa_loaddata *udata, struct list_head *lh, const char **ns,
-	      char *compressed_data, size_t compressed_size);
+int aa_unpack(struct aa_loaddata *udata, struct list_head *lh, const char **ns);
 
 /**
- * aa_get_i_loaddata - get a reference count from a counted data reference
+ * aa_get_loaddata - get a reference count from a counted data reference
  * @data: reference to get a count on
  *
  * Returns: pointer to reference

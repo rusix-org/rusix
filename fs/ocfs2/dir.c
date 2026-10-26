@@ -136,7 +136,7 @@ static void ocfs2_init_dir_trailer(struct inode *inode,
 	struct ocfs2_dir_block_trailer *trailer;
 
 	trailer = ocfs2_trailer_from_bh(bh, inode->i_sb);
-	strscpy(trailer->db_signature, OCFS2_DIR_TRAILER_SIGNATURE);
+	strcpy(trailer->db_signature, OCFS2_DIR_TRAILER_SIGNATURE);
 	trailer->db_compat_rec_len =
 			cpu_to_le16(sizeof(struct ocfs2_dir_block_trailer));
 	trailer->db_parent_dinode = cpu_to_le64(OCFS2_I(inode)->ip_blkno);
@@ -302,22 +302,8 @@ static int ocfs2_check_dir_entry(struct inode *dir,
 				 unsigned long offset)
 {
 	const char *error_msg = NULL;
-	unsigned long buf_offset = (char *)de - buf;
-	unsigned long next_offset;
-	int rlen;
-
-	if (buf_offset > size || size - buf_offset < OCFS2_DIR_REC_LEN(1)) {
-		/* Dirent is (maybe partially) beyond the buffer
-		 * boundaries so touching 'de' members is unsafe.
-		 */
-		mlog(ML_ERROR, "directory entry (#%llu: offset=%lu) "
-		     "too close to end or out-of-bounds",
-		     (unsigned long long)OCFS2_I(dir)->ip_blkno, offset);
-		return 0;
-	}
-
-	rlen = le16_to_cpu(de->rec_len);
-	next_offset = buf_offset + rlen;
+	const int rlen = le16_to_cpu(de->rec_len);
+	const unsigned long next_offset = ((char *) de - buf) + rlen;
 
 	if (unlikely(rlen < OCFS2_DIR_REC_LEN(1)))
 		error_msg = "rec_len is smaller than minimal";
@@ -866,11 +852,19 @@ static int ocfs2_dx_dir_lookup_rec(struct inode *inode,
 
 		if (el->l_tree_depth) {
 			ret = ocfs2_error(inode->i_sb,
-					  "Inode %llu has non zero tree depth in btree tree block %llu\n",
+					  "Inode %lu has non zero tree depth in btree tree block %llu\n",
 					  inode->i_ino,
 					  (unsigned long long)eb_bh->b_blocknr);
 			goto out;
 		}
+	}
+
+	if (le16_to_cpu(el->l_next_free_rec) == 0) {
+		ret = ocfs2_error(inode->i_sb,
+				  "Inode %lu has empty extent list at depth %u\n",
+				  inode->i_ino,
+				  le16_to_cpu(el->l_tree_depth));
+		goto out;
 	}
 
 	found = 0;
@@ -885,9 +879,10 @@ static int ocfs2_dx_dir_lookup_rec(struct inode *inode,
 
 	if (!found) {
 		ret = ocfs2_error(inode->i_sb,
-				  "Inode %llu has no extent record for hash %u in btree (next_free_rec %u)\n",
-				  inode->i_ino, major_hash,
-				  le16_to_cpu(el->l_next_free_rec));
+				  "Inode %lu has bad extent record (%u, %u, 0) in btree\n",
+				  inode->i_ino,
+				  le32_to_cpu(rec->e_cpos),
+				  ocfs2_rec_clusters(el, rec));
 		goto out;
 	}
 
@@ -1849,12 +1844,7 @@ static int ocfs2_dir_foreach_blk_id(struct inode *inode,
 		 * dirent right now.  Scan from the start of the block
 		 * to make sure. */
 		if (!inode_eq_iversion(inode, *f_version)) {
-			loff_t size = i_size_read(inode);
-
-			for (i = 0; i + OCFS2_DIR_REC_LEN(1) <= size &&
-			     i < offset;) {
-				unsigned int rec_len;
-
+			for (i = 0; i < i_size_read(inode) && i < offset; ) {
 				de = (struct ocfs2_dir_entry *)
 					(data->id_data + i);
 				/* It's too expensive to do a full
@@ -1863,11 +1853,10 @@ static int ocfs2_dir_foreach_blk_id(struct inode *inode,
 				 * least that it is non-zero.  A
 				 * failure will be detected in the
 				 * dirent test below. */
-				rec_len = le16_to_cpu(de->rec_len);
-				if (rec_len < OCFS2_DIR_REC_LEN(1) ||
-				    i + rec_len > size)
+				if (le16_to_cpu(de->rec_len) <
+				    OCFS2_DIR_REC_LEN(1))
 					break;
-				i += rec_len;
+				i += le16_to_cpu(de->rec_len);
 			}
 			ctx->pos = offset = i;
 			*f_version = inode_query_iversion(inode);
@@ -1910,7 +1899,6 @@ static int ocfs2_dir_foreach_blk_el(struct inode *inode,
 	struct super_block * sb = inode->i_sb;
 	unsigned int ra_sectors = 16;
 	int stored = 0;
-	int ret;
 
 	bh = NULL;
 
@@ -1918,13 +1906,9 @@ static int ocfs2_dir_foreach_blk_el(struct inode *inode,
 
 	while (ctx->pos < i_size_read(inode)) {
 		blk = ctx->pos >> sb->s_blocksize_bits;
-		ret = ocfs2_read_dir_block(inode, blk, &bh, 0);
-		if (ret) {
-			if (persist)
-				return ret;
+		if (ocfs2_read_dir_block(inode, blk, &bh, 0)) {
 			/* Skip the corrupt dirblock and keep trying */
 			ctx->pos += sb->s_blocksize - offset;
-			offset = 0;
 			continue;
 		}
 
@@ -1951,10 +1935,7 @@ static int ocfs2_dir_foreach_blk_el(struct inode *inode,
 		 * dirent right now.  Scan from the start of the block
 		 * to make sure. */
 		if (!inode_eq_iversion(inode, *f_version)) {
-			for (i = 0; i + OCFS2_DIR_REC_LEN(1) <= sb->s_blocksize &&
-			     i < offset;) {
-				unsigned int rec_len;
-
+			for (i = 0; i < sb->s_blocksize && i < offset; ) {
 				de = (struct ocfs2_dir_entry *) (bh->b_data + i);
 				/* It's too expensive to do a full
 				 * dirent test each time round this
@@ -1962,11 +1943,10 @@ static int ocfs2_dir_foreach_blk_el(struct inode *inode,
 				 * least that it is non-zero.  A
 				 * failure will be detected in the
 				 * dirent test below. */
-				rec_len = le16_to_cpu(de->rec_len);
-				if (rec_len < OCFS2_DIR_REC_LEN(1) ||
-				    i + rec_len > sb->s_blocksize)
+				if (le16_to_cpu(de->rec_len) <
+				    OCFS2_DIR_REC_LEN(1))
 					break;
-				i += rec_len;
+				i += le16_to_cpu(de->rec_len);
 			}
 			offset = i;
 			ctx->pos = (ctx->pos & ~((loff_t)sb->s_blocksize - 1))
@@ -2022,7 +2002,8 @@ static int ocfs2_dir_foreach_blk(struct inode *inode, u64 *f_version,
 int ocfs2_dir_foreach(struct inode *inode, struct dir_context *ctx)
 {
 	u64 version = inode_query_iversion(inode);
-	return ocfs2_dir_foreach_blk(inode, &version, ctx, true);
+	ocfs2_dir_foreach_blk(inode, &version, ctx, true);
+	return 0;
 }
 
 /*
@@ -2219,7 +2200,7 @@ out:
 /*
  * routine to check that the specified directory is empty (for rmdir)
  *
- * Returns 1 if dir is empty, zero if not, and a negative errno on error.
+ * Returns 1 if dir is empty, zero otherwise.
  *
  * XXX: This is a performance problem for unindexed directories.
  */
@@ -2232,10 +2213,8 @@ int ocfs2_empty_dir(struct inode *inode)
 
 	if (ocfs2_dir_indexed(inode)) {
 		ret = ocfs2_empty_dir_dx(inode, &priv);
-		if (ret) {
+		if (ret)
 			mlog_errno(ret);
-			return ret;
-		}
 		/*
 		 * We still run ocfs2_dir_foreach to get the checks
 		 * for "." and "..".
@@ -2243,10 +2222,8 @@ int ocfs2_empty_dir(struct inode *inode)
 	}
 
 	ret = ocfs2_dir_foreach(inode, &priv.ctx);
-	if (ret) {
+	if (ret)
 		mlog_errno(ret);
-		return ret;
-	}
 
 	if (!priv.seen_dot || !priv.seen_dot_dot) {
 		mlog(ML_ERROR, "bad directory (dir #%llu) - no `.' or `..'\n",
@@ -2276,14 +2253,14 @@ static struct ocfs2_dir_entry *ocfs2_fill_initial_dirents(struct inode *inode,
 	de->name_len = 1;
 	de->rec_len =
 		cpu_to_le16(OCFS2_DIR_REC_LEN(de->name_len));
-	strscpy(de->name, ".");
+	strcpy(de->name, ".");
 	ocfs2_set_de_type(de, S_IFDIR);
 
 	de = (struct ocfs2_dir_entry *) ((char *)de + le16_to_cpu(de->rec_len));
 	de->inode = cpu_to_le64(OCFS2_I(parent)->ip_blkno);
 	de->rec_len = cpu_to_le16(size - OCFS2_DIR_REC_LEN(1));
 	de->name_len = 2;
-	strscpy(de->name, "..");
+	strcpy(de->name, "..");
 	ocfs2_set_de_type(de, S_IFDIR);
 
 	return de;
@@ -2441,7 +2418,7 @@ static int ocfs2_dx_dir_attach_index(struct ocfs2_super *osb,
 
 	dx_root = (struct ocfs2_dx_root_block *)dx_root_bh->b_data;
 	memset(dx_root, 0, osb->sb->s_blocksize);
-	strscpy(dx_root->dr_signature, OCFS2_DX_ROOT_SIGNATURE);
+	strcpy(dx_root->dr_signature, OCFS2_DX_ROOT_SIGNATURE);
 	dx_root->dr_suballoc_slot = cpu_to_le16(meta_ac->ac_alloc_slot);
 	dx_root->dr_suballoc_loc = cpu_to_le64(suballoc_loc);
 	dx_root->dr_suballoc_bit = cpu_to_le16(dr_suballoc_bit);
@@ -2517,7 +2494,7 @@ static int ocfs2_dx_dir_format_cluster(struct ocfs2_super *osb,
 		dx_leaf = (struct ocfs2_dx_leaf *) bh->b_data;
 
 		memset(dx_leaf, 0, osb->sb->s_blocksize);
-		strscpy(dx_leaf->dl_signature, OCFS2_DX_LEAF_SIGNATURE);
+		strcpy(dx_leaf->dl_signature, OCFS2_DX_LEAF_SIGNATURE);
 		dx_leaf->dl_fs_generation = cpu_to_le32(osb->fs_generation);
 		dx_leaf->dl_blkno = cpu_to_le64(bh->b_blocknr);
 		dx_leaf->dl_list.de_count =
@@ -2613,7 +2590,8 @@ static struct buffer_head **ocfs2_dx_dir_kmalloc_leaves(struct super_block *sb,
 	int num_dx_leaves = ocfs2_clusters_to_blocks(sb, 1);
 	struct buffer_head **dx_leaves;
 
-	dx_leaves = kzalloc_objs(struct buffer_head *, num_dx_leaves, GFP_NOFS);
+	dx_leaves = kcalloc(num_dx_leaves, sizeof(struct buffer_head *),
+			    GFP_NOFS);
 	if (dx_leaves && ret_num_leaves)
 		*ret_num_leaves = num_dx_leaves;
 
@@ -3506,14 +3484,6 @@ static int ocfs2_find_dir_space_id(struct inode *dir, struct buffer_head *di_bh,
 		offset += le16_to_cpu(de->rec_len);
 	}
 
-	if (!last_de) {
-		ret = ocfs2_error(sb, "Directory entry (#%llu: size=%lld) "
-				  "is unexpectedly short",
-				  (unsigned long long)OCFS2_I(dir)->ip_blkno,
-				  i_size_read(dir));
-		goto out;
-	}
-
 	/*
 	 * We're going to require expansion of the directory - figure
 	 * out how many blocks we'll need so that a place for the
@@ -4195,15 +4165,10 @@ static int ocfs2_expand_inline_dx_root(struct inode *dir,
 	}
 
 	dx_root->dr_flags &= ~OCFS2_DX_FLAG_INLINE;
-
-	dx_root->dr_list.l_tree_depth = 0;
+	memset(&dx_root->dr_list, 0, osb->sb->s_blocksize -
+	       offsetof(struct ocfs2_dx_root_block, dr_list));
 	dx_root->dr_list.l_count =
 		cpu_to_le16(ocfs2_extent_recs_per_dx_root(osb->sb));
-	dx_root->dr_list.l_next_free_rec = 0;
-	memset(&dx_root->dr_list.l_recs, 0,
-	       osb->sb->s_blocksize -
-	       (offsetof(struct ocfs2_dx_root_block, dr_list) +
-		offsetof(struct ocfs2_extent_list, l_recs)));
 
 	/* This should never fail considering we start with an empty
 	 * dx_root. */

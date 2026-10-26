@@ -962,39 +962,13 @@ static int sve_set_common(struct task_struct *target,
 		return -EINVAL;
 
 	/*
-	 * On systems without SVE we accept FPSIMD format writes with
-	 * a VL of 0 to allow exiting streaming mode, otherwise a VL
-	 * is required.
+	 * Apart from SVE_PT_REGS_MASK, all SVE_PT_* flags are consumed by
+	 * vec_set_vector_length(), which will also validate them for us:
 	 */
-	if (header.vl) {
-		/*
-		 * If the system does not support SVE we can't
-		 * configure a SVE VL.
-		 */
-		if (!system_supports_sve() && type == ARM64_VEC_SVE)
-			return -EINVAL;
-
-		/*
-		 * Apart from SVE_PT_REGS_MASK, all SVE_PT_* flags are
-		 * consumed by vec_set_vector_length(), which will
-		 * also validate them for us:
-		 */
-		ret = vec_set_vector_length(target, type, header.vl,
-					    ((unsigned long)header.flags & ~SVE_PT_REGS_MASK) << 16);
-		if (ret)
-			return ret;
-	} else {
-		/* If the system supports SVE we require a VL. */
-		if (system_supports_sve())
-			return -EINVAL;
-
-		/*
-		 * Only FPSIMD formatted data with no flags set is
-		 * supported.
-		 */
-		if (header.flags != SVE_PT_REGS_FPSIMD)
-			return -EINVAL;
-	}
+	ret = vec_set_vector_length(target, type, header.vl,
+		((unsigned long)header.flags & ~SVE_PT_REGS_MASK) << 16);
+	if (ret)
+		return ret;
 
 	/* Allocate SME storage if necessary, preserving any existing ZA/ZT state */
 	if (type == ARM64_VEC_SME) {
@@ -1090,7 +1064,7 @@ static int sve_set(struct task_struct *target,
 		   unsigned int pos, unsigned int count,
 		   const void *kbuf, const void __user *ubuf)
 {
-	if (!system_supports_sve() && !system_supports_sme())
+	if (!system_supports_sve())
 		return -EINVAL;
 
 	return sve_set_common(target, regset, pos, count, kbuf, ubuf,
@@ -2394,10 +2368,9 @@ enum ptrace_syscall_dir {
 	PTRACE_SYSCALL_EXIT,
 };
 
-static __always_inline unsigned long ptrace_save_reg(struct pt_regs *regs,
-						     enum ptrace_syscall_dir dir,
-						     int *regno)
+static void report_syscall(struct pt_regs *regs, enum ptrace_syscall_dir dir)
 {
+	int regno;
 	unsigned long saved_reg;
 
 	/*
@@ -2416,34 +2389,15 @@ static __always_inline unsigned long ptrace_save_reg(struct pt_regs *regs,
 	 * - Syscall stops behave differently to seccomp and pseudo-step traps
 	 *   (the latter do not nobble any registers).
 	 */
-	*regno = (is_compat_task() ? 12 : 7);
-	saved_reg = regs->regs[*regno];
-	regs->regs[*regno] = dir;
+	regno = (is_compat_task() ? 12 : 7);
+	saved_reg = regs->regs[regno];
+	regs->regs[regno] = dir;
 
-	return saved_reg;
-}
-
-static int report_syscall_entry(struct pt_regs *regs)
-{
-	unsigned long saved_reg;
-	int regno, ret;
-
-	saved_reg = ptrace_save_reg(regs, PTRACE_SYSCALL_ENTER, &regno);
-	ret = !ptrace_report_syscall_permit_entry(regs);
-	if (ret)
-		forget_syscall(regs);
-	regs->regs[regno] = saved_reg;
-
-	return ret;
-}
-
-static void report_syscall_exit(struct pt_regs *regs)
-{
-	unsigned long saved_reg;
-	int regno;
-
-	saved_reg = ptrace_save_reg(regs, PTRACE_SYSCALL_EXIT, &regno);
-	if (!test_thread_flag(TIF_SINGLESTEP)) {
+	if (dir == PTRACE_SYSCALL_ENTER) {
+		if (ptrace_report_syscall_entry(regs))
+			forget_syscall(regs);
+		regs->regs[regno] = saved_reg;
+	} else if (!test_thread_flag(TIF_SINGLESTEP)) {
 		ptrace_report_syscall_exit(regs, 0);
 		regs->regs[regno] = saved_reg;
 	} else {
@@ -2461,16 +2415,15 @@ static void report_syscall_exit(struct pt_regs *regs)
 int syscall_trace_enter(struct pt_regs *regs)
 {
 	unsigned long flags = read_thread_flags();
-	int ret;
 
 	if (flags & (_TIF_SYSCALL_EMU | _TIF_SYSCALL_TRACE)) {
-		ret = report_syscall_entry(regs);
-		if (ret || (flags & _TIF_SYSCALL_EMU))
+		report_syscall(regs, PTRACE_SYSCALL_ENTER);
+		if (flags & _TIF_SYSCALL_EMU)
 			return NO_SYSCALL;
 	}
 
 	/* Do the secure computing after ptrace; failures should be fast. */
-	if (!seccomp_permit_syscall())
+	if (secure_computing() == -1)
 		return NO_SYSCALL;
 
 	if (test_thread_flag(TIF_SYSCALL_TRACEPOINT))
@@ -2492,7 +2445,7 @@ void syscall_trace_exit(struct pt_regs *regs)
 		trace_sys_exit(regs, syscall_get_return_value(current, regs));
 
 	if (flags & (_TIF_SYSCALL_TRACE | _TIF_SINGLESTEP))
-		report_syscall_exit(regs);
+		report_syscall(regs, PTRACE_SYSCALL_EXIT);
 
 	rseq_syscall(regs);
 }
@@ -2517,8 +2470,12 @@ static int valid_compat_regs(struct user_pt_regs *regs)
 {
 	regs->pstate &= ~SPSR_EL1_AARCH32_RES0_BITS;
 
-	if (!system_supports_mixed_endian_el0())
-		regs->pstate &= ~PSR_AA32_E_BIT;
+	if (!system_supports_mixed_endian_el0()) {
+		if (IS_ENABLED(CONFIG_CPU_BIG_ENDIAN))
+			regs->pstate |= PSR_AA32_E_BIT;
+		else
+			regs->pstate &= ~PSR_AA32_E_BIT;
+	}
 
 	if (user_mode(regs) && (regs->pstate & PSR_MODE32_BIT) &&
 	    (regs->pstate & PSR_AA32_A_BIT) == 0 &&

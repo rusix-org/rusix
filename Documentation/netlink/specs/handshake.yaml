@@ -22,8 +22,7 @@ definitions:
     type: enum
     name: handler-class
     value-start: 0
-    entries: [none, tlshd]
-    render-max: true
+    entries: [none, tlshd, max]
   -
     type: enum
     name: msg-type
@@ -68,7 +67,7 @@ attribute-sets:
         enum: auth
       -
         name: peer-identity
-        type: s32
+        type: u32
         multi-attr: true
       -
         name: certificate
@@ -80,7 +79,7 @@ attribute-sets:
         type: string
       -
         name: keyring
-        type: s32
+        type: u32
   -
     name: done
     attributes:
@@ -94,7 +93,7 @@ attribute-sets:
         type: s32
       -
         name: remote-auth
-        type: s32
+        type: u32
         multi-attr: true
 
 operations:

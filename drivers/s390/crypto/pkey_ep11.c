@@ -5,7 +5,8 @@
  *  Copyright IBM Corp. 2024
  */
 
-#define pr_fmt(fmt) "pkey: " fmt
+#define KMSG_COMPONENT "pkey"
+#define pr_fmt(fmt) KMSG_COMPONENT ": " fmt
 
 #include <linux/init.h>
 #include <linux/module.h>
@@ -357,11 +358,6 @@ static int ep11_clr2key(const struct pkey_apqn *apqns, size_t nr_apqns,
 	struct pkey_apqn _apqns[MAXAPQNSINLIST];
 	int i, len, rc;
 	u32 xflags;
-
-	if (pflags & PKEY_XFLAG_NOCLEARKEY) {
-		PKEY_DBF_ERR("%s clear key but xflag NOCLEARKEY\n", __func__);
-		return -EINVAL;
-	}
 
 	xflags = pflags & PKEY_XFLAG_NOMEMALLOC ? ZCRYPT_XFLAG_NOMEMALLOC : 0;
 

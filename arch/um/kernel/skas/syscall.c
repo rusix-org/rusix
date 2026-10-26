@@ -27,7 +27,7 @@ void handle_syscall(struct uml_pt_regs *r)
 		goto out;
 
 	/* Do the seccomp check after ptrace; failures should be fast. */
-	if (!seccomp_permit_syscall())
+	if (secure_computing() == -1)
 		goto out;
 
 	syscall = UPT_SYSCALL_NR(r);
@@ -35,13 +35,12 @@ void handle_syscall(struct uml_pt_regs *r)
 	/*
 	 * If no time passes, then sched_yield may not actually yield, causing
 	 * broken spinlock implementations in userspace (ASAN) to hang for long
-	 * periods of time. Advance the time-travel clock a bit so sched_yield()
-	 * in a loop (like ping does for small intervals) also works correctly.
+	 * periods of time.
 	 */
 	if ((time_travel_mode == TT_MODE_INFCPU ||
 	     time_travel_mode == TT_MODE_EXTERNAL) &&
 	    syscall == __NR_sched_yield)
-		time_travel_ndelay(1000);
+		tt_extra_sched_jiffies += 1;
 
 	if (syscall >= 0 && syscall < __NR_syscalls) {
 		unsigned long ret;

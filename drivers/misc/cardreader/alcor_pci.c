@@ -47,7 +47,7 @@ static const struct pci_device_id pci_ids[] = {
 		.driver_data = (kernel_ulong_t)&au6621_cfg },
 	{ PCI_DEVICE(PCI_ID_ALCOR_MICRO, PCI_ID_AU6625),
 		.driver_data = (kernel_ulong_t)&au6625_cfg },
-	{ }
+	{},
 };
 MODULE_DEVICE_TABLE(pci, pci_ids);
 
@@ -188,6 +188,7 @@ static void alcor_pci_remove(struct pci_dev *pdev)
 	pci_set_drvdata(pdev, NULL);
 }
 
+#ifdef CONFIG_PM_SLEEP
 static int alcor_suspend(struct device *dev)
 {
 	return 0;
@@ -202,8 +203,9 @@ static int alcor_resume(struct device *dev)
 
 	return 0;
 }
+#endif /* CONFIG_PM_SLEEP */
 
-static DEFINE_SIMPLE_DEV_PM_OPS(alcor_pci_pm_ops, alcor_suspend, alcor_resume);
+static SIMPLE_DEV_PM_OPS(alcor_pci_pm_ops, alcor_suspend, alcor_resume);
 
 static struct pci_driver alcor_driver = {
 	.name	=	DRV_NAME_ALCOR_PCI,
@@ -211,7 +213,7 @@ static struct pci_driver alcor_driver = {
 	.probe	=	alcor_pci_probe,
 	.remove =	alcor_pci_remove,
 	.driver	=	{
-		.pm	= pm_sleep_ptr(&alcor_pci_pm_ops)
+		.pm	= &alcor_pci_pm_ops
 	},
 };
 

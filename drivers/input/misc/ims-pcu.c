@@ -287,7 +287,7 @@ static int ims_pcu_setup_gamepad(struct ims_pcu *pcu)
 	struct input_dev *input;
 	int error;
 
-	gamepad = kzalloc_obj(*gamepad);
+	gamepad = kzalloc(sizeof(*gamepad), GFP_KERNEL);
 	input = input_allocate_device();
 	if (!gamepad || !input) {
 		dev_err(pcu->dev,
@@ -1844,7 +1844,7 @@ static int ims_pcu_line_setup(struct ims_pcu *pcu)
 {
 	struct usb_host_interface *interface = pcu->ctrl_intf->cur_altsetting;
 	struct usb_cdc_line_coding *line __free(kfree) =
-				kmalloc_obj(*line);
+				kmalloc(sizeof(*line), GFP_KERNEL);
 	int error;
 
 	if (!line)
@@ -2106,7 +2106,7 @@ static int ims_pcu_probe(struct usb_interface *intf,
 	struct ims_pcu *pcu;
 	int error;
 
-	pcu = kzalloc_obj(*pcu);
+	pcu = kzalloc(sizeof(*pcu), GFP_KERNEL);
 	if (!pcu)
 		return -ENOMEM;
 
@@ -2234,7 +2234,6 @@ static const struct usb_device_id ims_pcu_id_table[] = {
 	},
 	{ }
 };
-MODULE_DEVICE_TABLE(usb, ims_pcu_id_table);
 
 static const struct attribute_group *ims_pcu_sysfs_groups[] = {
 	&ims_pcu_attr_group,

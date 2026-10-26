@@ -106,7 +106,7 @@ struct crypto4xx_core_device {
 	struct crypto4xx_device *dev;
 	struct hwrng *trng;
 	u32 int_status;
-	int irq;
+	u32 irq;
 	struct tasklet_struct tasklet;
 	spinlock_t lock;
 };

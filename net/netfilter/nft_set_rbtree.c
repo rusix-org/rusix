@@ -400,6 +400,9 @@ static int __nft_rbtree_insert(const struct net *net, const struct nft_set *set,
 			const struct nft_rbtree_elem *removed_end;
 
 			removed_end = nft_rbtree_gc_elem(set, priv, rbe);
+			if (IS_ERR(removed_end))
+				return PTR_ERR(removed_end);
+
 			if (removed_end == rbe_le || removed_end == rbe_ge)
 				return -EAGAIN;
 
@@ -543,12 +546,13 @@ static int nft_array_intervals_alloc(struct nft_array *array, u32 max_intervals)
 {
 	struct nft_array_interval *intervals;
 
-	intervals = kvzalloc_objs(struct nft_array_interval, max_intervals,
-				  GFP_KERNEL_ACCOUNT);
+	intervals = kvcalloc(max_intervals, sizeof(struct nft_array_interval),
+			     GFP_KERNEL_ACCOUNT);
 	if (!intervals)
 		return -ENOMEM;
 
-	kvfree(array->intervals);
+	if (array->intervals)
+		kvfree(array->intervals);
 
 	array->intervals = intervals;
 	array->max_intervals = max_intervals;
@@ -560,7 +564,7 @@ static struct nft_array *nft_array_alloc(u32 max_intervals)
 {
 	struct nft_array *array;
 
-	array = kzalloc_obj(*array, GFP_KERNEL_ACCOUNT);
+	array = kzalloc(sizeof(*array), GFP_KERNEL_ACCOUNT);
 	if (!array)
 		return NULL;
 
@@ -657,10 +661,8 @@ maybe_grow:
 	}
 
 realloc_array:
-	if (unlikely(nelems > new_max_intervals)) {
-		DEBUG_NET_WARN_ON_ONCE(1);
+	if (WARN_ON_ONCE(nelems > new_max_intervals))
 		return -ENOMEM;
-	}
 
 	if (priv->array_next) {
 		if (max_intervals == new_max_intervals)
@@ -699,12 +701,19 @@ static int nft_rbtree_insert(const struct net *net, const struct nft_set *set,
 
 		cond_resched();
 
-		write_lock(&priv->lock);
+		write_lock_bh(&priv->lock);
 		err = __nft_rbtree_insert(net, set, rbe, elem_priv, tstamp);
-		write_unlock(&priv->lock);
+		write_unlock_bh(&priv->lock);
 	} while (err == -EAGAIN);
 
 	return err;
+}
+
+static void nft_rbtree_erase(struct nft_rbtree *priv, struct nft_rbtree_elem *rbe)
+{
+	write_lock_bh(&priv->lock);
+	rb_erase(&rbe->node, &priv->root);
+	write_unlock_bh(&priv->lock);
 }
 
 static void nft_rbtree_remove(const struct net *net,
@@ -714,9 +723,7 @@ static void nft_rbtree_remove(const struct net *net,
 	struct nft_rbtree_elem *rbe = nft_elem_priv_cast(elem_priv);
 	struct nft_rbtree *priv = nft_set_priv(set);
 
-	write_lock(&priv->lock);
-	rb_erase(&rbe->node, &priv->root);
-	write_unlock(&priv->lock);
+	nft_rbtree_erase(priv, rbe);
 }
 
 static void nft_rbtree_activate(const struct net *net,
@@ -877,13 +884,13 @@ static void nft_rbtree_walk(const struct nft_ctx *ctx,
 		nft_rbtree_do_walk(ctx, set, iter);
 		break;
 	case NFT_ITER_READ:
-		read_lock(&priv->lock);
+		read_lock_bh(&priv->lock);
 		nft_rbtree_do_walk(ctx, set, iter);
-		read_unlock(&priv->lock);
+		read_unlock_bh(&priv->lock);
 		break;
 	default:
 		iter->err = -EINVAL;
-		DEBUG_NET_WARN_ON_ONCE(1);
+		WARN_ON_ONCE(1);
 		break;
 	}
 }
@@ -900,8 +907,6 @@ static void nft_rbtree_gc_scan(struct nft_set *set)
 		next = rb_next(node);
 
 		rbe = rb_entry(node, struct nft_rbtree_elem, node);
-		if (!nft_set_elem_active(&rbe->ext, NFT_GENMASK_ANY))
-			continue;
 
 		/* elements are reversed in the rbtree for historical reasons,
 		 * from highest to lowest value, that is why end element is
@@ -917,14 +922,14 @@ static void nft_rbtree_gc_scan(struct nft_set *set)
 		/* end element needs to be removed first, it has
 		 * no timeout extension.
 		 */
-		write_lock(&priv->lock);
+		write_lock_bh(&priv->lock);
 		if (rbe_end) {
 			nft_rbtree_gc_elem_move(net, set, priv, rbe_end);
 			rbe_end = NULL;
 		}
 
 		nft_rbtree_gc_elem_move(net, set, priv, rbe);
-		write_unlock(&priv->lock);
+		write_unlock_bh(&priv->lock);
 	}
 
 	priv->last_gc = jiffies;
@@ -1091,8 +1096,7 @@ static void nft_rbtree_commit(struct nft_set *set)
 		 * representation. Use next start element to complete this
 		 * interval.
 		 */
-		if (nft_set_is_anonymous(set) &&
-		    nft_rbtree_interval_start(rbe) &&
+		if (nft_rbtree_interval_start(rbe) &&
 		    nft_rbtree_interval_start(prev_rbe) &&
 		    priv->array_next->intervals[num_intervals].from)
 			priv->array_next->intervals[num_intervals++].to = &prev_rbe->ext;

@@ -62,10 +62,6 @@ struct hid_bpf_offset_write_range {
 	u32 end;
 };
 
-struct hid_bpf_ctx__safe_trusted {
-	struct hid_device *hid;
-};
-
 static int hid_bpf_ops_btf_struct_access(struct bpf_verifier_log *log,
 					   const struct bpf_reg_state *reg,
 					   int off, int size)
@@ -89,8 +85,6 @@ static int hid_bpf_ops_btf_struct_access(struct bpf_verifier_log *log,
 	const struct btf_type *t;
 	const char *cur = NULL;
 	int i;
-
-	BTF_TYPE_EMIT(struct hid_bpf_ctx__safe_trusted);
 
 	t = btf_type_by_id(reg->btf, reg->btf_id);
 

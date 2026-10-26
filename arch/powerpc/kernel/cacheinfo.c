@@ -18,7 +18,6 @@
 #include <linux/of.h>
 #include <linux/percpu.h>
 #include <linux/slab.h>
-#include <linux/sysfs.h>
 #include <asm/cputhreads.h>
 #include <asm/smp.h>
 
@@ -158,7 +157,7 @@ static struct cache *new_cache(int type, int level,
 {
 	struct cache *cache;
 
-	cache = kzalloc_obj(*cache);
+	cache = kzalloc(sizeof(*cache), GFP_KERNEL);
 	if (cache)
 		cache_init(cache, type, level, ofnode, group_id);
 
@@ -541,7 +540,7 @@ static struct cache_dir *cacheinfo_create_cache_dir(unsigned int cpu_id)
 	if (!kobj)
 		goto err;
 
-	cache_dir = kzalloc_obj(*cache_dir);
+	cache_dir = kzalloc(sizeof(*cache_dir), GFP_KERNEL);
 	if (!cache_dir)
 		goto err;
 
@@ -597,7 +596,7 @@ static ssize_t size_show(struct kobject *k, struct kobj_attribute *attr, char *b
 	if (cache_size_kb(cache, &size_kb))
 		return -ENODEV;
 
-	return sysfs_emit(buf, "%uK\n", size_kb);
+	return sprintf(buf, "%uK\n", size_kb);
 }
 
 static struct kobj_attribute cache_size_attr =
@@ -614,7 +613,7 @@ static ssize_t line_size_show(struct kobject *k, struct kobj_attribute *attr, ch
 	if (cache_get_line_size(cache, &line_size))
 		return -ENODEV;
 
-	return sysfs_emit(buf, "%u\n", line_size);
+	return sprintf(buf, "%u\n", line_size);
 }
 
 static struct kobj_attribute cache_line_size_attr =
@@ -630,7 +629,7 @@ static ssize_t nr_sets_show(struct kobject *k, struct kobj_attribute *attr, char
 	if (cache_nr_sets(cache, &nr_sets))
 		return -ENODEV;
 
-	return sysfs_emit(buf, "%u\n", nr_sets);
+	return sprintf(buf, "%u\n", nr_sets);
 }
 
 static struct kobj_attribute cache_nr_sets_attr =
@@ -646,7 +645,7 @@ static ssize_t associativity_show(struct kobject *k, struct kobj_attribute *attr
 	if (cache_associativity(cache, &associativity))
 		return -ENODEV;
 
-	return sysfs_emit(buf, "%u\n", associativity);
+	return sprintf(buf, "%u\n", associativity);
 }
 
 static struct kobj_attribute cache_assoc_attr =
@@ -658,7 +657,7 @@ static ssize_t type_show(struct kobject *k, struct kobj_attribute *attr, char *b
 
 	cache = index_kobj_to_cache(k);
 
-	return sysfs_emit(buf, "%s\n", cache_type_string(cache));
+	return sprintf(buf, "%s\n", cache_type_string(cache));
 }
 
 static struct kobj_attribute cache_type_attr =
@@ -672,7 +671,7 @@ static ssize_t level_show(struct kobject *k, struct kobj_attribute *attr, char *
 	index = kobj_to_cache_index_dir(k);
 	cache = index->cache;
 
-	return sysfs_emit(buf, "%d\n", cache->level);
+	return sprintf(buf, "%d\n", cache->level);
 }
 
 static struct kobj_attribute cache_level_attr =
@@ -690,8 +689,7 @@ show_shared_cpumap(struct kobject *k, struct kobj_attribute *attr, char *buf, bo
 
 	mask = &cache->shared_cpu_map;
 
-	return sysfs_emit(buf, list ? "%*pbl\n" : "%*pb\n",
-			  cpumask_pr_args(mask));
+	return cpumap_print_to_pagebuf(list, buf, mask);
 }
 
 static ssize_t shared_cpu_map_show(struct kobject *k, struct kobj_attribute *attr, char *buf)
@@ -790,7 +788,7 @@ static void cacheinfo_create_index_dir(struct cache *cache, int index,
 	struct cache_index_dir *index_dir;
 	int rc;
 
-	index_dir = kzalloc_obj(*index_dir);
+	index_dir = kzalloc(sizeof(*index_dir), GFP_KERNEL);
 	if (!index_dir)
 		return;
 

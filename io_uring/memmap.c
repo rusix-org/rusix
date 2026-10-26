@@ -15,41 +15,26 @@
 #include "rsrc.h"
 #include "zcrx.h"
 
-static bool io_mem_alloc_compound(struct page **pages, int nr_pages,
-				  size_t size, gfp_t gfp,
-				  struct user_struct *user)
+static void *io_mem_alloc_compound(struct page **pages, int nr_pages,
+				   size_t size, gfp_t gfp)
 {
-	unsigned long nr_compound, extra;
 	struct page *page;
 	int i, order;
 
 	order = get_order(size);
 	if (order > MAX_PAGE_ORDER)
-		return false;
+		return ERR_PTR(-ENOMEM);
 	else if (order)
 		gfp |= __GFP_COMP;
 
-	/*
-	 * get_order() rounds a non power of two size up, so the allocation
-	 * can hold more pages than the region exposes. Account those too,
-	 * and leave the compound allocation alone if they do not fit.
-	 */
-	nr_compound = 1UL << order;
-	extra = nr_compound - nr_pages;
-	if (extra && user && __io_account_mem(user, extra))
-		return false;
-
 	page = alloc_pages(gfp, order);
-	if (!page) {
-		if (extra && user)
-			__io_unaccount_mem(user, extra);
-		return false;
-	}
+	if (!page)
+		return ERR_PTR(-ENOMEM);
 
 	for (i = 0; i < nr_pages; i++)
 		pages[i] = page + i;
 
-	return true;
+	return page_address(page);
 }
 
 struct page **io_pin_pages(unsigned long uaddr, unsigned long len, int *npages)
@@ -68,10 +53,10 @@ struct page **io_pin_pages(unsigned long uaddr, unsigned long len, int *npages)
 	nr_pages = end - start;
 	if (WARN_ON_ONCE(!nr_pages))
 		return ERR_PTR(-EINVAL);
-	if (nr_pages > INT_MAX / sizeof(struct page *))
+	if (WARN_ON_ONCE(nr_pages > INT_MAX))
 		return ERR_PTR(-EOVERFLOW);
 
-	pages = kvmalloc_objs(struct page *, nr_pages, GFP_KERNEL_ACCOUNT);
+	pages = kvmalloc_array(nr_pages, sizeof(struct page *), GFP_KERNEL);
 	if (!pages)
 		return ERR_PTR(-ENOMEM);
 
@@ -120,15 +105,8 @@ void io_free_region(struct user_struct *user, struct io_mapped_region *mr)
 	}
 	if ((mr->flags & IO_REGION_F_VMAP) && mr->ptr)
 		vunmap(mr->ptr);
-	if (mr->nr_pages && user) {
-		unsigned long nr_accounted = mr->nr_pages;
-
-		/* a compound region was accounted for the whole allocation */
-		if (mr->flags & IO_REGION_F_SINGLE_REF)
-			nr_accounted = 1UL << get_order(io_region_size(mr));
-
-		__io_unaccount_mem(user, nr_accounted);
-	}
+	if (mr->nr_pages && user)
+		__io_unaccount_mem(user, mr->nr_pages);
 
 	memset(mr, 0, sizeof(*mr));
 }
@@ -154,9 +132,9 @@ static int io_region_init_ptr(struct io_mapped_region *mr)
 }
 
 static int io_region_pin_pages(struct io_mapped_region *mr,
-			       struct io_uring_region_desc *reg)
+				struct io_uring_region_desc *reg)
 {
-	size_t size = io_region_size(mr);
+	unsigned long size = (size_t) mr->nr_pages << PAGE_SHIFT;
 	struct page **pages;
 	int nr_pages;
 
@@ -173,33 +151,26 @@ static int io_region_pin_pages(struct io_mapped_region *mr,
 
 static int io_region_allocate_pages(struct io_mapped_region *mr,
 				    struct io_uring_region_desc *reg,
-				    unsigned long mmap_offset,
-				    struct user_struct *user)
+				    unsigned long mmap_offset)
 {
 	gfp_t gfp = GFP_KERNEL_ACCOUNT | __GFP_ZERO | __GFP_NOWARN;
-	size_t size = io_region_size(mr);
+	size_t size = (size_t) mr->nr_pages << PAGE_SHIFT;
 	unsigned long nr_allocated;
 	struct page **pages;
-	struct page *page;
+	void *p;
 
-	pages = kvmalloc_objs(*pages, mr->nr_pages, gfp);
+	pages = kvmalloc_array(mr->nr_pages, sizeof(*pages), gfp);
 	if (!pages)
 		return -ENOMEM;
 
-	if (io_mem_alloc_compound(pages, mr->nr_pages, size, gfp, user)) {
+	p = io_mem_alloc_compound(pages, mr->nr_pages, size, gfp);
+	if (!IS_ERR(p)) {
 		mr->flags |= IO_REGION_F_SINGLE_REF;
 		goto done;
 	}
 
 	nr_allocated = alloc_pages_bulk_node(gfp, NUMA_NO_NODE,
 					     mr->nr_pages, pages);
-	while (nr_allocated < mr->nr_pages) {
-		page = alloc_page(gfp);
-		if (!page)
-			break;
-
-		pages[nr_allocated++] = page;
-	}
 	if (nr_allocated != mr->nr_pages) {
 		if (nr_allocated)
 			release_pages(pages, nr_allocated);
@@ -248,7 +219,7 @@ int io_create_region(struct user_struct *user, struct io_mapped_region *mr,
 	if (reg->flags & IORING_MEM_REGION_TYPE_USER)
 		ret = io_region_pin_pages(mr, reg);
 	else
-		ret = io_region_allocate_pages(mr, reg, mmap_offset, user);
+		ret = io_region_allocate_pages(mr, reg, mmap_offset);
 	if (ret)
 		goto out_free;
 
@@ -259,6 +230,28 @@ int io_create_region(struct user_struct *user, struct io_mapped_region *mr,
 out_free:
 	io_free_region(user, mr);
 	return ret;
+}
+
+int io_create_region_mmap_safe(struct io_ring_ctx *ctx, struct user_struct *user,
+				struct io_mapped_region *mr,
+				struct io_uring_region_desc *reg,
+				unsigned long mmap_offset)
+{
+	struct io_mapped_region tmp_mr;
+	int ret;
+
+	memcpy(&tmp_mr, mr, sizeof(tmp_mr));
+	ret = io_create_region(user, &tmp_mr, reg, mmap_offset);
+	if (ret)
+		return ret;
+
+	/*
+	 * Once published mmap can find it without holding only the ->mmap_lock
+	 * and not ->uring_lock.
+	 */
+	guard(mutex)(&ctx->mmap_lock);
+	memcpy(mr, &tmp_mr, sizeof(tmp_mr));
+	return 0;
 }
 
 static struct io_mapped_region *io_mmap_get_region(struct io_ring_ctx *ctx,
@@ -299,7 +292,8 @@ static void *io_region_validate_mmap(struct io_ring_ctx *ctx,
 	return io_region_get_ptr(mr);
 }
 
-static void *io_uring_validate_mmap_request(struct file *file, loff_t pgoff)
+static void *io_uring_validate_mmap_request(struct file *file, loff_t pgoff,
+					    size_t sz)
 {
 	struct io_ring_ctx *ctx = file->private_data;
 	struct io_mapped_region *region;
@@ -334,7 +328,7 @@ __cold int io_uring_mmap(struct file *file, struct vm_area_struct *vma)
 
 	guard(mutex)(&ctx->mmap_lock);
 
-	ptr = io_uring_validate_mmap_request(file, vma->vm_pgoff);
+	ptr = io_uring_validate_mmap_request(file, vma->vm_pgoff, sz);
 	if (IS_ERR(ptr))
 		return PTR_ERR(ptr);
 
@@ -366,9 +360,9 @@ unsigned long io_uring_get_unmapped_area(struct file *filp, unsigned long addr,
 
 	guard(mutex)(&ctx->mmap_lock);
 
-	ptr = io_uring_validate_mmap_request(filp, pgoff);
+	ptr = io_uring_validate_mmap_request(filp, pgoff, len);
 	if (IS_ERR(ptr))
-		return PTR_ERR(ptr);
+		return -ENOMEM;
 
 	/*
 	 * Some architectures have strong cache aliasing requirements.
@@ -392,58 +386,14 @@ unsigned long io_uring_get_unmapped_area(struct file *filp, unsigned long addr,
 #else
 	addr = 0UL;
 #endif
-	return mm_get_unmapped_area(filp, addr, len, pgoff, flags);
+	return mm_get_unmapped_area(current->mm, filp, addr, len, pgoff, flags);
 }
 
 #else /* !CONFIG_MMU */
 
-/*
- * Drop the pages that were initially referenced and added in
- * io_uring_mmap(). We cannot have had a mremap() as that isn't supported,
- * hence the vma should be identical to the one we initially referenced and
- * mapped, and partial unmaps and splitting isn't possible on a file backed
- * mapping.
- */
-static void io_uring_nommu_vm_close(struct vm_area_struct *vma)
-{
-	unsigned long index;
-
-	for (index = vma->vm_start; index < vma->vm_end; index += PAGE_SIZE)
-		put_page(virt_to_page((void *) index));
-}
-
-static const struct vm_operations_struct io_uring_nommu_vm_ops = {
-	.close = io_uring_nommu_vm_close,
-};
-
 int io_uring_mmap(struct file *file, struct vm_area_struct *vma)
 {
-	struct io_ring_ctx *ctx = file->private_data;
-	struct io_mapped_region *region;
-	unsigned long i;
-
-	if (!is_nommu_shared_mapping(vma->vm_flags))
-		return -EINVAL;
-
-	guard(mutex)(&ctx->mmap_lock);
-	region = io_mmap_get_region(ctx, vma->vm_pgoff);
-	if (!region || !io_region_is_set(region))
-		return -EINVAL;
-
-	if ((vma->vm_end - vma->vm_start) !=
-	    (unsigned long) region->nr_pages << PAGE_SHIFT)
-		return -EINVAL;
-
-	/*
-	 * Pin the pages so io_free_region()'s release_pages() does not
-	 * drop the last reference while this VMA exists. delete_vma()
-	 * in mm/nommu.c calls vma_close() which runs ->close above.
-	 */
-	for (i = 0; i < region->nr_pages; i++)
-		get_page(region->pages[i]);
-
-	vma->vm_ops = &io_uring_nommu_vm_ops;
-	return 0;
+	return is_nommu_shared_mapping(vma->vm_flags) ? 0 : -EINVAL;
 }
 
 unsigned int io_uring_nommu_mmap_capabilities(struct file *file)
@@ -460,7 +410,7 @@ unsigned long io_uring_get_unmapped_area(struct file *file, unsigned long addr,
 
 	guard(mutex)(&ctx->mmap_lock);
 
-	ptr = io_uring_validate_mmap_request(file, pgoff);
+	ptr = io_uring_validate_mmap_request(file, pgoff, len);
 	if (IS_ERR(ptr))
 		return PTR_ERR(ptr);
 

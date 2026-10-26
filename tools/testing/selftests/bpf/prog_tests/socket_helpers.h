@@ -17,16 +17,11 @@
 #define VMADDR_CID_LOCAL 1
 #endif
 
-/* include/linux/compiler_types.h */
-#if __STDC_VERSION__ < 202311L && !defined(auto)
-# define auto __auto_type
-#endif
-
 /* include/linux/cleanup.h */
 #define __get_and_null(p, nullvalue)                                           \
 	({                                                                     \
-		auto __ptr = &(p);					       \
-		auto __val = *__ptr;                                           \
+		__auto_type __ptr = &(p);                                      \
+		__auto_type __val = *__ptr;                                    \
 		*__ptr = nullvalue;                                            \
 		__val;                                                         \
 	})
@@ -468,18 +463,6 @@ static inline const char *socket_kind_to_str(int sock_fd)
 	}
 
 	return "???";
-}
-
-static inline const char *inet_family_str(sa_family_t family)
-{
-	switch (family) {
-	case AF_INET:
-		return "IPv4";
-	case AF_INET6:
-		return "IPv6";
-	default:
-		return "unknown";
-	}
 }
 
 #endif // __SOCKET_HELPERS__

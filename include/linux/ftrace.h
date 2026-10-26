@@ -31,7 +31,7 @@
 #define ARCH_SUPPORTS_FTRACE_OPS 0
 #endif
 
-#ifdef CONFIG_TRACER_SNAPSHOT
+#ifdef CONFIG_TRACING
 extern void ftrace_boot_snapshot(void);
 #else
 static inline void ftrace_boot_snapshot(void) { }
@@ -82,7 +82,6 @@ static inline void early_trace_init(void) { }
 
 struct module;
 struct ftrace_hash;
-struct ftrace_func_entry;
 
 #if defined(CONFIG_FUNCTION_TRACER) && defined(CONFIG_MODULES) && \
 	defined(CONFIG_DYNAMIC_FTRACE)
@@ -405,20 +404,9 @@ enum ftrace_ops_cmd {
  *        Negative on failure. The return value is dependent on the
  *        callback.
  */
-typedef int (*ftrace_ops_func_t)(struct ftrace_ops *op, unsigned long ip, enum ftrace_ops_cmd cmd);
+typedef int (*ftrace_ops_func_t)(struct ftrace_ops *op, enum ftrace_ops_cmd cmd);
 
 #ifdef CONFIG_DYNAMIC_FTRACE
-
-#define FTRACE_HASH_DEFAULT_BITS 10
-
-struct ftrace_hash *alloc_ftrace_hash(int size_bits);
-void free_ftrace_hash(struct ftrace_hash *hash);
-struct ftrace_func_entry *add_ftrace_hash_entry_direct(struct ftrace_hash *hash,
-						       unsigned long ip, unsigned long direct);
-void add_ftrace_hash_entry(struct ftrace_hash *hash, struct ftrace_func_entry *entry);
-struct ftrace_func_entry *ftrace_lookup_ip(struct ftrace_hash *hash, unsigned long ip);
-void ftrace_hash_remove(struct ftrace_hash *hash);
-
 /* The hash used to know what functions callbacks trace */
 struct ftrace_ops_hash {
 	struct ftrace_hash __rcu	*notrace_hash;
@@ -548,13 +536,7 @@ int unregister_ftrace_direct(struct ftrace_ops *ops, unsigned long addr,
 int modify_ftrace_direct(struct ftrace_ops *ops, unsigned long addr);
 int modify_ftrace_direct_nolock(struct ftrace_ops *ops, unsigned long addr);
 
-int update_ftrace_direct_add(struct ftrace_ops *ops, struct ftrace_hash *hash);
-int update_ftrace_direct_del(struct ftrace_ops *ops, struct ftrace_hash *hash);
-int update_ftrace_direct_mod(struct ftrace_ops *ops, struct ftrace_hash *hash, bool do_direct_lock);
-
 void ftrace_stub_direct_tramp(void);
-
-unsigned long ftrace_hash_count(struct ftrace_hash *hash);
 
 #else
 struct ftrace_ops;
@@ -580,26 +562,6 @@ static inline int modify_ftrace_direct_nolock(struct ftrace_ops *ops, unsigned l
 	return -ENODEV;
 }
 
-static inline int update_ftrace_direct_add(struct ftrace_ops *ops, struct ftrace_hash *hash)
-{
-	return -ENODEV;
-}
-
-static inline int update_ftrace_direct_del(struct ftrace_ops *ops, struct ftrace_hash *hash)
-{
-	return -ENODEV;
-}
-
-static inline int update_ftrace_direct_mod(struct ftrace_ops *ops, struct ftrace_hash *hash, bool do_direct_lock)
-{
-	return -ENODEV;
-}
-
-static inline unsigned long ftrace_hash_count(struct ftrace_hash *hash)
-{
-	return 0;
-}
-
 /*
  * This must be implemented by the architecture.
  * It is the way the ftrace direct_ops helper, when called
@@ -616,38 +578,6 @@ static inline unsigned long ftrace_hash_count(struct ftrace_hash *hash)
 static inline void arch_ftrace_set_direct_caller(struct ftrace_regs *fregs,
 						 unsigned long addr) { }
 #endif /* CONFIG_DYNAMIC_FTRACE_WITH_DIRECT_CALLS */
-
-#ifdef CONFIG_DYNAMIC_FTRACE_WITH_JMP
-static inline bool ftrace_is_jmp(unsigned long addr)
-{
-	return addr & 1;
-}
-
-static inline unsigned long ftrace_jmp_set(unsigned long addr)
-{
-	return addr | 1UL;
-}
-
-static inline unsigned long ftrace_jmp_get(unsigned long addr)
-{
-	return addr & ~1UL;
-}
-#else
-static inline bool ftrace_is_jmp(unsigned long addr)
-{
-	return false;
-}
-
-static inline unsigned long ftrace_jmp_set(unsigned long addr)
-{
-	return addr;
-}
-
-static inline unsigned long ftrace_jmp_get(unsigned long addr)
-{
-	return addr;
-}
-#endif /* CONFIG_DYNAMIC_FTRACE_WITH_JMP */
 
 #ifdef CONFIG_STACK_TRACER
 
@@ -1214,14 +1144,17 @@ static inline void ftrace_init(void) { }
  */
 struct ftrace_graph_ent {
 	unsigned long func; /* Current function */
-	long depth; /* signed to check for less than zero */
+	int depth;
 } __packed;
 
 /*
  * Structure that defines an entry function trace with retaddr.
+ * It's already packed but the attribute "packed" is needed
+ * to remove extra padding at the end.
  */
 struct fgraph_retaddr_ent {
-	struct ftrace_graph_ent ent;
+	unsigned long func; /* Current function */
+	int depth;
 	unsigned long retaddr;  /* Return address */
 } __packed;
 

@@ -10,7 +10,8 @@
  *		Harald Freudenberger <freude@de.ibm.com>
  */
 
-#define pr_fmt(fmt) "paes_s390: " fmt
+#define KMSG_COMPONENT "paes_s390"
+#define pr_fmt(fmt) KMSG_COMPONENT ": " fmt
 
 #include <linux/atomic.h>
 #include <linux/cpufeature.h>
@@ -19,7 +20,7 @@
 #include <linux/init.h>
 #include <linux/miscdevice.h>
 #include <linux/module.h>
-#include <linux/semaphore.h>
+#include <linux/mutex.h>
 #include <linux/spinlock.h>
 #include <crypto/aes.h>
 #include <crypto/algapi.h>
@@ -40,12 +41,8 @@
 #define PAES_256_PROTKEY_SIZE	(32 + 32)	/* key + verification pattern */
 #define PXTS_256_PROTKEY_SIZE	(32 + 32 + 32)	/* k1 + k2 + verification pattern */
 
-static bool pkey_clrkey_allowed;
-module_param_named(clrkey, pkey_clrkey_allowed, bool, 0444);
-MODULE_PARM_DESC(clrkey, "Allow clear key material (default N)");
-
 static u8 *ctrblk;
-static DEFINE_SEMAPHORE(ctrblk_sem, 1);
+static DEFINE_MUTEX(ctrblk_lock);
 
 static cpacf_mask_t km_functions, kmc_functions, kmctr_functions;
 
@@ -196,13 +193,9 @@ static inline int pxts_ctx_setkey(struct s390_pxts_ctx *ctx,
  * This function may sleep - don't call in non-sleeping context.
  */
 static inline int convert_key(const u8 *key, unsigned int keylen,
-			      struct paes_protkey *pk, bool tested)
+			      struct paes_protkey *pk)
 {
-	u32 xflags = PKEY_XFLAG_NOMEMALLOC;
 	int rc, i;
-
-	if (tested && !pkey_clrkey_allowed)
-		xflags |= PKEY_XFLAG_NOCLEARKEY;
 
 	pk->len = sizeof(pk->protkey);
 
@@ -217,7 +210,7 @@ static inline int convert_key(const u8 *key, unsigned int keylen,
 		}
 		rc = pkey_key2protkey(key, keylen,
 				      pk->protkey, &pk->len, &pk->type,
-				      xflags);
+				      PKEY_XFLAG_NOMEMALLOC);
 	}
 
 	/* But finally map -EBUSY to -EIO to indicate an IO failure */
@@ -243,7 +236,7 @@ out:
  * unnecessary additional conversion but never to invalid data on en-
  * or decrypt operations.
  */
-static int paes_convert_key(struct s390_paes_ctx *ctx, bool tested)
+static int paes_convert_key(struct s390_paes_ctx *ctx)
 {
 	struct paes_protkey pk;
 	int rc;
@@ -252,7 +245,7 @@ static int paes_convert_key(struct s390_paes_ctx *ctx, bool tested)
 	ctx->pk_state = PK_STATE_CONVERT_IN_PROGRESS;
 	spin_unlock_bh(&ctx->pk_lock);
 
-	rc = convert_key(ctx->keybuf, ctx->keylen, &pk, tested);
+	rc = convert_key(ctx->keybuf, ctx->keylen, &pk);
 
 	/* update context */
 	spin_lock_bh(&ctx->pk_lock);
@@ -275,7 +268,7 @@ static int paes_convert_key(struct s390_paes_ctx *ctx, bool tested)
  * pk_type, pk_len and the protected key in the tfm context.
  * See also comments on function paes_convert_key.
  */
-static int pxts_convert_key(struct s390_pxts_ctx *ctx, bool tested)
+static int pxts_convert_key(struct s390_pxts_ctx *ctx)
 {
 	struct paes_protkey pk0, pk1;
 	size_t split_keylen;
@@ -285,7 +278,7 @@ static int pxts_convert_key(struct s390_pxts_ctx *ctx, bool tested)
 	ctx->pk_state = PK_STATE_CONVERT_IN_PROGRESS;
 	spin_unlock_bh(&ctx->pk_lock);
 
-	rc = convert_key(ctx->keybuf, ctx->keylen, &pk0, tested);
+	rc = convert_key(ctx->keybuf, ctx->keylen, &pk0);
 	if (rc)
 		goto out;
 
@@ -299,7 +292,7 @@ static int pxts_convert_key(struct s390_pxts_ctx *ctx, bool tested)
 		}
 		split_keylen = ctx->keylen / 2;
 		rc = convert_key(ctx->keybuf + split_keylen,
-				 split_keylen, &pk1, tested);
+				 split_keylen, &pk1);
 		if (rc)
 			goto out;
 		if (pk0.type != pk1.type) {
@@ -355,7 +348,6 @@ static int ecb_paes_setkey(struct crypto_skcipher *tfm, const u8 *in_key,
 			   unsigned int key_len)
 {
 	struct s390_paes_ctx *ctx = crypto_skcipher_ctx(tfm);
-	bool tested = crypto_skcipher_tested(tfm);
 	long fc;
 	int rc;
 
@@ -365,7 +357,7 @@ static int ecb_paes_setkey(struct crypto_skcipher *tfm, const u8 *in_key,
 		goto out;
 
 	/* convert key into protected key */
-	rc = paes_convert_key(ctx, tested);
+	rc = paes_convert_key(ctx);
 	if (rc)
 		goto out;
 
@@ -395,7 +387,7 @@ out:
 
 static int ecb_paes_do_crypt(struct s390_paes_ctx *ctx,
 			     struct s390_pecb_req_ctx *req_ctx,
-			     bool tested, bool maysleep)
+			     bool maysleep)
 {
 	struct ecb_param *param = &req_ctx->param;
 	struct skcipher_walk *walk = &req_ctx->walk;
@@ -436,17 +428,14 @@ static int ecb_paes_do_crypt(struct s390_paes_ctx *ctx,
 		n = nbytes & ~(AES_BLOCK_SIZE - 1);
 		k = cpacf_km(ctx->fc | req_ctx->modifier, param,
 			     walk->dst.virt.addr, walk->src.virt.addr, n);
-		if (k) {
+		if (k)
 			rc = skcipher_walk_done(walk, nbytes - k);
-			if (rc)
-				goto out;
-		}
 		if (k < n) {
 			if (!maysleep) {
 				rc = -EKEYEXPIRED;
 				goto out;
 			}
-			rc = paes_convert_key(ctx, tested);
+			rc = paes_convert_key(ctx);
 			if (rc)
 				goto out;
 			spin_lock_bh(&ctx->pk_lock);
@@ -466,8 +455,6 @@ static int ecb_paes_crypt(struct skcipher_request *req, unsigned long modifier)
 	struct crypto_skcipher *tfm = crypto_skcipher_reqtfm(req);
 	struct s390_paes_ctx *ctx = crypto_skcipher_ctx(tfm);
 	struct skcipher_walk *walk = &req_ctx->walk;
-	bool tested = crypto_skcipher_tested(tfm);
-	bool cleanup = true;
 	int rc;
 
 	/*
@@ -486,7 +473,7 @@ static int ecb_paes_crypt(struct skcipher_request *req, unsigned long modifier)
 
 	/* Try synchronous operation if no active engine usage */
 	if (!atomic_read(&ctx->via_engine_ctr)) {
-		rc = ecb_paes_do_crypt(ctx, req_ctx, tested, false);
+		rc = ecb_paes_do_crypt(ctx, req_ctx, false);
 		if (rc == 0)
 			goto out;
 	}
@@ -499,17 +486,15 @@ static int ecb_paes_crypt(struct skcipher_request *req, unsigned long modifier)
 	if (rc == 0 || rc == -EKEYEXPIRED) {
 		atomic_inc(&ctx->via_engine_ctr);
 		rc = crypto_transfer_skcipher_request_to_engine(paes_crypto_engine, req);
-		if (rc == -EINPROGRESS || rc == -EBUSY)
-			cleanup = false;
-		else
+		if (rc != -EINPROGRESS)
 			atomic_dec(&ctx->via_engine_ctr);
 	}
 
-	if (cleanup && walk->nbytes)
+	if (rc != -EINPROGRESS)
 		skcipher_walk_done(walk, rc);
 
 out:
-	if (cleanup)
+	if (rc != -EINPROGRESS)
 		memzero_explicit(&req_ctx->param, sizeof(req_ctx->param));
 	pr_debug("rc=%d\n", rc);
 	return rc;
@@ -551,15 +536,23 @@ static int ecb_paes_do_one_request(struct crypto_engine *engine, void *areq)
 	struct crypto_skcipher *tfm = crypto_skcipher_reqtfm(req);
 	struct s390_paes_ctx *ctx = crypto_skcipher_ctx(tfm);
 	struct skcipher_walk *walk = &req_ctx->walk;
-	bool tested = crypto_skcipher_tested(tfm);
 	int rc;
 
 	/* walk has already been prepared */
 
-	rc = ecb_paes_do_crypt(ctx, req_ctx, tested, true);
+	rc = ecb_paes_do_crypt(ctx, req_ctx, true);
 	if (rc == -EKEYEXPIRED) {
-		return pkey_handle_expired();
-	} else if (rc && walk->nbytes) {
+		/*
+		 * Protected key expired, conversion is in process.
+		 * Trigger a re-schedule of this request by returning
+		 * -ENOSPC ("hardware queue is full") to the crypto engine.
+		 * To avoid immediately re-invocation of this callback,
+		 * tell the scheduler to voluntarily give up the CPU here.
+		 */
+		cond_resched();
+		pr_debug("rescheduling request\n");
+		return -ENOSPC;
+	} else if (rc) {
 		skcipher_walk_done(walk, rc);
 	}
 
@@ -615,7 +608,6 @@ static int cbc_paes_setkey(struct crypto_skcipher *tfm, const u8 *in_key,
 			   unsigned int key_len)
 {
 	struct s390_paes_ctx *ctx = crypto_skcipher_ctx(tfm);
-	bool tested = crypto_skcipher_tested(tfm);
 	long fc;
 	int rc;
 
@@ -625,7 +617,7 @@ static int cbc_paes_setkey(struct crypto_skcipher *tfm, const u8 *in_key,
 		goto out;
 
 	/* convert raw key into protected key */
-	rc = paes_convert_key(ctx, tested);
+	rc = paes_convert_key(ctx);
 	if (rc)
 		goto out;
 
@@ -655,7 +647,7 @@ out:
 
 static int cbc_paes_do_crypt(struct s390_paes_ctx *ctx,
 			     struct s390_pcbc_req_ctx *req_ctx,
-			     bool tested, bool maysleep)
+			     bool maysleep)
 {
 	struct cbc_param *param = &req_ctx->param;
 	struct skcipher_walk *walk = &req_ctx->walk;
@@ -701,15 +693,13 @@ static int cbc_paes_do_crypt(struct s390_paes_ctx *ctx,
 		if (k) {
 			memcpy(walk->iv, param->iv, AES_BLOCK_SIZE);
 			rc = skcipher_walk_done(walk, nbytes - k);
-			if (rc)
-				goto out;
 		}
 		if (k < n) {
 			if (!maysleep) {
 				rc = -EKEYEXPIRED;
 				goto out;
 			}
-			rc = paes_convert_key(ctx, tested);
+			rc = paes_convert_key(ctx);
 			if (rc)
 				goto out;
 			spin_lock_bh(&ctx->pk_lock);
@@ -729,8 +719,6 @@ static int cbc_paes_crypt(struct skcipher_request *req, unsigned long modifier)
 	struct crypto_skcipher *tfm = crypto_skcipher_reqtfm(req);
 	struct s390_paes_ctx *ctx = crypto_skcipher_ctx(tfm);
 	struct skcipher_walk *walk = &req_ctx->walk;
-	bool tested = crypto_skcipher_tested(tfm);
-	bool cleanup = true;
 	int rc;
 
 	/*
@@ -749,7 +737,7 @@ static int cbc_paes_crypt(struct skcipher_request *req, unsigned long modifier)
 
 	/* Try synchronous operation if no active engine usage */
 	if (!atomic_read(&ctx->via_engine_ctr)) {
-		rc = cbc_paes_do_crypt(ctx, req_ctx, tested, false);
+		rc = cbc_paes_do_crypt(ctx, req_ctx, false);
 		if (rc == 0)
 			goto out;
 	}
@@ -762,17 +750,15 @@ static int cbc_paes_crypt(struct skcipher_request *req, unsigned long modifier)
 	if (rc == 0 || rc == -EKEYEXPIRED) {
 		atomic_inc(&ctx->via_engine_ctr);
 		rc = crypto_transfer_skcipher_request_to_engine(paes_crypto_engine, req);
-		if (rc == -EINPROGRESS || rc == -EBUSY)
-			cleanup = false;
-		else
+		if (rc != -EINPROGRESS)
 			atomic_dec(&ctx->via_engine_ctr);
 	}
 
-	if (cleanup && walk->nbytes)
+	if (rc != -EINPROGRESS)
 		skcipher_walk_done(walk, rc);
 
 out:
-	if (cleanup)
+	if (rc != -EINPROGRESS)
 		memzero_explicit(&req_ctx->param, sizeof(req_ctx->param));
 	pr_debug("rc=%d\n", rc);
 	return rc;
@@ -814,15 +800,23 @@ static int cbc_paes_do_one_request(struct crypto_engine *engine, void *areq)
 	struct crypto_skcipher *tfm = crypto_skcipher_reqtfm(req);
 	struct s390_paes_ctx *ctx = crypto_skcipher_ctx(tfm);
 	struct skcipher_walk *walk = &req_ctx->walk;
-	bool tested = crypto_skcipher_tested(tfm);
 	int rc;
 
 	/* walk has already been prepared */
 
-	rc = cbc_paes_do_crypt(ctx, req_ctx, tested, true);
+	rc = cbc_paes_do_crypt(ctx, req_ctx, true);
 	if (rc == -EKEYEXPIRED) {
-		return pkey_handle_expired();
-	} else if (rc && walk->nbytes) {
+		/*
+		 * Protected key expired, conversion is in process.
+		 * Trigger a re-schedule of this request by returning
+		 * -ENOSPC ("hardware queue is full") to the crypto engine.
+		 * To avoid immediately re-invocation of this callback,
+		 * tell the scheduler to voluntarily give up the CPU here.
+		 */
+		cond_resched();
+		pr_debug("rescheduling request\n");
+		return -ENOSPC;
+	} else if (rc) {
 		skcipher_walk_done(walk, rc);
 	}
 
@@ -878,7 +872,6 @@ static int ctr_paes_setkey(struct crypto_skcipher *tfm, const u8 *in_key,
 			   unsigned int key_len)
 {
 	struct s390_paes_ctx *ctx = crypto_skcipher_ctx(tfm);
-	bool tested = crypto_skcipher_tested(tfm);
 	long fc;
 	int rc;
 
@@ -888,7 +881,7 @@ static int ctr_paes_setkey(struct crypto_skcipher *tfm, const u8 *in_key,
 		goto out;
 
 	/* convert raw key into protected key */
-	rc = paes_convert_key(ctx, tested);
+	rc = paes_convert_key(ctx);
 	if (rc)
 		goto out;
 
@@ -931,62 +924,15 @@ static inline unsigned int __ctrblk_init(u8 *ctrptr, u8 *iv, unsigned int nbytes
 	return n;
 }
 
-static int __ctr_paes_do_crypt(struct s390_paes_ctx *ctx,
-			       struct ctr_param *param,
-			       struct skcipher_walk *walk,
-			       bool tested, bool maysleep, bool locked)
-{
-	unsigned int nbytes, n, k;
-	u8 *ctrptr;
-	int rc = 0;
-
-	/*
-	 * Note that in case of partial processing or failure the walk
-	 * is NOT unmapped here. So a follow up task may reuse the walk
-	 * or in case of unrecoverable failure needs to unmap it.
-	 */
-	while ((nbytes = walk->nbytes) >= AES_BLOCK_SIZE) {
-		n = AES_BLOCK_SIZE;
-		if (nbytes >= 2 * AES_BLOCK_SIZE && locked)
-			n = __ctrblk_init(ctrblk, walk->iv, nbytes);
-		ctrptr = (n > AES_BLOCK_SIZE) ? ctrblk : walk->iv;
-		k = cpacf_kmctr(ctx->fc, param, walk->dst.virt.addr,
-				walk->src.virt.addr, n, ctrptr);
-		if (k) {
-			if (ctrptr == ctrblk)
-				memcpy(walk->iv, ctrptr + k - AES_BLOCK_SIZE,
-				       AES_BLOCK_SIZE);
-			crypto_inc(walk->iv, AES_BLOCK_SIZE);
-			rc = skcipher_walk_done(walk, nbytes - k);
-			if (rc)
-				goto out;
-		}
-		if (k < n) {
-			if (!maysleep) {
-				rc = -EKEYEXPIRED;
-				goto out;
-			}
-			rc = paes_convert_key(ctx, tested);
-			if (rc)
-				goto out;
-			spin_lock_bh(&ctx->pk_lock);
-			memcpy(param->key, ctx->pk.protkey, sizeof(param->key));
-			spin_unlock_bh(&ctx->pk_lock);
-		}
-	}
-
-out:
-	return rc;
-}
-
 static int ctr_paes_do_crypt(struct s390_paes_ctx *ctx,
 			     struct s390_pctr_req_ctx *req_ctx,
-			     bool tested, bool maysleep)
+			     bool maysleep)
 {
 	struct ctr_param *param = &req_ctx->param;
 	struct skcipher_walk *walk = &req_ctx->walk;
-	u8 buf[AES_BLOCK_SIZE];
-	int pk_state, rc = 0;
+	u8 buf[AES_BLOCK_SIZE], *ctrptr;
+	unsigned int nbytes, n, k;
+	int pk_state, locked, rc = 0;
 
 	if (!req_ctx->param_init_done) {
 		/* fetch and check protected key state */
@@ -1012,17 +958,52 @@ static int ctr_paes_do_crypt(struct s390_paes_ctx *ctx,
 	if (rc)
 		goto out;
 
-	if (down_trylock(&ctrblk_sem) == 0) {
-		rc = __ctr_paes_do_crypt(ctx, param, walk, tested, maysleep, true);
-		up(&ctrblk_sem);
-	} else {
-		rc = __ctr_paes_do_crypt(ctx, param, walk, tested, maysleep, false);
+	locked = mutex_trylock(&ctrblk_lock);
+
+	/*
+	 * Note that in case of partial processing or failure the walk
+	 * is NOT unmapped here. So a follow up task may reuse the walk
+	 * or in case of unrecoverable failure needs to unmap it.
+	 */
+	while ((nbytes = walk->nbytes) >= AES_BLOCK_SIZE) {
+		n = AES_BLOCK_SIZE;
+		if (nbytes >= 2 * AES_BLOCK_SIZE && locked)
+			n = __ctrblk_init(ctrblk, walk->iv, nbytes);
+		ctrptr = (n > AES_BLOCK_SIZE) ? ctrblk : walk->iv;
+		k = cpacf_kmctr(ctx->fc, param, walk->dst.virt.addr,
+				walk->src.virt.addr, n, ctrptr);
+		if (k) {
+			if (ctrptr == ctrblk)
+				memcpy(walk->iv, ctrptr + k - AES_BLOCK_SIZE,
+				       AES_BLOCK_SIZE);
+			crypto_inc(walk->iv, AES_BLOCK_SIZE);
+			rc = skcipher_walk_done(walk, nbytes - k);
+		}
+		if (k < n) {
+			if (!maysleep) {
+				if (locked)
+					mutex_unlock(&ctrblk_lock);
+				rc = -EKEYEXPIRED;
+				goto out;
+			}
+			rc = paes_convert_key(ctx);
+			if (rc) {
+				if (locked)
+					mutex_unlock(&ctrblk_lock);
+				goto out;
+			}
+			spin_lock_bh(&ctx->pk_lock);
+			memcpy(param->key, ctx->pk.protkey, sizeof(param->key));
+			spin_unlock_bh(&ctx->pk_lock);
+		}
 	}
+	if (locked)
+		mutex_unlock(&ctrblk_lock);
 
 	/* final block may be < AES_BLOCK_SIZE, copy only nbytes */
-	if (!rc && walk->nbytes > 0) {
+	if (nbytes) {
 		memset(buf, 0, AES_BLOCK_SIZE);
-		memcpy(buf, walk->src.virt.addr, walk->nbytes);
+		memcpy(buf, walk->src.virt.addr, nbytes);
 		while (1) {
 			if (cpacf_kmctr(ctx->fc, param, buf,
 					buf, AES_BLOCK_SIZE,
@@ -1032,14 +1013,14 @@ static int ctr_paes_do_crypt(struct s390_paes_ctx *ctx,
 				rc = -EKEYEXPIRED;
 				goto out;
 			}
-			rc = paes_convert_key(ctx, tested);
+			rc = paes_convert_key(ctx);
 			if (rc)
 				goto out;
 			spin_lock_bh(&ctx->pk_lock);
 			memcpy(param->key, ctx->pk.protkey, sizeof(param->key));
 			spin_unlock_bh(&ctx->pk_lock);
 		}
-		memcpy(walk->dst.virt.addr, buf, walk->nbytes);
+		memcpy(walk->dst.virt.addr, buf, nbytes);
 		crypto_inc(walk->iv, AES_BLOCK_SIZE);
 		rc = skcipher_walk_done(walk, 0);
 	}
@@ -1056,8 +1037,6 @@ static int ctr_paes_crypt(struct skcipher_request *req)
 	struct crypto_skcipher *tfm = crypto_skcipher_reqtfm(req);
 	struct s390_paes_ctx *ctx = crypto_skcipher_ctx(tfm);
 	struct skcipher_walk *walk = &req_ctx->walk;
-	bool tested = crypto_skcipher_tested(tfm);
-	bool cleanup = true;
 	int rc;
 
 	/*
@@ -1075,7 +1054,7 @@ static int ctr_paes_crypt(struct skcipher_request *req)
 
 	/* Try synchronous operation if no active engine usage */
 	if (!atomic_read(&ctx->via_engine_ctr)) {
-		rc = ctr_paes_do_crypt(ctx, req_ctx, tested, false);
+		rc = ctr_paes_do_crypt(ctx, req_ctx, false);
 		if (rc == 0)
 			goto out;
 	}
@@ -1088,17 +1067,15 @@ static int ctr_paes_crypt(struct skcipher_request *req)
 	if (rc == 0 || rc == -EKEYEXPIRED) {
 		atomic_inc(&ctx->via_engine_ctr);
 		rc = crypto_transfer_skcipher_request_to_engine(paes_crypto_engine, req);
-		if (rc == -EINPROGRESS || rc == -EBUSY)
-			cleanup = false;
-		else
+		if (rc != -EINPROGRESS)
 			atomic_dec(&ctx->via_engine_ctr);
 	}
 
-	if (cleanup && walk->nbytes)
+	if (rc != -EINPROGRESS)
 		skcipher_walk_done(walk, rc);
 
 out:
-	if (cleanup)
+	if (rc != -EINPROGRESS)
 		memzero_explicit(&req_ctx->param, sizeof(req_ctx->param));
 	pr_debug("rc=%d\n", rc);
 	return rc;
@@ -1130,15 +1107,23 @@ static int ctr_paes_do_one_request(struct crypto_engine *engine, void *areq)
 	struct crypto_skcipher *tfm = crypto_skcipher_reqtfm(req);
 	struct s390_paes_ctx *ctx = crypto_skcipher_ctx(tfm);
 	struct skcipher_walk *walk = &req_ctx->walk;
-	bool tested = crypto_skcipher_tested(tfm);
 	int rc;
 
 	/* walk has already been prepared */
 
-	rc = ctr_paes_do_crypt(ctx, req_ctx, tested, true);
+	rc = ctr_paes_do_crypt(ctx, req_ctx, true);
 	if (rc == -EKEYEXPIRED) {
-		return pkey_handle_expired();
-	} else if (rc && walk->nbytes) {
+		/*
+		 * Protected key expired, conversion is in process.
+		 * Trigger a re-schedule of this request by returning
+		 * -ENOSPC ("hardware queue is full") to the crypto engine.
+		 * To avoid immediately re-invocation of this callback,
+		 * tell the scheduler to voluntarily give up the CPU here.
+		 */
+		cond_resched();
+		pr_debug("rescheduling request\n");
+		return -ENOSPC;
+	} else if (rc) {
 		skcipher_walk_done(walk, rc);
 	}
 
@@ -1214,7 +1199,6 @@ static int xts_paes_setkey(struct crypto_skcipher *tfm, const u8 *in_key,
 			   unsigned int in_keylen)
 {
 	struct s390_pxts_ctx *ctx = crypto_skcipher_ctx(tfm);
-	bool tested = crypto_skcipher_tested(tfm);
 	u8 ckey[2 * AES_MAX_KEY_SIZE];
 	unsigned int ckey_len;
 	long fc;
@@ -1230,7 +1214,7 @@ static int xts_paes_setkey(struct crypto_skcipher *tfm, const u8 *in_key,
 		goto out;
 
 	/* convert raw key(s) into protected key(s) */
-	rc = pxts_convert_key(ctx, tested);
+	rc = pxts_convert_key(ctx);
 	if (rc)
 		goto out;
 
@@ -1280,7 +1264,7 @@ out:
 
 static int xts_paes_do_crypt_fullkey(struct s390_pxts_ctx *ctx,
 				     struct s390_pxts_req_ctx *req_ctx,
-				     bool tested, bool maysleep)
+				     bool maysleep)
 {
 	struct xts_full_km_param *param = &req_ctx->param.full_km_param;
 	struct skcipher_walk *walk = &req_ctx->walk;
@@ -1317,17 +1301,14 @@ static int xts_paes_do_crypt_fullkey(struct s390_pxts_ctx *ctx,
 		n = nbytes & ~(AES_BLOCK_SIZE - 1);
 		k = cpacf_km(ctx->fc | req_ctx->modifier, param->key + offset,
 			     walk->dst.virt.addr, walk->src.virt.addr, n);
-		if (k) {
+		if (k)
 			rc = skcipher_walk_done(walk, nbytes - k);
-			if (rc)
-				goto out;
-		}
 		if (k < n) {
 			if (!maysleep) {
 				rc = -EKEYEXPIRED;
 				goto out;
 			}
-			rc = pxts_convert_key(ctx, tested);
+			rc = pxts_convert_key(ctx);
 			if (rc)
 				goto out;
 			spin_lock_bh(&ctx->pk_lock);
@@ -1346,8 +1327,7 @@ static inline int __xts_2keys_prep_param(struct s390_pxts_ctx *ctx,
 					 struct xts_km_param *param,
 					 struct skcipher_walk *walk,
 					 unsigned int keylen,
-					 unsigned int offset,
-					 bool tested, bool maysleep)
+					 unsigned int offset, bool maysleep)
 {
 	struct xts_pcc_param pcc_param;
 	unsigned long cc = 1;
@@ -1366,7 +1346,7 @@ static inline int __xts_2keys_prep_param(struct s390_pxts_ctx *ctx,
 				rc = -EKEYEXPIRED;
 				break;
 			}
-			rc = pxts_convert_key(ctx, tested);
+			rc = pxts_convert_key(ctx);
 			if (rc)
 				break;
 			continue;
@@ -1380,7 +1360,7 @@ static inline int __xts_2keys_prep_param(struct s390_pxts_ctx *ctx,
 
 static int xts_paes_do_crypt_2keys(struct s390_pxts_ctx *ctx,
 				   struct s390_pxts_req_ctx *req_ctx,
-				   bool tested, bool maysleep)
+				   bool maysleep)
 {
 	struct xts_km_param *param = &req_ctx->param.km_param;
 	struct skcipher_walk *walk = &req_ctx->walk;
@@ -1398,7 +1378,7 @@ static int xts_paes_do_crypt_2keys(struct s390_pxts_ctx *ctx,
 
 	if (!req_ctx->param_init_done) {
 		rc = __xts_2keys_prep_param(ctx, param, walk,
-					    keylen, offset, tested, maysleep);
+					    keylen, offset, maysleep);
 		if (rc)
 			goto out;
 		req_ctx->param_init_done = true;
@@ -1414,17 +1394,14 @@ static int xts_paes_do_crypt_2keys(struct s390_pxts_ctx *ctx,
 		n = nbytes & ~(AES_BLOCK_SIZE - 1);
 		k = cpacf_km(ctx->fc | req_ctx->modifier, param->key + offset,
 			     walk->dst.virt.addr, walk->src.virt.addr, n);
-		if (k) {
+		if (k)
 			rc = skcipher_walk_done(walk, nbytes - k);
-			if (rc)
-				goto out;
-		}
 		if (k < n) {
 			if (!maysleep) {
 				rc = -EKEYEXPIRED;
 				goto out;
 			}
-			rc = pxts_convert_key(ctx, tested);
+			rc = pxts_convert_key(ctx);
 			if (rc)
 				goto out;
 			spin_lock_bh(&ctx->pk_lock);
@@ -1440,7 +1417,7 @@ out:
 
 static int xts_paes_do_crypt(struct s390_pxts_ctx *ctx,
 			     struct s390_pxts_req_ctx *req_ctx,
-			     bool tested, bool maysleep)
+			     bool maysleep)
 {
 	int pk_state, rc = 0;
 
@@ -1468,11 +1445,11 @@ static int xts_paes_do_crypt(struct s390_pxts_ctx *ctx,
 	switch (ctx->fc) {
 	case CPACF_KM_PXTS_128:
 	case CPACF_KM_PXTS_256:
-		rc = xts_paes_do_crypt_2keys(ctx, req_ctx, tested, maysleep);
+		rc = xts_paes_do_crypt_2keys(ctx, req_ctx, maysleep);
 		break;
 	case CPACF_KM_PXTS_128_FULL:
 	case CPACF_KM_PXTS_256_FULL:
-		rc = xts_paes_do_crypt_fullkey(ctx, req_ctx, tested, maysleep);
+		rc = xts_paes_do_crypt_fullkey(ctx, req_ctx, maysleep);
 		break;
 	default:
 		rc = -EINVAL;
@@ -1489,8 +1466,6 @@ static inline int xts_paes_crypt(struct skcipher_request *req, unsigned long mod
 	struct crypto_skcipher *tfm = crypto_skcipher_reqtfm(req);
 	struct s390_pxts_ctx *ctx = crypto_skcipher_ctx(tfm);
 	struct skcipher_walk *walk = &req_ctx->walk;
-	bool tested = crypto_skcipher_tested(tfm);
-	bool cleanup = true;
 	int rc;
 
 	/*
@@ -1509,7 +1484,7 @@ static inline int xts_paes_crypt(struct skcipher_request *req, unsigned long mod
 
 	/* Try synchronous operation if no active engine usage */
 	if (!atomic_read(&ctx->via_engine_ctr)) {
-		rc = xts_paes_do_crypt(ctx, req_ctx, tested, false);
+		rc = xts_paes_do_crypt(ctx, req_ctx, false);
 		if (rc == 0)
 			goto out;
 	}
@@ -1522,17 +1497,15 @@ static inline int xts_paes_crypt(struct skcipher_request *req, unsigned long mod
 	if (rc == 0 || rc == -EKEYEXPIRED) {
 		atomic_inc(&ctx->via_engine_ctr);
 		rc = crypto_transfer_skcipher_request_to_engine(paes_crypto_engine, req);
-		if (rc == -EINPROGRESS || rc == -EBUSY)
-			cleanup = false;
-		else
+		if (rc != -EINPROGRESS)
 			atomic_dec(&ctx->via_engine_ctr);
 	}
 
-	if (cleanup && walk->nbytes)
+	if (rc != -EINPROGRESS)
 		skcipher_walk_done(walk, rc);
 
 out:
-	if (cleanup)
+	if (rc != -EINPROGRESS)
 		memzero_explicit(&req_ctx->param, sizeof(req_ctx->param));
 	pr_debug("rc=%d\n", rc);
 	return rc;
@@ -1574,15 +1547,23 @@ static int xts_paes_do_one_request(struct crypto_engine *engine, void *areq)
 	struct crypto_skcipher *tfm = crypto_skcipher_reqtfm(req);
 	struct s390_pxts_ctx *ctx = crypto_skcipher_ctx(tfm);
 	struct skcipher_walk *walk = &req_ctx->walk;
-	bool tested = crypto_skcipher_tested(tfm);
 	int rc;
 
 	/* walk has already been prepared */
 
-	rc = xts_paes_do_crypt(ctx, req_ctx, tested, true);
+	rc = xts_paes_do_crypt(ctx, req_ctx, true);
 	if (rc == -EKEYEXPIRED) {
-		return pkey_handle_expired();
-	} else if (rc && walk->nbytes) {
+		/*
+		 * Protected key expired, conversion is in process.
+		 * Trigger a re-schedule of this request by returning
+		 * -ENOSPC ("hardware queue is full") to the crypto engine.
+		 * To avoid immediately re-invocation of this callback,
+		 * tell the scheduler to voluntarily give up the CPU here.
+		 */
+		cond_resched();
+		pr_debug("rescheduling request\n");
+		return -ENOSPC;
+	} else if (rc) {
 		skcipher_walk_done(walk, rc);
 	}
 

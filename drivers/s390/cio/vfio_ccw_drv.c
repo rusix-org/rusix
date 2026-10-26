@@ -35,7 +35,6 @@ debug_info_t *vfio_ccw_debug_trace_id;
  * Helpers
  */
 int vfio_ccw_sch_quiesce(struct subchannel *sch)
-	__must_hold(&sch->lock)
 {
 	struct vfio_ccw_parent *parent = dev_get_drvdata(&sch->dev);
 	struct vfio_ccw_private *private = dev_get_drvdata(&parent->dev);
@@ -186,7 +185,7 @@ static int vfio_ccw_sch_probe(struct subchannel *sch)
 		return -ENODEV;
 	}
 
-	parent = kzalloc_obj(*parent);
+	parent = kzalloc(sizeof(*parent), GFP_KERNEL);
 	if (!parent)
 		return -ENOMEM;
 
@@ -297,7 +296,7 @@ static void vfio_ccw_queue_crw(struct vfio_ccw_private *private,
 	 * carry on.  The guest will either see a later one or
 	 * learn when it issues its own store subchannel.
 	 */
-	crw = kzalloc_obj(*crw, GFP_ATOMIC);
+	crw = kzalloc(sizeof(*crw), GFP_ATOMIC);
 	if (!crw)
 		return;
 

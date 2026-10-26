@@ -2,7 +2,7 @@
 /*
  * Sensirion SCD30 carbon dioxide sensor core driver
  *
- * Copyright (c) 2020 Tomasz Duszynski <tduszyns@gmail.com>
+ * Copyright (c) 2020 Tomasz Duszynski <tomasz.duszynski@octakon.com>
  */
 
 #include <linux/bitfield.h>
@@ -379,13 +379,11 @@ static ssize_t calibration_auto_enable_show(struct device *dev, struct device_at
 	int ret;
 	u16 val;
 
-	guard(mutex)(&state->lock);
-
+	mutex_lock(&state->lock);
 	ret = scd30_command_read(state, CMD_ASC, &val);
-	if (ret)
-		return ret;
+	mutex_unlock(&state->lock);
 
-	return sysfs_emit(buf, "%d\n", val);
+	return ret ?: sysfs_emit(buf, "%d\n", val);
 }
 
 static ssize_t calibration_auto_enable_store(struct device *dev, struct device_attribute *attr,
@@ -400,13 +398,11 @@ static ssize_t calibration_auto_enable_store(struct device *dev, struct device_a
 	if (ret)
 		return ret;
 
-	guard(mutex)(&state->lock);
-
+	mutex_lock(&state->lock);
 	ret = scd30_command_write(state, CMD_ASC, val);
-	if (ret)
-		return ret;
+	mutex_unlock(&state->lock);
 
-	return len;
+	return ret ?: len;
 }
 
 static ssize_t calibration_forced_value_show(struct device *dev, struct device_attribute *attr,
@@ -417,13 +413,11 @@ static ssize_t calibration_forced_value_show(struct device *dev, struct device_a
 	int ret;
 	u16 val;
 
-	guard(mutex)(&state->lock);
-
+	mutex_lock(&state->lock);
 	ret = scd30_command_read(state, CMD_FRC, &val);
-	if (ret)
-		return ret;
+	mutex_unlock(&state->lock);
 
-	return sysfs_emit(buf, "%d\n", val);
+	return ret ?: sysfs_emit(buf, "%d\n", val);
 }
 
 static ssize_t calibration_forced_value_store(struct device *dev, struct device_attribute *attr,
@@ -441,13 +435,11 @@ static ssize_t calibration_forced_value_store(struct device *dev, struct device_
 	if (val < SCD30_FRC_MIN_PPM || val > SCD30_FRC_MAX_PPM)
 		return -EINVAL;
 
-	guard(mutex)(&state->lock);
-
+	mutex_lock(&state->lock);
 	ret = scd30_command_write(state, CMD_FRC, val);
-	if (ret)
-		return ret;
+	mutex_unlock(&state->lock);
 
-	return len;
+	return ret ?: len;
 }
 
 static IIO_DEVICE_ATTR_RO(sampling_frequency_available, 0);
@@ -598,34 +590,24 @@ out:
 	return IRQ_HANDLED;
 }
 
-static int scd30_trigger_handler_helper(struct iio_dev *indio_dev, int *scan_data,
-					size_t scan_data_size)
-{
-	struct scd30_state *state = iio_priv(indio_dev);
-	int ret;
-
-	guard(mutex)(&state->lock);
-
-	if (!iio_trigger_using_own(indio_dev))
-		ret = scd30_read_poll(state);
-	else
-		ret = scd30_read_meas(state);
-	memcpy(scan_data, state->meas, scan_data_size);
-
-	return ret;
-}
-
 static irqreturn_t scd30_trigger_handler(int irq, void *p)
 {
 	struct iio_poll_func *pf = p;
 	struct iio_dev *indio_dev = pf->indio_dev;
+	struct scd30_state *state = iio_priv(indio_dev);
 	struct {
 		int data[SCD30_MEAS_COUNT];
 		aligned_s64 ts;
 	} scan = { };
 	int ret;
 
-	ret = scd30_trigger_handler_helper(indio_dev, scan.data, sizeof(scan.data));
+	mutex_lock(&state->lock);
+	if (!iio_trigger_using_own(indio_dev))
+		ret = scd30_read_poll(state);
+	else
+		ret = scd30_read_meas(state);
+	memcpy(scan.data, state->meas, sizeof(state->meas));
+	mutex_unlock(&state->lock);
 	if (ret)
 		goto out;
 
@@ -686,7 +668,7 @@ static int scd30_setup_trigger(struct iio_dev *indio_dev)
 					IRQF_NO_AUTOEN,
 					indio_dev->name, indio_dev);
 	if (ret)
-		return ret;
+		return dev_err_probe(dev, ret, "failed to request irq\n");
 
 	return 0;
 }
@@ -711,11 +693,7 @@ int scd30_probe(struct device *dev, int irq, const char *name, void *priv,
 	state->pressure_comp = SCD30_PRESSURE_COMP_DEFAULT;
 	state->meas_interval = SCD30_MEAS_INTERVAL_DEFAULT;
 	state->command = command;
-
-	ret = devm_mutex_init(dev, &state->lock);
-	if (ret)
-		return ret;
-
+	mutex_init(&state->lock);
 	init_completion(&state->meas_ready);
 
 	dev_set_drvdata(dev, indio_dev);
@@ -774,6 +752,6 @@ int scd30_probe(struct device *dev, int irq, const char *name, void *priv,
 }
 EXPORT_SYMBOL_NS(scd30_probe, "IIO_SCD30");
 
-MODULE_AUTHOR("Tomasz Duszynski <tduszyns@gmail.com>");
+MODULE_AUTHOR("Tomasz Duszynski <tomasz.duszynski@octakon.com>");
 MODULE_DESCRIPTION("Sensirion SCD30 carbon dioxide sensor core driver");
 MODULE_LICENSE("GPL v2");

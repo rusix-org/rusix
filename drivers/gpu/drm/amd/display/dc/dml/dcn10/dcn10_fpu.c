@@ -28,6 +28,7 @@
 
 #include "dcn10_fpu.h"
 #include "resource.h"
+#include "amdgpu_dm/dc_fpu.h"
 
 /**
  * DOC: DCN10 FPU manipulation Overview
@@ -75,7 +76,7 @@ struct _vcs_dpi_ip_params_st dcn1_0_ip = {
 	.line_buffer_size_bits = 589824,
 	.max_line_buffer_lines = 12,
 	.IsLineBufferBppFixed = 0,
-	.LineBufferFixedBpp = (unsigned int)-1,
+	.LineBufferFixedBpp = -1,
 	.writeback_luma_buffer_size_kbytes = 12,
 	.writeback_chroma_buffer_size_kbytes = 8,
 	.max_num_dpp = 4,

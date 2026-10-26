@@ -33,7 +33,6 @@
 #include "gt/intel_gt.h"
 #include "gt/intel_gt_requests.h"
 #include "gt/mock_engine.h"
-#include "i915_driver.h"
 #include "intel_memory_region.h"
 #include "intel_region_ttm.h"
 
@@ -148,7 +147,7 @@ struct drm_i915_private *mock_gem_device(void)
 	struct pci_dev *pdev;
 	int ret;
 
-	pdev = kzalloc_obj(*pdev);
+	pdev = kzalloc(sizeof(*pdev), GFP_KERNEL);
 	if (!pdev)
 		return NULL;
 	device_initialize(&pdev->dev);
@@ -184,8 +183,7 @@ struct drm_i915_private *mock_gem_device(void)
 	/* Set up device info and initial runtime info. */
 	intel_device_info_driver_create(i915, pdev->device, &mock_info);
 
-	/* FIXME: Can we run selftests using a mock device without display? */
-	display = intel_display_device_probe(pdev, i915_driver_parent_interface());
+	display = intel_display_device_probe(pdev);
 	if (IS_ERR(display))
 		goto err_device;
 
@@ -223,7 +221,7 @@ struct drm_i915_private *mock_gem_device(void)
 	if (!i915->wq)
 		goto err_drv;
 
-	i915->unordered_wq = alloc_workqueue("mock-unordered", WQ_PERCPU, 0);
+	i915->unordered_wq = alloc_workqueue("mock-unordered", 0, 0);
 	if (!i915->unordered_wq)
 		goto err_wq;
 
@@ -277,7 +275,6 @@ void mock_destroy_device(struct drm_i915_private *i915)
 	struct device *dev = i915->drm.dev;
 
 	intel_display_device_remove(i915->display);
-	i915->display = NULL;
 
 	devres_release_group(dev, NULL);
 	put_device(dev);

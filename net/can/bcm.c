@@ -60,7 +60,6 @@
 #include <linux/slab.h>
 #include <linux/workqueue.h>
 #include <linux/spinlock.h>
-#include <net/can.h>
 #include <net/sock.h>
 #include <net/net_namespace.h>
 
@@ -129,7 +128,6 @@ struct bcm_op {
 	struct canfd_frame last_sframe;
 	struct sock *sk;
 	struct net_device *rx_reg_dev;
-	netdevice_tracker rx_reg_dev_tracker;
 	spinlock_t bcm_tx_lock; /* protect tx data and timer updates */
 	spinlock_t bcm_rx_update_lock; /* protect filter/timer data updates */
 };
@@ -321,7 +319,6 @@ static void bcm_update_tx_stats(struct bcm_op *op)
 static void bcm_can_tx(struct bcm_op *op, struct canfd_frame *cf)
 {
 	struct sk_buff *skb;
-	struct can_skb_ext *csx;
 	struct net_device *dev;
 	struct canfd_frame cframe;
 	bool cyclic = !cf;
@@ -347,17 +344,13 @@ static void bcm_can_tx(struct bcm_op *op, struct canfd_frame *cf)
 		return;
 	}
 
-	skb = alloc_skb(op->cfsiz, gfp_any());
+	skb = alloc_skb(op->cfsiz + sizeof(struct can_skb_priv), gfp_any());
 	if (!skb)
 		goto out;
 
-	csx = can_skb_ext_add(skb);
-	if (!csx) {
-		kfree_skb(skb);
-		goto out;
-	}
-
-	csx->can_iif = dev->ifindex;
+	can_skb_reserve(skb);
+	can_skb_prv(skb)->ifindex = dev->ifindex;
+	can_skb_prv(skb)->skbcnt = 0;
 
 	skb_put_data(skb, cf, op->cfsiz);
 
@@ -813,7 +806,7 @@ static void bcm_rx_handler(struct sk_buff *skb, void *data)
 		    (op->kt_ival1 || op->kt_ival2)) {
 			/* don't claim to vanishing interface */
 			if (!op->if_detected &&
-			    READ_ONCE(skb->dev->reg_state) == NETREG_REGISTERED)
+			    skb->dev->reg_state == NETREG_REGISTERED)
 				op->if_detected = skb->dev->ifindex;
 
 			if (op->if_detected != skb->dev->ifindex) {
@@ -968,7 +961,7 @@ static void bcm_rx_unreg(struct net_device *dev, struct bcm_op *op)
 
 		/* mark as removed subscription */
 		op->rx_reg_dev = NULL;
-		netdev_put(dev, &op->rx_reg_dev_tracker);
+		dev_put(dev);
 	} else
 		printk(KERN_ERR "can-bcm: bcm_rx_unreg: registered device "
 		       "mismatch %p %p\n", op->rx_reg_dev, dev);
@@ -1538,16 +1531,14 @@ static int bcm_rx_setup(struct bcm_msg_head *msg_head, struct msghdr *msg,
 						      bcm_rx_handler, op,
 						      "bcm", sk);
 
-				/* keep a tracked reference so that a later
+				/* keep a reference so that a later
 				 * unregister can safely reach the device even
 				 * if a concurrent NETDEV_UNREGISTER has
 				 * already unlisted it by ifindex
 				 */
 				if (!err) {
 					op->rx_reg_dev = dev;
-					netdev_hold(dev,
-						    &op->rx_reg_dev_tracker,
-						    GFP_KERNEL);
+					dev_hold(dev);
 				}
 				dev_put(dev);
 			} else {
@@ -1603,7 +1594,6 @@ static int bcm_tx_send(struct msghdr *msg, int ifindex, struct sock *sk,
 		       int cfsiz)
 {
 	struct sk_buff *skb;
-	struct can_skb_ext *csx;
 	struct net_device *dev;
 	int err;
 
@@ -1611,15 +1601,11 @@ static int bcm_tx_send(struct msghdr *msg, int ifindex, struct sock *sk,
 	if (!ifindex)
 		return -ENODEV;
 
-	skb = alloc_skb(cfsiz, GFP_KERNEL);
+	skb = alloc_skb(cfsiz + sizeof(struct can_skb_priv), GFP_KERNEL);
 	if (!skb)
 		return -ENOMEM;
 
-	csx = can_skb_ext_add(skb);
-	if (!csx) {
-		kfree_skb(skb);
-		return -ENOMEM;
-	}
+	can_skb_reserve(skb);
 
 	err = memcpy_from_msg(skb_put(skb, cfsiz), msg, cfsiz);
 	if (err < 0) {
@@ -1633,7 +1619,8 @@ static int bcm_tx_send(struct msghdr *msg, int ifindex, struct sock *sk,
 		return -ENODEV;
 	}
 
-	csx->can_iif = dev->ifindex;
+	can_skb_prv(skb)->ifindex = dev->ifindex;
+	can_skb_prv(skb)->skbcnt = 0;
 	skb->dev = dev;
 	can_skb_set_owner(skb, sk);
 	err = can_send(skb, 1); /* send with loopback */
@@ -1996,7 +1983,7 @@ static int bcm_release(struct socket *sock)
 	return 0;
 }
 
-static int bcm_connect(struct socket *sock, struct sockaddr_unsized *uaddr, int len,
+static int bcm_connect(struct socket *sock, struct sockaddr *uaddr, int len,
 		       int flags)
 {
 	struct sockaddr_can *addr = (struct sockaddr_can *)uaddr;
@@ -2041,7 +2028,7 @@ static int bcm_connect(struct socket *sock, struct sockaddr_unsized *uaddr, int 
 #if IS_ENABLED(CONFIG_PROC_FS)
 	if (net->can.bcmproc_dir) {
 		/* unique socket address as filename */
-		sprintf(bo->procname, "%llu", sock_i_ino(sk));
+		sprintf(bo->procname, "%lu", sock_i_ino(sk));
 		bo->bcm_proc_read = proc_create_net_single(bo->procname, 0644,
 						     net->can.bcmproc_dir,
 						     bcm_proc_show, sk);

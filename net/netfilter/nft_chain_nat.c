@@ -131,7 +131,6 @@ static void __exit nft_chain_nat_exit(void)
 #ifdef CONFIG_NF_TABLES_INET
 	nft_unregister_chain_type(&nft_chain_nat_inet);
 #endif
-	synchronize_rcu();
 }
 
 module_init(nft_chain_nat_init);

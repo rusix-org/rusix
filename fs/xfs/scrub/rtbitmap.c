@@ -3,7 +3,7 @@
  * Copyright (C) 2017-2023 Oracle.  All Rights Reserved.
  * Author: Darrick J. Wong <djwong@kernel.org>
  */
-#include "xfs_platform.h"
+#include "xfs.h"
 #include "xfs_fs.h"
 #include "xfs_shared.h"
 #include "xfs_format.h"
@@ -41,14 +41,14 @@ xchk_setup_rtbitmap(
 	if (xchk_need_intent_drain(sc))
 		xchk_fsgates_enable(sc, XCHK_FSGATES_DRAIN);
 
-	rtb = kzalloc_flex(*rtb, words, xchk_rtbitmap_wordcnt(sc),
-			   XCHK_GFP_FLAGS);
+	rtb = kzalloc(struct_size(rtb, words, xchk_rtbitmap_wordcnt(sc)),
+			XCHK_GFP_FLAGS);
 	if (!rtb)
 		return -ENOMEM;
 	sc->buf = rtb;
 	rtb->sc = sc;
 
-	error = xchk_rtgroup_init(sc, sc->sm->sm_agno);
+	error = xchk_rtgroup_init(sc, sc->sm->sm_agno, &sc->sr);
 	if (error)
 		return error;
 
@@ -70,7 +70,7 @@ xchk_setup_rtbitmap(
 	if (error)
 		return error;
 
-	error = xchk_rtgroup_lock(sc, XCHK_RTGLOCK_ALL);
+	error = xchk_rtgroup_lock(sc, &sc->sr, XCHK_RTGLOCK_ALL);
 	if (error)
 		return error;
 

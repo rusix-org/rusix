@@ -58,7 +58,7 @@ static void rdma_dim_init(struct ib_cq *cq)
 	    cq->poll_ctx == IB_POLL_DIRECT)
 		return;
 
-	dim = kzalloc_obj(struct dim);
+	dim = kzalloc(sizeof(struct dim), GFP_KERNEL);
 	if (!dim)
 		return;
 
@@ -220,9 +220,6 @@ struct ib_cq *__ib_alloc_cq(struct ib_device *dev, void *private, int nr_cqe,
 	struct ib_cq *cq;
 	int ret = -ENOMEM;
 
-	if (WARN_ON_ONCE(!nr_cqe))
-		return ERR_PTR(-EINVAL);
-
 	cq = rdma_zalloc_drv_obj(dev, ib_cq);
 	if (!cq)
 		return ERR_PTR(ret);
@@ -233,7 +230,7 @@ struct ib_cq *__ib_alloc_cq(struct ib_device *dev, void *private, int nr_cqe,
 	atomic_set(&cq->usecnt, 0);
 	cq->comp_vector = comp_vector;
 
-	cq->wc = kmalloc_objs(*cq->wc, IB_POLL_BATCH);
+	cq->wc = kmalloc_array(IB_POLL_BATCH, sizeof(*cq->wc), GFP_KERNEL);
 	if (!cq->wc)
 		goto out_free_cq;
 
@@ -393,7 +390,8 @@ static int ib_alloc_cqs(struct ib_device *dev, unsigned int nr_cqes,
 	 * a reasonable batch size so that we can share CQs between
 	 * multiple users instead of allocating a larger number of CQs.
 	 */
-	nr_cqes = min(dev->attrs.max_cqe, max(nr_cqes, IB_MAX_SHARED_CQ_SZ));
+	nr_cqes = min_t(unsigned int, dev->attrs.max_cqe,
+			max(nr_cqes, IB_MAX_SHARED_CQ_SZ));
 	nr_cqs = min_t(unsigned int, dev->num_comp_vectors, num_online_cpus());
 	for (i = 0; i < nr_cqs; i++) {
 		cq = ib_alloc_cq(dev, NULL, nr_cqes, i, poll_ctx);

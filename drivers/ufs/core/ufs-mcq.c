@@ -31,8 +31,7 @@
 
 #define UFSHCD_ENABLE_MCQ_INTRS	(UTP_TASK_REQ_COMPL |\
 				 UFSHCD_ERROR_MASK |\
-				 MCQ_CQ_EVENT_STATUS |\
-				 MCQ_IAG_EVENT_STATUS)
+				 MCQ_CQ_EVENT_STATUS)
 
 /* Max mcq register polling time in microseconds */
 #define MCQ_POLL_US 500000
@@ -135,15 +134,17 @@ unsigned int ufshcd_mcq_queue_cfg_addr(struct ufs_hba *hba)
 EXPORT_SYMBOL_GPL(ufshcd_mcq_queue_cfg_addr);
 
 /**
- * ufshcd_get_hba_mac - Maximum number of commands supported by the host
- *	controller.
+ * ufshcd_mcq_decide_queue_depth - decide the queue depth
  * @hba: per adapter instance
  *
- * Return: queue depth on success; negative upon error.
+ * Return: queue-depth on success, non-zero on error
  *
- * MAC = Maximum number of Active Commands supported by the Host Controller.
+ * MAC - Max. Active Command of the Host Controller (HC)
+ * HC wouldn't send more than this commands to the device.
+ * Calculates and adjusts the queue depth based on the depth
+ * supported by the HC and ufs device.
  */
-int ufshcd_get_hba_mac(struct ufs_hba *hba)
+int ufshcd_mcq_decide_queue_depth(struct ufs_hba *hba)
 {
 	int mac;
 
@@ -161,7 +162,18 @@ int ufshcd_get_hba_mac(struct ufs_hba *hba)
 		mac = hba->vops->get_hba_mac(hba);
 	}
 	if (mac < 0)
-		dev_err(hba->dev, "Failed to get mac, err=%d\n", mac);
+		goto err;
+
+	WARN_ON_ONCE(!hba->dev_info.bqueuedepth);
+	/*
+	 * max. value of bqueuedepth = 256, mac is host dependent.
+	 * It is mandatory for UFS device to define bQueueDepth if
+	 * shared queuing architecture is enabled.
+	 */
+	return min_t(int, mac, hba->dev_info.bqueuedepth);
+
+err:
+	dev_err(hba->dev, "Failed to get mac, err=%d\n", mac);
 	return mac;
 }
 
@@ -273,43 +285,22 @@ void ufshcd_mcq_write_cqis(struct ufs_hba *hba, u32 val, int i)
 }
 EXPORT_SYMBOL_GPL(ufshcd_mcq_write_cqis);
 
-u32 ufshcd_mcq_read_mcqiacr(struct ufs_hba *hba, int i)
-{
-	return readl(mcq_opr_base(hba, OPR_CQIS, i) + REG_MCQIACR);
-}
-
-void ufshcd_mcq_write_mcqiacr(struct ufs_hba *hba, u32 val, int i)
-{
-	writel(val, mcq_opr_base(hba, OPR_CQIS, i) + REG_MCQIACR);
-}
-
 /*
- * UFSHCI 4.0 MCQ specification doesn't provide a Task Tag or its equivalent in
+ * Current MCQ specification doesn't provide a Task Tag or its equivalent in
  * the Completion Queue Entry. Find the Task Tag using an indirect method.
- * UFSHCI 4.1 and above can directly return the Task Tag in the Completion Queue
- * Entry.
  */
 static int ufshcd_mcq_get_tag(struct ufs_hba *hba, struct cq_entry *cqe)
 {
 	u64 addr;
 
-	if (hba->ufs_version >= ufshci_version(4, 1))
-		return cqe->task_tag;
-
-	/* Both UCD types must have a size that is a multiple of 128 bytes */
+	/* sizeof(struct utp_transfer_cmd_desc) must be a multiple of 128 */
 	BUILD_BUG_ON(sizeof(struct utp_transfer_cmd_desc) & GENMASK(6, 0));
-	BUILD_BUG_ON(sizeof(struct utp_devman_cmd_desc) & GENMASK(6, 0));
 
 	/* Bits 63:7 UCD base address, 6:5 are reserved, 4:0 is SQ ID */
-	addr = le64_to_cpu(cqe->command_desc_base_addr) & CQE_UCD_BA;
+	addr = (le64_to_cpu(cqe->command_desc_base_addr) & CQE_UCD_BA) -
+		hba->ucdl_dma_addr;
 
-	/* The devman UCD is outside the pool; return its reserved tag. */
-	if (unlikely(addr == hba->devman_ucd_dma_addr))
-		return hba->dev_cmd.tag;
-
-	/* Pool entries follow the reserved tags. */
-	return div_u64(addr - hba->ucdl_dma_addr, ufshcd_get_ucd_size(hba)) +
-		UFSHCD_NUM_RESERVED;
+	return div_u64(addr, ufshcd_get_ucd_size(hba));
 }
 
 static void ufshcd_mcq_compl_cqe(struct ufs_hba *hba, struct cq_entry *cqe)
@@ -467,7 +458,8 @@ void ufshcd_mcq_disable(struct ufs_hba *hba)
 
 void ufshcd_mcq_enable_esi(struct ufs_hba *hba)
 {
-	ufshcd_rmwl(hba, ESI_ENABLE, ESI_ENABLE, REG_UFS_MEM_CFG);
+	ufshcd_writel(hba, ufshcd_readl(hba, REG_UFS_MEM_CFG) | 0x2,
+		      REG_UFS_MEM_CFG);
 }
 EXPORT_SYMBOL_GPL(ufshcd_mcq_enable_esi);
 
@@ -480,6 +472,7 @@ EXPORT_SYMBOL_GPL(ufshcd_mcq_config_esi);
 
 int ufshcd_mcq_init(struct ufs_hba *hba)
 {
+	struct Scsi_Host *host = hba->host;
 	struct ufs_hw_queue *hwq;
 	int ret, i;
 
@@ -513,6 +506,10 @@ int ufshcd_mcq_init(struct ufs_hba *hba)
 		mutex_init(&hwq->sq_mutex);
 	}
 
+	/* The very first HW queue serves device commands */
+	hba->dev_cmd_queue = &hba->uhq[0];
+
+	host->host_tagset = 1;
 	return 0;
 }
 
@@ -564,9 +561,8 @@ static int ufshcd_mcq_sq_start(struct ufs_hba *hba, struct ufs_hw_queue *hwq)
  */
 int ufshcd_mcq_sq_cleanup(struct ufs_hba *hba, int task_tag)
 {
-	struct scsi_cmnd *cmd = ufshcd_tag_to_cmd(hba, task_tag);
-	struct ufshcd_lrb *lrbp = scsi_cmd_priv(cmd);
-	struct request *rq = scsi_cmd_to_rq(cmd);
+	struct ufshcd_lrb *lrbp = &hba->lrb[task_tag];
+	struct scsi_cmnd *cmd = lrbp->cmd;
 	struct ufs_hw_queue *hwq;
 	void __iomem *reg, *opr_sqd_base;
 	u32 nexus, id, val;
@@ -575,21 +571,24 @@ int ufshcd_mcq_sq_cleanup(struct ufs_hba *hba, int task_tag)
 	if (hba->quirks & UFSHCD_QUIRK_MCQ_BROKEN_RTC)
 		return -ETIMEDOUT;
 
-	if (!cmd)
-		return -EINVAL;
-
-	hwq = ufshcd_mcq_req_to_hwq(hba, rq);
-	if (!hwq)
-		return 0;
+	if (task_tag != hba->nutrs - UFSHCD_NUM_RESERVED) {
+		if (!cmd)
+			return -EINVAL;
+		hwq = ufshcd_mcq_req_to_hwq(hba, scsi_cmd_to_rq(cmd));
+		if (!hwq)
+			return 0;
+	} else {
+		hwq = hba->dev_cmd_queue;
+	}
 
 	id = hwq->id;
 
-	guard(mutex)(&hwq->sq_mutex);
+	mutex_lock(&hwq->sq_mutex);
 
 	/* stop the SQ fetching before working on it */
 	err = ufshcd_mcq_sq_stop(hba, hwq);
 	if (err)
-		return err;
+		goto unlock;
 
 	/* SQCTI = EXT_IID, IID, LUN, Task Tag */
 	nexus = lrbp->lun << 8 | task_tag;
@@ -616,6 +615,8 @@ int ufshcd_mcq_sq_cleanup(struct ufs_hba *hba, int task_tag)
 	if (ufshcd_mcq_sq_start(hba, hwq))
 		err = -ETIMEDOUT;
 
+unlock:
+	mutex_unlock(&hwq->sq_mutex);
 	return err;
 }
 
@@ -646,8 +647,7 @@ static void ufshcd_mcq_nullify_sqe(struct utp_transfer_req_desc *utrd)
 static bool ufshcd_mcq_sqe_search(struct ufs_hba *hba,
 				  struct ufs_hw_queue *hwq, int task_tag)
 {
-	struct scsi_cmnd *cmd = ufshcd_tag_to_cmd(hba, task_tag);
-	struct ufshcd_lrb *lrbp;
+	struct ufshcd_lrb *lrbp = &hba->lrb[task_tag];
 	struct utp_transfer_req_desc *utrd;
 	__le64  cmd_desc_base_addr;
 	bool ret = false;
@@ -656,11 +656,6 @@ static bool ufshcd_mcq_sqe_search(struct ufs_hba *hba,
 
 	if (hba->quirks & UFSHCD_QUIRK_MCQ_BROKEN_RTC)
 		return true;
-
-	if (!cmd)
-		return false;
-
-	lrbp = scsi_cmd_priv(cmd);
 
 	mutex_lock(&hwq->sq_mutex);
 
@@ -703,7 +698,7 @@ int ufshcd_mcq_abort(struct scsi_cmnd *cmd)
 	struct Scsi_Host *host = cmd->device->host;
 	struct ufs_hba *hba = shost_priv(host);
 	int tag = scsi_cmd_to_rq(cmd)->tag;
-	struct ufshcd_lrb *lrbp = scsi_cmd_priv(cmd);
+	struct ufshcd_lrb *lrbp = &hba->lrb[tag];
 	struct ufs_hw_queue *hwq;
 	int err;
 

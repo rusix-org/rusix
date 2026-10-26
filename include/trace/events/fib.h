@@ -15,10 +15,9 @@
 TRACE_EVENT(fib_table_lookup,
 
 	TP_PROTO(u32 tb_id, const struct flowi4 *flp,
-		 const struct fib_nh_common *nhc, int err,
-		 const struct net *net),
+		 const struct fib_nh_common *nhc, int err),
 
-	TP_ARGS(tb_id, flp, nhc, err, net),
+	TP_ARGS(tb_id, flp, nhc, err),
 
 	TP_STRUCT__entry(
 		__field(	u32,	tb_id		)
@@ -36,7 +35,6 @@ TRACE_EVENT(fib_table_lookup,
 		__field(	u16,	sport		)
 		__field(	u16,	dport		)
 		__array(char,  name,   IFNAMSIZ )
-		__field(	u64,	net_cookie	)
 	),
 
 	TP_fast_assign(
@@ -92,16 +90,13 @@ TRACE_EVENT(fib_table_lookup,
 			in6 = (struct in6_addr *)__entry->gw6;
 			*in6 = in6addr_any;
 		}
-
-		__entry->net_cookie = net->net_cookie;
 	),
 
-	TP_printk("table %u oif %d iif %d proto %u %pI4/%u -> %pI4/%u tos %d scope %d flags %x ==> dev %s gw %pI4/%pI6c err %d net_cookie %llu",
+	TP_printk("table %u oif %d iif %d proto %u %pI4/%u -> %pI4/%u tos %d scope %d flags %x ==> dev %s gw %pI4/%pI6c err %d",
 		  __entry->tb_id, __entry->oif, __entry->iif, __entry->proto,
 		  __entry->src, __entry->sport, __entry->dst, __entry->dport,
 		  __entry->tos, __entry->scope, __entry->flags,
-		  __entry->name, __entry->gw4, __entry->gw6, __entry->err,
-		  __entry->net_cookie)
+		  __entry->name, __entry->gw4, __entry->gw6, __entry->err)
 );
 #endif /* _TRACE_FIB_H */
 

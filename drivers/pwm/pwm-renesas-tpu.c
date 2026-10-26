@@ -149,14 +149,10 @@ static int tpu_pwm_timer_start(struct tpu_pwm_device *tpd)
 
 	if (!tpd->timer_on) {
 		/* Wake up device and enable clock. */
-		ret = pm_runtime_resume_and_get(&tpd->tpu->pdev->dev);
-		if (ret < 0)
-			return ret;
-
+		pm_runtime_get_sync(&tpd->tpu->pdev->dev);
 		ret = clk_prepare_enable(tpd->tpu->clk);
 		if (ret) {
 			dev_err(&tpd->tpu->pdev->dev, "cannot enable clock\n");
-			pm_runtime_put(&tpd->tpu->pdev->dev);
 			return ret;
 		}
 		tpd->timer_on = true;
@@ -386,21 +382,15 @@ static int tpu_pwm_enable(struct pwm_chip *chip, struct pwm_device *pwm)
 	return 0;
 }
 
-static int tpu_pwm_disable(struct pwm_chip *chip, struct pwm_device *pwm)
+static void tpu_pwm_disable(struct pwm_chip *chip, struct pwm_device *pwm)
 {
 	struct tpu_device *tpu = to_tpu_device(chip);
 	struct tpu_pwm_device *tpd = &tpu->tpd[pwm->hwpwm];
-	int ret;
 
 	/* The timer must be running to modify the pin output configuration. */
-	ret = tpu_pwm_timer_start(tpd);
-	if (ret < 0)
-		return ret;
-
+	tpu_pwm_timer_start(tpd);
 	tpu_pwm_set_pin(tpd, TPU_PIN_INACTIVE);
 	tpu_pwm_timer_stop(tpd);
-
-	return 0;
 }
 
 static int tpu_pwm_apply(struct pwm_chip *chip, struct pwm_device *pwm,
@@ -411,10 +401,7 @@ static int tpu_pwm_apply(struct pwm_chip *chip, struct pwm_device *pwm,
 
 	if (state->polarity != pwm->state.polarity) {
 		if (enabled) {
-			err = tpu_pwm_disable(chip, pwm);
-			if (err)
-				return err;
-
+			tpu_pwm_disable(chip, pwm);
 			enabled = false;
 		}
 
@@ -425,7 +412,7 @@ static int tpu_pwm_apply(struct pwm_chip *chip, struct pwm_device *pwm,
 
 	if (!state->enabled) {
 		if (enabled)
-			return tpu_pwm_disable(chip, pwm);
+			tpu_pwm_disable(chip, pwm);
 
 		return 0;
 	}
@@ -492,11 +479,11 @@ static int tpu_probe(struct platform_device *pdev)
 
 #ifdef CONFIG_OF
 static const struct of_device_id tpu_of_table[] = {
-	{ .compatible = "renesas,tpu-r8a73a4" },
-	{ .compatible = "renesas,tpu-r8a7740" },
-	{ .compatible = "renesas,tpu-r8a7790" },
-	{ .compatible = "renesas,tpu" },
-	{ }
+	{ .compatible = "renesas,tpu-r8a73a4", },
+	{ .compatible = "renesas,tpu-r8a7740", },
+	{ .compatible = "renesas,tpu-r8a7790", },
+	{ .compatible = "renesas,tpu", },
+	{ },
 };
 
 MODULE_DEVICE_TABLE(of, tpu_of_table);

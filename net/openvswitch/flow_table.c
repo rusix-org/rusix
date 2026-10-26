@@ -11,9 +11,11 @@
 #include <linux/etherdevice.h>
 #include <linux/if_ether.h>
 #include <linux/if_vlan.h>
+#include <net/llc_pdu.h>
 #include <linux/kernel.h>
 #include <linux/jhash.h>
 #include <linux/jiffies.h>
+#include <linux/llc.h>
 #include <linux/module.h>
 #include <linux/in.h>
 #include <linux/rcupdate.h>
@@ -148,13 +150,14 @@ static void __table_instance_destroy(struct table_instance *ti)
 
 static struct table_instance *table_instance_alloc(int new_size)
 {
-	struct table_instance *ti = kmalloc_obj(*ti);
+	struct table_instance *ti = kmalloc(sizeof(*ti), GFP_KERNEL);
 	int i;
 
 	if (!ti)
 		return NULL;
 
-	ti->buckets = kvmalloc_objs(struct hlist_head, new_size);
+	ti->buckets = kvmalloc_array(new_size, sizeof(struct hlist_head),
+				     GFP_KERNEL);
 	if (!ti->buckets) {
 		kfree(ti);
 		return NULL;
@@ -165,7 +168,7 @@ static struct table_instance *table_instance_alloc(int new_size)
 
 	ti->n_buckets = new_size;
 	ti->node_ver = 0;
-	ti->hash_seed = get_random_u32();
+	get_random_bytes(&ti->hash_seed, sizeof(u32));
 
 	return ti;
 }
@@ -366,7 +369,7 @@ static struct mask_cache *tbl_mask_cache_alloc(u32 size)
 	    (size * sizeof(struct mask_cache_entry)) > PCPU_MIN_UNIT_SIZE)
 		return NULL;
 
-	new = kzalloc_obj(*new);
+	new = kzalloc(sizeof(*new), GFP_KERNEL);
 	if (!new)
 		return NULL;
 
@@ -964,7 +967,7 @@ static struct sw_flow_mask *mask_alloc(void)
 {
 	struct sw_flow_mask *mask;
 
-	mask = kmalloc_obj(*mask);
+	mask = kmalloc(sizeof(*mask), GFP_KERNEL);
 	if (mask)
 		mask->ref_count = 1;
 
@@ -1109,7 +1112,8 @@ void ovs_flow_masks_rebalance(struct flow_table *table)
 	int i;
 
 	/* Build array of all current entries with use counters. */
-	masks_and_count = kmalloc_objs(*masks_and_count, ma->max);
+	masks_and_count = kmalloc_array(ma->max, sizeof(*masks_and_count),
+					GFP_KERNEL);
 	if (!masks_and_count)
 		return;
 

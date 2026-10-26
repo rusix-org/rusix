@@ -9,10 +9,11 @@
  * The V3D block provides 16 hardware counters which can count various events.
  */
 
-#include <drm/drm_print.h>
-
 #include "vc4_drv.h"
 #include "vc4_regs.h"
+
+#define VC4_PERFMONID_MIN	1
+#define VC4_PERFMONID_MAX	U32_MAX
 
 void vc4_perfmon_get(struct vc4_perfmon *perfmon)
 {
@@ -92,10 +93,10 @@ struct vc4_perfmon *vc4_perfmon_find(struct vc4_file *vc4file, int id)
 	if (WARN_ON_ONCE(vc4->gen > VC4_GEN_4))
 		return NULL;
 
-	xa_lock(&vc4file->perfmons);
-	perfmon = xa_load(&vc4file->perfmons, id);
+	mutex_lock(&vc4file->perfmon.lock);
+	perfmon = idr_find(&vc4file->perfmon.idr, id);
 	vc4_perfmon_get(perfmon);
-	xa_unlock(&vc4file->perfmons);
+	mutex_unlock(&vc4file->perfmon.lock);
 
 	return perfmon;
 }
@@ -107,34 +108,37 @@ void vc4_perfmon_open_file(struct vc4_file *vc4file)
 	if (WARN_ON_ONCE(vc4->gen > VC4_GEN_4))
 		return;
 
-	xa_init_flags(&vc4file->perfmons, XA_FLAGS_ALLOC1);
+	mutex_init(&vc4file->perfmon.lock);
+	idr_init_base(&vc4file->perfmon.idr, VC4_PERFMONID_MIN);
+	vc4file->dev = vc4;
 }
 
-static void vc4_perfmon_delete(struct vc4_file *vc4file,
-			       struct vc4_perfmon *perfmon)
+static int vc4_perfmon_idr_del(int id, void *elem, void *data)
 {
-	struct vc4_dev *vc4 = vc4file->dev;
+	struct vc4_perfmon *perfmon = elem;
+	struct vc4_dev *vc4 = (struct vc4_dev *)data;
 
 	/* If the active perfmon is being destroyed, stop it first */
 	if (perfmon == vc4->active_perfmon)
 		vc4_perfmon_stop(vc4, perfmon, false);
 
 	vc4_perfmon_put(perfmon);
+
+	return 0;
 }
 
 void vc4_perfmon_close_file(struct vc4_file *vc4file)
 {
 	struct vc4_dev *vc4 = vc4file->dev;
-	struct vc4_perfmon *perfmon;
-	unsigned long id;
 
 	if (WARN_ON_ONCE(vc4->gen > VC4_GEN_4))
 		return;
 
-	xa_for_each(&vc4file->perfmons, id, perfmon)
-		vc4_perfmon_delete(vc4file, perfmon);
-
-	xa_destroy(&vc4file->perfmons);
+	mutex_lock(&vc4file->perfmon.lock);
+	idr_for_each(&vc4file->perfmon.idr, vc4_perfmon_idr_del, vc4);
+	idr_destroy(&vc4file->perfmon.idr);
+	mutex_unlock(&vc4file->perfmon.lock);
+	mutex_destroy(&vc4file->perfmon.lock);
 }
 
 int vc4_perfmon_create_ioctl(struct drm_device *dev, void *data,
@@ -146,7 +150,6 @@ int vc4_perfmon_create_ioctl(struct drm_device *dev, void *data,
 	struct vc4_perfmon *perfmon;
 	unsigned int i;
 	int ret;
-	u32 id;
 
 	if (WARN_ON_ONCE(vc4->gen > VC4_GEN_4))
 		return -ENODEV;
@@ -167,7 +170,8 @@ int vc4_perfmon_create_ioctl(struct drm_device *dev, void *data,
 			return -EINVAL;
 	}
 
-	perfmon = kzalloc_flex(*perfmon, counters, req->ncounters);
+	perfmon = kzalloc(struct_size(perfmon, counters, req->ncounters),
+			  GFP_KERNEL);
 	if (!perfmon)
 		return -ENOMEM;
 	perfmon->dev = vc4;
@@ -179,15 +183,17 @@ int vc4_perfmon_create_ioctl(struct drm_device *dev, void *data,
 
 	refcount_set(&perfmon->refcnt, 1);
 
-	ret = xa_alloc(&vc4file->perfmons, &id, perfmon, xa_limit_32b,
-		       GFP_KERNEL);
+	mutex_lock(&vc4file->perfmon.lock);
+	ret = idr_alloc(&vc4file->perfmon.idr, perfmon, VC4_PERFMONID_MIN,
+			VC4_PERFMONID_MAX, GFP_KERNEL);
+	mutex_unlock(&vc4file->perfmon.lock);
+
 	if (ret < 0) {
 		kfree(perfmon);
 		return ret;
 	}
 
-	req->id = id;
-
+	req->id = ret;
 	return 0;
 }
 
@@ -207,12 +213,14 @@ int vc4_perfmon_destroy_ioctl(struct drm_device *dev, void *data,
 		return -ENODEV;
 	}
 
-	perfmon = xa_erase(&vc4file->perfmons, req->id);
+	mutex_lock(&vc4file->perfmon.lock);
+	perfmon = idr_remove(&vc4file->perfmon.idr, req->id);
+	mutex_unlock(&vc4file->perfmon.lock);
+
 	if (!perfmon)
 		return -EINVAL;
 
-	vc4_perfmon_delete(vc4file, perfmon);
-
+	vc4_perfmon_put(perfmon);
 	return 0;
 }
 

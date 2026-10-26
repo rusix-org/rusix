@@ -73,4 +73,6 @@ struct otx2_qos_node {
 	u8 level;
 	bool is_static;
 };
+
+
 #endif

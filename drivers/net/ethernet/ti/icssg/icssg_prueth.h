@@ -38,8 +38,6 @@
 #include <net/devlink.h>
 #include <net/xdp.h>
 #include <net/page_pool/helpers.h>
-#include <net/xsk_buff_pool.h>
-#include <net/xdp_sock_drv.h>
 
 #include "icssg_config.h"
 #include "icss_iep.h"
@@ -128,8 +126,6 @@ struct prueth_tx_chn {
 	char name[32];
 	struct hrtimer tx_hrtimer;
 	unsigned long tx_pace_timeout_ns;
-	struct xsk_buff_pool *xsk_pool;
-	bool irq_disabled;
 };
 
 struct prueth_rx_chn {
@@ -142,8 +138,6 @@ struct prueth_rx_chn {
 	char name[32];
 	struct page_pool *pg_pool;
 	struct xdp_rxq_info xdp_rxq;
-	struct xsk_buff_pool *xsk_pool;
-	bool irq_disabled;
 };
 
 enum prueth_swdata_type {
@@ -152,7 +146,6 @@ enum prueth_swdata_type {
 	PRUETH_SWDATA_PAGE,
 	PRUETH_SWDATA_CMD,
 	PRUETH_SWDATA_XDPF,
-	PRUETH_SWDATA_XSK,
 };
 
 enum prueth_tx_buff_type {
@@ -167,7 +160,6 @@ struct prueth_swdata {
 		struct page *page;
 		u32 cmd;
 		struct xdp_frame *xdpf;
-		struct xdp_buff *xdp;
 	} data;
 };
 
@@ -236,6 +228,7 @@ struct prueth_emac {
 	/* Mutex to serialize access to firmware command interface */
 	struct mutex cmd_lock;
 	struct work_struct rx_mode_work;
+	struct workqueue_struct	*cmd_wq;
 
 	struct pruss_mem_region dram;
 
@@ -253,7 +246,6 @@ struct prueth_emac {
 	struct netdev_hw_addr_list vlan_mcast_list[MAX_VLAN_ID];
 	struct bpf_prog *xdp_prog;
 	struct xdp_attachment_info xdpi;
-	int xsk_qid;
 };
 
 /* The buf includes headroom compatible with both skb and xdpf */
@@ -423,8 +415,6 @@ void icssg_class_promiscuous_sr1(struct regmap *miig_rt, int slice);
 void icssg_class_add_mcast_sr1(struct regmap *miig_rt, int slice,
 			       struct net_device *ndev);
 void icssg_ft1_set_mac_addr(struct regmap *miig_rt, int slice, u8 *mac_addr);
-void icssg_ft3_hsr_configurations(struct regmap *miig_rt, int slice,
-				  struct prueth *prueth);
 
 /* config helpers */
 void icssg_config_ipg(struct prueth_emac *emac);
@@ -518,10 +508,5 @@ u32 emac_xmit_xdp_frame(struct prueth_emac *emac,
 			enum prueth_tx_buff_type buff_type);
 void prueth_rx_cleanup(void *data, dma_addr_t desc_dma);
 void prueth_tx_cleanup(void *data, dma_addr_t desc_dma);
-int prueth_xsk_wakeup(struct net_device *ndev, u32 qid, u32 flags);
-static inline bool prueth_xdp_is_enabled(struct prueth_emac *emac)
-{
-	return !!READ_ONCE(emac->xdp_prog);
-}
 
 #endif /* __NET_TI_ICSSG_PRUETH_H */

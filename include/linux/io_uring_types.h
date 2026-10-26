@@ -1,16 +1,12 @@
 #ifndef IO_URING_TYPES_H
 #define IO_URING_TYPES_H
 
-#include <linux/blk_plug.h>
+#include <linux/blkdev.h>
 #include <linux/hashtable.h>
 #include <linux/task_work.h>
 #include <linux/bitmap.h>
 #include <linux/llist.h>
-#include <linux/uio.h>
 #include <uapi/linux/io_uring.h>
-
-struct iou_loop_params;
-struct io_uring_bpf_ops;
 
 enum {
 	/*
@@ -51,14 +47,8 @@ enum io_uring_cmd_flags {
 	/* set when uring wants to cancel a previously issued command */
 	IO_URING_F_CANCEL		= (1 << 11),
 	IO_URING_F_COMPAT		= (1 << 12),
+	IO_URING_F_TASK_DEAD		= (1 << 13),
 };
-
-enum {
-	IO_BUF_DEST	= 1 << ITER_DEST,
-	IO_BUF_SOURCE	= 1 << ITER_SOURCE,
-};
-
-struct iou_loop_params;
 
 struct io_wq_work_node {
 	struct io_wq_work_node *next;
@@ -67,18 +57,6 @@ struct io_wq_work_node {
 struct io_wq_work_list {
 	struct io_wq_work_node *first;
 	struct io_wq_work_node *last;
-};
-
-/*
- * Lockless multi-producer, single-consumer FIFO queue, see
- * io_uring/mpscq.h for the implementation and rules. Defined here so
- * that it can be embedded in io_ring_ctx. This is the producer side
- * only - the consumer cursor is kept separately, on a cacheline that
- * isn't dirtied by the producers.
- */
-struct mpscq {
-	struct llist_node	*tail;		/* producers */
-	struct llist_node	stub;
 };
 
 struct io_wq_work {
@@ -145,11 +123,6 @@ struct io_uring_task {
 	const struct io_ring_ctx 	*last;
 	struct task_struct		*task;
 	struct io_wq			*io_wq;
-	/*
-	 * Consumer cursor for ->task_list. Only popped by the task itself,
-	 * or by ->fallback_work once the task can no longer run task_work.
-	 */
-	struct llist_node		*task_head;
 	struct file			*registered_rings[IO_RINGFD_REG_MAX];
 
 	struct xarray			xa;
@@ -158,11 +131,8 @@ struct io_uring_task {
 	atomic_t			inflight_tracked;
 	struct percpu_counter		inflight;
 
-	/* drains ->task_list once the task can no longer run task_work */
-	struct work_struct		fallback_work;
-
 	struct { /* task_work */
-		struct mpscq		task_list;
+		struct llist_head	task_list;
 		struct callback_head	task_work;
 	} ____cacheline_aligned_in_smp;
 };
@@ -258,26 +228,12 @@ struct io_rings {
 	struct io_uring_cqe	cqes[] ____cacheline_aligned_in_smp;
 };
 
-struct io_bpf_filter;
-struct io_bpf_filters {
-	refcount_t refs;	/* ref for ->bpf_filters */
-	spinlock_t lock;	/* protects ->bpf_filters modifications */
-	struct io_bpf_filter __rcu **filters;
-	struct rcu_head rcu_head;
-};
-
 struct io_restriction {
 	DECLARE_BITMAP(register_op, IORING_REGISTER_LAST);
 	DECLARE_BITMAP(sqe_op, IORING_OP_LAST);
-	struct io_bpf_filters *bpf_filters;
-	/* ->bpf_filters needs COW on modification */
-	bool bpf_filters_cow;
 	u8 sqe_flags_allowed;
 	u8 sqe_flags_required;
-	/* IORING_OP_* restrictions exist */
-	bool op_registered;
-	/* IORING_REGISTER_* restrictions exist */
-	bool reg_registered;
+	bool registered;
 };
 
 struct io_submit_link {
@@ -307,39 +263,26 @@ struct io_alloc_cache {
 	unsigned int		init_clear;
 };
 
-enum {
-	IO_RING_F_DRAIN_NEXT		= BIT(0),
-	IO_RING_F_OP_RESTRICTED		= BIT(1),
-	IO_RING_F_REG_RESTRICTED	= BIT(2),
-	IO_RING_F_OFF_TIMEOUT_USED	= BIT(3),
-	IO_RING_F_DRAIN_ACTIVE		= BIT(4),
-	IO_RING_F_HAS_EVFD		= BIT(5),
-	/* all CQEs should be posted only by the submitter task */
-	IO_RING_F_TASK_COMPLETE		= BIT(6),
-	IO_RING_F_LOCKLESS_CQ		= BIT(7),
-	IO_RING_F_SYSCALL_IOPOLL	= BIT(8),
-	IO_RING_F_POLL_ACTIVATED	= BIT(9),
-	IO_RING_F_DRAIN_DISABLED	= BIT(10),
-	IO_RING_F_COMPAT		= BIT(11),
-	IO_RING_F_IOWQ_LIMITS_SET	= BIT(12),
-	/* restrictions were inherited from the task that created the ring */
-	IO_RING_F_RESTRICT_INHERITED	= BIT(13),
-};
-
-struct iou_ctx {};
-
 struct io_ring_ctx {
 	/* const or read-mostly hot data */
 	struct {
-		/* ring setup flags */
 		unsigned int		flags;
-		/* internal state flags IO_RING_F_* flags , mostly read-only */
-		unsigned int		int_flags;
+		unsigned int		drain_next: 1;
+		unsigned int		restricted: 1;
+		unsigned int		off_timeout_used: 1;
+		unsigned int		drain_active: 1;
+		unsigned int		has_evfd: 1;
+		/* all CQEs should be posted only by the submitter task */
+		unsigned int		task_complete: 1;
+		unsigned int		lockless_cq: 1;
+		unsigned int		syscall_iopoll: 1;
+		unsigned int		poll_activated: 1;
+		unsigned int		drain_disabled: 1;
+		unsigned int		compat: 1;
+		unsigned int		iowq_limits_set : 1;
 
 		struct task_struct	*submitter_task;
 		struct io_rings		*rings;
-		/* cache of ->restrictions.bpf_filters->filters */
-		struct io_bpf_filter __rcu	**bpf_filters;
 		struct percpu_ref	refs;
 
 		clockid_t		clockid;
@@ -382,15 +325,7 @@ struct io_ring_ctx {
 		 * manipulate the list, hence no extra locking is needed there.
 		 */
 		bool			poll_multi_queue;
-		struct list_head	iopoll_list;
-
-		/*
-		 * Consumer cursor for ->work_list, protected by ->uring_lock.
-		 * Deliberately kept away from the producer side of the queue,
-		 * as it's written for every popped entry, and the producer
-		 * cacheline is contended enough as it is.
-		 */
-		struct llist_node	*work_head;
+		struct io_wq_work_list	iopoll_list;
 
 		struct io_file_table	file_table;
 		struct io_rsrc_data	buf_table;
@@ -401,8 +336,8 @@ struct io_ring_ctx {
 
 		/*
 		 * Modifications are protected by ->uring_lock and ->mmap_lock.
-		 * The buffer list's io mapped region should be stable once
-		 * published.
+		 * The flags, buf_pages and buf_nr_pages fields should be stable
+		 * once published.
 		 */
 		struct xarray		io_bl_xa;
 
@@ -411,9 +346,6 @@ struct io_ring_ctx {
 		struct io_alloc_cache	netmsg_cache;
 		struct io_alloc_cache	rw_cache;
 		struct io_alloc_cache	cmd_cache;
-
-		int (*loop_step)(struct iou_ctx *,
-				 struct iou_loop_params *);
 
 		/*
 		 * Any cancelable uring_cmd is added to this list in
@@ -449,7 +381,8 @@ struct io_ring_ctx {
 	 */
 	struct {
 		struct io_rings	__rcu	*rings_rcu;
-		struct mpscq		work_list;
+		struct llist_head	work_llist;
+		struct llist_head	retry_llist;
 		unsigned long		check_cq;
 		atomic_t		cq_wait_nr;
 		atomic_t		cq_timeouts;
@@ -491,9 +424,6 @@ struct io_ring_ctx {
 	/* Stores zcrx object pointers of type struct io_zcrx_ifq */
 	struct xarray			zcrx_ctxs;
 
-	/* Used for accounting references on pages in registered buffers */
-	struct xarray		hpage_acct;
-
 	u32			pers_next;
 	struct xarray		personalities;
 
@@ -504,33 +434,22 @@ struct io_ring_ctx {
 	struct user_struct		*user;
 	struct mm_struct		*mm_account;
 
-	/*
-	 * List of tctx nodes for this ctx, protected by tctx_lock. For
-	 * cancelation purposes, nests under uring_lock.
-	 */
-	struct list_head		tctx_list;
-	struct mutex			tctx_lock;
-
 	/* ctx exit and cancelation */
+	struct llist_head		fallback_llist;
+	struct delayed_work		fallback_work;
 	struct work_struct		exit_work;
+	struct list_head		tctx_list;
 	struct completion		ref_comp;
 
 	/* io-wq management, e.g. thread count */
 	u32				iowq_limits[2];
 
 	struct callback_head		poll_wq_task_work;
-	/* deferred ->poll_wq wake up for local task_work */
-	struct rcu_head			poll_wq_rcu;
-	atomic_t			poll_wq_rcu_pending;
 	struct list_head		defer_list;
 	unsigned			nr_drained;
-	/* drain request dispatched from ->defer_list, until it completes */
-	struct io_kiocb			*drain_req;
 
 	/* protected by ->completion_lock */
 	unsigned			nr_req_allocated;
-	/* pending SEND_ZC notifications, protected by ->uring_lock */
-	unsigned			nr_notifs;
 
 #ifdef CONFIG_NET_RX_BUSY_POLL
 	struct list_head	napi_list;	/* track busy poll napi_id */
@@ -544,8 +463,6 @@ struct io_ring_ctx {
 	DECLARE_HASHTABLE(napi_ht, 4);
 #endif
 
-	struct io_uring_bpf_ops		*bpf_ops;
-
 	/*
 	 * Protection for resize vs mmap races - both the mmap and resize
 	 * side will need to grab this lock, to prevent either side from
@@ -557,8 +474,6 @@ struct io_ring_ctx {
 	struct io_mapped_region		ring_region;
 	/* used for optimised request parameter and wait argument passing  */
 	struct io_mapped_region		param_region;
-
-	struct kcov_common_handle_id	kcov_handle;
 };
 
 /*
@@ -616,7 +531,6 @@ enum {
 	REQ_F_HAS_METADATA_BIT,
 	REQ_F_IMPORT_BUFFER_BIT,
 	REQ_F_SQE_COPIED_BIT,
-	REQ_F_IOPOLL_BIT,
 
 	/* not a real bit, just to check we're not overflowing the space */
 	__REQ_F_LAST_BIT,
@@ -710,8 +624,6 @@ enum {
 	REQ_F_IMPORT_BUFFER	= IO_REQ_FLAG(REQ_F_IMPORT_BUFFER_BIT),
 	/* ->sqe_copy() has been called, if necessary */
 	REQ_F_SQE_COPIED	= IO_REQ_FLAG(REQ_F_SQE_COPIED_BIT),
-	/* request must be iopolled to completion (set in ->issue()) */
-	REQ_F_IOPOLL		= IO_REQ_FLAG(REQ_F_IOPOLL_BIT),
 };
 
 struct io_tw_req {
@@ -780,6 +692,8 @@ struct io_kiocb {
 	 */
 	u16				buf_index;
 
+	unsigned			nr_tw;
+
 	/* REQ_F_* flags */
 	io_req_flags_t			flags;
 
@@ -806,21 +720,15 @@ struct io_kiocb {
 
 	atomic_t			refs;
 	bool				cancel_seq_set;
-
-	union {
-		struct io_task_work	io_task_work;
-		/* For IOPOLL setup queues, with hybrid polling */
-		u64                     iopoll_start;
-	};
-
+	struct io_task_work		io_task_work;
 	union {
 		/*
 		 * for polled requests, i.e. IORING_OP_POLL_ADD and async armed
 		 * poll
 		 */
 		struct hlist_node	hash_node;
-		/* IOPOLL completion handling */
-		struct list_head	iopoll_node;
+		/* For IOPOLL setup queues, with hybrid polling */
+		u64                     iopoll_start;
 		/* for private io_kiocb freeing */
 		struct rcu_head		rcu_head;
 	};

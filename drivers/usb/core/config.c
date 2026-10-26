@@ -54,9 +54,10 @@ static void usb_parse_ssp_isoc_endpoint_companion(struct device *ddev,
 	 * follows the SuperSpeed Endpoint Companion descriptor
 	 */
 	desc = (struct usb_ssp_isoc_ep_comp_descriptor *) buffer;
-	if (size < USB_DT_SSP_ISOC_EP_COMP_SIZE ||
-	    desc->bDescriptorType != USB_DT_SSP_ISOC_ENDPOINT_COMP) {
-		dev_notice(ddev, "Invalid SuperSpeedPlus isoc endpoint companion for config %d interface %d altsetting %d ep 0x%X.\n",
+	if (desc->bDescriptorType != USB_DT_SSP_ISOC_ENDPOINT_COMP ||
+	    size < USB_DT_SSP_ISOC_EP_COMP_SIZE) {
+		dev_notice(ddev, "Invalid SuperSpeedPlus isoc endpoint companion"
+			 "for config %d interface %d altsetting %d ep %d.\n",
 			 cfgno, inum, asnum, ep->desc.bEndpointAddress);
 		return;
 	}
@@ -90,7 +91,7 @@ static void usb_parse_eusb2_isoc_endpoint_companion(struct device *ddev,
 		size -= h->bLength;
 	}
 
-	dev_notice(ddev, "No eUSB2 isoc ep 0x%X companion for config %d interface %d altsetting %d\n",
+	dev_notice(ddev, "No eUSB2 isoc ep %d companion for config %d interface %d altsetting %d\n",
 		   ep->desc.bEndpointAddress, cfgno, inum, asnum);
 }
 
@@ -114,7 +115,9 @@ static void usb_parse_ss_endpoint_companion(struct device *ddev, int cfgno,
 	}
 
 	if (desc->bDescriptorType != USB_DT_SS_ENDPOINT_COMP) {
-		dev_notice(ddev, "No SuperSpeed endpoint companion for config %d interface %d altsetting %d ep 0x%X: using minimum values\n",
+		dev_notice(ddev, "No SuperSpeed endpoint companion for config %d "
+				" interface %d altsetting %d ep %d: "
+				"using minimum values\n",
 				cfgno, inum, asnum, ep->desc.bEndpointAddress);
 
 		/* Fill in some default values.
@@ -138,32 +141,42 @@ static void usb_parse_ss_endpoint_companion(struct device *ddev, int cfgno,
 
 	/* Check the various values */
 	if (usb_endpoint_xfer_control(&ep->desc) && desc->bMaxBurst != 0) {
-		dev_notice(ddev, "Control endpoint with bMaxBurst = %d in config %d interface %d altsetting %d ep 0x%X: setting to zero\n",
-				desc->bMaxBurst, cfgno, inum, asnum, ep->desc.bEndpointAddress);
+		dev_notice(ddev, "Control endpoint with bMaxBurst = %d in "
+				"config %d interface %d altsetting %d ep %d: "
+				"setting to zero\n", desc->bMaxBurst,
+				cfgno, inum, asnum, ep->desc.bEndpointAddress);
 		ep->ss_ep_comp.bMaxBurst = 0;
 	} else if (desc->bMaxBurst > 15) {
-		dev_notice(ddev, "Endpoint with bMaxBurst = %d in config %d interface %d altsetting %d ep 0x%X: setting to 15\n",
-				desc->bMaxBurst, cfgno, inum, asnum, ep->desc.bEndpointAddress);
+		dev_notice(ddev, "Endpoint with bMaxBurst = %d in "
+				"config %d interface %d altsetting %d ep %d: "
+				"setting to 15\n", desc->bMaxBurst,
+				cfgno, inum, asnum, ep->desc.bEndpointAddress);
 		ep->ss_ep_comp.bMaxBurst = 15;
 	}
 
 	if ((usb_endpoint_xfer_control(&ep->desc) ||
 			usb_endpoint_xfer_int(&ep->desc)) &&
 				desc->bmAttributes != 0) {
-		dev_notice(ddev, "%s endpoint with bmAttributes = %d in config %d interface %d altsetting %d ep 0x%X: setting to zero\n",
-				usb_endpoint_xfer_control(&ep->desc) ? "Control" : "Interrupt",
+		dev_notice(ddev, "%s endpoint with bmAttributes = %d in "
+				"config %d interface %d altsetting %d ep %d: "
+				"setting to zero\n",
+				usb_endpoint_xfer_control(&ep->desc) ? "Control" : "Bulk",
 				desc->bmAttributes,
 				cfgno, inum, asnum, ep->desc.bEndpointAddress);
 		ep->ss_ep_comp.bmAttributes = 0;
 	} else if (usb_endpoint_xfer_bulk(&ep->desc) &&
 			desc->bmAttributes > 16) {
-		dev_notice(ddev, "Bulk endpoint with more than 65536 streams in config %d interface %d altsetting %d ep 0x%X: setting to max\n",
+		dev_notice(ddev, "Bulk endpoint with more than 65536 streams in "
+				"config %d interface %d altsetting %d ep %d: "
+				"setting to max\n",
 				cfgno, inum, asnum, ep->desc.bEndpointAddress);
 		ep->ss_ep_comp.bmAttributes = 16;
 	} else if (usb_endpoint_xfer_isoc(&ep->desc) &&
 		   !USB_SS_SSP_ISOC_COMP(desc->bmAttributes) &&
 		   USB_SS_MULT(desc->bmAttributes) > 3) {
-		dev_notice(ddev, "Isoc endpoint has Mult of %d in config %d interface %d altsetting %d ep 0x%X: setting to 3\n",
+		dev_notice(ddev, "Isoc endpoint has Mult of %d in "
+				"config %d interface %d altsetting %d ep %d: "
+				"setting to 3\n",
 				USB_SS_MULT(desc->bmAttributes),
 				cfgno, inum, asnum, ep->desc.bEndpointAddress);
 		ep->ss_ep_comp.bmAttributes = 2;
@@ -186,7 +199,9 @@ static void usb_parse_ss_endpoint_companion(struct device *ddev, int cfgno,
 	if (le16_to_cpu(desc->wBytesPerInterval) > max_tx ||
 	    (le16_to_cpu(desc->wBytesPerInterval) < usb_endpoint_maxp(&ep->desc) &&
 	     usb_endpoint_is_int_in(&ep->desc))) {
-		dev_notice(ddev, "%s endpoint with wBytesPerInterval of %d in config %d interface %d altsetting %d ep 0x%X: setting to %d\n",
+		dev_notice(ddev, "%s endpoint with wBytesPerInterval of %d in "
+				"config %d interface %d altsetting %d ep %d: "
+				"setting to %d\n",
 				usb_endpoint_xfer_isoc(&ep->desc) ? "Isoc" : "Int",
 				le16_to_cpu(desc->wBytesPerInterval),
 				cfgno, inum, asnum, ep->desc.bEndpointAddress,
@@ -815,7 +830,7 @@ static int usb_parse_configuration(struct usb_device *dev, int cfgidx,
 			nalts[i] = j = USB_MAXALTSETTING;
 		}
 
-		intfc = kzalloc_flex(*intfc, altsetting, j);
+		intfc = kzalloc(struct_size(intfc, altsetting, j), GFP_KERNEL);
 		config->intf_cache[i] = intfc;
 		if (!intfc)
 			return -ENOMEM;
@@ -1057,7 +1072,7 @@ int usb_get_bos_descriptor(struct usb_device *dev)
 		return -ENOMSG;
 	}
 
-	bos = kzalloc_obj(*bos);
+	bos = kzalloc(sizeof(*bos), GFP_KERNEL);
 	if (!bos)
 		return -ENOMEM;
 
@@ -1078,7 +1093,7 @@ int usb_get_bos_descriptor(struct usb_device *dev)
 	if (total_len < length)
 		return -EINVAL;
 
-	dev->bos = kzalloc_obj(*dev->bos);
+	dev->bos = kzalloc(sizeof(*dev->bos), GFP_KERNEL);
 	if (!dev->bos)
 		return -ENOMEM;
 

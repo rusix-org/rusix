@@ -53,18 +53,15 @@ struct audit_entry {
 	struct audit_krule	rule;
 };
 
-struct audit_file_caps {
-	kernel_cap_t		permitted;
-	kernel_cap_t		inheritable;
-	unsigned int		fE;		/* effective bit of file cap */
-	kuid_t			rootid;
-};
-
 struct audit_cap_data {
 	kernel_cap_t		permitted;
 	kernel_cap_t		inheritable;
-	kernel_cap_t		effective;
+	union {
+		unsigned int	fE;		/* effective bit of file cap */
+		kernel_cap_t	effective;	/* effective set of process */
+	};
 	kernel_cap_t		ambient;
+	kuid_t			rootid;
 };
 
 /* When fs/namei.c:getname() is called, we store the pointer in name and bump
@@ -86,7 +83,7 @@ struct audit_names {
 	kgid_t			gid;
 	dev_t			rdev;
 	struct lsm_prop		oprop;
-	struct audit_file_caps	fcap;
+	struct audit_cap_data	fcap;
 	unsigned int		fcap_ver;
 	unsigned char		type;		/* record type */
 	/*
@@ -141,7 +138,7 @@ struct audit_context {
 	struct audit_aux_data *aux_pids;
 	struct sockaddr_storage *sockaddr;
 	size_t sockaddr_len;
-	/* Save things to print about task_struct */
+				/* Save things to print about task_struct */
 	pid_t		    ppid;
 	kuid_t		    uid, euid, suid, fsuid;
 	kgid_t		    gid, egid, sgid, fsgid;
@@ -275,9 +272,6 @@ extern void audit_put_tty(struct tty_struct *tty);
 /* audit watch/mark/tree functions */
 extern unsigned int audit_serial(void);
 #ifdef CONFIG_AUDITSYSCALL
-void audit_rule_account(const struct audit_krule *rule);
-void audit_rule_unaccount(const struct audit_krule *rule);
-
 extern int auditsc_get_stamp(struct audit_context *ctx,
 			     struct audit_stamp *stamp);
 
@@ -321,8 +315,6 @@ extern void audit_filter_inodes(struct task_struct *tsk,
 				struct audit_context *ctx);
 extern struct list_head *audit_killed_trees(void);
 #else /* CONFIG_AUDITSYSCALL */
-#define audit_rule_account(...) do { } while (0)
-#define audit_rule_unaccount(...) do { } while (0)
 #define auditsc_get_stamp(c, s) 0
 #define audit_put_watch(w) do { } while (0)
 #define audit_get_watch(w) do { } while (0)

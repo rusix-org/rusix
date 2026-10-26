@@ -25,7 +25,6 @@
 #include <soc/rockchip/rockchip_sip.h>
 #include <dt-bindings/power/px30-power.h>
 #include <dt-bindings/power/rockchip,rv1126-power.h>
-#include <dt-bindings/power/rockchip,rv1126b-power-controller.h>
 #include <dt-bindings/power/rk3036-power.h>
 #include <dt-bindings/power/rk3066-power.h>
 #include <dt-bindings/power/rk3128-power.h>
@@ -138,20 +137,6 @@ struct rockchip_pmu {
 	.active_wakeup = wakeup,			\
 }
 
-#define DOMAIN_M_G(_name, pwr, status, req, idle, ack, g_mask, wakeup, keepon)	\
-{							\
-	.name = _name,					\
-	.pwr_w_mask = (pwr) << 16,			\
-	.pwr_mask = (pwr),				\
-	.status_mask = (status),			\
-	.req_w_mask = (req) << 16,			\
-	.req_mask = (req),				\
-	.idle_mask = (idle),				\
-	.ack_mask = (ack),				\
-	.clk_ungate_mask = (g_mask),			\
-	.active_wakeup = wakeup,			\
-}
-
 #define DOMAIN_M_G_SD(_name, pwr, status, req, idle, ack, g_mask, mem, wakeup, keepon)	\
 {							\
 	.name = _name,					\
@@ -204,20 +189,6 @@ struct rockchip_pmu {
 	.active_wakeup = wakeup,			\
 }
 
-#define DOMAIN_M_R(_name, pwr, status, req, idle, ack, wakeup, regulator)	\
-{							\
-	.name = _name,				\
-	.pwr_w_mask = (pwr) << 16,			\
-	.pwr_mask = (pwr),				\
-	.status_mask = (status),			\
-	.req_w_mask = (req) << 16,			\
-	.req_mask = (req),				\
-	.idle_mask = (idle),				\
-	.ack_mask = (ack),				\
-	.active_wakeup = wakeup,			\
-	.need_regulator = regulator,			\
-}
-
 #define DOMAIN_RK3036(_name, req, ack, idle, wakeup)		\
 {							\
 	.name = _name,				\
@@ -233,9 +204,6 @@ struct rockchip_pmu {
 
 #define DOMAIN_RV1126(name, pwr, req, idle, wakeup)		\
 	DOMAIN_M(name, pwr, pwr, req, idle, idle, wakeup)
-
-#define DOMAIN_RV1126B(name, pwr, req, wakeup)			\
-	DOMAIN_M_G(name, pwr, pwr, req, req, req, req, wakeup, true)
 
 #define DOMAIN_RK3288(name, pwr, status, req, wakeup)		\
 	DOMAIN(name, pwr, status, req, req, (req) << 16, wakeup)
@@ -255,8 +223,8 @@ struct rockchip_pmu {
 #define DOMAIN_RK3562(name, pwr, req, g_mask, mem, wakeup)		\
 	DOMAIN_M_G_SD(name, pwr, pwr, req, req, req, g_mask, mem, wakeup, false)
 
-#define DOMAIN_RK3568(name, pwr, req, wakeup, regulator)		\
-	DOMAIN_M_R(name, pwr, pwr, req, req, req, wakeup, regulator)
+#define DOMAIN_RK3568(name, pwr, req, wakeup)		\
+	DOMAIN_M(name, pwr, pwr, req, req, req, wakeup)
 
 #define DOMAIN_RK3576(name, p_offset, pwr, status, r_status, r_offset, req, idle, g_mask, wakeup)	\
 	DOMAIN_M_O_R_G(name, p_offset, pwr, status, 0, r_status, r_status, r_offset, req, idle, idle, g_mask, wakeup)
@@ -719,9 +687,10 @@ static int rockchip_pd_power_on(struct generic_pm_domain *domain)
 	int ret;
 
 	ret = rockchip_pd_regulator_enable(pd);
-	if (ret)
-		return dev_err_probe(pd->pmu->dev, ret,
-				     "Failed to enable supply\n");
+	if (ret) {
+		dev_err(pd->pmu->dev, "Failed to enable supply: %d\n", ret);
+		return ret;
+	}
 
 	ret = rockchip_pd_power(pd, true);
 	if (ret)
@@ -821,7 +790,7 @@ static int rockchip_pm_add_one_domain(struct rockchip_pmu *pmu,
 		return 0;
 
 	pd_info = &pmu->info->domain_info[id];
-	if (!pd_info->pwr_mask && !pd_info->req_mask) {
+	if (!pd_info) {
 		dev_err(pmu->dev, "%pOFn: undefined domain id %d\n",
 			node, id);
 		return -EINVAL;
@@ -1159,13 +1128,6 @@ static const struct rockchip_domain_info rv1126_pm_domains[] = {
 	[RV1126_PD_USB]		= DOMAIN_RV1126("usb", BIT(9), BIT(15), BIT(15),  false),
 };
 
-static const struct rockchip_domain_info rv1126b_pm_domains[] = {
-					      /* name     pwr     req      wakeup */
-	[RV1126B_PD_NPU]	= DOMAIN_RV1126B("npu",   BIT(0), BIT(8),  false),
-	[RV1126B_PD_VDO]	= DOMAIN_RV1126B("vdo",   BIT(1), BIT(9),  false),
-	[RV1126B_PD_AIISP]	= DOMAIN_RV1126B("aiisp", BIT(2), BIT(10), false),
-};
-
 static const struct rockchip_domain_info rk3036_pm_domains[] = {
 	[RK3036_PD_MSCH]	= DOMAIN_RK3036("msch", BIT(14), BIT(23), BIT(30), true),
 	[RK3036_PD_CORE]	= DOMAIN_RK3036("core", BIT(13), BIT(17), BIT(24), false),
@@ -1302,15 +1264,15 @@ static const struct rockchip_domain_info rk3562_pm_domains[] = {
 };
 
 static const struct rockchip_domain_info rk3568_pm_domains[] = {
-	[RK3568_PD_NPU]		= DOMAIN_RK3568("npu",  BIT(1), BIT(2),  false, true),
-	[RK3568_PD_GPU]		= DOMAIN_RK3568("gpu",  BIT(0), BIT(1),  false, false),
-	[RK3568_PD_VI]		= DOMAIN_RK3568("vi",   BIT(6), BIT(3),  false, false),
-	[RK3568_PD_VO]		= DOMAIN_RK3568("vo",   BIT(7), BIT(4),  false, false),
-	[RK3568_PD_RGA]		= DOMAIN_RK3568("rga",  BIT(5), BIT(5),  false, false),
-	[RK3568_PD_VPU]		= DOMAIN_RK3568("vpu",  BIT(2), BIT(6),  false, false),
-	[RK3568_PD_RKVDEC]	= DOMAIN_RK3568("vdec", BIT(4), BIT(8),  false, false),
-	[RK3568_PD_RKVENC]	= DOMAIN_RK3568("venc", BIT(3), BIT(7),  false, false),
-	[RK3568_PD_PIPE]	= DOMAIN_RK3568("pipe", BIT(8), BIT(11), false, false),
+	[RK3568_PD_NPU]		= DOMAIN_RK3568("npu",  BIT(1), BIT(2),  false),
+	[RK3568_PD_GPU]		= DOMAIN_RK3568("gpu",  BIT(0), BIT(1),  false),
+	[RK3568_PD_VI]		= DOMAIN_RK3568("vi",   BIT(6), BIT(3),  false),
+	[RK3568_PD_VO]		= DOMAIN_RK3568("vo",   BIT(7), BIT(4),  false),
+	[RK3568_PD_RGA]		= DOMAIN_RK3568("rga",  BIT(5), BIT(5),  false),
+	[RK3568_PD_VPU]		= DOMAIN_RK3568("vpu",  BIT(2), BIT(6),  false),
+	[RK3568_PD_RKVDEC]	= DOMAIN_RK3568("vdec", BIT(4), BIT(8),  false),
+	[RK3568_PD_RKVENC]	= DOMAIN_RK3568("venc", BIT(3), BIT(7),  false),
+	[RK3568_PD_PIPE]	= DOMAIN_RK3568("pipe", BIT(8), BIT(11), false),
 };
 
 static const struct rockchip_domain_info rk3576_pm_domains[] = {
@@ -1578,18 +1540,6 @@ static const struct rockchip_pmu_info rv1126_pmu = {
 	.domain_info = rv1126_pm_domains,
 };
 
-static const struct rockchip_pmu_info rv1126b_pmu = {
-	.pwr_offset = 0x210,
-	.status_offset = 0x230,
-	.req_offset = 0x110,
-	.idle_offset = 0x128,
-	.ack_offset = 0x120,
-	.clk_ungate_offset = 0x140,
-
-	.num_domains = ARRAY_SIZE(rv1126b_pm_domains),
-	.domain_info = rv1126b_pm_domains,
-};
-
 static const struct of_device_id rockchip_pm_domain_dt_match[] = {
 	{
 		.compatible = "rockchip,px30-power-controller",
@@ -1658,10 +1608,6 @@ static const struct of_device_id rockchip_pm_domain_dt_match[] = {
 	{
 		.compatible = "rockchip,rv1126-power-controller",
 		.data = (void *)&rv1126_pmu,
-	},
-	{
-		.compatible = "rockchip,rv1126b-power-controller",
-		.data = (void *)&rv1126b_pmu,
 	},
 	{ /* sentinel */ },
 };

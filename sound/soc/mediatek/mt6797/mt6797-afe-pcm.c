@@ -754,8 +754,10 @@ static int mt6797_afe_pcm_dev_probe(struct platform_device *pdev)
 
 	/* initial audio related clock */
 	ret = mt6797_init_clock(afe);
-	if (ret)
+	if (ret) {
+		dev_err(dev, "init clock error\n");
 		return ret;
+	}
 
 	/* regmap init */
 	afe->base_addr = devm_platform_ioremap_resource(pdev, 0);
@@ -798,8 +800,10 @@ static int mt6797_afe_pcm_dev_probe(struct platform_device *pdev)
 
 	ret = devm_request_irq(dev, irq_id, mt6797_afe_irq_handler,
 			       IRQF_TRIGGER_NONE, "asys-isr", (void *)afe);
-	if (ret)
+	if (ret) {
+		dev_err(dev, "could not request_irq for asys-isr\n");
 		return ret;
+	}
 
 	/* init sub_dais */
 	INIT_LIST_HEAD(&afe->sub_dais);

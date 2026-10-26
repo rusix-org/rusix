@@ -838,14 +838,14 @@ void __init time_init_early(void)
 	if (tlb_type == spitfire) {
 		if (is_hummingbird()) {
 			init_tick_ops(&hbtick_operations);
-			clocksource_tick.vdso_clock_mode = VDSO_CLOCKMODE_NONE;
+			clocksource_tick.archdata.vclock_mode = VCLOCK_NONE;
 		} else {
 			init_tick_ops(&tick_operations);
-			clocksource_tick.vdso_clock_mode = VDSO_CLOCKMODE_TICK;
+			clocksource_tick.archdata.vclock_mode = VCLOCK_TICK;
 		}
 	} else {
 		init_tick_ops(&stick_operations);
-		clocksource_tick.vdso_clock_mode = VDSO_CLOCKMODE_STICK;
+		clocksource_tick.archdata.vclock_mode = VCLOCK_STICK;
 	}
 }
 
@@ -894,8 +894,8 @@ unsigned long long sched_clock(void)
 	return ((get_tick() * quotient) >> SPARC64_NSEC_PER_CYC_SHIFT) - offset;
 }
 
-bool delay_read_timer(unsigned long *timer_val)
+int read_current_timer(unsigned long *timer_val)
 {
 	*timer_val = get_tick();
-	return true;
+	return 0;
 }

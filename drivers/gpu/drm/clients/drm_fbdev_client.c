@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 
-#include <drm/clients/drm_fbdev_helper.h>
 #include <drm/drm_client.h>
 #include <drm/drm_crtc_helper.h>
 #include <drm/drm_drv.h>
+#include <drm/drm_fb_helper.h>
 #include <drm/drm_fourcc.h>
 #include <drm/drm_print.h>
 
@@ -13,28 +13,16 @@
  * struct drm_client_funcs
  */
 
-static void drm_fbdev_client_free(struct drm_client_dev *client)
-{
-	struct drm_fb_helper *fb_helper = drm_fb_helper_from_client(client);
-
-	drm_fb_helper_unprepare(fb_helper);
-	kfree(fb_helper);
-}
-
 static void drm_fbdev_client_unregister(struct drm_client_dev *client)
 {
 	struct drm_fb_helper *fb_helper = drm_fb_helper_from_client(client);
 
 	if (fb_helper->info) {
-		/*
-		 * Fully probed framebuffer device
-		 */
 		drm_fb_helper_unregister_info(fb_helper);
 	} else {
-		/*
-		 * Partially initialized client, no framebuffer device yet
-		 */
 		drm_client_release(&fb_helper->client);
+		drm_fb_helper_unprepare(fb_helper);
+		kfree(fb_helper);
 	}
 }
 
@@ -53,14 +41,6 @@ static int drm_fbdev_client_restore(struct drm_client_dev *client, bool force)
 	drm_fb_helper_restore_fbdev_mode_unlocked(fb_helper, force);
 
 	return 0;
-}
-
-static void drm_fbdev_client_acquire_outputs(struct drm_client_dev *client)
-{
-	struct drm_fb_helper *fb_helper = drm_fb_helper_from_client(client);
-
-	if (fb_helper->info)
-		fb_switch_outputs(fb_helper->info);
 }
 
 static int drm_fbdev_client_hotplug(struct drm_client_dev *client)
@@ -111,14 +91,12 @@ static int drm_fbdev_client_resume(struct drm_client_dev *client)
 }
 
 static const struct drm_client_funcs drm_fbdev_client_funcs = {
-	.owner		 = THIS_MODULE,
-	.free		 = drm_fbdev_client_free,
-	.unregister	 = drm_fbdev_client_unregister,
-	.restore	 = drm_fbdev_client_restore,
-	.acquire_outputs = drm_fbdev_client_acquire_outputs,
-	.hotplug	 = drm_fbdev_client_hotplug,
-	.suspend	 = drm_fbdev_client_suspend,
-	.resume		 = drm_fbdev_client_resume,
+	.owner		= THIS_MODULE,
+	.unregister	= drm_fbdev_client_unregister,
+	.restore	= drm_fbdev_client_restore,
+	.hotplug	= drm_fbdev_client_hotplug,
+	.suspend	= drm_fbdev_client_suspend,
+	.resume		= drm_fbdev_client_resume,
 };
 
 /**
@@ -171,7 +149,7 @@ int drm_fbdev_client_setup(struct drm_device *dev, const struct drm_format_info 
 	drm_WARN(dev, !dev->registered, "Device has not been registered.\n");
 	drm_WARN(dev, dev->fb_helper, "fb_helper is already set!\n");
 
-	fb_helper = kzalloc_obj(*fb_helper);
+	fb_helper = kzalloc(sizeof(*fb_helper), GFP_KERNEL);
 	if (!fb_helper)
 		return -ENOMEM;
 	drm_fb_helper_prepare(dev, fb_helper, color_mode, NULL);

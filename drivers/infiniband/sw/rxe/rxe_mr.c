@@ -157,7 +157,8 @@ static int rxe_mr_fill_pages_from_sgt(struct rxe_mr *mr, struct sg_table *sgt)
 
 static int __alloc_mr_page_info(struct rxe_mr *mr, int num_pages)
 {
-	mr->page_info = kzalloc_objs(struct rxe_mr_page, num_pages);
+	mr->page_info = kcalloc(num_pages, sizeof(struct rxe_mr_page),
+				GFP_KERNEL);
 	if (!mr->page_info)
 		return -ENOMEM;
 
@@ -198,7 +199,7 @@ int rxe_mr_init_user(struct rxe_dev *rxe, u64 start, u64 length,
 
 	rxe_mr_init(access, mr);
 
-	umem = ib_umem_get_va(&rxe->ib_dev, start, length, access);
+	umem = ib_umem_get(&rxe->ib_dev, start, length, access);
 	if (IS_ERR(umem)) {
 		rxe_dbg_mr(mr, "Unable to pin memory region err = %d\n",
 			(int)PTR_ERR(umem));
@@ -319,6 +320,7 @@ int rxe_map_mr_sg(struct ib_mr *ibmr, struct scatterlist *sgl,
 	mr->nbuf = 0;
 	mr->page_shift = ilog2(page_size);
 	mr->page_mask = ~((u64)page_size - 1);
+	mr->page_offset = mr->ibmr.iova & (page_size - 1);
 
 	return ib_sg_to_pages(ibmr, sgl, sg_nents, sg_offset, rxe_set_page);
 }
@@ -418,13 +420,13 @@ int copy_data(
 	int			access,
 	struct rxe_dma_info	*dma,
 	void			*addr,
-	u32			length,
+	int			length,
 	enum rxe_mr_copy_dir	dir)
 {
-	u32			bytes;
+	int			bytes;
 	struct rxe_sge		*sge	= &dma->sge[dma->cur_sge];
-	u32			offset	= dma->sge_offset;
-	u32			resid	= dma->resid;
+	int			offset	= dma->sge_offset;
+	int			resid	= dma->resid;
 	struct rxe_mr		*mr	= NULL;
 	u64			iova;
 	int			err;
@@ -532,6 +534,7 @@ static int rxe_mr_flush_pmem_iova(struct rxe_mr *mr, u64 iova, unsigned int leng
 
 		length -= bytes;
 		iova += bytes;
+		page_offset = 0;
 	}
 
 	return 0;
@@ -777,10 +780,6 @@ int rxe_reg_fast_mr(struct rxe_qp *qp, struct rxe_send_wqe *wqe)
 	u32 key = wqe->wr.wr.reg.key;
 	u32 access = wqe->wr.wr.reg.access;
 
-	/* IB_WR_REG_MR is a kernel-only op; a user QP must not reach here. */
-	if (qp->is_user)
-		return -EOPNOTSUPP;
-
 	/* user can only register MR in free state */
 	if (unlikely(mr->state != RXE_MR_STATE_FREE)) {
 		rxe_dbg_mr(mr, "mr->lkey = 0x%x not free\n", mr->lkey);
@@ -797,12 +796,6 @@ int rxe_reg_fast_mr(struct rxe_qp *qp, struct rxe_send_wqe *wqe)
 	if (unlikely((mr->lkey & ~0xff) != (key & ~0xff))) {
 		rxe_dbg_mr(mr, "key = 0x%x has wrong index mr->lkey = 0x%x\n",
 			key, mr->lkey);
-		return -EINVAL;
-	}
-
-	/* an MR with no umem is never an ODP MR */
-	if (unlikely(access & IB_ACCESS_ON_DEMAND)) {
-		rxe_dbg_mr(mr, "access = 0x%x requests ODP\n", access);
 		return -EINVAL;
 	}
 

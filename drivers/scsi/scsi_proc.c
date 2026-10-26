@@ -28,7 +28,6 @@
 #include <linux/mutex.h>
 #include <linux/gfp.h>
 #include <linux/uaccess.h>
-#include <linux/slab.h>
 
 #include <scsi/scsi.h>
 #include <scsi/scsi_device.h>
@@ -75,7 +74,7 @@ static ssize_t proc_scsi_host_write(struct file *file, const char __user *buf,
 	if (!shost->hostt->write_info)
 		return -EINVAL;
 
-	page = kmalloc(PAGE_SIZE, GFP_KERNEL);
+	page = (char *)__get_free_page(GFP_KERNEL);
 	if (page) {
 		ret = -EFAULT;
 		if (copy_from_user(page, buf, count))
@@ -83,7 +82,7 @@ static ssize_t proc_scsi_host_write(struct file *file, const char __user *buf,
 		ret = shost->hostt->write_info(shost, page, count);
 	}
 out:
-	kfree(page);
+	free_page((unsigned long)page);
 	return ret;
 }
 
@@ -163,7 +162,7 @@ int scsi_proc_hostdir_add(const struct scsi_host_template *sht)
 	mutex_lock(&global_host_template_mutex);
 	e = __scsi_lookup_proc_entry(sht);
 	if (!e) {
-		e = kzalloc_obj(*e);
+		e = kzalloc(sizeof(*e), GFP_KERNEL);
 		if (!e) {
 			ret = -ENOMEM;
 			goto unlock;
@@ -413,7 +412,7 @@ static ssize_t proc_scsi_write(struct file *file, const char __user *buf,
 	if (!buf || length > PAGE_SIZE)
 		return -EINVAL;
 
-	buffer = kmalloc(PAGE_SIZE, GFP_KERNEL);
+	buffer = (char *)__get_free_page(GFP_KERNEL);
 	if (!buffer)
 		return -ENOMEM;
 
@@ -468,7 +467,7 @@ static ssize_t proc_scsi_write(struct file *file, const char __user *buf,
 		err = length;
 
  out:
-	kfree(buffer);
+	free_page((unsigned long)buffer);
 	return err;
 }
 

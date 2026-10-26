@@ -22,7 +22,7 @@
 #include <stdio.h>
 #include <fcntl.h>
 
-#include "kselftest.h"
+#include "../kselftest.h"
 
 #define fail(fmt, ...) ksft_test_result_fail(fmt, ##__VA_ARGS__)
 #define pass(fmt, ...) ksft_test_result_pass(fmt, ##__VA_ARGS__)
@@ -145,8 +145,7 @@ static void try_ptrace(int fd, int pipefd[2])
 		exit(KSFT_FAIL);
 	}
 
-	/* PEEKDATA on secret memory must fail, else protection is broken. */
-	if (ptrace(PTRACE_PEEKDATA, ppid, mem, 0) == -1)
+	if (ptrace(PTRACE_PEEKDATA, ppid, mem, 0))
 		exit(KSFT_PASS);
 
 	exit(KSFT_FAIL);

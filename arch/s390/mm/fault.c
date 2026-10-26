@@ -23,6 +23,7 @@
 #include <linux/ptrace.h>
 #include <linux/mman.h>
 #include <linux/mm.h>
+#include <linux/compat.h>
 #include <linux/smp.h>
 #include <linux/kdebug.h>
 #include <linux/init.h>
@@ -132,17 +133,8 @@ static void dump_fault_info(struct pt_regs *regs)
 	union teid teid = { .val = regs->int_parm_long };
 	unsigned long asce;
 
-	pr_alert("Failing address: %016lx TEID: %016lx",
+	pr_alert("Failing address: %016lx TEID: %016lx\n",
 		 get_fault_address(regs), teid.val);
-	if (test_facility(131))
-		pr_cont(" ESOP-2");
-	else if (machine_has_esop())
-		pr_cont(" ESOP-1");
-	else
-		pr_cont(" SOP");
-	if (test_facility(75))
-		pr_cont(" FSI");
-	pr_cont("\n");
 	pr_alert("Fault in ");
 	switch (teid.as) {
 	case PSW_BITS_AS_HOME:
@@ -373,20 +365,23 @@ void do_protection_exception(struct pt_regs *regs)
 	 * The exception to this rule are aborted transactions, for these
 	 * the PSW already points to the correct location.
 	 */
-	if (!(regs->int_code & 0x200)) {
+	if (!(regs->int_code & 0x200))
 		regs->psw.addr = __rewind_psw(regs->psw, regs->int_code >> 16);
-		set_pt_regs_flag(regs, PIF_PSW_ADDR_ADJUSTED);
-	}
 	/*
-	 * If bit 61 if the TEID is not set, the remainder of the
-	 * TEID is unpredictable. Special handling is required.
+	 * Check for low-address protection.  This needs to be treated
+	 * as a special case because the translation exception code
+	 * field is not guaranteed to contain valid data in this case.
 	 */
 	if (unlikely(!teid.b61)) {
 		if (user_mode(regs)) {
+			/* Low-address protection in user mode: cannot happen */
 			dump_fault_info(regs);
-			die(regs, "Unexpected TEID");
+			die(regs, "Low-address protection");
 		}
-		/* Assume low-address protection in kernel mode. */
+		/*
+		 * Low-address protection in kernel mode means
+		 * NULL pointer write access in kernel mode.
+		 */
 		return handle_fault_error_nolock(regs, 0);
 	}
 	if (unlikely(cpu_has_nx() && teid.b56)) {
@@ -403,16 +398,15 @@ void do_dat_exception(struct pt_regs *regs)
 }
 NOKPROBE_SYMBOL(do_dat_exception);
 
-#if IS_ENABLED(CONFIG_KVM)
+#if IS_ENABLED(CONFIG_PGSTE)
 
 void do_secure_storage_access(struct pt_regs *regs)
-__context_unsafe(/* folio_walk_end() not instrumented */)
 {
 	union teid teid = { .val = regs->int_parm_long };
 	unsigned long addr = get_fault_address(regs);
-	struct mm_struct *mm = current->mm;
 	struct vm_area_struct *vma;
 	struct folio_walk fw;
+	struct mm_struct *mm;
 	struct folio *folio;
 	int rc;
 
@@ -428,8 +422,10 @@ __context_unsafe(/* folio_walk_end() not instrumented */)
 		 * was not supposed to do, e.g. branching into secure
 		 * memory. Trigger a segmentation fault.
 		 */
-		if (user_mode(regs))
-			return handle_fault_error_nolock(regs, SEGV_ACCERR);
+		if (user_mode(regs)) {
+			send_sig(SIGSEGV, current, 0);
+			return;
+		}
 		/*
 		 * The kernel should never run into this case and
 		 * there is no way out of this situation.
@@ -437,9 +433,13 @@ __context_unsafe(/* folio_walk_end() not instrumented */)
 		panic("Unexpected PGM 0x3d with TEID bit 61=0");
 	}
 	if (is_kernel_fault(regs)) {
-		if (is_vmalloc_addr((void *)addr))
-			return handle_fault_error_nolock(regs, 0);
-		rc = uv_convert_from_secure(__pa(addr));
+		folio = virt_to_folio((void *)addr);
+		if (unlikely(!folio_try_get(folio)))
+			return;
+		rc = uv_convert_from_secure(folio_to_phys(folio));
+		if (!rc)
+			clear_bit(PG_arch_1, &folio->flags.f);
+		folio_put(folio);
 		/*
 		 * There are some valid fixup types for kernel
 		 * accesses to donated secure memory. zeropad is one
@@ -448,25 +448,28 @@ __context_unsafe(/* folio_walk_end() not instrumented */)
 		if (rc)
 			return handle_fault_error_nolock(regs, 0);
 	} else {
-		if (faulthandler_disabled() || !mm)
+		if (faulthandler_disabled())
 			return handle_fault_error_nolock(regs, 0);
-		vma = lock_mm_and_find_vma(mm, addr, regs);
+		mm = current->mm;
+		mmap_read_lock(mm);
+		vma = find_vma(mm, addr);
 		if (!vma)
-			return handle_fault_error_nolock(regs, SEGV_MAPERR);
+			return handle_fault_error(regs, SEGV_MAPERR);
 		folio = folio_walk_start(&fw, vma, addr, 0);
-		if (!folio)
-			goto out;
+		if (!folio) {
+			mmap_read_unlock(mm);
+			return;
+		}
 		/* arch_make_folio_accessible() needs a raised refcount. */
 		folio_get(folio);
 		rc = arch_make_folio_accessible(folio);
 		folio_put(folio);
 		folio_walk_end(&fw, vma);
 		if (rc)
-			return handle_fault_error(regs, SEGV_ACCERR);
-out:
+			send_sig(SIGSEGV, current, 0);
 		mmap_read_unlock(mm);
 	}
 }
 NOKPROBE_SYMBOL(do_secure_storage_access);
 
-#endif /* CONFIG_KVM */
+#endif /* CONFIG_PGSTE */

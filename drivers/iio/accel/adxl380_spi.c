@@ -5,6 +5,7 @@
  * Copyright 2024 Analog Devices Inc.
  */
 
+#include <linux/mod_devicetable.h>
 #include <linux/module.h>
 #include <linux/regmap.h>
 #include <linux/spi/spi.h>
@@ -25,8 +26,6 @@ static int adxl380_spi_probe(struct spi_device *spi)
 	struct regmap *regmap;
 
 	chip_data = spi_get_device_match_data(spi);
-	if (!chip_data)
-		return -ENODATA;
 
 	regmap = devm_regmap_init_spi(spi, &adxl380_spi_regmap_config);
 	if (IS_ERR(regmap))
@@ -36,17 +35,13 @@ static int adxl380_spi_probe(struct spi_device *spi)
 }
 
 static const struct spi_device_id adxl380_spi_id[] = {
-	{ .name = "adxl318", .driver_data = (kernel_ulong_t)&adxl318_chip_info },
-	{ .name = "adxl319", .driver_data = (kernel_ulong_t)&adxl319_chip_info },
-	{ .name = "adxl380", .driver_data = (kernel_ulong_t)&adxl380_chip_info },
-	{ .name = "adxl382", .driver_data = (kernel_ulong_t)&adxl382_chip_info },
+	{ "adxl380", (kernel_ulong_t)&adxl380_chip_info },
+	{ "adxl382", (kernel_ulong_t)&adxl382_chip_info },
 	{ }
 };
 MODULE_DEVICE_TABLE(spi, adxl380_spi_id);
 
 static const struct of_device_id adxl380_of_match[] = {
-	{ .compatible = "adi,adxl318", .data = &adxl318_chip_info },
-	{ .compatible = "adi,adxl319", .data = &adxl319_chip_info },
 	{ .compatible = "adi,adxl380", .data = &adxl380_chip_info },
 	{ .compatible = "adi,adxl382", .data = &adxl382_chip_info },
 	{ }

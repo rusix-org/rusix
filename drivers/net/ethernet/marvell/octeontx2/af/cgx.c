@@ -752,16 +752,6 @@ u64 cgx_features_get(void *cgxd)
 	return ((struct cgx *)cgxd)->hw_features;
 }
 
-u64 cgx_get_dmacflt_dropped_pktcnt(void *cgxd, int lmac_id)
-{
-	struct cgx *cgx = cgxd;
-
-	if (!is_lmac_valid(cgx, lmac_id))
-		return 0;
-
-	return cgx_read(cgx, lmac_id, CGXX_CMRX_RX_STAT4);
-}
-
 int cgx_stats_reset(void *cgxd, int lmac_id)
 {
 	struct cgx *cgx = cgxd;
@@ -981,9 +971,15 @@ int verify_lmac_fc_cfg(void *cgxd, int lmac_id, u8 tx_pause, u8 rx_pause,
 	if (!lmac)
 		return -ENODEV;
 
-	assign_bit(pfvf_idx, lmac->rx_fc_pfvf_bmap.bmap, rx_pause);
+	if (!rx_pause)
+		clear_bit(pfvf_idx, lmac->rx_fc_pfvf_bmap.bmap);
+	else
+		set_bit(pfvf_idx, lmac->rx_fc_pfvf_bmap.bmap);
 
-	assign_bit(pfvf_idx, lmac->tx_fc_pfvf_bmap.bmap, tx_pause);
+	if (!tx_pause)
+		clear_bit(pfvf_idx, lmac->tx_fc_pfvf_bmap.bmap);
+	else
+		set_bit(pfvf_idx, lmac->tx_fc_pfvf_bmap.bmap);
 
 	/* check if other pfvfs are using flow control */
 	if (!rx_pause && bitmap_weight(lmac->rx_fc_pfvf_bmap.bmap, lmac->rx_fc_pfvf_bmap.max)) {
@@ -1746,7 +1742,7 @@ static int cgx_lmac_init(struct cgx *cgx)
 		cgx->lmac_count = cgx->max_lmac_per_mac;
 
 	for (i = 0; i < cgx->lmac_count; i++) {
-		lmac = kzalloc_obj(struct lmac);
+		lmac = kzalloc(sizeof(struct lmac), GFP_KERNEL);
 		if (!lmac)
 			return -ENOMEM;
 		lmac->name = kcalloc(1, sizeof("cgx_fwi_xxx_yyy"), GFP_KERNEL);
@@ -1843,7 +1839,7 @@ static int cgx_lmac_exit(struct cgx *cgx)
 			continue;
 		cgx->mac_ops->mac_pause_frm_config(cgx, lmac->lmac_id, false);
 		cgx_configure_interrupt(cgx, lmac, lmac->lmac_id, true);
-		rvu_free_bitmap(&lmac->mac_to_index_bmap);
+		kfree(lmac->mac_to_index_bmap.bmap);
 		rvu_free_bitmap(&lmac->rx_fc_pfvf_bmap);
 		rvu_free_bitmap(&lmac->tx_fc_pfvf_bmap);
 		kfree(lmac->name);
@@ -1947,8 +1943,7 @@ static struct mac_ops	cgx_mac_ops    = {
 	.pfc_config =                   cgx_lmac_pfc_config,
 	.mac_get_pfc_frm_cfg   =        cgx_lmac_get_pfc_frm_cfg,
 	.mac_reset   =			cgx_lmac_reset,
-	.get_dmacflt_dropped_pktcnt      =      cgx_get_dmacflt_dropped_pktcnt,
-	.mac_stats_reset		 =	cgx_stats_reset,
+	.mac_stats_reset       =	cgx_stats_reset,
 	.mac_x2p_reset                   =      cgx_x2p_reset,
 	.mac_enadis_rx			 =      cgx_enadis_rx,
 };
@@ -2018,7 +2013,7 @@ static int cgx_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 
 	nvec = pci_msix_vec_count(cgx->pdev);
 	err = pci_alloc_irq_vectors(pdev, nvec, nvec, PCI_IRQ_MSIX);
-	if (err < 0) {
+	if (err < 0 || err != nvec) {
 		dev_err(dev, "Request for %d msix vectors failed, err %d\n",
 			nvec, err);
 		goto err_release_regions;
@@ -2037,6 +2032,8 @@ static int cgx_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 	}
 
 	list_add(&cgx->cgx_list, &cgx_list);
+
+
 	cgx_populate_features(cgx);
 
 	mutex_init(&cgx->lock);

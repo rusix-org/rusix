@@ -2,16 +2,13 @@
 #include <linux/perf_event.h>
 #include <linux/jump_label.h>
 #include <linux/export.h>
-#include <linux/kvm_types.h>
 #include <linux/types.h>
 #include <linux/init.h>
 #include <linux/slab.h>
 #include <linux/delay.h>
 #include <linux/jiffies.h>
-
 #include <asm/apicdef.h>
 #include <asm/apic.h>
-#include <asm/cpuid/api.h>
 #include <asm/msr.h>
 #include <asm/nmi.h>
 
@@ -1038,7 +1035,7 @@ static int amd_pmu_v2_handle_irq(struct pt_regs *regs)
 	 * Unmasking the LVTPC is not required as the Mask (M) bit of the LVT
 	 * PMI entry is not set by the local APIC when a PMC overflow occurs
 	 */
-	inc_perf_irq_stat();
+	inc_irq_stat(apic_perf_irqs);
 
 done:
 	cpuc->enabled = pmu_enabled;
@@ -1392,7 +1389,7 @@ static struct attribute *amd_brs_events_attrs[] = {
 static umode_t
 amd_brs_is_visible(struct kobject *kobj, struct attribute *attr, int i)
 {
-	return cpu_feature_enabled(X86_FEATURE_BRS) && x86_pmu.lbr_nr ?
+	return static_cpu_has(X86_FEATURE_BRS) && x86_pmu.lbr_nr ?
 	       attr->mode : 0;
 }
 
@@ -1444,8 +1441,6 @@ static int __init amd_core_pmu_init(void)
 		x86_pmu.cntr_mask64 = GENMASK_ULL(ebx.split.num_core_pmc - 1, 0);
 
 		amd_pmu_global_cntr_mask = x86_pmu.cntr_mask64;
-
-		x86_get_pmu(smp_processor_id())->capabilities |= PERF_PMU_CAP_MEDIATED_VPMU;
 
 		/* Update PMC handling functions */
 		x86_pmu.enable_all = amd_pmu_v2_enable_all;
@@ -1583,7 +1578,7 @@ void amd_pmu_enable_virt(void)
 	/* Reload all events */
 	amd_pmu_reload_virt();
 }
-EXPORT_SYMBOL_FOR_KVM(amd_pmu_enable_virt);
+EXPORT_SYMBOL_GPL(amd_pmu_enable_virt);
 
 void amd_pmu_disable_virt(void)
 {
@@ -1600,4 +1595,4 @@ void amd_pmu_disable_virt(void)
 	/* Reload all events */
 	amd_pmu_reload_virt();
 }
-EXPORT_SYMBOL_FOR_KVM(amd_pmu_disable_virt);
+EXPORT_SYMBOL_GPL(amd_pmu_disable_virt);

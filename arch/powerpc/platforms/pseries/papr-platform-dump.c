@@ -303,6 +303,8 @@ static long papr_platform_dump_create_handle(u64 dump_tag)
 {
 	struct ibm_platform_dump_params *params;
 	u64 param_dump_tag;
+	struct file *file;
+	long err;
 	int fd;
 
 	/*
@@ -321,8 +323,8 @@ static long papr_platform_dump_create_handle(u64 dump_tag)
 		}
 	}
 
-	params =  kzalloc_obj(struct ibm_platform_dump_params,
-			      GFP_KERNEL_ACCOUNT);
+	params =  kzalloc(sizeof(struct ibm_platform_dump_params),
+			GFP_KERNEL_ACCOUNT);
 	if (!params)
 		return -ENOMEM;
 
@@ -332,22 +334,34 @@ static long papr_platform_dump_create_handle(u64 dump_tag)
 	params->dump_tag_lo = (u32)(dump_tag & 0x00000000ffffffffULL);
 	params->status = RTAS_IBM_PLATFORM_DUMP_START;
 
-	fd = FD_ADD(O_RDONLY | O_CLOEXEC,
-		    anon_inode_getfile_fmode("[papr-platform-dump]",
-					     &papr_platform_dump_handle_ops,
-					     (void *)params, O_RDONLY,
-					     FMODE_LSEEK | FMODE_PREAD));
+	fd = get_unused_fd_flags(O_RDONLY | O_CLOEXEC);
 	if (fd < 0) {
-		rtas_work_area_free(params->work_area);
-		kfree(params);
-		return fd;
+		err = fd;
+		goto free_area;
 	}
+
+	file = anon_inode_getfile_fmode("[papr-platform-dump]",
+				&papr_platform_dump_handle_ops,
+				(void *)params, O_RDONLY,
+				FMODE_LSEEK | FMODE_PREAD);
+	if (IS_ERR(file)) {
+		err = PTR_ERR(file);
+		goto put_fd;
+	}
+
+	fd_install(fd, file);
 
 	list_add(&params->list, &platform_dump_list);
 
 	pr_info("%s (%d) initiated platform dump for dump tag %llu\n",
 		current->comm, current->pid, dump_tag);
 	return fd;
+put_fd:
+	put_unused_fd(fd);
+free_area:
+	rtas_work_area_free(params->work_area);
+	kfree(params);
+	return err;
 }
 
 /*

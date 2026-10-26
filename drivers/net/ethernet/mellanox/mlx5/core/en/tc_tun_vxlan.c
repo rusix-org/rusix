@@ -241,16 +241,9 @@ static bool mlx5e_tc_tun_encap_info_equal_vxlan(struct mlx5e_encap_key *a,
 static int mlx5e_tc_tun_get_remote_ifindex(struct net_device *mirred_dev)
 {
 	const struct vxlan_dev *vxlan = netdev_priv(mirred_dev);
-	const struct vxlan_config *cfg;
-	int ifindex = 0;
+	const struct vxlan_rdst *dst = &vxlan->default_dst;
 
-	rcu_read_lock();
-	cfg = rcu_dereference(vxlan->cfg);
-	if (cfg)
-		ifindex = cfg->remote_ifindex;
-	rcu_read_unlock();
-
-	return ifindex;
+	return dst->remote_ifindex;
 }
 
 struct mlx5e_tc_tunnel vxlan_tunnel = {

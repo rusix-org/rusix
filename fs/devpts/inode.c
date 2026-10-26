@@ -102,7 +102,7 @@ struct pts_fs_info {
 	struct ida allocated_ptys;
 	struct pts_mount_opts mount_opts;
 	struct super_block *sb;
-	struct inode *ptmx_inode; // borrowed
+	struct dentry *ptmx_dentry;
 };
 
 static inline struct pts_fs_info *DEVPTS_SB(struct super_block *sb)
@@ -249,8 +249,6 @@ static int devpts_parse_param(struct fs_context *fc, struct fs_parameter *param)
 	case Opt_max:
 		if (result.uint_32 > NR_UNIX98_PTY_MAX)
 			return invalf(fc, "max out of range");
-		if (result.uint_32 == 0)
-			return invalf(fc, "max must be greater than 0");
 		opts->max = result.uint_32;
 		break;
 	}
@@ -261,6 +259,7 @@ static int devpts_parse_param(struct fs_context *fc, struct fs_parameter *param)
 static int mknod_ptmx(struct super_block *sb, struct fs_context *fc)
 {
 	int mode;
+	int rc = -ENOMEM;
 	struct dentry *dentry;
 	struct inode *inode;
 	struct dentry *root = sb->s_root;
@@ -269,10 +268,18 @@ static int mknod_ptmx(struct super_block *sb, struct fs_context *fc)
 	kuid_t ptmx_uid = current_fsuid();
 	kgid_t ptmx_gid = current_fsgid();
 
-	dentry = simple_start_creating(root, "ptmx");
-	if (IS_ERR(dentry)) {
+	inode_lock(d_inode(root));
+
+	/* If we have already created ptmx node, return */
+	if (fsi->ptmx_dentry) {
+		rc = 0;
+		goto out;
+	}
+
+	dentry = d_alloc_name(root, "ptmx");
+	if (!dentry) {
 		pr_err("Unable to alloc dentry for ptmx node\n");
-		return PTR_ERR(dentry);
+		goto out;
 	}
 
 	/*
@@ -280,9 +287,9 @@ static int mknod_ptmx(struct super_block *sb, struct fs_context *fc)
 	 */
 	inode = new_inode(sb);
 	if (!inode) {
-		simple_done_creating(dentry);
 		pr_err("Unable to alloc inode for ptmx node\n");
-		return -ENOMEM;
+		dput(dentry);
+		goto out;
 	}
 
 	inode->i_ino = 2;
@@ -292,18 +299,23 @@ static int mknod_ptmx(struct super_block *sb, struct fs_context *fc)
 	init_special_inode(inode, mode, MKDEV(TTYAUX_MAJOR, 2));
 	inode->i_uid = ptmx_uid;
 	inode->i_gid = ptmx_gid;
-	fsi->ptmx_inode = inode;
 
-	d_make_persistent(dentry, inode);
+	d_add(dentry, inode);
 
-	simple_done_creating(dentry);
-
-	return 0;
+	fsi->ptmx_dentry = dentry;
+	rc = 0;
+out:
+	inode_unlock(d_inode(root));
+	return rc;
 }
 
 static void update_ptmx_mode(struct pts_fs_info *fsi)
 {
-	fsi->ptmx_inode->i_mode = S_IFCHR|fsi->mount_opts.ptmxmode;
+	struct inode *inode;
+	if (fsi->ptmx_dentry) {
+		inode = d_inode(fsi->ptmx_dentry);
+		inode->i_mode = S_IFCHR|fsi->mount_opts.ptmxmode;
+	}
 }
 
 static int devpts_reconfigure(struct fs_context *fc)
@@ -422,7 +434,7 @@ static int devpts_init_fs_context(struct fs_context *fc)
 {
 	struct pts_fs_info *fsi;
 
-	fsi = kzalloc_obj(struct pts_fs_info);
+	fsi = kzalloc(sizeof(struct pts_fs_info), GFP_KERNEL);
 	if (!fsi)
 		return -ENOMEM;
 
@@ -449,7 +461,7 @@ static void devpts_kill_sb(struct super_block *sb)
 	if (fsi)
 		ida_destroy(&fsi->allocated_ptys);
 	kfree(fsi);
-	kill_anon_super(sb);
+	kill_litter_super(sb);
 }
 
 static struct file_system_type devpts_fs_type = {
@@ -522,15 +534,16 @@ struct dentry *devpts_pty_new(struct pts_fs_info *fsi, int index, void *priv)
 	sprintf(s, "%d", index);
 
 	dentry = d_alloc_name(root, s);
-	if (!dentry) {
+	if (dentry) {
+		dentry->d_fsdata = priv;
+		d_add(dentry, inode);
+		fsnotify_create(d_inode(root), dentry);
+	} else {
 		iput(inode);
-		return ERR_PTR(-ENOMEM);
+		dentry = ERR_PTR(-ENOMEM);
 	}
-	dentry->d_fsdata = priv;
-	d_make_persistent(dentry, inode);
-	fsnotify_create(d_inode(root), dentry);
-	dput(dentry);
-	return dentry; // borrowed
+
+	return dentry;
 }
 
 /**
@@ -560,7 +573,7 @@ void devpts_pty_kill(struct dentry *dentry)
 	drop_nlink(dentry->d_inode);
 	d_drop(dentry);
 	fsnotify_unlink(d_inode(dentry->d_parent), dentry);
-	d_make_discardable(dentry);
+	dput(dentry);	/* d_alloc_name() in devpts_pty_new() */
 }
 
 static int __init init_devpts_fs(void)

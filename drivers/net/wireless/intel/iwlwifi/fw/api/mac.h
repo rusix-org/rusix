@@ -57,7 +57,8 @@ enum iwl_mac_protection_flags {
  * @FW_MAC_TYPE_P2P_DEVICE: P2P Device
  * @FW_MAC_TYPE_P2P_STA: P2P client
  * @FW_MAC_TYPE_GO: P2P GO
- * @FW_MAC_TYPE_NAN: NAN (since version 4)
+ * @FW_MAC_TYPE_TEST: ?
+ * @FW_MAC_TYPE_MAX: highest support MAC type
  */
 enum iwl_mac_types {
 	FW_MAC_TYPE_FIRST = 1,
@@ -69,7 +70,8 @@ enum iwl_mac_types {
 	FW_MAC_TYPE_P2P_DEVICE,
 	FW_MAC_TYPE_P2P_STA,
 	FW_MAC_TYPE_GO,
-	FW_MAC_TYPE_NAN,
+	FW_MAC_TYPE_TEST,
+	FW_MAC_TYPE_MAX = FW_MAC_TYPE_TEST
 }; /* MAC_CONTEXT_TYPE_API_E_VER_1 */
 
 /**

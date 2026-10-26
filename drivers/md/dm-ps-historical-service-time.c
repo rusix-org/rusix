@@ -31,12 +31,11 @@
 
 #define DM_MSG_PREFIX	"multipath historical-service-time"
 #define HST_MIN_IO 1
-#define HST_VERSION "0.2.0"
+#define HST_VERSION "0.1.1"
 
 #define HST_FIXED_SHIFT 10  /* 10 bits of decimal precision */
 #define HST_FIXED_MAX (ULLONG_MAX >> HST_FIXED_SHIFT)
 #define HST_FIXED_1 (1 << HST_FIXED_SHIFT)
-#define HST_FIXED_POINT_5 (1 << (HST_FIXED_SHIFT - 1))
 #define HST_FIXED_95 972
 #define HST_MAX_INFLIGHT HST_FIXED_1
 #define HST_BUCKET_SHIFT 24 /* Buckets are ~ 16ms */
@@ -67,6 +66,46 @@ struct path_info {
 	u64 outstanding;
 };
 
+/**
+ * fixed_power - compute: x^n, in O(log n) time
+ *
+ * @x:         base of the power
+ * @frac_bits: fractional bits of @x
+ * @n:         power to raise @x to.
+ *
+ * By exploiting the relation between the definition of the natural power
+ * function: x^n := x*x*...*x (x multiplied by itself for n times), and
+ * the binary encoding of numbers used by computers: n := \Sum n_i * 2^i,
+ * (where: n_i \elem {0, 1}, the binary vector representing n),
+ * we find: x^n := x^(\Sum n_i * 2^i) := \Prod x^(n_i * 2^i), which is
+ * of course trivially computable in O(log_2 n), the length of our binary
+ * vector.
+ *
+ * (see: kernel/sched/loadavg.c)
+ */
+static u64 fixed_power(u64 x, unsigned int frac_bits, unsigned int n)
+{
+	unsigned long result = 1UL << frac_bits;
+
+	if (n) {
+		for (;;) {
+			if (n & 1) {
+				result *= x;
+				result += 1UL << (frac_bits - 1);
+				result >>= frac_bits;
+			}
+			n >>= 1;
+			if (!n)
+				break;
+			x *= x;
+			x += 1UL << (frac_bits - 1);
+			x >>= frac_bits;
+		}
+	}
+
+	return result;
+}
+
 /*
  * Calculate the next value of an exponential moving average
  * a_1 = a_0 * e + a * (1 - e)
@@ -84,13 +123,13 @@ static u64 fixed_ema(u64 last, u64 next, u64 weight)
 {
 	last *= weight;
 	last += next * (HST_FIXED_1 - weight);
-	last += HST_FIXED_POINT_5;
+	last += 1ULL << (HST_FIXED_SHIFT - 1);
 	return last >> HST_FIXED_SHIFT;
 }
 
 static struct selector *alloc_selector(void)
 {
-	struct selector *s = kmalloc_obj(*s);
+	struct selector *s = kmalloc(sizeof(*s), GFP_KERNEL);
 
 	if (s) {
 		INIT_LIST_HEAD(&s->valid_paths);
@@ -128,10 +167,8 @@ static void hst_set_weights(struct path_selector *ps, unsigned int base)
 	if (base >= HST_FIXED_1)
 		return;
 
-	s->weights[0] = base;
-	for (i = 1; i < HST_WEIGHT_COUNT - 1; i++)
-		s->weights[i] = (base * s->weights[i - 1] +
-				 HST_FIXED_POINT_5) >> HST_FIXED_SHIFT;
+	for (i = 0; i < HST_WEIGHT_COUNT - 1; i++)
+		s->weights[i] = fixed_power(base, HST_FIXED_SHIFT, i + 1);
 	s->weights[HST_WEIGHT_COUNT - 1] = 0;
 }
 
@@ -202,7 +239,6 @@ static int hst_status(struct path_selector *ps, struct dm_path *path,
 {
 	unsigned int sz = 0;
 	struct path_info *pi;
-	unsigned long flags;
 
 	if (!path) {
 		struct selector *s = ps->context;
@@ -213,13 +249,11 @@ static int hst_status(struct path_selector *ps, struct dm_path *path,
 
 		switch (type) {
 		case STATUSTYPE_INFO:
-			spin_lock_irqsave(&pi->lock, flags);
 			DMEMIT("%llu %llu %llu ", pi->historical_service_time,
 			       pi->outstanding, pi->stale_after);
-			spin_unlock_irqrestore(&pi->lock, flags);
 			break;
 		case STATUSTYPE_TABLE:
-			DMEMIT("%u ", pi->repeat_count);
+			DMEMIT("0 ");
 			break;
 		case STATUSTYPE_IMA:
 			*result = '\0';
@@ -254,13 +288,8 @@ static int hst_add_path(struct path_selector *ps, struct dm_path *path,
 		return -EINVAL;
 	}
 
-	if (repeat_count > 1) {
-		DMWARN_LIMIT("repeat_count > 1 is deprecated, using 1 instead");
-		repeat_count = 1;
-	}
-
 	/* allocate the path */
-	pi = kmalloc_obj(*pi);
+	pi = kmalloc(sizeof(*pi), GFP_KERNEL);
 	if (!pi) {
 		*error = "historical-service-time ps: Error allocating path context";
 		return -ENOMEM;

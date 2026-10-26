@@ -7,6 +7,7 @@
 #include <linux/clk.h>
 #include <linux/device.h>
 #include <linux/io.h>
+#include <linux/mod_devicetable.h>
 #include <linux/module.h>
 #include <linux/platform_device.h>
 #include <linux/pm_runtime.h>
@@ -201,7 +202,7 @@ static const struct soc_enum tegra210_ope_data_dir_enum =
 static int tegra210_ope_get_data_dir(struct snd_kcontrol *kcontrol,
 				     struct snd_ctl_elem_value *ucontrol)
 {
-	struct snd_soc_component *cmpnt = snd_kcontrol_chip(kcontrol);
+	struct snd_soc_component *cmpnt = snd_soc_kcontrol_component(kcontrol);
 	struct tegra210_ope *ope = snd_soc_component_get_drvdata(cmpnt);
 
 	ucontrol->value.enumerated.item[0] = ope->data_dir;
@@ -212,7 +213,7 @@ static int tegra210_ope_get_data_dir(struct snd_kcontrol *kcontrol,
 static int tegra210_ope_put_data_dir(struct snd_kcontrol *kcontrol,
 				     struct snd_ctl_elem_value *ucontrol)
 {
-	struct snd_soc_component *cmpnt = snd_kcontrol_chip(kcontrol);
+	struct snd_soc_component *cmpnt = snd_soc_kcontrol_component(kcontrol);
 	struct tegra210_ope *ope = snd_soc_component_get_drvdata(cmpnt);
 	unsigned int value = ucontrol->value.enumerated.item[0];
 
@@ -296,7 +297,6 @@ static const struct regmap_config tegra210_ope_regmap_config = {
 	.volatile_reg		= tegra210_ope_volatile_reg,
 	.reg_defaults		= tegra210_ope_reg_defaults,
 	.num_reg_defaults	= ARRAY_SIZE(tegra210_ope_reg_defaults),
-	.reg_default_cb		= regmap_default_zero_cb,
 	.cache_type		= REGCACHE_FLAT,
 };
 
@@ -317,28 +317,34 @@ static int tegra210_ope_probe(struct platform_device *pdev)
 
 	ope->regmap = devm_regmap_init_mmio(dev, regs,
 					    &tegra210_ope_regmap_config);
-	if (IS_ERR(ope->regmap))
-		return dev_err_probe(dev, PTR_ERR(ope->regmap),
-				     "regmap init failed\n");
+	if (IS_ERR(ope->regmap)) {
+		dev_err(dev, "regmap init failed\n");
+		return PTR_ERR(ope->regmap);
+	}
 
 	regcache_cache_only(ope->regmap, true);
 
 	dev_set_drvdata(dev, ope);
 
 	err = tegra210_peq_regmap_init(pdev);
-	if (err < 0)
+	if (err < 0) {
+		dev_err(dev, "PEQ init failed\n");
 		return err;
+	}
 
 	err = tegra210_mbdrc_regmap_init(pdev);
-	if (err < 0)
+	if (err < 0) {
+		dev_err(dev, "MBDRC init failed\n");
 		return err;
+	}
 
 	err = devm_snd_soc_register_component(dev, &tegra210_ope_cmpnt,
 					      tegra210_ope_dais,
 					      ARRAY_SIZE(tegra210_ope_dais));
-	if (err)
-		return dev_err_probe(dev, err,
-				     "can't register OPE component\n");
+	if (err) {
+		dev_err(dev, "can't register OPE component, err: %d\n", err);
+		return err;
+	}
 
 	pm_runtime_enable(dev);
 

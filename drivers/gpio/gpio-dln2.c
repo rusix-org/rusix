@@ -243,8 +243,10 @@ static int dln2_gpio_set_direction(struct gpio_chip *chip, unsigned offset,
 	if (ret < 0)
 		return ret;
 
-	assign_bit(offset, dln2->output_enabled,
-		   dir == DLN2_GPIO_DIRECTION_OUT);
+	if (dir == DLN2_GPIO_DIRECTION_OUT)
+		set_bit(offset, dln2->output_enabled);
+	else
+		clear_bit(offset, dln2->output_enabled);
 
 	return ret;
 }

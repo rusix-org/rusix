@@ -9,6 +9,7 @@
 #include <linux/bitops.h>
 #include <linux/device.h>
 #include <linux/module.h>
+#include <linux/mod_devicetable.h>
 #include <linux/slab.h>
 #include <linux/soundwire/sdw.h>
 #include "bus.h"
@@ -123,9 +124,6 @@ static void sdw_compute_dp0_port_params(struct sdw_bus *bus)
 	struct sdw_master_runtime *m_rt;
 
 	list_for_each_entry(m_rt, &bus->m_rt_list, bus_node) {
-		/* DP0 is for BPT only */
-		if (m_rt->stream->type != SDW_STREAM_BPT)
-			continue;
 		sdw_compute_dp0_master_ports(m_rt);
 		sdw_compute_dp0_slave_ports(m_rt);
 	}
@@ -307,21 +305,22 @@ static int sdw_add_element_group_count(struct sdw_group *group,
 		unsigned int *rates;
 		unsigned int *lanes;
 
-		rates = krealloc_array(group->rates, group->max_size + 1,
-				       sizeof(*group->rates), GFP_KERNEL);
+		group->max_size += 1;
+		rates = krealloc(group->rates,
+				 (sizeof(int) * group->max_size),
+				 GFP_KERNEL);
 		if (!rates)
 			return -ENOMEM;
 
 		group->rates = rates;
 
-		lanes = krealloc_array(group->lanes, group->max_size + 1,
-				       sizeof(*group->lanes), GFP_KERNEL);
+		lanes = krealloc(group->lanes,
+				 (sizeof(int) * group->max_size),
+				 GFP_KERNEL);
 		if (!lanes)
 			return -ENOMEM;
 
 		group->lanes = lanes;
-
-		group->max_size += 1;
 	}
 
 	group->rates[group->count] = rate;
@@ -397,7 +396,7 @@ static int sdw_compute_port_params(struct sdw_bus *bus, struct sdw_stream_runtim
 	if (group.count == 0)
 		goto out;
 
-	params = kzalloc_objs(*params, group.count);
+	params = kcalloc(group.count, sizeof(*params), GFP_KERNEL);
 	if (!params) {
 		ret = -ENOMEM;
 		goto out;

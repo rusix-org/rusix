@@ -23,11 +23,13 @@ __futex_atomic_##name(int oparg, int *old, u32 __user *uaddr)			\
 		"0:	l	%[old],%[uaddr]\n"				\
 		"1:"insn							\
 		"2:	cs	%[old],%[new],%[uaddr]\n"			\
-		"	jl	1b\n"						\
+		"3:	jl	1b\n"						\
 		"	lhi	%[rc],0\n"					\
-		"3:	sacf	768\n"						\
-		EX_TABLE_INSN_UA_FAULT(0b, 3b, %[rc])				\
-		EX_TABLE_INSN_UA_FAULT(2b, 3b, %[rc])				\
+		"4:	sacf	768\n"						\
+		EX_TABLE_UA_FAULT(0b, 4b, %[rc])				\
+		EX_TABLE_UA_FAULT(1b, 4b, %[rc])				\
+		EX_TABLE_UA_FAULT(2b, 4b, %[rc])				\
+		EX_TABLE_UA_FAULT(3b, 4b, %[rc])				\
 		: [rc] "=d" (rc), [old] "=&d" (*old),				\
 		  [new] "=&d" (new), [uaddr] "+Q" (*uaddr)			\
 		: [oparg] "d" (oparg)						\
@@ -84,9 +86,10 @@ int futex_atomic_cmpxchg_inatomic(u32 *uval, u32 __user *uaddr, u32 oldval, u32 
 	asm_inline volatile(
 		"	sacf	256\n"
 		"0:	cs	%[old],%[new],%[uaddr]\n"
-		"	lhi	%[rc],0\n"
-		"1:	sacf	768\n"
-		EX_TABLE_INSN_UA_FAULT(0b, 1b, %[rc])
+		"1:	lhi	%[rc],0\n"
+		"2:	sacf	768\n"
+		EX_TABLE_UA_FAULT(0b, 2b, %[rc])
+		EX_TABLE_UA_FAULT(1b, 2b, %[rc])
 		: [rc] "=d" (rc), [old] "+d" (oldval), [uaddr] "+Q" (*uaddr)
 		: [new] "d" (newval)
 		: "cc", "memory");

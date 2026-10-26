@@ -843,7 +843,7 @@ static ssize_t mmc_fwrev_show(struct device *dev,
 				  card->ext_csd.fwrev);
 }
 
-static DEVICE_ATTR(fwrev, 0444, mmc_fwrev_show, NULL);
+static DEVICE_ATTR(fwrev, S_IRUGO, mmc_fwrev_show, NULL);
 
 static ssize_t mmc_dsr_show(struct device *dev,
 			    struct device_attribute *attr,
@@ -859,7 +859,7 @@ static ssize_t mmc_dsr_show(struct device *dev,
 		return sysfs_emit(buf, "0x%x\n", 0x404);
 }
 
-static DEVICE_ATTR(dsr, 0444, mmc_dsr_show, NULL);
+static DEVICE_ATTR(dsr, S_IRUGO, mmc_dsr_show, NULL);
 
 static struct attribute *mmc_std_attrs[] = {
 	&dev_attr_cid.attr,
@@ -1015,7 +1015,7 @@ static void mmc_set_bus_speed(struct mmc_card *card)
 }
 
 /*
- * Select the bus width among 4-bit and 8-bit(SDR).
+ * Select the bus width amoung 4-bit and 8-bit(SDR).
  * If the bus width is changed successfully, return the selected width value.
  * Zero is returned instead of error value if the wide width is not supported.
  */

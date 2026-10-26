@@ -264,7 +264,7 @@ int __register_blkdev(unsigned int major, const char *name,
 		goto out;
 	}
 
-	p = kmalloc_obj(struct blk_major_name);
+	p = kmalloc(sizeof(struct blk_major_name), GFP_KERNEL);
 	if (p == NULL) {
 		ret = -ENOMEM;
 		goto out;
@@ -799,11 +799,11 @@ static void disable_elv_switch(struct request_queue *q)
  * partitions associated with the gendisk, and unregisters the associated
  * request_queue.
  *
- * This is the counter to the respective device_add_disk() call.
+ * This is the counter to the respective __device_add_disk() call.
  *
  * The final removal of the struct gendisk happens when its refcount reaches 0
  * with put_disk(), which should be called after del_gendisk(), if
- * device_add_disk() was used.
+ * __device_add_disk() was used.
  *
  * Drivers exist which depend on the release of the gendisk to be synchronous,
  * it should not be deferred.
@@ -918,7 +918,7 @@ static void *disk_seqf_start(struct seq_file *seqf, loff_t *pos)
 	struct class_dev_iter *iter;
 	struct device *dev;
 
-	iter = kmalloc_obj(*iter);
+	iter = kmalloc(sizeof(*iter), GFP_KERNEL);
 	if (!iter)
 		return ERR_PTR(-ENOMEM);
 
@@ -1269,7 +1269,7 @@ static const struct attribute_group *disk_attr_groups[] = {
  *
  * This function releases all allocated resources of the gendisk.
  *
- * Drivers which used device_add_disk() have a gendisk with a request_queue
+ * Drivers which used __device_add_disk() have a gendisk with a request_queue
  * assigned. Since the request_queue sits on top of the gendisk for these
  * drivers we also call blk_put_queue() for them, and we expect the
  * request_queue refcount to reach 0 at this point, and so the request_queue
@@ -1308,7 +1308,7 @@ static void disk_release(struct device *dev)
 
 	disk_release_events(disk);
 	kfree(disk->random);
-	disk_release_zone_resources(disk);
+	disk_free_zone_resources(disk);
 	xa_destroy(&disk->part_tbl);
 
 	kobject_put(&disk->queue_kobj);
@@ -1493,10 +1493,6 @@ struct gendisk *__alloc_disk_node(struct request_queue *q, int node_id,
 	lockdep_init_map(&disk->lockdep_map, "(bio completion)", lkclass, 0);
 #ifdef CONFIG_BLOCK_HOLDER_DEPRECATED
 	INIT_LIST_HEAD(&disk->slave_bdevs);
-#endif
-#ifdef CONFIG_BLK_ERROR_INJECTION
-	mutex_init(&disk->error_injection_lock);
-	INIT_LIST_HEAD(&disk->error_injection_list);
 #endif
 	mutex_init(&disk->rqos_state_mutex);
 	kobject_init(&disk->queue_kobj, &blk_queue_ktype);

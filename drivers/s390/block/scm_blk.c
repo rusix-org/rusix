@@ -6,7 +6,8 @@
  * Author(s): Sebastian Ott <sebott@linux.vnet.ibm.com>
  */
 
-#define pr_fmt(fmt) "scm_block: " fmt
+#define KMSG_COMPONENT "scm_block"
+#define pr_fmt(fmt) KMSG_COMPONENT ": " fmt
 
 #include <linux/interrupt.h>
 #include <linux/spinlock.h>
@@ -77,7 +78,8 @@ static int __scm_alloc_rq(void)
 	if (!scmrq->aob)
 		goto free;
 
-	scmrq->request = kzalloc_objs(scmrq->request[0], nr_requests_per_io);
+	scmrq->request = kcalloc(nr_requests_per_io, sizeof(scmrq->request[0]),
+				 GFP_KERNEL);
 	if (!scmrq->request)
 		goto free;
 
@@ -330,7 +332,7 @@ static blk_status_t scm_blk_request(struct blk_mq_hw_ctx *hctx,
 static int scm_blk_init_hctx(struct blk_mq_hw_ctx *hctx, void *data,
 			     unsigned int idx)
 {
-	struct scm_queue *qd = kzalloc_obj(*qd);
+	struct scm_queue *qd = kzalloc(sizeof(*qd), GFP_KERNEL);
 
 	if (!qd)
 		return -ENOMEM;

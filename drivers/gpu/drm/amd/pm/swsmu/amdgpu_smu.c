@@ -28,7 +28,6 @@
 #include <linux/reboot.h>
 
 #include "amdgpu.h"
-#include "amdgpu_reset.h"
 #include "amdgpu_smu.h"
 #include "smu_internal.h"
 #include "atom.h"
@@ -47,8 +46,6 @@
 #include "smu_v13_0_7_ppt.h"
 #include "smu_v14_0_0_ppt.h"
 #include "smu_v14_0_2_ppt.h"
-#include "smu_v15_0_0_ppt.h"
-#include "smu_v15_0_8_ppt.h"
 #include "amd_pcie.h"
 
 /*
@@ -69,10 +66,9 @@ static int smu_handle_task(struct smu_context *smu,
 			   enum amd_dpm_forced_level level,
 			   enum amd_pp_task task_id);
 static int smu_reset(struct smu_context *smu);
-static int smu_set_ac_dc(struct smu_context *smu);
 static int smu_set_fan_speed_pwm(void *handle, u32 speed);
 static int smu_set_fan_control_mode(void *handle, u32 value);
-static int smu_set_ppt_limit(void *handle, uint32_t limit_type, uint32_t limit);
+static int smu_set_power_limit(void *handle, uint32_t limit);
 static int smu_set_fan_speed_rpm(void *handle, uint32_t speed);
 static int smu_set_gfx_cgpg(struct smu_context *smu, bool enabled);
 static int smu_set_mp1_state(void *handle, enum pp_mp1_state mp1_state);
@@ -490,52 +486,13 @@ static void smu_set_user_clk_dependencies(struct smu_context *smu, enum smu_clk_
 		return;
 }
 
-static void smu_restore_ppt_limits(struct smu_context *smu,
-				   bool restore_defaults)
-{
-	enum smu_power_src_type power_source;
-	struct smu_ppt_limit_range *range;
-	uint32_t restore_mask;
-	uint32_t limit;
-	int i, ret;
-
-	power_source = smu->adev->pm.ac_power ?
-		SMU_POWER_SOURCE_AC : SMU_POWER_SOURCE_DC;
-	restore_mask = smu->user_dpm_profile.ppt_limit_user_mask[power_source] &
-		smu->ppt_limits.supported_mask;
-	if (!restore_mask && !restore_defaults)
-		return;
-
-	smu->user_dpm_profile.flags |= SMU_DPM_USER_PROFILE_RESTORE;
-
-	for (i = SMU_PPT_LIMIT_PPT0; i < SMU_LIMIT_TYPE_COUNT; i++) {
-		if (!(smu->ppt_limits.supported_mask & BIT(i)))
-			continue;
-
-		if (restore_mask & BIT(i)) {
-			limit = smu->user_dpm_profile.ppt_limits[power_source][i];
-		} else if (restore_defaults) {
-			range = &smu->ppt_limits.range[power_source][i];
-			limit = range->default_value;
-		} else {
-			continue;
-		}
-
-		ret = smu_set_ppt_limit(smu, i, limit);
-		if (ret)
-			dev_err(smu->adev->dev,
-				"Failed to restore PPT%d limit: %d\n", i, ret);
-	}
-
-	smu->user_dpm_profile.flags &= ~SMU_DPM_USER_PROFILE_RESTORE;
-}
-
 /**
  * smu_restore_dpm_user_profile - reinstate user dpm profile
  *
  * @smu:	smu_context pointer
  *
- * Restore saved user clock frequencies and fan settings.
+ * Restore the saved user power configurations include power limit,
+ * clock frequencies, fan control mode and fan speed.
  */
 static void smu_restore_dpm_user_profile(struct smu_context *smu)
 {
@@ -550,6 +507,13 @@ static void smu_restore_dpm_user_profile(struct smu_context *smu)
 
 	/* Enable restore flag */
 	smu->user_dpm_profile.flags |= SMU_DPM_USER_PROFILE_RESTORE;
+
+	/* set the user dpm power limit */
+	if (smu->user_dpm_profile.power_limit) {
+		ret = smu_set_power_limit(smu, smu->user_dpm_profile.power_limit);
+		if (ret)
+			dev_err(smu->adev->dev, "Failed to set power limit value\n");
+	}
 
 	/* set the user dpm clock configurations */
 	if (smu_dpm_ctx->dpm_level == AMD_DPM_FORCED_LEVEL_MANUAL) {
@@ -622,13 +586,17 @@ static int smu_get_power_num_states(void *handle,
 	return 0;
 }
 
-void amdgpu_smu_early_init(struct amdgpu_device *adev)
+bool is_support_sw_smu(struct amdgpu_device *adev)
 {
 	/* vega20 is 11.0.2, but it's supported via the powerplay code */
-	adev->is_sw_smu = adev->asic_type != CHIP_VEGA20 &&
-			  (amdgpu_ip_version(adev, MP1_HWIP, 0) >=
-			   IP_VERSION(11, 0, 0) &&
-			   amdgpu_device_ip_is_valid(adev, AMD_IP_BLOCK_TYPE_SMC));
+	if (adev->asic_type == CHIP_VEGA20)
+		return false;
+
+	if ((amdgpu_ip_version(adev, MP1_HWIP, 0) >= IP_VERSION(11, 0, 0)) &&
+	    amdgpu_device_ip_is_valid(adev, AMD_IP_BLOCK_TYPE_SMC))
+		return true;
+
+	return false;
 }
 
 bool is_support_cclk_dpm(struct amdgpu_device *adev)
@@ -641,44 +609,6 @@ bool is_support_cclk_dpm(struct amdgpu_device *adev)
 	return true;
 }
 
-int amdgpu_smu_ras_send_msg(struct amdgpu_device *adev, enum smu_message_type msg,
-			const uint32_t *params, size_t num_params,
-			uint32_t *read_args, size_t num_read_args)
-{
-	struct smu_context *smu = adev->powerplay.pp_handle;
-	int ret = -EOPNOTSUPP;
-
-	if (!smu)
-		return ret;
-
-	if (smu->ppt_funcs && smu->ppt_funcs->ras_send_msg) {
-		if (num_params && !params)
-			return -EINVAL;
-
-		if (num_read_args && !read_args)
-			return -EINVAL;
-
-		if (num_params > SMU_MSG_MAX_ARGS || num_read_args > SMU_MSG_MAX_ARGS)
-			return -EINVAL;
-
-		ret = smu->ppt_funcs->ras_send_msg(smu, msg,
-				params, num_params, read_args, num_read_args);
-	}
-
-	return ret;
-}
-
-int amdgpu_smu_ras_feature_is_enabled(struct amdgpu_device *adev,
-						enum smu_feature_mask mask)
-{
-	struct smu_context *smu = adev->powerplay.pp_handle;
-	int ret = 0;
-
-	if (smu->ppt_funcs && smu->ppt_funcs->feature_is_enabled)
-		ret = smu->ppt_funcs->feature_is_enabled(smu, mask);
-
-	return ret;
-}
 
 static int smu_sys_get_pp_table(void *handle,
 				char **table)
@@ -706,31 +636,27 @@ static int smu_sys_set_pp_table(void *handle,
 {
 	struct smu_context *smu = handle;
 	struct smu_table_context *smu_table = &smu->smu_table;
-	ATOM_COMMON_TABLE_HEADER *header;
-	void *hardcode_pptable;
+	ATOM_COMMON_TABLE_HEADER *header = (ATOM_COMMON_TABLE_HEADER *)buf;
 	int ret = 0;
 
 	if (!smu->pm_enabled || !smu->adev->pm.dpm_enabled)
 		return -EOPNOTSUPP;
 
-	if (!buf || size < sizeof(*header))
-		return -EINVAL;
-
-	header = (ATOM_COMMON_TABLE_HEADER *)buf;
 	if (header->usStructureSize != size) {
 		dev_err(smu->adev->dev, "pp table size not matched !\n");
 		return -EIO;
 	}
 
-	hardcode_pptable = kmemdup(buf, size, GFP_KERNEL);
-	if (!hardcode_pptable)
-		return -ENOMEM;
+	if (!smu_table->hardcode_pptable || smu_table->power_play_table_size < size) {
+		kfree(smu_table->hardcode_pptable);
+		smu_table->hardcode_pptable = kzalloc(size, GFP_KERNEL);
+		if (!smu_table->hardcode_pptable)
+			return -ENOMEM;
+	}
 
-	kfree(smu_table->hardcode_pptable);
-	smu_table->hardcode_pptable = hardcode_pptable;
+	memcpy(smu_table->hardcode_pptable, buf, size);
 	smu_table->power_play_table = smu_table->hardcode_pptable;
 	smu_table->power_play_table_size = size;
-	memset(&smu->ppt_limits, 0, sizeof(smu->ppt_limits));
 
 	/*
 	 * Special hw_fini action(for Navi1x, the DPMs disablement will be
@@ -747,8 +673,12 @@ static int smu_sys_set_pp_table(void *handle,
 	return ret;
 }
 
-static int smu_init_driver_allowed_feature_mask(struct smu_context *smu)
+static int smu_get_driver_allowed_feature_mask(struct smu_context *smu)
 {
+	struct smu_feature *feature = &smu->smu_feature;
+	uint32_t allowed_feature_mask[SMU_FEATURE_MAX/32];
+	int ret = 0;
+
 	/*
 	 * With SCPM enabled, the allowed featuremasks setting(via
 	 * PPSMC_MSG_SetAllowedFeaturesMaskLow/High) is not permitted.
@@ -757,13 +687,22 @@ static int smu_init_driver_allowed_feature_mask(struct smu_context *smu)
 	 * such scenario.
 	 */
 	if (smu->adev->scpm_enabled) {
-		smu_feature_list_set_all(smu, SMU_FEATURE_LIST_ALLOWED);
+		bitmap_fill(feature->allowed, SMU_FEATURE_MAX);
 		return 0;
 	}
 
-	smu_feature_list_clear_all(smu, SMU_FEATURE_LIST_ALLOWED);
+	bitmap_zero(feature->allowed, SMU_FEATURE_MAX);
 
-	return smu_init_allowed_features(smu);
+	ret = smu_get_allowed_feature_mask(smu, allowed_feature_mask,
+					     SMU_FEATURE_MAX/32);
+	if (ret)
+		return ret;
+
+	bitmap_or(feature->allowed, feature->allowed,
+		      (unsigned long *)allowed_feature_mask,
+		      feature->feature_num);
+
+	return ret;
 }
 
 static int smu_set_funcs(struct amdgpu_device *adev)
@@ -843,15 +782,6 @@ static int smu_set_funcs(struct amdgpu_device *adev)
 	case IP_VERSION(14, 0, 3):
 		smu_v14_0_2_set_ppt_funcs(smu);
 		break;
-	case IP_VERSION(15, 0, 0):
-	case IP_VERSION(15, 0, 5):
-	case IP_VERSION(15, 0, 9):
-		smu_v15_0_0_set_ppt_funcs(smu);
-		break;
-	case IP_VERSION(15, 0, 8):
-		smu_v15_0_8_set_ppt_funcs(smu);
-		smu->od_enabled = true;
-		break;
 	default:
 		return -EINVAL;
 	}
@@ -865,18 +795,20 @@ static int smu_early_init(struct amdgpu_ip_block *ip_block)
 	struct smu_context *smu;
 	int r;
 
-	smu = kzalloc_obj(struct smu_context);
+	smu = kzalloc(sizeof(struct smu_context), GFP_KERNEL);
 	if (!smu)
 		return -ENOMEM;
 
 	smu->adev = adev;
 	smu->pm_enabled = !!amdgpu_dpm;
 	smu->is_apu = false;
-	smu->smu_baco.state = SMU_BACO_STATE_EXIT;
+	smu->smu_baco.state = SMU_BACO_STATE_NONE;
 	smu->smu_baco.platform_support = false;
 	smu->smu_baco.maco_support = false;
 	smu->user_dpm_profile.fan_mode = -1;
 	smu->power_profile_mode = PP_SMC_POWER_PROFILE_UNKNOWN;
+
+	mutex_init(&smu->message_lock);
 
 	adev->powerplay.pp_handle = smu;
 	adev->powerplay.pp_funcs = &swsmu_pm_funcs;
@@ -993,6 +925,16 @@ static int smu_late_init(struct amdgpu_ip_block *ip_block)
 		return ret;
 	}
 
+	ret = smu_get_asic_power_limits(smu,
+					&smu->current_power_limit,
+					&smu->default_power_limit,
+					&smu->max_power_limit,
+					&smu->min_power_limit);
+	if (ret) {
+		dev_err(adev->dev, "Failed to get asic power limits!\n");
+		return ret;
+	}
+
 	if (!amdgpu_sriov_vf(adev))
 		smu_get_unique_id(smu);
 
@@ -1008,8 +950,6 @@ static int smu_late_init(struct amdgpu_ip_block *ip_block)
 		return ret;
 	}
 
-	if (adev->in_suspend || amdgpu_reset_in_recovery(adev))
-		smu_restore_ppt_limits(smu, false);
 	smu_restore_dpm_user_profile(smu);
 
 	return 0;
@@ -1417,7 +1357,9 @@ static int smu_sw_init(struct amdgpu_ip_block *ip_block)
 	int i, ret;
 
 	smu->pool_size = adev->pm.smu_prv_buffer_size;
-	smu_feature_init(smu, SMU_FEATURE_NUM_DEFAULT);
+	smu->smu_feature.feature_num = SMU_FEATURE_MAX;
+	bitmap_zero(smu->smu_feature.supported, SMU_FEATURE_MAX);
+	bitmap_zero(smu->smu_feature.allowed, SMU_FEATURE_MAX);
 
 	INIT_WORK(&smu->throttling_logging_work, smu_throttling_logging_work_fn);
 	INIT_WORK(&smu->interrupt_work, smu_interrupt_work_fn);
@@ -1710,9 +1652,10 @@ static void smu_wbrf_fini(struct smu_context *smu)
 
 static int smu_smc_hw_setup(struct smu_context *smu)
 {
+	struct smu_feature *feature = &smu->smu_feature;
 	struct amdgpu_device *adev = smu->adev;
 	uint8_t pcie_gen = 0, pcie_width = 0;
-	struct smu_feature_bits features_supported;
+	uint64_t features_supported;
 	int ret = 0;
 
 	switch (amdgpu_ip_version(adev, MP1_HWIP, 0)) {
@@ -1872,8 +1815,9 @@ static int smu_smc_hw_setup(struct smu_context *smu)
 		dev_err(adev->dev, "Failed to retrieve supported dpm features!\n");
 		return ret;
 	}
-	smu_feature_list_set_bits(smu, SMU_FEATURE_LIST_SUPPORTED,
-			     features_supported.bits);
+	bitmap_copy(feature->supported,
+		    (unsigned long *)&features_supported,
+		    feature->feature_num);
 
 	if (!smu_is_dpm_running(smu))
 		dev_info(adev->dev, "dpm has been disabled\n");
@@ -2004,7 +1948,7 @@ static int smu_hw_init(struct amdgpu_ip_block *ip_block)
 	if (!smu->pm_enabled)
 		return 0;
 
-	ret = smu_init_driver_allowed_feature_mask(smu);
+	ret = smu_get_driver_allowed_feature_mask(smu);
 	if (ret)
 		return ret;
 
@@ -2186,8 +2130,9 @@ static int smu_reset_mp1_state(struct smu_context *smu)
 	int ret = 0;
 
 	if ((!adev->in_runpm) && (!adev->in_suspend) &&
-		(!amdgpu_in_reset(adev)) && !smu->is_apu &&
-			amdgpu_ip_version(adev, MP1_HWIP, 0) >= IP_VERSION(13, 0, 0))
+		(!amdgpu_in_reset(adev)) && amdgpu_ip_version(adev, MP1_HWIP, 0) ==
+									IP_VERSION(13, 0, 10) &&
+		!amdgpu_device_has_display_hardware(adev))
 		ret = smu_set_mp1_state(smu, PP_MP1_STATE_UNLOAD);
 
 	return ret;
@@ -2787,7 +2732,7 @@ static int smu_set_watermarks_for_clock_ranges(void *handle,
 	return smu_set_watermarks_table(smu, clock_ranges);
 }
 
-static int smu_set_ac_dc(struct smu_context *smu)
+int smu_set_ac_dc(struct smu_context *smu)
 {
 	int ret = 0;
 
@@ -2795,29 +2740,17 @@ static int smu_set_ac_dc(struct smu_context *smu)
 		return -EOPNOTSUPP;
 
 	/* controlled by firmware */
-	if (!smu->dc_controlled_by_gpio) {
-		ret = smu_set_power_source(smu,
-					   smu->adev->pm.ac_power ?
-					   SMU_POWER_SOURCE_AC :
-					   SMU_POWER_SOURCE_DC);
-		if (ret) {
-			dev_err(smu->adev->dev, "Failed to switch to %s mode!\n",
-				smu->adev->pm.ac_power ? "AC" : "DC");
-			return ret;
-		}
-	}
+	if (smu->dc_controlled_by_gpio)
+		return 0;
 
-	return 0;
-}
+	ret = smu_set_power_source(smu,
+				   smu->adev->pm.ac_power ? SMU_POWER_SOURCE_AC :
+				   SMU_POWER_SOURCE_DC);
+	if (ret)
+		dev_err(smu->adev->dev, "Failed to switch to %s mode!\n",
+		       smu->adev->pm.ac_power ? "AC" : "DC");
 
-static void smu_notify_ac_dc(void *handle)
-{
-	struct smu_context *smu = handle;
-
-	if (smu_set_ac_dc(smu))
-		return;
-
-	smu_restore_ppt_limits(smu, true);
+	return ret;
 }
 
 const struct amd_ip_funcs smu_ip_funcs = {
@@ -2831,6 +2764,8 @@ const struct amd_ip_funcs smu_ip_funcs = {
 	.late_fini = smu_late_fini,
 	.suspend = smu_suspend,
 	.resume = smu_resume,
+	.is_idle = NULL,
+	.check_soft_reset = NULL,
 	.wait_for_idle = NULL,
 	.soft_reset = NULL,
 	.set_clockgating_state = smu_set_clockgating_state,
@@ -2864,14 +2799,6 @@ const struct amdgpu_ip_block_version smu_v13_0_ip_block = {
 const struct amdgpu_ip_block_version smu_v14_0_ip_block = {
 	.type = AMD_IP_BLOCK_TYPE_SMC,
 	.major = 14,
-	.minor = 0,
-	.rev = 0,
-	.funcs = &smu_ip_funcs,
-};
-
-const struct amdgpu_ip_block_version smu_v15_0_ip_block = {
-	.type = AMD_IP_BLOCK_TYPE_SMC,
-	.major = 15,
 	.minor = 0,
 	.rev = 0,
 	.funcs = &smu_ip_funcs,
@@ -2947,7 +2874,7 @@ static int smu_set_fan_speed_rpm(void *handle, uint32_t speed)
 }
 
 /**
- * smu_get_ppt_limit - Request one of the SMU PPT limits
+ * smu_get_power_limit - Request one of the SMU Power Limits
  *
  * @handle: pointer to smu context
  * @limit: requested limit is written back to this variable
@@ -2956,13 +2883,13 @@ static int smu_set_fan_speed_rpm(void *handle, uint32_t speed)
  * Return:  0 on success, <0 on error
  *
  */
-int smu_get_ppt_limit(void *handle,
+int smu_get_power_limit(void *handle,
 			uint32_t *limit,
 			enum pp_power_limit_level pp_limit_level,
 			enum pp_power_type pp_power_type)
 {
 	struct smu_context *smu = handle;
-	enum smu_power_src_type power_source;
+	struct amdgpu_device *adev = smu->adev;
 	enum smu_ppt_limit_level limit_level;
 	uint32_t limit_type;
 	int ret = 0;
@@ -2970,15 +2897,9 @@ int smu_get_ppt_limit(void *handle,
 	if (!smu->pm_enabled || !smu->adev->pm.dpm_enabled)
 		return -EOPNOTSUPP;
 
-	if  (!limit)
-		return -EINVAL;
-
-	power_source = smu->adev->pm.ac_power ?
-		SMU_POWER_SOURCE_AC : SMU_POWER_SOURCE_DC;
-
 	switch (pp_power_type) {
 	case PP_PWR_TYPE_SUSTAINED:
-		limit_type = SMU_SLOW_PPT_LIMIT;
+		limit_type = SMU_DEFAULT_PPT_LIMIT;
 		break;
 	case PP_PWR_TYPE_FAST:
 		limit_type = SMU_FAST_PPT_LIMIT;
@@ -3004,81 +2925,91 @@ int smu_get_ppt_limit(void *handle,
 		return -EOPNOTSUPP;
 	}
 
-	if (!(smu->ppt_limits.supported_mask & BIT(limit_type)))
-		return -EOPNOTSUPP;
-
-	switch (limit_level) {
-	case SMU_PPT_LIMIT_CURRENT:
-		ret = smu_get_asic_ppt_limit(smu, limit_type, limit);
-		break;
-	case SMU_PPT_LIMIT_DEFAULT:
-		*limit = smu->ppt_limits.range[power_source][limit_type].default_value;
-		break;
-	case SMU_PPT_LIMIT_MAX:
-		*limit = smu->od_enabled ?
-			smu->ppt_limits.range[power_source][limit_type].od_max :
-			smu->ppt_limits.range[power_source][limit_type].max;
-		break;
-	case SMU_PPT_LIMIT_MIN:
-		*limit = smu->od_enabled ?
-			smu->ppt_limits.range[power_source][limit_type].od_min :
-			smu->ppt_limits.range[power_source][limit_type].min;
-		break;
-	default:
-		return -EINVAL;
+	if (limit_type != SMU_DEFAULT_PPT_LIMIT) {
+		if (smu->ppt_funcs->get_ppt_limit)
+			ret = smu->ppt_funcs->get_ppt_limit(smu, limit, limit_type, limit_level);
+	} else {
+		switch (limit_level) {
+		case SMU_PPT_LIMIT_CURRENT:
+			switch (amdgpu_ip_version(adev, MP1_HWIP, 0)) {
+			case IP_VERSION(13, 0, 2):
+			case IP_VERSION(13, 0, 6):
+			case IP_VERSION(13, 0, 12):
+			case IP_VERSION(13, 0, 14):
+			case IP_VERSION(11, 0, 7):
+			case IP_VERSION(11, 0, 11):
+			case IP_VERSION(11, 0, 12):
+			case IP_VERSION(11, 0, 13):
+				ret = smu_get_asic_power_limits(smu,
+								&smu->current_power_limit,
+								NULL, NULL, NULL);
+				break;
+			default:
+				break;
+			}
+			*limit = smu->current_power_limit;
+			break;
+		case SMU_PPT_LIMIT_DEFAULT:
+			*limit = smu->default_power_limit;
+			break;
+		case SMU_PPT_LIMIT_MAX:
+			*limit = smu->max_power_limit;
+			break;
+		case SMU_PPT_LIMIT_MIN:
+			*limit = smu->min_power_limit;
+			break;
+		default:
+			return -EINVAL;
+		}
 	}
 
 	return ret;
 }
 
-static int smu_set_ppt_limit(void *handle, uint32_t limit_type, uint32_t limit)
+static int smu_set_power_limit(void *handle, uint32_t limit)
 {
 	struct smu_context *smu = handle;
-	enum smu_power_src_type power_source;
-	struct smu_ppt_limit_range *range;
-	uint32_t min_limit, max_limit;
+	uint32_t limit_type = limit >> 24;
 	int ret = 0;
 
 	if (!smu->pm_enabled || !smu->adev->pm.dpm_enabled)
 		return -EOPNOTSUPP;
-	if (limit_type >= SMU_LIMIT_TYPE_COUNT)
-		return -EINVAL;
 
-	power_source = smu->adev->pm.ac_power ?
-		SMU_POWER_SOURCE_AC : SMU_POWER_SOURCE_DC;
-	range = &smu->ppt_limits.range[power_source][limit_type];
-	min_limit = smu->od_enabled ? range->od_min : range->min;
-	max_limit = smu->od_enabled ? range->od_max : range->max;
+	limit &= (1<<24)-1;
+	if (limit_type != SMU_DEFAULT_PPT_LIMIT)
+		if (smu->ppt_funcs->set_power_limit)
+			return smu->ppt_funcs->set_power_limit(smu, limit_type, limit);
 
-	if (!(smu->ppt_limits.supported_mask & BIT(limit_type)))
-		return -EOPNOTSUPP;
-
-	if (limit_type == SMU_DEFAULT_PPT_LIMIT && !limit) {
-		ret = smu_get_asic_ppt_limit(smu, limit_type, &limit);
-		if (ret)
-			return ret;
-	}
-
-	if (limit > max_limit || limit < min_limit) {
+	if ((limit > smu->max_power_limit) || (limit < smu->min_power_limit)) {
 		dev_err(smu->adev->dev,
-			"New PPT limit (%d) is out of range [%d,%d]\n",
-			limit, min_limit, max_limit);
+			"New power limit (%d) is out of range [%d,%d]\n",
+			limit, smu->min_power_limit, smu->max_power_limit);
 		return -EINVAL;
 	}
 
-	if (!smu->ppt_funcs->set_ppt_limit)
-		return -EOPNOTSUPP;
+	if (!limit)
+		limit = smu->current_power_limit;
 
-	ret = smu->ppt_funcs->set_ppt_limit(smu, limit_type, limit);
-	if (ret)
-		return ret;
-	if (!(smu->user_dpm_profile.flags & SMU_DPM_USER_PROFILE_RESTORE)) {
-		smu->user_dpm_profile.ppt_limits[power_source][limit_type] = limit;
-		smu->user_dpm_profile.ppt_limit_user_mask[power_source] |=
-			BIT(limit_type);
+	if (smu->ppt_funcs->set_power_limit) {
+		ret = smu->ppt_funcs->set_power_limit(smu, limit_type, limit);
+		if (!ret && !(smu->user_dpm_profile.flags & SMU_DPM_USER_PROFILE_RESTORE))
+			smu->user_dpm_profile.power_limit = limit;
 	}
 
-	return 0;
+	return ret;
+}
+
+static int smu_print_smuclk_levels(struct smu_context *smu, enum smu_clk_type clk_type, char *buf)
+{
+	int ret = 0;
+
+	if (!smu->pm_enabled || !smu->adev->pm.dpm_enabled)
+		return -EOPNOTSUPP;
+
+	if (smu->ppt_funcs->print_clk_levels)
+		ret = smu->ppt_funcs->print_clk_levels(smu, clk_type, buf);
+
+	return ret;
 }
 
 static enum smu_clk_type smu_convert_to_smuclk(enum pp_clock_type type)
@@ -3116,8 +3047,6 @@ static enum smu_clk_type smu_convert_to_smuclk(enum pp_clock_type type)
 		clk_type = SMU_OD_SCLK; break;
 	case OD_MCLK:
 		clk_type = SMU_OD_MCLK; break;
-	case OD_FCLK:
-		clk_type = SMU_OD_FCLK; break;
 	case OD_VDDC_CURVE:
 		clk_type = SMU_OD_VDDC_CURVE; break;
 	case OD_RANGE:
@@ -3145,6 +3074,20 @@ static enum smu_clk_type smu_convert_to_smuclk(enum pp_clock_type type)
 	}
 
 	return clk_type;
+}
+
+static int smu_print_ppclk_levels(void *handle,
+				  enum pp_clock_type type,
+				  char *buf)
+{
+	struct smu_context *smu = handle;
+	enum smu_clk_type clk_type;
+
+	clk_type = smu_convert_to_smuclk(type);
+	if (clk_type == SMU_CLK_COUNT)
+		return -EINVAL;
+
+	return smu_print_smuclk_levels(smu, clk_type, buf);
 }
 
 static int smu_emit_ppclk_levels(void *handle, enum pp_clock_type type, char *buf, int *offset)
@@ -3225,19 +3168,10 @@ static int smu_read_sensor(void *handle,
 		*((uint32_t *)data) = pstate_table->uclk_pstate.peak * 100;
 		*size = 4;
 		break;
-	case AMDGPU_PP_SENSOR_ENABLED_SMC_FEATURES_MASK: {
-		struct smu_feature_bits feature_mask;
-		uint32_t features[2];
-
-		/* TBD: need to handle for > 64 bits */
-		ret = smu_feature_get_enabled_mask(smu, &feature_mask);
-		if (!ret) {
-			smu_feature_bits_to_arr32(&feature_mask, features, 64);
-			*(uint64_t *)data = *(uint64_t *)features;
-		}
+	case AMDGPU_PP_SENSOR_ENABLED_SMC_FEATURES_MASK:
+		ret = smu_feature_get_enabled_mask(smu, (uint64_t *)data);
 		*size = 8;
 		break;
-	}
 	case AMDGPU_PP_SENSOR_UVD_POWER:
 		*(uint32_t *)data = smu_feature_is_enabled(smu, SMU_FEATURE_DPM_UVD_BIT) ? 1 : 0;
 		*size = 4;
@@ -3737,23 +3671,12 @@ static int smu_get_dpm_clock_table(void *handle,
 static ssize_t smu_sys_get_gpu_metrics(void *handle, void **table)
 {
 	struct smu_context *smu = handle;
-	struct smu_table_context *smu_table = &smu->smu_table;
-	struct smu_driver_table *driver_tables = smu_table->driver_tables;
-	struct smu_driver_table *gpu_metrics_table;
 
 	if (!smu->pm_enabled || !smu->adev->pm.dpm_enabled)
 		return -EOPNOTSUPP;
 
 	if (!smu->ppt_funcs->get_gpu_metrics)
 		return -EOPNOTSUPP;
-
-	gpu_metrics_table = &driver_tables[SMU_DRIVER_TABLE_GPU_METRICS];
-
-	/* If cached table is valid, return it */
-	if (smu_driver_table_is_valid(gpu_metrics_table)) {
-		*table = gpu_metrics_table->cache.buffer;
-		return gpu_metrics_table->cache.size;
-	}
 
 	return smu->ppt_funcs->get_gpu_metrics(smu, table);
 }
@@ -3942,9 +3865,8 @@ static ssize_t smu_sys_get_temp_metrics(void *handle, enum smu_temp_metric_type 
 {
 	struct smu_context *smu = handle;
 	struct smu_table_context *smu_table = &smu->smu_table;
-	struct smu_driver_table *driver_tables = smu_table->driver_tables;
-	enum smu_driver_table_id table_id;
-	struct smu_driver_table *temp_table;
+	struct smu_table *tables = smu_table->tables;
+	enum smu_table_id table_id;
 
 	if (!smu->pm_enabled || !smu->adev->pm.dpm_enabled)
 		return -EOPNOTSUPP;
@@ -3954,18 +3876,17 @@ static ssize_t smu_sys_get_temp_metrics(void *handle, enum smu_temp_metric_type 
 
 	table_id = smu_metrics_get_temp_table_id(type);
 
-	if (table_id == SMU_DRIVER_TABLE_COUNT)
+	if (table_id == SMU_TABLE_COUNT)
 		return -EINVAL;
 
-	temp_table = &driver_tables[table_id];
-
 	/* If the request is to get size alone, return the cached table size */
-	if (!table && temp_table->cache.size)
-		return temp_table->cache.size;
+	if (!table && tables[table_id].cache.size)
+		return tables[table_id].cache.size;
 
-	if (smu_driver_table_is_valid(temp_table)) {
-		memcpy(table, temp_table->cache.buffer, temp_table->cache.size);
-		return temp_table->cache.size;
+	if (smu_table_cache_is_valid(&tables[table_id])) {
+		memcpy(table, tables[table_id].cache.buffer,
+		       tables[table_id].cache.size);
+		return tables[table_id].cache.size;
 	}
 
 	return smu->smu_temp.temp_funcs->get_temp_metrics(smu, type, table);
@@ -3983,16 +3904,6 @@ static bool smu_temp_metrics_is_supported(void *handle, enum smu_temp_metric_typ
 		ret = smu->smu_temp.temp_funcs->temp_metrics_is_supported(smu, type);
 
 	return ret;
-}
-
-static u64 smu_get_npm_cap(void *handle)
-{
-	struct smu_context *smu = handle;
-
-	if (!smu->pm_enabled || !smu->ppt_funcs || !smu->ppt_funcs->get_npm_cap)
-		return 0;
-
-	return smu->ppt_funcs->get_npm_cap(smu);
 }
 
 static ssize_t smu_sys_get_xcp_metrics(void *handle, int xcp_id, void *table)
@@ -4015,6 +3926,7 @@ static const struct amd_pm_funcs swsmu_pm_funcs = {
 	.set_fan_speed_pwm   = smu_set_fan_speed_pwm,
 	.get_fan_speed_pwm   = smu_get_fan_speed_pwm,
 	.force_clock_level       = smu_force_ppclk_levels,
+	.print_clock_levels      = smu_print_ppclk_levels,
 	.emit_clock_levels       = smu_emit_ppclk_levels,
 	.force_performance_level = smu_force_performance_level,
 	.read_sensor             = smu_read_sensor,
@@ -4029,13 +3941,12 @@ static const struct amd_pm_funcs swsmu_pm_funcs = {
 	.set_pp_table            = smu_sys_set_pp_table,
 	.switch_power_profile    = smu_switch_power_profile,
 	.pause_power_profile     = smu_pause_power_profile,
-	.notify_ac_dc            = smu_notify_ac_dc,
 	/* export to amdgpu */
 	.dispatch_tasks          = smu_handle_dpm_task,
 	.load_firmware           = smu_load_microcode,
 	.set_powergating_by_smu  = smu_dpm_set_power_gate,
-	.set_power_limit         = smu_set_ppt_limit,
-	.get_power_limit         = smu_get_ppt_limit,
+	.set_power_limit         = smu_set_power_limit,
+	.get_power_limit         = smu_get_power_limit,
 	.get_power_profile_mode  = smu_get_power_profile_mode,
 	.set_power_profile_mode  = smu_set_power_profile_mode,
 	.odn_edit_dpm_table      = smu_od_edit_dpm_table,
@@ -4069,7 +3980,6 @@ static const struct amd_pm_funcs swsmu_pm_funcs = {
 	.get_xcp_metrics                  = smu_sys_get_xcp_metrics,
 	.get_temp_metrics             = smu_sys_get_temp_metrics,
 	.temp_metrics_is_supported      = smu_temp_metrics_is_supported,
-	.get_npm_cap                  = smu_get_npm_cap,
 };
 
 int smu_wait_for_event(struct smu_context *smu, enum smu_event_type event,

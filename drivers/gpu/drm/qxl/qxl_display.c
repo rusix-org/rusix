@@ -30,17 +30,13 @@
 #include <drm/drm_drv.h>
 #include <drm/drm_atomic.h>
 #include <drm/drm_atomic_helper.h>
-#include <drm/drm_blend.h>
 #include <drm/drm_edid.h>
-#include <drm/drm_encoder.h>
 #include <drm/drm_framebuffer.h>
 #include <drm/drm_gem_framebuffer_helper.h>
 #include <drm/drm_plane_helper.h>
-#include <drm/drm_print.h>
 #include <drm/drm_probe_helper.h>
+#include <drm/drm_simple_kms_helper.h>
 #include <drm/drm_gem_atomic_helper.h>
-#include <drm/drm_vblank.h>
-#include <drm/drm_vblank_helper.h>
 
 #include "qxl_drv.h"
 #include "qxl_object.h"
@@ -59,8 +55,9 @@ static int qxl_alloc_client_monitors_config(struct qxl_device *qdev,
 		qdev->client_monitors_config = NULL;
 	}
 	if (!qdev->client_monitors_config) {
-		qdev->client_monitors_config = kzalloc_flex(*qdev->client_monitors_config,
-							    heads, count);
+		qdev->client_monitors_config = kzalloc(
+				struct_size(qdev->client_monitors_config,
+				heads, count), GFP_KERNEL);
 		if (!qdev->client_monitors_config)
 			return -ENOMEM;
 	}
@@ -383,27 +380,9 @@ static void qxl_crtc_update_monitors_config(struct drm_crtc *crtc,
 }
 
 static void qxl_crtc_atomic_flush(struct drm_crtc *crtc,
-				  struct drm_atomic_commit *state)
+				  struct drm_atomic_state *state)
 {
-	struct drm_device *dev = crtc->dev;
-	struct drm_crtc_state *crtc_state = drm_atomic_get_new_crtc_state(state, crtc);
-	struct drm_pending_vblank_event *event;
-
 	qxl_crtc_update_monitors_config(crtc, "flush");
-
-	spin_lock_irq(&dev->event_lock);
-
-	event = crtc_state->event;
-	crtc_state->event = NULL;
-
-	if (event) {
-		if (drm_crtc_vblank_get(crtc) == 0)
-			drm_crtc_arm_vblank_event(crtc, event);
-		else
-			drm_crtc_send_vblank_event(crtc, event);
-	}
-
-	spin_unlock_irq(&dev->event_lock);
 }
 
 static void qxl_crtc_destroy(struct drm_crtc *crtc)
@@ -419,10 +398,9 @@ static const struct drm_crtc_funcs qxl_crtc_funcs = {
 	.set_config = drm_atomic_helper_set_config,
 	.destroy = qxl_crtc_destroy,
 	.page_flip = drm_atomic_helper_page_flip,
-	.atomic_create_state = drm_atomic_helper_crtc_create_state,
+	.reset = drm_atomic_helper_crtc_reset,
 	.atomic_duplicate_state = drm_atomic_helper_crtc_duplicate_state,
 	.atomic_destroy_state = drm_atomic_helper_crtc_destroy_state,
-	DRM_CRTC_VBLANK_TIMER_FUNCS,
 };
 
 static int qxl_framebuffer_surface_dirty(struct drm_framebuffer *fb,
@@ -474,18 +452,14 @@ static const struct drm_framebuffer_funcs qxl_fb_funcs = {
 };
 
 static void qxl_crtc_atomic_enable(struct drm_crtc *crtc,
-				   struct drm_atomic_commit *state)
+				   struct drm_atomic_state *state)
 {
 	qxl_crtc_update_monitors_config(crtc, "enable");
-
-	drm_crtc_vblank_on(crtc);
 }
 
 static void qxl_crtc_atomic_disable(struct drm_crtc *crtc,
-				    struct drm_atomic_commit *state)
+				    struct drm_atomic_state *state)
 {
-	drm_crtc_vblank_off(crtc);
-
 	qxl_crtc_update_monitors_config(crtc, "disable");
 }
 
@@ -496,7 +470,7 @@ static const struct drm_crtc_helper_funcs qxl_crtc_helper_funcs = {
 };
 
 static int qxl_primary_atomic_check(struct drm_plane *plane,
-				    struct drm_atomic_commit *state)
+				    struct drm_atomic_state *state)
 {
 	struct drm_plane_state *new_plane_state = drm_atomic_get_new_plane_state(state,
 										 plane);
@@ -663,7 +637,7 @@ static void qxl_free_cursor(struct qxl_bo *cursor_bo)
 }
 
 static void qxl_primary_atomic_update(struct drm_plane *plane,
-				      struct drm_atomic_commit *state)
+				      struct drm_atomic_state *state)
 {
 	struct drm_plane_state *new_state = drm_atomic_get_new_plane_state(state,
 									   plane);
@@ -696,7 +670,7 @@ static void qxl_primary_atomic_update(struct drm_plane *plane,
 }
 
 static void qxl_primary_atomic_disable(struct drm_plane *plane,
-				       struct drm_atomic_commit *state)
+				       struct drm_atomic_state *state)
 {
 	struct drm_plane_state *old_state = drm_atomic_get_old_plane_state(state,
 									   plane);
@@ -713,7 +687,7 @@ static void qxl_primary_atomic_disable(struct drm_plane *plane,
 }
 
 static void qxl_cursor_atomic_update(struct drm_plane *plane,
-				     struct drm_atomic_commit *state)
+				     struct drm_atomic_state *state)
 {
 	struct drm_plane_state *old_state = drm_atomic_get_old_plane_state(state,
 									   plane);
@@ -730,7 +704,7 @@ static void qxl_cursor_atomic_update(struct drm_plane *plane,
 }
 
 static void qxl_cursor_atomic_disable(struct drm_plane *plane,
-				      struct drm_atomic_commit *state)
+				      struct drm_atomic_state *state)
 {
 	struct drm_plane_state *old_state = drm_atomic_get_old_plane_state(state,
 									   plane);
@@ -930,7 +904,7 @@ static const struct drm_plane_funcs qxl_cursor_plane_funcs = {
 	.update_plane	= drm_atomic_helper_update_plane,
 	.disable_plane	= drm_atomic_helper_disable_plane,
 	.destroy	= drm_plane_helper_destroy,
-	.atomic_create_state = drm_atomic_helper_plane_create_state,
+	.reset		= drm_atomic_helper_plane_reset,
 	.atomic_duplicate_state = drm_atomic_helper_plane_duplicate_state,
 	.atomic_destroy_state = drm_atomic_helper_plane_destroy_state,
 };
@@ -952,7 +926,7 @@ static const struct drm_plane_funcs qxl_primary_plane_funcs = {
 	.update_plane	= drm_atomic_helper_update_plane,
 	.disable_plane	= drm_atomic_helper_disable_plane,
 	.destroy	= drm_plane_helper_destroy,
-	.atomic_create_state = drm_atomic_helper_plane_create_state,
+	.reset		= drm_atomic_helper_plane_reset,
 	.atomic_duplicate_state = drm_atomic_helper_plane_duplicate_state,
 	.atomic_destroy_state = drm_atomic_helper_plane_destroy_state,
 };
@@ -982,7 +956,7 @@ static struct drm_plane *qxl_create_plane(struct qxl_device *qdev,
 		return ERR_PTR(-EINVAL);
 	}
 
-	plane = kzalloc_obj(*plane);
+	plane = kzalloc(sizeof(*plane), GFP_KERNEL);
 	if (!plane)
 		return ERR_PTR(-ENOMEM);
 
@@ -993,9 +967,6 @@ static struct drm_plane *qxl_create_plane(struct qxl_device *qdev,
 		goto free_plane;
 
 	drm_plane_helper_add(plane, helper_funcs);
-
-	drm_plane_create_blend_mode_property(plane,
-					     BIT(DRM_MODE_BLEND_PREMULTI));
 
 	return plane;
 
@@ -1011,7 +982,7 @@ static int qdev_crtc_init(struct drm_device *dev, int crtc_id)
 	struct qxl_device *qdev = to_qxl(dev);
 	int r;
 
-	qxl_crtc = kzalloc_obj(struct qxl_crtc);
+	qxl_crtc = kzalloc(sizeof(struct qxl_crtc), GFP_KERNEL);
 	if (!qxl_crtc)
 		return -ENOMEM;
 
@@ -1099,10 +1070,6 @@ static const struct drm_connector_helper_funcs qxl_connector_helper_funcs = {
 	.best_encoder = qxl_best_encoder,
 };
 
-static const struct drm_encoder_funcs qxl_encoder_funcs = {
-	.destroy = drm_encoder_cleanup,
-};
-
 static enum drm_connector_status qxl_conn_detect(
 			struct drm_connector *connector,
 			bool force)
@@ -1166,7 +1133,7 @@ static int qdev_output_init(struct drm_device *dev, int num_output)
 	struct drm_encoder *encoder;
 	int ret;
 
-	qxl_output = kzalloc_obj(struct qxl_output);
+	qxl_output = kzalloc(sizeof(struct qxl_output), GFP_KERNEL);
 	if (!qxl_output)
 		return -ENOMEM;
 
@@ -1177,10 +1144,10 @@ static int qdev_output_init(struct drm_device *dev, int num_output)
 	drm_connector_init(dev, &qxl_output->base,
 			   &qxl_connector_funcs, DRM_MODE_CONNECTOR_VIRTUAL);
 
-	ret = drm_encoder_init(dev, &qxl_output->enc, &qxl_encoder_funcs,
-			       DRM_MODE_ENCODER_VIRTUAL, NULL);
+	ret = drm_simple_encoder_init(dev, &qxl_output->enc,
+				      DRM_MODE_ENCODER_VIRTUAL);
 	if (ret) {
-		drm_err(dev, "drm_encoder_init() failed, error %d\n",
+		drm_err(dev, "drm_simple_encoder_init() failed, error %d\n",
 			ret);
 		goto err_drm_connector_cleanup;
 	}
@@ -1248,7 +1215,8 @@ int qxl_create_monitors_object(struct qxl_device *qdev)
 		qxl_bo_physical_address(qdev, qdev->monitors_config_bo, 0);
 
 	memset(qdev->monitors_config, 0, monitors_config_size);
-	qdev->dumb_heads = kzalloc_objs(qdev->dumb_heads[0], qxl_num_crtc);
+	qdev->dumb_heads = kcalloc(qxl_num_crtc, sizeof(qdev->dumb_heads[0]),
+				   GFP_KERNEL);
 	if (!qdev->dumb_heads) {
 		qxl_destroy_monitors_object(qdev);
 		return -ENOMEM;
@@ -1307,10 +1275,6 @@ int qxl_modeset_init(struct qxl_device *qdev)
 	}
 
 	qxl_display_read_client_monitors_config(qdev);
-
-	ret = drm_vblank_init(&qdev->ddev, qxl_num_crtc);
-	if (ret)
-		return ret;
 
 	drm_mode_config_reset(&qdev->ddev);
 	return 0;

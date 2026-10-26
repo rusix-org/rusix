@@ -288,7 +288,7 @@ int cache_subtree_walk(struct pcache_cache_subtree_walk_ctx *ctx)
 
 		/*
 		 * If key_tmp starts after the end of key, stop traversing.
-		 *        |--------|
+		 *	  |--------|
 		 * |====|
 		 */
 		if (cache_key_lstart(key_tmp) >= cache_key_lend(key)) {
@@ -811,12 +811,12 @@ int cache_replay(struct pcache_cache *cache)
 
 			pcache_dev_debug(pcache, "last kset replay, next: %u\n", kset_onmedia->next_cache_seg_id);
 
-			if (!cache_seg_id_valid(cache, kset_onmedia->next_cache_seg_id)) {
+			if (++last_hops > cache->n_segs) {
 				ret = -EIO;
 				goto out;
 			}
 
-			if (++last_hops > cache->n_segs) {
+			if (!cache_seg_id_valid(cache, kset_onmedia->next_cache_seg_id)) {
 				ret = -EIO;
 				goto out;
 			}
@@ -895,7 +895,7 @@ int cache_verify_dirty_tail(struct pcache_cache *cache)
 		}
 
 		if (kset_onmedia->flags & PCACHE_KSET_FLAGS_LAST) {
-			if (!cache_seg_id_valid(cache, kset_onmedia->next_cache_seg_id)) {
+			if (kset_onmedia->next_cache_seg_id >= cache->cache_info.n_segs) {
 				ret = -EIO;
 				goto out;
 			}
@@ -943,8 +943,7 @@ int cache_tree_init(struct pcache_cache *cache, struct pcache_cache_tree *cache_
 	 * Each element is a cache tree structure that contains
 	 * an RB tree root and a spinlock for protecting its contents.
 	 */
-	cache_tree->subtrees = kvzalloc_objs(struct pcache_cache_subtree,
-					     cache_tree->n_subtrees);
+	cache_tree->subtrees = kvcalloc(cache_tree->n_subtrees, sizeof(struct pcache_cache_subtree), GFP_KERNEL);
 	if (!cache_tree->subtrees) {
 		ret = -ENOMEM;
 		goto key_pool_exit;

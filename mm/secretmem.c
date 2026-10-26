@@ -39,7 +39,7 @@
 
 static bool secretmem_enable __ro_after_init = 1;
 module_param_named(enable, secretmem_enable, bool, 0400);
-MODULE_PARM_DESC(enable,
+MODULE_PARM_DESC(secretmem_enable,
 		 "Enable secretmem and memfd_secret(2) system call");
 
 static atomic_t secretmem_users;
@@ -139,7 +139,7 @@ retry:
 			goto out;
 		}
 
-		err = set_direct_map_invalid_noflush(folio_page(folio, 0), 1);
+		err = set_direct_map_invalid_noflush(folio_page(folio, 0));
 		if (err) {
 			secretmem_unaccount_folio(state, folio);
 			folio_put(folio);
@@ -156,7 +156,7 @@ retry:
 			 * already happened when we marked the page invalid
 			 * which guarantees that this call won't fail
 			 */
-			set_direct_map_default_noflush(folio_page(folio, 0), 1);
+			set_direct_map_default_noflush(folio_page(folio, 0));
 			folio_put(folio);
 			if (err == -EEXIST)
 				goto retry;
@@ -201,10 +201,10 @@ static int secretmem_release(struct inode *inode, struct file *file)
 
 static int secretmem_mmap_prepare(struct vm_area_desc *desc)
 {
-	if (!vma_desc_test_any(desc, VMA_SHARED_BIT, VMA_MAYSHARE_BIT))
+	if ((desc->vm_flags & (VM_SHARED | VM_MAYSHARE)) == 0)
 		return -EINVAL;
 
-	vma_desc_set_flags(desc, VMA_DONTDUMP_BIT);
+	desc->vm_flags |= VM_DONTDUMP;
 	desc->vm_ops = &secretmem_vm_ops;
 
 	return 0;
@@ -228,7 +228,7 @@ static int secretmem_migrate_folio(struct address_space *mapping,
 
 static void secretmem_free_folio(struct folio *folio)
 {
-	set_direct_map_default_noflush(folio_page(folio, 0), 1);
+	set_direct_map_default_noflush(folio_page(folio, 0));
 	folio_zero_segment(folio, 0, folio_size(folio));
 }
 
@@ -238,7 +238,7 @@ const struct address_space_operations secretmem_aops = {
 	.migrate_folio	= secretmem_migrate_folio,
 };
 
-static int secretmem_setattr(const struct mnt_idmap *idmap,
+static int secretmem_setattr(struct mnt_idmap *idmap,
 			     struct dentry *dentry, struct iattr *iattr)
 {
 	struct inode *inode = d_inode(dentry);
@@ -299,7 +299,7 @@ static struct file *secretmem_file_create(unsigned long flags)
 		goto err_free_priv;
 	}
 
-	mapping_set_gfp_mask(inode->i_mapping, GFP_USER);
+	mapping_set_gfp_mask(inode->i_mapping, GFP_HIGHUSER);
 	mapping_set_unevictable(inode->i_mapping);
 
 	inode->i_op = &secretmem_iops;
@@ -321,6 +321,9 @@ err_free_inode:
 
 SYSCALL_DEFINE1(memfd_secret, unsigned int, flags)
 {
+	struct file *file;
+	int fd, err;
+
 	/* make sure local flags do not conflict with global fcntl.h */
 	BUILD_BUG_ON(SECRETMEM_FLAGS_MASK & O_CLOEXEC);
 
@@ -332,7 +335,22 @@ SYSCALL_DEFINE1(memfd_secret, unsigned int, flags)
 	if (atomic_read(&secretmem_users) < 0)
 		return -ENFILE;
 
-	return FD_ADD(flags & O_CLOEXEC, secretmem_file_create(flags));
+	fd = get_unused_fd_flags(flags & O_CLOEXEC);
+	if (fd < 0)
+		return fd;
+
+	file = secretmem_file_create(flags);
+	if (IS_ERR(file)) {
+		err = PTR_ERR(file);
+		goto err_put_fd;
+	}
+
+	fd_install(fd, file);
+	return fd;
+
+err_put_fd:
+	put_unused_fd(fd);
+	return err;
 }
 
 static int secretmem_init_fs_context(struct fs_context *fc)
@@ -343,6 +361,8 @@ static int secretmem_init_fs_context(struct fs_context *fc)
 	if (!ctx)
 		return -ENOMEM;
 
+	fc->s_iflags |= SB_I_NOEXEC;
+	fc->s_iflags |= SB_I_NODEV;
 	return 0;
 }
 

@@ -33,7 +33,7 @@ extern void platform_setup (char **);
 extern void platform_idle (void);
 
 /*
- * platform_calibrate_ccount calibrates cpu clock freq (CONFIG_XTENSA_CALIBRATE_CCOUNT)
+ * platform_calibrate_ccount calibrates cpu clock freq (CONFIG_XTENSA_CALIBRATE)
  */
 extern void platform_calibrate_ccount (void);
 

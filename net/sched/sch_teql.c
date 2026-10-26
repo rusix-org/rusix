@@ -15,9 +15,7 @@
 #include <linux/init.h>
 #include <linux/skbuff.h>
 #include <linux/moduleparam.h>
-#include <net/arp.h>
 #include <net/dst.h>
-#include <net/ndisc.h>
 #include <net/neighbour.h>
 #include <net/pkt_sched.h>
 
@@ -112,7 +110,7 @@ teql_dequeue(struct Qdisc *sch)
 	} else {
 		qdisc_bstats_update(sch, skb);
 	}
-	WRITE_ONCE(sch->q.qlen, dat->q.qlen + READ_ONCE(q->q.qlen));
+	sch->q.qlen = dat->q.qlen + q->q.qlen;
 	return skb;
 }
 
@@ -259,18 +257,7 @@ __teql_resolve(struct sk_buff *skb, struct sk_buff *skb_res,
 	if (dst->dev != dev) {
 		struct neighbour *mn;
 
-#if IS_ENABLED(CONFIG_IPV6)
-		if (n->tbl->family == AF_INET6) {
-			mn = ipv6_neigh_lookup(dev, n->primary_key);
-			if (!mn)
-				mn = ipv6_neigh_create(dev, n->primary_key);
-		} else
-#endif
-		{
-			mn = ipv4_neigh_lookup(dev, n->primary_key);
-			if (!mn)
-				mn = ipv4_neigh_create(dev, n->primary_key);
-		}
+		mn = __neigh_lookup_errno(n->tbl, n->primary_key, dev);
 		neigh_release(n);
 		if (IS_ERR(mn))
 			return PTR_ERR(mn);

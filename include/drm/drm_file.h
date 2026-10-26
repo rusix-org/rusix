@@ -33,7 +33,6 @@
 #include <linux/types.h>
 #include <linux/completion.h>
 #include <linux/idr.h>
-#include <linux/xarray.h>
 
 #include <uapi/drm/drm.h>
 
@@ -208,13 +207,6 @@ struct drm_file {
 	bool writeback_connectors;
 
 	/**
-	 * @plane_color_pipeline:
-	 *
-	 * True if client understands plane color pipelines
-	 */
-	bool plane_color_pipeline;
-
-	/**
 	 * @was_master:
 	 *
 	 * This client has or had, master capability. Protected by struct
@@ -317,8 +309,10 @@ struct drm_file {
 	/** @table_lock: Protects @object_idr. */
 	spinlock_t table_lock;
 
-	/** @syncobj_xa: Mapping of sync object handles to object pointers. */
-	struct xarray syncobj_xa;
+	/** @syncobj_idr: Mapping of sync object handles to object pointers. */
+	struct idr syncobj_idr;
+	/** @syncobj_table_lock: Protects @syncobj_idr. */
+	spinlock_t syncobj_table_lock;
 
 	/** @filp: Pointer to the core file structure. */
 	struct file *filp;

@@ -4,6 +4,7 @@
  */
 
 #include <linux/clk-provider.h>
+#include <linux/mod_devicetable.h>
 #include <linux/module.h>
 #include <linux/platform_device.h>
 #include <linux/regmap.h>
@@ -3516,7 +3517,7 @@ static struct clk_alpha_pll *cam_cc_sm8550_plls[] = {
 	&cam_cc_pll12,
 };
 
-static const u32 cam_cc_sm8550_critical_cbcrs[] = {
+static u32 cam_cc_sm8550_critical_cbcrs[] = {
 	0x1419c, /* CAM_CC_GDSC_CLK */
 	0x142cc, /* CAM_CC_SLEEP_CLK */
 };
@@ -3529,7 +3530,7 @@ static const struct regmap_config cam_cc_sm8550_regmap_config = {
 	.fast_io = true,
 };
 
-static const struct qcom_cc_driver_data cam_cc_sm8550_driver_data = {
+static struct qcom_cc_driver_data cam_cc_sm8550_driver_data = {
 	.alpha_plls = cam_cc_sm8550_plls,
 	.num_alpha_plls = ARRAY_SIZE(cam_cc_sm8550_plls),
 	.clk_cbcrs = cam_cc_sm8550_critical_cbcrs,

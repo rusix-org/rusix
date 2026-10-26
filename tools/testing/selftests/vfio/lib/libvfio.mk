@@ -1,38 +1,24 @@
 include $(top_srcdir)/scripts/subarch.include
 ARCH ?= $(SUBARCH)
 
-LIBVFIO_SRCDIR := $(selfdir)/vfio/lib
+VFIO_DIR := $(selfdir)/vfio
 
-LIBVFIO_C := iommu.c
-LIBVFIO_C += iova_allocator.c
-LIBVFIO_C += libvfio.c
-LIBVFIO_C += sysfs.c
-LIBVFIO_C += vfio_pci_device.c
-LIBVFIO_C += vfio_pci_driver.c
+LIBVFIO_C := lib/vfio_pci_device.c
+LIBVFIO_C += lib/vfio_pci_driver.c
 
 ifeq ($(ARCH:x86_64=x86),x86)
-LIBVFIO_C += drivers/ioat/ioat.c
-LIBVFIO_C += drivers/dsa/dsa.c
+LIBVFIO_C += lib/drivers/ioat/ioat.c
+LIBVFIO_C += lib/drivers/dsa/dsa.c
 endif
 
-LIBVFIO_C += drivers/mlx5/mlx5.c
-LIBVFIO_C += drivers/nv_falcon/nv_falcon.c
-LIBVFIO_C += drivers/igb/igb.c
-
-LIBVFIO_OUTPUT := $(OUTPUT)/libvfio
-
-LIBVFIO_O := $(patsubst %.c, $(LIBVFIO_OUTPUT)/%.o, $(LIBVFIO_C))
+LIBVFIO_O := $(patsubst %.c, $(OUTPUT)/%.o, $(LIBVFIO_C))
 
 LIBVFIO_O_DIRS := $(shell dirname $(LIBVFIO_O) | uniq)
+$(shell mkdir -p $(LIBVFIO_O_DIRS))
 
-$(LIBVFIO_O_DIRS):
-	mkdir -p $@
+CFLAGS += -I$(VFIO_DIR)/lib/include
 
-CFLAGS += -I$(LIBVFIO_SRCDIR)/include
-
-LDLIBS += -luuid
-
-$(LIBVFIO_O): $(LIBVFIO_OUTPUT)/%.o : $(LIBVFIO_SRCDIR)/%.c | $(LIBVFIO_O_DIRS)
+$(LIBVFIO_O): $(OUTPUT)/%.o : $(VFIO_DIR)/%.c
 	$(CC) $(CFLAGS) $(CPPFLAGS) $(TARGET_ARCH) -c $< -o $@
 
-EXTRA_CLEAN += $(LIBVFIO_OUTPUT)
+EXTRA_CLEAN += $(LIBVFIO_O)

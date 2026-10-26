@@ -12,7 +12,6 @@
 #include <drm/drm_fourcc.h>
 #include <drm/drm_framebuffer.h>
 #include <drm/drm_gem_atomic_helper.h>
-#include <drm/drm_panic_helper.h>
 
 #include "tidss_crtc.h"
 #include "tidss_dispc.h"
@@ -30,7 +29,7 @@ void tidss_plane_error_irq(struct drm_plane *plane, u64 irqstatus)
 /* drm_plane_helper_funcs */
 
 static int tidss_plane_atomic_check(struct drm_plane *plane,
-				    struct drm_atomic_commit *state)
+				    struct drm_atomic_state *state)
 {
 	struct drm_plane_state *new_plane_state = drm_atomic_get_new_plane_state(state,
 										 plane);
@@ -42,6 +41,8 @@ static int tidss_plane_atomic_check(struct drm_plane *plane,
 	u32 hw_plane = tplane->hw_plane_id;
 	u32 hw_videoport;
 	int ret;
+
+	dev_dbg(ddev->dev, "%s\n", __func__);
 
 	if (!new_plane_state->crtc) {
 		/*
@@ -114,7 +115,7 @@ static int tidss_plane_atomic_check(struct drm_plane *plane,
 }
 
 static void tidss_plane_atomic_update(struct drm_plane *plane,
-				      struct drm_atomic_commit *state)
+				      struct drm_atomic_state *state)
 {
 	struct drm_device *ddev = plane->dev;
 	struct tidss_device *tidss = to_tidss(ddev);
@@ -122,6 +123,8 @@ static void tidss_plane_atomic_update(struct drm_plane *plane,
 	struct drm_plane_state *new_state = drm_atomic_get_new_plane_state(state,
 									   plane);
 	u32 hw_videoport;
+
+	dev_dbg(ddev->dev, "%s\n", __func__);
 
 	if (!new_state->visible) {
 		dispc_plane_enable(tidss->dispc, tplane->hw_plane_id, false);
@@ -134,21 +137,25 @@ static void tidss_plane_atomic_update(struct drm_plane *plane,
 }
 
 static void tidss_plane_atomic_enable(struct drm_plane *plane,
-				      struct drm_atomic_commit *state)
+				      struct drm_atomic_state *state)
 {
 	struct drm_device *ddev = plane->dev;
 	struct tidss_device *tidss = to_tidss(ddev);
 	struct tidss_plane *tplane = to_tidss_plane(plane);
+
+	dev_dbg(ddev->dev, "%s\n", __func__);
 
 	dispc_plane_enable(tidss->dispc, tplane->hw_plane_id, true);
 }
 
 static void tidss_plane_atomic_disable(struct drm_plane *plane,
-				       struct drm_atomic_commit *state)
+				       struct drm_atomic_state *state)
 {
 	struct drm_device *ddev = plane->dev;
 	struct tidss_device *tidss = to_tidss(ddev);
 	struct tidss_plane *tplane = to_tidss_plane(plane);
+
+	dev_dbg(ddev->dev, "%s\n", __func__);
 
 	dispc_plane_enable(tidss->dispc, tplane->hw_plane_id, false);
 }
@@ -179,11 +186,10 @@ static const struct drm_plane_helper_funcs tidss_primary_plane_helper_funcs = {
 static const struct drm_plane_funcs tidss_plane_funcs = {
 	.update_plane = drm_atomic_helper_update_plane,
 	.disable_plane = drm_atomic_helper_disable_plane,
+	.reset = drm_atomic_helper_plane_reset,
 	.destroy = drm_plane_destroy,
-	.atomic_create_state = drm_atomic_helper_plane_create_state,
 	.atomic_duplicate_state = drm_atomic_helper_plane_duplicate_state,
 	.atomic_destroy_state = drm_atomic_helper_plane_destroy_state,
-	DRM_PANIC_PLANE_FUNCS,
 };
 
 struct tidss_plane *tidss_plane_create(struct tidss_device *tidss,
@@ -205,7 +211,7 @@ struct tidss_plane *tidss_plane_create(struct tidss_device *tidss,
 			   BIT(DRM_MODE_BLEND_COVERAGE));
 	int ret;
 
-	tplane = kzalloc_obj(*tplane);
+	tplane = kzalloc(sizeof(*tplane), GFP_KERNEL);
 	if (!tplane)
 		return ERR_PTR(-ENOMEM);
 

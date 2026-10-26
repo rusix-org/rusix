@@ -2,11 +2,7 @@
 
 //! Rust faux device sample.
 
-use kernel::{
-    faux,
-    prelude::*,
-    Module, //
-};
+use kernel::{c_str, faux, prelude::*, Module};
 
 module! {
     type: SampleModule,
@@ -24,10 +20,9 @@ impl Module for SampleModule {
     fn init(_module: &'static ThisModule) -> Result<Self> {
         pr_info!("Initialising Rust Faux Device Sample\n");
 
-        let reg = faux::Registration::new(c"rust-faux-sample-device", None)?;
-        let fdev = reg.as_ref();
+        let reg = faux::Registration::new(c_str!("rust-faux-sample-device"), None)?;
 
-        dev_info!(fdev, "Hello from faux device!\n");
+        dev_info!(reg.as_ref(), "Hello from faux device!\n");
 
         Ok(Self { _reg: reg })
     }

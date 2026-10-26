@@ -82,6 +82,12 @@ static inline unsigned int reg_status(struct bcm7038_l1_chip *intc,
 	return (0 * intc->n_words + word) * sizeof(u32);
 }
 
+static inline unsigned int reg_mask_status(struct bcm7038_l1_chip *intc,
+					   unsigned int word)
+{
+	return (1 * intc->n_words + word) * sizeof(u32);
+}
+
 static inline unsigned int reg_mask_set(struct bcm7038_l1_chip *intc,
 					unsigned int word)
 {
@@ -242,7 +248,8 @@ static int bcm7038_l1_init_one(struct device_node *dn, unsigned int idx,
 		return -EINVAL;
 	}
 
-	cpu = intc->cpus[idx] = kzalloc_flex(*cpu, mask_cache, n_words);
+	cpu = intc->cpus[idx] = kzalloc(struct_size(cpu, mask_cache, n_words),
+					GFP_KERNEL);
 	if (!cpu)
 		return -ENOMEM;
 
@@ -397,7 +404,7 @@ static int bcm7038_l1_probe(struct platform_device *pdev, struct device_node *pa
 	struct bcm7038_l1_chip *intc;
 	int idx, ret;
 
-	intc = kzalloc_obj(*intc);
+	intc = kzalloc(sizeof(*intc), GFP_KERNEL);
 	if (!intc)
 		return -ENOMEM;
 

@@ -1,7 +1,5 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
-#define pr_fmt(fmt) "zstd: " fmt
-
 #include <linux/kernel.h>
 #include <linux/slab.h>
 #include <linux/vmalloc.h>
@@ -55,18 +53,13 @@ static int zstd_setup_params(struct zcomp_params *params)
 	zstd_compression_parameters prm;
 	struct zstd_params *zp;
 
-	zp = kzalloc_obj(*zp);
+	zp = kzalloc(sizeof(*zp), GFP_KERNEL);
 	if (!zp)
 		return -ENOMEM;
 
 	params->drv_data = zp;
-	if (params->level == ZCOMP_PARAM_NOT_SET) {
+	if (params->level == ZCOMP_PARAM_NOT_SET)
 		params->level = zstd_default_clevel();
-	} else if (params->level < zstd_min_clevel() ||
-		   params->level > zstd_max_clevel()) {
-		pr_err("invalid compression level %d\n", params->level);
-		goto error;
-	}
 
 	zp->cprm = zstd_get_params(params->level, PAGE_SIZE);
 
@@ -92,6 +85,7 @@ static int zstd_setup_params(struct zcomp_params *params)
 	return 0;
 
 error:
+	zstd_release_params(params);
 	return -EINVAL;
 }
 
@@ -128,7 +122,7 @@ static int zstd_create(struct zcomp_params *params, struct zcomp_ctx *ctx)
 	zstd_parameters prm;
 	size_t sz;
 
-	zctx = kzalloc_obj(*zctx);
+	zctx = kzalloc(sizeof(*zctx), GFP_KERNEL);
 	if (!zctx)
 		return -ENOMEM;
 
@@ -167,6 +161,7 @@ static int zstd_create(struct zcomp_params *params, struct zcomp_ctx *ctx)
 	return 0;
 
 error:
+	zstd_release_params(params);
 	zstd_destroy(ctx);
 	return -EINVAL;
 }

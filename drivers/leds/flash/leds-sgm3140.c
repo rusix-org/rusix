@@ -214,7 +214,8 @@ static int sgm3140_probe(struct platform_device *pdev)
 		return dev_err_probe(&pdev->dev, ret,
 				     "Failed to request regulator\n");
 
-	child_node = device_get_next_child_node(&pdev->dev, NULL);
+	child_node = fwnode_get_next_available_child_node(pdev->dev.fwnode,
+							  NULL);
 	if (!child_node) {
 		dev_err(&pdev->dev,
 			"No fwnode child node found for connected LED.\n");

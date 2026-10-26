@@ -8,7 +8,7 @@ CPU hotplug in the Kernel
          Srivatsa Vaddagiri <vatsa@in.ibm.com>,
          Ashok Raj <ashok.raj@intel.com>,
          Joel Schopp <jschopp@austin.ibm.com>,
-	 Thomas Gleixner <tglx@kernel.org>
+	 Thomas Gleixner <tglx@linutronix.de>
 
 Introduction
 ============
@@ -44,6 +44,11 @@ Command Line Switches
   This option sets ``possible_cpus`` bits in ``cpu_possible_mask``.
 
   This option is limited to the X86 and S390 architecture.
+
+``cpu0_hotplug``
+  Allow to shutdown CPU0.
+
+  This option is limited to the X86 architecture.
 
 CPU maps
 ========
@@ -607,9 +612,9 @@ ONLINE section for notifications on online and offline operation::
    if (ret)
         return ret;
    ....
-   cpuhp_state_remove_instance(state, &inst1->node);
+   cpuhp_remove_instance(state, &inst1->node);
    ....
-   cpuhp_state_remove_instance(state, &inst2->node);
+   cpuhp_remove_instance(state, &inst2->node);
    ....
    cpuhp_remove_multi_state(state);
 

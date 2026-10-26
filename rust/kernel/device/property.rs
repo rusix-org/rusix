@@ -14,8 +14,7 @@ use crate::{
     fmt,
     prelude::*,
     str::{CStr, CString},
-    sync::aref::ARef,
-    types::Opaque,
+    types::{ARef, Opaque},
 };
 
 /// A reference-counted fwnode_handle.
@@ -179,11 +178,11 @@ impl FwNode {
     /// # Examples
     ///
     /// ```
-    /// # use kernel::{device::{Device, property::FwNode}, str::CString};
+    /// # use kernel::{c_str, device::{Device, property::FwNode}, str::CString};
     /// fn examples(dev: &Device) -> Result {
     ///     let fwnode = dev.fwnode().ok_or(ENOENT)?;
-    ///     let b: u32 = fwnode.property_read(c"some-number").required_by(dev)?;
-    ///     if let Some(s) = fwnode.property_read::<CString>(c"some-str").optional() {
+    ///     let b: u32 = fwnode.property_read(c_str!("some-number")).required_by(dev)?;
+    ///     if let Some(s) = fwnode.property_read::<CString>(c_str!("some-str")).optional() {
     ///         // ...
     ///     }
     ///     Ok(())
@@ -360,7 +359,7 @@ impl fmt::Debug for FwNodeReferenceArgs {
 }
 
 // SAFETY: Instances of `FwNode` are always reference-counted.
-unsafe impl crate::sync::aref::AlwaysRefCounted for FwNode {
+unsafe impl crate::types::AlwaysRefCounted for FwNode {
     fn inc_ref(&self) {
         // SAFETY: The existence of a shared reference guarantees that the
         // refcount is non-zero.

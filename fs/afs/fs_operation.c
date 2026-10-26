@@ -21,7 +21,7 @@ struct afs_operation *afs_alloc_operation(struct key *key, struct afs_volume *vo
 
 	_enter("");
 
-	op = kzalloc_obj(*op);
+	op = kzalloc(sizeof(*op), GFP_KERNEL);
 	if (!op)
 		return ERR_PTR(-ENOMEM);
 

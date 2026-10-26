@@ -3,6 +3,7 @@
 //! Rust configfs sample.
 
 use kernel::alloc::flags;
+use kernel::c_str;
 use kernel::configfs;
 use kernel::configfs::configfs_attrs;
 use kernel::new_mutex;
@@ -34,7 +35,7 @@ struct Configuration {
 impl Configuration {
     fn new() -> impl PinInit<Self, Error> {
         try_pin_init!(Self {
-            message: c"Hello World\n",
+            message: c_str!("Hello World\n"),
             bar <- new_mutex!((KBox::new([0; PAGE_SIZE], flags::GFP_KERNEL)?, 0)),
         })
     }
@@ -60,7 +61,7 @@ impl kernel::InPlaceModule for RustConfigfs {
 
         try_pin_init!(Self {
             config <- configfs::Subsystem::new(
-                c"rust_configfs", item_type, Configuration::new()
+                c_str!("rust_configfs"), item_type, Configuration::new()
             ),
         })
     }

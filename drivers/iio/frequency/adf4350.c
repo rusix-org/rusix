@@ -7,6 +7,7 @@
 
 #include <linux/device.h>
 #include <linux/kernel.h>
+#include <linux/mod_devicetable.h>
 #include <linux/module.h>
 #include <linux/property.h>
 #include <linux/slab.h>
@@ -151,10 +152,10 @@ static int adf4350_set_freq(struct adf4350_state *st, unsigned long long freq)
 	st->r4_rf_div_sel = 0;
 
 	/*
-	 * NOTE: This iteratively shifts freq by a power of 2
-	 * (st->r4_rf_div_sel) to meet or exceed ADF4350_MIN_VCO_FREQ.
-	 * A constant-time approach using fls_long() was attempted but
-	 * deemed more complex without meaningful benefit for init code.
+	 * !\TODO: The below computation is making sure we get a power of 2
+	 * shift (st->r4_rf_div_sel) so that freq becomes higher or equal to
+	 * ADF4350_MIN_VCO_FREQ. This might be simplified with fls()/fls_long()
+	 * and friends.
 	 */
 	while (freq < ADF4350_MIN_VCO_FREQ) {
 		freq <<= 1;
@@ -461,7 +462,7 @@ static const struct clk_ops adf4350_clk_ops = {
 static int adf4350_clk_register(struct adf4350_state *st)
 {
 	struct spi_device *spi = st->spi;
-	struct clk_init_data init = { };
+	struct clk_init_data init;
 	struct clk *clk;
 	const char *parent_name;
 	int ret;
@@ -606,7 +607,7 @@ static int adf4350_probe(struct spi_device *spi)
 	if (dev_fwnode(&spi->dev)) {
 		pdata = adf4350_parse_dt(&spi->dev);
 		if (pdata == NULL)
-			return -ENOMEM;
+			return -EINVAL;
 	} else {
 		pdata = dev_get_platdata(&spi->dev);
 	}
@@ -691,8 +692,8 @@ static const struct of_device_id adf4350_of_match[] = {
 MODULE_DEVICE_TABLE(of, adf4350_of_match);
 
 static const struct spi_device_id adf4350_id[] = {
-	{ .name = "adf4350", .driver_data = 4350 },
-	{ .name = "adf4351", .driver_data = 4351 },
+	{"adf4350", 4350},
+	{"adf4351", 4351},
 	{ }
 };
 MODULE_DEVICE_TABLE(spi, adf4350_id);

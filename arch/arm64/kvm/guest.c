@@ -62,7 +62,6 @@ const struct kvm_stats_header kvm_vcpu_stats_header = {
 		       sizeof(kvm_vcpu_stats_desc),
 };
 
-#if ARM64_S390_COMMON == 1
 static bool core_reg_offset_is_vreg(u64 off)
 {
 	return off >= KVM_REG_ARM_CORE_REG(fp_regs.vregs) &&
@@ -135,19 +134,19 @@ static void *core_reg_addr(struct kvm_vcpu *vcpu, const struct kvm_one_reg *reg)
 	     KVM_REG_ARM_CORE_REG(regs.regs[30]):
 		off -= KVM_REG_ARM_CORE_REG(regs.regs[0]);
 		off /= 2;
-		return &vcpu_gp_regs(vcpu)[off];
+		return &vcpu->arch.ctxt.regs.regs[off];
 
 	case KVM_REG_ARM_CORE_REG(regs.sp):
-		return vcpu_sp_el0(vcpu);
+		return &vcpu->arch.ctxt.regs.sp;
 
 	case KVM_REG_ARM_CORE_REG(regs.pc):
-		return vcpu_pc(vcpu);
+		return &vcpu->arch.ctxt.regs.pc;
 
 	case KVM_REG_ARM_CORE_REG(regs.pstate):
-		return vcpu_cpsr(vcpu);
+		return &vcpu->arch.ctxt.regs.pstate;
 
 	case KVM_REG_ARM_CORE_REG(sp_el1):
-		return vcpu_sp_el1(vcpu);
+		return __ctxt_sys_reg(&vcpu->arch.ctxt, SP_EL1);
 
 	case KVM_REG_ARM_CORE_REG(elr_el1):
 		return __ctxt_sys_reg(&vcpu->arch.ctxt, ELR_EL1);
@@ -171,13 +170,13 @@ static void *core_reg_addr(struct kvm_vcpu *vcpu, const struct kvm_one_reg *reg)
 	     KVM_REG_ARM_CORE_REG(fp_regs.vregs[31]):
 		off -= KVM_REG_ARM_CORE_REG(fp_regs.vregs[0]);
 		off /= 4;
-		return vcpu_vreg(vcpu, off);
+		return &vcpu->arch.ctxt.fp_regs.vregs[off];
 
 	case KVM_REG_ARM_CORE_REG(fp_regs.fpsr):
-		return vcpu_fpsr(vcpu);
+		return &vcpu->arch.ctxt.fp_regs.fpsr;
 
 	case KVM_REG_ARM_CORE_REG(fp_regs.fpcr):
-		return vcpu_fpcr(vcpu);
+		return &vcpu->arch.ctxt.fp_regs.fpcr;
 
 	default:
 		return NULL;
@@ -306,8 +305,6 @@ static int set_core_reg(struct kvm_vcpu *vcpu, const struct kvm_one_reg *reg)
 out:
 	return err;
 }
-
-#endif /* ARM64_S390_COMMON == 1 */
 
 #define vq_word(vq) (((vq) - SVE_VQ_MIN) / 64)
 #define vq_mask(vq) ((u64)1 << ((vq) - SVE_VQ_MIN) % 64)
@@ -503,7 +500,7 @@ static int get_sve_reg(struct kvm_vcpu *vcpu, const struct kvm_one_reg *reg)
 	if (!kvm_arm_vcpu_sve_finalized(vcpu))
 		return -EPERM;
 
-	if (copy_to_user(uptr, (void *)vcpu->arch.sve_state + region.koffset,
+	if (copy_to_user(uptr, vcpu->arch.sve_state + region.koffset,
 			 region.klen) ||
 	    clear_user(uptr + region.klen, region.upad))
 		return -EFAULT;
@@ -529,7 +526,7 @@ static int set_sve_reg(struct kvm_vcpu *vcpu, const struct kvm_one_reg *reg)
 	if (!kvm_arm_vcpu_sve_finalized(vcpu))
 		return -EPERM;
 
-	if (copy_from_user((void *)vcpu->arch.sve_state + region.koffset, uptr,
+	if (copy_from_user(vcpu->arch.sve_state + region.koffset, uptr,
 			   region.klen))
 		return -EFAULT;
 
@@ -546,7 +543,6 @@ int kvm_arch_vcpu_ioctl_set_regs(struct kvm_vcpu *vcpu, struct kvm_regs *regs)
 	return -EINVAL;
 }
 
-#if ARM64_S390_COMMON == 1
 static int copy_core_reg_indices(const struct kvm_vcpu *vcpu,
 				 u64 __user *uindices)
 {
@@ -594,8 +590,6 @@ static unsigned long num_core_regs(const struct kvm_vcpu *vcpu)
 {
 	return copy_core_reg_indices(vcpu, NULL);
 }
-
-#endif /* ARM64_S390_COMMON == 1 */
 
 static unsigned long num_sve_regs(const struct kvm_vcpu *vcpu)
 {
@@ -793,13 +787,6 @@ int __kvm_arm_vcpu_set_events(struct kvm_vcpu *vcpu,
 	int ret = 0;
 
 	/*
-	 * EL2 injects an external abort only to complete a forwarded abort.
-	 * SError injection is forwarded.
-	 */
-	if (vcpu_is_protected(vcpu) && ext_dabt_pending)
-		return -EPERM;
-
-	/*
 	 * Immediately commit the pending SEA to the vCPU's architectural
 	 * state which is necessary since we do not return a pending SEA
 	 * to userspace via KVM_GET_VCPU_EVENTS.
@@ -895,10 +882,6 @@ int kvm_arch_vcpu_ioctl_set_guest_debug(struct kvm_vcpu *vcpu,
 					struct kvm_guest_debug *dbg)
 {
 	trace_kvm_set_guest_debug(vcpu, dbg->control);
-
-	/* A protected guest's debug state is not exposed to the host. */
-	if (vcpu_is_protected(vcpu))
-		return -EPERM;
 
 	if (dbg->control & ~KVM_GUESTDBG_VALID_MASK)
 		return -EINVAL;

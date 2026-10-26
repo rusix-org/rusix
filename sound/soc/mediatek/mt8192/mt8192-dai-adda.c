@@ -218,13 +218,10 @@ static int mtk_adda_ul_event(struct snd_soc_dapm_widget *w,
 	struct mtk_base_afe *afe = snd_soc_component_get_drvdata(cmpnt);
 	struct mt8192_afe_private *afe_priv = afe->platform_priv;
 	int mtkaif_dmic = afe_priv->mtkaif_dmic;
-	int ret;
 
 	switch (event) {
 	case SND_SOC_DAPM_PRE_PMU:
-		ret = mt8192_afe_gpio_request(afe->dev, true, MT8192_DAI_ADDA, 1);
-		if (ret)
-			return ret;
+		mt8192_afe_gpio_request(afe->dev, true, MT8192_DAI_ADDA, 1);
 
 		/* update setting to dmic */
 		if (mtkaif_dmic) {
@@ -242,9 +239,7 @@ static int mtk_adda_ul_event(struct snd_soc_dapm_widget *w,
 	case SND_SOC_DAPM_POST_PMD:
 		/* should delayed 1/fs(smallest is 8k) = 125us before afe off */
 		usleep_range(125, 135);
-		ret = mt8192_afe_gpio_request(afe->dev, false, MT8192_DAI_ADDA, 1);
-		if (ret)
-			return ret;
+		mt8192_afe_gpio_request(afe->dev, false, MT8192_DAI_ADDA, 1);
 		break;
 	default:
 		break;
@@ -262,14 +257,11 @@ static int mtk_adda_ch34_ul_event(struct snd_soc_dapm_widget *w,
 	struct mt8192_afe_private *afe_priv = afe->platform_priv;
 	int mtkaif_dmic = afe_priv->mtkaif_dmic_ch34;
 	int mtkaif_adda6_only = afe_priv->mtkaif_adda6_only;
-	int ret;
 
 	switch (event) {
 	case SND_SOC_DAPM_PRE_PMU:
-		ret = mt8192_afe_gpio_request(afe->dev, true, MT8192_DAI_ADDA_CH34,
-					      1);
-		if (ret)
-			return ret;
+		mt8192_afe_gpio_request(afe->dev, true, MT8192_DAI_ADDA_CH34,
+					1);
 
 		/* update setting to dmic */
 		if (mtkaif_dmic) {
@@ -299,10 +291,8 @@ static int mtk_adda_ch34_ul_event(struct snd_soc_dapm_widget *w,
 	case SND_SOC_DAPM_POST_PMD:
 		/* should delayed 1/fs(smallest is 8k) = 125us before afe off */
 		usleep_range(125, 135);
-		ret = mt8192_afe_gpio_request(afe->dev, false, MT8192_DAI_ADDA_CH34,
-					      1);
-		if (ret)
-			return ret;
+		mt8192_afe_gpio_request(afe->dev, false, MT8192_DAI_ADDA_CH34,
+					1);
 
 		/* reset dmic */
 		afe_priv->mtkaif_dmic_ch34 = 0;
@@ -456,20 +446,15 @@ static int mtk_adda_dl_event(struct snd_soc_dapm_widget *w,
 {
 	struct snd_soc_component *cmpnt = snd_soc_dapm_to_component(w->dapm);
 	struct mtk_base_afe *afe = snd_soc_component_get_drvdata(cmpnt);
-	int ret;
 
 	switch (event) {
 	case SND_SOC_DAPM_PRE_PMU:
-		ret = mt8192_afe_gpio_request(afe->dev, true, MT8192_DAI_ADDA, 0);
-		if (ret)
-			return ret;
+		mt8192_afe_gpio_request(afe->dev, true, MT8192_DAI_ADDA, 0);
 		break;
 	case SND_SOC_DAPM_POST_PMD:
 		/* should delayed 1/fs(smallest is 8k) = 125us before afe off */
 		usleep_range(125, 135);
-		ret = mt8192_afe_gpio_request(afe->dev, false, MT8192_DAI_ADDA, 0);
-		if (ret)
-			return ret;
+		mt8192_afe_gpio_request(afe->dev, false, MT8192_DAI_ADDA, 0);
 		break;
 	default:
 		break;
@@ -484,22 +469,17 @@ static int mtk_adda_ch34_dl_event(struct snd_soc_dapm_widget *w,
 {
 	struct snd_soc_component *cmpnt = snd_soc_dapm_to_component(w->dapm);
 	struct mtk_base_afe *afe = snd_soc_component_get_drvdata(cmpnt);
-	int ret;
 
 	switch (event) {
 	case SND_SOC_DAPM_PRE_PMU:
-		ret = mt8192_afe_gpio_request(afe->dev, true, MT8192_DAI_ADDA_CH34,
-					      0);
-		if (ret)
-			return ret;
+		mt8192_afe_gpio_request(afe->dev, true, MT8192_DAI_ADDA_CH34,
+					0);
 		break;
 	case SND_SOC_DAPM_POST_PMD:
 		/* should delayed 1/fs(smallest is 8k) = 125us before afe off */
 		usleep_range(125, 135);
-		ret = mt8192_afe_gpio_request(afe->dev, false, MT8192_DAI_ADDA_CH34,
-					      0);
-		if (ret)
-			return ret;
+		mt8192_afe_gpio_request(afe->dev, false, MT8192_DAI_ADDA_CH34,
+					0);
 		break;
 	default:
 		break;
@@ -512,7 +492,7 @@ static int mtk_adda_ch34_dl_event(struct snd_soc_dapm_widget *w,
 static int stf_positive_gain_get(struct snd_kcontrol *kcontrol,
 				 struct snd_ctl_elem_value *ucontrol)
 {
-	struct snd_soc_component *cmpnt = snd_kcontrol_chip(kcontrol);
+	struct snd_soc_component *cmpnt = snd_soc_kcontrol_component(kcontrol);
 	struct mtk_base_afe *afe = snd_soc_component_get_drvdata(cmpnt);
 	struct mt8192_afe_private *afe_priv = afe->platform_priv;
 
@@ -523,7 +503,7 @@ static int stf_positive_gain_get(struct snd_kcontrol *kcontrol,
 static int stf_positive_gain_set(struct snd_kcontrol *kcontrol,
 				 struct snd_ctl_elem_value *ucontrol)
 {
-	struct snd_soc_component *cmpnt = snd_kcontrol_chip(kcontrol);
+	struct snd_soc_component *cmpnt = snd_soc_kcontrol_component(kcontrol);
 	struct mtk_base_afe *afe = snd_soc_component_get_drvdata(cmpnt);
 	struct mt8192_afe_private *afe_priv = afe->platform_priv;
 	int gain_db = ucontrol->value.integer.value[0];
@@ -547,7 +527,7 @@ static int stf_positive_gain_set(struct snd_kcontrol *kcontrol,
 static int mt8192_adda_dmic_get(struct snd_kcontrol *kcontrol,
 				struct snd_ctl_elem_value *ucontrol)
 {
-	struct snd_soc_component *cmpnt = snd_kcontrol_chip(kcontrol);
+	struct snd_soc_component *cmpnt = snd_soc_kcontrol_component(kcontrol);
 	struct mtk_base_afe *afe = snd_soc_component_get_drvdata(cmpnt);
 	struct mt8192_afe_private *afe_priv = afe->platform_priv;
 
@@ -558,7 +538,7 @@ static int mt8192_adda_dmic_get(struct snd_kcontrol *kcontrol,
 static int mt8192_adda_dmic_set(struct snd_kcontrol *kcontrol,
 				struct snd_ctl_elem_value *ucontrol)
 {
-	struct snd_soc_component *cmpnt = snd_kcontrol_chip(kcontrol);
+	struct snd_soc_component *cmpnt = snd_soc_kcontrol_component(kcontrol);
 	struct mtk_base_afe *afe = snd_soc_component_get_drvdata(cmpnt);
 	struct mt8192_afe_private *afe_priv = afe->platform_priv;
 	int dmic_on;
@@ -578,7 +558,7 @@ static int mt8192_adda_dmic_set(struct snd_kcontrol *kcontrol,
 static int mt8192_adda6_only_get(struct snd_kcontrol *kcontrol,
 				 struct snd_ctl_elem_value *ucontrol)
 {
-	struct snd_soc_component *cmpnt = snd_kcontrol_chip(kcontrol);
+	struct snd_soc_component *cmpnt = snd_soc_kcontrol_component(kcontrol);
 	struct mtk_base_afe *afe = snd_soc_component_get_drvdata(cmpnt);
 	struct mt8192_afe_private *afe_priv = afe->platform_priv;
 
@@ -589,7 +569,7 @@ static int mt8192_adda6_only_get(struct snd_kcontrol *kcontrol,
 static int mt8192_adda6_only_set(struct snd_kcontrol *kcontrol,
 				 struct snd_ctl_elem_value *ucontrol)
 {
-	struct snd_soc_component *cmpnt = snd_kcontrol_chip(kcontrol);
+	struct snd_soc_component *cmpnt = snd_soc_kcontrol_component(kcontrol);
 	struct mtk_base_afe *afe = snd_soc_component_get_drvdata(cmpnt);
 	struct mt8192_afe_private *afe_priv = afe->platform_priv;
 	int mtkaif_adda6_only;

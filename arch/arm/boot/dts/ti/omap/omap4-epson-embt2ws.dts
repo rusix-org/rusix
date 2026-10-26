@@ -64,13 +64,6 @@
 		};
 	};
 
-	multi-led {
-		compatible = "leds-group-multicolor";
-		color = <LED_COLOR_ID_RGB>;
-		function = LED_FUNCTION_STATUS;
-		leds = <&led_r>, <&led_g>, <&led_b>;
-	};
-
 	cb_v18: regulator-cb-v18 {
 		pinctrl-names = "default";
 		pinctrl-0 = <&cb_v18_pins>;
@@ -236,11 +229,6 @@
 			interrupts = <11>;
 		};
 
-		pwrbutton {
-			compatible = "ti,twl6030-pwrbutton";
-			interrupts = <0>;
-		};
-
 		ldo2: regulator-ldo2 {
 			compatible = "ti,twl6032-ldo2";
 			regulator-min-microvolt = <1000000>;
@@ -358,7 +346,7 @@
 		pinctrl-names = "default";
 		pinctrl-0 = <&mpu9150h_pins>;
 		interrupt-parent = <&gpio2>;
-		interrupts = <19 IRQ_TYPE_LEVEL_HIGH>;
+		interrupt = <19 IRQ_TYPE_LEVEL_HIGH>;
 	};
 };
 
@@ -375,19 +363,19 @@
 		#address-cells = <1>;
 		#size-cells = <0>;
 
-		led_g: led@0 {
+		led@0 {
 			reg = <0>;
 			color = <LED_COLOR_ID_GREEN>;
 			function = LED_FUNCTION_STATUS;
 		};
 
-		led_b: led@2 {
+		led@2 {
 			reg = <2>;
 			color = <LED_COLOR_ID_BLUE>;
 			function = LED_FUNCTION_STATUS;
 		};
 
-		led_r: led@4 {
+		led@4 {
 			reg = <4>;
 			color = <LED_COLOR_ID_RED>;
 			function = LED_FUNCTION_STATUS;
@@ -420,7 +408,7 @@
 		pinctrl-names = "default";
 		pinctrl-0 = <&mpu9150_pins>;
 		interrupt-parent = <&gpio2>;
-		interrupts = <7 IRQ_TYPE_LEVEL_HIGH>;
+		interrupt = <7 IRQ_TYPE_LEVEL_HIGH>;
 		vddio-supply = <&cb_v18>;
 		vdd-supply = <&cb_v33>;
 		invensense,level-shifter;
@@ -428,8 +416,6 @@
 };
 
 &keypad {
-	status = "okay";
-
 	pinctrl-names = "default";
 	pinctrl-0 = <&keypad_pins>;
 	keypad,num-rows = <2>;

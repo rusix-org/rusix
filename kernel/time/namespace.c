@@ -91,12 +91,12 @@ static struct time_namespace *clone_time_ns(struct user_namespace *user_ns,
 		goto fail;
 
 	err = -ENOMEM;
-	ns = kzalloc_obj(*ns, GFP_KERNEL_ACCOUNT);
+	ns = kzalloc(sizeof(*ns), GFP_KERNEL_ACCOUNT);
 	if (!ns)
 		goto fail_dec;
 
-	err = timens_vdso_alloc_vvar_page(ns);
-	if (err)
+	ns->vvar_page = alloc_page(GFP_KERNEL_ACCOUNT | __GFP_ZERO);
+	if (!ns->vvar_page)
 		goto fail_free;
 
 	err = ns_common_init(ns);
@@ -111,7 +111,7 @@ static struct time_namespace *clone_time_ns(struct user_namespace *user_ns,
 	return ns;
 
 fail_free_page:
-	timens_vdso_free_vvar_page(ns);
+	__free_page(ns->vvar_page);
 fail_free:
 	kfree(ns);
 fail_dec:
@@ -148,39 +148,41 @@ void free_time_ns(struct time_namespace *ns)
 	dec_time_namespaces(ns->ucounts);
 	put_user_ns(ns->user_ns);
 	ns_common_free(ns);
-	timens_vdso_free_vvar_page(ns);
+	__free_page(ns->vvar_page);
 	/* Concurrent nstree traversal depends on a grace period. */
 	kfree_rcu(ns, ns.ns_rcu);
 }
 
 static struct ns_common *timens_get(struct task_struct *task)
 {
-	struct time_namespace *ns;
+	struct time_namespace *ns = NULL;
 	struct nsproxy *nsproxy;
 
-	guard(task_lock)(task);
+	task_lock(task);
 	nsproxy = task->nsproxy;
-	if (!nsproxy)
-		return NULL;
+	if (nsproxy) {
+		ns = nsproxy->time_ns;
+		get_time_ns(ns);
+	}
+	task_unlock(task);
 
-	ns = nsproxy->time_ns;
-	get_time_ns(ns);
-	return &ns->ns;
+	return ns ? &ns->ns : NULL;
 }
 
 static struct ns_common *timens_for_children_get(struct task_struct *task)
 {
-	struct time_namespace *ns;
+	struct time_namespace *ns = NULL;
 	struct nsproxy *nsproxy;
 
-	guard(task_lock)(task);
+	task_lock(task);
 	nsproxy = task->nsproxy;
-	if (!nsproxy)
-		return NULL;
+	if (nsproxy) {
+		ns = nsproxy->time_ns_for_children;
+		get_time_ns(ns);
+	}
+	task_unlock(task);
 
-	ns = nsproxy->time_ns_for_children;
-	get_time_ns(ns);
-	return &ns->ns;
+	return ns ? &ns->ns : NULL;
 }
 
 static void timens_put(struct ns_common *ns)
@@ -269,7 +271,7 @@ int proc_timens_set_offset(struct file *file, struct task_struct *p,
 	struct time_namespace *time_ns __free(time_ns) = NULL;
 	struct ns_common *ns = timens_for_children_get(p);
 	struct timespec64 tp;
-	int i;
+	int i, err;
 
 	if (!ns)
 		return -ESRCH;
@@ -308,10 +310,13 @@ int proc_timens_set_offset(struct file *file, struct task_struct *p,
 			return -ERANGE;
 	}
 
-	guard(mutex)(&timens_offset_lock);
-	if (time_ns->frozen_offsets)
-		return -EACCES;
+	mutex_lock(&timens_offset_lock);
+	if (time_ns->frozen_offsets) {
+		err = -EACCES;
+		goto out_unlock;
+	}
 
+	err = 0;
 	/* Don't report errors after this line */
 	for (i = 0; i < noffsets; i++) {
 		struct proc_timens_offset *off = &offsets[i];
@@ -329,7 +334,10 @@ int proc_timens_set_offset(struct file *file, struct task_struct *p,
 		*offset = off->val;
 	}
 
-	return 0;
+out_unlock:
+	mutex_unlock(&timens_offset_lock);
+
+	return err;
 }
 
 const struct proc_ns_operations timens_operations = {
@@ -350,8 +358,11 @@ const struct proc_ns_operations timens_for_children_operations = {
 };
 
 struct time_namespace init_time_ns = {
-	.ns		= NS_COMMON_INIT(init_time_ns),
+	.ns.ns_type	= ns_common_type(&init_time_ns),
+	.ns.__ns_ref	= REFCOUNT_INIT(3),
 	.user_ns	= &init_user_ns,
+	.ns.inum	= ns_init_inum(&init_time_ns),
+	.ns.ops		= &timens_operations,
 	.frozen_offsets	= true,
 };
 EXPORT_SYMBOL_GPL(init_time_ns);

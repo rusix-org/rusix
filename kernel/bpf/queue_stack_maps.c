@@ -59,9 +59,6 @@ static int queue_stack_map_alloc_check(union bpf_attr *attr)
 		 */
 		return -E2BIG;
 
-	if (attr->max_entries >= U32_MAX / attr->value_size)
-		return -E2BIG;
-
 	return 0;
 }
 
@@ -125,6 +122,7 @@ out:
 	raw_res_spin_unlock_irqrestore(&qs->lock, flags);
 	return err;
 }
+
 
 static long __stack_map_get(struct bpf_map *map, void *value, bool delete)
 {

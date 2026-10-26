@@ -13,11 +13,9 @@
 #include <linux/skbuff.h>
 #include <linux/rtnetlink.h>
 #include <linux/pkt_cls.h>
-#include <linux/if_tunnel.h>
 #include <linux/ip.h>
 #include <linux/ipv6.h>
 #include <linux/rhashtable.h>
-#include <net/gre.h>
 #include <net/netlink.h>
 #include <net/pkt_sched.h>
 #include <net/pkt_cls.h>
@@ -336,7 +334,7 @@ static int tcf_ct_flow_table_get(struct net *net, struct tcf_ct_params *params)
 	}
 	rcu_read_unlock();
 
-	ct_ft = kzalloc_obj(*ct_ft);
+	ct_ft = kzalloc(sizeof(*ct_ft), GFP_KERNEL);
 	if (!ct_ft)
 		goto err_alloc;
 	refcount_set(&ct_ft->ref, 1);
@@ -349,10 +347,10 @@ static int tcf_ct_flow_table_get(struct net *net, struct tcf_ct_params *params)
 	ct_ft->nf_ft.type = &flowtable_ct;
 	ct_ft->nf_ft.flags |= NF_FLOWTABLE_HW_OFFLOAD |
 			      NF_FLOWTABLE_COUNTER;
-	write_pnet(&ct_ft->nf_ft.net, net);
 	err = nf_flow_table_init(&ct_ft->nf_ft);
 	if (err)
 		goto err_init;
+	write_pnet(&ct_ft->nf_ft.net, net);
 
 	__module_get(THIS_MODULE);
 out_unlock:
@@ -781,7 +779,7 @@ static bool tcf_ct_skb_nfct_cached(struct net *net, struct sk_buff *skb,
 	return true;
 
 drop_ct:
-	nf_reset_ct(skb);
+	nf_ct_put(ct);
 	nf_ct_set(skb, NULL, IP_CT_UNTRACKED);
 
 	return false;
@@ -965,9 +963,9 @@ static int tcf_ct_act_nat(struct sk_buff *skb,
 		return err & NF_VERDICT_MASK;
 
 	if (action & BIT(NF_NAT_MANIP_SRC))
-		qdisc_skb_cb(skb)->post_ct_snat = 1;
+		tc_skb_cb(skb)->post_ct_snat = 1;
 	if (action & BIT(NF_NAT_MANIP_DST))
-		qdisc_skb_cb(skb)->post_ct_dnat = 1;
+		tc_skb_cb(skb)->post_ct_dnat = 1;
 
 	return err;
 #else
@@ -986,6 +984,7 @@ TC_INDIRECT_SCOPE int tcf_ct_act(struct sk_buff *skb, const struct tc_action *a,
 	struct nf_hook_state state;
 	int nh_ofs, err, retval;
 	struct tcf_ct_params *p;
+	bool add_helper = false;
 	bool skb_is_ours = false;
 	bool skip_add = false;
 	bool defrag = false;
@@ -1004,10 +1003,10 @@ TC_INDIRECT_SCOPE int tcf_ct_act(struct sk_buff *skb, const struct tc_action *a,
 	tcf_action_update_bstats(&c->common, skb);
 
 	if (clear) {
-		qdisc_skb_cb(skb)->post_ct = false;
+		tc_skb_cb(skb)->post_ct = false;
 		ct = nf_ct_get(skb, &ctinfo);
 		if (ct) {
-			nf_reset_ct(skb);
+			nf_ct_put(ct);
 			nf_ct_set(skb, NULL, IP_CT_UNTRACKED);
 		}
 
@@ -1067,7 +1066,7 @@ TC_INDIRECT_SCOPE int tcf_ct_act(struct sk_buff *skb, const struct tc_action *a,
 
 		/* Associate skb with specified zone. */
 		if (tmpl) {
-			nf_reset_ct(skb);
+			nf_conntrack_put(skb_nfct(skb));
 			nf_conntrack_get(&tmpl->ct_general);
 			nf_ct_set(skb, tmpl, IP_CT_NEW);
 		}
@@ -1095,7 +1094,7 @@ do_nat:
 		err = __nf_ct_try_assign_helper(ct, p->tmpl, GFP_ATOMIC);
 		if (err)
 			goto drop;
-
+		add_helper = true;
 		if (nat && !nfct_seqadj(ct)) {
 			if (!nfct_seqadj_ext_add(ct))
 				goto drop;
@@ -1114,7 +1113,7 @@ do_nat:
 	 * or if we're about to commit.  This has to be done after all the
 	 * extensions are already added.
 	 */
-	if (nf_ct_is_confirmed(ct) ? (!cached && !skip_add) : commit) {
+	if (nf_ct_is_confirmed(ct) ? ((!cached && !skip_add) || add_helper) : commit) {
 		err = nf_ct_helper(skb, ct, ctinfo, family);
 		if (err != NF_ACCEPT)
 			goto nf_error;
@@ -1143,7 +1142,7 @@ do_nat:
 out_push:
 	skb_push_rcsum(skb, nh_ofs);
 
-	qdisc_skb_cb(skb)->post_ct = true;
+	tc_skb_cb(skb)->post_ct = true;
 	tc_skb_cb(skb)->zone = p->zone;
 out_clear:
 	if (defrag)
@@ -1449,7 +1448,7 @@ static int tcf_ct_init(struct net *net, struct nlattr *nla,
 
 	c = to_ct(*a);
 
-	params = kzalloc_obj(*params);
+	params = kzalloc(sizeof(*params), GFP_KERNEL);
 	if (unlikely(!params)) {
 		err = -ENOMEM;
 		goto cleanup;
@@ -1566,8 +1565,8 @@ static int tcf_ct_dump_helper(struct sk_buff *skb,
 		return 0;
 
 	if (nla_put_string(skb, TCA_CT_HELPER_NAME, helper->name) ||
-	    nla_put_u8(skb, TCA_CT_HELPER_FAMILY, helper->nfproto) ||
-	    nla_put_u8(skb, TCA_CT_HELPER_PROTO, helper->l4proto))
+	    nla_put_u8(skb, TCA_CT_HELPER_FAMILY, helper->tuple.src.l3num) ||
+	    nla_put_u8(skb, TCA_CT_HELPER_PROTO, helper->tuple.dst.protonum))
 		return -1;
 
 	return 0;

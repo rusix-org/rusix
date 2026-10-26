@@ -3,7 +3,8 @@
  *    Copyright IBM Corp. 2007, 2011
  */
 
-#define pr_fmt(fmt) "cpu: " fmt
+#define KMSG_COMPONENT "cpu"
+#define pr_fmt(fmt) KMSG_COMPONENT ": " fmt
 
 #include <linux/cpufeature.h>
 #include <linux/workqueue.h>
@@ -147,7 +148,7 @@ static void add_cpus_to_mask(struct topology_core *tl_core,
 			cpumask_set_cpu(cpu, &book->mask);
 			cpumask_set_cpu(cpu, &socket->mask);
 			smp_cpu_set_polarization(cpu, tl_core->pp);
-			topology_set_cpu_scale(cpu, CPU_CAPACITY_HIGH);
+			smp_cpu_set_capacity(cpu, CPU_CAPACITY_HIGH);
 		}
 	}
 }
@@ -192,21 +193,17 @@ static void tl_to_masks(struct sysinfo_15_1_x *info)
 	end = (union topology_entry *)((unsigned long)info + info->length);
 	while (tle < end) {
 		switch (tle->nl) {
-		/*
-		 * Adjust drawer_id, book_id, and socked_id so they match the
-		 * numbering scheme of e.g. the hardware management console.
-		 */
 		case 3:
 			drawer = drawer->next;
-			drawer->id = tle->container.id - 1;
+			drawer->id = tle->container.id;
 			break;
 		case 2:
 			book = book->next;
-			book->id = tle->container.id - 1;
+			book->id = tle->container.id;
 			break;
 		case 1:
 			socket = socket->next;
-			socket->id = tle->container.id - 1;
+			socket->id = tle->container.id;
 			break;
 		case 0:
 			add_cpus_to_mask(&tle->cpu, drawer, book, socket);

@@ -123,8 +123,7 @@ static bool valid_kwork_class_type(enum kwork_class_type type)
 static int setup_filters(struct perf_kwork *kwork)
 {
 	if (kwork->cpu_list) {
-		unsigned int idx;
-		int nr_cpus, fd;
+		int idx, nr_cpus, fd;
 		struct perf_cpu_map *map;
 		struct perf_cpu cpu;
 

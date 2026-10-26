@@ -28,12 +28,18 @@ that goes into great technical depth about the BPF Architecture.
    classic_vs_extended.rst
    bpf_iterators
    bpf_licensing
-   signing
    test_debug
    clang-notes
    linux-notes
    other
    redirect
+
+.. only::  subproject and html
+
+   Indices
+   =======
+
+   * :ref:`genindex`
 
 .. Links:
 .. _BPF and XDP Reference Guide: https://docs.cilium.io/en/latest/bpf/

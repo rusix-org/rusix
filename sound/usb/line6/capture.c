@@ -117,8 +117,7 @@ void line6_capture_copy(struct snd_line6_pcm *line6pcm, char *fbuf, int fsize)
 	} else {
 		/* copy single chunk */
 		memcpy(runtime->dma_area +
-		       line6pcm->in.pos_done * bytes_per_frame, fbuf,
-		       frames * bytes_per_frame);
+		       line6pcm->in.pos_done * bytes_per_frame, fbuf, fsize);
 	}
 
 	line6pcm->in.pos_done += frames;
@@ -126,21 +125,24 @@ void line6_capture_copy(struct snd_line6_pcm *line6pcm, char *fbuf, int fsize)
 		line6pcm->in.pos_done -= runtime->buffer_size;
 }
 
-/* update the capture position and check whether we need period_elapsed call */
-bool line6_capture_check_period(struct snd_line6_pcm *line6pcm, int length)
+void line6_capture_check_period(struct snd_line6_pcm *line6pcm, int length)
 {
+	struct snd_pcm_substream *substream =
+	    get_substream(line6pcm, SNDRV_PCM_STREAM_CAPTURE);
+
 	line6pcm->in.bytes += length;
 	if (line6pcm->in.bytes >= line6pcm->in.period) {
 		line6pcm->in.bytes %= line6pcm->in.period;
-		return true;
+		spin_unlock(&line6pcm->in.lock);
+		snd_pcm_period_elapsed(substream);
+		spin_lock(&line6pcm->in.lock);
 	}
-	return false;
 }
 
 /*
  * Callback for completed capture URB.
  */
-static bool handle_audio_in(struct urb *urb)
+static void audio_in_callback(struct urb *urb)
 {
 	int i, index, length = 0, shutdown = 0;
 	struct snd_line6_pcm *line6pcm = (struct snd_line6_pcm *)urb->context;
@@ -205,18 +207,8 @@ static bool handle_audio_in(struct urb *urb)
 
 		if (!test_bit(LINE6_STREAM_IMPULSE, &line6pcm->in.running) &&
 		    test_bit(LINE6_STREAM_PCM, &line6pcm->in.running))
-			return line6_capture_check_period(line6pcm, length);
+			line6_capture_check_period(line6pcm, length);
 	}
-
-	return false;
-}
-
-static void audio_in_callback(struct urb *urb)
-{
-	struct snd_line6_pcm *line6pcm = (struct snd_line6_pcm *)urb->context;
-
-	if (handle_audio_in(urb))
-		snd_pcm_period_elapsed(get_substream(line6pcm, SNDRV_PCM_STREAM_CAPTURE));
 }
 
 /* open capture callback */
@@ -263,7 +255,8 @@ int line6_create_audio_in_urbs(struct snd_line6_pcm *line6pcm)
 	struct usb_line6 *line6 = line6pcm->line6;
 	int i;
 
-	line6pcm->in.urbs = kzalloc_objs(struct urb *, line6->iso_buffers);
+	line6pcm->in.urbs = kcalloc(line6->iso_buffers, sizeof(struct urb *),
+				    GFP_KERNEL);
 	if (line6pcm->in.urbs == NULL)
 		return -ENOMEM;
 

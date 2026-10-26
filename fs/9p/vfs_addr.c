@@ -36,7 +36,7 @@ static void v9fs_begin_writeback(struct netfs_io_request *wreq)
 
 	fid = v9fs_fid_find_inode(wreq->inode, true, INVALID_UID, true);
 	if (!fid) {
-		WARN_ONCE(1, "folio expected an open fid inode->i_ino=%llx\n",
+		WARN_ONCE(1, "folio expected an open fid inode->i_ino=%lx\n",
 			  wreq->inode->i_ino);
 		return;
 	}
@@ -60,15 +60,14 @@ static void v9fs_issue_write(struct netfs_io_subrequest *subreq)
 
 	len = p9_client_write(fid, subreq->start, &subreq->io_iter, &err);
 	if (len > 0) {
-		uoff_t end = subreq->start + len, i_size, remote, zp;
+		unsigned long long end = subreq->start + len, i_size, remote;
 		bool set = false;
 
 		spin_lock(&inode->i_lock);
 
 		/* We can read the sizes directly as we hold i_lock. */
 		i_size = inode->i_size;
-		remote = ictx->_remote_i_size;
-		zp = ictx->_zero_point;
+		remote = ictx->remote_i_size;
 
 		if (end > i_size) {
 			i_size = end;
@@ -79,8 +78,10 @@ static void v9fs_issue_write(struct netfs_io_subrequest *subreq)
 			set = true;
 		}
 
-		if (set)
-			netfs_write_sizes(inode, i_size, remote, zp);
+		if (set) {
+			i_size_write(inode, i_size);
+			ictx->remote_i_size = remote;
+		}
 		spin_unlock(&inode->i_lock);
 
 		__set_bit(NETFS_SREQ_MADE_PROGRESS, &subreq->flags);
@@ -96,34 +97,11 @@ static void v9fs_issue_read(struct netfs_io_subrequest *subreq)
 {
 	struct netfs_io_request *rreq = subreq->rreq;
 	struct p9_fid *fid = rreq->netfs_priv;
-	char *target;
 	unsigned long long pos = subreq->start + subreq->transferred;
-	int total = 0, err, len, n;
+	int total, err;
 
-	if (S_ISLNK(rreq->inode->i_mode)) {
-		/* p9_client_readlink() must not be called for legacy protocols
-		 * 9p2000 or 9p2000.u.
-		 */
-		BUG_ON(!p9_is_proto_dotl(fid->clnt));
-		if (WARN_ON_ONCE(pos)) {
-			/* reading a link at a non null offset should
-			 * not happen
-			 */
-			err = -EIO;
-			goto fill_subreq;
-		}
-		err = p9_client_readlink(fid, &target);
-		if (err != 0)
-			goto fill_subreq;
-		len = strlen(target);
-		n = copy_to_iter(target, len, &subreq->io_iter);
-		kfree(target);
-		total = n;
-	} else {
-		total = p9_client_read(fid, pos, &subreq->io_iter, &err);
-	}
+	total = p9_client_read(fid, pos, &subreq->io_iter, &err);
 
-fill_subreq:
 	/* if we just extended the file size, any portion not in
 	 * cache won't be on server and is zeroes */
 	if (subreq->rreq->origin != NETFS_UNBUFFERED_READ &&
@@ -148,8 +126,8 @@ fill_subreq:
 static int v9fs_init_request(struct netfs_io_request *rreq, struct file *file)
 {
 	struct p9_fid *fid;
-	struct dentry *dentry;
 	bool writing = (rreq->origin == NETFS_READ_FOR_WRITE ||
+			rreq->origin == NETFS_WRITETHROUGH ||
 			rreq->origin == NETFS_UNBUFFERED_WRITE ||
 			rreq->origin == NETFS_DIO_WRITE);
 
@@ -164,14 +142,6 @@ static int v9fs_init_request(struct netfs_io_request *rreq, struct file *file)
 		if (!fid)
 			goto no_fid;
 		p9_fid_get(fid);
-	} else if (S_ISLNK(rreq->inode->i_mode)) {
-		dentry = d_find_any_alias(rreq->inode);
-		if (!dentry)
-			goto no_fid;
-		fid = v9fs_fid_lookup(dentry);
-		dput(dentry);
-		if (IS_ERR(fid))
-			goto no_fid;
 	} else {
 		fid = v9fs_fid_find_inode(rreq->inode, writing, INVALID_UID, true);
 		if (!fid)
@@ -190,7 +160,7 @@ static int v9fs_init_request(struct netfs_io_request *rreq, struct file *file)
 	return 0;
 
 no_fid:
-	WARN_ONCE(1, "folio expected an open fid inode->i_ino=%llx\n",
+	WARN_ONCE(1, "folio expected an open fid inode->i_ino=%lx\n",
 		  rreq->inode->i_ino);
 	return -EINVAL;
 }

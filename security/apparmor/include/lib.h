@@ -30,10 +30,8 @@ extern struct aa_dfa *stacksplitdfa;
 #define DEBUG_DOMAIN 4
 #define DEBUG_POLICY 8
 #define DEBUG_INTERFACE 0x10
-#define DEBUG_UNPACK 0x20
-#define DEBUG_TAGS 0x40
 
-#define DEBUG_ALL 0x7f		/* update if new DEBUG_X added */
+#define DEBUG_ALL 0x1f		/* update if new DEBUG_X added */
 #define DEBUG_PARSE_ERROR (-1)
 
 #define DEBUG_ON (aa_g_debug != DEBUG_NONE)
@@ -47,10 +45,8 @@ extern struct aa_dfa *stacksplitdfa;
 #define AA_DEBUG_LABEL(LAB, X, fmt, args...)				\
 do {									\
 	if ((LAB)->flags & FLAG_DEBUG1)					\
-		AA_DEBUG(X, fmt, ##args);				\
+		AA_DEBUG(X, fmt, args);					\
 } while (0)
-
-#define AA_DEBUG_PROFILE(PROF, X, fmt...) AA_DEBUG_LABEL(&(PROF)->label, X, ##fmt)
 
 #define AA_WARN(X) WARN((X), "APPARMOR WARN %s: %s\n", __func__, #X)
 
@@ -136,7 +132,7 @@ static inline bool aa_strneq(const char *str, const char *sub, int len)
  * character which is not used in standard matching and is only
  * used to separate pairs.
  */
-static inline aa_state_t aa_dfa_null_transition(const struct aa_dfa *dfa,
+static inline aa_state_t aa_dfa_null_transition(struct aa_dfa *dfa,
 						aa_state_t start)
 {
 	/* the null transition only needs the string's null terminator byte */
@@ -148,19 +144,13 @@ static inline bool path_mediated_fs(struct dentry *dentry)
 	return !(dentry->d_sb->s_flags & SB_NOUSER);
 }
 
-struct aa_str_table_ent {
-	int count;
-	int size;
-	char *strs;
-};
-
 struct aa_str_table {
 	int size;
-	struct aa_str_table_ent *table;
+	char **table;
 };
 
+void aa_free_str_table(struct aa_str_table *table);
 bool aa_resize_str_table(struct aa_str_table *t, int newsize, gfp_t gfp);
-void aa_destroy_str_table(struct aa_str_table *table);
 
 struct counted_str {
 	struct kref count;
@@ -281,15 +271,14 @@ void aa_policy_destroy(struct aa_policy *policy);
  * @FN: fn to call for each profile transition. @P is set to the profile
  *
  * Returns: new label on success
- *	    NULL if all callbacks decline to specify a transition
  *          ERR_PTR if build @FN fails
  *
- * @FN must return a label or ERR_PTR on failure.
+ * @FN must return a label or ERR_PTR on failure. NULL is not allowed
  */
 #define fn_label_build(L, P, GFP, FN)					\
 ({									\
 	__label__ __do_cleanup, __done;					\
-	struct aa_label *__new_ = NULL;					\
+	struct aa_label *__new_;					\
 									\
 	if ((L)->size > 1) {						\
 		/* TODO: add cache of transitions already done */	\
@@ -304,15 +293,11 @@ void aa_policy_destroy(struct aa_policy *policy);
 		__j = 0;						\
 		label_for_each(__i, (L), (P)) {				\
 			__new_ = (FN);					\
-			if (!__new_)					\
-				continue;				\
+			AA_BUG(!__new_);				\
 			if (IS_ERR(__new_))				\
 				goto __do_cleanup;			\
 			__lvec[__j++] = __new_;				\
 		}							\
-		if (__j == 0)						\
-			/* no components adding to build */		\
-			goto __do_cleanup;				\
 		for (__j = __count = 0; __j < (L)->size; __j++)		\
 			__count += __lvec[__j]->size;			\
 		if (!vec_setup(profile, __pvec, __count, (GFP))) {	\
@@ -336,10 +321,12 @@ __do_cleanup:								\
 	} else {							\
 		(P) = labels_profile(L);				\
 		__new_ = (FN);						\
+		AA_BUG(!__new_);					\
 	}								\
 __done:									\
-	if (IS_ERR(__new_))						\
-		AA_DEBUG(DEBUG_LABEL, "label build failed %ld\n", PTR_ERR(__new_)); \
+	if (PTR_ERR(__new_))						\
+		AA_DEBUG(DEBUG_LABEL, "label build failed\n");		\
+	AA_BUG(!__new_);						\
 	(__new_);							\
 })
 

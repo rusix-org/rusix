@@ -17,6 +17,7 @@
 #include <linux/kernel.h>
 #include <linux/list.h>
 #include <linux/lockdep.h>
+#include <linux/mod_devicetable.h>
 #include <linux/module.h>
 #include <linux/mutex.h>
 #include <linux/overflow.h>
@@ -156,7 +157,7 @@ gpio_aggregator_line_alloc(struct gpio_aggregator *parent, unsigned int idx,
 {
 	struct gpio_aggregator_line *line;
 
-	line = kzalloc_obj(*line);
+	line = kzalloc(sizeof(*line), GFP_KERNEL);
 	if (!line)
 		return ERR_PTR(-ENOMEM);
 
@@ -886,8 +887,8 @@ gpio_aggregator_make_device_sw_node(struct gpio_aggregator *aggr)
 	if (num_lines == 0)
 		return NULL;
 
-	const char **line_names __free(kfree) = kzalloc_objs(*line_names,
-							     num_lines);
+	const char **line_names __free(kfree) = kcalloc(
+				num_lines, sizeof(*line_names), GFP_KERNEL);
 	if (!line_names)
 		return ERR_PTR(-ENOMEM);
 
@@ -914,7 +915,8 @@ static int gpio_aggregator_activate(struct gpio_aggregator *aggr)
 	if (gpio_aggregator_count_lines(aggr) == 0)
 		return -EINVAL;
 
-	aggr->lookups = kzalloc_flex(*aggr->lookups, table, 1);
+	aggr->lookups = kzalloc(struct_size(aggr->lookups, table, 1),
+				GFP_KERNEL);
 	if (!aggr->lookups)
 		return -ENOMEM;
 
@@ -1242,7 +1244,7 @@ gpio_aggregator_line_release(struct config_item *item)
 	kfree(line);
 }
 
-static const struct configfs_item_operations gpio_aggregator_line_item_ops = {
+static struct configfs_item_operations gpio_aggregator_line_item_ops = {
 	.release	= gpio_aggregator_line_release,
 };
 
@@ -1263,7 +1265,7 @@ static void gpio_aggregator_device_release(struct config_item *item)
 	gpio_aggregator_free(aggr);
 }
 
-static const struct configfs_item_operations gpio_aggregator_device_item_ops = {
+static struct configfs_item_operations gpio_aggregator_device_item_ops = {
 	.release	= gpio_aggregator_device_release,
 };
 
@@ -1308,7 +1310,7 @@ gpio_aggregator_device_make_group(struct config_group *group, const char *name)
 	return &line->group;
 }
 
-static const struct configfs_group_operations gpio_aggregator_device_group_ops = {
+static struct configfs_group_operations gpio_aggregator_device_group_ops = {
 	.make_group	= gpio_aggregator_device_make_group,
 };
 
@@ -1343,7 +1345,7 @@ gpio_aggregator_make_group(struct config_group *group, const char *name)
 	return &aggr->group;
 }
 
-static const struct configfs_group_operations gpio_aggregator_group_ops = {
+static struct configfs_group_operations gpio_aggregator_group_ops = {
 	.make_group	= gpio_aggregator_make_group,
 };
 
@@ -1472,7 +1474,8 @@ static ssize_t gpio_aggregator_new_device_store(struct device_driver *driver,
 	memcpy(aggr->args, buf, count + 1);
 
 	aggr->init_via_sysfs = true;
-	aggr->lookups = kzalloc_flex(*aggr->lookups, table, 1);
+	aggr->lookups = kzalloc(struct_size(aggr->lookups, table, 1),
+				GFP_KERNEL);
 	if (!aggr->lookups) {
 		res = -ENOMEM;
 		goto free_ga;

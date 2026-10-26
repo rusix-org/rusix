@@ -3,7 +3,7 @@
  * Copyright (C) 2018-2023 Oracle.  All Rights Reserved.
  * Author: Darrick J. Wong <djwong@kernel.org>
  */
-#include "xfs_platform.h"
+#include "xfs.h"
 #include "xfs_fs.h"
 #include "xfs_shared.h"
 #include "xfs_format.h"
@@ -287,21 +287,28 @@ xrep_ibt_process_cluster(
 	struct xrep_ibt		*ri,
 	xfs_agblock_t		cluster_bno)
 {
+	struct xfs_imap		imap;
 	struct xfs_buf		*cluster_bp;
 	struct xfs_scrub	*sc = ri->sc;
 	struct xfs_mount	*mp = sc->mp;
 	struct xfs_ino_geometry	*igeo = M_IGEO(mp);
 	xfs_agino_t		cluster_ag_base;
 	xfs_agino_t		irec_index;
+	unsigned int		nr_inodes;
 	int			error;
+
+	nr_inodes = min_t(unsigned int, igeo->inodes_per_cluster,
+			XFS_INODES_PER_CHUNK);
 
 	/*
 	 * Grab the inode cluster buffer.  This is safe to do with a broken
 	 * inobt because imap_to_bp directly maps the buffer without touching
 	 * either inode btree.
 	 */
-	error = xfs_read_icluster(sc->sa.pag, sc->tp, cluster_bno,
-			&cluster_bp);
+	imap.im_blkno = xfs_agbno_to_daddr(sc->sa.pag, cluster_bno);
+	imap.im_len = XFS_FSB_TO_BB(mp, igeo->blocks_per_cluster);
+	imap.im_boffset = 0;
+	error = xfs_imap_to_bp(mp, sc->tp, &imap, &cluster_bp);
 	if (error)
 		return error;
 
@@ -313,10 +320,6 @@ xrep_ibt_process_cluster(
 	for (irec_index = 0;
 	     irec_index < igeo->inodes_per_cluster;
 	     irec_index += XFS_INODES_PER_CHUNK) {
-		unsigned int	nr_inodes =
-			min_t(unsigned int, XFS_INODES_PER_CHUNK,
-					igeo->inodes_per_cluster - irec_index);
-
 		error = xrep_ibt_cluster_record(ri,
 				cluster_ag_base + irec_index, cluster_bp,
 				nr_inodes);
@@ -473,9 +476,9 @@ xrep_ibt_find_inodes(
 	ri->rie.ir_startino = NULLAGINO;
 
 	/* Collect all reverse mappings for inode blocks. */
-	xrep_ag_btcur_init(sc);
+	xrep_ag_btcur_init(sc, &sc->sa);
 	error = xfs_rmap_query_all(sc->sa.rmap_cur, xrep_ibt_walk_rmap, ri);
-	xchk_ag_btcur_free(sc);
+	xchk_ag_btcur_free(&sc->sa);
 	if (error)
 		return error;
 
@@ -801,7 +804,7 @@ xrep_iallocbt(
 	if (!xfs_has_rmapbt(mp))
 		return -EOPNOTSUPP;
 
-	ri = kzalloc_obj(struct xrep_ibt, XCHK_GFP_FLAGS);
+	ri = kzalloc(sizeof(struct xrep_ibt), XCHK_GFP_FLAGS);
 	if (!ri)
 		return -ENOMEM;
 	ri->sc = sc;

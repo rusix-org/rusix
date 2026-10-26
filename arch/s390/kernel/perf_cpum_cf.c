@@ -6,7 +6,8 @@
  *  Author(s): Hendrik Brueckner <brueckner@linux.ibm.com>
  *	       Thomas Richter <tmricht@linux.ibm.com>
  */
-#define pr_fmt(fmt) "cpum_cf: " fmt
+#define KMSG_COMPONENT	"cpum_cf"
+#define pr_fmt(fmt)	KMSG_COMPONENT ": " fmt
 
 #include <linux/kernel.h>
 #include <linux/kernel_stat.h>
@@ -262,7 +263,7 @@ static int cpum_cf_alloc_cpu(int cpu, unsigned int num)
 	cpuhw = p->cpucf;
 
 	if (!cpuhw) {
-		cpuhw = kzalloc_obj(*cpuhw);
+		cpuhw = kzalloc(sizeof(*cpuhw), GFP_KERNEL);
 		if (cpuhw) {
 			p->cpucf = cpuhw;
 			refcount_set(&cpuhw->refcnt, num);
@@ -1260,7 +1261,7 @@ static int __init cpumf_pmu_init(void)
 	}
 
 	/* Setup s390dbf facility */
-	cf_dbg = debug_register("cpum_cf", 2, 1, 128);
+	cf_dbg = debug_register(KMSG_COMPONENT, 2, 1, 128);
 	if (!cf_dbg) {
 		pr_err("Registration of s390dbf(cpum_cf) failed\n");
 		rc = -ENOMEM;
@@ -1565,6 +1566,7 @@ static int cfset_all_copy(unsigned long arg, cpumask_t *mask)
 			goto out;
 		}
 		uptr += sizeof(struct s390_ctrset_cpudata) + cpuhw->used;
+		cond_resched();
 	}
 	cpus = cpumask_weight(mask);
 	if (put_user(cpus, &ctrset_read->no_cpus))
@@ -1687,7 +1689,7 @@ static long cfset_ioctl_start(unsigned long arg, struct file *file)
 	if (!start.counter_sets)
 		return -EINVAL;		/* No counter set at all? */
 
-	preq = kzalloc_obj(*preq);
+	preq = kzalloc(sizeof(*preq), GFP_KERNEL);
 	if (!preq)
 		return -ENOMEM;
 	cpumask_clear(&preq->mask);
@@ -1759,6 +1761,7 @@ static const struct file_operations cfset_fops = {
 	.open = cfset_open,
 	.release = cfset_release,
 	.unlocked_ioctl	= cfset_ioctl,
+	.compat_ioctl = cfset_ioctl,
 };
 
 static struct miscdevice cfset_dev = {
@@ -1768,9 +1771,8 @@ static struct miscdevice cfset_dev = {
 	.mode	= 0666,
 };
 
-/*
- * Start counter sets on a newly online CPU for each active hwctr session that
- * includes this CPU in its requested mask.
+/* Hotplug add of a CPU. Scan through all active processes and add
+ * that CPU to the list of CPUs supplied with ioctl(..., START, ...).
  */
 static int cfset_online_cpu(unsigned int cpu)
 {
@@ -1779,19 +1781,17 @@ static int cfset_online_cpu(unsigned int cpu)
 
 	if (!list_empty(&cfset_session.head)) {
 		list_for_each_entry(rp, &cfset_session.head, node) {
-			if (!cpumask_test_cpu(cpu, &rp->mask))
-				continue;
-
 			p.sets = rp->ctrset;
 			cfset_ioctl_on(&p);
+			cpumask_set_cpu(cpu, &rp->mask);
 		}
 	}
 	return 0;
 }
 
-/*
- * Stop counter sets on an outgoing CPU for each active hwctr session that
- * includes this CPU in its requested mask.
+/* Hotplug remove of a CPU. Scan through all active processes and clear
+ * that CPU from the list of CPUs supplied with ioctl(..., START, ...).
+ * Adjust reference counts.
  */
 static int cfset_offline_cpu(unsigned int cpu)
 {
@@ -1800,11 +1800,9 @@ static int cfset_offline_cpu(unsigned int cpu)
 
 	if (!list_empty(&cfset_session.head)) {
 		list_for_each_entry(rp, &cfset_session.head, node) {
-			if (!cpumask_test_cpu(cpu, &rp->mask))
-				continue;
-
 			p.sets = rp->ctrset;
 			cfset_ioctl_off(&p);
+			cpumask_clear_cpu(cpu, &rp->mask);
 		}
 	}
 	return 0;

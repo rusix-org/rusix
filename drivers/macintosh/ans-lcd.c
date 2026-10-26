@@ -71,7 +71,7 @@ anslcd_write( struct file * file, const char __user * buf,
 	for ( i = *ppos; count > 0; ++i, ++p, --count ) 
 	{
 		char c;
-		get_user(c, p);
+		__get_user(c, p);
 		anslcd_write_byte_data( c );
 	}
 	mutex_unlock(&anslcd_mutex);
@@ -102,10 +102,10 @@ anslcd_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 		break;
 	case ANSLCD_SENDCTRL:
 		temp = (char __user *) arg;
-		get_user(ch, temp);
+		__get_user(ch, temp);
 		for (; ch; temp++) { /* FIXME: This is ugly, but should work, as a \0 byte is not a valid command code */
 			anslcd_write_byte_ctrl ( ch );
-			get_user(ch, temp);
+			__get_user(ch, temp);
 		}
 		break;
 	case ANSLCD_SETSHORTDELAY:

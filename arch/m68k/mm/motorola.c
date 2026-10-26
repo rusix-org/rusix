@@ -20,7 +20,6 @@
 #include <linux/init.h>
 #include <linux/memblock.h>
 #include <linux/gfp.h>
-#include <linux/cleanup.h>
 
 #include <asm/setup.h>
 #include <linux/uaccess.h>
@@ -104,8 +103,6 @@ static struct list_head ptable_list[3] = {
 	LIST_HEAD_INIT(ptable_list[2]),
 };
 
-static DEFINE_SPINLOCK(ptable_lock);
-
 #define PD_PTABLE(ptdesc) ((ptable_desc *)&(virt_to_ptdesc((void *)(ptdesc))->pt_list))
 #define PD_PTDESC(ptable) (list_entry(ptable, struct ptdesc, pt_list))
 #define PD_MARKBITS(dp) (*(unsigned int *)&PD_PTDESC(dp)->pt_index)
@@ -142,65 +139,52 @@ void __init init_pointer_table(void *table, int type)
 	return;
 }
 
-/*
- * For a pointer table for a user process address space, a
- * table is taken from a ptdesc allocated for the purpose.  Each
- * ptdesc can hold 8 pointer tables.  The ptdesc is remapped in
- * virtual address space to be noncacheable.
- */
-static void *add_pointer_table(struct mm_struct *mm, int type)
-{
-	struct ptdesc *ptdesc;
-	ptable_desc *new;
-	void *pt_addr;
-
-	ptdesc = pagetable_alloc(GFP_KERNEL | __GFP_ZERO, 0);
-	if (!ptdesc)
-		return NULL;
-
-	pt_addr = ptdesc_address(ptdesc);
-
-	switch (type) {
-	case TABLE_PTE:
-		/*
-		 * m68k doesn't have SPLIT_PTE_PTLOCKS for not having
-		 * SMP.
-		 */
-		pagetable_pte_ctor(mm, ptdesc);
-		break;
-	case TABLE_PMD:
-		pagetable_pmd_ctor(mm, ptdesc);
-		break;
-	case TABLE_PGD:
-		pagetable_pgd_ctor(ptdesc);
-		break;
-	}
-
-	mmu_page_ctor(pt_addr);
-
-	new = PD_PTABLE(pt_addr);
-
-	PD_MARKBITS(new) = ptable_mask(type) - 1;
-	scoped_guard(spinlock_bh, &ptable_lock)
-		list_add(new, &ptable_list[type]);
-
-	return (pmd_t *)pt_addr;
-}
-
 void *get_pointer_table(struct mm_struct *mm, int type)
 {
+	ptable_desc *dp = ptable_list[type].next;
+	unsigned int mask = list_empty(&ptable_list[type]) ? 0 : PD_MARKBITS(dp);
 	unsigned int tmp, off;
-	unsigned long mask;
-	ptable_desc *dp;
-	void *ret;
 
-	spin_lock_bh(&ptable_lock);
-	dp = ptable_list[type].next;
-	mask = list_empty(&ptable_list[type]) ? 0 : PD_MARKBITS(dp);
-
+	/*
+	 * For a pointer table for a user process address space, a
+	 * table is taken from a ptdesc allocated for the purpose.  Each
+	 * ptdesc can hold 8 pointer tables.  The ptdesc is remapped in
+	 * virtual address space to be noncacheable.
+	 */
 	if (mask == 0) {
-		spin_unlock_bh(&ptable_lock);
-		return add_pointer_table(mm, type);
+		struct ptdesc *ptdesc;
+		ptable_desc *new;
+		void *pt_addr;
+
+		ptdesc = pagetable_alloc(GFP_KERNEL | __GFP_ZERO, 0);
+		if (!ptdesc)
+			return NULL;
+
+		pt_addr = ptdesc_address(ptdesc);
+
+		switch (type) {
+		case TABLE_PTE:
+			/*
+			 * m68k doesn't have SPLIT_PTE_PTLOCKS for not having
+			 * SMP.
+			 */
+			pagetable_pte_ctor(mm, ptdesc);
+			break;
+		case TABLE_PMD:
+			pagetable_pmd_ctor(mm, ptdesc);
+			break;
+		case TABLE_PGD:
+			pagetable_pgd_ctor(ptdesc);
+			break;
+		}
+
+		mmu_page_ctor(pt_addr);
+
+		new = PD_PTABLE(pt_addr);
+		PD_MARKBITS(new) = ptable_mask(type) - 1;
+		list_add_tail(new, dp);
+
+		return (pmd_t *)pt_addr;
 	}
 
 	for (tmp = 1, off = 0; (mask & tmp) == 0; tmp <<= 1, off += ptable_size(type))
@@ -210,10 +194,7 @@ void *get_pointer_table(struct mm_struct *mm, int type)
 		/* move to end of list */
 		list_move_tail(dp, &ptable_list[type]);
 	}
-
-	ret = ptdesc_address(PD_PTDESC(dp)) + off;
-	spin_unlock_bh(&ptable_lock);
-	return ret;
+	return ptdesc_address(PD_PTDESC(dp)) + off;
 }
 
 int free_pointer_table(void *table, int type)
@@ -222,8 +203,6 @@ int free_pointer_table(void *table, int type)
 	unsigned long ptable = (unsigned long)table;
 	unsigned long pt_addr = ptable & PAGE_MASK;
 	unsigned int mask = 1U << ((ptable - pt_addr)/ptable_size(type));
-
-	spin_lock_bh(&ptable_lock);
 
 	dp = PD_PTABLE(pt_addr);
 	if (PD_MARKBITS (dp) & mask)
@@ -234,8 +213,6 @@ int free_pointer_table(void *table, int type)
 	if (PD_MARKBITS(dp) == ptable_mask(type)) {
 		/* all tables in ptdesc are free, free ptdesc */
 		list_del(dp);
-		spin_unlock_bh(&ptable_lock);
-
 		mmu_page_dtor((void *)pt_addr);
 		pagetable_dtor_free(virt_to_ptdesc((void *)pt_addr));
 		return 1;
@@ -246,19 +223,7 @@ int free_pointer_table(void *table, int type)
 		 */
 		list_move(dp, &ptable_list[type]);
 	}
-
-	spin_unlock_bh(&ptable_lock);
 	return 0;
-}
-
-void __tlb_remove_table(void *table)
-{
-	/* The bottom 2 bits are used to encode page table type. */
-	const unsigned long encoded = (unsigned long)table;
-	void *addr = (void *)(encoded & ~3UL);
-	const int type = encoded & 3;
-
-	free_pointer_table(addr, type);
 }
 
 /* size of memory already mapped in head.S */
@@ -464,6 +429,7 @@ DECLARE_VM_GET_PAGE_PROT
  */
 void __init paging_init(void)
 {
+	unsigned long max_zone_pfn[MAX_NR_ZONES] = { 0, };
 	unsigned long min_addr, max_addr;
 	unsigned long addr;
 	int i;
@@ -534,14 +500,23 @@ void __init paging_init(void)
 	early_memtest(min_addr, max_addr);
 
 	/*
+	 * initialize the bad page table and bad page to point
+	 * to a couple of allocated pages
+	 */
+	empty_zero_page = memblock_alloc_or_panic(PAGE_SIZE, PAGE_SIZE);
+
+	/*
 	 * Set up SFC/DFC registers
 	 */
 	set_fc(USER_DATA);
 
 #ifdef DEBUG
-	printk ("before node_set_state\n");
+	printk ("before free_area_init\n");
 #endif
 	for (i = 0; i < m68k_num_memory; i++)
 		if (node_present_pages(i))
 			node_set_state(i, N_NORMAL_MEMORY);
+
+	max_zone_pfn[ZONE_DMA] = memblock_end_of_DRAM();
+	free_area_init(max_zone_pfn);
 }

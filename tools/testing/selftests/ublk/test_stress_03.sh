@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: GPL-2.0
 
 . "$(cd "$(dirname "$0")" && pwd)"/test_common.sh
+TID="stress_03"
 ERR_CODE=0
 
 ublk_io_and_remove()
@@ -49,5 +50,5 @@ if _have_feature "PER_IO_DAEMON"; then
 	wait
 fi
 
-_cleanup_test
+_cleanup_test "stress"
 _show_result $TID $ERR_CODE

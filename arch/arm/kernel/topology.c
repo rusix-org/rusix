@@ -12,7 +12,6 @@
  */
 
 #include <linux/arch_topology.h>
-#include <linux/cacheinfo.h>
 #include <linux/cpu.h>
 #include <linux/cpufreq.h>
 #include <linux/cpumask.h>
@@ -239,20 +238,8 @@ topology_populated:
  */
 void __init init_cpu_topology(void)
 {
-	int cpu, ret;
-
 	reset_cpu_topology();
 	smp_wmb();
 
 	parse_dt_topology();
-
-	for_each_possible_cpu(cpu) {
-		ret = fetch_cache_info(cpu);
-		if (!ret)
-			continue;
-		/* CPUs without a usable CLIDR return -EOPNOTSUPP. */
-		if (ret != -ENOENT && ret != -EOPNOTSUPP)
-			pr_err("Early cacheinfo failed, ret = %d\n", ret);
-		return;
-	}
 }

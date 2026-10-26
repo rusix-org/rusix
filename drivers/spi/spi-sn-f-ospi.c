@@ -222,8 +222,9 @@ static void f_ospi_config_clk(struct f_ospi *ospi, u32 device_hz)
 	 */
 	val = readl(ospi->base + OSPI_CLK_CTL);
 
-	FIELD_MODIFY(OSPI_CLK_CTL_PHA, &val, OSPI_CLK_CTL_PHA_180);
-	FIELD_MODIFY(OSPI_CLK_CTL_DIV, &val, div_reg);
+	val &= ~(OSPI_CLK_CTL_PHA | OSPI_CLK_CTL_DIV);
+	val |= FIELD_PREP(OSPI_CLK_CTL_PHA, OSPI_CLK_CTL_PHA_180)
+	     | FIELD_PREP(OSPI_CLK_CTL_DIV, div_reg);
 
 	writel(val, ospi->base + OSPI_CLK_CTL);
 }
@@ -624,9 +625,10 @@ static int f_ospi_probe(struct platform_device *pdev)
 	of_property_read_u32(dev->of_node, "num-cs", &num_cs);
 	if (num_cs > OSPI_NUM_CS) {
 		dev_err(dev, "num-cs too large: %d\n", num_cs);
-		return -EINVAL;
+		return -ENOMEM;
 	}
 	ctlr->num_chipselect = num_cs;
+	ctlr->dev.of_node = dev->of_node;
 
 	ospi = spi_controller_get_devdata(ctlr);
 	ospi->dev = dev;
@@ -641,15 +643,29 @@ static int f_ospi_probe(struct platform_device *pdev)
 	if (IS_ERR(ospi->clk))
 		return PTR_ERR(ospi->clk);
 
-	ret = devm_mutex_init(dev, &ospi->mlock);
-	if (ret)
-		return ret;
+	mutex_init(&ospi->mlock);
 
 	ret = f_ospi_init(ospi);
 	if (ret)
-		return ret;
+		goto err_destroy_mutex;
 
-	return devm_spi_register_controller(dev, ctlr);
+	ret = devm_spi_register_controller(dev, ctlr);
+	if (ret)
+		goto err_destroy_mutex;
+
+	return 0;
+
+err_destroy_mutex:
+	mutex_destroy(&ospi->mlock);
+
+	return ret;
+}
+
+static void f_ospi_remove(struct platform_device *pdev)
+{
+	struct f_ospi *ospi = platform_get_drvdata(pdev);
+
+	mutex_destroy(&ospi->mlock);
 }
 
 static const struct of_device_id f_ospi_dt_ids[] = {
@@ -664,6 +680,7 @@ static struct platform_driver f_ospi_driver = {
 		.of_match_table = f_ospi_dt_ids,
 	},
 	.probe = f_ospi_probe,
+	.remove = f_ospi_remove,
 };
 module_platform_driver(f_ospi_driver);
 

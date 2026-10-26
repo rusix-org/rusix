@@ -31,16 +31,6 @@ static void dwxgmac2_dma_init(void __iomem *ioaddr,
 		value |= XGMAC_EAME;
 
 	writel(value, ioaddr + XGMAC_DMA_SYSBUS_MODE);
-
-	/*
-	 * Route DMA interrupts to per-channel lines when multi-MSI enabled.
-	 */
-	if (dma_cfg->multi_msi_en) {
-		value = readl(ioaddr + XGMAC_DMA_MODE);
-		value = u32_replace_bits(value, XGMAC_INTM_MODE1,
-					 XGMAC_INTM_MASK);
-		writel(value, ioaddr + XGMAC_DMA_MODE);
-	}
 }
 
 static void dwxgmac2_dma_init_chan(struct stmmac_priv *priv,
@@ -91,6 +81,7 @@ static void dwxgmac2_dma_init_tx_chan(struct stmmac_priv *priv,
 static void dwxgmac2_dma_axi(void __iomem *ioaddr, struct stmmac_axi *axi)
 {
 	u32 value = readl(ioaddr + XGMAC_DMA_SYSBUS_MODE);
+	int i;
 
 	if (axi->axi_lpi_en)
 		value |= XGMAC_EN_LPI;
@@ -103,12 +94,32 @@ static void dwxgmac2_dma_axi(void __iomem *ioaddr, struct stmmac_axi *axi)
 	if (!axi->axi_fb)
 		value |= XGMAC_UNDEF;
 
-	/* Depending on the UNDEF bit the Master AXI will perform any burst
-	 * length according to the BLEN programmed (by default all BLEN are
-	 * set). Note that the UNDEF bit is readonly, and is the inverse of
-	 * Bus Mode bit 16.
-	 */
-	value = (value & ~DMA_AXI_BLEN_MASK) | axi->axi_blen_regval;
+	value &= ~XGMAC_BLEN;
+	for (i = 0; i < AXI_BLEN; i++) {
+		switch (axi->axi_blen[i]) {
+		case 256:
+			value |= XGMAC_BLEN256;
+			break;
+		case 128:
+			value |= XGMAC_BLEN128;
+			break;
+		case 64:
+			value |= XGMAC_BLEN64;
+			break;
+		case 32:
+			value |= XGMAC_BLEN32;
+			break;
+		case 16:
+			value |= XGMAC_BLEN16;
+			break;
+		case 8:
+			value |= XGMAC_BLEN8;
+			break;
+		case 4:
+			value |= XGMAC_BLEN4;
+			break;
+		}
+	}
 
 	writel(value, ioaddr + XGMAC_DMA_SYSBUS_MODE);
 	writel(XGMAC_TDPS, ioaddr + XGMAC_TX_EDMA_CTRL);
@@ -346,7 +357,7 @@ static int dwxgmac2_dma_interrupt(struct stmmac_priv *priv,
 		u64_stats_update_end(&stats->syncp);
 		ret |= handle_rx;
 	}
-	if (likely(intr_status & XGMAC_TI)) {
+	if (likely(intr_status & (XGMAC_TI | XGMAC_TBU))) {
 		u64_stats_update_begin(&stats->syncp);
 		u64_stats_inc(&stats->tx_normal_irq_n[chan]);
 		u64_stats_update_end(&stats->syncp);
@@ -374,7 +385,6 @@ static int dwxgmac2_get_hw_feature(void __iomem *ioaddr,
 	dma_cap->vxn = (hw_cap & XGMAC_HWFEAT_VXN) >> 29;
 	dma_cap->vlins = (hw_cap & XGMAC_HWFEAT_SAVLANINS) >> 27;
 	dma_cap->tssrc = (hw_cap & XGMAC_HWFEAT_TSSTSSEL) >> 25;
-	dma_cap->actphyif = FIELD_GET(XGMAC_HWFEAT_PHYSEL, hw_cap);
 	dma_cap->multi_addr = (hw_cap & XGMAC_HWFEAT_ADDMACADRSEL) >> 18;
 	dma_cap->rx_coe = (hw_cap & XGMAC_HWFEAT_RXCOESEL) >> 16;
 	dma_cap->tx_coe = (hw_cap & XGMAC_HWFEAT_TXCOESEL) >> 14;

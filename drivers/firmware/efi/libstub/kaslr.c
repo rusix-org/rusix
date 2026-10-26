@@ -18,7 +18,7 @@
  */
 u32 efi_kaslr_get_phys_seed(efi_handle_t image_handle)
 {
-	static efi_guid_t li_fixed_proto = LINUX_EFI_LOADED_IMAGE_FIXED_GUID;
+	efi_guid_t li_fixed_proto = LINUX_EFI_LOADED_IMAGE_FIXED_GUID;
 	void *p;
 
 	if (!IS_ENABLED(CONFIG_RANDOMIZE_BASE))
@@ -59,7 +59,8 @@ static bool check_image_region(u64 base, u64 size)
 {
 	struct efi_boot_memmap *map __free(efi_pool) = NULL;
 	efi_status_t status;
-	unsigned long map_offset;
+	bool ret = false;
+	int map_offset;
 
 	status = efi_get_memory_map(&map, false);
 	if (status != EFI_SUCCESS)
@@ -73,16 +74,18 @@ static bool check_image_region(u64 base, u64 size)
 		 * Find the region that covers base, and return whether
 		 * it covers base+size bytes.
 		 */
-		if (base >= md->phys_addr && base < end)
-			return (base + size) <= end;
+		if (base >= md->phys_addr && base < end) {
+			ret = (base + size) <= end;
+			break;
+		}
 	}
 
-	return false;
+	return ret;
 }
 
 /**
  * efi_kaslr_relocate_kernel() - Relocate the kernel (random if KASLR enabled)
- * @image_addr:		Pointer to the current kernel location
+ * @image_addr: Pointer to the current kernel location
  * @reserve_addr:	Pointer to the relocated kernel location
  * @reserve_size:	Size of the relocated kernel
  * @kernel_size:	Size of the text + data
@@ -91,8 +94,8 @@ static bool check_image_region(u64 base, u64 size)
  * @phys_seed:		Random seed used for the relocation
  *
  * If KASLR is not enabled, this function relocates the kernel to a fixed
- * address or leaves it at its current location. If KASLR is enabled, the
- * kernel's physical location is randomized using the supplied seed.
+ * address (or leave it as its current location). If KASLR is enabled, the
+ * kernel physical location is randomized using the seed in parameter.
  *
  * Return:	status code, EFI_SUCCESS if relocation is successful
  */

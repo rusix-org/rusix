@@ -83,7 +83,7 @@ struct e820_entry {
  * The whole array of E820 entries:
  */
 struct e820_table {
-	u32 nr_entries;
+	__u32 nr_entries;
 	struct e820_entry entries[E820_MAX_ENTRIES];
 };
 

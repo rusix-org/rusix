@@ -5,7 +5,6 @@
  * Copyright (c) 2003-2010 Cavium Networks
  */
 
-#include <linux/platform_device.h>
 #include <linux/module.h>
 #include <linux/kernel.h>
 #include <linux/netdevice.h>
@@ -450,6 +449,8 @@ skip_xmit:
 	case QUEUE_CORE:
 		__skb_queue_tail(&priv->tx_free_list[qos], skb);
 		break;
+	default:
+		BUG();
 	}
 
 	while (skb_to_free > 0) {
@@ -481,7 +482,7 @@ skip_xmit:
 			cvmx_fau_fetch_and_add32(FAU_TOTAL_TX_TO_CLEAN, 1);
 	}
 
-	if ((total_to_clean & 0x3ff) == 0) {
+	if (total_to_clean & 0x3ff) {
 		/*
 		 * Schedule the cleanup tasklet every 1024 packets for
 		 * the pathological case of high traffic on one port
@@ -650,19 +651,19 @@ static irqreturn_t cvm_oct_tx_cleanup_watchdog(int cpl, void *dev_id)
 	return IRQ_HANDLED;
 }
 
-int cvm_oct_tx_initialize(struct platform_device *pdev)
+void cvm_oct_tx_initialize(void)
 {
-	int ret;
+	int i;
 
 	/* Disable the interrupt.  */
 	cvmx_write_csr(CVMX_CIU_TIMX(1), 0);
 	/* Register an IRQ handler to receive CIU_TIMX(1) interrupts */
-	ret = request_irq(OCTEON_IRQ_TIMER1, cvm_oct_tx_cleanup_watchdog, 0,
-			  "Ethernet", cvm_oct_device);
-	if (ret)
-		dev_warn(&pdev->dev, "Could not acquire Ethernet IRQ %d\n",
-			 OCTEON_IRQ_TIMER1);
-	return ret;
+	i = request_irq(OCTEON_IRQ_TIMER1,
+			cvm_oct_tx_cleanup_watchdog, 0,
+			"Ethernet", cvm_oct_device);
+
+	if (i)
+		panic("Could not acquire Ethernet IRQ %d\n", OCTEON_IRQ_TIMER1);
 }
 
 void cvm_oct_tx_shutdown(void)

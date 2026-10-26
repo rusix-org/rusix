@@ -104,13 +104,14 @@ static int __vsp1_video_try_format(struct vsp1_video *video,
 	const struct vsp1_format_info *info;
 	unsigned int width = pix->width;
 	unsigned int height = pix->height;
+	unsigned int i;
 
 	/*
 	 * Backward compatibility: replace deprecated RGB formats by their XRGB
 	 * equivalent. This selects the format older userspace applications want
 	 * while still exposing the new format.
 	 */
-	for (unsigned int i = 0; i < ARRAY_SIZE(xrgb_formats); ++i) {
+	for (i = 0; i < ARRAY_SIZE(xrgb_formats); ++i) {
 		if (xrgb_formats[i][0] == pix->pixelformat) {
 			pix->pixelformat = xrgb_formats[i][1];
 			break;
@@ -160,7 +161,7 @@ static int __vsp1_video_try_format(struct vsp1_video *video,
 	 * the datasheet, strides not aligned to a multiple of 128 bytes result
 	 * in image corruption.
 	 */
-	for (unsigned int i = 0; i < min(info->planes, 2U); ++i) {
+	for (i = 0; i < min(info->planes, 2U); ++i) {
 		unsigned int hsub = i > 0 ? info->hsub : 1;
 		unsigned int vsub = i > 0 ? info->vsub : 1;
 		unsigned int align = 128;
@@ -208,24 +209,30 @@ vsp1_video_complete_buffer(struct vsp1_video *video)
 	struct vsp1_pipeline *pipe = video->rwpf->entity.pipe;
 	struct vsp1_vb2_buffer *next = NULL;
 	struct vsp1_vb2_buffer *done;
+	unsigned long flags;
+	unsigned int i;
 
-	scoped_guard(spinlock_irqsave, &video->irqlock) {
-		if (list_empty(&video->irqqueue))
-			return NULL;
+	spin_lock_irqsave(&video->irqlock, flags);
 
-		done = list_first_entry(&video->irqqueue,
+	if (list_empty(&video->irqqueue)) {
+		spin_unlock_irqrestore(&video->irqlock, flags);
+		return NULL;
+	}
+
+	done = list_first_entry(&video->irqqueue,
+				struct vsp1_vb2_buffer, queue);
+
+	list_del(&done->queue);
+
+	if (!list_empty(&video->irqqueue))
+		next = list_first_entry(&video->irqqueue,
 					struct vsp1_vb2_buffer, queue);
 
-		list_del(&done->queue);
-
-		if (!list_empty(&video->irqqueue))
-			next = list_first_entry(&video->irqqueue,
-						struct vsp1_vb2_buffer, queue);
-	}
+	spin_unlock_irqrestore(&video->irqlock, flags);
 
 	done->buf.sequence = pipe->sequence;
 	done->buf.vb2_buf.timestamp = ktime_get_ns();
-	for (unsigned int i = 0; i < done->buf.vb2_buf.num_planes; ++i)
+	for (i = 0; i < done->buf.vb2_buf.num_planes; ++i)
 		vb2_set_plane_payload(&done->buf.vb2_buf, i,
 				      vb2_plane_size(&done->buf.vb2_buf, i));
 	vb2_buffer_done(&done->buf.vb2_buf, VB2_BUF_STATE_DONE);
@@ -265,6 +272,7 @@ static void vsp1_video_pipeline_run(struct vsp1_pipeline *pipe)
 	struct vsp1_entity *entity;
 	struct vsp1_dl_body *dlb;
 	struct vsp1_dl_list *dl;
+	unsigned int partition;
 
 	dl = vsp1_dl_list_get(pipe->output->dlm);
 
@@ -286,7 +294,7 @@ static void vsp1_video_pipeline_run(struct vsp1_pipeline *pipe)
 	vsp1_video_pipeline_run_partition(pipe, dl, 0);
 
 	/* Process consecutive partitions as necessary. */
-	for (unsigned int partition = 1; partition < pipe->partitions; ++partition) {
+	for (partition = 1; partition < pipe->partitions; ++partition) {
 		struct vsp1_dl_list *dl_next;
 
 		dl_next = vsp1_dl_list_get(pipe->output->dlm);
@@ -318,6 +326,7 @@ static void vsp1_video_pipeline_frame_end(struct vsp1_pipeline *pipe,
 	struct vsp1_device *vsp1 = pipe->output->entity.vsp1;
 	enum vsp1_pipeline_state state;
 	unsigned long flags;
+	unsigned int i;
 
 	/* M2M Pipelines should never call here with an incomplete frame. */
 	WARN_ON_ONCE(!(completion & VSP1_DL_FRAME_END_COMPLETED));
@@ -325,7 +334,7 @@ static void vsp1_video_pipeline_frame_end(struct vsp1_pipeline *pipe,
 	spin_lock_irqsave(&pipe->irqlock, flags);
 
 	/* Complete buffers on all video nodes. */
-	for (unsigned int i = 0; i < vsp1->info->rpf_count; ++i) {
+	for (i = 0; i < vsp1->info->rpf_count; ++i) {
 		if (!pipe->inputs[i])
 			continue;
 
@@ -445,6 +454,7 @@ static int vsp1_video_pipeline_build(struct vsp1_pipeline *pipe,
 	struct media_graph graph;
 	struct media_entity *entity = &video->video.entity;
 	struct media_device *mdev = entity->graph_obj.mdev;
+	unsigned int i;
 	int ret;
 
 	/* Walk the graph to locate the entities and video nodes. */
@@ -512,7 +522,7 @@ static int vsp1_video_pipeline_build(struct vsp1_pipeline *pipe,
 	 * Follow links downstream for each input and make sure the graph
 	 * contains no loop and that all branches end at the output WPF.
 	 */
-	for (unsigned int i = 0; i < video->vsp1->info->rpf_count; ++i) {
+	for (i = 0; i < video->vsp1->info->rpf_count; ++i) {
 		if (!pipe->inputs[i])
 			continue;
 
@@ -555,7 +565,7 @@ static struct vsp1_pipeline *vsp1_video_pipeline_get(struct vsp1_video *video)
 	 * when the last reference is released.
 	 */
 	if (!video->rwpf->entity.pipe) {
-		pipe = kzalloc_obj(*pipe);
+		pipe = kzalloc(sizeof(*pipe), GFP_KERNEL);
 		if (!pipe)
 			return ERR_PTR(-ENOMEM);
 
@@ -585,9 +595,9 @@ static void vsp1_video_pipeline_put(struct vsp1_pipeline *pipe)
 {
 	struct media_device *mdev = &pipe->output->entity.vsp1->media_dev;
 
-	guard(mutex)(&mdev->graph_mutex);
-
+	mutex_lock(&mdev->graph_mutex);
 	kref_put(&pipe->kref, vsp1_video_pipeline_release);
+	mutex_unlock(&mdev->graph_mutex);
 }
 
 /* -----------------------------------------------------------------------------
@@ -601,12 +611,13 @@ vsp1_video_queue_setup(struct vb2_queue *vq,
 {
 	struct vsp1_video *video = vb2_get_drv_priv(vq);
 	const struct v4l2_pix_format_mplane *format = &video->rwpf->format;
+	unsigned int i;
 
 	if (*nplanes) {
 		if (*nplanes != format->num_planes)
 			return -EINVAL;
 
-		for (unsigned int i = 0; i < *nplanes; i++)
+		for (i = 0; i < *nplanes; i++)
 			if (sizes[i] < format->plane_fmt[i].sizeimage)
 				return -EINVAL;
 		return 0;
@@ -614,7 +625,7 @@ vsp1_video_queue_setup(struct vb2_queue *vq,
 
 	*nplanes = format->num_planes;
 
-	for (unsigned int i = 0; i < format->num_planes; ++i)
+	for (i = 0; i < format->num_planes; ++i)
 		sizes[i] = format->plane_fmt[i].sizeimage;
 
 	return 0;
@@ -650,17 +661,18 @@ static void vsp1_video_buffer_queue(struct vb2_buffer *vb)
 	struct vsp1_video *video = vb2_get_drv_priv(vb->vb2_queue);
 	struct vsp1_pipeline *pipe = video->rwpf->entity.pipe;
 	struct vsp1_vb2_buffer *buf = to_vsp1_vb2_buffer(vbuf);
+	unsigned long flags;
 	bool empty;
 
-	scoped_guard(spinlock_irqsave, &video->irqlock) {
-		empty = list_empty(&video->irqqueue);
-		list_add_tail(&buf->queue, &video->irqqueue);
-	}
+	spin_lock_irqsave(&video->irqlock, flags);
+	empty = list_empty(&video->irqqueue);
+	list_add_tail(&buf->queue, &video->irqqueue);
+	spin_unlock_irqrestore(&video->irqlock, flags);
 
 	if (!empty)
 		return;
 
-	guard(spinlock_irqsave)(&pipe->irqlock);
+	spin_lock_irqsave(&pipe->irqlock, flags);
 
 	video->rwpf->mem = buf->mem;
 	pipe->buffers_ready |= 1 << video->pipe_index;
@@ -668,6 +680,8 @@ static void vsp1_video_buffer_queue(struct vb2_buffer *vb)
 	if (vb2_start_streaming_called(&video->queue) &&
 	    vsp1_pipeline_ready(pipe))
 		vsp1_video_pipeline_run(pipe);
+
+	spin_unlock_irqrestore(&pipe->irqlock, flags);
 }
 
 static int vsp1_video_pipeline_setup_partitions(struct vsp1_pipeline *pipe)
@@ -676,6 +690,7 @@ static int vsp1_video_pipeline_setup_partitions(struct vsp1_pipeline *pipe)
 	const struct v4l2_mbus_framefmt *format;
 	struct vsp1_entity *entity;
 	unsigned int div_size;
+	unsigned int i;
 
 	/*
 	 * Partitions are computed on the size before rotation, use the format
@@ -705,11 +720,12 @@ static int vsp1_video_pipeline_setup_partitions(struct vsp1_pipeline *pipe)
 	}
 
 	pipe->partitions = DIV_ROUND_UP(format->width, div_size);
-	pipe->part_table = kzalloc_objs(*pipe->part_table, pipe->partitions);
+	pipe->part_table = kcalloc(pipe->partitions, sizeof(*pipe->part_table),
+				   GFP_KERNEL);
 	if (!pipe->part_table)
 		return -ENOMEM;
 
-	for (unsigned int i = 0; i < pipe->partitions; ++i)
+	for (i = 0; i < pipe->partitions; ++i)
 		vsp1_pipeline_calculate_partition(pipe, &pipe->part_table[i],
 						  div_size, i);
 
@@ -768,13 +784,14 @@ static int vsp1_video_setup_pipeline(struct vsp1_pipeline *pipe)
 static void vsp1_video_release_buffers(struct vsp1_video *video)
 {
 	struct vsp1_vb2_buffer *buffer;
+	unsigned long flags;
 
 	/* Remove all buffers from the IRQ queue. */
-	guard(spinlock_irqsave)(&video->irqlock);
-
+	spin_lock_irqsave(&video->irqlock, flags);
 	list_for_each_entry(buffer, &video->irqqueue, queue)
 		vb2_buffer_done(&buffer->buf.vb2_buf, VB2_BUF_STATE_ERROR);
 	INIT_LIST_HEAD(&video->irqqueue);
+	spin_unlock_irqrestore(&video->irqlock, flags);
 }
 
 static void vsp1_video_cleanup_pipeline(struct vsp1_pipeline *pipe)
@@ -796,22 +813,24 @@ static int vsp1_video_start_streaming(struct vb2_queue *vq, unsigned int count)
 	struct vsp1_video *video = vb2_get_drv_priv(vq);
 	struct vsp1_pipeline *pipe = video->rwpf->entity.pipe;
 	bool start_pipeline = false;
+	unsigned long flags;
 	int ret;
 
-	scoped_guard(mutex, &pipe->lock) {
-		if (pipe->stream_count == pipe->num_inputs) {
-			ret = vsp1_video_setup_pipeline(pipe);
-			if (ret < 0) {
-				vsp1_video_release_buffers(video);
-				vsp1_video_cleanup_pipeline(pipe);
-				return ret;
-			}
-
-			start_pipeline = true;
+	mutex_lock(&pipe->lock);
+	if (pipe->stream_count == pipe->num_inputs) {
+		ret = vsp1_video_setup_pipeline(pipe);
+		if (ret < 0) {
+			vsp1_video_release_buffers(video);
+			vsp1_video_cleanup_pipeline(pipe);
+			mutex_unlock(&pipe->lock);
+			return ret;
 		}
 
-		pipe->stream_count++;
+		start_pipeline = true;
 	}
+
+	pipe->stream_count++;
+	mutex_unlock(&pipe->lock);
 
 	/*
 	 * vsp1_pipeline_ready() is not sufficient to establish that all streams
@@ -823,10 +842,10 @@ static int vsp1_video_start_streaming(struct vb2_queue *vq, unsigned int count)
 	if (!start_pipeline)
 		return 0;
 
-	guard(spinlock_irqsave)(&pipe->irqlock);
-
+	spin_lock_irqsave(&pipe->irqlock, flags);
 	if (vsp1_pipeline_ready(pipe))
 		vsp1_video_pipeline_run(pipe);
+	spin_unlock_irqrestore(&pipe->irqlock, flags);
 
 	return 0;
 }
@@ -835,27 +854,27 @@ static void vsp1_video_stop_streaming(struct vb2_queue *vq)
 {
 	struct vsp1_video *video = vb2_get_drv_priv(vq);
 	struct vsp1_pipeline *pipe = video->rwpf->entity.pipe;
+	unsigned long flags;
 	int ret;
 
 	/*
 	 * Clear the buffers ready flag to make sure the device won't be started
 	 * by a QBUF on the video node on the other side of the pipeline.
 	 */
-	scoped_guard(spinlock_irqsave, &video->irqlock) {
-		pipe->buffers_ready &= ~(1 << video->pipe_index);
-	}
+	spin_lock_irqsave(&video->irqlock, flags);
+	pipe->buffers_ready &= ~(1 << video->pipe_index);
+	spin_unlock_irqrestore(&video->irqlock, flags);
 
-	scoped_guard(mutex, &pipe->lock) {
-		if (--pipe->stream_count == pipe->num_inputs) {
-			/* Stop the pipeline. */
-			ret = vsp1_pipeline_stop(pipe);
-			if (ret == -ETIMEDOUT)
-				dev_err(video->vsp1->dev,
-					"pipeline stop timeout\n");
+	mutex_lock(&pipe->lock);
+	if (--pipe->stream_count == pipe->num_inputs) {
+		/* Stop the pipeline. */
+		ret = vsp1_pipeline_stop(pipe);
+		if (ret == -ETIMEDOUT)
+			dev_err(video->vsp1->dev, "pipeline stop timeout\n");
 
-			vsp1_video_cleanup_pipeline(pipe);
-		}
+		vsp1_video_cleanup_pipeline(pipe);
 	}
+	mutex_unlock(&pipe->lock);
 
 	video_device_pipeline_stop(&video->video);
 	vsp1_video_release_buffers(video);
@@ -920,9 +939,9 @@ vsp1_video_get_format(struct file *file, void *fh, struct v4l2_format *format)
 	if (format->type != video->queue.type)
 		return -EINVAL;
 
-	guard(mutex)(&video->lock);
-
+	mutex_lock(&video->lock);
 	format->fmt.pix_mp = video->rwpf->format;
+	mutex_unlock(&video->lock);
 
 	return 0;
 }
@@ -954,15 +973,19 @@ vsp1_video_set_format(struct file *file, void *fh, struct v4l2_format *format)
 	if (ret < 0)
 		return ret;
 
-	guard(mutex)(&video->lock);
+	mutex_lock(&video->lock);
 
-	if (vb2_is_busy(&video->queue))
-		return -EBUSY;
+	if (vb2_is_busy(&video->queue)) {
+		ret = -EBUSY;
+		goto done;
+	}
 
 	video->rwpf->format = format->fmt.pix_mp;
 	video->rwpf->fmtinfo = info;
 
-	return 0;
+done:
+	mutex_unlock(&video->lock);
+	return ret;
 }
 
 static int
@@ -982,15 +1005,21 @@ vsp1_video_streamon(struct file *file, void *fh, enum v4l2_buf_type type)
 	 * touching an entity in the pipeline can be activated or deactivated
 	 * once streaming is started.
 	 */
-	scoped_guard(mutex, &mdev->graph_mutex) {
-		pipe = vsp1_video_pipeline_get(video);
-		if (IS_ERR(pipe))
-			return PTR_ERR(pipe);
+	mutex_lock(&mdev->graph_mutex);
 
-		ret = __video_device_pipeline_start(&video->video, &pipe->pipe);
-		if (ret < 0)
-			goto err_pipe;
+	pipe = vsp1_video_pipeline_get(video);
+	if (IS_ERR(pipe)) {
+		mutex_unlock(&mdev->graph_mutex);
+		return PTR_ERR(pipe);
 	}
+
+	ret = __video_device_pipeline_start(&video->video, &pipe->pipe);
+	if (ret < 0) {
+		mutex_unlock(&mdev->graph_mutex);
+		goto err_pipe;
+	}
+
+	mutex_unlock(&mdev->graph_mutex);
 
 	/*
 	 * Verify that the configured format matches the output of the connected
@@ -1045,7 +1074,7 @@ static int vsp1_video_open(struct file *file)
 	struct v4l2_fh *vfh;
 	int ret = 0;
 
-	vfh = kzalloc_obj(*vfh);
+	vfh = kzalloc(sizeof(*vfh), GFP_KERNEL);
 	if (vfh == NULL)
 		return -ENOMEM;
 
@@ -1109,6 +1138,8 @@ static const struct media_entity_operations vsp1_video_media_ops = {
 
 void vsp1_video_suspend(struct vsp1_device *vsp1)
 {
+	unsigned long flags;
+	unsigned int i;
 	int ret;
 
 	/*
@@ -1116,7 +1147,7 @@ void vsp1_video_suspend(struct vsp1_device *vsp1)
 	 * pipelines twice, first to set them all to the stopping state, and
 	 * then to wait for the stop to complete.
 	 */
-	for (unsigned int i = 0; i < vsp1->info->wpf_count; ++i) {
+	for (i = 0; i < vsp1->info->wpf_count; ++i) {
 		struct vsp1_rwpf *wpf = vsp1->wpf[i];
 		struct vsp1_pipeline *pipe;
 
@@ -1127,13 +1158,13 @@ void vsp1_video_suspend(struct vsp1_device *vsp1)
 		if (pipe == NULL)
 			continue;
 
-		scoped_guard(spinlock_irqsave, &pipe->irqlock) {
-			if (pipe->state == VSP1_PIPELINE_RUNNING)
-				pipe->state = VSP1_PIPELINE_STOPPING;
-		}
+		spin_lock_irqsave(&pipe->irqlock, flags);
+		if (pipe->state == VSP1_PIPELINE_RUNNING)
+			pipe->state = VSP1_PIPELINE_STOPPING;
+		spin_unlock_irqrestore(&pipe->irqlock, flags);
 	}
 
-	for (unsigned int i = 0; i < vsp1->info->wpf_count; ++i) {
+	for (i = 0; i < vsp1->info->wpf_count; ++i) {
 		struct vsp1_rwpf *wpf = vsp1->wpf[i];
 		struct vsp1_pipeline *pipe;
 
@@ -1154,8 +1185,11 @@ void vsp1_video_suspend(struct vsp1_device *vsp1)
 
 void vsp1_video_resume(struct vsp1_device *vsp1)
 {
+	unsigned long flags;
+	unsigned int i;
+
 	/* Resume all running pipelines. */
-	for (unsigned int i = 0; i < vsp1->info->wpf_count; ++i) {
+	for (i = 0; i < vsp1->info->wpf_count; ++i) {
 		struct vsp1_rwpf *wpf = vsp1->wpf[i];
 		struct vsp1_pipeline *pipe;
 
@@ -1172,10 +1206,10 @@ void vsp1_video_resume(struct vsp1_device *vsp1)
 		 */
 		pipe->configured = false;
 
-		scoped_guard(spinlock_irqsave, &pipe->irqlock) {
-			if (vsp1_pipeline_ready(pipe))
-				vsp1_video_pipeline_run(pipe);
-		}
+		spin_lock_irqsave(&pipe->irqlock, flags);
+		if (vsp1_pipeline_ready(pipe))
+			vsp1_video_pipeline_run(pipe);
+		spin_unlock_irqrestore(&pipe->irqlock, flags);
 	}
 }
 

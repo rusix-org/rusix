@@ -67,7 +67,7 @@ static int rds_ib_add_ipaddr(struct rds_ib_device *rds_ibdev, __be32 ipaddr)
 {
 	struct rds_ib_ipaddr *i_ipaddr;
 
-	i_ipaddr = kmalloc_obj(*i_ipaddr);
+	i_ipaddr = kmalloc(sizeof *i_ipaddr, GFP_KERNEL);
 	if (!i_ipaddr)
 		return -ENOMEM;
 
@@ -251,7 +251,9 @@ void __rds_ib_teardown_mr(struct rds_ib_mr *ibmr)
 
 			/* FIXME we need a way to tell a r/w MR
 			 * from a r/o MR */
-			unpin_user_pages_dirty_lock(&page, 1, true);
+			WARN_ON(!page->mapping && irqs_disabled());
+			set_page_dirty(page);
+			put_page(page);
 		}
 		kfree(ibmr->sg);
 
@@ -583,7 +585,7 @@ void *rds_ib_get_mr(struct scatterlist *sg, unsigned long nents,
 		if (key_ret)
 			*key_ret = ib_mr->rkey;
 
-		ibmr = kzalloc_obj(*ibmr);
+		ibmr = kzalloc(sizeof(*ibmr), GFP_KERNEL);
 		if (!ibmr) {
 			ib_dereg_mr(ib_mr);
 			ret = -ENOMEM;
@@ -644,7 +646,7 @@ struct rds_ib_mr_pool *rds_ib_create_mr_pool(struct rds_ib_device *rds_ibdev,
 {
 	struct rds_ib_mr_pool *pool;
 
-	pool = kzalloc_obj(*pool);
+	pool = kzalloc(sizeof(*pool), GFP_KERNEL);
 	if (!pool)
 		return ERR_PTR(-ENOMEM);
 

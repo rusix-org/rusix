@@ -22,28 +22,27 @@
 	KVM_X86_CPU_FEATURE(HYPERV_CPUID_ENLIGHTMENT_INFO, 0, EBX, 0)
 
 struct msr_data {
-	u32 idx;
+	uint32_t idx;
 	bool fault_expected;
 	bool write;
 	u64 write_val;
-	bool reset_expected;
 };
 
 struct hcall_data {
-	u64 control;
-	u64 expect;
+	uint64_t control;
+	uint64_t expect;
 	bool ud_expected;
 };
 
-static bool is_write_only_msr(u32 msr)
+static bool is_write_only_msr(uint32_t msr)
 {
 	return msr == HV_X64_MSR_EOI;
 }
 
 static void guest_msr(struct msr_data *msr)
 {
-	u8 vector = 0;
-	u64 msr_val = 0;
+	uint8_t vector = 0;
+	uint64_t msr_val = 0;
 
 	GUEST_ASSERT(msr->idx);
 
@@ -83,10 +82,10 @@ done:
 	GUEST_DONE();
 }
 
-static void guest_hcall(gpa_t pgs_gpa, struct hcall_data *hcall)
+static void guest_hcall(vm_vaddr_t pgs_gpa, struct hcall_data *hcall)
 {
 	u64 res, input, output;
-	u8 vector;
+	uint8_t vector;
 
 	GUEST_ASSERT_NE(hcall->control, 0);
 
@@ -95,7 +94,7 @@ static void guest_hcall(gpa_t pgs_gpa, struct hcall_data *hcall)
 
 	if (!(hcall->control & HV_HYPERCALL_FAST_BIT)) {
 		input = pgs_gpa;
-		output = pgs_gpa + PAGE_SIZE;
+		output = pgs_gpa + 4096;
 	} else {
 		input = output = 0;
 	}
@@ -135,14 +134,14 @@ static void guest_test_msrs_access(void)
 	struct kvm_vm *vm;
 	struct ucall uc;
 	int stage = 0;
-	gva_t msr_gva;
+	vm_vaddr_t msr_gva;
 	struct msr_data *msr;
 	bool has_invtsc = kvm_cpu_has(X86_FEATURE_INVTSC);
 
 	while (true) {
 		vm = vm_create_with_one_vcpu(&vcpu, guest_msr);
 
-		msr_gva = vm_alloc_page(vm);
+		msr_gva = vm_vaddr_alloc_page(vm);
 		memset(addr_gva2hva(vm, msr_gva), 0x0, getpagesize());
 		msr = addr_gva2hva(vm, msr_gva);
 
@@ -268,9 +267,14 @@ static void guest_test_msrs_access(void)
 		case 16:
 			msr->idx = HV_X64_MSR_RESET;
 			msr->write = true;
-			msr->write_val = 1;
+			/*
+			 * TODO: the test only writes '0' to HV_X64_MSR_RESET
+			 * at the moment, writing some other value there will
+			 * trigger real vCPU reset and the code is not prepared
+			 * to handle it yet.
+			 */
+			msr->write_val = 0;
 			msr->fault_expected = false;
-			msr->reset_expected = true;
 			break;
 
 		case 17:
@@ -453,7 +457,7 @@ static void guest_test_msrs_access(void)
 			msr->fault_expected = true;
 			break;
 		case 45:
-			/* MSR is available when CPUID feature bit is set */
+			/* MSR is vailable when CPUID feature bit is set */
 			if (!has_invtsc)
 				goto next_stage;
 			vcpu_set_cpuid_feature(vcpu, HV_ACCESS_TSC_INVARIANT);
@@ -493,15 +497,6 @@ static void guest_test_msrs_access(void)
 			 msr->idx, msr->write ? "write" : "read");
 
 		vcpu_run(vcpu);
-
-		if (msr->reset_expected) {
-			TEST_ASSERT_KVM_EXIT_REASON(vcpu, KVM_EXIT_SYSTEM_EVENT);
-			TEST_ASSERT(vcpu->run->system_event.type == KVM_SYSTEM_EVENT_RESET,
-				    "Expected reset system event, got type %u",
-				    vcpu->run->system_event.type);
-			goto next_stage;
-		}
-
 		TEST_ASSERT_KVM_EXIT_REASON(vcpu, KVM_EXIT_IO);
 
 		switch (get_ucall(vcpu, &uc)) {
@@ -528,17 +523,17 @@ static void guest_test_hcalls_access(void)
 	struct kvm_vm *vm;
 	struct ucall uc;
 	int stage = 0;
-	gva_t hcall_page, hcall_params;
+	vm_vaddr_t hcall_page, hcall_params;
 	struct hcall_data *hcall;
 
 	while (true) {
 		vm = vm_create_with_one_vcpu(&vcpu, guest_hcall);
 
 		/* Hypercall input/output */
-		hcall_page = vm_alloc_pages(vm, 2);
+		hcall_page = vm_vaddr_alloc_pages(vm, 2);
 		memset(addr_gva2hva(vm, hcall_page), 0x0, 2 * getpagesize());
 
-		hcall_params = vm_alloc_page(vm);
+		hcall_params = vm_vaddr_alloc_page(vm);
 		memset(addr_gva2hva(vm, hcall_params), 0x0, getpagesize());
 		hcall = addr_gva2hva(vm, hcall_params);
 

@@ -3,6 +3,7 @@
  * Copyright 2010-2011 Calxeda, Inc.
  */
 #include <linux/module.h>
+#include <linux/mod_devicetable.h>
 #include <linux/kernel.h>
 #include <linux/circ_buf.h>
 #include <linux/interrupt.h>
@@ -728,7 +729,8 @@ static int xgmac_dma_desc_rings_init(struct net_device *dev)
 
 	netdev_dbg(priv->dev, "mtu [%d] bfsize [%d]\n", dev->mtu, bfsize);
 
-	priv->rx_skbuff = kzalloc_objs(struct sk_buff *, DMA_RX_RING_SZ);
+	priv->rx_skbuff = kcalloc(DMA_RX_RING_SZ, sizeof(struct sk_buff *),
+				  GFP_KERNEL);
 	if (!priv->rx_skbuff)
 		return -ENOMEM;
 
@@ -740,7 +742,8 @@ static int xgmac_dma_desc_rings_init(struct net_device *dev)
 	if (!priv->dma_rx)
 		goto err_dma_rx;
 
-	priv->tx_skbuff = kzalloc_objs(struct sk_buff *, DMA_TX_RING_SZ);
+	priv->tx_skbuff = kcalloc(DMA_TX_RING_SZ, sizeof(struct sk_buff *),
+				  GFP_KERNEL);
 	if (!priv->tx_skbuff)
 		goto err_tx_skb;
 

@@ -355,27 +355,19 @@ struct software_node;
 
 /**
  * struct software_node_ref_args - Reference property with additional arguments
- * @swnode: Reference to a software node
- * @fwnode: Alternative reference to a firmware node handle
+ * @node: Reference to a software node
  * @nargs: Number of elements in @args array
  * @args: Integer arguments
  */
 struct software_node_ref_args {
-	const struct software_node *swnode;
-	struct fwnode_handle *fwnode;
+	const struct software_node *node;
 	unsigned int nargs;
 	u64 args[NR_FWNODE_REFERENCE_ARGS];
 };
 
 #define SOFTWARE_NODE_REFERENCE(_ref_, ...)			\
 (const struct software_node_ref_args) {				\
-	.swnode = _Generic(_ref_,				\
-			   const struct software_node *: _ref_,	\
-			   struct software_node *: _ref_,	\
-			   default: NULL),			\
-	.fwnode = _Generic(_ref_,				\
-			   struct fwnode_handle *: _ref_,	\
-			   default: NULL),			\
+	.node = _ref_,						\
 	.nargs = COUNT_ARGS(__VA_ARGS__),			\
 	.args = { __VA_ARGS__ },				\
 }
@@ -397,13 +389,11 @@ struct property_entry {
 	union {
 		const void *pointer;
 		union {
-			/* private: internal representation of @value */
 			u8 u8_data[sizeof(u64) / sizeof(u8)];
 			u16 u16_data[sizeof(u64) / sizeof(u16)];
 			u32 u32_data[sizeof(u64) / sizeof(u32)];
 			u64 u64_data[sizeof(u64) / sizeof(u64)];
 			const char *str[sizeof(u64) / sizeof(char *)];
-			/* public: */
 		} value;
 	};
 };
@@ -473,18 +463,12 @@ struct property_entry {
 #define PROPERTY_ENTRY_STRING(_name_, _val_)				\
 	__PROPERTY_ENTRY_ELEMENT(_name_, str, STRING, _val_)
 
-#define __PROPERTY_ENTRY_REF_ARGS(_ref_, ...)				\
-	_Generic(_ref_,							\
-		 const struct software_node_ref_args *: _ref_,		\
-		 struct software_node_ref_args *: _ref_,		\
-		 default: &SOFTWARE_NODE_REFERENCE(_ref_, ##__VA_ARGS__))
-
 #define PROPERTY_ENTRY_REF(_name_, _ref_, ...)				\
 (struct property_entry) {						\
 	.name = _name_,							\
 	.length = sizeof(struct software_node_ref_args),		\
 	.type = DEV_PROP_REF,						\
-	{ .pointer = __PROPERTY_ENTRY_REF_ARGS(_ref_, ##__VA_ARGS__) },	\
+	{ .pointer = &SOFTWARE_NODE_REFERENCE(_ref_, ##__VA_ARGS__), },	\
 }
 
 #define PROPERTY_ENTRY_BOOL(_name_)		\
@@ -546,11 +530,6 @@ unsigned int fwnode_graph_get_endpoint_count(const struct fwnode_handle *fwnode,
 #define fwnode_graph_for_each_endpoint(fwnode, child)				\
 	for (child = fwnode_graph_get_next_endpoint(fwnode, NULL); child;	\
 	     child = fwnode_graph_get_next_endpoint(fwnode, child))
-
-#define fwnode_graph_for_each_endpoint_scoped(fwnode, child)			\
-	for (struct fwnode_handle *child __free(fwnode_handle) =		\
-		fwnode_graph_get_next_endpoint(fwnode, NULL);			\
-	     child; child = fwnode_graph_get_next_endpoint(fwnode, child))
 
 int fwnode_graph_parse_endpoint(const struct fwnode_handle *fwnode,
 				struct fwnode_endpoint *endpoint);

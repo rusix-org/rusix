@@ -16,8 +16,9 @@ MODULE_LICENSE("GPL");
 /*
  * create a new hardware dependent device for Emu10k1
  */
-static int snd_emu10k1_synth_probe(struct snd_seq_device *dev)
+static int snd_emu10k1_synth_probe(struct device *_dev)
 {
+	struct snd_seq_device *dev = to_seq_dev(_dev);
 	struct snd_emux *emux;
 	struct snd_emu10k1 *hw;
 	struct snd_emu10k1_synth_arg *arg;
@@ -63,13 +64,14 @@ static int snd_emu10k1_synth_probe(struct snd_seq_device *dev)
 	return 0;
 }
 
-static void snd_emu10k1_synth_remove(struct snd_seq_device *dev)
+static int snd_emu10k1_synth_remove(struct device *_dev)
 {
+	struct snd_seq_device *dev = to_seq_dev(_dev);
 	struct snd_emux *emux;
 	struct snd_emu10k1 *hw;
 
 	if (dev->driver_data == NULL)
-		return; /* not registered actually */
+		return 0; /* not registered actually */
 
 	emux = dev->driver_data;
 
@@ -80,6 +82,7 @@ static void snd_emu10k1_synth_remove(struct snd_seq_device *dev)
 	}
 
 	snd_emux_free(emux);
+	return 0;
 }
 
 /*
@@ -87,10 +90,10 @@ static void snd_emu10k1_synth_remove(struct snd_seq_device *dev)
  */
 
 static struct snd_seq_driver emu10k1_synth_driver = {
-	.probe = snd_emu10k1_synth_probe,
-	.remove = snd_emu10k1_synth_remove,
 	.driver = {
 		.name = KBUILD_MODNAME,
+		.probe = snd_emu10k1_synth_probe,
+		.remove = snd_emu10k1_synth_remove,
 	},
 	.id = SNDRV_SEQ_DEV_ID_EMU10K1_SYNTH,
 	.argsize = sizeof(struct snd_emu10k1_synth_arg),

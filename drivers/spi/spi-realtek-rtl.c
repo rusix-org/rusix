@@ -2,6 +2,7 @@
 
 #include <linux/module.h>
 #include <linux/platform_device.h>
+#include <linux/mod_devicetable.h>
 #include <linux/spi/spi.h>
 
 struct rtspi {
@@ -18,6 +19,7 @@ struct rtspi {
 #define RTL_SPI_SFCSR_CSB0		BIT(31)
 #define RTL_SPI_SFCSR_CSB1		BIT(30)
 #define RTL_SPI_SFCSR_RDY		BIT(27)
+#define RTL_SPI_SFCSR_CS		BIT(24)
 #define RTL_SPI_SFCSR_LEN_MASK		~(0x03 << 28)
 #define RTL_SPI_SFCSR_LEN1		(0x00 << 28)
 #define RTL_SPI_SFCSR_LEN4		(0x03 << 28)
@@ -28,78 +30,64 @@ struct rtspi {
 #define REG(x)		(rtspi->base + x)
 
 
-static void rt_set_cs(struct spi_device *spi, bool level)
+static void rt_set_cs(struct spi_device *spi, bool active)
 {
 	struct rtspi *rtspi = spi_controller_get_devdata(spi->controller);
-	unsigned int cs = spi_get_chipselect(spi, 0);
-	u32 cs_mask, value;
+	u32 value;
 
-	switch (cs) {
-	case 0:
-		cs_mask = RTL_SPI_SFCSR_CSB0;
-		break;
-	case 1:
-		cs_mask = RTL_SPI_SFCSR_CSB1;
-		break;
-	default:
-		return;
-	}
-
-	value = __raw_readl(REG(RTL_SPI_SFCSR));
-
-	/* CSBx is active low */
-	if (level)
-		value |= cs_mask;
+	/* CS0 bit is active low */
+	value = readl(REG(RTL_SPI_SFCSR));
+	if (active)
+		value |= RTL_SPI_SFCSR_CSB0;
 	else
-		value &= ~cs_mask;
-
-	__raw_writel(value, REG(RTL_SPI_SFCSR));
+		value &= ~RTL_SPI_SFCSR_CSB0;
+	writel(value, REG(RTL_SPI_SFCSR));
 }
 
 static void set_size(struct rtspi *rtspi, int size)
 {
 	u32 value;
 
-	value = __raw_readl(REG(RTL_SPI_SFCSR));
+	value = readl(REG(RTL_SPI_SFCSR));
 	value &= RTL_SPI_SFCSR_LEN_MASK;
 	if (size == 4)
 		value |= RTL_SPI_SFCSR_LEN4;
 	else if (size == 1)
 		value |= RTL_SPI_SFCSR_LEN1;
-	__raw_writel(value, REG(RTL_SPI_SFCSR));
+	writel(value, REG(RTL_SPI_SFCSR));
 }
 
 static inline void wait_ready(struct rtspi *rtspi)
 {
-	while (!(__raw_readl(REG(RTL_SPI_SFCSR)) & RTL_SPI_SFCSR_RDY))
+	while (!(readl(REG(RTL_SPI_SFCSR)) & RTL_SPI_SFCSR_RDY))
 		cpu_relax();
 }
 static void send4(struct rtspi *rtspi, const u32 *buf)
 {
 	wait_ready(rtspi);
 	set_size(rtspi, 4);
-	__raw_writel(*buf, REG(RTL_SPI_SFDR));
+	writel(*buf, REG(RTL_SPI_SFDR));
 }
 
 static void send1(struct rtspi *rtspi, const u8 *buf)
 {
 	wait_ready(rtspi);
 	set_size(rtspi, 1);
-	__raw_writel(buf[0] << 24, REG(RTL_SPI_SFDR));
+	writel(buf[0] << 24, REG(RTL_SPI_SFDR));
 }
 
 static void rcv4(struct rtspi *rtspi, u32 *buf)
 {
 	wait_ready(rtspi);
 	set_size(rtspi, 4);
-	*buf = __raw_readl(REG(RTL_SPI_SFDR));
+	*buf = readl(REG(RTL_SPI_SFDR));
 }
 
 static void rcv1(struct rtspi *rtspi, u8 *buf)
 {
 	wait_ready(rtspi);
 	set_size(rtspi, 1);
-	*buf = __raw_readl(REG(RTL_SPI_SFDR)) >> 24;
+	*buf = readl(REG(RTL_SPI_SFDR)) >> 24;
 }
 
 static int transfer_one(struct spi_controller *ctrl, struct spi_device *spi,
@@ -147,14 +135,16 @@ static void init_hw(struct rtspi *rtspi)
 	u32 value;
 
 	/* Turn on big-endian byte ordering */
-	value = __raw_readl(REG(RTL_SPI_SFCR));
+	value = readl(REG(RTL_SPI_SFCR));
 	value |= RTL_SPI_SFCR_RBO | RTL_SPI_SFCR_WBO;
-	__raw_writel(value, REG(RTL_SPI_SFCR));
+	writel(value, REG(RTL_SPI_SFCR));
 
-	/* CHIP_SEL is only used in MMIO mode; CSB0/CSB1 are active low. */
-	value = 0;
-	value |= RTL_SPI_SFCSR_CSB0 | RTL_SPI_SFCSR_CSB1;
-	__raw_writel(value, REG(RTL_SPI_SFCSR));
+	value = readl(REG(RTL_SPI_SFCSR));
+	/* Permanently disable CS1, since it's never used */
+	value |= RTL_SPI_SFCSR_CSB1;
+	/* Select CS0 for use */
+	value &= RTL_SPI_SFCSR_CS;
+	writel(value, REG(RTL_SPI_SFCSR));
 }
 
 static int realtek_rtl_spi_probe(struct platform_device *pdev)
@@ -179,10 +169,10 @@ static int realtek_rtl_spi_probe(struct platform_device *pdev)
 
 	init_hw(rtspi);
 
+	ctrl->dev.of_node = pdev->dev.of_node;
 	ctrl->flags = SPI_CONTROLLER_HALF_DUPLEX;
 	ctrl->set_cs = rt_set_cs;
 	ctrl->transfer_one = transfer_one;
-	ctrl->num_chipselect = 2;
 
 	err = devm_spi_register_controller(&pdev->dev, ctrl);
 	if (err) {

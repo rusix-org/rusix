@@ -26,7 +26,6 @@
 #include <linux/of_address.h>
 #include <linux/of_pci.h>
 
-#include "pci-host-common.h"
 #include "../pci.h"
 #include "../pci-bridge-emul.h"
 
@@ -256,6 +255,9 @@ enum {
 #define PIO_RETRY_CNT			750000 /* 1.5 s */
 #define PIO_RETRY_DELAY			2 /* 2 us*/
 
+#define LINK_WAIT_MAX_RETRIES		10
+#define LINK_WAIT_USLEEP_MIN		90000
+#define LINK_WAIT_USLEEP_MAX		100000
 #define RETRAIN_WAIT_MAX_RETRIES	10
 #define RETRAIN_WAIT_USLEEP_US		2000
 
@@ -347,13 +349,11 @@ static int advk_pcie_wait_for_link(struct advk_pcie *pcie)
 	int retries;
 
 	/* check if the link is up or not */
-	for (retries = 0; retries < PCIE_LINK_WAIT_MAX_RETRIES; retries++) {
-		if (advk_pcie_link_up(pcie)) {
-			pci_host_common_link_train_delay(pcie->link_gen);
+	for (retries = 0; retries < LINK_WAIT_MAX_RETRIES; retries++) {
+		if (advk_pcie_link_up(pcie))
 			return 0;
-		}
 
-		msleep(PCIE_LINK_WAIT_SLEEP_MS);
+		usleep_range(LINK_WAIT_USLEEP_MIN, LINK_WAIT_USLEEP_MAX);
 	}
 
 	return -ETIMEDOUT;
@@ -1719,7 +1719,7 @@ static int advk_pcie_setup_phy(struct advk_pcie *pcie)
 
 	/* Old bindings miss the PHY handle */
 	if (IS_ERR(pcie->phy)) {
-		dev_warn(dev, "PHY unavailable (%pe)\n", pcie->phy);
+		dev_warn(dev, "PHY unavailable (%ld)\n", PTR_ERR(pcie->phy));
 		pcie->phy = NULL;
 		return 0;
 	}
@@ -1864,25 +1864,28 @@ static int advk_pcie_probe(struct platform_device *pdev)
 	ret = advk_sw_pci_bridge_init(pcie);
 	if (ret) {
 		dev_err(dev, "Failed to register emulated root PCI bridge\n");
-		goto err_disable_phy;
+		return ret;
 	}
 
 	ret = advk_pcie_init_irq_domain(pcie);
 	if (ret) {
 		dev_err(dev, "Failed to initialize irq\n");
-		goto err_cleanup_bridge;
+		return ret;
 	}
 
 	ret = advk_pcie_init_msi_irq_domain(pcie);
 	if (ret) {
 		dev_err(dev, "Failed to initialize irq\n");
-		goto err_remove_irq_domain;
+		advk_pcie_remove_irq_domain(pcie);
+		return ret;
 	}
 
 	ret = advk_pcie_init_rp_irq_domain(pcie);
 	if (ret) {
 		dev_err(dev, "Failed to initialize irq\n");
-		goto err_remove_msi_irq_domain;
+		advk_pcie_remove_msi_irq_domain(pcie);
+		advk_pcie_remove_irq_domain(pcie);
+		return ret;
 	}
 
 	bridge->sysdata = pcie;
@@ -1890,22 +1893,14 @@ static int advk_pcie_probe(struct platform_device *pdev)
 	bridge->map_irq = advk_pcie_map_irq;
 
 	ret = pci_host_probe(bridge);
-	if (ret < 0)
-		goto err_remove_rp_irq_domain;
+	if (ret < 0) {
+		advk_pcie_remove_rp_irq_domain(pcie);
+		advk_pcie_remove_msi_irq_domain(pcie);
+		advk_pcie_remove_irq_domain(pcie);
+		return ret;
+	}
 
 	return 0;
-
-err_remove_rp_irq_domain:
-	advk_pcie_remove_rp_irq_domain(pcie);
-err_remove_msi_irq_domain:
-	advk_pcie_remove_msi_irq_domain(pcie);
-err_remove_irq_domain:
-	advk_pcie_remove_irq_domain(pcie);
-err_cleanup_bridge:
-	pci_bridge_emul_cleanup(&pcie->bridge);
-err_disable_phy:
-	advk_pcie_disable_phy(pcie);
-	return ret;
 }
 
 static void advk_pcie_remove(struct platform_device *pdev)

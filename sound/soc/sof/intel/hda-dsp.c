@@ -70,7 +70,6 @@ static void hda_get_interfaces(struct snd_sof_dev *sdev, u32 *interface_mask)
 		break;
 	case SOF_INTEL_ACE_2_0:
 	case SOF_INTEL_ACE_3_0:
-	case SOF_INTEL_ACE_4_0:
 		interface_mask[SOF_DAI_DSP_ACCESS] =
 			BIT(SOF_DAI_INTEL_SSP) | BIT(SOF_DAI_INTEL_DMIC) |
 			BIT(SOF_DAI_INTEL_HDA) | BIT(SOF_DAI_INTEL_ALH);
@@ -1114,7 +1113,11 @@ static int hda_dsp_s5_quirk(struct snd_sof_dev *sdev)
 	usleep_range(500, 1000);
 
 	/* Restore state for shutdown, back to reset */
-	return hda_dsp_ctrl_link_reset(sdev, true);
+	ret = hda_dsp_ctrl_link_reset(sdev, true);
+	if (ret < 0)
+		return ret;
+
+	return ret;
 }
 
 int hda_dsp_shutdown_dma_flush(struct snd_sof_dev *sdev)

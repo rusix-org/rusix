@@ -3,6 +3,7 @@
 
 . "$(cd "$(dirname "$0")" && pwd)"/test_common.sh
 
+TID="stripe_01"
 ERR_CODE=0
 
 if ! _have_program fio; then
@@ -21,5 +22,5 @@ _check_add_dev $TID $?
 _run_fio_verify_io --filename=/dev/ublkb"${dev_id}" --size=512M
 ERR_CODE=$?
 
-_cleanup_test
+_cleanup_test "stripe"
 _show_result $TID $ERR_CODE

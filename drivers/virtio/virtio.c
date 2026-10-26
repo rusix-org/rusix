@@ -264,8 +264,6 @@ void virtio_reset_device(struct virtio_device *dev)
 #endif
 
 	dev->config->reset(dev);
-	/* Flush pending VQ/configuration callbacks. */
-	virtio_synchronize_cbs(dev);
 }
 EXPORT_SYMBOL_GPL(virtio_reset_device);
 
@@ -450,14 +448,6 @@ static void virtio_dev_shutdown(struct device *_d)
 	virtio_device_shutdown(dev);
 }
 
-static int virtio_dev_num_vf(struct device *dev)
-{
-	struct virtio_device *vdev = dev_to_virtio(dev);
-
-	return dev_num_vf(vdev->dev.parent);
-}
-
-
 static const struct bus_type virtio_bus = {
 	.name  = "virtio",
 	.match = virtio_dev_match,
@@ -467,7 +457,6 @@ static const struct bus_type virtio_bus = {
 	.remove = virtio_dev_remove,
 	.irq_get_affinity = virtio_irq_get_affinity,
 	.shutdown = virtio_dev_shutdown,
-	.num_vf = virtio_dev_num_vf,
 };
 
 int __register_virtio_driver(struct virtio_driver *driver, struct module *owner)

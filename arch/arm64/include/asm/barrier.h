@@ -7,7 +7,7 @@
 #ifndef __ASM_BARRIER_H
 #define __ASM_BARRIER_H
 
-#ifndef __ASSEMBLER__
+#ifndef __ASSEMBLY__
 
 #include <linux/kasan-checks.h>
 
@@ -221,6 +221,6 @@ do {									\
 
 #include <asm-generic/barrier.h>
 
-#endif	/* __ASSEMBLER__ */
+#endif	/* __ASSEMBLY__ */
 
 #endif	/* __ASM_BARRIER_H */

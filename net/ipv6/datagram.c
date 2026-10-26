@@ -72,12 +72,12 @@ static void ip6_datagram_flow_key_init(struct flowi6 *fl6,
 int ip6_datagram_dst_update(struct sock *sk, bool fix_sk_saddr)
 {
 	struct ip6_flowlabel *flowlabel = NULL;
+	struct in6_addr *final_p, final;
+	struct ipv6_txoptions *opt;
+	struct dst_entry *dst;
 	struct inet_sock *inet = inet_sk(sk);
 	struct ipv6_pinfo *np = inet6_sk(sk);
-	struct ipv6_txoptions *opt;
-	struct in6_addr *final_p;
-	struct dst_entry *dst;
-	struct flowi6 *fl6;
+	struct flowi6 fl6;
 	int err = 0;
 
 	if (inet6_test_bit(SNDFLOW, sk) &&
@@ -86,15 +86,14 @@ int ip6_datagram_dst_update(struct sock *sk, bool fix_sk_saddr)
 		if (IS_ERR(flowlabel))
 			return -EINVAL;
 	}
-	fl6 = &inet_sk(sk)->cork.fl.u.ip6;
-	ip6_datagram_flow_key_init(fl6, sk);
+	ip6_datagram_flow_key_init(&fl6, sk);
 
 	rcu_read_lock();
 	opt = flowlabel ? flowlabel->opt : rcu_dereference(np->opt);
-	final_p = fl6_update_dst(fl6, opt, &np->final);
+	final_p = fl6_update_dst(&fl6, opt, &final);
 	rcu_read_unlock();
 
-	dst = ip6_dst_lookup_flow(sock_net(sk), sk, fl6, final_p);
+	dst = ip6_dst_lookup_flow(sock_net(sk), sk, &fl6, final_p);
 	if (IS_ERR(dst)) {
 		err = PTR_ERR(dst);
 		goto out;
@@ -102,17 +101,17 @@ int ip6_datagram_dst_update(struct sock *sk, bool fix_sk_saddr)
 
 	if (fix_sk_saddr) {
 		if (ipv6_addr_any(&np->saddr))
-			np->saddr = fl6->saddr;
+			np->saddr = fl6.saddr;
 
 		if (ipv6_addr_any(&sk->sk_v6_rcv_saddr)) {
-			sk->sk_v6_rcv_saddr = fl6->saddr;
+			sk->sk_v6_rcv_saddr = fl6.saddr;
 			inet->inet_rcv_saddr = LOOPBACK4_IPV6;
 			if (sk->sk_prot->rehash)
 				sk->sk_prot->rehash(sk);
 		}
 	}
 
-	ip6_sk_dst_store_flow(sk, dst, fl6);
+	ip6_sk_dst_store_flow(sk, dst, &fl6);
 
 out:
 	fl6_sock_release(flowlabel);
@@ -139,7 +138,7 @@ void ip6_datagram_release_cb(struct sock *sk)
 }
 EXPORT_SYMBOL_GPL(ip6_datagram_release_cb);
 
-int __ip6_datagram_connect(struct sock *sk, struct sockaddr_unsized *uaddr,
+int __ip6_datagram_connect(struct sock *sk, struct sockaddr *uaddr,
 			   int addr_len)
 {
 	struct sockaddr_in6	*usin = (struct sockaddr_in6 *) uaddr;
@@ -195,7 +194,7 @@ int __ip6_datagram_connect(struct sock *sk, struct sockaddr_unsized *uaddr,
 		sin.sin_port = usin->sin6_port;
 
 		err = __ip4_datagram_connect(sk,
-					     (struct sockaddr_unsized *)&sin,
+					     (struct sockaddr *) &sin,
 					     sizeof(sin));
 
 ipv4_connected:
@@ -272,7 +271,7 @@ out:
 }
 EXPORT_SYMBOL_GPL(__ip6_datagram_connect);
 
-int ip6_datagram_connect(struct sock *sk, struct sockaddr_unsized *uaddr, int addr_len)
+int ip6_datagram_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 {
 	int res;
 
@@ -283,7 +282,7 @@ int ip6_datagram_connect(struct sock *sk, struct sockaddr_unsized *uaddr, int ad
 }
 EXPORT_SYMBOL_GPL(ip6_datagram_connect);
 
-int ip6_datagram_connect_v6_only(struct sock *sk, struct sockaddr_unsized *uaddr,
+int ip6_datagram_connect_v6_only(struct sock *sk, struct sockaddr *uaddr,
 				 int addr_len)
 {
 	DECLARE_SOCKADDR(struct sockaddr_in6 *, sin6, uaddr);
@@ -1102,7 +1101,7 @@ void __ip6_dgram_sock_seq_show(struct seq_file *seq, struct sock *sp,
 	src   = &sp->sk_v6_rcv_saddr;
 	seq_printf(seq,
 		   "%5d: %08X%08X%08X%08X:%04X %08X%08X%08X%08X:%04X "
-		   "%02X %08X:%08X %02X:%08lX %08X %5u %8d %llu %d 0 %u\n",
+		   "%02X %08X:%08X %02X:%08lX %08X %5u %8d %lu %d %pK %u\n",
 		   bucket,
 		   src->s6_addr32[0], src->s6_addr32[1],
 		   src->s6_addr32[2], src->s6_addr32[3], srcp,
@@ -1115,5 +1114,6 @@ void __ip6_dgram_sock_seq_show(struct seq_file *seq, struct sock *sp,
 		   from_kuid_munged(seq_user_ns(seq), sk_uid(sp)),
 		   0,
 		   sock_i_ino(sp),
-		   refcount_read(&sp->sk_refcnt), sk_drops_read(sp));
+		   refcount_read(&sp->sk_refcnt), sp,
+		   sk_drops_read(sp));
 }

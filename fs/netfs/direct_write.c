@@ -175,16 +175,13 @@ static int netfs_unbuffered_write(struct netfs_io_request *wreq)
 		 */
 		subreq->error = -EAGAIN;
 		trace_netfs_sreq(subreq, netfs_sreq_trace_retry);
-		if (subreq->transferred > 0) {
+		if (subreq->transferred > 0)
 			iov_iter_advance(&wreq->buffer.iter, subreq->transferred);
-			wreq->transferred += subreq->transferred;
-		}
 
 		if (stream->source == NETFS_UPLOAD_TO_SERVER &&
 		    wreq->netfs_ops->retry_request)
 			wreq->netfs_ops->retry_request(wreq, stream);
 
-		__clear_bit(NETFS_SREQ_MADE_PROGRESS, &subreq->flags);
 		__clear_bit(NETFS_SREQ_NEED_RETRY, &subreq->flags);
 		__clear_bit(NETFS_SREQ_BOUNDARY, &subreq->flags);
 		__clear_bit(NETFS_SREQ_FAILED, &subreq->flags);
@@ -198,10 +195,17 @@ static int netfs_unbuffered_write(struct netfs_io_request *wreq)
 
 		netfs_get_subrequest(subreq, netfs_sreq_trace_get_resubmit);
 
-		if (stream->prepare_write)
+		if (stream->prepare_write) {
 			stream->prepare_write(subreq);
-		__set_bit(NETFS_SREQ_IN_PROGRESS, &subreq->flags);
-		netfs_stat(&netfs_n_wh_retry_write_subreq);
+			__set_bit(NETFS_SREQ_IN_PROGRESS, &subreq->flags);
+			netfs_stat(&netfs_n_wh_retry_write_subreq);
+		} else {
+			struct iov_iter source;
+
+			netfs_reset_iter(subreq);
+			source = subreq->io_iter;
+			netfs_reissue_write(stream, subreq, &source);
+		}
 	}
 
 	netfs_unbuffered_write_done(wreq);
@@ -225,9 +229,9 @@ ssize_t netfs_unbuffered_write_iter_locked(struct kiocb *iocb, struct iov_iter *
 						  struct netfs_group *netfs_group)
 {
 	struct netfs_io_request *wreq;
+	unsigned long long start = iocb->ki_pos;
+	unsigned long long end = start + iov_iter_count(iter);
 	ssize_t ret, n;
-	uoff_t start = iocb->ki_pos;
-	uoff_t end = start + iov_iter_count(iter);
 	size_t len = iov_iter_count(iter);
 	bool async = !is_sync_kiocb(iocb);
 
@@ -336,8 +340,8 @@ ssize_t netfs_unbuffered_write_iter(struct kiocb *iocb, struct iov_iter *from)
 	struct inode *inode = mapping->host;
 	struct netfs_inode *ictx = netfs_inode(inode);
 	ssize_t ret;
-	uoff_t pos = iocb->ki_pos;
-	uoff_t end = pos + iov_iter_count(from) - 1;
+	loff_t pos = iocb->ki_pos;
+	unsigned long long end = pos + iov_iter_count(from) - 1;
 
 	_enter("%llx,%zx,%llx", pos, iov_iter_count(from), i_size_read(inode));
 
@@ -390,10 +394,8 @@ ssize_t netfs_unbuffered_write_iter(struct kiocb *iocb, struct iov_iter *from)
 	if (ret < 0)
 		goto out;
 	end = iocb->ki_pos + iov_iter_count(from);
-	spin_lock(&inode->i_lock);
-	if (end > ictx->_zero_point)
-		netfs_write_zero_point(inode, end);
-	spin_unlock(&inode->i_lock);
+	if (end > ictx->zero_point)
+		ictx->zero_point = end;
 
 	fscache_invalidate(netfs_i_cookie(ictx), NULL, i_size_read(inode),
 			   FSCACHE_INVAL_DIO_WRITE);

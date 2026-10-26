@@ -164,7 +164,6 @@ void optc1_program_timing(
 	const enum signal_type signal,
 	bool use_vbios)
 {
-	(void)use_vbios;
 	struct dc_crtc_timing patched_crtc_timing;
 	uint32_t asic_blank_end;
 	uint32_t asic_blank_start;
@@ -375,7 +374,7 @@ void optc1_set_vtg_params(struct timing_generator *optc,
 	if (REG(OTG_INTERLACE_CONTROL)) {
 		if (patched_crtc_timing.flags.INTERLACE == 1) {
 			v_init = v_init / 2;
-			if ((uint32_t)((optc1->vstartup_start/2)*2) > asic_blank_end)
+			if ((optc1->vstartup_start/2)*2 > asic_blank_end)
 				v_fp2 = v_fp2 / 2;
 		}
 	}
@@ -539,10 +538,15 @@ static bool optc1_enable_crtc(struct timing_generator *optc)
 	REG_UPDATE(CONTROL,
 			VTG0_ENABLE, 1);
 
+	REG_SEQ_START();
+
 	/* Enable CRTC */
 	REG_UPDATE_2(OTG_CONTROL,
 			OTG_DISABLE_POINT_CNTL, 3,
 			OTG_MASTER_EN, 1);
+
+	REG_SEQ_SUBMIT();
+	REG_SEQ_WAIT_DONE();
 
 	return true;
 }
@@ -851,8 +855,6 @@ void optc1_set_early_control(
 	struct timing_generator *optc,
 	uint32_t early_cntl)
 {
-	(void)optc;
-	(void)early_cntl;
 	/* asic design change, do not need this control
 	 * empty for share caller logic
 	 */
@@ -1247,7 +1249,6 @@ void optc1_get_crtc_scanoutpos(
 static void optc1_enable_stereo(struct timing_generator *optc,
 	const struct dc_crtc_timing *timing, struct crtc_stereo_flags *flags)
 {
-	(void)timing;
 	struct optc *optc1 = DCN10TG_FROM_TG(optc);
 
 	if (flags) {
@@ -1471,21 +1472,8 @@ bool optc1_configure_crc(struct timing_generator *optc,
 	if (!optc1_is_tg_enabled(optc))
 		return false;
 
-	if (!params->enable || params->reset) {
-		switch (params->crc_eng_inst) {
-		case 0:
-			REG_UPDATE(OTG_CRC_CNTL, OTG_CRC_EN, 0);
-			break;
-		case 1:
-			if (optc1->tg_mask->OTG_CRC1_EN != 0)
-				REG_UPDATE(OTG_CRC_CNTL, OTG_CRC1_EN, 0);
-			else
-				REG_UPDATE(OTG_CRC_CNTL, OTG_CRC_EN, 0);
-			break;
-		default:
-			return false;
-		}
-	}
+	if (!params->enable || params->reset)
+		REG_WRITE(OTG_CRC_CNTL, 0);
 
 	if (!params->enable)
 		return true;
@@ -1541,16 +1529,10 @@ bool optc1_configure_crc(struct timing_generator *optc,
 				OTG_CRC1_WINDOWB_Y_END, params->windowb_y_end);
 
 		/* Set crc mode and selection, and enable.*/
-		if (optc1->tg_mask->OTG_CRC1_EN != 0)
-			REG_UPDATE_3(OTG_CRC_CNTL,
-					OTG_CRC_CONT_EN, params->continuous_mode ? 1 : 0,
-					OTG_CRC1_SELECT, params->selection,
-					OTG_CRC1_EN, 1);
-		else
-			REG_UPDATE_3(OTG_CRC_CNTL,
-					OTG_CRC_CONT_EN, params->continuous_mode ? 1 : 0,
-					OTG_CRC1_SELECT, params->selection,
-					OTG_CRC_EN, 1);
+		REG_UPDATE_3(OTG_CRC_CNTL,
+				OTG_CRC_CONT_EN, params->continuous_mode ? 1 : 0,
+				OTG_CRC1_SELECT, params->selection,
+				OTG_CRC_EN, 1);
 		break;
 	default:
 		return false;
@@ -1581,10 +1563,7 @@ bool optc1_get_crc(struct timing_generator *optc, uint8_t idx,
 	uint32_t field = 0;
 	struct optc *optc1 = DCN10TG_FROM_TG(optc);
 
-	if (idx == 1 && optc1->tg_mask->OTG_CRC1_EN != 0)
-		REG_GET(OTG_CRC_CNTL, OTG_CRC1_EN, &field);
-	else
-		REG_GET(OTG_CRC_CNTL, OTG_CRC_EN, &field);
+	REG_GET(OTG_CRC_CNTL, OTG_CRC_EN, &field);
 
 	/* Early return if CRC is not enabled for this CRTC */
 	if (!field)

@@ -7,8 +7,6 @@
 #include <linux/highmem.h>
 #include <linux/vmalloc.h>
 
-#include <asm/cpuid/api.h>
-
 #include "mmu.h"
 #include "psb_drv.h"
 #include "psb_reg.h"
@@ -160,7 +158,7 @@ static inline uint32_t psb_mmu_mask_pte(uint32_t pfn, int type)
 struct psb_mmu_pd *psb_mmu_alloc_pd(struct psb_mmu_driver *driver,
 				    int trap_pagefaults, int invalid_type)
 {
-	struct psb_mmu_pd *pd = kmalloc_obj(*pd);
+	struct psb_mmu_pd *pd = kmalloc(sizeof(*pd), GFP_KERNEL);
 	uint32_t *v;
 	int i;
 
@@ -262,7 +260,7 @@ void psb_mmu_free_pagedir(struct psb_mmu_pd *pd)
 
 static struct psb_mmu_pt *psb_mmu_alloc_pt(struct psb_mmu_pd *pd)
 {
-	struct psb_mmu_pt *pt = kmalloc_obj(*pt);
+	struct psb_mmu_pt *pt = kmalloc(sizeof(*pt), GFP_KERNEL);
 	void *v;
 	uint32_t clflush_add = pd->driver->clflush_add >> PAGE_SHIFT;
 	uint32_t clflush_count = PAGE_SIZE / clflush_add;
@@ -427,7 +425,7 @@ struct psb_mmu_driver *psb_mmu_driver_init(struct drm_device *dev,
 	struct psb_mmu_driver *driver;
 	struct drm_psb_private *dev_priv = to_drm_psb_private(dev);
 
-	driver = kmalloc_obj(*driver);
+	driver = kmalloc(sizeof(*driver), GFP_KERNEL);
 
 	if (!driver)
 		return NULL;

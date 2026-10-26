@@ -38,8 +38,6 @@
 #include <linux/swap.h>
 #include <linux/sched/mm.h>
 
-#include <drm/drm_print.h>
-
 #include "i915_drv.h"
 #include "i915_gem_ioctls.h"
 #include "i915_gem_object.h"
@@ -109,7 +107,7 @@ static int i915_gem_userptr_get_pages(struct drm_i915_gem_object *obj)
 		return -E2BIG;
 
 	num_pages = obj->base.size >> PAGE_SHIFT;
-	st = kmalloc_obj(*st);
+	st = kmalloc(sizeof(*st), GFP_KERNEL);
 	if (!st)
 		return -ENOMEM;
 
@@ -258,7 +256,7 @@ int i915_gem_object_userptr_submit_init(struct drm_i915_gem_object *obj)
 	if (ret)
 		return ret;
 
-	pvec = kvmalloc_objs(struct page *, num_pages);
+	pvec = kvmalloc_array(num_pages, sizeof(struct page *), GFP_KERNEL);
 	if (!pvec)
 		return -ENOMEM;
 

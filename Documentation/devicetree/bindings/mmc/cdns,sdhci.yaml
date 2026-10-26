@@ -134,6 +134,8 @@ allOf:
           items:
             - description: Host controller registers
             - description: Elba byte-lane enable register for writes
+      required:
+        - resets
     else:
       properties:
         reg:

@@ -33,17 +33,17 @@ static bool afs_lookup_one_filldir(struct dir_context *ctx, const char *name, in
 static bool afs_lookup_filldir(struct dir_context *ctx, const char *name, int nlen,
 			       u64 ino, u32 uniquifier);
 #define AFS_LOOKUP ((filldir_t)0x137UL)
-static int afs_create(const struct mnt_idmap *idmap, struct inode *dir,
-		      struct dentry *dentry, umode_t mode);
-static struct dentry *afs_mkdir(const struct mnt_idmap *idmap, struct inode *dir,
+static int afs_create(struct mnt_idmap *idmap, struct inode *dir,
+		      struct dentry *dentry, umode_t mode, bool excl);
+static struct dentry *afs_mkdir(struct mnt_idmap *idmap, struct inode *dir,
 				struct dentry *dentry, umode_t mode);
 static int afs_rmdir(struct inode *dir, struct dentry *dentry);
 static int afs_unlink(struct inode *dir, struct dentry *dentry);
 static int afs_link(struct dentry *from, struct inode *dir,
 		    struct dentry *dentry);
-static int afs_symlink(const struct mnt_idmap *idmap, struct inode *dir,
+static int afs_symlink(struct mnt_idmap *idmap, struct inode *dir,
 		       struct dentry *dentry, const char *content);
-static int afs_rename(const struct mnt_idmap *idmap, struct inode *old_dir,
+static int afs_rename(struct mnt_idmap *idmap, struct inode *old_dir,
 		      struct dentry *old_dentry, struct inode *new_dir,
 		      struct dentry *new_dentry, unsigned int flags);
 static int afs_dir_writepages(struct address_space *mapping,
@@ -152,7 +152,7 @@ static bool afs_dir_check_block(struct afs_vnode *dvnode, size_t progress,
 				union afs_xdr_dir_block *block)
 {
 	if (block->hdr.magic != AFS_DIR_MAGIC) {
-		pr_warn("%s(%llx): [%zx] bad magic %04x\n",
+		pr_warn("%s(%lx): [%zx] bad magic %04x\n",
 		       __func__, dvnode->netfs.inode.i_ino,
 		       progress, ntohs(block->hdr.magic));
 		trace_afs_dir_check_failed(dvnode, progress);
@@ -218,7 +218,7 @@ static int afs_dir_check(struct afs_vnode *dvnode)
  */
 static int afs_dir_open(struct inode *inode, struct file *file)
 {
-	_enter("{%llu}", inode->i_ino);
+	_enter("{%lu}", inode->i_ino);
 
 	BUILD_BUG_ON(sizeof(union afs_xdr_dir_block) != 2048);
 	BUILD_BUG_ON(sizeof(union afs_xdr_dirent) != 32);
@@ -519,7 +519,7 @@ static int afs_dir_iterate(struct inode *dir, struct dir_context *ctx,
 	int retry_limit = 100;
 	int ret;
 
-	_enter("{%llu},%llx,,", dir->i_ino, ctx->pos);
+	_enter("{%lu},%llx,,", dir->i_ino, ctx->pos);
 
 	do {
 		if (--retry_limit < 0) {
@@ -607,7 +607,7 @@ static int afs_do_lookup_one(struct inode *dir, const struct qstr *name,
 	};
 	int ret;
 
-	_enter("{%llu},{%.*s},", dir->i_ino, name->len, name->name);
+	_enter("{%lu},{%.*s},", dir->i_ino, name->len, name->name);
 
 	/* search the directory */
 	ret = afs_dir_iterate(dir, &cookie.ctx, NULL, _dir_version);
@@ -776,13 +776,13 @@ static struct inode *afs_do_lookup(struct inode *dir, struct dentry *dentry)
 	struct afs_vnode *dvnode = AFS_FS_I(dir), *vnode;
 	struct inode *inode = NULL, *ti;
 	afs_dataversion_t data_version = READ_ONCE(dvnode->status.data_version);
-	bool supports_ibulk, isnew;
+	bool supports_ibulk;
 	long ret;
 	int i;
 
-	_enter("{%llu},%p{%pd},", dir->i_ino, dentry, dentry);
+	_enter("{%lu},%p{%pd},", dir->i_ino, dentry, dentry);
 
-	cookie = kzalloc_obj(struct afs_lookup_cookie);
+	cookie = kzalloc(sizeof(struct afs_lookup_cookie), GFP_KERNEL);
 	if (!cookie)
 		return ERR_PTR(-ENOMEM);
 
@@ -831,8 +831,9 @@ static struct inode *afs_do_lookup(struct inode *dir, struct dentry *dentry)
 
 	/* Need space for examining all the selected files */
 	if (op->nr_files > 2) {
-		op->more_files = kvzalloc_objs(struct afs_vnode_param,
-					       op->nr_files - 2);
+		op->more_files = kvcalloc(op->nr_files - 2,
+					  sizeof(struct afs_vnode_param),
+					  GFP_KERNEL);
 		if (!op->more_files) {
 			afs_op_nomem(op);
 			goto out_op;
@@ -846,7 +847,7 @@ static struct inode *afs_do_lookup(struct inode *dir, struct dentry *dentry)
 			 * callback counters.
 			 */
 			ti = ilookup5_nowait(dir->i_sb, vp->fid.vnode,
-					     afs_ilookup5_test_by_fid, &vp->fid, &isnew);
+					     afs_ilookup5_test_by_fid, &vp->fid);
 			if (!IS_ERR_OR_NULL(ti)) {
 				vnode = AFS_FS_I(ti);
 				vp->dv_before = vnode->status.data_version;
@@ -1310,7 +1311,7 @@ static const struct afs_operation_ops afs_mkdir_operation = {
 /*
  * create a directory on an AFS filesystem
  */
-static struct dentry *afs_mkdir(const struct mnt_idmap *idmap, struct inode *dir,
+static struct dentry *afs_mkdir(struct mnt_idmap *idmap, struct inode *dir,
 				struct dentry *dentry, umode_t mode)
 {
 	struct afs_operation *op;
@@ -1333,7 +1334,7 @@ static struct dentry *afs_mkdir(const struct mnt_idmap *idmap, struct inode *dir
 	op->file[0].modification = true;
 	op->file[0].update_ctime = true;
 	op->dentry	= dentry;
-	op->create.mode	= mode;
+	op->create.mode	= S_IFDIR | mode;
 	op->create.reason = afs_edit_dir_for_mkdir;
 	op->mtime	= current_time(dir);
 	op->ops		= &afs_mkdir_operation;
@@ -1632,8 +1633,8 @@ static const struct afs_operation_ops afs_create_operation = {
 /*
  * create a regular file on an AFS filesystem
  */
-static int afs_create(const struct mnt_idmap *idmap, struct inode *dir,
-		      struct dentry *dentry, umode_t mode)
+static int afs_create(struct mnt_idmap *idmap, struct inode *dir,
+		      struct dentry *dentry, umode_t mode, bool excl)
 {
 	struct afs_operation *op;
 	struct afs_vnode *dvnode = AFS_FS_I(dir);
@@ -1779,7 +1780,7 @@ static const struct afs_operation_ops afs_symlink_operation = {
 /*
  * create a symlink in an AFS filesystem
  */
-static int afs_symlink(const struct mnt_idmap *idmap, struct inode *dir,
+static int afs_symlink(struct mnt_idmap *idmap, struct inode *dir,
 		       struct dentry *dentry, const char *content)
 {
 	struct afs_operation *op;
@@ -1801,7 +1802,7 @@ static int afs_symlink(const struct mnt_idmap *idmap, struct inode *dir,
 		goto error;
 
 	ret = -ENOMEM;
-	symlink = kmalloc_flex(struct afs_symlink, content, clen + 1);
+	symlink = kmalloc_flex(struct afs_symlink, content, clen + 1, GFP_KERNEL);
 	if (!symlink)
 		goto error;
 	refcount_set(&symlink->ref, 1);
@@ -2067,7 +2068,7 @@ static const struct afs_operation_ops afs_rename_exchange_operation = {
 /*
  * rename a file in an AFS filesystem and/or move it between directories
  */
-static int afs_rename(const struct mnt_idmap *idmap, struct inode *old_dir,
+static int afs_rename(struct mnt_idmap *idmap, struct inode *old_dir,
 		      struct dentry *old_dentry, struct inode *new_dir,
 		      struct dentry *new_dentry, unsigned int flags)
 {
@@ -2108,7 +2109,7 @@ static int afs_rename(const struct mnt_idmap *idmap, struct inode *old_dir,
 		goto error;
 
 	ret = -ENOMEM;
-	op->more_files = kvzalloc_objs(struct afs_vnode_param, 2);
+	op->more_files = kvcalloc(2, sizeof(struct afs_vnode_param), GFP_KERNEL);
 	if (!op->more_files)
 		goto error;
 

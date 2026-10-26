@@ -3,7 +3,6 @@
 #include <linux/errno.h>
 #include <linux/file.h>
 #include <linux/io_uring.h>
-#include <linux/time_namespace.h>
 
 #include <trace/events/io_uring.h>
 
@@ -31,48 +30,10 @@ struct io_timeout_rem {
 	u64				addr;
 
 	/* timeout update */
-	ktime_t				time;
+	struct timespec64		ts;
 	u32				flags;
 	bool				ltimeout;
 };
-
-static clockid_t io_flags_to_clock(unsigned flags)
-{
-	switch (flags & IORING_TIMEOUT_CLOCK_MASK) {
-	case IORING_TIMEOUT_BOOTTIME:
-		return CLOCK_BOOTTIME;
-	case IORING_TIMEOUT_REALTIME:
-		return CLOCK_REALTIME;
-	default:
-		/* can't happen, vetted at prep time */
-		WARN_ON_ONCE(1);
-		fallthrough;
-	case 0:
-		return CLOCK_MONOTONIC;
-	}
-}
-
-static int io_parse_user_time(ktime_t *time, u64 arg, unsigned flags)
-{
-	struct timespec64 ts;
-
-	if (flags & IORING_TIMEOUT_IMMEDIATE_ARG) {
-		*time = ns_to_ktime(arg);
-		if (*time < 0)
-			return -EINVAL;
-		goto out;
-	}
-
-	if (get_timespec64(&ts, u64_to_user_ptr(arg)))
-		return -EFAULT;
-	if (ts.tv_sec < 0 || ts.tv_nsec < 0)
-		return -EINVAL;
-	*time = timespec64_to_ktime(ts);
-out:
-	if (flags & IORING_TIMEOUT_ABS)
-		*time = timens_ktime_to_host(io_flags_to_clock(flags), *time);
-	return 0;
-}
 
 static struct io_kiocb *__io_disarm_linked_timeout(struct io_kiocb *req,
 						   struct io_kiocb *link);
@@ -119,7 +80,7 @@ static void io_timeout_complete(struct io_tw_req tw_req, io_tw_token_t tw)
 			/* re-arm timer */
 			raw_spin_lock_irq(&ctx->timeout_lock);
 			list_add(&timeout->list, ctx->timeout_list.prev);
-			hrtimer_start(&data->timer, data->time, data->mode);
+			hrtimer_start(&data->timer, timespec64_to_ktime(data->ts), data->mode);
 			raw_spin_unlock_irq(&ctx->timeout_lock);
 			return;
 		}
@@ -170,14 +131,6 @@ __cold void io_flush_timeouts(struct io_ring_ctx *ctx)
 
 	raw_spin_lock_irq(&ctx->timeout_lock);
 	seq = READ_ONCE(ctx->cached_cq_tail) - atomic_read(&ctx->cq_timeouts);
-
-	/*
-	 * A fired timeout bumps ->cq_timeouts before its CQE is posted, which
-	 * leaves the sequence behind the last flush until it is. No event has
-	 * happened then, see io_timeout().
-	 */
-	if ((s32)(seq - ctx->cq_last_tm_flush) < 0)
-		seq = ctx->cq_last_tm_flush;
 
 	list_for_each_entry_safe(timeout, tmp, &ctx->timeout_list, list) {
 		struct io_kiocb *req = cmd_to_io_kiocb(timeout);
@@ -292,10 +245,6 @@ static struct io_kiocb *__io_disarm_linked_timeout(struct io_kiocb *req,
 	struct io_timeout *timeout = io_kiocb_to_cmd(link, struct io_timeout);
 
 	io_remove_next_linked(req);
-
-	/* If this is NULL, then timer already claimed it and will complete it */
-	if (!timeout->head)
-		return NULL;
 	timeout->head = NULL;
 	if (hrtimer_try_to_cancel(&io->timer) != -1) {
 		list_del(&timeout->list);
@@ -316,8 +265,8 @@ static enum hrtimer_restart io_timeout_fn(struct hrtimer *timer)
 
 	raw_spin_lock_irqsave(&ctx->timeout_lock, flags);
 	list_del_init(&timeout->list);
-	atomic_set(&ctx->cq_timeouts,
-		atomic_read(&ctx->cq_timeouts) + 1);
+	atomic_set(&req->ctx->cq_timeouts,
+		atomic_read(&req->ctx->cq_timeouts) + 1);
 	raw_spin_unlock_irqrestore(&ctx->timeout_lock, flags);
 
 	if (!(data->flags & IORING_TIMEOUT_ETIME_SUCCESS))
@@ -329,29 +278,22 @@ static enum hrtimer_restart io_timeout_fn(struct hrtimer *timer)
 	return HRTIMER_NORESTART;
 }
 
-static struct io_kiocb *io_timeout_find(struct io_ring_ctx *ctx,
-					struct io_cancel_data *cd)
-	__must_hold(&ctx->timeout_lock)
-{
-	struct io_timeout *timeout;
-
-	list_for_each_entry(timeout, &ctx->timeout_list, list) {
-		struct io_kiocb *req = cmd_to_io_kiocb(timeout);
-
-		if (io_cancel_req_match(req, cd))
-			return req;
-	}
-	return NULL;
-}
-
 static struct io_kiocb *io_timeout_extract(struct io_ring_ctx *ctx,
 					   struct io_cancel_data *cd)
 	__must_hold(&ctx->timeout_lock)
 {
-	struct io_kiocb *req = io_timeout_find(ctx, cd);
 	struct io_timeout *timeout;
 	struct io_timeout_data *io;
+	struct io_kiocb *req = NULL;
 
+	list_for_each_entry(timeout, &ctx->timeout_list, list) {
+		struct io_kiocb *tmp = cmd_to_io_kiocb(timeout);
+
+		if (io_cancel_req_match(tmp, cd)) {
+			req = tmp;
+			break;
+		}
+	}
 	if (!req)
 		return ERR_PTR(-ENOENT);
 
@@ -386,14 +328,6 @@ static void io_req_task_link_timeout(struct io_tw_req tw_req, io_tw_token_t tw)
 	int ret;
 
 	if (prev) {
-		/*
-		 * splice the linked timeout out of prev's chain if the regular
-		 * completion path didn't already do it.
-		 */
-		if (prev->link == req)
-			prev->link = req->link;
-		req->link = NULL;
-
 		if (!tw.cancel) {
 			struct io_cancel_data cd = {
 				.ctx		= req->ctx,
@@ -401,9 +335,6 @@ static void io_req_task_link_timeout(struct io_tw_req tw_req, io_tw_token_t tw)
 			};
 
 			ret = io_try_cancel(req->tctx, &cd, 0);
-			/* a number of requests for futex and waitid */
-			if (ret > 0)
-				ret = 0;
 		} else {
 			ret = -ECANCELED;
 		}
@@ -431,14 +362,12 @@ static enum hrtimer_restart io_link_timeout_fn(struct hrtimer *timer)
 
 	/*
 	 * We don't expect the list to be empty, that will only happen if we
-	 * race with the completion of the linked work. Splice of prev is
-	 * done in io_req_task_link_timeout(), if needed.
+	 * race with the completion of the linked work.
 	 */
 	if (prev) {
-		if (!req_ref_inc_not_zero(prev)) {
-			io_remove_next_linked(prev);
+		io_remove_next_linked(prev);
+		if (!req_ref_inc_not_zero(prev))
 			prev = NULL;
-		}
 	}
 	list_del(&timeout->list);
 	timeout->prev = prev;
@@ -451,11 +380,22 @@ static enum hrtimer_restart io_link_timeout_fn(struct hrtimer *timer)
 
 static clockid_t io_timeout_get_clock(struct io_timeout_data *data)
 {
-	return io_flags_to_clock(data->flags);
+	switch (data->flags & IORING_TIMEOUT_CLOCK_MASK) {
+	case IORING_TIMEOUT_BOOTTIME:
+		return CLOCK_BOOTTIME;
+	case IORING_TIMEOUT_REALTIME:
+		return CLOCK_REALTIME;
+	default:
+		/* can't happen, vetted at prep time */
+		WARN_ON_ONCE(1);
+		fallthrough;
+	case 0:
+		return CLOCK_MONOTONIC;
+	}
 }
 
 static int io_linked_timeout_update(struct io_ring_ctx *ctx, __u64 user_data,
-				    ktime_t ts, enum hrtimer_mode mode)
+				    struct timespec64 *ts, enum hrtimer_mode mode)
 	__must_hold(&ctx->timeout_lock)
 {
 	struct io_timeout_data *io;
@@ -476,50 +416,36 @@ static int io_linked_timeout_update(struct io_ring_ctx *ctx, __u64 user_data,
 	io = req->async_data;
 	if (hrtimer_try_to_cancel(&io->timer) == -1)
 		return -EALREADY;
-	if (mode == HRTIMER_MODE_ABS)
-		ts = timens_ktime_to_host(io_timeout_get_clock(io), ts);
 	hrtimer_setup(&io->timer, io_link_timeout_fn, io_timeout_get_clock(io), mode);
-	hrtimer_start(&io->timer, ts, mode);
+	hrtimer_start(&io->timer, timespec64_to_ktime(*ts), mode);
 	return 0;
 }
 
 static int io_timeout_update(struct io_ring_ctx *ctx, __u64 user_data,
-			     ktime_t time, enum hrtimer_mode mode)
+			     struct timespec64 *ts, enum hrtimer_mode mode)
 	__must_hold(&ctx->timeout_lock)
 {
 	struct io_cancel_data cd = { .ctx = ctx, .data = user_data, };
-	struct io_kiocb *req = io_timeout_find(ctx, &cd);
+	struct io_kiocb *req = io_timeout_extract(ctx, &cd);
 	struct io_timeout *timeout = io_kiocb_to_cmd(req, struct io_timeout);
 	struct io_timeout_data *data;
 
-	if (!req)
-		return -ENOENT;
-
-	data = req->async_data;
-	/* multishot requests only make sense with rel values */
-	if ((data->flags & IORING_TIMEOUT_MULTISHOT) && mode == HRTIMER_MODE_ABS)
-		return -EINVAL;
-
-	req = io_timeout_extract(ctx, &cd);
 	if (IS_ERR(req))
 		return PTR_ERR(req);
-	/* for a multishot request this isn't a sequence, keep the repeats */
-	if (!(data->flags & IORING_TIMEOUT_MULTISHOT))
-		timeout->off = 0; /* noseq */
-	if (mode == HRTIMER_MODE_ABS)
-		time = timens_ktime_to_host(io_timeout_get_clock(data), time);
-	data->time = time;
+
+	timeout->off = 0; /* noseq */
+	data = req->async_data;
+	data->ts = *ts;
 
 	list_add_tail(&timeout->list, &ctx->timeout_list);
 	hrtimer_setup(&data->timer, io_timeout_fn, io_timeout_get_clock(data), mode);
-	hrtimer_start(&data->timer, data->time, mode);
+	hrtimer_start(&data->timer, timespec64_to_ktime(data->ts), mode);
 	return 0;
 }
 
 int io_timeout_remove_prep(struct io_kiocb *req, const struct io_uring_sqe *sqe)
 {
 	struct io_timeout_rem *tr = io_kiocb_to_cmd(req, struct io_timeout_rem);
-	int ret;
 
 	if (unlikely(req->flags & (REQ_F_FIXED_FILE | REQ_F_BUFFER_SELECT)))
 		return -EINVAL;
@@ -536,18 +462,12 @@ int io_timeout_remove_prep(struct io_kiocb *req, const struct io_uring_sqe *sqe)
 			return -EINVAL;
 		if (tr->flags & IORING_LINK_TIMEOUT_UPDATE)
 			tr->ltimeout = true;
-		if (tr->flags & ~(IORING_TIMEOUT_UPDATE_MASK |
-				  IORING_TIMEOUT_ABS |
-				  IORING_TIMEOUT_IMMEDIATE_ARG))
+		if (tr->flags & ~(IORING_TIMEOUT_UPDATE_MASK|IORING_TIMEOUT_ABS))
 			return -EINVAL;
-		/*
-		 * The clock is that of the timeout to update, an absolute time
-		 * is converted to the host's view once that has been found.
-		 */
-		ret = io_parse_user_time(&tr->time, READ_ONCE(sqe->addr2),
-					 tr->flags & ~IORING_TIMEOUT_ABS);
-		if (ret)
-			return ret;
+		if (get_timespec64(&tr->ts, u64_to_user_ptr(sqe->addr2)))
+			return -EFAULT;
+		if (tr->ts.tv_sec < 0 || tr->ts.tv_nsec < 0)
+			return -EINVAL;
 	} else if (tr->flags) {
 		/* timeout removal doesn't support flags */
 		return -EINVAL;
@@ -582,9 +502,9 @@ int io_timeout_remove(struct io_kiocb *req, unsigned int issue_flags)
 
 		raw_spin_lock_irq(&ctx->timeout_lock);
 		if (tr->ltimeout)
-			ret = io_linked_timeout_update(ctx, tr->addr, tr->time, mode);
+			ret = io_linked_timeout_update(ctx, tr->addr, &tr->ts, mode);
 		else
-			ret = io_timeout_update(ctx, tr->addr, tr->time, mode);
+			ret = io_timeout_update(ctx, tr->addr, &tr->ts, mode);
 		raw_spin_unlock_irq(&ctx->timeout_lock);
 	}
 
@@ -602,7 +522,6 @@ static int __io_timeout_prep(struct io_kiocb *req,
 	struct io_timeout_data *data;
 	unsigned flags;
 	u32 off = READ_ONCE(sqe->off);
-	int ret;
 
 	if (sqe->addr3 || sqe->__pad2[0])
 		return -EINVAL;
@@ -613,8 +532,7 @@ static int __io_timeout_prep(struct io_kiocb *req,
 	flags = READ_ONCE(sqe->timeout_flags);
 	if (flags & ~(IORING_TIMEOUT_ABS | IORING_TIMEOUT_CLOCK_MASK |
 		      IORING_TIMEOUT_ETIME_SUCCESS |
-		      IORING_TIMEOUT_MULTISHOT |
-		      IORING_TIMEOUT_IMMEDIATE_ARG))
+		      IORING_TIMEOUT_MULTISHOT))
 		return -EINVAL;
 	/* more than one clock specified is invalid, obviously */
 	if (hweight32(flags & IORING_TIMEOUT_CLOCK_MASK) > 1)
@@ -625,8 +543,8 @@ static int __io_timeout_prep(struct io_kiocb *req,
 
 	INIT_LIST_HEAD(&timeout->list);
 	timeout->off = off;
-	if (unlikely(off && !(req->ctx->int_flags & IO_RING_F_OFF_TIMEOUT_USED)))
-		req->ctx->int_flags |= IO_RING_F_OFF_TIMEOUT_USED;
+	if (unlikely(off && !req->ctx->off_timeout_used))
+		req->ctx->off_timeout_used = true;
 	/*
 	 * for multishot reqs w/ fixed nr of repeats, repeats tracks the
 	 * remaining nr
@@ -643,9 +561,11 @@ static int __io_timeout_prep(struct io_kiocb *req,
 	data->req = req;
 	data->flags = flags;
 
-	ret = io_parse_user_time(&data->time, READ_ONCE(sqe->addr), flags);
-	if (ret)
-		return ret;
+	if (get_timespec64(&data->ts, u64_to_user_ptr(sqe->addr)))
+		return -EFAULT;
+
+	if (data->ts.tv_sec < 0 || data->ts.tv_nsec < 0)
+		return -EINVAL;
 
 	data->mode = io_translate_timeout_mode(flags);
 
@@ -681,18 +601,10 @@ int io_timeout(struct io_kiocb *req, unsigned int issue_flags)
 	struct io_timeout *timeout = io_kiocb_to_cmd(req, struct io_timeout);
 	struct io_ring_ctx *ctx = req->ctx;
 	struct io_timeout_data *data = req->async_data;
-	struct io_timeout *first;
 	struct list_head *entry;
-	u32 tail, base, off = timeout->off;
+	u32 tail, off = timeout->off;
 
 	raw_spin_lock_irq(&ctx->timeout_lock);
-
-	/* the list is searched under ->timeout_lock, see io_wq_cancel_seen() */
-	if (__io_wq_cancel_seen(req, issue_flags)) {
-		raw_spin_unlock_irq(&ctx->timeout_lock);
-		io_req_task_queue_fail(req, -ECANCELED);
-		return IOU_ISSUE_SKIP_COMPLETE;
-	}
 
 	/*
 	 * sqe->off holds how many events that need to occur for this
@@ -705,27 +617,13 @@ int io_timeout(struct io_kiocb *req, unsigned int issue_flags)
 	}
 
 	tail = data_race(ctx->cached_cq_tail) - atomic_read(&ctx->cq_timeouts);
-
-	/*
-	 * Update the last seq here in case io_flush_timeouts() hasn't, it only
-	 * gets called once sequences are in use. Leave it alone if there are
-	 * timeouts waiting for one. CQEs may have been posted since the last
-	 * flush, and a target that has been reached must not fall behind it.
-	 */
-	first = list_first_entry_or_null(&ctx->timeout_list, struct io_timeout,
-					 list);
-	if (!first || io_is_timeout_noseq(cmd_to_io_kiocb(first)))
-		ctx->cq_last_tm_flush = tail;
-	base = ctx->cq_last_tm_flush;
-
-	/*
-	 * A fired timeout bumps ->cq_timeouts before its CQE is posted, which
-	 * leaves the sequence behind the last flush until it is. Nothing else
-	 * separates the two then, so count from the flush.
-	 */
-	if ((s32)(tail - base) < 0)
-		tail = base;
 	timeout->target_seq = tail + off;
+
+	/* Update the last seq here in case io_flush_timeouts() hasn't.
+	 * This is safe because ->completion_lock is held, and submissions
+	 * and completions are never mixed in the same ->completion_lock section.
+	 */
+	ctx->cq_last_tm_flush = tail;
 
 	/*
 	 * Insertion sort, ensuring the first entry in the list is always
@@ -737,13 +635,13 @@ int io_timeout(struct io_kiocb *req, unsigned int issue_flags)
 
 		if (io_is_timeout_noseq(nxt))
 			continue;
-		/* no target is behind the last flush, see io_flush_timeouts() */
-		if (timeout->target_seq - base >= nextt->target_seq - base)
+		/* nxt.seq is behind @tail, otherwise would've been completed */
+		if (off >= nextt->target_seq - tail)
 			break;
 	}
 add:
 	list_add(&timeout->list, entry);
-	hrtimer_start(&data->timer, data->time, data->mode);
+	hrtimer_start(&data->timer, timespec64_to_ktime(data->ts), data->mode);
 	raw_spin_unlock_irq(&ctx->timeout_lock);
 	return IOU_ISSUE_SKIP_COMPLETE;
 }
@@ -761,7 +659,8 @@ void io_queue_linked_timeout(struct io_kiocb *req)
 	if (timeout->head) {
 		struct io_timeout_data *data = req->async_data;
 
-		hrtimer_start(&data->timer, data->time, data->mode);
+		hrtimer_start(&data->timer, timespec64_to_ktime(data->ts),
+				data->mode);
 		list_add_tail(&timeout->list, &ctx->ltimeout_list);
 	}
 	raw_spin_unlock_irq(&ctx->timeout_lock);
@@ -785,24 +684,6 @@ static bool io_match_task(struct io_kiocb *head, struct io_uring_task *tctx,
 			return true;
 	}
 	return false;
-}
-
-__cold unsigned int io_timeouts_armed(struct io_ring_ctx *ctx,
-				      struct io_uring_task *tctx)
-{
-	struct io_timeout *timeout;
-	unsigned int nr = 0;
-
-	guard(mutex)(&ctx->uring_lock);
-	raw_spin_lock_irq(&ctx->timeout_lock);
-	list_for_each_entry(timeout, &ctx->timeout_list, list) {
-		struct io_kiocb *req = cmd_to_io_kiocb(timeout);
-
-		if (req->tctx == tctx)
-			nr += io_linked_nr(req);
-	}
-	raw_spin_unlock_irq(&ctx->timeout_lock);
-	return nr;
 }
 
 /* Returns true if we found and killed one or more timeouts */

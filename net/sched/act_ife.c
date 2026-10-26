@@ -300,7 +300,7 @@ static int __add_metainfo(const struct tcf_meta_ops *ops,
 	struct tcf_meta_info *mi = NULL;
 	int ret = 0;
 
-	mi = kzalloc_obj(*mi, atomic ? GFP_ATOMIC : GFP_KERNEL);
+	mi = kzalloc(sizeof(*mi), atomic ? GFP_ATOMIC : GFP_KERNEL);
 	if (!mi)
 		return -ENOMEM;
 
@@ -518,7 +518,7 @@ static int tcf_ife_init(struct net *net, struct nlattr *nla,
 	if (parm->flags & ~IFE_ENCODE)
 		return -EINVAL;
 
-	p = kzalloc_obj(*p);
+	p = kzalloc(sizeof(*p), GFP_KERNEL);
 	if (!p)
 		return -ENOMEM;
 	INIT_LIST_HEAD(&p->metalist);
@@ -737,7 +737,6 @@ static int tcf_ife_decode(struct sk_buff *skb, const struct tc_action *a,
 		u8 *curr_data;
 		u16 mtype;
 		u16 dlen;
-		int ret;
 
 		curr_data = ife_tlv_meta_decode(tlv_data, ifehdr_end, &mtype,
 						&dlen, NULL);
@@ -746,19 +745,13 @@ static int tcf_ife_decode(struct sk_buff *skb, const struct tc_action *a,
 			return TC_ACT_SHOT;
 		}
 
-		ret = find_decode_metaid(skb, p, mtype, dlen, curr_data);
-		if (ret < 0) {
-			/* abuse overlimits to count metadata we cannot
-			 * decode: no ops for it, or the decoder rejected it
+		if (find_decode_metaid(skb, p, mtype, dlen, curr_data)) {
+			/* abuse overlimits to count when we receive metadata
+			 * but dont have an ops for it
 			 */
-			qstats_cpu_overlimit_inc(ife->common.cpu_qstats);
-
-			if (ret == -ENOENT)
-				pr_info_ratelimited("Unknown metaid %d dlen %d\n",
-						    mtype, dlen);
-			else
-				pr_info_ratelimited("Failed to decode metaid %d dlen %d err %d\n",
-						    mtype, dlen, ret);
+			pr_info_ratelimited("Unknown metaid %d dlen %d\n",
+					    mtype, dlen);
+			qstats_overlimit_inc(this_cpu_ptr(ife->common.cpu_qstats));
 		}
 	}
 
@@ -822,7 +815,7 @@ static int tcf_ife_encode(struct sk_buff *skb, const struct tc_action *a,
 		/* abuse overlimits to count when we allow packet
 		 * with no metadata
 		 */
-		qstats_cpu_overlimit_inc(ife->common.cpu_qstats);
+		qstats_overlimit_inc(this_cpu_ptr(ife->common.cpu_qstats));
 		return action;
 	}
 	/* could be stupid policy setup or mtu config

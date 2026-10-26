@@ -13,7 +13,6 @@
 #include <linux/device.h>
 #include <linux/errno.h>
 #include <linux/fs.h>
-#include <linux/hex.h>
 #include <linux/limits.h>
 #include <linux/mm.h>
 #include <linux/slab.h>
@@ -147,7 +146,7 @@ int parse_int_array(const char *buf, size_t count, int **array)
 	if (!nints)
 		return -ENOENT;
 
-	ints = kzalloc_objs(*ints, nints + 1);
+	ints = kcalloc(nints + 1, sizeof(*ints), GFP_KERNEL);
 	if (!ints)
 		return -ENOMEM;
 
@@ -752,7 +751,7 @@ EXPORT_SYMBOL_GPL(kstrdup_and_replace);
  * kasprintf_strarray - allocate and fill array of sequential strings
  * @gfp: flags for the slab allocator
  * @prefix: prefix to be used
- * @n: number of strings to be allocated and filled
+ * @n: amount of lines to be allocated and filled
  *
  * Allocates and fills @n strings using pattern "%s-%zu", where prefix
  * is provided by caller. The caller is responsible to free them with
@@ -765,7 +764,7 @@ char **kasprintf_strarray(gfp_t gfp, const char *prefix, size_t n)
 	char **names;
 	size_t i;
 
-	names = kcalloc(n, sizeof(char *), gfp);
+	names = kcalloc(n + 1, sizeof(char *), gfp);
 	if (!names)
 		return NULL;
 
@@ -805,7 +804,7 @@ void kfree_strarray(char **array, size_t n)
 EXPORT_SYMBOL_GPL(kfree_strarray);
 
 struct strarray {
-	char **array __counted_by_ptr(n);
+	char **array;
 	size_t n;
 };
 
@@ -824,13 +823,13 @@ char **devm_kasprintf_strarray(struct device *dev, const char *prefix, size_t n)
 	if (!ptr)
 		return ERR_PTR(-ENOMEM);
 
-	ptr->n = n;
 	ptr->array = kasprintf_strarray(GFP_KERNEL, prefix, n);
 	if (!ptr->array) {
 		devres_free(ptr);
 		return ERR_PTR(-ENOMEM);
 	}
 
+	ptr->n = n;
 	devres_add(dev, ptr);
 
 	return ptr->array;

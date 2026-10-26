@@ -169,8 +169,6 @@
 			reg = <0>;
 			interrupts-extended = <&gpio7 5 IRQ_TYPE_LEVEL_LOW>;
 			reset-gpios = <&gpio7 10 GPIO_ACTIVE_LOW>;
-			reset-assert-us = <10000>;
-			reset-deassert-us = <300>;
 		};
 	};
 };
@@ -320,12 +318,12 @@
 			function = "avb0";
 		};
 
-		pins-mdio {
+		pins_mdio {
 			groups = "avb0_mdio";
 			drive-strength = <21>;
 		};
 
-		pins-mii {
+		pins_mii {
 			groups = "avb0_rgmii";
 			drive-strength = <21>;
 		};
@@ -368,7 +366,7 @@
 		function = "qspi0";
 	};
 
-	scif_clk_pins: scif-clk {
+	scif_clk_pins: scif_clk {
 		groups = "scif_clk";
 		function = "scif_clk";
 	};

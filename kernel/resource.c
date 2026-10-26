@@ -48,14 +48,6 @@ struct resource iomem_resource = {
 };
 EXPORT_SYMBOL(iomem_resource);
 
-struct resource soft_reserve_resource = {
-	.name	= "Soft Reserved",
-	.start	= 0,
-	.end	= -1,
-	.desc	= IORES_DESC_SOFT_RESERVED,
-	.flags	= IORESOURCE_MEM,
-};
-
 static DEFINE_RWLOCK(resource_lock);
 
 /*
@@ -90,7 +82,7 @@ static struct resource *next_resource(struct resource *p, bool skip_children,
 
 #ifdef CONFIG_PROC_FS
 
-enum { MAX_IORES_LEVEL = 8 };
+enum { MAX_IORES_LEVEL = 5 };
 
 static void *r_start(struct seq_file *m, loff_t *pos)
 	__acquires(resource_lock)
@@ -182,7 +174,7 @@ static void free_resource(struct resource *res)
 
 static struct resource *alloc_resource(gfp_t flags)
 {
-	return kzalloc_obj(struct resource, flags);
+	return kzalloc(sizeof(struct resource), flags);
 }
 
 /* Return the conflict entry if you can't request it */
@@ -329,14 +321,13 @@ static bool is_type_match(struct resource *p, unsigned long flags, unsigned long
 }
 
 /**
- * find_next_res - Finds the lowest resource that covers part of
- *		   [@start..@end].
+ * find_next_iomem_res - Finds the lowest iomem resource that covers part of
+ *			 [@start..@end].
  *
  * If a resource is found, returns 0 and @*res is overwritten with the part
  * of the resource that's within [@start..@end]; if none is found, returns
  * -ENODEV.  Returns -EINVAL for invalid parameters.
  *
- * @parent:	resource tree root to search
  * @start:	start address of the resource searched for
  * @end:	end address of same resource
  * @flags:	flags which the resource must have
@@ -346,9 +337,9 @@ static bool is_type_match(struct resource *p, unsigned long flags, unsigned long
  * The caller must specify @start, @end, @flags, and @desc
  * (which may be IORES_DESC_NONE).
  */
-static int find_next_res(struct resource *parent, resource_size_t start,
-			 resource_size_t end, unsigned long flags,
-			 unsigned long desc, struct resource *res)
+static int find_next_iomem_res(resource_size_t start, resource_size_t end,
+			       unsigned long flags, unsigned long desc,
+			       struct resource *res)
 {
 	/* Skip children until we find a top level range that matches */
 	bool skip_children = true;
@@ -362,7 +353,7 @@ static int find_next_res(struct resource *parent, resource_size_t start,
 
 	read_lock(&resource_lock);
 
-	for_each_resource(parent, p, skip_children) {
+	for_each_resource(&iomem_resource, p, skip_children) {
 		/* If we passed the resource we are looking for, stop */
 		if (p->start > end) {
 			p = NULL;
@@ -399,23 +390,16 @@ static int find_next_res(struct resource *parent, resource_size_t start,
 	return p ? 0 : -ENODEV;
 }
 
-static int find_next_iomem_res(resource_size_t start, resource_size_t end,
-			       unsigned long flags, unsigned long desc,
-			       struct resource *res)
-{
-	return find_next_res(&iomem_resource, start, end, flags, desc, res);
-}
-
-static int walk_res_desc(struct resource *parent, resource_size_t start,
-			 resource_size_t end, unsigned long flags,
-			 unsigned long desc, void *arg,
-			 int (*func)(struct resource *, void *))
+static int __walk_iomem_res_desc(resource_size_t start, resource_size_t end,
+				 unsigned long flags, unsigned long desc,
+				 void *arg,
+				 int (*func)(struct resource *, void *))
 {
 	struct resource res;
 	int ret = -EINVAL;
 
 	while (start < end &&
-	       !find_next_res(parent, start, end, flags, desc, &res)) {
+	       !find_next_iomem_res(start, end, flags, desc, &res)) {
 		ret = (*func)(&res, arg);
 		if (ret)
 			break;
@@ -425,15 +409,6 @@ static int walk_res_desc(struct resource *parent, resource_size_t start,
 
 	return ret;
 }
-
-static int __walk_iomem_res_desc(resource_size_t start, resource_size_t end,
-				 unsigned long flags, unsigned long desc,
-				 void *arg,
-				 int (*func)(struct resource *, void *))
-{
-	return walk_res_desc(&iomem_resource, start, end, flags, desc, arg, func);
-}
-
 
 /**
  * walk_iomem_res_desc - Walks through iomem resources and calls func()
@@ -458,18 +433,6 @@ int walk_iomem_res_desc(unsigned long desc, unsigned long flags, u64 start,
 	return __walk_iomem_res_desc(start, end, flags, desc, arg, func);
 }
 EXPORT_SYMBOL_GPL(walk_iomem_res_desc);
-
-/*
- * In support of device drivers claiming Soft Reserved resources, walk the Soft
- * Reserved resource deferral tree.
- */
-int walk_soft_reserve_res(u64 start, u64 end, void *arg,
-			  int (*func)(struct resource *, void *))
-{
-	return walk_res_desc(&soft_reserve_resource, start, end, IORESOURCE_MEM,
-			     IORES_DESC_SOFT_RESERVED, arg, func);
-}
-EXPORT_SYMBOL_GPL(walk_soft_reserve_res);
 
 /*
  * This function calls the @func callback against all memory ranges of type
@@ -502,7 +465,7 @@ int walk_system_ram_res_rev(u64 start, u64 end, void *arg,
 	int ret = -1;
 
 	/* create a list */
-	rams = kvzalloc_objs(struct resource, rams_size);
+	rams = kvcalloc(rams_size, sizeof(struct resource), GFP_KERNEL);
 	if (!rams)
 		return ret;
 
@@ -693,18 +656,6 @@ int region_intersects(resource_size_t start, size_t size, unsigned long flags,
 }
 EXPORT_SYMBOL_GPL(region_intersects);
 
-/*
- * Check if the provided range is registered in the Soft Reserved resource
- * deferral tree for driver consideration.
- */
-int region_intersects_soft_reserve(resource_size_t start, size_t size)
-{
-	guard(read_lock)(&resource_lock);
-	return __region_intersects(&soft_reserve_resource, start, size,
-				   IORESOURCE_MEM, IORES_DESC_SOFT_RESERVED);
-}
-EXPORT_SYMBOL_GPL(region_intersects_soft_reserve);
-
 void __weak arch_remove_reservations(struct resource *avail)
 {
 }
@@ -727,46 +678,45 @@ static int __find_resource_space(struct resource *root, struct resource *old,
 				 struct resource_constraint *constraint)
 {
 	struct resource *this = root->child;
-	struct resource full_avail = *new, avail, alloc;
+	struct resource tmp = *new, avail, alloc;
 	resource_alignf alignf = constraint->alignf;
 
-	full_avail.start = root->start;
+	tmp.start = root->start;
 	/*
 	 * Skip past an allocated resource that starts at 0, since the assignment
-	 * of this->start - 1 to full_avail->end below would cause an underflow.
+	 * of this->start - 1 to tmp->end below would cause an underflow.
 	 */
 	if (this && this->start == root->start) {
-		full_avail.start = (this == old) ? old->start : this->end + 1;
+		tmp.start = (this == old) ? old->start : this->end + 1;
 		this = this->sibling;
 	}
 	for(;;) {
 		if (this)
-			full_avail.end = (this == old) ?  this->end : this->start - 1;
+			tmp.end = (this == old) ?  this->end : this->start - 1;
 		else
-			full_avail.end = root->end;
+			tmp.end = root->end;
 
-		if (full_avail.end < full_avail.start)
+		if (tmp.end < tmp.start)
 			goto next;
 
-		resource_clip(&full_avail, constraint->min, constraint->max);
-		arch_remove_reservations(&full_avail);
+		resource_clip(&tmp, constraint->min, constraint->max);
+		arch_remove_reservations(&tmp);
 
 		/* Check for overflow after ALIGN() */
-		avail.start = ALIGN(full_avail.start, constraint->align);
-		avail.end = full_avail.end;
-		avail.flags = new->flags;
-		if (avail.start >= full_avail.start) {
+		avail.start = ALIGN(tmp.start, constraint->align);
+		avail.end = tmp.end;
+		avail.flags = new->flags & ~IORESOURCE_UNSET;
+		if (avail.start >= tmp.start) {
 			alloc.flags = avail.flags;
 			if (alignf) {
 				alloc.start = alignf(constraint->alignf_data,
-						     &avail, &full_avail,
-						     size, constraint->align);
+						     &avail, size, constraint->align);
 			} else {
 				alloc.start = avail.start;
 			}
 			alloc.end = alloc.start + size - 1;
 			if (alloc.start <= alloc.end &&
-			    __resource_contains_unbound(&full_avail, &alloc)) {
+			    resource_contains(&avail, &alloc)) {
 				new->start = alloc.start;
 				new->end = alloc.end;
 				return 0;
@@ -777,7 +727,7 @@ next:		if (!this || this->end == root->end)
 			break;
 
 		if (this != old)
-			full_avail.start = this->end + 1;
+			tmp.start = this->end + 1;
 		this = this->sibling;
 	}
 	return -EBUSY;
@@ -1238,7 +1188,7 @@ reserve_region_with_split(struct resource *root, resource_size_t start,
  *
  * Returns alignment on success, 0 (invalid alignment) on failure.
  */
-resource_size_t resource_alignment(const struct resource *res)
+resource_size_t resource_alignment(struct resource *res)
 {
 	switch (res->flags & (IORESOURCE_SIZEALIGN | IORESOURCE_STARTALIGN)) {
 	case IORESOURCE_SIZEALIGN:
@@ -1859,7 +1809,7 @@ int iomem_map_sanity_check(resource_size_t addr, unsigned long size)
 		if (p->flags & IORESOURCE_BUSY)
 			continue;
 
-		pr_debug("resource sanity check: requesting [mem %pa-%pa], which spans more than %s %pR\n",
+		pr_warn("resource sanity check: requesting [mem %pa-%pa], which spans more than %s %pR\n",
 			&addr, &end, p->name, p);
 		err = -1;
 		break;

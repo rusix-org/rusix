@@ -15,6 +15,8 @@ general guides
    kgdb
    userspace_debugging_guide
 
+.. only::  subproject and html
+
 subsystem specific guides
 -------------------------
 
@@ -22,6 +24,13 @@ subsystem specific guides
    :maxdepth: 1
 
    media_specific_debugging_guide
+
+.. only::  subproject and html
+
+   Indices
+   =======
+
+   * :ref:`genindex`
 
 General debugging advice
 ========================

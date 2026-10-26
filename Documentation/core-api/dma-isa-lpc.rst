@@ -115,18 +115,17 @@ sure that all data has been transferred.
 
 Example::
 
-	unsigned long flags;
-	int residue;
+	int flags, residue;
 
 	flags = claim_dma_lock();
 
-	clear_dma_ff(channel);
+	clear_dma_ff();
 
 	set_dma_mode(channel, DMA_MODE_WRITE);
 	set_dma_addr(channel, phys_addr);
 	set_dma_count(channel, num_bytes);
 
-	enable_dma(channel);
+	dma_enable(channel);
 
 	release_dma_lock(flags);
 
@@ -134,9 +133,9 @@ Example::
 
 	flags = claim_dma_lock();
 
-	disable_dma(channel);
+	dma_disable(channel);
 
-	residue = get_dma_residue(channel);
+	residue = dma_get_residue(channel);
 	if (residue != 0)
 		printk(KERN_ERR "driver: Incomplete DMA transfer!"
 			" %d bytes left!\n", residue);

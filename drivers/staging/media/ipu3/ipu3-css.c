@@ -290,6 +290,7 @@ fail:
 
 void imgu_css_set_powerdown(struct device *dev, void __iomem *base)
 {
+	dev_dbg(dev, "%s\n", __func__);
 	/* wait for cio idle signal */
 	if (imgu_hw_wait(base, IMGU_REG_CIO_GATE_BURST_STATE,
 			 IMGU_CIO_GATE_BURST_MASK, 0))
@@ -1701,7 +1702,7 @@ int imgu_css_fmt_try(struct imgu_css *css,
 	struct v4l2_pix_format_mplane *in, *out, *vf;
 	int i, s, ret;
 
-	q = kzalloc_objs(struct imgu_css_queue, IPU3_CSS_QUEUES);
+	q = kcalloc(IPU3_CSS_QUEUES, sizeof(struct imgu_css_queue), GFP_KERNEL);
 	if (!q)
 		return -ENOMEM;
 

@@ -47,18 +47,12 @@ $(rq-offsets-file): kernel/sched/rq-offsets.s FORCE
 
 # Check for missing system calls
 
-missing-syscalls-file := .tmp_missing-syscalls$(missing_syscalls_instance)
-
-targets += $(missing-syscalls-file)
-
-quiet_cmd_syscalls = CALL    $< $(addprefix for ,$(missing_syscalls_instance))
-      cmd_syscalls = DEPFILE=$(depfile) $(CONFIG_SHELL) $< $(CC) $(c_flags) $(missing_syscalls_flags); touch $@
-
-$(missing-syscalls-file): scripts/checksyscalls.sh $(rq-offsets-file) FORCE
-	$(call if_changed_dep,syscalls)
+quiet_cmd_syscalls = CALL    $<
+      cmd_syscalls = $(CONFIG_SHELL) $< $(CC) $(c_flags) $(missing_syscalls_flags)
 
 PHONY += missing-syscalls
-missing-syscalls: $(missing-syscalls-file)
+missing-syscalls: scripts/checksyscalls.sh $(rq-offsets-file)
+	$(call cmd,syscalls)
 
 # Check the manual modification of atomic headers
 

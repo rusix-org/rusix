@@ -9,10 +9,9 @@
 #
 
 hostprogs	:= tools/mkbb tools/objstrip
-targets		:= vmlinuz vmlinux \
+targets		:= vmlinux.gz vmlinux \
 		   vmlinux.nh tools/lxboot tools/bootlx tools/bootph \
-		   tools/bootpzh bootloader bootpheader bootpzheader
-subdir-		:= compressed
+		   tools/bootpzh bootloader bootpheader bootpzheader 
 OBJSTRIP	:= $(obj)/tools/objstrip
 
 KBUILD_HOSTCFLAGS := -Wall -I$(objtree)/usr/include
@@ -39,14 +38,9 @@ ifdef INITRD
 	cat $(INITRD) >> $@
 endif
 
-# Self-extracting compressed kernel image: a small ELF stub (see
-# compressed/) with the real vmlinux linked in compressed, which aboot
-# loads and enters like a plain vmlinux.
-$(obj)/compressed/vmlinux: vmlinux FORCE
-	$(Q)$(MAKE) $(build)=$(obj)/compressed $@
-
-$(obj)/vmlinuz: $(obj)/compressed/vmlinux FORCE
-	$(call if_changed,copy)
+# Compressed kernel image
+$(obj)/vmlinux.gz: $(obj)/vmlinux FORCE
+	$(call if_changed,gzip)
 	@echo '  Kernel $@ is ready'
 
 $(obj)/main.o: $(obj)/ksize.h
@@ -91,7 +85,7 @@ $(obj)/vmlinux.nh: vmlinux $(OBJSTRIP) FORCE
 	$(call if_changed,objstrip)
 
 $(obj)/vmlinux.nh.gz: $(obj)/vmlinux.nh FORCE
-	+$(call if_changed,gzip)
+	$(call if_changed,gzip)
 
 $(obj)/tools/lxboot: $(obj)/bootloader $(OBJSTRIP) FORCE
 	$(call if_changed,objstrip)

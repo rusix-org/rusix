@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause */
 /*
- * Copyright (C) 2024-2026 Intel Corporation
+ * Copyright (C) 2024-2025 Intel Corporation
  */
 #ifndef __iwl_mld_scan_h__
 #define __iwl_mld_scan_h__
@@ -112,7 +112,6 @@ enum iwl_mld_traffic_load {
  * @traffic_load.status: The current traffic load status, see
  *	&enum iwl_mld_traffic_load
  * @cmd_size: size of %cmd.
- * @cmd_ver: version of the scan command format.
  * @cmd: pointer to scan cmd buffer (allocated once in op mode start).
  * @last_6ghz_passive_jiffies: stores the last 6GHz passive scan time
  *	in jiffies.
@@ -138,7 +137,6 @@ struct iwl_mld_scan {
 	/* And here fields that survive a fw restart */
 	size_t cmd_size;
 	void *cmd;
-	u8 cmd_ver;
 	unsigned long last_6ghz_passive_jiffies;
 	unsigned long last_start_time_jiffies;
 	u64 last_mlo_scan_start_time;
@@ -151,13 +149,11 @@ struct iwl_mld_scan {
  *
  * @time: time in ms the radio was on the channel
  * @time_busy: time in ms the channel was sensed busy
- * @time_rx: time in ms the channel was sensed to carry Wi-Fi frames
  * @noise: channel noise in dBm
  */
 struct iwl_mld_survey_channel {
 	u32 time;
 	u32 time_busy;
-	u32 time_rx;
 	s8 noise;
 };
 

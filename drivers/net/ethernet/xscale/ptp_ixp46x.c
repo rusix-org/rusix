@@ -6,6 +6,7 @@
  */
 #include <linux/device.h>
 #include <linux/module.h>
+#include <linux/mod_devicetable.h>
 #include <linux/err.h>
 #include <linux/init.h>
 #include <linux/interrupt.h>
@@ -307,7 +308,6 @@ static const struct of_device_id ptp_ixp_match[] = {
 	},
 	{ },
 };
-MODULE_DEVICE_TABLE(of, ptp_ixp_match);
 
 static struct platform_driver ptp_ixp_driver = {
 	.driver = {

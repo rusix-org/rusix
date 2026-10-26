@@ -17,9 +17,7 @@ properties:
   compatible:
     oneOf:
       - items:
-          - enum:
-              - renesas,r9a09g047-usb2phy-reset # RZ/G3E
-              - renesas,r9a09g056-usb2phy-reset # RZ/V2N
+          - const: renesas,r9a09g056-usb2phy-reset # RZ/V2N
           - const: renesas,r9a09g057-usb2phy-reset
 
       - const: renesas,r9a09g057-usb2phy-reset # RZ/V2H(P)
@@ -39,9 +37,6 @@ properties:
   '#reset-cells':
     const: 0
 
-  '#mux-state-cells':
-    const: 1
-
 required:
   - compatible
   - reg
@@ -49,7 +44,6 @@ required:
   - resets
   - power-domains
   - '#reset-cells'
-  - '#mux-state-cells'
 
 additionalProperties: false
 
@@ -64,5 +58,4 @@ examples:
         resets = <&cpg 0xaf>;
         power-domains = <&cpg>;
         #reset-cells = <0>;
-        #mux-state-cells = <1>;
     };

@@ -118,11 +118,6 @@ struct bpf_mem_cache {
 	struct llist_head free_by_rcu_ttrace;
 	struct llist_head waiting_for_gp_ttrace;
 	struct rcu_head rcu_ttrace;
-	/*
-	 * 0 - idle
-	 * 1 - __free_rcu() is queued
-	 * 2 - __free_rcu() is queued and free_by_rcu_ttrace got more objects since
-	 */
 	atomic_t call_rcu_ttrace_in_progress;
 	raw_spinlock_t lock;
 };
@@ -281,8 +276,6 @@ static int free_all(struct bpf_mem_cache *c, struct llist_node *llnode, bool per
 	return cnt;
 }
 
-static void __do_call_rcu_ttrace(struct bpf_mem_cache *c);
-
 static void __free_rcu(struct rcu_head *head)
 {
 	struct bpf_mem_cache *c = container_of(head, struct bpf_mem_cache, rcu_ttrace);
@@ -292,19 +285,18 @@ static void __free_rcu(struct rcu_head *head)
 		llnode = llist_del_all(&c->waiting_for_gp_ttrace);
 
 	free_all(c, llnode, !!c->percpu_size);
+	atomic_set(&c->call_rcu_ttrace_in_progress, 0);
+}
 
-	/*
-	 * do_call_rcu_ttrace() that ran while GP was in flight left its objects
-	 * in free_by_rcu_ttrace. This cache may never free or alloc in bulk
-	 * again, so start the next GP from here.
-	 * 'c' can be freed as soon as call_rcu_ttrace_in_progress is zero.
+static void __free_rcu_tasks_trace(struct rcu_head *head)
+{
+	/* If RCU Tasks Trace grace period implies RCU grace period,
+	 * there is no need to invoke call_rcu().
 	 */
-	if (atomic_cmpxchg(&c->call_rcu_ttrace_in_progress, 1, 0) == 1)
-		return;
-
-	/* Pairs with synchronize_rcu() in free_mem_alloc() */
-	guard(rcu)();
-	__do_call_rcu_ttrace(c);
+	if (rcu_trace_implies_rcu_gp())
+		__free_rcu(head);
+	else
+		call_rcu(head, __free_rcu);
 }
 
 static void enque_to_free(struct bpf_mem_cache *c, void *obj)
@@ -317,15 +309,18 @@ static void enque_to_free(struct bpf_mem_cache *c, void *obj)
 	llist_add(llnode, &c->free_by_rcu_ttrace);
 }
 
-static void __do_call_rcu_ttrace(struct bpf_mem_cache *c)
+static void do_call_rcu_ttrace(struct bpf_mem_cache *c)
 {
 	struct llist_node *llnode, *t;
 
-	/*
-	 * Must be done before llist_del_all(). Objects that it misses were
-	 * added by do_call_rcu_ttrace() that will set 2 after this store.
-	 */
-	atomic_set(&c->call_rcu_ttrace_in_progress, 1);
+	if (atomic_xchg(&c->call_rcu_ttrace_in_progress, 1)) {
+		if (unlikely(READ_ONCE(c->draining))) {
+			scoped_guard(raw_spinlock_irqsave, &c->lock)
+				llnode = llist_del_all(&c->free_by_rcu_ttrace);
+			free_all(c, llnode, !!c->percpu_size);
+		}
+		return;
+	}
 
 	WARN_ON_ONCE(!llist_empty(&c->waiting_for_gp_ttrace));
 	llist_for_each_safe(llnode, t, llist_del_all(&c->free_by_rcu_ttrace))
@@ -336,28 +331,12 @@ static void __do_call_rcu_ttrace(struct bpf_mem_cache *c)
 		return;
 	}
 
-	/*
-	 * Use call_rcu_tasks_trace() to wait for sleepable progs to finish.
-	 * RCU Tasks Trace grace period implies RCU grace period, so pass
-	 * __free_rcu directly as the callback.
+	/* Use call_rcu_tasks_trace() to wait for sleepable progs to finish.
+	 * If RCU Tasks Trace grace period implies RCU grace period, free
+	 * these elements directly, else use call_rcu() to wait for normal
+	 * progs to finish and finally do free_one() on each element.
 	 */
-	call_rcu_tasks_trace(&c->rcu_ttrace, __free_rcu);
-}
-
-static void do_call_rcu_ttrace(struct bpf_mem_cache *c)
-{
-	struct llist_node *llnode;
-
-	if (atomic_xchg(&c->call_rcu_ttrace_in_progress, 2)) {
-		if (unlikely(READ_ONCE(c->draining))) {
-			scoped_guard(raw_spinlock_irqsave, &c->lock)
-				llnode = llist_del_all(&c->free_by_rcu_ttrace);
-			free_all(c, llnode, !!c->percpu_size);
-		}
-		return;
-	}
-
-	__do_call_rcu_ttrace(c);
+	call_rcu_tasks_trace(&c->rcu_ttrace, __free_rcu_tasks_trace);
 }
 
 static void free_bulk(struct bpf_mem_cache *c)
@@ -723,23 +702,20 @@ static void free_mem_alloc_no_barrier(struct bpf_mem_alloc *ma)
 
 static void free_mem_alloc(struct bpf_mem_alloc *ma)
 {
-	/*
-	 * waiting_for_gp[_ttrace] lists were drained, but RCU callbacks
+	/* waiting_for_gp[_ttrace] lists were drained, but RCU callbacks
 	 * might still execute. Wait for them.
 	 *
 	 * rcu_barrier_tasks_trace() doesn't imply synchronize_rcu_tasks_trace(),
 	 * but rcu_barrier_tasks_trace() and rcu_barrier() below are only used
-	 * to wait for the pending __free_by_rcu(), and __free_rcu(). RCU Tasks
-	 * Trace grace period implies RCU grace period, so all __free_rcu don't
-	 * need extra call_rcu() (and thus extra rcu_barrier() here).
-	 *
-	 * __free_rcu() queues itself again unless it sees 'draining'. After
-	 * synchronize_rcu() it either did that already or will not do it, so
-	 * rcu_barrier_tasks_trace() cannot miss it.
+	 * to wait for the pending __free_rcu_tasks_trace() and __free_rcu(),
+	 * so if call_rcu(head, __free_rcu) is skipped due to
+	 * rcu_trace_implies_rcu_gp(), it will be OK to skip rcu_barrier() by
+	 * using rcu_trace_implies_rcu_gp() as well.
 	 */
-	synchronize_rcu();
 	rcu_barrier(); /* wait for __free_by_rcu */
 	rcu_barrier_tasks_trace(); /* wait for __free_rcu */
+	if (!rcu_trace_implies_rcu_gp())
+		rcu_barrier();
 	free_mem_alloc_no_barrier(ma);
 }
 

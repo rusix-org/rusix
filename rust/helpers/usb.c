@@ -2,8 +2,7 @@
 
 #include <linux/usb.h>
 
-__rust_helper struct usb_device *
-rust_helper_interface_to_usbdev(struct usb_interface *intf)
+struct usb_device *rust_helper_interface_to_usbdev(struct usb_interface *intf)
 {
 	return interface_to_usbdev(intf);
 }

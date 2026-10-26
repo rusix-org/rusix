@@ -91,7 +91,7 @@ static void erdma_disassoc_listen_cep(struct erdma_cep *cep)
 
 static struct erdma_cep *erdma_cep_alloc(struct erdma_dev *dev)
 {
-	struct erdma_cep *cep = kzalloc_obj(*cep);
+	struct erdma_cep *cep = kzalloc(sizeof(*cep), GFP_KERNEL);
 	unsigned long flags;
 
 	if (!cep)
@@ -217,7 +217,7 @@ static int erdma_cm_alloc_work(struct erdma_cep *cep, int num)
 	struct erdma_cm_work *work;
 
 	while (num--) {
-		work = kmalloc_obj(*work);
+		work = kmalloc(sizeof(*work), GFP_KERNEL);
 		if (!work) {
 			if (!(list_empty(&cep->work_freelist)))
 				erdma_cm_free_work(cep);
@@ -996,7 +996,7 @@ static int kernel_bindconnect(struct socket *s, struct sockaddr *laddr,
 	ret = s->ops->bind(s, (struct sockaddr_unsized *)laddr, laddrlen);
 	if (ret)
 		return ret;
-	ret = s->ops->connect(s, (struct sockaddr_unsized *)raddr, raddrlen, flags);
+	ret = s->ops->connect(s, raddr, raddrlen, flags);
 	return ret < 0 ? ret : 0;
 }
 
@@ -1338,7 +1338,7 @@ int erdma_create_listen(struct iw_cm_id *id, int backlog)
 
 	if (!id->provider_data) {
 		id->provider_data =
-			kmalloc_obj(struct list_head);
+			kmalloc(sizeof(struct list_head), GFP_KERNEL);
 		if (!id->provider_data) {
 			ret = -ENOMEM;
 			goto error;

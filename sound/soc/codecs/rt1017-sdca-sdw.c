@@ -8,6 +8,7 @@
 #include <linux/delay.h>
 #include <linux/device.h>
 #include <linux/pm_runtime.h>
+#include <linux/mod_devicetable.h>
 #include <linux/module.h>
 #include <linux/regmap.h>
 #include <sound/core.h>
@@ -729,12 +730,14 @@ static int rt1017_sdca_sdw_probe(struct sdw_slave *slave,
 	return rt1017_sdca_init(&slave->dev, regmap, slave);
 }
 
-static void rt1017_sdca_sdw_remove(struct sdw_slave *slave)
+static int rt1017_sdca_sdw_remove(struct sdw_slave *slave)
 {
 	struct rt1017_sdca_priv *rt1017 = dev_get_drvdata(&slave->dev);
 
 	if (rt1017->first_hw_init)
 		pm_runtime_disable(&slave->dev);
+
+	return 0;
 }
 
 static const struct sdw_device_id rt1017_sdca_id[] = {
@@ -761,24 +764,27 @@ static int rt1017_sdca_dev_resume(struct device *dev)
 {
 	struct sdw_slave *slave = dev_to_sdw_dev(dev);
 	struct rt1017_sdca_priv *rt1017 = dev_get_drvdata(dev);
-	int ret;
+	unsigned long time;
 
 	if (!rt1017->first_hw_init)
 		return 0;
 
-	ret = sdw_slave_wait_for_init(slave, RT1017_PROBE_TIMEOUT);
-	if (ret) {
+	if (!slave->unattach_request)
+		goto regmap_sync;
+
+	time = wait_for_completion_timeout(&slave->initialization_complete,
+				msecs_to_jiffies(RT1017_PROBE_TIMEOUT));
+	if (!time) {
+		dev_err(&slave->dev, "Initialization not complete, timed out\n");
 		sdw_show_ping_status(slave->bus, true);
-		return ret;
+
+		return -ETIMEDOUT;
 	}
 
+regmap_sync:
+	slave->unattach_request = 0;
 	regcache_cache_only(rt1017->regmap, false);
-	ret = regcache_sync(rt1017->regmap);
-	if (ret) {
-		regcache_cache_only(rt1017->regmap, true);
-		regcache_mark_dirty(rt1017->regmap);
-		return ret;
-	}
+	regcache_sync(rt1017->regmap);
 
 	return 0;
 }

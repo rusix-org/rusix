@@ -13,6 +13,7 @@
 #include <linux/io.h>
 #include <linux/kernel.h>
 #include <linux/module.h>
+#include <linux/mod_devicetable.h>
 #include <linux/platform_device.h>
 #include <linux/scatterlist.h>
 
@@ -628,14 +629,24 @@ static int img_hash_digest(struct ahash_request *req)
 	struct crypto_ahash *tfm = crypto_ahash_reqtfm(req);
 	struct img_hash_ctx *tctx = crypto_ahash_ctx(tfm);
 	struct img_hash_request_ctx *ctx = ahash_request_ctx(req);
+	struct img_hash_dev *hdev = NULL;
+	struct img_hash_dev *tmp;
+	int err;
 
 	spin_lock(&img_hash.lock);
-	if (!tctx->hdev)
-		tctx->hdev = list_first_entry_or_null(&img_hash.dev_list,
-						      struct img_hash_dev, list);
-	ctx->hdev = tctx->hdev;
-	spin_unlock(&img_hash.lock);
+	if (!tctx->hdev) {
+		list_for_each_entry(tmp, &img_hash.dev_list, list) {
+			hdev = tmp;
+			break;
+		}
+		tctx->hdev = hdev;
 
+	} else {
+		hdev = tctx->hdev;
+	}
+
+	spin_unlock(&img_hash.lock);
+	ctx->hdev = hdev;
 	ctx->flags = 0;
 	ctx->digsize = crypto_ahash_digestsize(tfm);
 
@@ -664,7 +675,9 @@ static int img_hash_digest(struct ahash_request *req)
 	ctx->sgfirst = req->src;
 	ctx->nents = sg_nents(ctx->sg);
 
-	return img_hash_handle_queue(ctx->hdev, req);
+	err = img_hash_handle_queue(tctx->hdev, req);
+
+	return err;
 }
 
 static int img_hash_cra_init(struct crypto_tfm *tfm, const char *alg_name)
@@ -857,18 +870,25 @@ static int img_register_algs(struct img_hash_dev *hdev)
 
 	for (i = 0; i < ARRAY_SIZE(img_algs); i++) {
 		err = crypto_register_ahash(&img_algs[i]);
-		if (err) {
-			crypto_unregister_ahashes(img_algs, i);
-			return err;
-		}
+		if (err)
+			goto err_reg;
 	}
-
 	return 0;
+
+err_reg:
+	for (; i--; )
+		crypto_unregister_ahash(&img_algs[i]);
+
+	return err;
 }
 
-static void img_unregister_algs(struct img_hash_dev *hdev)
+static int img_unregister_algs(struct img_hash_dev *hdev)
 {
-	crypto_unregister_ahashes(img_algs, ARRAY_SIZE(img_algs));
+	int i;
+
+	for (i = 0; i < ARRAY_SIZE(img_algs); i++)
+		crypto_unregister_ahash(&img_algs[i]);
+	return 0;
 }
 
 static void img_hash_done_task(unsigned long data)
@@ -966,8 +986,10 @@ static int img_hash_probe(struct platform_device *pdev)
 
 	err = devm_request_irq(dev, irq, img_irq_handler, 0,
 			       dev_name(dev), hdev);
-	if (err)
+	if (err) {
+		dev_err(dev, "unable to request irq\n");
 		goto res_err;
+	}
 	dev_dbg(dev, "using IRQ channel %d\n", irq);
 
 	hdev->hash_clk = devm_clk_get_enabled(&pdev->dev, "hash");

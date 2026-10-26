@@ -264,17 +264,17 @@ int go7007_register_encoder(struct go7007 *go, unsigned num_i2c_devs)
 	ret = go7007_init_encoder(go);
 	mutex_unlock(&go->hw_lock);
 	if (ret < 0)
-		goto err_unregister_v4l2_dev;
+		return ret;
 
 	ret = go7007_v4l2_ctrl_init(go);
 	if (ret < 0)
-		goto err_free_controls;
+		return ret;
 
 	if (!go->i2c_adapter_online &&
 			go->board_info->flags & GO7007_BOARD_USE_ONBOARD_I2C) {
 		ret = go7007_i2c_init(go);
 		if (ret < 0)
-			goto err_free_controls;
+			return ret;
 		go->i2c_adapter_online = 1;
 	}
 	if (go->i2c_adapter_online) {
@@ -304,18 +304,13 @@ int go7007_register_encoder(struct go7007 *go, unsigned num_i2c_devs)
 
 	ret = go7007_v4l2_init(go);
 	if (ret < 0)
-		goto err_free_controls;
+		return ret;
 
-	if ((go->board_info->flags & GO7007_BOARD_HAS_AUDIO) &&
-	    go7007_snd_init(go) == 0)
+	if (go->board_info->flags & GO7007_BOARD_HAS_AUDIO) {
 		go->audio_enabled = 1;
+		go7007_snd_init(go);
+	}
 	return 0;
-
-err_free_controls:
-	v4l2_ctrl_handler_free(&go->hdl);
-err_unregister_v4l2_dev:
-	v4l2_device_unregister(&go->v4l2_dev);
-	return ret;
 }
 EXPORT_SYMBOL(go7007_register_encoder);
 
@@ -699,7 +694,7 @@ struct go7007 *go7007_alloc(const struct go7007_board_info *board,
 {
 	struct go7007 *go;
 
-	go = kzalloc_obj(struct go7007);
+	go = kzalloc(sizeof(struct go7007), GFP_KERNEL);
 	if (go == NULL)
 		return NULL;
 	go->dev = dev;

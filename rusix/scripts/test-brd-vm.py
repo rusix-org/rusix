@@ -26,7 +26,7 @@ def accept_console(console, qemu_exit):
     """Require the exact ordered inventory and completion, without kernel faults."""
     if qemu_exit != 0:
         raise ValueError(f"QEMU failed or timed out: exit {qemu_exit}")
-    if re.search(r"\b(?:WARNING|BUG)\b|Oops:|Kernel panic|CPU feature dependency check failure", console):
+    if re.search(r"\b(?:WARNING|BUG)\b|Oops:|Kernel panic|CPU feature dependency check failure|ACPI (?:BIOS )?(?:Error|Exception|Warning)|ACPI: Unable to load", console):
         raise ValueError("Kernel warning, oops, BUG, or panic in console")
     markers = [line for line in console.splitlines() if "RUSIX_BRD_" in line]
     expected = [f"RUSIX_BRD_PASS {name}" for name in CASES]
@@ -34,6 +34,25 @@ def accept_console(console, qemu_exit):
     if markers != expected:
         raise ValueError(f"BRD case inventory/order mismatch: {markers!r}")
     return {"status": "PASS", "cases": list(CASES), "qemu_exit": qemu_exit}
+
+
+def validate_selection(profile, selection, config):
+    """Bind the requested implementation to its build proof and resolved config."""
+    implementation = {"brd": "brd-c", "brd-rust": "brd-rust",
+                      "brd-ext4-c": "brd-c", "brd-ext4-rust": "brd-rust"}.get(profile)
+    if implementation is None:
+        raise ValueError("A BRD or ext4 build profile is required")
+    if selection != f"implementation={implementation}":
+        raise ValueError("Build evidence does not identify the selected BRD implementation")
+    settings = set(config.splitlines())
+    if ("CONFIG_RUSIX_BRD_RUST=y" in settings) != (implementation == "brd-rust"):
+        raise ValueError("Resolved configuration contradicts BRD selection")
+    for name in REQUIRED_CONFIG:
+        if f"CONFIG_{name}=y" not in settings:
+            raise ValueError(f"Missing required CONFIG_{name}=y")
+    if "CONFIG_KUNIT=y" in settings:
+        raise ValueError("BRD profile must disable KUnit to isolate contract execution")
+    return implementation
 
 
 def first_line(path):
@@ -120,19 +139,12 @@ def run(args, paths, evidence):
         raise ValueError("Source changed during the kernel build")
     if (build_evidence / "source-after.status").read_bytes():
         raise ValueError("Source was dirty after the kernel build")
-    if (build_evidence / "profile.txt").read_text().strip() != "brd":
-        raise ValueError("The BRD build profile is required")
-    if first_line(build_evidence / "selection.log") != "implementation=brd-c":
-        raise ValueError("Build evidence does not identify the pinned C BRD")
+    profile = (build_evidence / "profile.txt").read_text().strip()
+    implementation = validate_selection(
+        profile, first_line(build_evidence / "selection.log"), config.read_text())
     check_hashes(build_evidence / "build.sha256", [kernel, config])
     if (build_evidence / "config").read_bytes() != config.read_bytes():
         raise ValueError("Resolved configuration differs from build evidence")
-    settings = set(config.read_text().splitlines())
-    for name in REQUIRED_CONFIG:
-        if f"CONFIG_{name}=y" not in settings:
-            raise ValueError(f"Missing required CONFIG_{name}=y")
-    if "CONFIG_KUNIT=y" in settings:
-        raise ValueError("BRD profile must disable KUnit to isolate contract execution")
 
     artifacts = paths.output / "builds" / f"brd-vm-{args.label}"
     artifacts.mkdir(parents=True, exist_ok=False)
@@ -167,15 +179,15 @@ def run(args, paths, evidence):
                     paths.project / "scripts/with-local-tools.sh",
                     paths.project / "scripts/repo-paths.sh"]
     metadata = {
-        "source_revision": revision, "implementation": "brd-c",
-        "scope": "C BRD userspace block contract; not Rust BRD or complete Phase 1",
+        "source_revision": revision, "implementation": implementation,
+        "scope": "Six-case userspace block contract",
         "sources": {str(p.relative_to(paths.source)): digest(p) for p in source_files},
         "artifacts": {str(p): digest(p) for p in (image, init, initramfs)},
         "config_sha256": digest(config),
     }
     (evidence / "inputs.json").write_text(json.dumps(metadata, indent=2) + "\n")
     command = wrapper + ["timeout", "--kill-after=5s", "180s", "qemu-system-x86_64",
-                         "-accel", accel, "-cpu", "qemu64" if accel == "kvm" else "max",
+                         "-machine", "q35", "-accel", accel, "-cpu", "qemu64" if accel == "kvm" else "max",
                          "-m", "512M", "-smp", "2"]
     firmware = paths.tools / "usr/share/qemu"
     if (firmware / "qboot.rom").is_file():
@@ -200,7 +212,7 @@ def run(args, paths, evidence):
         if digest(Path(path)) != expected:
             raise ValueError(f"Artifact changed during VM verification: {path}")
     (evidence / "result.json").write_text(json.dumps(result, indent=2) + "\n")
-    print(f"C BRD contract: {len(CASES)} cases passed; evidence {evidence}")
+    print(f"{implementation} contract: {len(CASES)} cases passed; evidence {evidence}")
 
 
 def main():

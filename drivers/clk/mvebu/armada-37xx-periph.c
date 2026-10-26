@@ -126,11 +126,9 @@ static const struct clk_div_table clk_table2[] = {
 static const struct clk_ops clk_double_div_ops;
 static const struct clk_ops clk_pm_cpu_ops;
 
-#define __reg(__x) ((void __iomem __force *)(__x))
-
 #define PERIPH_GATE(_name, _bit)		\
 struct clk_gate gate_##_name = {		\
-	.reg = __reg(CLK_DIS),			\
+	.reg = (void *)CLK_DIS,			\
 	.bit_idx = _bit,			\
 	.hw.init = &(struct clk_init_data){	\
 		.ops =  &clk_gate_ops,		\
@@ -139,7 +137,7 @@ struct clk_gate gate_##_name = {		\
 
 #define PERIPH_MUX(_name, _shift)		\
 struct clk_mux mux_##_name = {			\
-	.reg = __reg(TBG_SEL),			\
+	.reg = (void *)TBG_SEL,			\
 	.shift = _shift,			\
 	.mask = 3,				\
 	.hw.init = &(struct clk_init_data){	\
@@ -149,8 +147,8 @@ struct clk_mux mux_##_name = {			\
 
 #define PERIPH_DOUBLEDIV(_name, _reg1, _reg2, _shift1, _shift2)	\
 struct clk_double_div rate_##_name = {		\
-	.reg1 = __reg(_reg1),			\
-	.reg2 = __reg(_reg2),			\
+	.reg1 = (void *)_reg1,			\
+	.reg2 = (void *)_reg2,			\
 	.shift1 = _shift1,			\
 	.shift2 = _shift2,			\
 	.hw.init = &(struct clk_init_data){	\
@@ -160,7 +158,7 @@ struct clk_double_div rate_##_name = {		\
 
 #define PERIPH_DIV(_name, _reg, _shift, _table)	\
 struct clk_divider rate_##_name = {		\
-	.reg = __reg(_reg),			\
+	.reg = (void *)_reg,			\
 	.table = _table,			\
 	.shift = _shift,			\
 	.hw.init = &(struct clk_init_data){	\
@@ -170,10 +168,10 @@ struct clk_divider rate_##_name = {		\
 
 #define PERIPH_PM_CPU(_name, _shift1, _reg, _shift2)	\
 struct clk_pm_cpu muxrate_##_name = {		\
-	.reg_mux = __reg(TBG_SEL),		\
+	.reg_mux = (void *)TBG_SEL,		\
 	.mask_mux = 3,				\
 	.shift_mux = _shift1,			\
-	.reg_div = __reg(_reg),			\
+	.reg_div = (void *)_reg,		\
 	.shift_div = _shift2,			\
 	.hw.init = &(struct clk_init_data){	\
 		.ops =  &clk_pm_cpu_ops,	\

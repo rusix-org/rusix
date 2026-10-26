@@ -23,7 +23,6 @@
 #include <linux/fs.h>
 #include <linux/types.h>
 #include <linux/slab.h>
-#include <linux/string.h>
 #include <linux/highmem.h>
 #include <linux/quotaops.h>
 #include <linux/iversion.h>
@@ -227,7 +226,7 @@ static void ocfs2_cleanup_add_entry_failure(struct ocfs2_super *osb,
 	iput(inode);
 }
 
-static int ocfs2_mknod(const struct mnt_idmap *idmap,
+static int ocfs2_mknod(struct mnt_idmap *idmap,
 		       struct inode *dir,
 		       struct dentry *dentry,
 		       umode_t mode,
@@ -571,7 +570,7 @@ static int __ocfs2_mknod_locked(struct inode *dir,
 	ocfs2_set_links_count(fe, inode->i_nlink);
 
 	fe->i_last_eb_blk = 0;
-	strscpy(fe->i_signature, OCFS2_INODE_SIGNATURE);
+	strcpy(fe->i_signature, OCFS2_INODE_SIGNATURE);
 	fe->i_flags |= cpu_to_le32(OCFS2_VALID_FL);
 	ktime_get_coarse_real_ts64(&ts);
 	fe->i_atime = fe->i_ctime = fe->i_mtime =
@@ -650,7 +649,7 @@ static int ocfs2_mknod_locked(struct ocfs2_super *osb,
 				    suballoc_loc, suballoc_bit);
 }
 
-static struct dentry *ocfs2_mkdir(const struct mnt_idmap *idmap,
+static struct dentry *ocfs2_mkdir(struct mnt_idmap *idmap,
 				  struct inode *dir,
 				  struct dentry *dentry,
 				  umode_t mode)
@@ -659,17 +658,18 @@ static struct dentry *ocfs2_mkdir(const struct mnt_idmap *idmap,
 
 	trace_ocfs2_mkdir(dir, dentry, dentry->d_name.len, dentry->d_name.name,
 			  OCFS2_I(dir)->ip_blkno, mode);
-	ret = ocfs2_mknod(&nop_mnt_idmap, dir, dentry, mode, 0);
+	ret = ocfs2_mknod(&nop_mnt_idmap, dir, dentry, mode | S_IFDIR, 0);
 	if (ret)
 		mlog_errno(ret);
 
 	return ERR_PTR(ret);
 }
 
-static int ocfs2_create(const struct mnt_idmap *idmap,
+static int ocfs2_create(struct mnt_idmap *idmap,
 			struct inode *dir,
 			struct dentry *dentry,
-			umode_t mode)
+			umode_t mode,
+			bool excl)
 {
 	int ret;
 
@@ -946,10 +946,7 @@ static int ocfs2_unlink(struct inode *dir,
 	child_locked = 1;
 
 	if (S_ISDIR(inode->i_mode)) {
-		status = ocfs2_empty_dir(inode);
-		if (status < 0)
-			goto leave;
-		if (inode->i_nlink != 2 || !status) {
+		if (inode->i_nlink != 2 || !ocfs2_empty_dir(inode)) {
 			status = -ENOTEMPTY;
 			goto leave;
 		}
@@ -1206,7 +1203,7 @@ static void ocfs2_double_unlock(struct inode *inode1, struct inode *inode2)
 		ocfs2_inode_unlock(inode2, 1);
 }
 
-static int ocfs2_rename(const struct mnt_idmap *idmap,
+static int ocfs2_rename(struct mnt_idmap *idmap,
 			struct inode *old_dir,
 			struct dentry *old_dentry,
 			struct inode *new_dir,
@@ -1503,10 +1500,8 @@ static int ocfs2_rename(const struct mnt_idmap *idmap,
 
 	if (target_exists) {
 		if (S_ISDIR(new_inode->i_mode)) {
-			status = ocfs2_empty_dir(new_inode);
-			if (status < 0)
-				goto bail;
-			if (new_inode->i_nlink != 2 || !status) {
+			if (new_inode->i_nlink != 2 ||
+			    !ocfs2_empty_dir(new_inode)) {
 				status = -ENOTEMPTY;
 				goto bail;
 			}
@@ -1689,6 +1684,9 @@ bail:
 	if (rename_lock)
 		ocfs2_rename_unlock(osb);
 
+	if (new_inode)
+		sync_mapping_buffers(old_inode->i_mapping);
+
 	iput(new_inode);
 
 	ocfs2_free_dir_lookup_result(&target_lookup_res);
@@ -1739,7 +1737,7 @@ static int ocfs2_create_symlink_data(struct ocfs2_super *osb,
 		goto bail;
 	}
 
-	bhs = kzalloc_objs(struct buffer_head *, blocks);
+	bhs = kcalloc(blocks, sizeof(struct buffer_head *), GFP_KERNEL);
 	if (!bhs) {
 		status = -ENOMEM;
 		mlog_errno(status);
@@ -1810,7 +1808,7 @@ bail:
 	return status;
 }
 
-static int ocfs2_symlink(const struct mnt_idmap *idmap,
+static int ocfs2_symlink(struct mnt_idmap *idmap,
 			 struct inode *dir,
 			 struct dentry *dentry,
 			 const char *symname)
@@ -2132,7 +2130,7 @@ static int ocfs2_lookup_lock_orphan_dir(struct ocfs2_super *osb,
 		return ret;
 	}
 
-	inode_lock_nested(orphan_dir_inode, I_MUTEX_NONDIR2);
+	inode_lock(orphan_dir_inode);
 
 	ret = ocfs2_inode_lock(orphan_dir_inode, &orphan_dir_bh, 1);
 	if (ret < 0) {
@@ -2731,7 +2729,7 @@ int ocfs2_del_inode_from_orphan(struct ocfs2_super *osb,
 		goto bail;
 	}
 
-	inode_lock_nested(orphan_dir_inode, I_MUTEX_NONDIR2);
+	inode_lock(orphan_dir_inode);
 	status = ocfs2_inode_lock(orphan_dir_inode, &orphan_dir_bh, 1);
 	if (status < 0) {
 		inode_unlock(orphan_dir_inode);
@@ -2844,7 +2842,7 @@ int ocfs2_mv_orphaned_inode_to_new(struct inode *dir,
 		goto leave;
 	}
 
-	inode_lock_nested(orphan_dir_inode, I_MUTEX_NONDIR2);
+	inode_lock(orphan_dir_inode);
 
 	status = ocfs2_inode_lock(orphan_dir_inode, &orphan_dir_bh, 1);
 	if (status < 0) {

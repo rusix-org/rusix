@@ -221,6 +221,9 @@ consider asking on the amd-gfx mailing list and update this page.
     TMDS
       Transition-Minimized Differential Signaling
 
+    TMZ
+      Trusted Memory Zone
+
     TTU
       Time to Underflow
 

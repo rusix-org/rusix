@@ -3,7 +3,7 @@
  * Xilinx Zynq MPSoC Firmware layer
  *
  *  Copyright (C) 2014-2021 Xilinx
- *  Copyright (C) 2022 - 2026 Advanced Micro Devices, Inc.
+ *  Copyright (C) 2022 - 2024, Advanced Micro Devices, Inc.
  *
  *  Michal Simek <michal.simek@amd.com>
  *  Davorin Mista <davorin.mista@aggios.com>
@@ -16,8 +16,6 @@
 #include <linux/types.h>
 
 #include <linux/err.h>
-#include <linux/firmware/xlnx-zynqmp-ufs.h>
-#include <linux/firmware/xlnx-zynqmp-crypto.h>
 
 #define ZYNQMP_PM_VERSION_MAJOR	1
 #define ZYNQMP_PM_VERSION_MINOR	0
@@ -50,7 +48,6 @@
 /* PM API versions */
 #define PM_API_VERSION_1	1
 #define PM_API_VERSION_2	2
-#define PM_API_VERSION_3	3
 
 #define PM_PINCTRL_PARAM_SET_VERSION	2
 
@@ -67,7 +64,6 @@
 #define FIRMWARE_VERSION_MASK		0xFFFFU
 
 /* ATF only commands */
-#define TF_A_CLEAR_PM_STATE		0xa05
 #define TF_A_PM_REGISTER_SGI		0xa04
 #define PM_GET_TRUSTZONE_VERSION	0xa03
 #define PM_SET_SUSPEND_MODE		0xa02
@@ -145,12 +141,6 @@
 #define XPM_EVENT_ERROR_MASK_DDRMC_NCR		BIT(19)
 #define XPM_EVENT_ERROR_MASK_NOC_NCR		BIT(13)
 #define XPM_EVENT_ERROR_MASK_NOC_CR		BIT(12)
-
-/* Node ID for all peripheral devices */
-#define PM_DEV_ALL_PERIPH	0x18224FFFU
-
-/* Node ID for all notifier callbacks */
-#define PM_ALL_NOTIFIERS	0xFFFFFFFFU
 
 enum pm_module_id {
 	PM_MODULE_ID = 0x0,
@@ -246,7 +236,6 @@ enum pm_ioctl_id {
 	IOCTL_GET_FEATURE_CONFIG = 27,
 	/* IOCTL for Secure Read/Write Interface */
 	IOCTL_READ_REG = 28,
-	IOCTL_MASK_WRITE_REG = 29,
 	/* Dynamic SD/GEM configuration */
 	IOCTL_SET_SD_CONFIG = 30,
 	IOCTL_SET_GEM_CONFIG = 31,
@@ -275,6 +264,11 @@ enum pm_query_id {
 enum rpu_oper_mode {
 	PM_RPU_MODE_LOCKSTEP = 0,
 	PM_RPU_MODE_SPLIT = 1,
+};
+
+enum rpu_boot_mem {
+	PM_RPU_BOOTMEM_LOVEC = 0,
+	PM_RPU_BOOTMEM_HIVEC = 1,
 };
 
 enum rpu_tcm_comb {
@@ -605,7 +599,9 @@ int zynqmp_pm_release_node(const u32 node);
 int zynqmp_pm_set_requirement(const u32 node, const u32 capabilities,
 			      const u32 qos,
 			      const enum zynqmp_pm_request_ack ack);
+int zynqmp_pm_aes_engine(const u64 address, u32 *out);
 int zynqmp_pm_efuse_access(const u64 address, u32 *out);
+int zynqmp_pm_sha_hash(const u64 address, const u32 size, const u32 flags);
 int zynqmp_pm_fpga_load(const u64 address, const u32 size, const u32 flags);
 int zynqmp_pm_fpga_get_status(u32 *value);
 int zynqmp_pm_fpga_get_config_status(u32 *value);
@@ -630,9 +626,6 @@ int zynqmp_pm_feature(const u32 api_id);
 int zynqmp_pm_is_function_supported(const u32 api_id, const u32 id);
 int zynqmp_pm_set_feature_config(enum pm_feature_config_id id, u32 value);
 int zynqmp_pm_get_feature_config(enum pm_feature_config_id id, u32 *payload);
-int zynqmp_pm_sec_read_reg(u32 node_id, u32 offset, u32 *ret_value);
-int zynqmp_pm_sec_mask_write_reg(const u32 node_id, const u32 offset,
-				 u32 mask, u32 value);
 int zynqmp_pm_register_sgi(u32 sgi_num, u32 reset);
 int zynqmp_pm_force_pwrdwn(const u32 target,
 			   const enum zynqmp_pm_request_ack ack);
@@ -643,12 +636,6 @@ int zynqmp_pm_request_wake(const u32 node,
 int zynqmp_pm_get_rpu_mode(u32 node_id, enum rpu_oper_mode *rpu_mode);
 int zynqmp_pm_set_rpu_mode(u32 node_id, enum rpu_oper_mode rpu_mode);
 int zynqmp_pm_set_tcm_config(u32 node_id, enum rpu_tcm_comb tcm_mode);
-int zynqmp_pm_get_node_status(const u32 node, u32 *const status,
-			      u32 *const requirements, u32 *const usage);
-int zynqmp_pm_get_rpu_node_status(const u32 node, u32 *const status,
-				  u32 *const requirements, u32 *const usage);
-int zynqmp_pm_start_rpu(const u32 node, const u64 bootaddr);
-int zynqmp_pm_stop_rpu(const u32 node);
 int zynqmp_pm_set_sd_config(u32 node, enum pm_sd_config_type config, u32 value);
 int zynqmp_pm_set_gem_config(u32 node, enum pm_gem_config_type config,
 			     u32 value);
@@ -790,7 +777,18 @@ static inline int zynqmp_pm_set_requirement(const u32 node,
 	return -ENODEV;
 }
 
+static inline int zynqmp_pm_aes_engine(const u64 address, u32 *out)
+{
+	return -ENODEV;
+}
+
 static inline int zynqmp_pm_efuse_access(const u64 address, u32 *out)
+{
+	return -ENODEV;
+}
+
+static inline int zynqmp_pm_sha_hash(const u64 address, const u32 size,
+				     const u32 flags)
 {
 	return -ENODEV;
 }
@@ -925,17 +923,6 @@ static inline int zynqmp_pm_request_wake(const u32 node,
 	return -ENODEV;
 }
 
-static inline int zynqmp_pm_sec_read_reg(u32 node_id, u32 offset, u32 *ret_value)
-{
-	return -ENODEV;
-}
-
-static inline int zynqmp_pm_sec_mask_write_reg(const u32 node_id, const u32 offset,
-					       u32 mask, u32 value)
-{
-	return -ENODEV;
-}
-
 static inline int zynqmp_pm_get_rpu_mode(u32 node_id, enum rpu_oper_mode *rpu_mode)
 {
 	return -ENODEV;
@@ -947,30 +934,6 @@ static inline int zynqmp_pm_set_rpu_mode(u32 node_id, enum rpu_oper_mode rpu_mod
 }
 
 static inline int zynqmp_pm_set_tcm_config(u32 node_id, enum rpu_tcm_comb tcm_mode)
-{
-	return -ENODEV;
-}
-
-static inline int zynqmp_pm_get_node_status(const u32 node, u32 *const status,
-					    u32 *const requirements,
-					    u32 *const usage)
-{
-	return -ENODEV;
-}
-
-static inline int zynqmp_pm_get_rpu_node_status(const u32 node, u32 *const status,
-						u32 *const requirements,
-						u32 *const usage)
-{
-	return -ENODEV;
-}
-
-static inline int zynqmp_pm_start_rpu(const u32 node, const u64 bootaddr)
-{
-	return -ENODEV;
-}
-
-static inline int zynqmp_pm_stop_rpu(const u32 node)
 {
 	return -ENODEV;
 }

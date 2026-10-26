@@ -5,23 +5,16 @@
  * Author: Boris Brezillon <boris.brezillon@bootlin.com>
  */
 
-#include <dt-bindings/i3c/i3c.h>
-#include <linux/acpi.h>
 #include <linux/atomic.h>
-#include <linux/bitmap.h>
 #include <linux/bug.h>
-#include <linux/delay.h>
 #include <linux/device.h>
 #include <linux/dma-mapping.h>
 #include <linux/err.h>
 #include <linux/export.h>
-#include <linux/i2c.h>
 #include <linux/kernel.h>
 #include <linux/list.h>
 #include <linux/of.h>
-#include <linux/of_device.h>
 #include <linux/pm_runtime.h>
-#include <linux/property.h>
 #include <linux/slab.h>
 #include <linux/spinlock.h>
 #include <linux/workqueue.h>
@@ -102,6 +95,12 @@ void i3c_bus_normaluse_unlock(struct i3c_bus *bus)
 	up_read(&bus->lock);
 }
 
+static struct i3c_master_controller *
+i3c_bus_to_i3c_master(struct i3c_bus *i3cbus)
+{
+	return container_of(i3cbus, struct i3c_master_controller, bus);
+}
+
 static struct i3c_master_controller *dev_to_i3cmaster(struct device *dev)
 {
 	return container_of(dev, struct i3c_master_controller, dev);
@@ -175,7 +174,7 @@ static ssize_t bcr_show(struct device *dev,
 
 	i3c_bus_normaluse_lock(bus);
 	desc = dev_to_i3cdesc(dev);
-	ret = sysfs_emit(buf, "0x%02x\n", desc->info.bcr);
+	ret = sprintf(buf, "0x%02x\n", desc->info.bcr);
 	i3c_bus_normaluse_unlock(bus);
 
 	return ret;
@@ -192,7 +191,7 @@ static ssize_t dcr_show(struct device *dev,
 
 	i3c_bus_normaluse_lock(bus);
 	desc = dev_to_i3cdesc(dev);
-	ret = sysfs_emit(buf, "0x%02x\n", desc->info.dcr);
+	ret = sprintf(buf, "0x%02x\n", desc->info.dcr);
 	i3c_bus_normaluse_unlock(bus);
 
 	return ret;
@@ -209,7 +208,7 @@ static ssize_t pid_show(struct device *dev,
 
 	i3c_bus_normaluse_lock(bus);
 	desc = dev_to_i3cdesc(dev);
-	ret = sysfs_emit(buf, "%llx\n", desc->info.pid);
+	ret = sprintf(buf, "%llx\n", desc->info.pid);
 	i3c_bus_normaluse_unlock(bus);
 
 	return ret;
@@ -226,7 +225,7 @@ static ssize_t dynamic_address_show(struct device *dev,
 
 	i3c_bus_normaluse_lock(bus);
 	desc = dev_to_i3cdesc(dev);
-	ret = sysfs_emit(buf, "%02x\n", desc->info.dyn_addr);
+	ret = sprintf(buf, "%02x\n", desc->info.dyn_addr);
 	i3c_bus_normaluse_unlock(bus);
 
 	return ret;
@@ -257,7 +256,7 @@ static ssize_t hdrcap_show(struct device *dev,
 		if (!hdrcap_strings[mode])
 			continue;
 
-		ret = sysfs_emit_at(buf, offset, offset ? " %s" : "%s",
+		ret = sprintf(buf + offset, offset ? " %s" : "%s",
 			      hdrcap_strings[mode]);
 		if (ret < 0)
 			goto out;
@@ -265,7 +264,7 @@ static ssize_t hdrcap_show(struct device *dev,
 		offset += ret;
 	}
 
-	ret = sysfs_emit_at(buf, offset, "\n");
+	ret = sprintf(buf + offset, "\n");
 	if (ret < 0)
 		goto out;
 
@@ -291,10 +290,10 @@ static ssize_t modalias_show(struct device *dev,
 	ext = I3C_PID_EXTRA_INFO(devinfo.pid);
 
 	if (I3C_PID_RND_LOWER_32BITS(devinfo.pid))
-		return sysfs_emit(buf, "i3c:dcr%02Xmanuf%04X\n", devinfo.dcr,
+		return sprintf(buf, "i3c:dcr%02Xmanuf%04X", devinfo.dcr,
 			       manuf);
 
-	return sysfs_emit(buf, "i3c:dcr%02Xmanuf%04Xpart%04Xext%04X\n",
+	return sprintf(buf, "i3c:dcr%02Xmanuf%04Xpart%04Xext%04X",
 		       devinfo.dcr, manuf, part, ext);
 }
 static DEVICE_ATTR_RO(modalias);
@@ -316,7 +315,8 @@ static int i3c_device_uevent(const struct device *dev, struct kobj_uevent_env *e
 	struct i3c_device_info devinfo;
 	u16 manuf, part, ext;
 
-	i3c_device_get_info(i3cdev, &devinfo);
+	if (i3cdev->desc)
+		devinfo = i3cdev->desc->info;
 	manuf = I3C_PID_MANUF_ID(devinfo.pid);
 	part = I3C_PID_PART_ID(devinfo.pid);
 	ext = I3C_PID_EXTRA_INFO(devinfo.pid);
@@ -339,33 +339,14 @@ static int i3c_device_match(struct device *dev, const struct device_driver *drv)
 {
 	struct i3c_device *i3cdev;
 	const struct i3c_driver *i3cdrv;
-	u8 static_addr_method = 0;
 
 	if (dev->type != &i3c_device_type)
 		return 0;
 
 	i3cdev = dev_to_i3cdev(dev);
 	i3cdrv = drv_to_i3cdrv(drv);
-
-	i3c_bus_normaluse_lock(i3cdev->bus);
-	if (i3cdev->desc->boardinfo)
-		static_addr_method = i3cdev->desc->boardinfo->static_addr_method;
-	i3c_bus_normaluse_unlock(i3cdev->bus);
-
-	/*
-	 * SETAASA-based devices need not always have a matching ID since
-	 * it is not mandatory for such devices to implement deviceinfo
-	 * CCC commands. Allow them to register through DT or ACPI.
-	 */
-	if (i3cdrv->id_table && i3c_device_match_id(i3cdev, i3cdrv->id_table))
+	if (i3c_device_match_id(i3cdev, i3cdrv->id_table))
 		return 1;
-
-	if (static_addr_method & I3C_ADDR_METHOD_SETAASA) {
-		if (of_driver_match_device(dev, drv))
-			return 1;
-		if (acpi_driver_match_device(dev, drv))
-			return 1;
-	}
 
 	return 0;
 }
@@ -385,6 +366,8 @@ static void i3c_device_remove(struct device *dev)
 
 	if (driver->remove)
 		driver->remove(i3cdev);
+
+	i3c_device_free_ibi(i3cdev);
 }
 
 static enum i3c_addr_slot_status
@@ -508,7 +491,7 @@ static void i3c_bus_cleanup(struct i3c_bus *i3cbus)
 	mutex_unlock(&i3c_core_lock);
 }
 
-static int i3c_bus_init(struct i3c_bus *i3cbus, struct fwnode_handle *fwnode)
+static int i3c_bus_init(struct i3c_bus *i3cbus, struct device_node *np)
 {
 	int ret, start, end, id = -1;
 
@@ -518,8 +501,8 @@ static int i3c_bus_init(struct i3c_bus *i3cbus, struct fwnode_handle *fwnode)
 	i3c_bus_init_addrslots(i3cbus);
 	i3cbus->mode = I3C_BUS_MODE_PURE;
 
-	if (fwnode && is_of_node(fwnode))
-		id = of_alias_get_id(to_of_node(fwnode), "i3c");
+	if (np)
+		id = of_alias_get_id(np, "i3c");
 
 	mutex_lock(&i3c_core_lock);
 	if (id >= 0) {
@@ -589,9 +572,9 @@ static ssize_t mode_show(struct device *dev,
 	if (i3cbus->mode < 0 ||
 	    i3cbus->mode >= ARRAY_SIZE(i3c_bus_mode_strings) ||
 	    !i3c_bus_mode_strings[i3cbus->mode])
-		ret = sysfs_emit(buf, "unknown\n");
+		ret = sprintf(buf, "unknown\n");
 	else
-		ret = sysfs_emit(buf, "%s\n", i3c_bus_mode_strings[i3cbus->mode]);
+		ret = sprintf(buf, "%s\n", i3c_bus_mode_strings[i3cbus->mode]);
 	i3c_bus_normaluse_unlock(i3cbus);
 
 	return ret;
@@ -606,7 +589,7 @@ static ssize_t current_master_show(struct device *dev,
 	ssize_t ret;
 
 	i3c_bus_normaluse_lock(i3cbus);
-	ret = sysfs_emit(buf, "%d-%llx\n", i3cbus->id,
+	ret = sprintf(buf, "%d-%llx\n", i3cbus->id,
 		      i3cbus->cur_master->info.pid);
 	i3c_bus_normaluse_unlock(i3cbus);
 
@@ -622,7 +605,7 @@ static ssize_t i3c_scl_frequency_show(struct device *dev,
 	ssize_t ret;
 
 	i3c_bus_normaluse_lock(i3cbus);
-	ret = sysfs_emit(buf, "%ld\n", i3cbus->scl_rate.i3c);
+	ret = sprintf(buf, "%ld\n", i3cbus->scl_rate.i3c);
 	i3c_bus_normaluse_unlock(i3cbus);
 
 	return ret;
@@ -637,7 +620,7 @@ static ssize_t i2c_scl_frequency_show(struct device *dev,
 	ssize_t ret;
 
 	i3c_bus_normaluse_lock(i3cbus);
-	ret = sysfs_emit(buf, "%ld\n", i3cbus->scl_rate.i2c);
+	ret = sprintf(buf, "%ld\n", i3cbus->scl_rate.i2c);
 	i3c_bus_normaluse_unlock(i3cbus);
 
 	return ret;
@@ -668,7 +651,7 @@ static int i3c_set_hotjoin(struct i3c_master_controller *master, bool enable)
 			return ret;
 	}
 
-	i3c_bus_maintenance_lock(&master->bus);
+	i3c_bus_normaluse_lock(&master->bus);
 
 	if (master->shutting_down)
 		ret = -ENODEV;
@@ -680,7 +663,7 @@ static int i3c_set_hotjoin(struct i3c_master_controller *master, bool enable)
 	if (!ret)
 		master->hotjoin = enable;
 
-	i3c_bus_maintenance_unlock(&master->bus);
+	i3c_bus_normaluse_unlock(&master->bus);
 
 	if ((enable && ret) || (!enable && !ret) || master->rpm_ibi_allowed)
 		i3c_master_rpm_put(master);
@@ -777,10 +760,10 @@ static ssize_t dev_nack_retry_count_store(struct device *dev,
 {
 	struct i3c_bus *i3cbus = dev_to_i3cbus(dev);
 	struct i3c_master_controller *master = dev_to_i3cmaster(dev);
-	unsigned int val;
+	unsigned long val;
 	int ret;
 
-	ret = kstrtouint(buf, 0, &val);
+	ret = kstrtoul(buf, 0, &val);
 	if (ret)
 		return ret;
 
@@ -801,32 +784,6 @@ static ssize_t dev_nack_retry_count_store(struct device *dev,
 
 static DEVICE_ATTR_RW(dev_nack_retry_count);
 
-static ssize_t do_daa_store(struct device *dev,
-			    struct device_attribute *attr,
-			    const char *buf, size_t count)
-{
-	struct i3c_master_controller *master = dev_to_i3cmaster(dev);
-	bool val;
-	int ret;
-
-	if (kstrtobool(buf, &val))
-		return -EINVAL;
-
-	if (!val)
-		return -EINVAL;
-
-	if (!master->init_done)
-		return -EAGAIN;
-
-	ret = i3c_master_do_daa(master);
-	if (ret)
-		return ret;
-
-	return count;
-}
-
-static DEVICE_ATTR_WO(do_daa);
-
 static struct attribute *i3c_masterdev_attrs[] = {
 	&dev_attr_mode.attr,
 	&dev_attr_current_master.attr,
@@ -838,7 +795,6 @@ static struct attribute *i3c_masterdev_attrs[] = {
 	&dev_attr_dynamic_address.attr,
 	&dev_attr_hdrcap.attr,
 	&dev_attr_hotjoin.attr,
-	&dev_attr_do_daa.attr,
 	NULL,
 };
 ATTRIBUTE_GROUPS(i3c_masterdev);
@@ -859,7 +815,7 @@ static void i3c_masterdev_release(struct device *dev)
 	WARN_ON(!list_empty(&bus->devs.i2c) || !list_empty(&bus->devs.i3c));
 	i3c_bus_cleanup(bus);
 
-	fwnode_handle_put(dev->fwnode);
+	of_node_put(dev->of_node);
 
 	i3c_master_free_i3c_dev(master->this);
 }
@@ -960,7 +916,7 @@ i3c_master_alloc_i2c_dev(struct i3c_master_controller *master,
 {
 	struct i2c_dev_desc *dev;
 
-	dev = kzalloc_obj(*dev);
+	dev = kzalloc(sizeof(*dev), GFP_KERNEL);
 	if (!dev)
 		return ERR_PTR(-ENOMEM);
 
@@ -976,8 +932,6 @@ static void *i3c_ccc_cmd_dest_init(struct i3c_ccc_cmd_dest *dest, u8 addr,
 {
 	dest->addr = addr;
 	dest->payload.len = payloadlen;
-	dest->payload.actual_len = 0;
-	dest->payload.optional_bytes = 0;
 	if (payloadlen)
 		dest->payload.data = kzalloc(payloadlen, GFP_KERNEL);
 	else
@@ -991,66 +945,20 @@ static void i3c_ccc_cmd_dest_cleanup(struct i3c_ccc_cmd_dest *dest)
 	kfree(dest->payload.data);
 }
 
-static void i3c_ccc_cmd_init_retries(struct i3c_ccc_cmd *cmd, bool rnw, u8 id,
-				     struct i3c_ccc_cmd_dest *dests,
-				     unsigned int ndests, unsigned int retries)
+static void i3c_ccc_cmd_init(struct i3c_ccc_cmd *cmd, bool rnw, u8 id,
+			     struct i3c_ccc_cmd_dest *dests,
+			     unsigned int ndests)
 {
 	cmd->rnw = rnw ? 1 : 0;
 	cmd->id = id;
 	cmd->dests = dests;
 	cmd->ndests = ndests;
-	cmd->retries = retries;
 	cmd->err = I3C_ERROR_UNKNOWN;
 }
 
-static void i3c_ccc_cmd_init(struct i3c_ccc_cmd *cmd, bool rnw, u8 id,
-			     struct i3c_ccc_cmd_dest *dests,
-			     unsigned int ndests)
-{
-	i3c_ccc_cmd_init_retries(cmd, rnw, id, dests, ndests,
-				 rnw ? I3C_CCC_RETRIES : 0);
-}
-
-static int i3c_ccc_validate_payload_len(struct i3c_ccc_cmd *cmd)
-{
-	unsigned int i;
-
-	if (!cmd->rnw)
-		return 0;
-
-	for (i = 0; i < cmd->ndests; i++) {
-		struct i3c_ccc_cmd_payload *p = &cmd->dests[i].payload;
-		u16 min_len;
-
-		if (p->optional_bytes > p->len)
-			return -EINVAL;
-
-		if (p->actual_len > p->len)
-			return -EIO;
-
-		if (!p->len)
-			continue;
-
-		min_len = p->len - p->optional_bytes;
-		if (p->actual_len < min_len)
-			return -EIO;
-	}
-
-	return 0;
-}
-
-/**
- * i3c_master_send_ccc_cmd_locked() - send a CCC (Common Command Codes)
- * @master: master used to send frames on the bus
- * @cmd: command to send
- *
- * Return: 0 in case of success, or a negative error code otherwise.
- *         I3C Mx error codes are stored in cmd->err.
- */
 static int i3c_master_send_ccc_cmd_locked(struct i3c_master_controller *master,
 					  struct i3c_ccc_cmd *cmd)
 {
-	unsigned int attempt, max_attempts;
 	int ret;
 
 	if (!cmd || !master)
@@ -1063,33 +971,22 @@ static int i3c_master_send_ccc_cmd_locked(struct i3c_master_controller *master,
 	if (!master->ops->send_ccc_cmd)
 		return -EOPNOTSUPP;
 
-	if ((cmd->rnw || (cmd->id & I3C_CCC_DIRECT)) &&
-	    (!cmd->dests || !cmd->ndests))
+	if ((cmd->id & I3C_CCC_DIRECT) && (!cmd->dests || !cmd->ndests))
 		return -EINVAL;
 
 	if (master->ops->supports_ccc_cmd &&
 	    !master->ops->supports_ccc_cmd(master, cmd))
 		return -EOPNOTSUPP;
 
-	max_attempts = cmd->retries + 1;
-	ret = -EIO;
-	for (attempt = 0; attempt < max_attempts; attempt++) {
-		unsigned int i;
+	ret = master->ops->send_ccc_cmd(master, cmd);
+	if (ret) {
+		if (cmd->err != I3C_ERROR_UNKNOWN)
+			return cmd->err;
 
-		if (cmd->rnw)
-			for (i = 0; i < cmd->ndests; i++)
-				cmd->dests[i].payload.actual_len = 0;
-
-		cmd->err = I3C_ERROR_UNKNOWN;
-		ret = master->ops->send_ccc_cmd(master, cmd);
-		if (!ret && cmd->err == I3C_ERROR_UNKNOWN)
-			break;
+		return ret;
 	}
 
-	if (!ret)
-		ret = i3c_ccc_validate_payload_len(cmd);
-
-	return ret;
+	return 0;
 }
 
 static struct i2c_dev_desc *
@@ -1129,7 +1026,7 @@ static void i3c_device_release(struct device *dev)
 
 	WARN_ON(i3cdev->desc);
 
-	fwnode_handle_put(dev->fwnode);
+	of_node_put(i3cdev->dev.of_node);
 	kfree(i3cdev);
 }
 
@@ -1139,7 +1036,7 @@ i3c_master_alloc_i3c_dev(struct i3c_master_controller *master,
 {
 	struct i3c_dev_desc *dev;
 
-	dev = kzalloc_obj(*dev);
+	dev = kzalloc(sizeof(*dev), GFP_KERNEL);
 	if (!dev)
 		return ERR_PTR(-ENOMEM);
 
@@ -1180,51 +1077,6 @@ static int i3c_master_rstdaa_locked(struct i3c_master_controller *master,
 }
 
 /**
- * i3c_master_setaasa_locked() - start a SETAASA procedure (Set All Addresses to Static Address)
- * @master: I3C master object
- *
- * Send a SETAASA CCC command to set all attached I3C devices' dynamic addresses to
- * their static address.
- *
- * This function must be called with the bus lock held in write mode.
- *
- * First, the SETHID CCC command is sent, followed by the SETAASA CCC.
- *
- * Return: 0 in case of success, a positive I3C error code if the error is
- * one of the official Mx error codes, and a negative error code otherwise.
- */
-static int i3c_master_setaasa_locked(struct i3c_master_controller *master)
-{
-	struct i3c_ccc_cmd_dest dest;
-	struct i3c_ccc_cmd cmd;
-	int ret;
-
-	/*
-	 * Send SETHID CCC command. Though it is a standard CCC command specified
-	 * in JESD300-5, we are not defining a separate macro to be explicit that
-	 * the value falls under the vendor specific range.
-	 */
-	i3c_ccc_cmd_dest_init(&dest, I3C_BROADCAST_ADDR, 0);
-	i3c_ccc_cmd_init(&cmd, false, I3C_CCC_VENDOR(0, true), &dest, 1);
-	ret = i3c_master_send_ccc_cmd_locked(master, &cmd);
-	i3c_ccc_cmd_dest_cleanup(&dest);
-	if (ret && cmd.err == I3C_ERROR_M2)
-		ret = 0;
-	if (ret)
-		return ret;
-
-	/* Send SETAASA CCC command */
-	i3c_ccc_cmd_dest_init(&dest, I3C_BROADCAST_ADDR, 0);
-	i3c_ccc_cmd_init(&cmd, false, I3C_CCC_SETAASA, &dest, 1);
-	ret = i3c_master_send_ccc_cmd_locked(master, &cmd);
-	i3c_ccc_cmd_dest_cleanup(&dest);
-	if (ret && cmd.err == I3C_ERROR_M2)
-		ret = 0;
-
-	return ret;
-}
-
-/**
  * i3c_master_entdaa_locked() - start a DAA (Dynamic Address Assignment)
  *				procedure
  * @master: master used to send frames on the bus
@@ -1237,7 +1089,8 @@ static int i3c_master_setaasa_locked(struct i3c_master_controller *master)
  *
  * This function must be called with the bus lock held in write mode.
  *
- * Return: 0 in case of success, or a negative error code otherwise.
+ * Return: 0 in case of success, a positive I3C error code if the error is
+ * one of the official Mx error codes, and a negative error code otherwise.
  */
 int i3c_master_entdaa_locked(struct i3c_master_controller *master)
 {
@@ -1250,37 +1103,12 @@ int i3c_master_entdaa_locked(struct i3c_master_controller *master)
 	ret = i3c_master_send_ccc_cmd_locked(master, &cmd);
 	i3c_ccc_cmd_dest_cleanup(&dest);
 
-	/* No active devices need an address. */
-	if (ret && cmd.err == I3C_ERROR_M2)
-		ret = 0;
-
 	return ret;
 }
 EXPORT_SYMBOL_GPL(i3c_master_entdaa_locked);
 
-/**
- * i3c_master_enec_disec_locked() - send an ENEC or DISEC CCC command
- * @master: master used to send frames on the bus
- * @addr: a valid I3C slave address or %I3C_BROADCAST_ADDR
- * @enable: true to send ENEC, false to send DISEC
- * @evts: events to enable or disable
- * @suppress_m2: if true, treat an M2 (NACK) error from the CCC as success
- *
- * Send an ENEC or DISEC CCC command to enable or disable some or all events
- * coming from a specific slave, or all devices if @addr is
- * %I3C_BROADCAST_ADDR.
- *
- * When @suppress_m2 is true, a NACK of the broadcast (which can happen when
- * no devices are present on the bus) is not reported as an error. This is
- * useful for callers that want to configure event reporting unconditionally,
- * regardless of whether any devices are currently on the bus.
- *
- * This function must be called with the bus lock held in write mode.
- *
- * Return: 0 in case of success, or a negative error code otherwise.
- */
-int i3c_master_enec_disec_locked(struct i3c_master_controller *master, u8 addr,
-				 bool enable, u8 evts, bool suppress_m2)
+static int i3c_master_enec_disec_locked(struct i3c_master_controller *master,
+					u8 addr, bool enable, u8 evts)
 {
 	struct i3c_ccc_events *events;
 	struct i3c_ccc_cmd_dest dest;
@@ -1300,12 +1128,8 @@ int i3c_master_enec_disec_locked(struct i3c_master_controller *master, u8 addr,
 	ret = i3c_master_send_ccc_cmd_locked(master, &cmd);
 	i3c_ccc_cmd_dest_cleanup(&dest);
 
-	if (suppress_m2 && ret && cmd.err == I3C_ERROR_M2)
-		ret = 0;
-
 	return ret;
 }
-EXPORT_SYMBOL_GPL(i3c_master_enec_disec_locked);
 
 /**
  * i3c_master_disec_locked() - send a DISEC CCC command
@@ -1318,12 +1142,13 @@ EXPORT_SYMBOL_GPL(i3c_master_enec_disec_locked);
  *
  * This function must be called with the bus lock held in write mode.
  *
- * Return: 0 in case of success, or a negative error code otherwise.
+ * Return: 0 in case of success, a positive I3C error code if the error is
+ * one of the official Mx error codes, and a negative error code otherwise.
  */
 int i3c_master_disec_locked(struct i3c_master_controller *master, u8 addr,
 			    u8 evts)
 {
-	return i3c_master_enec_disec_locked(master, addr, false, evts, false);
+	return i3c_master_enec_disec_locked(master, addr, false, evts);
 }
 EXPORT_SYMBOL_GPL(i3c_master_disec_locked);
 
@@ -1338,12 +1163,13 @@ EXPORT_SYMBOL_GPL(i3c_master_disec_locked);
  *
  * This function must be called with the bus lock held in write mode.
  *
- * Return: 0 in case of success, or a negative error code otherwise.
+ * Return: 0 in case of success, a positive I3C error code if the error is
+ * one of the official Mx error codes, and a negative error code otherwise.
  */
 int i3c_master_enec_locked(struct i3c_master_controller *master, u8 addr,
 			   u8 evts)
 {
-	return i3c_master_enec_disec_locked(master, addr, true, evts, false);
+	return i3c_master_enec_disec_locked(master, addr, true, evts);
 }
 EXPORT_SYMBOL_GPL(i3c_master_enec_locked);
 
@@ -1363,7 +1189,8 @@ EXPORT_SYMBOL_GPL(i3c_master_enec_locked);
  *
  * This function must be called with the bus lock held in write mode.
  *
- * Return: 0 in case of success, or a negative error code otherwise.
+ * Return: 0 in case of success, a positive I3C error code if the error is
+ * one of the official Mx error codes, and a negative error code otherwise.
  */
 int i3c_master_defslvs_locked(struct i3c_master_controller *master)
 {
@@ -1488,14 +1315,10 @@ static int i3c_master_getmrl_locked(struct i3c_master_controller *master,
 		return -ENOMEM;
 
 	/*
-	 * GETMRL returns 2 bytes (max read length) when the device does not
-	 * advertise IBI payload, or 2 or 3 bytes when it does (the optional
-	 * third byte is max IBI length). Use optional_bytes to allow either
-	 * length when IBI payload is supported.
+	 * When the device does not have IBI payload GETMRL only returns 2
+	 * bytes of data.
 	 */
-	if (info->bcr & I3C_BCR_IBI_PAYLOAD)
-		dest.payload.optional_bytes = 1;
-	else
+	if (!(info->bcr & I3C_BCR_IBI_PAYLOAD))
 		dest.payload.len -= 1;
 
 	i3c_ccc_cmd_init(&cmd, true, I3C_CCC_GETMRL, &dest, 1);
@@ -1503,7 +1326,7 @@ static int i3c_master_getmrl_locked(struct i3c_master_controller *master,
 	if (ret)
 		goto out;
 
-	switch (dest.payload.actual_len) {
+	switch (dest.payload.len) {
 	case 3:
 		info->max_ibi_len = mrl->ibi_len;
 		fallthrough;
@@ -1538,7 +1361,7 @@ static int i3c_master_getmwl_locked(struct i3c_master_controller *master,
 	if (ret)
 		goto out;
 
-	if (dest.payload.actual_len != sizeof(*mwl)) {
+	if (dest.payload.len != sizeof(*mwl)) {
 		ret = -EIO;
 		goto out;
 	}
@@ -1564,32 +1387,27 @@ static int i3c_master_getmxds_locked(struct i3c_master_controller *master,
 	if (!getmaxds)
 		return -ENOMEM;
 
-	dest.payload.optional_bytes = 3;
-
 	i3c_ccc_cmd_init(&cmd, true, I3C_CCC_GETMXDS, &dest, 1);
 	ret = i3c_master_send_ccc_cmd_locked(master, &cmd);
 	if (ret) {
 		/*
-		 * optional_bytes = 3 accepts a 2-byte response on the first
-		 * attempt, so this fallback runs only when the 5-byte request
-		 * fails rather than returning a short read.
+		 * Retry when the device does not support max read turnaround
+		 * while expecting shorter length from this CCC command.
 		 */
 		dest.payload.len -= 3;
-		dest.payload.optional_bytes = 0;
-		i3c_ccc_cmd_init(&cmd, true, I3C_CCC_GETMXDS, &dest, 1);
 		ret = i3c_master_send_ccc_cmd_locked(master, &cmd);
 		if (ret)
 			goto out;
 	}
 
-	if (dest.payload.actual_len != 2 && dest.payload.actual_len != 5) {
+	if (dest.payload.len != 2 && dest.payload.len != 5) {
 		ret = -EIO;
 		goto out;
 	}
 
 	info->max_read_ds = getmaxds->maxrd;
 	info->max_write_ds = getmaxds->maxwr;
-	if (dest.payload.actual_len == 5)
+	if (dest.payload.len == 5)
 		info->max_read_turnaround = getmaxds->maxrdturn[0] |
 					    ((u32)getmaxds->maxrdturn[1] << 8) |
 					    ((u32)getmaxds->maxrdturn[2] << 16);
@@ -1618,7 +1436,7 @@ static int i3c_master_gethdrcap_locked(struct i3c_master_controller *master,
 	if (ret)
 		goto out;
 
-	if (dest.payload.actual_len != 1) {
+	if (dest.payload.len != 1) {
 		ret = -EIO;
 		goto out;
 	}
@@ -1759,57 +1577,6 @@ static int i3c_master_retrieve_dev_info(struct i3c_dev_desc *dev)
 	return 0;
 }
 
-static int i3c_master_getstatus_locked(struct i3c_master_controller *master,
-				       u8 addr, u16 *status)
-{
-	struct i3c_ccc_getstatus *getstatus;
-	struct i3c_ccc_cmd_dest dest;
-	struct i3c_ccc_cmd cmd;
-	int ret;
-
-	getstatus = i3c_ccc_cmd_dest_init(&dest, addr, sizeof(*getstatus));
-	if (!getstatus)
-		return -ENOMEM;
-
-	i3c_ccc_cmd_init(&cmd, true, I3C_CCC_GETSTATUS, &dest, 1);
-	ret = i3c_master_send_ccc_cmd_locked(master, &cmd);
-	if (ret)
-		goto out;
-
-	if (dest.payload.len != sizeof(*getstatus)) {
-		ret = -EIO;
-		goto out;
-	}
-
-	if (status)
-		*status = be16_to_cpu(getstatus->status);
-out:
-	i3c_ccc_cmd_dest_cleanup(&dest);
-
-	return ret;
-}
-
-/* Values are chosen to give the device plenty of opportunities to respond */
-#define I3C_DEV_PROBE_INITIAL_DELAY_US	20
-#define I3C_DEV_PROBE_DELAY_FACTOR	2
-#define I3C_DEV_PROBE_CNT		5
-
-static bool i3c_master_i3c_dev_present(struct i3c_master_controller *master, unsigned int addr)
-{
-	int delay = I3C_DEV_PROBE_INITIAL_DELAY_US;
-
-	for (int i = 0; i < I3C_DEV_PROBE_CNT; i++) {
-		if (i) {
-			fsleep(delay);
-			delay *= I3C_DEV_PROBE_DELAY_FACTOR;
-		}
-		if (!i3c_master_getstatus_locked(master, addr, NULL))
-			return true;
-	}
-
-	return false;
-}
-
 static void i3c_master_put_i3c_addrs(struct i3c_dev_desc *dev)
 {
 	struct i3c_master_controller *master = i3c_dev_get_master(dev);
@@ -1909,22 +1676,7 @@ static int i3c_master_attach_i3c_dev(struct i3c_master_controller *master,
 	return 0;
 }
 
-/**
- * i3c_master_reattach_i3c_dev_locked() - reattach an I3C device with a new address
- * @dev: I3C device descriptor to reattach
- * @old_dyn_addr: previous dynamic address of the device
- *
- * This function reattaches an existing I3C device to the bus when its dynamic
- * address has changed. It updates the bus address slot status accordingly:
- * - Marks the new dynamic address as occupied by an I3C device.
- * - Frees the old dynamic address slot if applicable.
- *
- * This function must be called with the bus lock held in write mode.
- *
- * Return: 0 on success, or a negative error code if reattachment fails
- *         (e.g. -EBUSY if the new address slot is not free).
- */
-int i3c_master_reattach_i3c_dev_locked(struct i3c_dev_desc *dev,
+static int i3c_master_reattach_i3c_dev(struct i3c_dev_desc *dev,
 				       u8 old_dyn_addr)
 {
 	struct i3c_master_controller *master = i3c_dev_get_master(dev);
@@ -1949,7 +1701,6 @@ int i3c_master_reattach_i3c_dev_locked(struct i3c_dev_desc *dev,
 
 	return 0;
 }
-EXPORT_SYMBOL_GPL(i3c_master_reattach_i3c_dev_locked);
 
 static void i3c_master_detach_i3c_dev(struct i3c_dev_desc *dev)
 {
@@ -2000,10 +1751,8 @@ static int i3c_master_early_i3c_dev_add(struct i3c_master_controller *master,
 	int ret;
 
 	i3cdev = i3c_master_alloc_i3c_dev(master, &info);
-	if (IS_ERR(i3cdev)) {
-		ret = -ENOMEM;
-		goto err_reserve_addr;
-	}
+	if (IS_ERR(i3cdev))
+		return -ENOMEM;
 
 	i3cdev->boardinfo = boardinfo;
 
@@ -2011,29 +1760,13 @@ static int i3c_master_early_i3c_dev_add(struct i3c_master_controller *master,
 	if (ret)
 		goto err_free_dev;
 
-	/*
-	 * For devices using SETAASA instead of ENTDAA, the address is statically
-	 * assigned. Update the dynamic address to the provided static address.
-	 * Reattach the I3C device after updating the dynamic address with the same
-	 * static address. It is not mandatory for such devices to implement CCC
-	 * commands like GETPID, GETDCR etc. Hence, we can return after reattaching.
-	 */
-	if (i3cdev->boardinfo->static_addr_method & I3C_ADDR_METHOD_SETAASA) {
-		i3cdev->info.dyn_addr = i3cdev->boardinfo->static_addr;
-		ret = i3c_master_reattach_i3c_dev_locked(i3cdev, 0);
-		if (ret)
-			goto err_detach_dev;
-
-		return 0;
-	}
-
 	ret = i3c_master_setdasa_locked(master, i3cdev->info.static_addr,
 					i3cdev->boardinfo->init_dyn_addr);
 	if (ret)
 		goto err_detach_dev;
 
 	i3cdev->info.dyn_addr = i3cdev->boardinfo->init_dyn_addr;
-	ret = i3c_master_reattach_i3c_dev_locked(i3cdev, 0);
+	ret = i3c_master_reattach_i3c_dev(i3cdev, 0);
 	if (ret)
 		goto err_rstdaa;
 
@@ -2049,16 +1782,6 @@ err_detach_dev:
 	i3c_master_detach_i3c_dev(i3cdev);
 err_free_dev:
 	i3c_master_free_i3c_dev(i3cdev);
-err_reserve_addr:
-	/*
-	 * A target using SETAASA may still get the static address on the
-	 * SETAASA broadcast even if attach fails here. Keep the address
-	 * reserved so that it is not assigned to another device during DAA.
-	 */
-	if (boardinfo->static_addr_method & I3C_ADDR_METHOD_SETAASA)
-		i3c_bus_set_addr_slot_status(&master->bus,
-					     boardinfo->static_addr,
-					     I3C_ADDR_SLOT_RSVD);
 
 	return ret;
 }
@@ -2085,7 +1808,7 @@ i3c_master_register_new_i3c_devs(struct i3c_master_controller *master)
 		if (desc->dev || !desc->info.dyn_addr || desc == master->this)
 			continue;
 
-		desc->dev = kzalloc_obj(*desc->dev);
+		desc->dev = kzalloc(sizeof(*desc->dev), GFP_KERNEL);
 		if (!desc->dev)
 			continue;
 
@@ -2095,24 +1818,11 @@ i3c_master_register_new_i3c_devs(struct i3c_master_controller *master)
 		desc->dev->dev.type = &i3c_device_type;
 		desc->dev->dev.bus = &i3c_bus_type;
 		desc->dev->dev.release = i3c_device_release;
-
-		/*
-		 * For devices without PID (e.g., SETAASA devices), use
-		 * static address for naming instead.
-		 */
-		if (desc->info.pid)
-			dev_set_name(&desc->dev->dev, "%d-%llx", master->bus.id,
-				     desc->info.pid);
-		else
-			dev_set_name(&desc->dev->dev, "%d-%02x", master->bus.id,
-				     desc->info.static_addr);
+		dev_set_name(&desc->dev->dev, "%d-%llx", master->bus.id,
+			     desc->info.pid);
 
 		if (desc->boardinfo)
-			device_set_node(&desc->dev->dev, desc->boardinfo->fwnode);
-
-		/* If the device has IBI capability, set as wakeup capable */
-		if (master->ibi_wakeup && (desc->info.bcr & I3C_BCR_IBI_REQ_CAP))
-			device_set_wakeup_capable(&desc->dev->dev, true);
+			desc->dev->dev.of_node = desc->boardinfo->of_node;
 
 		list_add_tail(&desc->dev->node, &i3c_unreg_devs);
 	}
@@ -2148,39 +1858,68 @@ static void i3c_master_reg_work_fn(struct work_struct *work)
 }
 
 /**
- * i3c_master_has_wakeup_enabled_devs() - check if any device can wake the system
- * @master: I3C master controller
+ * i3c_master_do_daa_ext() - Dynamic Address Assignment (extended version)
+ * @master: controller
+ * @rstdaa: whether to first perform Reset of Dynamic Addresses (RSTDAA)
  *
- * Iterate over devices on the bus and return true if any device has
- * system wakeup enabled and IBI enabled.
+ * Perform Dynamic Address Assignment with optional support for System
+ * Hibernation (@rstdaa is true).
  *
- * Whether a device is enabled for system wakeup is user space policy,
- * settable at any time through the device's power/wakeup sysfs attribute,
- * so the answer is only stable once user space is frozen.  Call this from
- * a system suspend callback.
+ * After System Hibernation, Dynamic Addresses can have been reassigned at boot
+ * time to different values. A simple strategy is followed to handle that.
+ * Perform a Reset of Dynamic Addresses (RSTDAA) followed by the normal DAA
+ * procedure which has provision for reassigning addresses that differ from the
+ * previously recorded addresses.
  *
- * Return: true if any device may wake the system via IBI, false otherwise.
+ * Return: a 0 in case of success, an negative error code otherwise.
  */
-bool i3c_master_has_wakeup_enabled_devs(struct i3c_master_controller *master)
+int i3c_master_do_daa_ext(struct i3c_master_controller *master, bool rstdaa)
 {
-	struct i3c_dev_desc *desc;
-	bool wakeup = false;
+	int rstret = 0;
+	int ret;
 
-	i3c_bus_normaluse_lock(&master->bus);
-	i3c_bus_for_each_i3cdev(&master->bus, desc) {
-		if (!desc->dev || desc == master->this || !device_may_wakeup(&desc->dev->dev))
-			continue;
-		guard(mutex)(&desc->ibi_lock);
-		if (desc->ibi && desc->ibi->enabled) {
-			wakeup = true;
-			break;
-		}
+	ret = i3c_master_rpm_get(master);
+	if (ret)
+		return ret;
+
+	i3c_bus_maintenance_lock(&master->bus);
+
+	if (master->shutting_down) {
+		ret = -ENODEV;
+	} else {
+		if (rstdaa)
+			rstret = i3c_master_rstdaa_locked(master, I3C_BROADCAST_ADDR);
+		ret = master->ops->do_daa(master);
 	}
-	i3c_bus_normaluse_unlock(&master->bus);
 
-	return wakeup;
+	i3c_bus_maintenance_unlock(&master->bus);
+
+	if (ret)
+		goto out;
+
+	queue_work(master->wq, &master->reg_work);
+out:
+	i3c_master_rpm_put(master);
+
+	return rstret ?: ret;
 }
-EXPORT_SYMBOL_GPL(i3c_master_has_wakeup_enabled_devs);
+EXPORT_SYMBOL_GPL(i3c_master_do_daa_ext);
+
+/**
+ * i3c_master_do_daa() - do a DAA (Dynamic Address Assignment)
+ * @master: master doing the DAA
+ *
+ * This function instantiates I3C device objects and adds them to the
+ * I3C device list. All device information is automatically retrieved using
+ * standard CCC commands.
+ *
+ * Return: a 0 in case of success, an negative error code otherwise.
+ */
+int i3c_master_do_daa(struct i3c_master_controller *master)
+{
+	return i3c_master_do_daa_ext(master, false);
+}
+EXPORT_SYMBOL_GPL(i3c_master_do_daa);
 
 /**
  * i3c_master_dma_map_single() - Map buffer for single DMA transfer
@@ -2198,10 +1937,11 @@ EXPORT_SYMBOL_GPL(i3c_master_has_wakeup_enabled_devs);
 struct i3c_dma *i3c_master_dma_map_single(struct device *dev, void *buf,
 	size_t len, bool force_bounce, enum dma_data_direction dir)
 {
+	struct i3c_dma *dma_xfer __free(kfree) = NULL;
 	void *bounce __free(kfree) = NULL;
 	void *dma_buf = buf;
 
-	struct i3c_dma *dma_xfer __free(kfree) = kzalloc_obj(*dma_xfer);
+	dma_xfer = kzalloc(sizeof(*dma_xfer), GFP_KERNEL);
 	if (!dma_xfer)
 		return NULL;
 
@@ -2454,14 +2194,11 @@ static int i3c_master_bus_init(struct i3c_master_controller *master)
 			goto err_bus_cleanup;
 	}
 
-	/*
-	 * Disable all slave events before starting DAA. When no active device
-	 * is on the bus, returns Mx error code M2, this error is ignored.
-	 */
-	ret = i3c_master_enec_disec_locked(master, I3C_BROADCAST_ADDR, false,
-					   I3C_CCC_EVENT_SIR | I3C_CCC_EVENT_MR |
-					   I3C_CCC_EVENT_HJ, true);
-	if (ret)
+	/* Disable all slave events before starting DAA. */
+	ret = i3c_master_disec_locked(master, I3C_BROADCAST_ADDR,
+				      I3C_CCC_EVENT_SIR | I3C_CCC_EVENT_MR |
+				      I3C_CCC_EVENT_HJ);
+	if (ret && ret != I3C_ERROR_M2)
 		goto err_bus_cleanup;
 
 	/*
@@ -2503,19 +2240,6 @@ static int i3c_master_bus_init(struct i3c_master_controller *master)
 
 		if (i3cboardinfo->static_addr)
 			i3c_master_early_i3c_dev_add(master, i3cboardinfo);
-	}
-
-	/*
-	 * SETAASA is a broadcast CCC. Issue it after SETDASA so that devices
-	 * configured for SETDASA (or supporting both methods) are assigned
-	 * first, matching MIPI DISCO guidance to prefer SETDASA when both are
-	 * available. Targets that already have a dynamic address ignore the
-	 * later SETAASA broadcast.
-	 */
-	if (master->addr_method & I3C_ADDR_METHOD_SETAASA) {
-		ret = i3c_master_setaasa_locked(master);
-		if (ret)
-			goto err_rstdaa;
 	}
 
 	ret = i3c_master_do_daa(master);
@@ -2560,18 +2284,8 @@ static void i3c_master_attach_boardinfo(struct i3c_dev_desc *i3cdev)
 	struct i3c_dev_boardinfo *i3cboardinfo;
 
 	list_for_each_entry(i3cboardinfo, &master->boardinfo.i3c, node) {
-		/*
-		 * For devices without PID (e.g., SETAASA devices), match by
-		 * static address. For devices with PID, match by PID.
-		 */
-		if (i3cboardinfo->pid) {
-			if (i3cdev->info.pid != i3cboardinfo->pid)
-				continue;
-		} else {
-			if (!i3cboardinfo->static_addr ||
-			    i3cdev->info.static_addr != i3cboardinfo->static_addr)
-				continue;
-		}
+		if (i3cdev->info.pid != i3cboardinfo->pid)
+			continue;
 
 		i3cdev->boardinfo = i3cboardinfo;
 		i3cdev->info.static_addr = i3cboardinfo->static_addr;
@@ -2585,12 +2299,8 @@ i3c_master_search_i3c_dev_duplicate(struct i3c_dev_desc *refdev)
 	struct i3c_master_controller *master = i3c_dev_get_master(refdev);
 	struct i3c_dev_desc *i3cdev;
 
-	if (!refdev->info.pid)
-		return NULL;
-
 	i3c_bus_for_each_i3cdev(&master->bus, i3cdev) {
-		if (i3cdev != refdev && i3cdev->info.pid &&
-		    i3cdev->info.pid == refdev->info.pid &&
+		if (i3cdev != refdev && i3cdev->info.pid == refdev->info.pid &&
 		    i3cdev != master->this)
 			return i3cdev;
 	}
@@ -2599,25 +2309,29 @@ i3c_master_search_i3c_dev_duplicate(struct i3c_dev_desc *refdev)
 }
 
 /**
- * __i3c_master_add_i3c_dev_locked() - add an I3C slave to the bus
+ * i3c_master_add_i3c_dev_locked() - add an I3C slave to the bus
  * @master: master used to send frames on the bus
  * @addr: I3C slave dynamic address assigned to the device
- * @probe: probe to see if the device is really present at @addr
  *
- * This function instantiates an I3C device object and adds it to the I3C device
- * list. All device information is retrieved using standard CCC commands.
+ * This function is instantiating an I3C device object and adding it to the
+ * I3C device list. All device information are automatically retrieved using
+ * standard CCC commands.
+ *
+ * The I3C device object is returned in case the master wants to attach
+ * private data to it using i3c_dev_set_master_data().
  *
  * This function must be called with the bus lock held in write mode.
+ *
+ * Return: a 0 in case of success, an negative error code otherwise.
  */
-static void __i3c_master_add_i3c_dev_locked(struct i3c_master_controller *master,
-					    u8 addr, bool probe)
+int i3c_master_add_i3c_dev_locked(struct i3c_master_controller *master,
+				  u8 addr)
 {
 	struct i3c_device_info info = { .dyn_addr = addr };
 	struct i3c_dev_desc *newdev, *olddev;
 	u8 old_dyn_addr = addr, expected_dyn_addr;
 	struct i3c_ibi_setup ibireq = { };
 	bool enable_ibi = false;
-	bool no_dev = false;
 	int ret;
 
 	newdev = i3c_master_alloc_i3c_dev(master, &info);
@@ -2629,18 +2343,6 @@ static void __i3c_master_add_i3c_dev_locked(struct i3c_master_controller *master
 	ret = i3c_master_attach_i3c_dev(master, newdev);
 	if (ret)
 		goto err_free_dev;
-
-	/*
-	 * When a dynamic address is first assigned, there is no need to check
-	 * whether it is still assigned, however, if adding the device fails,
-	 * it will be attempted again later, at which point the address may
-	 * have been lost (e.g. due to power management), so for that case,
-	 * probe to see if the device is still present at the assigned address.
-	 */
-	if (probe && !i3c_master_i3c_dev_present(master, addr)) {
-		no_dev = true;
-		goto err_detach_dev;
-	}
 
 	ret = i3c_master_retrieve_dev_info(newdev);
 	if (ret)
@@ -2715,7 +2417,7 @@ static void __i3c_master_add_i3c_dev_locked(struct i3c_master_controller *master
 		if (!ret) {
 			old_dyn_addr = newdev->info.dyn_addr;
 			newdev->info.dyn_addr = expected_dyn_addr;
-			i3c_master_reattach_i3c_dev_locked(newdev, old_dyn_addr);
+			i3c_master_reattach_i3c_dev(newdev, old_dyn_addr);
 		} else {
 			dev_err(&master->dev,
 				"Failed to assign reserved/old address to device %d%llx",
@@ -2747,7 +2449,7 @@ static void __i3c_master_add_i3c_dev_locked(struct i3c_master_controller *master
 		mutex_unlock(&newdev->ibi_lock);
 	}
 
-	return;
+	return 0;
 
 err_detach_dev:
 	if (newdev->dev && newdev->dev->desc)
@@ -2759,8 +2461,6 @@ err_free_dev:
 	i3c_master_free_i3c_dev(newdev);
 
 err_prevent_addr_reuse:
-	if (no_dev)
-		return;
 	/*
 	 * Although the device has not been added, the address has been
 	 * assigned. Prevent the address from being used again.
@@ -2769,172 +2469,16 @@ err_prevent_addr_reuse:
 		i3c_bus_set_addr_slot_status(&master->bus, addr, I3C_ADDR_SLOT_I3C_DEV);
 
 	dev_err(&master->dev, "Failed to add I3C device at address %u, error %d\n", addr, ret);
-}
 
-/**
- * i3c_master_add_i3c_dev_locked() - add an I3C slave to the bus
- * @master: master used to send frames on the bus
- * @addr: I3C slave dynamic address assigned to the device
- *
- * This function instantiates an I3C device object and adds it to the
- * I3C device list. All device information is automatically retrieved using
- * standard CCC commands.
- *
- * This function must be called with the bus lock held in write mode.
- */
-void i3c_master_add_i3c_dev_locked(struct i3c_master_controller *master, u8 addr)
-{
-	__i3c_master_add_i3c_dev_locked(master, addr, false);
+	return ret;
 }
 EXPORT_SYMBOL_GPL(i3c_master_add_i3c_dev_locked);
 
-static void i3c_master_reconcile_dyn_addrs(struct i3c_master_controller *master)
-{
-	DECLARE_BITMAP(dev_dyn_addrs, I2C_MAX_ADDR + 1);
-	enum i3c_addr_slot_status status;
-	struct i3c_dev_desc *desc;
-
-	/* Mark all devices' dynamic and static addresses in the bitmap */
-	bitmap_zero(dev_dyn_addrs, I2C_MAX_ADDR + 1);
-	i3c_bus_for_each_i3cdev(&master->bus, desc) {
-		if (desc->info.static_addr)
-			__set_bit(desc->info.static_addr, dev_dyn_addrs);
-		__set_bit(desc->info.dyn_addr, dev_dyn_addrs);
-	}
-	/* Reconcile the bitmap with the bus address slot status */
-	for (unsigned int addr = 0; addr <= I2C_MAX_ADDR; addr++) {
-		status = i3c_bus_get_addr_slot_status(&master->bus, addr);
-		if (status != I3C_ADDR_SLOT_I3C_DEV || test_bit(addr, dev_dyn_addrs))
-			continue;
-		i3c_bus_set_addr_slot_status(&master->bus, addr, I3C_ADDR_SLOT_FREE);
-		/* Try to add the device, but probe to see if it is really present */
-		__i3c_master_add_i3c_dev_locked(master, addr, true);
-	}
-}
-
-/**
- * i3c_master_do_daa_ext() - Dynamic Address Assignment (extended version)
- * @master: controller
- * @rstdaa: whether to first perform Reset of Dynamic Addresses (RSTDAA)
- *
- * Perform Dynamic Address Assignment with optional support for System
- * Hibernation (@rstdaa is true).
- *
- * After System Hibernation, Dynamic Addresses can have been reassigned at boot
- * time to different values. A simple strategy is followed to handle that.
- * Perform a Reset of Dynamic Addresses (RSTDAA) followed by the normal DAA
- * procedure which has provision for reassigning addresses that differ from the
- * previously recorded addresses.
- *
- * Return: a 0 in case of success, an negative error code otherwise.
- */
-int i3c_master_do_daa_ext(struct i3c_master_controller *master, bool rstdaa)
-{
-	int rstret = 0;
-	int ret;
-
-	ret = i3c_master_rpm_get(master);
-	if (ret)
-		return ret;
-
-	i3c_bus_maintenance_lock(&master->bus);
-
-	if (master->shutting_down) {
-		ret = -ENODEV;
-	} else {
-		if (rstdaa)
-			rstret = i3c_master_rstdaa_locked(master, I3C_BROADCAST_ADDR);
-		ret = master->ops->do_daa(master);
-		/*
-		 * Handle cases where a dynamic address was assigned but the
-		 * device was not successfully added.
-		 */
-		i3c_master_reconcile_dyn_addrs(master);
-	}
-
-	i3c_bus_maintenance_unlock(&master->bus);
-
-	if (ret)
-		goto out;
-
-	queue_work(master->wq, &master->reg_work);
-out:
-	i3c_master_rpm_put(master);
-
-	return rstret ?: ret;
-}
-EXPORT_SYMBOL_GPL(i3c_master_do_daa_ext);
-
-/**
- * i3c_master_do_daa() - do a DAA (Dynamic Address Assignment)
- * @master: master doing the DAA
- *
- * This function instantiates I3C device objects and adds them to the
- * I3C device list. All device information is automatically retrieved using
- * standard CCC commands.
- *
- * Return: a 0 in case of success, an negative error code otherwise.
- */
-int i3c_master_do_daa(struct i3c_master_controller *master)
-{
-	return i3c_master_do_daa_ext(master, false);
-}
-EXPORT_SYMBOL_GPL(i3c_master_do_daa);
-
 #define OF_I3C_REG1_IS_I2C_DEV			BIT(31)
 
-#ifdef CONFIG_ACPI
-static int i3c_acpi_get_i2c_resource(struct acpi_resource *ares, void *data)
-{
-	struct i2c_dev_boardinfo *boardinfo = data;
-	struct acpi_resource_i2c_serialbus *sb;
-
-	if (boardinfo->base.addr || !i2c_acpi_get_i2c_resource(ares, &sb))
-		return 1;
-
-	boardinfo->base.addr = sb->slave_address;
-	if (sb->access_mode == ACPI_I2C_10BIT_MODE)
-		boardinfo->base.flags |= I2C_CLIENT_TEN;
-
-	boardinfo->lvr = sb->lvr;
-
-	return 1;
-}
-
-static int i3c_acpi_add_i2c_boardinfo(struct i2c_dev_boardinfo *boardinfo,
-				      struct fwnode_handle *fwnode)
-{
-	struct acpi_device *adev = to_acpi_device_node(fwnode);
-	LIST_HEAD(resources);
-	int ret;
-
-	boardinfo->base.fwnode = acpi_fwnode_handle(adev);
-	acpi_set_modalias(adev, dev_name(&adev->dev), boardinfo->base.type,
-			  sizeof(boardinfo->base.type));
-
-	ret = acpi_dev_get_resources(adev, &resources,
-				     i3c_acpi_get_i2c_resource, boardinfo);
-	if (ret < 0)
-		return ret;
-
-	acpi_dev_free_resource_list(&resources);
-
-	if (!boardinfo->base.addr)
-		return -ENODEV;
-
-	return 0;
-}
-#else
-static inline int i3c_acpi_add_i2c_boardinfo(struct i2c_dev_boardinfo *boardinfo,
-					     struct fwnode_handle *fwnode)
-{
-	return -ENODEV;
-}
-#endif
-
 static int
-i3c_master_add_i2c_boardinfo(struct i3c_master_controller *master,
-			     struct fwnode_handle *fwnode, u32 *reg)
+of_i3c_master_add_i2c_boardinfo(struct i3c_master_controller *master,
+				struct device_node *node, u32 *reg)
 {
 	struct i2c_dev_boardinfo *boardinfo;
 	struct device *dev = &master->dev;
@@ -2944,22 +2488,9 @@ i3c_master_add_i2c_boardinfo(struct i3c_master_controller *master,
 	if (!boardinfo)
 		return -ENOMEM;
 
-	if (is_of_node(fwnode)) {
-		ret = of_i2c_get_board_info(dev, to_of_node(fwnode), &boardinfo->base);
-		if (ret)
-			return ret;
-
-		/* LVR is encoded in reg[2] for Device Tree. */
-		boardinfo->lvr = reg[2];
-	} else if (is_acpi_device_node(fwnode)) {
-		ret = i3c_acpi_add_i2c_boardinfo(boardinfo, fwnode);
-		if (ret) {
-			devm_kfree(dev, boardinfo);
-			return ret;
-		}
-	} else {
-		return -EINVAL;
-	}
+	ret = of_i2c_get_board_info(dev, node, &boardinfo->base);
+	if (ret)
+		return ret;
 
 	/*
 	 * The I3C Specification does not clearly say I2C devices with 10-bit
@@ -2967,24 +2498,27 @@ i3c_master_add_i2c_boardinfo(struct i3c_master_controller *master,
 	 * DEFSLVS command.
 	 */
 	if (boardinfo->base.flags & I2C_CLIENT_TEN) {
-		dev_err(dev, "I2C device with 10 bit address not supported.\n");
+		dev_err(dev, "I2C device with 10 bit address not supported.");
 		return -EOPNOTSUPP;
 	}
 
+	/* LVR is encoded in reg[2]. */
+	boardinfo->lvr = reg[2];
+
 	list_add_tail(&boardinfo->node, &master->boardinfo.i2c);
-	fwnode_handle_get(fwnode);
+	of_node_get(node);
 
 	return 0;
 }
 
 static int
-i3c_master_add_i3c_boardinfo(struct i3c_master_controller *master,
-			     struct fwnode_handle *fwnode, u32 *reg)
+of_i3c_master_add_i3c_boardinfo(struct i3c_master_controller *master,
+				struct device_node *node, u32 *reg)
 {
 	struct i3c_dev_boardinfo *boardinfo;
 	struct device *dev = &master->dev;
 	enum i3c_addr_slot_status addrstatus;
-	u32 init_dyn_addr = 0, static_addr_method = 0;
+	u32 init_dyn_addr = 0;
 
 	boardinfo = devm_kzalloc(dev, sizeof(*boardinfo), GFP_KERNEL);
 	if (!boardinfo)
@@ -3002,19 +2536,7 @@ i3c_master_add_i3c_boardinfo(struct i3c_master_controller *master,
 
 	boardinfo->static_addr = reg[0];
 
-	if (!fwnode_property_read_u32(fwnode, "mipi-i3c-static-method", &static_addr_method))
-		boardinfo->static_addr_method = static_addr_method &
-					(I3C_ADDR_METHOD_SETDASA | I3C_ADDR_METHOD_SETAASA);
-
-	if (!fwnode_property_read_u32(fwnode, "assigned-address", &init_dyn_addr)) {
-		/*
-		 * When a device advertises both SETDASA and SETAASA, an explicit
-		 * dynamic address selects SETDASA (MIPI DISCO prefers it); drop
-		 * SETAASA so it is not used for this device.
-		 */
-		if (boardinfo->static_addr_method & I3C_ADDR_METHOD_SETDASA)
-			boardinfo->static_addr_method &= ~I3C_ADDR_METHOD_SETAASA;
-
+	if (!of_property_read_u32(node, "assigned-address", &init_dyn_addr)) {
 		if (init_dyn_addr > I3C_MAX_ADDR)
 			return -EINVAL;
 
@@ -3024,36 +2546,21 @@ i3c_master_add_i3c_boardinfo(struct i3c_master_controller *master,
 			return -EINVAL;
 	}
 
-	if (boardinfo->static_addr_method & I3C_ADDR_METHOD_SETAASA) {
-		/* For SETAASA, static address is taken as the dynamic address. */
-		init_dyn_addr = boardinfo->static_addr;
-	}
-
-	/* Update the address methods required for device discovery */
-	master->addr_method |= boardinfo->static_addr_method;
-
 	boardinfo->pid = ((u64)reg[1] << 32) | reg[2];
 
-	/* For SETAASA devices, validate the static address instead of PID */
-	if (boardinfo->static_addr_method & I3C_ADDR_METHOD_SETAASA) {
-		if (!boardinfo->static_addr)
-			return -EINVAL;
-	} else {
-		if (!I3C_PID_MANUF_ID(boardinfo->pid) ||
-		    (boardinfo->pid & GENMASK_ULL(63, 48)) ||
-		    I3C_PID_RND_LOWER_32BITS(boardinfo->pid))
-			return -EINVAL;
-	}
+	if ((boardinfo->pid & GENMASK_ULL(63, 48)) ||
+	    I3C_PID_RND_LOWER_32BITS(boardinfo->pid))
+		return -EINVAL;
 
 	boardinfo->init_dyn_addr = init_dyn_addr;
-	boardinfo->fwnode = fwnode_handle_get(fwnode);
+	boardinfo->of_node = of_node_get(node);
 	list_add_tail(&boardinfo->node, &master->boardinfo.i3c);
 
 	return 0;
 }
 
-static int i3c_master_add_of_dev(struct i3c_master_controller *master,
-				 struct fwnode_handle *fwnode)
+static int of_i3c_master_add_dev(struct i3c_master_controller *master,
+				 struct device_node *node)
 {
 	u32 reg[3];
 	int ret;
@@ -3061,110 +2568,39 @@ static int i3c_master_add_of_dev(struct i3c_master_controller *master,
 	if (!master)
 		return -EINVAL;
 
-	ret = fwnode_property_read_u32_array(fwnode, "reg", reg, ARRAY_SIZE(reg));
+	ret = of_property_read_u32_array(node, "reg", reg, ARRAY_SIZE(reg));
 	if (ret)
 		return ret;
 
 	/*
-	 * I3C device should have either the manufacturer ID specified or the
-	 * address discovery method specified. Else treat it as an I2C device.
+	 * The manufacturer ID can't be 0. If reg[1] == 0 that means we're
+	 * dealing with an I2C device.
 	 */
-	if (!reg[1] && !fwnode_property_present(fwnode, "mipi-i3c-static-method"))
-		ret = i3c_master_add_i2c_boardinfo(master, fwnode, reg);
+	if (!reg[1])
+		ret = of_i3c_master_add_i2c_boardinfo(master, node, reg);
 	else
-		ret = i3c_master_add_i3c_boardinfo(master, fwnode, reg);
+		ret = of_i3c_master_add_i3c_boardinfo(master, node, reg);
 
 	return ret;
 }
 
-#ifdef CONFIG_ACPI
-static int i3c_master_add_acpi_dev(struct i3c_master_controller *master,
-				   struct fwnode_handle *fwnode)
-{
-	struct acpi_device *adev = to_acpi_device_node(fwnode);
-	acpi_bus_address adr;
-	u32 reg[3] = { 0 };
-	int ret;
-
-	/*
-	 * If the ACPI table entry has _ADR method, it's an I3C device.
-	 * Otherwise it may be an I2C device described by an I2cSerialBus
-	 * resource. If no I2cSerialBus resource is found, ignore the entry.
-	 */
-	if (!acpi_has_method(adev->handle, "_ADR")) {
-		ret = i3c_master_add_i2c_boardinfo(master, fwnode, reg);
-		if (ret == -ENODEV)
-			return 0;
-
-		return ret;
-	}
-
-	adr = acpi_device_adr(adev);
-
-	/* For I3C devices, _ADR will have the 48 bit PID of the device  */
-	reg[1] = upper_32_bits(adr);
-	reg[2] = lower_32_bits(adr);
-
-	fwnode_property_read_u32(fwnode, "mipi-i3c-static-address", &reg[0]);
-
-	return i3c_master_add_i3c_boardinfo(master, fwnode, reg);
-}
-
-static u8 i3c_acpi_i2c_get_lvr(struct i2c_client *client)
-{
-	struct acpi_device *adev = to_acpi_device_node(client->dev.fwnode);
-	struct i2c_dev_boardinfo boardinfo = {};
-	LIST_HEAD(resources);
-	int ret;
-	u8 lvr;
-
-	lvr = I3C_LVR_I2C_INDEX(2) | I3C_LVR_I2C_FM_MODE;
-
-	ret = acpi_dev_get_resources(adev, &resources,
-				     i3c_acpi_get_i2c_resource, &boardinfo);
-	if (ret < 0)
-		return lvr;
-
-	if (boardinfo.base.addr)
-		lvr = boardinfo.lvr;
-
-	acpi_dev_free_resource_list(&resources);
-
-	return lvr;
-}
-#else
-static inline int i3c_master_add_acpi_dev(struct i3c_master_controller *master,
-					  struct fwnode_handle *fwnode)
-{
-	return -ENODEV;
-}
-
-static inline u8 i3c_acpi_i2c_get_lvr(struct i2c_client *client)
-{
-	return I3C_LVR_I2C_INDEX(2) | I3C_LVR_I2C_FM_MODE;
-}
-#endif
-
-static int fwnode_populate_i3c_bus(struct i3c_master_controller *master)
+static int of_populate_i3c_bus(struct i3c_master_controller *master)
 {
 	struct device *dev = &master->dev;
-	struct fwnode_handle *fwnode = dev_fwnode(dev);
+	struct device_node *i3cbus_np = dev->of_node;
+	struct device_node *node;
 	int ret;
 	u32 val;
 
-	if (!fwnode)
+	if (!i3cbus_np)
 		return 0;
 
-	fwnode_for_each_available_child_node_scoped(fwnode, child) {
-		if (is_of_node(child))
-			ret = i3c_master_add_of_dev(master, child);
-		else if (is_acpi_device_node(child))
-			ret = i3c_master_add_acpi_dev(master, child);
-		else
-			continue;
-
-		if (ret)
+	for_each_available_child_of_node(i3cbus_np, node) {
+		ret = of_i3c_master_add_dev(master, node);
+		if (ret) {
+			of_node_put(node);
 			return ret;
+		}
 	}
 
 	/*
@@ -3172,10 +2608,10 @@ static int fwnode_populate_i3c_bus(struct i3c_master_controller *master)
 	 * on the bus are not supporting typical rates, or if the bus topology
 	 * prevents it from using max possible rate.
 	 */
-	if (!device_property_read_u32(dev, "i2c-scl-hz", &val))
+	if (!of_property_read_u32(i3cbus_np, "i2c-scl-hz", &val))
 		master->bus.scl_rate.i2c = val;
 
-	if (!device_property_read_u32(dev, "i3c-scl-hz", &val))
+	if (!of_property_read_u32(i3cbus_np, "i3c-scl-hz", &val))
 		master->bus.scl_rate.i3c = val;
 
 	return 0;
@@ -3230,13 +2666,8 @@ static u8 i3c_master_i2c_get_lvr(struct i2c_client *client)
 	u8 lvr = I3C_LVR_I2C_INDEX(2) | I3C_LVR_I2C_FM_MODE;
 	u32 reg[3];
 
-	if (is_of_node(client->dev.fwnode)) {
-		if (!fwnode_property_read_u32_array(client->dev.fwnode, "reg",
-						    reg, ARRAY_SIZE(reg)))
-			lvr = reg[2];
-	} else if (is_acpi_device_node(client->dev.fwnode)) {
-		lvr = i3c_acpi_i2c_get_lvr(client);
-	}
+	if (!of_property_read_u32_array(client->dev.of_node, "reg", reg, ARRAY_SIZE(reg)))
+		lvr = reg[2];
 
 	return lvr;
 }
@@ -3354,8 +2785,7 @@ static int i3c_master_i2c_adapter_init(struct i3c_master_controller *master)
 	struct i2c_adapter *adap = i3c_master_to_i2c_adapter(master);
 	struct i2c_dev_desc *i2cdev;
 	struct i2c_dev_boardinfo *i2cboardinfo;
-	struct fwnode_handle *fwnode = dev_fwnode(&master->dev);
-	int ret, id = -1;
+	int ret, id;
 
 	adap->dev.parent = master->dev.parent;
 	adap->owner = master->dev.parent->driver->owner;
@@ -3364,9 +2794,7 @@ static int i3c_master_i2c_adapter_init(struct i3c_master_controller *master)
 	adap->timeout = HZ;
 	adap->retries = 3;
 
-	if (fwnode && is_of_node(fwnode))
-		id = of_alias_get_id(to_of_node(fwnode), "i2c");
-
+	id = of_alias_get_id(master->dev.of_node, "i2c");
 	if (id >= 0) {
 		adap->nr = id;
 		ret = i2c_add_numbered_adapter(adap);
@@ -3419,9 +2847,6 @@ static void i3c_master_unregister_i3c_devs(struct i3c_master_controller *master)
 	}
 }
 
-/* Approximate time for IBI handler to run */
-#define I3C_WAKEUP_PROCESSING_TIME_MS 100
-
 /**
  * i3c_master_queue_ibi() - Queue an IBI
  * @dev: the device this IBI is coming from
@@ -3434,9 +2859,6 @@ void i3c_master_queue_ibi(struct i3c_dev_desc *dev, struct i3c_ibi_slot *slot)
 {
 	if (!dev->ibi || !slot)
 		return;
-
-	if (device_may_wakeup(&dev->dev->dev))
-		pm_wakeup_event(&dev->dev->dev, I3C_WAKEUP_PROCESSING_TIME_MS);
 
 	atomic_inc(&dev->ibi->pending_ibis);
 	queue_work(dev->ibi->wq, &slot->work);
@@ -3477,10 +2899,10 @@ struct i3c_generic_ibi_slot {
 struct i3c_generic_ibi_pool {
 	spinlock_t lock;
 	unsigned int num_slots;
+	struct i3c_generic_ibi_slot *slots;
 	void *payload_buf;
 	struct list_head free_slots;
 	struct list_head pending;
-	struct i3c_generic_ibi_slot slots[] __counted_by(num_slots);
 };
 
 /**
@@ -3508,6 +2930,7 @@ void i3c_generic_ibi_free_pool(struct i3c_generic_ibi_pool *pool)
 	WARN_ON(nslots != pool->num_slots);
 
 	kfree(pool->payload_buf);
+	kfree(pool->slots);
 	kfree(pool);
 }
 EXPORT_SYMBOL_GPL(i3c_generic_ibi_free_pool);
@@ -3530,15 +2953,19 @@ i3c_generic_ibi_alloc_pool(struct i3c_dev_desc *dev,
 	unsigned int i;
 	int ret;
 
-	pool = kzalloc_flex(*pool, slots, req->num_slots);
+	pool = kzalloc(sizeof(*pool), GFP_KERNEL);
 	if (!pool)
 		return ERR_PTR(-ENOMEM);
-
-	pool->num_slots = req->num_slots;
 
 	spin_lock_init(&pool->lock);
 	INIT_LIST_HEAD(&pool->free_slots);
 	INIT_LIST_HEAD(&pool->pending);
+
+	pool->slots = kcalloc(req->num_slots, sizeof(*slot), GFP_KERNEL);
+	if (!pool->slots) {
+		ret = -ENOMEM;
+		goto err_free_pool;
+	}
 
 	if (req->max_payload_len) {
 		pool->payload_buf = kcalloc(req->num_slots,
@@ -3558,6 +2985,7 @@ i3c_generic_ibi_alloc_pool(struct i3c_dev_desc *dev,
 					  (i * req->max_payload_len);
 
 		list_add_tail(&slot->node, &pool->free_slots);
+		pool->num_slots++;
 	}
 
 	return pool;
@@ -3621,7 +3049,7 @@ EXPORT_SYMBOL_GPL(i3c_generic_ibi_recycle_slot);
 
 static int i3c_master_check_ops(const struct i3c_master_controller_ops *ops)
 {
-	if (!ops || !ops->bus_init || !ops->i3c_xfers ||
+	if (!ops || !ops->bus_init || !ops->priv_xfers ||
 	    !ops->send_ccc_cmd || !ops->do_daa || !ops->i2c_xfers)
 		return -EINVAL;
 
@@ -3674,13 +3102,12 @@ int i3c_master_register(struct i3c_master_controller *master,
 		return ret;
 
 	master->dev.parent = parent;
-	device_set_node(&master->dev, fwnode_handle_get(dev_fwnode(parent)));
+	master->dev.of_node = of_node_get(parent->of_node);
 	master->dev.bus = &i3c_bus_type;
 	master->dev.type = &i3c_masterdev_type;
 	master->dev.release = i3c_masterdev_release;
 	master->ops = ops;
 	master->secondary = secondary;
-	master->addr_method = I3C_ADDR_METHOD_SETDASA;
 	INIT_LIST_HEAD(&master->boardinfo.i2c);
 	INIT_LIST_HEAD(&master->boardinfo.i3c);
 
@@ -3694,13 +3121,13 @@ int i3c_master_register(struct i3c_master_controller *master,
 	master->dev.coherent_dma_mask = parent->coherent_dma_mask;
 	master->dev.dma_parms = parent->dma_parms;
 
-	ret = i3c_bus_init(i3cbus, dev_fwnode(&master->dev));
+	ret = i3c_bus_init(i3cbus, master->dev.of_node);
 	if (ret)
 		goto err_put_dev;
 
 	dev_set_name(&master->dev, "i3c-%d", i3cbus->id);
 
-	ret = fwnode_populate_i3c_bus(master);
+	ret = of_populate_i3c_bus(master);
 	if (ret)
 		goto err_put_dev;
 
@@ -3835,8 +3262,9 @@ int i3c_dev_setdasa_locked(struct i3c_dev_desc *dev)
 						dev->boardinfo->init_dyn_addr);
 }
 
-int i3c_dev_do_xfers_locked(struct i3c_dev_desc *dev, struct i3c_xfer *xfers,
-			    int nxfers, enum i3c_xfer_mode mode)
+int i3c_dev_do_priv_xfers_locked(struct i3c_dev_desc *dev,
+				 struct i3c_priv_xfer *xfers,
+				 int nxfers)
 {
 	struct i3c_master_controller *master;
 
@@ -3847,22 +3275,12 @@ int i3c_dev_do_xfers_locked(struct i3c_dev_desc *dev, struct i3c_xfer *xfers,
 	if (!master || !xfers)
 		return -EINVAL;
 
-	if (mode != I3C_SDR && !(master->this->info.hdr_cap & BIT(mode)))
+	if (!master->ops->priv_xfers)
 		return -EOPNOTSUPP;
 
-	return master->ops->i3c_xfers(dev, xfers, nxfers, mode);
+	return master->ops->priv_xfers(dev, xfers, nxfers);
 }
 
-/**
- * i3c_dev_disable_ibi_locked() - Disable IBIs coming from a specific device
- * @dev: device on which IBIs should be disabled
- *
- * This function disable IBIs coming from a specific device and wait for
- * all pending IBIs to be processed.
- *
- * Context: Must be called with mutex_lock(&dev->desc->ibi_lock) held.
- * Return: 0 in case of success, a negative error core otherwise.
- */
 int i3c_dev_disable_ibi_locked(struct i3c_dev_desc *dev)
 {
 	struct i3c_master_controller *master;
@@ -3884,22 +3302,7 @@ int i3c_dev_disable_ibi_locked(struct i3c_dev_desc *dev)
 
 	return 0;
 }
-EXPORT_SYMBOL_GPL(i3c_dev_disable_ibi_locked);
 
-/**
- * i3c_dev_enable_ibi_locked() - Enable IBIs from a specific device (lock held)
- * @dev: device on which IBIs should be enabled
- *
- * This function enable IBIs coming from a specific device and wait for
- * all pending IBIs to be processed. This should be called on a device
- * where i3c_device_request_ibi() has succeeded.
- *
- * Note that IBIs from this device might be received before this function
- * returns to its caller.
- *
- * Context: Must be called with mutex_lock(&dev->desc->ibi_lock) held.
- * Return: 0 on success, or a negative error code on failure.
- */
 int i3c_dev_enable_ibi_locked(struct i3c_dev_desc *dev)
 {
 	struct i3c_master_controller *master = i3c_dev_get_master(dev);
@@ -3914,20 +3317,7 @@ int i3c_dev_enable_ibi_locked(struct i3c_dev_desc *dev)
 
 	return ret;
 }
-EXPORT_SYMBOL_GPL(i3c_dev_enable_ibi_locked);
 
-/**
- * i3c_dev_request_ibi_locked() - Request an IBI
- * @dev: device for which we should enable IBIs
- * @req: setup requested for this IBI
- *
- * This function is responsible for pre-allocating all resources needed to
- * process IBIs coming from @dev. When this function returns, the IBI is not
- * enabled until i3c_device_enable_ibi() is called.
- *
- * Context: Must be called with mutex_lock(&dev->desc->ibi_lock) held.
- * Return: 0 in case of success, a negative error core otherwise.
- */
 int i3c_dev_request_ibi_locked(struct i3c_dev_desc *dev,
 			       const struct i3c_ibi_setup *req)
 {
@@ -3941,7 +3331,7 @@ int i3c_dev_request_ibi_locked(struct i3c_dev_desc *dev,
 	if (dev->ibi)
 		return -EBUSY;
 
-	ibi = kzalloc_obj(*ibi);
+	ibi = kzalloc(sizeof(*ibi), GFP_KERNEL);
 	if (!ibi)
 		return -ENOMEM;
 
@@ -3966,18 +3356,7 @@ int i3c_dev_request_ibi_locked(struct i3c_dev_desc *dev,
 
 	return ret;
 }
-EXPORT_SYMBOL_GPL(i3c_dev_request_ibi_locked);
 
-/**
- * i3c_dev_free_ibi_locked() - Free all resources needed for IBI handling
- * @dev: device on which you want to release IBI resources
- *
- * This function is responsible for de-allocating resources previously
- * allocated by i3c_device_request_ibi(). It should be called after disabling
- * IBIs with i3c_device_disable_ibi().
- *
- * Context: Must be called with mutex_lock(&dev->desc->ibi_lock) held.
- */
 void i3c_dev_free_ibi_locked(struct i3c_dev_desc *dev)
 {
 	struct i3c_master_controller *master = i3c_dev_get_master(dev);
@@ -4008,7 +3387,6 @@ void i3c_dev_free_ibi_locked(struct i3c_dev_desc *dev)
 	kfree(dev->ibi);
 	dev->ibi = NULL;
 }
-EXPORT_SYMBOL_GPL(i3c_dev_free_ibi_locked);
 
 static int __init i3c_init(void)
 {

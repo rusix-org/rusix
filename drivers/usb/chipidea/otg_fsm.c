@@ -629,6 +629,7 @@ int ci_otg_fsm_work(struct ci_hdrc *ci)
 				ci_otg_queue_work(ci);
 			}
 		} else if (ci->fsm.otg->state == OTG_STATE_A_HOST) {
+			pm_runtime_mark_last_busy(ci->dev);
 			pm_runtime_put_autosuspend(ci->dev);
 			return 0;
 		}
@@ -705,7 +706,7 @@ static void ci_otg_fsm_event(struct ci_hdrc *ci)
 		if ((intr_sts & USBi_PCI) && !port_conn) {
 			fsm->b_conn = 0;
 
-			/* if gadget driver is bound */
+			/* if gadget driver is binded */
 			if (ci->driver) {
 				/* A device to be peripheral mode */
 				ci->gadget.is_a_peripheral = 1;

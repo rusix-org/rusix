@@ -1,25 +1,13 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 #include <string.h>
 #include <objtool/check.h>
-#include <objtool/disas.h>
 #include <objtool/warn.h>
 #include <asm/inst.h>
 #include <asm/orc_types.h>
 #include <linux/objtool_types.h>
 #include <arch/elf.h>
 
-const char *arch_reg_name[CFI_NUM_REGS] = {
-	"zero", "ra", "tp", "sp",
-	"a0", "a1", "a2", "a3",
-	"a4", "a5", "a6", "a7",
-	"t0", "t1", "t2", "t3",
-	"t4", "t5", "t6", "t7",
-	"t8", "u0", "fp", "s0",
-	"s1", "s2", "s3", "s4",
-	"s5", "s6", "s7", "s8"
-};
-
-int arch_ftrace_match(const char *name)
+int arch_ftrace_match(char *name)
 {
 	return !strcmp(name, "_mcount");
 }
@@ -29,9 +17,9 @@ unsigned long arch_jump_destination(struct instruction *insn)
 	return insn->offset + (insn->immediate << 2);
 }
 
-s64 arch_insn_adjusted_addend(struct instruction *insn, struct reloc *reloc)
+unsigned long arch_dest_reloc_offset(int addend)
 {
-	return reloc_addend(reloc);
+	return addend;
 }
 
 bool arch_pc_relative_reloc(struct reloc *reloc)
@@ -426,14 +414,3 @@ unsigned long arch_jump_table_sym_offset(struct reloc *reloc, struct reloc *tabl
 		return reloc->sym->offset + reloc_addend(reloc);
 	}
 }
-
-#ifdef DISAS
-
-int arch_disas_info_init(struct disassemble_info *dinfo)
-{
-	return disas_info_init(dinfo, bfd_arch_loongarch,
-			       bfd_mach_loongarch32, bfd_mach_loongarch64,
-			       NULL);
-}
-
-#endif /* DISAS */

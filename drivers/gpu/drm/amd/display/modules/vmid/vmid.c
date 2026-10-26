@@ -56,11 +56,8 @@ static void clear_entry_from_vmid_table(struct core_vmid *core_vmid, unsigned in
 
 static void evict_vmids(struct core_vmid *core_vmid)
 {
-	unsigned int i;
-	int ord_int = dc_get_vmid_use_vector(core_vmid->dc);
-
-	ASSERT(ord_int >= 0 && ord_int <= 0xFFFF);
-	uint16_t ord = (uint16_t)ord_int;
+	int i;
+	uint16_t ord = dc_get_vmid_use_vector(core_vmid->dc);
 
 	// At this point any positions with value 0 are unused vmids, evict them
 	for (i = 1; i < core_vmid->num_vmid; i++) {
@@ -72,7 +69,7 @@ static void evict_vmids(struct core_vmid *core_vmid)
 // Return value of -1 indicates vmid table uninitialized or ptb dne in the table
 static int get_existing_vmid_for_ptb(struct core_vmid *core_vmid, uint64_t ptb)
 {
-	unsigned int i;
+	int i;
 
 	for (i = 0; i < core_vmid->num_vmid; i++) {
 		if (core_vmid->ptb_assigned_to_vmid[i] == ptb)
@@ -85,7 +82,7 @@ static int get_existing_vmid_for_ptb(struct core_vmid *core_vmid, uint64_t ptb)
 // Expected to be called only when there's an available vmid
 static int get_next_available_vmid(struct core_vmid *core_vmid)
 {
-	unsigned int i;
+	int i;
 
 	for (i = 1; i < core_vmid->num_vmid; i++) {
 		if (core_vmid->ptb_assigned_to_vmid[i] == 0)
@@ -123,8 +120,7 @@ uint8_t mod_vmid_get_for_ptb(struct mod_vmid *mod_vmid, uint64_t ptb)
 			ASSERT(0);
 	}
 
-	ASSERT(vmid >= 0 && vmid <= 0xFF);
-	return (uint8_t)vmid;
+	return vmid;
 }
 
 void mod_vmid_reset(struct mod_vmid *mod_vmid)
@@ -148,7 +144,7 @@ struct mod_vmid *mod_vmid_create(
 	if (dc == NULL)
 		goto fail_dc_null;
 
-	core_vmid = kzalloc_obj(struct core_vmid);
+	core_vmid = kzalloc(sizeof(struct core_vmid), GFP_KERNEL);
 
 	if (core_vmid == NULL)
 		goto fail_alloc_context;

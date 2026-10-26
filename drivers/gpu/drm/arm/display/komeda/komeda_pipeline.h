@@ -128,8 +128,6 @@ struct komeda_component {
 	const struct komeda_component_funcs *funcs;
 };
 
-#define to_component(o)	container_of(o, struct komeda_component, obj)
-
 /**
  * struct komeda_component_output
  *
@@ -155,7 +153,7 @@ struct komeda_component_output {
  * @komeda_scaler_state
  */
 struct komeda_component_state {
-	/** @obj: tracking component_state by drm_atomic_commit */
+	/** @obj: tracking component_state by drm_atomic_state */
 	struct drm_private_state obj;
 	/** @component: backpointer to the component */
 	struct komeda_component *component;
@@ -319,7 +317,7 @@ struct komeda_splitter_state {
 
 struct komeda_improc {
 	struct komeda_component base;
-	u32 supported_color_formats;  /* BIT(DRM_OUTPUT_COLOR_FORMAT_RGB444/YUV444/YUV420) */
+	u32 supported_color_formats;  /* DRM_RGB/YUV444/YUV420*/
 	u32 supported_color_depths; /* BIT(8) | BIT(10)*/
 	u8 supports_degamma : 1;
 	u8 supports_csc : 1;
@@ -328,8 +326,7 @@ struct komeda_improc {
 
 struct komeda_improc_state {
 	struct komeda_component_state base;
-	enum drm_output_color_format color_format;
-	u8 color_depth;
+	u8 color_format, color_depth;
 	u16 hsize, vsize;
 	u32 fgamma_coeffs[KOMEDA_N_GAMMA_COEFFS];
 	u32 ctm_coeffs[KOMEDA_N_CTM_COEFFS];
@@ -388,7 +385,7 @@ struct komeda_pipeline_funcs {
  * Represent a complete display pipeline and hold all functional components.
  */
 struct komeda_pipeline {
-	/** @obj: link pipeline as private obj of drm_atomic_commit */
+	/** @obj: link pipeline as private obj of drm_atomic_state */
 	struct drm_private_obj obj;
 	/** @mdev: the parent komeda_dev */
 	struct komeda_dev *mdev;
@@ -448,10 +445,10 @@ struct komeda_pipeline {
  *
  * NOTE:
  * Unlike the pipeline, pipeline_state doesn’t gather any component_state
- * into it. It because all component will be managed by drm_atomic_commit.
+ * into it. It because all component will be managed by drm_atomic_state.
  */
 struct komeda_pipeline_state {
-	/** @obj: tracking pipeline_state by drm_atomic_commit */
+	/** @obj: tracking pipeline_state by drm_atomic_state */
 	struct drm_private_state obj;
 	/** @pipe: backpointer to the pipeline */
 	struct komeda_pipeline *pipe;
@@ -555,11 +552,11 @@ int komeda_release_unclaimed_resources(struct komeda_pipeline *pipe,
 
 struct komeda_pipeline_state *
 komeda_pipeline_get_old_state(struct komeda_pipeline *pipe,
-			      struct drm_atomic_commit *state);
+			      struct drm_atomic_state *state);
 bool komeda_pipeline_disable(struct komeda_pipeline *pipe,
-			     struct drm_atomic_commit *old_state);
+			     struct drm_atomic_state *old_state);
 void komeda_pipeline_update(struct komeda_pipeline *pipe,
-			    struct drm_atomic_commit *old_state);
+			    struct drm_atomic_state *old_state);
 
 void komeda_complete_data_flow_cfg(struct komeda_layer *layer,
 				   struct komeda_data_flow_cfg *dflow,

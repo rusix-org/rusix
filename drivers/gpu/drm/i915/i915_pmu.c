@@ -6,8 +6,6 @@
 
 #include <linux/pm_runtime.h>
 
-#include <drm/drm_print.h>
-
 #include "gt/intel_engine.h"
 #include "gt/intel_engine_pm.h"
 #include "gt/intel_engine_regs.h"
@@ -897,7 +895,7 @@ static ssize_t i915_pmu_format_show(struct device *dev,
 	struct i915_str_attribute *eattr;
 
 	eattr = container_of(attr, struct i915_str_attribute, attr);
-	return sysfs_emit(buf, "%s\n", eattr->str);
+	return sprintf(buf, "%s\n", eattr->str);
 }
 
 #define I915_PMU_FORMAT_ATTR(_name, _config) \
@@ -927,7 +925,7 @@ static ssize_t i915_pmu_event_show(struct device *dev,
 	struct i915_ext_attribute *eattr;
 
 	eattr = container_of(attr, struct i915_ext_attribute, attr);
-	return sysfs_emit(buf, "config=0x%lx\n", eattr->val);
+	return sprintf(buf, "config=0x%lx\n", eattr->val);
 }
 
 #define __event(__counter, __name, __unit) \
@@ -1028,16 +1026,16 @@ create_event_attributes(struct i915_pmu *pmu)
 	}
 
 	/* Allocate attribute objects and table. */
-	i915_attr = kzalloc_objs(*i915_attr, count);
+	i915_attr = kcalloc(count, sizeof(*i915_attr), GFP_KERNEL);
 	if (!i915_attr)
 		goto err_alloc;
 
-	pmu_attr = kzalloc_objs(*pmu_attr, count);
+	pmu_attr = kcalloc(count, sizeof(*pmu_attr), GFP_KERNEL);
 	if (!pmu_attr)
 		goto err_alloc;
 
 	/* Max one pointer of each attribute type plus a termination entry. */
-	attr = kzalloc_objs(*attr, count * 2 + 1);
+	attr = kcalloc(count * 2 + 1, sizeof(*attr), GFP_KERNEL);
 	if (!attr)
 		goto err_alloc;
 

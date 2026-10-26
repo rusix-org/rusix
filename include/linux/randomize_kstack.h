@@ -6,7 +6,6 @@
 #include <linux/kernel.h>
 #include <linux/jump_label.h>
 #include <linux/percpu-defs.h>
-#include <linux/prandom.h>
 
 DECLARE_STATIC_KEY_MAYBE(CONFIG_RANDOMIZE_KSTACK_OFFSET_DEFAULT,
 			 randomize_kstack_offset);
@@ -46,22 +45,9 @@ DECLARE_STATIC_KEY_MAYBE(CONFIG_RANDOMIZE_KSTACK_OFFSET_DEFAULT,
 #define KSTACK_OFFSET_MAX(x)	((x) & 0b1111111100)
 #endif
 
-DECLARE_PER_CPU(struct rnd_state, kstack_rnd_state);
-
-static __always_inline u32 get_kstack_offset(void)
-{
-	struct rnd_state *state;
-	u32 rnd;
-
-	state = &get_cpu_var(kstack_rnd_state);
-	rnd = prandom_u32_state(state);
-	put_cpu_var(kstack_rnd_state);
-
-	return rnd;
-}
-
 /**
- * add_random_kstack_offset - Increase stack utilization by a random offset.
+ * add_random_kstack_offset - Increase stack utilization by previously
+ *			      chosen random offset
  *
  * This should be used in the syscall entry path after user registers have been
  * stored to the stack. Preemption may be enabled. For testing the resulting
@@ -70,7 +56,7 @@ static __always_inline u32 get_kstack_offset(void)
 #define add_random_kstack_offset() do {					\
 	if (static_branch_maybe(CONFIG_RANDOMIZE_KSTACK_OFFSET_DEFAULT,	\
 				&randomize_kstack_offset)) {		\
-		u32 offset = get_kstack_offset();			\
+		u32 offset = current->kstack_offset;			\
 		u8 *ptr = __kstack_alloca(KSTACK_OFFSET_MAX(offset));	\
 		/* Keep allocation even after "ptr" loses scope. */	\
 		asm volatile("" :: "r"(ptr) : "memory");		\
@@ -78,26 +64,39 @@ static __always_inline u32 get_kstack_offset(void)
 } while (0)
 
 /**
- * add_random_kstack_offset_irqsoff - Increase stack utilization by a random offset.
+ * choose_random_kstack_offset - Choose the random offset for the next
+ *				 add_random_kstack_offset()
  *
- * This should be used in the syscall entry path after user registers have been
- * stored to the stack. Interrupts must be still disabled.
+ * This should only be used during syscall exit. Preemption may be enabled. This
+ * position in the syscall flow is done to frustrate attacks from userspace
+ * attempting to learn the next offset:
+ * - Maximize the timing uncertainty visible from userspace: if the
+ *   offset is chosen at syscall entry, userspace has much more control
+ *   over the timing between choosing offsets. "How long will we be in
+ *   kernel mode?" tends to be more difficult to predict than "how long
+ *   will we be in user mode?"
+ * - Reduce the lifetime of the new offset sitting in memory during
+ *   kernel mode execution. Exposure of "thread-local" memory content
+ *   (e.g. current, percpu, etc) tends to be easier than arbitrary
+ *   location memory exposure.
  */
-#define add_random_kstack_offset_irqsoff()					\
-do {										\
-	lockdep_assert_irqs_disabled();						\
-	if (static_branch_maybe(CONFIG_RANDOMIZE_KSTACK_OFFSET_DEFAULT,		\
-				&randomize_kstack_offset)) {			\
-		u32 offset = prandom_u32_state(raw_cpu_ptr(&kstack_rnd_state));	\
-		u8 *ptr = __kstack_alloca(KSTACK_OFFSET_MAX(offset));		\
-		/* Keep allocation even after "ptr" loses scope. */		\
-		asm volatile("" :: "r"(ptr) : "memory");			\
-	}									\
+#define choose_random_kstack_offset(rand) do {				\
+	if (static_branch_maybe(CONFIG_RANDOMIZE_KSTACK_OFFSET_DEFAULT,	\
+				&randomize_kstack_offset)) {		\
+		u32 offset = current->kstack_offset;			\
+		offset = ror32(offset, 5) ^ (rand);			\
+		current->kstack_offset = offset;			\
+	}								\
 } while (0)
 
+static inline void random_kstack_task_init(struct task_struct *tsk)
+{
+	tsk->kstack_offset = 0;
+}
 #else /* CONFIG_RANDOMIZE_KSTACK_OFFSET */
 #define add_random_kstack_offset()		do { } while (0)
-#define add_random_kstack_offset_irqsoff()	do { } while (0)
+#define choose_random_kstack_offset(rand)	do { } while (0)
+#define random_kstack_task_init(tsk)		do { } while (0)
 #endif /* CONFIG_RANDOMIZE_KSTACK_OFFSET */
 
 #endif

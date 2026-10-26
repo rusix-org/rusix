@@ -130,6 +130,7 @@ struct mlxsw_pci {
 		} comp;
 	} cmd;
 	struct mlxsw_bus_info bus_info;
+	const struct pci_device_id *id;
 	enum mlxsw_pci_cqe_v max_cqe_ver; /* Maximal supported CQE version */
 	u8 num_cqs; /* Number of CQs */
 	u8 num_sdqs; /* Number of SDQs */
@@ -1263,7 +1264,7 @@ static int mlxsw_pci_queue_init(struct mlxsw_pci *mlxsw_pci, char *mbox,
 	if (!mem_item->buf)
 		return -ENOMEM;
 
-	q->elem_info = kzalloc_objs(*q->elem_info, q->count);
+	q->elem_info = kcalloc(q->count, sizeof(*q->elem_info), GFP_KERNEL);
 	if (!q->elem_info) {
 		err = -ENOMEM;
 		goto err_elem_info_alloc;
@@ -1315,7 +1316,7 @@ static int mlxsw_pci_queue_group_init(struct mlxsw_pci *mlxsw_pci, char *mbox,
 	int err;
 
 	queue_group = mlxsw_pci_queue_type_group_get(mlxsw_pci, q_ops->type);
-	queue_group->q = kzalloc_objs(*queue_group->q, num_qs);
+	queue_group->q = kcalloc(num_qs, sizeof(*queue_group->q), GFP_KERNEL);
 	if (!queue_group->q)
 		return -ENOMEM;
 
@@ -1666,7 +1667,8 @@ static int mlxsw_pci_fw_area_init(struct mlxsw_pci *mlxsw_pci, char *mbox,
 	int i;
 	int err;
 
-	mlxsw_pci->fw_area.items = kzalloc_objs(*mem_item, num_pages);
+	mlxsw_pci->fw_area.items = kcalloc(num_pages, sizeof(*mem_item),
+					   GFP_KERNEL);
 	if (!mlxsw_pci->fw_area.items)
 		return -ENOMEM;
 	mlxsw_pci->fw_area.count = num_pages;
@@ -1767,6 +1769,7 @@ static void mlxsw_pci_mbox_free(struct mlxsw_pci *mlxsw_pci,
 }
 
 static int mlxsw_pci_sys_ready_wait(struct mlxsw_pci *mlxsw_pci,
+				    const struct pci_device_id *id,
 				    u32 *p_sys_status)
 {
 	unsigned long end;
@@ -1837,7 +1840,7 @@ static int mlxsw_pci_reset_sw(struct mlxsw_pci *mlxsw_pci)
 }
 
 static int
-mlxsw_pci_reset(struct mlxsw_pci *mlxsw_pci)
+mlxsw_pci_reset(struct mlxsw_pci *mlxsw_pci, const struct pci_device_id *id)
 {
 	struct pci_dev *pdev = mlxsw_pci->pdev;
 	bool pci_reset_sbr_supported = false;
@@ -1846,7 +1849,7 @@ mlxsw_pci_reset(struct mlxsw_pci *mlxsw_pci)
 	u32 sys_status;
 	int err;
 
-	err = mlxsw_pci_sys_ready_wait(mlxsw_pci, &sys_status);
+	err = mlxsw_pci_sys_ready_wait(mlxsw_pci, id, &sys_status);
 	if (err) {
 		dev_err(&pdev->dev, "Failed to reach system ready status before reset. Status is 0x%x\n",
 			sys_status);
@@ -1878,7 +1881,7 @@ mlxsw_pci_reset(struct mlxsw_pci *mlxsw_pci)
 	if (err)
 		return err;
 
-	err = mlxsw_pci_sys_ready_wait(mlxsw_pci, &sys_status);
+	err = mlxsw_pci_sys_ready_wait(mlxsw_pci, id, &sys_status);
 	if (err) {
 		dev_err(&pdev->dev, "Failed to reach system ready status after reset. Status is 0x%x\n",
 			sys_status);
@@ -1930,7 +1933,7 @@ static int mlxsw_pci_init(void *bus_priv, struct mlxsw_core *mlxsw_core,
 	if (!mbox)
 		return -ENOMEM;
 
-	err = mlxsw_pci_reset(mlxsw_pci);
+	err = mlxsw_pci_reset(mlxsw_pci, mlxsw_pci->id);
 	if (err)
 		goto err_reset;
 
@@ -2411,7 +2414,7 @@ static int mlxsw_pci_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 	struct mlxsw_pci *mlxsw_pci;
 	int err;
 
-	mlxsw_pci = kzalloc_obj(*mlxsw_pci);
+	mlxsw_pci = kzalloc(sizeof(*mlxsw_pci), GFP_KERNEL);
 	if (!mlxsw_pci)
 		return -ENOMEM;
 
@@ -2429,8 +2432,11 @@ static int mlxsw_pci_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 
 	err = dma_set_mask_and_coherent(&pdev->dev, DMA_BIT_MASK(64));
 	if (err) {
-		dev_err(&pdev->dev, "dma_set_mask_and_coherent failed\n");
-		goto err_pci_set_dma_mask;
+		err = dma_set_mask(&pdev->dev, DMA_BIT_MASK(32));
+		if (err) {
+			dev_err(&pdev->dev, "dma_set_mask failed\n");
+			goto err_pci_set_dma_mask;
+		}
 	}
 
 	if (pci_resource_len(pdev, 0) < MLXSW_PCI_BAR0_SIZE) {
@@ -2459,6 +2465,7 @@ static int mlxsw_pci_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 	mlxsw_pci->bus_info.device_name = pci_name(mlxsw_pci->pdev);
 	mlxsw_pci->bus_info.dev = &pdev->dev;
 	mlxsw_pci->bus_info.read_clock_capable = true;
+	mlxsw_pci->id = id;
 
 	err = mlxsw_core_bus_device_register(&mlxsw_pci->bus_info,
 					     &mlxsw_pci_bus, mlxsw_pci, false,
@@ -2534,6 +2541,18 @@ void mlxsw_pci_driver_unregister(struct pci_driver *pci_driver)
 	pci_unregister_driver(pci_driver);
 }
 EXPORT_SYMBOL(mlxsw_pci_driver_unregister);
+
+static int __init mlxsw_pci_module_init(void)
+{
+	return 0;
+}
+
+static void __exit mlxsw_pci_module_exit(void)
+{
+}
+
+module_init(mlxsw_pci_module_init);
+module_exit(mlxsw_pci_module_exit);
 
 MODULE_LICENSE("Dual BSD/GPL");
 MODULE_AUTHOR("Jiri Pirko <jiri@mellanox.com>");

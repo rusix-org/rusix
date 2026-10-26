@@ -14,6 +14,5 @@ int panfrost_ioctl_perfcnt_enable(struct drm_device *dev, void *data,
 				  struct drm_file *file_priv);
 int panfrost_ioctl_perfcnt_dump(struct drm_device *dev, void *data,
 				struct drm_file *file_priv);
-void panfrost_perfcnt_reset(struct panfrost_device *pfdev);
 
 #endif

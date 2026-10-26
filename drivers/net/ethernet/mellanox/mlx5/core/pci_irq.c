@@ -87,8 +87,9 @@ int mlx5_set_msix_vec_count(struct mlx5_core_dev *dev, int function_id,
 			    int msix_vec_count)
 {
 	int query_sz = MLX5_ST_SZ_BYTES(query_hca_cap_out);
+	int set_sz = MLX5_ST_SZ_BYTES(set_hca_cap_in);
+	void *hca_cap = NULL, *query_cap = NULL, *cap;
 	int num_vf_msix, min_msix, max_msix;
-	void *query_cap, *hca_caps;
 	bool ec_vf_function;
 	int vport;
 	int ret;
@@ -110,8 +111,11 @@ int mlx5_set_msix_vec_count(struct mlx5_core_dev *dev, int function_id,
 		return -EOVERFLOW;
 
 	query_cap = kvzalloc(query_sz, GFP_KERNEL);
-	if (!query_cap)
-		return -ENOMEM;
+	hca_cap = kvzalloc(set_sz, GFP_KERNEL);
+	if (!hca_cap || !query_cap) {
+		ret = -ENOMEM;
+		goto out;
+	}
 
 	ec_vf_function = mlx5_core_ec_sriov_enabled(dev);
 	vport = mlx5_core_func_to_vport(dev, function_id, ec_vf_function);
@@ -119,12 +123,21 @@ int mlx5_set_msix_vec_count(struct mlx5_core_dev *dev, int function_id,
 	if (ret)
 		goto out;
 
-	hca_caps = MLX5_ADDR_OF(query_hca_cap_out, query_cap, capability);
-	MLX5_SET(cmd_hca_cap, hca_caps, dynamic_msix_table_size,
-		 msix_vec_count);
+	cap = MLX5_ADDR_OF(set_hca_cap_in, hca_cap, capability);
+	memcpy(cap, MLX5_ADDR_OF(query_hca_cap_out, query_cap, capability),
+	       MLX5_UN_SZ_BYTES(hca_cap_union));
+	MLX5_SET(cmd_hca_cap, cap, dynamic_msix_table_size, msix_vec_count);
 
-	ret = mlx5_vport_set_other_func_general_cap(dev, hca_caps, vport);
+	MLX5_SET(set_hca_cap_in, hca_cap, opcode, MLX5_CMD_OP_SET_HCA_CAP);
+	MLX5_SET(set_hca_cap_in, hca_cap, other_function, 1);
+	MLX5_SET(set_hca_cap_in, hca_cap, ec_vf_function, ec_vf_function);
+	MLX5_SET(set_hca_cap_in, hca_cap, function_id, function_id);
+
+	MLX5_SET(set_hca_cap_in, hca_cap, op_mod,
+		 MLX5_SET_HCA_CAP_OP_MOD_GENERAL_DEVICE << 1);
+	ret = mlx5_cmd_exec_in(dev, set_hca_cap, hca_cap);
 out:
+	kvfree(hca_cap);
 	kvfree(query_cap);
 	return ret;
 }
@@ -248,7 +261,7 @@ struct mlx5_irq *mlx5_irq_alloc(struct mlx5_irq_pool *pool, int i,
 	struct mlx5_irq *irq;
 	int err;
 
-	irq = kzalloc_obj(*irq);
+	irq = kzalloc(sizeof(*irq), GFP_KERNEL);
 	if (!irq || !zalloc_cpumask_var(&irq->mask, GFP_KERNEL)) {
 		kfree(irq);
 		return ERR_PTR(-ENOMEM);
@@ -458,7 +471,7 @@ struct mlx5_irq *mlx5_ctrl_irq_request(struct mlx5_core_dev *dev)
 	struct irq_affinity_desc *af_desc;
 	struct mlx5_irq *irq;
 
-	af_desc = kvzalloc_obj(*af_desc);
+	af_desc = kvzalloc(sizeof(*af_desc), GFP_KERNEL);
 	if (!af_desc)
 		return ERR_PTR(-ENOMEM);
 
@@ -543,7 +556,7 @@ struct mlx5_irq *mlx5_irq_request_vector(struct mlx5_core_dev *dev, u16 cpu,
 	struct irq_affinity_desc *af_desc;
 	struct mlx5_irq *irq;
 
-	af_desc = kvzalloc_obj(*af_desc);
+	af_desc = kvzalloc(sizeof(*af_desc), GFP_KERNEL);
 	if (!af_desc)
 		return ERR_PTR(-ENOMEM);
 
@@ -565,7 +578,7 @@ static struct mlx5_irq_pool *
 irq_pool_alloc(struct mlx5_core_dev *dev, int start, int size, char *name,
 	       u32 min_threshold, u32 max_threshold)
 {
-	struct mlx5_irq_pool *pool = kvzalloc_obj(*pool);
+	struct mlx5_irq_pool *pool = kvzalloc(sizeof(*pool), GFP_KERNEL);
 
 	if (!pool)
 		return ERR_PTR(-ENOMEM);

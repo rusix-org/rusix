@@ -26,28 +26,21 @@ static ssize_t show_domain_id(struct kobject *kobj, struct kobj_attribute *attr,
 {
 	struct uncore_data *data = container_of(attr, struct uncore_data, domain_id_kobj_attr);
 
-	return sysfs_emit(buf, "%u\n", data->domain_id);
-}
-
-static ssize_t show_instance_id(struct kobject *kobj, struct kobj_attribute *attr, char *buf)
-{
-	struct uncore_data *data = container_of(attr, struct uncore_data, instance_id_kobj_attr);
-
-	return sysfs_emit(buf, "%u\n", data->instance_id);
+	return sprintf(buf, "%u\n", data->domain_id);
 }
 
 static ssize_t show_fabric_cluster_id(struct kobject *kobj, struct kobj_attribute *attr, char *buf)
 {
 	struct uncore_data *data = container_of(attr, struct uncore_data, fabric_cluster_id_kobj_attr);
 
-	return sysfs_emit(buf, "%u\n", data->cluster_id);
+	return sprintf(buf, "%u\n", data->cluster_id);
 }
 
 static ssize_t show_package_id(struct kobject *kobj, struct kobj_attribute *attr, char *buf)
 {
 	struct uncore_data *data = container_of(attr, struct uncore_data, package_id_kobj_attr);
 
-	return sysfs_emit(buf, "%u\n", data->package_id);
+	return sprintf(buf, "%u\n", data->package_id);
 }
 
 #define MAX_UNCORE_AGENT_TYPES	4
@@ -84,7 +77,7 @@ static ssize_t show_attr(struct uncore_data *data, char *buf, enum uncore_index 
 	if (ret)
 		return ret;
 
-	return sysfs_emit(buf, "%u\n", value);
+	return sprintf(buf, "%u\n", value);
 }
 
 static ssize_t store_attr(struct uncore_data *data, const char *buf, ssize_t count,
@@ -207,9 +200,6 @@ static int create_attr_group(struct uncore_data *data, char *name)
 	if (data->domain_id != UNCORE_DOMAIN_ID_INVALID) {
 		init_attribute_root_ro(domain_id);
 		data->uncore_attrs[index++] = &data->domain_id_kobj_attr.attr;
-		init_attribute_root_ro(instance_id);
-		data->uncore_attrs[index++] = &data->instance_id_kobj_attr.attr;
-
 		init_attribute_root_ro(fabric_cluster_id);
 		data->uncore_attrs[index++] = &data->fabric_cluster_id_kobj_attr.attr;
 		init_attribute_root_ro(package_id);
@@ -278,11 +268,10 @@ int uncore_freq_add_entry(struct uncore_data *data, int cpu)
 		if (ret < 0)
 			goto uncore_unlock;
 
-		data->seqnum_id = ret;
-		scnprintf(data->name, sizeof(data->name), "uncore%02d", ret);
+		data->instance_id = ret;
+		sprintf(data->name, "uncore%02d", ret);
 	} else {
-		scnprintf(data->name, sizeof(data->name), "package_%02d_die_%02d",
-			  data->package_id, data->die_id);
+		sprintf(data->name, "package_%02d_die_%02d", data->package_id, data->die_id);
 	}
 
 	/*
@@ -297,7 +286,7 @@ int uncore_freq_add_entry(struct uncore_data *data, int cpu)
 	if (ret) {
 		data->control_cpu = -1;
 		if (data->domain_id != UNCORE_DOMAIN_ID_INVALID)
-			ida_free(&intel_uncore_ida, data->seqnum_id);
+			ida_free(&intel_uncore_ida, data->instance_id);
 	} else {
 		data->valid = true;
 	}
@@ -316,7 +305,7 @@ void uncore_freq_remove_die_entry(struct uncore_data *data)
 	data->control_cpu = -1;
 	data->valid = false;
 	if (data->domain_id != UNCORE_DOMAIN_ID_INVALID)
-		ida_free(&intel_uncore_ida, data->seqnum_id);
+		ida_free(&intel_uncore_ida, data->instance_id);
 
 	mutex_unlock(&uncore_lock);
 }

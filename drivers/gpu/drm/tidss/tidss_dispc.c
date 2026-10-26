@@ -27,7 +27,6 @@
 #include <drm/drm_framebuffer.h>
 #include <drm/drm_gem_dma_helper.h>
 #include <drm/drm_panel.h>
-#include <drm/drm_print.h>
 
 #include "tidss_crtc.h"
 #include "tidss_dispc.h"
@@ -1018,22 +1017,20 @@ struct dispc_bus_format *dispc_vp_find_bus_fmt(struct dispc_device *dispc,
 int dispc_vp_bus_check(struct dispc_device *dispc, u32 hw_videoport,
 		       const struct drm_crtc_state *state)
 {
-	struct tidss_device *tidss = dispc->tidss;
-	struct drm_device *dev = &tidss->ddev;
 	const struct tidss_crtc_state *tstate = to_tidss_crtc_state(state);
 	const struct dispc_bus_format *fmt;
 
 	fmt = dispc_vp_find_bus_fmt(dispc, hw_videoport, tstate->bus_format,
 				    tstate->bus_flags);
 	if (!fmt) {
-		drm_dbg(dev, "%s: Unsupported bus format: %u\n",
+		dev_dbg(dispc->dev, "%s: Unsupported bus format: %u\n",
 			__func__, tstate->bus_format);
 		return -EINVAL;
 	}
 
 	if (dispc->feat->vp_bus_type[hw_videoport] != DISPC_VP_OLDI_AM65X &&
 	    fmt->is_oldi_fmt) {
-		drm_dbg(dev, "%s: %s is not OLDI-port\n",
+		dev_dbg(dispc->dev, "%s: %s is not OLDI-port\n",
 			__func__, dispc->feat->vp_name[hw_videoport]);
 		return -EINVAL;
 	}
@@ -1130,9 +1127,6 @@ void dispc_vp_prepare(struct dispc_device *dispc, u32 hw_videoport,
 {
 	const struct tidss_crtc_state *tstate = to_tidss_crtc_state(state);
 	const struct dispc_bus_format *fmt;
-	const struct drm_display_mode *mode = &state->adjusted_mode;
-	bool align, onoff, rf, ieo, ipc, ihs, ivs;
-	u32 hsw, hfp, hbp, vsw, vfp, vbp;
 
 	fmt = dispc_vp_find_bus_fmt(dispc, hw_videoport, tstate->bus_format,
 				    tstate->bus_flags);
@@ -1145,6 +1139,22 @@ void dispc_vp_prepare(struct dispc_device *dispc, u32 hw_videoport,
 
 		dispc_enable_am65x_oldi(dispc, hw_videoport, fmt);
 	}
+}
+
+void dispc_vp_enable(struct dispc_device *dispc, u32 hw_videoport,
+		     const struct drm_crtc_state *state)
+{
+	const struct drm_display_mode *mode = &state->adjusted_mode;
+	const struct tidss_crtc_state *tstate = to_tidss_crtc_state(state);
+	bool align, onoff, rf, ieo, ipc, ihs, ivs;
+	const struct dispc_bus_format *fmt;
+	u32 hsw, hfp, hbp, vsw, vfp, vbp;
+
+	fmt = dispc_vp_find_bus_fmt(dispc, hw_videoport, tstate->bus_format,
+				    tstate->bus_flags);
+
+	if (WARN_ON(!fmt))
+		return;
 
 	dispc_set_num_datalines(dispc, hw_videoport, fmt->data_width);
 
@@ -1200,10 +1210,7 @@ void dispc_vp_prepare(struct dispc_device *dispc, u32 hw_videoport,
 				  mode->crtc_hdisplay - 1) |
 		       FIELD_PREP(DISPC_VP_SIZE_SCREEN_VDISPLAY_MASK,
 				  mode->crtc_vdisplay - 1));
-}
 
-void dispc_vp_enable(struct dispc_device *dispc, u32 hw_videoport)
-{
 	VP_REG_FLD_MOD(dispc, hw_videoport, DISPC_VP_CONTROL, 1,
 		       DISPC_VP_CONTROL_ENABLE_MASK);
 }
@@ -2157,15 +2164,47 @@ int dispc_plane_check(struct dispc_device *dispc, u32 hw_plane,
 	return 0;
 }
 
+static
+dma_addr_t dispc_plane_state_dma_addr(const struct drm_plane_state *state)
+{
+	struct drm_framebuffer *fb = state->fb;
+	struct drm_gem_dma_object *gem;
+	u32 x = state->src_x >> 16;
+	u32 y = state->src_y >> 16;
+
+	gem = drm_fb_dma_get_gem_obj(state->fb, 0);
+
+	return gem->dma_addr + fb->offsets[0] + x * fb->format->cpp[0] +
+		y * fb->pitches[0];
+}
+
+static
+dma_addr_t dispc_plane_state_p_uv_addr(const struct drm_plane_state *state)
+{
+	struct drm_framebuffer *fb = state->fb;
+	struct drm_gem_dma_object *gem;
+	u32 x = state->src_x >> 16;
+	u32 y = state->src_y >> 16;
+
+	if (WARN_ON(state->fb->format->num_planes != 2))
+		return 0;
+
+	gem = drm_fb_dma_get_gem_obj(fb, 1);
+
+	return gem->dma_addr + fb->offsets[1] +
+		(x * fb->format->cpp[1] / fb->format->hsub) +
+		(y * fb->pitches[1] / fb->format->vsub);
+}
+
 void dispc_plane_setup(struct dispc_device *dispc, u32 hw_plane,
-		       struct drm_plane_state *state,
+		       const struct drm_plane_state *state,
 		       u32 hw_videoport)
 {
 	bool lite = dispc->feat->vid_info[hw_plane].is_lite;
 	u32 fourcc = state->fb->format->format;
 	u16 cpp = state->fb->format->cpp[0];
 	u32 fb_width = state->fb->pitches[0] / cpp;
-	dma_addr_t dma_addr = drm_fb_dma_get_gem_addr(state->fb, state, 0);
+	dma_addr_t dma_addr = dispc_plane_state_dma_addr(state);
 	struct dispc_scaling_params scale;
 
 	dispc_vid_calc_scaling(dispc, state, &scale, lite);
@@ -2197,7 +2236,7 @@ void dispc_plane_setup(struct dispc_device *dispc, u32 hw_plane,
 	if (state->fb->format->num_planes == 2) {
 		u16 cpp_uv = state->fb->format->cpp[1];
 		u32 fb_width_uv = state->fb->pitches[1] / cpp_uv;
-		dma_addr_t p_uv_addr = drm_fb_dma_get_gem_addr(state->fb, state, 1);
+		dma_addr_t p_uv_addr = dispc_plane_state_p_uv_addr(state);
 
 		dispc_vid_write(dispc, hw_plane,
 				DISPC_VID_BA_UV_0, p_uv_addr & 0xffffffff);
@@ -2793,6 +2832,8 @@ int dispc_runtime_resume(struct dispc_device *dispc)
 
 void dispc_remove(struct tidss_device *tidss)
 {
+	dev_dbg(tidss->dev, "%s\n", __func__);
+
 	tidss->dispc = NULL;
 }
 
@@ -2933,6 +2974,8 @@ int dispc_init(struct tidss_device *tidss)
 	const struct dispc_features *feat;
 	unsigned int i, num_fourccs;
 	int r = 0;
+
+	dev_dbg(dev, "%s\n", __func__);
 
 	feat = tidss->feat;
 

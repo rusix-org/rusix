@@ -77,6 +77,9 @@ struct nvt_dev {
 	/* hardware id */
 	u8 chip_major;
 	u8 chip_minor;
+
+	/* carrier period = 1 / frequency */
+	u32 carrier;
 };
 
 /* buffer packet constants */

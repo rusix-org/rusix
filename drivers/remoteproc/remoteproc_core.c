@@ -16,25 +16,29 @@
 
 #define pr_fmt(fmt)    "%s: " fmt, __func__
 
-#include <asm/byteorder.h>
 #include <linux/delay.h>
-#include <linux/device.h>
-#include <linux/dma-mapping.h>
-#include <linux/elf.h>
-#include <linux/firmware.h>
-#include <linux/idr.h>
-#include <linux/iommu.h>
 #include <linux/kernel.h>
 #include <linux/module.h>
-#include <linux/mutex.h>
-#include <linux/of_platform.h>
+#include <linux/device.h>
 #include <linux/panic_notifier.h>
-#include <linux/platform_device.h>
+#include <linux/slab.h>
+#include <linux/mutex.h>
+#include <linux/dma-mapping.h>
+#include <linux/firmware.h>
+#include <linux/string.h>
+#include <linux/debugfs.h>
 #include <linux/rculist.h>
 #include <linux/remoteproc.h>
-#include <linux/slab.h>
-#include <linux/string.h>
+#include <linux/iommu.h>
+#include <linux/idr.h>
+#include <linux/elf.h>
+#include <linux/crc32.h>
+#include <linux/of_platform.h>
+#include <linux/of_reserved_mem.h>
+#include <linux/virtio_ids.h>
 #include <linux/virtio_ring.h>
+#include <asm/byteorder.h>
+#include <linux/platform_device.h>
 
 #include "remoteproc_internal.h"
 
@@ -155,6 +159,7 @@ phys_addr_t rproc_va_to_pa(void *cpu_addr)
 	WARN_ON(!virt_addr_valid(cpu_addr));
 	return virt_to_phys(cpu_addr);
 }
+EXPORT_SYMBOL(rproc_va_to_pa);
 
 /**
  * rproc_da_to_va() - lookup the kernel virtual address for a remoteproc address
@@ -557,7 +562,7 @@ static int rproc_handle_trace(struct rproc *rproc, void *ptr,
 		return -EINVAL;
 	}
 
-	trace = kzalloc_obj(*trace);
+	trace = kzalloc(sizeof(*trace), GFP_KERNEL);
 	if (!trace)
 		return -ENOMEM;
 
@@ -635,7 +640,7 @@ static int rproc_handle_devmem(struct rproc *rproc, void *ptr,
 		return -EINVAL;
 	}
 
-	mapping = kzalloc_obj(*mapping);
+	mapping = kzalloc(sizeof(*mapping), GFP_KERNEL);
 	if (!mapping)
 		return -ENOMEM;
 
@@ -727,7 +732,7 @@ static int rproc_alloc_carveout(struct rproc *rproc,
 	 * physical address in this case.
 	 */
 	if (mem->da != FW_RSC_ADDR_ANY && rproc->domain) {
-		mapping = kzalloc_obj(*mapping);
+		mapping = kzalloc(sizeof(*mapping), GFP_KERNEL);
 		if (!mapping) {
 			ret = -ENOMEM;
 			goto dma_free;
@@ -917,7 +922,7 @@ rproc_mem_entry_init(struct device *dev,
 	struct rproc_mem_entry *mem;
 	va_list args;
 
-	mem = kzalloc_obj(*mem);
+	mem = kzalloc(sizeof(*mem), GFP_KERNEL);
 	if (!mem)
 		return mem;
 
@@ -960,7 +965,7 @@ rproc_of_resm_mem_entry_init(struct device *dev, u32 of_resm_idx, size_t len,
 	struct rproc_mem_entry *mem;
 	va_list args;
 
-	mem = kzalloc_obj(*mem);
+	mem = kzalloc(sizeof(*mem), GFP_KERNEL);
 	if (!mem)
 		return mem;
 
@@ -1099,8 +1104,6 @@ static int rproc_start_subdevices(struct rproc *rproc)
 		}
 	}
 
-	rproc->subdevs_started = true;
-
 	return 0;
 
 unroll_registration:
@@ -1116,15 +1119,10 @@ static void rproc_stop_subdevices(struct rproc *rproc, bool crashed)
 {
 	struct rproc_subdev *subdev;
 
-	if (!rproc->subdevs_started)
-		return;
-
 	list_for_each_entry_reverse(subdev, &rproc->subdevs, node) {
 		if (subdev->stop)
 			subdev->stop(subdev, crashed);
 	}
-
-	rproc->subdevs_started = false;
 }
 
 static void rproc_unprepare_subdevices(struct rproc *rproc)
@@ -1786,20 +1784,7 @@ static int rproc_attach_recovery(struct rproc *rproc)
 	if (ret)
 		return ret;
 
-	/* clean up all acquired resources */
-	rproc_resource_cleanup(rproc);
-
-	/* release HW resources if needed */
-	rproc_unprepare_device(rproc);
-
-	rproc_disable_iommu(rproc);
-
-	/* Free the copy of the resource table */
-	kfree(rproc->cached_table);
-	rproc->cached_table = NULL;
-	rproc->table_ptr = NULL;
-
-	return rproc_attach(rproc);
+	return __rproc_attach(rproc);
 }
 
 static int rproc_boot_recovery(struct rproc *rproc)
@@ -1988,54 +1973,6 @@ unlock_mutex:
 }
 EXPORT_SYMBOL(rproc_boot);
 
-static int __rproc_shutdown(struct rproc *rproc, bool force)
-{
-	struct device *dev = &rproc->dev;
-	bool crashed;
-	int ret;
-
-	ret = mutex_lock_interruptible(&rproc->lock);
-	if (ret) {
-		dev_err(dev, "can't lock rproc %s: %d\n", rproc->name, ret);
-		return ret;
-	}
-
-	if (rproc->state != RPROC_RUNNING &&
-	    rproc->state != RPROC_ATTACHED &&
-	    rproc->state != RPROC_CRASHED) {
-		ret = -EINVAL;
-		goto out;
-	}
-	crashed = rproc->state == RPROC_CRASHED;
-
-	if (!atomic_dec_and_test(&rproc->power) && !force) {
-		/* The remote processor is still needed by another user. */
-		goto out;
-	}
-
-	ret = rproc_stop(rproc, crashed);
-	if (ret) {
-		atomic_inc(&rproc->power);
-		goto out;
-	}
-
-	/* clean up all acquired resources */
-	rproc_resource_cleanup(rproc);
-
-	/* release HW resources if needed */
-	rproc_unprepare_device(rproc);
-
-	rproc_disable_iommu(rproc);
-
-	/* Free the copy of the resource table */
-	kfree(rproc->cached_table);
-	rproc->cached_table = NULL;
-	rproc->table_ptr = NULL;
-out:
-	mutex_unlock(&rproc->lock);
-	return ret;
-}
-
 /**
  * rproc_shutdown() - power off the remote processor
  * @rproc: the remote processor
@@ -2059,7 +1996,49 @@ out:
  */
 int rproc_shutdown(struct rproc *rproc)
 {
-	return __rproc_shutdown(rproc, false);
+	struct device *dev = &rproc->dev;
+	bool crashed;
+	int ret;
+
+	ret = mutex_lock_interruptible(&rproc->lock);
+	if (ret) {
+		dev_err(dev, "can't lock rproc %s: %d\n", rproc->name, ret);
+		return ret;
+	}
+
+	if (rproc->state != RPROC_RUNNING &&
+	    rproc->state != RPROC_ATTACHED &&
+	    rproc->state != RPROC_CRASHED) {
+		ret = -EINVAL;
+		goto out;
+	}
+	crashed = rproc->state == RPROC_CRASHED;
+
+	/* if the remote proc is still needed, bail out */
+	if (!atomic_dec_and_test(&rproc->power))
+		goto out;
+
+	ret = rproc_stop(rproc, crashed);
+	if (ret) {
+		atomic_inc(&rproc->power);
+		goto out;
+	}
+
+	/* clean up all acquired resources */
+	rproc_resource_cleanup(rproc);
+
+	/* release HW resources if needed */
+	rproc_unprepare_device(rproc);
+
+	rproc_disable_iommu(rproc);
+
+	/* Free the copy of the resource table */
+	kfree(rproc->cached_table);
+	rproc->cached_table = NULL;
+	rproc->table_ptr = NULL;
+out:
+	mutex_unlock(&rproc->lock);
+	return ret;
 }
 EXPORT_SYMBOL(rproc_shutdown);
 
@@ -2359,7 +2338,6 @@ int rproc_add(struct rproc *rproc)
 	return 0;
 
 rproc_remove_dev:
-	cancel_work_sync(&rproc->crash_handler);
 	rproc_delete_debug_dir(rproc);
 	device_del(dev);
 rproc_remove_cdev:
@@ -2410,7 +2388,6 @@ static void rproc_type_release(struct device *dev)
 
 	dev_info(&rproc->dev, "releasing %s\n", rproc->name);
 
-	cleanup_srcu_struct(&rproc->vq_srcu);
 	idr_destroy(&rproc->notifyids);
 
 	if (rproc->index >= 0)
@@ -2508,11 +2485,6 @@ struct rproc *rproc_alloc(struct device *dev, const char *name,
 	if (!rproc)
 		return NULL;
 
-	if (init_srcu_struct(&rproc->vq_srcu)) {
-		kfree(rproc);
-		return NULL;
-	}
-
 	rproc->priv = &rproc[1];
 	rproc->auto_boot = true;
 	rproc->elf_class = ELFCLASSNONE;
@@ -2577,9 +2549,6 @@ EXPORT_SYMBOL(rproc_alloc);
  *
  * If no one holds any reference to rproc anymore, then its refcount would
  * now drop to zero, and it would be freed.
- *
- * Context: Any context, but the last reference must not be dropped from
- * atomic context.
  */
 void rproc_free(struct rproc *rproc)
 {
@@ -2595,9 +2564,6 @@ EXPORT_SYMBOL(rproc_free);
  *
  * If no one holds any reference to rproc anymore, then its refcount would
  * now drop to zero, and it would be freed.
- *
- * Context: Any context, but the last reference must not be dropped from
- * atomic context.
  */
 void rproc_put(struct rproc *rproc)
 {
@@ -2639,7 +2605,8 @@ int rproc_del(struct rproc *rproc)
 	if (cancel_work_sync(&rproc->crash_handler))
 		pm_relax(rproc->dev.parent);
 
-	__rproc_shutdown(rproc, true);
+	/* TODO: make sure this works with rproc->power > 1 */
+	rproc_shutdown(rproc);
 
 	rproc_delete_debug_dir(rproc);
 

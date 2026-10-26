@@ -108,8 +108,9 @@ static int imx8m_blk_ctrl_power_on(struct generic_pm_domain *genpd)
 	guard(mutex)(&bc->power_lock);
 
 	/* make sure bus domain is awake */
-	ret = pm_runtime_resume_and_get(bc->bus_power_dev);
+	ret = pm_runtime_get_sync(bc->bus_power_dev);
 	if (ret < 0) {
+		pm_runtime_put_noidle(bc->bus_power_dev);
 		dev_err(bc->dev, "failed to power up bus domain\n");
 		return ret;
 	}
@@ -396,16 +397,20 @@ static int imx8m_blk_ctrl_suspend(struct device *dev)
 	 * in the system suspend/resume paths due to the device parent/child
 	 * hierarchy.
 	 */
-	ret = pm_runtime_resume_and_get(bc->bus_power_dev);
-	if (ret < 0)
+	ret = pm_runtime_get_sync(bc->bus_power_dev);
+	if (ret < 0) {
+		pm_runtime_put_noidle(bc->bus_power_dev);
 		return ret;
+	}
 
 	for (i = 0; i < bc->onecell_data.num_domains; i++) {
 		struct imx8m_blk_ctrl_domain *domain = &bc->domains[i];
 
-		ret = pm_runtime_resume_and_get(domain->power_dev);
-		if (ret < 0)
+		ret = pm_runtime_get_sync(domain->power_dev);
+		if (ret < 0) {
+			pm_runtime_put_noidle(domain->power_dev);
 			goto out_fail;
+		}
 	}
 
 	return 0;
@@ -963,5 +968,4 @@ static struct platform_driver imx8m_blk_ctrl_driver = {
 	},
 };
 module_platform_driver(imx8m_blk_ctrl_driver);
-MODULE_DESCRIPTION("NXP i.MX8M power domain driver");
 MODULE_LICENSE("GPL");

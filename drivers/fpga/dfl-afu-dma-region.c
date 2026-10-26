@@ -42,7 +42,7 @@ static int afu_dma_pin_pages(struct dfl_feature_dev_data *fdata,
 	if (ret)
 		return ret;
 
-	region->pages = kzalloc_objs(struct page *, npages);
+	region->pages = kcalloc(npages, sizeof(struct page *), GFP_KERNEL);
 	if (!region->pages) {
 		ret = -ENOMEM;
 		goto unlock_vm;
@@ -316,7 +316,7 @@ int afu_dma_map_region(struct dfl_feature_dev_data *fdata,
 	if (user_addr + length < user_addr)
 		return -EINVAL;
 
-	region = kzalloc_obj(*region);
+	region = kzalloc(sizeof(*region), GFP_KERNEL);
 	if (!region)
 		return -ENOMEM;
 

@@ -21,6 +21,7 @@
 #include <drm/drm_encoder.h>
 #include <drm/drm_gem.h>
 #include <drm/drm_panel.h>
+#include <drm/drm_simple_kms_helper.h>
 
 /*
  * CLCD Controller Internal Register addresses
@@ -134,9 +135,7 @@ struct pl111_drm_dev_private {
 	struct drm_connector *connector;
 	struct drm_panel *panel;
 	struct drm_bridge *bridge;
-	struct drm_plane plane;
-	struct drm_crtc crtc;
-	struct drm_encoder encoder;
+	struct drm_simple_display_pipe pipe;
 
 	void *regs;
 	u32 memory_bw;

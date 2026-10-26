@@ -116,7 +116,7 @@ static const struct iio_chan_spec iio_dummy_channels[] = {
 		BIT(IIO_CHAN_INFO_OFFSET) |
 		/*
 		 * in_voltage0_scale
-		 * Multiplier for userspace to apply post offset
+		 * Multipler for userspace to apply post offset
 		 * when converting to standard units (microvolts)
 		 */
 		BIT(IIO_CHAN_INFO_SCALE),
@@ -588,7 +588,7 @@ static struct iio_sw_device *iio_dummy_probe(const char *name)
 	 * parent = &client->dev;
 	 */
 
-	swd = kzalloc_obj(*swd);
+	swd = kzalloc(sizeof(*swd), GFP_KERNEL);
 	if (!swd)
 		return ERR_PTR(-ENOMEM);
 

@@ -70,10 +70,6 @@ struct serial_struct;
  *	``/dev/ttyprintk`` and not ``/dev/ttyprintk0``. Applicable only when a
  *	driver for a single tty device is being allocated.
  *
- * @TTY_DRIVER_NO_WORKQUEUE:
- *	Do not create workqueue when tty_register_driver(). Whenever set, flip
- *	buffer workqueue can be set by tty_port_link_wq() for every port.
- *
  * @TTY_DRIVER_RESET_SAVED_TERMIOS:
  *	Reset any saved termios settings on device registration when reusing a
  *	minor number. Must only be set by drivers that guarantee that the minor
@@ -88,7 +84,6 @@ enum tty_driver_flag {
 	TTY_DRIVER_HARDWARE_BREAK	= BIT(5),
 	TTY_DRIVER_DYNAMIC_ALLOC	= BIT(6),
 	TTY_DRIVER_UNNUMBERED_NODE	= BIT(7),
-	TTY_DRIVER_NO_WORKQUEUE		= BIT(8),
 	TTY_DRIVER_RESET_SAVED_TERMIOS	= BIT(9),
 };
 
@@ -517,7 +512,6 @@ struct tty_operations {
  * @flags: tty driver flags (%TTY_DRIVER_)
  * @proc_entry: proc fs entry, used internally
  * @other: driver of the linked tty; only used for the PTY driver
- * @flip_wq: workqueue to queue flip buffer work on
  * @ttys: array of active &struct tty_struct, set by tty_standard_install()
  * @ports: array of &struct tty_port; can be set during initialization by
  *	   tty_port_link_device() and similar
@@ -551,7 +545,6 @@ struct tty_driver {
 	unsigned long	flags;
 	struct proc_dir_entry *proc_entry;
 	struct tty_driver *other;
-	struct workqueue_struct *flip_wq;
 
 	/*
 	 * Pointer to the tty data structures

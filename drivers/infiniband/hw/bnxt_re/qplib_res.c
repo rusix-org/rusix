@@ -45,7 +45,6 @@
 #include <linux/dma-mapping.h>
 #include <linux/if_vlan.h>
 #include <linux/vmalloc.h>
-#include <linux/bitops.h>
 #include <rdma/ib_verbs.h>
 #include <rdma/iter.h>
 
@@ -557,7 +556,7 @@ static int bnxt_qplib_alloc_sgid_tbl(struct bnxt_qplib_res *res,
 				     struct bnxt_qplib_sgid_tbl *sgid_tbl,
 				     u16 max)
 {
-	sgid_tbl->tbl = kzalloc_objs(*sgid_tbl->tbl, max);
+	sgid_tbl->tbl = kcalloc(max, sizeof(*sgid_tbl->tbl), GFP_KERNEL);
 	if (!sgid_tbl->tbl)
 		return -ENOMEM;
 
@@ -669,9 +668,9 @@ static int bnxt_qplib_alloc_pd_tbl(struct bnxt_qplib_res *res,
 {
 	u32 bytes;
 
-	bytes = BITS_TO_LONGS(max) * sizeof(unsigned long);
+	bytes = max >> 3;
 	if (!bytes)
-		bytes = sizeof(unsigned long);
+		bytes = 1;
 	pdt->tbl = kmalloc(bytes, GFP_KERNEL);
 	if (!pdt->tbl)
 		return -ENOMEM;
@@ -684,49 +683,6 @@ static int bnxt_qplib_alloc_pd_tbl(struct bnxt_qplib_res *res,
 }
 
 /* DPIs */
-int bnxt_qplib_alloc_uc_dpi(struct bnxt_qplib_res *res, struct bnxt_qplib_dpi *dpi)
-{
-	struct bnxt_qplib_dpi_tbl *dpit = &res->dpi_tbl;
-	struct bnxt_qplib_reg_desc *reg;
-	u32 bit_num;
-	int rc = 0;
-
-	reg = &dpit->wcreg;
-	mutex_lock(&res->dpi_tbl_lock);
-	bit_num = find_first_bit(dpit->tbl, dpit->max);
-	if (bit_num >= dpit->max) {
-		rc = -ENOMEM;
-		goto unlock;
-	}
-	/* Found unused DPI */
-	clear_bit(bit_num, dpit->tbl);
-	dpi->bit = bit_num;
-	dpi->dpi = bit_num + (reg->offset - dpit->ucreg.offset) / PAGE_SIZE;
-	dpi->umdbr = reg->bar_base + reg->offset + bit_num * PAGE_SIZE;
-unlock:
-	mutex_unlock(&res->dpi_tbl_lock);
-	return rc;
-}
-
-int bnxt_qplib_free_uc_dpi(struct bnxt_qplib_res *res, struct bnxt_qplib_dpi *dpi)
-{
-	struct bnxt_qplib_dpi_tbl *dpit = &res->dpi_tbl;
-	int rc = 0;
-
-	mutex_lock(&res->dpi_tbl_lock);
-	if (dpi->bit >= dpit->max) {
-		rc = -EINVAL;
-		goto unlock;
-	}
-
-	if (test_and_set_bit(dpi->bit, dpit->tbl))
-		rc = -EINVAL;
-	memset(dpi, 0, sizeof(*dpi));
-unlock:
-	mutex_unlock(&res->dpi_tbl_lock);
-	return rc;
-}
-
 int bnxt_qplib_alloc_dpi(struct bnxt_qplib_res *res,
 			 struct bnxt_qplib_dpi *dpi,
 			 void *app, u8 type)
@@ -845,13 +801,13 @@ static int bnxt_qplib_alloc_dpi_tbl(struct bnxt_qplib_res *res,
 	if (dev_attr->max_dpi)
 		dpit->max = min_t(u32, dpit->max, dev_attr->max_dpi);
 
-	dpit->app_tbl = kzalloc_objs(void *, dpit->max);
+	dpit->app_tbl = kcalloc(dpit->max,  sizeof(void *), GFP_KERNEL);
 	if (!dpit->app_tbl)
 		return -ENOMEM;
 
-	bytes = BITS_TO_LONGS(dpit->max) * sizeof(unsigned long);
+	bytes = dpit->max >> 3;
 	if (!bytes)
-		bytes = sizeof(unsigned long);
+		bytes = 1;
 
 	dpit->tbl = kmalloc(bytes, GFP_KERNEL);
 	if (!dpit->tbl) {
@@ -910,15 +866,7 @@ int bnxt_qplib_init_res(struct bnxt_qplib_res *res)
 
 void bnxt_qplib_free_res(struct bnxt_qplib_res *res)
 {
-	struct bnxt_qplib_rcfw *rcfw = res->rcfw;
-	struct bnxt_qplib_qp_node *qp_tbl;
-
-	/* The CREQ tasklet may still be running; unpublish the table first */
-	spin_lock_bh(&rcfw->tbl_lock);
-	qp_tbl = rcfw->qp_tbl;
-	rcfw->qp_tbl = NULL;
-	spin_unlock_bh(&rcfw->tbl_lock);
-	kvfree(qp_tbl);
+	kfree(res->rcfw->qp_tbl);
 	bnxt_qplib_free_sgid_tbl(res, &res->sgid_tbl);
 	bnxt_qplib_free_pd_tbl(&res->pd_tbl);
 	bnxt_qplib_free_dpi_tbl(res, &res->dpi_tbl);
@@ -935,8 +883,8 @@ int bnxt_qplib_alloc_res(struct bnxt_qplib_res *res, struct net_device *netdev)
 
 	/* Allocate one extra to hold the QP1 entries */
 	rcfw->qp_tbl_size = max_t(u32, BNXT_RE_MAX_QPC_COUNT + 1, dev_attr->max_qp);
-	rcfw->qp_tbl = kvzalloc_objs(struct bnxt_qplib_qp_node,
-				     rcfw->qp_tbl_size);
+	rcfw->qp_tbl = kcalloc(rcfw->qp_tbl_size, sizeof(struct bnxt_qplib_qp_node),
+			       GFP_KERNEL);
 	if (!rcfw->qp_tbl)
 		return -ENOMEM;
 

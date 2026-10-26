@@ -400,10 +400,10 @@ static int tmu_mode_init(struct tb_switch *sw)
 
 /**
  * tb_switch_tmu_init() - Initialize switch TMU structures
- * @sw: Switch to be initialized
+ * @sw: Switch to initialized
  *
  * This function must be called before other TMU related functions to
- * make sure the internal structures are filled in correctly. Does not
+ * makes the internal structures are filled in correctly. Does not
  * change any hardware configuration.
  *
  * Return: %0 on success, negative errno otherwise.

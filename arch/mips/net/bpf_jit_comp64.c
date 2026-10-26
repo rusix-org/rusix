@@ -120,58 +120,6 @@ static void emit_zext_ver(struct jit_context *ctx, u8 dst)
 		emit_zext(ctx, dst);
 }
 
-/* Sign-extend an 8- or 16-bit field into a native register. */
-static void emit_movsx_r(struct jit_context *ctx, u8 dst, u8 src, s16 off)
-{
-	/* seb/seh would need a sign-extended 32-bit source first. */
-	int shift = 32 - off;
-
-	/* dsll32 and dsra32 add 32 to the shift argument. */
-	emit(ctx, dsll32, dst, src, shift);
-	emit(ctx, dsra32, dst, dst, shift);
-}
-
-/* Register move operation (32-bit), optionally with sign extension */
-static void emit_mov_r32(struct jit_context *ctx, u8 dst, u8 src, s16 off)
-{
-	switch (off) {
-	case 8:
-	case 16:
-		emit_movsx_r(ctx, dst, src, off);
-		break;
-	default:
-		/* off == 0 is MOV; the verifier rejects other offsets. */
-		emit_mov_r(ctx, dst, src);
-		break;
-	}
-	clobber_reg(ctx, dst);
-	emit_zext_ver(ctx, dst);
-}
-
-/* Register move operation (64-bit), optionally with sign extension */
-static void emit_mov_r64(struct jit_context *ctx, u8 dst, u8 src, s16 off)
-{
-	switch (off) {
-	case 8:
-	case 16:
-		emit_movsx_r(ctx, dst, src, off);
-		break;
-	case 32:
-		emit_sext(ctx, dst, src);
-		break;
-	default:
-		/*
-		 * off == 0 is ordinary MOV. The verifier rejects other
-		 * offsets; defined exceptions require
-		 * bpf_jit_supports_percpu_insn() or bpf_jit_supports_arena(),
-		 * neither implemented by MIPS.
-		 */
-		emit_mov_r(ctx, dst, src);
-		break;
-	}
-	clobber_reg(ctx, dst);
-}
-
 /* dst = imm (64-bit) */
 static void emit_mov_i64(struct jit_context *ctx, u8 dst, u64 imm64)
 {
@@ -249,43 +197,8 @@ static void emit_alu_i64(struct jit_context *ctx, u8 dst, s32 imm, u8 op)
 	clobber_reg(ctx, dst);
 }
 
-/* ALU division operation (64-bit) */
-static void emit_div64(struct jit_context *ctx, u8 dst, u8 src, s16 off)
-{
-	if (cpu_has_mips64r6) {
-		if (off == 1)
-			emit(ctx, ddiv_r6, dst, dst, src);
-		else
-			emit(ctx, ddivu_r6, dst, dst, src);
-	} else {
-		if (off == 1)
-			emit(ctx, ddiv, dst, src);
-		else
-			emit(ctx, ddivu, dst, src);
-		emit(ctx, mflo, dst);
-	}
-}
-
-/* ALU modulo operation (64-bit) */
-static void emit_mod64(struct jit_context *ctx, u8 dst, u8 src, s16 off)
-{
-	if (cpu_has_mips64r6) {
-		if (off == 1)
-			emit(ctx, dmod, dst, dst, src);
-		else
-			emit(ctx, dmodu, dst, dst, src);
-	} else {
-		if (off == 1)
-			emit(ctx, ddiv, dst, src);
-		else
-			emit(ctx, ddivu, dst, src);
-		emit(ctx, mfhi, dst);
-	}
-}
-
 /* ALU register operation (64-bit) */
-static void emit_alu_r64(struct jit_context *ctx, u8 dst, u8 src, u8 op,
-			 s16 off)
+static void emit_alu_r64(struct jit_context *ctx, u8 dst, u8 src, u8 op)
 {
 	switch (BPF_OP(op)) {
 	/* dst = dst << src */
@@ -322,15 +235,25 @@ static void emit_alu_r64(struct jit_context *ctx, u8 dst, u8 src, u8 op,
 		break;
 	/* dst = dst / src */
 	case BPF_DIV:
-		emit_div64(ctx, dst, src, off);
+		if (cpu_has_mips64r6) {
+			emit(ctx, ddivu_r6, dst, dst, src);
+		} else {
+			emit(ctx, ddivu, dst, src);
+			emit(ctx, mflo, dst);
+		}
 		break;
 	/* dst = dst % src */
 	case BPF_MOD:
-		emit_mod64(ctx, dst, src, off);
+		if (cpu_has_mips64r6) {
+			emit(ctx, dmodu, dst, dst, src);
+		} else {
+			emit(ctx, ddivu, dst, src);
+			emit(ctx, mfhi, dst);
+		}
 		break;
 	default:
 		/* Width-generic operations */
-		emit_alu_r(ctx, dst, src, op, off);
+		emit_alu_r(ctx, dst, src, op);
 	}
 	clobber_reg(ctx, dst);
 }
@@ -732,7 +655,8 @@ int build_insn(const struct bpf_insn *insn, struct jit_context *ctx)
 			/* Special mov32 for zext */
 			emit_zext(ctx, dst);
 		} else {
-			emit_mov_r32(ctx, dst, src, off);
+			emit_mov_r(ctx, dst, src);
+			emit_zext_ver(ctx, dst);
 		}
 		break;
 	/* dst = -dst */
@@ -749,9 +673,9 @@ int build_insn(const struct bpf_insn *insn, struct jit_context *ctx)
 	case BPF_ALU | BPF_AND | BPF_K:
 	case BPF_ALU | BPF_XOR | BPF_K:
 	case BPF_ALU | BPF_LSH | BPF_K:
-		if (!valid_alu_i(BPF_OP(code), imm, off)) {
+		if (!valid_alu_i(BPF_OP(code), imm)) {
 			emit_mov_i(ctx, MIPS_R_T4, imm);
-			emit_alu_r(ctx, dst, MIPS_R_T4, BPF_OP(code), off);
+			emit_alu_r(ctx, dst, MIPS_R_T4, BPF_OP(code));
 		} else if (rewrite_alu_i(BPF_OP(code), imm, &alu, &val)) {
 			emit_alu_i(ctx, dst, val, alu);
 		}
@@ -771,10 +695,10 @@ int build_insn(const struct bpf_insn *insn, struct jit_context *ctx)
 	case BPF_ALU | BPF_MUL | BPF_K:
 	case BPF_ALU | BPF_DIV | BPF_K:
 	case BPF_ALU | BPF_MOD | BPF_K:
-		if (!valid_alu_i(BPF_OP(code), imm, off)) {
+		if (!valid_alu_i(BPF_OP(code), imm)) {
 			emit_sext(ctx, dst, dst);
 			emit_mov_i(ctx, MIPS_R_T4, imm);
-			emit_alu_r(ctx, dst, MIPS_R_T4, BPF_OP(code), off);
+			emit_alu_r(ctx, dst, MIPS_R_T4, BPF_OP(code));
 		} else if (rewrite_alu_i(BPF_OP(code), imm, &alu, &val)) {
 			emit_sext(ctx, dst, dst);
 			emit_alu_i(ctx, dst, val, alu);
@@ -789,7 +713,7 @@ int build_insn(const struct bpf_insn *insn, struct jit_context *ctx)
 	case BPF_ALU | BPF_OR | BPF_X:
 	case BPF_ALU | BPF_XOR | BPF_X:
 	case BPF_ALU | BPF_LSH | BPF_X:
-		emit_alu_r(ctx, dst, src, BPF_OP(code), off);
+		emit_alu_r(ctx, dst, src, BPF_OP(code));
 		emit_zext_ver(ctx, dst);
 		break;
 	/* dst = dst >> src */
@@ -808,7 +732,7 @@ int build_insn(const struct bpf_insn *insn, struct jit_context *ctx)
 	case BPF_ALU | BPF_MOD | BPF_X:
 		emit_sext(ctx, dst, dst);
 		emit_sext(ctx, MIPS_R_T4, src);
-		emit_alu_r(ctx, dst, MIPS_R_T4, BPF_OP(code), off);
+		emit_alu_r(ctx, dst, MIPS_R_T4, BPF_OP(code));
 		emit_zext_ver(ctx, dst);
 		break;
 	/* dst = imm (64-bit) */
@@ -817,7 +741,7 @@ int build_insn(const struct bpf_insn *insn, struct jit_context *ctx)
 		break;
 	/* dst = src (64-bit) */
 	case BPF_ALU64 | BPF_MOV | BPF_X:
-		emit_mov_r64(ctx, dst, src, off);
+		emit_mov_r(ctx, dst, src);
 		break;
 	/* dst = -dst (64-bit) */
 	case BPF_ALU64 | BPF_NEG:
@@ -845,9 +769,9 @@ int build_insn(const struct bpf_insn *insn, struct jit_context *ctx)
 	case BPF_ALU64 | BPF_MUL | BPF_K:
 	case BPF_ALU64 | BPF_DIV | BPF_K:
 	case BPF_ALU64 | BPF_MOD | BPF_K:
-		if (!valid_alu_i(BPF_OP(code), imm, off)) {
+		if (!valid_alu_i(BPF_OP(code), imm)) {
 			emit_mov_i(ctx, MIPS_R_T4, imm);
-			emit_alu_r64(ctx, dst, MIPS_R_T4, BPF_OP(code), off);
+			emit_alu_r64(ctx, dst, MIPS_R_T4, BPF_OP(code));
 		} else if (rewrite_alu_i(BPF_OP(code), imm, &alu, &val)) {
 			emit_alu_i64(ctx, dst, val, alu);
 		}
@@ -874,11 +798,7 @@ int build_insn(const struct bpf_insn *insn, struct jit_context *ctx)
 	case BPF_ALU64 | BPF_MUL | BPF_X:
 	case BPF_ALU64 | BPF_DIV | BPF_X:
 	case BPF_ALU64 | BPF_MOD | BPF_X:
-		emit_alu_r64(ctx, dst, src, BPF_OP(code), off);
-		break;
-	/* dst = bswap(dst) */
-	case BPF_ALU64 | BPF_END:
-		emit_bswap_r64(ctx, dst, imm);
+		emit_alu_r64(ctx, dst, src, BPF_OP(code));
 		break;
 	/* dst = htole(dst) */
 	/* dst = htobe(dst) */
@@ -1039,13 +959,6 @@ int build_insn(const struct bpf_insn *insn, struct jit_context *ctx)
 			emit_jmp_r(ctx, MIPS_R_T4, MIPS_R_T5, rel, jmp);
 		}
 		if (finish_jmp(ctx, jmp, off) < 0)
-			goto toofar;
-		break;
-	/* PC += imm */
-	case BPF_JMP32 | BPF_JA:
-		if (imm == 0)
-			break;
-		if (emit_ja(ctx, imm) < 0)
 			goto toofar;
 		break;
 	/* PC += off if dst == src */

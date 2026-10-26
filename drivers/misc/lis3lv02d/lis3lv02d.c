@@ -12,7 +12,6 @@
 #include <linux/kernel.h>
 #include <linux/sched/signal.h>
 #include <linux/dmi.h>
-#include <linux/minmax.h>
 #include <linux/module.h>
 #include <linux/types.h>
 #include <linux/interrupt.h>
@@ -630,7 +629,10 @@ static ssize_t lis3lv02d_misc_read(struct file *file, char __user *buf,
 		schedule();
 	}
 
-	byte_data = min(data, 255);
+	if (data < 255)
+		byte_data = data;
+	else
+		byte_data = 255;
 
 	/* make sure we are not going into copy_to_user() with
 	 * TASK_INTERRUPTIBLE state */
@@ -952,7 +954,7 @@ int lis3lv02d_init_dt(struct lis3lv02d *lis3)
 	if (!lis3->of_node)
 		return 0;
 
-	pdata = kzalloc_obj(*pdata);
+	pdata = kzalloc(sizeof(*pdata), GFP_KERNEL);
 	if (!pdata)
 		return -ENOMEM;
 
@@ -1230,12 +1232,10 @@ int lis3lv02d_init_device(struct lis3lv02d *lis3)
 	else
 		thread_fn = NULL;
 
-	if (thread_fn)
-		irq_flags |= IRQF_ONESHOT;
-
 	err = request_threaded_irq(lis3->irq, lis302dl_interrupt,
 				thread_fn,
-				irq_flags | IRQF_TRIGGER_RISING,
+				IRQF_TRIGGER_RISING | IRQF_ONESHOT |
+				irq_flags,
 				DRIVER_NAME, lis3);
 
 	if (err < 0) {

@@ -61,14 +61,7 @@ static inline struct rdt_fs_context *rdt_fc2context(struct fs_context *fc)
  *			READS_TO_REMOTE_MEM) being tracked by @evtid.
  *			Only valid if @evtid is an MBM event.
  * @configurable:	true if the event is configurable
- * @any_cpu:		true if the event can be read from any CPU
- * @is_floating_point:	event values are displayed in floating point format
- * @binary_bits:	number of fixed-point binary bits from architecture,
- *			only valid if @is_floating_point is true
  * @enabled:		true if the event is enabled
- * @arch_priv:		Architecture private data for this event.
- *			The @arch_priv provided by the architecture via
- *			resctrl_enable_mon_event().
  */
 struct mon_evt {
 	enum resctrl_event_id	evtid;
@@ -76,11 +69,7 @@ struct mon_evt {
 	char			*name;
 	u32			evt_cfg;
 	bool			configurable;
-	bool			any_cpu;
-	bool			is_floating_point;
-	unsigned int		binary_bits;
 	bool			enabled;
-	void			*arch_priv;
 };
 
 extern struct mon_evt mon_event_all[QOS_NUM_EVENTS];
@@ -88,16 +77,13 @@ extern struct mon_evt mon_event_all[QOS_NUM_EVENTS];
 #define for_each_mon_event(mevt) for (mevt = &mon_event_all[QOS_FIRST_EVENT];	\
 				      mevt < &mon_event_all[QOS_NUM_EVENTS]; mevt++)
 
-/* Limit for mon_evt::binary_bits */
-#define MAX_BINARY_BITS	27
-
 /**
  * struct mon_data - Monitoring details for each event file.
  * @list:            Member of the global @mon_data_kn_priv_list list.
  * @rid:             Resource id associated with the event file.
- * @evt:             Event structure associated with the event file.
- * @sum:             Set for RDT_RESOURCE_L3 when event must be summed
- *                   across multiple domains.
+ * @evtid:           Event id associated with the event file.
+ * @sum:             Set when event must be summed across multiple
+ *                   domains.
  * @domid:           When @sum is zero this is the domain to which
  *                   the event file belongs. When @sum is one this
  *                   is the id of the L3 cache that all domains to be
@@ -109,7 +95,7 @@ extern struct mon_evt mon_event_all[QOS_NUM_EVENTS];
 struct mon_data {
 	struct list_head	list;
 	enum resctrl_res_level	rid;
-	struct mon_evt		*evt;
+	enum resctrl_event_id	evtid;
 	int			domid;
 	bool			sum;
 };
@@ -120,27 +106,25 @@ struct mon_data {
  *	   resource group then its event count is summed with the count from all
  *	   its child resource groups.
  * @r:	   Resource describing the properties of the event being read.
- * @hdr:   Header of domain that the counter should be read from. If NULL then
- *	   sum all domains in @r sharing L3 @ci.id
- * @evt:   Which monitor event to read.
+ * @d:	   Domain that the counter should be read from. If NULL then sum all
+ *	   domains in @r sharing L3 @ci.id
+ * @evtid: Which monitor event to read.
  * @first: Initialize MBM counter when true.
- * @ci:    Cacheinfo for L3. Only set when @hdr is NULL. Used when summing
- *	   domains.
+ * @ci:    Cacheinfo for L3. Only set when @d is NULL. Used when summing domains.
  * @is_mbm_cntr: true if "mbm_event" counter assignment mode is enabled and it
  *	   is an MBM event.
  * @err:   Error encountered when reading counter.
- * @val:   Returned value of event counter. If @rgrp is a parent resource
- *	   group, @val includes the sum of event counts from its child
- *	   resource groups.  If @hdr is NULL, @val includes the sum of all
- *	   domains in @r sharing @ci.id, (summed across child resource groups
- *	   if @rgrp is a parent resource group).
+ * @val:   Returned value of event counter. If @rgrp is a parent resource group,
+ *	   @val includes the sum of event counts from its child resource groups.
+ *	   If @d is NULL, @val includes the sum of all domains in @r sharing @ci.id,
+ *	   (summed across child resource groups if @rgrp is a parent resource group).
  * @arch_mon_ctx: Hardware monitor allocated for this read request (MPAM only).
  */
 struct rmid_read {
 	struct rdtgroup		*rgrp;
 	struct rdt_resource	*r;
-	struct rdt_domain_hdr	*hdr;
-	struct mon_evt		*evt;
+	struct rdt_l3_mon_domain *d;
+	enum resctrl_event_id	evtid;
 	bool			first;
 	struct cacheinfo	*ci;
 	bool			is_mbm_cntr;
@@ -259,8 +243,6 @@ struct rdtgroup {
 
 #define RFTYPE_ASSIGN_CONFIG		BIT(11)
 
-#define RFTYPE_RES_PERF_PKG		BIT(12)
-
 #define RFTYPE_CTRL_INFO		(RFTYPE_INFO | RFTYPE_CTRL)
 
 #define RFTYPE_MON_INFO			(RFTYPE_INFO | RFTYPE_MON)
@@ -335,9 +317,8 @@ __printf(1, 2)
 void rdt_last_cmd_printf(const char *fmt, ...);
 
 struct rdtgroup *rdtgroup_kn_lock_live(struct kernfs_node *kn);
+
 void rdtgroup_kn_unlock(struct kernfs_node *kn);
-bool info_kn_lock(struct kernfs_node *kn);
-void info_kn_unlock(struct kernfs_node *kn);
 
 int rdtgroup_kn_mode_restrict(struct rdtgroup *r, const char *name);
 
@@ -387,8 +368,8 @@ void mon_event_count(void *info);
 int rdtgroup_mondata_show(struct seq_file *m, void *arg);
 
 void mon_event_read(struct rmid_read *rr, struct rdt_resource *r,
-		    struct rdt_domain_hdr *hdr, struct rdtgroup *rdtgrp,
-		    cpumask_t *cpumask, struct mon_evt *evt, int first);
+		    struct rdt_l3_mon_domain *d, struct rdtgroup *rdtgrp,
+		    cpumask_t *cpumask, int evtid, int first);
 
 void mbm_setup_overflow_handler(struct rdt_l3_mon_domain *dom,
 				unsigned long delay_ms,
@@ -409,13 +390,9 @@ void __check_limbo(struct rdt_l3_mon_domain *d, bool force_free);
 
 void resctrl_file_fflags_init(const char *config, unsigned long fflags);
 
-void resctrl_file_mode_init(const char *config, umode_t mode);
-
 void rdt_staged_configs_clear(void);
 
 bool closid_allocated(unsigned int closid);
-
-bool closid_alloc_fixed(u32 closid);
 
 int resctrl_find_cleanest_closid(void);
 
@@ -453,21 +430,6 @@ int mbm_L3_assignments_show(struct kernfs_open_file *of, struct seq_file *s, voi
 
 ssize_t mbm_L3_assignments_write(struct kernfs_open_file *of, char *buf, size_t nbytes,
 				 loff_t off);
-int resctrl_io_alloc_show(struct kernfs_open_file *of, struct seq_file *seq, void *v);
-
-int rdtgroup_init_cat(struct resctrl_schema *s, u32 closid);
-
-enum resctrl_conf_type resctrl_peer_type(enum resctrl_conf_type my_type);
-
-ssize_t resctrl_io_alloc_write(struct kernfs_open_file *of, char *buf,
-			       size_t nbytes, loff_t off);
-
-const char *rdtgroup_name_by_closid(u32 closid);
-int resctrl_io_alloc_cbm_show(struct kernfs_open_file *of, struct seq_file *seq,
-			      void *v);
-ssize_t resctrl_io_alloc_cbm_write(struct kernfs_open_file *of, char *buf,
-				   size_t nbytes, loff_t off);
-u32 resctrl_io_alloc_closid(struct rdt_resource *r);
 
 #ifdef CONFIG_RESCTRL_FS_PSEUDO_LOCK
 int rdtgroup_locksetup_enter(struct rdtgroup *rdtgrp);

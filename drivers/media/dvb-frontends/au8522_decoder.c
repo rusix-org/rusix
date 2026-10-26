@@ -567,7 +567,6 @@ static int au8522_s_video_routing(struct v4l2_subdev *sd,
 	case AU8522_COMPOSITE_CH1:
 	case AU8522_SVIDEO_CH13:
 	case AU8522_COMPOSITE_CH4_SIF:
-	case AU8522_COMPOSITE_CH4:
 		state->vid_input = input;
 		break;
 	default:
@@ -768,8 +767,8 @@ static void au8522_remove(struct i2c_client *client)
 }
 
 static const struct i2c_device_id au8522_id[] = {
-	{ .name = "au8522" },
-	{ }
+	{ "au8522" },
+	{}
 };
 
 MODULE_DEVICE_TABLE(i2c, au8522_id);

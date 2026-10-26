@@ -395,7 +395,8 @@ static void *bsd_alloc (unsigned char *options, int opt_len, int decomp)
  * Allocate the main control structure for this instance.
  */
     maxmaxcode = MAXCODE(bits);
-    db         = kzalloc_obj(struct bsd_db);
+    db         = kzalloc(sizeof (struct bsd_db),
+					    GFP_KERNEL);
     if (!db)
       {
 	return NULL;

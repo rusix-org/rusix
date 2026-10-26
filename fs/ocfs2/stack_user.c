@@ -589,7 +589,7 @@ static int ocfs2_control_open(struct inode *inode, struct file *file)
 {
 	struct ocfs2_control_private *p;
 
-	p = kzalloc_obj(struct ocfs2_control_private);
+	p = kzalloc(sizeof(struct ocfs2_control_private), GFP_KERNEL);
 	if (!p)
 		return -ENOMEM;
 	p->op_this_node = -1;
@@ -963,7 +963,7 @@ static int user_cluster_connect(struct ocfs2_cluster_connection *conn)
 
 	BUG_ON(conn == NULL);
 
-	lc = kzalloc_obj(struct ocfs2_live_connection);
+	lc = kzalloc(sizeof(struct ocfs2_live_connection), GFP_KERNEL);
 	if (!lc)
 		return -ENOMEM;
 

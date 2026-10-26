@@ -1158,7 +1158,7 @@ static int si2165_probe(struct i2c_client *client)
 	};
 
 	/* allocate memory for the internal state */
-	state = kzalloc_obj(*state);
+	state = kzalloc(sizeof(*state), GFP_KERNEL);
 	if (!state) {
 		ret = -ENOMEM;
 		goto error;
@@ -1281,8 +1281,8 @@ static void si2165_remove(struct i2c_client *client)
 }
 
 static const struct i2c_device_id si2165_id_table[] = {
-	{ .name = "si2165" },
-	{ }
+	{ "si2165" },
+	{}
 };
 MODULE_DEVICE_TABLE(i2c, si2165_id_table);
 

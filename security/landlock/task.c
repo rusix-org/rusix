@@ -20,11 +20,11 @@
 #include <net/af_unix.h>
 #include <net/sock.h>
 
+#include "audit.h"
 #include "common.h"
 #include "cred.h"
 #include "domain.h"
 #include "fs.h"
-#include "log.h"
 #include "ruleset.h"
 #include "setup.h"
 #include "task.h"
@@ -37,12 +37,9 @@
  *
  * Checks if the @parent domain is less or equal to (i.e. an ancestor, which
  * means a subset of) the @child domain.
- *
- * Return: True if @parent is an ancestor of or equal to @child, false
- * otherwise.
  */
-static bool domain_scope_le(const struct landlock_domain *const parent,
-			    const struct landlock_domain *const child)
+static bool domain_scope_le(const struct landlock_ruleset *const parent,
+			    const struct landlock_ruleset *const child)
 {
 	const struct landlock_hierarchy *walker;
 
@@ -63,8 +60,8 @@ static bool domain_scope_le(const struct landlock_domain *const parent,
 	return false;
 }
 
-static int domain_ptrace(const struct landlock_domain *const parent,
-			 const struct landlock_domain *const child)
+static int domain_ptrace(const struct landlock_ruleset *const parent,
+			 const struct landlock_ruleset *const child)
 {
 	if (domain_scope_le(parent, child))
 		return 0;
@@ -82,15 +79,14 @@ static int domain_ptrace(const struct landlock_domain *const parent,
  * If the current task has Landlock rules, then the child must have at least
  * the same rules.  Else denied.
  *
- * Return: 0 if permission is granted, -errno if denied.
+ * Determines whether a process may access another, returning 0 if permission
+ * granted, -errno if denied.
  */
 static int hook_ptrace_access_check(struct task_struct *const child,
 				    const unsigned int mode)
 {
 	const struct landlock_cred_security *parent_subject;
-#ifdef CONFIG_TRACEPOINTS
-	u64 tracee_domain_id = 0;
-#endif /* CONFIG_TRACEPOINTS */
+	const struct landlock_ruleset *child_dom;
 	int err;
 
 	/* Quick return for non-landlocked tasks. */
@@ -98,14 +94,10 @@ static int hook_ptrace_access_check(struct task_struct *const child,
 	if (!parent_subject)
 		return 0;
 
-	scoped_guard(rcu) {
-		const struct landlock_domain *const child_dom =
-			landlock_get_task_domain(child);
+	scoped_guard(rcu)
+	{
+		child_dom = landlock_get_task_domain(child);
 		err = domain_ptrace(parent_subject->domain, child_dom);
-#ifdef CONFIG_TRACEPOINTS
-		if (child_dom)
-			tracee_domain_id = child_dom->hierarchy->id;
-#endif /* CONFIG_TRACEPOINTS */
 	}
 
 	if (!err)
@@ -123,12 +115,6 @@ static int hook_ptrace_access_check(struct task_struct *const child,
 				.u.tsk = child,
 			},
 			.layer_plus_one = parent_subject->domain->num_layers,
-#ifdef CONFIG_TRACEPOINTS
-			.trace_ptrace = &(struct landlock_ptrace_trace) {
-				.tracee_domain_id = tracee_domain_id,
-				.tracer = current,
-			},
-#endif /* CONFIG_TRACEPOINTS */
 		});
 
 	return err;
@@ -143,12 +129,13 @@ static int hook_ptrace_access_check(struct task_struct *const child,
  * If the parent has Landlock rules, then the current task must have the same
  * or more rules.  Else denied.
  *
- * Return: 0 if permission is granted, -errno if denied.
+ * Determines whether the nominated task is permitted to trace the current
+ * process, returning 0 if permission is granted, -errno if denied.
  */
 static int hook_ptrace_traceme(struct task_struct *const parent)
 {
 	const struct landlock_cred_security *parent_subject;
-	const struct landlock_domain *child_dom;
+	const struct landlock_ruleset *child_dom;
 	int err;
 
 	child_dom = landlock_get_current_domain();
@@ -174,30 +161,23 @@ static int hook_ptrace_traceme(struct task_struct *const parent)
 			.u.tsk = current,
 		},
 		.layer_plus_one = parent_subject->domain->num_layers,
-#ifdef CONFIG_TRACEPOINTS
-		.trace_ptrace = &(struct landlock_ptrace_trace) {
-			/* The current task's domain is stable here. */
-			.tracee_domain_id = child_dom ? child_dom->hierarchy->id : 0,
-			.tracer = parent,
-		},
-#endif /* CONFIG_TRACEPOINTS */
 	});
 	return err;
 }
 
 /**
- * domain_is_scoped - Check if an interaction from a client/sender to a
- *		      server/receiver should be restricted based on scope controls.
+ * domain_is_scoped - Checks if the client domain is scoped in the same
+ *		      domain as the server.
  *
  * @client: IPC sender domain.
  * @server: IPC receiver domain.
  * @scope: The scope restriction criteria.
  *
- * Return: True if @server is in a different domain from @client and @client
- * is scoped to access @server (i.e. access should be denied), false otherwise.
+ * Returns: True if the @client domain is scoped to access the @server,
+ * unless the @server is also scoped in the same domain as @client.
  */
-static bool domain_is_scoped(const struct landlock_domain *const client,
-			     const struct landlock_domain *const server,
+static bool domain_is_scoped(const struct landlock_ruleset *const client,
+			     const struct landlock_ruleset *const server,
 			     access_mask_t scope)
 {
 	int client_layer, server_layer;
@@ -210,13 +190,10 @@ static bool domain_is_scoped(const struct landlock_domain *const client,
 	client_layer = client->num_layers - 1;
 	client_walker = client->hierarchy;
 	/*
-	 * client_layer must be able to represent all numbers from
-	 * LANDLOCK_MAX_NUM_LAYERS - 1 to -1 for the loop below to terminate.
-	 * (It must be large enough, and it must be signed.)
+	 * client_layer must be a signed integer with greater capacity
+	 * than client->num_layers to ensure the following loop stops.
 	 */
-	BUILD_BUG_ON(!is_signed_type(typeof(client_layer)));
-	BUILD_BUG_ON(LANDLOCK_MAX_NUM_LAYERS - 1 >
-		     type_max(typeof(client_layer)));
+	BUILD_BUG_ON(sizeof(client_layer) > sizeof(client->num_layers));
 
 	server_layer = server ? (server->num_layers - 1) : -1;
 	server_walker = server ? server->hierarchy : NULL;
@@ -256,40 +233,16 @@ static bool domain_is_scoped(const struct landlock_domain *const client,
 }
 
 static bool sock_is_scoped(struct sock *const other,
-			   const struct landlock_domain *const domain)
+			   const struct landlock_ruleset *const domain)
 {
-	const struct landlock_domain *dom_other;
+	const struct landlock_ruleset *dom_other;
 
 	/* The credentials will not change. */
 	lockdep_assert_held(&unix_sk(other)->lock);
-
-	/*
-	 * A live kernel socket (e.g. from sock_create_kern()) has no backing
-	 * file, hence no Landlock domain, so treat it as unscoped.  The
-	 * sk_socket check only guards that dereference; sk_socket is NULL
-	 * solely for a dead peer, which the caller already excludes under the
-	 * held lock, so no separate SOCK_DEAD check is needed.
-	 */
-	if (unlikely(!other->sk_socket || !other->sk_socket->file))
-		return false;
-
 	dom_other = landlock_cred(other->sk_socket->file->f_cred)->domain;
 	return domain_is_scoped(domain, dom_other,
 				LANDLOCK_SCOPE_ABSTRACT_UNIX_SOCKET);
 }
-
-#ifdef CONFIG_TRACEPOINTS
-
-static u64 get_socket_domain_id(const struct sock *const other)
-{
-	const struct landlock_domain *domain;
-
-	lockdep_assert_held(&unix_sk(other)->lock);
-	domain = landlock_cred(other->sk_socket->file->f_cred)->domain;
-	return domain ? domain->hierarchy->id : 0;
-}
-
-#endif /* CONFIG_TRACEPOINTS */
 
 static bool is_abstract_socket(struct sock *const sock)
 {
@@ -337,9 +290,6 @@ static int hook_unix_stream_connect(struct sock *const sock,
 			},
 		},
 		.layer_plus_one = handle_layer + 1,
-#ifdef CONFIG_TRACEPOINTS
-		.other_domain_id = get_socket_domain_id(other),
-#endif /* CONFIG_TRACEPOINTS */
 	});
 	return -EPERM;
 }
@@ -377,9 +327,6 @@ static int hook_unix_may_send(struct socket *const sock,
 			},
 		},
 		.layer_plus_one = handle_layer + 1,
-#ifdef CONFIG_TRACEPOINTS
-		.other_domain_id = get_socket_domain_id(other->sk),
-#endif /* CONFIG_TRACEPOINTS */
 	});
 	return -EPERM;
 }
@@ -394,9 +341,6 @@ static int hook_task_kill(struct task_struct *const p,
 {
 	bool is_scoped;
 	size_t handle_layer;
-#ifdef CONFIG_TRACEPOINTS
-	u64 target_domain_id = 0;
-#endif /* CONFIG_TRACEPOINTS */
 	const struct landlock_cred_security *subject;
 
 	if (!cred) {
@@ -422,16 +366,11 @@ static int hook_task_kill(struct task_struct *const p,
 	if (!subject)
 		return 0;
 
-	scoped_guard(rcu) {
-		const struct landlock_domain *const other =
-			landlock_get_task_domain(p);
-
-		is_scoped = domain_is_scoped(subject->domain, other,
+	scoped_guard(rcu)
+	{
+		is_scoped = domain_is_scoped(subject->domain,
+					     landlock_get_task_domain(p),
 					     signal_scope.scope);
-#ifdef CONFIG_TRACEPOINTS
-		if (other)
-			target_domain_id = other->hierarchy->id;
-#endif /* CONFIG_TRACEPOINTS */
 	}
 
 	if (!is_scoped)
@@ -444,12 +383,6 @@ static int hook_task_kill(struct task_struct *const p,
 			.u.tsk = p,
 		},
 		.layer_plus_one = handle_layer + 1,
-#ifdef CONFIG_TRACEPOINTS
-		.trace_signal = &(struct landlock_signal_trace) {
-			.target_domain_id = target_domain_id,
-			.signal = sig,
-		},
-#endif /* CONFIG_TRACEPOINTS */
 	});
 	return -EPERM;
 }
@@ -459,9 +392,6 @@ static int hook_file_send_sigiotask(struct task_struct *tsk,
 {
 	const struct landlock_cred_security *subject;
 	bool is_scoped = false;
-#ifdef CONFIG_TRACEPOINTS
-	u64 target_domain_id = 0;
-#endif /* CONFIG_TRACEPOINTS */
 
 	/* Lock already held by send_sigio() and send_sigurg(). */
 	lockdep_assert_held(&fown->lock);
@@ -488,16 +418,11 @@ static int hook_file_send_sigiotask(struct task_struct *tsk,
 	if (task_tgid(tsk) == landlock_file(fown->file)->fown_tg)
 		return 0;
 
-	scoped_guard(rcu) {
-		const struct landlock_domain *const other =
-			landlock_get_task_domain(tsk);
-
-		is_scoped = domain_is_scoped(subject->domain, other,
+	scoped_guard(rcu)
+	{
+		is_scoped = domain_is_scoped(subject->domain,
+					     landlock_get_task_domain(tsk),
 					     signal_scope.scope);
-#ifdef CONFIG_TRACEPOINTS
-		if (other)
-			target_domain_id = other->hierarchy->id;
-#endif /* CONFIG_TRACEPOINTS */
 	}
 
 	if (!is_scoped)
@@ -509,15 +434,9 @@ static int hook_file_send_sigiotask(struct task_struct *tsk,
 			.type = LSM_AUDIT_DATA_TASK,
 			.u.tsk = tsk,
 		},
-#ifdef CONFIG_SECURITY_LANDLOCK_LOG
+#ifdef CONFIG_AUDIT
 		.layer_plus_one = landlock_file(fown->file)->fown_layer + 1,
-#endif /* CONFIG_SECURITY_LANDLOCK_LOG */
-#ifdef CONFIG_TRACEPOINTS
-		.trace_signal = &(struct landlock_signal_trace) {
-			.target_domain_id = target_domain_id,
-			.signal = signum ? signum : SIGIO,
-		},
-#endif /* CONFIG_TRACEPOINTS */
+#endif /* CONFIG_AUDIT */
 	});
 	return -EPERM;
 }

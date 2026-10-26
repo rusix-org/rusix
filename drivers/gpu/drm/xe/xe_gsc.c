@@ -266,7 +266,7 @@ static int gsc_upload_and_init(struct xe_gsc *gsc)
 	unsigned int fw_ref;
 	int ret;
 
-	if (tile->primary_gt && XE_GT_WA(tile->primary_gt, 14018094691)) {
+	if (XE_GT_WA(tile->primary_gt, 14018094691)) {
 		fw_ref = xe_force_wake_get(gt_to_fw(tile->primary_gt), XE_FORCEWAKE_ALL);
 
 		/*
@@ -281,7 +281,7 @@ static int gsc_upload_and_init(struct xe_gsc *gsc)
 
 	ret = gsc_upload(gsc);
 
-	if (tile->primary_gt && XE_GT_WA(tile->primary_gt, 14018094691))
+	if (XE_GT_WA(tile->primary_gt, 14018094691))
 		xe_force_wake_put(gt_to_fw(tile->primary_gt), fw_ref);
 
 	if (ret)
@@ -352,6 +352,7 @@ static void gsc_work(struct work_struct *work)
 	struct xe_gsc *gsc = container_of(work, typeof(*gsc), work);
 	struct xe_gt *gt = gsc_to_gt(gsc);
 	struct xe_device *xe = gt_to_xe(gt);
+	unsigned int fw_ref;
 	u32 actions;
 	int ret;
 
@@ -360,12 +361,13 @@ static void gsc_work(struct work_struct *work)
 	gsc->work_actions = 0;
 	spin_unlock_irq(&gsc->lock);
 
-	guard(xe_pm_runtime)(xe);
-	CLASS(xe_force_wake, fw_ref)(gt_to_fw(gt), XE_FW_GSC);
+	xe_pm_runtime_get(xe);
+	fw_ref = xe_force_wake_get(gt_to_fw(gt), XE_FW_GSC);
 
 	if (actions & GSC_ACTION_ER_COMPLETE) {
-		if (gsc_er_complete(gt))
-			return;
+		ret = gsc_er_complete(gt);
+		if (ret)
+			goto out;
 	}
 
 	if (actions & GSC_ACTION_FW_LOAD) {
@@ -378,6 +380,10 @@ static void gsc_work(struct work_struct *work)
 
 	if (actions & GSC_ACTION_SW_PROXY)
 		xe_gsc_proxy_request_handler(gsc);
+
+out:
+	xe_force_wake_put(gt_to_fw(gt), fw_ref);
+	xe_pm_runtime_put(xe);
 }
 
 void xe_gsc_hwe_irq_handler(struct xe_hw_engine *hwe, u16 intr_vec)
@@ -414,15 +420,14 @@ int xe_gsc_init(struct xe_gsc *gsc)
 	}
 
 	/*
-	 * Starting from BMG the GSC is no longer needed for MC6 entry, so the
-	 * only missing features if the FW is lacking would be the content
-	 * protection ones. This is acceptable, so we allow the driver load to
-	 * continue if the GSC FW is missing.
+	 * Some platforms can have GuC but not GSC. That would cause
+	 * xe_uc_fw_init(gsc) to return a "not supported" failure code and abort
+	 * all firmware loading. So check for GSC being enabled before
+	 * propagating the failure back up. That way the higher level will keep
+	 * going and load GuC as appropriate.
 	 */
 	ret = xe_uc_fw_init(&gsc->fw);
 	if (!xe_uc_fw_is_enabled(&gsc->fw))
-		return 0;
-	else if (gt_to_xe(gt)->info.platform >= XE_BATTLEMAGE && !xe_uc_fw_is_available(&gsc->fw))
 		return 0;
 	else if (ret)
 		goto out;
@@ -478,7 +483,8 @@ int xe_gsc_init_post_hwconfig(struct xe_gsc *gsc)
 
 	q = xe_exec_queue_create(xe, NULL,
 				 BIT(hwe->logical_instance), 1, hwe,
-				 EXEC_QUEUE_FLAG_KERNEL, 0);
+				 EXEC_QUEUE_FLAG_KERNEL |
+				 EXEC_QUEUE_FLAG_PERMANENT, 0);
 	if (IS_ERR(q)) {
 		xe_gt_err(gt, "Failed to create queue for GSC submission\n");
 		return PTR_ERR(q);
@@ -606,16 +612,17 @@ void xe_gsc_print_info(struct xe_gsc *gsc, struct drm_printer *p)
 {
 	struct xe_gt *gt = gsc_to_gt(gsc);
 	struct xe_mmio *mmio = &gt->mmio;
+	unsigned int fw_ref;
 
 	xe_uc_fw_print(&gsc->fw, p);
 
 	drm_printf(p, "\tfound security version %u\n", gsc->security_version);
 
-	if (!xe_uc_fw_is_available(&gsc->fw))
+	if (!xe_uc_fw_is_enabled(&gsc->fw))
 		return;
 
-	CLASS(xe_force_wake, fw_ref)(gt_to_fw(gt), XE_FW_GSC);
-	if (!fw_ref.domains)
+	fw_ref = xe_force_wake_get(gt_to_fw(gt), XE_FW_GSC);
+	if (!fw_ref)
 		return;
 
 	drm_printf(p, "\nHECI1 FWSTS: 0x%08x 0x%08x 0x%08x 0x%08x 0x%08x 0x%08x\n",
@@ -625,4 +632,6 @@ void xe_gsc_print_info(struct xe_gsc *gsc, struct drm_printer *p)
 			xe_mmio_read32(mmio, HECI_FWSTS4(MTL_GSC_HECI1_BASE)),
 			xe_mmio_read32(mmio, HECI_FWSTS5(MTL_GSC_HECI1_BASE)),
 			xe_mmio_read32(mmio, HECI_FWSTS6(MTL_GSC_HECI1_BASE)));
+
+	xe_force_wake_put(gt_to_fw(gt), fw_ref);
 }

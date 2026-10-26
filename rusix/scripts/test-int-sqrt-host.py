@@ -17,7 +17,7 @@ if args.runner == "qemu-i386" and not args.target32:
 paths = resolve_paths()
 out = paths.output / "builds" / ("int-sqrt-host-i686" if args.target32 else "int-sqrt-host")
 out.mkdir(parents=True, exist_ok=True)
-baseline = "21a7f44fd0765fcc5194130b28767786eba1d1e7"
+baseline = "2926d88bb7fc4608fd942453d929c39e4e5ec006"
 source = subprocess.check_output(
     ["git", "-C", str(paths.source), "show", f"{baseline}:lib/math/int_sqrt.c"],
     text=True,

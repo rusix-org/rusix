@@ -12,7 +12,6 @@
 #include <linux/uaccess.h>
 #include <clocksource/timer-riscv.h>
 #include <asm/delay.h>
-#include <asm/kvm_isa.h>
 #include <asm/kvm_nacl.h>
 #include <asm/kvm_vcpu_timer.h>
 
@@ -76,9 +75,8 @@ static int kvm_riscv_vcpu_timer_cancel(struct kvm_vcpu_timer *t)
 static int kvm_riscv_vcpu_update_vstimecmp(struct kvm_vcpu *vcpu, u64 ncycles)
 {
 #if defined(CONFIG_32BIT)
-	ncsr_write(CSR_VSTIMECMP,  ULONG_MAX);
+	ncsr_write(CSR_VSTIMECMP, ncycles & 0xFFFFFFFF);
 	ncsr_write(CSR_VSTIMECMPH, ncycles >> 32);
-	ncsr_write(CSR_VSTIMECMP, (u32)ncycles);
 #else
 	ncsr_write(CSR_VSTIMECMP, ncycles);
 #endif
@@ -234,7 +232,7 @@ int kvm_riscv_vcpu_set_reg_timer(struct kvm_vcpu *vcpu,
 		break;
 	case KVM_REG_RISCV_TIMER_REG(state):
 		if (reg_val == KVM_RISCV_TIMER_STATE_ON)
-			ret = kvm_riscv_vcpu_timer_next_event(vcpu, t->next_cycles);
+			ret = kvm_riscv_vcpu_timer_next_event(vcpu, reg_val);
 		else
 			ret = kvm_riscv_vcpu_timer_cancel(t);
 		break;
@@ -257,7 +255,7 @@ int kvm_riscv_vcpu_timer_init(struct kvm_vcpu *vcpu)
 	t->next_set = false;
 
 	/* Enable sstc for every vcpu if available in hardware */
-	if (!kvm_riscv_isa_check_host(SSTC)) {
+	if (riscv_isa_extension_available(NULL, SSTC)) {
 		t->sstc_enabled = true;
 		hrtimer_setup(&t->hrt, kvm_riscv_vcpu_vstimer_expired, CLOCK_MONOTONIC,
 			      HRTIMER_MODE_REL);
@@ -312,9 +310,8 @@ void kvm_riscv_vcpu_timer_restore(struct kvm_vcpu *vcpu)
 		return;
 
 #if defined(CONFIG_32BIT)
-	ncsr_write(CSR_VSTIMECMP, ULONG_MAX);
+	ncsr_write(CSR_VSTIMECMP, (u32)t->next_cycles);
 	ncsr_write(CSR_VSTIMECMPH, (u32)(t->next_cycles >> 32));
-	ncsr_write(CSR_VSTIMECMP, (u32)(t->next_cycles));
 #else
 	ncsr_write(CSR_VSTIMECMP, t->next_cycles);
 #endif

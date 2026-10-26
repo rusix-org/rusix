@@ -82,13 +82,17 @@ static void usnic_ib_fw_string_to_u64(char *fw_ver_str, u64 *fw_ver)
 static int usnic_ib_fill_create_qp_resp(struct usnic_ib_qp_grp *qp_grp,
 					struct ib_udata *udata)
 {
-	struct usnic_ib_create_qp_resp resp = {};
+	struct usnic_ib_dev *us_ibdev;
+	struct usnic_ib_create_qp_resp resp;
 	struct pci_dev *pdev;
 	struct vnic_dev_bar *bar;
 	struct usnic_vnic_res_chunk *chunk;
 	struct usnic_ib_qp_grp_flow *default_flow;
 	int i, err;
 
+	memset(&resp, 0, sizeof(resp));
+
+	us_ibdev = qp_grp->vf->pf;
 	pdev = usnic_vnic_get_pdev(qp_grp->vf->vnic);
 	if (!pdev) {
 		usnic_err("Failed to get pdev of qp_grp %d\n",
@@ -153,9 +157,12 @@ static int usnic_ib_fill_create_qp_resp(struct usnic_ib_qp_grp *qp_grp,
 					struct usnic_ib_qp_grp_flow, link);
 	resp.transport = default_flow->trans_type;
 
-	err = ib_respond_udata(udata, resp);
-	if (err)
+	err = ib_copy_to_udata(udata, &resp, sizeof(resp));
+	if (err) {
+		usnic_err("Failed to copy udata for %s",
+			  dev_name(&us_ibdev->ib_dev.dev));
 		return err;
+	}
 
 	return 0;
 }
@@ -181,7 +188,7 @@ find_free_vf_and_create_qp_grp(struct ib_qp *qp,
 	}
 
 	if (usnic_ib_share_vf) {
-		/* Try to find resources on a used vf which is in pd */
+		/* Try to find resouces on a used vf which is in pd */
 		dev_list = usnic_uiom_get_dev_list(pd->umem_pd);
 		if (IS_ERR(dev_list))
 			return PTR_ERR(dev_list);
@@ -275,15 +282,14 @@ int usnic_ib_query_device(struct ib_device *ibdev,
 	union ib_gid gid;
 	struct ethtool_drvinfo info;
 	int qp_per_vf;
-	int err;
 
 	usnic_dbg("\n");
-	err = ib_no_udata_io(uhw);
-	if (err)
-		return err;
+	if (uhw->inlen || uhw->outlen)
+		return -EINVAL;
 
 	mutex_lock(&us_ibdev->usdev_lock);
 	us_ibdev->netdev->ethtool_ops->get_drvinfo(us_ibdev->netdev, &info);
+	memset(props, 0, sizeof(*props));
 	usnic_mac_ip_to_gid(us_ibdev->ufdev->mac, us_ibdev->ufdev->inaddr,
 			&gid.raw[0]);
 	memcpy(&props->sys_image_guid, &gid.global.interface_id,
@@ -470,7 +476,7 @@ int usnic_ib_create_qp(struct ib_qp *ibqp, struct ib_qp_init_attr *init_attr,
 	if (init_attr->create_flags)
 		return -EOPNOTSUPP;
 
-	err = ib_copy_validate_udata_in(udata, cmd, spec);
+	err = ib_copy_from_udata(&cmd, udata, sizeof(cmd));
 	if (err) {
 		usnic_err("%s: cannot copy udata for create_qp\n",
 			  dev_name(&us_ibdev->ib_dev.dev));
@@ -598,7 +604,7 @@ struct ib_mr *usnic_ib_reg_mr(struct ib_pd *pd, u64 start, u64 length,
 	if (dmah)
 		return ERR_PTR(-EOPNOTSUPP);
 
-	mr = kzalloc_obj(*mr);
+	mr = kzalloc(sizeof(*mr), GFP_KERNEL);
 	if (!mr)
 		return ERR_PTR(-ENOMEM);
 

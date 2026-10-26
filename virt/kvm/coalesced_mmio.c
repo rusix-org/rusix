@@ -15,8 +15,6 @@
 #include <linux/slab.h>
 #include <linux/kvm.h>
 
-#ifndef __KVM_NO_MMIO
-
 #include "coalesced_mmio.h"
 
 static inline struct kvm_coalesced_mmio_dev *to_mmio(struct kvm_io_device *dev)
@@ -130,7 +128,8 @@ int kvm_vm_ioctl_register_coalesced_mmio(struct kvm *kvm,
 	if (zone->pio != 1 && zone->pio != 0)
 		return -EINVAL;
 
-	dev = kzalloc_obj(struct kvm_coalesced_mmio_dev, GFP_KERNEL_ACCOUNT);
+	dev = kzalloc(sizeof(struct kvm_coalesced_mmio_dev),
+		      GFP_KERNEL_ACCOUNT);
 	if (!dev)
 		return -ENOMEM;
 
@@ -190,5 +189,3 @@ int kvm_vm_ioctl_unregister_coalesced_mmio(struct kvm *kvm,
 	 */
 	return 0;
 }
-
-#endif /* !__KVM_NO_MMIO */

@@ -69,11 +69,10 @@
 .macro SHA1_VECTOR_ASM  name
 	SYM_FUNC_START(\name)
 
-	push	%rbp
-	mov	%rsp, %rbp
-
 	push	%rbx
 	push	%r12
+	push	%rbp
+	mov	%rsp, %rbp
 
 	sub	$64, %rsp		# allocate workspace
 	and	$~15, %rsp		# align stack
@@ -96,10 +95,10 @@
 	xor	%eax, %eax
 	rep stosq
 
-	lea	-16(%rbp), %rsp		# deallocate workspace
+	mov	%rbp, %rsp		# deallocate workspace
+	pop	%rbp
 	pop	%r12
 	pop	%rbx
-	pop	%rbp
 	RET
 
 	SYM_FUNC_END(\name)

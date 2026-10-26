@@ -39,13 +39,12 @@ void drm_client_dev_unregister(struct drm_device *dev)
 	mutex_lock(&dev->clientlist_mutex);
 	list_for_each_entry_safe(client, tmp, &dev->clientlist, list) {
 		list_del(&client->list);
-		/*
-		 * Unregistering consumes and frees the client.
-		 */
-		if (client->funcs && client->funcs->unregister)
+		if (client->funcs && client->funcs->unregister) {
 			client->funcs->unregister(client);
-		else
+		} else {
 			drm_client_release(client);
+			kfree(client);
+		}
 	}
 	mutex_unlock(&dev->clientlist_mutex);
 }
@@ -122,24 +121,6 @@ void drm_client_dev_restore(struct drm_device *dev, bool force)
 	}
 	mutex_unlock(&dev->clientlist_mutex);
 }
-
-void drm_client_dev_acquire_outputs(struct drm_device *dev)
-{
-	struct drm_client_dev *client;
-
-	if (!drm_core_check_feature(dev, DRIVER_MODESET))
-		return;
-
-	mutex_lock(&dev->clientlist_mutex);
-	list_for_each_entry(client, &dev->clientlist, list) {
-		if (!client->funcs || !client->funcs->acquire_outputs)
-			continue;
-
-		client->funcs->acquire_outputs(client);
-	}
-	mutex_unlock(&dev->clientlist_mutex);
-}
-EXPORT_SYMBOL(drm_client_dev_acquire_outputs);
 
 static int drm_client_suspend(struct drm_client_dev *client)
 {

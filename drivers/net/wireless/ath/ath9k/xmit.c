@@ -168,7 +168,7 @@ static bool ath_merge_ratetbl(struct ieee80211_sta *sta, struct ath_buf *bf,
 	if (!sta)
 		return false;
 
-	ratetbl = rcu_dereference_bh(sta->rates);
+	ratetbl = rcu_dereference(sta->rates);
 	if (!ratetbl)
 		return false;
 
@@ -1993,6 +1993,7 @@ void ath_txq_schedule(struct ath_softc *sc, struct ath_txq *txq)
 
 	ieee80211_txq_schedule_start(hw, txq->mac80211_qnum);
 	spin_lock_bh(&sc->chan_lock);
+	rcu_read_lock();
 
 	if (sc->cur_chan->stopped)
 		goto out;
@@ -2010,6 +2011,7 @@ void ath_txq_schedule(struct ath_softc *sc, struct ath_txq *txq)
 	}
 
 out:
+	rcu_read_unlock();
 	spin_unlock_bh(&sc->chan_lock);
 	ieee80211_txq_schedule_end(hw, txq->mac80211_qnum);
 }

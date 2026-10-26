@@ -17,8 +17,6 @@
 
 #include <dt-bindings/arm/ux500_pm_domains.h>
 
-#define NR_DOMAINS		(DOMAIN_VAPE + 1)
-
 static int pd_power_off(struct generic_pm_domain *domain)
 {
 	/*
@@ -67,7 +65,7 @@ static int ux500_pm_domains_probe(struct platform_device *pdev)
 	if (!np)
 		return -ENODEV;
 
-	genpd_data = kzalloc_obj(*genpd_data);
+	genpd_data = kzalloc(sizeof(*genpd_data), GFP_KERNEL);
 	if (!genpd_data)
 		return -ENOMEM;
 

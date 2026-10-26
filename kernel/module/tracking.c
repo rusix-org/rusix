@@ -33,13 +33,13 @@ int try_add_tainted_module(struct module *mod)
 		}
 	}
 
-	mod_taint = kmalloc_obj(*mod_taint);
+	mod_taint = kmalloc(sizeof(*mod_taint), GFP_KERNEL);
 	if (unlikely(!mod_taint))
 		return -ENOMEM;
 	strscpy(mod_taint->name, mod->name, MODULE_NAME_LEN);
 	mod_taint->taints = mod->taints;
-	mod_taint->count = 1;
 	list_add_rcu(&mod_taint->list, &unloaded_tainted_modules);
+	mod_taint->count = 1;
 out:
 	return 0;
 }

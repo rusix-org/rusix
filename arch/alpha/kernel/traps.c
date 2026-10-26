@@ -81,7 +81,7 @@ dik_show_code(unsigned int *pc)
 	printk("Code:");
 	for (i = -6; i < 2; i++) {
 		unsigned int insn;
-		if (get_kernel_nofault(insn, pc + i))
+		if (__get_user(insn, (unsigned int __user *)pc + i))
 			break;
 		printk("%c%08x%c", i ? ' ' : '<', insn, i ? ' ' : '>');
 	}
@@ -917,9 +917,7 @@ void
 trap_init(void)
 {
 	/* Tell PAL-code what global pointer we want in the kernel.  */
-	unsigned long gptr;
-
-	__asm__ __volatile__("mov $29, %0" : "=r" (gptr));
+	register unsigned long gptr __asm__("$29");
 	wrkgp(gptr);
 
 	wrent(entArith, 1);

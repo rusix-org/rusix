@@ -9,7 +9,6 @@
 #define _LINUX_NFSD_XDR3_H
 
 #include "xdr.h"
-#include "vfs.h"
 
 struct nfsd3_sattrargs {
 	struct svc_fh		fh;
@@ -210,8 +209,8 @@ struct nfsd3_pathconfres {
 	__u32			p_name_max;
 	__u32			p_no_trunc;
 	__u32			p_chown_restricted;
-	bool			p_case_insensitive;
-	bool			p_case_preserving;
+	__u32			p_case_insensitive;
+	__u32			p_case_preserving;
 };
 
 struct nfsd3_commitres {

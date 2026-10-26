@@ -197,7 +197,7 @@ out:
  * Actually probing is superfluous but we're paranoid.
  */
 
-static int xtsonic_probe(struct platform_device *pdev)
+int xtsonic_probe(struct platform_device *pdev)
 {
 	struct net_device *dev;
 	struct sonic_local *lp;

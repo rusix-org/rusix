@@ -60,18 +60,20 @@ static void dc_mouse_close(struct input_dev *dev)
 {
 	struct dc_mouse *mse = input_get_drvdata(dev);
 
-	maple_getcond_callback(mse->mdev, NULL, 0, MAPLE_FUNC_MOUSE);
+	maple_getcond_callback(mse->mdev, dc_mouse_callback, 0,
+		MAPLE_FUNC_MOUSE);
 }
 
 /* allow the mouse to be used */
 static int probe_maple_mouse(struct device *dev)
 {
 	struct maple_device *mdev = to_maple_dev(dev);
+	struct maple_driver *mdrv = to_maple_driver(dev->driver);
 	int error;
 	struct input_dev *input_dev;
 	struct dc_mouse *mse;
 
-	mse = kzalloc_obj(*mse);
+	mse = kzalloc(sizeof(*mse), GFP_KERNEL);
 	if (!mse) {
 		error = -ENOMEM;
 		goto fail;
@@ -101,10 +103,14 @@ static int probe_maple_mouse(struct device *dev)
 	error =	input_register_device(input_dev);
 	if (error)
 		goto fail_register;
+
+	mdev->driver = mdrv;
+
 	return error;
 
 fail_register:
 	input_free_device(input_dev);
+	maple_set_drvdata(mdev, NULL);
 fail_nomem:
 	kfree(mse);
 fail:
@@ -116,7 +122,9 @@ static int remove_maple_mouse(struct device *dev)
 	struct maple_device *mdev = to_maple_dev(dev);
 	struct dc_mouse *mse = maple_get_drvdata(mdev);
 
+	mdev->callback = NULL;
 	input_unregister_device(mse->dev);
+	maple_set_drvdata(mdev, NULL);
 	kfree(mse);
 
 	return 0;

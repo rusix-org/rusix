@@ -707,14 +707,16 @@ static int fsl_edma_probe(struct platform_device *pdev)
 	int ret, i;
 
 	drvdata = device_get_match_data(&pdev->dev);
-	if (!drvdata)
-		return dev_err_probe(&pdev->dev, -EINVAL,
-				     "unable to find driver data\n");
+	if (!drvdata) {
+		dev_err(&pdev->dev, "unable to find driver data\n");
+		return -EINVAL;
+	}
 
 	ret = of_property_read_u32(np, "dma-channels", &chans);
-	if (ret)
-		return dev_err_probe(&pdev->dev, ret,
-				     "Can't get dma-channels.\n");
+	if (ret) {
+		dev_err(&pdev->dev, "Can't get dma-channels.\n");
+		return ret;
+	}
 
 	fsl_edma = devm_kzalloc(&pdev->dev, struct_size(fsl_edma, chans, chans),
 				GFP_KERNEL);
@@ -738,10 +740,10 @@ static int fsl_edma_probe(struct platform_device *pdev)
 
 	if (drvdata->flags & FSL_EDMA_DRV_HAS_DMACLK) {
 		fsl_edma->dmaclk = devm_clk_get_enabled(&pdev->dev, "dma");
-		if (IS_ERR(fsl_edma->dmaclk))
-			return dev_err_probe(&pdev->dev,
-					     PTR_ERR(fsl_edma->dmaclk),
-					     "Missing DMA block clock.\n");
+		if (IS_ERR(fsl_edma->dmaclk)) {
+			dev_err(&pdev->dev, "Missing DMA block clock.\n");
+			return PTR_ERR(fsl_edma->dmaclk);
+		}
 	}
 
 	ret = of_property_read_variable_u32_array(np, "dma-channel-mask", chan_mask, 1, 2);
@@ -765,10 +767,11 @@ static int fsl_edma_probe(struct platform_device *pdev)
 
 		sprintf(clkname, "dmamux%d", i);
 		fsl_edma->muxclk[i] = devm_clk_get_enabled(&pdev->dev, clkname);
-		if (IS_ERR(fsl_edma->muxclk[i]))
-			return dev_err_probe(&pdev->dev,
-					     PTR_ERR(fsl_edma->muxclk[i]),
-					     "Missing DMAMUX block clock.\n");
+		if (IS_ERR(fsl_edma->muxclk[i])) {
+			dev_err(&pdev->dev, "Missing DMAMUX block clock.\n");
+			/* on error: disable all previously enabled clks */
+			return PTR_ERR(fsl_edma->muxclk[i]);
+		}
 	}
 
 	fsl_edma->big_endian = of_property_read_bool(np, "big-endian");
@@ -877,17 +880,22 @@ static int fsl_edma_probe(struct platform_device *pdev)
 
 	platform_set_drvdata(pdev, fsl_edma);
 
-	ret = dmaenginem_async_device_register(&fsl_edma->dma_dev);
-	if (ret)
-		return dev_err_probe(&pdev->dev, ret,
-				     "Can't register Freescale eDMA engine.\n");
+	ret = dma_async_device_register(&fsl_edma->dma_dev);
+	if (ret) {
+		dev_err(&pdev->dev,
+			"Can't register Freescale eDMA engine. (%d)\n", ret);
+		return ret;
+	}
 
-	ret = devm_of_dma_controller_register(&pdev->dev, np,
+	ret = of_dma_controller_register(np,
 			drvdata->dmamuxs ? fsl_edma_xlate : fsl_edma3_xlate,
 			fsl_edma);
-	if (ret)
-		return dev_err_probe(&pdev->dev, ret,
-				     "Can't register Freescale eDMA of_dma.\n");
+	if (ret) {
+		dev_err(&pdev->dev,
+			"Can't register Freescale eDMA of_dma. (%d)\n", ret);
+		dma_async_device_unregister(&fsl_edma->dma_dev);
+		return ret;
+	}
 
 	/* enable round robin arbitration */
 	if (!(drvdata->flags & FSL_EDMA_DRV_SPLIT_REG))
@@ -898,9 +906,12 @@ static int fsl_edma_probe(struct platform_device *pdev)
 
 static void fsl_edma_remove(struct platform_device *pdev)
 {
+	struct device_node *np = pdev->dev.of_node;
 	struct fsl_edma_engine *fsl_edma = platform_get_drvdata(pdev);
 
 	fsl_edma_irq_exit(pdev, fsl_edma);
+	of_dma_controller_free(np);
+	dma_async_device_unregister(&fsl_edma->dma_dev);
 	fsl_edma_cleanup_vchan(&fsl_edma->dma_dev);
 }
 
@@ -985,5 +996,6 @@ static void __exit fsl_edma_exit(void)
 }
 module_exit(fsl_edma_exit);
 
+MODULE_ALIAS("platform:fsl-edma");
 MODULE_DESCRIPTION("Freescale eDMA engine driver");
 MODULE_LICENSE("GPL v2");

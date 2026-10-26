@@ -24,7 +24,6 @@
 		serial5 = &main_uart3;
 		mmc0 = &main_sdhci0;
 		mmc1 = &main_sdhci1;
-		ethernet0 = &cpsw_port1;
 	};
 
 	chosen {
@@ -324,7 +323,6 @@
 &mcu_cpsw {
 	pinctrl-names = "default";
 	pinctrl-0 = <&mcu_cpsw_pins_default>, <&mcu_mdio_pins_default>;
-	status = "okay";
 };
 
 &davinci_mdio {
@@ -332,12 +330,11 @@
 		reg = <0>;
 		ti,rx-internal-delay = <DP83867_RGMIIDCTL_2_00_NS>;
 		ti,fifo-depth = <DP83867_PHYCR_FIFO_DEPTH_4_B_NIB>;
-		ti,min-output-impedance;
 	};
 };
 
 &cpsw_port1 {
-	phy-mode = "rgmii-id";
+	phy-mode = "rgmii-rxid";
 	phy-handle = <&phy0>;
 };
 

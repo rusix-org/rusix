@@ -4,25 +4,21 @@
 #include <mlx5_core.h>
 #include "fs_pool.h"
 
-int mlx5_fs_bulk_bitmap_alloc(struct mlx5_core_dev *dev,
-			      struct mlx5_fs_bulk *fs_bulk)
+int mlx5_fs_bulk_init(struct mlx5_core_dev *dev, struct mlx5_fs_bulk *fs_bulk,
+		      int bulk_len)
 {
 	int i;
 
-	fs_bulk->bitmask = kvcalloc(BITS_TO_LONGS(fs_bulk->bulk_len),
-				    sizeof(unsigned long), GFP_KERNEL);
+	fs_bulk->bitmask = kvcalloc(BITS_TO_LONGS(bulk_len), sizeof(unsigned long),
+				    GFP_KERNEL);
 	if (!fs_bulk->bitmask)
 		return -ENOMEM;
 
-	for (i = 0; i < fs_bulk->bulk_len; i++)
+	fs_bulk->bulk_len = bulk_len;
+	for (i = 0; i < bulk_len; i++)
 		set_bit(i, fs_bulk->bitmask);
 
 	return 0;
-}
-
-void mlx5_fs_bulk_init(struct mlx5_fs_bulk *fs_bulk, int bulk_len)
-{
-	fs_bulk->bulk_len = bulk_len;
 }
 
 void mlx5_fs_bulk_cleanup(struct mlx5_fs_bulk *fs_bulk)

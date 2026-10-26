@@ -150,12 +150,6 @@ struct ti_sci_msg_req_reboot {
  *		MSG_FLAG_CAPS_LPM_DM_MANAGED: LPM can be managed by DM
  *		MSG_FLAG_CAPS_LPM_ABORT: Abort entry to LPM
  *		MSG_FLAG_CAPS_IO_ISOLATION: IO Isolation support
- *		MSG_FLAG_CAPS_LPM_BOARDCFG_MANAGED: LPM config done statically
- *			for the DM via boardcfg
- *		MSG_FLAG_CAPS_LPM_IRQ_CONTEXT_LOST: DM is not able to restore IRQ
- *			context
- *		MSG_FLAG_CAPS_LPM_CLK_CONTEXT_LOST: DM is not able to restore
- *			Clock context
  *
  * Response to a generic message with message type TI_SCI_MSG_QUERY_FW_CAPS
  * providing currently available SOC/firmware capabilities. SoC that don't
@@ -168,9 +162,6 @@ struct ti_sci_msg_resp_query_fw_caps {
 #define MSG_FLAG_CAPS_LPM_DM_MANAGED	TI_SCI_MSG_FLAG(5)
 #define MSG_FLAG_CAPS_LPM_ABORT		TI_SCI_MSG_FLAG(9)
 #define MSG_FLAG_CAPS_IO_ISOLATION	TI_SCI_MSG_FLAG(7)
-#define MSG_FLAG_CAPS_LPM_BOARDCFG_MANAGED	TI_SCI_MSG_FLAG(12)
-#define MSG_FLAG_CAPS_LPM_IRQ_CONTEXT_LOST	TI_SCI_MSG_FLAG(14)
-#define MSG_FLAG_CAPS_LPM_CLK_CONTEXT_LOST	TI_SCI_MSG_FLAG(15)
 #define MSG_MASK_CAPS_LPM		GENMASK_ULL(4, 1)
 	u64 fw_caps;
 } __packed;
@@ -589,13 +580,13 @@ struct ti_sci_msg_resp_get_clock_freq {
 } __packed;
 
 /**
- * struct ti_sci_msg_req_prepare_sleep - Request for TISCI_MSG_PREPARE_SLEEP.
+ * struct tisci_msg_req_prepare_sleep - Request for TISCI_MSG_PREPARE_SLEEP.
  *
- * @hdr:			TISCI header to provide ACK/NAK flags to the host.
- * @mode:			Low power mode to enter.
- * @ctx_lo:			Low 32-bits of physical pointer to address to use for context save.
- * @ctx_hi:			High 32-bits of physical pointer to address to use for context save.
- * @debug_flags:		Flags that can be set to halt the sequence during suspend or
+ * @hdr				TISCI header to provide ACK/NAK flags to the host.
+ * @mode			Low power mode to enter.
+ * @ctx_lo			Low 32-bits of physical pointer to address to use for context save.
+ * @ctx_hi			High 32-bits of physical pointer to address to use for context save.
+ * @debug_flags			Flags that can be set to halt the sequence during suspend or
  *				resume to allow JTAG connection and debug.
  *
  * This message is used as the first step of entering a low power mode. It
@@ -606,11 +597,6 @@ struct ti_sci_msg_resp_get_clock_freq {
 struct ti_sci_msg_req_prepare_sleep {
 	struct ti_sci_msg_hdr	hdr;
 
-/*
- * When sending prepare_sleep with MODE_PARTIAL_IO no response will be sent,
- * no further steps are required.
- */
-#define TISCI_MSG_VALUE_SLEEP_MODE_PARTIAL_IO				0x03
 #define TISCI_MSG_VALUE_SLEEP_MODE_DM_MANAGED				0xfd
 	u8			mode;
 	u32			ctx_lo;
@@ -619,7 +605,7 @@ struct ti_sci_msg_req_prepare_sleep {
 } __packed;
 
 /**
- * struct ti_sci_msg_req_set_io_isolation - Request for TI_SCI_MSG_SET_IO_ISOLATION.
+ * struct tisci_msg_set_io_isolation_req - Request for TI_SCI_MSG_SET_IO_ISOLATION.
  *
  * @hdr:	Generic header
  * @state:	The deseared state of the IO isolation.
@@ -685,7 +671,7 @@ struct ti_sci_msg_req_lpm_set_device_constraint {
  * TISCI_MSG_LPM_SET_LATENCY_CONSTRAINT.
  *
  * @hdr:	TISCI header to provide ACK/NAK flags to the host.
- * @latency:	The maximum acceptable latency to wake up from low power mode
+ * @wkup_latency:	The maximum acceptable latency to wake up from low power mode
  *			in milliseconds. The deeper the state, the higher the latency.
  * @state:	The desired state of wakeup latency constraint: set or clear.
  * @rsvd:	Reserved for future use.
@@ -864,7 +850,7 @@ struct ti_sci_msg_rm_ring_cfg_req {
  * UDMAP transmit channels mapped to source threads will have their
  * TCHAN_THRD_ID register programmed with the destination thread if the pairing
  * is successful.
- *
+
  * @dst_thread: PSI-L destination thread ID within the PSI-L System thread map.
  * PSI-L destination threads start at index 0x8000.  The request is NACK'd if
  * the destination thread is not greater than or equal to 0x8000.
@@ -1009,8 +995,7 @@ struct rm_ti_sci_msg_udmap_rx_flow_opt_cfg {
 } __packed;
 
 /**
- * struct ti_sci_msg_rm_udmap_tx_ch_cfg_req - Configures a
- *	Navigator Subsystem UDMAP transmit channel
+ * Configures a Navigator Subsystem UDMAP transmit channel
  *
  * Configures the non-real-time registers of a Navigator Subsystem UDMAP
  * transmit channel.  The channel index must be assigned to the host defined
@@ -1138,8 +1123,7 @@ struct ti_sci_msg_rm_udmap_tx_ch_cfg_req {
 } __packed;
 
 /**
- * struct ti_sci_msg_rm_udmap_rx_ch_cfg_req - Configures a
- *	Navigator Subsystem UDMAP receive channel
+ * Configures a Navigator Subsystem UDMAP receive channel
  *
  * Configures the non-real-time registers of a Navigator Subsystem UDMAP
  * receive channel.  The channel index must be assigned to the host defined
@@ -1258,8 +1242,7 @@ struct ti_sci_msg_rm_udmap_rx_ch_cfg_req {
 } __packed;
 
 /**
- * struct ti_sci_msg_rm_udmap_flow_cfg_req - Configures a
- *	Navigator Subsystem UDMAP receive flow
+ * Configures a Navigator Subsystem UDMAP receive flow
  *
  * Configures a Navigator Subsystem UDMAP receive flow's registers.
  * Configuration does not include the flow registers which handle size-based
@@ -1270,7 +1253,7 @@ struct ti_sci_msg_rm_udmap_rx_ch_cfg_req {
  *
  * @hdr: Standard TISCI header
  *
- * @valid_params:
+ * @valid_params
  * Bitfield defining validity of rx flow configuration parameters.  The
  * rx flow configuration fields are not valid, and will not be used for flow
  * configuration, if their corresponding valid bit is zero.  Valid bit usage:

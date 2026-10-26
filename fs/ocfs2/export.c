@@ -74,9 +74,8 @@ static struct dentry *ocfs2_get_dentry(struct super_block *sb,
 			 * nice
 			 */
 			status = -ESTALE;
-		} else if (status != -ESTALE) {
+		} else
 			mlog(ML_ERROR, "test inode bit failed %d\n", status);
-		}
 		goto unlock_nfs_sync;
 	}
 
@@ -163,9 +162,8 @@ static struct dentry *ocfs2_get_parent(struct dentry *child)
 	if (status < 0) {
 		if (status == -EINVAL) {
 			status = -ESTALE;
-		} else if (status != -ESTALE) {
+		} else
 			mlog(ML_ERROR, "test inode bit failed %d\n", status);
-		}
 		parent = ERR_PTR(status);
 		goto bail_unlock;
 	}

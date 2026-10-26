@@ -136,15 +136,22 @@ int mtk_phy_led_hw_ctrl_get(struct phy_device *phydev, u8 index,
 	if (blink < 0)
 		return -EIO;
 
-	assign_bit(bit_netdev, &priv->led_state,
-		   (on & (on_set | MTK_PHY_LED_ON_FDX | MTK_PHY_LED_ON_HDX |
-		    MTK_PHY_LED_ON_LINKDOWN)) ||
-		    (blink & (rx_blink_set | tx_blink_set)));
+	if ((on & (on_set | MTK_PHY_LED_ON_FDX |
+		   MTK_PHY_LED_ON_HDX | MTK_PHY_LED_ON_LINKDOWN)) ||
+	    (blink & (rx_blink_set | tx_blink_set)))
+		set_bit(bit_netdev, &priv->led_state);
+	else
+		clear_bit(bit_netdev, &priv->led_state);
 
-	assign_bit(bit_on, &priv->led_state, on & MTK_PHY_LED_ON_FORCE_ON);
+	if (on & MTK_PHY_LED_ON_FORCE_ON)
+		set_bit(bit_on, &priv->led_state);
+	else
+		clear_bit(bit_on, &priv->led_state);
 
-	assign_bit(bit_blink, &priv->led_state,
-		   blink & MTK_PHY_LED_BLINK_FORCE_BLINK);
+	if (blink & MTK_PHY_LED_BLINK_FORCE_BLINK)
+		set_bit(bit_blink, &priv->led_state);
+	else
+		clear_bit(bit_blink, &priv->led_state);
 
 	if (!rules)
 		return 0;
@@ -247,7 +254,10 @@ int mtk_phy_led_hw_ctrl_set(struct phy_device *phydev, u8 index,
 		}
 	}
 
-	assign_bit(bit_netdev, &priv->led_state, blink || on);
+	if (blink || on)
+		set_bit(bit_netdev, &priv->led_state);
+	else
+		clear_bit(bit_netdev, &priv->led_state);
 
 	ret = phy_modify_mmd(phydev, MDIO_MMD_VEND2, index ?
 			     MTK_PHY_LED1_ON_CTRL : MTK_PHY_LED0_ON_CTRL,

@@ -69,6 +69,9 @@
 #define bond_first_slave_rcu(bond) \
 	netdev_lower_get_first_private_rcu(bond->dev)
 
+#define bond_is_first_slave(bond, pos) (pos == bond_first_slave(bond))
+#define bond_is_last_slave(bond, pos) (pos == bond_last_slave(bond))
+
 /**
  * bond_for_each_slave - iterate over all slaves
  * @bond:	the bond holding this list
@@ -88,22 +91,22 @@
 			    NETIF_F_GSO_ESP)
 
 #ifdef CONFIG_NET_POLL_CONTROLLER
-DECLARE_STATIC_KEY_FALSE(netpoll_block_tx);
+extern atomic_t netpoll_block_tx;
 
 static inline void block_netpoll_tx(void)
 {
-	static_branch_inc(&netpoll_block_tx);
+	atomic_inc(&netpoll_block_tx);
 }
 
 static inline void unblock_netpoll_tx(void)
 {
-	static_branch_dec(&netpoll_block_tx);
+	atomic_dec(&netpoll_block_tx);
 }
 
 static inline int is_netpoll_tx_blocked(struct net_device *dev)
 {
-	if (static_branch_unlikely(&netpoll_block_tx))
-		return netpoll_tx_running(dev);
+	if (unlikely(netpoll_tx_running(dev)))
+		return atomic_read(&netpoll_block_tx);
 	return 0;
 }
 #else
@@ -252,7 +255,6 @@ struct bonding {
 	struct   delayed_work ad_work;
 	struct   delayed_work mcast_work;
 	struct   delayed_work slave_arr_work;
-	struct   delayed_work peer_notify_work;
 #ifdef CONFIG_DEBUG_FS
 	/* debugging support via debugfs */
 	struct	 dentry *debug_dir;
@@ -345,14 +347,14 @@ static inline bool bond_mode_uses_primary(int mode)
 	       mode == BOND_MODE_ALB;
 }
 
-static inline bool bond_uses_primary(const struct bonding *bond)
+static inline bool bond_uses_primary(struct bonding *bond)
 {
 	return bond_mode_uses_primary(BOND_MODE(bond));
 }
 
-static inline struct net_device *bond_option_active_slave_get_rcu(const struct bonding *bond)
+static inline struct net_device *bond_option_active_slave_get_rcu(struct bonding *bond)
 {
-	const struct slave *slave = rcu_dereference_rtnl(bond->curr_active_slave);
+	struct slave *slave = rcu_dereference_rtnl(bond->curr_active_slave);
 
 	return bond_uses_primary(bond) && slave ? slave->dev : NULL;
 }
@@ -703,14 +705,13 @@ void bond_setup(struct net_device *bond_dev);
 unsigned int bond_get_num_tx_queues(void);
 int bond_netlink_init(void);
 void bond_netlink_fini(void);
-struct net_device *bond_option_active_slave_get_rcu(const struct bonding *bond);
+struct net_device *bond_option_active_slave_get_rcu(struct bonding *bond);
 const char *bond_slave_link_status(s8 link);
 struct bond_vlan_tag *bond_verify_device_path(struct net_device *start_dev,
 					      struct net_device *end_dev,
 					      int level);
 int bond_update_slave_arr(struct bonding *bond, struct slave *skipslave);
 void bond_slave_arr_work_rearm(struct bonding *bond, unsigned long delay);
-void bond_peer_notify_work_rearm(struct bonding *bond, unsigned long delay);
 void bond_work_init_all(struct bonding *bond);
 void bond_work_cancel_all(struct bonding *bond);
 

@@ -265,7 +265,7 @@ struct bcm_enet_priv {
 	/* number of available descriptor for tx */
 	int tx_desc_count;
 
-	/* next tx descriptor available */
+	/* next tx descriptor avaiable */
 	int tx_curr_desc;
 
 	/* next dirty tx descriptor to reclaim */

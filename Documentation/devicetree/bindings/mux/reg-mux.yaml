@@ -22,7 +22,7 @@ properties:
   reg: true
 
   '#mux-control-cells':
-    enum: [ 0, 1 ]
+    const: 1
 
   mux-reg-masks:
     $ref: /schemas/types.yaml#/definitions/uint32-matrix

@@ -11,11 +11,7 @@
 
 #include <linux/lockdep_types.h>
 
-/*
- * Keep in sync with rust/kernel/sync/lock/spinlock.rs
- */
-
-context_lock_struct(raw_spinlock) {
+typedef struct raw_spinlock {
 	arch_spinlock_t raw_lock;
 #ifdef CONFIG_DEBUG_SPINLOCK
 	unsigned int magic, owner_cpu;
@@ -24,8 +20,7 @@ context_lock_struct(raw_spinlock) {
 #ifdef CONFIG_DEBUG_LOCK_ALLOC
 	struct lockdep_map dep_map;
 #endif
-};
-typedef struct raw_spinlock raw_spinlock_t;
+} raw_spinlock_t;
 
 #define SPINLOCK_MAGIC		0xdead4ead
 

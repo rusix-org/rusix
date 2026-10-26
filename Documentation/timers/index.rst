@@ -13,3 +13,10 @@ Timers
     no_hz
     timekeeping
     delay_sleep_functions
+
+.. only::  subproject and html
+
+   Indices
+   =======
+
+   * :ref:`genindex`

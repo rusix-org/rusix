@@ -50,10 +50,6 @@ MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Stephan Mueller <smueller@chronox.de>");
 MODULE_DESCRIPTION("User-space interface for random number generators");
 
-static const struct af_alg_allowlist_entry rng_allowlist[] = {
-	{},
-};
-
 struct rng_ctx {
 #define MAXSIZE 128
 	unsigned int len;
@@ -201,21 +197,16 @@ static struct proto_ops __maybe_unused algif_rng_test_ops = {
 	.sendmsg	=	rng_test_sendmsg,
 };
 
-static void *rng_bind(const char *name)
+static void *rng_bind(const char *name, u32 type, u32 mask)
 {
 	struct rng_parent_ctx *pctx;
 	struct crypto_rng *rng;
-	int err;
 
-	err = af_alg_check_restriction(name, rng_allowlist);
-	if (err)
-		return ERR_PTR(err);
-
-	pctx = kzalloc_obj(*pctx);
+	pctx = kzalloc(sizeof(*pctx), GFP_KERNEL);
 	if (!pctx)
 		return ERR_PTR(-ENOMEM);
 
-	rng = crypto_alloc_rng(name, 0, AF_ALG_CRYPTOAPI_MASK);
+	rng = crypto_alloc_rng(name, type, mask);
 	if (IS_ERR(rng)) {
 		kfree(pctx);
 		return ERR_CAST(rng);

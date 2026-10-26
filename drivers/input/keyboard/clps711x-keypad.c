@@ -6,6 +6,7 @@
  */
 
 #include <linux/input.h>
+#include <linux/mod_devicetable.h>
 #include <linux/module.h>
 #include <linux/gpio/consumer.h>
 #include <linux/platform_device.h>
@@ -130,6 +131,7 @@ static int clps711x_keypad_probe(struct platform_device *pdev)
 	input_set_drvdata(input, priv);
 
 	input->name		= pdev->name;
+	input->dev.parent	= dev;
 	input->id.bustype	= BUS_HOST;
 	input->id.vendor	= 0x0001;
 	input->id.product	= 0x0001;

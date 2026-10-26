@@ -87,7 +87,7 @@ pub struct Error<State: RegulatorState> {
 pub fn devm_enable(dev: &Device<Bound>, name: &CStr) -> Result {
     // SAFETY: `dev` is a valid and bound device, while `name` is a valid C
     // string.
-    to_result(unsafe { bindings::devm_regulator_get_enable(dev.as_raw(), name.as_char_ptr()) })
+    to_result(unsafe { bindings::devm_regulator_get_enable(dev.as_raw(), name.as_ptr()) })
 }
 
 /// Same as [`devm_enable`], but calls `devm_regulator_get_enable_optional`
@@ -105,9 +105,7 @@ pub fn devm_enable(dev: &Device<Bound>, name: &CStr) -> Result {
 pub fn devm_enable_optional(dev: &Device<Bound>, name: &CStr) -> Result {
     // SAFETY: `dev` is a valid and bound device, while `name` is a valid C
     // string.
-    to_result(unsafe {
-        bindings::devm_regulator_get_enable_optional(dev.as_raw(), name.as_char_ptr())
-    })
+    to_result(unsafe { bindings::devm_regulator_get_enable_optional(dev.as_raw(), name.as_ptr()) })
 }
 
 /// A `struct regulator` abstraction.
@@ -125,11 +123,12 @@ pub fn devm_enable_optional(dev: &Device<Bound>, name: &CStr) -> Result {
 ///
 /// ```
 /// # use kernel::prelude::*;
+/// # use kernel::c_str;
 /// # use kernel::device::Device;
 /// # use kernel::regulator::{Voltage, Regulator, Disabled, Enabled};
 /// fn enable(dev: &Device, min_voltage: Voltage, max_voltage: Voltage) -> Result {
 ///     // Obtain a reference to a (fictitious) regulator.
-///     let regulator: Regulator<Disabled> = Regulator::<Disabled>::get(dev, c"vcc")?;
+///     let regulator: Regulator<Disabled> = Regulator::<Disabled>::get(dev, c_str!("vcc"))?;
 ///
 ///     // The voltage can be set before enabling the regulator if needed, e.g.:
 ///     regulator.set_voltage(min_voltage, max_voltage)?;
@@ -168,11 +167,12 @@ pub fn devm_enable_optional(dev: &Device<Bound>, name: &CStr) -> Result {
 ///
 /// ```
 /// # use kernel::prelude::*;
+/// # use kernel::c_str;
 /// # use kernel::device::Device;
 /// # use kernel::regulator::{Voltage, Regulator, Enabled};
 /// fn enable(dev: &Device) -> Result {
 ///     // Obtain a reference to a (fictitious) regulator and enable it.
-///     let regulator: Regulator<Enabled> = Regulator::<Enabled>::get(dev, c"vcc")?;
+///     let regulator: Regulator<Enabled> = Regulator::<Enabled>::get(dev, c_str!("vcc"))?;
 ///
 ///     // Dropping an enabled regulator will disable it. The refcount will be
 ///     // decremented.
@@ -194,12 +194,13 @@ pub fn devm_enable_optional(dev: &Device<Bound>, name: &CStr) -> Result {
 ///
 /// ```
 /// # use kernel::prelude::*;
+/// # use kernel::c_str;
 /// # use kernel::device::{Bound, Device};
 /// # use kernel::regulator;
 /// fn enable(dev: &Device<Bound>) -> Result {
 ///     // Obtain a reference to a (fictitious) regulator and enable it. This
 ///     // call only returns whether the operation succeeded.
-///     regulator::devm_enable(dev, c"vcc")?;
+///     regulator::devm_enable(dev, c_str!("vcc"))?;
 ///
 ///     // The regulator will be disabled and put when `dev` is unbound.
 ///     Ok(())
@@ -270,10 +271,9 @@ impl<T: RegulatorState> Regulator<T> {
     }
 
     fn get_internal(dev: &Device, name: &CStr) -> Result<Regulator<T>> {
-        let inner =
-            // SAFETY: It is safe to call `regulator_get()`, on a device pointer
-            // received from the C code.
-            from_err_ptr(unsafe { bindings::regulator_get(dev.as_raw(), name.as_char_ptr()) })?;
+        // SAFETY: It is safe to call `regulator_get()`, on a device pointer
+        // received from the C code.
+        let inner = from_err_ptr(unsafe { bindings::regulator_get(dev.as_raw(), name.as_ptr()) })?;
 
         // INVARIANT: `inner` is a pointer obtained from `regulator_get()`, and
         // the call was successful.

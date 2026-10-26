@@ -23,7 +23,6 @@
 #include <linux/err.h>
 #include <linux/kref.h>
 #include <linux/slab.h>
-#include <linux/srcu.h>
 
 #include "remoteproc_internal.h"
 
@@ -89,23 +88,15 @@ static bool rproc_virtio_notify(struct virtqueue *vq)
  */
 irqreturn_t rproc_vq_interrupt(struct rproc *rproc, int notifyid)
 {
-	irqreturn_t ret = IRQ_NONE;
 	struct rproc_vring *rvring;
-	struct virtqueue *vq;
-	int idx;
 
 	dev_dbg(&rproc->dev, "vq index %d is interrupted\n", notifyid);
 
-	idx = srcu_read_lock(&rproc->vq_srcu);
-
 	rvring = idr_find(&rproc->notifyids, notifyid);
-	vq = rvring ? READ_ONCE(rvring->vq) : NULL;
-	if (vq)
-		ret = vring_interrupt(0, vq);
+	if (!rvring || !rvring->vq)
+		return IRQ_NONE;
 
-	srcu_read_unlock(&rproc->vq_srcu, idx);
-
-	return ret;
+	return vring_interrupt(0, rvring->vq);
 }
 EXPORT_SYMBOL(rproc_vq_interrupt);
 
@@ -162,7 +153,7 @@ static struct virtqueue *rp_find_vq(struct virtio_device *vdev,
 
 	vq->num_max = num;
 
-	WRITE_ONCE(rvring->vq, vq);
+	rvring->vq = vq;
 	vq->priv = rvring;
 
 	/* Update vring in resource table */
@@ -174,20 +165,14 @@ static struct virtqueue *rp_find_vq(struct virtio_device *vdev,
 
 static void __rproc_virtio_del_vqs(struct virtio_device *vdev)
 {
-	struct rproc *rproc = vdev_to_rproc(vdev);
 	struct virtqueue *vq, *n;
 	struct rproc_vring *rvring;
 
-	list_for_each_entry(vq, &vdev->vqs, list) {
+	list_for_each_entry_safe(vq, n, &vdev->vqs, list) {
 		rvring = vq->priv;
-		WRITE_ONCE(rvring->vq, NULL);
-	}
-
-	/* Synchronize with rproc_vq_interrupt() callers that found a queue. */
-	synchronize_srcu(&rproc->vq_srcu);
-
-	list_for_each_entry_safe(vq, n, &vdev->vqs, list)
+		rvring->vq = NULL;
 		vring_del_virtqueue(vq);
+	}
 }
 
 static void rproc_virtio_del_vqs(struct virtio_device *vdev)
@@ -255,13 +240,6 @@ static void rproc_virtio_reset(struct virtio_device *vdev)
 
 	rsc->status = 0;
 	dev_dbg(&vdev->dev, "reset !\n");
-}
-
-static void rproc_virtio_synchronize_cbs(struct virtio_device *vdev)
-{
-	struct rproc *rproc = vdev_to_rproc(vdev);
-
-	synchronize_srcu(&rproc->vq_srcu);
 }
 
 /* provide the vdev features as retrieved from the firmware */
@@ -352,7 +330,6 @@ static const struct virtio_config_ops rproc_virtio_config_ops = {
 	.find_vqs	= rproc_virtio_find_vqs,
 	.del_vqs	= rproc_virtio_del_vqs,
 	.reset		= rproc_virtio_reset,
-	.synchronize_cbs = rproc_virtio_synchronize_cbs,
 	.set_status	= rproc_virtio_set_status,
 	.get_status	= rproc_virtio_get_status,
 	.get		= rproc_virtio_get,
@@ -453,7 +430,7 @@ static int rproc_add_virtio_dev(struct rproc_vdev *rvdev, int id)
 	}
 
 	/* Allocate virtio device */
-	vdev = kzalloc_obj(*vdev);
+	vdev = kzalloc(sizeof(*vdev), GFP_KERNEL);
 	if (!vdev) {
 		ret = -ENOMEM;
 		goto out;

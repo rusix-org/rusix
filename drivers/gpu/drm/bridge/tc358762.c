@@ -12,6 +12,7 @@
 
 #include <linux/delay.h>
 #include <linux/gpio/consumer.h>
+#include <linux/mod_devicetable.h>
 #include <linux/module.h>
 #include <linux/of_graph.h>
 #include <linux/regulator/consumer.h>
@@ -149,7 +150,7 @@ static int tc358762_init(struct tc358762 *ctx)
 }
 
 static void tc358762_post_disable(struct drm_bridge *bridge,
-				  struct drm_atomic_commit *state)
+				  struct drm_atomic_state *state)
 {
 	struct tc358762 *ctx = bridge_to_tc358762(bridge);
 	int ret;
@@ -172,7 +173,7 @@ static void tc358762_post_disable(struct drm_bridge *bridge,
 }
 
 static void tc358762_pre_enable(struct drm_bridge *bridge,
-				struct drm_atomic_commit *state)
+				struct drm_atomic_state *state)
 {
 	struct tc358762 *ctx = bridge_to_tc358762(bridge);
 	int ret;
@@ -190,7 +191,7 @@ static void tc358762_pre_enable(struct drm_bridge *bridge,
 }
 
 static void tc358762_enable(struct drm_bridge *bridge,
-			    struct drm_atomic_commit *state)
+			    struct drm_atomic_state *state)
 {
 	struct tc358762 *ctx = bridge_to_tc358762(bridge);
 	int ret;
@@ -225,7 +226,7 @@ static const struct drm_bridge_funcs tc358762_bridge_funcs = {
 	.atomic_enable = tc358762_enable,
 	.atomic_duplicate_state = drm_atomic_helper_bridge_duplicate_state,
 	.atomic_destroy_state = drm_atomic_helper_bridge_destroy_state,
-	.atomic_create_state = drm_atomic_helper_bridge_create_state,
+	.atomic_reset = drm_atomic_helper_bridge_reset,
 	.attach = tc358762_attach,
 	.mode_set = tc358762_bridge_mode_set,
 };
@@ -292,15 +293,23 @@ static int tc358762_probe(struct mipi_dsi_device *dsi)
 	ctx->bridge.of_node = dev->of_node;
 	ctx->bridge.pre_enable_prev_first = true;
 
-	ret = devm_drm_bridge_add(dev, &ctx->bridge);
-	if (ret < 0)
-		return ret;
+	drm_bridge_add(&ctx->bridge);
 
-	ret = devm_mipi_dsi_attach(dev, dsi);
-	if (ret < 0)
+	ret = mipi_dsi_attach(dsi);
+	if (ret < 0) {
+		drm_bridge_remove(&ctx->bridge);
 		dev_err(dev, "failed to attach dsi\n");
+	}
 
 	return ret;
+}
+
+static void tc358762_remove(struct mipi_dsi_device *dsi)
+{
+	struct tc358762 *ctx = mipi_dsi_get_drvdata(dsi);
+
+	mipi_dsi_detach(dsi);
+	drm_bridge_remove(&ctx->bridge);
 }
 
 static const struct of_device_id tc358762_of_match[] = {
@@ -311,6 +320,7 @@ MODULE_DEVICE_TABLE(of, tc358762_of_match);
 
 static struct mipi_dsi_driver tc358762_driver = {
 	.probe = tc358762_probe,
+	.remove = tc358762_remove,
 	.driver = {
 		.name = "tc358762",
 		.of_match_table = tc358762_of_match,

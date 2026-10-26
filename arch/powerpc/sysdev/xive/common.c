@@ -74,8 +74,6 @@ static struct xive_ipi_desc {
  */
 static unsigned int xive_ipi_cpu_to_irq(unsigned int cpu)
 {
-	if (!xive_ipis)
-		return XIVE_BAD_IRQ;
 	return xive_ipis[early_cpu_to_node(cpu)].irq;
 }
 #endif
@@ -550,23 +548,41 @@ static void xive_dec_target_count(int cpu)
 static int xive_find_target_in_mask(const struct cpumask *mask,
 				    unsigned int fuzz)
 {
-	int cpu, first;
+	int cpu, first, num, i;
 
 	/* Pick up a starting point CPU in the mask based on  fuzz */
-	fuzz %= cpumask_weight(mask);
-	first = cpumask_nth(fuzz, mask);
-	WARN_ON(first >= nr_cpu_ids);
+	num = min_t(int, cpumask_weight(mask), nr_cpu_ids);
+	first = fuzz % num;
+
+	/* Locate it */
+	cpu = cpumask_first(mask);
+	for (i = 0; i < first && cpu < nr_cpu_ids; i++)
+		cpu = cpumask_next(cpu, mask);
+
+	/* Sanity check */
+	if (WARN_ON(cpu >= nr_cpu_ids))
+		cpu = cpumask_first(cpu_online_mask);
+
+	/* Remember first one to handle wrap-around */
+	first = cpu;
 
 	/*
 	 * Now go through the entire mask until we find a valid
 	 * target.
 	 */
-	for_each_cpu_wrap(cpu, mask, first) {
+	do {
+		/*
+		 * We re-check online as the fallback case passes us
+		 * an untested affinity mask
+		 */
 		if (cpu_online(cpu) && xive_try_pick_target(cpu))
 			return cpu;
-	}
+		cpu = cpumask_next(cpu, mask);
+		/* Wrap around */
+		if (cpu >= nr_cpu_ids)
+			cpu = cpumask_first(mask);
+	} while (cpu != first);
 
-	WARN_ONCE(1, "target CPU not found in mask: %*pbl\n", cpumask_pr_args(mask));
 	return -1;
 }
 
@@ -1000,7 +1016,7 @@ static struct xive_irq_data *xive_irq_alloc_data(unsigned int virq, irq_hw_numbe
 	struct xive_irq_data *xd;
 	int rc;
 
-	xd = kzalloc_obj(struct xive_irq_data);
+	xd = kzalloc(sizeof(struct xive_irq_data), GFP_KERNEL);
 	if (!xd)
 		return ERR_PTR(-ENOMEM);
 	rc = xive_ops->populate_irq_data(hw, xd);
@@ -1134,7 +1150,7 @@ static int __init xive_init_ipis(void)
 	if (!ipi_domain)
 		goto out_free_fwnode;
 
-	xive_ipis = kzalloc_objs(*xive_ipis, nr_node_ids);
+	xive_ipis = kcalloc(nr_node_ids, sizeof(*xive_ipis), GFP_KERNEL | __GFP_NOFAIL);
 	if (!xive_ipis)
 		goto out_free_domain;
 
@@ -1159,7 +1175,6 @@ static int __init xive_init_ipis(void)
 
 out_free_xive_ipis:
 	kfree(xive_ipis);
-	xive_ipis = NULL;
 out_free_domain:
 	irq_domain_remove(ipi_domain);
 out_free_fwnode:
@@ -1191,9 +1206,6 @@ static int xive_setup_cpu_ipi(unsigned int cpu)
 	int rc;
 
 	pr_debug("Setting up IPI for CPU %d\n", cpu);
-
-	if (xive_ipi_irq == XIVE_BAD_IRQ)
-		return -EIO;
 
 	xc = per_cpu(xive_cpu, cpu);
 
@@ -1239,9 +1251,6 @@ noinstr static void xive_cleanup_cpu_ipi(unsigned int cpu, struct xive_cpu *xc)
 
 	/* Disable the IPI and free the IRQ data */
 
-	if (xive_ipi_irq == XIVE_BAD_IRQ)
-		return;
-
 	/* Already cleaned up ? */
 	if (xc->hw_ipi == XIVE_BAD_IRQ)
 		return;
@@ -1269,19 +1278,15 @@ int __init xive_smp_probe(void)
 {
 	int ret;
 
+	smp_ops->cause_ipi = xive_cause_ipi;
+
 	/* Register the IPI */
 	ret = xive_init_ipis();
 	if (ret < 0)
 		return ret;
 
 	/* Allocate and setup IPI for the boot CPU */
-	ret = xive_setup_cpu_ipi(smp_processor_id());
-	if (ret < 0)
-		return ret;
-
-	smp_ops->cause_ipi = xive_cause_ipi;
-
-	return 0;
+	return xive_setup_cpu_ipi(smp_processor_id());
 }
 
 #endif /* CONFIG_SMP */

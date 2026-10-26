@@ -8,7 +8,6 @@
 
 #include <linux/ascii85.h>
 #include <linux/interconnect.h>
-#include <linux/firmware/qcom/qcom_pas.h>
 #include <linux/firmware/qcom/qcom_scm.h>
 #include <linux/kernel.h>
 #include <linux/of_reserved_mem.h>
@@ -46,16 +45,10 @@ static int zap_shader_load_mdt(struct msm_gpu *gpu, const char *fwname,
 		return -EINVAL;
 	}
 
-	np = of_get_available_child_by_name(dev->of_node, "zap-shader");
-	if (!np) {
+	np = of_get_child_by_name(dev->of_node, "zap-shader");
+	if (!of_device_is_available(np)) {
 		zap_available = false;
 		return -ENODEV;
-	}
-
-	/* We need PAS to be able to load the firmware */
-	if (!qcom_pas_is_available()) {
-		DRM_DEV_ERROR(dev, "PAS is not available\n");
-		return -EPROBE_DEFER;
 	}
 
 	ret = of_reserved_mem_region_to_resource(np, 0, &r);
@@ -153,10 +146,10 @@ static int zap_shader_load_mdt(struct msm_gpu *gpu, const char *fwname,
 		goto out;
 
 	/* Send the image to the secure world */
-	ret = qcom_pas_auth_and_reset(pasid);
+	ret = qcom_scm_pas_auth_and_reset(pasid);
 
 	/*
-	 * If the pas call returns -EOPNOTSUPP we assume that this target
+	 * If the scm call returns -EOPNOTSUPP we assume that this target
 	 * doesn't need/support the zap shader so quietly fail
 	 */
 	if (ret == -EOPNOTSUPP)
@@ -176,10 +169,17 @@ out:
 int adreno_zap_shader_load(struct msm_gpu *gpu, u32 pasid)
 {
 	struct adreno_gpu *adreno_gpu = to_adreno_gpu(gpu);
+	struct platform_device *pdev = gpu->pdev;
 
 	/* Short cut if we determine the zap shader isn't available/needed */
 	if (!zap_available)
 		return -ENODEV;
+
+	/* We need SCM to be able to load the firmware */
+	if (!qcom_scm_is_available()) {
+		DRM_DEV_ERROR(&pdev->dev, "SCM is not available\n");
+		return -EPROBE_DEFER;
+	}
 
 	return zap_shader_load_mdt(gpu, adreno_gpu->info->zapfw, pasid);
 }
@@ -284,7 +284,6 @@ int adreno_fault_handler(struct msm_gpu *gpu, unsigned long iova, int flags,
 			 struct adreno_smmu_fault_info *info, const char *block,
 			 u32 scratch[4])
 {
-	struct adreno_gpu *adreno_gpu = container_of(gpu, struct adreno_gpu, base);
 	struct msm_drm_private *priv = gpu->dev->dev_private;
 	struct msm_mmu *mmu = to_msm_vm(gpu->vm)->mmu;
 	const char *type = "UNKNOWN";
@@ -337,11 +336,6 @@ int adreno_fault_handler(struct msm_gpu *gpu, unsigned long iova, int flags,
 		/* Turn off the hangcheck timer to keep it from bothering us */
 		timer_delete(&gpu->hangcheck_timer);
 
-		/* Let any concurrent GMU transactions know that the MMU may be
-		 * blocked for a while and they should wait on us.
-		 */
-		reinit_completion(&adreno_gpu->fault_coredump_done);
-
 		fault_info.ttbr0 = info->ttbr0;
 		fault_info.iova  = iova;
 		fault_info.flags = flags;
@@ -349,17 +343,9 @@ int adreno_fault_handler(struct msm_gpu *gpu, unsigned long iova, int flags,
 		fault_info.block = block;
 
 		msm_gpu_fault_crashstate_capture(gpu, &fault_info);
-
-		complete_all(&adreno_gpu->fault_coredump_done);
 	}
 
 	return 0;
-}
-
-static bool
-valid_per_process_vm(struct msm_gpu *gpu, struct drm_gpuvm *vm)
-{
-	return vm && (vm != gpu->vm);
 }
 
 int adreno_get_param(struct msm_gpu *gpu, struct msm_context *ctx,
@@ -379,10 +365,11 @@ int adreno_get_param(struct msm_gpu *gpu, struct msm_context *ctx,
 		*value = adreno_gpu->info->revn;
 		return 0;
 	case MSM_PARAM_GMEM_SIZE:
-		*value = adreno_gpu->gmem;
+		*value = adreno_gpu->info->gmem;
 		return 0;
 	case MSM_PARAM_GMEM_BASE:
-		if (adreno_gpu->info->family >= ADRENO_6XX_GEN3)
+		if (adreno_is_a650_family(adreno_gpu) ||
+		    adreno_is_a740_family(adreno_gpu))
 			*value = 0;
 		else
 			*value = 0x100000;
@@ -397,11 +384,13 @@ int adreno_get_param(struct msm_gpu *gpu, struct msm_context *ctx,
 		return 0;
 	case MSM_PARAM_TIMESTAMP:
 		if (adreno_gpu->funcs->get_timestamp) {
+			int ret;
+
 			pm_runtime_get_sync(&gpu->pdev->dev);
-			*value = adreno_gpu->funcs->get_timestamp(gpu);
+			ret = adreno_gpu->funcs->get_timestamp(gpu, value);
 			pm_runtime_put_autosuspend(&gpu->pdev->dev);
 
-			return 0;
+			return ret;
 		}
 		return -EINVAL;
 	case MSM_PARAM_PRIORITIES:
@@ -420,12 +409,12 @@ int adreno_get_param(struct msm_gpu *gpu, struct msm_context *ctx,
 		*value = gpu->suspend_count;
 		return 0;
 	case MSM_PARAM_VA_START:
-		if (!valid_per_process_vm(gpu, vm))
+		if (vm == gpu->vm)
 			return UERR(EINVAL, drm, "requires per-process pgtables");
 		*value = vm->mm_start;
 		return 0;
 	case MSM_PARAM_VA_SIZE:
-		if (!valid_per_process_vm(gpu, vm))
+		if (vm == gpu->vm)
 			return UERR(EINVAL, drm, "requires per-process pgtables");
 		*value = vm->mm_range;
 		return 0;
@@ -440,22 +429,18 @@ int adreno_get_param(struct msm_gpu *gpu, struct msm_context *ctx,
 	case MSM_PARAM_UBWC_SWIZZLE:
 		if (!adreno_gpu->ubwc_config)
 			return UERR(ENOENT, drm, "no UBWC on this platform");
-		*value = qcom_ubwc_swizzle(adreno_gpu->ubwc_config);
+		*value = adreno_gpu->ubwc_config->ubwc_swizzle;
 		return 0;
 	case MSM_PARAM_MACROTILE_MODE:
 		if (!adreno_gpu->ubwc_config)
 			return UERR(ENOENT, drm, "no UBWC on this platform");
-		*value = qcom_ubwc_macrotile_mode(adreno_gpu->ubwc_config);
+		*value = adreno_gpu->ubwc_config->macrotile_mode;
 		return 0;
 	case MSM_PARAM_UCHE_TRAP_BASE:
 		*value = adreno_gpu->uche_trap_base;
 		return 0;
 	case MSM_PARAM_HAS_PRR:
 		*value = adreno_smmu_has_prr(gpu);
-		return 0;
-	case MSM_PARAM_AQE:
-		*value = !!(adreno_gpu->funcs->aqe_is_enabled &&
-			    adreno_gpu->funcs->aqe_is_enabled(adreno_gpu));
 		return 0;
 	default:
 		return UERR(EINVAL, drm, "%s: invalid param: %u", gpu->name, param);
@@ -506,14 +491,12 @@ int adreno_set_param(struct msm_gpu *gpu, struct msm_context *ctx,
 		return 0;
 	}
 	case MSM_PARAM_SYSPROF:
-		if (!perfmon_capable())
+		if (!capable(CAP_SYS_ADMIN))
 			return UERR(EPERM, drm, "invalid permissions");
 		return msm_context_set_sysprof(ctx, gpu, value);
-	case MSM_PARAM_EN_VM_BIND: {
-		guard(rwsem_read)(&ctx->ctxlock);
-
+	case MSM_PARAM_EN_VM_BIND:
 		/* We can only support VM_BIND with per-process pgtables: */
-		if (!gpu->funcs->create_private_vm)
+		if (ctx->vm == gpu->vm)
 			return UERR(EINVAL, drm, "requires per-process pgtables");
 
 		/*
@@ -526,7 +509,6 @@ int adreno_set_param(struct msm_gpu *gpu, struct msm_context *ctx,
 		ctx->userspace_managed_vm = value;
 
 		return 0;
-	}
 	default:
 		return UERR(EINVAL, drm, "%s: invalid param: %u", gpu->name, param);
 	}
@@ -717,10 +699,11 @@ void adreno_recover(struct msm_gpu *gpu)
 	struct drm_device *dev = gpu->dev;
 	int ret;
 
-	msm_perfcntr_suspend(gpu);
+	// XXX pm-runtime??  we *need* the device to be off after this
+	// so maybe continuing to call ->pm_suspend/resume() is better?
+
 	gpu->funcs->pm_suspend(gpu);
 	gpu->funcs->pm_resume(gpu);
-	msm_perfcntr_resume(gpu);
 
 	ret = msm_gpu_hw_init(gpu);
 	if (ret) {
@@ -1200,19 +1183,18 @@ int adreno_gpu_init(struct drm_device *drm, struct platform_device *pdev,
 	struct msm_gpu_config adreno_gpu_config  = { 0 };
 	struct msm_gpu *gpu = &adreno_gpu->base;
 	const char *gpu_name;
+	u32 speedbin;
 	int ret;
 
 	adreno_gpu->funcs = funcs;
 	adreno_gpu->info = config->info;
 	adreno_gpu->chip_id = config->chip_id;
-	adreno_gpu->gmem = config->info->gmem;
 
 	gpu->allow_relocs = config->info->family < ADRENO_6XX_GEN1;
 	gpu->pdev = pdev;
 
 	/* Only handle the core clock when GMU is not in use (or is absent). */
 	if (adreno_has_gmu_wrapper(adreno_gpu) ||
-	    adreno_has_rgmu(adreno_gpu) ||
 	    adreno_gpu->info->family < ADRENO_6XX_GEN1) {
 		/*
 		 * This can only be done before devm_pm_opp_of_add_table(), or
@@ -1229,6 +1211,10 @@ int adreno_gpu_init(struct drm_device *drm, struct platform_device *pdev,
 			devm_pm_opp_set_clkname(dev, "core");
 	}
 
+	if (adreno_read_speedbin(dev, &speedbin) || !speedbin)
+		speedbin = 0xffff;
+	adreno_gpu->speedbin = (uint16_t) (0xffff & speedbin);
+
 	gpu_name = devm_kasprintf(dev, GFP_KERNEL, "%"ADRENO_CHIPID_FMT,
 			ADRENO_CHIPID_ARGS(config->chip_id));
 	if (!gpu_name)
@@ -1241,9 +1227,6 @@ int adreno_gpu_init(struct drm_device *drm, struct platform_device *pdev,
 	ret = adreno_get_pwrlevels(dev, gpu);
 	if (ret)
 		return ret;
-
-	init_completion(&adreno_gpu->fault_coredump_done);
-	complete_all(&adreno_gpu->fault_coredump_done);
 
 	pm_runtime_set_autosuspend_delay(dev,
 		adreno_gpu->info->inactive_period);

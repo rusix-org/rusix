@@ -5,7 +5,8 @@
  * Copyright IBM Corp. 2013, 2018
  * Author(s): Hendrik Brueckner <brueckner@linux.vnet.ibm.com>
  */
-#define pr_fmt(fmt) "cpum_sf: " fmt
+#define KMSG_COMPONENT	"cpum_sf"
+#define pr_fmt(fmt)	KMSG_COMPONENT ": " fmt
 
 #include <linux/kernel.h>
 #include <linux/kernel_stat.h>
@@ -1092,7 +1093,7 @@ static void perf_event_count_update(struct perf_event *event, u64 count)
  * combined-sampling data entry consists of a basic- and a diagnostic-sampling
  * data entry.	The sampling function is determined by the flags in the perf
  * event hardware structure.  The function always works with a combined-sampling
- * data entry but ignores the diagnostic portion if it is not available.
+ * data entry but ignores the the diagnostic portion if it is not available.
  *
  * Note that the implementation focuses on basic-sampling data entries and, if
  * such an entry is not valid, the entire combined-sampling data entry is
@@ -1613,7 +1614,7 @@ static void *aux_buffer_setup(struct perf_event *event, void **pages,
 	}
 
 	/* Allocate aux_buffer struct for the event */
-	aux = kzalloc_obj(struct aux_buffer);
+	aux = kzalloc(sizeof(struct aux_buffer), GFP_KERNEL);
 	if (!aux)
 		goto no_aux;
 	sfb = &aux->sfb;
@@ -2073,7 +2074,7 @@ static int __init init_cpum_sampling_pmu(void)
 			CPUMF_EVENT_PTR(SF, SF_CYCLES_BASIC_DIAG);
 	}
 
-	sfdbg = debug_register("cpum_sf", 2, 1, 80);
+	sfdbg = debug_register(KMSG_COMPONENT, 2, 1, 80);
 	if (!sfdbg) {
 		pr_err("Registering for s390dbf failed\n");
 		return -ENOMEM;

@@ -500,14 +500,11 @@ static int alauda_check_media(struct us_data *us)
 static int alauda_check_status2(struct us_data *us)
 {
 	int rc;
-	unsigned char *command = us->iobuf;
-	unsigned char *data = us->iobuf;
-
-	memset(command, 0, 9);
-	command[0] = ALAUDA_BULK_CMD;
-	command[1] = ALAUDA_BULK_GET_STATUS2;
-	command[6] = 3;
-	command[8] = MEDIA_PORT(us);
+	unsigned char command[] = {
+		ALAUDA_BULK_CMD, ALAUDA_BULK_GET_STATUS2,
+		0, 0, 0, 0, 3, 0, MEDIA_PORT(us)
+	};
+	unsigned char data[3];
 
 	rc = usb_stor_bulk_transfer_buf(us, us->send_bulk_pipe,
 		command, 9, NULL);
@@ -533,15 +530,10 @@ static int alauda_check_status2(struct us_data *us)
 static int alauda_get_redu_data(struct us_data *us, u16 pba, unsigned char *data)
 {
 	int rc;
-	unsigned char *command = us->iobuf;
-
-	memset(command, 0, 9);
-	command[0] = ALAUDA_BULK_CMD;
-	command[1] = ALAUDA_BULK_GET_REDU_DATA;
-	command[2] = PBA_HI(pba);
-	command[3] = PBA_ZONE(pba);
-	command[5] = PBA_LO(pba);
-	command[8] = MEDIA_PORT(us);
+	unsigned char command[] = {
+		ALAUDA_BULK_CMD, ALAUDA_BULK_GET_REDU_DATA,
+		PBA_HI(pba), PBA_ZONE(pba), 0, PBA_LO(pba), 0, 0, MEDIA_PORT(us)
+	};
 
 	rc = usb_stor_bulk_transfer_buf(us, us->send_bulk_pipe,
 		command, 9, NULL);
@@ -697,13 +689,11 @@ out:
  * Checks to see whether we have already mapped a certain zone
  * If we haven't, the map is generated
  */
-static int alauda_ensure_map_for_zone(struct us_data *us, unsigned int zone)
+static void alauda_ensure_map_for_zone(struct us_data *us, unsigned int zone)
 {
 	if (MEDIA_INFO(us).lba_to_pba[zone] == NULL
 		|| MEDIA_INFO(us).pba_to_lba[zone] == NULL)
-		return alauda_read_map(us, zone);
-
-	return 0;
+		alauda_read_map(us, zone);
 }
 
 /*
@@ -712,19 +702,13 @@ static int alauda_ensure_map_for_zone(struct us_data *us, unsigned int zone)
 static int alauda_erase_block(struct us_data *us, u16 pba)
 {
 	int rc;
-	unsigned char *command = us->iobuf;
-	unsigned char *buf = us->iobuf;
+	unsigned char command[] = {
+		ALAUDA_BULK_CMD, ALAUDA_BULK_ERASE_BLOCK, PBA_HI(pba),
+		PBA_ZONE(pba), 0, PBA_LO(pba), 0x02, 0, MEDIA_PORT(us)
+	};
+	unsigned char buf[2];
 
 	usb_stor_dbg(us, "Erasing PBA %d\n", pba);
-
-	memset(command, 0, 9);
-	command[0] = ALAUDA_BULK_CMD;
-	command[1] = ALAUDA_BULK_ERASE_BLOCK;
-	command[2] = PBA_HI(pba);
-	command[3] = PBA_ZONE(pba);
-	command[5] = PBA_LO(pba);
-	command[6] = 0x02;
-	command[8] = MEDIA_PORT(us);
 
 	rc = usb_stor_bulk_transfer_buf(us, us->send_bulk_pipe,
 		command, 9, NULL);
@@ -748,18 +732,12 @@ static int alauda_read_block_raw(struct us_data *us, u16 pba,
 		unsigned int page, unsigned int pages, unsigned char *data)
 {
 	int rc;
-	unsigned char *command = us->iobuf;
+	unsigned char command[] = {
+		ALAUDA_BULK_CMD, ALAUDA_BULK_READ_BLOCK, PBA_HI(pba),
+		PBA_ZONE(pba), 0, PBA_LO(pba) + page, pages, 0, MEDIA_PORT(us)
+	};
 
 	usb_stor_dbg(us, "pba %d page %d count %d\n", pba, page, pages);
-
-	memset(command, 0, 9);
-	command[0] = ALAUDA_BULK_CMD;
-	command[1] = ALAUDA_BULK_READ_BLOCK;
-	command[2] = PBA_HI(pba);
-	command[3] = PBA_ZONE(pba);
-	command[5] = PBA_LO(pba) + page;
-	command[6] = pages;
-	command[8] = MEDIA_PORT(us);
 
 	rc = usb_stor_bulk_transfer_buf(us, us->send_bulk_pipe,
 		command, 9, NULL);
@@ -805,18 +783,12 @@ static int alauda_write_block(struct us_data *us, u16 pba, unsigned char *data)
 {
 	int rc;
 	struct alauda_info *info = (struct alauda_info *) us->extra;
-	unsigned char *command = us->iobuf;
+	unsigned char command[] = {
+		ALAUDA_BULK_CMD, ALAUDA_BULK_WRITE_BLOCK, PBA_HI(pba),
+		PBA_ZONE(pba), 0, PBA_LO(pba), 32, 0, MEDIA_PORT(us)
+	};
 
 	usb_stor_dbg(us, "pba %d\n", pba);
-
-	memset(command, 0, 9);
-	command[0] = ALAUDA_BULK_CMD;
-	command[1] = ALAUDA_BULK_WRITE_BLOCK;
-	command[2] = PBA_HI(pba);
-	command[3] = PBA_ZONE(pba);
-	command[5] = PBA_LO(pba);
-	command[6] = 32;
-	command[8] = MEDIA_PORT(us);
 
 	rc = usb_stor_bulk_transfer_buf(us, us->send_bulk_pipe,
 		command, 9, NULL);
@@ -851,9 +823,7 @@ static int alauda_write_lba(struct us_data *us, u16 lba,
 	unsigned int new_pba_offset;
 	unsigned int zone = lba / uzonesize;
 
-	result = alauda_ensure_map_for_zone(us, zone);
-	if (result != USB_STOR_TRANSPORT_GOOD)
-		return result;
+	alauda_ensure_map_for_zone(us, zone);
 
 	pba = MEDIA_INFO(us).lba_to_pba[zone][lba_offset];
 	if (pba == 1) {
@@ -949,7 +919,6 @@ static int alauda_read_data(struct us_data *us, unsigned long address,
 	unsigned char *buffer;
 	u16 lba, max_lba;
 	unsigned int page, len, offset;
-	unsigned int num_zones;
 	unsigned int blockshift = MEDIA_INFO(us).blockshift;
 	unsigned int pageshift = MEDIA_INFO(us).pageshift;
 	unsigned int blocksize = MEDIA_INFO(us).blocksize;
@@ -974,9 +943,7 @@ static int alauda_read_data(struct us_data *us, unsigned long address,
 	/* Figure out the initial LBA and page */
 	lba = address >> blockshift;
 	page = (address & MEDIA_INFO(us).blockmask);
-	num_zones = MEDIA_INFO(us).capacity >> (MEDIA_INFO(us).zoneshift
-		+ blockshift + pageshift);
-	max_lba = num_zones * uzonesize;
+	max_lba = MEDIA_INFO(us).capacity >> (blockshift + pageshift);
 
 	result = USB_STOR_TRANSPORT_GOOD;
 	offset = 0;
@@ -987,6 +954,7 @@ static int alauda_read_data(struct us_data *us, unsigned long address,
 		unsigned int lba_offset = lba - (zone * uzonesize);
 		unsigned int pages;
 		u16 pba;
+		alauda_ensure_map_for_zone(us, zone);
 
 		/* Not overflowing capacity? */
 		if (lba >= max_lba) {
@@ -995,10 +963,6 @@ static int alauda_read_data(struct us_data *us, unsigned long address,
 			result = USB_STOR_TRANSPORT_ERROR;
 			break;
 		}
-
-		result = alauda_ensure_map_for_zone(us, zone);
-		if (result != USB_STOR_TRANSPORT_GOOD)
-			break;
 
 		/* Find number of pages we can read in this block */
 		pages = min(sectors, blocksize - page);
@@ -1055,7 +1019,6 @@ static int alauda_write_data(struct us_data *us, unsigned long address,
 	unsigned int pagesize = MEDIA_INFO(us).pagesize;
 	struct scatterlist *sg;
 	u16 lba, max_lba;
-	unsigned int num_zones;
 	int result;
 
 	/*
@@ -1082,9 +1045,7 @@ static int alauda_write_data(struct us_data *us, unsigned long address,
 	/* Figure out the initial LBA and page */
 	lba = address >> blockshift;
 	page = (address & MEDIA_INFO(us).blockmask);
-	num_zones = MEDIA_INFO(us).capacity >> (MEDIA_INFO(us).zoneshift
-		+ blockshift + pageshift);
-	max_lba = num_zones * MEDIA_INFO(us).uzonesize;
+	max_lba = MEDIA_INFO(us).capacity >> (pageshift + blockshift);
 
 	result = USB_STOR_TRANSPORT_GOOD;
 	offset = 0;
@@ -1152,7 +1113,7 @@ static int init_alauda(struct us_data *us)
 	struct usb_host_interface *altsetting = us->pusb_intf->cur_altsetting;
 	nand_init_ecc();
 
-	us->extra = kzalloc_obj(struct alauda_info, GFP_NOIO);
+	us->extra = kzalloc(sizeof(struct alauda_info), GFP_NOIO);
 	if (!us->extra)
 		return -ENOMEM;
 

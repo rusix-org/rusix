@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (C) 2020-2026 Intel Corporation
+ * Copyright (C) 2020-2023 Intel Corporation
  */
 
 #include <linux/dma-buf.h>
@@ -12,10 +12,9 @@
 #include <drm/drm_cache.h>
 #include <drm/drm_debugfs.h>
 #include <drm/drm_file.h>
-#include <drm/drm_timeout.h>
+#include <drm/drm_utils.h>
 
 #include "ivpu_drv.h"
-#include "ivpu_fw.h"
 #include "ivpu_gem.h"
 #include "ivpu_hw.h"
 #include "ivpu_mmu.h"
@@ -31,7 +30,7 @@ static inline void ivpu_dbg_bo(struct ivpu_device *vdev, struct ivpu_bo *bo, con
 		 "%6s: bo %8p size %9zu ctx %d vpu_addr %9llx pages %d sgt %d mmu_mapped %d wc %d imported %d\n",
 		 action, bo, ivpu_bo_size(bo), bo->ctx_id, bo->vpu_addr,
 		 (bool)bo->base.pages, (bool)bo->base.sgt, bo->mmu_mapped, bo->base.map_wc,
-		 drm_gem_is_imported(&bo->base.base));
+		 (bool)drm_gem_is_imported(&bo->base.base));
 }
 
 static inline int ivpu_bo_lock(struct ivpu_bo *bo)
@@ -48,7 +47,7 @@ static struct sg_table *ivpu_bo_map_attachment(struct ivpu_device *vdev, struct 
 {
 	struct sg_table *sgt;
 
-	drm_WARN_ON(&vdev->drm, !drm_gem_is_imported(&bo->base.base));
+	drm_WARN_ON(&vdev->drm, !bo->base.base.import_attach);
 
 	ivpu_bo_lock(bo);
 
@@ -81,7 +80,7 @@ int __must_check ivpu_bo_bind(struct ivpu_bo *bo)
 
 	ivpu_dbg_bo(vdev, bo, "bind");
 
-	if (drm_gem_is_imported(&bo->base.base))
+	if (bo->base.base.import_attach)
 		sgt = ivpu_bo_map_attachment(vdev, bo);
 	else
 		sgt = drm_gem_shmem_get_pages_sgt(&bo->base);
@@ -95,8 +94,8 @@ int __must_check ivpu_bo_bind(struct ivpu_bo *bo)
 
 	if (!bo->mmu_mapped) {
 		drm_WARN_ON(&vdev->drm, !bo->ctx);
-		ret = ivpu_mmu_context_map_sgt(vdev, bo->ctx, bo->vpu_addr, sgt, ivpu_bo_size(bo),
-					       ivpu_bo_is_snooped(bo), ivpu_bo_is_read_only(bo));
+		ret = ivpu_mmu_context_map_sgt(vdev, bo->ctx, bo->vpu_addr, sgt,
+					       ivpu_bo_is_snooped(bo));
 		if (ret) {
 			ivpu_err(vdev, "Failed to map BO in MMU: %d\n", ret);
 			goto unlock;
@@ -128,6 +127,8 @@ ivpu_bo_alloc_vpu_addr(struct ivpu_bo *bo, struct ivpu_mmu_context *ctx,
 		bo->ctx_id = ctx->id;
 		bo->vpu_addr = bo->mm_node.start;
 		ivpu_dbg_bo(vdev, bo, "vaddr");
+	} else {
+		ivpu_err(vdev, "Failed to add BO to context %u: %d\n", ctx->id, ret);
 	}
 
 	ivpu_bo_unlock(bo);
@@ -157,7 +158,7 @@ static void ivpu_bo_unbind_locked(struct ivpu_bo *bo)
 	}
 
 	if (bo->base.sgt) {
-		if (drm_gem_is_imported(&bo->base.base)) {
+		if (bo->base.base.import_attach) {
 			dma_buf_unmap_attachment(bo->base.base.import_attach,
 						 bo->base.sgt, DMA_BIDIRECTIONAL);
 		} else {
@@ -195,7 +196,7 @@ struct drm_gem_object *ivpu_gem_create_object(struct drm_device *dev, size_t siz
 	if (size == 0 || !PAGE_ALIGNED(size))
 		return ERR_PTR(-EINVAL);
 
-	bo = kzalloc_obj(*bo);
+	bo = kzalloc(sizeof(*bo), GFP_KERNEL);
 	if (!bo)
 		return ERR_PTR(-ENOMEM);
 
@@ -287,8 +288,8 @@ static int ivpu_gem_bo_open(struct drm_gem_object *obj, struct drm_file *file)
 	struct ivpu_addr_range *range;
 
 	if (bo->ctx) {
-		ivpu_dbg(vdev, IOCTL, "Can't add BO %pe to ctx %u: already in ctx %u\n",
-			 bo, file_priv->ctx.id, bo->ctx->id);
+		ivpu_warn(vdev, "Can't add BO to ctx %u: already in ctx %u\n",
+			  file_priv->ctx.id, bo->ctx->id);
 		return -EALREADY;
 	}
 
@@ -329,19 +330,7 @@ static void ivpu_gem_bo_free(struct drm_gem_object *obj)
 	drm_WARN_ON(&vdev->drm, bo->ctx);
 
 	drm_WARN_ON(obj->dev, refcount_read(&bo->base.pages_use_count) > 1);
-	drm_WARN_ON(obj->dev, bo->base.base.vma_node.vm_files.rb_node);
 	drm_gem_shmem_free(&bo->base);
-}
-
-static enum drm_gem_object_status ivpu_gem_status(struct drm_gem_object *obj)
-{
-	struct ivpu_bo *bo = to_ivpu_bo(obj);
-	enum drm_gem_object_status status = 0;
-
-	if (ivpu_bo_is_resident(bo))
-		status |= DRM_GEM_OBJECT_RESIDENT;
-
-	return status;
 }
 
 static const struct drm_gem_object_funcs ivpu_gem_funcs = {
@@ -354,7 +343,6 @@ static const struct drm_gem_object_funcs ivpu_gem_funcs = {
 	.vmap = drm_gem_shmem_object_vmap,
 	.vunmap = drm_gem_shmem_object_vunmap,
 	.mmap = drm_gem_shmem_object_mmap,
-	.status = ivpu_gem_status,
 	.vm_ops = &drm_gem_shmem_vm_ops,
 };
 
@@ -367,33 +355,25 @@ int ivpu_bo_create_ioctl(struct drm_device *dev, void *data, struct drm_file *fi
 	struct ivpu_bo *bo;
 	int ret;
 
-	if (args->flags & ~DRM_IVPU_BO_FLAGS) {
-		ivpu_dbg(vdev, IOCTL, "Invalid BO flags 0x%x\n", args->flags);
+	if (args->flags & ~DRM_IVPU_BO_FLAGS)
 		return -EINVAL;
-	}
 
-	if (size == 0) {
-		ivpu_dbg(vdev, IOCTL, "Invalid BO size %llu\n", args->size);
+	if (size == 0)
 		return -EINVAL;
-	}
 
 	bo = ivpu_bo_alloc(vdev, size, args->flags);
 	if (IS_ERR(bo)) {
-		ivpu_dbg(vdev, IOCTL, "Failed to allocate BO: %pe ctx %u size %llu flags 0x%x\n",
+		ivpu_err(vdev, "Failed to allocate BO: %pe (ctx %u size %llu flags 0x%x)",
 			 bo, file_priv->ctx.id, args->size, args->flags);
 		return PTR_ERR(bo);
 	}
 
-	drm_WARN_ON(&vdev->drm, bo->base.base.handle_count != 0);
-
 	ret = drm_gem_handle_create(file, &bo->base.base, &args->handle);
-	if (ret) {
-		ivpu_dbg(vdev, IOCTL, "Failed to create handle for BO: %pe ctx %u size %llu flags 0x%x\n",
+	if (ret)
+		ivpu_err(vdev, "Failed to create handle for BO: %pe (ctx %u size %llu flags 0x%x)",
 			 bo, file_priv->ctx.id, args->size, args->flags);
-	} else {
+	else
 		args->vpu_addr = bo->vpu_addr;
-		drm_WARN_ON(&vdev->drm, bo->base.base.handle_count != 1);
-	}
 
 	drm_gem_object_put(&bo->base.base);
 
@@ -417,17 +397,14 @@ ivpu_bo_create(struct ivpu_device *vdev, struct ivpu_mmu_context *ctx,
 
 	bo = ivpu_bo_alloc(vdev, size, flags);
 	if (IS_ERR(bo)) {
-		ivpu_err(vdev, "Failed to allocate BO: %pe vpu_addr 0x%llx size %llu flags 0x%x\n",
+		ivpu_err(vdev, "Failed to allocate BO: %pe (vpu_addr 0x%llx size %llu flags 0x%x)",
 			 bo, range->start, size, flags);
 		return NULL;
 	}
 
 	ret = ivpu_bo_alloc_vpu_addr(bo, ctx, range);
-	if (ret) {
-		ivpu_err(vdev, "Failed to allocate NPU address for BO: %pe ctx %u size %llu: %d\n",
-			 bo, ctx->id, size, ret);
+	if (ret)
 		goto err_put;
-	}
 
 	ret = ivpu_bo_bind(bo);
 	if (ret)
@@ -449,21 +426,6 @@ err_put:
 	return NULL;
 }
 
-struct ivpu_bo *ivpu_bo_create_runtime(struct ivpu_device *vdev, u64 addr, u64 size, u32 flags)
-{
-	struct ivpu_addr_range range;
-
-	if (!ivpu_is_within_range(addr, size, &vdev->hw->ranges.runtime)) {
-		ivpu_err(vdev, "Invalid runtime BO address 0x%llx size %llu\n", addr, size);
-		return NULL;
-	}
-
-	if (ivpu_hw_range_init(vdev, &range, addr, size))
-		return NULL;
-
-	return ivpu_bo_create(vdev, &vdev->gctx, &range, size, flags);
-}
-
 struct ivpu_bo *ivpu_bo_create_global(struct ivpu_device *vdev, u64 size, u32 flags)
 {
 	return ivpu_bo_create(vdev, &vdev->gctx, &vdev->hw->ranges.global, size, flags);
@@ -471,9 +433,6 @@ struct ivpu_bo *ivpu_bo_create_global(struct ivpu_device *vdev, u64 size, u32 fl
 
 void ivpu_bo_free(struct ivpu_bo *bo)
 {
-	if (!bo)
-		return;
-
 	struct iosys_map map = IOSYS_MAP_INIT_VADDR(bo->base.vaddr);
 
 	if (bo->flags & DRM_IVPU_BO_MAPPABLE) {

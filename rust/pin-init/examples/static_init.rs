@@ -2,6 +2,7 @@
 
 #![allow(clippy::undocumented_unsafe_blocks)]
 #![cfg_attr(feature = "alloc", feature(allocator_api))]
+#![cfg_attr(not(RUSTC_LINT_REASONS_IS_STABLE), feature(lint_reasons))]
 #![allow(unused_imports)]
 
 use core::{
@@ -59,7 +60,7 @@ impl<T, I: PinInit<T>> ops::Deref for StaticInit<T, I> {
             println!("doing init");
             let ptr = self.cell.get().cast::<T>();
             match self.init.take() {
-                Some(f) => unsafe { pin_init::raw_init(ptr, f) },
+                Some(f) => unsafe { f.__pinned_init(ptr).unwrap() },
                 None => unsafe { core::hint::unreachable_unchecked() },
             }
             self.present.set(true);
@@ -71,11 +72,13 @@ impl<T, I: PinInit<T>> ops::Deref for StaticInit<T, I> {
 pub struct CountInit;
 
 unsafe impl PinInit<CMutex<usize>> for CountInit {
-    unsafe fn __init(self, slot: *mut CMutex<usize>) -> Result<(), core::convert::Infallible> {
+    unsafe fn __pinned_init(
+        self,
+        slot: *mut CMutex<usize>,
+    ) -> Result<(), core::convert::Infallible> {
         let init = CMutex::new(0);
         std::thread::sleep(std::time::Duration::from_millis(1000));
-        unsafe { pin_init::raw_init(slot, init) };
-        Ok(())
+        unsafe { init.__pinned_init(slot) }
     }
 }
 
@@ -115,7 +118,7 @@ fn main() {
         for h in handles {
             h.join().expect("thread panicked");
         }
-        println!("{:?}, {:?}", *mtx.lock(), *COUNT.lock());
+        println!("{:?}, {:?}", &*mtx.lock(), &*COUNT.lock());
         assert_eq!(*mtx.lock(), workload * thread_count * 2);
     }
 }

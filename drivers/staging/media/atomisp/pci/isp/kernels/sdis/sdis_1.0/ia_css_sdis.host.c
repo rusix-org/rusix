@@ -50,8 +50,9 @@ void ia_css_sdis_horicoef_vmem_encode(
 	assert(size % (IA_CSS_DVS_NUM_COEF_TYPES * ISP_VEC_NELEMS * sizeof(
 			   short)) == 0);
 
-	for (type = 0; type < IA_CSS_DVS_NUM_COEF_TYPES; type++)
+	for (type = 0; type < IA_CSS_DVS_NUM_COEF_TYPES; type++) {
 		fill_row(&private[type * stride], &public[type * width], width, padding);
+	}
 }
 
 void ia_css_sdis_vertcoef_vmem_encode(
@@ -76,8 +77,9 @@ void ia_css_sdis_vertcoef_vmem_encode(
 	assert(size % (IA_CSS_DVS_NUM_COEF_TYPES * ISP_VEC_NELEMS * sizeof(
 			   short)) == 0);
 
-	for (type = 0; type < IA_CSS_DVS_NUM_COEF_TYPES; type++)
+	for (type = 0; type < IA_CSS_DVS_NUM_COEF_TYPES; type++) {
 		fill_row(&private[type * stride], &public[type * height], height, padding);
+	}
 }
 
 void ia_css_sdis_horiproj_encode(
@@ -307,7 +309,7 @@ ia_css_isp_dvs_statistics_allocate(
 	if (!grid->enable)
 		return NULL;
 
-	me = kvzalloc_objs(*me, 1);
+	me = kvcalloc(1, sizeof(*me), GFP_KERNEL);
 	if (!me)
 		goto err;
 
@@ -348,7 +350,7 @@ ia_css_isp_dvs_statistics_map_allocate(
 	 * so we use a local char * instead. */
 	char *base_ptr;
 
-	me = kvmalloc_obj(*me);
+	me = kvmalloc(sizeof(*me), GFP_KERNEL);
 	if (!me) {
 		IA_CSS_LOG("cannot allocate memory");
 		goto err;

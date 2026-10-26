@@ -28,7 +28,8 @@
  *	      Benjamin Block
  */
 
-#define pr_fmt(fmt) "zfcp: " fmt
+#define KMSG_COMPONENT "zfcp"
+#define pr_fmt(fmt) KMSG_COMPONENT ": " fmt
 
 #include <linux/seq_file.h>
 #include <linux/slab.h>
@@ -345,7 +346,7 @@ struct zfcp_adapter *zfcp_adapter_enqueue(struct ccw_device *ccw_device)
 	if (!get_device(&ccw_device->dev))
 		return ERR_PTR(-ENODEV);
 
-	adapter = kzalloc_obj(struct zfcp_adapter);
+	adapter = kzalloc(sizeof(struct zfcp_adapter), GFP_KERNEL);
 	if (!adapter) {
 		put_device(&ccw_device->dev);
 		return ERR_PTR(-ENOMEM);
@@ -519,7 +520,7 @@ struct zfcp_port *zfcp_port_enqueue(struct zfcp_adapter *adapter, u64 wwpn,
 		goto err_put;
 	}
 
-	port = kzalloc_obj(struct zfcp_port);
+	port = kzalloc(sizeof(struct zfcp_port), GFP_KERNEL);
 	if (!port)
 		goto err_put;
 

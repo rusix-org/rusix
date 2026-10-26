@@ -5,7 +5,6 @@
  */
 
 #include <linux/fs.h>
-#include <linux/filelock.h>
 #include <linux/namei.h>
 #include <linux/ctype.h>
 #include <linux/quotaops.h>
@@ -60,8 +59,8 @@ static inline void free_ea_wmap(struct inode *inode)
  * RETURN:	Errors from subroutines
  *
  */
-static int jfs_create(const struct mnt_idmap *idmap, struct inode *dip,
-		      struct dentry *dentry, umode_t mode)
+static int jfs_create(struct mnt_idmap *idmap, struct inode *dip,
+		      struct dentry *dentry, umode_t mode, bool excl)
 {
 	int rc = 0;
 	tid_t tid;		/* transaction id */
@@ -193,7 +192,7 @@ static int jfs_create(const struct mnt_idmap *idmap, struct inode *dip,
  * note:
  * EACCES: user needs search+write permission on the parent directory
  */
-static struct dentry *jfs_mkdir(const struct mnt_idmap *idmap, struct inode *dip,
+static struct dentry *jfs_mkdir(struct mnt_idmap *idmap, struct inode *dip,
 				struct dentry *dentry, umode_t mode)
 {
 	int rc = 0;
@@ -223,7 +222,7 @@ static struct dentry *jfs_mkdir(const struct mnt_idmap *idmap, struct inode *dip
 	 * block there while holding dtree page, so we allocate the inode &
 	 * begin the transaction before we search the directory.
 	 */
-	ip = ialloc(dip, mode);
+	ip = ialloc(dip, S_IFDIR | mode);
 	if (IS_ERR(ip)) {
 		rc = PTR_ERR(ip);
 		goto out2;
@@ -876,7 +875,7 @@ static int jfs_link(struct dentry *old_dentry,
  * an intermediate result whose length exceeds PATH_MAX [XPG4.2]
 */
 
-static int jfs_symlink(const struct mnt_idmap *idmap, struct inode *dip,
+static int jfs_symlink(struct mnt_idmap *idmap, struct inode *dip,
 		       struct dentry *dentry, const char *name)
 {
 	int rc;
@@ -1066,7 +1065,7 @@ static int jfs_symlink(const struct mnt_idmap *idmap, struct inode *dip,
  *
  * FUNCTION:	rename a file or directory
  */
-static int jfs_rename(const struct mnt_idmap *idmap, struct inode *old_dir,
+static int jfs_rename(struct mnt_idmap *idmap, struct inode *old_dir,
 		      struct dentry *old_dentry, struct inode *new_dir,
 		      struct dentry *new_dentry, unsigned int flags)
 {
@@ -1355,7 +1354,7 @@ static int jfs_rename(const struct mnt_idmap *idmap, struct inode *old_dir,
  *
  * FUNCTION:	Create a special file (device)
  */
-static int jfs_mknod(const struct mnt_idmap *idmap, struct inode *dir,
+static int jfs_mknod(struct mnt_idmap *idmap, struct inode *dir,
 		     struct dentry *dentry, umode_t mode, dev_t rdev)
 {
 	struct jfs_inode_info *jfs_ip;
@@ -1548,7 +1547,6 @@ const struct file_operations jfs_dir_operations = {
 	.unlocked_ioctl = jfs_ioctl,
 	.compat_ioctl	= compat_ptr_ioctl,
 	.llseek		= generic_file_llseek,
-	.setlease	= generic_setlease,
 };
 
 static int jfs_ci_hash(const struct dentry *dir, struct qstr *this)

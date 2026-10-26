@@ -9,7 +9,7 @@
 #include <asm/cputype.h>
 #include <asm/mte-def.h>
 
-#ifndef __ASSEMBLER__
+#ifndef __ASSEMBLY__
 
 #include <linux/types.h>
 
@@ -53,16 +53,14 @@ static inline bool system_uses_mte_async_or_asymm_mode(void)
  */
 static inline void mte_disable_tco(void)
 {
-	if (!IS_ENABLED(CONFIG_KASAN_HW_TAGS))
-		return;
-	asm volatile(ALTERNATIVE("nop", SET_PSTATE_TCO(0), ARM64_MTE));
+	asm volatile(ALTERNATIVE("nop", SET_PSTATE_TCO(0),
+				 ARM64_MTE, CONFIG_KASAN_HW_TAGS));
 }
 
 static inline void mte_enable_tco(void)
 {
-	if (!IS_ENABLED(CONFIG_KASAN_HW_TAGS))
-		return;
-	asm volatile(ALTERNATIVE("nop", SET_PSTATE_TCO(1), ARM64_MTE));
+	asm volatile(ALTERNATIVE("nop", SET_PSTATE_TCO(1),
+				 ARM64_MTE, CONFIG_KASAN_HW_TAGS));
 }
 
 /*
@@ -261,6 +259,6 @@ static inline int mte_enable_kernel_store_only(void)
 
 #endif /* CONFIG_ARM64_MTE */
 
-#endif /* __ASSEMBLER__ */
+#endif /* __ASSEMBLY__ */
 
 #endif /* __ASM_MTE_KASAN_H  */

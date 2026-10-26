@@ -1,4 +1,3 @@
-/* SPDX-License-Identifier: GPL-2.0 */
 #ifndef _TCP_DCTCP_H
 #define _TCP_DCTCP_H
 

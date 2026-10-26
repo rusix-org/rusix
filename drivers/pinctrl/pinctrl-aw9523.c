@@ -291,14 +291,14 @@ static int aw9523_pconf_set(struct pinctrl_dev *pctldev, unsigned int pin,
 	unsigned int mask, val;
 	int i, rc;
 
-	guard(mutex)(&awi->i2c_lock);
+	mutex_lock(&awi->i2c_lock);
 	for (i = 0; i < num_configs; i++) {
 		param = pinconf_to_config_param(configs[i]);
 		arg = pinconf_to_config_argument(configs[i]);
 
 		rc = aw9523_pcfg_param_to_reg(param, pin, &reg);
 		if (rc)
-			return rc;
+			goto end;
 
 		switch (param) {
 		case PIN_CONFIG_LEVEL:
@@ -307,7 +307,7 @@ static int aw9523_pconf_set(struct pinctrl_dev *pctldev, unsigned int pin,
 						AW9523_REG_CONF_STATE(pin),
 						BIT(regbit), 0);
 			if (rc)
-				return rc;
+				goto end;
 
 			/* Then, fall through to config output level */
 			fallthrough;
@@ -323,9 +323,10 @@ static int aw9523_pconf_set(struct pinctrl_dev *pctldev, unsigned int pin,
 			break;
 		case PIN_CONFIG_DRIVE_OPEN_DRAIN:
 			/* Open-Drain is supported only on port 0 */
-			if (pin >= AW9523_PINS_PER_PORT)
-				return -ENOTSUPP;
-
+			if (pin >= AW9523_PINS_PER_PORT) {
+				rc = -ENOTSUPP;
+				goto end;
+			}
 			mask = AW9523_GCR_GPOMD_MASK;
 			val = 0;
 			break;
@@ -340,15 +341,17 @@ static int aw9523_pconf_set(struct pinctrl_dev *pctldev, unsigned int pin,
 			val = AW9523_GCR_GPOMD_MASK;
 			break;
 		default:
-			return -ENOTSUPP;
+			rc = -ENOTSUPP;
+			goto end;
 		}
 
 		rc = regmap_update_bits(awi->regmap, reg, mask, val);
 		if (rc)
-			return rc;
+			goto end;
 	}
-
-	return 0;
+end:
+	mutex_unlock(&awi->i2c_lock);
+	return rc;
 }
 
 static const struct pinconf_ops aw9523_pinconf_ops = {
@@ -596,14 +599,14 @@ static int aw9523_gpio_get_multiple(struct gpio_chip *chip,
 	u8 m, state = 0;
 	int ret;
 
-	guard(mutex)(&awi->i2c_lock);
+	mutex_lock(&awi->i2c_lock);
 
 	/* Port 0 (gpio 0-7) */
 	m = *mask;
 	if (m) {
 		ret = _aw9523_gpio_get_multiple(awi, 0, &state, m);
 		if (ret)
-			return ret;
+			goto out;
 	}
 	*bits = state;
 
@@ -613,12 +616,13 @@ static int aw9523_gpio_get_multiple(struct gpio_chip *chip,
 		ret = _aw9523_gpio_get_multiple(awi, AW9523_PINS_PER_PORT,
 						&state, m);
 		if (ret)
-			return ret;
+			goto out;
 
 		*bits |= (state << 8);
 	}
-
-	return 0;
+out:
+	mutex_unlock(&awi->i2c_lock);
+	return ret;
 }
 
 static int aw9523_gpio_set_multiple(struct gpio_chip *chip,
@@ -628,28 +632,30 @@ static int aw9523_gpio_set_multiple(struct gpio_chip *chip,
 	struct aw9523 *awi = gpiochip_get_data(chip);
 	u8 mask_lo, mask_hi, bits_lo, bits_hi;
 	unsigned int reg;
-	int ret;
+	int ret = 0;
 
 	mask_lo = *mask;
 	mask_hi = *mask >> 8;
 	bits_lo = *bits;
 	bits_hi = *bits >> 8;
 
-	guard(mutex)(&awi->i2c_lock);
+	mutex_lock(&awi->i2c_lock);
 	if (mask_hi) {
 		reg = AW9523_REG_OUT_STATE(AW9523_PINS_PER_PORT);
 		ret = regmap_write_bits(awi->regmap, reg, mask_hi, bits_hi);
 		if (ret)
-			return ret;
+			goto out;
 	}
 	if (mask_lo) {
 		reg = AW9523_REG_OUT_STATE(0);
 		ret = regmap_write_bits(awi->regmap, reg, mask_lo, bits_lo);
 		if (ret)
-			return ret;
+			goto out;
 	}
 
-	return 0;
+out:
+	mutex_unlock(&awi->i2c_lock);
+	return ret;
 }
 
 static int aw9523_gpio_set(struct gpio_chip *chip, unsigned int offset,
@@ -689,15 +695,16 @@ static int aw9523_direction_output(struct gpio_chip *chip,
 	u8 regbit = offset % AW9523_PINS_PER_PORT;
 	int ret;
 
-	guard(mutex)(&awi->i2c_lock);
+	mutex_lock(&awi->i2c_lock);
 	ret = regmap_update_bits(awi->regmap, AW9523_REG_OUT_STATE(offset),
 				 BIT(regbit), value ? BIT(regbit) : 0);
 	if (ret)
-		return ret;
+		goto end;
 
 	ret = regmap_update_bits(awi->regmap, AW9523_REG_CONF_STATE(offset),
 				 BIT(regbit), 0);
-
+end:
+	mutex_unlock(&awi->i2c_lock);
 	return ret;
 }
 
@@ -817,7 +824,7 @@ static int aw9523_init_irq(struct aw9523 *awi, int irq)
 	ret = devm_request_threaded_irq(dev, irq, NULL, aw9523_irq_thread_func,
 					IRQF_ONESHOT, dev_name(dev), awi);
 	if (ret)
-		return ret;
+		return dev_err_probe(dev, ret, "Failed to request irq %d\n", irq);
 
 	girq = &awi->gpio.irq;
 	gpio_irq_chip_set_chip(girq, &aw9523_irq_chip);
@@ -1033,7 +1040,7 @@ static void aw9523_remove(struct i2c_client *client)
 }
 
 static const struct i2c_device_id aw9523_i2c_id_table[] = {
-	{ .name = "aw9523_i2c" },
+	{ "aw9523_i2c" },
 	{ }
 };
 MODULE_DEVICE_TABLE(i2c, aw9523_i2c_id_table);

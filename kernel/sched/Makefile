@@ -1,8 +1,5 @@
 # SPDX-License-Identifier: GPL-2.0
 
-CONTEXT_ANALYSIS_core.o := y
-CONTEXT_ANALYSIS_fair.o := y
-
 # The compilers are complaining about unused variables inside an if(0) scope
 # block. This is daft, shut them up.
 ccflags-y += $(call cc-disable-warning, unused-but-set-variable)
@@ -40,3 +37,6 @@ obj-y += core.o
 obj-y += fair.o
 obj-y += build_policy.o
 obj-y += build_utility.o
+
+# Keep C wait/wakeup infrastructure; select only the complete() entry point.
+obj-$(CONFIG_RUSIX_COMPLETION_RUST) += completion_rust.o

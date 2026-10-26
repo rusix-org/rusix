@@ -115,7 +115,7 @@ static int acrn_irqfd_assign(struct acrn_vm *vm, struct acrn_irqfd *args)
 	__poll_t events;
 	int ret = 0;
 
-	irqfd = kzalloc_obj(*irqfd);
+	irqfd = kzalloc(sizeof(*irqfd), GFP_KERNEL);
 	if (!irqfd)
 		return -ENOMEM;
 
@@ -217,7 +217,7 @@ int acrn_irqfd_init(struct acrn_vm *vm)
 {
 	INIT_LIST_HEAD(&vm->irqfds);
 	mutex_init(&vm->irqfds_lock);
-	vm->irqfd_wq = alloc_workqueue("acrn_irqfd-%u", WQ_PERCPU, 0, vm->vmid);
+	vm->irqfd_wq = alloc_workqueue("acrn_irqfd-%u", 0, 0, vm->vmid);
 	if (!vm->irqfd_wq)
 		return -ENOMEM;
 

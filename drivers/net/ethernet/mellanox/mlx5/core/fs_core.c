@@ -503,8 +503,7 @@ static bool is_fwd_dest_type(enum mlx5_flow_destination_type type)
 		type == MLX5_FLOW_DESTINATION_TYPE_FLOW_SAMPLER ||
 		type == MLX5_FLOW_DESTINATION_TYPE_TIR ||
 		type == MLX5_FLOW_DESTINATION_TYPE_RANGE ||
-		type == MLX5_FLOW_DESTINATION_TYPE_TABLE_TYPE ||
-		type == MLX5_FLOW_DESTINATION_TYPE_VHCA_RX;
+		type == MLX5_FLOW_DESTINATION_TYPE_TABLE_TYPE;
 }
 
 static bool check_valid_spec(const struct mlx5_flow_spec *spec)
@@ -940,15 +939,15 @@ static struct mlx5_flow_group *alloc_insert_flow_group(struct mlx5_flow_table *f
 	return fg;
 }
 
-static struct mlx5_flow_table *
-alloc_flow_table(struct mlx5_flow_table_attr *ft_attr, u16 vport,
-		 enum fs_flow_table_type table_type,
-		 enum fs_flow_table_op_mod op_mod)
+static struct mlx5_flow_table *alloc_flow_table(int level, u16 vport,
+						enum fs_flow_table_type table_type,
+						enum fs_flow_table_op_mod op_mod,
+						u32 flags)
 {
 	struct mlx5_flow_table *ft;
 	int ret;
 
-	ft = kzalloc_obj(*ft);
+	ft  = kzalloc(sizeof(*ft), GFP_KERNEL);
 	if (!ft)
 		return ERR_PTR(-ENOMEM);
 
@@ -958,13 +957,12 @@ alloc_flow_table(struct mlx5_flow_table_attr *ft_attr, u16 vport,
 		return ERR_PTR(ret);
 	}
 
-	ft->level = ft_attr->level;
+	ft->level = level;
 	ft->node.type = FS_TYPE_FLOW_TABLE;
 	ft->op_mod = op_mod;
 	ft->type = table_type;
 	ft->vport = vport;
-	ft->esw_owner_vhca_id = ft_attr->esw_owner_vhca_id;
-	ft->flags = ft_attr->flags;
+	ft->flags = flags;
 	INIT_LIST_HEAD(&ft->fwd_rules);
 	mutex_init(&ft->lock);
 
@@ -1372,7 +1370,10 @@ static struct mlx5_flow_table *__mlx5_create_flow_table(struct mlx5_flow_namespa
 	/* The level is related to the
 	 * priority level range.
 	 */
-	ft = alloc_flow_table(ft_attr, vport, root->table_type, op_mod);
+	ft = alloc_flow_table(ft_attr->level,
+			      vport,
+			      root->table_type,
+			      op_mod, ft_attr->flags);
 	if (IS_ERR(ft)) {
 		err = PTR_ERR(ft);
 		goto unlock_root;
@@ -1438,9 +1439,15 @@ mlx5_create_vport_flow_table(struct mlx5_flow_namespace *ns,
 
 struct mlx5_flow_table*
 mlx5_create_lag_demux_flow_table(struct mlx5_flow_namespace *ns,
-				 struct mlx5_flow_table_attr *ft_attr)
+				 int prio, u32 level)
 {
-	return __mlx5_create_flow_table(ns, ft_attr, FS_FT_OP_MOD_LAG_DEMUX, 0);
+	struct mlx5_flow_table_attr ft_attr = {};
+
+	ft_attr.level = level;
+	ft_attr.prio  = prio;
+	ft_attr.max_fte = 1;
+
+	return __mlx5_create_flow_table(ns, &ft_attr, FS_FT_OP_MOD_LAG_DEMUX, 0);
 }
 EXPORT_SYMBOL(mlx5_create_lag_demux_flow_table);
 
@@ -1525,7 +1532,7 @@ static struct mlx5_flow_rule *alloc_rule(struct mlx5_flow_destination *dest)
 {
 	struct mlx5_flow_rule *rule;
 
-	rule = kzalloc_obj(*rule);
+	rule = kzalloc(sizeof(*rule), GFP_KERNEL);
 	if (!rule)
 		return NULL;
 
@@ -1543,7 +1550,7 @@ static struct mlx5_flow_handle *alloc_handle(int num_rules)
 {
 	struct mlx5_flow_handle *handle;
 
-	handle = kzalloc_flex(*handle, rule, num_rules);
+	handle = kzalloc(struct_size(handle, rule, num_rules), GFP_KERNEL);
 	if (!handle)
 		return NULL;
 
@@ -1885,9 +1892,7 @@ static bool mlx5_flow_dests_cmp(struct mlx5_flow_destination *d1,
 		     d1->range.hit_ft == d2->range.hit_ft &&
 		     d1->range.miss_ft == d2->range.miss_ft &&
 		     d1->range.min == d2->range.min &&
-		     d1->range.max == d2->range.max) ||
-		    (d1->type == MLX5_FLOW_DESTINATION_TYPE_VHCA_RX &&
-		     d1->vhca.id == d2->vhca.id))
+		     d1->range.max == d2->range.max))
 			return true;
 	}
 
@@ -2093,7 +2098,7 @@ static int build_match_list(struct match_list *match_head,
 		if (unlikely(!tree_get_node(&g->node)))
 			continue;
 
-		curr_match = kmalloc_obj(*curr_match, GFP_ATOMIC);
+		curr_match = kmalloc(sizeof(*curr_match), GFP_ATOMIC);
 		if (!curr_match) {
 			rcu_read_unlock();
 			free_match_list(match_head, ft_locked);
@@ -2175,7 +2180,7 @@ add_rule_dup_match_fte(struct fs_fte *fte,
 	int i = 0;
 
 	if (!fte->dup) {
-		dup = kvzalloc_obj(*dup);
+		dup = kvzalloc(sizeof(*dup), GFP_KERNEL);
 		if (!dup)
 			return ERR_PTR(-ENOMEM);
 		/* dup will be freed when the fte is freed
@@ -2468,7 +2473,8 @@ mlx5_add_flow_rules(struct mlx5_flow_table *ft,
 		goto unlock;
 	}
 
-	gen_dest = kzalloc_objs(*dest, num_dest + 1);
+	gen_dest = kcalloc(num_dest + 1, sizeof(*dest),
+			   GFP_KERNEL);
 	if (!gen_dest) {
 		handle = ERR_PTR(-ENOMEM);
 		goto unlock;
@@ -2845,7 +2851,7 @@ static struct fs_prio *_fs_create_prio(struct mlx5_flow_namespace *ns,
 {
 	struct fs_prio *fs_prio;
 
-	fs_prio = kzalloc_obj(*fs_prio);
+	fs_prio = kzalloc(sizeof(*fs_prio), GFP_KERNEL);
 	if (!fs_prio)
 		return ERR_PTR(-ENOMEM);
 
@@ -2885,7 +2891,7 @@ static struct mlx5_flow_namespace *fs_create_namespace(struct fs_prio *prio,
 {
 	struct mlx5_flow_namespace	*ns;
 
-	ns = kzalloc_obj(*ns);
+	ns = kzalloc(sizeof(*ns), GFP_KERNEL);
 	if (!ns)
 		return ERR_PTR(-ENOMEM);
 
@@ -3016,7 +3022,7 @@ static struct mlx5_flow_root_namespace
 	struct mlx5_flow_namespace *ns;
 
 	/* Create the root namespace */
-	root_ns = kzalloc_obj(*root_ns);
+	root_ns = kzalloc(sizeof(*root_ns), GFP_KERNEL);
 	if (!root_ns)
 		return NULL;
 
@@ -3304,62 +3310,6 @@ err:
 	return ret;
 }
 
-static bool mlx5_fs_ns_is_empty(struct mlx5_flow_namespace *ns)
-{
-	struct fs_prio *iter_prio;
-
-	fs_for_each_prio(iter_prio, ns) {
-		if (iter_prio->num_ft)
-			return false;
-	}
-
-	return true;
-}
-
-int mlx5_fs_set_root_dev(struct mlx5_core_dev *dev,
-			 struct mlx5_core_dev *new_dev,
-			 enum fs_flow_table_type table_type)
-{
-	struct mlx5_flow_root_namespace	**root;
-	int total_vports;
-	int i;
-
-	switch (table_type) {
-	case FS_FT_RDMA_TRANSPORT_TX:
-		root = dev->priv.steering->rdma_transport_tx_root_ns;
-		total_vports = dev->priv.steering->rdma_transport_tx_vports;
-		break;
-	case FS_FT_RDMA_TRANSPORT_RX:
-		root = dev->priv.steering->rdma_transport_rx_root_ns;
-		total_vports = dev->priv.steering->rdma_transport_rx_vports;
-		break;
-	default:
-		WARN_ON_ONCE(true);
-		return -EINVAL;
-	}
-
-	for (i = 0; i < total_vports; i++) {
-		mutex_lock(&root[i]->chain_lock);
-		if (!mlx5_fs_ns_is_empty(&root[i]->ns)) {
-			mutex_unlock(&root[i]->chain_lock);
-			goto err;
-		}
-		root[i]->dev = new_dev;
-		mutex_unlock(&root[i]->chain_lock);
-	}
-	return 0;
-err:
-	while (i--) {
-		mutex_lock(&root[i]->chain_lock);
-		root[i]->dev = dev;
-		mutex_unlock(&root[i]->chain_lock);
-	}
-	/* If you hit this error try destroying all flow tables and try again */
-	mlx5_core_err(dev, "Failed to set root device for RDMA TRANSPORT\n");
-	return -EINVAL;
-}
-EXPORT_SYMBOL(mlx5_fs_set_root_dev);
-
 static int init_rdma_transport_rx_root_ns(struct mlx5_flow_steering *steering)
 {
 	struct mlx5_core_dev *dev = steering->dev;
@@ -3371,8 +3321,9 @@ static int init_rdma_transport_rx_root_ns(struct mlx5_flow_steering *steering)
 	total_vports = mlx5_eswitch_get_total_vports(dev) ?: 1;
 
 	steering->rdma_transport_rx_root_ns =
-			kzalloc_objs(*steering->rdma_transport_rx_root_ns,
-				     total_vports);
+			kcalloc(total_vports,
+				sizeof(*steering->rdma_transport_rx_root_ns),
+				GFP_KERNEL);
 	if (!steering->rdma_transport_rx_root_ns)
 		return -ENOMEM;
 
@@ -3403,8 +3354,9 @@ static int init_rdma_transport_tx_root_ns(struct mlx5_flow_steering *steering)
 	total_vports = mlx5_eswitch_get_total_vports(dev) ?: 1;
 
 	steering->rdma_transport_tx_root_ns =
-			kzalloc_objs(*steering->rdma_transport_tx_root_ns,
-				     total_vports);
+			kcalloc(total_vports,
+				sizeof(*steering->rdma_transport_tx_root_ns),
+				GFP_KERNEL);
 	if (!steering->rdma_transport_tx_root_ns)
 		return -ENOMEM;
 
@@ -3512,8 +3464,9 @@ static int create_fdb_fast_path(struct mlx5_flow_steering *steering)
 {
 	int err;
 
-	steering->fdb_sub_ns = kzalloc_objs(*steering->fdb_sub_ns,
-					    FDB_NUM_CHAINS);
+	steering->fdb_sub_ns = kcalloc(FDB_NUM_CHAINS,
+				       sizeof(*steering->fdb_sub_ns),
+				       GFP_KERNEL);
 	if (!steering->fdb_sub_ns)
 		return -ENOMEM;
 
@@ -3667,7 +3620,7 @@ mlx5_fs_add_vport_acl_root_ns(struct mlx5_flow_steering *steering,
 	if (xa_load(esw_acl_root_ns, vport_idx))
 		return -EEXIST;
 
-	vport_ns = kzalloc_obj(*vport_ns);
+	vport_ns = kzalloc(sizeof(*vport_ns), GFP_KERNEL);
 	if (!vport_ns)
 		return -ENOMEM;
 
@@ -3765,11 +3718,11 @@ cleanup:
 }
 
 static int mlx5_fs_mode_validate(struct devlink *devlink, u32 id,
-				 union devlink_param_value *val,
+				 union devlink_param_value val,
 				 struct netlink_ext_ack *extack)
 {
 	struct mlx5_core_dev *dev = devlink_priv(devlink);
-	char *value = val->vstr;
+	char *value = val.vstr;
 	u8 eswitch_mode;
 
 	eswitch_mode = mlx5_eswitch_mode(dev);
@@ -3826,8 +3779,7 @@ static int mlx5_fs_mode_set(struct devlink *devlink, u32 id,
 }
 
 static int mlx5_fs_mode_get(struct devlink *devlink, u32 id,
-			    struct devlink_param_gset_ctx *ctx,
-			    struct netlink_ext_ack *extack)
+			    struct devlink_param_gset_ctx *ctx)
 {
 	struct mlx5_core_dev *dev = devlink_priv(devlink);
 
@@ -3986,7 +3938,7 @@ int mlx5_fs_core_alloc(struct mlx5_core_dev *dev)
 	if (err)
 		goto err;
 
-	steering = kzalloc_obj(*steering);
+	steering = kzalloc(sizeof(*steering), GFP_KERNEL);
 	if (!steering) {
 		err = -ENOMEM;
 		goto err;
@@ -4027,7 +3979,7 @@ int mlx5_fs_add_rx_underlay_qpn(struct mlx5_core_dev *dev, u32 underlay_qpn)
 	struct mlx5_ft_underlay_qp *new_uqp;
 	int err = 0;
 
-	new_uqp = kzalloc_obj(*new_uqp);
+	new_uqp = kzalloc(sizeof(*new_uqp), GFP_KERNEL);
 	if (!new_uqp)
 		return -ENOMEM;
 
@@ -4130,7 +4082,7 @@ struct mlx5_modify_hdr *mlx5_modify_header_alloc(struct mlx5_core_dev *dev,
 	if (!root)
 		return ERR_PTR(-EOPNOTSUPP);
 
-	modify_hdr = kzalloc_obj(*modify_hdr);
+	modify_hdr = kzalloc(sizeof(*modify_hdr), GFP_KERNEL);
 	if (!modify_hdr)
 		return ERR_PTR(-ENOMEM);
 
@@ -4171,7 +4123,7 @@ struct mlx5_pkt_reformat *mlx5_packet_reformat_alloc(struct mlx5_core_dev *dev,
 	if (!root)
 		return ERR_PTR(-EOPNOTSUPP);
 
-	pkt_reformat = kzalloc_obj(*pkt_reformat);
+	pkt_reformat = kzalloc(sizeof(*pkt_reformat), GFP_KERNEL);
 	if (!pkt_reformat)
 		return ERR_PTR(-ENOMEM);
 
@@ -4219,7 +4171,7 @@ mlx5_create_match_definer(struct mlx5_core_dev *dev,
 	if (!root)
 		return ERR_PTR(-EOPNOTSUPP);
 
-	definer = kzalloc_obj(*definer);
+	definer = kzalloc(sizeof(*definer), GFP_KERNEL);
 	if (!definer)
 		return ERR_PTR(-ENOMEM);
 

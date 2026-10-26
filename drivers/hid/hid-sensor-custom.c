@@ -919,7 +919,7 @@ hid_sensor_custom_get_known(struct hid_sensor_hub_device *hsdev,
 		hid_sensor_custom_known_table;
 	struct hid_sensor_custom_properties *prop;
 
-	prop = kmalloc_obj(struct hid_sensor_custom_properties);
+	prop = kmalloc(sizeof(struct hid_sensor_custom_properties), GFP_KERNEL);
 	if (!prop)
 		return -ENOMEM;
 

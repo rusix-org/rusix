@@ -30,7 +30,6 @@
 #include <linux/moduleparam.h>
 #include <linux/io.h>
 #include <linux/uaccess.h>
-#include <linux/stringify.h>
 
 
 /* #define DEBUG 1 */
@@ -334,7 +333,7 @@ static int pc87413_status(void)
  *	@ppos: pointer to the position to write. No seeks allowed
  *
  *	A write to a watchdog device is defined as a keepalive signal. Any
- *	write of data will do, as we don't define content meaning.
+ *	write of data will do, as we we don't define content meaning.
  */
 
 static ssize_t pc87413_write(struct file *file, const char __user *data,
@@ -578,15 +577,15 @@ MODULE_LICENSE("GPL");
 
 module_param_hw(io, int, ioport, 0);
 MODULE_PARM_DESC(io, MODNAME " I/O port (default: "
-					__stringify(IO_DEFAULT) ").");
+					__MODULE_STRING(IO_DEFAULT) ").");
 
 module_param(timeout, int, 0);
 MODULE_PARM_DESC(timeout,
 		"Watchdog timeout in minutes (default="
-				__stringify(DEFAULT_TIMEOUT) ").");
+				__MODULE_STRING(DEFAULT_TIMEOUT) ").");
 
 module_param(nowayout, bool, 0);
 MODULE_PARM_DESC(nowayout,
 		"Watchdog cannot be stopped once started (default="
-				__stringify(WATCHDOG_NOWAYOUT) ")");
+				__MODULE_STRING(WATCHDOG_NOWAYOUT) ")");
 

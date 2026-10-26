@@ -161,7 +161,7 @@ int tc_action_net_init(struct net *net, struct tc_action_net *tn,
 {
 	int err = 0;
 
-	tn->idrinfo = kmalloc_obj(*tn->idrinfo);
+	tn->idrinfo = kmalloc(sizeof(*tn->idrinfo), GFP_KERNEL);
 	if (!tn->idrinfo)
 		return -ENOMEM;
 	tn->ops = ops;
@@ -251,7 +251,7 @@ static inline void tcf_action_inc_drop_qstats(struct tc_action *a)
 static inline void tcf_action_inc_overlimit_qstats(struct tc_action *a)
 {
 	if (likely(a->cpu_qstats)) {
-		qstats_cpu_overlimit_inc(a->cpu_qstats);
+		qstats_overlimit_inc(this_cpu_ptr(a->cpu_qstats));
 		return;
 	}
 	atomic_inc(&a->tcfa_overlimits);

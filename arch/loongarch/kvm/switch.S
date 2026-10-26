@@ -66,8 +66,9 @@
 	ld.d	t0, a2, KVM_ARCH_KVMPGD
 	csrwr	t0, LOONGARCH_CSR_PGDL
 
-	/* Set VMID for gpa --> hpa mapping */
-	ld.d		t1, a2, KVM_ARCH_TGID
+	/* Mix GID and RID */
+	csrrd		t1, LOONGARCH_CSR_GSTAT
+	bstrpick.w	t1, t1, CSR_GSTAT_GID_SHIFT_END, CSR_GSTAT_GID_SHIFT
 	csrrd		t0, LOONGARCH_CSR_GTLBC
 	bstrins.w	t0, t1, CSR_GTLBC_TGID_SHIFT_END, CSR_GTLBC_TGID_SHIFT
 	csrwr		t0, LOONGARCH_CSR_GTLBC
@@ -197,7 +198,7 @@ ret_to_host:
 	jr      ra
 
 SYM_CODE_END(kvm_exc_entry)
-EXPORT_SYMBOL_FOR_KVM(kvm_exc_entry)
+EXPORT_SYMBOL_GPL(kvm_exc_entry)
 
 /*
  * int kvm_enter_guest(struct kvm_run *run, struct kvm_vcpu *vcpu)
@@ -222,7 +223,7 @@ SYM_FUNC_START(kvm_enter_guest)
 	csrwr	a1, KVM_VCPU_KS
 	kvm_switch_to_guest
 SYM_FUNC_END(kvm_enter_guest)
-EXPORT_SYMBOL_FOR_KVM(kvm_enter_guest)
+EXPORT_SYMBOL_GPL(kvm_enter_guest)
 
 SYM_FUNC_START(kvm_save_fpu)
 	fpu_save_csr	a0 t1
@@ -230,7 +231,7 @@ SYM_FUNC_START(kvm_save_fpu)
 	fpu_save_cc	a0 t1 t2
 	jr              ra
 SYM_FUNC_END(kvm_save_fpu)
-EXPORT_SYMBOL_FOR_KVM(kvm_save_fpu)
+EXPORT_SYMBOL_GPL(kvm_save_fpu)
 
 SYM_FUNC_START(kvm_restore_fpu)
 	fpu_restore_double a0 t1
@@ -238,7 +239,7 @@ SYM_FUNC_START(kvm_restore_fpu)
 	fpu_restore_cc	   a0 t1 t2
 	jr                 ra
 SYM_FUNC_END(kvm_restore_fpu)
-EXPORT_SYMBOL_FOR_KVM(kvm_restore_fpu)
+EXPORT_SYMBOL_GPL(kvm_restore_fpu)
 
 #ifdef CONFIG_CPU_HAS_LSX
 SYM_FUNC_START(kvm_save_lsx)
@@ -247,7 +248,7 @@ SYM_FUNC_START(kvm_save_lsx)
 	lsx_save_data   a0 t1
 	jr              ra
 SYM_FUNC_END(kvm_save_lsx)
-EXPORT_SYMBOL_FOR_KVM(kvm_save_lsx)
+EXPORT_SYMBOL_GPL(kvm_save_lsx)
 
 SYM_FUNC_START(kvm_restore_lsx)
 	lsx_restore_data a0 t1
@@ -255,7 +256,7 @@ SYM_FUNC_START(kvm_restore_lsx)
 	fpu_restore_csr  a0 t1 t2
 	jr               ra
 SYM_FUNC_END(kvm_restore_lsx)
-EXPORT_SYMBOL_FOR_KVM(kvm_restore_lsx)
+EXPORT_SYMBOL_GPL(kvm_restore_lsx)
 #endif
 
 #ifdef CONFIG_CPU_HAS_LASX
@@ -265,7 +266,7 @@ SYM_FUNC_START(kvm_save_lasx)
 	lasx_save_data  a0 t1
 	jr              ra
 SYM_FUNC_END(kvm_save_lasx)
-EXPORT_SYMBOL_FOR_KVM(kvm_save_lasx)
+EXPORT_SYMBOL_GPL(kvm_save_lasx)
 
 SYM_FUNC_START(kvm_restore_lasx)
 	lasx_restore_data a0 t1
@@ -273,7 +274,7 @@ SYM_FUNC_START(kvm_restore_lasx)
 	fpu_restore_csr   a0 t1 t2
 	jr                ra
 SYM_FUNC_END(kvm_restore_lasx)
-EXPORT_SYMBOL_FOR_KVM(kvm_restore_lasx)
+EXPORT_SYMBOL_GPL(kvm_restore_lasx)
 #endif
 
 #ifdef CONFIG_CPU_HAS_LBT

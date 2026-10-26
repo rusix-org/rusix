@@ -395,7 +395,9 @@ static int qcomtee_object_invoke(struct tee_context *ctx,
 				 struct tee_ioctl_object_invoke_arg *arg,
 				 struct tee_param *params)
 {
+	struct qcomtee_object_invoke_ctx *oic __free(kfree) = NULL;
 	struct qcomtee_context_data *ctxdata = ctx->data;
+	struct qcomtee_arg *u __free(kfree) = NULL;
 	struct qcomtee_object *object;
 	int i, ret, result;
 
@@ -410,14 +412,12 @@ static int qcomtee_object_invoke(struct tee_context *ctx,
 	}
 
 	/* Otherwise, invoke a QTEE object: */
-	struct qcomtee_object_invoke_ctx *oic __free(kfree) =
-		qcomtee_object_invoke_ctx_alloc(ctx);
+	oic = qcomtee_object_invoke_ctx_alloc(ctx);
 	if (!oic)
 		return -ENOMEM;
 
 	/* +1 for ending QCOMTEE_ARG_TYPE_INV. */
-	struct qcomtee_arg *u __free(kfree) = kzalloc_objs(*u,
-							   arg->num_params + 1);
+	u = kcalloc(arg->num_params + 1, sizeof(*u), GFP_KERNEL);
 	if (!u)
 		return -ENOMEM;
 
@@ -562,7 +562,9 @@ static int qcomtee_supp_send(struct tee_context *ctx, u32 errno, u32 num_params,
 
 static int qcomtee_open(struct tee_context *ctx)
 {
-	struct qcomtee_context_data *ctxdata __free(kfree) = kzalloc_obj(*ctxdata);
+	struct qcomtee_context_data *ctxdata __free(kfree) = NULL;
+
+	ctxdata = kzalloc(sizeof(*ctxdata), GFP_KERNEL);
 	if (!ctxdata)
 		return -ENOMEM;
 
@@ -643,12 +645,12 @@ static void qcomtee_get_version(struct tee_device *teedev,
 static void qcomtee_get_qtee_feature_list(struct tee_context *ctx, u32 id,
 					  u32 *version)
 {
+	struct qcomtee_object_invoke_ctx *oic __free(kfree) = NULL;
 	struct qcomtee_object *client_env, *service;
 	struct qcomtee_arg u[3] = { 0 };
 	int result;
 
-	struct qcomtee_object_invoke_ctx *oic __free(kfree) =
-		qcomtee_object_invoke_ctx_alloc(ctx);
+	oic = qcomtee_object_invoke_ctx_alloc(ctx);
 	if (!oic)
 		return;
 
@@ -705,7 +707,7 @@ static int qcomtee_probe(struct platform_device *pdev)
 	struct qcomtee *qcomtee;
 	int err;
 
-	qcomtee = kzalloc_obj(*qcomtee);
+	qcomtee = kzalloc(sizeof(*qcomtee), GFP_KERNEL);
 	if (!qcomtee)
 		return -ENOMEM;
 
@@ -798,12 +800,7 @@ static void qcomtee_remove(struct platform_device *pdev)
 	kfree(qcomtee);
 }
 
-static const struct platform_device_id qcomtee_ids[] = {
-	{
-		.name = "qcomtee",
-	},
-	{ }
-};
+static const struct platform_device_id qcomtee_ids[] = { { "qcomtee", 0 }, {} };
 MODULE_DEVICE_TABLE(platform, qcomtee_ids);
 
 static struct platform_driver qcomtee_platform_driver = {

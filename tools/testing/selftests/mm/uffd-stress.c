@@ -241,7 +241,7 @@ static int stress(struct uffd_args *args)
 			return 1;
 
 	for (cpu = 0; cpu < gopts->nr_parallel; cpu++) {
-		char c = '\0';
+		char c;
 		if (bounces & BOUNCE_POLL) {
 			if (write(gopts->pipefd[cpu*2+1], &c, 1) != 1)
 				err("pipefd write error");
@@ -286,12 +286,18 @@ static int userfaultfd_stress(uffd_global_test_opts_t *gopts)
 	pthread_attr_setstacksize(&attr, 16*1024*1024);
 
 	while (bounces--) {
-		ksft_print_msg("bounces: %d, mode:%s%s%s%s, ",
-			       bounces,
-			       bounces & BOUNCE_RANDOM ? " rnd" : "",
-			       bounces & BOUNCE_RACINGFAULTS ? " racing" : "",
-			       bounces & BOUNCE_VERIFY ? " ver" : "",
-			       bounces & BOUNCE_POLL ? " poll" : " read");
+		printf("bounces: %d, mode:", bounces);
+		if (bounces & BOUNCE_RANDOM)
+			printf(" rnd");
+		if (bounces & BOUNCE_RACINGFAULTS)
+			printf(" racing");
+		if (bounces & BOUNCE_VERIFY)
+			printf(" ver");
+		if (bounces & BOUNCE_POLL)
+			printf(" poll");
+		else
+			printf(" read");
+		printf(", ");
 		fflush(stdout);
 
 		if (bounces & BOUNCE_POLL)
@@ -455,9 +461,6 @@ int main(int argc, char **argv)
 	if (argc < 4)
 		usage();
 
-	ksft_print_header();
-	ksft_set_plan(1);
-
 	if (signal(SIGALRM, sigalrm) == SIG_ERR)
 		err("failed to arm SIGALRM");
 	alarm(ALARM_INTERVAL_SECS);
@@ -480,11 +483,10 @@ int main(int argc, char **argv)
 	 * Ensure nr_parallel - 1 hugepages on top of that to account
 	 * for racy extra reservation of hugepages.
 	 */
-	if (gopts->test_type == TEST_HUGETLB) {
-		unsigned long nr = 2 * (bytes / gopts->page_size) + gopts->nr_parallel - 1;
-
-		if (!hugetlb_setup_default(nr))
-			ksft_exit_skip("Skipping userfaultfd... not enough hugepages\n");
+	if (gopts->test_type == TEST_HUGETLB &&
+	   get_free_hugepages() < 2 * (bytes / gopts->page_size) + gopts->nr_parallel - 1) {
+		printf("skip: Skipping userfaultfd... not enough hugepages\n");
+		return KSFT_SKIP;
 	}
 
 	gopts->nr_pages_per_cpu = bytes / gopts->page_size / gopts->nr_parallel;
@@ -500,12 +502,9 @@ int main(int argc, char **argv)
 	}
 	gopts->nr_pages = gopts->nr_pages_per_cpu * gopts->nr_parallel;
 
-	ksft_print_msg("nr_pages: %lu, nr_pages_per_cpu: %lu\n",
-		       gopts->nr_pages, gopts->nr_pages_per_cpu);
-
-	ksft_test_result(!userfaultfd_stress(gopts),
-			 "uffd-stress %s\n", argv[1]);
-	ksft_finished();
+	printf("nr_pages: %lu, nr_pages_per_cpu: %lu\n",
+	       gopts->nr_pages, gopts->nr_pages_per_cpu);
+	return userfaultfd_stress(gopts);
 }
 
 #else /* __NR_userfaultfd */
@@ -514,8 +513,8 @@ int main(int argc, char **argv)
 
 int main(void)
 {
-	ksft_print_header();
-	ksft_exit_skip("missing __NR_userfaultfd definition\n");
+	printf("skip: Skipping userfaultfd test (missing __NR_userfaultfd)\n");
+	return KSFT_SKIP;
 }
 
 #endif /* __NR_userfaultfd */

@@ -7,7 +7,6 @@
 #include <linux/delay.h>
 #include <linux/suspend.h>
 #include <linux/stat.h>
-#include <linux/sysfs.h>
 #include <asm/firmware.h>
 #include <asm/hvcall.h>
 #include <asm/machdep.h>
@@ -122,12 +121,12 @@ static ssize_t show_hibernate(struct device *dev,
 			      struct device_attribute *attr,
 			      char *buf)
 {
-	return sysfs_emit(buf, "%d\n", KERN_DT_UPDATE);
+	return sprintf(buf, "%d\n", KERN_DT_UPDATE);
 }
 
 static DEVICE_ATTR(hibernate, 0644, show_hibernate, store_hibernate);
 
-static const struct bus_type suspend_subsys = {
+static struct bus_type suspend_subsys = {
 	.name = "power",
 	.dev_name = "power",
 };

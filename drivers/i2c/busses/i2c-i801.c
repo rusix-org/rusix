@@ -84,8 +84,6 @@
  * Panther Lake-H (SOC)		0xe322	32	hard	yes	yes	yes
  * Panther Lake-P (SOC)		0xe422	32	hard	yes	yes	yes
  * Wildcat Lake-U (SOC)		0x4d22	32	hard	yes	yes	yes
- * Diamond Rapids (SOC)		0x5827	32	hard	yes	yes	yes
- * Nova Lake-S (PCH)		0x6e23	32	hard	yes	yes	yes
  *
  * Features supported by this driver:
  * Software PEC				no
@@ -244,9 +242,7 @@
 #define PCI_DEVICE_ID_INTEL_ALDER_LAKE_P_SMBUS		0x51a3
 #define PCI_DEVICE_ID_INTEL_ALDER_LAKE_M_SMBUS		0x54a3
 #define PCI_DEVICE_ID_INTEL_BIRCH_STREAM_SMBUS		0x5796
-#define PCI_DEVICE_ID_INTEL_DIAMOND_RAPIDS_SMBUS	0x5827
 #define PCI_DEVICE_ID_INTEL_BROXTON_SMBUS		0x5ad4
-#define PCI_DEVICE_ID_INTEL_NOVA_LAKE_S_SMBUS		0x6e23
 #define PCI_DEVICE_ID_INTEL_ARROW_LAKE_H_SMBUS		0x7722
 #define PCI_DEVICE_ID_INTEL_RAPTOR_LAKE_S_SMBUS		0x7a23
 #define PCI_DEVICE_ID_INTEL_ALDER_LAKE_S_SMBUS		0x7aa3
@@ -1063,12 +1059,10 @@ static const struct pci_device_id i801_ids[] = {
 	{ PCI_DEVICE_DATA(INTEL, METEOR_LAKE_SOC_S_SMBUS,	FEATURES_ICH5 | FEATURE_TCO_CNL) },
 	{ PCI_DEVICE_DATA(INTEL, METEOR_LAKE_PCH_S_SMBUS,	FEATURES_ICH5 | FEATURE_TCO_CNL) },
 	{ PCI_DEVICE_DATA(INTEL, BIRCH_STREAM_SMBUS,		FEATURES_ICH5)			 },
-	{ PCI_DEVICE_DATA(INTEL, DIAMOND_RAPIDS_SMBUS,		FEATURES_ICH5)			 },
 	{ PCI_DEVICE_DATA(INTEL, ARROW_LAKE_H_SMBUS,		FEATURES_ICH5 | FEATURE_TCO_CNL) },
 	{ PCI_DEVICE_DATA(INTEL, PANTHER_LAKE_H_SMBUS,		FEATURES_ICH5 | FEATURE_TCO_CNL) },
 	{ PCI_DEVICE_DATA(INTEL, PANTHER_LAKE_P_SMBUS,		FEATURES_ICH5 | FEATURE_TCO_CNL) },
 	{ PCI_DEVICE_DATA(INTEL, WILDCAT_LAKE_U_SMBUS,		FEATURES_ICH5 | FEATURE_TCO_CNL) },
-	{ PCI_DEVICE_DATA(INTEL, NOVA_LAKE_S_SMBUS,		FEATURES_ICH5 | FEATURE_TCO_CNL) },
 	{ 0, }
 };
 
@@ -1170,14 +1164,6 @@ static void dmi_check_onboard_devices(const struct dmi_header *dm, void *adap)
 	}
 }
 
-static void i801_register_spd(struct i801_priv *priv)
-{
-	if (priv->original_hstcfg & SMBHSTCFG_SPD_WD)
-		i2c_register_spd_write_disable(&priv->adapter);
-	else
-		i2c_register_spd_write_enable(&priv->adapter);
-}
-
 /* Register optional targets */
 static void i801_probe_optional_targets(struct i801_priv *priv)
 {
@@ -1201,7 +1187,7 @@ static void i801_probe_optional_targets(struct i801_priv *priv)
 #ifdef CONFIG_I2C_I801_MUX
 	if (!priv->mux_pdev)
 #endif
-		i801_register_spd(priv);
+		i2c_register_spd_write_enable(&priv->adapter);
 }
 #else
 static void __init input_apanel_init(void) {}

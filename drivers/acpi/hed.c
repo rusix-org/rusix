@@ -13,7 +13,6 @@
 #include <linux/module.h>
 #include <linux/init.h>
 #include <linux/acpi.h>
-#include <linux/platform_device.h>
 #include <acpi/hed.h>
 
 static const struct acpi_device_id acpi_hed_ids[] = {
@@ -22,7 +21,7 @@ static const struct acpi_device_id acpi_hed_ids[] = {
 };
 MODULE_DEVICE_TABLE(acpi, acpi_hed_ids);
 
-static bool hed_present;
+static acpi_handle hed_handle;
 
 static BLOCKING_NOTIFIER_HEAD(acpi_hed_notify_list);
 
@@ -48,40 +47,43 @@ static void acpi_hed_notify(acpi_handle handle, u32 event, void *data)
 	blocking_notifier_call_chain(&acpi_hed_notify_list, 0, NULL);
 }
 
-static int acpi_hed_probe(struct platform_device *pdev)
+static int acpi_hed_add(struct acpi_device *device)
 {
 	int err;
 
 	/* Only one hardware error device */
-	if (hed_present)
+	if (hed_handle)
 		return -EINVAL;
+	hed_handle = device->handle;
 
-	err = devm_acpi_install_notify_handler(&pdev->dev, ACPI_DEVICE_NOTIFY,
-					       acpi_hed_notify, NULL);
+	err = acpi_dev_install_notify_handler(device, ACPI_DEVICE_NOTIFY,
+					      acpi_hed_notify, device);
 	if (err)
-		return err;
+		hed_handle = NULL;
 
-	hed_present = true;
-	return 0;
+	return err;
 }
 
-static void acpi_hed_remove(struct platform_device *pdev)
+static void acpi_hed_remove(struct acpi_device *device)
 {
-	hed_present = false;
+	acpi_dev_remove_notify_handler(device, ACPI_DEVICE_NOTIFY,
+				       acpi_hed_notify);
+	hed_handle = NULL;
 }
 
-static struct platform_driver acpi_hed_driver = {
-	.probe = acpi_hed_probe,
-	.remove = acpi_hed_remove,
-	.driver = {
-		.name = "acpi-hardware-error-device",
-		.acpi_match_table = acpi_hed_ids,
+static struct acpi_driver acpi_hed_driver = {
+	.name = "hardware_error_device",
+	.class = "hardware_error",
+	.ids = acpi_hed_ids,
+	.ops = {
+		.add = acpi_hed_add,
+		.remove = acpi_hed_remove,
 	},
 };
 
 static int __init acpi_hed_driver_init(void)
 {
-	return platform_driver_register(&acpi_hed_driver);
+	return acpi_bus_register_driver(&acpi_hed_driver);
 }
 subsys_initcall(acpi_hed_driver_init);
 

@@ -112,13 +112,7 @@ properties:
     maxItems: 1
 
   resets:
-    minItems: 1
-    maxItems: 2
-
-  reset-names:
-    items:
-      - const: ao_g3d
-      - const: media_g3d
+    maxItems: 1
 
   operating-points-v2: true
 
@@ -136,23 +130,6 @@ required:
 additionalProperties: false
 
 allOf:
-  - if:
-      properties:
-        compatible:
-          contains:
-            const: hisilicon,hi6220-mali
-    then:
-      properties:
-        resets:
-          minItems: 2
-      required:
-        - reset-names
-    else:
-      properties:
-        resets:
-          maxItems: 1
-        reset-names: false
-
   - if:
       properties:
         compatible:

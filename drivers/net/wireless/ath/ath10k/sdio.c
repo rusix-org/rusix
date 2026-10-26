@@ -3,7 +3,7 @@
  * Copyright (c) 2004-2011 Atheros Communications Inc.
  * Copyright (c) 2011-2012,2017 Qualcomm Atheros, Inc.
  * Copyright (c) 2016-2017 Erik Stromdahl <erik.stromdahl@gmail.com>
- * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
+ * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/module.h>
@@ -246,7 +246,7 @@ static int ath10k_sdio_writesb32(struct ath10k *ar, u32 addr, u32 val)
 	__le32 *buf;
 	int ret;
 
-	buf = kzalloc_obj(*buf);
+	buf = kzalloc(sizeof(*buf), GFP_KERNEL);
 	if (!buf)
 		return -ENOMEM;
 
@@ -1766,7 +1766,7 @@ static int ath10k_sdio_diag_read32(struct ath10k *ar, u32 address,
 	__le32 *val;
 	int ret;
 
-	val = kzalloc_obj(*val);
+	val = kzalloc(sizeof(*val), GFP_KERNEL);
 	if (!val)
 		return -ENOMEM;
 

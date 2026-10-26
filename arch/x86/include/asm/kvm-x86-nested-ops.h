@@ -23,7 +23,6 @@ KVM_X86_NESTED_OP(get_state)
 KVM_X86_NESTED_OP(set_state)
 KVM_X86_NESTED_OP(get_nested_state_pages)
 KVM_X86_NESTED_OP_OPTIONAL_RET0(write_log_dirty)
-KVM_X86_NESTED_OP(translate_nested_gpa)
 #ifdef CONFIG_KVM_HYPERV
 KVM_X86_NESTED_OP_OPTIONAL(enable_evmcs)
 KVM_X86_NESTED_OP_OPTIONAL_RET0(get_evmcs_version)

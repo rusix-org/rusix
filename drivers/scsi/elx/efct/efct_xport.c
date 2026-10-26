@@ -28,7 +28,7 @@ efct_xport_alloc(struct efct *efct)
 {
 	struct efct_xport *xport;
 
-	xport = kzalloc_obj(*xport);
+	xport = kzalloc(sizeof(*xport), GFP_KERNEL);
 	if (!xport)
 		return xport;
 

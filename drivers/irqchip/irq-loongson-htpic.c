@@ -95,7 +95,7 @@ static int __init htpic_of_init(struct device_node *node, struct device_node *pa
 		return -ENODEV;
 	}
 
-	htpic = kzalloc_obj(*htpic);
+	htpic = kzalloc(sizeof(*htpic), GFP_KERNEL);
 	if (!htpic)
 		return -ENOMEM;
 

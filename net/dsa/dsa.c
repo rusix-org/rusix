@@ -9,7 +9,6 @@
 
 #include <linux/device.h>
 #include <linux/err.h>
-#include <linux/if_hsr.h>
 #include <linux/list.h>
 #include <linux/module.h>
 #include <linux/netdevice.h>
@@ -18,7 +17,6 @@
 #include <linux/of.h>
 #include <linux/of_net.h>
 #include <net/dsa_stubs.h>
-#include <net/netdev_lock.h>
 #include <net/sch_generic.h>
 
 #include "conduit.h"
@@ -214,7 +212,7 @@ static struct dsa_switch_tree *dsa_tree_alloc(int index)
 {
 	struct dsa_switch_tree *dst;
 
-	dst = kzalloc_obj(*dst);
+	dst = kzalloc(sizeof(*dst), GFP_KERNEL);
 	if (!dst)
 		return NULL;
 
@@ -299,7 +297,7 @@ static struct dsa_link *dsa_link_touch(struct dsa_port *dp,
 		if (dl->dp == dp && dl->link_dp == link_dp)
 			return dl;
 
-	dl = kzalloc_obj(*dl);
+	dl = kzalloc(sizeof(*dl), GFP_KERNEL);
 	if (!dl)
 		return NULL;
 
@@ -845,7 +843,7 @@ static int dsa_tree_setup_lags(struct dsa_switch_tree *dst)
 	if (!len)
 		return 0;
 
-	dst->lags = kzalloc_objs(*dst->lags, len);
+	dst->lags = kcalloc(len, sizeof(*dst->lags), GFP_KERNEL);
 	if (!dst->lags)
 		return -ENOMEM;
 
@@ -1093,7 +1091,7 @@ static struct dsa_port *dsa_port_touch(struct dsa_switch *ds, int index)
 		if (dp->index == index)
 			return dp;
 
-	dp = kzalloc_obj(*dp);
+	dp = kzalloc(sizeof(*dp), GFP_KERNEL);
 	if (!dp)
 		return NULL;
 
@@ -1383,7 +1381,7 @@ static int dsa_switch_parse_of(struct dsa_switch *ds, struct device_node *dn)
 
 static int dev_is_class(struct device *dev, const void *class)
 {
-	if (dev->class && !strcmp(dev->class->name, class))
+	if (dev->class != NULL && !strcmp(dev->class->name, class))
 		return 1;
 
 	return 0;
@@ -1621,23 +1619,10 @@ void dsa_switch_shutdown(struct dsa_switch *ds)
 
 	rtnl_lock();
 
-	dsa_switch_for_each_cpu_port(dp, ds) {
-		if (!(dp->conduit->flags & IFF_UP))
-			continue;
-		list_add_tail(&dp->conduit->close_list, &close_list);
-		netdev_lock_ops(dp->conduit);
-	}
+	dsa_switch_for_each_cpu_port(dp, ds)
+		list_add(&dp->conduit->close_list, &close_list);
 
-	netif_close_many(&close_list, false);
-
-	while (!list_empty(&close_list)) {
-		struct net_device *conduit;
-
-		conduit = list_first_entry(&close_list, struct net_device,
-					   close_list);
-		netdev_unlock_ops(conduit);
-		list_del_init(&conduit->close_list);
-	}
+	netif_close_many(&close_list, true);
 
 	dsa_switch_for_each_user_port(dp, ds) {
 		conduit = dsa_port_to_conduit(dp);
@@ -1783,70 +1768,6 @@ bool dsa_mdb_present_in_other_db(struct dsa_switch *ds, int port,
 	return false;
 }
 EXPORT_SYMBOL_GPL(dsa_mdb_present_in_other_db);
-
-/* Helpers for switches without specific HSR offloads, but which can implement
- * NETIF_F_HW_HSR_DUP because their tagger uses dsa_xmit_port_mask()
- */
-int dsa_port_simple_hsr_validate(struct dsa_switch *ds, int port,
-				 struct net_device *hsr,
-				 struct netlink_ext_ack *extack)
-{
-	enum hsr_port_type type;
-	int err;
-
-	err = hsr_get_port_type(hsr, dsa_to_port(ds, port)->user, &type);
-	if (err)
-		return err;
-
-	if (type != HSR_PT_SLAVE_A && type != HSR_PT_SLAVE_B) {
-		NL_SET_ERR_MSG_MOD(extack,
-				   "Only HSR slave ports can be offloaded");
-		return -EOPNOTSUPP;
-	}
-
-	return 0;
-}
-EXPORT_SYMBOL_GPL(dsa_port_simple_hsr_validate);
-
-int dsa_port_simple_hsr_join(struct dsa_switch *ds, int port,
-			     struct net_device *hsr,
-			     struct netlink_ext_ack *extack)
-{
-	struct dsa_port *dp = dsa_to_port(ds, port), *other_dp;
-	int err;
-
-	err = dsa_port_simple_hsr_validate(ds, port, hsr, extack);
-	if (err)
-		return err;
-
-	dsa_hsr_foreach_port(other_dp, ds, hsr) {
-		if (other_dp != dp) {
-			dp->user->features |= NETIF_F_HW_HSR_DUP;
-			other_dp->user->features |= NETIF_F_HW_HSR_DUP;
-			break;
-		}
-	}
-
-	return 0;
-}
-EXPORT_SYMBOL_GPL(dsa_port_simple_hsr_join);
-
-int dsa_port_simple_hsr_leave(struct dsa_switch *ds, int port,
-			      struct net_device *hsr)
-{
-	struct dsa_port *dp = dsa_to_port(ds, port), *other_dp;
-
-	dsa_hsr_foreach_port(other_dp, ds, hsr) {
-		if (other_dp != dp) {
-			dp->user->features &= ~NETIF_F_HW_HSR_DUP;
-			other_dp->user->features &= ~NETIF_F_HW_HSR_DUP;
-			break;
-		}
-	}
-
-	return 0;
-}
-EXPORT_SYMBOL_GPL(dsa_port_simple_hsr_leave);
 
 static const struct dsa_stubs __dsa_stubs = {
 	.conduit_hwtstamp_validate = __dsa_conduit_hwtstamp_validate,

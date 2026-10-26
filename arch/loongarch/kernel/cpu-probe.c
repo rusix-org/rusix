@@ -107,11 +107,7 @@ EXPORT_SYMBOL(vm_map_base);
 
 static void cpu_probe_addrbits(struct cpuinfo_loongarch *c)
 {
-#ifdef CONFIG_32BIT
-	c->pabits = cpu_pabits;
-	c->vabits = cpu_vabits;
-	vm_map_base = KVRANGE;
-#else
+#ifdef __NEED_ADDRBITS_PROBE
 	c->pabits = (read_cpucfg(LOONGARCH_CPUCFG1) & CPUCFG1_PABITS) >> 4;
 	c->vabits = (read_cpucfg(LOONGARCH_CPUCFG1) & CPUCFG1_VABITS) >> 12;
 	vm_map_base = 0UL - (1UL << c->vabits);
@@ -178,14 +174,6 @@ static void cpu_probe_common(struct cpuinfo_loongarch *c)
 		c->options |= LOONGARCH_CPU_LAM;
 		elf_hwcap |= HWCAP_LOONGARCH_LAM;
 	}
-	if (config & CPUCFG2_LAM_BH) {
-		c->options |= LOONGARCH_CPU_LAM_BH;
-		elf_hwcap |= HWCAP_LOONGARCH_LAM_BH;
-	}
-	if (config & CPUCFG2_SCQ) {
-		c->options |= LOONGARCH_CPU_SCQ;
-		elf_hwcap |= HWCAP_LOONGARCH_SCQ;
-	}
 	if (config & CPUCFG2_FP) {
 		c->options |= LOONGARCH_CPU_FPU;
 		elf_hwcap |= HWCAP_LOONGARCH_FPU;
@@ -240,10 +228,6 @@ static void cpu_probe_common(struct cpuinfo_loongarch *c)
 	config = read_cpucfg(LOONGARCH_CPUCFG6);
 	if (config & CPUCFG6_PMP)
 		c->options |= LOONGARCH_CPU_PMP;
-
-	config = read_cpucfg(LOONGARCH_CPUCFG8);
-	if (config & CPUCFG8_S2TGID)
-		c->options |= LOONGARCH_CPU_GUESTID;
 
 	config = csr_read32(LOONGARCH_CSR_ASID);
 	config = (config & CSR_ASID_BIT) >> CSR_ASID_BIT_SHIFT;
@@ -315,15 +299,8 @@ static inline void cpu_probe_loongson(struct cpuinfo_loongarch *c, unsigned int 
 		return;
 	}
 
-#ifdef CONFIG_64BIT
 	*vendor = iocsr_read64(LOONGARCH_IOCSR_VENDOR);
 	*cpuname = iocsr_read64(LOONGARCH_IOCSR_CPUNAME);
-#else
-	*vendor = iocsr_read32(LOONGARCH_IOCSR_VENDOR) |
-		(u64)iocsr_read32(LOONGARCH_IOCSR_VENDOR + 4) << 32;
-	*cpuname = iocsr_read32(LOONGARCH_IOCSR_CPUNAME) |
-		(u64)iocsr_read32(LOONGARCH_IOCSR_CPUNAME + 4) << 32;
-#endif
 
 	if (!__cpu_full_name[cpu]) {
 		if (((char *)vendor)[0] == 0)

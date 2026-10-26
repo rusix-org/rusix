@@ -387,8 +387,8 @@ static int acpi_ipmi_probe(struct platform_device *pdev)
 }
 
 static const struct acpi_device_id acpi_ipmi_match[] = {
-	{ .id = "IPI0001" },
-	{ }
+	{ "IPI0001", 0 },
+	{ },
 };
 MODULE_DEVICE_TABLE(acpi, acpi_ipmi_match);
 #else
@@ -436,9 +436,9 @@ void ipmi_remove_platform_device_by_name(char *name)
 }
 
 static const struct platform_device_id si_plat_ids[] = {
-	{ .name = "dmi-ipmi-si" },
-	{ .name = "hardcode-ipmi-si" },
-	{ .name = "hotmod-ipmi-si" },
+	{ "dmi-ipmi-si", 0 },
+	{ "hardcode-ipmi-si", 0 },
+	{ "hotmod-ipmi-si", 0 },
 	{ }
 };
 

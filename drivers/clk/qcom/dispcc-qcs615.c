@@ -5,6 +5,7 @@
 
 #include <linux/clk-provider.h>
 #include <linux/module.h>
+#include <linux/mod_devicetable.h>
 #include <linux/of.h>
 #include <linux/platform_device.h>
 #include <linux/regmap.h>
@@ -738,7 +739,7 @@ static struct clk_alpha_pll *disp_cc_qcs615_plls[] = {
 	&disp_cc_pll0,
 };
 
-static const u32 disp_cc_qcs615_critical_cbcrs[] = {
+static u32 disp_cc_qcs615_critical_cbcrs[] = {
 	0x6054, /* DISP_CC_XO_CLK */
 };
 
@@ -750,7 +751,7 @@ static const struct regmap_config disp_cc_qcs615_regmap_config = {
 	.fast_io = true,
 };
 
-static const struct qcom_cc_driver_data disp_cc_qcs615_driver_data = {
+static struct qcom_cc_driver_data disp_cc_qcs615_driver_data = {
 	.alpha_plls = disp_cc_qcs615_plls,
 	.num_alpha_plls = ARRAY_SIZE(disp_cc_qcs615_plls),
 	.clk_cbcrs = disp_cc_qcs615_critical_cbcrs,

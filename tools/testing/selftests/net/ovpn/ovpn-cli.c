@@ -6,9 +6,7 @@
  *  Author:	Antonio Quartulli <antonio@openvpn.net>
  */
 
-#include <stdint.h>
 #include <stdio.h>
-#include <stdlib.h>
 #include <inttypes.h>
 #include <stdbool.h>
 #include <string.h>
@@ -17,7 +15,6 @@
 #include <arpa/inet.h>
 #include <net/if.h>
 #include <netinet/in.h>
-#include <netinet/tcp.h>
 #include <time.h>
 
 #include <linux/ovpn.h>
@@ -35,7 +32,7 @@
 
 #include <sys/socket.h>
 
-#include "kselftest.h"
+#include "../../kselftest.h"
 
 /* defines to make checkpatch happy */
 #define strscpy strncpy
@@ -106,7 +103,7 @@ struct ovpn_ctx {
 
 	sa_family_t sa_family;
 
-	unsigned long peer_id, tx_id;
+	unsigned long peer_id;
 	unsigned long lport;
 
 	union {
@@ -135,9 +132,6 @@ struct ovpn_ctx {
 	enum ovpn_key_direction key_dir;
 	enum ovpn_key_slot key_slot;
 	int key_id;
-
-	uint32_t mark;
-	bool asymm_id;
 
 	const char *peers_file;
 };
@@ -472,33 +466,6 @@ static int ovpn_parse_key_direction(const char *dir, struct ovpn_ctx *ctx)
 	return 0;
 }
 
-/* openvpn 2.7.6 and later always set TCP_NODELAY, so mirror that by
- * default. Peers running 2.7.0 to 2.7.5 still leave Nagle enabled, and
- * mixed-version deployments will keep doing so for a while, so let the
- * selftests exercise that configuration too by setting OVPN_TCP_NODELAY=0.
- */
-static bool ovpn_tcp_nodelay_wanted(void)
-{
-	const char *env = getenv("OVPN_TCP_NODELAY");
-
-	return !env || strcmp(env, "0");
-}
-
-static int ovpn_tcp_nodelay(int socket)
-{
-	int opt = 1;
-	int ret;
-
-	if (!ovpn_tcp_nodelay_wanted())
-		return 0;
-
-	ret = setsockopt(socket, IPPROTO_TCP, TCP_NODELAY, &opt, sizeof(opt));
-	if (ret < 0)
-		perror("setsockopt for TCP_NODELAY");
-
-	return ret;
-}
-
 static int ovpn_socket(struct ovpn_ctx *ctx, sa_family_t family, int proto)
 {
 	struct sockaddr_storage local_sock = { 0 };
@@ -552,15 +519,6 @@ static int ovpn_socket(struct ovpn_ctx *ctx, sa_family_t family, int proto)
 	if (ret < 0) {
 		perror("setsockopt for SO_REUSEPORT");
 		return ret;
-	}
-
-	if (ctx->mark != 0) {
-		ret = setsockopt(s, SOL_SOCKET, SO_MARK, (void *)&ctx->mark,
-				 sizeof(ctx->mark));
-		if (ret < 0) {
-			perror("setsockopt for SO_MARK");
-			return ret;
-		}
 	}
 
 	if (family == AF_INET6) {
@@ -635,12 +593,6 @@ static int ovpn_accept(struct ovpn_ctx *ctx)
 		goto err;
 	}
 
-	if (ovpn_tcp_nodelay(ret) < 0) {
-		close(ret);
-		ret = -1;
-		goto err;
-	}
-
 	return ret;
 err:
 	close(ctx->socket);
@@ -657,10 +609,6 @@ static int ovpn_connect(struct ovpn_ctx *ovpn)
 		perror("cannot create socket");
 		return -1;
 	}
-
-	ret = ovpn_tcp_nodelay(s);
-	if (ret < 0)
-		goto err;
 
 	switch (ovpn->remote.in4.sin_family) {
 	case AF_INET:
@@ -689,26 +637,6 @@ err:
 	return ret;
 }
 
-static int ovpn_nl_put_vpn_addr(struct nl_msg *msg,
-				const struct ovpn_ctx *ovpn)
-{
-	if (!ovpn->peer_ip_set)
-		return 0;
-
-	switch (ovpn->peer_ip.in4.sin_family) {
-	case AF_INET:
-		return nla_put_u32(msg, OVPN_A_PEER_VPN_IPV4,
-				   ovpn->peer_ip.in4.sin_addr.s_addr);
-	case AF_INET6:
-		return nla_put(msg, OVPN_A_PEER_VPN_IPV6,
-			       sizeof(struct in6_addr),
-			       &ovpn->peer_ip.in6.sin6_addr);
-	default:
-		fprintf(stderr, "Invalid family for peer address\n");
-		return -EAFNOSUPPORT;
-	}
-}
-
 static int ovpn_new_peer(struct ovpn_ctx *ovpn, bool is_tcp)
 {
 	struct nlattr *attr;
@@ -721,8 +649,6 @@ static int ovpn_new_peer(struct ovpn_ctx *ovpn, bool is_tcp)
 
 	attr = nla_nest_start(ctx->nl_msg, OVPN_A_PEER);
 	NLA_PUT_U32(ctx->nl_msg, OVPN_A_PEER_ID, ovpn->peer_id);
-	if (ovpn->asymm_id)
-		NLA_PUT_U32(ctx->nl_msg, OVPN_A_PEER_TX_ID, ovpn->tx_id);
 	NLA_PUT_U32(ctx->nl_msg, OVPN_A_PEER_SOCKET, ovpn->socket);
 
 	if (!is_tcp) {
@@ -750,9 +676,22 @@ static int ovpn_new_peer(struct ovpn_ctx *ovpn, bool is_tcp)
 		}
 	}
 
-	ret = ovpn_nl_put_vpn_addr(ctx->nl_msg, ovpn);
-	if (ret)
-		goto nla_put_failure;
+	if (ovpn->peer_ip_set) {
+		switch (ovpn->peer_ip.in4.sin_family) {
+		case AF_INET:
+			NLA_PUT_U32(ctx->nl_msg, OVPN_A_PEER_VPN_IPV4,
+				    ovpn->peer_ip.in4.sin_addr.s_addr);
+			break;
+		case AF_INET6:
+			NLA_PUT(ctx->nl_msg, OVPN_A_PEER_VPN_IPV6,
+				sizeof(struct in6_addr),
+				&ovpn->peer_ip.in6.sin6_addr);
+			break;
+		default:
+			fprintf(stderr, "Invalid family for peer address\n");
+			goto nla_put_failure;
+		}
+	}
 
 	nla_nest_end(ctx->nl_msg, attr);
 
@@ -778,10 +717,6 @@ static int ovpn_set_peer(struct ovpn_ctx *ovpn)
 		    ovpn->keepalive_interval);
 	NLA_PUT_U32(ctx->nl_msg, OVPN_A_PEER_KEEPALIVE_TIMEOUT,
 		    ovpn->keepalive_timeout);
-
-	ret = ovpn_nl_put_vpn_addr(ctx->nl_msg, ovpn);
-	if (ret)
-		goto nla_put_failure;
 	nla_nest_end(ctx->nl_msg, attr);
 
 	ret = ovpn_nl_msg_send(ctx, NULL);
@@ -831,10 +766,6 @@ static int ovpn_handle_peer(struct nl_msg *msg, void (*arg)__always_unused)
 	if (pattrs[OVPN_A_PEER_ID])
 		fprintf(stderr, "* Peer %u\n",
 			nla_get_u32(pattrs[OVPN_A_PEER_ID]));
-
-	if (pattrs[OVPN_A_PEER_TX_ID])
-		fprintf(stderr, "\tTX peer ID %u\n",
-			nla_get_u32(pattrs[OVPN_A_PEER_TX_ID]));
 
 	if (pattrs[OVPN_A_PEER_SOCKET_NETNSID])
 		fprintf(stderr, "\tsocket NetNS ID: %d\n",
@@ -1585,9 +1516,6 @@ static int ovpn_handle_msg(struct nl_msg *msg, void *arg)
 	case OVPN_CMD_PEER_DEL_NTF:
 		fprintf(stdout, "received CMD_PEER_DEL_NTF\n");
 		break;
-	case OVPN_CMD_PEER_FLOAT_NTF:
-		fprintf(stdout, "received CMD_PEER_FLOAT_NTF\n");
-		break;
 	case OVPN_CMD_KEY_SWAP_NTF:
 		fprintf(stdout, "received CMD_KEY_SWAP_NTF\n");
 		break;
@@ -1726,68 +1654,50 @@ static void usage(const char *cmd)
 	fprintf(stderr, "\tiface: ovpn interface name\n");
 
 	fprintf(stderr,
-		"* listen <iface> <lport> <id_type> <peers_file> [ipv6]: listen for incoming peer TCP connections\n");
+		"* listen <iface> <lport> <peers_file> [ipv6]: listen for incoming peer TCP connections\n");
 	fprintf(stderr, "\tiface: ovpn interface name\n");
 	fprintf(stderr, "\tlport: TCP port to listen to\n");
-	fprintf(stderr, "\tid_type:\n");
-	fprintf(stderr,
-		"\t\t- SYMM for ignoring the TX peer ID from the peers_file\n");
-	fprintf(stderr,
-		"\t\t- ASYMM for using the TX peer ID from the peers_file\n");
 	fprintf(stderr,
 		"\tpeers_file: file containing one peer per line: Line format:\n");
-	fprintf(stderr, "\t\t<peer_id> <tx_id> <vpnaddr>\n");
+	fprintf(stderr, "\t\t<peer_id> <vpnaddr>\n");
 	fprintf(stderr,
 		"\tipv6: whether the socket should listen to the IPv6 wildcard address\n");
 
 	fprintf(stderr,
-		"* connect <iface> <peer_id> <tx_id> <raddr> <rport> [key_file]: start connecting peer of TCP-based VPN session\n");
+		"* connect <iface> <peer_id> <raddr> <rport> [key_file]: start connecting peer of TCP-based VPN session\n");
 	fprintf(stderr, "\tiface: ovpn interface name\n");
-	fprintf(stderr,
-		"\tpeer_id: peer ID found in data packets received from this peer\n");
-	fprintf(stderr,
-		"\ttx_id: peer ID to be used when sending to this peer, 'none' for symmetric peer ID\n");
+	fprintf(stderr, "\tpeer_id: peer ID of the connecting peer\n");
 	fprintf(stderr, "\traddr: peer IP address to connect to\n");
 	fprintf(stderr, "\trport: peer TCP port to connect to\n");
 	fprintf(stderr,
 		"\tkey_file: file containing the symmetric key for encryption\n");
 
 	fprintf(stderr,
-		"* new_peer <iface> <peer_id> <tx_id> <lport> <raddr> <rport> [vpnaddr]: add new peer\n");
+		"* new_peer <iface> <peer_id> <lport> <raddr> <rport> [vpnaddr]: add new peer\n");
 	fprintf(stderr, "\tiface: ovpn interface name\n");
-	fprintf(stderr,
-		"\tpeer_id: peer ID found in data packets received from this peer\n");
-	fprintf(stderr,
-		"\ttx_id: peer ID to be used when sending to this peer, 'none' for symmetric peer ID\n");
 	fprintf(stderr, "\tlport: local UDP port to bind to\n");
+	fprintf(stderr,
+		"\tpeer_id: peer ID to be used in data packets to/from this peer\n");
 	fprintf(stderr, "\traddr: peer IP address\n");
 	fprintf(stderr, "\trport: peer UDP port\n");
 	fprintf(stderr, "\tvpnaddr: peer VPN IP\n");
 
 	fprintf(stderr,
-		"* new_multi_peer <iface> <lport> <id_type> <peers_file> [mark]: add multiple peers as listed in the file\n");
+		"* new_multi_peer <iface> <lport> <peers_file>: add multiple peers as listed in the file\n");
 	fprintf(stderr, "\tiface: ovpn interface name\n");
 	fprintf(stderr, "\tlport: local UDP port to bind to\n");
-	fprintf(stderr, "\tid_type:\n");
-	fprintf(stderr,
-		"\t\t- SYMM for ignoring the TX peer ID from the peers_file\n");
-	fprintf(stderr,
-		"\t\t- ASYMM for using the TX peer ID from the peers_file\n");
 	fprintf(stderr,
 		"\tpeers_file: text file containing one peer per line. Line format:\n");
-	fprintf(stderr,
-		"\t\t<peer_id> <tx_id> <raddr> <rport> <laddr> <lport> <vpnaddr>\n");
-	fprintf(stderr, "\tmark: socket FW mark value\n");
+	fprintf(stderr, "\t\t<peer_id> <raddr> <rport> <vpnaddr>\n");
 
 	fprintf(stderr,
-		"* set_peer <iface> <peer_id> <keepalive_interval> <keepalive_timeout> [vpnaddr]: set peer attributes\n");
+		"* set_peer <iface> <peer_id> <keepalive_interval> <keepalive_timeout>: set peer attributes\n");
 	fprintf(stderr, "\tiface: ovpn interface name\n");
 	fprintf(stderr, "\tpeer_id: peer ID of the peer to modify\n");
 	fprintf(stderr,
 		"\tkeepalive_interval: interval for sending ping messages\n");
 	fprintf(stderr,
 		"\tkeepalive_timeout: time after which a peer is timed out\n");
-	fprintf(stderr, "\tvpnaddr: peer VPN IP\n");
 
 	fprintf(stderr, "* del_peer <iface> <peer_id>: delete peer\n");
 	fprintf(stderr, "\tiface: ovpn interface name\n");
@@ -1893,21 +1803,13 @@ out:
 }
 
 static int ovpn_parse_new_peer(struct ovpn_ctx *ovpn, const char *peer_id,
-			       const char *tx_id, const char *raddr,
-			       const char *rport, const char *vpnip)
+			       const char *raddr, const char *rport,
+			       const char *vpnip)
 {
 	ovpn->peer_id = strtoul(peer_id, NULL, 10);
 	if (errno == ERANGE || ovpn->peer_id > PEER_ID_UNDEF) {
-		fprintf(stderr, "rx peer ID value out of range\n");
+		fprintf(stderr, "peer ID value out of range\n");
 		return -1;
-	}
-
-	if (ovpn->asymm_id) {
-		ovpn->tx_id = strtoul(tx_id, NULL, 10);
-		if (errno == ERANGE || ovpn->tx_id > PEER_ID_UNDEF) {
-			fprintf(stderr, "tx peer ID value out of range\n");
-			return -1;
-		}
 	}
 
 	return ovpn_parse_remote(ovpn, raddr, rport, vpnip);
@@ -2036,8 +1938,8 @@ static void ovpn_waitbg(void)
 
 static int ovpn_run_cmd(struct ovpn_ctx *ovpn)
 {
-	char peer_id[10], tx_id[10], vpnip[INET6_ADDRSTRLEN], laddr[128];
-	char lport[10], raddr[128], rport[10];
+	char peer_id[10], vpnip[INET6_ADDRSTRLEN], laddr[128], lport[10];
+	char raddr[128], rport[10];
 	int n, ret;
 	FILE *fp;
 
@@ -2064,8 +1966,7 @@ static int ovpn_run_cmd(struct ovpn_ctx *ovpn)
 
 		int num_peers = 0;
 
-		while ((n = fscanf(fp, "%s %s %s\n", peer_id, tx_id,
-				   vpnip)) == 3) {
+		while ((n = fscanf(fp, "%s %s\n", peer_id, vpnip)) == 2) {
 			struct ovpn_ctx peer_ctx = { 0 };
 
 			if (num_peers == MAX_PEERS) {
@@ -2075,7 +1976,6 @@ static int ovpn_run_cmd(struct ovpn_ctx *ovpn)
 
 			peer_ctx.ifindex = ovpn->ifindex;
 			peer_ctx.sa_family = ovpn->sa_family;
-			peer_ctx.asymm_id = ovpn->asymm_id;
 
 			peer_ctx.socket = ovpn_accept(ovpn);
 			if (peer_ctx.socket < 0) {
@@ -2086,8 +1986,8 @@ static int ovpn_run_cmd(struct ovpn_ctx *ovpn)
 			/* store peer sockets to test TCP I/O */
 			ovpn->cli_sockets[num_peers] = peer_ctx.socket;
 
-			ret = ovpn_parse_new_peer(&peer_ctx, peer_id, tx_id,
-						  NULL, NULL, vpnip);
+			ret = ovpn_parse_new_peer(&peer_ctx, peer_id, NULL,
+						  NULL, vpnip);
 			if (ret < 0) {
 				fprintf(stderr, "error while parsing line\n");
 				return -1;
@@ -2141,8 +2041,6 @@ static int ovpn_run_cmd(struct ovpn_ctx *ovpn)
 			return ret;
 
 		ret = ovpn_new_peer(ovpn, false);
-		if (ret < 0)
-			return ret;
 		ovpn_waitbg();
 		break;
 	case CMD_NEW_MULTI_PEER:
@@ -2157,17 +2055,16 @@ static int ovpn_run_cmd(struct ovpn_ctx *ovpn)
 			return -1;
 		}
 
-		while ((n = fscanf(fp, "%s %s %s %s %s %s %s\n", peer_id, tx_id,
-				   laddr, lport, raddr, rport, vpnip)) == 7) {
+		while ((n = fscanf(fp, "%s %s %s %s %s %s\n", peer_id, laddr,
+				   lport, raddr, rport, vpnip)) == 6) {
 			struct ovpn_ctx peer_ctx = { 0 };
 
 			peer_ctx.ifindex = ovpn->ifindex;
 			peer_ctx.socket = ovpn->socket;
 			peer_ctx.sa_family = AF_UNSPEC;
-			peer_ctx.asymm_id = ovpn->asymm_id;
 
-			ret = ovpn_parse_new_peer(&peer_ctx, peer_id, tx_id,
-						  raddr, rport, vpnip);
+			ret = ovpn_parse_new_peer(&peer_ctx, peer_id, raddr,
+						  rport, vpnip);
 			if (ret < 0) {
 				fprintf(stderr, "error while parsing line\n");
 				return -1;
@@ -2263,7 +2160,7 @@ static int ovpn_parse_cmd_args(struct ovpn_ctx *ovpn, int argc, char *argv[])
 	case CMD_DEL_IFACE:
 		break;
 	case CMD_LISTEN:
-		if (argc < 6)
+		if (argc < 5)
 			return -EINVAL;
 
 		ovpn->lport = strtoul(argv[3], NULL, 10);
@@ -2272,67 +2169,55 @@ static int ovpn_parse_cmd_args(struct ovpn_ctx *ovpn, int argc, char *argv[])
 			return -1;
 		}
 
-		if (strcmp(argv[4], "SYMM") == 0) {
-			ovpn->asymm_id = false;
-		} else if (strcmp(argv[4], "ASYMM") == 0) {
-			ovpn->asymm_id = true;
-		} else {
-			fprintf(stderr, "Cannot parse id type: %s\n", argv[4]);
-			return -1;
-		}
-
-		ovpn->peers_file = argv[5];
+		ovpn->peers_file = argv[4];
 
 		ovpn->sa_family = AF_INET;
-		if (argc > 6 && !strcmp(argv[6], "ipv6"))
+		if (argc > 5 && !strcmp(argv[5], "ipv6"))
 			ovpn->sa_family = AF_INET6;
 		break;
 	case CMD_CONNECT:
-		if (argc < 7)
+		if (argc < 6)
 			return -EINVAL;
 
 		ovpn->sa_family = AF_INET;
-		ovpn->asymm_id = strcmp(argv[4], "none");
 
 		ret = ovpn_parse_new_peer(ovpn, argv[3], argv[4], argv[5],
-					  argv[6], NULL);
+					  NULL);
 		if (ret < 0) {
 			fprintf(stderr, "Cannot parse remote peer data\n");
 			return -1;
 		}
 
-		if (argc > 7) {
+		if (argc > 6) {
 			ovpn->key_slot = OVPN_KEY_SLOT_PRIMARY;
 			ovpn->key_id = 0;
 			ovpn->cipher = OVPN_CIPHER_ALG_AES_GCM;
 			ovpn->key_dir = KEY_DIR_OUT;
 
-			ret = ovpn_parse_key(argv[7], ovpn);
+			ret = ovpn_parse_key(argv[6], ovpn);
 			if (ret)
 				return -1;
 		}
 		break;
 	case CMD_NEW_PEER:
-		if (argc < 8)
+		if (argc < 7)
 			return -EINVAL;
 
-		ovpn->asymm_id = strcmp(argv[4], "none");
-
-		ovpn->lport = strtoul(argv[5], NULL, 10);
+		ovpn->lport = strtoul(argv[4], NULL, 10);
 		if (errno == ERANGE || ovpn->lport > 65535) {
 			fprintf(stderr, "lport value out of range\n");
 			return -1;
 		}
 
-		const char *vpnip = (argc > 8) ? argv[8] : NULL;
+		const char *vpnip = (argc > 7) ? argv[7] : NULL;
 
-		ret = ovpn_parse_new_peer(ovpn, argv[3], argv[4], argv[6],
-					  argv[7], vpnip);
+		ret = ovpn_parse_new_peer(ovpn, argv[3], argv[5], argv[6],
+					  vpnip);
 		if (ret < 0)
 			return -1;
 		break;
 	case CMD_NEW_MULTI_PEER:
-		if (argc < 6)
+		if (argc < 5)
 			return -EINVAL;
 
 		ovpn->lport = strtoul(argv[3], NULL, 10);
@@ -2341,25 +2226,7 @@ static int ovpn_parse_cmd_args(struct ovpn_ctx *ovpn, int argc, char *argv[])
 			return -1;
 		}
 
-		if (!strcmp(argv[4], "SYMM")) {
-			ovpn->asymm_id = false;
-		} else if (!strcmp(argv[4], "ASYMM")) {
-			ovpn->asymm_id = true;
-		} else {
-			fprintf(stderr, "Cannot parse id type: %s\n", argv[4]);
-			return -1;
-		}
-
-		ovpn->peers_file = argv[5];
-
-		ovpn->mark = 0;
-		if (argc > 6) {
-			ovpn->mark = strtoul(argv[6], NULL, 10);
-			if (errno == ERANGE || ovpn->mark > UINT32_MAX) {
-				fprintf(stderr, "mark value out of range\n");
-				return -1;
-			}
-		}
+		ovpn->peers_file = argv[4];
 		break;
 	case CMD_SET_PEER:
 		if (argc < 6)
@@ -2383,12 +2250,6 @@ static int ovpn_parse_cmd_args(struct ovpn_ctx *ovpn, int argc, char *argv[])
 			fprintf(stderr,
 				"keepalive interval value out of range\n");
 			return -1;
-		}
-
-		if (argc > 6) {
-			ret = ovpn_parse_remote(ovpn, NULL, NULL, argv[6]);
-			if (ret < 0)
-				return -1;
 		}
 		break;
 	case CMD_DEL_PEER:

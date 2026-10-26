@@ -222,7 +222,7 @@ static void devlink_notify(struct devlink *devlink, enum devlink_command cmd)
 
 int devlink_nl_get_doit(struct sk_buff *skb, struct genl_info *info)
 {
-	struct devlink *devlink = devlink_nl_ctx(info)->devlink;
+	struct devlink *devlink = info->user_ptr[0];
 	struct sk_buff *msg;
 	int err;
 
@@ -412,9 +412,9 @@ static struct net *devlink_netns_get(struct sk_buff *skb,
 	return net;
 }
 
-void devlink_reload_netns_change(struct devlink *devlink,
-				 struct net *curr_net,
-				 struct net *dest_net)
+static void devlink_reload_netns_change(struct devlink *devlink,
+					struct net *curr_net,
+					struct net *dest_net)
 {
 	/* Userspace needs to be notified about devlink objects
 	 * removed from original and entering new network namespace.
@@ -434,7 +434,7 @@ static void devlink_reload_reinit_sanity_check(struct devlink *devlink)
 	WARN_ON(!list_empty(&devlink->trap_list));
 	WARN_ON(!list_empty(&devlink->dpipe_table_list));
 	WARN_ON(!list_empty(&devlink->sb_list));
-	WARN_ON(devlink_rates_check(devlink, NULL, NULL));
+	WARN_ON(!list_empty(&devlink->rate_list));
 	WARN_ON(!list_empty(&devlink->linecard_list));
 	WARN_ON(!xa_empty(&devlink->ports));
 }
@@ -453,8 +453,7 @@ int devlink_reload(struct devlink *devlink, struct net *dest_net,
 	 * (e.g., PCI reset) and to close possible races between these
 	 * operations and probe/remove.
 	 */
-	if (devlink->dev)
-		device_lock_assert(devlink->dev);
+	device_lock_assert(devlink->dev);
 
 	memcpy(remote_reload_stats, devlink->stats.remote_reload_stats,
 	       sizeof(remote_reload_stats));
@@ -519,7 +518,7 @@ free_msg:
 
 int devlink_nl_reload_doit(struct sk_buff *skb, struct genl_info *info)
 {
-	struct devlink *devlink = devlink_nl_ctx(info)->devlink;
+	struct devlink *devlink = info->user_ptr[0];
 	enum devlink_reload_action action;
 	enum devlink_reload_limit limit;
 	struct net *dest_net = NULL;
@@ -684,7 +683,7 @@ nla_put_failure:
 
 int devlink_nl_eswitch_get_doit(struct sk_buff *skb, struct genl_info *info)
 {
-	struct devlink *devlink = devlink_nl_ctx(info)->devlink;
+	struct devlink *devlink = info->user_ptr[0];
 	struct sk_buff *msg;
 	int err;
 
@@ -705,7 +704,7 @@ int devlink_nl_eswitch_get_doit(struct sk_buff *skb, struct genl_info *info)
 
 int devlink_nl_eswitch_set_doit(struct sk_buff *skb, struct genl_info *info)
 {
-	struct devlink *devlink = devlink_nl_ctx(info)->devlink;
+	struct devlink *devlink = info->user_ptr[0];
 	const struct devlink_ops *ops = devlink->ops;
 	enum devlink_eswitch_encap_mode encap_mode;
 	u8 inline_mode;
@@ -715,11 +714,10 @@ int devlink_nl_eswitch_set_doit(struct sk_buff *skb, struct genl_info *info)
 	if (info->attrs[DEVLINK_ATTR_ESWITCH_MODE]) {
 		if (!ops->eswitch_mode_set)
 			return -EOPNOTSUPP;
-		err = devlink_rates_check(devlink, devlink_rate_is_node,
-					  info->extack);
+		mode = nla_get_u16(info->attrs[DEVLINK_ATTR_ESWITCH_MODE]);
+		err = devlink_rate_nodes_check(devlink, mode, info->extack);
 		if (err)
 			return err;
-		mode = nla_get_u16(info->attrs[DEVLINK_ATTR_ESWITCH_MODE]);
 		err = ops->eswitch_mode_set(devlink, mode, info->extack);
 		if (err)
 			return err;
@@ -856,7 +854,7 @@ int devlink_info_version_running_put_ext(struct devlink_info_req *req,
 }
 EXPORT_SYMBOL_GPL(devlink_info_version_running_put_ext);
 
-static int devlink_nl_driver_info_get(const struct device_driver *drv,
+static int devlink_nl_driver_info_get(struct device_driver *drv,
 				      struct devlink_info_req *req)
 {
 	if (!drv)
@@ -874,6 +872,7 @@ devlink_nl_info_fill(struct sk_buff *msg, struct devlink *devlink,
 		     enum devlink_command cmd, u32 portid,
 		     u32 seq, int flags, struct netlink_ext_ack *extack)
 {
+	struct device *dev = devlink_to_dev(devlink);
 	struct devlink_info_req req = {};
 	void *hdr;
 	int err;
@@ -893,7 +892,7 @@ devlink_nl_info_fill(struct sk_buff *msg, struct devlink *devlink,
 			goto err_cancel_msg;
 	}
 
-	err = devlink_nl_driver_info_get(devlink->dev_driver, &req);
+	err = devlink_nl_driver_info_get(dev->driver, &req);
 	if (err)
 		goto err_cancel_msg;
 
@@ -907,7 +906,7 @@ err_cancel_msg:
 
 int devlink_nl_info_get_doit(struct sk_buff *skb, struct genl_info *info)
 {
-	struct devlink *devlink = devlink_nl_ctx(info)->devlink;
+	struct devlink *devlink = info->user_ptr[0];
 	struct sk_buff *msg;
 	int err;
 
@@ -1135,7 +1134,7 @@ int devlink_nl_flash_update_doit(struct sk_buff *skb, struct genl_info *info)
 {
 	struct nlattr *nla_overwrite_mask, *nla_file_name;
 	struct devlink_flash_update_params params = {};
-	struct devlink *devlink = devlink_nl_ctx(info)->devlink;
+	struct devlink *devlink = info->user_ptr[0];
 	const char *file_name;
 	u32 supported_params;
 	int ret;
@@ -1169,7 +1168,7 @@ int devlink_nl_flash_update_doit(struct sk_buff *skb, struct genl_info *info)
 
 	nla_file_name = info->attrs[DEVLINK_ATTR_FLASH_UPDATE_FILE_NAME];
 	file_name = nla_data(nla_file_name);
-	ret = request_firmware_direct(&params.fw, file_name, devlink->dev);
+	ret = request_firmware(&params.fw, file_name, devlink->dev);
 	if (ret) {
 		NL_SET_ERR_MSG_ATTR(info->extack, nla_file_name,
 				    "failed to locate the requested firmware file");
@@ -1245,7 +1244,7 @@ int devlink_compat_flash_update(struct devlink *devlink, const char *file_name)
 		goto out_unlock;
 	}
 
-	ret = request_firmware_direct(&params.fw, file_name, devlink->dev);
+	ret = request_firmware(&params.fw, file_name, devlink->dev);
 	if (ret)
 		goto out_unlock;
 
@@ -1303,7 +1302,7 @@ err_cancel_msg:
 
 int devlink_nl_selftests_get_doit(struct sk_buff *skb, struct genl_info *info)
 {
-	struct devlink *devlink = devlink_nl_ctx(info)->devlink;
+	struct devlink *devlink = info->user_ptr[0];
 	struct sk_buff *msg;
 	int err;
 
@@ -1373,7 +1372,7 @@ static const struct nla_policy devlink_selftest_nl_policy[DEVLINK_ATTR_SELFTEST_
 int devlink_nl_selftests_run_doit(struct sk_buff *skb, struct genl_info *info)
 {
 	struct nlattr *tb[DEVLINK_ATTR_SELFTEST_ID_MAX + 1];
-	struct devlink *devlink = devlink_nl_ctx(info)->devlink;
+	struct devlink *devlink = info->user_ptr[0];
 	struct nlattr *attrs, *selftests;
 	struct sk_buff *msg;
 	void *hdr;

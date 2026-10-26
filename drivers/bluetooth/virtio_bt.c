@@ -228,7 +228,7 @@ static void virtbt_rx_handle(struct virtio_bluetooth *vbt, struct sk_buff *skb)
 
 	if (skb->len < min_hdr) {
 		bt_dev_err_ratelimited(vbt->hdev,
-				       "rx pkt_type 0x%02x payload %u < hdr %zu",
+				       "rx pkt_type 0x%02x payload %u < hdr %zu\n",
 				       pkt_type, skb->len, min_hdr);
 		kfree_skb(skb);
 		return;
@@ -251,7 +251,7 @@ static void virtbt_rx_work(struct work_struct *work)
 
 	if (!len || len > VIRTBT_RX_BUF_SIZE) {
 		bt_dev_err_ratelimited(vbt->hdev,
-				       "rx reply len %u outside [1, %u]",
+				       "rx reply len %u outside [1, %u]\n",
 				       len, VIRTBT_RX_BUF_SIZE);
 		kfree_skb(skb);
 	} else {
@@ -304,7 +304,7 @@ static int virtbt_probe(struct virtio_device *vdev)
 		return -EINVAL;
 	}
 
-	vbt = kzalloc_obj(*vbt);
+	vbt = kzalloc(sizeof(*vbt), GFP_KERNEL);
 	if (!vbt)
 		return -ENOMEM;
 
@@ -315,12 +315,12 @@ static int virtbt_probe(struct virtio_device *vdev)
 
 	err = virtio_find_vqs(vdev, VIRTBT_NUM_VQS, vbt->vqs, vqs_info, NULL);
 	if (err)
-		goto err_free_vbt;
+		return err;
 
 	hdev = hci_alloc_dev();
 	if (!hdev) {
 		err = -ENOMEM;
-		goto err_del_vqs;
+		goto failed;
 	}
 
 	vbt->hdev = hdev;
@@ -390,25 +390,20 @@ static int virtbt_probe(struct virtio_device *vdev)
 	if (hci_register_dev(hdev) < 0) {
 		hci_free_dev(hdev);
 		err = -EBUSY;
-		goto err_del_vqs;
+		goto failed;
 	}
 
 	virtio_device_ready(vdev);
 	err = virtbt_open_vdev(vbt);
-	if (err) {
-		hci_unregister_dev(hdev);
-		virtio_reset_device(vdev);
-		virtbt_close_vdev(vbt);
-		hci_free_dev(hdev);
-		goto err_del_vqs;
-	}
+	if (err)
+		goto open_failed;
 
 	return 0;
 
-err_del_vqs:
+open_failed:
+	hci_free_dev(hdev);
+failed:
 	vdev->config->del_vqs(vdev);
-err_free_vbt:
-	kfree(vbt);
 	return err;
 }
 

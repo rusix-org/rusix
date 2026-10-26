@@ -15,6 +15,7 @@
 #include <linux/iio/triggered_event.h>
 #include <linux/interrupt.h>
 #include <linux/module.h>
+#include <linux/mod_devicetable.h>
 #include <linux/spi/spi.h>
 #include <linux/gpio/consumer.h>
 
@@ -526,7 +527,7 @@ static const struct of_device_id hi8435_dt_ids[] = {
 MODULE_DEVICE_TABLE(of, hi8435_dt_ids);
 
 static const struct spi_device_id hi8435_id[] = {
-	{ .name = "hi8435" },
+	{ "hi8435", 0 },
 	{ }
 };
 MODULE_DEVICE_TABLE(spi, hi8435_id);

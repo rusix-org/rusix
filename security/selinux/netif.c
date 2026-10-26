@@ -22,7 +22,6 @@
 #include <linux/rcupdate.h>
 #include <net/net_namespace.h>
 
-#include "initcalls.h"
 #include "security.h"
 #include "objsec.h"
 #include "netif.h"
@@ -161,7 +160,7 @@ static int sel_netif_sid_slow(struct net *ns, int ifindex, u32 *sid)
 	/* If this memory allocation fails still return 0. The SID
 	 * is valid, it just won't be added to the cache.
 	 */
-	new = kmalloc_obj(*new, GFP_ATOMIC);
+	new = kmalloc(sizeof(*new), GFP_ATOMIC);
 	if (new) {
 		new->nsec.ns = ns;
 		new->nsec.ifindex = ifindex;
@@ -266,7 +265,7 @@ static struct notifier_block sel_netif_netdev_notifier = {
 	.notifier_call = sel_netif_netdev_notifier_handler,
 };
 
-int __init sel_netif_init(void)
+static __init int sel_netif_init(void)
 {
 	int i;
 
@@ -280,4 +279,6 @@ int __init sel_netif_init(void)
 
 	return 0;
 }
+
+__initcall(sel_netif_init);
 

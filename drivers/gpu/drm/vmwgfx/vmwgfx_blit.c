@@ -609,7 +609,8 @@ int vmw_bo_cpu_blit(struct vmw_bo *vmw_dst,
 					    w, h, diff);
 
 	if (!src->ttm->pages && src->ttm->sg) {
-		src_pages = kvmalloc_objs(struct page *, src->ttm->num_pages);
+		src_pages = kvmalloc_array(src->ttm->num_pages,
+					   sizeof(struct page *), GFP_KERNEL);
 		if (!src_pages)
 			return -ENOMEM;
 		ret = drm_prime_sg_to_page_array(src->ttm->sg, src_pages,
@@ -618,7 +619,8 @@ int vmw_bo_cpu_blit(struct vmw_bo *vmw_dst,
 			goto out;
 	}
 	if (!dst->ttm->pages && dst->ttm->sg) {
-		dst_pages = kvmalloc_objs(struct page *, dst->ttm->num_pages);
+		dst_pages = kvmalloc_array(dst->ttm->num_pages,
+					   sizeof(struct page *), GFP_KERNEL);
 		if (!dst_pages) {
 			ret = -ENOMEM;
 			goto out;

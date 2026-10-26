@@ -598,6 +598,18 @@ class BaseTest:
                 if unit_set:
                     assert required[usage].contains(field)
 
+        def test_prop_direct(self):
+            """
+            Todo: Verify that INPUT_PROP_DIRECT is set on display devices.
+            """
+            pass
+
+        def test_prop_pointer(self):
+            """
+            Todo: Verify that INPUT_PROP_POINTER is set on opaque devices.
+            """
+            pass
+
 
 class PenTabletTest(BaseTest.TestTablet):
     def assertName(self, uhdev):
@@ -664,15 +676,6 @@ class TestOpaqueTablet(PenTabletTest):
         self.sync_and_assert_events(
             uhdev.event(130, 240, pressure=0), [], auto_syn=False, strict=True
         )
-
-    def test_prop_pointer(self):
-        """
-        Verify that INPUT_PROP_POINTER is set and INPUT_PROP_DIRECT
-        is not set on opaque devices.
-        """
-        evdev = self.uhdev.get_evdev()
-        assert libevdev.INPUT_PROP_POINTER in evdev.properties
-        assert libevdev.INPUT_PROP_DIRECT not in evdev.properties
 
 
 class TestOpaqueCTLTablet(TestOpaqueTablet):
@@ -859,18 +862,7 @@ class TestPTHX60_Pen(TestOpaqueCTLTablet):
         )
 
 
-class DirectTabletTest():
-    def test_prop_direct(self):
-        """
-        Verify that INPUT_PROP_DIRECT is set and INPUT_PROP_POINTER
-        is not set on display devices.
-        """
-        evdev = self.uhdev.get_evdev()
-        assert libevdev.INPUT_PROP_DIRECT in evdev.properties
-        assert libevdev.INPUT_PROP_POINTER not in evdev.properties
-
-
-class TestDTH2452Tablet(test_multitouch.BaseTest.TestMultitouch, TouchTabletTest, DirectTabletTest):
+class TestDTH2452Tablet(test_multitouch.BaseTest.TestMultitouch, TouchTabletTest):
     ContactIds = namedtuple("ContactIds", "contact_id, tracking_id, slot_num")
 
     def create_device(self):

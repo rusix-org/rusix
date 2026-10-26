@@ -5,16 +5,10 @@
 //! C header: [`include/linux/xarray.h`](srctree/include/linux/xarray.h)
 
 use crate::{
-    alloc,
-    bindings,
-    build_assert::build_assert,
+    alloc, bindings, build_assert,
     error::{Error, Result},
     ffi::c_void,
-    types::{
-        ForeignOwnable,
-        NotThreadSafe,
-        Opaque, //
-    }, //
+    types::{ForeignOwnable, NotThreadSafe, Opaque},
 };
 use core::{iter, marker::PhantomData, pin::Pin, ptr::NonNull};
 use pin_init::{pin_data, pin_init, pinned_drop, PinInit};
@@ -178,7 +172,6 @@ pub struct StoreError<T> {
 }
 
 impl<T> From<StoreError<T>> for Error {
-    #[inline]
     fn from(value: StoreError<T>) -> Self {
         value.error
     }
@@ -222,6 +215,48 @@ impl<'a, T: ForeignOwnable> Guard<'a, T> {
         // - `&mut self` guarantees that the lifetimes of [`T::Borrowed`] and [`T::BorrowedMut`]
         // borrowed from `self` have ended.
         unsafe { T::try_from_foreign(ptr) }
+    }
+
+    /// Inserts an element only if the index is unoccupied.
+    ///
+    /// Unlike [`Self::store`], this never replaces an existing entry. On failure,
+    /// including [`crate::error::code::EBUSY`], ownership of `value` is returned.
+    /// Reserved entries also cause `EBUSY`, although [`Self::get`] reports them
+    /// as absent.
+    ///
+    /// Blocking allocation flags permit temporarily dropping and reacquiring the
+    /// lock. The C insertion primitive rechecks the slot after allocation, so a
+    /// competing insertion is not overwritten. Other operations before/after
+    /// this call do not form one atomic transaction across that lock drop.
+    pub fn insert(
+        &mut self,
+        index: usize,
+        value: T,
+        gfp: alloc::Flags,
+    ) -> Result<(), StoreError<T>> {
+        build_assert!(
+            T::FOREIGN_ALIGN >= 4,
+            "pointers stored in XArray must be 4-byte aligned"
+        );
+        let new = value.into_foreign();
+        // SAFETY: The array is initialized and its lock is held by this guard.
+        // `new` came from `T::into_foreign` and satisfies XArray's alignment.
+        // The mutable guard borrow ends all earlier entry borrows before a
+        // possible lock drop. `__xa_insert` returns with the lock held.
+        let errno =
+            unsafe { bindings::__xa_insert(self.xa.xa.get(), index, new.cast(), gfp.as_raw()) };
+        if errno == 0 {
+            // INVARIANT: The array now owns the one foreign reference in `new`.
+            Ok(())
+        } else {
+            // SAFETY: No insertion happened on error, including EBUSY. The
+            // caller still owns `new`, so reconstruct its owner exactly once.
+            let value = unsafe { T::from_foreign(new) };
+            Err(StoreError {
+                error: Error::from_errno(errno),
+                value,
+            })
+        }
     }
 
     /// Stores an element at the given index.
@@ -281,3 +316,82 @@ unsafe impl<T: ForeignOwnable + Send> Send for XArray<T> {}
 // SAFETY: `XArray<T>` serialises the interior mutability it provides so it is `Sync` iff `T` is
 // `Send`.
 unsafe impl<T: ForeignOwnable + Send> Sync for XArray<T> {}
+
+#[macros::kunit_tests(rusix_xarray_insert)]
+mod insert_tests {
+    use super::*;
+    use crate::{
+        prelude::*,
+        sync::{
+            atomic::{Atomic, Relaxed},
+            Arc,
+        },
+    };
+
+    struct Tracked {
+        id: u32,
+        drops: Arc<Atomic<u32>>,
+    }
+
+    impl Drop for Tracked {
+        fn drop(&mut self) {
+            self.drops.fetch_add(1, Relaxed);
+        }
+    }
+
+    #[test]
+    fn occupied_insert_returns_owner_without_replacing() -> Result {
+        let drops = Arc::new(Atomic::new(0u32), GFP_KERNEL)?;
+        let xa = KBox::pin_init(XArray::new(AllocKind::Alloc), GFP_KERNEL)?;
+        let original = KBox::new(
+            Tracked {
+                id: 1,
+                drops: drops.clone(),
+            },
+            GFP_KERNEL,
+        )?;
+        let competing = KBox::new(
+            Tracked {
+                id: 2,
+                drops: drops.clone(),
+            },
+            GFP_KERNEL,
+        )?;
+        let mut guard = xa.lock();
+        guard.insert(42, original, GFP_KERNEL)?;
+        let rejected = match guard.insert(42, competing, GFP_KERNEL) {
+            Ok(()) => return Err(EINVAL),
+            Err(error) => error,
+        };
+        assert_eq!(rejected.error, EBUSY);
+        assert_eq!(rejected.value.id, 2);
+        assert_eq!(guard.get(42).map(|entry| entry.id), Some(1));
+        let removed = guard.remove(42).ok_or(EINVAL)?;
+        assert!(guard.get(42).is_none());
+        drop(guard);
+        assert_eq!(drops.load(Relaxed), 0);
+        drop(rejected.value);
+        assert_eq!(drops.load(Relaxed), 1);
+        drop(removed);
+        assert_eq!(drops.load(Relaxed), 2);
+        Ok(())
+    }
+
+    #[test]
+    fn array_drop_releases_inserted_owner() -> Result {
+        let drops = Arc::new(Atomic::new(0u32), GFP_KERNEL)?;
+        let xa = KBox::pin_init(XArray::new(AllocKind::Alloc), GFP_KERNEL)?;
+        let value = KBox::new(
+            Tracked {
+                id: 1,
+                drops: drops.clone(),
+            },
+            GFP_KERNEL,
+        )?;
+        xa.lock().insert(usize::MAX, value, GFP_KERNEL)?;
+        assert_eq!(drops.load(Relaxed), 0);
+        drop(xa);
+        assert_eq!(drops.load(Relaxed), 1);
+        Ok(())
+    }
+}

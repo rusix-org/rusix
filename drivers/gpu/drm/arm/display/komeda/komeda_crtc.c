@@ -11,11 +11,10 @@
 
 #include <drm/drm_atomic.h>
 #include <drm/drm_atomic_helper.h>
-#include <drm/drm_encoder.h>
 #include <drm/drm_print.h>
 #include <drm/drm_vblank.h>
+#include <drm/drm_simple_kms_helper.h>
 #include <drm/drm_bridge.h>
-#include <drm/drm_panel.h>
 
 #include "komeda_dev.h"
 #include "komeda_kms.h"
@@ -41,7 +40,7 @@ void komeda_crtc_get_color_config(struct drm_crtc_state *crtc_st,
 
 	/* connector doesn't config any color_format, use RGB444 as default */
 	if (!conn_color_formats)
-		conn_color_formats = BIT(DRM_OUTPUT_COLOR_FORMAT_RGB444);
+		conn_color_formats = DRM_COLOR_FORMAT_RGB444;
 
 	*color_depths = GENMASK(min_bpc, 0);
 	*color_formats = conn_color_formats;
@@ -76,7 +75,7 @@ static void komeda_crtc_update_clock_ratio(struct komeda_crtc_state *kcrtc_st)
  */
 static int
 komeda_crtc_atomic_check(struct drm_crtc *crtc,
-			 struct drm_atomic_commit *state)
+			 struct drm_atomic_state *state)
 {
 	struct drm_crtc_state *crtc_state = drm_atomic_get_new_crtc_state(state,
 									  crtc);
@@ -112,7 +111,6 @@ komeda_crtc_atomic_check(struct drm_crtc *crtc,
 static int
 komeda_crtc_prepare(struct komeda_crtc *kcrtc)
 {
-	struct drm_device *drm = kcrtc->base.dev;
 	struct komeda_dev *mdev = kcrtc->base.dev->dev_private;
 	struct komeda_pipeline *master = kcrtc->master;
 	struct komeda_crtc_state *kcrtc_st = to_kcrtc_st(kcrtc->base.state);
@@ -130,8 +128,8 @@ komeda_crtc_prepare(struct komeda_crtc *kcrtc)
 
 	err = mdev->funcs->change_opmode(mdev, new_mode);
 	if (err) {
-		drm_err(drm, "failed to change opmode: 0x%x -> 0x%x.\n,",
-			mdev->dpmode, new_mode);
+		DRM_ERROR("failed to change opmode: 0x%x -> 0x%x.\n,",
+			  mdev->dpmode, new_mode);
 		goto unlock;
 	}
 
@@ -144,18 +142,18 @@ komeda_crtc_prepare(struct komeda_crtc *kcrtc)
 	if (new_mode != KOMEDA_MODE_DUAL_DISP) {
 		err = clk_set_rate(mdev->aclk, komeda_crtc_get_aclk(kcrtc_st));
 		if (err)
-			drm_err(drm, "failed to set aclk.\n");
+			DRM_ERROR("failed to set aclk.\n");
 		err = clk_prepare_enable(mdev->aclk);
 		if (err)
-			drm_err(drm, "failed to enable aclk.\n");
+			DRM_ERROR("failed to enable aclk.\n");
 	}
 
 	err = clk_set_rate(master->pxlclk, mode->crtc_clock * 1000);
 	if (err)
-		drm_err(drm, "failed to set pxlclk for pipe%d\n", master->id);
+		DRM_ERROR("failed to set pxlclk for pipe%d\n", master->id);
 	err = clk_prepare_enable(master->pxlclk);
 	if (err)
-		drm_err(drm, "failed to enable pxl clk for pipe%d.\n", master->id);
+		DRM_ERROR("failed to enable pxl clk for pipe%d.\n", master->id);
 
 unlock:
 	mutex_unlock(&mdev->lock);
@@ -166,7 +164,6 @@ unlock:
 static int
 komeda_crtc_unprepare(struct komeda_crtc *kcrtc)
 {
-	struct drm_device *drm = kcrtc->base.dev;
 	struct komeda_dev *mdev = kcrtc->base.dev->dev_private;
 	struct komeda_pipeline *master = kcrtc->master;
 	u32 new_mode;
@@ -183,8 +180,8 @@ komeda_crtc_unprepare(struct komeda_crtc *kcrtc)
 
 	err = mdev->funcs->change_opmode(mdev, new_mode);
 	if (err) {
-		drm_err(drm, "failed to change opmode: 0x%x -> 0x%x.\n,",
-			mdev->dpmode, new_mode);
+		DRM_ERROR("failed to change opmode: 0x%x -> 0x%x.\n,",
+			  mdev->dpmode, new_mode);
 		goto unlock;
 	}
 
@@ -203,7 +200,6 @@ unlock:
 void komeda_crtc_handle_event(struct komeda_crtc   *kcrtc,
 			      struct komeda_events *evts)
 {
-	struct drm_device *drm = kcrtc->base.dev;
 	struct drm_crtc *crtc = &kcrtc->base;
 	u32 events = evts->pipes[kcrtc->master->id];
 
@@ -216,7 +212,7 @@ void komeda_crtc_handle_event(struct komeda_crtc   *kcrtc,
 		if (wb_conn)
 			drm_writeback_signal_completion(&wb_conn->base, 0);
 		else
-			drm_warn(drm, "CRTC[%d]: EOW happen but no wb_connector.\n",
+			DRM_WARN("CRTC[%d]: EOW happen but no wb_connector.\n",
 				 drm_crtc_index(&kcrtc->base));
 	}
 	/* will handle it together with the write back support */
@@ -240,7 +236,7 @@ void komeda_crtc_handle_event(struct komeda_crtc   *kcrtc,
 			crtc->state->event = NULL;
 			drm_crtc_send_vblank_event(crtc, event);
 		} else {
-			drm_warn(drm, "CRTC[%d]: FLIP happened but no pending commit.\n",
+			DRM_WARN("CRTC[%d]: FLIP happened but no pending commit.\n",
 				 drm_crtc_index(&kcrtc->base));
 		}
 		spin_unlock_irqrestore(&crtc->dev->event_lock, flags);
@@ -280,7 +276,7 @@ komeda_crtc_do_flush(struct drm_crtc *crtc,
 
 static void
 komeda_crtc_atomic_enable(struct drm_crtc *crtc,
-			  struct drm_atomic_commit *state)
+			  struct drm_atomic_state *state)
 {
 	struct drm_crtc_state *old = drm_atomic_get_old_crtc_state(state,
 								   crtc);
@@ -313,7 +309,7 @@ komeda_crtc_flush_and_wait_for_flip_done(struct komeda_crtc *kcrtc,
 
 	/* wait the flip take affect.*/
 	if (wait_for_completion_timeout(flip_done, HZ) == 0) {
-		drm_err(drm, "wait pipe%d flip done timeout\n", kcrtc->master->id);
+		DRM_ERROR("wait pipe%d flip done timeout\n", kcrtc->master->id);
 		if (!input_flip_done) {
 			unsigned long flags;
 
@@ -326,7 +322,7 @@ komeda_crtc_flush_and_wait_for_flip_done(struct komeda_crtc *kcrtc,
 
 static void
 komeda_crtc_atomic_disable(struct drm_crtc *crtc,
-			   struct drm_atomic_commit *state)
+			   struct drm_atomic_state *state)
 {
 	struct drm_crtc_state *old = drm_atomic_get_old_crtc_state(state,
 								   crtc);
@@ -388,7 +384,7 @@ komeda_crtc_atomic_disable(struct drm_crtc *crtc,
 
 static void
 komeda_crtc_atomic_flush(struct drm_crtc *crtc,
-			 struct drm_atomic_commit *state)
+			 struct drm_atomic_state *state)
 {
 	struct drm_crtc_state *crtc_state = drm_atomic_get_new_crtc_state(state,
 									  crtc);
@@ -494,17 +490,19 @@ static const struct drm_crtc_helper_funcs komeda_crtc_helper_funcs = {
 	.mode_fixup	= komeda_crtc_mode_fixup,
 };
 
-static struct drm_crtc_state *komeda_crtc_create_state(struct drm_crtc *crtc)
+static void komeda_crtc_reset(struct drm_crtc *crtc)
 {
 	struct komeda_crtc_state *state;
 
-	state = kzalloc_obj(*state);
-	if (!state)
-		return ERR_PTR(-ENOMEM);
+	if (crtc->state)
+		__drm_atomic_helper_crtc_destroy_state(crtc->state);
 
-	__drm_atomic_helper_crtc_state_init(&state->base, crtc);
+	kfree(to_kcrtc_st(crtc->state));
+	crtc->state = NULL;
 
-	return &state->base;
+	state = kzalloc(sizeof(*state), GFP_KERNEL);
+	if (state)
+		__drm_atomic_helper_crtc_reset(crtc, &state->base);
 }
 
 static struct drm_crtc_state *
@@ -513,7 +511,7 @@ komeda_crtc_atomic_duplicate_state(struct drm_crtc *crtc)
 	struct komeda_crtc_state *old = to_kcrtc_st(crtc->state);
 	struct komeda_crtc_state *new;
 
-	new = kzalloc_obj(*new);
+	new = kzalloc(sizeof(*new), GFP_KERNEL);
 	if (!new)
 		return NULL;
 
@@ -554,7 +552,7 @@ static const struct drm_crtc_funcs komeda_crtc_funcs = {
 	.destroy		= drm_crtc_cleanup,
 	.set_config		= drm_atomic_helper_set_config,
 	.page_flip		= drm_atomic_helper_page_flip,
-	.atomic_create_state = komeda_crtc_create_state,
+	.reset			= komeda_crtc_reset,
 	.atomic_duplicate_state	= komeda_crtc_atomic_duplicate_state,
 	.atomic_destroy_state	= komeda_crtc_atomic_destroy_state,
 	.enable_vblank		= komeda_crtc_vblank_enable,
@@ -564,7 +562,6 @@ static const struct drm_crtc_funcs komeda_crtc_funcs = {
 int komeda_kms_setup_crtcs(struct komeda_kms_dev *kms,
 			   struct komeda_dev *mdev)
 {
-	struct drm_device *drm = &kms->base;
 	struct komeda_crtc *crtc;
 	struct komeda_pipeline *master;
 	char str[16];
@@ -584,7 +581,7 @@ int komeda_kms_setup_crtcs(struct komeda_kms_dev *kms,
 		else
 			sprintf(str, "None");
 
-		drm_info(drm, "CRTC-%d: master(pipe-%d) slave(%s).\n",
+		DRM_INFO("CRTC-%d: master(pipe-%d) slave(%s).\n",
 			 kms->n_crtcs, master->id, str);
 
 		kms->n_crtcs++;
@@ -616,7 +613,6 @@ static int komeda_attach_bridge(struct device *dev,
 				struct komeda_pipeline *pipe,
 				struct drm_encoder *encoder)
 {
-	struct drm_device *drm = encoder->dev;
 	struct drm_bridge *bridge;
 	int err;
 
@@ -628,15 +624,11 @@ static int komeda_attach_bridge(struct device *dev,
 
 	err = drm_bridge_attach(encoder, bridge, NULL, 0);
 	if (err)
-		drm_err(drm, "bridge_attach() failed for pipe: %s\n",
+		dev_err(dev, "bridge_attach() failed for pipe: %s\n",
 			of_node_full_name(pipe->of_node));
 
 	return err;
 }
-
-static const struct drm_encoder_funcs komeda_encoder_funcs = {
-	.destroy = drm_encoder_cleanup,
-};
 
 static int komeda_crtc_add(struct komeda_kms_dev *kms,
 			   struct komeda_crtc *kcrtc)
@@ -661,8 +653,7 @@ static int komeda_crtc_add(struct komeda_kms_dev *kms,
 	 * bridge
 	 */
 	kcrtc->encoder.possible_crtcs = drm_crtc_mask(crtc);
-	err = drm_encoder_init(base, encoder, &komeda_encoder_funcs,
-			       DRM_MODE_ENCODER_TMDS, NULL);
+	err = drm_simple_encoder_init(base, encoder, DRM_MODE_ENCODER_TMDS);
 	if (err)
 		return err;
 

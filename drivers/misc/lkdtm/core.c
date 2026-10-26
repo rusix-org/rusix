@@ -96,7 +96,7 @@ static const struct crashtype_category *crashtype_categories[] = {
 	&stackleak_crashtypes,
 	&cfi_crashtypes,
 	&fortify_crashtypes,
-#ifdef CONFIG_PPC_BOOK3S_64
+#ifdef CONFIG_PPC_64S_HASH_MMU
 	&powerpc_crashtypes,
 #endif
 };
@@ -236,11 +236,11 @@ static ssize_t lkdtm_debugfs_entry(struct file *f,
 	if (count >= PAGE_SIZE)
 		return -EINVAL;
 
-	buf = kmalloc(PAGE_SIZE, GFP_KERNEL);
+	buf = (char *)__get_free_page(GFP_KERNEL);
 	if (!buf)
 		return -ENOMEM;
 	if (copy_from_user(buf, user_buf, count)) {
-		kfree(buf);
+		free_page((unsigned long) buf);
 		return -EFAULT;
 	}
 	/* NULL-terminate and remove enter */
@@ -248,7 +248,7 @@ static ssize_t lkdtm_debugfs_entry(struct file *f,
 	strim(buf);
 
 	crashtype = find_crashtype(buf);
-	kfree(buf);
+	free_page((unsigned long)buf);
 
 	if (!crashtype)
 		return -EINVAL;
@@ -271,7 +271,7 @@ static ssize_t lkdtm_debugfs_read(struct file *f, char __user *user_buf,
 	ssize_t out;
 	char *buf;
 
-	buf = kmalloc(PAGE_SIZE, GFP_KERNEL);
+	buf = (char *)__get_free_page(GFP_KERNEL);
 	if (buf == NULL)
 		return -ENOMEM;
 
@@ -290,7 +290,7 @@ static ssize_t lkdtm_debugfs_read(struct file *f, char __user *user_buf,
 
 	out = simple_read_from_buffer(user_buf, count, off,
 				      buf, n);
-	kfree(buf);
+	free_page((unsigned long) buf);
 
 	return out;
 }
@@ -313,11 +313,11 @@ static ssize_t direct_entry(struct file *f, const char __user *user_buf,
 	if (count < 1)
 		return -EINVAL;
 
-	buf = kmalloc(PAGE_SIZE, GFP_KERNEL);
+	buf = (char *)__get_free_page(GFP_KERNEL);
 	if (!buf)
 		return -ENOMEM;
 	if (copy_from_user(buf, user_buf, count)) {
-		kfree(buf);
+		free_page((unsigned long) buf);
 		return -EFAULT;
 	}
 	/* NULL-terminate and remove enter */
@@ -325,7 +325,7 @@ static ssize_t direct_entry(struct file *f, const char __user *user_buf,
 	strim(buf);
 
 	crashtype = find_crashtype(buf);
-	kfree(buf);
+	free_page((unsigned long) buf);
 	if (!crashtype)
 		return -EINVAL;
 

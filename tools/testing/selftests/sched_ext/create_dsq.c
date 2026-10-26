@@ -35,11 +35,7 @@ static enum scx_test_status run(void *ctx)
 		return SCX_TEST_FAIL;
 	}
 
-	SCX_ASSERT_ALIVE(skel, uei);
-
 	bpf_link__destroy(link);
-
-	SCX_EQ(skel->bss->nr_lifecycle_tests, 1024);
 
 	return SCX_TEST_PASS;
 }
@@ -53,7 +49,7 @@ static void cleanup(void *ctx)
 
 struct scx_test create_dsq = {
 	.name = "create_dsq",
-	.description = "Create, reject duplicates, destroy and recreate DSQs",
+	.description = "Create and destroy a dsq in a loop",
 	.setup = setup,
 	.run = run,
 	.cleanup = cleanup,

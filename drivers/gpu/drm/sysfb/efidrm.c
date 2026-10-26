@@ -4,8 +4,7 @@
 #include <linux/efi.h>
 #include <linux/limits.h>
 #include <linux/platform_device.h>
-#include <linux/sysfb.h>
-#include <linux/pm.h>
+#include <linux/screen_info.h>
 
 #include <drm/clients/drm_client_setup.h>
 #include <drm/drm_atomic.h>
@@ -21,11 +20,10 @@
 #include <drm/drm_gem_framebuffer_helper.h>
 #include <drm/drm_gem_shmem_helper.h>
 #include <drm/drm_managed.h>
-#include <drm/drm_modeset_helper.h>
 #include <drm/drm_modeset_helper_vtables.h>
-#include <drm/drm_print.h>
 #include <drm/drm_probe_helper.h>
 
+#include <video/edid.h>
 #include <video/pixel_format.h>
 
 #include "drm_sysfb_helper.h"
@@ -46,14 +44,8 @@ static const struct drm_format_info *efidrm_get_format_si(struct drm_device *dev
 		{ PIXEL_FORMAT_XBGR8888, DRM_FORMAT_XBGR8888, },
 		{ PIXEL_FORMAT_XRGB2101010, DRM_FORMAT_XRGB2101010, },
 	};
-	struct pixel_format pixel;
-	int ret;
 
-	ret = screen_info_pixel_format(si, &pixel);
-	if (ret)
-		return NULL;
-
-	return drm_sysfb_get_format(dev, formats, ARRAY_SIZE(formats), &pixel);
+	return drm_sysfb_get_format_si(dev, formats, ARRAY_SIZE(formats), si);
 }
 
 static u64 efidrm_get_mem_flags(struct drm_device *dev, resource_size_t start,
@@ -148,11 +140,9 @@ static const struct drm_mode_config_funcs efidrm_mode_config_funcs = {
 static struct efidrm_device *efidrm_device_create(struct drm_driver *drv,
 						  struct platform_device *pdev)
 {
-	const struct sysfb_display_info *dpy;
 	const struct screen_info *si;
 	const struct drm_format_info *format;
 	int width, height, stride;
-	unsigned int panel_width, panel_height;
 	s64 vsize;
 	u64 mem_flags;
 	struct resource resbuf;
@@ -169,11 +159,9 @@ static struct efidrm_device *efidrm_device_create(struct drm_driver *drv,
 	size_t nformats;
 	int ret;
 
-	dpy = dev_get_platdata(&pdev->dev);
-	if (!dpy)
+	si = dev_get_platdata(&pdev->dev);
+	if (!si)
 		return ERR_PTR(-ENODEV);
-	si = &dpy->screen;
-
 	if (screen_info_video_type(si) != VIDEO_TYPE_EFI)
 		return ERR_PTR(-ENODEV);
 
@@ -215,23 +203,9 @@ static struct efidrm_device *efidrm_device_create(struct drm_driver *drv,
 		&format->format, width, height, stride);
 
 #if defined(CONFIG_FIRMWARE_EDID)
-	if (drm_edid_header_is_valid(dpy->edid.dummy) == 8)
-		sysfb->edid = dpy->edid.dummy;
+	if (drm_edid_header_is_valid(edid_info.dummy) == 8)
+		sysfb->edid = edid_info.dummy;
 #endif
-
-	panel_width = width;
-	panel_height = height;
-
-	if (sysfb->edid) {
-		const struct drm_edid *drm_edid;
-
-		drm_edid = drm_edid_alloc(sysfb->edid, EDID_LENGTH);
-		if (drm_edid) {
-			drm_edid_detect_panel_size(drm_edid, &panel_width, &panel_height);
-			drm_edid_free(drm_edid);
-		}
-	}
-
 	sysfb->fb_mode = drm_sysfb_mode(width, height, 0, 0);
 	sysfb->fb_format = format;
 	sysfb->fb_pitch = stride;
@@ -355,7 +329,7 @@ static struct efidrm_device *efidrm_device_create(struct drm_driver *drv,
 	drm_connector_helper_add(connector, &efidrm_connector_helper_funcs);
 	drm_connector_set_panel_orientation_with_quirk(connector,
 						       DRM_MODE_PANEL_ORIENTATION_UNKNOWN,
-						       panel_width, panel_height);
+						       width, height);
 	if (sysfb->edid)
 		drm_connector_attach_edid_property(connector);
 
@@ -389,22 +363,6 @@ static struct drm_driver efidrm_driver = {
  * Platform driver
  */
 
-static int efidrm_pm_suspend(struct device *dev)
-{
-	struct drm_device *drm = dev_get_drvdata(dev);
-
-	return drm_mode_config_helper_suspend(drm);
-}
-
-static int efidrm_pm_resume(struct device *dev)
-{
-	struct drm_device *drm = dev_get_drvdata(dev);
-
-	return drm_mode_config_helper_resume(drm);
-}
-
-static DEFINE_SIMPLE_DEV_PM_OPS(efidrm_pm_ops, efidrm_pm_suspend, efidrm_pm_resume);
-
 static int efidrm_probe(struct platform_device *pdev)
 {
 	struct efidrm_device *efi;
@@ -437,7 +395,6 @@ static void efidrm_remove(struct platform_device *pdev)
 static struct platform_driver efidrm_platform_driver = {
 	.driver = {
 		.name = "efi-framebuffer",
-		.pm = pm_sleep_ptr(&efidrm_pm_ops),
 	},
 	.probe = efidrm_probe,
 	.remove = efidrm_remove,

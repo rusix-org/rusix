@@ -371,7 +371,7 @@ static int sp2_probe(struct i2c_client *client)
 
 	dev_dbg(&client->dev, "\n");
 
-	s = kzalloc_obj(*s);
+	s = kzalloc(sizeof(*s), GFP_KERNEL);
 	if (!s) {
 		ret = -ENOMEM;
 		goto err;
@@ -407,8 +407,8 @@ static void sp2_remove(struct i2c_client *client)
 }
 
 static const struct i2c_device_id sp2_id[] = {
-	{ .name = "sp2" },
-	{ }
+	{ "sp2" },
+	{}
 };
 MODULE_DEVICE_TABLE(i2c, sp2_id);
 

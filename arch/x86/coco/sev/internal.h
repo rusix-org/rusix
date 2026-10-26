@@ -70,9 +70,6 @@ void svsm_pval_pages(struct snp_psc_desc *desc);
 int svsm_perform_call_protocol(struct svsm_call *call);
 bool snp_svsm_vtpm_probe(void);
 
-noinstr void kernel_exc_vmm_communication(struct pt_regs *regs, unsigned long error_code);
-noinstr void user_exc_vmm_communication(struct pt_regs *regs, unsigned long error_code);
-
 static inline u64 sev_es_rd_ghcb_msr(void)
 {
 	return native_rdmsrq(MSR_AMD64_SEV_ES_GHCB);
@@ -88,7 +85,7 @@ static __always_inline void sev_es_wr_ghcb_msr(u64 val)
 	native_wrmsr(MSR_AMD64_SEV_ES_GHCB, low, high);
 }
 
-enum es_result __vc_handle_msr(struct ghcb *ghcb, struct es_em_ctxt *ctxt, bool write);
+enum es_result sev_es_ghcb_handle_msr(struct ghcb *ghcb, struct es_em_ctxt *ctxt, bool write);
 
 u64 get_hv_features(void);
 

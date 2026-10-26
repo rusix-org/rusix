@@ -47,9 +47,6 @@
 #include <linux/rwsem.h>
 #include <linux/mutex.h>
 #include <asm/xen/hypervisor.h>
-#ifdef CONFIG_X86
-#include <asm/cpuid/api.h>
-#endif
 #include <xen/xenbus.h>
 #include <xen/xen.h>
 #include "xenbus.h"
@@ -327,7 +324,7 @@ static void *xs_talkv(struct xenbus_transaction t,
 	unsigned int i;
 	int err;
 
-	req = kmalloc_obj(*req, GFP_NOIO | __GFP_HIGH);
+	req = kmalloc(sizeof(*req), GFP_NOIO | __GFP_HIGH);
 	if (!req)
 		return ERR_PTR(-ENOMEM);
 
@@ -410,18 +407,12 @@ static char *join(const char *dir, const char *name)
 		buffer = kasprintf(GFP_NOIO | __GFP_HIGH, "%s", dir);
 	else
 		buffer = kasprintf(GFP_NOIO | __GFP_HIGH, "%s/%s", dir, name);
-	return buffer ?: ERR_PTR(-ENOMEM);
+	return (!buffer) ? ERR_PTR(-ENOMEM) : buffer;
 }
 
-static char **split_strings(char *strings, unsigned int len, unsigned int *num)
+static char **split(char *strings, unsigned int len, unsigned int *num)
 {
 	char *p, **ret;
-
-	if (len && strings[len - 1]) {
-		pr_err_once("malformed XS_DIRECTORY reply\n");
-		kfree(strings);
-		return ERR_PTR(-EIO);
-	}
 
 	/* Count the strings. */
 	*num = count_strings(strings, len);
@@ -457,7 +448,7 @@ char **xenbus_directory(struct xenbus_transaction t,
 	if (IS_ERR(strings))
 		return ERR_CAST(strings);
 
-	return split_strings(strings, len, num);
+	return split(strings, len, num);
 }
 EXPORT_SYMBOL_GPL(xenbus_directory);
 
@@ -555,12 +546,18 @@ int xenbus_transaction_start(struct xenbus_transaction *t)
 EXPORT_SYMBOL_GPL(xenbus_transaction_start);
 
 /* End a transaction.
- * If abort is true, transaction is discarded instead of committed.
+ * If abandon is true, transaction is discarded instead of committed.
  */
-int xenbus_transaction_end(struct xenbus_transaction t, bool abort)
+int xenbus_transaction_end(struct xenbus_transaction t, int abort)
 {
-	return xs_error(xs_single(t, XS_TRANSACTION_END, abort ? "F" : "T",
-				  NULL));
+	char abortstr[2];
+
+	if (abort)
+		strcpy(abortstr, "F");
+	else
+		strcpy(abortstr, "T");
+
+	return xs_error(xs_single(t, XS_TRANSACTION_END, abortstr, NULL));
 }
 EXPORT_SYMBOL_GPL(xenbus_transaction_end);
 

@@ -244,7 +244,8 @@ static int sun50i_cpufreq_nvmem_probe(struct platform_device *pdev)
 	int speed;
 	int ret;
 
-	opp_tokens = kzalloc_objs(*opp_tokens, num_possible_cpus());
+	opp_tokens = kcalloc(num_possible_cpus(), sizeof(*opp_tokens),
+			     GFP_KERNEL);
 	if (!opp_tokens)
 		return -ENOMEM;
 
@@ -331,6 +332,13 @@ static const struct of_device_id sun50i_cpufreq_match_list[] = {
 };
 MODULE_DEVICE_TABLE(of, sun50i_cpufreq_match_list);
 
+static const struct of_device_id *sun50i_cpufreq_match_node(void)
+{
+	struct device_node *np __free(device_node) = of_find_node_by_path("/");
+
+	return of_match_node(sun50i_cpufreq_match_list, np);
+}
+
 /*
  * Since the driver depends on nvmem drivers, which may return EPROBE_DEFER,
  * all the real activity is done in the probe, which may be defered as well.
@@ -338,9 +346,11 @@ MODULE_DEVICE_TABLE(of, sun50i_cpufreq_match_list);
  */
 static int __init sun50i_cpufreq_init(void)
 {
+	const struct of_device_id *match;
 	int ret;
 
-	if (!of_machine_device_match(sun50i_cpufreq_match_list))
+	match = sun50i_cpufreq_match_node();
+	if (!match)
 		return -ENODEV;
 
 	ret = platform_driver_register(&sun50i_cpufreq_driver);

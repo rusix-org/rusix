@@ -28,7 +28,6 @@
 #include <linux/delay.h>
 #include <linux/slab.h>
 #include <linux/workqueue.h>
-#include <linux/sizes.h>
 #include "xillybus.h"
 #include "xillybus_class.h"
 
@@ -73,8 +72,6 @@ static struct workqueue_struct *xillybus_wq;
  *
  * rd_spinlock does the same with rd_*_buf_idx, rd_empty and end_offset.
  *
- * allow_isr_lock protects allow_isr.
- *
  * register_mutex is endpoint-specific, and is held when non-atomic
  * register operations are performed. wr_mutex and rd_mutex may be
  * held when register_mutex is taken, but none of the spinlocks. Note that
@@ -87,8 +84,7 @@ static struct workqueue_struct *xillybus_wq;
  * Only interruptible blocking is allowed on mutexes and wait queues.
  *
  * All in all, the locking order goes (with skips allowed, of course):
- * wr_mutex -> rd_mutex -> register_mutex ->
- * allow_isr_lock -> wr_spinlock -> rd_spinlock
+ * wr_mutex -> rd_mutex -> register_mutex -> wr_spinlock -> rd_spinlock
  */
 
 static void malformed_message(struct xilly_endpoint *endpoint, u32 *buf)
@@ -123,13 +119,6 @@ irqreturn_t xillybus_isr(int irq, void *data)
 	unsigned int msg_channel, msg_bufno, msg_data, msg_dir;
 	struct xilly_channel *channel;
 
-	guard(spinlock)(&ep->allow_isr_lock);
-
-	if (!ep->allow_isr) {
-		dev_err_ratelimited(ep->dev, "Unexpected interrupt! Something is wrong with the hardware.\n");
-		return IRQ_NONE;
-	}
-
 	buf = ep->msgbuf_addr;
 	buf_size = ep->msg_buf_size/sizeof(u32);
 
@@ -148,7 +137,6 @@ irqreturn_t xillybus_isr(int irq, void *data)
 			if (++ep->failed_messages > 10) {
 				dev_err(ep->dev,
 					"Lost sync with interrupt messages. Stopping.\n");
-				return IRQ_NONE;
 			} else {
 				dma_sync_single_for_device(ep->dev,
 							   ep->msgbuf_dma_addr,
@@ -296,19 +284,6 @@ irqreturn_t xillybus_isr(int irq, void *data)
 EXPORT_SYMBOL(xillybus_isr);
 
 /*
- * xilly_allow_isr() is similar to enabling / disabling the interrupt,
- * with the difference that if an interrupt is issued while ep->allow_isr
- * is false, this is visible in the kernel log.
- */
-
-static void xilly_allow_isr(struct xilly_endpoint *ep, bool newstate)
-{
-	guard(spinlock_irqsave)(&ep->allow_isr_lock);
-
-	ep->allow_isr = newstate;
-}
-
-/*
  * A few trivial memory management functions.
  * NOTE: These functions are used only on probe and remove, and therefore
  * no locks are applied!
@@ -344,7 +319,7 @@ static int xilly_map_single(struct xilly_endpoint *ep,
 	dma_addr_t addr;
 	struct xilly_mapping *this;
 
-	this = kzalloc_obj(*this);
+	this = kzalloc(sizeof(*this), GFP_KERNEL);
 	if (!this)
 		return -ENOMEM;
 
@@ -368,19 +343,12 @@ static int xilly_map_single(struct xilly_endpoint *ep,
 static int xilly_get_dma_buffers(struct xilly_endpoint *ep,
 				 struct xilly_alloc_state *s,
 				 struct xilly_buffer **buffers,
-				 unsigned int bufnum,
-				 unsigned int bytebufsize)
+				 int bufnum, int bytebufsize)
 {
 	int i, rc;
 	dma_addr_t dma_addr;
 	struct device *dev = ep->dev;
 	struct xilly_buffer *this_buffer = NULL; /* Init to silence warning */
-
-	if (bytebufsize == 0 || bytebufsize > SZ_1G) {
-		dev_err(ep->dev,
-			"Illegal buffer size requested in IDT. Aborting.\n");
-		return -ENODEV;
-	}
 
 	if (buffers) { /* Not the message buffer */
 		this_buffer = devm_kcalloc(dev, bufnum,
@@ -463,8 +431,8 @@ static int xilly_setupchannels(struct xilly_endpoint *ep,
 	struct device *dev = ep->dev;
 	int i, entry, rc;
 	struct xilly_channel *channel;
-	unsigned int channelnum, bufnum, bufsize, format, is_writebuf;
-	unsigned int bytebufsize;
+	int channelnum, bufnum, bufsize, format, is_writebuf;
+	int bytebufsize;
 	int synchronous, allowpartial, exclusive_open, seekable;
 	int supports_nonempty;
 	int msg_buf_done = 0;
@@ -544,7 +512,7 @@ static int xilly_setupchannels(struct xilly_endpoint *ep,
 		format = (chandesc[1] >> 4) & 0x03;
 		allowpartial = (chandesc[1] >> 6) & 0x01;
 		synchronous = (chandesc[1] >> 7) & 0x01;
-		bufsize = 1U << (chandesc[2] & 0x1f);
+		bufsize = 1 << (chandesc[2] & 0x1f);
 		bufnum = 1 << (chandesc[3] & 0x0f);
 		exclusive_open = (chandesc[2] >> 7) & 0x01;
 		seekable = (chandesc[2] >> 6) & 0x01;
@@ -563,7 +531,8 @@ static int xilly_setupchannels(struct xilly_endpoint *ep,
 			channel->log2_element_size = ((format > 2) ?
 						      2 : format);
 
-			bytebufsize = bufsize << channel->log2_element_size;
+			bytebufsize = bufsize *
+				(1 << channel->log2_element_size);
 
 			buffers = devm_kcalloc(dev, bufnum,
 					       sizeof(struct xilly_buffer *),
@@ -620,7 +589,7 @@ static int xilly_setupchannels(struct xilly_endpoint *ep,
 static int xilly_scan_idt(struct xilly_endpoint *endpoint,
 			  struct xilly_idt_handle *idt_handle)
 {
-	unsigned int count = 0;
+	int count = 0;
 	unsigned char *idt = endpoint->channels[1]->wr_buffers[0]->addr;
 	unsigned char *end_of_idt = idt + endpoint->idtlen - 4;
 	unsigned char *scan;
@@ -654,12 +623,6 @@ static int xilly_scan_idt(struct xilly_endpoint *endpoint,
 		return -ENODEV;
 	}
 
-	if (count == 0 || count > XILLYBUS_MAX_NODES) {
-		dev_err(endpoint->dev,
-			"Unreasonable number of channels. Aborting.\n");
-		return -ENODEV;
-	}
-
 	idt_handle->entries = len >> 2;
 	endpoint->num_channels = count;
 
@@ -676,8 +639,6 @@ static int xilly_obtain_idt(struct xilly_endpoint *endpoint)
 
 	channel->wr_sleepy = 1;
 
-	xilly_allow_isr(endpoint, true);
-
 	iowrite32(1 |
 		  (3 << 24), /* Opcode 3 for channel 0 = Send IDT */
 		  endpoint->registers + fpga_buf_ctrl_reg);
@@ -685,8 +646,6 @@ static int xilly_obtain_idt(struct xilly_endpoint *endpoint)
 	t = wait_event_interruptible_timeout(channel->wr_wait,
 					     (!channel->wr_sleepy),
 					     XILLY_TIMEOUT);
-
-	xilly_allow_isr(endpoint, false);
 
 	if (t <= 0) {
 		dev_err(endpoint->dev, "Failed to obtain IDT. Aborting.\n");
@@ -735,8 +694,7 @@ static ssize_t xillybus_read(struct file *filp, char __user *userbuf,
 	unsigned long flags;
 	int bytes_done = 0;
 	int no_time_left = 0;
-	unsigned long deadline;
-	long left_to_sleep;
+	long deadline, left_to_sleep;
 	struct xilly_channel *channel = filp->private_data;
 
 	int empty, reached_eof, exhausted, ready;
@@ -766,18 +724,8 @@ static ssize_t xillybus_read(struct file *filp, char __user *userbuf,
 			bufidx = channel->wr_host_buf_idx;
 			bufpos = channel->wr_host_buf_pos;
 			howmany = ((channel->wr_buffers[bufidx]->end_offset
-				    + 1) << channel->log2_element_size);
-
-			if (howmany > channel->wr_buf_size ||
-			    howmany < bufpos) {
-				dev_err(channel->endpoint->dev,
-					"Illegal buffer fill level from hardware\n");
-				channel->endpoint->fatal_error = 1;
-				spin_unlock_irqrestore(&channel->wr_spinlock, flags);
-				break;
-			}
-
-			howmany	-= bufpos;
+				    + 1) << channel->log2_element_size)
+				- bufpos;
 
 			/* Update wr_host_* to its post-operation state */
 			if (howmany > bytes_to_do) {
@@ -990,7 +938,7 @@ interrupted: /* Mutex is not held if got here */
 			return -EINTR;
 		}
 
-		left_to_sleep = deadline - jiffies;
+		left_to_sleep = deadline - ((long) jiffies);
 
 		/*
 		 * If our time is out, skip the waiting. We may miss wr_sleepy
@@ -1866,9 +1814,6 @@ struct xilly_endpoint *xillybus_init_endpoint(struct device *dev)
 	endpoint->failed_messages = 0;
 	endpoint->fatal_error = 0;
 
-	endpoint->allow_isr = false;
-	spin_lock_init(&endpoint->allow_isr_lock);
-
 	init_waitqueue_head(&endpoint->ep_wait);
 	mutex_init(&endpoint->register_mutex);
 
@@ -1881,9 +1826,6 @@ static int xilly_quiesce(struct xilly_endpoint *endpoint)
 	long t;
 
 	endpoint->idtlen = -1;
-	endpoint->num_channels = 0;
-
-	xilly_allow_isr(endpoint, true);
 
 	iowrite32((u32) (endpoint->dma_using_dac & 0x0001),
 		  endpoint->registers + fpga_dma_control_reg);
@@ -1891,9 +1833,6 @@ static int xilly_quiesce(struct xilly_endpoint *endpoint)
 	t = wait_event_interruptible_timeout(endpoint->ep_wait,
 					     (endpoint->idtlen >= 0),
 					     XILLY_TIMEOUT);
-
-	xilly_allow_isr(endpoint, false);
-
 	if (t <= 0) {
 		dev_err(endpoint->dev,
 			"Failed to quiesce the device on exit.\n");
@@ -1947,8 +1886,6 @@ int xillybus_endpoint_discovery(struct xilly_endpoint *endpoint)
 
 	endpoint->idtlen = -1;
 
-	xilly_allow_isr(endpoint, true);
-
 	/*
 	 * Set DMA 32/64 bit mode, quiesce the device (?!) and get IDT
 	 * buffer size.
@@ -1959,16 +1896,8 @@ int xillybus_endpoint_discovery(struct xilly_endpoint *endpoint)
 	t = wait_event_interruptible_timeout(endpoint->ep_wait,
 					     (endpoint->idtlen >= 0),
 					     XILLY_TIMEOUT);
-
-	xilly_allow_isr(endpoint, false);
-
 	if (t <= 0) {
 		dev_err(endpoint->dev, "No response from FPGA. Aborting.\n");
-		return -ENODEV;
-	}
-
-	if (endpoint->idtlen < 4 || endpoint->idtlen > XILLYBUS_MAX_IDT) {
-		dev_err(endpoint->dev, "Invalid IDT length. Aborting.\n");
 		return -ENODEV;
 	}
 
@@ -1988,7 +1917,6 @@ int xillybus_endpoint_discovery(struct xilly_endpoint *endpoint)
 	if (rc)
 		goto failed_idt;
 
-	/* xilly_obtain_idt() allows and then disallows the ISR */
 	rc = xilly_obtain_idt(endpoint);
 	if (rc)
 		goto failed_idt;
@@ -2006,8 +1934,6 @@ int xillybus_endpoint_discovery(struct xilly_endpoint *endpoint)
 				 idt_handle.entries);
 	if (rc)
 		goto failed_idt;
-
-	xilly_allow_isr(endpoint, true);
 
 	rc = xillybus_init_chrdev(dev, &xillybus_fops,
 				  endpoint->owner, endpoint,
@@ -2047,7 +1973,7 @@ EXPORT_SYMBOL(xillybus_endpoint_remove);
 
 static int __init xillybus_init(void)
 {
-	xillybus_wq = alloc_workqueue(xillyname, WQ_UNBOUND, 0);
+	xillybus_wq = alloc_workqueue(xillyname, 0, 0);
 	if (!xillybus_wq)
 		return -ENOMEM;
 

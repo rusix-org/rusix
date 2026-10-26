@@ -16,7 +16,6 @@
 #include <linux/rcupdate.h>
 
 #include "access.h"
-#include "domain.h"
 #include "limits.h"
 #include "ruleset.h"
 #include "setup.h"
@@ -27,16 +26,14 @@
  * This structure is packed to minimize the size of struct
  * landlock_file_security.  However, it is always aligned in the LSM cred blob,
  * see lsm_set_blob_size().
- *
- * When updating this, also update landlock_cred_copy() if needed.
  */
 struct landlock_cred_security {
 	/**
-	 * @domain: Immutable domain enforced on a task.
+	 * @domain: Immutable ruleset enforced on a task.
 	 */
-	struct landlock_domain *domain;
+	struct landlock_ruleset *domain;
 
-#ifdef CONFIG_SECURITY_LANDLOCK_LOG
+#ifdef CONFIG_AUDIT
 	/**
 	 * @domain_exec: Bitmask identifying the domain layers that were enforced by
 	 * the current task's executed file (i.e. no new execve(2) since
@@ -50,17 +47,17 @@ struct landlock_cred_security {
 	 * not require a current domain.
 	 */
 	u8 log_subdomains_off : 1;
-#endif /* CONFIG_SECURITY_LANDLOCK_LOG */
+#endif /* CONFIG_AUDIT */
 } __packed;
 
-#ifdef CONFIG_SECURITY_LANDLOCK_LOG
+#ifdef CONFIG_AUDIT
 
 /* Makes sure all layer executions can be stored. */
 static_assert(BITS_PER_TYPE(typeof_member(struct landlock_cred_security,
 					  domain_exec)) >=
 	      LANDLOCK_MAX_NUM_LAYERS);
 
-#endif /* CONFIG_SECURITY_LANDLOCK_LOG */
+#endif /* CONFIG_AUDIT */
 
 static inline struct landlock_cred_security *
 landlock_cred(const struct cred *cred)
@@ -68,23 +65,15 @@ landlock_cred(const struct cred *cred)
 	return cred->security + landlock_blob_sizes.lbs_cred;
 }
 
-static inline void landlock_cred_copy(struct landlock_cred_security *dst,
-				      const struct landlock_cred_security *src)
-{
-	landlock_put_domain(dst->domain);
-
-	*dst = *src;
-
-	landlock_get_domain(src->domain);
-}
-
-static inline struct landlock_domain *landlock_get_current_domain(void)
+static inline struct landlock_ruleset *landlock_get_current_domain(void)
 {
 	return landlock_cred(current_cred())->domain;
 }
 
-/* The call needs to come from an RCU read-side critical section. */
-static inline const struct landlock_domain *
+/*
+ * The call needs to come from an RCU read-side critical section.
+ */
+static inline const struct landlock_ruleset *
 landlock_get_task_domain(const struct task_struct *const task)
 {
 	return landlock_cred(__task_cred(task))->domain;
@@ -114,7 +103,7 @@ static inline bool landlocked(const struct task_struct *const task)
  * @handle_layer: returned youngest layer handling a subset of @masks.  Not set
  *                if the function returns NULL.
  *
- * Return: landlock_cred(@cred) if any access rights specified in @masks is
+ * Returns: landlock_cred(@cred) if any access rights specified in @masks is
  * handled, or NULL otherwise.
  */
 static inline const struct landlock_cred_security *
@@ -125,7 +114,7 @@ landlock_get_applicable_subject(const struct cred *const cred,
 	const union access_masks_all masks_all = {
 		.masks = masks,
 	};
-	const struct landlock_domain *domain;
+	const struct landlock_ruleset *domain;
 	ssize_t layer_level;
 
 	if (!cred)
@@ -138,7 +127,7 @@ landlock_get_applicable_subject(const struct cred *const cred,
 	for (layer_level = domain->num_layers - 1; layer_level >= 0;
 	     layer_level--) {
 		union access_masks_all layer = {
-			.masks = domain->layers[layer_level].handled,
+			.masks = domain->access_masks[layer_level],
 		};
 
 		if (layer.all & masks_all.all) {

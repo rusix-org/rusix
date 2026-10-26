@@ -12,6 +12,7 @@
  * Author: Linus Walleij <linus.walleij@linaro.org>
  */
 #include <linux/module.h>
+#include <linux/mod_devicetable.h>
 #include <linux/kernel.h>
 #include <linux/i2c.h>
 #include <linux/interrupt.h>
@@ -379,7 +380,11 @@ static int ak8974_getresult(struct ak8974 *ak8974, __le16 *result)
 		return -ERANGE;
 	}
 
-	return regmap_bulk_read(ak8974->map, AK8974_DATA_X, result, 6);
+	ret = regmap_bulk_read(ak8974->map, AK8974_DATA_X, result, 6);
+	if (ret)
+		return ret;
+
+	return ret;
 }
 
 static irqreturn_t ak8974_drdy_irq(int irq, void *d)
@@ -572,7 +577,7 @@ static int ak8974_measure_channel(struct ak8974 *ak8974, unsigned long address,
 	/*
 	 * This explicit cast to (s16) is necessary as the measurement
 	 * is done in 2's complement with positive and negative values.
-	 * The following assignment to *val will then convert the signed
+	 * The follwing assignment to *val will then convert the signed
 	 * s16 value to a signed int value.
 	 */
 	*val = (s16)le16_to_cpu(hw_values[address]);
@@ -922,8 +927,11 @@ static int ak8974_probe(struct i2c_client *i2c)
 						irq_trig,
 						ak8974->name,
 						ak8974);
-		if (ret)
+		if (ret) {
+			dev_err(&i2c->dev, "unable to request DRDY IRQ "
+				"- proceeding without IRQ\n");
 			goto no_irq;
+		}
 		ak8974->drdy_irq = true;
 	}
 
@@ -1009,10 +1017,10 @@ static DEFINE_RUNTIME_DEV_PM_OPS(ak8974_dev_pm_ops, ak8974_runtime_suspend,
 				 ak8974_runtime_resume, NULL);
 
 static const struct i2c_device_id ak8974_id[] = {
-	{ .name = "ami305" },
-	{ .name = "ami306" },
-	{ .name = "ak8974" },
-	{ .name = "hscdtd008a" },
+	{ "ami305" },
+	{ "ami306" },
+	{ "ak8974" },
+	{ "hscdtd008a" },
 	{ }
 };
 MODULE_DEVICE_TABLE(i2c, ak8974_id);

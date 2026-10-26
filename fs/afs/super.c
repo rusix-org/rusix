@@ -502,7 +502,7 @@ static struct afs_super_info *afs_alloc_sbi(struct fs_context *fc)
 	struct afs_fs_context *ctx = fc->fs_private;
 	struct afs_super_info *as;
 
-	as = kzalloc_obj(struct afs_super_info);
+	as = kzalloc(sizeof(struct afs_super_info), GFP_KERNEL);
 	if (as) {
 		as->net_ns = get_net(fc->net_ns);
 		as->flock_mode = ctx->flock_mode;
@@ -523,7 +523,7 @@ static void afs_destroy_sbi(struct afs_super_info *as)
 		afs_put_volume(as->volume, afs_volume_trace_put_destroy_sbi);
 		afs_unuse_cell(as->cell, afs_cell_trace_unuse_sbi);
 		put_net(as->net_ns);
-		kfree_rcu(as, rcu);
+		kfree(as);
 	}
 }
 
@@ -624,7 +624,7 @@ static int afs_init_fs_context(struct fs_context *fc)
 	struct afs_fs_context *ctx;
 	struct afs_cell *cell;
 
-	ctx = kzalloc_obj(struct afs_fs_context);
+	ctx = kzalloc(sizeof(struct afs_fs_context), GFP_KERNEL);
 	if (!ctx)
 		return -ENOMEM;
 

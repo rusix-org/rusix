@@ -205,7 +205,7 @@ struct key *request_key_auth_new(struct key *target, const char *op,
 	kenter("%d,", target->serial);
 
 	/* allocate a auth record */
-	rka = kzalloc_obj(*rka);
+	rka = kzalloc(sizeof(*rka), GFP_KERNEL);
 	if (!rka)
 		goto error;
 	refcount_set(&rka->usage, 1);

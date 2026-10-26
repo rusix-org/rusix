@@ -7,13 +7,11 @@
 #include <linux/scatterlist.h>
 #include <linux/spinlock.h>
 #include <linux/device.h>
-#include <linux/device-id/virtio.h>
+#include <linux/mod_devicetable.h>
 #include <linux/gfp.h>
 #include <linux/dma-mapping.h>
 #include <linux/completion.h>
 #include <linux/virtio_features.h>
-
-struct module;
 
 /**
  * struct virtqueue - a queue to register buffers for sending or receiving.
@@ -61,11 +59,6 @@ int virtqueue_add_inbuf(struct virtqueue *vq,
 			struct scatterlist sg[], unsigned int num,
 			void *data,
 			gfp_t gfp);
-
-int virtqueue_add_inbuf_cache_clean(struct virtqueue *vq,
-				    struct scatterlist sg[], unsigned int num,
-				    void *data,
-				    gfp_t gfp);
 
 int virtqueue_add_inbuf_ctx(struct virtqueue *vq,
 			    struct scatterlist sg[], unsigned int num,
@@ -157,13 +150,11 @@ struct virtio_admin_cmd {
  * @id: the device type identification (used to match it with a driver).
  * @config: the configuration ops for this device.
  * @vringh_config: configuration ops for host vrings.
- * @map: the map operations for mapping virtio device memory.
  * @vqs: the list of virtqueues for this device.
  * @features: the 64 lower features supported by both driver and device.
  * @features_array: the full features space supported by both driver and
  *		    device.
  * @priv: private pointer for the driver's use.
- * @vmap: the map container with transport- or device-specific metadata.
  * @debugfs_dir: debugfs directory entry.
  * @debugfs_filter_features: features to be filtered set by debugfs.
  */

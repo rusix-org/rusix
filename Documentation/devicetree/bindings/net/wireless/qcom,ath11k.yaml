@@ -16,17 +16,11 @@ description: |
 
 properties:
   compatible:
-    oneOf:
-      - items:
-          - enum:
-              - qcom,wcn6755-wifi
-          - const: qcom,wcn6750-wifi
-
-      - enum:
-          - qcom,ipq8074-wifi
-          - qcom,ipq6018-wifi
-          - qcom,wcn6750-wifi
-          - qcom,ipq5018-wifi
+    enum:
+      - qcom,ipq8074-wifi
+      - qcom,ipq6018-wifi
+      - qcom,wcn6750-wifi
+      - qcom,ipq5018-wifi
 
   reg:
     maxItems: 1
@@ -86,13 +80,7 @@ properties:
     description: State bits used by the AP to signal the WLAN Q6.
     items:
       - description: Signal bits used to enable/disable low power mode
-          on WCN6750 in the case of WoW (Wake on Wireless).
-        items:
-          - description: Phandle to the Shared Memory Point 2 Point device
-              handling the communication with a remote processor
-          - description: Single bit index to toggle in the value sent to
-              the remote processor
-            maximum: 32
+                     on WCN6750 in the case of WoW (Wake on Wireless).
 
   qcom,smem-state-names:
     description: The names of the state bits used for SMP2P output.
@@ -226,6 +214,15 @@ allOf:
             - const: wbm2host-tx-completions-ring2
             - const: wbm2host-tx-completions-ring1
             - const: tcl2host-status-ring
+
+  - if:
+      properties:
+        compatible:
+          contains:
+            enum:
+              - qcom,ipq8074-wifi
+              - qcom,ipq6018-wifi
+    then:
       required:
         - interrupt-names
 

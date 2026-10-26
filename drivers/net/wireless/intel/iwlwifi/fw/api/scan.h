@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause */
 /*
- * Copyright (C) 2012-2014, 2018-2026 Intel Corporation
+ * Copyright (C) 2012-2014, 2018-2025 Intel Corporation
  * Copyright (C) 2013-2015 Intel Mobile Communications GmbH
  * Copyright (C) 2016-2017 Intel Deutschland GmbH
  */
@@ -985,9 +985,6 @@ struct iwl_scan_probe_params_v4 {
 } __packed; /* SCAN_PROBE_PARAMS_API_S_VER_4 */
 
 #define SCAN_MAX_NUM_CHANS_V3 67
-#define SCAN_MAX_NUM_CHANS_V4 68
-
-#define SCAN_MAX_NUM_NOTIF_RESULTS 112
 
 /**
  * struct iwl_scan_channel_params_v4 - channel params
@@ -1029,24 +1026,6 @@ struct iwl_scan_channel_params_v7 {
 	u8 n_aps_override[2];
 	struct iwl_scan_channel_cfg_umac channel_config[SCAN_MAX_NUM_CHANS_V3];
 } __packed; /* SCAN_CHANNEL_PARAMS_API_S_VER_6 */
-
-/**
- * struct iwl_scan_channel_params_v8 - channel params
- * @flags: channel flags &enum iwl_scan_channel_flags
- * @count: num of channels in scan request
- * @n_aps_override: override the number of APs the FW uses to calculate dwell
- *	time when adaptive dwell is used.
- *	Channel k will use n_aps_override[i] when BIT(20 + i) is set in
- *	channel_config[k].flags
- * @channel_config: array of explicit channel configurations
- *      for 2.4Ghz and 5.2Ghz bands
- */
-struct iwl_scan_channel_params_v8 {
-	u8 flags;
-	u8 count;
-	u8 n_aps_override[2];
-	struct iwl_scan_channel_cfg_umac channel_config[SCAN_MAX_NUM_CHANS_V4];
-} __packed; /* SCAN_CHANNEL_PARAMS_API_S_VER_8 */
 
 /**
  * struct iwl_scan_general_params_v11 - channel params
@@ -1131,20 +1110,6 @@ struct iwl_scan_req_params_v17 {
 } __packed; /* SCAN_REQUEST_PARAMS_API_S_VER_17 - 14 */
 
 /**
- * struct iwl_scan_req_params_v18 - scan request parameters (v18)
- * @general_params: &struct iwl_scan_general_params_v11
- * @channel_params: &struct iwl_scan_channel_params_v8
- * @periodic_params: &struct iwl_scan_periodic_parms_v1
- * @probe_params: &struct iwl_scan_probe_params_v4
- */
-struct iwl_scan_req_params_v18 {
-	struct iwl_scan_general_params_v11 general_params;
-	struct iwl_scan_channel_params_v8 channel_params;
-	struct iwl_scan_periodic_parms_v1 periodic_params;
-	struct iwl_scan_probe_params_v4 probe_params;
-} __packed; /* SCAN_REQUEST_PARAMS_API_S_VER_18 */
-
-/**
  * struct iwl_scan_req_umac_v12 - scan request command (v12)
  * @uid: scan id, &enum iwl_umac_scan_uid_offsets
  * @ooc_priority: out of channel priority - &enum iwl_scan_priority
@@ -1167,18 +1132,6 @@ struct iwl_scan_req_umac_v17 {
 	__le32 ooc_priority;
 	struct iwl_scan_req_params_v17 scan_params;
 } __packed; /* SCAN_REQUEST_CMD_UMAC_API_S_VER_17 - 14 */
-
-/**
- * struct iwl_scan_req_umac_v18 - scan request command (v18)
- * @uid: scan id, &enum iwl_umac_scan_uid_offsets
- * @ooc_priority: out of channel priority - &enum iwl_scan_priority
- * @scan_params: scan parameters
- */
-struct iwl_scan_req_umac_v18 {
-	__le32 uid;
-	__le32 ooc_priority;
-	struct iwl_scan_req_params_v18 scan_params;
-} __packed; /* SCAN_REQUEST_CMD_UMAC_API_S_VER_18 */
 
 /**
  * struct iwl_umac_scan_abort - scan abort command
@@ -1234,8 +1187,7 @@ struct iwl_umac_scan_complete {
 } __packed; /* SCAN_COMPLETE_NTF_UMAC_API_S_VER_1 */
 
 #define SCAN_OFFLOAD_MATCHING_CHANNELS_LEN_V1 5
-#define SCAN_OFFLOAD_MATCHING_CHANNELS_LEN_V2 7
-#define SCAN_OFFLOAD_MATCHING_CHANNELS_LEN    16
+#define SCAN_OFFLOAD_MATCHING_CHANNELS_LEN    7
 
 /**
  * struct iwl_scan_offload_profile_match_v1 - match information
@@ -1282,30 +1234,10 @@ struct iwl_scan_offload_profiles_query_v1 {
 } __packed; /* SCAN_OFFLOAD_PROFILES_QUERY_RSP_S_VER_2 */
 
 /**
- * struct iwl_scan_offload_profile_match_v2 - match information
- * @bssid: matched bssid
- * @reserved: reserved
- * @channel: channel where the match occurred
- * @energy: energy
- * @matching_feature: feature matches
- * @matching_channels: bitmap of channels that matched, referencing
- *	the channels passed in the scan offload request.
- */
-struct iwl_scan_offload_profile_match_v2 {
-	u8 bssid[ETH_ALEN];
-	__le16 reserved;
-	u8 channel;
-	u8 energy;
-	u8 matching_feature;
-	u8 matching_channels[SCAN_OFFLOAD_MATCHING_CHANNELS_LEN_V2];
-} __packed; /* SCAN_OFFLOAD_PROFILE_MATCH_RESULTS_S_VER_2 */
-
-/**
  * struct iwl_scan_offload_profile_match - match information
  * @bssid: matched bssid
  * @reserved: reserved
  * @channel: channel where the match occurred
- * @band: band where the match occurred
  * @energy: energy
  * @matching_feature: feature matches
  * @matching_channels: bitmap of channels that matched, referencing
@@ -1315,11 +1247,10 @@ struct iwl_scan_offload_profile_match {
 	u8 bssid[ETH_ALEN];
 	__le16 reserved;
 	u8 channel;
-	u8 band;
 	u8 energy;
 	u8 matching_feature;
 	u8 matching_channels[SCAN_OFFLOAD_MATCHING_CHANNELS_LEN];
-} __packed; /* SCAN_OFFLOAD_PROFILE_MATCH_RESULTS_S_VER_3 */
+} __packed; /* SCAN_OFFLOAD_PROFILE_MATCH_RESULTS_S_VER_2 */
 
 /**
  * struct iwl_scan_offload_match_info - match results information
@@ -1343,14 +1274,13 @@ struct iwl_scan_offload_match_info {
 	u8 resume_while_scanning;
 	u8 self_recovery;
 	__le16 reserved;
-	struct iwl_scan_offload_profile_match matches[IWL_SCAN_MAX_PROFILES_V2];
-} __packed; /* SCAN_OFFLOAD_PROFILES_QUERY_RSP_S_VER_5 and
+	struct iwl_scan_offload_profile_match matches[];
+} __packed; /* SCAN_OFFLOAD_PROFILES_QUERY_RSP_S_VER_3 and
 	     * SCAN_OFFLOAD_MATCH_INFO_NOTIFICATION_S_VER_1
 	     */
 
 /**
- * struct iwl_umac_scan_iter_complete_notif_v2 - notifies end of scanning
- *	iteration
+ * struct iwl_umac_scan_iter_complete_notif - notifies end of scanning iteration
  * @uid: scan id, &enum iwl_umac_scan_uid_offsets
  * @scanned_channels: number of channels scanned and number of valid elements in
  *	results array
@@ -1361,7 +1291,7 @@ struct iwl_scan_offload_match_info {
  *	in &struct iwl_scan_req_umac.
  * @results: array of scan results, length in @scanned_channels
  */
-struct iwl_umac_scan_iter_complete_notif_v2 {
+struct iwl_umac_scan_iter_complete_notif {
 	__le32 uid;
 	u8 scanned_channels;
 	u8 status;
@@ -1370,39 +1300,6 @@ struct iwl_umac_scan_iter_complete_notif_v2 {
 	__le64 start_tsf;
 	struct iwl_scan_results_notif results[];
 } __packed; /* SCAN_ITER_COMPLETE_NTF_UMAC_API_S_VER_2 */
-
-/**
- * struct iwl_umac_scan_iter_complete_notif - notifies end of scanning
- *	iteration
- * @uid: scan id, &enum iwl_umac_scan_uid_offsets
- * @scanned_channels: number of channels scanned and number of valid elements in
- *	results array
- * @status: one of SCAN_COMP_STATUS_*
- * @bt_status: BT on/off status
- * @last_channel: last channel that was scanned
- * @start_tsf: TSF timer in usecs of the scan start time for the mac specified
- *	in &struct iwl_scan_req_umac.
- * @results: array of scan results, only @scanned_channels of them are valid
- * @ebs_status: EBS completion status, &enum iwl_scan_ebs_status
- * @reserved: reserved for alignment
- * @ebs_channel_status: only valid when @ebs_status is %IWL_SCAN_EBS_SUCCESS.
- *	Bitmap of the 5 GHz channels on which EBS found energy:
- *	bit i in [0..27]:  channel = 36 + 4 * i   (channels 36 - 144)
- *	bit i in [28..35]: channel = 37 + 4 * i   (channels 149 - 177)
- *	bit 36: channel 181 (reserved, not currently covered by EBS)
- */
-struct iwl_umac_scan_iter_complete_notif {
-	__le32 uid;
-	u8 scanned_channels;
-	u8 status;
-	u8 bt_status;
-	u8 last_channel;
-	__le64 start_tsf;
-	struct iwl_scan_results_notif results[SCAN_MAX_NUM_NOTIF_RESULTS];
-	u8 ebs_status;
-	u8 reserved[3];
-	__le64 ebs_channel_status;
-} __packed; /* SCAN_ITER_COMPLETE_NTF_UMAC_API_S_VER_3 */
 
 /**
  * struct iwl_umac_scan_channel_survey_notif - data for survey

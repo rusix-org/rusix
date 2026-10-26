@@ -158,8 +158,12 @@
 };
 
 &usbotg1 {
+	adp-disable;
+	hnp-disable;
+	srp-disable;
 	disable-over-current;
-	dr_mode = "peripheral";
+	dr_mode = "otg";
+	usb-role-switch;
 	status = "okay";
 };
 

@@ -140,7 +140,6 @@ static int vimc_scaler_enum_frame_size(struct v4l2_subdev *sd,
 }
 
 static int vimc_scaler_set_fmt(struct v4l2_subdev *sd,
-			    const struct v4l2_subdev_client_info *ci,
 			    struct v4l2_subdev_state *sd_state,
 			    struct v4l2_subdev_format *format)
 {
@@ -205,7 +204,6 @@ static int vimc_scaler_set_fmt(struct v4l2_subdev *sd,
 }
 
 static int vimc_scaler_get_selection(struct v4l2_subdev *sd,
-				  const struct v4l2_subdev_client_info *ci,
 				  struct v4l2_subdev_state *sd_state,
 				  struct v4l2_subdev_selection *sel)
 {
@@ -241,7 +239,6 @@ static void vimc_scaler_adjust_sink_crop(struct v4l2_rect *r,
 }
 
 static int vimc_scaler_set_selection(struct v4l2_subdev *sd,
-				  const struct v4l2_subdev_client_info *ci,
 				  struct v4l2_subdev_state *sd_state,
 				  struct v4l2_subdev_selection *sel)
 {
@@ -395,7 +392,7 @@ static struct vimc_ent_device *vimc_scaler_add(struct vimc_device *vimc,
 	int ret;
 
 	/* Allocate the vscaler struct */
-	vscaler = kzalloc_obj(*vscaler);
+	vscaler = kzalloc(sizeof(*vscaler), GFP_KERNEL);
 	if (!vscaler)
 		return ERR_PTR(-ENOMEM);
 

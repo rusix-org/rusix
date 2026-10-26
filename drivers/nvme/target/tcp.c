@@ -350,6 +350,8 @@ static void nvmet_tcp_free_cmd_buffers(struct nvmet_tcp_cmd *cmd)
 	cmd->req.sg = NULL;
 }
 
+static void nvmet_tcp_fatal_error(struct nvmet_tcp_queue *queue);
+
 static int nvmet_tcp_build_pdu_iovec(struct nvmet_tcp_cmd *cmd)
 {
 	struct bio_vec *iov = cmd->iov;
@@ -393,7 +395,7 @@ static int nvmet_tcp_build_pdu_iovec(struct nvmet_tcp_cmd *cmd)
 	return 0;
 }
 
-static void nvmet_tcp_socket_error(struct nvmet_tcp_queue *queue, int status)
+static void nvmet_tcp_fatal_error(struct nvmet_tcp_queue *queue)
 {
 	/*
 	 * Keep rcv_state at RECV_ERR even for the internal -ESHUTDOWN path.
@@ -409,10 +411,19 @@ static void nvmet_tcp_socket_error(struct nvmet_tcp_queue *queue, int status)
 	 * That is why queue->rcv_state needs to be updated before we return.
 	 */
 	queue->rcv_state = NVMET_TCP_RECV_ERR;
-	if (status == -EPIPE || status == -ECONNRESET || !queue->nvme_sq.ctrl)
+	if (queue->nvme_sq.ctrl)
+		nvmet_ctrl_fatal_error(queue->nvme_sq.ctrl);
+	else
+		kernel_sock_shutdown(queue->sock, SHUT_RDWR);
+}
+
+static void nvmet_tcp_socket_error(struct nvmet_tcp_queue *queue, int status)
+{
+	queue->rcv_state = NVMET_TCP_RECV_ERR;
+	if (status == -EPIPE || status == -ECONNRESET)
 		kernel_sock_shutdown(queue->sock, SHUT_RDWR);
 	else
-		nvmet_ctrl_fatal_error(queue->nvme_sq.ctrl);
+		nvmet_tcp_fatal_error(queue);
 }
 
 static int nvmet_tcp_map_data(struct nvmet_tcp_cmd *cmd)
@@ -454,8 +465,8 @@ static int nvmet_tcp_map_data(struct nvmet_tcp_cmd *cmd)
 	cmd->cur_sg = cmd->req.sg;
 
 	if (nvmet_tcp_has_data_in(cmd)) {
-		cmd->iov = kmalloc_objs(*cmd->iov, cmd->req.sg_cnt,
-					GFP_KERNEL | __GFP_NOWARN);
+		cmd->iov = kmalloc_array(cmd->req.sg_cnt,
+				sizeof(*cmd->iov), GFP_KERNEL | __GFP_NOWARN);
 		if (!cmd->iov)
 			goto err;
 	}
@@ -904,6 +915,7 @@ static int nvmet_tcp_handle_icreq(struct nvmet_tcp_queue *queue)
 	if (le32_to_cpu(icreq->hdr.plen) != sizeof(struct nvme_tcp_icreq_pdu)) {
 		pr_err("bad nvme-tcp pdu length (%d)\n",
 			le32_to_cpu(icreq->hdr.plen));
+		nvmet_tcp_fatal_error(queue);
 		return -EPROTO;
 	}
 
@@ -982,6 +994,7 @@ static int nvmet_tcp_handle_req_failure(struct nvmet_tcp_queue *queue,
 	ret = nvmet_tcp_map_data(cmd);
 	if (unlikely(ret)) {
 		pr_err("queue %d: failed to map data\n", queue->idx);
+		nvmet_tcp_fatal_error(queue);
 		return -EPROTO;
 	}
 
@@ -1060,6 +1073,7 @@ static int nvmet_tcp_handle_h2c_data_pdu(struct nvmet_tcp_queue *queue)
 
 err_proto:
 	/* FIXME: use proper transport errors */
+	nvmet_tcp_fatal_error(queue);
 	return -EPROTO;
 }
 
@@ -1074,6 +1088,7 @@ static int nvmet_tcp_done_recv_pdu(struct nvmet_tcp_queue *queue)
 		if (hdr->type != nvme_tcp_icreq) {
 			pr_err("unexpected pdu type (%d) before icreq\n",
 				hdr->type);
+			nvmet_tcp_fatal_error(queue);
 			return -EPROTO;
 		}
 		return nvmet_tcp_handle_icreq(queue);
@@ -1082,6 +1097,7 @@ static int nvmet_tcp_done_recv_pdu(struct nvmet_tcp_queue *queue)
 	if (unlikely(hdr->type == nvme_tcp_icreq)) {
 		pr_err("queue %d: received icreq pdu in state %d\n",
 			queue->idx, queue->state);
+		nvmet_tcp_fatal_error(queue);
 		return -EPROTO;
 	}
 
@@ -1098,6 +1114,7 @@ static int nvmet_tcp_done_recv_pdu(struct nvmet_tcp_queue *queue)
 		pr_err("queue %d: out of commands (%d) send_list_len: %d, opcode: %d",
 			queue->idx, queue->nr_cmds, queue->send_list_len,
 			nvme_cmd->common.opcode);
+		nvmet_tcp_fatal_error(queue);
 		return -ENOMEM;
 	}
 
@@ -1118,9 +1135,9 @@ static int nvmet_tcp_done_recv_pdu(struct nvmet_tcp_queue *queue)
 	if (unlikely(ret)) {
 		pr_err("queue %d: failed to map data\n", queue->idx);
 		if (nvmet_tcp_has_inline_data(queue->cmd))
-			return -EPROTO;
-
-		nvmet_req_complete(req, ret);
+			nvmet_tcp_fatal_error(queue);
+		else
+			nvmet_req_complete(req, ret);
 		ret = -EAGAIN;
 		goto out;
 	}
@@ -1243,6 +1260,7 @@ recv:
 
 		if (unlikely(!nvmet_tcp_pdu_valid(hdr->type))) {
 			pr_err("unexpected pdu type %d\n", hdr->type);
+			nvmet_tcp_fatal_error(queue);
 			return -EIO;
 		}
 
@@ -1258,12 +1276,16 @@ recv:
 	}
 
 	if (queue->hdr_digest &&
-	    nvmet_tcp_verify_hdgst(queue, &queue->pdu, hdr->hlen))
+	    nvmet_tcp_verify_hdgst(queue, &queue->pdu, hdr->hlen)) {
+		nvmet_tcp_fatal_error(queue); /* fatal */
 		return -EPROTO;
+	}
 
 	if (queue->data_digest &&
-	    nvmet_tcp_check_ddgst(queue, &queue->pdu))
+	    nvmet_tcp_check_ddgst(queue, &queue->pdu)) {
+		nvmet_tcp_fatal_error(queue); /* fatal */
 		return -EPROTO;
+	}
 
 	return nvmet_tcp_done_recv_pdu(queue);
 }
@@ -1351,6 +1373,7 @@ static int nvmet_tcp_try_recv_ddgst(struct nvmet_tcp_queue *queue)
 			nvmet_req_uninit(&cmd->req);
 		}
 		nvmet_tcp_free_cmd_buffers(cmd);
+		nvmet_tcp_fatal_error(queue);
 		ret = -EPROTO;
 		goto out;
 	}
@@ -1550,7 +1573,7 @@ static int nvmet_tcp_alloc_cmds(struct nvmet_tcp_queue *queue)
 	struct nvmet_tcp_cmd *cmds;
 	int i, ret = -EINVAL, nr_cmds = queue->nr_cmds;
 
-	cmds = kvzalloc_objs(struct nvmet_tcp_cmd, nr_cmds);
+	cmds = kcalloc(nr_cmds, sizeof(struct nvmet_tcp_cmd), GFP_KERNEL);
 	if (!cmds)
 		goto out;
 
@@ -1566,7 +1589,7 @@ static int nvmet_tcp_alloc_cmds(struct nvmet_tcp_queue *queue)
 out_free:
 	while (--i >= 0)
 		nvmet_tcp_free_cmd(cmds + i);
-	kvfree(cmds);
+	kfree(cmds);
 out:
 	return ret;
 }
@@ -1580,7 +1603,7 @@ static void nvmet_tcp_free_cmds(struct nvmet_tcp_queue *queue)
 		nvmet_tcp_free_cmd(cmds + i);
 
 	nvmet_tcp_free_cmd(&queue->connect);
-	kvfree(cmds);
+	kfree(cmds);
 }
 
 static void nvmet_tcp_restore_socket_callbacks(struct nvmet_tcp_queue *queue)
@@ -1686,7 +1709,7 @@ static void nvmet_tcp_write_space(struct sock *sk)
 	}
 
 	if (sk_stream_is_writeable(sk)) {
-		sk_clear_nospace(sk);
+		clear_bit(SOCK_NOSPACE, &sk->sk_socket->flags);
 		queue_work_on(queue_cpu(queue), nvmet_tcp_wq, &queue->io_work);
 	}
 out:
@@ -1705,7 +1728,6 @@ static void nvmet_tcp_state_change(struct sock *sk)
 	switch (sk->sk_state) {
 	case TCP_FIN_WAIT2:
 	case TCP_LAST_ACK:
-	case TCP_CLOSING:
 		break;
 	case TCP_FIN_WAIT1:
 	case TCP_CLOSE_WAIT:
@@ -1940,7 +1962,7 @@ static void nvmet_tcp_alloc_queue(struct nvmet_tcp_port *port,
 	struct file *sock_file = NULL;
 	int ret;
 
-	queue = kzalloc_obj(*queue);
+	queue = kzalloc(sizeof(*queue), GFP_KERNEL);
 	if (!queue) {
 		ret = -ENOMEM;
 		goto out_release;
@@ -2082,7 +2104,7 @@ static int nvmet_tcp_add_port(struct nvmet_port *nport)
 	__kernel_sa_family_t af;
 	int ret;
 
-	port = kzalloc_obj(*port);
+	port = kzalloc(sizeof(*port), GFP_KERNEL);
 	if (!port)
 		return -ENOMEM;
 
@@ -2271,7 +2293,7 @@ static int __init nvmet_tcp_init(void)
 	int ret;
 
 	nvmet_tcp_wq = alloc_workqueue("nvmet_tcp_wq",
-				WQ_MEM_RECLAIM | WQ_HIGHPRI | WQ_PERCPU, 0);
+				WQ_MEM_RECLAIM | WQ_HIGHPRI, 0);
 	if (!nvmet_tcp_wq)
 		return -ENOMEM;
 

@@ -3,7 +3,7 @@
  * Copyright (c) 2023-2025 Christoph Hellwig.
  * Copyright (c) 2024-2025, Western Digital Corporation or its affiliates.
  */
-#include "xfs_platform.h"
+#include "xfs.h"
 #include "xfs_shared.h"
 #include "xfs_format.h"
 #include "xfs_trans_resv.h"
@@ -85,13 +85,13 @@ xfs_zoned_add_available(
 	struct xfs_zone_info		*zi = mp->m_zone_info;
 	struct xfs_zone_reservation	*reservation;
 
-	spin_lock(&zi->zi_reservation_lock);
-	xfs_add_freecounter(mp, XC_FREE_RTAVAILABLE, count_fsb);
-	if (list_empty(&zi->zi_reclaim_reservations)) {
-		spin_unlock(&zi->zi_reservation_lock);
+	if (list_empty_careful(&zi->zi_reclaim_reservations)) {
+		xfs_add_freecounter(mp, XC_FREE_RTAVAILABLE, count_fsb);
 		return;
 	}
 
+	spin_lock(&zi->zi_reservation_lock);
+	xfs_add_freecounter(mp, XC_FREE_RTAVAILABLE, count_fsb);
 	count_fsb = xfs_sum_freecounter(mp, XC_FREE_RTAVAILABLE);
 	list_for_each_entry(reservation, &zi->zi_reclaim_reservations, entry) {
 		if (reservation->count_fsb > count_fsb)
@@ -172,7 +172,7 @@ xfs_zoned_reserve_available(
 		 * processing a pending GC request give up as we're fully out
 		 * of space.
 		 */
-		if (!xfs_zoned_have_reclaimable(mp->m_zone_info) &&
+		if (!xfs_group_marked(mp, XG_TYPE_RTG, XFS_RTG_RECLAIMABLE) &&
 		    !xfs_is_zonegc_running(mp))
 			break;
 

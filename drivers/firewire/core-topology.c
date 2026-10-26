@@ -27,7 +27,7 @@ static struct fw_node *fw_node_create(u32 sid, int port_count, int color)
 {
 	struct fw_node *node;
 
-	node = kzalloc_flex(*node, ports, port_count, GFP_ATOMIC);
+	node = kzalloc(struct_size(node, ports, port_count), GFP_ATOMIC);
 	if (node == NULL)
 		return NULL;
 
@@ -286,9 +286,7 @@ static void for_each_fw_node(struct fw_card *card, struct fw_node *root,
 	fw_node_get(root);
 	list_add_tail(&root->link, &list);
 	parent = NULL;
-	for (node = list_first_entry(&list, typeof(*node), link);
-	     !list_entry_is_head(node, &list, link);
-	     node = list_next_entry(node, link)) {
+	list_for_each_entry(node, &list, link) {
 		node->color = card->color;
 
 		for (i = 0; i < node->port_count; i++) {
@@ -474,11 +472,8 @@ static void update_topology_map(__be32 *buffer, size_t buffer_size, int root_nod
 
 void fw_core_handle_bus_reset(struct fw_card *card, int node_id, int generation,
 			      int self_id_count, u32 *self_ids, bool bm_abdicate)
-__must_not_hold(&card->topology_map.lock)
 {
 	struct fw_node *local_node;
-
-	lockdep_assert_not_held(&card->topology_map.lock);
 
 	trace_bus_reset_handle(card->index, generation, node_id, bm_abdicate, self_ids, self_id_count);
 

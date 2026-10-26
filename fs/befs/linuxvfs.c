@@ -14,7 +14,6 @@
 #include <linux/fs_context.h>
 #include <linux/fs_parser.h>
 #include <linux/errno.h>
-#include <linux/filelock.h>
 #include <linux/stat.h>
 #include <linux/nls.h>
 #include <linux/buffer_head.h>
@@ -80,7 +79,6 @@ static const struct file_operations befs_dir_operations = {
 	.read		= generic_read_dir,
 	.iterate_shared	= befs_readdir,
 	.llseek		= generic_file_llseek,
-	.setlease	= generic_setlease,
 };
 
 static const struct inode_operations befs_dir_inode_operations = {
@@ -140,20 +138,20 @@ befs_get_block(struct inode *inode, sector_t block,
 	int res;
 	ulong disk_off;
 
-	befs_debug(sb, "---> befs_get_block() for inode %llu, block %ld",
-		   inode->i_ino, (long)block);
+	befs_debug(sb, "---> befs_get_block() for inode %lu, block %ld",
+		   (unsigned long)inode->i_ino, (long)block);
 	if (create) {
 		befs_error(sb, "befs_get_block() was asked to write to "
-			   "block %ld in inode %llu", (long)block,
-			   inode->i_ino);
+			   "block %ld in inode %lu", (long)block,
+			   (unsigned long)inode->i_ino);
 		return -EPERM;
 	}
 
 	res = befs_fblock2brun(sb, ds, block, &run);
 	if (res != BEFS_OK) {
 		befs_error(sb,
-			   "<--- %s for inode %llu, block %ld ERROR",
-			   __func__, inode->i_ino,
+			   "<--- %s for inode %lu, block %ld ERROR",
+			   __func__, (unsigned long)inode->i_ino,
 			   (long)block);
 		return -EFBIG;
 	}
@@ -162,8 +160,8 @@ befs_get_block(struct inode *inode, sector_t block,
 
 	map_bh(bh_result, inode->i_sb, disk_off);
 
-	befs_debug(sb, "<--- %s for inode %llu, block %ld, disk address %lu",
-		  __func__, inode->i_ino, (long)block,
+	befs_debug(sb, "<--- %s for inode %lu, block %ld, disk address %lu",
+		  __func__, (unsigned long)inode->i_ino, (long)block,
 		  (unsigned long)disk_off);
 
 	return 0;
@@ -181,7 +179,7 @@ befs_lookup(struct inode *dir, struct dentry *dentry, unsigned int flags)
 	char *utfname;
 	const char *name = dentry->d_name.name;
 
-	befs_debug(sb, "---> %s name %pd inode %llu", __func__,
+	befs_debug(sb, "---> %s name %pd inode %ld", __func__,
 		   dentry, dir->i_ino);
 
 	/* Convert to UTF-8 */
@@ -224,7 +222,7 @@ befs_readdir(struct file *file, struct dir_context *ctx)
 	size_t keysize;
 	char keybuf[BEFS_NAME_LEN + 1];
 
-	befs_debug(sb, "---> %s name %pD, inode %llu, ctx->pos %lld",
+	befs_debug(sb, "---> %s name %pD, inode %ld, ctx->pos %lld",
 		  __func__, file, inode->i_ino, ctx->pos);
 
 	while (1) {
@@ -233,7 +231,7 @@ befs_readdir(struct file *file, struct dir_context *ctx)
 
 		if (result == BEFS_ERR) {
 			befs_debug(sb, "<--- %s ERROR", __func__);
-			befs_error(sb, "IO error reading %pD (inode %llu)",
+			befs_error(sb, "IO error reading %pD (inode %lu)",
 				   file, inode->i_ino);
 			return -EIO;
 
@@ -309,7 +307,7 @@ static struct inode *befs_iget(struct super_block *sb, unsigned long ino)
 	inode = iget_locked(sb, ino);
 	if (!inode)
 		return ERR_PTR(-ENOMEM);
-	if (!(inode_state_read_once(inode) & I_NEW))
+	if (!(inode->i_state & I_NEW))
 		return inode;
 
 	befs_ino = BEFS_I(inode);
@@ -324,7 +322,7 @@ static struct inode *befs_iget(struct super_block *sb, unsigned long ino)
 	bh = sb_bread(sb, inode->i_ino);
 	if (!bh) {
 		befs_error(sb, "unable to read inode block - "
-			   "inode = %llu", inode->i_ino);
+			   "inode = %lu", inode->i_ino);
 		goto unacquire_none;
 	}
 
@@ -333,7 +331,7 @@ static struct inode *befs_iget(struct super_block *sb, unsigned long ino)
 	befs_dump_inode(sb, raw_inode);
 
 	if (befs_check_inode(sb, raw_inode, inode->i_ino) != BEFS_OK) {
-		befs_error(sb, "Bad inode: %llu", inode->i_ino);
+		befs_error(sb, "Bad inode: %lu", inode->i_ino);
 		goto unacquire_bh;
 	}
 
@@ -407,7 +405,7 @@ static struct inode *befs_iget(struct super_block *sb, unsigned long ino)
 			inode->i_op = &simple_symlink_inode_operations;
 		}
 	} else {
-		befs_error(sb, "Inode %llu is not a regular file, "
+		befs_error(sb, "Inode %lu is not a regular file, "
 			   "directory or symlink. THAT IS WRONG! BeFS has no "
 			   "on disk special files", inode->i_ino);
 		goto unacquire_bh;
@@ -790,7 +788,7 @@ befs_fill_super(struct super_block *sb, struct fs_context *fc)
 	struct befs_mount_options *parsed_opts = fc->fs_private;
 	int silent = fc->sb_flags & SB_SILENT;
 
-	sb->s_fs_info = kzalloc_obj(*befs_sb);
+	sb->s_fs_info = kzalloc(sizeof(*befs_sb), GFP_KERNEL);
 	if (sb->s_fs_info == NULL)
 		goto unacquire_none;
 
@@ -957,7 +955,7 @@ static int befs_init_fs_context(struct fs_context *fc)
 {
 	struct befs_mount_options *opts;
 
-	opts = kzalloc_obj(*opts);
+	opts = kzalloc(sizeof(*opts), GFP_KERNEL);
 	if (!opts)
 		return -ENOMEM;
 

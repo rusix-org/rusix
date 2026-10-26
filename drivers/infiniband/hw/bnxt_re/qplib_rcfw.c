@@ -638,10 +638,6 @@ static int bnxt_qplib_process_qp_event(struct bnxt_qplib_rcfw *rcfw,
 		err_event = (struct creq_qp_error_notification *)qp_event;
 		qp_id = le32_to_cpu(err_event->xid);
 		spin_lock(&rcfw->tbl_lock);
-		if (!rcfw->qp_tbl) {
-			spin_unlock(&rcfw->tbl_lock);
-			break;
-		}
 		tbl_indx = map_qp_id_to_tbl_indx(qp_id, rcfw);
 		qp = rcfw->qp_tbl[tbl_indx].qp_handle;
 		if (!qp) {
@@ -972,7 +968,8 @@ int bnxt_qplib_alloc_rcfw_channel(struct bnxt_qplib_res *res,
 		goto fail;
 	}
 
-	rcfw->crsqe_tbl = kzalloc_objs(*rcfw->crsqe_tbl, cmdq->hwq.max_elements);
+	rcfw->crsqe_tbl = kcalloc(cmdq->hwq.max_elements,
+				  sizeof(*rcfw->crsqe_tbl), GFP_KERNEL);
 	if (!rcfw->crsqe_tbl)
 		goto fail;
 

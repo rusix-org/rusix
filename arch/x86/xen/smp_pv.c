@@ -65,9 +65,10 @@ static void cpu_bringup(void)
 	touch_softlockup_watchdog();
 
 	/* PVH runs in ring 0 and allows us to do native syscalls. Yay! */
-	if (!xen_feature(XENFEAT_supervisor_mode_kernel))
+	if (!xen_feature(XENFEAT_supervisor_mode_kernel)) {
+		xen_enable_sysenter();
 		xen_enable_syscall();
-
+	}
 	cpu = smp_processor_id();
 	identify_secondary_cpu(cpu);
 	set_cpu_sibling_map(cpu);
@@ -230,7 +231,7 @@ cpu_initialize_context(unsigned int cpu, struct task_struct *idle)
 	if (cpumask_test_and_set_cpu(cpu, xen_cpu_initialized_map))
 		return 0;
 
-	ctxt = kzalloc_obj(*ctxt);
+	ctxt = kzalloc(sizeof(*ctxt), GFP_KERNEL);
 	if (ctxt == NULL) {
 		cpumask_clear_cpu(cpu, xen_cpu_initialized_map);
 		return -ENOMEM;
@@ -400,7 +401,7 @@ static void xen_pv_stop_other_cpus(int wait)
 static irqreturn_t xen_irq_work_interrupt(int irq, void *dev_id)
 {
 	irq_work_run();
-	inc_irq_stat(IRQ_WORK);
+	inc_irq_stat(apic_irq_work_irqs);
 
 	return IRQ_HANDLED;
 }

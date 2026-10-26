@@ -39,11 +39,6 @@
 
 #define is_ldst_op(op)		(!!((op) & ARM_SPE_OP_LDST))
 
-#define is_simd_op(op)		(!!((op) & (ARM_SPE_OP_SIMD_FP | ARM_SPE_OP_SVE | \
-					    ARM_SPE_OP_SME | ARM_SPE_OP_ASE)))
-
-#define is_mem_op(op)		(is_ldst_op(op) || is_simd_op(op))
-
 #define ARM_SPE_CACHE_EVENT(lvl) \
 	(ARM_SPE_##lvl##_ACCESS | ARM_SPE_##lvl##_MISS)
 
@@ -134,10 +129,8 @@ struct data_source_handle {
 		.ds_synth = arm_spe__synth_##func,	\
 	}
 
-static int arm_spe__get_midr(struct arm_spe *spe, int cpu, u64 *midr);
-
 static void arm_spe_dump(struct arm_spe *spe __maybe_unused,
-			 unsigned char *buf, size_t len, u64 midr)
+			 unsigned char *buf, size_t len)
 {
 	struct arm_spe_pkt packet;
 	size_t pos = 0;
@@ -150,8 +143,7 @@ static void arm_spe_dump(struct arm_spe *spe __maybe_unused,
 		      len);
 
 	while (len) {
-		ret = arm_spe_get_packet(buf, len, &packet, midr);
-
+		ret = arm_spe_get_packet(buf, len, &packet);
 		if (ret > 0)
 			pkt_len = ret;
 		else
@@ -177,10 +169,10 @@ static void arm_spe_dump(struct arm_spe *spe __maybe_unused,
 }
 
 static void arm_spe_dump_event(struct arm_spe *spe, unsigned char *buf,
-			       size_t len, u64 midr)
+			       size_t len)
 {
 	printf(".\n");
-	arm_spe_dump(spe, buf, len, midr);
+	arm_spe_dump(spe, buf, len);
 }
 
 static int arm_spe_get_trace(struct arm_spe_buffer *b, void *data)
@@ -305,10 +297,8 @@ static void arm_spe_set_pid_tid_cpu(struct arm_spe *spe,
 
 	if (speq->thread) {
 		speq->pid = thread__pid(speq->thread);
-		if (queue->cpu == -1) {
+		if (queue->cpu == -1)
 			speq->cpu = thread__cpu(speq->thread);
-			arm_spe__get_midr(spe, speq->cpu, &speq->decoder->midr);
-		}
 	}
 }
 
@@ -356,28 +346,17 @@ static struct simd_flags arm_spe__synth_simd_flags(const struct arm_spe_record *
 {
 	struct simd_flags simd_flags = {};
 
-	if (record->op & ARM_SPE_OP_SVE)
+	if ((record->op & ARM_SPE_OP_LDST) && (record->op & ARM_SPE_OP_SVE_LDST))
 		simd_flags.arch |= SIMD_OP_FLAGS_ARCH_SVE;
-	else if (record->op & ARM_SPE_OP_SME)
-		simd_flags.arch |= SIMD_OP_FLAGS_ARCH_SME;
-	else if (record->op & (ARM_SPE_OP_ASE | ARM_SPE_OP_SIMD_FP))
-		simd_flags.arch |= SIMD_OP_FLAGS_ARCH_ASE;
 
-	if (record->op & ARM_SPE_OP_SVE) {
-		if (!(record->op & ARM_SPE_OP_PRED))
-			simd_flags.pred = SIMD_OP_FLAGS_PRED_DISABLED;
-		else if (record->type & ARM_SPE_SVE_PARTIAL_PRED)
-			simd_flags.pred = SIMD_OP_FLAGS_PRED_PARTIAL;
-		else if (record->type & ARM_SPE_SVE_EMPTY_PRED)
-			simd_flags.pred = SIMD_OP_FLAGS_PRED_EMPTY;
-		else
-			simd_flags.pred = SIMD_OP_FLAGS_PRED_FULL;
-	} else {
-		if (record->type & ARM_SPE_SVE_PARTIAL_PRED)
-			simd_flags.pred = SIMD_OP_FLAGS_PRED_PARTIAL;
-		else if (record->type & ARM_SPE_SVE_EMPTY_PRED)
-			simd_flags.pred = SIMD_OP_FLAGS_PRED_EMPTY;
-	}
+	if ((record->op & ARM_SPE_OP_OTHER) && (record->op & ARM_SPE_OP_SVE_OTHER))
+		simd_flags.arch |= SIMD_OP_FLAGS_ARCH_SVE;
+
+	if (record->type & ARM_SPE_SVE_PARTIAL_PRED)
+		simd_flags.pred |= SIMD_OP_FLAGS_PRED_PARTIAL;
+
+	if (record->type & ARM_SPE_SVE_EMPTY_PRED)
+		simd_flags.pred |= SIMD_OP_FLAGS_PRED_EMPTY;
 
 	return simd_flags;
 }
@@ -487,30 +466,10 @@ static void arm_spe__prep_branch_stack(struct arm_spe_queue *speq)
 	bstack->hw_idx = -1ULL;
 }
 
-static int arm_spe__inject_event(struct arm_spe *spe, union perf_event *event,
-				 struct perf_sample *sample, u64 type)
+static int arm_spe__inject_event(union perf_event *event, struct perf_sample *sample, u64 type)
 {
-	struct evsel *evsel = sample->evsel;
-	u64 branch_sample_type = 0;
-	size_t sz;
-
-	if (!evsel && spe->session && spe->session->evlist)
-		evsel = evlist__id2evsel(spe->session->evlist, sample->id);
-
-	if (evsel)
-		branch_sample_type = evsel->core.attr.branch_sample_type;
-
-	event->header.type = PERF_RECORD_SAMPLE;
-	sz = perf_event__sample_event_size(sample, type, /*read_format=*/0,
-					   branch_sample_type);
-	if (sz >= PERF_SAMPLE_MAX_SIZE) {
-		pr_err("Sample size %zu exceeds max size %d\n", sz, PERF_SAMPLE_MAX_SIZE);
-		return -EFAULT;
-	}
-	event->header.size = sz;
-
-	return perf_event__synthesize_sample(event, type, /*read_format=*/0,
-					     branch_sample_type, sample);
+	event->header.size = perf_event__sample_event_size(sample, type, 0);
+	return perf_event__synthesize_sample(event, type, 0, sample);
 }
 
 static inline int
@@ -522,7 +481,7 @@ arm_spe_deliver_synth_event(struct arm_spe *spe,
 	int ret;
 
 	if (spe->synth_opts.inject) {
-		ret = arm_spe__inject_event(spe, event, sample, spe->sample_type);
+		ret = arm_spe__inject_event(event, sample, spe->sample_type);
 		if (ret)
 			return ret;
 	}
@@ -611,22 +570,15 @@ static int arm_spe__synth_instruction_sample(struct arm_spe_queue *speq,
 }
 
 static const struct midr_range common_ds_encoding_cpus[] = {
-	MIDR_ALL_VERSIONS(MIDR_CORTEX_A715),
 	MIDR_ALL_VERSIONS(MIDR_CORTEX_A720),
-	MIDR_ALL_VERSIONS(MIDR_CORTEX_A720AE),
 	MIDR_ALL_VERSIONS(MIDR_CORTEX_A725),
-	MIDR_ALL_VERSIONS(MIDR_CORTEX_A78C),
-	MIDR_ALL_VERSIONS(MIDR_CORTEX_X1),
 	MIDR_ALL_VERSIONS(MIDR_CORTEX_X1C),
 	MIDR_ALL_VERSIONS(MIDR_CORTEX_X3),
-	MIDR_ALL_VERSIONS(MIDR_CORTEX_X4),
 	MIDR_ALL_VERSIONS(MIDR_CORTEX_X925),
 	MIDR_ALL_VERSIONS(MIDR_NEOVERSE_N1),
 	MIDR_ALL_VERSIONS(MIDR_NEOVERSE_N2),
 	MIDR_ALL_VERSIONS(MIDR_NEOVERSE_V1),
 	MIDR_ALL_VERSIONS(MIDR_NEOVERSE_V2),
-	MIDR_ALL_VERSIONS(MIDR_NEOVERSE_V3),
-	MIDR_ALL_VERSIONS(MIDR_NVIDIA_OLYMPUS),
 	{},
 };
 
@@ -997,9 +949,14 @@ static void arm_spe__synth_memory_level(struct arm_spe_queue *speq,
 	}
 }
 
-static int arm_spe__get_midr(struct arm_spe *spe, int cpu, u64 *midr)
+static void arm_spe__synth_ds(struct arm_spe_queue *speq,
+			      const struct arm_spe_record *record,
+			      union perf_mem_data_src *data_src)
 {
-	u64 *metadata;
+	struct arm_spe *spe = speq->spe;
+	u64 *metadata = NULL;
+	u64 midr;
+	unsigned int i;
 
 	/* Metadata version 1 assumes all CPUs are the same (old behavior) */
 	if (spe->metadata_ver == 1) {
@@ -1007,34 +964,14 @@ static int arm_spe__get_midr(struct arm_spe *spe, int cpu, u64 *midr)
 
 		pr_warning_once("Old SPE metadata, re-record to improve decode accuracy\n");
 		cpuid = perf_env__cpuid(perf_session__env(spe->session));
-		if (!cpuid)
-			goto err;
+		midr = strtol(cpuid, NULL, 16);
+	} else {
+		metadata = arm_spe__get_metadata_by_cpu(spe, speq->cpu);
+		if (!metadata)
+			return;
 
-		*midr = strtol(cpuid, NULL, 16);
-		return 0;
+		midr = metadata[ARM_SPE_CPU_MIDR];
 	}
-
-	metadata = arm_spe__get_metadata_by_cpu(spe, cpu);
-	if (!metadata)
-		goto err;
-
-	*midr = metadata[ARM_SPE_CPU_MIDR];
-	return 0;
-
-err:
-	pr_warning_once("Failed to get MIDR for CPU %d\n", cpu);
-	return -EINVAL;
-}
-
-static void arm_spe__synth_ds(struct arm_spe_queue *speq,
-			      const struct arm_spe_record *record,
-			      union perf_mem_data_src *data_src)
-{
-	u64 midr;
-	unsigned int i;
-
-	if (arm_spe__get_midr(speq->spe, speq->cpu, &midr))
-		return;
 
 	for (i = 0; i < ARRAY_SIZE(data_source_handles); i++) {
 		if (is_midr_in_range_list(midr, data_source_handles[i].midr_ranges)) {
@@ -1051,7 +988,8 @@ arm_spe__synth_data_source(struct arm_spe_queue *speq,
 {
 	union perf_mem_data_src	data_src = {};
 
-	if (!is_mem_op(record->op))
+	/* Only synthesize data source for LDST operations */
+	if (!is_ldst_op(record->op))
 		return data_src;
 
 	if (record->op & ARM_SPE_OP_LD)
@@ -1059,7 +997,7 @@ arm_spe__synth_data_source(struct arm_spe_queue *speq,
 	else if (record->op & ARM_SPE_OP_ST)
 		data_src.mem_op = PERF_MEM_OP_STORE;
 	else
-		data_src.mem_op = PERF_MEM_OP_NA;
+		return data_src;
 
 	arm_spe__synth_ds(speq, record, &data_src);
 	arm_spe__synth_memory_level(speq, record, &data_src);
@@ -1160,7 +1098,11 @@ static int arm_spe_sample(struct arm_spe_queue *speq)
 			return err;
 	}
 
-	if (spe->sample_memory && is_mem_op(record->op)) {
+	/*
+	 * When data_src is zero it means the record is not a memory operation,
+	 * skip to synthesize memory sample for this case.
+	 */
+	if (spe->sample_memory && is_ldst_op(record->op)) {
 		err = arm_spe__synth_mem_sample(speq, spe->memory_id, data_src);
 		if (err)
 			return err;
@@ -1273,7 +1215,6 @@ static int arm_spe__setup_queue(struct arm_spe *spe,
 
 	if (queue->cpu != -1)
 		speq->cpu = queue->cpu;
-	arm_spe__get_midr(spe, queue->cpu, &speq->decoder->midr);
 
 	if (!speq->on_heap) {
 		int ret;
@@ -1516,11 +1457,8 @@ static int arm_spe_process_auxtrace_event(struct perf_session *session,
 		/* Dump here now we have copied a piped trace out of the pipe */
 		if (dump_trace) {
 			if (auxtrace_buffer__get_data(buffer, fd)) {
-				u64 midr = 0;
-
-				arm_spe__get_midr(spe, buffer->cpu.cpu, &midr);
 				arm_spe_dump_event(spe, buffer->data,
-						   buffer->size, midr);
+						buffer->size);
 				auxtrace_buffer__put_data(buffer);
 			}
 		}
@@ -1798,7 +1736,10 @@ arm_spe_synth_events(struct arm_spe *spe, struct perf_session *session)
 	attr.sample_period = spe->synth_opts.period;
 
 	/* create new id val to be a fixed offset from evsel id */
-	id = auxtrace_synth_id_range_start(evsel);
+	id = evsel->core.id[0] + 1000000000;
+
+	if (!id)
+		id = 1;
 
 	if (spe->synth_opts.flc) {
 		spe->sample_flc = true;
@@ -2006,7 +1947,7 @@ int arm_spe_process_auxtrace_info(union perf_event *event,
 	spe->tc.time_mult = tc->time_mult;
 	spe->tc.time_zero = tc->time_zero;
 
-	if (event_contains(*tc, cap_user_time_short)) {
+	if (event_contains(*tc, time_cycles)) {
 		spe->tc.time_cycles = tc->time_cycles;
 		spe->tc.time_mask = tc->time_mask;
 		spe->tc.cap_user_time_zero = tc->cap_user_time_zero;

@@ -10,7 +10,8 @@
  *  MSGTYPE restruct:		  Holger Dengler <hd@linux.vnet.ibm.com>
  */
 
-#define pr_fmt(fmt) "zcrypt: " fmt
+#define KMSG_COMPONENT "zcrypt"
+#define pr_fmt(fmt) KMSG_COMPONENT ": " fmt
 
 #include <linux/module.h>
 #include <linux/slab.h>
@@ -150,11 +151,6 @@ struct type80_hdr {
 	unsigned char	code;		/* 0x00 */
 	unsigned char	reserved2[3];
 	unsigned char	reserved3[8];
-} __packed;
-
-struct type80_reply {
-	struct type80_hdr hdr;
-	char data[];
 } __packed;
 
 int get_rsa_modex_fc(struct ica_rsa_modexpo *mex, int *fcode)
@@ -345,43 +341,32 @@ static int ICACRT_msg_to_type50CRT_msg(struct zcrypt_queue *zq,
  * @data: pointer to user output data
  * @length: size of user output data
  *
- * Returns 0 on success or neg. errno value on failure.
+ * Returns 0 on success or -EFAULT.
  */
 static int convert_type80(struct zcrypt_queue *zq,
 			  struct ap_message *reply,
 			  char __user *outputdata,
 			  unsigned int outputdatalength)
 {
-	struct type80_reply *msg = reply->msg;
-	size_t payload_len;
+	struct type80_hdr *t80h = reply->msg;
+	unsigned char *data;
 
-	/*
-	 * reply->len is always >= sizeof(struct type80_reply) here and
-	 * outputdatalength (the modulus size) is guaranteed to be equal to
-	 * inputdatalength and 0 < outputdatalength <= CEX3A_MAX_MOD_SIZE,
-	 * also payload size may be >= outputdatalength.
-	 */
-
-	payload_len = reply->len - sizeof(msg->hdr);
-
-	if (outputdatalength > payload_len) {
-		/* We expect at least outputdatalength bytes, broken card ? */
+	if (t80h->len < sizeof(*t80h) + outputdatalength) {
+		/* The result is too short, the CEXxA card may not do that.. */
 		zq->online = 0;
 		pr_err("Crypto dev=%02x.%04x code=0x%02x => online=0 rc=EAGAIN\n",
 		       AP_QID_CARD(zq->queue->qid),
-		       AP_QID_QUEUE(zq->queue->qid), msg->hdr.code);
+		       AP_QID_QUEUE(zq->queue->qid), t80h->code);
 		ZCRYPT_DBF_ERR("%s dev=%02x.%04x code=0x%02x => online=0 rc=EAGAIN\n",
 			       __func__, AP_QID_CARD(zq->queue->qid),
-			       AP_QID_QUEUE(zq->queue->qid), msg->hdr.code);
+			       AP_QID_QUEUE(zq->queue->qid), t80h->code);
 		ap_send_online_uevent(&zq->queue->ap_dev, zq->online);
 		return -EAGAIN;
 	}
-
-	if (copy_to_user(outputdata,
-			 msg->data + payload_len - outputdatalength,
-			 outputdatalength))
+	BUG_ON(t80h->len > CEX3A_MAX_RESPONSE_SIZE);
+	data = reply->msg + t80h->len - outputdatalength;
+	if (copy_to_user(outputdata, data, outputdatalength))
 		return -EFAULT;
-
 	return 0;
 }
 
@@ -390,19 +375,14 @@ static int convert_response(struct zcrypt_queue *zq,
 			    char __user *outputdata,
 			    unsigned int outputdatalength)
 {
-	struct type80_reply *msg = reply->msg;
+	/* Response type byte is the second byte in the response. */
+	unsigned char rtype = ((unsigned char *)reply->msg)[1];
 
-	/* reply->len is always >= sizeof(struct error_hdr) here */
-
-	switch (msg->hdr.type) {
+	switch (rtype) {
 	case TYPE82_RSP_CODE:
 	case TYPE88_RSP_CODE:
 		return convert_error(zq, reply);
 	case TYPE80_RSP_CODE:
-		if (msg->hdr.code)
-			return convert_error(zq, reply);
-		if (reply->len < sizeof(struct type80_reply))
-			return -EINVAL;
 		return convert_type80(zq, reply,
 				      outputdata, outputdatalength);
 	default: /* Unknown response type, this should NEVER EVER happen */
@@ -410,11 +390,11 @@ static int convert_response(struct zcrypt_queue *zq,
 		pr_err("Crypto dev=%02x.%04x unknown response type 0x%02x => online=0 rc=EAGAIN\n",
 		       AP_QID_CARD(zq->queue->qid),
 		       AP_QID_QUEUE(zq->queue->qid),
-		       (int)msg->hdr.type);
+		       (int)rtype);
 		ZCRYPT_DBF_ERR(
 			"%s dev=%02x.%04x unknown response type 0x%02x => online=0 rc=EAGAIN\n",
 			__func__, AP_QID_CARD(zq->queue->qid),
-			AP_QID_QUEUE(zq->queue->qid), (int)msg->hdr.type);
+			AP_QID_QUEUE(zq->queue->qid), (int)rtype);
 		ap_send_online_uevent(&zq->queue->ap_dev, zq->online);
 		return -EAGAIN;
 	}
@@ -437,46 +417,26 @@ static void zcrypt_msgtype50_receive(struct ap_queue *aq,
 		.reply_code = REP82_ERROR_MACHINE_FAILURE,
 	};
 	struct type80_hdr *t80h;
-	size_t len;
+	int len;
 
 	/* Copy the reply message to the request message buffer. */
 	if (!reply)
 		goto out;	/* ap_msg->rc indicates the error */
-
 	t80h = reply->msg;
-
-	if (reply->len < sizeof(*t80h) ||
-	    t80h->type != TYPE80_RSP_CODE) {
-		if (reply->len < sizeof(error_reply)) {
-			/* total broken reply, use static error reply instead */
-			memcpy(msg->msg, &error_reply, sizeof(error_reply));
-			msg->len = sizeof(error_reply);
+	if (t80h->type == TYPE80_RSP_CODE) {
+		len = t80h->len;
+		if (len > reply->bufsize || len > msg->bufsize ||
+		    len != reply->len) {
+			pr_debug("len mismatch => EMSGSIZE\n");
+			msg->rc = -EMSGSIZE;
 			goto out;
-		} else {
-			/* malformed reply, convert function will handle this */
-			len = reply->len;
-			goto copy_len_and_out;
 		}
+		memcpy(msg->msg, reply->msg, len);
+		msg->len = len;
+	} else {
+		memcpy(msg->msg, reply->msg, sizeof(error_reply));
+		msg->len = sizeof(error_reply);
 	}
-
-	len = t80h->len;
-
-copy_len_and_out:
-	if (len != reply->len) {
-		msg->rc = -EMSGSIZE;
-		pr_debug("len %zu rpl.len %zu mismatch, msg.rc=%d\n",
-			 len, reply->len, msg->rc);
-		goto out;
-	}
-	if (len > reply->bufsize || len > msg->bufsize) {
-		msg->rc = -EMSGSIZE;
-		pr_debug("len %zu exceeds buf %zu/%zu, msg.rc=%d\n",
-			 len, reply->bufsize, msg->bufsize, msg->rc);
-		goto out;
-	}
-	memcpy(msg->msg, reply->msg, len);
-	msg->len = len;
-
 out:
 	complete(&msg->response.work);
 }

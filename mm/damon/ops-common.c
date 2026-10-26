@@ -1,34 +1,29 @@
 // SPDX-License-Identifier: GPL-2.0
 /*
  * Common Code for Data Access Monitoring
+ *
+ * Author: SeongJae Park <sj@kernel.org>
  */
 
-#include <linux/hugetlb.h>
 #include <linux/migrate.h>
 #include <linux/mmu_notifier.h>
 #include <linux/page_idle.h>
 #include <linux/pagemap.h>
 #include <linux/rmap.h>
 #include <linux/swap.h>
-#include <linux/leafops.h>
+#include <linux/swapops.h>
 
 #include "../internal.h"
 #include "ops-common.h"
 
-static bool damon_folio_acceptable(struct folio *folio, bool monitor)
-{
-	return folio_test_lru(folio) ||
-		(monitor && folio_test_hugetlb(folio));
-}
-
 /*
- * Get an online page for a pfn if it's in the LRU list, or a hugetlb folio if
- * @monitor is set.  Otherwise, returns NULL.
+ * Get an online page for a pfn if it's in the LRU list.  Otherwise, returns
+ * NULL.
  *
  * The body of this function is stolen from the 'page_idle_get_folio()'.  We
  * steal rather than reuse it because the code is quite simple.
  */
-static struct folio *__damon_get_folio(unsigned long pfn, bool monitor)
+struct folio *damon_get_folio(unsigned long pfn)
 {
 	struct page *page = pfn_to_online_page(pfn);
 	struct folio *folio;
@@ -39,22 +34,11 @@ static struct folio *__damon_get_folio(unsigned long pfn, bool monitor)
 	folio = page_folio(page);
 	if (!folio_try_get(folio))
 		return NULL;
-	if (unlikely(page_folio(page) != folio) ||
-			!damon_folio_acceptable(folio, monitor)) {
+	if (unlikely(page_folio(page) != folio) || !folio_test_lru(folio)) {
 		folio_put(folio);
 		folio = NULL;
 	}
 	return folio;
-}
-
-struct folio *damon_get_folio(unsigned long pfn)
-{
-	return __damon_get_folio(pfn, false);
-}
-
-struct folio *damon_get_monitor_folio(unsigned long pfn)
-{
-	return __damon_get_folio(pfn, true);
 }
 
 void damon_ptep_mkold(pte_t *pte, struct vm_area_struct *vma, unsigned long addr)
@@ -67,7 +51,7 @@ void damon_ptep_mkold(pte_t *pte, struct vm_area_struct *vma, unsigned long addr
 	if (likely(pte_present(pteval)))
 		pfn = pte_pfn(pteval);
 	else
-		pfn = softleaf_to_pfn(softleaf_from_pte(pteval));
+		pfn = swp_offset_pfn(pte_to_swp_entry(pteval));
 
 	folio = damon_get_folio(pfn);
 	if (!folio)
@@ -79,12 +63,7 @@ void damon_ptep_mkold(pte_t *pte, struct vm_area_struct *vma, unsigned long addr
 	 * device aspects.
 	 */
 	if (likely(pte_present(pteval)))
-		/*
-		 * Arch implementation of ptep_test_and_clear_young() may
-		 * require aligned @addr
-		 */
-		young |= ptep_test_and_clear_young(vma, PAGE_ALIGN_DOWN(addr),
-				pte);
+		young |= ptep_test_and_clear_young(vma, addr, pte);
 	young |= mmu_notifier_clear_young(vma->vm_mm, addr, addr + PAGE_SIZE);
 	if (young)
 		folio_set_young(folio);
@@ -96,66 +75,18 @@ void damon_ptep_mkold(pte_t *pte, struct vm_area_struct *vma, unsigned long addr
 void damon_pmdp_mkold(pmd_t *pmd, struct vm_area_struct *vma, unsigned long addr)
 {
 #ifdef CONFIG_TRANSPARENT_HUGEPAGE
-	pmd_t pmdval = pmdp_get(pmd);
-	struct folio *folio;
-	bool young = false;
-	unsigned long pfn;
+	struct folio *folio = damon_get_folio(pmd_pfn(pmdp_get(pmd)));
 
-	if (likely(pmd_present(pmdval)))
-		pfn = pmd_pfn(pmdval);
-	else
-		pfn = softleaf_to_pfn(softleaf_from_pmd(pmdval));
-
-	folio = damon_get_folio(pfn);
 	if (!folio)
 		return;
 
-	if (likely(pmd_present(pmdval)))
-		young |= pmdp_test_and_clear_young(vma, addr, pmd);
-	young |= mmu_notifier_clear_young(vma->vm_mm, addr, addr + HPAGE_PMD_SIZE);
-	if (young)
+	if (pmdp_clear_young_notify(vma, addr, pmd))
 		folio_set_young(folio);
 
 	folio_set_idle(folio);
 	folio_put(folio);
 #endif /* CONFIG_TRANSPARENT_HUGEPAGE */
 }
-
-#ifdef CONFIG_HUGETLB_PAGE
-static bool damon_hugetlb_ptep_mkold(pte_t *pte, struct mm_struct *mm,
-		struct vm_area_struct *vma, unsigned long addr, pte_t *entry)
-{
-	unsigned long psize = huge_page_size(hstate_vma(vma));
-
-	if (!pte_young(*entry))
-		return false;
-	*entry = huge_ptep_get_and_clear(mm, addr, pte, psize);
-	*entry = pte_mkold(*entry);
-	set_huge_pte_at(mm, addr, pte, *entry, psize);
-	return true;
-}
-
-void damon_hugetlb_mkold(pte_t *pte, struct mm_struct *mm,
-		struct vm_area_struct *vma, unsigned long addr)
-{
-	bool referenced = false;
-	pte_t entry = huge_ptep_get(mm, addr, pte);
-	struct folio *folio = pfn_folio(pte_pfn(entry));
-
-	folio_get(folio);
-
-	referenced = damon_hugetlb_ptep_mkold(pte, mm, vma, addr, &entry);
-	if (mmu_notifier_clear_young(mm, addr,
-				     addr + huge_page_size(hstate_vma(vma))))
-		referenced = true;
-
-	if (referenced)
-		folio_set_young(folio);
-
-	folio_set_idle(folio);
-	folio_put(folio);
-}
-#endif	/* CONFIG_HUGETLB_PAGE */
 
 #define DAMON_MAX_SUBSCORE	(100)
 #define DAMON_MAX_AGE_IN_LOG	(32)
@@ -170,17 +101,14 @@ int damon_hot_score(struct damon_ctx *c, struct damon_region *r,
 	unsigned int age_weight = s->quota.weight_age;
 	int hotness;
 
-	freq_subscore = mult_frac(damon_nr_accesses_mvsum(r, c),
+	freq_subscore = mult_frac(r->nr_accesses_bp / 10000,
 			DAMON_MAX_SUBSCORE,
-			damon_nr_samples_per_aggr(&c->attrs));
+			damon_max_nr_accesses(&c->attrs));
 
 	age_in_sec = (unsigned long)r->age * c->attrs.aggr_interval / 1000000;
-	if (age_in_sec)
-		age_in_log = min_t(int, ilog2(age_in_sec) + 1,
-				DAMON_MAX_AGE_IN_LOG);
-	else
-		age_in_log = 0;
-
+	for (age_in_log = 0; age_in_log < DAMON_MAX_AGE_IN_LOG && age_in_sec;
+			age_in_log++, age_in_sec >>= 1)
+		;
 
 	/* If frequency is 0, higher age means it's colder */
 	if (freq_subscore == 0)
@@ -222,15 +150,10 @@ static bool damon_folio_mkold_one(struct folio *folio,
 
 	while (page_vma_mapped_walk(&pvmw)) {
 		addr = pvmw.address;
-		if (pvmw.pte) {
-			if (folio_test_hugetlb(folio))
-				damon_hugetlb_mkold(pvmw.pte, vma->vm_mm, vma,
-						addr);
-			else
-				damon_ptep_mkold(pvmw.pte, vma, addr);
-		} else {
+		if (pvmw.pte)
+			damon_ptep_mkold(pvmw.pte, vma, addr);
+		else
 			damon_pmdp_mkold(pvmw.pmd, vma, addr);
-		}
 	}
 	return true;
 }
@@ -241,51 +164,22 @@ void damon_folio_mkold(struct folio *folio)
 		.rmap_one = damon_folio_mkold_one,
 		.anon_lock = folio_lock_anon_vma_read,
 	};
+	bool need_lock;
 
 	if (!folio_mapped(folio) || !folio_raw_mapping(folio)) {
 		folio_set_idle(folio);
 		return;
 	}
 
-	if (!folio_trylock(folio))
+	need_lock = !folio_test_anon(folio) || folio_test_ksm(folio);
+	if (need_lock && !folio_trylock(folio))
 		return;
 
 	rmap_walk(folio, &rwc);
-	folio_unlock(folio);
 
-}
+	if (need_lock)
+		folio_unlock(folio);
 
-#ifdef CONFIG_HUGETLB_PAGE
-static bool damon_hugetlb_young(pte_t *pte, struct vm_area_struct *vma,
-		unsigned long addr, struct folio *folio)
-{
-	pte_t entry = huge_ptep_get(vma->vm_mm, addr, pte);
-
-	return (pte_present(entry) && pte_young(entry)) ||
-		!folio_test_idle(folio) ||
-		mmu_notifier_test_young(vma->vm_mm, addr);
-}
-#else
-static bool damon_hugetlb_young(pte_t *pte, struct vm_area_struct *vma,
-		unsigned long addr, struct folio *folio)
-{
-	return false;
-}
-#endif	/* CONFIG_HUGETLB_PAGE */
-
-static bool damon_pte_young(pte_t *pte, struct vm_area_struct *vma,
-		unsigned long addr, struct folio *folio)
-{
-	pte_t entry = ptep_get(pte);
-
-	/*
-	 * PFN swap PTEs, such as device-exclusive ones, that actually map
-	 * pages are "old" from a CPU perspective. The MMU notifier takes care
-	 * of any device aspects.
-	 */
-	return (pte_present(entry) && pte_young(entry)) ||
-		!folio_test_idle(folio) ||
-		mmu_notifier_test_young(vma->vm_mm, addr);
 }
 
 static bool damon_folio_young_one(struct folio *folio,
@@ -293,22 +187,25 @@ static bool damon_folio_young_one(struct folio *folio,
 {
 	bool *accessed = arg;
 	DEFINE_FOLIO_VMA_WALK(pvmw, folio, vma, addr, 0);
+	pte_t pte;
 
 	*accessed = false;
 	while (page_vma_mapped_walk(&pvmw)) {
 		addr = pvmw.address;
 		if (pvmw.pte) {
-			if (folio_test_hugetlb(folio))
-				*accessed = damon_hugetlb_young(pvmw.pte, vma,
-						addr, folio);
-			else
-				*accessed = damon_pte_young(pvmw.pte, vma,
-						addr, folio);
+			pte = ptep_get(pvmw.pte);
+
+			/*
+			 * PFN swap PTEs, such as device-exclusive ones, that
+			 * actually map pages are "old" from a CPU perspective.
+			 * The MMU notifier takes care of any device aspects.
+			 */
+			*accessed = (pte_present(pte) && pte_young(pte)) ||
+				!folio_test_idle(folio) ||
+				mmu_notifier_test_young(vma->vm_mm, addr);
 		} else {
 #ifdef CONFIG_TRANSPARENT_HUGEPAGE
-			pmd_t pmd = pmdp_get(pvmw.pmd);
-
-			*accessed = (pmd_present(pmd) && pmd_young(pmd)) ||
+			*accessed = pmd_young(pmdp_get(pvmw.pmd)) ||
 				!folio_test_idle(folio) ||
 				mmu_notifier_test_young(vma->vm_mm, addr);
 #else
@@ -333,6 +230,7 @@ bool damon_folio_young(struct folio *folio)
 		.rmap_one = damon_folio_young_one,
 		.anon_lock = folio_lock_anon_vma_read,
 	};
+	bool need_lock;
 
 	if (!folio_mapped(folio) || !folio_raw_mapping(folio)) {
 		if (folio_test_idle(folio))
@@ -341,11 +239,14 @@ bool damon_folio_young(struct folio *folio)
 			return true;
 	}
 
-	if (!folio_trylock(folio))
+	need_lock = !folio_test_anon(folio) || folio_test_ksm(folio);
+	if (need_lock && !folio_trylock(folio))
 		return false;
 
 	rmap_walk(folio, &rwc);
-	folio_unlock(folio);
+
+	if (need_lock)
+		folio_unlock(folio);
 
 	return accessed;
 }
@@ -404,7 +305,7 @@ static unsigned int __damon_migrate_folio_list(
 		 * instead of migrated.
 		 */
 		.gfp_mask = (GFP_HIGHUSER_MOVABLE & ~__GFP_RECLAIM) |
-			__GFP_NOMEMALLOC | GFP_NOWAIT | __GFP_THISNODE,
+			__GFP_NOMEMALLOC | GFP_NOWAIT,
 		.nid = target_nid,
 	};
 
@@ -422,19 +323,6 @@ static unsigned int __damon_migrate_folio_list(
 	return nr_succeeded;
 }
 
-static void damon_putback_folio_list(struct list_head *folio_list)
-{
-	struct folio *folio;
-
-	while (!list_empty(folio_list)) {
-		folio = lru_to_folio(folio_list);
-		list_del(&folio->lru);
-		node_stat_sub_folio(folio, NR_ISOLATED_ANON +
-				folio_is_file_lru(folio));
-		folio_putback_lru(folio);
-	}
-}
-
 static unsigned int damon_migrate_folio_list(struct list_head *folio_list,
 						struct pglist_data *pgdat,
 						int target_nid)
@@ -445,6 +333,8 @@ static unsigned int damon_migrate_folio_list(struct list_head *folio_list,
 	LIST_HEAD(migrate_folios);
 
 	while (!list_empty(folio_list)) {
+		struct folio *folio;
+
 		cond_resched();
 
 		folio = lru_to_folio(folio_list);
@@ -476,7 +366,13 @@ keep:
 
 	list_splice(&ret_folios, folio_list);
 
-	damon_putback_folio_list(folio_list);
+	while (!list_empty(folio_list)) {
+		folio = lru_to_folio(folio_list);
+		list_del(&folio->lru);
+		node_stat_sub_folio(folio, NR_ISOLATED_ANON +
+				folio_is_file_lru(folio));
+		folio_putback_lru(folio);
+	}
 
 	return nr_migrated;
 }
@@ -493,7 +389,14 @@ unsigned long damon_migrate_pages(struct list_head *folio_list, int target_nid)
 
 	if (target_nid < 0 || target_nid >= MAX_NUMNODES ||
 			!node_state(target_nid, N_MEMORY)) {
-		damon_putback_folio_list(folio_list);
+		while (!list_empty(folio_list)) {
+			struct folio *folio = lru_to_folio(folio_list);
+
+			list_del(&folio->lru);
+			node_stat_sub_folio(folio, NR_ISOLATED_ANON +
+					folio_is_file_lru(folio));
+			folio_putback_lru(folio);
+		}
 		return nr_migrated;
 	}
 
@@ -530,46 +433,4 @@ bool damos_ops_has_filter(struct damos *s)
 	damos_for_each_ops_filter(f, s)
 		return true;
 	return false;
-}
-
-bool damon_ops_filter_match(struct damon_filter *filter, struct folio *folio)
-{
-	bool matched = false;
-	struct mem_cgroup *memcg;
-	size_t folio_sz;
-
-	switch (filter->type) {
-	case DAMON_FILTER_TYPE_ANON:
-		if (!folio) {
-			matched = false;
-			break;
-		}
-		matched = folio_test_anon(folio);
-		break;
-	case DAMON_FILTER_TYPE_MEMCG:
-		if (!folio) {
-			matched = false;
-			break;
-		}
-		rcu_read_lock();
-		memcg = folio_memcg_check(folio);
-		if (!memcg)
-			matched = false;
-		else
-			matched = filter->memcg_id == mem_cgroup_id(memcg);
-		rcu_read_unlock();
-		break;
-	case DAMON_FILTER_TYPE_HUGEPAGE_SIZE:
-		if (!folio) {
-			matched = false;
-			break;
-		}
-		folio_sz = folio_size(folio);
-		matched = filter->range_min <= folio_sz &&
-			folio_sz <= filter->range_max;
-		break;
-	default:
-		break;
-	}
-	return matched == filter->matching;
 }

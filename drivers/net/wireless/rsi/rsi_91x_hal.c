@@ -655,7 +655,7 @@ static int bl_write_header(struct rsi_hw *adapter, u8 *flash_content,
 	u32 write_addr, write_len;
 	int status;
 
-	bl_hdr = kzalloc_obj(*bl_hdr);
+	bl_hdr = kzalloc(sizeof(*bl_hdr), GFP_KERNEL);
 	if (!bl_hdr)
 		return -ENOMEM;
 

@@ -3,6 +3,7 @@
 
 #include <linux/kernel.h>
 #include <linux/module.h>
+#include <linux/mod_devicetable.h>
 #include <linux/bitfield.h>
 #include <linux/delay.h>
 #include <linux/hw_random.h>
@@ -186,8 +187,10 @@ static int airoha_trng_probe(struct platform_device *pdev)
 	airoha_trng_irq_mask(trng);
 	ret = devm_request_irq(&pdev->dev, irq, airoha_trng_irq, 0,
 			       pdev->name, (void *)trng);
-	if (ret)
+	if (ret) {
+		dev_err(dev, "Can't get interrupt working.\n");
 		return ret;
+	}
 
 	init_completion(&trng->rng_op_done);
 

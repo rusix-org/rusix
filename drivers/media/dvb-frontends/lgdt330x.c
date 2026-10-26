@@ -124,6 +124,7 @@ static int i2c_read_demod_bytes(struct lgdt330x_state *state,
 /* Software reset */
 static int lgdt3302_sw_reset(struct lgdt330x_state *state)
 {
+	u8 ret;
 	u8 reset[] = {
 		IRQ_MASK,
 		/*
@@ -132,7 +133,6 @@ static int lgdt3302_sw_reset(struct lgdt330x_state *state)
 		 */
 		0x00
 	};
-	int ret;
 
 	ret = i2c_write_demod_bytes(state,
 				    reset, sizeof(reset));
@@ -147,11 +147,11 @@ static int lgdt3302_sw_reset(struct lgdt330x_state *state)
 
 static int lgdt3303_sw_reset(struct lgdt330x_state *state)
 {
+	u8 ret;
 	u8 reset[] = {
 		0x02,
 		0x00 /* bit 0 is active low software reset */
 	};
-	int ret;
 
 	ret = i2c_write_demod_bytes(state,
 				    reset, sizeof(reset));
@@ -863,7 +863,7 @@ static int lgdt330x_probe(struct i2c_client *client)
 	u8 buf[1];
 
 	/* Allocate memory for the internal state */
-	state = kzalloc_obj(*state);
+	state = kzalloc(sizeof(*state), GFP_KERNEL);
 	if (!state)
 		goto error;
 
@@ -983,8 +983,8 @@ static void lgdt330x_remove(struct i2c_client *client)
 }
 
 static const struct i2c_device_id lgdt330x_id_table[] = {
-	{ .name = "lgdt330x" },
-	{ }
+	{ "lgdt330x" },
+	{}
 };
 MODULE_DEVICE_TABLE(i2c, lgdt330x_id_table);
 

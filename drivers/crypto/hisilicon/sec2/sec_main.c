@@ -48,7 +48,6 @@
 #define SEC_OOO_SHUTDOWN_SEL		0x301014
 #define SEC_RAS_DISABLE		0x0
 #define SEC_AXI_ERROR_MASK		(BIT(0) | BIT(1))
-#define SEC_RAS_CLEAR_ALL		GENMASK(31, 0)
 
 #define SEC_MEM_START_INIT_REG	0x301100
 #define SEC_MEM_INIT_DONE_REG		0x301104
@@ -133,8 +132,6 @@
 					GENMASK_ULL(42, 25))
 #define SEC_AEAD_BITMAP			(GENMASK_ULL(7, 6) | GENMASK_ULL(18, 17) | \
 					GENMASK_ULL(45, 43))
-
-#define SEC_MAX_CHANNEL_NUM		1
 
 struct sec_hw_error {
 	u32 int_msk;
@@ -423,7 +420,7 @@ struct hisi_qp **sec_create_qps(void)
 	u8 *type;
 	int ret;
 
-	qps = kzalloc_objs(struct hisi_qp *, ctx_num);
+	qps = kcalloc(ctx_num, sizeof(struct hisi_qp *), GFP_KERNEL);
 	if (!qps)
 		return NULL;
 
@@ -484,7 +481,7 @@ static void sec_set_endian(struct hisi_qm *qm)
 	if (!IS_ENABLED(CONFIG_64BIT))
 		reg |= BIT(1);
 
-	if (IS_ENABLED(CONFIG_CPU_BIG_ENDIAN))
+	if (!IS_ENABLED(CONFIG_CPU_LITTLE_ENDIAN))
 		reg |= BIT(0);
 
 	writel_relaxed(reg, qm->io_base + SEC_CONTROL_REG);
@@ -753,7 +750,7 @@ static void sec_hw_error_enable(struct hisi_qm *qm)
 	}
 
 	/* clear SEC hw error source if having */
-	writel(SEC_RAS_CLEAR_ALL, qm->io_base + SEC_CORE_INT_SOURCE);
+	writel(err_mask, qm->io_base + SEC_CORE_INT_SOURCE);
 
 	/* enable RAS int */
 	writel(dev_err->ce, qm->io_base + SEC_RAS_CE_REG);
@@ -910,7 +907,7 @@ static int sec_debugfs_atomic64_set(void *data, u64 val)
 }
 
 DEFINE_DEBUGFS_ATTRIBUTE(sec_atomic64_ops, sec_debugfs_atomic64_get,
-			 sec_debugfs_atomic64_set, "%llu\n");
+			 sec_debugfs_atomic64_set, "%lld\n");
 
 static int sec_regs_show(struct seq_file *s, void *unused)
 {
@@ -1285,18 +1282,10 @@ static int sec_pre_store_cap_reg(struct hisi_qm *qm)
 				     i, qm->cap_ver);
 	}
 
-	qm->cap_tables.dev_cap_size = size;
 	qm->cap_tables.dev_cap_table = sec_cap;
+	qm->cap_tables.dev_cap_size = size;
 
 	return 0;
-}
-
-static void sec_set_channels(struct hisi_qm *qm)
-{
-	struct qm_channel *channel_data = &qm->channel_data;
-
-	channel_data->channel_num = SEC_MAX_CHANNEL_NUM;
-	channel_data->channel_name[0] = "SEC";
 }
 
 static int sec_qm_init(struct hisi_qm *qm, struct pci_dev *pdev)
@@ -1336,7 +1325,6 @@ static int sec_qm_init(struct hisi_qm *qm, struct pci_dev *pdev)
 		return ret;
 	}
 
-	sec_set_channels(qm);
 	/* Fetch and save the value of capability registers */
 	ret = sec_pre_store_cap_reg(qm);
 	if (ret) {
@@ -1450,10 +1438,12 @@ static int sec_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 		goto err_qm_del_list;
 	}
 
-	ret = hisi_qm_register_uacce(qm);
-	if (ret) {
-		pci_err(pdev, "failed to register uacce (%d)!\n", ret);
-		goto err_alg_unregister;
+	if (qm->uacce) {
+		ret = uacce_register(qm->uacce);
+		if (ret) {
+			pci_err(pdev, "failed to register uacce (%d)!\n", ret);
+			goto err_alg_unregister;
+		}
 	}
 
 	if (qm->fun_type == QM_HW_PF && vfs_num) {

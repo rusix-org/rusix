@@ -1928,14 +1928,14 @@ module_param_hw_array(dma2, int, dma, NULL, 0444);
 MODULE_PARM_DESC(dma2, "DMA 2 # for ES18xx driver.");
 
 #ifdef CONFIG_PNP
-static int isa_registered __ro_after_init;
-static int pnp_registered __ro_after_init;
-static int pnpc_registered __ro_after_init;
+static int isa_registered;
+static int pnp_registered;
+static int pnpc_registered;
 
 static const struct pnp_device_id snd_audiodrive_pnpbiosids[] = {
 	{ .id = "ESS1869" },
 	{ .id = "ESS1879" },
-	{ }			/* end */
+	{ .id = "" }		/* end */
 };
 
 MODULE_DEVICE_TABLE(pnp, snd_audiodrive_pnpbiosids);

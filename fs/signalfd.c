@@ -48,30 +48,17 @@ static int signalfd_release(struct inode *inode, struct file *file)
 	return 0;
 }
 
-static void refine_sigmask(struct signalfd_ctx *ctx, sigset_t *sigmask)
-{
-	struct k_sigaction *k = current->sighand->action;
-	int n;
-
-	*sigmask = ctx->sigmask;
-	for (n = 1; n <= _NSIG; ++n, ++k) {
-		if (k->sa.sa_flags & SA_IMMUTABLE)
-			sigaddset(sigmask, n);
-	}
-}
-
 static __poll_t signalfd_poll(struct file *file, poll_table *wait)
 {
 	struct signalfd_ctx *ctx = file->private_data;
 	__poll_t events = 0;
-	sigset_t sigmask;
 
 	poll_wait(file, &current->sighand->signalfd_wqh, wait);
 
 	spin_lock_irq(&current->sighand->siglock);
-	refine_sigmask(ctx, &sigmask);
-	if (next_signal(&current->pending, &sigmask) ||
-	    next_signal(&current->signal->shared_pending, &sigmask))
+	if (next_signal(&current->pending, &ctx->sigmask) ||
+	    next_signal(&current->signal->shared_pending,
+			&ctx->sigmask))
 		events |= EPOLLIN;
 	spin_unlock_irq(&current->sighand->siglock);
 
@@ -168,13 +155,11 @@ static ssize_t signalfd_dequeue(struct signalfd_ctx *ctx, kernel_siginfo_t *info
 				int nonblock)
 {
 	enum pid_type type;
-	DECLARE_WAITQUEUE(wait, current);
-	sigset_t sigmask;
 	ssize_t ret;
+	DECLARE_WAITQUEUE(wait, current);
 
 	spin_lock_irq(&current->sighand->siglock);
-	refine_sigmask(ctx, &sigmask);
-	ret = dequeue_signal(&sigmask, info, &type);
+	ret = dequeue_signal(&ctx->sigmask, info, &type);
 	switch (ret) {
 	case 0:
 		if (!nonblock)
@@ -189,7 +174,7 @@ static ssize_t signalfd_dequeue(struct signalfd_ctx *ctx, kernel_siginfo_t *info
 	add_wait_queue(&current->sighand->signalfd_wqh, &wait);
 	for (;;) {
 		set_current_state(TASK_INTERRUPTIBLE);
-		ret = dequeue_signal(&sigmask, info, &type);
+		ret = dequeue_signal(&ctx->sigmask, info, &type);
 		if (ret != 0)
 			break;
 		if (signal_pending(current)) {
@@ -199,7 +184,6 @@ static ssize_t signalfd_dequeue(struct signalfd_ctx *ctx, kernel_siginfo_t *info
 		spin_unlock_irq(&current->sighand->siglock);
 		schedule();
 		spin_lock_irq(&current->sighand->siglock);
-		refine_sigmask(ctx, &sigmask);
 	}
 	spin_unlock_irq(&current->sighand->siglock);
 
@@ -266,6 +250,8 @@ static const struct file_operations signalfd_fops = {
 
 static int do_signalfd4(int ufd, sigset_t *mask, int flags)
 {
+	struct signalfd_ctx *ctx;
+
 	/* Check the SFD_* constants for consistency.  */
 	BUILD_BUG_ON(SFD_CLOEXEC != O_CLOEXEC);
 	BUILD_BUG_ON(SFD_NONBLOCK != O_NONBLOCK);
@@ -277,25 +263,30 @@ static int do_signalfd4(int ufd, sigset_t *mask, int flags)
 	signotset(mask);
 
 	if (ufd == -1) {
-		int fd;
-		struct signalfd_ctx *ctx __free(kfree) = NULL;
+		struct file *file;
 
-		ctx = kmalloc_obj(*ctx);
+		ctx = kmalloc(sizeof(*ctx), GFP_KERNEL);
 		if (!ctx)
 			return -ENOMEM;
 
 		ctx->sigmask = *mask;
 
-		fd = FD_ADD(flags & O_CLOEXEC,
-			    anon_inode_getfile_fmode(
-				    "[signalfd]", &signalfd_fops, ctx,
-				    O_RDWR | (flags & O_NONBLOCK), FMODE_NOWAIT));
-		if (fd >= 0)
-			retain_and_null_ptr(ctx);
-		return fd;
-	} else {
-		struct signalfd_ctx *ctx;
+		ufd = get_unused_fd_flags(flags & O_CLOEXEC);
+		if (ufd < 0) {
+			kfree(ctx);
+			return ufd;
+		}
 
+		file = anon_inode_getfile_fmode("[signalfd]", &signalfd_fops,
+					ctx, O_RDWR | (flags & O_NONBLOCK),
+					FMODE_NOWAIT);
+		if (IS_ERR(file)) {
+			put_unused_fd(ufd);
+			kfree(ctx);
+			return PTR_ERR(file);
+		}
+		fd_install(ufd, file);
+	} else {
 		CLASS(fd, f)(ufd);
 		if (fd_empty(f))
 			return -EBADF;

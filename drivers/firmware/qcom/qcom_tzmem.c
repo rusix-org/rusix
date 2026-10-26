@@ -50,7 +50,7 @@ static struct device *qcom_tzmem_dev;
 static RADIX_TREE(qcom_tzmem_chunks, GFP_ATOMIC);
 static DEFINE_SPINLOCK(qcom_tzmem_chunks_lock);
 
-#ifndef CONFIG_QCOM_TZMEM_MODE_SHMBRIDGE
+#if IS_ENABLED(CONFIG_QCOM_TZMEM_MODE_GENERIC)
 
 static int qcom_tzmem_init(void)
 {
@@ -67,7 +67,7 @@ static void qcom_tzmem_cleanup_area(struct qcom_tzmem_area *area)
 
 }
 
-#else
+#elif IS_ENABLED(CONFIG_QCOM_TZMEM_MODE_SHMBRIDGE)
 
 #include <linux/firmware/qcom/qcom_scm.h>
 #include <linux/of.h>
@@ -82,7 +82,6 @@ static const char *const qcom_tzmem_blacklist[] = {
 	"qcom,sc8180x",
 	"qcom,sdm670", /* failure in GPU firmware loading */
 	"qcom,sdm845", /* reset in rmtfs memory assignment */
-	"qcom,sm7125", /* hang in rmtfs memory assignment */
 	"qcom,sm7150", /* reset in rmtfs memory assignment */
 	"qcom,sm8150", /* reset in rmtfs memory assignment */
 	NULL
@@ -170,7 +169,7 @@ static int qcom_tzmem_init_area(struct qcom_tzmem_area *area)
 {
 	int ret;
 
-	u64 *handle __free(kfree) = kzalloc_obj(*handle);
+	u64 *handle __free(kfree) = kzalloc(sizeof(*handle), GFP_KERNEL);
 	if (!handle)
 		return -ENOMEM;
 
@@ -198,7 +197,8 @@ static int qcom_tzmem_pool_add_memory(struct qcom_tzmem_pool *pool,
 {
 	int ret;
 
-	struct qcom_tzmem_area *area __free(kfree) = kzalloc_obj(*area, gfp);
+	struct qcom_tzmem_area *area __free(kfree) = kzalloc(sizeof(*area),
+							     gfp);
 	if (!area)
 		return -ENOMEM;
 
@@ -263,7 +263,8 @@ qcom_tzmem_pool_new(const struct qcom_tzmem_pool_config *config)
 		return ERR_PTR(-EINVAL);
 	}
 
-	struct qcom_tzmem_pool *pool __free(kfree) = kzalloc_obj(*pool);
+	struct qcom_tzmem_pool *pool __free(kfree) = kzalloc(sizeof(*pool),
+							     GFP_KERNEL);
 	if (!pool)
 		return ERR_PTR(-ENOMEM);
 
@@ -415,7 +416,8 @@ void *qcom_tzmem_alloc(struct qcom_tzmem_pool *pool, size_t size, gfp_t gfp)
 
 	size = PAGE_ALIGN(size);
 
-	struct qcom_tzmem_chunk *chunk __free(kfree) = kzalloc_obj(*chunk, gfp);
+	struct qcom_tzmem_chunk *chunk __free(kfree) = kzalloc(sizeof(*chunk),
+							       gfp);
 	if (!chunk)
 		return NULL;
 
@@ -517,7 +519,7 @@ int qcom_tzmem_enable(struct device *dev)
 	static int result;
 
 	qcom_tzmem_dev = dev;
-	DO_ONCE_SLEEPABLE(qcom_tzmem_do_init, &result);
+	DO_ONCE(qcom_tzmem_do_init, &result);
 	return result;
 }
 EXPORT_SYMBOL_GPL(qcom_tzmem_enable);

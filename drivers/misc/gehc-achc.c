@@ -369,7 +369,7 @@ static int ezport_firmware_flash_data(struct spi_device *spi,
 	dev_dbg(&spi->dev, "EzPort verify flashed data...\n");
 	ret = ezport_firmware_compare_data(spi, data, size);
 
-	/* allow missing FW verification in secure mode */
+	/* allow missing FW verfication in secure mode */
 	if (ret == -EACCES)
 		ret = 0;
 
@@ -538,8 +538,8 @@ static int gehc_achc_probe(struct spi_device *spi)
 }
 
 static const struct spi_device_id gehc_achc_id[] = {
-	{ .name = "ge,achc" },
-	{ .name = "achc" },
+	{ "ge,achc", 0 },
+	{ "achc", 0 },
 	{ }
 };
 MODULE_DEVICE_TABLE(spi, gehc_achc_id);

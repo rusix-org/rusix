@@ -94,7 +94,7 @@ struct vpe *alloc_vpe(int minor)
 {
 	struct vpe *v;
 
-	v = kzalloc_obj(struct vpe);
+	v = kzalloc(sizeof(struct vpe), GFP_KERNEL);
 	if (v == NULL)
 		goto out;
 
@@ -115,7 +115,7 @@ struct tc *alloc_tc(int index)
 {
 	struct tc *tc;
 
-	tc = kzalloc_obj(struct tc);
+	tc = kzalloc(sizeof(struct tc), GFP_KERNEL);
 	if (tc == NULL)
 		goto out;
 
@@ -318,7 +318,7 @@ static int apply_r_mips_hi16(struct module *me, uint32_t *location,
 	 * the carry we need to add.  Save the information, and let LO16 do the
 	 * actual relocation.
 	 */
-	n = kmalloc_obj(*n);
+	n = kmalloc(sizeof(*n), GFP_KERNEL);
 	if (!n)
 		return -ENOMEM;
 

@@ -332,7 +332,7 @@ property_entries_dup(const struct property_entry *properties)
 	while (properties[n].name)
 		n++;
 
-	p = kzalloc_objs(*p, n + 1);
+	p = kcalloc(n + 1, sizeof(*p), GFP_KERNEL);
 	if (!p)
 		return ERR_PTR(-ENOMEM);
 
@@ -374,28 +374,20 @@ EXPORT_SYMBOL_GPL(property_entries_free);
 /* -------------------------------------------------------------------------- */
 /* fwnode operations */
 
-static struct swnode *swnode_get(struct swnode *swnode)
-{
-	kobject_get(&swnode->kobj);
-
-	return swnode;
-}
-
-static void swnode_put(struct swnode *swnode)
-{
-	kobject_put(&swnode->kobj);
-}
-
 static struct fwnode_handle *software_node_get(struct fwnode_handle *fwnode)
 {
-	struct swnode *swnode = swnode_get(to_swnode(fwnode));
+	struct swnode *swnode = to_swnode(fwnode);
+
+	kobject_get(&swnode->kobj);
 
 	return &swnode->fwnode;
 }
 
 static void software_node_put(struct fwnode_handle *fwnode)
 {
-	swnode_put(to_swnode(fwnode));
+	struct swnode *swnode = to_swnode(fwnode);
+
+	kobject_put(&swnode->kobj);
 }
 
 static bool software_node_property_present(const struct fwnode_handle *fwnode,
@@ -501,7 +493,7 @@ software_node_get_named_child_node(const struct fwnode_handle *fwnode,
 
 	list_for_each_entry(child, &swnode->children, entry) {
 		if (!strcmp(childname, kobject_name(&child->kobj))) {
-			swnode_get(child);
+			kobject_get(&child->kobj);
 			return &child->fwnode;
 		}
 	}
@@ -543,29 +535,14 @@ software_node_get_reference_args(const struct fwnode_handle *fwnode,
 	ref_array = prop->pointer;
 	ref = &ref_array[index];
 
-	/*
-	 * A software node can reference other software nodes or firmware
-	 * nodes (which are the abstraction layer sitting on top of them).
-	 * This is done to ensure we can create references to static software
-	 * nodes before they're registered with the firmware node framework.
-	 * At the time the reference is being resolved, we expect the swnodes
-	 * in question to already have been registered and to be backed by
-	 * a firmware node. This is why we use the fwnode API below to read the
-	 * relevant properties and bump the reference count.
-	 */
-
-	if (ref->swnode)
-		refnode = software_node_fwnode(ref->swnode);
-	else if (ref->fwnode)
-		refnode = ref->fwnode;
-	else
-		return -EINVAL;
-
+	refnode = software_node_fwnode(ref->node);
 	if (!refnode)
-		return -ENOTCONN;
+		return -ENOENT;
 
 	if (nargs_prop) {
-		error = fwnode_property_read_u32(refnode, nargs_prop, &nargs_prop_val);
+		error = property_entry_read_int_array(ref->node->properties,
+						      nargs_prop, sizeof(u32),
+						      &nargs_prop_val, 1);
 		if (error)
 			return error;
 
@@ -578,7 +555,7 @@ software_node_get_reference_args(const struct fwnode_handle *fwnode,
 	if (!args)
 		return 0;
 
-	args->fwnode = fwnode_handle_get(refnode);
+	args->fwnode = software_node_get(refnode);
 	args->nargs = nargs;
 
 	for (i = 0; i < nargs; i++)
@@ -658,10 +635,7 @@ software_node_graph_get_remote_endpoint(const struct fwnode_handle *fwnode)
 
 	ref = prop->pointer;
 
-	if (!ref->swnode)
-		return NULL;
-
-	return software_node_get(software_node_fwnode(ref->swnode));
+	return software_node_get(software_node_fwnode(ref[0].node));
 }
 
 static struct fwnode_handle *
@@ -699,62 +673,6 @@ software_node_graph_parse_endpoint(const struct fwnode_handle *fwnode,
 	return 0;
 }
 
-static int software_node_add_links(struct fwnode_handle *fwnode)
-{
-	const struct software_node_ref_args *ref, *ref_array;
-	struct swnode *swnode = to_swnode(fwnode);
-	const struct property_entry *prop;
-	struct fwnode_handle *refnode;
-	unsigned int count;
-
-	if (!swnode || !swnode->node->properties)
-		return 0;
-
-	/*
-	 * Unlike Device Tree, where phandles appear in many non-supplier
-	 * contexts and a curated allowlist is required, a software node only
-	 * carries a DEV_PROP_REF property when the author explicitly describes
-	 * a reference to another node. Every such reference is therefore an
-	 * intentional supplier dependency, so we create fwnode links for all
-	 * of them.
-	 */
-	for (prop = swnode->node->properties; prop->name; prop++) {
-		if (prop->type != DEV_PROP_REF || prop->is_inline)
-			continue;
-
-		/*
-		 * TODO: Graph "remote-endpoint" references go both ways
-		 * between endpoint child nodes and would create endpoint
-		 * cycles. Let's leave it out for now until we have potential
-		 * users.
-		 */
-		if (!strcmp(prop->name, "remote-endpoint"))
-			continue;
-
-		ref_array = prop->pointer;
-		count = prop->length / sizeof(*ref_array);
-
-		for (unsigned int i = 0; i < count; i++) {
-			ref = &ref_array[i];
-
-			if (ref->swnode)
-				refnode = software_node_fwnode(ref->swnode);
-			else if (ref->fwnode)
-				refnode = ref->fwnode;
-			else
-				continue;
-
-			/* Supplier not registered yet, or self-reference. */
-			if (!refnode || refnode == &swnode->fwnode)
-				continue;
-
-			fwnode_link_add(&swnode->fwnode, refnode, 0);
-		}
-	}
-
-	return 0;
-}
-
 static const struct fwnode_operations software_node_ops = {
 	.get = software_node_get,
 	.put = software_node_put,
@@ -772,7 +690,6 @@ static const struct fwnode_operations software_node_ops = {
 	.graph_get_remote_endpoint = software_node_graph_get_remote_endpoint,
 	.graph_get_port_parent = software_node_graph_get_port_parent,
 	.graph_parse_endpoint = software_node_graph_parse_endpoint,
-	.add_links = software_node_add_links,
 };
 
 /* -------------------------------------------------------------------------- */
@@ -802,7 +719,7 @@ software_node_find_by_name(const struct software_node *parent, const char *name)
 		swnode = kobj_to_swnode(k);
 		if (parent == swnode->node->parent && swnode->node->name &&
 		    !strcmp(name, swnode->node->name)) {
-			swnode_get(swnode);
+			kobject_get(&swnode->kobj);
 			break;
 		}
 		swnode = NULL;
@@ -823,7 +740,7 @@ static struct software_node *software_node_alloc(const struct property_entry *pr
 	if (IS_ERR(props))
 		return ERR_CAST(props);
 
-	node = kzalloc_obj(*node);
+	node = kzalloc(sizeof(*node), GFP_KERNEL);
 	if (!node) {
 		property_entries_free(props);
 		return ERR_PTR(-ENOMEM);
@@ -843,8 +760,6 @@ static void software_node_free(const struct software_node *node)
 static void software_node_release(struct kobject *kobj)
 {
 	struct swnode *swnode = kobj_to_swnode(kobj);
-
-	fwnode_links_purge(&swnode->fwnode);
 
 	if (swnode->parent) {
 		ida_free(&swnode->parent->child_ids, swnode->id);
@@ -872,7 +787,7 @@ swnode_register(const struct software_node *node, struct swnode *parent,
 	struct swnode *swnode;
 	int ret;
 
-	swnode = kzalloc_obj(*swnode);
+	swnode = kzalloc(sizeof(*swnode), GFP_KERNEL);
 	if (!swnode)
 		return ERR_PTR(-ENOMEM);
 
@@ -902,13 +817,13 @@ swnode_register(const struct software_node *node, struct swnode *parent,
 					   parent ? &parent->kobj : NULL,
 					   "node%d", swnode->id);
 	if (ret) {
-		swnode_put(swnode);
+		kobject_put(&swnode->kobj);
 		return ERR_PTR(ret);
 	}
 
 	/*
 	 * Assign the flag only in the successful case, so
-	 * the above swnode_put() won't mess up with properties.
+	 * the above kobject_put() won't mess up with properties.
 	 */
 	swnode->allocated = allocated;
 
@@ -1045,7 +960,7 @@ void fwnode_remove_software_node(struct fwnode_handle *fwnode)
 	if (!swnode)
 		return;
 
-	swnode_put(swnode);
+	kobject_put(&swnode->kobj);
 }
 EXPORT_SYMBOL_GPL(fwnode_remove_software_node);
 
@@ -1069,7 +984,7 @@ int device_add_software_node(struct device *dev, const struct software_node *nod
 
 	swnode = software_node_to_swnode(node);
 	if (swnode) {
-		swnode_get(swnode);
+		kobject_get(&swnode->kobj);
 	} else {
 		ret = software_node_register(node);
 		if (ret)
@@ -1111,7 +1026,7 @@ void device_remove_software_node(struct device *dev)
 		software_node_notify_remove(dev);
 
 	set_secondary_fwnode(dev, NULL);
-	swnode_put(swnode);
+	kobject_put(&swnode->kobj);
 }
 EXPORT_SYMBOL_GPL(device_remove_software_node);
 
@@ -1164,18 +1079,7 @@ void software_node_notify(struct device *dev)
 	if (!swnode)
 		return;
 
-	/*
-	 * When the software node is the device's secondary firmware node,
-	 * the core only records the owning device on the primary fwnode
-	 * (see device_add()). fw_devlink resolves a supplier device through
-	 * fwnode->dev, so without this a consumer referencing the software
-	 * node could never find the supplier device and would defer forever.
-	 * Make fwnode.dev point to its owner in that case.
-	 */
-	if (!device_match_fwnode(dev, &swnode->fwnode) && !swnode->fwnode.dev)
-		swnode->fwnode.dev = dev;
-
-	swnode_get(swnode);
+	kobject_get(&swnode->kobj);
 	ret = sysfs_create_link(&dev->kobj, &swnode->kobj, "software_node");
 	if (ret)
 		return;
@@ -1197,26 +1101,26 @@ void software_node_notify_remove(struct device *dev)
 
 	sysfs_remove_link(&swnode->kobj, dev_name(dev));
 	sysfs_remove_link(&dev->kobj, "software_node");
-
-	/*
-	 * Drop the device pointer mirrored onto a secondary software node in
-	 * software_node_notify(). For a primary software node the core owns
-	 * fwnode->dev and clears it in device_del().
-	 */
-	if (!device_match_fwnode(dev, &swnode->fwnode) && swnode->fwnode.dev == dev)
-		swnode->fwnode.dev = NULL;
-
-	swnode_put(swnode);
+	kobject_put(&swnode->kobj);
 
 	if (swnode->managed) {
 		set_secondary_fwnode(dev, NULL);
-		swnode_put(swnode);
+		kobject_put(&swnode->kobj);
 	}
 }
 
-void __init software_node_init(void)
+static int __init software_node_init(void)
 {
 	swnode_kset = kset_create_and_add("software_nodes", NULL, kernel_kobj);
 	if (!swnode_kset)
-		pr_err("failed to register software nodes\n");
+		return -ENOMEM;
+	return 0;
 }
+postcore_initcall(software_node_init);
+
+static void __exit software_node_exit(void)
+{
+	ida_destroy(&swnode_root_ids);
+	kset_unregister(swnode_kset);
+}
+__exitcall(software_node_exit);

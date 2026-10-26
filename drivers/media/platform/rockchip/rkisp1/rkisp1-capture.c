@@ -1123,6 +1123,7 @@ static void rkisp1_vb2_stop_streaming(struct vb2_queue *queue)
 	struct rkisp1_capture *cap = queue->drv_priv;
 	struct rkisp1_vdev_node *node = &cap->vnode;
 	struct rkisp1_device *rkisp1 = cap->rkisp1;
+	int ret;
 
 	mutex_lock(&cap->rkisp1->stream_lock);
 
@@ -1131,7 +1132,9 @@ static void rkisp1_vb2_stop_streaming(struct vb2_queue *queue)
 	rkisp1_return_all_buffers(cap, VB2_BUF_STATE_ERROR);
 
 	v4l2_pipeline_pm_put(&node->vdev.entity);
-	pm_runtime_put(rkisp1->dev);
+	ret = pm_runtime_put(rkisp1->dev);
+	if (ret < 0)
+		dev_err(rkisp1->dev, "power down failed error:%d\n", ret);
 
 	rkisp1_dummy_buf_destroy(cap);
 
@@ -1379,9 +1382,6 @@ static int rkisp1_enum_framesizes(struct file *file, void *fh,
 		RKISP1_RSZ_SP_SRC_MAX_HEIGHT,
 	};
 	struct rkisp1_capture *cap = video_drvdata(file);
-
-	if (!rkisp1_find_fmt_cfg(cap, fsize->pixel_format))
-		return -EINVAL;
 
 	if (fsize->index != 0)
 		return -EINVAL;

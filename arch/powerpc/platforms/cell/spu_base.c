@@ -20,7 +20,6 @@
 #include <linux/mutex.h>
 #include <linux/linux_logo.h>
 #include <linux/syscore_ops.h>
-#include <linux/sysfs.h>
 #include <asm/spu.h>
 #include <asm/spu_priv1.h>
 #include <asm/spu_csa.h>
@@ -465,7 +464,7 @@ void spu_init_channels(struct spu *spu)
 }
 EXPORT_SYMBOL_GPL(spu_init_channels);
 
-static const struct bus_type spu_subsys = {
+static struct bus_type spu_subsys = {
 	.name = "spu",
 	.dev_name = "spu",
 };
@@ -559,7 +558,7 @@ static int __init create_spu(void *data)
 	unsigned long flags;
 
 	ret = -ENOMEM;
-	spu = kzalloc_obj(*spu);
+	spu = kzalloc(sizeof (*spu), GFP_KERNEL);
 	if (!spu)
 		goto out;
 
@@ -639,8 +638,8 @@ static ssize_t spu_stat_show(struct device *dev,
 {
 	struct spu *spu = container_of(dev, struct spu, dev);
 
-	return sysfs_emit(buf,
-		"%s %llu %llu %llu %llu %llu %llu %llu %llu %llu %llu %llu %llu\n",
+	return sprintf(buf, "%s %llu %llu %llu %llu "
+		      "%llu %llu %llu %llu %llu %llu %llu %llu\n",
 		spu_state_names[spu->stats.util_state],
 		spu_acct_time(spu, SPU_UTIL_USER),
 		spu_acct_time(spu, SPU_UTIL_SYSTEM),

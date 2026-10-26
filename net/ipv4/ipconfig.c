@@ -244,7 +244,7 @@ static int __init ic_open_devs(void)
 				       dev->name);
 				continue;
 			}
-			if (!(d = kmalloc_obj(struct ic_device))) {
+			if (!(d = kmalloc(sizeof(struct ic_device), GFP_KERNEL))) {
 				rtnl_unlock();
 				return -ENOMEM;
 			}
@@ -346,9 +346,6 @@ static void __init ic_close_devs(void)
 		kfree(d);
 	}
 	rtnl_unlock();
-
-	ic_first_dev = NULL;
-	ic_dev = NULL;
 }
 
 /*
@@ -857,7 +854,7 @@ static void __init ic_bootp_send_if(struct ic_device *d, unsigned long jiffies_d
 	/* Construct UDP header */
 	b->udph.source = htons(68);
 	b->udph.dest = htons(67);
-	udp_set_len_short(&b->udph, sizeof(struct bootp_pkt) - sizeof(struct iphdr));
+	b->udph.len = htons(sizeof(struct bootp_pkt) - sizeof(struct iphdr));
 	/* UDP checksum not calculated -- explicitly allowed in BOOTP RFC */
 
 	/* Construct DHCP/BOOTP header */
@@ -1035,10 +1032,10 @@ static int __init ic_bootp_recv(struct sk_buff *skb, struct net_device *dev, str
 	if (b->udph.source != htons(67) || b->udph.dest != htons(68))
 		goto drop;
 
-	if (ntohs(h->tot_len) < udp_get_len_short(&b->udph) + sizeof(struct iphdr))
+	if (ntohs(h->tot_len) < ntohs(b->udph.len) + sizeof(struct iphdr))
 		goto drop;
 
-	len = udp_get_len_short(&b->udph) - sizeof(struct udphdr);
+	len = ntohs(b->udph.len) - sizeof(struct udphdr);
 	ext_len = len - (sizeof(*b) -
 			 sizeof(struct iphdr) -
 			 sizeof(struct udphdr) -
@@ -1695,8 +1692,7 @@ static int __init ic_proto_name(char *name)
 			*v = 0;
 			if (kstrtou8(client_id, 0, dhcp_client_identifier))
 				pr_debug("DHCP: Invalid client identifier type\n");
-			strscpy(dhcp_client_identifier + 1, v + 1,
-				sizeof(dhcp_client_identifier) - 1);
+			strncpy(dhcp_client_identifier + 1, v + 1, 251);
 			*v = ',';
 		}
 		return 1;

@@ -21,12 +21,7 @@
 
 extern bool host_cpu_is_intel;
 extern bool host_cpu_is_amd;
-extern bool host_cpu_is_hygon;
-extern bool host_cpu_is_amd_compatible;
-extern bool host_cpu_is_zhaoxin;
-extern bool host_cpu_is_intel_compatible;
-extern u64 guest_tsc_khz;
-extern struct kvm_mmu guest_mmu;
+extern uint64_t guest_tsc_khz;
 
 #ifndef MAX_NR_CPUID_ENTRIES
 #define MAX_NR_CPUID_ENTRIES 100
@@ -41,24 +36,7 @@ extern struct kvm_mmu guest_mmu;
 
 const char *ex_str(int vector);
 
-#define X86_EFLAGS_CF		BIT(0)  /* Carry Flag */
-#define X86_EFLAGS_FIXED	BIT(1)  /* Bit 1 - always on */
-#define X86_EFLAGS_PF		BIT(2)  /* Parity Flag */
-#define X86_EFLAGS_AF		BIT(4)  /* Auxiliary carry Flag */
-#define X86_EFLAGS_ZF		BIT(6)  /* Zero Flag */
-#define X86_EFLAGS_SF		BIT(7)  /* Sign Flag */
-#define X86_EFLAGS_TF		BIT(8)  /* Trap Flag */
-#define X86_EFLAGS_IF		BIT(9)  /* Interrupt Flag */
-#define X86_EFLAGS_DF		BIT(10) /* Direction Flag */
-#define X86_EFLAGS_OF		BIT(11) /* Overflow Flag */
-#define X86_EFLAGS_IOPL		BIT(12) /* I/O Privilege Level (2 bits) */
-#define X86_EFLAGS_NT		BIT(14) /* Nested Task */
-#define X86_EFLAGS_RF		BIT(16) /* Resume Flag */
-#define X86_EFLAGS_VM		BIT(17) /* Virtual Mode */
-#define X86_EFLAGS_AC		BIT(18) /* Alignment Check/Access Control */
-#define X86_EFLAGS_VIF		BIT(19) /* Virtual Interrupt Flag */
-#define X86_EFLAGS_VIP		BIT(20) /* Virtual Interrupt Pending */
-#define X86_EFLAGS_ID		BIT(21) /* CPUID detection */
+#define X86_EFLAGS_FIXED	 (1u << 1)
 
 #define X86_CR4_VME		(1ul << 0)
 #define X86_CR4_PVI		(1ul << 1)
@@ -211,28 +189,23 @@ struct kvm_x86_cpu_feature {
 #define	X86_FEATURE_PERFCTR_NB		KVM_X86_CPU_FEATURE(0x80000001, 0, ECX, 24)
 #define	X86_FEATURE_PERFCTR_LLC		KVM_X86_CPU_FEATURE(0x80000001, 0, ECX, 28)
 #define	X86_FEATURE_NX			KVM_X86_CPU_FEATURE(0x80000001, 0, EDX, 20)
-#define	X86_FEATURE_FXSR_OPT		KVM_X86_CPU_FEATURE(0x80000001, 0, EDX, 25)
 #define	X86_FEATURE_GBPAGES		KVM_X86_CPU_FEATURE(0x80000001, 0, EDX, 26)
 #define	X86_FEATURE_RDTSCP		KVM_X86_CPU_FEATURE(0x80000001, 0, EDX, 27)
 #define	X86_FEATURE_LM			KVM_X86_CPU_FEATURE(0x80000001, 0, EDX, 29)
 #define	X86_FEATURE_INVTSC		KVM_X86_CPU_FEATURE(0x80000007, 0, EDX, 8)
 #define	X86_FEATURE_RDPRU		KVM_X86_CPU_FEATURE(0x80000008, 0, EBX, 4)
 #define	X86_FEATURE_AMD_IBPB		KVM_X86_CPU_FEATURE(0x80000008, 0, EBX, 12)
-#define	X86_FEATURE_EFER_LMSLE_MBZ	KVM_X86_CPU_FEATURE(0x80000008, 0, EBX, 20)
 #define	X86_FEATURE_NPT			KVM_X86_CPU_FEATURE(0x8000000A, 0, EDX, 0)
 #define	X86_FEATURE_LBRV		KVM_X86_CPU_FEATURE(0x8000000A, 0, EDX, 1)
 #define	X86_FEATURE_NRIPS		KVM_X86_CPU_FEATURE(0x8000000A, 0, EDX, 3)
 #define X86_FEATURE_TSCRATEMSR          KVM_X86_CPU_FEATURE(0x8000000A, 0, EDX, 4)
 #define X86_FEATURE_PAUSEFILTER         KVM_X86_CPU_FEATURE(0x8000000A, 0, EDX, 10)
 #define X86_FEATURE_PFTHRESHOLD         KVM_X86_CPU_FEATURE(0x8000000A, 0, EDX, 12)
-#define	X86_FEATURE_V_VMSAVE_VMLOAD	KVM_X86_CPU_FEATURE(0x8000000A, 0, EDX, 15)
 #define	X86_FEATURE_VGIF		KVM_X86_CPU_FEATURE(0x8000000A, 0, EDX, 16)
 #define X86_FEATURE_IDLE_HLT		KVM_X86_CPU_FEATURE(0x8000000A, 0, EDX, 30)
 #define X86_FEATURE_SEV			KVM_X86_CPU_FEATURE(0x8000001F, 0, EAX, 1)
 #define X86_FEATURE_SEV_ES		KVM_X86_CPU_FEATURE(0x8000001F, 0, EAX, 3)
 #define X86_FEATURE_SEV_SNP		KVM_X86_CPU_FEATURE(0x8000001F, 0, EAX, 4)
-#define	X86_FEATURE_AUTOIBRS		KVM_X86_CPU_FEATURE(0x80000021, 0, EAX, 8)
-#define	X86_FEATURE_GP_ON_USER_CPUID	KVM_X86_CPU_FEATURE(0x80000021, 0, EAX, 17)
 #define	X86_FEATURE_PERFMON_V2		KVM_X86_CPU_FEATURE(0x80000022, 0, EAX, 0)
 #define	X86_FEATURE_LBR_PMC_FREEZE	KVM_X86_CPU_FEATURE(0x80000022, 0, EAX, 2)
 
@@ -389,6 +362,16 @@ static inline unsigned int x86_model(unsigned int eax)
 	return ((eax >> 12) & 0xf0) | ((eax >> 4) & 0x0f);
 }
 
+/* Page table bitfield declarations */
+#define PTE_PRESENT_MASK        BIT_ULL(0)
+#define PTE_WRITABLE_MASK       BIT_ULL(1)
+#define PTE_USER_MASK           BIT_ULL(2)
+#define PTE_ACCESSED_MASK       BIT_ULL(5)
+#define PTE_DIRTY_MASK          BIT_ULL(6)
+#define PTE_LARGE_MASK          BIT_ULL(7)
+#define PTE_GLOBAL_MASK         BIT_ULL(8)
+#define PTE_NX_MASK             BIT_ULL(63)
+
 #define PHYSICAL_PAGE_MASK      GENMASK_ULL(51, 12)
 
 #define PAGE_SHIFT		12
@@ -402,7 +385,8 @@ static inline unsigned int x86_model(unsigned int eax)
 #define PTE_GET_PA(pte)		((pte) & PHYSICAL_PAGE_MASK)
 #define PTE_GET_PFN(pte)        (PTE_GET_PA(pte) >> PAGE_SHIFT)
 
-struct guest_regs {
+/* General Registers in 64-Bit Mode */
+struct gpr64_regs {
 	u64 rax;
 	u64 rcx;
 	u64 rdx;
@@ -419,50 +403,20 @@ struct guest_regs {
 	u64 r13;
 	u64 r14;
 	u64 r15;
-	u64 rflags;
 };
 
-extern struct guest_regs guest_regs;
-
-#define GUEST_REG_OFFSET(name) \
-	[off_##name] "i" (offsetof(struct guest_regs, name))
-
-#define GUEST_REGS_OFFSETS	\
-	GUEST_REG_OFFSET(rax),	\
-	GUEST_REG_OFFSET(rcx),	\
-	GUEST_REG_OFFSET(rdx),	\
-	GUEST_REG_OFFSET(rbx),	\
-	GUEST_REG_OFFSET(rsp),	\
-	GUEST_REG_OFFSET(rbp),	\
-	GUEST_REG_OFFSET(rsi),	\
-	GUEST_REG_OFFSET(rdi),	\
-	GUEST_REG_OFFSET(r8),	\
-	GUEST_REG_OFFSET(r9),	\
-	GUEST_REG_OFFSET(r10),	\
-	GUEST_REG_OFFSET(r11),	\
-	GUEST_REG_OFFSET(r12),	\
-	GUEST_REG_OFFSET(r13),	\
-	GUEST_REG_OFFSET(r14),	\
-	GUEST_REG_OFFSET(r15),	\
-	GUEST_REG_OFFSET(rflags)
-
-#define GUEST_REG(name) "guest_regs + %c[off_" #name "]"
-
-#define GUEST_SWITCH_GPR_ASM(name) \
-	"xchg %%" #name ", " GUEST_REG(name) "\n\t"
-
 struct desc64 {
-	u16 limit0;
-	u16 base0;
+	uint16_t limit0;
+	uint16_t base0;
 	unsigned base1:8, type:4, s:1, dpl:2, p:1;
 	unsigned limit1:4, avl:1, l:1, db:1, g:1, base2:8;
-	u32 base3;
-	u32 zero1;
+	uint32_t base3;
+	uint32_t zero1;
 } __attribute__((packed));
 
 struct desc_ptr {
-	u16 size;
-	u64 address;
+	uint16_t size;
+	uint64_t address;
 } __attribute__((packed));
 
 struct kvm_x86_state {
@@ -480,18 +434,16 @@ struct kvm_x86_state {
 	struct kvm_msrs msrs;
 };
 
-static inline u64 get_desc64_base(const struct desc64 *desc)
+static inline uint64_t get_desc64_base(const struct desc64 *desc)
 {
-	return (u64)desc->base3 << 32 |
-	       (u64)desc->base2 << 24 |
-	       (u64)desc->base1 << 16 |
-	       (u64)desc->base0;
+	return ((uint64_t)desc->base3 << 32) |
+		(desc->base0 | ((desc->base1) << 16) | ((desc->base2) << 24));
 }
 
-static inline u64 rdtsc(void)
+static inline uint64_t rdtsc(void)
 {
-	u32 eax, edx;
-	u64 tsc_val;
+	uint32_t eax, edx;
+	uint64_t tsc_val;
 	/*
 	 * The lfence is to wait (on Intel CPUs) until all previous
 	 * instructions have been executed. If software requires RDTSC to be
@@ -499,39 +451,39 @@ static inline u64 rdtsc(void)
 	 * execute LFENCE immediately after RDTSC
 	 */
 	__asm__ __volatile__("lfence; rdtsc; lfence" : "=a"(eax), "=d"(edx));
-	tsc_val = ((u64)edx) << 32 | eax;
+	tsc_val = ((uint64_t)edx) << 32 | eax;
 	return tsc_val;
 }
 
-static inline u64 rdtscp(u32 *aux)
+static inline uint64_t rdtscp(uint32_t *aux)
 {
-	u32 eax, edx;
+	uint32_t eax, edx;
 
 	__asm__ __volatile__("rdtscp" : "=a"(eax), "=d"(edx), "=c"(*aux));
-	return ((u64)edx) << 32 | eax;
+	return ((uint64_t)edx) << 32 | eax;
 }
 
-static inline u64 rdmsr(u32 msr)
+static inline uint64_t rdmsr(uint32_t msr)
 {
-	u32 a, d;
+	uint32_t a, d;
 
 	__asm__ __volatile__("rdmsr" : "=a"(a), "=d"(d) : "c"(msr) : "memory");
 
-	return a | ((u64)d << 32);
+	return a | ((uint64_t) d << 32);
 }
 
-static inline void wrmsr(u32 msr, u64 value)
+static inline void wrmsr(uint32_t msr, uint64_t value)
 {
-	u32 a = value;
-	u32 d = value >> 32;
+	uint32_t a = value;
+	uint32_t d = value >> 32;
 
 	__asm__ __volatile__("wrmsr" :: "a"(a), "d"(d), "c"(msr) : "memory");
 }
 
 
-static inline u16 inw(u16 port)
+static inline uint16_t inw(uint16_t port)
 {
-	u16 tmp;
+	uint16_t tmp;
 
 	__asm__ __volatile__("in %%dx, %%ax"
 		: /* output */ "=a" (tmp)
@@ -540,130 +492,99 @@ static inline u16 inw(u16 port)
 	return tmp;
 }
 
-static inline u16 get_es(void)
+static inline uint16_t get_es(void)
 {
-	u16 es;
+	uint16_t es;
 
 	__asm__ __volatile__("mov %%es, %[es]"
 			     : /* output */ [es]"=rm"(es));
 	return es;
 }
 
-static inline u16 get_cs(void)
+static inline uint16_t get_cs(void)
 {
-	u16 cs;
+	uint16_t cs;
 
 	__asm__ __volatile__("mov %%cs, %[cs]"
 			     : /* output */ [cs]"=rm"(cs));
 	return cs;
 }
 
-static inline u16 get_ss(void)
+static inline uint16_t get_ss(void)
 {
-	u16 ss;
+	uint16_t ss;
 
 	__asm__ __volatile__("mov %%ss, %[ss]"
 			     : /* output */ [ss]"=rm"(ss));
 	return ss;
 }
 
-static inline u16 get_ds(void)
+static inline uint16_t get_ds(void)
 {
-	u16 ds;
+	uint16_t ds;
 
 	__asm__ __volatile__("mov %%ds, %[ds]"
 			     : /* output */ [ds]"=rm"(ds));
 	return ds;
 }
 
-static inline u16 get_fs(void)
+static inline uint16_t get_fs(void)
 {
-	u16 fs;
+	uint16_t fs;
 
 	__asm__ __volatile__("mov %%fs, %[fs]"
 			     : /* output */ [fs]"=rm"(fs));
 	return fs;
 }
 
-static inline u16 get_gs(void)
+static inline uint16_t get_gs(void)
 {
-	u16 gs;
+	uint16_t gs;
 
 	__asm__ __volatile__("mov %%gs, %[gs]"
 			     : /* output */ [gs]"=rm"(gs));
 	return gs;
 }
 
-static inline u16 get_tr(void)
+static inline uint16_t get_tr(void)
 {
-	u16 tr;
+	uint16_t tr;
 
 	__asm__ __volatile__("str %[tr]"
 			     : /* output */ [tr]"=rm"(tr));
 	return tr;
 }
 
-static inline u64 get_cr0(void)
+static inline uint64_t get_cr0(void)
 {
-	u64 cr0;
+	uint64_t cr0;
 
 	__asm__ __volatile__("mov %%cr0, %[cr0]"
 			     : /* output */ [cr0]"=r"(cr0));
 	return cr0;
 }
 
-static inline void set_cr0(u64 val)
+static inline uint64_t get_cr3(void)
 {
-	__asm__ __volatile__("mov %0, %%cr0" : : "r" (val) : "memory");
-}
-
-static inline u64 get_cr2(void)
-{
-	u64 cr2;
-
-	__asm__ __volatile__("mov %%cr2, %[cr2]" : [cr2]"=r"(cr2));
-	return cr2;
-}
-
-static inline u64 get_cr3(void)
-{
-	u64 cr3;
+	uint64_t cr3;
 
 	__asm__ __volatile__("mov %%cr3, %[cr3]"
 			     : /* output */ [cr3]"=r"(cr3));
 	return cr3;
 }
 
-static inline void set_cr3(u64 val)
+static inline uint64_t get_cr4(void)
 {
-	__asm__ __volatile__("mov %0, %%cr3" : : "r" (val) : "memory");
-}
-
-static inline u64 get_cr4(void)
-{
-	u64 cr4;
+	uint64_t cr4;
 
 	__asm__ __volatile__("mov %%cr4, %[cr4]"
 			     : /* output */ [cr4]"=r"(cr4));
 	return cr4;
 }
 
-static inline void set_cr4(u64 val)
+static inline void set_cr4(uint64_t val)
 {
 	__asm__ __volatile__("mov %0, %%cr4" : : "r" (val) : "memory");
-}
-
-static inline u64 get_cr8(void)
-{
-	u64 cr8;
-
-	__asm__ __volatile__("mov %%cr8, %[cr8]" : [cr8]"=r"(cr8));
-	return cr8;
-}
-
-static inline void set_cr8(u64 val)
-{
-	__asm__ __volatile__("mov %0, %%cr8" : : "r" (val) : "memory");
 }
 
 static inline void set_idt(const struct desc_ptr *idt_desc)
@@ -712,14 +633,14 @@ static inline struct desc_ptr get_idt(void)
 	return idt;
 }
 
-static inline void outl(u16 port, u32 value)
+static inline void outl(uint16_t port, uint32_t value)
 {
 	__asm__ __volatile__("outl %%eax, %%dx" : : "d"(port), "a"(value));
 }
 
-static inline void __cpuid(u32 function, u32 index,
-			   u32 *eax, u32 *ebx,
-			   u32 *ecx, u32 *edx)
+static inline void __cpuid(uint32_t function, uint32_t index,
+			   uint32_t *eax, uint32_t *ebx,
+			   uint32_t *ecx, uint32_t *edx)
 {
 	*eax = function;
 	*ecx = index;
@@ -733,35 +654,35 @@ static inline void __cpuid(u32 function, u32 index,
 	    : "memory");
 }
 
-static inline void cpuid(u32 function,
-			 u32 *eax, u32 *ebx,
-			 u32 *ecx, u32 *edx)
+static inline void cpuid(uint32_t function,
+			 uint32_t *eax, uint32_t *ebx,
+			 uint32_t *ecx, uint32_t *edx)
 {
 	return __cpuid(function, 0, eax, ebx, ecx, edx);
 }
 
-static inline u32 this_cpu_fms(void)
+static inline uint32_t this_cpu_fms(void)
 {
-	u32 eax, ebx, ecx, edx;
+	uint32_t eax, ebx, ecx, edx;
 
 	cpuid(1, &eax, &ebx, &ecx, &edx);
 	return eax;
 }
 
-static inline u32 this_cpu_family(void)
+static inline uint32_t this_cpu_family(void)
 {
 	return x86_family(this_cpu_fms());
 }
 
-static inline u32 this_cpu_model(void)
+static inline uint32_t this_cpu_model(void)
 {
 	return x86_model(this_cpu_fms());
 }
 
 static inline bool this_cpu_vendor_string_is(const char *vendor)
 {
-	const u32 *chunk = (const u32 *)vendor;
-	u32 eax, ebx, ecx, edx;
+	const uint32_t *chunk = (const uint32_t *)vendor;
+	uint32_t eax, ebx, ecx, edx;
 
 	cpuid(0, &eax, &ebx, &ecx, &edx);
 	return (ebx == chunk[0] && edx == chunk[1] && ecx == chunk[2]);
@@ -780,20 +701,10 @@ static inline bool this_cpu_is_amd(void)
 	return this_cpu_vendor_string_is("AuthenticAMD");
 }
 
-static inline bool this_cpu_is_hygon(void)
+static inline uint32_t __this_cpu_has(uint32_t function, uint32_t index,
+				      uint8_t reg, uint8_t lo, uint8_t hi)
 {
-	return this_cpu_vendor_string_is("HygonGenuine");
-}
-
-static inline bool this_cpu_is_zhaoxin(void)
-{
-	return this_cpu_vendor_string_is("CentaurHauls") ||
-	       this_cpu_vendor_string_is("  Shanghai  ");
-}
-
-static inline u32 __this_cpu_has(u32 function, u32 index, u8 reg, u8 lo, u8 hi)
-{
-	u32 gprs[4];
+	uint32_t gprs[4];
 
 	__cpuid(function, index,
 		&gprs[KVM_CPUID_EAX], &gprs[KVM_CPUID_EBX],
@@ -808,7 +719,7 @@ static inline bool this_cpu_has(struct kvm_x86_cpu_feature feature)
 			      feature.reg, feature.bit, feature.bit);
 }
 
-static inline u32 this_cpu_property(struct kvm_x86_cpu_property property)
+static inline uint32_t this_cpu_property(struct kvm_x86_cpu_property property)
 {
 	return __this_cpu_has(property.function, property.index,
 			      property.reg, property.lo_bit, property.hi_bit);
@@ -816,7 +727,7 @@ static inline u32 this_cpu_property(struct kvm_x86_cpu_property property)
 
 static __always_inline bool this_cpu_has_p(struct kvm_x86_cpu_property property)
 {
-	u32 max_leaf;
+	uint32_t max_leaf;
 
 	switch (property.function & 0xc0000000) {
 	case 0:
@@ -836,7 +747,7 @@ static __always_inline bool this_cpu_has_p(struct kvm_x86_cpu_property property)
 
 static inline bool this_pmu_has(struct kvm_x86_pmu_feature feature)
 {
-	u32 nr_bits;
+	uint32_t nr_bits;
 
 	if (feature.f.reg == KVM_CPUID_EBX) {
 		nr_bits = this_cpu_property(X86_PROPERTY_PMU_EBX_BIT_VECTOR_LENGTH);
@@ -848,13 +759,13 @@ static inline bool this_pmu_has(struct kvm_x86_pmu_feature feature)
 	return nr_bits > feature.f.bit || this_cpu_has(feature.f);
 }
 
-static __always_inline u64 this_cpu_supported_xcr0(void)
+static __always_inline uint64_t this_cpu_supported_xcr0(void)
 {
 	if (!this_cpu_has_p(X86_PROPERTY_SUPPORTED_XCR0_LO))
 		return 0;
 
 	return this_cpu_property(X86_PROPERTY_SUPPORTED_XCR0_LO) |
-	       ((u64)this_cpu_property(X86_PROPERTY_SUPPORTED_XCR0_HI) << 32);
+	       ((uint64_t)this_cpu_property(X86_PROPERTY_SUPPORTED_XCR0_HI) << 32);
 }
 
 typedef u32		__attribute__((vector_size(16))) sse128_t;
@@ -926,11 +837,6 @@ static inline void write_sse_reg(int reg, const sse128_t *data)
 	}
 }
 
-static inline void invlpg(u64 addr)
-{
-	__asm__ __volatile__("invlpg (%0)" : : "r"(addr) : "memory");
-}
-
 static inline void cpu_relax(void)
 {
 	asm volatile("rep; nop" ::: "memory");
@@ -938,7 +844,7 @@ static inline void cpu_relax(void)
 
 static inline void udelay(unsigned long usec)
 {
-	u64 start, now, cycles;
+	uint64_t start, now, cycles;
 
 	GUEST_ASSERT(guest_tsc_khz);
 	cycles = guest_tsc_khz / 1000 * usec;
@@ -967,15 +873,10 @@ struct kvm_x86_state *vcpu_save_state(struct kvm_vcpu *vcpu);
 void vcpu_load_state(struct kvm_vcpu *vcpu, struct kvm_x86_state *state);
 void kvm_x86_state_cleanup(struct kvm_x86_state *state);
 
-static inline bool kvm_x86_state_is_guest_mode(struct kvm_x86_state *state)
-{
-	return state->nested.size && (state->nested.flags & KVM_STATE_NESTED_GUEST_MODE);
-}
-
 const struct kvm_msr_list *kvm_get_msr_index_list(void);
 const struct kvm_msr_list *kvm_get_feature_msr_index_list(void);
-bool kvm_msr_is_in_save_restore_list(u32 msr_index);
-u64 kvm_get_feature_msr(u64 msr_index);
+bool kvm_msr_is_in_save_restore_list(uint32_t msr_index);
+uint64_t kvm_get_feature_msr(uint64_t msr_index);
 
 static inline void vcpu_msrs_get(struct kvm_vcpu *vcpu,
 				 struct kvm_msrs *msrs)
@@ -1030,20 +931,20 @@ static inline void vcpu_xcrs_set(struct kvm_vcpu *vcpu, struct kvm_xcrs *xcrs)
 }
 
 const struct kvm_cpuid_entry2 *get_cpuid_entry(const struct kvm_cpuid2 *cpuid,
-					       u32 function, u32 index);
+					       uint32_t function, uint32_t index);
 const struct kvm_cpuid2 *kvm_get_supported_cpuid(void);
 
-static inline u32 kvm_cpu_fms(void)
+static inline uint32_t kvm_cpu_fms(void)
 {
 	return get_cpuid_entry(kvm_get_supported_cpuid(), 0x1, 0)->eax;
 }
 
-static inline u32 kvm_cpu_family(void)
+static inline uint32_t kvm_cpu_family(void)
 {
 	return x86_family(kvm_cpu_fms());
 }
 
-static inline u32 kvm_cpu_model(void)
+static inline uint32_t kvm_cpu_model(void)
 {
 	return x86_model(kvm_cpu_fms());
 }
@@ -1056,17 +957,17 @@ static inline bool kvm_cpu_has(struct kvm_x86_cpu_feature feature)
 	return kvm_cpuid_has(kvm_get_supported_cpuid(), feature);
 }
 
-u32 kvm_cpuid_property(const struct kvm_cpuid2 *cpuid,
-		       struct kvm_x86_cpu_property property);
+uint32_t kvm_cpuid_property(const struct kvm_cpuid2 *cpuid,
+			    struct kvm_x86_cpu_property property);
 
-static inline u32 kvm_cpu_property(struct kvm_x86_cpu_property property)
+static inline uint32_t kvm_cpu_property(struct kvm_x86_cpu_property property)
 {
 	return kvm_cpuid_property(kvm_get_supported_cpuid(), property);
 }
 
 static __always_inline bool kvm_cpu_has_p(struct kvm_x86_cpu_property property)
 {
-	u32 max_leaf;
+	uint32_t max_leaf;
 
 	switch (property.function & 0xc0000000) {
 	case 0:
@@ -1086,7 +987,7 @@ static __always_inline bool kvm_cpu_has_p(struct kvm_x86_cpu_property property)
 
 static inline bool kvm_pmu_has(struct kvm_x86_pmu_feature feature)
 {
-	u32 nr_bits;
+	uint32_t nr_bits;
 
 	if (feature.f.reg == KVM_CPUID_EBX) {
 		nr_bits = kvm_cpu_property(X86_PROPERTY_PMU_EBX_BIT_VECTOR_LENGTH);
@@ -1098,13 +999,13 @@ static inline bool kvm_pmu_has(struct kvm_x86_pmu_feature feature)
 	return nr_bits > feature.f.bit || kvm_cpu_has(feature.f);
 }
 
-static __always_inline u64 kvm_cpu_supported_xcr0(void)
+static __always_inline uint64_t kvm_cpu_supported_xcr0(void)
 {
 	if (!kvm_cpu_has_p(X86_PROPERTY_SUPPORTED_XCR0_LO))
 		return 0;
 
 	return kvm_cpu_property(X86_PROPERTY_SUPPORTED_XCR0_LO) |
-	       ((u64)kvm_cpu_property(X86_PROPERTY_SUPPORTED_XCR0_HI) << 32);
+	       ((uint64_t)kvm_cpu_property(X86_PROPERTY_SUPPORTED_XCR0_HI) << 32);
 }
 
 static inline size_t kvm_cpuid2_size(int nr_entries)
@@ -1138,8 +1039,8 @@ static inline void vcpu_get_cpuid(struct kvm_vcpu *vcpu)
 }
 
 static inline struct kvm_cpuid_entry2 *__vcpu_get_cpuid_entry(struct kvm_vcpu *vcpu,
-							      u32 function,
-							      u32 index)
+							      uint32_t function,
+							      uint32_t index)
 {
 	TEST_ASSERT(vcpu->cpuid, "Must do vcpu_init_cpuid() first (or equivalent)");
 
@@ -1150,7 +1051,7 @@ static inline struct kvm_cpuid_entry2 *__vcpu_get_cpuid_entry(struct kvm_vcpu *v
 }
 
 static inline struct kvm_cpuid_entry2 *vcpu_get_cpuid_entry(struct kvm_vcpu *vcpu,
-							    u32 function)
+							    uint32_t function)
 {
 	return __vcpu_get_cpuid_entry(vcpu, function, 0);
 }
@@ -1180,9 +1081,10 @@ static inline void vcpu_set_cpuid(struct kvm_vcpu *vcpu)
 
 void vcpu_set_cpuid_property(struct kvm_vcpu *vcpu,
 			     struct kvm_x86_cpu_property property,
-			     u32 value);
+			     uint32_t value);
+void vcpu_set_cpuid_maxphyaddr(struct kvm_vcpu *vcpu, uint8_t maxphyaddr);
 
-void vcpu_clear_cpuid_entry(struct kvm_vcpu *vcpu, u32 function);
+void vcpu_clear_cpuid_entry(struct kvm_vcpu *vcpu, uint32_t function);
 
 static inline bool vcpu_cpuid_has(struct kvm_vcpu *vcpu,
 				  struct kvm_x86_cpu_feature feature)
@@ -1210,8 +1112,8 @@ static inline void vcpu_clear_cpuid_feature(struct kvm_vcpu *vcpu,
 	vcpu_set_or_clear_cpuid_feature(vcpu, feature, false);
 }
 
-u64 vcpu_get_msr(struct kvm_vcpu *vcpu, u64 msr_index);
-int _vcpu_set_msr(struct kvm_vcpu *vcpu, u64 msr_index, u64 msr_value);
+uint64_t vcpu_get_msr(struct kvm_vcpu *vcpu, uint64_t msr_index);
+int _vcpu_set_msr(struct kvm_vcpu *vcpu, uint64_t msr_index, uint64_t msr_value);
 
 /*
  * Assert on an MSR access(es) and pretty print the MSR name when possible.
@@ -1236,14 +1138,14 @@ do {										\
  * is changing, etc.  This is NOT an exhaustive list!  The intent is to filter
  * out MSRs that are not durable _and_ that a selftest wants to write.
  */
-static inline bool is_durable_msr(u32 msr)
+static inline bool is_durable_msr(uint32_t msr)
 {
 	return msr != MSR_IA32_TSC;
 }
 
 #define vcpu_set_msr(vcpu, msr, val)							\
 do {											\
-	u64 r, v = val;								\
+	uint64_t r, v = val;								\
 											\
 	TEST_ASSERT_MSR(_vcpu_set_msr(vcpu, msr, v) == 1,				\
 			"KVM_SET_MSRS failed on %s, value = 0x%lx", msr, #msr, v);	\
@@ -1257,34 +1159,32 @@ void kvm_get_cpu_address_width(unsigned int *pa_bits, unsigned int *va_bits);
 void kvm_init_vm_address_properties(struct kvm_vm *vm);
 
 struct ex_regs {
-	u64 rax, rcx, rdx, rbx;
-	u64 rbp, rsi, rdi;
-	u64 r8, r9, r10, r11;
-	u64 r12, r13, r14, r15;
-	u64 vector;
-	u64 error_code;
-	u64 rip;
-	u64 cs;
-	u64 rflags;
+	uint64_t rax, rcx, rdx, rbx;
+	uint64_t rbp, rsi, rdi;
+	uint64_t r8, r9, r10, r11;
+	uint64_t r12, r13, r14, r15;
+	uint64_t vector;
+	uint64_t error_code;
+	uint64_t rip;
+	uint64_t cs;
+	uint64_t rflags;
 };
 
 struct idt_entry {
-	u16 offset0;
-	u16 selector;
-	u16 ist : 3;
-	u16 : 5;
-	u16 type : 4;
-	u16 : 1;
-	u16 dpl : 2;
-	u16 p : 1;
-	u16 offset1;
-	u32 offset2; u32 reserved;
+	uint16_t offset0;
+	uint16_t selector;
+	uint16_t ist : 3;
+	uint16_t : 5;
+	uint16_t type : 4;
+	uint16_t : 1;
+	uint16_t dpl : 2;
+	uint16_t p : 1;
+	uint16_t offset1;
+	uint32_t offset2; uint32_t reserved;
 };
 
 void vm_install_exception_handler(struct kvm_vm *vm, int vector,
 			void (*handler)(struct ex_regs *));
-
-gva_t vm_alloc_stack(struct kvm_vm *vm, int nr_pages);
 
 /*
  * Exception fixup morphs #DE to an arbitrary magic vector so that '0' can be
@@ -1326,7 +1226,7 @@ gva_t vm_alloc_stack(struct kvm_vm *vm, int nr_pages);
 	"lea 1f(%%rip), %%r10\n\t"				\
 	"lea 2f(%%rip), %%r11\n\t"				\
 	fep "1: " insn "\n\t"					\
-	"mov $0, %%r9d\n\t"					\
+	"xor %%r9, %%r9\n\t"					\
 	"2:\n\t"						\
 	"mov  %%r9b, %[vector]\n\t"				\
 	"mov  %%r10, %[error_code]\n\t"
@@ -1339,8 +1239,8 @@ gva_t vm_alloc_stack(struct kvm_vm *vm, int nr_pages);
 
 #define kvm_asm_safe(insn, inputs...)					\
 ({									\
-	u64 ign_error_code;						\
-	u8 vector;							\
+	uint64_t ign_error_code;					\
+	uint8_t vector;							\
 									\
 	asm volatile(KVM_ASM_SAFE(insn)					\
 		     : KVM_ASM_SAFE_OUTPUTS(vector, ign_error_code)	\
@@ -1351,7 +1251,7 @@ gva_t vm_alloc_stack(struct kvm_vm *vm, int nr_pages);
 
 #define kvm_asm_safe_ec(insn, error_code, inputs...)			\
 ({									\
-	u8 vector;							\
+	uint8_t vector;							\
 									\
 	asm volatile(KVM_ASM_SAFE(insn)					\
 		     : KVM_ASM_SAFE_OUTPUTS(vector, error_code)		\
@@ -1362,8 +1262,8 @@ gva_t vm_alloc_stack(struct kvm_vm *vm, int nr_pages);
 
 #define kvm_asm_safe_fep(insn, inputs...)				\
 ({									\
-	u64 ign_error_code;						\
-	u8 vector;							\
+	uint64_t ign_error_code;					\
+	uint8_t vector;							\
 									\
 	asm volatile(KVM_ASM_SAFE_FEP(insn)				\
 		     : KVM_ASM_SAFE_OUTPUTS(vector, ign_error_code)	\
@@ -1374,7 +1274,7 @@ gva_t vm_alloc_stack(struct kvm_vm *vm, int nr_pages);
 
 #define kvm_asm_safe_ec_fep(insn, error_code, inputs...)		\
 ({									\
-	u8 vector;							\
+	uint8_t vector;							\
 									\
 	asm volatile(KVM_ASM_SAFE_FEP(insn)				\
 		     : KVM_ASM_SAFE_OUTPUTS(vector, error_code)		\
@@ -1384,11 +1284,11 @@ gva_t vm_alloc_stack(struct kvm_vm *vm, int nr_pages);
 })
 
 #define BUILD_READ_U64_SAFE_HELPER(insn, _fep, _FEP)			\
-static inline u8 insn##_safe ##_fep(u32 idx, u64 *val)			\
+static inline uint8_t insn##_safe ##_fep(uint32_t idx, uint64_t *val)	\
 {									\
-	u64 error_code;							\
-	u8 vector;							\
-	u32 a, d;							\
+	uint64_t error_code;						\
+	uint8_t vector;							\
+	uint32_t a, d;							\
 									\
 	asm volatile(KVM_ASM_SAFE##_FEP(#insn)				\
 		     : "=a"(a), "=d"(d),				\
@@ -1396,7 +1296,7 @@ static inline u8 insn##_safe ##_fep(u32 idx, u64 *val)			\
 		     : "c"(idx)						\
 		     : KVM_ASM_SAFE_CLOBBERS);				\
 									\
-	*val = (u64)a | ((u64)d << 32);			\
+	*val = (uint64_t)a | ((uint64_t)d << 32);			\
 	return vector;							\
 }
 
@@ -1412,12 +1312,12 @@ BUILD_READ_U64_SAFE_HELPERS(rdmsr)
 BUILD_READ_U64_SAFE_HELPERS(rdpmc)
 BUILD_READ_U64_SAFE_HELPERS(xgetbv)
 
-static inline u8 wrmsr_safe(u32 msr, u64 val)
+static inline uint8_t wrmsr_safe(uint32_t msr, uint64_t val)
 {
 	return kvm_asm_safe("wrmsr", "a"(val & -1u), "d"(val >> 32), "c"(msr));
 }
 
-static inline u8 xsetbv_safe(u32 index, u64 value)
+static inline uint8_t xsetbv_safe(uint32_t index, uint64_t value)
 {
 	u32 eax = value;
 	u32 edx = value >> 32;
@@ -1452,14 +1352,6 @@ static inline bool kvm_is_pmu_enabled(void)
 	return get_kvm_param_bool("enable_pmu");
 }
 
-static inline bool kvm_is_mediated_pmu_enabled(void)
-{
-	if (host_cpu_is_intel_compatible)
-		return get_kvm_intel_param_bool("enable_mediated_pmu");
-
-	return get_kvm_amd_param_bool("enable_mediated_pmu");
-}
-
 static inline bool kvm_is_forced_emulation_enabled(void)
 {
 	return !!get_kvm_param_integer("force_emulation_prefix");
@@ -1475,38 +1367,25 @@ static inline bool kvm_is_ignore_msrs(void)
 	return get_kvm_param_bool("ignore_msrs");
 }
 
-static inline bool kvm_is_lbrv_enabled(void)
-{
-	return !!get_kvm_amd_param_integer("lbrv");
-}
+uint64_t *__vm_get_page_table_entry(struct kvm_vm *vm, uint64_t vaddr,
+				    int *level);
+uint64_t *vm_get_page_table_entry(struct kvm_vm *vm, uint64_t vaddr);
 
-/*
- * Do NOT use this to check for nVMX or nSVM support.  Querying kvm_cpu_has()
- * for either of X86_FEATURE_{VMX,SVM} is the idiomatic way to check for nested
- * virtualization support.  Use this *only* to validate KVM's own enumeration.
- */
-static inline bool kvm_is_nested_virtualization_enabled(void)
-{
-	if (host_cpu_is_intel)
-		return get_kvm_intel_param_bool("nested");
+uint64_t kvm_hypercall(uint64_t nr, uint64_t a0, uint64_t a1, uint64_t a2,
+		       uint64_t a3);
+uint64_t __xen_hypercall(uint64_t nr, uint64_t a0, void *a1);
+void xen_hypercall(uint64_t nr, uint64_t a0, void *a1);
 
-	return get_kvm_amd_param_integer("nested");
-}
-
-u64 *vm_get_pte(struct kvm_vm *vm, gva_t gva);
-
-u64 kvm_hypercall(u64 nr, u64 a0, u64 a1, u64 a2, u64 a3);
-u64 __xen_hypercall(u64 nr, u64 a0, void *a1);
-void xen_hypercall(u64 nr, u64 a0, void *a1);
-
-static inline u64 __kvm_hypercall_map_gpa_range(gpa_t gpa, u64 size, u64 flags)
+static inline uint64_t __kvm_hypercall_map_gpa_range(uint64_t gpa,
+						     uint64_t size, uint64_t flags)
 {
 	return kvm_hypercall(KVM_HC_MAP_GPA_RANGE, gpa, size >> PAGE_SHIFT, flags, 0);
 }
 
-static inline void kvm_hypercall_map_gpa_range(gpa_t gpa, u64 size, u64 flags)
+static inline void kvm_hypercall_map_gpa_range(uint64_t gpa, uint64_t size,
+					       uint64_t flags)
 {
-	u64 ret = __kvm_hypercall_map_gpa_range(gpa, size, flags);
+	uint64_t ret = __kvm_hypercall_map_gpa_range(gpa, size, flags);
 
 	GUEST_ASSERT(!ret);
 }
@@ -1551,7 +1430,7 @@ static inline void cli(void)
 	asm volatile ("cli");
 }
 
-void __vm_xsave_require_permission(u64 xfeature, const char *name);
+void __vm_xsave_require_permission(uint64_t xfeature, const char *name);
 
 #define vm_xsave_require_permission(xfeature)	\
 	__vm_xsave_require_permission(xfeature, #xfeature)
@@ -1562,7 +1441,7 @@ enum pg_level {
 	PG_LEVEL_2M,
 	PG_LEVEL_1G,
 	PG_LEVEL_512G,
-	PG_LEVEL_256T
+	PG_LEVEL_NUM
 };
 
 #define PG_LEVEL_SHIFT(_level) ((_level - 1) * 9 + 12)
@@ -1572,51 +1451,9 @@ enum pg_level {
 #define PG_SIZE_2M PG_LEVEL_SIZE(PG_LEVEL_2M)
 #define PG_SIZE_1G PG_LEVEL_SIZE(PG_LEVEL_1G)
 
-#define PTE_PRESENT_MASK(mmu)		((mmu)->arch.pte_masks.present)
-#define PTE_WRITABLE_MASK(mmu)		((mmu)->arch.pte_masks.writable)
-#define PTE_USER_MASK(mmu)		((mmu)->arch.pte_masks.user)
-#define PTE_READABLE_MASK(mmu)		((mmu)->arch.pte_masks.readable)
-#define PTE_EXECUTABLE_MASK(mmu)	((mmu)->arch.pte_masks.executable)
-#define PTE_ACCESSED_MASK(mmu)		((mmu)->arch.pte_masks.accessed)
-#define PTE_DIRTY_MASK(mmu)		((mmu)->arch.pte_masks.dirty)
-#define PTE_HUGE_MASK(mmu)		((mmu)->arch.pte_masks.huge)
-#define PTE_NX_MASK(mmu)		((mmu)->arch.pte_masks.nx)
-#define PTE_C_BIT_MASK(mmu)		((mmu)->arch.pte_masks.c)
-#define PTE_S_BIT_MASK(mmu)		((mmu)->arch.pte_masks.s)
-#define PTE_ALWAYS_SET_MASK(mmu)	((mmu)->arch.pte_masks.always_set)
-
-/*
- * For PTEs without a PRESENT bit (i.e. EPT entries), treat the PTE as present
- * if it's executable or readable, as EPT supports execute-only PTEs, but not
- * write-only PTEs.
- */
-#define is_present_pte(mmu, pte)		\
-	(PTE_PRESENT_MASK(mmu) ?		\
-	 !!(*(pte) & PTE_PRESENT_MASK(mmu)) :	\
-	 !!(*(pte) & (PTE_READABLE_MASK(mmu) | PTE_EXECUTABLE_MASK(mmu))))
-#define is_executable_pte(mmu, pte)	\
-	((*(pte) & (PTE_EXECUTABLE_MASK(mmu) | PTE_NX_MASK(mmu))) == PTE_EXECUTABLE_MASK(mmu))
-#define is_writable_pte(mmu, pte)	(!!(*(pte) & PTE_WRITABLE_MASK(mmu)))
-#define is_user_pte(mmu, pte)		(!!(*(pte) & PTE_USER_MASK(mmu)))
-#define is_accessed_pte(mmu, pte)	(!!(*(pte) & PTE_ACCESSED_MASK(mmu)))
-#define is_dirty_pte(mmu, pte)		(!!(*(pte) & PTE_DIRTY_MASK(mmu)))
-#define is_huge_pte(mmu, pte)		(!!(*(pte) & PTE_HUGE_MASK(mmu)))
-#define is_nx_pte(mmu, pte)		(!is_executable_pte(mmu, pte))
-
-void tdp_mmu_init(struct kvm_vm *vm, int pgtable_levels,
-		  struct pte_masks *pte_masks);
-
-void __virt_pg_map(struct kvm_vm *vm, struct kvm_mmu *mmu, gva_t gva,
-		   gpa_t gpa,  int level);
-void virt_map_level(struct kvm_vm *vm, gva_t gva, gpa_t gpa,
-		    u64 nr_bytes, int level);
-
-void vm_enable_tdp(struct kvm_vm *vm);
-bool kvm_cpu_has_tdp(void);
-void tdp_map(struct kvm_vm *vm, gpa_t l2_gpa, gpa_t gpa, u64 size);
-void tdp_identity_map_default_memslots(struct kvm_vm *vm);
-void tdp_identity_map_1g(struct kvm_vm *vm,  u64 addr, u64 size);
-u64 *tdp_get_pte(struct kvm_vm *vm, u64 l2_gpa);
+void __virt_pg_map(struct kvm_vm *vm, uint64_t vaddr, uint64_t paddr, int level);
+void virt_map_level(struct kvm_vm *vm, uint64_t vaddr, uint64_t paddr,
+		    uint64_t nr_bytes, int level);
 
 /*
  * Basic CPU control in CR0
@@ -1654,15 +1491,6 @@ u64 *tdp_get_pte(struct kvm_vm *vm, u64 l2_gpa);
 #define PFERR_GUEST_FINAL_MASK	BIT_ULL(PFERR_GUEST_FINAL_BIT)
 #define PFERR_GUEST_PAGE_MASK	BIT_ULL(PFERR_GUEST_PAGE_BIT)
 #define PFERR_IMPLICIT_ACCESS	BIT_ULL(PFERR_IMPLICIT_ACCESS_BIT)
-
-#define EPT_VIOLATION_ACC_READ		BIT(0)
-#define EPT_VIOLATION_ACC_WRITE		BIT(1)
-#define EPT_VIOLATION_ACC_INSTR		BIT(2)
-#define EPT_VIOLATION_PROT_READ		BIT(3)
-#define EPT_VIOLATION_PROT_WRITE	BIT(4)
-#define EPT_VIOLATION_PROT_EXEC		BIT(5)
-#define EPT_VIOLATION_GVA_IS_VALID	BIT(7)
-#define EPT_VIOLATION_GVA_TRANSLATED	BIT(8)
 
 bool sys_clocksource_is_based_on_tsc(void);
 

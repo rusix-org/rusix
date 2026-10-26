@@ -25,6 +25,40 @@
  *  - Greg Kroah-Hartman - usb-skeleton driver
  *  - Xbox Linux project - extra USB IDs
  *  - Pekka Pöyry (quantus) - Xbox One controller reverse-engineering
+ *
+ * TODO:
+ *  - fine tune axes (especially trigger axes)
+ *  - fix "analog" buttons (reported as digital now)
+ *  - get rumble working
+ *  - need USB IDs for other dance pads
+ *
+ * History:
+ *
+ * 2002-06-27 - 0.0.1 : first version, just said "XBOX HID controller"
+ *
+ * 2002-07-02 - 0.0.2 : basic working version
+ *  - all axes and 9 of the 10 buttons work (german InterAct device)
+ *  - the black button does not work
+ *
+ * 2002-07-14 - 0.0.3 : rework by Vojtech Pavlik
+ *  - indentation fixes
+ *  - usb + input init sequence fixes
+ *
+ * 2002-07-16 - 0.0.4 : minor changes, merge with Vojtech's v0.0.3
+ *  - verified the lack of HID and report descriptors
+ *  - verified that ALL buttons WORK
+ *  - fixed d-pad to axes mapping
+ *
+ * 2002-07-17 - 0.0.5 : simplified d-pad handling
+ *
+ * 2004-10-02 - 0.0.6 : DDR pad support
+ *  - borrowed from the Xbox Linux kernel
+ *  - USB id's for commonly used dance pads are present
+ *  - dance pads will map D-PAD to buttons, not axes
+ *  - pass the module paramater 'dpad_to_buttons' to force
+ *    the D-PAD to map to buttons if your pad is not detected
+ *
+ * Later changes can be tracked in SCM.
  */
 
 #include <linux/bits.h>
@@ -408,7 +442,6 @@ static const struct xpad_device {
 	{ 0x3537, 0x1004, "GameSir T4 Kaleid", 0, XTYPE_XBOX360 },
 	{ 0x3537, 0x100f, "GameSir Nova 2 Lite", 0, XTYPE_XBOX360 },
 	{ 0x3537, 0x1010, "GameSir G7 SE", 0, XTYPE_XBOXONE },
-	{ 0x3537, 0x1040, "GameSir Nova Lite", 0, XTYPE_XBOX360 },
 	{ 0x3651, 0x1000, "CRKD SG", 0, XTYPE_XBOX360 },
 	{ 0x366c, 0x0005, "ByoWave Proteus Controller", MAP_SHARE_BUTTON, XTYPE_XBOXONE, FLAG_DELAY_INIT },
 	{ 0x3767, 0x0101, "Fanatec Speedster 3 Forceshock Wheel", 0, XTYPE_XBOX },
@@ -577,7 +610,6 @@ static const struct usb_device_id xpad_table[] = {
 	XPAD_XBOX360_VENDOR(0x3651),		/* CRKD Controllers */
 	XPAD_XBOXONE_VENDOR(0x366c),		/* ByoWave controllers */
 	XPAD_XBOX360_VENDOR(0x37d7),		/* Flydigi Controllers */
-	XPAD_XBOX360_VENDOR(0x3958),		/* RedOctane Games Controllers */
 	XPAD_XBOX360_VENDOR(0x413d),		/* Black Shark Green Ghost Controller */
 	{ }
 };
@@ -1737,7 +1769,7 @@ static int xpad_led_probe(struct usb_xpad *xpad)
 	if (xpad->xtype != XTYPE_XBOX360 && xpad->xtype != XTYPE_XBOX360W)
 		return 0;
 
-	xpad->led = led = kzalloc_obj(*led);
+	xpad->led = led = kzalloc(sizeof(*led), GFP_KERNEL);
 	if (!led)
 		return -ENOMEM;
 
@@ -2070,7 +2102,7 @@ static int xpad_probe(struct usb_interface *intf, const struct usb_device_id *id
 			break;
 	}
 
-	xpad = kzalloc_obj(*xpad);
+	xpad = kzalloc(sizeof(*xpad), GFP_KERNEL);
 	if (!xpad)
 		return -ENOMEM;
 

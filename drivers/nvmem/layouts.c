@@ -96,7 +96,7 @@ static int nvmem_layout_create_device(struct nvmem_device *nvmem,
 	struct device *dev;
 	int ret;
 
-	layout = kzalloc_obj(*layout);
+	layout = kzalloc(sizeof(*layout), GFP_KERNEL);
 	if (!layout)
 		return -ENOMEM;
 
@@ -156,18 +156,7 @@ static int nvmem_layout_bus_populate(struct nvmem_device *nvmem,
 
 struct device_node *of_nvmem_layout_get_container(struct nvmem_device *nvmem)
 {
-	struct device_node *np;
-
-	/* Search for nvmem-layout child */
-	np = of_get_child_by_name(nvmem->dev.of_node, "nvmem-layout");
-	if (np)
-		return np;
-
-	/* The nvmem of_node is itself a fixed-layout node */
-	if (of_device_is_compatible(nvmem->dev.of_node, "fixed-layout"))
-		return of_node_get(nvmem->dev.of_node);
-
-	return NULL;
+	return of_get_child_by_name(nvmem->dev.of_node, "nvmem-layout");
 }
 EXPORT_SYMBOL_GPL(of_nvmem_layout_get_container);
 

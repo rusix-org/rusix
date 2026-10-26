@@ -14,13 +14,11 @@ struct gro_cell {
 int gro_cells_receive(struct gro_cells *gcells, struct sk_buff *skb)
 {
 	struct net_device *dev = skb->dev;
-	enum skb_drop_reason reason;
 	bool have_bh_lock = false;
 	struct gro_cell *cell;
 	int res;
 
 	rcu_read_lock();
-	reason = SKB_DROP_REASON_DEV_READY;
 	if (unlikely(!(dev->flags & IFF_UP)))
 		goto drop;
 
@@ -36,10 +34,9 @@ int gro_cells_receive(struct gro_cells *gcells, struct sk_buff *skb)
 	cell = this_cpu_ptr(gcells->cells);
 
 	if (skb_queue_len(&cell->napi_skbs) > READ_ONCE(net_hotdata.max_backlog)) {
-		reason = SKB_DROP_REASON_CPU_BACKLOG;
 drop:
 		dev_core_stats_rx_dropped_inc(dev);
-		kfree_skb_reason(skb, reason);
+		kfree_skb(skb);
 		res = NET_RX_DROP;
 		goto unlock;
 	}
@@ -95,7 +92,6 @@ int gro_cells_init(struct gro_cells *gcells, struct net_device *dev)
 		local_lock_init(&cell->bh_lock);
 
 		set_bit(NAPI_STATE_NO_BUSY_POLL, &cell->napi.state);
-		set_bit(NAPI_STATE_PERCPU, &cell->napi.state);
 
 		netif_napi_add(dev, &cell->napi, gro_cell_poll);
 		napi_enable(&cell->napi);
@@ -138,7 +134,7 @@ void gro_cells_destroy(struct gro_cells *gcells)
 	 * because we might be called from cleanup_net(), and we
 	 * definitely do not want to block this critical task.
 	 */
-	defer = kmalloc_obj(*defer, GFP_KERNEL | __GFP_NOWARN);
+	defer = kmalloc(sizeof(*defer), GFP_KERNEL | __GFP_NOWARN);
 	if (likely(defer)) {
 		defer->ptr = gcells->cells;
 		call_rcu(&defer->rcu, percpu_free_defer_callback);

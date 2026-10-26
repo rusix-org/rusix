@@ -453,7 +453,6 @@ static int sh_msiof_spi_setup(struct spi_device *spi)
 	struct sh_msiof_spi_priv *p =
 		spi_controller_get_devdata(spi->controller);
 	u32 clr, set, tmp;
-	int ret;
 
 	if (spi_get_csgpiod(spi, 0) || spi_controller_is_target(p->ctlr))
 		return 0;
@@ -469,9 +468,7 @@ static int sh_msiof_spi_setup(struct spi_device *spi)
 		clr |= SIMDR1_SYNCAC;
 	else
 		set |= SIMDR1_SYNCAC;
-	ret = pm_runtime_resume_and_get(&p->pdev->dev);
-	if (ret < 0)
-		return ret;
+	pm_runtime_get_sync(&p->pdev->dev);
 	tmp = sh_msiof_read(p, SITMDR1) & ~clr;
 	sh_msiof_write(p, SITMDR1, tmp | set | SIMDR1_TRMD | SITMDR1_PCON);
 	tmp = sh_msiof_read(p, SIRMDR1) & ~clr;
@@ -674,7 +671,7 @@ static int sh_msiof_dma_once(struct sh_msiof_spi_priv *p, const void *tx,
 
 	if (tx) {
 		ier_bits |= SIIER_TDREQE | SIIER_TDMAE;
-		dma_sync_single_for_device(dmaengine_get_dma_device(p->ctlr->dma_tx),
+		dma_sync_single_for_device(p->ctlr->dma_tx->device->dev,
 					   p->tx_dma_addr, len, DMA_TO_DEVICE);
 		desc_tx = dmaengine_prep_slave_single(p->ctlr->dma_tx,
 					p->tx_dma_addr, len, DMA_MEM_TO_DEV,
@@ -754,7 +751,7 @@ static int sh_msiof_dma_once(struct sh_msiof_spi_priv *p, const void *tx,
 	}
 
 	if (rx)
-		dma_sync_single_for_cpu(dmaengine_get_dma_device(p->ctlr->dma_rx),
+		dma_sync_single_for_cpu(p->ctlr->dma_rx->device->dev,
 					p->rx_dma_addr, len, DMA_FROM_DEVICE);
 
 	return 0;
@@ -1016,7 +1013,6 @@ static const struct of_device_id sh_msiof_match[] __maybe_unused = {
 	{ .compatible = "renesas,msiof-r8a779a0",  .data = &rcar_gen3_data },
 	{ .compatible = "renesas,msiof-r8a779f0",  .data = &rcar_gen3_data },
 	{ .compatible = "renesas,rcar-gen4-msiof", .data = &rcar_gen4_data },
-	{ .compatible = "renesas,rcar-gen5-msiof", .data = &rcar_gen4_data },
 	{ .compatible = "renesas,sh-msiof",        .data = &sh_data }, /* Deprecated */
 	{ /* sentinel */ }
 };
@@ -1142,13 +1138,13 @@ static int sh_msiof_request_dma(struct sh_msiof_spi_priv *p)
 	if (!p->rx_dma_page)
 		goto free_tx_page;
 
-	tx_dev = dmaengine_get_dma_device(ctlr->dma_tx);
+	tx_dev = ctlr->dma_tx->device->dev;
 	p->tx_dma_addr = dma_map_single(tx_dev, p->tx_dma_page, PAGE_SIZE,
 					DMA_TO_DEVICE);
 	if (dma_mapping_error(tx_dev, p->tx_dma_addr))
 		goto free_rx_page;
 
-	rx_dev = dmaengine_get_dma_device(ctlr->dma_rx);
+	rx_dev = ctlr->dma_rx->device->dev;
 	p->rx_dma_addr = dma_map_single(rx_dev, p->rx_dma_page, PAGE_SIZE,
 					DMA_FROM_DEVICE);
 	if (dma_mapping_error(rx_dev, p->rx_dma_addr))
@@ -1178,9 +1174,9 @@ static void sh_msiof_release_dma(struct sh_msiof_spi_priv *p)
 	if (!ctlr->dma_tx)
 		return;
 
-	dma_unmap_single(dmaengine_get_dma_device(ctlr->dma_rx), p->rx_dma_addr, PAGE_SIZE,
+	dma_unmap_single(ctlr->dma_rx->device->dev, p->rx_dma_addr, PAGE_SIZE,
 			 DMA_FROM_DEVICE);
-	dma_unmap_single(dmaengine_get_dma_device(ctlr->dma_tx), p->tx_dma_addr, PAGE_SIZE,
+	dma_unmap_single(ctlr->dma_tx->device->dev, p->tx_dma_addr, PAGE_SIZE,
 			 DMA_TO_DEVICE);
 	free_page((unsigned long)p->rx_dma_page);
 	free_page((unsigned long)p->tx_dma_page);
@@ -1221,9 +1217,9 @@ static int sh_msiof_spi_probe(struct platform_device *pdev)
 		info->dtdl = 200;
 
 	if (info->mode == MSIOF_SPI_TARGET)
-		ctlr = devm_spi_alloc_target(dev, sizeof(struct sh_msiof_spi_priv));
+		ctlr = spi_alloc_target(dev, sizeof(struct sh_msiof_spi_priv));
 	else
-		ctlr = devm_spi_alloc_host(dev, sizeof(struct sh_msiof_spi_priv));
+		ctlr = spi_alloc_host(dev, sizeof(struct sh_msiof_spi_priv));
 	if (ctlr == NULL)
 		return -ENOMEM;
 
@@ -1240,21 +1236,26 @@ static int sh_msiof_spi_probe(struct platform_device *pdev)
 	p->clk = devm_clk_get(dev, NULL);
 	if (IS_ERR(p->clk)) {
 		dev_err(dev, "cannot get clock\n");
-		return PTR_ERR(p->clk);
+		ret = PTR_ERR(p->clk);
+		goto err1;
 	}
 
 	i = platform_get_irq(pdev, 0);
-	if (i < 0)
-		return i;
+	if (i < 0) {
+		ret = i;
+		goto err1;
+	}
 
 	p->mapbase = devm_platform_ioremap_resource(pdev, 0);
-	if (IS_ERR(p->mapbase))
-		return PTR_ERR(p->mapbase);
+	if (IS_ERR(p->mapbase)) {
+		ret = PTR_ERR(p->mapbase);
+		goto err1;
+	}
 
 	ret = devm_request_irq(dev, i, sh_msiof_spi_irq, 0, dev_name(dev), p);
 	if (ret) {
 		dev_err(dev, "unable to request irq\n");
-		return ret;
+		goto err1;
 	}
 
 	p->pdev = pdev;
@@ -1277,6 +1278,7 @@ static int sh_msiof_spi_probe(struct platform_device *pdev)
 	ctlr->flags = chipdata->ctlr_flags;
 	ctlr->bus_num = pdev->id;
 	ctlr->num_chipselect = p->info->num_chipselect;
+	ctlr->dev.of_node = dev->of_node;
 	ctlr->setup = sh_msiof_spi_setup;
 	ctlr->prepare_message = sh_msiof_prepare_message;
 	ctlr->target_abort = sh_msiof_target_abort;
@@ -1301,7 +1303,8 @@ static int sh_msiof_spi_probe(struct platform_device *pdev)
  err2:
 	sh_msiof_release_dma(p);
 	pm_runtime_disable(dev);
-
+ err1:
+	spi_controller_put(ctlr);
 	return ret;
 }
 
@@ -1309,15 +1312,19 @@ static void sh_msiof_spi_remove(struct platform_device *pdev)
 {
 	struct sh_msiof_spi_priv *p = platform_get_drvdata(pdev);
 
+	spi_controller_get(p->ctlr);
+
 	spi_unregister_controller(p->ctlr);
 
 	sh_msiof_release_dma(p);
 	pm_runtime_disable(&pdev->dev);
+
+	spi_controller_put(p->ctlr);
 }
 
 static const struct platform_device_id spi_driver_ids[] = {
-	{ .name = "spi_sh_msiof", .driver_data = (kernel_ulong_t)&sh_data },
-	{ }
+	{ "spi_sh_msiof",	(kernel_ulong_t)&sh_data },
+	{},
 };
 MODULE_DEVICE_TABLE(platform, spi_driver_ids);
 

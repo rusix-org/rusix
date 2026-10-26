@@ -313,7 +313,7 @@ static void bq32k_remove(struct i2c_client *client)
 }
 
 static const struct i2c_device_id bq32k_id[] = {
-	{ .name = "bq32000" },
+	{ "bq32000" },
 	{ }
 };
 MODULE_DEVICE_TABLE(i2c, bq32k_id);

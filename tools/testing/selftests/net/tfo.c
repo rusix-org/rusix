@@ -82,10 +82,8 @@ static void run_server(void)
 		error(1, errno, "getsockopt(SO_INCOMING_NAPI_ID)");
 
 	if (read(connfd, buf, 64) < 0)
-		error(1, errno, "read()");
-
-	if (fprintf(outfile, "%d\n", opt) < 0)
-		error(1, errno, "fprintf()");
+		perror("read()");
+	fprintf(outfile, "%d\n", opt);
 
 	fclose(outfile);
 	close(connfd);
@@ -94,17 +92,14 @@ static void run_server(void)
 
 static void run_client(void)
 {
-	int fd, ret;
+	int fd;
 	char *msg = "Hello, world!";
 
 	fd = socket(AF_INET6, SOCK_STREAM, 0);
 	if (fd == -1)
 		error(1, errno, "socket()");
 
-	ret = sendto(fd, msg, strlen(msg), MSG_FASTOPEN,
-		     (struct sockaddr *)&cfg_addr, sizeof(cfg_addr));
-	if (ret < 0)
-		error(1, errno, "sendto()");
+	sendto(fd, msg, strlen(msg), MSG_FASTOPEN, (struct sockaddr *)&cfg_addr, sizeof(cfg_addr));
 
 	close(fd);
 }

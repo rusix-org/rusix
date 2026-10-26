@@ -1,4 +1,3 @@
-// SPDX-License-Identifier: GPL-2.0
 /*
  * POSIX message queues filesystem for Linux.
  *
@@ -10,6 +9,8 @@
  *			    Manfred Spraul	    (manfred@colorfullife.com)
  *
  * Audit:                   George Wilson           (ltcgcw@us.ibm.com)
+ *
+ * This file is released under the GPL.
  */
 
 #include <linux/capability.h>
@@ -210,7 +211,7 @@ static int msg_insert(struct msg_msg *msg, struct mqueue_inode_info *info)
 		leaf = info->node_cache;
 		info->node_cache = NULL;
 	} else {
-		leaf = kmalloc_obj(*leaf, GFP_ATOMIC);
+		leaf = kmalloc(sizeof(*leaf), GFP_ATOMIC);
 		if (!leaf)
 			return -ENOMEM;
 		INIT_LIST_HEAD(&leaf->msg_list);
@@ -449,7 +450,7 @@ static int mqueue_init_fs_context(struct fs_context *fc)
 {
 	struct mqueue_fs_context *ctx;
 
-	ctx = kzalloc_obj(struct mqueue_fs_context);
+	ctx = kzalloc(sizeof(struct mqueue_fs_context), GFP_KERNEL);
 	if (!ctx)
 		return -ENOMEM;
 
@@ -528,13 +529,6 @@ static void mqueue_evict_inode(struct inode *inode)
 		list_add_tail(&msg->m_list, &tmp_msg);
 	kfree(info->node_cache);
 	spin_unlock(&info->lock);
-	/*
-	 * A shared file table can let the notification owner exit without
-	 * running ->flush(). No users of the inode remain during eviction, so
-	 * tear down any stale notification after dropping info->lock because
-	 * netlink_sendskb() may release the final socket reference.
-	 */
-	remove_notification(info);
 
 	list_for_each_entry_safe(msg, nmsg, &tmp_msg, m_list) {
 		list_del(&msg->m_list);
@@ -605,7 +599,8 @@ static int mqueue_create_attr(struct dentry *dentry, umode_t mode, void *arg)
 	dir->i_size += DIRENT_SIZE;
 	simple_inode_init_ts(dir);
 
-	d_make_persistent(dentry, inode);
+	d_instantiate(dentry, inode);
+	dget(dentry);
 	return 0;
 out_unlock:
 	spin_unlock(&mq_lock);
@@ -614,16 +609,21 @@ out_unlock:
 	return error;
 }
 
-static int mqueue_create(const struct mnt_idmap *idmap, struct inode *dir,
-			 struct dentry *dentry, umode_t mode)
+static int mqueue_create(struct mnt_idmap *idmap, struct inode *dir,
+			 struct dentry *dentry, umode_t mode, bool excl)
 {
 	return mqueue_create_attr(dentry, mode, NULL);
 }
 
 static int mqueue_unlink(struct inode *dir, struct dentry *dentry)
 {
+	struct inode *inode = d_inode(dentry);
+
+	simple_inode_init_ts(dir);
 	dir->i_size -= DIRENT_SIZE;
-	return simple_unlink(dir, dentry);
+	drop_nlink(inode);
+	dput(dentry);
+	return 0;
 }
 
 /*
@@ -797,6 +797,7 @@ static void __do_notify(struct mqueue_inode_info *info)
 			struct kernel_siginfo sig_i;
 			struct task_struct *task;
 
+			/* do_mq_notify() accepts sigev_signo == 0, why?? */
 			if (!info->notify.sigev_signo)
 				break;
 
@@ -891,45 +892,53 @@ static int prepare_open(struct dentry *dentry, int oflag, int ro,
 	return inode_permission(&nop_mnt_idmap, d_inode(dentry), acc);
 }
 
-static struct file *mqueue_file_open(struct filename *name,
-				     struct vfsmount *mnt, int oflag, int ro,
-				     umode_t mode, struct mq_attr *attr)
-{
-	struct dentry *dentry;
-	struct file *file;
-	int ret;
-
-	dentry = start_creating_noperm(mnt->mnt_root, &QSTR(name->name));
-	if (IS_ERR(dentry))
-		return ERR_CAST(dentry);
-
-	ret = prepare_open(dentry, oflag, ro, mode, name, attr);
-	file = ERR_PTR(ret);
-	if (!ret) {
-		const struct path path = { .mnt = mnt, .dentry = dentry };
-		file = dentry_open(&path, oflag, current_cred());
-	}
-
-	end_creating(dentry);
-	return file;
-}
-
 static int do_mq_open(const char __user *u_name, int oflag, umode_t mode,
 		      struct mq_attr *attr)
 {
 	struct vfsmount *mnt = current->nsproxy->ipc_ns->mq_mnt;
-	int fd, ro;
+	struct dentry *root = mnt->mnt_root;
+	struct filename *name;
+	struct path path;
+	int fd, error;
+	int ro;
 
 	audit_mq_open(oflag, mode, attr);
 
-	CLASS(filename, name)(u_name);
+	name = getname(u_name);
 	if (IS_ERR(name))
 		return PTR_ERR(name);
 
+	fd = get_unused_fd_flags(O_CLOEXEC);
+	if (fd < 0)
+		goto out_putname;
+
 	ro = mnt_want_write(mnt);	/* we'll drop it in any case */
-	fd = FD_ADD(O_CLOEXEC, mqueue_file_open(name, mnt, oflag, ro, mode, attr));
+	inode_lock(d_inode(root));
+	path.dentry = lookup_noperm(&QSTR(name->name), root);
+	if (IS_ERR(path.dentry)) {
+		error = PTR_ERR(path.dentry);
+		goto out_putfd;
+	}
+	path.mnt = mntget(mnt);
+	error = prepare_open(path.dentry, oflag, ro, mode, name, attr);
+	if (!error) {
+		struct file *file = dentry_open(&path, oflag, current_cred());
+		if (!IS_ERR(file))
+			fd_install(fd, file);
+		else
+			error = PTR_ERR(file);
+	}
+	path_put(&path);
+out_putfd:
+	if (error) {
+		put_unused_fd(fd);
+		fd = error;
+	}
+	inode_unlock(d_inode(root));
 	if (!ro)
 		mnt_drop_write(mnt);
+out_putname:
+	putname(name);
 	return fd;
 }
 
@@ -946,34 +955,44 @@ SYSCALL_DEFINE4(mq_open, const char __user *, u_name, int, oflag, umode_t, mode,
 SYSCALL_DEFINE1(mq_unlink, const char __user *, u_name)
 {
 	int err;
+	struct filename *name;
 	struct dentry *dentry;
-	struct inode *inode;
+	struct inode *inode = NULL;
 	struct ipc_namespace *ipc_ns = current->nsproxy->ipc_ns;
 	struct vfsmount *mnt = ipc_ns->mq_mnt;
-	CLASS(filename, name)(u_name);
 
+	name = getname(u_name);
 	if (IS_ERR(name))
 		return PTR_ERR(name);
 
 	audit_inode_parent_hidden(name, mnt->mnt_root);
 	err = mnt_want_write(mnt);
 	if (err)
-		return err;
-	dentry = start_removing_noperm(mnt->mnt_root, &QSTR(name->name));
+		goto out_name;
+	inode_lock_nested(d_inode(mnt->mnt_root), I_MUTEX_PARENT);
+	dentry = lookup_noperm(&QSTR(name->name), mnt->mnt_root);
 	if (IS_ERR(dentry)) {
 		err = PTR_ERR(dentry);
-		goto out_drop_write;
+		goto out_unlock;
 	}
 
 	inode = d_inode(dentry);
-	ihold(inode);
-	err = vfs_unlink(&nop_mnt_idmap, d_inode(mnt->mnt_root),
-			 dentry, NULL);
-	end_removing(dentry);
-	iput(inode);
+	if (!inode) {
+		err = -ENOENT;
+	} else {
+		ihold(inode);
+		err = vfs_unlink(&nop_mnt_idmap, d_inode(dentry->d_parent),
+				 dentry, NULL);
+	}
+	dput(dentry);
 
-out_drop_write:
+out_unlock:
+	inode_unlock(d_inode(mnt->mnt_root));
+	iput(inode);
 	mnt_drop_write(mnt);
+out_name:
+	putname(name);
+
 	return err;
 }
 
@@ -1094,7 +1113,7 @@ static int do_mq_timedsend(mqd_t mqdes, const char __user *u_msg_ptr,
 	 * fall back to that if necessary.
 	 */
 	if (!info->node_cache)
-		new_leaf = kmalloc_obj(*new_leaf);
+		new_leaf = kmalloc(sizeof(*new_leaf), GFP_KERNEL);
 
 	spin_lock(&info->lock);
 
@@ -1187,7 +1206,7 @@ static int do_mq_timedreceive(mqd_t mqdes, char __user *u_msg_ptr,
 	 * fall back to that if necessary.
 	 */
 	if (!info->node_cache)
-		new_leaf = kmalloc_obj(*new_leaf);
+		new_leaf = kmalloc(sizeof(*new_leaf), GFP_KERNEL);
 
 	spin_lock(&info->lock);
 
@@ -1287,9 +1306,9 @@ static int do_mq_notify(mqd_t mqdes, const struct sigevent *notification)
 			     notification->sigev_notify != SIGEV_THREAD))
 			return -EINVAL;
 		if (notification->sigev_notify == SIGEV_SIGNAL &&
-		    (!notification->sigev_signo ||
-		     !valid_signal(notification->sigev_signo)))
+			!valid_signal(notification->sigev_signo)) {
 			return -EINVAL;
+		}
 		if (notification->sigev_notify == SIGEV_THREAD) {
 			long timeo;
 
@@ -1619,7 +1638,7 @@ static const struct fs_context_operations mqueue_fs_context_ops = {
 static struct file_system_type mqueue_fs_type = {
 	.name			= "mqueue",
 	.init_fs_context	= mqueue_init_fs_context,
-	.kill_sb		= kill_anon_super,
+	.kill_sb		= kill_litter_super,
 	.fs_flags		= FS_USERNS_MOUNT,
 };
 

@@ -113,12 +113,16 @@ static struct afs_volume *afs_lookup_volume_rcu(struct afs_cell *cell,
 {
 	struct afs_volume *volume = NULL;
 	struct rb_node *p;
+	int seq = 1;
 
-	scoped_seqlock_read(&cell->volume_lock, ss_lock) {
+	for (;;) {
 		/* Unfortunately, rbtree walking doesn't give reliable results
 		 * under just the RCU read lock, so we have to check for
 		 * changes.
 		 */
+		seq++; /* 2 on the 1st/lockless path, otherwise odd */
+		read_seqbegin_or_lock(&cell->volume_lock, &seq);
+
 		p = rcu_dereference_raw(cell->volumes.rb_node);
 		while (p) {
 			volume = rb_entry(p, struct afs_volume, cell_node);
@@ -135,8 +139,11 @@ static struct afs_volume *afs_lookup_volume_rcu(struct afs_cell *cell,
 		if (volume && afs_try_get_volume(volume, afs_volume_trace_get_callback))
 			break;
 		volume = NULL;
+		if (!need_seqretry(&cell->volume_lock, seq))
+			break;
 	}
 
+	done_seqretry(&cell->volume_lock, seq);
 	return volume;
 }
 

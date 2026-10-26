@@ -3,7 +3,7 @@
  * Copyright (c) 2000-2002 Silicon Graphics, Inc.
  * All Rights Reserved.
  */
-#include "xfs_platform.h"
+#include "xfs.h"
 #include "xfs_fs.h"
 #include "xfs_shared.h"
 #include "xfs_format.h"
@@ -164,7 +164,7 @@ xfs_trans_mod_ino_dquot(
 	if (xfs_hooks_switched_on(&xfs_dqtrx_hooks_switch)) {
 		struct xfs_mod_ino_dqtrx_params	p = {
 			.tx_id		= (uintptr_t)tp,
-			.ino		= I_INO(ip),
+			.ino		= ip->i_ino,
 			.q_type		= xfs_dquot_type(dqp),
 			.q_id		= dqp->q_id,
 			.delta		= delta
@@ -247,7 +247,7 @@ xfs_trans_mod_dquot_byino(
 	xfs_mount_t	*mp = tp->t_mountp;
 
 	if (!XFS_IS_QUOTA_ON(mp) ||
-	    xfs_is_quota_inode(&mp->m_sb, I_INO(ip)) ||
+	    xfs_is_quota_inode(&mp->m_sb, ip->i_ino) ||
 	    xfs_is_metadir_inode(ip))
 		return;
 
@@ -393,7 +393,7 @@ xfs_trans_dqlockedjoin(
 	unsigned int		i;
 	ASSERT(q[0].qt_dquot != NULL);
 	if (q[1].qt_dquot == NULL) {
-		mutex_lock(&q[0].qt_dquot->q_qlock);
+		xfs_dqlock(q[0].qt_dquot);
 		xfs_trans_dqjoin(tp, q[0].qt_dquot);
 	} else if (q[2].qt_dquot == NULL) {
 		xfs_dqlock2(q[0].qt_dquot, q[1].qt_dquot);
@@ -566,7 +566,11 @@ xfs_trans_apply_dquot_deltas(
 			 * Get any default limits in use.
 			 * Start/reset the timer(s) if needed.
 			 */
-			xfs_qm_adjust_dqenforcement(dqp);
+			if (dqp->q_id) {
+				xfs_qm_adjust_dqlimits(dqp);
+				xfs_qm_adjust_dqtimers(dqp);
+			}
+
 			dqp->q_flags |= XFS_DQFLAG_DIRTY;
 			/*
 			 * add this to the list of items to get logged
@@ -689,7 +693,7 @@ xfs_trans_unreserve_and_mod_dquots(
 			locked = already_locked;
 			if (qtrx->qt_blk_res) {
 				if (!locked) {
-					mutex_lock(&dqp->q_qlock);
+					xfs_dqlock(dqp);
 					locked = true;
 				}
 				dqp->q_blk.reserved -=
@@ -697,7 +701,7 @@ xfs_trans_unreserve_and_mod_dquots(
 			}
 			if (qtrx->qt_ino_res) {
 				if (!locked) {
-					mutex_lock(&dqp->q_qlock);
+					xfs_dqlock(dqp);
 					locked = true;
 				}
 				dqp->q_ino.reserved -=
@@ -706,14 +710,14 @@ xfs_trans_unreserve_and_mod_dquots(
 
 			if (qtrx->qt_rtblk_res) {
 				if (!locked) {
-					mutex_lock(&dqp->q_qlock);
+					xfs_dqlock(dqp);
 					locked = true;
 				}
 				dqp->q_rtb.reserved -=
 					(xfs_qcnt_t)qtrx->qt_rtblk_res;
 			}
 			if (locked && !already_locked)
-				mutex_unlock(&dqp->q_qlock);
+				xfs_dqunlock(dqp);
 
 		}
 	}
@@ -816,7 +820,7 @@ xfs_trans_dqresv(
 	struct xfs_dquot_res	*blkres;
 	struct xfs_quota_limits	*qlim;
 
-	mutex_lock(&dqp->q_qlock);
+	xfs_dqlock(dqp);
 
 	defq = xfs_get_defquota(q, xfs_dquot_type(dqp));
 
@@ -883,16 +887,16 @@ xfs_trans_dqresv(
 	    XFS_IS_CORRUPT(mp, dqp->q_ino.reserved < dqp->q_ino.count))
 		goto error_corrupt;
 
-	mutex_unlock(&dqp->q_qlock);
+	xfs_dqunlock(dqp);
 	return 0;
 
 error_return:
-	mutex_unlock(&dqp->q_qlock);
+	xfs_dqunlock(dqp);
 	if (xfs_dquot_type(dqp) == XFS_DQTYPE_PROJ)
 		return -ENOSPC;
 	return -EDQUOT;
 error_corrupt:
-	mutex_unlock(&dqp->q_qlock);
+	xfs_dqunlock(dqp);
 	xfs_force_shutdown(mp, SHUTDOWN_CORRUPT_INCORE);
 	xfs_fs_mark_sick(mp, XFS_SICK_FS_QUOTACHECK);
 	return -EFSCORRUPTED;
@@ -986,7 +990,7 @@ xfs_trans_reserve_quota_nblks(
 	if (xfs_is_metadir_inode(ip))
 		return 0;
 
-	ASSERT(!xfs_is_quota_inode(&mp->m_sb, I_INO(ip)));
+	ASSERT(!xfs_is_quota_inode(&mp->m_sb, ip->i_ino));
 	xfs_assert_ilocked(ip, XFS_ILOCK_EXCL);
 
 	if (force)

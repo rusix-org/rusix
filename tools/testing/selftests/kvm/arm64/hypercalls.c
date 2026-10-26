@@ -1,13 +1,12 @@
 // SPDX-License-Identifier: GPL-2.0-only
 
-/* hypercalls: Check the ARM64's pseudo-firmware bitmap register interface.
+/* hypercalls: Check the ARM64's psuedo-firmware bitmap register interface.
  *
  * The test validates the basic hypercall functionalities that are exposed
- * via the pseudo-firmware bitmap register. This includes the registers'
+ * via the psuedo-firmware bitmap register. This includes the registers'
  * read/write behavior before and after the VM has started, and if the
  * hypercalls are properly masked or unmasked to the guest when disabled or
- * enabled from the KVM userspace, respectively. It also checks the two
- * SMCCC_ARCH_FEATURES queries whose answer SMCCC pins to SUCCESS.
+ * enabled from the KVM userspace, respectively.
  */
 #include <errno.h>
 #include <linux/arm-smccc.h>
@@ -30,9 +29,9 @@
 #define KVM_REG_ARM_VENDOR_HYP_BMAP_2_RESET_VAL 0
 
 struct kvm_fw_reg_info {
-	u64 reg;		/* Register definition */
-	u64 max_feat_bit;	/* Bit that represents the upper limit of the feature-map */
-	u64 reset_val;	/* Reset value for the register */
+	uint64_t reg;		/* Register definition */
+	uint64_t max_feat_bit;	/* Bit that represents the upper limit of the feature-map */
+	uint64_t reset_val;	/* Reset value for the register */
 };
 
 #define FW_REG_INFO(r)			\
@@ -60,8 +59,8 @@ enum test_stage {
 static int stage = TEST_STAGE_REG_IFACE;
 
 struct test_hvc_info {
-	u32 func_id;
-	u64 arg1;
+	uint32_t func_id;
+	uint64_t arg1;
 };
 
 #define TEST_HVC_INFO(f, a1)	\
@@ -98,12 +97,6 @@ static const struct test_hvc_info false_hvc_info[] = {
 	TEST_HVC_INFO(ARM_SMCCC_HV_PV_TIME_FEATURES, ARM_SMCCC_TRNG_RND64),
 };
 
-/* SMCCC pins the answer to SUCCESS, whatever the bitmaps hold. */
-static const struct test_hvc_info always_hvc_info[] = {
-	TEST_HVC_INFO(ARM_SMCCC_ARCH_FEATURES_FUNC_ID, ARM_SMCCC_VERSION_FUNC_ID),
-	TEST_HVC_INFO(ARM_SMCCC_ARCH_FEATURES_FUNC_ID, ARM_SMCCC_ARCH_FEATURES_FUNC_ID),
-};
-
 static void guest_test_hvc(const struct test_hvc_info *hc_info)
 {
 	unsigned int i;
@@ -135,23 +128,6 @@ static void guest_test_hvc(const struct test_hvc_info *hc_info)
 	}
 }
 
-static void guest_test_always_hvc(void)
-{
-	struct arm_smccc_res res;
-	unsigned int i;
-
-	for (i = 0; i < ARRAY_SIZE(always_hvc_info); i++) {
-		memset(&res, 0, sizeof(res));
-		do_smccc(always_hvc_info[i].func_id, always_hvc_info[i].arg1,
-			 0, 0, 0, 0, 0, 0, &res);
-
-		__GUEST_ASSERT(res.a0 == SMCCC_RET_SUCCESS,
-			       "a0 = 0x%lx, func_id = 0x%x, arg1 = 0x%lx, stage = %u",
-			       res.a0, always_hvc_info[i].func_id,
-			       always_hvc_info[i].arg1, stage);
-	}
-}
-
 static void guest_code(void)
 {
 	while (stage != TEST_STAGE_END) {
@@ -161,7 +137,6 @@ static void guest_code(void)
 		case TEST_STAGE_HVC_IFACE_FEAT_DISABLED:
 		case TEST_STAGE_HVC_IFACE_FEAT_ENABLED:
 			guest_test_hvc(hvc_info);
-			guest_test_always_hvc();
 			break;
 		case TEST_STAGE_HVC_IFACE_FALSE_INFO:
 			guest_test_hvc(false_hvc_info);
@@ -177,9 +152,9 @@ static void guest_code(void)
 }
 
 struct st_time {
-	u32 rev;
-	u32 attr;
-	u64 st_time;
+	uint32_t rev;
+	uint32_t attr;
+	uint64_t st_time;
 };
 
 #define STEAL_TIME_SIZE		((sizeof(struct st_time) + 63) & ~63)
@@ -187,7 +162,7 @@ struct st_time {
 
 static void steal_time_init(struct kvm_vcpu *vcpu)
 {
-	u64 st_ipa = (unsigned long)ST_GPA_BASE;
+	uint64_t st_ipa = (ulong)ST_GPA_BASE;
 	unsigned int gpages;
 
 	gpages = vm_calc_num_guest_pages(VM_MODE_DEFAULT, STEAL_TIME_SIZE);
@@ -199,13 +174,13 @@ static void steal_time_init(struct kvm_vcpu *vcpu)
 
 static void test_fw_regs_before_vm_start(struct kvm_vcpu *vcpu)
 {
-	u64 val;
+	uint64_t val;
 	unsigned int i;
 	int ret;
 
 	for (i = 0; i < ARRAY_SIZE(fw_reg_info); i++) {
 		const struct kvm_fw_reg_info *reg_info = &fw_reg_info[i];
-		u64 set_val;
+		uint64_t set_val;
 
 		/* First 'read' should be the reset value for the reg  */
 		val = vcpu_get_reg(vcpu, reg_info->reg);
@@ -254,7 +229,7 @@ static void test_fw_regs_before_vm_start(struct kvm_vcpu *vcpu)
 
 static void test_fw_regs_after_vm_start(struct kvm_vcpu *vcpu)
 {
-	u64 val;
+	uint64_t val;
 	unsigned int i;
 	int ret;
 

@@ -37,7 +37,8 @@
  * The type of operation used for picking the delay between
  * successive pmbus operations.
  */
-/* PMBUS_OP_WRITE and PMBUS_OP_PAGE_CHANGE are defined in pmbus.h */
+#define PMBUS_OP_WRITE		BIT(0)
+#define PMBUS_OP_PAGE_CHANGE	BIT(1)
 
 static int wp = -1;
 module_param(wp, int, 0444);
@@ -96,8 +97,7 @@ struct pmbus_data {
 
 	u32 flags;		/* from platform data */
 
-	bool have_pmbus_revision;
-	u8 revision;		/* The PMBus revision the device is compliant with */
+	u8 revision;	/* The PMBus revision the device is compliant with */
 
 	int exponent[PMBUS_PAGES];
 				/* linear mode: exponent for output voltages */
@@ -179,33 +179,21 @@ void pmbus_set_update(struct i2c_client *client, u8 reg, bool update)
 EXPORT_SYMBOL_NS_GPL(pmbus_set_update, "PMBUS");
 
 /* Some chips need a delay between accesses. */
-void pmbus_wait(struct i2c_client *client)
+static void pmbus_wait(struct i2c_client *client)
 {
 	struct pmbus_data *data = i2c_get_clientdata(client);
-	s64 delay;
-
-	if (!data)
-		return;
-
-	delay = ktime_us_delta(data->next_access_backoff, ktime_get());
+	s64 delay = ktime_us_delta(data->next_access_backoff, ktime_get());
 
 	if (delay > 0)
 		fsleep(delay);
 }
-EXPORT_SYMBOL_NS_GPL(pmbus_wait, "PMBUS");
 
 /* Sets the last operation timestamp for pmbus_wait */
-void pmbus_update_ts(struct i2c_client *client, int op)
+static void pmbus_update_ts(struct i2c_client *client, int op)
 {
 	struct pmbus_data *data = i2c_get_clientdata(client);
-	const struct pmbus_driver_info *info;
-	int delay;
-
-	if (!data)
-		return;
-
-	info = data->info;
-	delay = info->access_delay;
+	const struct pmbus_driver_info *info = data->info;
+	int delay = info->access_delay;
 
 	if (op & PMBUS_OP_WRITE)
 		delay = max(delay, info->write_delay);
@@ -215,7 +203,6 @@ void pmbus_update_ts(struct i2c_client *client, int op)
 	if (delay > 0)
 		data->next_access_backoff = ktime_add_us(ktime_get(), delay);
 }
-EXPORT_SYMBOL_NS_GPL(pmbus_update_ts, "PMBUS");
 
 int pmbus_set_page(struct i2c_client *client, int page, int phase)
 {
@@ -529,81 +516,6 @@ int pmbus_update_byte_data(struct i2c_client *client, int page, u8 reg,
 }
 EXPORT_SYMBOL_NS_GPL(pmbus_update_byte_data, "PMBUS");
 
-/**
- * pmbus_read_smbus_i2c_block_data() - Read SMBus/I2C block data
- * @client:	Handle to slave device
- * @reg:	Byte interpreted by slave
- * @data_buf:	Byte array into which data will be read
- * Return:	Negative errno or number of bytes read
- *
- * PMBus internal function to read a SMBus block from a PMBus chip.
- *
- * PMBus chips report various properties using SMBus block read operations.
- * However, not all I2C controllers support this operation.
- *
- * Execute SMBus block read if supported. If not supported, but SMBus I2C block
- * read is supported, use it instead. Note that at most 31 data bytes can be
- * read from the device if i2c_smbus_read_i2c_block_data() is used to read the
- * data. This is a SMBUs protocol limit which can not be avoided.
- *
- * Return -EOPNOTSUPP if neither I2C_FUNC_SMBUS_READ_BLOCK_DATA nor
- * I2C_FUNC_SMBUS_READ_I2C_BLOCK is supported.
- *
- * Callers must hold pmbus_lock or execute calls from the probe function.
- */
-int pmbus_read_smbus_i2c_block_data(struct i2c_client *client, u8 reg, char *data_buf)
-{
-	u8 buf[I2C_SMBUS_BLOCK_MAX];
-	int blen, len, ret;
-
-	if (i2c_check_functionality(client->adapter,
-				    I2C_FUNC_SMBUS_READ_BLOCK_DATA)) {
-		pmbus_wait(client);
-		ret = i2c_smbus_read_block_data(client, reg, data_buf);
-		pmbus_update_ts(client, 0);
-		return ret;
-	}
-
-	if (!i2c_check_functionality(client->adapter, I2C_FUNC_SMBUS_READ_I2C_BLOCK)) {
-		dev_err_once(&client->dev, "I2C adapter does not support I2C_FUNC_SMBUS_READ_I2C_BLOCK\n");
-		return -EOPNOTSUPP;
-	}
-
-	/*
-	 * If the returned data is valid SMBus block data, the first byte
-	 * must be the data length.
-	 *
-	 * i2c_smbus_read_i2c_block_data() may return an error if the chip
-	 * sends NACK before the number of requested bytes is received.
-	 * Handle this by reading the data length first, then reading the
-	 * entire message up to I2C_SMBUS_BLOCK_MAX bytes. This ensures
-	 * that requested number of bytes never exceeds the number of
-	 * bytes sent by the chip.
-	 */
-	pmbus_wait(client);
-	ret = i2c_smbus_read_i2c_block_data(client, reg, 1, buf);
-	pmbus_update_ts(client, 0);
-	if (ret < 0)
-		return ret;
-
-	len = buf[0];
-	if (len == 0)
-		return 0;
-	blen = len;
-	if (len >= I2C_SMBUS_BLOCK_MAX)
-		len = I2C_SMBUS_BLOCK_MAX - 1;
-	pmbus_wait(client);
-	ret = i2c_smbus_read_i2c_block_data(client, reg, len + 1, buf);
-	pmbus_update_ts(client, 0);
-	if (ret < 0)
-		return ret;
-	if (buf[0] != blen)
-		return -EIO;
-	memcpy(data_buf, buf + 1, len);
-	return len;
-}
-EXPORT_SYMBOL_NS_GPL(pmbus_read_smbus_i2c_block_data, "PMBUS");
-
 static int pmbus_read_block_data(struct i2c_client *client, int page, u8 reg,
 				 char *data_buf)
 {
@@ -613,7 +525,11 @@ static int pmbus_read_block_data(struct i2c_client *client, int page, u8 reg,
 	if (rv < 0)
 		return rv;
 
-	return pmbus_read_smbus_i2c_block_data(client, reg, data_buf);
+	pmbus_wait(client);
+	rv = i2c_smbus_read_block_data(client, reg, data_buf);
+	pmbus_update_ts(client, 0);
+
+	return rv;
 }
 
 static struct pmbus_sensor *pmbus_find_sensor(struct pmbus_data *data, int page,
@@ -975,10 +891,6 @@ static s64 pmbus_reg2data_vid(struct pmbus_data *data,
 		if (val >= 0x0 && val <= 0xd8)
 			rv = DIV_ROUND_CLOSEST(155000 - val * 625, 100);
 		break;
-	case nvidia195mv:
-		if (val >= 0x01)
-			rv = 195 + (val - 1) * 5;  /* VID step is 5mv */
-		break;
 	}
 	return rv;
 }
@@ -1178,27 +1090,9 @@ static u16 pmbus_data2reg_direct(struct pmbus_data *data,
 static u16 pmbus_data2reg_vid(struct pmbus_data *data,
 			      struct pmbus_sensor *sensor, s64 val)
 {
-	switch (data->info->vrm_version[sensor->page]) {
-	case vr12:
-		val = clamp_val(val, 250, 1520);
-		return 1 + DIV_ROUND_CLOSEST_ULL(val - 250, 5);
-	case vr13:
-		val = clamp_val(val, 500, 3040);
-		return 1 + DIV_ROUND_CLOSEST_ULL(val - 500, 10);
-	case imvp9:
-		val = clamp_val(val, 200, 2740);
-		return 1 + DIV_ROUND_CLOSEST_ULL(val - 200, 10);
-	case amd625mv:
-		val = clamp_val(val, 200, 1550);
-		return DIV_ROUND_CLOSEST_ULL((1550LL - val) * 100LL, 625);
-	case nvidia195mv:
-		val = clamp_val(val, 195, 1465);
-		return 1 + DIV_ROUND_CLOSEST_ULL(val - 195, 5);
-	case vr11:
-	default:
-		val = clamp_val(val, 500, 1600);
-		return 2 + DIV_ROUND_CLOSEST_ULL((1600LL - val) * 100LL, 625);
-	}
+	val = clamp_val(val, 500, 1600);
+
+	return 2 + DIV_ROUND_CLOSEST_ULL((1600LL - val) * 100LL, 625);
 }
 
 static u16 pmbus_data2reg(struct pmbus_data *data,
@@ -2932,16 +2826,9 @@ static int pmbus_init_common(struct i2c_client *client, struct pmbus_data *data,
 	if (!(data->flags & PMBUS_NO_WRITE_PROTECT))
 		pmbus_init_wp(client, data);
 
-	if (info->have_pmbus_revision) {
-		data->have_pmbus_revision = true;
-		data->revision = info->pmbus_revision;
-	} else {
-		ret = i2c_smbus_read_byte_data(client, PMBUS_REVISION);
-		if (ret >= 0) {
-			data->have_pmbus_revision = true;
-			data->revision = ret;
-		}
-	}
+	ret = i2c_smbus_read_byte_data(client, PMBUS_REVISION);
+	if (ret >= 0)
+		data->revision = ret;
 
 	if (data->info->pages)
 		pmbus_clear_faults(client);
@@ -3532,8 +3419,6 @@ static int pmbus_write_smbalert_mask(struct i2c_client *client, u8 page, u8 reg,
 {
 	int ret;
 
-	guard(pmbus_lock)(client);
-
 	ret = _pmbus_write_word_data(client, page, PMBUS_SMBALERT_MASK, reg | (val << 8));
 
 	/*
@@ -3545,9 +3430,10 @@ static int pmbus_write_smbalert_mask(struct i2c_client *client, u8 page, u8 reg,
 	return ret;
 }
 
-void pmbus_check_and_notify_faults(struct i2c_client *client)
+static irqreturn_t pmbus_fault_handler(int irq, void *pdata)
 {
-	struct pmbus_data *data = i2c_get_clientdata(client);
+	struct pmbus_data *data = pdata;
+	struct i2c_client *client = to_i2c_client(data->dev);
 	int i, status, event;
 
 	guard(pmbus_lock)(client);
@@ -3560,15 +3446,6 @@ void pmbus_check_and_notify_faults(struct i2c_client *client)
 	}
 
 	pmbus_clear_faults(client);
-}
-EXPORT_SYMBOL_NS_GPL(pmbus_check_and_notify_faults, "PMBUS");
-
-static irqreturn_t pmbus_fault_handler(int irq, void *pdata)
-{
-	struct pmbus_data *data = pdata;
-	struct i2c_client *client = to_i2c_client(data->dev);
-
-	pmbus_check_and_notify_faults(client);
 
 	return IRQ_HANDLED;
 }
@@ -3612,8 +3489,10 @@ static int pmbus_irq_setup(struct i2c_client *client, struct pmbus_data *data)
 	/* Register notifiers */
 	err = devm_request_threaded_irq(dev, client->irq, NULL, pmbus_fault_handler,
 					IRQF_ONESHOT, "pmbus-irq", data);
-	if (err)
+	if (err) {
+		dev_err(dev, "failed to request an irq %d\n", err);
 		return err;
+	}
 
 	return 0;
 }
@@ -3637,17 +3516,6 @@ static int pmbus_debugfs_get(void *data, u64 *val)
 	return 0;
 }
 DEFINE_DEBUGFS_ATTRIBUTE(pmbus_debugfs_ops, pmbus_debugfs_get, NULL,
-			 "0x%02llx\n");
-
-static int pmbus_debugfs_get_revision(void *data, u64 *val)
-{
-	struct pmbus_data *pdata = data;
-
-	*val = pdata->revision;
-
-	return 0;
-}
-DEFINE_DEBUGFS_ATTRIBUTE(pmbus_debugfs_revision_ops, pmbus_debugfs_get_revision, NULL,
 			 "0x%02llx\n");
 
 static int pmbus_debugfs_get_status(void *data, u64 *val)
@@ -3786,8 +3654,6 @@ static void pmbus_init_debugfs(struct i2c_client *client,
 	if (!entries)
 		return;
 
-	guard(pmbus_lock)(client);
-
 	/*
 	 * Add device-specific entries.
 	 * Please note that the PMBUS standard allows all registers to be
@@ -3805,9 +3671,14 @@ static void pmbus_init_debugfs(struct i2c_client *client,
 				    &entries[idx++],
 				    &pmbus_debugfs_ops);
 	}
-	if (data->have_pmbus_revision)
-		debugfs_create_file("pmbus_revision", 0444, debugfs, data,
-				    &pmbus_debugfs_revision_ops);
+	if (pmbus_check_byte_register(client, 0, PMBUS_REVISION)) {
+		entries[idx].client = client;
+		entries[idx].page = 0;
+		entries[idx].reg = PMBUS_REVISION;
+		debugfs_create_file("pmbus_revision", 0444, debugfs,
+				    &entries[idx++],
+				    &pmbus_debugfs_ops);
+	}
 
 	for (i = 0; i < ARRAY_SIZE(pmbus_debugfs_block_data); i++) {
 		const struct pmbus_debugfs_data *d = &pmbus_debugfs_block_data[i];

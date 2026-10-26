@@ -7,6 +7,7 @@
 
 #include <linux/kernel.h>
 #include <linux/err.h>
+#include <linux/mod_devicetable.h>
 #include <linux/module.h>
 #include <linux/spi/spi.h>
 #include <linux/i2c.h>
@@ -250,6 +251,8 @@ static int sc18is602_probe(struct i2c_client *client)
 	if (!host)
 		return -ENOMEM;
 
+	device_set_node(&host->dev, dev_fwnode(dev));
+
 	hw = spi_controller_get_devdata(host);
 
 	/* assert reset and then release */
@@ -294,9 +297,9 @@ static int sc18is602_probe(struct i2c_client *client)
 }
 
 static const struct i2c_device_id sc18is602_id[] = {
-	{ .name = "sc18is602", .driver_data = sc18is602 },
-	{ .name = "sc18is602b", .driver_data = sc18is602b },
-	{ .name = "sc18is603", .driver_data = sc18is603 },
+	{ "sc18is602", sc18is602 },
+	{ "sc18is602b", sc18is602b },
+	{ "sc18is603", sc18is603 },
 	{ }
 };
 MODULE_DEVICE_TABLE(i2c, sc18is602_id);

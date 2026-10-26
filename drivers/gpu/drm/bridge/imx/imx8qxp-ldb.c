@@ -62,18 +62,6 @@ static inline struct imx8qxp_ldb *base_to_imx8qxp_ldb(struct ldb *base)
 	return container_of(base, struct imx8qxp_ldb, base);
 }
 
-static void imx8qxp_ldb_bridge_destroy(struct drm_bridge *bridge)
-{
-	struct ldb_channel *ldb_ch = bridge->driver_private;
-	struct imx8qxp_ldb *imx8qxp_ldb;
-
-	if (!ldb_ch)
-		return;
-
-	imx8qxp_ldb = base_to_imx8qxp_ldb(ldb_ch->ldb);
-	drm_bridge_put(imx8qxp_ldb->companion);
-}
-
 static void imx8qxp_ldb_set_phy_cfg(struct imx8qxp_ldb *imx8qxp_ldb,
 				    unsigned long di_clk, bool is_split,
 				    struct phy_configure_opts_lvds *phy_cfg)
@@ -216,7 +204,7 @@ imx8qxp_ldb_bridge_mode_set(struct drm_bridge *bridge,
 }
 
 static void imx8qxp_ldb_bridge_atomic_pre_enable(struct drm_bridge *bridge,
-						 struct drm_atomic_commit *state)
+						 struct drm_atomic_state *state)
 {
 	struct ldb_channel *ldb_ch = bridge->driver_private;
 	struct ldb *ldb = ldb_ch->ldb;
@@ -232,7 +220,7 @@ static void imx8qxp_ldb_bridge_atomic_pre_enable(struct drm_bridge *bridge,
 }
 
 static void imx8qxp_ldb_bridge_atomic_enable(struct drm_bridge *bridge,
-					     struct drm_atomic_commit *state)
+					     struct drm_atomic_state *state)
 {
 	struct ldb_channel *ldb_ch = bridge->driver_private;
 	struct ldb *ldb = ldb_ch->ldb;
@@ -266,7 +254,7 @@ static void imx8qxp_ldb_bridge_atomic_enable(struct drm_bridge *bridge,
 }
 
 static void imx8qxp_ldb_bridge_atomic_disable(struct drm_bridge *bridge,
-					      struct drm_atomic_commit *state)
+					      struct drm_atomic_state *state)
 {
 	struct ldb_channel *ldb_ch = bridge->driver_private;
 	struct ldb *ldb = ldb_ch->ldb;
@@ -294,7 +282,9 @@ static void imx8qxp_ldb_bridge_atomic_disable(struct drm_bridge *bridge,
 	if (is_split && companion)
 		companion->funcs->atomic_disable(companion, state);
 
-	pm_runtime_put(dev);
+	ret = pm_runtime_put(dev);
+	if (ret < 0)
+		DRM_DEV_ERROR(dev, "failed to put runtime PM: %d\n", ret);
 }
 
 static const u32 imx8qxp_ldb_bus_output_fmts[] = {
@@ -333,7 +323,7 @@ imx8qxp_ldb_bridge_atomic_get_input_bus_fmts(struct drm_bridge *bridge,
 
 	*num_input_fmts = 1;
 
-	input_fmts = kmalloc_obj(*input_fmts);
+	input_fmts = kmalloc(sizeof(*input_fmts), GFP_KERNEL);
 	if (!input_fmts)
 		return NULL;
 
@@ -401,10 +391,9 @@ imx8qxp_ldb_bridge_mode_valid(struct drm_bridge *bridge,
 }
 
 static const struct drm_bridge_funcs imx8qxp_ldb_bridge_funcs = {
-	.destroy		= imx8qxp_ldb_bridge_destroy,
 	.atomic_duplicate_state	= drm_atomic_helper_bridge_duplicate_state,
 	.atomic_destroy_state	= drm_atomic_helper_bridge_destroy_state,
-	.atomic_create_state	= drm_atomic_helper_bridge_create_state,
+	.atomic_reset		= drm_atomic_helper_bridge_reset,
 	.mode_valid		= imx8qxp_ldb_bridge_mode_valid,
 	.attach			= ldb_bridge_attach_helper,
 	.atomic_check		= imx8qxp_ldb_bridge_atomic_check,
@@ -563,7 +552,7 @@ static int imx8qxp_ldb_parse_dt_companion(struct imx8qxp_ldb *imx8qxp_ldb)
 		goto out;
 	}
 
-	imx8qxp_ldb->companion = of_drm_find_and_get_bridge(companion_port);
+	imx8qxp_ldb->companion = of_drm_find_bridge(companion_port);
 	if (!imx8qxp_ldb->companion) {
 		ret = -EPROBE_DEFER;
 		DRM_DEV_DEBUG_DRIVER(dev,
@@ -694,6 +683,11 @@ static void imx8qxp_ldb_remove(struct platform_device *pdev)
 	pm_runtime_disable(&pdev->dev);
 }
 
+static int imx8qxp_ldb_runtime_suspend(struct device *dev)
+{
+	return 0;
+}
+
 static int imx8qxp_ldb_runtime_resume(struct device *dev)
 {
 	struct imx8qxp_ldb *imx8qxp_ldb = dev_get_drvdata(dev);
@@ -706,7 +700,7 @@ static int imx8qxp_ldb_runtime_resume(struct device *dev)
 }
 
 static const struct dev_pm_ops imx8qxp_ldb_pm_ops = {
-	RUNTIME_PM_OPS(NULL, imx8qxp_ldb_runtime_resume, NULL)
+	RUNTIME_PM_OPS(imx8qxp_ldb_runtime_suspend, imx8qxp_ldb_runtime_resume, NULL)
 };
 
 static const struct of_device_id imx8qxp_ldb_dt_ids[] = {

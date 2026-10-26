@@ -48,9 +48,7 @@ static inline void free_pmd_fast(pmd_t * pmd)
 }
 
 #define pmd_free(mm, pmd)		free_pmd_fast(pmd)
-
-#define __pmd_free_tlb(tlb, pmd, addr)					\
-	tlb_remove_table((tlb), (void *)((unsigned long)(pmd) | 1UL))
+#define __pmd_free_tlb(tlb, pmd, addr)	pmd_free((tlb)->mm, pmd)
 
 #define pmd_populate(mm, pmd, pte)	pmd_set(pmd, pte)
 
@@ -74,7 +72,6 @@ static inline void free_pte_fast(pte_t *pte)
 #define pte_free_kernel(mm, pte)	free_pte_fast(pte)
 
 void pte_free(struct mm_struct * mm, pgtable_t pte);
-void __tlb_remove_table(void *table);
-#define __pte_free_tlb(tlb, pte, addr)	tlb_remove_table((tlb), (void *)(pte))
+#define __pte_free_tlb(tlb, pte, addr)	pte_free((tlb)->mm, pte)
 
 #endif /* _SPARC_PGALLOC_H */

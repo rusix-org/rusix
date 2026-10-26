@@ -14,7 +14,6 @@
 #include <linux/iio/triggered_buffer.h>
 #include <linux/iio/trigger_consumer.h>
 #include <linux/iio/sysfs.h>
-#include <linux/iio/kfifo_buf.h>
 #include "hid-sensor-trigger.h"
 
 static ssize_t _hid_sensor_set_report_latency(struct device *dev,
@@ -203,20 +202,11 @@ static void hid_sensor_set_power_work(struct work_struct *work)
 		_hid_sensor_power_state(attrb, true);
 }
 
-static int buffer_postenable(struct iio_dev *indio_dev)
+static int hid_sensor_data_rdy_trigger_set_state(struct iio_trigger *trig,
+						bool state)
 {
-	return hid_sensor_power_state(iio_device_get_drvdata(indio_dev), 1);
+	return hid_sensor_power_state(iio_trigger_get_drvdata(trig), state);
 }
-
-static int buffer_predisable(struct iio_dev *indio_dev)
-{
-	return hid_sensor_power_state(iio_device_get_drvdata(indio_dev), 0);
-}
-
-static const struct iio_buffer_setup_ops hid_sensor_buffer_ops = {
-	.postenable = buffer_postenable,
-	.predisable = buffer_predisable,
-};
 
 void hid_sensor_remove_trigger(struct iio_dev *indio_dev,
 			       struct hid_sensor_common *attrb)
@@ -229,11 +219,16 @@ void hid_sensor_remove_trigger(struct iio_dev *indio_dev,
 	cancel_work_sync(&attrb->work);
 	iio_trigger_unregister(attrb->trigger);
 	iio_trigger_free(attrb->trigger);
+	iio_triggered_buffer_cleanup(indio_dev);
 }
 EXPORT_SYMBOL_NS(hid_sensor_remove_trigger, "IIO_HID");
 
+static const struct iio_trigger_ops hid_sensor_trigger_ops = {
+	.set_trigger_state = &hid_sensor_data_rdy_trigger_set_state,
+};
+
 int hid_sensor_setup_trigger(struct iio_dev *indio_dev, const char *name,
-			     struct hid_sensor_common *attrb)
+				struct hid_sensor_common *attrb)
 {
 	const struct iio_dev_attr **fifo_attrs;
 	int ret;
@@ -244,34 +239,25 @@ int hid_sensor_setup_trigger(struct iio_dev *indio_dev, const char *name,
 	else
 		fifo_attrs = NULL;
 
-	indio_dev->modes = INDIO_DIRECT_MODE | INDIO_HARDWARE_TRIGGERED;
-
-	ret = devm_iio_kfifo_buffer_setup_ext(&indio_dev->dev, indio_dev,
-					      &hid_sensor_buffer_ops,
-					      fifo_attrs);
+	ret = iio_triggered_buffer_setup_ext(indio_dev,
+					     &iio_pollfunc_store_time, NULL,
+					     IIO_BUFFER_DIRECTION_IN,
+					     NULL, fifo_attrs);
 	if (ret) {
-		dev_err(&indio_dev->dev, "Kfifo Buffer Setup Failed\n");
+		dev_err(&indio_dev->dev, "Triggered Buffer Setup Failed\n");
 		return ret;
 	}
 
-	/*
-	 * The current user space in distro "iio-sensor-proxy" is not working in
-	 * trigerless mode and it expects
-	 * /sys/bus/iio/devices/iio:device0/trigger/current_trigger.
-	 * The change replacing iio_triggered_buffer_setup_ext() with
-	 * devm_iio_kfifo_buffer_setup_ext() will not create attribute without
-	 * registering a trigger with INDIO_HARDWARE_TRIGGERED.
-	 * So the below code fragment is still required.
-	 */
-
 	trig = iio_trigger_alloc(indio_dev->dev.parent,
 				 "%s-dev%d", name, iio_device_id(indio_dev));
-	if (!trig) {
+	if (trig == NULL) {
 		dev_err(&indio_dev->dev, "Trigger Allocate Failed\n");
-		return -ENOMEM;
+		ret = -ENOMEM;
+		goto error_triggered_buffer_cleanup;
 	}
 
 	iio_trigger_set_drvdata(trig, attrb);
+	trig->ops = &hid_sensor_trigger_ops;
 	ret = iio_trigger_register(trig);
 
 	if (ret) {
@@ -298,6 +284,8 @@ error_unreg_trigger:
 	iio_trigger_unregister(trig);
 error_free_trig:
 	iio_trigger_free(trig);
+error_triggered_buffer_cleanup:
+	iio_triggered_buffer_cleanup(indio_dev);
 	return ret;
 }
 EXPORT_SYMBOL_NS(hid_sensor_setup_trigger, "IIO_HID");
@@ -314,9 +302,7 @@ static int __maybe_unused hid_sensor_resume(struct device *dev)
 {
 	struct iio_dev *indio_dev = dev_get_drvdata(dev);
 	struct hid_sensor_common *attrb = iio_device_get_drvdata(indio_dev);
-
 	schedule_work(&attrb->work);
-
 	return 0;
 }
 
@@ -324,7 +310,6 @@ static int __maybe_unused hid_sensor_runtime_resume(struct device *dev)
 {
 	struct iio_dev *indio_dev = dev_get_drvdata(dev);
 	struct hid_sensor_common *attrb = iio_device_get_drvdata(indio_dev);
-
 	return _hid_sensor_power_state(attrb, true);
 }
 

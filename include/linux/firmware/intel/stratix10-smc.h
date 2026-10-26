@@ -1,7 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0 */
 /*
  * Copyright (C) 2017-2018, Intel Corporation
- * Copyright (C) 2025, Altera Corporation
  */
 
 #ifndef __STRATIX10_SMC_H
@@ -48,10 +47,6 @@
 	ARM_SMCCC_CALL_VAL(ARM_SMCCC_FAST_CALL, ARM_SMCCC_SMC_64, \
 	ARM_SMCCC_OWNER_SIP, (func_num))
 
-#define INTEL_SIP_SMC_ASYNC_VAL(func_name)	\
-	ARM_SMCCC_CALL_VAL(ARM_SMCCC_STD_CALL, ARM_SMCCC_SMC_64, \
-	ARM_SMCCC_OWNER_SIP, (func_name))
-
 /**
  * Return values in INTEL_SIP_SMC_* call
  *
@@ -67,9 +62,6 @@
  * INTEL_SIP_SMC_STATUS_REJECTED:
  * Secure monitor software reject the service client's request.
  *
- * INTEL_SIP_SMC_STATUS_NO_RESPONSE:
- * Secure monitor software has no response for the request yet.
- *
  * INTEL_SIP_SMC_STATUS_ERROR:
  * There is error during the process of service request.
  *
@@ -80,7 +72,6 @@
 #define INTEL_SIP_SMC_STATUS_OK				0x0
 #define INTEL_SIP_SMC_STATUS_BUSY			0x1
 #define INTEL_SIP_SMC_STATUS_REJECTED			0x2
-#define INTEL_SIP_SMC_STATUS_NO_RESPONSE		0x3
 #define INTEL_SIP_SMC_STATUS_ERROR			0x4
 #define INTEL_SIP_SMC_RSU_ERROR				0x7
 
@@ -434,29 +425,6 @@ INTEL_SIP_SMC_FAST_CALL_VAL(INTEL_SIP_SMC_FUNCID_FPGA_CONFIG_COMPLETED_WRITE)
 	INTEL_SIP_SMC_FAST_CALL_VAL(INTEL_SIP_SMC_FUNCID_RSU_DCMF_STATUS)
 
 /**
- * Request INTEL_SIP_SMC_RSU_GET_DEVICE_INFO
- *
- * Sync call used by service driver at EL1 to query QSPI device info from FW
- *
- * Call register usage:
- * a0 INTEL_SIP_SMC_RSU_GET_DEVICE_INFO
- * a1-7 not used
- *
- * Return status
- * a0 INTEL_SIP_SMC_STATUS_OK
- * a1 erasesize0 | size0
- * a2 erasesize1 | size1
- * a3 erasesize2 | size2
- * a4 erasesize3 | size3
- * Or
- *
- * a0 INTEL_SIP_SMC_RSU_ERROR
- */
-#define INTEL_SIP_SMC_FUNCID_RSU_GET_DEVICE_INFO 22
-#define INTEL_SIP_SMC_RSU_GET_DEVICE_INFO \
-	INTEL_SIP_SMC_FAST_CALL_VAL(INTEL_SIP_SMC_FUNCID_RSU_GET_DEVICE_INFO)
-
-/**
  * Request INTEL_SIP_SMC_SERVICE_COMPLETED
  * Sync call to check if the secure world have completed service request
  * or not.
@@ -520,7 +488,7 @@ INTEL_SIP_SMC_FAST_CALL_VAL(INTEL_SIP_SMC_FUNCID_FPGA_CONFIG_COMPLETED_WRITE)
  * a3 not used
  */
 #define INTEL_SIP_SMC_FUNCID_MBOX_SEND_CMD 60
-#define INTEL_SIP_SMC_MBOX_SEND_CMD \
+	#define INTEL_SIP_SMC_MBOX_SEND_CMD \
 	INTEL_SIP_SMC_FAST_CALL_VAL(INTEL_SIP_SMC_FUNCID_MBOX_SEND_CMD)
 
 /**
@@ -540,25 +508,6 @@ INTEL_SIP_SMC_FAST_CALL_VAL(INTEL_SIP_SMC_FUNCID_FPGA_CONFIG_COMPLETED_WRITE)
 #define INTEL_SIP_SMC_SVC_FUNCID_VERSION 512
 #define INTEL_SIP_SMC_SVC_VERSION \
 	INTEL_SIP_SMC_FAST_CALL_VAL(INTEL_SIP_SMC_SVC_FUNCID_VERSION)
-
-/**
- * Request INTEL_SIP_SMC_ATF_BUILD_VER
- *
- * Sync call used to query the ATF Build Version
- *
- * Call register usage:
- * a0 INTEL_SIP_SMC_ATF_BUILD_VER
- * a1-a7 not used
- *
- * Return status:
- * a0 INTEL_SIP_SMC_STATUS_OK
- * a1 Major
- * a2 Minor
- * a3 Patch
- */
-#define INTEL_SIP_SMC_ATF_BUILD_VERSION 155
-#define INTEL_SIP_SMC_ATF_BUILD_VER \
-		INTEL_SIP_SMC_FAST_CALL_VAL(INTEL_SIP_SMC_ATF_BUILD_VERSION)
 
 /**
  * SMC call protocol for FPGA Crypto Service (FCS)
@@ -668,193 +617,5 @@ INTEL_SIP_SMC_FAST_CALL_VAL(INTEL_SIP_SMC_FUNCID_FPGA_CONFIG_COMPLETED_WRITE)
 #define INTEL_SIP_SMC_FUNCID_FCS_GET_PROVISION_DATA 94
 #define INTEL_SIP_SMC_FCS_GET_PROVISION_DATA \
 	INTEL_SIP_SMC_STD_CALL_VAL(INTEL_SIP_SMC_FUNCID_FCS_GET_PROVISION_DATA)
-
-/**
- * Request INTEL_SIP_SMC_HWMON_READTEMP
- * Sync call to request temperature
- *
- * Call register usage:
- * a0 Temperature Channel
- * a1-a7 not used
- *
- * Return status
- * a0 INTEL_SIP_SMC_STATUS_OK
- * a1 Temperature Value
- * a2-a3 not used
- */
-#define INTEL_SIP_SMC_FUNCID_HWMON_READTEMP 32
-#define INTEL_SIP_SMC_HWMON_READTEMP \
-	INTEL_SIP_SMC_FAST_CALL_VAL(INTEL_SIP_SMC_FUNCID_HWMON_READTEMP)
-
-/**
- * Request INTEL_SIP_SMC_HWMON_READVOLT
- * Sync call to request voltage
- *
- * Call register usage:
- * a0 Voltage Channel
- * a1-a7 not used
- *
- * Return status
- * a0 INTEL_SIP_SMC_STATUS_OK
- * a1 Voltage Value
- * a2-a3 not used
- */
-#define INTEL_SIP_SMC_FUNCID_HWMON_READVOLT 33
-#define INTEL_SIP_SMC_HWMON_READVOLT \
-	INTEL_SIP_SMC_FAST_CALL_VAL(INTEL_SIP_SMC_FUNCID_HWMON_READVOLT)
-
-/**
- * Request INTEL_SIP_SMC_ASYNC_POLL
- * Async call used by service driver at EL1 to query mailbox response from SDM.
- *
- * Call register usage:
- * a0 INTEL_SIP_SMC_ASYNC_POLL
- * a1 transaction job id
- * a2-17 will be used to return the response data
- *
- * Return status
- * a0 INTEL_SIP_SMC_STATUS_OK
- * a1-17 will contain the response values from mailbox for the previous send
- * transaction
- * Or
- * a0 INTEL_SIP_SMC_STATUS_NO_RESPONSE
- * a1-17 not used
- */
-#define INTEL_SIP_SMC_ASYNC_FUNC_ID_POLL (0xC8)
-#define INTEL_SIP_SMC_ASYNC_POLL \
-	INTEL_SIP_SMC_ASYNC_VAL(INTEL_SIP_SMC_ASYNC_FUNC_ID_POLL)
-
-/**
- * Request INTEL_SIP_SMC_ASYNC_POLL_ON_IRQ
- * Async call used by service driver at EL1 to retrieve the transaction IDs
- * of available responses from the SDM mailbox (typically after an IRQ).
- *
- * Call register usage:
- * a0 INTEL_SIP_SMC_ASYNC_POLL_ON_IRQ
- * a1-a17 not used
- *
- * Return status
- * a0 INTEL_SIP_SMC_STATUS_OK
- * a1-a4 contain a bitmap of pending transaction IDs (set bit positions)
- * a5-a17 not used
- * Or
- * a0 INTEL_SIP_SMC_STATUS_NO_RESPONSE
- * a1-a17 not used
- */
-#define INTEL_SIP_SMC_ASYNC_FUNC_ID_IRQ_POLL (0xC9)
-#define INTEL_SIP_SMC_ASYNC_POLL_ON_IRQ \
-	INTEL_SIP_SMC_ASYNC_VAL(INTEL_SIP_SMC_ASYNC_FUNC_ID_IRQ_POLL)
-
-/**
- * Request INTEL_SIP_SMC_ASYNC_HWMON_READTEMP
- * Async call to request temperature
- *
- * Call register usage:
- * a0 INTEL_SIP_SMC_ASYNC_HWMON_READTEMP
- * a1 transaction job id
- * a2 Temperature Channel
- * a3-a17 not used
- *
- * Return status
- * a0 INTEL_SIP_SMC_STATUS_OK, INTEL_SIP_SMC_STATUS_REJECTED
- * or INTEL_SIP_SMC_STATUS_BUSY
- * a1-a17 not used
- */
-#define INTEL_SIP_SMC_ASYNC_FUNC_ID_HWMON_READTEMP	0xE8
-#define INTEL_SIP_SMC_ASYNC_HWMON_READTEMP \
-	INTEL_SIP_SMC_ASYNC_VAL(INTEL_SIP_SMC_ASYNC_FUNC_ID_HWMON_READTEMP)
-
-/**
- * Request INTEL_SIP_SMC_ASYNC_HWMON_READVOLT
- * Async call to request voltage
- *
- * Call register usage:
- * a0 INTEL_SIP_SMC_ASYNC_HWMON_READVOLT
- * a1 transaction job id
- * a2 Voltage Channel
- * a3-a17 not used
- *
- * Return status
- * a0 INTEL_SIP_SMC_STATUS_OK, INTEL_SIP_SMC_STATUS_REJECTED
- * or INTEL_SIP_SMC_STATUS_BUSY
- * a1-a17 not used
- */
-#define INTEL_SIP_SMC_ASYNC_FUNC_ID_HWMON_READVOLT	0xE9
-#define INTEL_SIP_SMC_ASYNC_HWMON_READVOLT \
-	INTEL_SIP_SMC_ASYNC_VAL(INTEL_SIP_SMC_ASYNC_FUNC_ID_HWMON_READVOLT)
-
-/**
- * Request INTEL_SIP_SMC_ASYNC_RSU_GET_SPT
- * Async call to get RSU SPT from SDM.
- * Call register usage:
- * a0 INTEL_SIP_SMC_ASYNC_RSU_GET_SPT
- * a1 transaction job id
- * a2-a17 not used
- *
- * Return status:
- * a0 INTEL_SIP_SMC_STATUS_OK ,INTEL_SIP_SMC_STATUS_REJECTED
- * or INTEL_SIP_SMC_STATUS_BUSY
- * a1-a17 not used
- */
-#define INTEL_SIP_SMC_ASYNC_FUNC_ID_RSU_GET_SPT (0xEA)
-#define INTEL_SIP_SMC_ASYNC_RSU_GET_SPT \
-	INTEL_SIP_SMC_ASYNC_VAL(INTEL_SIP_SMC_ASYNC_FUNC_ID_RSU_GET_SPT)
-
-/**
- * Request INTEL_SIP_SMC_ASYNC_RSU_GET_ERROR_STATUS
- * Async call to get RSU error status from SDM.
- * Call register usage:
- * a0 INTEL_SIP_SMC_ASYNC_RSU_GET_ERROR_STATUS
- * a1 transaction job id
- * a2-a17 not used
- *
- * Return status:
- * a0 INTEL_SIP_SMC_STATUS_OK ,INTEL_SIP_SMC_STATUS_REJECTED
- * or INTEL_SIP_SMC_STATUS_BUSY
- * a1-a17 not used
- */
-#define INTEL_SIP_SMC_ASYNC_FUNC_ID_RSU_GET_ERROR_STATUS (0xEB)
-#define INTEL_SIP_SMC_ASYNC_RSU_GET_ERROR_STATUS \
-	INTEL_SIP_SMC_ASYNC_VAL(INTEL_SIP_SMC_ASYNC_FUNC_ID_RSU_GET_ERROR_STATUS)
-
-/**
- * Request INTEL_SIP_SMC_ASYNC_RSU_NOTIFY
- * Async call to send NOTIFY value to SDM.
- * Call register usage:
- * a0 INTEL_SIP_SMC_ASYNC_RSU_NOTIFY
- * a1 transaction job id
- * a2 notify value
- * a3-a17 not used
- *
- * Return status:
- * a0 INTEL_SIP_SMC_STATUS_OK ,INTEL_SIP_SMC_STATUS_REJECTED
- * or INTEL_SIP_SMC_STATUS_BUSY
- * a1-a17 not used
- */
-#define INTEL_SIP_SMC_ASYNC_FUNC_ID_RSU_NOTIFY (0xEC)
-#define INTEL_SIP_SMC_ASYNC_RSU_NOTIFY \
-	INTEL_SIP_SMC_ASYNC_VAL(INTEL_SIP_SMC_ASYNC_FUNC_ID_RSU_NOTIFY)
-
-/**
- * Request INTEL_SIP_SMC_SDM_REMAPPER_CONFIG
- *
- * Sync call to configure the SDM address remapper. On Agilex5, the remapper
- * must be bypassed when the SMMU is active to avoid conflicts with IOMMU
- * address translation.
- *
- * Call register usage:
- * a0: INTEL_SIP_SMC_SDM_REMAPPER_CONFIG
- * a1: INTEL_SIP_SMC_SDM_REMAPPER_ENABLE or INTEL_SIP_SMC_SDM_REMAPPER_BYPASS
- * a2-7: not used
- *
- * Return status:
- * a0: INTEL_SIP_SMC_STATUS_OK
- * a1-3: not used
- */
-#define INTEL_SIP_SMC_FUNCID_SDM_REMAPPER_CONFIG	513
-#define INTEL_SIP_SMC_SDM_REMAPPER_CONFIG \
-	INTEL_SIP_SMC_FAST_CALL_VAL(INTEL_SIP_SMC_FUNCID_SDM_REMAPPER_CONFIG)
-#define INTEL_SIP_SMC_SDM_REMAPPER_ENABLE		0
-#define INTEL_SIP_SMC_SDM_REMAPPER_BYPASS		1
 
 #endif

@@ -76,7 +76,7 @@ static int __fwnode_link_add(struct fwnode_handle *con,
 			return 0;
 		}
 
-	link = kzalloc_obj(*link);
+	link = kzalloc(sizeof(*link), GFP_KERNEL);
 	if (!link)
 		return -ENOMEM;
 
@@ -127,13 +127,7 @@ static void __fwnode_link_cycle(struct fwnode_link *link)
 {
 	pr_debug("%pfwf: cycle: depends on %pfwf\n",
 		 link->consumer, link->supplier);
-
-	if (link->flags & FWLINK_FLAG_CYCLE)
-		return;
-
 	link->flags |= FWLINK_FLAG_CYCLE;
-	pr_info("%pfwf: Fixed dependency cycle(s) with %pfwf\n",
-		link->consumer, link->supplier);
 }
 
 /**
@@ -501,7 +495,7 @@ void device_pm_move_to_tail(struct device *dev)
 #define to_devlink(dev)	container_of((dev), struct device_link, link_dev)
 
 static ssize_t status_show(struct device *dev,
-			   const struct device_attribute *attr, char *buf)
+			   struct device_attribute *attr, char *buf)
 {
 	const char *output;
 
@@ -531,10 +525,10 @@ static ssize_t status_show(struct device *dev,
 
 	return sysfs_emit(buf, "%s\n", output);
 }
-static const DEVICE_ATTR_RO(status);
+static DEVICE_ATTR_RO(status);
 
 static ssize_t auto_remove_on_show(struct device *dev,
-				   const struct device_attribute *attr, char *buf)
+				   struct device_attribute *attr, char *buf)
 {
 	struct device_link *link = to_devlink(dev);
 	const char *output;
@@ -548,27 +542,27 @@ static ssize_t auto_remove_on_show(struct device *dev,
 
 	return sysfs_emit(buf, "%s\n", output);
 }
-static const DEVICE_ATTR_RO(auto_remove_on);
+static DEVICE_ATTR_RO(auto_remove_on);
 
 static ssize_t runtime_pm_show(struct device *dev,
-			       const struct device_attribute *attr, char *buf)
+			       struct device_attribute *attr, char *buf)
 {
 	struct device_link *link = to_devlink(dev);
 
 	return sysfs_emit(buf, "%d\n", device_link_test(link, DL_FLAG_PM_RUNTIME));
 }
-static const DEVICE_ATTR_RO(runtime_pm);
+static DEVICE_ATTR_RO(runtime_pm);
 
 static ssize_t sync_state_only_show(struct device *dev,
-				    const struct device_attribute *attr, char *buf)
+				    struct device_attribute *attr, char *buf)
 {
 	struct device_link *link = to_devlink(dev);
 
 	return sysfs_emit(buf, "%d\n", device_link_test(link, DL_FLAG_SYNC_STATE_ONLY));
 }
-static const DEVICE_ATTR_RO(sync_state_only);
+static DEVICE_ATTR_RO(sync_state_only);
 
-static const struct attribute *const devlink_attrs[] = {
+static struct attribute *devlink_attrs[] = {
 	&dev_attr_status.attr,
 	&dev_attr_auto_remove_on.attr,
 	&dev_attr_runtime_pm.attr,
@@ -923,7 +917,7 @@ struct device_link *device_link_add(struct device *consumer,
 		goto out;
 	}
 
-	link = kzalloc_obj(*link);
+	link = kzalloc(sizeof(*link), GFP_KERNEL);
 	if (!link)
 		goto out;
 
@@ -1202,7 +1196,7 @@ static void __device_links_queue_sync_state(struct device *dev,
 
 	if (!dev_has_sync_state(dev))
 		return;
-	if (dev_state_synced(dev))
+	if (dev->state_synced)
 		return;
 
 	list_for_each_entry(link, &dev->links.consumers, s_node) {
@@ -1217,7 +1211,7 @@ static void __device_links_queue_sync_state(struct device *dev,
 	 * than once. This can happen if new consumers get added to the device
 	 * and probed before the list is flushed.
 	 */
-	dev_set_state_synced(dev);
+	dev->state_synced = true;
 
 	if (WARN_ON(!list_empty(&dev->links.defer_sync)))
 		return;
@@ -1312,7 +1306,7 @@ static void device_link_drop_managed(struct device_link *link)
 }
 
 static ssize_t waiting_for_supplier_show(struct device *dev,
-					 const struct device_attribute *attr,
+					 struct device_attribute *attr,
 					 char *buf)
 {
 	bool val;
@@ -1323,7 +1317,7 @@ static ssize_t waiting_for_supplier_show(struct device *dev,
 	device_unlock(dev);
 	return sysfs_emit(buf, "%u\n", val);
 }
-static const DEVICE_ATTR_RO(waiting_for_supplier);
+static DEVICE_ATTR_RO(waiting_for_supplier);
 
 /**
  * device_links_force_bind - Prepares device to be force bound
@@ -1851,7 +1845,7 @@ static int fw_devlink_dev_sync_state(struct device *dev, void *data)
 	struct device *sup = link->supplier;
 
 	if (!device_link_test(link, DL_FLAG_MANAGED) ||
-	    link->status == DL_STATE_ACTIVE || dev_state_synced(sup) ||
+	    link->status == DL_STATE_ACTIVE || sup->state_synced ||
 	    !dev_has_sync_state(sup))
 		return 0;
 
@@ -1865,7 +1859,7 @@ static int fw_devlink_dev_sync_state(struct device *dev, void *data)
 		return 0;
 
 	dev_warn(sup, "Timed out. Forcing sync_state()\n");
-	dev_set_state_synced(sup);
+	sup->state_synced = true;
 	get_device(sup);
 	list_add_tail(&sup->links.defer_sync, data);
 
@@ -2212,6 +2206,8 @@ static int fw_devlink_create_devlink(struct device *con,
 	if (__fw_devlink_relax_cycles(link->consumer, sup_handle)) {
 		__fwnode_link_cycle(link);
 		pr_debug("----- cycle: end -----\n");
+		pr_info("%pfwf: Fixed dependency cycle(s) with %pfwf\n",
+			link->consumer, sup_handle);
 	}
 	device_links_write_unlock();
 
@@ -2489,11 +2485,9 @@ static ssize_t dev_attr_show(struct kobject *kobj, struct attribute *attr,
 
 	if (dev_attr->show)
 		ret = dev_attr->show(dev, dev_attr, buf);
-	else if (dev_attr->show_const)
-		ret = dev_attr->show_const(dev, dev_attr, buf);
 	if (ret >= (ssize_t)PAGE_SIZE) {
-		printk("dev_attr_show: %pS/%pS returned bad count\n",
-				dev_attr->show, dev_attr->show_const);
+		printk("dev_attr_show: %pS returned bad count\n",
+				dev_attr->show);
 	}
 	return ret;
 }
@@ -2507,8 +2501,6 @@ static ssize_t dev_attr_store(struct kobject *kobj, struct attribute *attr,
 
 	if (dev_attr->store)
 		ret = dev_attr->store(dev, dev_attr, buf, count);
-	else if (dev_attr->store_const)
-		ret = dev_attr->store_const(dev, dev_attr, buf, count);
 	return ret;
 }
 
@@ -2517,13 +2509,13 @@ static const struct sysfs_ops dev_sysfs_ops = {
 	.store	= dev_attr_store,
 };
 
-#define to_ext_attr(x) container_of_const(x, struct dev_ext_attribute, attr)
+#define to_ext_attr(x) container_of(x, struct dev_ext_attribute, attr)
 
 ssize_t device_store_ulong(struct device *dev,
-			   const struct device_attribute *attr,
+			   struct device_attribute *attr,
 			   const char *buf, size_t size)
 {
-	const struct dev_ext_attribute *ea = to_ext_attr(attr);
+	struct dev_ext_attribute *ea = to_ext_attr(attr);
 	int ret;
 	unsigned long new;
 
@@ -2537,19 +2529,19 @@ ssize_t device_store_ulong(struct device *dev,
 EXPORT_SYMBOL_GPL(device_store_ulong);
 
 ssize_t device_show_ulong(struct device *dev,
-			  const struct device_attribute *attr,
+			  struct device_attribute *attr,
 			  char *buf)
 {
-	const struct dev_ext_attribute *ea = to_ext_attr(attr);
+	struct dev_ext_attribute *ea = to_ext_attr(attr);
 	return sysfs_emit(buf, "%lx\n", *(unsigned long *)(ea->var));
 }
 EXPORT_SYMBOL_GPL(device_show_ulong);
 
 ssize_t device_store_int(struct device *dev,
-			 const struct device_attribute *attr,
+			 struct device_attribute *attr,
 			 const char *buf, size_t size)
 {
-	const struct dev_ext_attribute *ea = to_ext_attr(attr);
+	struct dev_ext_attribute *ea = to_ext_attr(attr);
 	int ret;
 	long new;
 
@@ -2566,19 +2558,19 @@ ssize_t device_store_int(struct device *dev,
 EXPORT_SYMBOL_GPL(device_store_int);
 
 ssize_t device_show_int(struct device *dev,
-			const struct device_attribute *attr,
+			struct device_attribute *attr,
 			char *buf)
 {
-	const struct dev_ext_attribute *ea = to_ext_attr(attr);
+	struct dev_ext_attribute *ea = to_ext_attr(attr);
 
 	return sysfs_emit(buf, "%d\n", *(int *)(ea->var));
 }
 EXPORT_SYMBOL_GPL(device_show_int);
 
-ssize_t device_store_bool(struct device *dev, const struct device_attribute *attr,
+ssize_t device_store_bool(struct device *dev, struct device_attribute *attr,
 			  const char *buf, size_t size)
 {
-	const struct dev_ext_attribute *ea = to_ext_attr(attr);
+	struct dev_ext_attribute *ea = to_ext_attr(attr);
 
 	if (kstrtobool(buf, ea->var) < 0)
 		return -EINVAL;
@@ -2587,19 +2579,19 @@ ssize_t device_store_bool(struct device *dev, const struct device_attribute *att
 }
 EXPORT_SYMBOL_GPL(device_store_bool);
 
-ssize_t device_show_bool(struct device *dev, const struct device_attribute *attr,
+ssize_t device_show_bool(struct device *dev, struct device_attribute *attr,
 			 char *buf)
 {
-	const struct dev_ext_attribute *ea = to_ext_attr(attr);
+	struct dev_ext_attribute *ea = to_ext_attr(attr);
 
 	return sysfs_emit(buf, "%d\n", *(bool *)(ea->var));
 }
 EXPORT_SYMBOL_GPL(device_show_bool);
 
 ssize_t device_show_string(struct device *dev,
-			   const struct device_attribute *attr, char *buf)
+			   struct device_attribute *attr, char *buf)
 {
-	const struct dev_ext_attribute *ea = to_ext_attr(attr);
+	struct dev_ext_attribute *ea = to_ext_attr(attr);
 
 	return sysfs_emit(buf, "%s\n", (char *)ea->var);
 }
@@ -2644,14 +2636,15 @@ static void device_release(struct kobject *kobj)
 	kfree(p);
 }
 
-static const struct ns_common *device_namespace(const struct kobject *kobj)
+static const void *device_namespace(const struct kobject *kobj)
 {
 	const struct device *dev = kobj_to_dev(kobj);
+	const void *ns = NULL;
 
 	if (dev->class && dev->class->namespace)
-		return dev->class->namespace(dev);
+		ns = dev->class->namespace(dev);
 
-	return NULL;
+	return ns;
 }
 
 static void device_get_ownership(const struct kobject *kobj, kuid_t *uid, kgid_t *gid)
@@ -2796,7 +2789,7 @@ static const struct kset_uevent_ops device_uevent_ops = {
 	.uevent =	dev_uevent,
 };
 
-static ssize_t uevent_show(struct device *dev, const struct device_attribute *attr,
+static ssize_t uevent_show(struct device *dev, struct device_attribute *attr,
 			   char *buf)
 {
 	struct kobject *top_kobj;
@@ -2822,7 +2815,7 @@ static ssize_t uevent_show(struct device *dev, const struct device_attribute *at
 		if (!kset->uevent_ops->filter(&dev->kobj))
 			goto out;
 
-	env = kzalloc_obj(struct kobj_uevent_env);
+	env = kzalloc(sizeof(struct kobj_uevent_env), GFP_KERNEL);
 	if (!env)
 		return -ENOMEM;
 
@@ -2839,7 +2832,7 @@ out:
 	return len;
 }
 
-static ssize_t uevent_store(struct device *dev, const struct device_attribute *attr,
+static ssize_t uevent_store(struct device *dev, struct device_attribute *attr,
 			    const char *buf, size_t count)
 {
 	int rc;
@@ -2853,20 +2846,20 @@ static ssize_t uevent_store(struct device *dev, const struct device_attribute *a
 
 	return count;
 }
-static const DEVICE_ATTR_RW(uevent);
+static DEVICE_ATTR_RW(uevent);
 
-static ssize_t online_show(struct device *dev, const struct device_attribute *attr,
+static ssize_t online_show(struct device *dev, struct device_attribute *attr,
 			   char *buf)
 {
 	bool val;
 
 	device_lock(dev);
-	val = !dev_offline(dev);
+	val = !dev->offline;
 	device_unlock(dev);
 	return sysfs_emit(buf, "%u\n", val);
 }
 
-static ssize_t online_store(struct device *dev, const struct device_attribute *attr,
+static ssize_t online_store(struct device *dev, struct device_attribute *attr,
 			    const char *buf, size_t count)
 {
 	bool val;
@@ -2884,9 +2877,9 @@ static ssize_t online_store(struct device *dev, const struct device_attribute *a
 	unlock_device_hotplug();
 	return ret < 0 ? ret : count;
 }
-static const DEVICE_ATTR_RW(online);
+static DEVICE_ATTR_RW(online);
 
-static ssize_t removable_show(struct device *dev, const struct device_attribute *attr,
+static ssize_t removable_show(struct device *dev, struct device_attribute *attr,
 			      char *buf)
 {
 	const char *loc;
@@ -2903,17 +2896,16 @@ static ssize_t removable_show(struct device *dev, const struct device_attribute 
 	}
 	return sysfs_emit(buf, "%s\n", loc);
 }
-static const DEVICE_ATTR_RO(removable);
+static DEVICE_ATTR_RO(removable);
 
-int device_add_groups(struct device *dev,
-		      const struct attribute_group *const *groups)
+int device_add_groups(struct device *dev, const struct attribute_group **groups)
 {
 	return sysfs_create_groups(&dev->kobj, groups);
 }
 EXPORT_SYMBOL_GPL(device_add_groups);
 
 void device_remove_groups(struct device *dev,
-			  const struct attribute_group *const *groups)
+			  const struct attribute_group **groups)
 {
 	sysfs_remove_groups(&dev->kobj, groups);
 }
@@ -2987,7 +2979,7 @@ static int device_add_attrs(struct device *dev)
 	if (error)
 		goto err_remove_type_groups;
 
-	if (device_supports_offline(dev) && !dev_offline_disabled(dev)) {
+	if (device_supports_offline(dev) && !dev->offline_disabled) {
 		error = device_create_file(dev, &dev_attr_online);
 		if (error)
 			goto err_remove_dev_groups;
@@ -3054,12 +3046,12 @@ static void device_remove_attrs(struct device *dev)
 		device_remove_groups(dev, class->dev_groups);
 }
 
-static ssize_t dev_show(struct device *dev, const struct device_attribute *attr,
+static ssize_t dev_show(struct device *dev, struct device_attribute *attr,
 			char *buf)
 {
 	return print_dev_t(buf, dev->devt);
 }
-static const DEVICE_ATTR_RO(dev);
+static DEVICE_ATTR_RO(dev);
 
 /* /sys/devices/ */
 struct kset *devices_kset;
@@ -3121,10 +3113,10 @@ int device_create_file(struct device *dev,
 	int error = 0;
 
 	if (dev) {
-		WARN(((attr->attr.mode & S_IWUGO) && !(attr->store || attr->store_const)),
+		WARN(((attr->attr.mode & S_IWUGO) && !attr->store),
 			"Attribute %s: write permission without 'store'\n",
 			attr->attr.name);
-		WARN(((attr->attr.mode & S_IRUGO) && !(attr->show || attr->show_const)),
+		WARN(((attr->attr.mode & S_IRUGO) && !attr->show),
 			"Attribute %s: read permission without 'show'\n",
 			attr->attr.name);
 		error = sysfs_create_file(&dev->kobj, &attr->attr);
@@ -3244,7 +3236,11 @@ void device_initialize(struct device *dev)
 	INIT_LIST_HEAD(&dev->links.suppliers);
 	INIT_LIST_HEAD(&dev->links.defer_sync);
 	dev->links.status = DL_DEV_NO_DRIVER;
-	dev_assign_dma_coherent(dev, dma_default_coherent);
+#if defined(CONFIG_ARCH_HAS_SYNC_DMA_FOR_DEVICE) || \
+    defined(CONFIG_ARCH_HAS_SYNC_DMA_FOR_CPU) || \
+    defined(CONFIG_ARCH_HAS_SYNC_DMA_FOR_CPU_ALL)
+	dev->dma_coherent = dma_default_coherent;
+#endif
 	swiotlb_dev_init(dev);
 }
 EXPORT_SYMBOL_GPL(device_initialize);
@@ -3292,7 +3288,7 @@ static struct kobject *class_dir_create_and_add(struct subsys_private *sp,
 	struct class_dir *dir;
 	int retval;
 
-	dir = kzalloc_obj(*dir);
+	dir = kzalloc(sizeof(*dir), GFP_KERNEL);
 	if (!dir)
 		return ERR_PTR(-ENOMEM);
 
@@ -3603,7 +3599,7 @@ static void device_remove_sys_dev_entry(struct device *dev)
 
 static int device_private_init(struct device *dev)
 {
-	dev->p = kzalloc_obj(*dev->p);
+	dev->p = kzalloc(sizeof(*dev->p), GFP_KERNEL);
 	if (!dev->p)
 		return -ENOMEM;
 	dev->p->device = dev;
@@ -4225,7 +4221,7 @@ int __init devices_init(void)
 	sysfs_dev_char_kobj = kobject_create_and_add("char", dev_kobj);
 	if (!sysfs_dev_char_kobj)
 		goto char_kobj_err;
-	device_link_wq = alloc_workqueue("device_link_wq", WQ_PERCPU, 0);
+	device_link_wq = alloc_workqueue("device_link_wq", 0, 0);
 	if (!device_link_wq)
 		goto wq_err;
 
@@ -4250,7 +4246,7 @@ static int device_check_offline(struct device *dev, void *not_used)
 	if (ret)
 		return ret;
 
-	return device_supports_offline(dev) && !dev_offline(dev) ? -EBUSY : 0;
+	return device_supports_offline(dev) && !dev->offline ? -EBUSY : 0;
 }
 
 /**
@@ -4268,7 +4264,7 @@ int device_offline(struct device *dev)
 {
 	int ret;
 
-	if (dev_offline_disabled(dev))
+	if (dev->offline_disabled)
 		return -EPERM;
 
 	ret = device_for_each_child(dev, NULL, device_check_offline);
@@ -4277,13 +4273,13 @@ int device_offline(struct device *dev)
 
 	device_lock(dev);
 	if (device_supports_offline(dev)) {
-		if (dev_offline(dev)) {
+		if (dev->offline) {
 			ret = 1;
 		} else {
 			ret = dev->bus->offline(dev);
 			if (!ret) {
 				kobject_uevent(&dev->kobj, KOBJ_OFFLINE);
-				dev_set_offline(dev);
+				dev->offline = true;
 			}
 		}
 	}
@@ -4308,11 +4304,11 @@ int device_online(struct device *dev)
 
 	device_lock(dev);
 	if (device_supports_offline(dev)) {
-		if (dev_offline(dev)) {
+		if (dev->offline) {
 			ret = dev->bus->online(dev);
 			if (!ret) {
 				kobject_uevent(&dev->kobj, KOBJ_ONLINE);
-				dev_clear_offline(dev);
+				dev->offline = false;
 			}
 		} else {
 			ret = 1;
@@ -4365,7 +4361,7 @@ struct device *__root_device_register(const char *name, struct module *owner)
 	struct root_device *root;
 	int err = -ENOMEM;
 
-	root = kzalloc_obj(struct root_device);
+	root = kzalloc(sizeof(struct root_device), GFP_KERNEL);
 	if (!root)
 		return ERR_PTR(err);
 
@@ -4437,7 +4433,7 @@ device_create_groups_vargs(const struct class *class, struct device *parent,
 	if (IS_ERR_OR_NULL(class))
 		goto error;
 
-	dev = kzalloc_obj(*dev);
+	dev = kzalloc(sizeof(*dev), GFP_KERNEL);
 	if (!dev) {
 		retval = -ENOMEM;
 		goto error;
@@ -4786,7 +4782,7 @@ static int device_attrs_change_owner(struct device *dev, kuid_t kuid,
 	if (error)
 		return error;
 
-	if (device_supports_offline(dev) && !dev_offline_disabled(dev)) {
+	if (device_supports_offline(dev) && !dev->offline_disabled) {
 		/* Change online device attributes of @dev to @kuid/@kgid. */
 		error = sysfs_file_change_owner(kobj, dev_attr_online.attr.name,
 						kuid, kgid);
@@ -4868,6 +4864,7 @@ out:
 	put_device(dev);
 	return error;
 }
+EXPORT_SYMBOL_GPL(device_change_owner);
 
 /**
  * device_shutdown - call ->shutdown() on each device to shutdown.
@@ -5353,7 +5350,7 @@ void device_set_of_node_from_dev(struct device *dev, const struct device *dev2)
 {
 	of_node_put(dev->of_node);
 	dev->of_node = of_node_get(dev2->of_node);
-	dev_set_of_node_reused(dev);
+	dev->of_node_reused = true;
 }
 EXPORT_SYMBOL_GPL(device_set_of_node_from_dev);
 

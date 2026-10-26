@@ -27,7 +27,6 @@
 #include <drm/drm_fourcc.h>
 #include <drm/drm_framebuffer.h>
 #include <drm/drm_modeset_helper.h>
-#include <drm/drm_panic_helper.h>
 #include <drm/drm_plane_helper.h>
 #include <drm/drm_print.h>
 #include <drm/drm_probe_helper.h>
@@ -114,7 +113,6 @@ static const uint32_t safe_modeset_formats[] = {
 
 static const struct drm_plane_funcs primary_plane_funcs = {
 	DRM_PLANE_NON_ATOMIC_FUNCS,
-	DRM_PANIC_PLANE_FUNCS,
 };
 
 /**
@@ -137,6 +135,9 @@ static const struct drm_plane_funcs primary_plane_funcs = {
  *
  * This is purely a backwards compatibility helper for old drivers. Drivers
  * should instead implement their own primary plane. Atomic drivers must do so.
+ * Drivers with the above hardware restriction can look into using &struct
+ * drm_simple_display_pipe, which encapsulates the above limitations into a nice
+ * interface.
  *
  * Returns:
  * Zero on success, error code on failure.
@@ -192,7 +193,7 @@ EXPORT_SYMBOL(drm_crtc_init);
  */
 int drm_mode_config_helper_suspend(struct drm_device *dev)
 {
-	struct drm_atomic_commit *state;
+	struct drm_atomic_state *state;
 
 	if (!dev)
 		return 0;

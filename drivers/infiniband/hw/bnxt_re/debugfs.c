@@ -23,14 +23,6 @@
 
 static struct dentry *bnxt_re_debugfs_root;
 
-static const char * const bnxt_re_cq_coal_str[] = {
-	"buf_maxtime",
-	"normal_maxbuf",
-	"during_maxbuf",
-	"en_ring_idle_mode",
-	"enable",
-};
-
 static const char * const bnxt_re_cc_gen0_name[] = {
 	"enable_cc",
 	"run_avg_weight_g",
@@ -87,17 +79,11 @@ static ssize_t qp_info_read(struct file *filep,
 			    size_t count, loff_t *ppos)
 {
 	struct bnxt_re_qp *qp = filep->private_data;
-	struct bnxt_qplib_qp *qplib_qp;
-	u32 rate_limit = 0;
 	char *buf;
 	int len;
 
 	if (*ppos)
 		return 0;
-
-	qplib_qp = &qp->qplib_qp;
-	if (qplib_qp->shaper_allocation_status)
-		rate_limit = qplib_qp->rate_limit;
 
 	buf = kasprintf(GFP_KERNEL,
 			"QPN\t\t: %d\n"
@@ -105,17 +91,13 @@ static ssize_t qp_info_read(struct file *filep,
 			"state\t\t: %s\n"
 			"mtu\t\t: %d\n"
 			"timeout\t\t: %d\n"
-			"remote QPN\t: %d\n"
-			"shaper allocated : %d\n"
-			"rate limit\t: %d kbps\n",
+			"remote QPN\t: %d\n",
 			qp->qplib_qp.id,
 			bnxt_re_qp_type_str(qp->qplib_qp.type),
 			bnxt_re_qp_state_str(qp->qplib_qp.state),
 			qp->qplib_qp.mtu,
 			qp->qplib_qp.timeout,
-			qp->qplib_qp.dest_qpn,
-			qplib_qp->shaper_allocation_status,
-			rate_limit);
+			qp->qplib_qp.dest_qpn);
 	if (!buf)
 		return -ENOMEM;
 	if (count < strlen(buf)) {
@@ -308,12 +290,21 @@ static ssize_t bnxt_re_cc_config_set(struct file *filp, const char __user *buffe
 	struct bnxt_re_dev *rdev = dbg_cc_param->rdev;
 	u32 offset = dbg_cc_param->offset;
 	u8 cc_gen = dbg_cc_param->cc_gen;
+	char buf[16];
 	u32 val;
 	int rc;
 
-	rc = kstrtou32_from_user(buffer, count, 0, &val);
-	if (!rc)
-		rc = bnxt_re_configure_cc(rdev, cc_gen, offset, val);
+	if (count >= sizeof(buf))
+		return -EINVAL;
+
+	if (copy_from_user(buf, buffer, count))
+		return -EFAULT;
+
+	buf[count] = '\0';
+	if (kstrtou32(buf, 0, &val))
+		return -EINVAL;
+
+	rc = bnxt_re_configure_cc(rdev, cc_gen, offset, val);
 	return rc ? rc : count;
 }
 
@@ -358,115 +349,6 @@ static void bnxt_re_debugfs_add_info(struct bnxt_re_dev *rdev)
 	debugfs_create_file("info", 0400, rdev->dbg_root, rdev, &info_fops);
 }
 
-static ssize_t cq_coal_cfg_write(struct file *file,
-				 const char __user *buf,
-				 size_t count, loff_t *pos)
-{
-	struct seq_file *s = file->private_data;
-	struct bnxt_re_cq_coal_param *param = s->private;
-	struct bnxt_re_dev *rdev = param->rdev;
-	int ret, offset = param->offset;
-	u32 val;
-
-	ret = kstrtou32_from_user(buf, count, 0, &val);
-	if (ret)
-		return ret;
-
-	switch (offset) {
-	case BNXT_RE_COAL_CQ_BUF_MAXTIME:
-		if (val < 1 || val > BNXT_QPLIB_CQ_COAL_MAX_BUF_MAXTIME)
-			return -EINVAL;
-		rdev->cq_coalescing.buf_maxtime = val;
-		break;
-	case BNXT_RE_COAL_CQ_NORMAL_MAXBUF:
-		if (val < 1 || val > BNXT_QPLIB_CQ_COAL_MAX_NORMAL_MAXBUF)
-			return -EINVAL;
-		rdev->cq_coalescing.normal_maxbuf = val;
-		break;
-	case BNXT_RE_COAL_CQ_DURING_MAXBUF:
-		if (val < 1 || val > BNXT_QPLIB_CQ_COAL_MAX_DURING_MAXBUF)
-			return -EINVAL;
-		rdev->cq_coalescing.during_maxbuf = val;
-		break;
-	case BNXT_RE_COAL_CQ_EN_RING_IDLE_MODE:
-		if (val > BNXT_QPLIB_CQ_COAL_MAX_EN_RING_IDLE_MODE)
-			return -EINVAL;
-		rdev->cq_coalescing.en_ring_idle_mode = val;
-		break;
-	case BNXT_RE_COAL_CQ_ENABLE:
-		if (val > 1)
-			return -EINVAL;
-		rdev->cq_coalescing.enable = val;
-		break;
-	default:
-		return -EINVAL;
-	}
-	return  count;
-}
-
-static int cq_coal_cfg_show(struct seq_file *s, void *unused)
-{
-	struct bnxt_re_cq_coal_param *param = s->private;
-	struct bnxt_re_dev *rdev = param->rdev;
-	int offset = param->offset;
-	u32 val = 0;
-
-	switch (offset) {
-	case BNXT_RE_COAL_CQ_BUF_MAXTIME:
-		val = rdev->cq_coalescing.buf_maxtime;
-		break;
-	case BNXT_RE_COAL_CQ_NORMAL_MAXBUF:
-		val = rdev->cq_coalescing.normal_maxbuf;
-		break;
-	case BNXT_RE_COAL_CQ_DURING_MAXBUF:
-		val = rdev->cq_coalescing.during_maxbuf;
-		break;
-	case BNXT_RE_COAL_CQ_EN_RING_IDLE_MODE:
-		val = rdev->cq_coalescing.en_ring_idle_mode;
-		break;
-	case BNXT_RE_COAL_CQ_ENABLE:
-		val = rdev->cq_coalescing.enable;
-		break;
-	default:
-		return -EINVAL;
-	}
-
-	seq_printf(s, "%u\n", val);
-	return 0;
-}
-DEFINE_SHOW_STORE_ATTRIBUTE(cq_coal_cfg);
-
-static void bnxt_re_cleanup_cq_coal_debugfs(struct bnxt_re_dev *rdev)
-{
-	debugfs_remove_recursive(rdev->cq_coal_cfg);
-	kfree(rdev->cq_coal_cfg_params);
-}
-
-static void bnxt_re_init_cq_coal_debugfs(struct bnxt_re_dev *rdev)
-{
-	struct bnxt_re_dbg_cq_coal_params *dbg_cq_coal_params;
-	int i;
-
-	if (!_is_cq_coalescing_supported(rdev->dev_attr->dev_cap_flags2))
-		return;
-
-	dbg_cq_coal_params = kzalloc_obj(*dbg_cq_coal_params);
-	if (!dbg_cq_coal_params)
-		return;
-
-	rdev->cq_coal_cfg = debugfs_create_dir("cq_coal_cfg", rdev->dbg_root);
-	rdev->cq_coal_cfg_params = dbg_cq_coal_params;
-
-	for (i = 0; i < BNXT_RE_COAL_CQ_MAX; i++) {
-		dbg_cq_coal_params->params[i].offset = i;
-		dbg_cq_coal_params->params[i].rdev = rdev;
-		debugfs_create_file(bnxt_re_cq_coal_str[i],
-				    0600, rdev->cq_coal_cfg,
-				    &dbg_cq_coal_params->params[i],
-				    &cq_coal_cfg_fops);
-	}
-}
-
 void bnxt_re_debugfs_add_pdev(struct bnxt_re_dev *rdev)
 {
 	struct pci_dev *pdev = rdev->en_dev->pdev;
@@ -480,9 +362,7 @@ void bnxt_re_debugfs_add_pdev(struct bnxt_re_dev *rdev)
 
 	bnxt_re_debugfs_add_info(rdev);
 
-	rdev->cc_config_params = kzalloc_obj(*cc_params);
-	if (!rdev->cc_config_params)
-		return;
+	rdev->cc_config_params = kzalloc(sizeof(*cc_params), GFP_KERNEL);
 
 	for (i = 0; i < BNXT_RE_CC_PARAM_GEN0; i++) {
 		struct bnxt_re_cc_param *tmp_params = &rdev->cc_config_params->gen0_parms[i];
@@ -494,13 +374,10 @@ void bnxt_re_debugfs_add_pdev(struct bnxt_re_dev *rdev)
 							 rdev->cc_config, tmp_params,
 							 &bnxt_re_cc_config_ops);
 	}
-
-	bnxt_re_init_cq_coal_debugfs(rdev);
 }
 
 void bnxt_re_debugfs_rem_pdev(struct bnxt_re_dev *rdev)
 {
-	bnxt_re_cleanup_cq_coal_debugfs(rdev);
 	debugfs_remove_recursive(rdev->qp_debugfs);
 	debugfs_remove_recursive(rdev->cc_config);
 	kfree(rdev->cc_config_params);

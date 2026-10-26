@@ -240,11 +240,11 @@ static u32 isp_xclk_calc_divider(unsigned long *rate, unsigned long parent_rate)
 	return divider;
 }
 
-static int isp_xclk_determine_rate(struct clk_hw *hw,
-				   struct clk_rate_request *req)
+static long isp_xclk_round_rate(struct clk_hw *hw, unsigned long rate,
+				unsigned long *parent_rate)
 {
-	isp_xclk_calc_divider(&req->rate, req->best_parent_rate);
-	return 0;
+	isp_xclk_calc_divider(&rate, *parent_rate);
+	return rate;
 }
 
 static int isp_xclk_set_rate(struct clk_hw *hw, unsigned long rate,
@@ -275,7 +275,7 @@ static const struct clk_ops isp_xclk_ops = {
 	.enable = isp_xclk_enable,
 	.disable = isp_xclk_disable,
 	.recalc_rate = isp_xclk_recalc_rate,
-	.determine_rate = isp_xclk_determine_rate,
+	.round_rate = isp_xclk_round_rate,
 	.set_rate = isp_xclk_set_rate,
 };
 
@@ -2231,7 +2231,7 @@ static int isp_probe(struct platform_device *pdev)
 	int ret;
 	int i, m;
 
-	isp = kzalloc_obj(*isp);
+	isp = kzalloc(sizeof(*isp), GFP_KERNEL);
 	if (!isp) {
 		dev_err(&pdev->dev, "could not allocate memory\n");
 		return -ENOMEM;

@@ -16,7 +16,6 @@
 #include <asm/set_memory.h>
 
 #include <drm/drm.h>
-#include <drm/drm_print.h>
 #include <drm/drm_vma_manager.h>
 
 #include "gem.h"
@@ -146,7 +145,7 @@ psb_gem_create(struct drm_device *dev, u64 size, const char *name, bool stolen, 
 
 	size = roundup(size, PAGE_SIZE);
 
-	pobj = kzalloc_obj(*pobj);
+	pobj = kzalloc(sizeof(*pobj), GFP_KERNEL);
 	if (!pobj)
 		return ERR_PTR(-ENOMEM);
 	obj = &pobj->base;
@@ -288,7 +287,7 @@ static vm_fault_t psb_gem_fault(struct vm_fault *vmf)
 
 	/* Page relative to the VMA start - we must calculate this ourselves
 	   because vmf->pgoff is the fake GEM offset */
-	page_offset = linear_page_delta(vma, vmf->address);
+	page_offset = (vmf->address - vma->vm_start) >> PAGE_SHIFT;
 
 	/* CPU view of the page, don't go via the GART for CPU writes */
 	if (pobj->stolen)

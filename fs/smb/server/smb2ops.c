@@ -11,7 +11,6 @@
 #include "connection.h"
 #include "smb_common.h"
 #include "server.h"
-#include "stats.h"
 
 static struct smb_version_values smb21_server_values = {
 	.version_string = SMB21_VERSION_STRING,
@@ -37,7 +36,6 @@ static struct smb_version_values smb21_server_values = {
 	.create_mxac_size = sizeof(struct create_mxac_rsp),
 	.create_disk_id_size = sizeof(struct create_disk_id_rsp),
 	.create_posix_size = sizeof(struct create_posix_rsp),
-	.create_aapl_size = AAPL_RSP_MAX_SIZE,
 };
 
 static struct smb_version_values smb30_server_values = {
@@ -61,11 +59,10 @@ static struct smb_version_values smb30_server_values = {
 	.cap_large_files = SMB2_LARGE_FILES,
 	.create_lease_size = sizeof(struct create_lease_v2),
 	.create_durable_size = sizeof(struct create_durable_rsp),
-	.create_durable_v2_size = sizeof(struct create_durable_rsp_v2),
+	.create_durable_v2_size = sizeof(struct create_durable_v2_rsp),
 	.create_mxac_size = sizeof(struct create_mxac_rsp),
 	.create_disk_id_size = sizeof(struct create_disk_id_rsp),
 	.create_posix_size = sizeof(struct create_posix_rsp),
-	.create_aapl_size = AAPL_RSP_MAX_SIZE,
 };
 
 static struct smb_version_values smb302_server_values = {
@@ -89,11 +86,10 @@ static struct smb_version_values smb302_server_values = {
 	.cap_large_files = SMB2_LARGE_FILES,
 	.create_lease_size = sizeof(struct create_lease_v2),
 	.create_durable_size = sizeof(struct create_durable_rsp),
-	.create_durable_v2_size = sizeof(struct create_durable_rsp_v2),
+	.create_durable_v2_size = sizeof(struct create_durable_v2_rsp),
 	.create_mxac_size = sizeof(struct create_mxac_rsp),
 	.create_disk_id_size = sizeof(struct create_disk_id_rsp),
 	.create_posix_size = sizeof(struct create_posix_rsp),
-	.create_aapl_size = AAPL_RSP_MAX_SIZE,
 };
 
 static struct smb_version_values smb311_server_values = {
@@ -117,16 +113,14 @@ static struct smb_version_values smb311_server_values = {
 	.cap_large_files = SMB2_LARGE_FILES,
 	.create_lease_size = sizeof(struct create_lease_v2),
 	.create_durable_size = sizeof(struct create_durable_rsp),
-	.create_durable_v2_size = sizeof(struct create_durable_rsp_v2),
+	.create_durable_v2_size = sizeof(struct create_durable_v2_rsp),
 	.create_mxac_size = sizeof(struct create_mxac_rsp),
 	.create_disk_id_size = sizeof(struct create_disk_id_rsp),
 	.create_posix_size = sizeof(struct create_posix_rsp),
-	.create_aapl_size = AAPL_RSP_MAX_SIZE,
 };
 
 static struct smb_version_ops smb2_0_server_ops = {
 	.get_cmd_val		=	get_smb2_cmd_val,
-	.inc_reqs		=	ksmbd_counter_inc_reqs,
 	.init_rsp_hdr		=	init_smb2_rsp_hdr,
 	.set_rsp_status		=	set_smb2_rsp_status,
 	.allocate_rsp_buf       =       smb2_allocate_rsp_buf,
@@ -140,7 +134,6 @@ static struct smb_version_ops smb2_0_server_ops = {
 
 static struct smb_version_ops smb3_0_server_ops = {
 	.get_cmd_val		=	get_smb2_cmd_val,
-	.inc_reqs		=	ksmbd_counter_inc_reqs,
 	.init_rsp_hdr		=	init_smb2_rsp_hdr,
 	.set_rsp_status		=	set_smb2_rsp_status,
 	.allocate_rsp_buf       =       smb2_allocate_rsp_buf,
@@ -159,7 +152,6 @@ static struct smb_version_ops smb3_0_server_ops = {
 
 static struct smb_version_ops smb3_11_server_ops = {
 	.get_cmd_val		=	get_smb2_cmd_val,
-	.inc_reqs		=	ksmbd_counter_inc_reqs,
 	.init_rsp_hdr		=	init_smb2_rsp_hdr,
 	.set_rsp_status		=	set_smb2_rsp_status,
 	.allocate_rsp_buf       =       smb2_allocate_rsp_buf,
@@ -329,13 +321,6 @@ void init_smb2_max_trans_size(unsigned int sz)
 
 void init_smb2_max_credits(unsigned int sz)
 {
-	/*
-	 * The command sequence window (and its backing bitmap) can track at
-	 * most SMB2_MAX_CREDITS outstanding sequence numbers, so the number of
-	 * credits granted on a connection must not exceed that.
-	 */
-	if (sz > SMB2_MAX_CREDITS)
-		sz = SMB2_MAX_CREDITS;
 	smb21_server_values.max_credits = sz;
 	smb30_server_values.max_credits = sz;
 	smb302_server_values.max_credits = sz;

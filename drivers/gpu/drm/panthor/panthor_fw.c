@@ -16,17 +16,14 @@
 
 #include <drm/drm_drv.h>
 #include <drm/drm_managed.h>
-#include <drm/drm_print.h>
 
 #include "panthor_device.h"
 #include "panthor_fw.h"
-#include "panthor_fw_regs.h"
 #include "panthor_gem.h"
 #include "panthor_gpu.h"
-#include "panthor_hw.h"
 #include "panthor_mmu.h"
+#include "panthor_regs.h"
 #include "panthor_sched.h"
-#include "panthor_trace.h"
 
 #define CSF_FW_NAME "mali_csffw.bin"
 
@@ -35,7 +32,6 @@
 #define PROGRESS_TIMEOUT_SCALE_SHIFT		10
 #define IDLE_HYSTERESIS_US			800
 #define PWROFF_HYSTERESIS_US			10000
-#define MCU_HALT_TIMEOUT_US			(1ULL * USEC_PER_SEC)
 
 /**
  * struct panthor_fw_binary_hdr - Firmware binary header.
@@ -234,9 +230,6 @@ struct panthor_fw_iface {
  * struct panthor_fw - Firmware management
  */
 struct panthor_fw {
-	/** @iomem: CPU mapping of MCU_CONTROL iomem region */
-	void __iomem *iomem;
-
 	/** @vm: MCU VM. */
 	struct panthor_vm *vm;
 
@@ -321,49 +314,6 @@ panthor_fw_get_cs_iface(struct panthor_device *ptdev, u32 csg_slot, u32 cs_slot)
 		return NULL;
 
 	return &ptdev->fw->iface.streams[csg_slot][cs_slot];
-}
-
-static bool panthor_fw_has_glb_state(struct panthor_device *ptdev)
-{
-	struct panthor_fw_global_iface *glb_iface = panthor_fw_get_glb_iface(ptdev);
-
-	return glb_iface->control->version >= CSF_IFACE_VERSION(4, 1, 0);
-}
-
-static bool panthor_fw_has_64bit_ep_req(struct panthor_device *ptdev)
-{
-	struct panthor_fw_global_iface *glb_iface = panthor_fw_get_glb_iface(ptdev);
-
-	return glb_iface->control->version >= CSF_IFACE_VERSION(4, 0, 0);
-}
-
-u64 panthor_fw_csg_endpoint_req_get(struct panthor_device *ptdev,
-				    struct panthor_fw_csg_iface *csg_iface)
-{
-	if (panthor_fw_has_64bit_ep_req(ptdev))
-		return csg_iface->input->endpoint_req2;
-	else
-		return csg_iface->input->endpoint_req;
-}
-
-void panthor_fw_csg_endpoint_req_set(struct panthor_device *ptdev,
-				     struct panthor_fw_csg_iface *csg_iface, u64 value)
-{
-	if (panthor_fw_has_64bit_ep_req(ptdev))
-		csg_iface->input->endpoint_req2 = value;
-	else
-		csg_iface->input->endpoint_req = lower_32_bits(value);
-}
-
-void panthor_fw_csg_endpoint_req_update(struct panthor_device *ptdev,
-					struct panthor_fw_csg_iface *csg_iface, u64 value,
-					u64 mask)
-{
-	if (panthor_fw_has_64bit_ep_req(ptdev))
-		panthor_fw_update_reqs64(csg_iface, endpoint_req2, value, mask);
-	else
-		panthor_fw_update_reqs(csg_iface, endpoint_req, lower_32_bits(value),
-				       lower_32_bits(mask));
 }
 
 /**
@@ -585,7 +535,7 @@ static int panthor_fw_load_section_entry(struct panthor_device *ptdev,
 
 	if (hdr.flags & CSF_FW_BINARY_IFACE_ENTRY_PROT) {
 		drm_warn(&ptdev->base,
-			 "Firmware protected mode entry is not supported, ignoring");
+			 "Firmware protected mode entry not be supported, ignoring");
 		return 0;
 	}
 
@@ -641,6 +591,7 @@ static int panthor_fw_load_section_entry(struct panthor_device *ptdev,
 		u32 cache_mode = hdr.flags & CSF_FW_BINARY_IFACE_ENTRY_CACHE_MODE_MASK;
 		struct panthor_gem_object *bo;
 		u32 vm_map_flags = 0;
+		struct sg_table *sgt;
 		u64 va = hdr.va.start;
 
 		if (!(hdr.flags & CSF_FW_BINARY_IFACE_ENTRY_WR))
@@ -678,12 +629,11 @@ static int panthor_fw_load_section_entry(struct panthor_device *ptdev,
 		panthor_fw_init_section_mem(ptdev, section);
 
 		bo = to_panthor_bo(section->mem->obj);
+		sgt = drm_gem_shmem_get_pages_sgt(&bo->base);
+		if (IS_ERR(sgt))
+			return PTR_ERR(sgt);
 
-		/* An sgt should have been requested when the kernel BO was GPU-mapped. */
-		if (drm_WARN_ON_ONCE(&ptdev->base, !bo->dmap.sgt))
-			return -EINVAL;
-
-		dma_sync_sgtable_for_device(ptdev->base.dev, bo->dmap.sgt, DMA_TO_DEVICE);
+		dma_sync_sgtable_for_device(ptdev->base.dev, sgt, DMA_TO_DEVICE);
 	}
 
 	if (hdr.va.start == CSF_MCU_SHARED_REGION_START)
@@ -744,10 +694,8 @@ panthor_reload_fw_sections(struct panthor_device *ptdev, bool full_reload)
 			continue;
 
 		panthor_fw_init_section_mem(ptdev, section);
-
-		/* An sgt should have been requested when the kernel BO was GPU-mapped. */
-		sgt = to_panthor_bo(section->mem->obj)->dmap.sgt;
-		if (!drm_WARN_ON_ONCE(&ptdev->base, !sgt))
+		sgt = drm_gem_shmem_get_pages_sgt(&to_panthor_bo(section->mem->obj)->base);
+		if (!drm_WARN_ON(&ptdev->base, IS_ERR_OR_NULL(sgt)))
 			dma_sync_sgtable_for_device(ptdev->base.dev, sgt, DMA_TO_DEVICE);
 	}
 }
@@ -766,7 +714,7 @@ static int panthor_fw_load_entry(struct panthor_device *ptdev,
 
 	if ((iter->offset % sizeof(u32)) ||
 	    (CSF_FW_BINARY_ENTRY_SIZE(ehdr) % sizeof(u32))) {
-		drm_err(&ptdev->base, "Firmware entry is not 32-bit aligned, offset=0x%x size=0x%x\n",
+		drm_err(&ptdev->base, "Firmware entry isn't 32 bit aligned, offset=0x%x size=0x%x\n",
 			(u32)(iter->offset - sizeof(u32)), CSF_FW_BINARY_ENTRY_SIZE(ehdr));
 		return -EINVAL;
 	}
@@ -1078,33 +1026,22 @@ static void panthor_fw_init_global_iface(struct panthor_device *ptdev)
 					 GLB_IDLE_EN |
 					 GLB_IDLE;
 
-	if (panthor_fw_has_glb_state(ptdev))
-		glb_iface->input->ack_irq_mask |= GLB_STATE_MASK;
-
-	panthor_fw_update_reqs(glb_iface, req, GLB_IDLE_EN | GLB_COUNTER_EN,
-			       GLB_IDLE_EN | GLB_COUNTER_EN);
+	panthor_fw_update_reqs(glb_iface, req, GLB_IDLE_EN, GLB_IDLE_EN);
 	panthor_fw_toggle_reqs(glb_iface, req, ack,
 			       GLB_CFG_ALLOC_EN |
 			       GLB_CFG_POWEROFF_TIMER |
 			       GLB_CFG_PROGRESS_TIMER);
 
-	panthor_fw_ring_doorbell(ptdev, CSF_GLB_DOORBELL_ID);
+	gpu_write(ptdev, CSF_DOORBELL(CSF_GLB_DOORBELL_ID), 1);
 
 	/* Kick the watchdog. */
 	mod_delayed_work(ptdev->reset.wq, &ptdev->fw->watchdog.ping_work,
 			 msecs_to_jiffies(PING_INTERVAL_MS));
 }
 
-static void panthor_job_irq_handler(struct panthor_irq *pirq, u32 status)
+static void panthor_job_irq_handler(struct panthor_device *ptdev, u32 status)
 {
-	struct panthor_device *ptdev = pirq->ptdev;
-	u32 duration;
-	u64 start = 0;
-
-	if (tracepoint_enabled(gpu_job_irq))
-		start = ktime_get_ns();
-
-	gpu_write(ptdev->fw->irq.iomem, INT_CLEAR, status);
+	gpu_write(ptdev, JOB_INT_CLEAR, status);
 
 	if (!ptdev->fw->booted && (status & JOB_INT_GLOBAL_IF))
 		ptdev->fw->booted = true;
@@ -1116,34 +1053,22 @@ static void panthor_job_irq_handler(struct panthor_irq *pirq, u32 status)
 		return;
 
 	panthor_sched_report_fw_events(ptdev, status);
-
-	if (tracepoint_enabled(gpu_job_irq) && start) {
-		if (check_sub_overflow(ktime_get_ns(), start, &duration))
-			duration = U32_MAX;
-		trace_gpu_job_irq(ptdev->base.dev, status, duration);
-	}
 }
-
-static irqreturn_t panthor_job_irq_threaded_handler(int irq, void *data)
-{
-	return panthor_irq_default_threaded_handler(data, panthor_job_irq_handler);
-}
+PANTHOR_IRQ_HANDLER(job, JOB, panthor_job_irq_handler);
 
 static int panthor_fw_start(struct panthor_device *ptdev)
 {
-	struct panthor_fw *fw = ptdev->fw;
 	bool timedout = false;
 
 	ptdev->fw->booted = false;
-	panthor_irq_enable_events(&ptdev->fw->irq, ~0);
-	panthor_irq_resume(&ptdev->fw->irq);
-	gpu_write(fw->iomem, MCU_CONTROL, MCU_CONTROL_AUTO);
+	panthor_job_irq_resume(&ptdev->fw->irq, ~0);
+	gpu_write(ptdev, MCU_CONTROL, MCU_CONTROL_AUTO);
 
 	if (!wait_event_timeout(ptdev->fw->req_waitqueue,
 				ptdev->fw->booted,
 				msecs_to_jiffies(1000))) {
 		if (!ptdev->fw->booted &&
-		    !(gpu_read(fw->irq.iomem, INT_STAT) & JOB_INT_GLOBAL_IF))
+		    !(gpu_read(ptdev, JOB_INT_STAT) & JOB_INT_GLOBAL_IF))
 			timedout = true;
 	}
 
@@ -1154,7 +1079,7 @@ static int panthor_fw_start(struct panthor_device *ptdev)
 			[MCU_STATUS_HALT] = "halt",
 			[MCU_STATUS_FATAL] = "fatal",
 		};
-		u32 status = gpu_read(fw->iomem, MCU_STATUS);
+		u32 status = gpu_read(ptdev, MCU_STATUS);
 
 		drm_err(&ptdev->base, "Failed to boot MCU (status=%s)",
 			status < ARRAY_SIZE(status_str) ? status_str[status] : "unknown");
@@ -1166,61 +1091,12 @@ static int panthor_fw_start(struct panthor_device *ptdev)
 
 static void panthor_fw_stop(struct panthor_device *ptdev)
 {
-	struct panthor_fw *fw = ptdev->fw;
 	u32 status;
 
-	gpu_write(fw->iomem, MCU_CONTROL, MCU_CONTROL_DISABLE);
-	if (gpu_read_poll_timeout(fw->iomem, MCU_STATUS, status,
+	gpu_write(ptdev, MCU_CONTROL, MCU_CONTROL_DISABLE);
+	if (gpu_read_poll_timeout(ptdev, MCU_STATUS, status,
 				  status == MCU_STATUS_DISABLED, 10, 100000))
 		drm_err(&ptdev->base, "Failed to stop MCU");
-}
-
-static bool panthor_fw_mcu_halted(struct panthor_device *ptdev)
-{
-	struct panthor_fw_global_iface *glb_iface = panthor_fw_get_glb_iface(ptdev);
-	bool halted;
-
-	halted = gpu_read(ptdev->fw->iomem, MCU_STATUS) == MCU_STATUS_HALT;
-
-	if (panthor_fw_has_glb_state(ptdev))
-		halted &= (GLB_STATE_GET(glb_iface->output->ack) == GLB_STATE_HALT);
-
-	return halted;
-}
-
-static void panthor_fw_halt_mcu(struct panthor_device *ptdev)
-{
-	struct panthor_fw_global_iface *glb_iface = panthor_fw_get_glb_iface(ptdev);
-
-	if (panthor_fw_has_glb_state(ptdev))
-		panthor_fw_update_reqs(glb_iface, req, GLB_STATE(GLB_STATE_HALT), GLB_STATE_MASK);
-	else
-		panthor_fw_update_reqs(glb_iface, req, GLB_HALT, GLB_HALT);
-
-	panthor_fw_ring_doorbell(ptdev, CSF_GLB_DOORBELL_ID);
-}
-
-static bool panthor_fw_wait_mcu_halted(struct panthor_device *ptdev)
-{
-	bool halted = false;
-
-	if (read_poll_timeout_atomic(panthor_fw_mcu_halted, halted, halted, 10,
-				     MCU_HALT_TIMEOUT_US, 0, ptdev)) {
-		drm_warn(&ptdev->base, "Timed out waiting for MCU to halt");
-		return false;
-	}
-
-	return true;
-}
-
-static void panthor_fw_mcu_set_active(struct panthor_device *ptdev)
-{
-	struct panthor_fw_global_iface *glb_iface = panthor_fw_get_glb_iface(ptdev);
-
-	if (panthor_fw_has_glb_state(ptdev))
-		panthor_fw_update_reqs(glb_iface, req, GLB_STATE(GLB_STATE_ACTIVE), GLB_STATE_MASK);
-	else
-		panthor_fw_update_reqs(glb_iface, req, 0, GLB_HALT);
 }
 
 /**
@@ -1239,14 +1115,21 @@ void panthor_fw_pre_reset(struct panthor_device *ptdev, bool on_hang)
 	ptdev->reset.fast = false;
 
 	if (!on_hang) {
-		panthor_fw_halt_mcu(ptdev);
-		if (!panthor_fw_wait_mcu_halted(ptdev))
-			drm_warn(&ptdev->base, "Failed to cleanly suspend MCU");
-		else
+		struct panthor_fw_global_iface *glb_iface = panthor_fw_get_glb_iface(ptdev);
+		u32 status;
+
+		panthor_fw_update_reqs(glb_iface, req, GLB_HALT, GLB_HALT);
+		gpu_write(ptdev, CSF_DOORBELL(CSF_GLB_DOORBELL_ID), 1);
+		if (!gpu_read_poll_timeout(ptdev, MCU_STATUS, status,
+					   status == MCU_STATUS_HALT, 10,
+					   100000)) {
 			ptdev->reset.fast = true;
+		} else {
+			drm_warn(&ptdev->base, "Failed to cleanly suspend MCU");
+		}
 	}
 
-	panthor_irq_suspend(&ptdev->fw->irq);
+	panthor_job_irq_suspend(&ptdev->fw->irq);
 	panthor_fw_stop(ptdev);
 }
 
@@ -1273,14 +1156,14 @@ int panthor_fw_post_reset(struct panthor_device *ptdev)
 		 */
 		panthor_reload_fw_sections(ptdev, true);
 	} else {
-		/*
-		 * If the FW was previously successfully halted in the pre-reset
-		 * operation, we need to transition it to active again before
-		 * the FW is rebooted.
+		/* The FW detects 0 -> 1 transitions. Make sure we reset
+		 * the HALT bit before the FW is rebooted.
 		 * This is not needed on a slow reset because FW sections are
 		 * re-initialized.
 		 */
-		panthor_fw_mcu_set_active(ptdev);
+		struct panthor_fw_global_iface *glb_iface = panthor_fw_get_glb_iface(ptdev);
+
+		panthor_fw_update_reqs(glb_iface, req, 0, GLB_HALT);
 	}
 
 	ret = panthor_fw_start(ptdev);
@@ -1311,11 +1194,13 @@ void panthor_fw_unplug(struct panthor_device *ptdev)
 {
 	struct panthor_fw_section *section;
 
-	disable_delayed_work_sync(&ptdev->fw->watchdog.ping_work);
+	cancel_delayed_work_sync(&ptdev->fw->watchdog.ping_work);
 
 	if (!IS_ENABLED(CONFIG_PM) || pm_runtime_active(ptdev->base.dev)) {
 		/* Make sure the IRQ handler cannot be called after that point. */
-		panthor_irq_suspend(&ptdev->fw->irq);
+		if (ptdev->fw->irq.irq)
+			panthor_job_irq_suspend(&ptdev->fw->irq);
+
 		panthor_fw_stop(ptdev);
 	}
 
@@ -1331,7 +1216,7 @@ void panthor_fw_unplug(struct panthor_device *ptdev)
 	ptdev->fw->vm = NULL;
 
 	if (!IS_ENABLED(CONFIG_PM) || pm_runtime_active(ptdev->base.dev))
-		panthor_hw_l2_power_off(ptdev);
+		panthor_gpu_power_off(ptdev, L2, ptdev->gpu_info.l2_present, 20000);
 }
 
 /**
@@ -1439,11 +1324,6 @@ int panthor_fw_csg_wait_acks(struct panthor_device *ptdev, u32 csg_slot,
 	return ret;
 }
 
-void panthor_fw_ring_doorbell(struct panthor_device *ptdev, u32 doorbell_id)
-{
-	gpu_write(ptdev->iomem, CSF_DOORBELL(doorbell_id), 1);
-}
-
 /**
  * panthor_fw_ring_csg_doorbells() - Ring command stream group doorbells.
  * @ptdev: Device.
@@ -1458,7 +1338,7 @@ void panthor_fw_ring_csg_doorbells(struct panthor_device *ptdev, u32 csg_mask)
 	struct panthor_fw_global_iface *glb_iface = panthor_fw_get_glb_iface(ptdev);
 
 	panthor_fw_toggle_reqs(glb_iface, doorbell_req, doorbell_ack, csg_mask);
-	panthor_fw_ring_doorbell(ptdev, CSF_GLB_DOORBELL_ID);
+	gpu_write(ptdev, CSF_DOORBELL(CSF_GLB_DOORBELL_ID), 1);
 }
 
 static void panthor_fw_ping_work(struct work_struct *work)
@@ -1473,7 +1353,7 @@ static void panthor_fw_ping_work(struct work_struct *work)
 		return;
 
 	panthor_fw_toggle_reqs(glb_iface, req, ack, GLB_PING);
-	panthor_fw_ring_doorbell(ptdev, CSF_GLB_DOORBELL_ID);
+	gpu_write(ptdev, CSF_DOORBELL(CSF_GLB_DOORBELL_ID), 1);
 
 	ret = panthor_fw_glb_wait_acks(ptdev, GLB_PING, &acked, 100);
 	if (ret) {
@@ -1500,7 +1380,6 @@ int panthor_fw_init(struct panthor_device *ptdev)
 	if (!fw)
 		return -ENOMEM;
 
-	fw->iomem = ptdev->iomem + MCU_CONTROL_BASE;
 	ptdev->fw = fw;
 	init_waitqueue_head(&fw->req_waitqueue);
 	INIT_LIST_HEAD(&fw->sections);
@@ -1510,15 +1389,13 @@ int panthor_fw_init(struct panthor_device *ptdev)
 	if (irq <= 0)
 		return -ENODEV;
 
-	ret = panthor_irq_request(ptdev, &fw->irq, irq,
-				  ptdev->iomem + JOB_INT_BASE, "job",
-				  panthor_job_irq_threaded_handler);
+	ret = panthor_request_job_irq(ptdev, &fw->irq, irq, 0);
 	if (ret) {
 		drm_err(&ptdev->base, "failed to request job irq");
 		return ret;
 	}
 
-	ret = panthor_hw_l2_power_on(ptdev);
+	ret = panthor_gpu_l2_power_on(ptdev);
 	if (ret)
 		return ret;
 
@@ -1562,4 +1439,3 @@ MODULE_FIRMWARE("arm/mali/arch10.12/mali_csffw.bin");
 MODULE_FIRMWARE("arm/mali/arch11.8/mali_csffw.bin");
 MODULE_FIRMWARE("arm/mali/arch12.8/mali_csffw.bin");
 MODULE_FIRMWARE("arm/mali/arch13.8/mali_csffw.bin");
-MODULE_FIRMWARE("arm/mali/arch14.8/mali_csffw.bin");

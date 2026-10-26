@@ -341,33 +341,29 @@ static int u2fzero_probe(struct hid_device *hdev,
 	if (ret)
 		return ret;
 
-	ret = u2fzero_fill_in_urb(dev);
-	if (ret)
-		goto err_hid_hw_stop;
+	u2fzero_fill_in_urb(dev);
 
 	dev->present = true;
 
 	minor = ((struct hidraw *) hdev->hidraw)->minor;
 
 	ret = u2fzero_init_led(dev, minor);
-	if (ret)
-		goto err_free_urb;
+	if (ret) {
+		hid_hw_stop(hdev);
+		return ret;
+	}
 
 	hid_info(hdev, "%s LED initialised\n", hw_configs[dev->hw_revision].name);
 
 	ret = u2fzero_init_hwrng(dev, minor);
-	if (ret)
-		goto err_free_urb;
+	if (ret) {
+		hid_hw_stop(hdev);
+		return ret;
+	}
 
 	hid_info(hdev, "%s RNG initialised\n", hw_configs[dev->hw_revision].name);
 
 	return 0;
-
-err_free_urb:
-	usb_free_urb(dev->urb);
-err_hid_hw_stop:
-	hid_hw_stop(hdev);
-	return ret;
 }
 
 static void u2fzero_remove(struct hid_device *hdev)

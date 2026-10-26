@@ -81,18 +81,14 @@ properties:
   phy-mode:
     contains:
       enum:
-        - 10gbase-kr
-        - 10gbase-r
         - usxgmii
+        - 10gbase-kr
 
   mdio:
     $ref: mdio.yaml#
     unevaluatedProperties: false
     description:
       Optional node for embedded MDIO controller.
-
-allOf:
-  - $ref: snps,dwmac-common.yaml#
 
 required:
   - compatible
@@ -107,7 +103,7 @@ required:
   - phy-handle
   - phy-mode
 
-unevaluatedProperties: false
+additionalProperties: false
 
 examples:
   - |

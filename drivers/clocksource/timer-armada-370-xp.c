@@ -22,7 +22,7 @@
  *     doing otherwise leads to using a clocksource whose frequency varies
  *     when doing cpufreq frequency changes.
  *
- * See Documentation/devicetree/bindings/timer/marvell,armada-370-timer.yaml
+ * See Documentation/devicetree/bindings/timer/marvell,armada-370-xp-timer.txt
  */
 
 #include <linux/init.h>

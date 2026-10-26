@@ -194,7 +194,8 @@ zl3073x_flash_cmd_wait(struct zl3073x_dev *zldev, u32 operation,
 	if (rc)
 		return rc;
 
-	FIELD_MODIFY(ZL_WRITE_FLASH_OP, &value, operation);
+	value &= ~ZL_WRITE_FLASH_OP;
+	value |= FIELD_PREP(ZL_WRITE_FLASH_OP, operation);
 
 	rc = zl3073x_write_u8(zldev, ZL_REG_WRITE_FLASH, value);
 	if (rc)

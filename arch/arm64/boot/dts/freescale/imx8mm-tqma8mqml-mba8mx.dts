@@ -76,6 +76,7 @@
 };
 
 &mipi_dsi {
+	samsung,burst-clock-frequency = <891000000>;
 	samsung,esc-clock-frequency = <20000000>;
 };
 
@@ -97,10 +98,6 @@
 	assigned-clock-rates = <10000000>, <250000000>;
 	assigned-clock-parents = <&clk IMX8MM_SYS_PLL2_50M>,
 				 <&clk IMX8MM_SYS_PLL2_250M>;
-	status = "okay";
-};
-
-&reg_usdhc2_vqmmc {
 	status = "okay";
 };
 
@@ -279,7 +276,8 @@
 			   <MX8MM_IOMUXC_SD2_DATA0_USDHC2_DATA0		0x1d4>,
 			   <MX8MM_IOMUXC_SD2_DATA1_USDHC2_DATA1		0x1d4>,
 			   <MX8MM_IOMUXC_SD2_DATA2_USDHC2_DATA2		0x1d4>,
-			   <MX8MM_IOMUXC_SD2_DATA3_USDHC2_DATA3		0x1d4>;
+			   <MX8MM_IOMUXC_SD2_DATA3_USDHC2_DATA3		0x1d4>,
+			   <MX8MM_IOMUXC_GPIO1_IO04_USDHC2_VSELECT	0x84>;
 	};
 
 	pinctrl_usdhc2_100mhz: usdhc2-100mhzgrp {
@@ -288,7 +286,8 @@
 			   <MX8MM_IOMUXC_SD2_DATA0_USDHC2_DATA0		0x1d4>,
 			   <MX8MM_IOMUXC_SD2_DATA1_USDHC2_DATA1		0x1d4>,
 			   <MX8MM_IOMUXC_SD2_DATA2_USDHC2_DATA2		0x1d4>,
-			   <MX8MM_IOMUXC_SD2_DATA3_USDHC2_DATA3		0x1d4>;
+			   <MX8MM_IOMUXC_SD2_DATA3_USDHC2_DATA3		0x1d4>,
+			   <MX8MM_IOMUXC_GPIO1_IO04_USDHC2_VSELECT	0x84>;
 	};
 
 	pinctrl_usdhc2_200mhz: usdhc2-200mhzgrp {
@@ -297,6 +296,7 @@
 			   <MX8MM_IOMUXC_SD2_DATA0_USDHC2_DATA0		0x1d4>,
 			   <MX8MM_IOMUXC_SD2_DATA1_USDHC2_DATA1		0x1d4>,
 			   <MX8MM_IOMUXC_SD2_DATA2_USDHC2_DATA2		0x1d4>,
-			   <MX8MM_IOMUXC_SD2_DATA3_USDHC2_DATA3		0x1d4>;
+			   <MX8MM_IOMUXC_SD2_DATA3_USDHC2_DATA3		0x1d4>,
+			   <MX8MM_IOMUXC_GPIO1_IO04_USDHC2_VSELECT	0x84>;
 	};
 };

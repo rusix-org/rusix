@@ -8,7 +8,6 @@
 
 #include <linux/fs.h>
 #include <linux/dlm.h>
-#include <linux/hex.h>
 #include <linux/slab.h>
 #include <linux/types.h>
 #include <linux/delay.h>
@@ -16,6 +15,9 @@
 #include <linux/sched/signal.h>
 
 #include "incore.h"
+#include "glock.h"
+#include "glops.h"
+#include "recovery.h"
 #include "util.h"
 #include "sys.h"
 #include "trace_gfs2.h"
@@ -75,13 +77,13 @@ static inline void gfs2_update_reply_times(struct gfs2_glock *gl,
 					   bool blocking)
 {
 	struct gfs2_pcpu_lkstats *lks;
-	const unsigned gltype = glock_type(gl);
+	const unsigned gltype = gl->gl_name.ln_type;
 	unsigned index = blocking ? GFS2_LKS_SRTTB : GFS2_LKS_SRTT;
 	s64 rtt;
 
 	preempt_disable();
 	rtt = ktime_to_ns(ktime_sub(ktime_get_real(), gl->gl_dstamp));
-	lks = this_cpu_ptr(glock_sbd(gl)->sd_lkstats);
+	lks = this_cpu_ptr(gl->gl_name.ln_sbd->sd_lkstats);
 	gfs2_update_stats(&gl->gl_stats, index, rtt);		/* Local */
 	gfs2_update_stats(&lks->lkstats[gltype], index, rtt);	/* Global */
 	preempt_enable();
@@ -101,7 +103,7 @@ static inline void gfs2_update_reply_times(struct gfs2_glock *gl,
 static inline void gfs2_update_request_times(struct gfs2_glock *gl)
 {
 	struct gfs2_pcpu_lkstats *lks;
-	const unsigned gltype = glock_type(gl);
+	const unsigned gltype = gl->gl_name.ln_type;
 	ktime_t dstamp;
 	s64 irt;
 
@@ -109,7 +111,7 @@ static inline void gfs2_update_request_times(struct gfs2_glock *gl)
 	dstamp = gl->gl_dstamp;
 	gl->gl_dstamp = ktime_get_real();
 	irt = ktime_to_ns(ktime_sub(gl->gl_dstamp, dstamp));
-	lks = this_cpu_ptr(glock_sbd(gl)->sd_lkstats);
+	lks = this_cpu_ptr(gl->gl_name.ln_sbd->sd_lkstats);
 	gfs2_update_stats(&gl->gl_stats, GFS2_LKS_SIRT, irt);		/* Local */
 	gfs2_update_stats(&lks->lkstats[gltype], GFS2_LKS_SIRT, irt);	/* Global */
 	preempt_enable();
@@ -126,7 +128,7 @@ static void gdlm_ast(void *arg)
 	clear_bit(GLF_BLOCKING, &gl->gl_flags);
 
 	/* If the glock is dead, we only react to a dlm_unlock() reply. */
-	if (lockref_is_dead(&gl->gl_lockref) &&
+	if (__lockref_is_dead(&gl->gl_lockref) &&
 	    gl->gl_lksb.sb_status != -DLM_EUNLOCK)
 		return;
 
@@ -137,6 +139,8 @@ static void gdlm_ast(void *arg)
 
 	switch (gl->gl_lksb.sb_status) {
 	case -DLM_EUNLOCK: /* Unlocked, so glock can be freed */
+		if (gl->gl_ops->go_unlocked)
+			gl->gl_ops->go_unlocked(gl);
 		gfs2_glock_free(gl);
 		return;
 	case -DLM_ECANCEL: /* Cancel while getting lock */
@@ -182,6 +186,9 @@ static void gdlm_bast(void *arg, int mode)
 {
 	struct gfs2_glock *gl = arg;
 
+	if (__lockref_is_dead(&gl->gl_lockref))
+		return;
+
 	switch (mode) {
 	case DLM_LOCK_EX:
 		gfs2_glock_cb(gl, LM_ST_UNLOCKED);
@@ -193,7 +200,7 @@ static void gdlm_bast(void *arg, int mode)
 		gfs2_glock_cb(gl, LM_ST_SHARED);
 		break;
 	default:
-		fs_err(glock_sbd(gl), "unknown bast mode %d\n", mode);
+		fs_err(gl->gl_name.ln_sbd, "unknown bast mode %d\n", mode);
 		BUG();
 	}
 }
@@ -274,7 +281,7 @@ static void gfs2_reverse_hex(char *c, u64 value)
 static int gdlm_lock(struct gfs2_glock *gl, unsigned int req_state,
 		     unsigned int flags)
 {
-	struct lm_lockstruct *ls = &glock_sbd(gl)->sd_lockstruct;
+	struct lm_lockstruct *ls = &gl->gl_name.ln_sbd->sd_lockstruct;
 	bool blocking;
 	int cur, req;
 	u32 lkf;
@@ -282,8 +289,8 @@ static int gdlm_lock(struct gfs2_glock *gl, unsigned int req_state,
 	int error;
 
 	gl->gl_req = req_state;
-	cur = make_mode(glock_sbd(gl), gl->gl_state);
-	req = make_mode(glock_sbd(gl), req_state);
+	cur = make_mode(gl->gl_name.ln_sbd, gl->gl_state);
+	req = make_mode(gl->gl_name.ln_sbd, req_state);
 	blocking = !down_conversion(cur, req) &&
 		   !(flags & (LM_FLAG_TRY|LM_FLAG_TRY_1CB));
 	lkf = make_flags(gl, flags, req, blocking);
@@ -294,8 +301,8 @@ static int gdlm_lock(struct gfs2_glock *gl, unsigned int req_state,
 	if (test_bit(GLF_INITIAL, &gl->gl_flags)) {
 		memset(strname, ' ', GDLM_STRNAME_BYTES - 1);
 		strname[GDLM_STRNAME_BYTES - 1] = '\0';
-		gfs2_reverse_hex(strname + 7, glock_type(gl));
-		gfs2_reverse_hex(strname + 23, glock_number(gl));
+		gfs2_reverse_hex(strname + 7, gl->gl_name.ln_type);
+		gfs2_reverse_hex(strname + 23, gl->gl_name.ln_number);
 		gl->gl_dstamp = ktime_get_real();
 	} else {
 		gfs2_update_request_times(gl);
@@ -321,12 +328,12 @@ again:
 
 static void gdlm_put_lock(struct gfs2_glock *gl)
 {
-	struct gfs2_sbd *sdp = glock_sbd(gl);
+	struct gfs2_sbd *sdp = gl->gl_name.ln_sbd;
 	struct lm_lockstruct *ls = &sdp->sd_lockstruct;
 	uint32_t flags = 0;
 	int error;
 
-	BUG_ON(!lockref_is_dead(&gl->gl_lockref));
+	BUG_ON(!__lockref_is_dead(&gl->gl_lockref));
 
 	if (test_bit(GLF_INITIAL, &gl->gl_flags)) {
 		gfs2_glock_free(gl);
@@ -344,7 +351,7 @@ static void gdlm_put_lock(struct gfs2_glock *gl)
 	 * DLM_LOCK_PW mode, the lock value block (LVB) would be lost.
 	 */
 
-	if (test_bit(SDF_KILL, &sdp->sd_flags) &&
+	if (test_bit(SDF_SKIP_DLM_UNLOCK, &sdp->sd_flags) &&
 	    (!gl->gl_lksb.sb_lvbptr || gl->gl_state != LM_ST_EXCLUSIVE)) {
 		gfs2_glock_free_later(gl);
 		return;
@@ -373,14 +380,14 @@ again:
 
 	if (error) {
 		fs_err(sdp, "gdlm_unlock %x,%llx err=%d\n",
-		       glock_type(gl),
-		       (unsigned long long) glock_number(gl), error);
+		       gl->gl_name.ln_type,
+		       (unsigned long long)gl->gl_name.ln_number, error);
 	}
 }
 
 static void gdlm_cancel(struct gfs2_glock *gl)
 {
-	struct lm_lockstruct *ls = &glock_sbd(gl)->sd_lockstruct;
+	struct lm_lockstruct *ls = &gl->gl_name.ln_sbd->sd_lockstruct;
 
 	down_read(&ls->ls_sem);
 	if (likely(ls->ls_dlm != NULL)) {
@@ -392,6 +399,7 @@ static void gdlm_cancel(struct gfs2_glock *gl)
 /*
  * dlm/gfs2 recovery coordination using dlm_recover callbacks
  *
+ *  0. gfs2 checks for another cluster node withdraw, needing journal replay
  *  1. dlm_controld sees lockspace members change
  *  2. dlm_controld blocks dlm-kernel locking activity
  *  3. dlm_controld within dlm-kernel notifies gfs2 (recover_prep)
@@ -431,7 +439,7 @@ static void gdlm_cancel(struct gfs2_glock *gl)
  * 10. gfs2_control sets control_lock lvb = new gen + bits for failed jids
  * 12. gfs2_recover does journal recoveries for failed jids identified above
  * 14. gfs2_control clears control_lock lvb bits for recovered jids
- * 15. gfs2_control checks if recover_block == recover_start (step 3 occurred
+ * 15. gfs2_control checks if recover_block == recover_start (step 3 occured
  *     again) then do nothing, otherwise if recover_start > recover_block
  *     then clear BLOCK_LOCKS.
  *
@@ -649,6 +657,28 @@ static int control_lock(struct gfs2_sbd *sdp, int mode, uint32_t flags)
 			 &ls->ls_control_lksb, "control_lock");
 }
 
+/**
+ * remote_withdraw - react to a node withdrawing from the file system
+ * @sdp: The superblock
+ */
+static void remote_withdraw(struct gfs2_sbd *sdp)
+{
+	struct gfs2_jdesc *jd;
+	int ret = 0, count = 0;
+
+	list_for_each_entry(jd, &sdp->sd_jindex_list, jd_list) {
+		if (jd->jd_jid == sdp->sd_lockstruct.ls_jid)
+			continue;
+		ret = gfs2_recover_journal(jd, true);
+		if (ret)
+			break;
+		count++;
+	}
+
+	/* Now drop the additional reference we acquired */
+	fs_err(sdp, "Journals checked: %d, ret = %d.\n", count, ret);
+}
+
 static void gfs2_control_func(struct work_struct *work)
 {
 	struct gfs2_sbd *sdp = container_of(work, struct gfs2_sbd, sd_control_work.work);
@@ -658,6 +688,13 @@ static void gfs2_control_func(struct work_struct *work)
 	int write_lvb = 0;
 	int recover_size;
 	int i, error;
+
+	/* First check for other nodes that may have done a withdraw. */
+	if (test_bit(SDF_REMOTE_WITHDRAW, &sdp->sd_flags)) {
+		remote_withdraw(sdp);
+		clear_bit(SDF_REMOTE_WITHDRAW, &sdp->sd_flags);
+		return;
+	}
 
 	spin_lock(&ls->ls_recover_spin);
 	/*
@@ -809,7 +846,7 @@ static void gfs2_control_func(struct work_struct *work)
 
 	/*
 	 * No more jid bits set in lvb, all recovery is done, unblock locks
-	 * (unless a new recover_prep callback has occurred blocking locks
+	 * (unless a new recover_prep callback has occured blocking locks
 	 * again while working above)
 	 */
 

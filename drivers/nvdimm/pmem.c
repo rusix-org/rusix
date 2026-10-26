@@ -80,7 +80,7 @@ static void pmem_mkpage_present(struct pmem_device *pmem, phys_addr_t offset,
 		 * here since we're in the driver I/O path and
 		 * outstanding I/O requests pin the dev_pagemap.
 		 */
-		if (TestClearPageHWPoison(page))
+		if (test_and_clear_pmem_poison(page))
 			clear_mce_nospec(pfn);
 	}
 }
@@ -128,10 +128,10 @@ static void write_pmem(void *pmem_addr, struct page *page,
 	void *mem;
 
 	while (len) {
-		mem = kmap_local_page(page);
+		mem = kmap_atomic(page);
 		chunk = min_t(unsigned int, len, PAGE_SIZE - off);
 		memcpy_flushcache(pmem_addr, mem + off, chunk);
-		kunmap_local(mem);
+		kunmap_atomic(mem);
 		len -= chunk;
 		off = 0;
 		page++;
@@ -147,10 +147,10 @@ static blk_status_t read_pmem(struct page *page, unsigned int off,
 	void *mem;
 
 	while (len) {
-		mem = kmap_local_page(page);
+		mem = kmap_atomic(page);
 		chunk = min_t(unsigned int, len, PAGE_SIZE - off);
 		rem = copy_mc_to_kernel(mem + off, pmem_addr, chunk);
-		kunmap_local(mem);
+		kunmap_atomic(mem);
 		if (rem)
 			return BLK_STS_IOERR;
 		len -= chunk;
@@ -217,29 +217,23 @@ static void pmem_submit_bio(struct bio *bio)
 		}
 	}
 
-	if (bio_has_data(bio)) {
-		do_acct = blk_queue_io_stat(bio->bi_bdev->bd_disk->queue);
-		if (do_acct)
-			start = bio_start_io_acct(bio);
-		bio_for_each_segment(bvec, bio, iter) {
-			if (op_is_write(bio_op(bio)))
-				rc = pmem_do_write(pmem, bvec.bv_page,
-						   bvec.bv_offset,
-						   iter.bi_sector,
-						   bvec.bv_len);
-			else
-				rc = pmem_do_read(pmem, bvec.bv_page,
-						  bvec.bv_offset,
-						  iter.bi_sector,
-						  bvec.bv_len);
-			if (rc) {
-				bio->bi_status = rc;
-				break;
-			}
+	do_acct = blk_queue_io_stat(bio->bi_bdev->bd_disk->queue);
+	if (do_acct)
+		start = bio_start_io_acct(bio);
+	bio_for_each_segment(bvec, bio, iter) {
+		if (op_is_write(bio_op(bio)))
+			rc = pmem_do_write(pmem, bvec.bv_page, bvec.bv_offset,
+				iter.bi_sector, bvec.bv_len);
+		else
+			rc = pmem_do_read(pmem, bvec.bv_page, bvec.bv_offset,
+				iter.bi_sector, bvec.bv_len);
+		if (rc) {
+			bio->bi_status = rc;
+			break;
 		}
-		if (do_acct)
-			bio_end_io_acct(bio, start);
 	}
+	if (do_acct)
+		bio_end_io_acct(bio, start);
 
 	if ((bio->bi_opf & REQ_FUA) && !bio->bi_status) {
 		ret = nvdimm_flush(nd_region, bio);

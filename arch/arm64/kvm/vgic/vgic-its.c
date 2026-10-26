@@ -27,7 +27,7 @@ static struct kvm_device_ops kvm_arm_vgic_its_ops;
 
 static int vgic_its_save_tables_v0(struct vgic_its *its);
 static int vgic_its_restore_tables_v0(struct vgic_its *its);
-static void vgic_its_commit_v0(struct vgic_its *its);
+static int vgic_its_commit_v0(struct vgic_its *its);
 static int update_lpi_config(struct kvm *kvm, struct vgic_irq *irq,
 			     struct kvm_vcpu *filter_vcpu, bool needs_inv);
 
@@ -85,7 +85,7 @@ static struct vgic_irq *vgic_add_lpi(struct kvm *kvm, u32 intid,
 	if (irq)
 		return irq;
 
-	irq = kzalloc_obj(struct vgic_irq, GFP_KERNEL_ACCOUNT);
+	irq = kzalloc(sizeof(struct vgic_irq), GFP_KERNEL_ACCOUNT);
 	if (!irq)
 		return ERR_PTR(-ENOMEM);
 
@@ -121,8 +121,7 @@ static struct vgic_irq *vgic_add_lpi(struct kvm *kvm, u32 intid,
 		 * from the deferred release path, pending cleanup by
 		 * vgic_release_deleted_lpis(). Evict and free it if present.
 		 */
-		oldirq = __xa_store(&dist->lpi_xa, intid, irq,
-				    GFP_NOWAIT | __GFP_ACCOUNT);
+		oldirq = __xa_store(&dist->lpi_xa, intid, irq, 0);
 		ret = xa_err(oldirq);
 		if (ret) {
 			xa_unlock_irqrestore(&dist->lpi_xa, flags);
@@ -177,7 +176,7 @@ struct vgic_its_abi {
 	int ite_esz;
 	int (*save_tables)(struct vgic_its *its);
 	int (*restore_tables)(struct vgic_its *its);
-	void (*commit)(struct vgic_its *its);
+	int (*commit)(struct vgic_its *its);
 };
 
 #define ABI_0_ESZ	8
@@ -201,13 +200,13 @@ inline const struct vgic_its_abi *vgic_its_get_abi(struct vgic_its *its)
 	return &its_table_abi_versions[its->abi_rev];
 }
 
-static void vgic_its_set_abi(struct vgic_its *its, u32 rev)
+static int vgic_its_set_abi(struct vgic_its *its, u32 rev)
 {
 	const struct vgic_its_abi *abi;
 
 	its->abi_rev = rev;
 	abi = vgic_its_get_abi(its);
-	abi->commit(its);
+	return abi->commit(its);
 }
 
 /*
@@ -485,8 +484,7 @@ static int vgic_mmio_uaccess_write_its_iidr(struct kvm *kvm,
 
 	if (rev >= NR_ITS_ABIS)
 		return -EINVAL;
-	vgic_its_set_abi(its, rev);
-	return 0;
+	return vgic_its_set_abi(its, rev);
 }
 
 static unsigned long vgic_mmio_read_its_idregs(struct kvm *kvm,
@@ -978,7 +976,7 @@ static int vgic_its_alloc_collection(struct vgic_its *its,
 {
 	struct its_collection *collection;
 
-	collection = kzalloc_obj(*collection, GFP_KERNEL_ACCOUNT);
+	collection = kzalloc(sizeof(*collection), GFP_KERNEL_ACCOUNT);
 	if (!collection)
 		return -ENOMEM;
 
@@ -1022,7 +1020,7 @@ static struct its_ite *vgic_its_alloc_ite(struct its_device *device,
 {
 	struct its_ite *ite;
 
-	ite = kzalloc_obj(*ite, GFP_KERNEL_ACCOUNT);
+	ite = kzalloc(sizeof(*ite), GFP_KERNEL_ACCOUNT);
 	if (!ite)
 		return ERR_PTR(-ENOMEM);
 
@@ -1149,7 +1147,7 @@ static struct its_device *vgic_its_alloc_device(struct vgic_its *its,
 {
 	struct its_device *device;
 
-	device = kzalloc_obj(*device, GFP_KERNEL_ACCOUNT);
+	device = kzalloc(sizeof(*device), GFP_KERNEL_ACCOUNT);
 	if (!device)
 		return ERR_PTR(-ENOMEM);
 
@@ -1869,7 +1867,7 @@ static int vgic_its_create(struct kvm_device *dev, u32 type)
 	if (type != KVM_DEV_TYPE_ARM_VGIC_ITS)
 		return -ENODEV;
 
-	its = kzalloc_obj(struct vgic_its, GFP_KERNEL_ACCOUNT);
+	its = kzalloc(sizeof(struct vgic_its), GFP_KERNEL_ACCOUNT);
 	if (!its)
 		return -ENOMEM;
 
@@ -1911,11 +1909,14 @@ static int vgic_its_create(struct kvm_device *dev, u32 type)
 	its->baser_coll_table = INITIAL_BASER_VALUE |
 		((u64)GITS_BASER_TYPE_COLLECTION << GITS_BASER_TYPE_SHIFT);
 	dev->kvm->arch.vgic.propbaser = INITIAL_PROPBASER_VALUE;
+
 	dev->private = its;
 
-	vgic_its_set_abi(its, NR_ITS_ABIS - 1);
+	ret = vgic_its_set_abi(its, NR_ITS_ABIS - 1);
+
 	mutex_unlock(&dev->kvm->arch.config_lock);
-	return 0;
+
+	return ret;
 }
 
 static void vgic_its_destroy(struct kvm_device *kvm_dev)
@@ -2048,16 +2049,15 @@ static u32 compute_next_devid_offset(struct vgic_its *its, u64 baser,
 
 static u32 compute_next_eventid_offset(struct list_head *h, struct its_ite *ite)
 {
-	struct its_ite *next = ite;
+	struct its_ite *next;
+	u32 next_offset;
 
-	/* Point at the next ITE that vgic_its_save_ite() stores as valid. */
-	list_for_each_entry_continue(next, h, ite_list) {
-		if (next->collection)
-			return min_t(u32, next->event_id - ite->event_id,
-				     VITS_ITE_MAX_EVENTID_OFFSET);
-	}
+	if (list_is_last(&ite->ite_list, h))
+		return 0;
+	next = list_next_entry(ite, ite_list);
+	next_offset = next->event_id - ite->event_id;
 
-	return 0;
+	return min_t(u32, next_offset, VITS_ITE_MAX_EVENTID_OFFSET);
 }
 
 /**
@@ -2134,9 +2134,9 @@ static int vgic_its_save_ite(struct vgic_its *its, struct its_device *dev,
 	u64 val;
 
 	/*
-	 * MAPC with V=0 and clearing GITS_BASER<coll>.Valid both keep the
-	 * ITEs mapped while dropping their collection, and with it the ICID.
-	 * Save a zeroed entry, which the restore path reads back as invalid.
+	 * MAPC with V=0 keeps the ITEs mapped but drops their collection,
+	 * and with it the ICID. Save a zeroed entry, which the restore path
+	 * reads back as invalid.
 	 */
 	if (!ite->collection)
 		return vgic_its_write_entry_lock(its, gpa, 0ULL, ite);
@@ -2645,7 +2645,7 @@ static int vgic_its_restore_tables_v0(struct vgic_its *its)
 	return ret;
 }
 
-static void vgic_its_commit_v0(struct vgic_its *its)
+static int vgic_its_commit_v0(struct vgic_its *its)
 {
 	const struct vgic_its_abi *abi;
 
@@ -2658,6 +2658,7 @@ static void vgic_its_commit_v0(struct vgic_its *its)
 
 	its->baser_device_table |= (GIC_ENCODE_SZ(abi->dte_esz, 5)
 					<< GITS_BASER_ENTRY_SIZE_SHIFT);
+	return 0;
 }
 
 static void vgic_its_reset(struct kvm *kvm, struct vgic_its *its)

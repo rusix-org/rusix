@@ -84,11 +84,8 @@ static int test__PERF_RECORD(struct test_suite *test __maybe_unused, int subtest
 	CPU_ZERO_S(cpu_mask_size, cpu_mask);
 
 	perf_sample__init(&sample, /*all=*/false);
-	if (evlist == NULL) { /* Fallback for kernels lacking PERF_COUNT_SW_DUMMY */
-		struct target target = {};
-
-		evlist = evlist__new_default(&target, /*sample_callchains=*/false);
-	}
+	if (evlist == NULL) /* Fallback for kernels lacking PERF_COUNT_SW_DUMMY */
+		evlist = evlist__new_default();
 
 	if (evlist == NULL) {
 		pr_debug("Not enough memory to create evlist\n");
@@ -105,7 +102,7 @@ static int test__PERF_RECORD(struct test_suite *test __maybe_unused, int subtest
 	err = evlist__create_maps(evlist, &opts.target);
 	if (err < 0) {
 		pr_debug("Not enough memory to create thread/cpu maps\n");
-		goto out_put_evlist;
+		goto out_delete_evlist;
 	}
 
 	/*
@@ -117,7 +114,7 @@ static int test__PERF_RECORD(struct test_suite *test __maybe_unused, int subtest
 	err = evlist__prepare_workload(evlist, &opts.target, argv, false, NULL);
 	if (err < 0) {
 		pr_debug("Couldn't run the workload!\n");
-		goto out_put_evlist;
+		goto out_delete_evlist;
 	}
 
 	/*
@@ -129,12 +126,12 @@ static int test__PERF_RECORD(struct test_suite *test __maybe_unused, int subtest
 	evsel__set_sample_bit(evsel, TIME);
 	evlist__config(evlist, &opts, NULL);
 
-	err = sched__get_first_possible_cpu(evlist__workload_pid(evlist), cpu_mask);
+	err = sched__get_first_possible_cpu(evlist->workload.pid, cpu_mask);
 	if (err < 0) {
 		pr_debug("sched__get_first_possible_cpu: %s\n",
 			 str_error_r(errno, sbuf, sizeof(sbuf)));
 		evlist__cancel_workload(evlist);
-		goto out_put_evlist;
+		goto out_delete_evlist;
 	}
 
 	cpu = err;
@@ -142,11 +139,11 @@ static int test__PERF_RECORD(struct test_suite *test __maybe_unused, int subtest
 	/*
 	 * So that we can check perf_sample.cpu on all the samples.
 	 */
-	if (sched_setaffinity(evlist__workload_pid(evlist), cpu_mask_size, cpu_mask) < 0) {
+	if (sched_setaffinity(evlist->workload.pid, cpu_mask_size, cpu_mask) < 0) {
 		pr_debug("sched_setaffinity: %s\n",
 			 str_error_r(errno, sbuf, sizeof(sbuf)));
 		evlist__cancel_workload(evlist);
-		goto out_put_evlist;
+		goto out_delete_evlist;
 	}
 
 	/*
@@ -158,7 +155,7 @@ static int test__PERF_RECORD(struct test_suite *test __maybe_unused, int subtest
 		pr_debug("perf_evlist__open: %s\n",
 			 str_error_r(errno, sbuf, sizeof(sbuf)));
 		evlist__cancel_workload(evlist);
-		goto out_put_evlist;
+		goto out_delete_evlist;
 	}
 
 	/*
@@ -166,12 +163,12 @@ static int test__PERF_RECORD(struct test_suite *test __maybe_unused, int subtest
 	 * fds in the same CPU to be injected in the same mmap ring buffer
 	 * (using ioctl(PERF_EVENT_IOC_SET_OUTPUT)).
 	 */
-	err = evlist__do_mmap(evlist, opts.mmap_pages);
+	err = evlist__mmap(evlist, opts.mmap_pages);
 	if (err < 0) {
 		pr_debug("evlist__mmap: %s\n",
 			 str_error_r(errno, sbuf, sizeof(sbuf)));
 		evlist__cancel_workload(evlist);
-		goto out_put_evlist;
+		goto out_delete_evlist;
 	}
 
 	/*
@@ -188,11 +185,11 @@ static int test__PERF_RECORD(struct test_suite *test __maybe_unused, int subtest
 	while (1) {
 		int before = total_events;
 
-		for (i = 0; i < evlist__core(evlist)->nr_mmaps; i++) {
+		for (i = 0; i < evlist->core.nr_mmaps; i++) {
 			union perf_event *event;
 			struct mmap *md;
 
-			md = &evlist__mmap(evlist)[i];
+			md = &evlist->mmap[i];
 			if (perf_mmap__read_init(&md->core) < 0)
 				continue;
 
@@ -209,7 +206,7 @@ static int test__PERF_RECORD(struct test_suite *test __maybe_unused, int subtest
 					if (verbose > 0)
 						perf_event__fprintf(event, NULL, stderr);
 					pr_debug("Couldn't parse sample\n");
-					goto out_put_evlist;
+					goto out_delete_evlist;
 				}
 
 				if (verbose > 0) {
@@ -231,15 +228,15 @@ static int test__PERF_RECORD(struct test_suite *test __maybe_unused, int subtest
 					++errs;
 				}
 
-				if ((pid_t)sample.pid != evlist__workload_pid(evlist)) {
+				if ((pid_t)sample.pid != evlist->workload.pid) {
 					pr_debug("%s with unexpected pid, expected %d, got %d\n",
-						 name, evlist__workload_pid(evlist), sample.pid);
+						 name, evlist->workload.pid, sample.pid);
 					++errs;
 				}
 
-				if ((pid_t)sample.tid != evlist__workload_pid(evlist)) {
+				if ((pid_t)sample.tid != evlist->workload.pid) {
 					pr_debug("%s with unexpected tid, expected %d, got %d\n",
-						 name, evlist__workload_pid(evlist), sample.tid);
+						 name, evlist->workload.pid, sample.tid);
 					++errs;
 				}
 
@@ -248,7 +245,7 @@ static int test__PERF_RECORD(struct test_suite *test __maybe_unused, int subtest
 				     type == PERF_RECORD_MMAP2 ||
 				     type == PERF_RECORD_FORK ||
 				     type == PERF_RECORD_EXIT) &&
-				     (pid_t)event->comm.pid != evlist__workload_pid(evlist)) {
+				     (pid_t)event->comm.pid != evlist->workload.pid) {
 					pr_debug("%s with unexpected pid/tid\n", name);
 					++errs;
 				}
@@ -300,7 +297,6 @@ static int test__PERF_RECORD(struct test_suite *test __maybe_unused, int subtest
 				}
 
 				perf_mmap__consume(&md->core);
-				perf_sample__exit(&sample);
 			}
 			perf_mmap__read_done(&md->core);
 		}
@@ -350,11 +346,11 @@ found_exit:
 		pr_debug("PERF_RECORD_MMAP for %s missing!\n", "[vdso]");
 		++errs;
 	}
-out_put_evlist:
+out_delete_evlist:
 	CPU_FREE(cpu_mask);
+	evlist__delete(evlist);
 out:
 	perf_sample__exit(&sample);
-	evlist__put(evlist);
 	if (err == -EACCES)
 		return TEST_SKIP;
 	if (err < 0 || errs != 0)

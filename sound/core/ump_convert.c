@@ -323,7 +323,7 @@ static int fill_rpn(struct ump_cvt_to_ump_bank *cc,
 					      cc->cc_data_lsb);
 
 	reset_rpn(cc);
-	return 8;
+	return 1;
 }
 
 /* convert to a MIDI 1.0 Channel Voice message */

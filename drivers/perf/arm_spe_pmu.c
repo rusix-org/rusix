@@ -87,7 +87,6 @@ struct arm_spe_pmu {
 #define SPE_PMU_FEAT_INV_FILT_EVT		(1UL << 6)
 #define SPE_PMU_FEAT_DISCARD			(1UL << 7)
 #define SPE_PMU_FEAT_EFT			(1UL << 8)
-#define SPE_PMU_FEAT_FDS			(1UL << 9)
 #define SPE_PMU_FEAT_DEV_PROBED			(1UL << 63)
 	u64					features;
 
@@ -172,9 +171,9 @@ static ssize_t arm_spe_pmu_cap_show_hex(struct device *dev,
 	return sysfs_emit(buf, "0x%llx\n", arm_spe_pmu_cap_get(spe_pmu, cap));
 }
 
-#define SPE_EXT_ATTR_ENTRY(_name, _func, _var)					\
-	&((struct dev_ext_attribute[]) {					\
-		{ __DEVICE_ATTR(_name, S_IRUGO, _func, NULL), (void *)_var }	\
+#define SPE_EXT_ATTR_ENTRY(_name, _func, _var)				\
+	&((struct dev_ext_attribute[]) {				\
+		{ __ATTR(_name, S_IRUGO, _func, NULL), (void *)_var }	\
 	})[0].attr.attr
 
 #define SPE_CAP_EXT_ATTR_ENTRY(_name, _var)				\
@@ -255,10 +254,6 @@ static const struct attribute_group arm_spe_pmu_cap_group = {
 #define ATTR_CFG_FLD_inv_event_filter_LO	0
 #define ATTR_CFG_FLD_inv_event_filter_HI	63
 
-#define ATTR_CFG_FLD_inv_data_src_filter_CFG	config4	/* inverse of PMSDSFR_EL1 */
-#define ATTR_CFG_FLD_inv_data_src_filter_LO	0
-#define ATTR_CFG_FLD_inv_data_src_filter_HI	63
-
 GEN_PMU_FORMAT_ATTR(ts_enable);
 GEN_PMU_FORMAT_ATTR(pa_enable);
 GEN_PMU_FORMAT_ATTR(pct_enable);
@@ -275,7 +270,6 @@ GEN_PMU_FORMAT_ATTR(float_filter);
 GEN_PMU_FORMAT_ATTR(float_filter_mask);
 GEN_PMU_FORMAT_ATTR(event_filter);
 GEN_PMU_FORMAT_ATTR(inv_event_filter);
-GEN_PMU_FORMAT_ATTR(inv_data_src_filter);
 GEN_PMU_FORMAT_ATTR(min_latency);
 GEN_PMU_FORMAT_ATTR(discard);
 
@@ -296,7 +290,6 @@ static struct attribute *arm_spe_pmu_formats_attr[] = {
 	&format_attr_float_filter_mask.attr,
 	&format_attr_event_filter.attr,
 	&format_attr_inv_event_filter.attr,
-	&format_attr_inv_data_src_filter.attr,
 	&format_attr_min_latency.attr,
 	&format_attr_discard.attr,
 	NULL,
@@ -313,10 +306,6 @@ static umode_t arm_spe_pmu_format_attr_is_visible(struct kobject *kobj,
 		return 0;
 
 	if (attr == &format_attr_inv_event_filter.attr && !(spe_pmu->features & SPE_PMU_FEAT_INV_FILT_EVT))
-		return 0;
-
-	if (attr == &format_attr_inv_data_src_filter.attr &&
-	    !(spe_pmu->features & SPE_PMU_FEAT_FDS))
 		return 0;
 
 	if ((attr == &format_attr_branch_filter_mask.attr ||
@@ -343,7 +332,7 @@ static ssize_t cpumask_show(struct device *dev,
 {
 	struct arm_spe_pmu *spe_pmu = dev_get_drvdata(dev);
 
-	return sysfs_emit(buf, "%*pbl\n", cpumask_pr_args(&spe_pmu->supported_cpus));
+	return cpumap_print_to_pagebuf(true, buf, &spe_pmu->supported_cpus);
 }
 static DEVICE_ATTR_RO(cpumask);
 
@@ -443,9 +432,6 @@ static u64 arm_spe_event_to_pmsfcr(struct perf_event *event)
 	if (ATTR_CFG_GET_FLD(attr, inv_event_filter))
 		reg |= PMSFCR_EL1_FnE;
 
-	if (ATTR_CFG_GET_FLD(attr, inv_data_src_filter))
-		reg |= PMSFCR_EL1_FDS;
-
 	if (ATTR_CFG_GET_FLD(attr, min_latency))
 		reg |= PMSFCR_EL1_FL;
 
@@ -468,17 +454,6 @@ static u64 arm_spe_event_to_pmslatfr(struct perf_event *event)
 {
 	struct perf_event_attr *attr = &event->attr;
 	return FIELD_PREP(PMSLATFR_EL1_MINLAT, ATTR_CFG_GET_FLD(attr, min_latency));
-}
-
-static u64 arm_spe_event_to_pmsdsfr(struct perf_event *event)
-{
-	struct perf_event_attr *attr = &event->attr;
-
-	/*
-	 * Data src filter is inverted so that the default value of 0 is
-	 * equivalent to no filtering.
-	 */
-	return ~ATTR_CFG_GET_FLD(attr, inv_data_src_filter);
 }
 
 static void arm_spe_pmu_pad_buf(struct perf_output_handle *handle, int len)
@@ -821,10 +796,6 @@ static int arm_spe_pmu_event_init(struct perf_event *event)
 	if (arm_spe_event_to_pmsnevfr(event) & spe_pmu->pmsevfr_res0)
 		return -EOPNOTSUPP;
 
-	if (arm_spe_event_to_pmsdsfr(event) != U64_MAX &&
-	    !(spe_pmu->features & SPE_PMU_FEAT_FDS))
-		return -EOPNOTSUPP;
-
 	if (attr->exclude_idle)
 		return -EOPNOTSUPP;
 
@@ -890,8 +861,6 @@ static void arm_spe_pmu_start(struct perf_event *event, int flags)
 		return;
 	}
 
-	perf_event_itrace_started(event);
-
 	reg = arm_spe_event_to_pmsfcr(event);
 	write_sysreg_s(reg, SYS_PMSFCR_EL1);
 
@@ -901,11 +870,6 @@ static void arm_spe_pmu_start(struct perf_event *event, int flags)
 	if (spe_pmu->features & SPE_PMU_FEAT_INV_FILT_EVT) {
 		reg = arm_spe_event_to_pmsnevfr(event);
 		write_sysreg_s(reg, SYS_PMSNEVFR_EL1);
-	}
-
-	if (spe_pmu->features & SPE_PMU_FEAT_FDS) {
-		reg = arm_spe_event_to_pmsdsfr(event);
-		write_sysreg_s(reg, SYS_PMSDSFR_EL1);
 	}
 
 	reg = arm_spe_event_to_pmslatfr(event);
@@ -1022,7 +986,7 @@ static void *arm_spe_pmu_setup_aux(struct perf_event *event, void **pages,
 	if (!buf)
 		return NULL;
 
-	pglist = kzalloc_objs(*pglist, nr_pages);
+	pglist = kcalloc(nr_pages, sizeof(*pglist), GFP_KERNEL);
 	if (!pglist)
 		goto out_free_buf;
 
@@ -1167,9 +1131,6 @@ static void __arm_spe_pmu_dev_probe(void *info)
 	if (FIELD_GET(PMSIDR_EL1_EFT, reg))
 		spe_pmu->features |= SPE_PMU_FEAT_EFT;
 
-	if (FIELD_GET(PMSIDR_EL1_FDS, reg))
-		spe_pmu->features |= SPE_PMU_FEAT_FDS;
-
 	/* This field has a spaced out encoding, so just use a look-up */
 	fld = FIELD_GET(PMSIDR_EL1_INTERVAL, reg);
 	switch (fld) {
@@ -1304,8 +1265,8 @@ static int arm_spe_pmu_dev_init(struct arm_spe_pmu *spe_pmu)
 		return -ENXIO;
 
 	/* Request our PPIs (note that the IRQ is still disabled) */
-	ret = request_percpu_irq_affinity(spe_pmu->irq, arm_spe_pmu_irq_handler,
-					  DRVNAME, mask, spe_pmu->handle);
+	ret = request_percpu_irq(spe_pmu->irq, arm_spe_pmu_irq_handler, DRVNAME,
+				 spe_pmu->handle);
 	if (ret)
 		return ret;
 
@@ -1332,10 +1293,8 @@ static void arm_spe_pmu_dev_teardown(struct arm_spe_pmu *spe_pmu)
 static int arm_spe_pmu_irq_probe(struct arm_spe_pmu *spe_pmu)
 {
 	struct platform_device *pdev = spe_pmu->pdev;
-	const struct cpumask *affinity;
-	int irq;
+	int irq = platform_get_irq(pdev, 0);
 
-	irq = platform_get_irq_affinity(pdev, 0, &affinity);
 	if (irq < 0)
 		return -ENXIO;
 
@@ -1344,7 +1303,10 @@ static int arm_spe_pmu_irq_probe(struct arm_spe_pmu *spe_pmu)
 		return -EINVAL;
 	}
 
-	cpumask_copy(&spe_pmu->supported_cpus, affinity);
+	if (irq_get_percpu_devid_partition(irq, &spe_pmu->supported_cpus)) {
+		dev_err(&pdev->dev, "failed to get PPI partition (%d)\n", irq);
+		return -EINVAL;
+	}
 
 	spe_pmu->irq = irq;
 	return 0;

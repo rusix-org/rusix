@@ -8,53 +8,107 @@
  *  more details.
  */
 
-#include <linux/errno.h>
+#include <linux/module.h>
+#include <linux/slab.h>
+#include <linux/string.h>
 #include <linux/fb.h>
-#include <linux/font.h>
-
+#include <linux/vt_kern.h>
+#include <linux/console.h>
+#include <asm/types.h>
 #include "fbcon.h"
 #include "fbcon_rotate.h"
 
-int fbcon_rotate_font(struct fb_info *info, struct vc_data *vc)
+static int fbcon_rotate_font(struct fb_info *info, struct vc_data *vc)
 {
 	struct fbcon_par *par = info->fbcon_par;
-	unsigned char *buf;
-	int ret;
+	int len, err = 0;
+	int s_cellsize, d_cellsize, i;
+	const u8 *src;
+	u8 *dst;
 
-	if (par->p->fontdata == par->rotated.fontdata &&
-	    par->rotate == par->rotated.buf_rotate &&
-	    vc->vc_font.width == par->rotated.buf_width &&
-	    vc->vc_font.height == par->rotated.buf_height &&
-	    vc->vc_font.charcount == par->rotated.buf_charcount &&
-	    par->rotated.buf)
-		return 0;
+	if (vc->vc_font.data == par->fontdata &&
+	    par->p->con_rotate == par->cur_rotate)
+		goto finished;
 
-	par->rotated.fontdata = par->p->fontdata;
-	par->rotated.buf_rotate = par->rotate;
-	par->rotated.buf_width = vc->vc_font.width;
-	par->rotated.buf_height = vc->vc_font.height;
-	par->rotated.buf_charcount = vc->vc_font.charcount;
+	src = par->fontdata = vc->vc_font.data;
+	par->cur_rotate = par->p->con_rotate;
+	len = vc->vc_font.charcount;
+	s_cellsize = ((vc->vc_font.width + 7)/8) *
+		vc->vc_font.height;
+	d_cellsize = s_cellsize;
+
+	if (par->rotate == FB_ROTATE_CW ||
+	    par->rotate == FB_ROTATE_CCW)
+		d_cellsize = ((vc->vc_font.height + 7)/8) *
+			vc->vc_font.width;
 
 	if (info->fbops->fb_sync)
 		info->fbops->fb_sync(info);
 
-	buf = font_data_rotate(par->rotated.fontdata, vc->vc_font.width,
-			       vc->vc_font.height, vc->vc_font.charcount,
-			       par->rotated.buf_rotate, par->rotated.buf,
-			       &par->rotated.bufsize);
-	if (IS_ERR(buf)) {
-		ret = PTR_ERR(buf);
-		goto err_kfree;
+	if (par->fd_size < d_cellsize * len) {
+		kfree(par->fontbuffer);
+		par->fontbuffer = NULL;
+		par->fd_size = 0;
+
+		dst = kmalloc_array(len, d_cellsize, GFP_KERNEL);
+
+		if (dst == NULL) {
+			err = -ENOMEM;
+			goto finished;
+		}
+
+		par->fd_size = d_cellsize * len;
+		par->fontbuffer = dst;
 	}
 
-	par->rotated.buf = buf;
+	dst = par->fontbuffer;
+	memset(dst, 0, par->fd_size);
 
-	return 0;
+	switch (par->rotate) {
+	case FB_ROTATE_UD:
+		for (i = len; i--; ) {
+			rotate_ud(src, dst, vc->vc_font.width,
+				  vc->vc_font.height);
 
-err_kfree:
-	kfree(par->rotated.buf);
-	par->rotated.buf = NULL; /* clear here to avoid output */
-	par->rotated.bufsize = 0;
+			src += s_cellsize;
+			dst += d_cellsize;
+		}
+		break;
+	case FB_ROTATE_CW:
+		for (i = len; i--; ) {
+			rotate_cw(src, dst, vc->vc_font.width,
+				  vc->vc_font.height);
+			src += s_cellsize;
+			dst += d_cellsize;
+		}
+		break;
+	case FB_ROTATE_CCW:
+		for (i = len; i--; ) {
+			rotate_ccw(src, dst, vc->vc_font.width,
+				   vc->vc_font.height);
+			src += s_cellsize;
+			dst += d_cellsize;
+		}
+		break;
+	}
 
-	return ret;
+finished:
+	return err;
+}
+
+void fbcon_set_rotate(struct fbcon_par *par)
+{
+	par->rotate_font = fbcon_rotate_font;
+
+	switch (par->rotate) {
+	case FB_ROTATE_CW:
+		fbcon_rotate_cw(par);
+		break;
+	case FB_ROTATE_UD:
+		fbcon_rotate_ud(par);
+		break;
+	case FB_ROTATE_CCW:
+		fbcon_rotate_ccw(par);
+		break;
+	}
 }

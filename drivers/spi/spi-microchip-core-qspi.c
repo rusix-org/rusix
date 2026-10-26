@@ -99,6 +99,7 @@
 #define REG_IEN			(0x0c)
 #define REG_STATUS		(0x10)
 #define REG_DIRECT_ACCESS	(0x14)
+#define REG_UPPER_ACCESS	(0x18)
 #define REG_RX_DATA		(0x40)
 #define REG_TX_DATA		(0x44)
 #define REG_X4_RX_DATA		(0x48)
@@ -196,7 +197,7 @@ static int mchp_coreqspi_setup(struct spi_device *spi)
 	return 0;
 }
 
-static void mchp_coreqspi_read_op(struct mchp_coreqspi *qspi)
+static inline void mchp_coreqspi_read_op(struct mchp_coreqspi *qspi)
 {
 	u32 control, data;
 
@@ -232,7 +233,7 @@ static void mchp_coreqspi_read_op(struct mchp_coreqspi *qspi)
 	}
 }
 
-static void mchp_coreqspi_write_op(struct mchp_coreqspi *qspi)
+static inline void mchp_coreqspi_write_op(struct mchp_coreqspi *qspi)
 {
 	u32 control, data;
 
@@ -260,7 +261,7 @@ static void mchp_coreqspi_write_op(struct mchp_coreqspi *qspi)
 	}
 }
 
-static void mchp_coreqspi_write_read_op(struct mchp_coreqspi *qspi)
+static inline void mchp_coreqspi_write_read_op(struct mchp_coreqspi *qspi)
 {
 	u32 control, data;
 
@@ -418,7 +419,7 @@ static int mchp_coreqspi_setup_clock(struct mchp_coreqspi *qspi, struct spi_devi
 	return 0;
 }
 
-static void mchp_coreqspi_config_op(struct mchp_coreqspi *qspi, const struct spi_mem_op *op)
+static inline void mchp_coreqspi_config_op(struct mchp_coreqspi *qspi, const struct spi_mem_op *op)
 {
 	u32 idle_cycles = 0;
 	int total_bytes, cmd_bytes, frames, ctrl;
@@ -631,7 +632,7 @@ static int mchp_coreqspi_prepare_message(struct spi_controller *ctlr, struct spi
 	ret = mchp_coreqspi_wait_for_ready(qspi);
 	if (ret) {
 		mutex_unlock(&qspi->op_lock);
-		dev_err(&m->spi->dev, "Timeout waiting on QSPI ready.\n");
+		dev_err(&ctlr->dev, "Timeout waiting on QSPI ready.\n");
 		return ret;
 	}
 

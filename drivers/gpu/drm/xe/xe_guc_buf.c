@@ -6,6 +6,7 @@
 #include <linux/cleanup.h>
 #include <drm/drm_managed.h>
 
+#include "xe_assert.h"
 #include "xe_bo.h"
 #include "xe_gt_printk.h"
 #include "xe_guc.h"
@@ -134,19 +135,6 @@ void xe_guc_buf_release(const struct xe_guc_buf buf)
 {
 	if (xe_guc_buf_is_valid(buf))
 		xe_sa_bo_free(buf.sa, NULL);
-}
-
-/**
- * xe_guc_buf_sync_read() - Copy the data from the GPU memory to the sub-allocation.
- * @buf: the &xe_guc_buf to sync
- *
- * Return: a CPU pointer of the sub-allocation.
- */
-void *xe_guc_buf_sync_read(const struct xe_guc_buf buf)
-{
-	xe_sa_bo_sync_read(buf.sa);
-
-	return xe_sa_bo_cpu_addr(buf.sa);
 }
 
 /**

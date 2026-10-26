@@ -6,7 +6,7 @@
  * Copyright 2007-2008	Johannes Berg <johannes@sipsolutions.net>
  * Copyright 2013-2014  Intel Mobile Communications GmbH
  * Copyright 2015-2017	Intel Deutschland GmbH
- * Copyright 2018-2020, 2022-2026  Intel Corporation
+ * Copyright 2018-2020, 2022-2025  Intel Corporation
  */
 
 #include <crypto/utils.h>
@@ -150,14 +150,11 @@ static int ieee80211_key_enable_hw_accel(struct ieee80211_key *key)
 	sta = key->sta;
 
 	/*
-	 * Allow installation of a per-STA GTK if per-STA GTK is supported
-	 * by the driver or the interface is a NAN Data interface (as
-	 * per-station GTKs are required to be supported if secure NAN is
-	 * supported).
+	 * If this is a per-STA GTK, check if it
+	 * is supported; if not, return.
 	 */
 	if (sta && !(key->conf.flags & IEEE80211_KEY_FLAG_PAIRWISE) &&
-	    !(ieee80211_hw_check(&key->local->hw, SUPPORTS_PER_STA_GTK) ||
-	      sdata->vif.type == NL80211_IFTYPE_NAN_DATA))
+	    !ieee80211_hw_check(&key->local->hw, SUPPORTS_PER_STA_GTK))
 		goto out_unsupported;
 
 	if (sta && !sta->uploaded)
@@ -205,10 +202,6 @@ static int ieee80211_key_enable_hw_accel(struct ieee80211_key *key)
 			  sta ? sta->sta.addr : bcast_addr, ret);
 
  out_unsupported:
-	/* Control Integrity Protocol can only be done in hardware */
-	if (key->conf.flags & IEEE80211_KEY_FLAG_CIP)
-		return -EINVAL;
-
 	switch (key->conf.cipher) {
 	case WLAN_CIPHER_SUITE_WEP40:
 	case WLAN_CIPHER_SUITE_WEP104:
@@ -444,13 +437,11 @@ void ieee80211_set_default_beacon_key(struct ieee80211_link_data *link,
 static int ieee80211_key_replace(struct ieee80211_sub_if_data *sdata,
 				 struct ieee80211_link_data *link,
 				 struct sta_info *sta,
-				 enum ieee80211_key_flags flags,
+				 bool pairwise,
 				 struct ieee80211_key *old,
 				 struct ieee80211_key *new)
 {
 	struct link_sta_info *link_sta = sta ? &sta->deflink : NULL;
-	bool pairwise = flags & IEEE80211_KEY_FLAG_PAIRWISE;
-	bool cip = flags & IEEE80211_KEY_FLAG_CIP;
 	int link_id;
 	int idx;
 	int ret = 0;
@@ -541,8 +532,6 @@ static int ieee80211_key_replace(struct ieee80211_sub_if_data *sdata,
 			if (new &&
 			    !(new->conf.flags & IEEE80211_KEY_FLAG_NO_AUTO_TX))
 				_ieee80211_set_tx_key(new, true);
-		} else if (cip) {
-			rcu_assign_pointer(link_sta->cigtk[idx], new);
 		} else {
 			rcu_assign_pointer(link_sta->gtk[idx], new);
 		}
@@ -577,8 +566,6 @@ static int ieee80211_key_replace(struct ieee80211_sub_if_data *sdata,
 
 		if (is_wep || pairwise)
 			rcu_assign_pointer(sdata->keys[idx], new);
-		else if (cip)
-			rcu_assign_pointer(link->cigtk[idx], new);
 		else
 			rcu_assign_pointer(link->gtk[idx], new);
 
@@ -703,9 +690,10 @@ ieee80211_key_alloc(u32 cipher, int idx, size_t key_len,
 		 * Initialize AES key state here as an optimization so that
 		 * it does not need to be initialized for every packet.
 		 */
-		err = aes_cmac_preparekey(&key->u.aes_cmac.key, key_data,
-					  key_len);
-		if (err) {
+		key->u.aes_cmac.tfm =
+			ieee80211_aes_cmac_key_setup(key_data, key_len);
+		if (IS_ERR(key->u.aes_cmac.tfm)) {
+			err = PTR_ERR(key->u.aes_cmac.tfm);
 			kfree(key);
 			return ERR_PTR(err);
 		}
@@ -761,6 +749,10 @@ static void ieee80211_key_free_common(struct ieee80211_key *key)
 	case WLAN_CIPHER_SUITE_CCMP:
 	case WLAN_CIPHER_SUITE_CCMP_256:
 		ieee80211_aes_key_free(key->u.ccmp.tfm);
+		break;
+	case WLAN_CIPHER_SUITE_AES_CMAC:
+	case WLAN_CIPHER_SUITE_BIP_CMAC_256:
+		ieee80211_aes_cmac_key_free(key->u.aes_cmac.tfm);
 		break;
 	case WLAN_CIPHER_SUITE_BIP_GMAC_128:
 	case WLAN_CIPHER_SUITE_BIP_GMAC_256:
@@ -880,23 +872,14 @@ int ieee80211_key_link(struct ieee80211_key *key,
 		alt_key = wiphy_dereference(sdata->local->hw.wiphy,
 					    sta->ptk[idx ^ 1]);
 
-		/*
-		 * The rekey code assumes that the old and new key are using
+		/* The rekey code assumes that the old and new key are using
 		 * the same cipher. Enforce the assumption for pairwise keys.
-		 * NAN Data interfaces are exempt: Wi-Fi Aware v4.0 section 7.4
-		 * requires upgrading the ND-TKSA when a new NDP negotiates a
-		 * stronger cipher suite.
 		 */
-		if (sdata->vif.type != NL80211_IFTYPE_NAN_DATA &&
-		    ((alt_key && alt_key->conf.cipher != key->conf.cipher) ||
-		     (old_key && old_key->conf.cipher != key->conf.cipher))) {
+		if ((alt_key && alt_key->conf.cipher != key->conf.cipher) ||
+		    (old_key && old_key->conf.cipher != key->conf.cipher)) {
 			ret = -EOPNOTSUPP;
 			goto out;
 		}
-
-		/* Set CIP flag if enabled for the station */
-		if (sta->sta.cip)
-			key->conf.flags |= IEEE80211_KEY_FLAG_CIP;
 	} else if (sta) {
 		struct link_sta_info *link_sta = &sta->deflink;
 		int link_id = key->conf.link_id;
@@ -910,25 +893,15 @@ int ieee80211_key_link(struct ieee80211_key *key,
 			}
 		}
 
-		if (key->conf.flags & IEEE80211_KEY_FLAG_CIP)
-			old_key = wiphy_dereference(sdata->local->hw.wiphy,
-						    link_sta->cigtk[idx]);
-		else
-			old_key = wiphy_dereference(sdata->local->hw.wiphy,
-						    link_sta->gtk[idx]);
+		old_key = wiphy_dereference(sdata->local->hw.wiphy,
+					    link_sta->gtk[idx]);
 	} else {
-		if (key->conf.flags & IEEE80211_KEY_FLAG_CIP) {
+		if (idx < NUM_DEFAULT_KEYS)
 			old_key = wiphy_dereference(sdata->local->hw.wiphy,
-						    link->cigtk[idx]);
-		} else {
-			if (idx < NUM_DEFAULT_KEYS)
-				old_key = wiphy_dereference(sdata->local->hw.wiphy,
-							    sdata->keys[idx]);
-
-			if (!old_key)
-				old_key = wiphy_dereference(sdata->local->hw.wiphy,
-							    link->gtk[idx]);
-		}
+						    sdata->keys[idx]);
+		if (!old_key)
+			old_key = wiphy_dereference(sdata->local->hw.wiphy,
+						    link->gtk[idx]);
 	}
 
 	/* Non-pairwise keys must also not switch the cipher on rekey */
@@ -962,17 +935,9 @@ int ieee80211_key_link(struct ieee80211_key *key,
 	if (sta && sta->sta.spp_amsdu)
 		key->conf.flags |= IEEE80211_KEY_FLAG_SPP_AMSDU;
 
-	/* A CIP related key must be GCMP-256 (really GMAC-256) */
-	if ((key->conf.flags & IEEE80211_KEY_FLAG_CIP) &&
-	    key->conf.cipher != WLAN_CIPHER_SUITE_GCMP_256) {
-		ret = -EINVAL;
-		goto out;
-	}
-
 	increment_tailroom_need_count(sdata);
 
-	ret = ieee80211_key_replace(sdata, link, sta, key->conf.flags,
-				    old_key, key);
+	ret = ieee80211_key_replace(sdata, link, sta, pairwise, old_key, key);
 
 	if (!ret) {
 		ieee80211_debugfs_key_add(key);
@@ -998,7 +963,8 @@ void ieee80211_key_free(struct ieee80211_key *key, bool delay_tailroom)
 	 */
 	if (key->sdata)
 		ieee80211_key_replace(key->sdata, NULL, key->sta,
-				      key->conf.flags, key, NULL);
+				      key->conf.flags & IEEE80211_KEY_FLAG_PAIRWISE,
+				      key, NULL);
 	ieee80211_key_destroy(key, delay_tailroom);
 }
 
@@ -1129,7 +1095,8 @@ static void ieee80211_free_keys_iface(struct ieee80211_sub_if_data *sdata,
 
 	list_for_each_entry_safe(key, tmp, &sdata->key_list, list) {
 		ieee80211_key_replace(key->sdata, NULL, key->sta,
-				      key->conf.flags, key, NULL);
+				      key->conf.flags & IEEE80211_KEY_FLAG_PAIRWISE,
+				      key, NULL);
 		list_add_tail(&key->list, keys);
 	}
 
@@ -1149,7 +1116,8 @@ void ieee80211_remove_link_keys(struct ieee80211_link_data *link,
 		if (key->conf.link_id != link->link_id)
 			continue;
 		ieee80211_key_replace(key->sdata, link, key->sta,
-				      key->conf.flags, key, NULL);
+				      key->conf.flags & IEEE80211_KEY_FLAG_PAIRWISE,
+				      key, NULL);
 		list_add_tail(&key->list, keys);
 	}
 }
@@ -1225,17 +1193,8 @@ void ieee80211_free_sta_keys(struct ieee80211_local *local,
 		if (!key)
 			continue;
 		ieee80211_key_replace(key->sdata, NULL, key->sta,
-				      key->conf.flags, key, NULL);
-		__ieee80211_key_destroy(key, key->sdata->vif.type ==
-					NL80211_IFTYPE_STATION);
-	}
-
-	for (i = 0; i < ARRAY_SIZE(sta->deflink.cigtk); i++) {
-		key = wiphy_dereference(local->hw.wiphy, sta->deflink.cigtk[i]);
-		if (!key)
-			continue;
-		ieee80211_key_replace(key->sdata, NULL, key->sta,
-				      key->conf.flags, key, NULL);
+				      key->conf.flags & IEEE80211_KEY_FLAG_PAIRWISE,
+				      key, NULL);
 		__ieee80211_key_destroy(key, key->sdata->vif.type ==
 					NL80211_IFTYPE_STATION);
 	}
@@ -1245,7 +1204,8 @@ void ieee80211_free_sta_keys(struct ieee80211_local *local,
 		if (!key)
 			continue;
 		ieee80211_key_replace(key->sdata, NULL, key->sta,
-				      key->conf.flags, key, NULL);
+				      key->conf.flags & IEEE80211_KEY_FLAG_PAIRWISE,
+				      key, NULL);
 		__ieee80211_key_destroy(key, key->sdata->vif.type ==
 					NL80211_IFTYPE_STATION);
 	}
@@ -1403,7 +1363,7 @@ EXPORT_SYMBOL_GPL(ieee80211_set_key_rx_seq);
 struct ieee80211_key_conf *
 ieee80211_gtk_rekey_add(struct ieee80211_vif *vif,
 			u8 idx, u8 *key_data, u8 key_len,
-			int link_id, bool cigtk)
+			int link_id)
 {
 	struct ieee80211_sub_if_data *sdata = vif_to_sdata(vif);
 	struct ieee80211_local *local = sdata->local;
@@ -1427,20 +1387,10 @@ ieee80211_gtk_rekey_add(struct ieee80211_vif *vif,
 		    NUM_DEFAULT_BEACON_KEYS))
 		return ERR_PTR(-EINVAL);
 
-	if (WARN_ON(cigtk && idx >= NUM_CTRL_KEYS))
-		return ERR_PTR(-EINVAL);
-
-	if (cigtk)
-		prev_key = wiphy_dereference(local->hw.wiphy,
-					     link_data->cigtk[idx]);
-	else
-		prev_key = wiphy_dereference(local->hw.wiphy,
-					     link_data->gtk[idx]);
+	prev_key = wiphy_dereference(local->hw.wiphy,
+				     link_data->gtk[idx]);
 	if (!prev_key) {
-		if (cigtk) {
-			prev_key = wiphy_dereference(local->hw.wiphy,
-						     link_data->cigtk[idx ^ 1]);
-		} else if (idx < NUM_DEFAULT_KEYS) {
+		if (idx < NUM_DEFAULT_KEYS) {
 			for (int i = 0; i < NUM_DEFAULT_KEYS; i++) {
 				if (i == idx)
 					continue;
@@ -1470,9 +1420,6 @@ ieee80211_gtk_rekey_add(struct ieee80211_vif *vif,
 
 	if (sdata->u.mgd.mfp != IEEE80211_MFP_DISABLED)
 		key->conf.flags |= IEEE80211_KEY_FLAG_RX_MGMT;
-
-	if (prev_key->conf.flags & IEEE80211_KEY_FLAG_CIP)
-		key->conf.flags |= IEEE80211_KEY_FLAG_CIP;
 
 	key->conf.link_id = link_data->link_id;
 

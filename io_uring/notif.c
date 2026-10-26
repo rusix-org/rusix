@@ -1,4 +1,3 @@
-// SPDX-License-Identifier: GPL-2.0
 #include <linux/kernel.h>
 #include <linux/errno.h>
 #include <linux/file.h>
@@ -36,7 +35,6 @@ static void io_notif_tw_complete(struct io_tw_req tw_req, io_tw_token_t tw)
 		}
 
 		nd = nd->next;
-		ctx->nr_notifs--;
 		io_req_task_complete((struct io_tw_req){notif}, tw);
 	} while (nd);
 }
@@ -95,7 +93,7 @@ static int io_link_skb(struct sk_buff *skb, struct ubuf_info *uarg)
 	prev_nd = container_of(prev_uarg, struct io_notif_data, uarg);
 	prev_notif = cmd_to_io_kiocb(prev_nd);
 
-	/* make sure all notifications can be finished in the same task_work */
+	/* make sure all noifications can be finished in the same task_work */
 	if (unlikely(notif->ctx != prev_notif->ctx ||
 		     notif->tctx != prev_notif->tctx))
 		return -EEXIST;
@@ -120,7 +118,6 @@ struct io_kiocb *io_alloc_notif(struct io_ring_ctx *ctx)
 
 	if (unlikely(!io_alloc_req(ctx, &notif)))
 		return NULL;
-	ctx->nr_notifs++;
 	notif->ctx = ctx;
 	notif->opcode = IORING_OP_NOP;
 	notif->flags = 0;

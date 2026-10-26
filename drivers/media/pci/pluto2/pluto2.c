@@ -582,7 +582,7 @@ static int pluto2_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 	struct dmx_demux *dmx;
 	int ret = -ENOMEM;
 
-	pluto = kzalloc_obj(struct pluto);
+	pluto = kzalloc(sizeof(struct pluto), GFP_KERNEL);
 	if (!pluto)
 		goto out;
 
@@ -762,7 +762,10 @@ static void pluto2_remove(struct pci_dev *pdev)
 
 static const struct pci_device_id pluto2_id_table[] = {
 	{
-		PCI_VDEVICE(SCM, PCI_DEVICE_ID_PLUTO2),
+		.vendor = PCI_VENDOR_ID_SCM,
+		.device = PCI_DEVICE_ID_PLUTO2,
+		.subvendor = PCI_ANY_ID,
+		.subdevice = PCI_ANY_ID,
 	}, {
 		/* empty */
 	},

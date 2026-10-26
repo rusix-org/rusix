@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause
 /*
- * Copyright (C) 2024-2026 Intel Corporation
+ * Copyright (C) 2024-2025 Intel Corporation
  */
 #include <net/mac80211.h>
 
@@ -11,11 +11,36 @@
 #include "link.h"
 #include "constants.h"
 
+static void iwl_mld_vif_ps_iterator(void *data, u8 *mac,
+				    struct ieee80211_vif *vif)
+{
+	bool *ps_enable = (bool *)data;
+	struct iwl_mld_vif *mld_vif = iwl_mld_vif_from_mac80211(vif);
+
+	if (vif->type != NL80211_IFTYPE_STATION)
+		return;
+
+	*ps_enable &= !mld_vif->ps_disabled;
+}
+
 int iwl_mld_update_device_power(struct iwl_mld *mld, bool d3)
 {
 	struct iwl_device_power_cmd cmd = {};
+	bool enable_ps = false;
 
-	if (iwlmld_mod_params.power_scheme != IWL_POWER_SCHEME_CAM)
+	if (iwlmld_mod_params.power_scheme != IWL_POWER_SCHEME_CAM) {
+		enable_ps = true;
+
+		/* Disable power save if any STA interface has
+		 * power save turned off
+		 */
+		ieee80211_iterate_active_interfaces_mtx(mld->hw,
+							IEEE80211_IFACE_ITER_NORMAL,
+							iwl_mld_vif_ps_iterator,
+							&enable_ps);
+	}
+
+	if (enable_ps)
 		cmd.flags |=
 			cpu_to_le16(DEVICE_POWER_FLAGS_POWER_SAVE_ENA_MSK);
 
@@ -271,7 +296,9 @@ static void iwl_mld_power_build_cmd_v2(struct iwl_mld *mld,
 		return;
 
 	cmd->flags |= cpu_to_le16(POWER_FLAGS_POWER_MANAGEMENT_ENA_MSK);
-	cmd->flags |= cpu_to_le16(POWER_FLAGS_ENABLE_SMPS_MSK);
+
+	if (iwl_fw_lookup_cmd_ver(mld->fw, MAC_PM_POWER_TABLE, 0) >= 2)
+		cmd->flags |= cpu_to_le16(POWER_FLAGS_ENABLE_SMPS_MSK);
 
 	/* firmware supports LPRX for beacons at rate 1 Mbps or 6 Mbps only */
 	if (link_conf->beacon_rate &&
@@ -448,33 +475,6 @@ iwl_mld_tpe_sta_cmd_data(struct iwl_txpower_constraints_cmd *cmd,
 				       link->tpe.max_reg_client[0].power[i]);
 }
 
-static int
-iwl_mld_set_ap_power_type(struct iwl_txpower_constraints_cmd *cmd,
-			  struct ieee80211_vif *vif,
-			  struct ieee80211_bss_conf *link)
-{
-	if (vif->type == NL80211_IFTYPE_AP) {
-		cmd->ap_type = cpu_to_le16(IWL_6GHZ_AP_TYPE_VLP);
-		return 0;
-	}
-
-	switch (link->power_type) {
-	case IEEE80211_REG_LPI_AP:
-		cmd->ap_type = cpu_to_le16(IWL_6GHZ_AP_TYPE_LPI);
-		break;
-	case IEEE80211_REG_SP_AP:
-		cmd->ap_type = cpu_to_le16(IWL_6GHZ_AP_TYPE_SP);
-		break;
-	case IEEE80211_REG_VLP_AP:
-		cmd->ap_type = cpu_to_le16(IWL_6GHZ_AP_TYPE_VLP);
-		break;
-	default:
-		return -EINVAL;
-	}
-
-	return 0;
-}
-
 void
 iwl_mld_send_ap_tx_power_constraint_cmd(struct iwl_mld *mld,
 					struct ieee80211_vif *vif,
@@ -486,7 +486,7 @@ iwl_mld_send_ap_tx_power_constraint_cmd(struct iwl_mld *mld,
 
 	lockdep_assert_wiphy(mld->wiphy);
 
-	if (!mld_link->active && vif->type != NL80211_IFTYPE_AP)
+	if (!mld_link->active)
 		return;
 
 	if (link->chanreq.oper.chan->band != NL80211_BAND_6GHZ)
@@ -496,13 +496,15 @@ iwl_mld_send_ap_tx_power_constraint_cmd(struct iwl_mld *mld,
 	memset(cmd.psd_pwr, DEFAULT_TPE_TX_POWER, sizeof(cmd.psd_pwr));
 	memset(cmd.eirp_pwr, DEFAULT_TPE_TX_POWER, sizeof(cmd.eirp_pwr));
 
-	if (iwl_mld_set_ap_power_type(&cmd, vif, link))
+	if (vif->type == NL80211_IFTYPE_AP) {
+		cmd.ap_type = cpu_to_le16(IWL_6GHZ_AP_TYPE_VLP);
+	} else if (link->power_type == IEEE80211_REG_UNSET_AP) {
 		return;
-
-	if (vif->type != NL80211_IFTYPE_AP)
+	} else {
+		cmd.ap_type = cpu_to_le16(link->power_type - 1);
 		iwl_mld_tpe_sta_cmd_data(&cmd, link);
+	}
 
-	IWL_DEBUG_POWER(mld, "AP power type: %d\n", le16_to_cpu(cmd.ap_type));
 	ret = iwl_mld_send_cmd_pdu(mld,
 				   WIDE_ID(PHY_OPS_GROUP,
 					   AP_TX_POWER_CONSTRAINTS_CMD),
@@ -525,10 +527,7 @@ int iwl_mld_set_tx_power(struct iwl_mld *mld,
 		.common.set_mode = cpu_to_le32(IWL_TX_POWER_MODE_SET_LINK),
 		.common.pwr_restriction = cpu_to_le16(u_tx_power),
 	};
-	int len = sizeof(cmd.common) + sizeof(cmd.v12);
-
-	if (iwl_fw_lookup_cmd_ver(mld->fw, cmd_id, 10) == 10)
-		len = sizeof(cmd.common) + sizeof(cmd.v10);
+	int len = sizeof(cmd.common) + sizeof(cmd.v10);
 
 	if (WARN_ON(!mld_link))
 		return -ENODEV;

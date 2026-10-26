@@ -36,32 +36,6 @@ struct senary_spec {
 	unsigned int gpio_mic_led_mask;
 };
 
-enum {
-	SENARY_FIXUP_PINCFG_DEFAULT,
-};
-
-static const struct hda_pintbl senary_pincfg_default[] = {
-	{ 0x16, 0x02211020 }, /* Headphone */
-	{ 0x17, 0x40f001f0 }, /* Not used */
-	{ 0x18, 0x05a1904d }, /* Mic */
-	{ 0x19, 0x02a1104e }, /* Headset Mic */
-	{ 0x1a, 0x01819030 }, /* Line-in */
-	{ 0x1d, 0x01014010 }, /* Line-out */
-	{}
-};
-
-static const struct hda_fixup senary_fixups[] = {
-	[SENARY_FIXUP_PINCFG_DEFAULT] = {
-		.type = HDA_FIXUP_PINS,
-		.v.pins = senary_pincfg_default,
-	},
-};
-
-/* Quirk table for specific machines can be added here */
-static const struct hda_quirk sn6186_fixups[] = {
-	{}
-};
-
 #ifdef CONFIG_SND_HDA_INPUT_BEEP
 /* additional beep mixers; private_value will be overwritten */
 static const struct snd_kcontrol_new senary_beep_mixer[] = {
@@ -76,6 +50,7 @@ static int set_beep_amp(struct senary_spec *spec, hda_nid_t nid,
 	unsigned int beep_amp = HDA_COMPOSE_AMP_VAL(nid, 1, idx, dir);
 	int i;
 
+	spec->gen.beep_nid = nid;
 	for (i = 0; i < ARRAY_SIZE(senary_beep_mixer); i++) {
 		knew = snd_hda_gen_add_kctl(&spec->gen, NULL,
 					    &senary_beep_mixer[i]);
@@ -83,8 +58,6 @@ static int set_beep_amp(struct senary_spec *spec, hda_nid_t nid,
 			return -ENOMEM;
 		knew->private_value = beep_amp;
 	}
-
-	spec->gen.beep_nid = nid;
 	return 0;
 }
 
@@ -120,28 +93,16 @@ static void senary_auto_parse_eapd(struct hda_codec *codec)
 	}
 }
 
-/* Hardware specific initialization verbs */
-static void senary_init_verb(struct hda_codec *codec)
-{
-	/* Vendor specific init sequence */
-	snd_hda_codec_write(codec, 0x1b, 0x0, 0x05a, 0xaa);
-	snd_hda_codec_write(codec, 0x1b, 0x0, 0x059, 0x48);
-	snd_hda_codec_write(codec, 0x1b, 0x0, 0x01b, 0x00);
-	snd_hda_codec_write(codec, 0x1b, 0x0, 0x01c, 0x00);
-
-	/* Override pin caps for headset mic */
-	snd_hda_override_pin_caps(codec, 0x19, 0x2124);
-}
-
 static void senary_auto_turn_eapd(struct hda_codec *codec, int num_pins,
 			      const hda_nid_t *pins, bool on)
 {
 	int i;
 
 	for (i = 0; i < num_pins; i++) {
-		snd_hda_codec_write(codec, pins[i], 0,
-				    AC_VERB_SET_EAPD_BTLENABLE,
-				    on ? 0x02 : 0);
+		if (snd_hda_query_pin_caps(codec, pins[i]) & AC_PINCAP_EAPD)
+			snd_hda_codec_write(codec, pins[i], 0,
+					    AC_VERB_SET_EAPD_BTLENABLE,
+					    on ? 0x02 : 0);
 	}
 }
 
@@ -159,8 +120,14 @@ static void senary_init_gpio_led(struct hda_codec *codec)
 	struct senary_spec *spec = codec->spec;
 	unsigned int mask = spec->gpio_mute_led_mask | spec->gpio_mic_led_mask;
 
-	if (mask)
-		snd_hda_codec_set_gpio(codec, mask, mask, spec->gpio_led, 0);
+	if (mask) {
+		snd_hda_codec_write(codec, 0x01, 0, AC_VERB_SET_GPIO_MASK,
+				    mask);
+		snd_hda_codec_write(codec, 0x01, 0, AC_VERB_SET_GPIO_DIRECTION,
+				    mask);
+		snd_hda_codec_write(codec, 0x01, 0, AC_VERB_SET_GPIO_DATA,
+				    spec->gpio_led);
+	}
 }
 
 static int senary_init(struct hda_codec *codec)
@@ -169,7 +136,6 @@ static int senary_init(struct hda_codec *codec)
 
 	snd_hda_gen_init(codec);
 	senary_init_gpio_led(codec);
-	senary_init_verb(codec);
 	if (!spec->dynamic_eapd)
 		senary_auto_turn_eapd(codec, spec->num_eapds, spec->eapds, true);
 	snd_hda_apply_fixup(codec, HDA_FIXUP_ACT_INIT);
@@ -206,7 +172,7 @@ static int senary_probe(struct hda_codec *codec, const struct hda_device_id *id)
 
 	codec_info(codec, "%s: BIOS auto-probing.\n", codec->core.chip_name);
 
-	spec = kzalloc_obj(*spec);
+	spec = kzalloc(sizeof(*spec), GFP_KERNEL);
 	if (!spec)
 		return -ENOMEM;
 	snd_hda_gen_spec_init(&spec->gen);
@@ -215,29 +181,10 @@ static int senary_probe(struct hda_codec *codec, const struct hda_device_id *id)
 	senary_auto_parse_eapd(codec);
 	spec->gen.own_eapd_ctl = 1;
 
-	/* Setup fixups based on codec vendor ID */
-	switch (codec->core.vendor_id) {
-	case 0x1fa86186:
-		codec->pin_amp_workaround = 1;
-		spec->gen.mixer_nid = 0x15;
-		snd_hda_pick_fixup(codec, NULL, sn6186_fixups, senary_fixups);
-
-		/* If no specific quirk found, apply the default pin configuration */
-		if (codec->fixup_id == HDA_FIXUP_ID_NOT_SET)
-			codec->fixup_id = SENARY_FIXUP_PINCFG_DEFAULT;
-		break;
-	default:
-		snd_hda_pick_fixup(codec, NULL, sn6186_fixups, senary_fixups);
-		break;
-	}
-
-	snd_hda_apply_fixup(codec, HDA_FIXUP_ACT_PRE_PROBE);
-
-	/* Run hardware init verbs once during probe */
-	senary_init_verb(codec);
-
 	if (!spec->gen.vmaster_mute.hook)
 		spec->gen.vmaster_mute.hook = senary_auto_vmaster_hook;
+
+	snd_hda_apply_fixup(codec, HDA_FIXUP_ACT_PRE_PROBE);
 
 	err = snd_hda_parse_pin_defcfg(codec, &spec->gen.autocfg, NULL,
 				       spec->parse_flags);

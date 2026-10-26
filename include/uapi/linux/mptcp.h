@@ -71,8 +71,7 @@ struct mptcp_info {
 	__u64	mptcpi_bytes_acked;
 	__u8	mptcpi_subflows_total;
 	__u8	mptcpi_endp_laminar_max;
-	__u8	mptcpi_endp_fullmesh_max;
-	__u8	reserved;
+	__u8	reserved[2];
 	__u32	mptcpi_last_data_sent;
 	__u32	mptcpi_last_data_recv;
 	__u32	mptcpi_last_ack_recv;

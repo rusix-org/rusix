@@ -2,14 +2,11 @@
 
 #include <linux/aperture.h>
 #include <linux/clk.h>
-#include <linux/minmax.h>
-#include <linux/of_address.h>
 #include <linux/of_clk.h>
+#include <linux/minmax.h>
 #include <linux/of_reserved_mem.h>
-#include <linux/overflow.h>
 #include <linux/platform_data/simplefb.h>
 #include <linux/platform_device.h>
-#include <linux/pm.h>
 #include <linux/pm_domain.h>
 #include <linux/regulator/consumer.h>
 
@@ -26,10 +23,7 @@
 #include <drm/drm_gem_framebuffer_helper.h>
 #include <drm/drm_gem_shmem_helper.h>
 #include <drm/drm_managed.h>
-#include <drm/drm_modeset_helper.h>
 #include <drm/drm_modeset_helper_vtables.h>
-#include <drm/drm_of.h>
-#include <drm/drm_print.h>
 #include <drm/drm_probe_helper.h>
 
 #include "drm_sysfb_helper.h"
@@ -42,6 +36,13 @@
 /*
  * Helpers for simplefb
  */
+
+static int
+simplefb_get_validated_int(struct drm_device *dev, const char *name,
+			   uint32_t value)
+{
+	return drm_sysfb_get_validated_int(dev, name, value, INT_MAX);
+}
 
 static const struct drm_format_info *
 simplefb_get_validated_format(struct drm_device *dev, const char *format_name)
@@ -90,7 +91,7 @@ static int
 simplefb_get_stride_pd(struct drm_device *dev,
 		       const struct simplefb_platform_data *pd)
 {
-	return drm_sysfb_get_validated_int(dev, "stride", pd->stride, INT_MAX);
+	return simplefb_get_validated_int(dev, "stride", pd->stride);
 }
 
 static const struct drm_format_info *
@@ -154,7 +155,7 @@ simplefb_get_stride_of(struct drm_device *dev, struct device_node *of_node)
 
 	if (ret)
 		return ret;
-	return drm_sysfb_get_validated_int(dev, "stride", stride, INT_MAX);
+	return simplefb_get_validated_int(dev, "stride", stride);
 }
 
 static const struct drm_format_info *
@@ -624,9 +625,7 @@ static struct simpledrm_device *simpledrm_device_create(struct drm_driver *drv,
 	int width, height, stride;
 	u16 width_mm = 0, height_mm = 0;
 	struct device_node *panel_node;
-	enum drm_panel_orientation orientation = DRM_MODE_PANEL_ORIENTATION_UNKNOWN;
 	const struct drm_format_info *format;
-	u64 size;
 	struct resource *res, *mem = NULL;
 	struct drm_plane *primary_plane;
 	struct drm_crtc *crtc;
@@ -700,12 +699,6 @@ static struct simpledrm_device *simpledrm_device_create(struct drm_driver *drv,
 			ret = simplefb_get_panel_height_mm_of(dev, panel_node);
 			if (ret > 0)
 				height_mm = ret;
-			/*
-			 * Ignore errors from parsing the panel orientation. With
-			 * the orientation initialized to UNKNOWN, the connector
-			 * helpers will do the right thing.
-			 */
-			drm_of_get_panel_orientation(panel_node, &orientation);
 			of_node_put(panel_node);
 		}
 	} else {
@@ -722,14 +715,6 @@ static struct simpledrm_device *simpledrm_device_create(struct drm_driver *drv,
 			return ERR_PTR(-EINVAL);
 		}
 		stride = pitch;
-	}
-	if (check_mul_overflow(height, stride, &size)) {
-		drm_err(dev, "framebuffer size exceeds maximum\n");
-		return ERR_PTR(-EINVAL);
-	}
-	if (ALIGN(size, PAGE_SIZE) < PAGE_SIZE) {
-		drm_err(dev, "page-aligned framebuffer exceeds maximum\n");
-		return ERR_PTR(-EINVAL);
 	}
 
 	sysfb->fb_mode = drm_sysfb_mode(width, height, width_mm, height_mm);
@@ -755,13 +740,6 @@ static struct simpledrm_device *simpledrm_device_create(struct drm_driver *drv,
 		}
 
 		drm_dbg(dev, "using system memory framebuffer at %pr\n", mem);
-
-		if (size > resource_size(mem)) {
-			drm_err(dev,
-				"framebuffer size of %llu exceeds memory range %pr\n",
-				size, mem);
-			return ERR_PTR(-EINVAL);
-		}
 
 		screen_base = devm_memremap(dev->dev, mem->start, resource_size(mem), MEMREMAP_WC);
 		if (IS_ERR(screen_base))
@@ -794,13 +772,6 @@ static struct simpledrm_device *simpledrm_device_create(struct drm_driver *drv,
 			 */
 			drm_warn(dev, "could not acquire memory region %pr\n", res);
 			mem = res;
-		}
-
-		if (size > resource_size(mem)) {
-			drm_err(dev,
-				"framebuffer size of %llu exceeds memory range %pr\n",
-				size, mem);
-			return ERR_PTR(-EINVAL);
 		}
 
 		screen_base = devm_ioremap_wc(&pdev->dev, mem->start, resource_size(mem));
@@ -869,7 +840,8 @@ static struct simpledrm_device *simpledrm_device_create(struct drm_driver *drv,
 	if (ret)
 		return ERR_PTR(ret);
 	drm_connector_helper_add(connector, &simpledrm_connector_helper_funcs);
-	drm_connector_set_panel_orientation_with_quirk(connector, orientation,
+	drm_connector_set_panel_orientation_with_quirk(connector,
+						       DRM_MODE_PANEL_ORIENTATION_UNKNOWN,
 						       width, height);
 
 	ret = drm_connector_attach_encoder(connector, encoder);
@@ -901,24 +873,6 @@ static struct drm_driver simpledrm_driver = {
 /*
  * Platform driver
  */
-
-static int simpledrm_pm_suspend(struct device *dev)
-{
-	struct simpledrm_device *sdev = dev_get_drvdata(dev);
-	struct drm_device *drm = &sdev->sysfb.dev;
-
-	return drm_mode_config_helper_suspend(drm);
-}
-
-static int simpledrm_pm_resume(struct device *dev)
-{
-	struct simpledrm_device *sdev = dev_get_drvdata(dev);
-	struct drm_device *drm = &sdev->sysfb.dev;
-
-	return drm_mode_config_helper_resume(drm);
-}
-
-static DEFINE_SIMPLE_DEV_PM_OPS(simpledrm_pm_ops, simpledrm_pm_suspend, simpledrm_pm_resume);
 
 static int simpledrm_probe(struct platform_device *pdev)
 {
@@ -960,7 +914,6 @@ static struct platform_driver simpledrm_platform_driver = {
 	.driver = {
 		.name = "simple-framebuffer", /* connect to sysfb */
 		.of_match_table = simpledrm_of_match_table,
-		.pm = pm_sleep_ptr(&simpledrm_pm_ops),
 	},
 	.probe = simpledrm_probe,
 	.remove = simpledrm_remove,

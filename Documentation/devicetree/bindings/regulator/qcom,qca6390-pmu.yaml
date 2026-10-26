@@ -16,17 +16,11 @@ description:
 
 properties:
   compatible:
-    oneOf:
-      - items:
-          - enum:
-              - qcom,wcn6755-pmu
-          - const: qcom,wcn6750-pmu
-
-      - enum:
-          - qcom,qca6390-pmu
-          - qcom,wcn6750-pmu
-          - qcom,wcn6855-pmu
-          - qcom,wcn7850-pmu
+    enum:
+      - qcom,qca6390-pmu
+      - qcom,wcn6750-pmu
+      - qcom,wcn6855-pmu
+      - qcom,wcn7850-pmu
 
   vdd-supply:
     description: VDD supply regulator handle

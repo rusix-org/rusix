@@ -34,7 +34,6 @@ struct dmub_psr_funcs;
 struct dmub_psr {
 	struct dc_context *ctx;
 	const struct dmub_psr_funcs *funcs;
-	uint32_t inst;
 };
 
 struct dmub_psr_funcs {

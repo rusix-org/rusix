@@ -46,7 +46,8 @@ static long do_sys_name_to_handle(const struct path *path,
 	if (f_handle.handle_bytes > MAX_HANDLE_SZ)
 		return -EINVAL;
 
-	handle = kzalloc_flex(*handle, f_handle, f_handle.handle_bytes);
+	handle = kzalloc(struct_size(handle, f_handle, f_handle.handle_bytes),
+			 GFP_KERNEL);
 	if (!handle)
 		return -ENOMEM;
 
@@ -156,8 +157,9 @@ SYSCALL_DEFINE5(name_to_handle_at, int, dfd, const char __user *, name,
 		fh_flags |= EXPORT_FH_CONNECTABLE;
 
 	lookup_flags = (flag & AT_SYMLINK_FOLLOW) ? LOOKUP_FOLLOW : 0;
-	CLASS(filename_uflags, filename)(name, flag);
-	err = filename_lookup(dfd, filename, lookup_flags, &path, NULL);
+	if (flag & AT_EMPTY_PATH)
+		lookup_flags |= LOOKUP_EMPTY;
+	err = user_path_at(dfd, name, lookup_flags, &path);
 	if (!err) {
 		err = do_sys_name_to_handle(&path, handle, mnt_id,
 					    flag & AT_HANDLE_MNT_ID_UNIQUE,
@@ -201,7 +203,7 @@ static int vfs_dentry_acceptable(void *context, struct dentry *dentry)
 	struct handle_to_path_ctx *ctx = context;
 	struct user_namespace *user_ns = current_user_ns();
 	struct dentry *d, *root = ctx->root.dentry;
-	const struct mnt_idmap *idmap = mnt_idmap(ctx->root.mnt);
+	struct mnt_idmap *idmap = mnt_idmap(ctx->root.mnt);
 	int retval = 0;
 
 	if (!root)
@@ -298,22 +300,6 @@ static bool capable_wrt_mount(struct mount *mount)
 	return mnt_ns && ns_capable(mnt_ns->user_ns, CAP_SYS_ADMIN);
 }
 
-/*
- * Does the caller have an unobstructed way to everything below @root? Only
- * if the mount is mounted, the caller is privileged over its mount namespace
- * and no locked child covers something below @root->dentry. One answer from
- * under mount_lock: an umount in between clears ->mnt_ns and takes the
- * children off the mount, the locked ones too.
- */
-static bool subtree_unobstructed(const struct path *root)
-{
-	struct mount *mnt = real_mount(root->mnt);
-
-	guard(mount_locked_reader)();
-	return is_mounted(root->mnt) && capable_wrt_mount(mnt) &&
-	       !has_locked_children(mnt, root->dentry);
-}
-
 static inline int may_decode_fh(struct handle_to_path_ctx *ctx,
 				unsigned int o_flags)
 {
@@ -348,7 +334,9 @@ static inline int may_decode_fh(struct handle_to_path_ctx *ctx,
 
 	if (ns_capable(root->mnt->mnt_sb->s_user_ns, CAP_SYS_ADMIN))
 		ctx->flags = HANDLE_CHECK_PERMS;
-	else if (subtree_unobstructed(root))
+	else if (is_mounted(root->mnt) &&
+		 capable_wrt_mount(real_mount(root->mnt)) &&
+		 !has_locked_children(real_mount(root->mnt), root->dentry))
 		ctx->flags = HANDLE_CHECK_PERMS | HANDLE_CHECK_SUBTREE;
 	else
 		return -EPERM;
@@ -393,7 +381,8 @@ static int handle_to_path(int mountdirfd, struct file_handle __user *ufh,
 	if (retval)
 		goto out_path;
 
-	handle = kmalloc_flex(*handle, f_handle, f_handle.handle_bytes);
+	handle = kmalloc(struct_size(handle, f_handle, f_handle.handle_bytes),
+			 GFP_KERNEL);
 	if (!handle) {
 		retval = -ENOMEM;
 		goto out_path;
@@ -427,28 +416,32 @@ out_path:
 	return retval;
 }
 
-static struct file *file_open_handle(struct path *path, int open_flag)
-{
-	const struct export_operations *eops;
-
-	eops = path->mnt->mnt_sb->s_export_op;
-	if (eops->open)
-		return eops->open(path, open_flag);
-
-	return file_open_root(path, "", open_flag, 0);
-}
-
 static long do_handle_open(int mountdirfd, struct file_handle __user *ufh,
 			   int open_flag)
 {
-	long retval;
+	long retval = 0;
 	struct path path __free(path_put) = {};
+	struct file *file;
+	const struct export_operations *eops;
 
 	retval = handle_to_path(mountdirfd, ufh, &path, open_flag);
 	if (retval)
 		return retval;
 
-	return FD_ADD(open_flag, file_open_handle(&path, open_flag));
+	CLASS(get_unused_fd, fd)(open_flag);
+	if (fd < 0)
+		return fd;
+
+	eops = path.mnt->mnt_sb->s_export_op;
+	if (eops->open)
+		file = eops->open(&path, open_flag);
+	else
+		file = file_open_root(&path, "", open_flag, 0);
+	if (IS_ERR(file))
+		return PTR_ERR(file);
+
+	fd_install(fd, file);
+	return take_fd(fd);
 }
 
 /**

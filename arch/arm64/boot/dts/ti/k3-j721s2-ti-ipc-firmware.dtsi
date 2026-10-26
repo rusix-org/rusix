@@ -190,7 +190,6 @@
 	mboxes = <&mailbox0_cluster0 &mbox_mcu_r5fss0_core0>;
 	memory-region = <&mcu_r5fss0_core0_dma_memory_region>,
 			<&mcu_r5fss0_core0_memory_region>;
-	memory-region-names = "dma", "firmware";
 	status = "okay";
 };
 
@@ -198,7 +197,6 @@
 	mboxes = <&mailbox0_cluster0 &mbox_mcu_r5fss0_core1>;
 	memory-region = <&mcu_r5fss0_core1_dma_memory_region>,
 			<&mcu_r5fss0_core1_memory_region>;
-	memory-region-names = "dma", "firmware";
 	status = "okay";
 };
 
@@ -211,7 +209,6 @@
 	mboxes = <&mailbox0_cluster1 &mbox_main_r5fss0_core0>;
 	memory-region = <&main_r5fss0_core0_dma_memory_region>,
 			<&main_r5fss0_core0_memory_region>;
-	memory-region-names = "dma", "firmware";
 	status = "okay";
 };
 
@@ -219,7 +216,6 @@
 	mboxes = <&mailbox0_cluster1 &mbox_main_r5fss0_core1>;
 	memory-region = <&main_r5fss0_core1_dma_memory_region>,
 			<&main_r5fss0_core1_memory_region>;
-	memory-region-names = "dma", "firmware";
 	status = "okay";
 };
 
@@ -232,7 +228,6 @@
 	mboxes = <&mailbox0_cluster2 &mbox_main_r5fss1_core0>;
 	memory-region = <&main_r5fss1_core0_dma_memory_region>,
 			<&main_r5fss1_core0_memory_region>;
-	memory-region-names = "dma", "firmware";
 	status = "okay";
 };
 
@@ -240,7 +235,6 @@
 	mboxes = <&mailbox0_cluster2 &mbox_main_r5fss1_core1>;
 	memory-region = <&main_r5fss1_core1_dma_memory_region>,
 			<&main_r5fss1_core1_memory_region>;
-	memory-region-names = "dma", "firmware";
 	status = "okay";
 };
 

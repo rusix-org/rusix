@@ -1601,7 +1601,8 @@ static int sky2_alloc_buffers(struct sky2_port *sky2)
 	if (!sky2->tx_le)
 		goto nomem;
 
-	sky2->tx_ring = kzalloc_objs(struct tx_ring_info, sky2->tx_ring_size);
+	sky2->tx_ring = kcalloc(sky2->tx_ring_size, sizeof(struct tx_ring_info),
+				GFP_KERNEL);
 	if (!sky2->tx_ring)
 		goto nomem;
 
@@ -1610,7 +1611,8 @@ static int sky2_alloc_buffers(struct sky2_port *sky2)
 	if (!sky2->rx_le)
 		goto nomem;
 
-	sky2->rx_ring = kzalloc_objs(struct rx_ring_info, sky2->rx_pending);
+	sky2->rx_ring = kcalloc(sky2->rx_pending, sizeof(struct rx_ring_info),
+				GFP_KERNEL);
 	if (!sky2->rx_ring)
 		goto nomem;
 
@@ -2501,7 +2503,7 @@ static void skb_put_frags(struct sk_buff *skb, unsigned int hdr_space,
 
 		if (length == 0) {
 			/* don't need this page */
-			skb_frag_unref(skb, i);
+			__skb_frag_unref(frag, false);
 			--skb_shinfo(skb)->nr_frags;
 		} else {
 			size = min(length, (unsigned) PAGE_SIZE);

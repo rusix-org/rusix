@@ -16,23 +16,17 @@ struct svm_test_data {
 	/* VMCB */
 	struct vmcb *vmcb; /* gva */
 	void *vmcb_hva;
-	u64 vmcb_gpa;
+	uint64_t vmcb_gpa;
 
 	/* host state-save area */
 	struct vmcb_save_area *save_area; /* gva */
 	void *save_area_hva;
-	u64 save_area_gpa;
+	uint64_t save_area_gpa;
 
 	/* MSR-Bitmap */
 	void *msr; /* gva */
 	void *msr_hva;
-	u64 msr_gpa;
-
-	/* Stack */
-	void *stack; /* gva */
-
-	/* NPT */
-	u64 ncr3_gpa;
+	uint64_t msr_gpa;
 };
 
 static inline void vmmcall(void)
@@ -59,15 +53,9 @@ static inline void vmmcall(void)
 		"clgi\n"	\
 		)
 
-struct svm_test_data *vcpu_alloc_svm(struct kvm_vm *vm, gva_t *p_svm_gva);
-void generic_svm_setup(struct svm_test_data *svm, void *guest_rip);
-void run_guest(struct vmcb *vmcb, u64 vmcb_gpa);
-
-static inline bool kvm_cpu_has_npt(void)
-{
-	return kvm_cpu_has(X86_FEATURE_NPT);
-}
-void vm_enable_npt(struct kvm_vm *vm);
+struct svm_test_data *vcpu_alloc_svm(struct kvm_vm *vm, vm_vaddr_t *p_svm_gva);
+void generic_svm_setup(struct svm_test_data *svm, void *guest_rip, void *guest_rsp);
+void run_guest(struct vmcb *vmcb, uint64_t vmcb_gpa);
 
 int open_sev_dev_path_or_exit(void);
 

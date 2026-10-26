@@ -21,8 +21,7 @@ struct jh7110_pinctrl {
 	/* register read/write mutex */
 	struct mutex mutex;
 	const struct jh7110_pinctrl_soc_info *info;
-	unsigned int num_saved_regs;
-	u32 saved_regs[] __counted_by(num_saved_regs);
+	u32 *saved_regs;
 };
 
 struct jh7110_gpio_irq_reg {
@@ -39,6 +38,7 @@ struct jh7110_pinctrl_soc_info {
 	const struct pinctrl_pin_desc *pins;
 	unsigned int npins;
 	unsigned int ngpios;
+	unsigned int gc_base;
 
 	/* gpio dout/doen/din/gpioinput register */
 	unsigned int dout_reg_base;

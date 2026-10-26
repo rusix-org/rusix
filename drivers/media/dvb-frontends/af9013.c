@@ -1447,7 +1447,7 @@ static int af9013_probe(struct i2c_client *client)
 		.val_bits = 8,
 	};
 
-	state = kzalloc_obj(*state);
+	state = kzalloc(sizeof(*state), GFP_KERNEL);
 	if (!state) {
 		ret = -ENOMEM;
 		goto err;
@@ -1553,8 +1553,8 @@ static void af9013_remove(struct i2c_client *client)
 }
 
 static const struct i2c_device_id af9013_id_table[] = {
-	{ .name = "af9013" },
-	{ }
+	{ "af9013" },
+	{}
 };
 MODULE_DEVICE_TABLE(i2c, af9013_id_table);
 

@@ -308,7 +308,7 @@ int hl_dio_ssd2hl(struct hl_device *hdev, struct hl_ctx *ctx, int fd,
 
 	dev_dbg(hdev->dev, "SSD2HL fd=%d va=%#llx len=%#lx\n", fd, device_va, len_bytes);
 
-	io = kzalloc_obj(*io);
+	io = kzalloc(sizeof(*io), GFP_KERNEL);
 	if (!io) {
 		rc = -ENOMEM;
 		goto out;

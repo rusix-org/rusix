@@ -25,7 +25,6 @@
 #define SESSION_HASH_SIZE	512
 
 struct cld_net;
-struct nfsd_net_cb;
 struct nfsd4_client_tracking_ops;
 
 enum nfsd_net_flag {
@@ -53,15 +52,10 @@ enum {
 	NFSD_STATS_FIRST_NFS4_OP,	/* count of individual nfsv4 operations */
 	NFSD_STATS_LAST_NFS4_OP = NFSD_STATS_FIRST_NFS4_OP + LAST_NFS4_OP,
 #define NFSD_STATS_NFS4_OP(op)	(NFSD_STATS_FIRST_NFS4_OP + (op))
+	NFSD_STATS_WDELEG_GETATTR,	/* count of getattr conflict with wdeleg */
 #endif
 	NFSD_STATS_COUNTERS_NUM
 };
-
-/*
- * Per-netns NFSv4 callback (backchannel) per-operation counters, indexed
- * directly by RFC 8881 callback opcode (OP_CB_GETATTR..OP_CB_OFFLOAD).
- */
-#define NFSD_STATS_CB_OPS_NUM	(OP_CB_OFFLOAD + 1)
 
 /*
  * Represents a nfsd "container". With respect to nfsv4 state tracking, the
@@ -99,7 +93,6 @@ struct nfsd_net {
 	 */
 	struct list_head *reclaim_str_hashtbl;
 	int reclaim_str_hashtbl_size;
-	struct rw_semaphore reclaim_str_hashtbl_lock;
 	struct list_head *conf_id_hashtbl;
 	struct rb_root conf_name_tree;
 	struct list_head *unconf_id_hashtbl;
@@ -112,10 +105,7 @@ struct nfsd_net {
 	 * close_lru holds (open) stateowner queue ordered by nfs4_stateowner.so_time
 	 * for last close replay.
 	 *
-	 * reclaim_str_hashtbl[], reclaim_str_hashtbl_size are protected by
-	 * reclaim_str_hashtbl_lock.
-	 *
-	 * All of the remaining fields are protected by the client_lock.
+	 * All of the above fields are protected by the client_mutex.
 	 */
 	struct list_head client_lru;
 	struct list_head close_lru;
@@ -147,12 +137,6 @@ struct nfsd_net {
 
 	seqlock_t writeverf_lock;
 	unsigned char writeverf[8];
-
-	/*
-	 * Minimum number of threads to run per pool.  If 0 then the
-	 * min == max requested number of threads.
-	 */
-	unsigned int min_threads;
 
 	u32 clientid_base;
 	u32 clientid_counter;
@@ -205,11 +189,6 @@ struct nfsd_net {
 	/* Per-netns stats counters */
 	struct percpu_counter    counter[NFSD_STATS_COUNTERS_NUM];
 
-#ifdef CONFIG_NFSD_V4
-	/* Per-netns NFSv4 callback (backchannel) per-operation counters */
-	struct percpu_counter    cb_counter[NFSD_STATS_CB_OPS_NUM];
-#endif
-
 	/* sunrpc svc stats */
 	struct svc_stat          nfsd_svcstats;
 
@@ -249,9 +228,6 @@ struct nfsd_net {
 	spinlock_t              local_clients_lock;
 	struct list_head	local_clients;
 #endif
-	siphash_key_t		*fh_key;
-
-	struct nfsd_net_cb	*nfsd_cb;
 };
 
 /* Simple check to find out if a given net was properly initialized */

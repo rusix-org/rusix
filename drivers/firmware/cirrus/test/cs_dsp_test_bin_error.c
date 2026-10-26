@@ -8,7 +8,6 @@
 
 #include <kunit/device.h>
 #include <kunit/resource.h>
-#include <kunit/static_stub.h>
 #include <kunit/test.h>
 #include <linux/build_bug.h>
 #include <linux/firmware/cirrus/cs_dsp.h>
@@ -69,24 +68,24 @@ static void bin_load_with_unknown_blocks(struct kunit *test)
 	cs_dsp_mock_bin_add_raw_block(local->bin_builder,
 				      cs_dsp_bin_err_test_mock_algs[0].id,
 				      cs_dsp_bin_err_test_mock_algs[0].ver,
-				      0xf5, 0, 0,
+				      0xf5, 0,
 				      random_data, sizeof(random_data));
 	cs_dsp_mock_bin_add_raw_block(local->bin_builder,
 				      cs_dsp_bin_err_test_mock_algs[0].id,
 				      cs_dsp_bin_err_test_mock_algs[0].ver,
-				      0xf500, 0, 0,
+				      0xf500, 0,
 				      random_data, sizeof(random_data));
 	cs_dsp_mock_bin_add_raw_block(local->bin_builder,
 				      cs_dsp_bin_err_test_mock_algs[0].id,
 				      cs_dsp_bin_err_test_mock_algs[0].ver,
-				      0xc300, 0, 0,
+				      0xc300, 0,
 				      random_data, sizeof(random_data));
 
 	/* Add a single payload to be written to DSP memory */
 	cs_dsp_mock_bin_add_raw_block(local->bin_builder,
 				      cs_dsp_bin_err_test_mock_algs[0].id,
 				      cs_dsp_bin_err_test_mock_algs[0].ver,
-				      WMFW_ADSP2_YM, 0, 0,
+				      WMFW_ADSP2_YM, 0,
 				      payload_data, payload_size_bytes);
 
 	bin = cs_dsp_mock_bin_get_firmware(local->bin_builder);
@@ -280,7 +279,7 @@ static void bin_too_short_for_block_header(struct kunit *test)
 	cs_dsp_mock_bin_add_raw_block(local->bin_builder,
 				      cs_dsp_bin_err_test_mock_algs[0].id,
 				      cs_dsp_bin_err_test_mock_algs[0].ver,
-				      param->block_type, 0, 0,
+				      param->block_type, 0,
 				      NULL, 0);
 
 	bin = cs_dsp_mock_bin_get_firmware(local->bin_builder);
@@ -312,7 +311,7 @@ static void bin_too_short_for_block_payload(struct kunit *test)
 	cs_dsp_mock_bin_add_raw_block(local->bin_builder,
 				      cs_dsp_bin_err_test_mock_algs[0].id,
 				      cs_dsp_bin_err_test_mock_algs[0].ver,
-				      param->block_type, 0, 0,
+				      param->block_type, 0,
 				      payload, sizeof(payload));
 
 	bin = cs_dsp_mock_bin_get_firmware(local->bin_builder);
@@ -344,7 +343,7 @@ static void bin_block_payload_len_garbage(struct kunit *test)
 	cs_dsp_mock_bin_add_raw_block(local->bin_builder,
 				      cs_dsp_bin_err_test_mock_algs[0].id,
 				      cs_dsp_bin_err_test_mock_algs[0].ver,
-				      param->block_type, 0, 0,
+				      param->block_type, 0,
 				      &payload, sizeof(payload));
 
 	bin = cs_dsp_mock_bin_get_firmware(local->bin_builder);
@@ -381,13 +380,11 @@ static void bin_block_payload_len_garbage(struct kunit *test)
 			0);
 }
 
-static bool cs_dsp_bin_err_test_can_emit_message_hook(void)
+static void cs_dsp_bin_err_test_exit(struct kunit *test)
 {
-#if defined(DEBUG)
-	return true;
-#else
-	return false;
-#endif
+	cs_dsp_suppress_err_messages = false;
+	cs_dsp_suppress_warn_messages = false;
+	cs_dsp_suppress_info_messages = false;
 }
 
 static int cs_dsp_bin_err_test_common_init(struct kunit *test, struct cs_dsp *dsp,
@@ -485,8 +482,9 @@ static int cs_dsp_bin_err_test_common_init(struct kunit *test, struct cs_dsp *ds
 	 * Testing error conditions can produce a lot of log output
 	 * from cs_dsp error messages, so suppress messages.
 	 */
-	kunit_activate_static_stub(test, cs_dsp_can_emit_message,
-				   cs_dsp_bin_err_test_can_emit_message_hook);
+	cs_dsp_suppress_err_messages = true;
+	cs_dsp_suppress_warn_messages = true;
+	cs_dsp_suppress_info_messages = true;
 
 	return 0;
 }
@@ -586,22 +584,22 @@ static struct kunit_case cs_dsp_bin_err_test_cases[] = {
 static struct kunit_suite cs_dsp_bin_err_test_halo = {
 	.name = "cs_dsp_bin_err_halo",
 	.init = cs_dsp_bin_err_test_halo_init,
+	.exit = cs_dsp_bin_err_test_exit,
 	.test_cases = cs_dsp_bin_err_test_cases,
-	.attr.speed = KUNIT_SPEED_SLOW,
 };
 
 static struct kunit_suite cs_dsp_bin_err_test_adsp2_32bit = {
 	.name = "cs_dsp_bin_err_adsp2_32bit",
 	.init = cs_dsp_bin_err_test_adsp2_32bit_init,
+	.exit = cs_dsp_bin_err_test_exit,
 	.test_cases = cs_dsp_bin_err_test_cases,
-	.attr.speed = KUNIT_SPEED_SLOW,
 };
 
 static struct kunit_suite cs_dsp_bin_err_test_adsp2_16bit = {
 	.name = "cs_dsp_bin_err_adsp2_16bit",
 	.init = cs_dsp_bin_err_test_adsp2_16bit_init,
+	.exit = cs_dsp_bin_err_test_exit,
 	.test_cases = cs_dsp_bin_err_test_cases,
-	.attr.speed = KUNIT_SPEED_SLOW,
 };
 
 kunit_test_suites(&cs_dsp_bin_err_test_halo,

@@ -21,13 +21,21 @@
 #include <net/netfilter/nf_conntrack_helper.h>
 #include <linux/netfilter/nf_conntrack_irc.h>
 
+#define MAX_PORTS 8
+static unsigned short ports[MAX_PORTS];
+static unsigned int ports_c;
 static unsigned int max_dcc_channels = 8;
 static unsigned int dcc_timeout __read_mostly = 300;
 /* This is slow, but it's simple. --RR */
 static char *irc_buffer;
 static DEFINE_SPINLOCK(irc_buffer_lock);
 
-nf_nat_irc_hook_fn __rcu *nf_nat_irc_hook __read_mostly;
+unsigned int (*nf_nat_irc_hook)(struct sk_buff *skb,
+				enum ip_conntrack_info ctinfo,
+				unsigned int protoff,
+				unsigned int matchoff,
+				unsigned int matchlen,
+				struct nf_conntrack_expect *exp) __read_mostly;
 EXPORT_SYMBOL_GPL(nf_nat_irc_hook);
 
 #define HELPER_NAME "irc"
@@ -39,6 +47,8 @@ MODULE_LICENSE("GPL");
 MODULE_ALIAS("ip_conntrack_irc");
 MODULE_ALIAS_NFCT_HELPER(HELPER_NAME);
 
+module_param_array(ports, ushort, &ports_c, 0400);
+MODULE_PARM_DESC(ports, "port numbers of IRC servers");
 module_param(max_dcc_channels, uint, 0400);
 MODULE_PARM_DESC(max_dcc_channels, "max number of expected DCC channels per "
 				   "IRC session");
@@ -111,7 +121,7 @@ static int help(struct sk_buff *skb, unsigned int protoff,
 	__be16 port;
 	int i, ret = NF_ACCEPT;
 	char *addr_beg_p, *addr_end_p;
-	nf_nat_irc_hook_fn *nf_nat_irc;
+	typeof(nf_nat_irc_hook) nf_nat_irc;
 	unsigned int datalen;
 
 	/* If packet is coming from IRC server */
@@ -231,7 +241,7 @@ static int help(struct sk_buff *skb, unsigned int protoff,
 
 			nf_nat_irc = rcu_dereference(nf_nat_irc_hook);
 			if (nf_nat_irc && ct->status & IPS_NAT_MASK)
-				ret = nf_nat_irc(skb, ct, ctinfo, protoff,
+				ret = nf_nat_irc(skb, ctinfo, protoff,
 						 addr_beg_p - ib_ptr,
 						 addr_end_p - addr_beg_p,
 						 exp);
@@ -249,15 +259,12 @@ static int help(struct sk_buff *skb, unsigned int protoff,
 	return ret;
 }
 
-static struct nf_conntrack_helper irc __read_mostly;
-static struct nf_conntrack_helper *irc_ptr __read_mostly;
+static struct nf_conntrack_helper irc[MAX_PORTS] __read_mostly;
 static struct nf_conntrack_expect_policy irc_exp_policy;
 
 static int __init nf_conntrack_irc_init(void)
 {
-	int ret;
-
-	nf_conntrack_helper_deprecated(HELPER_NAME);
+	int i, ret;
 
 	if (max_dcc_channels < 1) {
 		pr_err("max_dcc_channels must not be zero\n");
@@ -277,11 +284,17 @@ static int __init nf_conntrack_irc_init(void)
 	if (!irc_buffer)
 		return -ENOMEM;
 
-	nf_ct_helper_init(&irc, AF_INET, IPPROTO_TCP, HELPER_NAME,
-			  &irc_exp_policy,
-			  0, help, NULL, THIS_MODULE);
+	/* If no port given, default to standard irc port */
+	if (ports_c == 0)
+		ports[ports_c++] = IRC_PORT;
 
-	ret = nf_conntrack_helper_register(&irc, &irc_ptr);
+	for (i = 0; i < ports_c; i++) {
+		nf_ct_helper_init(&irc[i], AF_INET, IPPROTO_TCP, HELPER_NAME,
+				  IRC_PORT, ports[i], i, &irc_exp_policy,
+				  0, help, NULL, THIS_MODULE);
+	}
+
+	ret = nf_conntrack_helpers_register(&irc[0], ports_c);
 	if (ret) {
 		pr_err("failed to register helpers\n");
 		kfree(irc_buffer);
@@ -293,7 +306,7 @@ static int __init nf_conntrack_irc_init(void)
 
 static void __exit nf_conntrack_irc_fini(void)
 {
-	nf_conntrack_helper_unregister(irc_ptr);
+	nf_conntrack_helpers_unregister(irc, ports_c);
 	kfree(irc_buffer);
 }
 

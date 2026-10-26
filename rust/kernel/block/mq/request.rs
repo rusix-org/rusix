@@ -7,21 +7,11 @@
 use crate::{
     bindings,
     block::mq::Operations,
-    prelude::*,
-    sync::{
-        aref::{
-            ARef,
-            AlwaysRefCounted, //
-        },
-        atomic::Relaxed,
-        Refcount, //
-    },
-    types::Opaque, //
+    error::Result,
+    sync::{atomic::Relaxed, Refcount},
+    types::{ARef, AlwaysRefCounted, Opaque},
 };
-use core::{
-    marker::PhantomData,
-    ptr::NonNull, //
-};
+use core::{marker::PhantomData, ptr::NonNull};
 
 /// A wrapper around a blk-mq [`struct request`]. This represents an IO request.
 ///

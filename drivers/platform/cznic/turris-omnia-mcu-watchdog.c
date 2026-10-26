@@ -9,7 +9,6 @@
 #include <linux/device.h>
 #include <linux/i2c.h>
 #include <linux/moduleparam.h>
-#include <linux/stringify.h>
 #include <linux/types.h>
 #include <linux/units.h>
 #include <linux/watchdog.h>
@@ -26,7 +25,7 @@ MODULE_PARM_DESC(timeout, "Watchdog timeout in seconds");
 static bool nowayout = WATCHDOG_NOWAYOUT;
 module_param(nowayout, bool, 0);
 MODULE_PARM_DESC(nowayout, "Watchdog cannot be stopped once started (default="
-			   __stringify(WATCHDOG_NOWAYOUT) ")");
+			   __MODULE_STRING(WATCHDOG_NOWAYOUT) ")");
 
 static int omnia_wdt_start(struct watchdog_device *wdt)
 {

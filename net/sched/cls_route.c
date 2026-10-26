@@ -251,7 +251,7 @@ static int route4_init(struct tcf_proto *tp)
 {
 	struct route4_head *head;
 
-	head = kzalloc_obj(struct route4_head);
+	head = kzalloc(sizeof(struct route4_head), GFP_KERNEL);
 	if (head == NULL)
 		return -ENOBUFS;
 
@@ -455,7 +455,7 @@ static int route4_set_parms(struct net *net, struct tcf_proto *tp,
 	h1 = to_hash(nhandle);
 	b = rtnl_dereference(head->table[h1]);
 	if (!b) {
-		b = kzalloc_obj(struct route4_bucket, GFP_KERNEL_ACCOUNT);
+		b = kzalloc(sizeof(struct route4_bucket), GFP_KERNEL_ACCOUNT);
 		if (b == NULL)
 			return -ENOBUFS;
 
@@ -530,7 +530,7 @@ static int route4_change(struct net *net, struct sk_buff *in_skb,
 			return -EINVAL;
 
 	err = -ENOBUFS;
-	f = kzalloc_obj(struct route4_filter, GFP_KERNEL_ACCOUNT);
+	f = kzalloc(sizeof(struct route4_filter), GFP_KERNEL_ACCOUNT);
 	if (!f)
 		goto errout;
 
@@ -663,8 +663,7 @@ static int route4_dump(struct net *net, struct tcf_proto *tp, void *fh,
 	if (tcf_exts_dump(skb, &f->exts) < 0)
 		goto nla_put_failure;
 
-	if (nla_nest_end_safe(skb, nest) < 0)
-		goto nla_put_failure;
+	nla_nest_end(skb, nest);
 
 	if (tcf_exts_dump_stats(skb, &f->exts) < 0)
 		goto nla_put_failure;

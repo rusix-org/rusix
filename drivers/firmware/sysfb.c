@@ -66,7 +66,7 @@ static bool sysfb_unregister(void)
  */
 void sysfb_disable(struct device *dev)
 {
-	struct screen_info *si = &sysfb_primary_display.screen;
+	struct screen_info *si = &screen_info;
 	struct device *parent;
 
 	mutex_lock(&disable_lock);
@@ -92,7 +92,7 @@ EXPORT_SYMBOL_GPL(sysfb_disable);
  */
 bool sysfb_handles_screen_info(void)
 {
-	const struct screen_info *si = &sysfb_primary_display.screen;
+	const struct screen_info *si = &screen_info;
 
 	return !!screen_info_video_type(si);
 }
@@ -141,8 +141,7 @@ static struct device *sysfb_parent_dev(const struct screen_info *si)
 
 static __init int sysfb_init(void)
 {
-	struct sysfb_display_info *dpy = &sysfb_primary_display;
-	struct screen_info *si = &dpy->screen;
+	struct screen_info *si = &screen_info;
 	struct device *parent;
 	unsigned int type;
 	struct simplefb_platform_data mode;
@@ -156,7 +155,7 @@ static __init int sysfb_init(void)
 	if (disabled)
 		goto unlock_mutex;
 
-	sysfb_apply_efi_quirks(si);
+	sysfb_apply_efi_quirks();
 
 	parent = sysfb_parent_dev(si);
 	if (IS_ERR(parent)) {
@@ -201,9 +200,9 @@ static __init int sysfb_init(void)
 
 	pd->dev.parent = parent;
 
-	sysfb_set_efifb_fwnode(si, pd);
+	sysfb_set_efifb_fwnode(pd);
 
-	ret = platform_device_add_data(pd, dpy, sizeof(*dpy));
+	ret = platform_device_add_data(pd, si, sizeof(*si));
 	if (ret)
 		goto err;
 

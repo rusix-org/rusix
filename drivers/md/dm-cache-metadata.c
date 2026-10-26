@@ -49,7 +49,7 @@ enum superblock_flag_bits {
 enum mapping_bits {
 	/*
 	 * A valid mapping.  Because we're using an array we clear this
-	 * flag for an non existent mapping.
+	 * flag for an non existant mapping.
 	 */
 	M_VALID = 1,
 
@@ -760,7 +760,7 @@ static struct dm_cache_metadata *metadata_open(struct block_device *bdev,
 	int r;
 	struct dm_cache_metadata *cmd;
 
-	cmd = kzalloc_obj(*cmd);
+	cmd = kzalloc(sizeof(*cmd), GFP_KERNEL);
 	if (!cmd) {
 		DMERR("could not allocate metadata struct");
 		return ERR_PTR(-ENOMEM);
@@ -1815,13 +1815,4 @@ out:
 		dm_block_manager_destroy(new_bm);
 
 	return r;
-}
-
-int dm_cache_metadata_clean_when_opened(struct dm_cache_metadata *cmd, bool *result)
-{
-	READ_LOCK(cmd);
-	*result = cmd->clean_when_opened;
-	READ_UNLOCK(cmd);
-
-	return 0;
 }

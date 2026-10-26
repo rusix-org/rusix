@@ -277,7 +277,7 @@ static int __init rmobile_add_pm_domains(void __iomem *base,
 			/* always-on domain */
 		}
 
-		pd = kzalloc_obj(*pd);
+		pd = kzalloc(sizeof(*pd), GFP_KERNEL);
 		if (!pd)
 			return -ENOMEM;
 

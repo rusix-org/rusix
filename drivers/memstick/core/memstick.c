@@ -378,7 +378,8 @@ EXPORT_SYMBOL(memstick_set_rw_addr);
 
 static struct memstick_dev *memstick_alloc_card(struct memstick_host *host)
 {
-	struct memstick_dev *card = kzalloc_obj(struct memstick_dev);
+	struct memstick_dev *card = kzalloc(sizeof(struct memstick_dev),
+					    GFP_KERNEL);
 	struct memstick_dev *old_card = host->card;
 	struct ms_id_register id_reg;
 

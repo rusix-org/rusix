@@ -25,7 +25,6 @@
 #include <linux/workqueue.h>
 #include <linux/syscalls.h>
 #include <linux/sched/signal.h>
-#include <linux/uio.h>
 
 #include <net/kcm.h>
 #include <net/netns/generic.h>
@@ -735,7 +734,7 @@ static void kcm_tx_work(struct work_struct *w)
 	/* Primarily for SOCK_SEQPACKET sockets */
 	if (likely(sk->sk_socket) &&
 	    test_bit(SOCK_NOSPACE, &sk->sk_socket->flags)) {
-		sk_clear_nospace(sk);
+		clear_bit(SOCK_NOSPACE, &sk->sk_socket->flags);
 		sk->sk_write_space(sk);
 	}
 
@@ -779,7 +778,7 @@ static int kcm_sendmsg(struct socket *sock, struct msghdr *msg, size_t len)
 	/* Call the sk_stream functions to manage the sndbuf mem. */
 	if (!sk_stream_memory_free(sk)) {
 		kcm_push(kcm);
-		sk_set_nospace(sk);
+		set_bit(SOCK_NOSPACE, &sk->sk_socket->flags);
 		err = sk_stream_wait_memory(sk, &timeo);
 		if (err)
 			goto out_error;
@@ -1171,7 +1170,7 @@ static int kcm_setsockopt(struct socket *sock, int level, int optname,
 }
 
 static int kcm_getsockopt(struct socket *sock, int level, int optname,
-			  sockopt_t *opt)
+			  char __user *optval, int __user *optlen)
 {
 	struct kcm_sock *kcm = kcm_sk(sock->sk);
 	int val, len;
@@ -1179,7 +1178,9 @@ static int kcm_getsockopt(struct socket *sock, int level, int optname,
 	if (level != SOL_KCM)
 		return -ENOPROTOOPT;
 
-	len = opt->optlen;
+	if (get_user(len, optlen))
+		return -EFAULT;
+
 	if (len < 0)
 		return -EINVAL;
 
@@ -1193,8 +1194,9 @@ static int kcm_getsockopt(struct socket *sock, int level, int optname,
 		return -ENOPROTOOPT;
 	}
 
-	opt->optlen = len;
-	if (copy_to_iter(&val, len, &opt->iter_out) != len)
+	if (put_user(len, optlen))
+		return -EFAULT;
+	if (copy_to_user(optval, &val, len))
 		return -EFAULT;
 	return 0;
 }
@@ -1578,16 +1580,24 @@ static int kcm_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg)
 	}
 	case SIOCKCMCLONE: {
 		struct kcm_clone info;
+		struct file *file;
 
-		FD_PREPARE(fdf, 0, kcm_clone(sock));
-		if (fdf->fd < 0)
-			return fdf->fd;
+		info.fd = get_unused_fd_flags(0);
+		if (unlikely(info.fd < 0))
+			return info.fd;
 
-		info.fd = fdf->fd;
-		if (copy_to_user((void __user *)arg, &info, sizeof(info)))
+		file = kcm_clone(sock);
+		if (IS_ERR(file)) {
+			put_unused_fd(info.fd);
+			return PTR_ERR(file);
+		}
+		if (copy_to_user((void __user *)arg, &info,
+				 sizeof(info))) {
+			put_unused_fd(info.fd);
+			fput(file);
 			return -EFAULT;
-
-		fd_publish(fdf);
+		}
+		fd_install(info.fd, file);
 		err = 0;
 		break;
 	}
@@ -1756,7 +1766,7 @@ static const struct proto_ops kcm_dgram_ops = {
 	.listen =	sock_no_listen,
 	.shutdown =	sock_no_shutdown,
 	.setsockopt =	kcm_setsockopt,
-	.getsockopt_iter = kcm_getsockopt,
+	.getsockopt =	kcm_getsockopt,
 	.sendmsg =	kcm_sendmsg,
 	.recvmsg =	kcm_recvmsg,
 	.mmap =		sock_no_mmap,
@@ -1777,7 +1787,7 @@ static const struct proto_ops kcm_seqpacket_ops = {
 	.listen =	sock_no_listen,
 	.shutdown =	sock_no_shutdown,
 	.setsockopt =	kcm_setsockopt,
-	.getsockopt_iter = kcm_getsockopt,
+	.getsockopt =	kcm_getsockopt,
 	.sendmsg =	kcm_sendmsg,
 	.recvmsg =	kcm_recvmsg,
 	.mmap =		sock_no_mmap,

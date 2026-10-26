@@ -1,4 +1,3 @@
-// SPDX-License-Identifier: GPL-2.0
 /*
  * Public API and common code for kernel->userspace relay file support.
  *
@@ -10,6 +9,8 @@
  * Moved to kernel/relay.c by Paul Mundt, 2006.
  * November 2006 - CPU hotplug support by Mathieu Desnoyers
  * 	(mathieu.desnoyers@polymtl.ca)
+ *
+ * This file is released under the GPL.
  */
 #include <linux/errno.h>
 #include <linux/stddef.h>
@@ -59,7 +60,7 @@ static const struct vm_operations_struct relay_file_mmap_ops = {
  */
 static struct page **relay_alloc_page_array(unsigned int n_pages)
 {
-	return kvzalloc_objs(struct page *, n_pages);
+	return kvcalloc(n_pages, sizeof(struct page *), GFP_KERNEL);
 }
 
 /*
@@ -71,18 +72,17 @@ static void relay_free_page_array(struct page **array)
 }
 
 /**
- *	relay_mmap_prepare_buf: - mmap channel buffer to process address space
- *	@buf: the relay channel buffer
- *	@desc: describing what to map
+ *	relay_mmap_buf: - mmap channel buffer to process address space
+ *	@buf: relay channel buffer
+ *	@vma: vm_area_struct describing memory to be mapped
  *
  *	Returns 0 if ok, negative on error
  *
  *	Caller should already have grabbed mmap_lock.
  */
-static int relay_mmap_prepare_buf(struct rchan_buf *buf,
-				  struct vm_area_desc *desc)
+static int relay_mmap_buf(struct rchan_buf *buf, struct vm_area_struct *vma)
 {
-	unsigned long length = vma_desc_size(desc);
+	unsigned long length = vma->vm_end - vma->vm_start;
 
 	if (!buf)
 		return -EBADF;
@@ -90,9 +90,9 @@ static int relay_mmap_prepare_buf(struct rchan_buf *buf,
 	if (length != (unsigned long)buf->chan->alloc_size)
 		return -EINVAL;
 
-	desc->vm_ops = &relay_file_mmap_ops;
-	vma_desc_set_flags(desc, VMA_DONTEXPAND_BIT);
-	desc->private_data = buf;
+	vma->vm_ops = &relay_file_mmap_ops;
+	vm_flags_set(vma, VM_DONTEXPAND);
+	vma->vm_private_data = buf;
 
 	return 0;
 }
@@ -150,10 +150,11 @@ static struct rchan_buf *relay_create_buf(struct rchan *chan)
 	if (chan->n_subbufs > KMALLOC_MAX_SIZE / sizeof(size_t))
 		return NULL;
 
-	buf = kzalloc_obj(struct rchan_buf);
+	buf = kzalloc(sizeof(struct rchan_buf), GFP_KERNEL);
 	if (!buf)
 		return NULL;
-	buf->padding = kmalloc_objs(size_t, chan->n_subbufs);
+	buf->padding = kmalloc_array(chan->n_subbufs, sizeof(size_t),
+				     GFP_KERNEL);
 	if (!buf->padding)
 		goto free_buf;
 
@@ -489,7 +490,7 @@ struct rchan *relay_open(const char *base_filename,
 	if (!cb || !cb->create_buf_file || !cb->remove_buf_file)
 		return NULL;
 
-	chan = kzalloc_obj(struct rchan);
+	chan = kzalloc(sizeof(struct rchan), GFP_KERNEL);
 	if (!chan)
 		return NULL;
 
@@ -748,16 +749,16 @@ static int relay_file_open(struct inode *inode, struct file *filp)
 }
 
 /**
- *	relay_file_mmap_prepare - mmap file op for relay files
- *	@desc: describing what to map
+ *	relay_file_mmap - mmap file op for relay files
+ *	@filp: the file
+ *	@vma: the vma describing what to map
  *
- *	Calls upon relay_mmap_prepare_buf() to map the file into user space.
+ *	Calls upon relay_mmap_buf() to map the file into user space.
  */
-static int relay_file_mmap_prepare(struct vm_area_desc *desc)
+static int relay_file_mmap(struct file *filp, struct vm_area_struct *vma)
 {
-	struct rchan_buf *buf = desc->file->private_data;
-
-	return relay_mmap_prepare_buf(buf, desc);
+	struct rchan_buf *buf = filp->private_data;
+	return relay_mmap_buf(buf, vma);
 }
 
 /**
@@ -1005,7 +1006,7 @@ static ssize_t relay_file_read(struct file *filp,
 const struct file_operations relay_file_operations = {
 	.open		= relay_file_open,
 	.poll		= relay_file_poll,
-	.mmap_prepare	= relay_file_mmap_prepare,
+	.mmap		= relay_file_mmap,
 	.read		= relay_file_read,
 	.release	= relay_file_release,
 };

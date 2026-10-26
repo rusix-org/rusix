@@ -26,7 +26,7 @@
 #include <linux/poll.h>
 #include <linux/miscdevice.h>
 #include <linux/slab.h>
-#include <linux/sysfb.h>
+#include <linux/screen_info.h>
 #include <linux/vt.h>
 #include <linux/console.h>
 #include <linux/acpi.h>
@@ -51,8 +51,7 @@ struct vga_device {
 	unsigned int mem_norm_cnt;	/* normal MEM count */
 	bool bridge_has_one_vga;
 	bool is_firmware_default;	/* device selected by firmware */
-	unsigned int (*set_decode)(void *data, bool decode);
-	void *set_decode_data;
+	unsigned int (*set_decode)(struct pci_dev *pdev, bool decode);
 };
 
 static LIST_HEAD(vga_list);
@@ -216,7 +215,6 @@ static struct vga_device *__vga_tryget(struct vga_device *vgadev,
 	struct vga_device *conflict;
 	unsigned int pci_bits;
 	u32 flags = 0;
-	int err;
 
 	/*
 	 * Account for "normal" resources to lock. If we decode the legacy,
@@ -309,9 +307,7 @@ static struct vga_device *__vga_tryget(struct vga_device *vgadev,
 		if (change_bridge)
 			flags |= PCI_VGA_STATE_CHANGE_BRIDGE;
 
-		err = pci_set_vga_state(conflict->pdev, false, pci_bits, flags);
-		if (err)
-			return ERR_PTR(err);
+		pci_set_vga_state(conflict->pdev, false, pci_bits, flags);
 		conflict->owns &= ~match;
 
 		/* If we disabled normal decoding, reflect it in owns */
@@ -341,9 +337,7 @@ enable_them:
 	if (wants & VGA_RSRC_LEGACY_MASK)
 		flags |= PCI_VGA_STATE_CHANGE_BRIDGE;
 
-	err = pci_set_vga_state(vgadev->pdev, true, pci_bits, flags);
-	if (err)
-		return ERR_PTR(err);
+	pci_set_vga_state(vgadev->pdev, true, pci_bits, flags);
 
 	vgadev->owns |= wants;
 lock_them:
@@ -461,10 +455,6 @@ int vga_get(struct pci_dev *pdev, unsigned int rsrc, int interruptible)
 		}
 		conflict = __vga_tryget(vgadev, rsrc);
 		spin_unlock_irqrestore(&vga_lock, flags);
-		if (IS_ERR(conflict)) {
-			rc = PTR_ERR(conflict);
-			break;
-		}
 		if (conflict == NULL)
 			break;
 
@@ -567,7 +557,7 @@ EXPORT_SYMBOL(vga_put);
 static bool vga_is_firmware_default(struct pci_dev *pdev)
 {
 #if defined CONFIG_X86
-	return pdev == screen_info_pci_dev(&sysfb_primary_display.screen);
+	return pdev == screen_info_pci_dev(&screen_info);
 #else
 	return false;
 #endif
@@ -576,7 +566,9 @@ static bool vga_is_firmware_default(struct pci_dev *pdev)
 static bool vga_arb_integrated_gpu(struct device *dev)
 {
 #if defined(CONFIG_ACPI)
-	return acpi_dev_is_video_device(ACPI_COMPANION(dev));
+	struct acpi_device *adev = ACPI_COMPANION(dev);
+
+	return adev && !strcmp(acpi_device_hid(adev), ACPI_VIDEO_HID);
 #else
 	return false;
 #endif
@@ -743,7 +735,7 @@ static bool vga_arbiter_add_pci_device(struct pci_dev *pdev)
 	u16 cmd;
 
 	/* Allocate structure */
-	vgadev = kzalloc_obj(struct vga_device);
+	vgadev = kzalloc(sizeof(struct vga_device), GFP_KERNEL);
 	if (vgadev == NULL) {
 		vgaarb_err(&pdev->dev, "failed to allocate VGA arbiter data\n");
 		/*
@@ -936,7 +928,6 @@ EXPORT_SYMBOL(vga_set_legacy_decoding);
  * vga_client_register - register or unregister a VGA arbitration client
  * @pdev: PCI device of the VGA client
  * @set_decode: VGA decode change callback
- * @data: private data to pass to callback
  *
  * Clients have two callback mechanisms they can use.
  *
@@ -958,18 +949,15 @@ EXPORT_SYMBOL(vga_set_legacy_decoding);
  * Returns: 0 on success, -ENODEV on failure
  */
 int vga_client_register(struct pci_dev *pdev,
-		unsigned int (*set_decode)(void *data, bool decode),
-		void *data)
+		unsigned int (*set_decode)(struct pci_dev *pdev, bool decode))
 {
 	unsigned long flags;
 	struct vga_device *vgadev;
 
 	spin_lock_irqsave(&vga_lock, flags);
 	vgadev = vgadev_find(pdev);
-	if (vgadev) {
+	if (vgadev)
 		vgadev->set_decode = set_decode;
-		vgadev->set_decode_data = data;
-	}
 	spin_unlock_irqrestore(&vga_lock, flags);
 	if (!vgadev)
 		return -ENODEV;
@@ -1146,7 +1134,6 @@ static ssize_t vga_arb_write(struct file *file, const char __user *buf,
 	char kbuf[64], *curr_pos;
 	size_t remaining = count;
 
-	int err;
 	int ret_val;
 	int i;
 
@@ -1178,11 +1165,7 @@ static ssize_t vga_arb_write(struct file *file, const char __user *buf,
 			goto done;
 		}
 
-		err = vga_get_uninterruptible(pdev, io_state);
-		if (err) {
-			ret_val = err;
-			goto done;
-		}
+		vga_get_uninterruptible(pdev, io_state);
 
 		/* Update the client's locks lists */
 		for (i = 0; i < MAX_USER_CARDS; i++) {
@@ -1402,7 +1385,7 @@ static int vga_arb_open(struct inode *inode, struct file *file)
 
 	pr_debug("%s\n", __func__);
 
-	priv = kzalloc_obj(*priv);
+	priv = kzalloc(sizeof(*priv), GFP_KERNEL);
 	if (priv == NULL)
 		return -ENOMEM;
 	spin_lock_init(&priv->lock);
@@ -1469,7 +1452,7 @@ static void vga_arbiter_notify_clients(void)
 	spin_lock_irqsave(&vga_lock, flags);
 	list_for_each_entry(vgadev, &vga_list, list) {
 		if (vgadev->set_decode) {
-			new_decodes = vgadev->set_decode(vgadev->set_decode_data,
+			new_decodes = vgadev->set_decode(vgadev->pdev,
 							 new_state);
 			vga_update_device_decodes(vgadev, new_decodes);
 		}

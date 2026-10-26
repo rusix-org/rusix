@@ -49,9 +49,6 @@ properties:
   reset-names:
     const: stmmaceth
 
-  power-domains:
-    maxItems: 1
-
 required:
   - compatible
   - reg

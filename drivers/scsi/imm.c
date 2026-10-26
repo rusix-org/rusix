@@ -781,10 +781,10 @@ static void imm_interrupt(struct work_struct *work)
 
 	imm_pb_dismiss(dev);
 
-	spin_lock_irqsave(&host->host_lock, flags);
+	spin_lock_irqsave(host->host_lock, flags);
 	dev->cur_cmd = NULL;
 	scsi_done(cmd);
-	spin_unlock_irqrestore(&host->host_lock, flags);
+	spin_unlock_irqrestore(host->host_lock, flags);
 	return;
 }
 
@@ -925,7 +925,7 @@ static int imm_engine(imm_struct *dev, struct scsi_cmnd *const cmd)
 	return 0;
 }
 
-static enum scsi_qc_status imm_queuecommand_lck(struct scsi_cmnd *cmd)
+static int imm_queuecommand_lck(struct scsi_cmnd *cmd)
 {
 	imm_struct *dev = imm_dev(cmd->device->host);
 
@@ -1158,7 +1158,7 @@ static int __imm_attach(struct parport *pb)
 
 	init_waitqueue_head(&waiting);
 
-	dev = kzalloc_obj(imm_struct);
+	dev = kzalloc(sizeof(imm_struct), GFP_KERNEL);
 	if (!dev)
 		return -ENOMEM;
 

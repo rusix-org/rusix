@@ -28,7 +28,7 @@ struct ksmbd_user *ksmbd_login_user(const char *account)
 	user = ksmbd_alloc_user(resp, resp_ext);
 	kvfree(resp_ext);
 out:
-	kvfree_sensitive(resp, sizeof(*resp));
+	kvfree(resp);
 	return user;
 }
 
@@ -48,7 +48,7 @@ struct ksmbd_user *ksmbd_alloc_user(struct ksmbd_login_response *resp,
 	if (resp->hash_sz > sizeof(resp->hash))
 		return NULL;
 
-	user = kmalloc_obj(struct ksmbd_user, KSMBD_DEFAULT_GFP);
+	user = kmalloc(sizeof(struct ksmbd_user), KSMBD_DEFAULT_GFP);
 	if (!user)
 		return NULL;
 
@@ -82,7 +82,7 @@ struct ksmbd_user *ksmbd_alloc_user(struct ksmbd_login_response *resp,
 
 err_free:
 	kfree(user->name);
-	kfree_sensitive(user->passkey);
+	kfree(user->passkey);
 	kfree(user);
 	return NULL;
 }
@@ -92,13 +92,15 @@ void ksmbd_free_user(struct ksmbd_user *user)
 	ksmbd_ipc_logout_request(user->name, user->flags);
 	kfree(user->sgid);
 	kfree(user->name);
-	kfree_sensitive(user->passkey);
+	kfree(user->passkey);
 	kfree(user);
 }
 
-bool ksmbd_anonymous_user(struct ksmbd_user *user)
+int ksmbd_anonymous_user(struct ksmbd_user *user)
 {
-	return user->name[0] == '\0';
+	if (user->name[0] == '\0')
+		return 1;
+	return 0;
 }
 
 bool ksmbd_compare_user(struct ksmbd_user *u1, struct ksmbd_user *u2)

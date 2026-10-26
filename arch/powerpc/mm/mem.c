@@ -30,13 +30,12 @@
 #include <asm/setup.h>
 #include <asm/fixmap.h>
 
-#include <asm/fadump.h>
-#include <asm/kexec.h>
-#include <asm/kvm_ppc.h>
-
 #include <mm/mmu_decl.h>
 
 unsigned long long memory_limit __initdata;
+
+unsigned long empty_zero_page[PAGE_SIZE / sizeof(unsigned long)] __page_aligned_bss;
+EXPORT_SYMBOL(empty_zero_page);
 
 pgprot_t __phys_mem_access_prot(unsigned long pfn, unsigned long size,
 				pgprot_t vma_prot)
@@ -158,13 +157,12 @@ int __ref arch_add_memory(int nid, u64 start, u64 size,
 	return rc;
 }
 
-void __ref arch_remove_memory(u64 start, u64 size, struct vmem_altmap *altmap,
-			      struct dev_pagemap *pgmap)
+void __ref arch_remove_memory(u64 start, u64 size, struct vmem_altmap *altmap)
 {
 	unsigned long start_pfn = start >> PAGE_SHIFT;
 	unsigned long nr_pages = size >> PAGE_SHIFT;
 
-	__remove_pages(start_pfn, nr_pages, altmap, pgmap);
+	__remove_pages(start_pfn, nr_pages, altmap);
 	arch_remove_linear_mapping(start, size);
 }
 #endif
@@ -182,6 +180,11 @@ void __init mem_topology_setup(void)
 	 * memblock_regions
 	 */
 	memblock_set_node(0, PHYS_ADDR_MAX, &memblock.memory, 0);
+}
+
+void __init initmem_init(void)
+{
+	sparse_init();
 }
 
 /* mark pages that don't exist as nosave */
@@ -218,16 +221,7 @@ static int __init mark_nonram_nosave(void)
  * anyway) will take a first dip into ZONE_NORMAL and get otherwise served by
  * ZONE_DMA.
  */
-void __init arch_zone_limits_init(unsigned long *max_zone_pfns)
-{
-#ifdef CONFIG_ZONE_DMA
-	max_zone_pfns[ZONE_DMA] = min((zone_dma_limit >> PAGE_SHIFT) + 1, max_low_pfn);
-#endif
-	max_zone_pfns[ZONE_NORMAL] = max_low_pfn;
-#ifdef CONFIG_HIGHMEM
-	max_zone_pfns[ZONE_HIGHMEM] = max_pfn;
-#endif
-}
+static unsigned long max_zone_pfns[MAX_NR_ZONES];
 
 /*
  * paging_init() sets up the page tables - in fact we've already done this.
@@ -265,21 +259,22 @@ void __init paging_init(void)
 
 	zone_dma_limit = DMA_BIT_MASK(zone_dma_bits);
 
+#ifdef CONFIG_ZONE_DMA
+	max_zone_pfns[ZONE_DMA]	= min(max_low_pfn,
+				      1UL << (zone_dma_bits - PAGE_SHIFT));
+#endif
+	max_zone_pfns[ZONE_NORMAL] = max_low_pfn;
+#ifdef CONFIG_HIGHMEM
+	max_zone_pfns[ZONE_HIGHMEM] = max_pfn;
+#endif
+
+	free_area_init(max_zone_pfns);
+
 	mark_nonram_nosave();
 }
 
 void __init arch_mm_preinit(void)
 {
-
-	/*
-	 * Reserve large chunks of memory for use by CMA for kdump, fadump, KVM
-	 * and hugetlb. These must be called after pageblock_order is
-	 * initialised.
-	 */
-	fadump_cma_init();
-	kdump_cma_reserve();
-	kvm_cma_reserve();
-
 	/*
 	 * book3s is limited to 16 page sizes due to encoding this in
 	 * a 4-bit field for slices.
@@ -330,7 +325,7 @@ static int __init add_system_ram_resources(void)
 	for_each_mem_range(i, &start, &end) {
 		struct resource *res;
 
-		res = kzalloc_obj(struct resource);
+		res = kzalloc(sizeof(struct resource), GFP_KERNEL);
 		WARN_ON(!res);
 
 		if (res) {
@@ -371,6 +366,12 @@ int devmem_is_allowed(unsigned long pfn)
 }
 #endif /* CONFIG_STRICT_DEVMEM */
 
+/*
+ * This is defined in kernel/resource.c but only powerpc needs to export it, for
+ * the EHEA driver. Drop this when drivers/net/ethernet/ibm/ehea is removed.
+ */
+EXPORT_SYMBOL_GPL(walk_system_ram_range);
+
 #ifdef CONFIG_EXECMEM
 static struct execmem_info execmem_info __ro_after_init;
 
@@ -399,6 +400,8 @@ struct execmem_info __init *execmem_arch_setup(void)
 	 */
 #ifdef MODULES_VADDR
 	unsigned long limit = (unsigned long)_etext - SZ_32M;
+
+	BUILD_BUG_ON(TASK_SIZE > MODULES_VADDR);
 
 	/* First try within 32M limit from _etext to avoid branch trampolines */
 	if (MODULES_VADDR < PAGE_OFFSET && MODULES_END > limit) {

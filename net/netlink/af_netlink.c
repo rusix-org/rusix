@@ -39,7 +39,6 @@
 #include <linux/fs.h>
 #include <linux/slab.h>
 #include <linux/uaccess.h>
-#include <linux/uio.h>
 #include <linux/skbuff.h>
 #include <linux/netdevice.h>
 #include <linux/rtnetlink.h>
@@ -145,7 +144,7 @@ DEFINE_RWLOCK(nl_table_lock);
 EXPORT_SYMBOL_GPL(nl_table_lock);
 static atomic_t nl_table_users = ATOMIC_INIT(0);
 
-#define nl_deref_protected(X) rcu_dereference_protected(X, lockdep_is_held(&nl_table_lock))
+#define nl_deref_protected(X) rcu_dereference_protected(X, lockdep_is_held(&nl_table_lock));
 
 static BLOCKING_NOTIFIER_HEAD(netlink_chain);
 
@@ -293,6 +292,8 @@ static int __netlink_deliver_tap_skb(struct sk_buff *skb,
 	if (!net_eq(dev_net(dev), sock_net(sk)))
 		return 0;
 
+	dev_hold(dev);
+
 	if (is_vmalloc_addr(skb->head))
 		nskb = netlink_to_full_skb(skb, GFP_ATOMIC);
 	else
@@ -308,6 +309,7 @@ static int __netlink_deliver_tap_skb(struct sk_buff *skb,
 			ret = net_xmit_errno(ret);
 	}
 
+	dev_put(dev);
 	return ret;
 }
 
@@ -461,7 +463,7 @@ netlink_unlock_table(void)
 
 struct netlink_compare_arg
 {
-	u64 net_cookie;
+	possible_net_t pnet;
 	u32 portid;
 };
 
@@ -476,14 +478,14 @@ static inline int netlink_compare(struct rhashtable_compare_arg *arg,
 	const struct netlink_sock *nlk = ptr;
 
 	return nlk->portid != x->portid ||
-	       sock_net(&nlk->sk)->net_cookie != x->net_cookie;
+	       !net_eq(sock_net(&nlk->sk), read_pnet(&x->pnet));
 }
 
 static void netlink_compare_arg_init(struct netlink_compare_arg *arg,
 				     struct net *net, u32 portid)
 {
 	memset(arg, 0, sizeof(*arg));
-	arg->net_cookie = net->net_cookie;
+	write_pnet(&arg->pnet, net);
 	arg->portid = portid;
 }
 
@@ -594,8 +596,10 @@ static void netlink_remove(struct sock *sk)
 
 	table = &nl_table[sk->sk_protocol];
 	if (!rhashtable_remove_fast(&table->hash, &nlk_sk(sk)->node,
-				    netlink_rhashtable_params))
+				    netlink_rhashtable_params)) {
+		WARN_ON(refcount_read(&sk->sk_refcnt) == 1);
 		__sock_put(sk);
+	}
 
 	netlink_table_grab();
 	if (nlk_sk(sk)->subscriptions) {
@@ -919,9 +923,9 @@ netlink_update_subscriptions(struct sock *sk, unsigned int subscriptions)
 
 static int netlink_realloc_groups(struct sock *sk)
 {
-	unsigned long *new_groups, *old_groups = NULL;
 	struct netlink_sock *nlk = nlk_sk(sk);
 	unsigned int groups;
+	unsigned long *new_groups;
 	int err = 0;
 
 	netlink_table_grab();
@@ -935,37 +939,18 @@ static int netlink_realloc_groups(struct sock *sk)
 	if (nlk->ngroups >= groups)
 		goto out_unlock;
 
-	/* Can not use krealloc(), because the old buffer might be freed
-	 * immediately, while lockless readers (netlink diag dump and
-	 * /proc/net/netlink) can still be looking at it.
-	 */
-	new_groups = kzalloc(NLGRPSZ(groups), GFP_ATOMIC);
-	if (!new_groups) {
+	new_groups = krealloc(nlk->groups, NLGRPSZ(groups), GFP_ATOMIC);
+	if (new_groups == NULL) {
 		err = -ENOMEM;
 		goto out_unlock;
 	}
-	old_groups = nlk->groups;
-	if (old_groups)
-		memcpy(new_groups, old_groups, NLGRPSZ(nlk->ngroups));
+	memset((char *)new_groups + NLGRPSZ(nlk->ngroups), 0,
+	       NLGRPSZ(groups) - NLGRPSZ(nlk->ngroups));
 
-	/* Publish the new bitmap and its content: pairs with the address
-	 * dependency in lockless readers, which can pick up the new pointer
-	 * while still seeing the old (smaller) nlk->ngroups.
-	 */
-	smp_store_release(&nlk->groups, new_groups);
-
-	/* Then publish the new size: pairs with smp_load_acquire() from
-	 * lockless readers, so that they can not read NLGRPSZ(new ngroups)
-	 * bytes from the old buffer.
-	 */
-	smp_store_release(&nlk->ngroups, groups);
-
+	nlk->groups = new_groups;
+	nlk->ngroups = groups;
  out_unlock:
 	netlink_table_ungrab();
-
-	if (old_groups)
-		kfree_rcu_mightsleep(old_groups);
-
 	return err;
 }
 
@@ -1071,7 +1056,7 @@ unlock:
 	return err;
 }
 
-static int netlink_connect(struct socket *sock, struct sockaddr_unsized *addr,
+static int netlink_connect(struct socket *sock, struct sockaddr *addr,
 			   int alen, int flags)
 {
 	int err = 0;
@@ -1360,8 +1345,6 @@ retry:
 	if (netlink_is_kernel(sk))
 		return netlink_unicast_kernel(sk, skb, ssk);
 
-	skb_reset_network_header(skb);
-	skb_reset_mac_header(skb);
 	if (sk_filter(sk, skb)) {
 		err = skb->len;
 		kfree_skb(skb);
@@ -1496,8 +1479,6 @@ static void do_one_broadcast(struct sock *sk,
 		goto out;
 	}
 
-	skb_reset_network_header(p->skb2);
-	skb_reset_mac_header(p->skb2);
 	if (sk_filter(sk, p->skb2)) {
 		kfree_skb(p->skb2);
 		p->skb2 = NULL;
@@ -1742,18 +1723,18 @@ static int netlink_setsockopt(struct socket *sock, int level, int optname,
 }
 
 static int netlink_getsockopt(struct socket *sock, int level, int optname,
-			      sockopt_t *opt)
+			      char __user *optval, int __user *optlen)
 {
 	struct sock *sk = sock->sk;
 	struct netlink_sock *nlk = nlk_sk(sk);
 	unsigned int flag;
 	int len, val;
-	u32 group;
 
 	if (level != SOL_NETLINK)
 		return -ENOPROTOOPT;
 
-	len = opt->optlen;
+	if (get_user(len, optlen))
+		return -EFAULT;
 	if (len < 0)
 		return -EINVAL;
 
@@ -1777,14 +1758,14 @@ static int netlink_getsockopt(struct socket *sock, int level, int optname,
 
 			idx = pos / sizeof(unsigned long);
 			shift = (pos % sizeof(unsigned long)) * 8;
-			group = (u32)(nlk->groups[idx] >> shift);
-			if (copy_to_iter(&group, sizeof(u32),
-					 &opt->iter_out) != sizeof(u32)) {
+			if (put_user((u32)(nlk->groups[idx] >> shift),
+				     (u32 __user *)(optval + pos))) {
 				err = -EFAULT;
 				break;
 			}
 		}
-		opt->optlen = ALIGN(BITS_TO_BYTES(nlk->ngroups), sizeof(u32));
+		if (put_user(ALIGN(BITS_TO_BYTES(nlk->ngroups), sizeof(u32)), optlen))
+			err = -EFAULT;
 		netlink_unlock_table();
 		return err;
 	}
@@ -1810,8 +1791,8 @@ static int netlink_getsockopt(struct socket *sock, int level, int optname,
 	len = sizeof(int);
 	val = test_bit(flag, &nlk->flags);
 
-	opt->optlen = len;
-	if (copy_to_iter(&val, len, &opt->iter_out) != len)
+	if (put_user(len, optlen) ||
+	    copy_to_user(optval, &val, len))
 		return -EFAULT;
 
 	return 0;
@@ -2134,8 +2115,8 @@ int __netlink_change_ngroups(struct sock *sk, unsigned int groups)
  * This changes the number of multicast groups that are available
  * on a certain netlink family. Note that it is not possible to
  * change the number of groups to below 32. Also note that it does
- * not implicitly clear listeners from groups that are removed when
- * the number of groups is reduced.
+ * not implicitly call netlink_clear_multicast_users() when the
+ * number of groups is reduced.
  *
  * @sk: The kernel netlink socket, as returned by netlink_kernel_create().
  * @groups: The new number of groups.
@@ -2720,23 +2701,17 @@ static int netlink_native_seq_show(struct seq_file *seq, void *v)
 {
 	if (v == SEQ_START_TOKEN) {
 		seq_puts(seq,
-			 "sk Eth Pid        Groups   "
+			 "sk               Eth Pid        Groups   "
 			 "Rmem     Wmem     Dump  Locks    Drops    Inode\n");
 	} else {
 		struct sock *s = v;
 		struct netlink_sock *nlk = nlk_sk(s);
-		const unsigned long *groups;
 
-		/* Lockless read : netlink_realloc_groups() can change
-		 * nlk->groups under us. The old buffer is freed after an
-		 * RCU grace period, and this walk is RCU protected.
-		 */
-		groups = READ_ONCE(nlk->groups);
-
-		seq_printf(seq, "0  %-3d %-10u %08x %-8d %-8d %-5d %-8d %-8u %-8llu\n",
+		seq_printf(seq, "%pK %-3d %-10u %08x %-8d %-8d %-5d %-8d %-8u %-8lu\n",
+			   s,
 			   s->sk_protocol,
 			   nlk->portid,
-			   groups ? (u32)groups[0] : 0,
+			   nlk->groups ? (u32)nlk->groups[0] : 0,
 			   sk_rmem_alloc_get(s),
 			   sk_wmem_alloc_get(s),
 			   READ_ONCE(nlk->cb_running),
@@ -2845,7 +2820,7 @@ static const struct proto_ops netlink_ops = {
 	.listen =	sock_no_listen,
 	.shutdown =	sock_no_shutdown,
 	.setsockopt =	netlink_setsockopt,
-	.getsockopt_iter = netlink_getsockopt,
+	.getsockopt =	netlink_getsockopt,
 	.sendmsg =	netlink_sendmsg,
 	.recvmsg =	netlink_recvmsg,
 	.mmap =		sock_no_mmap,
@@ -2959,7 +2934,7 @@ static int __init netlink_proto_init(void)
 
 	BUILD_BUG_ON(sizeof(struct netlink_skb_parms) > sizeof_field(struct sk_buff, cb));
 
-	nl_table = kzalloc_objs(*nl_table, MAX_LINKS);
+	nl_table = kcalloc(MAX_LINKS, sizeof(*nl_table), GFP_KERNEL);
 	if (!nl_table)
 		goto panic;
 

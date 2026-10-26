@@ -102,7 +102,7 @@ do {									\
 
 #else /* !CONFIG_PPC_BARRIER_NOSPEC */
 #define barrier_nospec_asm
-#define barrier_nospec()	do {} while (0)
+#define barrier_nospec()
 #endif /* CONFIG_PPC_BARRIER_NOSPEC */
 
 /*

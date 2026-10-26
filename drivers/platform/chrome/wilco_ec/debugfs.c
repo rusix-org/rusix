@@ -10,6 +10,7 @@
 #include <linux/ctype.h>
 #include <linux/debugfs.h>
 #include <linux/fs.h>
+#include <linux/mod_devicetable.h>
 #include <linux/module.h>
 #include <linux/platform_data/wilco-ec.h>
 #include <linux/platform_device.h>
@@ -265,8 +266,8 @@ static void wilco_ec_debugfs_remove(struct platform_device *pdev)
 }
 
 static const struct platform_device_id wilco_ec_debugfs_id[] = {
-	{ .name = DRV_NAME },
-	{ }
+	{ DRV_NAME, 0 },
+	{}
 };
 MODULE_DEVICE_TABLE(platform, wilco_ec_debugfs_id);
 

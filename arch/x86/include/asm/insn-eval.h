@@ -45,8 +45,6 @@ enum insn_mmio_type {
 
 enum insn_mmio_type insn_decode_mmio(struct insn *insn, int *bytes);
 
-bool insn_is_nop(struct insn *insn);
-
 /*
  * Write @val into *@reg following the x86 rules for writes to
  * general-purpose registers (Intel SDM Vol. 1, "General-Purpose

@@ -9,7 +9,6 @@
 #include <linux/uaccess.h>
 
 #include <drm/drm_auth.h>
-#include <drm/drm_print.h>
 #include <drm/drm_syncobj.h>
 
 #include "gem/i915_gem_ioctls.h"
@@ -143,7 +142,7 @@ enum {
  * we want to leave the object where it is and for all the existing relocations
  * to match. If the object is given a new address, or if userspace thinks the
  * object is elsewhere, we have to parse all the relocation entries and update
- * the addresses. Userspace can set the I915_EXEC_NO_RELOC flag to hint that
+ * the addresses. Userspace can set the I915_EXEC_NORELOC flag to hint that
  * all the target addresses in all of its objects match the value in the
  * relocation entries and that they all match the presumed offsets given by the
  * list of execbuffer objects. Using this knowledge, we know that if we haven't
@@ -896,7 +895,7 @@ static struct i915_vma *eb_lookup_vma(struct i915_execbuffer *eb, u32 handle)
 
 		rcu_read_lock();
 		vma = radix_tree_lookup(&eb->gem_context->handles_vma, handle);
-		if (likely(vma))
+		if (likely(vma && vma->vm == vm))
 			vma = i915_vma_tryget(vma);
 		rcu_read_unlock();
 		if (likely(vma))
@@ -1522,9 +1521,8 @@ static int eb_relocate_vma(struct i915_execbuffer *eb, struct eb_vma *ev)
 
 	/*
 	 * We must check that the entire relocation array is safe
-	 * to read. Whether it is also writable only shows when we
-	 * write back the presumed offsets below, and if that fails we
-	 * fall back to the slow path.
+	 * to read. However, if the array is not writable the user loses
+	 * the updated relocation values.
 	 */
 	if (unlikely(!access_ok(urelocs, remain * sizeof(*urelocs))))
 		return -EFAULT;
@@ -1554,7 +1552,6 @@ static int eb_relocate_vma(struct i915_execbuffer *eb, struct eb_vma *ev)
 		remain -= count;
 		do {
 			u64 offset = eb_relocate_entry(eb, ev, r);
-			int err;
 
 			if (likely(offset == 0))
 				continue;
@@ -1564,41 +1561,28 @@ static int eb_relocate_vma(struct i915_execbuffer *eb, struct eb_vma *ev)
 				goto out;
 			}
 			/*
-			 * Write back the presumed offset. We hold the
-			 * objects' dma_resv locks here, so this must not
-			 * take a page fault: that would take mmap_lock
-			 * under dma_resv, the opposite of the order our
-			 * own fault handler uses.
+			 * Note that reporting an error now
+			 * leaves everything in an inconsistent
+			 * state as we have *already* changed
+			 * the relocation value inside the
+			 * object. As we have not changed the
+			 * reloc.presumed_offset or will not
+			 * change the execobject.offset, on the
+			 * call we may not rewrite the value
+			 * inside the object, leaving it
+			 * dangling and causing a GPU hang. Unless
+			 * userspace dynamically rebuilds the
+			 * relocations on each execbuf rather than
+			 * presume a static tree.
 			 *
-			 * If the write fails (the page is read-only,
-			 * copy-on-write, or gone since we read it), we
-			 * must not just carry on. We have already changed
-			 * the relocation value inside the object, and a
-			 * stale presumed_offset could later match again
-			 * and make us skip a relocation that is needed,
-			 * hanging the GPU. So fall back to the slow path,
-			 * as for a failed read: it retries after
-			 * prefaulting and, failing that, marks every
-			 * presumed_offset invalid with faults allowed and
-			 * no locks held.
+			 * We did previously check if the relocations
+			 * were writable (access_ok), an error now
+			 * would be a strange race with mprotect,
+			 * having already demonstrated that we
+			 * can read from this userspace address.
 			 */
 			offset = gen8_canonical_addr(offset & ~UPDATE);
-			pagefault_disable();
-			err = put_user(offset, &urelocs[r - stack].presumed_offset);
-			pagefault_enable();
-
-			/*
-			 * Error handling is disabled on purpose. No, it makes
-			 * no sense, and the code will loop over the relocations
-			 * without writing them back and just waste CPU time,
-			 * but that's apparently what the mprotect test-cases
-			 * want. See commit 97a37c919f62 ("drm/i915/gem: Ignore
-			 * readonly failures when updating relocs")
-			 */
-			if (unlikely(err) && 0) {
-				remain = -EFAULT;
-				goto out;
-			}
+			__put_user(offset, &urelocs[r - stack].presumed_offset);
 		} while (r++, --count);
 		urelocs += ARRAY_SIZE(stack);
 	} while (remain);
@@ -1650,11 +1634,11 @@ static int check_relocations(const struct drm_i915_gem_exec_object2 *entry)
 
 	end = addr + size;
 	for (; addr < end; addr += PAGE_SIZE) {
-		int err = get_user(c, addr);
+		int err = __get_user(c, addr);
 		if (err)
 			return err;
 	}
-	return get_user(c, end - 1);
+	return __get_user(c, end - 1);
 }
 
 static int eb_copy_relocations(const struct i915_execbuffer *eb)
@@ -2021,7 +2005,7 @@ static int eb_capture_stage(struct i915_execbuffer *eb)
 		for_each_batch_create_order(eb, j) {
 			struct i915_capture_list *capture;
 
-			capture = kmalloc_obj(*capture);
+			capture = kmalloc(sizeof(*capture), GFP_KERNEL);
 			if (!capture)
 				continue;
 
@@ -2852,7 +2836,7 @@ add_timeline_fence_array(struct i915_execbuffer *eb,
 		if (user_fence.flags & __I915_EXEC_FENCE_UNKNOWN_FLAGS)
 			return -EINVAL;
 
-		if (get_user(point, user_values++))
+		if (__get_user(point, user_values++))
 			return -EFAULT;
 
 		syncobj = drm_syncobj_find(eb->file, user_fence.handle);
@@ -3205,7 +3189,7 @@ eb_composite_fence_create(struct i915_execbuffer *eb, int out_fence_fd)
 
 	GEM_BUG_ON(!intel_context_is_parent(eb->context));
 
-	fences = kmalloc_objs(*fences, eb->num_batches);
+	fences = kmalloc_array(eb->num_batches, sizeof(*fences), GFP_KERNEL);
 	if (!fences)
 		return ERR_PTR(-ENOMEM);
 
@@ -3218,7 +3202,8 @@ eb_composite_fence_create(struct i915_execbuffer *eb, int out_fence_fd)
 	fence_array = dma_fence_array_create(eb->num_batches,
 					     fences,
 					     eb->context->parallel.fence_context,
-					     eb->context->parallel.seqno++);
+					     eb->context->parallel.seqno++,
+					     false);
 	if (!fence_array) {
 		kfree(fences);
 		return ERR_PTR(-ENOMEM);

@@ -12,26 +12,23 @@
  * sample was taken from.
  */
 
-#include <inttypes.h>
+#include <unistd.h>
 #include <stdio.h>
 #include <string.h>
+#include <inttypes.h>
 
-#include <asm/byteorder.h>
-#include <linux/compiler.h>
-#include <linux/err.h>
 #include <sys/stat.h>
-#include <unistd.h>
+#include <linux/compiler.h>
+#include <asm/byteorder.h>
 
-#include "color.h"
 #include "debug.h"
-#include "evlist.h"
-#include "hashmap.h"
-#include "pmu.h"
-#include "pmus.h"
-#include "s390-cpumcf-kernel.h"
-#include "sample-raw.h"
-#include "sample.h"
 #include "session.h"
+#include "evlist.h"
+#include "color.h"
+#include "sample-raw.h"
+#include "s390-cpumcf-kernel.h"
+#include "util/pmu.h"
+#include "util/sample.h"
 
 static size_t ctrset_size(struct cf_ctrset_entry *set)
 {
@@ -135,8 +132,8 @@ static int get_counterset_start(int setnr)
 }
 
 struct get_counter_name_data {
-	long wanted;
-	const char *result;
+	int wanted;
+	char *result;
 };
 
 static int get_counter_name_callback(void *vdata, struct pmu_event_info *info)
@@ -154,20 +151,10 @@ static int get_counter_name_callback(void *vdata, struct pmu_event_info *info)
 
 	rc = sscanf(event_str, "event=%x", &event_nr);
 	if (rc == 1 && event_nr == data->wanted) {
-		data->result = info->name;
+		data->result = strdup(info->name);
 		return 1; /* Terminate the search. */
 	}
 	return 0;
-}
-
-static size_t get_counter_name_hash_fn(long key, void *ctx __maybe_unused)
-{
-	return key;
-}
-
-static bool get_counter_name_hashmap_equal_fn(long key1, long key2, void *ctx __maybe_unused)
-{
-	return key1 == key2;
 }
 
 /* Scan the PMU and extract the logical name of a counter from the event. Input
@@ -177,55 +164,21 @@ static bool get_counter_name_hashmap_equal_fn(long key1, long key2, void *ctx __
  */
 static char *get_counter_name(int set, int nr, struct perf_pmu *pmu)
 {
-	static struct hashmap *cache;
-	static struct perf_pmu *cache_pmu;
-	long cache_key = get_counterset_start(set) + nr;
 	struct get_counter_name_data data = {
-		.wanted = cache_key,
+		.wanted = get_counterset_start(set) + nr,
 		.result = NULL,
 	};
-	char *result = NULL;
 
 	if (!pmu)
 		return NULL;
 
-	if (cache_pmu == pmu && hashmap__find(cache, cache_key, &result))
-		return strdup(result);
-
 	perf_pmu__for_each_event(pmu, /*skip_duplicate_pmus=*/ true,
 				 &data, get_counter_name_callback);
-
-	result = strdup(data.result ?: "<unknown>");
-
-	if (cache_pmu == NULL) {
-		struct hashmap *tmp = hashmap__new(get_counter_name_hash_fn,
-						   get_counter_name_hashmap_equal_fn,
-						   /*ctx=*/NULL);
-
-		if (!IS_ERR(tmp)) {
-			cache = tmp;
-			cache_pmu = pmu;
-		}
-	}
-
-	if (cache_pmu == pmu && result) {
-		char *old_value = NULL, *new_value = strdup(result);
-
-		if (new_value) {
-			hashmap__set(cache, cache_key, new_value, /*old_key=*/NULL, &old_value);
-			/*
-			 * Free in case of a race, but resizing would be broken
-			 * in that case.
-			 */
-			free(old_value);
-		}
-	}
-	return result;
+	return data.result;
 }
 
-static void s390_cpumcfdg_dump(struct perf_sample *sample)
+static void s390_cpumcfdg_dump(struct perf_pmu *pmu, struct perf_sample *sample)
 {
-	struct perf_pmu *pmu = sample->evsel->pmu;
 	size_t i, len = sample->raw_size, offset = 0;
 	unsigned char *buf = sample->raw_data;
 	const char *color = PERF_COLOR_BLUE;
@@ -286,9 +239,8 @@ static bool s390_pai_all_test(struct perf_sample *sample)
 	return true;
 }
 
-static void s390_pai_all_dump(struct perf_sample *sample)
+static void s390_pai_all_dump(struct evsel *evsel, struct perf_sample *sample)
 {
-	struct evsel *evsel = sample->evsel;
 	size_t len = sample->raw_size, offset = 0;
 	unsigned char *p = sample->raw_data;
 	const char *color = PERF_COLOR_BLUE;
@@ -335,33 +287,31 @@ void evlist__s390_sample_raw(struct evlist *evlist, union perf_event *event,
 			     struct perf_sample *sample)
 {
 	const char *pai_name;
+	struct evsel *evsel;
 
 	if (event->header.type != PERF_RECORD_SAMPLE)
 		return;
 
-	if (!sample->evsel) {
-		sample->evsel = evlist__event2evsel(evlist, event);
-		if (!sample->evsel)
-			return;
-		evsel__get(sample->evsel);
-	}
+	evsel = evlist__event2evsel(evlist, event);
+	if (!evsel)
+		return;
 
 	/* Check for raw data in sample */
 	if (!sample->raw_size || !sample->raw_data)
 		return;
 
 	/* Display raw data on screen */
-	if (sample->evsel->core.attr.config == PERF_EVENT_CPUM_CF_DIAG) {
-		if (!sample->evsel->pmu)
-			sample->evsel->pmu = perf_pmus__find("cpum_cf");
+	if (evsel->core.attr.config == PERF_EVENT_CPUM_CF_DIAG) {
+		if (!evsel->pmu)
+			evsel->pmu = perf_pmus__find("cpum_cf");
 		if (!s390_cpumcfdg_testctr(sample))
 			pr_err("Invalid counter set data encountered\n");
 		else
-			s390_cpumcfdg_dump(sample);
+			s390_cpumcfdg_dump(evsel->pmu, sample);
 		return;
 	}
 
-	switch (sample->evsel->core.attr.config) {
+	switch (evsel->core.attr.config) {
 	case PERF_EVENT_PAI_NNPA_ALL:
 		pai_name = "NNPA_ALL";
 		break;
@@ -375,8 +325,8 @@ void evlist__s390_sample_raw(struct evlist *evlist, union perf_event *event,
 	if (!s390_pai_all_test(sample)) {
 		pr_err("Invalid %s raw data encountered\n", pai_name);
 	} else {
-		if (!sample->evsel->pmu)
-			sample->evsel->pmu = perf_pmus__find_by_type(sample->evsel->core.attr.type);
-		s390_pai_all_dump(sample);
+		if (!evsel->pmu)
+			evsel->pmu = perf_pmus__find_by_type(evsel->core.attr.type);
+		s390_pai_all_dump(evsel, sample);
 	}
 }

@@ -21,7 +21,6 @@
 #include <linux/kernel_stat.h>
 #include <linux/module.h>
 #include <linux/mutex.h>
-#include <linux/sysfs.h>
 
 /* Ondemand Sampling types */
 enum {OD_NORMAL_SAMPLE, OD_SUB_SAMPLE};
@@ -58,7 +57,7 @@ static ssize_t file_name##_show						\
 {									\
 	struct dbs_data *dbs_data = to_dbs_data(attr_set);		\
 	struct _gov##_dbs_tuners *tuners = dbs_data->tuners;		\
-	return sysfs_emit(buf, "%u\n", tuners->file_name);		\
+	return sprintf(buf, "%u\n", tuners->file_name);			\
 }
 
 #define gov_show_one_common(file_name)					\
@@ -66,7 +65,7 @@ static ssize_t file_name##_show						\
 (struct gov_attr_set *attr_set, char *buf)				\
 {									\
 	struct dbs_data *dbs_data = to_dbs_data(attr_set);		\
-	return sysfs_emit(buf, "%u\n", dbs_data->file_name);		\
+	return sprintf(buf, "%u\n", dbs_data->file_name);		\
 }
 
 #define gov_attr_ro(_name)						\
@@ -95,8 +94,6 @@ struct policy_dbs_info {
 	/* Multiplier for increasing sample delay temporarily. */
 	unsigned int rate_mult;
 	unsigned int idle_periods;	/* For conservative */
-	/* Maximum load from the current policy sample. */
-	unsigned int max_sample_load;
 	/* Status indicators */
 	bool is_shared;		/* This object is used by multiple CPUs */
 	bool work_in_progress;	/* Work is being queued up or in progress */

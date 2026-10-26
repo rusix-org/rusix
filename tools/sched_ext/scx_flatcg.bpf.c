@@ -18,7 +18,7 @@
  * 100/(100+100) == 1/2. At its parent level, A is competing against D and A's
  * share in that competition is 100/(200+100) == 1/3. B's eventual share in the
  * system can be calculated by multiplying the two shares, 1/2 * 1/3 == 1/6. C's
- * eventual share is the same at 1/6. D is only competing at the top level and
+ * eventual shaer is the same at 1/6. D is only competing at the top level and
  * its share is 200/(100+200) == 2/3.
  *
  * So, instead of hierarchically scheduling level-by-level, we can consider it
@@ -144,7 +144,7 @@ static bool cgv_node_less(struct bpf_rb_node *a, const struct bpf_rb_node *b)
 	cgc_a = container_of(a, struct cgv_node, rb_node);
 	cgc_b = container_of(b, struct cgv_node, rb_node);
 
-	return time_before(cgc_a->cvtime, cgc_b->cvtime);
+	return cgc_a->cvtime < cgc_b->cvtime;
 }
 
 static struct fcg_cpu_ctx *find_cpu_ctx(void)
@@ -605,9 +605,6 @@ void BPF_STRUCT_OPS(fcg_cgroup_set_weight, struct cgroup *cgrp, u32 weight)
 		pcgc->child_weight_sum += (s64)weight - cgc->weight;
 	cgc->weight = weight;
 	bpf_spin_unlock(&cgv_tree_lock);
-
-	/* expire cached hweights so the new weight propagates */
-	__sync_fetch_and_add(&hweight_gen, 1);
 }
 
 static bool try_pick_next_cgroup(u64 *cgidp)
@@ -666,7 +663,7 @@ static bool try_pick_next_cgroup(u64 *cgidp)
 		goto out_free;
 	}
 
-	if (!scx_bpf_dsq_move_to_local(cgid, 0)) {
+	if (!scx_bpf_dsq_move_to_local(cgid)) {
 		bpf_cgroup_release(cgrp);
 		stat_inc(FCG_STAT_PNC_EMPTY);
 		goto out_stash;
@@ -746,7 +743,7 @@ void BPF_STRUCT_OPS(fcg_dispatch, s32 cpu, struct task_struct *prev)
 		goto pick_next_cgroup;
 
 	if (time_before(now, cpuc->cur_at + cgrp_slice_ns)) {
-		if (scx_bpf_dsq_move_to_local(cpuc->cur_cgid, 0)) {
+		if (scx_bpf_dsq_move_to_local(cpuc->cur_cgid)) {
 			stat_inc(FCG_STAT_CNS_KEEP);
 			return;
 		}
@@ -794,7 +791,7 @@ void BPF_STRUCT_OPS(fcg_dispatch, s32 cpu, struct task_struct *prev)
 pick_next_cgroup:
 	cpuc->cur_at = now;
 
-	if (scx_bpf_dsq_move_to_local(FALLBACK_DSQ, 0)) {
+	if (scx_bpf_dsq_move_to_local(FALLBACK_DSQ)) {
 		cpuc->cur_cgid = 0;
 		return;
 	}
@@ -856,10 +853,8 @@ int BPF_STRUCT_OPS_SLEEPABLE(fcg_cgroup_init, struct cgroup *cgrp,
 	 * unlikely case that it breaks.
 	 */
 	ret = scx_bpf_create_dsq(cgid, -1);
-	if (ret) {
-		scx_bpf_error("scx_bpf_create_dsq failed (%d)", ret);
+	if (ret)
 		return ret;
-	}
 
 	cgc = bpf_cgrp_storage_get(&cgrp_ctx, cgrp, 0,
 				   BPF_LOCAL_STORAGE_GET_F_CREATE);
@@ -933,7 +928,7 @@ void BPF_STRUCT_OPS(fcg_cgroup_move, struct task_struct *p,
 	struct fcg_cgrp_ctx *from_cgc, *to_cgc;
 	s64 delta;
 
-	/* find_cgrp_ctx() triggers scx_bpf_error() on lookup failures */
+	/* find_cgrp_ctx() triggers scx_ops_error() on lookup failures */
 	if (!(from_cgc = find_cgrp_ctx(from)) || !(to_cgc = find_cgrp_ctx(to)))
 		return;
 
@@ -943,15 +938,7 @@ void BPF_STRUCT_OPS(fcg_cgroup_move, struct task_struct *p,
 
 s32 BPF_STRUCT_OPS_SLEEPABLE(fcg_init)
 {
-	int ret;
-
-	ret = scx_bpf_create_dsq(FALLBACK_DSQ, -1);
-	if (ret) {
-		scx_bpf_error("failed to create DSQ %d (%d)", FALLBACK_DSQ, ret);
-		return ret;
-	}
-
-	return 0;
+	return scx_bpf_create_dsq(FALLBACK_DSQ, -1);
 }
 
 void BPF_STRUCT_OPS(fcg_exit, struct scx_exit_info *ei)
@@ -974,5 +961,5 @@ SCX_OPS_DEFINE(flatcg_ops,
 	       .cgroup_move		= (void *)fcg_cgroup_move,
 	       .init			= (void *)fcg_init,
 	       .exit			= (void *)fcg_exit,
-	       .flags			= SCX_OPS_ENQ_EXITING,
+	       .flags			= SCX_OPS_HAS_CGROUP_WEIGHT | SCX_OPS_ENQ_EXITING,
 	       .name			= "flatcg");

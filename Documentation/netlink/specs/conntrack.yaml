@@ -72,14 +72,14 @@ definitions:
     type: enum
     entries:
       - none
-      - closed
+      - cloned
       - cookie-wait
       - cookie-echoed
       - established
       - shutdown-sent
-      - shutdown-recd
+      - shutdown-received
       - shutdown-ack-sent
-      - heartbeat-sent
+      - shutdown-heartbeat-sent
   -
     name: nf-ct-status
     type: flags
@@ -116,11 +116,9 @@ attribute-sets:
       -
         name: packets-old
         type: u32
-        doc: obsolete
       -
         name: bytes-old
         type: u32
-        doc: obsolete
       -
         name: pad
         type: pad
@@ -294,12 +292,6 @@ attribute-sets:
         name: help-name
         type: string
         doc: helper name
-      -
-        name: help-info
-        type: binary
-        doc: >-
-          Private data of a user space helper, only present for helpers
-          registered via nfnetlink_cthelper with a non-zero data length.
   -
     name: nat-proto-attrs
     attributes:
@@ -323,15 +315,15 @@ attribute-sets:
         type: u32
         byte-order: big-endian
       -
-        name: nat-proto
-        type: nest
-        nested-attributes: nat-proto-attrs
-      -
         name: nat-v6-minip
         type: binary
       -
         name: nat-v6-maxip
         type: binary
+      -
+        name: nat-proto
+        type: nest
+        nested-attributes: nat-proto-attrs
   -
     name: seqadj-attrs
     attributes:
@@ -354,20 +346,6 @@ attribute-sets:
         name: secctx-name
         type: string
   -
-    name: timestamp-attrs
-    attributes:
-      -
-        name: start
-        type: u64
-        byte-order: big-endian
-      -
-        name: stop
-        type: u64
-        byte-order: big-endian
-      -
-        name: pad
-        type: pad
-  -
     name: synproxy-attrs
     attributes:
       -
@@ -382,23 +360,6 @@ attribute-sets:
         name: tsoff
         type: u32
         byte-order: big-endian
-  -
-    name: filter-attrs
-    attributes:
-      -
-        name: orig-flags
-        type: u32
-        doc: bitmask of tuple fields to filter on, original direction
-      -
-        name: reply-flags
-        type: u32
-        doc: bitmask of tuple fields to filter on, reply direction
-      -
-        name: zone
-        type: flag
-        doc: >-
-          Filter on conntrack zone id; requires the top-level zone
-          (``CTA_ZONE``) attribute.
   -
     name: conntrack-attrs
     attributes:
@@ -473,7 +434,7 @@ attribute-sets:
         nested-attributes: seqadj-attrs
       -
         name: secmark
-        type: u32
+        type: binary
         doc: obsolete
       -
         name: zone
@@ -486,8 +447,8 @@ attribute-sets:
         nested-attributes: secctx-attrs
       -
         name: timestamp
-        type: nest
-        nested-attributes: timestamp-attrs
+        type: u64
+        byte-order: big-endian
       -
         name: mark-mask
         type: u32
@@ -505,7 +466,7 @@ attribute-sets:
       -
         name: filter
         type: nest
-        nested-attributes: filter-attrs
+        nested-attributes: tuple-attrs
       -
         name: status-mask
         type: u32
@@ -538,7 +499,7 @@ attribute-sets:
         name: invalid
         type: u32
         byte-order: big-endian
-        doc: packets which could not be tracked
+        doc: obsolete
       -
         name: ignore
         type: u32
@@ -610,32 +571,30 @@ operations:
             - status
             - protoinfo
             - help
+            - nat-src
+            - nat-dst
             - timeout
             - mark
             - counters-orig
             - counters-reply
             - use
             - id
+            - nat-dst
             - tuple-master
             - seq-adj-orig
             - seq-adj-reply
             - zone
             - secctx
-            - timestamp
             - labels
             - synproxy
       dump:
         request:
           value: 0x101
           attributes:
-            - tuple-orig
-            - tuple-reply
-            - status
             - mark
-            - zone
-            - mark-mask
             - filter
-            - status-mask
+            - status
+            - zone
         reply:
           value: 0x100
           attributes:
@@ -644,18 +603,20 @@ operations:
             - status
             - protoinfo
             - help
+            - nat-src
+            - nat-dst
             - timeout
             - mark
             - counters-orig
             - counters-reply
             - use
             - id
+            - nat-dst
             - tuple-master
             - seq-adj-orig
             - seq-adj-reply
             - zone
             - secctx
-            - timestamp
             - labels
             - synproxy
     -
@@ -669,8 +630,8 @@ operations:
         reply:
           value: 0x104
           attributes:
+            - searched
             - found
-            - invalid
             - insert
             - insert-failed
             - drop

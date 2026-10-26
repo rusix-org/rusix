@@ -36,7 +36,6 @@
 #include <linux/kmod.h>
 #include <linux/kprobes.h>
 #include <linux/kmsan.h>
-#include <linux/ksysfs.h>
 #include <linux/vmalloc.h>
 #include <linux/kernel_stat.h>
 #include <linux/start_kernel.h>
@@ -103,11 +102,9 @@
 #include <linux/stackdepot.h>
 #include <linux/randomize_kstack.h>
 #include <linux/pidfs.h>
-#include <linux/fs_struct.h>
 #include <linux/ptdump.h>
 #include <linux/time_namespace.h>
 #include <linux/unaligned.h>
-#include <linux/vdso_datastore.h>
 #include <net/net_namespace.h>
 
 #include <asm/io.h>
@@ -166,7 +163,6 @@ static size_t initargs_offs;
 
 static char *execute_command;
 static char *ramdisk_execute_command = "/init";
-static bool __initdata ramdisk_execute_command_set;
 
 /*
  * Used to generate warnings if static_key manipulation functions are used
@@ -278,7 +274,7 @@ static void * __init get_boot_config_from_initrd(size_t *_size)
 	int i;
 
 	if (!initrd_end || initrd_end < initrd_start ||
-	    initrd_end - initrd_start < BOOTCONFIG_FOOTER_SIZE)
+	    initrd_end - initrd_start < BOOTCONFIG_MAGIC_LEN + 8)
 		return NULL;
 
 	data = (char *)initrd_end - BOOTCONFIG_MAGIC_LEN;
@@ -336,64 +332,9 @@ static void * __init get_boot_config_from_initrd(size_t *_size)
 
 #ifdef CONFIG_BOOT_CONFIG
 
-/* Check if a parameter name matches an obs_kernel_param entry */
-static bool __init match_obs_param(const char *param, const char *pattern)
-{
-	size_t n = strlen(pattern);
-
-	if (n > 0 && pattern[n - 1] == '=')
-		return parameqn(param, pattern, n - 1) && param[n - 1] == '\0';
-
-	return parameq(param, pattern);
-}
-
-/* Return true if the given param is only defined by early_param(). */
-static bool __init is_early_only_param(const char *param)
-{
-	const struct obs_kernel_param *p;
-	const struct kernel_param *kp;
-	bool has_early = false;
-
-	/* If handled by a regular module_param, it is not early-only */
-	for (kp = __start___param; kp < __stop___param; kp++) {
-		if (parameq(param, kp->name))
-			return false;
-	}
-
-	/* Check __setup / early_param table */
-	for (p = __setup_start; p < __setup_end; p++) {
-		if (match_obs_param(param, p->str)) {
-			if (!p->early)
-				return false;
-			has_early = true;
-		}
-	}
-	return has_early;
-}
-
-struct xbc_filter_data {
-	bool warn;
-};
-
-static bool __init xbc_kernel_param_filter(struct xbc_node *node,
-					   const char *key, void *data)
-{
-	struct xbc_filter_data *fdata = data;
-
-	if (is_early_only_param(key)) {
-		if (fdata && fdata->warn)
-			pr_warn("bootconfig: early_param 'kernel.%s' cannot be applied from bootconfig, skipping\n",
-				key);
-		return false;
-	}
-	return true;
-}
-
 /* Make an extra command line under given key word */
-static char * __init xbc_make_cmdline(const char *key, bool is_kernel)
+static char * __init xbc_make_cmdline(const char *key)
 {
-	struct xbc_filter_data fdata = { .warn = true };
-	xbc_cmdline_filter_fn filter = is_kernel ? xbc_kernel_param_filter : NULL;
 	struct xbc_node *root;
 	char *new_cmdline;
 	int ret, len = 0;
@@ -402,12 +343,8 @@ static char * __init xbc_make_cmdline(const char *key, bool is_kernel)
 	if (!root)
 		return NULL;
 
-	/*
-	 * Pass 1: Count required buffer size. Emit warnings for skipped early
-	 * params in this pass so they are logged even if all parameters under
-	 * @key are skipped and len becomes 0.
-	 */
-	len = xbc_snprint_cmdline_filter(NULL, 0, root, filter, &fdata);
+	/* Count required buffer size */
+	len = xbc_snprint_cmdline(NULL, 0, root);
 	if (len <= 0)
 		return NULL;
 
@@ -417,9 +354,7 @@ static char * __init xbc_make_cmdline(const char *key, bool is_kernel)
 		return NULL;
 	}
 
-	/* Pass 2: Render into buffer with warnings suppressed */
-	fdata.warn = false;
-	ret = xbc_snprint_cmdline_filter(new_cmdline, len + 1, root, filter, &fdata);
+	ret = xbc_snprint_cmdline(new_cmdline, len + 1, root);
 	if (ret < 0 || ret > len) {
 		pr_err("Failed to print extra kernel cmdline.\n");
 		memblock_free(new_cmdline, len + 1);
@@ -429,33 +364,45 @@ static char * __init xbc_make_cmdline(const char *key, bool is_kernel)
 	return new_cmdline;
 }
 
+static int __init bootconfig_params(char *param, char *val,
+				    const char *unused, void *arg)
+{
+	if (strcmp(param, "bootconfig") == 0) {
+		bootconfig_found = true;
+	}
+	return 0;
+}
+
 static int __init warn_bootconfig(char *str)
 {
-	/* The 'bootconfig' option is handled by setup_boot_config(). */
+	/* The 'bootconfig' has been handled by bootconfig_params(). */
 	return 0;
 }
 
 static void __init setup_boot_config(void)
 {
+	static char tmp_cmdline[COMMAND_LINE_SIZE] __initdata;
 	const char *msg, *data;
-	int pos, ret, offs;
+	int pos, ret;
 	size_t size;
-	bool from_embedded = false;
+	char *err;
 
 	/* Cut out the bootconfig data even if we have no bootconfig option */
 	data = get_boot_config_from_initrd(&size);
 	/* If there is no bootconfig in initrd, try embedded one. */
-	if (!data) {
+	if (!data)
 		data = xbc_get_embedded_bootconfig(&size);
-		from_embedded = true;
-	}
 
-	bootconfig_found = bootconfig_cmdline_requested(boot_command_line, &offs);
-	if (!(bootconfig_found || IS_ENABLED(CONFIG_BOOT_CONFIG_FORCE)))
+	strscpy(tmp_cmdline, boot_command_line, COMMAND_LINE_SIZE);
+	err = parse_args("bootconfig", tmp_cmdline, NULL, 0, 0, 0, NULL,
+			 bootconfig_params);
+
+	if (IS_ERR(err) || !(bootconfig_found || IS_ENABLED(CONFIG_BOOT_CONFIG_FORCE)))
 		return;
 
-	/* Offset of the init arguments after a "--", located by the helper. */
-	initargs_offs = offs;
+	/* parse_args() stops at the next param of '--' and returns an address */
+	if (err)
+		initargs_offs = err - tmp_cmdline;
 
 	if (!data) {
 		/* If user intended to use bootconfig, show an error level message */
@@ -476,26 +423,10 @@ static void __init setup_boot_config(void)
 	} else {
 		xbc_get_info(&ret, NULL);
 		pr_info("Load bootconfig: %ld bytes %d nodes\n", (long)size, ret);
-		/*
-		 * keys starting with "kernel." are passed via cmdline. When
-		 * this bootconfig came from the embedded source and
-		 * setup_arch() already prepended the rendered "kernel" subtree
-		 * to boot_command_line, rendering again here would duplicate
-		 * the keys in saved_command_line and make accumulating handlers
-		 * (console=, earlycon=, ...) re-register the same value. Skip
-		 * only when the prepend really happened.
-		 *
-		 * On arches that do not select ARCH_SUPPORTS_CMDLINE_FROM_BOOTCONFIG,
-		 * CONFIG_CMDLINE_FROM_BOOTCONFIG is unselectable and
-		 * xbc_embedded_cmdline_applied() collapses to a stub returning
-		 * false, so this path still runs and the embedded "kernel"
-		 * keys reach the cmdline via the runtime parser exactly as
-		 * before this series.
-		 */
-		if (!from_embedded || !xbc_embedded_cmdline_applied())
-			extra_command_line = xbc_make_cmdline("kernel", true);
+		/* keys starting with "kernel." are passed via cmdline */
+		extra_command_line = xbc_make_cmdline("kernel");
 		/* Also, "init." keys are init arguments */
-		extra_init_args = xbc_make_cmdline("init", false);
+		extra_init_args = xbc_make_cmdline("init");
 	}
 	return;
 }
@@ -653,7 +584,6 @@ static int __init rdinit_setup(char *str)
 	unsigned int i;
 
 	ramdisk_execute_command = str;
-	ramdisk_execute_command_set = true;
 	/* See "auto" comment in init_setup */
 	for (i = 1; i < MAX_INIT_ARGS; i++)
 		argv_init[i] = NULL;
@@ -741,11 +671,6 @@ static __initdata DECLARE_COMPLETION(kthreadd_done);
 
 static noinline void __ref __noreturn rest_init(void)
 {
-	struct kernel_clone_args init_args = {
-		.flags		= (CLONE_VM | CLONE_UNTRACED),
-		.fn		= kernel_init,
-		.fn_arg		= NULL,
-	};
 	struct task_struct *tsk;
 	int pid;
 
@@ -755,7 +680,7 @@ static noinline void __ref __noreturn rest_init(void)
 	 * the init task will end up wanting to create kthreads, which, if
 	 * we schedule it before we create kthreadd, will OOPS.
 	 */
-	pid = kernel_clone(&init_args);
+	pid = user_mode_thread(kernel_init, NULL, CLONE_FS);
 	/*
 	 * Pin init on the boot CPU. Task migration is not properly working
 	 * until sched_init_smp() has been run. It will set the allowed
@@ -866,14 +791,6 @@ static inline void initcall_debug_enable(void)
 #ifdef CONFIG_RANDOMIZE_KSTACK_OFFSET
 DEFINE_STATIC_KEY_MAYBE_RO(CONFIG_RANDOMIZE_KSTACK_OFFSET_DEFAULT,
 			   randomize_kstack_offset);
-DEFINE_PER_CPU(struct rnd_state, kstack_rnd_state);
-
-static int __init random_kstack_init(void)
-{
-	prandom_seed_full_state(&kstack_rnd_state);
-	return 0;
-}
-late_initcall(random_kstack_init);
 
 static int __init early_randomize_kstack_offset(char *buf)
 {
@@ -949,101 +866,6 @@ static void __init early_numa_node_init(void)
 #endif
 }
 
-#define KERNEL_CMDLINE_PREFIX		"Kernel command line: "
-#define KERNEL_CMDLINE_PREFIX_LEN	(sizeof(KERNEL_CMDLINE_PREFIX) - 1)
-#define KERNEL_CMDLINE_CONTINUATION	" \\"
-#define KERNEL_CMDLINE_CONTINUATION_LEN	(sizeof(KERNEL_CMDLINE_CONTINUATION) - 1)
-
-#define MIN_CMDLINE_LOG_WRAP_IDEAL_LEN	(KERNEL_CMDLINE_PREFIX_LEN + \
-					 KERNEL_CMDLINE_CONTINUATION_LEN)
-#define CMDLINE_LOG_WRAP_IDEAL_LEN	(CONFIG_CMDLINE_LOG_WRAP_IDEAL_LEN > \
-					 MIN_CMDLINE_LOG_WRAP_IDEAL_LEN ? \
-					 CONFIG_CMDLINE_LOG_WRAP_IDEAL_LEN : \
-					 MIN_CMDLINE_LOG_WRAP_IDEAL_LEN)
-
-#define IDEAL_CMDLINE_LEN		(CMDLINE_LOG_WRAP_IDEAL_LEN - KERNEL_CMDLINE_PREFIX_LEN)
-#define IDEAL_CMDLINE_SPLIT_LEN		(IDEAL_CMDLINE_LEN - KERNEL_CMDLINE_CONTINUATION_LEN)
-
-/**
- * print_kernel_cmdline() - Print the kernel cmdline with wrapping.
- * @cmdline: The cmdline to print.
- *
- * Print the kernel command line, trying to wrap based on the Kconfig knob
- * CONFIG_CMDLINE_LOG_WRAP_IDEAL_LEN.
- *
- * Wrapping is based on spaces, ignoring quotes. All lines are prefixed
- * with "Kernel command line: " and lines that are not the last line have
- * a " \" suffix added to them. The prefix and suffix count towards the
- * line length for wrapping purposes. The ideal length will be exceeded
- * if no appropriate place to wrap is found.
- *
- * Example output if CONFIG_CMDLINE_LOG_WRAP_IDEAL_LEN is 40:
- *   Kernel command line: loglevel=7 \
- *   Kernel command line: init=/sbin/init \
- *   Kernel command line: root=PARTUUID=8c3efc1a-768b-6642-8d0c-89eb782f19f0/PARTNROFF=1 \
- *   Kernel command line: rootwait ro \
- *   Kernel command line: my_quoted_arg="The \
- *   Kernel command line: quick brown fox \
- *   Kernel command line: jumps over the \
- *   Kernel command line: lazy dog."
- */
-static void __init print_kernel_cmdline(const char *cmdline)
-{
-	size_t len;
-
-	/* Config option of 0 or anything longer than the max disables wrapping */
-	if (CONFIG_CMDLINE_LOG_WRAP_IDEAL_LEN == 0 ||
-	    IDEAL_CMDLINE_LEN >= COMMAND_LINE_SIZE - 1) {
-		pr_notice("%s%s\n", KERNEL_CMDLINE_PREFIX, cmdline);
-		return;
-	}
-
-	len = strlen(cmdline);
-	while (len > IDEAL_CMDLINE_LEN) {
-		const char *first_space;
-		const char *prev_cutoff;
-		const char *cutoff;
-		int to_print;
-		size_t used;
-
-		/* Find the last ' ' that wouldn't make the line too long */
-		prev_cutoff = NULL;
-		cutoff = cmdline;
-		while (true) {
-			cutoff = strchr(cutoff + 1, ' ');
-			if (!cutoff || cutoff - cmdline > IDEAL_CMDLINE_SPLIT_LEN)
-				break;
-			prev_cutoff = cutoff;
-		}
-		if (prev_cutoff)
-			cutoff = prev_cutoff;
-		else if (!cutoff)
-			break;
-
-		/* Find the beginning and end of the string of spaces */
-		first_space = cutoff;
-		while (first_space > cmdline && first_space[-1] == ' ')
-			first_space--;
-		to_print = first_space - cmdline;
-		while (*cutoff == ' ')
-			cutoff++;
-		used = cutoff - cmdline;
-
-		/* If the whole string is used, break and do the final printout */
-		if (len == used)
-			break;
-
-		if (to_print)
-			pr_notice("%s%.*s%s\n", KERNEL_CMDLINE_PREFIX,
-				  to_print, cmdline, KERNEL_CMDLINE_CONTINUATION);
-
-		len -= used;
-		cmdline += used;
-	}
-	if (len)
-		pr_notice("%s%s\n", KERNEL_CMDLINE_PREFIX, cmdline);
-}
-
 asmlinkage __visible __init __no_sanitize_address __noreturn __no_stack_protector
 void start_kernel(void)
 {
@@ -1068,7 +890,6 @@ void start_kernel(void)
 	page_address_init();
 	pr_notice("%s", linux_banner);
 	setup_arch(&command_line);
-	mm_core_init_early();
 	/* Static keys and static calls are needed by LSMs */
 	jump_label_init();
 	static_call_init();
@@ -1081,7 +902,7 @@ void start_kernel(void)
 	early_numa_node_init();
 	boot_cpu_hotplug_init();
 
-	print_kernel_cmdline(saved_command_line);
+	pr_notice("Kernel command line: %s\n", saved_command_line);
 	/* parameters may set static keys */
 	parse_early_param();
 	after_dashes = parse_args("Booting kernel",
@@ -1159,7 +980,6 @@ void start_kernel(void)
 	srcu_init();
 	hrtimers_init();
 	softirq_init();
-	vdso_setup_data_pages();
 	timekeeping_init();
 	time_init();
 
@@ -1514,7 +1334,6 @@ static void __init do_initcalls(void)
 static void __init do_basic_setup(void)
 {
 	cpuset_init_smp();
-	ksysfs_init();
 	driver_init();
 	init_irq_proc();
 	do_ctors();
@@ -1615,8 +1434,6 @@ void __weak free_initmem(void)
 static int __ref kernel_init(void *unused)
 {
 	int ret;
-
-	init_userspace_fs();
 
 	/*
 	 * Wait until kthreadd is all set-up.
@@ -1747,9 +1564,8 @@ static noinline void __init kernel_init_freeable(void)
 	int ramdisk_command_access;
 	ramdisk_command_access = init_eaccess(ramdisk_execute_command);
 	if (ramdisk_command_access != 0) {
-		if (ramdisk_execute_command_set)
-			pr_warn("check access for rdinit=%s failed: %i, ignoring\n",
-				ramdisk_execute_command, ramdisk_command_access);
+		pr_warn("check access for rdinit=%s failed: %i, ignoring\n",
+			ramdisk_execute_command, ramdisk_command_access);
 		ramdisk_execute_command = NULL;
 		prepare_namespace();
 	}

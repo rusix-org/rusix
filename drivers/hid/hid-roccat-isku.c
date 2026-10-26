@@ -279,7 +279,7 @@ static int isku_init_specials(struct hid_device *hdev)
 		return 0;
 	}
 
-	isku = kzalloc_obj(*isku);
+	isku = kzalloc(sizeof(*isku), GFP_KERNEL);
 	if (!isku) {
 		hid_err(hdev, "can't alloc device descriptor\n");
 		return -ENOMEM;
@@ -409,9 +409,6 @@ static int isku_raw_event(struct hid_device *hdev,
 		return 0;
 
 	if (isku == NULL)
-		return 0;
-
-	if (size < sizeof(struct isku_report_button))
 		return 0;
 
 	isku_keep_values_up_to_date(isku, data);

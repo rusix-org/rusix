@@ -27,7 +27,6 @@
 
 #include <linux/dma-resv.h>
 #include <linux/list.h>
-#include <linux/llist.h>
 #include <linux/rbtree.h>
 #include <linux/types.h>
 
@@ -153,12 +152,13 @@ void drm_gpuva_remove(struct drm_gpuva *va);
 
 void drm_gpuva_link(struct drm_gpuva *va, struct drm_gpuvm_bo *vm_bo);
 void drm_gpuva_unlink(struct drm_gpuva *va);
-void drm_gpuva_unlink_defer(struct drm_gpuva *va);
 
 struct drm_gpuva *drm_gpuva_find(struct drm_gpuvm *gpuvm,
 				 u64 addr, u64 range);
 struct drm_gpuva *drm_gpuva_find_first(struct drm_gpuvm *gpuvm,
 				       u64 addr, u64 range);
+struct drm_gpuva *drm_gpuva_find_prev(struct drm_gpuvm *gpuvm, u64 start);
+struct drm_gpuva *drm_gpuva_find_next(struct drm_gpuvm *gpuvm, u64 end);
 
 /**
  * drm_gpuva_invalidate() - sets whether the backing GEM of this &drm_gpuva is
@@ -331,11 +331,6 @@ struct drm_gpuvm {
 		 */
 		spinlock_t lock;
 	} evict;
-
-	/**
-	 * @bo_defer: structure holding vm_bos that need to be destroyed
-	 */
-	struct llist_head bo_defer;
 };
 
 void drm_gpuvm_init(struct drm_gpuvm *gpuvm, const char *name,
@@ -719,12 +714,6 @@ struct drm_gpuvm_bo {
 			 * &drm_gpuvms evict list.
 			 */
 			struct list_head evict;
-
-			/**
-			 * @list.entry.bo_defer: List entry to attach to
-			 * the &drm_gpuvms bo_defer list.
-			 */
-			struct llist_node bo_defer;
 		} entry;
 	} list;
 };
@@ -734,8 +723,8 @@ drm_gpuvm_bo_create(struct drm_gpuvm *gpuvm,
 		    struct drm_gem_object *obj);
 
 struct drm_gpuvm_bo *
-drm_gpuvm_bo_obtain_locked(struct drm_gpuvm *gpuvm,
-			   struct drm_gem_object *obj);
+drm_gpuvm_bo_obtain(struct drm_gpuvm *gpuvm,
+		    struct drm_gem_object *obj);
 struct drm_gpuvm_bo *
 drm_gpuvm_bo_obtain_prealloc(struct drm_gpuvm_bo *vm_bo);
 
@@ -756,9 +745,6 @@ drm_gpuvm_bo_get(struct drm_gpuvm_bo *vm_bo)
 }
 
 bool drm_gpuvm_bo_put(struct drm_gpuvm_bo *vm_bo);
-
-bool drm_gpuvm_bo_put_deferred(struct drm_gpuvm_bo *vm_bo);
-void drm_gpuvm_bo_deferred_cleanup(struct drm_gpuvm *gpuvm);
 
 struct drm_gpuvm_bo *
 drm_gpuvm_bo_find(struct drm_gpuvm *gpuvm,
@@ -928,8 +914,6 @@ struct drm_gpuva_op_unmap {
  * If either a new mapping's start address is aligned with the start address
  * of the old mapping or the new mapping's end address is aligned with the
  * end address of the old mapping, either @prev or @next is NULL.
- * This will also be the case when the requested mapping begins before the
- * old mapping's start address or stretches beyond its end address.
  *
  * Note, the reason for a dedicated remap operation, rather than arbitrary
  * unmap and map operations, is to give drivers the chance of extracting driver
@@ -1121,7 +1105,7 @@ void drm_gpuva_ops_free(struct drm_gpuvm *gpuvm,
 			struct drm_gpuva_ops *ops);
 
 static inline void drm_gpuva_init_from_op(struct drm_gpuva *va,
-					  const struct drm_gpuva_op_map *op)
+					  struct drm_gpuva_op_map *op)
 {
 	va->va.addr = op->va.addr;
 	va->va.range = op->va.range;
@@ -1265,13 +1249,13 @@ int drm_gpuvm_sm_unmap_exec_lock(struct drm_gpuvm *gpuvm, struct drm_exec *exec,
 
 void drm_gpuva_map(struct drm_gpuvm *gpuvm,
 		   struct drm_gpuva *va,
-		   const struct drm_gpuva_op_map *op);
+		   struct drm_gpuva_op_map *op);
 
 void drm_gpuva_remap(struct drm_gpuva *prev,
 		     struct drm_gpuva *next,
-		     const struct drm_gpuva_op_remap *op);
+		     struct drm_gpuva_op_remap *op);
 
-void drm_gpuva_unmap(const struct drm_gpuva_op_unmap *op);
+void drm_gpuva_unmap(struct drm_gpuva_op_unmap *op);
 
 /**
  * drm_gpuva_op_remap_to_unmap_range() - Helper to get the start and range of

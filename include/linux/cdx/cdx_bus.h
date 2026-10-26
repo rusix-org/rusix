@@ -11,7 +11,7 @@
 
 #include <linux/device.h>
 #include <linux/list.h>
-#include <linux/device-id/cdx.h>
+#include <linux/mod_devicetable.h>
 #include <linux/msi.h>
 
 #define MAX_CDX_DEV_RESOURCES	4
@@ -230,7 +230,7 @@ int __must_check __cdx_driver_register(struct cdx_driver *cdx_driver,
  */
 void cdx_driver_unregister(struct cdx_driver *cdx_driver);
 
-extern const struct bus_type cdx_bus_type;
+extern struct bus_type cdx_bus_type;
 
 /**
  * cdx_dev_reset - Reset CDX device

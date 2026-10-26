@@ -23,7 +23,6 @@ const struct device_type sdw_slave_type = {
 	.release =	sdw_slave_release,
 	.uevent =	sdw_slave_uevent,
 };
-EXPORT_SYMBOL_GPL(sdw_slave_type);
 
 int sdw_slave_add(struct sdw_bus *bus,
 		  struct sdw_slave_id *id, struct fwnode_handle *fwnode)
@@ -32,7 +31,7 @@ int sdw_slave_add(struct sdw_bus *bus,
 	int ret;
 	int i;
 
-	slave = kzalloc_obj(*slave);
+	slave = kzalloc(sizeof(*slave), GFP_KERNEL);
 	if (!slave)
 		return -ENOMEM;
 
@@ -114,9 +113,6 @@ static bool find_slave(struct sdw_bus *bus,
 	unsigned int link_id;
 	u64 addr;
 	int ret;
-
-	if (acpi_bus_get_status(adev) || !acpi_dev_ready_for_enumeration(adev))
-		return false;
 
 	ret = acpi_get_local_u64_address(adev->handle, &addr);
 	if (ret < 0)

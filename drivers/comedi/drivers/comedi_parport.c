@@ -232,19 +232,16 @@ static int parport_attach(struct comedi_device *dev,
 			  struct comedi_devconfig *it)
 {
 	struct comedi_subdevice *s;
-	unsigned int iobase = it->options[0];
 	int ret;
 
-	ret = comedi_check_request_region(dev, iobase, 0x03,
-					  0, UINT_MAX, 4);
+	ret = comedi_request_region(dev, it->options[0], 0x03);
 	if (ret)
 		return ret;
 
 	outb(0, dev->iobase + PARPORT_DATA_REG);
 	outb(0, dev->iobase + PARPORT_CTRL_REG);
 
-	/* only ISA interrupts are valid on a parallel port */
-	if (it->options[1] >= 1 && it->options[1] <= 15) {
+	if (it->options[1]) {
 		ret = request_irq(it->options[1], parport_interrupt, 0,
 				  dev->board_name, dev);
 		if (ret == 0)

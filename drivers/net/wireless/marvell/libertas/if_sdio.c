@@ -1158,7 +1158,7 @@ static int if_sdio_probe(struct sdio_func *func,
 		return -ENODEV;
 	}
 
-	card = kzalloc_obj(struct if_sdio_card);
+	card = kzalloc(sizeof(struct if_sdio_card), GFP_KERNEL);
 	if (!card)
 		return -ENOMEM;
 

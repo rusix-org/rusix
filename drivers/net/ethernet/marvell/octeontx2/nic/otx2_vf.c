@@ -297,9 +297,10 @@ static int otx2vf_register_mbox_intr(struct otx2_nic *vf, bool probe_pf)
 
 	err = otx2_sync_mbox_msg(&vf->mbox);
 	if (err) {
-		otx2vf_disable_mbox_intr(vf);
-		return dev_err_probe(vf->dev, -EPROBE_DEFER,
+		dev_warn(vf->dev,
 			 "AF not responding to mailbox, deferring probe\n");
+		otx2vf_disable_mbox_intr(vf);
+		return -EPROBE_DEFER;
 	}
 	return 0;
 }
@@ -531,9 +532,8 @@ static const struct net_device_ops otx2vf_netdev_ops = {
 	.ndo_set_features = otx2vf_set_features,
 	.ndo_get_stats64 = otx2_get_stats64,
 	.ndo_tx_timeout = otx2_tx_timeout,
+	.ndo_eth_ioctl	= otx2_ioctl,
 	.ndo_setup_tc = otx2_setup_tc,
-	.ndo_hwtstamp_get = otx2_config_hwtstamp_get,
-	.ndo_hwtstamp_set = otx2_config_hwtstamp_set,
 };
 
 static int otx2_vf_wq_init(struct otx2_nic *vf)
@@ -553,7 +553,7 @@ static int otx2vf_realloc_msix_vectors(struct otx2_nic *vf)
 	int num_vec, err;
 
 	num_vec = hw->nix_msixoff;
-	num_vec += NIX_LF_POISON_VEC + 1;
+	num_vec += NIX_LF_CINT_VEC_START + hw->max_queues;
 
 	otx2vf_disable_mbox_intr(vf);
 	pci_free_irq_vectors(hw->pdev);
@@ -596,7 +596,7 @@ static int otx2vf_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 
 	pci_set_master(pdev);
 
-	qcount = min_t(int, num_online_cpus(), OTX2_MAX_CQ_CNT);
+	qcount = num_online_cpus();
 	qos_txqs = min_t(int, qcount, OTX2_QOS_MAX_LEAF_NODES);
 	netdev = alloc_etherdev_mqs(sizeof(*vf), qcount + qos_txqs, qcount);
 	if (!netdev)

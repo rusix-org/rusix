@@ -192,7 +192,7 @@ static int si4713_send_startup_command(struct si4713_usb_device *radio)
 		}
 		if (time_is_before_jiffies(until_jiffies))
 			return -EIO;
-		usleep_range(3000, 4000);
+		msleep(3);
 	}
 
 	return retval;
@@ -339,7 +339,7 @@ static int si4713_i2c_read(struct si4713_usb_device *radio, char *data, int len)
 			data[0] = 0;
 			return 0;
 		}
-		usleep_range(3000, 4000);
+		msleep(3);
 	}
 }
 
@@ -420,7 +420,7 @@ static int usb_si4713_probe(struct usb_interface *intf,
 			id->idVendor, id->idProduct);
 
 	/* Initialize local device structure */
-	radio = kzalloc_obj(struct si4713_usb_device);
+	radio = kzalloc(sizeof(struct si4713_usb_device), GFP_KERNEL);
 	if (radio)
 		radio->buffer = kmalloc(BUFFER_LENGTH, GFP_KERNEL);
 

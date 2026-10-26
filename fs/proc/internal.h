@@ -79,11 +79,8 @@ static inline bool pde_is_permanent(const struct proc_dir_entry *pde)
 	return pde->flags & PROC_ENTRY_PERMANENT;
 }
 
-/* This is for builtin code, not even for modules which are compiled in. */
 static inline void pde_make_permanent(struct proc_dir_entry *pde)
 {
-	/* Ensure magic flag does something. */
-	static_assert(PROC_ENTRY_PERMANENT != 0);
 	pde->flags |= PROC_ENTRY_PERMANENT;
 }
 
@@ -258,9 +255,9 @@ extern int proc_pid_statm(struct seq_file *, struct pid_namespace *,
  * base.c
  */
 extern const struct dentry_operations pid_dentry_operations;
-extern int pid_getattr(const struct mnt_idmap *, const struct path *,
+extern int pid_getattr(struct mnt_idmap *, const struct path *,
 		       struct kstat *, u32, unsigned int);
-int proc_nochmod_setattr(const struct mnt_idmap *idmap, struct dentry *dentry,
+int proc_nochmod_setattr(struct mnt_idmap *idmap, struct dentry *dentry,
 			struct iattr *attr);
 extern void proc_pid_evict_inode(struct proc_inode *);
 extern struct inode *proc_pid_make_inode(struct super_block *, struct task_struct *, umode_t);
@@ -351,7 +348,7 @@ extern void proc_thread_self_init(void);
 /*
  * proc_sysctl.c
  */
-#ifdef CONFIG_SYSCTL
+#ifdef CONFIG_PROC_SYSCTL
 extern int proc_sys_init(void);
 extern void proc_sys_evict_inode(struct inode *inode,
 				 struct ctl_table_header *head);
@@ -376,7 +373,6 @@ static inline void proc_tty_init(void) {}
 extern struct proc_dir_entry proc_root;
 
 extern void proc_self_init(void);
-extern unsigned self_inum, thread_self_inum;
 
 /*
  * task_[no]mmu.c
@@ -385,8 +381,10 @@ struct mem_size_stats;
 
 struct proc_maps_locking_ctx {
 	struct mm_struct *mm;
+#ifdef CONFIG_PER_VMA_LOCK
 	bool mmap_locked;
 	struct vm_area_struct *locked_vma;
+#endif
 };
 
 struct proc_maps_private {

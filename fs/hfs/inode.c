@@ -18,7 +18,6 @@
 #include <linux/uio.h>
 #include <linux/xattr.h>
 #include <linux/blkdev.h>
-#include <linux/fileattr.h>
 
 #include "hfs_fs.h"
 #include "btree.h"
@@ -49,19 +48,11 @@ int hfs_write_begin(const struct kiocb *iocb, struct address_space *mapping,
 		    loff_t pos, unsigned int len, struct folio **foliop,
 		    void **fsdata)
 {
-	struct inode *inode = mapping->host;
-	struct hfs_sb_info *sbi = HFS_SB(inode->i_sb);
-	loff_t total_capacity;
 	int ret;
-
-	total_capacity = (loff_t)sbi->fs_ablocks * sbi->alloc_blksz;
-
-	if (pos >= total_capacity)
-		return -EFBIG;
 
 	ret = cont_write_begin(iocb, mapping, pos, len, foliop, fsdata,
 				hfs_get_block,
-				&HFS_I(inode)->phys_size);
+				&HFS_I(mapping->host)->phys_size);
 	if (unlikely(ret))
 		hfs_write_failed(mapping, pos + len);
 
@@ -211,7 +202,7 @@ struct inode *hfs_new_inode(struct inode *dir, const struct qstr *name, umode_t 
 		pr_err("cannot create new inode: next CNID exceeds limit\n");
 		goto out_discard;
 	}
-	inode->i_ino = (u32)next_id - 1;
+	inode->i_ino = (u32)next_id;
 	inode->i_mode = mode;
 	inode->i_uid = current_fsuid();
 	inode->i_gid = current_fsgid();
@@ -277,7 +268,7 @@ void hfs_delete_inode(struct inode *inode)
 {
 	struct super_block *sb = inode->i_sb;
 
-	hfs_dbg("ino %llu\n", inode->i_ino);
+	hfs_dbg("ino %lu\n", inode->i_ino);
 	if (S_ISDIR(inode->i_mode)) {
 		atomic64_dec(&HFS_SB(sb)->folder_count);
 		if (HFS_I(inode)->cat_key.ParID == cpu_to_be32(HFS_ROOT_CNID))
@@ -355,7 +346,6 @@ static int hfs_read_inode(struct inode *inode, void *data)
 	struct hfs_iget_data *idata = data;
 	struct hfs_sb_info *hsb = HFS_SB(inode->i_sb);
 	hfs_cat_rec *rec;
-	struct timespec64 mtime;
 
 	HFS_I(inode)->flags = 0;
 	HFS_I(inode)->rsrc_inode = NULL;
@@ -375,9 +365,6 @@ static int hfs_read_inode(struct inode *inode, void *data)
 	rec = idata->rec;
 	switch (rec->type) {
 	case HFS_CDR_FIL:
-		if (!hfs_is_valid_cnid(be32_to_cpu(rec->file.FlNum), rec->type))
-			return -EIO;
-
 		if (!HFS_IS_RSRC(inode)) {
 			hfs_inode_read_fork(inode, rec->file.ExtRec, rec->file.LgLen,
 					    rec->file.PyLen, be16_to_cpu(rec->file.ClpSize));
@@ -392,26 +379,19 @@ static int hfs_read_inode(struct inode *inode, void *data)
 			inode->i_mode |= S_IWUGO;
 		inode->i_mode &= ~hsb->s_file_umask;
 		inode->i_mode |= S_IFREG;
-		mtime = hfs_m_to_utime(rec->file.MdDat);
-		inode_set_ctime_to_ts(inode, mtime);
-		inode_set_atime_to_ts(inode, mtime);
-		inode_set_mtime_to_ts(inode, mtime);
+		inode_set_mtime_to_ts(inode,
+				      inode_set_atime_to_ts(inode, inode_set_ctime_to_ts(inode, hfs_m_to_utime(rec->file.MdDat))));
 		inode->i_op = &hfs_file_inode_operations;
 		inode->i_fop = &hfs_file_operations;
 		inode->i_mapping->a_ops = &hfs_aops;
 		break;
 	case HFS_CDR_DIR:
-		if (!hfs_is_valid_cnid(be32_to_cpu(rec->dir.DirID), rec->type))
-			return -EIO;
-
 		inode->i_ino = be32_to_cpu(rec->dir.DirID);
 		inode->i_size = be16_to_cpu(rec->dir.Val) + 2;
 		HFS_I(inode)->fs_blocks = 0;
 		inode->i_mode = S_IFDIR | (S_IRWXUGO & ~hsb->s_dir_umask);
-		mtime = hfs_m_to_utime(rec->dir.MdDat);
-		inode_set_ctime_to_ts(inode, mtime);
-		inode_set_atime_to_ts(inode, mtime);
-		inode_set_mtime_to_ts(inode, mtime);
+		inode_set_mtime_to_ts(inode,
+				      inode_set_atime_to_ts(inode, inode_set_ctime_to_ts(inode, hfs_m_to_utime(rec->dir.MdDat))));
 		inode->i_op = &hfs_dir_inode_operations;
 		inode->i_fop = &hfs_dir_operations;
 		break;
@@ -447,7 +427,7 @@ struct inode *hfs_iget(struct super_block *sb, struct hfs_cat_key *key, hfs_cat_
 		return NULL;
 	}
 	inode = iget5_locked(sb, cnid, hfs_test_inode, hfs_read_inode, &data);
-	if (inode && (inode_state_read_once(inode) & I_NEW))
+	if (inode && (inode->i_state & I_NEW))
 		unlock_new_inode(inode);
 	return inode;
 }
@@ -471,7 +451,7 @@ int hfs_write_inode(struct inode *inode, struct writeback_control *wbc)
 	hfs_cat_rec rec;
 	int res;
 
-	hfs_dbg("ino %llu\n", inode->i_ino);
+	hfs_dbg("ino %lu\n", inode->i_ino);
 	res = hfs_ext_write_extent(inode);
 	if (res)
 		return res;
@@ -585,17 +565,12 @@ static struct dentry *hfs_file_lookup(struct inode *dir, struct dentry *dentry,
 	res = hfs_brec_read(&fd, &rec, sizeof(rec));
 	if (!res) {
 		struct hfs_iget_data idata = { NULL, &rec };
-		res = hfs_read_inode(inode, &idata);
+		hfs_read_inode(inode, &idata);
 	}
 	hfs_find_exit(&fd);
 	if (res) {
 		iput(inode);
 		return ERR_PTR(res);
-	}
-
-	if (is_bad_inode(inode)) {
-		iput(inode);
-		return ERR_PTR(-EIO);
 	}
 	HFS_I(inode)->rsrc_inode = dir;
 	HFS_I(dir)->rsrc_inode = inode;
@@ -643,14 +618,32 @@ static int hfs_file_release(struct inode *inode, struct file *file)
 	return 0;
 }
 
-int hfs_inode_setattr(const struct mnt_idmap *idmap, struct dentry *dentry,
+/*
+ * hfs_notify_change()
+ *
+ * Based very closely on fs/msdos/inode.c by Werner Almesberger
+ *
+ * This is the notify_change() field in the super_operations structure
+ * for HFS file systems.  The purpose is to take that changes made to
+ * an inode and apply then in a filesystem-dependent manner.  In this
+ * case the process has a few of tasks to do:
+ *  1) prevent changes to the i_uid and i_gid fields.
+ *  2) map file permissions to the closest allowable permissions
+ *  3) Since multiple Linux files can share the same on-disk inode under
+ *     HFS (for instance the data and resource forks of a file) a change
+ *     to permissions must be applied to all other in-core inodes which
+ *     correspond to the same HFS file.
+ */
+
+int hfs_inode_setattr(struct mnt_idmap *idmap, struct dentry *dentry,
 		      struct iattr *attr)
 {
 	struct inode *inode = d_inode(dentry);
 	struct hfs_sb_info *hsb = HFS_SB(inode->i_sb);
 	int error;
 
-	error = setattr_prepare(&nop_mnt_idmap, dentry, attr);
+	error = setattr_prepare(&nop_mnt_idmap, dentry,
+				attr); /* basic permission checks */
 	if (error)
 		return error;
 
@@ -663,10 +656,9 @@ int hfs_inode_setattr(const struct mnt_idmap *idmap, struct dentry *dentry,
 	     ((S_ISDIR(inode->i_mode) &&
 	       (attr->ia_mode != inode->i_mode)) ||
 	      (attr->ia_mode & ~HFS_VALID_MODE_BITS)))) {
-		return hsb->s_quiet ? 0 : -EPERM;
+		return hsb->s_quiet ? 0 : error;
 	}
 
-	/* map file permissions to the closest allowable permissions in HFS */
 	if (attr->ia_valid & ATTR_MODE) {
 		/* Only the 'w' bits can ever change and only all together. */
 		if (attr->ia_mode & S_IWUSR)
@@ -686,7 +678,7 @@ int hfs_inode_setattr(const struct mnt_idmap *idmap, struct dentry *dentry,
 
 		truncate_setsize(inode, attr->ia_size);
 		hfs_file_truncate(inode);
-		inode_set_mtime_to_ts(inode, inode_set_ctime_current(inode));
+		simple_inode_init_ts(inode);
 	}
 
 	setattr_copy(&nop_mnt_idmap, inode, attr);
@@ -720,18 +712,6 @@ static int hfs_file_fsync(struct file *filp, loff_t start, loff_t end,
 	return ret;
 }
 
-int hfs_fileattr_get(struct dentry *dentry, struct file_kattr *fa)
-{
-	/*
-	 * HFS compares filenames using Mac OS Roman case folding, so
-	 * lookup is always case-insensitive. Names are stored on disk
-	 * with case intact; CASENONPRESERVING stays clear.
-	 */
-	fa->fsx_xflags |= FS_XFLAG_CASEFOLD;
-	fa->flags |= FS_CASEFOLD_FL;
-	return 0;
-}
-
 static const struct file_operations hfs_file_operations = {
 	.llseek		= generic_file_llseek,
 	.read_iter	= generic_file_read_iter,
@@ -748,5 +728,4 @@ static const struct inode_operations hfs_file_inode_operations = {
 	.lookup		= hfs_file_lookup,
 	.setattr	= hfs_inode_setattr,
 	.listxattr	= generic_listxattr,
-	.fileattr_get	= hfs_fileattr_get,
 };

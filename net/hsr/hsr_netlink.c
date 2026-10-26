@@ -76,14 +76,9 @@ static int hsr_newlink(struct net_device *dev,
 		return -EINVAL;
 	}
 
-	if (data[IFLA_HSR_INTERLINK]) {
+	if (data[IFLA_HSR_INTERLINK])
 		interlink = __dev_get_by_index(link_net,
 					       nla_get_u32(data[IFLA_HSR_INTERLINK]));
-		if (!interlink) {
-			NL_SET_ERR_MSG_MOD(extack, "Interlink does not exist");
-			return -EINVAL;
-		}
-	}
 
 	if (interlink && interlink == link[0]) {
 		NL_SET_ERR_MSG_MOD(extack, "Interlink and Slave1 are the same");
@@ -121,8 +116,14 @@ static int hsr_newlink(struct net_device *dev,
 		}
 	}
 
-	if (proto == HSR_PROTOCOL_PRP)
+	if (proto == HSR_PROTOCOL_PRP) {
 		proto_version = PRP_V1;
+		if (interlink) {
+			NL_SET_ERR_MSG_MOD(extack,
+					   "Interlink only works with HSR");
+			return -EINVAL;
+		}
+	}
 
 	return hsr_dev_finalize(dev, link, interlink, multicast_spec,
 				proto_version, extack);
@@ -147,61 +148,36 @@ static void hsr_dellink(struct net_device *dev, struct list_head *head)
 	unregister_netdevice_queue(dev, head);
 }
 
-/* RCU variant of hsr_port_get_hsr() */
-static struct hsr_port *hsr_port_get_hsr_rcu(const struct hsr_priv *hsr,
-					     enum hsr_port_type pt)
-{
-	struct hsr_port *port;
-
-	hsr_for_each_port(hsr, port)
-		if (port->type == pt)
-			return port;
-	return NULL;
-}
-
 static int hsr_fill_info(struct sk_buff *skb, const struct net_device *dev)
 {
-	const struct hsr_priv *hsr = netdev_priv(dev);
-	const struct hsr_port *port;
+	struct hsr_priv *hsr = netdev_priv(dev);
 	u8 proto = HSR_PROTOCOL_HSR;
+	struct hsr_port *port;
 
-	rcu_read_lock();
-
-	port = hsr_port_get_hsr_rcu(hsr, HSR_PT_SLAVE_A);
+	port = hsr_port_get_hsr(hsr, HSR_PT_SLAVE_A);
 	if (port) {
 		if (nla_put_u32(skb, IFLA_HSR_SLAVE1, port->dev->ifindex))
 			goto nla_put_failure;
 	}
 
-	port = hsr_port_get_hsr_rcu(hsr, HSR_PT_SLAVE_B);
+	port = hsr_port_get_hsr(hsr, HSR_PT_SLAVE_B);
 	if (port) {
 		if (nla_put_u32(skb, IFLA_HSR_SLAVE2, port->dev->ifindex))
 			goto nla_put_failure;
 	}
 
-	port = hsr_port_get_hsr_rcu(hsr, HSR_PT_INTERLINK);
-	if (port) {
-		if (nla_put_u32(skb, IFLA_HSR_INTERLINK, port->dev->ifindex))
-			goto nla_put_failure;
-	}
-
-	rcu_read_unlock();
-
 	if (nla_put(skb, IFLA_HSR_SUPERVISION_ADDR, ETH_ALEN,
 		    hsr->sup_multicast_addr) ||
-	    nla_put_u16(skb, IFLA_HSR_SEQ_NR, READ_ONCE(hsr->sequence_nr)))
-		return -EMSGSIZE;
+	    nla_put_u16(skb, IFLA_HSR_SEQ_NR, hsr->sequence_nr))
+		goto nla_put_failure;
 	if (hsr->prot_version == PRP_V1)
 		proto = HSR_PROTOCOL_PRP;
-	else if (nla_put_u8(skb, IFLA_HSR_VERSION, hsr->prot_version))
-		return -EMSGSIZE;
 	if (nla_put_u8(skb, IFLA_HSR_PROTOCOL, proto))
-		return -EMSGSIZE;
+		goto nla_put_failure;
 
 	return 0;
 
 nla_put_failure:
-	rcu_read_unlock();
 	return -EMSGSIZE;
 }
 

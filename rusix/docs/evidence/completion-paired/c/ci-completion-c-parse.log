@@ -1,0 +1,34 @@
+[06:22:52] ============================================================
+[06:22:52] =============== rusix_noio_scope (1 subtest) ===============
+[06:22:52] [PASSED] nested_scopes_restore_task_policy_on_error
+[06:22:52] ================ [PASSED] rusix_noio_scope =================
+[06:22:52] ========== rusix_completion_contract (5 subtests) ==========
+[06:22:52] [PASSED] initial_state_has_no_token
+[06:22:52] [PASSED] presignals_are_consumed_once_each
+[06:22:52] [PASSED] broadcast_persists_until_quiescent_reset
+[06:22:52] [PASSED] zero_timeout_reports_completion_and_consumes_token
+[06:22:52] [PASSED] signal_saturates_instead_of_wrapping
+[06:22:52] ============ [PASSED] rusix_completion_contract ============
+[06:22:52] =========== rusix_completion_layout (4 subtests) ===========
+[06:22:52] [PASSED] c_operations_share_pinned_rust_owned_storage
+[06:22:52] [PASSED] worker_handoff_observes_published_value
+[06:22:52] [PASSED] two_workers_consume_exactly_two_tokens
+[06:22:52] [PASSED] timed_out_worker_unlinks_before_late_signal
+[06:22:52] ============= [PASSED] rusix_completion_layout =============
+[06:22:52] ============= rusix_xarray_insert (2 subtests) =============
+[06:22:52] [PASSED] occupied_insert_returns_owner_without_replacing
+[06:22:52] [PASSED] array_drop_releases_inserted_owner
+[06:22:52] =============== [PASSED] rusix_xarray_insert ===============
+[06:22:52] =============== rusix_brd_store (3 subtests) ===============
+[06:22:52] [PASSED] lookup_and_repeated_insert_preserve_page
+[06:22:52] [PASSED] discard_keeps_inflight_page_alive_and_reinsert_is_independent
+[06:22:52] [PASSED] discard_excludes_end_and_is_idempotent
+[06:22:52] ================= [PASSED] rusix_brd_store =================
+[06:22:52] ============== rusix_brd_policy (3 subtests) ===============
+[06:22:52] [PASSED] minor_count_preserves_defined_normalization
+[06:22:52] [PASSED] invalid_minor_normalization_is_rejected
+[06:22:52] [PASSED] legacy_size_retains_prefix_and_wrapping_semantics
+[06:22:52] ================ [PASSED] rusix_brd_policy =================
+[06:22:52] ============================================================
+[06:22:52] Testing complete. Ran 18 tests: passed: 18
+[06:22:52] Test results stored in /out/logs/ci-completion-c-kunit.json

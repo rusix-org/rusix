@@ -344,7 +344,8 @@ int mwifiex_bss_start(struct mwifiex_private *priv, struct cfg80211_bss *bss,
 			return -EINVAL;
 
 		/* Allocate and fill new bss descriptor */
-		bss_desc = kzalloc_obj(struct mwifiex_bssdescriptor);
+		bss_desc = kzalloc(sizeof(struct mwifiex_bssdescriptor),
+				   GFP_KERNEL);
 		if (!bss_desc)
 			return -ENOMEM;
 
@@ -1144,8 +1145,7 @@ mwifiex_drv_get_driver_version(struct mwifiex_adapter *adapter, char *version,
 	char fw_ver[32];
 
 	ver.l = cpu_to_le32(adapter->fw_release_number);
-	sprintf(fw_ver, "%u.%u.%u.p%u.%u", ver.c[2], ver.c[1],
-		ver.c[0], ver.c[3], adapter->fw_hotfix_ver);
+	sprintf(fw_ver, "%u.%u.%u.p%u", ver.c[2], ver.c[1], ver.c[0], ver.c[3]);
 
 	snprintf(version, max_len, driver_version, fw_ver);
 

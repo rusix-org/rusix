@@ -845,7 +845,7 @@ static int tas_i2c_probe(struct i2c_client *client)
 	struct device_node *node = client->dev.of_node;
 	struct tas *tas;
 
-	tas = kzalloc_obj(struct tas);
+	tas = kzalloc(sizeof(struct tas), GFP_KERNEL);
 
 	if (!tas)
 		return -ENOMEM;
@@ -872,7 +872,6 @@ static int tas_i2c_probe(struct i2c_client *client)
 	return 0;
  fail:
 	mutex_destroy(&tas->mtx);
-	of_node_put(tas->codec.node);
 	kfree(tas);
 	return -EINVAL;
 }

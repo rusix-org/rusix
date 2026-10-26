@@ -145,17 +145,17 @@
 #define MAX_NR_SG	16
 
 static unsigned rw_threshold = 32;
-module_param(rw_threshold, uint, 0444);
+module_param(rw_threshold, uint, S_IRUGO);
 MODULE_PARM_DESC(rw_threshold,
 		"Read/Write threshold. Default = 32");
 
 static unsigned poll_threshold = 128;
-module_param(poll_threshold, uint, 0444);
+module_param(poll_threshold, uint, S_IRUGO);
 MODULE_PARM_DESC(poll_threshold,
 		 "Polling transaction size threshold. Default = 128");
 
 static unsigned poll_loopcount = 32;
-module_param(poll_loopcount, uint, 0444);
+module_param(poll_loopcount, uint, S_IRUGO);
 MODULE_PARM_DESC(poll_loopcount,
 		 "Maximum polling loop count. Default = 32");
 
@@ -1249,10 +1249,6 @@ static int davinci_mmcsd_probe(struct platform_device *pdev)
 	host->use_dma = use_dma;
 	host->mmc_irq = irq;
 	host->sdio_irq = platform_get_irq_optional(pdev, 1);
-	if (host->sdio_irq < 0 && host->sdio_irq != -ENXIO) {
-		ret = host->sdio_irq;
-		goto parse_fail;
-	}
 
 	if (host->use_dma) {
 		ret = davinci_acquire_dma_channels(host);
@@ -1303,7 +1299,7 @@ static int davinci_mmcsd_probe(struct platform_device *pdev)
 	if (ret)
 		goto mmc_add_host_fail;
 
-	if (host->sdio_irq > 0) {
+	if (host->sdio_irq >= 0) {
 		ret = devm_request_irq(&pdev->dev, host->sdio_irq,
 				       mmc_davinci_sdio_irq, 0,
 				       mmc_hostname(mmc), host);

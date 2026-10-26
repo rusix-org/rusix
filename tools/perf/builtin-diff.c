@@ -113,7 +113,7 @@ enum {
 	COMPUTE_STREAM,	/* After COMPUTE_MAX to avoid use current compute arrays */
 };
 
-static const char *compute_names[COMPUTE_MAX] = {
+const char *compute_names[COMPUTE_MAX] = {
 	[COMPUTE_DELTA] = "delta",
 	[COMPUTE_DELTA_ABS] = "delta-abs",
 	[COMPUTE_RATIO] = "ratio",
@@ -382,7 +382,7 @@ static void block_hist_free(void *he)
 	free(bh);
 }
 
-static struct hist_entry_ops block_hist_ops = {
+struct hist_entry_ops block_hist_ops = {
 	.new    = block_hist_zalloc,
 	.free   = block_hist_free,
 };
@@ -390,13 +390,14 @@ static struct hist_entry_ops block_hist_ops = {
 static int diff__process_sample_event(const struct perf_tool *tool,
 				      union perf_event *event,
 				      struct perf_sample *sample,
+				      struct evsel *evsel,
 				      struct machine *machine)
 {
 	struct perf_diff *pdiff = container_of(tool, struct perf_diff, tool);
 	struct addr_location al;
-	struct evsel *evsel = sample->evsel;
 	struct hists *hists = evsel__hists(evsel);
 	struct hist_entry_iter iter = {
+		.evsel	= evsel,
 		.sample	= sample,
 		.ops	= &hist_iter_normal,
 	};
@@ -409,9 +410,8 @@ static int diff__process_sample_event(const struct perf_tool *tool,
 
 	addr_location__init(&al);
 	if (machine__resolve(machine, &al, sample) < 0) {
-		pr_warning("problem processing %s (%u) event at offset %#" PRIx64 ", skipping it.\n",
-			   perf_event__name(event->header.type), event->header.type,
-			   sample->file_offset);
+		pr_warning("problem processing %d event, skipping it.\n",
+			   event->header.type);
 		ret = -1;
 		goto out;
 	}
@@ -432,14 +432,13 @@ static int diff__process_sample_event(const struct perf_tool *tool,
 		}
 
 		hist__account_cycles(sample->branch_stack, &al, sample,
-				     /*nonany_branch_mode=*/false, /*total_cycles=*/NULL);
+				     false, NULL, evsel);
 		break;
 
 	case COMPUTE_STREAM:
 		if (hist_entry_iter__add(&iter, &al, PERF_MAX_STACK_DEPTH,
 					 NULL)) {
-			pr_debug("problem adding hist entry at offset %#" PRIx64 ", skipping event\n",
-				 sample->file_offset);
+			pr_debug("problem adding hist entry, skipping event\n");
 			goto out;
 		}
 		break;
@@ -1282,7 +1281,8 @@ static const struct option options[] = {
 	OPT_STRING_NOEMPTY('t', "field-separator", &symbol_conf.field_sep, "separator",
 		   "separator for columns, no spaces will be added between "
 		   "columns '.' is reserved."),
-	OPT_CALLBACK(0, "symfs", NULL, "directory[,layout]", SYMFS_HELP,
+	OPT_CALLBACK(0, "symfs", NULL, "directory",
+		     "Look for files with symbols relative to this directory",
 		     symbol__config_symfs),
 	OPT_UINTEGER('o', "order", &sort_compute, "Specify compute sorting."),
 	OPT_CALLBACK(0, "percentage", NULL, "relative|absolute",
@@ -1354,7 +1354,7 @@ static int cycles_printf(struct hist_entry *he, struct hist_entry *pair,
 	/*
 	 * Avoid printing the warning "addr2line_init failed for ..."
 	 */
-	symbol_conf.addr2line_disable_warn = true;
+	symbol_conf.disable_add2line_warn = true;
 
 	bi = block_he->block_info;
 
@@ -1893,7 +1893,7 @@ static int data_init(int argc, const char **argv)
 		return -EINVAL;
 	}
 
-	data__files = calloc(data__files_cnt, sizeof(*data__files));
+	data__files = zalloc(sizeof(*data__files) * data__files_cnt);
 	if (!data__files)
 		return -ENOMEM;
 
@@ -1988,7 +1988,7 @@ int cmd_diff(int argc, const char **argv)
 
 	if (compute == COMPUTE_STREAM) {
 		symbol_conf.show_branchflag_count = true;
-		symbol_conf.addr2line_disable_warn = true;
+		symbol_conf.disable_add2line_warn = true;
 		callchain_param.mode = CHAIN_FLAT;
 		callchain_param.key = CCKEY_SRCLINE;
 		callchain_param.branch_callstack = 1;

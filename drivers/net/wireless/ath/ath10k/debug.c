@@ -3,6 +3,7 @@
  * Copyright (c) 2005-2011 Atheros Communications Inc.
  * Copyright (c) 2011-2017 Qualcomm Atheros, Inc.
  * Copyright (c) 2018, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022, 2024 Qualcomm Innovation Center, Inc. All rights reserved.
  * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 
@@ -2004,7 +2005,10 @@ static ssize_t ath10k_write_btcoex(struct file *file,
 		ath10k_core_start_recovery(ar);
 	}
 
-	assign_bit(ATH10K_FLAG_BTCOEX, &ar->dev_flags, val);
+	if (val)
+		set_bit(ATH10K_FLAG_BTCOEX, &ar->dev_flags);
+	else
+		clear_bit(ATH10K_FLAG_BTCOEX, &ar->dev_flags);
 
 	ret = count;
 
@@ -2115,7 +2119,10 @@ static ssize_t ath10k_write_peer_stats(struct file *file,
 		goto exit;
 	}
 
-	assign_bit(ATH10K_FLAG_PEER_STATS, &ar->dev_flags, val);
+	if (val)
+		set_bit(ATH10K_FLAG_PEER_STATS, &ar->dev_flags);
+	else
+		clear_bit(ATH10K_FLAG_PEER_STATS, &ar->dev_flags);
 
 	ath10k_info(ar, "restarting firmware due to Peer stats change");
 

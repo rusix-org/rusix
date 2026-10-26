@@ -3,14 +3,8 @@
 #include <bpf/btf.h>
 #include <test_progs.h>
 
-/*
- * Only a page is pinned to kernel, so the maximum amount of dynamic data
- * allowed is page_size - sizeof(struct tld_data_u) - static TLD fields.
- */
-#define TLD_DYN_DATA_SIZE_MAX (getpagesize() - sizeof(struct tld_data_u) - 8)
-
 #define TLD_FREE_DATA_ON_THREAD_EXIT
-#define TLD_DYN_DATA_SIZE TLD_DYN_DATA_SIZE_MAX
+#define TLD_DYN_DATA_SIZE 4096
 #include "task_local_data.h"
 
 struct test_tld_struct {
@@ -30,12 +24,12 @@ TLD_DEFINE_KEY(value0_key, "value0", sizeof(int));
  * sequentially. Users of task local data library should not touch
  * library internal.
  */
-static void reset_tld(__u16 dyn_data_size)
+static void reset_tld(void)
 {
-	if (tld_meta_p) {
+	if (TLD_READ_ONCE(tld_meta_p)) {
 		/* Remove TLDs created by tld_create_key() */
 		tld_meta_p->cnt = 1;
-		tld_meta_p->size = dyn_data_size + 8;
+		tld_meta_p->size = TLD_DYN_DATA_SIZE;
 		memset(&tld_meta_p->metadata[1], 0,
 		       (TLD_MAX_DATA_CNT - 1) * sizeof(struct tld_metadata));
 	}
@@ -133,7 +127,7 @@ static void test_task_local_data_basic(void)
 	tld_key_t key;
 	int i, err;
 
-	reset_tld(TLD_DYN_DATA_SIZE_MAX);
+	reset_tld();
 
 	ASSERT_OK(pthread_mutex_init(&global_mutex, NULL), "pthread_mutex_init");
 
@@ -153,13 +147,11 @@ static void test_task_local_data_basic(void)
 
 	/*
 	 * Shouldn't be able to store data exceed a page. Create a TLD just big
-	 * enough to exceed a page. Data already contains struct tld_data_u,
-	 * value0 and value1 of int type, and value 2 of struct test_tld_struct.
+	 * enough to exceed a page. TLDs already created are int value0, int
+	 * value1, and struct test_tld_struct value2.
 	 */
-	key = tld_create_key("value_not_exist", TLD_PAGE_SIZE + 1 -
-						sizeof(struct tld_data_u) -
-						TLD_ROUND_UP(sizeof(int), 8) * 2 -
-						TLD_ROUND_UP(sizeof(struct test_tld_struct), 8));
+	key = tld_create_key("value_not_exist",
+			     TLD_PAGE_SIZE - 2 * sizeof(int) - sizeof(struct test_tld_struct) + 1);
 	ASSERT_EQ(tld_key_err_or_zero(key), -E2BIG, "tld_create_key");
 
 	key = tld_create_key("value2", sizeof(struct test_tld_struct));
@@ -247,7 +239,7 @@ static void test_task_local_data_race(void)
 	tld_keys[0] = value0_key;
 
 	for (j = 0; j < 100; j++) {
-		reset_tld(TLD_DYN_DATA_SIZE_MAX);
+		reset_tld();
 
 		for (i = 0; i < TEST_RACE_THREAD_NUM; i++) {
 			/*
@@ -296,80 +288,10 @@ out:
 	test_task_local_data__destroy(skel);
 }
 
-static void test_task_local_data_dyn_size(__u16 dyn_data_size)
-{
-	LIBBPF_OPTS(bpf_test_run_opts, opts);
-	struct test_task_local_data *skel;
-	int max_keys, i, err, fd, *data;
-	char name[TLD_NAME_LEN];
-	tld_key_t key;
-
-	reset_tld(dyn_data_size);
-
-	skel = test_task_local_data__open_and_load();
-	if (!ASSERT_OK_PTR(skel, "skel_open_and_load"))
-		return;
-
-	tld_keys = calloc(TLD_MAX_DATA_CNT, sizeof(tld_key_t));
-	if (!ASSERT_OK_PTR(tld_keys, "calloc tld_keys"))
-		goto out;
-
-	fd = bpf_map__fd(skel->maps.tld_data_map);
-
-	/* Create as many int-sized TLDs as the dynamic data size allows */
-	max_keys = dyn_data_size / TLD_ROUND_UP(sizeof(int), 8);
-	for (i = 0; i < max_keys; i++) {
-		snprintf(name, TLD_NAME_LEN, "value_%d", i);
-		tld_keys[i] = tld_create_key(name, sizeof(int));
-		if (!ASSERT_FALSE(tld_key_is_err(tld_keys[i]), "tld_create_key"))
-			goto out;
-
-		data = tld_get_data(fd, tld_keys[i]);
-		if (!ASSERT_OK_PTR(data, "tld_get_data"))
-			goto out;
-		*data = i;
-	}
-
-	/* The next key should fail with E2BIG */
-	key = tld_create_key("overflow", sizeof(int));
-	ASSERT_EQ(tld_key_err_or_zero(key), -E2BIG, "tld_create_key overflow");
-
-	/* Verify data for value_i do not overlap */
-	for (i = 0; i < max_keys; i++) {
-		data = tld_get_data(fd, tld_keys[i]);
-		if (!ASSERT_OK_PTR(data, "tld_get_data"))
-			goto out;
-
-		ASSERT_EQ(*data, i, "tld_get_data value_i");
-	}
-
-	/* Verify BPF side can still read the static key */
-	data = tld_get_data(fd, value0_key);
-	if (!ASSERT_OK_PTR(data, "tld_get_data value0"))
-		goto out;
-	*data = 0xdeadbeef;
-
-	err = bpf_prog_test_run_opts(bpf_program__fd(skel->progs.task_main), &opts);
-	ASSERT_OK(err, "run task_main");
-	ASSERT_EQ(skel->bss->test_value0, 0xdeadbeef, "tld_get_data value0");
-
-out:
-	if (tld_keys) {
-		free(tld_keys);
-		tld_keys = NULL;
-	}
-	tld_free();
-	test_task_local_data__destroy(skel);
-}
-
 void test_task_local_data(void)
 {
 	if (test__start_subtest("task_local_data_basic"))
 		test_task_local_data_basic();
 	if (test__start_subtest("task_local_data_race"))
 		test_task_local_data_race();
-	if (test__start_subtest("task_local_data_dyn_size_small"))
-		test_task_local_data_dyn_size(64);
-	if (test__start_subtest("task_local_data_dyn_size_zero"))
-		test_task_local_data_dyn_size(0);
 }

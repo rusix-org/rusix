@@ -110,8 +110,6 @@ static int __hfsplus_ext_write_extent(struct inode *inode,
 	} else {
 		if (res)
 			return res;
-		if (fd->entrylength != sizeof(hfsplus_extent_rec))
-			return -EIO;
 		hfs_bnode_write(fd->bnode, hip->cached_extents,
 				fd->entryoffset, fd->entrylength);
 		hip->extent_state &= ~HFSPLUS_EXT_DIRTY;
@@ -123,8 +121,6 @@ static int __hfsplus_ext_write_extent(struct inode *inode,
 	 * redirty the inode.  Instead the callers have to be careful
 	 * to explicily mark the inode dirty, too.
 	 */
-	set_bit(HFSPLUS_I_EXT_DIRTY,
-		&HFSPLUS_I(HFSPLUS_EXT_TREE_I(inode->i_sb))->flags);
 	set_bit(HFSPLUS_I_EXT_DIRTY, &hip->flags);
 
 	return 0;
@@ -279,7 +275,7 @@ int hfsplus_get_block(struct inode *inode, sector_t iblock,
 	mutex_unlock(&hip->extents_lock);
 
 done:
-	hfs_dbg("ino %llu, iblock %llu - dblock %u\n",
+	hfs_dbg("ino %lu, iblock %llu - dblock %u\n",
 		inode->i_ino, (long long)iblock, dblock);
 
 	mask = (1 << sbi->fs_shift) - 1;
@@ -480,7 +476,7 @@ int hfsplus_file_extend(struct inode *inode, bool zeroout)
 			goto out;
 	}
 
-	hfs_dbg("ino %llu, start %u, len %u\n", inode->i_ino, start, len);
+	hfs_dbg("ino %lu, start %u, len %u\n", inode->i_ino, start, len);
 
 	if (hip->alloc_blocks <= hip->first_blocks) {
 		if (!hip->first_blocks) {
@@ -517,8 +513,6 @@ out:
 	if (!res) {
 		hip->alloc_blocks += len;
 		mutex_unlock(&hip->extents_lock);
-		hfsplus_mark_inode_dirty(HFSPLUS_SB(sb)->alloc_file,
-					 HFSPLUS_I_ALLOC_DIRTY);
 		hfsplus_mark_inode_dirty(inode, HFSPLUS_I_ALLOC_DIRTY);
 		return 0;
 	}
@@ -551,7 +545,7 @@ void hfsplus_file_truncate(struct inode *inode)
 	u32 alloc_cnt, blk_cnt, start;
 	int res;
 
-	hfs_dbg("ino %llu, phys_size %llu -> i_size %llu\n",
+	hfs_dbg("ino %lu, phys_size %llu -> i_size %llu\n",
 		inode->i_ino, (long long)hip->phys_size, inode->i_size);
 
 	if (inode->i_size > hip->phys_size) {
@@ -588,7 +582,6 @@ void hfsplus_file_truncate(struct inode *inode)
 		/* XXX: We lack error handling of hfsplus_file_truncate() */
 		return;
 	}
-
 	while (1) {
 		if (alloc_cnt == hip->first_blocks) {
 			mutex_unlock(&fd.tree->tree_lock);
@@ -630,7 +623,5 @@ out_unlock:
 	hip->fs_blocks = (inode->i_size + sb->s_blocksize - 1) >>
 		sb->s_blocksize_bits;
 	inode_set_bytes(inode, hip->fs_blocks << sb->s_blocksize_bits);
-	hfsplus_mark_inode_dirty(HFSPLUS_SB(sb)->alloc_file,
-				 HFSPLUS_I_ALLOC_DIRTY);
 	hfsplus_mark_inode_dirty(inode, HFSPLUS_I_ALLOC_DIRTY);
 }

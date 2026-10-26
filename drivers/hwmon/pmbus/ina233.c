@@ -85,7 +85,6 @@ static int ina233_read_word_data(struct i2c_client *client, int page,
 static int ina233_probe(struct i2c_client *client)
 {
 	struct device *dev = &client->dev;
-	const char *propname;
 	int ret, m, R;
 	u32 rshunt;
 	u32 max_current;
@@ -115,28 +114,27 @@ static int ina233_probe(struct i2c_client *client)
 
 	/* If INA233 skips current/power, shunt-resistor and current-lsb aren't needed.	*/
 	/* read rshunt value (uOhm) */
-	propname = "shunt-resistor";
-	if (device_property_present(dev, propname)) {
-		ret = device_property_read_u32(dev, propname, &rshunt);
-		if (ret)
-			return dev_err_probe(dev, ret, "%s property read fail.\n", propname);
-	} else {
+	ret = device_property_read_u32(dev, "shunt-resistor", &rshunt);
+	if (ret) {
+		if (ret != -EINVAL)
+			return dev_err_probe(dev, ret, "Shunt resistor property read fail.\n");
 		rshunt = INA233_RSHUNT_DEFAULT;
 	}
 	if (!rshunt)
-		return dev_err_probe(dev, -EINVAL, "%s cannot be zero.\n", propname);
+		return dev_err_probe(dev, -EINVAL,
+				     "Shunt resistor cannot be zero.\n");
 
 	/* read Maximum expected current value (uA) */
-	propname = "ti,maximum-expected-current-microamp";
-	if (device_property_present(dev, propname)) {
-		ret = device_property_read_u32(dev, propname, &max_current);
-		if (ret)
-			return dev_err_probe(dev, ret, "%s property read fail.\n", propname);
-	} else {
+	ret = device_property_read_u32(dev, "ti,maximum-expected-current-microamp", &max_current);
+	if (ret) {
+		if (ret != -EINVAL)
+			return dev_err_probe(dev, ret,
+					     "Maximum expected current property read fail.\n");
 		max_current = INA233_MAX_CURRENT_DEFAULT;
 	}
 	if (max_current < 32768)
-		return dev_err_probe(dev, -EINVAL, "%s cannot be less than 32768.\n", propname);
+		return dev_err_probe(dev, -EINVAL,
+				     "Maximum expected current cannot less then 32768.\n");
 
 	/* Calculate Current_LSB according to the spec formula */
 	current_lsb = max_current / 32768;
@@ -168,8 +166,8 @@ static int ina233_probe(struct i2c_client *client)
 }
 
 static const struct i2c_device_id ina233_id[] = {
-	{ .name = "ina233" },
-	{ }
+	{"ina233", 0},
+	{}
 };
 MODULE_DEVICE_TABLE(i2c, ina233_id);
 

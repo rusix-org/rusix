@@ -11,10 +11,6 @@ static dev_t device_devt;
 
 void vfio_init_device_cdev(struct vfio_device *device)
 {
-	if (vfio_device_is_noiommu(device) &&
-	    !IS_ENABLED(CONFIG_IOMMUFD_NOIOMMU))
-		return;
-
 	device->device.devt = MKDEV(MAJOR(device_devt), device->index);
 	cdev_init(&device->cdev, &vfio_device_fops);
 	device->cdev.owner = THIS_MODULE;
@@ -34,11 +30,6 @@ int vfio_device_fops_cdev_open(struct inode *inode, struct file *filep)
 	/* Paired with the put in vfio_device_fops_release() */
 	if (!vfio_device_try_get_registration(device))
 		return -ENODEV;
-
-	if (vfio_device_is_noiommu(device) && !capable(CAP_SYS_RAWIO)) {
-		ret = -EPERM;
-		goto err_put_registration;
-	}
 
 	df = vfio_allocate_device_file(device);
 	if (IS_ERR(df)) {
@@ -65,7 +56,7 @@ err_put_registration:
 static void vfio_df_get_kvm_safe(struct vfio_device_file *df)
 {
 	spin_lock(&df->kvm_ref_lock);
-	vfio_device_get_kvm(df->device, df->kvm);
+	vfio_device_get_kvm_safe(df->device, df->kvm);
 	spin_unlock(&df->kvm_ref_lock);
 }
 
@@ -127,18 +118,6 @@ long vfio_df_ioctl_bind_iommufd(struct vfio_device_file *df,
 	/* one device cannot be bound twice */
 	if (df->access_granted) {
 		ret = -EINVAL;
-		goto out_unlock;
-	}
-
-	/*
-	 * The cdev path allows only a single open.  Reject a second open here,
-	 * before the VF token and device->kvm updates below would clobber the
-	 * current opener's state on a bind that cannot complete.  Return -EBUSY
-	 * rather than -EINVAL since a delayed release of the prior opener can
-	 * make this transient.
-	 */
-	if (device->open_count) {
-		ret = -EBUSY;
 		goto out_unlock;
 	}
 
@@ -314,8 +293,14 @@ int vfio_df_ioctl_detach_pt(struct vfio_device_file *df,
 	return 0;
 }
 
-int vfio_cdev_init(void)
+static char *vfio_device_devnode(const struct device *dev, umode_t *mode)
 {
+	return kasprintf(GFP_KERNEL, "vfio/devices/%s", dev_name(dev));
+}
+
+int vfio_cdev_init(struct class *device_class)
+{
+	device_class->devnode = vfio_device_devnode;
 	return alloc_chrdev_region(&device_devt, 0,
 				   MINORMASK + 1, "vfio-dev");
 }

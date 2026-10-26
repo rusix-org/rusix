@@ -4,7 +4,6 @@
  * Copyright (c) 2015-2016 HGST, a Western Digital Company.
  */
 #define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
-#include <linux/hex.h>
 #include <linux/kstrtox.h>
 #include <linux/kernel.h>
 #include <linux/module.h>
@@ -17,6 +16,7 @@
 #include <linux/nvme-auth.h>
 #endif
 #include <linux/nvme-keyring.h>
+#include <crypto/hash.h>
 #include <crypto/kpp.h>
 #include <linux/nospec.h>
 
@@ -300,33 +300,6 @@ static ssize_t nvmet_param_max_queue_size_store(struct config_item *item,
 }
 
 CONFIGFS_ATTR(nvmet_, param_max_queue_size);
-
-static ssize_t nvmet_param_mdts_show(struct config_item *item, char *page)
-{
-	struct nvmet_port *port = to_nvmet_port(item);
-
-	return snprintf(page, PAGE_SIZE, "%d\n", port->mdts);
-}
-
-static ssize_t nvmet_param_mdts_store(struct config_item *item,
-		const char *page, size_t count)
-{
-	struct nvmet_port *port = to_nvmet_port(item);
-	int ret, mdts;
-
-	if (nvmet_is_port_enabled(port, __func__))
-		return -EACCES;
-	ret = kstrtoint(page, 0, &mdts);
-	if (ret || mdts < 0 || mdts > NVMET_MAX_MDTS) {
-		pr_err("Invalid value '%s' for mdts, should be 0-%d\n",
-		       page, NVMET_MAX_MDTS);
-		return -EINVAL;
-	}
-	port->mdts = mdts;
-	return count;
-}
-
-CONFIGFS_ATTR(nvmet_, param_mdts);
 
 #ifdef CONFIG_BLK_DEV_INTEGRITY
 static ssize_t nvmet_param_pi_enable_show(struct config_item *item,
@@ -817,7 +790,7 @@ static ssize_t nvmet_ns_resv_enable_store(struct config_item *item,
 
 	mutex_lock(&ns->subsys->lock);
 	if (ns->enabled) {
-		pr_err("the ns:%u is already enabled.\n", ns->nsid);
+		pr_err("the ns:%d is already enabled.\n", ns->nsid);
 		mutex_unlock(&ns->subsys->lock);
 		return -EINVAL;
 	}
@@ -883,7 +856,7 @@ static struct config_group *nvmet_ns_make(struct config_group *group,
 		goto out;
 	config_group_init_type_name(&ns->group, name, &nvmet_ns_type);
 
-	pr_info("adding nsid %u to subsystem %s\n", nsid, subsys->subsysnqn);
+	pr_info("adding nsid %d to subsystem %s\n", nsid, subsys->subsysnqn);
 
 	return &ns->group;
 out:
@@ -905,34 +878,21 @@ static ssize_t nvmet_passthru_device_path_show(struct config_item *item,
 		char *page)
 {
 	struct nvmet_subsys *subsys = to_subsys(item->ci_parent);
-	ssize_t ret;
 
-	mutex_lock(&subsys->lock);
-	ret = snprintf(page, PAGE_SIZE, "%s\n",
-		       subsys->passthru && subsys->passthru->ctrl_path ?
-		       subsys->passthru->ctrl_path : "");
-	mutex_unlock(&subsys->lock);
-	return ret;
+	return snprintf(page, PAGE_SIZE, "%s\n", subsys->passthru_ctrl_path);
 }
 
 static ssize_t nvmet_passthru_device_path_store(struct config_item *item,
 		const char *page, size_t count)
 {
 	struct nvmet_subsys *subsys = to_subsys(item->ci_parent);
-	struct nvmet_passthru *passthru;
 	size_t len;
 	int ret;
 
 	mutex_lock(&subsys->lock);
 
-	passthru = nvmet_subsys_passthru(subsys);
-	if (!passthru) {
-		ret = -ENOMEM;
-		goto out_unlock;
-	}
-
 	ret = -EBUSY;
-	if (passthru->ctrl)
+	if (subsys->passthru_ctrl)
 		goto out_unlock;
 
 	ret = -EINVAL;
@@ -940,10 +900,10 @@ static ssize_t nvmet_passthru_device_path_store(struct config_item *item,
 	if (!len)
 		goto out_unlock;
 
-	kfree(passthru->ctrl_path);
+	kfree(subsys->passthru_ctrl_path);
 	ret = -ENOMEM;
-	passthru->ctrl_path = kstrndup(page, len, GFP_KERNEL);
-	if (!passthru->ctrl_path)
+	subsys->passthru_ctrl_path = kstrndup(page, len, GFP_KERNEL);
+	if (!subsys->passthru_ctrl_path)
 		goto out_unlock;
 
 	mutex_unlock(&subsys->lock);
@@ -959,13 +919,8 @@ static ssize_t nvmet_passthru_enable_show(struct config_item *item,
 		char *page)
 {
 	struct nvmet_subsys *subsys = to_subsys(item->ci_parent);
-	ssize_t ret;
 
-	mutex_lock(&subsys->lock);
-	ret = sprintf(page, "%d\n",
-		subsys->passthru && subsys->passthru->ctrl ? 1 : 0);
-	mutex_unlock(&subsys->lock);
-	return ret;
+	return sprintf(page, "%d\n", subsys->passthru_ctrl ? 1 : 0);
 }
 
 static ssize_t nvmet_passthru_enable_store(struct config_item *item,
@@ -990,34 +945,18 @@ CONFIGFS_ATTR(nvmet_passthru_, enable);
 static ssize_t nvmet_passthru_admin_timeout_show(struct config_item *item,
 		char *page)
 {
-	struct nvmet_subsys *subsys = to_subsys(item->ci_parent);
-	ssize_t ret;
-
-	mutex_lock(&subsys->lock);
-	ret = sprintf(page, "%u\n", subsys->passthru ?
-			subsys->passthru->admin_timeout : 0);
-	mutex_unlock(&subsys->lock);
-	return ret;
+	return sprintf(page, "%u\n", to_subsys(item->ci_parent)->admin_timeout);
 }
 
 static ssize_t nvmet_passthru_admin_timeout_store(struct config_item *item,
 		const char *page, size_t count)
 {
 	struct nvmet_subsys *subsys = to_subsys(item->ci_parent);
-	struct nvmet_passthru *passthru;
 	unsigned int timeout;
 
 	if (kstrtouint(page, 0, &timeout))
 		return -EINVAL;
-
-	mutex_lock(&subsys->lock);
-	passthru = nvmet_subsys_passthru(subsys);
-	if (!passthru) {
-		mutex_unlock(&subsys->lock);
-		return -ENOMEM;
-	}
-	passthru->admin_timeout = timeout;
-	mutex_unlock(&subsys->lock);
+	subsys->admin_timeout = timeout;
 	return count;
 }
 CONFIGFS_ATTR(nvmet_passthru_, admin_timeout);
@@ -1025,34 +964,18 @@ CONFIGFS_ATTR(nvmet_passthru_, admin_timeout);
 static ssize_t nvmet_passthru_io_timeout_show(struct config_item *item,
 		char *page)
 {
-	struct nvmet_subsys *subsys = to_subsys(item->ci_parent);
-	ssize_t ret;
-
-	mutex_lock(&subsys->lock);
-	ret = sprintf(page, "%u\n",
-		subsys->passthru ? subsys->passthru->io_timeout : 0);
-	mutex_unlock(&subsys->lock);
-	return ret;
+	return sprintf(page, "%u\n", to_subsys(item->ci_parent)->io_timeout);
 }
 
 static ssize_t nvmet_passthru_io_timeout_store(struct config_item *item,
 		const char *page, size_t count)
 {
 	struct nvmet_subsys *subsys = to_subsys(item->ci_parent);
-	struct nvmet_passthru *passthru;
 	unsigned int timeout;
 
 	if (kstrtouint(page, 0, &timeout))
 		return -EINVAL;
-
-	mutex_lock(&subsys->lock);
-	passthru = nvmet_subsys_passthru(subsys);
-	if (!passthru) {
-		mutex_unlock(&subsys->lock);
-		return -ENOMEM;
-	}
-	passthru->io_timeout = timeout;
-	mutex_unlock(&subsys->lock);
+	subsys->io_timeout = timeout;
 	return count;
 }
 CONFIGFS_ATTR(nvmet_passthru_, io_timeout);
@@ -1060,34 +983,18 @@ CONFIGFS_ATTR(nvmet_passthru_, io_timeout);
 static ssize_t nvmet_passthru_clear_ids_show(struct config_item *item,
 		char *page)
 {
-	struct nvmet_subsys *subsys = to_subsys(item->ci_parent);
-	ssize_t ret;
-
-	mutex_lock(&subsys->lock);
-	ret = sprintf(page, "%u\n",
-		subsys->passthru ? subsys->passthru->clear_ids : 0);
-	mutex_unlock(&subsys->lock);
-	return ret;
+	return sprintf(page, "%u\n", to_subsys(item->ci_parent)->clear_ids);
 }
 
 static ssize_t nvmet_passthru_clear_ids_store(struct config_item *item,
 		const char *page, size_t count)
 {
 	struct nvmet_subsys *subsys = to_subsys(item->ci_parent);
-	struct nvmet_passthru *passthru;
 	unsigned int clear_ids;
 
 	if (kstrtouint(page, 0, &clear_ids))
 		return -EINVAL;
-
-	mutex_lock(&subsys->lock);
-	passthru = nvmet_subsys_passthru(subsys);
-	if (!passthru) {
-		mutex_unlock(&subsys->lock);
-		return -ENOMEM;
-	}
-	passthru->clear_ids = clear_ids;
-	mutex_unlock(&subsys->lock);
+	subsys->clear_ids = clear_ids;
 	return count;
 }
 CONFIGFS_ATTR(nvmet_passthru_, clear_ids);
@@ -1135,7 +1042,7 @@ static int nvmet_port_subsys_allow_link(struct config_item *parent,
 		return -EINVAL;
 	}
 	subsys = to_subsys(target);
-	link = kmalloc_obj(*link);
+	link = kmalloc(sizeof(*link), GFP_KERNEL);
 	if (!link)
 		return -ENOMEM;
 	link->subsys = subsys;
@@ -1215,7 +1122,7 @@ static int nvmet_allowed_hosts_allow_link(struct config_item *parent,
 	}
 
 	host = to_host(target);
-	link = kmalloc_obj(*link);
+	link = kmalloc(sizeof(*link), GFP_KERNEL);
 	if (!link)
 		return -ENOMEM;
 	link->host = host;
@@ -1437,34 +1344,6 @@ static ssize_t nvmet_subsys_attr_serial_store(struct config_item *item,
 	return ret;
 }
 CONFIGFS_ATTR(nvmet_subsys_, attr_serial);
-
-static ssize_t nvmet_subsys_attr_tbkas_show(struct config_item *item,
-					     char *page)
-{
-	return snprintf(page, PAGE_SIZE, "%d\n", to_subsys(item)->tbkas);
-}
-
-static ssize_t nvmet_subsys_attr_tbkas_store(struct config_item *item,
-					      const char *page, size_t count)
-{
-	struct nvmet_subsys *subsys = to_subsys(item);
-	struct nvmet_ctrl *ctrl;
-	bool tbkas;
-
-	if (kstrtobool(page, &tbkas))
-		return -EINVAL;
-
-	down_write(&nvmet_config_sem);
-	subsys->tbkas = tbkas;
-
-	/* Force reconnect */
-	list_for_each_entry(ctrl, &subsys->ctrls, subsys_entry)
-		ctrl->ops->delete_ctrl(ctrl);
-	up_write(&nvmet_config_sem);
-
-	return count;
-}
-CONFIGFS_ATTR(nvmet_subsys_, attr_tbkas);
 
 static ssize_t nvmet_subsys_attr_cntlid_min_show(struct config_item *item,
 						 char *page)
@@ -1803,7 +1682,6 @@ static struct configfs_attribute *nvmet_subsys_attrs[] = {
 	&nvmet_subsys_attr_attr_qid_max,
 	&nvmet_subsys_attr_attr_ieee_oui,
 	&nvmet_subsys_attr_attr_firmware,
-	&nvmet_subsys_attr_attr_tbkas,
 #ifdef CONFIG_BLK_DEV_INTEGRITY
 	&nvmet_subsys_attr_attr_pi_enable,
 #endif
@@ -1949,7 +1827,7 @@ static struct config_group *nvmet_referral_make(
 {
 	struct nvmet_port *port;
 
-	port = kzalloc_obj(*port);
+	port = kzalloc(sizeof(*port), GFP_KERNEL);
 	if (!port)
 		return ERR_PTR(-ENOMEM);
 
@@ -2067,7 +1945,7 @@ static struct config_group *nvmet_ana_groups_make_group(
 		goto out;
 
 	ret = -ENOMEM;
-	grp = kzalloc_obj(*grp);
+	grp = kzalloc(sizeof(*grp), GFP_KERNEL);
 	if (!grp)
 		goto out;
 	grp->port = port;
@@ -2107,6 +1985,7 @@ static void nvmet_port_release(struct config_item *item)
 	list_del(&port->global_entry);
 
 	key_put(port->keyring);
+	kfree(port->ana_state);
 	kfree(port);
 }
 
@@ -2119,7 +1998,6 @@ static struct configfs_attribute *nvmet_port_attrs[] = {
 	&nvmet_attr_addr_tsas,
 	&nvmet_attr_param_inline_data_size,
 	&nvmet_attr_param_max_queue_size,
-	&nvmet_attr_param_mdts,
 #ifdef CONFIG_BLK_DEV_INTEGRITY
 	&nvmet_attr_param_pi_enable,
 #endif
@@ -2146,9 +2024,16 @@ static struct config_group *nvmet_ports_make(struct config_group *group,
 	if (kstrtou16(name, 0, &portid))
 		return ERR_PTR(-EINVAL);
 
-	port = kzalloc_flex(*port, ana_state, NVMET_MAX_ANAGRPS + 1);
+	port = kzalloc(sizeof(*port), GFP_KERNEL);
 	if (!port)
 		return ERR_PTR(-ENOMEM);
+
+	port->ana_state = kcalloc(NVMET_MAX_ANAGRPS + 1,
+			sizeof(*port->ana_state), GFP_KERNEL);
+	if (!port->ana_state) {
+		kfree(port);
+		return ERR_PTR(-ENOMEM);
+	}
 
 	if (IS_ENABLED(CONFIG_NVME_TARGET_TCP_TLS) && nvme_keyring_id()) {
 		port->keyring = key_lookup(nvme_keyring_id());
@@ -2172,7 +2057,6 @@ static struct config_group *nvmet_ports_make(struct config_group *group,
 	INIT_LIST_HEAD(&port->referrals);
 	port->inline_data_size = -1;	/* < 0 == let the transport choose */
 	port->max_queue_size = -1;	/* < 0 == let the transport choose */
-	port->mdts = -1;		/* < 0 == let the transport choose */
 
 	port->disc_addr.trtype = NVMF_TRTYPE_MAX;
 	port->disc_addr.portid = cpu_to_le16(portid);
@@ -2300,6 +2184,8 @@ static ssize_t nvmet_host_dhchap_hash_store(struct config_item *item,
 	hmac_id = nvme_auth_hmac_id(page);
 	if (hmac_id == NVME_AUTH_HASH_INVALID)
 		return -EINVAL;
+	if (!crypto_has_shash(nvme_auth_hmac_name(hmac_id), 0, 0))
+		return -ENOTSUPP;
 	host->dhchap_hash_id = hmac_id;
 	return count;
 }
@@ -2373,7 +2259,7 @@ static struct config_group *nvmet_hosts_make_group(struct config_group *group,
 {
 	struct nvmet_host *host;
 
-	host = kzalloc_obj(*host);
+	host = kzalloc(sizeof(*host), GFP_KERNEL);
 	if (!host)
 		return ERR_PTR(-ENOMEM);
 

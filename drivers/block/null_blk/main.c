@@ -353,7 +353,6 @@ static ssize_t nullb_device_bool_attr_store(bool *val, const char *page,
 static ssize_t								\
 nullb_device_##NAME##_show(struct config_item *item, char *page)	\
 {									\
-	guard(mutex)(&lock);						\
 	return nullb_device_##TYPE##_attr_show(				\
 				to_nullb_device(item)->NAME, page);	\
 }									\
@@ -487,7 +486,6 @@ NULLB_DEVICE_ATTR(badblocks_partial_io, bool, NULL);
 
 static ssize_t nullb_device_power_show(struct config_item *item, char *page)
 {
-	guard(mutex)(&lock);
 	return nullb_device_bool_attr_show(to_nullb_device(item)->power, page);
 }
 
@@ -503,15 +501,15 @@ static ssize_t nullb_device_power_store(struct config_item *item,
 		return ret;
 
 	ret = count;
-	guard(mutex)(&lock);
+	mutex_lock(&lock);
 	if (!dev->power && newp) {
 		if (test_and_set_bit(NULLB_DEV_FL_UP, &dev->flags))
-			return ret;
+			goto out;
 
 		ret = null_add_dev(dev);
 		if (ret) {
 			clear_bit(NULLB_DEV_FL_UP, &dev->flags);
-			return ret;
+			goto out;
 		}
 
 		set_bit(NULLB_DEV_FL_CONFIGURED, &dev->flags);
@@ -525,6 +523,8 @@ static ssize_t nullb_device_power_store(struct config_item *item,
 		clear_bit(NULLB_DEV_FL_CONFIGURED, &dev->flags);
 	}
 
+out:
+	mutex_unlock(&lock);
 	return ret;
 }
 
@@ -587,9 +587,13 @@ static ssize_t nullb_device_zone_readonly_store(struct config_item *item,
 						const char *page, size_t count)
 {
 	struct nullb_device *dev = to_nullb_device(item);
+	ssize_t ret;
 
-	guard(mutex)(&lock);
-	return zone_cond_store(dev, page, count, BLK_ZONE_COND_READONLY);
+	mutex_lock(&lock);
+	ret = zone_cond_store(dev, page, count, BLK_ZONE_COND_READONLY);
+	mutex_unlock(&lock);
+
+	return ret;
 }
 CONFIGFS_ATTR_WO(nullb_device_, zone_readonly);
 
@@ -597,9 +601,13 @@ static ssize_t nullb_device_zone_offline_store(struct config_item *item,
 					       const char *page, size_t count)
 {
 	struct nullb_device *dev = to_nullb_device(item);
+	ssize_t ret;
 
-	guard(mutex)(&lock);
-	return zone_cond_store(dev, page, count, BLK_ZONE_COND_OFFLINE);
+	mutex_lock(&lock);
+	ret = zone_cond_store(dev, page, count, BLK_ZONE_COND_OFFLINE);
+	mutex_unlock(&lock);
+
+	return ret;
 }
 CONFIGFS_ATTR_WO(nullb_device_, zone_offline);
 
@@ -652,7 +660,7 @@ static void nullb_device_release(struct config_item *item)
 	null_free_dev(dev);
 }
 
-static const struct configfs_item_operations nullb_device_ops = {
+static struct configfs_item_operations nullb_device_ops = {
 	.release	= nullb_device_release,
 };
 
@@ -717,9 +725,10 @@ nullb_group_drop_item(struct config_group *group, struct config_item *item)
 	struct nullb_device *dev = to_nullb_device(item);
 
 	if (test_and_clear_bit(NULLB_DEV_FL_UP, &dev->flags)) {
-		guard(mutex)(&lock);
+		mutex_lock(&lock);
 		dev->power = false;
 		null_del_dev(dev->nullb);
+		mutex_unlock(&lock);
 	}
 	nullb_del_fault_config(dev);
 	config_item_put(item);
@@ -758,7 +767,7 @@ static struct configfs_attribute *nullb_group_attrs[] = {
 	NULL,
 };
 
-static const struct configfs_group_operations nullb_group_ops = {
+static struct configfs_group_operations nullb_group_ops = {
 	.make_group	= nullb_group_make_group,
 	.drop_item	= nullb_group_drop_item,
 };
@@ -787,7 +796,7 @@ static struct nullb_device *null_alloc_dev(void)
 {
 	struct nullb_device *dev;
 
-	dev = kzalloc_obj(*dev);
+	dev = kzalloc(sizeof(*dev), GFP_KERNEL);
 	if (!dev)
 		return NULL;
 
@@ -875,7 +884,7 @@ static struct nullb_page *null_alloc_page(void)
 {
 	struct nullb_page *t_page;
 
-	t_page = kmalloc_obj(struct nullb_page, GFP_NOIO);
+	t_page = kmalloc(sizeof(struct nullb_page), GFP_NOIO);
 	if (!t_page)
 		return NULL;
 
@@ -1147,28 +1156,26 @@ again:
 	return 0;
 }
 
-static blk_status_t copy_to_nullb(struct nullb *nullb, void *source,
-				  loff_t pos, size_t n, bool is_fua)
+static int copy_to_nullb(struct nullb *nullb, struct page *source,
+	unsigned int off, sector_t sector, size_t n, bool is_fua)
 {
 	size_t temp, count = 0;
+	unsigned int offset;
 	struct nullb_page *t_page;
-	sector_t sector;
 
 	while (count < n) {
-		temp = min3(nullb->dev->blocksize, n - count,
-			    PAGE_SIZE - offset_in_page(pos));
-		sector = pos >> SECTOR_SHIFT;
+		temp = min_t(size_t, nullb->dev->blocksize, n - count);
 
 		if (null_cache_active(nullb) && !is_fua)
 			null_make_cache_space(nullb, PAGE_SIZE);
 
+		offset = (sector & SECTOR_MASK) << SECTOR_SHIFT;
 		t_page = null_insert_page(nullb, sector,
 			!null_cache_active(nullb) || is_fua);
 		if (!t_page)
-			return BLK_STS_NOSPC;
+			return -ENOSPC;
 
-		memcpy_to_page(t_page->page, offset_in_page(pos),
-			       source + count, temp);
+		memcpy_page(t_page->page, offset, source, off + count, temp);
 
 		__set_bit(sector & SECTOR_MASK, t_page->bitmap);
 
@@ -1176,34 +1183,41 @@ static blk_status_t copy_to_nullb(struct nullb *nullb, void *source,
 			null_free_sector(nullb, sector, true);
 
 		count += temp;
-		pos += temp;
+		sector += temp >> SECTOR_SHIFT;
 	}
-	return BLK_STS_OK;
+	return 0;
 }
 
-static void copy_from_nullb(struct nullb *nullb, void *dest, loff_t pos,
-			    size_t n)
+static int copy_from_nullb(struct nullb *nullb, struct page *dest,
+	unsigned int off, sector_t sector, size_t n)
 {
 	size_t temp, count = 0;
+	unsigned int offset;
 	struct nullb_page *t_page;
-	sector_t sector;
 
 	while (count < n) {
-		temp = min3(nullb->dev->blocksize, n - count,
-			    PAGE_SIZE - offset_in_page(pos));
-		sector = pos >> SECTOR_SHIFT;
+		temp = min_t(size_t, nullb->dev->blocksize, n - count);
 
+		offset = (sector & SECTOR_MASK) << SECTOR_SHIFT;
 		t_page = null_lookup_page(nullb, sector, false,
 			!null_cache_active(nullb));
+
 		if (t_page)
-			memcpy_from_page(dest + count, t_page->page,
-					 offset_in_page(pos), temp);
+			memcpy_page(dest, off + count, t_page->page, offset,
+				    temp);
 		else
-			memset(dest + count, 0, temp);
+			memzero_page(dest, off + count, temp);
 
 		count += temp;
-		pos += temp;
+		sector += temp >> SECTOR_SHIFT;
 	}
+	return 0;
+}
+
+static void nullb_fill_pattern(struct nullb *nullb, struct page *page,
+			       unsigned int len, unsigned int off)
+{
+	memset_page(page, off, 0xff, len);
 }
 
 blk_status_t null_handle_discard(struct nullb_device *dev,
@@ -1247,39 +1261,34 @@ static blk_status_t null_handle_flush(struct nullb *nullb)
 	return errno_to_blk_status(err);
 }
 
-static blk_status_t null_transfer(struct nullb *nullb, struct page *page,
-	unsigned int len, unsigned int off, bool is_write, loff_t pos,
+static int null_transfer(struct nullb *nullb, struct page *page,
+	unsigned int len, unsigned int off, bool is_write, sector_t sector,
 	bool is_fua)
 {
 	struct nullb_device *dev = nullb->dev;
-	blk_status_t err = BLK_STS_OK;
 	unsigned int valid_len = len;
-	void *p;
+	int err = 0;
 
-	p = kmap_local_page(page) + off;
 	if (!is_write) {
-		if (dev->zoned) {
+		if (dev->zoned)
 			valid_len = null_zone_valid_read_len(nullb,
-				pos >> SECTOR_SHIFT, len);
-			if (valid_len && valid_len != len)
-				valid_len -= pos & (SECTOR_SIZE - 1);
-		}
+				sector, len);
 
 		if (valid_len) {
-			copy_from_nullb(nullb, p, pos, valid_len);
+			err = copy_from_nullb(nullb, page, off,
+				sector, valid_len);
 			off += valid_len;
 			len -= valid_len;
 		}
 
 		if (len)
-			memset(p + valid_len, 0xff, len);
+			nullb_fill_pattern(nullb, page, len, off);
 		flush_dcache_page(page);
 	} else {
 		flush_dcache_page(page);
-		err = copy_to_nullb(nullb, p, pos, len, is_fua);
+		err = copy_to_nullb(nullb, page, off, sector, len, is_fua);
 	}
 
-	kunmap_local(p);
 	return err;
 }
 
@@ -1292,9 +1301,9 @@ static blk_status_t null_handle_data_transfer(struct nullb_cmd *cmd,
 {
 	struct request *rq = blk_mq_rq_from_pdu(cmd);
 	struct nullb *nullb = cmd->nq->dev->nullb;
-	blk_status_t err = BLK_STS_OK;
+	int err = 0;
 	unsigned int len;
-	loff_t pos = blk_rq_pos(rq) << SECTOR_SHIFT;
+	sector_t sector = blk_rq_pos(rq);
 	unsigned int max_bytes = nr_sectors << SECTOR_SHIFT;
 	unsigned int transferred_bytes = 0;
 	struct req_iterator iter;
@@ -1306,18 +1315,18 @@ static blk_status_t null_handle_data_transfer(struct nullb_cmd *cmd,
 		if (transferred_bytes + len > max_bytes)
 			len = max_bytes - transferred_bytes;
 		err = null_transfer(nullb, bvec.bv_page, len, bvec.bv_offset,
-				     op_is_write(req_op(rq)), pos,
+				     op_is_write(req_op(rq)), sector,
 				     rq->cmd_flags & REQ_FUA);
 		if (err)
 			break;
-		pos += len;
+		sector += len >> SECTOR_SHIFT;
 		transferred_bytes += len;
 		if (transferred_bytes >= max_bytes)
 			break;
 	}
 	spin_unlock_irq(&nullb->lock);
 
-	return err;
+	return errno_to_blk_status(err);
 }
 
 static inline blk_status_t null_handle_throttled(struct nullb_cmd *cmd)
@@ -1778,7 +1787,7 @@ static void null_del_dev(struct nullb *nullb)
 
 	del_gendisk(nullb->disk);
 
-	if (test_bit(NULLB_DEV_FL_THROTTLED, &dev->flags)) {
+	if (test_bit(NULLB_DEV_FL_THROTTLED, &nullb->dev->flags)) {
 		hrtimer_cancel(&nullb->bw_timer);
 		atomic_long_set(&nullb->cur_bytes, LONG_MAX);
 		blk_mq_start_stopped_hw_queues(nullb->q, true);
@@ -1790,7 +1799,7 @@ static void null_del_dev(struct nullb *nullb)
 		blk_mq_free_tag_set(nullb->tag_set);
 	kfree(nullb->queues);
 	if (null_cache_active(nullb))
-		null_free_device_storage(dev, true);
+		null_free_device_storage(nullb->dev, true);
 	kfree(nullb);
 	dev->nullb = NULL;
 }
@@ -1827,7 +1836,8 @@ static int setup_queues(struct nullb *nullb)
 	if (g_poll_queues)
 		nqueues += g_poll_queues;
 
-	nullb->queues = kzalloc_objs(struct nullb_queue, nqueues);
+	nullb->queues = kcalloc(nqueues, sizeof(struct nullb_queue),
+				GFP_KERNEL);
 	if (!nullb->queues)
 		return -ENOMEM;
 
@@ -1967,7 +1977,7 @@ static int null_add_dev(struct nullb_device *dev)
 		.logical_block_size	= dev->blocksize,
 		.physical_block_size	= dev->blocksize,
 		.max_hw_sectors		= dev->max_sectors,
-		.dma_alignment		= 1,
+		.dma_alignment		= dev->blocksize - 1,
 	};
 
 	struct nullb *nullb;
@@ -2090,13 +2100,14 @@ static struct nullb *null_find_dev_by_name(const char *name)
 {
 	struct nullb *nullb = NULL, *nb;
 
-	guard(mutex)(&lock);
+	mutex_lock(&lock);
 	list_for_each_entry(nb, &nullb_list, list) {
 		if (strcmp(nb->disk_name, name) == 0) {
 			nullb = nb;
 			break;
 		}
 	}
+	mutex_unlock(&lock);
 
 	return nullb;
 }
@@ -2110,9 +2121,9 @@ static int null_create_dev(void)
 	if (!dev)
 		return -ENOMEM;
 
-	scoped_guard(mutex, &lock) {
-		ret = null_add_dev(dev);
-	}
+	mutex_lock(&lock);
+	ret = null_add_dev(dev);
+	mutex_unlock(&lock);
 	if (ret) {
 		null_free_dev(dev);
 		return ret;
@@ -2204,14 +2215,14 @@ static void __exit null_exit(void)
 
 	configfs_unregister_subsystem(&nullb_subsys);
 
-	scoped_guard(mutex, &lock) {
-		while (!list_empty(&nullb_list)) {
-			nullb = list_entry(nullb_list.next, struct nullb, list);
-			null_destroy_dev(nullb);
-		}
-	}
-
 	unregister_blkdev(null_major, "nullb");
+
+	mutex_lock(&lock);
+	while (!list_empty(&nullb_list)) {
+		nullb = list_entry(nullb_list.next, struct nullb, list);
+		null_destroy_dev(nullb);
+	}
+	mutex_unlock(&lock);
 
 	if (tag_set.ops)
 		blk_mq_free_tag_set(&tag_set);

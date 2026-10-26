@@ -33,7 +33,7 @@
  * dynamically, rather then relying on e.g. Devicetree and phandles.
  */
 
-#define MSM_PULL_MASK		GENMASK(1, 0)
+#define MSM_PULL_MASK		GENMASK(2, 0)
 #define MSM_PULL_DOWN		1
 #define MSM_PULL_UP		3
 #define TLMM_REG_SIZE		0x1000
@@ -273,6 +273,7 @@ static void tlmm_test_low(struct kunit *test)
 	int i;
 
 	priv->intr_op = TLMM_TEST_COUNT | TLMM_TEST_OUTPUT_HIGH;
+	atomic_set(&priv->intr_op_remain, 9);
 
 	tlmm_output_high();
 
@@ -297,6 +298,7 @@ static void tlmm_test_high(struct kunit *test)
 	int i;
 
 	priv->intr_op = TLMM_TEST_COUNT | TLMM_TEST_OUTPUT_LOW;
+	atomic_set(&priv->intr_op_remain, 9);
 
 	tlmm_output_low();
 
@@ -519,6 +521,7 @@ static void tlmm_test_rising_while_disabled(struct kunit *test)
 	unsigned int before_edge;
 
 	priv->intr_op = TLMM_TEST_COUNT;
+	atomic_set(&priv->thread_op_remain, 10);
 
 	tlmm_output_low();
 
@@ -587,7 +590,7 @@ static int tlmm_reg_base(struct device_node *tlmm, struct resource *res)
 		return count;
 	}
 
-	reg_names = kcalloc(count, sizeof(*reg_names), GFP_KERNEL);
+	reg_names = kcalloc(count, sizeof(char *), GFP_KERNEL);
 	if (!reg_names)
 		return -ENOMEM;
 

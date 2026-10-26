@@ -17,6 +17,7 @@
 #include <linux/irq.h>
 #include <linux/kernel.h>
 #include <linux/module.h>
+#include <linux/mod_devicetable.h>
 #include <linux/perf_event.h>
 #include <linux/platform_device.h>
 #include <linux/sysfs.h>
@@ -51,7 +52,7 @@
 
 #define STARLINK_FORMAT_ATTR(_name, _config)				      \
 	(&((struct dev_ext_attribute[]) {				      \
-		{ .attr = __DEVICE_ATTR(_name, 0444, starlink_pmu_sysfs_format_show, NULL), \
+		{ .attr = __ATTR(_name, 0444, starlink_pmu_sysfs_format_show, NULL), \
 		  .var = (void *)_config, }				      \
 	})[0].attr.attr)
 
@@ -130,7 +131,7 @@ cpumask_show(struct device *dev, struct device_attribute *attr, char *buf)
 {
 	struct starlink_pmu *starlink_pmu = to_starlink_pmu(dev_get_drvdata(dev));
 
-	return sysfs_emit(buf, "%*pbl\n", cpumask_pr_args(&starlink_pmu->cpumask));
+	return cpumap_print_to_pagebuf(true, buf, &starlink_pmu->cpumask);
 }
 
 static DEVICE_ATTR_RO(cpumask);
@@ -435,7 +436,7 @@ static int starlink_setup_irqs(struct starlink_pmu *starlink_pmu,
 	ret = devm_request_irq(&pdev->dev, irq, starlink_pmu_handle_irq,
 			       0, STARLINK_PMU_PDEV_NAME, starlink_pmu);
 	if (ret)
-		return ret;
+		return dev_err_probe(&pdev->dev, ret, "Failed to request IRQ\n");
 
 	starlink_pmu->irq = irq;
 
@@ -449,7 +450,8 @@ static int starlink_pmu_pm_notify(struct notifier_block *b,
 							 starlink_pmu_pm_nb);
 	struct starlink_hw_events *hw_events =
 					this_cpu_ptr(starlink_pmu->hw_events);
-	bool enabled = !bitmap_empty(hw_events->used_mask, STARLINK_PMU_MAX_COUNTERS);
+	int enabled = bitmap_weight(hw_events->used_mask,
+				    STARLINK_PMU_MAX_COUNTERS);
 	struct perf_event *event;
 	int idx;
 

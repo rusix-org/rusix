@@ -183,7 +183,7 @@ struct ipuv3_channel *ipu_idmac_get(struct ipu_soc *ipu, unsigned num)
 		}
 	}
 
-	channel = kzalloc_obj(*channel);
+	channel = kzalloc(sizeof(*channel), GFP_KERNEL);
 	if (!channel) {
 		channel = ERR_PTR(-ENOMEM);
 		goto out;

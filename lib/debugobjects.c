@@ -2,7 +2,7 @@
 /*
  * Generic infrastructure for lifetime debugging of objects.
  *
- * Copyright (C) 2008, Linutronix GmbH, Thomas Gleixner <tglx@kernel.org>
+ * Copyright (C) 2008, Thomas Gleixner <tglx@linutronix.de>
  */
 
 #define pr_fmt(fmt) "ODEBUG: " fmt
@@ -1070,7 +1070,7 @@ void debug_object_assert_init(void *addr, const struct debug_obj_descr *descr)
 	raw_spin_lock_irqsave(&db->lock, flags);
 	obj = lookup_object_or_alloc(addr, db, descr, false, true);
 	raw_spin_unlock_irqrestore(&db->lock, flags);
-	if (!IS_ERR_OR_NULL(obj))
+	if (likely(!IS_ERR_OR_NULL(obj)))
 		return;
 
 	/* If NULL the allocation has hit OOM */

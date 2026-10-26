@@ -9,6 +9,7 @@
 #include <linux/kobject.h>
 #include <linux/init.h>
 #include <linux/io.h>
+#include <linux/mod_devicetable.h>
 #include <linux/nvmem-consumer.h>
 #include <linux/nvmem-provider.h>
 #include <linux/of.h>
@@ -34,7 +35,6 @@ static const char *tegra_revision_name[TEGRA_REVISION_MAX] = {
 	[TEGRA_REVISION_A03]     = "A03",
 	[TEGRA_REVISION_A03p]    = "A03 prime",
 	[TEGRA_REVISION_A04]     = "A04",
-	[TEGRA_REVISION_B01]     = "B01",
 };
 
 static const char *tegra_platform_name[TEGRA_PLATFORM_MAX] = {
@@ -66,9 +66,6 @@ static struct tegra_fuse *fuse = &(struct tegra_fuse) {
 };
 
 static const struct of_device_id tegra_fuse_match[] = {
-#ifdef CONFIG_ARCH_TEGRA_264_SOC
-	{ .compatible = "nvidia,tegra264-efuse", .data = &tegra264_fuse_soc },
-#endif
 #ifdef CONFIG_ARCH_TEGRA_234_SOC
 	{ .compatible = "nvidia,tegra234-efuse", .data = &tegra234_fuse_soc },
 #endif
@@ -180,11 +177,6 @@ static int tegra_fuse_probe(struct platform_device *pdev)
 			fuse->soc = &tegra241_fuse_soc;
 			break;
 #endif
-#if defined(CONFIG_ARCH_TEGRA_264_SOC)
-		case TEGRA264:
-			fuse->soc = &tegra264_fuse_soc;
-			break;
-#endif
 		default:
 			return dev_err_probe(&pdev->dev, -EINVAL, "Unsupported SoC: %02x\n", chip);
 		}
@@ -267,7 +259,6 @@ static int tegra_fuse_probe(struct platform_device *pdev)
 
 static int __maybe_unused tegra_fuse_runtime_resume(struct device *dev)
 {
-	struct tegra_fuse *fuse = dev_get_drvdata(dev);
 	int err;
 
 	err = clk_prepare_enable(fuse->clk);
@@ -281,8 +272,6 @@ static int __maybe_unused tegra_fuse_runtime_resume(struct device *dev)
 
 static int __maybe_unused tegra_fuse_runtime_suspend(struct device *dev)
 {
-	struct tegra_fuse *fuse = dev_get_drvdata(dev);
-
 	clk_disable_unprepare(fuse->clk);
 
 	return 0;
@@ -290,7 +279,6 @@ static int __maybe_unused tegra_fuse_runtime_suspend(struct device *dev)
 
 static int __maybe_unused tegra_fuse_suspend(struct device *dev)
 {
-	struct tegra_fuse *fuse = dev_get_drvdata(dev);
 	int ret;
 
 	/*
@@ -307,7 +295,6 @@ static int __maybe_unused tegra_fuse_suspend(struct device *dev)
 
 static int __maybe_unused tegra_fuse_resume(struct device *dev)
 {
-	struct tegra_fuse *fuse = dev_get_drvdata(dev);
 	int ret = 0;
 
 	if (fuse->soc->clk_suspend_on)
@@ -422,8 +409,7 @@ const struct attribute_group tegra_soc_attr_group = {
 
 #if IS_ENABLED(CONFIG_ARCH_TEGRA_194_SOC) || \
     IS_ENABLED(CONFIG_ARCH_TEGRA_234_SOC) || \
-    IS_ENABLED(CONFIG_ARCH_TEGRA_241_SOC) || \
-    IS_ENABLED(CONFIG_ARCH_TEGRA_264_SOC)
+    IS_ENABLED(CONFIG_ARCH_TEGRA_241_SOC)
 static ssize_t platform_show(struct device *dev, struct device_attribute *attr,
 			     char *buf)
 {
@@ -455,7 +441,7 @@ struct device *tegra_soc_device_register(void)
 	struct soc_device_attribute *attr;
 	struct soc_device *dev;
 
-	attr = kzalloc_obj(*attr);
+	attr = kzalloc(sizeof(*attr), GFP_KERNEL);
 	if (!attr)
 		return NULL;
 

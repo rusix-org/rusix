@@ -41,7 +41,6 @@
 #include <linux/nfs2.h>
 #include <linux/nfs_fs.h>
 #include <linux/nfs_page.h>
-#include <linux/filelock.h>
 #include <linux/lockd/bind.h>
 #include <linux/freezer.h>
 #include "internal.h"
@@ -218,7 +217,7 @@ static struct nfs_createdata *nfs_alloc_createdata(struct inode *dir,
 {
 	struct nfs_createdata *data;
 
-	data = kmalloc_obj(*data);
+	data = kmalloc(sizeof(*data), GFP_KERNEL);
 
 	if (data != NULL) {
 		data->arg.fh = NFS_FH(dir);
@@ -354,8 +353,7 @@ static int nfs_proc_unlink_done(struct rpc_task *task, struct inode *dir)
 static void
 nfs_proc_rename_setup(struct rpc_message *msg,
 		struct dentry *old_dentry,
-		struct dentry *new_dentry,
-		struct inode *same_parent)
+		struct dentry *new_dentry)
 {
 	msg->rpc_proc = &nfs_procedures[NFSPROC_RENAME];
 }
@@ -598,7 +596,6 @@ nfs_proc_pathconf(struct nfs_server *server, struct nfs_fh *fhandle,
 {
 	info->max_link = 0;
 	info->max_namelen = NFS2_MAXNAMLEN;
-	info->case_preserving = true;
 	return 0;
 }
 
@@ -699,10 +696,11 @@ static int nfs_have_delegation(struct inode *inode, fmode_t type, int flags)
 	return 0;
 }
 
-static void nfs_return_delegation(struct inode *inode)
+static int nfs_return_delegation(struct inode *inode)
 {
 	if (S_ISREG(inode->i_mode))
 		nfs_wb_all(inode);
+	return 0;
 }
 
 static const struct inode_operations nfs_dir_inode_operations = {
@@ -719,14 +717,12 @@ static const struct inode_operations nfs_dir_inode_operations = {
 	.permission	= nfs_permission,
 	.getattr	= nfs_getattr,
 	.setattr	= nfs_setattr,
-	.fileattr_get	= nfs_fileattr_get,
 };
 
 static const struct inode_operations nfs_file_inode_operations = {
 	.permission	= nfs_permission,
 	.getattr	= nfs_getattr,
 	.setattr	= nfs_setattr,
-	.fileattr_get	= nfs_fileattr_get,
 };
 
 const struct nfs_rpc_ops nfs_v2_clientops = {

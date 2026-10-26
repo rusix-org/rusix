@@ -8,10 +8,10 @@
 #define pr_fmt(fmt)	"reboot: " fmt
 
 #include <linux/atomic.h>
-#include <linux/console.h>
 #include <linux/ctype.h>
 #include <linux/export.h>
 #include <linux/kexec.h>
+#include <linux/kmod.h>
 #include <linux/kmsg_dump.h>
 #include <linux/rcupdate.h>
 #include <linux/reboot.h>
@@ -20,7 +20,6 @@
 #include <linux/syscalls.h>
 #include <linux/syscore_ops.h>
 #include <linux/uaccess.h>
-#include <linux/umh.h>
 
 /*
  * this indicates whether you can reboot with ctrl-alt-del: the default is yes
@@ -95,14 +94,6 @@ void emergency_restart(void)
 {
 	kmsg_dump(KMSG_DUMP_EMERG);
 	system_state = SYSTEM_RESTART;
-
-	/*
-	 * NBCON kthreads won't be flushed and stopped properly in
-	 * the emergency restart. Move them to the atomic mode.
-	 */
-	nbcon_cpu_emergency_enter();
-	printk_trigger_flush();
-
 	machine_emergency_restart();
 }
 EXPORT_SYMBOL_GPL(emergency_restart);
@@ -384,7 +375,7 @@ static struct sys_off_handler *alloc_sys_off_handler(int priority)
 		else
 			flags = GFP_KERNEL;
 
-		handler = kzalloc_obj(*handler, flags);
+		handler = kzalloc(sizeof(*handler), flags);
 		if (!handler)
 			return ERR_PTR(-ENOMEM);
 	}

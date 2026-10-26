@@ -37,7 +37,6 @@ enum nvram_parser_state {
  *
  * @state: current parser state.
  * @data: input buffer being parsed.
- * @data_len: size of the input buffer, including comments.
  * @nvram: output buffer with parse result.
  * @nvram_len: length of parse result.
  * @line: current line.
@@ -52,7 +51,6 @@ enum nvram_parser_state {
 struct nvram_parser {
 	enum nvram_parser_state state;
 	const u8 *data;
-	size_t data_len;
 	u8 *nvram;
 	u32 nvram_len;
 	u32 line;
@@ -173,14 +171,12 @@ brcmf_nvram_handle_value(struct nvram_parser *nvp)
 static enum nvram_parser_state
 brcmf_nvram_handle_comment(struct nvram_parser *nvp)
 {
-	const char *eoc, *sol;
-	size_t remaining;
+	char *eoc, *sol;
 
-	sol = (const char *)&nvp->data[nvp->pos];
-	remaining = nvp->data_len - nvp->pos;
-	eoc = strnchr(sol, remaining, '\n');
+	sol = (char *)&nvp->data[nvp->pos];
+	eoc = strchr(sol, '\n');
 	if (!eoc) {
-		eoc = memchr(sol, '\0', remaining);
+		eoc = strchr(sol, '\0');
 		if (!eoc)
 			return END;
 	}
@@ -214,7 +210,6 @@ static int brcmf_init_nvram_parser(struct nvram_parser *nvp,
 
 	memset(nvp, 0, sizeof(*nvp));
 	nvp->data = data;
-	nvp->data_len = data_len;
 	/* Limit size to MAX_NVRAM_SIZE, some files contain lot of comment */
 	if (data_len > BRCMF_FW_MAX_NVRAM_SIZE)
 		size = BRCMF_FW_MAX_NVRAM_SIZE;
@@ -675,9 +670,6 @@ static int brcmf_fw_request_firmware(const struct firmware **fw,
 	}
 
 fallback:
-	if (cur->flags & BRCMF_FW_REQF_OPTIONAL)
-		return firmware_request_nowarn(fw, cur->path, fwctx->dev);
-
 	return request_firmware(fw, cur->path, fwctx->dev);
 }
 
@@ -722,10 +714,9 @@ static void brcmf_fw_request_done_alt_path(const struct firmware *fw, void *ctx)
 		if (!alt_path)
 			goto fallback;
 
-		ret = firmware_request_nowait_nowarn(THIS_MODULE,
-						     alt_path, fwctx->dev,
-						     GFP_KERNEL, fwctx,
-						     brcmf_fw_request_done_alt_path);
+		ret = request_firmware_nowait(THIS_MODULE, true, alt_path,
+					      fwctx->dev, GFP_KERNEL, fwctx,
+					      brcmf_fw_request_done_alt_path);
 		kfree(alt_path);
 
 		if (ret < 0)
@@ -774,7 +765,7 @@ int brcmf_fw_get_firmwares(struct device *dev, struct brcmf_fw_request *req,
 	if (!brcmf_fw_request_is_valid(req))
 		return -EINVAL;
 
-	fwctx = kzalloc_obj(*fwctx);
+	fwctx = kzalloc(sizeof(*fwctx), GFP_KERNEL);
 	if (!fwctx)
 		return -ENOMEM;
 
@@ -788,10 +779,9 @@ int brcmf_fw_get_firmwares(struct device *dev, struct brcmf_fw_request *req,
 					    fwctx->req->board_types[0]);
 	if (alt_path) {
 		fwctx->board_index++;
-		ret = firmware_request_nowait_nowarn(THIS_MODULE,
-						     alt_path, fwctx->dev,
-						     GFP_KERNEL, fwctx,
-						     brcmf_fw_request_done_alt_path);
+		ret = request_firmware_nowait(THIS_MODULE, true, alt_path,
+					      fwctx->dev, GFP_KERNEL, fwctx,
+					      brcmf_fw_request_done_alt_path);
 		kfree(alt_path);
 	} else {
 		ret = request_firmware_nowait(THIS_MODULE, true, first->path,
@@ -835,7 +825,7 @@ brcmf_fw_alloc_request(u32 chip, u32 chiprev,
 		return NULL;
 	}
 
-	fwreq = kzalloc_flex(*fwreq, items, n_fwnames);
+	fwreq = kzalloc(struct_size(fwreq, items, n_fwnames), GFP_KERNEL);
 	if (!fwreq)
 		return NULL;
 

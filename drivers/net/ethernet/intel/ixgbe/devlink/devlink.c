@@ -318,7 +318,7 @@ static int ixgbe_devlink_info_get(struct devlink *devlink,
 	struct ixgbe_info_ctx *ctx;
 	int err;
 
-	ctx = kmalloc_obj(*ctx);
+	ctx = kmalloc(sizeof(*ctx), GFP_KERNEL);
 	if (!ctx)
 		return -ENOMEM;
 

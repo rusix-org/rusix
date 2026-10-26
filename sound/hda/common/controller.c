@@ -97,8 +97,6 @@ static int azx_pcm_close(struct snd_pcm_substream *substream)
 
 	trace_azx_pcm_close(chip, azx_dev);
 	scoped_guard(mutex, &chip->open_mutex) {
-		if (chip->ops->pcm_close)
-			chip->ops->pcm_close(chip, azx_dev);
 		azx_release_device(azx_dev);
 		if (hinfo->ops.close)
 			hinfo->ops.close(hinfo, apcm->codec, substream);
@@ -491,9 +489,9 @@ static int azx_get_time_info(struct snd_pcm_substream *substream,
 			struct snd_pcm_audio_tstamp_config *audio_tstamp_config,
 			struct snd_pcm_audio_tstamp_report *audio_tstamp_report)
 {
-	struct system_device_crosststamp xtstamp = { .clock_id = CLOCK_REALTIME };
 	struct azx_dev *azx_dev = get_azx_dev(substream);
 	struct snd_pcm_runtime *runtime = substream->runtime;
+	struct system_device_crosststamp xtstamp;
 	int ret;
 	u64 nsec;
 
@@ -527,7 +525,7 @@ static int azx_get_time_info(struct snd_pcm_substream *substream,
 			break;
 
 		default:
-			*system_ts = ktime_to_timespec64(xtstamp.sys_systime);
+			*system_ts = ktime_to_timespec64(xtstamp.sys_realtime);
 			break;
 
 		}
@@ -717,7 +715,7 @@ int snd_hda_attach_pcm_stream(struct hda_bus *_bus, struct hda_codec *codec,
 	if (err < 0)
 		return err;
 	strscpy(pcm->name, cpcm->name, sizeof(pcm->name));
-	apcm = kzalloc_obj(*apcm);
+	apcm = kzalloc(sizeof(*apcm), GFP_KERNEL);
 	if (apcm == NULL) {
 		snd_device_free(chip->card, pcm);
 		return -ENOMEM;
@@ -1266,28 +1264,44 @@ int azx_codec_configure(struct azx *chip)
 }
 EXPORT_SYMBOL_GPL(azx_codec_configure);
 
-void azx_add_stream(struct azx *chip, struct azx_dev *azx_dev, int idx, int tag)
+static int stream_direction(struct azx *chip, unsigned char index)
 {
-	snd_hdac_stream_init(azx_bus(chip), azx_stream(azx_dev), idx,
-			     azx_stream_direction(chip, idx), tag);
+	if (index >= chip->capture_index_offset &&
+	    index < chip->capture_index_offset + chip->capture_streams)
+		return SNDRV_PCM_STREAM_CAPTURE;
+	return SNDRV_PCM_STREAM_PLAYBACK;
 }
-EXPORT_SYMBOL_GPL(azx_add_stream);
 
 /* initialize SD streams */
 int azx_init_streams(struct azx *chip)
 {
 	int i;
+	int stream_tags[2] = { 0, 0 };
 
 	/* initialize each stream (aka device)
 	 * assign the starting bdl address to each stream (device)
 	 * and initialize
 	 */
 	for (i = 0; i < chip->num_streams; i++) {
-		struct azx_dev *azx_dev = kzalloc_obj(*azx_dev);
+		struct azx_dev *azx_dev = kzalloc(sizeof(*azx_dev), GFP_KERNEL);
+		int dir, tag;
 
 		if (!azx_dev)
 			return -ENOMEM;
-		azx_add_stream(chip, azx_dev, i, i + 1);
+
+		dir = stream_direction(chip, i);
+		/* stream tag must be unique throughout
+		 * the stream direction group,
+		 * valid values 1...15
+		 * use separate stream tag if the flag
+		 * AZX_DCAPS_SEPARATE_STREAM_TAG is used
+		 */
+		if (chip->driver_caps & AZX_DCAPS_SEPARATE_STREAM_TAG)
+			tag = ++stream_tags[dir];
+		else
+			tag = i + 1;
+		snd_hdac_stream_init(azx_bus(chip), azx_stream(azx_dev),
+				     i, dir, tag);
 	}
 
 	return 0;

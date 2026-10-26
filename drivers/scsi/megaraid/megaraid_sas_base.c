@@ -1781,8 +1781,8 @@ out_return_cmd:
  * @shost:			adapter SCSI host
  * @scmd:			SCSI command to be queued
  */
-static enum scsi_qc_status megasas_queue_command(struct Scsi_Host *shost,
-						 struct scsi_cmnd *scmd)
+static int
+megasas_queue_command(struct Scsi_Host *shost, struct scsi_cmnd *scmd)
 {
 	struct megasas_instance *instance;
 	struct MR_PRIV_DEVICE *mr_device_priv_data;
@@ -2148,7 +2148,8 @@ static int megasas_sdev_init(struct scsi_device *sdev)
 	}
 
 scan_target:
-	mr_device_priv_data = kzalloc_obj(*mr_device_priv_data);
+	mr_device_priv_data = kzalloc(sizeof(*mr_device_priv_data),
+					GFP_KERNEL);
 	if (!mr_device_priv_data)
 		return -ENOMEM;
 
@@ -2274,11 +2275,11 @@ megasas_check_and_restore_queue_depth(struct megasas_instance *instance)
 	    && atomic_read(&instance->fw_outstanding) <
 	    instance->throttlequeuedepth + 1) {
 
-		spin_lock_irqsave(&instance->host->host_lock, flags);
+		spin_lock_irqsave(instance->host->host_lock, flags);
 		instance->flag &= ~MEGASAS_FW_BUSY;
 
 		instance->host->can_queue = instance->cur_can_queue;
-		spin_unlock_irqrestore(&instance->host->host_lock, flags);
+		spin_unlock_irqrestore(instance->host->host_lock, flags);
 	}
 }
 
@@ -2955,13 +2956,13 @@ static enum scsi_timeout_action megasas_reset_timer(struct scsi_cmnd *scmd)
 	instance = (struct megasas_instance *)scmd->device->host->hostdata;
 	if (!(instance->flag & MEGASAS_FW_BUSY)) {
 		/* FW is busy, throttle IO */
-		spin_lock_irqsave(&instance->host->host_lock, flags);
+		spin_lock_irqsave(instance->host->host_lock, flags);
 
 		instance->host->can_queue = instance->throttlequeuedepth;
 		instance->last_time = jiffies;
 		instance->flag |= MEGASAS_FW_BUSY;
 
-		spin_unlock_irqrestore(&instance->host->host_lock, flags);
+		spin_unlock_irqrestore(instance->host->host_lock, flags);
 	}
 	return SCSI_EH_RESET_TIMER;
 }
@@ -3083,7 +3084,7 @@ static int megasas_reset_bus_host(struct scsi_cmnd *scmd)
 
 	scmd_printk(KERN_INFO, scmd,
 		"SCSI host state: %d  SCSI host busy: %d  FW outstanding: %d\n",
-		scsi_get_host_state(scmd->device->host),
+		scmd->device->host->shost_state,
 		scsi_host_busy(scmd->device->host),
 		atomic_read(&instance->fw_outstanding));
 	/*
@@ -3265,7 +3266,7 @@ megasas_service_aen(struct megasas_instance *instance, struct megasas_cmd *cmd)
 		((instance->issuepend_done == 1))) {
 		struct megasas_aen_event *ev;
 
-		ev = kzalloc_obj(*ev, GFP_ATOMIC);
+		ev = kzalloc(sizeof(*ev), GFP_ATOMIC);
 		if (!ev) {
 			dev_err(&instance->pdev->dev, "megasas_service_aen: out of memory\n");
 		} else {
@@ -3727,7 +3728,7 @@ megasas_complete_cmd(struct megasas_instance *instance, struct megasas_cmd *cmd,
 		if ((opcode == MR_DCMD_LD_MAP_GET_INFO)
 			&& (cmd->frame->dcmd.mbox.b[1] == 1)) {
 			fusion->fast_path_io = 0;
-			spin_lock_irqsave(&instance->host->host_lock, flags);
+			spin_lock_irqsave(instance->host->host_lock, flags);
 			status = cmd->frame->hdr.cmd_status;
 			instance->map_update_cmd = NULL;
 			if (status != MFI_STAT_OK) {
@@ -3737,7 +3738,7 @@ megasas_complete_cmd(struct megasas_instance *instance, struct megasas_cmd *cmd,
 				else {
 					megasas_return_cmd(instance, cmd);
 					spin_unlock_irqrestore(
-						&instance->host->host_lock,
+						instance->host->host_lock,
 						flags);
 					break;
 				}
@@ -3762,7 +3763,7 @@ megasas_complete_cmd(struct megasas_instance *instance, struct megasas_cmd *cmd,
 				megasas_set_ld_removed_by_fw(instance);
 
 			megasas_sync_map_info(instance);
-			spin_unlock_irqrestore(&instance->host->host_lock,
+			spin_unlock_irqrestore(instance->host->host_lock,
 					       flags);
 
 			break;
@@ -3778,7 +3779,7 @@ megasas_complete_cmd(struct megasas_instance *instance, struct megasas_cmd *cmd,
 		if ((opcode == MR_DCMD_SYSTEM_PD_MAP_GET_INFO) &&
 			(cmd->frame->dcmd.mbox.b[0] == 1)) {
 
-			spin_lock_irqsave(&instance->host->host_lock, flags);
+			spin_lock_irqsave(instance->host->host_lock, flags);
 			status = cmd->frame->hdr.cmd_status;
 			instance->jbod_seq_cmd = NULL;
 			megasas_return_cmd(instance, cmd);
@@ -3791,7 +3792,7 @@ megasas_complete_cmd(struct megasas_instance *instance, struct megasas_cmd *cmd,
 			} else
 				instance->use_seqnum_jbod_fp = false;
 
-			spin_unlock_irqrestore(&instance->host->host_lock, flags);
+			spin_unlock_irqrestore(instance->host->host_lock, flags);
 			break;
 		}
 
@@ -4478,7 +4479,7 @@ int megasas_alloc_cmds(struct megasas_instance *instance)
 	 * Allocate the dynamic array first and then allocate individual
 	 * commands.
 	 */
-	instance->cmd_list = kzalloc_objs(struct megasas_cmd *, max_cmd);
+	instance->cmd_list = kcalloc(max_cmd, sizeof(struct megasas_cmd*), GFP_KERNEL);
 
 	if (!instance->cmd_list) {
 		dev_printk(KERN_DEBUG, &instance->pdev->dev, "out of memory\n");
@@ -4486,7 +4487,8 @@ int megasas_alloc_cmds(struct megasas_instance *instance)
 	}
 
 	for (i = 0; i < max_cmd; i++) {
-		instance->cmd_list[i] = kmalloc_obj(struct megasas_cmd);
+		instance->cmd_list[i] = kmalloc(sizeof(struct megasas_cmd),
+						GFP_KERNEL);
 
 		if (!instance->cmd_list[i]) {
 
@@ -6376,20 +6378,19 @@ static int megasas_init_fw(struct megasas_instance *instance)
 
 	megasas_setup_jbod_map(instance);
 
-	scoped_guard(mutex, &instance->reset_mutex) {
-		if (megasas_get_device_list(instance) != SUCCESS) {
-			dev_err(&instance->pdev->dev,
-				"%s: megasas_get_device_list failed\n",
-				__func__);
-			goto fail_get_ld_pd_list;
-		}
+	if (megasas_get_device_list(instance) != SUCCESS) {
+		dev_err(&instance->pdev->dev,
+			"%s: megasas_get_device_list failed\n",
+			__func__);
+		goto fail_get_ld_pd_list;
 	}
 
 	/* stream detection initialization */
 	if (instance->adapter_type >= VENTURA_SERIES) {
 		fusion->stream_detect_by_ld =
-			kzalloc_objs(struct LD_STREAM_DETECT *,
-				     MAX_LOGICAL_DRIVES_EXT);
+			kcalloc(MAX_LOGICAL_DRIVES_EXT,
+				sizeof(struct LD_STREAM_DETECT *),
+				GFP_KERNEL);
 		if (!fusion->stream_detect_by_ld) {
 			dev_err(&instance->pdev->dev,
 				"unable to allocate stream detection for pool of LDs\n");
@@ -6397,7 +6398,8 @@ static int megasas_init_fw(struct megasas_instance *instance)
 		}
 		for (i = 0; i < MAX_LOGICAL_DRIVES_EXT; ++i) {
 			fusion->stream_detect_by_ld[i] =
-				kzalloc_obj(struct LD_STREAM_DETECT);
+				kzalloc(sizeof(struct LD_STREAM_DETECT),
+				GFP_KERNEL);
 			if (!fusion->stream_detect_by_ld[i]) {
 				dev_err(&instance->pdev->dev,
 					"unable to allocate stream detect by LD\n");
@@ -6481,8 +6483,7 @@ static int megasas_init_fw(struct megasas_instance *instance)
 	}
 
 	if (instance->snapdump_wait_time) {
-		scoped_guard(mutex, &instance->reset_mutex)
-			megasas_get_snapdump_properties(instance);
+		megasas_get_snapdump_properties(instance);
 		dev_info(&instance->pdev->dev, "Snap dump wait time\t: %d\n",
 			 instance->snapdump_wait_time);
 	}
@@ -8508,7 +8509,7 @@ megasas_compat_iocpacket_get_user(void __user *arg)
 	int err = -EFAULT;
 	int i;
 
-	ioc = kzalloc_obj(*ioc);
+	ioc = kzalloc(sizeof(*ioc), GFP_KERNEL);
 	if (!ioc)
 		return ERR_PTR(-ENOMEM);
 	size = offsetof(struct megasas_iocpacket, frame) + sizeof(ioc->frame);

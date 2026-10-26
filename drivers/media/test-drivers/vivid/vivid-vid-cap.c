@@ -302,10 +302,8 @@ void vivid_update_quality(struct vivid_dev *dev)
 	 */
 	freq_modulus = (dev->tv_freq - 676 /* (43.25-1) * 16 */) % (6 * 16);
 	if (freq_modulus > 2 * 16) {
-		struct rnd_state prng;
-		prandom_seed_state(&prng, dev->tv_freq ^ 0x55);
 		tpg_s_quality(&dev->tpg, TPG_QUAL_NOISE,
-			prandom_u32_state(&prng) & 0x3f);
+			next_pseudo_random32(dev->tv_freq ^ 0x55) & 0x3f);
 		return;
 	}
 	if (freq_modulus < 12 /*0.75 * 16*/ || freq_modulus > 20 /*1.25 * 16*/)
@@ -570,7 +568,6 @@ int vivid_try_fmt_vid_cap(struct file *file, void *priv,
 	const struct vivid_fmt *fmt;
 	unsigned bytesperline, max_bpl;
 	unsigned factor = 1;
-	unsigned int vdiv = 1;
 	unsigned w, h;
 	unsigned p;
 	bool user_set_csc = !!(mp->flags & V4L2_PIX_FMT_FLAG_SET_CSC);
@@ -622,18 +619,6 @@ int vivid_try_fmt_vid_cap(struct file *file, void *priv,
 		mp->width = r.width;
 		mp->height = r.height / factor;
 	}
-
-	/*
-	 * The chroma planes of vertically subsampled formats hold
-	 * height / vdownsampling lines. If the height is not a multiple of
-	 * the subsampling factor, then the buffer size calculations round
-	 * that number down while the test pattern generator rounds it up,
-	 * so the generator writes one line past the end of the buffer.
-	 * Round the height down to keep both in sync.
-	 */
-	for (p = 0; p < fmt->planes; p++)
-		vdiv = max(vdiv, fmt->vdownsampling[p]);
-	mp->height = rounddown(mp->height, vdiv);
 
 	/* This driver supports custom bytesperline values */
 

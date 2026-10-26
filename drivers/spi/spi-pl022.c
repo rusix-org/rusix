@@ -684,9 +684,9 @@ static void readwriter(struct pl022 *pl022)
 static void unmap_free_dma_scatter(struct pl022 *pl022)
 {
 	/* Unmap and free the SG tables */
-	dma_unmap_sg(dmaengine_get_dma_device(pl022->dma_tx_channel), pl022->sgt_tx.sgl,
+	dma_unmap_sg(pl022->dma_tx_channel->device->dev, pl022->sgt_tx.sgl,
 		     pl022->sgt_tx.nents, DMA_TO_DEVICE);
-	dma_unmap_sg(dmaengine_get_dma_device(pl022->dma_rx_channel), pl022->sgt_rx.sgl,
+	dma_unmap_sg(pl022->dma_rx_channel->device->dev, pl022->sgt_rx.sgl,
 		     pl022->sgt_rx.nents, DMA_FROM_DEVICE);
 	sg_free_table(&pl022->sgt_rx);
 	sg_free_table(&pl022->sgt_tx);
@@ -811,7 +811,6 @@ static int configure_dma(struct pl022 *pl022)
 	struct dma_chan *txchan = pl022->dma_tx_channel;
 	struct dma_async_tx_descriptor *rxdesc;
 	struct dma_async_tx_descriptor *txdesc;
-	struct device *rx_dev, *tx_dev;
 
 	/* Check that the channels are available */
 	if (!rxchan || !txchan)
@@ -925,16 +924,14 @@ static int configure_dma(struct pl022 *pl022)
 	setup_dma_scatter(pl022, pl022->tx,
 			  pl022->cur_transfer->len, &pl022->sgt_tx);
 
-	rx_dev = dmaengine_get_dma_device(rxchan);
 	/* Map DMA buffers */
-	rx_sglen = dma_map_sg(rx_dev, pl022->sgt_rx.sgl,
-			      pl022->sgt_rx.nents, DMA_FROM_DEVICE);
+	rx_sglen = dma_map_sg(rxchan->device->dev, pl022->sgt_rx.sgl,
+			   pl022->sgt_rx.nents, DMA_FROM_DEVICE);
 	if (!rx_sglen)
 		goto err_rx_sgmap;
 
-	tx_dev = dmaengine_get_dma_device(txchan);
-	tx_sglen = dma_map_sg(tx_dev, pl022->sgt_tx.sgl,
-			      pl022->sgt_tx.nents, DMA_TO_DEVICE);
+	tx_sglen = dma_map_sg(txchan->device->dev, pl022->sgt_tx.sgl,
+			   pl022->sgt_tx.nents, DMA_TO_DEVICE);
 	if (!tx_sglen)
 		goto err_tx_sgmap;
 
@@ -972,10 +969,10 @@ err_txdesc:
 	dmaengine_terminate_all(txchan);
 err_rxdesc:
 	dmaengine_terminate_all(rxchan);
-	dma_unmap_sg(tx_dev, pl022->sgt_tx.sgl,
+	dma_unmap_sg(txchan->device->dev, pl022->sgt_tx.sgl,
 		     pl022->sgt_tx.nents, DMA_TO_DEVICE);
 err_tx_sgmap:
-	dma_unmap_sg(rx_dev, pl022->sgt_rx.sgl,
+	dma_unmap_sg(rxchan->device->dev, pl022->sgt_rx.sgl,
 		     pl022->sgt_rx.nents, DMA_FROM_DEVICE);
 err_rx_sgmap:
 	sg_free_table(&pl022->sgt_tx);
@@ -1130,11 +1127,11 @@ static inline void pl022_dma_remove(struct pl022 *pl022)
  *
  * This function handles interrupts generated for an interrupt based transfer.
  * If a receive overrun (ROR) interrupt is there then we disable SSP, flag the
- * current transfer with SPI_TRANS_FAIL_IO and call
- * spi_finalize_current_transfer() to let the core finish the message.
- * Otherwise it reads data from RX FIFO till there is no more data, and writes
- * data in TX FIFO till it is not full. When the transfer is complete we call
- * spi_finalize_current_transfer() so the core can schedule the next one.
+ * current message's state as STATE_ERROR and schedule the tasklet
+ * pump_transfers which will do the postprocessing of the current message by
+ * calling giveback(). Otherwise it reads data from RX FIFO till there is no
+ * more data, and writes data in TX FIFO till it is not full. If we complete
+ * the transfer we move to the next transfer and schedule the tasklet.
  */
 static irqreturn_t pl022_interrupt_handler(int irq, void *dev_id)
 {
@@ -1609,7 +1606,7 @@ static int pl022_setup(struct spi_device *spi)
 	chip = spi_get_ctldata(spi);
 
 	if (chip == NULL) {
-		chip = kzalloc_obj(struct chip_data);
+		chip = kzalloc(sizeof(struct chip_data), GFP_KERNEL);
 		if (!chip)
 			return -ENOMEM;
 		dev_dbg(&spi->dev,
@@ -1871,7 +1868,7 @@ static int pl022_probe(struct amba_device *adev, const struct amba_id *id)
 	}
 
 	/* Allocate host with space for data */
-	host = devm_spi_alloc_host(dev, sizeof(struct pl022));
+	host = spi_alloc_host(dev, sizeof(struct pl022));
 	if (host == NULL) {
 		dev_err(&adev->dev, "probe - cannot alloc SPI host\n");
 		return -ENOMEM;
@@ -1896,6 +1893,7 @@ static int pl022_probe(struct amba_device *adev, const struct amba_id *id)
 	host->handle_err = pl022_handle_err;
 	host->unprepare_transfer_hardware = pl022_unprepare_transfer_hardware;
 	host->rt = platform_info->rt;
+	host->dev.of_node = dev->of_node;
 	host->use_gpio_descriptors = true;
 
 	/*
@@ -1910,7 +1908,7 @@ static int pl022_probe(struct amba_device *adev, const struct amba_id *id)
 
 	status = amba_request_regions(adev, NULL);
 	if (status)
-		return status;
+		goto err_no_ioregion;
 
 	pl022->phybase = adev->res.start;
 	pl022->virtbase = devm_ioremap(dev, adev->res.start,
@@ -1987,7 +1985,8 @@ static int pl022_probe(struct amba_device *adev, const struct amba_id *id)
  err_no_clk:
  err_no_ioremap:
 	amba_release_regions(adev);
-
+ err_no_ioregion:
+	spi_controller_put(host);
 	return status;
 }
 
@@ -1998,6 +1997,8 @@ pl022_remove(struct amba_device *adev)
 
 	if (!pl022)
 		return;
+
+	spi_controller_get(pl022->host);
 
 	spi_unregister_controller(pl022->host);
 
@@ -2012,8 +2013,11 @@ pl022_remove(struct amba_device *adev)
 		pl022_dma_remove(pl022);
 
 	amba_release_regions(adev);
+
+	spi_controller_put(pl022->host);
 }
 
+#ifdef CONFIG_PM_SLEEP
 static int pl022_suspend(struct device *dev)
 {
 	struct pl022 *pl022 = dev_get_drvdata(dev);
@@ -2051,7 +2055,9 @@ static int pl022_resume(struct device *dev)
 
 	return ret;
 }
+#endif
 
+#ifdef CONFIG_PM
 static int pl022_runtime_suspend(struct device *dev)
 {
 	struct pl022 *pl022 = dev_get_drvdata(dev);
@@ -2071,10 +2077,11 @@ static int pl022_runtime_resume(struct device *dev)
 
 	return 0;
 }
+#endif
 
 static const struct dev_pm_ops pl022_dev_pm_ops = {
-	SYSTEM_SLEEP_PM_OPS(pl022_suspend, pl022_resume)
-	RUNTIME_PM_OPS(pl022_runtime_suspend, pl022_runtime_resume, NULL)
+	SET_SYSTEM_SLEEP_PM_OPS(pl022_suspend, pl022_resume)
+	SET_RUNTIME_PM_OPS(pl022_runtime_suspend, pl022_runtime_resume, NULL)
 };
 
 static struct vendor_data vendor_arm = {
@@ -2165,7 +2172,7 @@ MODULE_DEVICE_TABLE(amba, pl022_ids);
 static struct amba_driver pl022_driver = {
 	.drv = {
 		.name	= "ssp-pl022",
-		.pm	= pm_ptr(&pl022_dev_pm_ops),
+		.pm	= &pl022_dev_pm_ops,
 	},
 	.id_table	= pl022_ids,
 	.probe		= pl022_probe,

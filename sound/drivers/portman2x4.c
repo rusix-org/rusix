@@ -88,7 +88,7 @@ static int portman_create(struct snd_card *card,
 
 	*rchip = NULL;
 
-	pm = kzalloc_obj(struct portman);
+	pm = kzalloc(sizeof(struct portman), GFP_KERNEL);
 	if (pm == NULL) 
 		return -ENOMEM;
 

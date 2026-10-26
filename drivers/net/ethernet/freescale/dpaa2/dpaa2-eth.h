@@ -632,8 +632,6 @@ struct dpaa2_eth_priv {
 	struct devlink *devlink;
 	struct dpaa2_eth_trap_data *trap_data;
 	struct devlink_port devlink_port;
-	u32 dl_port_number;
-	bool dl_port_valid;
 
 	u32 rx_copybreak;
 
@@ -804,7 +802,6 @@ void dpaa2_eth_dl_unregister(struct dpaa2_eth_priv *priv);
 
 int dpaa2_eth_dl_port_add(struct dpaa2_eth_priv *priv);
 void dpaa2_eth_dl_port_del(struct dpaa2_eth_priv *priv);
-void dpaa2_eth_dl_port_check(struct dpaa2_eth_priv *priv);
 
 int dpaa2_eth_dl_traps_register(struct dpaa2_eth_priv *priv);
 void dpaa2_eth_dl_traps_unregister(struct dpaa2_eth_priv *priv);

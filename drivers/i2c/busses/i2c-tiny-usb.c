@@ -55,7 +55,7 @@ static int usb_xfer(struct i2c_adapter *adapter, struct i2c_msg *msgs, int num)
 	struct i2c_msg *pmsg;
 	int i, ret;
 
-	pstatus = kmalloc_obj(*pstatus);
+	pstatus = kmalloc(sizeof(*pstatus), GFP_KERNEL);
 	if (!pstatus)
 		return -ENOMEM;
 
@@ -123,7 +123,7 @@ static u32 usb_func(struct i2c_adapter *adapter)
 	__le32 *pfunc;
 	u32 ret;
 
-	pfunc = kmalloc_obj(*pfunc);
+	pfunc = kmalloc(sizeof(*pfunc), GFP_KERNEL);
 
 	/* get functionality from adapter */
 	if (!pfunc || usb_read(adapter, CMD_GET_FUNC, 0, 0, pfunc,
@@ -213,6 +213,12 @@ static int usb_write(struct i2c_adapter *adapter, int cmd,
 	return ret;
 }
 
+static void i2c_tiny_usb_free(struct i2c_tiny_usb *dev)
+{
+	usb_put_dev(dev->usb_dev);
+	kfree(dev);
+}
+
 static int i2c_tiny_usb_probe(struct usb_interface *interface,
 			      const struct usb_device_id *id)
 {
@@ -227,11 +233,11 @@ static int i2c_tiny_usb_probe(struct usb_interface *interface,
 	dev_dbg(&interface->dev, "probing usb device\n");
 
 	/* allocate memory for our device state and initialize it */
-	dev = kzalloc_obj(*dev);
+	dev = kzalloc(sizeof(*dev), GFP_KERNEL);
 	if (!dev)
 		goto error;
 
-	dev->usb_dev = interface_to_usbdev(interface);
+	dev->usb_dev = usb_get_dev(interface_to_usbdev(interface));
 	dev->interface = interface;
 
 	/* save our data pointer in this interface device */
@@ -254,8 +260,9 @@ static int i2c_tiny_usb_probe(struct usb_interface *interface,
 		 dev->usb_dev->bus->busnum, dev->usb_dev->devnum);
 
 	if (usb_write(&dev->adapter, CMD_SET_DELAY, delay, 0, NULL, 0) != 0) {
-		retval = dev_err_probe(&dev->adapter.dev, -EIO,
-				       "failure setting delay to %dus\n", delay);
+		dev_err(&dev->adapter.dev,
+			"failure setting delay to %dus\n", delay);
+		retval = -EIO;
 		goto error;
 	}
 
@@ -270,7 +277,8 @@ static int i2c_tiny_usb_probe(struct usb_interface *interface,
 	return 0;
 
  error:
-	kfree(dev);
+	if (dev)
+		i2c_tiny_usb_free(dev);
 
 	return retval;
 }
@@ -281,7 +289,7 @@ static void i2c_tiny_usb_disconnect(struct usb_interface *interface)
 
 	i2c_del_adapter(&dev->adapter);
 	usb_set_intfdata(interface, NULL);
-	kfree(dev);
+	i2c_tiny_usb_free(dev);
 
 	dev_dbg(&interface->dev, "disconnected\n");
 }

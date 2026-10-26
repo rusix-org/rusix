@@ -1,5 +1,4 @@
 // SPDX-License-Identifier: GPL-2.0
-#include <generated/utsrelease.h>
 #include <linux/proc_fs.h>
 #include <linux/ethtool.h>
 #include <linux/export.h>
@@ -7,7 +6,7 @@
 #include <net/netns/generic.h>
 #include <net/bonding.h>
 
-#define bond_version "Ethernet Channel Bonding Driver: v" UTS_RELEASE "\n"
+#include "bonding_priv.h"
 
 static void *bond_info_seq_start(struct seq_file *seq, loff_t *pos)
 	__acquires(RCU)
@@ -61,28 +60,27 @@ static void bond_info_show_master(struct seq_file *seq)
 	struct bonding *bond = pde_data(file_inode(seq->file));
 	const struct bond_opt_value *optval;
 	struct slave *curr, *primary;
-	int arp_interval, fail_over_mac, miimon, i;
+	int i;
 
 	curr = rcu_dereference(bond->curr_active_slave);
 
 	seq_printf(seq, "Bonding Mode: %s",
 		   bond_mode_name(BOND_MODE(bond)));
 
-	fail_over_mac = READ_ONCE(bond->params.fail_over_mac);
-	if (BOND_MODE(bond) == BOND_MODE_ACTIVEBACKUP && fail_over_mac) {
+	if (BOND_MODE(bond) == BOND_MODE_ACTIVEBACKUP &&
+	    bond->params.fail_over_mac) {
 		optval = bond_opt_get_val(BOND_OPT_FAIL_OVER_MAC,
-					  fail_over_mac);
+					  bond->params.fail_over_mac);
 		seq_printf(seq, " (fail_over_mac %s)", optval->string);
 	}
 
 	seq_printf(seq, "\n");
 
 	if (bond_mode_uses_xmit_hash(bond)) {
-		int xmit_policy = READ_ONCE(bond->params.xmit_policy);
-
-		optval = bond_opt_get_val(BOND_OPT_XMIT_HASH, xmit_policy);
+		optval = bond_opt_get_val(BOND_OPT_XMIT_HASH,
+					  bond->params.xmit_policy);
 		seq_printf(seq, "Transmit Hash Policy: %s (%d)\n",
-			   optval->string, xmit_policy);
+			   optval->string, bond->params.xmit_policy);
 	}
 
 	if (bond_uses_primary(bond)) {
@@ -91,7 +89,7 @@ static void bond_info_show_master(struct seq_file *seq)
 			   primary ? primary->dev->name : "None");
 		if (primary) {
 			optval = bond_opt_get_val(BOND_OPT_PRIMARY_RESELECT,
-					READ_ONCE(bond->params.primary_reselect));
+						  bond->params.primary_reselect);
 			seq_printf(seq, " (primary_reselect %s)",
 				   optval->string);
 		}
@@ -102,36 +100,32 @@ static void bond_info_show_master(struct seq_file *seq)
 
 	seq_printf(seq, "MII Status: %s\n", netif_carrier_ok(bond->dev) ?
 		   "up" : "down");
-	miimon = READ_ONCE(bond->params.miimon);
-	seq_printf(seq, "MII Polling Interval (ms): %d\n", miimon);
+	seq_printf(seq, "MII Polling Interval (ms): %d\n", bond->params.miimon);
 	seq_printf(seq, "Up Delay (ms): %d\n",
-		   READ_ONCE(bond->params.updelay) * miimon);
+		   bond->params.updelay * bond->params.miimon);
 	seq_printf(seq, "Down Delay (ms): %d\n",
-		   READ_ONCE(bond->params.downdelay) * miimon);
+		   bond->params.downdelay * bond->params.miimon);
 	seq_printf(seq, "Peer Notification Delay (ms): %d\n",
-		   READ_ONCE(bond->params.peer_notif_delay) * miimon);
+		   bond->params.peer_notif_delay * bond->params.miimon);
 
 
 	/* ARP information */
-	arp_interval = READ_ONCE(bond->params.arp_interval);
-	if (arp_interval > 0) {
+	if (bond->params.arp_interval > 0) {
 		int printed = 0;
 
 		seq_printf(seq, "ARP Polling Interval (ms): %d\n",
-				arp_interval);
+				bond->params.arp_interval);
 		seq_printf(seq, "ARP Missed Max: %u\n",
-				READ_ONCE(bond->params.missed_max));
+				bond->params.missed_max);
 
 		seq_printf(seq, "ARP IP target/s (n.n.n.n form):");
 
 		for (i = 0; (i < BOND_MAX_ARP_TARGETS); i++) {
-			__be32 t = READ_ONCE(bond->params.arp_targets[i]);
-
-			if (!t)
+			if (!bond->params.arp_targets[i])
 				break;
 			if (printed)
 				seq_printf(seq, ",");
-			seq_printf(seq, " %pI4", &t);
+			seq_printf(seq, " %pI4", &bond->params.arp_targets[i]);
 			printed = 1;
 		}
 		seq_printf(seq, "\n");
@@ -157,13 +151,12 @@ static void bond_info_show_master(struct seq_file *seq)
 
 		seq_puts(seq, "\n802.3ad info\n");
 		seq_printf(seq, "LACP active: %s\n",
-			   READ_ONCE(bond->params.lacp_active) ? "on" : "off");
+			   (bond->params.lacp_active) ? "on" : "off");
 		seq_printf(seq, "LACP rate: %s\n",
-			   READ_ONCE(bond->params.lacp_fast) ? "fast" : "slow");
-		seq_printf(seq, "Min links: %d\n",
-			   READ_ONCE(bond->params.min_links));
+			   (bond->params.lacp_fast) ? "fast" : "slow");
+		seq_printf(seq, "Min links: %d\n", bond->params.min_links);
 		optval = bond_opt_get_val(BOND_OPT_AD_SELECT,
-					  READ_ONCE(bond->params.ad_select));
+					  bond->params.ad_select);
 		seq_printf(seq, "Aggregator selection policy (ad_select): %s\n",
 			   optval->string);
 		if (capable(CAP_NET_ADMIN)) {
@@ -227,13 +220,13 @@ static void bond_info_show_slave(struct seq_file *seq,
 			seq_printf(seq, "Aggregator ID: %d\n",
 				   agg->aggregator_identifier);
 			seq_printf(seq, "Actor Churn State: %s\n",
-				   bond_3ad_churn_desc(READ_ONCE(port->sm_churn_actor_state)));
+				   bond_3ad_churn_desc(port->sm_churn_actor_state));
 			seq_printf(seq, "Partner Churn State: %s\n",
-				   bond_3ad_churn_desc(READ_ONCE(port->sm_churn_partner_state)));
+				   bond_3ad_churn_desc(port->sm_churn_partner_state));
 			seq_printf(seq, "Actor Churned Count: %d\n",
-				   READ_ONCE(port->churn_actor_count));
+				   port->churn_actor_count);
 			seq_printf(seq, "Partner Churned Count: %d\n",
-				   READ_ONCE(port->churn_partner_count));
+				   port->churn_partner_count);
 
 			if (capable(CAP_NET_ADMIN)) {
 				seq_puts(seq, "details actor lacp pdu:\n");
@@ -298,7 +291,7 @@ void bond_create_proc_entry(struct bonding *bond)
 				bn->proc_dir, &bond_info_seq_ops, bond);
 		if (bond->proc_entry == NULL)
 			netdev_warn(bond_dev, "Cannot create /proc/net/%s/%s\n",
-				    KBUILD_MODNAME, bond_dev->name);
+				    DRV_NAME, bond_dev->name);
 		else
 			memcpy(bond->proc_file_name, bond_dev->name, IFNAMSIZ);
 	}
@@ -322,10 +315,10 @@ void bond_remove_proc_entry(struct bonding *bond)
 void __net_init bond_create_proc_dir(struct bond_net *bn)
 {
 	if (!bn->proc_dir) {
-		bn->proc_dir = proc_mkdir(KBUILD_MODNAME, bn->net->proc_net);
+		bn->proc_dir = proc_mkdir(DRV_NAME, bn->net->proc_net);
 		if (!bn->proc_dir)
 			pr_warn("Warning: Cannot create /proc/net/%s\n",
-				KBUILD_MODNAME);
+				DRV_NAME);
 	}
 }
 
@@ -334,7 +327,7 @@ void __net_init bond_create_proc_dir(struct bond_net *bn)
 void __net_exit bond_destroy_proc_dir(struct bond_net *bn)
 {
 	if (bn->proc_dir) {
-		remove_proc_entry(KBUILD_MODNAME, bn->net->proc_net);
+		remove_proc_entry(DRV_NAME, bn->net->proc_net);
 		bn->proc_dir = NULL;
 	}
 }

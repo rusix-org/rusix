@@ -49,7 +49,7 @@ int _iommufd_alloc_mmap(struct iommufd_ctx *ictx, struct iommufd_object *owner,
 	if (!length || !PAGE_ALIGNED(length))
 		return -EINVAL;
 
-	immap = kzalloc_obj(*immap);
+	immap = kzalloc(sizeof(*immap), GFP_KERNEL);
 	if (!immap)
 		return -ENOMEM;
 	immap->owner = owner;
@@ -205,7 +205,7 @@ iommufd_sw_msi_get_map(struct iommufd_ctx *ictx, phys_addr_t msi_addr,
 	    BITS_PER_BYTE * sizeof_field(struct iommufd_sw_msi_maps, bitmap))
 		return ERR_PTR(-EOVERFLOW);
 
-	cur = kzalloc_obj(*cur);
+	cur = kzalloc(sizeof(*cur), GFP_KERNEL);
 	if (!cur)
 		return ERR_PTR(-ENOMEM);
 

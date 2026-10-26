@@ -83,9 +83,6 @@ properties:
     description:
       To select RMII reference clock from external.
 
-  power-domains:
-    maxItems: 1
-
 required:
   - compatible
   - clocks

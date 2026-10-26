@@ -13,6 +13,7 @@
 #include <linux/spinlock.h>
 
 #include <asm/mshyperv.h>
+#include <asm/paravirt.h>
 #include <asm/apic.h>
 #include <asm/msr.h>
 
@@ -78,11 +79,11 @@ void __init hv_init_spinlocks(void)
 	pr_info("PV spinlocks enabled\n");
 
 	__pv_init_lock_hash();
-	static_call_update(queued_spin_lock_slowpath, __pv_queued_spin_lock_slowpath);
-	static_call_update(queued_spin_unlock, __raw_callee_save___pv_queued_spin_unlock);
-	pv_ops_lock.wait = hv_qlock_wait;
-	pv_ops_lock.kick = hv_qlock_kick;
-	pv_ops_lock.vcpu_is_preempted = PV_CALLEE_SAVE(hv_vcpu_is_preempted);
+	pv_ops.lock.queued_spin_lock_slowpath = __pv_queued_spin_lock_slowpath;
+	pv_ops.lock.queued_spin_unlock = PV_CALLEE_SAVE(__pv_queued_spin_unlock);
+	pv_ops.lock.wait = hv_qlock_wait;
+	pv_ops.lock.kick = hv_qlock_kick;
+	pv_ops.lock.vcpu_is_preempted = PV_CALLEE_SAVE(hv_vcpu_is_preempted);
 }
 
 static __init int hv_parse_nopvspin(char *arg)

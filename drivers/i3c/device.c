@@ -15,12 +15,12 @@
 #include "internals.h"
 
 /**
- * i3c_device_do_xfers() - do I3C transfers directed to a specific device
+ * i3c_device_do_priv_xfers() - do I3C SDR private transfers directed to a
+ *				specific device
  *
  * @dev: device with which the transfers should be done
  * @xfers: array of transfers
  * @nxfers: number of transfers
- * @mode: transfer mode
  *
  * Initiate one or several private SDR transfers with @dev.
  *
@@ -33,8 +33,9 @@
  *   'xfers' some time later. See I3C spec ver 1.1.1 09-Jun-2021. Section:
  *   5.1.2.2.3.
  */
-int i3c_device_do_xfers(struct i3c_device *dev, struct i3c_xfer *xfers,
-			int nxfers, enum i3c_xfer_mode mode)
+int i3c_device_do_priv_xfers(struct i3c_device *dev,
+			     struct i3c_priv_xfer *xfers,
+			     int nxfers)
 {
 	int ret, i;
 
@@ -51,14 +52,14 @@ int i3c_device_do_xfers(struct i3c_device *dev, struct i3c_xfer *xfers,
 		return ret;
 
 	i3c_bus_normaluse_lock(dev->bus);
-	ret = i3c_dev_do_xfers_locked(dev->desc, xfers, nxfers, mode);
+	ret = i3c_dev_do_priv_xfers_locked(dev->desc, xfers, nxfers);
 	i3c_bus_normaluse_unlock(dev->bus);
 
 	i3c_bus_rpm_put(dev->bus);
 
 	return ret;
 }
-EXPORT_SYMBOL_GPL(i3c_device_do_xfers);
+EXPORT_SYMBOL_GPL(i3c_device_do_priv_xfers);
 
 /**
  * i3c_device_do_setdasa() - do I3C dynamic address assignement with
@@ -101,7 +102,8 @@ void i3c_device_get_info(const struct i3c_device *dev,
 		return;
 
 	i3c_bus_normaluse_lock(dev->bus);
-	*info = dev->desc->info;
+	if (dev->desc)
+		*info = dev->desc->info;
 	i3c_bus_normaluse_unlock(dev->bus);
 }
 EXPORT_SYMBOL_GPL(i3c_device_get_info);
@@ -204,14 +206,12 @@ int i3c_device_request_ibi(struct i3c_device *dev,
 		return ret;
 
 	i3c_bus_normaluse_lock(dev->bus);
-	if (!dev->desc) {
-		ret = -ENOENT;
-	} else if (!(dev->desc->info.bcr & I3C_BCR_IBI_REQ_CAP)) {
-		ret = -EOPNOTSUPP;
-	} else {
+	if (dev->desc) {
 		mutex_lock(&dev->desc->ibi_lock);
 		ret = i3c_dev_request_ibi_locked(dev->desc, req);
 		mutex_unlock(&dev->desc->ibi_lock);
+	} else {
+		ret = -ENOENT;
 	}
 	i3c_bus_normaluse_unlock(dev->bus);
 
@@ -299,20 +299,6 @@ i3c_device_match_id(struct i3c_device *i3cdev,
 	return NULL;
 }
 EXPORT_SYMBOL_GPL(i3c_device_match_id);
-
-/**
- * i3c_device_get_supported_xfer_mode - Returns the supported transfer mode by
- *					connected master controller.
- * @dev: I3C device
- *
- * Return: a bit mask, which supported transfer mode, bit position is defined at
- *	   enum i3c_hdr_mode
- */
-u32 i3c_device_get_supported_xfer_mode(struct i3c_device *dev)
-{
-	return i3c_bus_to_i3c_master(dev->bus)->this->info.hdr_cap | BIT(I3C_SDR);
-}
-EXPORT_SYMBOL_GPL(i3c_device_get_supported_xfer_mode);
 
 /**
  * i3c_driver_register_with_owner() - register an I3C device driver

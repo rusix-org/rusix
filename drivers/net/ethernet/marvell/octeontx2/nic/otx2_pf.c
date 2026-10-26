@@ -959,7 +959,6 @@ int otx2_mbox_up_handler_cgx_link_event(struct otx2_nic *pf,
 	otx2_handle_link_event(pf);
 	return 0;
 }
-EXPORT_SYMBOL(otx2_mbox_up_handler_cgx_link_event);
 
 static int otx2_process_mbox_msg_up(struct otx2_nic *pf,
 				    struct mbox_msghdr *req)
@@ -1053,6 +1052,7 @@ irqreturn_t otx2_pfaf_mbox_intr_handler(int irq, void *pf_irq)
 
 	/* Clear the IRQ */
 	otx2_write64(pf, RVU_PF_INT, BIT_ULL(0));
+
 
 	mbox_data = otx2_read64(pf, RVU_PF_PFAF_MBOX0);
 
@@ -1168,9 +1168,10 @@ int otx2_register_mbox_intr(struct otx2_nic *pf, bool probe_af)
 	}
 	err = otx2_sync_mbox_msg(&pf->mbox);
 	if (err) {
-		otx2_disable_mbox_intr(pf);
-		return dev_err_probe(pf->dev, -EPROBE_DEFER,
+		dev_warn(pf->dev,
 			 "AF not responding to mailbox, deferring probe\n");
+		otx2_disable_mbox_intr(pf);
+		return -EPROBE_DEFER;
 	}
 
 	return 0;
@@ -1524,34 +1525,6 @@ irqreturn_t otx2_cq_intr_handler(int irq, void *cq_irq)
 }
 EXPORT_SYMBOL(otx2_cq_intr_handler);
 
-static irqreturn_t otx2_nixlf_err_intr_handler(int irq, void *data)
-{
-	struct otx2_nic *pf = data;
-	u64 regval;
-
-	/* Clear interrupt */
-	regval = otx2_read64(pf, NIX_LF_ERR_INT);
-	otx2_write64(pf, NIX_LF_ERR_INT, regval);
-
-	dev_err_ratelimited(pf->dev, "NIXLF Error Interrupt: 0x%llx\n", regval);
-
-	return IRQ_HANDLED;
-}
-
-static irqreturn_t otx2_nixlf_poison_intr_handler(int irq, void *data)
-{
-	struct otx2_nic *pf = data;
-	u64 regval;
-
-	/* Clear interrupt */
-	regval = otx2_read64(pf, NIX_LF_RAS);
-	otx2_write64(pf, NIX_LF_RAS, regval);
-
-	dev_err_ratelimited(pf->dev, "NIXLF Poison Interrupt: 0x%llx\n", regval);
-
-	return IRQ_HANDLED;
-}
-
 void otx2_disable_napi(struct otx2_nic *pf)
 {
 	struct otx2_qset *qset = &pf->qset;
@@ -1754,7 +1727,7 @@ err_free_nix_lf:
 	mutex_lock(&mbox->lock);
 	free_req = otx2_mbox_alloc_msg_nix_lf_free(mbox);
 	if (free_req) {
-		free_req->flags = NIX_LF_DISABLE_FLOWS | NIX_LF_DONT_FREE_DFT_IDXS;
+		free_req->flags = NIX_LF_DISABLE_FLOWS;
 		if (otx2_sync_mbox_msg(mbox))
 			dev_err(pf->dev, "%s failed to free nixlf\n", __func__);
 	}
@@ -1828,7 +1801,7 @@ void otx2_free_hw_resources(struct otx2_nic *pf)
 	/* Reset NIX LF */
 	free_req = otx2_mbox_alloc_msg_nix_lf_free(mbox);
 	if (free_req) {
-		free_req->flags = NIX_LF_DISABLE_FLOWS | NIX_LF_DONT_FREE_DFT_IDXS;
+		free_req->flags = NIX_LF_DISABLE_FLOWS;
 		if (!(pf->flags & OTX2_FLAG_PF_SHUTDOWN))
 			free_req->flags |= NIX_LF_DONT_FREE_TX_VTAG;
 		if (otx2_sync_mbox_msg(mbox))
@@ -1951,6 +1924,7 @@ int otx2_alloc_queue_mem(struct otx2_nic *pf)
 	struct otx2_qset *qset = &pf->qset;
 	struct otx2_cq_poll *cq_poll;
 
+
 	/* RQ and SQs are mapped to different CQs,
 	 * so find out max CQ IRQs (i.e CINTs) needed.
 	 */
@@ -1960,7 +1934,7 @@ int otx2_alloc_queue_mem(struct otx2_nic *pf)
 
 	pf->qset.cq_cnt = pf->hw.rx_queues + otx2_get_total_tx_queues(pf);
 
-	qset->napi = kzalloc_objs(*cq_poll, pf->hw.cint_cnt);
+	qset->napi = kcalloc(pf->hw.cint_cnt, sizeof(*cq_poll), GFP_KERNEL);
 	if (!qset->napi)
 		return -ENOMEM;
 
@@ -1969,16 +1943,18 @@ int otx2_alloc_queue_mem(struct otx2_nic *pf)
 	/* CQ size of SQ */
 	qset->sqe_cnt = qset->sqe_cnt ? qset->sqe_cnt : Q_COUNT(Q_SIZE_4K);
 
-	qset->cq = kzalloc_objs(struct otx2_cq_queue, pf->qset.cq_cnt);
+	qset->cq = kcalloc(pf->qset.cq_cnt,
+			   sizeof(struct otx2_cq_queue), GFP_KERNEL);
 	if (!qset->cq)
 		goto err_free_mem;
 
-	qset->sq = kzalloc_objs(struct otx2_snd_queue,
-				otx2_get_total_tx_queues(pf));
+	qset->sq = kcalloc(otx2_get_total_tx_queues(pf),
+			   sizeof(struct otx2_snd_queue), GFP_KERNEL);
 	if (!qset->sq)
 		goto err_free_mem;
 
-	qset->rq = kzalloc_objs(struct otx2_rcv_queue, pf->hw.rx_queues);
+	qset->rq = kcalloc(pf->hw.rx_queues,
+			   sizeof(struct otx2_rcv_queue), GFP_KERNEL);
 	if (!qset->rq)
 		goto err_free_mem;
 
@@ -2108,34 +2084,6 @@ int otx2_open(struct net_device *netdev)
 
 	otx2_set_cints_affinity(pf);
 
-	/* Register NIXLF error IRQ handler */
-	vec = pf->hw.nix_msixoff + NIX_LF_ERR_VEC;
-	irq_name = &pf->hw.irq_name[vec * NAME_SIZE];
-	snprintf(irq_name, NAME_SIZE, "%s-nixlf-err", pf->netdev->name);
-	err = request_irq(pci_irq_vector(pf->pdev, vec),
-			  otx2_nixlf_err_intr_handler, 0, irq_name, pf);
-	if (err) {
-		dev_err(pf->dev,
-			"RVUPF%d: IRQ registration failed for NIXLF ERR vector\n",
-			rvu_get_pf(pf->pdev, pf->pcifunc));
-		goto err_free_cints;
-	}
-	otx2_write64(pf, NIX_LF_ERR_INT_ENA_W1S, NIX_LF_ERR_INT_MASK);
-
-	/* Register NIXLF POISON interrupt handler */
-	vec = pf->hw.nix_msixoff + NIX_LF_POISON_VEC;
-	irq_name = &pf->hw.irq_name[vec * NAME_SIZE];
-	snprintf(irq_name, NAME_SIZE, "%s-nixlf-poison", pf->netdev->name);
-	err = request_irq(pci_irq_vector(pf->pdev, vec),
-			  otx2_nixlf_poison_intr_handler, 0, irq_name, pf);
-	if (err) {
-		dev_err(pf->dev,
-			"RVUPF%d: IRQ registration failed for NIXLF POISON vector\n",
-			rvu_get_pf(pf->pdev, pf->pcifunc));
-		goto err_free_errint;
-	}
-	otx2_write64(pf, NIX_LF_RAS_ENA_W1S, NIX_LF_RAS_MASK);
-
 	if (pf->flags & OTX2_FLAG_RX_VLAN_SUPPORT)
 		otx2_enable_rxvlan(pf, true);
 
@@ -2188,16 +2136,6 @@ err_tx_stop_queues:
 	netif_tx_stop_all_queues(netdev);
 	netif_carrier_off(netdev);
 	pf->flags |= OTX2_FLAG_INTF_DOWN;
-	/* free NIXLF POISON irq */
-	vec = pci_irq_vector(pf->pdev,
-			     pf->hw.nix_msixoff + NIX_LF_POISON_VEC);
-	otx2_write64(pf, NIX_LF_RAS_ENA_W1C, NIX_LF_RAS_MASK);
-	free_irq(vec, pf);
-err_free_errint:
-	vec = pci_irq_vector(pf->pdev,
-			     pf->hw.nix_msixoff + NIX_LF_ERR_VEC);
-	otx2_write64(pf, NIX_LF_ERR_INT_ENA_W1C, NIX_LF_ERR_INT_MASK);
-	free_irq(vec, pf);
 err_free_cints:
 	otx2_free_cints(pf, qidx);
 	vec = pci_irq_vector(pf->pdev,
@@ -2236,18 +2174,6 @@ int otx2_stop(struct net_device *netdev)
 
 	/* Clear RSS enable flag */
 	pf->hw.rss_info.enable = false;
-
-	/* Cleanup NIXLF Poison IRQ */
-	vec = pci_irq_vector(pf->pdev,
-			     pf->hw.nix_msixoff + NIX_LF_POISON_VEC);
-	otx2_write64(pf, NIX_LF_RAS_ENA_W1C, NIX_LF_RAS_MASK);
-	free_irq(vec, pf);
-
-	/* Cleanup NIXLF Error IRQ */
-	vec = pci_irq_vector(pf->pdev,
-			     pf->hw.nix_msixoff + NIX_LF_ERR_VEC);
-	otx2_write64(pf, NIX_LF_ERR_INT_ENA_W1C, NIX_LF_ERR_INT_MASK);
-	free_irq(vec, pf);
 
 	/* Cleanup Queue IRQ */
 	vec = pci_irq_vector(pf->pdev,
@@ -2517,26 +2443,18 @@ static int otx2_config_hw_tx_tstamp(struct otx2_nic *pfvf, bool enable)
 	return 0;
 }
 
-int otx2_config_hwtstamp_get(struct net_device *netdev,
-			     struct kernel_hwtstamp_config *config)
+int otx2_config_hwtstamp(struct net_device *netdev, struct ifreq *ifr)
 {
 	struct otx2_nic *pfvf = netdev_priv(netdev);
-
-	*config = pfvf->tstamp;
-	return 0;
-}
-EXPORT_SYMBOL(otx2_config_hwtstamp_get);
-
-int otx2_config_hwtstamp_set(struct net_device *netdev,
-			     struct kernel_hwtstamp_config *config,
-			     struct netlink_ext_ack *extack)
-{
-	struct otx2_nic *pfvf = netdev_priv(netdev);
+	struct hwtstamp_config config;
 
 	if (!pfvf->ptp)
 		return -ENODEV;
 
-	switch (config->tx_type) {
+	if (copy_from_user(&config, ifr->ifr_data, sizeof(config)))
+		return -EFAULT;
+
+	switch (config.tx_type) {
 	case HWTSTAMP_TX_OFF:
 		if (pfvf->flags & OTX2_FLAG_PTP_ONESTEP_SYNC)
 			pfvf->flags &= ~OTX2_FLAG_PTP_ONESTEP_SYNC;
@@ -2545,11 +2463,8 @@ int otx2_config_hwtstamp_set(struct net_device *netdev,
 		otx2_config_hw_tx_tstamp(pfvf, false);
 		break;
 	case HWTSTAMP_TX_ONESTEP_SYNC:
-		if (!test_bit(CN10K_PTP_ONESTEP, &pfvf->hw.cap_flag)) {
-			NL_SET_ERR_MSG_MOD(extack,
-					   "One-step time stamping is not supported");
+		if (!test_bit(CN10K_PTP_ONESTEP, &pfvf->hw.cap_flag))
 			return -ERANGE;
-		}
 		pfvf->flags |= OTX2_FLAG_PTP_ONESTEP_SYNC;
 		schedule_delayed_work(&pfvf->ptp->synctstamp_work,
 				      msecs_to_jiffies(500));
@@ -2561,7 +2476,7 @@ int otx2_config_hwtstamp_set(struct net_device *netdev,
 		return -ERANGE;
 	}
 
-	switch (config->rx_filter) {
+	switch (config.rx_filter) {
 	case HWTSTAMP_FILTER_NONE:
 		otx2_config_hw_rx_tstamp(pfvf, false);
 		break;
@@ -2580,17 +2495,35 @@ int otx2_config_hwtstamp_set(struct net_device *netdev,
 	case HWTSTAMP_FILTER_PTP_V2_SYNC:
 	case HWTSTAMP_FILTER_PTP_V2_DELAY_REQ:
 		otx2_config_hw_rx_tstamp(pfvf, true);
-		config->rx_filter = HWTSTAMP_FILTER_ALL;
+		config.rx_filter = HWTSTAMP_FILTER_ALL;
 		break;
 	default:
 		return -ERANGE;
 	}
 
-	pfvf->tstamp = *config;
+	memcpy(&pfvf->tstamp, &config, sizeof(config));
 
-	return 0;
+	return copy_to_user(ifr->ifr_data, &config,
+			    sizeof(config)) ? -EFAULT : 0;
 }
-EXPORT_SYMBOL(otx2_config_hwtstamp_set);
+EXPORT_SYMBOL(otx2_config_hwtstamp);
+
+int otx2_ioctl(struct net_device *netdev, struct ifreq *req, int cmd)
+{
+	struct otx2_nic *pfvf = netdev_priv(netdev);
+	struct hwtstamp_config *cfg = &pfvf->tstamp;
+
+	switch (cmd) {
+	case SIOCSHWTSTAMP:
+		return otx2_config_hwtstamp(netdev, req);
+	case SIOCGHWTSTAMP:
+		return copy_to_user(req->ifr_data, cfg,
+				    sizeof(*cfg)) ? -EFAULT : 0;
+	default:
+		return -EOPNOTSUPP;
+	}
+}
+EXPORT_SYMBOL(otx2_ioctl);
 
 static int otx2_do_set_vf_mac(struct otx2_nic *pf, int vf, const u8 *mac)
 {
@@ -3038,6 +2971,7 @@ static const struct net_device_ops otx2_netdev_ops = {
 	.ndo_set_features	= otx2_set_features,
 	.ndo_tx_timeout		= otx2_tx_timeout,
 	.ndo_get_stats64	= otx2_get_stats64,
+	.ndo_eth_ioctl		= otx2_ioctl,
 	.ndo_set_vf_mac		= otx2_set_vf_mac,
 	.ndo_set_vf_vlan	= otx2_set_vf_vlan,
 	.ndo_get_vf_config	= otx2_get_vf_config,
@@ -3046,8 +2980,6 @@ static const struct net_device_ops otx2_netdev_ops = {
 	.ndo_xdp_xmit           = otx2_xdp_xmit,
 	.ndo_setup_tc		= otx2_setup_tc,
 	.ndo_set_vf_trust	= otx2_ndo_set_vf_trust,
-	.ndo_hwtstamp_get	= otx2_config_hwtstamp_get,
-	.ndo_hwtstamp_set	= otx2_config_hwtstamp_set,
 };
 
 int otx2_wq_init(struct otx2_nic *pf)
@@ -3071,9 +3003,11 @@ int otx2_check_pf_usable(struct otx2_nic *nic)
 	 * otherwise this driver probe should be deferred
 	 * until AF driver comes up.
 	 */
-	if (!rev)
-		return dev_err_probe(nic->dev, -EPROBE_DEFER,
+	if (!rev) {
+		dev_warn(nic->dev,
 			 "AF is not initialized, deferring probe\n");
+		return -EPROBE_DEFER;
+	}
 	return 0;
 }
 
@@ -3082,15 +3016,11 @@ int otx2_realloc_msix_vectors(struct otx2_nic *pf)
 	struct otx2_hw *hw = &pf->hw;
 	int num_vec, err;
 
-	/* Skip NPA vectors. Representors only use CINT vectors, so limit
-	 * the budget to that range. For PF/VF, allocate the full NIX LF
-	 * interrupt range (QINT, CINT, GINT, ERR and POISON vectors).
+	/* NPA interrupts are inot registered, so alloc only
+	 * upto NIX vector offset.
 	 */
 	num_vec = hw->nix_msixoff;
-	if (pf->flags & OTX2_FLAG_REP_MODE_ENABLED)
-		num_vec += NIX_LF_CINT_VEC_START + hw->max_queues;
-	else
-		num_vec += NIX_LF_POISON_VEC + 1;
+	num_vec += NIX_LF_CINT_VEC_START + hw->max_queues;
 
 	otx2_disable_mbox_intr(pf);
 	pci_free_irq_vectors(hw->pdev);
@@ -3103,6 +3033,7 @@ int otx2_realloc_msix_vectors(struct otx2_nic *pf)
 
 	return otx2_register_mbox_intr(pf, false);
 }
+EXPORT_SYMBOL(otx2_realloc_msix_vectors);
 
 static int otx2_sriov_vfcfg_init(struct otx2_nic *pf)
 {

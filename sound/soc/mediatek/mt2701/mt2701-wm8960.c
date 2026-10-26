@@ -137,8 +137,10 @@ static int mt2701_wm8960_machine_probe(struct platform_device *pdev)
 	}
 
 	ret = snd_soc_of_parse_audio_routing(card, "audio-routing");
-	if (ret)
+	if (ret) {
+		dev_err(&pdev->dev, "failed to parse audio-routing: %d\n", ret);
 		goto put_codec_node;
+	}
 
 	ret = devm_snd_soc_register_card(&pdev->dev, card);
 	if (ret)

@@ -18,6 +18,7 @@
 #include <linux/errno.h>
 #include <linux/export.h>
 #include <linux/ioport.h>
+#include <linux/mod_devicetable.h>
 #include <linux/module.h>
 #include <linux/regmap.h>
 #include <linux/spi/spi.h>
@@ -270,7 +271,7 @@ static int ocelot_spi_probe(struct spi_device *spi)
 }
 
 static const struct spi_device_id ocelot_spi_ids[] = {
-	{ .name = "vsc7512" },
+	{ "vsc7512", 0 },
 	{ }
 };
 MODULE_DEVICE_TABLE(spi, ocelot_spi_ids);

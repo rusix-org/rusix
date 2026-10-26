@@ -18,10 +18,23 @@
 
 unsigned short reuse_listen_hport = 0;
 unsigned short listen_hport = 0;
-const char cubic_cc[] = "bpf_cubic";
+char cubic_cc[TCP_CA_NAME_MAX] = "bpf_cubic";
 char dctcp_cc[TCP_CA_NAME_MAX] = "bpf_dctcp";
 bool random_retry = false;
 
+static bool tcp_cc_eq(const char *a, const char *b)
+{
+	int i;
+
+	for (i = 0; i < TCP_CA_NAME_MAX; i++) {
+		if (a[i] != b[i])
+			return false;
+		if (!a[i])
+			break;
+	}
+
+	return true;
+}
 
 SEC("iter/tcp")
 int change_tcp_cc(struct bpf_iter__tcp *ctx)
@@ -45,7 +58,7 @@ int change_tcp_cc(struct bpf_iter__tcp *ctx)
 			   cur_cc, sizeof(cur_cc)))
 		return 0;
 
-	if (bpf_strncmp(cur_cc, TCP_CA_NAME_MAX, cubic_cc))
+	if (!tcp_cc_eq(cur_cc, cubic_cc))
 		return 0;
 
 	if (random_retry && bpf_get_prandom_u32() % 4 == 1)

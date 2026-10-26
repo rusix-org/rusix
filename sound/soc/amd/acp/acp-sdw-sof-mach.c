@@ -280,6 +280,8 @@ static int sof_card_dai_links_create(struct snd_soc_card *card)
 	int sdw_be_num = 0, dmic_num = 0;
 	struct asoc_sdw_mc_private *ctx = snd_soc_card_get_drvdata(card);
 	struct snd_soc_acpi_mach_params *mach_params = &mach->mach_params;
+	struct asoc_sdw_endpoint *sof_ends __free(kfree) = NULL;
+	struct asoc_sdw_dailink *sof_dais __free(kfree) = NULL;
 	struct snd_soc_aux_dev *sof_aux;
 	struct snd_soc_codec_conf *codec_conf;
 	struct snd_soc_dai_link *dai_links;
@@ -299,14 +301,12 @@ static int sof_card_dai_links_create(struct snd_soc_card *card)
 
 	num_confs = num_ends;
 	/* One per DAI link, worst case is a DAI link for every endpoint */
-	struct asoc_sdw_dailink *sof_dais __free(kfree) =
-		kzalloc_objs(*sof_dais, num_ends);
+	sof_dais = kcalloc(num_ends, sizeof(*sof_dais), GFP_KERNEL);
 	if (!sof_dais)
 		return -ENOMEM;
 
 	/* One per endpoint, ie. each DAI on each codec/amp */
-	struct asoc_sdw_endpoint *sof_ends __free(kfree) =
-		kzalloc_objs(*sof_ends, num_ends);
+	sof_ends = kcalloc(num_ends, sizeof(*sof_ends), GFP_KERNEL);
 	if (!sof_ends)
 		return -ENOMEM;
 
@@ -390,7 +390,7 @@ static int mc_probe(struct platform_device *pdev)
 	ctx->private = amd_ctx;
 	card = &ctx->card;
 	card->dev = &pdev->dev;
-	card->name = "amd-sdw";
+	card->name = "amd-soundwire";
 	card->owner = THIS_MODULE;
 	card->late_probe = asoc_sdw_card_late_probe;
 
@@ -399,12 +399,12 @@ static int mc_probe(struct platform_device *pdev)
 	dmi_check_system(sof_sdw_quirk_table);
 
 	if (quirk_override != -1) {
-		dev_info(&pdev->dev, "Overriding quirk 0x%lx => 0x%x\n",
+		dev_info(card->dev, "Overriding quirk 0x%lx => 0x%x\n",
 			 sof_sdw_quirk, quirk_override);
 		sof_sdw_quirk = quirk_override;
 	}
 
-	log_quirks(&pdev->dev);
+	log_quirks(card->dev);
 
 	ctx->mc_quirk = sof_sdw_quirk;
 	/* reset amp_num to ensure amp_num++ starts from 0 in each probe */
@@ -423,15 +423,15 @@ static int mc_probe(struct platform_device *pdev)
 	for (i = 0; i < ctx->codec_info_list_count; i++)
 		amp_num += codec_info_list[i].amp_num;
 
-	card->components = devm_kasprintf(&pdev->dev, GFP_KERNEL,
+	card->components = devm_kasprintf(card->dev, GFP_KERNEL,
 					  " cfg-amp:%d", amp_num);
 	if (!card->components)
 		return -ENOMEM;
 
 	/* Register the card */
-	ret = devm_snd_soc_register_card(&pdev->dev, card);
+	ret = devm_snd_soc_register_card(card->dev, card);
 	if (ret) {
-		dev_err_probe(&pdev->dev, ret, "snd_soc_register_card failed %d\n", ret);
+		dev_err_probe(card->dev, ret, "snd_soc_register_card failed %d\n", ret);
 		asoc_sdw_mc_dailink_exit_loop(card);
 		return ret;
 	}
@@ -449,8 +449,8 @@ static void mc_remove(struct platform_device *pdev)
 }
 
 static const struct platform_device_id mc_id_table[] = {
-	{ .name = "amd_sof_sdw" },
-	{ }
+	{ "amd_sof_sdw", },
+	{}
 };
 MODULE_DEVICE_TABLE(platform, mc_id_table);
 

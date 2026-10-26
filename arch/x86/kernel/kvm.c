@@ -29,8 +29,6 @@
 #include <linux/syscore_ops.h>
 #include <linux/cc_platform.h>
 #include <linux/efi.h>
-#include <linux/kvm_types.h>
-#include <linux/sched/cputime.h>
 #include <asm/timer.h>
 #include <asm/cpu.h>
 #include <asm/traps.h>
@@ -41,7 +39,6 @@
 #include <asm/hypervisor.h>
 #include <asm/mtrr.h>
 #include <asm/tlb.h>
-#include <asm/cpuid/api.h>
 #include <asm/cpuidle_haltpoll.h>
 #include <asm/msr.h>
 #include <asm/ptrace.h>
@@ -76,6 +73,12 @@ DEFINE_PER_CPU_DECRYPTED(struct kvm_steal_time, steal_time) __aligned(64) __visi
 static int has_steal_clock = 0;
 
 static int has_guest_poll = 0;
+/*
+ * No need for any "IO delay" on KVM
+ */
+static void kvm_io_delay(void)
+{
+}
 
 #define KVM_TASK_SLEEP_HASHBITS 8
 #define KVM_TASK_SLEEP_HASHSIZE (1<<KVM_TASK_SLEEP_HASHBITS)
@@ -85,7 +88,6 @@ struct kvm_task_sleep_node {
 	struct swait_queue_head wq;
 	u32 token;
 	int cpu;
-	bool dummy;
 };
 
 static struct kvm_task_sleep_head {
@@ -117,26 +119,15 @@ static bool kvm_async_pf_queue_task(u32 token, struct kvm_task_sleep_node *n)
 	raw_spin_lock(&b->lock);
 	e = _find_apf_task(b, token);
 	if (e) {
-		struct kvm_task_sleep_node *dummy = NULL;
-
-		/*
-		 * The entry can either be a 'dummy' entry (which is put on the
-		 * list when wake-up happens ahead of APF handling completion)
-		 * or a token from another task which should not be touched.
-		 */
-		if (e->dummy) {
-			hlist_del(&e->link);
-			dummy = e;
-		}
-
+		/* dummy entry exist -> wake up was delivered ahead of PF */
+		hlist_del(&e->link);
 		raw_spin_unlock(&b->lock);
-		kfree(dummy);
+		kfree(e);
 		return false;
 	}
 
 	n->token = token;
 	n->cpu = smp_processor_id();
-	n->dummy = false;
 	init_swait_queue_head(&n->wq);
 	hlist_add_head(&n->link, &b->list);
 	raw_spin_unlock(&b->lock);
@@ -171,7 +162,7 @@ void kvm_async_pf_task_wait_schedule(u32 token)
 	}
 	finish_swait(&n.wq, &wait);
 }
-EXPORT_SYMBOL_FOR_KVM(kvm_async_pf_task_wait_schedule);
+EXPORT_SYMBOL_GPL(kvm_async_pf_task_wait_schedule);
 
 static void apf_task_wake_one(struct kvm_task_sleep_node *n)
 {
@@ -221,7 +212,7 @@ again:
 		 */
 		if (!dummy) {
 			raw_spin_unlock(&b->lock);
-			dummy = kzalloc_obj(*dummy, GFP_ATOMIC);
+			dummy = kzalloc(sizeof(*dummy), GFP_ATOMIC);
 
 			/*
 			 * Continue looping on allocation failure, eventually
@@ -239,7 +230,6 @@ again:
 		}
 		dummy->token = token;
 		dummy->cpu = smp_processor_id();
-		dummy->dummy = true;
 		init_swait_queue_head(&dummy->wq);
 		hlist_add_head(&dummy->link, &b->list);
 		dummy = NULL;
@@ -263,41 +253,13 @@ noinstr u32 kvm_read_and_reset_apf_flags(void)
 
 	return flags;
 }
-EXPORT_SYMBOL_FOR_KVM(kvm_read_and_reset_apf_flags);
-
-static __always_inline bool kvm_apf_reason_pending(void)
-{
-	return __this_cpu_read(async_pf_enabled) &&
-	       __this_cpu_read(apf_reason.flags);
-}
+EXPORT_SYMBOL_GPL(kvm_read_and_reset_apf_flags);
 
 noinstr bool __kvm_handle_async_pf(struct pt_regs *regs, u32 token)
 {
+	u32 flags = kvm_read_and_reset_apf_flags();
 	irqentry_state_t state;
-	u32 flags;
 
-	if (!kvm_apf_reason_pending())
-		return false;
-
-	/*
-	 * The guest does not enable KVM_ASYNC_PF_SEND_ALWAYS, so the host
-	 * delivers async #PF only to user mode (or as a #PF VM-exit, which KVM
-	 * reads itself). A #PF from kernel mode can still arrive between that
-	 * delivery and the read of the reason flags, inside an NMI that
-	 * interrupted it, for instance perf reading user memory for a call
-	 * chain. Such a fault is not async, so leave the async PF flags
-	 * untouched for the outer handler.  Outside NMI context, on the other
-	 * hand, async PF flags on a kernel-mode fault mean the host is broken.
-	 */
-	if (!user_mode(regs)) {
-		if (likely(in_nmi()))
-			return false;
-		state = irqentry_enter(regs);
-		instrumentation_begin();
-		panic("Host injected async #PF in kernel mode\n");
-	}
-
-	flags = kvm_read_and_reset_apf_flags();
 	if (!flags)
 		return false;
 
@@ -313,6 +275,8 @@ noinstr bool __kvm_handle_async_pf(struct pt_regs *regs, u32 token)
 		panic("Host injected async #PF in interrupt disabled region\n");
 
 	if (flags & KVM_PV_REASON_PAGE_NOT_PRESENT) {
+		if (unlikely(!(user_mode(regs))))
+			panic("Host injected async #PF in kernel mode\n");
 		/* Page is swapped out by the host. */
 		kvm_async_pf_task_wait_schedule(token);
 	} else {
@@ -331,7 +295,7 @@ DEFINE_IDTENTRY_SYSVEC(sysvec_kvm_asyncpf_interrupt)
 
 	apic_eoi();
 
-	inc_irq_stat(HYPERVISOR_CALLBACK);
+	inc_irq_stat(irq_hv_callback_count);
 
 	if (__this_cpu_read(async_pf_enabled)) {
 		token = __this_cpu_read(apf_reason.token);
@@ -348,7 +312,7 @@ static void __init paravirt_ops_setup(void)
 	pv_info.name = "KVM";
 
 	if (kvm_para_has_feature(KVM_FEATURE_NOP_IO_DELAY))
-		pv_info.io_delay = false;
+		pv_ops.cpu.io_delay = kvm_io_delay;
 
 #ifdef CONFIG_X86_IO_APIC
 	no_timer_check = 1;
@@ -689,10 +653,8 @@ static void kvm_flush_tlb_multi(const struct cpumask *cpumask,
 	u8 state;
 	int cpu;
 	struct kvm_steal_time *src;
-	struct cpumask *flushmask;
+	struct cpumask *flushmask = this_cpu_cpumask_var_ptr(__pv_cpu_mask);
 
-	guard(preempt)();
-	flushmask = this_cpu_cpumask_var_ptr(__pv_cpu_mask);
 	cpumask_copy(flushmask, cpumask);
 	/*
 	 * We have to call flush only on online vCPUs. And
@@ -865,10 +827,8 @@ static void __init kvm_guest_init(void)
 		has_steal_clock = 1;
 		static_call_update(pv_steal_clock, kvm_steal_clock);
 
-#ifdef CONFIG_PARAVIRT_SPINLOCKS
-		pv_ops_lock.vcpu_is_preempted =
+		pv_ops.lock.vcpu_is_preempted =
 			PV_CALLEE_SAVE(__kvm_vcpu_is_preempted);
-#endif
 	}
 
 	if (kvm_para_has_feature(KVM_FEATURE_PV_EOI))
@@ -1080,9 +1040,9 @@ const __initconst struct hypervisor_x86 x86_hyper_kvm = {
 static __init int activate_jump_labels(void)
 {
 	if (has_steal_clock) {
-		static_branch_inc(&paravirt_steal_enabled);
+		static_key_slow_inc(&paravirt_steal_enabled);
 		if (steal_acc)
-			static_branch_inc(&paravirt_steal_rq_enabled);
+			static_key_slow_inc(&paravirt_steal_rq_enabled);
 	}
 
 	return 0;
@@ -1164,10 +1124,11 @@ void __init kvm_spinlock_init(void)
 	pr_info("PV spinlocks enabled\n");
 
 	__pv_init_lock_hash();
-	static_call_update(queued_spin_lock_slowpath, __pv_queued_spin_lock_slowpath);
-	static_call_update(queued_spin_unlock, __raw_callee_save___pv_queued_spin_unlock);
-	pv_ops_lock.wait = kvm_wait;
-	pv_ops_lock.kick = kvm_kick_cpu;
+	pv_ops.lock.queued_spin_lock_slowpath = __pv_queued_spin_lock_slowpath;
+	pv_ops.lock.queued_spin_unlock =
+		PV_CALLEE_SAVE(__pv_queued_spin_unlock);
+	pv_ops.lock.wait = kvm_wait;
+	pv_ops.lock.kick = kvm_kick_cpu;
 
 	/*
 	 * When PV spinlock is enabled which is preferred over

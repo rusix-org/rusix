@@ -291,7 +291,7 @@ nfsd3_create_file(struct svc_rqst *rqstp, struct svc_fh *fhp,
 
 	if (!nfsd3_time_in_range(iap))
 		return nfserr_inval;
-	if (name_is_dot_dotdot(argp->name, argp->len))
+	if (isdotent(argp->name, argp->len))
 		return nfserr_exist;
 	if (!(iap->ia_valid & ATTR_MODE))
 		iap->ia_mode = 0;
@@ -307,11 +307,14 @@ nfsd3_create_file(struct svc_rqst *rqstp, struct svc_fh *fhp,
 	if (host_err)
 		return nfserrno(host_err);
 
-	child = start_creating(&nop_mnt_idmap, parent,
-			       &QSTR_LEN(argp->name, argp->len));
+	inode_lock_nested(inode, I_MUTEX_PARENT);
+
+	child = lookup_one(&nop_mnt_idmap,
+			   &QSTR_LEN(argp->name, argp->len),
+			   parent);
 	if (IS_ERR(child)) {
 		status = nfserrno(PTR_ERR(child));
-		goto out_write;
+		goto out;
 	}
 
 	if (d_really_is_negative(child)) {
@@ -367,7 +370,7 @@ nfsd3_create_file(struct svc_rqst *rqstp, struct svc_fh *fhp,
 	status = fh_fill_pre_attrs(fhp);
 	if (status != nfs_ok)
 		goto out;
-	host_err = vfs_create(&nop_mnt_idmap, child, iap->ia_mode, NULL);
+	host_err = vfs_create(&nop_mnt_idmap, inode, child, iap->ia_mode, true);
 	if (host_err < 0) {
 		status = nfserrno(host_err);
 		goto out;
@@ -390,8 +393,9 @@ set_attr:
 	status = nfsd_create_setattr(rqstp, fhp, resfhp, &attrs);
 
 out:
-	end_creating(child);
-out_write:
+	inode_unlock(inode);
+	if (child && !IS_ERR(child))
+		dput(child);
 	fh_drop_write(fhp);
 	return status;
 }
@@ -750,46 +754,23 @@ nfsd3_proc_pathconf(struct svc_rqst *rqstp)
 	resp->p_name_max = 255;		/* at least */
 	resp->p_no_trunc = 0;
 	resp->p_chown_restricted = 1;
-	resp->p_case_insensitive = false;
-	resp->p_case_preserving = true;
+	resp->p_case_insensitive = 0;
+	resp->p_case_preserving = 1;
 
 	resp->status = fh_verify(rqstp, &argp->fh, 0, NFSD_MAY_NOP);
 
 	if (resp->status == nfs_ok) {
 		struct super_block *sb = argp->fh.fh_dentry->d_sb;
-		int err;
 
-		if (sb->s_magic == EXT2_SUPER_MAGIC) {
+		/* Note that we don't care for remote fs's here */
+		switch (sb->s_magic) {
+		case EXT2_SUPER_MAGIC:
 			resp->p_link_max = EXT2_LINK_MAX;
 			resp->p_name_max = EXT2_NAME_LEN;
-		}
-
-		err = nfsd_get_case_info(argp->fh.fh_dentry,
-					 &resp->p_case_insensitive,
-					 &resp->p_case_preserving);
-		/*
-		 * RFC 1813 lists NFS3ERR_STALE, NFS3ERR_BADHANDLE, and
-		 * NFS3ERR_SERVERFAULT as the only PATHCONF errors.
-		 */
-		switch (err) {
-		case 0:
-		case -EOPNOTSUPP:
-			/* Both arms leave the output booleans valid. */
 			break;
-		case -EACCES:
-		case -EPERM:
-			/*
-			 * Policy denied the query. Report STALE so the
-			 * handle is unusable without implying a server
-			 * malfunction.
-			 */
-			resp->status = nfserr_stale;
-			break;
-		case -ESTALE:
-			resp->status = nfserr_stale;
-			break;
-		default:
-			resp->status = nfserr_serverfault;
+		case MSDOS_SUPER_MAGIC:
+			resp->p_case_insensitive = 1;
+			resp->p_case_preserving  = 0;
 			break;
 		}
 	}
@@ -1108,10 +1089,13 @@ static const struct svc_procedure nfsd_procedures3[22] = {
 	},
 };
 
+static DEFINE_PER_CPU_ALIGNED(unsigned long,
+			      nfsd_count3[ARRAY_SIZE(nfsd_procedures3)]);
 const struct svc_version nfsd_version3 = {
 	.vs_vers	= 3,
 	.vs_nproc	= ARRAY_SIZE(nfsd_procedures3),
 	.vs_proc	= nfsd_procedures3,
 	.vs_dispatch	= nfsd_dispatch,
+	.vs_count	= nfsd_count3,
 	.vs_xdrsize	= NFS3_SVC_XDRSIZE,
 };

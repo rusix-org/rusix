@@ -405,21 +405,18 @@ static int prepare_inbound_urb(struct snd_usb_endpoint *ep,
 }
 
 /* notify an error as XRUN to the assigned PCM data substream */
-static bool notify_xrun(struct snd_usb_endpoint *ep)
+static void notify_xrun(struct snd_usb_endpoint *ep)
 {
 	struct snd_usb_substream *data_subs;
 	struct snd_pcm_substream *psubs;
 
 	data_subs = READ_ONCE(ep->data_subs);
 	if (!data_subs)
-		return false;
+		return;
 	psubs = data_subs->pcm_substream;
 	if (psubs && psubs->runtime &&
-	    psubs->runtime->state == SNDRV_PCM_STATE_RUNNING) {
+	    psubs->runtime->state == SNDRV_PCM_STATE_RUNNING)
 		snd_pcm_stop_xrun(psubs);
-		return true;
-	}
-	return false;
 }
 
 static struct snd_usb_packet_info *
@@ -449,9 +446,7 @@ static void push_back_to_ready_list(struct snd_usb_endpoint *ep,
 				    struct snd_urb_ctx *ctx)
 {
 	guard(spinlock_irqsave)(&ep->lock);
-	/* ctx may still be linked: a stale completion racing a stop/restart. */
-	if (list_empty(&ctx->ready_list))
-		list_add_tail(&ctx->ready_list, &ep->ready_playback_urbs);
+	list_add_tail(&ctx->ready_list, &ep->ready_playback_urbs);
 }
 
 /*
@@ -603,9 +598,8 @@ static void snd_complete_urb(struct urb *urb)
 		return;
 
 	if (!atomic_read(&ep->chip->shutdown)) {
-		if (notify_xrun(ep))
-			usb_audio_err(ep->chip,
-				      "cannot submit urb (err = %d)\n", err);
+		usb_audio_err(ep->chip, "cannot submit urb (err = %d)\n", err);
+		notify_xrun(ep);
 	}
 
 exit_clear:
@@ -627,7 +621,7 @@ iface_ref_find(struct snd_usb_audio *chip, int iface)
 		if (ip->iface == iface)
 			return ip;
 
-	ip = kzalloc_obj(*ip);
+	ip = kzalloc(sizeof(*ip), GFP_KERNEL);
 	if (!ip)
 		return NULL;
 	ip->iface = iface;
@@ -645,7 +639,7 @@ clock_ref_find(struct snd_usb_audio *chip, int clock)
 		if (ref->clock == clock)
 			return ref;
 
-	ref = kzalloc_obj(*ref);
+	ref = kzalloc(sizeof(*ref), GFP_KERNEL);
 	if (!ref)
 		return NULL;
 	ref->clock = clock;
@@ -704,7 +698,7 @@ int snd_usb_add_endpoint(struct snd_usb_audio *chip, int ep_num, int type)
 	usb_audio_dbg(chip, "Creating new %s endpoint #%x\n",
 		      ep_type_name(type),
 		      ep_num);
-	ep = kzalloc_obj(*ep);
+	ep = kzalloc(sizeof(*ep), GFP_KERNEL);
 	if (!ep)
 		return -ENOMEM;
 
@@ -1039,7 +1033,6 @@ void snd_usb_endpoint_sync_pending_stop(struct snd_usb_endpoint *ep)
  */
 static int stop_urbs(struct snd_usb_endpoint *ep, bool force, bool keep_pending)
 {
-	struct snd_urb_ctx *ctx, *n;
 	unsigned int i;
 
 	if (!force && atomic_read(&ep->running))
@@ -1049,9 +1042,7 @@ static int stop_urbs(struct snd_usb_endpoint *ep, bool force, bool keep_pending)
 		return 0;
 
 	scoped_guard(spinlock_irqsave, &ep->lock) {
-		/* Unlink each ctx; INIT_LIST_HEAD() alone would leave them looking linked. */
-		list_for_each_entry_safe(ctx, n, &ep->ready_playback_urbs, ready_list)
-			list_del_init(&ctx->ready_list);
+		INIT_LIST_HEAD(&ep->ready_playback_urbs);
 		ep->next_packet_head = 0;
 		ep->next_packet_queued = 0;
 	}
@@ -1242,10 +1233,7 @@ static int data_ep_set_params(struct snd_usb_endpoint *ep)
 		/* try to use enough URBs to contain an entire ALSA buffer */
 		max_urbs = min((unsigned) MAX_URBS,
 				MAX_QUEUE * packs_per_ms / urb_packs);
-		if (chip->quirk_flags & QUIRK_FLAG_PLAYBACK_URB_FIXUP)
-			ep->nurbs = MAX_URBS;
-		else
-			ep->nurbs = min(max_urbs, urbs_per_period * ep->cur_buffer_periods);
+		ep->nurbs = min(max_urbs, urbs_per_period * ep->cur_buffer_periods);
 	}
 
 	if (fmt->fmt_type == UAC_FORMAT_TYPE_II)
@@ -1270,8 +1258,6 @@ static int data_ep_set_params(struct snd_usb_endpoint *ep)
 			goto out_of_memory;
 		u->urb->pipe = ep->pipe;
 		u->urb->transfer_flags = URB_NO_TRANSFER_DMA_MAP;
-		if (chip->quirk_flags & QUIRK_FLAG_PLAYBACK_URB_FIXUP)
-			u->urb->transfer_flags |= URB_ISO_ASAP;
 		u->urb->interval = 1 << ep->datainterval;
 		u->urb->context = u;
 		u->urb->complete = snd_complete_urb;
@@ -1511,15 +1497,15 @@ int snd_usb_endpoint_prepare(struct snd_usb_audio *chip,
 			return err;
 	}
 
-	err = snd_usb_select_mode_quirk(chip, ep->cur_audiofmt);
-	if (err < 0)
-		return err;
-
 	err = snd_usb_init_pitch(chip, ep->cur_audiofmt);
 	if (err < 0)
 		return err;
 
 	err = init_sample_rate(chip, ep);
+	if (err < 0)
+		return err;
+
+	err = snd_usb_select_mode_quirk(chip, ep->cur_audiofmt);
 	if (err < 0)
 		return err;
 
@@ -1796,26 +1782,17 @@ static void snd_usb_handle_sync_urb(struct snd_usb_endpoint *ep,
 		/*
 		 * skip empty packets. At least M-Audio's Fast Track Ultra stops
 		 * streaming once it received a 0-byte OUT URB
-		 *
-		 * However, on devices where bytes==0 means every sync-source
-		 * packet errored (e.g. Behringer Flow 8 returning -EXDEV bursts
-		 * for entire capture URBs), an unconditional return starves the
-		 * IFB-fed OUT ring permanently. Such devices set
-		 * QUIRK_FLAG_IFB_SILENCE_ON_EMPTY to fall through and enqueue a
-		 * packet_info with size 0 packets, so playback emits silence
-		 * and the OUT ring keeps moving.
 		 */
-		if (bytes == 0 && !(ep->chip->quirk_flags & QUIRK_FLAG_IFB_SILENCE_ON_EMPTY))
+		if (bytes == 0)
 			return;
 
 		spin_lock_irqsave(&ep->lock, flags);
 		if (ep->next_packet_queued >= ARRAY_SIZE(ep->next_packet)) {
 			spin_unlock_irqrestore(&ep->lock, flags);
-			if (notify_xrun(ep)) {
-				usb_audio_err(ep->chip,
-					      "next packet FIFO overflow EP 0x%x\n",
-					      ep->ep_num);
-			}
+			usb_audio_err(ep->chip,
+				      "next package FIFO overflow EP 0x%x\n",
+				      ep->ep_num);
+			notify_xrun(ep);
 			return;
 		}
 
@@ -1907,22 +1884,6 @@ static void snd_usb_handle_sync_urb(struct snd_usb_endpoint *ep,
 		f <<= ep->freqshift;
 	else
 		f >>= -ep->freqshift;
-
-	if (unlikely(sender->snap_fb_quirk) &&
-	    (f < ep->freqn - ep->freqn / 128 ||
-	     f > ep->freqn + ep->freqn / 128)) {
-		/*
-		 * Feedback deviates from nominal far beyond what real
-		 * clock differences can explain.  This firmware can get
-		 * stuck at nominal+1 sample per frame, causing audible
-		 * pops.  Trust the nominal rate instead.
-		 */
-		dev_warn_ratelimited(&ep->chip->dev->dev,
-				     "EP 0x%x: ignoring implausible feedback 0x%x.%04x (nominal 0x%x.%04x)\n",
-				     ep->ep_num, f >> 16, f & 0xffff,
-				     ep->freqn >> 16, ep->freqn & 0xffff);
-		f = ep->freqn;
-	}
 
 	if (likely(f >= ep->freqn - ep->freqn / 8 && f <= ep->freqmax)) {
 		/*

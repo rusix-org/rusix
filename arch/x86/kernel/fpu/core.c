@@ -18,7 +18,6 @@
 #include <uapi/asm/kvm.h>
 
 #include <linux/hardirq.h>
-#include <linux/kvm_types.h>
 #include <linux/pkeys.h>
 #include <linux/vmalloc.h>
 
@@ -213,19 +212,6 @@ void restore_fpregs_from_fpstate(struct fpstate *fpstate, u64 mask)
 	}
 }
 
-/*
- * Save the FPU register state in fpu->fpstate->regs and set
- * TIF_NEED_FPU_LOAD subsequently.
- *
- * Must be called with fpregs_lock() held, ensuring flag
- * TIF_NEED_FPU_LOAD is set last.
- */
-void update_fpu_state_and_flag(struct fpu *fpu, struct task_struct *task)
-{
-	save_fpregs_to_fpstate(fpu);
-	set_tsk_thread_flag(task, TIF_NEED_FPU_LOAD);
-}
-
 void fpu_reset_from_exception_fixup(void)
 {
 	restore_fpregs_from_fpstate(&init_fpstate, XFEATURE_MASK_FPSTATE);
@@ -290,7 +276,7 @@ bool fpu_alloc_guest_fpstate(struct fpu_guest *gfpu)
 
 	return true;
 }
-EXPORT_SYMBOL_FOR_KVM(fpu_alloc_guest_fpstate);
+EXPORT_SYMBOL_GPL(fpu_alloc_guest_fpstate);
 
 void fpu_free_guest_fpstate(struct fpu_guest *gfpu)
 {
@@ -305,17 +291,17 @@ void fpu_free_guest_fpstate(struct fpu_guest *gfpu)
 	gfpu->fpstate = NULL;
 	vfree(fpstate);
 }
-EXPORT_SYMBOL_FOR_KVM(fpu_free_guest_fpstate);
+EXPORT_SYMBOL_GPL(fpu_free_guest_fpstate);
 
-/**
- * fpu_enable_guest_xfd_features - Check xfeatures against guest perm and enable
- * @guest_fpu:		Pointer to the guest FPU container
- * @xfeatures:		Features requested by guest CPUID
- *
- * Enable all dynamic xfeatures according to guest perm and requested CPUID.
- *
- * Return: 0 on success, error code otherwise
- */
+/*
+  * fpu_enable_guest_xfd_features - Check xfeatures against guest perm and enable
+  * @guest_fpu:         Pointer to the guest FPU container
+  * @xfeatures:         Features requested by guest CPUID
+  *
+  * Enable all dynamic xfeatures according to guest perm and requested CPUID.
+  *
+  * Return: 0 on success, error code otherwise
+  */
 int fpu_enable_guest_xfd_features(struct fpu_guest *guest_fpu, u64 xfeatures)
 {
 	lockdep_assert_preemption_enabled();
@@ -327,7 +313,7 @@ int fpu_enable_guest_xfd_features(struct fpu_guest *guest_fpu, u64 xfeatures)
 
 	return __xfd_enable_feature(xfeatures, guest_fpu);
 }
-EXPORT_SYMBOL_FOR_KVM(fpu_enable_guest_xfd_features);
+EXPORT_SYMBOL_GPL(fpu_enable_guest_xfd_features);
 
 #ifdef CONFIG_X86_64
 void fpu_update_guest_xfd(struct fpu_guest *guest_fpu, u64 xfd)
@@ -357,7 +343,7 @@ void fpu_update_guest_xfd(struct fpu_guest *guest_fpu, u64 xfd)
 
 	fpregs_unlock();
 }
-EXPORT_SYMBOL_FOR_KVM(fpu_update_guest_xfd);
+EXPORT_SYMBOL_GPL(fpu_update_guest_xfd);
 
 /**
  * fpu_sync_guest_vmexit_xfd_state - Synchronize XFD MSR and software state
@@ -381,7 +367,7 @@ void fpu_sync_guest_vmexit_xfd_state(void)
 		__this_cpu_write(xfd_state, fpstate->xfd);
 	}
 }
-EXPORT_SYMBOL_FOR_KVM(fpu_sync_guest_vmexit_xfd_state);
+EXPORT_SYMBOL_GPL(fpu_sync_guest_vmexit_xfd_state);
 #endif /* CONFIG_X86_64 */
 
 int fpu_swap_kvm_fpstate(struct fpu_guest *guest_fpu, bool enter_guest)
@@ -396,13 +382,13 @@ int fpu_swap_kvm_fpstate(struct fpu_guest *guest_fpu, bool enter_guest)
 
 	/* Swap fpstate */
 	if (enter_guest) {
-		WRITE_ONCE(fpu->__task_fpstate, cur_fps);
-		barrier();
+		fpu->__task_fpstate = cur_fps;
 		fpu->fpstate = guest_fps;
 		guest_fps->in_use = true;
 	} else {
 		guest_fps->in_use = false;
 		fpu->fpstate = fpu->__task_fpstate;
+		fpu->__task_fpstate = NULL;
 	}
 
 	cur_fps = fpu->fpstate;
@@ -419,21 +405,11 @@ int fpu_swap_kvm_fpstate(struct fpu_guest *guest_fpu, bool enter_guest)
 		xfd_update_state(cur_fps);
 	}
 
-	/*
-	 * Clear fpu->__task_fpstate after switching back to host state.
-	 * A non-NULL __task_fpstate means guest state is still resident in
-	 * hardware; reset it only once host state has been restored.
-	 */
-	if (!enter_guest) {
-		barrier();
-		WRITE_ONCE(fpu->__task_fpstate, NULL);
-	}
-
 	fpregs_mark_activate();
 	fpregs_unlock();
 	return 0;
 }
-EXPORT_SYMBOL_FOR_KVM(fpu_swap_kvm_fpstate);
+EXPORT_SYMBOL_GPL(fpu_swap_kvm_fpstate);
 
 void fpu_copy_guest_fpstate_to_uabi(struct fpu_guest *gfpu, void *buf,
 				    unsigned int size, u64 xfeatures, u32 pkru)
@@ -452,7 +428,7 @@ void fpu_copy_guest_fpstate_to_uabi(struct fpu_guest *gfpu, void *buf,
 		ustate->xsave.header.xfeatures = XFEATURE_MASK_FPSSE;
 	}
 }
-EXPORT_SYMBOL_FOR_KVM(fpu_copy_guest_fpstate_to_uabi);
+EXPORT_SYMBOL_GPL(fpu_copy_guest_fpstate_to_uabi);
 
 int fpu_copy_uabi_to_guest_fpstate(struct fpu_guest *gfpu, const void *buf,
 				   u64 xcr0, u32 *vpkru)
@@ -489,7 +465,7 @@ int fpu_copy_uabi_to_guest_fpstate(struct fpu_guest *gfpu, const void *buf,
 
 	return copy_uabi_from_kernel_to_xstate(kstate, ustate, vpkru);
 }
-EXPORT_SYMBOL_FOR_KVM(fpu_copy_uabi_to_guest_fpstate);
+EXPORT_SYMBOL_GPL(fpu_copy_uabi_to_guest_fpstate);
 #endif /* CONFIG_KVM */
 
 void kernel_fpu_begin_mask(unsigned int kfpu_mask)
@@ -504,15 +480,17 @@ void kernel_fpu_begin_mask(unsigned int kfpu_mask)
 	this_cpu_write(kernel_fpu_allowed, false);
 
 	if (!(current->flags & (PF_KTHREAD | PF_USER_WORKER)) &&
-	    !test_thread_flag(TIF_NEED_FPU_LOAD))
-		update_fpu_state_and_flag(x86_task_fpu(current), current);
+	    !test_thread_flag(TIF_NEED_FPU_LOAD)) {
+		set_thread_flag(TIF_NEED_FPU_LOAD);
+		save_fpregs_to_fpstate(x86_task_fpu(current));
+	}
 	__cpu_invalidate_fpregs_state();
 
 	/* Put sane initial values into the control registers. */
 	if (likely(kfpu_mask & KFPU_MXCSR) && boot_cpu_has(X86_FEATURE_XMM))
 		ldmxcsr(MXCSR_DEFAULT);
 
-	if (unlikely(kfpu_mask & KFPU_387))
+	if (unlikely(kfpu_mask & KFPU_387) && boot_cpu_has(X86_FEATURE_FPU))
 		asm volatile ("fninit");
 }
 EXPORT_SYMBOL_GPL(kernel_fpu_begin_mask);
@@ -579,6 +557,11 @@ static inline void fpstate_init_fstate(struct fpstate *fpstate)
  */
 void fpstate_init_user(struct fpstate *fpstate)
 {
+	if (!cpu_feature_enabled(X86_FEATURE_FPU)) {
+		fpstate_init_soft(&fpstate->regs.soft);
+		return;
+	}
+
 	xstate_init_xcomp_bv(&fpstate->regs.xsave, fpstate->xfeatures);
 
 	if (cpu_feature_enabled(X86_FEATURE_FXSR))
@@ -692,6 +675,9 @@ int fpu_clone(struct task_struct *dst, u64 clone_flags, bool minimal,
 	dst_fpu->last_cpu = -1;
 
 	fpstate_reset(dst_fpu);
+
+	if (!cpu_feature_enabled(X86_FEATURE_FPU))
+		return 0;
 
 	/*
 	 * Enforce reload for user space tasks and prevent kernel threads
@@ -851,6 +837,11 @@ void fpu__clear_user_states(struct fpu *fpu)
 	WARN_ON_FPU(fpu != x86_task_fpu(current));
 
 	fpregs_lock();
+	if (!cpu_feature_enabled(X86_FEATURE_FPU)) {
+		fpu_reset_fpstate_regs();
+		fpregs_unlock();
+		return;
+	}
 
 	/*
 	 * Ensure that current's supervisor states are loaded into their
@@ -887,9 +878,12 @@ void fpu_flush_thread(void)
  */
 void switch_fpu_return(void)
 {
+	if (!static_cpu_has(X86_FEATURE_FPU))
+		return;
+
 	fpregs_restore_userregs();
 }
-EXPORT_SYMBOL_FOR_KVM(switch_fpu_return);
+EXPORT_SYMBOL_GPL(switch_fpu_return);
 
 void fpregs_lock_and_load(void)
 {
@@ -924,7 +918,7 @@ void fpregs_assert_state_consistent(void)
 
 	WARN_ON_FPU(!fpregs_state_valid(fpu, smp_processor_id()));
 }
-EXPORT_SYMBOL_FOR_KVM(fpregs_assert_state_consistent);
+EXPORT_SYMBOL_GPL(fpregs_assert_state_consistent);
 #endif
 
 void fpregs_mark_activate(void)

@@ -29,7 +29,6 @@
 #include <drm/drm_modeset_helper.h>
 #include <drm/drm_module.h>
 #include <drm/drm_of.h>
-#include <drm/drm_print.h>
 #include <drm/drm_probe_helper.h>
 #include <drm/drm_vblank.h>
 
@@ -190,7 +189,7 @@ static int malidp_set_and_wait_config_valid(struct drm_device *drm)
 	return (ret > 0) ? 0 : -ETIMEDOUT;
 }
 
-static void malidp_atomic_commit_hw_done(struct drm_atomic_commit *state)
+static void malidp_atomic_commit_hw_done(struct drm_atomic_state *state)
 {
 	struct drm_device *drm = state->dev;
 	struct malidp_drm *malidp = drm_to_malidp(drm);
@@ -231,7 +230,7 @@ static void malidp_atomic_commit_hw_done(struct drm_atomic_commit *state)
 	drm_atomic_helper_commit_hw_done(state);
 }
 
-static void malidp_atomic_commit_tail(struct drm_atomic_commit *state)
+static void malidp_atomic_commit_tail(struct drm_atomic_state *state)
 {
 	struct drm_device *drm = state->dev;
 	struct malidp_drm *malidp = drm_to_malidp(drm);

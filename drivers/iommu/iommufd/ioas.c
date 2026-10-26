@@ -132,7 +132,7 @@ static int iommufd_ioas_load_iovas(struct rb_root_cached *itree,
 		if (interval_tree_iter_first(itree, range.start, range.last))
 			return -EINVAL;
 
-		allowed = kzalloc_obj(*allowed, GFP_KERNEL_ACCOUNT);
+		allowed = kzalloc(sizeof(*allowed), GFP_KERNEL_ACCOUNT);
 		if (!allowed)
 			return -ENOMEM;
 		allowed->node.start = range.start;
@@ -207,6 +207,7 @@ int iommufd_ioas_map_file(struct iommufd_ucmd *ucmd)
 	unsigned long iova = cmd->iova;
 	struct iommufd_ioas *ioas;
 	unsigned int flags = 0;
+	struct file *file;
 	int rc;
 
 	if (cmd->flags &
@@ -228,7 +229,11 @@ int iommufd_ioas_map_file(struct iommufd_ucmd *ucmd)
 	if (!(cmd->flags & IOMMU_IOAS_MAP_FIXED_IOVA))
 		flags = IOPT_ALLOC_IOVA;
 
-	rc = iopt_map_file_pages(ucmd->ictx, &ioas->iopt, &iova, cmd->fd,
+	file = fget(cmd->fd);
+	if (!file)
+		return -EBADF;
+
+	rc = iopt_map_file_pages(ucmd->ictx, &ioas->iopt, &iova, file,
 				 cmd->start, cmd->length,
 				 conv_iommu_prot(cmd->flags), flags);
 	if (rc)
@@ -238,6 +243,7 @@ int iommufd_ioas_map_file(struct iommufd_ucmd *ucmd)
 	rc = iommufd_ucmd_respond(ucmd, sizeof(*cmd));
 out_put:
 	iommufd_put_object(ucmd->ictx, &ioas->obj);
+	fput(file);
 	return rc;
 }
 
@@ -374,42 +380,6 @@ out_put:
 	iommufd_put_object(ucmd->ictx, &ioas->obj);
 	return rc;
 }
-
-#ifdef CONFIG_IOMMUFD_NOIOMMU
-int iommufd_ioas_noiommu_get_pa(struct iommufd_ucmd *ucmd)
-{
-	struct iommu_ioas_noiommu_get_pa *cmd = ucmd->cmd;
-	struct iommufd_ioas *ioas;
-	int rc;
-
-	if (!capable(CAP_SYS_RAWIO))
-		return -EPERM;
-
-	if (cmd->flags || cmd->__reserved)
-		return -EOPNOTSUPP;
-
-	if (!cmd->length)
-		return -EINVAL;
-
-	if (cmd->iova >= ULONG_MAX)
-		return -EOVERFLOW;
-
-	ioas = iommufd_get_ioas(ucmd->ictx, cmd->ioas_id);
-	if (IS_ERR(ioas))
-		return PTR_ERR(ioas);
-
-	rc = iopt_get_phys(&ioas->iopt, cmd->iova, &cmd->out_phys,
-			   &cmd->length);
-	if (rc)
-		goto out_put;
-
-	rc = iommufd_ucmd_respond(ucmd, sizeof(*cmd));
-out_put:
-	iommufd_put_object(ucmd->ictx, &ioas->obj);
-
-	return rc;
-}
-#endif
 
 static void iommufd_release_all_iova_rwsem(struct iommufd_ctx *ictx,
 					   struct xarray *ioas_list)

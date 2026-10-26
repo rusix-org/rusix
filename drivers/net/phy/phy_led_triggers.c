@@ -93,7 +93,8 @@ int phy_led_triggers_register(struct phy_device *phy)
 	if (!phy->phy_num_led_triggers)
 		return 0;
 
-	phy->led_link_trigger = kzalloc_obj(*phy->led_link_trigger);
+	phy->led_link_trigger = kzalloc(sizeof(*phy->led_link_trigger),
+					GFP_KERNEL);
 	if (!phy->led_link_trigger) {
 		err = -ENOMEM;
 		goto out_clear;
@@ -103,8 +104,9 @@ int phy_led_triggers_register(struct phy_device *phy)
 	if (err)
 		goto out_free_link;
 
-	phy->phy_led_triggers = kzalloc_objs(struct phy_led_trigger,
-					     phy->phy_num_led_triggers);
+	phy->phy_led_triggers = kcalloc(phy->phy_num_led_triggers,
+					sizeof(struct phy_led_trigger),
+					GFP_KERNEL);
 	if (!phy->phy_led_triggers) {
 		err = -ENOMEM;
 		goto out_unreg_link;
@@ -126,7 +128,6 @@ out_unreg:
 	while (i--)
 		phy_led_trigger_unregister(&phy->phy_led_triggers[i]);
 	kfree(phy->phy_led_triggers);
-	phy->phy_led_triggers = NULL;
 out_unreg_link:
 	phy_led_trigger_unregister(phy->led_link_trigger);
 out_free_link:
@@ -142,12 +143,10 @@ void phy_led_triggers_unregister(struct phy_device *phy)
 {
 	int i;
 
-	if (phy->phy_led_triggers) {
-		for (i = 0; i < phy->phy_num_led_triggers; i++)
-			phy_led_trigger_unregister(&phy->phy_led_triggers[i]);
-		kfree(phy->phy_led_triggers);
-		phy->phy_led_triggers = NULL;
-	}
+	for (i = 0; i < phy->phy_num_led_triggers; i++)
+		phy_led_trigger_unregister(&phy->phy_led_triggers[i]);
+	kfree(phy->phy_led_triggers);
+	phy->phy_led_triggers = NULL;
 
 	if (phy->led_link_trigger) {
 		phy_led_trigger_unregister(phy->led_link_trigger);

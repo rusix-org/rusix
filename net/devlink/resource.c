@@ -117,7 +117,7 @@ devlink_resource_validate_size(struct devlink_resource *resource, u64 size,
 
 int devlink_nl_resource_set_doit(struct sk_buff *skb, struct genl_info *info)
 {
-	struct devlink *devlink = devlink_nl_ctx(info)->devlink;
+	struct devlink *devlink = info->user_ptr[0];
 	struct devlink_resource *resource;
 	u64 resource_id;
 	u64 size;
@@ -223,39 +223,11 @@ nla_put_failure:
 	return -EMSGSIZE;
 }
 
-static int devlink_resource_list_fill(struct sk_buff *skb,
-				      struct devlink *devlink,
-				      struct list_head *resource_list_head,
-				      int *idx)
-{
-	struct devlink_resource *resource;
-	int i = 0;
-	int err;
-
-	list_for_each_entry(resource, resource_list_head, list) {
-		if (i < *idx) {
-			i++;
-			continue;
-		}
-		err = devlink_resource_put(devlink, skb, resource);
-		if (err) {
-			*idx = i;
-			return err;
-		}
-		i++;
-	}
-	*idx = 0;
-	return 0;
-}
-
 static int devlink_resource_fill(struct genl_info *info,
 				 enum devlink_command cmd, int flags)
 {
-	struct devlink_nl_ctx *ctx = devlink_nl_ctx(info);
-	struct devlink *devlink = ctx->devlink;
-	struct devlink_port *devlink_port;
+	struct devlink *devlink = info->user_ptr[0];
 	struct devlink_resource *resource;
-	struct list_head *resource_list;
 	struct nlattr *resources_attr;
 	struct sk_buff *skb = NULL;
 	struct nlmsghdr *nlh;
@@ -264,10 +236,7 @@ static int devlink_resource_fill(struct genl_info *info,
 	int i;
 	int err;
 
-	devlink_port = ctx->devlink_port;
-	resource_list = devlink_port ?
-		&devlink_port->resource_list : &devlink->resource_list;
-	resource = list_first_entry(resource_list,
+	resource = list_first_entry(&devlink->resource_list,
 				    struct devlink_resource, list);
 start_again:
 	err = devlink_nl_msg_reply_and_new(&skb, info);
@@ -283,9 +252,6 @@ start_again:
 
 	if (devlink_nl_put_handle(skb, devlink))
 		goto nla_put_failure;
-	if (devlink_port &&
-	    nla_put_u32(skb, DEVLINK_ATTR_PORT_INDEX, devlink_port->index))
-		goto nla_put_failure;
 
 	resources_attr = nla_nest_start_noflag(skb,
 					       DEVLINK_ATTR_RESOURCE_LIST);
@@ -294,7 +260,7 @@ start_again:
 
 	incomplete = false;
 	i = 0;
-	list_for_each_entry_from(resource, resource_list, list) {
+	list_for_each_entry_from(resource, &devlink->resource_list, list) {
 		err = devlink_resource_put(devlink, skb, resource);
 		if (err) {
 			if (!i)
@@ -328,133 +294,12 @@ err_resource_put:
 
 int devlink_nl_resource_dump_doit(struct sk_buff *skb, struct genl_info *info)
 {
-	struct devlink_nl_ctx *ctx = devlink_nl_ctx(info);
-	struct devlink *devlink = ctx->devlink;
-	struct devlink_port *devlink_port;
-	struct list_head *resource_list;
+	struct devlink *devlink = info->user_ptr[0];
 
-	devlink_port = ctx->devlink_port;
-	if (info->attrs[DEVLINK_ATTR_PORT_INDEX] && !devlink_port)
-		return -ENODEV;
-
-	resource_list = devlink_port ?
-		&devlink_port->resource_list : &devlink->resource_list;
-	if (list_empty(resource_list))
+	if (list_empty(&devlink->resource_list))
 		return -EOPNOTSUPP;
 
 	return devlink_resource_fill(info, DEVLINK_CMD_RESOURCE_DUMP, 0);
-}
-
-static int
-devlink_resource_dump_fill_one(struct sk_buff *skb, struct devlink *devlink,
-			       struct devlink_port *devlink_port,
-			       struct netlink_callback *cb, int flags, int *idx)
-{
-	struct list_head *resource_list;
-	struct nlattr *resources_attr;
-	int start_idx = *idx;
-	void *hdr;
-	int err;
-
-	resource_list = devlink_port ?
-		&devlink_port->resource_list : &devlink->resource_list;
-
-	if (list_empty(resource_list))
-		return 0;
-
-	err = -EMSGSIZE;
-	hdr = genlmsg_put(skb, NETLINK_CB(cb->skb).portid, cb->nlh->nlmsg_seq,
-			  &devlink_nl_family, flags, DEVLINK_CMD_RESOURCE_DUMP);
-	if (!hdr)
-		return err;
-
-	if (devlink_nl_put_handle(skb, devlink))
-		goto nla_put_failure;
-	if (devlink_port &&
-	    nla_put_u32(skb, DEVLINK_ATTR_PORT_INDEX, devlink_port->index))
-		goto nla_put_failure;
-
-	resources_attr = nla_nest_start_noflag(skb, DEVLINK_ATTR_RESOURCE_LIST);
-	if (!resources_attr)
-		goto nla_put_failure;
-
-	err = devlink_resource_list_fill(skb, devlink, resource_list, idx);
-	if (err) {
-		if (*idx == start_idx)
-			goto resource_list_cancel;
-		nla_nest_end(skb, resources_attr);
-		genlmsg_end(skb, hdr);
-		return err;
-	}
-	nla_nest_end(skb, resources_attr);
-	genlmsg_end(skb, hdr);
-	return 0;
-
-resource_list_cancel:
-	nla_nest_cancel(skb, resources_attr);
-nla_put_failure:
-	genlmsg_cancel(skb, hdr);
-	return err;
-}
-
-static int
-devlink_nl_resource_dump_one(struct sk_buff *skb, struct devlink *devlink,
-			     struct netlink_callback *cb, int flags)
-{
-	struct devlink_nl_dump_state *state = devlink_dump_state(cb);
-	const struct genl_info *info = genl_info_dump(cb);
-	struct devlink_port *devlink_port;
-	struct nlattr *scope_attr = NULL;
-	unsigned long port_idx;
-	u32 scope = 0;
-	int err;
-
-	if (info->attrs && info->attrs[DEVLINK_ATTR_RESOURCE_SCOPE_MASK]) {
-		scope_attr = info->attrs[DEVLINK_ATTR_RESOURCE_SCOPE_MASK];
-		scope = nla_get_u32(scope_attr);
-		if (!scope) {
-			NL_SET_ERR_MSG_ATTR(info->extack, scope_attr,
-					    "empty resource scope selection");
-			return -EINVAL;
-		}
-	}
-
-	if (!state->port_ctx.index_valid &&
-	    (!scope || (scope & DEVLINK_RESOURCE_SCOPE_DEV))) {
-		err = devlink_resource_dump_fill_one(skb, devlink, NULL,
-						     cb, flags, &state->idx);
-		if (err)
-			return err;
-		state->idx = 0;
-	}
-
-	if (scope && !(scope & DEVLINK_RESOURCE_SCOPE_PORT))
-		goto out;
-	/* Check in case port was removed between dump callbacks. */
-	if (state->port_ctx.index_valid &&
-	    !xa_load(&devlink->ports, state->port_ctx.index))
-		state->idx = 0;
-	state->port_ctx.index_valid = true;
-	xa_for_each_start(&devlink->ports, port_idx, devlink_port,
-			  state->port_ctx.index) {
-		err = devlink_resource_dump_fill_one(skb, devlink, devlink_port,
-						     cb, flags, &state->idx);
-		if (err) {
-			state->port_ctx.index = port_idx;
-			return err;
-		}
-		state->idx = 0;
-	}
-out:
-	state->port_ctx.index_valid = false;
-	state->port_ctx.index = 0;
-	return 0;
-}
-
-int devlink_nl_resource_dump_dumpit(struct sk_buff *skb,
-				    struct netlink_callback *cb)
-{
-	return devlink_nl_dumpit(skb, cb, devlink_nl_resource_dump_one);
 }
 
 int devlink_resources_validate(struct devlink *devlink,
@@ -490,8 +335,6 @@ __devl_resource_register(struct devlink *devlink,
 	struct list_head *resource_list;
 	bool top_hierarchy;
 
-	WARN_ON(resource_id == DEVLINK_RESOURCE_ID_PARENT_TOP);
-
 	lockdep_assert_held(&devlink->lock);
 
 	top_hierarchy = parent_resource_id == DEVLINK_RESOURCE_ID_PARENT_TOP;
@@ -501,7 +344,7 @@ __devl_resource_register(struct devlink *devlink,
 	if (resource)
 		return -EEXIST;
 
-	resource = kzalloc_obj(*resource);
+	resource = kzalloc(sizeof(*resource), GFP_KERNEL);
 	if (!resource)
 		return -ENOMEM;
 

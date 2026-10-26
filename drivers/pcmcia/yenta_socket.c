@@ -674,8 +674,9 @@ static int yenta_search_res(struct yenta_socket *socket, struct resource *res,
 			    u32 min)
 {
 	struct resource *root;
+	int i;
 
-	pci_bus_for_each_resource(socket->dev->bus, root) {
+	pci_bus_for_each_resource(socket->dev->bus, root, i) {
 		if (!root)
 			continue;
 
@@ -778,7 +779,7 @@ static void yenta_allocate_resources(struct yenta_socket *socket)
 			   IORESOURCE_MEM,
 			   PCI_CB_MEMORY_BASE_1, PCI_CB_MEMORY_LIMIT_1);
 	if (program)
-		pci_setup_cardbus_bridge(socket->dev->subordinate);
+		pci_setup_cardbus(socket->dev->subordinate);
 }
 
 
@@ -1170,7 +1171,7 @@ static int yenta_probe(struct pci_dev *dev, const struct pci_device_id *id)
 		return -ENODEV;
 	}
 
-	socket = kzalloc_obj(struct yenta_socket);
+	socket = kzalloc(sizeof(struct yenta_socket), GFP_KERNEL);
 	if (!socket)
 		return -ENOMEM;
 

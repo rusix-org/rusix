@@ -30,6 +30,7 @@ struct find_free_extent_ctl {
 	u64 min_alloc_size;
 	u64 empty_size;
 	u64 flags;
+	int delalloc;
 
 	/* Where to start the search inside the bg */
 	u64 search_start;
@@ -39,7 +40,6 @@ struct find_free_extent_ctl {
 	struct btrfs_free_cluster *last_ptr;
 	bool use_cluster;
 
-	bool delalloc;
 	bool have_caching_bg;
 	bool orig_have_caching_bg;
 
@@ -49,16 +49,6 @@ struct find_free_extent_ctl {
 	/* Allocation is called for data relocation */
 	bool for_data_reloc;
 
-	/*
-	 * Set to true if we're retrying the allocation on this block group
-	 * after waiting for caching progress, this is so that we retry only
-	 * once before moving on to another block group.
-	 */
-	bool retry_uncached;
-
-	/* Whether or not the allocator is currently following a hint. */
-	bool hinted;
-
 	/* RAID index, converted from flags */
 	int index;
 
@@ -66,6 +56,13 @@ struct find_free_extent_ctl {
 	 * Current loop number, check find_free_extent_update_loop() for details
 	 */
 	int loop;
+
+	/*
+	 * Set to true if we're retrying the allocation on this block group
+	 * after waiting for caching progress, this is so that we retry only
+	 * once before moving on to another block group.
+	 */
+	bool retry_uncached;
 
 	/* If current block group is cached */
 	int cached;
@@ -84,6 +81,9 @@ struct find_free_extent_ctl {
 
 	/* Allocation policy */
 	enum btrfs_extent_allocation_policy policy;
+
+	/* Whether or not the allocator is currently following a hint */
+	bool hinted;
 
 	/* Size class of block groups to prefer in early loops */
 	enum btrfs_block_group_size_class size_class;
@@ -137,7 +137,7 @@ int btrfs_alloc_logged_file_extent(struct btrfs_trans_handle *trans,
 				   struct btrfs_key *ins);
 int btrfs_reserve_extent(struct btrfs_root *root, u64 ram_bytes, u64 num_bytes,
 			 u64 min_alloc_size, u64 empty_size, u64 hint_byte,
-			 struct btrfs_key *ins, bool is_data, bool delalloc);
+			 struct btrfs_key *ins, int is_data, int delalloc);
 int btrfs_inc_ref(struct btrfs_trans_handle *trans, struct btrfs_root *root,
 		  struct extent_buffer *buf, bool full_backref);
 int btrfs_dec_ref(struct btrfs_trans_handle *trans, struct btrfs_root *root,
@@ -161,9 +161,7 @@ int btrfs_drop_subtree(struct btrfs_trans_handle *trans,
 			struct extent_buffer *parent);
 void btrfs_error_unpin_extent_range(struct btrfs_fs_info *fs_info, u64 start, u64 end);
 int btrfs_discard_extent(struct btrfs_fs_info *fs_info, u64 bytenr,
-			 u64 num_bytes, u64 *actual_bytes, bool do_remap);
+			 u64 num_bytes, u64 *actual_bytes);
 int btrfs_trim_fs(struct btrfs_fs_info *fs_info, struct fstrim_range *range);
-void btrfs_handle_fully_remapped_bgs(struct btrfs_fs_info *fs_info);
-int btrfs_complete_bg_remapping(struct btrfs_block_group *bg);
 
 #endif

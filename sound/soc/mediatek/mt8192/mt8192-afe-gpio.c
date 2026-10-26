@@ -132,8 +132,12 @@ int mt8192_afe_gpio_init(struct device *dev)
 	int i, ret;
 
 	aud_pinctrl = devm_pinctrl_get(dev);
-	if (IS_ERR(aud_pinctrl))
-		return dev_err_probe(dev, PTR_ERR(aud_pinctrl), "cannot get aud_pinctrl!\n");
+	if (IS_ERR(aud_pinctrl)) {
+		ret = PTR_ERR(aud_pinctrl);
+		dev_err(dev, "%s(), ret %d, cannot get aud_pinctrl!\n",
+			__func__, ret);
+		return ret;
+	}
 
 	for (i = 0; i < ARRAY_SIZE(aud_gpios); i++) {
 		aud_gpios[i].gpioctrl = pinctrl_lookup_state(aud_pinctrl,
@@ -147,17 +151,13 @@ int mt8192_afe_gpio_init(struct device *dev)
 		}
 	}
 
-	ret = mt8192_afe_gpio_select(dev, MT8192_AFE_GPIO_CLK_MOSI_ON);
-	if (ret)
-		return ret;
+	mt8192_afe_gpio_select(dev, MT8192_AFE_GPIO_CLK_MOSI_ON);
 
 	/* gpio status init */
-	ret = mt8192_afe_gpio_request(dev, false, MT8192_DAI_ADDA, 0);
-	if (ret)
-		return ret;
-	ret = mt8192_afe_gpio_request(dev, false, MT8192_DAI_ADDA, 1);
+	mt8192_afe_gpio_request(dev, false, MT8192_DAI_ADDA, 0);
+	mt8192_afe_gpio_request(dev, false, MT8192_DAI_ADDA, 1);
 
-	return ret;
+	return 0;
 }
 EXPORT_SYMBOL(mt8192_afe_gpio_init);
 
@@ -208,104 +208,100 @@ static int mt8192_afe_gpio_adda_ch34_ul(struct device *dev, bool enable)
 int mt8192_afe_gpio_request(struct device *dev, bool enable,
 			    int dai, int uplink)
 {
-	int ret;
-
-	guard(mutex)(&gpio_request_mutex);
+	mutex_lock(&gpio_request_mutex);
 	switch (dai) {
 	case MT8192_DAI_ADDA:
 		if (uplink)
-			ret = mt8192_afe_gpio_adda_ul(dev, enable);
+			mt8192_afe_gpio_adda_ul(dev, enable);
 		else
-			ret = mt8192_afe_gpio_adda_dl(dev, enable);
+			mt8192_afe_gpio_adda_dl(dev, enable);
 		break;
 	case MT8192_DAI_ADDA_CH34:
 		if (uplink)
-			ret = mt8192_afe_gpio_adda_ch34_ul(dev, enable);
+			mt8192_afe_gpio_adda_ch34_ul(dev, enable);
 		else
-			ret = mt8192_afe_gpio_adda_ch34_dl(dev, enable);
+			mt8192_afe_gpio_adda_ch34_dl(dev, enable);
 		break;
 	case MT8192_DAI_I2S_0:
 		if (enable)
-			ret = mt8192_afe_gpio_select(dev, MT8192_AFE_GPIO_I2S0_ON);
+			mt8192_afe_gpio_select(dev, MT8192_AFE_GPIO_I2S0_ON);
 		else
-			ret = mt8192_afe_gpio_select(dev, MT8192_AFE_GPIO_I2S0_OFF);
+			mt8192_afe_gpio_select(dev, MT8192_AFE_GPIO_I2S0_OFF);
 		break;
 	case MT8192_DAI_I2S_1:
 		if (enable)
-			ret = mt8192_afe_gpio_select(dev, MT8192_AFE_GPIO_I2S1_ON);
+			mt8192_afe_gpio_select(dev, MT8192_AFE_GPIO_I2S1_ON);
 		else
-			ret = mt8192_afe_gpio_select(dev, MT8192_AFE_GPIO_I2S1_OFF);
+			mt8192_afe_gpio_select(dev, MT8192_AFE_GPIO_I2S1_OFF);
 		break;
 	case MT8192_DAI_I2S_2:
 		if (enable)
-			ret = mt8192_afe_gpio_select(dev, MT8192_AFE_GPIO_I2S2_ON);
+			mt8192_afe_gpio_select(dev, MT8192_AFE_GPIO_I2S2_ON);
 		else
-			ret = mt8192_afe_gpio_select(dev, MT8192_AFE_GPIO_I2S2_OFF);
+			mt8192_afe_gpio_select(dev, MT8192_AFE_GPIO_I2S2_OFF);
 		break;
 	case MT8192_DAI_I2S_3:
 		if (enable)
-			ret = mt8192_afe_gpio_select(dev, MT8192_AFE_GPIO_I2S3_ON);
+			mt8192_afe_gpio_select(dev, MT8192_AFE_GPIO_I2S3_ON);
 		else
-			ret = mt8192_afe_gpio_select(dev, MT8192_AFE_GPIO_I2S3_OFF);
+			mt8192_afe_gpio_select(dev, MT8192_AFE_GPIO_I2S3_OFF);
 		break;
 	case MT8192_DAI_I2S_5:
 		if (enable)
-			ret = mt8192_afe_gpio_select(dev, MT8192_AFE_GPIO_I2S5_ON);
+			mt8192_afe_gpio_select(dev, MT8192_AFE_GPIO_I2S5_ON);
 		else
-			ret = mt8192_afe_gpio_select(dev, MT8192_AFE_GPIO_I2S5_OFF);
+			mt8192_afe_gpio_select(dev, MT8192_AFE_GPIO_I2S5_OFF);
 		break;
 	case MT8192_DAI_I2S_6:
 		if (enable)
-			ret = mt8192_afe_gpio_select(dev, MT8192_AFE_GPIO_I2S6_ON);
+			mt8192_afe_gpio_select(dev, MT8192_AFE_GPIO_I2S6_ON);
 		else
-			ret = mt8192_afe_gpio_select(dev, MT8192_AFE_GPIO_I2S6_OFF);
+			mt8192_afe_gpio_select(dev, MT8192_AFE_GPIO_I2S6_OFF);
 		break;
 	case MT8192_DAI_I2S_7:
 		if (enable)
-			ret = mt8192_afe_gpio_select(dev, MT8192_AFE_GPIO_I2S7_ON);
+			mt8192_afe_gpio_select(dev, MT8192_AFE_GPIO_I2S7_ON);
 		else
-			ret = mt8192_afe_gpio_select(dev, MT8192_AFE_GPIO_I2S7_OFF);
+			mt8192_afe_gpio_select(dev, MT8192_AFE_GPIO_I2S7_OFF);
 		break;
 	case MT8192_DAI_I2S_8:
 		if (enable)
-			ret = mt8192_afe_gpio_select(dev, MT8192_AFE_GPIO_I2S8_ON);
+			mt8192_afe_gpio_select(dev, MT8192_AFE_GPIO_I2S8_ON);
 		else
-			ret = mt8192_afe_gpio_select(dev, MT8192_AFE_GPIO_I2S8_OFF);
+			mt8192_afe_gpio_select(dev, MT8192_AFE_GPIO_I2S8_OFF);
 		break;
 	case MT8192_DAI_I2S_9:
 		if (enable)
-			ret = mt8192_afe_gpio_select(dev, MT8192_AFE_GPIO_I2S9_ON);
+			mt8192_afe_gpio_select(dev, MT8192_AFE_GPIO_I2S9_ON);
 		else
-			ret = mt8192_afe_gpio_select(dev, MT8192_AFE_GPIO_I2S9_OFF);
+			mt8192_afe_gpio_select(dev, MT8192_AFE_GPIO_I2S9_OFF);
 		break;
 	case MT8192_DAI_TDM:
 		if (enable)
-			ret = mt8192_afe_gpio_select(dev, MT8192_AFE_GPIO_TDM_ON);
+			mt8192_afe_gpio_select(dev, MT8192_AFE_GPIO_TDM_ON);
 		else
-			ret = mt8192_afe_gpio_select(dev, MT8192_AFE_GPIO_TDM_OFF);
+			mt8192_afe_gpio_select(dev, MT8192_AFE_GPIO_TDM_OFF);
 		break;
 	case MT8192_DAI_VOW:
 		if (enable) {
-			ret = mt8192_afe_gpio_select(dev,
-						     MT8192_AFE_GPIO_VOW_CLK_ON);
-			if (ret)
-				break;
-			ret = mt8192_afe_gpio_select(dev,
-						     MT8192_AFE_GPIO_VOW_DAT_ON);
+			mt8192_afe_gpio_select(dev,
+					       MT8192_AFE_GPIO_VOW_CLK_ON);
+			mt8192_afe_gpio_select(dev,
+					       MT8192_AFE_GPIO_VOW_DAT_ON);
 		} else {
-			ret = mt8192_afe_gpio_select(dev,
-						     MT8192_AFE_GPIO_VOW_CLK_OFF);
-			if (ret)
-				break;
-			ret = mt8192_afe_gpio_select(dev,
-						     MT8192_AFE_GPIO_VOW_DAT_OFF);
+			mt8192_afe_gpio_select(dev,
+					       MT8192_AFE_GPIO_VOW_CLK_OFF);
+			mt8192_afe_gpio_select(dev,
+					       MT8192_AFE_GPIO_VOW_DAT_OFF);
 		}
 		break;
 	default:
+		mutex_unlock(&gpio_request_mutex);
 		dev_warn(dev, "%s(), invalid dai %d\n", __func__, dai);
-		ret = -EINVAL;
+		return -EINVAL;
 	}
+	mutex_unlock(&gpio_request_mutex);
 
-	return ret;
+	return 0;
 }
 EXPORT_SYMBOL(mt8192_afe_gpio_request);

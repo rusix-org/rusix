@@ -33,8 +33,6 @@ There are a few areas these helpers can grouped into:
   pipeline: Planes, handling rectangles for visibility checking and scissoring,
   flip queues and assorted bits.
 
-.. contents::
-
 Modeset Helper Reference for Common Vtables
 ===========================================
 
@@ -106,31 +104,34 @@ VBLANK Helper Reference
 .. kernel-doc:: drivers/gpu/drm/drm_vblank_helper.c
    :export:
 
+Simple KMS Helper Reference
+===========================
+
+.. kernel-doc:: drivers/gpu/drm/drm_simple_kms_helper.c
+   :doc: overview
+
+.. kernel-doc:: include/drm/drm_simple_kms_helper.h
+   :internal:
+
+.. kernel-doc:: drivers/gpu/drm/drm_simple_kms_helper.c
+   :export:
+
 fbdev Helper Functions Reference
 ================================
 
-.. kernel-doc:: drivers/gpu/drm/clients/drm_fbdev_helper.c
+.. kernel-doc:: drivers/gpu/drm/drm_fb_helper.c
    :doc: fbdev helpers
 
-.. kernel-doc:: include/drm/clients/drm_fbdev_helper.h
+.. kernel-doc:: include/drm/drm_fb_helper.h
    :internal:
 
-.. kernel-doc:: drivers/gpu/drm/clients/drm_fbdev_helper.c
+.. kernel-doc:: drivers/gpu/drm/drm_fb_helper.c
    :export:
 
-Draw Helper Functions Reference
+format Helper Functions Reference
 =================================
 
-Format-Conversion Helper Reference
-----------------------------------
-
 .. kernel-doc:: drivers/gpu/drm/drm_format_helper.c
-   :export:
-
-Panic Helper Reference
-----------------------
-
-.. kernel-doc:: drivers/gpu/drm/drm_panic_helper.c
    :export:
 
 Framebuffer DMA Helper Functions Reference
@@ -180,12 +181,6 @@ Bridge Operations
 .. kernel-doc:: drivers/gpu/drm/drm_bridge.c
    :doc: bridge operations
 
-Bridge Chain Format Selection
------------------------------
-
-.. kernel-doc:: drivers/gpu/drm/drm_bridge.c
-   :doc: bridge chain format selection
-
 Bridge Connector Helper
 -----------------------
 
@@ -218,7 +213,7 @@ Bridge Connector Helper Reference
 Panel-Bridge Helper Reference
 -----------------------------
 
-.. kernel-doc:: drivers/gpu/drm/drm_panel.c
+.. kernel-doc:: drivers/gpu/drm/bridge/panel.c
    :export:
 
 .. _drm_panel_helper:

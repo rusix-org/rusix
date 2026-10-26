@@ -1,0 +1,17 @@
+[06:27:05] ============================================================
+[06:27:05] ========== rusix_completion_contract (5 subtests) ==========
+[06:27:05] [PASSED] initial_state_has_no_token
+[06:27:05] [PASSED] presignals_are_consumed_once_each
+[06:27:05] [PASSED] broadcast_persists_until_quiescent_reset
+[06:27:05] [PASSED] zero_timeout_reports_completion_and_consumes_token
+[06:27:05] [PASSED] signal_saturates_instead_of_wrapping
+[06:27:05] ============ [PASSED] rusix_completion_contract ============
+[06:27:05] =========== rusix_completion_layout (4 subtests) ===========
+[06:27:05] [PASSED] c_operations_share_pinned_rust_owned_storage
+[06:27:05] [PASSED] worker_handoff_observes_published_value
+[06:27:05] [PASSED] two_workers_consume_exactly_two_tokens
+[06:27:05] [PASSED] timed_out_worker_unlinks_before_late_signal
+[06:27:05] ============= [PASSED] rusix_completion_layout =============
+[06:27:05] ============================================================
+[06:27:05] Testing complete. Ran 9 tests: passed: 9
+[06:27:05] Test results stored in /out/logs/ci-completion-rust-completion-kunit.json

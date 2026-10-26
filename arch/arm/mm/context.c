@@ -238,7 +238,7 @@ void check_and_switch_context(struct mm_struct *mm, struct task_struct *tsk)
 {
 	unsigned long flags;
 	unsigned int cpu = smp_processor_id();
-	u64 asid, old_active_asid;
+	u64 asid;
 
 	check_vmalloc_seq(mm);
 
@@ -250,17 +250,8 @@ void check_and_switch_context(struct mm_struct *mm, struct task_struct *tsk)
 	cpu_set_reserved_ttbr0();
 
 	asid = atomic64_read(&mm->context.id);
-
-	/*
-	 * If our active_asids is zero, we are racing with an ASID roll-over
-	 * on a different CPU, so skip the update (using cmpxchg if non-zero)
-	 * and take the slow path.
-	 */
-	old_active_asid = atomic64_read(&per_cpu(active_asids, cpu));
-	if (old_active_asid &&
-	    !((asid ^ atomic64_read(&asid_generation)) >> ASID_BITS) &&
-	    atomic64_cmpxchg(&per_cpu(active_asids, cpu),
-			     old_active_asid, asid))
+	if (!((asid ^ atomic64_read(&asid_generation)) >> ASID_BITS)
+	    && atomic64_xchg(&per_cpu(active_asids, cpu), asid))
 		goto switch_mm_fastpath;
 
 	raw_spin_lock_irqsave(&cpu_asid_lock, flags);

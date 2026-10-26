@@ -4,7 +4,6 @@
 // Author: Steven Eckhoff <steven.eckhoff.opensource@gmail.com>
 
 #include <linux/kernel.h>
-#include <linux/cleanup.h>
 #include <linux/clk.h>
 #include <linux/device.h>
 #include <linux/regmap.h>
@@ -309,7 +308,8 @@ struct reg_setting {
 static int coeff_ram_get(struct snd_kcontrol *kcontrol,
 	struct snd_ctl_elem_value *ucontrol)
 {
-	struct snd_soc_component *component = snd_kcontrol_chip(kcontrol);
+	struct snd_soc_component *component =
+		snd_soc_kcontrol_component(kcontrol);
 	struct tscs454 *tscs454 = snd_soc_component_get_drvdata(component);
 	struct coeff_ram_ctl *ctl =
 		(struct coeff_ram_ctl *)kcontrol->private_value;
@@ -330,10 +330,12 @@ static int coeff_ram_get(struct snd_kcontrol *kcontrol,
 		return -EINVAL;
 	}
 
-	scoped_guard(mutex, coeff_ram_lock) {
-		memcpy(ucontrol->value.bytes.data,
-		       &coeff_ram[ctl->addr * COEFF_SIZE], params->max);
-	}
+	mutex_lock(coeff_ram_lock);
+
+	memcpy(ucontrol->value.bytes.data,
+		&coeff_ram[ctl->addr * COEFF_SIZE], params->max);
+
+	mutex_unlock(coeff_ram_lock);
 
 	return 0;
 }
@@ -387,7 +389,8 @@ static int write_coeff_ram(struct snd_soc_component *component, u8 *coeff_ram,
 static int coeff_ram_put(struct snd_kcontrol *kcontrol,
 	struct snd_ctl_elem_value *ucontrol)
 {
-	struct snd_soc_component *component = snd_kcontrol_chip(kcontrol);
+	struct snd_soc_component *component =
+		snd_soc_kcontrol_component(kcontrol);
 	struct tscs454 *tscs454 = snd_soc_component_get_drvdata(component);
 	struct coeff_ram_ctl *ctl =
 		(struct coeff_ram_ctl *)kcontrol->private_value;
@@ -427,15 +430,15 @@ static int coeff_ram_put(struct snd_kcontrol *kcontrol,
 		return -EINVAL;
 	}
 
-	guard(mutex)(coeff_ram_lock);
+	mutex_lock(coeff_ram_lock);
 
 	*coeff_ram_synced = false;
 
 	memcpy(&coeff_ram[ctl->addr * COEFF_SIZE],
 		ucontrol->value.bytes.data, params->max);
 
-	guard(mutex)(&tscs454->pll1.lock);
-	guard(mutex)(&tscs454->pll2.lock);
+	mutex_lock(&tscs454->pll1.lock);
+	mutex_lock(&tscs454->pll2.lock);
 
 	val = snd_soc_component_read(component, R_PLLSTAT);
 	if (val) { /* PLLs locked */
@@ -445,12 +448,18 @@ static int coeff_ram_put(struct snd_kcontrol *kcontrol,
 		if (ret < 0) {
 			dev_err(component->dev,
 				"Failed to flush coeff ram cache (%d)\n", ret);
-			return ret;
+			goto exit;
 		}
 		*coeff_ram_synced = true;
 	}
 
-	return 0;
+	ret = 0;
+exit:
+	mutex_unlock(&tscs454->pll2.lock);
+	mutex_unlock(&tscs454->pll1.lock);
+	mutex_unlock(coeff_ram_lock);
+
+	return ret;
 }
 
 static inline int coeff_ram_sync(struct snd_soc_component *component,
@@ -458,35 +467,41 @@ static inline int coeff_ram_sync(struct snd_soc_component *component,
 {
 	int ret;
 
-	scoped_guard(mutex, &tscs454->dac_ram.lock) {
-		if (!tscs454->dac_ram.synced) {
-			ret = write_coeff_ram(component, tscs454->dac_ram.cache,
-					      R_DACCRS, R_DACCRADD, R_DACCRWDL,
-					      0x00, COEFF_RAM_COEFF_COUNT);
-			if (ret < 0)
-				return ret;
+	mutex_lock(&tscs454->dac_ram.lock);
+	if (!tscs454->dac_ram.synced) {
+		ret = write_coeff_ram(component, tscs454->dac_ram.cache,
+				R_DACCRS, R_DACCRADD, R_DACCRWDL,
+				0x00, COEFF_RAM_COEFF_COUNT);
+		if (ret < 0) {
+			mutex_unlock(&tscs454->dac_ram.lock);
+			return ret;
 		}
 	}
+	mutex_unlock(&tscs454->dac_ram.lock);
 
-	scoped_guard(mutex, &tscs454->spk_ram.lock) {
-		if (!tscs454->spk_ram.synced) {
-			ret = write_coeff_ram(component, tscs454->spk_ram.cache,
-					      R_SPKCRS, R_SPKCRADD, R_SPKCRWDL,
-					      0x00, COEFF_RAM_COEFF_COUNT);
-			if (ret < 0)
-				return ret;
+	mutex_lock(&tscs454->spk_ram.lock);
+	if (!tscs454->spk_ram.synced) {
+		ret = write_coeff_ram(component, tscs454->spk_ram.cache,
+				R_SPKCRS, R_SPKCRADD, R_SPKCRWDL,
+				0x00, COEFF_RAM_COEFF_COUNT);
+		if (ret < 0) {
+			mutex_unlock(&tscs454->spk_ram.lock);
+			return ret;
 		}
 	}
+	mutex_unlock(&tscs454->spk_ram.lock);
 
-	scoped_guard(mutex, &tscs454->sub_ram.lock) {
-		if (!tscs454->sub_ram.synced) {
-			ret = write_coeff_ram(component, tscs454->sub_ram.cache,
-					      R_SUBCRS, R_SUBCRADD, R_SUBCRWDL,
-					      0x00, COEFF_RAM_COEFF_COUNT);
-			if (ret < 0)
-				return ret;
+	mutex_lock(&tscs454->sub_ram.lock);
+	if (!tscs454->sub_ram.synced) {
+		ret = write_coeff_ram(component, tscs454->sub_ram.cache,
+				R_SUBCRS, R_SUBCRADD, R_SUBCRWDL,
+				0x00, COEFF_RAM_COEFF_COUNT);
+		if (ret < 0) {
+			mutex_unlock(&tscs454->sub_ram.lock);
+			return ret;
 		}
 	}
+	mutex_unlock(&tscs454->sub_ram.lock);
 
 	return 0;
 }
@@ -645,14 +660,16 @@ static int set_sysclk(struct snd_soc_component *component)
 
 static inline void reserve_pll(struct pll *pll)
 {
-	guard(mutex)(&pll->lock);
+	mutex_lock(&pll->lock);
 	pll->users++;
+	mutex_unlock(&pll->lock);
 }
 
 static inline void free_pll(struct pll *pll)
 {
-	guard(mutex)(&pll->lock);
+	mutex_lock(&pll->lock);
 	pll->users--;
+	mutex_unlock(&pll->lock);
 }
 
 static int pll_connected(struct snd_soc_dapm_widget *source,
@@ -664,13 +681,15 @@ static int pll_connected(struct snd_soc_dapm_widget *source,
 	int users;
 
 	if (strstr(source->name, "PLL 1")) {
-		scoped_guard(mutex, &tscs454->pll1.lock)
-			users = tscs454->pll1.users;
+		mutex_lock(&tscs454->pll1.lock);
+		users = tscs454->pll1.users;
+		mutex_unlock(&tscs454->pll1.lock);
 		dev_dbg(component->dev, "%s(): PLL 1 users = %d\n", __func__,
 				users);
 	} else {
-		scoped_guard(mutex, &tscs454->pll2.lock)
-			users = tscs454->pll2.users;
+		mutex_lock(&tscs454->pll2.lock);
+		users = tscs454->pll2.users;
+		mutex_unlock(&tscs454->pll2.lock);
 		dev_dbg(component->dev, "%s(): PLL 2 users = %d\n", __func__,
 				users);
 	}
@@ -789,7 +808,7 @@ static inline int aif_free(struct snd_soc_component *component,
 {
 	struct tscs454 *tscs454 = snd_soc_component_get_drvdata(component);
 
-	guard(mutex)(&tscs454->aifs_status_lock);
+	mutex_lock(&tscs454->aifs_status_lock);
 
 	dev_dbg(component->dev, "%s(): aif %d\n", __func__, aif->id);
 
@@ -811,6 +830,8 @@ static inline int aif_free(struct snd_soc_component *component,
 				tscs454->internal_rate.pll->id);
 		free_pll(tscs454->internal_rate.pll);
 	}
+
+	mutex_unlock(&tscs454->aifs_status_lock);
 
 	return 0;
 }
@@ -3155,7 +3176,7 @@ static int tscs454_hw_params(struct snd_pcm_substream *substream,
 	unsigned int val;
 	int ret;
 
-	guard(mutex)(&tscs454->aifs_status_lock);
+	mutex_lock(&tscs454->aifs_status_lock);
 
 	dev_dbg(component->dev, "%s(): aif %d fs = %u\n", __func__,
 			aif->id, fs);
@@ -3188,14 +3209,14 @@ static int tscs454_hw_params(struct snd_pcm_substream *substream,
 	ret = set_aif_fs(component, aif->id, fs);
 	if (ret < 0) {
 		dev_err(component->dev, "Failed to set aif fs (%d)\n", ret);
-		return ret;
+		goto exit;
 	}
 
 	ret = set_aif_sample_format(component, params_format(params), aif->id);
 	if (ret < 0) {
 		dev_err(component->dev,
 				"Failed to set aif sample format (%d)\n", ret);
-		return ret;
+		goto exit;
 	}
 
 	set_aif_status_active(&tscs454->aifs_status, aif->id,
@@ -3204,7 +3225,11 @@ static int tscs454_hw_params(struct snd_pcm_substream *substream,
 	dev_dbg(component->dev, "Set aif %d active. Streams status is 0x%x\n",
 		aif->id, tscs454->aifs_status.streams);
 
-	return 0;
+	ret = 0;
+exit:
+	mutex_unlock(&tscs454->aifs_status_lock);
+
+	return ret;
 }
 
 static int tscs454_hw_free(struct snd_pcm_substream *substream,
@@ -3233,17 +3258,6 @@ static int tscs454_prepare(struct snd_pcm_substream *substream,
 	return 0;
 }
 
-static const u64 tscs454_selectable_formats =
-	SND_SOC_POSSIBLE_DAIFMT_I2S	|
-	SND_SOC_POSSIBLE_DAIFMT_RIGHT_J	|
-	SND_SOC_POSSIBLE_DAIFMT_LEFT_J	|
-	SND_SOC_POSSIBLE_DAIFMT_DSP_A	|
-	SND_SOC_POSSIBLE_DAIFMT_DSP_B	|
-	SND_SOC_POSSIBLE_DAIFMT_NB_NF	|
-	SND_SOC_POSSIBLE_DAIFMT_NB_IF	|
-	SND_SOC_POSSIBLE_DAIFMT_IB_NF	|
-	SND_SOC_POSSIBLE_DAIFMT_IB_IF;
-
 static struct snd_soc_dai_ops const tscs454_dai1_ops = {
 	.set_sysclk	= tscs454_set_sysclk,
 	.set_bclk_ratio = tscs454_set_bclk_ratio,
@@ -3252,8 +3266,6 @@ static struct snd_soc_dai_ops const tscs454_dai1_ops = {
 	.hw_params	= tscs454_hw_params,
 	.hw_free	= tscs454_hw_free,
 	.prepare	= tscs454_prepare,
-	.auto_selectable_formats	= &tscs454_selectable_formats,
-	.num_auto_selectable_formats	= 1,
 };
 
 static struct snd_soc_dai_ops const tscs454_dai23_ops = {
@@ -3264,8 +3276,6 @@ static struct snd_soc_dai_ops const tscs454_dai23_ops = {
 	.hw_params	= tscs454_hw_params,
 	.hw_free	= tscs454_hw_free,
 	.prepare	= tscs454_prepare,
-	.auto_selectable_formats	= &tscs454_selectable_formats,
-	.num_auto_selectable_formats	= 1,
 };
 
 static int tscs454_probe(struct snd_soc_component *component)
@@ -3446,7 +3456,7 @@ static int tscs454_i2c_probe(struct i2c_client *i2c)
 }
 
 static const struct i2c_device_id tscs454_i2c_id[] = {
-	{ .name = "tscs454" },
+	{ "tscs454" },
 	{ }
 };
 MODULE_DEVICE_TABLE(i2c, tscs454_i2c_id);

@@ -126,12 +126,12 @@ int init_se_kmem_caches(void)
 	}
 
 	target_completion_wq = alloc_workqueue("target_completion",
-					       WQ_MEM_RECLAIM | WQ_PERCPU, 0);
+					       WQ_MEM_RECLAIM, 0);
 	if (!target_completion_wq)
 		goto out_free_lba_map_mem_cache;
 
 	target_submission_wq = alloc_workqueue("target_submission",
-					       WQ_MEM_RECLAIM | WQ_PERCPU, 0);
+					       WQ_MEM_RECLAIM, 0);
 	if (!target_submission_wq)
 		goto out_free_completion_wq;
 
@@ -233,7 +233,7 @@ struct target_cmd_counter *target_alloc_cmd_counter(void)
 	struct target_cmd_counter *cmd_cnt;
 	int rc;
 
-	cmd_cnt = kzalloc_obj(*cmd_cnt);
+	cmd_cnt = kzalloc(sizeof(*cmd_cnt), GFP_KERNEL);
 	if (!cmd_cnt)
 		return NULL;
 
@@ -902,59 +902,13 @@ static bool target_cmd_interrupted(struct se_cmd *cmd)
 	return false;
 }
 
-static void target_complete(struct se_cmd *cmd, int success)
-{
-	struct se_wwn *wwn = cmd->se_sess->se_tpg->se_tpg_wwn;
-	struct se_dev_attrib *da;
-	u8 compl_type;
-	int cpu;
-
-	if (!wwn) {
-		cpu = cmd->cpuid;
-		goto queue_work;
-	}
-
-	da = &cmd->se_dev->dev_attrib;
-	if (da->complete_type == TARGET_FABRIC_DEFAULT_COMPL)
-		compl_type = wwn->wwn_tf->tf_ops->default_compl_type;
-	else if (da->complete_type == TARGET_DIRECT_COMPL &&
-		 wwn->wwn_tf->tf_ops->direct_compl_supp)
-		compl_type = TARGET_DIRECT_COMPL;
-	else
-		compl_type = TARGET_QUEUE_COMPL;
-
-	if (compl_type == TARGET_DIRECT_COMPL) {
-		/*
-		 * Failure handling and processing secondary stages of
-		 * complex commands can be too heavy to handle from the
-		 * fabric driver so always defer.
-		 */
-		if (success && !cmd->transport_complete_callback) {
-			target_complete_ok_work(&cmd->work);
-			return;
-		}
-
-		compl_type = TARGET_QUEUE_COMPL;
-	}
-
-queue_work:
-	INIT_WORK(&cmd->work, success ? target_complete_ok_work :
-		  target_complete_failure_work);
-
-	if (!wwn || wwn->cmd_compl_affinity == SE_COMPL_AFFINITY_CPUID)
-		cpu = cmd->cpuid;
-	else
-		cpu = wwn->cmd_compl_affinity;
-
-	queue_work_on(cpu, target_completion_wq, &cmd->work);
-}
-
 /* May be called from interrupt context so must not sleep. */
 void target_complete_cmd_with_sense(struct se_cmd *cmd, u8 scsi_status,
 				    sense_reason_t sense_reason)
 {
+	struct se_wwn *wwn = cmd->se_sess->se_tpg->se_tpg_wwn;
+	int success, cpu;
 	unsigned long flags;
-	int success;
 
 	if (target_cmd_interrupted(cmd))
 		return;
@@ -979,7 +933,15 @@ void target_complete_cmd_with_sense(struct se_cmd *cmd, u8 scsi_status,
 	cmd->transport_state |= (CMD_T_COMPLETE | CMD_T_ACTIVE);
 	spin_unlock_irqrestore(&cmd->t_state_lock, flags);
 
-	target_complete(cmd, success);
+	INIT_WORK(&cmd->work, success ? target_complete_ok_work :
+		  target_complete_failure_work);
+
+	if (!wwn || wwn->cmd_compl_affinity == SE_COMPL_AFFINITY_CPUID)
+		cpu = cmd->cpuid;
+	else
+		cpu = wwn->cmd_compl_affinity;
+
+	queue_work_on(cpu, target_completion_wq, &cmd->work);
 }
 EXPORT_SYMBOL(target_complete_cmd_with_sense);
 
@@ -1150,7 +1112,7 @@ void transport_dump_vpd_proto_id(
 	}
 
 	if (p_buf)
-		strscpy(p_buf, buf, p_buf_len);
+		strncpy(p_buf, buf, p_buf_len);
 	else
 		pr_debug("%s", buf);
 }
@@ -1200,7 +1162,7 @@ int transport_dump_vpd_assoc(
 	}
 
 	if (p_buf)
-		strscpy(p_buf, buf, p_buf_len);
+		strncpy(p_buf, buf, p_buf_len);
 	else
 		pr_debug("%s", buf);
 
@@ -1260,7 +1222,7 @@ int transport_dump_vpd_ident_type(
 	if (p_buf) {
 		if (p_buf_len < strlen(buf)+1)
 			return -EINVAL;
-		strscpy(p_buf, buf, p_buf_len);
+		strncpy(p_buf, buf, p_buf_len);
 	} else {
 		pr_debug("%s", buf);
 	}
@@ -1314,7 +1276,7 @@ int transport_dump_vpd_ident(
 	}
 
 	if (p_buf)
-		strscpy(p_buf, buf, p_buf_len);
+		strncpy(p_buf, buf, p_buf_len);
 	else
 		pr_debug("%s", buf);
 
@@ -1610,12 +1572,7 @@ target_cmd_parse_cdb(struct se_cmd *cmd)
 		return ret;
 
 	cmd->se_cmd_flags |= SCF_SUPPORTED_SAM_OPCODE;
-	/*
-	 * If this is the xcopy_lun then we won't have lun_stats since we
-	 * can't export them.
-	 */
-	if (cmd->se_lun->lun_stats)
-		this_cpu_inc(cmd->se_lun->lun_stats->cmd_pdus);
+	atomic_long_inc(&cmd->se_lun->lun_stats.cmd_pdus);
 	return 0;
 }
 EXPORT_SYMBOL(target_cmd_parse_cdb);
@@ -2359,7 +2316,7 @@ void target_do_delayed_work(struct work_struct *work)
 	struct se_device *dev = container_of(work, struct se_device,
 					     delayed_cmd_work);
 
-	spin_lock_irq(&dev->delayed_cmd_lock);
+	spin_lock(&dev->delayed_cmd_lock);
 	while (!dev->ordered_sync_in_progress) {
 		struct se_cmd *cmd;
 
@@ -2380,12 +2337,12 @@ void target_do_delayed_work(struct work_struct *work)
 		dev->ordered_sync_in_progress = true;
 
 		list_del(&cmd->se_delayed_node);
-		spin_unlock_irq(&dev->delayed_cmd_lock);
+		spin_unlock(&dev->delayed_cmd_lock);
 
 		__target_execute_cmd(cmd, true);
-		spin_lock_irq(&dev->delayed_cmd_lock);
+		spin_lock(&dev->delayed_cmd_lock);
 	}
-	spin_unlock_irq(&dev->delayed_cmd_lock);
+	spin_unlock(&dev->delayed_cmd_lock);
 }
 
 static void transport_complete_ordered_sync(struct se_cmd *cmd)
@@ -2649,9 +2606,8 @@ queue_rsp:
 		    !(cmd->se_cmd_flags & SCF_TREAT_READ_AS_NORMAL))
 			goto queue_status;
 
-		if (cmd->se_lun->lun_stats)
-			this_cpu_add(cmd->se_lun->lun_stats->tx_data_octets,
-				     cmd->data_length);
+		atomic_long_add(cmd->data_length,
+				&cmd->se_lun->lun_stats.tx_data_octets);
 		/*
 		 * Perform READ_STRIP of PI using software emulation when
 		 * backend had PI enabled, if the transport will not be
@@ -2674,16 +2630,14 @@ queue_rsp:
 			goto queue_full;
 		break;
 	case DMA_TO_DEVICE:
-		if (cmd->se_lun->lun_stats)
-			this_cpu_add(cmd->se_lun->lun_stats->rx_data_octets,
-				     cmd->data_length);
+		atomic_long_add(cmd->data_length,
+				&cmd->se_lun->lun_stats.rx_data_octets);
 		/*
 		 * Check if we need to send READ payload for BIDI-COMMAND
 		 */
 		if (cmd->se_cmd_flags & SCF_BIDI) {
-			if (cmd->se_lun->lun_stats)
-				this_cpu_add(cmd->se_lun->lun_stats->tx_data_octets,
-					     cmd->data_length);
+			atomic_long_add(cmd->data_length,
+					&cmd->se_lun->lun_stats.tx_data_octets);
 			ret = cmd->se_tfo->queue_data_in(cmd);
 			if (ret)
 				goto queue_full;
@@ -2786,7 +2740,7 @@ void *transport_kmap_data_sg(struct se_cmd *cmd)
 		return kmap(sg_page(sg)) + sg->offset;
 
 	/* >1 page. use vmap */
-	pages = kmalloc_objs(*pages, cmd->t_data_nents);
+	pages = kmalloc_array(cmd->t_data_nents, sizeof(*pages), GFP_KERNEL);
 	if (!pages)
 		return NULL;
 
@@ -3555,8 +3509,7 @@ static void translate_sense_reason(struct se_cmd *cmd, sense_reason_t reason)
 	const struct sense_detail *sd;
 	u8 *buffer = cmd->sense_buffer;
 	int r = (__force int)reason;
-	u16 code;
-	u8 key;
+	u8 key, asc, ascq;
 	bool desc_format = target_sense_desc_format(cmd->se_dev);
 
 	if (r < ARRAY_SIZE(sense_detail_table) && sense_detail_table[r].key)
@@ -3567,19 +3520,21 @@ static void translate_sense_reason(struct se_cmd *cmd, sense_reason_t reason)
 
 	key = sd->key;
 	if (reason == TCM_CHECK_CONDITION_UNIT_ATTENTION) {
-		if (!core_scsi3_ua_for_check_condition(cmd, &key, &code)) {
+		if (!core_scsi3_ua_for_check_condition(cmd, &key, &asc,
+						       &ascq)) {
 			cmd->scsi_status = SAM_STAT_BUSY;
 			return;
 		}
 	} else {
 		WARN_ON_ONCE(sd->asc == 0);
-		code = scsi_sense_code(sd->asc, sd->ascq);
+		asc = sd->asc;
+		ascq = sd->ascq;
 	}
 
 	cmd->se_cmd_flags |= SCF_EMULATED_TASK_SENSE;
 	cmd->scsi_status = SAM_STAT_CHECK_CONDITION;
 	cmd->scsi_sense_length  = TRANSPORT_SENSE_BUFFER;
-	scsi_set_sense_buffer(desc_format, buffer, key, code);
+	scsi_build_sense_buffer(desc_format, buffer, key, asc, ascq);
 	if (sd->add_sense_info)
 		WARN_ON_ONCE(scsi_set_sense_information(buffer,
 							cmd->scsi_sense_length,

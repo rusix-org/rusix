@@ -579,7 +579,7 @@ static int wtm_init(struct snd_ice1712 *ice)
 	ice->force_rdma1 = 1;
 
 	/*init mutex for dac mute conflict*/
-	spec = kzalloc_obj(*spec);
+	spec = kzalloc(sizeof(*spec), GFP_KERNEL);
 	if (!spec)
 		return -ENOMEM;
 	ice->spec = spec;

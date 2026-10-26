@@ -136,8 +136,6 @@ struct vfe_subdev_resources {
 	u8 line_num;
 	bool has_pd;
 	char *pd_name;
-	bool has_vbif;
-	char *vbif_name;
 	const struct vfe_hw_ops *hw_ops;
 	const struct camss_formats *formats_rdi;
 	const struct camss_formats *formats_pix;
@@ -147,7 +145,6 @@ struct vfe_device {
 	struct camss *camss;
 	u8 id;
 	void __iomem *base;
-	void __iomem *vbif_base;
 	u32 irq;
 	char irq_name[30];
 	struct camss_clock *clock;

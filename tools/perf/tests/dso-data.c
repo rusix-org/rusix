@@ -58,7 +58,7 @@ struct test_data_offset {
 	int size;
 };
 
-static struct test_data_offset offsets[] = {
+struct test_data_offset offsets[] = {
 	/* Fill first cache page. */
 	{
 		.offset = 10,

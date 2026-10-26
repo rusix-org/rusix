@@ -96,8 +96,7 @@ static int ioctl_internal_command(struct scsi_device *sdev, char *cmd,
 					    "ioctl_internal_command: "
 					    "ILLEGAL REQUEST "
 					    "asc=0x%x ascq=0x%x\n",
-					    scsi_sense_asc(&sshdr),
-					    scsi_sense_ascq(&sshdr));
+					    sshdr.asc, sshdr.ascq);
 			break;
 		case NOT_READY:	/* This happens if there is no disc in drive */
 			if (sdev->removable)
@@ -177,13 +176,10 @@ static int scsi_ioctl_get_pci(struct scsi_device *sdev, void __user *arg)
 
 	name = dev_name(dev);
 
-	/*
-	 * Compatibility with old ioctl which only returned 20 characters.
-	 */
-	if (copy_to_user(arg, name, strnlen(name, 20)))
-		return -EFAULT;
-
-	return 0;
+	/* compatibility with old ioctl which only returned
+	 * 20 characters */
+        return copy_to_user(arg, name, min(strlen(name), (size_t)20))
+		? -EFAULT: 0;
 }
 
 static int sg_get_version(int __user *p)

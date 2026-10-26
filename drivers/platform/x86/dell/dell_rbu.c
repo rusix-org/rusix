@@ -112,7 +112,7 @@ static int create_packet(void *data, size_t length) __must_hold(&rbu_data.lock)
 
 	spin_unlock(&rbu_data.lock);
 
-	newpacket = kzalloc_obj(struct packet_data);
+	newpacket = kzalloc(sizeof (struct packet_data), GFP_KERNEL);
 
 	if (!newpacket) {
 		pr_warn("failed to allocate new packet\n");
@@ -562,9 +562,9 @@ static ssize_t image_type_write(struct file *filp, struct kobject *kobj,
 		buffer[count] = '\0';
 
 	if (strstr(buffer, "mono"))
-		strscpy(image_type, "mono");
+		strcpy(image_type, "mono");
 	else if (strstr(buffer, "packet"))
-		strscpy(image_type, "packet");
+		strcpy(image_type, "packet");
 	else if (strstr(buffer, "init")) {
 		/*
 		 * If due to the user error the driver gets in a bad

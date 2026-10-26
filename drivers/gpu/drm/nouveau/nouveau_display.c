@@ -30,7 +30,6 @@
 #include <drm/drm_atomic_helper.h>
 #include <drm/drm_client_event.h>
 #include <drm/drm_crtc_helper.h>
-#include <drm/drm_dumb_buffers.h>
 #include <drm/drm_fourcc.h>
 #include <drm/drm_gem_framebuffer_helper.h>
 #include <drm/drm_probe_helper.h>
@@ -316,7 +315,7 @@ nouveau_framebuffer_new(struct drm_device *dev,
 		}
 	}
 
-	if (!(fb = *pfb = kzalloc_obj(*fb)))
+	if (!(fb = *pfb = kzalloc(sizeof(*fb), GFP_KERNEL)))
 		return -ENOMEM;
 
 	drm_helper_mode_fill_fb_struct(dev, fb, info, mode_cmd);
@@ -646,7 +645,7 @@ nouveau_display_create(struct drm_device *dev)
 	struct nouveau_display *disp;
 	int ret;
 
-	disp = drm->display = kzalloc_obj(*disp);
+	disp = drm->display = kzalloc(sizeof(*disp), GFP_KERNEL);
 	if (!disp)
 		return -ENOMEM;
 
@@ -808,9 +807,9 @@ nouveau_display_dumb_create(struct drm_file *file_priv, struct drm_device *dev,
 	uint32_t domain;
 	int ret;
 
-	ret = drm_mode_size_dumb(dev, args, SZ_256, 0);
-	if (ret)
-		return ret;
+	args->pitch = roundup(args->width * (args->bpp / 8), 256);
+	args->size = args->pitch * args->height;
+	args->size = roundup(args->size, PAGE_SIZE);
 
 	/* Use VRAM if there is any ; otherwise fallback to system memory */
 	if (nouveau_drm(dev)->client.device.info.ram_size != 0)

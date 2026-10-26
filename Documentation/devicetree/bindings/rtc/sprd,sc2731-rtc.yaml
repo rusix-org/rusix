@@ -13,12 +13,7 @@ maintainers:
 
 properties:
   compatible:
-    oneOf:
-      - items:
-          - enum:
-              - sprd,sc2730-rtc
-          - const: sprd,sc2731-rtc
-      - const: sprd,sc2731-rtc
+    const: sprd,sc2731-rtc
 
   reg:
     maxItems: 1

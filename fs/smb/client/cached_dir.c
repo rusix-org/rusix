@@ -177,7 +177,7 @@ replay_again:
 	server = cifs_pick_channel(ses);
 
 	if (!server->ops->new_lease_key)
-		return smb_EIO(smb_eio_trace_no_lease_key);
+		return -EIO;
 
 	utf16_path = cifs_convert_path_to_utf16(path, cifs_sb);
 	if (!utf16_path)
@@ -576,7 +576,7 @@ void close_all_cached_dirs(struct cifs_sb_info *cifs_sb)
 			continue;
 		spin_lock(&cfids->cfid_list_lock);
 		list_for_each_entry(cfid, &cfids->entries, entry) {
-			tmp_list = kmalloc_obj(*tmp_list, GFP_ATOMIC);
+			tmp_list = kmalloc(sizeof(*tmp_list), GFP_ATOMIC);
 			if (tmp_list == NULL) {
 				/*
 				 * If the malloc() fails, we won't drop all
@@ -613,7 +613,7 @@ done:
  * Invalidate all cached dirs when a TCON has been reset
  * due to a session loss.
  */
-void invalidate_all_cached_dirs(struct cifs_tcon *tcon, bool sync)
+void invalidate_all_cached_dirs(struct cifs_tcon *tcon)
 {
 	struct cached_fids *cfids = tcon->cfids;
 	struct cached_fid *cfid, *q;
@@ -645,8 +645,7 @@ void invalidate_all_cached_dirs(struct cifs_tcon *tcon, bool sync)
 
 	/* run laundromat unconditionally now as there might have been previously queued work */
 	mod_delayed_work(cfid_put_wq, &cfids->laundromat_work, 0);
-	if (sync)
-		flush_delayed_work(&cfids->laundromat_work);
+	flush_delayed_work(&cfids->laundromat_work);
 }
 
 static void
@@ -719,7 +718,7 @@ static struct cached_fid *init_cached_dir(const char *path)
 {
 	struct cached_fid *cfid;
 
-	cfid = kzalloc_obj(*cfid, GFP_ATOMIC);
+	cfid = kzalloc(sizeof(*cfid), GFP_ATOMIC);
 	if (!cfid)
 		return NULL;
 	cfid->path = kstrdup(path, GFP_ATOMIC);
@@ -834,7 +833,7 @@ struct cached_fids *init_cached_dirs(void)
 {
 	struct cached_fids *cfids;
 
-	cfids = kzalloc_obj(*cfids);
+	cfids = kzalloc(sizeof(*cfids), GFP_KERNEL);
 	if (!cfids)
 		return NULL;
 	spin_lock_init(&cfids->cfid_list_lock);

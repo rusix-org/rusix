@@ -245,19 +245,6 @@ setup_ns()
 	NS_LIST+=("${ns_list[@]}")
 }
 
-in_all_ns()
-{
-	local ret=0
-	local ns_list=("${NS_LIST[@]}")
-
-	for ns in "${ns_list[@]}"; do
-		ip netns exec "${ns}" "$@"
-		(( ret = ret || $? ))
-	done
-
-	return "${ret}"
-}
-
 # Create netdevsim with given id and net namespace.
 create_netdevsim() {
     local id="$1"
@@ -314,8 +301,7 @@ tc_rule_stats_get()
 	local selector=${1:-.packets}; shift
 
 	tc -j -s filter show dev $dev $dir pref $pref \
-	    | jq ".[] | select(.options.actions) |
-		  .options.actions[].stats$selector"
+	    | jq ".[1].options.actions[].stats$selector"
 }
 
 tc_rule_handle_stats_get()
@@ -454,40 +440,6 @@ log_test_xfail()
 	RET=$ksft_xfail retmsg= log_test "$@"
 }
 
-# Log test result with expected return value
-log_test_expected()
-{
-	local rc=$1
-	local expected=$2
-	local msg="$3"
-	local a
-
-	if [ "${rc}" -eq "${expected}" ]; then
-		nsuccess=$((nsuccess+1))
-		printf "    TEST: %-60s  [ OK ]\n" "${msg}"
-	else
-		ret="$ksft_fail"
-		nfail=$((nfail+1))
-		printf "    TEST: %-60s  [FAIL]\n" "${msg}"
-		if [ "$VERBOSE" = "1" ]; then
-			echo "    rc=$rc, expected $expected"
-		fi
-
-		pause_on_fail || true
-	fi
-
-	if [ "${PAUSE}" = "yes" ]; then
-		echo
-		echo "hit enter to continue, 'q' to quit"
-		read -r a
-		[ "$a" = "q" ] && exit 1
-	fi
-
-	[ "$VERBOSE" = "1" ] && echo
-
-	return 0
-}
-
 log_info()
 {
 	local msg=$1
@@ -582,8 +534,7 @@ mac_get()
 {
 	local if_name=$1
 
-	run_on "$if_name" \
-		ip -j link show dev "$if_name" | jq -r '.[]["address"]'
+	ip -j link show dev $if_name | jq -r '.[]["address"]'
 }
 
 kill_process()
@@ -738,9 +689,4 @@ cmd_jq()
 	echo $output
 	# return success only in case of non-empty output
 	[ ! -z "$output" ]
-}
-
-run_on()
-{
-	shift; "$@"
 }

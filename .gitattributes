@@ -3,3 +3,6 @@
 *.dts diff=dts
 *.dts[io] diff=dts
 *.rs diff=rust
+
+# Machine-generated verification artifacts; source and policy docs remain reviewable.
+rusix/docs/evidence/** linguist-generated=true

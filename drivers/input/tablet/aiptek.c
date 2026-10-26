@@ -16,6 +16,37 @@
  *
  *  Many thanks to Oliver Kuechemann for his support.
  *
+ *  ChangeLog:
+ *      v0.1 - Initial release
+ *      v0.2 - Hack to get around fake event 28's. (Bryan W. Headley)
+ *      v0.3 - Make URB dynamic (Bryan W. Headley, Jun-8-2002)
+ *             Released to Linux 2.4.19 and 2.5.x
+ *      v0.4 - Rewrote substantial portions of the code to deal with
+ *             corrected control sequences, timing, dynamic configuration,
+ *             support of 6000U - 12000U, procfs, and macro key support
+ *             (Jan-1-2003 - Feb-5-2003, Bryan W. Headley)
+ *      v1.0 - Added support for diagnostic messages, count of messages
+ *             received from URB - Mar-8-2003, Bryan W. Headley
+ *      v1.1 - added support for tablet resolution, changed DV and proximity
+ *             some corrections - Jun-22-2003, martin schneebacher
+ *           - Added support for the sysfs interface, deprecating the
+ *             procfs interface for 2.5.x kernel. Also added support for
+ *             Wheel command. Bryan W. Headley July-15-2003.
+ *      v1.2 - Reworked jitter timer as a kernel thread.
+ *             Bryan W. Headley November-28-2003/Jan-10-2004.
+ *      v1.3 - Repaired issue of kernel thread going nuts on single-processor
+ *             machines, introduced programmableDelay as a command line
+ *             parameter. Feb 7 2004, Bryan W. Headley.
+ *      v1.4 - Re-wire jitter so it does not require a thread. Courtesy of
+ *             Rene van Paassen. Added reporting of physical pointer device
+ *             (e.g., stylus, mouse in reports 2, 3, 4, 5. We don't know
+ *             for reports 1, 6.)
+ *             what physical device reports for reports 1, 6.) Also enabled
+ *             MOUSE and LENS tool button modes. Renamed "rubber" to "eraser".
+ *             Feb 20, 2004, Bryan W. Headley.
+ *      v1.5 - Added previousJitterable, so we don't do jitter delay when the
+ *             user is holding a button down for periods of time.
+ *
  * NOTE:
  *      This kernel driver is augmented by the "Aiptek" XFree86 input
  *      driver for your X server, as well as the Gaiptek GUI Front-end
@@ -26,7 +57,6 @@
  *      http://aiptektablet.sourceforge.net.
  */
 
-#include <linux/hid.h>
 #include <linux/jiffies.h>
 #include <linux/kernel.h>
 #include <linux/slab.h>
@@ -134,6 +164,8 @@
 
 #define USB_VENDOR_ID_AIPTEK				0x08ca
 #define USB_VENDOR_ID_KYE				0x0458
+#define USB_REQ_GET_REPORT				0x01
+#define USB_REQ_SET_REPORT				0x09
 
 	/* PointerMode codes
 	 */
@@ -829,7 +861,7 @@ aiptek_set_report(struct aiptek *aiptek,
 
 	return usb_control_msg(udev,
 			       usb_sndctrlpipe(udev, 0),
-			       HID_REQ_SET_REPORT,
+			       USB_REQ_SET_REPORT,
 			       USB_TYPE_CLASS | USB_RECIP_INTERFACE |
 			       USB_DIR_OUT, (report_type << 8) + report_id,
 			       aiptek->ifnum, buffer, size, 5000);
@@ -844,7 +876,7 @@ aiptek_get_report(struct aiptek *aiptek,
 
 	return usb_control_msg(udev,
 			       usb_rcvctrlpipe(udev, 0),
-			       HID_REQ_GET_REPORT,
+			       USB_REQ_GET_REPORT,
 			       USB_TYPE_CLASS | USB_RECIP_INTERFACE |
 			       USB_DIR_IN, (report_type << 8) + report_id,
 			       aiptek->ifnum, buffer, size, 5000);
@@ -1646,7 +1678,7 @@ aiptek_probe(struct usb_interface *intf, const struct usb_device_id *id)
 	 */
 	speeds[0] = programmableDelay;
 
-	aiptek = kzalloc_obj(*aiptek);
+	aiptek = kzalloc(sizeof(*aiptek), GFP_KERNEL);
 	inputdev = input_allocate_device();
 	if (!aiptek || !inputdev) {
 		dev_warn(&intf->dev,

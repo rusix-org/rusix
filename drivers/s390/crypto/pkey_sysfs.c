@@ -5,7 +5,8 @@
  *  Copyright IBM Corp. 2024
  */
 
-#define pr_fmt(fmt) "pkey: " fmt
+#define KMSG_COMPONENT "pkey"
+#define pr_fmt(fmt) KMSG_COMPONENT ": " fmt
 
 #include <linux/sysfs.h>
 

@@ -154,8 +154,6 @@ static struct scmi_transport_core_operations *core;
 /* There can be only 1 SCMI service in OP-TEE we connect to */
 static struct scmi_optee_agent *scmi_optee_private;
 
-static DEFINE_SCMI_TRANSPORT_SUPPLIER(scmi_optee_supplier);
-
 /* Open a session toward SCMI OP-TEE service with REE_KERNEL identity */
 static int open_session(struct scmi_optee_agent *agent, u32 *tee_session)
 {
@@ -314,14 +312,9 @@ static int invoke_process_msg_channel(struct scmi_optee_channel *channel, size_t
 	return 0;
 }
 
-static bool
-scmi_optee_chan_available(struct fwnode_handle *fwnode, int prot_id, int idx)
+static bool scmi_optee_chan_available(struct device_node *of_node, int idx)
 {
 	u32 channel_id;
-	struct device_node *of_node = to_of_node(fwnode);
-
-	if (!of_node)
-		return false;
 
 	return !of_property_read_u32_index(of_node, "linaro,optee-channel-id",
 					   idx, &channel_id);
@@ -529,16 +522,15 @@ static struct scmi_desc scmi_optee_desc = {
 };
 
 static const struct of_device_id scmi_of_match[] = {
-	{ .compatible = "linaro,scmi-optee", .data = &scmi_optee_supplier.th},
+	{ .compatible = "linaro,scmi-optee" },
 	{ /* Sentinel */ },
 };
 
 DEFINE_SCMI_TRANSPORT_DRIVER(scmi_optee, scmi_optee_driver, scmi_optee_desc,
 			     scmi_of_match, core);
 
-static int scmi_optee_service_probe(struct tee_client_device *scmi_pta)
+static int scmi_optee_service_probe(struct device *dev)
 {
-	struct device *dev = &scmi_pta->dev;
 	struct scmi_optee_agent *agent;
 	struct tee_context *tee_ctx;
 	int ret;
@@ -568,19 +560,17 @@ static int scmi_optee_service_probe(struct tee_client_device *scmi_pta)
 	if (ret)
 		goto err;
 
-	/* Ensure initialized scmi_optee_private is visible */
+	/* Ensure agent resources are all visible before scmi_optee_private is */
 	smp_mb();
 	scmi_optee_private = agent;
 
-	ret = scmi_transport_supplier_put(&scmi_optee_supplier.th, agent->dev);
-	if (ret)
-		goto err_put;
+	ret = platform_driver_register(&scmi_optee_driver);
+	if (ret) {
+		scmi_optee_private = NULL;
+		goto err;
+	}
 
 	return 0;
-
-err_put:
-	/* Ensure cleared reference is visible before resources are released */
-	smp_store_mb(scmi_optee_private, NULL);
 
 err:
 	tee_client_close_context(tee_ctx);
@@ -588,21 +578,24 @@ err:
 	return ret;
 }
 
-static void scmi_optee_service_remove(struct tee_client_device *scmi_pta)
+static int scmi_optee_service_remove(struct device *dev)
 {
 	struct scmi_optee_agent *agent = scmi_optee_private;
 
 	if (!scmi_optee_private)
-		return;
+		return -EINVAL;
+
+	platform_driver_unregister(&scmi_optee_driver);
 
 	if (!list_empty(&scmi_optee_private->channel_list))
-		return;
+		return -EBUSY;
 
 	/* Ensure cleared reference is visible before resources are released */
 	smp_store_mb(scmi_optee_private, NULL);
-	scmi_transport_supplier_put(&scmi_optee_supplier.th, agent->dev);
 
 	tee_client_close_context(agent->tee_ctx);
+
+	return 0;
 }
 
 static const struct tee_client_device_id scmi_optee_service_id[] = {
@@ -616,36 +609,24 @@ static const struct tee_client_device_id scmi_optee_service_id[] = {
 MODULE_DEVICE_TABLE(tee, scmi_optee_service_id);
 
 static struct tee_client_driver scmi_optee_service_driver = {
-	.probe = scmi_optee_service_probe,
-	.remove = scmi_optee_service_remove,
-	.id_table = scmi_optee_service_id,
-	.driver = {
+	.id_table	= scmi_optee_service_id,
+	.driver		= {
 		.name = "scmi-optee",
+		.bus = &tee_bus_type,
+		.probe = scmi_optee_service_probe,
+		.remove = scmi_optee_service_remove,
 	},
 };
 
 static int __init scmi_transport_optee_init(void)
 {
-	int ret;
-
-	ret = tee_client_driver_register(&scmi_optee_service_driver);
-	if (ret)
-		return ret;
-
-	ret = platform_driver_register(&scmi_optee_driver);
-	if (ret) {
-		tee_client_driver_unregister(&scmi_optee_service_driver);
-		return ret;
-	}
-
-	return ret;
+	return driver_register(&scmi_optee_service_driver.driver);
 }
 module_init(scmi_transport_optee_init);
 
 static void __exit scmi_transport_optee_exit(void)
 {
-	platform_driver_unregister(&scmi_optee_driver);
-	tee_client_driver_unregister(&scmi_optee_service_driver);
+	driver_unregister(&scmi_optee_service_driver.driver);
 }
 module_exit(scmi_transport_optee_exit);
 

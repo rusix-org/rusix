@@ -69,6 +69,11 @@ const struct cred *ovl_override_creds(struct super_block *sb)
 	return override_creds(ofs->creator_cred);
 }
 
+void ovl_revert_creds(const struct cred *old_cred)
+{
+	revert_creds(old_cred);
+}
+
 /*
  * Check if underlying fs supports file handles and try to determine encoding
  * type, in order to deduce maximum inode number used by fs.
@@ -116,7 +121,7 @@ bool ovl_verify_lower(struct super_block *sb)
 
 struct ovl_path *ovl_stack_alloc(unsigned int n)
 {
-	return kzalloc_objs(struct ovl_path, n);
+	return kcalloc(n, sizeof(struct ovl_path), GFP_KERNEL);
 }
 
 void ovl_stack_cpy(struct ovl_path *dst, struct ovl_path *src, unsigned int n)
@@ -146,7 +151,7 @@ struct ovl_entry *ovl_alloc_entry(unsigned int numlower)
 {
 	struct ovl_entry *oe;
 
-	oe = kzalloc_flex(*oe, __lowerstack, numlower);
+	oe = kzalloc(struct_size(oe, __lowerstack, numlower), GFP_KERNEL);
 	if (oe)
 		oe->__numlower = numlower;
 
@@ -657,7 +662,7 @@ bool ovl_path_is_whiteout(struct ovl_fs *ofs, const struct path *path)
 struct file *ovl_path_open(const struct path *path, int flags)
 {
 	struct inode *inode = d_inode(path->dentry);
-	const struct mnt_idmap *real_idmap = mnt_idmap(path->mnt);
+	struct mnt_idmap *real_idmap = mnt_idmap(path->mnt);
 	int err, acc_mode;
 
 	if (flags & ~(O_ACCMODE | O_LARGEFILE))
@@ -1017,8 +1022,8 @@ bool ovl_inuse_trylock(struct dentry *dentry)
 	bool locked = false;
 
 	spin_lock(&inode->i_lock);
-	if (!(inode_state_read(inode) & I_OVL_INUSE)) {
-		inode_state_set(inode, I_OVL_INUSE);
+	if (!(inode->i_state & I_OVL_INUSE)) {
+		inode->i_state |= I_OVL_INUSE;
 		locked = true;
 	}
 	spin_unlock(&inode->i_lock);
@@ -1032,8 +1037,8 @@ void ovl_inuse_unlock(struct dentry *dentry)
 		struct inode *inode = d_inode(dentry);
 
 		spin_lock(&inode->i_lock);
-		WARN_ON(!(inode_state_read(inode) & I_OVL_INUSE));
-		inode_state_clear(inode, I_OVL_INUSE);
+		WARN_ON(!(inode->i_state & I_OVL_INUSE));
+		inode->i_state &= ~I_OVL_INUSE;
 		spin_unlock(&inode->i_lock);
 	}
 }
@@ -1044,7 +1049,7 @@ bool ovl_is_inuse(struct dentry *dentry)
 	bool inuse;
 
 	spin_lock(&inode->i_lock);
-	inuse = (inode_state_read(inode) & I_OVL_INUSE);
+	inuse = (inode->i_state & I_OVL_INUSE);
 	spin_unlock(&inode->i_lock);
 
 	return inuse;
@@ -1095,7 +1100,7 @@ static void ovl_cleanup_index(struct dentry *dentry)
 	got_write = true;
 	inode = d_inode(upperdentry);
 	if (!S_ISDIR(inode->i_mode) && inode->i_nlink != 1) {
-		pr_warn_ratelimited("cleanup linked index (%pd2, ino=%llu, nlink=%u)\n",
+		pr_warn_ratelimited("cleanup linked index (%pd2, ino=%lu, nlink=%u)\n",
 				    upperdentry, inode->i_ino, inode->i_nlink);
 		/*
 		 * We either have a bug with persistent union nlink or a lower
@@ -1145,6 +1150,7 @@ fail:
 int ovl_nlink_start(struct dentry *dentry)
 {
 	struct inode *inode = d_inode(dentry);
+	const struct cred *old_cred;
 	int err;
 
 	if (WARN_ON(!inode))
@@ -1181,14 +1187,15 @@ int ovl_nlink_start(struct dentry *dentry)
 	if (d_is_dir(dentry) || !ovl_test_flag(OVL_INDEX, inode))
 		return 0;
 
+	old_cred = ovl_override_creds(dentry->d_sb);
 	/*
 	 * The overlay inode nlink should be incremented/decremented IFF the
 	 * upper operation succeeds, along with nlink change of upper inode.
 	 * Therefore, before link/unlink/rename, we store the union nlink
 	 * value relative to the upper inode nlink in an upper inode xattr.
 	 */
-	with_ovl_creds(dentry->d_sb)
-		err = ovl_set_nlink_upper(dentry);
+	err = ovl_set_nlink_upper(dentry);
+	ovl_revert_creds(old_cred);
 	if (err)
 		goto out_drop_write;
 
@@ -1209,11 +1216,39 @@ void ovl_nlink_end(struct dentry *dentry)
 	ovl_drop_write(dentry);
 
 	if (ovl_test_flag(OVL_INDEX, inode) && inode->i_nlink == 0) {
-		with_ovl_creds(dentry->d_sb)
-			ovl_cleanup_index(dentry);
+		const struct cred *old_cred;
+
+		old_cred = ovl_override_creds(dentry->d_sb);
+		ovl_cleanup_index(dentry);
+		ovl_revert_creds(old_cred);
 	}
 
 	ovl_inode_unlock(inode);
+}
+
+int ovl_lock_rename_workdir(struct dentry *workdir, struct dentry *work,
+			    struct dentry *upperdir, struct dentry *upper)
+{
+	struct dentry *trap;
+
+	/* Workdir should not be subdir of upperdir and vice versa */
+	trap = lock_rename(workdir, upperdir);
+	if (IS_ERR(trap))
+		goto err;
+	if (trap)
+		goto err_unlock;
+	if (work && (work->d_parent != workdir || d_unhashed(work)))
+		goto err_unlock;
+	if (upper && (upper->d_parent != upperdir || d_unhashed(upper)))
+		goto err_unlock;
+
+	return 0;
+
+err_unlock:
+	unlock_rename(workdir, upperdir);
+err:
+	pr_err("failed to lock workdir+upperdir\n");
+	return -EIO;
 }
 
 /*
@@ -1354,7 +1389,7 @@ int ovl_ensure_verity_loaded(const struct path *datapath)
 	struct inode *inode = d_inode(datapath->dentry);
 	struct file *filp;
 
-	if (IS_VERITY(inode) && fsverity_get_info(inode) == NULL) {
+	if (!fsverity_active(inode) && IS_VERITY(inode)) {
 		/*
 		 * If this inode was not yet opened, the verity info hasn't been
 		 * loaded yet, so we need to do that here to force it into memory.
@@ -1496,7 +1531,7 @@ void ovl_copyattr(struct inode *inode)
 {
 	struct path realpath;
 	struct inode *realinode;
-	const struct mnt_idmap *real_idmap;
+	struct mnt_idmap *real_idmap;
 	vfsuid_t vfsuid;
 	vfsgid_t vfsgid;
 
@@ -1515,4 +1550,15 @@ void ovl_copyattr(struct inode *inode)
 	inode_set_ctime_to_ts(inode, inode_get_ctime(realinode));
 	i_size_write(inode, i_size_read(realinode));
 	spin_unlock(&inode->i_lock);
+}
+
+int ovl_parent_lock(struct dentry *parent, struct dentry *child)
+{
+	inode_lock_nested(parent->d_inode, I_MUTEX_PARENT);
+	if (!child ||
+	    (!d_unhashed(child) && child->d_parent == parent))
+		return 0;
+
+	inode_unlock(parent->d_inode);
+	return -EINVAL;
 }

@@ -851,7 +851,7 @@ static int ns_parse_weakblocks(void)
 		}
 		if (*w == ',')
 			w += 1;
-		wb = kzalloc_obj(*wb);
+		wb = kzalloc(sizeof(*wb), GFP_KERNEL);
 		if (!wb) {
 			NS_ERR("unable to allocate memory.\n");
 			return -ENOMEM;
@@ -902,7 +902,7 @@ static int ns_parse_weakpages(void)
 		}
 		if (*w == ',')
 			w += 1;
-		wp = kzalloc_obj(*wp);
+		wp = kzalloc(sizeof(*wp), GFP_KERNEL);
 		if (!wp) {
 			NS_ERR("unable to allocate memory.\n");
 			return -ENOMEM;
@@ -953,7 +953,7 @@ static int ns_parse_gravepages(void)
 		}
 		if (*g == ',')
 			g += 1;
-		gp = kzalloc_obj(*gp);
+		gp = kzalloc(sizeof(*gp), GFP_KERNEL);
 		if (!gp) {
 			NS_ERR("unable to allocate memory.\n");
 			return -ENOMEM;
@@ -2268,7 +2268,7 @@ static int __init ns_init_module(void)
 		return -EINVAL;
 	}
 
-	ns = kzalloc_obj(struct nandsim);
+	ns = kzalloc(sizeof(struct nandsim), GFP_KERNEL);
 	if (!ns) {
 		NS_ERR("unable to allocate core structures.\n");
 		return -ENOMEM;

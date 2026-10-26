@@ -233,21 +233,14 @@ static void nft_exthdr_tcp_set_eval(const struct nft_expr *expr,
 				    struct nft_regs *regs,
 				    const struct nft_pktinfo *pkt)
 {
+	u8 buff[sizeof(struct tcphdr) + MAX_TCP_OPTION_SPACE];
 	struct nft_exthdr *priv = nft_expr_priv(expr);
 	unsigned int i, optl, tcphdr_len, offset;
-	struct tcphdr *tcph, _tcph;
+	struct tcphdr *tcph;
 	u8 *opt;
 
-	if (pkt->tprot != IPPROTO_TCP || pkt->fragoff)
-		goto err;
-
-	tcph = skb_header_pointer(pkt->skb, nft_thoff(pkt), sizeof(_tcph), &_tcph);
+	tcph = nft_tcp_header_pointer(pkt, sizeof(buff), buff, &tcphdr_len);
 	if (!tcph)
-		goto err;
-
-	tcphdr_len = __tcp_hdrlen(tcph);
-	if (tcphdr_len < sizeof(*tcph) ||
-	    tcphdr_len > sizeof(*tcph) + MAX_TCP_OPTION_SPACE)
 		goto err;
 
 	if (skb_ensure_writable(pkt->skb, nft_thoff(pkt) + tcphdr_len))
@@ -305,7 +298,7 @@ static void nft_exthdr_tcp_set_eval(const struct nft_expr *expr,
 						 old.v32, new.v32, false);
 			break;
 		default:
-			DEBUG_NET_WARN_ON_ONCE(1);
+			WARN_ON_ONCE(1);
 			break;
 		}
 
@@ -320,21 +313,14 @@ static void nft_exthdr_tcp_strip_eval(const struct nft_expr *expr,
 				      struct nft_regs *regs,
 				      const struct nft_pktinfo *pkt)
 {
+	u8 buff[sizeof(struct tcphdr) + MAX_TCP_OPTION_SPACE];
 	struct nft_exthdr *priv = nft_expr_priv(expr);
 	unsigned int i, tcphdr_len, optl;
-	struct tcphdr *tcph, _tcph;
+	struct tcphdr *tcph;
 	u8 *opt;
 
-	if (pkt->tprot != IPPROTO_TCP || pkt->fragoff)
-		goto err;
-
-	tcph = skb_header_pointer(pkt->skb, nft_thoff(pkt), sizeof(_tcph), &_tcph);
+	tcph = nft_tcp_header_pointer(pkt, sizeof(buff), buff, &tcphdr_len);
 	if (!tcph)
-		goto err;
-
-	tcphdr_len = __tcp_hdrlen(tcph);
-	if (tcphdr_len < sizeof(*tcph) ||
-	    tcphdr_len > sizeof(*tcph) + MAX_TCP_OPTION_SPACE)
 		goto err;
 
 	if (skb_ensure_writable(pkt->skb, nft_thoff(pkt) + tcphdr_len))
@@ -390,7 +376,7 @@ static void nft_exthdr_sctp_eval(const struct nft_expr *expr,
 	const struct sctp_chunkhdr *sch;
 	struct sctp_chunkhdr _sch;
 
-	if (pkt->tprot != IPPROTO_SCTP || pkt->fragoff)
+	if (pkt->tprot != IPPROTO_SCTP)
 		goto err;
 
 	do {
@@ -500,13 +486,13 @@ err:
 #endif
 
 static const struct nla_policy nft_exthdr_policy[NFTA_EXTHDR_MAX + 1] = {
-	[NFTA_EXTHDR_DREG]		= NLA_POLICY_MAX(NLA_BE32, NFT_REG32_MAX),
+	[NFTA_EXTHDR_DREG]		= { .type = NLA_U32 },
 	[NFTA_EXTHDR_TYPE]		= { .type = NLA_U8 },
 	[NFTA_EXTHDR_OFFSET]		= { .type = NLA_U32 },
 	[NFTA_EXTHDR_LEN]		= NLA_POLICY_MAX(NLA_BE32, 255),
-	[NFTA_EXTHDR_FLAGS]		= NLA_POLICY_MASK(NLA_BE32, NFT_EXTHDR_F_PRESENT),
+	[NFTA_EXTHDR_FLAGS]		= { .type = NLA_U32 },
 	[NFTA_EXTHDR_OP]		= NLA_POLICY_MAX(NLA_BE32, 255),
-	[NFTA_EXTHDR_SREG]		= NLA_POLICY_MAX(NLA_BE32, NFT_REG32_MAX),
+	[NFTA_EXTHDR_SREG]		= { .type = NLA_U32 },
 };
 
 static int nft_exthdr_init(const struct nft_ctx *ctx,
@@ -565,7 +551,7 @@ static int nft_exthdr_tcp_set_init(const struct nft_ctx *ctx,
 				   const struct nlattr * const tb[])
 {
 	struct nft_exthdr *priv = nft_expr_priv(expr);
-	u32 offset, len, flags = 0;
+	u32 offset, len, flags = 0, op = NFT_EXTHDR_OP_IPV6;
 	int err;
 
 	if (!tb[NFTA_EXTHDR_SREG] ||
@@ -595,11 +581,15 @@ static int nft_exthdr_tcp_set_init(const struct nft_ctx *ctx,
 		return -EOPNOTSUPP;
 	}
 
+	err = nft_parse_u32_check(tb[NFTA_EXTHDR_OP], U8_MAX, &op);
+	if (err < 0)
+		return err;
+
 	priv->type   = nla_get_u8(tb[NFTA_EXTHDR_TYPE]);
 	priv->offset = offset;
 	priv->len    = len;
 	priv->flags  = flags;
-	priv->op     = NFT_EXTHDR_OP_TCPOPT;
+	priv->op     = op;
 
 	return nft_parse_register_load(ctx, tb[NFTA_EXTHDR_SREG], &priv->sreg,
 				       priv->len);
@@ -809,9 +799,6 @@ nft_exthdr_select_ops(const struct nft_ctx *ctx,
 		break;
 #ifdef CONFIG_NFT_EXTHDR_DCCP
 	case NFT_EXTHDR_OP_DCCP:
-		pr_warn_once("The dccp option matching is deprecated and scheduled to be removed in 2027.\n"
-			     "Please contact the netfilter-devel mailing list or update your nftables rules.\n");
-
 		if (tb[NFTA_EXTHDR_DREG])
 			return &nft_exthdr_dccp_ops;
 		break;

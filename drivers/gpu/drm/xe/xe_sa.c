@@ -10,7 +10,7 @@
 #include <drm/drm_managed.h>
 
 #include "xe_bo.h"
-#include "xe_device_types.h"
+#include "xe_device.h"
 #include "xe_map.h"
 
 static void xe_sa_bo_manager_fini(struct drm_device *drm, void *arg)
@@ -88,12 +88,6 @@ struct xe_sa_manager *__xe_sa_bo_manager_init(struct xe_tile *tile, u32 size,
 		ret = drmm_mutex_init(&xe->drm, &sa_manager->swap_guard);
 		if (ret)
 			return ERR_PTR(ret);
-
-		if (IS_ENABLED(CONFIG_PROVE_LOCKING)) {
-			fs_reclaim_acquire(GFP_KERNEL);
-			might_lock(&sa_manager->swap_guard);
-			fs_reclaim_release(GFP_KERNEL);
-		}
 
 		shadow = xe_managed_bo_create_pin_map(xe, tile, size,
 						      XE_BO_FLAG_VRAM_IF_DGFX(tile) |
@@ -181,40 +175,6 @@ struct drm_suballoc *__xe_sa_bo_new(struct xe_sa_manager *sa_manager, u32 size, 
 	return drm_suballoc_new(&sa_manager->base, size, gfp, true, 0);
 }
 
-/**
- * xe_sa_bo_alloc() - Allocate uninitialized suballoc object.
- * @gfp: gfp flags used for memory allocation.
- *
- * Allocate memory for an uninitialized suballoc object. Intended usage is
- * allocate memory for suballoc object outside of a reclaim tainted context
- * and then be initialized at a later time in a reclaim tainted context.
- *
- * Return: a new uninitialized suballoc object, or an ERR_PTR(-ENOMEM).
- */
-struct drm_suballoc *xe_sa_bo_alloc(gfp_t gfp)
-{
-	return drm_suballoc_alloc(gfp);
-}
-
-/**
- * xe_sa_bo_init() - Initialize a suballocation.
- * @sa_manager: pointer to the sa_manager
- * @sa: The struct drm_suballoc.
- * @size: number of bytes we want to suballocate.
- *
- * Try to make a suballocation on a pre-allocated suballoc object of size @size.
- *
- * Return: zero on success, errno on failure.
- */
-int xe_sa_bo_init(struct xe_sa_manager *sa_manager, struct drm_suballoc *sa, size_t size)
-{
-	return drm_suballoc_insert(&sa_manager->base, sa, size, true, 0);
-}
-
-/**
- * xe_sa_bo_flush_write() - Copy the data from the sub-allocation to the GPU memory.
- * @sa_bo: the &drm_suballoc to flush
- */
 void xe_sa_bo_flush_write(struct drm_suballoc *sa_bo)
 {
 	struct xe_sa_manager *sa_manager = to_xe_sa_manager(sa_bo->manager);
@@ -226,23 +186,6 @@ void xe_sa_bo_flush_write(struct drm_suballoc *sa_bo)
 	xe_map_memcpy_to(xe, &sa_manager->bo->vmap, drm_suballoc_soffset(sa_bo),
 			 xe_sa_bo_cpu_addr(sa_bo),
 			 drm_suballoc_size(sa_bo));
-}
-
-/**
- * xe_sa_bo_sync_read() - Copy the data from GPU memory to the sub-allocation.
- * @sa_bo: the &drm_suballoc to sync
- */
-void xe_sa_bo_sync_read(struct drm_suballoc *sa_bo)
-{
-	struct xe_sa_manager *sa_manager = to_xe_sa_manager(sa_bo->manager);
-	struct xe_device *xe = tile_to_xe(sa_manager->bo->tile);
-
-	if (!sa_manager->bo->vmap.is_iomem)
-		return;
-
-	xe_map_memcpy_from(xe, xe_sa_bo_cpu_addr(sa_bo), &sa_manager->bo->vmap,
-			   drm_suballoc_soffset(sa_bo),
-			   drm_suballoc_size(sa_bo));
 }
 
 void xe_sa_bo_free(struct drm_suballoc *sa_bo,

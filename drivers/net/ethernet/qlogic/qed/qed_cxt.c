@@ -561,7 +561,7 @@ int qed_cxt_cfg_ilt_compute(struct qed_hwfn *p_hwfn, u32 *line_count)
 			 *      block in the ILT client. This is later used to
 			 *      configure the CDU segment offset registers and
 			 *      results in an FL command for TIDs of this
-			 *      segment behaves as regular load commands
+			 *      segement behaves as regular load commands
 			 *      (loading TIDs from the working memory).
 			 */
 			line = p_cli->pf_blks[CDUT_SEG_BLK(i)].start_line;
@@ -845,7 +845,8 @@ static int qed_cxt_src_t2_alloc(struct qed_hwfn *p_hwfn)
 	p_t2->num_pages = DIV_ROUND_UP(total_size, psz);
 
 	/* allocate t2 */
-	p_t2->dma_mem = kzalloc_objs(struct phys_mem_desc, p_t2->num_pages);
+	p_t2->dma_mem = kcalloc(p_t2->num_pages, sizeof(struct phys_mem_desc),
+				GFP_KERNEL);
 	if (!p_t2->dma_mem) {
 		DP_NOTICE(p_hwfn, "Failed to allocate t2 table\n");
 		rc = -ENOMEM;
@@ -993,7 +994,8 @@ static int qed_ilt_shadow_alloc(struct qed_hwfn *p_hwfn)
 	int rc;
 
 	size = qed_cxt_ilt_shadow_size(clients);
-	p_mngr->ilt_shadow = kzalloc_objs(struct phys_mem_desc, size);
+	p_mngr->ilt_shadow = kcalloc(size, sizeof(struct phys_mem_desc),
+				     GFP_KERNEL);
 	if (!p_mngr->ilt_shadow) {
 		rc = -ENOMEM;
 		goto ilt_shadow_fail;
@@ -1114,7 +1116,7 @@ int qed_cxt_mngr_alloc(struct qed_hwfn *p_hwfn)
 	struct qed_cxt_mngr *p_mngr;
 	u32 i;
 
-	p_mngr = kzalloc_obj(*p_mngr);
+	p_mngr = kzalloc(sizeof(*p_mngr), GFP_KERNEL);
 	if (!p_mngr)
 		return -ENOMEM;
 

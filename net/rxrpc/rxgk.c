@@ -351,7 +351,7 @@ static int rxgk_secure_packet_integrity(const struct rxrpc_call *call,
 
 	_enter("");
 
-	hdr = kzalloc_obj(*hdr, GFP_NOFS);
+	hdr = kzalloc(sizeof(*hdr), GFP_NOFS);
 	if (!hdr)
 		goto error_gk;
 
@@ -488,7 +488,7 @@ static int rxgk_verify_packet_integrity(struct rxrpc_call *call,
 		goto put_gk;
 	}
 
-	hdr = kzalloc_obj(*hdr, GFP_NOFS);
+	hdr = kzalloc(sizeof(*hdr), GFP_NOFS);
 	if (!hdr)
 		goto put_gk;
 

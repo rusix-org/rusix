@@ -90,7 +90,7 @@ static int nd_region_invalidate_memregion(struct nd_region *nd_region)
 		}
 	}
 
-	cpu_cache_invalidate_all();
+	cpu_cache_invalidate_memregion(IORES_DESC_PERSISTENT_MEMORY);
 out:
 	for (i = 0; i < nd_region->ndr_mappings; i++) {
 		struct nd_mapping *nd_mapping = &nd_region->mapping[i];
@@ -985,7 +985,8 @@ static struct nd_region *nd_region_create(struct nvdimm_bus *nvdimm_bus,
 	}
 
 	nd_region =
-		kzalloc_flex(*nd_region, mapping, ndr_desc->num_mappings);
+		kzalloc(struct_size(nd_region, mapping, ndr_desc->num_mappings),
+			GFP_KERNEL);
 
 	if (!nd_region)
 		return NULL;
@@ -1002,7 +1003,8 @@ static struct nd_region *nd_region_create(struct nvdimm_bus *nvdimm_bus,
 	nd_region->num_lanes = ndr_desc->num_lanes;
 	if (!nd_region->num_lanes)
 		goto err_percpu;
-	nd_region->lane = kzalloc_objs(*nd_region->lane, nd_region->num_lanes);
+	nd_region->lane = kcalloc(nd_region->num_lanes,
+				  sizeof(*nd_region->lane), GFP_KERNEL);
 	if (!nd_region->lane)
 		goto err_percpu;
 

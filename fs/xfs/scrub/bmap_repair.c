@@ -3,7 +3,7 @@
  * Copyright (C) 2018-2023 Oracle.  All Rights Reserved.
  * Author: Darrick J. Wong <djwong@kernel.org>
  */
-#include "xfs_platform.h"
+#include "xfs.h"
 #include "xfs_fs.h"
 #include "xfs_shared.h"
 #include "xfs_format.h"
@@ -211,7 +211,7 @@ xrep_bmap_check_fork_rmap(
 
 	/* Check the file offset range. */
 	if (!(rec->rm_flags & XFS_RMAP_BMBT_BLOCK) &&
-	    !xfs_verify_fileext(rec->rm_offset, rec->rm_blockcount))
+	    !xfs_verify_fileext(sc->mp, rec->rm_offset, rec->rm_blockcount))
 		return -EFSCORRUPTED;
 
 	/* No contradictory flags. */
@@ -252,7 +252,7 @@ xrep_bmap_walk_rmap(
 	if (xchk_should_terminate(rb->sc, &error))
 		return error;
 
-	if (rec->rm_owner != I_INO(rb->sc->ip))
+	if (rec->rm_owner != rb->sc->ip->i_ino)
 		return 0;
 
 	error = xrep_bmap_check_fork_rmap(rb, cur, rec);
@@ -359,12 +359,12 @@ xrep_bmap_scan_ag(
 	struct xfs_scrub	*sc = rb->sc;
 	int			error;
 
-	error = xrep_ag_init(sc, pag);
+	error = xrep_ag_init(sc, pag, &sc->sa);
 	if (error)
 		return error;
 
 	error = xfs_rmap_query_all(sc->sa.rmap_cur, xrep_bmap_walk_rmap, rb);
-	xchk_ag_free(sc);
+	xchk_ag_free(sc, &sc->sa);
 	return error;
 }
 
@@ -389,7 +389,7 @@ xrep_bmap_check_rtfork_rmap(
 		return -EFSCORRUPTED;
 
 	/* Check the file offsets and physical extents. */
-	if (!xfs_verify_fileext(rec->rm_offset, rec->rm_blockcount))
+	if (!xfs_verify_fileext(sc->mp, rec->rm_offset, rec->rm_blockcount))
 		return -EFSCORRUPTED;
 
 	/* Check that this is within the rtgroup. */
@@ -416,7 +416,7 @@ xrep_bmap_walk_rtrmap(
 		return error;
 
 	/* Skip extents which are not owned by this inode and fork. */
-	if (rec->rm_owner != I_INO(rb->sc->ip))
+	if (rec->rm_owner != rb->sc->ip->i_ino)
 		return 0;
 
 	error = xrep_bmap_check_rtfork_rmap(rb->sc, cur, rec);
@@ -456,15 +456,16 @@ xrep_bmap_scan_rtgroup(
 	if (!xfs_has_rtrmapbt(sc->mp))
 		return 0;
 
-	error = xrep_rtgroup_init(sc, rtg, XFS_RTGLOCK_RMAP |
-					   XFS_RTGLOCK_REFCOUNT |
-					   XFS_RTGLOCK_BITMAP_SHARED);
+	error = xrep_rtgroup_init(sc, rtg, &sc->sr,
+			XFS_RTGLOCK_RMAP |
+			XFS_RTGLOCK_REFCOUNT |
+			XFS_RTGLOCK_BITMAP_SHARED);
 	if (error)
 		return error;
 
 	error = xfs_rmap_query_all(sc->sr.rmap_cur, xrep_bmap_walk_rtrmap, rb);
-	xchk_rtgroup_btcur_free(sc);
-	xchk_rtgroup_free(sc);
+	xchk_rtgroup_btcur_free(&sc->sr);
+	xchk_rtgroup_free(sc, &sc->sr);
 	return error;
 }
 #else
@@ -759,7 +760,7 @@ xrep_bmap_build_new_fork(
 	 * Prepare to construct the new fork by initializing the new btree
 	 * structure and creating a fake ifork in the ifakeroot structure.
 	 */
-	xfs_rmap_inode_bmbt_owner(&oinfo, sc->ip, rb->whichfork);
+	xfs_rmap_ino_bmbt_owner(&oinfo, sc->ip->i_ino, rb->whichfork);
 	error = xrep_newbt_init_inode(&rb->new_bmapbt, sc, rb->whichfork,
 			&oinfo);
 	if (error)
@@ -832,7 +833,7 @@ xrep_bmap_remove_old_tree(
 	struct xfs_owner_info	oinfo;
 
 	/* Free the old bmbt blocks if they're not in use. */
-	xfs_rmap_inode_bmbt_owner(&oinfo, sc->ip, rb->whichfork);
+	xfs_rmap_ino_bmbt_owner(&oinfo, sc->ip->i_ino, rb->whichfork);
 	return xrep_reap_fsblocks(sc, &rb->old_bmbt_blocks, &oinfo);
 }
 
@@ -932,7 +933,7 @@ xrep_bmap(
 	if (error)
 		return error;
 
-	rb = kzalloc_obj(struct xrep_bmap, XCHK_GFP_FLAGS);
+	rb = kzalloc(sizeof(struct xrep_bmap), XCHK_GFP_FLAGS);
 	if (!rb)
 		return -ENOMEM;
 	rb->sc = sc;

@@ -101,7 +101,7 @@ required:
 unevaluatedProperties: false
 
 allOf:
-  - $ref: nand-controller-legacy.yaml
+  - $ref: nand-controller.yaml
 
   - if:
       properties:

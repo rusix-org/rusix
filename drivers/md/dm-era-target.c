@@ -808,7 +808,7 @@ static struct era_metadata *metadata_open(struct block_device *bdev,
 					  bool may_format)
 {
 	int r;
-	struct era_metadata *md = kzalloc_obj(*md);
+	struct era_metadata *md = kzalloc(sizeof(*md), GFP_KERNEL);
 
 	if (!md) {
 		DMERR("could not allocate metadata struct");
@@ -1481,7 +1481,7 @@ static int era_ctr(struct dm_target *ti, unsigned int argc, char **argv)
 		return -EINVAL;
 	}
 
-	era = kzalloc_obj(*era);
+	era = kzalloc(sizeof(*era), GFP_KERNEL);
 	if (!era) {
 		ti->error = "Error allocating era structure";
 		return -ENOMEM;
@@ -1494,7 +1494,7 @@ static int era_ctr(struct dm_target *ti, unsigned int argc, char **argv)
 	if (r) {
 		ti->error = "Error opening metadata device";
 		era_destroy(era);
-		return r;
+		return -EINVAL;
 	}
 
 	r = dm_get_device(ti, argv[1], BLK_OPEN_READ | BLK_OPEN_WRITE,
@@ -1502,7 +1502,7 @@ static int era_ctr(struct dm_target *ti, unsigned int argc, char **argv)
 	if (r) {
 		ti->error = "Error opening data device";
 		era_destroy(era);
-		return r;
+		return -EINVAL;
 	}
 
 	r = sscanf(argv[2], "%u%c", &era->sectors_per_block, &dummy);
@@ -1516,7 +1516,7 @@ static int era_ctr(struct dm_target *ti, unsigned int argc, char **argv)
 	if (r) {
 		ti->error = "could not set max io len";
 		era_destroy(era);
-		return r;
+		return -EINVAL;
 	}
 
 	if (!valid_block_size(era->sectors_per_block)) {

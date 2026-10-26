@@ -63,6 +63,8 @@ static void free_sdei_stacks(void)
 {
 	int cpu;
 
+	BUILD_BUG_ON(!IS_ENABLED(CONFIG_VMAP_STACK));
+
 	for_each_possible_cpu(cpu) {
 		_free_sdei_stack(&sdei_stack_normal_ptr, cpu);
 		_free_sdei_stack(&sdei_stack_critical_ptr, cpu);
@@ -85,6 +87,8 @@ static int init_sdei_stacks(void)
 {
 	int cpu;
 	int err = 0;
+
+	BUILD_BUG_ON(!IS_ENABLED(CONFIG_VMAP_STACK));
 
 	for_each_possible_cpu(cpu) {
 		err = _init_sdei_stack(&sdei_stack_normal_ptr, cpu);
@@ -198,7 +202,7 @@ out_err:
 /*
  * do_sdei_event() returns one of:
  *  SDEI_EV_HANDLED -  success, return to the interrupted context.
- *  SDEI_EV_FAILED  -  failure, return this error code to firmware.
+ *  SDEI_EV_FAILED  -  failure, return this error code to firmare.
  *  virtual-address -  success, return to this address.
  */
 unsigned long __kprobes do_sdei_event(struct pt_regs *regs,

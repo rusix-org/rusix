@@ -28,7 +28,6 @@
 #include <linux/usb/otg.h>
 #include <linux/usb/quirks.h>
 #include <linux/workqueue.h>
-#include <linux/minmax.h>
 #include <linux/mutex.h>
 #include <linux/random.h>
 #include <linux/pm_qos.h>
@@ -41,7 +40,6 @@
 #include "hub.h"
 #include "phy.h"
 #include "otg_productlist.h"
-#include "trace.h"
 
 #define USB_VENDOR_GENESYS_LOGIC		0x05e3
 #define USB_VENDOR_SMSC				0x0424
@@ -282,7 +280,10 @@ static void usb_set_lpm_pel(struct usb_device *udev,
 	 * device and the parent hub into U0.  The exit latency is the bigger of
 	 * the device exit latency or the hub exit latency.
 	 */
-	first_link_pel = max(udev_exit_latency, hub_exit_latency) * 1000;
+	if (udev_exit_latency > hub_exit_latency)
+		first_link_pel = udev_exit_latency * 1000;
+	else
+		first_link_pel = hub_exit_latency * 1000;
 
 	/*
 	 * When the hub starts to receive the LFPS, there is a slight delay for
@@ -296,7 +297,10 @@ static void usb_set_lpm_pel(struct usb_device *udev,
 	 * According to figure C-7 in the USB 3.0 spec, the PEL for this device
 	 * is the greater of the two exit latencies.
 	 */
-	udev_lpm_params->pel = max(first_link_pel, hub_pel);
+	if (first_link_pel > hub_pel)
+		udev_lpm_params->pel = first_link_pel;
+	else
+		udev_lpm_params->pel = hub_pel;
 }
 
 /*
@@ -626,11 +630,11 @@ static int hub_ext_port_status(struct usb_hub *hub, int port1, int type,
 	mutex_lock(&hub->status_mutex);
 	ret = get_port_status(hub->hdev, port1, &hub->status->port, type, len);
 	if (ret < len) {
+		if (ret != -ENODEV)
+			dev_err(hub->intfdev,
+				"%s failed (err = %d)\n", __func__, ret);
 		if (ret >= 0)
 			ret = -EIO;
-		if (ret != -ENODEV)
-			dev_dbg(hub->intfdev,
-				"get_port_status failed: err = %d\n", ret);
 	} else {
 		*status = le16_to_cpu(hub->status->port.wPortStatus);
 		*change = le16_to_cpu(hub->status->port.wPortChange);
@@ -935,7 +939,7 @@ int usb_hub_clear_tt_buffer(struct urb *urb)
 	 * since each TT has "at least two" buffers that can need it (and
 	 * there can be many TTs per hub).  even if they're uncommon.
 	 */
-	clear = kmalloc_obj(*clear, GFP_ATOMIC);
+	clear = kmalloc(sizeof *clear, GFP_ATOMIC);
 	if (clear == NULL) {
 		dev_err(&udev->dev, "can't save CLEAR_TT_BUFFER state\n");
 		/* FIXME recover somehow ... RESET_TT? */
@@ -998,11 +1002,11 @@ static int hub_hub_status(struct usb_hub *hub,
 	mutex_lock(&hub->status_mutex);
 	ret = get_hub_status(hub->hdev, &hub->status->hub);
 	if (ret < (int)sizeof(hub->status->hub)) {
+		if (ret != -ENODEV)
+			dev_err(hub->intfdev,
+				"%s failed (err = %d)\n", __func__, ret);
 		if (ret >= 0)
 			ret = -EIO;
-		if (ret != -ENODEV)
-			dev_dbg(hub->intfdev,
-				"get_hub_status failed: err = %d\n", ret);
 	} else {
 		*status = le16_to_cpu(hub->status->hub.wHubStatus);
 		*change = le16_to_cpu(hub->status->hub.wHubChange);
@@ -1471,20 +1475,20 @@ static int hub_configure(struct usb_hub *hub,
 	unsigned full_load;
 	unsigned maxchild;
 
-	hub->buffer = kmalloc_obj(*hub->buffer);
+	hub->buffer = kmalloc(sizeof(*hub->buffer), GFP_KERNEL);
 	if (!hub->buffer) {
 		ret = -ENOMEM;
 		goto fail;
 	}
 
-	hub->status = kmalloc_obj(*hub->status);
+	hub->status = kmalloc(sizeof(*hub->status), GFP_KERNEL);
 	if (!hub->status) {
 		ret = -ENOMEM;
 		goto fail;
 	}
 	mutex_init(&hub->status_mutex);
 
-	hub->descriptor = kzalloc_obj(*hub->descriptor);
+	hub->descriptor = kzalloc(sizeof(*hub->descriptor), GFP_KERNEL);
 	if (!hub->descriptor) {
 		ret = -ENOMEM;
 		goto fail;
@@ -1532,7 +1536,7 @@ static int hub_configure(struct usb_hub *hub,
 	dev_info(hub_dev, "%d port%s detected\n", maxchild,
 			str_plural(maxchild));
 
-	hub->ports = kzalloc_objs(struct usb_port *, maxchild);
+	hub->ports = kcalloc(maxchild, sizeof(struct usb_port *), GFP_KERNEL);
 	if (!hub->ports) {
 		ret = -ENOMEM;
 		goto fail;
@@ -1968,7 +1972,7 @@ static int hub_probe(struct usb_interface *intf, const struct usb_device_id *id)
 	/* We found a hub */
 	dev_info(&intf->dev, "USB hub found\n");
 
-	hub = kzalloc_obj(*hub);
+	hub = kzalloc(sizeof(*hub), GFP_KERNEL);
 	if (!hub)
 		return -ENOMEM;
 
@@ -2153,21 +2157,6 @@ static void update_port_device_state(struct usb_device *udev)
 	}
 }
 
-static void update_usb_device_state(struct usb_device *udev,
-				    enum usb_device_state new_state)
-{
-	if (udev->state == USB_STATE_SUSPENDED &&
-	    new_state != USB_STATE_SUSPENDED)
-		udev->active_duration -= jiffies;
-	else if (new_state == USB_STATE_SUSPENDED &&
-		 udev->state != USB_STATE_SUSPENDED)
-		udev->active_duration += jiffies;
-
-	udev->state = new_state;
-	update_port_device_state(udev);
-	trace_usb_set_device_state(udev);
-}
-
 static void recursively_mark_NOTATTACHED(struct usb_device *udev)
 {
 	struct usb_hub *hub = usb_hub_to_struct_hub(udev);
@@ -2177,7 +2166,10 @@ static void recursively_mark_NOTATTACHED(struct usb_device *udev)
 		if (hub->ports[i]->child)
 			recursively_mark_NOTATTACHED(hub->ports[i]->child);
 	}
-	update_usb_device_state(udev, USB_STATE_NOTATTACHED);
+	if (udev->state == USB_STATE_SUSPENDED)
+		udev->active_duration -= jiffies;
+	udev->state = USB_STATE_NOTATTACHED;
+	update_port_device_state(udev);
 }
 
 /**
@@ -2227,7 +2219,14 @@ void usb_set_device_state(struct usb_device *udev,
 			else
 				wakeup = 0;
 		}
-		update_usb_device_state(udev, new_state);
+		if (udev->state == USB_STATE_SUSPENDED &&
+			new_state != USB_STATE_SUSPENDED)
+			udev->active_duration -= jiffies;
+		else if (new_state == USB_STATE_SUSPENDED &&
+				udev->state != USB_STATE_SUSPENDED)
+			udev->active_duration += jiffies;
+		udev->state = new_state;
+		update_port_device_state(udev);
 	} else
 		recursively_mark_NOTATTACHED(udev);
 	spin_unlock_irqrestore(&device_state_lock, flags);
@@ -2411,19 +2410,15 @@ static void show_string(struct usb_device *udev, char *id, char *string)
 	dev_info(&udev->dev, "%s: %s\n", id, string);
 }
 
-static void announce_device_ids(struct usb_device *udev)
+static void announce_device(struct usb_device *udev)
 {
 	u16 bcdDevice = le16_to_cpu(udev->descriptor.bcdDevice);
 
 	dev_info(&udev->dev,
-		"New USB device found: idVendor=%04x, idProduct=%04x, bcdDevice=%x.%02x\n",
+		"New USB device found, idVendor=%04x, idProduct=%04x, bcdDevice=%2x.%02x\n",
 		le16_to_cpu(udev->descriptor.idVendor),
 		le16_to_cpu(udev->descriptor.idProduct),
 		bcdDevice >> 8, bcdDevice & 0xff);
-}
-
-static void announce_device_strings(struct usb_device *udev)
-{
 	dev_info(&udev->dev,
 		"New USB device strings: Mfr=%d, Product=%d, SerialNumber=%d\n",
 		udev->descriptor.iManufacturer,
@@ -2434,8 +2429,7 @@ static void announce_device_strings(struct usb_device *udev)
 	show_string(udev, "SerialNumber", udev->serial);
 }
 #else
-static inline void announce_device_ids(struct usb_device *udev) { }
-static inline void announce_device_strings(struct usb_device *udev) { }
+static inline void announce_device(struct usb_device *udev) { }
 #endif
 
 
@@ -2666,9 +2660,6 @@ int usb_new_device(struct usb_device *udev)
 		device_init_wakeup(&udev->dev, 0);
 	}
 
-	/* Announce the device identity */
-	announce_device_ids(udev);
-
 	/* Tell the runtime-PM framework the device is active */
 	pm_runtime_set_active(&udev->dev);
 	pm_runtime_get_noresume(&udev->dev);
@@ -2690,8 +2681,8 @@ int usb_new_device(struct usb_device *udev)
 	udev->dev.devt = MKDEV(USB_DEVICE_MAJOR,
 			(((udev->bus->busnum-1) * 128) + (udev->devnum-1)));
 
-	/* Announce the device's product, manufacturer and serial number */
-	announce_device_strings(udev);
+	/* Tell the world! */
+	announce_device(udev);
 
 	if (udev->serial)
 		add_device_randomness(udev->serial, strlen(udev->serial));
@@ -3166,7 +3157,7 @@ static int hub_port_reset(struct usb_hub *hub, int port1,
 		delay = HUB_LONG_RESET_TIME;
 	}
 
-	dev_err_ratelimited(&port_dev->dev, "Cannot enable. Maybe the USB cable is bad?\n");
+	dev_err(&port_dev->dev, "Cannot enable. Maybe the USB cable is bad?\n");
 
 done:
 	if (status == 0) {
@@ -4160,7 +4151,7 @@ static int usb_req_set_sel(struct usb_device *udev)
 	 * which may be initiated by an error path of a mass storage driver.
 	 * Therefore, use GFP_NOIO.
 	 */
-	sel_values = kmalloc_obj(*(sel_values), GFP_NOIO);
+	sel_values = kmalloc(sizeof *(sel_values), GFP_NOIO);
 	if (!sel_values)
 		return -ENOMEM;
 
@@ -5254,7 +5245,7 @@ check_highspeed(struct usb_hub *hub, struct usb_device *udev, int port1)
 	if (udev->quirks & USB_QUIRK_DEVICE_QUALIFIER)
 		return;
 
-	qual = kmalloc_obj(*qual);
+	qual = kmalloc(sizeof *qual, GFP_KERNEL);
 	if (qual == NULL)
 		return;
 
@@ -6096,7 +6087,7 @@ int usb_hub_init(void)
 	 * device was gone before the EHCI controller had handed its port
 	 * over to the companion full-speed controller.
 	 */
-	hub_wq = alloc_workqueue("usb_hub_wq", WQ_FREEZABLE | WQ_PERCPU, 0);
+	hub_wq = alloc_workqueue("usb_hub_wq", WQ_FREEZABLE, 0);
 	if (hub_wq)
 		return 0;
 

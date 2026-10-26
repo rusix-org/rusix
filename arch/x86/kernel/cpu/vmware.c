@@ -29,11 +29,9 @@
 #include <linux/efi.h>
 #include <linux/reboot.h>
 #include <linux/static_call.h>
-#include <linux/sched/cputime.h>
 #include <asm/div64.h>
 #include <asm/x86_init.h>
 #include <asm/hypervisor.h>
-#include <asm/cpuid/api.h>
 #include <asm/timer.h>
 #include <asm/apic.h>
 #include <asm/vmware.h>
@@ -328,9 +326,9 @@ static int vmware_cpu_down_prepare(unsigned int cpu)
 static __init int activate_jump_labels(void)
 {
 	if (has_steal_clock) {
-		static_branch_inc(&paravirt_steal_enabled);
+		static_key_slow_inc(&paravirt_steal_enabled);
 		if (steal_acc)
-			static_branch_inc(&paravirt_steal_rq_enabled);
+			static_key_slow_inc(&paravirt_steal_rq_enabled);
 	}
 
 	return 0;
@@ -340,7 +338,7 @@ arch_initcall(activate_jump_labels);
 static void __init vmware_paravirt_ops_setup(void)
 {
 	pv_info.name = "VMware hypervisor";
-	pv_info.io_delay = false;
+	pv_ops.cpu.io_delay = paravirt_nop;
 
 	if (vmware_tsc_khz == 0)
 		return;

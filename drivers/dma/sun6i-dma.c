@@ -680,7 +680,7 @@ static struct dma_async_tx_descriptor *sun6i_dma_prep_dma_memcpy(
 	if (!len)
 		return NULL;
 
-	txd = kzalloc_obj(*txd, GFP_NOWAIT);
+	txd = kzalloc(sizeof(*txd), GFP_NOWAIT);
 	if (!txd)
 		return NULL;
 
@@ -738,7 +738,7 @@ static struct dma_async_tx_descriptor *sun6i_dma_prep_slave_sg(
 		return NULL;
 	}
 
-	txd = kzalloc_obj(*txd, GFP_NOWAIT);
+	txd = kzalloc(sizeof(*txd), GFP_NOWAIT);
 	if (!txd)
 		return NULL;
 
@@ -821,7 +821,7 @@ static struct dma_async_tx_descriptor *sun6i_dma_prep_dma_cyclic(
 		return NULL;
 	}
 
-	txd = kzalloc_obj(*txd, GFP_NOWAIT);
+	txd = kzalloc(sizeof(*txd), GFP_NOWAIT);
 	if (!txd)
 		return NULL;
 
@@ -842,11 +842,6 @@ static struct dma_async_tx_descriptor *sun6i_dma_prep_dma_cyclic(
 			v_lli->cfg = lli_cfg;
 			sdev->cfg->set_drq(&v_lli->cfg, DRQ_SDRAM, vchan->port);
 			sdev->cfg->set_mode(&v_lli->cfg, LINEAR_MODE, IO_MODE);
-			dev_dbg(chan2dev(chan),
-				"%s; chan: %d, dest: %pad, src: %pad, len: %zu. flags: 0x%08lx\n",
-				__func__, vchan->vc.chan.chan_id,
-				&sconfig->dst_addr, &buf_addr,
-				buf_len, flags);
 		} else {
 			sun6i_dma_set_addr(sdev, v_lli,
 					   sconfig->src_addr,
@@ -854,11 +849,6 @@ static struct dma_async_tx_descriptor *sun6i_dma_prep_dma_cyclic(
 			v_lli->cfg = lli_cfg;
 			sdev->cfg->set_drq(&v_lli->cfg, vchan->port, DRQ_SDRAM);
 			sdev->cfg->set_mode(&v_lli->cfg, IO_MODE, LINEAR_MODE);
-			dev_dbg(chan2dev(chan),
-				"%s; chan: %d, dest: %pad, src: %pad, len: %zu. flags: 0x%08lx\n",
-				__func__, vchan->vc.chan.chan_id,
-				&buf_addr, &sconfig->src_addr,
-				buf_len, flags);
 		}
 
 		prev = sun6i_dma_lli_add(prev, v_lli, p_lli, txd);

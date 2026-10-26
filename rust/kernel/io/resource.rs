@@ -5,16 +5,12 @@
 //!
 //! C header: [`include/linux/ioport.h`](srctree/include/linux/ioport.h)
 
-use core::{
-    ops::Deref,
-    ptr::NonNull, //
-};
+use core::ops::Deref;
+use core::ptr::NonNull;
 
-use crate::{
-    prelude::*,
-    str::CString,
-    types::Opaque, //
-};
+use crate::prelude::*;
+use crate::str::{CStr, CString};
+use crate::types::Opaque;
 
 pub use super::{
     PhysAddr,
@@ -58,7 +54,7 @@ impl Drop for Region {
         };
 
         // SAFETY: Safe as per the invariant of `Region`.
-        unsafe { release_fn(start, size.into_raw()) };
+        unsafe { release_fn(start, size) };
     }
 }
 
@@ -114,7 +110,7 @@ impl Resource {
             bindings::__request_region(
                 self.0.get(),
                 start,
-                size.into_raw(),
+                size,
                 name.as_char_ptr(),
                 flags.0 as c_int,
             )
@@ -130,7 +126,7 @@ impl Resource {
     pub fn size(&self) -> ResourceSize {
         let inner = self.0.get();
         // SAFETY: Safe as per the invariants of `Resource`.
-        ResourceSize::from_raw(unsafe { bindings::resource_size(inner) })
+        unsafe { bindings::resource_size(inner) }
     }
 
     /// Returns the start address of the resource.
@@ -226,18 +222,10 @@ impl Flags {
     /// Resource represents a memory region that must be ioremaped using `ioremap_np`.
     pub const IORESOURCE_MEM_NONPOSTED: Flags = Flags::new(bindings::IORESOURCE_MEM_NONPOSTED);
 
-    /// Memory region uses a 64-bit address (consumes two consecutive PCI resource slots).
-    pub const IORESOURCE_MEM_64: Flags = Flags::new(bindings::IORESOURCE_MEM_64);
-
     // Always inline to optimize out error path of `build_assert`.
     #[inline(always)]
     const fn new(value: u32) -> Self {
-        build_assert!(value as u64 <= c_ulong::MAX as u64);
+        crate::build_assert!(value as u64 <= c_ulong::MAX as u64);
         Flags(value as c_ulong)
-    }
-
-    /// Wrap a raw `c_ulong` value returned by a C API into [`Flags`].
-    pub(crate) const fn from_raw(value: c_ulong) -> Self {
-        Flags(value)
     }
 }

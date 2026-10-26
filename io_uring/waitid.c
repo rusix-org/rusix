@@ -10,7 +10,6 @@
 #include <linux/io_uring.h>
 
 #include <uapi/linux/io_uring.h>
-#include <uapi/linux/wait.h>
 
 #include "io_uring.h"
 #include "cancel.h"
@@ -155,12 +154,9 @@ static bool __io_waitid_cancel(struct io_kiocb *req, bool copy_si)
 
 	/*
 	 * Mark us canceled regardless of ownership. This will prevent a
-	 * potential retry from a spurious wakeup. Only the first cancel
-	 * attempt should take a reference for the ownership handoff.
+	 * potential retry from a spurious wakeup.
 	 */
-	if (atomic_fetch_or(IO_WAITID_CANCEL_FLAG, &iw->refs) &
-	    IO_WAITID_CANCEL_FLAG)
-		return false;
+	atomic_or(IO_WAITID_CANCEL_FLAG, &iw->refs);
 
 	/* claim ownership */
 	if (atomic_fetch_inc(&iw->refs) & IO_WAITID_REF_MASK)
@@ -269,17 +265,11 @@ static int io_waitid_wait(struct wait_queue_entry *wait, unsigned mode,
 		return 0;
 
 	list_del_init(&wait->entry);
+	smp_store_release(&iw->head, NULL);
 
-	/*
-	 * Cancel or issue is in progress. Leave ->head alone, so that whoever
-	 * owns the request has to take the wait queue lock, which we hold,
-	 * before it can complete and free it.
-	 */
+	/* cancel is in progress */
 	if (atomic_fetch_inc(&iw->refs) & IO_WAITID_REF_MASK)
 		return 1;
-
-	/* pairs with the smp_load_acquire() in io_waitid_remove_wq() */
-	smp_store_release(&iw->head, NULL);
 
 	req->io_task_work.func = io_waitid_cb;
 	__io_req_task_work_add(req, IOU_F_TWQ_IN_WAKE);
@@ -353,8 +343,6 @@ int io_waitid(struct io_kiocb *req, unsigned int issue_flags)
 		 * a waitqueue callback, or if someone cancels it.
 		 */
 		if (!io_waitid_drop_issue_ref(req)) {
-			if (io_wq_cancel_seen(req, issue_flags))
-				__io_waitid_cancel(req, true);
 			io_ring_submit_unlock(ctx, issue_flags);
 			return IOU_ISSUE_SKIP_COMPLETE;
 		}
@@ -369,9 +357,6 @@ int io_waitid(struct io_kiocb *req, unsigned int issue_flags)
 
 	hlist_del_init(&req->hash_node);
 	io_waitid_remove_wq(req);
-	/* a non-blocking pidfd implies WNOHANG, report it as waitid(2) does */
-	if (!ret && !(iw->options & WNOHANG) && (iwa->wo.wo_flags & WNOHANG))
-		ret = -EAGAIN;
 	ret = io_waitid_finish(req, ret);
 
 	io_ring_submit_unlock(ctx, issue_flags);

@@ -20,8 +20,10 @@ impl CritIncrWrapper {
     }
 
     pub(super) fn init(self, node: DArc<Node>) -> DLArc<dyn DeliverToRead> {
-        let Ok(initialized) = self.inner.pin_init_with(DTRWrap::new(NodeWrapper { node }));
-        ListArc::from(initialized) as DLArc<dyn DeliverToRead>
+        match self.inner.pin_init_with(DTRWrap::new(NodeWrapper { node })) {
+            Ok(initialized) => ListArc::from(initialized) as _,
+            Err(err) => match err {},
+        }
     }
 }
 
@@ -81,7 +83,7 @@ impl DeliverToRead for NodeWrapper {
         if !ds.has_pushed_node {
             if let Some(node2) = ListArc::try_from_arc_borrow(node.as_arc_borrow()) {
                 ds.has_pushed_node = true;
-                _drop_outside_lock = owner_inner.push_work(&node.owner, node2);
+                _drop_outside_lock = owner_inner.push_work(node2);
             } else {
                 // This can't actually happen.
                 ds.has_strong_zero2one = false;
@@ -94,7 +96,7 @@ impl DeliverToRead for NodeWrapper {
     }
 
     #[inline(never)]
-    fn debug_print(&self, m: &SeqFile, prefix: &str, _tprefix: &str) -> Result {
+    fn debug_print(&self, m: &SeqFile, prefix: &str, _tprefix: &str) -> Result<()> {
         seq_print!(
             m,
             "{}node work {}: u{:016x} c{:016x}\n",

@@ -772,13 +772,8 @@ static int pk_raw_event(struct hid_device *hdev, struct hid_report *report,
 		if (report->id == data[0])
 			switch (report->id) {
 			case 0x01: /* midi keys (qwerty)*/
-			case 0x04: /* extra/midi keys (qwerty)*/
-				if (size < 4)
-					break;
-				ret = pcmidi_handle_report(pm, report->id,
-							   data, size);
-				break;
 			case 0x03: /* midi keyboard (musical)*/
+			case 0x04: /* extra/midi keys (qwerty)*/
 				ret = pcmidi_handle_report(pm,
 						report->id, data, size);
 				break;
@@ -802,7 +797,7 @@ static int pk_probe(struct hid_device *hdev, const struct hid_device_id *id)
 	intf = to_usb_interface(hdev->dev.parent);
 	ifnum = intf->cur_altsetting->desc.bInterfaceNumber;
 
-	pm = kzalloc_obj(*pm);
+	pm = kzalloc(sizeof(*pm), GFP_KERNEL);
 	if (pm == NULL) {
 		hid_err(hdev, "can't alloc descriptor\n");
 		return -ENOMEM;

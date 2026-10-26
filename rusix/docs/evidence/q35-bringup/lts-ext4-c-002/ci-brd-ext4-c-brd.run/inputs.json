@@ -1,0 +1,18 @@
+{
+  "source_revision": "740d79ef6788fb8296cad5488838b2e4c61428f5",
+  "implementation": "brd-c",
+  "scope": "Six-case userspace block contract",
+  "sources": {
+    "rusix/tests/brd-contract/probe.c": "07e87cb39a03314737389877bc6360d90a8e088d706fcbb2d9664a2bae5834ab",
+    "rusix/scripts/test-brd-vm.py": "15df6567225b998ac1ff9e46201538470de52de36b36f56fd8bc78cdc42542ba",
+    "rusix/scripts/rusix_paths.py": "15158c8c33e303341ef523c8317da73fb3f008908b8bfa53611d13bc87c94cae",
+    "rusix/scripts/with-local-tools.sh": "b47051d02fd2eb024dedc91f4a0c2cf071529d018a8ae246678bbb568069ffd0",
+    "rusix/scripts/repo-paths.sh": "c1456d937aa223d2b6d9bcd914238ef49cdd4974419df0ff7b2e20bbf542cfc7"
+  },
+  "artifacts": {
+    "/out/builds/brd-vm-ci-brd-ext4-c/bzImage": "c2928b99fc3100b7641f7e7b2ea2c5c8fd8d9044aa9a50e7f78fc4d508fa7248",
+    "/out/builds/brd-vm-ci-brd-ext4-c/init": "64ded8d0bf3dcb9b2cd5616a88498ccbaa37b12bf6e524fb63e778057d92a4a4",
+    "/out/builds/brd-vm-ci-brd-ext4-c/initramfs.cpio": "d66359172ae093fab64a4612c7759cae1252397bee8ff8d061b0280f854c29e2"
+  },
+  "config_sha256": "fb40d354afc6d5a426ee03f0ed2da9ab29646cfee5f814dfcba8636cd5f52d45"
+}

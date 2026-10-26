@@ -580,7 +580,14 @@ static const struct bus_type rbd_bus_type = {
 	.bus_groups	= rbd_bus_groups,
 };
 
-static struct device *rbd_root_dev;
+static void rbd_root_dev_release(struct device *dev)
+{
+}
+
+static struct device rbd_root_dev = {
+	.init_name =    "rbd",
+	.release =      rbd_root_dev_release,
+};
 
 static __printf(2, 3)
 void rbd_warn(struct rbd_device *rbd_dev, const char *fmt, ...)
@@ -700,7 +707,7 @@ static struct rbd_client *rbd_client_create(struct ceph_options *ceph_opts)
 	int ret = -ENOMEM;
 
 	dout("%s:\n", __func__);
-	rbdc = kmalloc_obj(struct rbd_client);
+	rbdc = kmalloc(sizeof(struct rbd_client), GFP_KERNEL);
 	if (!rbdc)
 		goto out_opt;
 
@@ -2570,9 +2577,9 @@ static int rbd_img_fill_request(struct rbd_img_request *img_req,
 	}
 
 	for_each_obj_request(img_req, obj_req) {
-		obj_req->bvec_pos.bvecs = kmalloc_objs(*obj_req->bvec_pos.bvecs,
-						       obj_req->bvec_count,
-						       GFP_NOIO);
+		obj_req->bvec_pos.bvecs = kmalloc_array(obj_req->bvec_count,
+					      sizeof(*obj_req->bvec_pos.bvecs),
+					      GFP_NOIO);
 		if (!obj_req->bvec_pos.bvecs)
 			return -ENOMEM;
 	}
@@ -3076,9 +3083,9 @@ static int setup_copyup_bvecs(struct rbd_obj_request *obj_req, u64 obj_overlap)
 
 	rbd_assert(!obj_req->copyup_bvecs);
 	obj_req->copyup_bvec_count = calc_pages_for(0, obj_overlap);
-	obj_req->copyup_bvecs = kzalloc_objs(*obj_req->copyup_bvecs,
-					     obj_req->copyup_bvec_count,
-					     GFP_NOIO);
+	obj_req->copyup_bvecs = kcalloc(obj_req->copyup_bvec_count,
+					sizeof(*obj_req->copyup_bvecs),
+					GFP_NOIO);
 	if (!obj_req->copyup_bvecs)
 		return -ENOMEM;
 
@@ -3670,7 +3677,7 @@ static void __rbd_lock(struct rbd_device *rbd_dev, const char *cookie)
 	struct rbd_client_id cid = rbd_get_cid(rbd_dev);
 
 	rbd_dev->lock_state = RBD_LOCK_STATE_LOCKED;
-	strscpy(rbd_dev->lock_cookie, cookie);
+	strcpy(rbd_dev->lock_cookie, cookie);
 	rbd_set_owner_cid(rbd_dev, &cid);
 	queue_work(rbd_dev->task_wq, &rbd_dev->acquired_lock_work);
 }
@@ -5275,7 +5282,7 @@ static struct rbd_spec *rbd_spec_alloc(void)
 {
 	struct rbd_spec *spec;
 
-	spec = kzalloc_obj(*spec);
+	spec = kzalloc(sizeof (*spec), GFP_KERNEL);
 	if (!spec)
 		return NULL;
 
@@ -5338,7 +5345,7 @@ static struct rbd_device *__rbd_dev_create(struct rbd_spec *spec)
 {
 	struct rbd_device *rbd_dev;
 
-	rbd_dev = kzalloc_obj(*rbd_dev);
+	rbd_dev = kzalloc(sizeof(*rbd_dev), GFP_KERNEL);
 	if (!rbd_dev)
 		return NULL;
 
@@ -5376,7 +5383,7 @@ static struct rbd_device *__rbd_dev_create(struct rbd_spec *spec)
 
 	rbd_dev->dev.bus = &rbd_bus_type;
 	rbd_dev->dev.type = &rbd_device_type;
-	rbd_dev->dev.parent = rbd_root_dev;
+	rbd_dev->dev.parent = &rbd_root_dev;
 	device_initialize(&rbd_dev->dev);
 
 	return rbd_dev;
@@ -6080,9 +6087,12 @@ static int rbd_dev_v2_snap_context(struct rbd_device *rbd_dev,
 
 	/*
 	 * Make sure the reported number of snapshot ids wouldn't go
-	 * beyond the end of our buffer.
+	 * beyond the end of our buffer.  But before checking that,
+	 * make sure the computed size of the snapshot context we
+	 * allocate is representable in a size_t.
 	 */
-	if (snap_count > RBD_MAX_SNAP_COUNT) {
+	if (snap_count > (SIZE_MAX - sizeof (struct ceph_snap_context))
+				 / sizeof (u64)) {
 		ret = -EINVAL;
 		goto out;
 	}
@@ -6492,7 +6502,7 @@ static int rbd_add_parse_args(const char *buf,
 
 	/* Initialize all rbd options to the defaults */
 
-	pctx.opts = kzalloc_obj(*pctx.opts);
+	pctx.opts = kzalloc(sizeof(*pctx.opts), GFP_KERNEL);
 	if (!pctx.opts)
 		goto out_mem;
 
@@ -7322,13 +7332,15 @@ static int __init rbd_sysfs_init(void)
 {
 	int ret;
 
-	rbd_root_dev = root_device_register("rbd");
-	if (IS_ERR(rbd_root_dev))
-		return PTR_ERR(rbd_root_dev);
+	ret = device_register(&rbd_root_dev);
+	if (ret < 0) {
+		put_device(&rbd_root_dev);
+		return ret;
+	}
 
 	ret = bus_register(&rbd_bus_type);
 	if (ret < 0)
-		root_device_unregister(rbd_root_dev);
+		device_unregister(&rbd_root_dev);
 
 	return ret;
 }
@@ -7336,7 +7348,7 @@ static int __init rbd_sysfs_init(void)
 static void __exit rbd_sysfs_cleanup(void)
 {
 	bus_unregister(&rbd_bus_type);
-	root_device_unregister(rbd_root_dev);
+	device_unregister(&rbd_root_dev);
 }
 
 static int __init rbd_slab_init(void)

@@ -158,7 +158,7 @@ static int uacce_fops_open(struct inode *inode, struct file *filep)
 	if (!uacce)
 		return -ENODEV;
 
-	q = kzalloc_obj(struct uacce_queue);
+	q = kzalloc(sizeof(struct uacce_queue), GFP_KERNEL);
 	if (!q)
 		return -ENOMEM;
 
@@ -251,7 +251,7 @@ static int uacce_fops_mmap(struct file *filep, struct vm_area_struct *vma)
 	else
 		return -EINVAL;
 
-	qfr = kzalloc_obj(*qfr);
+	qfr = kzalloc(sizeof(*qfr), GFP_KERNEL);
 	if (!qfr)
 		return -ENOMEM;
 
@@ -506,7 +506,7 @@ struct uacce_device *uacce_alloc(struct device *parent,
 	struct uacce_device *uacce;
 	int ret;
 
-	uacce = kzalloc_obj(struct uacce_device);
+	uacce = kzalloc(sizeof(struct uacce_device), GFP_KERNEL);
 	if (!uacce)
 		return ERR_PTR(-ENOMEM);
 

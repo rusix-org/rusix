@@ -3,7 +3,7 @@
  * Copyright (C) 2022-2023 Oracle.  All Rights Reserved.
  * Author: Darrick J. Wong <djwong@kernel.org>
  */
-#include "xfs_platform.h"
+#include "xfs.h"
 #include "xfs_fs.h"
 #include "xfs_shared.h"
 #include "xfs_format.h"
@@ -172,7 +172,7 @@ static inline bool xreap_is_dirty(const struct xreap_state *rs)
 }
 
 /*
- * Decide if we need to roll the transaction to clear out the log
+ * Decide if we need to roll the transaction to clear out the the log
  * reservation that we allocated to buffer invalidations.
  */
 static inline bool xreap_want_binval_roll(const struct xreap_state *rs)
@@ -796,9 +796,9 @@ xreap_fsmeta_extent(
 	xfs_agblock_t		agbno_next = agbno + len;
 	int			error = 0;
 
+	ASSERT(len <= XFS_MAX_BMBT_EXTLEN);
 	ASSERT(sc->ip != NULL);
 	ASSERT(!sc->sa.pag);
-	ASSERT(agno == XFS_FSB_TO_AGNO(sc->mp, fsbno + len - 1));
 
 	/*
 	 * We're reaping blocks after repairing file metadata, which means that
@@ -1080,22 +1080,25 @@ xreap_configure_rgcow_limits(
 				 XFS_RTGLOCK_RMAP | \
 				 XFS_RTGLOCK_REFCOUNT)
 
-static int
-xreap_rtgroup_extent(
-	struct xreap_state	*rs,
-	xfs_rtblock_t		rtbno,
+/*
+ * Break a rt file metadata extent into sub-extents by fate (crosslinked, not
+ * crosslinked), and dispose of each sub-extent separately.  The extent must
+ * be aligned to a realtime extent.
+ */
+STATIC int
+xreap_rtmeta_extent(
+	uint64_t		rtbno,
 	uint64_t		len,
-	xfs_rgblock_t		*done)
+	void			*priv)
 {
+	struct xreap_state	*rs = priv;
 	struct xfs_scrub	*sc = rs->sc;
 	xfs_rgblock_t		rgbno = xfs_rtb_to_rgbno(sc->mp, rtbno);
-	xfs_rgblock_t		rgbno_next;
+	xfs_rgblock_t		rgbno_next = rgbno + len;
 	int			error = 0;
 
 	ASSERT(sc->ip != NULL);
 	ASSERT(!sc->sr.rtg);
-
-	*done = 0;
 
 	/*
 	 * We're reaping blocks after repairing file metadata, which means that
@@ -1107,7 +1110,6 @@ xreap_rtgroup_extent(
 
 	xfs_rtgroup_lock(sc->sr.rtg, XREAP_RTGLOCK_ALL);
 
-	rgbno_next = rgbno + min(len, (uint64_t)rtg_blocks(sc->sr.rtg) - rgbno);
 	while (rgbno < rgbno_next) {
 		xfs_extlen_t	rglen;
 		bool		crosslinked;
@@ -1134,7 +1136,6 @@ xreap_rtgroup_extent(
 		}
 
 		rgbno += rglen;
-		*done += rglen;
 	}
 
 out_unlock:
@@ -1142,44 +1143,6 @@ out_unlock:
 	xfs_rtgroup_put(sc->sr.rtg);
 	sc->sr.rtg = NULL;
 	return error;
-}
-
-/*
- * Break a rt file metadata extent into sub-extents by fate (crosslinked, not
- * crosslinked), and dispose of each sub-extent separately.  The extent must
- * be aligned to a realtime extent.
- */
-STATIC int
-xreap_rtmeta_extent(
-	uint64_t		rtbno,
-	uint64_t		len,
-	void			*priv)
-{
-	struct xreap_state	*rs = priv;
-	int			error;
-
-	/*
-	 * Space from adjacent rtgroups can be stored as a single bitmap extent
-	 * because rtgroups do not have fixed-location metadata such as a
-	 * per-group superblock that cannot be reaped.  Handle these overlaps
-	 * by only reaping within a single rtgroup at a time.
-	 *
-	 * In the somewhat unlikely event that an rtgroup size is not a power
-	 * of two, the segmented nature of xfs_rtblock_t prevents space in
-	 * adjacent rtgroups from merging in the bitmap.
-	 */
-	while (len > 0) {
-		xfs_rgblock_t	done = 0;
-
-		error = xreap_rtgroup_extent(rs, rtbno, len, &done);
-		if (error)
-			return error;
-
-		rtbno += done;
-		len -= done;
-	}
-
-	return 0;
 }
 
 /*
@@ -1242,7 +1205,7 @@ xrep_reap_metadir_fsblocks(
 	ASSERT(xfs_is_metadir_inode(sc->ip));
 
 	xreap_configure_agextent_limits(&rs);
-	xfs_rmap_inode_bmbt_owner(&oinfo, sc->ip, XFS_DATA_FORK);
+	xfs_rmap_ino_bmbt_owner(&oinfo, sc->ip->i_ino, XFS_DATA_FORK);
 	error = xfsb_bitmap_walk(bitmap, xreap_fsmeta_extent, &rs);
 	if (error)
 		return error;
@@ -1480,12 +1443,12 @@ xrep_reap_bmapi_iter(
 		/*
 		 * t0: Schedule removal of the mapping from the fork.  We use
 		 * deferred log intents in this function to control the exact
-		 * sequence of metadata updates.  The BUI queues a RUI to
-		 * remove the reverse mapping.
+		 * sequence of metadata updates.
 		 */
 		xfs_bmap_unmap_extent(sc->tp, rs->ip, rs->whichfork, imap);
 		xfs_trans_mod_dquot_byino(sc->tp, rs->ip, XFS_TRANS_DQ_BCOUNT,
 				-(int64_t)imap->br_blockcount);
+		xfs_rmap_unmap_extent(sc->tp, rs->ip, rs->whichfork, imap);
 		return 0;
 	}
 

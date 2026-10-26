@@ -211,9 +211,11 @@ static const char * const snd_pcm_format_names[] = {
  */
 const char *snd_pcm_format_name(snd_pcm_format_t format)
 {
-	if (format >= ARRAY_SIZE(snd_pcm_format_names) || !snd_pcm_format_names[format])
+	unsigned int format_num = (__force unsigned int)format;
+
+	if (format_num >= ARRAY_SIZE(snd_pcm_format_names) || !snd_pcm_format_names[format_num])
 		return "Unknown";
-	return snd_pcm_format_names[format];
+	return snd_pcm_format_names[format_num];
 }
 EXPORT_SYMBOL_GPL(snd_pcm_format_name);
 
@@ -273,12 +275,12 @@ static const char *snd_pcm_stream_name(int stream)
 
 static const char *snd_pcm_access_name(snd_pcm_access_t access)
 {
-	return snd_pcm_access_names[access];
+	return snd_pcm_access_names[(__force int)access];
 }
 
 static const char *snd_pcm_subformat_name(snd_pcm_subformat_t subformat)
 {
-	return snd_pcm_subformat_names[subformat];
+	return snd_pcm_subformat_names[(__force int)subformat];
 }
 
 static const char *snd_pcm_tstamp_mode_name(int mode)
@@ -288,7 +290,7 @@ static const char *snd_pcm_tstamp_mode_name(int mode)
 
 static const char *snd_pcm_state_name(snd_pcm_state_t state)
 {
-	return snd_pcm_state_names[state];
+	return snd_pcm_state_names[(__force int)state];
 }
 
 #if IS_ENABLED(CONFIG_SND_PCM_OSS)
@@ -332,7 +334,7 @@ static void snd_pcm_proc_info_read(struct snd_pcm_substream *substream,
 		return;
 
 	struct snd_pcm_info *info __free(kfree) =
-		kmalloc_obj(*info);
+		kmalloc(sizeof(*info), GFP_KERNEL);
 	if (!info)
 		return;
 
@@ -655,7 +657,7 @@ int snd_pcm_new_stream(struct snd_pcm *pcm, int stream, int substream_count)
 	}
 	prev = NULL;
 	for (idx = 0, prev = NULL; idx < substream_count; idx++) {
-		substream = kzalloc_obj(*substream);
+		substream = kzalloc(sizeof(*substream), GFP_KERNEL);
 		if (!substream)
 			return -ENOMEM;
 		substream->pcm = pcm;
@@ -711,7 +713,7 @@ static int _snd_pcm_new(struct snd_card *card, const char *id, int device,
 		return -ENXIO;
 	if (rpcm)
 		*rpcm = NULL;
-	pcm = kzalloc_obj(*pcm);
+	pcm = kzalloc(sizeof(*pcm), GFP_KERNEL);
 	if (!pcm)
 		return -ENOMEM;
 	pcm->card = card;
@@ -819,9 +821,6 @@ static void snd_pcm_free_stream(struct snd_pcm_str * pstr)
 	/* free all proc files under the stream */
 	snd_pcm_stream_proc_done(pstr);
 
-	/* Drain channel-map callbacks before freeing the substreams. */
-	free_chmap(pstr);
-
 	substream = pstr->substream;
 	while (substream) {
 		substream_next = substream->next;
@@ -836,6 +835,7 @@ static void snd_pcm_free_stream(struct snd_pcm_str * pstr)
 		kfree(setup);
 	}
 #endif
+	free_chmap(pstr);
 	if (pstr->substream_count)
 		put_device(pstr->dev);
 }
@@ -855,10 +855,8 @@ static int snd_pcm_free(struct snd_pcm *pcm)
 {
 	if (!pcm)
 		return 0;
-	if (!pcm->internal) {
-		scoped_guard(mutex, &register_mutex)
-			pcm_call_notify(pcm, n_unregister);
-	}
+	if (!pcm->internal)
+		pcm_call_notify(pcm, n_unregister);
 	if (pcm->private_free)
 		pcm->private_free(pcm);
 	snd_pcm_lib_preallocate_free_for_all(pcm);
@@ -937,7 +935,7 @@ int snd_pcm_attach_substream(struct snd_pcm *pcm, int stream,
 	if (substream == NULL)
 		return -EAGAIN;
 
-	runtime = kzalloc_obj(*runtime);
+	runtime = kzalloc(sizeof(*runtime), GFP_KERNEL);
 	if (runtime == NULL)
 		return -ENOMEM;
 
@@ -961,7 +959,6 @@ int snd_pcm_attach_substream(struct snd_pcm *pcm, int stream,
 
 	init_waitqueue_head(&runtime->sleep);
 	init_waitqueue_head(&runtime->tsleep);
-	snd_refcount_init(&runtime->refcnt);
 
 	__snd_pcm_set_state(runtime, SNDRV_PCM_STATE_OPEN);
 	mutex_init(&runtime->buffer_mutex);

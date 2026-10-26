@@ -878,7 +878,7 @@ int nfc_add_se(struct nfc_dev *dev, u32 se_idx, u16 type)
 	if (se)
 		return -EALREADY;
 
-	se = kzalloc_obj(struct nfc_se);
+	se = kzalloc(sizeof(struct nfc_se), GFP_KERNEL);
 	if (!se)
 		return -ENOMEM;
 
@@ -1061,7 +1061,7 @@ struct nfc_dev *nfc_allocate_device(const struct nfc_ops *ops,
 	if (!supported_protocols)
 		return NULL;
 
-	dev = kzalloc_obj(struct nfc_dev);
+	dev = kzalloc(sizeof(struct nfc_dev), GFP_KERNEL);
 	if (!dev)
 		return NULL;
 

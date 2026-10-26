@@ -694,7 +694,7 @@ static int mon_bin_open(struct inode *inode, struct file *file)
 		return -ENODEV;
 	}
 
-	rp = kzalloc_obj(struct mon_reader_bin);
+	rp = kzalloc(sizeof(struct mon_reader_bin), GFP_KERNEL);
 	if (rp == NULL) {
 		rc = -ENOMEM;
 		goto err_alloc;
@@ -1029,7 +1029,8 @@ static long mon_bin_ioctl(struct file *file, unsigned int cmd, unsigned long arg
 			return -EINVAL;
 
 		size = CHUNK_ALIGN(arg);
-		vec = kzalloc_objs(struct mon_pgmap, size / CHUNK_SIZE);
+		vec = kcalloc(size / CHUNK_SIZE, sizeof(struct mon_pgmap),
+			      GFP_KERNEL);
 		if (vec == NULL) {
 			ret = -ENOMEM;
 			break;

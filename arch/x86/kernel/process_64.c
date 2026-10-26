@@ -30,7 +30,6 @@
 #include <linux/interrupt.h>
 #include <linux/delay.h>
 #include <linux/export.h>
-#include <linux/kvm_types.h>
 #include <linux/ptrace.h>
 #include <linux/notifier.h>
 #include <linux/kprobes.h>
@@ -104,10 +103,10 @@ void __show_regs(struct pt_regs *regs, enum show_regs_mode mode,
 		return;
 	}
 
-	savesegment(ds, ds);
-	savesegment(es, es);
-	savesegment(fs, fsindex);
-	savesegment(gs, gsindex);
+	asm("movl %%ds,%0" : "=r" (ds));
+	asm("movl %%es,%0" : "=r" (es));
+	asm("movl %%fs,%0" : "=r" (fsindex));
+	asm("movl %%gs,%0" : "=r" (gsindex));
 
 	rdmsrq(MSR_FS_BASE, fs);
 	rdmsrq(MSR_GS_BASE, gs);
@@ -277,7 +276,7 @@ static __always_inline void save_fsgs(struct task_struct *task)
 {
 	savesegment(fs, task->thread.fsindex);
 	savesegment(gs, task->thread.gsindex);
-	if (cpu_feature_enabled(X86_FEATURE_FSGSBASE)) {
+	if (static_cpu_has(X86_FEATURE_FSGSBASE)) {
 		/*
 		 * If FSGSBASE is enabled, we can't make any useful guesses
 		 * about the base, and user code expects us to save the current
@@ -304,7 +303,9 @@ void current_save_fsgs(void)
 	save_fsgs(current);
 	local_irq_restore(flags);
 }
-EXPORT_SYMBOL_FOR_KVM(current_save_fsgs);
+#if IS_ENABLED(CONFIG_KVM)
+EXPORT_SYMBOL_GPL(current_save_fsgs);
+#endif
 
 static __always_inline void loadseg(enum which_selector which,
 				    unsigned short sel)
@@ -391,7 +392,7 @@ static __always_inline void x86_pkru_load(struct thread_struct *prev,
 static __always_inline void x86_fsgsbase_load(struct thread_struct *prev,
 					      struct thread_struct *next)
 {
-	if (cpu_feature_enabled(X86_FEATURE_FSGSBASE)) {
+	if (static_cpu_has(X86_FEATURE_FSGSBASE)) {
 		/* Update the FS and GS selectors if they could have changed. */
 		if (unlikely(prev->fsindex || next->fsindex))
 			loadseg(FS, next->fsindex);
@@ -533,7 +534,7 @@ start_thread_common(struct pt_regs *regs, unsigned long new_ip,
 {
 	WARN_ON_ONCE(regs != current_pt_regs());
 
-	if (cpu_feature_enabled(X86_BUG_NULL_SEG)) {
+	if (static_cpu_has(X86_BUG_NULL_SEG)) {
 		/* Loading zero below won't clear the base. */
 		loadsegment(fs, __USER_DS);
 		load_gs_index(__USER_DS);
@@ -708,7 +709,7 @@ __switch_to(struct task_struct *prev_p, struct task_struct *next_p)
 
 	/* Reset hw history on AMD CPUs */
 	if (cpu_feature_enabled(X86_FEATURE_AMD_WORKLOAD_CLASS))
-		wrmsrq(MSR_AMD_WORKLOAD_HRST, 0x1);
+		wrmsrl(MSR_AMD_WORKLOAD_HRST, 0x1);
 
 	return prev_p;
 }
@@ -941,14 +942,14 @@ long do_arch_prctl_64(struct task_struct *task, int option, unsigned long arg2)
 #ifdef CONFIG_CHECKPOINT_RESTORE
 # ifdef CONFIG_X86_X32_ABI
 	case ARCH_MAP_VDSO_X32:
-		return prctl_map_vdso(&vdsox32_image, arg2);
+		return prctl_map_vdso(&vdso_image_x32, arg2);
 # endif
 # ifdef CONFIG_IA32_EMULATION
 	case ARCH_MAP_VDSO_32:
-		return prctl_map_vdso(&vdso32_image, arg2);
+		return prctl_map_vdso(&vdso_image_32, arg2);
 # endif
 	case ARCH_MAP_VDSO_64:
-		return prctl_map_vdso(&vdso64_image, arg2);
+		return prctl_map_vdso(&vdso_image_64, arg2);
 #endif
 #ifdef CONFIG_ADDRESS_MASKING
 	case ARCH_GET_UNTAG_MASK:

@@ -32,8 +32,8 @@
 
 #define OSS_ALSAEMULVER		_SIOR ('M', 249, int)
 
-static int dsp_map[SNDRV_CARDS] __ro_after_init;
-static int adsp_map[SNDRV_CARDS] __ro_after_init = {[0 ... (SNDRV_CARDS-1)] = 1};
+static int dsp_map[SNDRV_CARDS];
+static int adsp_map[SNDRV_CARDS] = {[0 ... (SNDRV_CARDS-1)] = 1};
 static bool nonblock_open = 1;
 
 MODULE_AUTHOR("Jaroslav Kysela <perex@perex.cz>, Abramo Bagnara <abramo@alsa-project.org>");
@@ -377,6 +377,7 @@ static int snd_pcm_hw_param_near(struct snd_pcm_substream *pcm,
 				 snd_pcm_hw_param_t var, unsigned int best,
 				 int *dir)
 {
+	struct snd_pcm_hw_params *save __free(kfree) = NULL;
 	int v;
 	unsigned int saved_min;
 	int last = 0;
@@ -396,22 +397,19 @@ static int snd_pcm_hw_param_near(struct snd_pcm_substream *pcm,
 		maxdir = 1;
 		max--;
 	}
-
-	struct snd_pcm_hw_params *save __free(kfree) =
-		kmalloc_obj(*save);
+	save = kmalloc(sizeof(*save), GFP_KERNEL);
 	if (save == NULL)
 		return -ENOMEM;
 	*save = *params;
 	saved_min = min;
 	min = snd_pcm_hw_param_min(pcm, params, var, min, &mindir);
 	if (min >= 0) {
+		struct snd_pcm_hw_params *params1 __free(kfree) = NULL;
 		if (max < 0)
 			goto _end;
 		if ((unsigned int)min == saved_min && mindir == valdir)
 			goto _end;
-
-		struct snd_pcm_hw_params *params1 __free(kfree) =
-			kmalloc_obj(*params1);
+		params1 = kmalloc(sizeof(*params1), GFP_KERNEL);
 		if (params1 == NULL)
 			return -ENOMEM;
 		*params1 = *save;
@@ -783,10 +781,10 @@ static int choose_rate(struct snd_pcm_substream *substream,
 		       struct snd_pcm_hw_params *params, unsigned int best_rate)
 {
 	const struct snd_interval *it;
+	struct snd_pcm_hw_params *save __free(kfree) = NULL;
 	unsigned int rate, prev;
 
-	struct snd_pcm_hw_params *save __free(kfree) =
-		kmalloc_obj(*save);
+	save = kmalloc(sizeof(*save), GFP_KERNEL);
 	if (save == NULL)
 		return -ENOMEM;
 	*save = *params;
@@ -861,9 +859,9 @@ static int snd_pcm_oss_change_params_locked(struct snd_pcm_substream *substream)
 
 	if (!runtime->oss.params)
 		return 0;
-	sw_params = kzalloc_obj(*sw_params);
-	params = kmalloc_obj(*params);
-	sparams = kmalloc_obj(*sparams);
+	sw_params = kzalloc(sizeof(*sw_params), GFP_KERNEL);
+	params = kmalloc(sizeof(*params), GFP_KERNEL);
+	sparams = kmalloc(sizeof(*sparams), GFP_KERNEL);
 	if (!sw_params || !params || !sparams) {
 		err = -ENOMEM;
 		goto failure;
@@ -879,11 +877,11 @@ static int snd_pcm_oss_change_params_locked(struct snd_pcm_substream *substream)
 	_snd_pcm_hw_param_min(sparams, SNDRV_PCM_HW_PARAM_PERIODS, 2, 0);
 	snd_mask_none(&mask);
 	if (atomic_read(&substream->mmap_count))
-		snd_mask_set(&mask, SNDRV_PCM_ACCESS_MMAP_INTERLEAVED);
+		snd_mask_set(&mask, (__force int)SNDRV_PCM_ACCESS_MMAP_INTERLEAVED);
 	else {
-		snd_mask_set(&mask, SNDRV_PCM_ACCESS_RW_INTERLEAVED);
+		snd_mask_set(&mask, (__force int)SNDRV_PCM_ACCESS_RW_INTERLEAVED);
 		if (!direct)
-			snd_mask_set(&mask, SNDRV_PCM_ACCESS_RW_NONINTERLEAVED);
+			snd_mask_set(&mask, (__force int)SNDRV_PCM_ACCESS_RW_NONINTERLEAVED);
 	}
 	err = snd_pcm_hw_param_mask(substream, sparams, SNDRV_PCM_HW_PARAM_ACCESS, &mask);
 	if (err < 0) {
@@ -909,7 +907,7 @@ static int snd_pcm_oss_change_params_locked(struct snd_pcm_substream *substream)
 	else
 		sformat = snd_pcm_plug_slave_format(format, sformat_mask);
 
-	if (sformat < 0 ||
+	if ((__force int)sformat < 0 ||
 	    !snd_mask_test_format(sformat_mask, sformat)) {
 		pcm_for_each_format(sformat) {
 			if (snd_mask_test_format(sformat_mask, sformat) &&
@@ -921,7 +919,7 @@ static int snd_pcm_oss_change_params_locked(struct snd_pcm_substream *substream)
 		goto failure;
 	}
  format_found:
-	err = _snd_pcm_hw_param_set(sparams, SNDRV_PCM_HW_PARAM_FORMAT, sformat, 0);
+	err = _snd_pcm_hw_param_set(sparams, SNDRV_PCM_HW_PARAM_FORMAT, (__force int)sformat, 0);
 	if (err < 0)
 		goto failure;
 
@@ -930,9 +928,9 @@ static int snd_pcm_oss_change_params_locked(struct snd_pcm_substream *substream)
 	} else {
 		_snd_pcm_hw_params_any(params);
 		_snd_pcm_hw_param_set(params, SNDRV_PCM_HW_PARAM_ACCESS,
-				      SNDRV_PCM_ACCESS_RW_INTERLEAVED, 0);
+				      (__force int)SNDRV_PCM_ACCESS_RW_INTERLEAVED, 0);
 		_snd_pcm_hw_param_set(params, SNDRV_PCM_HW_PARAM_FORMAT,
-				      snd_pcm_oss_format_from(runtime->oss.format), 0);
+				      (__force int)snd_pcm_oss_format_from(runtime->oss.format), 0);
 		_snd_pcm_hw_param_set(params, SNDRV_PCM_HW_PARAM_CHANNELS,
 				      runtime->oss.channels, 0);
 		_snd_pcm_hw_param_set(params, SNDRV_PCM_HW_PARAM_RATE,
@@ -1227,16 +1225,14 @@ static int snd_pcm_oss_capture_position_fixup(struct snd_pcm_substream *substrea
 snd_pcm_sframes_t snd_pcm_oss_write3(struct snd_pcm_substream *substream, const char *ptr, snd_pcm_uframes_t frames, int in_kernel)
 {
 	struct snd_pcm_runtime *runtime = substream->runtime;
-	snd_pcm_state_t state;
 	int ret;
 	while (1) {
-		state = snd_pcm_get_state(substream);
-		if (state == SNDRV_PCM_STATE_XRUN ||
-		    state == SNDRV_PCM_STATE_SUSPENDED) {
+		if (runtime->state == SNDRV_PCM_STATE_XRUN ||
+		    runtime->state == SNDRV_PCM_STATE_SUSPENDED) {
 #ifdef OSS_DEBUG
 			pcm_dbg(substream->pcm,
 				"pcm_oss: write: recovering from %s\n",
-				state == SNDRV_PCM_STATE_XRUN ?
+				runtime->state == SNDRV_PCM_STATE_XRUN ?
 				"XRUN" : "SUSPEND");
 #endif
 			ret = snd_pcm_oss_prepare(substream);
@@ -1251,7 +1247,7 @@ snd_pcm_sframes_t snd_pcm_oss_write3(struct snd_pcm_substream *substream, const 
 			break;
 		/* test, if we can't store new data, because the stream */
 		/* has not been started */
-		if (snd_pcm_get_state(substream) == SNDRV_PCM_STATE_PREPARED)
+		if (runtime->state == SNDRV_PCM_STATE_PREPARED)
 			return -EAGAIN;
 	}
 	return ret;
@@ -1261,22 +1257,20 @@ snd_pcm_sframes_t snd_pcm_oss_read3(struct snd_pcm_substream *substream, char *p
 {
 	struct snd_pcm_runtime *runtime = substream->runtime;
 	snd_pcm_sframes_t delay;
-	snd_pcm_state_t state;
 	int ret;
 	while (1) {
-		state = snd_pcm_get_state(substream);
-		if (state == SNDRV_PCM_STATE_XRUN ||
-		    state == SNDRV_PCM_STATE_SUSPENDED) {
+		if (runtime->state == SNDRV_PCM_STATE_XRUN ||
+		    runtime->state == SNDRV_PCM_STATE_SUSPENDED) {
 #ifdef OSS_DEBUG
 			pcm_dbg(substream->pcm,
 				"pcm_oss: read: recovering from %s\n",
-				state == SNDRV_PCM_STATE_XRUN ?
+				runtime->state == SNDRV_PCM_STATE_XRUN ?
 				"XRUN" : "SUSPEND");
 #endif
 			ret = snd_pcm_kernel_ioctl(substream, SNDRV_PCM_IOCTL_DRAIN, NULL);
 			if (ret < 0)
 				break;
-		} else if (state == SNDRV_PCM_STATE_SETUP) {
+		} else if (runtime->state == SNDRV_PCM_STATE_SETUP) {
 			ret = snd_pcm_oss_prepare(substream);
 			if (ret < 0)
 				break;
@@ -1289,7 +1283,7 @@ snd_pcm_sframes_t snd_pcm_oss_read3(struct snd_pcm_substream *substream, char *p
 					 frames, in_kernel);
 		mutex_lock(&runtime->oss.params_lock);
 		if (ret == -EPIPE) {
-			if (snd_pcm_get_state(substream) == SNDRV_PCM_STATE_DRAINING) {
+			if (runtime->state == SNDRV_PCM_STATE_DRAINING) {
 				ret = snd_pcm_kernel_ioctl(substream, SNDRV_PCM_IOCTL_DROP, NULL);
 				if (ret < 0)
 					break;
@@ -1305,16 +1299,15 @@ snd_pcm_sframes_t snd_pcm_oss_read3(struct snd_pcm_substream *substream, char *p
 #ifdef CONFIG_SND_PCM_OSS_PLUGINS
 snd_pcm_sframes_t snd_pcm_oss_writev3(struct snd_pcm_substream *substream, void **bufs, snd_pcm_uframes_t frames)
 {
-	snd_pcm_state_t state;
+	struct snd_pcm_runtime *runtime = substream->runtime;
 	int ret;
 	while (1) {
-		state = snd_pcm_get_state(substream);
-		if (state == SNDRV_PCM_STATE_XRUN ||
-		    state == SNDRV_PCM_STATE_SUSPENDED) {
+		if (runtime->state == SNDRV_PCM_STATE_XRUN ||
+		    runtime->state == SNDRV_PCM_STATE_SUSPENDED) {
 #ifdef OSS_DEBUG
 			pcm_dbg(substream->pcm,
 				"pcm_oss: writev: recovering from %s\n",
-				state == SNDRV_PCM_STATE_XRUN ?
+				runtime->state == SNDRV_PCM_STATE_XRUN ?
 				"XRUN" : "SUSPEND");
 #endif
 			ret = snd_pcm_oss_prepare(substream);
@@ -1327,7 +1320,7 @@ snd_pcm_sframes_t snd_pcm_oss_writev3(struct snd_pcm_substream *substream, void 
 
 		/* test, if we can't store new data, because the stream */
 		/* has not been started */
-		if (snd_pcm_get_state(substream) == SNDRV_PCM_STATE_PREPARED)
+		if (runtime->state == SNDRV_PCM_STATE_PREPARED)
 			return -EAGAIN;
 	}
 	return ret;
@@ -1335,22 +1328,21 @@ snd_pcm_sframes_t snd_pcm_oss_writev3(struct snd_pcm_substream *substream, void 
 	
 snd_pcm_sframes_t snd_pcm_oss_readv3(struct snd_pcm_substream *substream, void **bufs, snd_pcm_uframes_t frames)
 {
-	snd_pcm_state_t state;
+	struct snd_pcm_runtime *runtime = substream->runtime;
 	int ret;
 	while (1) {
-		state = snd_pcm_get_state(substream);
-		if (state == SNDRV_PCM_STATE_XRUN ||
-		    state == SNDRV_PCM_STATE_SUSPENDED) {
+		if (runtime->state == SNDRV_PCM_STATE_XRUN ||
+		    runtime->state == SNDRV_PCM_STATE_SUSPENDED) {
 #ifdef OSS_DEBUG
 			pcm_dbg(substream->pcm,
 				"pcm_oss: readv: recovering from %s\n",
-				state == SNDRV_PCM_STATE_XRUN ?
+				runtime->state == SNDRV_PCM_STATE_XRUN ?
 				"XRUN" : "SUSPEND");
 #endif
 			ret = snd_pcm_kernel_ioctl(substream, SNDRV_PCM_IOCTL_DRAIN, NULL);
 			if (ret < 0)
 				break;
-		} else if (state == SNDRV_PCM_STATE_SETUP) {
+		} else if (runtime->state == SNDRV_PCM_STATE_SETUP) {
 			ret = snd_pcm_oss_prepare(substream);
 			if (ret < 0)
 				break;
@@ -1844,6 +1836,7 @@ static int snd_pcm_oss_get_formats(struct snd_pcm_oss_file *pcm_oss_file)
 	struct snd_pcm_substream *substream;
 	int err;
 	int direct;
+	struct snd_pcm_hw_params *params __free(kfree) = NULL;
 	unsigned int formats = 0;
 	const struct snd_mask *format_mask;
 	int fmt;
@@ -1863,9 +1856,7 @@ static int snd_pcm_oss_get_formats(struct snd_pcm_oss_file *pcm_oss_file)
 			AFMT_S32_LE | AFMT_S32_BE |
 			AFMT_S24_LE | AFMT_S24_BE |
 			AFMT_S24_PACKED;
-
-	struct snd_pcm_hw_params *params __free(kfree) =
-		kmalloc_obj(*params);
+	params = kmalloc(sizeof(*params), GFP_KERNEL);
 	if (!params)
 		return -ENOMEM;
 	_snd_pcm_hw_params_any(params);
@@ -1875,7 +1866,7 @@ static int snd_pcm_oss_get_formats(struct snd_pcm_oss_file *pcm_oss_file)
 	format_mask = hw_param_mask_c(params, SNDRV_PCM_HW_PARAM_FORMAT);
 	for (fmt = 0; fmt < 32; ++fmt) {
 		if (snd_mask_test(format_mask, fmt)) {
-			int f = snd_pcm_oss_format_to(fmt);
+			int f = snd_pcm_oss_format_to((__force snd_pcm_format_t)fmt);
 			if (f >= 0)
 				formats |= f;
 		}
@@ -2430,7 +2421,7 @@ static int snd_pcm_oss_open_file(struct file *file,
 	if (rpcm_oss_file)
 		*rpcm_oss_file = NULL;
 
-	pcm_oss_file = kzalloc_obj(*pcm_oss_file);
+	pcm_oss_file = kzalloc(sizeof(*pcm_oss_file), GFP_KERNEL);
 	if (pcm_oss_file == NULL)
 		return -ENOMEM;
 
@@ -2495,7 +2486,9 @@ static int snd_pcm_oss_open(struct inode *inode, struct file *file)
 	int nonblock;
 	wait_queue_entry_t wait;
 
-	nonseekable_open(inode, file);
+	err = nonseekable_open(inode, file);
+	if (err < 0)
+		return err;
 
 	pcm = snd_lookup_oss_minor_data(iminor(inode),
 					SNDRV_OSS_DEVICE_TYPE_PCM);
@@ -2507,7 +2500,7 @@ static int snd_pcm_oss_open(struct inode *inode, struct file *file)
 	if (err < 0)
 		goto __error1;
 	if (!try_module_get(pcm->card->module)) {
-		err = -ENODEV;
+		err = -EFAULT;
 		goto __error2;
 	}
 	if (snd_task_name(current, task_name, sizeof(task_name)) < 0) {
@@ -3055,7 +3048,7 @@ static void snd_pcm_oss_proc_write(struct snd_info_entry *entry,
 			}
 		} while (*str);
 		if (setup == NULL) {
-			setup = kmalloc_obj(*setup);
+			setup = kmalloc(sizeof(*setup), GFP_KERNEL);
 			if (! setup) {
 				buffer->error = -ENOMEM;
 				return;
@@ -3127,16 +3120,17 @@ static inline void snd_pcm_oss_proc_done(struct snd_pcm *pcm)
  *  ENTRY functions
  */
 
-static const struct file_operations snd_pcm_oss_f_reg = {
-	.owner		=	THIS_MODULE,
-	.read		=	snd_pcm_oss_read,
-	.write		=	snd_pcm_oss_write,
-	.open		=	snd_pcm_oss_open,
-	.release	=	snd_pcm_oss_release,
-	.poll		=	snd_pcm_oss_poll,
-	.unlocked_ioctl	=	snd_pcm_oss_ioctl,
-	.compat_ioctl	=	snd_pcm_oss_ioctl_compat,
-	.mmap		=	snd_pcm_oss_mmap,
+static const struct file_operations snd_pcm_oss_f_reg =
+{
+	.owner =	THIS_MODULE,
+	.read =		snd_pcm_oss_read,
+	.write =	snd_pcm_oss_write,
+	.open =		snd_pcm_oss_open,
+	.release =	snd_pcm_oss_release,
+	.poll =		snd_pcm_oss_poll,
+	.unlocked_ioctl =	snd_pcm_oss_ioctl,
+	.compat_ioctl =	snd_pcm_oss_ioctl_compat,
+	.mmap =		snd_pcm_oss_mmap,
 };
 
 static void register_oss_dsp(struct snd_pcm *pcm, int index)
@@ -3151,12 +3145,6 @@ static void register_oss_dsp(struct snd_pcm *pcm, int index)
 
 static int snd_pcm_oss_register_minor(struct snd_pcm *pcm)
 {
-	if (pcm->oss.registered)
-		return 0;
-	if (!try_module_get(THIS_MODULE))
-		return -ENODEV;
-	pcm->oss.registered = true;
-
 	pcm->oss.reg = 0;
 	if (dsp_map[pcm->card->number] == (int)pcm->device) {
 		char name[128];
@@ -3211,14 +3199,8 @@ static int snd_pcm_oss_disconnect_minor(struct snd_pcm *pcm)
 
 static int snd_pcm_oss_unregister_minor(struct snd_pcm *pcm)
 {
-	/* BUILD-state and creation-error cleanup need not have registered us. */
-	if (!pcm->oss.registered)
-		return 0;
-
 	snd_pcm_oss_disconnect_minor(pcm);
 	snd_pcm_oss_proc_done(pcm);
-	pcm->oss.registered = false;
-	module_put(THIS_MODULE);
 	return 0;
 }
 

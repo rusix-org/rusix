@@ -22,7 +22,6 @@
 #include <linux/mm.h>
 #include <linux/sizes.h>
 #include <linux/slab.h>
-#include <linux/string.h>
 #include <linux/string_choices.h>
 #include <linux/log2.h>
 #include <linux/cma.h>
@@ -33,7 +32,6 @@
 
 #include "internal.h"
 #include "cma.h"
-#include "mm_init.h"
 
 struct cma cma_areas[MAX_CMA_AREAS];
 unsigned int cma_area_count;
@@ -53,7 +51,6 @@ const char *cma_get_name(const struct cma *cma)
 {
 	return cma->name;
 }
-EXPORT_SYMBOL_GPL(cma_get_name);
 
 static unsigned long cma_bitmap_aligned_mask(const struct cma *cma,
 					     unsigned int align_order)
@@ -127,6 +124,7 @@ bool cma_validate_zones(struct cma *cma)
 		 * to be in the same zone. Simplify by forcing the entire
 		 * CMA resv range to be in the same zone.
 		 */
+		WARN_ON_ONCE(!pfn_valid(base_pfn));
 		if (pfn_range_intersects_zones(cma->nid, base_pfn, cmr->count)) {
 			set_bit(CMA_ZONES_INVALID, &cma->flags);
 			return false;
@@ -164,8 +162,6 @@ static void __init cma_activate_area(struct cma *cma)
 			bitmap_count = cma_bitmap_pages_to_bits(cma, count);
 			bitmap_set(cmr->bitmap, 0, bitmap_count);
 		}
-
-		WARN_ON_ONCE(!pfn_valid(cmr->base_pfn));
 
 		for (pfn = early_pfn[r]; pfn < cmr->base_pfn + cmr->count;
 		     pfn += pageblock_nr_pages)
@@ -240,9 +236,9 @@ static int __init cma_new_area(const char *name, phys_addr_t size,
 	cma_area_count++;
 
 	if (name)
-		strscpy(cma->name, name);
+		snprintf(cma->name, CMA_MAX_NAME, "%s", name);
 	else
-		snprintf(cma->name, CMA_MAX_NAME, "cma%d", cma_area_count);
+		snprintf(cma->name, CMA_MAX_NAME,  "cma%d\n", cma_area_count);
 
 	cma->available_count = cma->count = size >> PAGE_SHIFT;
 	cma->order_per_bit = order_per_bit;
@@ -843,7 +839,7 @@ static int cma_range_alloc(struct cma *cma, struct cma_memrange *cmr,
 		spin_unlock_irq(&cma->lock);
 
 		mutex_lock(&cma->alloc_mutex);
-		ret = alloc_contig_frozen_range(pfn, pfn + count, ACR_FLAGS_CMA, gfp);
+		ret = alloc_contig_range(pfn, pfn + count, ACR_FLAGS_CMA, gfp);
 		mutex_unlock(&cma->alloc_mutex);
 		if (!ret)
 			break;
@@ -863,8 +859,8 @@ out:
 	return ret;
 }
 
-static struct page *__cma_alloc_frozen(struct cma *cma,
-		unsigned long count, unsigned int align, gfp_t gfp)
+static struct page *__cma_alloc(struct cma *cma, unsigned long count,
+		       unsigned int align, gfp_t gfp)
 {
 	struct page *page = NULL;
 	int ret = -ENOMEM, r;
@@ -921,21 +917,6 @@ static struct page *__cma_alloc_frozen(struct cma *cma,
 	return page;
 }
 
-struct page *cma_alloc_frozen(struct cma *cma, unsigned long count,
-		unsigned int align, bool no_warn)
-{
-	gfp_t gfp = GFP_KERNEL | (no_warn ? __GFP_NOWARN : 0);
-
-	return __cma_alloc_frozen(cma, count, align, gfp);
-}
-
-struct page *cma_alloc_frozen_compound(struct cma *cma, unsigned int order)
-{
-	gfp_t gfp = GFP_KERNEL | __GFP_COMP | __GFP_NOWARN;
-
-	return __cma_alloc_frozen(cma, 1 << order, order, gfp);
-}
-
 /**
  * cma_alloc() - allocate pages from contiguous area
  * @cma:   Contiguous memory region for which the allocation is performed.
@@ -949,61 +930,49 @@ struct page *cma_alloc_frozen_compound(struct cma *cma, unsigned int order)
 struct page *cma_alloc(struct cma *cma, unsigned long count,
 		       unsigned int align, bool no_warn)
 {
+	return __cma_alloc(cma, count, align, GFP_KERNEL | (no_warn ? __GFP_NOWARN : 0));
+}
+
+struct folio *cma_alloc_folio(struct cma *cma, int order, gfp_t gfp)
+{
 	struct page *page;
 
-	page = cma_alloc_frozen(cma, count, align, no_warn);
-	if (page)
-		set_pages_refcounted(page, count);
-
-	return page;
-}
-EXPORT_SYMBOL_GPL(cma_alloc);
-
-static struct cma_memrange *find_cma_memrange(struct cma *cma,
-		const struct page *pages, unsigned long count)
-{
-	struct cma_memrange *cmr = NULL;
-	unsigned long pfn, end_pfn;
-	int r;
-
-	pr_debug("%s(page %p, count %lu)\n", __func__, (void *)pages, count);
-
-	if (!cma || !pages || count > cma->count)
+	if (WARN_ON(!order || !(gfp & __GFP_COMP)))
 		return NULL;
 
+	page = __cma_alloc(cma, 1 << order, order, gfp);
+
+	return page ? page_folio(page) : NULL;
+}
+
+bool cma_pages_valid(struct cma *cma, const struct page *pages,
+		     unsigned long count)
+{
+	unsigned long pfn, end;
+	int r;
+	struct cma_memrange *cmr;
+	bool ret;
+
+	if (!cma || !pages || count > cma->count)
+		return false;
+
 	pfn = page_to_pfn(pages);
+	ret = false;
 
 	for (r = 0; r < cma->nranges; r++) {
 		cmr = &cma->ranges[r];
-		end_pfn = cmr->base_pfn + cmr->count;
-		if (pfn >= cmr->base_pfn && pfn < end_pfn) {
-			if (pfn + count <= end_pfn)
-				break;
-
-			VM_WARN_ON_ONCE(1);
+		end = cmr->base_pfn + cmr->count;
+		if (pfn >= cmr->base_pfn && pfn < end) {
+			ret = pfn + count <= end;
+			break;
 		}
 	}
 
-	if (r == cma->nranges) {
-		pr_debug("%s(page %p, count %lu, no cma range matches the page range)\n",
-			 __func__, (void *)pages, count);
-		return NULL;
-	}
+	if (!ret)
+		pr_debug("%s(page %p, count %lu)\n",
+				__func__, (void *)pages, count);
 
-	return cmr;
-}
-
-static void __cma_release_frozen(struct cma *cma, struct cma_memrange *cmr,
-		const struct page *pages, unsigned long count)
-{
-	unsigned long pfn = page_to_pfn(pages);
-
-	pr_debug("%s(page %p, count %lu)\n", __func__, (void *)pages, count);
-
-	free_contig_frozen_range(pfn, count);
-	cma_clear_bitmap(cma, cmr, pfn, count);
-	cma_sysfs_account_release_pages(cma, count);
-	trace_cma_release(cma->name, pfn, pages, count);
+	return ret;
 }
 
 /**
@@ -1020,37 +989,43 @@ bool cma_release(struct cma *cma, const struct page *pages,
 		 unsigned long count)
 {
 	struct cma_memrange *cmr;
-	unsigned long ret = 0;
-	unsigned long i, pfn;
+	unsigned long pfn, end_pfn;
+	int r;
 
-	cmr = find_cma_memrange(cma, pages, count);
-	if (!cmr)
+	pr_debug("%s(page %p, count %lu)\n", __func__, (void *)pages, count);
+
+	if (!cma_pages_valid(cma, pages, count))
 		return false;
 
 	pfn = page_to_pfn(pages);
-	for (i = 0; i < count; i++, pfn++)
-		ret += !put_page_testzero(pfn_to_page(pfn));
+	end_pfn = pfn + count;
 
-	WARN(ret, "%lu pages are still in use!\n", ret);
+	for (r = 0; r < cma->nranges; r++) {
+		cmr = &cma->ranges[r];
+		if (pfn >= cmr->base_pfn &&
+		    pfn < (cmr->base_pfn + cmr->count)) {
+			VM_BUG_ON(end_pfn > cmr->base_pfn + cmr->count);
+			break;
+		}
+	}
 
-	__cma_release_frozen(cma, cmr, pages, count);
+	if (r == cma->nranges)
+		return false;
+
+	free_contig_range(pfn, count);
+	cma_clear_bitmap(cma, cmr, pfn, count);
+	cma_sysfs_account_release_pages(cma, count);
+	trace_cma_release(cma->name, pfn, pages, count);
 
 	return true;
 }
-EXPORT_SYMBOL_GPL(cma_release);
 
-bool cma_release_frozen(struct cma *cma, const struct page *pages,
-		unsigned long count)
+bool cma_free_folio(struct cma *cma, const struct folio *folio)
 {
-	struct cma_memrange *cmr;
-
-	cmr = find_cma_memrange(cma, pages, count);
-	if (!cmr)
+	if (WARN_ON(!folio_test_large(folio)))
 		return false;
 
-	__cma_release_frozen(cma, cmr, pages, count);
-
-	return true;
+	return cma_release(cma, &folio->page, folio_nr_pages(folio));
 }
 
 int cma_for_each_area(int (*it)(struct cma *cma, void *data), void *data)

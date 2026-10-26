@@ -8,6 +8,7 @@
  */
 #include <linux/interrupt.h>
 #include <linux/module.h>
+#include <linux/mod_devicetable.h>
 #include <linux/mmc/sdio_func.h>
 #include <linux/mmc/sdio_ids.h>
 #include <linux/platform_device.h>
@@ -203,7 +204,7 @@ static int wl1251_sdio_probe(struct sdio_func *func,
 
 	wl = hw->priv;
 
-	wl_sdio = kzalloc_obj(*wl_sdio);
+	wl_sdio = kzalloc(sizeof(*wl_sdio), GFP_KERNEL);
 	if (wl_sdio == NULL) {
 		ret = -ENOMEM;
 		goto out_free_hw;

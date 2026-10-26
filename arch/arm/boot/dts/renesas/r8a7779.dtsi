@@ -704,7 +704,7 @@
 		};
 	};
 
-	lbsc: bus@0 {
+	lbsc: bus {
 		compatible = "simple-bus";
 		#address-cells = <1>;
 		#size-cells = <1>;

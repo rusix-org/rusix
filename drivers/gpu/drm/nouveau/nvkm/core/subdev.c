@@ -280,7 +280,7 @@ int
 nvkm_subdev_new_(const struct nvkm_subdev_func *func, struct nvkm_device *device,
 		 enum nvkm_subdev_type type, int inst, struct nvkm_subdev **psubdev)
 {
-	if (!(*psubdev = kzalloc_obj(**psubdev)))
+	if (!(*psubdev = kzalloc(sizeof(**psubdev), GFP_KERNEL)))
 		return -ENOMEM;
 	nvkm_subdev_ctor(func, device, type, inst, *psubdev);
 	return 0;

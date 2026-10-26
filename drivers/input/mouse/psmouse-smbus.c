@@ -154,7 +154,7 @@ static void psmouse_smbus_schedule_remove(struct i2c_client *client)
 {
 	struct psmouse_smbus_removal_work *rwork;
 
-	rwork = kzalloc_obj(*rwork);
+	rwork = kzalloc(sizeof(*rwork), GFP_KERNEL);
 	if (rwork) {
 		INIT_WORK(&rwork->work, psmouse_smbus_remove_i2c_device);
 		rwork->client = client;
@@ -232,7 +232,7 @@ int psmouse_smbus_init(struct psmouse *psmouse,
 	struct psmouse_smbus_dev *smbdev;
 	int error;
 
-	smbdev = kzalloc_obj(*smbdev);
+	smbdev = kzalloc(sizeof(*smbdev), GFP_KERNEL);
 	if (!smbdev)
 		return -ENOMEM;
 
@@ -299,7 +299,7 @@ int __init psmouse_smbus_module_init(void)
 {
 	int error;
 
-	psmouse_smbus_wq = alloc_workqueue("psmouse-smbus", WQ_UNBOUND, 0);
+	psmouse_smbus_wq = alloc_workqueue("psmouse-smbus", 0, 0);
 	if (!psmouse_smbus_wq)
 		return -ENOMEM;
 

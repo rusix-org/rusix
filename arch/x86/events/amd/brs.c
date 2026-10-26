@@ -343,10 +343,11 @@ void amd_brs_drain(void)
 		if (!amd_brs_match_plm(event, from, to))
 			continue;
 
-		br[nr] = (struct perf_branch_entry){
-			.from	= from,
-			.to	= to,
-		};
+		perf_clear_branch_entry_bitfields(br+nr);
+
+		br[nr].from = from;
+		br[nr].to   = to;
+
 		nr++;
 	}
 empty:

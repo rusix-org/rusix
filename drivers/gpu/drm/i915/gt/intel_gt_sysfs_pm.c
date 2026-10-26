@@ -7,8 +7,6 @@
 #include <linux/sysfs.h>
 #include <linux/printk.h>
 
-#include <drm/intel/intel_pcode_regs.h>
-
 #include "i915_drv.h"
 #include "i915_reg.h"
 #include "i915_sysfs.h"

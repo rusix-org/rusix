@@ -56,7 +56,11 @@
 #include <linux/sched/isolation.h>
 #include <crypto/chacha.h>
 #include <crypto/blake2s.h>
+#ifdef CONFIG_VDSO_GETRANDOM
+#include <vdso/getrandom.h>
 #include <vdso/datapage.h>
+#include <vdso/vsyscall.h>
+#endif
 #include <asm/archrandom.h>
 #include <asm/processor.h>
 #include <asm/irq.h>
@@ -248,8 +252,8 @@ static void crng_reseed(struct work_struct *work)
 	u8 key[CHACHA_KEY_SIZE];
 
 	/* Immediately schedule the next reseeding, so that it fires sooner rather than later. */
-	if (likely(system_dfl_wq))
-		queue_delayed_work(system_dfl_wq, &next_reseed, crng_reseed_interval());
+	if (likely(system_unbound_wq))
+		queue_delayed_work(system_unbound_wq, &next_reseed, crng_reseed_interval());
 
 	extract_entropy(key, sizeof(key));
 
@@ -265,7 +269,7 @@ static void crng_reseed(struct work_struct *work)
 	if (next_gen == ULONG_MAX)
 		++next_gen;
 	WRITE_ONCE(base_crng.generation, next_gen);
-
+#ifdef CONFIG_VDSO_GETRANDOM
 	/* base_crng.generation's invalid value is ULONG_MAX, while
 	 * vdso_k_rng_data->generation's invalid value is 0, so add one to the
 	 * former to arrive at the latter. Use smp_store_release so that this
@@ -279,9 +283,8 @@ static void crng_reseed(struct work_struct *work)
 	 * because the vDSO side only checks whether the value changed, without
 	 * actually using or interpreting the value.
 	 */
-	if (IS_ENABLED(CONFIG_VDSO_GETRANDOM))
-		smp_store_release((unsigned long *)&vdso_k_rng_data->generation, next_gen + 1);
-
+	smp_store_release((unsigned long *)&vdso_k_rng_data->generation, next_gen + 1);
+#endif
 	if (!static_branch_likely(&crng_is_ready))
 		crng_init = CRNG_READY;
 	spin_unlock_irqrestore(&base_crng.lock, flags);
@@ -417,7 +420,7 @@ static void _get_random_bytes(void *buf, size_t len)
 
 /*
  * This returns random bytes in arbitrary quantities. The quality of the
- * random bytes is as good as /dev/urandom. In order to ensure that the
+ * random bytes is good as /dev/urandom. In order to ensure that the
  * randomness provided by this function is okay, the function
  * wait_for_random_bytes() should be called and return 0 at least once
  * at any point prior.
@@ -480,7 +483,7 @@ out_zero_chacha:
 
 /*
  * Batched entropy returns random integers. The quality of the random
- * number is as good as /dev/urandom. In order to ensure that the randomness
+ * number is good as /dev/urandom. In order to ensure that the randomness
  * provided by this function is okay, the function wait_for_random_bytes()
  * should be called and return 0 at least once at any point prior.
  */
@@ -623,7 +626,7 @@ enum {
 };
 
 static struct {
-	struct blake2s_ctx hash;
+	struct blake2s_state hash;
 	spinlock_t lock;
 	unsigned int init_bits;
 } input_pool = {
@@ -688,7 +691,7 @@ static void extract_entropy(void *buf, size_t len)
 
 	/* next_key = HASHPRF(seed, RDSEED || 0) */
 	block.counter = 0;
-	blake2s(seed, sizeof(seed), (const u8 *)&block, sizeof(block), next_key, sizeof(next_key));
+	blake2s(next_key, (u8 *)&block, seed, sizeof(next_key), sizeof(block), sizeof(seed));
 	blake2s_init_key(&input_pool.hash, BLAKE2S_HASH_SIZE, next_key, sizeof(next_key));
 
 	spin_unlock_irqrestore(&input_pool.lock, flags);
@@ -698,7 +701,7 @@ static void extract_entropy(void *buf, size_t len)
 		i = min_t(size_t, len, BLAKE2S_HASH_SIZE);
 		/* output = HASHPRF(seed, RDSEED || ++counter) */
 		++block.counter;
-		blake2s(seed, sizeof(seed), (const u8 *)&block, sizeof(block), buf, i);
+		blake2s(buf, (u8 *)&block, seed, i, sizeof(block), sizeof(seed));
 		len -= i;
 		buf += i;
 	}
@@ -728,11 +731,12 @@ static void __cold _credit_init_bits(size_t bits)
 
 	if (orig < POOL_READY_BITS && new >= POOL_READY_BITS) {
 		crng_reseed(NULL); /* Sets crng_init to CRNG_READY under base_crng.lock. */
-		if (system_dfl_wq)
-			queue_work(system_dfl_wq, &set_ready);
+		if (static_key_initialized && system_unbound_wq)
+			queue_work(system_unbound_wq, &set_ready);
 		atomic_notifier_call_chain(&random_ready_notifier, 0, NULL);
-		if (IS_ENABLED(CONFIG_VDSO_GETRANDOM))
-			WRITE_ONCE(vdso_k_rng_data->is_ready, true);
+#ifdef CONFIG_VDSO_GETRANDOM
+		WRITE_ONCE(vdso_k_rng_data->is_ready, true);
+#endif
 		wake_up_interruptible(&crng_init_wait);
 		kill_fasync(&fasync, SIGIO, POLL_IN);
 		pr_notice("crng init done\n");
@@ -780,7 +784,7 @@ static void __cold _credit_init_bits(size_t bits)
  *
  * add_bootloader_randomness() is called by bootloader drivers, such as EFI
  * and device tree, and credits its input depending on whether or not the
- * command line option 'random.trust_bootloader' is set.
+ * command line option 'random.trust_bootloader'.
  *
  * add_vmfork_randomness() adds a unique (but not necessarily secret) ID
  * representing the current instance of a VM to the pool, without crediting,
@@ -901,8 +905,9 @@ void __init random_init(void)
 	add_latent_entropy();
 
 	/*
-	 * If we were initialized by the cpu or bootloader before workqueues
-	 * are initialized, then we should enable the static branch here.
+	 * If we were initialized by the cpu or bootloader before jump labels
+	 * or workqueues are initialized, then we should enable the static
+	 * branch here, where it's guaranteed that these have been initialized.
 	 */
 	if (!static_branch_likely(&crng_is_ready) && crng_init >= CRNG_READY)
 		crng_set_ready(NULL);
@@ -1234,7 +1239,7 @@ void __cold rand_initialize_disk(struct gendisk *disk)
 	 * If kzalloc returns null, we just won't use that entropy
 	 * source.
 	 */
-	state = kzalloc_obj(struct timer_rand_state);
+	state = kzalloc(sizeof(struct timer_rand_state), GFP_KERNEL);
 	if (state) {
 		state->last_time = INITIAL_JIFFIES;
 		disk->random = state;

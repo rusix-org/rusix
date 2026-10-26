@@ -6,6 +6,7 @@
 #include <linux/init.h>
 #include <linux/rv.h>
 #include <rv/instrumentation.h>
+#include <rv/da_monitor.h>
 
 #define MODULE_NAME "%%MODEL_NAME%%"
 
@@ -19,9 +20,15 @@
  * This is the self-generated part of the monitor. Generally, there is no need
  * to touch this section.
  */
-#define RV_MON_TYPE RV_MON_%%MONITOR_TYPE%%
 #include "%%MODEL_NAME%%.h"
-#include <rv/%%MONITOR_CLASS%%_monitor.h>
+
+/*
+ * Declare the deterministic automata monitor.
+ *
+ * The rv monitor reference is needed for the monitor declaration.
+ */
+static struct rv_monitor rv_%%MODEL_NAME%%;
+DECLARE_DA_MON_%%MONITOR_TYPE%%(%%MODEL_NAME%%, %%MIN_TYPE%%);
 
 /*
  * This is the instrumentation part of the monitor.
@@ -35,7 +42,7 @@ static int enable_%%MODEL_NAME%%(void)
 {
 	int retval;
 
-	retval = %%MONITOR_CLASS%%_monitor_init();
+	retval = da_monitor_init_%%MODEL_NAME%%();
 	if (retval)
 		return retval;
 
@@ -46,38 +53,38 @@ static int enable_%%MODEL_NAME%%(void)
 
 static void disable_%%MODEL_NAME%%(void)
 {
-	rv_this.enabled = 0;
+	rv_%%MODEL_NAME%%.enabled = 0;
 
 %%TRACEPOINT_DETACH%%
 
-	%%MONITOR_CLASS%%_monitor_destroy();
+	da_monitor_destroy_%%MODEL_NAME%%();
 }
 
 /*
  * This is the monitor register section.
  */
-static struct rv_monitor rv_this = {
+static struct rv_monitor rv_%%MODEL_NAME%% = {
 	.name = "%%MODEL_NAME%%",
 	.description = "%%DESCRIPTION%%",
 	.enable = enable_%%MODEL_NAME%%,
 	.disable = disable_%%MODEL_NAME%%,
-	.reset = da_monitor_reset_all,
+	.reset = da_monitor_reset_all_%%MODEL_NAME%%,
 	.enabled = 0,
 };
 
 static int __init register_%%MODEL_NAME%%(void)
 {
-	return rv_register_monitor(&rv_this, %%PARENT%%);
+	return rv_register_monitor(&rv_%%MODEL_NAME%%, %%PARENT%%);
 }
 
 static void __exit unregister_%%MODEL_NAME%%(void)
 {
-	rv_unregister_monitor(&rv_this);
+	rv_unregister_monitor(&rv_%%MODEL_NAME%%);
 }
 
 module_init(register_%%MODEL_NAME%%);
 module_exit(unregister_%%MODEL_NAME%%);
 
 MODULE_LICENSE("GPL");
-MODULE_AUTHOR("rvgen: auto-generated");
+MODULE_AUTHOR("dot2k: auto-generated");
 MODULE_DESCRIPTION("%%MODEL_NAME%%: %%DESCRIPTION%%");

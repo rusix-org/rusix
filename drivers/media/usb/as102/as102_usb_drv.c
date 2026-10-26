@@ -336,7 +336,7 @@ static int as102_usb_probe(struct usb_interface *intf,
 	struct as102_dev_t *as102_dev;
 	const struct as102_dev_info *info = (const struct as102_dev_info *)id->driver_info;
 
-	as102_dev = kzalloc_obj(struct as102_dev_t);
+	as102_dev = kzalloc(sizeof(struct as102_dev_t), GFP_KERNEL);
 	if (as102_dev == NULL)
 		return -ENOMEM;
 

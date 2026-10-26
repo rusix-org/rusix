@@ -282,7 +282,7 @@ dr_domain_add_vport_cap(struct mlx5dr_domain *dmn, u16 vport)
 	struct mlx5dr_cmd_vport_cap *vport_caps;
 	int ret;
 
-	vport_caps = kvzalloc_obj(*vport_caps);
+	vport_caps = kvzalloc(sizeof(*vport_caps), GFP_KERNEL);
 	if (!vport_caps)
 		return NULL;
 
@@ -410,7 +410,7 @@ static int dr_domain_caps_init(struct mlx5_core_dev *mdev,
 	switch (dmn->type) {
 	case MLX5DR_DOMAIN_TYPE_NIC_RX:
 		if (!DR_DOMAIN_SW_STEERING_SUPPORTED(dmn, rx))
-			return -EOPNOTSUPP;
+			return -ENOTSUPP;
 
 		dmn->info.supp_sw_steering = true;
 		dmn->info.rx.type = DR_DOMAIN_NIC_TYPE_RX;
@@ -419,7 +419,7 @@ static int dr_domain_caps_init(struct mlx5_core_dev *mdev,
 		break;
 	case MLX5DR_DOMAIN_TYPE_NIC_TX:
 		if (!DR_DOMAIN_SW_STEERING_SUPPORTED(dmn, tx))
-			return -EOPNOTSUPP;
+			return -ENOTSUPP;
 
 		dmn->info.supp_sw_steering = true;
 		dmn->info.tx.type = DR_DOMAIN_NIC_TYPE_TX;
@@ -428,10 +428,10 @@ static int dr_domain_caps_init(struct mlx5_core_dev *mdev,
 		break;
 	case MLX5DR_DOMAIN_TYPE_FDB:
 		if (!dmn->info.caps.eswitch_manager)
-			return -EOPNOTSUPP;
+			return -ENOTSUPP;
 
 		if (!DR_DOMAIN_SW_STEERING_SUPPORTED(dmn, fdb))
-			return -EOPNOTSUPP;
+			return -ENOTSUPP;
 
 		dmn->info.rx.type = DR_DOMAIN_NIC_TYPE_RX;
 		dmn->info.tx.type = DR_DOMAIN_NIC_TYPE_TX;
@@ -467,7 +467,7 @@ mlx5dr_domain_create(struct mlx5_core_dev *mdev, enum mlx5dr_domain_type type)
 	if (type > MLX5DR_DOMAIN_TYPE_FDB)
 		return NULL;
 
-	dmn = kzalloc_obj(*dmn);
+	dmn = kzalloc(sizeof(*dmn), GFP_KERNEL);
 	if (!dmn)
 		return NULL;
 

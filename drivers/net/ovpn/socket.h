@@ -24,6 +24,7 @@ struct ovpn_peer;
  * @peer: unique peer transmitting over this socket (TCP only)
  * @sk: the low level sock object
  * @refcount: amount of contexts currently referencing this object
+ * @work: member used to schedule release routine (it may block)
  * @tcp_tx_work: work for deferring outgoing packet processing (TCP only)
  */
 struct ovpn_socket {
@@ -37,6 +38,7 @@ struct ovpn_socket {
 
 	struct sock *sk;
 	struct kref refcount;
+	struct work_struct work;
 	struct work_struct tcp_tx_work;
 };
 

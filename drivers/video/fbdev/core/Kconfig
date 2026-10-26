@@ -155,6 +155,12 @@ config FB_IOMEM_HELPERS
 	select FB_CFB_IMAGEBLIT
 	select FB_IOMEM_FOPS
 
+config FB_IOMEM_HELPERS_DEFERRED
+	bool
+	depends on FB_CORE
+	select FB_DEFERRED_IO
+	select FB_IOMEM_HELPERS
+
 config FB_SYSMEM_HELPERS
 	bool
 	depends on FB_CORE
@@ -174,7 +180,7 @@ config FB_BACKLIGHT
 	depends on FB
 
 config FB_MODE_HELPERS
-	bool
+	bool "Enable Video Mode Handling Helpers"
 	depends on FB
 	help
 	  This enables functions for handling video modes using the

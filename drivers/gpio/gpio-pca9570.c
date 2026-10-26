@@ -9,16 +9,11 @@
  *	Andrew F. Davis <afd@ti.com>
  */
 
-#include <linux/bits.h>
-#include <linux/cleanup.h>
-#include <linux/device/devres.h>
-#include <linux/errno.h>
 #include <linux/gpio/driver.h>
 #include <linux/i2c.h>
 #include <linux/module.h>
 #include <linux/mutex.h>
 #include <linux/property.h>
-#include <linux/types.h>
 
 #define SLG7XL45106_GPO_REG	0xDB
 
@@ -99,7 +94,7 @@ static int pca9570_set(struct gpio_chip *chip, unsigned int offset, int value)
 	u8 buffer;
 	int ret;
 
-	guard(mutex)(&gpio->lock);
+	mutex_lock(&gpio->lock);
 
 	buffer = gpio->out;
 	if (value)
@@ -109,18 +104,18 @@ static int pca9570_set(struct gpio_chip *chip, unsigned int offset, int value)
 
 	ret = pca9570_write(gpio, buffer);
 	if (ret)
-		return ret;
+		goto out;
 
 	gpio->out = buffer;
 
-	return 0;
+out:
+	mutex_unlock(&gpio->lock);
+	return ret;
 }
 
 static int pca9570_probe(struct i2c_client *client)
 {
-	struct device *dev = &client->dev;
 	struct pca9570 *gpio;
-	int ret;
 
 	gpio = devm_kzalloc(&client->dev, sizeof(*gpio), GFP_KERNEL);
 	if (!gpio)
@@ -133,13 +128,11 @@ static int pca9570_probe(struct i2c_client *client)
 	gpio->chip.get = pca9570_get;
 	gpio->chip.set = pca9570_set;
 	gpio->chip.base = -1;
-	gpio->chip_data = i2c_get_match_data(client);
+	gpio->chip_data = device_get_match_data(&client->dev);
 	gpio->chip.ngpio = gpio->chip_data->ngpio;
 	gpio->chip.can_sleep = true;
 
-	ret = devm_mutex_init(dev, &gpio->lock);
-	if (ret)
-		return ret;
+	mutex_init(&gpio->lock);
 
 	/* Read the current output level */
 	pca9570_read(gpio, &gpio->out);
@@ -163,9 +156,9 @@ static const struct pca9570_chip_data slg7xl45106_gpio = {
 };
 
 static const struct i2c_device_id pca9570_id_table[] = {
-	{ .name = "pca9570", .driver_data = (kernel_ulong_t)&pca9570_gpio },
-	{ .name = "pca9571", .driver_data = (kernel_ulong_t)&pca9571_gpio },
-	{ .name = "slg7xl45106", .driver_data = (kernel_ulong_t)&slg7xl45106_gpio },
+	{ "pca9570", (kernel_ulong_t)&pca9570_gpio},
+	{ "pca9571", (kernel_ulong_t)&pca9571_gpio },
+	{ "slg7xl45106", (kernel_ulong_t)&slg7xl45106_gpio },
 	{ /* sentinel */ }
 };
 MODULE_DEVICE_TABLE(i2c, pca9570_id_table);

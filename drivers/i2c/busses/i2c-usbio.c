@@ -24,12 +24,11 @@ struct usbio_i2c {
 };
 
 static const struct acpi_device_id usbio_i2c_acpi_hids[] = {
-	{ .id = "INTC1008" }, /* MTL */
-	{ .id = "INTC10B3" }, /* ARL */
-	{ .id = "INTC10B6" }, /* LNL */
-	{ .id = "INTC10D2" }, /* MTL-CVF */
-	{ .id = "INTC10E3" }, /* PTL */
-	{ .id = "INTC1118" }, /* NVL */
+	{ "INTC1008" }, /* MTL */
+	{ "INTC10B3" }, /* ARL */
+	{ "INTC10B6" }, /* LNL */
+	{ "INTC10D2" }, /* MTL-CVF */
+	{ "INTC10E3" }, /* PTL */
 	{ }
 };
 

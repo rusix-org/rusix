@@ -6,7 +6,7 @@ import json
 from pathlib import Path
 
 
-# Names from upstream 21a7f44fd0765fcc5194130b28767786eba1d1e7. Keep this
+# Names from upstream 2926d88bb7fc4608fd942453d929c39e4e5ec006. Keep this
 # inventory independent of the live C source, so removing a test cannot silently
 # weaken both the tests and their acceptance gate in the same build.
 UPSTREAM_CASES = (

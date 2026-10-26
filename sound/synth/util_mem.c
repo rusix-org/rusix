@@ -26,7 +26,7 @@ snd_util_memhdr_new(int memsize)
 {
 	struct snd_util_memhdr *hdr;
 
-	hdr = kzalloc_obj(*hdr);
+	hdr = kzalloc(sizeof(*hdr), GFP_KERNEL);
 	if (hdr == NULL)
 		return NULL;
 	hdr->size = memsize;

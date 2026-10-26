@@ -18,17 +18,7 @@ description: |
 
 properties:
   compatible:
-    oneOf:
-      - enum:
-          - qcom,kaanapali-fastrpc
-          - qcom,fastrpc
-      - items:
-          - enum:
-              - qcom,glymur-fastrpc
-              - qcom,hawi-fastrpc
-              - qcom,maili-fastrpc
-              - qcom,nord-fastrpc
-          - const: qcom,kaanapali-fastrpc
+    const: qcom,fastrpc
 
   label:
     enum:
@@ -37,8 +27,6 @@ properties:
       - sdsp
       - cdsp
       - cdsp1
-      - cdsp2
-      - cdsp3
       - gdsp0
       - gdsp1
 

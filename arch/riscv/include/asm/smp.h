@@ -15,18 +15,6 @@
 struct seq_file;
 extern unsigned long boot_cpu_hartid;
 
-enum ipi_message_type {
-	IPI_RESCHEDULE,
-	IPI_CALL_FUNC,
-	IPI_CPU_STOP,
-	IPI_CPU_CRASH_STOP,
-	IPI_IRQ_WORK,
-	IPI_TIMER,
-	IPI_CPU_BACKTRACE,
-	IPI_KGDB_ROUNDUP,
-	IPI_MAX
-};
-
 #ifdef CONFIG_SMP
 
 #include <linux/jump_label.h>
@@ -117,7 +105,7 @@ static inline void riscv_ipi_set_virq_range(int virq, int nr)
 
 #endif /* CONFIG_SMP */
 
-#if defined(CONFIG_HOTPLUG_CPU)
+#if defined(CONFIG_HOTPLUG_CPU) && (CONFIG_SMP)
 bool cpu_has_hotplug(unsigned int cpu);
 #else
 static inline bool cpu_has_hotplug(unsigned int cpu)

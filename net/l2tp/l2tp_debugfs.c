@@ -163,7 +163,7 @@ static void l2tp_dfs_seq_tunnel_show(struct seq_file *m, void *v)
 	seq_printf(m, " %d sessions, refcnt %d/%d\n", session_count,
 		   tunnel->sock ? refcount_read(&tunnel->sock->sk_refcnt) : 0,
 		   refcount_read(&tunnel->ref_count));
-	seq_printf(m, " %08x tx %ld/%ld/%ld rx %ld/%ld/%ld\n",
+	seq_printf(m, " %08x rx %ld/%ld/%ld rx %ld/%ld/%ld\n",
 		   0,
 		   atomic_long_read(&tunnel->stats.tx_packets),
 		   atomic_long_read(&tunnel->stats.tx_bytes),
@@ -182,12 +182,12 @@ static void l2tp_dfs_seq_session_show(struct seq_file *m, void *v)
 		   session->pwtype == L2TP_PWTYPE_ETH ? "ETH" :
 		   session->pwtype == L2TP_PWTYPE_PPP ? "PPP" :
 		   "");
-	if (READ_ONCE(session->send_seq) || session->recv_seq)
+	if (session->send_seq || session->recv_seq)
 		seq_printf(m, "   nr %u, ns %u\n", session->nr, session->ns);
 	seq_printf(m, "   refcnt %d\n", refcount_read(&session->ref_count));
 	seq_printf(m, "   config 0/0/%c/%c/-/%s %08x %u\n",
 		   session->recv_seq ? 'R' : '-',
-		   READ_ONCE(session->send_seq) ? 'S' : '-',
+		   session->send_seq ? 'S' : '-',
 		   session->lns_mode ? "LNS" : "LAC",
 		   0,
 		   jiffies_to_msecs(session->reorder_timeout));
@@ -269,7 +269,7 @@ static int l2tp_dfs_seq_open(struct inode *inode, struct file *file)
 	struct seq_file *seq;
 	int rc = -ENOMEM;
 
-	pd = kzalloc_obj(*pd);
+	pd = kzalloc(sizeof(*pd), GFP_KERNEL);
 	if (!pd)
 		goto out;
 

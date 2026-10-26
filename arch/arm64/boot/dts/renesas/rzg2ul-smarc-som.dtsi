@@ -75,7 +75,8 @@
 	status = "okay";
 
 	phy0: ethernet-phy@7 {
-		compatible = "ethernet-phy-id0022.1640";
+		compatible = "ethernet-phy-id0022.1640",
+			     "ethernet-phy-ieee802.3-c22";
 		reg = <7>;
 		interrupts-extended = <&irqc RZG2L_IRQ2 IRQ_TYPE_LEVEL_LOW>;
 		rxc-skew-psec = <2400>;
@@ -102,7 +103,8 @@
 	status = "okay";
 
 	phy1: ethernet-phy@7 {
-		compatible = "ethernet-phy-id0022.1640";
+		compatible = "ethernet-phy-id0022.1640",
+			     "ethernet-phy-ieee802.3-c22";
 		reg = <7>;
 		interrupts-extended = <&irqc RZG2L_IRQ7 IRQ_TYPE_LEVEL_LOW>;
 		rxc-skew-psec = <2400>;
@@ -204,51 +206,51 @@
 	};
 
 	sdhi0_emmc_pins: sd0emmc {
-		sd0-emmc-data {
+		sd0_emmc_data {
 			pins = "SD0_DATA0", "SD0_DATA1", "SD0_DATA2", "SD0_DATA3",
 			       "SD0_DATA4", "SD0_DATA5", "SD0_DATA6", "SD0_DATA7";
 			power-source = <1800>;
 		};
 
-		sd0-emmc-ctrl {
+		sd0_emmc_ctrl {
 			pins = "SD0_CLK", "SD0_CMD";
 			power-source = <1800>;
 		};
 
-		sd0-emmc-rst {
+		sd0_emmc_rst {
 			pins = "SD0_RST#";
 			power-source = <1800>;
 		};
 	};
 
 	sdhi0_pins: sd0 {
-		sd0-data {
+		sd0_data {
 			pins = "SD0_DATA0", "SD0_DATA1", "SD0_DATA2", "SD0_DATA3";
 			power-source = <3300>;
 		};
 
-		sd0-ctrl {
+		sd0_ctrl {
 			pins = "SD0_CLK", "SD0_CMD";
 			power-source = <3300>;
 		};
 
-		sd0-mux {
+		sd0_mux {
 			pinmux = <RZG2L_PORT_PINMUX(0, 0, 1)>; /* SD0_CD */
 		};
 	};
 
-	sdhi0_pins_uhs: sd0-uhs {
-		sd0-data-uhs {
+	sdhi0_pins_uhs: sd0_uhs {
+		sd0_data_uhs {
 			pins = "SD0_DATA0", "SD0_DATA1", "SD0_DATA2", "SD0_DATA3";
 			power-source = <1800>;
 		};
 
-		sd0-ctrl-uhs {
+		sd0_ctrl_uhs {
 			pins = "SD0_CLK", "SD0_CMD";
 			power-source = <1800>;
 		};
 
-		sd0-mux-uhs {
+		sd0_mux_uhs {
 			pinmux = <RZG2L_PORT_PINMUX(0, 0, 1)>; /* SD0_CD */
 		};
 	};

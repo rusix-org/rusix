@@ -341,7 +341,7 @@ static void chipone_configure_pll(struct chipone *icn,
 }
 
 static void chipone_atomic_enable(struct drm_bridge *bridge,
-				  struct drm_atomic_commit *state)
+				  struct drm_atomic_state *state)
 {
 	struct chipone *icn = bridge_to_chipone(bridge);
 	struct drm_display_mode *mode = &icn->mode;
@@ -444,7 +444,7 @@ static void chipone_atomic_enable(struct drm_bridge *bridge,
 }
 
 static void chipone_atomic_pre_enable(struct drm_bridge *bridge,
-				      struct drm_atomic_commit *state)
+				      struct drm_atomic_state *state)
 {
 	struct chipone *icn = bridge_to_chipone(bridge);
 	int ret;
@@ -481,7 +481,7 @@ static void chipone_atomic_pre_enable(struct drm_bridge *bridge,
 }
 
 static void chipone_atomic_post_disable(struct drm_bridge *bridge,
-					struct drm_atomic_commit *state)
+					struct drm_atomic_state *state)
 {
 	struct chipone *icn = bridge_to_chipone(bridge);
 
@@ -531,7 +531,7 @@ static int chipone_dsi_attach(struct chipone *icn)
 	dsi->hs_rate = 500000000;
 	dsi->lp_rate = 16000000;
 
-	ret = devm_mipi_dsi_attach(dev, dsi);
+	ret = mipi_dsi_attach(dsi);
 	if (ret < 0)
 		dev_err(icn->dev, "failed to attach dsi\n");
 
@@ -618,7 +618,7 @@ chipone_atomic_get_input_bus_fmts(struct drm_bridge *bridge,
 static const struct drm_bridge_funcs chipone_bridge_funcs = {
 	.atomic_duplicate_state	= drm_atomic_helper_bridge_duplicate_state,
 	.atomic_destroy_state	= drm_atomic_helper_bridge_destroy_state,
-	.atomic_create_state		= drm_atomic_helper_bridge_create_state,
+	.atomic_reset		= drm_atomic_helper_bridge_reset,
 	.atomic_pre_enable	= chipone_atomic_pre_enable,
 	.atomic_enable		= chipone_atomic_enable,
 	.atomic_post_disable	= chipone_atomic_post_disable,
@@ -730,11 +730,13 @@ static int chipone_dsi_probe(struct mipi_dsi_device *dsi)
 
 	mipi_dsi_set_drvdata(dsi, icn);
 
-	ret = devm_drm_bridge_add(dev, &icn->bridge);
-	if (ret)
-		return ret;
+	drm_bridge_add(&icn->bridge);
 
-	return chipone_dsi_attach(icn);
+	ret = chipone_dsi_attach(icn);
+	if (ret)
+		drm_bridge_remove(&icn->bridge);
+
+	return ret;
 }
 
 static int chipone_i2c_probe(struct i2c_client *client)
@@ -763,6 +765,14 @@ static int chipone_i2c_probe(struct i2c_client *client)
 	return chipone_dsi_host_attach(icn);
 }
 
+static void chipone_dsi_remove(struct mipi_dsi_device *dsi)
+{
+	struct chipone *icn = mipi_dsi_get_drvdata(dsi);
+
+	mipi_dsi_detach(dsi);
+	drm_bridge_remove(&icn->bridge);
+}
+
 static const struct of_device_id chipone_of_match[] = {
 	{ .compatible = "chipone,icn6211", },
 	{ /* sentinel */ }
@@ -771,6 +781,7 @@ MODULE_DEVICE_TABLE(of, chipone_of_match);
 
 static struct mipi_dsi_driver chipone_dsi_driver = {
 	.probe = chipone_dsi_probe,
+	.remove = chipone_dsi_remove,
 	.driver = {
 		.name = "chipone-icn6211",
 		.of_match_table = chipone_of_match,
@@ -778,8 +789,8 @@ static struct mipi_dsi_driver chipone_dsi_driver = {
 };
 
 static const struct i2c_device_id chipone_i2c_id[] = {
-	{ .name = "chipone,icn6211" },
-	{ }
+	{ "chipone,icn6211" },
+	{},
 };
 MODULE_DEVICE_TABLE(i2c, chipone_i2c_id);
 

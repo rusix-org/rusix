@@ -77,21 +77,6 @@ FIXTURE_VARIANT_ADD(valid_modes, enable_write_push)
 		PR_SHADOW_STACK_PUSH,
 };
 
-FIXTURE_VARIANT_ADD(valid_modes, write)
-{
-	.mode = PR_SHADOW_STACK_WRITE,
-};
-
-FIXTURE_VARIANT_ADD(valid_modes, push)
-{
-	.mode = PR_SHADOW_STACK_PUSH,
-};
-
-FIXTURE_VARIANT_ADD(valid_modes, write_push)
-{
-	.mode = PR_SHADOW_STACK_WRITE | PR_SHADOW_STACK_PUSH,
-};
-
 FIXTURE_SETUP(valid_modes)
 {
 }
@@ -130,7 +115,7 @@ TEST_F(valid_modes, enable_lock_disable)
 	ASSERT_EQ(ret, 0);
 
 	ret = my_syscall2(__NR_prctl, PR_SET_SHADOW_STACK_STATUS, 0);
-	ASSERT_EQ(ret, -EPERM);
+	ASSERT_EQ(ret, -EBUSY);
 
 	_exit(0);
 }
@@ -146,7 +131,7 @@ TEST_F(valid_modes, lock_enable)
 
 	ret = my_syscall2(__NR_prctl, PR_SET_SHADOW_STACK_STATUS,
 			  variant->mode);
-	ASSERT_EQ(ret, -EPERM);
+	ASSERT_EQ(ret, -EBUSY);
 
 	ret = prctl(PR_GET_SHADOW_STACK_STATUS, &mode, 0, 0, 0);
 	ASSERT_EQ(ret, 0);

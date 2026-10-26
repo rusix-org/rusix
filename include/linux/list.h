@@ -34,14 +34,6 @@
 	struct list_head name = LIST_HEAD_INIT(name)
 
 /**
- * LIST_HEAD_GUARDED - define a &struct list_head annotated with __guarded_by()
- * @name: name of the list_head
- * @lock: lock protecting the list
- */
-#define LIST_HEAD_GUARDED(name, lock) \
-	__guarded_by(&(lock)) LIST_HEAD(name)
-
-/**
  * INIT_LIST_HEAD - Initialize a list_head structure
  * @list: list_head structure to be initialized.
  *
@@ -451,7 +443,6 @@ static inline void list_del_init_careful(struct list_head *entry)
  * if another CPU could re-list_add() it.
  */
 static inline int list_empty_careful(const struct list_head *head)
-	__context_unsafe(/* intentional lockless access to @head */)
 {
 	struct list_head *next = smp_load_acquire(&head->next);
 	return list_is_head(next, head) && (next == READ_ONCE(head->prev));
@@ -1172,7 +1163,7 @@ static inline void hlist_move_list(struct hlist_head *old,
 {
 	new->first = old->first;
 	if (new->first)
-		WRITE_ONCE(new->first->pprev, &new->first);
+		new->first->pprev = &new->first;
 	old->first = NULL;
 }
 
@@ -1189,10 +1180,10 @@ static inline void hlist_splice_init(struct hlist_head *from,
 				     struct hlist_head *to)
 {
 	if (to->first)
-		WRITE_ONCE(to->first->pprev, &last->next);
+		to->first->pprev = &last->next;
 	last->next = to->first;
 	to->first = from->first;
-	WRITE_ONCE(from->first->pprev, &to->first);
+	from->first->pprev = &to->first;
 	from->first = NULL;
 }
 

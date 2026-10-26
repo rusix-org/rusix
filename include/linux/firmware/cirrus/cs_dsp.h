@@ -96,13 +96,13 @@ struct cs_dsp_alg_region {
 struct cs_dsp_coeff_ctl {
 	struct list_head list;
 	struct cs_dsp *dsp;
-	void *cache __counted_by_ptr(len);
+	void *cache;
 	const char *fw_name;
 	/* Subname is needed to match with firmware */
 	const char *subname;
 	unsigned int subname_len;
 	unsigned int offset;
-	unsigned int len;
+	size_t len;
 	unsigned int type;
 	unsigned int flags;
 	unsigned int set:1;
@@ -179,7 +179,6 @@ struct cs_dsp {
 
 	bool booted;
 	bool running;
-	bool hibernating;
 
 	struct list_head ctl_list;
 
@@ -354,7 +353,5 @@ static inline bool cs_dsp_chunk_valid_addr(struct cs_dsp_chunk *ch, void *addr)
 int cs_dsp_chunk_write(struct cs_dsp_chunk *ch, int nbits, u32 val);
 int cs_dsp_chunk_flush(struct cs_dsp_chunk *ch);
 int cs_dsp_chunk_read(struct cs_dsp_chunk *ch, int nbits);
-
-void cs_dsp_hibernate(struct cs_dsp *dsp, bool hibernating);
 
 #endif

@@ -191,22 +191,18 @@ static int fcp_usb(struct usb_mixer_interface *mixer, u32 opcode,
 	const int max_retries = 5;
 	int err;
 
-	CLASS(snd_usb_lock, pm)(mixer->chip);
-	if (pm.err < 0)
-		return -EIO;
-
 	if (!private->urb)
 		return -ENODEV;
 
 	struct fcp_usb_packet *req __free(kfree) = NULL;
 	size_t req_buf_size = struct_size(req, data, req_size);
-	req = kmalloc_flex(*req, data, req_size);
+	req = kmalloc(req_buf_size, GFP_KERNEL);
 	if (!req)
 		return -ENOMEM;
 
 	struct fcp_usb_packet *resp __free(kfree) = NULL;
 	size_t resp_buf_size = struct_size(resp, data, resp_size);
-	resp = kmalloc_flex(*resp, data, resp_size);
+	resp = kmalloc(resp_buf_size, GFP_KERNEL);
 	if (!resp)
 		return -ENOMEM;
 
@@ -338,7 +334,7 @@ static int fcp_add_new_ctl(struct usb_mixer_interface *mixer,
 	struct usb_mixer_elem_info *elem;
 	int err;
 
-	elem = kzalloc_obj(*elem);
+	elem = kzalloc(sizeof(*elem), GFP_KERNEL);
 	if (!elem)
 		return -ENOMEM;
 
@@ -667,7 +663,7 @@ static int fcp_ioctl_set_meter_map(struct usb_mixer_interface *mixer,
 	if (!private->meter_ctl) {
 		/* Allocate buffer for the map */
 		s16 *new_map __free(kfree) =
-			kmalloc_objs(s16, map.map_size);
+			kmalloc_array(map.map_size, sizeof(s16), GFP_KERNEL);
 		if (!new_map)
 			return -ENOMEM;
 
@@ -1030,10 +1026,6 @@ static int fcp_init(struct usb_mixer_interface *mixer,
 	struct usb_device *dev = mixer->chip->dev;
 	int err;
 
-	CLASS(snd_usb_lock, pm)(mixer->chip);
-	if (pm.err < 0)
-		return -EIO;
-
 	err = snd_usb_ctl_msg(dev, usb_rcvctrlpipe(dev, 0),
 		FCP_USB_REQ_STEP0,
 		USB_RECIP_INTERFACE | USB_TYPE_CLASS | USB_DIR_IN,
@@ -1066,7 +1058,7 @@ static int fcp_init(struct usb_mixer_interface *mixer,
 static int fcp_init_private(struct usb_mixer_interface *mixer)
 {
 	struct fcp_data *private =
-		kzalloc_obj(struct fcp_data);
+		kzalloc(sizeof(struct fcp_data), GFP_KERNEL);
 
 	if (!private)
 		return -ENOMEM;

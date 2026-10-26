@@ -2037,7 +2037,7 @@ static irqreturn_t ab8500_fg_cc_convend_handler(int irq, void *_di)
 }
 
 /**
- * ab8500_fg_batt_ovv_handler() - Battery OVV occurred
+ * ab8500_fg_batt_ovv_handler() - Battery OVV occured
  * @irq:       interrupt number
  * @_di:       pointer to the ab8500_fg structure
  *
@@ -3262,4 +3262,3 @@ MODULE_LICENSE("GPL v2");
 MODULE_AUTHOR("Johan Palsson, Karl Komierowski");
 MODULE_ALIAS("platform:ab8500-fg");
 MODULE_DESCRIPTION("AB8500 Fuel Gauge driver");
-MODULE_IMPORT_NS("IIO_CONSUMER");

@@ -712,7 +712,7 @@ void netvsc_linkstatus_callback(struct net_device *net,
 	if (net->reg_state != NETREG_REGISTERED)
 		return;
 
-	event = kzalloc_obj(*event, GFP_ATOMIC);
+	event = kzalloc(sizeof(*event), GFP_ATOMIC);
 	if (!event)
 		return;
 	event->event = indicate->status;
@@ -931,7 +931,7 @@ struct netvsc_device_info *netvsc_devinfo_get(struct netvsc_device *nvdev)
 	struct netvsc_device_info *dev_info;
 	struct bpf_prog *prog;
 
-	dev_info = kzalloc_obj(*dev_info, GFP_ATOMIC);
+	dev_info = kzalloc(sizeof(*dev_info), GFP_ATOMIC);
 
 	if (!dev_info)
 		return NULL;
@@ -1524,7 +1524,9 @@ static void netvsc_get_ethtool_stats(struct net_device *dev,
 		data[i++] = xdp_tx;
 	}
 
-	pcpu_sum = kvmalloc_objs(struct netvsc_ethtool_pcpu_stats, nr_cpu_ids);
+	pcpu_sum = kvmalloc_array(nr_cpu_ids,
+				  sizeof(struct netvsc_ethtool_pcpu_stats),
+				  GFP_KERNEL);
 	if (!pcpu_sum)
 		return;
 
@@ -1622,15 +1624,22 @@ netvsc_get_rxfh_fields(struct net_device *ndev,
 	return 0;
 }
 
-static u32 netvsc_get_rx_ring_count(struct net_device *dev)
+static int
+netvsc_get_rxnfc(struct net_device *dev, struct ethtool_rxnfc *info,
+		 u32 *rules)
 {
 	struct net_device_context *ndc = netdev_priv(dev);
 	struct netvsc_device *nvdev = rtnl_dereference(ndc->nvdev);
 
 	if (!nvdev)
-		return 0;
+		return -ENODEV;
 
-	return nvdev->num_chn;
+	switch (info->cmd) {
+	case ETHTOOL_GRXRINGS:
+		info->data = nvdev->num_chn;
+		return 0;
+	}
+	return -EOPNOTSUPP;
 }
 
 static int
@@ -1963,7 +1972,7 @@ static const struct ethtool_ops ethtool_ops = {
 	.get_channels   = netvsc_get_channels,
 	.set_channels   = netvsc_set_channels,
 	.get_ts_info	= ethtool_op_get_ts_info,
-	.get_rx_ring_count = netvsc_get_rx_ring_count,
+	.get_rxnfc	= netvsc_get_rxnfc,
 	.get_rxfh_key_size = netvsc_get_rxfh_key_size,
 	.get_rxfh_indir_size = netvsc_rss_indir_size,
 	.get_rxfh	= netvsc_get_rxfh,
@@ -2867,16 +2876,11 @@ static void __exit netvsc_drv_exit(void)
 {
 	unregister_netdevice_notifier(&netvsc_netdev_notifier);
 	vmbus_driver_unregister(&netvsc_drv);
-	netvsc_workqueue_destroy();
 }
 
 static int __init netvsc_drv_init(void)
 {
 	int ret;
-
-	ret = netvsc_workqueue_init();
-	if (ret)
-		return ret;
 
 	if (ring_size < RING_SIZE_MIN) {
 		ring_size = RING_SIZE_MIN;
@@ -2895,7 +2899,6 @@ static int __init netvsc_drv_init(void)
 
 err_vmbus_reg:
 	unregister_netdevice_notifier(&netvsc_netdev_notifier);
-	netvsc_workqueue_destroy();
 	return ret;
 }
 

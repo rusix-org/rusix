@@ -84,8 +84,6 @@ static void jcore_spi_baudrate(struct jcore_spi *hw, int speed)
 {
 	if (speed == hw->speed_hz)
 		return;
-	if (speed <= 0)
-		speed = 1;
 	hw->speed_hz = speed;
 	if (speed >= hw->clock_freq / 2)
 		hw->speed_reg = 0;
@@ -145,12 +143,14 @@ static int jcore_spi_probe(struct platform_device *pdev)
 	struct device_node *node = pdev->dev.of_node;
 	struct jcore_spi *hw;
 	struct spi_controller *host;
+	struct resource *res;
 	u32 clock_freq;
 	struct clk *clk;
+	int err = -ENODEV;
 
-	host = devm_spi_alloc_host(&pdev->dev, sizeof(struct jcore_spi));
+	host = spi_alloc_host(&pdev->dev, sizeof(struct jcore_spi));
 	if (!host)
-		return -ENOMEM;
+		return err;
 
 	/* Setup the host state. */
 	host->num_chipselect = 3;
@@ -165,9 +165,16 @@ static int jcore_spi_probe(struct platform_device *pdev)
 	platform_set_drvdata(pdev, hw);
 
 	/* Find and map our resources */
-	hw->base = devm_platform_ioremap_resource(pdev, 0);
-	if (IS_ERR(hw->base))
-		return PTR_ERR(hw->base);
+	res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
+	if (!res)
+		goto exit_busy;
+	if (!devm_request_mem_region(&pdev->dev, res->start,
+				     resource_size(res), pdev->name))
+		goto exit_busy;
+	hw->base = devm_ioremap(&pdev->dev, res->start,
+					resource_size(res));
+	if (!hw->base)
+		goto exit_busy;
 
 	/*
 	 * The SPI clock rate controlled via a configurable clock divider
@@ -193,7 +200,17 @@ static int jcore_spi_probe(struct platform_device *pdev)
 	jcore_spi_baudrate(hw, 400000);
 
 	/* Register our spi controller */
-	return devm_spi_register_controller(&pdev->dev, host);
+	err = devm_spi_register_controller(&pdev->dev, host);
+	if (err)
+		goto exit;
+
+	return 0;
+
+exit_busy:
+	err = -EBUSY;
+exit:
+	spi_controller_put(host);
+	return err;
 }
 
 static const struct of_device_id jcore_spi_of_match[] = {

@@ -33,7 +33,7 @@ static void cleanup_unstripe(struct unstripe_c *uc, struct dm_target *ti)
 }
 
 /*
- * Construct an unstriped mapping.
+ * Contruct an unstriped mapping.
  * <number of stripes> <chunk size> <stripe #> <dev_path> <offset>
  */
 static int unstripe_ctr(struct dm_target *ti, unsigned int argc, char **argv)
@@ -48,7 +48,7 @@ static int unstripe_ctr(struct dm_target *ti, unsigned int argc, char **argv)
 		return -EINVAL;
 	}
 
-	uc = kzalloc_obj(*uc);
+	uc = kzalloc(sizeof(*uc), GFP_KERNEL);
 	if (!uc) {
 		ti->error = "Memory allocation for unstriped context failed";
 		return -ENOMEM;

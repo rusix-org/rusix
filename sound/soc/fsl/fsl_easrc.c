@@ -1025,6 +1025,7 @@ static int fsl_easrc_config_context(struct fsl_asrc *easrc, unsigned int ctx_id)
 	struct fsl_easrc_ctx_priv *ctx_priv;
 	struct fsl_asrc_pair *ctx;
 	struct device *dev;
+	unsigned long lock_flags;
 	int ret;
 
 	if (!easrc)
@@ -1052,8 +1053,9 @@ static int fsl_easrc_config_context(struct fsl_asrc *easrc, unsigned int ctx_id)
 	if (ret)
 		return ret;
 
-	scoped_guard(spinlock_irqsave, &easrc->lock)
-		ret = fsl_easrc_config_slot(easrc, ctx->index);
+	spin_lock_irqsave(&easrc->lock, lock_flags);
+	ret = fsl_easrc_config_slot(easrc, ctx->index);
+	spin_unlock_irqrestore(&easrc->lock, lock_flags);
 	if (ret)
 		return ret;
 
@@ -1299,12 +1301,13 @@ static int fsl_easrc_request_context(int channels, struct fsl_asrc_pair *ctx)
 	enum asrc_pair_index index = ASRC_INVALID_PAIR;
 	struct fsl_asrc *easrc = ctx->asrc;
 	struct device *dev;
+	unsigned long lock_flags;
 	int ret = 0;
 	int i;
 
 	dev = &easrc->pdev->dev;
 
-	guard(spinlock_irqsave)(&easrc->lock);
+	spin_lock_irqsave(&easrc->lock, lock_flags);
 
 	for (i = ASRC_PAIR_A; i < EASRC_CTX_MAX_NUM; i++) {
 		if (easrc->pair[i])
@@ -1328,6 +1331,8 @@ static int fsl_easrc_request_context(int channels, struct fsl_asrc_pair *ctx)
 		easrc->channel_avail -= channels;
 	}
 
+	spin_unlock_irqrestore(&easrc->lock, lock_flags);
+
 	return ret;
 }
 
@@ -1338,6 +1343,7 @@ static int fsl_easrc_request_context(int channels, struct fsl_asrc_pair *ctx)
  */
 static void fsl_easrc_release_context(struct fsl_asrc_pair *ctx)
 {
+	unsigned long lock_flags;
 	struct fsl_asrc *easrc;
 
 	if (!ctx)
@@ -1345,12 +1351,14 @@ static void fsl_easrc_release_context(struct fsl_asrc_pair *ctx)
 
 	easrc = ctx->asrc;
 
-	guard(spinlock_irqsave)(&easrc->lock);
+	spin_lock_irqsave(&easrc->lock, lock_flags);
 
 	fsl_easrc_release_slot(easrc, ctx->index);
 
 	easrc->channel_avail += ctx->channels;
 	easrc->pair[ctx->index] = NULL;
+
+	spin_unlock_irqrestore(&easrc->lock, lock_flags);
 }
 
 /*
@@ -1433,7 +1441,7 @@ static struct dma_chan *fsl_easrc_get_dma_channel(struct fsl_asrc_pair *ctx,
 	/* Example of dma name: ctx0_rx */
 	sprintf(name, "ctx%c_%cx", index + '0', dir == IN ? 'r' : 't');
 
-	return dma_request_chan(&easrc->pdev->dev, name);
+	return dma_request_slave_channel(&easrc->pdev->dev, name);
 };
 
 static const unsigned int easrc_rates[] = {
@@ -1582,106 +1590,45 @@ static int fsl_easrc_hw_free(struct snd_pcm_substream *substream,
 	return 0;
 }
 
+static int fsl_easrc_dai_probe(struct snd_soc_dai *cpu_dai)
+{
+	struct fsl_asrc *easrc = dev_get_drvdata(cpu_dai->dev);
+
+	snd_soc_dai_init_dma_data(cpu_dai,
+				  &easrc->dma_params_tx,
+				  &easrc->dma_params_rx);
+	return 0;
+}
+
 static const struct snd_soc_dai_ops fsl_easrc_dai_ops = {
+	.probe		= fsl_easrc_dai_probe,
 	.startup	= fsl_easrc_startup,
 	.trigger	= fsl_easrc_trigger,
 	.hw_params	= fsl_easrc_hw_params,
 	.hw_free	= fsl_easrc_hw_free,
 };
 
-static struct snd_soc_dai_driver fsl_easrc_dai[] = {
-	{
-		.name = "easrc-0",
-		.playback = {
-			.stream_name = "ASRC-Playback",
-			.channels_min = 1,
-			.channels_max = 32,
-			.rate_min = 8000,
-			.rate_max = 768000,
-			.rates = SNDRV_PCM_RATE_KNOT,
-			.formats = FSL_EASRC_FORMATS,
-		},
-		.capture = {
-			.stream_name = "ASRC-Capture",
-			.channels_min = 1,
-			.channels_max = 32,
-			.rate_min = 8000,
-			.rate_max = 768000,
-			.rates = SNDRV_PCM_RATE_KNOT,
-			.formats = FSL_EASRC_FORMATS |
-				   SNDRV_PCM_FMTBIT_IEC958_SUBFRAME_LE,
-		},
-		.ops = &fsl_easrc_dai_ops,
+static struct snd_soc_dai_driver fsl_easrc_dai = {
+	.playback = {
+		.stream_name = "ASRC-Playback",
+		.channels_min = 1,
+		.channels_max = 32,
+		.rate_min = 8000,
+		.rate_max = 768000,
+		.rates = SNDRV_PCM_RATE_KNOT,
+		.formats = FSL_EASRC_FORMATS,
 	},
-	{
-		.name = "easrc-1",
-		.playback = {
-			.stream_name = "ASRC1-Playback",
-			.channels_min = 1,
-			.channels_max = 32,
-			.rate_min = 8000,
-			.rate_max = 768000,
-			.rates = SNDRV_PCM_RATE_KNOT,
-			.formats = FSL_EASRC_FORMATS,
-		},
-		.capture = {
-			.stream_name = "ASRC1-Capture",
-			.channels_min = 1,
-			.channels_max = 32,
-			.rate_min = 8000,
-			.rate_max = 768000,
-			.rates = SNDRV_PCM_RATE_KNOT,
-			.formats = FSL_EASRC_FORMATS |
-				   SNDRV_PCM_FMTBIT_IEC958_SUBFRAME_LE,
-		},
-		.ops = &fsl_easrc_dai_ops,
+	.capture = {
+		.stream_name = "ASRC-Capture",
+		.channels_min = 1,
+		.channels_max = 32,
+		.rate_min = 8000,
+		.rate_max = 768000,
+		.rates = SNDRV_PCM_RATE_KNOT,
+		.formats = FSL_EASRC_FORMATS |
+			   SNDRV_PCM_FMTBIT_IEC958_SUBFRAME_LE,
 	},
-	{
-		.name = "easrc-2",
-		.playback = {
-			.stream_name = "ASRC2-Playback",
-			.channels_min = 1,
-			.channels_max = 32,
-			.rate_min = 8000,
-			.rate_max = 768000,
-			.rates = SNDRV_PCM_RATE_KNOT,
-			.formats = FSL_EASRC_FORMATS,
-		},
-		.capture = {
-			.stream_name = "ASRC2-Capture",
-			.channels_min = 1,
-			.channels_max = 32,
-			.rate_min = 8000,
-			.rate_max = 768000,
-			.rates = SNDRV_PCM_RATE_KNOT,
-			.formats = FSL_EASRC_FORMATS |
-				   SNDRV_PCM_FMTBIT_IEC958_SUBFRAME_LE,
-		},
-		.ops = &fsl_easrc_dai_ops,
-	},
-	{
-		.name = "easrc-3",
-		.playback = {
-			.stream_name = "ASRC3-Playback",
-			.channels_min = 1,
-			.channels_max = 32,
-			.rate_min = 8000,
-			.rate_max = 768000,
-			.rates = SNDRV_PCM_RATE_KNOT,
-			.formats = FSL_EASRC_FORMATS,
-		},
-		.capture = {
-			.stream_name = "ASRC3-Capture",
-			.channels_min = 1,
-			.channels_max = 32,
-			.rate_min = 8000,
-			.rate_max = 768000,
-			.rates = SNDRV_PCM_RATE_KNOT,
-			.formats = FSL_EASRC_FORMATS |
-				   SNDRV_PCM_FMTBIT_IEC958_SUBFRAME_LE,
-		},
-		.ops = &fsl_easrc_dai_ops,
-	},
+	.ops = &fsl_easrc_dai_ops,
 };
 
 static const struct snd_soc_component_driver fsl_easrc_component = {
@@ -1689,9 +1636,6 @@ static const struct snd_soc_component_driver fsl_easrc_component = {
 	.controls		= fsl_easrc_snd_controls,
 	.num_controls		= ARRAY_SIZE(fsl_easrc_snd_controls),
 	.legacy_dai_naming	= 1,
-#ifdef CONFIG_DEBUG_FS
-	.debugfs_prefix		= "easrc",
-#endif
 };
 
 static const struct reg_default fsl_easrc_reg_defaults[] = {
@@ -1764,12 +1708,12 @@ static const struct reg_default fsl_easrc_reg_defaults[] = {
 	{REG_EASRC_SFS(2),	0x00000000},
 	{REG_EASRC_SFS(3),	0x00000000},
 	{REG_EASRC_RRL(0),	0x00000000},
-	{REG_EASRC_RRH(0),	0x00000000},
 	{REG_EASRC_RRL(1),	0x00000000},
-	{REG_EASRC_RRH(1),	0x00000000},
 	{REG_EASRC_RRL(2),	0x00000000},
-	{REG_EASRC_RRH(2),	0x00000000},
 	{REG_EASRC_RRL(3),	0x00000000},
+	{REG_EASRC_RRH(0),	0x00000000},
+	{REG_EASRC_RRH(1),	0x00000000},
+	{REG_EASRC_RRH(2),	0x00000000},
 	{REG_EASRC_RRH(3),	0x00000000},
 	{REG_EASRC_RUC(0),	0x00000000},
 	{REG_EASRC_RUC(1),	0x00000000},
@@ -2280,7 +2224,7 @@ static int fsl_easrc_probe(struct platform_device *pdev)
 	}
 
 	ret = of_property_read_u32(np, "fsl,asrc-format", &asrc_fmt);
-	easrc->asrc_format = asrc_fmt;
+	easrc->asrc_format = (__force snd_pcm_format_t)asrc_fmt;
 	if (ret) {
 		dev_err(dev, "failed to asrc format\n");
 		return ret;
@@ -2306,7 +2250,7 @@ static int fsl_easrc_probe(struct platform_device *pdev)
 	regcache_cache_only(easrc->regmap, true);
 
 	ret = devm_snd_soc_register_component(dev, &fsl_easrc_component,
-					      fsl_easrc_dai, ARRAY_SIZE(fsl_easrc_dai));
+					      &fsl_easrc_dai, 1);
 	if (ret) {
 		dev_err(dev, "failed to register ASoC DAI\n");
 		goto err_pm_disable;
@@ -2345,13 +2289,15 @@ static int fsl_easrc_runtime_suspend(struct device *dev)
 {
 	struct fsl_asrc *easrc = dev_get_drvdata(dev);
 	struct fsl_easrc_priv *easrc_priv = easrc->private;
+	unsigned long lock_flags;
 
 	regcache_cache_only(easrc->regmap, true);
 
 	clk_disable_unprepare(easrc->mem_clk);
 
-	scoped_guard(spinlock_irqsave, &easrc->lock)
-		easrc_priv->firmware_loaded = 0;
+	spin_lock_irqsave(&easrc->lock, lock_flags);
+	easrc_priv->firmware_loaded = 0;
+	spin_unlock_irqrestore(&easrc->lock, lock_flags);
 
 	return 0;
 }
@@ -2362,6 +2308,7 @@ static int fsl_easrc_runtime_resume(struct device *dev)
 	struct fsl_easrc_priv *easrc_priv = easrc->private;
 	struct fsl_easrc_ctx_priv *ctx_priv;
 	struct fsl_asrc_pair *ctx;
+	unsigned long lock_flags;
 	int ret;
 	int i;
 
@@ -2373,11 +2320,13 @@ static int fsl_easrc_runtime_resume(struct device *dev)
 	regcache_mark_dirty(easrc->regmap);
 	regcache_sync(easrc->regmap);
 
-	scoped_guard(spinlock_irqsave, &easrc->lock) {
-		if (easrc_priv->firmware_loaded)
-			return 0;
-		easrc_priv->firmware_loaded = 1;
+	spin_lock_irqsave(&easrc->lock, lock_flags);
+	if (easrc_priv->firmware_loaded) {
+		spin_unlock_irqrestore(&easrc->lock, lock_flags);
+		goto skip_load;
 	}
+	easrc_priv->firmware_loaded = 1;
+	spin_unlock_irqrestore(&easrc->lock, lock_flags);
 
 	ret = fsl_easrc_get_firmware(easrc);
 	if (ret) {
@@ -2425,7 +2374,9 @@ static int fsl_easrc_runtime_resume(struct device *dev)
 			goto disable_mem_clk;
 	}
 
+skip_load:
 	return 0;
+
 disable_mem_clk:
 	clk_disable_unprepare(easrc->mem_clk);
 	return ret;

@@ -571,7 +571,6 @@ struct enc_wave_param {
 	u32 mb_level_rc_enable: 1; /* enable MB-level rate control */
 	u32 forced_idr_header_enable: 1; /* enable header encoding before IDR frame */
 	u32 constraint_set1_flag: 1; /* enable CBP */
-	u32 bg_detection: 1; /* enable background detection */
 };
 
 struct enc_open_param {
@@ -820,12 +819,6 @@ struct vpu_instance {
 	bool cbcr_interleave;
 	bool nv21;
 	bool eos;
-	bool sent_eos; /* check if EOS is sent to application */
-	bool retry; /* retry to feed bitstream if failure reason is WAVE5_SYSERR_QUEUEING_FAIL*/
-	int queuing_num; /* count of bitstream queued */
-	struct mutex feed_lock; /* lock for feeding bitstream buffers */
-	bool queuing_fail; /* if there is the queuing failure */
-	bool empty_queue;
 	struct vpu_buf bitstream_vbuf;
 	dma_addr_t last_rd_ptr;
 	size_t remaining_consumed_bytes;

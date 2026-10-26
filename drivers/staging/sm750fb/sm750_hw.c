@@ -1,6 +1,23 @@
 // SPDX-License-Identifier: GPL-2.0
+#include <linux/module.h>
+#include <linux/kernel.h>
+#include <linux/errno.h>
+#include <linux/string.h>
+#include <linux/mm.h>
+#include <linux/slab.h>
+#include <linux/delay.h>
 #include <linux/fb.h>
+#include <linux/ioport.h>
+#include <linux/init.h>
 #include <linux/pci.h>
+#include <linux/vmalloc.h>
+#include <linux/pagemap.h>
+#include <linux/console.h>
+#ifdef CONFIG_MTRR
+#include <asm/mtrr.h>
+#endif
+#include <linux/platform_device.h>
+#include <linux/sizes.h>
 
 #include "sm750.h"
 #include "ddk750.h"
@@ -12,29 +29,34 @@ int hw_sm750_map(struct sm750_dev *sm750_dev, struct pci_dev *pdev)
 {
 	int ret;
 
+	ret = 0;
+
 	sm750_dev->vidreg_start = pci_resource_start(pdev, 1);
 	sm750_dev->vidreg_size = SZ_2M;
+
+	pr_info("mmio phyAddr = %lx\n", sm750_dev->vidreg_start);
 
 	/* reserve the vidreg space of smi adaptor */
 	ret = pci_request_region(pdev, 1, "sm750fb");
 	if (ret) {
-		dev_err(&pdev->dev, "Can not request PCI regions.\n");
+		pr_err("Can not request PCI regions.\n");
 		return ret;
 	}
 
 	/* now map mmio and vidmem */
-	sm750_dev->mmio =
+	sm750_dev->pvReg =
 		ioremap(sm750_dev->vidreg_start, sm750_dev->vidreg_size);
-	if (!sm750_dev->mmio) {
-		dev_err(&pdev->dev, "mmio failed\n");
+	if (!sm750_dev->pvReg) {
+		pr_err("mmio failed\n");
 		ret = -EFAULT;
 		goto err_release_region;
 	}
+	pr_info("mmio virtual addr = %p\n", sm750_dev->pvReg);
 
-	sm750_dev->accel.dpr_base = sm750_dev->mmio + DE_BASE_ADDR_TYPE1;
-	sm750_dev->accel.dp_port_base = sm750_dev->mmio + DE_PORT_ADDR_TYPE1;
+	sm750_dev->accel.dpr_base = sm750_dev->pvReg + DE_BASE_ADDR_TYPE1;
+	sm750_dev->accel.dp_port_base = sm750_dev->pvReg + DE_PORT_ADDR_TYPE1;
 
-	mmio750 = sm750_dev->mmio;
+	mmio750 = sm750_dev->pvReg;
 	sm750_set_chip_type(sm750_dev->devid, sm750_dev->revid);
 
 	sm750_dev->vidmem_start = pci_resource_start(pdev, 0);
@@ -45,20 +67,23 @@ int hw_sm750_map(struct sm750_dev *sm750_dev, struct pci_dev *pdev)
 	 * @ddk750_get_vm_size function can be safe.
 	 */
 	sm750_dev->vidmem_size = ddk750_get_vm_size();
+	pr_info("video memory phyAddr = %lx, size = %u bytes\n",
+		sm750_dev->vidmem_start, sm750_dev->vidmem_size);
 
 	/* reserve the vidmem space of smi adaptor */
-	sm750_dev->vmem =
+	sm750_dev->pvMem =
 		ioremap_wc(sm750_dev->vidmem_start, sm750_dev->vidmem_size);
-	if (!sm750_dev->vmem) {
-		dev_err(&pdev->dev, "Map video memory failed\n");
+	if (!sm750_dev->pvMem) {
+		pr_err("Map video memory failed\n");
 		ret = -EFAULT;
 		goto err_unmap_reg;
 	}
+	pr_info("video memory vaddr = %p\n", sm750_dev->pvMem);
 
 	return 0;
 
 err_unmap_reg:
-	iounmap(sm750_dev->mmio);
+	iounmap(sm750_dev->pvReg);
 err_release_region:
 	pci_release_region(pdev, 1);
 	return ret;
@@ -66,20 +91,20 @@ err_release_region:
 
 int hw_sm750_inithw(struct sm750_dev *sm750_dev, struct pci_dev *pdev)
 {
-	struct initchip_param *parm;
+	struct init_status *parm;
 
-	parm = &sm750_dev->init_parm;
-	if (parm->chip_clock == 0)
-		parm->chip_clock = (sm750_get_chip_type() == SM750LE) ?
+	parm = &sm750_dev->initParm;
+	if (parm->chip_clk == 0)
+		parm->chip_clk = (sm750_get_chip_type() == SM750LE) ?
 					       DEFAULT_SM750LE_CHIP_CLOCK :
 					       DEFAULT_SM750_CHIP_CLOCK;
 
-	if (parm->mem_clock == 0)
-		parm->mem_clock = parm->chip_clock;
-	if (parm->master_clock == 0)
-		parm->master_clock = parm->chip_clock / 3;
+	if (parm->mem_clk == 0)
+		parm->mem_clk = parm->chip_clk;
+	if (parm->master_clk == 0)
+		parm->master_clk = parm->chip_clk / 3;
 
-	ddk750_init_hw(&sm750_dev->init_parm);
+	ddk750_init_hw((struct initchip_param *)&sm750_dev->initParm);
 	/* for sm718, open pci burst */
 	if (sm750_dev->devid == 0x718) {
 		poke32(SYSTEM_CTRL,
@@ -109,12 +134,12 @@ int hw_sm750_inithw(struct sm750_dev *sm750_dev, struct pci_dev *pdev)
 		      ~(PANEL_DISPLAY_CTRL_DUAL_DISPLAY |
 			PANEL_DISPLAY_CTRL_DOUBLE_PIXEL);
 		switch (sm750_dev->pnltype) {
-		case SM750_24TFT:
+		case sm750_24TFT:
 			break;
-		case SM750_DOUBLE_TFT:
+		case sm750_doubleTFT:
 			val |= PANEL_DISPLAY_CTRL_DOUBLE_PIXEL;
 			break;
-		case SM750_DUAL_TFT:
+		case sm750_dualTFT:
 			val |= PANEL_DISPLAY_CTRL_DUAL_DISPLAY;
 			break;
 		}
@@ -138,9 +163,11 @@ int hw_sm750_inithw(struct sm750_dev *sm750_dev, struct pci_dev *pdev)
 			 * The following register values for CH7301 are from
 			 * Chrontel app note and our experiment.
 			 */
+			pr_info("yes,CH7301 DVI chip found\n");
 			sm750_sw_i2c_write_reg(0xec, 0x1d, 0x16);
 			sm750_sw_i2c_write_reg(0xec, 0x21, 0x9);
 			sm750_sw_i2c_write_reg(0xec, 0x49, 0xC0);
+			pr_info("okay,CH7301 DVI chip setup done\n");
 		}
 	}
 
@@ -165,12 +192,14 @@ int hw_sm750_output_set_mode(struct lynxfb_output *output,
 
 	if (sm750_get_chip_type() != SM750LE) {
 		if (channel == sm750_primary) {
+			pr_info("primary channel\n");
 			if (output->paths & sm750_panel)
 				disp_set |= do_LCD1_PRI;
 			if (output->paths & sm750_crt)
 				disp_set |= do_CRT_PRI;
 
 		} else {
+			pr_info("secondary channel\n");
 			if (output->paths & sm750_panel)
 				disp_set |= do_LCD1_SEC;
 			if (output->paths & sm750_crt)
@@ -186,6 +215,7 @@ int hw_sm750_output_set_mode(struct lynxfb_output *output,
 		poke32(DISPLAY_CONTROL_750LE, reg);
 	}
 
+	pr_info("ddk setlogicdispout done\n");
 	return ret;
 }
 
@@ -202,8 +232,10 @@ int hw_sm750_crtc_check_mode(struct lynxfb_crtc *crtc,
 	case 16:
 		break;
 	case 32:
-		if (sm750_dev->revid == SM750LE_REVISION_ID)
+		if (sm750_dev->revid == SM750LE_REVISION_ID) {
+			pr_debug("750le do not support 32bpp\n");
 			return -EINVAL;
+		}
 		break;
 	default:
 		return -EINVAL;
@@ -224,6 +256,7 @@ int hw_sm750_crtc_set_mode(struct lynxfb_crtc *crtc,
 	struct sm750_dev *sm750_dev;
 	struct lynxfb_par *par;
 
+	ret = 0;
 	par = container_of(crtc, struct lynxfb_par, crtc);
 	sm750_dev = par->dev;
 
@@ -269,9 +302,10 @@ int hw_sm750_crtc_set_mode(struct lynxfb_crtc *crtc,
 	else
 		clock = SECONDARY_PLL;
 
+	pr_debug("Request pixel clock = %lu\n", modparm.pixel_clock);
 	ret = ddk750_set_mode_timing(&modparm, clock);
 	if (ret) {
-		dev_err(&sm750_dev->pdev->dev, "Set mode timing failed\n");
+		pr_err("Set mode timing failed\n");
 		goto exit;
 	}
 
@@ -397,10 +431,12 @@ int hw_sm750_set_blank(struct lynxfb_output *output, int blank)
 
 	switch (blank) {
 	case FB_BLANK_UNBLANK:
+		pr_debug("flag = FB_BLANK_UNBLANK\n");
 		dpms = SYSTEM_CTRL_DPMS_VPHP;
 		pps = PANEL_DISPLAY_CTRL_DATA;
 		break;
 	case FB_BLANK_NORMAL:
+		pr_debug("flag = FB_BLANK_NORMAL\n");
 		dpms = SYSTEM_CTRL_DPMS_VPHP;
 		crtdb = CRT_DISPLAY_CTRL_BLANK;
 		break;
@@ -481,8 +517,8 @@ int hw_sm750le_de_wait(void)
 		    (DE_STATE2_DE_FIFO_EMPTY | DE_STATE2_DE_MEM_FIFO_EMPTY))
 			return 0;
 	}
-
-	return -ETIMEDOUT;
+	/* timeout error */
+	return -1;
 }
 
 int hw_sm750_de_wait(void)
@@ -499,8 +535,8 @@ int hw_sm750_de_wait(void)
 		    (SYSTEM_CTRL_DE_FIFO_EMPTY | SYSTEM_CTRL_DE_MEM_FIFO_EMPTY))
 			return 0;
 	}
-
-	return -ETIMEDOUT;
+	/* timeout error */
+	return -1;
 }
 
 int hw_sm750_pan_display(struct lynxfb_crtc *crtc,

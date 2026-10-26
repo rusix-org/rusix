@@ -1,13 +1,9 @@
 // SPDX-License-Identifier: GPL-2.0
 
 #include <stdint.h>
-#include <string.h>
 #include <time.h>
 #include <sched.h>
 #include <stdbool.h>
-#include <stdlib.h>
-
-#include <linux/container_of.h>
 
 /*
  * '18446744073709551615\0'
@@ -17,42 +13,19 @@
 #define MAX_NICE		20
 #define MIN_NICE		-19
 
-#ifndef ARRAY_SIZE
-#define ARRAY_SIZE(x) (sizeof(x) / sizeof(*(x)))
-#endif
+#define container_of(ptr, type, member)({			\
+	const typeof(((type *)0)->member) *__mptr = (ptr);	\
+	(type *)((char *)__mptr - offsetof(type, member)) ; })
 
-/* Calculate string length at compile time (excluding null terminator) */
-#define STRING_LENGTH(s) (ARRAY_SIZE(s) - sizeof(*(s)))
-
-/* Compare string with static string, length determined at compile time */
-#define strncmp_static(s1, s2) strncmp(s1, s2, ARRAY_SIZE(s2))
-
-/**
- * str_has_prefix - Test if a string has a given prefix
- * @str: The string to test
- * @prefix: The string to see if @str starts with
- *
- * Returns: true if @str starts with @prefix, false otherwise
- */
-static inline bool str_has_prefix(const char *str, const char *prefix)
-{
-	return strncmp(str, prefix, strlen(prefix)) == 0;
-}
-
-extern bool config_debug;
-extern int nr_cpus;
-
+extern int config_debug;
 void debug_msg(const char *fmt, ...);
 void err_msg(const char *fmt, ...);
-void fatal(const char *fmt, ...);
 
 long parse_seconds_duration(char *val);
 void get_duration(time_t start_time, char *output, int output_size);
 
-int cpu_list_iterate(const char *cpu_list, int (*callback)(int, void *), void *data);
-int get_max_cpu_from_list(const char *cpu_list);
-int get_possible_cpus(void);
-
+int parse_cpu_list(char *cpu_list, char **monitored_cpus);
+char *parse_optional_arg(int argc, char **argv);
 long long get_llong_from_str(char *start);
 
 static inline void
@@ -88,23 +61,13 @@ struct sched_attr {
 };
 #endif /* SCHED_ATTR_SIZE_VER0 */
 
-enum stack_format {
-	STACK_FORMAT_TRUNCATE,
-	STACK_FORMAT_SKIP,
-	STACK_FORMAT_FULL
-};
-
 int parse_prio(char *arg, struct sched_attr *sched_param);
 int parse_cpu_set(char *cpu_list, cpu_set_t *set);
-int parse_stack_format(char *arg);
 int __set_sched_attr(int pid, struct sched_attr *attr);
 int set_comm_sched_attr(const char *comm_prefix, struct sched_attr *attr);
 int set_comm_cgroup(const char *comm_prefix, const char *cgroup);
 int set_pid_cgroup(pid_t pid, const char *cgroup);
 int set_cpu_dma_latency(int32_t latency);
-void *calloc_fatal(size_t n, size_t size);
-void *reallocarray_fatal(void *p, size_t n, size_t size);
-char *strdup_fatal(const char *s);
 #ifdef HAVE_LIBCPUPOWER_SUPPORT
 int save_cpu_idle_disable_state(unsigned int cpu);
 int restore_cpu_idle_disable_state(unsigned int cpu);
@@ -125,7 +88,7 @@ __attribute__((__warn_unused_result__)) int strtoi(const char *s, int *res);
 #define ns_to_per(total, part) ((part * 100) / (double)total)
 
 enum result {
-	PASSED	= EXIT_SUCCESS,
-	ERROR	= EXIT_FAILURE,
-	FAILED, /* test hit the stop tracing condition */
+	PASSED = 0, /* same as EXIT_SUCCESS */
+	ERROR = 1,  /* same as EXIT_FAILURE, an error in arguments */
+	FAILED = 2, /* test hit the stop tracing condition */
 };

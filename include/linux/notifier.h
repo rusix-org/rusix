@@ -46,7 +46,6 @@
  * often but notifier_blocks will seldom be removed.
  */
 
-struct device;
 struct notifier_block;
 
 typedef	int (*notifier_fn_t)(struct notifier_block *nb,
@@ -110,7 +109,7 @@ extern void srcu_init_notifier_head(struct srcu_notifier_head *nh);
 		.mutex = __MUTEX_INITIALIZER(name.mutex),	\
 		.head = NULL,					\
 		.srcuu = __SRCU_USAGE_INIT(name.srcuu),		\
-		.srcu = __SRCU_STRUCT_INIT(name.srcu, name.srcuu, pcpu, 0), \
+		.srcu = __SRCU_STRUCT_INIT(name.srcu, name.srcuu, pcpu), \
 	}
 
 #define ATOMIC_NOTIFIER_HEAD(name)				\
@@ -146,13 +145,7 @@ extern void srcu_init_notifier_head(struct srcu_notifier_head *nh);
 
 extern int atomic_notifier_chain_register(struct atomic_notifier_head *nh,
 		struct notifier_block *nb);
-int devm_atomic_notifier_chain_register(struct device *dev,
-		struct atomic_notifier_head *nh,
-		struct notifier_block *nb);
 extern int blocking_notifier_chain_register(struct blocking_notifier_head *nh,
-		struct notifier_block *nb);
-int devm_blocking_notifier_chain_register(struct device *dev,
-		struct blocking_notifier_head *nh,
 		struct notifier_block *nb);
 extern int raw_notifier_chain_register(struct raw_notifier_head *nh,
 		struct notifier_block *nb);

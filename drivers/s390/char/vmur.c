@@ -9,7 +9,8 @@
  *	    Frank Munzert <munzert@de.ibm.com>
  */
 
-#define pr_fmt(fmt) "vmur: " fmt
+#define KMSG_COMPONENT "vmur"
+#define pr_fmt(fmt) KMSG_COMPONENT ": " fmt
 
 #include <linux/cdev.h>
 #include <linux/slab.h>
@@ -107,7 +108,7 @@ static struct urdev *urdev_alloc(struct ccw_device *cdev)
 {
 	struct urdev *urd;
 
-	urd = kzalloc_obj(struct urdev);
+	urd = kzalloc(sizeof(struct urdev), GFP_KERNEL);
 	if (!urd)
 		return NULL;
 	urd->reclen = cdev->id.driver_info;
@@ -154,7 +155,7 @@ static struct urdev *urdev_get_from_devno(u16 devno)
 	struct ccw_device *cdev;
 	struct urdev *urd;
 
-	scnprintf(bus_id, sizeof(bus_id), "0.0.%04x", devno);
+	sprintf(bus_id, "0.0.%04x", devno);
 	cdev = get_ccwdev_by_busid(&ur_driver, bus_id);
 	if (!cdev)
 		return NULL;
@@ -225,7 +226,8 @@ static struct ccw1 *alloc_chan_prog(const char __user *ubuf, int rec_count,
 	 * That means we allocate room for CCWs to cover count/reclen
 	 * records plus a NOP.
 	 */
-	cpa = kzalloc_objs(struct ccw1, rec_count + 1, GFP_KERNEL | GFP_DMA);
+	cpa = kcalloc(rec_count + 1, sizeof(struct ccw1),
+		      GFP_KERNEL | GFP_DMA);
 	if (!cpa)
 		return ERR_PTR(-ENOMEM);
 
@@ -396,7 +398,7 @@ static struct urfile *urfile_alloc(struct urdev *urd)
 {
 	struct urfile *urf;
 
-	urf = kzalloc_obj(struct urfile);
+	urf = kzalloc(sizeof(struct urfile), GFP_KERNEL);
 	if (!urf)
 		return NULL;
 	urf->urd = urd;
@@ -605,7 +607,7 @@ static int verify_uri_device(struct urdev *urd)
 	char *buf;
 	int rc;
 
-	fcb = kmalloc_obj(*fcb, GFP_KERNEL | GFP_DMA);
+	fcb = kmalloc(sizeof(*fcb), GFP_KERNEL | GFP_DMA);
 	if (!fcb)
 		return -ENOMEM;
 
@@ -664,7 +666,7 @@ static int get_uri_file_reclen(struct urdev *urd)
 	struct file_control_block *fcb;
 	int rc;
 
-	fcb = kmalloc_obj(*fcb, GFP_KERNEL | GFP_DMA);
+	fcb = kmalloc(sizeof(*fcb), GFP_KERNEL | GFP_DMA);
 	if (!fcb)
 		return -ENOMEM;
 	rc = diag_read_next_file_info(fcb, 0);
@@ -903,11 +905,11 @@ static int ur_set_online(struct ccw_device *cdev)
 		goto fail_free_cdev;
 	if (urd->cdev->id.cu_type == READER_PUNCH_DEVTYPE) {
 		if (urd->class == DEV_CLASS_UR_I)
-			scnprintf(node_id, sizeof(node_id), "vmrdr-%s", dev_name(&cdev->dev));
+			sprintf(node_id, "vmrdr-%s", dev_name(&cdev->dev));
 		if (urd->class == DEV_CLASS_UR_O)
-			scnprintf(node_id, sizeof(node_id), "vmpun-%s", dev_name(&cdev->dev));
+			sprintf(node_id, "vmpun-%s", dev_name(&cdev->dev));
 	} else if (urd->cdev->id.cu_type == PRINTER_DEVTYPE) {
-		scnprintf(node_id, sizeof(node_id), "vmprt-%s", dev_name(&cdev->dev));
+		sprintf(node_id, "vmprt-%s", dev_name(&cdev->dev));
 	} else {
 		rc = -EOPNOTSUPP;
 		goto fail_free_cdev;

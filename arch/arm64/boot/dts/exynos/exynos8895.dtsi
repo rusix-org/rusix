@@ -35,15 +35,12 @@
 				core0 {
 					cpu = <&cpu0>;
 				};
-
 				core1 {
 					cpu = <&cpu1>;
 				};
-
 				core2 {
 					cpu = <&cpu2>;
 				};
-
 				core3 {
 					cpu = <&cpu3>;
 				};
@@ -53,15 +50,12 @@
 				core0 {
 					cpu = <&cpu4>;
 				};
-
 				core1 {
 					cpu = <&cpu5>;
 				};
-
 				core2 {
 					cpu = <&cpu6>;
 				};
-
 				core3 {
 					cpu = <&cpu7>;
 				};
@@ -213,7 +207,8 @@
 			      <0x10206000 0x2000>;
 			#interrupt-cells = <3>;
 			interrupt-controller;
-			interrupts = <GIC_PPI 9 (GIC_CPU_MASK_SIMPLE(8) | IRQ_TYPE_LEVEL_HIGH)>;
+			interrupts = <GIC_PPI 9 (GIC_CPU_MASK_SIMPLE(8) |
+						 IRQ_TYPE_LEVEL_HIGH)>;
 			#address-cells = <0>;
 			#size-cells = <1>;
 		};
@@ -249,7 +244,6 @@
 			pinctrl-names = "default";
 			pinctrl-0 = <&uart0_bus>;
 			samsung,uart-fifosize = <256>;
-
 			status = "disabled";
 		};
 
@@ -262,7 +256,6 @@
 			#address-cells = <1>;
 			#size-cells = <1>;
 			samsung,sysreg = <&syscon_peric0 0x1000>;
-
 			status = "disabled";
 
 			hsi2c_5: i2c@0 {
@@ -273,10 +266,6 @@
 				interrupts = <GIC_SPI 364 IRQ_TYPE_LEVEL_HIGH>;
 				pinctrl-0 = <&hsi2c5_bus>;
 				pinctrl-names = "default";
-
-				#address-cells = <1>;
-				#size-cells = <0>;
-
 				status = "disabled";
 			};
 
@@ -290,7 +279,6 @@
 				pinctrl-0 = <&uart2_bus>;
 				pinctrl-names = "default";
 				samsung,uart-fifosize = <64>;
-
 				status = "disabled";
 			};
 
@@ -306,7 +294,6 @@
 				pinctrl-names = "default";
 				#address-cells = <1>;
 				#size-cells = <0>;
-
 				status = "disabled";
 			};
 
@@ -318,10 +305,6 @@
 				interrupts = <GIC_SPI 365 IRQ_TYPE_LEVEL_HIGH>;
 				pinctrl-0 = <&hsi2c6_bus>;
 				pinctrl-names = "default";
-
-				#address-cells = <1>;
-				#size-cells = <0>;
-
 				status = "disabled";
 			};
 		};
@@ -335,7 +318,6 @@
 			#address-cells = <1>;
 			#size-cells = <1>;
 			samsung,sysreg = <&syscon_peric0 0x1004>;
-
 			status = "disabled";
 
 			hsi2c_7: i2c@0 {
@@ -346,10 +328,6 @@
 				interrupts = <GIC_SPI 368 IRQ_TYPE_LEVEL_HIGH>;
 				pinctrl-0 = <&hsi2c5_bus>;
 				pinctrl-names = "default";
-
-				#address-cells = <1>;
-				#size-cells = <0>;
-
 				status = "disabled";
 			};
 
@@ -363,7 +341,6 @@
 				pinctrl-0 = <&uart3_bus>;
 				pinctrl-names = "default";
 				samsung,uart-fifosize = <64>;
-
 				status = "disabled";
 			};
 
@@ -379,7 +356,6 @@
 				pinctrl-names = "default";
 				#address-cells = <1>;
 				#size-cells = <0>;
-
 				status = "disabled";
 			};
 
@@ -391,10 +367,6 @@
 				interrupts = <GIC_SPI 369 IRQ_TYPE_LEVEL_HIGH>;
 				pinctrl-0 = <&hsi2c8_bus>;
 				pinctrl-names = "default";
-
-				#address-cells = <1>;
-				#size-cells = <0>;
-
 				status = "disabled";
 			};
 		};
@@ -408,7 +380,6 @@
 			#address-cells = <1>;
 			#size-cells = <1>;
 			samsung,sysreg = <&syscon_peric0 0x1008>;
-
 			status = "disabled";
 
 			hsi2c_9: i2c@0 {
@@ -419,10 +390,6 @@
 				interrupts = <GIC_SPI 372 IRQ_TYPE_LEVEL_HIGH>;
 				pinctrl-0 = <&hsi2c9_bus>;
 				pinctrl-names = "default";
-
-				#address-cells = <1>;
-				#size-cells = <0>;
-
 				status = "disabled";
 			};
 
@@ -436,7 +403,6 @@
 				pinctrl-0 = <&uart4_bus>;
 				pinctrl-names = "default";
 				samsung,uart-fifosize = <64>;
-
 				status = "disabled";
 			};
 
@@ -452,7 +418,6 @@
 				pinctrl-names = "default";
 				#address-cells = <1>;
 				#size-cells = <0>;
-
 				status = "disabled";
 			};
 
@@ -464,10 +429,6 @@
 				interrupts = <GIC_SPI 373 IRQ_TYPE_LEVEL_HIGH>;
 				pinctrl-0 = <&hsi2c10_bus>;
 				pinctrl-names = "default";
-
-				#address-cells = <1>;
-				#size-cells = <0>;
-
 				status = "disabled";
 			};
 		};
@@ -481,7 +442,6 @@
 			#address-cells = <1>;
 			#size-cells = <1>;
 			samsung,sysreg = <&syscon_peric0 0x100c>;
-
 			status = "disabled";
 
 			hsi2c_11: i2c@0 {
@@ -492,10 +452,6 @@
 				interrupts = <GIC_SPI 376 IRQ_TYPE_LEVEL_HIGH>;
 				pinctrl-0 = <&hsi2c11_bus>;
 				pinctrl-names = "default";
-
-				#address-cells = <1>;
-				#size-cells = <0>;
-
 				status = "disabled";
 			};
 
@@ -509,7 +465,6 @@
 				pinctrl-0 = <&uart5_bus>;
 				pinctrl-names = "default";
 				samsung,uart-fifosize = <64>;
-
 				status = "disabled";
 			};
 
@@ -525,7 +480,6 @@
 				pinctrl-names = "default";
 				#address-cells = <1>;
 				#size-cells = <0>;
-
 				status = "disabled";
 			};
 
@@ -537,10 +491,6 @@
 				interrupts = <GIC_SPI 377 IRQ_TYPE_LEVEL_HIGH>;
 				pinctrl-0 = <&hsi2c12_bus>;
 				pinctrl-names = "default";
-
-				#address-cells = <1>;
-				#size-cells = <0>;
-
 				status = "disabled";
 			};
 		};
@@ -593,7 +543,6 @@
 			pinctrl-names = "default";
 			pinctrl-0 = <&uart1_bus>;
 			samsung,uart-fifosize = <256>;
-
 			status = "disabled";
 		};
 
@@ -606,7 +555,6 @@
 			#address-cells = <1>;
 			#size-cells = <1>;
 			samsung,sysreg = <&syscon_peric1 0x1008>;
-
 			status = "disabled";
 
 			hsi2c_13: i2c@0 {
@@ -617,10 +565,6 @@
 				interrupts = <GIC_SPI 390 IRQ_TYPE_LEVEL_HIGH>;
 				pinctrl-0 = <&hsi2c13_bus>;
 				pinctrl-names = "default";
-
-				#address-cells = <1>;
-				#size-cells = <0>;
-
 				status = "disabled";
 			};
 
@@ -634,7 +578,6 @@
 				pinctrl-0 = <&uart6_bus>;
 				pinctrl-names = "default";
 				samsung,uart-fifosize = <64>;
-
 				status = "disabled";
 			};
 
@@ -650,7 +593,6 @@
 				pinctrl-names = "default";
 				#address-cells = <1>;
 				#size-cells = <0>;
-
 				status = "disabled";
 			};
 
@@ -662,10 +604,6 @@
 				interrupts = <GIC_SPI 391 IRQ_TYPE_LEVEL_HIGH>;
 				pinctrl-0 = <&hsi2c14_bus>;
 				pinctrl-names = "default";
-
-				#address-cells = <1>;
-				#size-cells = <0>;
-
 				status = "disabled";
 			};
 		};
@@ -679,7 +617,6 @@
 			#address-cells = <1>;
 			#size-cells = <1>;
 			samsung,sysreg = <&syscon_peric1 0x100c>;
-
 			status = "disabled";
 
 			hsi2c_15: i2c@0 {
@@ -690,10 +627,6 @@
 				interrupts = <GIC_SPI 394 IRQ_TYPE_LEVEL_HIGH>;
 				pinctrl-0 = <&hsi2c15_bus>;
 				pinctrl-names = "default";
-
-				#address-cells = <1>;
-				#size-cells = <0>;
-
 				status = "disabled";
 			};
 
@@ -707,7 +640,6 @@
 				pinctrl-0 = <&uart7_bus>;
 				pinctrl-names = "default";
 				samsung,uart-fifosize = <64>;
-
 				status = "disabled";
 			};
 
@@ -723,7 +655,6 @@
 				pinctrl-names = "default";
 				#address-cells = <1>;
 				#size-cells = <0>;
-
 				status = "disabled";
 			};
 
@@ -735,10 +666,6 @@
 				interrupts = <GIC_SPI 395 IRQ_TYPE_LEVEL_HIGH>;
 				pinctrl-0 = <&hsi2c16_bus>;
 				pinctrl-names = "default";
-
-				#address-cells = <1>;
-				#size-cells = <0>;
-
 				status = "disabled";
 			};
 		};
@@ -752,7 +679,6 @@
 			#address-cells = <1>;
 			#size-cells = <1>;
 			samsung,sysreg = <&syscon_peric1 0x1010>;
-
 			status = "disabled";
 
 			hsi2c_17: i2c@0 {
@@ -763,10 +689,6 @@
 				interrupts = <GIC_SPI 398 IRQ_TYPE_LEVEL_HIGH>;
 				pinctrl-0 = <&hsi2c17_bus>;
 				pinctrl-names = "default";
-
-				#address-cells = <1>;
-				#size-cells = <0>;
-
 				status = "disabled";
 			};
 
@@ -780,7 +702,6 @@
 				pinctrl-0 = <&uart8_bus>;
 				pinctrl-names = "default";
 				samsung,uart-fifosize = <64>;
-
 				status = "disabled";
 			};
 
@@ -796,7 +717,6 @@
 				pinctrl-names = "default";
 				#address-cells = <1>;
 				#size-cells = <0>;
-
 				status = "disabled";
 			};
 
@@ -808,10 +728,6 @@
 				interrupts = <GIC_SPI 399 IRQ_TYPE_LEVEL_HIGH>;
 				pinctrl-0 = <&hsi2c18_bus>;
 				pinctrl-names = "default";
-
-				#address-cells = <1>;
-				#size-cells = <0>;
-
 				status = "disabled";
 			};
 		};
@@ -825,7 +741,6 @@
 			#address-cells = <1>;
 			#size-cells = <1>;
 			samsung,sysreg = <&syscon_peric1 0x1014>;
-
 			status = "disabled";
 
 			hsi2c_19: i2c@0 {
@@ -836,10 +751,6 @@
 				interrupts = <GIC_SPI 402 IRQ_TYPE_LEVEL_HIGH>;
 				pinctrl-0 = <&hsi2c19_bus>;
 				pinctrl-names = "default";
-
-				#address-cells = <1>;
-				#size-cells = <0>;
-
 				status = "disabled";
 			};
 
@@ -853,7 +764,6 @@
 				pinctrl-0 = <&uart9_bus>;
 				pinctrl-names = "default";
 				samsung,uart-fifosize = <64>;
-
 				status = "disabled";
 			};
 
@@ -869,7 +779,6 @@
 				pinctrl-names = "default";
 				#address-cells = <1>;
 				#size-cells = <0>;
-
 				status = "disabled";
 			};
 
@@ -881,10 +790,6 @@
 				interrupts = <GIC_SPI 403 IRQ_TYPE_LEVEL_HIGH>;
 				pinctrl-0 = <&hsi2c20_bus>;
 				pinctrl-names = "default";
-
-				#address-cells = <1>;
-				#size-cells = <0>;
-
 				status = "disabled";
 			};
 		};
@@ -898,7 +803,6 @@
 			#address-cells = <1>;
 			#size-cells = <1>;
 			samsung,sysreg = <&syscon_peric1 0x1018>;
-
 			status = "disabled";
 
 			hsi2c_21: i2c@0 {
@@ -909,10 +813,6 @@
 				interrupts = <GIC_SPI 406 IRQ_TYPE_LEVEL_HIGH>;
 				pinctrl-0 = <&hsi2c21_bus>;
 				pinctrl-names = "default";
-
-				#address-cells = <1>;
-				#size-cells = <0>;
-
 				status = "disabled";
 			};
 
@@ -926,7 +826,6 @@
 				pinctrl-0 = <&uart10_bus>;
 				pinctrl-names = "default";
 				samsung,uart-fifosize = <64>;
-
 				status = "disabled";
 			};
 
@@ -942,7 +841,6 @@
 				pinctrl-names = "default";
 				#address-cells = <1>;
 				#size-cells = <0>;
-
 				status = "disabled";
 			};
 
@@ -954,10 +852,6 @@
 				interrupts = <GIC_SPI 407 IRQ_TYPE_LEVEL_HIGH>;
 				pinctrl-0 = <&hsi2c22_bus>;
 				pinctrl-names = "default";
-
-				#address-cells = <1>;
-				#size-cells = <0>;
-
 				status = "disabled";
 			};
 		};
@@ -971,7 +865,6 @@
 			#address-cells = <1>;
 			#size-cells = <1>;
 			samsung,sysreg = <&syscon_peric1 0x101c>;
-
 			status = "disabled";
 
 			hsi2c_23: i2c@0 {
@@ -982,10 +875,6 @@
 				interrupts = <GIC_SPI 410 IRQ_TYPE_LEVEL_HIGH>;
 				pinctrl-0 = <&hsi2c23_bus>;
 				pinctrl-names = "default";
-
-				#address-cells = <1>;
-				#size-cells = <0>;
-
 				status = "disabled";
 			};
 
@@ -999,7 +888,6 @@
 				pinctrl-0 = <&uart11_bus>;
 				pinctrl-names = "default";
 				samsung,uart-fifosize = <64>;
-
 				status = "disabled";
 			};
 
@@ -1015,7 +903,6 @@
 				pinctrl-names = "default";
 				#address-cells = <1>;
 				#size-cells = <0>;
-
 				status = "disabled";
 			};
 
@@ -1027,10 +914,6 @@
 				interrupts = <GIC_SPI 411 IRQ_TYPE_LEVEL_HIGH>;
 				pinctrl-0 = <&hsi2c24_bus>;
 				pinctrl-names = "default";
-
-				#address-cells = <1>;
-				#size-cells = <0>;
-
 				status = "disabled";
 			};
 		};
@@ -1044,7 +927,6 @@
 			#address-cells = <1>;
 			#size-cells = <1>;
 			samsung,sysreg = <&syscon_peric1 0x1020>;
-
 			status = "disabled";
 
 			hsi2c_25: i2c@0 {
@@ -1055,10 +937,6 @@
 				interrupts = <GIC_SPI 414 IRQ_TYPE_LEVEL_HIGH>;
 				pinctrl-0 = <&hsi2c25_bus>;
 				pinctrl-names = "default";
-
-				#address-cells = <1>;
-				#size-cells = <0>;
-
 				status = "disabled";
 			};
 
@@ -1072,7 +950,6 @@
 				pinctrl-0 = <&uart12_bus>;
 				pinctrl-names = "default";
 				samsung,uart-fifosize = <64>;
-
 				status = "disabled";
 			};
 
@@ -1088,7 +965,6 @@
 				pinctrl-names = "default";
 				#address-cells = <1>;
 				#size-cells = <0>;
-
 				status = "disabled";
 			};
 
@@ -1100,10 +976,6 @@
 				interrupts = <GIC_SPI 415 IRQ_TYPE_LEVEL_HIGH>;
 				pinctrl-0 = <&hsi2c26_bus>;
 				pinctrl-names = "default";
-
-				#address-cells = <1>;
-				#size-cells = <0>;
-
 				status = "disabled";
 			};
 		};
@@ -1117,7 +989,6 @@
 			#address-cells = <1>;
 			#size-cells = <1>;
 			samsung,sysreg = <&syscon_peric1 0x1024>;
-
 			status = "disabled";
 
 			hsi2c_27: i2c@0 {
@@ -1128,10 +999,6 @@
 				interrupts = <GIC_SPI 418 IRQ_TYPE_LEVEL_HIGH>;
 				pinctrl-0 = <&hsi2c27_bus>;
 				pinctrl-names = "default";
-
-				#address-cells = <1>;
-				#size-cells = <0>;
-
 				status = "disabled";
 			};
 
@@ -1145,7 +1012,6 @@
 				pinctrl-0 = <&uart13_bus>;
 				pinctrl-names = "default";
 				samsung,uart-fifosize = <64>;
-
 				status = "disabled";
 			};
 
@@ -1161,7 +1027,6 @@
 				pinctrl-names = "default";
 				#address-cells = <1>;
 				#size-cells = <0>;
-
 				status = "disabled";
 			};
 
@@ -1173,10 +1038,6 @@
 				interrupts = <GIC_SPI 419 IRQ_TYPE_LEVEL_HIGH>;
 				pinctrl-0 = <&hsi2c28_bus>;
 				pinctrl-names = "default";
-
-				#address-cells = <1>;
-				#size-cells = <0>;
-
 				status = "disabled";
 			};
 		};
@@ -1190,7 +1051,6 @@
 			#address-cells = <1>;
 			#size-cells = <1>;
 			samsung,sysreg = <&syscon_peric1 0x1028>;
-
 			status = "disabled";
 
 			hsi2c_29: i2c@0 {
@@ -1201,10 +1061,6 @@
 				interrupts = <GIC_SPI 422 IRQ_TYPE_LEVEL_HIGH>;
 				pinctrl-0 = <&hsi2c29_bus>;
 				pinctrl-names = "default";
-
-				#address-cells = <1>;
-				#size-cells = <0>;
-
 				status = "disabled";
 			};
 
@@ -1218,7 +1074,6 @@
 				pinctrl-0 = <&uart14_bus>;
 				pinctrl-names = "default";
 				samsung,uart-fifosize = <64>;
-
 				status = "disabled";
 			};
 
@@ -1234,7 +1089,6 @@
 				pinctrl-names = "default";
 				#address-cells = <1>;
 				#size-cells = <0>;
-
 				status = "disabled";
 			};
 
@@ -1246,10 +1100,6 @@
 				interrupts = <GIC_SPI 423 IRQ_TYPE_LEVEL_HIGH>;
 				pinctrl-0 = <&hsi2c30_bus>;
 				pinctrl-names = "default";
-
-				#address-cells = <1>;
-				#size-cells = <0>;
-
 				status = "disabled";
 			};
 		};
@@ -1263,7 +1113,6 @@
 			#address-cells = <1>;
 			#size-cells = <1>;
 			samsung,sysreg = <&syscon_peric1 0x102c>;
-
 			status = "disabled";
 
 			hsi2c_31: i2c@0 {
@@ -1274,10 +1123,6 @@
 				interrupts = <GIC_SPI 426 IRQ_TYPE_LEVEL_HIGH>;
 				pinctrl-0 = <&hsi2c31_bus>;
 				pinctrl-names = "default";
-
-				#address-cells = <1>;
-				#size-cells = <0>;
-
 				status = "disabled";
 			};
 
@@ -1291,7 +1136,6 @@
 				pinctrl-0 = <&uart15_bus>;
 				pinctrl-names = "default";
 				samsung,uart-fifosize = <64>;
-
 				status = "disabled";
 			};
 
@@ -1307,7 +1151,6 @@
 				pinctrl-names = "default";
 				#address-cells = <1>;
 				#size-cells = <0>;
-
 				status = "disabled";
 			};
 
@@ -1319,10 +1162,6 @@
 				interrupts = <GIC_SPI 427 IRQ_TYPE_LEVEL_HIGH>;
 				pinctrl-0 = <&hsi2c32_bus>;
 				pinctrl-names = "default";
-
-				#address-cells = <1>;
-				#size-cells = <0>;
-
 				status = "disabled";
 			};
 		};
@@ -1341,10 +1180,6 @@
 			interrupts = <GIC_SPI 431 IRQ_TYPE_LEVEL_HIGH>;
 			pinctrl-0 = <&hsi2c1_bus>;
 			pinctrl-names = "default";
-
-			#address-cells = <1>;
-			#size-cells = <0>;
-
 			status = "disabled";
 		};
 
@@ -1356,10 +1191,6 @@
 			interrupts = <GIC_SPI 432 IRQ_TYPE_LEVEL_HIGH>;
 			pinctrl-0 = <&hsi2c2_bus>;
 			pinctrl-names = "default";
-
-			#address-cells = <1>;
-			#size-cells = <0>;
-
 			status = "disabled";
 		};
 
@@ -1371,10 +1202,6 @@
 			interrupts = <GIC_SPI 433 IRQ_TYPE_LEVEL_HIGH>;
 			pinctrl-0 = <&hsi2c3_bus>;
 			pinctrl-names = "default";
-
-			#address-cells = <1>;
-			#size-cells = <0>;
-
 			status = "disabled";
 		};
 
@@ -1386,10 +1213,6 @@
 			interrupts = <GIC_SPI 434 IRQ_TYPE_LEVEL_HIGH>;
 			pinctrl-0 = <&hsi2c4_bus>;
 			pinctrl-names = "default";
-
-			#address-cells = <1>;
-			#size-cells = <0>;
-
 			status = "disabled";
 		};
 
@@ -1405,7 +1228,6 @@
 			interrupts = <GIC_SPI 435 IRQ_TYPE_LEVEL_HIGH>;
 			pinctrl-0 = <&spi0_bus>;
 			pinctrl-names = "default";
-
 			status = "disabled";
 		};
 
@@ -1421,7 +1243,6 @@
 			interrupts = <GIC_SPI 436 IRQ_TYPE_LEVEL_HIGH>;
 			pinctrl-0 = <&spi1_bus>;
 			pinctrl-names = "default";
-
 			status = "disabled";
 		};
 
@@ -1488,7 +1309,6 @@
 			interrupts = <GIC_SPI 341 IRQ_TYPE_LEVEL_HIGH>;
 			#address-cells = <1>;
 			#size-cells = <0>;
-
 			status = "disabled";
 		};
 

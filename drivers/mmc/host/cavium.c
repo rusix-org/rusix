@@ -905,7 +905,9 @@ static void cvm_mmc_set_clock(struct cvm_mmc_slot *slot, unsigned int clock)
 {
 	struct mmc_host *mmc = slot->mmc;
 
-	slot->clock = clamp(clock, mmc->f_min, mmc->f_max);
+	clock = min(clock, mmc->f_max);
+	clock = max(clock, mmc->f_min);
+	slot->clock = clock;
 }
 
 static int cvm_mmc_init_lowlevel(struct cvm_mmc_slot *slot)

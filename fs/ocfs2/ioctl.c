@@ -82,7 +82,7 @@ int ocfs2_fileattr_get(struct dentry *dentry, struct file_kattr *fa)
 	return status;
 }
 
-int ocfs2_fileattr_set(const struct mnt_idmap *idmap,
+int ocfs2_fileattr_set(struct mnt_idmap *idmap,
 		       struct dentry *dentry, struct file_kattr *fa)
 {
 	struct inode *inode = d_inode(dentry);
@@ -334,7 +334,7 @@ static int ocfs2_info_handle_freeinode(struct inode *inode,
 	struct ocfs2_super *osb = OCFS2_SB(inode->i_sb);
 	struct inode *inode_alloc = NULL;
 
-	oifi = kzalloc_obj(struct ocfs2_info_freeinode);
+	oifi = kzalloc(sizeof(struct ocfs2_info_freeinode), GFP_KERNEL);
 	if (!oifi) {
 		status = -ENOMEM;
 		mlog_errno(status);
@@ -636,7 +636,7 @@ static int ocfs2_info_handle_freefrag(struct inode *inode,
 	struct ocfs2_super *osb = OCFS2_SB(inode->i_sb);
 	struct inode *gb_inode = NULL;
 
-	oiff = kzalloc_obj(struct ocfs2_info_freefrag);
+	oiff = kzalloc(sizeof(struct ocfs2_info_freefrag), GFP_KERNEL);
 	if (!oiff) {
 		status = -ENOMEM;
 		mlog_errno(status);

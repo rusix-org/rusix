@@ -206,16 +206,18 @@ static void __print_timestamp(const char *name, struct timespec *cur,
 	fprintf(stderr, "\n");
 }
 
-static void record_timestamp_usr(void)
+static void print_timestamp_usr(void)
 {
 	if (clock_gettime(CLOCK_REALTIME, &ts_usr))
 		error(1, errno, "clock_gettime");
+
+	__print_timestamp("  USR", &ts_usr, 0, 0);
 }
 
 static void print_timestamp(struct scm_timestamping *tss, int tstype,
 			    int tskey, int payload_len)
 {
-	const char *tsname = NULL;
+	const char *tsname;
 
 	validate_key(tskey, tstype);
 
@@ -597,6 +599,8 @@ static void do_test(int family, unsigned int report_opt)
 			fill_header_udp(buf + off, family == PF_INET);
 		}
 
+		print_timestamp_usr();
+
 		iov.iov_base = buf;
 		iov.iov_len = total_len;
 
@@ -651,13 +655,9 @@ static void do_test(int family, unsigned int report_opt)
 
 		}
 
-		record_timestamp_usr();
-
 		val = sendmsg(fd, &msg, 0);
 		if (val != total_len)
 			error(1, errno, "send");
-
-		__print_timestamp("  USR", &ts_usr, 0, 0);
 
 		/* wait for all errors to be queued, else ACKs arrive OOO */
 		if (cfg_sleep_usec)

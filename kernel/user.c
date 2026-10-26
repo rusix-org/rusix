@@ -23,9 +23,9 @@
 
 #if IS_ENABLED(CONFIG_BINFMT_MISC)
 struct binfmt_misc init_binfmt_misc = {
-	.entries = HLIST_HEAD_INIT,
+	.entries = LIST_HEAD_INIT(init_binfmt_misc.entries),
 	.enabled = true,
-	.entries_lock = __SPIN_LOCK_UNLOCKED(init_binfmt_misc.entries_lock),
+	.entries_lock = __RW_LOCK_UNLOCKED(init_binfmt_misc.entries_lock),
 };
 EXPORT_SYMBOL_GPL(init_binfmt_misc);
 #endif
@@ -35,7 +35,6 @@ EXPORT_SYMBOL_GPL(init_binfmt_misc);
  * and 1 for... ?
  */
 struct user_namespace init_user_ns = {
-	.ns = NS_COMMON_INIT(init_user_ns),
 	.uid_map = {
 		{
 			.extent[0] = {
@@ -66,8 +65,14 @@ struct user_namespace init_user_ns = {
 			.nr_extents = 1,
 		},
 	},
+	.ns.ns_type = ns_common_type(&init_user_ns),
+	.ns.__ns_ref = REFCOUNT_INIT(3),
 	.owner = GLOBAL_ROOT_UID,
 	.group = GLOBAL_ROOT_GID,
+	.ns.inum = ns_init_inum(&init_user_ns),
+#ifdef CONFIG_USER_NS
+	.ns.ops = &userns_operations,
+#endif
 	.flags = USERNS_INIT_FLAGS,
 #ifdef CONFIG_KEYS
 	.keyring_name_list = LIST_HEAD_INIT(init_user_ns.keyring_name_list),

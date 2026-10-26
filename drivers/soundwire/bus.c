@@ -3,6 +3,7 @@
 
 #include <linux/acpi.h>
 #include <linux/delay.h>
+#include <linux/mod_devicetable.h>
 #include <linux/pm_runtime.h>
 #include <linux/soundwire/sdw_registers.h>
 #include <linux/soundwire/sdw.h>
@@ -816,11 +817,8 @@ bool is_clock_scaling_supported_by_slave(struct sdw_slave *slave)
 	/*
 	 * Dynamic scaling is a defined by SDCA. However, some devices expose the class ID but
 	 * can't support dynamic scaling. We might need a quirk to handle such devices.
-	 * The clock base and scale registers themselves are SoundWire 1.2, so a device
-	 * may implement them without setting the class field; the driver says so with
-	 * clock_reg_supported.
 	 */
-	return slave->id.class_id || slave->prop.clock_reg_supported;
+	return slave->id.class_id;
 }
 EXPORT_SYMBOL(is_clock_scaling_supported_by_slave);
 
@@ -1374,6 +1372,37 @@ int sdw_slave_get_current_bank(struct sdw_slave *slave)
 }
 EXPORT_SYMBOL_GPL(sdw_slave_get_current_bank);
 
+/**
+ * sdw_slave_wait_for_init - Wait for device initialisation
+ * @slave: Pointer to the SoundWire peripheral.
+ * @timeout_ms: Timeout in milliseconds.
+ *
+ * Wait for a peripheral device to enumerate and be initialised by the
+ * SoundWire core.
+ *
+ * Return: Zero on success, and a negative error code on failure.
+ */
+int sdw_slave_wait_for_init(struct sdw_slave *slave, int timeout_ms)
+{
+	unsigned long time;
+
+	if (!slave->unattach_request)
+		return 0;
+
+	time = wait_for_completion_timeout(&slave->initialization_complete,
+					   msecs_to_jiffies(timeout_ms));
+	if (!time) {
+		dev_err(&slave->dev, "Initialization not complete\n");
+		sdw_show_ping_status(slave->bus, true);
+		return -ETIMEDOUT;
+	}
+
+	slave->unattach_request = 0;
+
+	return 0;
+}
+EXPORT_SYMBOL_GPL(sdw_slave_wait_for_init);
+
 static int sdw_slave_set_frequency(struct sdw_slave *slave)
 {
 	int scale_index;
@@ -1387,7 +1416,7 @@ static int sdw_slave_set_frequency(struct sdw_slave *slave)
 	 * DisCo property to discover support for the scaling registers
 	 * from platform firmware.
 	 */
-	if (!is_clock_scaling_supported_by_slave(slave))
+	if (!slave->id.class_id && !slave->prop.clock_reg_supported)
 		return 0;
 
 	scale_index = sdw_slave_get_scale_index(slave, &base);
@@ -2058,14 +2087,8 @@ EXPORT_SYMBOL(sdw_clear_slave_status);
 
 int sdw_bpt_send_async(struct sdw_bus *bus, struct sdw_slave *slave, struct sdw_bpt_msg *msg)
 {
-	int len = 0;
-	int i;
-
-	for (i = 0; i < msg->sections; i++)
-		len += msg->sec[i].len;
-
-	if (len > SDW_BPT_MSG_MAX_BYTES) {
-		dev_err(bus->dev, "Invalid BPT message length %d\n", len);
+	if (msg->len > SDW_BPT_MSG_MAX_BYTES) {
+		dev_err(bus->dev, "Invalid BPT message length %d\n", msg->len);
 		return -EINVAL;
 	}
 

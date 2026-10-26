@@ -13,6 +13,7 @@
 #include <linux/clk.h>
 #include <linux/io.h>
 #include <linux/kernel.h>
+#include <linux/mod_devicetable.h>
 #include <linux/module.h>
 #include <linux/platform_device.h>
 #include <linux/pwm.h>
@@ -190,7 +191,7 @@ static const struct pwm_ops berlin_pwm_ops = {
 
 static const struct of_device_id berlin_pwm_match[] = {
 	{ .compatible = "marvell,berlin-pwm" },
-	{ }
+	{ },
 };
 MODULE_DEVICE_TABLE(of, berlin_pwm_match);
 

@@ -4,8 +4,6 @@
  */
 
 #include <linux/string.h>
-#include <linux/zalloc.h>
-#include <errno.h>
 #include <inttypes.h>
 #include "color.h"
 #include "evlist.h"
@@ -183,9 +181,7 @@ static int powerpc_vpadtl_sample(struct powerpc_vpadtl_entry *record,
 {
 	struct perf_sample sample;
 	union perf_event event;
-	int ret;
 
-	perf_sample__init(&sample, /*all=*/true);
 	sample.ip = be64_to_cpu(record->srr0);
 	sample.period = 1;
 	sample.cpu = cpu;
@@ -201,12 +197,12 @@ static int powerpc_vpadtl_sample(struct powerpc_vpadtl_entry *record,
 	event.sample.header.misc = sample.cpumode;
 	event.sample.header.size = sizeof(struct perf_event_header);
 
-	ret = perf_session__deliver_synth_event(vpa->session, &event, &sample);
-	if (ret)
+	if (perf_session__deliver_synth_event(vpa->session, &event, &sample)) {
 		pr_debug("Failed to create sample for dtl entry\n");
+		return -1;
+	}
 
-	perf_sample__exit(&sample);
-	return ret;
+	return 0;
 }
 
 static int powerpc_vpadtl_get_buffer(struct powerpc_vpadtl_queue *vpaq)
@@ -660,7 +656,9 @@ powerpc_vpadtl_synth_events(struct powerpc_vpadtl *vpa, struct perf_session *ses
 	attr.config = PERF_SYNTH_POWERPC_VPA_DTL;
 
 	/* create new id val to be a fixed offset from evsel id */
-	id = auxtrace_synth_id_range_start(evsel);
+	id = evsel->core.id[0] + 1000000000;
+	if (!id)
+		id = 1;
 
 	err = perf_session__deliver_synth_attr_event(session, &attr, id);
 	if (err)

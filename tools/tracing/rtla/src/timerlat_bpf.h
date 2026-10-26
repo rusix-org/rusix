@@ -22,12 +22,14 @@ int timerlat_bpf_restart_tracing(void);
 int timerlat_bpf_get_hist_value(int key,
 				long long *value_irq,
 				long long *value_thread,
-				long long *value_user);
+				long long *value_user,
+				int cpus);
 int timerlat_bpf_get_summary_value(enum summary_field key,
 				   long long *value_irq,
 				   long long *value_thread,
-				   long long *value_user);
-int timerlat_load_bpf_action_program(const char *program_path);
+				   long long *value_user,
+				   int cpus);
+
 static inline int have_libbpf_support(void) { return 1; }
 #else
 static inline int timerlat_bpf_init(struct timerlat_params *params)
@@ -42,18 +44,16 @@ static inline int timerlat_bpf_restart_tracing(void) { return -1; };
 static inline int timerlat_bpf_get_hist_value(int key,
 					      long long *value_irq,
 					      long long *value_thread,
-					      long long *value_user)
+					      long long *value_user,
+					      int cpus)
 {
 	return -1;
 }
 static inline int timerlat_bpf_get_summary_value(enum summary_field key,
 						 long long *value_irq,
 						 long long *value_thread,
-						 long long *value_user)
-{
-	return -1;
-}
-static inline int timerlat_load_bpf_action_program(const char *program_path)
+						 long long *value_user,
+						 int cpus)
 {
 	return -1;
 }

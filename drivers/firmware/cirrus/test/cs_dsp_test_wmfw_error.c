@@ -8,7 +8,6 @@
 
 #include <kunit/device.h>
 #include <kunit/resource.h>
-#include <kunit/static_stub.h>
 #include <kunit/test.h>
 #include <linux/build_bug.h>
 #include <linux/firmware/cirrus/cs_dsp.h>
@@ -990,13 +989,11 @@ static void wmfw_v2_coeff_description_exceeds_block(struct kunit *test)
 			-EOVERFLOW);
 }
 
-static bool cs_dsp_wmfw_err_test_can_emit_message_hook(void)
+static void cs_dsp_wmfw_err_test_exit(struct kunit *test)
 {
-#if defined(DEBUG)
-	return true;
-#else
-	return false;
-#endif
+	cs_dsp_suppress_err_messages = false;
+	cs_dsp_suppress_warn_messages = false;
+	cs_dsp_suppress_info_messages = false;
 }
 
 static int cs_dsp_wmfw_err_test_common_init(struct kunit *test, struct cs_dsp *dsp,
@@ -1083,8 +1080,9 @@ static int cs_dsp_wmfw_err_test_common_init(struct kunit *test, struct cs_dsp *d
 	 * Testing error conditions can produce a lot of log output
 	 * from cs_dsp error messages, so suppress messages.
 	 */
-	kunit_activate_static_stub(test, cs_dsp_can_emit_message,
-				   cs_dsp_wmfw_err_test_can_emit_message_hook);
+	cs_dsp_suppress_err_messages = true;
+	cs_dsp_suppress_warn_messages = true;
+	cs_dsp_suppress_info_messages = true;
 
 	return 0;
 }
@@ -1306,50 +1304,50 @@ static struct kunit_case cs_dsp_wmfw_err_test_cases_v3[] = {
 static struct kunit_suite cs_dsp_wmfw_err_test_halo = {
 	.name = "cs_dsp_wmfwV3_err_halo",
 	.init = cs_dsp_wmfw_err_test_halo_init,
+	.exit = cs_dsp_wmfw_err_test_exit,
 	.test_cases = cs_dsp_wmfw_err_test_cases_v3,
-	.attr.speed = KUNIT_SPEED_SLOW,
 };
 
 static struct kunit_suite cs_dsp_wmfw_err_test_adsp2_32bit_wmfw0 = {
 	.name = "cs_dsp_wmfwV0_err_adsp2_32bit",
 	.init = cs_dsp_wmfw_err_test_adsp2_32bit_wmfw0_init,
+	.exit = cs_dsp_wmfw_err_test_exit,
 	.test_cases = cs_dsp_wmfw_err_test_cases_v0,
-	.attr.speed = KUNIT_SPEED_SLOW,
 };
 
 static struct kunit_suite cs_dsp_wmfw_err_test_adsp2_32bit_wmfw1 = {
 	.name = "cs_dsp_wmfwV1_err_adsp2_32bit",
 	.init = cs_dsp_wmfw_err_test_adsp2_32bit_wmfw1_init,
+	.exit = cs_dsp_wmfw_err_test_exit,
 	.test_cases = cs_dsp_wmfw_err_test_cases_v1,
-	.attr.speed = KUNIT_SPEED_SLOW,
 };
 
 static struct kunit_suite cs_dsp_wmfw_err_test_adsp2_32bit_wmfw2 = {
 	.name = "cs_dsp_wmfwV2_err_adsp2_32bit",
 	.init = cs_dsp_wmfw_err_test_adsp2_32bit_wmfw2_init,
+	.exit = cs_dsp_wmfw_err_test_exit,
 	.test_cases = cs_dsp_wmfw_err_test_cases_v2,
-	.attr.speed = KUNIT_SPEED_SLOW,
 };
 
 static struct kunit_suite cs_dsp_wmfw_err_test_adsp2_16bit_wmfw0 = {
 	.name = "cs_dsp_wmfwV0_err_adsp2_16bit",
 	.init = cs_dsp_wmfw_err_test_adsp2_16bit_wmfw0_init,
+	.exit = cs_dsp_wmfw_err_test_exit,
 	.test_cases = cs_dsp_wmfw_err_test_cases_v0,
-	.attr.speed = KUNIT_SPEED_SLOW,
 };
 
 static struct kunit_suite cs_dsp_wmfw_err_test_adsp2_16bit_wmfw1 = {
 	.name = "cs_dsp_wmfwV1_err_adsp2_16bit",
 	.init = cs_dsp_wmfw_err_test_adsp2_16bit_wmfw1_init,
+	.exit = cs_dsp_wmfw_err_test_exit,
 	.test_cases = cs_dsp_wmfw_err_test_cases_v1,
-	.attr.speed = KUNIT_SPEED_SLOW,
 };
 
 static struct kunit_suite cs_dsp_wmfw_err_test_adsp2_16bit_wmfw2 = {
 	.name = "cs_dsp_wmfwV2_err_adsp2_16bit",
 	.init = cs_dsp_wmfw_err_test_adsp2_16bit_wmfw2_init,
+	.exit = cs_dsp_wmfw_err_test_exit,
 	.test_cases = cs_dsp_wmfw_err_test_cases_v2,
-	.attr.speed = KUNIT_SPEED_SLOW,
 };
 
 kunit_test_suites(&cs_dsp_wmfw_err_test_halo,

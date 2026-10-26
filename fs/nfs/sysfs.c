@@ -11,9 +11,8 @@
 #include <linux/netdevice.h>
 #include <linux/string.h>
 #include <linux/nfs_fs.h>
-#include <net/net_namespace.h>
 #include <linux/rcupdate.h>
-#include <linux/lockd/bind.h>
+#include <linux/lockd/lockd.h>
 
 #include "internal.h"
 #include "nfs4_fs.h"
@@ -44,7 +43,7 @@ int nfs_sysfs_init(void)
 {
 	int ret;
 
-	nfs_kset = kzalloc_obj(*nfs_kset);
+	nfs_kset = kzalloc(sizeof(*nfs_kset), GFP_KERNEL);
 	if (!nfs_kset)
 		return -ENOMEM;
 
@@ -128,10 +127,9 @@ static void nfs_netns_client_release(struct kobject *kobj)
 	kfree(rcu_dereference_raw(c->identifier));
 }
 
-static const struct ns_common *nfs_netns_client_namespace(const struct kobject *kobj)
+static const void *nfs_netns_client_namespace(const struct kobject *kobj)
 {
-	return to_ns_common(container_of(kobj, struct nfs_netns_client,
-					 kobject)->net);
+	return container_of(kobj, struct nfs_netns_client, kobject)->net;
 }
 
 static struct kobj_attribute nfs_netns_client_id = __ATTR(identifier,
@@ -158,10 +156,9 @@ static void nfs_netns_object_release(struct kobject *kobj)
 	kfree(c);
 }
 
-static const struct ns_common *nfs_netns_namespace(const struct kobject *kobj)
+static const void *nfs_netns_namespace(const struct kobject *kobj)
 {
-	return to_ns_common(container_of(kobj, struct nfs_netns_client,
-					 nfs_net_kobj)->net);
+	return container_of(kobj, struct nfs_netns_client, nfs_net_kobj)->net;
 }
 
 static struct kobj_type nfs_netns_object_type = {
@@ -175,7 +172,7 @@ static struct nfs_netns_client *nfs_netns_client_alloc(struct kobject *parent,
 {
 	struct nfs_netns_client *p;
 
-	p = kzalloc_obj(*p);
+	p = kzalloc(sizeof(*p), GFP_KERNEL);
 	if (p) {
 		p->net = net;
 		p->kobject.kset = nfs_kset;
@@ -288,7 +285,7 @@ shutdown_store(struct kobject *kobj, struct kobj_attribute *attr,
 		shutdown_client(server->client_acl);
 
 	if (server->nlm_host)
-		nlmclnt_shutdown_rpc_clnt(server->nlm_host);
+		shutdown_client(server->nlm_host->h_rpcclnt);
 out:
 	shutdown_nfs_client(server->nfs_client);
 	return count;
@@ -296,7 +293,7 @@ out:
 
 static struct kobj_attribute nfs_sysfs_attr_shutdown = __ATTR_RW(shutdown);
 
-#if IS_ENABLED(CONFIG_NFS_V4)
+#if IS_ENABLED(CONFIG_NFS_V4_1)
 static ssize_t
 implid_domain_show(struct kobject *kobj, struct kobj_attribute *attr,
 				char *buf)
@@ -326,7 +323,7 @@ implid_name_show(struct kobject *kobj, struct kobj_attribute *attr,
 
 static struct kobj_attribute nfs_sysfs_attr_implid_name = __ATTR_RO(implid_name);
 
-#endif /* IS_ENABLED(CONFIG_NFS_V4) */
+#endif /* IS_ENABLED(CONFIG_NFS_V4_1) */
 
 #define RPC_CLIENT_NAME_SIZE 64
 
@@ -353,10 +350,9 @@ static void nfs_sysfs_sb_release(struct kobject *kobj)
 	/* no-op: why? see lib/kobject.c kobject_cleanup() */
 }
 
-static const struct ns_common *nfs_netns_server_namespace(const struct kobject *kobj)
+static const void *nfs_netns_server_namespace(const struct kobject *kobj)
 {
-	return to_ns_common(container_of(kobj, struct nfs_server,
-					 kobj)->nfs_client->cl_net);
+	return container_of(kobj, struct nfs_server, kobj)->nfs_client->cl_net;
 }
 
 static struct kobj_type nfs_sb_ktype = {
@@ -366,7 +362,7 @@ static struct kobj_type nfs_sb_ktype = {
 	.child_ns_type = nfs_netns_object_child_ns_type,
 };
 
-#if IS_ENABLED(CONFIG_NFS_V4)
+#if IS_ENABLED(CONFIG_NFS_V4_1)
 static void nfs_sysfs_add_nfsv41_server(struct nfs_server *server)
 {
 	int ret;
@@ -386,11 +382,11 @@ static void nfs_sysfs_add_nfsv41_server(struct nfs_server *server)
 		pr_warn("NFS: sysfs_create_file_ns for server-%d failed (%d)\n",
 			server->s_sysfs_id, ret);
 }
-#else /* CONFIG_NFS_V4 */
+#else /* CONFIG_NFS_V4_1 */
 static inline void nfs_sysfs_add_nfsv41_server(struct nfs_server *server)
 {
 }
-#endif /* CONFIG_NFS_V4 */
+#endif /* CONFIG_NFS_V4_1 */
 
 #if IS_ENABLED(CONFIG_NFS_LOCALIO)
 

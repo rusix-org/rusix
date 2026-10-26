@@ -112,7 +112,7 @@ static int alloc_mr_pbl(struct hns_roce_dev *hr_dev, struct hns_roce_mr *mr,
 
 	err = hns_roce_mtr_create(hr_dev, &mr->pbl_mtr, &buf_attr,
 				  hr_dev->caps.pbl_ba_pg_sz + PAGE_SHIFT,
-				  udata, start, false);
+				  udata, start);
 	if (err) {
 		ibdev_err(ibdev, "failed to alloc pbl mtr, ret = %d.\n", err);
 		return err;
@@ -200,7 +200,7 @@ struct ib_mr *hns_roce_get_dma_mr(struct ib_pd *pd, int acc)
 	struct hns_roce_mr *mr;
 	int ret;
 
-	mr = kzalloc_obj(*mr);
+	mr = kzalloc(sizeof(*mr), GFP_KERNEL);
 	if (!mr)
 		return  ERR_PTR(-ENOMEM);
 
@@ -243,7 +243,7 @@ struct ib_mr *hns_roce_reg_user_mr(struct ib_pd *pd, u64 start, u64 length,
 		goto err_out;
 	}
 
-	mr = kzalloc_obj(*mr);
+	mr = kzalloc(sizeof(*mr), GFP_KERNEL);
 	if (!mr) {
 		ret = -ENOMEM;
 		goto err_out;
@@ -399,7 +399,7 @@ struct ib_mr *hns_roce_alloc_mr(struct ib_pd *pd, enum ib_mr_type mr_type,
 		return ERR_PTR(-EINVAL);
 	}
 
-	mr = kzalloc_obj(*mr);
+	mr = kzalloc(sizeof(*mr), GFP_KERNEL);
 	if (!mr)
 		return ERR_PTR(-ENOMEM);
 
@@ -462,8 +462,8 @@ int hns_roce_map_mr_sg(struct ib_mr *ibmr, struct scatterlist *sg, int sg_nents,
 		return sg_num;
 
 	mr->npages = 0;
-	mr->page_list = kvzalloc_objs(dma_addr_t,
-				      mr->pbl_mtr.hem_cfg.buf_pg_count);
+	mr->page_list = kvcalloc(mr->pbl_mtr.hem_cfg.buf_pg_count,
+				 sizeof(dma_addr_t), GFP_KERNEL);
 	if (!mr->page_list)
 		return sg_num;
 
@@ -586,8 +586,7 @@ static void mtr_free_bufs(struct hns_roce_dev *hr_dev, struct hns_roce_mtr *mtr)
 
 static int mtr_alloc_bufs(struct hns_roce_dev *hr_dev, struct hns_roce_mtr *mtr,
 			  struct hns_roce_buf_attr *buf_attr,
-			  struct ib_udata *udata, unsigned long user_addr,
-			  bool is_cq)
+			  struct ib_udata *udata, unsigned long user_addr)
 {
 	struct ib_device *ibdev = &hr_dev->ib_dev;
 	size_t total_size;
@@ -596,14 +595,8 @@ static int mtr_alloc_bufs(struct hns_roce_dev *hr_dev, struct hns_roce_mtr *mtr,
 
 	if (udata) {
 		mtr->kmem = NULL;
-		if (is_cq)
-			mtr->umem = ib_umem_get_cq_buf_or_va(ibdev, NULL,
-							     user_addr,
-							     total_size,
-							     buf_attr->user_access);
-		else
-			mtr->umem = ib_umem_get_va(ibdev, user_addr, total_size,
-						   buf_attr->user_access);
+		mtr->umem = ib_umem_get(ibdev, user_addr, total_size,
+					buf_attr->user_access);
 		if (IS_ERR(mtr->umem)) {
 			ibdev_err(ibdev, "failed to get umem, ret = %pe.\n",
 				  mtr->umem);
@@ -661,7 +654,7 @@ static int mtr_map_bufs(struct hns_roce_dev *hr_dev, struct hns_roce_mtr *mtr)
 	page_shift = need_split_huge_page(mtr) ? HNS_HW_PAGE_SHIFT :
 						 mtr->hem_cfg.buf_pg_shift;
 	/* alloc a tmp array to store buffer's dma address */
-	pages = kvzalloc_objs(dma_addr_t, page_count);
+	pages = kvcalloc(page_count, sizeof(dma_addr_t), GFP_KERNEL);
 	if (!pages)
 		return -ENOMEM;
 
@@ -1042,13 +1035,11 @@ static void mtr_free_mtt(struct hns_roce_dev *hr_dev, struct hns_roce_mtr *mtr)
  * @ba_page_shift: page shift for multi-hop base address table
  * @udata: user space context, if it's NULL, means kernel space
  * @user_addr: userspace virtual address to start at
- * @is_cq: true when @mtr backs a CQ buffer, which the device writes
- *         completion entries into
  */
 int hns_roce_mtr_create(struct hns_roce_dev *hr_dev, struct hns_roce_mtr *mtr,
 			struct hns_roce_buf_attr *buf_attr,
 			unsigned int ba_page_shift, struct ib_udata *udata,
-			unsigned long user_addr, bool is_cq)
+			unsigned long user_addr)
 {
 	struct ib_device *ibdev = &hr_dev->ib_dev;
 	int ret;
@@ -1061,8 +1052,7 @@ int hns_roce_mtr_create(struct hns_roce_dev *hr_dev, struct hns_roce_mtr *mtr,
 		mtr->umem = NULL;
 		mtr->kmem = NULL;
 	} else {
-		ret = mtr_alloc_bufs(hr_dev, mtr, buf_attr, udata, user_addr,
-				     is_cq);
+		ret = mtr_alloc_bufs(hr_dev, mtr, buf_attr, udata, user_addr);
 		if (ret) {
 			ibdev_err(ibdev,
 				  "failed to alloc mtr bufs, ret = %d.\n", ret);

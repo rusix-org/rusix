@@ -388,7 +388,7 @@ static void qat_alg_skcipher_init_enc(struct qat_alg_skcipher_ctx *ctx,
 static void qat_alg_xts_reverse_key(const u8 *key_forward, unsigned int keylen,
 				    u8 *key_reverse)
 {
-	struct crypto_aes_ctx aes_expanded __cleanup(aes_zeroize_ctx);
+	struct crypto_aes_ctx aes_expanded;
 	int nrounds;
 	u8 *key;
 
@@ -405,6 +405,7 @@ static void qat_alg_xts_reverse_key(const u8 *key_forward, unsigned int keylen,
 		memcpy(key_reverse + AES_BLOCK_SIZE, key - AES_BLOCK_SIZE,
 		       AES_BLOCK_SIZE);
 	}
+	memzero_explicit(&aes_expanded, sizeof(aes_expanded));
 }
 
 static void qat_alg_skcipher_init_dec(struct qat_alg_skcipher_ctx *ctx,
@@ -1319,22 +1320,19 @@ int qat_algs_register(void)
 	ret = crypto_register_skciphers(qat_skciphers,
 					ARRAY_SIZE(qat_skciphers));
 	if (ret)
-		goto err_dec;
+		goto unlock;
 
 	ret = crypto_register_aeads(qat_aeads, ARRAY_SIZE(qat_aeads));
 	if (ret)
-		goto err_unreg_skciphers;
+		goto unreg_algs;
 
-	mutex_unlock(&algs_lock);
-	return 0;
-
-err_unreg_skciphers:
-	crypto_unregister_skciphers(qat_skciphers, ARRAY_SIZE(qat_skciphers));
-err_dec:
-	active_devs--;
 unlock:
 	mutex_unlock(&algs_lock);
 	return ret;
+
+unreg_algs:
+	crypto_unregister_skciphers(qat_skciphers, ARRAY_SIZE(qat_skciphers));
+	goto unlock;
 }
 
 void qat_algs_unregister(void)

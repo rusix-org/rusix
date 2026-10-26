@@ -1114,11 +1114,8 @@ static int emac_change_mtu(struct net_device *ndev, int new_mtu)
 	DBG(dev, "change_mtu(%d)" NL, new_mtu);
 
 	if (netif_running(ndev)) {
-		/* Check if we really need to reinitialize RX ring. The
-		 * jumbo frame settings are only updated by a resize.
-		 */
-		if (emac_rx_skb_size(ndev->mtu) != emac_rx_skb_size(new_mtu) ||
-		    ndev->mtu > ETH_DATA_LEN || new_mtu > ETH_DATA_LEN)
+		/* Check if we really need to reinitialize RX ring */
+		if (emac_rx_skb_size(ndev->mtu) != emac_rx_skb_size(new_mtu))
 			ret = emac_resize_rx_ring(dev, new_mtu);
 	}
 
@@ -1162,17 +1159,6 @@ static void emac_clean_rx_ring(struct emac_instance *dev)
 	if (dev->rx_sg_skb) {
 		dev_kfree_skb(dev->rx_sg_skb);
 		dev->rx_sg_skb = NULL;
-	}
-}
-
-static void emac_clear_mal_desc(struct mal_descriptor *desc, int count)
-{
-	int i;
-
-	for (i = 0; i < count; i++) {
-		WRITE_ONCE(desc[i].ctrl, 0);
-		WRITE_ONCE(desc[i].data_len, 0);
-		WRITE_ONCE(desc[i].data_ptr, 0);
 	}
 }
 
@@ -1742,6 +1728,7 @@ static inline int emac_rx_sg_append(struct emac_instance *dev, int slot)
 /* NAPI poll context */
 static int emac_poll_rx(void *param, int budget)
 {
+	LIST_HEAD(rx_list);
 	struct emac_instance *dev = param;
 	int slot = dev->rx_slot, received = 0;
 
@@ -1798,7 +1785,7 @@ static int emac_poll_rx(void *param, int budget)
 		skb->protocol = eth_type_trans(skb, dev->ndev);
 		emac_rx_csum(dev, skb, ctrl);
 
-		napi_gro_receive(&dev->mal->napi, skb);
+		list_add_tail(&skb->list, &rx_list);
 	next:
 		++dev->stats.rx_packets;
 	skip:
@@ -1841,6 +1828,8 @@ static int emac_poll_rx(void *param, int budget)
 		emac_recycle_rx_skb(dev, slot, 0);
 		goto next;
 	}
+
+	netif_receive_skb_list(&rx_list);
 
 	if (received) {
 		DBG2(dev, "rx %d BDs" NL, received);
@@ -3047,15 +3036,6 @@ static int emac_probe(struct platform_device *ofdev)
 	if (err)
 		goto err_gone;
 
-	if (emac_phy_supports_gige(dev->phy_mode)) {
-		ndev->netdev_ops = &emac_gige_netdev_ops;
-		dev->commac.ops = &emac_commac_sg_ops;
-	} else {
-		ndev->netdev_ops = &emac_netdev_ops;
-		dev->commac.ops = &emac_commac_ops;
-	}
-	ndev->ethtool_ops = &emac_ethtool_ops;
-
 	dev->emacp = devm_platform_ioremap_resource(ofdev, 0);
 	if (IS_ERR(dev->emacp)) {
 		err = PTR_ERR(dev->emacp);
@@ -3088,6 +3068,7 @@ static int emac_probe(struct platform_device *ofdev)
 		dev->mdio_instance = platform_get_drvdata(dev->mdio_dev);
 
 	/* Register with MAL */
+	dev->commac.ops = &emac_commac_ops;
 	dev->commac.dev = dev;
 	dev->commac.tx_chan_mask = MAL_CHAN_MASK(dev->mal_tx_chan);
 	dev->commac.rx_chan_mask = MAL_CHAN_MASK(dev->mal_rx_chan);
@@ -3110,8 +3091,8 @@ static int emac_probe(struct platform_device *ofdev)
 	DBG(dev, "rx_desc %p" NL, dev->rx_desc);
 
 	/* Clean rings */
-	emac_clear_mal_desc(dev->tx_desc, NUM_TX_BUFF);
-	emac_clear_mal_desc(dev->rx_desc, NUM_RX_BUFF);
+	memset(dev->tx_desc, 0, NUM_TX_BUFF * sizeof(struct mal_descriptor));
+	memset(dev->rx_desc, 0, NUM_RX_BUFF * sizeof(struct mal_descriptor));
 	memset(dev->tx_skb, 0, NUM_TX_BUFF * sizeof(struct sk_buff *));
 	memset(dev->rx_skb, 0, NUM_RX_BUFF * sizeof(struct sk_buff *));
 
@@ -3155,6 +3136,12 @@ static int emac_probe(struct platform_device *ofdev)
 		ndev->features |= ndev->hw_features | NETIF_F_RXCSUM;
 	}
 	ndev->watchdog_timeo = 5 * HZ;
+	if (emac_phy_supports_gige(dev->phy_mode)) {
+		ndev->netdev_ops = &emac_gige_netdev_ops;
+		dev->commac.ops = &emac_commac_sg_ops;
+	} else
+		ndev->netdev_ops = &emac_netdev_ops;
+	ndev->ethtool_ops = &emac_ethtool_ops;
 
 	/* MTU range: 46 - 1500 or whatever is in OF */
 	ndev->min_mtu = EMAC_MIN_MTU;

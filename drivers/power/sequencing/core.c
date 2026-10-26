@@ -90,7 +90,7 @@ static struct pwrseq_unit *pwrseq_unit_new(const struct pwrseq_unit_data *data)
 {
 	struct pwrseq_unit *unit;
 
-	unit = kzalloc_obj(*unit);
+	unit = kzalloc(sizeof(*unit), GFP_KERNEL);
 	if (!unit)
 		return NULL;
 
@@ -139,7 +139,7 @@ static struct pwrseq_unit_dep *pwrseq_unit_dep_new(struct pwrseq_unit *unit)
 {
 	struct pwrseq_unit_dep *dep;
 
-	dep = kzalloc_obj(*dep);
+	dep = kzalloc(sizeof(*dep), GFP_KERNEL);
 	if (!dep)
 		return NULL;
 
@@ -183,15 +183,12 @@ static void pwrseq_unit_release(struct kref *ref)
  *               the state lock has been released. It's useful for implementing
  *               boot-up delays without blocking other users from powering up
  *               using the same power sequencer.
- * @is_controllable: Optional callback reporting whether enabling/disabling
- *                   this target actually controls power.
  */
 struct pwrseq_target {
 	struct list_head list;
 	const char *name;
 	struct pwrseq_unit *unit;
 	pwrseq_power_state_func post_enable;
-	pwrseq_is_controllable_func is_controllable;
 };
 
 static struct pwrseq_target *
@@ -199,7 +196,7 @@ pwrseq_target_new(const struct pwrseq_target_data *data)
 {
 	struct pwrseq_target *target;
 
-	target = kzalloc_obj(*target);
+	target = kzalloc(sizeof(*target), GFP_KERNEL);
 	if (!target)
 		return NULL;
 
@@ -210,7 +207,6 @@ pwrseq_target_new(const struct pwrseq_target_data *data)
 	}
 
 	target->post_enable = data->post_enable;
-	target->is_controllable = data->is_controllable;
 
 	return target;
 }
@@ -485,7 +481,7 @@ pwrseq_device_register(const struct pwrseq_config *config)
 	    !config->targets[0])
 		return ERR_PTR(-EINVAL);
 
-	pwrseq = kzalloc_obj(*pwrseq);
+	pwrseq = kzalloc(sizeof(*pwrseq), GFP_KERNEL);
 	if (!pwrseq)
 		return ERR_PTR(-ENOMEM);
 
@@ -677,7 +673,8 @@ struct pwrseq_desc *pwrseq_get(struct device *dev, const char *target)
 	struct pwrseq_match_data match_data;
 	int ret;
 
-	struct pwrseq_desc *desc __free(kfree) = kzalloc_obj(*desc);
+	struct pwrseq_desc *desc __free(kfree) = kzalloc(sizeof(*desc),
+							 GFP_KERNEL);
 	if (!desc)
 		return ERR_PTR(-ENOMEM);
 
@@ -713,7 +710,7 @@ void pwrseq_put(struct pwrseq_desc *desc)
 	pwrseq = desc->pwrseq;
 
 	if (desc->powered_on)
-		pwrseq_disable(desc);
+		pwrseq_power_off(desc);
 
 	kfree(desc);
 	module_put(pwrseq->owner);
@@ -879,7 +876,7 @@ static int pwrseq_unit_disable(struct pwrseq_device *pwrseq,
 }
 
 /**
- * pwrseq_enable() - Issue a power-on request on behalf of the consumer
+ * pwrseq_power_on() - Issue a power-on request on behalf of the consumer
  *                     device.
  * @desc: Descriptor referencing the power sequencer.
  *
@@ -892,7 +889,7 @@ static int pwrseq_unit_disable(struct pwrseq_device *pwrseq,
  * Returns:
  * 0 on success, negative error number on failure.
  */
-int pwrseq_enable(struct pwrseq_desc *desc)
+int pwrseq_power_on(struct pwrseq_desc *desc)
 {
 	struct pwrseq_device *pwrseq;
 	struct pwrseq_target *target;
@@ -932,14 +929,14 @@ int pwrseq_enable(struct pwrseq_desc *desc)
 
 	return ret;
 }
-EXPORT_SYMBOL_GPL(pwrseq_enable);
+EXPORT_SYMBOL_GPL(pwrseq_power_on);
 
 /**
- * pwrseq_disable() - Issue a power-off request on behalf of the consumer
+ * pwrseq_power_off() - Issue a power-off request on behalf of the consumer
  *                      device.
  * @desc: Descriptor referencing the power sequencer.
  *
- * This undoes the effects of pwrseq_enable(). It issues a power-off request
+ * This undoes the effects of pwrseq_power_on(). It issues a power-off request
  * on behalf of the consumer and when the last remaining user does so, the
  * power-down sequence will be started. If one is in progress, the function
  * will block until it's complete and then return.
@@ -947,7 +944,7 @@ EXPORT_SYMBOL_GPL(pwrseq_enable);
  * Returns:
  * 0 on success, negative error number on failure.
  */
-int pwrseq_disable(struct pwrseq_desc *desc)
+int pwrseq_power_off(struct pwrseq_desc *desc)
 {
 	struct pwrseq_device *pwrseq;
 	struct pwrseq_unit *unit;
@@ -973,75 +970,7 @@ int pwrseq_disable(struct pwrseq_desc *desc)
 
 	return ret;
 }
-EXPORT_SYMBOL_GPL(pwrseq_disable);
-
-/**
- * pwrseq_to_device() - Get the pwrseq device pointer from a descriptor.
- * @desc: Descriptor referencing the power sequencer.
- *
- * Return the 'dev' pointer of the power sequencer device associated with @desc.
- * Consumer drivers can use this to query the pwrseq provider's device tree
- * node, for example to check for the existence of specific properties.
- *
- * Since pwrseq_get() already takes a reference to the pwrseq device, this
- * function does not take an additional reference.
- *
- * Returns:
- * Pointer to the pwrseq struct device, or NULL if @desc is NULL.
- */
-struct device *pwrseq_to_device(struct pwrseq_desc *desc)
-{
-	if (!desc)
-		return NULL;
-
-	return &desc->pwrseq->dev;
-}
-EXPORT_SYMBOL_GPL(pwrseq_to_device);
-
-/**
- * pwrseq_is_controllable() - Check whether the target provides a
- *                            host-controllable power actuator.
- * @desc: Descriptor referencing the power sequencer.
- *
- * Some power sequencing targets provide no host-controllable enable for their
- * function on a given board, for instance when the enable line is not wired up
- * and is instead hardwired to an always-on level. For such targets a call to
- * pwrseq_power_off() is still allowed, so that the consumer can drop its vote
- * on the (possibly shared) resources, but the host cannot gate the function
- * on its own.
- *
- * Returns:
- * True if the target provides a host-controllable power actuator, false
- * otherwise. Also returns false if @desc is NULL.
- */
-bool pwrseq_is_controllable(struct pwrseq_desc *desc)
-{
-	struct pwrseq_device *pwrseq;
-	struct pwrseq_target *target;
-	struct pwrseq_unit *unit;
-
-	might_sleep();
-
-	if (!desc)
-		return false;
-
-	pwrseq = desc->pwrseq;
-	target = desc->target;
-	unit = target->unit;
-
-	guard(rwsem_read)(&pwrseq->rw_lock);
-	if (!device_is_registered(&pwrseq->dev))
-		return false;
-
-	if (!unit->enable && !unit->disable)
-		return false;
-
-	if (!target->is_controllable)
-		return true;
-
-	return target->is_controllable(pwrseq);
-}
-EXPORT_SYMBOL_GPL(pwrseq_is_controllable);
+EXPORT_SYMBOL_GPL(pwrseq_power_off);
 
 #if IS_ENABLED(CONFIG_DEBUG_FS)
 
@@ -1123,7 +1052,7 @@ static int pwrseq_debugfs_seq_show(struct seq_file *seq, void *data)
 	struct pwrseq_target *target;
 	struct pwrseq_unit *unit;
 
-	seq_printf(seq, "%s (%s):\n", dev_name(dev), dev_name(dev->parent));
+	seq_printf(seq, "%s:\n", dev_name(dev));
 
 	seq_puts(seq, "  targets:\n");
 	list_for_each_entry(target, &pwrseq->targets, list)

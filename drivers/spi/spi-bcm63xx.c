@@ -413,7 +413,7 @@ static irqreturn_t bcm63xx_spi_interrupt(int irq, void *dev_id)
 	struct bcm63xx_spi *bs = spi_controller_get_devdata(host);
 	u8 intr;
 
-	/* Read interrupts and clear them immediately */
+	/* Read interupts and clear them immediately */
 	intr = bcm_spi_readb(bs, SPI_INT_STATUS);
 	bcm_spi_writeb(bs, SPI_INTR_CLEAR_ALL, SPI_INT_STATUS);
 	bcm_spi_writeb(bs, 0, SPI_INT_MASK);
@@ -477,7 +477,8 @@ static const struct platform_device_id bcm63xx_spi_dev_match[] = {
 		.name = "bcm6358-spi",
 		.driver_data = (unsigned long)bcm6358_spi_reg_offsets,
 	},
-	{ }
+	{
+	},
 };
 MODULE_DEVICE_TABLE(platform, bcm63xx_spi_dev_match);
 
@@ -540,9 +541,11 @@ static int bcm63xx_spi_probe(struct platform_device *pdev)
 	if (IS_ERR(reset))
 		return PTR_ERR(reset);
 
-	host = devm_spi_alloc_host(dev, sizeof(*bs));
-	if (!host)
+	host = spi_alloc_host(dev, sizeof(*bs));
+	if (!host) {
+		dev_err(dev, "out of memory\n");
 		return -ENOMEM;
+	}
 
 	bs = spi_controller_get_devdata(host);
 	init_completion(&bs->done);
@@ -551,8 +554,10 @@ static int bcm63xx_spi_probe(struct platform_device *pdev)
 	bs->pdev = pdev;
 
 	bs->regs = devm_platform_get_and_ioremap_resource(pdev, 0, &r);
-	if (IS_ERR(bs->regs))
-		return PTR_ERR(bs->regs);
+	if (IS_ERR(bs->regs)) {
+		ret = PTR_ERR(bs->regs);
+		goto out_err;
+	}
 
 	bs->irq = irq;
 	bs->clk = clk;
@@ -563,9 +568,10 @@ static int bcm63xx_spi_probe(struct platform_device *pdev)
 			       pdev->name, host);
 	if (ret) {
 		dev_err(dev, "unable to request irq\n");
-		return ret;
+		goto out_err;
 	}
 
+	host->dev.of_node = dev->of_node;
 	host->bus_num = bus_num;
 	host->num_chipselect = num_cs;
 	host->transfer_one_message = bcm63xx_spi_transfer_one;
@@ -576,13 +582,13 @@ static int bcm63xx_spi_probe(struct platform_device *pdev)
 	host->auto_runtime_pm = true;
 	bs->msg_type_shift = bs->reg_offsets[SPI_MSG_TYPE_SHIFT];
 	bs->msg_ctl_width = bs->reg_offsets[SPI_MSG_CTL_WIDTH];
-	bs->tx_io = bs->regs + bs->reg_offsets[SPI_MSG_DATA];
-	bs->rx_io = bs->regs + bs->reg_offsets[SPI_RX_DATA];
+	bs->tx_io = (u8 *)(bs->regs + bs->reg_offsets[SPI_MSG_DATA]);
+	bs->rx_io = (const u8 *)(bs->regs + bs->reg_offsets[SPI_RX_DATA]);
 
 	/* Initialize hardware */
 	ret = clk_prepare_enable(bs->clk);
 	if (ret)
-		return ret;
+		goto out_err;
 
 	ret = reset_control_reset(reset);
 	if (ret) {
@@ -610,7 +616,8 @@ static int bcm63xx_spi_probe(struct platform_device *pdev)
 
 out_clk_disable:
 	clk_disable_unprepare(clk);
-
+out_err:
+	spi_controller_put(host);
 	return ret;
 }
 
@@ -619,6 +626,8 @@ static void bcm63xx_spi_remove(struct platform_device *pdev)
 	struct spi_controller *host = platform_get_drvdata(pdev);
 	struct bcm63xx_spi *bs = spi_controller_get_devdata(host);
 
+	spi_controller_get(host);
+
 	spi_unregister_controller(host);
 
 	/* reset spi block */
@@ -626,17 +635,16 @@ static void bcm63xx_spi_remove(struct platform_device *pdev)
 
 	/* HW shutdown */
 	clk_disable_unprepare(bs->clk);
+
+	spi_controller_put(host);
 }
 
 static int bcm63xx_spi_suspend(struct device *dev)
 {
 	struct spi_controller *host = dev_get_drvdata(dev);
 	struct bcm63xx_spi *bs = spi_controller_get_devdata(host);
-	int ret;
 
-	ret = spi_controller_suspend(host);
-	if (ret)
-		return ret;
+	spi_controller_suspend(host);
 
 	clk_disable_unprepare(bs->clk);
 

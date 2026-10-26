@@ -305,8 +305,7 @@ static int dt2814_attach(struct comedi_device *dev, struct comedi_devconfig *it)
 	struct comedi_subdevice *s;
 	int ret;
 
-	ret = comedi_check_request_region(dev, it->options[0], 0x2,
-					  0x200, 0x3ff, 2);
+	ret = comedi_request_region(dev, it->options[0], 0x2);
 	if (ret)
 		return ret;
 
@@ -316,8 +315,7 @@ static int dt2814_attach(struct comedi_device *dev, struct comedi_devconfig *it)
 		return -EIO;
 	}
 
-	/* only ISA interrupts are valid on this board */
-	if (it->options[1] >= 1 && it->options[1] <= 15) {
+	if (it->options[1]) {
 		ret = request_irq(it->options[1], dt2814_interrupt, 0,
 				  dev->board_name, dev);
 		if (ret == 0)

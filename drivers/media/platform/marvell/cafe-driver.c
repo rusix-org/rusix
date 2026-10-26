@@ -127,7 +127,7 @@ struct cafe_camera {
  * Debugging and related.
  */
 #define cam_err(cam, fmt, arg...) \
-	dev_err(&(cam)->pdev->dev, fmt, ##arg)
+	dev_err(&(cam)->pdev->dev, fmt, ##arg);
 #define cam_warn(cam, fmt, arg...) \
 	dev_warn(&(cam)->pdev->dev, fmt, ##arg);
 
@@ -327,7 +327,7 @@ static int cafe_smbus_setup(struct cafe_camera *cam)
 	struct i2c_adapter *adap;
 	int ret;
 
-	adap = kzalloc_obj(*adap);
+	adap = kzalloc(sizeof(*adap), GFP_KERNEL);
 	if (adap == NULL)
 		return -ENOMEM;
 	adap->owner = THIS_MODULE;
@@ -485,7 +485,7 @@ static int cafe_pci_probe(struct pci_dev *pdev,
 	 * Start putting together one of our big camera structures.
 	 */
 	ret = -ENOMEM;
-	cam = kzalloc_obj(struct cafe_camera);
+	cam = kzalloc(sizeof(struct cafe_camera), GFP_KERNEL);
 	if (cam == NULL)
 		goto out;
 	pci_set_drvdata(pdev, cam);

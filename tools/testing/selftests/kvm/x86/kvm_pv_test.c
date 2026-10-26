@@ -13,7 +13,7 @@
 #include "processor.h"
 
 struct msr_data {
-	u32 idx;
+	uint32_t idx;
 	const char *name;
 };
 
@@ -40,8 +40,8 @@ static struct msr_data msrs_to_test[] = {
 
 static void test_msr(struct msr_data *msr)
 {
-	u64 ignored;
-	u8 vector;
+	uint64_t ignored;
+	uint8_t vector;
 
 	PR_MSR(msr);
 
@@ -53,7 +53,7 @@ static void test_msr(struct msr_data *msr)
 }
 
 struct hcall_data {
-	u64 nr;
+	uint64_t nr;
 	const char *name;
 };
 
@@ -73,7 +73,7 @@ static struct hcall_data hcalls_to_test[] = {
 
 static void test_hcall(struct hcall_data *hc)
 {
-	u64 r;
+	uint64_t r;
 
 	PR_HCALL(hc);
 	r = kvm_hypercall(hc->nr, 0, 0, 0, 0);

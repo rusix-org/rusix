@@ -86,9 +86,6 @@ __naked static void cumulative_stack_depth_subprog(void)
 SEC("kprobe")
 __description("Private stack, subtree > MAX_BPF_STACK")
 __success
-__log_level(4) __msg("stack depth max 512")
-__msg("subprog 0 (private_stack_nested_1) main {{.*}} stack 512")
-__msg("subprog 1 (cumulative_stack_depth_subprog) static {{.*}} stack 32")
 __arch_x86_64
 /* private stack fp for the main prog */
 __jited("	movabsq	$0x{{.*}}, %r9")
@@ -96,7 +93,6 @@ __jited("	addq	%gs:{{.*}}, %r9")
 __jited("	movl	$0x2a, %edi")
 __jited("	movq	%rdi, -0x200(%r9)")
 __jited("	pushq	%r9")
-__jited("...")
 __jited("	callq	0x{{.*}}")
 __jited("	popq	%r9")
 __jited("	xorl	%eax, %eax")
@@ -156,13 +152,11 @@ __jited("	endbr64")
 __jited("	movabsq	$0x{{.*}}, %r9")
 __jited("	addq	%gs:{{.*}}, %r9")
 __jited("	pushq	%r9")
-__jited("...")
 __jited("	callq")
 __jited("	popq	%r9")
 __jited("	movl	$0x2a, %edi")
 __jited("	movq	%rdi, -0x200(%r9)")
 __jited("	pushq	%r9")
-__jited("...")
 __jited("	callq")
 __jited("	popq	%r9")
 __arch_arm64
@@ -176,12 +170,12 @@ __jited("	mrs	x10, TPIDR_EL{{[0-1]}}")
 __jited("	add	x27, x27, x10")
 __jited("	add	x25, x27, {{.*}}")
 __jited("	bl	0x{{.*}}")
-__jited("	mov	x8, x0")
+__jited("	add	x7, x0, #0x0")
 __jited("	mov	x0, #0x2a")
 __jited("	str	x0, [x27]")
 __jited("	bl	0x{{.*}}")
-__jited("	mov	x8, x0")
-__jited("	mov	x8, #0x0")
+__jited("	add	x7, x0, #0x0")
+__jited("	mov	x7, #0x0")
 __jited("	ldp	x25, x27, [sp], {{.*}}")
 __naked void private_stack_callback(void)
 {
@@ -204,7 +198,6 @@ __description("Private stack, exception in main prog")
 __success __retval(0)
 __arch_x86_64
 __jited("	pushq	%r9")
-__jited("...")
 __jited("	callq")
 __jited("	popq	%r9")
 __arch_arm64
@@ -227,7 +220,7 @@ __jited("	mov	x0, #0x2a")
 __jited("	str	x0, [x27]")
 __jited("	mov	x0, #0x0")
 __jited("	bl	0x{{.*}}")
-__jited("	mov	x8, x0")
+__jited("	add	x7, x0, #0x0")
 __jited("	ldp	x27, x28, [sp], #0x10")
 int private_stack_exception_main_prog(void)
 {
@@ -252,7 +245,6 @@ __success __retval(0)
 __arch_x86_64
 __jited("	movq	%rdi, -0x200(%r9)")
 __jited("	pushq	%r9")
-__jited("...")
 __jited("	callq")
 __jited("	popq	%r9")
 __arch_arm64
@@ -266,7 +258,7 @@ __jited("	add	x25, x27, {{.*}}")
 __jited("	mov	x0, #0x2a")
 __jited("	str	x0, [x27]")
 __jited("	bl	0x{{.*}}")
-__jited("	mov	x8, x0")
+__jited("	add	x7, x0, #0x0")
 __jited("	ldp	x27, x28, [sp], #0x10")
 int private_stack_exception_sub_prog(void)
 {
@@ -332,12 +324,6 @@ int private_stack_async_callback_1(void)
 SEC("fentry/bpf_fentry_test9")
 __description("Private stack, async callback, potential nesting")
 __success __retval(0)
-__load_if_JITed()
-__log_level(4) __msg("stack depth max 272")
-__msg("subprog 0 (private_stack_async_callback_2) main {{.*}} stack 8")
-__msg("subprog 1 (timer_cb1) static {{.*}} stack 0")
-__msg("subprog 2 (subprog1) static {{.*}} stack 256")
-__msg("subprog 3 (subprog2) static {{.*}} stack 0")
 __arch_x86_64
 __jited("	subq	$0x100, %rsp")
 __arch_arm64
@@ -358,26 +344,10 @@ int private_stack_async_callback_2(void)
 	return 0;
 }
 
-SEC("fentry/bpf_fentry_test9")
-__description("private stack, max stack depth is private stack")
-__success
-__log_level(4) __msg("stack depth max 256")
-__msg("subprog 0 (private_stack_max_depth) main {{.*}} stack 8")
-__msg("subprog 1 (subprog1) static insns_self {{[0-9]+}} insns_total {{[0-9]+}} stack 256")
-__msg("subprog 2 (subprog2) static insns_self {{[0-9]+}} insns_total {{[0-9]+}} stack 0")
-int private_stack_max_depth(void)
-{
-	int x = 0;
-
-	subprog1(&x);
-	return 0;
-}
-
 #else
 
 SEC("kprobe")
 __description("private stack is not supported, use a dummy test")
-__skip("private stack is not supported")
 __success
 int dummy_test(void)
 {

@@ -314,7 +314,7 @@ nouveau_backlight_init(struct drm_connector *connector)
 	if (!nv_encoder)
 		return 0;
 
-	bl = kzalloc_obj(*bl);
+	bl = kzalloc(sizeof(*bl), GFP_KERNEL);
 	if (!bl)
 		return -ENOMEM;
 

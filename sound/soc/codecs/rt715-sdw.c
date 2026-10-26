@@ -9,6 +9,7 @@
  */
 #include <linux/delay.h>
 #include <linux/device.h>
+#include <linux/mod_devicetable.h>
 #include <linux/soundwire/sdw.h>
 #include <linux/soundwire/sdw_type.h>
 #include <linux/soundwire/sdw_registers.h>
@@ -470,9 +471,11 @@ static int rt715_sdw_probe(struct sdw_slave *slave,
 	return rt715_init(&slave->dev, sdw_regmap, regmap, slave);
 }
 
-static void rt715_sdw_remove(struct sdw_slave *slave)
+static int rt715_sdw_remove(struct sdw_slave *slave)
 {
 	pm_runtime_disable(&slave->dev);
+
+	return 0;
 }
 
 static const struct sdw_device_id rt715_id[] = {
@@ -500,17 +503,25 @@ static int rt715_dev_resume(struct device *dev)
 {
 	struct sdw_slave *slave = dev_to_sdw_dev(dev);
 	struct rt715_priv *rt715 = dev_get_drvdata(dev);
-	int ret;
+	unsigned long time;
 
 	if (!rt715->first_hw_init)
 		return 0;
 
-	ret = sdw_slave_wait_for_init(slave, RT715_PROBE_TIMEOUT);
-	if (ret) {
+	if (!slave->unattach_request)
+		goto regmap_sync;
+
+	time = wait_for_completion_timeout(&slave->initialization_complete,
+					   msecs_to_jiffies(RT715_PROBE_TIMEOUT));
+	if (!time) {
+		dev_err(&slave->dev, "%s: Initialization not complete, timed out\n", __func__);
 		sdw_show_ping_status(slave->bus, true);
-		return ret;
+
+		return -ETIMEDOUT;
 	}
 
+regmap_sync:
+	slave->unattach_request = 0;
 	regcache_cache_only(rt715->regmap, false);
 	regcache_sync_region(rt715->regmap, 0x3000, 0x8fff);
 	regcache_sync_region(rt715->regmap, 0x752039, 0x752039);

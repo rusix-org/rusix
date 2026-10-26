@@ -1524,17 +1524,17 @@ static int goodix_resume(struct device *dev)
 static DEFINE_SIMPLE_DEV_PM_OPS(goodix_pm_ops, goodix_suspend, goodix_resume);
 
 static const struct i2c_device_id goodix_ts_id[] = {
-	{ .name = "GDIX1001:00" },
+	{ "GDIX1001:00" },
 	{ }
 };
 MODULE_DEVICE_TABLE(i2c, goodix_ts_id);
 
 #ifdef CONFIG_ACPI
 static const struct acpi_device_id goodix_acpi_match[] = {
-	{ .id = "GDIX1001" },
-	{ .id = "GDIX1002" },
-	{ .id = "GDIX1003" },
-	{ .id = "GDX9110" },
+	{ "GDIX1001", 0 },
+	{ "GDIX1002", 0 },
+	{ "GDIX1003", 0 },
+	{ "GDX9110", 0 },
 	{ }
 };
 MODULE_DEVICE_TABLE(acpi, goodix_acpi_match);

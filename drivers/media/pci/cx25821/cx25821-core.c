@@ -1266,7 +1266,7 @@ static int cx25821_initdev(struct pci_dev *pci_dev,
 	struct cx25821_dev *dev;
 	int err = 0;
 
-	dev = kzalloc_obj(*dev);
+	dev = kzalloc(sizeof(*dev), GFP_KERNEL);
 	if (NULL == dev)
 		return -ENOMEM;
 
@@ -1347,10 +1347,16 @@ static void cx25821_finidev(struct pci_dev *pci_dev)
 static const struct pci_device_id cx25821_pci_tbl[] = {
 	{
 		/* CX25821 Athena */
-		PCI_DEVICE_SUB(0x14f1, 0x8210, 0x14f1, 0x0920),
+		.vendor = 0x14f1,
+		.device = 0x8210,
+		.subvendor = 0x14f1,
+		.subdevice = 0x0920,
 	}, {
 		/* CX25821 No Brand */
-		PCI_DEVICE_SUB(0x14f1, 0x8210, 0x0000, 0x0000),
+		.vendor = 0x14f1,
+		.device = 0x8210,
+		.subvendor = 0x0000,
+		.subdevice = 0x0000,
 	}, {
 		/* --- end of list --- */
 	}

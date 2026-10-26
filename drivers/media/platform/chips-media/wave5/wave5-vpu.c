@@ -340,13 +340,6 @@ static int wave5_vpu_probe(struct platform_device *pdev)
 		dev_err(&pdev->dev, "failed to get irq resource, falling back to polling\n");
 		sema_init(&dev->irq_sem, 1);
 		dev->irq_thread = kthread_run(irq_thread, dev, "irq thread");
-		if (IS_ERR(dev->irq_thread)) {
-			ret = PTR_ERR(dev->irq_thread);
-			dev_err(&pdev->dev, "failed to create irq thread\n");
-			dev->irq_thread = NULL;
-			goto err_vdi_release;
-		}
-
 		hrtimer_setup(&dev->hrtimer, &wave5_vpu_timer_callback, CLOCK_MONOTONIC,
 			      HRTIMER_MODE_REL_PINNED);
 		dev->worker = kthread_run_worker(0, "vpu_irq_thread");
@@ -369,7 +362,7 @@ static int wave5_vpu_probe(struct platform_device *pdev)
 	ret = v4l2_device_register(&pdev->dev, &dev->v4l2_dev);
 	if (ret) {
 		dev_err(&pdev->dev, "v4l2_device_register, fail: %d\n", ret);
-		goto err_irq_release;
+		goto err_vdi_release;
 	}
 
 	if (match_data->flags & WAVE5_IS_DEC) {
@@ -414,15 +407,7 @@ err_dec_unreg:
 		wave5_vpu_dec_unregister_device(dev);
 err_v4l2_unregister:
 	v4l2_device_unregister(&dev->v4l2_dev);
-err_irq_release:
-	if (dev->irq < 0)
-		kthread_destroy_worker(dev->worker);
 err_vdi_release:
-	if (dev->irq_thread) {
-		kthread_stop(dev->irq_thread);
-		up(&dev->irq_sem);
-		dev->irq_thread = NULL;
-	}
 	wave5_vdi_release(&pdev->dev);
 err_clk_dis:
 	clk_bulk_disable_unprepare(dev->num_clks, dev->clks);

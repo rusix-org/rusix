@@ -1,4 +1,3 @@
-// SPDX-License-Identifier: GPL-2.0
 #include <linux/kernel.h>
 #include <linux/init.h>
 #include <linux/module.h>
@@ -7,7 +6,6 @@
 #include <linux/netdevice.h>
 #include <linux/tc_act/tc_csum.h>
 #include <net/flow_offload.h>
-#include <net/ip_tunnels.h>
 #include <net/netfilter/nf_flow_table.h>
 #include <net/netfilter/nf_tables.h>
 #include <net/netfilter/nf_conntrack.h>
@@ -596,7 +594,7 @@ static int flow_offload_redirect(struct net *net,
 	switch (this_tuple->xmit_type) {
 	case FLOW_OFFLOAD_XMIT_DIRECT:
 		this_tuple = &flow->tuplehash[dir].tuple;
-		ifindex = this_tuple->out.ifidx;
+		ifindex = this_tuple->out.hw_ifidx;
 		break;
 	case FLOW_OFFLOAD_XMIT_NEIGH:
 		other_tuple = &flow->tuplehash[!dir].tuple;
@@ -806,7 +804,7 @@ nf_flow_offload_rule_alloc(struct net *net,
 	struct nf_flow_rule *flow_rule;
 	int err = -ENOMEM;
 
-	flow_rule = kzalloc_obj(*flow_rule);
+	flow_rule = kzalloc(sizeof(*flow_rule), GFP_KERNEL);
 	if (!flow_rule)
 		goto err_flow;
 
@@ -1088,7 +1086,7 @@ nf_flow_offload_work_alloc(struct nf_flowtable *flowtable,
 	if (test_and_set_bit(NF_FLOW_PENDING, &flow->flags))
 		return NULL;
 
-	offload = kmalloc_obj(struct flow_offload_work, GFP_ATOMIC);
+	offload = kmalloc(sizeof(struct flow_offload_work), GFP_ATOMIC);
 	if (!offload) {
 		clear_bit(NF_FLOW_PENDING, &flow->flags);
 		return NULL;
@@ -1102,17 +1100,9 @@ nf_flow_offload_work_alloc(struct nf_flowtable *flowtable,
 	return offload;
 }
 
-static bool nf_flow_offload_unsupported(struct flow_offload *flow)
-{
-	if (flow->tuplehash[FLOW_OFFLOAD_DIR_ORIGINAL].tuple.tun_num ||
-	    flow->tuplehash[FLOW_OFFLOAD_DIR_REPLY].tuple.tun_num)
-		return true;
 
-	return false;
-}
-
-void nf_flow_offload_refresh(struct nf_flowtable *flowtable,
-			     struct flow_offload *flow)
+void nf_flow_offload_add(struct nf_flowtable *flowtable,
+			 struct flow_offload *flow)
 {
 	struct flow_offload_work *offload;
 
@@ -1121,16 +1111,6 @@ void nf_flow_offload_refresh(struct nf_flowtable *flowtable,
 		return;
 
 	flow_offload_queue_work(offload);
-}
-
-void nf_flow_offload_add(struct nf_flowtable *flowtable,
-			 struct flow_offload *flow)
-{
-	if (nf_flow_offload_unsupported(flow))
-		return;
-
-	set_bit(NF_FLOW_HW, &flow->flags);
-	nf_flow_offload_refresh(flowtable, flow);
 }
 
 void nf_flow_offload_del(struct nf_flowtable *flowtable,

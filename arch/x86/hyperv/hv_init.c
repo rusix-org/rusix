@@ -103,9 +103,9 @@ static int hyperv_init_ghcb(void)
 	 */
 	rdmsrq(MSR_AMD64_SEV_ES_GHCB, ghcb_gpa);
 
-	/* Mask out vTOM bit and map as decrypted */
+	/* Mask out vTOM bit. ioremap_cache() maps decrypted */
 	ghcb_gpa &= ~ms_hyperv.shared_gpa_boundary;
-	ghcb_va = memremap(ghcb_gpa, HV_HYP_PAGE_SIZE, MEMREMAP_WB | MEMREMAP_DEC);
+	ghcb_va = (void *)ioremap_cache(ghcb_gpa, HV_HYP_PAGE_SIZE);
 	if (!ghcb_va)
 		return -ENOMEM;
 
@@ -170,9 +170,6 @@ static int hv_cpu_init(unsigned int cpu)
 		wrmsrq(HV_X64_MSR_VP_ASSIST_PAGE, msr.as_uint64);
 	}
 
-	/* Allow Hyper-V stimer vector to be injected from Hypervisor. */
-	apic_update_vector(cpu, HYPERV_STIMER0_VECTOR, true);
-
 	return hyperv_init_ghcb();
 }
 
@@ -218,7 +215,7 @@ static inline bool hv_reenlightenment_available(void)
 DEFINE_IDTENTRY_SYSVEC(sysvec_hyperv_reenlightenment)
 {
 	apic_eoi();
-	inc_irq_stat(HYPERV_REENLIGHTENMENT);
+	inc_irq_stat(irq_hv_reenlightenment_count);
 	schedule_delayed_work(&hv_reenlightenment_work, HZ/10);
 }
 
@@ -276,11 +273,9 @@ static int hv_cpu_die(unsigned int cpu)
 	if (hv_ghcb_pg) {
 		ghcb_va = (void **)this_cpu_ptr(hv_ghcb_pg);
 		if (*ghcb_va)
-			memunmap(*ghcb_va);
+			iounmap(*ghcb_va);
 		*ghcb_va = NULL;
 	}
-
-	apic_update_vector(cpu, HYPERV_STIMER0_VECTOR, false);
 
 	hv_common_cpu_die(cpu);
 
@@ -423,18 +418,15 @@ static void (* __initdata old_setup_percpu_clockev)(void);
 
 static void __init hv_stimer_setup_percpu_clockev(void)
 {
-	int ret;
-
 	/*
-	 * Continue after errors in setting up stimer clockevents
+	 * Ignore any errors in setting up stimer clockevents
 	 * as we can run with the LAPIC timer as a fallback.
 	 */
-	ret = hv_stimer_alloc(false);
-	if (ret)
-		pr_warn("stimer setup failed with error %d\n", ret);
+	(void)hv_stimer_alloc(false);
 
 	/*
-	 * Still register the LAPIC timer to allow users
+	 * Still register the LAPIC timer, because the direct-mode STIMER is
+	 * not supported by old versions of Hyper-V. This also allows users
 	 * to switch to LAPIC timer via /sys, if they want to.
 	 */
 	if (old_setup_percpu_clockev)
@@ -468,7 +460,9 @@ void __init hyperv_init(void)
 	if (hv_isolation_type_tdx())
 		hv_vp_assist_page = NULL;
 	else
-		hv_vp_assist_page = kzalloc_objs(*hv_vp_assist_page, nr_cpu_ids);
+		hv_vp_assist_page = kcalloc(nr_cpu_ids,
+					    sizeof(*hv_vp_assist_page),
+					    GFP_KERNEL);
 	if (!hv_vp_assist_page) {
 		ms_hyperv.hints &= ~HV_X64_ENLIGHTENED_VMCS_RECOMMENDED;
 
@@ -557,16 +551,12 @@ void __init hyperv_init(void)
 		memunmap(src);
 
 		hv_remap_tsc_clocksource();
-		hv_sleep_notifiers_register();
 	} else {
 		hypercall_msr.guest_physical_address = vmalloc_to_pfn(hv_hypercall_pg);
 		wrmsrq(HV_X64_MSR_HYPERCALL, hypercall_msr.as_uint64);
 	}
 
 	hv_set_hypercall_pg(hv_hypercall_pg);
-
-	if (hv_root_partition())        /* after set hypercall pg */
-		hv_root_crash_init();
 
 skip_hypercall_pg_init:
 	/*
@@ -578,10 +568,6 @@ skip_hypercall_pg_init:
 	 */
 	old_setup_percpu_clockev = x86_init.timers.setup_percpu_clockev;
 	x86_init.timers.setup_percpu_clockev = hv_stimer_setup_percpu_clockev;
-
-#ifdef CONFIG_HYPERV_PVIOMMU
-	x86_init.iommu.iommu_init = hv_iommu_init;
-#endif
 
 	hv_apic_init();
 
@@ -638,13 +624,9 @@ void hyperv_cleanup(void)
 	hv_ivm_msr_write(HV_X64_MSR_GUEST_OS_ID, 0);
 
 	/*
-	 * Reset hv_hypercall_pg before resetting it in the hypervisor.
-	 * hv_set_hypercall_pg(NULL) is not used because at this point in the
-	 * panic path other CPUs have been stopped, causing static_call_update()
-	 * to hang. So resetting hv_hypercall_pg to cause hypercalls to fail
-	 * cleanly is only operative on 32-bit builds. But this is OK as it is
-	 * just a preventative measure to ease detecting a hypercall being made
-	 * after this point, which shouldn't be happening anyway.
+	 * Reset hypercall page reference before reset the page,
+	 * let hypercall operations fail safely rather than
+	 * panic the kernel for using invalid hypercall page
 	 */
 	hv_hypercall_pg = NULL;
 
@@ -731,8 +713,7 @@ int hv_apicid_to_vp_index(u32 apic_id)
 	input->partition_id = HV_PARTITION_ID_SELF;
 	input->apic_ids[0] = apic_id;
 
-	/* Treat input as having 2 APIC IDs so output is 64-bit aligned */
-	output = (void *)input + struct_size(input, apic_ids, 2);
+	output = *this_cpu_ptr(hyperv_pcpu_output_arg);
 
 	control = HV_HYPERCALL_REP_COMP_1 | HVCALL_GET_VP_INDEX_FROM_APIC_ID;
 	status = hv_do_hypercall(control, input, output);

@@ -21,7 +21,6 @@
 #include <linux/resctrl.h>
 
 #include <asm/cpu_device_id.h>
-#include <asm/cpuid/api.h>
 #include <asm/msr.h>
 
 #include "internal.h"
@@ -136,7 +135,7 @@ static int logical_rmid_to_physical_rmid(int cpu, int lrmid)
 
 static int __rmid_read_phys(u32 prmid, enum resctrl_event_id eventid, u64 *val)
 {
-	struct msr msr_val = { .l = eventid, .h = prmid };
+	u64 msr_val;
 
 	/*
 	 * As per the SDM, when IA32_QM_EVTSEL.EvtID (bits 7:0) is configured
@@ -146,15 +145,15 @@ static int __rmid_read_phys(u32 prmid, enum resctrl_event_id eventid, u64 *val)
 	 * IA32_QM_CTR.Error (bit 63) and IA32_QM_CTR.Unavailable (bit 62)
 	 * are error bits.
 	 */
-	wrmsrq(MSR_IA32_QM_EVTSEL, msr_val.q);
-	rdmsrq(MSR_IA32_QM_CTR, msr_val.q);
+	wrmsr(MSR_IA32_QM_EVTSEL, eventid, prmid);
+	rdmsrq(MSR_IA32_QM_CTR, msr_val);
 
-	if (msr_val.q & RMID_VAL_ERROR)
+	if (msr_val & RMID_VAL_ERROR)
 		return -EIO;
-	if (msr_val.q & RMID_VAL_UNAVAIL)
+	if (msr_val & RMID_VAL_UNAVAIL)
 		return -EINVAL;
 
-	*val = msr_val.q;
+	*val = msr_val;
 	return 0;
 }
 
@@ -239,12 +238,11 @@ static u64 get_corrected_val(struct rdt_resource *r, struct rdt_l3_mon_domain *d
 	return chunks * hw_res->mon_scale;
 }
 
-int resctrl_arch_rmid_read(struct rdt_resource *r, struct rdt_domain_hdr *hdr,
+int resctrl_arch_rmid_read(struct rdt_resource *r, struct rdt_l3_mon_domain *d,
 			   u32 unused, u32 rmid, enum resctrl_event_id eventid,
-			   void *arch_priv, u64 *val, void *ignored)
+			   u64 *val, void *ignored)
 {
-	struct rdt_hw_l3_mon_domain *hw_dom;
-	struct rdt_l3_mon_domain *d;
+	struct rdt_hw_l3_mon_domain *hw_dom = resctrl_to_arch_mon_dom(d);
 	struct arch_mbm_state *am;
 	u64 msr_val;
 	u32 prmid;
@@ -253,20 +251,12 @@ int resctrl_arch_rmid_read(struct rdt_resource *r, struct rdt_domain_hdr *hdr,
 
 	resctrl_arch_rmid_read_context_check();
 
-	if (r->rid == RDT_RESOURCE_PERF_PKG)
-		return intel_aet_read_event(hdr->id, rmid, arch_priv, val);
-
-	if (!domain_header_is_valid(hdr, RESCTRL_MON_DOMAIN, RDT_RESOURCE_L3))
-		return -EINVAL;
-
-	if (cpumask_empty(&hdr->cpu_mask)) {
-		pr_warn_once("Domain %d has no CPUs\n", hdr->id);
+	if (cpumask_empty(&d->hdr.cpu_mask)) {
+		pr_warn_once("Domain %d has no CPUs\n", d->hdr.id);
 		return -EINVAL;
 	}
 
-	d = container_of(hdr, struct rdt_l3_mon_domain, hdr);
-	hw_dom = resctrl_to_arch_mon_dom(d);
-	cpu = cpumask_any(&hdr->cpu_mask);
+	cpu = cpumask_any(&d->hdr.cpu_mask);
 	prmid = logical_rmid_to_physical_rmid(cpu, rmid);
 	ret = __rmid_read_phys(prmid, eventid, &msr_val);
 
@@ -283,10 +273,7 @@ int resctrl_arch_rmid_read(struct rdt_resource *r, struct rdt_domain_hdr *hdr,
 
 static int __cntr_id_read(u32 cntr_id, u64 *val)
 {
-	struct msr msr_val = {
-		.l = ABMC_EXTENDED_EVT_ID | ABMC_EVT_ID,
-		.h = cntr_id
-	};
+	u64 msr_val;
 
 	/*
 	 * QM_EVTSEL Register definition:
@@ -309,15 +296,15 @@ static int __cntr_id_read(u32 cntr_id, u64 *val)
 	 * ID is set in the QM_EVTSEL.RMID field.  The RMID_VAL_UNAVAIL bit
 	 * is set if the counter data is unavailable.
 	 */
-	wrmsrq(MSR_IA32_QM_EVTSEL, msr_val.q);
-	rdmsrq(MSR_IA32_QM_CTR, msr_val.q);
+	wrmsr(MSR_IA32_QM_EVTSEL, ABMC_EXTENDED_EVT_ID | ABMC_EVT_ID, cntr_id);
+	rdmsrl(MSR_IA32_QM_CTR, msr_val);
 
-	if (msr_val.q & RMID_VAL_ERROR)
+	if (msr_val & RMID_VAL_ERROR)
 		return -EIO;
-	if (msr_val.q & RMID_VAL_UNAVAIL)
+	if (msr_val & RMID_VAL_UNAVAIL)
 		return -EINVAL;
 
-	*val = msr_val.q;
+	*val = msr_val;
 	return 0;
 }
 
@@ -373,30 +360,50 @@ void arch_mon_domain_online(struct rdt_resource *r, struct rdt_l3_mon_domain *d)
 		msr_clear_bit(MSR_RMID_SNC_CONFIG, 0);
 }
 
-/* CPU models that support SNC and MSR_RMID_SNC_CONFIG */
+/* CPU models that support MSR_RMID_SNC_CONFIG */
 static const struct x86_cpu_id snc_cpu_ids[] __initconst = {
 	X86_MATCH_VFM(INTEL_ICELAKE_X, 0),
 	X86_MATCH_VFM(INTEL_SAPPHIRERAPIDS_X, 0),
 	X86_MATCH_VFM(INTEL_EMERALDRAPIDS_X, 0),
 	X86_MATCH_VFM(INTEL_GRANITERAPIDS_X, 0),
 	X86_MATCH_VFM(INTEL_ATOM_CRESTMONT_X, 0),
-	X86_MATCH_VFM(INTEL_ATOM_DARKMONT_X, 0),
 	{}
 };
 
+/*
+ * There isn't a simple hardware bit that indicates whether a CPU is running
+ * in Sub-NUMA Cluster (SNC) mode. Infer the state by comparing the
+ * number of CPUs sharing the L3 cache with CPU0 to the number of CPUs in
+ * the same NUMA node as CPU0.
+ * It is not possible to accurately determine SNC state if the system is
+ * booted with a maxcpus=N parameter. That distorts the ratio of SNC nodes
+ * to L3 caches. It will be OK if system is booted with hyperthreading
+ * disabled (since this doesn't affect the ratio).
+ */
 static __init int snc_get_config(void)
 {
+	struct cacheinfo *ci = get_cpu_cacheinfo_level(0, RESCTRL_L3_CACHE);
+	const cpumask_t *node0_cpumask;
+	int cpus_per_node, cpus_per_l3;
 	int ret;
 
-	if (boot_cpu_data.x86_vendor != X86_VENDOR_INTEL)
+	if (!x86_match_cpu(snc_cpu_ids) || !ci)
 		return 1;
 
-	ret = topology_num_nodes_per_package();
+	cpus_read_lock();
+	if (num_online_cpus() != num_present_cpus())
+		pr_warn("Some CPUs offline, SNC detection may be incorrect\n");
+	cpus_read_unlock();
 
-	if (ret > 1 && !x86_match_cpu(snc_cpu_ids)) {
-		pr_warn("CoD enabled system? Resctrl not supported\n");
+	node0_cpumask = cpumask_of_node(cpu_to_node(0));
+
+	cpus_per_node = cpumask_weight(node0_cpumask);
+	cpus_per_l3 = cpumask_weight(&ci->shared_cpu_map);
+
+	if (!cpus_per_node || !cpus_per_l3)
 		return 1;
-	}
+
+	ret = cpus_per_l3 / cpus_per_node;
 
 	/* sanity check: Only valid results are 1, 2, 3, 4, 6 */
 	switch (ret) {
@@ -468,7 +475,6 @@ int __init rdt_get_l3_mon_config(struct rdt_resource *r)
 	    (rdt_cpu_has(X86_FEATURE_CQM_MBM_TOTAL) ||
 	     rdt_cpu_has(X86_FEATURE_CQM_MBM_LOCAL))) {
 		r->mon.mbm_cntr_assignable = true;
-		r->mon.mbm_cntr_configurable = true;
 		cpuid_count(0x80000020, 5, &eax, &ebx, &ecx, &edx);
 		r->mon.num_mbm_cntrs = (ebx & GENMASK(15, 0)) + 1;
 		hw_res->mbm_cntr_assign_enabled = true;
@@ -513,7 +519,7 @@ static void _resctrl_abmc_enable(struct rdt_resource *r, bool enable)
 
 	lockdep_assert_cpus_held();
 
-	list_for_each_entry_rcu(d, &r->mon_domains, hdr.list, lockdep_is_cpus_held()) {
+	list_for_each_entry(d, &r->mon_domains, hdr.list) {
 		on_each_cpu_mask(&d->hdr.cpu_mask, resctrl_abmc_set_one_amd,
 				 &enable, 1);
 		resctrl_arch_reset_rmid_all(r, d);
@@ -542,7 +548,7 @@ static void resctrl_abmc_config_one_amd(void *info)
 {
 	union l3_qos_abmc_cfg *abmc_cfg = info;
 
-	wrmsrq(MSR_IA32_L3_QOS_ABMC_CFG, abmc_cfg->full);
+	wrmsrl(MSR_IA32_L3_QOS_ABMC_CFG, abmc_cfg->full);
 }
 
 /*

@@ -17,7 +17,6 @@ enum m68k_table_types {
 extern void init_pointer_table(void *table, int type);
 extern void *get_pointer_table(struct mm_struct *mm, int type);
 extern int free_pointer_table(void *table, int type);
-extern void __tlb_remove_table(void *table);
 
 /*
  * Allocate and free page tables. The xxx_kernel() versions are
@@ -48,7 +47,7 @@ static inline void pte_free(struct mm_struct *mm, pgtable_t pgtable)
 static inline void __pte_free_tlb(struct mmu_gather *tlb, pgtable_t pgtable,
 				  unsigned long address)
 {
-	tlb_remove_table(tlb, (void *)((unsigned long)pgtable | TABLE_PTE));
+	free_pointer_table(pgtable, TABLE_PTE);
 }
 
 
@@ -62,10 +61,10 @@ static inline int pmd_free(struct mm_struct *mm, pmd_t *pmd)
 	return free_pointer_table(pmd, TABLE_PMD);
 }
 
-static inline void __pmd_free_tlb(struct mmu_gather *tlb, pmd_t *pmd,
-				  unsigned long address)
+static inline int __pmd_free_tlb(struct mmu_gather *tlb, pmd_t *pmd,
+				 unsigned long address)
 {
-	tlb_remove_table(tlb, (void *)((unsigned long)pmd | TABLE_PMD));
+	return free_pointer_table(pmd, TABLE_PMD);
 }
 
 

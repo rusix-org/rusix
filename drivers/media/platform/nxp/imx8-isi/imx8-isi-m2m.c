@@ -107,7 +107,7 @@ static void mxc_isi_m2m_frame_write_done(struct mxc_isi_pipe *pipe, u32 status)
 	src_vbuf = v4l2_m2m_src_buf_remove(ctx->fh.m2m_ctx);
 	dst_vbuf = v4l2_m2m_dst_buf_remove(ctx->fh.m2m_ctx);
 
-	v4l2_m2m_buf_copy_metadata(src_vbuf, dst_vbuf);
+	v4l2_m2m_buf_copy_metadata(src_vbuf, dst_vbuf, false);
 
 	src_vbuf->sequence = ctx->queues.out.sequence++;
 	dst_vbuf->sequence = ctx->queues.cap.sequence++;
@@ -144,7 +144,7 @@ static void mxc_isi_m2m_device_run(void *priv)
 			.height = ctx->queues.cap.format.height,
 		};
 
-		mxc_isi_channel_config(m2m->pipe, MXC_ISI_INPUT_MEM, 0,
+		mxc_isi_channel_config(m2m->pipe, MXC_ISI_INPUT_MEM,
 				       &in_size, &scale, &crop,
 				       ctx->queues.out.info->encoding,
 				       ctx->queues.cap.info->encoding);
@@ -559,6 +559,8 @@ static int mxc_isi_m2m_s_fmt_vid(struct file *file, void *fh,
 	struct vb2_queue *vq;
 
 	vq = v4l2_m2m_get_vq(ctx->fh.m2m_ctx, f->type);
+	if (!vq)
+		return -EINVAL;
 
 	if (vb2_is_busy(vq))
 		return -EBUSY;
@@ -629,7 +631,7 @@ static int mxc_isi_m2m_open(struct file *file)
 	struct mxc_isi_m2m_ctx *ctx;
 	int ret;
 
-	ctx = kzalloc_obj(*ctx);
+	ctx = kzalloc(sizeof(*ctx), GFP_KERNEL);
 	if (!ctx)
 		return -ENOMEM;
 

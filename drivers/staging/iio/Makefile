@@ -3,6 +3,7 @@
 # Makefile for the industrial I/O core.
 #
 
+obj-y += accel/
 obj-y += adc/
 obj-y += addac/
 obj-y += frequency/
