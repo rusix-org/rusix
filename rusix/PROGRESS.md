@@ -128,8 +128,21 @@ on both), strict source/preprocessor/linked-object selection gates and five
 userspace cases covering COW, parent unmap, repeated exec and MDWE inheritance.
 Independent fixture review and 40 host gate cases pass; fixture sources are
 recorded before compilation and checked again afterward. Local input hashes
-and logs are in `linux-out/mm-construction-host-001`. Neither the MM kernel
-nor its guest fixtures have been compiled or booted. Actual linked selection,
+and logs are in `linux-out/mm-construction-host-001`. The MM kernel has not been compiled or booted; guest compilation is recorded below. Actual linked selection,
 paired VM behavior and attributable allocation failures remain unverified. Early boot and
 PGD/per-CPU counter observers prohibit exclusive whole-mm references.
 [Ownership contract and remaining C](experiments/mm-construction/README.md).
+
+### Constructor verification tooling update
+
+Pinned static fixture compilation passed for all five binaries: fault init,
+controller and worker at `15c7e563fa4b`, and MM init and probe at `0fd31f0fde17`.
+`linux-out/constructor-fixtures-compile-002` records compiler commands, static
+ELF checks and source identities; the earlier compile failure remains in `001`.
+No fixture was executed and this establishes no kernel, VM or fault-calibration
+result. The reviewed archive payload/path fix from `0af2d8b944b2` is inherited
+here, including real thin/regular archive regression tests; it does not change
+constructor policy.
+
+All 46 archive, selection and guest-gate host cases pass.
+Logs and exact inputs: `linux-out/constructor-archive-propagation-host-001/linux-mm-construction`.

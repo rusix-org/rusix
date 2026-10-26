@@ -173,10 +173,7 @@ def verify(args):
     if rust: objects.append(build/'kernel/mm_construction_rust.o')
     for obj in objects:
         member = next(row for row in members.splitlines() if Path(row).name == obj.name)
-        data = subprocess.run(['llvm-ar','p',str(archive),member],check=True,capture_output=True)
-        if data.stderr or task.digest(obj) != hashlib.sha256(data.stdout).hexdigest():
-            raise ValueError('Archive member differs from standalone object')
-        member_hashes[member] = digest(obj)
+        member_hashes[member] = task.archive_member_hash(archive, member, obj)
     fork_symbols = run('mm-fork-symbols.txt',['llvm-nm','--defined-only',str(build/'kernel/fork.o')])
     task_symbols = run('mm-task-symbols.txt',['llvm-nm','--defined-only',str(build/'kernel/task_construction_rust.o')])
     linked = run('mm-kernel-symbols.txt',['llvm-nm','--defined-only',str(build/'vmlinux')])
