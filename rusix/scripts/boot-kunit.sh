@@ -18,7 +18,7 @@ case "${1:-}" in
     --baseline) baseline=(--baseline); mode=baseline; shift ;;
     --completion)
         mode=completion
-        filter=rusix_completion_contract
+        filter='rusix_completion_*'
         gate=validate-completion-kunit.py
         required=(KUNIT RUST SMP SERIAL_8250_CONSOLE)
         cpus=2

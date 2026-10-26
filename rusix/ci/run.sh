@@ -39,6 +39,8 @@ if [[ "$profile" == kunit ]]; then
 elif [[ "$profile" == brd-kunit ]]; then
     bash "$RUSIX_PROJECT/scripts/boot-kunit.sh" --brd \
         "$RUSIX_OUTPUT_ROOT/builds/ci-brd-kunit" ci-brd-kunit
+    bash "$RUSIX_PROJECT/scripts/boot-kunit.sh" --completion \
+        "$RUSIX_OUTPUT_ROOT/builds/ci-brd-kunit" ci-completion
 elif [[ "$profile" == brd || "$profile" == brd-rust ]]; then
     shopt -s nullglob
     evidence=("$RUSIX_OUTPUT_ROOT"/logs/ci-$profile-build.*)

@@ -220,3 +220,6 @@ mod contract_tests {
         Ok(())
     }
 }
+
+#[cfg(CONFIG_KUNIT = "y")]
+mod layout_tests;

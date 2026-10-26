@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-2.0-only
-"""Require the five pinned completion-contract KUnit cases."""
+"""Require five C completion-contract cases and one Rust-owned layout spike."""
 import argparse
 import importlib.util
 import json
@@ -22,6 +22,7 @@ SUITES = {
         "zero_timeout_reports_completion_and_consumes_token",
         "signal_saturates_instead_of_wrapping",
     ),
+    "rusix_completion_layout": ("c_operations_share_pinned_rust_owned_storage",),
 }
 
 

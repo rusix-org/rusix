@@ -31,16 +31,21 @@ class CompletionGateTests(unittest.TestCase):
             gate.validate(result)
 
     def test_exact_inventory_passes(self):
-        self.assertEqual(gate.validate(self.result), 5)
+        self.assertEqual(gate.validate(self.result), 6)
 
     def test_every_omitted_case_rejected(self):
-        for index in range(5):
-            result = copy.deepcopy(self.result)
-            result["sub_groups"][0]["test_cases"].pop(index)
-            self.rejected(result)
+        for suite_index, group in enumerate(self.result["sub_groups"]):
+            for case_index in range(len(group["test_cases"])):
+                result = copy.deepcopy(self.result)
+                result["sub_groups"][suite_index]["test_cases"].pop(case_index)
+                self.rejected(result)
 
     def test_missing_suite_rejected(self):
         self.rejected(suite("KUnit Test Group"))
+        for index in range(len(gate.SUITES)):
+            result = copy.deepcopy(self.result)
+            result["sub_groups"].pop(index)
+            self.rejected(result)
 
     def test_duplicate_suite_rejected(self):
         self.result["sub_groups"] *= 2

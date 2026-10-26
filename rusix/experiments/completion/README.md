@@ -108,10 +108,20 @@ with no outstanding waiter or producer; queue layout is untouched. Zero-timeout
 waits exercise the C return contract without an unbounded worker. No production
 API was added. Worker handoff, FIFO, interruption and timeout races still need
 bounded kernel fixtures with proven teardown; these five tests do not cover them.
-Use the exact suite filter `kunit.filter_glob=rusix_completion_contract` for its
-own baseline result. Existing BRD ownership gates retain their separate inventory.
+The separate `rusix_completion_layout` suite requires one case,
+`c_operations_share_pinned_rust_owned_storage`: a Rust-owned `repr(C)` layout
+with compile-time size, alignment and field-offset checks is initialized and
+operated on by the original C completion functions. Rust reads/resets its counter
+only while quiescent. This is a storage interoperability spike, not a replacement
+implementation, concurrent waiter test, or proof for other configurations.
+
+Use `kunit.filter_glob=rusix_completion_*` to select both suites. The completion
+gate requires all five C behavior cases and the one layout case, separately
+identified; missing, duplicate, skipped or failing cases reject the result.
+Existing BRD ownership gates retain their separate nine-case inventory.
 
 The same five host cases also pass with pinned container Rust 1.85.1;
 [recorded output](../../docs/evidence/completion-host/manifest.json).
-Use `boot-kunit.sh --completion` and its five-case gate for the separate kernel
-contract suite once a KUnit kernel containing these tests is built.
+Use `boot-kunit.sh --completion` and its six-case gate once a KUnit kernel
+containing both suites is built. Kernel execution of the layout spike remains
+pending; successful host tests do not establish kernel layout compatibility.
