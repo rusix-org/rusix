@@ -1,0 +1,5 @@
+implementation=brd-c
+/out/builds/ci-brd-ext4-c/drivers/block/brd.o
+ffffffff8155c9c0 t brd_submit_bio
+f3f113666045b1c76f97bec85a1bd519d1c1c633f2e6fdf20ce0c3e927fca685  /src/drivers/block/brd.c
+4ff5421360f13bdec4a5ed804759a7860a0956d5d9824d12dd33e1bfe87bc70b  /out/builds/ci-brd-ext4-c/drivers/block/brd.o

@@ -1,0 +1,2 @@
+/out/builds/ci-brd-ext4-rust/drivers/block/brd_rust.o
+/out/builds/ci-brd-ext4-rust/drivers/block/brd_rust/params.o
