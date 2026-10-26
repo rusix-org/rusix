@@ -9,15 +9,15 @@ if [[ ${1:-} == --profile ]]; then
     shift 2
 fi
 case "$profile" in
-    kunit|brd|brd-fixed-c|brd-rust|brd-kunit|brd-ext4-c|brd-ext4-fixed-c|brd-ext4-rust|core-ext4-c|core-ext4-rust|completion-c|completion-rust|completion-plain-c|completion-plain-rust|rcu-list-c|rcu-list-rust|rcu-list-plain-c|rcu-list-plain-rust|server|server-c) ;;
-    *) echo 'Profile must be kunit, brd, brd-fixed-c, brd-rust, brd-kunit, brd-ext4-c, brd-ext4-fixed-c, brd-ext4-rust, core-ext4-c, core-ext4-rust, completion-c, completion-rust, completion-plain-c, completion-plain-rust, rcu-list-c, rcu-list-rust, rcu-list-plain-c, rcu-list-plain-rust, server or server-c.' >&2; exit 2 ;;
+    kunit|brd|brd-fixed-c|brd-rust|brd-kunit|brd-ext4-c|brd-ext4-fixed-c|brd-ext4-rust|core-ext4-c|core-ext4-rust|completion-c|completion-rust|completion-plain-c|completion-plain-rust|rcu-list-c|rcu-list-rust|rcu-list-plain-c|rcu-list-plain-rust|rcu-sync-c|rcu-sync-rust|rcu-sync-plain-c|rcu-sync-plain-rust|server|server-c) ;;
+    *) echo 'Profile must be kunit, brd, brd-fixed-c, brd-rust, brd-kunit, brd-ext4-c, brd-ext4-fixed-c, brd-ext4-rust, core-ext4-c, core-ext4-rust, completion-c, completion-rust, completion-plain-c, completion-plain-rust, rcu-list-c, rcu-list-rust, rcu-list-plain-c, rcu-list-plain-rust, rcu-sync-c, rcu-sync-rust, rcu-sync-plain-c, rcu-sync-plain-rust, server or server-c.' >&2; exit 2 ;;
 esac
 config="$RUSIX_PROJECT/configs/x86_64-$profile.config"
 if [[ "$profile" == server-c ]]; then
     config="$RUSIX_PROJECT/configs/x86_64-server.config"
 fi
 if [[ $# != 1 || ! "$1" =~ ^[a-zA-Z0-9_-]+$ ]]; then
-    echo 'Usage: bash rusix/scripts/build-kernel.sh [--profile kunit|brd|brd-fixed-c|brd-rust|brd-kunit|brd-ext4-c|brd-ext4-fixed-c|brd-ext4-rust|core-ext4-c|core-ext4-rust|completion-c|completion-rust|completion-plain-c|completion-plain-rust|rcu-list-c|rcu-list-rust|rcu-list-plain-c|rcu-list-plain-rust|server|server-c] BUILD_NAME' >&2
+    echo 'Usage: bash rusix/scripts/build-kernel.sh [--profile kunit|brd|brd-fixed-c|brd-rust|brd-kunit|brd-ext4-c|brd-ext4-fixed-c|brd-ext4-rust|core-ext4-c|core-ext4-rust|completion-c|completion-rust|completion-plain-c|completion-plain-rust|rcu-list-c|rcu-list-rust|rcu-list-plain-c|rcu-list-plain-rust|rcu-sync-c|rcu-sync-rust|rcu-sync-plain-c|rcu-sync-plain-rust|server|server-c] BUILD_NAME' >&2
     exit 2
 fi
 name=$1
@@ -74,6 +74,8 @@ elif grep -qx 'CONFIG_RUSIX_BRD_C_PARAMETER_FIX=y' "$out/.config"; then
     echo 'Fixed C oracle selected outside its explicit verification profile.' >&2; exit 1
 fi
 python3 "$RUSIX_PROJECT/scripts/verify-rcu-list-selection.py" config \
+    --profile "$profile" --config "$out/.config"
+python3 "$RUSIX_PROJECT/scripts/verify-rcu-sync-selection.py" config \
     --profile "$profile" --config "$out/.config"
 cp "$out/.config" "$evidence/config"
 if [[ "$profile" == server || "$profile" == server-c ]]; then
@@ -159,7 +161,7 @@ PYBRDCOMMAND
         fi
     } > "$evidence/selection.log"
 fi
-if [[ "$profile" == brd-rust || "$profile" == brd-kunit || "$profile" == brd-ext4-rust || "$profile" == core-ext4-c || "$profile" == core-ext4-rust || "$profile" == completion-c || "$profile" == completion-rust || "$profile" == completion-plain-c || "$profile" == completion-plain-rust || "$profile" == rcu-list-* || "$profile" == server || "$profile" == server-c ]]; then
+if [[ "$profile" == brd-rust || "$profile" == brd-kunit || "$profile" == brd-ext4-rust || "$profile" == core-ext4-c || "$profile" == core-ext4-rust || "$profile" == completion-c || "$profile" == completion-rust || "$profile" == completion-plain-c || "$profile" == completion-plain-rust || "$profile" == rcu-list-* || "$profile" == rcu-sync-* || "$profile" == server || "$profile" == server-c ]]; then
     git -C "$RUSIX_SOURCE" diff --exit-code \
         2926d88bb7fc4608fd942453d929c39e4e5ec006 -- drivers/block/brd.c \
         > "$evidence/brd-reference.diff"
@@ -200,14 +202,14 @@ if [[ "$profile" == brd-rust || "$profile" == brd-kunit || "$profile" == brd-ext
     } > "$evidence/selection.log"
 fi
 
-if [[ "$profile" == rcu-list-* ]]; then
+if [[ "$profile" == rcu-list-* || "$profile" == rcu-sync-* ]]; then
     git -C "$RUSIX_SOURCE" diff --exit-code \
         2926d88bb7fc4608fd942453d929c39e4e5ec006 -- kernel/rcu/rcu_segcblist.c \
         > "$evidence/rcu-list-reference.diff"
     bash "$RUSIX_PROJECT/scripts/with-local-tools.sh" llvm-ar t \
         "$out/kernel/rcu/built-in.a" > "$evidence/rcu-archive.txt"
     rcu_object=rcu_segcblist.o
-    if [[ "$profile" == *-rust ]]; then rcu_object=rcu_segcblist_rust.o; fi
+    if grep -qx CONFIG_RUSIX_RCU_LIST_RUST=y "$out/.config"; then rcu_object=rcu_segcblist_rust.o; fi
     bash "$RUSIX_PROJECT/scripts/with-local-tools.sh" llvm-nm --defined-only \
         "$out/kernel/rcu/$rcu_object" > "$evidence/rcu-object-symbols.txt"
     bash "$RUSIX_PROJECT/scripts/with-local-tools.sh" llvm-nm --defined-only \
@@ -229,6 +231,30 @@ if [[ "$profile" == rcu-list-* ]]; then
         "$RUSIX_PROJECT/configs/x86_64-$profile.config" \
         "$RUSIX_PROJECT/scripts/verify-rcu-list-selection.py" \
         > "$evidence/rcu-list-inputs.sha256"
+fi
+
+if [[ "$profile" == rcu-sync-* ]]; then
+    git -C "$RUSIX_SOURCE" diff --exit-code \
+        2926d88bb7fc4608fd942453d929c39e4e5ec006 -- kernel/rcu/sync.c \
+        > "$evidence/rcu-sync-reference.diff"
+    sync_object=sync.o
+    if [[ "$profile" == *-rust ]]; then sync_object=sync_rust.o; fi
+    bash "$RUSIX_PROJECT/scripts/with-local-tools.sh" llvm-nm --defined-only \
+        "$out/kernel/rcu/$sync_object" > "$evidence/rcu-sync-object-symbols.txt"
+    python3 "$RUSIX_PROJECT/scripts/verify-rcu-sync-selection.py" objects \
+        --profile "$profile" --config "$out/.config" --evidence "$evidence" \
+        > "$evidence/rcu-sync-selection.json"
+    sha256sum "$out/kernel/rcu/$sync_object" \
+        "$RUSIX_SOURCE/kernel/rcu/sync.c" "$RUSIX_SOURCE/kernel/rcu/sync_rust.rs" \
+        "$RUSIX_SOURCE/include/linux/rcu_sync.h" \
+        "$RUSIX_SOURCE/rust/helpers/rcu_sync.c" \
+        "$RUSIX_SOURCE/rust/helpers/rcu_sync_test.c" \
+        "$RUSIX_SOURCE/kernel/rcu/rcu_sync_test.c" \
+        "$RUSIX_SOURCE/rust/bindings/bindings_helper.h" \
+        "$out/rust/bindings/bindings_generated.rs" \
+        "$RUSIX_PROJECT/configs/x86_64-$profile.config" \
+        "$RUSIX_PROJECT/scripts/verify-rcu-sync-selection.py" \
+        > "$evidence/rcu-sync-inputs.sha256"
 fi
 
 # Bind completion selection to the linked scheduler archive and defining object.

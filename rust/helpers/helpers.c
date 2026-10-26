@@ -54,6 +54,12 @@
 #endif
 #include "rbtree.c"
 #include "rcu.c"
+#ifdef CONFIG_RUSIX_RCU_SYNC_RUST
+#include "rcu_sync.c"
+#endif
+#ifdef CONFIG_RUSIX_RCU_SYNC_TEST
+#include "rcu_sync_test.c"
+#endif
 #ifdef CONFIG_RUSIX_RCU_LIST_RUST
 #include "rcu_list.c"
 #endif

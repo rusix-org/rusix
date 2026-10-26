@@ -53,3 +53,6 @@ pub fn read_lock() -> Guard {
 
 #[cfg(CONFIG_RUSIX_RCU_LIST_TEST)]
 mod list_tests;
+
+#[cfg(CONFIG_RUSIX_RCU_SYNC_TEST)]
+mod sync_tests;

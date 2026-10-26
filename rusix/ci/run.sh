@@ -5,8 +5,8 @@ set -euo pipefail
 source "$(dirname -- "${BASH_SOURCE[0]}")/../scripts/repo-paths.sh"
 profile=${1:-}
 case "$profile" in
-    kunit|brd|brd-fixed-c|brd-rust|brd-kunit|brd-ext4-c|brd-ext4-fixed-c|brd-ext4-rust|core-ext4-c|core-ext4-rust|completion-c|completion-rust|completion-plain-c|completion-plain-rust|rcu-list-c|rcu-list-rust|rcu-list-plain-c|rcu-list-plain-rust|server|server-c) ;;
-    *) echo 'Usage: bash rusix/ci/run.sh kunit|brd|brd-fixed-c|brd-rust|brd-kunit|brd-ext4-c|brd-ext4-fixed-c|brd-ext4-rust|core-ext4-c|core-ext4-rust|completion-c|completion-rust|completion-plain-c|completion-plain-rust|rcu-list-c|rcu-list-rust|rcu-list-plain-c|rcu-list-plain-rust|server|server-c' >&2; exit 2 ;;
+    kunit|brd|brd-fixed-c|brd-rust|brd-kunit|brd-ext4-c|brd-ext4-fixed-c|brd-ext4-rust|core-ext4-c|core-ext4-rust|completion-c|completion-rust|completion-plain-c|completion-plain-rust|rcu-list-c|rcu-list-rust|rcu-list-plain-c|rcu-list-plain-rust|rcu-sync-c|rcu-sync-rust|rcu-sync-plain-c|rcu-sync-plain-rust|server|server-c) ;;
+    *) echo 'Usage: bash rusix/ci/run.sh kunit|brd|brd-fixed-c|brd-rust|brd-kunit|brd-ext4-c|brd-ext4-fixed-c|brd-ext4-rust|core-ext4-c|core-ext4-rust|completion-c|completion-rust|completion-plain-c|completion-plain-rust|rcu-list-c|rcu-list-rust|rcu-list-plain-c|rcu-list-plain-rust|rcu-sync-c|rcu-sync-rust|rcu-sync-plain-c|rcu-sync-plain-rust|server|server-c' >&2; exit 2 ;;
 esac
 mkdir -p "$RUSIX_OUTPUT_ROOT/logs" "$RUSIX_OUTPUT_ROOT/tmp"
 export TMPDIR="$RUSIX_OUTPUT_ROOT/tmp"
@@ -44,6 +44,15 @@ bash "$RUSIX_PROJECT/scripts/build-kernel.sh" --profile "$profile" "ci-$profile"
 if [[ "$profile" == kunit ]]; then
     bash "$RUSIX_PROJECT/scripts/boot-kunit.sh" \
         "$RUSIX_OUTPUT_ROOT/builds/ci-kunit" ci-kunit
+elif [[ "$profile" == rcu-sync-* ]]; then
+    bash "$RUSIX_PROJECT/scripts/boot-kunit.sh" --rcu-sync-combined \
+        "$RUSIX_OUTPUT_ROOT/builds/ci-$profile" "ci-$profile"
+    bash "$RUSIX_PROJECT/scripts/boot-kunit.sh" --completion \
+        "$RUSIX_OUTPUT_ROOT/builds/ci-$profile" "ci-$profile-completion"
+    bash "$RUSIX_PROJECT/scripts/boot-kunit.sh" --rcu-list \
+        "$RUSIX_OUTPUT_ROOT/builds/ci-$profile" "ci-$profile-rcu-list"
+    bash "$RUSIX_PROJECT/scripts/boot-kunit.sh" --rcu-sync \
+        "$RUSIX_OUTPUT_ROOT/builds/ci-$profile" "ci-$profile-rcu-sync"
 elif [[ "$profile" == rcu-list-* ]]; then
     bash "$RUSIX_PROJECT/scripts/boot-kunit.sh" --rcu-combined \
         "$RUSIX_OUTPUT_ROOT/builds/ci-$profile" "ci-$profile"

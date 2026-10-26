@@ -111,3 +111,10 @@ strict gates require 86 combined or ten isolated RCU cases. Fourteen host gate
 scripts pass; kernel compilation and C/Rust VM parity remain unexecuted.
 The [contract](experiments/rcu-lists/README.md) records shared C access/order
 primitives and the subsequent storage-ownership work.
+
+RCU sync now implements its five-state protocol and wait loop on
+`rusix/rcu-sync-policy`, with five differential fixtures connecting callbacks to
+per-CPU semaphore consumers. Independent source review and sixteen host gate
+scripts pass; kernel compilation and runtime parity remain pending. The
+[contract](experiments/rcu-sync/README.md) records lifetime, ordering and the
+91 combined/67 core/ten list/five sync gates.

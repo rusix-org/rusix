@@ -74,6 +74,7 @@
 #include <linux/property.h>
 #include <linux/random.h>
 #include <linux/rcu_segcblist.h>
+#include <linux/rcu_sync.h>
 #include <linux/refcount.h>
 #include <linux/regulator/consumer.h>
 #include <linux/rusix_wait_bit_types.h>

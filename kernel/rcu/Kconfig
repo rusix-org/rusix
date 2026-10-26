@@ -5,6 +5,26 @@
 
 menu "RCU Subsystem"
 
+config RUSIX_RCU_SYNC_RUST
+	bool "Rusix Rust RCU reader/writer synchronization policy"
+	depends on RUST && X86_64 && !MODULES && TREE_RCU && !RCU_NOCB_CPU
+	depends on RUSIX_COMPLETION_RUST
+	default n
+	help
+	  Translate all four RCU sync entry points and their private callback.
+	  Reuses the selected Rust wait policy and its ordinary spinlock helpers.
+	  Shared-memory access and RCU grace-period primitives remain C.
+
+config RUSIX_RCU_SYNC_TEST
+	bool "Rusix RCU synchronization parity tests"
+	depends on KUNIT && RUST && X86_64 && !MODULES
+	depends on TREE_RCU && !RCU_NOCB_CPU && RUSIX_COMPLETION_RUST
+	default n
+	help
+	  Run identical synchronization fixtures against C or Rust RCU sync.
+	  Intended for local VM verification profiles.
+
+
 config RUSIX_RCU_LIST_RUST
 	bool "Rusix Rust RCU callback-list policy"
 	depends on RUST && X86_64 && !MODULES

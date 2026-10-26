@@ -10,6 +10,9 @@ import re
 PROFILES = {
     'rcu-list-c': False, 'rcu-list-rust': True,
     'rcu-list-plain-c': False, 'rcu-list-plain-rust': True,
+    # Sync parity keeps the already migrated list implementation selected.
+    'rcu-sync-c': True, 'rcu-sync-rust': True,
+    'rcu-sync-plain-c': True, 'rcu-sync-plain-rust': True,
 }
 SYMBOLS = (
     'rcu_cblist_init', 'rcu_cblist_enqueue', 'rcu_cblist_flush_enqueue',

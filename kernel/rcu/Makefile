@@ -7,7 +7,13 @@ ifeq ($(CONFIG_KCSAN),y)
 KBUILD_CFLAGS += -g -fno-omit-frame-pointer
 endif
 
-obj-y += update.o sync.o
+obj-y += update.o
+ifeq ($(CONFIG_RUSIX_RCU_SYNC_RUST),y)
+obj-y += sync_rust.o
+else
+obj-y += sync.o
+endif
+obj-$(CONFIG_RUSIX_RCU_SYNC_TEST) += rcu_sync_test.o
 obj-$(CONFIG_TREE_SRCU) += srcutree.o
 obj-$(CONFIG_TINY_SRCU) += srcutiny.o
 obj-$(CONFIG_RCU_TORTURE_TEST) += rcutorture.o
