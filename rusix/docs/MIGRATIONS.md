@@ -26,7 +26,9 @@ when the declared target and export mechanism no longer require them.
 
 ## RAM-backed block driver
 
-**LTS C baseline verified; Rust candidate compiling and entering VM verification.**
+**LTS C and Rust drivers pass the six-case x86_64 SMP block contract.**
+[Rust evidence](evidence/brd-rust-initial/manifest.json) records implementation selection;
+ownership KUnit, ordinary ext4 and expanded validation remain pending.
 The driver/store live in `drivers/block/brd_rust.rs` and `brd_rust/store.rs`;
 `rust/kernel/block/{bio,bio_disk}.rs` provide transitional interfaces.
 Six x86_64 SMP baseline cases: [manifest](evidence/lts-baseline/manifest.json). [BRD.md](BRD.md) owns the pinned

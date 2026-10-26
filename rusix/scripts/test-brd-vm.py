@@ -211,7 +211,7 @@ def run(args, paths, evidence):
         if digest(Path(path)) != expected:
             raise ValueError(f"Artifact changed during VM verification: {path}")
     (evidence / "result.json").write_text(json.dumps(result, indent=2) + "\n")
-    print(f"C BRD contract: {len(CASES)} cases passed; evidence {evidence}")
+    print(f"{implementation} contract: {len(CASES)} cases passed; evidence {evidence}")
 
 
 def main():

@@ -20,8 +20,8 @@ Implemented candidate: approximately 1,200 lines of Rust across BRD driver/store
 and bio/disk abstractions, plus conditional xarray insertion and synchronous NOIO
 scope. Nine new in-kernel tests cover store lifetime, insertion ownership, NOIO
 nesting and parameters. Targeted compilation passes in the pinned container after correcting a queue-field
-width, cleanup captures, and encoding nonzero minor spacing. Runtime validation
-is pending; source review includes independent ownership review.
+width, cleanup captures, and encoding nonzero minor spacing. The full kernel builds and passes all six unchanged VM contract cases; source
+review includes independent ownership review.
 
 LTS local KUnit attempt `linux-out/lts-kunit-001` built and booted: 46 passed,
 one intentionally disabled upstream demonstration test skipped. The strict gate
@@ -36,7 +36,9 @@ Candidate `f1bf14f5c` is frozen in a separate worktree for compilation. The earl
 IRQ, cancellation and scheduler obligations; five host ownership-model tests pass.
 It is groundwork for the post-BRD kernel spike, not kernel-runtime evidence.
 
-The first full Rust BRD build uses `aa6da498a` in `linux-out/lts-brd-rust-001`.
+The first full Rust BRD build at `aa6da498a` passed all six unchanged cases in
+`linux-out/lts-brd-rust-001`; [evidence](docs/evidence/brd-rust-initial/manifest.json)
+records the linked Rust submission symbol and absence of C submission.
 Targeted compile attempts (including failures and an eliminated objtool warning)
 are retained in `linux-out/lts-brd-rust-dev/logs/attempts.json`.
 

@@ -10,7 +10,7 @@ boundaries. [The roadmap](docs/ROADMAP.md) orders that work.
 **Phase 1a implementation and verification are in progress.** Most kernel code
 remains C. This branch is based on **Linux 6.18.58 LTS**. Its required math
 compatibility tests and six-case C BRD baseline pass in local VMs. A built-in
-Rust BRD implementation now compiles; its full-kernel/VM checks are underway.
+Rust BRD implementation now builds and passes the same six VM contract cases.
 Ordinary-userspace ext4 and ownership test fixtures are implemented, with their
 runtime results tracked in [PROGRESS.md](PROGRESS.md).
 
