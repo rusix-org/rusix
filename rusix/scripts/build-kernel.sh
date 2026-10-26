@@ -264,6 +264,84 @@ rm -- "$evidence/wake-symbols.tmp" "$evidence/wake-current.txt"
     fi
 } > "$evidence/wake-selection.log"
 
+# Wait-bit policy has ten selected definitions, including its private matcher.
+bit_symbols=(__var_wake_key wake_bit_function __wait_on_bit __wait_on_bit_lock
+    bit_wait bit_wait_io bit_wait_timeout out_of_line_wait_on_bit
+    out_of_line_wait_on_bit_timeout out_of_line_wait_on_bit_lock)
+bit_sched_symbols=(__wait_on_bit __wait_on_bit_lock bit_wait bit_wait_io bit_wait_timeout
+    out_of_line_wait_on_bit out_of_line_wait_on_bit_timeout out_of_line_wait_on_bit_lock)
+if [[ "$completion_impl" == rust ]]; then
+    bit_object="$out/kernel/sched/wait_bit_rust.o"
+    grep -E '(^|/)wait_bit_rust\.o$' "$evidence/scheduler-archive.txt" \
+        > "$evidence/wait-bit-objects.txt"
+    bash "$RUSIX_PROJECT/scripts/with-local-tools.sh" llvm-nm --defined-only \
+        "$out/kernel/sched/build_utility.o" > "$evidence/wait-bit-c-symbols.txt"
+    for symbol in "${bit_symbols[@]}"; do
+        if awk -v symbol="$symbol" '$2 == "T" && $3 == symbol { found=1 } END { exit !found }' \
+            "$evidence/wait-bit-c-symbols.txt"; then
+            echo "C wait-bit definition remains selected: $symbol" >&2; exit 1;
+        fi
+    done
+else
+    bit_object="$out/kernel/sched/build_utility.o"
+    if grep -Eq '(^|/)wait_bit_rust\.o$' "$evidence/scheduler-archive.txt"; then
+        echo 'Rust wait-bit object linked in C selection.' >&2; exit 1;
+    fi
+    grep -E '(^|/)build_utility\.o$' "$evidence/scheduler-archive.txt" \
+        > "$evidence/wait-bit-objects.txt"
+fi
+[[ $(wc -l < "$evidence/wait-bit-objects.txt") == 1 ]] || {
+    echo 'Expected one selected wait-bit object.' >&2; exit 1;
+}
+for item in "$bit_object" "$out/vmlinux"; do
+    bash "$RUSIX_PROJECT/scripts/with-local-tools.sh" llvm-nm --defined-only "$item" \
+        > "$evidence/wait-bit-symbols.tmp"
+    printf '%s\n' "$item" >> "$evidence/wait-bit-symbols.txt"
+    for symbol in "${bit_symbols[@]}"; do
+        awk -v symbol="$symbol" '$2 == "T" && $3 == symbol { print }' \
+            "$evidence/wait-bit-symbols.tmp" > "$evidence/wait-bit-current.txt"
+        [[ $(wc -l < "$evidence/wait-bit-current.txt") == 1 ]] || {
+            echo "Expected one global $symbol definition in $item" >&2; exit 1;
+        }
+        cat "$evidence/wait-bit-current.txt" >> "$evidence/wait-bit-symbols.txt"
+    done
+done
+# Verify both defining-object section and linked scheduler-text interval.
+bash "$RUSIX_PROJECT/scripts/with-local-tools.sh" llvm-objdump --syms "$bit_object" \
+    > "$evidence/wait-bit-object-sections.txt"
+python3 - "$evidence/wait-bit-symbols.tmp" "$evidence/wait-bit-object-sections.txt" \
+    "${bit_sched_symbols[@]}" > "$evidence/wait-bit-scheduler-sections.txt" <<'PYBITSECTIONS'
+import sys
+from pathlib import Path
+symbols = {}
+for line in Path(sys.argv[1]).read_text().splitlines():
+    fields = line.split()
+    if len(fields) == 3:
+        symbols[fields[2]] = int(fields[0], 16)
+object_lines = [line.split() for line in Path(sys.argv[2]).read_text().splitlines()]
+start, end = symbols['__sched_text_start'], symbols['__sched_text_end']
+for name in sys.argv[3:]:
+    matches = [fields for fields in object_lines if fields and fields[-1] == name]
+    if len(matches) != 1 or '.sched.text' not in matches[0]:
+        raise SystemExit(f'{name} missing/duplicate or outside object .sched.text')
+    address = symbols[name]
+    if not start <= address < end:
+        raise SystemExit(f'{name} outside linked scheduler text: {address:x}')
+    print(f'{name} object=.sched.text address={address:x} sched-range=[{start:x},{end:x})')
+PYBITSECTIONS
+rm -- "$evidence/wait-bit-symbols.tmp" "$evidence/wait-bit-current.txt"
+{
+    printf 'implementation=wait-bit-%s\n' "$completion_impl"
+    cat "$evidence/wait-bit-objects.txt" "$evidence/wait-bit-symbols.txt" \
+        "$evidence/wait-bit-scheduler-sections.txt"
+    sha256sum "$RUSIX_SOURCE/kernel/sched/wait_bit.c" "$bit_object"
+    if [[ "$completion_impl" == rust ]]; then
+        sha256sum "$RUSIX_SOURCE/kernel/sched/wait_bit_rust.rs" \
+            "$RUSIX_SOURCE/kernel/sched/wait_bit_rust/time.rs" \
+            "$RUSIX_SOURCE/rust/helpers/wait_bit_policy.c"
+    fi
+} > "$evidence/wait-bit-selection.log"
+
 git -C "$RUSIX_SOURCE" status --porcelain > "$evidence/source-after.status"
 git -C "$RUSIX_SOURCE" rev-parse HEAD > "$evidence/source-after.commit"
 if [[ -s "$evidence/source-after.status" || $(cat "$evidence/source-after.commit") != "$source_commit" ]]; then

@@ -15,6 +15,17 @@ spec.loader.exec_module(common)
 
 # Independent of live Rust source so removing a test does not weaken this gate.
 SUITES = {
+    "rusix_completion_wait_bit": (
+        "ordinary_loop_preserves_action_errors_even_when_bit_clears",
+        "lock_loop_acquisition_overrides_action_error",
+        "key_match_and_clear_bit_gate_autoremove",
+        "already_expired_action_returns_without_scheduling",
+        "production_deadline_arithmetic_matches_c_across_wrap",
+        "blocked_bit_clear_publishes_payload",
+        "blocked_bit_lock_serializes_two_owners",
+        "blocked_bit_signal_and_expiry_unlink",
+        "stack_timeout_wrapper_blocks_and_cleans",
+    ),
     "rusix_completion_wait_woken": (
         "prelatched_running_callback_skips_schedule_and_preserves_membership",
         "zero_and_positive_timeout_restore_state_without_autoremove",

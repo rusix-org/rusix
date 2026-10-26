@@ -74,9 +74,11 @@
 #include "vmalloc.c"
 #include "wait.c"
 #ifdef CONFIG_RUSIX_COMPLETION_RUST
+#include "wait_bit_policy.c"
 #include "wait_policy.c"
 #endif
 #ifdef CONFIG_KUNIT
+#include "wait_bit_test.c"
 #include "wait_policy_test.c"
 #endif
 #include "workqueue.c"

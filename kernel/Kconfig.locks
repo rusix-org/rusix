@@ -272,6 +272,8 @@ config RUSIX_COMPLETION_RUST
 	  and generic wait.c initialization, enrollment, prepare/finish,
 	  autoremove callback, WOKEN protocol and seven wake wrappers.
 	  Entry initialization and locked interruptible wait iterations remain C.
+	  Wait-bit key matching, wait loops/actions and stack wrappers also use
+	  Rust; hash queues, variable entry initialization and bit primitives remain C.
 	  WOKEN flag barriers/updates retain their exact C primitives.
 	  Generic swait consumers also use these policies. C completion layout
 	  and initialization/reset, raw locks, marked list

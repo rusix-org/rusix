@@ -38,10 +38,10 @@ obj-y += fair.o
 obj-y += build_policy.o
 obj-y += build_utility.o
 
-# Keep C scheduler/list primitives; select Rust completion and swait policy.
-obj-$(CONFIG_RUSIX_COMPLETION_RUST) += completion_rust.o swait_rust.o wait_rust.o
+# Keep C scheduler/list primitives; select Rust completion and wait policies.
+obj-$(CONFIG_RUSIX_COMPLETION_RUST) += completion_rust.o swait_rust.o wait_rust.o wait_bit_rust.o
 
-# Synchronous callback fixtures only in Rust-enabled KUnit kernels.
+# Callback and dedicated-worker fixtures only in Rust-enabled KUnit kernels.
 ifeq ($(CONFIG_RUST)$(CONFIG_KUNIT),yy)
-obj-y += wait_test.o
+obj-y += wait_test.o wait_bit_test.o
 endif

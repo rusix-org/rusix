@@ -21,6 +21,7 @@ wait_queue_head_t *bit_waitqueue(unsigned long *word, int bit)
 }
 EXPORT_SYMBOL(bit_waitqueue);
 
+#ifndef CONFIG_RUSIX_COMPLETION_RUST
 int wake_bit_function(struct wait_queue_entry *wq_entry, unsigned mode, int sync, void *arg)
 {
 	struct wait_bit_key *key = arg;
@@ -33,6 +34,7 @@ int wake_bit_function(struct wait_queue_entry *wq_entry, unsigned mode, int sync
 
 	return autoremove_wake_function(wq_entry, mode, sync, key);
 }
+#endif
 EXPORT_SYMBOL(wake_bit_function);
 
 /*
@@ -40,6 +42,7 @@ EXPORT_SYMBOL(wake_bit_function);
  * waiting, the actions of __wait_on_bit() and __wait_on_bit_lock() are
  * permitted return codes. Nonzero return codes halt waiting and return.
  */
+#ifndef CONFIG_RUSIX_COMPLETION_RUST
 int __sched
 __wait_on_bit(struct wait_queue_head *wq_head, struct wait_bit_queue_entry *wbq_entry,
 	      wait_bit_action_f *action, unsigned mode)
@@ -56,8 +59,10 @@ __wait_on_bit(struct wait_queue_head *wq_head, struct wait_bit_queue_entry *wbq_
 
 	return ret;
 }
+#endif
 EXPORT_SYMBOL(__wait_on_bit);
 
+#ifndef CONFIG_RUSIX_COMPLETION_RUST
 int __sched out_of_line_wait_on_bit(unsigned long *word, int bit,
 				    wait_bit_action_f *action, unsigned mode)
 {
@@ -66,8 +71,10 @@ int __sched out_of_line_wait_on_bit(unsigned long *word, int bit,
 
 	return __wait_on_bit(wq_head, &wq_entry, action, mode);
 }
+#endif
 EXPORT_SYMBOL(out_of_line_wait_on_bit);
 
+#ifndef CONFIG_RUSIX_COMPLETION_RUST
 int __sched out_of_line_wait_on_bit_timeout(
 	unsigned long *word, int bit, wait_bit_action_f *action,
 	unsigned mode, unsigned long timeout)
@@ -79,8 +86,10 @@ int __sched out_of_line_wait_on_bit_timeout(
 
 	return __wait_on_bit(wq_head, &wq_entry, action, mode);
 }
+#endif
 EXPORT_SYMBOL_GPL(out_of_line_wait_on_bit_timeout);
 
+#ifndef CONFIG_RUSIX_COMPLETION_RUST
 int __sched
 __wait_on_bit_lock(struct wait_queue_head *wq_head, struct wait_bit_queue_entry *wbq_entry,
 			wait_bit_action_f *action, unsigned mode)
@@ -109,8 +118,10 @@ __wait_on_bit_lock(struct wait_queue_head *wq_head, struct wait_bit_queue_entry 
 		}
 	}
 }
+#endif
 EXPORT_SYMBOL(__wait_on_bit_lock);
 
+#ifndef CONFIG_RUSIX_COMPLETION_RUST
 int __sched out_of_line_wait_on_bit_lock(unsigned long *word, int bit,
 					 wait_bit_action_f *action, unsigned mode)
 {
@@ -119,6 +130,7 @@ int __sched out_of_line_wait_on_bit_lock(unsigned long *word, int bit,
 
 	return __wait_on_bit_lock(wq_head, &wq_entry, action, mode);
 }
+#endif
 EXPORT_SYMBOL(out_of_line_wait_on_bit_lock);
 
 void __wake_up_bit(struct wait_queue_head *wq_head, unsigned long *word, int bit)
@@ -167,6 +179,7 @@ wait_queue_head_t *__var_waitqueue(void *p)
 }
 EXPORT_SYMBOL(__var_waitqueue);
 
+#ifndef CONFIG_RUSIX_COMPLETION_RUST
 struct wait_bit_key *__var_wake_key(struct wait_queue_entry *wq_entry, void *arg)
 {
 	struct wait_bit_key *key = arg;
@@ -179,6 +192,7 @@ struct wait_bit_key *__var_wake_key(struct wait_queue_entry *wq_entry, void *arg
 
 	return key;
 }
+#endif
 
 static int var_wake_function(struct wait_queue_entry *wq_entry, unsigned int mode,
 			     int sync, void *arg)
@@ -243,6 +257,7 @@ void wake_up_var(void *var)
 }
 EXPORT_SYMBOL(wake_up_var);
 
+#ifndef CONFIG_RUSIX_COMPLETION_RUST
 __sched int bit_wait(struct wait_bit_key *word, int mode)
 {
 	schedule();
@@ -251,8 +266,10 @@ __sched int bit_wait(struct wait_bit_key *word, int mode)
 
 	return 0;
 }
+#endif
 EXPORT_SYMBOL(bit_wait);
 
+#ifndef CONFIG_RUSIX_COMPLETION_RUST
 __sched int bit_wait_io(struct wait_bit_key *word, int mode)
 {
 	io_schedule();
@@ -261,8 +278,10 @@ __sched int bit_wait_io(struct wait_bit_key *word, int mode)
 
 	return 0;
 }
+#endif
 EXPORT_SYMBOL(bit_wait_io);
 
+#ifndef CONFIG_RUSIX_COMPLETION_RUST
 __sched int bit_wait_timeout(struct wait_bit_key *word, int mode)
 {
 	unsigned long now = READ_ONCE(jiffies);
@@ -275,6 +294,7 @@ __sched int bit_wait_timeout(struct wait_bit_key *word, int mode)
 
 	return 0;
 }
+#endif
 EXPORT_SYMBOL_GPL(bit_wait_timeout);
 
 void __init wait_bit_init(void)

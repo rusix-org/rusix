@@ -36,7 +36,10 @@ timeouts, blocked condition handoff and bit-key filtering. The waiter remains
 linked until explicit removal. Compiled-object records retain state/flag barrier
 calls and their x86 primitives; runtime tests are not a universal ordering proof.
 
-Next migrate bit-wait policy and locked interruptible waits with blocked consumers.
+In progress on `rusix/wait-bit`: ten bit-wait definitions are implemented and
+paired tests are being integrated; build/runtime verification is pending. The
+[bit-wait record](experiments/wait-bit/README.md) owns their contracts. Next are
+locked interruptible waits and promotion into the declared server target.
 The [wait record](experiments/wait/README.md) owns mixed-access and lifetime
 contracts. Stop/park, repeated latch races, socket/futex consumer integration,
 bit-wait acquisition loops and POLLFREE races remain unverified.
