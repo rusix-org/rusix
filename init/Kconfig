@@ -2221,3 +2221,20 @@ config RUSIX_TASK_CONSTRUCTION_RUST
 	  VMAP stacks are excluded pending allocator caller-address handling.
 	  This does not give Rust ownership of live tasks or task_struct layout.
 	  Leave disabled for the original C comparison implementation.
+
+config RUSIX_MM_CONSTRUCTION_RUST
+	bool "Rusix Rust address-space construction transaction"
+	depends on RUST && X86_64 && MMU && SMP && !MODULES
+	depends on !PREEMPT_RT && !KASAN && !KMSAN && !KCSAN && !MEM_ALLOC_PROFILING
+	depends on !MEMCG && !MM_ID && !SCHED_MM_CID && !LRU_GEN
+	depends on !TRANSPARENT_HUGEPAGE && !HUGETLB_PAGE
+	depends on !MODIFY_LDT_SYSCALL && !X86_INTEL_MEMORY_PROTECTION_KEYS && !PARAVIRT
+	default n
+	help
+	  Select Rust sequencing and explicit staged rollback for mm_alloc and
+	  the shared mm_init used by fresh exec and copied fork address spaces.
+	  Architecture, slab/PGD and subsystem primitives remain C. Initial scope
+	  excludes optional lifecycles needing separate failure-path evidence.
+	  No exclusive whole-mm ownership is claimed: PGD and per-CPU counter
+	  initialization already expose fields to existing C observers.
+	  Leave disabled for the preserved original C comparison implementation.

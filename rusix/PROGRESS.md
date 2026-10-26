@@ -116,3 +116,14 @@ was executed. Matching C/Rust profiles, actual dispatch/linked selection proof
 and the bounded guest runner are ready for kernel verification. No candidate
 kernel has been compiled or booted. Attributable allocation-failure tests remain
 required. [Contract and remaining C boundaries](experiments/task-construction/README.md).
+
+### Address-space construction candidate
+
+This separate branch adds Rust sequencing for complete `mm_alloc` and shared
+`mm_init`, including inherited flags and six allocation rollback stages. The
+original C bodies and export placement are preserved. Root and independent
+source review, literal source reconstruction, formatting and diff checks pass.
+This code has not been compiled or booted; selection proof, paired consumers
+and attributable allocation-failure tests remain required. Early boot and
+PGD/per-CPU counter observers prohibit exclusive whole-mm references.
+[Ownership contract and remaining C](experiments/mm-construction/README.md).

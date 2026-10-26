@@ -209,3 +209,5 @@ $(obj)/kheaders.md5: $(obj)/kheaders-srclist FORCE
 clean-files := kheaders.md5 kheaders-srclist kheaders-objlist
 
 obj-$(CONFIG_RUSIX_TASK_CONSTRUCTION_RUST) += task_construction_rust.o
+
+obj-$(CONFIG_RUSIX_MM_CONSTRUCTION_RUST) += mm_construction_rust.o

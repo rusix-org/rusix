@@ -1043,6 +1043,17 @@ static void mmap_init_lock(struct mm_struct *mm)
 #endif
 }
 
+#ifdef CONFIG_RUSIX_MM_CONSTRUCTION_RUST
+#include "mm_construction_impl.h"
+extern struct mm_struct *rusix_mm_init(struct mm_struct *mm, struct task_struct *p,
+				     struct user_namespace *user_ns);
+
+static struct mm_struct *mm_init(struct mm_struct *mm, struct task_struct *p,
+				struct user_namespace *user_ns)
+{
+	return rusix_mm_init(mm, p, user_ns);
+}
+#else
 static struct mm_struct *mm_init(struct mm_struct *mm, struct task_struct *p,
 	struct user_namespace *user_ns)
 {
@@ -1121,10 +1132,12 @@ fail_mm_init:
 	free_mm(mm);
 	return NULL;
 }
+#endif /* CONFIG_RUSIX_MM_CONSTRUCTION_RUST */
 
 /*
  * Allocate and initialize an mm_struct.
  */
+#ifndef CONFIG_RUSIX_MM_CONSTRUCTION_RUST
 struct mm_struct *mm_alloc(void)
 {
 	struct mm_struct *mm;
@@ -1136,6 +1149,7 @@ struct mm_struct *mm_alloc(void)
 	memset(mm, 0, sizeof(*mm));
 	return mm_init(mm, current, current_user_ns());
 }
+#endif /* CONFIG_RUSIX_MM_CONSTRUCTION_RUST */
 EXPORT_SYMBOL_IF_KUNIT(mm_alloc);
 
 static inline void __mmput(struct mm_struct *mm)
