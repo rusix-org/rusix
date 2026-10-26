@@ -1,6 +1,12 @@
 # Initial source publication record
 
-**Status: readiness checks passed; first source push authorized and pending.**
+**Status: first source publication completed, 2026-10-25.**
+
+First published commit: `5520dd71ea4637bca9e82761463c0df53f3feb46` on
+`rusix/main`. GitHub independently returned that branch SHA after the push.
+The default branch is `rusix/main`, issues are enabled, and GitHub's README API
+selects the rusix `README.md`. The public fork's parent is verified as
+`torvalds/linux`. Subsequent documentation commits may advance the branch.
 
 Aaron clarified on 2026-10-25 that the existing kernel build and passing tests
 are a sufficient initial layer if the docs are ready. Module/export/CRC, fallback,
@@ -53,10 +59,12 @@ by an organization administrator. No broader authentication scope was requested.
   files and upstream README are unchanged. This is a bounded repository hygiene
   check, not a formal security/license audit. Final documentation changes are
   checked separately for links, whitespace, and accurate scope.
-- There is no hosted CI or independent human-maintainer approval claim. The exact
-  first-push revision and GitHub verification will be recorded after success.
+- There is no hosted CI or independent human-maintainer approval claim. The
+  successful push and GitHub branch/default-branch/README checks establish
+  publication, not any additional runtime behavior.
 
-No results are inferred from plans. The first push must preserve upstream history,
-include only reviewed project changes, and accurately expose the remaining work.
-The exact first-push commit and remote verification will be recorded after the
-operation succeeds.
+No results are inferred from plans. Upstream ancestry is retained in the fork;
+publication contains the documented initial layer and clearly exposes remaining
+work. The temporary local verification worktree is removed after its evidence
+is archived; its kernel image/config are retained under `artifacts/publication-check/`
+locally. Evidence path strings reflect where commands originally ran.

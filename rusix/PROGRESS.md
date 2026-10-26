@@ -25,7 +25,8 @@ all executing C as unfinished migration work. See `docs/ARCHITECTURE.md` (decisi
 - Public GitHub repository `https://github.com/rusix-org/rusix` is now a verified
   fork of `torvalds/linux`. `origin` points there; `upstream` still points to Linux.
   Aaron accepted the existing built/tested layer for first publication once docs
-  are ready. Readiness checks pass; source push is pending. See `docs/PUBLICATION.md`.
+  are ready. The first source push succeeded at `5520dd71e`; `rusix/main` is the
+  default branch and issues are enabled. See `docs/PUBLICATION.md`.
 - No host kernel installation or host module loading.
 - Build with two jobs on disk under `builds/`; QEMU TCG uses one CPU/512 MiB.
 - Rust 1.99.0 (LLVM 23.1.1), Clang/LLD 23.1.3, bindgen 0.73.2, QEMU 11.1.2.
@@ -161,4 +162,10 @@ Raw evidence is archived in `docs/evidence/publication-check/`. Audited project
 history and retained upstream license/README content. The local full-history
 fetch was deliberately stopped after the GitHub fork preserved public ancestry;
 the local repository remains shallow and passes Git connectivity checks.
-First source push is the next action; broader rewrite work remains incomplete.
+First source push succeeded at `5520dd71ea4637bca9e82761463c0df53f3feb46`.
+GitHub returned the exact branch SHA, verified the fork parent and public
+visibility, and confirmed `rusix/main` as default plus the project's README.md.
+The temporary verification worktree is removed after archiving its logs/results;
+its image/config remain under `artifacts/publication-check/`. Broader rewrite
+work remains incomplete. The unpublished module runner prepared in the outer
+workspace still needs independent review and actual VM execution.

@@ -34,7 +34,9 @@ Executed tests and limitations are recorded in `VERIFICATION.md`, `PROGRESS.md`,
 and the archived evidence. Tools included Git, rustc/rustfmt, Clang/LLVM, kernel
 Kbuild/KUnit, QEMU, Python harnesses, and kernel checkpatch. GitHub CLI initially created an empty public repository, then created the
 authorized Linux fork after retaining the empty placeholder under another name.
-The publication record tracks source-push readiness and results separately.
+The first source push followed the documented readiness checks; GitHub verified
+the resulting branch SHA and default branch. The publication record tracks the
+exact source-push result separately from runtime verification.
 
 Agent agreement is not independent human approval. No human DCO certification
 has been added by the agents. Before public submission, the human submitter must
