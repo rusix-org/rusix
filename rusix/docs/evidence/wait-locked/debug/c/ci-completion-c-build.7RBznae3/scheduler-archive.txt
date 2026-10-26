@@ -1,0 +1,7 @@
+/out/builds/ci-completion-c/kernel/sched/core.o
+/out/builds/ci-completion-c/kernel/sched/fair.o
+/out/builds/ci-completion-c/kernel/sched/build_policy.o
+/out/builds/ci-completion-c/kernel/sched/build_utility.o
+/out/builds/ci-completion-c/kernel/sched/wait_test.o
+/out/builds/ci-completion-c/kernel/sched/wait_bit_test.o
+/out/builds/ci-completion-c/kernel/sched/wait_locked_test.o

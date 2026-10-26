@@ -1,0 +1,37 @@
+implementation=wait-bit-rust
+/out/builds/ci-server/kernel/sched/wait_bit_rust.o
+/out/builds/ci-server/kernel/sched/wait_bit_rust.o
+0000000000000010 T __var_wake_key
+0000000000000040 T wake_bit_function
+0000000000000010 T __wait_on_bit
+00000000000000b0 T __wait_on_bit_lock
+0000000000000160 T bit_wait
+00000000000001a0 T bit_wait_io
+00000000000001e0 T bit_wait_timeout
+00000000000003d0 T out_of_line_wait_on_bit
+0000000000000400 T out_of_line_wait_on_bit_timeout
+0000000000000430 T out_of_line_wait_on_bit_lock
+/out/builds/ci-server/vmlinux
+ffffffff812a8120 T __var_wake_key
+ffffffff812a8150 T wake_bit_function
+ffffffff81756030 T __wait_on_bit
+ffffffff817560d0 T __wait_on_bit_lock
+ffffffff81756180 T bit_wait
+ffffffff817561c0 T bit_wait_io
+ffffffff81756200 T bit_wait_timeout
+ffffffff817563f0 T out_of_line_wait_on_bit
+ffffffff81756420 T out_of_line_wait_on_bit_timeout
+ffffffff81756450 T out_of_line_wait_on_bit_lock
+__wait_on_bit object=.sched.text address=ffffffff81756030 sched-range=[ffffffff817551c0,ffffffff8175b347)
+__wait_on_bit_lock object=.sched.text address=ffffffff817560d0 sched-range=[ffffffff817551c0,ffffffff8175b347)
+bit_wait object=.sched.text address=ffffffff81756180 sched-range=[ffffffff817551c0,ffffffff8175b347)
+bit_wait_io object=.sched.text address=ffffffff817561c0 sched-range=[ffffffff817551c0,ffffffff8175b347)
+bit_wait_timeout object=.sched.text address=ffffffff81756200 sched-range=[ffffffff817551c0,ffffffff8175b347)
+out_of_line_wait_on_bit object=.sched.text address=ffffffff817563f0 sched-range=[ffffffff817551c0,ffffffff8175b347)
+out_of_line_wait_on_bit_timeout object=.sched.text address=ffffffff81756420 sched-range=[ffffffff817551c0,ffffffff8175b347)
+out_of_line_wait_on_bit_lock object=.sched.text address=ffffffff81756450 sched-range=[ffffffff817551c0,ffffffff8175b347)
+a815f92eec5144fc4bb0e53d4db745daafe31be6826d1fa79a2021a9c9d17a00  /src/kernel/sched/wait_bit.c
+5d864e620155f62a98d9964e54300a52023b9449d6236233b502cd9e2748eb6c  /out/builds/ci-server/kernel/sched/wait_bit_rust.o
+0b394829c468baa946778680cc9d0ce83076b614fc6b54dc11e0e36cbcc0a247  /src/kernel/sched/wait_bit_rust.rs
+50b1347b6b913908d0d387facc6c0cf8147dcde3a5fb5a44cdd729e4713ebe8b  /src/kernel/sched/wait_bit_rust/time.rs
+e6b8373e598d262398a7e9cddc6536bc956f4e2574d0c3d4031a5fe5a5231840  /src/rust/helpers/wait_bit_policy.c

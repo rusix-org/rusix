@@ -1,0 +1,25 @@
+{
+  "source": "/home/aaron/code/rusix/linux-out/lts-server-core-rust-001/builds/ci-server",
+  "source_profile": "server",
+  "source_revision": "8aafe7d962dd77f8be21d798098a3c09db9e155f",
+  "source_build_evidence": "/home/aaron/code/rusix/linux-out/lts-server-core-rust-001/logs/ci-server-build.QuaYt8yc",
+  "source_terminal_status": {
+    "logs/ci.exit": "0",
+    "logs/ci-server-build.QuaYt8yc/build.exit": "0",
+    "logs/ci-server-ext4.run/runner.exit": "0",
+    "logs/ci-server-ext4.run/compile.exit": "0",
+    "logs/ci-server-ext4.run/qemu.exit": "0"
+  },
+  "source_build_hash_records_sha256": "44a6e0aea01db1d0f98b563ead5b468eecc1909b5ac48bf3e23a19a838ca9c67",
+  "copied_artifact_sha256": {
+    "builds/ci-server/.config": "e8cee23bd5c24281a674ed9b2391c1c717103ddb615c59349cd737939544d928",
+    "builds/ci-server/arch/x86/boot/bzImage": "7a9b5c3321c9b3d5538b05585013d67f15d3d8fa1563035fbbe47384f89726c7",
+    "builds/ci-server/vmlinux": "1a47fa02a5a51a3c1d9feb7b33b03ed4a5baaec581dcd5bc166ae4bba9cda6e4",
+    "builds/ci-server/vmlinux.map": "d08cd444b6305fa29f5a593b1b4ec8f21a566e3e807177667d23e4e34b75d389"
+  },
+  "source_languages_sha256": "e8bce1c1937dc70523debab373e1c44da2f033aad7dab21cae21591289e39f3b",
+  "copy_method": "cp -a --reflink=auto; recorded build artifacts rehashed after copy",
+  "scope": "Kernel-only cache from completed passing declared-server run; not locked-wait verification. No guest fixtures, prior VM evidence or success markers copied.",
+  "runtime_source_mount": "/home/aaron/code/rusix/linux-wait-locked",
+  "status": "PREPARED_NOT_RUN"
+}

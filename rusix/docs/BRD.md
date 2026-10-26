@@ -5,6 +5,10 @@ Reference: `drivers/block/brd.c` at Linux 6.18.58,
 Git root. [Progress](../PROGRESS.md) records executed checks;
 [Phase 1](PHASE1.md) defines delivery gates.
 
+[ADR 0003](adr/0003.md) amends invalid `max_part` normalization. Its implementation
+and paired verification are pending separately; the reference table below
+records the pinned behavior and does not claim the correction has shipped.
+
 ## Behavior to preserve
 
 | Area | Pinned C behavior and boundary |

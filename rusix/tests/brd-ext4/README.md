@@ -135,3 +135,10 @@ At `df5d5cb7f2c0`, all four pass with both C/Rust core selections and identical
 fixtures. [Evidence](../../docs/evidence/wait-wake-ext4/manifest.json). Historical
 six-case ext4 results above retain their narrower scope. The runner records `wake_cases` separately and hashes
 the module with all other fixture inputs. Never execute the fixture on the host.
+
+
+Two separately recorded `locked_cases` now require blocking eventfd and timerfd
+reads after the four nonblocking cases. The observer samples sleeping read
+syscalls before producer release; bounded controller cleanup retains descriptor
+lifetimes. [The locked-wait record](../../experiments/wait-locked/README.md) owns
+the exact observation and cleanup limits and links matched runtime evidence.

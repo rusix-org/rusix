@@ -30,7 +30,8 @@ when the declared target and export mechanism no longer require them.
 [manifest](evidence/brd-q35/manifest.json) records block6, ext4 six cases, six
 parameter boots and partition5, with identical fixtures and only driver selection
 differing between configs. Nine ownership tests also pass. The negative-parameter
-exception and residual C boundaries remain; no complete-subsystem claim follows.
+exception is addressed by accepted [ADR 0003](adr/0003.md), pending separate
+implementation/verification; residual C boundaries remain.
 The driver/store live in `drivers/block/brd_rust.rs` and `brd_rust/store.rs`;
 `rust/kernel/block/{bio,bio_disk}.rs` provide transitional interfaces.
 Six x86_64 SMP baseline cases: [manifest](evidence/lts-baseline/manifest.json). [BRD.md](BRD.md) owns the pinned
@@ -47,8 +48,10 @@ The [ownership experiment](../experiments/completion/README.md) owns the contrac
 current test inventory, evidence and remaining dependencies. The
 [generic wait record](../experiments/wait/README.md) covers shared enrollment,
 prepare/finish and wake-callback policy; the [bit-wait record](../experiments/wait-bit/README.md)
-covers bit acquisition and stack-waiter ownership. Selection remains
+covers bit acquisition and stack-waiter ownership. The
+[locked-wait record](../experiments/wait-locked/README.md) covers the two
+interruptible iterations and blocking consumers. Selection remains
 default-off in Kconfig and enabled by the declared x86_64 server target, with
-[matched target evidence](evidence/server-core/manifest.json). No subsystem
+[matched target evidence](evidence/wait-locked-server/manifest.json). No subsystem
 divergence point is declared. GCD/LCM remain
 deferred; [the roadmap](ROADMAP.md) prioritizes this core boundary after BRD.

@@ -1,0 +1,22 @@
+/out/builds/ci-server-c/kernel/sched/build_utility.o
+0000000000002de0 T __init_swait_queue_head
+0000000000002fa0 T __prepare_to_swait
+0000000000003120 T __finish_swait
+0000000000002e10 T swake_up_locked
+0000000000002ce0 T swake_up_all_locked
+0000000000002e60 T swake_up_one
+0000000000002ed0 T swake_up_all
+0000000000002ff0 T prepare_to_swait_exclusive
+0000000000003060 T prepare_to_swait_event
+0000000000003170 T finish_swait
+/out/builds/ci-server-c/vmlinux
+ffffffff812a36b0 T __init_swait_queue_head
+ffffffff812a3870 T __prepare_to_swait
+ffffffff812a39f0 T __finish_swait
+ffffffff812a36e0 T swake_up_locked
+ffffffff812a35b0 T swake_up_all_locked
+ffffffff812a3730 T swake_up_one
+ffffffff812a37a0 T swake_up_all
+ffffffff812a38c0 T prepare_to_swait_exclusive
+ffffffff812a3930 T prepare_to_swait_event
+ffffffff812a3a40 T finish_swait

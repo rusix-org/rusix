@@ -1,0 +1,22 @@
+/out/builds/ci-completion-plain-c/kernel/sched/build_utility.o
+00000000000033c0 T __var_wake_key
+0000000000002fc0 T wake_bit_function
+0000000000000330 T __wait_on_bit
+0000000000000560 T __wait_on_bit_lock
+0000000000000750 T bit_wait
+00000000000007a0 T bit_wait_io
+00000000000007f0 T bit_wait_timeout
+0000000000000430 T out_of_line_wait_on_bit
+00000000000004c0 T out_of_line_wait_on_bit_timeout
+00000000000006c0 T out_of_line_wait_on_bit_lock
+/out/builds/ci-completion-plain-c/vmlinux
+ffffffff81288130 T __var_wake_key
+ffffffff81287d30 T wake_bit_function
+ffffffff814ef6c0 T __wait_on_bit
+ffffffff814ef8f0 T __wait_on_bit_lock
+ffffffff814efae0 T bit_wait
+ffffffff814efb30 T bit_wait_io
+ffffffff814efb80 T bit_wait_timeout
+ffffffff814ef7c0 T out_of_line_wait_on_bit
+ffffffff814ef850 T out_of_line_wait_on_bit_timeout
+ffffffff814efa50 T out_of_line_wait_on_bit_lock

@@ -1,0 +1,20 @@
+{
+  "source_revision": "5234e2809e9bbaf59ac600bd59500b0614bee639",
+  "implementation": "brd-rust",
+  "profile": "core-ext4-c",
+  "scope": "Six boot variants of BRD parameter/on-demand device contract",
+  "sources": {
+    "rusix/tests/brd-parameters/init.rs": "e3b69ffa5a685710322275234dffbde187caf9236efa96608337c6f5d83e41cd",
+    "rusix/scripts/test-brd-parameters-vm.py": "5058ca5b60eb56deda240002278f0d6f4901f4f8467dff2e6ce1d8a510558c2e",
+    "rusix/scripts/rusix_paths.py": "15158c8c33e303341ef523c8317da73fb3f008908b8bfa53611d13bc87c94cae",
+    "rusix/scripts/test-brd-vm.py": "48c0b871d979eb2ca6e035b05569f50d1bd318c4fb6b8672b5a86f1942679329",
+    "rusix/scripts/with-local-tools.sh": "b47051d02fd2eb024dedc91f4a0c2cf071529d018a8ae246678bbb568069ffd0",
+    "rusix/scripts/repo-paths.sh": "c1456d937aa223d2b6d9bcd914238ef49cdd4974419df0ff7b2e20bbf542cfc7"
+  },
+  "artifacts": {
+    "/out/builds/brd-parameters-vm-ci-core-ext4-c/bzImage": "7c7ee8db7c0e6445b0f43d7a01e636c53fb6efb0bc06384b5284e705a8daf9a4",
+    "/out/builds/brd-parameters-vm-ci-core-ext4-c/init": "11cf872e02e25be972a02352574f3607b21852193f670f58e1c6e1198e7a5f40",
+    "/out/builds/brd-parameters-vm-ci-core-ext4-c/initramfs.cpio": "e97144cddfebfe87962a2c9610e0462fd2ba50b63b14798116ef98e7f46c6acd"
+  },
+  "config_sha256": "647e551e9a2e9dd70e26b4066607e45274e786de274727a9fa8e3a33ac61d220"
+}

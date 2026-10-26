@@ -1,0 +1,25 @@
+{
+  "source": "/home/aaron/code/rusix/linux-out/lts-server-core-c-001/builds/ci-server-c",
+  "source_profile": "server-c",
+  "source_revision": "8aafe7d962dd77f8be21d798098a3c09db9e155f",
+  "source_build_evidence": "/home/aaron/code/rusix/linux-out/lts-server-core-c-001/logs/ci-server-c-build.N43iL9cy",
+  "source_terminal_status": {
+    "logs/ci.exit": "0",
+    "logs/ci-server-c-build.N43iL9cy/build.exit": "0",
+    "logs/ci-server-c-ext4.run/runner.exit": "0",
+    "logs/ci-server-c-ext4.run/compile.exit": "0",
+    "logs/ci-server-c-ext4.run/qemu.exit": "0"
+  },
+  "source_build_hash_records_sha256": "d1c0632b32ccda8b04475d61b83bb1b6d769789ccd2fd4cfba83fba32327b810",
+  "copied_artifact_sha256": {
+    "builds/ci-server-c/.config": "3ba80afb1dd3aa8a98271c280b198ebc64623fc733fd1af90cc268cee29de674",
+    "builds/ci-server-c/arch/x86/boot/bzImage": "2c65e6e89be358a64c3a9c88e287242cd231bc694acde266c80c31ae4322c12e",
+    "builds/ci-server-c/vmlinux": "2b1fa9c8cf6827ad087bf710069318d313f09d1f54b1fe29e31a0083dfbb9b85",
+    "builds/ci-server-c/vmlinux.map": "3dd63ab296dceb5a9b50237b7a7f3c4cca2f6551031a00345d75179369c640a6"
+  },
+  "source_languages_sha256": "fe4e88709c06be801f40b3d3f0296e23868fef2b6616d9cc1544427d16cf4457",
+  "copy_method": "cp -a --reflink=auto; recorded build artifacts rehashed after copy",
+  "scope": "Kernel-only cache from completed passing declared-server run; not locked-wait verification. No guest fixtures, prior VM evidence or success markers copied.",
+  "runtime_source_mount": "/home/aaron/code/rusix/linux-wait-locked",
+  "status": "PREPARED_NOT_RUN"
+}

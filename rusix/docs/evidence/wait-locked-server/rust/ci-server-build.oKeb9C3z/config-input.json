@@ -1,0 +1,9 @@
+{
+  "config_input_sha256": "5b37adb3792b56926ef687dd7392b3916dbb8b77a30e50c2b2664373988098d6",
+  "derivation_script_sha256": "357f1680a766deee25a75f56470f1a6223a9429326efd2089efc7ac5ee484eed",
+  "override": {},
+  "profile": "server",
+  "schema": 1,
+  "source_fragment": "/src/rusix/configs/x86_64-server.config",
+  "source_fragment_sha256": "5b37adb3792b56926ef687dd7392b3916dbb8b77a30e50c2b2664373988098d6"
+}

@@ -1,0 +1,27 @@
+{
+  "artifacts": {
+    "/out/builds/ext4-vm-ci-server/bzImage": "202bf9f7a93b4778d365264285dad4b3b25dc0d1d4fdd8be38fe46617d560be9",
+    "/out/builds/ext4-vm-ci-server/init": "c01b1aa9c109601e85600e76440ff1894507d616db522cd006d75502fc561732",
+    "/out/builds/ext4-vm-ci-server/initramfs.cpio": "0184417ec80f450100bf306fe930949030a914c73603dc629b3a1fdfba0f36fa"
+  },
+  "config_sha256": "e8cee23bd5c24281a674ed9b2391c1c717103ddb615c59349cd737939544d928",
+  "container_image": "sha256:c02eb3929889b3f0cc035d57a02c844e0c74c71d24fbda1311249faeb8257f63",
+  "implementation": "brd-rust",
+  "profile": "server",
+  "source_revision": "5234e2809e9bbaf59ac600bd59500b0614bee639",
+  "sources": {
+    "rusix/scripts/rusix_paths.py": "15158c8c33e303341ef523c8317da73fb3f008908b8bfa53611d13bc87c94cae",
+    "rusix/scripts/server_target.py": "357f1680a766deee25a75f56470f1a6223a9429326efd2089efc7ac5ee484eed",
+    "rusix/scripts/test-brd-ext4-vm.py": "768a6b73699bf336bcfba4ce4a324e1e39032a71b530038b3d44cad69f82257d",
+    "rusix/scripts/test-brd-vm.py": "48c0b871d979eb2ca6e035b05569f50d1bd318c4fb6b8672b5a86f1942679329",
+    "rusix/tests/brd-ext4/Dockerfile": "16c3dc63cd956f56ef494dff04ec66beb5d246928f0cb04ba4b578376cf5dd02",
+    "rusix/tests/brd-ext4/FINAL.sha256": "4badf6874d8f5bcb531eeebbd70b8814c5c54a8c87247f79f1266975da3e7f0f",
+    "rusix/tests/brd-ext4/README.md": "fdb1a20d8e86ec2a3c476d1044aeb15e5bf219cb32d207f87ce8f313b347dc94",
+    "rusix/tests/brd-ext4/SHA256SUMS": "b8fe76c42a436aa12c3efa253976561559c1bc9432c1a38343ac94ad0cb0de8b",
+    "rusix/tests/brd-ext4/ext4-packages.lock": "30a6ea7af0307248c70192e2ec793e655084c4f65a788a5d6c367412ab9e39e7",
+    "rusix/tests/brd-ext4/init.rs": "18c4938cde2931e62787ca61e2ba7834816fa321f412cf2dac6f3cca144e569c",
+    "rusix/tests/brd-ext4/locked_probe.rs": "78ebd607a3eaa8157b159609ac9fb997f8a117a90d4822c3c9ff668936f48c64",
+    "rusix/tests/brd-ext4/wake_probe.rs": "ac58dbab4f7cf708c3009df22f90e1856e0d5bd7198005e313361d7eac917890",
+    "rusix/tests/brd-ext4/workload.sh": "adab6c2e7c100bdadfad61f39d94687a7c30953e71c4eb04bd3ef5bb3e9cec38"
+  }
+}

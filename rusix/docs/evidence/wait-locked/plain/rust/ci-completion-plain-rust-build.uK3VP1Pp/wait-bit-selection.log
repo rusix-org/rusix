@@ -1,0 +1,37 @@
+implementation=wait-bit-rust
+/out/builds/ci-completion-plain-rust/kernel/sched/wait_bit_rust.o
+/out/builds/ci-completion-plain-rust/kernel/sched/wait_bit_rust.o
+0000000000000000 T __var_wake_key
+0000000000000020 T wake_bit_function
+0000000000000000 T __wait_on_bit
+0000000000000080 T __wait_on_bit_lock
+0000000000000120 T bit_wait
+0000000000000150 T bit_wait_io
+0000000000000180 T bit_wait_timeout
+0000000000000330 T out_of_line_wait_on_bit
+0000000000000350 T out_of_line_wait_on_bit_timeout
+0000000000000370 T out_of_line_wait_on_bit_lock
+/out/builds/ci-completion-plain-rust/vmlinux
+ffffffff8128bce0 T __var_wake_key
+ffffffff8128bd00 T wake_bit_function
+ffffffff814ef9a0 T __wait_on_bit
+ffffffff814efa20 T __wait_on_bit_lock
+ffffffff814efac0 T bit_wait
+ffffffff814efaf0 T bit_wait_io
+ffffffff814efb20 T bit_wait_timeout
+ffffffff814efcd0 T out_of_line_wait_on_bit
+ffffffff814efcf0 T out_of_line_wait_on_bit_timeout
+ffffffff814efd10 T out_of_line_wait_on_bit_lock
+__wait_on_bit object=.sched.text address=ffffffff814ef9a0 sched-range=[ffffffff814eedb0,ffffffff814f41d1)
+__wait_on_bit_lock object=.sched.text address=ffffffff814efa20 sched-range=[ffffffff814eedb0,ffffffff814f41d1)
+bit_wait object=.sched.text address=ffffffff814efac0 sched-range=[ffffffff814eedb0,ffffffff814f41d1)
+bit_wait_io object=.sched.text address=ffffffff814efaf0 sched-range=[ffffffff814eedb0,ffffffff814f41d1)
+bit_wait_timeout object=.sched.text address=ffffffff814efb20 sched-range=[ffffffff814eedb0,ffffffff814f41d1)
+out_of_line_wait_on_bit object=.sched.text address=ffffffff814efcd0 sched-range=[ffffffff814eedb0,ffffffff814f41d1)
+out_of_line_wait_on_bit_timeout object=.sched.text address=ffffffff814efcf0 sched-range=[ffffffff814eedb0,ffffffff814f41d1)
+out_of_line_wait_on_bit_lock object=.sched.text address=ffffffff814efd10 sched-range=[ffffffff814eedb0,ffffffff814f41d1)
+a815f92eec5144fc4bb0e53d4db745daafe31be6826d1fa79a2021a9c9d17a00  /src/kernel/sched/wait_bit.c
+6661ea4b18958f7766415012be3c4ad030fd4d5376c224534aabc6da4c9482c2  /out/builds/ci-completion-plain-rust/kernel/sched/wait_bit_rust.o
+0b394829c468baa946778680cc9d0ce83076b614fc6b54dc11e0e36cbcc0a247  /src/kernel/sched/wait_bit_rust.rs
+50b1347b6b913908d0d387facc6c0cf8147dcde3a5fb5a44cdd729e4713ebe8b  /src/kernel/sched/wait_bit_rust/time.rs
+e6b8373e598d262398a7e9cddc6536bc956f4e2574d0c3d4031a5fe5a5231840  /src/rust/helpers/wait_bit_policy.c

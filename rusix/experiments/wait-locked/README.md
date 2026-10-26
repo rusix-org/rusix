@@ -1,10 +1,17 @@
 # Locked interruptible wait iterations
 
-Status: implemented on `rusix/wait-locked`; source and test review passed; compilation and
-paired runtime tests are pending. The selected slice translates Linux 6.18.58
-`do_wait_intr` and `do_wait_intr_irq` into `kernel/sched/wait_rust.rs` under the
-existing core option. Selection checks now require 23 generic wait definitions.
-Original C bodies remain for comparison; their export records are unchanged.
+At `5234e2809e9b`, C/Rust debug and plain pairs each pass 70 combined cases
+(61 core + nine BRD), then 61 isolated core cases. The two Rust iterations bring
+the selected generic wait inventory to 23 definitions. Original C bodies remain
+for comparison and export records are unchanged. [Core evidence](../../docs/evidence/wait-locked/manifest.json).
+
+The same source passes nine ordinary-userspace/storage boots per implementation,
+including six ext4, four poll/epoll and two blocking read cases with identical
+fixtures. [Userspace evidence](../../docs/evidence/wait-locked-ext4/manifest.json).
+The exact declared server pair passes the same twelve ext4/consumer cases and
+refreshes language measurements; only core selection differs.
+[Server evidence](../../docs/evidence/wait-locked-server/manifest.json).
+No compiler/objtool or rejected runtime diagnostics occur in these pairs.
 
 ## Contract
 
@@ -59,16 +66,16 @@ C macro fixtures are needed for that path. PREEMPT_RT remains unverified.
 
 Dedicated worker fixtures must cover both variants: actual blocked observation,
 condition/payload publication under the queue lock, lock/IRQ ownership on return,
-spurious wake/re-enrollment, pending-signal cleanup and exclusive wake accounting.
+spurious wake/re-enrollment and pending-signal cleanup. Exclusive macro wake
+accounting remains open.
 State-mutating synthetic cases belong in worker contexts, not the KUnit controller.
 Snapshots must precede cleanup so repairs cannot hide incorrect state or links.
 
 Neither production function has a timeout. Failure paths need an independently
 owned abort/wakeup mechanism and retained fixture/task lifetime. Acknowledgment
 plus Arc lifetime protection is not a task join. A stuck kernel is bounded by the
-VM watchdog and remains a failure. Matched debug/plain runs and ordinary-userspace
-regressions, exact symbol selection and absence of diagnostics are still pending.
-
+VM watchdog and remains a failure. The matched runs above verify exact symbol
+selection and reject missing, skipped, duplicate or failed cases.
 
 Four new required KUnit cases exercise both variants: pending-signal iterations
 including repeated enrollment, original macro condition/error precedence,

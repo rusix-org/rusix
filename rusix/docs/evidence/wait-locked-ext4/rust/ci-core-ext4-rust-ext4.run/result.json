@@ -1,0 +1,23 @@
+{
+  "status": "PASS",
+  "cases": [
+    "mkfs",
+    "initial_write",
+    "remount_read",
+    "mutate",
+    "final_read",
+    "fsck"
+  ],
+  "wake_cases": [
+    "pipe_poll",
+    "epoll_pipe_eventfd",
+    "epoll_oneshot_rearm",
+    "epoll_del_close"
+  ],
+  "locked_cases": [
+    "eventfd_blocking_read",
+    "timerfd_blocking_read"
+  ],
+  "qemu_exit": 0,
+  "implementation": "brd-rust"
+}

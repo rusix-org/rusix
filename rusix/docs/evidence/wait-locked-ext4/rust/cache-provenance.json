@@ -1,0 +1,24 @@
+{
+  "source": "/home/aaron/code/rusix/linux-out/lts-wait-bit-ext4-rust-001/builds/ci-core-ext4-rust",
+  "source_profile": "core-ext4-rust",
+  "source_revision": "4e487a43f0a9c849b3cb3a8c67f4a30b60cfd8d0",
+  "source_build_evidence": "/home/aaron/code/rusix/linux-out/lts-wait-bit-ext4-rust-001/logs/ci-core-ext4-rust-build.D9qto0KZ",
+  "source_terminal_status": {
+    "logs/ci.exit": "0",
+    "logs/ci-core-ext4-rust-build.D9qto0KZ/build.exit": "0",
+    "logs/ci-core-ext4-rust-brd.run/runner.exit": "0",
+    "logs/ci-core-ext4-rust-ext4.run/runner.exit": "0",
+    "logs/ci-core-ext4-rust-brd-parameters.run/runner.exit": "0",
+    "logs/ci-core-ext4-rust-brd-partitions.run/runner.exit": "0"
+  },
+  "source_build_hash_records_sha256": "a63ddf2fe3686fc03fe3ce2cd2b449409205006d94987c43c15214ea414459c0",
+  "copied_artifact_sha256": {
+    "builds/ci-core-ext4-rust/.config": "cafe71edc0273681a025dbfa4f894ae2187c1789795691d3eb504f16c359affc",
+    "builds/ci-core-ext4-rust/arch/x86/boot/bzImage": "fa296e62786a5551a4402339095f0d85cba62ff9f485e1b6d038331b6a5ada05",
+    "builds/ci-core-ext4-rust/vmlinux": "51cabe09c64fb6b32b8843252dcf52f83d88de3a950fef1127468a9630c75b68"
+  },
+  "copy_method": "cp -a --reflink=auto; recorded build artifacts rehashed after copy",
+  "scope": "Kernel-only cache from completed passing wait-bit run; not new locked-wait verification. No guest fixtures, VM evidence, host build output or prior success markers copied.",
+  "runtime_source_mount": "/home/aaron/code/rusix/linux-wait-locked",
+  "status": "PREPARED_NOT_RUN"
+}

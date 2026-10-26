@@ -312,7 +312,7 @@ def run(args, paths, evidence):
             raise ValueError(f"Artifact changed: {path}")
     result["implementation"] = implementation
     (evidence / "result.json").write_text(json.dumps(result, indent=2) + "\n")
-    print(f"Ext4 {implementation}: six ext4 and four wake cases passed; evidence {evidence}")
+    print(f"Ext4 {implementation}: six ext4, four wake and two locked cases passed; evidence {evidence}")
 
 
 def main():

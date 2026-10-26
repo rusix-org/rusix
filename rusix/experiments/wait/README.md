@@ -1,17 +1,19 @@
 # Generic wait-queue policy
 
-Rust now implements twenty-one Linux 6.18.58 wait.c entry points: seven wake
+Rust implements twenty-three Linux 6.18.58 wait.c entry points: seven wake
 wrappers, initialization, four add variants, removal, three prepare functions,
-finish, automatic wake removal and three WOKEN functions. Selection remains
-experimental/default-off under `CONFIG_RUSIX_COMPLETION_RUST`. At `2e358654d2fb`,
-C/Rust debug and plain kernels each pass 57 combined cases (48 core + nine BRD),
-then 48 isolated core cases. [Core evidence](../../docs/evidence/wait-woken/manifest.json).
-The same source passes nine ordinary-userspace/storage boots per implementation,
-including six ext4 and four poll-consumer cases with identical guest fixtures.
-[Userspace evidence](../../docs/evidence/wait-woken-ext4/manifest.json).
-There are no compiler/objtool or rejected runtime diagnostics in these pairs.
-The earlier [wake evidence](../../docs/evidence/wait-wake/manifest.json) retains
-its resolved pointer-conversion compile failure. No divergence point is declared.
+finish, automatic wake removal, three WOKEN functions and two locked
+interruptible iterations. Selection remains default-off under
+`CONFIG_RUSIX_COMPLETION_RUST`, enabled in the declared server target.
+At `5234e2809e9b`, C/Rust debug and plain pairs each pass 70 combined cases
+(61 core + nine BRD), then 61 isolated core cases.
+[Core evidence](../../docs/evidence/wait-locked/manifest.json).
+The same source passes nine storage/userspace boots per implementation and a
+matched declared-server pair, including blocking eventfd/timerfd reads.
+[Userspace](../../docs/evidence/wait-locked-ext4/manifest.json),
+[server](../../docs/evidence/wait-locked-server/manifest.json).
+The [locked-wait record](../wait-locked/README.md) owns that iteration contract.
+No divergence point is declared; historical failures remain in the verification index.
 
 ## Contract and ownership
 
@@ -36,15 +38,15 @@ does not protect all flag accesses:
 wait_woken modifies WOKEN outside it. Direct Rust ownership or atomic references
 need a separate mixed-access audit. Scheduler wake ordering remains in the C
 scheduler. Raw-spinlock adapters are not substitutes for spinlock_t.
-Default wake callback, entry initialization,
-locked interruptible iteration and __wake_up_pollfree remain C. Real epoll
+Default wake callback, entry initialization and __wake_up_pollfree remain C. Real epoll
 POLLFREE can release a waiter's last
 protection before its callback returns; ordinary close tests do not prove this race.
 
 ## Gates and scope
 
 Nine `rusix_completion_wake`, five lifecycle and four WOKEN cases join the strict
-core inventory, now 57 with nine [bit-wait cases](../wait-bit/README.md), so
+core inventory, now 61 with nine [bit-wait cases](../wait-bit/README.md) and
+four [locked-wait cases](../wait-locked/README.md), so
 both combined and isolated core boots must execute them. The synchronous wake fixture
 configures inputs and records observations; Rust uses literal expected results.
 It covers mixed exclusivity/order, zero/negative/positive callback returns,
@@ -54,7 +56,7 @@ external ownership before freeing nodes and performs cleanup before assertions.
 Uninstrumented frees exercise the path but cannot alone prove no post-free read.
 Archive/object/symbol gates require exactly one definition of each wrapper in the
 selected object and linked image, plus six enrollment/constructor and five
-lifecycle definitions and three WOKEN entries; fixture code is builtin-only
+lifecycle definitions, three WOKEN entries and two locked iterations; fixture code is builtin-only
 Rust/KUnit=y.
 
 The guest-only ordinary ext4 fixture adds four required consumer cases: pipe poll,
@@ -67,8 +69,8 @@ other-architecture or exhaustive callback compatibility. Existing ext4 cases sta
 required. Missing/duplicate/reordered/failing/skipped markers reject the whole run.
 
 The [bit-wait record](../wait-bit/README.md) covers its selected Rust policy.
-Next migrate locked interruptible policy with blocked consumers, then retire
-adapters with their ownership boundaries. Keep unchanged
+Next transfer bit-wait table ownership, then retire adapters with their
+ownership boundaries. Keep unchanged
 upstream tests and explicit configuration limits.
 
 ## Enrollment and constructor contract
@@ -116,8 +118,8 @@ Separately protected membership is not an atomic cross-lock snapshot or proof of
 later wake causation. Polling and worker loops have finite deadlines; scheduler
 lock acquisition itself is not a hard time bound, and the VM has a watchdog.
 Finite tests supplement, rather than prove, the barrier contract. Locked
-interruptible consumers, PREEMPT_RT and POLLFREE races remain outside this
-verification. Bit-wait coverage is recorded separately.
+interruptible consumers have their separate linked evidence; PREEMPT_RT and
+POLLFREE races remain outside this verification. Bit-wait coverage is recorded separately.
 
 ## WOKEN handshake
 

@@ -1,0 +1,34 @@
+implementation=wait-bit-c
+/out/builds/ci-server-c/kernel/sched/build_utility.o
+/out/builds/ci-server-c/kernel/sched/build_utility.o
+0000000000003730 T __var_wake_key
+0000000000003230 T wake_bit_function
+0000000000000440 T __wait_on_bit
+00000000000006f0 T __wait_on_bit_lock
+0000000000000930 T bit_wait
+0000000000000990 T bit_wait_io
+00000000000009f0 T bit_wait_timeout
+0000000000000560 T out_of_line_wait_on_bit
+0000000000000620 T out_of_line_wait_on_bit_timeout
+0000000000000870 T out_of_line_wait_on_bit_lock
+/out/builds/ci-server-c/vmlinux
+ffffffff812a4000 T __var_wake_key
+ffffffff812a3b00 T wake_bit_function
+ffffffff81755b60 T __wait_on_bit
+ffffffff81755e10 T __wait_on_bit_lock
+ffffffff81756050 T bit_wait
+ffffffff817560b0 T bit_wait_io
+ffffffff81756110 T bit_wait_timeout
+ffffffff81755c80 T out_of_line_wait_on_bit
+ffffffff81755d40 T out_of_line_wait_on_bit_timeout
+ffffffff81755f90 T out_of_line_wait_on_bit_lock
+__wait_on_bit object=.sched.text address=ffffffff81755b60 sched-range=[ffffffff81754c00,ffffffff8175b057)
+__wait_on_bit_lock object=.sched.text address=ffffffff81755e10 sched-range=[ffffffff81754c00,ffffffff8175b057)
+bit_wait object=.sched.text address=ffffffff81756050 sched-range=[ffffffff81754c00,ffffffff8175b057)
+bit_wait_io object=.sched.text address=ffffffff817560b0 sched-range=[ffffffff81754c00,ffffffff8175b057)
+bit_wait_timeout object=.sched.text address=ffffffff81756110 sched-range=[ffffffff81754c00,ffffffff8175b057)
+out_of_line_wait_on_bit object=.sched.text address=ffffffff81755c80 sched-range=[ffffffff81754c00,ffffffff8175b057)
+out_of_line_wait_on_bit_timeout object=.sched.text address=ffffffff81755d40 sched-range=[ffffffff81754c00,ffffffff8175b057)
+out_of_line_wait_on_bit_lock object=.sched.text address=ffffffff81755f90 sched-range=[ffffffff81754c00,ffffffff8175b057)
+a815f92eec5144fc4bb0e53d4db745daafe31be6826d1fa79a2021a9c9d17a00  /src/kernel/sched/wait_bit.c
+b01b0a3471e9c2ae2fccce8d1e5f9abfb44e665b1bae1189d4599737dc3318c0  /out/builds/ci-server-c/kernel/sched/build_utility.o

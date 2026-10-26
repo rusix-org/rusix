@@ -1,0 +1,4 @@
+e8cee23bd5c24281a674ed9b2391c1c717103ddb615c59349cd737939544d928  /out/builds/ci-server/.config
+202bf9f7a93b4778d365264285dad4b3b25dc0d1d4fdd8be38fe46617d560be9  /out/builds/ci-server/arch/x86/boot/bzImage
+891a7e9f00556a64750f0088ec60551ac1c8020f54de154d7659892b38102ed3  /out/builds/ci-server/vmlinux
+c38da7cd43d0b57cf798bca692538a7fac3d2cb4b9080879d5df6033f25f6903  /out/builds/ci-server/vmlinux.map

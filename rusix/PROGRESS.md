@@ -2,7 +2,7 @@
 
 **Rust BRD passes x86_64 block and ordinary-userspace ext4 contracts;
 all fourteen completion entry points and all ten swait.c entry points have verified
-opt-in Rust implementations; twenty-one generic wait and ten bit-wait entries now pass parity too.** Most of the kernel remains C. Linux 6.18.58
+opt-in Rust implementations; twenty-three generic wait and ten bit-wait entries now pass parity too.** Most of the kernel remains C. Linux 6.18.58
 (`2926d88bb7fc`) is the behavioral baseline. Hosted CI remains disabled;
 verification runs locally. No subsystem divergence point is declared.
 
@@ -13,56 +13,55 @@ target; [Phase 1](docs/PHASE1.md) owns delivery gates.
 | --- | --- |
 | LTS provenance/math | Signed tag verified; all 24 required math cases pass on q35, zero skips. [Math](docs/evidence/math-q35/manifest.json), [provenance](docs/evidence/lts-baseline/manifest.json). |
 | Storage parity | At `9d1c1ca5dd`, C/Rust BRD each pass block6, ext4 userspace6, six parameter variants and partition5. Four identical guest fixtures; configs differ only by BRD selection. [Evidence](docs/evidence/brd-q35/manifest.json). |
-| Core and shared queue policy | At `4e487a43f0a9`, C/Rust debug and plain pairs each pass 66 combined (57 core + nine BRD), then 57 isolated core on q35/KVM SMP2. All 14 completion, 10 swait and 21 generic wait and 10 bit-wait definitions link exclusively. Zero skips or compiler/objtool diagnostics. [Evidence](docs/evidence/wait-bit/manifest.json). |
-| Ordinary-userspace integration | Same source, Rust BRD in both; only core selection differs. Both pass nine block/ext4/parameter/partition boots, including six filesystem and four pipe/poll/epoll/eventfd cases. Identical fixtures; no compiler diagnostics. [Evidence](docs/evidence/wait-bit-ext4/manifest.json). |
+| Core and shared queue policy | At `5234e2809e9b`, C/Rust debug and plain pairs each pass 70 combined (61 core + nine BRD), then 61 isolated core on q35/KVM SMP2. All 14 completion, 10 swait, 23 generic wait and 10 bit-wait definitions link exclusively. Zero skips or compiler/objtool diagnostics. [Evidence](docs/evidence/wait-locked/manifest.json). |
+| Ordinary-userspace integration | Same source, Rust BRD in both; only core selection differs. Both pass nine block/ext4/parameter/partition boots, including six filesystem, four poll/epoll and two blocking eventfd/timerfd read cases. Identical fixtures; no compiler diagnostics. [Evidence](docs/evidence/wait-locked-ext4/manifest.json). |
 
 Rust implements BRD/store and bio/disk interfaces, conditional xarray insertion,
 NOIO scope, completion/swait policy and generic wait initialization, enrollment,
-prepare/finish, removal, callback traversal, WOKEN handshake and bit-wait policy.
+prepare/finish, removal, callback traversal, WOKEN handshake, locked interruptible
+iterations and bit-wait policy.
 The [core migration record](experiments/completion/README.md) owns storage,
 locking/lifetime contracts, test inventory and remaining C boundaries. Selection
 remains default-off and builtin-only; known incompatible counter-access drivers
 are excluded.
 
-The declared x86_64 server now selects the verified Rust core. At
-`8aafe7d962dd`, it and the derived C-core comparison each pass six ext4 and four
-pipe/poll/epoll/eventfd cases on q35/KVM SMP2. Resolved configs differ only by
-core selection; fixtures, container and VM parameters match. Both complete
-without compiler/objtool diagnostics. [Evidence](docs/evidence/server-core/manifest.json).
+The declared x86_64 server selects the verified Rust core. At `5234e2809e9b`,
+it and the derived C-core comparison each pass six ext4, four poll/epoll and two
+blocking eventfd/timerfd read cases on q35/KVM SMP2. Resolved configs differ only
+by core selection; fixtures, container and VM parameters match. Both complete
+without compiler/objtool diagnostics. [Evidence](docs/evidence/wait-locked-server/manifest.json).
 
-Same-build executable contributions for the Rust-core server: C **5,747,302
-bytes**, Rust **151,896**, assembly **45,104**, generated **28**, linker/padding
-**2,107,047**, unknown **0**. Against its C-core comparison, C decreases by
-6,107 bytes and Rust increases by 6,813. This includes inherited Rust support;
-linked bytes are not a completion percentage. Networking is configured but not
-runtime-tested here; ext4 runs on BRD, not virtio block. [Local commands](ci/README.md)
-reproduce the target and its derived comparison; hosted execution stays disabled.
+Same-build executable contributions for the Rust-core server: C **5,747,110
+bytes**, Rust **152,114**, assembly **45,104**, generated **28**, linker/padding
+**2,107,085**, unknown **0**; total **8,051,441**. Its C-core comparison contains
+C **5,753,409** and Rust **145,083**, total **8,050,673**, also zero unknown bytes.
+C decreases by 6,299 bytes and Rust increases by 7,031. This includes inherited
+Rust support; linked bytes are not a completion percentage. Networking is
+configured but not runtime-tested here; ext4 runs on BRD, not virtio block.
+[Local commands](ci/README.md) reproduce the target and derived comparison;
+hosted execution stays disabled.
 
-Locked interruptible wait migration is in progress on `rusix/wait-locked`.
-The two Rust definitions and exact spinlock IRQ adapters pass source review;
-four dedicated-worker cases and two blocking userspace consumer tests are
-implemented and reviewed. Their host acceptance-gate tests pass.
-The guest fixture compiles without diagnostics in the pinned container at
-`c2cf1011bb`; kernel compilation and runtime parity are still pending.
-The ordinary-lock watchdog must run
-in process context so it cannot interrupt a holder and deadlock on the same
-queue lock. [Migration contract](experiments/wait-locked/README.md).
+The two locked interruptible iterations now pass four dedicated-worker cases
+and the blocking userspace consumers above. A process-context watchdog preserves
+the ordinary-lock IRQ contract; sampled blocked-state evidence does not prove
+all wake races. [Migration contract](experiments/wait-locked/README.md).
 
-Nine new bit-wait cases verify error/acquisition precedence, matching, shared
-production deadline arithmetic, real blocked bit clear and exclusive owners,
-signal/expiry cleanup and all three stack wrappers. Eight bit-wait scheduler
-entry points retain their section placement. The first compile failure is
-retained; kernel C-long aliases corrected the shared arithmetic types.
+[ADR 0003](docs/adr/0003.md) accepts the selected BRD parameter correction.
+Implementation and paired verification are pending separately on
+`rusix/brd-parameter-fix`; this checkpoint retains the previously verified
+parameter behavior. Historical high-positive INT_MIN/ENXIO results remain valid
+for their recorded source, not the corrected contract.
 
-Next migrate locked interruptible waits, then transfer bit-wait table ownership
-into Rust. The [bit-wait record](experiments/wait-bit/README.md)
-and [generic wait record](experiments/wait/README.md) own their contracts.
+Next verify the approved BRD parameter fix, then transfer bit-wait table
+ownership and BRD parameter metadata into Rust as separate changes. The
+[bit-wait record](experiments/wait-bit/README.md) and [generic wait record](experiments/wait/README.md) own their contracts.
 Standalone untimed bit_wait/io scheduling, stop/park, repeated latch races,
 socket/futex consumer integration and POLLFREE races remain unverified.
 Forced diagnostic failures, detached-batch races, untimed signal paths, deadline
 races and broader IRQ coverage remain open. arm64, modules, expanded fault stress
-and performance budgets remain Phase 1b. Phase 1a still needs the provisional BRD
-invalid-parameter exception, parameter adapters and review gates; [BRD.md](docs/BRD.md).
+and performance budgets remain Phase 1b. Phase 1a still needs the approved BRD
+parameter correction verified, parameter adapters removed and review gates
+completed; [BRD.md](docs/BRD.md).
 
 Failures are retained, including the [bit-wait FFI type mismatch](docs/evidence/wait-bit/manifest.json),
 the [wake pointer-conversion compile error](docs/evidence/wait-wake/manifest.json),
