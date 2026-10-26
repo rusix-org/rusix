@@ -9,6 +9,8 @@
 int rusix_wait_test_run(unsigned int scenario, unsigned int wrapper,
 			bool disabled, u32 *out);
 u32 rusix_wait_test_null_sync(bool disabled);
+int rusix_wait_test_enrollment(unsigned int scenario, bool disabled, u32 *out);
+u32 rusix_wait_test_constructor(bool disabled);
 
 #define TEST_NODES 4
 struct wait_policy_test;
@@ -216,4 +218,200 @@ u32 rusix_wait_test_null_sync(bool disabled)
 		errors |= 2;
 	local_irq_restore(flags);
 	return errors;
+}
+
+struct enrollment_log {
+	u32 order, calls;
+};
+struct enrollment_node {
+	wait_queue_entry_t wait;
+	u32 ordinal;
+};
+
+static int enrollment_callback(wait_queue_entry_t *wait, unsigned int mode,
+			       int wake_flags, void *key)
+{
+	struct enrollment_node *node = container_of(wait, struct enrollment_node, wait);
+	struct enrollment_log *log = wait->private;
+
+	if (log->calls >= 5)
+		return -EINVAL;
+	log->order |= (node->ordinal + 1) << (4 * log->calls++);
+	return 0;
+}
+
+static u32 enrollment_order(wait_queue_head_t *queue)
+{
+	struct list_head *entry;
+	u32 order = 0, count = 0;
+
+	list_for_each(entry, &queue->head) {
+		struct enrollment_node *node;
+
+		if (count == 5)
+			return ~0U;
+		node = container_of(entry, struct enrollment_node, wait.entry);
+		order |= (node->ordinal + 1) << (4 * count++);
+	}
+	return order;
+}
+
+static bool enrollment_poisoned(wait_queue_entry_t *entry)
+{
+	return entry->entry.next == LIST_POISON1 && entry->entry.prev == LIST_POISON2;
+}
+
+/* Fixed synchronous API sequences, not a second insertion implementation.
+ * out[0..2]: structural order, callback order, operation result;
+ * out[3]: observed link invariant bits; out[4]: context/field errors;
+ * out[5..9]: final flags of each real entry.
+ */
+int rusix_wait_test_enrollment(unsigned int scenario, bool disabled, u32 *out)
+{
+	struct enrollment_node nodes[5] = {};
+	struct enrollment_log log = {};
+	wait_queue_head_t queue;
+	unsigned long incoming, held;
+	bool before;
+	u32 links = 0, errors = 0, order;
+	int result = 0;
+	unsigned int i;
+
+	if (scenario > 3)
+		return -EINVAL;
+	init_waitqueue_head(&queue);
+	for (i = 0; i < 5; i++) {
+		nodes[i].ordinal = i;
+		/* Deliberately leave NULL links: enrollment must initialize them,
+		 * not assume they were self-linked by an entry initializer.
+		 */
+		nodes[i].wait.func = enrollment_callback;
+		nodes[i].wait.private = &log;
+		nodes[i].wait.flags = 0x100;
+	}
+	local_save_flags(incoming);
+	if (disabled)
+		local_irq_disable();
+	before = irqs_disabled();
+	switch (scenario) {
+	case 0:
+		nodes[0].wait.flags |= WQ_FLAG_EXCLUSIVE;
+		add_wait_queue_priority(&queue, &nodes[0].wait);
+		add_wait_queue_priority(&queue, &nodes[1].wait);
+		nodes[2].wait.flags |= WQ_FLAG_EXCLUSIVE;
+		add_wait_queue(&queue, &nodes[2].wait);
+		add_wait_queue(&queue, &nodes[3].wait);
+		add_wait_queue_exclusive(&queue, &nodes[4].wait);
+		break;
+	case 1:
+		add_wait_queue_priority(&queue, &nodes[0].wait);
+		/* Preserve NULL links on rejection; delete-init must not go unnoticed. */
+		result = add_wait_queue_priority_exclusive(&queue, &nodes[1].wait);
+		if (!nodes[1].wait.entry.next && !nodes[1].wait.entry.prev)
+			links = 1;
+		break;
+	case 2:
+		add_wait_queue(&queue, &nodes[0].wait);
+		nodes[1].wait.flags |= WQ_FLAG_PRIORITY;
+		add_wait_queue_exclusive(&queue, &nodes[1].wait);
+		result = add_wait_queue_priority_exclusive(&queue, &nodes[2].wait);
+		break;
+	case 3:
+		for (i = 0; i < 3; i++)
+			add_wait_queue_exclusive(&queue, &nodes[i].wait);
+		remove_wait_queue(&queue, &nodes[1].wait);
+		if (enrollment_poisoned(&nodes[1].wait))
+			links |= 1;
+		/* Legal re-add after poison; insertion initializes both links. */
+		add_wait_queue(&queue, &nodes[1].wait);
+		break;
+	}
+	spin_lock_irqsave(&queue.lock, held);
+	order = enrollment_order(&queue);
+	spin_unlock_irqrestore(&queue.lock, held);
+	__wake_up(&queue, TASK_INTERRUPTIBLE, 0, NULL);
+	if (scenario == 3) {
+		remove_wait_queue(&queue, &nodes[1].wait); /* head */
+		if (enrollment_poisoned(&nodes[1].wait))
+			links |= 2;
+		remove_wait_queue(&queue, &nodes[2].wait); /* tail */
+		if (enrollment_poisoned(&nodes[2].wait))
+			links |= 4;
+		remove_wait_queue(&queue, &nodes[0].wait); /* only entry */
+		if (enrollment_poisoned(&nodes[0].wait))
+			links |= 8;
+		INIT_LIST_HEAD(&nodes[3].wait.entry);
+		remove_wait_queue(&queue, &nodes[3].wait);
+		if (enrollment_poisoned(&nodes[3].wait))
+			links |= 16;
+		if (queue.head.next == &queue.head && queue.head.prev == &queue.head)
+			links |= 32;
+	}
+	if (irqs_disabled() != before)
+		errors |= 1;
+	local_irq_restore(incoming);
+	for (i = 0; i < 5; i++) {
+		if (nodes[i].wait.func != enrollment_callback || nodes[i].wait.private != &log)
+			errors |= 2;
+		out[5 + i] = nodes[i].wait.flags;
+	}
+	/* Private queue: discard surviving links without invoking policy under test.
+	 * No node or queue pointer escapes this synchronous call.
+	 */
+	while (!list_empty(&queue.head))
+		list_del_init(queue.head.next);
+	out[0] = order;
+	out[1] = log.order;
+	out[2] = result;
+	out[3] = links;
+	out[4] = errors;
+	return 0;
+}
+
+#ifdef CONFIG_LOCKDEP
+static struct lock_class_key enrollment_keys[2];
+static const char enrollment_names[2][24] = { "wait-test-first", "wait-test-second" };
+#endif
+
+/* Three simultaneously live queues: same caller class twice, then distinct. */
+u32 rusix_wait_test_constructor(bool disabled)
+{
+	wait_queue_head_t queues[3];
+	unsigned long flags, held;
+	bool before;
+	u32 errors = 0;
+	unsigned int i;
+
+	local_save_flags(flags);
+	if (disabled)
+		local_irq_disable();
+	before = irqs_disabled();
+	for (i = 0; i < 3; i++) {
+		unsigned int class = i == 2;
+		wait_queue_head_t *queue = &queues[i];
+
+#ifdef CONFIG_LOCKDEP
+		__init_waitqueue_head(queue, enrollment_names[class], &enrollment_keys[class]);
+		if (queue->lock.dep_map.key != &enrollment_keys[class] ||
+		    queue->lock.dep_map.name != enrollment_names[class] ||
+		    queue->lock.dep_map.wait_type_inner != LD_WAIT_CONFIG)
+			errors |= 1;
+#else
+		(void)class;
+		__init_waitqueue_head(queue, NULL, NULL);
+#endif
+		if (irqs_disabled() != before)
+			errors |= 2;
+		spin_lock_irqsave(&queue->lock, held);
+		if (queue->head.next != &queue->head || queue->head.prev != &queue->head)
+			errors |= 4;
+		if (!irqs_disabled())
+			errors |= 8;
+		spin_unlock_irqrestore(&queue->lock, held);
+		if (irqs_disabled() != before)
+			errors |= 16;
+	}
+	local_irq_restore(flags);
+	/* Make unavailable metadata observation explicit to the Rust oracle. */
+	return errors | (IS_ENABLED(CONFIG_LOCKDEP) ? 0x100 : 0);
 }

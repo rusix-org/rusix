@@ -16,6 +16,10 @@ spec.loader.exec_module(common)
 # Independent of live Rust source so removing a test does not weaken this gate.
 SUITES = {
     "rusix_completion_wake": (
+        "enrollment_preserves_priority_prefix_lifo_and_exclusive_tail",
+        "priority_exclusive_rejects_only_priority_at_head",
+        "removal_poisons_links_and_allows_readdition",
+        "constructor_preserves_caller_class_links_and_irq_context",
         "exclusive_budget_uses_callback_success_not_return_magnitude",
         "exclusive_accounting_uses_flags_from_before_callback",
         "callbacks_can_retire_current_for_each_return_path",

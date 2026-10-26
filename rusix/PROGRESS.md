@@ -31,10 +31,12 @@ linker/padding **2,107,049**, unknown **0**.
 migration, includes inherited Rust infrastructure, and is neither a completion
 percentage nor server runtime evidence. That target selects Rust BRD/C completion.
 
-Next migrate generic wait enrollment and initialization, with priority ordering
-and pre-lock flag accesses preserved explicitly. The [wake migration record](experiments/wait/README.md)
+Working branch `rusix/wait-enrollment` adds six generic queue initialization,
+enrollment and removal functions in Rust. Priority ordering, rejection side
+effects, removal poisoning and lock-class tests bring the strict core inventory
+to 39; paired runtime verification is pending. The [wait migration record](experiments/wait/README.md)
 owns callback lifetime and mixed flag-access boundaries. Real blocked wait-event
-and wait-bit handoffs, priority enrollment and POLLFREE races remain unverified.
+and wait-bit handoffs and POLLFREE races remain unverified.
 Forced diagnostic failures, detached-batch races, untimed signal paths, deadline
 races and broader IRQ coverage remain open. arm64, modules, expanded fault stress
 and performance budgets remain Phase 1b. Phase 1a still needs the provisional BRD

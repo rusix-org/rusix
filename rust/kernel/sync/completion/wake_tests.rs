@@ -15,6 +15,18 @@ fn observe(scenario: u32, wrapper: u32, disabled: bool) -> Result<[u32; 5]> {
     Ok(out)
 }
 
+fn enrollment(scenario: u32, disabled: bool) -> Result<[u32; 10]> {
+    let mut out = [0u32; 10];
+    // SAFETY: Ten exclusive writable words for a synchronous private fixture.
+    // C initializes actual pinned stack queue/entries, restores IRQ flags, and
+    // removes every surviving link before their storage leaves scope.
+    let error = unsafe { bindings::wait_test_enrollment(scenario, disabled, out.as_mut_ptr()) };
+    if error != 0 {
+        return Err(Error::from_errno(error));
+    }
+    Ok(out)
+}
+
 #[macros::kunit_tests(rusix_completion_wake)]
 mod tests {
     use super::*;
@@ -87,6 +99,71 @@ mod tests {
             // accept NULL, and always restores current's incoming IRQ flags.
             let errors = unsafe { bindings::wait_test_null_sync(disabled) };
             assert_eq!(errors, 0);
+        }
+    }
+
+    #[test]
+    fn enrollment_preserves_priority_prefix_lifo_and_exclusive_tail() -> Result {
+        for disabled in [false, true] {
+            // Original C-list observation and actual callbacks both see
+            // priorities 1,2, ordinary LIFO 4,3, then exclusive tail 5.
+            assert_eq!(
+                enrollment(0, disabled)?,
+                [0x53421, 0x53421, 0, 0, 0, 0x111, 0x110, 0x100, 0x100, 0x101,]
+            );
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn priority_exclusive_rejects_only_priority_at_head() -> Result {
+        for disabled in [false, true] {
+            // EBUSY still sets both bits, while both new entry links stay intact.
+            assert_eq!(
+                enrollment(1, disabled)?,
+                [
+                    1,
+                    1,
+                    (-16i32) as u32,
+                    1,
+                    0,
+                    0x110,
+                    0x111,
+                    0x100,
+                    0x100,
+                    0x100,
+                ]
+            );
+            // A priority-marked exclusive tail does not block a new head.
+            assert_eq!(
+                enrollment(2, disabled)?,
+                [0x213, 0x213, 0, 0, 0, 0x100, 0x111, 0x111, 0x100, 0x100,]
+            );
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn removal_poisons_links_and_allows_readdition() -> Result {
+        for disabled in [false, true] {
+            // Middle removal/readd produces 2,1,3. Six observed link bits cover
+            // poison on middle/head/tail/only/self-linked nodes and empty head.
+            assert_eq!(
+                enrollment(3, disabled)?,
+                [0x312, 0x312, 0, 63, 0, 0x101, 0x100, 0x101, 0x100, 0x100,]
+            );
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn constructor_preserves_caller_class_links_and_irq_context() {
+        for disabled in [false, true] {
+            // SAFETY: Synchronous private constructor fixture. Metadata has
+            // static storage; three queues remain immovable until all calls
+            // finish. Non-lockdep builds deliberately pass unused NULL metadata.
+            let observations = unsafe { bindings::wait_test_constructor(disabled) };
+            assert_eq!(observations, if cfg!(CONFIG_LOCKDEP) { 0x100 } else { 0 });
         }
     }
 }

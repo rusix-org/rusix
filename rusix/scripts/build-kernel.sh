@@ -238,7 +238,9 @@ for item in "$wake_object" "$out/vmlinux"; do
     bash "$RUSIX_PROJECT/scripts/with-local-tools.sh" llvm-nm --defined-only "$item" \
         > "$evidence/wake-symbols.tmp"
     printf '%s\n' "$item" >> "$evidence/wake-symbols.txt"
-    for symbol in __wake_up __wake_up_on_current_cpu __wake_up_locked __wake_up_locked_key \
+    for symbol in __init_waitqueue_head add_wait_queue add_wait_queue_exclusive \
+        add_wait_queue_priority add_wait_queue_priority_exclusive remove_wait_queue \
+        __wake_up __wake_up_on_current_cpu __wake_up_locked __wake_up_locked_key \
         __wake_up_sync_key __wake_up_locked_sync_key __wake_up_sync; do
         awk -v symbol="$symbol" '$2 == "T" && $3 == symbol { print }' \
             "$evidence/wake-symbols.tmp" > "$evidence/wake-current.txt"

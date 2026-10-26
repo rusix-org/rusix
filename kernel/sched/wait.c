@@ -13,15 +13,18 @@ const int rusix_wait_wf_sync = WF_SYNC;
 const int rusix_wait_wf_current_cpu = WF_CURRENT_CPU;
 #endif
 
+#ifndef CONFIG_RUSIX_COMPLETION_RUST
 void __init_waitqueue_head(struct wait_queue_head *wq_head, const char *name, struct lock_class_key *key)
 {
 	spin_lock_init(&wq_head->lock);
 	lockdep_set_class_and_name(&wq_head->lock, key, name);
 	INIT_LIST_HEAD(&wq_head->head);
 }
+#endif
 
 EXPORT_SYMBOL(__init_waitqueue_head);
 
+#ifndef CONFIG_RUSIX_COMPLETION_RUST
 void add_wait_queue(struct wait_queue_head *wq_head, struct wait_queue_entry *wq_entry)
 {
 	unsigned long flags;
@@ -31,8 +34,10 @@ void add_wait_queue(struct wait_queue_head *wq_head, struct wait_queue_entry *wq
 	__add_wait_queue(wq_head, wq_entry);
 	spin_unlock_irqrestore(&wq_head->lock, flags);
 }
+#endif
 EXPORT_SYMBOL(add_wait_queue);
 
+#ifndef CONFIG_RUSIX_COMPLETION_RUST
 void add_wait_queue_exclusive(struct wait_queue_head *wq_head, struct wait_queue_entry *wq_entry)
 {
 	unsigned long flags;
@@ -42,8 +47,10 @@ void add_wait_queue_exclusive(struct wait_queue_head *wq_head, struct wait_queue
 	__add_wait_queue_entry_tail(wq_head, wq_entry);
 	spin_unlock_irqrestore(&wq_head->lock, flags);
 }
+#endif
 EXPORT_SYMBOL(add_wait_queue_exclusive);
 
+#ifndef CONFIG_RUSIX_COMPLETION_RUST
 void add_wait_queue_priority(struct wait_queue_head *wq_head, struct wait_queue_entry *wq_entry)
 {
 	unsigned long flags;
@@ -53,8 +60,10 @@ void add_wait_queue_priority(struct wait_queue_head *wq_head, struct wait_queue_
 	__add_wait_queue(wq_head, wq_entry);
 	spin_unlock_irqrestore(&wq_head->lock, flags);
 }
+#endif
 EXPORT_SYMBOL_GPL(add_wait_queue_priority);
 
+#ifndef CONFIG_RUSIX_COMPLETION_RUST
 int add_wait_queue_priority_exclusive(struct wait_queue_head *wq_head,
 				      struct wait_queue_entry *wq_entry)
 {
@@ -71,8 +80,10 @@ int add_wait_queue_priority_exclusive(struct wait_queue_head *wq_head,
 	list_add(&wq_entry->entry, head);
 	return 0;
 }
+#endif
 EXPORT_SYMBOL_GPL(add_wait_queue_priority_exclusive);
 
+#ifndef CONFIG_RUSIX_COMPLETION_RUST
 void remove_wait_queue(struct wait_queue_head *wq_head, struct wait_queue_entry *wq_entry)
 {
 	unsigned long flags;
@@ -81,6 +92,7 @@ void remove_wait_queue(struct wait_queue_head *wq_head, struct wait_queue_entry 
 	__remove_wait_queue(wq_head, wq_entry);
 	spin_unlock_irqrestore(&wq_head->lock, flags);
 }
+#endif
 EXPORT_SYMBOL(remove_wait_queue);
 
 /*

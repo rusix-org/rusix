@@ -1,16 +1,16 @@
 // SPDX-License-Identifier: GPL-2.0-only
-// Rust translation of Linux 6.18.58 generic wait wake policy.
+// Rust translation of Linux 6.18.58 generic wait enrollment and wake policy.
 
-//! Callback traversal and exclusive wake accounting over C-visible wait queues.
+//! Initialization, enrollment and callback wake policy over C-visible wait queues.
 //!
-//! Initialization, enrollment, callbacks, scheduler wakes and spinlock primitives
-//! remain C. The flag snapshot retains the baseline C mixed-access boundary;
+//! Callbacks, prepare/finish, scheduler wakes and spinlock primitives remain C.
+//! Flag updates/snapshots retain the baseline C mixed-access boundary;
 //! this module does not expose a safe Rust API for generic wait entry ownership.
 
 use core::ptr::{addr_of, addr_of_mut, null_mut};
 use kernel::{
     bindings,
-    ffi::{c_int, c_uint, c_ulong, c_void},
+    ffi::{c_char, c_int, c_uint, c_ulong, c_void},
     types::NotThreadSafe,
 };
 
@@ -71,8 +71,7 @@ unsafe fn wake_common(
     let mut node = unsafe { addr_of!((*head).next).read() };
     while node != head {
         // SAFETY: a non-head member is embedded in a live wait_queue_entry.
-        let current =
-            unsafe { kernel::container_of!(node, bindings::wait_queue_entry, entry) };
+        let current = unsafe { kernel::container_of!(node, bindings::wait_queue_entry, entry) };
         // SAFETY: cache successor before callback, which can retire current.
         let next = unsafe { addr_of!((*node).next).read() };
         // SAFETY: preserves baseline flag load in C, including existing C-side
@@ -222,4 +221,168 @@ pub unsafe extern "C" fn __wake_up_locked_sync_key(
 pub unsafe extern "C" fn __wake_up_sync(q: *mut bindings::wait_queue_head, mode: c_uint) {
     // SAFETY: inherits null handling and caller requirements from sync_key.
     unsafe { __wake_up_sync_key(q, mode, null_mut()) };
+}
+
+/// Inserts after the contiguous priority prefix, before any ordinary waiter.
+/// # Safety
+/// Queue lock is held. Existing membership/flags obey the C wait protocols.
+/// Entry is live, initialized except its links may be uninitialized, and not
+/// currently enrolled. It remains pinned/live through removal.
+unsafe fn add_after_priority(
+    q: *mut bindings::wait_queue_head,
+    entry: *mut bindings::wait_queue_entry,
+) {
+    // SAFETY: initialized queue under its held lock.
+    let head = unsafe { addr_of_mut!((*q).head) };
+    let mut insertion = head;
+    // SAFETY: list links stable while lock held; sentinel is not an entry.
+    let mut node = unsafe { addr_of!((*head).next).read() };
+    while node != head {
+        // SAFETY: non-sentinel node belongs to a live wait entry.
+        let current = unsafe { kernel::container_of!(node, bindings::wait_queue_entry, entry) };
+        // SAFETY: preserve C flag observation; no Rust field reference/read.
+        if unsafe { bindings::wait_entry_flags(current) } & bindings::WQ_FLAG_PRIORITY == 0 {
+            break;
+        }
+        insertion = node;
+        // SAFETY: structural links remain protected by the queue lock.
+        node = unsafe { addr_of!((*node).next).read() };
+    }
+    // SAFETY: entry is detached; insertion belongs to this locked valid list.
+    unsafe { bindings::wait_list_add(addr_of_mut!((*entry).entry), insertion) };
+}
+
+/// # Safety
+/// Queue initialized/live; caller may acquire its spinlock. Entry not enrolled,
+/// flags/func/private initialized; pin/lifetime and C mixed-flags protocol apply.
+// SAFETY: the same Kconfig selection excludes the matching C body and retains
+// its export. Generated types preserve the C pointer/integer ABI.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn add_wait_queue(
+    q: *mut bindings::wait_queue_head,
+    entry: *mut bindings::wait_queue_entry,
+) {
+    // SAFETY: caller permits the original pre-lock C flag update. Do not claim
+    // queue.lock protects it; it has not been acquired yet.
+    unsafe { bindings::wait_entry_update_flags(entry, bindings::WQ_FLAG_EXCLUSIVE, 0) };
+    // SAFETY: initialized queue and valid nonrecursive acquisition context.
+    let _guard = unsafe { IrqRestore::acquire(addr_of_mut!((*q).lock)) };
+    // SAFETY: guard protects list; caller supplies detached live entry.
+    unsafe { add_after_priority(q, entry) };
+}
+
+/// # Safety
+/// Same storage, nonmembership and context requirements as add_wait_queue.
+// SAFETY: the same Kconfig selection excludes the matching C body and retains
+// its export. Generated types preserve the C pointer/integer ABI.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn add_wait_queue_exclusive(
+    q: *mut bindings::wait_queue_head,
+    entry: *mut bindings::wait_queue_entry,
+) {
+    // SAFETY: original C pre-lock update, with caller's C flags protocol.
+    unsafe { bindings::wait_entry_update_flags(entry, 0, bindings::WQ_FLAG_EXCLUSIVE) };
+    // SAFETY: initialized queue and valid nonrecursive acquisition context.
+    let _guard = unsafe { IrqRestore::acquire(addr_of_mut!((*q).lock)) };
+    // SAFETY: append detached entry to locked queue; adapter preserves marked
+    // link stores/debug checks. Its swait name does not change list_head ABI.
+    unsafe { bindings::swait_list_add_tail(addr_of_mut!((*entry).entry), addr_of_mut!((*q).head)) };
+}
+
+/// # Safety
+/// Same storage, nonmembership and context requirements as add_wait_queue.
+// SAFETY: the same Kconfig selection excludes the matching C body and retains
+// its GPL export. Generated types preserve the C pointer/integer ABI.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn add_wait_queue_priority(
+    q: *mut bindings::wait_queue_head,
+    entry: *mut bindings::wait_queue_entry,
+) {
+    // SAFETY: original pre-lock flag update; EXCLUSIVE remains unchanged.
+    unsafe { bindings::wait_entry_update_flags(entry, 0, bindings::WQ_FLAG_PRIORITY) };
+    // SAFETY: initialized queue and valid nonrecursive acquisition context.
+    let _guard = unsafe { IrqRestore::acquire(addr_of_mut!((*q).lock)) };
+    // SAFETY: guard protects list; caller supplies detached live entry.
+    unsafe { add_after_priority(q, entry) };
+}
+
+/// # Safety
+/// Same storage, nonmembership and context requirements as add_wait_queue.
+/// Failure leaves PRIORITY|EXCLUSIVE set; entry links remain untouched.
+// SAFETY: the same Kconfig selection excludes the matching C body and retains
+// its GPL export. Generated types preserve the C pointer/integer ABI.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn add_wait_queue_priority_exclusive(
+    q: *mut bindings::wait_queue_head,
+    entry: *mut bindings::wait_queue_entry,
+) -> c_int {
+    // SAFETY: original pre-lock C flag update, even on subsequent rejection.
+    unsafe {
+        bindings::wait_entry_update_flags(
+            entry,
+            0,
+            bindings::WQ_FLAG_EXCLUSIVE | bindings::WQ_FLAG_PRIORITY,
+        )
+    };
+    // SAFETY: initialized queue and valid nonrecursive acquisition context.
+    let _guard = unsafe { IrqRestore::acquire(addr_of_mut!((*q).lock)) };
+    // SAFETY: stable initialized queue under lock.
+    let head = unsafe { addr_of_mut!((*q).head) };
+    // SAFETY: preserve list_empty's marked read via existing list adapter.
+    if unsafe { bindings::swait_list_empty(head) } == 0 {
+        // SAFETY: nonempty locked list has a real first entry.
+        let node = unsafe { addr_of!((*head).next).read() };
+        // SAFETY: node is not the sentinel and is embedded in a live wait entry.
+        let first = unsafe { kernel::container_of!(node, bindings::wait_queue_entry, entry) };
+        // SAFETY: baseline C flag load on a live entry; no Rust flag ownership.
+        if unsafe { bindings::wait_entry_flags(first) } & bindings::WQ_FLAG_PRIORITY != 0 {
+            return -(bindings::EBUSY as c_int);
+        }
+    }
+    // SAFETY: no leading priority waiter; insert at head under lock.
+    unsafe { bindings::wait_list_add(addr_of_mut!((*entry).entry), head) };
+    0
+}
+
+/// # Safety
+/// Queue/entry live, queue lock may be acquired; entry is linked on this queue
+/// or already self-linked under its removal protocol. Poisoned links are invalid.
+// SAFETY: the same Kconfig selection excludes the matching C body and retains
+// its export. Generated types preserve the C pointer/integer ABI.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn remove_wait_queue(
+    q: *mut bindings::wait_queue_head,
+    entry: *mut bindings::wait_queue_entry,
+) {
+    // SAFETY: caller retains live queue and supplies acquisition context.
+    let _guard = unsafe { IrqRestore::acquire(addr_of_mut!((*q).lock)) };
+    // SAFETY: valid links protected by guard. Preserve list_del poisoning,
+    // not list_del_init; caller owns entry lifetime through this operation.
+    unsafe { bindings::wait_list_del(addr_of_mut!((*entry).entry)) };
+}
+
+/// # Safety
+/// Queue is aligned writable, exclusively accessible storage at final address;
+/// no live waiter/held lock/observer from previous initialization remains.
+/// Publish only after return. Under LOCKDEP, name/key obey C class lifetimes
+/// and registration rules (which can outlive this queue); otherwise unused.
+// SAFETY: matching C body is excluded and export retained. Opaque key pointer avoids
+// exposing configuration-empty C lock_class_key through the Rust extern ABI.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn __init_waitqueue_head(
+    q: *mut bindings::wait_queue_head,
+    name: *const c_char,
+    key: *mut c_void,
+) {
+    // SAFETY: exclusive storage; exact C spinlock macro initializes lock first.
+    unsafe { bindings::wait_spin_init(q) };
+    // SAFETY: initialized lock map; caller-provided original name/key contract.
+    unsafe { bindings::wait_lock_class(q, name, key.cast()) };
+    // SAFETY: raw projection/writes initialize both links without referencing
+    // uninitialized data. No observer exists until external publication.
+    unsafe {
+        let head = addr_of_mut!((*q).head);
+        addr_of_mut!((*head).next).write(head);
+        addr_of_mut!((*head).prev).write(head);
+    }
 }

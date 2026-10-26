@@ -3,6 +3,8 @@
  * Include only under CONFIG_RUSIX_COMPLETION_RUST. Replace these adapters when
  * reviewed Rust spinlock and generic-wait flag ownership protocols take over.
  */
+#include <linux/list.h>
+#include <linux/lockdep.h>
 #include <linux/spinlock.h>
 #include <linux/wait.h>
 
@@ -27,4 +29,33 @@ unsigned int rust_helper_wait_entry_flags(const struct wait_queue_entry *entry)
 	 * includes lockless wait_woken accesses; direct Rust ownership is not proven.
 	 */
 	return entry->flags;
+}
+
+void rust_helper_wait_entry_update_flags(struct wait_queue_entry *entry,
+					unsigned int clear, unsigned int set)
+{
+	/* Original non-atomic C RMW, intentionally before caller takes queue lock. */
+	entry->flags = (entry->flags & ~clear) | set;
+}
+
+void rust_helper_wait_list_add(struct list_head *entry, struct list_head *head)
+{
+	list_add(entry, head);
+}
+
+void rust_helper_wait_list_del(struct list_head *entry)
+{
+	list_del(entry);
+}
+
+void rust_helper_wait_spin_init(struct wait_queue_head *wq_head)
+{
+	/* Preserve original expression for initial lockdep debug naming. */
+	spin_lock_init(&wq_head->lock);
+}
+
+void rust_helper_wait_lock_class(struct wait_queue_head *wq_head,
+				const char *name, struct lock_class_key *key)
+{
+	lockdep_set_class_and_name(&wq_head->lock, key, name);
 }

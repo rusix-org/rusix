@@ -63,3 +63,20 @@ required. Missing/duplicate/reordered/failing/skipped markers reject the whole r
 Next establish real blocked wait_event/wait-bit handoffs and priority enrollment,
 then migrate enrollment/callback policy and retire adapters with their ownership
 boundaries. Keep unchanged upstream tests and explicit configuration limits.
+
+## Enrollment slice under verification
+
+Six further Rust entries initialize the queue, add ordinary/exclusive/priority/
+priority-exclusive entries, and remove entries. Fresh additions may have
+uninitialized links: do not inspect them before list insertion. Ordinary and
+priority insertion scan only the contiguous priority prefix; exclusive insertion
+always appends. Priority-exclusive rejection examines only the first entry and
+leaves the candidate flag update in place. Removal uses list_del poisoning, not
+self-linking. Pre-lock flag RMW remains C and is not silently moved under the lock.
+
+The constructor retains ordinary spin_lock_init, caller lock-class assignment,
+then final-address self-links under exclusive initialization. Its non-RT debug
+wait type is LD_WAIT_CONFIG, distinct from swait's LD_WAIT_SPIN. Static/dynamic
+lockdep metadata lifetimes and disabled-lockdep unused/null arguments remain the
+baseline contract. Six-symbol selection and new differential tests are pending
+verification. Prepare/finish and callbacks remain the next policy dependencies.
