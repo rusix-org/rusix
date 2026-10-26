@@ -13,6 +13,8 @@ Current work and remaining gates: [progress](../PROGRESS.md), [Phase 1](PHASE1.m
 | [Rust BRD](evidence/brd-rust-initial/manifest.json) | Selected Rust implementation passes the identical six-case block probe. |
 | [BRD ownership](evidence/brd-ownership/manifest.json) | Nine in-kernel policy/ownership cases, zero skips. |
 | [Ordinary ext4](evidence/brd-ext4/manifest.json) | Six cases each on C/Rust, same source and byte-identical userspace initramfs. |
+| [Generic swait wrappers](evidence/swait-wrappers/manifest.json) | Nine swait and fourteen completion entries selected; paired instrumented 29 core + nine BRD cases, then 29 isolated core cases. |
+| [Generic swait/ext4](evidence/swait-wrappers-ext4/manifest.json) | Same source passes all nine userspace/contract boots per implementation with identical fixtures. |
 | [Shared swait policy](evidence/swait-debug/manifest.json) | Four shared policies selected in Rust; paired instrumented 26 core + nine BRD cases, then 26 isolated core cases. |
 | [Swait/ext4 integration](evidence/swait-ext4/manifest.json) | Same source passes nine boots each with identical fixtures; initial fixture staging failure retained. |
 | [Completion/ext4 integration](evidence/completion-ext4/manifest.json) | Rust BRD in both; C/Rust completion selection alone differs; both pass nine ordinary-userspace/contract boots with identical fixtures. |

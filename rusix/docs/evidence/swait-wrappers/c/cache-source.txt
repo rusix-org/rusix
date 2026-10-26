@@ -1,0 +1,1 @@
+Kernel-only cache copied from /home/aaron/code/rusix/linux-out/lts-swait-debug-c-001; original evidence/output retained. New clean source identity captured by runner. Initial host copy mishandled source symlink; recreated cache preserving symlinks before any build.

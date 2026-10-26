@@ -1,209 +1,119 @@
-# Completion ownership and partial core migration
+# Completion and swait core migration
 
-Linux 6.18.58 (`2926d88bb7fc4608fd942453d929c39e4e5ec006`) remains the
-behavior reference. All fourteen completion.c entry points now have opt-in Rust implementations,
-link exclusively and pass all twenty-one core cases against C on q35 at
-`afaedde2732b`.
-[Paired evidence](../../docs/evidence/completion-status/manifest.json).
-`CONFIG_RUSIX_COMPLETION_RUST` defaults off and requires Rust/x86_64 builtins;
-`completion-c` and `completion-rust` are the local comparison profiles.
-This is neither a completed subsystem nor a declared divergence point.
+Linux 6.18.58 (`2926d88bb7fc4608fd942453d929c39e4e5ec006`) is the behavior
+reference. All fourteen completion.c entry points and nine swait.c operations
+have opt-in Rust implementations. At `e7b7b9a94103`, both implementations pass
+29 core cases plus nine BRD cases, then 29 isolated core cases with lock/list/sleep
+checks enabled. [Instrumented evidence](../../docs/evidence/swait-wrappers/manifest.json).
+The same source passes nine ordinary-userspace storage boots per implementation.
+[Ext4 evidence](../../docs/evidence/swait-wrappers-ext4/manifest.json).
 
-## Implementation and remaining boundary
+`CONFIG_RUSIX_COMPLETION_RUST` defaults off and requires Rust/x86_64 builtins.
+The four driver families with incompatible plain counter access are excluded by
+Kconfig. Use the local `completion-c`/`completion-rust` and
+`core-ext4-c`/`core-ext4-rust` profiles; [execution policy](../../ci/README.md).
+No subsystem divergence point is declared.
 
-[`completion_rust.rs`](../../../kernel/sched/completion_rust.rs) preserves the C
-layout, increments `done` unless it is `UINT_MAX`, then calls
-`swake_up_locked(wait, 0)` under the embedded raw lock. Conditional Kbuild/C
-selection retains exactly one intended `complete` definition and its C export.
-The private non-Send guard restores the original IRQ flags on final unlock.
+## Storage, counter and lifetime contract
 
-The counter uses **kernel LKMM `Atomic<u32>`**, not standard Rust atomics.
-Counter updates hold the raw lock; short lockless references implement the
-status/try-wait fast checks. All selected concurrent core accesses are marked
-LKMM operations; initialization/reset requires external quiescence.
-No Rust reference covers the containing concurrently mutable C object. Raw field
-projection and scoped atomic access preserve the existing storage/alias boundary;
-callers must keep initialized, pinned storage alive until the final lock release.
+[`completion_rust.rs`](../../../kernel/sched/completion_rust.rs) preserves the
+configuration-dependent C layout. C callers still embed and initialize/reset it;
+an Arc pointer cannot replace their ABI. Storage and embedded list links remain
+pinned, initialized and live through the operation's final unlock.
 
-C still owns initialization/reset, swait queues, scheduler wakeups, and
-task/timer/signal integration. Raw-spin and lockdep macro helpers, plus LKMM atomic helpers, remain C.
-Replace those boundaries only with reviewed Rust scheduler/locking/atomic
-interfaces. Preserve FIFO enrollment (not task execution order), saturation,
-timeout success of at least one jiffy, interrupt errors and race ordering.
+The counter uses kernel LKMM `Atomic<u32>`, not standard Rust atomics. Updates
+hold the raw lock; short lockless references implement status/try-wait fast checks.
+All selected concurrent core accesses are marked LKMM operations. Initialization
+and reset require external quiescence. No Rust reference covers the containing
+C object, and no counter reference survives an unlocked scheduling interval.
+The [counter audit](../../docs/evidence/completion-counter-audit/manifest.json)
+records reviewed dependencies, excluded drivers and its limits as a source scan.
 
-C callers embed and directly initialize/reset completion storage. Preserve actual
-configuration-dependent layout, lockdep and pinned list links until those callers
-migrate; an Arc pointer cannot replace their ABI. `submit_bio_wait` demonstrates
-stack callback lifetime, while `__kthread_create_on_node` requires ownership
-handoff or a second wait after interruption. A timeout alone never permits freeing
-callback storage. `completion_done` is not proof of producer/waiter quiescence.
+Signals preserve saturation at UINT_MAX and broadcast persistence. A private
+immutable C integer supplies `WF_CURRENT_CPU` without exposing scheduler headers.
+`completion_done` keeps its positive-read lock handoff without rereading after
+acquisition; it is not proof of producer/waiter quiescence. A timeout alone never
+permits freeing callback storage: `submit_bio_wait` and interrupted kthread
+creation illustrate the distinct ownership/handoff obligations.
 
-## Kernel verification
+## Blocking wait and shared queue policy
 
-Select `kunit.filter_glob=rusix_completion_*`. The strict current inventory is
-five `rusix_completion_contract`, eight `rusix_completion_layout`, four
-`rusix_completion_wait` and four `rusix_completion_signal` cases. All twenty-one
-pass on both implementations:
+[`completion_rust/wait.rs`](../../../kernel/sched/completion_rust/wait.rs)
+implements the shared wait engine and nine blocking entries. An Opaque waiter
+is initialized at its final pinned stack address. The queue lock covers state
+checks and enqueue/unlink; IRQs are enabled around the retained scheduler call.
+Every exit restores task state and unlinks before stack storage disappears.
+Preserve signal/timeout race order, positive timeout success of at least one jiffy,
+signed returns and I/O accounting. All nine entries retain `.sched.text` placement.
 
-- Current-CPU signal counting/saturation and an observed enrolled-worker wakeup.
-- All nine wait entry points consume presignals and preserve broadcast; all four
-  timed variants distinguish zero-timeout states and unlink after positive timeout.
-- Competing nonblocking consumers take exactly one token after an observed
-  two-waiter start gate.
-- Dedicated threads verify pending/enrolled signal interruption, pre-signaled
-  token precedence and nonfatal-signal timeout for killable waits.
-- Initial empty state, pre-signal consumption, persistent broadcast/reset,
-  zero-timeout return/consumption, and saturation.
-- `c_operations_share_pinned_rust_owned_storage`: `repr(C)` size/alignment/offset
-  assertions and pinned initialization; counter inspection/reset is quiescent.
-- `worker_handoff_observes_published_value`: single completion and LKMM payload
-  publication; pre-signaling is allowed, blocked wakeup is not guaranteed.
-- `two_workers_consume_exactly_two_tokens`: concurrent waiters and two signals.
-- `broadcast_serves_two_workers_and_late_waiters`: a KUnit-only helper counts
-  two enrolled waiters under the queue lock; both must finish before worker
-  timeouts, and late waits remain successful. The helper is absent from server builds.
-- `timed_out_worker_unlinks_before_late_signal`: positive timeout followed by a
-  late signal consumed exactly once.
+[`swait_rust.rs`](../../../kernel/sched/swait_rust.rs) implements four shared
+locked primitives and five outer wrappers. They preserve FIFO enrollment/removal,
+not CPU execution order. Wake precedes unlink; unlink is the final waiter access:
+a generic finisher may observe self-links and free its stack before the waker
+releases the queue lock. The original lock also protects detached batch nodes.
 
-Workers use
-pinned Arc-owned upstream wrappers, finite waits and no borrowed KUnit stack.
-Their final notification acknowledges data access, not callback exit; retained
-Arc ownership protects late callbacks. VM timeout bounds scheduler failure.
-Missing, duplicate, skipped or failing cases reject a run. FIFO execution,
-untimed signal paths, deadline races, IRQ-context checks, lockdep/KASAN,
-arm64, the nonempty `PROVE_RAW_LOCK_NESTING` assertion branch, and
-instrumented integration remain gaps.
-BRD ownership has a separate nine-case inventory.
+Generic `swake_up_all` pins a temporary head, detaches the initial batch and
+enables IRQs between nonfinal wakes. Newly enrolled nodes stay on the original
+head. Reload the batch after each reacquisition; never retain a node reference
+across it. Its caller must enter with IRQs enabled. Other outer wrappers preserve
+incoming IRQ flags through private non-Send guards.
 
-**Historical evidence:** the original five contract cases and one layout case
-passed on x86_64 **i440fx**, using a copied KUnit object cache:
-[kernel manifest](../../docs/evidence/completion-kernel/manifest.json).
-That result proves neither the three worker cases, q35 nor Rust `complete()`.
+Prepare uses the full `set_current_state` barrier. Pending-signal prepare removes
+the node unconditionally, leaves task state unchanged and returns `-ERESTARTSYS`;
+the original C consumer macro determines condition precedence. Finish restores
+RUNNING before `list_empty_careful`, then locks and deletes without a second check.
+C macro adapters preserve marked pointer accesses, list validation and state hooks.
 
-## Host model and next work
+## Verification and remaining coverage
 
-`model.rs` is a safe standard-library ownership model, not a kernel replacement.
-Its five tests cover accounting, saturation/broadcast, quiescent reset, abandoned
-waiter storage and concurrent consumption; it has no blocking wait, IRQ, LKMM,
-FIFO, timeout or kernel-layout proof. Five cases passed with host Rust 1.99.0 and
-[pinned container Rust 1.85.1](../../docs/evidence/completion-host/manifest.json).
+The strict `rusix_completion_*` inventory has five contract, eight layout,
+four wait, four signal and eight swait cases:
 
-```sh
-mkdir -p ../lts-integration-out/experiments/completion
-rustc --edition=2021 --test -D warnings rusix/experiments/completion/model.rs \
-  -o ../lts-integration-out/experiments/completion/model-test
-../lts-integration-out/experiments/completion/model-test
-```
+- Counter/token/saturation/broadcast behavior, layout and pinned C-visible storage.
+- All blocking entry points on presignals/broadcast; timed zero/positive exits.
+- Payload handoff, current-CPU enrolled wake, two-token and competing consumers.
+- Dedicated-thread pending/enrolled signals, token precedence, killable nonfatal timeout.
+- Empty queue/IRQ restoration, repeated enrollment, structural FIFO removal,
+  original generic condition macro and timeout cleanup before a late wake.
+- Fresh/enrolled pending-signal removal preserves a distinct task state and IRQs.
+- Generic interruptible error versus condition becoming true after prepare.
+- Initial broadcast batch removal and a separately enrolled post-return waiter.
 
-Current-CPU signaling now uses the shared Rust counting path and a private
-immutable C `int` initialized from `WF_CURRENT_CPU`; this four-byte data bridge
-keeps the scheduler macro authoritative until Rust owns that boundary.
+Workers own pinned Arcs and use finite deadlines. Successful stopped-thread creation
+transfers one Arc to its callback and retains a task reference before wakeup;
+failure reclaims the Arc. No stop-before-start cancellation path exists. Signals
+are confined to dedicated tasks with private handlers. Cleanup precedes assertions.
+Final notification acknowledges data publication, not callback exit; callbacks
+retain ownership until return. KUnit-only C observation helpers are absent from
+ordinary userspace/server builds.
 
-Next: migrate swait queue policy and its generic consumers. The status pair removed remaining
-concurrent plain C counter writes before introducing lockless Rust references.
-Waiters need pinned stack storage and guaranteed unlink under the queue lock on
-every exit. Preserve timeout/signal race order, IRQ transitions and I/O accounting.
-Queue ownership and scheduler integration follow; Rust-native endpoints require
-retiring C embedding/access. Preserve upstream `test-ww_mutex` unchanged.
+Required gates reject missing, duplicate, skipped or failed cases. Symbol/archive
+checks prove all fourteen completion and nine swait definitions come from the
+selected objects, and verify scheduler text placement. Instrumented profiles enable
+BUG, lockdep/raw-lock nesting, atomic-sleep, DEBUG_LIST and LIST_HARDENED. Earlier
+minimal profiles lacked BUG and did not establish the same assertion coverage.
 
-## Blocking wait translation
+Outstanding: forced diagnostic violations, deterministic detached-batch concurrent
+enrollment/spurious-wakeup races, broadcast wake latency, untimed signal paths,
+deadline races, all IRQ contexts, Rust race instrumentation, arm64, modules and
+performance budgets. Current broadcast coverage does not force enrollment during
+its unlock window. Historical failures/results remain in the
+[verification index](../../docs/VERIFICATION.md), including initial conversion
+errors and warnings resolved before the passing pairs.
 
-The private `completion_rust/wait.rs` implements the shared wait loop and nine
-entry points. It initializes an `Opaque<swait_queue>` in final pinned stack
-storage, holds the queue lock across state checks and enqueue/unlink, enables
-IRQs around the retained scheduler call, and reacquires before touching protected
-state. No LKMM atomic reference survives that unlock. The original `.sched.text`
-placement and C exports are retained; section and exclusive-symbol gates check
-the linked image. Four macro/inline adapters for IRQ locking, signal queries and
-current task state remain C, as do queue and scheduler primitives.
+## Remaining C and next ownership step
 
-The four wait cases above do not inject signals or test deadline races.
-The [initial evidence](../../docs/evidence/completion-wait-initial/manifest.json)
-retains a test conversion failure and ten Rust declaration/visibility warnings.
-Explicit integer casts, private symbol visibility and an opaque pointer at the
-private swait ABI resolved those diagnostics before the clean paired run.
+C still executes queue/completion initialization/reset, raw-lock and lockdep
+macros, list/state/LKMM adapters, task wakeup, scheduler/timer/signal primitives
+and generic consumer macros. Next translate the swait initializer while preserving
+raw-lock class/name and LD_WAIT_SPIN in debug/nondebug configurations. Its
+constructor needs exclusive quiescent storage and synchronized publication; that
+argument cannot justify unmarked writes on live queues. Then retire adapters as
+Rust owns the corresponding primitives and callers. Preserve upstream tests,
+including `test-ww_mutex`, and the declared configuration bounds.
 
-## Counter-access configuration boundary
-
-The [target audit](../../docs/evidence/completion-counter-audit/manifest.json)
-records reviewed dependency inventories and their source/config identities.
-Known plain completion-counter reads in OneNAND, MT7601U, IPR and SGI GRU lack a
-demonstrated synchronization proof against Rust atomic stores. Kconfig excludes
-these families, including modular forms, and excludes modules for this built-in
-slice. No reviewed external counter access appeared in the completion/server
-inventories; their direct Rust test accesses are quiescent. This textual review
-is not whole-tree alias analysis. Expanding configurations requires another
-boundary review, not merely enabling the option. Initialization and reset still
-require caller-provided quiescence.
-
-## Signal testing and remaining queue work
-
-Dedicated test kthreads have private signal handlers; no KUnit controller or
-shared worker receives an injected signal. A successful stopped-thread creation
-transfers one Arc reference to its callback and retains a separate task reference
-before wakeup. Creation failure reclaims the Arc; no stop-before-start path exists.
-Cleanup broadcasts before assertions. Finished notification acknowledges result
-publication, not callback exit; callback-owned Arcs protect delayed execution.
-These KUnit-only C creation/signal/jiffy helpers are excluded from server builds.
-The nonfatal timeout case checks elapsed jiffies, and other cases must complete
-before their ten-second worker deadlines. This is not module-unload evidence.
-
-The verified shared queue slice covers `__prepare_to_swait`, `__finish_swait`,
-`swake_up_locked` and `swake_up_all_locked`. Some also serve generic swait/RCU:
-retain marked list updates and debug validation, and test those callers too.
-Deletion must be the final waiter access because generic `finish_swait` can
-observe self-links and release stack storage without acquiring the queue lock.
-Scheduler wakeup still precedes deletion. List primitives and task wakeup remain
-explicit dependencies until their own ownership migration.
-
-## Ordinary-userspace integration
-
-[Paired core/ext4 evidence](../../docs/evidence/completion-ext4/manifest.json)
-at `3df316f9971f` uses Rust BRD in both kernels, with only C/Rust completion
-selection differing. Both pass block and ordinary Debian ext4 operations,
-six parameter boots and partition checks. Four fixture archives are byte-identical;
-all fourteen symbols and blocking scheduler-text placement are verified. This
-extends the focused core tests without implying a full-kernel rewrite, arm64
-support or a measured performance budget.
-
-## Shared swait policy
-
-The working slice replaces `__prepare_to_swait`, `__finish_swait`,
-`swake_up_locked` and `swake_up_all_locked`. C list adapters retain marked pointer
-accesses and hardening/debug validation; initialization, outer generic wrappers,
-raw locking and scheduler task wakeup remain C. This also affects generic swait
-consumers, so five dedicated cases check empty wake/IRQ restoration, repeated
-enrollment/state restoration, structural FIFO removal, the original C condition
-macro, and timeout cleanup before a late wake. No CPU execution order is claimed.
-
-The current completion comparison profiles enable `BUG`, `PROVE_LOCKING`,
-`PROVE_RAW_LOCK_NESTING`, `DEBUG_ATOMIC_SLEEP`, `DEBUG_LIST` and `LIST_HARDENED`.
-Explicit `BUG=y` matters: without it, the baseline WARN macros can be silent.
-At `6bc02bee8561`, both implementations pass all 26 core cases and nine BRD
-cases, followed by 26 isolated core cases. No skips or compiler diagnostics.
-[Instrumented evidence](../../docs/evidence/swait-debug/manifest.json).
-The same source passes nine ordinary-userspace/contract boots per implementation
-with identical fixtures. [Ext4 evidence](../../docs/evidence/swait-ext4/manifest.json).
-These runs exercise enabled checks, not deliberate diagnostic violations or every
-IRQ context. Detached-batch/spurious-wakeup races still need targeted coverage.
-
-## Generic swait wrappers: next verification slice
-
-Five further entry points are translated: `swake_up_one`, `swake_up_all`,
-`prepare_to_swait_exclusive`, `prepare_to_swait_event` and `finish_swait`.
-`swake_up_all` pins a detached batch and releases/reacquires the original queue
-lock between nonfinal wakes; new enrollments stay on the original head. No waiter
-access follows unlink, and the persistent batch is reread after reacquisition.
-The other wrappers preserve incoming IRQ flags. Preparation uses the full
-`set_current_state` barrier, whereas finish uses the baseline weaker state store
-and `list_empty_careful` observation. A pending signal removes the node without
-changing task state and returns `-ERESTARTSYS`; the C wait macro still determines
-condition precedence. Three thin macro adapters preserve state hooks, careful
-list observation and splice operations. Initialization and lock/list/scheduler
-primitives remain C. Paired compilation/runtime verification is pending.
-
-Three additional cases bring the required core inventory to 29: pending-signal
-removal on fresh/enrolled nodes with state and IRQ preservation; generic macro
-signal error versus a condition becoming true immediately after prepare; and
-broadcast traversal followed by a separately enrolled late waiter. That last
-case does not force enrollment during the detached-batch unlock window.
+`model.rs` remains a host-only standard-library ownership model: five tests cover
+accounting, saturation, quiescent reset, abandoned storage and concurrent consumers.
+[Historical host evidence](../../docs/evidence/completion-host/manifest.json).
+It provides no kernel layout, IRQ, LKMM or blocking-wait proof. Run it with
+`rustc --edition=2021 --test -D warnings`, writing the binary outside the source tree.

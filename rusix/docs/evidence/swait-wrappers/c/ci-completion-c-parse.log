@@ -1,0 +1,60 @@
+[13:25:51] ============================================================
+[13:25:51] =============== rusix_noio_scope (1 subtest) ===============
+[13:25:51] [PASSED] nested_scopes_restore_task_policy_on_error
+[13:25:51] ================ [PASSED] rusix_noio_scope =================
+[13:25:51] ========== rusix_completion_contract (5 subtests) ==========
+[13:25:51] [PASSED] initial_state_has_no_token
+[13:25:51] [PASSED] presignals_are_consumed_once_each
+[13:25:51] [PASSED] broadcast_persists_until_quiescent_reset
+[13:25:51] [PASSED] zero_timeout_reports_completion_and_consumes_token
+[13:25:51] [PASSED] signal_saturates_instead_of_wrapping
+[13:25:51] ============ [PASSED] rusix_completion_contract ============
+[13:25:51] =========== rusix_completion_layout (8 subtests) ===========
+[13:25:51] [PASSED] c_operations_share_pinned_rust_owned_storage
+[13:25:51] [PASSED] current_cpu_signal_counts_and_saturates
+[13:25:51] [PASSED] worker_handoff_observes_published_value
+[13:25:51] [PASSED] current_cpu_signal_wakes_enrolled_worker
+[13:25:51] [PASSED] two_workers_consume_exactly_two_tokens
+[13:25:51] [PASSED] competing_try_waiters_consume_one_token
+[13:25:51] [PASSED] broadcast_serves_two_workers_and_late_waiters
+[13:25:51] [PASSED] timed_out_worker_unlinks_before_late_signal
+[13:25:51] ============= [PASSED] rusix_completion_layout =============
+[13:25:51] ============ rusix_completion_wait (4 subtests) ============
+[13:25:51] [PASSED] all_wait_entries_consume_presignaled_token
+[13:25:51] [PASSED] all_wait_entries_preserve_broadcast_sentinel
+[13:25:51] [PASSED] all_timed_entries_distinguish_zero_timeout_states
+[13:25:51] [PASSED] all_timed_entries_unlink_after_positive_timeout
+[13:25:51] ============== [PASSED] rusix_completion_wait ==============
+[13:25:51] =========== rusix_completion_signal (4 subtests) ===========
+[13:25:51] [PASSED] pending_signals_interrupt_timed_waits
+[13:25:51] [PASSED] enrolled_waits_wake_for_signals
+[13:25:51] [PASSED] presignaled_token_wins_over_pending_signal
+[13:25:51] [PASSED] killable_wait_ignores_nonfatal_pending_signal
+[13:25:51] ============= [PASSED] rusix_completion_signal =============
+[13:25:51] =========== rusix_completion_swait (8 subtests) ============
+[13:25:51] [PASSED] empty_wake_preserves_initialized_queue
+[13:25:51] [PASSED] repeated_prepare_keeps_single_enrollment_and_finish_restores_state
+[13:25:51] [PASSED] queued_wake_removes_fifo_head_before_second_waiter
+[13:25:51] [PASSED] generic_swait_event_observes_condition_and_unlinks
+[13:25:51] [PASSED] generic_swait_timeout_unlinks_before_late_wake
+[13:25:51] [PASSED] pending_prepare_event_unlinks_without_changing_state_or_irqs
+[13:25:51] [PASSED] generic_signal_error_and_post_prepare_condition_precedence
+[13:25:51] [PASSED] generic_broadcast_removes_initial_batch_and_leaves_late_waiter
+[13:25:51] ============= [PASSED] rusix_completion_swait ==============
+[13:25:51] ============= rusix_xarray_insert (2 subtests) =============
+[13:25:51] [PASSED] occupied_insert_returns_owner_without_replacing
+[13:25:51] [PASSED] array_drop_releases_inserted_owner
+[13:25:51] =============== [PASSED] rusix_xarray_insert ===============
+[13:25:51] =============== rusix_brd_store (3 subtests) ===============
+[13:25:51] [PASSED] lookup_and_repeated_insert_preserve_page
+[13:25:51] [PASSED] discard_keeps_inflight_page_alive_and_reinsert_is_independent
+[13:25:51] [PASSED] discard_excludes_end_and_is_idempotent
+[13:25:51] ================= [PASSED] rusix_brd_store =================
+[13:25:51] ============== rusix_brd_policy (3 subtests) ===============
+[13:25:51] [PASSED] minor_count_preserves_defined_normalization
+[13:25:51] [PASSED] invalid_minor_normalization_is_rejected
+[13:25:51] [PASSED] legacy_size_retains_prefix_and_wrapping_semantics
+[13:25:51] ================ [PASSED] rusix_brd_policy =================
+[13:25:51] ============================================================
+[13:25:51] Testing complete. Ran 38 tests: passed: 38
+[13:25:51] Test results stored in /out/logs/ci-completion-c-kunit.json

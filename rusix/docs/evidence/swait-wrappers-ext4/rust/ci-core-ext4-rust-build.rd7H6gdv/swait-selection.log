@@ -1,0 +1,26 @@
+implementation=swait-rust
+/out/builds/ci-core-ext4-rust/kernel/sched/swait_rust.o
+/out/builds/ci-core-ext4-rust/kernel/sched/swait_rust.o
+0000000000000000 T __prepare_to_swait
+0000000000000040 T __finish_swait
+0000000000000070 T swake_up_locked
+00000000000000c0 T swake_up_all_locked
+0000000000000130 T swake_up_one
+0000000000000180 T swake_up_all
+0000000000000230 T prepare_to_swait_exclusive
+0000000000000290 T prepare_to_swait_event
+0000000000000320 T finish_swait
+/out/builds/ci-core-ext4-rust/vmlinux
+ffffffff81298b90 T __prepare_to_swait
+ffffffff81298bd0 T __finish_swait
+ffffffff81298c00 T swake_up_locked
+ffffffff81298c50 T swake_up_all_locked
+ffffffff81298cc0 T swake_up_one
+ffffffff81298d10 T swake_up_all
+ffffffff81298dc0 T prepare_to_swait_exclusive
+ffffffff81298e20 T prepare_to_swait_event
+ffffffff81298eb0 T finish_swait
+6b32deb829d1fa35847bbf77d90d0fb351b5b2437f034d6b07669c0927d7c335  /src/kernel/sched/swait.c
+5c42ea5c0ead19dbc908d1388122924a28fff99e1d7be798d1946e93a35ee335  /out/builds/ci-core-ext4-rust/kernel/sched/swait_rust.o
+6e9b2a47568db9435024054c25644c68f65bd2332ee4820bfe9100da074eeaa2  /src/kernel/sched/swait_rust.rs
+fd666f59384776bb9258d2583557673a85f780290dd1727c9a2a70e85044bad7  /src/rust/helpers/swait.c

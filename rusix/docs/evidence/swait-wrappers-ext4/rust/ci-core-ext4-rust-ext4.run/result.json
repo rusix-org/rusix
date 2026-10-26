@@ -1,0 +1,13 @@
+{
+  "status": "PASS",
+  "cases": [
+    "mkfs",
+    "initial_write",
+    "remount_read",
+    "mutate",
+    "final_read",
+    "fsck"
+  ],
+  "qemu_exit": 0,
+  "implementation": "brd-rust"
+}

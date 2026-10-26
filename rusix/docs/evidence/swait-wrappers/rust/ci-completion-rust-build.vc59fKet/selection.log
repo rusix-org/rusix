@@ -1,0 +1,7 @@
+implementation=brd-rust
+/out/builds/ci-completion-rust/drivers/block/brd_rust.o
+ffffffff8155c740 T <brd_rust::Device as kernel::block::bio_disk::Operations>::submit
+2f7c33173054587799f63c2eb28f22a52eb29a8d3deefe9b21ca97f7f1318c1a  /src/drivers/block/brd_rust.rs
+cae39a89754ba8eae43b5e952152a105e00d10116052a0a8facfd571ec2d7c0e  /src/drivers/block/brd_rust/store.rs
+2c48bcf0f09e7fd97291918ba16f1d93cfd12d65365f00505840cd698e42414b  /out/builds/ci-completion-rust/drivers/block/brd_rust.o
+239a02df8350e9f06ce6185f71550329c623ba58a2710bfe361db428cc9cd1f5  /out/builds/ci-completion-rust/drivers/block/brd_rust/params.o

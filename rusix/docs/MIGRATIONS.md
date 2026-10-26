@@ -39,7 +39,7 @@ safety obligations. [Probe instructions](../tests/brd-contract/README.md) reprod
 that baseline; [Phase 1](PHASE1.md) defines replacement gates. Existing mq APIs
 and upstream rnull are not substitutes for the bio-based stateful BRD contract.
 
-## Completion: opt-in partial core migration
+## Completion and swait: opt-in core migration
 
 The opt-in [Rust signaling implementation](../../kernel/sched/completion_rust.rs)
 preserves C-visible storage while moving completion policy into Rust.
