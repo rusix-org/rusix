@@ -20,6 +20,7 @@ class GateTests(unittest.TestCase):
     def setUp(self):
         self.lines = ["RUSIX_EXT4_START"] + [f"RUSIX_EXT4_PASS {case}" for case in runner.CASES]
         self.lines += [f"RUSIX_WAKE_PASS {case}" for case in runner.WAKE_CASES]
+        self.lines += [f"RUSIX_LOCKED_PASS {case}" for case in runner.LOCKED_CASES]
         self.lines += ["RUSIX_EXT4_SUCCESS cases=6"]
 
     def test_informational_pci_bug_reporting_hint_is_not_a_fault(self):
@@ -45,6 +46,7 @@ class GateTests(unittest.TestCase):
         self.assertEqual(result["wake_cases"], list(runner.WAKE_CASES))
         self.assertEqual(len(result["cases"]), 6)
         self.assertEqual(len(result["wake_cases"]), 4)
+        self.assertEqual(result["locked_cases"], ["eventfd_blocking_read", "timerfd_blocking_read"])
 
     def test_ext4_only_and_wake_only_are_incomplete(self):
         self.rejected([line for line in self.lines if "RUSIX_WAKE_" not in line])
@@ -83,6 +85,8 @@ class GateTests(unittest.TestCase):
         for extra in ("RUSIX_EXT4_FAIL reboot", "RUSIX_EXT4_SKIP fsck", "RUSIX_EXT4_PASS unknown",
                       "RUSIX_WAKE_FAIL pipe_poll", "RUSIX_WAKE_SKIP epoll_del_close",
                       "RUSIX_WAKE_PASS unknown", "RUSIX_WAKE_UNKNOWN",
+                      "RUSIX_LOCKED_FAIL observer timeout", "RUSIX_LOCKED_SKIP eventfd_blocking_read",
+                      "RUSIX_LOCKED_PASS unknown", "RUSIX_LOCKED_UNKNOWN",
                       "WARNING: CPU: 0", "BUG: page", "Oops: bad", "Kernel panic",
                       "CPU feature dependency check failure", "ACPI Error: AE_BAD_PARAMETER",
                       "ACPI BIOS Error: missing handler", "EXT4-fs warning (device ram0)",
@@ -90,12 +94,31 @@ class GateTests(unittest.TestCase):
             with self.subTest(extra=extra):
                 self.rejected(self.lines + [extra])
 
+    def test_locked_inventory_is_literal_and_mandatory(self):
+        self.assertEqual(runner.LOCKED_CASES, ("eventfd_blocking_read", "timerfd_blocking_read"))
+        self.rejected([line for line in self.lines if "RUSIX_LOCKED_" not in line])
+        for index, line in enumerate(self.lines):
+            if "RUSIX_LOCKED_" in line:
+                self.rejected(self.lines[:index] + self.lines[index + 1:])
+                self.rejected(self.lines[:index] + [line] + self.lines[index:])
+        swapped = self.lines.copy()
+        first = swapped.index("RUSIX_LOCKED_PASS eventfd_blocking_read")
+        swapped[first], swapped[first + 1] = swapped[first + 1], swapped[first]
+        self.rejected(swapped)
+
     def test_timeout_nonzero_or_signal_even_with_all_markers(self):
         for status in (1, 124, 137, -9):
             self.rejected(self.lines, status)
 
 
 class SelectionTests(unittest.TestCase):
+    def test_blocking_consumers_require_timer_and_proc_syscall_observation(self):
+        config = self.config(True)
+        for name in ("TIMERFD", "HAVE_ARCH_TRACEHOOK"):
+            with self.subTest(name=name), self.assertRaises(ValueError):
+                runner.validate_selection("brd-ext4-rust", "implementation=brd-rust",
+                                          config.replace(f"CONFIG_{name}=y", f"# CONFIG_{name} is not set"))
+
     def test_core_profiles_require_completion_config_and_symbol_proof(self):
         for suffix in ("c", "rust"):
             profile = f"core-ext4-{suffix}"

@@ -15,6 +15,12 @@ spec.loader.exec_module(common)
 
 # Independent of live Rust source so removing a test does not weaken this gate.
 SUITES = {
+    "rusix_completion_wait_locked": (
+        "pending_iteration_preserves_lock_state_irq_and_enrollment",
+        "original_macro_distinguishes_initial_condition_from_pending_error",
+        "blocked_spurious_wake_rechecks_before_locked_publication",
+        "blocked_signal_returns_error_with_caller_cleanup",
+    ),
     "rusix_completion_wait_bit": (
         "ordinary_loop_preserves_action_errors_even_when_bit_clears",
         "lock_loop_acquisition_overrides_action_error",

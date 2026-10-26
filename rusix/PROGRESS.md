@@ -38,6 +38,14 @@ linked bytes are not a completion percentage. Networking is configured but not
 runtime-tested here; ext4 runs on BRD, not virtio block. [Local commands](ci/README.md)
 reproduce the target and its derived comparison; hosted execution stays disabled.
 
+Locked interruptible wait migration is in progress on `rusix/wait-locked`.
+The two Rust definitions and exact spinlock IRQ adapters pass source review;
+four dedicated-worker cases and two blocking userspace consumer tests are
+implemented and reviewed. Their host acceptance-gate tests pass.
+No build or runtime result is claimed yet. The ordinary-lock watchdog must run
+in process context so it cannot interrupt a holder and deadlock on the same
+queue lock. [Migration contract](experiments/wait-locked/README.md).
+
 Nine new bit-wait cases verify error/acquisition precedence, matching, shared
 production deadline arithmetic, real blocked bit clear and exclusive owners,
 signal/expiry cleanup and all three stack wrappers. Eight bit-wait scheduler

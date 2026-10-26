@@ -10,6 +10,7 @@ use std::{
     time::Duration,
 };
 
+mod locked_probe;
 mod wake_probe;
 
 const TOKEN: &str = "rusix.brd_ext4=1";
@@ -116,6 +117,7 @@ fn main() {
     if let Err(error) = marker("RUSIX_EXT4_START")
         .and_then(|()| run())
         .and_then(|()| wake_probe::run())
+        .and_then(|()| locked_probe::run())
         .and_then(|()| marker("RUSIX_EXT4_SUCCESS cases=6"))
     {
         eprintln!("RUSIX_EXT4_FAIL init {error}");

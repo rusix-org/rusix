@@ -80,6 +80,7 @@
 #ifdef CONFIG_KUNIT
 #include "wait_bit_test.c"
 #include "wait_policy_test.c"
+#include "wait_locked_test.c"
 #endif
 #include "workqueue.c"
 #include "xarray.c"

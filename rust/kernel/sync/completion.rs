@@ -260,3 +260,6 @@ mod woken_tests;
 
 #[cfg(CONFIG_KUNIT = "y")]
 mod bit_tests;
+
+#[cfg(CONFIG_KUNIT = "y")]
+mod locked_tests;

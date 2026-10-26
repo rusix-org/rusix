@@ -78,3 +78,14 @@ void rust_helper_wait_set_woken_after_mb(struct wait_queue_entry *entry)
 	smp_mb();
 	entry->flags |= WQ_FLAG_WOKEN;
 }
+
+/* Ordinary spinlock_t IRQ protocol; remove when Rust primitives own it. */
+void rust_helper_wait_spin_lock_irq(spinlock_t *lock)
+{
+	spin_lock_irq(lock);
+}
+
+void rust_helper_wait_spin_unlock_irq(spinlock_t *lock)
+{
+	spin_unlock_irq(lock);
+}

@@ -3,8 +3,9 @@
 
 //! Initialization, enrollment, prepare/finish and wake policy over C-visible queues.
 //!
-//! Entry initialization, locked wait iterations, scheduler wakes and spinlocks
-//! remain C. WOKEN ordering primitives also retain their exact C operations.
+//! Entry initialization, scheduler wakes and spinlocks remain C. Locked wait
+//! iterations retain the caller's lock ownership across each sleep. WOKEN ordering
+//! primitives also retain their exact C operations.
 //! Flag updates/snapshots retain the baseline C mixed-access boundary;
 //! this module does not expose a safe Rust API for generic wait entry ownership.
 
@@ -606,4 +607,87 @@ pub unsafe extern "C" fn woken_wake_bit_function(
     // SAFETY: matched key remains live; shared implementation preserves barrier
     // C before WOKEN update and forwards the matcher-returned key unchanged.
     unsafe { woken_wake_function(entry, mode, sync, key.cast()) }
+}
+
+/// One baseline interruptible wait iteration, returning with incoming lock held.
+/// # Safety
+/// Caller is waiting task, owns live pinned entry, and holds queue spinlock.
+/// Entry links are initialized/self-linked or on this queue. No nested lock,
+/// preemption or IRQ context prevents schedule after releasing this queue lock.
+/// Neither queue nor waiter may be freed/moved across the unlocked interval.
+/// The caller owns incoming lock acquisition and eventual final release.
+/// irq=true requires the irq locking protocol: IRQs disabled on entry, permitted
+/// to enable for sleep, and disabled again on return. irq=false uses ordinary
+/// spin_unlock/lock; caller context must permit schedule without IRQ adjustment.
+/// Entry flags/private/func are initialized and callback/task lifetimes obey the
+/// generic wait protocol. No unrelated lock may prevent the waker from running.
+unsafe fn wait_intr(
+    q: *mut bindings::wait_queue_head,
+    entry: *mut bindings::wait_queue_entry,
+    irq: bool,
+) -> c_int {
+    // SAFETY: initialized links stable under caller-owned queue lock.
+    if unsafe { bindings::swait_list_empty(addr_of!((*entry).entry)) } != 0 {
+        // SAFETY: detached entry and queue protected by incoming lock.
+        unsafe {
+            bindings::swait_list_add_tail(addr_of_mut!((*entry).entry), addr_of_mut!((*q).head))
+        };
+    }
+    // SAFETY: full barrier after enrollment; exact C task state.
+    unsafe { bindings::swait_set_current_state(bindings::TASK_INTERRUPTIBLE) };
+    // SAFETY: current live; original signal test happens after setting state.
+    if unsafe { bindings::signal_pending(bindings::get_current()) } != 0 {
+        // No unlock, state restoration or unlink on this path. The original
+        // locked-wait macro performs cleanup with the incoming lock still held.
+        return -(bindings::ERESTARTSYS as c_int);
+    }
+    // SAFETY: initialized live queue remains pinned across sleep, retained by
+    // caller; raw pointer does not borrow its contents across unlocked interval.
+    let lock = unsafe { addr_of_mut!((*q).lock) };
+    if irq {
+        // SAFETY: caller chose IRQ lock protocol, owns exact lock, permits IRQs.
+        unsafe { bindings::wait_spin_unlock_irq(lock) };
+    } else {
+        // SAFETY: caller owns lock, ordinary spin unlock matches acquisition.
+        unsafe { bindings::spin_unlock(lock) };
+    }
+    // No acquisition guard is used here: an ordinary RAII drop must not release
+    // the caller-owned lock after reacquisition or on the signal return path.
+    // SAFETY: queue lock released; caller guarantees sleepable context and
+    // retains entry/queue. Kernel C schedule does not unwind through this frame.
+    unsafe { bindings::schedule() };
+    if irq {
+        // SAFETY: caller retains live lock; reacquire with IRQs disabled as C.
+        unsafe { bindings::wait_spin_lock_irq(lock) };
+    } else {
+        // SAFETY: same live lock, ordinary spin acquisition preserves IRQ state.
+        unsafe { bindings::spin_lock(lock) };
+    }
+    0
+}
+
+/// # Safety
+/// wait_intr's ordinary-spinlock contract applies; lock is held on return.
+// SAFETY: the same Kconfig selection excludes the matching C body and retains
+// its export. Generated queue/entry pointers and c_int preserve the C ABI.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn do_wait_intr(
+    q: *mut bindings::wait_queue_head,
+    entry: *mut bindings::wait_queue_entry,
+) -> c_int {
+    // SAFETY: caller supplies ordinary locked wait protocol.
+    unsafe { wait_intr(q, entry, false) }
+}
+
+/// # Safety
+/// wait_intr's IRQ-spinlock contract applies; lock and disabled IRQs on return.
+// SAFETY: the same Kconfig selection excludes the matching C body and retains
+// its export. Generated queue/entry pointers and c_int preserve the C ABI.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn do_wait_intr_irq(
+    q: *mut bindings::wait_queue_head,
+    entry: *mut bindings::wait_queue_entry,
+) -> c_int {
+    // SAFETY: caller supplies IRQ locked wait protocol.
+    unsafe { wait_intr(q, entry, true) }
 }

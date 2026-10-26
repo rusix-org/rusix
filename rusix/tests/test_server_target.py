@@ -62,7 +62,7 @@ class ServerTargetTests(unittest.TestCase):
 
     def test_runtime_accepts_both_directions_without_debugfs(self):
         for profile, config, core in (("server", self.rust, "rust"), ("server-c", self.c, "c")):
-            self.assertEqual(ext4.validate_selection(profile, "implementation=brd-rust", config,
+            self.assertEqual(ext4.validate_selection(profile, "implementation=brd-rust", config + "\nCONFIG_HAVE_ARCH_TRACEHOOK=y\n",
                 f"implementation=completion-{core}"), "brd-rust")
             # Broader block suite keeps its old allowlist and DEBUG_FS gate.
             with self.assertRaises(ValueError):
@@ -72,8 +72,16 @@ class ServerTargetTests(unittest.TestCase):
                 ext4._common.validate_selection(f"core-ext4-{core}", "implementation=brd-rust", config,
                     f"implementation=completion-{core}")
 
+    def test_server_runtime_requires_resolved_arch_syscall_observation(self):
+        # x86 selects this hidden feature; the canonical allnoconfig input need
+        # not request it explicitly, but runtime evidence requires it resolved.
+        with self.assertRaises(ValueError):
+            ext4.validate_selection("server", "implementation=brd-rust", self.rust,
+                                    "implementation=completion-rust")
+
     def test_runtime_rejects_wrong_missing_core_proof_or_brd(self):
         for profile, config, core, wrong in (("server", self.rust, "rust", "c"), ("server-c", self.c, "c", "rust")):
+            config += "\nCONFIG_HAVE_ARCH_TRACEHOOK=y\n"
             for proof in (None, "", f"implementation=completion-{wrong}"):
                 with self.subTest(profile=profile, proof=proof), self.assertRaises(ValueError):
                     ext4.validate_selection(profile, "implementation=brd-rust", config, proof)
@@ -90,7 +98,7 @@ class ServerTargetTests(unittest.TestCase):
             self.rust + "CONFIG_MT7601U=y\n",
         ):
             with self.subTest(changed=changed[-40:]), self.assertRaises(ValueError):
-                ext4.validate_selection("server", "implementation=brd-rust", changed,
+                ext4.validate_selection("server", "implementation=brd-rust", changed + "\nCONFIG_HAVE_ARCH_TRACEHOOK=y\n",
                     "implementation=completion-rust")
 
     def test_provenance_rejects_tampered_input_template_metadata_and_resolved_config(self):

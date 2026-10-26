@@ -257,7 +257,7 @@ for item in "$wake_object" "$out/vmlinux"; do
         __wake_up_sync_key __wake_up_locked_sync_key __wake_up_sync \
         prepare_to_wait prepare_to_wait_exclusive prepare_to_wait_event \
         finish_wait autoremove_wake_function wait_woken \
-        woken_wake_function woken_wake_bit_function; do
+        woken_wake_function woken_wake_bit_function do_wait_intr do_wait_intr_irq; do
         awk -v symbol="$symbol" '$2 == "T" && $3 == symbol { print }' \
             "$evidence/wake-symbols.tmp" > "$evidence/wake-current.txt"
         [[ $(wc -l < "$evidence/wake-current.txt") == 1 ]] || {

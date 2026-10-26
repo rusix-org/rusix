@@ -372,6 +372,7 @@ EXPORT_SYMBOL(prepare_to_wait_event);
  * condition in the caller before they add the wait
  * entry to the wake queue.
  */
+#ifndef CONFIG_RUSIX_COMPLETION_RUST
 int do_wait_intr(wait_queue_head_t *wq, wait_queue_entry_t *wait)
 {
 	if (likely(list_empty(&wait->entry)))
@@ -387,8 +388,10 @@ int do_wait_intr(wait_queue_head_t *wq, wait_queue_entry_t *wait)
 
 	return 0;
 }
+#endif
 EXPORT_SYMBOL(do_wait_intr);
 
+#ifndef CONFIG_RUSIX_COMPLETION_RUST
 int do_wait_intr_irq(wait_queue_head_t *wq, wait_queue_entry_t *wait)
 {
 	if (likely(list_empty(&wait->entry)))
@@ -404,6 +407,7 @@ int do_wait_intr_irq(wait_queue_head_t *wq, wait_queue_entry_t *wait)
 
 	return 0;
 }
+#endif
 EXPORT_SYMBOL(do_wait_intr_irq);
 
 /**

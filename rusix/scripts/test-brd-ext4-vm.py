@@ -28,11 +28,12 @@ check_hashes = _common.check_hashes
 source_state = _common.source_state
 first_line = _common.first_line
 
+LOCKED_CASES = ("eventfd_blocking_read", "timerfd_blocking_read")
 CASES = ("mkfs", "initial_write", "remount_read", "mutate", "final_read", "fsck")
 WAKE_CASES = ("pipe_poll", "epoll_pipe_eventfd", "epoll_oneshot_rearm", "epoll_del_close")
 REQUIRED_CONFIG = ("64BIT", "BLOCK", "BLK_DEV_RAM", "EXT4_FS", "PROC_FS", "SMP",
                    "FUTEX", "MULTIUSER", "BINFMT_ELF", "BINFMT_SCRIPT", "EPOLL", "EVENTFD",
-                   "BLK_DEV_INITRD", "SERIAL_8250_CONSOLE")
+                   "BLK_DEV_INITRD", "SERIAL_8250_CONSOLE", "TIMERFD", "HAVE_ARCH_TRACEHOOK")
 TOOLS = ("mount", "umount", "blockdev", "cat", "cp", "chmod", "ln", "truncate",
          "dd", "sync", "sha256sum", "stat", "cmp", "mv", "rm")
 TOOL_PATH = "/usr/sbin:/usr/bin:/sbin:/bin"
@@ -45,12 +46,14 @@ def accept_console(console, qemu_exit):
         raise ValueError("Kernel warning, oops, BUG, or panic in console")
     expected = ["RUSIX_EXT4_START"] + [f"RUSIX_EXT4_PASS {case}" for case in CASES]
     expected += [f"RUSIX_WAKE_PASS {case}" for case in WAKE_CASES]
+    expected += [f"RUSIX_LOCKED_PASS {case}" for case in LOCKED_CASES]
     expected += ["RUSIX_EXT4_SUCCESS cases=6"]
-    markers = [line for line in console.splitlines() if "RUSIX_EXT4_" in line or "RUSIX_WAKE_" in line]
+    markers = [line for line in console.splitlines()
+               if any(prefix in line for prefix in ("RUSIX_EXT4_", "RUSIX_WAKE_", "RUSIX_LOCKED_"))]
     if markers != expected:
-        raise ValueError(f"Ext4/wake inventory/order mismatch: {markers!r}")
+        raise ValueError(f"Ext4/wake/locked inventory/order mismatch: {markers!r}")
     return {"status": "PASS", "cases": list(CASES), "wake_cases": list(WAKE_CASES),
-            "qemu_exit": qemu_exit}
+            "locked_cases": list(LOCKED_CASES), "qemu_exit": qemu_exit}
 
 
 def validate_selection(profile, selection, config, core_selection=None):
