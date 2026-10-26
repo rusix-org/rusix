@@ -1,0 +1,10 @@
+
+running 5 tests
+test broadcast_covers_current_and_future_endpoints ... ok
+test cancelled_waiter_does_not_destroy_producer_storage ... ok
+test counting_tokens_are_consumed_once ... ok
+test saturation_is_permanent_until_quiescent_reset ... ok
+test concurrent_consumers_cannot_duplicate_tokens ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+

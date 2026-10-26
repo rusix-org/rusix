@@ -16,6 +16,14 @@ required=(KUNIT INT_SQRT_KUNIT_TEST SERIAL_8250_CONSOLE)
 cpus=1
 case "${1:-}" in
     --baseline) baseline=(--baseline); mode=baseline; shift ;;
+    --completion)
+        mode=completion
+        filter=rusix_completion_contract
+        gate=validate-completion-kunit.py
+        required=(KUNIT RUST SMP SERIAL_8250_CONSOLE)
+        cpus=2
+        shift
+        ;;
     --brd)
         mode=brd
         filter='rusix_*'
@@ -26,7 +34,7 @@ case "${1:-}" in
         ;;
 esac
 if [[ $# != 2 || ! "$2" =~ ^[a-zA-Z0-9_-]+$ ]]; then
-    echo 'Usage: bash rusix/scripts/boot-kunit.sh [--baseline|--brd] BUILD_DIRECTORY EVIDENCE_LABEL' >&2
+    echo 'Usage: bash rusix/scripts/boot-kunit.sh [--baseline|--brd|--completion] BUILD_DIRECTORY EVIDENCE_LABEL' >&2
     exit 2
 fi
 build=$(cd -- "$1" && pwd)
@@ -57,12 +65,16 @@ fi
 printf '%s\n' "$mode" > "$run/mode.txt"
 sha256sum "$RUSIX_PROJECT/scripts/boot-kunit.sh" "$RUSIX_PROJECT/scripts/$gate" \
     > "$run/scripts.sha256"
+if [[ "$mode" == completion ]]; then
+    sha256sum "$RUSIX_PROJECT/scripts/validate-brd-kunit.py" >> "$run/scripts.sha256"
+fi
 sha256sum "$build/arch/x86/boot/bzImage" "$build/.config" > "$RUSIX_OUTPUT_ROOT/logs/$label-inputs.sha256"
 firmware=()
 if [[ -f "$RUSIX_TOOLS_ROOT/usr/share/qemu/qboot.rom" ]]; then
     firmware=(-L "$RUSIX_TOOLS_ROOT/usr/share/qemu" -bios qboot.rom)
 fi
-# Select math suites by default, or the nine BRD ownership cases with --brd.
+# Select math suites by default, BRD ownership with --brd, or completion
+# semantics with --completion. Each mode has an independent required inventory.
 # Exclude unrelated framework suites (including an intentionally disabled test)
 # without relaxing either acceptance gate or modifying upstream tests.
 # With system packages only, let QEMU find its own firmware at its default path.

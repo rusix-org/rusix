@@ -39,7 +39,7 @@ def groups(group):
         yield from groups(child)
 
 
-def validate(result):
+def validate(result, *, suites=SUITES):
     """Reject missing/duplicate cases, bad totals, and any reported non-pass."""
     inventory = list(groups(result))
     for group in inventory:
@@ -57,7 +57,7 @@ def validate(result):
         if len(names) != len(set(names)):
             raise ValueError(f"{group['name']}: duplicate case")
     count = 0
-    for name, expected in SUITES.items():
+    for name, expected in suites.items():
         matches = [group for group in inventory if group["name"] == name]
         if len(matches) != 1:
             raise ValueError(f"Expected exactly one {name} suite, found {len(matches)}")

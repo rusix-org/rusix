@@ -110,3 +110,8 @@ API was added. Worker handoff, FIFO, interruption and timeout races still need
 bounded kernel fixtures with proven teardown; these five tests do not cover them.
 Use the exact suite filter `kunit.filter_glob=rusix_completion_contract` for its
 own baseline result. Existing BRD ownership gates retain their separate inventory.
+
+The same five host cases also pass with pinned container Rust 1.85.1;
+[recorded output](../../docs/evidence/completion-host/manifest.json).
+Use `boot-kunit.sh --completion` and its five-case gate for the separate kernel
+contract suite once a KUnit kernel containing these tests is built.
