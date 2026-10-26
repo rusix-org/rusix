@@ -26,7 +26,7 @@ def accept_console(console, qemu_exit):
     """Require the exact ordered inventory and completion, without kernel faults."""
     if qemu_exit != 0:
         raise ValueError(f"QEMU failed or timed out: exit {qemu_exit}")
-    if re.search(r"\b(?:WARNING|BUG)\b|Oops:|Kernel panic", console):
+    if re.search(r"\b(?:WARNING|BUG)\b|Oops:|Kernel panic|CPU feature dependency check failure", console):
         raise ValueError("Kernel warning, oops, BUG, or panic in console")
     markers = [line for line in console.splitlines() if "RUSIX_BRD_" in line]
     expected = [f"RUSIX_BRD_PASS {name}" for name in CASES]
@@ -175,7 +175,7 @@ def run(args, paths, evidence):
     }
     (evidence / "inputs.json").write_text(json.dumps(metadata, indent=2) + "\n")
     command = wrapper + ["timeout", "--kill-after=5s", "180s", "qemu-system-x86_64",
-                         "-accel", accel, "-cpu", "host" if accel == "kvm" else "max",
+                         "-accel", accel, "-cpu", "qemu64" if accel == "kvm" else "max",
                          "-m", "512M", "-smp", "2"]
     firmware = paths.tools / "usr/share/qemu"
     if (firmware / "qboot.rom").is_file():

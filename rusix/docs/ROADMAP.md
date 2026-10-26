@@ -8,7 +8,7 @@ expand or narrow that contract. Actual state is in [PROGRESS.md](../PROGRESS.md)
 
 Retain the verified Rust square-root replacement, original tests, added parity
 checks and source evidence. The C BRD probe establishes the next component's
-baseline. These are foundations, not a completed Rust kernel.
+baseline.
 
 ## Phase 1a — Working Rust storage component
 

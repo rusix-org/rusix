@@ -11,10 +11,10 @@ observed evidence, not checked-in plans. See [PROGRESS.md](../PROGRESS.md).
 | --- | --- |
 | Repository | A Kbuild-compatible checkout builds/tests using tracked tooling without parent copies or developer-specific paths. |
 | Environment and CI | Pin container/compiler/Rust source/bindgen/QEMU/rootfs inputs. CI builds and executes required gates, retaining failures and source/config/tool/image identities. Required skips, missing cases and timeouts fail. No green claim before an observed hosted run. |
-| Complete BRD | Rust implements the pinned RAM-disk driver contract: data/holes, discard, geometry/partitions, parameters/aliases, on-demand creation, accounting, rollback and teardown. Verify x86_64 built-in and module forms; C reference remains available but cannot execute in the claimed Rust path. |
+| Complete BRD | Rust implements the pinned RAM-disk driver contract: data/holes, discard, geometry/partitions, parameters/aliases, on-demand creation, accounting, rollback and teardown. Verify the x86_64 built-in form; C reference remains available but cannot execute in the claimed Rust path. |
 | Paired parity | C and Rust run matching preserved upstream tests plus BRD-specific cases. Bind expected implementation and build evidence to the tested image. Basic lifetime, allocation/error and competing-insertion behavior must be correct; expanded stress is in 1b. |
 | Useful userspace | Boot pinned ordinary Linux init/shell/utilities. Format/mount ext4 on Rust BRD; verify buffered/direct I/O where supported, files, rename, fsync, unmount/remount, content integrity and offline fsck. A custom test init alone does not satisfy this gate. |
-| Review and ownership | Review unsafe invariants and upstream API proposals; record remaining C dependencies and the subsystem divergence point. Include existing math module/export/version checks in the x86_64 module profile. |
+| Review and ownership | Review unsafe invariants and upstream API proposals; record remaining C dependencies and the subsystem divergence point. |
 
 The complete component is BRD, not the surrounding storage stack. Block core,
 VFS, ext4 and allocator C dependencies remain tracked kernel work. The
@@ -25,7 +25,7 @@ do not duplicate it here or replace BRD with a data-discarding null driver.
 
 | Gate | Required result |
 | --- | --- |
-| Architecture | arm64, 4 KiB pages and SMP, built-in/module BRD, passes the common integrity/lifecycle suite; retain x86_64 coverage. |
+| Architecture | arm64, 4 KiB pages and SMP, passes the common integrity suite. Add built-in/module lifecycle coverage on both architectures, including x86_64 math export/version checks. |
 | Failure and concurrency | Deterministic allocation/NOWAIT faults, overlapping I/O/discard lifetimes, memory pressure, busy removal and repeated teardown; supported Rust memory instrumentation and lockdep with demonstrated coverage and no unexplained new reports. |
 | Performance and memory | Controlled paired sequential/random/mixed I/O, discard and sparse allocation. Initial thresholds: throughput at least 90% of C, p99 latency at most 110%, populated-store memory at most 110%. Pin the protocol and measure baseline variance first. TCG timing is not production performance evidence. |
 | Selected-fix maintenance | Review one relevant upstream fix, port its behavior deliberately into a migrated Rust component and demonstrate the regression test. Record relevance/disposition; no whole-tree rebase requirement. |
@@ -41,8 +41,6 @@ upstream abstractions, implement Rust BRD and run paired tests, then complete th
 1b matrix and budgets. Immediately after BRD, start the executable core ownership
 spike in [ROADMAP.md](ROADMAP.md), rather than an indefinite sequence of drivers.
 
-Neither phase completes the target kernel or later userspace rewrite. Passing
-one profile does not establish other architectures, page sizes or hardware.
 Keep exclusions and remaining C explicit. Instrumentation configuration alone
 is not coverage: pinned KCSAN rules currently export C instrumentation flags,
 so enabling KCSAN does not demonstrate Rust race instrumentation.

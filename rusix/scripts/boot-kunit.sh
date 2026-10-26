@@ -5,7 +5,7 @@ source "$(dirname -- "${BASH_SOURCE[0]}")/repo-paths.sh"
 accel=${RUSIX_QEMU_ACCEL:-tcg}
 case "$accel" in
     tcg) cpu=max ;;
-    kvm) cpu=host ;;
+    kvm) cpu=qemu64 ;;
     *) echo 'RUSIX_QEMU_ACCEL must be tcg or kvm.' >&2; exit 2 ;;
 esac
 baseline=()
@@ -68,6 +68,10 @@ printf '%s\n' "$status" > "$RUSIX_OUTPUT_ROOT/logs/$label-qemu.exit"
 if [[ $status != 0 ]]; then
     tail -40 "$RUSIX_OUTPUT_ROOT/logs/$label-console.log" >&2
     exit "$status"
+fi
+if grep -q 'CPU feature dependency check failure' "$RUSIX_OUTPUT_ROOT/logs/$label-console.log"; then
+    echo 'Guest CPU feature dependencies are inconsistent.' >&2
+    exit 1
 fi
 set +e
 python3 "$RUSIX_SOURCE/tools/testing/kunit/kunit.py" parse \

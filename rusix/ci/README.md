@@ -17,7 +17,9 @@ bash rusix/ci/run-container.sh rusix-toolchain:trixie-20261025 ../rusix-ci-serve
 The wrapper selects KVM only if `/dev/kvm` is accessible, otherwise TCG. Set
 `RUSIX_QEMU_ACCEL=kvm` or `RUSIX_QEMU_ACCEL=tcg` to require one mode. A requested
 KVM run fails if unavailable; a runtime KVM failure does not retry under TCG.
-The selected mode is recorded. KVM exposes only that device to the container;
+The selected mode is recorded. KVM uses the portable `qemu64` model; TCG uses
+`max`. Host CPU passthrough exposed inconsistent speculation-control features
+on the initial AMD/KVM setup. KVM exposes only that device to the container;
 no privileged container or host kernel/module changes are required. The container
 runs as the caller, with a read-only source mount, no network, two CPU slots, and
 a 5 GiB memory limit. All generated output is written to the supplied disk path.

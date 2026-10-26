@@ -58,7 +58,8 @@ class GateTests(unittest.TestCase):
 
     def test_fault_even_after_success(self):
         for fault in ("WARNING: CPU: 0", "BUG: bad page state", "Oops: 0000",
-                      "Kernel panic - not syncing: test"):
+                      "Kernel panic - not syncing: test",
+                      "x86 CPU feature dependency check failure: CPU0"):
             with self.subTest(fault=fault):
                 self.check_rejected(self.lines + [fault])
 
