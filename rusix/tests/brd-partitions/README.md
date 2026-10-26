@@ -1,7 +1,8 @@
 # Bounded DOS partition contract
 
-Implemented fixture and runner; **kernel execution pending**. Static Rust PID1
-runs unchanged against C and Rust BRD. Never execute its binary on the host or as
+**Five cases pass for C and Rust on q35** at `9d1c1ca5dd`, with an identical
+fixture archive: [paired evidence](../../docs/evidence/brd-q35/manifest.json).
+Static Rust PID1 runs unchanged against C and Rust BRD. Never execute its binary on the host or as
 container PID1: it writes an MBR and block data. It requires PID1 and the exact
 `rusix.brd_partitions=1` authorization before creating guest block nodes/writing.
 
@@ -29,7 +30,8 @@ then `SUCCESS cases=5`:
 5. `independent_disk`: corresponding ram1 sectors remain zero, its later write
    leaves ram0p1 unchanged, and the original MBR survives all operations.
 
-Stage only `/init`, `/proc`, `/sys`, `/dev` and console character 5:1. PID1
+Stage `/init`, `/proc`, `/sys`, `/dev`, console character 5:1 and `/dev/kmsg`
+character 1:11. Markers use single printk records without reconstruction. PID1
 creates block nodes in the guest. All data I/O uses aligned direct-I/O buffers.
 The runner compiles static Rust, rejects ELF interpreter/dynamic dependencies,
 requires matching clean source/build evidence, copies the kernel, and records

@@ -1,6 +1,7 @@
 # Ordinary ext4 userspace fixture
 
-**C and Rust VM runs pass.** See the [paired evidence](../../docs/evidence/brd-ext4/manifest.json). This is separate from the unchanged
+**C and Rust q35 VM runs pass** at `9d1c1ca5dd` with an identical fixture archive:
+[paired evidence](../../docs/evidence/brd-q35/manifest.json). This is separate from the unchanged
 six-case direct-I/O BRD contract. Buffered writes, per-file fsync, aligned direct reads/writes and remount checks
 exercise the same staged rootfs and workload against
 C and Rust BRD kernels. Never execute `init` or `workload.sh` on the host or as
@@ -12,7 +13,7 @@ runs the ordinary Debian shell/utilities, checks exit status, and reboots.
 The child shell independently requires the token, parent PID 1 and authorization
 environment. These prevent accidental use, not deliberate circumvention.
 
-## Build and stage (container/VM execution pending)
+## Build and stage
 
 Compile without running the output, inside the pinned toolchain container:
 
@@ -25,14 +26,13 @@ readelf -h -l -d /out/ext4-init
 
 Require x86_64 static ELF with no `INTERP` or `NEEDED`. Compilation and ELF
 inspection passed with the pinned container Rust 1.85.1. The executable has
-never been run on the host. `sh -n workload.sh` passes; guest execution is pending.
+never been run on the host. Guest execution is recorded in the paired evidence.
 
 The fixture image builds successfully from the inspected local toolchain image
 and its signed Debian snapshot sources (`20261025T000000Z`). Added e2fsprogs and
 all dependencies are pinned in [ext4-packages.lock](ext4-packages.lock); the
 Docker build and runner compare package inventories against that tracked file.
-The local base tag must resolve to the ID recorded in the Dockerfile before a
-build; preserve the inspected base/final image IDs in build evidence. Reconstruct
+Select and record the inspected local base/final image IDs for each build. Reconstruct
 the base using [CI tooling](../../ci/README.md) when unavailable. Image identity
 passed to the runner is caller attestation; inventory checks verify versions,
 while archived-file hashes record the actual staged bytes. No package
@@ -50,7 +50,7 @@ Stage a fresh `newc` archive, without creating host device nodes:
 | `/usr/sbin/` | `mkfs.ext4` and `e2fsck` (dereference symlinks) |
 | `/etc/mke2fs.conf` | Exact config from the fixture image; hash it |
 | `/proc`, `/mnt/test`, `/expected`, `/dev`, `/etc` | Directories |
-| `/dev/console`, `/dev/ram0` | Character 5:1 and block 1:0 |
+| `/dev/console`, `/dev/kmsg`, `/dev/ram0` | Character 5:1, character 1:11 and block 1:0 |
 | `/dev/null`, `/dev/zero`, `/dev/random`, `/dev/urandom` | Character 1:3, 1:5, 1:8, 1:9 |
 
 For **each** staged ordinary executable, inspect `readelf -l -d` inside the
@@ -74,7 +74,9 @@ ELF/script execution, initramfs, procfs, multiuser and the selected BRD. Do not 
 Require one `RUSIX_EXT4_START`, these ordered pass markers, then exactly one
 `RUSIX_EXT4_SUCCESS cases=6`. Reject every failure marker, panic, timeout,
 missing/duplicate/reordered case or unsuccessful child/VM outcome; reboot alone
-is insufficient. Keep serial output and exact kernel/rootfs/tool provenance.
+is insufficient. START/PASS/SUCCESS use one `/dev/kmsg` write per record, avoiding
+tty/printk interleaving. The runner enables devkmsg, disables printk timestamps
+and sets loglevel 7; it never reconstructs fragmented markers. Keep serial output and exact kernel/rootfs/tool provenance.
 
 1. `mkfs`: ordinary `mkfs.ext4` creates the filesystem.
 2. `initial_write`: patterned and sparse files, digests, mode and hardlink checks.
@@ -109,7 +111,7 @@ selection proof; the runner rejects ordinary BRD profiles without ext4. Set
 Only QEMU receives the guest archive: no host mounts, device-node creation,
 formatting or fixture execution occurs. The runner requires the fixture's
 package inventory to match installed packages. Its host-only regression suite
-is `python3 rusix/tests/test_brd_ext4_gate.py`; all 17 checks currently pass.
+is `python3 rusix/tests/test_brd_ext4_gate.py`.
 
 For a local rebuild, select the inspected base explicitly:
 

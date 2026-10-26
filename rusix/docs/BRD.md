@@ -153,16 +153,20 @@ review even though this project's long-term direction is governed by ADR 0002.
 
 ## Remaining verification
 
-Finish parameter/partition and on-demand parity before Phase 1a closure.
+[Paired q35 verification](evidence/brd-q35/manifest.json) at `9d1c1ca5dd` passes
+block6, ext4 six cases, six parameter/on-demand boots and partition5 (including
+clipped writes). Each fixture archive is identical across C/Rust; configs differ
+only in BRD selection. This does not resolve the negative-parameter exception
+below or retire the remaining C boundaries.
 Phase 1b adds paired allocation injection and deterministic NOWAIT errors,
 overlapping I/O/discard lifetimes, memory pressure, initialization failure,
 busy removal and repeated module load/use/unload. Use
 supported memory instrumentation and lockdep with demonstrated coverage.
 
-The ordinary userspace/ext4 workload, built-in/module x86_64 and arm64 matrix,
-controlled performance measurements, pinned environment/CI and a chosen upstream-fix port remain required,
-with the 1a/1b split defined in [PHASE1.md](PHASE1.md). Neither this
-design nor six passing baseline tests would complete any of those broader gates.
+Expanded architecture/module coverage, controlled performance and a chosen
+upstream-fix port remain subject to the 1a/1b split in [PHASE1.md](PHASE1.md).
+Hosted CI is disabled by execution policy; these local results do not complete
+those broader gates.
 
 ## LTS implementation candidate
 
@@ -188,8 +192,8 @@ On the declared 64-bit targets, positive `max_part` inputs from 2^30 through
 INT_MAX preserve the pinned narrowing to INT_MIN, signed clamp comparison,
 parameter sysfs value and major registration. Their unsigned probe divisor is
 0x80000000; disk creation rejects the minor count, and opening ram0 returns
-ENXIO. The paired high-positive guest case checks these defined observations; its
-runtime verification is pending.
+ENXIO. The paired q35 high-positive guest case verifies these observations;
+it avoids the C failure path's dangling debugfs counter.
 Negative inputs instead narrow to zero in C, producing a zero divisor in its
 on-demand probe. Rust retains an initialization-time EINVAL guard for this
 undefined-behavior boundary. That guard also changes pre-fault initialization

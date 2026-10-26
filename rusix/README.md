@@ -9,11 +9,12 @@ boundaries. [The roadmap](docs/ROADMAP.md) orders that work.
 
 **Phase 1a implementation and verification are in progress.** Most kernel code
 remains C. This branch is based on **Linux 6.18.58 LTS**. Its required math
-compatibility tests and six-case C BRD baseline pass in local VMs. A built-in
-Rust BRD implementation now builds and passes the same six VM contract cases.
-Both implementations also pass the same ordinary-userspace ext4 workload; nine
-Rust ownership/policy kernel tests pass. Remaining gates are tracked in
-[PROGRESS.md](PROGRESS.md).
+compatibility tests pass. [Paired x86_64 q35 evidence](docs/evidence/brd-q35/manifest.json)
+at `9d1c1ca5dd` covers C/Rust BRD block6, ordinary ext4 six cases, six parameter
+boots and five partition cases, with identical fixture archives and only BRD
+selection differing in configuration. Nine Rust ownership tests also pass.
+Negative-parameter behavior, remaining C parameter/interface code and core
+integration gaps prevent a Phase 1a completion claim; see [PROGRESS.md](PROGRESS.md).
 
 The published main branch remains on its earlier verified source until this
 transition passes review gates. Historical results retain their original source

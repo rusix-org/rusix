@@ -26,10 +26,11 @@ when the declared target and export mechanism no longer require them.
 
 ## RAM-backed block driver
 
-**LTS C and Rust drivers pass the six-case x86_64 SMP block contract.**
-[Rust evidence](evidence/brd-rust-initial/manifest.json) records implementation selection;
-nine ownership tests and paired ordinary ext4 also pass. Parameter/on-demand
-coverage and broader validation are tracked in PROGRESS.
+**Paired x86_64 q35 BRD verification passes** at `9d1c1ca5dd`:
+[manifest](evidence/brd-q35/manifest.json) records block6, ext4 six cases, six
+parameter boots and partition5, with identical fixtures and only driver selection
+differing between configs. Nine ownership tests also pass. The negative-parameter
+exception and residual C boundaries remain; no complete-subsystem claim follows.
 The driver/store live in `drivers/block/brd_rust.rs` and `brd_rust/store.rs`;
 `rust/kernel/block/{bio,bio_disk}.rs` provide transitional interfaces.
 Six x86_64 SMP baseline cases: [manifest](evidence/lts-baseline/manifest.json). [BRD.md](BRD.md) owns the pinned
@@ -42,8 +43,9 @@ and upstream rnull are not substitutes for the bio-based stateful BRD contract.
 
 [`complete()`](../../kernel/sched/completion_rust.rs) has an opt-in Rust
 translation (`0e7d592fed`, default off, x86_64). Local `completion-c`/`completion-rust`
-profiles support comparison; compilation, exclusive-symbol linking and paired
-runtime verification remain pending. C still owns layout/init/reset, other
+profiles support comparison. The C-selected q35 run passes all nine completion
+cases (also alongside nine BRD ownership cases); Rust-selected build/link/runtime
+verification is still in progress. See PROGRESS for current run identities. C still owns layout/init/reset, other
 completion operations, wait loops, raw locks, swait and scheduler integration.
 The scoped kernel LKMM atomic counter shares the existing raw lock with C writers;
 no Rust reference covers the enclosing mutable C object.

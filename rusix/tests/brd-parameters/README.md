@@ -2,14 +2,15 @@
 
 Static Rust guest PID1, shared unchanged by C and Rust BRD kernels. **Never run
 on the host or as container PID1.** No kernel behavior is implemented here.
-The current q35/configuration validation is ongoing; no latest-run success is
-claimed here. See the progress ledger for revision-specific evidence.
+All six variants pass for both implementations on q35 at `9d1c1ca5dd` with an
+identical fixture archive: [paired evidence](../../docs/evidence/brd-q35/manifest.json).
 
 Requires PID1 before actions, mounts proc, requires exactly one
 `rusix.brd_parameters=1` token, then mounts sysfs and creates guest-only block
 nodes. Supply unique decimal `rusix.expect_rd_nr`, `rusix.expect_rd_size` (KiB),
 and `rusix.expect_max_part` values. Stage `/proc`, `/sys`, `/dev` and character
-console 5:1. No other rootfs utilities/libraries are needed for the static ELF.
+console 5:1 plus `/dev/kmsg` character 1:11. Markers use single printk records,
+not serial-fragment reconstruction; ordinary output remains on the console. No other rootfs utilities/libraries are needed for the static ELF.
 The runner bounds each fresh VM to 180 seconds and rejects failed, missing,
 duplicate or reordered markers, nonzero exits, timeouts and kernel diagnostics.
 It uses `q35` with ACPI/PCI configuration and requires `CONFIG_SYSFS=y` plus
