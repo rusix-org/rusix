@@ -79,6 +79,9 @@ if [[ "$profile" == brd || "$profile" == brd-ext4-c ]]; then
     grep -E '(^|/)brd\.o$' "$evidence/block-archive.txt" > "$evidence/brd-objects.txt"
     bash "$RUSIX_PROJECT/scripts/with-local-tools.sh" llvm-nm --defined-only \
         "$out/vmlinux" > "$evidence/kernel-symbols.tmp"
+    if grep -q 'brd_rust' "$evidence/kernel-symbols.tmp"; then
+        echo 'Rust BRD symbols remain linked in the C profile.' >&2; exit 1;
+    fi
     awk '$3 == "brd_submit_bio" { print }' "$evidence/kernel-symbols.tmp" \
         > "$evidence/brd-symbols.txt"
     rm -- "$evidence/kernel-symbols.tmp"
