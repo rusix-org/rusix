@@ -1,0 +1,1 @@
+Kernel-only cache from /home/aaron/code/rusix/linux-out/lts-swait-init-debug-c-001; originals retained, no guest fixtures copied.

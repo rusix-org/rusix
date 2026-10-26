@@ -1,0 +1,20 @@
+implementation=wake-c
+/out/builds/ci-completion-plain-c/kernel/sched/build_utility.o
+/out/builds/ci-completion-plain-c/kernel/sched/build_utility.o
+0000000000003230 T __wake_up
+00000000000036f0 T __wake_up_on_current_cpu
+0000000000003760 T __wake_up_locked
+00000000000037c0 T __wake_up_locked_key
+0000000000003810 T __wake_up_sync_key
+0000000000003890 T __wake_up_locked_sync_key
+00000000000038f0 T __wake_up_sync
+/out/builds/ci-completion-plain-c/vmlinux
+ffffffff81287fa0 T __wake_up
+ffffffff81288460 T __wake_up_on_current_cpu
+ffffffff812884d0 T __wake_up_locked
+ffffffff81288530 T __wake_up_locked_key
+ffffffff81288580 T __wake_up_sync_key
+ffffffff81288600 T __wake_up_locked_sync_key
+ffffffff81288660 T __wake_up_sync
+208ef0fc223fa288a4047bb5fd5252d2dd128c64e83dadeb3a70124010a4f39e  /src/kernel/sched/wait.c
+fcc4cc29d391b8891645f9e7c170ee4fb9130dc8f7ffcc7a15adaa8d84f49c30  /out/builds/ci-completion-plain-c/kernel/sched/build_utility.o

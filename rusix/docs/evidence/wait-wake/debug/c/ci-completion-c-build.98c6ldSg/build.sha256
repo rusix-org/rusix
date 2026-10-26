@@ -1,0 +1,4 @@
+897f77cccc0bbbdd54b4831252514cd61f5afcb71a0c824324e6e15914f8805e  /out/builds/ci-completion-c/.config
+0f88369dfd6391b149763f6fd454e315c1b4c4bd09f611b9657b32366f129cfd  /out/builds/ci-completion-c/arch/x86/boot/bzImage
+a15e3ae30f43c06156ec330a9aa7d6f0d71a8a470702eae0d8f14c5da3b2766e  /out/builds/ci-completion-c/vmlinux
+d83e452b4e02fcd323257dc2d1ba83c39d8440a9629409f8217ebade84eb5778  /out/builds/ci-completion-c/vmlinux.map

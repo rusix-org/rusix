@@ -1,10 +1,16 @@
 # Generic wait-queue wake policy
 
-The working slice translates Linux 6.18.58 wait.c traversal/accounting and seven
-wake wrappers into `kernel/sched/wait_rust.rs`. It shares the experimental,
-default-off `CONFIG_RUSIX_COMPLETION_RUST` selection. Compilation and paired
-runtime verification are pending; prior completion/swait evidence does not certify
-this new code. No subsystem divergence point is declared.
+The slice translates Linux 6.18.58 wait.c traversal/accounting and seven wake
+wrappers into `kernel/sched/wait_rust.rs`, under experimental, default-off
+`CONFIG_RUSIX_COMPLETION_RUST`. At `df5d5cb7f2c0`, C/Rust debug and plain kernels
+each pass 44 combined cases (35 core + nine BRD), then 35 isolated core cases.
+[Core evidence](../../docs/evidence/wait-wake/manifest.json) retains the initial
+Rust pointer-conversion compile failure. The corrected pairs have no compiler or
+rejected runtime diagnostics. Symbol gates select all seven wake entries.
+The same source passes nine ordinary-userspace/storage boots per implementation,
+including six ext4 and four poll-consumer cases with identical guest fixtures.
+[Userspace evidence](../../docs/evidence/wait-wake-ext4/manifest.json).
+No subsystem divergence point is declared.
 
 ## Contract and ownership
 

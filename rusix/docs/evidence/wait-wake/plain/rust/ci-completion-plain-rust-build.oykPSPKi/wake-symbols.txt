@@ -1,0 +1,16 @@
+/out/builds/ci-completion-plain-rust/kernel/sched/wait_rust.o
+0000000000000010 T __wake_up
+00000000000000d0 T __wake_up_on_current_cpu
+0000000000000170 T __wake_up_locked
+00000000000001f0 T __wake_up_locked_key
+0000000000000270 T __wake_up_sync_key
+0000000000000330 T __wake_up_locked_sync_key
+00000000000003b0 T __wake_up_sync
+/out/builds/ci-completion-plain-rust/vmlinux
+ffffffff8128b820 T __wake_up
+ffffffff8128b8e0 T __wake_up_on_current_cpu
+ffffffff8128b980 T __wake_up_locked
+ffffffff8128ba00 T __wake_up_locked_key
+ffffffff8128ba80 T __wake_up_sync_key
+ffffffff8128bb40 T __wake_up_locked_sync_key
+ffffffff8128bbc0 T __wake_up_sync

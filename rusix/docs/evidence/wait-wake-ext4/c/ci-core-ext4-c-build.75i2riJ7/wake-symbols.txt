@@ -1,0 +1,16 @@
+/out/builds/ci-core-ext4-c/kernel/sched/build_utility.o
+0000000000003230 T __wake_up
+00000000000036f0 T __wake_up_on_current_cpu
+0000000000003760 T __wake_up_locked
+00000000000037c0 T __wake_up_locked_key
+0000000000003810 T __wake_up_sync_key
+0000000000003890 T __wake_up_locked_sync_key
+00000000000038f0 T __wake_up_sync
+/out/builds/ci-core-ext4-c/vmlinux
+ffffffff81294ba0 T __wake_up
+ffffffff81295060 T __wake_up_on_current_cpu
+ffffffff812950d0 T __wake_up_locked
+ffffffff81295130 T __wake_up_locked_key
+ffffffff81295180 T __wake_up_sync_key
+ffffffff81295200 T __wake_up_locked_sync_key
+ffffffff81295260 T __wake_up_sync

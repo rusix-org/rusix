@@ -1,0 +1,1 @@
+Kernel-only cache from /home/aaron/code/rusix/linux-out/lts-wait-wake-debug-c-001; original C pass/Rust pointer-conversion compile failure retained.

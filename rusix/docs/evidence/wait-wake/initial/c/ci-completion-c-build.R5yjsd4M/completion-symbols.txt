@@ -1,0 +1,30 @@
+/out/builds/ci-completion-c/kernel/sched/build_utility.o
+0000000000002c80 T complete
+0000000000002d00 T complete_all
+0000000000002c00 T complete_on_current_cpu
+0000000000002e50 T try_wait_for_completion
+0000000000002e90 T completion_done
+0000000000000000 T wait_for_completion
+0000000000000180 T wait_for_completion_timeout
+0000000000000300 T wait_for_completion_io
+0000000000000490 T wait_for_completion_io_timeout
+00000000000004a0 T wait_for_completion_interruptible
+0000000000000670 T wait_for_completion_interruptible_timeout
+0000000000000820 T wait_for_completion_killable
+0000000000000a20 T wait_for_completion_killable_timeout
+00000000000009f0 T wait_for_completion_state
+/out/builds/ci-completion-c/vmlinux
+ffffffff812a9090 T complete
+ffffffff812a9110 T complete_all
+ffffffff812a9010 T complete_on_current_cpu
+ffffffff812a9260 T try_wait_for_completion
+ffffffff812a92a0 T completion_done
+ffffffff815955d0 T wait_for_completion
+ffffffff81595750 T wait_for_completion_timeout
+ffffffff815958d0 T wait_for_completion_io
+ffffffff81595a60 T wait_for_completion_io_timeout
+ffffffff81595a70 T wait_for_completion_interruptible
+ffffffff81595c40 T wait_for_completion_interruptible_timeout
+ffffffff81595df0 T wait_for_completion_killable
+ffffffff81595ff0 T wait_for_completion_killable_timeout
+ffffffff81595fc0 T wait_for_completion_state

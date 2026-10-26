@@ -76,8 +76,9 @@ and subsequent synchronized publication, not merely an address to a live queue.
 
 ## Verification and remaining coverage
 
-The strict `rusix_completion_*` inventory has five contract, eight layout,
-four wait, four signal and nine swait cases:
+The completion/swait portion has five contract, eight layout,
+four wait, four signal and nine swait cases. Five [generic wake cases](../wait/README.md)
+bring the strict `rusix_completion_*` inventory to 35:
 
 - Counter/token/saturation/broadcast behavior, layout and pinned C-visible storage.
 - All blocking entry points on presignals/broadcast; timed zero/positive exits.
@@ -117,12 +118,11 @@ errors and warnings resolved before the passing pairs.
 
 C still executes inline completion initialization/reset, raw-lock and lockdep
 macros, list/state/LKMM adapters, task wakeup, scheduler/timer/signal primitives
-and generic consumer macros. Next migrate generic wait.c callback traversal and
-wake wrappers, retaining a cached successor and never accessing a waiter after
-its callback: callbacks may unlink/free themselves before returning. Mixed C
-flag accesses need a separate audit before Rust can access them directly. Retire
-adapters as Rust owns their primitives and callers. Preserve upstream tests,
-including `test-ww_mutex`, and the declared configuration bounds.
+and generic consumer macros. Generic wake traversal and seven wrappers now have
+verified Rust replacements; the [wake record](../wait/README.md) owns their
+callback-lifetime and mixed-flag-access contracts. Enrollment/callback policy and
+primitive ownership follow. Preserve upstream tests, including `test-ww_mutex`,
+and the declared configuration bounds.
 
 `model.rs` remains a host-only standard-library ownership model: five tests cover
 accounting, saturation, quiescent reset, abandoned storage and concurrent consumers.

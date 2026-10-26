@@ -1,0 +1,26 @@
+implementation=swait-c
+/out/builds/ci-completion-c/kernel/sched/build_utility.o
+/out/builds/ci-completion-c/kernel/sched/build_utility.o
+0000000000002ec0 T __init_swait_queue_head
+0000000000003080 T __prepare_to_swait
+00000000000032e0 T __finish_swait
+0000000000002f20 T swake_up_locked
+0000000000002df0 T swake_up_all_locked
+0000000000002f70 T swake_up_one
+0000000000002fd0 T swake_up_all
+00000000000030e0 T prepare_to_swait_exclusive
+00000000000031b0 T prepare_to_swait_event
+0000000000003350 T finish_swait
+/out/builds/ci-completion-c/vmlinux
+ffffffff812a92d0 T __init_swait_queue_head
+ffffffff812a9490 T __prepare_to_swait
+ffffffff812a96f0 T __finish_swait
+ffffffff812a9330 T swake_up_locked
+ffffffff812a9200 T swake_up_all_locked
+ffffffff812a9380 T swake_up_one
+ffffffff812a93e0 T swake_up_all
+ffffffff812a94f0 T prepare_to_swait_exclusive
+ffffffff812a95c0 T prepare_to_swait_event
+ffffffff812a9760 T finish_swait
+7a4b16a13ac282ea4335cc33e5779c6208734a9b0d1f6ca547cf28d327f9a3f8  /src/kernel/sched/swait.c
+4762ed8d14e461f60f6eda8e499c3a1c829de46f92f41d6ae44b3f26e6a7f256  /out/builds/ci-completion-c/kernel/sched/build_utility.o

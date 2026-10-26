@@ -1,0 +1,55 @@
+make: Entering directory '/src'
+make[1]: Entering directory '/out/builds/ci-completion-rust'
+  SYNC    include/config/auto.conf
+  GEN     Makefile
+  GEN     Makefile
+  DESCEND objtool
+  CALL    /src/scripts/checksyscalls.sh
+  INSTALL libsubcmd_headers
+  BINDGEN rust/bindings/bindings_helpers_generated.rs
+  CC      rust/helpers/helpers.o
+  EXPORTS rust/exports_helpers_generated.h
+  RUSTC L rust/bindings.o
+  EXPORTS rust/exports_bindings_generated.h
+  RUSTC L rust/kernel.o
+  EXPORTS rust/exports_kernel_generated.h
+  GEN     usr/initramfs_data.cpio
+  COPY    usr/initramfs_inc_data
+  AS      usr/initramfs_data.o
+  UPD     init/utsversion-tmp.h
+  CC      init/version.o
+  AR      usr/built-in.a
+  AR      init/built-in.a
+  CC      kernel/sched/build_utility.o
+  RUSTC     kernel/sched/completion_rust.o
+  RUSTC     kernel/sched/swait_rust.o
+  CC      rust/exports.o
+  AR      rust/built-in.a
+  RUSTC     kernel/sched/wait_rust.o
+error[E0599]: no method named `cast_mut` found for raw pointer `*mut kernel::bindings::wait_queue_entry` in the current scope
+  --> /src/kernel/sched/wait_rust.rs:75:87
+   |
+75 |             unsafe { kernel::container_of!(node, bindings::wait_queue_entry, entry) }.cast_mut();
+   |                                                                                       ^^^^^^^^
+   |
+help: there is a method `as_mut` with a similar name
+   |
+75 |             unsafe { kernel::container_of!(node, bindings::wait_queue_entry, entry) }.as_mut();
+   |                                                                                       ~~~~~~
+
+error: aborting due to 1 previous error
+
+For more information about this error, try `rustc --explain E0599`.
+make[5]: *** [/src/scripts/Makefile.build:354: kernel/sched/wait_rust.o] Error 1
+make[5]: *** Waiting for unfinished jobs....
+make[4]: *** [/src/scripts/Makefile.build:544: kernel/sched] Error 2
+make[3]: *** [/src/scripts/Makefile.build:544: kernel] Error 2
+make[3]: *** Waiting for unfinished jobs....
+  RUSTC     drivers/block/brd_rust.o
+  AR      drivers/block/built-in.a
+  AR      drivers/built-in.a
+make[2]: *** [/src/Makefile:2050: .] Error 2
+make[1]: *** [/src/Makefile:248: __sub-make] Error 2
+make[1]: Leaving directory '/out/builds/ci-completion-rust'
+make: *** [Makefile:248: __sub-make] Error 2
+make: Leaving directory '/src'

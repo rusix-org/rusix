@@ -2,7 +2,7 @@
 
 **Rust BRD passes x86_64 block and ordinary-userspace ext4 contracts;
 all fourteen completion entry points and all ten swait.c entry points have verified
-opt-in Rust implementations.** Most of the kernel remains C. Linux 6.18.58
+opt-in Rust implementations; seven generic wake wrappers now pass parity too.** Most of the kernel remains C. Linux 6.18.58
 (`2926d88bb7fc`) is the behavioral baseline. Hosted CI remains disabled;
 verification runs locally. No subsystem divergence point is declared.
 
@@ -13,11 +13,11 @@ target; [Phase 1](docs/PHASE1.md) owns delivery gates.
 | --- | --- |
 | LTS provenance/math | Signed tag verified; all 24 required math cases pass on q35, zero skips. [Math](docs/evidence/math-q35/manifest.json), [provenance](docs/evidence/lts-baseline/manifest.json). |
 | Storage parity | At `9d1c1ca5dd`, C/Rust BRD each pass block6, ext4 userspace6, six parameter variants and partition5. Four identical guest fixtures; configs differ only by BRD selection. [Evidence](docs/evidence/brd-q35/manifest.json). |
-| Core and shared queue policy | C/Rust debug at `61882366fe7e` and plain at `9bba720b206b` each pass 39 combined (30 core + nine BRD), then 30 isolated core on q35/KVM SMP2. Only two plain-profile config fragments differ between revisions; production/tests are identical. All 14 completion and 10 swait definitions link exclusively. Zero skips or compiler/objtool diagnostics. [Evidence](docs/evidence/swait-init/manifest.json). |
-| Ordinary-userspace integration | At `9bba720b206b`, Rust BRD in both; only completion/swait selection differs. Both pass nine block/ext4/parameter/partition boots with identical fixtures and no compiler diagnostics. KUnit disabled. [Evidence](docs/evidence/swait-init-ext4/manifest.json). |
+| Core and shared queue policy | At `df5d5cb7f2c0`, C/Rust debug and plain pairs each pass 44 combined (35 core + nine BRD), then 35 isolated core on q35/KVM SMP2. All 14 completion, 10 swait and seven generic wake definitions link exclusively. Zero skips or compiler/objtool diagnostics. [Evidence](docs/evidence/wait-wake/manifest.json). |
+| Ordinary-userspace integration | Same source, Rust BRD in both; only core selection differs. Both pass nine block/ext4/parameter/partition boots. Ext4 boot requires six filesystem and four pipe/poll/epoll/eventfd cases. Identical fixtures; no compiler diagnostics. KUnit disabled. [Evidence](docs/evidence/wait-wake-ext4/manifest.json). |
 
 Rust implements BRD/store and bio/disk interfaces, conditional xarray insertion,
-NOIO scope, completion policy and shared/generic swait enrollment/wakeup.
+NOIO scope, completion/swait policy and generic callback wake traversal.
 The [core migration record](experiments/completion/README.md) owns storage,
 locking/lifetime contracts, test inventory and remaining C boundaries. Selection
 remains default-off and builtin-only; known incompatible counter-access drivers
@@ -31,17 +31,17 @@ linker/padding **2,107,049**, unknown **0**.
 migration, includes inherited Rust infrastructure, and is neither a completion
 percentage nor server runtime evidence. That target selects Rust BRD/C completion.
 
-Working branch `rusix/wait-wake-policy` adds seven Rust generic wake wrappers
-and shared callback traversal. Five cases bring the required core inventory to 35;
-four new guest consumer cases exercise pipe/poll/epoll/eventfd. Build/runtime
-verification is pending. [Wake migration contract](experiments/wait/README.md)
-owns the callback-lifetime, flag-access boundaries and remaining coverage.
+Next migrate generic wait enrollment and initialization, with priority ordering
+and pre-lock flag accesses preserved explicitly. The [wake migration record](experiments/wait/README.md)
+owns callback lifetime and mixed flag-access boundaries. Real blocked wait-event
+and wait-bit handoffs, priority enrollment and POLLFREE races remain unverified.
 Forced diagnostic failures, detached-batch races, untimed signal paths, deadline
 races and broader IRQ coverage remain open. arm64, modules, expanded fault stress
 and performance budgets remain Phase 1b. Phase 1a still needs the provisional BRD
 invalid-parameter exception, parameter adapters and review gates; [BRD.md](docs/BRD.md).
 
-Failures are retained, including the [plain-profile configuration refusal](docs/evidence/swait-init/manifest.json)
+Failures are retained, including the [wake pointer-conversion compile error](docs/evidence/wait-wake/manifest.json),
+the [plain-profile configuration refusal](docs/evidence/swait-init/manifest.json)
 (EXPERT forces DEBUG_KERNEL; corrected before compilation), [wait bringup](docs/evidence/completion-wait-initial/manifest.json),
 [status test compilation](docs/evidence/completion-status/manifest.json),
 [q35 bringup](docs/evidence/q35-bringup/manifest.json) and the initial

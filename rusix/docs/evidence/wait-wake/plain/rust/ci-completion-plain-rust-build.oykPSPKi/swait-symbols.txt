@@ -1,0 +1,22 @@
+/out/builds/ci-completion-plain-rust/kernel/sched/swait_rust.o
+0000000000000000 T __init_swait_queue_head
+0000000000000040 T __prepare_to_swait
+0000000000000080 T __finish_swait
+00000000000000b0 T swake_up_locked
+0000000000000100 T swake_up_all_locked
+0000000000000170 T swake_up_one
+00000000000001c0 T swake_up_all
+0000000000000270 T prepare_to_swait_exclusive
+00000000000002d0 T prepare_to_swait_event
+0000000000000360 T finish_swait
+/out/builds/ci-completion-plain-rust/vmlinux
+ffffffff8128b460 T __init_swait_queue_head
+ffffffff8128b4a0 T __prepare_to_swait
+ffffffff8128b4e0 T __finish_swait
+ffffffff8128b510 T swake_up_locked
+ffffffff8128b560 T swake_up_all_locked
+ffffffff8128b5d0 T swake_up_one
+ffffffff8128b620 T swake_up_all
+ffffffff8128b6d0 T prepare_to_swait_exclusive
+ffffffff8128b730 T prepare_to_swait_event
+ffffffff8128b7c0 T finish_swait
