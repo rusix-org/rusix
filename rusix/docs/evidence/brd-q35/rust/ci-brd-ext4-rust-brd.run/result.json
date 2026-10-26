@@ -1,0 +1,12 @@
+{
+  "status": "PASS",
+  "cases": [
+    "geometry",
+    "sparse_read",
+    "crossing_write",
+    "discard_edges",
+    "concurrent_insert",
+    "accounting"
+  ],
+  "qemu_exit": 0
+}
