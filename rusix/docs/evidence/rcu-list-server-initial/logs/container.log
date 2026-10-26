@@ -1,0 +1,20 @@
+Build evidence: /out/logs/ci-rcu-list-server-c-build.o50XEXAW
+{
+  "profile": "rcu-list-server-c",
+  "configuration": "PASS"
+}
+Traceback (most recent call last):
+  File "/src/rusix/scripts/verify-brd-parameter-owner.py", line 260, in <module>
+    main()
+    ~~~~^^
+  File "/src/rusix/scripts/verify-brd-parameter-owner.py", line 254, in main
+    result = [verify(path, initial) for path in (args.object, args.vmlinux)]
+              ~~~~~~^^^^^^^^^^^^^^^
+  File "/src/rusix/scripts/verify-brd-parameter-owner.py", line 161, in verify
+    elf = Elf(path)
+  File "/src/rusix/scripts/verify-brd-parameter-owner.py", line 46, in __init__
+    self.sections = measurement.elf_sections(path)
+                    ~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^
+  File "/src/rusix/scripts/measure-kernel-languages.py", line 63, in elf_sections
+    raise ValueError(f"Duplicate ELF section name: {name}")
+ValueError: Duplicate ELF section name: __patchable_function_entries

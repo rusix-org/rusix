@@ -1,0 +1,40 @@
+{
+  "configuration_note": "Configuration-near seed; fresh profile resolution and all selection gates required. Ext4 seed core is C; target core must be Rust.",
+  "copied_artifact_sha256": {
+    "builds/ci-rcu-list-server-c/.config": "e8cee23bd5c24281a674ed9b2391c1c717103ddb615c59349cd737939544d928",
+    "builds/ci-rcu-list-server-c/arch/x86/boot/bzImage": "f4dead6219d7be1af8f9b504ca9892e81aea53e6639ba75380554cdb132005dd",
+    "builds/ci-rcu-list-server-c/vmlinux": "3c9883755e8cae647eaebf3286e7fc28a2b9bce5365a14720e94776dacfda80c",
+    "builds/ci-rcu-list-server-c/vmlinux.map": "d5eff8cadac4269189a8230d5deb14281e59cc2378b891c0862821e2c1b08848"
+  },
+  "copy_command": [
+    "cp",
+    "-a",
+    "--reflink=auto",
+    "/home/aaron/code/rusix/linux-out/lts-wait-owner-server-rust-001/builds/ci-server/.",
+    "/home/aaron/code/rusix/linux-out/lts-rcu-list-server-c-001/builds/ci-rcu-list-server-c"
+  ],
+  "excluded": "No guest fixtures, VM logs, initramfs, CI results or source checkout copied",
+  "free_bytes_before_preparation": 237968945152,
+  "scope": "Kernel-only incremental cache; not new build/runtime evidence",
+  "seed_artifact_sha256": {
+    "/out/builds/ci-server/.config": "e8cee23bd5c24281a674ed9b2391c1c717103ddb615c59349cd737939544d928",
+    "/out/builds/ci-server/arch/x86/boot/bzImage": "f4dead6219d7be1af8f9b504ca9892e81aea53e6639ba75380554cdb132005dd",
+    "/out/builds/ci-server/vmlinux": "3c9883755e8cae647eaebf3286e7fc28a2b9bce5365a14720e94776dacfda80c",
+    "/out/builds/ci-server/vmlinux.map": "d5eff8cadac4269189a8230d5deb14281e59cc2378b891c0862821e2c1b08848"
+  },
+  "seed_build_evidence": "/home/aaron/code/rusix/linux-out/lts-wait-owner-server-rust-001/logs/ci-server-build.ac3l9G9J",
+  "seed_build_log_sha256": "a40a71f5b267f9f4a7085211e86d4bebef19d9ca90926d941f540e1ad5cf36b0",
+  "seed_output": "/home/aaron/code/rusix/linux-out/lts-wait-owner-server-rust-001",
+  "seed_profile": "server",
+  "seed_source": "ae62f42b6f585fcbcdcff84e0763412609f36ccd",
+  "seed_source_after": "ae62f42b6f585fcbcdcff84e0763412609f36ccd",
+  "seed_source_after_status_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "seed_terminal_status": {
+    "build.exit": "0",
+    "ci.exit": "0",
+    "container.exit": "0"
+  },
+  "status": "PREPARED_NOT_RUN",
+  "target_profile": "rcu-list-server-c",
+  "target_source": "a536e5425997f36fd17c8941084c40ca889cceda"
+}

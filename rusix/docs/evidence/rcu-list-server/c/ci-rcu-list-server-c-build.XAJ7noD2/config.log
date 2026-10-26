@@ -1,0 +1,8 @@
+make: Entering directory '/src'
+make[1]: Entering directory '/out/builds/ci-rcu-list-server-c'
+  GEN     Makefile
+#
+# No change to .config
+#
+make[1]: Leaving directory '/out/builds/ci-rcu-list-server-c'
+make: Leaving directory '/src'

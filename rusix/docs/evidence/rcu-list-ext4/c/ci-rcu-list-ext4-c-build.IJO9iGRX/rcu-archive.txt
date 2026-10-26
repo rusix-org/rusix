@@ -1,0 +1,5 @@
+/out/builds/ci-rcu-list-ext4-c/kernel/rcu/update.o
+/out/builds/ci-rcu-list-ext4-c/kernel/rcu/sync.o
+/out/builds/ci-rcu-list-ext4-c/kernel/rcu/srcutree.o
+/out/builds/ci-rcu-list-ext4-c/kernel/rcu/tree.o
+/out/builds/ci-rcu-list-ext4-c/kernel/rcu/rcu_segcblist.o

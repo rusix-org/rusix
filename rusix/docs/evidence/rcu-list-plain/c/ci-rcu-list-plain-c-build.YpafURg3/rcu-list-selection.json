@@ -1,0 +1,32 @@
+{
+  "implementation": "c",
+  "object": "rcu_segcblist.o",
+  "definitions": [
+    "rcu_cblist_init",
+    "rcu_cblist_enqueue",
+    "rcu_cblist_flush_enqueue",
+    "rcu_cblist_dequeue",
+    "rcu_segcblist_get_seglen",
+    "rcu_segcblist_n_segment_cbs",
+    "rcu_segcblist_add_len",
+    "rcu_segcblist_inc_len",
+    "rcu_segcblist_init",
+    "rcu_segcblist_disable",
+    "rcu_segcblist_ready_cbs",
+    "rcu_segcblist_pend_cbs",
+    "rcu_segcblist_first_cb",
+    "rcu_segcblist_first_pend_cb",
+    "rcu_segcblist_nextgp",
+    "rcu_segcblist_enqueue",
+    "rcu_segcblist_entrain",
+    "rcu_segcblist_extract_done_cbs",
+    "rcu_segcblist_extract_pend_cbs",
+    "rcu_segcblist_insert_count",
+    "rcu_segcblist_insert_done_cbs",
+    "rcu_segcblist_insert_pend_cbs",
+    "rcu_segcblist_advance",
+    "rcu_segcblist_accelerate",
+    "rcu_segcblist_merge"
+  ],
+  "scope": "Archive/object/linked symbol selection, not runtime evidence"
+}

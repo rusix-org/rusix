@@ -1,0 +1,12 @@
+{
+  "name": "duplicate_max_part",
+  "rd_nr": 1,
+  "rd_size": 4096,
+  "max_part": 4,
+  "options": [
+    "brd.rd_nr=1",
+    "brd.rd_size=4096",
+    "brd.max_part=257",
+    "brd.max_part=3"
+  ]
+}

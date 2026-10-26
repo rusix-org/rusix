@@ -1,0 +1,2 @@
+/out/builds/ci-rcu-list-server-rust/drivers/block/brd_rust.o
+/out/builds/ci-rcu-list-server-rust/drivers/block/virtio_blk.o

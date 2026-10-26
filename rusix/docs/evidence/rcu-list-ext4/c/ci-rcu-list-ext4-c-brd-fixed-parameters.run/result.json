@@ -1,0 +1,382 @@
+{
+  "status": "PASS",
+  "variants": [
+    {
+      "status": "PASS",
+      "cases": [
+        "parameters",
+        "major_registered",
+        "initial_devices",
+        "on_demand_mapping",
+        "independent_io",
+        "capacity"
+      ],
+      "qemu_exit": 0,
+      "variant": "count_0_max_-2147483648"
+    },
+    {
+      "status": "PASS",
+      "cases": [
+        "parameters",
+        "major_registered",
+        "initial_devices",
+        "on_demand_mapping",
+        "independent_io",
+        "capacity"
+      ],
+      "qemu_exit": 0,
+      "variant": "count_0_max_-1"
+    },
+    {
+      "status": "PASS",
+      "cases": [
+        "parameters",
+        "major_registered",
+        "initial_devices",
+        "on_demand_mapping",
+        "independent_io",
+        "capacity"
+      ],
+      "qemu_exit": 0,
+      "variant": "count_0_max_0"
+    },
+    {
+      "status": "PASS",
+      "cases": [
+        "parameters",
+        "major_registered",
+        "initial_devices",
+        "on_demand_mapping",
+        "independent_io",
+        "capacity"
+      ],
+      "qemu_exit": 0,
+      "variant": "count_0_max_1"
+    },
+    {
+      "status": "PASS",
+      "cases": [
+        "parameters",
+        "major_registered",
+        "initial_devices",
+        "on_demand_mapping",
+        "independent_io",
+        "capacity"
+      ],
+      "qemu_exit": 0,
+      "variant": "count_0_max_2"
+    },
+    {
+      "status": "PASS",
+      "cases": [
+        "parameters",
+        "major_registered",
+        "initial_devices",
+        "on_demand_mapping",
+        "independent_io",
+        "capacity"
+      ],
+      "qemu_exit": 0,
+      "variant": "count_0_max_3"
+    },
+    {
+      "status": "PASS",
+      "cases": [
+        "parameters",
+        "major_registered",
+        "initial_devices",
+        "on_demand_mapping",
+        "independent_io",
+        "capacity"
+      ],
+      "qemu_exit": 0,
+      "variant": "count_0_max_128"
+    },
+    {
+      "status": "PASS",
+      "cases": [
+        "parameters",
+        "major_registered",
+        "initial_devices",
+        "on_demand_mapping",
+        "independent_io",
+        "capacity"
+      ],
+      "qemu_exit": 0,
+      "variant": "count_0_max_129"
+    },
+    {
+      "status": "PASS",
+      "cases": [
+        "parameters",
+        "major_registered",
+        "initial_devices",
+        "on_demand_mapping",
+        "independent_io",
+        "capacity"
+      ],
+      "qemu_exit": 0,
+      "variant": "count_0_max_256"
+    },
+    {
+      "status": "PASS",
+      "cases": [
+        "parameters",
+        "major_registered",
+        "initial_devices",
+        "on_demand_mapping",
+        "independent_io",
+        "capacity"
+      ],
+      "qemu_exit": 0,
+      "variant": "count_0_max_257"
+    },
+    {
+      "status": "PASS",
+      "cases": [
+        "parameters",
+        "major_registered",
+        "initial_devices",
+        "on_demand_mapping",
+        "independent_io",
+        "capacity"
+      ],
+      "qemu_exit": 0,
+      "variant": "count_0_max_1073741824"
+    },
+    {
+      "status": "PASS",
+      "cases": [
+        "parameters",
+        "major_registered",
+        "initial_devices",
+        "on_demand_mapping",
+        "independent_io",
+        "capacity"
+      ],
+      "qemu_exit": 0,
+      "variant": "count_0_max_2147483647"
+    },
+    {
+      "status": "PASS",
+      "cases": [
+        "parameters",
+        "major_registered",
+        "initial_devices",
+        "on_demand_mapping",
+        "independent_io",
+        "capacity"
+      ],
+      "qemu_exit": 0,
+      "variant": "count_2_max_-2147483648"
+    },
+    {
+      "status": "PASS",
+      "cases": [
+        "parameters",
+        "major_registered",
+        "initial_devices",
+        "on_demand_mapping",
+        "independent_io",
+        "capacity"
+      ],
+      "qemu_exit": 0,
+      "variant": "count_2_max_-1"
+    },
+    {
+      "status": "PASS",
+      "cases": [
+        "parameters",
+        "major_registered",
+        "initial_devices",
+        "on_demand_mapping",
+        "independent_io",
+        "capacity"
+      ],
+      "qemu_exit": 0,
+      "variant": "count_2_max_0"
+    },
+    {
+      "status": "PASS",
+      "cases": [
+        "parameters",
+        "major_registered",
+        "initial_devices",
+        "on_demand_mapping",
+        "independent_io",
+        "capacity"
+      ],
+      "qemu_exit": 0,
+      "variant": "count_2_max_1"
+    },
+    {
+      "status": "PASS",
+      "cases": [
+        "parameters",
+        "major_registered",
+        "initial_devices",
+        "on_demand_mapping",
+        "independent_io",
+        "capacity"
+      ],
+      "qemu_exit": 0,
+      "variant": "count_2_max_2"
+    },
+    {
+      "status": "PASS",
+      "cases": [
+        "parameters",
+        "major_registered",
+        "initial_devices",
+        "on_demand_mapping",
+        "independent_io",
+        "capacity"
+      ],
+      "qemu_exit": 0,
+      "variant": "count_2_max_3"
+    },
+    {
+      "status": "PASS",
+      "cases": [
+        "parameters",
+        "major_registered",
+        "initial_devices",
+        "on_demand_mapping",
+        "independent_io",
+        "capacity"
+      ],
+      "qemu_exit": 0,
+      "variant": "count_2_max_128"
+    },
+    {
+      "status": "PASS",
+      "cases": [
+        "parameters",
+        "major_registered",
+        "initial_devices",
+        "on_demand_mapping",
+        "independent_io",
+        "capacity"
+      ],
+      "qemu_exit": 0,
+      "variant": "count_2_max_129"
+    },
+    {
+      "status": "PASS",
+      "cases": [
+        "parameters",
+        "major_registered",
+        "initial_devices",
+        "on_demand_mapping",
+        "independent_io",
+        "capacity"
+      ],
+      "qemu_exit": 0,
+      "variant": "count_2_max_256"
+    },
+    {
+      "status": "PASS",
+      "cases": [
+        "parameters",
+        "major_registered",
+        "initial_devices",
+        "on_demand_mapping",
+        "independent_io",
+        "capacity"
+      ],
+      "qemu_exit": 0,
+      "variant": "count_2_max_257"
+    },
+    {
+      "status": "PASS",
+      "cases": [
+        "parameters",
+        "major_registered",
+        "initial_devices",
+        "on_demand_mapping",
+        "independent_io",
+        "capacity"
+      ],
+      "qemu_exit": 0,
+      "variant": "count_2_max_1073741824"
+    },
+    {
+      "status": "PASS",
+      "cases": [
+        "parameters",
+        "major_registered",
+        "initial_devices",
+        "on_demand_mapping",
+        "independent_io",
+        "capacity"
+      ],
+      "qemu_exit": 0,
+      "variant": "count_2_max_2147483647"
+    },
+    {
+      "status": "PASS",
+      "cases": [
+        "parameters",
+        "major_registered",
+        "initial_devices",
+        "on_demand_mapping",
+        "independent_io",
+        "capacity"
+      ],
+      "qemu_exit": 0,
+      "variant": "defaults"
+    },
+    {
+      "status": "PASS",
+      "cases": [
+        "parameters",
+        "major_registered",
+        "initial_devices",
+        "on_demand_mapping",
+        "independent_io",
+        "capacity"
+      ],
+      "qemu_exit": 0,
+      "variant": "legacy_octal"
+    },
+    {
+      "status": "PASS",
+      "cases": [
+        "parameters",
+        "major_registered",
+        "initial_devices",
+        "on_demand_mapping",
+        "independent_io",
+        "capacity"
+      ],
+      "qemu_exit": 0,
+      "variant": "duplicate_rd_nr"
+    },
+    {
+      "status": "PASS",
+      "cases": [
+        "parameters",
+        "major_registered",
+        "initial_devices",
+        "on_demand_mapping",
+        "independent_io",
+        "capacity"
+      ],
+      "qemu_exit": 0,
+      "variant": "duplicate_rd_size"
+    },
+    {
+      "status": "PASS",
+      "cases": [
+        "parameters",
+        "major_registered",
+        "initial_devices",
+        "on_demand_mapping",
+        "independent_io",
+        "capacity"
+      ],
+      "qemu_exit": 0,
+      "variant": "duplicate_max_part"
+    }
+  ]
+}

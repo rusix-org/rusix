@@ -1,0 +1,28 @@
+{
+  "artifacts": {
+    "/out/builds/ext4-vm-ci-rcu-list-server-rust/bzImage": "ece72e87c49b5994d32dfae4765df41eb79e4864b7292c00fb1c8e4c17802729",
+    "/out/builds/ext4-vm-ci-rcu-list-server-rust/init": "c01b1aa9c109601e85600e76440ff1894507d616db522cd006d75502fc561732",
+    "/out/builds/ext4-vm-ci-rcu-list-server-rust/initramfs.cpio": "0184417ec80f450100bf306fe930949030a914c73603dc629b3a1fdfba0f36fa"
+  },
+  "config_sha256": "3e8dc632cb2209c388eda704e0bbfc2f3296db75623143bc2e8351ef26a31b23",
+  "container_image": "sha256:c02eb3929889b3f0cc035d57a02c844e0c74c71d24fbda1311249faeb8257f63",
+  "implementation": "brd-rust",
+  "profile": "rcu-list-server-rust",
+  "source_revision": "1fdb7a7707acd36f88516ea9ec1eeda862c7867a",
+  "sources": {
+    "rusix/scripts/rusix_paths.py": "15158c8c33e303341ef523c8317da73fb3f008908b8bfa53611d13bc87c94cae",
+    "rusix/scripts/server_target.py": "8b11948c0549867ed2ec70c6d99c8f543f3567b9acb3af1552198b3f667720af",
+    "rusix/scripts/test-brd-ext4-vm.py": "a83edebc6ae62629e9438a58f259a994285d60ce6b72e2360838ef80214736a1",
+    "rusix/scripts/test-brd-vm.py": "28dda01ff5b4cab0be4090f18cdb4ea97d5fba57ca04cd00f30048ae600a5425",
+    "rusix/scripts/verify-rcu-list-selection.py": "91251a424e83958d048a10d0db252f16d5ffcfdc051616fd01ff6d5ab55a5cad",
+    "rusix/tests/brd-ext4/Dockerfile": "16c3dc63cd956f56ef494dff04ec66beb5d246928f0cb04ba4b578376cf5dd02",
+    "rusix/tests/brd-ext4/FINAL.sha256": "4badf6874d8f5bcb531eeebbd70b8814c5c54a8c87247f79f1266975da3e7f0f",
+    "rusix/tests/brd-ext4/README.md": "a155c29f7a2bc8e451b94bde94481ca82617d6570a68834bf5bd1a3be35a1c9c",
+    "rusix/tests/brd-ext4/SHA256SUMS": "b8fe76c42a436aa12c3efa253976561559c1bc9432c1a38343ac94ad0cb0de8b",
+    "rusix/tests/brd-ext4/ext4-packages.lock": "30a6ea7af0307248c70192e2ec793e655084c4f65a788a5d6c367412ab9e39e7",
+    "rusix/tests/brd-ext4/init.rs": "18c4938cde2931e62787ca61e2ba7834816fa321f412cf2dac6f3cca144e569c",
+    "rusix/tests/brd-ext4/locked_probe.rs": "78ebd607a3eaa8157b159609ac9fb997f8a117a90d4822c3c9ff668936f48c64",
+    "rusix/tests/brd-ext4/wake_probe.rs": "ac58dbab4f7cf708c3009df22f90e1856e0d5bd7198005e313361d7eac917890",
+    "rusix/tests/brd-ext4/workload.sh": "adab6c2e7c100bdadfad61f39d94687a7c30953e71c4eb04bd3ef5bb3e9cec38"
+  }
+}

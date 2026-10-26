@@ -11,7 +11,9 @@ boundaries. [The roadmap](docs/ROADMAP.md) orders that work.
 **Linux 6.18.58 LTS**. Rust BRD passes paired block and ordinary-userspace ext4
 tests. All fourteen completion.c and ten swait.c entry points have opt-in Rust
 implementations, alongside twenty-three generic wait and seventeen bit-wait entries. Rust also owns the
-shared bit/variable wait table.
+shared bit/variable wait table. All 25 RCU callback-list policy definitions now
+pass paired debug/plain KUnit and fresh userspace/server integration checks;
+RCU storage and grace-period coordination remain C-owned.
 Paired C/Rust tests cover
 core behavior and blocked worker handoffs, ordinary ext4, poll/epoll and
 blocking eventfd/timerfd consumers.

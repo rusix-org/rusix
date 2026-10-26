@@ -2,7 +2,8 @@
 
 **Rust BRD passes x86_64 block and ordinary-userspace ext4 contracts;
 all fourteen completion entry points and all ten swait.c entry points have verified
-opt-in Rust implementations; twenty-three generic wait and seventeen bit-wait entries pass parity, with the shared wait table owned by Rust.** Most of the kernel remains C. Linux 6.18.58
+opt-in Rust implementations; twenty-three generic wait and seventeen bit-wait entries pass parity, with the shared wait table owned by Rust. All 25 RCU callback-list policy definitions
+now pass paired KUnit and userspace/server integration checks.** Most of the kernel remains C. Linux 6.18.58
 (`2926d88bb7fc`) is the behavioral baseline. Hosted CI remains disabled;
 verification runs locally. No subsystem divergence point is declared.
 
@@ -25,21 +26,25 @@ locking/lifetime contracts, test inventory and remaining C boundaries. Selection
 remains default-off and builtin-only; known incompatible counter-access drivers
 are excluded.
 
-The declared x86_64 server selects the verified Rust core. At `ae62f42b6f58`,
-it and the derived C-core comparison each pass six ext4, four poll/epoll and two
-blocking eventfd/timerfd read cases on q35/KVM SMP2. Resolved configs differ only
-by core selection; fixtures, container and VM parameters match. Both complete
-without compiler/objtool diagnostics. [Evidence](docs/evidence/wait-owner-server/manifest.json).
+The declared x86_64 server selects the verified Rust core. The historical
+`ae62f42b6f58` C/Rust **core** comparison and its language measurements remain in
+[their original evidence](docs/evidence/wait-owner-server/manifest.json).
 
-Same-build executable contributions for the Rust-core server: C **5,746,278
-bytes**, Rust **152,850**, assembly **45,104**, generated **28**, linker/padding
-**2,107,053**, unknown **0**; total **8,051,313**. Its C-core comparison contains
-C **5,753,409** and Rust **145,115**, total **8,050,737**, also zero unknown bytes.
-C decreases by 7,131 bytes and Rust increases by 7,735. This includes inherited
-Rust support; linked bytes are not a completion percentage. Networking is
-configured but not runtime-tested here; ext4 runs on BRD, not virtio block.
-[Local commands](ci/README.md) reproduce the target and derived comparison;
-hosted execution stays disabled.
+The latest measured server pair, at `1fdb7a7707ac`, keeps Rust BRD/core on both
+sides and changes only RCU-list selection. Both pass six ext4, four poll/epoll and
+two blocking eventfd/timerfd cases with matching fixtures, tools and VM parameters.
+These explicit verification profiles do not change the declared server default.
+[Current server evidence](docs/evidence/rcu-list-server/manifest.json).
+
+| RCU-list selection | Executable C bytes | Executable Rust bytes | Total executable-section bytes |
+| --- | ---: | ---: | ---: |
+| C | 5,746,223 | 152,872 | 8,051,313 |
+| Rust | 5,744,423 | 157,351 | 8,053,937 |
+
+Both same-build inventories have zero unknown bytes. Totals also include assembly,
+generated code and linker/padding; this is compilation-unit attribution, not a
+rewrite completion percentage. Networking is configured but not runtime-tested;
+ext4 runs on BRD, not virtio block. [Local commands](ci/README.md) own execution.
 
 The two locked interruptible iterations now pass four dedicated-worker cases
 and the blocking userspace consumers above. A process-context watchdog preserves
@@ -70,9 +75,10 @@ calls from BRD, and passes ownership checks plus the same 76/67 KUnit cases.
 Generic parameter parsers/getters, mutexes and block/page services remain C.
 
 The [wait-table ownership record](experiments/wait-owner/README.md) covers the
-new storage boundary and six collision/constructor tests. Next verify the
-implemented RCU callback-list and sync policy translations; their development
-branches have no kernel/runtime verification yet.
+new storage boundary and six collision/constructor tests. The verified
+[RCU-list checkpoint](experiments/rcu-lists/README.md) advances the core migration.
+Sync, per-CPU/batch ownership and task-lifecycle candidates remain separate
+unpublished work; their evidence is not part of this checkpoint.
 The [bit-wait record](experiments/wait-bit/README.md) and
 [generic wait record](experiments/wait/README.md) own their contracts.
 Standalone untimed bit_wait/io scheduling, stop/park, repeated latch races,
@@ -105,29 +111,31 @@ on a generated field name and three unnecessary-unsafe warnings. The corrected
 `a39d03eb165b` builds have no compiler/objtool diagnostics.
 [Retained failure](docs/evidence/brd-parameter-owner-initial/manifest.json).
 
-RCU callback-list policy translates all 25 definitions on `rusix/rcu-callback-lists`.
-Ten new cases cover literal list transitions and real RCU/SRCU consumers; the
-strict gates require 86 combined or ten isolated RCU cases. Fourteen host gate
-scripts pass; kernel compilation and C/Rust VM parity remain unexecuted.
-The [contract](experiments/rcu-lists/README.md) records shared C access/order
-primitives and the subsequent storage-ownership work.
+### Verified RCU callback-list checkpoint
 
-### RCU-list production integration tooling (development)
+At `c4e7efcf22b6`, all four C/Rust debug/plain kernels pass 86 combined cases
+(nine BRD, 67 core, ten RCU lists), then 67 isolated core and ten isolated list
+cases. The ten cases include literal list transitions and real RCU/SRCU consumers.
+All 25 policy definitions link exclusively to the selected implementation.
+[Debug](docs/evidence/rcu-list-debug/manifest.json),
+[plain](docs/evidence/rcu-list-plain/manifest.json).
 
-Added explicit ext4/server C/Rust RCU-list profiles with Rust BRD/core on both
-sides and fixtures disabled, production selection checks, guest proof validation,
-and exact ancestry/change-boundary verification for retaining older KUnit evidence
-under its original source identity. Kernel policy, KUnit fixtures and existing
-configuration fragments are unchanged. See the [migration record](experiments/rcu-lists/README.md#production-integration-profiles).
-Host regressions and independent source review are the current verification
-scope; these new profiles have not been built or booted. Next freeze the reviewed
-tooling revision, run serial paired integration guests and refresh the declared
-server language inventory before considering promotion.
+Fresh integration at `1fdb7a7707ac` passes 32 boots per ext4 profile: 29 parameter
+variants, block, partitions and ext4/consumer tests. Both server profiles pass the
+12 consumers and language measurement above. Only the RCU selector differs within
+each pair; Rust BRD/core remain selected and test fixtures are disabled.
+[Ext4](docs/evidence/rcu-list-ext4/manifest.json),
+[server](docs/evidence/rcu-list-server/manifest.json).
 
-At `a536e5425997`, both RCU-list ext4 profiles pass 32 VM boots each. The
-server C build then stopped before boot: the ownership verifier rejected valid
-repeated `__patchable_function_entries` sections. The failure is retained in
-`linux-out/rcu-list-server-initial-evidence/manifest.json`; no server runtime
-result is claimed. The tooling fix uses section-index identities while requiring
-unique named parameter/setup/modinfo metadata. Kernel sources are unchanged;
-fresh integration verification remains pending.
+The continuity proof preserves the original `c4e7efcf22b6` KUnit attribution:
+kernel/fixture sources and those KUnit configurations are unchanged by the
+reviewed integration-tooling updates. It does not relabel KUnit as a `1fdb` run
+or assert identical linked images. The [migration record](experiments/rcu-lists/README.md)
+owns remaining C access/order primitives, storage and subsequent ownership work.
+
+The initial `a536e5425997` server C attempt stopped after compilation but before
+boot because the ELF ownership gate rejected valid repeated
+`__patchable_function_entries` sections. The [failed attempt](docs/evidence/rcu-list-server-initial/manifest.json)
+is retained separately; section-index parsing fixed the tooling, and fresh
+`1fdb` runs supplied the successful integration evidence. NOCB, actual hotplug
+stress, broader ordering stress and performance remain unverified.

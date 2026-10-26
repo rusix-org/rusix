@@ -1,0 +1,39 @@
+implementation=completion-rust
+/out/builds/ci-rcu-list-server-rust/kernel/sched/completion_rust.o
+/out/builds/ci-rcu-list-server-rust/kernel/sched/completion_rust.o
+0000000000000050 T complete
+0000000000000120 T complete_all
+00000000000000b0 T complete_on_current_cpu
+0000000000000180 T try_wait_for_completion
+0000000000000200 T completion_done
+0000000000000140 T wait_for_completion
+0000000000000170 T wait_for_completion_timeout
+00000000000001a0 T wait_for_completion_io
+00000000000001d0 T wait_for_completion_io_timeout
+0000000000000200 T wait_for_completion_interruptible
+0000000000000250 T wait_for_completion_interruptible_timeout
+0000000000000280 T wait_for_completion_killable
+0000000000000320 T wait_for_completion_killable_timeout
+00000000000002d0 T wait_for_completion_state
+/out/builds/ci-rcu-list-server-rust/vmlinux
+ffffffff812a6b00 T complete
+ffffffff812a6bd0 T complete_all
+ffffffff812a6b60 T complete_on_current_cpu
+ffffffff812a6c30 T try_wait_for_completion
+ffffffff812a6cb0 T completion_done
+ffffffff81756800 T wait_for_completion
+ffffffff81756830 T wait_for_completion_timeout
+ffffffff81756860 T wait_for_completion_io
+ffffffff81756890 T wait_for_completion_io_timeout
+ffffffff817568c0 T wait_for_completion_interruptible
+ffffffff81756910 T wait_for_completion_interruptible_timeout
+ffffffff81756940 T wait_for_completion_killable
+ffffffff817569e0 T wait_for_completion_killable_timeout
+ffffffff81756990 T wait_for_completion_state
+ffc9d689b4002047b3ab01b456408ad8665312e56629e3a470a20a48fa9ae0fb  /src/kernel/sched/completion.c
+4e956cd22568a86a26b43e9bb6e7e9aac784abb21c0bdc7142ca6e9a23479125  /out/builds/ci-rcu-list-server-rust/kernel/sched/completion_rust.o
+16e35f269e8ddb31f7b1f836bb960eaa46ecf8368eb2800851bbffb2740a8323  /src/kernel/sched/completion_rust.rs
+14bef117612d2a8b79f5db6206114d6870d31c87577cefd9a1ae57bd01b57aa0  /src/kernel/sched/completion_rust/wait.rs
+43aa0c2925b4c9467e13dc42f75916fc8facfbb8a307584c267bc28294fb5ffa  /src/rust/helpers/raw_spinlock.c
+fa27056e5312f586421048ca287065e92c9d61a689eaecbe5c4de2fc9b6bc89d  /src/rust/helpers/signal.c
+15e7455b02a67c0783f5e655ece3300d476075702f1ac7acf6f24519a8703e91  /src/rust/helpers/task.c

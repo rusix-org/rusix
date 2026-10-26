@@ -1,0 +1,27 @@
+Build evidence: /out/logs/ci-rcu-list-server-c-build.XAJ7noD2
+{
+  "profile": "rcu-list-server-c",
+  "configuration": "PASS"
+}
+Built /out/builds/ci-rcu-list-server-c/arch/x86/boot/bzImage
+Ext4 brd-rust: six ext4, four wake and two locked cases passed; evidence /out/logs/ci-rcu-list-server-c-ext4.run
+{
+  "total_bytes": 8051313,
+  "bytes": {
+    "c": 5746223,
+    "rust": 152872,
+    "assembly": 45104,
+    "generated": 28,
+    "unknown": 0,
+    "padding_or_linker_script": 2107086
+  },
+  "percent": {
+    "c": 71.370011,
+    "rust": 1.898721,
+    "assembly": 0.560207,
+    "generated": 0.000348,
+    "unknown": 0.0,
+    "padding_or_linker_script": 26.170713
+  }
+}
+Wrote /out/logs/languages.json

@@ -1,0 +1,11 @@
+{
+  "status": "PASS",
+  "resolved_config_differences": {
+    "CONFIG_RUSIX_RCU_LIST_RUST": [
+      "y",
+      "n"
+    ]
+  },
+  "rust_config_sha256": "3e8dc632cb2209c388eda704e0bbfc2f3296db75623143bc2e8351ef26a31b23",
+  "c_config_sha256": "c4c75ad7671e37955e63907b6511c5ba737ae2a95570c42e77b43a3d0f91ba78"
+}

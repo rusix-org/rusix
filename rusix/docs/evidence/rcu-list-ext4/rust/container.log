@@ -1,0 +1,10 @@
+Build evidence: /out/logs/ci-rcu-list-ext4-rust-build.3P4OLhYB
+{
+  "profile": "rcu-list-ext4-rust",
+  "configuration": "PASS"
+}
+Built /out/builds/ci-rcu-list-ext4-rust/arch/x86/boot/bzImage
+brd-rust contract: 6 cases passed; evidence /out/logs/ci-rcu-list-ext4-rust-brd.run
+Ext4 brd-rust: six ext4, four wake and two locked cases passed; evidence /out/logs/ci-rcu-list-ext4-rust-ext4.run
+brd-rust parameters: 29 variants passed; evidence /out/logs/ci-rcu-list-ext4-rust-brd-fixed-parameters.run
+brd-rust partitions: 1 variants passed; evidence /out/logs/ci-rcu-list-ext4-rust-brd-partitions.run

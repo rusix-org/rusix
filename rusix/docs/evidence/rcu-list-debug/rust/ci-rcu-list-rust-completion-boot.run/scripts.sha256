@@ -1,0 +1,3 @@
+f86d246f507dfd5bf58bb8988d0aae5498b05a0ca1b1a70d2b31580f7cfcfcc6  /src/rusix/scripts/boot-kunit.sh
+0467f463f2bbfd05d7fcec46123dccd869ced22b86c4a8d6f9a71acd705ecdef  /src/rusix/scripts/validate-completion-kunit.py
+1350025c9c9abda4e287e6cda85140639ccbc660ffcaecdab7a0634ec0fc24cb  /src/rusix/scripts/validate-brd-kunit.py

@@ -1,0 +1,30 @@
+{
+  "source": "/home/aaron/code/rusix/linux-out/lts-wait-owner-plain-rust-001/builds/ci-completion-plain-rust",
+  "source_profile": "completion-plain-rust",
+  "source_revision": "ae62f42b6f585fcbcdcff84e0763412609f36ccd",
+  "source_build_evidence": "/home/aaron/code/rusix/linux-out/lts-wait-owner-plain-rust-001/logs/ci-completion-plain-rust-build.0BrsF5P2",
+  "source_terminal_status": {
+    "logs/ci-completion-plain-rust-qemu.exit": "0",
+    "logs/ci-completion-plain-rust-parse.exit": "0",
+    "logs/ci-completion-plain-rust-gate.exit": "0",
+    "logs/ci-completion-plain-rust-completion-qemu.exit": "0",
+    "logs/ci-completion-plain-rust-completion-parse.exit": "0",
+    "logs/ci-completion-plain-rust-completion-gate.exit": "0",
+    "logs/ci.exit": "0",
+    "logs/container.exit": "0",
+    "logs/ci-completion-plain-rust-build.0BrsF5P2/build.exit": "0"
+  },
+  "source_build_hash_records_sha256": "2e274934a289042a96bd22f8ee6a12ed1854641f29562f3825c454c2b6b2a6e8",
+  "copied_artifact_sha256": {
+    "builds/ci-rcu-list-plain-rust/.config": "cdba5e33d71ee64f19ae8f4bafa17daad411de86dfc2561edab17c72565e8e60",
+    "builds/ci-rcu-list-plain-rust/arch/x86/boot/bzImage": "df1bad211449326dbf13c26d3c0143201ca62537310cb796d1f665f39fcbbfe1",
+    "builds/ci-rcu-list-plain-rust/vmlinux": "6e811ce97c82b15d73e4c2766e1b53d41f4e5b4766756c61763cd16ad6aa2390",
+    "builds/ci-rcu-list-plain-rust/vmlinux.map": "e00ce1d3ae59489cedfb6c03a41078af1eaa688d3399a2cd5ec9383a9f728c39"
+  },
+  "copy_method": "cp -a --reflink=auto; every recorded build artifact rehashed after copy",
+  "scope": "Kernel-only cache from completed passing run; not RCU policy verification. No guest fixtures, VM evidence, host build outputs or prior success markers copied.",
+  "runtime_source_mount": "/home/aaron/code/rusix/linux-rcu-list",
+  "destination_profile": "rcu-list-plain-rust",
+  "runtime_container_image": "sha256:0e0cfd724bde5c2a81cee61210c2a14a66ea72f679e1308125825e0463c67937",
+  "status": "PREPARED_NOT_RUN"
+}

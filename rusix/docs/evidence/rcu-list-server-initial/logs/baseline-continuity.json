@@ -1,0 +1,138 @@
+{
+  "baseline_evidence": [
+    {
+      "cases_per_kernel": [
+        86,
+        67,
+        10
+      ],
+      "manifest": "/home/aaron/code/rusix/linux-out/rcu-list-debug-evidence/manifest.json",
+      "manifest_sha256": "362bc1b6c1bb3993f4832d488f409e1aaee08da671ec4847198c38c15d6c3ff6",
+      "source": "c4e7efcf22b659bab2d82f2d9892cf2215aea58f",
+      "suite": "debug"
+    },
+    {
+      "cases_per_kernel": [
+        86,
+        67,
+        10
+      ],
+      "manifest": "/home/aaron/code/rusix/linux-out/rcu-list-plain-evidence/manifest.json",
+      "manifest_sha256": "f3260fb2f983694f417e47e852a62dca4f7ee8ad38f0a4ceb1b7f46d600cd80f",
+      "source": "c4e7efcf22b659bab2d82f2d9892cf2215aea58f",
+      "suite": "plain"
+    }
+  ],
+  "baseline_source": "c4e7efcf22b659bab2d82f2d9892cf2215aea58f",
+  "candidate_source": "a536e5425997f36fd17c8941084c40ca889cceda",
+  "changes": [
+    {
+      "baseline_sha256": "6a2c5f8c6d057ca52c00201d904009795b1b581cf998915e2b41ce6444a1d13d",
+      "candidate_sha256": "373db2f0090d7bb1f3b6083aef9cf6b0de1e55b722de6e49b163b70aa7844dad",
+      "path": "rusix/PROGRESS.md",
+      "status": "M"
+    },
+    {
+      "baseline_sha256": "0ad13790f01eacc889ee7c8867cf388cc2f547b21e96b13e7f1070df1811f529",
+      "candidate_sha256": "8e6b1293f33dbfc8017e2c1cbec355143dc43e68ef236ce11dcb736021b6e2a6",
+      "path": "rusix/ci/run-container.sh",
+      "status": "M"
+    },
+    {
+      "baseline_sha256": "f8dd17b01d051e1abb6fb3332e30329b16fb8cbc542fb609d680d01eeead5d12",
+      "candidate_sha256": "a3b1a1ffbc01dd645414b02722dc5cbbef1c302adc3043d264d3ef3c31784aa2",
+      "path": "rusix/ci/run.sh",
+      "status": "M"
+    },
+    {
+      "baseline_sha256": null,
+      "candidate_sha256": "cec08585486286829831f8bc9dc1ed52f8bdfe6d08a099a7070f8545e3e95c4d",
+      "path": "rusix/configs/x86_64-rcu-list-ext4-c.config",
+      "status": "A"
+    },
+    {
+      "baseline_sha256": null,
+      "candidate_sha256": "2f056b70dd69145cf102d40f91dd826716db006cf527534cd5c4e2ed98c3f435",
+      "path": "rusix/configs/x86_64-rcu-list-ext4-rust.config",
+      "status": "A"
+    },
+    {
+      "baseline_sha256": "bc084c688ef51bf2057b9dd3ca9fc2999e412cef99a1d153dc8d4f191b117cf4",
+      "candidate_sha256": "c0396e0f72863842b5d13da202830d8d65d7b6d7a78656d5c08f106d98a6f56f",
+      "path": "rusix/experiments/rcu-lists/README.md",
+      "status": "M"
+    },
+    {
+      "baseline_sha256": "13068af9fe07ab914e724d7ea84748a617164c61c2dffefdebcd54a270f9aae4",
+      "candidate_sha256": "8ab3831af2e19dc48daacfefce320497bd2d88e69d541370304704a3798b4a72",
+      "path": "rusix/scripts/build-kernel.sh",
+      "status": "M"
+    },
+    {
+      "baseline_sha256": "357f1680a766deee25a75f56470f1a6223a9429326efd2089efc7ac5ee484eed",
+      "candidate_sha256": "8b11948c0549867ed2ec70c6d99c8f543f3567b9acb3af1552198b3f667720af",
+      "path": "rusix/scripts/server_target.py",
+      "status": "M"
+    },
+    {
+      "baseline_sha256": "88763b1373acc90f26859bc84b570291ee7fef97482b79107e1078cbe6e97947",
+      "candidate_sha256": "a83edebc6ae62629e9438a58f259a994285d60ce6b72e2360838ef80214736a1",
+      "path": "rusix/scripts/test-brd-ext4-vm.py",
+      "status": "M"
+    },
+    {
+      "baseline_sha256": "9af3826f789814894502099abb7ccc00ff659be9ba23a3ccb581757446b2a640",
+      "candidate_sha256": "4c1e51079b5142eddad02b6377f2126120632a08415a42da3e292d3d4a378043",
+      "path": "rusix/scripts/test-brd-fixed-parameters-vm.py",
+      "status": "M"
+    },
+    {
+      "baseline_sha256": "e3334093c69ac1eb18e6b4594800473612507e2f10853d05962f04d8a0d09a27",
+      "candidate_sha256": "f00aac17c4c210089dd9738d24a3781dd68d1a620763243b38414c8762df6c9d",
+      "path": "rusix/scripts/test-brd-partitions-vm.py",
+      "status": "M"
+    },
+    {
+      "baseline_sha256": "3487a725c1b62a1d4546da84120717a94f86a74fb475577a7582f3e47b53530d",
+      "candidate_sha256": "28dda01ff5b4cab0be4090f18cdb4ea97d5fba57ca04cd00f30048ae600a5425",
+      "path": "rusix/scripts/test-brd-vm.py",
+      "status": "M"
+    },
+    {
+      "baseline_sha256": null,
+      "candidate_sha256": "b98307844a077d0d302a552205b47976ddba426655de6d985299ce356d751230",
+      "path": "rusix/scripts/verify-rcu-list-continuity.py",
+      "status": "A"
+    },
+    {
+      "baseline_sha256": "694ecad60d3efeff3754b4b67bfacc588e0a86c6cb94911716ba7ec2f56a3efb",
+      "candidate_sha256": "91251a424e83958d048a10d0db252f16d5ffcfdc051616fd01ff6d5ab55a5cad",
+      "path": "rusix/scripts/verify-rcu-list-selection.py",
+      "status": "M"
+    },
+    {
+      "baseline_sha256": null,
+      "candidate_sha256": "2f83ce84a100f04dd8a9d5c70cfc2165d9c38f02d8d807b329d24e9c72c2ac77",
+      "path": "rusix/tests/test_rcu_list_integration.py",
+      "status": "A"
+    }
+  ],
+  "diff_sha256": "12488228f47aa6ec517327710c4b98ffe6d80bca31df7f4a078b809e92195899",
+  "limitations": [
+    "KUnit remains evidence for baseline_source; this does not relabel it as a candidate build.",
+    "Changed build/routing scripts require independent review and fresh candidate integration runs.",
+    "No assertion of identical linked images or matching build timestamps."
+  ],
+  "scope": "Unchanged kernel/fixtures/existing KUnit configurations; reviewed integration-tooling-only descendant",
+  "status": "PASS",
+  "unchanged_input_sha256": {
+    "rusix/configs/x86_64-rcu-list-c.config": "909bfa54b00ea303946c480742d03e3c871e3652083015b8865a4dc80cb75d53",
+    "rusix/configs/x86_64-rcu-list-plain-c.config": "fad2d4f4322b010b0294aef350ed0b75134cf66f1ef5deae615e364cd7ac1c26",
+    "rusix/configs/x86_64-rcu-list-plain-rust.config": "f20e09c44c722fe616717b577034301fdddb92f1513524bc6a066964f3c468b5",
+    "rusix/configs/x86_64-rcu-list-rust.config": "0746f50ecb5dd0781493ba9939d510716d73e0267f899921d431a33252b04848",
+    "rusix/scripts/boot-kunit.sh": "f86d246f507dfd5bf58bb8988d0aae5498b05a0ca1b1a70d2b31580f7cfcfcc6",
+    "rusix/scripts/validate-brd-kunit.py": "1350025c9c9abda4e287e6cda85140639ccbc660ffcaecdab7a0634ec0fc24cb",
+    "rusix/scripts/validate-completion-kunit.py": "0467f463f2bbfd05d7fcec46123dccd869ced22b86c4a8d6f9a71acd705ecdef",
+    "rusix/scripts/validate-rcu-kunit.py": "f5f753bbf7ba4e0a3701349d5ba5121c91fff766c9273265ecf2345d1382734c"
+  }
+}

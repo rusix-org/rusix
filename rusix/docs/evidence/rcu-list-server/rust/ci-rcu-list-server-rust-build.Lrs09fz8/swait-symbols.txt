@@ -1,0 +1,22 @@
+/out/builds/ci-rcu-list-server-rust/kernel/sched/swait_rust.o
+0000000000000010 T __init_swait_queue_head
+0000000000000060 T __prepare_to_swait
+00000000000000c0 T __finish_swait
+0000000000000100 T swake_up_locked
+0000000000000160 T swake_up_all_locked
+0000000000000210 T swake_up_one
+0000000000000270 T swake_up_all
+0000000000000330 T prepare_to_swait_exclusive
+00000000000003a0 T prepare_to_swait_event
+0000000000000440 T finish_swait
+/out/builds/ci-rcu-list-server-rust/vmlinux
+ffffffff812a6d00 T __init_swait_queue_head
+ffffffff812a6d50 T __prepare_to_swait
+ffffffff812a6db0 T __finish_swait
+ffffffff812a6df0 T swake_up_locked
+ffffffff812a6e50 T swake_up_all_locked
+ffffffff812a6f00 T swake_up_one
+ffffffff812a6f60 T swake_up_all
+ffffffff812a7020 T prepare_to_swait_exclusive
+ffffffff812a7090 T prepare_to_swait_event
+ffffffff812a7130 T finish_swait

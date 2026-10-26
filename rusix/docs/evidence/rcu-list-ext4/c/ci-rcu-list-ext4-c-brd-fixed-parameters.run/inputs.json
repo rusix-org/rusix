@@ -1,0 +1,22 @@
+{
+  "source_revision": "1fdb7a7707acd36f88516ea9ec1eeda862c7867a",
+  "implementation": "brd-rust",
+  "profile": "rcu-list-ext4-c",
+  "contract": "ADR 0003 approved BRD parameter normalization",
+  "scope": "29 boot variants of ADR 0003 approved BRD parameter and I/O contract",
+  "sources": {
+    "rusix/scripts/verify-rcu-list-selection.py": "91251a424e83958d048a10d0db252f16d5ffcfdc051616fd01ff6d5ab55a5cad",
+    "rusix/tests/brd-fixed-parameters/init.rs": "ad22520721aff0438dfb82ff742f91fbcdd73854dfcff9d927b16079c7763c6e",
+    "rusix/scripts/test-brd-fixed-parameters-vm.py": "4c1e51079b5142eddad02b6377f2126120632a08415a42da3e292d3d4a378043",
+    "rusix/scripts/rusix_paths.py": "15158c8c33e303341ef523c8317da73fb3f008908b8bfa53611d13bc87c94cae",
+    "rusix/scripts/test-brd-vm.py": "28dda01ff5b4cab0be4090f18cdb4ea97d5fba57ca04cd00f30048ae600a5425",
+    "rusix/scripts/with-local-tools.sh": "b47051d02fd2eb024dedc91f4a0c2cf071529d018a8ae246678bbb568069ffd0",
+    "rusix/scripts/repo-paths.sh": "c1456d937aa223d2b6d9bcd914238ef49cdd4974419df0ff7b2e20bbf542cfc7"
+  },
+  "artifacts": {
+    "/out/builds/brd-fixed-parameters-vm-ci-rcu-list-ext4-c/bzImage": "20f9be033b65fbb3d10b45eeec82abd208142dcd3d1e7f1710f6823c1c818a7a",
+    "/out/builds/brd-fixed-parameters-vm-ci-rcu-list-ext4-c/init": "15cafdd2c5832a930926d4b828aceabd54a455569637f2166913cd41b27153c1",
+    "/out/builds/brd-fixed-parameters-vm-ci-rcu-list-ext4-c/initramfs.cpio": "0953f7a23b502db171fc04f84bbfdb7bf280f8a87329e826a465adb57044f9f5"
+  },
+  "config_sha256": "62106eca7eec69b5ba2d7975ad97cafe5904a0cd82435ddba346659d236edade"
+}

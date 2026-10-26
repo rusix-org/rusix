@@ -1,7 +1,13 @@
 # RCU callback-list policy
 
-Status: implementation and ten tests are under review; fourteen host gate
-scripts pass. Kernel builds and runtime parity have not run yet.
+Status: paired debug/plain KUnit and fresh userspace/server integration pass.
+KUnit remains attributed to `c4e7efcf22b6`: all four kernels pass 86 combined,
+67 isolated core and 10 isolated list cases. Fresh `1fdb7a7707ac` integration passes
+32 ext4-profile boots and 12 server consumers per C/Rust side. Exact records:
+[debug](../../docs/evidence/rcu-list-debug/manifest.json),
+[plain](../../docs/evidence/rcu-list-plain/manifest.json),
+[ext4](../../docs/evidence/rcu-list-ext4/manifest.json),
+[server](../../docs/evidence/rcu-list-server/manifest.json).
 The reference is Linux 6.18.58 `kernel/rcu/rcu_segcblist.c`, retained unchanged.
 This slice translates all 25 external definitions: four simple-list operations
 and 21 segmented-list operations. Tree RCU, Tree SRCU and their C-owned state
@@ -55,7 +61,7 @@ work and must be inventoried, not hidden as completed policy.
 - Merge requires CPU-hotplug exclusion, discards pending grace-period progress,
   and resets the source. Never move a self-referential temporary during merge.
 
-## Required evidence and subsequent ownership
+## Verification and subsequent ownership
 
 Use the same bounded literal fixtures against C and Rust: labelled callback
 identities, exact tail slots, counts, meaningful sequence values and flags.
@@ -69,11 +75,11 @@ cases. Dedicated profiles require 86 combined cases (nine BRD, 67 core, ten RCU)
 then 67 isolated core cases and ten isolated RCU cases. Missing, skipped,
 duplicate, failed or unexpected cases cannot satisfy the gate.
 
-Prove exclusive selection of every definition and inspect the compiled ordering
-primitives. Paired runtime tests cannot alone prove weak-memory ordering. Keep
-existing storage/userspace gates, then test the declared server configuration
-and refresh its language inventory before promotion. NOCB, actual hotplug stress
-and broader ordering stress require separate evidence.
+The evidence binds all 25 definitions to the selected object and linked kernel,
+retains matching fixture/tool identities, and checks the declared server pair's
+same-build language inventories. Paired runtime tests cannot alone prove
+weak-memory ordering. NOCB, actual hotplug stress and broader ordering stress
+require separate evidence.
 
 Next replace direct C inline/trace access with explicit operation boundaries,
 then migrate callback-batch ownership/invocation and per-CPU RCU state. Grace-
@@ -84,7 +90,7 @@ remain part of the full kernel rewrite.
 
 `rcu-list-ext4-c` and `rcu-list-ext4-rust` keep Rust BRD and the Rust wait/core
 policy on both sides, disable KUnit/RCU fixtures, and change only the RCU-list
-selector. Each runs the block contract,29 parameter variants, partition probe
+selector. Each runs the block contract, 29 parameter variants, partition probe
 and ext4/wake/locked consumers (32 guest boots). `rcu-list-server-c` and
 `rcu-list-server-rust` derive from the declared server fragment, preserve its
 Rust BRD/core choices, and change the same RCU selector. They run twelve
@@ -92,9 +98,10 @@ filesystem/wake/locked consumers and same-build language measurement. Existing
 server/core comparison profiles retain their original meaning.
 
 These are verification profiles, not a changed server default. Production
-selection rejects fixture objects and requires all25 definitions in the selected
+selection rejects fixture objects and requires all 25 definitions in the selected
 object and linked kernel; guest runners revalidate the retained proof and input
-hashes before launching. Host profile tests do not establish runtime compatibility.
+hashes before launching. The fresh `1fdb7a7707ac` runs establish the bounded workloads above, not full
+runtime compatibility.
 
 When only the reviewed integration tooling changes after a KUnit run,
 `verify-rcu-list-continuity.py --source CHECKOUT --baseline KUNIT_COMMIT
@@ -106,3 +113,9 @@ new integration runs must identify their own clean source/config/scripts. The
 continuity record does not assert byte-identical images or substitute for review
 of changed build/routing scripts. A kernel, fixture or existing-profile change
 fails this boundary and requires fresh affected verification.
+
+The initial `a536e5425997` server C attempt failed its ELF ownership gate before
+boot on repeated patchable-function section names. [Retained failure](../../docs/evidence/rcu-list-server-initial/manifest.json).
+The retry changes section-identity handling in verification tooling, not kernel
+policy. Its continuity proof keeps the earlier KUnit results under `c4`; the
+server language counts are reported once in [PROGRESS](../../PROGRESS.md).

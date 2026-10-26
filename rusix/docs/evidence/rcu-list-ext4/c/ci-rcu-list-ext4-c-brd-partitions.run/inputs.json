@@ -1,0 +1,21 @@
+{
+  "source_revision": "1fdb7a7707acd36f88516ea9ec1eeda862c7867a",
+  "implementation": "brd-rust",
+  "profile": "rcu-list-ext4-c",
+  "scope": "One primary DOS partition geometry/translation/boundary contract",
+  "sources": {
+    "rusix/scripts/verify-rcu-list-selection.py": "91251a424e83958d048a10d0db252f16d5ffcfdc051616fd01ff6d5ab55a5cad",
+    "rusix/tests/brd-partitions/init.rs": "5ea6db8269f22f51ee8f17dec9f34d983dc77db4e4c2ba9fbe5920672c064673",
+    "rusix/scripts/test-brd-partitions-vm.py": "f00aac17c4c210089dd9738d24a3781dd68d1a620763243b38414c8762df6c9d",
+    "rusix/scripts/rusix_paths.py": "15158c8c33e303341ef523c8317da73fb3f008908b8bfa53611d13bc87c94cae",
+    "rusix/scripts/test-brd-vm.py": "28dda01ff5b4cab0be4090f18cdb4ea97d5fba57ca04cd00f30048ae600a5425",
+    "rusix/scripts/with-local-tools.sh": "b47051d02fd2eb024dedc91f4a0c2cf071529d018a8ae246678bbb568069ffd0",
+    "rusix/scripts/repo-paths.sh": "c1456d937aa223d2b6d9bcd914238ef49cdd4974419df0ff7b2e20bbf542cfc7"
+  },
+  "artifacts": {
+    "/out/builds/brd-partitions-vm-ci-rcu-list-ext4-c/bzImage": "20f9be033b65fbb3d10b45eeec82abd208142dcd3d1e7f1710f6823c1c818a7a",
+    "/out/builds/brd-partitions-vm-ci-rcu-list-ext4-c/init": "2d8d9121aa10f5efc323d4abff44a31f87e8e461ad059655f43824bff80831cf",
+    "/out/builds/brd-partitions-vm-ci-rcu-list-ext4-c/initramfs.cpio": "f44124ba7bba3f459baba71721d0a3f53c9df1867acee478b46d539528fb6c0a"
+  },
+  "config_sha256": "62106eca7eec69b5ba2d7975ad97cafe5904a0cd82435ddba346659d236edade"
+}

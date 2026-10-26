@@ -58,3 +58,17 @@ default-off in Kconfig and enabled by the declared x86_64 server target, with
 [matched target evidence](evidence/wait-owner-server/manifest.json). No subsystem
 divergence point is declared. GCD/LCM remain
 deferred; [the roadmap](ROADMAP.md) prioritizes this core boundary after BRD.
+
+## RCU callback-list policy
+
+**All 25 simple/segmented-list definitions have verified opt-in Rust policy.**
+Implementation: `kernel/rcu/rcu_segcblist_rust.rs`; unchanged baseline/fallback:
+`kernel/rcu/rcu_segcblist.c`. Separate C/Rust debug/plain KUnit at `c4e7efcf22b6`
+and fresh ext4/server integration at `1fdb7a7707ac` verify the bounded checkpoint.
+[Verification](VERIFICATION.md) preserves those source identities and the initial
+server verifier failure. Selection remains default-off and excludes NOCB.
+
+The [migration contract](../experiments/rcu-lists/README.md) owns list lifetimes,
+ordering and coverage. C still owns caller storage, GP coordination, inline/trace
+access and typed memory/order primitives. Callback-batch and per-CPU-state
+ownership are subsequent work; no RCU divergence point is declared.

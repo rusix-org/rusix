@@ -1,0 +1,11 @@
+{
+  "config_input_sha256": "96c2d6ef501af47cc8004c1bd37f42f339c74ec56a7e429c610c31df0ee3aa03",
+  "derivation_script_sha256": "8b11948c0549867ed2ec70c6d99c8f543f3567b9acb3af1552198b3f667720af",
+  "override": {
+    "CONFIG_RUSIX_RCU_LIST_RUST": "n"
+  },
+  "profile": "rcu-list-server-c",
+  "schema": 1,
+  "source_fragment": "/src/rusix/configs/x86_64-server.config",
+  "source_fragment_sha256": "5b37adb3792b56926ef687dd7392b3916dbb8b77a30e50c2b2664373988098d6"
+}
