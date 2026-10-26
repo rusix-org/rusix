@@ -1,0 +1,5 @@
+{
+  "reason": "36 improper_ctypes diagnostics from pointer-only task_struct manual extern declarations; strict warning gate cannot pass. Stop remaining compilation to review, preserving C PASS and Rust diagnostics.",
+  "owned_container": "ef1a122e1f08ad596b8d0eee19efe331e0edc8b237d8c67fe61f79d1fe4ab2b8",
+  "source": "0af2d8b944b2d6a3175269c52f10d85ce67a7d3d"
+}

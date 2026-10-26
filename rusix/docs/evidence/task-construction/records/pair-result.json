@@ -1,0 +1,15 @@
+{
+  "status": "PASS",
+  "source": "eec5ae3ecd7b9a671157694d0eceaaa89870889e",
+  "different_settings": [
+    "CONFIG_RUSIX_TASK_CONSTRUCTION_RUST"
+  ],
+  "cases": [
+    "fork_private_and_wait",
+    "exec_fresh_image",
+    "vfork_exec_handoff",
+    "affinity_inherited",
+    "seccomp_filter_inherited"
+  ],
+  "scope": "Five ordinary process consumers; no allocation-failure coverage"
+}

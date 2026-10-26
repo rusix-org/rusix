@@ -1,0 +1,2 @@
+/out/builds/ci-task-construction-rust/drivers/block/brd_rust.o
+/out/builds/ci-task-construction-rust/drivers/block/virtio_blk.o

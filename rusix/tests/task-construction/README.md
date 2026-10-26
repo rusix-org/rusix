@@ -1,17 +1,17 @@
 # Task-construction userspace probe
 
-Source-only guest fixture; not compiled or executed. Five literal cases use real
-syscalls. No allocation-failure injection, stack-allocation-site evidence or full
+Five literal syscall cases pass on matched C/Rust kernels at `eec5ae3ecd7b`.
+[Results and evidence](../../PROGRESS.md#verified-private-task-construction). No allocation-failure injection, stack-allocation-site evidence or full
 fork compatibility is claimed.
 
-The future PID1 init must mount proc, set its comm to `rusix-task-init` with
-PR_SET_NAME, and directly spawn `/probe` (no intermediate shell). Kernel cmdline
+The Rust PID1 init mounts proc, sets its comm to `rusix-task-init` with
+PR_SET_NAME, and directly spawns `/probe` (no intermediate shell). Kernel cmdline
 must contain exactly one `rusix.task_construction_probe=1` token. The probe checks
 both before running; normal mode additionally requires getppid()==1. Self-exec
 modes retain the same guest checks. These are execution guards, not a security
 boundary. Never run the probe on the host.
 
-Compile later in the pinned container as a static x86_64 binary, e.g.
+Compile in the pinned container as a static x86_64 binary, e.g.
 `gcc -std=gnu11 -O2 -Wall -Wextra -Werror -static probe.c -o /out/probe`.
 Required kernel interfaces: fork/clone, vfork, execve, waitid/waitpid, procfs,
 process groups, affinity, child subreaper, SECCOMP and SECCOMP_FILTER. Missing

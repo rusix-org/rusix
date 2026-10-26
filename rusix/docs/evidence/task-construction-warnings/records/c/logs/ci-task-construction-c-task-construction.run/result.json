@@ -1,0 +1,13 @@
+{
+  "status": "PASS",
+  "cases": [
+    "fork_private_and_wait",
+    "exec_fresh_image",
+    "vfork_exec_handoff",
+    "affinity_inherited",
+    "seccomp_filter_inherited"
+  ],
+  "qemu_exit": 0,
+  "implementation": "c",
+  "source_revision": "0af2d8b944b2d6a3175269c52f10d85ce67a7d3d"
+}

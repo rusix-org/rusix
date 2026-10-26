@@ -1,0 +1,3 @@
+Build evidence: /out/logs/ci-task-construction-c-build.PYgnAyqe
+Built /out/builds/ci-task-construction-c/arch/x86/boot/bzImage
+Task construction c: five cases passed; evidence /out/logs/ci-task-construction-c-task-construction.run

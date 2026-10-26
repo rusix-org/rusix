@@ -1,0 +1,29 @@
+{
+  "archive_member_sha256": {
+    "/out/builds/ci-task-construction-c/kernel/fork.o": "7a57a118845d124b286853528640cb8031d5502b3bc0a3af95503f9729e163a1"
+  },
+  "implementation": "c",
+  "input_sha256": {
+    "/out/builds/ci-task-construction-c/.config": "f8282f71082d0daeac76c0f7af3ad37147846b9397cb39b9a6f5b86298027636",
+    "/out/builds/ci-task-construction-c/include/generated/autoconf.h": "68e5ea5431b5416a8707ce2fac8db30dff0d43de53e4e3e3755b32d256d4699d",
+    "/out/builds/ci-task-construction-c/kernel/.fork.o.cmd": "b012a127cc2f658997ab1a5b38532e351cc9d1dd6b80fc8969efdaf5a479cdc4",
+    "/out/builds/ci-task-construction-c/kernel/built-in.a": "d29d890acc13fa15adae7723fd3957508875ae71244219b03094977fc101cf1d",
+    "/out/builds/ci-task-construction-c/kernel/fork.i": "99d92f8a3d357c40475e9657ae532432c84d9c2449d7c0ba61fdb402a0e50c03",
+    "/out/builds/ci-task-construction-c/kernel/fork.o": "7a57a118845d124b286853528640cb8031d5502b3bc0a3af95503f9729e163a1",
+    "/out/builds/ci-task-construction-c/vmlinux": "7f9d507787660f492a885be2c4985d6b1158c62968afdf5fd575dedc167f9cb3",
+    "/src/include/linux/compiler-version.h": "71b523f4f5ae572c6cee7fb2d62617ef900f3024619b1a61c8d9e758dfa002c8",
+    "/src/include/linux/compiler_types.h": "28bbd658a20cf4b72eb0759f2ff095a8cd317f719d8aa94c9298d6d0e2e77268",
+    "/src/include/linux/kconfig.h": "1b51cc51b6e4beb9b249853e0a0774f63679599f9a27b9e9fb8cc26ca14265f1",
+    "/src/kernel/fork.c": "d1c1e5ec0dde6c9bbd090adf837d44daceee27359556e10fc3bb586b8609283c",
+    "/src/kernel/task_construction_impl.h": "0a258e4e1368b612a020436aa90eb0c77f22ee58b4ab2fb31a195827eefac05d",
+    "/src/kernel/task_construction_rust.rs": "9513777b2f18b54fa5deab75caecffd18dcbe677df6e9458ebd65dd8da299a08",
+    "/src/rusix/configs/x86_64-server.config": "5b37adb3792b56926ef687dd7392b3916dbb8b77a30e50c2b2664373988098d6",
+    "/src/rusix/scripts/preprocess-task-construction.py": "3f6f3ba4cf0da1c0fff2a4c34c3a1e1106fa480e92ae2e73d500131b92612a90",
+    "/src/rusix/scripts/repo-paths.sh": "c1456d937aa223d2b6d9bcd914238ef49cdd4974419df0ff7b2e20bbf542cfc7",
+    "/src/rusix/scripts/saved_clang_command.py": "764e866c68a8943c3d3f680065c0c2d0a112f33f4be6b0828a21410a9823d37d",
+    "/src/rusix/scripts/verify-task-construction.py": "d0e6ed1c8e41a2de44da68328f660210da9ce88771aed86a505b3e246c3eb0f8",
+    "/src/rusix/scripts/with-local-tools.sh": "b47051d02fd2eb024dedc91f4a0c2cf071529d018a8ae246678bbb568069ffd0"
+  },
+  "scope": "Source/preprocessing/object/linked selection only; no fixture or runtime claim",
+  "status": "PASS"
+}

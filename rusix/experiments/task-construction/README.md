@@ -1,6 +1,7 @@
 # Partial task construction transaction
 
-Status: kernel source candidate, **not compiled or runtime-verified**. Reference:
+Status: paired C/Rust kernels at `eec5ae3ecd7b` pass five ordinary userspace
+cases with actual linked-selection proof. [Evidence](../../docs/evidence/task-construction/manifest.json). Reference:
 Linux 6.18.58 `kernel/fork.c:dup_task_struct` at
 `2926d88bb7fc4608fd942453d929c39e4e5ec006`. No subsystem divergence is declared.
 
@@ -68,24 +69,17 @@ flags/refcounts and the corresponding subsystem initialization interfaces. This
 transaction deliberately precedes wider copy_process rollback/publication work;
 it is not a claim that Rust owns live tasks or the task_struct allocation layout.
 
-## Required evidence before promotion
+## Verified scope and remaining promotion gates
 
-- Prove selected Rust transaction and C primitive objects in the actual linked
-  kernel, and absence of the original C transaction body in the selected path.
-- Run matched C/Rust kernels with the same SMP and debugging options through
-  ordinary fork/clone, exec/wait and vfork, parent/child stack isolation, affinity
-  and seccomp consumers. Record exact resolved selector exclusions.
-- Exercise task/stack allocation failures with attributable fault injection,
-  disarmed before logging; check parent survival and repeated create/reap.
-  Generic ENOMEM alone does not prove which rollback stage executed.
-- Separate synthetic unsupported-branch checks from actual x86 execution.
-  Never free an artificial partially constructed child using free_task merely
-  because its usage count happens to be one.
+The matched C/Rust pair at `eec5ae3ecd7b` proves exclusive compiled selection and
+passes fork/private-state isolation, exec/wait, vfork/exec, affinity and seccomp
+consumers. The [guest contract](../../tests/task-construction/README.md) owns the
+five literal cases; [progress](../../PROGRESS.md) owns results and failed attempts.
+This does not establish complete fork compatibility or live-task/layout ownership.
 
-Source and dispatch-tool review, unchanged-oracle comparison, formatting and
-15 host gate scripts (166 cases) pass. The Rust PID1 and five-case C probe
-compile as static binaries using the pinned ext4 container; neither was run.
-The guest contract is in [tests](../../tests/task-construction/README.md).
-Paired kernel compilation, runtime gates and attributable allocation failures
-remain pending. Local records: `linux-out/task-construction-host-002` and
-`linux-out/task-construction-guest-compile-001`; these are not VM evidence.
+Before promotion, exercise task/stack allocation failures with attributable
+fault injection disarmed before logging, checking parent survival and retry.
+Generic ENOMEM does not identify a rollback stage. Ordinary ext4/server
+integration, broader clone/thread and failure/concurrency cases remain pending.
+Keep synthetic unsupported-branch checks separate from actual x86 execution;
+never free an artificial partial child merely because its usage count is one.

@@ -1,0 +1,1586 @@
+make: Entering directory '/src'
+make[1]: Entering directory '/out/builds/ci-task-construction-rust'
+  SYNC    include/config/auto.conf
+  GEN     Makefile
+  GEN     Makefile
+  DESCEND objtool
+  CALL    /src/scripts/checksyscalls.sh
+  INSTALL libsubcmd_headers
+  CC      /out/builds/ci-task-construction-rust/tools/objtool/libsubcmd/exec-cmd.o
+  CC      /out/builds/ci-task-construction-rust/tools/objtool/libsubcmd/help.o
+  CC      /out/builds/ci-task-construction-rust/tools/objtool/libsubcmd/pager.o
+  CC      /out/builds/ci-task-construction-rust/tools/objtool/libsubcmd/parse-options.o
+  CC      /out/builds/ci-task-construction-rust/tools/objtool/libsubcmd/run-command.o
+  CC      /out/builds/ci-task-construction-rust/tools/objtool/libsubcmd/sigchain.o
+  CC      /out/builds/ci-task-construction-rust/tools/objtool/libsubcmd/subcmd-config.o
+  LD      /out/builds/ci-task-construction-rust/tools/objtool/libsubcmd/libsubcmd-in.o
+  AR      /out/builds/ci-task-construction-rust/tools/objtool/libsubcmd/libsubcmd.a
+  CC      /out/builds/ci-task-construction-rust/tools/objtool/weak.o
+  CC      /out/builds/ci-task-construction-rust/tools/objtool/arch/x86/special.o
+  CC      /out/builds/ci-task-construction-rust/tools/objtool/check.o
+  CC      /out/builds/ci-task-construction-rust/tools/objtool/arch/x86/decode.o
+  CC      /out/builds/ci-task-construction-rust/tools/objtool/arch/x86/orc.o
+  LD      /out/builds/ci-task-construction-rust/tools/objtool/arch/x86/objtool-in.o
+  CC      /out/builds/ci-task-construction-rust/tools/objtool/special.o
+  CC      /out/builds/ci-task-construction-rust/tools/objtool/builtin-check.o
+  CC      /out/builds/ci-task-construction-rust/tools/objtool/elf.o
+  CC      /out/builds/ci-task-construction-rust/tools/objtool/objtool.o
+  CC      /out/builds/ci-task-construction-rust/tools/objtool/orc_gen.o
+  CC      /out/builds/ci-task-construction-rust/tools/objtool/orc_dump.o
+  CC      /out/builds/ci-task-construction-rust/tools/objtool/libstring.o
+  CC      /out/builds/ci-task-construction-rust/tools/objtool/libctype.o
+  CC      /out/builds/ci-task-construction-rust/tools/objtool/str_error_r.o
+  CC      /out/builds/ci-task-construction-rust/tools/objtool/librbtree.o
+  LD      /out/builds/ci-task-construction-rust/tools/objtool/objtool-in.o
+  LINK    /out/builds/ci-task-construction-rust/tools/objtool/objtool
+  RUSTC L rust/core.o
+  CC      rust/helpers/helpers.o
+  EXPORTS rust/exports_helpers_generated.h
+  EXPORTS rust/exports_core_generated.h
+  RUSTC L rust/compiler_builtins.o
+  RUSTC L rust/ffi.o
+  RUSTC L rust/pin_init.o
+  RUSTC L rust/build_error.o
+  RUSTC L rust/bindings.o
+  RUSTC L rust/uapi.o
+  EXPORTS rust/exports_bindings_generated.h
+  RUSTC L rust/kernel.o
+  EXPORTS rust/exports_kernel_generated.h
+  GEN     usr/initramfs_data.cpio
+  COPY    usr/initramfs_inc_data
+  CC      init/main.o
+  AS      usr/initramfs_data.o
+  AR      usr/built-in.a
+  CC      arch/x86/boot/startup/gdt_idt.o
+  CC      arch/x86/boot/startup/map_kernel.o
+  OBJCOPY arch/x86/boot/startup/gdt_idt.pi.o
+  OBJCOPY arch/x86/boot/startup/map_kernel.pi.o
+  AR      arch/x86/boot/startup/built-in.a
+  AS      arch/x86/entry/entry.o
+  AS      arch/x86/entry/entry_64.o
+  CC      arch/x86/entry/syscall_64.o
+  UPD     init/utsversion-tmp.h
+  CC      init/do_mounts.o
+  CC      arch/x86/entry/vdso/vma.o
+  CC      init/do_mounts_rd.o
+  CC      arch/x86/entry/vdso/extable.o
+  CC      init/do_mounts_initrd.o
+  CC      arch/x86/entry/vdso/vdso-image-64.o
+  AR      arch/x86/entry/vdso/built-in.a
+  AR      arch/x86/entry/built-in.a
+  CC      arch/x86/events/core.o
+  CC      init/initramfs.o
+  CC      init/calibrate.o
+  CC      init/init_task.o
+  CC      arch/x86/events/probe.o
+  CC      arch/x86/events/utils.o
+  CC      init/version.o
+  CC      arch/x86/events/amd/core.o
+  AR      init/built-in.a
+  CC      arch/x86/events/amd/lbr.o
+  CC      arch/x86/events/amd/ibs.o
+  CC      arch/x86/realmode/init.o
+  AS      arch/x86/realmode/rmpiggy.o
+  AR      arch/x86/realmode/built-in.a
+  AS      arch/x86/kernel/head_64.o
+  AR      arch/x86/events/amd/built-in.a
+  CC      arch/x86/events/msr.o
+  CC      arch/x86/kernel/head64.o
+  CC      arch/x86/kernel/ebda.o
+  CC      arch/x86/events/intel/core.o
+  CC      arch/x86/kernel/platform-quirks.o
+  CC      arch/x86/kernel/process_64.o
+  CC      arch/x86/kernel/signal.o
+  CC      arch/x86/events/intel/bts.o
+  CC      arch/x86/kernel/signal_64.o
+  CC      arch/x86/events/intel/ds.o
+  CC      arch/x86/kernel/traps.o
+  CC      arch/x86/events/intel/knc.o
+  CC      arch/x86/kernel/idt.o
+  CC      arch/x86/events/intel/lbr.o
+  CC      arch/x86/kernel/irq.o
+  CC      arch/x86/events/intel/p4.o
+  CC      arch/x86/kernel/irq_64.o
+  CC      arch/x86/events/intel/p6.o
+  CC      arch/x86/kernel/dumpstack_64.o
+  CC      arch/x86/events/intel/pt.o
+  CC      arch/x86/kernel/time.o
+  CC      arch/x86/kernel/ioport.o
+  AR      arch/x86/events/intel/built-in.a
+  CC      arch/x86/events/zhaoxin/core.o
+  CC      arch/x86/kernel/dumpstack.o
+  AR      arch/x86/events/zhaoxin/built-in.a
+  AR      arch/x86/events/built-in.a
+  CC      arch/x86/mm/init.o
+  CC      arch/x86/kernel/nmi.o
+  CC      arch/x86/mm/init_64.o
+  CC      arch/x86/kernel/setup.o
+  CC      arch/x86/mm/fault.o
+  CC      arch/x86/kernel/x86_init.o
+  CC      arch/x86/kernel/i8259.o
+  CC      arch/x86/mm/ioremap.o
+  CC      arch/x86/kernel/irqinit.o
+  CC      arch/x86/mm/extable.o
+  CC      arch/x86/kernel/irq_work.o
+  CC      arch/x86/mm/mmap.o
+  CC      arch/x86/kernel/probe_roms.o
+  CC      arch/x86/mm/pgtable.o
+  CC      arch/x86/kernel/sys_x86_64.o
+  CC      arch/x86/mm/physaddr.o
+  CC      arch/x86/kernel/ksysfs.o
+  CC      arch/x86/mm/tlb.o
+  CC      arch/x86/kernel/bootflag.o
+  CC      arch/x86/mm/cpu_entry_area.o
+  CC      arch/x86/kernel/e820.o
+  CC      arch/x86/mm/maccess.o
+  CC      arch/x86/mm/pgprot.o
+  CC      arch/x86/kernel/pci-dma.o
+  CC      arch/x86/mm/pat/set_memory.o
+  CC      arch/x86/kernel/quirks.o
+  CC      arch/x86/kernel/kdebugfs.o
+  CC      arch/x86/mm/pat/memtype.o
+  CC      arch/x86/kernel/alternative.o
+  AR      arch/x86/mm/pat/built-in.a
+  CC      arch/x86/mm/pti.o
+  AR      arch/x86/mm/built-in.a
+  CC      arch/x86/kernel/i8253.o
+  CC      arch/x86/kernel/hw_breakpoint.o
+  CC      arch/x86/kernel/tsc.o
+  CC      arch/x86/kernel/tsc_msr.o
+  CC      arch/x86/kernel/io_delay.o
+  CC      kernel/fork.o
+  CC      arch/x86/kernel/rtc.o
+  CC      arch/x86/kernel/resource.o
+  AS      arch/x86/kernel/irqflags.o
+  CC      arch/x86/kernel/static_call.o
+  CC      kernel/exec_domain.o
+  CC      arch/x86/kernel/process.o
+  CC      kernel/panic.o
+  CC      arch/x86/kernel/fpu/init.o
+  CC      kernel/cpu.o
+  CC      arch/x86/kernel/fpu/bugs.o
+  CC      arch/x86/kernel/fpu/core.o
+  CC      kernel/exit.o
+  CC      arch/x86/kernel/fpu/regset.o
+  CC      arch/x86/kernel/fpu/signal.o
+  CC      kernel/softirq.o
+  CC      arch/x86/kernel/fpu/xstate.o
+  CC      kernel/resource.o
+  AR      arch/x86/kernel/fpu/built-in.a
+  CC      arch/x86/kernel/ptrace.o
+  CC      kernel/sysctl.o
+  CC      arch/x86/kernel/step.o
+  CC      kernel/capability.o
+  CC      arch/x86/kernel/stacktrace.o
+  CC      arch/x86/kernel/cpu/cacheinfo.o
+  CC      kernel/ptrace.o
+  CC      arch/x86/kernel/cpu/scattered.o
+  CC      kernel/user.o
+  CC      arch/x86/kernel/cpu/topology_common.o
+  CC      kernel/signal.o
+  CC      arch/x86/kernel/cpu/topology_ext.o
+  CC      arch/x86/kernel/cpu/topology_amd.o
+  CC      arch/x86/kernel/cpu/common.o
+  CC      kernel/sys.o
+  CC      arch/x86/kernel/cpu/rdrand.o
+  CC      arch/x86/kernel/cpu/match.o
+  CC      kernel/umh.o
+  CC      arch/x86/kernel/cpu/bugs.o
+  CC      kernel/workqueue.o
+  CC      arch/x86/kernel/cpu/aperfmperf.o
+  CC      arch/x86/kernel/cpu/cpuid-deps.o
+  CC      arch/x86/kernel/cpu/cpuid_0x2_table.o
+  CC      kernel/pid.o
+  CC      arch/x86/kernel/cpu/umwait.o
+  CC      arch/x86/kernel/cpu/capflags.o
+  CC      arch/x86/kernel/cpu/powerflags.o
+  CC      kernel/task_work.o
+  CC      arch/x86/kernel/cpu/topology.o
+  CC      arch/x86/kernel/cpu/proc.o
+  CC      kernel/extable.o
+  CC      arch/x86/kernel/cpu/feat_ctl.o
+  CC      kernel/params.o
+  CC      arch/x86/kernel/cpu/intel.o
+  CC      arch/x86/kernel/cpu/tsx.o
+  CC      kernel/kthread.o
+  CC      arch/x86/kernel/cpu/amd.o
+  CC      kernel/sys_ni.o
+  CC      arch/x86/kernel/cpu/amd_cache_disable.o
+  CC      kernel/nsproxy.o
+  CC      arch/x86/kernel/cpu/hygon.o
+  CC      kernel/nstree.o
+  CC      arch/x86/kernel/cpu/centaur.o
+  CC      kernel/nscommon.o
+  CC      arch/x86/kernel/cpu/zhaoxin.o
+  CC      arch/x86/kernel/cpu/microcode/core.o
+  CC      kernel/notifier.o
+  CC      arch/x86/kernel/cpu/microcode/intel.o
+  CC      kernel/ksysfs.o
+  CC      arch/x86/kernel/cpu/microcode/amd.o
+  CC      kernel/cred.o
+  AR      arch/x86/kernel/cpu/microcode/built-in.a
+  CC      arch/x86/kernel/cpu/perfctr-watchdog.o
+  CC      kernel/reboot.o
+  AR      arch/x86/kernel/cpu/built-in.a
+  CC      arch/x86/kernel/acpi/boot.o
+  CC      kernel/async.o
+  CC      arch/x86/kernel/acpi/madt_wakeup.o
+  CC      kernel/range.o
+  CC      kernel/smpboot.o
+  AS      arch/x86/kernel/acpi/madt_playdead.o
+  CC      kernel/ucount.o
+  AR      arch/x86/kernel/acpi/built-in.a
+  CC      arch/x86/kernel/reboot.o
+  CC      kernel/regset.o
+  CC      arch/x86/kernel/early-quirks.o
+  CC      kernel/ksyms_common.o
+  CC      arch/x86/kernel/smp.o
+  CC      kernel/groups.o
+  CC      kernel/sched/core.o
+  CC      arch/x86/kernel/smpboot.o
+  CC      arch/x86/kernel/tsc_sync.o
+  CC      arch/x86/kernel/setup_percpu.o
+  CC      arch/x86/kernel/apic/apic.o
+  CC      kernel/sched/fair.o
+  CC      arch/x86/kernel/apic/apic_common.o
+  CC      arch/x86/kernel/apic/apic_noop.o
+  CC      kernel/sched/build_policy.o
+  CC      arch/x86/kernel/apic/ipi.o
+  CC      arch/x86/kernel/apic/vector.o
+  CC      arch/x86/kernel/apic/init.o
+  CC      kernel/sched/build_utility.o
+  CC      arch/x86/kernel/apic/hw_nmi.o
+  CC      arch/x86/kernel/apic/io_apic.o
+  RUSTC     kernel/sched/completion_rust.o
+  CC      arch/x86/kernel/apic/msi.o
+  RUSTC     kernel/sched/swait_rust.o
+  RUSTC     kernel/sched/wait_rust.o
+  RUSTC     kernel/sched/wait_bit_rust.o
+  AR      kernel/sched/built-in.a
+  CC      kernel/locking/mutex.o
+  CC      arch/x86/kernel/apic/apic_flat_64.o
+  CC      arch/x86/kernel/apic/probe_64.o
+  CC      kernel/locking/semaphore.o
+  AR      arch/x86/kernel/apic/built-in.a
+  CC      arch/x86/kernel/trace_clock.o
+  CC      arch/x86/kernel/trace.o
+  CC      kernel/locking/rwsem.o
+  CC      arch/x86/kernel/hpet.o
+  CC      kernel/locking/percpu-rwsem.o
+  CC      arch/x86/kernel/amd_nb.o
+  CC      kernel/locking/mutex-debug.o
+  CC      arch/x86/kernel/amd_node.o
+  CC      kernel/locking/lockdep.o
+  CC      arch/x86/kernel/perf_regs.o
+  CC      arch/x86/kernel/unwind_orc.o
+  CC      kernel/locking/lockdep_proc.o
+  CC      arch/x86/kernel/callthunks.o
+  CC      kernel/locking/spinlock.o
+  CC      arch/x86/kernel/mmconf-fam10h_64.o
+  CC      kernel/locking/osq_lock.o
+  CC      kernel/locking/qspinlock.o
+  CC      arch/x86/kernel/vsmp_64.o
+  CC      kernel/locking/rtmutex_api.o
+  AR      arch/x86/kernel/built-in.a
+  CC      arch/x86/virt/svm/cmdline.o
+  AR      arch/x86/virt/svm/built-in.a
+  AR      arch/x86/virt/built-in.a
+  AR      arch/x86/built-in.a
+  CC      mm/filemap.o
+  CC      kernel/locking/spinlock_debug.o
+  CC      kernel/locking/qrwlock.o
+  AR      kernel/locking/built-in.a
+  CC      kernel/power/qos.o
+  CC      mm/mempool.o
+  AR      kernel/power/built-in.a
+  CC      kernel/printk/printk.o
+  CC      mm/oom_kill.o
+  CC      mm/fadvise.o
+  CC      kernel/printk/printk_safe.o
+  CC      kernel/printk/nbcon.o
+  CC      mm/maccess.o
+  CC      kernel/printk/printk_ringbuffer.o
+  CC      mm/page-writeback.o
+  CC      kernel/printk/sysctl.o
+  AR      kernel/printk/built-in.a
+  CC      kernel/irq/irqdesc.o
+  CC      mm/folio-compat.o
+  CC      kernel/irq/handle.o
+  CC      mm/readahead.o
+  CC      kernel/irq/manage.o
+  CC      mm/swap.o
+  CC      kernel/irq/spurious.o
+  CC      kernel/irq/resend.o
+  CC      mm/truncate.o
+  CC      kernel/irq/chip.o
+  CC      mm/vmscan.o
+  CC      kernel/irq/dummychip.o
+  CC      kernel/irq/devres.o
+  CC      kernel/irq/kexec.o
+  CC      mm/shrinker.o
+  CC      kernel/irq/autoprobe.o
+  CC      kernel/irq/irqdomain.o
+  CC      mm/shmem.o
+  CC      kernel/irq/proc.o
+  CC      mm/util.o
+  CC      kernel/irq/migration.o
+  CC      kernel/irq/cpuhotplug.o
+  CC      mm/mmzone.o
+  CC      kernel/irq/msi.o
+  CC      mm/vmstat.o
+  CC      kernel/irq/affinity.o
+  CC      mm/backing-dev.o
+  CC      kernel/irq/matrix.o
+  CC      mm/mm_init.o
+  AR      kernel/irq/built-in.a
+  CC      kernel/rcu/update.o
+  CC      mm/percpu.o
+  CC      kernel/rcu/sync.o
+  CC      kernel/rcu/srcutree.o
+  CC      mm/slab_common.o
+  CC      kernel/rcu/tree.o
+  CC      mm/compaction.o
+  CC      mm/show_mem.o
+  CC      kernel/rcu/rcu_segcblist.o
+  AR      kernel/rcu/built-in.a
+  CC      kernel/dma/mapping.o
+  CC      mm/interval_tree.o
+  CC      mm/list_lru.o
+  CC      kernel/dma/direct.o
+  CC      mm/workingset.o
+  CC      kernel/dma/swiotlb.o
+  CC      mm/debug.o
+  CC      kernel/dma/remap.o
+  CC      mm/gup.o
+  AR      kernel/dma/built-in.a
+  CC      kernel/entry/common.o
+  CC      mm/mmap_lock.o
+  CC      kernel/entry/syscall-common.o
+  CC      mm/vma_init.o
+  CC      kernel/entry/syscall_user_dispatch.o
+  AR      kernel/entry/built-in.a
+  CC      kernel/unwind/user.o
+  CC      mm/highmem.o
+  CC      kernel/unwind/deferred.o
+  CC      mm/memory.o
+  AR      kernel/unwind/built-in.a
+  CC      kernel/stacktrace.o
+  CC      kernel/time/time.o
+  CC      kernel/time/timer.o
+  CC      mm/mincore.o
+  CC      kernel/time/hrtimer.o
+  CC      mm/mlock.o
+  CC      mm/mmap.o
+  CC      kernel/time/sleep_timeout.o
+  CC      kernel/time/timekeeping.o
+  CC      mm/mmu_gather.o
+  CC      kernel/time/ntp.o
+  CC      mm/mprotect.o
+  CC      kernel/time/clocksource.o
+  CC      mm/mremap.o
+  CC      kernel/time/jiffies.o
+  CC      kernel/time/timer_list.o
+  CC      mm/msync.o
+  CC      kernel/time/timeconv.o
+  CC      kernel/time/timecounter.o
+  CC      kernel/time/alarmtimer.o
+  CC      mm/page_vma_mapped.o
+  CC      kernel/time/posix-timers.o
+  CC      mm/pagewalk.o
+  CC      mm/pgtable-generic.o
+  CC      kernel/time/posix-cpu-timers.o
+  CC      mm/rmap.o
+  CC      kernel/time/posix-clock.o
+  CC      kernel/time/itimer.o
+  CC      mm/vmalloc.o
+  CC      kernel/time/clockevents.o
+  CC      kernel/time/tick-common.o
+  CC      mm/vma.o
+  CC      kernel/time/tick-broadcast.o
+  CC      kernel/time/tick-broadcast-hrtimer.o
+  CC      mm/vma_exec.o
+  CC      kernel/time/tick-oneshot.o
+  CC      kernel/time/tick-sched.o
+  CC      mm/process_vm_access.o
+  CC      kernel/time/vsyscall.o
+  CC      mm/mseal.o
+  AR      kernel/time/built-in.a
+  CC      kernel/futex/core.o
+  CC      mm/page_alloc.o
+  CC      kernel/futex/syscalls.o
+  CC      kernel/futex/pi.o
+  CC      mm/page_frag_cache.o
+  CC      kernel/futex/requeue.o
+  CC      mm/init-mm.o
+  CC      kernel/futex/waitwake.o
+  CC      mm/memblock.o
+  AR      kernel/futex/built-in.a
+  CC      kernel/smp.o
+  CC      mm/slub.o
+  CC      kernel/kallsyms.o
+  CC      kernel/stop_machine.o
+  CC      mm/madvise.o
+  CC      kernel/seccomp.o
+  CC      mm/dmapool.o
+  CC      kernel/utsname_sysctl.o
+  CC      kernel/tracepoint.o
+  CC      mm/sparse.o
+  CC      kernel/trace/trace_clock.o
+  CC      mm/sparse-vmemmap.o
+  CC      kernel/trace/ring_buffer.o
+  CC      mm/early_ioremap.o
+  CC      mm/usercopy.o
+  CC      kernel/trace/trace.o
+  CC      mm/memfd.o
+  CC      mm/execmem.o
+  CC      kernel/trace/trace_output.o
+  AR      mm/built-in.a
+  CC      fs/open.o
+  CC      kernel/trace/trace_seq.o
+  CC      fs/read_write.o
+  CC      kernel/trace/trace_stat.o
+  CC      fs/file_table.o
+  CC      kernel/trace/trace_printk.o
+  CC      fs/super.o
+  CC      kernel/trace/pid_list.o
+  CC      kernel/trace/trace_sched_switch.o
+  CC      fs/char_dev.o
+  CC      fs/stat.o
+  CC      kernel/trace/trace_preemptirq.o
+  CC      kernel/trace/trace_nop.o
+  CC      fs/exec.o
+  CC      kernel/trace/blktrace.o
+  CC      fs/pipe.o
+  CC      kernel/trace/trace_events.o
+  CC      fs/namei.o
+  CC      kernel/trace/trace_export.o
+  CC      fs/fcntl.o
+  CC      kernel/trace/trace_event_perf.o
+  CC      fs/ioctl.o
+  CC      kernel/trace/trace_events_filter.o
+  CC      fs/readdir.o
+  CC      kernel/trace/trace_events_trigger.o
+  CC      fs/select.o
+  CC      kernel/trace/error_report-traces.o
+  CC      kernel/trace/power-traces.o
+  CC      fs/dcache.o
+  AR      kernel/trace/built-in.a
+  CC      kernel/irq_work.o
+  CC      fs/inode.o
+  CC      kernel/bpf/core.o
+  CC      fs/attr.o
+  AR      kernel/bpf/built-in.a
+  CC      kernel/static_call.o
+  CC      fs/bad_inode.o
+  CC      kernel/static_call_inline.o
+  CC      kernel/events/core.o
+  CC      fs/file.o
+  CC      fs/filesystems.o
+  CC      fs/namespace.o
+  CC      kernel/events/ring_buffer.o
+  CC      fs/seq_file.o
+  CC      kernel/events/callchain.o
+  CC      fs/xattr.o
+  CC      kernel/events/hw_breakpoint.o
+  CC      fs/libfs.o
+  AR      kernel/events/built-in.a
+  CC      kernel/context_tracking.o
+  CC      kernel/iomem.o
+  CC      fs/fs-writeback.o
+  CC      kernel/rseq.o
+  RUSTC     kernel/task_construction_rust.o
+warning: `extern` block uses type `kernel::bindings::sched_statistics`, which is not FFI-safe
+  --> /src/kernel/task_construction_rust.rs:15:35
+   |
+15 |     fn rusix_task_fork_node(orig: *mut task_struct) -> c_int;
+   |                                   ^^^^^^^^^^^^^^^^ not FFI-safe
+   |
+   = help: consider adding a member to this struct
+   = note: this struct has no fields
+   = note: `#[warn(improper_ctypes)]` on by default
+
+warning: `extern` block uses type `kernel::bindings::sched_statistics`, which is not FFI-safe
+  --> /src/kernel/task_construction_rust.rs:16:41
+   |
+16 |     fn rusix_task_alloc(node: c_int) -> *mut task_struct;
+   |                                         ^^^^^^^^^^^^^^^^ not FFI-safe
+   |
+   = help: consider adding a member to this struct
+   = note: this struct has no fields
+
+warning: `extern` block uses type `kernel::bindings::sched_statistics`, which is not FFI-safe
+  --> /src/kernel/task_construction_rust.rs:17:33
+   |
+17 |     fn rusix_task_arch_dup(tsk: *mut task_struct, orig: *mut task_struct) -> c_int;
+   |                                 ^^^^^^^^^^^^^^^^ not FFI-safe
+   |
+   = help: consider adding a member to this struct
+   = note: this struct has no fields
+
+warning: `extern` block uses type `kernel::bindings::sched_statistics`, which is not FFI-safe
+  --> /src/kernel/task_construction_rust.rs:17:57
+   |
+17 |     fn rusix_task_arch_dup(tsk: *mut task_struct, orig: *mut task_struct) -> c_int;
+   |                                                         ^^^^^^^^^^^^^^^^ not FFI-safe
+   |
+   = help: consider adding a member to this struct
+   = note: this struct has no fields
+
+warning: `extern` block uses type `kernel::bindings::sched_statistics`, which is not FFI-safe
+  --> /src/kernel/task_construction_rust.rs:18:36
+   |
+18 |     fn rusix_task_alloc_stack(tsk: *mut task_struct, node: c_int) -> c_int;
+   |                                    ^^^^^^^^^^^^^^^^ not FFI-safe
+   |
+   = help: consider adding a member to this struct
+   = note: this struct has no fields
+
+warning: `extern` block uses type `kernel::bindings::sched_statistics`, which is not FFI-safe
+  --> /src/kernel/task_construction_rust.rs:19:28
+   |
+19 |     fn rusix_task_scs(tsk: *mut task_struct, node: c_int) -> c_int;
+   |                            ^^^^^^^^^^^^^^^^ not FFI-safe
+   |
+   = help: consider adding a member to this struct
+   = note: this struct has no fields
+
+warning: `extern` block uses type `kernel::bindings::sched_statistics`, which is not FFI-safe
+  --> /src/kernel/task_construction_rust.rs:20:36
+   |
+20 |     fn rusix_task_setup_stack(tsk: *mut task_struct, orig: *mut task_struct);
+   |                                    ^^^^^^^^^^^^^^^^ not FFI-safe
+   |
+   = help: consider adding a member to this struct
+   = note: this struct has no fields
+
+warning: `extern` block uses type `kernel::bindings::sched_statistics`, which is not FFI-safe
+  --> /src/kernel/task_construction_rust.rs:20:60
+   |
+20 |     fn rusix_task_setup_stack(tsk: *mut task_struct, orig: *mut task_struct);
+   |                                                            ^^^^^^^^^^^^^^^^ not FFI-safe
+   |
+   = help: consider adding a member to this struct
+   = note: this struct has no fields
+
+warning: `extern` block uses type `kernel::bindings::sched_statistics`, which is not FFI-safe
+  --> /src/kernel/task_construction_rust.rs:21:40
+   |
+21 |     fn rusix_task_cpus_are_owned(orig: *mut task_struct) -> bool;
+   |                                        ^^^^^^^^^^^^^^^^ not FFI-safe
+   |
+   = help: consider adding a member to this struct
+   = note: this struct has no fields
+
+warning: `extern` block uses type `kernel::bindings::sched_statistics`, which is not FFI-safe
+  --> /src/kernel/task_construction_rust.rs:23:14
+   |
+23 |         tsk: *mut task_struct,
+   |              ^^^^^^^^^^^^^^^^ not FFI-safe
+   |
+   = help: consider adding a member to this struct
+   = note: this struct has no fields
+
+warning: `extern` block uses type `kernel::bindings::sched_statistics`, which is not FFI-safe
+  --> /src/kernel/task_construction_rust.rs:24:15
+   |
+24 |         orig: *mut task_struct,
+   |               ^^^^^^^^^^^^^^^^ not FFI-safe
+   |
+   = help: consider adding a member to this struct
+   = note: this struct has no fields
+
+warning: `extern` block uses type `kernel::bindings::sched_statistics`, which is not FFI-safe
+  --> /src/kernel/task_construction_rust.rs:27:39
+   |
+27 |     fn rusix_task_stack_refcount(tsk: *mut task_struct);
+   |                                       ^^^^^^^^^^^^^^^^ not FFI-safe
+   |
+   = help: consider adding a member to this struct
+   = note: this struct has no fields
+
+warning: `extern` block uses type `kernel::bindings::sched_statistics`, which is not FFI-safe
+  --> /src/kernel/task_construction_rust.rs:28:38
+   |
+28 |     fn rusix_task_account_stack(tsk: *mut task_struct);
+   |                                      ^^^^^^^^^^^^^^^^ not FFI-safe
+   |
+   = help: consider adding a member to this struct
+   = note: this struct has no fields
+
+warning: `extern` block uses type `kernel::bindings::sched_statistics`, which is not FFI-safe
+  --> /src/kernel/task_construction_rust.rs:29:38
+   |
+29 |     fn rusix_task_clear_seccomp(tsk: *mut task_struct);
+   |                                      ^^^^^^^^^^^^^^^^ not FFI-safe
+   |
+   = help: consider adding a member to this struct
+   = note: this struct has no fields
+
+warning: `extern` block uses type `kernel::bindings::sched_statistics`, which is not FFI-safe
+  --> /src/kernel/task_construction_rust.rs:30:39
+   |
+30 |     fn rusix_task_clear_notifier(tsk: *mut task_struct);
+   |                                       ^^^^^^^^^^^^^^^^ not FFI-safe
+   |
+   = help: consider adding a member to this struct
+   = note: this struct has no fields
+
+warning: `extern` block uses type `kernel::bindings::sched_statistics`, which is not FFI-safe
+  --> /src/kernel/task_construction_rust.rs:31:38
+   |
+31 |     fn rusix_task_clear_resched(tsk: *mut task_struct);
+   |                                      ^^^^^^^^^^^^^^^^ not FFI-safe
+   |
+   = help: consider adding a member to this struct
+   = note: this struct has no fields
+
+warning: `extern` block uses type `kernel::bindings::sched_statistics`, which is not FFI-safe
+  --> /src/kernel/task_construction_rust.rs:32:36
+   |
+32 |     fn rusix_task_stack_magic(tsk: *mut task_struct);
+   |                                    ^^^^^^^^^^^^^^^^ not FFI-safe
+   |
+   = help: consider adding a member to this struct
+   = note: this struct has no fields
+
+warning: `extern` block uses type `kernel::bindings::sched_statistics`, which is not FFI-safe
+  --> /src/kernel/task_construction_rust.rs:33:39
+   |
+33 |     fn rusix_task_clear_dispatch(tsk: *mut task_struct);
+   |                                       ^^^^^^^^^^^^^^^^ not FFI-safe
+   |
+   = help: consider adding a member to this struct
+   = note: this struct has no fields
+
+warning: `extern` block uses type `kernel::bindings::sched_statistics`, which is not FFI-safe
+  --> /src/kernel/task_construction_rust.rs:34:31
+   |
+34 |     fn rusix_task_canary(tsk: *mut task_struct);
+   |                               ^^^^^^^^^^^^^^^^ not FFI-safe
+   |
+   = help: consider adding a member to this struct
+   = note: this struct has no fields
+
+warning: `extern` block uses type `kernel::bindings::sched_statistics`, which is not FFI-safe
+  --> /src/kernel/task_construction_rust.rs:35:33
+   |
+35 |     fn rusix_task_own_cpus(tsk: *mut task_struct);
+   |                                 ^^^^^^^^^^^^^^^^ not FFI-safe
+   |
+   = help: consider adding a member to this struct
+   = note: this struct has no fields
+
+warning: `extern` block uses type `kernel::bindings::sched_statistics`, which is not FFI-safe
+  --> /src/kernel/task_construction_rust.rs:36:29
+   |
+36 |     fn rusix_task_refs(tsk: *mut task_struct);
+   |                             ^^^^^^^^^^^^^^^^ not FFI-safe
+   |
+   = help: consider adding a member to this struct
+   = note: this struct has no fields
+
+warning: `extern` block uses type `kernel::bindings::sched_statistics`, which is not FFI-safe
+  --> /src/kernel/task_construction_rust.rs:37:31
+   |
+37 |     fn rusix_task_btrace(tsk: *mut task_struct);
+   |                               ^^^^^^^^^^^^^^^^ not FFI-safe
+   |
+   = help: consider adding a member to this struct
+   = note: this struct has no fields
+
+warning: `extern` block uses type `kernel::bindings::sched_statistics`, which is not FFI-safe
+  --> /src/kernel/task_construction_rust.rs:38:41
+   |
+38 |     fn rusix_task_clear_transients(tsk: *mut task_struct);
+   |                                         ^^^^^^^^^^^^^^^^ not FFI-safe
+   |
+   = help: consider adding a member to this struct
+   = note: this struct has no fields
+
+warning: `extern` block uses type `kernel::bindings::sched_statistics`, which is not FFI-safe
+  --> /src/kernel/task_construction_rust.rs:39:29
+   |
+39 |     fn rusix_task_kcov(tsk: *mut task_struct);
+   |                             ^^^^^^^^^^^^^^^^ not FFI-safe
+   |
+   = help: consider adding a member to this struct
+   = note: this struct has no fields
+
+warning: `extern` block uses type `kernel::bindings::sched_statistics`, which is not FFI-safe
+  --> /src/kernel/task_construction_rust.rs:40:30
+   |
+40 |     fn rusix_task_kmsan(tsk: *mut task_struct);
+   |                              ^^^^^^^^^^^^^^^^ not FFI-safe
+   |
+   = help: consider adding a member to this struct
+   = note: this struct has no fields
+
+warning: `extern` block uses type `kernel::bindings::sched_statistics`, which is not FFI-safe
+  --> /src/kernel/task_construction_rust.rs:41:29
+   |
+41 |     fn rusix_task_kmap(tsk: *mut task_struct);
+   |                             ^^^^^^^^^^^^^^^^ not FFI-safe
+   |
+   = help: consider adding a member to this struct
+   = note: this struct has no fields
+
+warning: `extern` block uses type `kernel::bindings::sched_statistics`, which is not FFI-safe
+  --> /src/kernel/task_construction_rust.rs:42:30
+   |
+42 |     fn rusix_task_fault(tsk: *mut task_struct);
+   |                              ^^^^^^^^^^^^^^^^ not FFI-safe
+   |
+   = help: consider adding a member to this struct
+   = note: this struct has no fields
+
+warning: `extern` block uses type `kernel::bindings::sched_statistics`, which is not FFI-safe
+  --> /src/kernel/task_construction_rust.rs:43:30
+   |
+43 |     fn rusix_task_blkcg(tsk: *mut task_struct);
+   |                              ^^^^^^^^^^^^^^^^ not FFI-safe
+   |
+   = help: consider adding a member to this struct
+   = note: this struct has no fields
+
+warning: `extern` block uses type `kernel::bindings::sched_statistics`, which is not FFI-safe
+  --> /src/kernel/task_construction_rust.rs:44:30
+   |
+44 |     fn rusix_task_pasid(tsk: *mut task_struct);
+   |                              ^^^^^^^^^^^^^^^^ not FFI-safe
+   |
+   = help: consider adding a member to this struct
+   = note: this struct has no fields
+
+warning: `extern` block uses type `kernel::bindings::sched_statistics`, which is not FFI-safe
+  --> /src/kernel/task_construction_rust.rs:45:30
+   |
+45 |     fn rusix_task_memcg(tsk: *mut task_struct);
+   |                              ^^^^^^^^^^^^^^^^ not FFI-safe
+   |
+   = help: consider adding a member to this struct
+   = note: this struct has no fields
+
+warning: `extern` block uses type `kernel::bindings::sched_statistics`, which is not FFI-safe
+  --> /src/kernel/task_construction_rust.rs:46:35
+   |
+46 |     fn rusix_task_split_lock(tsk: *mut task_struct);
+   |                                   ^^^^^^^^^^^^^^^^ not FFI-safe
+   |
+   = help: consider adding a member to this struct
+   = note: this struct has no fields
+
+warning: `extern` block uses type `kernel::bindings::sched_statistics`, which is not FFI-safe
+  --> /src/kernel/task_construction_rust.rs:47:31
+   |
+47 |     fn rusix_task_mm_cid(tsk: *mut task_struct);
+   |                               ^^^^^^^^^^^^^^^^ not FFI-safe
+   |
+   = help: consider adding a member to this struct
+   = note: this struct has no fields
+
+warning: `extern` block uses type `kernel::bindings::sched_statistics`, which is not FFI-safe
+  --> /src/kernel/task_construction_rust.rs:48:28
+   |
+48 |     fn rusix_task_bpf(tsk: *mut task_struct);
+   |                            ^^^^^^^^^^^^^^^^ not FFI-safe
+   |
+   = help: consider adding a member to this struct
+   = note: this struct has no fields
+
+warning: `extern` block uses type `kernel::bindings::sched_statistics`, which is not FFI-safe
+  --> /src/kernel/task_construction_rust.rs:49:40
+   |
+49 |     fn rusix_task_unaccount_stack(tsk: *mut task_struct);
+   |                                        ^^^^^^^^^^^^^^^^ not FFI-safe
+   |
+   = help: consider adding a member to this struct
+   = note: this struct has no fields
+
+warning: `extern` block uses type `kernel::bindings::sched_statistics`, which is not FFI-safe
+  --> /src/kernel/task_construction_rust.rs:50:35
+   |
+50 |     fn rusix_task_free_stack(tsk: *mut task_struct);
+   |                                   ^^^^^^^^^^^^^^^^ not FFI-safe
+   |
+   = help: consider adding a member to this struct
+   = note: this struct has no fields
+
+warning: `extern` block uses type `kernel::bindings::sched_statistics`, which is not FFI-safe
+  --> /src/kernel/task_construction_rust.rs:51:34
+   |
+51 |     fn rusix_task_free_slab(tsk: *mut task_struct);
+   |                                  ^^^^^^^^^^^^^^^^ not FFI-safe
+   |
+   = help: consider adding a member to this struct
+   = note: this struct has no fields
+
+warning: 36 warnings emitted
+
+  CC      fs/pnode.o
+  AR      kernel/built-in.a
+  CC      ipc/util.o
+  CC      fs/splice.o
+  CC      ipc/msgutil.o
+  CC      ipc/msg.o
+  CC      fs/sync.o
+  CC      ipc/sem.o
+  CC      fs/utimes.o
+  CC      fs/d_path.o
+  CC      ipc/shm.o
+  CC      fs/stack.o
+  CC      ipc/syscall.o
+  CC      fs/fs_struct.o
+  CC      ipc/ipc_sysctl.o
+  CC      fs/statfs.o
+  CC      ipc/mqueue.o
+  CC      fs/fs_pin.o
+  CC      fs/nsfs.o
+  CC      ipc/mq_sysctl.o
+  AR      ipc/built-in.a
+  CC      fs/fs_types.o
+  CC      security/commoncap.o
+  CC      fs/fs_context.o
+  CC      security/min_addr.o
+  CC      fs/fs_parser.o
+  AR      security/built-in.a
+  CC      fs/fsopen.o
+  CC      fs/init.o
+  CC      block/bdev.o
+  CC      fs/kernel_read_file.o
+  CC      block/fops.o
+  CC      fs/mnt_idmapping.o
+  CC      fs/remap_range.o
+  CC      block/bio.o
+  CC      fs/pidfs.o
+  CC      block/elevator.o
+  CC      fs/file_attr.o
+  CC      block/blk-core.o
+  CC      fs/buffer.o
+  CC      block/blk-sysfs.o
+  CC      fs/mpage.o
+  CC      block/blk-flush.o
+  CC      fs/proc_namespace.o
+  CC      block/blk-settings.o
+  CC      fs/notify/fsnotify.o
+  CC      block/blk-ioc.o
+  CC      fs/notify/notification.o
+  CC      block/blk-map.o
+  CC      fs/notify/group.o
+  CC      block/blk-merge.o
+  CC      fs/notify/mark.o
+  CC      fs/notify/fdinfo.o
+  CC      block/blk-timeout.o
+  CC      fs/notify/inotify/inotify_fsnotify.o
+  CC      block/blk-lib.o
+  CC      fs/notify/inotify/inotify_user.o
+  CC      block/blk-mq.o
+  AR      fs/notify/inotify/built-in.a
+  AR      fs/notify/built-in.a
+  CC      fs/eventpoll.o
+  CC      block/blk-mq-tag.o
+  CC      fs/anon_inodes.o
+  CC      block/blk-mq-dma.o
+  CC      fs/signalfd.o
+  CC      block/blk-stat.o
+  CC      fs/timerfd.o
+  CC      block/blk-mq-sysfs.o
+  CC      fs/eventfd.o
+  CC      block/blk-mq-cpumap.o
+  CC      fs/aio.o
+  CC      block/blk-mq-sched.o
+  CC      fs/locks.o
+  CC      block/ioctl.o
+  CC      block/genhd.o
+  CC      fs/binfmt_script.o
+  CC      block/ioprio.o
+  CC      fs/binfmt_elf.o
+  CC      block/badblocks.o
+  CC      fs/mbcache.o
+  CC      block/partitions/core.o
+  CC      fs/posix_acl.o
+  CC      block/partitions/msdos.o
+  CC      fs/coredump.o
+  CC      block/partitions/efi.o
+  AR      block/partitions/built-in.a
+  CC      block/blk-rq-qos.o
+  CC      fs/drop_caches.o
+  CC      block/disk-events.o
+  CC      fs/sysctls.o
+  CC      fs/fhandle.o
+  CC      block/blk-ia-ranges.o
+  CC      fs/iomap/trace.o
+  CC      block/early-lookup.o
+  AR      block/built-in.a
+  CC      fs/iomap/iter.o
+  CC      fs/iomap/buffered-io.o
+  CC      rust/exports.o
+  AR      rust/built-in.a
+  CC      fs/iomap/direct-io.o
+  CC      fs/iomap/ioend.o
+  CC      fs/iomap/fiemap.o
+  CC      fs/iomap/seek.o
+  AR      fs/iomap/built-in.a
+  CC      lib/argv_split.o
+  CC      fs/proc/task_mmu.o
+  CC      lib/bug.o
+  CC      fs/proc/inode.o
+  CC      lib/buildid.o
+  CC      fs/proc/root.o
+  CC      lib/cmdline.o
+  CC      lib/cpumask.o
+  CC      fs/proc/base.o
+  CC      lib/ctype.o
+  CC      lib/dec_and_lock.o
+  CC      lib/decompress.o
+  CC      lib/decompress_inflate.o
+  CC      fs/proc/generic.o
+  CC      lib/dump_stack.o
+  CC      fs/proc/array.o
+  CC      lib/earlycpio.o
+  CC      lib/extable.o
+  CC      lib/flex_proportions.o
+  CC      fs/proc/fd.o
+  CC      lib/idr.o
+  CC      fs/proc/proc_tty.o
+  CC      lib/iomem_copy.o
+  CC      lib/irq_regs.o
+  CC      lib/is_single_threaded.o
+  CC      fs/proc/cmdline.o
+  CC      lib/klist.o
+  CC      fs/proc/consoles.o
+  CC      lib/kobject.o
+  CC      fs/proc/cpuinfo.o
+  CC      lib/kobject_uevent.o
+  CC      fs/proc/devices.o
+  CC      lib/logic_pio.o
+  CC      fs/proc/interrupts.o
+  CC      lib/maple_tree.o
+  CC      fs/proc/loadavg.o
+  CC      fs/proc/meminfo.o
+  CC      fs/proc/stat.o
+  CC      lib/memcat_p.o
+  CC      lib/nmi_backtrace.o
+  CC      fs/proc/uptime.o
+  CC      fs/proc/util.o
+  CC      lib/objpool.o
+  CC      lib/plist.o
+  CC      lib/radix-tree.o
+  CC      fs/proc/version.o
+  CC      lib/ratelimit.o
+  CC      fs/proc/softirqs.o
+  CC      lib/rbtree.o
+  CC      fs/proc/namespaces.o
+  CC      lib/seq_buf.o
+  CC      lib/siphash.o
+  CC      fs/proc/self.o
+  CC      lib/string.o
+  CC      lib/sys_info.o
+  CC      fs/proc/thread_self.o
+  CC      lib/timerqueue.o
+  CC      fs/proc/proc_sysctl.o
+  CC      lib/vsprintf.o
+  CC      fs/proc/proc_net.o
+  CC      lib/win_minmax.o
+  CC      fs/proc/kmsg.o
+  CC      lib/xarray.o
+  AR      fs/proc/built-in.a
+  CC      fs/kernfs/mount.o
+  CC      lib/lockref.o
+  CC      lib/bcd.o
+  CC      lib/sort.o
+  CC      fs/kernfs/inode.o
+  CC      lib/parser.o
+  CC      lib/debug_locks.o
+  CC      fs/kernfs/dir.o
+  CC      lib/random32.o
+  CC      lib/bust_spinlocks.o
+  CC      fs/kernfs/file.o
+  CC      lib/kasprintf.o
+  CC      lib/bitmap.o
+  CC      fs/kernfs/symlink.o
+  CC      lib/scatterlist.o
+  AR      fs/kernfs/built-in.a
+  CC      fs/sysfs/file.o
+  CC      lib/list_sort.o
+  CC      lib/uuid.o
+  CC      fs/sysfs/dir.o
+  CC      lib/iov_iter.o
+  CC      fs/sysfs/symlink.o
+  CC      lib/clz_ctz.o
+  CC      fs/sysfs/mount.o
+  CC      lib/bsearch.o
+  CC      lib/find_bit.o
+  CC      fs/sysfs/group.o
+  CC      lib/llist.o
+  CC      lib/lwq.o
+  CC      lib/memweight.o
+  AR      fs/sysfs/built-in.a
+  CC      fs/devpts/inode.o
+  CC      lib/kfifo.o
+  AR      fs/devpts/built-in.a
+  CC      fs/ext4/balloc.o
+  CC      lib/percpu-refcount.o
+  CC      lib/rhashtable.o
+  CC      fs/ext4/bitmap.o
+  CC      lib/base64.o
+  CC      lib/once.o
+  CC      fs/ext4/block_validity.o
+  CC      lib/refcount.o
+  CC      lib/rcuref.o
+  CC      fs/ext4/dir.o
+  CC      lib/usercopy.o
+  CC      lib/errseq.o
+  CC      lib/bucket_locks.o
+  CC      fs/ext4/ext4_jbd2.o
+  CC      lib/generic-radix-tree.o
+  CC      lib/bitmap-str.o
+  CC      fs/ext4/extents.o
+  CC      lib/string_helpers.o
+  CC      lib/hexdump.o
+  CC      lib/kstrtox.o
+  CC      lib/math/div64.o
+  CC      lib/math/gcd.o
+  CC      fs/ext4/extents_status.o
+  CC      lib/math/lcm.o
+  CC      lib/math/int_log.o
+  CC      lib/math/int_pow.o
+  CC      lib/math/reciprocal_div.o
+  RUSTC     lib/math/int_sqrt_rust.o
+  CC      lib/math/int_sqrt_exports.o
+  AR      lib/math/built-in.a
+  CC      lib/crc/crc16.o
+  CC      lib/crc/crc32-main.o
+  AR      lib/crc/built-in.a
+  CC      lib/crypto/blake2s.o
+  CC      fs/ext4/file.o
+  AS      lib/crypto/x86/blake2s-core.o
+  CC      lib/crypto/chacha-block-generic.o
+  CC      lib/crypto/sha1.o
+  CC      fs/ext4/fsmap.o
+  AS      lib/crypto/x86/sha1-ssse3-and-avx.o
+  AS      lib/crypto/x86/sha1-avx2-asm.o
+  AS      lib/crypto/x86/sha1-ni-asm.o
+  CC      lib/crypto/sha256.o
+  CC      fs/ext4/fsync.o
+  AS      lib/crypto/x86/sha256-ssse3-asm.o
+  AS      lib/crypto/x86/sha256-avx-asm.o
+  AS      lib/crypto/x86/sha256-avx2-asm.o
+  AS      lib/crypto/x86/sha256-ni-asm.o
+  AR      lib/crypto/built-in.a
+  CC      lib/vdso/datastore.o
+  CC      fs/ext4/hash.o
+  AR      lib/vdso/built-in.a
+  CC      lib/iomap.o
+  CC      fs/ext4/ialloc.o
+  CC      lib/iomap_copy.o
+  CC      lib/devres.o
+  CC      lib/list_debug.o
+  CC      lib/bitrev.o
+  CC      fs/ext4/indirect.o
+  CC      lib/zlib_inflate/inffast.o
+  CC      lib/zlib_inflate/inflate.o
+  CC      lib/zlib_inflate/infutil.o
+  CC      fs/ext4/inline.o
+  CC      lib/zlib_inflate/inftrees.o
+  CC      lib/zlib_inflate/inflate_syms.o
+  AR      lib/zlib_inflate/built-in.a
+  CC      lib/percpu_counter.o
+  CC      fs/ext4/inode.o
+  CC      lib/syscall.o
+  CC      lib/nlattr.o
+  CC      lib/glob.o
+  CC      fs/ext4/ioctl.o
+  CC      lib/dim/dim.o
+  CC      lib/dim/net_dim.o
+  CC      fs/ext4/mballoc.o
+  CC      lib/dim/rdma_dim.o
+  AR      lib/dim/built-in.a
+  CC      lib/strncpy_from_user.o
+  CC      lib/strnlen_user.o
+  CC      fs/ext4/migrate.o
+  CC      lib/net_utils.o
+  CC      fs/ext4/mmp.o
+  CC      lib/sg_pool.o
+  CC      lib/sbitmap.o
+  CC      fs/ext4/move_extent.o
+  CC      lib/group_cpus.o
+  CC      fs/ext4/namei.o
+  CC      lib/fw_table.o
+  AR      lib/lib.a
+  AR      lib/built-in.a
+  CC      fs/jbd2/transaction.o
+  CC      fs/ext4/page-io.o
+  CC      fs/jbd2/commit.o
+  CC      fs/ext4/readpage.o
+  CC      fs/jbd2/recovery.o
+  CC      fs/ext4/resize.o
+  CC      fs/jbd2/checkpoint.o
+  CC      fs/ext4/super.o
+  CC      fs/jbd2/revoke.o
+  CC      fs/jbd2/journal.o
+  AR      fs/jbd2/built-in.a
+  CC      fs/ramfs/inode.o
+  CC      fs/ramfs/file-mmu.o
+  CC      fs/ext4/symlink.o
+  AR      fs/ramfs/built-in.a
+  CC      fs/exportfs/expfs.o
+  CC      fs/ext4/sysfs.o
+  AR      fs/exportfs/built-in.a
+  CC      fs/nls/nls_base.o
+  CC      fs/ext4/xattr.o
+  AR      fs/nls/built-in.a
+  CC      fs/tracefs/inode.o
+  CC      fs/tracefs/event_inode.o
+  CC      fs/ext4/xattr_hurd.o
+  AR      fs/tracefs/built-in.a
+  CC      fs/ext4/xattr_trusted.o
+  CC      fs/ext4/xattr_user.o
+  CC      fs/ext4/fast_commit.o
+  AS      arch/x86/lib/bhi.o
+  AS      arch/x86/lib/clear_page_64.o
+  CC      arch/x86/lib/cmdline.o
+  AS      arch/x86/lib/cmpxchg16b_emu.o
+  CC      arch/x86/lib/copy_mc.o
+  AS      arch/x86/lib/copy_mc_64.o
+  AS      arch/x86/lib/copy_page_64.o
+  AS      arch/x86/lib/copy_user_64.o
+  AS      arch/x86/lib/copy_user_uncached_64.o
+  CC      arch/x86/lib/cpu.o
+  CC      fs/ext4/orphan.o
+  AS      arch/x86/lib/csum-copy_64.o
+  CC      arch/x86/lib/csum-partial_64.o
+  CC      arch/x86/lib/csum-wrappers_64.o
+  CC      fs/ext4/acl.o
+  CC      arch/x86/lib/delay.o
+  AS      arch/x86/lib/getuser.o
+  CC      arch/x86/lib/inat.o
+  CC      arch/x86/lib/insn-eval.o
+  CC      fs/ext4/xattr_security.o
+  CC      arch/x86/lib/insn.o
+  AR      fs/ext4/built-in.a
+  AR      fs/built-in.a
+  CC      arch/x86/lib/kaslr.o
+  AS      arch/x86/lib/memcpy_64.o
+  CC      drivers/pci/access.o
+  AS      arch/x86/lib/memmove_64.o
+  AS      arch/x86/lib/memset_64.o
+  CC      arch/x86/lib/misc.o
+  CC      arch/x86/lib/pc-conf-reg.o
+  AS      arch/x86/lib/putuser.o
+  AS      arch/x86/lib/retpoline.o
+  CC      arch/x86/lib/usercopy.o
+  CC      drivers/pci/bus.o
+  CC      arch/x86/lib/usercopy_64.o
+  CC      drivers/pci/probe.o
+  CC      arch/x86/lib/msr-smp.o
+  CC      arch/x86/lib/cache-smp.o
+  CC      arch/x86/lib/msr.o
+  CC      drivers/pci/host-bridge.o
+  AS      arch/x86/lib/msr-reg.o
+  CC      drivers/pci/remove.o
+  CC      arch/x86/lib/msr-reg-export.o
+  AS      arch/x86/lib/hweight.o
+  CC      arch/x86/lib/iomem.o
+  CC      drivers/pci/pci.o
+  AR      arch/x86/lib/lib.a
+  AR      arch/x86/lib/built-in.a
+  CC      drivers/pci/pci-driver.o
+  CC      drivers/pci/search.o
+  CC      drivers/pci/rebar.o
+  CC      drivers/pci/rom.o
+  CC      drivers/pci/setup-res.o
+  CC      drivers/pci/irq.o
+  CC      drivers/pci/vpd.o
+  CC      drivers/pci/setup-bus.o
+  CC      drivers/pci/vc.o
+  CC      drivers/pci/mmap.o
+  CC      drivers/pci/devres.o
+  CC      drivers/pci/msi/pcidev_msi.o
+  CC      drivers/acpi/tables.o
+  CC      drivers/pci/msi/api.o
+  CC      drivers/acpi/osi.o
+  CC      drivers/pci/msi/msi.o
+  CC      drivers/acpi/osl.o
+  CC      drivers/pci/msi/irqdomain.o
+  CC      drivers/acpi/utils.o
+  AR      drivers/pci/msi/built-in.a
+  CC      drivers/pci/pcie/aspm.o
+  CC      drivers/acpi/reboot.o
+  AR      drivers/pci/pcie/built-in.a
+  CC      drivers/pci/proc.o
+  CC      drivers/acpi/nvs.o
+  CC      drivers/pci/pci-sysfs.o
+  CC      drivers/acpi/wakeup.o
+  CC      drivers/acpi/sleep.o
+  CC      drivers/pci/slot.o
+  CC      drivers/acpi/device_sysfs.o
+  CC      drivers/pci/pci-acpi.o
+  CC      drivers/acpi/device_pm.o
+  CC      drivers/pci/iomap.o
+  CC      drivers/acpi/bus.o
+  CC      drivers/pci/pci-label.o
+  CC      drivers/acpi/glue.o
+  AR      drivers/pci/built-in.a
+  CC      net/devres.o
+  CC      drivers/acpi/scan.o
+  CC      net/socket.o
+  CC      drivers/acpi/mipi-disco-img.o
+  CC      drivers/acpi/resource.o
+  CC      net/core/sock.o
+  CC      drivers/acpi/acpi_processor.o
+  CC      drivers/acpi/processor_core.o
+  CC      drivers/acpi/processor_pdc.o
+  CC      net/core/request_sock.o
+  CC      drivers/acpi/pci_root.o
+  CC      net/core/skbuff.o
+  CC      drivers/acpi/pci_link.o
+  CC      drivers/acpi/pci_irq.o
+  CC      drivers/acpi/acpi_apd.o
+  CC      drivers/acpi/acpi_platform.o
+  CC      net/core/datagram.o
+  CC      drivers/acpi/acpi_pnp.o
+  CC      drivers/acpi/power.o
+  CC      net/core/stream.o
+  CC      drivers/acpi/event.o
+  CC      net/core/scm.o
+  CC      drivers/acpi/evged.o
+  CC      drivers/acpi/sysfs.o
+  CC      net/core/gen_stats.o
+  CC      drivers/acpi/property.o
+  CC      drivers/acpi/acpi_lpat.o
+  CC      net/core/gen_estimator.o
+  CC      drivers/acpi/acpi_lpit.o
+  CC      drivers/acpi/acpi_mrrm.o
+  CC      net/core/net_namespace.o
+  CC      drivers/acpi/acpica/dsargs.o
+  CC      net/core/secure_seq.o
+  CC      drivers/acpi/acpica/dscontrol.o
+  CC      drivers/acpi/acpica/dsdebug.o
+  CC      drivers/acpi/acpica/dsfield.o
+  CC      net/core/flow_dissector.o
+  CC      drivers/acpi/acpica/dsinit.o
+  CC      drivers/acpi/acpica/dsmethod.o
+  CC      drivers/acpi/acpica/dsmthdat.o
+  CC      net/core/sysctl_net_core.o
+  CC      drivers/acpi/acpica/dsobject.o
+  CC      drivers/acpi/acpica/dsopcode.o
+  CC      drivers/acpi/acpica/dspkginit.o
+  CC      net/core/dev.o
+  CC      drivers/acpi/acpica/dsutils.o
+  CC      drivers/acpi/acpica/dswexec.o
+  CC      drivers/acpi/acpica/dswload.o
+  CC      drivers/acpi/acpica/dswload2.o
+  CC      drivers/acpi/acpica/dswscope.o
+  CC      drivers/acpi/acpica/dswstate.o
+  CC      drivers/acpi/acpica/evevent.o
+  CC      net/core/dev_api.o
+  CC      drivers/acpi/acpica/evgpe.o
+  CC      drivers/acpi/acpica/evgpeblk.o
+  CC      net/core/dev_addr_lists.o
+  CC      drivers/acpi/acpica/evgpeinit.o
+  CC      drivers/acpi/acpica/evgpeutil.o
+  CC      drivers/acpi/acpica/evglock.o
+  CC      net/core/dst.o
+  CC      drivers/acpi/acpica/evhandler.o
+  CC      drivers/acpi/acpica/evmisc.o
+  CC      net/core/netevent.o
+  CC      drivers/acpi/acpica/evregion.o
+  CC      drivers/acpi/acpica/evrgnini.o
+  CC      net/core/neighbour.o
+  CC      drivers/acpi/acpica/evsci.o
+  CC      drivers/acpi/acpica/evxface.o
+  CC      drivers/acpi/acpica/evxfevnt.o
+  CC      drivers/acpi/acpica/evxfgpe.o
+  CC      net/core/rtnetlink.o
+  CC      drivers/acpi/acpica/evxfregn.o
+  CC      drivers/acpi/acpica/exconcat.o
+  CC      drivers/acpi/acpica/exconfig.o
+  CC      drivers/acpi/acpica/exconvrt.o
+  CC      drivers/acpi/acpica/excreate.o
+  CC      net/core/utils.o
+  CC      drivers/acpi/acpica/exdebug.o
+  CC      drivers/acpi/acpica/exdump.o
+  CC      net/core/link_watch.o
+  CC      drivers/acpi/acpica/exfield.o
+  CC      drivers/acpi/acpica/exfldio.o
+  CC      net/core/filter.o
+  CC      drivers/acpi/acpica/exmisc.o
+  CC      drivers/acpi/acpica/exmutex.o
+  CC      drivers/acpi/acpica/exnames.o
+  CC      drivers/acpi/acpica/exoparg1.o
+  CC      drivers/acpi/acpica/exoparg2.o
+  CC      drivers/acpi/acpica/exoparg3.o
+  CC      drivers/acpi/acpica/exoparg6.o
+  CC      net/core/sock_diag.o
+  CC      drivers/acpi/acpica/exprep.o
+  CC      drivers/acpi/acpica/exregion.o
+  CC      net/core/dev_ioctl.o
+  CC      drivers/acpi/acpica/exresnte.o
+  CC      drivers/acpi/acpica/exresolv.o
+  CC      drivers/acpi/acpica/exresop.o
+  CC      net/core/tso.o
+  CC      drivers/acpi/acpica/exserial.o
+  CC      drivers/acpi/acpica/exstore.o
+  CC      net/core/sock_reuseport.o
+  CC      drivers/acpi/acpica/exstoren.o
+  CC      drivers/acpi/acpica/exstorob.o
+  CC      drivers/acpi/acpica/exsystem.o
+  CC      net/core/fib_notifier.o
+  CC      drivers/acpi/acpica/extrace.o
+  CC      drivers/acpi/acpica/exutils.o
+  CC      net/core/xdp.o
+  CC      drivers/acpi/acpica/hwacpi.o
+  CC      drivers/acpi/acpica/hwesleep.o
+  CC      drivers/acpi/acpica/hwgpe.o
+  CC      net/core/flow_offload.o
+  CC      drivers/acpi/acpica/hwregs.o
+  CC      drivers/acpi/acpica/hwsleep.o
+  CC      net/core/gro.o
+  CC      drivers/acpi/acpica/hwvalid.o
+  CC      drivers/acpi/acpica/hwxface.o
+  CC      drivers/acpi/acpica/hwxfsleep.o
+  CC      drivers/acpi/acpica/hwpci.o
+  CC      net/core/netdev-genl.o
+  CC      drivers/acpi/acpica/nsaccess.o
+  CC      drivers/acpi/acpica/nsalloc.o
+  CC      net/core/netdev-genl-gen.o
+  CC      drivers/acpi/acpica/nsarguments.o
+  CC      drivers/acpi/acpica/nsconvert.o
+  CC      net/core/gso.o
+  CC      drivers/acpi/acpica/nsdump.o
+  CC      drivers/acpi/acpica/nseval.o
+  CC      drivers/acpi/acpica/nsinit.o
+  CC      net/core/net-sysfs.o
+  CC      drivers/acpi/acpica/nsload.o
+  CC      drivers/acpi/acpica/nsnames.o
+  CC      drivers/acpi/acpica/nsobject.o
+  CC      net/core/hotdata.o
+  CC      drivers/acpi/acpica/nsparse.o
+  CC      drivers/acpi/acpica/nspredef.o
+  CC      net/core/netdev_rx_queue.o
+  CC      drivers/acpi/acpica/nsprepkg.o
+  CC      drivers/acpi/acpica/nsrepair.o
+  CC      net/core/netdev_queues.o
+  CC      drivers/acpi/acpica/nsrepair2.o
+  CC      drivers/acpi/acpica/nssearch.o
+  CC      net/core/net-procfs.o
+  CC      drivers/acpi/acpica/nsutils.o
+  CC      drivers/acpi/acpica/nswalk.o
+  CC      net/core/net-traces.o
+  CC      drivers/acpi/acpica/nsxfeval.o
+  CC      drivers/acpi/acpica/nsxfname.o
+  CC      drivers/acpi/acpica/nsxfobj.o
+  CC      drivers/acpi/acpica/psargs.o
+  CC      drivers/acpi/acpica/psloop.o
+  CC      net/core/failover.o
+  CC      drivers/acpi/acpica/psobject.o
+  CC      drivers/acpi/acpica/psopcode.o
+  AR      net/core/built-in.a
+  CC      net/ethernet/eth.o
+  CC      drivers/acpi/acpica/psopinfo.o
+  CC      drivers/acpi/acpica/psparse.o
+  CC      drivers/acpi/acpica/psscope.o
+  AR      net/ethernet/built-in.a
+  CC      net/sched/sch_generic.o
+  CC      drivers/acpi/acpica/pstree.o
+  CC      drivers/acpi/acpica/psutils.o
+  CC      drivers/acpi/acpica/pswalk.o
+  CC      drivers/acpi/acpica/psxface.o
+  CC      net/sched/sch_mq.o
+  CC      drivers/acpi/acpica/rsaddr.o
+  CC      drivers/acpi/acpica/rscalc.o
+  CC      net/sched/sch_frag.o
+  CC      drivers/acpi/acpica/rscreate.o
+  CC      drivers/acpi/acpica/rsdumpinfo.o
+  AR      net/sched/built-in.a
+  CC      drivers/acpi/acpica/rsinfo.o
+  CC      net/netlink/af_netlink.o
+  CC      drivers/acpi/acpica/rsio.o
+  CC      drivers/acpi/acpica/rsirq.o
+  CC      drivers/acpi/acpica/rslist.o
+  CC      net/netlink/genetlink.o
+  CC      drivers/acpi/acpica/rsmemory.o
+  CC      drivers/acpi/acpica/rsmisc.o
+  CC      drivers/acpi/acpica/rsserial.o
+  CC      net/netlink/policy.o
+  CC      drivers/acpi/acpica/rsutils.o
+  CC      drivers/acpi/acpica/rsxface.o
+  AR      net/netlink/built-in.a
+  CC      net/ethtool/ioctl.o
+  CC      drivers/acpi/acpica/tbdata.o
+  CC      drivers/acpi/acpica/tbfadt.o
+  CC      drivers/acpi/acpica/tbfind.o
+  CC      net/ethtool/common.o
+  CC      drivers/acpi/acpica/tbinstal.o
+  CC      drivers/acpi/acpica/tbprint.o
+  CC      drivers/acpi/acpica/tbutils.o
+  AR      net/ethtool/built-in.a
+  CC      net/ipv4/route.o
+  CC      drivers/acpi/acpica/tbxface.o
+  CC      drivers/acpi/acpica/tbxfload.o
+  CC      drivers/acpi/acpica/tbxfroot.o
+  CC      drivers/acpi/acpica/utaddress.o
+  CC      net/ipv4/inetpeer.o
+  CC      drivers/acpi/acpica/utalloc.o
+  CC      drivers/acpi/acpica/utascii.o
+  CC      net/ipv4/protocol.o
+  CC      drivers/acpi/acpica/utbuffer.o
+  CC      drivers/acpi/acpica/utcksum.o
+  CC      drivers/acpi/acpica/utcopy.o
+  CC      net/ipv4/ip_input.o
+  CC      drivers/acpi/acpica/utexcep.o
+  CC      drivers/acpi/acpica/utdebug.o
+  CC      net/ipv4/ip_fragment.o
+  CC      drivers/acpi/acpica/utdecode.o
+  CC      drivers/acpi/acpica/utdelete.o
+  CC      drivers/acpi/acpica/uterror.o
+  CC      net/ipv4/ip_forward.o
+  CC      drivers/acpi/acpica/uteval.o
+  CC      drivers/acpi/acpica/utglobal.o
+  CC      drivers/acpi/acpica/uthex.o
+  CC      net/ipv4/ip_options.o
+  CC      drivers/acpi/acpica/utids.o
+  CC      drivers/acpi/acpica/utinit.o
+  CC      net/ipv4/ip_output.o
+  CC      drivers/acpi/acpica/utlock.o
+  CC      drivers/acpi/acpica/utmath.o
+  CC      drivers/acpi/acpica/utmisc.o
+  CC      drivers/acpi/acpica/utmutex.o
+  CC      net/ipv4/ip_sockglue.o
+  CC      drivers/acpi/acpica/utnonansi.o
+  CC      drivers/acpi/acpica/utobject.o
+  CC      drivers/acpi/acpica/utosi.o
+  CC      net/ipv4/inet_hashtables.o
+  CC      drivers/acpi/acpica/utownerid.o
+  CC      drivers/acpi/acpica/utpredef.o
+  CC      drivers/acpi/acpica/utresdecode.o
+  CC      net/ipv4/inet_timewait_sock.o
+  CC      drivers/acpi/acpica/utresrc.o
+  CC      drivers/acpi/acpica/utstate.o
+  CC      drivers/acpi/acpica/utstring.o
+  CC      net/ipv4/inet_connection_sock.o
+  CC      drivers/acpi/acpica/utstrsuppt.o
+  CC      drivers/acpi/acpica/utstrtoul64.o
+  CC      drivers/acpi/acpica/utxface.o
+  CC      net/ipv4/tcp.o
+  CC      drivers/acpi/acpica/utxfinit.o
+  CC      drivers/acpi/acpica/utxferror.o
+  CC      drivers/acpi/acpica/utxfmutex.o
+  AR      drivers/acpi/acpica/built-in.a
+  CC      drivers/acpi/container.o
+  CC      drivers/acpi/acpi_memhotplug.o
+  CC      net/ipv4/tcp_input.o
+  CC      drivers/acpi/ioapic.o
+  CC      drivers/acpi/dptf/int340x_thermal.o
+  AR      drivers/acpi/dptf/built-in.a
+  CC      drivers/acpi/x86/apple.o
+  CC      drivers/acpi/x86/cmos_rtc.o
+  CC      net/ipv4/tcp_output.o
+  CC      drivers/acpi/x86/lpss.o
+  CC      drivers/acpi/x86/s2idle.o
+  CC      net/ipv4/tcp_timer.o
+  CC      drivers/acpi/x86/utils.o
+  CC      drivers/acpi/x86/blacklist.o
+  AR      drivers/acpi/x86/built-in.a
+  AR      drivers/acpi/built-in.a
+  CC      net/ipv4/tcp_ipv4.o
+  CC      drivers/pnp/core.o
+  CC      drivers/pnp/card.o
+  CC      drivers/pnp/driver.o
+  CC      net/ipv4/tcp_minisocks.o
+  CC      drivers/pnp/resource.o
+  CC      drivers/pnp/manager.o
+  CC      net/ipv4/tcp_cong.o
+  CC      drivers/pnp/support.o
+  CC      drivers/pnp/interface.o
+  CC      net/ipv4/tcp_metrics.o
+  CC      drivers/pnp/quirks.o
+  CC      drivers/pnp/system.o
+  CC      net/ipv4/tcp_fastopen.o
+  CC      drivers/pnp/pnpacpi/core.o
+  CC      drivers/pnp/pnpacpi/rsparser.o
+  CC      net/ipv4/tcp_rate.o
+  AR      drivers/pnp/pnpacpi/built-in.a
+  AR      drivers/pnp/built-in.a
+  CC      drivers/virtio/virtio.o
+  CC      net/ipv4/tcp_recovery.o
+  CC      drivers/virtio/virtio_ring.o
+  CC      drivers/virtio/virtio_anchor.o
+  CC      net/ipv4/tcp_ulp.o
+  CC      drivers/virtio/virtio_pci_modern_dev.o
+  CC      net/ipv4/tcp_offload.o
+  CC      drivers/virtio/virtio_pci_modern.o
+  CC      drivers/virtio/virtio_pci_common.o
+  CC      net/ipv4/tcp_plb.o
+  CC      drivers/virtio/virtio_pci_admin_legacy_io.o
+  AR      drivers/virtio/built-in.a
+  CC      drivers/tty/tty_io.o
+  CC      net/ipv4/datagram.o
+  CC      net/ipv4/raw.o
+  CC      drivers/tty/n_tty.o
+  CC      drivers/tty/tty_ioctl.o
+  CC      net/ipv4/udp.o
+  CC      drivers/tty/tty_ldisc.o
+  CC      drivers/tty/tty_buffer.o
+  CC      drivers/tty/tty_port.o
+  CC      net/ipv4/udplite.o
+  CC      drivers/tty/tty_mutex.o
+  CC      net/ipv4/udp_offload.o
+  CC      drivers/tty/tty_ldsem.o
+  CC      drivers/tty/tty_baudrate.o
+  CC      net/ipv4/arp.o
+  CC      drivers/tty/tty_jobctrl.o
+  CC      drivers/tty/n_null.o
+  CC      net/ipv4/icmp.o
+  CC      drivers/tty/pty.o
+  CC      drivers/tty/serial/serial_core.o
+  CC      net/ipv4/devinet.o
+  CC      drivers/tty/serial/serial_base_bus.o
+  CC      drivers/tty/serial/serial_ctrl.o
+  CC      net/ipv4/af_inet.o
+  CC      drivers/tty/serial/serial_port.o
+  CC      drivers/tty/serial/earlycon.o
+  CC      net/ipv4/igmp.o
+  CC      drivers/tty/serial/8250/8250_core.o
+  CC      drivers/tty/serial/8250/8250_platform.o
+  CC      net/ipv4/fib_frontend.o
+  CC      drivers/tty/serial/8250/8250_port.o
+  CC      net/ipv4/fib_semantics.o
+  CC      drivers/tty/serial/8250/8250_early.o
+  AR      drivers/tty/serial/8250/built-in.a
+  AR      drivers/tty/serial/built-in.a
+  AR      drivers/tty/built-in.a
+  CC      drivers/char/mem.o
+  CC      net/ipv4/fib_trie.o
+  CC      drivers/char/random.o
+  CC      drivers/char/misc.o
+  CC      net/ipv4/fib_notifier.o
+  AR      drivers/char/built-in.a
+  CC      drivers/base/component.o
+  CC      net/ipv4/inet_fragment.o
+  CC      drivers/base/core.o
+  CC      net/ipv4/ping.o
+  CC      drivers/base/bus.o
+  CC      drivers/base/dd.o
+  CC      net/ipv4/ip_tunnel_core.o
+  CC      drivers/base/syscore.o
+  CC      net/ipv4/gre_offload.o
+  CC      drivers/base/driver.o
+  CC      drivers/base/class.o
+  CC      net/ipv4/metrics.o
+  CC      drivers/base/platform.o
+  CC      net/ipv4/netlink.o
+  CC      drivers/base/cpu.o
+  CC      drivers/base/firmware.o
+  CC      net/ipv4/nexthop.o
+  CC      drivers/base/init.o
+  CC      drivers/base/map.o
+  CC      drivers/base/devres.o
+  CC      net/ipv4/udp_tunnel_stub.o
+  CC      drivers/base/attribute_container.o
+  CC      drivers/base/transport_class.o
+  CC      net/ipv4/sysctl_net_ipv4.o
+  CC      drivers/base/topology.o
+  CC      drivers/base/container.o
+  CC      net/ipv4/proc.o
+  CC      drivers/base/property.o

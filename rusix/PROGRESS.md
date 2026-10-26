@@ -105,29 +105,32 @@ on a generated field name and three unnecessary-unsafe warnings. The corrected
 `a39d03eb165b` builds have no compiler/objtool diagnostics.
 [Retained failure](docs/evidence/brd-parameter-owner-initial/manifest.json).
 
-### Task construction candidate
+### Verified private task construction
 
-This separate branch translates the complete private `dup_task_struct` sequence
-into Rust: task/stack acquisition, staged rollback, ordered initialization and
-handoff to C `copy_process`. The original C body is preserved. Source review,
-formatting and 15 host gate scripts (166 cases) pass. The five-case userspace
-probe and Rust PID1 compile as static binaries in the pinned container; neither
-was executed. Matching C/Rust profiles, actual dispatch/linked selection proof
-and the bounded guest runner are ready for kernel verification. The first C kernel compiled at `8fd3defabb84`, then archive verification
-failed before boot because LLVM lists expanded thin-member paths but extracts
-stored relative names. The 69-record failure and linked artifact hashes remain
-in `linux-out/task-construction-initial-evidence`. The checker now validates
-exact thin-member identity and compares extracted bytes; six real-archiver
-regressions and ten selection cases pass. No candidate guest has run, and the
-Rust kernel was not built. Fresh paired verification and attributable
-allocation-failure tests remain required. [Contract and remaining C boundaries](experiments/task-construction/README.md).
+At `eec5ae3ecd7b`, the C and Rust private `dup_task_struct` implementations both
+pass five ordinary-userspace cases: fork/private-state separation and wait,
+fresh exec, vfork/exec handoff, affinity inheritance and seccomp inheritance.
+The pair differs only by task-construction selection, with Rust BRD/core on
+both sides. Actual preprocessing, archive payloads and linked definitions prove
+selection. Matching guest binaries, toolchain and VM settings are recorded;
+compilation and runtime logs have no diagnostics.
+[Evidence](docs/evidence/task-construction/manifest.json) retains 299 records and
+actual artifact hashes, rechecked by root and an independent audit. The tested
+source identity remains `eec5ae3ecd7b`; later documentation commits are not new
+kernel results.
 
-At `0af2d8b944b2`, the C kernel passes all five userspace cases and postchecks.
-Rust task construction compiled with 36 `improper_ctypes` diagnostics caused by
-GNU empty `sched_statistics` nested inside `task_struct` when SCHEDSTATS is off.
-The remaining Rust build was stopped (137), with no Rust guest execution;
-`linux-out/task-construction-warnings-evidence` retains both results. A local
-lint exception now documents the reviewed pointer-only ABI, matching canonical
-C prototypes without reading layout or passing aggregates by value. Configuration
-and the global warning gate are unchanged. Fresh compilation and paired runtime
-checks remain required.
+Rust owns task/stack acquisition, staged rollback and ordered initialization
+before handoff to C `copy_process`. [The contract](experiments/task-construction/README.md)
+records remaining C storage, architecture and subsystem boundaries. Attributable
+allocation-failure tests, broader clone/thread and failure/concurrency coverage,
+ordinary ext4/server integration, arm64 and performance remain pending. This
+branch remains a development checkpoint; no task subsystem divergence is declared.
+
+The first C attempt at `8fd3defabb84` compiled but stopped before boot on
+thin-archive path handling ([69 retained records](docs/evidence/task-construction-initial/manifest.json)).
+At `0af2d8b944b2`, C passed five cases; the Rust object emitted 36 warnings for
+GNU empty `sched_statistics` nested in pointer-only foreign declarations. That
+build was stopped before completion or Rust boot ([181 retained records](docs/evidence/task-construction-warnings/manifest.json)).
+A reviewed local lint exception documents that all aggregates cross this ABI
+only as raw pointers; configuration and the global warning gate are unchanged.
+The successful `eec5ae3ecd7b` retry validates the corrected build and consumers.

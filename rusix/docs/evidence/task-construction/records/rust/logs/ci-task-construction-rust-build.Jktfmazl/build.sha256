@@ -1,0 +1,4 @@
+ffbad813c54cc00b9dffc63c19dbc4acb300c3758fc08a97f3cb123283c02241  /out/builds/ci-task-construction-rust/.config
+166d5784ae20622b25e3b4d4f8464490ceaa14805d7066c3d209bceae97d8a5d  /out/builds/ci-task-construction-rust/arch/x86/boot/bzImage
+652a1395e59bed1492cdc3ab311856b896126e09fcf44eb673c300c60957ef0a  /out/builds/ci-task-construction-rust/vmlinux
+fc9c75e98eea3efe37b8397d6474a67de03b5ce6d86d5fbd083ea1832f13f90e  /out/builds/ci-task-construction-rust/vmlinux.map

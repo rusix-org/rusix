@@ -1,0 +1,13 @@
+Build evidence: /out/logs/ci-task-construction-c-build.DmDUmQYv
+Traceback (most recent call last):
+  File "/src/rusix/scripts/verify-task-construction.py", line 218, in <module>
+    if __name__ == '__main__': main()
+                               ~~~~^^
+  File "/src/rusix/scripts/verify-task-construction.py", line 208, in main
+    result = verify(args)
+  File "/src/rusix/scripts/verify-task-construction.py", line 178, in verify
+    extracted = subprocess.run(['llvm-ar', 'p', str(archive), member], check=True, capture_output=True)
+  File "/usr/lib/python3.13/subprocess.py", line 577, in run
+    raise CalledProcessError(retcode, process.args,
+                             output=stdout, stderr=stderr)
+subprocess.CalledProcessError: Command '['llvm-ar', 'p', '/out/builds/ci-task-construction-c/kernel/built-in.a', '/out/builds/ci-task-construction-c/kernel/fork.o']' returned non-zero exit status 1.
