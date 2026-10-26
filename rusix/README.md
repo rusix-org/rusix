@@ -7,13 +7,22 @@ physical hardware, and no claim of full feature parity is made.
 
 The actual kernel repository is `linux/`, branch `rusix/main`, based on upstream
 commit `21a7f44fd0765fcc5194130b28767786eba1d1e7`. Linux's license files,
-attribution, and source remain in that repository. There is no published remote
-for rusix yet. The initial checkout is shallow.
+attribution, and source remain in that repository. The public repository is
+[rusix-org/rusix](https://github.com/rusix-org/rusix), configured as `origin`;
+Linux remains the `upstream` remote. The GitHub repository is currently empty:
+source publication is held until the initial working layer and contributor
+documentation are ready. See [the publication gate](docs/PUBLICATION.md).
+The local checkout is shallow.
 
 Start with [PROGRESS.md](PROGRESS.md) for current evidence and unfinished work,
 [AGENTS.md](AGENTS.md) for contribution/agent requirements, and
 [docs/ROADMAP.md](docs/ROADMAP.md) for the full scope. Migration contracts live
 in [docs/MIGRATIONS.md](docs/MIGRATIONS.md).
+
+The accepted direction is [architecture decision 0001](docs/ARCHITECTURE.md):
+Linux-compatible externally, Rust-native internally, migrating incrementally
+toward complete Rust subsystems. C compatibility boundaries are temporary;
+upstream C may remain as uncompiled reference material.
 
 ## Workspace and reproduction
 

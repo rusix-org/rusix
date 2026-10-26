@@ -7,6 +7,13 @@ migrate the remaining operating-system components one at a time. Preserve this
 objective across sessions. A Rust module, demonstration kernel, or Rust-enabled
 Linux build is a milestone, never evidence that the rewrite is complete.
 
+Architecture decision 0001 in `docs/ARCHITECTURE.md` is accepted by Aaron:
+Linux-compatible external behavior, Rust-native internals, incremental migration.
+Preserve behavior at required boundaries; do not freeze C implementation details
+inside Rust. Work toward complete Rust subsystems and remove obsolete adapters.
+Retained upstream C references are allowed; executing C remains tracked migration
+work. Changes to these commitments require an explicit superseding decision.
+
 Aaron's global instructions continue to apply. The requested Linux/Rust rewrite
 authorizes work on this project's kernel; it does not authorize changes to the
 host kernel, unrelated backends, services, homelab, or production systems.
@@ -15,7 +22,8 @@ directories and virtual machines for verification.
 
 ## Resume protocol
 
-1. Read `PROGRESS.md`, `docs/ROADMAP.md`, and relevant local instructions.
+1. Read `PROGRESS.md`, `docs/ARCHITECTURE.md`, `docs/ROADMAP.md`, and relevant
+   local instructions.
 2. Inspect actual Git status, diffs, source, and existing build/test artifacts.
    Treat ledger claims as pointers to evidence, not as evidence themselves.
 3. Revalidate any recorded process before restarting work. Never assume a lock
@@ -32,12 +40,21 @@ directories and virtual machines for verification.
   Keep versioned copies in `linux/rusix/` using `scripts/sync-project-docs.sh`.
   Root copies are authoritative; edit them, then sync before committing.
 - Work on a `rusix/*` branch. Keep upstream remote named `upstream` and never
-  push to it. Do not create a publishing remote or claim a hosted fork exists
-  without evidence. Do not rewrite history or discard someone else's changes.
+  push to it. Publishing remote `origin` is the public
+  `https://github.com/rusix-org/rusix.git`, created at Aaron's request.
+  **Publication hold:** do not push commits, branches, tags, source files, or
+  releases until the initial working layer is verified and project documentation
+  and contribution guidelines are updated. Follow `docs/PUBLICATION.md`; creating
+  the empty repository does not lift this hold. Do not rewrite history or discard
+  someone else's changes.
 - Use small, reviewable migrations. Separate mechanical translation, interface
   changes, and algorithm changes. Retain attribution and SPDX identifiers.
 - Pin and record toolchain versions and configurations. Explain upstream
   rebases and conflicts; never silently change the baseline to make tests pass.
+- Integrate upstream updates on a separate integration branch, assess semantic
+  changes in migrated code and its callers, and restore Rust parity before
+  promotion to `rusix/main`. Follow `docs/ARCHITECTURE.md`; a clean merge is not
+  sufficient evidence. Preserve upstream tests for each pinned snapshot.
 
 ## Migration requirements
 
@@ -100,3 +117,10 @@ raw runtime evidence behind verification claims. A reviewer must be able to
 reproduce a result without relying on chat history. Keep upstream tests unchanged
 and added tests visibly separate. Document residual C, untested architectures,
 and known gaps prominently; do not market an early experiment as a finished OS.
+
+The source-tree `AGENTS.md` points to this synchronized guide. Also follow the
+inherited `linux/Documentation/process/coding-assistants.rst` and
+`linux/Documentation/process/generated-content.rst` guidance (paths relative to
+the outer workspace), including its rule that AI agents must not add human
+Signed-off-by certification. Keep the upstream README and process documents
+intact; project-specific guidance supplements them.

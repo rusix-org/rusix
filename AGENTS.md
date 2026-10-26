@@ -1,1 +1,1 @@
-README
+rusix/AGENTS.md

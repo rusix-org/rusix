@@ -7,7 +7,7 @@ fi
 test -e "$root/linux/.git" || { echo 'Linux checkout is missing' >&2; exit 1; }
 mkdir -p "$root/linux/rusix/docs" "$root/linux/rusix/scripts" "$root/linux/rusix/configs"
 mkdir -p "$root/linux/rusix/tests"
-cp "$root/AGENTS.md" "$root/PROGRESS.md" "$root/README.md" "$root/linux/rusix/"
+cp "$root/AGENTS.md" "$root/PROGRESS.md" "$root/README.md" "$root/CONTRIBUTING.md" "$root/linux/rusix/"
 cp "$root/docs/"*.md "$root/linux/rusix/docs/"
 cp "$root/scripts/"*.sh "$root/linux/rusix/scripts/"
 cp "$root/scripts/"*.py "$root/linux/rusix/scripts/"
@@ -15,6 +15,12 @@ cp "$root/docs/"*.lock "$root/linux/rusix/docs/"
 cp "$root/configs/"*.config "$root/linux/rusix/configs/"
 cp "$root/tests/"*.rs "$root/linux/rusix/tests/"
 cp "$root/tests/"*.py "$root/linux/rusix/tests/"
+if [[ -d "$root/tests/module-smoke" ]]; then
+    mkdir -p "$root/linux/rusix/tests/module-smoke"
+    cp "$root/tests/module-smoke/Makefile" "$root/tests/module-smoke/README.md" \
+        "$root/tests/module-smoke/"*.c "$root/tests/module-smoke/"*.rs \
+        "$root/linux/rusix/tests/module-smoke/"
+fi
 if [[ -d "$root/docs/evidence" ]]; then
     mkdir -p "$root/linux/rusix/docs/evidence"
     cp -R "$root/docs/evidence/." "$root/linux/rusix/docs/evidence/"

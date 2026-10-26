@@ -5,6 +5,11 @@ rewritten in Rust, followed by incremental migration of its remaining components
 Linux itself is the kernel; userspace selection is a separate project decision.
 No claim of full rewrite or distribution completeness is justified at bootstrap.
 
+Accepted direction: [architecture decision 0001](ARCHITECTURE.md). Preserve
+Linux-compatible external behavior; use Rust-native internal designs and migrate
+incrementally toward complete subsystems. Required C interfaces are transitional
+boundaries, not a permanent architecture constraint.
+
 ## M0 — Reproducible upstream foundation
 
 Obtain and pin upstream Linux, retain licensing/history, create a rusix branch,
@@ -18,7 +23,8 @@ Choose a bounded existing kernel implementation after inspecting its callers and
 build rules. Specify the preserved semantics and replace the active implementation
 with Rust. Test against upstream C, including edge cases, compile the linked
 kernel, and exercise the implementation in a VM. Record remaining C/FFI costs.
-Candidate: an integer/math helper; selection depends on source/API inspection.
+First migration: integer square root; see `MIGRATIONS.md` and `VERIFICATION.md`
+for actual evidence and outstanding gates.
 
 ## M2 — Repeatable subsystem migration
 
@@ -28,13 +34,16 @@ networking, security, and architecture support in dependency order. Each unit
 needs explicit behavioral contracts, rollback boundaries, integration tests, and
 performance checks. Reassess order as evidence exposes dependency constraints.
 Track removed C execution paths, not just Rust line counts.
+Each migration should advance a coherent subsystem. Once related components are
+Rust, replace unnecessary internal C interfaces with Rust-native abstractions.
 
 ## M3 — Rust kernel completeness and compatibility
 
 Audit every retained C implementation and assembly boundary. Demonstrate boot,
 userspace ABI compatibility, filesystem/network behavior, concurrency correctness,
 security invariants, and workload performance across a declared hardware matrix.
-Any residual C must remain visibly incomplete against the rewrite objective.
+Any executing C fallback or shim remains visibly incomplete runtime migration
+work. Upstream C retained solely as uncompiled reference material is allowed.
 Define unavoidable assembly boundaries with Aaron rather than silently treating
 an architecture shim as fully Rust.
 

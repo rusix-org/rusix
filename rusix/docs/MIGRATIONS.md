@@ -1,10 +1,19 @@
 # Kernel migration inventory
 
+All migrations follow accepted [architecture decision 0001](ARCHITECTURE.md):
+preserve required boundary behavior, advance complete Rust subsystems, and remove
+obsolete internal C interfaces. Record reference-only C separately from executing
+fallbacks or shims. Retaining a reference file does not make its Rust replacement
+incomplete; selecting its C implementation in a claimed migrated build does.
+
 ## int_sqrt — active on Rust builds; x86_64 comparison verified
 
 Baseline: `21a7f44fd0765fcc5194130b28767786eba1d1e7`.
 Sources: `lib/math/int_sqrt.c`, `include/linux/math.h`,
 `lib/math/tests/int_sqrt_kunit.c`, `lib/math/Makefile`.
+Rust implementation: `lib/math/int_sqrt_rust.rs`. Transitional export metadata:
+`lib/math/int_sqrt_exports.c`. Added checks: `lib/math/tests/int_sqrt_rusix_kunit.c`
+and `tests/int_sqrt_host.rs` (workspace; tracked under `rusix/tests/`).
 
 Contract: return floor(sqrt(x)) for every unsigned-long value, preserving the
 `unsigned long int_sqrt(unsigned long)` C ABI and non-GPL-only export. On 32-bit
@@ -38,3 +47,29 @@ by itself to validate the full x86_64 input domain.
 
 Current evidence: see `VERIFICATION.md` for clean committed C/Rust comparison,
 32-bit host checks, retained C, and remaining kernel/module/configuration gates.
+
+## Planned cluster: gcd, lcm, lcm_not_zero
+
+Status: source investigation only; no replacement implemented. This is a coherent
+next cluster because `lib/math/lcm.c` calls `gcd`, and block queue geometry uses
+both. A single Rust unit could preserve the three C entry points while making
+their internal arithmetic calls Rust-to-Rust. This advances the accepted
+architecture without creating an unused general-purpose math framework.
+
+Reference: `lib/math/gcd.c`, `lib/math/lcm.c`, `include/linux/gcd.h`,
+`include/linux/lcm.h`, `lib/math/tests/gcd_kunit.c`, and callers including
+`block/blk-settings.c`. Preserve unsigned-long width, zero handling, wrapping
+LCM arithmetic, `lcm_not_zero`'s exact fallback semantics, and GPL-only exports.
+The upstream GCD suite has 11 parameter cases; LCM requires added coverage.
+
+Architecture dependency: `gcd.c` owns `efficient_ffs_key`, which RISC-V setup may
+disable when Zbb is absent; `CONFIG_CPU_NO_EFFICIENT_FFS` also selects the algorithm.
+Both algorithms and this dispatch behavior need preservation and verification.
+The current Rust jump-label API does not supply the needed true-key branch form.
+Resolve that boundary explicitly rather than silently replacing both algorithms
+with unconditional trailing-zero operations. Benchmark any temporary C bridge.
+
+Tests must cover both algorithms, both integer widths, zero/maximum/high-bit
+inputs, Fibonacci pairs, symmetry, and LCM overflow, comparing pinned C with an
+independent Euclidean GCD oracle. Module/architecture gates from the first helper
+remain prerequisites for broad compatibility claims.

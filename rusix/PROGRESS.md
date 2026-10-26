@@ -8,6 +8,13 @@ root replacement) passes host and x86_64 VM comparisons from clean committed
 revisions. Module/export testing and other architecture verification remain
 outstanding. Review evidence: `docs/VERIFICATION.md`. Full scope: `docs/ROADMAP.md`.
 
+**Accepted architectural direction:** Linux-compatible external behavior,
+Rust-native internals, incremental replacement toward complete Rust subsystems.
+Preserve behavior at necessary boundaries; remove obsolete C interfaces as the
+Rust implementation grows. Retain upstream C as reference material while tracking
+all executing C as unfinished migration work. See `docs/ARCHITECTURE.md` (decision
+0001, explicitly agreed by Aaron).
+
 ## Baseline and workspace
 
 - Upstream: `https://github.com/torvalds/linux.git`, remote `upstream`, commit
@@ -15,7 +22,10 @@ outstanding. Review evidence: `docs/VERIFICATION.md`. Full scope: `docs/ROADMAP.
 - Linux Makefile reports 7.3.0 during the 7.4 merge window. History is shallow.
 - Actual Git repository: `linux/`; root `.git` is a protected placeholder.
   Root docs/scripts are canonical and synchronized into tracked `linux/rusix/`.
-- No hosted rusix fork, host kernel installation, or host module loading.
+- Public GitHub repository `https://github.com/rusix-org/rusix` created at Aaron's
+  request and verified public/empty. `origin` points there; `upstream` still points
+  to Linux. **No source pushed:** publication held per `docs/PUBLICATION.md`.
+- No host kernel installation or host module loading.
 - Build with two jobs on disk under `builds/`; QEMU TCG uses one CPU/512 MiB.
 - Rust 1.99.0 (LLVM 23.1.1), Clang/LLD 23.1.3, bindgen 0.73.2, QEMU 11.1.2.
   Rust source and i686 target are installed; default toolchain is unchanged.
@@ -97,3 +107,35 @@ agents; independent reviews identified and corrected verification weaknesses.
 32-bit host validation and clean committed C/Rust VM comparisons now pass.
 Independent final source review found no additional build-selection or export
 policy defect; module runtime/CRC and other architecture gates remain open.
+
+### 2026-10-25 — Architecture decision accepted
+
+Aaron explicitly agreed to the recommended direction and requested that it guide
+the entire project. Added architecture decision 0001 and linked it from agent
+instructions, roadmap, and contributor entry point. The decision distinguishes
+Linux external compatibility from temporary C internal boundaries, permits
+uncompiled upstream C references, and requires upstream integration plus Rust
+parity verification before promotion. It preserves the full rewrite objective.
+Module/export verification remains the next implementation gate; VM-only test
+fixture preparation is in progress and has not yet established runtime results.
+
+### 2026-10-25 — Public repository reserved; source publication held
+
+Aaron created `rusix-org` and requested a public `rusix` repository and remote,
+with no push until the first working layer and documentation/contribution
+guidelines are ready. Created the empty public repository via GitHub CLI and
+verified `isEmpty=true`, `visibility=PUBLIC`, and no default branch. Added it as
+`origin` and configured `remote.pushDefault=origin`; Linux `upstream` is unchanged.
+No commits, files, branches, tags, or releases have been published. Recorded the
+hold in agent instructions and `docs/PUBLICATION.md`; contributor guidance is
+drafted locally with repository-root entry points and an assistance record.
+Fresh-checkout reproduction and first-layer module/fallback verification remain
+open publication gates.
+
+The VM-only module fixture is now implemented and independently source-reviewed:
+the Rust init compiles as a static ELF with no interpreter/undefined symbols;
+the C consumer checks 17 boundary cases and is deliberately non-GPL-compatible
+to exercise the existing unrestricted export. It has not yet been built as a
+module or executed in a VM. Keep that distinction explicit. GCD/LCM source
+investigation identified a coherent next cluster and its architecture-dependent
+dispatch constraint; recorded in `docs/MIGRATIONS.md`.
