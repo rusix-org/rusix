@@ -64,8 +64,9 @@ fixtures and only the implementation option differing.
 [Ext4 evidence](docs/evidence/swait-ext4/manifest.json) retains the initial fixture
 staging failure as well as the successful retry.
 
-Next: translate the five outer swait wrappers, preserving full state-publication
-barriers, careful lockless removal and detached-batch wake semantics. This is
-working code until its own paired verification; the results above certify only
+Five outer swait wrappers are now translated, preserving full state-publication
+barriers, careful lockless removal and detached-batch wake semantics. Three new
+cases bring the required core inventory to 29. This is working code until its
+own paired verification; the results above certify only
 `6bc02bee8561`. Initializers, C list adapters, raw locks and scheduler dependencies
 remain to migrate.

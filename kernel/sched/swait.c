@@ -49,6 +49,7 @@ void swake_up_all_locked(struct swait_queue_head *q)
 }
 #endif
 
+#ifndef CONFIG_RUSIX_COMPLETION_RUST
 void swake_up_one(struct swait_queue_head *q)
 {
 	unsigned long flags;
@@ -57,12 +58,14 @@ void swake_up_one(struct swait_queue_head *q)
 	swake_up_locked(q, 0);
 	raw_spin_unlock_irqrestore(&q->lock, flags);
 }
+#endif
 EXPORT_SYMBOL(swake_up_one);
 
 /*
  * Does not allow usage from IRQ disabled, since we must be able to
  * release IRQs to guarantee bounded hold time.
  */
+#ifndef CONFIG_RUSIX_COMPLETION_RUST
 void swake_up_all(struct swait_queue_head *q)
 {
 	struct swait_queue *curr;
@@ -84,6 +87,7 @@ void swake_up_all(struct swait_queue_head *q)
 	}
 	raw_spin_unlock_irq(&q->lock);
 }
+#endif
 EXPORT_SYMBOL(swake_up_all);
 
 #ifndef CONFIG_RUSIX_COMPLETION_RUST
@@ -95,6 +99,7 @@ void __prepare_to_swait(struct swait_queue_head *q, struct swait_queue *wait)
 }
 #endif
 
+#ifndef CONFIG_RUSIX_COMPLETION_RUST
 void prepare_to_swait_exclusive(struct swait_queue_head *q, struct swait_queue *wait, int state)
 {
 	unsigned long flags;
@@ -104,8 +109,10 @@ void prepare_to_swait_exclusive(struct swait_queue_head *q, struct swait_queue *
 	set_current_state(state);
 	raw_spin_unlock_irqrestore(&q->lock, flags);
 }
+#endif
 EXPORT_SYMBOL(prepare_to_swait_exclusive);
 
+#ifndef CONFIG_RUSIX_COMPLETION_RUST
 long prepare_to_swait_event(struct swait_queue_head *q, struct swait_queue *wait, int state)
 {
 	unsigned long flags;
@@ -127,6 +134,7 @@ long prepare_to_swait_event(struct swait_queue_head *q, struct swait_queue *wait
 
 	return ret;
 }
+#endif
 EXPORT_SYMBOL(prepare_to_swait_event);
 
 #ifndef CONFIG_RUSIX_COMPLETION_RUST
@@ -138,6 +146,7 @@ void __finish_swait(struct swait_queue_head *q, struct swait_queue *wait)
 }
 #endif
 
+#ifndef CONFIG_RUSIX_COMPLETION_RUST
 void finish_swait(struct swait_queue_head *q, struct swait_queue *wait)
 {
 	unsigned long flags;
@@ -150,4 +159,5 @@ void finish_swait(struct swait_queue_head *q, struct swait_queue *wait)
 		raw_spin_unlock_irqrestore(&q->lock, flags);
 	}
 }
+#endif
 EXPORT_SYMBOL(finish_swait);

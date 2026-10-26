@@ -186,3 +186,24 @@ The same source passes nine ordinary-userspace/contract boots per implementation
 with identical fixtures. [Ext4 evidence](../../docs/evidence/swait-ext4/manifest.json).
 These runs exercise enabled checks, not deliberate diagnostic violations or every
 IRQ context. Detached-batch/spurious-wakeup races still need targeted coverage.
+
+## Generic swait wrappers: next verification slice
+
+Five further entry points are translated: `swake_up_one`, `swake_up_all`,
+`prepare_to_swait_exclusive`, `prepare_to_swait_event` and `finish_swait`.
+`swake_up_all` pins a detached batch and releases/reacquires the original queue
+lock between nonfinal wakes; new enrollments stay on the original head. No waiter
+access follows unlink, and the persistent batch is reread after reacquisition.
+The other wrappers preserve incoming IRQ flags. Preparation uses the full
+`set_current_state` barrier, whereas finish uses the baseline weaker state store
+and `list_empty_careful` observation. A pending signal removes the node without
+changing task state and returns `-ERESTARTSYS`; the C wait macro still determines
+condition precedence. Three thin macro adapters preserve state hooks, careful
+list observation and splice operations. Initialization and lock/list/scheduler
+primitives remain C. Paired compilation/runtime verification is pending.
+
+Three additional cases bring the required core inventory to 29: pending-signal
+removal on fresh/enrolled nodes with state and IRQ preservation; generic macro
+signal error versus a condition becoming true immediately after prepare; and
+broadcast traversal followed by a separately enrolled late waiter. That last
+case does not force enrollment during the detached-batch unlock window.

@@ -92,6 +92,11 @@ enum Mode {
     Repeat,
     Explicit,
     Generic,
+    PendingFresh,
+    PendingQueued,
+    SignalFalse,
+    SignalCondition,
+    Batch,
 }
 
 #[pin_data]
@@ -104,6 +109,7 @@ struct Worker {
     condition: Atomic<u32>,
     result: Atomic<i64>,
     elapsed: Atomic<u64>,
+    detail: Atomic<u32>,
     mode: Mode,
     timeout_ms: u32,
 }
@@ -135,6 +141,7 @@ impl Worker {
             condition: Atomic::new(0),
             result: Atomic::new(i64::MIN),
             elapsed: Atomic::new(0),
+            detail: Atomic::new(0),
             mode,
             timeout_ms,
         })
@@ -249,6 +256,145 @@ fn explicit_wait(worker: &Worker, mut timeout: c_long) -> c_long {
     }
 }
 
+// Signals are confined to this dedicated thread's private handler state.
+fn pending_signal() -> bool {
+    // SAFETY: This helper is called only by our standalone callback, never a
+    // shared worker or KUnit controller; its private handler accepts SIGUSR1.
+    unsafe { bindings::completion_test_allow_signal(bindings::SIGUSR1 as c_int) };
+    // SAFETY: Current is this live callback task; the signal remains pending
+    // for kernel wait predicates and no userspace signal delivery occurs here.
+    let sent = unsafe {
+        bindings::completion_test_send_signal(bindings::get_current(), bindings::SIGUSR1 as c_int)
+    };
+    // SAFETY: Marked pending-state observation on the live calling task.
+    sent == 0 && unsafe { bindings::signal_pending(bindings::get_current()) } != 0
+}
+
+fn pending_prepare(worker: &Worker, queued: bool) -> c_long {
+    if queued {
+        // SAFETY: Current owns the pinned initialized waiter and retained queue.
+        unsafe {
+            bindings::prepare_to_swait_exclusive(
+                worker.queue.raw(),
+                worker.waiter.get(),
+                bindings::TASK_UNINTERRUPTIBLE as c_int,
+            )
+        };
+        // SAFETY: Immediately restore this dedicated callback's state before any
+        // signal operation; no schedule or fallible step occurred in between.
+        unsafe { bindings::__set_current_state(bindings::TASK_RUNNING) };
+    }
+    let pending = pending_signal();
+    // SAFETY: Same-task local IRQ save; no sleep/fallible operations until restore.
+    let flags = unsafe { bindings::swait_test_irq_save() };
+    // SAFETY: Change only this dedicated callback's state with IRQs disabled.
+    // No schedule/fallible operation occurs before restoring RUNNING below.
+    unsafe { bindings::__set_current_state(bindings::TASK_UNINTERRUPTIBLE) };
+    // SAFETY: Initialized retained queue/node, current task, IRQ-safe API. A
+    // pending signal must remove any node without changing the sentinel state.
+    let result = unsafe {
+        bindings::prepare_to_swait_event(
+            worker.queue.raw(),
+            worker.waiter.get(),
+            bindings::TASK_INTERRUPTIBLE as c_int,
+        )
+    };
+    // SAFETY: Current-context observations while IRQs remain locally disabled.
+    let irqs = unsafe { bindings::swait_test_irqs_disabled() } != 0;
+    // SAFETY: Marked read of this calling task's state only. Testing a sleeping
+    // sentinel distinguishes an incorrect finish_swait call that stores RUNNING.
+    let unchanged =
+        unsafe { bindings::swait_test_current_state() } == bindings::TASK_UNINTERRUPTIBLE;
+    // SAFETY: Restore current before IRQs can be enabled or any sleep occurs.
+    unsafe { bindings::__set_current_state(bindings::TASK_RUNNING) };
+    // SAFETY: Exact saved flags from this callback, restored before other work.
+    unsafe { bindings::swait_test_irq_restore(flags) };
+    let snapshot;
+    {
+        let _guard = worker.queue.lock();
+        // SAFETY: Held queue lock, initialized node retained by callback Arc.
+        snapshot = unsafe {
+            bindings::swait_test_snapshot_locked(
+                worker.queue.raw(),
+                worker.waiter.get(),
+                null_mut(),
+            )
+        };
+    }
+    let expected = (1 << 8) | (1 << 11) | if queued { 1 << 10 } else { 0 };
+    worker.detail.store(
+        u32::from(pending)
+            | (u32::from(irqs) << 1)
+            | (u32::from(unchanged) << 2)
+            | (u32::from(snapshot == expected) << 3),
+        Relaxed,
+    );
+    // SAFETY: Always restore RUNNING/unlink before acknowledgment, even when
+    // observed behavior was wrong; retained initialized waiter belongs to current.
+    unsafe { bindings::finish_swait(worker.queue.raw(), worker.waiter.get()) };
+    result
+}
+
+fn pending_macro(worker: &Worker, timeout: c_long, late_condition: bool) -> c_long {
+    let pending = pending_signal();
+    let mut evaluations = 0u32;
+    let result = if late_condition {
+        // SAFETY: Dedicated sleepable callback and retained queue. evaluations
+        // is exclusively borrowed stack storage for this non-retaining helper.
+        unsafe {
+            bindings::swait_test_condition_after_prepare(
+                worker.queue.raw(),
+                &mut evaluations,
+                timeout,
+            )
+        }
+    } else {
+        // SAFETY: Condition is initialized LKMM atomic storage; C uses READ_ONCE.
+        // The original macro manages and unlinks its own stack waiter.
+        unsafe {
+            bindings::swait_test_interruptible_timeout(
+                worker.queue.raw(),
+                worker.condition.as_ptr(),
+                timeout,
+            )
+        }
+    };
+    // SAFETY: Marked read of current callback state; pending-error path must
+    // preserve RUNNING, and successful macro finish must restore it.
+    let running = unsafe { bindings::swait_test_current_state() } == bindings::TASK_RUNNING;
+    worker.detail.store(
+        u32::from(pending) | (u32::from(running) << 1) | (evaluations << 2),
+        Relaxed,
+    );
+    result
+}
+
+// Keep initialized nodes enrolled until the controller's release, independently
+// of spurious task wakeups. This tests broadcast list traversal, not wake latency.
+fn batch_wait(worker: &Worker, timeout: c_long) -> c_long {
+    {
+        let _guard = worker.queue.lock();
+        // SAFETY: Current owns this pinned node and holds queue.lock. It remains
+        // alive until finish below; a running task is a valid queued wake target.
+        unsafe { __prepare_to_swait(worker.queue.raw(), worker.waiter.get().cast()) };
+    }
+    // SAFETY: Marked global read; interval is finite and below half-counter range.
+    let start = unsafe { bindings::completion_test_jiffies() };
+    while worker.condition.load(Relaxed) == 0 {
+        // SAFETY: Same marked read used for bounded callback lifetime.
+        if unsafe { bindings::completion_test_jiffies() }.wrapping_sub(start) >= timeout as c_ulong
+        {
+            break;
+        }
+        // SAFETY: Sleepable dedicated task with no held locks. The retained
+        // queue/node can be woken by broadcast; no reenrollment occurs here.
+        unsafe { bindings::schedule_timeout_uninterruptible(1) };
+    }
+    // SAFETY: Current-owned pinned node, retained queue, original finish API.
+    unsafe { bindings::finish_swait(worker.queue.raw(), worker.waiter.get()) };
+    c_long::from(worker.condition.load(Relaxed) != 0)
+}
+
 unsafe extern "C" fn run_worker(data: *mut c_void) -> c_int {
     // SAFETY: Creator transfers exactly one raw Arc to this sole callback;
     // no kthread_stop path can bypass callback execution after successful create.
@@ -258,6 +404,11 @@ unsafe extern "C" fn run_worker(data: *mut c_void) -> c_int {
     let before = unsafe { bindings::completion_test_jiffies() };
     let result = match worker.mode {
         Mode::Repeat => repeat_in_worker(&worker),
+        Mode::PendingFresh => pending_prepare(&worker, false),
+        Mode::PendingQueued => pending_prepare(&worker, true),
+        Mode::SignalFalse => pending_macro(&worker, timeout, false),
+        Mode::SignalCondition => pending_macro(&worker, timeout, true),
+        Mode::Batch => batch_wait(&worker, timeout),
         Mode::Explicit => explicit_wait(&worker, timeout),
         Mode::Generic => {
             // SAFETY: Sleepable standalone task; the queue and marked condition
@@ -461,6 +612,114 @@ mod tests {
         assert!(worker.elapsed.load(Relaxed) >= crate::time::msecs_to_jiffies(20) as u64);
         assert_eq!(count_before_cleanup, 0);
         assert_eq!(count_after_late_wake, 0);
+        Ok(())
+    }
+
+    #[test]
+    fn pending_prepare_event_unlinks_without_changing_state_or_irqs() -> Result {
+        for mode in [Mode::PendingFresh, Mode::PendingQueued] {
+            let queue = Arc::pin_init(Queue::new(), GFP_KERNEL)?;
+            let worker = Arc::pin_init(Worker::new(queue.clone(), mode, 10000), GFP_KERNEL)?;
+            let started = Instant::<Monotonic>::now();
+            let task = spawn(&worker)?;
+            let finished = worker.finish_observed();
+            worker.release();
+            drop(task);
+            assert!(finished);
+            assert!(started.elapsed().as_millis() < 5000);
+            assert_eq!(worker.result.load(Relaxed), -(bindings::ERESTARTSYS as i64));
+            assert_eq!(worker.detail.load(Relaxed), 15);
+            assert_eq!(queue.count(), 0);
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn generic_signal_error_and_post_prepare_condition_precedence() -> Result {
+        for late_condition in [false, true] {
+            let queue = Arc::pin_init(Queue::new(), GFP_KERNEL)?;
+            let mode = if late_condition {
+                Mode::SignalCondition
+            } else {
+                Mode::SignalFalse
+            };
+            let worker = Arc::pin_init(Worker::new(queue.clone(), mode, 10000), GFP_KERNEL)?;
+            let started = Instant::<Monotonic>::now();
+            let task = spawn(&worker)?;
+            let finished = worker.finish_observed();
+            let count = queue.count();
+            worker.release();
+            drop(task);
+            assert!(finished);
+            assert!(started.elapsed().as_millis() < 5000);
+            assert_eq!(count, 0);
+            assert_eq!(
+                worker.detail.load(Relaxed),
+                if late_condition { 3 | (2 << 2) } else { 3 }
+            );
+            assert_eq!(
+                worker.result.load(Relaxed),
+                if late_condition {
+                    crate::time::msecs_to_jiffies(10000) as i64
+                } else {
+                    -(bindings::ERESTARTSYS as i64)
+                }
+            );
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn generic_broadcast_removes_initial_batch_and_leaves_late_waiter() -> Result {
+        let queue = Arc::pin_init(Queue::new(), GFP_KERNEL)?;
+        let first = Arc::pin_init(Worker::new(queue.clone(), Mode::Batch, 10000), GFP_KERNEL)?;
+        let second = Arc::pin_init(Worker::new(queue.clone(), Mode::Batch, 10000), GFP_KERNEL)?;
+        let late = Arc::pin_init(Worker::new(queue.clone(), Mode::Generic, 10000), GFP_KERNEL)?;
+        let started = Instant::<Monotonic>::now();
+        let first_task = spawn(&first)?;
+        let second_task = match spawn(&second) {
+            Ok(task) => task,
+            Err(error) => {
+                first.release();
+                return Err(error);
+            }
+        };
+        let enrolled = observe_count(&queue, 2);
+        // SAFETY: Current-context observation. KUnit controller enters the
+        // generic broadcast with IRQs enabled and holds no queue lock.
+        let before_irq = unsafe { bindings::swait_test_irqs_disabled() };
+        // SAFETY: Retained initialized queue; callbacks own nodes and do not
+        // finish or reenroll until released below (except bounded failure).
+        unsafe { bindings::swake_up_all(queue.raw()) };
+        // SAFETY: Observe the same context after broadcast returns.
+        let after_irq = unsafe { bindings::swait_test_irqs_disabled() };
+        let removed = queue.count();
+        first.release();
+        second.release();
+        let first_finished = first.finish_observed();
+        let second_finished = second.finish_observed();
+        drop(first_task);
+        drop(second_task);
+        // All previous callbacks are now released; a late waiter requires its
+        // own condition publication/wake rather than any broadcast credit.
+        let late_task = spawn(&late)?;
+        let late_enrolled = observe_count(&queue, 1);
+        let late_count = queue.count();
+        late.release();
+        let late_finished = late.finish_observed();
+        late.release();
+        drop(late_task);
+        assert!(enrolled && first_finished && second_finished);
+        assert!(started.elapsed().as_millis() < 5000);
+        assert_eq!(before_irq, 0);
+        assert_eq!(after_irq, 0);
+        assert_eq!(removed, 0);
+        assert_eq!(first.result.load(Relaxed), 1);
+        assert_eq!(second.result.load(Relaxed), 1);
+        assert!(late_enrolled && late_finished);
+        assert_eq!(late_count, 1);
+        assert!(late.result.load(Relaxed) > 0);
+        assert_eq!(queue.count(), 0);
         Ok(())
     }
 }

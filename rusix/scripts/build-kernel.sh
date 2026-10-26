@@ -200,7 +200,8 @@ for item in "$swait_object" "$out/vmlinux"; do
     bash "$RUSIX_PROJECT/scripts/with-local-tools.sh" llvm-nm --defined-only "$item" \
         > "$evidence/swait-symbols.tmp"
     printf '%s\n' "$item" >> "$evidence/swait-symbols.txt"
-    for symbol in __prepare_to_swait __finish_swait swake_up_locked swake_up_all_locked; do
+    for symbol in __prepare_to_swait __finish_swait swake_up_locked swake_up_all_locked \
+        swake_up_one swake_up_all prepare_to_swait_exclusive prepare_to_swait_event finish_swait; do
         awk -v symbol="$symbol" '$2 == "T" && $3 == symbol { print }' \
             "$evidence/swait-symbols.tmp" > "$evidence/swait-current.txt"
         [[ $(wc -l < "$evidence/swait-current.txt") == 1 ]] || {

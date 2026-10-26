@@ -21,6 +21,9 @@ SUITES = {
         "queued_wake_removes_fifo_head_before_second_waiter",
         "generic_swait_event_observes_condition_and_unlinks",
         "generic_swait_timeout_unlinks_before_late_wake",
+        "pending_prepare_event_unlinks_without_changing_state_or_irqs",
+        "generic_signal_error_and_post_prepare_condition_precedence",
+        "generic_broadcast_removes_initial_batch_and_leaves_late_waiter",
     ),
     "rusix_completion_signal": (
         "pending_signals_interrupt_timed_waits",

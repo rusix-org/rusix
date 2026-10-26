@@ -78,3 +78,35 @@ long rust_helper_swait_test_event_timeout(struct swait_queue_head *queue,
 {
 	return swait_event_timeout_exclusive(*queue, READ_ONCE(*condition), timeout);
 }
+
+unsigned long rust_helper_swait_test_irq_save(void)
+{
+	unsigned long flags;
+
+	local_irq_save(flags);
+	return flags;
+}
+
+void rust_helper_swait_test_irq_restore(unsigned long flags)
+{
+	local_irq_restore(flags);
+}
+
+long rust_helper_swait_test_interruptible_timeout(struct swait_queue_head *queue,
+						 u32 *condition, long timeout)
+{
+	return swait_event_interruptible_timeout_exclusive(*queue,
+						   READ_ONCE(*condition), timeout);
+}
+
+/* Deterministic consumer precedence: outer condition is false, then true after
+ * prepare_to_swait_event reports the pending signal. No scheduler race required.
+ */
+long rust_helper_swait_test_condition_after_prepare(struct swait_queue_head *queue,
+						   unsigned int *evaluations,
+						   long timeout)
+{
+	*evaluations = 0;
+	return swait_event_interruptible_timeout_exclusive(*queue,
+						   ++*evaluations > 1, timeout);
+}
