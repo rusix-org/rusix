@@ -51,6 +51,8 @@ elif [[ "$profile" == brd || "$profile" == brd-rust ]]; then
         "$RUSIX_OUTPUT_ROOT/builds/ci-$profile" "ci-$profile" --build-evidence "${evidence[0]}"
     python3 "$RUSIX_PROJECT/scripts/test-brd-parameters-vm.py" \
         "$RUSIX_OUTPUT_ROOT/builds/ci-$profile" "ci-$profile" --build-evidence "${evidence[0]}"
+    python3 "$RUSIX_PROJECT/scripts/test-brd-partitions-vm.py" \
+        "$RUSIX_OUTPUT_ROOT/builds/ci-$profile" "ci-$profile" --build-evidence "${evidence[0]}"
 elif [[ "$profile" == brd-ext4-c || "$profile" == brd-ext4-rust ]]; then
     shopt -s nullglob
     evidence=("$RUSIX_OUTPUT_ROOT"/logs/ci-$profile-build.*)
@@ -62,6 +64,8 @@ elif [[ "$profile" == brd-ext4-c || "$profile" == brd-ext4-rust ]]; then
     python3 "$RUSIX_PROJECT/scripts/test-brd-ext4-vm.py" \
         "$RUSIX_OUTPUT_ROOT/builds/ci-$profile" "ci-$profile" --build-evidence "${evidence[0]}"
     python3 "$RUSIX_PROJECT/scripts/test-brd-parameters-vm.py" \
+        "$RUSIX_OUTPUT_ROOT/builds/ci-$profile" "ci-$profile" --build-evidence "${evidence[0]}"
+    python3 "$RUSIX_PROJECT/scripts/test-brd-partitions-vm.py" \
         "$RUSIX_OUTPUT_ROOT/builds/ci-$profile" "ci-$profile" --build-evidence "${evidence[0]}"
 else
     shopt -s nullglob
