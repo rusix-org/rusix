@@ -1,0 +1,44 @@
+implementation=wake-rust
+/out/builds/ci-completion-plain-rust/kernel/sched/wait_rust.o
+/out/builds/ci-completion-plain-rust/kernel/sched/wait_rust.o
+00000000000006a0 T __init_waitqueue_head
+0000000000000470 T add_wait_queue
+0000000000000500 T add_wait_queue_exclusive
+0000000000000550 T add_wait_queue_priority
+00000000000005e0 T add_wait_queue_priority_exclusive
+0000000000000670 T remove_wait_queue
+0000000000000010 T __wake_up
+00000000000000d0 T __wake_up_on_current_cpu
+0000000000000170 T __wake_up_locked
+00000000000001f0 T __wake_up_locked_key
+0000000000000270 T __wake_up_sync_key
+0000000000000330 T __wake_up_locked_sync_key
+00000000000003b0 T __wake_up_sync
+00000000000006e0 T prepare_to_wait
+0000000000000780 T prepare_to_wait_exclusive
+0000000000000810 T prepare_to_wait_event
+00000000000008e0 T finish_wait
+0000000000000930 T autoremove_wake_function
+/out/builds/ci-completion-plain-rust/vmlinux
+ffffffff8128ba40 T __init_waitqueue_head
+ffffffff8128b810 T add_wait_queue
+ffffffff8128b8a0 T add_wait_queue_exclusive
+ffffffff8128b8f0 T add_wait_queue_priority
+ffffffff8128b980 T add_wait_queue_priority_exclusive
+ffffffff8128ba10 T remove_wait_queue
+ffffffff8128b3b0 T __wake_up
+ffffffff8128b470 T __wake_up_on_current_cpu
+ffffffff8128b510 T __wake_up_locked
+ffffffff8128b590 T __wake_up_locked_key
+ffffffff8128b610 T __wake_up_sync_key
+ffffffff8128b6d0 T __wake_up_locked_sync_key
+ffffffff8128b750 T __wake_up_sync
+ffffffff8128ba80 T prepare_to_wait
+ffffffff8128bb20 T prepare_to_wait_exclusive
+ffffffff8128bbb0 T prepare_to_wait_event
+ffffffff8128bc80 T finish_wait
+ffffffff8128bcd0 T autoremove_wake_function
+e56fd9e6bf7ad3beb475c67c0cf37522c0d264cd4d58e87e5fb509b786e3c551  /src/kernel/sched/wait.c
+8173e0e2551f3e779adb84e40302e4976667c3a265a6ea84df83dd78b03bd860  /out/builds/ci-completion-plain-rust/kernel/sched/wait_rust.o
+52a7a8148c22bbfee45ae48230b06aa9bbfb3cff50457bac151f84468e68f32e  /src/kernel/sched/wait_rust.rs
+a0fcd2364fea81cadd86aacbd2c91e1a4501d916b3c000da550353d67564a09f  /src/rust/helpers/wait_policy.c

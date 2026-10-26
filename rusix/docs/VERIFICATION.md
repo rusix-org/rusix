@@ -13,6 +13,8 @@ Current work and remaining gates: [progress](../PROGRESS.md), [Phase 1](PHASE1.m
 | [Rust BRD](evidence/brd-rust-initial/manifest.json) | Selected Rust implementation passes the identical six-case block probe. |
 | [BRD ownership](evidence/brd-ownership/manifest.json) | Nine in-kernel policy/ownership cases, zero skips. |
 | [Ordinary ext4](evidence/brd-ext4/manifest.json) | Six cases each on C/Rust, same source and byte-identical userspace initramfs. |
+| [Wait lifecycle](evidence/wait-lifecycle/manifest.json) | Eighteen generic wait entries selected; C/Rust debug and plain pairs each pass 44 core + nine BRD cases, then 44 isolated core. Real blocked-worker handoffs, signal/timeout cleanup and prepare/finish contracts verified. |
+| [Lifecycle/ext4](evidence/wait-lifecycle-ext4/manifest.json) | Same source passes nine boots each, including six ext4 and four poll-consumer cases with identical fixtures. |
 | [Wait enrollment](evidence/wait-enrollment/manifest.json) | Thirteen generic wait entries selected; C/Rust debug and plain pairs each pass 39 core + nine BRD cases, then 39 isolated core. Priority order, rejection side effects, poison removal and constructor metadata verified. |
 | [Enrollment/ext4](evidence/wait-enrollment-ext4/manifest.json) | Same source passes nine boots each, including six ext4 and four poll-consumer cases with identical fixtures. |
 | [Generic wake traversal](evidence/wait-wake/manifest.json) | Seven wake wrappers selected; C/Rust debug and plain pairs each pass 35 core + nine BRD cases, then 35 isolated core. Initial compile failure retained. |

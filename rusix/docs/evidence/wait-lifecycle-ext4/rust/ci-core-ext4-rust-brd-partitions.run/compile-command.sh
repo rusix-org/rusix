@@ -1,0 +1,1 @@
+bash /src/rusix/scripts/with-local-tools.sh rustc --edition=2021 --target x86_64-unknown-linux-gnu -C target-feature=+crt-static -C panic=abort -C opt-level=2 -D warnings /src/rusix/tests/brd-partitions/init.rs -o /out/builds/brd-partitions-vm-ci-core-ext4-rust/init

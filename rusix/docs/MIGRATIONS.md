@@ -39,11 +39,13 @@ safety obligations. [Probe instructions](../tests/brd-contract/README.md) reprod
 that baseline; [Phase 1](PHASE1.md) defines replacement gates. Existing mq APIs
 and upstream rnull are not substitutes for the bio-based stateful BRD contract.
 
-## Completion and swait: opt-in core migration
+## Completion and wait queues: opt-in core migration
 
 The opt-in [Rust signaling implementation](../../kernel/sched/completion_rust.rs)
 preserves C-visible storage while moving completion policy into Rust.
 The [ownership experiment](../experiments/completion/README.md) owns the contract,
-current test inventory, evidence and remaining dependencies. Selection remains
+current test inventory, evidence and remaining dependencies. The
+[generic wait record](../experiments/wait/README.md) covers shared enrollment,
+prepare/finish and wake-callback policy. Selection remains
 default-off on x86_64; no subsystem divergence point is declared. GCD/LCM remain
 deferred; [the roadmap](ROADMAP.md) prioritizes this core boundary after BRD.

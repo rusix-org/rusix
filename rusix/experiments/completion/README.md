@@ -77,8 +77,8 @@ and subsequent synchronized publication, not merely an address to a live queue.
 ## Verification and remaining coverage
 
 The completion/swait portion has five contract, eight layout,
-four wait, four signal and nine swait cases. Nine [generic wait cases](../wait/README.md)
-bring the strict `rusix_completion_*` inventory to 39:
+four wait, four signal and nine swait cases. Fourteen [generic wait cases](../wait/README.md), including five lifecycle
+worker cases, bring the strict `rusix_completion_*` inventory to 44:
 
 - Counter/token/saturation/broadcast behavior, layout and pinned C-visible storage.
 - All blocking entry points on presignals/broadcast; timed zero/positive exits.

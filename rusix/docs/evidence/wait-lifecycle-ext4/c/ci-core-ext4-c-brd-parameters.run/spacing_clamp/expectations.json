@@ -1,0 +1,11 @@
+{
+  "name": "spacing_clamp",
+  "rd_nr": 1,
+  "rd_size": 4096,
+  "max_part": 256,
+  "options": [
+    "brd.rd_nr=1",
+    "brd.rd_size=4096",
+    "brd.max_part=257"
+  ]
+}
