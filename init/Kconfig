@@ -2238,3 +2238,15 @@ config RUSIX_MM_CONSTRUCTION_RUST
 	  No exclusive whole-mm ownership is claimed: PGD and per-CPU counter
 	  initialization already expose fields to existing C observers.
 	  Leave disabled for the preserved original C comparison implementation.
+
+config RUSIX_MM_RELEASE_RUST
+	bool "Rusix Rust address-space release transaction"
+	depends on RUSIX_MM_CONSTRUCTION_RUST
+	default n
+	help
+	  Select Rust final-user teardown, asynchronous release and final MM
+	  storage destruction. Inherits the construction option's built-in
+	  x86_64 target exclusions. Atomic/LKMM, workqueue and architecture
+	  primitives remain C, as do inline mmgrab/mmget/mmdrop operations.
+	  No exclusive whole-MM references or Rust-owned layout are introduced.
+	  Leave disabled for the preserved original C release implementation.

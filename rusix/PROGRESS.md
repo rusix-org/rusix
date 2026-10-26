@@ -133,3 +133,15 @@ nor its guest fixtures have been compiled or booted. Actual linked selection,
 paired VM behavior and attributable allocation failures remain unverified. Early boot and
 PGD/per-CPU counter observers prohibit exclusive whole-mm references.
 [Ownership contract and remaining C](experiments/mm-construction/README.md).
+
+### Address-space release candidate
+
+This separate branch translates `mmput`, `mmput_async`, their shared final-user
+sequence and `__mmdrop` into Rust. The final-user and final-storage stages remain
+distinct; asynchronous callers retain workqueue deferral and the original atomic
+barriers. Original C bodies reconstruct byte-for-byte. Root and independent
+source reviews, formatting and diff checks pass; exact inputs are recorded in
+`linux-out/mm-release-source-001`. No release kernel has been compiled or booted.
+Next add paired selection proofs and focused reference/async cleanup coverage,
+after validating the preceding constructor candidates.
+[Release contract and remaining C](experiments/mm-release/README.md).

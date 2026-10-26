@@ -672,6 +672,7 @@ static void cleanup_lazy_tlbs(struct mm_struct *mm)
  * is dropped: either by a lazy thread or by
  * mmput. Free the page directory and the mm.
  */
+#ifndef CONFIG_RUSIX_MM_RELEASE_RUST
 void __mmdrop(struct mm_struct *mm)
 {
 	BUG_ON(mm == &init_mm);
@@ -693,6 +694,7 @@ void __mmdrop(struct mm_struct *mm)
 
 	free_mm(mm);
 }
+#endif /* CONFIG_RUSIX_MM_RELEASE_RUST */
 EXPORT_SYMBOL_GPL(__mmdrop);
 
 static void mmdrop_async_fn(struct work_struct *work)
@@ -1152,6 +1154,9 @@ struct mm_struct *mm_alloc(void)
 #endif /* CONFIG_RUSIX_MM_CONSTRUCTION_RUST */
 EXPORT_SYMBOL_IF_KUNIT(mm_alloc);
 
+#ifdef CONFIG_RUSIX_MM_RELEASE_RUST
+#include "mm_release_impl.h"
+#else
 static inline void __mmput(struct mm_struct *mm)
 {
 	VM_BUG_ON(atomic_read(&mm->mm_users));
@@ -1185,9 +1190,11 @@ void mmput(struct mm_struct *mm)
 	if (atomic_dec_and_test(&mm->mm_users))
 		__mmput(mm);
 }
+#endif /* CONFIG_RUSIX_MM_RELEASE_RUST */
 EXPORT_SYMBOL_GPL(mmput);
 
 #if defined(CONFIG_MMU) || defined(CONFIG_FUTEX_PRIVATE_HASH)
+#ifndef CONFIG_RUSIX_MM_RELEASE_RUST
 static void mmput_async_fn(struct work_struct *work)
 {
 	struct mm_struct *mm = container_of(work, struct mm_struct,
@@ -1203,6 +1210,7 @@ void mmput_async(struct mm_struct *mm)
 		schedule_work(&mm->async_put_work);
 	}
 }
+#endif /* CONFIG_RUSIX_MM_RELEASE_RUST */
 EXPORT_SYMBOL_GPL(mmput_async);
 #endif
 
