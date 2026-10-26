@@ -8,10 +8,25 @@
 
 use kernel::{
     bindings::{self, rcu_cblist as List},
-    ffi::{c_long, c_ulong, c_void},
+    ffi::{c_int, c_long, c_ulong, c_void},
     types::Opaque,
 };
 use pin_init::stack_pin_init;
+
+// The public linux/rcu_segcblist.h exposes storage types to bindgen, while these
+// canonical function declarations live in private kernel/rcu/rcu_segcblist.h.
+// Keep the exact ABI locally instead of exposing private inline C policy to
+// global bindings. The selected list object defines these same unmangled symbols.
+unsafe extern "C" {
+    fn rcu_cblist_init(list: *mut List);
+    fn rcu_cblist_dequeue(list: *mut List) -> *mut bindings::callback_head;
+    fn rcu_segcblist_ready_cbs(list: *mut bindings::rcu_segcblist) -> bool;
+    fn rcu_segcblist_get_seglen(list: *mut bindings::rcu_segcblist, seg: c_int) -> c_long;
+    fn rcu_segcblist_extract_done_cbs(list: *mut bindings::rcu_segcblist, dst: *mut List);
+    fn rcu_segcblist_insert_done_cbs(list: *mut bindings::rcu_segcblist, src: *mut List);
+    fn rcu_segcblist_add_len(list: *mut bindings::rcu_segcblist, delta: c_long);
+    fn rcu_segcblist_n_segment_cbs(list: *mut bindings::rcu_segcblist) -> c_long;
+}
 
 const RUNNING: u32 = bindings::RUSIX_RCU_BATCH_KTHREAD_RUNNING;
 const MAX_BLIMIT: c_long = bindings::RUSIX_RCU_BATCH_MAX_BLIMIT as c_long;
@@ -68,7 +83,7 @@ pub unsafe extern "C" fn rusix_rcu_do_batch(rdp: *mut c_void) {
     stack_pin_init!(let owned = Opaque::ffi_init(|list: *mut List| {
         // SAFETY: Exclusive unpublished final-address storage; selected list
         // constructor initializes the descriptor before any chain is transferred.
-        unsafe { bindings::rcu_cblist_init(list) };
+        unsafe { rcu_cblist_init(list) };
     }));
     let batch = owned.get();
     // SAFETY: rdp layout projection stays in C; returned canonical list pointer
@@ -77,7 +92,7 @@ pub unsafe extern "C" fn rusix_rcu_do_batch(rdp: *mut c_void) {
     // SAFETY: All foreign field access below remains typed C/LKMM, with caller's
     // local-CPU/BH/GP lifetime contract. Local Rust arithmetic cannot panic.
     unsafe {
-        if !bindings::rcu_segcblist_ready_cbs(list) {
+        if !rcu_segcblist_ready_cbs(list) {
             bindings::rusix_rcubatch_trace_start(rdp, 0);
             bindings::rusix_rcubatch_trace_end(rdp, 0, !bindings::rusix_rcubatch_empty(list));
             return;
@@ -85,7 +100,7 @@ pub unsafe extern "C" fn rusix_rcu_do_batch(rdp: *mut c_void) {
 
         let flags = bindings::rusix_rcubatch_irq_save(rdp);
         bindings::rusix_rcubatch_warn_offline();
-        let pending = bindings::rcu_segcblist_get_seglen(list, bindings::RCU_DONE_TAIL as _);
+        let pending = rcu_segcblist_get_seglen(list, bindings::RCU_DONE_TAIL as _);
         let div = bindings::rusix_rcubatch_divisor();
         // x86_64 C long is 64 bits (also asserted by the C adapter). The original
         // negative-divisor branch precedes its unsigned sizeof-derived comparison.
@@ -113,14 +128,14 @@ pub unsafe extern "C" fn rusix_rcu_do_batch(rdp: *mut c_void) {
         bindings::rusix_rcubatch_trace_start(rdp, limit);
         // Total len stays positive while callbacks are detached/in flight so
         // rcu_barrier cannot mistake an empty main-list head for completed work.
-        bindings::rcu_segcblist_extract_done_cbs(list, batch);
+        rcu_segcblist_extract_done_cbs(list, batch);
         // rcu_rdp_is_offloaded is constant false in the selected !NOCB mode.
         bindings::rusix_rcubatch_trace_dequeued(list);
         bindings::rusix_rcubatch_irq_restore(rdp, flags);
 
         bindings::rusix_rcubatch_tick_set();
         let mut count: c_long = 0;
-        let mut head = bindings::rcu_cblist_dequeue(batch);
+        let mut head = rcu_cblist_dequeue(batch);
         while !head.is_null() {
             count = count.wrapping_add(1);
             bindings::rusix_rcubatch_debug_unqueue(head);
@@ -160,7 +175,7 @@ pub unsafe extern "C" fn rusix_rcu_do_batch(rdp: *mut c_void) {
                     break;
                 }
             }
-            head = bindings::rcu_cblist_dequeue(batch);
+            head = rcu_cblist_dequeue(batch);
         }
 
         let flags = bindings::rusix_rcubatch_irq_save(rdp);
@@ -175,8 +190,8 @@ pub unsafe extern "C" fn rusix_rcu_do_batch(rdp: *mut c_void) {
         );
         // Explicit commit: prepend every unconsumed DONE callback, then subtract
         // only the completed invocations from the original conservative total.
-        bindings::rcu_segcblist_insert_done_cbs(list, batch);
-        bindings::rcu_segcblist_add_len(list, count.wrapping_neg());
+        rcu_segcblist_insert_done_cbs(list, batch);
+        rcu_segcblist_add_len(list, count.wrapping_neg());
         let remaining = bindings::rusix_rcubatch_n_cbs(list);
         if bindings::rusix_rcubatch_blimit(rdp) >= MAX_BLIMIT
             && remaining <= bindings::rusix_rcubatch_qlowmark()
@@ -195,10 +210,10 @@ pub unsafe extern "C" fn rusix_rcu_do_batch(rdp: *mut c_void) {
         bindings::rusix_rcubatch_warn_zero_nonempty(remaining == 0 && !empty);
         bindings::rusix_rcubatch_warn_nonzero_empty(remaining != 0 && empty);
         bindings::rusix_rcubatch_warn_zero_segments(
-            remaining == 0 && bindings::rcu_segcblist_n_segment_cbs(list) != 0,
+            remaining == 0 && rcu_segcblist_n_segment_cbs(list) != 0,
         );
         bindings::rusix_rcubatch_warn_nonempty_no_segments(
-            !empty && bindings::rcu_segcblist_n_segment_cbs(list) == 0,
+            !empty && rcu_segcblist_n_segment_cbs(list) == 0,
         );
         bindings::rusix_rcubatch_irq_restore(rdp, flags);
         bindings::rusix_rcubatch_tick_clear();

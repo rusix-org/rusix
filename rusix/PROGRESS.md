@@ -156,3 +156,11 @@ formatting, shell checks and complete input hashes. Partial-budget runtime
 verification, explicit `rcutree.use_softirq=0` callback-thread runs and CPU-hotplug
 coverage remain pending; neither mode is silently excluded from
 production policy. No full RCU ownership or subsystem divergence is declared.
+
+The initial batch matrix at `0dd58fb714be` passed all 93 combined, 67 core,
+ten list and seven batch cases on the C debug kernel. Rust debug compilation
+then failed on ten calls to eight list APIs absent from the public bindgen
+header; no Rust guest or plain pair ran. The 174-record failure archive remains
+`linux-out/rcu-batch-initial-evidence`. Explicit declarations now match the
+private canonical C header without changing policy. Host checks pass; a fresh
+paired matrix is required before claiming Rust runtime verification.
