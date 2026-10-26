@@ -29,3 +29,51 @@ u32 rust_helper_wait_test_constructor(bool disabled)
 {
 	return rusix_wait_test_constructor(disabled);
 }
+
+struct task_struct;
+void *rusix_wait_lifecycle_alloc(unsigned int mode);
+void rusix_wait_lifecycle_free(void *data);
+void rusix_wait_lifecycle_run(void *data, unsigned int slot, unsigned int timeout_ms);
+u32 rusix_wait_lifecycle_members(void *data);
+int rusix_wait_lifecycle_publish(void *data, u32 payload);
+int rusix_wait_lifecycle_mismatch(void *data);
+void rusix_wait_lifecycle_abort(void *data);
+void rusix_wait_lifecycle_result(void *data, unsigned int slot, s64 *out);
+u32 rusix_wait_lifecycle_blocked(struct task_struct *task);
+
+void *rust_helper_wait_lifecycle_alloc(unsigned int mode)
+{
+	return rusix_wait_lifecycle_alloc(mode);
+}
+void rust_helper_wait_lifecycle_free(void *data)
+{
+	rusix_wait_lifecycle_free(data);
+}
+void rust_helper_wait_lifecycle_run(void *data, unsigned int slot, unsigned int timeout_ms)
+{
+	rusix_wait_lifecycle_run(data, slot, timeout_ms);
+}
+u32 rust_helper_wait_lifecycle_members(void *data)
+{
+	return rusix_wait_lifecycle_members(data);
+}
+int rust_helper_wait_lifecycle_publish(void *data, u32 payload)
+{
+	return rusix_wait_lifecycle_publish(data, payload);
+}
+int rust_helper_wait_lifecycle_mismatch(void *data)
+{
+	return rusix_wait_lifecycle_mismatch(data);
+}
+void rust_helper_wait_lifecycle_abort(void *data)
+{
+	rusix_wait_lifecycle_abort(data);
+}
+void rust_helper_wait_lifecycle_result(void *data, unsigned int slot, s64 *out)
+{
+	rusix_wait_lifecycle_result(data, slot, out);
+}
+u32 rust_helper_wait_lifecycle_blocked(void *task)
+{
+	return rusix_wait_lifecycle_blocked(task);
+}

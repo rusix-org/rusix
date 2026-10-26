@@ -1,16 +1,16 @@
 // SPDX-License-Identifier: GPL-2.0-only
-// Rust translation of Linux 6.18.58 generic wait enrollment and wake policy.
+// Rust translation of Linux 6.18.58 generic wait lifecycle and wake policy.
 
-//! Initialization, enrollment and callback wake policy over C-visible wait queues.
+//! Initialization, enrollment, prepare/finish and wake policy over C-visible queues.
 //!
-//! Callbacks, prepare/finish, scheduler wakes and spinlock primitives remain C.
+//! Entry initialization, other callbacks, scheduler wakes and spinlocks remain C.
 //! Flag updates/snapshots retain the baseline C mixed-access boundary;
 //! this module does not expose a safe Rust API for generic wait entry ownership.
 
 use core::ptr::{addr_of, addr_of_mut, null_mut};
 use kernel::{
     bindings,
-    ffi::{c_char, c_int, c_uint, c_ulong, c_void},
+    ffi::{c_char, c_int, c_long, c_uint, c_ulong, c_void},
     types::NotThreadSafe,
 };
 
@@ -385,4 +385,147 @@ pub unsafe extern "C" fn __init_waitqueue_head(
         addr_of_mut!((*head).next).write(head);
         addr_of_mut!((*head).prev).write(head);
     }
+}
+
+/// # Safety
+/// Caller is the waiting task. Queue is initialized/pinned/live, lock may be
+/// acquired; entry has initialized flags/private/func and self-links or belongs
+/// to this queue. Caller retains it until removal and finish. Other contexts may
+/// remove but never concurrently re-enroll it. Existing C flags protocol applies.
+// SAFETY: the same Kconfig selection excludes the matching C body and retains
+// its export. Generated types preserve its C pointer/integer ABI.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn prepare_to_wait(
+    q: *mut bindings::wait_queue_head,
+    entry: *mut bindings::wait_queue_entry,
+    state: c_int,
+) {
+    // SAFETY: preserve caller-permitted prelock C flags update, not Rust RMW.
+    unsafe { bindings::wait_entry_update_flags(entry, bindings::WQ_FLAG_EXCLUSIVE, 0) };
+    // SAFETY: caller provides initialized queue/nonrecursive acquisition context.
+    let _guard = unsafe { IrqRestore::acquire(addr_of_mut!((*q).lock)) };
+    // SAFETY: entry links initialized; list test stable under held queue lock.
+    if unsafe { bindings::swait_list_empty(addr_of!((*entry).entry)) } != 0 {
+        // SAFETY: self-linked entry is detached; guard holds its queue lock.
+        unsafe { add_after_priority(q, entry) };
+    }
+    // SAFETY: state is the original C int bit pattern. Full barrier must follow
+    // enrollment and precede returning to the waiter's condition recheck.
+    unsafe { bindings::swait_set_current_state(state as c_uint) };
+}
+
+/// # Safety
+/// Same current-waiter, storage and synchronization contract as prepare_to_wait.
+// SAFETY: the same Kconfig selection excludes the matching C body and retains
+// its export. Rust bool matches the C _Bool return ABI.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn prepare_to_wait_exclusive(
+    q: *mut bindings::wait_queue_head,
+    entry: *mut bindings::wait_queue_entry,
+    state: c_int,
+) -> bool {
+    // SAFETY: original C flags update occurs before queue lock acquisition.
+    unsafe { bindings::wait_entry_update_flags(entry, 0, bindings::WQ_FLAG_EXCLUSIVE) };
+    // SAFETY: caller provides live queue and valid nonrecursive context.
+    let _guard = unsafe { IrqRestore::acquire(addr_of_mut!((*q).lock)) };
+    let mut was_empty = false;
+    // SAFETY: initialized entry links stable under the guard.
+    if unsafe { bindings::swait_list_empty(addr_of!((*entry).entry)) } != 0 {
+        // SAFETY: initialized queue links stable under the guard.
+        was_empty = unsafe { bindings::swait_list_empty(addr_of!((*q).head)) } != 0;
+        // SAFETY: detached entry and initialized list under its lock; preserve
+        // debug checks and marked writes. This is tail, not priority insertion.
+        unsafe {
+            bindings::swait_list_add_tail(addr_of_mut!((*entry).entry), addr_of_mut!((*q).head))
+        };
+    }
+    // SAFETY: full condition-publication barrier for current waiting task.
+    unsafe { bindings::swait_set_current_state(state as c_uint) };
+    was_empty
+}
+
+/// # Safety
+/// Same current-waiter/storage contract as prepare_to_wait; current's signals
+/// are valid to inspect. On signal failure the enclosing wait macro must recheck
+/// condition and restore task state according to its existing lifecycle rules.
+// SAFETY: the same Kconfig selection excludes the matching C body and retains
+// its export. c_long preserves the target C long return ABI.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn prepare_to_wait_event(
+    q: *mut bindings::wait_queue_head,
+    entry: *mut bindings::wait_queue_entry,
+    state: c_int,
+) -> c_long {
+    // SAFETY: caller provides live queue and valid nonrecursive context.
+    let _guard = unsafe { IrqRestore::acquire(addr_of_mut!((*q).lock)) };
+    // SAFETY: current is live; C helper preserves signal-state bit interpretation.
+    if unsafe { bindings::signal_pending_state(state as c_uint, bindings::get_current()) } != 0 {
+        // SAFETY: entry links initialized, either queued or self-linked; lock
+        // protects unlink. Unconditional deletion matches signal-first C path.
+        unsafe { bindings::swait_list_del_init(addr_of_mut!((*entry).entry)) };
+        return -(bindings::ERESTARTSYS as c_long);
+    }
+    // SAFETY: initialized entry links stable under lock.
+    if unsafe { bindings::swait_list_empty(addr_of!((*entry).entry)) } != 0 {
+        // SAFETY: baseline C flag load; no claim lock owns all flag accesses.
+        if unsafe { bindings::wait_entry_flags(entry) } & bindings::WQ_FLAG_EXCLUSIVE != 0 {
+            // SAFETY: entry detached and queue protected; original tail policy.
+            unsafe {
+                bindings::swait_list_add_tail(addr_of_mut!((*entry).entry), addr_of_mut!((*q).head))
+            };
+        } else {
+            // SAFETY: detached entry under the queue guard.
+            unsafe { add_after_priority(q, entry) };
+        }
+    }
+    // SAFETY: full barrier after insertion; signal failure intentionally skips it.
+    unsafe { bindings::swait_set_current_state(state as c_uint) };
+    0
+}
+
+/// # Safety
+/// Current task owns pinned entry until return; links initialized and either on
+/// q or self-linked after removal. Other contexts can only remove, never re-add.
+/// Queue remains live for lock acquisition/release when the nonempty path runs.
+// SAFETY: the same Kconfig selection excludes the matching C body and retains
+// its export. Generated queue/entry pointers preserve the C ABI.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn finish_wait(
+    q: *mut bindings::wait_queue_head,
+    entry: *mut bindings::wait_queue_entry,
+) {
+    // SAFETY: restores this task's state; baseline uses no full barrier here.
+    unsafe { bindings::__set_current_state(bindings::TASK_RUNNING) };
+    // SAFETY: C acquire/marked careful test supports concurrent removal only.
+    if unsafe { bindings::swait_list_empty_careful(addr_of!((*entry).entry)) } == 0 {
+        // SAFETY: caller retains queue and provides valid acquisition context.
+        let _guard = unsafe { IrqRestore::acquire(addr_of_mut!((*q).lock)) };
+        // SAFETY: entry now protected; it may have become self-linked before
+        // acquisition. Delete without a second check, matching the C baseline.
+        unsafe { bindings::swait_list_del_init(addr_of_mut!((*entry).entry)) };
+    }
+}
+
+/// # Safety
+/// Called with entry's queue lock held in legal wake context; entry and private
+/// task are live and satisfy default_wake_function's contract. Successful final
+/// careful deletion can let the waiter free entry before this function returns.
+// SAFETY: the same Kconfig selection excludes the matching C body and retains
+// its export. The signature matches the generated wait_queue_func_t C ABI.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn autoremove_wake_function(
+    entry: *mut bindings::wait_queue_entry,
+    mode: c_uint,
+    sync: c_int,
+    key: *mut c_void,
+) -> c_int {
+    // SAFETY: caller retains task/entry through scheduler wake and supplies
+    // supported scheduler flags. C preserves WARN_ON_ONCE and scheduler policy.
+    let ret = unsafe { bindings::default_wake_function(entry, mode, sync, key) };
+    if ret != 0 {
+        // SAFETY: live entry remains lock-protected through removal. Release
+        // self-link is final entry access; acquire finish may now retire it.
+        unsafe { bindings::wait_list_del_init_careful(addr_of_mut!((*entry).entry)) };
+    }
+    ret
 }

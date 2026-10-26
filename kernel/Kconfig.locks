@@ -269,8 +269,9 @@ config RUSIX_COMPLETION_RUST
 	default n
 	help
 	  Select Rust implementations of all completion.c and swait.c entry points
-	  and generic wait.c initialization, enrollment and seven wake wrappers.
-	  Prepare/finish wait policy and callback implementations remain C.
+	  and generic wait.c initialization, enrollment, prepare/finish,
+	  autoremove callback and seven wake wrappers. Entry initialization,
+	  other callback implementations and the wait_woken protocol remain C.
 	  Generic swait consumers also use these policies. C completion layout
 	  and initialization/reset, raw locks, marked list
 	  operations and scheduler task wakeup remain.

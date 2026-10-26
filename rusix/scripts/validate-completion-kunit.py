@@ -15,6 +15,13 @@ spec.loader.exec_module(common)
 
 # Independent of live Rust source so removing a test does not weaken this gate.
 SUITES = {
+    "rusix_completion_wait_lifecycle": (
+        "blocked_priority_exclusive_handoff_consumes_one_token",
+        "blocked_signal_and_nonmatching_wake_preserve_lifecycle",
+        "pending_condition_wins_after_prepare_signal_error",
+        "timeout_finishes_before_late_wake",
+        "repeated_prepare_preserves_membership_state_and_empty_return",
+    ),
     "rusix_completion_wake": (
         "enrollment_preserves_priority_prefix_lifo_and_exclusive_tail",
         "priority_exclusive_rejects_only_priority_at_head",

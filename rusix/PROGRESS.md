@@ -32,9 +32,10 @@ linker/padding **2,107,049**, unknown **0**.
 migration, includes inherited Rust infrastructure, and is neither a completion
 percentage nor server runtime evidence. That target selects Rust BRD/C completion.
 
-Next migrate prepare/finish and automatic-removal policy with real worker tests.
-An unbuilt lifecycle draft is staged at `linux-out/wait-lifecycle-draft`; a task
-state alone or enrollment is insufficient proof of descheduling. Single scheduler
+In progress on `rusix/wait-lifecycle`: five Rust prepare/finish and automatic-
+removal entries are implemented, with real-worker tests being integrated; these
+changes have not yet passed build or runtime gates. A task state alone or
+enrollment is insufficient proof of descheduling. Single scheduler
 observations still require external deadlines/watchdogs; they cannot establish
 causation by a later wake. The [wait record](experiments/wait/README.md) owns the
 mixed-access and lifetime contracts. Blocked wait-event/wait-bit handoffs and

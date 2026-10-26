@@ -83,3 +83,22 @@ all removal positions/self-links and poisoned re-addition, constructor class/nam
 and wait type, and IRQ restoration. Both debug and plain configurations pass;
 plain tests explicitly distinguish unavailable lockdep metadata. Prepare/finish
 and callbacks remain the next policy dependencies.
+
+## Lifecycle migration in progress
+
+Five further entries are implemented on the lifecycle branch, pending matched
+build/runtime verification: prepare_to_wait, prepare_to_wait_exclusive,
+prepare_to_wait_event, finish_wait and autoremove_wake_function. Prepare retains
+full state-publication barriers; its signal-first failure unlinks without a state
+store. The exclusive return is true only for a new insertion into an empty queue.
+Finish restores RUNNING before the careful acquire check and unlinks under lock
+without a second check. Autoremove retains C default_wake_function, then performs
+release self-linking as its final access to the entry on any nonzero return.
+The new careful-delete adapter cannot be replaced with ordinary list_del_init.
+
+Real-worker tests must retain task references and callback-owned fixture lifetimes,
+use finite deadlines and clean up before assertions. A scheduler-locked sample
+can establish that a task was descheduled at that instant; separately protected
+queue membership is not an atomic cross-lock observation or proof that a later
+wake caused execution. Finite tests supplement, rather than prove, the barrier
+contract. WOKEN flag protocols and locked interruptible waits remain later work.

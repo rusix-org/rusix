@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-2.0-only
-/* KUnit-only synchronous observations of generic wait wake policy. */
+/* KUnit-only generic wait policy observations and private-thread consumers. */
 #include "sched.h"
 #include <linux/slab.h>
 #include <linux/limits.h>
@@ -414,4 +414,257 @@ u32 rusix_wait_test_constructor(bool disabled)
 	local_irq_restore(flags);
 	/* Make unavailable metadata observation explicit to the Rust oracle. */
 	return errors | (IS_ENABLED(CONFIG_LOCKDEP) ? 0x100 : 0);
+}
+
+/* Dedicated-thread lifecycle fixture. Rust Arc owns this allocation until both
+ * controller and all callbacks release it. Only C touches its opaque storage.
+ */
+struct lifecycle_slot {
+	wait_queue_entry_t entry;
+	u32 abort;
+	long result;
+	u32 payload, detail, running, selflinked;
+};
+struct lifecycle_fixture {
+	wait_queue_head_t queue;
+	atomic_t tokens;
+	u32 payload;
+	unsigned int mode;
+	struct lifecycle_slot slots[2];
+};
+
+void *rusix_wait_lifecycle_alloc(unsigned int mode);
+void rusix_wait_lifecycle_free(void *data);
+void rusix_wait_lifecycle_run(void *data, unsigned int slot, unsigned int timeout_ms);
+u32 rusix_wait_lifecycle_members(void *data);
+int rusix_wait_lifecycle_publish(void *data, u32 payload);
+int rusix_wait_lifecycle_mismatch(void *data);
+void rusix_wait_lifecycle_abort(void *data);
+void rusix_wait_lifecycle_result(void *data, unsigned int slot, s64 *out);
+u32 rusix_wait_lifecycle_blocked(struct task_struct *task);
+
+void *rusix_wait_lifecycle_alloc(unsigned int mode)
+{
+	struct lifecycle_fixture *fixture = kzalloc(sizeof(*fixture), GFP_KERNEL);
+
+	if (!fixture)
+		return NULL;
+	init_waitqueue_head(&fixture->queue);
+	atomic_set(&fixture->tokens, 0);
+	fixture->mode = mode;
+	return fixture;
+}
+
+void rusix_wait_lifecycle_free(void *data)
+{
+	kfree(data);
+}
+
+/* One observational sample, no inactivity loop or force-dequeue. Normal lock
+ * acquisition/migration retries are not a hard real-time bound. Non-RT tests.
+ * Caller retains task reference and holds neither wait queue lock nor IRQ lock.
+ */
+u32 rusix_wait_lifecycle_blocked(struct task_struct *task)
+{
+	struct rq_flags rf;
+	struct rq *rq;
+	u32 result = 0;
+
+	rq = task_rq_lock(task, &rf);
+	if (READ_ONCE(task->__state) == TASK_INTERRUPTIBLE)
+		result |= 1;
+	if (!task_on_cpu(rq, task))
+		result |= 2;
+	if (!task_on_rq_queued(task))
+		result |= 4;
+	task_rq_unlock(rq, task, &rf);
+	return result;
+}
+
+u32 rusix_wait_lifecycle_members(void *data)
+{
+	struct lifecycle_fixture *fixture = data;
+	struct list_head *node;
+	unsigned long flags;
+	u32 mask = 0, count = 0;
+
+	spin_lock_irqsave(&fixture->queue.lock, flags);
+	list_for_each(node, &fixture->queue.head) {
+		if (++count > 2) {
+			mask |= 4;
+			break;
+		}
+		if (node == &fixture->slots[0].entry.entry)
+			mask |= 1;
+		else if (node == &fixture->slots[1].entry.entry)
+			mask |= 2;
+		else
+			mask |= 4;
+	}
+	spin_unlock_irqrestore(&fixture->queue.lock, flags);
+	return mask;
+}
+
+int rusix_wait_lifecycle_publish(void *data, u32 payload)
+{
+	struct lifecycle_fixture *fixture = data;
+
+	WRITE_ONCE(fixture->payload, payload);
+	/* Fully ordered publication even if worker consumes before wake's barrier. */
+	atomic_inc_return(&fixture->tokens);
+	return __wake_up(&fixture->queue, TASK_INTERRUPTIBLE, 1, NULL);
+}
+
+int rusix_wait_lifecycle_mismatch(void *data)
+{
+	struct lifecycle_fixture *fixture = data;
+
+	return __wake_up(&fixture->queue, TASK_UNINTERRUPTIBLE, 1, NULL);
+}
+
+void rusix_wait_lifecycle_abort(void *data)
+{
+	struct lifecycle_fixture *fixture = data;
+
+	WRITE_ONCE(fixture->slots[0].abort, 1);
+	WRITE_ONCE(fixture->slots[1].abort, 1);
+	__wake_up(&fixture->queue, TASK_NORMAL, 0, NULL);
+}
+
+/* Dedicated callback only; no assertions, allocation or sleeping while state is
+ * manipulated. All state restored before IRQ enable/return. Controller owns no
+ * sleep-state changes. This is synthetic companion coverage, not blocking proof.
+ */
+static u32 lifecycle_repeat(struct lifecycle_fixture *fixture,
+			    struct lifecycle_slot *slot)
+{
+	wait_queue_entry_t second;
+	unsigned long flags, held;
+	u32 detail = 0;
+	bool first, repeat, other;
+	long error;
+	unsigned int i;
+
+	init_wait_entry(&slot->entry, WQ_FLAG_EXCLUSIVE | 0x100);
+	init_wait_entry(&second, 0);
+	local_irq_save(flags);
+	first = prepare_to_wait_exclusive(&fixture->queue, &slot->entry, TASK_UNINTERRUPTIBLE);
+	repeat = prepare_to_wait_exclusive(&fixture->queue, &slot->entry, TASK_UNINTERRUPTIBLE);
+	other = prepare_to_wait_exclusive(&fixture->queue, &second, TASK_UNINTERRUPTIBLE);
+	if (first && !repeat && !other)
+		detail |= 1;
+	if (READ_ONCE(current->__state) == TASK_UNINTERRUPTIBLE)
+		detail |= 2;
+	spin_lock_irqsave(&fixture->queue.lock, held);
+	if (fixture->queue.head.next == &slot->entry.entry &&
+	    slot->entry.entry.next == &second.entry && second.entry.next == &fixture->queue.head)
+		detail |= 4;
+	spin_unlock_irqrestore(&fixture->queue.lock, held);
+	finish_wait(&fixture->queue, &slot->entry);
+	finish_wait(&fixture->queue, &second);
+	finish_wait(&fixture->queue, &second);
+	spin_lock_irqsave(&fixture->queue.lock, held);
+	if (READ_ONCE(current->__state) == TASK_RUNNING && list_empty(&fixture->queue.head))
+		detail |= 8;
+	spin_unlock_irqrestore(&fixture->queue.lock, held);
+	prepare_to_wait(&fixture->queue, &slot->entry, TASK_UNINTERRUPTIBLE);
+	prepare_to_wait(&fixture->queue, &slot->entry, TASK_UNINTERRUPTIBLE);
+	spin_lock_irqsave(&fixture->queue.lock, held);
+	if (slot->entry.flags == 0x100 && READ_ONCE(current->__state) == TASK_UNINTERRUPTIBLE &&
+	    fixture->queue.head.next == &slot->entry.entry &&
+	    slot->entry.entry.next == &fixture->queue.head)
+		detail |= 16;
+	spin_unlock_irqrestore(&fixture->queue.lock, held);
+	finish_wait(&fixture->queue, &slot->entry);
+	__set_current_state(TASK_RUNNING);
+	local_irq_restore(flags);
+
+	allow_signal(SIGUSR1);
+	if (send_sig(SIGUSR1, current, 0) || !signal_pending(current))
+		return detail;
+	for (i = 0; i < 2; i++) {
+		local_irq_save(flags);
+		if (i)
+			prepare_to_wait(&fixture->queue, &slot->entry, TASK_UNINTERRUPTIBLE);
+		__set_current_state(TASK_UNINTERRUPTIBLE);
+		error = prepare_to_wait_event(&fixture->queue, &slot->entry, TASK_INTERRUPTIBLE);
+		if (error == -ERESTARTSYS && READ_ONCE(current->__state) == TASK_UNINTERRUPTIBLE &&
+		    slot->entry.entry.next == &slot->entry.entry &&
+		    slot->entry.entry.prev == &slot->entry.entry)
+			detail |= 32U << i;
+		__set_current_state(TASK_RUNNING);
+		local_irq_restore(flags);
+		finish_wait(&fixture->queue, &slot->entry);
+	}
+	return detail;
+}
+
+void rusix_wait_lifecycle_run(void *data, unsigned int index, unsigned int timeout_ms)
+{
+	struct lifecycle_fixture *fixture = data;
+	struct lifecycle_slot *slot = &fixture->slots[index];
+	long timeout = msecs_to_jiffies(timeout_ms), error;
+	unsigned long deadline = jiffies + timeout, now;
+	unsigned int evaluations = 0;
+
+	allow_signal(SIGUSR1);
+	init_wait_entry(&slot->entry, WQ_FLAG_EXCLUSIVE |
+			(fixture->mode == 0 && index == 0 ? WQ_FLAG_PRIORITY : 0));
+	if (fixture->mode == 4) {
+		slot->detail = lifecycle_repeat(fixture, slot);
+		slot->result = 1;
+		goto finished;
+	}
+	if (fixture->mode == 3) {
+		slot->detail = send_sig(SIGUSR1, current, 0) == 0 && signal_pending(current);
+		if (index)
+			slot->result = wait_event_interruptible_timeout(fixture->queue,
+						++evaluations > 1, timeout);
+		else
+			slot->result = wait_event_interruptible_timeout(fixture->queue,
+						READ_ONCE(slot->abort), timeout);
+		slot->detail |= evaluations << 1;
+		goto finished;
+	}
+	for (;;) {
+		error = prepare_to_wait_event(&fixture->queue, &slot->entry, TASK_INTERRUPTIBLE);
+		if (READ_ONCE(slot->abort)) {
+			slot->result = -ECANCELED;
+			break;
+		}
+		if (atomic_dec_if_positive(&fixture->tokens) >= 0) {
+			slot->payload = READ_ONCE(fixture->payload);
+			slot->result = 1;
+			break;
+		}
+		if (error) {
+			slot->result = error;
+			break;
+		}
+		now = jiffies;
+		if (time_after_eq(now, deadline)) {
+			slot->result = 0;
+			break;
+		}
+		schedule_timeout(deadline - now);
+	}
+	finish_wait(&fixture->queue, &slot->entry);
+finished:
+	slot->running = READ_ONCE(current->__state) == TASK_RUNNING;
+	slot->selflinked = slot->entry.entry.next == &slot->entry.entry &&
+			   slot->entry.entry.prev == &slot->entry.entry;
+	flush_signals(current);
+}
+
+/* Controller reads only after this slot's completion acknowledgment. */
+void rusix_wait_lifecycle_result(void *data, unsigned int index, s64 *out)
+{
+	struct lifecycle_fixture *fixture = data;
+	struct lifecycle_slot *slot = &fixture->slots[index];
+
+	out[0] = slot->result;
+	out[1] = slot->payload;
+	out[2] = slot->detail;
+	out[3] = slot->running;
+	out[4] = slot->selflinked;
 }

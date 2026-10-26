@@ -281,6 +281,7 @@ void __wake_up_pollfree(struct wait_queue_head *wq_head)
  * stops them from bleeding out - it would still allow subsequent
  * loads to move into the critical region).
  */
+#ifndef CONFIG_RUSIX_COMPLETION_RUST
 void
 prepare_to_wait(struct wait_queue_head *wq_head, struct wait_queue_entry *wq_entry, int state)
 {
@@ -293,9 +294,11 @@ prepare_to_wait(struct wait_queue_head *wq_head, struct wait_queue_entry *wq_ent
 	set_current_state(state);
 	spin_unlock_irqrestore(&wq_head->lock, flags);
 }
+#endif
 EXPORT_SYMBOL(prepare_to_wait);
 
 /* Returns true if we are the first waiter in the queue, false otherwise. */
+#ifndef CONFIG_RUSIX_COMPLETION_RUST
 bool
 prepare_to_wait_exclusive(struct wait_queue_head *wq_head, struct wait_queue_entry *wq_entry, int state)
 {
@@ -312,6 +315,7 @@ prepare_to_wait_exclusive(struct wait_queue_head *wq_head, struct wait_queue_ent
 	spin_unlock_irqrestore(&wq_head->lock, flags);
 	return was_empty;
 }
+#endif
 EXPORT_SYMBOL(prepare_to_wait_exclusive);
 
 void init_wait_entry(struct wait_queue_entry *wq_entry, int flags)
@@ -323,6 +327,7 @@ void init_wait_entry(struct wait_queue_entry *wq_entry, int flags)
 }
 EXPORT_SYMBOL(init_wait_entry);
 
+#ifndef CONFIG_RUSIX_COMPLETION_RUST
 long prepare_to_wait_event(struct wait_queue_head *wq_head, struct wait_queue_entry *wq_entry, int state)
 {
 	unsigned long flags;
@@ -357,6 +362,7 @@ long prepare_to_wait_event(struct wait_queue_head *wq_head, struct wait_queue_en
 
 	return ret;
 }
+#endif
 EXPORT_SYMBOL(prepare_to_wait_event);
 
 /*
@@ -409,6 +415,7 @@ EXPORT_SYMBOL(do_wait_intr_irq);
  * the wait descriptor from the given waitqueue if still
  * queued.
  */
+#ifndef CONFIG_RUSIX_COMPLETION_RUST
 void finish_wait(struct wait_queue_head *wq_head, struct wait_queue_entry *wq_entry)
 {
 	unsigned long flags;
@@ -433,8 +440,10 @@ void finish_wait(struct wait_queue_head *wq_head, struct wait_queue_entry *wq_en
 		spin_unlock_irqrestore(&wq_head->lock, flags);
 	}
 }
+#endif
 EXPORT_SYMBOL(finish_wait);
 
+#ifndef CONFIG_RUSIX_COMPLETION_RUST
 int autoremove_wake_function(struct wait_queue_entry *wq_entry, unsigned mode, int sync, void *key)
 {
 	int ret = default_wake_function(wq_entry, mode, sync, key);
@@ -444,6 +453,7 @@ int autoremove_wake_function(struct wait_queue_entry *wq_entry, unsigned mode, i
 
 	return ret;
 }
+#endif
 EXPORT_SYMBOL(autoremove_wake_function);
 
 /*

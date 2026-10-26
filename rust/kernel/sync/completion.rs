@@ -251,3 +251,6 @@ mod swait_tests;
 
 #[cfg(CONFIG_KUNIT = "y")]
 mod wake_tests;
+
+#[cfg(CONFIG_KUNIT = "y")]
+mod lifecycle_tests;

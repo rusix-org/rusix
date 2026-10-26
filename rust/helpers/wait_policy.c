@@ -59,3 +59,9 @@ void rust_helper_wait_lock_class(struct wait_queue_head *wq_head,
 {
 	lockdep_set_class_and_name(&wq_head->lock, key, name);
 }
+
+void rust_helper_wait_list_del_init_careful(struct list_head *entry)
+{
+	/* Release self-link pairs with the acquire list_empty_careful in finish. */
+	list_del_init_careful(entry);
+}
