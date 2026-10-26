@@ -104,3 +104,10 @@ The initial parameter-owner build at `2048c42d9096` failed before VM execution
 on a generated field name and three unnecessary-unsafe warnings. The corrected
 `a39d03eb165b` builds have no compiler/objtool diagnostics.
 [Retained failure](docs/evidence/brd-parameter-owner-initial/manifest.json).
+
+RCU callback-list policy translates all 25 definitions on `rusix/rcu-callback-lists`.
+Ten new cases cover literal list transitions and real RCU/SRCU consumers; the
+strict gates require 86 combined or ten isolated RCU cases. Fourteen host gate
+scripts pass; kernel compilation and C/Rust VM parity remain unexecuted.
+The [contract](experiments/rcu-lists/README.md) records shared C access/order
+primitives and the subsequent storage-ownership work.

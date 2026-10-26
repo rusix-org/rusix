@@ -15,4 +15,9 @@ obj-$(CONFIG_RCU_SCALE_TEST) += rcuscale.o
 obj-$(CONFIG_RCU_REF_SCALE_TEST) += refscale.o
 obj-$(CONFIG_TREE_RCU) += tree.o
 obj-$(CONFIG_TINY_RCU) += tiny.o
+ifeq ($(CONFIG_RUSIX_RCU_LIST_RUST),y)
+obj-y += rcu_segcblist_rust.o
+else
 obj-$(CONFIG_RCU_NEED_SEGCBLIST) += rcu_segcblist.o
+endif
+obj-$(CONFIG_RUSIX_RCU_LIST_TEST) += rcu_list_test.o

@@ -73,6 +73,7 @@
 #include <linux/poll.h>
 #include <linux/property.h>
 #include <linux/random.h>
+#include <linux/rcu_segcblist.h>
 #include <linux/refcount.h>
 #include <linux/regulator/consumer.h>
 #include <linux/rusix_wait_bit_types.h>
@@ -90,6 +91,10 @@
 // Used by `#[export]` in `drivers/gpu/drm/drm_panic_qr.rs`.
 #include <drm/drm_panic.h>
 #endif
+
+/* Canonical constant expression for the Rust RCU list policy; no executable
+ * helper or duplicated bit assignment is required. */
+enum { RUSIX_RCU_SEGCBLIST_ENABLED = SEGCBLIST_ENABLED };
 
 /* `bindgen` gets confused at certain things. */
 const size_t RUST_CONST_HELPER_ARCH_SLAB_MINALIGN = ARCH_SLAB_MINALIGN;

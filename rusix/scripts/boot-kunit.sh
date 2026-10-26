@@ -16,6 +16,23 @@ required=(KUNIT INT_SQRT_KUNIT_TEST SERIAL_8250_CONSOLE)
 cpus=1
 case "${1:-}" in
     --baseline) baseline=(--baseline); mode=baseline; shift ;;
+    --rcu-combined)
+        baseline=(--combined)
+        mode=rcu-combined
+        filter='rusix_*'
+        gate=validate-rcu-kunit.py
+        required=(KUNIT RUST SMP TREE_RCU TREE_SRCU RUSIX_BRD_RUST RUSIX_COMPLETION_RUST RUSIX_RCU_LIST_TEST SERIAL_8250_CONSOLE)
+        cpus=2
+        shift
+        ;;
+    --rcu-list)
+        mode=rcu-list
+        filter='rusix_rcu_*'
+        gate=validate-rcu-kunit.py
+        required=(KUNIT RUST SMP TREE_RCU TREE_SRCU RUSIX_RCU_LIST_TEST SERIAL_8250_CONSOLE)
+        cpus=2
+        shift
+        ;;
     --completion)
         mode=completion
         filter='rusix_completion_*'
@@ -34,7 +51,7 @@ case "${1:-}" in
         ;;
 esac
 if [[ $# != 2 || ! "$2" =~ ^[a-zA-Z0-9_-]+$ ]]; then
-    echo 'Usage: bash rusix/scripts/boot-kunit.sh [--baseline|--brd|--completion] BUILD_DIRECTORY EVIDENCE_LABEL' >&2
+    echo 'Usage: bash rusix/scripts/boot-kunit.sh [--baseline|--brd|--completion|--rcu-list|--rcu-combined] BUILD_DIRECTORY EVIDENCE_LABEL' >&2
     exit 2
 fi
 build=$(cd -- "$1" && pwd)
@@ -65,8 +82,11 @@ fi
 printf '%s\n' "$mode" > "$run/mode.txt"
 sha256sum "$RUSIX_PROJECT/scripts/boot-kunit.sh" "$RUSIX_PROJECT/scripts/$gate" \
     > "$run/scripts.sha256"
-if [[ "$mode" == completion ]]; then
+if [[ "$mode" == completion || "$mode" == rcu-list || "$mode" == rcu-combined ]]; then
     sha256sum "$RUSIX_PROJECT/scripts/validate-brd-kunit.py" >> "$run/scripts.sha256"
+fi
+if [[ "$mode" == rcu-list || "$mode" == rcu-combined ]]; then
+    sha256sum "$RUSIX_PROJECT/scripts/validate-completion-kunit.py" >> "$run/scripts.sha256"
 fi
 sha256sum "$build/arch/x86/boot/bzImage" "$build/.config" > "$RUSIX_OUTPUT_ROOT/logs/$label-inputs.sha256"
 firmware=()

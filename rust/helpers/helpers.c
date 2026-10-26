@@ -54,6 +54,12 @@
 #endif
 #include "rbtree.c"
 #include "rcu.c"
+#ifdef CONFIG_RUSIX_RCU_LIST_RUST
+#include "rcu_list.c"
+#endif
+#ifdef CONFIG_RUSIX_RCU_LIST_TEST
+#include "rcu_list_test.c"
+#endif
 #include "refcount.c"
 #include "regulator.c"
 #include "scatterlist.c"

@@ -5,6 +5,26 @@
 
 menu "RCU Subsystem"
 
+config RUSIX_RCU_LIST_RUST
+	bool "Rusix Rust RCU callback-list policy"
+	depends on RUST && X86_64 && !MODULES
+	depends on RCU_NEED_SEGCBLIST && TREE_RCU && !RCU_NOCB_CPU
+	default n
+	help
+	  Select the Rust translation of the 25 callback-list operations.
+	  Shared memory access and ordering remain explicit C primitives.
+	  This initial builtin-only migration excludes NOCB offloading.
+
+config RUSIX_RCU_LIST_TEST
+	bool "Rusix RCU callback-list parity tests"
+	depends on KUNIT && RUST && X86_64 && !MODULES
+	depends on RCU_NEED_SEGCBLIST && TREE_RCU && TREE_SRCU && !RCU_NOCB_CPU
+	default n
+	help
+	  Exercise the same callback-list fixtures with either C or Rust policy.
+	  Intended for local VM verification profiles.
+
+
 config TREE_RCU
 	bool
 	default y if SMP

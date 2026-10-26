@@ -50,3 +50,6 @@ impl Drop for Guard {
 pub fn read_lock() -> Guard {
     Guard::new()
 }
+
+#[cfg(CONFIG_RUSIX_RCU_LIST_TEST)]
+mod list_tests;
