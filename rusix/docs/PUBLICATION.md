@@ -25,3 +25,12 @@ A bounded review of 77 project-added historical blobs found no unexpected large
 binaries or known credential-pattern matches; this was not a formal security or
 license audit. The empty `rusix-empty-placeholder` repository contains no project
 source. Current implementation/CI status belongs in [PROGRESS.md](../PROGRESS.md).
+
+The LTS transition adopts signed Linux 6.18.58 and preserves the earlier main
+as a merge parent. Its verified implementation at `7effedcbb1bf` builds with the
+pinned container, passes 24 math cases on q35, and passes paired C/Rust completion
+checks. [Paired q35 storage](evidence/brd-q35/manifest.json) at `9d1c1ca5dd`
+verifies BRD, ext4, parameters and partitions; subsequent implementation changes
+only correct the opt-in completion FFI type. [Current target inventory](evidence/lts-target/manifest.json)
+records linked C/Rust contributions. Phase 1a remains in progress and hosted CI
+remains disabled; see the progress ledger for unfinished gates.

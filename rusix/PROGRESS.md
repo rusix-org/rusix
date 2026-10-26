@@ -2,8 +2,8 @@
 
 **Phase 1a: C and Rust BRD pass the x86_64 block and ordinary-userspace ext4
 contracts on the declared q35 VM.** Most of the kernel remains C. The integration branch
-`rusix/lts-6.18` uses signed Linux 6.18.58 (`2926d88bb7fc`); published main
-remains on its previously verified source pending transition checks. Hosted CI
+`rusix/lts-6.18` uses signed Linux 6.18.58 (`2926d88bb7fc`); its verified
+source and delivery gates are recorded below. Hosted CI
 is disabled; all current tests run locally.
 
 Implemented: approximately 1,200 lines of Rust across BRD driver/store and
@@ -13,7 +13,7 @@ provisional invalid-parameter exception. No subsystem divergence point is declar
 
 | Check | Result and evidence |
 | --- | --- |
-| LTS provenance and math | Signed tag verified; 24 required math cases pass. An initial unfiltered run correctly failed on an intentionally skipped upstream demonstration test. [Evidence](docs/evidence/lts-baseline/manifest.json). |
+| LTS provenance and math | Signed tag verified. All 24 required math cases pass on q35, zero skips. [Current math evidence](docs/evidence/math-q35/manifest.json); [baseline provenance and initial failure](docs/evidence/lts-baseline/manifest.json). |
 | C/Rust storage parity | Both pass block6, ordinary ext4 userspace6, six parameter variants and partition5, including clipped reads/writes. Same source, image and four byte-identical guest fixtures; resolved configs differ only by BRD selection. [q35 evidence](docs/evidence/brd-q35/manifest.json). |
 | Rust selection | Full kernel at `aa6da498a` links Rust submission and excludes C BRD submission. [Evidence](docs/evidence/brd-rust-initial/manifest.json). |
 | Ownership and policy | Nine in-kernel tests pass, zero skips: insertion ownership, discard lifetime/accounting, NOIO nesting and parameters. [Evidence](docs/evidence/brd-ownership/manifest.json). |
@@ -41,8 +41,8 @@ compiler/objtool diagnostics. [Paired core evidence](docs/evidence/completion-pa
 Default selection remains off: IRQ-context checks, broader integration and the
 rest of completion/wait-queue/scheduler ownership remain unfinished.
 
-Next: finish the math replay and review Phase 1a gaps before publishing the baseline
-transition. arm64, module lifetime, expanded fault/concurrency stress and
+Next: resolve the remaining Phase 1a parameter/adapter and review gates; extend
+core IRQ-context and integration coverage. arm64, module lifetime, expanded fault/concurrency stress and
 performance budgets remain Phase 1b.
 See [ADR 0002](docs/adr/0002.md) and [delivery gates](docs/PHASE1.md).
 

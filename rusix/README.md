@@ -16,9 +16,8 @@ selection differing in configuration. Nine Rust ownership tests also pass.
 Negative-parameter behavior, remaining C parameter/interface code and core
 integration gaps prevent a Phase 1a completion claim; see [PROGRESS.md](PROGRESS.md).
 
-The published main branch remains on its earlier verified source until this
-transition passes review gates. Historical results retain their original source
-identities. Hosted CI is disabled and manual-only under the
+The pinned baseline transition preserves earlier main history. Historical
+results retain their original source identities. Hosted CI is disabled and manual-only under the
 [execution policy](ci/README.md).
 
 - [Progress and evidence](PROGRESS.md)

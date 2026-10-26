@@ -1,0 +1,8 @@
+implementation=completion-c
+/out/builds/ci-kunit/kernel/sched/build_utility.o
+/out/builds/ci-kunit/kernel/sched/build_utility.o
+0000000000002700 T complete
+/out/builds/ci-kunit/vmlinux
+ffffffff81283660 T complete
+002e509a111d473ccfb166b34e54a5c3c9b30d24451f64d831f895b930c29ecd  /src/kernel/sched/completion.c
+6ec1efaaa55b6d6e75263509833dce4a53cbf50666359b0e7167fc72b3719724  /out/builds/ci-kunit/kernel/sched/build_utility.o

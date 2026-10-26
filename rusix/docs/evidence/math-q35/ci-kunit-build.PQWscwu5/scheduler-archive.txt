@@ -1,0 +1,4 @@
+/out/builds/ci-kunit/kernel/sched/core.o
+/out/builds/ci-kunit/kernel/sched/fair.o
+/out/builds/ci-kunit/kernel/sched/build_policy.o
+/out/builds/ci-kunit/kernel/sched/build_utility.o
