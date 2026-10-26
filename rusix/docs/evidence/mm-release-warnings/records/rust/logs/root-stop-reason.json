@@ -1,0 +1,6 @@
+{
+  "cid": "3e6ece3a74dc6d41316e085fa826d8797602dd5045c692538f9cd8679b9d8e52",
+  "source": "/home/aaron/code/rusix/linux-mm-release",
+  "output": "/home/aaron/code/rusix/linux-out/mm-release-verification-002/rust",
+  "reason": "Observed33 improper_ctypes warnings in MM release pointer-only extern block; stop remainingbuild beforeguest, retainactualobject+logs"
+}

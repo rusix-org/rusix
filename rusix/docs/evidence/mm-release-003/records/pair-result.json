@@ -1,0 +1,11 @@
+{
+  "status": "PASS",
+  "source": "cfc899021ac624d392d0241009374bb40acd3b49",
+  "different_settings": [
+    "CONFIG_RUSIX_MM_RELEASE_RUST"
+  ],
+  "combined": 80,
+  "core": 67,
+  "release": 4,
+  "scope": "KUnit release lifetime/refcount cases; no ordinary-consumer or allocation-failure claim"
+}

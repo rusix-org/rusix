@@ -1,0 +1,36 @@
+/out/builds/ci-mm-release-c/kernel/sched/wait_bit_rust.o
+0000000000000010 T __var_wake_key
+0000000000000040 T wake_bit_function
+0000000000000010 T __wait_on_bit
+00000000000000b0 T __wait_on_bit_lock
+0000000000000160 T bit_wait
+00000000000001a0 T bit_wait_io
+00000000000001e0 T bit_wait_timeout
+00000000000003e0 T out_of_line_wait_on_bit
+0000000000000410 T out_of_line_wait_on_bit_timeout
+0000000000000440 T out_of_line_wait_on_bit_lock
+0000000000000010 T wait_bit_init
+00000000000000b0 T bit_waitqueue
+00000000000000f0 T __var_waitqueue
+0000000000000130 T __wake_up_bit
+0000000000000190 T wake_up_bit
+0000000000000250 T init_wait_var_entry
+00000000000002a0 T wake_up_var
+/out/builds/ci-mm-release-c/vmlinux
+ffffffff812d05f0 T __var_wake_key
+ffffffff812d0620 T wake_bit_function
+ffffffff818df960 T __wait_on_bit
+ffffffff818dfa00 T __wait_on_bit_lock
+ffffffff818dfab0 T bit_wait
+ffffffff818dfaf0 T bit_wait_io
+ffffffff818dfb30 T bit_wait_timeout
+ffffffff818dfd30 T out_of_line_wait_on_bit
+ffffffff818dfd60 T out_of_line_wait_on_bit_timeout
+ffffffff818dfd90 T out_of_line_wait_on_bit_lock
+ffffffff8219dcc0 T wait_bit_init
+ffffffff812d0690 T bit_waitqueue
+ffffffff812d06d0 T __var_waitqueue
+ffffffff812d0710 T __wake_up_bit
+ffffffff812d0770 T wake_up_bit
+ffffffff812d0830 T init_wait_var_entry
+ffffffff812d0880 T wake_up_var

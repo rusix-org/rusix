@@ -1,0 +1,58 @@
+{
+    "name": "KUnit Test Group",
+    "sub_groups": [
+        {
+            "name": "rusix_mm_release",
+            "sub_groups": [],
+            "test_cases": [
+                {
+                    "name": "nonfinal_users_preserve_stack_vma",
+                    "status": "PASS"
+                },
+                {
+                    "name": "final_users_preserve_retained_storage",
+                    "status": "PASS"
+                },
+                {
+                    "name": "atomic_async_final_release_drains_work",
+                    "status": "PASS"
+                },
+                {
+                    "name": "fresh_exec_style_storage_drop_accepts_live_users",
+                    "status": "PASS"
+                }
+            ],
+            "misc": {
+                "tests": 4,
+                "passed": 4,
+                "failed": 0,
+                "crashed": 0,
+                "skipped": 0,
+                "errors": 0
+            },
+            "arch": "",
+            "defconfig": "",
+            "build_environment": "",
+            "lab_name": null,
+            "kernel": null,
+            "job": null,
+            "git_branch": "kselftest"
+        }
+    ],
+    "test_cases": [],
+    "misc": {
+        "tests": 4,
+        "passed": 4,
+        "failed": 0,
+        "crashed": 0,
+        "skipped": 0,
+        "errors": 0
+    },
+    "arch": "",
+    "defconfig": "",
+    "build_environment": "",
+    "lab_name": null,
+    "kernel": null,
+    "job": null,
+    "git_branch": "kselftest"
+}

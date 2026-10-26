@@ -1,0 +1,4 @@
+b3bfd39e4ee6f7d049f77dcf6fbac6623b4330e0680fb72ce9bab158eaa0fe0a  /out/builds/ci-mm-release-rust/.config
+07ded8d89585d58f86ae55872804a6c2a236133470faed23360df7eb7977aba8  /out/builds/ci-mm-release-rust/arch/x86/boot/bzImage
+277384be7bdebbfe66f4be495735b98980c1739ecab3c92451cb803ce084d463  /out/builds/ci-mm-release-rust/vmlinux
+a3c522c4af3ff649d9af4afe7afe3476d89cec0fa6fed064c29c3dc7f147b746  /out/builds/ci-mm-release-rust/vmlinux.map

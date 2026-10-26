@@ -1,0 +1,2616 @@
+{
+  "artifact_inventory": "All existing regular .o/.a files and kernel/config/map outputs in the C build; hashes only",
+  "c_build_exit": 2,
+  "files": {
+    "archive-script.py": "07b12500a52bcc968e6d793a0b88e73797c0fc573fc1ac3f6e749fdd27a07092",
+    "launcher/check-results.py": "002605c40f727321b4286e9c905c2a2d76d11bc8494715abbf18eedf66dbb049",
+    "launcher/preflight.py": "7406ff6976fa8a68c243224dda6db3223fdc678ee49833f7e108bde6e53c31cb",
+    "launcher/run.sh": "da903dd87feaddef8f8d9dd1f773c33bf31ba2d797ad749ae8abbb32409c8e46",
+    "records/c/logs/ci-inputs.log": "f7c3147a86eff4b822db0fd32c65999144733c9d5a074cc48317d9b9b09baad2",
+    "records/c/logs/ci-mm-release-c-build.c1W89Nyh/build.exit": "53c234e5e8472b6ac51c1ae1cab3fe06fad053beb8ebfd8977b010655bfdd3c3",
+    "records/c/logs/ci-mm-release-c-build.c1W89Nyh/build.log": "be1fd1c42ace6b0c2ff4c07477f2971fe6196ce5f87299eb8daa765b66dc9996",
+    "records/c/logs/ci-mm-release-c-build.c1W89Nyh/config": "ec0b02962161db68600eacd31eca52bff981d5e24272b48065156d53c62345dd",
+    "records/c/logs/ci-mm-release-c-build.c1W89Nyh/config.log": "0f47c481e87efcf1b31f957c9c2d37307677eed026944d05b1762048ebbcec49",
+    "records/c/logs/ci-mm-release-c-build.c1W89Nyh/environment.log": "59574e636353536c4730e1d84203be1d6edee4043ed3080b3147896dbf69ab4f",
+    "records/c/logs/ci-mm-release-c-build.c1W89Nyh/mm-release-config-before.json": "52a72d22bb09fd152fec4fbfab8ac55f405387037777ce0f2558640e4ac4a1f2",
+    "records/c/logs/ci-mm-release-c-build.c1W89Nyh/profile.txt": "162ef09cb45d639e5fda8d3dddded14e7a73a5cb7e0b831bd7c50ef7d5c4bee2",
+    "records/c/logs/ci.exit": "53c234e5e8472b6ac51c1ae1cab3fe06fad053beb8ebfd8977b010655bfdd3c3",
+    "records/c/logs/container-image-id.txt": "6e8bf4e568c9bd0809bea944afb49f09c2647d954e520a2226b03ec688353545",
+    "records/c/logs/container.cid": "23ad2e04c2ee25ca6107185b8b95ed61c15327885038ffaeef315bec96f2df6d",
+    "records/c/logs/container.exit": "53c234e5e8472b6ac51c1ae1cab3fe06fad053beb8ebfd8977b010655bfdd3c3",
+    "records/c/logs/container.log": "d6874d428581e87b204f12116b6597a243f4d74dba63a00d1be2e6a6ef4297e5",
+    "records/c/logs/host-native.log": "5947862b22c3d6ec6beb115ae9d7178bac6fbe96095b9083066b33f39e005506",
+    "records/c/logs/launcher.exit": "53c234e5e8472b6ac51c1ae1cab3fe06fad053beb8ebfd8977b010655bfdd3c3",
+    "records/c/logs/packages.lock": "9ef7ec5334805f1896c6990c60937d2244f71982b9a06b8a6248f352f8e9cf19",
+    "records/c/logs/preflight.log": "522bfec88879b99be12257c198c7a766083b39d8973342c36615e9b29e9d1d7c",
+    "records/c/logs/source-before.json": "1b06bc0854c3216e4a48754dc20dea1eab65f287c177949943f4a184b60f6d0c",
+    "records/c/logs/test_brd_ext4_gate.log": "abb262ac1f1a32534d6105937c9aaa04ef150137bb5618a3dc9fc5a4e144f2b4",
+    "records/c/logs/test_brd_fixed_parameters_gate.log": "75ff54e727b57e4bd7b88956ed0c92c4b9a416e6f0976707e8fb54aa385ac0bd",
+    "records/c/logs/test_brd_gate.log": "2b390ad0ecc0187ae4c9907c4b66fcd5cf984adc11b10becfdaa3a91cfef8ccd",
+    "records/c/logs/test_brd_kunit_gate.log": "ddbc5bf15c26bf2c15a86c04aa1c4eb9dbb31a4d245c800b95a5282be426a476",
+    "records/c/logs/test_brd_owner_elf.log": "199ba496f288116d36c62f29346d4fbf0bd75745a1c893abfcbdaa4c6d5b1033",
+    "records/c/logs/test_brd_parameter_oracle.log": "6c799e05befe53a65a3d6e2fe9a29f05651433ae6c547ee3ac06cbd84b49e6a9",
+    "records/c/logs/test_brd_parameters_gate.log": "19ce4c3fe936ba5a289b545d890b7ffce48ced29d4b7b20a8c6b10a871321dd4",
+    "records/c/logs/test_brd_partitions_gate.log": "3af354abd6afd2f4f662a367159a8b8107385935ded6c8a2b929734becedb43c",
+    "records/c/logs/test_completion_kunit_gate.log": "364ca0b93f5162b017c2499855565f2b0038c3dfc20bcf089068ec93470f42bb",
+    "records/c/logs/test_constructor_archive.log": "b097ae9eb5ae4f0665973f22e519f4fef1d880911f39b98f150d715c8ddf3287",
+    "records/c/logs/test_kernel_languages.log": "d4be35de3d82250986690334669c4d88ae35b2993f723c16c8c675d6299bc32e",
+    "records/c/logs/test_kunit_gate.log": "d9d734ee1c2de67b748aeef1c4126433aa438ad8375ca953916f12b1df11414d",
+    "records/c/logs/test_mm_construction_gate.log": "ddbc5bf15c26bf2c15a86c04aa1c4eb9dbb31a4d245c800b95a5282be426a476",
+    "records/c/logs/test_mm_construction_selection.log": "eb8c88bdf6d7bffd457b38469078be30b7e97db745e82c5f24162939bad78be2",
+    "records/c/logs/test_mm_release_kunit_gate.log": "6273232de4d3ef7acd4ecafa5c86beeeb974f56586b21089a2990b3f72facbe6",
+    "records/c/logs/test_mm_release_selection.log": "fc23540c8545d4075fe2f0420accd022e74e5566176c3bd4c597964ff02c2e14",
+    "records/c/logs/test_repo_paths.log": "e5d93fcd4f5a6a78993157555dd4f00dca494ed7b0646fbd995e60f527ae56e0",
+    "records/c/logs/test_server_target.log": "b1e2df9be5b3e954c2d2d25efcf39cb02fe4e10735e67c33a5bb9488485289d7",
+    "records/c/logs/test_task_construction_gate.log": "4c3b3b2f85f7f81206f2731efca1a5c61f58b2f6c54d820b4003b988757b84ec",
+    "records/c/logs/test_task_construction_selection.log": "58a520a024f15707222afe6575db8a3a9dbe7469c2c156ae0f9979903d48645a",
+    "records/c/logs/toolchain.log": "c6f34500a39cbbff3c2a10d9f85c76a7399e918c72c166fe90da89178e1db5bf",
+    "records/fixture-source/kernel/mm_release_test.c": "c8efcead6bc24b0165133e7485f870e2a5b9ba405e02e5a2074ad71ab55ff573",
+    "records/fixture-source/rust/helpers/mm_release_test.c": "51edf4d7f29a477fc8de1768383493ddeec41e47680a13abeb23d135dfddab8b",
+    "records/fixture-source/rust/kernel/mm/release_tests.rs": "93866b3b0885a6ff3d4304fa498140c9418b98c4ad4d878a4e8141d6ee449b73",
+    "records/launcher.sha256": "a4738a7c44443d41a93b5b27d1ecc931cf523bb9d31945e48ef1601d89491b85",
+    "records/matrix.exit": "53c234e5e8472b6ac51c1ae1cab3fe06fad053beb8ebfd8977b010655bfdd3c3",
+    "records/source-before.json": "1b06bc0854c3216e4a48754dc20dea1eab65f287c177949943f4a184b60f6d0c",
+    "source/include/linux/maple_tree.h": "c890e4c6de96872ea5d5a697d010157a607b5aca145dbc7821db79d99d769bda",
+    "source/init/Kconfig": "c5cb5255842f00d7ffda59d9f30c9d21e8cd718271bf0e9e01a8af3b0a07a066",
+    "source/kernel/Makefile": "31fd25e76917f9bbaaf87c284f1631af519e15c4318a5de12e2c0bb7742d38f9",
+    "source/kernel/fork.c": "a5ab264d359c386833416d84cde1f81326d4ff8606b9d0eb4f8cd667e6bbd6c7",
+    "source/kernel/mm_construction_impl.h": "4b74f000e0c1205ca8c26bd59ee4d452315675c60e18099431fbdc19a2d6ef4a",
+    "source/kernel/mm_construction_rust.rs": "d68e29136f5e48a2a91ece0457b4e6d941dd6ee789f47d2aec1999060d9836a6",
+    "source/kernel/mm_release_impl.h": "90b08fe8acbe8b4da19865706fc59e2f41d1ccbef7c19b1446d090d63470b2d9",
+    "source/kernel/mm_release_rust.rs": "975756f33b07f3969871aa79ab2ea7dfe33a970fe0c3babc24b5971863b59430",
+    "source/kernel/mm_release_test.c": "c8efcead6bc24b0165133e7485f870e2a5b9ba405e02e5a2074ad71ab55ff573",
+    "source/kernel/task_construction_rust.rs": "9513777b2f18b54fa5deab75caecffd18dcbe677df6e9458ebd65dd8da299a08",
+    "source/rusix/ci/run.sh": "34f5abd1dbd6e19b422404babf9f84a60eb57da613851572c50d08e7478f1eac",
+    "source/rusix/configs/x86_64-mm-release-c.config": "2fbf7e7a41cb364d200af5037a3785ca5b876f4a253dfe4e3b775c4b9eff8642",
+    "source/rusix/configs/x86_64-mm-release-rust.config": "953dace162d66d1741d01a910a4e02ef1429ee05ff50a1175d4c1551ba68c979",
+    "source/rusix/scripts/boot-kunit.sh": "fb76ca2f07a34a409e73d0576ae08f86998ae9bd56e23b9a774e346a8550d5e8",
+    "source/rusix/scripts/build-kernel.sh": "3f0a96f1bc8e14ab5a3b6ce14ef07c4fe48e820b51d9404c31fa837810ac4af4",
+    "source/rusix/scripts/validate-mm-release-kunit.py": "d6a7dcbbd298cb8c16810f1594251e9b5c5a2c7b5f98c2358836b578d30a8259",
+    "source/rusix/scripts/verify-mm-release.py": "d052ce469d9ab3a7305cb4ee196be20a00bc56349f54b604570306a1b617c547",
+    "source/rust/helpers/helpers.c": "ac661a116124d69b37ed2f4f96a9aada17d3933c907eb2733532a2fdda498a47",
+    "source/rust/helpers/mm_release_test.c": "51edf4d7f29a477fc8de1768383493ddeec41e47680a13abeb23d135dfddab8b",
+    "source/rust/kernel/mm.rs": "a4562ddca1c6478d922f82e8852e69d4ed05db7920a7a91b641cb3556b08bbee",
+    "source/rust/kernel/mm/release_tests.rs": "93866b3b0885a6ff3d4304fa498140c9418b98c4ad4d878a4e8141d6ee449b73"
+  },
+  "matrix_exit": 2,
+  "missing_outputs": [
+    "arch/x86/boot/bzImage",
+    "vmlinux",
+    "vmlinux.map",
+    "kernel/mm_release_test.o"
+  ],
+  "raw_output": "/home/aaron/code/rusix/linux-out/mm-release-verification-001",
+  "retained_artifacts": {
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/.config": {
+      "bytes": 60855,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "ec0b02962161db68600eacd31eca52bff981d5e24272b48065156d53c62345dd"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/arch/x86/boot/startup/built-in.a": {
+      "bytes": 220,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "ae21ddbbfcada829ec5a52ed5a8cc3430fe6ee7ce835d238a569d7d44162abb8"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/arch/x86/boot/startup/gdt_idt.o": {
+      "bytes": 6592,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "bd65b49cf3342ad5c135478e62c0d27d16e1abf0378caba6cef8cf581ec69429"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/arch/x86/boot/startup/gdt_idt.pi.o": {
+      "bytes": 6592,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "6736727c7ab1554440c287d9c4bb90a03d8b534fd42b63d655472bf0c408fd2e"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/arch/x86/boot/startup/la57toggle.o": {
+      "bytes": 696,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "7b1d58f3238fcd124ddead835f91990f773af466f0d84fc85bd06fae55cf54a5"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/arch/x86/boot/startup/lib.a": {
+      "bytes": 262,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "51c181d4943e61eb5375abd795e1d97e10ea5c6d97ca7457a5a36cd3d95bf44d"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/arch/x86/boot/startup/map_kernel.o": {
+      "bytes": 4464,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "d7f99dfd79491566cc8f067858bf1e12ca320f0574ea8ccad68210904804d90f"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/arch/x86/boot/startup/map_kernel.pi.o": {
+      "bytes": 4528,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "d5447e5a7139b4b41e85ef412fe7f654a76a1f27122dbb51fdeef190433992fc"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/arch/x86/built-in.a": {
+      "bytes": 12040,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "0dbae669fe618bbaefe92a1ff36838d339d61668ffd8e14f4205898160b822b9"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/arch/x86/crypto/built-in.a": {
+      "bytes": 8,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "0a65ccde55367e8e46b05a05832863123bb32fd25be68eb45c6523b2e54dc0f6"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/arch/x86/entry/built-in.a": {
+      "bytes": 514,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "8f146797b3a9f22c771c188ab4e9bd3975fbcbc8827a6d39a230d5b8313459f1"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/arch/x86/entry/entry.o": {
+      "bytes": 4016,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "05dca50fd6d681a4e533945cebda77134da82d5984d8c84d03a04821a081affd"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/arch/x86/entry/entry_64.o": {
+      "bytes": 81872,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "764a8e1f189d75385d765674a067a68435060334caab111be87bf633bb26b546"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/arch/x86/entry/syscall_64.o": {
+      "bytes": 61776,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "90f343b5f9853db3c70c85d75691757ae31bb405365dd882ff35f0b2862970d3"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/arch/x86/entry/vdso/built-in.a": {
+      "bytes": 284,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "ffa5095fbc1ae313d620a69c4ee2f5f0753825c1bd93c1736b771d343c6c34e5"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/arch/x86/entry/vdso/extable.o": {
+      "bytes": 2080,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "36fff21bb3c1b9ea5fd54b5b3b5c6b9920abb8f8016b2c3909b85fb5dc043d3b"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/arch/x86/entry/vdso/vclock_gettime.o": {
+      "bytes": 3568,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "610321cc0362ad37691f8f0fbc543b8a1afa4de75e3ef0546036d68c0ca06667"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/arch/x86/entry/vdso/vdso-image-64.o": {
+      "bytes": 14032,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "bce1c7ba2e081db62fe44635d09408cbe5c6dbe4a255dc1a345661b89a48ee87"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/arch/x86/entry/vdso/vdso-note.o": {
+      "bytes": 496,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "7331f75ebee22e2de17d2d9ea7583df807a3b877b04ebfb3eb4096ad1336d9d5"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/arch/x86/entry/vdso/vgetcpu.o": {
+      "bytes": 1576,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "42161ab80a5c242776e3fced155a7d55ed5b7a0c197c57692933d238742ebe3e"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/arch/x86/entry/vdso/vgetrandom-chacha.o": {
+      "bytes": 1048,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "b1203c65613668921665e9d8b965fd196e4f869d89bf99a694dbb78efad57222"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/arch/x86/entry/vdso/vgetrandom.o": {
+      "bytes": 2600,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "16402e8975cb570ef1fb4d640deeb1a1df1f4ec248e83cdad432d260236fd5af"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/arch/x86/entry/vdso/vma.o": {
+      "bytes": 13200,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "31f98d775df21458c35a8b34c660423a5e4ebd72e985053d21577016ac1580a8"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/arch/x86/entry/vsyscall/built-in.a": {
+      "bytes": 8,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "0a65ccde55367e8e46b05a05832863123bb32fd25be68eb45c6523b2e54dc0f6"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/arch/x86/events/amd/built-in.a": {
+      "bytes": 270,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "37b25189bb73011d630f9ed2b5bceeb9abd96630f013d4840e5c0b6a0d866c27"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/arch/x86/events/amd/core.o": {
+      "bytes": 59168,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "270ab61a731d4ca1bf205dac179266213e907072174310ab1176339b6c384b5b"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/arch/x86/events/amd/ibs.o": {
+      "bytes": 43856,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "54f701d243791e9a1951156d01d92907203dfc41f0effe5e6fac24c37e117165"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/arch/x86/events/amd/lbr.o": {
+      "bytes": 15128,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "bef00109afa1d44935422a0ba5c552cc0e501d2252d879178e5f27a4aa8b3b69"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/arch/x86/events/built-in.a": {
+      "bytes": 1212,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "2b243eb33247910608a6bda081b994a589e2f75016e1f078f98e83dc133654e6"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/arch/x86/events/core.o": {
+      "bytes": 131808,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "96dc52c551cec11624b2b22e5774997b835f622e8f3b6c9aa5114b998c45c919"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/arch/x86/events/intel/bts.o": {
+      "bytes": 19080,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "65e720ba853c81cd693c72edd061bfc95d280167676afa5e473c19aef3b9d3db"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/arch/x86/events/intel/built-in.a": {
+      "bytes": 602,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "f8917ac7f2b50ef05de1b8305eb60ce1408aac69a7e9147905381bc786bd462b"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/arch/x86/events/intel/core.o": {
+      "bytes": 270384,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "9ba19c065639dd40375142c8312b12a6f48390692cba373a2384e3f692e2cbbc"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/arch/x86/events/intel/ds.o": {
+      "bytes": 88712,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "94647698331de7291d883328b6bae589acb889419dfe0954ee55a86d27176a9f"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/arch/x86/events/intel/knc.o": {
+      "bytes": 16560,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "50e2972c000d5b8ffae42239b13f00b70c05c6d8a83d8078e10b93f7ca3cfb86"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/arch/x86/events/intel/lbr.o": {
+      "bytes": 74296,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "282446064686e86ffc0dbe1b1df6dc9d6d79d0b6b679d4d4c047e90e06ce0c78"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/arch/x86/events/intel/p4.o": {
+      "bytes": 24952,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "a018d269124b45098bcd9e3d25b738abe4e29babe04086f85f7ec7bd45d7dc5c"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/arch/x86/events/intel/p6.o": {
+      "bytes": 13744,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "07aeb31dedcfef546427d241209e9e81ac109be43a4b5cc8844c7794af84ec91"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/arch/x86/events/intel/pt.o": {
+      "bytes": 55664,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "eb28ea4458a1978f5c8df35aba3bd81d3ea40c4daebb03e1afef5a5c5514f320"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/arch/x86/events/msr.o": {
+      "bytes": 17144,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "3700548f62780933fd815f9f97a23430e1bd7a8effb2de292aad2b22eaf10ff3"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/arch/x86/events/probe.o": {
+      "bytes": 4128,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "2d437ced0b99a5149bd91cff427110cc5666db79410f266b5a69a67ef124325a"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/arch/x86/events/utils.o": {
+      "bytes": 7456,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "5610483172913579a873bc21fddba08d242c25142f1a245c19a83703320ddc5b"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/arch/x86/events/zhaoxin/built-in.a": {
+      "bytes": 136,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "93f7382b5eb979fab4251871560af63ae7d603fb658397ffbb0d74add0c354dd"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/arch/x86/events/zhaoxin/core.o": {
+      "bytes": 25336,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "99e62f9ecfa2da3dcbb410e167b52fa5ddaa1cc8a3b2584e693798d42e7fbba4"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/arch/x86/kernel/acpi/boot.o": {
+      "bytes": 53784,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "f2b0a5e8765cecd6f60fb1398bed74ea3b5d5e122ede7f0e92f6195068d5e766"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/arch/x86/kernel/acpi/built-in.a": {
+      "bytes": 288,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "7eb5c3caaa8ae3b62e7bab0f38f5b401fbcf01156bc910e22689ba6d89c5a2bd"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/arch/x86/kernel/acpi/madt_playdead.o": {
+      "bytes": 4944,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "0498662a662d9f4fc13a0ecff854b73f32ca78c8cf0c2a25e7d26cd6dfa155bc"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/arch/x86/kernel/acpi/madt_wakeup.o": {
+      "bytes": 10768,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "8542758826bac95bafa5b2613eb4422dcdf4b539062b59f9f0554b4c579fd5b6"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/arch/x86/kernel/alternative.o": {
+      "bytes": 66680,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "1159cf3305c23831d9535f837b22b1d197e7b58a77d57a109f972b4db5a51ca5"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/arch/x86/kernel/amd_nb.o": {
+      "bytes": 18176,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "17a90b03d7dc130966b047b4e55ea81783c96305902e6787f612b676e757a97f"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/arch/x86/kernel/amd_node.o": {
+      "bytes": 13384,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "e8e4b3e6a6364af5c8ec5e18398ea24a27c5c2d481aab7fa6a7b3ff74494672a"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/arch/x86/kernel/apic/apic.o": {
+      "bytes": 91488,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "5db48846241dfa0d22bb71524d1bcc7600480683f1939f6989d3a8bf41ab39fd"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/arch/x86/kernel/apic/apic_common.o": {
+      "bytes": 4728,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "7f3956b8b234c12815982414e790dd298a4b199c7451a00c9ad612df1e61073a"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/arch/x86/kernel/apic/apic_flat_64.o": {
+      "bytes": 6696,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "37569afe34cbafbfa061f690540b79ce2d9eb453a1c3ddb73ec191aadbfb1c05"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/arch/x86/kernel/apic/apic_noop.o": {
+      "bytes": 8752,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "e5374304cb87c2c84a6d8860e0e1f12784dcb26e40bc3aa8e639236b759cd74f"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/arch/x86/kernel/apic/built-in.a": {
+      "bytes": 846,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "748da52e51c69acf12616cafdb804a5f4fc05cadb9d808cc3a783206a59ed98f"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/arch/x86/kernel/apic/hw_nmi.o": {
+      "bytes": 5144,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "b1ea2834ce067c0b7dbf3e82969af65aa4d9afd1144f117b56a1bf8566877a4d"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/arch/x86/kernel/apic/init.o": {
+      "bytes": 12384,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "e314b714fc7b5462418b27de6c752d2e0ffe6045800a2d16ec8cc3e5f897e1c8"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/arch/x86/kernel/apic/io_apic.o": {
+      "bytes": 112568,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "f31ba9ee48ed9fd033fdbbecc4b29780b6ae1f107833191fd3ba6944e547185b"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/arch/x86/kernel/apic/ipi.o": {
+      "bytes": 22496,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "ed9d4e34fa09301e2f9952b5ba160f3711315fe94e02a39da953d8c72d029cf3"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/arch/x86/kernel/apic/msi.o": {
+      "bytes": 10800,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "a8906ecf6b373a775e21088cec8c9564c48b90db2432314d8dc3d3469ed24018"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/arch/x86/kernel/apic/probe_64.o": {
+      "bytes": 3488,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "03903a9ca1630dd3b25403f275c63dd1f8827a4cd5b8ef50518f4e72c1463abf"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/arch/x86/kernel/apic/vector.o": {
+      "bytes": 77696,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "dea446b0d53f43e6980d7e5e2264902b878ab0ceac08425af28ff955dc580964"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/arch/x86/kernel/bootflag.o": {
+      "bytes": 4720,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "595b32d012d27a86c741c92134a9cf4838d0a985e2f9edfd5e936ba1eaaf4c65"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/arch/x86/kernel/built-in.a": {
+      "bytes": 8022,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "6f033e536f68f11b198e92a0ada6cd427469cdc435b9edbf4fbba7196b69fcaa"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/arch/x86/kernel/callthunks.o": {
+      "bytes": 12608,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "ffdf482018723162c3e51f52aa07aee4db4731cc309b3dedace6d5d86c47d100"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/arch/x86/kernel/cpu/amd.o": {
+      "bytes": 36592,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "45715d65c6cb41b9e07b6fc70118fdcfa1b78c5348d332fcd0195e2763f0c8f1"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/arch/x86/kernel/cpu/amd_cache_disable.o": {
+      "bytes": 13904,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "e90f5222eb8700b9e883472073245f6f0ad7787c8a7f1a4f75132bf221502943"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/arch/x86/kernel/cpu/aperfmperf.o": {
+      "bytes": 26936,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "5a57e40e67965c55d4f5035efb45482194870d00613859f5d35b4c3d61d77b59"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/arch/x86/kernel/cpu/bugs.o": {
+      "bytes": 143072,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "b0b55d8445627040080558214b0b3af39a8577a54f580d58839c1032bc0f4a59"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/arch/x86/kernel/cpu/built-in.a": {
+      "bytes": 2186,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "32085529e8ce69164b698af88b503b19b0dba105c3ae191a950f39a643438eb8"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/arch/x86/kernel/cpu/cacheinfo.o": {
+      "bytes": 25992,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "36c3925ce5c931a1ae1444e043b32e7a9705f3364af2228f86da1815a3cbab7f"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/arch/x86/kernel/cpu/capflags.o": {
+      "bytes": 19824,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "4fdf99e44f709c208c97f884795306c62d2de7388796b1cd24f13dac0db5dfe9"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/arch/x86/kernel/cpu/centaur.o": {
+      "bytes": 5456,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "9cc57ee5db8e03881944f2acaf52d245137b3064ea3ce61f4e3572bcc872d8ec"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/arch/x86/kernel/cpu/common.o": {
+      "bytes": 90824,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "4f9dc57c2fc3704379c8a5f8da7f909185824d37232aafe72791f1a9cf9bf39e"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/arch/x86/kernel/cpu/cpuid-deps.o": {
+      "bytes": 8616,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "3e0a73a4894d4681faadc2199b8538817876a2cbdc0f10ca4e1c4e31b7971007"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/arch/x86/kernel/cpu/cpuid_0x2_table.o": {
+      "bytes": 1816,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "cd4e898bdfcc9a9a6959458052acc30bb57ffd610033cb1d481d8810cc6bf655"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/arch/x86/kernel/cpu/feat_ctl.o": {
+      "bytes": 6984,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "965f82c645777eda929e48ba3470f1021985a4ba136b080997021325631c61fd"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/arch/x86/kernel/cpu/hygon.o": {
+      "bytes": 9200,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "f3e336d8a697b04ef9126d5030ab4ee2ac3a485eda6137fdbc775cba4b3109b1"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/arch/x86/kernel/cpu/intel.o": {
+      "bytes": 15584,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "6f74edb12b9a47a376ffa8d6e1d0b6808a5d33d1089e108d79c1668950504222"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/arch/x86/kernel/cpu/match.o": {
+      "bytes": 4352,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "bd65327b3fbe9991c01b88868035bbda70e176760f8d59a572d64b4aff2eae12"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/arch/x86/kernel/cpu/microcode/amd.o": {
+      "bytes": 41568,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "fae69e9b60aae982e711c6b4834b6a590c790bc5f2ecb61340a1fa5924d5fc2a"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/arch/x86/kernel/cpu/microcode/built-in.a": {
+      "bytes": 272,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "3b3d0878333d60f5a9e9f00837eb7f6b52110560550dd96ae76ce305b4a1b1c9"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/arch/x86/kernel/cpu/microcode/core.o": {
+      "bytes": 18776,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "dd3b6f2f2401cb0980455c1a21fe5f0709790fc38f003ff20ad96d6102de7e44"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/arch/x86/kernel/cpu/microcode/intel.o": {
+      "bytes": 22832,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "7c4577bb952fd949d01df7540b98986bac6b59a3229239c3db43f64f90bc1022"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/arch/x86/kernel/cpu/perfctr-watchdog.o": {
+      "bytes": 5456,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "0c1ecb706144fd5257c24780140e1d8035099361a17729e5d36071af78444a30"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/arch/x86/kernel/cpu/powerflags.o": {
+      "bytes": 1624,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "d818ec88745be6dd0c550d9f28ec628b480154c36d6d6da39b7aab8c60936dcf"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/arch/x86/kernel/cpu/proc.o": {
+      "bytes": 9344,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "d483ba21d2bc362083c435299f41fbbed9b2bd012280f510ab9a96854acab27d"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/arch/x86/kernel/cpu/rdrand.o": {
+      "bytes": 2752,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "2a455b69c6bd6b797c8f45f45e0af63ccbd164caa47aed89db54f4897f9bfed4"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/arch/x86/kernel/cpu/scattered.o": {
+      "bytes": 3152,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "5868660ba4d87119b1e83f55bcb4dfd523583a3fe1fb450c74bf435add5b0dc3"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/arch/x86/kernel/cpu/topology.o": {
+      "bytes": 52952,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "b0a3202a73ec28663a666ecbf69dac2c8882daa67b808e4ae5db886de2cc7e18"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/arch/x86/kernel/cpu/topology_amd.o": {
+      "bytes": 6104,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "1c671aaed79d3a8c442b7f39d66d528a446df8d907b6f43748c329479390cd2c"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/arch/x86/kernel/cpu/topology_common.o": {
+      "bytes": 12568,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "95d118df4750ef1d02e7151ac899608ffedfbe3910ecafa39d6474d1514a3ac3"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/arch/x86/kernel/cpu/topology_ext.o": {
+      "bytes": 4936,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "e68063da2b1f3e952ad3d3838a286510783059025e0cdd1ec7a4e974f1a8c609"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/arch/x86/kernel/cpu/tsx.o": {
+      "bytes": 12448,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "abf383d9b2c5654b24bda3b41ebb47c3b8780d46ae6ba8979b116f4c07f1b86d"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/arch/x86/kernel/cpu/umwait.o": {
+      "bytes": 13440,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "06b2f15198f70eb8bd0f02006c749dbb27345a1af523c6926e080ef78f90e838"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/arch/x86/kernel/cpu/zhaoxin.o": {
+      "bytes": 5464,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "e076da2fa2f3ef8282f7c0b20bd15a2a3d943b1709976ac2d5b3529e15f7ac90"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/arch/x86/kernel/dumpstack.o": {
+      "bytes": 20184,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "6089adee0c82397563ae49f740e157230fb836e5279b9b8d4155d63379d63bd8"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/arch/x86/kernel/dumpstack_64.o": {
+      "bytes": 5880,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "5c90a6880a305f475a30b63ff2bc0d7b07f8bc38cf508c4f840aff00cfae61d4"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/arch/x86/kernel/e820.o": {
+      "bytes": 58064,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "a8e1fd3c6106a9f80b9faf37dc9a706cc71193c50cf42b640cd9b59620476ad5"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/arch/x86/kernel/early-quirks.o": {
+      "bytes": 51512,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "816f88479cfd4344fecc46a436f6055373b325f8485e93959916653aab68f502"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/arch/x86/kernel/ebda.o": {
+      "bytes": 2040,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "d2e0cef891adc13b3a15f05465dd7beaaba8c73712b0b5d820be7e5c60fb9215"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/arch/x86/kernel/fpu/bugs.o": {
+      "bytes": 2992,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "2f784e85a5c1c35ffb66f4d8196e9d3925240cee9bc6acce599172ce295f948b"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/arch/x86/kernel/fpu/built-in.a": {
+      "bytes": 482,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "e1fa481e40415291681a7b6868d9739f1953bc49b14724306a2866f8283b3187"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/arch/x86/kernel/fpu/core.o": {
+      "bytes": 65112,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "9944758ec35d62b47a6027b75bd26944d0512bce095c00878c2331564042695f"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/arch/x86/kernel/fpu/init.o": {
+      "bytes": 6528,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "cd3e7c20c37ad7411daa413ff53a0b56cfbf818ab326cffb1ee1580c55e3b4b5"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/arch/x86/kernel/fpu/regset.o": {
+      "bytes": 9824,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "20dd59ea837b032879477a4907951c791c14ccea41c5aa01a4b35b632d2d7170"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/arch/x86/kernel/fpu/signal.o": {
+      "bytes": 19104,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "8a001c91bf7411843517ef11e8c2c21dc23bb95894694b393ef103e0dd032b10"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/arch/x86/kernel/fpu/xstate.o": {
+      "bytes": 63848,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "dfe66e62ba89a3dc3614d510f7bcf8ea081abfd16036081c01191bffc8426f97"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/arch/x86/kernel/head64.o": {
+      "bytes": 14816,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "1660d990b821e4b510b98c4e20fa605b7a4f06452c24f71798746a48205d5be1"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/arch/x86/kernel/head_64.o": {
+      "bytes": 331240,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "0e868093b1b7d4cbe825e366156b668a0138095d71002ed5dece7683959bf5c1"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/arch/x86/kernel/hpet.o": {
+      "bytes": 38040,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "ad4c28cacd9731dc954f4ffd25418421a147a8cc3f52a1da5bd5f7551f4451ac"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/arch/x86/kernel/hw_breakpoint.o": {
+      "bytes": 14728,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "c1ed264475331ced3e78204b373588a423c7ecdfd289e62845b4980e9535fe4e"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/arch/x86/kernel/i8253.o": {
+      "bytes": 2808,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "d79466edc60d2126557a3438cabef125d457d4593787bb3bb175ecd907e1c054"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/arch/x86/kernel/i8259.o": {
+      "bytes": 19456,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "3010321439ab1b0295788380d819c1ccb919a78ed4a3b69cd59da7110b4b2d9a"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/arch/x86/kernel/idt.o": {
+      "bytes": 16352,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "976c81c234907add16650b3db539979c4b194e5d9bcd36c18d8001ad35a559bb"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/arch/x86/kernel/io_delay.o": {
+      "bytes": 4608,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "3e687f3c75cc9f9dbdc57f149a4c86a758ab804d4f9b7a4532980c9dbef98c52"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/arch/x86/kernel/ioport.o": {
+      "bytes": 2528,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "cf7509056115c7c43cd3af451bb8197c93b72d5b8bd751a278624af07ccabf5e"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/arch/x86/kernel/irq.o": {
+      "bytes": 136688,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "5450bd46f2124c61fbb7033fc918beffbc140647aebaf716ee070d31e25b18fe"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/arch/x86/kernel/irq_64.o": {
+      "bytes": 22000,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "12754feead20e29986e7000d9cc7c85ceca73ecdedac9beeb56d72ff6e823887"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/arch/x86/kernel/irq_work.o": {
+      "bytes": 10272,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "8a2caf9b693f7e6d6ed5fd2cc24b5ab113c812b85c34f3904db7ad8fcd465eb1"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/arch/x86/kernel/irqflags.o": {
+      "bytes": 1504,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "b528dc5b79087cca60ab40c97687937b1e2738e914064f0a7a97514d1bec091f"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/arch/x86/kernel/irqinit.o": {
+      "bytes": 7320,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "5456e986b94553e7ea055305209a94565a9b8a71f4ce448d576f245f0ddf31e1"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/arch/x86/kernel/kdebugfs.o": {
+      "bytes": 2760,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "f6dd4e56728033f613ae74a5b0b66e2fbd0e72983eddeac6337f25bb46f50d27"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/arch/x86/kernel/kprobes/built-in.a": {
+      "bytes": 8,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "0a65ccde55367e8e46b05a05832863123bb32fd25be68eb45c6523b2e54dc0f6"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/arch/x86/kernel/ksysfs.o": {
+      "bytes": 14600,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "33ab7a6cf2bb0f3fb853162cc5668f8c44e8f37b8a782dda7aea47a5e03b9301"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/arch/x86/kernel/mmconf-fam10h_64.o": {
+      "bytes": 6392,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "46bddae2a438438c8aaf4cd751c932e4aaa5bc2e4e04d2c0668ac6af83ccf296"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/arch/x86/kernel/nmi.o": {
+      "bytes": 35000,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "874b2e0c67942bd1d824514f6a8245e442395a2ce8b5737e752b697a6fe53fb9"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/arch/x86/kernel/pci-dma.o": {
+      "bytes": 9344,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "c6d916759560eca0798f3db387467a8a9322b424f8eeb076f7f07738044c9a90"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/arch/x86/kernel/perf_regs.o": {
+      "bytes": 4888,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "783bd8da44651a987bd0fd53ae5ffe42ce87a278dac83406679d72e3ce958187"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/arch/x86/kernel/platform-quirks.o": {
+      "bytes": 2960,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "f9ca072939b8a2094eb518b0195d87225a1a3cc7d13d384cf122e06cfc332312"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/arch/x86/kernel/probe_roms.o": {
+      "bytes": 11544,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "a0e9ce5d9dc224fa222df331fc94ee9049db467a94fad72c2552d82742563365"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/arch/x86/kernel/process.o": {
+      "bytes": 73288,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "ce6da74e18e4c30a7ccf5b28b2852c507739c02e10336e3df3ef658989cef9f5"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/arch/x86/kernel/process_64.o": {
+      "bytes": 37488,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "033b37f892bee117fa84d999b83ddede91663e41d5ffa4f95a59bd289dcc4f54"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/arch/x86/kernel/ptrace.o": {
+      "bytes": 25256,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "982f3bea7f6454254633232c4bd28a870fff74aefa44c29a1e1a06c835a648ab"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/arch/x86/kernel/quirks.o": {
+      "bytes": 28848,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "5222121bc00e73b58459abb1d30922439ea24e46c50bed3d70e41dce455b5dbf"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/arch/x86/kernel/reboot.o": {
+      "bytes": 19784,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "4bced766d1cb8e63c3926a19d4cd081a797729c2c288a0ce1208348d4e0f8fcf"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/arch/x86/kernel/resource.o": {
+      "bytes": 3080,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "ca2a18fe9743b14f0ca80feaa7418b5d52605b1e9ee56fdd93437bae1b5364b0"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/arch/x86/kernel/rtc.o": {
+      "bytes": 11016,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "e66baceafe03b9d559e7ee91759feafe7d09f5a6efbf4f74e05351252e271188"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/arch/x86/kernel/setup.o": {
+      "bytes": 36800,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "f3340db322b6eb7720bcea78d573d1146584da8df4fb7711d87becad1c51a3e7"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/arch/x86/kernel/setup_percpu.o": {
+      "bytes": 6752,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "481bb2d888ea4eee3beb19f5804a525e3f929322e06980e27653e8c62e8c2b6f"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/arch/x86/kernel/signal.o": {
+      "bytes": 12120,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "48ff73583cbc89d0f5cca8423f618e406a19a89d9b79288682e3d216a043b0c7"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/arch/x86/kernel/signal_64.o": {
+      "bytes": 9144,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "07e25cc0f9ccd78a68e20a5acadcd2c32f16990307334011bc77a022f73837af"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/arch/x86/kernel/smp.o": {
+      "bytes": 32472,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "0a48bf571ec4f5666ff7d95c60d4a35f2652c2f3fa0aab770a95d9243a33600c"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/arch/x86/kernel/smpboot.o": {
+      "bytes": 50280,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "420c75fa82929c7bdcd9d69b9599c621b7a061a78f41f38226a9d96373d90e55"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/arch/x86/kernel/stacktrace.o": {
+      "bytes": 5888,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "923a4dbe5192c58269c9d526ada7c041f7e5ab9e524dc5e0ebe20402fe442b26"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/arch/x86/kernel/static_call.o": {
+      "bytes": 10952,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "68bc5c477b331e664ea30c6e2fa1757411347e3afee75f169e8b49f2aa38fa46"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/arch/x86/kernel/step.o": {
+      "bytes": 7120,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "24646310ac297d4cf5101774c26974162dd8b588b6844bbe98600109911a11aa"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/arch/x86/kernel/sys_x86_64.o": {
+      "bytes": 8640,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "cfc896bbec39bbaafc5608f034295dc4dce6d2afce5c09cc85ac5f0d0c8175f2"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/arch/x86/kernel/time.o": {
+      "bytes": 7624,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "e18c30def8b708ddf73b39917481188a057058c8a05741de4579bff1cb2ec60b"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/arch/x86/kernel/trace.o": {
+      "bytes": 672,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "ac613c39a97382ae3178e234c56b6464723c1f2012db2786c4f1e367869a20f9"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/arch/x86/kernel/trace_clock.o": {
+      "bytes": 2104,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "0f441220ba438738c5ef17b3f6c8450489b86aee9b2bdef9f7bba041113d9344"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/arch/x86/kernel/traps.o": {
+      "bytes": 53240,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "711d992258edc08822f16195ae93aca8fda3cfa473ee19727c200388ca99f9c5"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/arch/x86/kernel/tsc.o": {
+      "bytes": 51080,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "e15352f3b499a490affcc766f5d56ebdb855e18d3c82f39da9f44f93b660de4b"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/arch/x86/kernel/tsc_msr.o": {
+      "bytes": 6920,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "bd53b8e8b82f36e4b12edc3cb26997938c4cf368d57e7375c1a979d8bafc8119"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/arch/x86/kernel/tsc_sync.o": {
+      "bytes": 19424,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "6fd5977d745c4e463917c871a969da4fa93322b52a12d08698bff099c5b6185c"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/arch/x86/kernel/unwind_orc.o": {
+      "bytes": 23024,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "d9cb5105e11afa507241a00cb98dc5de341727883e2045a4230660f800ad23ec"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/arch/x86/kernel/vsmp_64.o": {
+      "bytes": 5320,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "83949e044917ee1c95cd9f9d715d152115d1e174cf4bd7b8ed54761d35a4f25d"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/arch/x86/kernel/x86_init.o": {
+      "bytes": 14408,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "80fe31ad921fde47542c84c03a9baa4394c76b5a385a333abe3a87bb685bd7e8"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/arch/x86/mm/built-in.a": {
+      "bytes": 1136,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "cfcb7be49a1d6a67de2a3e6cc89eb86d809a91c3e863ffd6b88fc5f6a12aec8d"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/arch/x86/mm/cpu_entry_area.o": {
+      "bytes": 46976,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "c04a8bac02ccd4e54d69d10c62e9263ce02c6d64a2a3801536f0897beed2fe17"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/arch/x86/mm/extable.o": {
+      "bytes": 10456,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "4a7b9dafa649e51584140c196eeae1f8e125ab46993bc14d85c212732da5ef6b"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/arch/x86/mm/fault.o": {
+      "bytes": 52128,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "3eb984342fdfa9336eede0a75f4ff41426bf344d42d8de2befc0abee10df0b3a"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/arch/x86/mm/init.o": {
+      "bytes": 46184,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "7b5c5ec49512c4a310b5d05f9a47ecae4a211bfc02d3839654bacf0690440d8b"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/arch/x86/mm/init_64.o": {
+      "bytes": 70536,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "90ff7a994c96b295a48cc4d0824a781e7790be55420bb9adc467f6ad02c13961"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/arch/x86/mm/ioremap.o": {
+      "bytes": 25048,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "b2e026be79ffd6a5bfa49b6263a405504dc80a4a3ac3899fba6c473019410610"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/arch/x86/mm/maccess.o": {
+      "bytes": 2240,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "e5235f4fc7acb22c470e2f587f5f5932e6308bebda9e04aaf82db264fb8bd6e8"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/arch/x86/mm/mmap.o": {
+      "bytes": 12008,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "7259ce6f019b15baac0dd7f5bc2b55958fb9610687296fd1b4f815faf93cea99"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/arch/x86/mm/pat/built-in.a": {
+      "bytes": 214,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "0d0af1acdb7670cd974c078b4d3347f405fe125ab5698fdc9587e704fead7b7c"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/arch/x86/mm/pat/memtype.o": {
+      "bytes": 23776,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "cd795e488327c890454fa4a2ab430ba23005485f3dccd1ed3a6a5be07ba019a3"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/arch/x86/mm/pat/set_memory.o": {
+      "bytes": 90664,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "d87b1a2006009de4900ea854699546f55463545acc7accfed9d8597602b2db6e"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/arch/x86/mm/pgprot.o": {
+      "bytes": 3008,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "b39444801db2349f6cdcb2b6b750ce2710c7b56ecb37fc2848297d04b5af268e"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/arch/x86/mm/pgtable.o": {
+      "bytes": 24616,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "839ea3f0d6e1802d804c0007e831601b147ff2e4ddbe2700827b1efabbd7de49"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/arch/x86/mm/physaddr.o": {
+      "bytes": 6480,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "d050dfdca7bd2c8bcbcfd0dccce1875fab1c6891ce5de6e5cd44ac73d9e9ec7a"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/arch/x86/mm/pti.o": {
+      "bytes": 20144,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "fdee47c01893f95f668e37d2d982caa2420191012a3b3b4f3f826fc19c3bd030"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/arch/x86/mm/tlb.o": {
+      "bytes": 62592,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "5c66ca2e04b8e7d8326a78c48158f06020449b8523b80dfa0972cacef6ab3ce4"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/arch/x86/net/built-in.a": {
+      "bytes": 8,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "0a65ccde55367e8e46b05a05832863123bb32fd25be68eb45c6523b2e54dc0f6"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/arch/x86/platform/atom/built-in.a": {
+      "bytes": 8,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "0a65ccde55367e8e46b05a05832863123bb32fd25be68eb45c6523b2e54dc0f6"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/arch/x86/platform/built-in.a": {
+      "bytes": 8,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "0a65ccde55367e8e46b05a05832863123bb32fd25be68eb45c6523b2e54dc0f6"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/arch/x86/platform/ce4100/built-in.a": {
+      "bytes": 8,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "0a65ccde55367e8e46b05a05832863123bb32fd25be68eb45c6523b2e54dc0f6"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/arch/x86/platform/efi/built-in.a": {
+      "bytes": 8,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "0a65ccde55367e8e46b05a05832863123bb32fd25be68eb45c6523b2e54dc0f6"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/arch/x86/platform/geode/built-in.a": {
+      "bytes": 8,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "0a65ccde55367e8e46b05a05832863123bb32fd25be68eb45c6523b2e54dc0f6"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/arch/x86/platform/intel-mid/built-in.a": {
+      "bytes": 8,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "0a65ccde55367e8e46b05a05832863123bb32fd25be68eb45c6523b2e54dc0f6"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/arch/x86/platform/intel-quark/built-in.a": {
+      "bytes": 8,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "0a65ccde55367e8e46b05a05832863123bb32fd25be68eb45c6523b2e54dc0f6"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/arch/x86/platform/intel/built-in.a": {
+      "bytes": 8,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "0a65ccde55367e8e46b05a05832863123bb32fd25be68eb45c6523b2e54dc0f6"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/arch/x86/platform/iris/built-in.a": {
+      "bytes": 8,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "0a65ccde55367e8e46b05a05832863123bb32fd25be68eb45c6523b2e54dc0f6"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/arch/x86/platform/olpc/built-in.a": {
+      "bytes": 8,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "0a65ccde55367e8e46b05a05832863123bb32fd25be68eb45c6523b2e54dc0f6"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/arch/x86/platform/scx200/built-in.a": {
+      "bytes": 8,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "0a65ccde55367e8e46b05a05832863123bb32fd25be68eb45c6523b2e54dc0f6"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/arch/x86/platform/ts5500/built-in.a": {
+      "bytes": 8,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "0a65ccde55367e8e46b05a05832863123bb32fd25be68eb45c6523b2e54dc0f6"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/arch/x86/platform/uv/built-in.a": {
+      "bytes": 8,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "0a65ccde55367e8e46b05a05832863123bb32fd25be68eb45c6523b2e54dc0f6"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/arch/x86/realmode/built-in.a": {
+      "bytes": 208,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "e5bbcd9d92173bba866104bd1830f3fc65a51ee1834411bea9322ecf193e7f16"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/arch/x86/realmode/init.o": {
+      "bytes": 10136,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "225fbb2248f138a27f908385db84dcb7704f947ec7896f1b6a3a5b7807a511c1"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/arch/x86/realmode/rm/header.o": {
+      "bytes": 1104,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "fd630da81b634327f4f536038f1be88cee2eec5b0ae6377036d119e52f506c04"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/arch/x86/realmode/rm/reboot.o": {
+      "bytes": 2480,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "0fba5061c3e9eb2b9a11edd540bf0d21f27d3ef12473b9210399af0665241776"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/arch/x86/realmode/rm/stack.o": {
+      "bytes": 836,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "95f45f565c5aed67886f7aa29e192d0a2cb1f2115cfb07909817cc86befb0d55"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/arch/x86/realmode/rm/trampoline_64.o": {
+      "bytes": 11476,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "be945f56f6bee028a7abbe7560923ef26e0f5ec17d12d8a9aa1671feaefed85e"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/arch/x86/realmode/rmpiggy.o": {
+      "bytes": 25256,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "a33eff42a4376c7c9623e7497e14c4a1dedaa83b5a8ecd3df75bb62cfe00a790"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/arch/x86/tools/relocs_32.o": {
+      "bytes": 21904,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "b3b4c4966cd47b81c68f67c454e18aef24fd8d415d53fbb3bf46931d9602e74a"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/arch/x86/tools/relocs_64.o": {
+      "bytes": 20280,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "831d61cca45f48d4c2a19e6ab569aea665cb5849a3e595bb260428dc5d950a67"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/arch/x86/tools/relocs_common.o": {
+      "bytes": 3480,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "65d3eef37cf153c564d5d6fcdba553b109978b3c8ed7c61bbca7d738e21ee2b9"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/arch/x86/virt/built-in.a": {
+      "bytes": 144,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "fd88ba0cd6bdf735871edfeaf94ab723bb43ac0289237fd656bcfbdf9692f0b1"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/arch/x86/virt/svm/built-in.a": {
+      "bytes": 140,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "455d1bee6df21492cbd6b86837a42dadcfd190a9091ec0828c1989204528d95d"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/arch/x86/virt/svm/cmdline.o": {
+      "bytes": 4296,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "0c97aee51c7992ba22a6a996d1ec8e66ed6ed14d7f7530a98ca438542b1be37e"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/arch/x86/virt/vmx/built-in.a": {
+      "bytes": 8,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "0a65ccde55367e8e46b05a05832863123bb32fd25be68eb45c6523b2e54dc0f6"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/certs/built-in.a": {
+      "bytes": 8,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "0a65ccde55367e8e46b05a05832863123bb32fd25be68eb45c6523b2e54dc0f6"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/init/built-in.a": {
+      "bytes": 656,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "61de5491fed08d1a6c129b94c57a9188ca2914d369bd24b7b460d691edd74b2a"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/init/calibrate.o": {
+      "bytes": 10120,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "b75e983690fb012a97e58b76bad71d30780fabc14ea4a936129a571f579fef3c"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/init/do_mounts.o": {
+      "bytes": 24696,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "1df058a1b361b300983a42d0d66bc9a23889fbf64d74f8bf5ddc2406fc572c91"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/init/do_mounts_initrd.o": {
+      "bytes": 11472,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "87d52ca9174ea620884331e9ac628ccaa3e440b81a1d21bef5ad31339e02d363"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/init/do_mounts_rd.o": {
+      "bytes": 14272,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "a380a1981acffd6913c21fec91a2433744d926a7bbaa3c553d48266906cbb46a"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/init/init_task.o": {
+      "bytes": 12792,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "53da2b1aeeea354d09e45286068bfc6b8798e76c026698f5a9c621fee47df5e3"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/init/initramfs.o": {
+      "bytes": 36360,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "fae5ab1b078c9c2f7f2e591c4c769bd2f99eaf654c16bc896bf20fa33fe9e6e8"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/init/main.o": {
+      "bytes": 92008,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "b745ba34a2cb0e18ee74c98b2b7b01f032834f47241f8b1c22646a16a3d59f36"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/init/version.o": {
+      "bytes": 4640,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "2ef4027685776139da9aba07d31c25be11b9fae7ad74aef51e17bfc25ce242f2"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/kernel/async.o": {
+      "bytes": 18184,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "1f79ddc65fa95e18fdb1ad41fc33585edc61fa89d3ed355a1c966a82143ed255"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/kernel/bpf/built-in.a": {
+      "bytes": 136,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "1c3a4952525a3ca49cba58b0c95ad5f066e41b34150180575a53ff5a1cccd5cc"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/kernel/bpf/core.o": {
+      "bytes": 140616,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "09c3c835dab5dfa9c63b6c5c387beec195a12ecad0765b7e82958ec26ddc7f95"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/kernel/capability.o": {
+      "bytes": 26776,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "da889d9ebab760206840a198d3952ca174c62ad844fb966c604669a2eaae93ee"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/kernel/context_tracking.o": {
+      "bytes": 14184,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "9e4ebe2dda6fd534afc97153e42d73a3eb72fd0cc3e12e98ed44dfa9301c282e"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/kernel/cpu.o": {
+      "bytes": 155136,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "4037e398595ff21acb878f4d283e976ce315adb2c2527881766c1a56b30ee6a8"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/kernel/cred.o": {
+      "bytes": 26992,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "13df37500999eeefaf72c41210e54b7ebbb617d321a057fddc392ee5c55c893d"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/kernel/dma/built-in.a": {
+      "bytes": 350,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "f40cb9811f377bf7f542268fba68454083e8624f20372c30f03e4e416611c480"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/kernel/dma/direct.o": {
+      "bytes": 22272,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "42df2f9eb673c038736f3311d5245f10ff257f52495fe48e44dcd93eb0b4c995"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/kernel/dma/mapping.o": {
+      "bytes": 214360,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "6e768cf1a0626d8dc353e22fb74575102798f526f7062cd2ba0f135b8595f5de"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/kernel/dma/remap.o": {
+      "bytes": 5784,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "913306e583c469bf1d6934c7da11cc67645e0a897855b94d954b38677658dd03"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/kernel/dma/swiotlb.o": {
+      "bytes": 46392,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "ce0389d52f30c281e9fc95b3de13f935e174077f1e21237458f7ce07f9e45380"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/kernel/entry/built-in.a": {
+      "bytes": 302,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "9154920a5135b7487a14ac8964d6dbaf1e9f487a7d60e2d5f86dce7d48225c5d"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/kernel/entry/common.o": {
+      "bytes": 16016,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "893ff41de9465cf4317e92b768afec9e25bd393f63942a4a8c9f5a004c454a7d"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/kernel/entry/syscall-common.o": {
+      "bytes": 28464,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "23966521d91b394d784f7678e17378e2dd414b4ef0dc886f7611af83c0004127"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/kernel/entry/syscall_user_dispatch.o": {
+      "bytes": 6872,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "468365d7ab04a8b9a8631b836a93cff120cc8289ffa3df06f7f3999e1acd7f9b"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/kernel/events/built-in.a": {
+      "bytes": 362,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "d4f2bdabe7f7c4575235a67e1c763a6fd016eddbac9586619d164408284aec86"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/kernel/events/callchain.o": {
+      "bytes": 15176,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "f090424cc7550b59b0858e11609a0bde8f30c2628b8d1a50a3cec25c04f6e6c8"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/kernel/events/core.o": {
+      "bytes": 489296,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "e4fb09cce3dd1905ef0e1cc849fb17f65efb35b9b2164908fcc62ebc9c482be2"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/kernel/events/hw_breakpoint.o": {
+      "bytes": 57408,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "3a8fa627f72d866f197a416d4984b879675b74874f19de5f7f56c106c9c9e573"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/kernel/events/ring_buffer.o": {
+      "bytes": 32568,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "decdfe3c5cc9ab27931dc0995fd85e04d5808e5c5c71b071d0747bd349651d38"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/kernel/exec_domain.o": {
+      "bytes": 3960,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "f0585da6e198820cbb215c90fe4c098baa40a9d21f9bce439b99bd91c090be99"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/kernel/exit.o": {
+      "bytes": 69064,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "ad79abae3b12eba629f26489007021109f61fbca32a71799643cedc6228488ed"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/kernel/extable.o": {
+      "bytes": 7584,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "52d7d243e882adfecad937ad36c6168ade3c1d22cadb6eb211862d0719d74cc2"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/kernel/fork.o": {
+      "bytes": 167208,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "134f21af6d6c32fd14af318f08552f8de3e06de8262dfb74f5555ac9f1cd88d9"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/kernel/futex/built-in.a": {
+      "bytes": 418,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "b95c889d87c1bf89e3e6fbb1451931559a37af604f8777eec3dfee8d394d81dc"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/kernel/futex/core.o": {
+      "bytes": 64240,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "bcc2cc4d4861b8956f972c5485da7b874370e477a6a54f5a98d907e8acd8c153"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/kernel/futex/pi.o": {
+      "bytes": 29408,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "dee035cfb3bc8277488b8654c3d4219579126f02e445f850cc5952430e31db5d"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/kernel/futex/requeue.o": {
+      "bytes": 17848,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "672121b6799129e6bef2939c6f6fa281cb0bfd3cb2b7d9445a1598d2759e36dd"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/kernel/futex/syscalls.o": {
+      "bytes": 18968,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "6a7d1cb89d225ac1cc8def93c6e0ec570a17ba4e09ce24fc2c0e192c9062dd33"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/kernel/futex/waitwake.o": {
+      "bytes": 27552,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "e8d085cdc8a02e3e000c410342ffe46333349c792195d0f7b180d4febb1c3368"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/kernel/groups.o": {
+      "bytes": 13296,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "cfc06fea5d2712a52f15538f530ff3fe5dd728c66d70e9b85c2cf95931a58fc7"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/kernel/iomem.o": {
+      "bytes": 13336,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "b3ee926b9d957553cc029435d80dfc74fbcec4613152c9c2cadf08ec817cf8a6"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/kernel/irq/affinity.o": {
+      "bytes": 6272,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "405b23d38885e88cdae2bf87557a3ac3bdba3cb62c9a23a0742dea7bd8ebc4d4"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/kernel/irq/autoprobe.o": {
+      "bytes": 8960,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "9a0619b597a7abc8c7ee93fc06e4938352c6f896c219f37f16dc34547cb27655"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/kernel/irq/built-in.a": {
+      "bytes": 1272,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "ec80dd63472e879a6916eff290158b6d90729df6c3cfd21952d750ecf51f1bfc"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/kernel/irq/chip.o": {
+      "bytes": 67120,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "401a78cbc6170f874bc653e9cbf41ca7b00f052351021738e8ee3814ab3ab6a2"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/kernel/irq/cpuhotplug.o": {
+      "bytes": 7600,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "a6096e57f5c5fc7ddd04c8702700b85b7cf4cf6c47154cb84e694dd1390a5f02"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/kernel/irq/devres.o": {
+      "bytes": 11696,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "bc578b96b0fdc300726e33dd28c90d02f90bc50a91259ab9c3a9943a69591be5"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/kernel/irq/dummychip.o": {
+      "bytes": 7248,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "96e73de63f7a00688c05172c23d99bee15a017af9e70ed8ae4b4ffac39d06f1e"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/kernel/irq/handle.o": {
+      "bytes": 19688,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "a712f02da13230a7ae02e21d3d3be653110e03bcb65e138a0edd2eb464bfa1e1"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/kernel/irq/irqdesc.o": {
+      "bytes": 49680,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "bf872929094e4937c455d655d1d2b9b78c95f72db975f78362050960cd3b3916"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/kernel/irq/irqdomain.o": {
+      "bytes": 72536,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "ed340ab2d2df227931c0f9b4413d33c97237e223f9651124dad0927a08460b42"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/kernel/irq/kexec.o": {
+      "bytes": 2792,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "a9df4284e8c1ca7c316fdaac9141e70da8486fcd660e3438befb665ca631c285"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/kernel/irq/manage.o": {
+      "bytes": 96920,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "5def57d686e8c3607354694ecd736a324b37ab50255af0aa2c4992fb98cd8471"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/kernel/irq/matrix.o": {
+      "bytes": 74216,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "ddf68cadd38187dc68931813ed0c9d790ed5760b21e904d79240688ed516d8db"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/kernel/irq/migration.o": {
+      "bytes": 5504,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "d3826826fbb8f8af53ed77c3c97aced7a335126298ef07d1d93fb413f1d7d825"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/kernel/irq/msi.o": {
+      "bytes": 65600,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "a26d048e253292ea1144dcb326276b9b699c71ffdaa8b1dfc1e705f0a57287ba"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/kernel/irq/proc.o": {
+      "bytes": 28552,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "c56462499380dab35671e29a83a715624896ff15f360c1d693f1f477025e7c82"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/kernel/irq/resend.o": {
+      "bytes": 6584,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "a6b27231bfe0aad799f229452c3a14e97dbd48635c1fe3dcd83e712017b7a159"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/kernel/irq/spurious.o": {
+      "bytes": 14792,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "e01528b99455c5bc6ac861e8dc99e54b1ec50646dcae779dbcb129c6059f828a"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/kernel/irq_work.o": {
+      "bytes": 16368,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "32b211be68a4d4a70cf156b23bde0370e156eaa47292ce8b64c496e7e3eebf0f"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/kernel/kallsyms.o": {
+      "bytes": 29032,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "bca4c499b00cac05c9f5d42b175377e7d2f0761f480c266e233a47345220337b"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/kernel/ksyms_common.o": {
+      "bytes": 2248,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "f4d8a370547213215e875dac41ede65b12bff600e2ffd8c0ee223b8c93d40ef8"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/kernel/ksysfs.o": {
+      "bytes": 10928,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "9474606f4a0f9fbaca72f76d51ce944bfd33d33b6454ed950d22214335cfbfed"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/kernel/kthread.o": {
+      "bytes": 80040,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "e90b42ecbbe09ddc4cdaeef58a4961d49811f7c914fd16f86b01c2a715eb571b"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/kernel/livepatch/built-in.a": {
+      "bytes": 8,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "0a65ccde55367e8e46b05a05832863123bb32fd25be68eb45c6523b2e54dc0f6"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/kernel/locking/built-in.a": {
+      "bytes": 1018,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "21bb472c181f9224351d96b19ec5eca298aaf8350f82dbcbb1e5ad618e11fdb8"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/kernel/locking/lockdep.o": {
+      "bytes": 230048,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "2f56733b502fdebf1655b6a127453ad4fc9b6fe47a7cc9f4b0970c07938f4611"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/kernel/locking/lockdep_proc.o": {
+      "bytes": 20624,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "a031086d70391c6d1fa1b07102a4ca548996577ca2a13b35b587a30c3ef49edf"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/kernel/locking/mutex-debug.o": {
+      "bytes": 15024,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "bc19c901b57050a6e9e24c1b29710dd151660c090cc12403f1985f0732df4501"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/kernel/locking/mutex.o": {
+      "bytes": 113560,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "9f2db83185f4f274ceab2cdd44d1654e88cadc6a3c2587fe69600215c0ec2bb4"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/kernel/locking/osq_lock.o": {
+      "bytes": 3488,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "25879a95af0b72313c9995705e5dd80e0727e029ba098d86c500230f597acd14"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/kernel/locking/percpu-rwsem.o": {
+      "bytes": 19048,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "96a7e364842c799fae91afd511281c4e10387394a8ff618520240417217faa8c"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/kernel/locking/qrwlock.o": {
+      "bytes": 9152,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "2496a6568312ea65dec0f9ea603e0bf314784ace3bc00b80af1c0d9f6b019d65"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/kernel/locking/qspinlock.o": {
+      "bytes": 8336,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "1549d459ccbe2f6ea24f253d966d04dfa9237e9344218db9ba58e123a986e6b4"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/kernel/locking/rtmutex_api.o": {
+      "bytes": 72280,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "8b424d1756bcd14fd605496f4418ce257b8307992e02b95e80acf42d553a0803"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/kernel/locking/rwsem.o": {
+      "bytes": 59384,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "b820291709deb0c3bf427febba161636fc3bfc0f91ef6e44f867f8b20aaa8aac"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/kernel/locking/semaphore.o": {
+      "bytes": 17336,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "e3382b24d1658757477ec773eaf0abb661825c989484b0adb7d7f2be7d45964d"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/kernel/locking/spinlock.o": {
+      "bytes": 36744,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "8f5e23c3d907957d0e6843ff3030d307ac28ada82ed9c55ba78fc11e1498a3dc"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/kernel/locking/spinlock_debug.o": {
+      "bytes": 13928,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "f9efe8e99e01b10c5394119b7d86800388d956645d5d3e0f720562212621d195"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/kernel/mm_construction_rust.o": {
+      "bytes": 8200,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "49cc0da9a1117bd6a660e9007f5fe6d348b3199d5a6f1261068062fa201c43e9"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/kernel/notifier.o": {
+      "bytes": 48312,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "937760b68a883b9b6b8781d61432e0c32bc21878806092133c5ed57fc6bb041f"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/kernel/nscommon.o": {
+      "bytes": 3200,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "4aabd2ba092eb63e735c221f2c639718091ef6be7b49188d41ee1b254ac1d301"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/kernel/nsproxy.o": {
+      "bytes": 20064,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "8fb0c5d66c23f8ba21f4b2336b88a262436de9b26ad36a2b08b815170e5e535d"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/kernel/nstree.o": {
+      "bytes": 15168,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "3fefc744a0b6918ca792d493080105f5520acbc0afb1791e88de2975a9ab3340"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/kernel/panic.o": {
+      "bytes": 50048,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "d09c0417a9405c99ce940b43620c4f966288214cae9bb3527b43bb87c42cb72a"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/kernel/params.o": {
+      "bytes": 56512,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "448c43e13e989ff2290ac4dcfd89736a5dc19aa8d5b0aafb914c0129ef02d075"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/kernel/pid.o": {
+      "bytes": 56768,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "6340637de3bc4311aa1178f3fba77de864eb1820b3bbd061e95556a3c42a2dd2"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/kernel/power/built-in.a": {
+      "bytes": 136,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "3df022d69f980fb5348aaff92f79e683018846678316878af85b8e9e794124ba"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/kernel/power/qos.o": {
+      "bytes": 17608,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "63b8858078fb6dd80b287148eba6a48ee9a1a1466956757e7bde0f6a6f761cd7"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/kernel/printk/built-in.a": {
+      "bytes": 434,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "8c6b166b5c2f3ab72dd75cea13692a838365075e5351f73d9907499ba235eec6"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/kernel/printk/nbcon.o": {
+      "bytes": 44632,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "c60b3353a82f0e156d13fdb4b41987e7efa77cdf99c3b35f9b2d7a17fdeef15c"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/kernel/printk/printk.o": {
+      "bytes": 648328,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "1bf1c1e41f1e304c8898f8fb7c3c99330adc7ba62bd6c02e062d21d97125c621"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/kernel/printk/printk_ringbuffer.o": {
+      "bytes": 27960,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "a01c2335e9a553b18af147cffce9e21b9ad64bb936982309b601dcf4b4906aa1"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/kernel/printk/printk_safe.o": {
+      "bytes": 6984,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "aafd3b554de34b1916d6788f62c4f98930f2a7b703343bb202e7583491a02e8d"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/kernel/printk/sysctl.o": {
+      "bytes": 5136,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "3aa41509255f7331e48ebcb8c8f8c06f05123d6c16f4f600d09b91bf0e5e7057"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/kernel/ptrace.o": {
+      "bytes": 39824,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "d79ea500e710e609c8c27166b6eecb0cfdc7d9d8df06cd8656b198b991d55fa4"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/kernel/range.o": {
+      "bytes": 6144,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "364f01e8021557bde73e50de13aee5b18460ed49f66a0d7f3e78c6c437dd81d9"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/kernel/rcu/built-in.a": {
+      "bytes": 424,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "51af6ac2f12eee5ab9950dacc12c2dee473b7fd96abd3b6230818607c5576f02"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/kernel/rcu/rcu_segcblist.o": {
+      "bytes": 16056,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "c4e5fcf26482ee12ffb9123ee3684f48c33378b9b35061b195978502e8255192"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/kernel/rcu/srcutree.o": {
+      "bytes": 63128,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "24b1438a60cd0233e2cf60400bd3ea29d8a4841792617288da66336c80fe49d7"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/kernel/rcu/sync.o": {
+      "bytes": 8216,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "7202f59765e619457df6e8f0644eca772af57d90feccd7266d78fd4aa9c56ff9"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/kernel/rcu/tree.o": {
+      "bytes": 278976,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "8244847172b53d7a30da072a11e5b84e3d2c5f0d388aba717f430e14f87f5085"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/kernel/rcu/update.o": {
+      "bytes": 129136,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "05269126ca39ee4de175a6788626f087f98df386fb586f3953c0e8330898483f"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/kernel/reboot.o": {
+      "bytes": 67320,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "00066cd833c2d39a43b3cddfe27988a50fdbca6fc477e993959ad22f156aa8e0"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/kernel/regset.o": {
+      "bytes": 6168,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "ab05a01a99e7410276e0fb826af870fa340f2c0b916c0aab0ddc1b56f332af03"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/kernel/resource.o": {
+      "bytes": 64568,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "7db220f00f2411e4de6db4b14322ac55dd4f059cce83b3c1177ad292b9411dde"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/kernel/rseq.o": {
+      "bytes": 28856,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "e8048c6edb2ab71d96792fb9622195aba85a412d4156003341a8b9a3c355c7d8"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/kernel/sched/build_policy.o": {
+      "bytes": 324088,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "8748040039534d81c65266badee5b9d9543e9c6e1d5ab3be5b06aad634fbc92f"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/kernel/sched/build_utility.o": {
+      "bytes": 170568,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "6a0b06294e546de45bea9b17e646f00062468c60d7eee25d2d7213d16d0742e4"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/kernel/sched/built-in.a": {
+      "bytes": 970,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "ccfa0d986e51661104a3afbc8432a577562cca760368cfaefe0838034fbecf98"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/kernel/sched/completion_rust.o": {
+      "bytes": 15560,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "c9fead324e39b51e36a3939f644d47f369ec6444dd7da4ab70d24cc319355975"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/kernel/sched/core.o": {
+      "bytes": 411568,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "342853e0ec7ffd55fa22b14458140d06f9dd57e11f53a8ad4c4daaffe1a60373"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/kernel/sched/fair.o": {
+      "bytes": 154384,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "716d8aa7529d6d4af01cb1f126064b871aa3a5ff0d0afac595bbef1e26db5ed1"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/kernel/sched/swait_rust.o": {
+      "bytes": 13592,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "0aa1266d2722c41232a04f83077c2f781e1e867cba5ff446a4d7963c26e50015"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/kernel/sched/wait_bit_rust.o": {
+      "bytes": 39184,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "68d092d76a4465082134ebdb58f4334805e77a460dcf9408e223345e73135913"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/kernel/sched/wait_bit_test.o": {
+      "bytes": 23304,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "372d8724eb04f8b840f4a8b14cd4e366653794cb799f0c4e3d804e7b6c2f9ae2"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/kernel/sched/wait_locked_test.o": {
+      "bytes": 15664,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "560a257c684f34b706e94be982fc843bae14762b16cecd29d4d597df592c6eb8"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/kernel/sched/wait_owner_test.o": {
+      "bytes": 15136,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "3cb490fe889b83c5bdbe4f57c7f327519b8a09d3bc33d48793fc67fdfcc50748"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/kernel/sched/wait_rust.o": {
+      "bytes": 30760,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "5df22e25e88e11523fce4825a2c32db8c9fce6c417a46d17fa0ab2086e3a31c7"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/kernel/sched/wait_test.o": {
+      "bytes": 38472,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "610aa1874c5264481f8e95160ab916ae60467fcaa3f514316799578aaef7ed39"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/kernel/seccomp.o": {
+      "bytes": 43120,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "fc5fab64c5d7320ba70d81f4b64ed013f9e234451035f2cf5901f870ce4c765c"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/kernel/signal.o": {
+      "bytes": 206560,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "0114224b5a701bf69eafbc65a940661310b2f6fe2709c99d2514d08cb63e6cbd"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/kernel/smp.o": {
+      "bytes": 63248,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "04ba9bb281c7bacb12b53f3d27a74824fabc3847ee020ee2cce485b9bf67aa85"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/kernel/smpboot.o": {
+      "bytes": 17520,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "15c629776f0603d95ed355b497a2fb57c117e97c943715853f969d654851afad"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/kernel/softirq.o": {
+      "bytes": 88592,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "c9ae99869a17832040e577328fa8b76672b0ece7c9b33a4a1233a426c0d13e2b"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/kernel/stacktrace.o": {
+      "bytes": 13088,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "c53e6056025c6bec01782f26e5fa871dad66b6c3e4640f99669642ab922eda57"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/kernel/static_call.o": {
+      "bytes": 2176,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "3f2b7b8792689ed3fbd7e41884d427895b88d6111dd9cf3cb7c7f0672101860d"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/kernel/static_call_inline.o": {
+      "bytes": 9976,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "4b5c391aaa82d24779768aae8531b98e20999b56aeb07ac6e52100050e1f659f"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/kernel/stop_machine.o": {
+      "bytes": 31048,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "8016401e439a8127944d2474d36e5482f860d46395b7cef1daa462bcb591805c"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/kernel/sys.o": {
+      "bytes": 102944,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "a7bb7f9cb11894b1f0d196e349cc9e912c3564a0e11dc82f93f771f99f8c320f"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/kernel/sys_ni.o": {
+      "bytes": 108832,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "50dc5ecc8c53f1ed372f5709657ddf4c0f42ad47ab7fad8ca9e0629fe0f66d95"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/kernel/sysctl.o": {
+      "bytes": 39928,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "37a5c46cb4e3c551b002e12a20b573dc85b4c6dd6bb5472520d386684caa6cfc"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/kernel/task_construction_rust.o": {
+      "bytes": 5696,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "a530ae440ca079d36d4df92146049f89a3ee781dbbf9252a37edc15ce064bdc5"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/kernel/task_work.o": {
+      "bytes": 9400,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "94830c46ed175b18e0bb4a4b5e53013393280e0013c92b1b62799f9276b00ca4"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/kernel/time/alarmtimer.o": {
+      "bytes": 45392,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "8af57e756b84dd4ac13a4dd9301d964deca04b39a323d5b11b1488c9ced73d97"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/kernel/time/built-in.a": {
+      "bytes": 1774,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "f104eb3db44582bca25ae501e130f72185602afe4d2919b320d8c63db8460640"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/kernel/time/clockevents.o": {
+      "bytes": 35096,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "a1219e87da29f9590a0c72dc3fc9739ed526aed05b872937780267c9bb214285"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/kernel/time/clocksource.o": {
+      "bytes": 55216,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "b733b4387a614c4c050e925bbf30ebc134f84a38b58543a95b3662a4f31b490d"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/kernel/time/hrtimer.o": {
+      "bytes": 66072,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "8775061d991413626b2268535d0d8d638cdd7a106685e96988ab562290fb9531"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/kernel/time/itimer.o": {
+      "bytes": 16424,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "eefa61a2eae5d1c08310da1eedd5a64e61edbd121807b0f086b69606f3b73c6f"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/kernel/time/jiffies.o": {
+      "bytes": 5176,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "a4f476f013ba0ccb1d179348c69448091b14cce19eef1687c7b65a41d8c6fecc"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/kernel/time/ntp.o": {
+      "bytes": 13664,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "1adc3b69cc42853d3c566ac2d9927d3325d8347a04d2ed272153b71bfaebffc6"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/kernel/time/posix-clock.o": {
+      "bytes": 16608,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "6f5f71b736667fa94a529c24f144834766f25e3a7d5cf0f552ed323dafe7dcef"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/kernel/time/posix-cpu-timers.o": {
+      "bytes": 55216,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "87e8168dfca28c882de9a15d0171f054eec59a5cd26efe01ffe5baa6809d5120"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/kernel/time/posix-timers.o": {
+      "bytes": 62288,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "23efd16e33c6d621e14dc03978056729de707745a4b6bac71661155bef3a7631"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/kernel/time/sleep_timeout.o": {
+      "bytes": 16576,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "cf8cb4314327adf3e7cbc1cc2e92e37b841dbd5f28526185bd4b949999f2b29d"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/kernel/time/tick-broadcast-hrtimer.o": {
+      "bytes": 5000,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "50cda819d882dce6c9a7edb2b77ff52aa6f44d41a5e9237a0608dcbfe696b2ad"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/kernel/time/tick-broadcast.o": {
+      "bytes": 36632,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "20d9af8b8a3536268f8eb395de8142e988b5111edf7342817cc5340ceaf7e571"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/kernel/time/tick-common.o": {
+      "bytes": 22152,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "f33ddfc7b60fe7fbf88818230a728c2a59a8c23cece223b7b1566a3b8ff8ae3f"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/kernel/time/tick-oneshot.o": {
+      "bytes": 7224,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "d9c6109cf1cefa0e888d728faf40dd1949869173ddd679809403648020be7b72"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/kernel/time/tick-sched.o": {
+      "bytes": 15552,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "10a1bf78928060be03faa6307f7b1a7ec9f54f541b81094f4dc8e883daa75120"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/kernel/time/time.o": {
+      "bytes": 32264,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "aeb748a1ccbb84e9c344ad5dfe9d6dc2ba585bd9e0be98e9ad5ce65a47e7a3a8"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/kernel/time/timeconv.o": {
+      "bytes": 2800,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "a7b174e854a9d44ca0bffa30486b26157f6d290617bfc13b411a71bdcd4cdcee"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/kernel/time/timecounter.o": {
+      "bytes": 4296,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "7aaf5b214a60414e853d356a538059bdff7c3bc8a2083cd7532ed1202c27a161"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/kernel/time/timekeeping.o": {
+      "bytes": 112696,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "31d461aa058388b356698b2b94bad646a2f6d85ece15f3cb9cdd47701cb3c1c3"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/kernel/time/timer.o": {
+      "bytes": 133000,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "8b5ab54357535e083d717d06a47b52b8db42fd010ec70d25ad59afa7ec1e7685"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/kernel/time/timer_list.o": {
+      "bytes": 18144,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "9b365cc885210da806329179ad8f9454fbfc25edf0d2f9f589348cf2ce0a5332"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/kernel/time/vsyscall.o": {
+      "bytes": 4496,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "6a6bbe9d63e6c00a9ea9862a25d7e8d8dfe6ccc4bc03d40f8d9c6c899bf90940"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/kernel/trace/blktrace.o": {
+      "bytes": 2608,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "f802f7d7c3c7f2d7626b5ad86529d53b2c4269aa9f4aeb11242dd40163d8c94d"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/kernel/trace/built-in.a": {
+      "bytes": 1524,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "33110d934e1a7c973131e238326a25aa94e53d8122964546f5d52e70c5ca92b5"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/kernel/trace/error_report-traces.o": {
+      "bytes": 12800,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "a44d24387fda90187d2f319f2b3505f833ef834589c872bf9142ed62c586e72b"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/kernel/trace/pid_list.o": {
+      "bytes": 14344,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "f2f426ffdfcc1d7e2e98187a262fae794805828d98f995290edfe90e2b43b234"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/kernel/trace/power-traces.o": {
+      "bytes": 93544,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "7d0494deb9acfc4a6d2ff3102a91f80844e194f99b47a58dd6468ee915aba64c"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/kernel/trace/ring_buffer.o": {
+      "bytes": 151792,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "adc0dcbc6bd6a2ac46193c3ecb91555f28fce0e1b4a8eefeab39b06e70d3677e"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/kernel/trace/trace.o": {
+      "bytes": 441312,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "3c771d0a97a2a253c3dcdb6130705a8ff1f9b5f755e91925b41cea8d51ef644a"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/kernel/trace/trace_clock.o": {
+      "bytes": 6360,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "602f3ba6b85d922a932be99ea851741deb3ebb0430181894824e72d0931ee8cb"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/kernel/trace/trace_event_perf.o": {
+      "bytes": 13192,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "68bd1e96404fc308ba93771a5f9b28aa18377be0e7f8451ad0447806d7e4a52b"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/kernel/trace/trace_events.o": {
+      "bytes": 171936,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "38a5921588d238e2a33e8390a22bceed2172a40a5af14c49514c9d915bdef593"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/kernel/trace/trace_events_filter.o": {
+      "bytes": 55384,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "d8952b6593c546bdbadc7125e3fd694b732a8ad0891c924fe614c3fbc27501fb"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/kernel/trace/trace_events_trigger.o": {
+      "bytes": 69760,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "923859e0c91312f2c582594987e8716df3a93da6ea7daf016ddc0046ba8981c8"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/kernel/trace/trace_export.o": {
+      "bytes": 23304,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "d646f05c251b41ab999a106335728f9ef2144ab978c2629948450d51ee6b1f0f"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/kernel/trace/trace_nop.o": {
+      "bytes": 4232,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "a79df53f8a4bfbf266f8b92c5b00f77fa40dc2d6fc81450544c3fcce641ddf3c"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/kernel/trace/trace_output.o": {
+      "bytes": 77512,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "f7c90dfeacd5a6f7d24532c2f9de1e0646806c19a10ea0e232637e122e2f1978"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/kernel/trace/trace_preemptirq.o": {
+      "bytes": 20232,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "3c14e6ed3205c3cf0998e1cbb1f14ac5a6a2891e789e74c839cdcb349376dba9"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/kernel/trace/trace_printk.o": {
+      "bytes": 13344,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "ed121dfe72668de578cee2abeaea8815565e97ac3f07498dcfdb5dadca3f2265"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/kernel/trace/trace_sched_switch.o": {
+      "bytes": 30920,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "c04a6c048e5fdc14eb49a26985f32daccd8e67104aacdfa144fb943348df4054"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/kernel/trace/trace_seq.o": {
+      "bytes": 15352,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "f94b8e7c030d0619127c12f39aa812f574500d61e428dc5b772ee69f897d7fd1"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/kernel/trace/trace_stat.o": {
+      "bytes": 15160,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "62d70f57848e061eafcc2894539f7c6855cc30311e8dde5af64bfe40a728d85b"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/kernel/tracepoint.o": {
+      "bytes": 19408,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "9184c9aefb86a89472b0f022a94a3b9441c57ae2061dce19975c0d7f0e83d0a5"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/kernel/ucount.o": {
+      "bytes": 30840,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "b8b91314e440e245baf5d9a814c4eacebf41fc087f14751344cb0791eb6f1b27"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/kernel/umh.o": {
+      "bytes": 24368,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "44ceea268706b1e4b38a4361823a8eff679f08bd2737baeb8d2a55fe0839cab8"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/kernel/unwind/built-in.a": {
+      "bytes": 208,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "7f4e5ec4e78fdfb07eb66dd86711f789484a3b5ad7b7cbb6b8d9efc2d16a622a"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/kernel/unwind/deferred.o": {
+      "bytes": 18464,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "e2459b5a3885fb7b6051b13b01d3b4cf752ff2b6827d1b077d180c97b9c8e31b"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/kernel/unwind/user.o": {
+      "bytes": 3336,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "505a0e990af45ab10d4e9a9ec284888345c10a8941c74704218ee81a1872db9b"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/kernel/user.o": {
+      "bytes": 11192,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "3163b9aebcd12e49b6a0e2d4b64db0a8b3285b2c6a7de741173de759453d298d"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/kernel/utsname_sysctl.o": {
+      "bytes": 7160,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "b3e1496c2a29ff43456010173bb9363bcb5c47d6aa8fed91c4213423fee8c38c"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/kernel/workqueue.o": {
+      "bytes": 298760,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "62e546d28adb95f2b550cb3056c2b9d45d98813bce14ef0222b5d0ac62ef4b8d"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/mm/backing-dev.o": {
+      "bytes": 39744,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "d14c6d950be09b3e0fc2dc08060b19ca0a8aabcaf8083dce403a7cc59ec7c937"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/mm/built-in.a": {
+      "bytes": 4386,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "7222efc3a670c984f862dc6c0229134fdfa54824b027a7476657ad26554555fd"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/mm/compaction.o": {
+      "bytes": 680,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "d5c544ed6574b1e8111aa23411364b9df0649208004bb168f443566b0d7151db"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/mm/debug.o": {
+      "bytes": 10864,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "b01658808fc07d65a70f1c9bc6dd61200e1ac1ae34ab09cd144fdad257385614"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/mm/dmapool.o": {
+      "bytes": 17880,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "fb7a5d3f2df9a9ff93f771d8537cf42fed0f28b07b8e34a379351db9b0f19c8c"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/mm/early_ioremap.o": {
+      "bytes": 13328,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "c45d1a5a79d5b1de734e4b532a01a07ea0f11b00ef0ccc9dfef9f0d2ebcc7c86"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/mm/execmem.o": {
+      "bytes": 11272,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "2dc62230c623cd74593a23e6aecb73bf25dd20b5eab5aa02f137017299186e2d"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/mm/fadvise.o": {
+      "bytes": 9064,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "d51fc067e63811e9aee7abdaca690f9ee3bb376b49310fd644f4df9b84306425"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/mm/filemap.o": {
+      "bytes": 237576,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "ecda79ff8691c1c0cdf04dd053b790439df32be94e15eb80184fb3dac921b183"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/mm/folio-compat.o": {
+      "bytes": 9464,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "b6434c897c81ce5104393ffd05679f6be8a54d36efac1842a0caa3eaa25f6c66"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/mm/gup.o": {
+      "bytes": 85336,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "daf36a3bbd6466712b33adec96dff7e0abdf5cbfe6dac270548cef671798098f"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/mm/highmem.o": {
+      "bytes": 672,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "e283bac63a90c34e4cee5d57e186d9b06dde309aa98aebc4adf6f9e7b574f667"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/mm/init-mm.o": {
+      "bytes": 5224,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "740fcbeebdf52703bfb9f493a14e4bae1729581c22c54bf21c3c46ec79f3464a"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/mm/interval_tree.o": {
+      "bytes": 9784,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "3c90dece1f46b820107499ae762585f83eaa3cf0e6bb64c8d5d90dfddf3d59fc"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/mm/list_lru.o": {
+      "bytes": 18128,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "28d297487d64984ebd2db95c3329683feaa4ee7b1f658beed78f6a54566e6da7"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/mm/maccess.o": {
+      "bytes": 11968,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "d48b71938996584d7bad96f998b07e1b440af1c0befe8daf9564e57163e5dcec"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/mm/madvise.o": {
+      "bytes": 40048,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "9f1c696f45b88139012e877881479d7ac7c11d96645434a430e6f26379a61002"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/mm/memblock.o": {
+      "bytes": 85880,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "a512bb8309a5222bce0158e7479589f5d8890b4d6bd6f217bfa8b73ffdafa540"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/mm/memfd.o": {
+      "bytes": 12544,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "818304743ed7b0769aa56c62140530aff8f9ce0dd3086d2f605df2e154abc84d"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/mm/memory.o": {
+      "bytes": 184280,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "14f4a59adc3e52462124fb325267911a9e91d23f6ac30714dbabba8a56446d06"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/mm/mempool.o": {
+      "bytes": 23240,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "28dd3cc3cf89765961a70ccde35311dd2c798c2e87fe670519e35c5f264c3768"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/mm/mincore.o": {
+      "bytes": 11368,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "4e6152dbb2f33391fb6b035ac6bde6faece767ef2ac6fd789749de1f276c93c4"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/mm/mlock.o": {
+      "bytes": 44552,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "1c898c733def9833d32da9ac872f65e000805c9838ef19620911bc262c3e69a3"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/mm/mm_init.o": {
+      "bytes": 61552,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "14556a124971d365fc5ebdfeca39593dfe41a6f71fed71f56eee8e41918c4fb2"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/mm/mmap.o": {
+      "bytes": 90672,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "173547d2196200a92b41e1479cb01ebb88244dc6c625e0ca14659225fb67fd37"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/mm/mmap_lock.o": {
+      "bytes": 54888,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "d82d2e176ba9f9c7f90772ab5cb8ad2605fb06b719faa235348255b9c9f6e06c"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/mm/mmu_gather.o": {
+      "bytes": 14480,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "4d74fa4b020dddacf9120b99b03338e57b20cec5b896a144407364781066db33"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/mm/mmzone.o": {
+      "bytes": 4472,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "1c2edad3ca8c9470c21a848f6dc87f00c2f941475d31cfdc5554587aba4a5569"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/mm/mprotect.o": {
+      "bytes": 23656,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "ed599c73a61da90885affedeb5abcb1936f13d8b55d820f3480e20ed3229e7f4"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/mm/mremap.o": {
+      "bytes": 32600,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "31c569b489128e1b43b26d09a35a772b25150e9ed94f52859ab9b04b27b3e544"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/mm/mseal.o": {
+      "bytes": 7280,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "defd024d76ce66d62e7af765aca568c66bf3a47401d9232e9ca9473705291c5f"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/mm/msync.o": {
+      "bytes": 5632,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "a173e1049b5fb9c7cabcdebd10be45598e6992921ecdfceca2eb74391e1c0567"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/mm/oom_kill.o": {
+      "bytes": 116768,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "c536409ba0eaf92b6c9ba10e540acdcedd69bbe995de4439e3958f89afc9516b"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/mm/page-writeback.o": {
+      "bytes": 90136,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "e5a62f78303aa281780723d97c841bbf0b76661e2b0523124d0ff249acb7d06a"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/mm/page_alloc.o": {
+      "bytes": 186024,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "857baf5327cea34d81d8f676d1a2c90ba7173d409892d1d7d0f436138644f3c1"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/mm/page_frag_cache.o": {
+      "bytes": 7032,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "467c81b8b11a3d1681f53c75b234b41b9faee650610aab15ada0cc7f35c166bf"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/mm/page_vma_mapped.o": {
+      "bytes": 8200,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "929effa57c9e1bcda4015bf9890749838c3e41ff2ff02fb35c2d8ab5fd174773"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/mm/pagewalk.o": {
+      "bytes": 28112,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "5a67224ca23602965e96467d46f6b51ad1ad1f9884ed0644b5e43328c0261735"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/mm/percpu.o": {
+      "bytes": 144936,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "22f3a0c676ca1b97047cc504da737e1fe31eb58ad23a19b226d377984bf64d77"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/mm/pgtable-generic.o": {
+      "bytes": 14536,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "b900e10fe826ad2394defb446fe49d0f0f1b368699f701896b86db4a6d1a3b79"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/mm/process_vm_access.o": {
+      "bytes": 7840,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "c0f6ee7d27272d41ade48675a0ac0d767ce6720ec05a34be763bad7a8a998ea1"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/mm/readahead.o": {
+      "bytes": 55128,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "42c39f02e80f16a2bb785dacd660829f0d824c569d8888615382d16696bd3fa4"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/mm/rmap.o": {
+      "bytes": 101032,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "8361ecb0458dc5e30da9afa5208dc3769e4f38486e88d07c05d0247a573d55e2"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/mm/shmem.o": {
+      "bytes": 135056,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "9336fc1bb1b964732b5444def926a82fb01e42da034b7fea1f1497357edfd30c"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/mm/show_mem.o": {
+      "bytes": 12432,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "07b73e0a8fa7f1814538613b17db405d00ba4264998a95fdd3d9e675932106ba"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/mm/shrinker.o": {
+      "bytes": 17680,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "c432aafe605242ac365f64a4aaff286c32654e4ae7de8860602f691ab6f25b6c"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/mm/slab_common.o": {
+      "bytes": 203016,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "a597957f45adf03af00361390d1339d9a2d45c690788747a3a6c9f1f1cdfa7fe"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/mm/slub.o": {
+      "bytes": 225016,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "da0e0b8f58e03df6f3c4ba50e340799c04ff955a597a65ec5eae8f5791486568"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/mm/sparse-vmemmap.o": {
+      "bytes": 26224,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "409a2271e8422820b604cb0d17b1ebbb78d552f144088aa413fbbc04a006a8b7"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/mm/sparse.o": {
+      "bytes": 23168,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "009572fc340b86a1b0cd1e21f514a97db7046361acd6ef680f56e71f7b23a9f5"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/mm/swap.o": {
+      "bytes": 75632,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "520f85b784f20a4babc2947ab9971f22d7cedbc5b7fbc8ec27283358ed5cd386"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/mm/truncate.o": {
+      "bytes": 32704,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "b398190ee29b11a21714fc354195048d4427d417446e0410d92e386c74d14138"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/mm/usercopy.o": {
+      "bytes": 10480,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "54519661a9ade55e1c4673f25c23fd1aec9741335961e5c2e6286126d693ba34"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/mm/util.o": {
+      "bytes": 55472,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "8d18ed903f23a0a3fd0a3379c1fbf842233d11386a059e57566398f0d04954c8"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/mm/vma.o": {
+      "bytes": 85416,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "282c146241ff3c0faa1f8bcea05eb57298055a6115f4d8a0f56fa97fc4e3d711"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/mm/vma_exec.o": {
+      "bytes": 8336,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "a3a3c28ea9eae4a13c29d3df207cdf0f5b375df95cf80b8409a49915fb4b9030"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/mm/vma_init.o": {
+      "bytes": 7512,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "988e6596fc3a0c126c96414fe2864e2336276fa6de52acd509692a33ef541d25"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/mm/vmalloc.o": {
+      "bytes": 200488,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "625e61519aa6400aadb032d275ef33c18e25a040116579a26e77075d26b515af"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/mm/vmscan.o": {
+      "bytes": 232464,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "f105a4548b926e7dd0fefa4840fb1682184692f01dc7747e48b52a615ef79815"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/mm/vmstat.o": {
+      "bytes": 78072,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "5325f6b3f8ff4864e03a7f8b545e8b5d609b87eea5b28fd2499f81610d117238"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/mm/workingset.o": {
+      "bytes": 16736,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "f8cd1dba0dfc2f0c90e27c46f6afe4cb8b74fcff49550536b45745f6562b6461"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/rust/bindings.o": {
+      "bytes": 482920,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "cdf380297dae9089299ada7ca2859e1e6dd5b22f62d8073a0950c19ab316668b"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/rust/build_error.o": {
+      "bytes": 3336,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "eb452867b4de6a49e9d0ccfa0b17a63cebc16dd9dac30e9b4abc85a3595b0ad1"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/rust/compiler_builtins.o": {
+      "bytes": 3296,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "646adbd0fa42fbdad8891022c38f71a1ae79042587f8c20588572d6ab9296232"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/rust/core.o": {
+      "bytes": 431800,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "577f59558d949afef5335dff007b380ba7177cc93daba0646a4d8d975e3f07f1"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/rust/ffi.o": {
+      "bytes": 656,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "b6aa34a95d70f377be803a204ca33f533174ea8ee469bab873772a04f4ad0793"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/rust/helpers/helpers.o": {
+      "bytes": 257264,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "3aff561203b55b9060b6af36df6307f379010d8014f6ce617ec952cf03f80c3a"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/rust/kernel.o": {
+      "bytes": 1500992,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "b28ea8bfa7d3118bebc3c97bea81cb25da40eaa134470164f6cac35ab217575a"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/rust/pin_init.o": {
+      "bytes": 656,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "7743011a94c7344bd9c9141e1515a9a4a0383920aa1c5f1be8b2203925f29bad"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/rust/uapi.o": {
+      "bytes": 323624,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "8e03b5c3c24bc529edffc3ad41f52491077e30751ef291a3686d1e753c5f021b"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/scripts/kconfig/conf.o": {
+      "bytes": 26704,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "d5c4c894516309e89a566480d60e51592268f0d6b5f66b4124411aa0c39ebc79"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/scripts/kconfig/confdata.o": {
+      "bytes": 25320,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "ee4d0bf0e0559e8e98b0a41ef69e4912b08a3d257d3aa8cc193b657e019a056e"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/scripts/kconfig/expr.o": {
+      "bytes": 28160,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "2e8dcd1f42bc8a4438a19ede4ef0f62e4ee1f10f956803868feff0981647ed33"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/scripts/kconfig/lexer.lex.o": {
+      "bytes": 51648,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "f998110cc9e1f03c4469b02b0edbabb3598ab4f35c3c18548a7a9ac0ee8e4b11"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/scripts/kconfig/menu.o": {
+      "bytes": 20320,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "826921a9d7e0d453c962f1459306da624bed35d1473a5e4eac1650e57b9aa660"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/scripts/kconfig/parser.tab.o": {
+      "bytes": 39560,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "4c8fc4c26b12cd1603c8a9d93a19c44602f5506b483515eb7b5e9b30a86aa950"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/scripts/kconfig/preprocess.o": {
+      "bytes": 12456,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "5899dff555dcce81689d0ab50f17b94e8239fcef6eecf9eb982c5fa507004dc7"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/scripts/kconfig/symbol.o": {
+      "bytes": 24752,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "1ad7f3294bd9df908627b71012017b78a2b7c8b7f774355145d30521c6525c33"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/scripts/kconfig/util.o": {
+      "bytes": 3472,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "afed61c17623a870fb61fd345005ce6ae78ac0689a3a2d2c004d721d93cad2b8"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/scripts/mod/empty.o": {
+      "bytes": 672,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "34bd015a28afd1386f332f7eb80a2555cd2fff570183fdcaa8110f49499910b2"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/scripts/mod/file2alias.o": {
+      "bytes": 59416,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "6c5f397b6103388d05b692dfc4439cccb63821e0685d382a72e3003bf5163501"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/scripts/mod/modpost.o": {
+      "bytes": 61536,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "3919d1e7c63284a9155ae030763864aebcc839153213d0b8a77e52912629dd74"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/scripts/mod/sumversion.o": {
+      "bytes": 7408,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "71882cafa888d05386c5e63925d132271f69a89979d5367f986206e52658e0f6"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/scripts/mod/symsearch.o": {
+      "bytes": 2848,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "f09e0694ace6acabd21d70888ec11816c0b8a9d1eb8ba67d847f9c94db1de60e"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/tools/objtool/arch/x86/decode.o": {
+      "bytes": 137392,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "49d98c990fbb2798f2010c0d94990dcb631ebb62bbe781d5e4a012537440fc3d"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/tools/objtool/arch/x86/objtool-in.o": {
+      "bytes": 187344,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "6e9ed30066c5a872ff2e44ee49894effbee0043e2b717e3593273f5c2dbd2d98"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/tools/objtool/arch/x86/orc.o": {
+      "bytes": 32408,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "a5c3b67446d2ede81ef9a35712a962526255cc5a70a146859851ad0266008d5a"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/tools/objtool/arch/x86/special.o": {
+      "bytes": 29424,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "5ca85849b47bfb2dadac0fbb56079721fec459658783b6176dce0889b248677c"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/tools/objtool/builtin-check.o": {
+      "bytes": 53656,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "b71d51ab1295870b9b474633b06059524bdbf7afaff52843d3a120cb1c35afd5"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/tools/objtool/check.o": {
+      "bytes": 338768,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "74291bd7992232baeac786574776e44e6e00c0aeeb62807e45b9da9f79e2d09c"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/tools/objtool/elf.o": {
+      "bytes": 135960,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "b3fa142758d39301c898c968ce9ace56b65dde718c668dc14086c8ef8cdd304f"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/tools/objtool/libctype.o": {
+      "bytes": 2720,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "81aac762c018172ca1f2762ad447cf4a4ec14d6c679597703ac767b899dc25b3"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/tools/objtool/librbtree.o": {
+      "bytes": 25816,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "3028d2288476ac57f049b694dea12b118dcc7834bd6d041b64336d19269b7a68"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/tools/objtool/libstring.o": {
+      "bytes": 12856,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "722029e69b61969211087ee456347af54194344a20a2dd69fb8ae1ce448ab612"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/tools/objtool/libsubcmd/exec-cmd.o": {
+      "bytes": 24720,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "04067d4824deaf179ab289eb1e58c32b6ee00f8a4ea41bce97b7f8bfce95fc33"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/tools/objtool/libsubcmd/help.o": {
+      "bytes": 34760,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "3a6551e2b50894ff1cca8386a41f0ec3eb95b8c47a4e19c2d5ad260854bbe29a"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/tools/objtool/libsubcmd/libsubcmd-in.o": {
+      "bytes": 161136,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "2fbdafd12d9b35c5763c2a5847193394011818b13628fc2a5d85ee67673ae0e7"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/tools/objtool/libsubcmd/libsubcmd.a": {
+      "bytes": 162010,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "a618b097d2f0bbe5fcfd9edc6d3243ab266d92ce79c55b2e670400109029da2e"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/tools/objtool/libsubcmd/pager.o": {
+      "bytes": 17696,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "10b428e97127f5a540909def6a5e3db1a459a2d6725d0c3118a9fdb78b7873f1"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/tools/objtool/libsubcmd/parse-options.o": {
+      "bytes": 62288,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "1de610fb2c704529a44a64f2866b8baba7eed717b867760145c8d658f2a70a37"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/tools/objtool/libsubcmd/run-command.o": {
+      "bytes": 24704,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "6b9e8788ca299832138fa77d839ccdbb1641c48b582384bee05b1bd4d280286c"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/tools/objtool/libsubcmd/sigchain.o": {
+      "bytes": 14400,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "52491c0bf08bb6b6b4281f08e9a1e49b6ee02092337cedc49a372c3e262134df"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/tools/objtool/libsubcmd/subcmd-config.o": {
+      "bytes": 3272,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "e22a61e2af7bffac49fb65a7242e8ea1a39b0988b099ffbc4bba871126046a0f"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/tools/objtool/objtool-in.o": {
+      "bytes": 826912,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "15d73cbf1446f8e5add9b2ae7d4cdd8e86899ea3fe07b333d0775c782d6f3add"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/tools/objtool/objtool.o": {
+      "bytes": 22968,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "a517eec9769f2c7575d05e5a14ed4fc88578cb06e6fab97971f45a7ccf1d3118"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/tools/objtool/orc_dump.o": {
+      "bytes": 32944,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "7574f378c339ce6c706cf8c3f72894c8c323b9f4f0444e1dda8fd7da6b65ba05"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/tools/objtool/orc_gen.o": {
+      "bytes": 28312,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "de425158c17471a8a6104dea45e11e69981bd53cff70892e536b0ed59f4c2a77"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/tools/objtool/special.o": {
+      "bytes": 28432,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "cb8c19e479c5c79523e746c08b5a474501c01db903bcf085ddecc663c6ee474b"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/tools/objtool/str_error_r.o": {
+      "bytes": 4512,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "b3551a0a7cd1f402aeef109a033bf321f3025791b4824604e04343f37eac10e8"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/tools/objtool/weak.o": {
+      "bytes": 14384,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "f4bf063710dae5fb67d73d9186e42897bbc364064ff7dc3b394d37603c78f1db"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/usr/built-in.a": {
+      "bytes": 146,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "cfa772d856e0a367f3c9b98d25a2c619b98a4c5e9370436a26d0a51eab151fb8"
+    },
+    "/home/aaron/code/rusix/linux-out/mm-release-verification-001/c/builds/ci-mm-release-c/usr/initramfs_data.o": {
+      "bytes": 1160,
+      "scope": "Retained partial build artifact; not a completed or verified kernel",
+      "sha256": "262af9bf978732c614f57fba3a01049e1b3358045d51ca6e1f2cf9866c1ab134"
+    }
+  },
+  "rust_started": false,
+  "scope": "C fixture compilation failed on undeclared mt_empty; no completed kernel or runtime acceptance",
+  "source": "fc7317e898853c95e4584d55e3477c4d7e755122",
+  "status": "FAIL",
+  "vm_started": false
+}

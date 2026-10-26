@@ -1,0 +1,10 @@
+[23:43:06] ============================================================
+[23:43:06] ============== rusix_mm_release (4 subtests) ===============
+[23:43:06] [PASSED] nonfinal_users_preserve_stack_vma
+[23:43:06] [PASSED] final_users_preserve_retained_storage
+[23:43:06] [PASSED] atomic_async_final_release_drains_work
+[23:43:06] [PASSED] fresh_exec_style_storage_drop_accepts_live_users
+[23:43:06] ================ [PASSED] rusix_mm_release =================
+[23:43:06] ============================================================
+[23:43:06] Testing complete. Ran 4 tests: passed: 4
+[23:43:06] Test results stored in /out/logs/ci-mm-release-c-mm-release-kunit.json

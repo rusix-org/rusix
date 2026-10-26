@@ -204,7 +204,7 @@ in the release test fixture. The pinned API is `mtree_empty`, which observes
 the root cleared by `__mt_destroy`. Corrected that fixture name only; kernel
 policy is unchanged. Session 50219 exited 2 before any VM or Rust-side build.
 `linux-out/mm-release-initial-evidence` retains 70 text records and 505 partial
-artifact hashes; it contains no completed kernel claim. A fresh retry is pending.
+artifact hashes; it contains no completed kernel claim. The successful third run is recorded below.
 
 ### MM-release pointer-ABI diagnostic correction
 
@@ -219,4 +219,29 @@ The reviewed correction adds only a documented local exception on the manual
 extern block: all aggregates cross as pointers, including the work callback;
 scalar results retain their C ABI. No Rust layout access or by-value aggregate
 is involved, and the global diagnostic gate remains strict. Kernel policy is
-unchanged. A new paired retry remains required.
+unchanged. The paired third run below verifies the corrected declarations.
+
+### MM-release paired lifecycle checkpoint
+
+At `cfc899021ac6`, C and Rust release selections each build without compiler or
+objtool diagnostics and pass **80 combined, 67 isolated core and four isolated
+release KUnit cases** on q35/KVM, two CPUs and 512 MiB. Resolved configurations
+differ only by `RUSIX_MM_RELEASE_RUST`; both retain Rust task/MM construction,
+BRD and core waits. Actual object, callback-registration, preprocessing and
+linked-symbol proofs pass with the pinned build tools.
+[Third-run evidence](docs/evidence/mm-release-003/manifest.json).
+
+The four cases exercise nonfinal users retaining a real stack VMA, final users
+tearing down mappings while an explicit `mm_count` reference keeps storage alive,
+final asynchronous release from IRQ-disabled context followed by worker-side
+flush, and fresh exec-style storage drop with a live users count. Controller
+waits are bounded and uncertain teardown retains storage. This does not verify
+ordinary-userspace consumers, allocation-failure rollback, arbitrary live-futex
+RCU quiescence or full MM compatibility. Those remain separate gates.
+
+The [initial fixture compile failure](docs/evidence/mm-release-initial/manifest.json)
+and [second-run pointer diagnostics](docs/evidence/mm-release-warnings/manifest.json)
+remain preserved with their original source identities. Archive preparation
+rehashed 25 retained artifacts, reparsed all six consoles and reapplied strict
+gates; the saved pinned LLVM inspections belong to the completed run, not a new
+host-tool inspection. No release or publication decision is implied.

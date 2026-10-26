@@ -1,0 +1,41 @@
+Build evidence: /out/logs/ci-mm-release-c-build.c1W89Nyh
+      |                    ^
+1 error generated.
+make[4]: *** [/src/scripts/Makefile.build:287: kernel/mm_release_test.o] Error 1
+make[3]: *** [/src/scripts/Makefile.build:544: kernel] Error 2
+make[3]: *** Waiting for unfinished jobs....
+  CC      mm/mincore.o
+  CC      mm/mlock.o
+  CC      mm/mmap.o
+  CC      mm/mmu_gather.o
+  CC      mm/mprotect.o
+  CC      mm/mremap.o
+  CC      mm/msync.o
+  CC      mm/page_vma_mapped.o
+  CC      mm/pagewalk.o
+  CC      mm/pgtable-generic.o
+  CC      mm/rmap.o
+  CC      mm/vmalloc.o
+  CC      mm/vma.o
+  CC      mm/vma_exec.o
+  CC      mm/process_vm_access.o
+  CC      mm/mseal.o
+  CC      mm/page_alloc.o
+  CC      mm/page_frag_cache.o
+  CC      mm/init-mm.o
+  CC      mm/memblock.o
+  CC      mm/slub.o
+  CC      mm/madvise.o
+  CC      mm/dmapool.o
+  CC      mm/sparse.o
+  CC      mm/sparse-vmemmap.o
+  CC      mm/early_ioremap.o
+  CC      mm/usercopy.o
+  CC      mm/memfd.o
+  CC      mm/execmem.o
+  AR      mm/built-in.a
+make[2]: *** [/src/Makefile:2050: .] Error 2
+make[1]: *** [/src/Makefile:248: __sub-make] Error 2
+make[1]: Leaving directory '/out/builds/ci-mm-release-c'
+make: *** [Makefile:248: __sub-make] Error 2
+make: Leaving directory '/src'
