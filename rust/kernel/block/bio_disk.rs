@@ -114,7 +114,7 @@ impl<T: Operations> BioDisk<T> {
         let disk = from_err_ptr(unsafe {
             bindings::__blk_alloc_disk(&mut limits, -1, static_lock_class!().as_ptr())
         })?;
-        let cleanup_disk = ScopeGuard::new(|| {
+        let cleanup_disk = ScopeGuard::new(move || {
             // SAFETY: This guard owns the unregistered disk's initial reference.
             unsafe { bindings::put_disk(disk) };
         });
@@ -123,7 +123,7 @@ impl<T: Operations> BioDisk<T> {
             NullTerminatedFormatter::new(unsafe { &mut (*disk).disk_name }).ok_or(EINVAL)?;
         writer.write_fmt(name)?;
         let private = data.into_foreign();
-        let cleanup_data = ScopeGuard::new(|| {
+        let cleanup_data = ScopeGuard::new(move || {
             // SAFETY: Before successful publication, free_disk is not called
             // (GD_ADDED is unset). This guard owns exactly the foreign Arc.
             drop(unsafe { Arc::<T>::from_foreign(private) });
