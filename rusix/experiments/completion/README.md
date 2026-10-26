@@ -148,7 +148,7 @@ These KUnit-only C creation/signal/jiffy helpers are excluded from server builds
 The nonfatal timeout case checks elapsed jiffies, and other cases must complete
 before their ten-second worker deadlines. This is not module-unload evidence.
 
-The next queue slice covers `__prepare_to_swait`, `__finish_swait`,
+The verified shared queue slice covers `__prepare_to_swait`, `__finish_swait`,
 `swake_up_locked` and `swake_up_all_locked`. Some also serve generic swait/RCU:
 retain marked list updates and debug validation, and test those callers too.
 Deletion must be the final waiter access because generic `finish_swait` can
@@ -166,7 +166,7 @@ all fourteen symbols and blocking scheduler-text placement are verified. This
 extends the focused core tests without implying a full-kernel rewrite, arm64
 support or a measured performance budget.
 
-## Shared swait policy under verification
+## Shared swait policy
 
 The working slice replaces `__prepare_to_swait`, `__finish_swait`,
 `swake_up_locked` and `swake_up_all_locked`. C list adapters retain marked pointer
@@ -179,5 +179,10 @@ macro, and timeout cleanup before a late wake. No CPU execution order is claimed
 The current completion comparison profiles enable `BUG`, `PROVE_LOCKING`,
 `PROVE_RAW_LOCK_NESTING`, `DEBUG_ATOMIC_SLEEP`, `DEBUG_LIST` and `LIST_HARDENED`.
 Explicit `BUG=y` matters: without it, the baseline WARN macros can be silent.
-The new 26-case inventory and instrumented profiles are pending verification;
-prior 21-case and ordinary-userspace results remain attributed above.
+At `6bc02bee8561`, both implementations pass all 26 core cases and nine BRD
+cases, followed by 26 isolated core cases. No skips or compiler diagnostics.
+[Instrumented evidence](../../docs/evidence/swait-debug/manifest.json).
+The same source passes nine ordinary-userspace/contract boots per implementation
+with identical fixtures. [Ext4 evidence](../../docs/evidence/swait-ext4/manifest.json).
+These runs exercise enabled checks, not deliberate diagnostic violations or every
+IRQ context. Detached-batch/spurious-wakeup races still need targeted coverage.

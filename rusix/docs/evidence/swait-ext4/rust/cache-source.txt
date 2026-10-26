@@ -1,0 +1,2 @@
+/home/aaron/code/rusix/linux-out/lts-swait-ext4-rust-001/builds/ci-core-ext4-rust
+Copied kernel cache ONLY, preserving symlinks; no guest fixture directories copied. Original failed run retained.

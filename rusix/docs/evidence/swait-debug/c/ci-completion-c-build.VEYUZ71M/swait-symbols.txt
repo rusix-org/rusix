@@ -1,0 +1,10 @@
+/out/builds/ci-completion-c/kernel/sched/build_utility.o
+0000000000003080 T __prepare_to_swait
+00000000000032e0 T __finish_swait
+0000000000002f20 T swake_up_locked
+0000000000002df0 T swake_up_all_locked
+/out/builds/ci-completion-c/vmlinux
+ffffffff812a9490 T __prepare_to_swait
+ffffffff812a96f0 T __finish_swait
+ffffffff812a9330 T swake_up_locked
+ffffffff812a9200 T swake_up_all_locked

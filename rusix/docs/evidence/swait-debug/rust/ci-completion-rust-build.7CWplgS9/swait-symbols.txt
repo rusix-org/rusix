@@ -1,0 +1,10 @@
+/out/builds/ci-completion-rust/kernel/sched/swait_rust.o
+0000000000000000 T __prepare_to_swait
+0000000000000040 T __finish_swait
+0000000000000070 T swake_up_locked
+00000000000000c0 T swake_up_all_locked
+/out/builds/ci-completion-rust/vmlinux
+ffffffff812ade20 T __prepare_to_swait
+ffffffff812ade60 T __finish_swait
+ffffffff812ade90 T swake_up_locked
+ffffffff812adee0 T swake_up_all_locked

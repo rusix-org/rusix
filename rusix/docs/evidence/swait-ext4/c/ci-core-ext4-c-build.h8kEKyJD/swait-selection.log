@@ -1,0 +1,14 @@
+implementation=swait-c
+/out/builds/ci-core-ext4-c/kernel/sched/build_utility.o
+/out/builds/ci-core-ext4-c/kernel/sched/build_utility.o
+0000000000002d90 T __prepare_to_swait
+0000000000002ee0 T __finish_swait
+0000000000002c50 T swake_up_locked
+0000000000002b70 T swake_up_all_locked
+/out/builds/ci-core-ext4-c/vmlinux
+ffffffff81294700 T __prepare_to_swait
+ffffffff81294850 T __finish_swait
+ffffffff812945c0 T swake_up_locked
+ffffffff812944e0 T swake_up_all_locked
+41bac39a53c509a849353e7de484b88d3c3ed28612e46d4872a0e39370516a59  /src/kernel/sched/swait.c
+686ead81526c374206c9acfd10d9f0e42991dca047d130b3d1e295af792d89cf  /out/builds/ci-core-ext4-c/kernel/sched/build_utility.o

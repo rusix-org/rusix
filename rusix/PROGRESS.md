@@ -32,10 +32,9 @@ or server runtime result. That target selects Rust BRD and C completion.
 
 Remaining Phase 1a work includes the provisional BRD invalid-parameter exception,
 parameter adapters and review gates; [BRD.md](docs/BRD.md) owns those details.
-For core work, next move queue policy into Rust while preserving
-list/scheduler contracts and covering generic swait consumers. IRQ/debug
-instrumentation, untimed signal paths, deadline races, queue ownership
-and scheduler integration remain unfinished. arm64, modules, expanded fault stress
+For core work, continue queue ownership while preserving list/scheduler contracts.
+Untimed signal paths, deadline races, forced diagnostic failure paths and scheduler
+integration remain unfinished. arm64, modules, expanded fault stress
 and performance budgets remain Phase 1b.
 
 Failed attempts and warnings are retained: [wait bringup](docs/evidence/completion-wait-initial/manifest.json)
@@ -55,8 +54,18 @@ at `3df316f9971f`: both kernels use Rust BRD and byte-identical fixtures; only
 completion selection differs. Each passes all nine block/ext4/parameter/partition
 boots, with no compiler diagnostics. KUnit is disabled in those userspace guests.
 
-Working branch `rusix/swait-policy` adds Rust enrollment/removal and one/all-wake
-policy for four shared swait functions. Five generic queue cases bring the strict
-core inventory to 26. The paired completion profiles now explicitly enable BUG,
-lockdep/raw-lock nesting, atomic-sleep and list validation; earlier profiles did
-not exercise these assertion paths. Build/runtime verification is pending.
+At `6bc02bee8561`, four shared swait policies are also Rust. The instrumented
+C/Rust pair each passes 35 combined cases (26 core + nine BRD), then 26 isolated
+core cases with zero skips and no compiler diagnostics. BUG, lockdep/raw-lock
+nesting, atomic-sleep and list checks are enabled.
+[Debug evidence](docs/evidence/swait-debug/manifest.json).
+The matching ordinary-userspace pair passes all nine boots each, with identical
+fixtures and only the implementation option differing.
+[Ext4 evidence](docs/evidence/swait-ext4/manifest.json) retains the initial fixture
+staging failure as well as the successful retry.
+
+Next: translate the five outer swait wrappers, preserving full state-publication
+barriers, careful lockless removal and detached-batch wake semantics. This is
+working code until its own paired verification; the results above certify only
+`6bc02bee8561`. Initializers, C list adapters, raw locks and scheduler dependencies
+remain to migrate.
