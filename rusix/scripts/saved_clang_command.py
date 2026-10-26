@@ -23,13 +23,23 @@ HARDENED_OBJTOOL = ('./tools/objtool/objtool', '--hacks=jump_label', '--hacks=no
 
 
 def command(text, output, unit='kernel/fork'):
-    if unit != 'kernel/fork':
+    if unit not in ('kernel/fork', 'mm/mmap'):
         raise ValueError('Unreviewed translation unit')
+    directory, basename = unit.split('/')
+    object_name = unit + '.o'
+    source_name = '/src/' + unit + '.c'
+    fork_flags = frozenset(('-I/src/kernel', '-Ikernel', '-DKBUILD_MODFILE="kernel/fork"',
+                            '-DKBUILD_BASENAME="fork"', '-DKBUILD_MODNAME="fork"',
+                            '-D__KBUILD_MODNAME=kmod_fork'))
+    unit_flags = frozenset((f'-I/src/{directory}', f'-I{directory}',
+                            f'-DKBUILD_MODFILE="{unit}"', f'-DKBUILD_BASENAME="{basename}"',
+                            f'-DKBUILD_MODNAME="{basename}"', f'-D__KBUILD_MODNAME=kmod_{basename}'))
+    allowed = (ALLOWED_FLAGS - fork_flags) | unit_flags
     rows = text.splitlines()
-    prefix = 'savedcmd_kernel/fork.o := '
+    prefix = f'savedcmd_{object_name} := '
     saved = [row[len(prefix):] for row in rows if row.startswith(prefix)]
-    sources = [row for row in rows if row.startswith('source_kernel/fork.o := ')]
-    if len(saved) != 1 or sources != ['source_kernel/fork.o := /src/kernel/fork.c']:
+    sources = [row for row in rows if row.startswith(f'source_{object_name} := ')]
+    if len(saved) != 1 or sources != [f'source_{object_name} := {source_name}']:
         raise ValueError('Unexpected actual compiler/source record')
     lexer = shlex.shlex(saved[0], posix=True, punctuation_chars=';&|<>')
     lexer.whitespace_split = True
@@ -38,7 +48,8 @@ def command(text, output, unit='kernel/fork'):
     if argv.count(';') != 1:
         raise ValueError('Missing/extra compiler command separator')
     split = argv.index(';')
-    if tuple(argv[split + 1:]) not in (PLAIN_OBJTOOL, HARDENED_OBJTOOL):
+    if tuple(argv[split + 1:]) not in tuple(command[:-1] + (object_name,)
+                                         for command in (PLAIN_OBJTOOL, HARDENED_OBJTOOL)):
         raise ValueError('Unexpected post-compile command')
     argv = argv[:split]
     if not argv or argv[0] != 'clang':
@@ -52,14 +63,14 @@ def command(text, output, unit='kernel/fork'):
             if i + 1 >= len(argv): raise ValueError('Missing include operand')
             includes.append(argv[i+1]); retained.extend(argv[i:i+2]); i += 2; continue
         if item == '-o':
-            if i + 1 >= len(argv) or argv[i+1] != 'kernel/fork.o':
+            if i + 1 >= len(argv) or argv[i+1] != object_name:
                 raise ValueError('Wrong compiled object output')
             output_count += 1; i += 2; continue
         if item == '-c': compile_count += 1
-        elif item == '-Wp,-MMD,kernel/.fork.o.d': dep_count += 1
-        elif item == '/src/kernel/fork.c':
+        elif item == f'-Wp,-MMD,{directory}/.{basename}.o.d': dep_count += 1
+        elif item == source_name:
             source_count += 1; retained.append(item)
-        elif item in ALLOWED_FLAGS: retained.append(item)
+        elif item in allowed: retained.append(item)
         else: raise ValueError('Unapproved compiler switch or shell token: ' + item)
         i += 1
     if (source_count, compile_count, output_count, dep_count) != (1,1,1,1):

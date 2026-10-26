@@ -223,3 +223,23 @@ shared child's emitted code contains inline syscalls, without libc/helper calls
 or TLS accesses. Both binaries remain non-executable files on the host.
 [Compile evidence](docs/evidence/mm-copy-fixtures/manifest.json) records this
 limited result; neither binary nor the MM-copy kernel has been run.
+
+### Mapping duplication candidate
+
+This branch adds default-off Rust policy for the complete MMU `dup_mmap`
+transaction, including lock sequencing, per-VMA resource stages, publication and
+partial-map failure markers. A canonical C stack wrapper adds no allocation;
+foreign layout and individual subsystem primitives remain explicit unfinished C.
+Source restoration and formatting checks are recorded in
+`linux-out/mm-dup-mmap-source-001`. No kernel compilation or VM verification has
+run for this slice. Next establish compiled selection and paired mapping/failure
+coverage. [Contract and remaining C](experiments/dup-mmap/README.md).
+
+Root and independent production review found no policy/ABI/lifetime discrepancy;
+removing only the selector wrapper restores the baseline `mm/mmap.c` byte-for-byte.
+The strict saved-Clang parser now explicitly supports `mm/mmap` as well as
+`kernel/fork`. Four new rejection tests and ten existing parser/selection cases
+pass; actual retained pinned compiler records parse correctly, with the fork
+argv unchanged (`linux-out/mm-mmap-command-host-001`). No compiler was invoked
+by that check. Seven-case mapping fixtures are being prepared separately;
+ordinary consumers will not certify partial-allocation rollback.

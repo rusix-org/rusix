@@ -2268,3 +2268,15 @@ config RUSIX_MM_COPY_RUST
 	  cleanup. Inherits the existing built-in x86_64 constructor exclusions.
 	  Mapping duplication, foreign field accesses, subsystem and atomic
 	  operations remain C. Original C transaction remains the default oracle.
+
+config RUSIX_DUP_MMAP_RUST
+	bool "Rusix Rust mapping duplication transaction"
+	depends on RUSIX_MM_COPY_RUST
+	default n
+	help
+	  Select Rust for the complete dup_mmap loop, lock and resource sequencing,
+	  partial mapping failure frontier and cleanup decisions. Inherits the
+	  built-in x86_64 MM-copy restrictions. A C entry initializes only its
+	  final-address stack iterator/list context; typed C primitives retain
+	  foreign fields, maple storage and architecture/subsystem operations.
+	  Original C remains the default comparison implementation.

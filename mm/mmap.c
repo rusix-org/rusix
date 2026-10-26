@@ -1716,6 +1716,20 @@ bool mmap_read_lock_maybe_expand(struct mm_struct *mm,
 	return true;
 }
 
+#ifdef CONFIG_RUSIX_DUP_MMAP_RUST
+#include "dup_mmap_impl.h"
+extern int rusix_dup_mmap(struct mm_struct *mm, struct mm_struct *oldmm,
+			 struct rusix_dup_mmap_context *ctx);
+
+__latent_entropy int dup_mmap(struct mm_struct *mm, struct mm_struct *oldmm)
+{
+	LIST_HEAD(uf);
+	VMA_ITERATOR(vmi, mm, 0);
+	struct rusix_dup_mmap_context ctx = { .vmi = &vmi, .uf = &uf };
+
+	return rusix_dup_mmap(mm, oldmm, &ctx);
+}
+#else
 __latent_entropy int dup_mmap(struct mm_struct *mm, struct mm_struct *oldmm)
 {
 	struct vm_area_struct *mpnt, *tmp;
@@ -1887,3 +1901,4 @@ fail_nomem:
 	vm_unacct_memory(charge);
 	goto loop_out;
 }
+#endif /* CONFIG_RUSIX_DUP_MMAP_RUST */
