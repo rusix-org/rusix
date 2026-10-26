@@ -333,6 +333,7 @@ EXPORT_SYMBOL(wait_for_completion_killable_timeout);
  *	enables us to avoid waiting if the resource the completion
  *	is protecting is not available.
  */
+#ifndef CONFIG_RUSIX_COMPLETION_RUST
 bool try_wait_for_completion(struct completion *x)
 {
 	unsigned long flags;
@@ -355,6 +356,7 @@ bool try_wait_for_completion(struct completion *x)
 	raw_spin_unlock_irqrestore(&x->wait.lock, flags);
 	return ret;
 }
+#endif
 EXPORT_SYMBOL(try_wait_for_completion);
 
 /**
@@ -366,6 +368,7 @@ EXPORT_SYMBOL(try_wait_for_completion);
  *
  *	Note, this will always return true if complete_all() was called on @X.
  */
+#ifndef CONFIG_RUSIX_COMPLETION_RUST
 bool completion_done(struct completion *x)
 {
 	unsigned long flags;
@@ -382,4 +385,5 @@ bool completion_done(struct completion *x)
 	raw_spin_unlock_irqrestore(&x->wait.lock, flags);
 	return true;
 }
+#endif
 EXPORT_SYMBOL(completion_done);

@@ -22,6 +22,7 @@
 #include "clk.c"
 #include "completion.c"
 #ifdef CONFIG_KUNIT
+#include "completion_signal_test.c"
 #include "completion_test.c"
 #endif
 #include "cpu.c"

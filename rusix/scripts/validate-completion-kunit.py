@@ -15,6 +15,12 @@ spec.loader.exec_module(common)
 
 # Independent of live Rust source so removing a test does not weaken this gate.
 SUITES = {
+    "rusix_completion_signal": (
+        "pending_signals_interrupt_timed_waits",
+        "enrolled_waits_wake_for_signals",
+        "presignaled_token_wins_over_pending_signal",
+        "killable_wait_ignores_nonfatal_pending_signal",
+    ),
     "rusix_completion_contract": (
         "initial_state_has_no_token",
         "presignals_are_consumed_once_each",
@@ -28,6 +34,7 @@ SUITES = {
         "worker_handoff_observes_published_value",
         "current_cpu_signal_wakes_enrolled_worker",
         "two_workers_consume_exactly_two_tokens",
+        "competing_try_waiters_consume_one_token",
         "broadcast_serves_two_workers_and_late_waiters",
         "timed_out_worker_unlinks_before_late_signal",
     ),

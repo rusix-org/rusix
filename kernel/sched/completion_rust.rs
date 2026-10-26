@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0
-// Rust translation of completion signaling from Linux 6.18.58 completion.c.
+// Rust translation of Linux 6.18.58 completion.c entry points.
 
-//! Opt-in completion signaling and blocking wait entry points.
+//! Opt-in completion signaling, wait and status entry points.
 //!
 //! C-visible completion storage, wait queues and scheduler primitives remain.
 //! No allocation, initialization or layout change occurs here.
@@ -80,7 +80,9 @@ impl Drop for IrqRestore {
 /// `completion` must point to initialized, immovable C completion storage which
 /// remains alive through the final lock release. Concurrent operations must follow the existing
 /// C completion contract: `done` updates and queue mutation hold `wait.lock`,
-/// and initialization/reinitialization requires external quiescence. This call
+/// and initialization/reinitialization requires external quiescence. Concurrent
+/// counter observations must be marked accesses or synchronized with updates;
+/// known incompatible C readers are excluded by this option's Kconfig bounds. This call
 /// must not recursively acquire the same raw lock. These are the C API's existing
 /// requirements; no Rust reference to the containing C object is constructed.
 // SAFETY: Kbuild selects this symbol only when the corresponding C definition
@@ -133,9 +135,10 @@ unsafe fn complete_with_flags(completion: *mut bindings::completion, wake_flags:
     {
         // SAFETY: `done` is an aligned live C unsigned-int field, represented
         // by u32 on the selected x86_64 target. This atomic reference exists
-        // only while wait.lock is held. C's plain writers take that same lock;
-        // concurrent lockless C observations use READ_ONCE. Quiescent init/reset
-        // cannot overlap this call. Thus no concurrent unmarked access races
+        // only while wait.lock is held. All selected completion entry points
+        // use LKMM atomic counter accesses; any permitted external observation
+        // is marked or synchronized with updates. Quiescent C init/reset cannot
+        // overlap this call. Thus no concurrent unmarked access races
         // with these LKMM atomic operations. No &mut or Rust payload reference
         // is created, and the reference is not retained across unlock.
         let done = unsafe { Atomic::<u32>::from_ptr(addr_of_mut!((*completion).done)) };
@@ -179,9 +182,10 @@ pub unsafe extern "C" fn complete_all(completion: *mut bindings::completion) {
     let _restore = unsafe { IrqRestore::acquire(lock) };
     {
         // SAFETY: The initialized u32 field is properly aligned. The atomic
-        // reference exists only while wait.lock excludes C's plain writers;
-        // concurrent lockless observations use READ_ONCE. Init/reset cannot
-        // overlap this operation. LKMM Atomic preserves marked shared accesses
+        // reference exists only while wait.lock serializes counter updates.
+        // Selected entry points use LKMM accesses; external observations must be
+        // marked or synchronized. Quiescent C init/reset cannot overlap this
+        // operation. LKMM Atomic preserves marked shared accesses
         // without exposing an exclusive reference or retaining one past unlock.
         let done = unsafe { Atomic::<u32>::from_ptr(addr_of_mut!((*completion).done)) };
         done.store(u32::MAX, Relaxed);
@@ -193,4 +197,98 @@ pub unsafe extern "C" fn complete_all(completion: *mut bindings::completion) {
     unsafe { swake_up_all_locked(wait) };
     // Waiters may release the last owner after unlock. Do not access completion
     // storage after _restore releases the lock; its saved fields are stack-local.
+}
+
+/// Observes the counter without retaining a reference beyond this load.
+///
+/// # Safety
+///
+/// `completion` must be initialized, aligned and alive through this call.
+/// All concurrent counter accesses must obey the selected implementation's LKMM
+/// contract: atomic accesses, or external accesses synchronized against updates.
+/// Initialization/reset must be quiescent. The Kconfig driver exclusions and
+/// reviewed target inventories bound this assumption; they are not permission
+/// to add arbitrary C field accesses in other configurations.
+unsafe fn observed_done(completion: *mut bindings::completion) -> u32 {
+    // SAFETY: The pointer projects a live aligned u32 field without creating a
+    // containing-object reference. Both status entry points are migrated in the
+    // same selection as all signal/wait writers, so concurrent core accesses are
+    // LKMM atomic. Known incompatible plain readers are excluded; the caller
+    // excludes unmarked init/reset and any other conflicting external access.
+    // The short reference ends before the caller acquires or releases a lock.
+    unsafe { Atomic::<u32>::from_ptr(addr_of_mut!((*completion).done)) }.load(Relaxed)
+}
+
+/// Consumes one available completion token without blocking for a producer.
+///
+/// # Safety
+///
+/// The storage, quiescent-reset, counter-access and nonrecursive-lock
+/// requirements of [`complete`] apply. Storage must remain alive through final
+/// unlock, or through the counter load if this returns on the empty fast path.
+// SAFETY: The matching C body is excluded under the same option. The C bool
+// return and pointer ABI match completion.h; its original export is retained.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn try_wait_for_completion(completion: *mut bindings::completion) -> bool {
+    // SAFETY: Caller supplies the live storage and counter-access contract.
+    // This preserves C's READ_ONCE empty fast path, without taking wait.lock.
+    if unsafe { observed_done(completion) } == 0 {
+        return false;
+    }
+
+    // SAFETY: Caller retains initialized immovable completion storage. Raw
+    // projection creates no reference to concurrently mutated containing fields.
+    let lock = unsafe { addr_of_mut!((*completion).wait.lock) };
+    // SAFETY: The initialized lock remains alive and is not held by this task.
+    // This local guard restores exactly the incoming IRQ flags on all returns.
+    let _restore = unsafe { IrqRestore::acquire(lock) };
+    {
+        // SAFETY: The live aligned counter has only marked concurrent accesses
+        // or externally synchronized observations. This task holds wait.lock,
+        // serializing all counter updates; init/reset cannot overlap. The atomic
+        // reference ends before the final unlock, including on an empty recheck.
+        let done = unsafe { Atomic::<u32>::from_ptr(addr_of_mut!((*completion).done)) };
+        let count = done.load(Relaxed);
+        if count == 0 {
+            return false;
+        }
+        if count != u32::MAX {
+            done.store(count.wrapping_sub(1), Relaxed);
+        }
+    }
+    true
+}
+
+/// Observes completion and synchronizes with a signaling operation's final unlock.
+///
+/// This does not consume a token or prove that all waiters/producers have exited.
+/// A concurrent consumer may remove the observed token before this returns.
+///
+/// # Safety
+///
+/// The storage, quiescent-reset, counter-access and nonrecursive-lock
+/// requirements of [`complete`] apply. Storage stays alive through final unlock,
+/// or through the initial load when the observed counter is empty. Callers must
+/// establish any additional quiescence needed before freeing or resetting it.
+// SAFETY: Selection excludes the C definition; pointer/bool ABI and original
+// EXPORT_SYMBOL record are retained without introducing another symbol export.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn completion_done(completion: *mut bindings::completion) -> bool {
+    // SAFETY: Caller supplies live storage and excludes conflicting unmarked
+    // accesses. Like READ_ONCE, this does not itself synchronize with a signaler.
+    if unsafe { observed_done(completion) } == 0 {
+        return false;
+    }
+    // SAFETY: Initialized immovable completion storage remains alive through
+    // this raw projection and the final lock release.
+    let lock = unsafe { addr_of_mut!((*completion).wait.lock) };
+    // SAFETY: This task does not own the initialized live lock. Acquiring and
+    // releasing it waits for a signaler's remaining queue accesses, preserving
+    // the baseline synchronization after the positive lockless observation.
+    let restore = unsafe { IrqRestore::acquire(lock) };
+    drop(restore);
+    // Deliberately do not reread done: the C API returns the initial observation
+    // even if a consumer removed its token before we acquired the lock. Do not
+    // access completion storage after unlock.
+    true
 }

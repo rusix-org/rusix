@@ -99,11 +99,12 @@ impl Drop for IrqEnabledOnDrop {
 /// # Safety
 ///
 /// `completion` must be live initialized storage whose wait.lock this task holds.
-/// All concurrent writers must hold that same lock; lockless C readers use
-/// READ_ONCE. Initialization/reset must not overlap this call.
+/// All concurrent counter updates hold that lock and selected core accesses
+/// are LKMM atomic. External observations must be marked or synchronized;
+/// Kconfig excludes known incompatible readers. Init/reset must be quiescent.
 unsafe fn locked_done(completion: *mut bindings::completion) -> u32 {
     // SAFETY: The initialized, aligned u32 field is protected from C plain
-    // writers for this reference's entire lifetime. Concurrent marked readers
+    // initialization/reset for this reference's entire lifetime. Concurrent marked readers
     // do not race against this LKMM operation. The reference does not escape.
     unsafe { Atomic::<u32>::from_ptr(addr_of_mut!((*completion).done)) }.load(Relaxed)
 }

@@ -242,3 +242,6 @@ mod layout_tests;
 
 #[cfg(CONFIG_KUNIT = "y")]
 mod wait_tests;
+
+#[cfg(CONFIG_KUNIT = "y")]
+mod signal_tests;

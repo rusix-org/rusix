@@ -332,6 +332,81 @@ mod tests {
     }
 
     #[test]
+    fn competing_try_waiters_consume_one_token() -> Result {
+        use crate::sync::{atomic::Relaxed, Arc};
+
+        let token = Arc::pin_init(super::super::Completion::new(), GFP_KERNEL)?;
+        let start = Arc::pin_init(super::super::Completion::new(), GFP_KERNEL)?;
+        let first = Arc::pin_init(Handoff::new(), GFP_KERNEL)?;
+        let second = Arc::pin_init(Handoff::new(), GFP_KERNEL)?;
+        let started = crate::time::Instant::<crate::time::Monotonic>::now();
+        for state in [&first, &second] {
+            let worker = state.clone();
+            let worker_token = token.clone();
+            let worker_start = start.clone();
+            let spawned = crate::workqueue::system_unbound().try_spawn(GFP_KERNEL, move || {
+                let result = if wait_bounded(&worker_start, 10000) {
+                    // SAFETY: The callback's Arc keeps initialized token storage
+                    // pinned and alive. Only these two consumers race this
+                    // nonblocking call; no reset occurs and no pointer is retained.
+                    u32::from(unsafe { bindings::try_wait_for_completion(worker_token.as_raw()) })
+                } else {
+                    2 // A gate timeout must never count as a legitimate loss.
+                };
+                worker.value.store(result, Relaxed);
+                worker.finished.complete_all();
+                // Each callback retains its own Arcs through return. Observer
+                // timeout or partial spawn failure cannot invalidate its storage.
+            });
+            if let Err(error) = spawned {
+                // Release any already-created worker before returning. Its own
+                // Arcs protect any callback that continues after this test exits.
+                start.complete_all();
+                return Err(error);
+            }
+        }
+        let mut enrolled = false;
+        for _ in 0..100 {
+            // SAFETY: Our Arc pins the initialized gate. The read-only helper
+            // locks its queue and retains no pointer or waiter reference.
+            if unsafe { bindings::completion_waiter_count(start.as_raw()) } == 2 {
+                enrolled = true;
+                break;
+            }
+            crate::time::delay::fsleep(crate::time::Delta::from_millis(10));
+        }
+        // SAFETY: The Arc pins initialized token storage; there is no reset.
+        // Exactly one counting token is supplied before releasing the consumers.
+        unsafe { bindings::complete(token.as_raw()) };
+        // Always release the gate before assertions, even on enrollment failure.
+        // Both workers become eligible to consume; simultaneous execution or
+        // scheduler order is not required or claimed by this conservation test.
+        start.complete_all();
+        let first_finished = wait_bounded(&first.finished, 1000);
+        let second_finished = wait_bounded(&second.finished, 1000);
+        let elapsed = started.elapsed().as_millis();
+        let first_result = first.value.load(Relaxed);
+        let second_result = second.value.load(Relaxed);
+        // SAFETY: The controller's Arc keeps initialized storage alive even if
+        // a worker is delayed. These nonblocking observations use the ordinary
+        // completion synchronization contract and never reinitialize storage.
+        let leftover = unsafe { bindings::try_wait_for_completion(token.as_raw()) };
+        // SAFETY: The same initialized, pinned storage/access conditions hold.
+        let still_done = unsafe { bindings::completion_done(token.as_raw()) };
+        assert!(enrolled);
+        assert!(first_finished);
+        assert!(second_finished);
+        // Gate expiry after ten seconds cannot masquerade as a prompt wakeup.
+        assert!(elapsed < 5000);
+        assert!(first_result <= 1);
+        assert!(second_result <= 1);
+        assert_eq!(first_result + second_result, 1);
+        assert!(!leftover);
+        assert!(!still_done);
+        Ok(())
+    }
+
+    #[test]
     fn broadcast_serves_two_workers_and_late_waiters() -> Result {
         use crate::sync::{atomic::Relaxed, Arc};
 

@@ -47,3 +47,10 @@ warnings, both resolved before the current clean pair. Earlier
 serial-diagnostic failures. Raw logs/binaries live in `linux-out/<run>`;
 committed manifests record source/config/tool identities. See the
 [verification index](docs/VERIFICATION.md) for historical evidence.
+
+Current working slice: Rust now supplies the remaining `try_wait_for_completion`
+and `completion_done` entry points, preserving their lockless checks and locked
+synchronization. Four dedicated-thread signal cases and a competing-consumer
+case bring the strict core inventory to 21. Signal tests verify pending/enrolled
+interruption, token precedence and nonfatal-signal timeout behavior. Paired
+build/runtime verification is pending; the 16-case archive predates this slice.
