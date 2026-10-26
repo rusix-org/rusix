@@ -91,6 +91,7 @@ void complete_all(struct completion *x)
 #endif
 EXPORT_SYMBOL(complete_all);
 
+#ifndef CONFIG_RUSIX_COMPLETION_RUST
 static inline long __sched
 do_wait_for_common(struct completion *x,
 		   long (*action)(long), long timeout, int state)
@@ -161,7 +162,9 @@ void __sched wait_for_completion(struct completion *x)
 {
 	wait_for_common(x, MAX_SCHEDULE_TIMEOUT, TASK_UNINTERRUPTIBLE);
 }
+#endif
 EXPORT_SYMBOL(wait_for_completion);
+#ifndef CONFIG_RUSIX_COMPLETION_RUST
 
 /**
  * wait_for_completion_timeout: - waits for completion of a task (w/timeout)
@@ -180,7 +183,9 @@ wait_for_completion_timeout(struct completion *x, unsigned long timeout)
 {
 	return wait_for_common(x, timeout, TASK_UNINTERRUPTIBLE);
 }
+#endif
 EXPORT_SYMBOL(wait_for_completion_timeout);
+#ifndef CONFIG_RUSIX_COMPLETION_RUST
 
 /**
  * wait_for_completion_io: - waits for completion of a task
@@ -194,7 +199,9 @@ void __sched wait_for_completion_io(struct completion *x)
 {
 	wait_for_common_io(x, MAX_SCHEDULE_TIMEOUT, TASK_UNINTERRUPTIBLE);
 }
+#endif
 EXPORT_SYMBOL(wait_for_completion_io);
+#ifndef CONFIG_RUSIX_COMPLETION_RUST
 
 /**
  * wait_for_completion_io_timeout: - waits for completion of a task (w/timeout)
@@ -214,7 +221,9 @@ wait_for_completion_io_timeout(struct completion *x, unsigned long timeout)
 {
 	return wait_for_common_io(x, timeout, TASK_UNINTERRUPTIBLE);
 }
+#endif
 EXPORT_SYMBOL(wait_for_completion_io_timeout);
+#ifndef CONFIG_RUSIX_COMPLETION_RUST
 
 /**
  * wait_for_completion_interruptible: - waits for completion of a task (w/intr)
@@ -233,7 +242,9 @@ int __sched wait_for_completion_interruptible(struct completion *x)
 		return t;
 	return 0;
 }
+#endif
 EXPORT_SYMBOL(wait_for_completion_interruptible);
+#ifndef CONFIG_RUSIX_COMPLETION_RUST
 
 /**
  * wait_for_completion_interruptible_timeout: - waits for completion (w/(to,intr))
@@ -252,7 +263,9 @@ wait_for_completion_interruptible_timeout(struct completion *x,
 {
 	return wait_for_common(x, timeout, TASK_INTERRUPTIBLE);
 }
+#endif
 EXPORT_SYMBOL(wait_for_completion_interruptible_timeout);
+#ifndef CONFIG_RUSIX_COMPLETION_RUST
 
 /**
  * wait_for_completion_killable: - waits for completion of a task (killable)
@@ -271,7 +284,9 @@ int __sched wait_for_completion_killable(struct completion *x)
 		return t;
 	return 0;
 }
+#endif
 EXPORT_SYMBOL(wait_for_completion_killable);
+#ifndef CONFIG_RUSIX_COMPLETION_RUST
 
 int __sched wait_for_completion_state(struct completion *x, unsigned int state)
 {
@@ -281,7 +296,9 @@ int __sched wait_for_completion_state(struct completion *x, unsigned int state)
 		return t;
 	return 0;
 }
+#endif
 EXPORT_SYMBOL(wait_for_completion_state);
+#ifndef CONFIG_RUSIX_COMPLETION_RUST
 
 /**
  * wait_for_completion_killable_timeout: - waits for completion of a task (w/(to,killable))
@@ -301,6 +318,7 @@ wait_for_completion_killable_timeout(struct completion *x,
 {
 	return wait_for_common(x, timeout, TASK_KILLABLE);
 }
+#endif
 EXPORT_SYMBOL(wait_for_completion_killable_timeout);
 
 /**

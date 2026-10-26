@@ -31,6 +31,12 @@ SUITES = {
         "broadcast_serves_two_workers_and_late_waiters",
         "timed_out_worker_unlinks_before_late_signal",
     ),
+    "rusix_completion_wait": (
+        "all_wait_entries_consume_presignaled_token",
+        "all_wait_entries_preserve_broadcast_sentinel",
+        "all_timed_entries_distinguish_zero_timeout_states",
+        "all_timed_entries_unlink_after_positive_timeout",
+    ),
 }
 
 

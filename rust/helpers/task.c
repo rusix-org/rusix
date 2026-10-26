@@ -60,3 +60,8 @@ pid_t rust_helper_task_tgid_nr_ns(struct task_struct *tsk,
 {
 	return task_tgid_nr_ns(tsk, ns);
 }
+
+void rust_helper___set_current_state(unsigned int state)
+{
+	__set_current_state(state);
+}

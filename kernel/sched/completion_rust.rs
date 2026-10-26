@@ -1,10 +1,13 @@
 // SPDX-License-Identifier: GPL-2.0
 // Rust translation of completion signaling from Linux 6.18.58 completion.c.
 
-//! Opt-in implementation of the three C completion signaling entry points.
+//! Opt-in completion signaling and blocking wait entry points.
 //!
-//! Completion storage, wait queues and scheduler wakeups retain their existing
-//! C implementation. No allocation, initialization or layout change occurs here.
+//! C-visible completion storage, wait queues and scheduler primitives remain.
+//! No allocation, initialization or layout change occurs here.
+
+#[path = "completion_rust/wait.rs"]
+mod wait;
 
 use core::ptr::addr_of_mut;
 use kernel::{

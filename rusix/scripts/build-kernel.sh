@@ -135,11 +135,16 @@ else
     grep -E '(^|/)build_utility\.o$' "$evidence/scheduler-archive.txt" \
         > "$evidence/completion-objects.txt"
 fi
+wait_symbols=(wait_for_completion wait_for_completion_timeout
+    wait_for_completion_io wait_for_completion_io_timeout
+    wait_for_completion_interruptible wait_for_completion_interruptible_timeout
+    wait_for_completion_killable wait_for_completion_killable_timeout
+    wait_for_completion_state)
 for item in "$completion_object" "$out/vmlinux"; do
     bash "$RUSIX_PROJECT/scripts/with-local-tools.sh" llvm-nm --defined-only "$item" \
         > "$evidence/completion-symbols.tmp"
     printf '%s\n' "$item" >> "$evidence/completion-symbols.txt"
-    for symbol in complete complete_all complete_on_current_cpu; do
+    for symbol in complete complete_all complete_on_current_cpu "${wait_symbols[@]}"; do
         awk -v symbol="$symbol" '$2 == "T" && $3 == symbol { print }' \
             "$evidence/completion-symbols.tmp" > "$evidence/completion-current.txt"
         [[ $(wc -l < "$evidence/completion-current.txt") == 1 ]] || {
@@ -148,6 +153,23 @@ for item in "$completion_object" "$out/vmlinux"; do
         cat "$evidence/completion-current.txt" >> "$evidence/completion-symbols.txt"
     done
 done
+# The final nm input above is vmlinux. Preserve __sched placement used by wchan.
+python3 - "$evidence/completion-symbols.tmp" "${wait_symbols[@]}" \
+    > "$evidence/completion-wait-sections.txt" <<'PYSECTIONS'
+import sys
+from pathlib import Path
+symbols = {}
+for line in Path(sys.argv[1]).read_text().splitlines():
+    fields = line.split()
+    if len(fields) == 3:
+        symbols[fields[2]] = int(fields[0], 16)
+start, end = symbols['__sched_text_start'], symbols['__sched_text_end']
+for name in sys.argv[2:]:
+    address = symbols[name]
+    if not start <= address < end:
+        raise SystemExit(f'{name} outside scheduler text: {address:x}')
+    print(f'{name}={address:x} sched-range=[{start:x},{end:x})')
+PYSECTIONS
 rm -- "$evidence/completion-symbols.tmp" "$evidence/completion-current.txt"
 {
     printf 'implementation=completion-%s\n' "$completion_impl"
@@ -155,7 +177,9 @@ rm -- "$evidence/completion-symbols.tmp" "$evidence/completion-current.txt"
     sha256sum "$RUSIX_SOURCE/kernel/sched/completion.c" "$completion_object"
     if [[ "$completion_impl" == rust ]]; then
         sha256sum "$RUSIX_SOURCE/kernel/sched/completion_rust.rs" \
-            "$RUSIX_SOURCE/rust/helpers/raw_spinlock.c"
+            "$RUSIX_SOURCE/kernel/sched/completion_rust/wait.rs" \
+            "$RUSIX_SOURCE/rust/helpers/raw_spinlock.c" \
+            "$RUSIX_SOURCE/rust/helpers/signal.c" "$RUSIX_SOURCE/rust/helpers/task.c"
     fi
 } > "$evidence/completion-selection.log"
 

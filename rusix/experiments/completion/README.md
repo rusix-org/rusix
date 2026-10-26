@@ -100,3 +100,20 @@ Waiters need pinned stack storage and guaranteed unlink under the queue lock on
 every exit. Preserve timeout/signal race order, IRQ transitions and I/O accounting.
 Queue ownership and scheduler integration follow; Rust-native endpoints require
 retiring C embedding/access. Preserve upstream `test-ww_mutex` unchanged.
+
+## Blocking wait translation under verification
+
+The private `completion_rust/wait.rs` implements the shared wait loop and nine
+entry points. It initializes an `Opaque<swait_queue>` in final pinned stack
+storage, holds the queue lock across state checks and enqueue/unlink, enables
+IRQs around the retained scheduler call, and reacquires before touching protected
+state. No LKMM atomic reference survives that unlock. The original `.sched.text`
+placement and C exports are retained; section and exclusive-symbol gates check
+the linked image. Four macro/inline adapters for IRQ locking, signal queries and
+current task state remain C, as do queue and scheduler primitives.
+
+Four new `rusix_completion_wait` cases bring the required inventory to 16:
+all entry points consume a presignal and preserve broadcast; all four timed
+variants distinguish zero-timeout states and unlink after actual timeout. These
+are not injected-signal or deadline-race tests. Current source is pending paired
+build/runtime verification; the 12-case archive above predates this translation.

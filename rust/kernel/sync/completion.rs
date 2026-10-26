@@ -239,3 +239,6 @@ mod contract_tests {
 
 #[cfg(CONFIG_KUNIT = "y")]
 mod layout_tests;
+
+#[cfg(CONFIG_KUNIT = "y")]
+mod wait_tests;

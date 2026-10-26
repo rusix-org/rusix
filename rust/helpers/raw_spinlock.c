@@ -21,3 +21,13 @@ void rust_helper_lockdep_assert_RT_in_threaded_ctx(void)
 {
 	lockdep_assert_RT_in_threaded_ctx();
 }
+
+void rust_helper_raw_spin_lock_irq(raw_spinlock_t *lock)
+{
+	raw_spin_lock_irq(lock);
+}
+
+void rust_helper_raw_spin_unlock_irq(raw_spinlock_t *lock)
+{
+	raw_spin_unlock_irq(lock);
+}

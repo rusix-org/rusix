@@ -62,3 +62,10 @@ signaling symbols are verified in their selected defining object and kernel.
 Queued wakeup tests now bound total elapsed time before the worker deadline,
 closing a false-pass possibility under a delayed producer. The next production
 slice is the common blocking wait engine and its nine entry points.
+
+Working slice: the Rust common wait engine and all nine blocking entry points
+are implemented, with scoped LKMM accesses, a pinned stack waiter, IRQ transitions
+and scheduler-text placement preserved. Four new contract cases cover every
+entry point, saturation, zero/positive timeouts and unlinking; the strict core
+inventory is 16. Compilation and runtime verification are pending. Injected
+signals, I/O-accounting inspection and deadline races need further coverage.
