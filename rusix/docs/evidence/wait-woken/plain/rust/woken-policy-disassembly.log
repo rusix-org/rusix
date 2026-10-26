@@ -1,0 +1,101 @@
+
+/out/builds/ci-completion-plain-rust/kernel/sched/wait_rust.o:	file format elf64-x86-64
+
+Disassembly of section .text:
+
+0000000000000950 <wait_woken>:
+     950: 41 56                        	pushq	%r14
+     952: 53                           	pushq	%rbx
+     953: 50                           	pushq	%rax
+     954: 48 89 d3                     	movq	%rdx, %rbx
+     957: 49 89 fe                     	movq	%rdi, %r14
+     95a: 89 f7                        	movl	%esi, %edi
+     95c: e8 00 00 00 00               	callq	0x961 <wait_woken+0x11>
+		000000000000095d:  R_X86_64_PLT32	rust_helper_swait_set_current_state-0x4
+     961: 4c 89 f7                     	movq	%r14, %rdi
+     964: e8 00 00 00 00               	callq	0x969 <wait_woken+0x19>
+		0000000000000965:  R_X86_64_PLT32	rust_helper_wait_entry_flags-0x4
+     969: a8 02                        	testb	$0x2, %al
+     96b: 75 14                        	jne	0x981 <wait_woken+0x31>
+     96d: e8 00 00 00 00               	callq	0x972 <wait_woken+0x22>
+		000000000000096e:  R_X86_64_PLT32	kthread_should_stop_or_park-0x4
+     972: 84 c0                        	testb	%al, %al
+     974: 75 0b                        	jne	0x981 <wait_woken+0x31>
+     976: 48 89 df                     	movq	%rbx, %rdi
+     979: e8 00 00 00 00               	callq	0x97e <wait_woken+0x2e>
+		000000000000097a:  R_X86_64_PLT32	schedule_timeout-0x4
+     97e: 48 89 c3                     	movq	%rax, %rbx
+     981: 31 ff                        	xorl	%edi, %edi
+     983: e8 00 00 00 00               	callq	0x988 <wait_woken+0x38>
+		0000000000000984:  R_X86_64_PLT32	rust_helper___set_current_state-0x4
+     988: 4c 89 f7                     	movq	%r14, %rdi
+     98b: e8 00 00 00 00               	callq	0x990 <wait_woken+0x40>
+		000000000000098c:  R_X86_64_PLT32	rust_helper_wait_clear_woken_mb-0x4
+     990: 48 89 d8                     	movq	%rbx, %rax
+     993: 48 83 c4 08                  	addq	$0x8, %rsp
+     997: 5b                           	popq	%rbx
+     998: 41 5e                        	popq	%r14
+     99a: c3                           	retq
+     99b: 0f 1f 44 00 00               	nopl	(%rax,%rax)
+
+00000000000009a0 <woken_wake_function>:
+     9a0: 55                           	pushq	%rbp
+     9a1: 41 57                        	pushq	%r15
+     9a3: 41 56                        	pushq	%r14
+     9a5: 53                           	pushq	%rbx
+     9a6: 50                           	pushq	%rax
+     9a7: 48 89 cb                     	movq	%rcx, %rbx
+     9aa: 89 d5                        	movl	%edx, %ebp
+     9ac: 41 89 f6                     	movl	%esi, %r14d
+     9af: 49 89 ff                     	movq	%rdi, %r15
+     9b2: e8 00 00 00 00               	callq	0x9b7 <woken_wake_function+0x17>
+		00000000000009b3:  R_X86_64_PLT32	rust_helper_wait_set_woken_after_mb-0x4
+     9b7: 4c 89 ff                     	movq	%r15, %rdi
+     9ba: 44 89 f6                     	movl	%r14d, %esi
+     9bd: 89 ea                        	movl	%ebp, %edx
+     9bf: 48 89 d9                     	movq	%rbx, %rcx
+     9c2: 48 83 c4 08                  	addq	$0x8, %rsp
+     9c6: 5b                           	popq	%rbx
+     9c7: 41 5e                        	popq	%r14
+     9c9: 41 5f                        	popq	%r15
+     9cb: 5d                           	popq	%rbp
+     9cc: e9 00 00 00 00               	jmp	0x9d1 <woken_wake_function+0x31>
+		00000000000009cd:  R_X86_64_PLT32	default_wake_function-0x4
+     9d1: 66 66 66 66 66 66 2e 0f 1f 84 00 00 00 00 00 	nopw	%cs:(%rax,%rax)
+
+00000000000009e0 <woken_wake_bit_function>:
+     9e0: 55                           	pushq	%rbp
+     9e1: 41 57                        	pushq	%r15
+     9e3: 41 56                        	pushq	%r14
+     9e5: 53                           	pushq	%rbx
+     9e6: 50                           	pushq	%rax
+     9e7: 89 d3                        	movl	%edx, %ebx
+     9e9: 89 f5                        	movl	%esi, %ebp
+     9eb: 49 89 fe                     	movq	%rdi, %r14
+     9ee: 48 89 ce                     	movq	%rcx, %rsi
+     9f1: e8 00 00 00 00               	callq	0x9f6 <woken_wake_bit_function+0x16>
+		00000000000009f2:  R_X86_64_PLT32	__var_wake_key-0x4
+     9f6: 48 85 c0                     	testq	%rax, %rax
+     9f9: 74 24                        	je	0xa1f <woken_wake_bit_function+0x3f>
+     9fb: 49 89 c7                     	movq	%rax, %r15
+     9fe: 4c 89 f7                     	movq	%r14, %rdi
+     a01: e8 00 00 00 00               	callq	0xa06 <woken_wake_bit_function+0x26>
+		0000000000000a02:  R_X86_64_PLT32	rust_helper_wait_set_woken_after_mb-0x4
+     a06: 4c 89 f7                     	movq	%r14, %rdi
+     a09: 89 ee                        	movl	%ebp, %esi
+     a0b: 89 da                        	movl	%ebx, %edx
+     a0d: 4c 89 f9                     	movq	%r15, %rcx
+     a10: 48 83 c4 08                  	addq	$0x8, %rsp
+     a14: 5b                           	popq	%rbx
+     a15: 41 5e                        	popq	%r14
+     a17: 41 5f                        	popq	%r15
+     a19: 5d                           	popq	%rbp
+     a1a: e9 00 00 00 00               	jmp	0xa1f <woken_wake_bit_function+0x3f>
+		0000000000000a1b:  R_X86_64_PLT32	default_wake_function-0x4
+     a1f: 31 c0                        	xorl	%eax, %eax
+     a21: 48 83 c4 08                  	addq	$0x8, %rsp
+     a25: 5b                           	popq	%rbx
+     a26: 41 5e                        	popq	%r14
+     a28: 41 5f                        	popq	%r15
+     a2a: 5d                           	popq	%rbp
+     a2b: c3                           	retq

@@ -1,0 +1,25 @@
+
+/out/builds/ci-completion-plain-rust/rust/helpers/helpers.o:	file format elf64-x86-64
+
+Disassembly of section .text:
+
+0000000000002100 <rust_helper_swait_set_current_state>:
+    2100: 65 48 8b 04 25 00 00 00 00   	movq	%gs:0x0, %rax
+		0000000000002105:  R_X86_64_32S	current_task
+    2109: 87 78 18                     	xchgl	%edi, 0x18(%rax)
+    210c: c3                           	retq
+    210d: 0f 1f 00                     	nopl	(%rax)
+
+00000000000029a0 <rust_helper_wait_clear_woken_mb>:
+    29a0: 8b 07                        	movl	(%rdi), %eax
+    29a2: 83 e0 fd                     	andl	$-0x3, %eax
+    29a5: 87 07                        	xchgl	%eax, (%rdi)
+    29a7: c3                           	retq
+    29a8: 0f 1f 84 00 00 00 00 00      	nopl	(%rax,%rax)
+
+00000000000029b0 <rust_helper_wait_set_woken_after_mb>:
+    29b0: f0                           	lock
+    29b1: 83 44 24 fc 00               	addl	$0x0, -0x4(%rsp)
+    29b6: 80 0f 02                     	orb	$0x2, (%rdi)
+    29b9: c3                           	retq
+    29ba: 66 0f 1f 44 00 00            	nopw	(%rax,%rax)

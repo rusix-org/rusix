@@ -1,0 +1,4 @@
+{
+  "source": "/home/aaron/code/rusix/linux-out/lts-wait-lifecycle-ext4-c-001/builds/ci-core-ext4-c",
+  "scope": "Kernel build cache only; all guest fixtures rebuilt from new committed source."
+}

@@ -1,0 +1,9 @@
+{
+  "source": "2e358654d2fb46bf2015052eccd5121f479d7081",
+  "observed": "wait_woken retains full-state helper before flags; latched branch skips stop/park and scheduler; relaxed RUNNING helper precedes clear helper. Callback set helper precedes default wake; bit mismatch returns before set/wake. x86 state and clear helpers use memory xchg; set helper has locked add barrier before flag OR.",
+  "scope": "Manual inspection of local x86_64 plain object disassembly; not an LKMM proof or coverage of stop/park behavior.",
+  "object_sha256": {
+    "builds/ci-completion-plain-rust/kernel/sched/wait_rust.o": "e081bbfe19e54f2681577cd83db10742e994bfb228fb84566aeaf0043317a67b",
+    "builds/ci-completion-plain-rust/rust/helpers/helpers.o": "b46bd98afd8788f5c27d4adf8134596179a0f85eabc19792299d685b7734647c"
+  }
+}

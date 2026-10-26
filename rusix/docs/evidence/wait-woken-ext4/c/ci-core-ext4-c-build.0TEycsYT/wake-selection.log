@@ -1,0 +1,48 @@
+implementation=wake-c
+/out/builds/ci-core-ext4-c/kernel/sched/build_utility.o
+/out/builds/ci-core-ext4-c/kernel/sched/build_utility.o
+0000000000003530 T __init_waitqueue_head
+0000000000003550 T add_wait_queue
+00000000000035a0 T add_wait_queue_exclusive
+00000000000035e0 T add_wait_queue_priority
+0000000000003630 T add_wait_queue_priority_exclusive
+00000000000036a0 T remove_wait_queue
+0000000000003230 T __wake_up
+00000000000036f0 T __wake_up_on_current_cpu
+0000000000003760 T __wake_up_locked
+00000000000037c0 T __wake_up_locked_key
+0000000000003810 T __wake_up_sync_key
+0000000000003890 T __wake_up_locked_sync_key
+00000000000038f0 T __wake_up_sync
+0000000000003040 T prepare_to_wait
+0000000000003120 T prepare_to_wait_exclusive
+0000000000003a10 T prepare_to_wait_event
+00000000000030b0 T finish_wait
+0000000000003010 T autoremove_wake_function
+0000000000003bc0 T wait_woken
+0000000000003c10 T woken_wake_function
+0000000000003c20 T woken_wake_bit_function
+/out/builds/ci-core-ext4-c/vmlinux
+ffffffff81294ea0 T __init_waitqueue_head
+ffffffff81294ec0 T add_wait_queue
+ffffffff81294f10 T add_wait_queue_exclusive
+ffffffff81294f50 T add_wait_queue_priority
+ffffffff81294fa0 T add_wait_queue_priority_exclusive
+ffffffff81295010 T remove_wait_queue
+ffffffff81294ba0 T __wake_up
+ffffffff81295060 T __wake_up_on_current_cpu
+ffffffff812950d0 T __wake_up_locked
+ffffffff81295130 T __wake_up_locked_key
+ffffffff81295180 T __wake_up_sync_key
+ffffffff81295200 T __wake_up_locked_sync_key
+ffffffff81295260 T __wake_up_sync
+ffffffff812949b0 T prepare_to_wait
+ffffffff81294a90 T prepare_to_wait_exclusive
+ffffffff81295380 T prepare_to_wait_event
+ffffffff81294a20 T finish_wait
+ffffffff81294980 T autoremove_wake_function
+ffffffff81295530 T wait_woken
+ffffffff81295580 T woken_wake_function
+ffffffff81295590 T woken_wake_bit_function
+4636cf43d396f0651645ef8fc7aa77f7c60a42973b2a3860b7a10b56b57ff628  /src/kernel/sched/wait.c
+357b43377f317c5c0b890b6083286a3382a9ed6cac50120593c8f31d7208e954  /out/builds/ci-core-ext4-c/kernel/sched/build_utility.o

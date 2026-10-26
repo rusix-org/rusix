@@ -10,7 +10,7 @@ boundaries. [The roadmap](docs/ROADMAP.md) orders that work.
 **Phase 1a remains in progress; most kernel code is still C.** The baseline is
 **Linux 6.18.58 LTS**. Rust BRD passes paired block and ordinary-userspace ext4
 tests. All fourteen completion.c and ten swait.c entry points have opt-in Rust
-implementations, alongside eighteen generic wait entries. Paired C/Rust tests cover
+implementations, alongside twenty-one generic wait entries. Paired C/Rust tests cover
 core behavior and blocked worker handoffs, ordinary ext4 and pipe/poll/epoll/eventfd consumers.
 [PROGRESS.md](PROGRESS.md) links exact source/configuration evidence and remaining
 gates, including BRD parameter behavior and the C queue/scheduler dependencies.

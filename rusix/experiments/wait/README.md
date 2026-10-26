@@ -1,13 +1,14 @@
 # Generic wait-queue policy
 
-Rust now implements eighteen Linux 6.18.58 wait.c entry points: seven wake
+Rust now implements twenty-one Linux 6.18.58 wait.c entry points: seven wake
 wrappers, initialization, four add variants, removal, three prepare functions,
-finish and automatic wake removal. Selection remains experimental/default-off under `CONFIG_RUSIX_COMPLETION_RUST`. At `ca91adc60e13`,
-C/Rust debug and plain kernels each pass 53 combined cases (44 core + nine BRD),
-then 44 isolated core cases. [Core evidence](../../docs/evidence/wait-lifecycle/manifest.json).
+finish, automatic wake removal and three WOKEN functions. Selection remains
+experimental/default-off under `CONFIG_RUSIX_COMPLETION_RUST`. At `2e358654d2fb`,
+C/Rust debug and plain kernels each pass 57 combined cases (48 core + nine BRD),
+then 48 isolated core cases. [Core evidence](../../docs/evidence/wait-woken/manifest.json).
 The same source passes nine ordinary-userspace/storage boots per implementation,
 including six ext4 and four poll-consumer cases with identical guest fixtures.
-[Userspace evidence](../../docs/evidence/wait-lifecycle-ext4/manifest.json).
+[Userspace evidence](../../docs/evidence/wait-woken-ext4/manifest.json).
 There are no compiler/objtool or rejected runtime diagnostics in these pairs.
 The earlier [wake evidence](../../docs/evidence/wait-wake/manifest.json) retains
 its resolved pointer-conversion compile failure. No divergence point is declared.
@@ -35,15 +36,16 @@ does not protect all flag accesses:
 wait_woken modifies WOKEN outside it. Direct Rust ownership or atomic references
 need a separate mixed-access audit. Scheduler wake ordering remains in the C
 scheduler. Raw-spinlock adapters are not substitutes for spinlock_t.
-Default/woken/wait-bit callbacks, the WOKEN protocol, entry initialization,
+Default/wait-bit callbacks, entry initialization,
 locked interruptible iteration and __wake_up_pollfree remain C. Real epoll
 POLLFREE can release a waiter's last
 protection before its callback returns; ordinary close tests do not prove this race.
 
 ## Gates and scope
 
-Nine `rusix_completion_wake` and five lifecycle cases join the strict core
-inventory (44 total), so both combined and isolated core boots must execute them. The synchronous C fixture
+Nine `rusix_completion_wake`, five lifecycle and four WOKEN cases join the strict
+core inventory (48 total), so both combined and isolated core boots must execute
+them. The synchronous wake fixture
 configures inputs and records observations; Rust uses literal expected results.
 It covers mixed exclusivity/order, zero/negative/positive callback returns,
 zero/negative/INT_MIN budgets, pre-callback flag mutation, self-unlink/free, all
@@ -52,7 +54,8 @@ external ownership before freeing nodes and performs cleanup before assertions.
 Uninstrumented frees exercise the path but cannot alone prove no post-free read.
 Archive/object/symbol gates require exactly one definition of each wrapper in the
 selected object and linked image, plus six enrollment/constructor and five
-lifecycle definitions; fixture code is builtin-only Rust/KUnit=y.
+lifecycle definitions and three WOKEN entries; fixture code is builtin-only
+Rust/KUnit=y.
 
 The guest-only ordinary ext4 fixture adds four required consumer cases: pipe poll,
 tagged pipe/eventfd epoll delivery and drain, one-shot suppression/rearm, and
@@ -63,7 +66,7 @@ blocked during notification, POLLFREE races, EPOLLEXCLUSIVE fairness, CFI, modul
 other-architecture or exhaustive callback compatibility. Existing ext4 cases stay
 required. Missing/duplicate/reordered/failing/skipped markers reject the whole run.
 
-Next migrate WOKEN/bit-wait and locked interruptible policy, with blocked
+Next migrate bit-wait and locked interruptible policy, with blocked
 consumers, then retire adapters with their ownership boundaries. Keep unchanged
 upstream tests and explicit configuration limits.
 
@@ -111,22 +114,32 @@ Scheduler-locked samples require expected state, off-CPU and off-runqueue status
 Separately protected membership is not an atomic cross-lock snapshot or proof of
 later wake causation. Polling and worker loops have finite deadlines; scheduler
 lock acquisition itself is not a hard time bound, and the VM has a watchdog.
-Finite tests supplement, rather than prove, the barrier contract. WOKEN, blocked
-bit-waits, locked interruptible consumers, PREEMPT_RT and POLLFREE races remain
-outside this verification.
+Finite tests supplement, rather than prove, the barrier contract. Blocked
+bit-wait acquisition loops, locked interruptible consumers, PREEMPT_RT and
+POLLFREE races remain outside this verification.
 
-## WOKEN migration in progress
+## WOKEN handshake
 
-The three WOKEN entries are implemented on the topic branch, pending local parity
-gates. wait_woken preserves the full state-store barrier before reading its latch,
+wait_woken preserves the full state-store barrier before reading its latch,
 short-circuits stop/park inspection when already latched, restores RUNNING, then
 clears WOKEN with the original C store/full-barrier primitive. Wake callbacks keep
 the full barrier before the C flag OR even if default_wake_function returns zero.
 The bit callback matches address and bit, ignoring timeout; mismatch has no flag
 or wake side effects. These entries retain membership until explicit removal.
 
-Two C adapters preserve the mixed flag RMW/barrier sequences. Removing them needs
-a reviewed Rust LKMM implementation or ownership eliminating the mixed accesses.
-The tests must allow concurrent relatching after a wait clears WOKEN, and cleanup
-must supply a valid matching bit key. Stop/park, socket/futex consumer integration
-and universal lost-wakeup proof remain separate coverage.
+Four required cases cover prelatched callback return zero with unchanged timeout
+and no voluntary switch, zero/positive timeout, an observed blocked condition
+consumer, and address/bit mismatch versus a match with differing timeout. Final
+membership, removal poisoning, state and unrelated flags are checked. Concurrent
+relatching is allowed after wait_woken clears WOKEN; strict final-clear assertions
+apply only to isolated cases. Test-owned release/acquire publishes payload
+independently of WOKEN, so it does not prove the A/B/C barrier protocol.
+
+Callback/task ownership follows the lifecycle discipline above. Direct bit probes
+check exact membership while holding the queue lock before touching the entry;
+cleanup always supplies a live matching key, including failed observations.
+Compiled Rust object records retain the state/flag-helper calls; x86 helper
+objects retain full barriers and the store-barrier clear. Two C adapters preserve
+mixed flag RMW/barrier sequences. Removing them needs a reviewed Rust LKMM
+implementation or ownership eliminating mixed accesses. Stop/park, repeated latch
+race stress, socket/futex consumers and universal lost-wakeup proof remain open.

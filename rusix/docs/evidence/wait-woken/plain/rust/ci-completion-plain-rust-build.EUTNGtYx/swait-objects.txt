@@ -1,0 +1,1 @@
+/out/builds/ci-completion-plain-rust/kernel/sched/swait_rust.o

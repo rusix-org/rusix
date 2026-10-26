@@ -1,0 +1,68 @@
+[15:09:02] ============================================================
+[15:09:02] ========== rusix_completion_contract (5 subtests) ==========
+[15:09:02] [PASSED] initial_state_has_no_token
+[15:09:02] [PASSED] presignals_are_consumed_once_each
+[15:09:02] [PASSED] broadcast_persists_until_quiescent_reset
+[15:09:02] [PASSED] zero_timeout_reports_completion_and_consumes_token
+[15:09:02] [PASSED] signal_saturates_instead_of_wrapping
+[15:09:02] ============ [PASSED] rusix_completion_contract ============
+[15:09:02] =========== rusix_completion_layout (8 subtests) ===========
+[15:09:02] [PASSED] c_operations_share_pinned_rust_owned_storage
+[15:09:02] [PASSED] current_cpu_signal_counts_and_saturates
+[15:09:02] [PASSED] worker_handoff_observes_published_value
+[15:09:02] [PASSED] current_cpu_signal_wakes_enrolled_worker
+[15:09:02] [PASSED] two_workers_consume_exactly_two_tokens
+[15:09:02] [PASSED] competing_try_waiters_consume_one_token
+[15:09:02] [PASSED] broadcast_serves_two_workers_and_late_waiters
+[15:09:02] [PASSED] timed_out_worker_unlinks_before_late_signal
+[15:09:02] ============= [PASSED] rusix_completion_layout =============
+[15:09:02] ============ rusix_completion_wait (4 subtests) ============
+[15:09:02] [PASSED] all_wait_entries_consume_presignaled_token
+[15:09:02] [PASSED] all_wait_entries_preserve_broadcast_sentinel
+[15:09:02] [PASSED] all_timed_entries_distinguish_zero_timeout_states
+[15:09:02] [PASSED] all_timed_entries_unlink_after_positive_timeout
+[15:09:02] ============== [PASSED] rusix_completion_wait ==============
+[15:09:02] =========== rusix_completion_signal (4 subtests) ===========
+[15:09:02] [PASSED] pending_signals_interrupt_timed_waits
+[15:09:02] [PASSED] enrolled_waits_wake_for_signals
+[15:09:02] [PASSED] presignaled_token_wins_over_pending_signal
+[15:09:02] [PASSED] killable_wait_ignores_nonfatal_pending_signal
+[15:09:02] ============= [PASSED] rusix_completion_signal =============
+[15:09:02] =========== rusix_completion_swait (9 subtests) ============
+[15:09:02] [PASSED] initializer_preserves_caller_class_links_and_irq_state
+[15:09:02] [PASSED] empty_wake_preserves_initialized_queue
+[15:09:02] [PASSED] repeated_prepare_keeps_single_enrollment_and_finish_restores_state
+[15:09:02] [PASSED] queued_wake_removes_fifo_head_before_second_waiter
+[15:09:02] [PASSED] generic_swait_event_observes_condition_and_unlinks
+[15:09:02] [PASSED] generic_swait_timeout_unlinks_before_late_wake
+[15:09:02] [PASSED] pending_prepare_event_unlinks_without_changing_state_or_irqs
+[15:09:02] [PASSED] generic_signal_error_and_post_prepare_condition_precedence
+[15:09:02] [PASSED] generic_broadcast_removes_initial_batch_and_leaves_late_waiter
+[15:09:02] ============= [PASSED] rusix_completion_swait ==============
+[15:09:02] ============ rusix_completion_wake (9 subtests) ============
+[15:09:02] [PASSED] exclusive_budget_uses_callback_success_not_return_magnitude
+[15:09:02] [PASSED] exclusive_accounting_uses_flags_from_before_callback
+[15:09:02] [PASSED] callbacks_can_retire_current_for_each_return_path
+[15:09:02] [PASSED] all_wrappers_forward_arguments_and_preserve_irq_context
+[15:09:02] [PASSED] null_sync_wrappers_preserve_irq_context
+[15:09:02] [PASSED] enrollment_preserves_priority_prefix_lifo_and_exclusive_tail
+[15:09:02] [PASSED] priority_exclusive_rejects_only_priority_at_head
+[15:09:02] [PASSED] removal_poisons_links_and_allows_readdition
+[15:09:02] [PASSED] constructor_preserves_caller_class_links_and_irq_context
+[15:09:02] ============== [PASSED] rusix_completion_wake ==============
+[15:09:02] ======= rusix_completion_wait_lifecycle (5 subtests) =======
+[15:09:02] [PASSED] blocked_priority_exclusive_handoff_consumes_one_token
+[15:09:02] [PASSED] blocked_signal_and_nonmatching_wake_preserve_lifecycle
+[15:09:02] [PASSED] pending_condition_wins_after_prepare_signal_error
+[15:09:02] [PASSED] timeout_finishes_before_late_wake
+[15:09:02] [PASSED] repeated_prepare_preserves_membership_state_and_empty_return
+[15:09:02] ========= [PASSED] rusix_completion_wait_lifecycle =========
+[15:09:02] ========= rusix_completion_wait_woken (4 subtests) =========
+[15:09:02] [PASSED] prelatched_running_callback_skips_schedule_and_preserves_membership
+[15:09:02] [PASSED] zero_and_positive_timeout_restore_state_without_autoremove
+[15:09:02] [PASSED] blocked_woken_consumer_observes_published_condition
+[15:09:02] [PASSED] bit_keys_filter_address_and_bit_but_not_timeout
+[15:09:02] =========== [PASSED] rusix_completion_wait_woken ===========
+[15:09:02] ============================================================
+[15:09:02] Testing complete. Ran 48 tests: passed: 48
+[15:09:02] Test results stored in /out/logs/ci-completion-plain-c-completion-kunit.json

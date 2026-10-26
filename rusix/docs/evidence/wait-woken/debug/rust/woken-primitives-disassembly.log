@@ -1,0 +1,43 @@
+
+/out/builds/ci-completion-rust/rust/helpers/helpers.o:	file format elf64-x86-64
+
+Disassembly of section .text:
+
+0000000000002450 <rust_helper_swait_set_current_state>:
+    2450: f7 c7 cc 80 00 00            	testl	$0x80cc, %edi           # imm = 0x80CC
+    2456: 75 2b                        	jne	0x2483 <rust_helper_swait_set_current_state+0x33>
+    2458: 41 56                        	pushq	%r14
+    245a: 53                           	pushq	%rbx
+    245b: 48 8d 05 00 00 00 00         	leaq	(%rip), %rax            # 0x2462 <rust_helper_swait_set_current_state+0x12>
+    2462: 65 4c 8b 34 25 00 00 00 00   	movq	%gs:0x0, %r14
+		0000000000002467:  R_X86_64_32S	current_task
+    246b: 49 89 86 e8 10 00 00         	movq	%rax, 0x10e8(%r14)
+    2472: 83 3d 00 00 00 00 00         	cmpl	$0x0, (%rip)            # 0x2479 <rust_helper_swait_set_current_state+0x29>
+		0000000000002474:  R_X86_64_PC32	__tracepoint_sched_set_state_tp+0x3
+    2479: 7f 0c                        	jg	0x2487 <rust_helper_swait_set_current_state+0x37>
+    247b: 41 87 7e 18                  	xchgl	%edi, 0x18(%r14)
+    247f: 5b                           	popq	%rbx
+    2480: 41 5e                        	popq	%r14
+    2482: c3                           	retq
+    2483: 0f 0b                        	ud2
+    2485: eb d1                        	jmp	0x2458 <rust_helper_swait_set_current_state+0x8>
+    2487: 89 fb                        	movl	%edi, %ebx
+    2489: e8 00 00 00 00               	callq	0x248e <rust_helper_swait_set_current_state+0x3e>
+		000000000000248a:  R_X86_64_PLT32	__trace_set_current_state-0x4
+    248e: 89 df                        	movl	%ebx, %edi
+    2490: eb e9                        	jmp	0x247b <rust_helper_swait_set_current_state+0x2b>
+    2492: 66 66 66 66 66 2e 0f 1f 84 00 00 00 00 00    	nopw	%cs:(%rax,%rax)
+
+00000000000030c0 <rust_helper_wait_clear_woken_mb>:
+    30c0: 8b 07                        	movl	(%rdi), %eax
+    30c2: 83 e0 fd                     	andl	$-0x3, %eax
+    30c5: 87 07                        	xchgl	%eax, (%rdi)
+    30c7: c3                           	retq
+    30c8: 0f 1f 84 00 00 00 00 00      	nopl	(%rax,%rax)
+
+00000000000030d0 <rust_helper_wait_set_woken_after_mb>:
+    30d0: f0                           	lock
+    30d1: 83 44 24 fc 00               	addl	$0x0, -0x4(%rsp)
+    30d6: 80 0f 02                     	orb	$0x2, (%rdi)
+    30d9: c3                           	retq
+    30da: 66 0f 1f 44 00 00            	nopw	(%rax,%rax)

@@ -1,0 +1,50 @@
+implementation=wake-rust
+/out/builds/ci-completion-plain-rust/kernel/sched/wait_rust.o
+/out/builds/ci-completion-plain-rust/kernel/sched/wait_rust.o
+00000000000006a0 T __init_waitqueue_head
+0000000000000470 T add_wait_queue
+0000000000000500 T add_wait_queue_exclusive
+0000000000000550 T add_wait_queue_priority
+00000000000005e0 T add_wait_queue_priority_exclusive
+0000000000000670 T remove_wait_queue
+0000000000000010 T __wake_up
+00000000000000d0 T __wake_up_on_current_cpu
+0000000000000170 T __wake_up_locked
+00000000000001f0 T __wake_up_locked_key
+0000000000000270 T __wake_up_sync_key
+0000000000000330 T __wake_up_locked_sync_key
+00000000000003b0 T __wake_up_sync
+00000000000006e0 T prepare_to_wait
+0000000000000780 T prepare_to_wait_exclusive
+0000000000000810 T prepare_to_wait_event
+00000000000008e0 T finish_wait
+0000000000000930 T autoremove_wake_function
+0000000000000950 T wait_woken
+00000000000009a0 T woken_wake_function
+00000000000009e0 T woken_wake_bit_function
+/out/builds/ci-completion-plain-rust/vmlinux
+ffffffff8128b9b0 T __init_waitqueue_head
+ffffffff8128b780 T add_wait_queue
+ffffffff8128b810 T add_wait_queue_exclusive
+ffffffff8128b860 T add_wait_queue_priority
+ffffffff8128b8f0 T add_wait_queue_priority_exclusive
+ffffffff8128b980 T remove_wait_queue
+ffffffff8128b320 T __wake_up
+ffffffff8128b3e0 T __wake_up_on_current_cpu
+ffffffff8128b480 T __wake_up_locked
+ffffffff8128b500 T __wake_up_locked_key
+ffffffff8128b580 T __wake_up_sync_key
+ffffffff8128b640 T __wake_up_locked_sync_key
+ffffffff8128b6c0 T __wake_up_sync
+ffffffff8128b9f0 T prepare_to_wait
+ffffffff8128ba90 T prepare_to_wait_exclusive
+ffffffff8128bb20 T prepare_to_wait_event
+ffffffff8128bbf0 T finish_wait
+ffffffff8128bc40 T autoremove_wake_function
+ffffffff8128bc60 T wait_woken
+ffffffff8128bcb0 T woken_wake_function
+ffffffff8128bcf0 T woken_wake_bit_function
+4636cf43d396f0651645ef8fc7aa77f7c60a42973b2a3860b7a10b56b57ff628  /src/kernel/sched/wait.c
+e081bbfe19e54f2681577cd83db10742e994bfb228fb84566aeaf0043317a67b  /out/builds/ci-completion-plain-rust/kernel/sched/wait_rust.o
+ea9b2420eee76dd810db65b0656fb9266d8d7e8150702d24d1afb637b21e77d6  /src/kernel/sched/wait_rust.rs
+9da15544477c0dd91da15209fa6339f5186a1df6099cc7bd8b2db5907b5ec306  /src/rust/helpers/wait_policy.c
