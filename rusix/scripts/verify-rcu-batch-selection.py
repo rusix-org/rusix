@@ -15,7 +15,10 @@ spec.loader.exec_module(lists)
 PROFILES = {'rcu-batch-c': False, 'rcu-batch-plain-c': False,
             'rcu-batch-rust': True, 'rcu-batch-plain-rust': True}
 BRIDGES = ('rusix_rcu_do_batch', 'rusix_rcu_batch_check_time')
-HOOKS = ('rusix_rcubatch_private', 'rusix_rcubatch_private_accounting', 'rusix_rcubatch_time_samples')
+HOOKS = ('rusix_rcubatch_private', 'rusix_rcubatch_private_accounting',
+         'rusix_rcubatch_time_samples', 'rusix_rcubatch_budget_create',
+         'rusix_rcubatch_budget_step', 'rusix_rcubatch_budget_detached',
+         'rusix_rcubatch_budget_drain')
 FIXTURE = ('rusix_rcubatch_start', 'rusix_rcubatch_wait', 'rusix_rcubatch_result', 'rusix_rcubatch_put')
 ORIGINAL_TREE_SHA256 = 'e44083c2f67df3a0de8f08a7a59d42c7d854d283c66b7e481b64a9fc36f2ef73'
 

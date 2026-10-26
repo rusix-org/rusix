@@ -6,6 +6,7 @@
 #include <linux/delay.h>
 #include <linux/err.h>
 #include <linux/jiffies.h>
+#include <linux/interrupt.h>
 #include <linux/kthread.h>
 #include <linux/rcupdate.h>
 #include <linux/refcount.h>
@@ -26,7 +27,9 @@ struct batch_slot {
 struct batch_fixture {
 	refcount_t refs;
 	struct task_struct *worker, *reader;
-	struct completion done, reader_entered, reader_done;
+	struct completion done, reader_entered, reader_done, budget_done;
+	struct tasklet_struct budget_tasklet;
+	int budget_error;
 	atomic_t release_reader, reader_expired, callbacks, verified, violations;
 	atomic_t private_accounts;
 	struct batch_slot slots[BATCH_NODES];
@@ -69,15 +72,20 @@ static void batch_callback(struct rcu_head *head)
 		atomic_inc(&f->verified);
 	else
 		atomic_inc(&f->violations);
-	if (f->mode == 0) {
+	if (f->mode == 0 || f->mode == 6) {
 		/* FIFO and detached-count observation of a private synchronous batch. */
 		if (atomic_read(&f->callbacks) != index)
 			atomic_inc(&f->violations);
-		if (rusix_rcubatch_private_accounting(f->private_rdp, 3))
+		if (f->mode == 0 && rusix_rcubatch_private_accounting(f->private_rdp, 3))
 			atomic_inc(&f->private_accounts);
 	}
+	if (f->mode == 6 && index == 0) {
+		f->result[11] = rusix_rcubatch_budget_detached(f->private_rdp,
+							   &f->slots[2].head);
+		f->result[15] = 1;
+	}
 	atomic_inc(&f->callbacks);
-	if (f->mode == 3) {
+	if (f->mode == 3 || (f->mode == 6 && index == 0)) {
 		/* No slot/head access after free, including from our caller. */
 		destroy_rcu_head(head);
 		kfree(slot);
@@ -91,7 +99,7 @@ static void batch_callback(struct rcu_head *head)
 	/* Private callbacks are synchronous and hold no independent submission
 	 * reference; the retained worker owns their entire invocation interval.
 	 */
-	if (f->mode != 0)
+	if (f->mode != 0 && f->mode != 6)
 		rusix_rcubatch_put(f);
 }
 
@@ -141,6 +149,68 @@ static void submit(struct batch_fixture *f, struct batch_slot *slot)
 	call_rcu(&slot->head, batch_callback);
 }
 
+static void budget_tasklet(struct tasklet_struct *tasklet)
+{
+	struct batch_fixture *f = from_tasklet(f, tasklet, budget_tasklet);
+
+	f->budget_error = rusix_rcubatch_budget_step(f->private_rdp,
+			&f->slots[1].head, &f->slots[2].head, f->result + 4);
+	complete(&f->budget_done);
+	/* Worker retains context until tasklet_kill: softirq core still traces
+	 * and unlocks this embedded tasklet after callback return. */
+}
+
+static int run_budget(struct batch_fixture *f, bool *retained)
+{
+	struct batch_slot *first;
+	struct rcu_head *heads[3];
+	int error = 0;
+	bool completed;
+
+	first = kzalloc(sizeof(*first), GFP_KERNEL);
+	if (!first)
+		return -ENOMEM;
+	first->owner = f;
+	first->payload = 0x5a00;
+	atomic_set(&first->seen, 0);
+	init_rcu_head(&first->head);
+	heads[0] = &first->head;
+	heads[1] = &f->slots[1].head;
+	heads[2] = &f->slots[2].head;
+	heads[0]->func = heads[1]->func = heads[2]->func = batch_callback;
+	f->private_rdp = rusix_rcubatch_budget_create(heads);
+	if (IS_ERR(f->private_rdp)) {
+		error = PTR_ERR(f->private_rdp);
+		f->private_rdp = NULL;
+		destroy_rcu_head(&first->head);
+		kfree(first);
+		return error;
+	}
+	/* All nodes belong to the private list now. Do not access first again. */
+	*retained = true;
+	init_completion(&f->budget_done);
+	tasklet_setup(&f->budget_tasklet, budget_tasklet);
+	local_bh_disable();
+	tasklet_schedule(&f->budget_tasklet);
+	local_bh_enable();
+	completed = wait_for_completion_timeout(&f->budget_done, msecs_to_jiffies(3000));
+	/* Only this retained worker may block here on a broken kernel, never the
+	 * bounded KUnit controller. No pending tasklet storage is freed. */
+	tasklet_kill(&f->budget_tasklet);
+	if (!completed)
+		return -ETIMEDOUT;
+	if (f->budget_error)
+		return f->budget_error;
+	if (f->result[5] != 2 || f->result[6] != 1 || f->result[7] != 1 ||
+	    f->result[8] != 2 || f->result[9] != 1 || f->result[10] != 1)
+		return -EIO;
+	if (!rusix_rcubatch_budget_drain(f->private_rdp, f->result + 12))
+		return -EIO;
+	f->private_rdp = NULL;
+	*retained = false;
+	return 0;
+}
+
 static int batch_worker(void *p)
 {
 	struct batch_fixture *f = p;
@@ -152,6 +222,10 @@ static int batch_worker(void *p)
 	cpus_read_lock();
 	if (!cpu_online(0) || !cpu_online(1)) {
 		error = -ENODEV;
+		goto publish;
+	}
+	if (f->mode == 6) {
+		error = run_budget(f, &retained);
 		goto publish;
 	}
 	if (f->mode == 0) {
@@ -248,7 +322,7 @@ void *rusix_rcubatch_start(u32 mode)
 	struct task_struct *task;
 	int i;
 
-	if (mode > 5 || nr_cpu_ids < 2)
+	if (mode > 6 || nr_cpu_ids < 2)
 		return ERR_PTR(-EINVAL);
 	f = kzalloc(sizeof(*f), GFP_KERNEL);
 	if (!f)

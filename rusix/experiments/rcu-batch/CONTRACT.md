@@ -47,13 +47,14 @@ around the call; no global environment override, replacement dispatch algorithm
 or artificial controller task state is involved. Refused private teardown
 records failure and retains both descriptor and callback storage.
 
-Suite `rusix_rcu_batch`, six literal cases:
+Suite `rusix_rcu_batch`, seven literal cases:
 
 - `private_empty_and_fifo_accounting`: empty transaction, then three FIFO
   callbacks; each observes positive total count with detached main-list head;
   final total/segment counts, empty state and invocation accounting.
 - `private_time_check_boundaries`: selected production time predicate with disabled budget,
-  count31 no-clock path, count32 far-future deadline and expired deadline.
+  count31 no-clock path, count32 far-future and expired deadlines, and LONG_MIN/-1
+  deadlines compared after the canonical conversion to u64.
 - `held_reader_payload_before_barrier`: CPU0 reader, CPU1 producer/orchestrator;
   no callback while reader remains held, then publication and barrier completion.
 - `self_free_callback_final_access`: real callback frees its own separate node.
@@ -65,8 +66,8 @@ Suite `rusix_rcu_batch`, six literal cases:
   per-node seen counts/payloads and total count reject loss or duplication.
 
 Private invocation is process context, so it intentionally does not claim
-forced softirq budget exits. Deterministic partial-batch reinsertion and timing
-exit decisions remain **pending coverage**. Flood completion establishes no
+forced softirq budget exits. A separate tasklet case below adds deterministic count-budget reinsertion.
+Elapsed-time exit decisions remain **pending coverage**. Flood completion establishes no
 particular batch split or latency budget. The test boundary deliberately does
 not introduce a scheduler/clock override merely to claim those cases.
 
@@ -103,3 +104,24 @@ partial-budget exits/reinsertion and CPU-hotplug runtime coverage remain pending
 The retained C caller protocol supplies the hotplug lifetime argument, not a new
 hotplug test result. No dependency on uncompiled RCU-sync/perCPU/file-owner
 branches is introduced by this worktree.
+
+## Count-budget softirq fixture (implemented, unexecuted)
+
+`softirq_count_budget_reinserts_done_before_pending` creates a private descriptor
+with blimit1, two DONE heads and one PENDING head. Setup checks normalized global
+divisor>=1 without changing it. A tasklet checks actual non-idle softirq and
+IRQ-enabled context before dispatch; failing that prerequisite fails the case.
+The first callback observes total3 while only the PENDING node remains in the
+main list, records FIFO identity, and frees its separate node. No later code
+reads that freed head. The first commit must record exactly one invocation,
+total2, DONE1, PENDING1, summed segments2 and exact surviving links/tails.
+
+The retained worker joins the tasklet before advancing/draining remaining nodes
+in process context. Final callback order is0,1,2; invoked3, no segment/total work
+remains, all final tails point to the private descriptor's head. The descriptor
+is freed only after these checks; refused cleanup retains it and the worker's
+fixture reference. Softirq core traces and unlocks tasklet storage after callback
+return, so acknowledgment alone never permits freeing the embedded tasklet.
+`tasklet_kill` may block only the retained worker; the KUnit controller retains its
+15-second bound and drops before assertions. No global queue/clock/parameter or
+scheduler state is overridden, and no delayed-clock case is added here.

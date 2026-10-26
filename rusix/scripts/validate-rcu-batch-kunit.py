@@ -24,6 +24,7 @@ SUITES = {"rusix_rcu_batch": (
     "self_free_callback_final_access",
     "self_requeue_once_before_second_barrier",
     "flood_exact_once_before_barrier",
+    "softirq_count_budget_reinserts_done_before_pending",
 )}
 
 def validate(result, combined=False):

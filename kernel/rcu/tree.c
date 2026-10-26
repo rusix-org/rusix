@@ -2768,6 +2768,100 @@ bool rusix_rcubatch_private_accounting(void *private_rdp, u32 expected)
 	       rcu_segcblist_n_cbs(&rdp->cblist) == expected;
 }
 
+/* Private count-budget fixture: no descriptor enters global per-CPU state. */
+void *rusix_rcubatch_budget_create(struct rcu_head **heads)
+{
+	struct rcu_data *rdp;
+	int div = READ_ONCE(rcu_divisor);
+	int i;
+
+	lockdep_assert_cpus_held();
+	div = div < 0 ? 7 : div > sizeof(long) * 8 - 2 ? sizeof(long) * 8 - 2 : div;
+	if (div < 1 || IS_ENABLED(CONFIG_RCU_NOCB_CPU) ||
+	    IS_ENABLED(CONFIG_RCU_BOOST) || IS_ENABLED(CONFIG_PREEMPT_RT))
+		return ERR_PTR(-EOPNOTSUPP);
+	rdp = kzalloc(sizeof(*rdp), GFP_KERNEL);
+	if (!rdp)
+		return ERR_PTR(-ENOMEM);
+	rcu_segcblist_init(&rdp->cblist);
+	rdp->blimit = 1;
+	rdp->rcu_cpu_kthread_status = RCU_KTHREAD_OFFCPU;
+	for (i = 0; i < 3; i++) {
+		if (debug_rcu_head_queue(heads[i])) {
+			while (i)
+				debug_rcu_head_unqueue(heads[--i]);
+			kfree(rdp);
+			return ERR_PTR(-EINVAL);
+		}
+	}
+	rcu_segcblist_enqueue(&rdp->cblist, heads[0]);
+	rcu_segcblist_enqueue(&rdp->cblist, heads[1]);
+	rcu_segcblist_accelerate(&rdp->cblist, 1);
+	rcu_segcblist_advance(&rdp->cblist, 1);
+	rcu_segcblist_enqueue(&rdp->cblist, heads[2]);
+	return rdp;
+}
+
+int rusix_rcubatch_budget_step(void *private_rdp, struct rcu_head *second,
+                              struct rcu_head *pending, s64 *out)
+{
+	struct rcu_data *rdp = private_rdp;
+	struct rcu_segcblist *list = &rdp->cblist;
+
+	/* Scheduling a tasklet alone does not prove non-idle execution. */
+	out[0] = in_serving_softirq() && !is_idle_task(current) && !irqs_disabled();
+	if (!out[0])
+		return -EAGAIN;
+	rcu_do_batch(rdp);
+	out[1] = rcu_segcblist_n_cbs(list);
+	out[2] = rcu_segcblist_get_seglen(list, RCU_DONE_TAIL);
+	out[3] = rcu_segcblist_get_seglen(list, RCU_WAIT_TAIL) +
+		 rcu_segcblist_get_seglen(list, RCU_NEXT_READY_TAIL) +
+		 rcu_segcblist_get_seglen(list, RCU_NEXT_TAIL);
+	out[4] = rcu_segcblist_n_segment_cbs(list);
+	out[5] = rdp->n_cbs_invoked;
+	/* Only known live embedded nodes are dereferenced. The first callback
+	 * may have freed its node; neither its pointer nor fields are read. */
+	out[6] = list->head == second && second->next == pending && !pending->next &&
+		 list->tails[RCU_DONE_TAIL] == &second->next &&
+		 list->tails[RCU_WAIT_TAIL] == &second->next &&
+		 list->tails[RCU_NEXT_READY_TAIL] == &second->next &&
+		 list->tails[RCU_NEXT_TAIL] == &pending->next;
+	return 0;
+}
+
+bool rusix_rcubatch_budget_detached(void *private_rdp, struct rcu_head *pending)
+{
+	struct rcu_data *rdp = private_rdp;
+
+	return rcu_segcblist_n_cbs(&rdp->cblist) == 3 &&
+	       rdp->cblist.head == pending && !pending->next;
+}
+
+bool rusix_rcubatch_budget_drain(void *private_rdp, s64 *out)
+{
+	struct rcu_data *rdp = private_rdp;
+	bool safe;
+	int i;
+
+	lockdep_assert_cpus_held();
+	/* The process worker has joined tasklet execution before touching rdp. */
+	rcu_segcblist_accelerate(&rdp->cblist, 2);
+	rcu_segcblist_advance(&rdp->cblist, 2);
+	local_bh_disable();
+	rcu_do_batch(rdp);
+	local_bh_enable();
+	out[0] = rcu_segcblist_empty(&rdp->cblist);
+	out[1] = rcu_segcblist_n_cbs(&rdp->cblist);
+	out[2] = rdp->n_cbs_invoked;
+	safe = out[0] && !out[1] && !rcu_segcblist_n_segment_cbs(&rdp->cblist);
+	for (i = 0; i < RCU_CBLIST_NSEGS; i++)
+		safe &= rdp->cblist.tails[i] == &rdp->cblist.head;
+	if (safe)
+		kfree(rdp);
+	return safe;
+}
+
 void rusix_rcubatch_time_samples(s64 *out)
 {
 	/* Actual production predicate. No artificial clock or task-state writes.
@@ -2777,6 +2871,9 @@ void rusix_rcubatch_time_samples(s64 *out)
 	out[1] = rcu_do_batch_check_time(31, 1, false, 0);
 	out[2] = rcu_do_batch_check_time(32, LONG_MAX, false, 0);
 	out[3] = rcu_do_batch_check_time(32, 1, false, 0);
+	/* local_clock is u64: negative signed deadlines convert to large u64. */
+	out[4] = rcu_do_batch_check_time(32, LONG_MIN, false, 0);
+	out[5] = rcu_do_batch_check_time(32, -1, false, 0);
 }
 #endif
 

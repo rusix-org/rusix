@@ -29,8 +29,8 @@ def result(combined=False):
 
 class RcuGateTests(unittest.TestCase):
     def test_exact_counts(self):
-        self.assertEqual(gate.validate(result()), 6)
-        self.assertEqual(gate.validate(result(True), True), 92)
+        self.assertEqual(gate.validate(result()), 7)
+        self.assertEqual(gate.validate(result(True), True), 93)
 
     def test_every_missing_duplicate_or_bad_case_rejected(self):
         for combined in (False, True):

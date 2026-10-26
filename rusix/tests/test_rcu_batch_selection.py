@@ -82,6 +82,19 @@ class BatchSelection(unittest.TestCase):
             path=root/'rcu-batch-rust-symbols.txt';path.write_text(path.read_text()+'1000 T '+gate.BRIDGES[0]+'\n')
             with self.assertRaises(ValueError):gate.check_objects('rcu-batch-rust',root,source,root/'tree.i')
 
+    def test_all_seven_test_hooks_are_required_in_tree_and_kernel(self):
+        self.assertEqual(gate.HOOKS, ('rusix_rcubatch_private', 'rusix_rcubatch_private_accounting',
+            'rusix_rcubatch_time_samples', 'rusix_rcubatch_budget_create',
+            'rusix_rcubatch_budget_step', 'rusix_rcubatch_budget_detached', 'rusix_rcubatch_budget_drain'))
+        with tempfile.TemporaryDirectory() as directory:
+            root=Path(directory);source=PROJECT.parent/'kernel/rcu/tree.c'
+            for name in ('tree','kernel'):
+                for hook in gate.HOOKS:
+                    self.evidence(root,True)
+                    path=root/f'rcu-batch-{name}-symbols.txt'
+                    path.write_text(path.read_text().replace('1000 T '+hook+'\n',''))
+                    with self.assertRaises(ValueError):gate.check_objects('rcu-batch-rust',root,source,root/'tree.i')
+
     def test_preprocessor_rejects_c_leakage_wrong_and_duplicate_dispatch(self):
         gate.check_preprocessed(CPP_C,False)
         gate.check_preprocessed(CPP_RUST,True)

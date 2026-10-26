@@ -5,7 +5,7 @@ use crate::{bindings, ffi::c_void, prelude::*};
 struct Fixture(*mut c_void);
 impl Fixture {
     fn start(mode: u32) -> Result<Self> {
-        // SAFETY: Private modes 0..=5; C returns one controller reference to a
+        // SAFETY: Private modes 0..=6; C returns one controller reference to a
         // stable allocation. Workers/callbacks retain independent references.
         Ok(Self(crate::error::from_err_ptr(unsafe {
             bindings::rcubatch_start(mode)
@@ -59,6 +59,8 @@ mod tests {
 
     #[test]
     fn private_time_check_boundaries() -> Result {
+        // Includes LONG_MIN/-1 deadlines: u64 clock comparison is false, not
+        // signed clock >= negative deadline. These occupy result slots8/9.
         run(1, [0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0])
     }
 
@@ -80,5 +82,9 @@ mod tests {
     #[test]
     fn flood_exact_once_before_barrier() -> Result {
         run(5, [0, 129, 129, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0])
+    }
+    #[test]
+    fn softirq_count_budget_reinserts_done_before_pending() -> Result {
+        run(6, [0, 3, 3, 0, 1, 2, 1, 1, 2, 1, 1, 1, 1, 0, 3, 1])
     }
 }

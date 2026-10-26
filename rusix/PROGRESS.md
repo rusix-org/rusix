@@ -130,22 +130,29 @@ On `rusix/rcu-batch`, the default-off Rust implementation now owns extraction,
 pinned detached-chain dispatch, budget decisions and reinsertion/accounting.
 Callback heads are not accessed after invocation; total counts remain retained
 until commit. C keeps per-CPU storage and typed access/IRQ/BH/clock/debug
-primitives. The original C function bodies and C-first test region remain intact.
+primitives. The original C production function bodies remain intact; test-only hooks are
+separate from the policy.
 The [contract](experiments/rcu-batch/CONTRACT.md) owns the boundary and removal path.
 
-Six cases cover private-descriptor accounting/time boundaries and real retained
-callback consumers. Paired local debug/plain profiles require 92 combined,
-67 isolated core, ten list and six batch cases. The fixture baseline `6f240ef01d`
+Seven cases cover private-descriptor accounting/time boundaries, real retained
+callback consumers and a real tasklet count-budget exit. The seventh fixture
+uses two DONE callbacks and one PENDING callback, checks partial reinsertion
+before pending work, and includes a self-freeing first callback. Paired local
+debug/plain profiles require 93 combined, 67 isolated core, ten list and seven
+batch cases. The fixture baseline `6f240ef01d`
 has 17 passing host scripts plus syntax/diff checks, recorded locally in
 `linux-out/rcu-batch-baseline-host-001/manifest.json`. The later production
 translation has independent source review and format/diff/input-hash records in
 `linux-out/rcu-batch-source-review-001`; it has **not been compiled or booted**.
 A fresh run of all 17 host scripts (172 cases), formatting and shell checks also
-passes at the final source snapshot; `linux-out/rcu-batch-host-001/manifest.json`
+passes at production snapshot `fdc12796e743`; `linux-out/rcu-batch-host-001/manifest.json`
 records its exact inputs. Kernel and runtime gates remain pending.
 
 Next freeze the reviewed implementation, run C before Rust debug/plain pairs,
 prove linked selection and exercise ordinary filesystem/server consumers.
-Partial-budget reinsertion, explicit `rcutree.use_softirq=0` callback-thread runs
-and CPU-hotplug coverage remain pending; neither mode is silently excluded from
+The seventh-fixture source has independent review; a fresh host record in
+`linux-out/rcu-batch-budget-host-001/manifest.json` covers all 17 scripts,
+formatting, shell checks and complete input hashes. Partial-budget runtime
+verification, explicit `rcutree.use_softirq=0` callback-thread runs and CPU-hotplug
+coverage remain pending; neither mode is silently excluded from
 production policy. No full RCU ownership or subsystem divergence is declared.
