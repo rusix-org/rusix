@@ -79,3 +79,13 @@ with 30-day retention. Durable milestone summaries remain necessary after expiry
 To update the environment, deliberately change the base digest and snapshot,
 resolve/review the new package inventory, and rerun all three profiles. Do not bypass
 an inventory or tool-version assertion to obtain a passing build.
+
+Additional local profiles on the LTS integration branch:
+
+- `brd-rust`: the unchanged six-case block probe against selected Rust BRD.
+- `brd-kunit`: nine required store, insertion, allocation-scope and parameter tests.
+- `brd-ext4-c` / `brd-ext4-rust`: the same ordinary-userspace ext4 workload;
+  use the [fixture image](../tests/brd-ext4/README.md) containing e2fsprogs.
+
+`run-container.sh` records the inspected image ID and passes it to the ext4
+runner. These profiles are local execution paths; they do not enable hosted jobs.
