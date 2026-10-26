@@ -4,6 +4,7 @@
 import importlib.util
 from pathlib import Path
 import sys
+import stat
 import unittest
 
 sys.dont_write_bytecode = True
@@ -38,6 +39,30 @@ class ParameterTests(unittest.TestCase):
     def reject(self, lines, status=0):
         with self.assertRaises(ValueError):
             runner.accept_console("\n".join(lines), status)
+
+    def test_archive_stages_guest_kmsg_device_and_atomic_console_options(self):
+        archive = runner.make_initramfs(b"static ELF fixture")
+        offset = 0
+        entries = {}
+        while True:
+            self.assertEqual(archive[offset:offset + 6], b"070701")
+            fields = [int(archive[offset + 6 + 8 * i:offset + 14 + 8 * i], 16)
+                      for i in range(13)]
+            start = offset + 110
+            name = archive[start:start + fields[11] - 1].decode()
+            entries[name] = fields
+            data_start = (start + fields[11] + 3) & ~3
+            offset = (data_start + fields[6] + 3) & ~3
+            if name == "TRAILER!!!":
+                break
+        self.assertEqual(entries["dev/kmsg"][1], stat.S_IFCHR | 0o600)
+        self.assertEqual(entries["dev/kmsg"][9:11], [1, 11])
+        self.assertEqual(entries["dev/console"][9:11], [5, 1])
+        for variant in runner.variants(self.config):
+            tokens = runner.command_line(variant).split()
+            self.assertEqual(tokens.count("printk.devkmsg=on"), 1)
+            self.assertEqual(tokens.count("printk.time=0"), 1)
+            self.assertEqual(tokens.count("loglevel=7"), 1)
 
     def test_complete_pass(self):
         self.assertEqual(runner.accept_console("\r\n".join(self.lines), 0)["cases"], list(runner.CASES))

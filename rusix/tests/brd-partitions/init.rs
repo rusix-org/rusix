@@ -30,6 +30,18 @@ unsafe extern "C" {
 #[repr(align(4096))]
 struct Buffer([u8; 1024]);
 
+// devkmsg_write copies one write and emits one printk record. Mixing stdout
+// writes with kernel printk can split markers on the serial console; submit
+// complete records through the same kernel logging path instead. Never retry a
+// partial write as another record: an incomplete marker must reject this run.
+fn marker(log: &mut File, text: &str) -> io::Result<()> {
+    let record = format!("<5>{text}\n");
+    check(
+        log.write(record.as_bytes())? == record.len(),
+        "short kmsg record",
+    )
+}
+
 fn check(ok: bool, reason: &str) -> io::Result<()> {
     if ok {
         Ok(())
@@ -120,7 +132,7 @@ fn write_sector(file: &File, offset: u64, value: u8) -> io::Result<()> {
     )
 }
 
-fn run() -> io::Result<()> {
+fn run(log: &mut File) -> io::Result<()> {
     mount_fs(c"sysfs", c"/sys")?;
     for (name, value) in [("rd_nr", 2), ("rd_size", 4096), ("max_part", 4)] {
         check(
@@ -150,7 +162,7 @@ fn run() -> io::Result<()> {
     if unsafe { ioctl(ram0.as_raw_fd(), 0x125f, 0 as c_ulong) } != 0 {
         return Err(io::Error::last_os_error());
     }
-    println!("RUSIX_BRD_PARTITIONS_PASS discovery");
+    marker(log, "RUSIX_BRD_PARTITIONS_PASS discovery")?;
     let partition = open_node("ram0p1", 1, LENGTH)?;
     check(
         sys_number("/sys/class/block/ram0p1/start")? == START / 512,
@@ -160,7 +172,7 @@ fn run() -> io::Result<()> {
         sys_number("/sys/class/block/ram0p1/partition")? == 1,
         "partition number mismatch",
     )?;
-    println!("RUSIX_BRD_PARTITIONS_PASS geometry");
+    marker(log, "RUSIX_BRD_PARTITIONS_PASS geometry")?;
     write_sector(&ram0, START - 512, 0x29)?;
     write_sector(&ram0, START + LENGTH, 0x91)?;
     write_sector(&partition, 0, 0x36)?;
@@ -171,7 +183,7 @@ fn run() -> io::Result<()> {
     read_sector(&partition, 4096, 0xa5)?;
     read_sector(&ram0, START - 512, 0x29)?;
     read_sector(&ram0, START + LENGTH, 0x91)?;
-    println!("RUSIX_BRD_PARTITIONS_PASS translation");
+    marker(log, "RUSIX_BRD_PARTITIONS_PASS translation")?;
     let mut buffer = Buffer([0xcc; 1024]);
     check(
         partition.read_at(&mut buffer.0, LENGTH - 512)? == 512,
@@ -207,7 +219,7 @@ fn run() -> io::Result<()> {
     read_sector(&ram0, START - 512, 0x29)?;
     read_sector(&ram0, START + LENGTH, 0x91)?;
     read_sector(&partition, LENGTH - 512, 0x48)?;
-    println!("RUSIX_BRD_PARTITIONS_PASS boundaries");
+    marker(log, "RUSIX_BRD_PARTITIONS_PASS boundaries")?;
     for offset in [
         0,
         START - 512,
@@ -226,7 +238,7 @@ fn run() -> io::Result<()> {
         ram0.read_at(&mut observed.0[..512], 0)? == 512 && observed.0[..512] == mbr.0[..512],
         "MBR changed during partition I/O",
     )?;
-    println!("RUSIX_BRD_PARTITIONS_PASS independent_disk");
+    marker(log, "RUSIX_BRD_PARTITIONS_PASS independent_disk")?;
     Ok(())
 }
 
@@ -249,16 +261,30 @@ fn main() {
         eprintln!("RUSIX_BRD_PARTITIONS_FAIL missing exact VM authorization");
         process::exit(2);
     }
-    println!("RUSIX_BRD_PARTITIONS_START");
-    match run() {
-        Ok(()) => println!("RUSIX_BRD_PARTITIONS_SUCCESS cases=5"),
-        Err(error) => eprintln!("RUSIX_BRD_PARTITIONS_FAIL {error}"),
+    // Open only after PID1 and exact command-line authorization checks.
+    let outcome = (|| -> io::Result<()> {
+        let mut log = OpenOptions::new().write(true).open("/dev/kmsg")?;
+        let metadata = log.metadata()?;
+        check(
+            metadata.file_type().is_char_device() && metadata.rdev() == 267,
+            "wrong kmsg device",
+        )?;
+        marker(&mut log, "RUSIX_BRD_PARTITIONS_START")?;
+        run(&mut log)?;
+        marker(&mut log, "RUSIX_BRD_PARTITIONS_SUCCESS cases=5")
+    })();
+    if let Err(error) = outcome {
+        let failure = format!("RUSIX_BRD_PARTITIONS_FAIL {error}");
+        if let Ok(mut log) = OpenOptions::new().write(true).open("/dev/kmsg") {
+            let _ = marker(&mut log, &failure);
+        }
+        eprintln!("{failure}");
     }
     let _ = io::stdout().flush();
     let _ = io::stderr().flush();
     // SAFETY: Authorized guest PID1 inherited the live console descriptors.
     // Flush only drains Rust buffering; tcdrain also waits for the serial TX
-    // queue before shutdown printk messages can interleave with test markers.
+    // queue for any remaining stderr diagnostics before shutdown.
     if unsafe { tcdrain(1) } != 0 || unsafe { tcdrain(2) } != 0 {
         eprintln!(
             "RUSIX_BRD_PARTITIONS_FAIL console drain {}",

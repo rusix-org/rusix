@@ -57,7 +57,7 @@ def variants(config):
 
 
 def command_line(variant):
-    return ("console=ttyS0 rdinit=/init rusix.brd_partitions=1 panic=-1 kunit.enable=0 "
+    return ("console=ttyS0 rdinit=/init rusix.brd_partitions=1 panic=-1 kunit.enable=0 printk.devkmsg=on printk.time=0 loglevel=7 "
             "brd.rd_nr=2 brd.rd_size=4096 brd.max_part=4")
 
 
@@ -67,6 +67,7 @@ def make_initramfs(init):
         ("proc", stat.S_IFDIR | 0o755, b"", 0, 0),
         ("sys", stat.S_IFDIR | 0o755, b"", 0, 0),
         ("dev/console", stat.S_IFCHR | 0o600, b"", 5, 1),
+        ("dev/kmsg", stat.S_IFCHR | 0o600, b"", 1, 11),
         ("init", stat.S_IFREG | 0o755, init, 0, 0),
         ("TRAILER!!!", 0, b"", 0, 0),
     ])

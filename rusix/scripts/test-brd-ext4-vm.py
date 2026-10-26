@@ -166,7 +166,7 @@ class Rootfs:
     def archive(self):
         entries = dict(self.files)
         for name, major, minor, kind in (
-            ("console", 5, 1, stat.S_IFCHR), ("ram0", 1, 0, stat.S_IFBLK),
+            ("console", 5, 1, stat.S_IFCHR), ("kmsg", 1, 11, stat.S_IFCHR), ("ram0", 1, 0, stat.S_IFBLK),
             ("null", 1, 3, stat.S_IFCHR), ("zero", 1, 5, stat.S_IFCHR),
             ("random", 1, 8, stat.S_IFCHR), ("urandom", 1, 9, stat.S_IFCHR),
         ):
@@ -278,7 +278,7 @@ def run(args, paths, evidence):
                "-m", "512M", "-smp", "2", "-display", "none", "-serial", "stdio",
                "-monitor", "none", "-nic", "none", "-no-reboot", "-kernel", str(image),
                "-initrd", str(archive), "-append", "console=ttyS0 rdinit=/init rusix.brd_ext4=1 "
-               "brd.rd_nr=1 brd.rd_size=65536 brd.max_part=1 panic=-1 kunit.enable=0"]
+               "brd.rd_nr=1 brd.rd_size=65536 brd.max_part=1 panic=-1 kunit.enable=0 printk.time=0 printk.devkmsg=on loglevel=7"]
     (evidence / "command.sh").write_text(shlex.join(command) + "\n")
     (evidence / "qemu-version.log").write_text(subprocess.check_output(["/usr/bin/qemu-system-x86_64", "--version"], text=True))
     with (evidence / "console.log").open("wb") as log:

@@ -162,6 +162,8 @@ class DependencyTests(unittest.TestCase):
             self.assertEqual(entries["dev/ram0"][1], stat.S_IFBLK | 0o600)
             self.assertEqual(entries["dev/ram0"][9:11], [1, 0])
             self.assertEqual(entries["dev/console"][9:11], [5, 1])
+            self.assertEqual(entries["dev/kmsg"][1], stat.S_IFCHR | 0o600)
+            self.assertEqual(entries["dev/kmsg"][9:11], [1, 11])
             self.assertEqual(entries["tmp"][1], stat.S_IFDIR | 0o1777)
             self.assertIn("lib64", entries)
             file.write_bytes(b"changed")

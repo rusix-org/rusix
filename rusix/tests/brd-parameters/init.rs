@@ -30,6 +30,18 @@ unsafe extern "C" {
 #[repr(align(4096))]
 struct Buffer([u8; 1024]);
 
+// devkmsg_write copies one write and emits one printk record. Mixing stdout
+// writes with kernel printk can split markers on the serial console; submit
+// complete records through the same kernel logging path instead. Never retry a
+// partial write as another record: an incomplete marker must reject this run.
+fn marker(log: &mut File, text: &str) -> io::Result<()> {
+    let record = format!("<5>{text}\n");
+    check(
+        log.write(record.as_bytes())? == record.len(),
+        "short kmsg record",
+    )
+}
+
 fn check(ok: bool, reason: &str) -> io::Result<()> {
     if ok {
         Ok(())
@@ -151,7 +163,7 @@ fn write_sector(file: &File, offset: u64, value: u8) -> io::Result<()> {
     )
 }
 
-fn high_positive(cmdline: &str) -> io::Result<()> {
+fn high_positive(cmdline: &str, log: &mut File) -> io::Result<()> {
     check(
         expected(cmdline, "rd_nr")? == 0,
         "high-positive requires rd_nr=0",
@@ -181,7 +193,7 @@ fn high_positive(cmdline: &str) -> io::Result<()> {
         .parse()
         .map_err(io::Error::other)?;
     check(normalized == i32::MIN, "signed normalization mismatch")?;
-    println!("RUSIX_BRD_PARAMETERS_PASS parameters");
+    marker(log, "RUSIX_BRD_PARAMETERS_PASS parameters")?;
     let listing = fs::read_to_string("/proc/devices")?;
     let block = listing
         .split_once("Block devices:\n")
@@ -195,9 +207,9 @@ fn high_positive(cmdline: &str) -> io::Result<()> {
             == 1,
         "RAM disk major not registered",
     )?;
-    println!("RUSIX_BRD_PARAMETERS_PASS major_registered");
+    marker(log, "RUSIX_BRD_PARAMETERS_PASS major_registered")?;
     check(devices()?.is_empty(), "high-positive precreated a disk")?;
-    println!("RUSIX_BRD_PARAMETERS_PASS initial_devices");
+    marker(log, "RUSIX_BRD_PARAMETERS_PASS initial_devices")?;
     // SAFETY: The caller has verified PID1 and the exact VM authorization;
     // this is a guest-only block node with Linux major1/minor0 encoding.
     if unsafe { mknod(c"/dev/ram0".as_ptr(), 0o60600, 256) } != 0 {
@@ -218,26 +230,26 @@ fn high_positive(cmdline: &str) -> io::Result<()> {
         error.raw_os_error() == Some(6),
         "high-positive open did not return ENXIO",
     )?;
-    println!("RUSIX_BRD_PARAMETERS_PASS open_enxio");
+    marker(log, "RUSIX_BRD_PARAMETERS_PASS open_enxio")?;
     check(
         devices()?.is_empty(),
         "failed creation left a published disk",
     )?;
-    println!("RUSIX_BRD_PARAMETERS_PASS final_devices");
+    marker(log, "RUSIX_BRD_PARAMETERS_PASS final_devices")?;
     // Never mount or read debugfs here: the pinned C allocation-error path can
     // leave a count file pointing to its freed brd_device. Observe only sysfs,
     // major registration and one failed open, then reboot the isolated guest.
     Ok(())
 }
 
-fn run(cmdline: &str) -> io::Result<()> {
+fn run(cmdline: &str, log: &mut File) -> io::Result<()> {
     mount_fs(c"sysfs", c"/sys")?;
     let modes: Vec<_> = cmdline
         .split_ascii_whitespace()
         .filter_map(|word| word.strip_prefix("rusix.parameters_mode="))
         .collect();
     if modes == ["high_positive"] {
-        return high_positive(cmdline);
+        return high_positive(cmdline, log);
     }
     check(
         modes == ["normal"],
@@ -256,12 +268,12 @@ fn run(cmdline: &str) -> io::Result<()> {
             "module parameter mismatch",
         )?;
     }
-    println!("RUSIX_BRD_PARAMETERS_PASS parameters");
+    marker(log, "RUSIX_BRD_PARAMETERS_PASS parameters")?;
     check(
         devices()? == (0..count).collect::<Vec<_>>(),
         "initial device inventory mismatch",
     )?;
-    println!("RUSIX_BRD_PARAMETERS_PASS initial_devices");
+    marker(log, "RUSIX_BRD_PARAMETERS_PASS initial_devices")?;
     let capacity = size * 1024;
     let ram0 = open_ram(0, spacing, capacity)?;
     let ram1 = open_ram(1, spacing, capacity)?;
@@ -277,7 +289,7 @@ fn run(cmdline: &str) -> io::Result<()> {
         devices()? == (0..final_count).collect::<Vec<_>>(),
         "on-demand inventory mismatch",
     )?;
-    println!("RUSIX_BRD_PARAMETERS_PASS on_demand");
+    marker(log, "RUSIX_BRD_PARAMETERS_PASS on_demand")?;
     for file in [&ram0, &ram1] {
         for offset in [0, 4096, capacity - 512] {
             read_sector(file, offset, 0)?;
@@ -294,7 +306,7 @@ fn run(cmdline: &str) -> io::Result<()> {
         read_sector(file, capacity - 512, last)?;
         read_sector(file, 4096, 0)?;
     }
-    println!("RUSIX_BRD_PARAMETERS_PASS independent_io");
+    marker(log, "RUSIX_BRD_PARAMETERS_PASS independent_io")?;
     // LTS block/fops.c truncates reads at capacity, returns EOF at/beyond it,
     // and rejects nonempty writes starting there with ENOSPC before driver IO.
     for (file, last) in [(&ram0, 0x73), (&ram1, 0xd9)] {
@@ -325,7 +337,7 @@ fn run(cmdline: &str) -> io::Result<()> {
         read_sector(file, capacity - 512, last)?;
     }
     drop(extra);
-    println!("RUSIX_BRD_PARAMETERS_PASS capacity");
+    marker(log, "RUSIX_BRD_PARAMETERS_PASS capacity")?;
     Ok(())
 }
 
@@ -348,16 +360,30 @@ fn main() {
         eprintln!("RUSIX_BRD_PARAMETERS_FAIL missing exact VM authorization");
         process::exit(2);
     }
-    println!("RUSIX_BRD_PARAMETERS_START");
-    match run(&cmdline) {
-        Ok(()) => println!("RUSIX_BRD_PARAMETERS_SUCCESS cases=5"),
-        Err(error) => eprintln!("RUSIX_BRD_PARAMETERS_FAIL {error}"),
+    // Open only after PID1 and exact command-line authorization checks.
+    let outcome = (|| -> io::Result<()> {
+        let mut log = OpenOptions::new().write(true).open("/dev/kmsg")?;
+        let metadata = log.metadata()?;
+        check(
+            metadata.file_type().is_char_device() && metadata.rdev() == 267,
+            "wrong kmsg device",
+        )?;
+        marker(&mut log, "RUSIX_BRD_PARAMETERS_START")?;
+        run(&cmdline, &mut log)?;
+        marker(&mut log, "RUSIX_BRD_PARAMETERS_SUCCESS cases=5")
+    })();
+    if let Err(error) = outcome {
+        let failure = format!("RUSIX_BRD_PARAMETERS_FAIL {error}");
+        if let Ok(mut log) = OpenOptions::new().write(true).open("/dev/kmsg") {
+            let _ = marker(&mut log, &failure);
+        }
+        eprintln!("{failure}");
     }
     let _ = io::stdout().flush();
     let _ = io::stderr().flush();
     // SAFETY: Authorized guest PID1 inherited the live console descriptors.
     // Flush only drains Rust buffering; tcdrain also waits for the serial TX
-    // queue before shutdown printk messages can interleave with test markers.
+    // queue for any remaining stderr diagnostics before shutdown.
     if unsafe { tcdrain(1) } != 0 || unsafe { tcdrain(2) } != 0 {
         eprintln!(
             "RUSIX_BRD_PARAMETERS_FAIL console drain {}",

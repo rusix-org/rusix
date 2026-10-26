@@ -19,6 +19,21 @@ unsafe extern "C" {
     fn reboot(command: i32) -> i32;
 }
 
+// One write becomes one printk record; never retry a short write as a second
+// record. Called only after guest authorization, before/after the workload.
+fn marker(text: &str) -> io::Result<()> {
+    let mut file = fs::OpenOptions::new().write(true).open("/dev/kmsg")?;
+    let metadata = file.metadata()?;
+    if !metadata.file_type().is_char_device() || metadata.rdev() != 267 {
+        return Err(io::Error::other("/dev/kmsg is not character device 1:11"));
+    }
+    let record = format!("<5>{text}\n");
+    if file.write(record.as_bytes())? != record.len() {
+        return Err(io::Error::other("short marker write"));
+    }
+    Ok(())
+}
+
 fn command(path: &str, args: &[&str]) -> io::Result<()> {
     let status = Command::new(path)
         .args(args)
@@ -96,16 +111,17 @@ fn main() {
     }
     // Avoid inheriting loader overrides from any unexpected init environment.
     env::remove_var("LD_PRELOAD");
-    println!("RUSIX_EXT4_START");
-    match run() {
-        Ok(()) => println!("RUSIX_EXT4_SUCCESS cases=6"),
-        Err(error) => eprintln!("RUSIX_EXT4_FAIL init {error}"),
+    if let Err(error) = marker("RUSIX_EXT4_START")
+        .and_then(|()| run())
+        .and_then(|()| marker("RUSIX_EXT4_SUCCESS cases=6"))
+    {
+        eprintln!("RUSIX_EXT4_FAIL init {error}");
     }
     let _ = io::stdout().flush();
     let _ = io::stderr().flush();
     // SAFETY: Authorized guest PID1 inherited the live console descriptors.
     // Flush only drains Rust buffering; tcdrain also waits for the serial TX
-    // queue before shutdown printk messages can interleave with test markers.
+    // queue for ordinary utility logs before shutdown printk messages.
     if unsafe { tcdrain(1) } != 0 || unsafe { tcdrain(2) } != 0 {
         eprintln!(
             "RUSIX_EXT4_FAIL console drain {}",
