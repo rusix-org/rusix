@@ -1,5 +1,11 @@
 # Pinned x86_64 build and verification container
 
+**Run tests locally for now.** The GitHub workflow is disabled and manual-only to
+limit credit use. Revisit hosted execution when Phase 1a is ready for outside
+review; enabling or dispatching it requires an explicit request. Do not restore
+push/PR triggers as routine maintenance. Existing hosted results are historical
+evidence, not authorization for more runs.
+
 This environment supplies its own compilers, Rust source, binding generator,
 static C runtime, QEMU, and build tools. It does not use the original laptop's
 Arch package extraction or host Rust installation. Docker is the host dependency.

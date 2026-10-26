@@ -1,0 +1,40 @@
+[04:02:14] ============================================================
+[04:02:14] =============== rust_kernel_fmt (1 subtest) ================
+[04:02:14] [PASSED] test_ptr_formatting
+[04:02:14] ================= [PASSED] rust_kernel_fmt =================
+[04:02:14] ========== rust_spinlock_irq_condvar (1 subtest) ===========
+[04:02:14] [PASSED] spinlock_irq_condvar
+[04:02:14] ============ [PASSED] rust_spinlock_irq_condvar ============
+[04:02:14] ================ math-int_sqrt (1 subtest) =================
+[04:02:14] ====================== int_sqrt_test  ======================
+[04:02:14] [PASSED] edge case: square root of 0
+[04:02:14] [PASSED] perfect square: square root of 1
+[04:02:14] [PASSED] non-perfect square: square root of 2
+[04:02:14] [PASSED] non-perfect square: square root of 3
+[04:02:14] [PASSED] perfect square: square root of 4
+[04:02:14] [PASSED] non-perfect square: square root of 5
+[04:02:14] [PASSED] non-perfect square: square root of 6
+[04:02:14] [PASSED] non-perfect square: square root of 7
+[04:02:14] [PASSED] non-perfect square: square root of 8
+[04:02:14] [PASSED] perfect square: square root of 9
+[04:02:14] [PASSED] non-perfect square: square root of 15 (N-1 from 16)
+[04:02:14] [PASSED] perfect square: square root of 16
+[04:02:14] [PASSED] non-perfect square: square root of 17 (N+1 from 16)
+[04:02:14] [PASSED] non-perfect square: square root of 80 (N-1 from 81)
+[04:02:14] [PASSED] perfect square: square root of 81
+[04:02:14] [PASSED] non-perfect square: square root of 82 (N+1 from 81)
+[04:02:14] [PASSED] non-perfect square: square root of 255 (N-1 from 256)
+[04:02:14] [PASSED] perfect square: square root of 256
+[04:02:14] [PASSED] non-perfect square: square root of 257 (N+1 from 256)
+[04:02:14] [PASSED] large input: square root of 2147483648
+[04:02:14] [PASSED] edge case: ULONG_MAX for 32-bit
+[04:02:14] ================== [PASSED] int_sqrt_test ==================
+[04:02:14] ================== [PASSED] math-int_sqrt ==================
+[04:02:14] ======== rusix-int-sqrt-compatibility (3 subtests) =========
+[04:02:14] [PASSED] int_sqrt_small_domain
+[04:02:14] [PASSED] int_sqrt_boundaries
+[04:02:14] [PASSED] int_sqrt_differential
+[04:02:14] ========== [PASSED] rusix-int-sqrt-compatibility ===========
+[04:02:14] ============================================================
+[04:02:14] Testing complete. Ran 26 tests: passed: 26
+[04:02:14] Test results stored in /out/logs/local-replay-kunit.json

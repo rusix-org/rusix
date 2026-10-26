@@ -1,19 +1,15 @@
 # VM-only integer-square-root module ABI probe
 
-This fixture checks that a separately built C module can resolve the existing
-`int_sqrt` export, calculate 17 native-width boundary cases, and unload normally.
-It is test infrastructure, not a general init system. Never execute this `/init`
-or load this module on the host.
+**Prepared fixture; kernel/module runtime verification remains pending.** It
+checks a separately built C module resolves `int_sqrt`, passes 17 native-width
+cases and unloads. Never run `/init` or load the module on the host/container.
+The PID 1 guard is insufficient protection outside an isolated VM.
 
-`MODULE_LICENSE("BSD")` is intentional: pinned Linux treats it as non-GPL-
-compatible, so modpost/loading exercises the original unrestricted export policy.
-The kernel is expected to report a proprietary/out-of-tree-module taint.
-Checkpatch reports one intentional unknown-license warning for this string.
-Do not change it to a GPL-compatible tag merely to make the fixture pass.
+`MODULE_LICENSE("BSD")` intentionally exercises the unrestricted export: Linux
+treats this tag as non-GPL-compatible, causing proprietary/out-of-tree taint and
+one intentional checkpatch license warning. Do not change it to obtain a pass.
 
-## Build the Rust init
-
-From the Git checkout root (the runner is still pending verification):
+From the checkout root, build and inspect the static init without executing it:
 
 ```sh
 source rusix/scripts/repo-paths.sh
@@ -27,23 +23,11 @@ llvm-readelf -h -l "$RUSIX_OUTPUT_ROOT/builds/module-fixture/init"
 llvm-nm --undefined-only "$RUSIX_OUTPUT_ROOT/builds/module-fixture/init"
 ```
 
-The result must be an x86_64 static ELF executable with no interpreter and no
-undefined symbols. `_start` aligns the process stack before entering Rust.
-The init checks `getpid() == 1` before any module/reboot operation, but this guard
-is not a substitute for a VM; never run it as host/container PID 1.
-
-## Kernel and module requirements
-
-Use a complete built kernel configured with `CONFIG_MODULES=y`,
-`CONFIG_MODULE_UNLOAD=y`, `CONFIG_BLK_DEV_INITRD=y`, `CONFIG_BINFMT_ELF=y`, and a
-working serial console. Build the module against that kernel's exact output tree
-and `Module.symvers`; do not use `modules_prepare` as a substitute for a complete
-build when verifying symbol versions. Enable module versioning in the kernel
-when testing CRC compatibility. No force-load, ignored-vermagic, ignored-modversion,
-or force-unload flags are supplied by the init.
-
-Stage the `Makefile` and `int_sqrt_probe.c` in an output directory to keep generated
-module files out of source control, then invoke Kbuild's external module target:
+Require x86_64 ELF, no interpreter or undefined symbols. Use a completely built
+kernel with `MODULES=y`, `MODULE_UNLOAD=y`, `BLK_DEV_INITRD=y`, `BINFMT_ELF=y` and
+serial console; enable module versioning for CRC testing. Build against its exact
+output and `Module.symvers`, not just `modules_prepare`. The init supplies no
+force-load, ignored-version or force-unload flags.
 
 ```sh
 mkdir -p "$RUSIX_OUTPUT_ROOT/builds/module-fixture/module"
@@ -53,19 +37,12 @@ bash rusix/scripts/with-local-tools.sh make -C "$RUSIX_SOURCE" \
   O="$RUSIX_OUTPUT_ROOT/builds/MODULE_KERNEL" M="$RUSIX_OUTPUT_ROOT/builds/module-fixture/module" LLVM=1 modules
 ```
 
-Replace `MODULE_KERNEL` with the actual completed kernel output directory.
-The parent verification runner packages a `newc` initramfs containing:
-
-- `/init` executable, built as above;
-- `/int_sqrt_probe.ko`, the uncompressed module;
-- `/dev` directory and `/dev/console` character device, major 5 minor 1.
-
-Boot in bounded QEMU with `rdinit=/init console=ttyS0`, one CPU, 512 MiB RAM,
-no network, and `-no-reboot`. Do **not** use `kunit_shutdown=reboot`: that would
-reboot before userspace runs. The parent runner must impose a timeout and reject
-any `RUSIX_INIT_FAIL` or `RUSIX_MODULE_FAIL` marker, panic, or incomplete output.
-
-Required success markers, in order:
+Replace `MODULE_KERNEL` with the completed output directory. The pending runner
+must package a `newc` initramfs with executable `/init`, uncompressed
+`/int_sqrt_probe.ko`, `/dev` and `/dev/console` (character 5:1). Boot bounded QEMU
+with `rdinit=/init console=ttyS0`, one CPU, 512 MiB, no network and `-no-reboot`.
+Omit `kunit_shutdown=reboot`, which would bypass userspace. Reject timeout,
+panic, any `RUSIX_INIT_FAIL`/`RUSIX_MODULE_FAIL`, or missing/out-of-order markers:
 
 ```text
 RUSIX_INIT_START
@@ -76,7 +53,5 @@ RUSIX_INIT_UNLOAD_PASS
 RUSIX_MODULE_SMOKE_PASS
 ```
 
-Successful QEMU exit alone is not sufficient: failure paths also request reboot.
-If reboot returns, init reports failure and waits; the external VM timeout ends
-the run. This proves only the selected x86_64 module boundary and tested values,
-not cross-version module compatibility or other architectures.
+VM exit alone is insufficient: failure paths also reboot. Scope is the selected
+x86_64 export boundary and values, not cross-version module ABI or other hardware.

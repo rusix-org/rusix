@@ -15,8 +15,8 @@ There is no Rust BRD driver or completed ordinary-userspace/ext4 workload yet.
 The engineering source remains `21a7f44fd0765fcc5194130b28767786eba1d1e7`.
 The accepted target is **Linux 6.18.58 LTS**; transition and verification are
 pending. Existing results, including the BRD run at `976e2de80`, do not certify
-that LTS baseline. Hosted CI and the pinned container are being established;
-no green hosted run is claimed here.
+that LTS baseline. The pinned container passes local verification. Hosted CI is
+disabled and manual-only under the [execution policy](ci/README.md).
 
 - [Progress and evidence](PROGRESS.md)
 - [Migration inventory](docs/MIGRATIONS.md) and [BRD contract/design](docs/BRD.md)

@@ -1,0 +1,230 @@
+{
+    "name": "KUnit Test Group",
+    "sub_groups": [
+        {
+            "name": "rust_kernel_fmt",
+            "sub_groups": [],
+            "test_cases": [
+                {
+                    "name": "test_ptr_formatting",
+                    "status": "PASS"
+                }
+            ],
+            "misc": {
+                "tests": 1,
+                "passed": 1,
+                "failed": 0,
+                "crashed": 0,
+                "skipped": 0,
+                "errors": 0
+            },
+            "arch": "",
+            "defconfig": "",
+            "build_environment": "",
+            "lab_name": null,
+            "kernel": null,
+            "job": null,
+            "git_branch": "kselftest"
+        },
+        {
+            "name": "rust_spinlock_irq_condvar",
+            "sub_groups": [],
+            "test_cases": [
+                {
+                    "name": "spinlock_irq_condvar",
+                    "status": "PASS"
+                }
+            ],
+            "misc": {
+                "tests": 1,
+                "passed": 1,
+                "failed": 0,
+                "crashed": 0,
+                "skipped": 0,
+                "errors": 0
+            },
+            "arch": "",
+            "defconfig": "",
+            "build_environment": "",
+            "lab_name": null,
+            "kernel": null,
+            "job": null,
+            "git_branch": "kselftest"
+        },
+        {
+            "name": "math-int_sqrt",
+            "sub_groups": [
+                {
+                    "name": "int_sqrt_test",
+                    "sub_groups": [],
+                    "test_cases": [
+                        {
+                            "name": "edge case: square root of 0",
+                            "status": "PASS"
+                        },
+                        {
+                            "name": "perfect square: square root of 1",
+                            "status": "PASS"
+                        },
+                        {
+                            "name": "non-perfect square: square root of 2",
+                            "status": "PASS"
+                        },
+                        {
+                            "name": "non-perfect square: square root of 3",
+                            "status": "PASS"
+                        },
+                        {
+                            "name": "perfect square: square root of 4",
+                            "status": "PASS"
+                        },
+                        {
+                            "name": "non-perfect square: square root of 5",
+                            "status": "PASS"
+                        },
+                        {
+                            "name": "non-perfect square: square root of 6",
+                            "status": "PASS"
+                        },
+                        {
+                            "name": "non-perfect square: square root of 7",
+                            "status": "PASS"
+                        },
+                        {
+                            "name": "non-perfect square: square root of 8",
+                            "status": "PASS"
+                        },
+                        {
+                            "name": "perfect square: square root of 9",
+                            "status": "PASS"
+                        },
+                        {
+                            "name": "non-perfect square: square root of 15 (N-1 from 16)",
+                            "status": "PASS"
+                        },
+                        {
+                            "name": "perfect square: square root of 16",
+                            "status": "PASS"
+                        },
+                        {
+                            "name": "non-perfect square: square root of 17 (N+1 from 16)",
+                            "status": "PASS"
+                        },
+                        {
+                            "name": "non-perfect square: square root of 80 (N-1 from 81)",
+                            "status": "PASS"
+                        },
+                        {
+                            "name": "perfect square: square root of 81",
+                            "status": "PASS"
+                        },
+                        {
+                            "name": "non-perfect square: square root of 82 (N+1 from 81)",
+                            "status": "PASS"
+                        },
+                        {
+                            "name": "non-perfect square: square root of 255 (N-1 from 256)",
+                            "status": "PASS"
+                        },
+                        {
+                            "name": "perfect square: square root of 256",
+                            "status": "PASS"
+                        },
+                        {
+                            "name": "non-perfect square: square root of 257 (N+1 from 256)",
+                            "status": "PASS"
+                        },
+                        {
+                            "name": "large input: square root of 2147483648",
+                            "status": "PASS"
+                        },
+                        {
+                            "name": "edge case: ULONG_MAX for 32-bit",
+                            "status": "PASS"
+                        }
+                    ],
+                    "misc": {
+                        "tests": 21,
+                        "passed": 21,
+                        "failed": 0,
+                        "crashed": 0,
+                        "skipped": 0,
+                        "errors": 0
+                    },
+                    "arch": "",
+                    "defconfig": "",
+                    "build_environment": "",
+                    "lab_name": null,
+                    "kernel": null,
+                    "job": null,
+                    "git_branch": "kselftest"
+                }
+            ],
+            "test_cases": [],
+            "misc": {
+                "tests": 21,
+                "passed": 21,
+                "failed": 0,
+                "crashed": 0,
+                "skipped": 0,
+                "errors": 0
+            },
+            "arch": "",
+            "defconfig": "",
+            "build_environment": "",
+            "lab_name": null,
+            "kernel": null,
+            "job": null,
+            "git_branch": "kselftest"
+        },
+        {
+            "name": "rusix-int-sqrt-compatibility",
+            "sub_groups": [],
+            "test_cases": [
+                {
+                    "name": "int_sqrt_small_domain",
+                    "status": "PASS"
+                },
+                {
+                    "name": "int_sqrt_boundaries",
+                    "status": "PASS"
+                },
+                {
+                    "name": "int_sqrt_differential",
+                    "status": "PASS"
+                }
+            ],
+            "misc": {
+                "tests": 3,
+                "passed": 3,
+                "failed": 0,
+                "crashed": 0,
+                "skipped": 0,
+                "errors": 0
+            },
+            "arch": "",
+            "defconfig": "",
+            "build_environment": "",
+            "lab_name": null,
+            "kernel": null,
+            "job": null,
+            "git_branch": "kselftest"
+        }
+    ],
+    "test_cases": [],
+    "misc": {
+        "tests": 26,
+        "passed": 26,
+        "failed": 0,
+        "crashed": 0,
+        "skipped": 0,
+        "errors": 0
+    },
+    "arch": "",
+    "defconfig": "",
+    "build_environment": "",
+    "lab_name": null,
+    "kernel": null,
+    "job": null,
+    "git_branch": "kselftest"
+}

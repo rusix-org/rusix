@@ -1,12 +1,12 @@
 # Contributing to rusix
 
-Read [ADR 0002](docs/adr/0002.md), [current progress](PROGRESS.md) and the relevant
-[migration record](docs/MIGRATIONS.md). The ADR owns compatibility/divergence
-policy; [AGENTS.md](AGENTS.md) owns execution and unsafe-code requirements.
+Read [ADR 0002](docs/adr/0002.md), [progress](PROGRESS.md) and the relevant
+[migration record](docs/MIGRATIONS.md). [AGENTS.md](AGENTS.md) defines implementation,
+unsafe-code and verification discipline; follow it for assisted contributions.
 
-## Checkout and tools
+## Checkout and verification
 
-Use disk storage, outside `/tmp`, with no spaces or colons in the checkout path:
+Use disk storage outside `/tmp`; Kbuild forbids spaces and colons in source paths:
 
 ```bash
 git clone --branch rusix/main https://github.com/rusix-org/rusix.git rusix
@@ -15,94 +15,50 @@ git remote add upstream https://github.com/torvalds/linux.git
 git switch -c rusix/your-topic
 ```
 
-Commands below run from this Git root. Edit tracked `rusix/` directly; no parent
-copies or synchronization. Outputs default to sibling `<checkout-name>-out`.
-`RUSIX_OUTPUT_ROOT` overrides output; `RUSIX_TOOLS_ROOT` overrides extracted
-local tools (default `$RUSIX_OUTPUT_ROOT/.tools/root`). Relative overrides resolve
-against the invoking directory. Worktrees need separate output directories.
-Never push to the Linux `upstream` remote.
+Run commands from this Git root and edit tracked `rusix/` directly. Never push to
+`upstream`. Outputs default to sibling `<checkout-name>-out`; `RUSIX_OUTPUT_ROOT`
+overrides this, and `RUSIX_TOOLS_ROOT` overrides `$RUSIX_OUTPUT_ROOT/.tools/root`.
+Relative overrides use the invoking directory. Give each worktree separate output.
+Differential checks need the pinned reference commit locally, even in shallow clones.
 
-See [TOOLCHAIN.md](docs/TOOLCHAIN.md) for host requirements and
-[the container instructions](ci/README.md) for the pinned environment under
-validation. A container definition is not evidence of a successful hosted run.
-Differential tests require the pinned source commit to be available locally;
-shallow clones may need more history.
-
-## Reproduce the current checks
+Use [the pinned container](ci/README.md) for kernel build, VM and measurement
+profiles; that guide owns exact commands, pins and the local-only spending policy.
+[TOOLCHAIN.md](docs/TOOLCHAIN.md) covers existing host setups. Quick host checks:
 
 ```bash
 bash rusix/scripts/with-local-tools.sh bash rusix/scripts/check-toolchain.sh
-python3 rusix/tests/test_kunit_gate.py
-python3 rusix/tests/test_repo_paths.py
-python3 rusix/tests/test_brd_gate.py
+python3 -m unittest discover -s rusix/tests -p 'test_*.py'
 bash rusix/scripts/with-local-tools.sh python3 rusix/scripts/test-int-sqrt-host.py
-```
-
-After recording source changes in a local commit, build and boot the KUnit profile:
-
-```bash
-bash rusix/scripts/build-kernel.sh review
-source rusix/scripts/repo-paths.sh
-bash rusix/scripts/boot-kunit.sh "$RUSIX_OUTPUT_ROOT/builds/review" review-001
-```
-
-For the C BRD contract, build its profile and pass the exact evidence directory
-printed by the build (replace `REPLACE` below):
-
-```bash
-bash rusix/scripts/build-kernel.sh --profile brd review-brd
-python3 rusix/scripts/test-brd-vm.py "$RUSIX_OUTPUT_ROOT/builds/review-brd" brd-001 \
-  --build-evidence "$RUSIX_OUTPUT_ROOT/logs/review-brd-build.REPLACE"
-```
-
-Recorded builds require clean committed source. Each build reserves fresh logs;
-each VM attempt needs a new label. Builds use two jobs; VMs are bounded to
-512 MiB and 180 seconds, with no network and one CPU for KUnit or two for BRD.
-The BRD runner compiles a static guest probe; never execute it on the host.
-Do not load experimental modules or alter the host bootloader/kernel.
-
-Current results belong to the engineering baseline, not the pending 6.18.58
-transition. Preserve failed results and warnings. Preflight, host tests and VM
-checks establish different scopes; consult the evidence before claiming parity.
-
-## Migration and review
-
-Before implementation, inspect the reference C, callers, Kconfig/Kbuild and tests.
-Specify behavior and ownership/context assumptions; check existing upstream Rust
-APIs and mailing-list proposals before introducing new abstractions. Separate
-translation, intentional behavior changes and redesign. Preserve baseline tests,
-add meaningful missing coverage, run paired C/Rust checks and prove Rust selection.
-Record retained C and adapter removal criteria. Apply the ADR's selected-fix and
-divergence rules rather than automatic whole-tree rebases.
-
-Keep patches focused and submit against `rusix/main`. A review description needs:
-
-- The concrete behavior change and preserved contract.
-- Exact source/config/tool identities, commands, raw results and limitations.
-- Unsafe invariants, selected implementation, retained C and unfinished gates.
-
-Update `PROGRESS.md` and the migration record. Do not commit installed tools,
-build trees, binaries or incidental local files; archive selected evidence with
-hashes. Run relevant formatting/style checks and `git diff --check`. For the
-current Rust helper:
-
-```bash
 rustfmt --check lib/math/int_sqrt_rust.rs rusix/tests/int_sqrt_host.rs
+git diff --check
 ```
 
-Use `scripts/checkpatch.pl` for changed kernel code. Explain intentional warnings.
-Upstream maintainers are not automatically rusix reviewers; upstream submission
-requires its own relevant, reviewable patch plan.
+Recorded builds require clean committed source; use fresh outputs and VM labels,
+retaining failed attempts. Never run guest probes or load experimental modules on
+the host. The [BRD fixture](tests/brd-contract/README.md) documents its exact scope.
+Current engineering-baseline results do not verify the pending 6.18.58 transition.
+
+## Review
+
+Submit focused patches against `rusix/main`, separating translation, behavior
+changes and redesign. Apply ADR 0002's selected-fix/divergence rules. Describe:
+
+- The concrete behavior change, preserved contract and unsafe invariants.
+- Source/config/tool identities, commands, raw evidence and limitations.
+- Selected implementation, remaining C/adapters and unfinished gates.
+
+Update progress and the migration record. Commit selected evidence with hashes,
+not installed tools, binaries or build trees. Use kernel formatting guidance and
+`scripts/checkpatch.pl` for changed kernel code; explain intentional warnings.
+Upstream submission needs its own relevant patch plan and review.
 
 ## Licensing and authorship
 
-Preserve `COPYING`, `LICENSES/`, SPDX identifiers and original attribution. Follow
-`Documentation/process/license-rules.rst` and `submitting-patches.rst`.
-Human contributors use their own authorship and `git commit -s` only when they
-can certify the DCO; never invent another person's approval or sign-off.
+Preserve `COPYING`, `LICENSES/`, SPDX notices and attribution. Follow Git-root
+`Documentation/process/license-rules.rst` and `submitting-patches.rst`. Humans
+may use `git commit -s` only when able to certify the DCO; never invent sign-offs.
 
 Disclose substantial generated content and tool-assisted findings under
 `Documentation/process/generated-content.rst` and `coding-assistants.rst`.
 Agents must not add human Signed-off-by certification. Human submitters remain
-responsible for understanding, reviewing and testing assisted work; see
-[ASSISTANCE.md](docs/ASSISTANCE.md).
+responsible for reviewing and testing assisted work; see [ASSISTANCE.md](docs/ASSISTANCE.md).
