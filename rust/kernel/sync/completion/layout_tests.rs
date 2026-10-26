@@ -78,25 +78,37 @@ mod tests {
         // and the pointer is never retained by these nonblocking C operations.
         // This task is the only owner/user: raw Rust observations and reset do
         // not race with C, a producer, a waiter, or an interrupt callback.
-        unsafe {
-            assert_eq!(owned.done.get().read(), 0);
-            bindings::complete(raw);
-            assert_eq!(owned.done.get().read(), 1);
-            assert!(bindings::try_wait_for_completion(raw));
-            assert_eq!(owned.done.get().read(), 0);
-            assert!(!bindings::try_wait_for_completion(raw));
-            bindings::complete_all(raw);
-            assert_eq!(owned.done.get().read(), u32::MAX);
-            assert!(bindings::try_wait_for_completion(raw));
-            assert_eq!(owned.done.get().read(), u32::MAX);
-            // Exactly the quiescent counter update performed by C's inline
-            // reinit_completion; the pinned queue is neither moved nor reset.
-            owned.done.get().write(0);
-            assert!(!bindings::try_wait_for_completion(raw));
-            bindings::complete(raw);
-            assert!(bindings::try_wait_for_completion(raw));
-            assert_eq!(owned.done.get().read(), 0);
-        }
+        assert_eq!(unsafe { owned.done.get().read() }, 0);
+        // SAFETY: The initialized pinned storage and access conditions above still hold.
+        unsafe { bindings::complete(raw) };
+        // SAFETY: The initialized pinned storage and access conditions above still hold.
+        assert_eq!(unsafe { owned.done.get().read() }, 1);
+        // SAFETY: The initialized pinned storage and access conditions above still hold.
+        assert!(unsafe { bindings::try_wait_for_completion(raw) });
+        // SAFETY: The initialized pinned storage and access conditions above still hold.
+        assert_eq!(unsafe { owned.done.get().read() }, 0);
+        // SAFETY: The initialized pinned storage and access conditions above still hold.
+        assert!(unsafe { !bindings::try_wait_for_completion(raw) });
+        // SAFETY: The initialized pinned storage and access conditions above still hold.
+        unsafe { bindings::complete_all(raw) };
+        // SAFETY: The initialized pinned storage and access conditions above still hold.
+        assert_eq!(unsafe { owned.done.get().read() }, u32::MAX);
+        // SAFETY: The initialized pinned storage and access conditions above still hold.
+        assert!(unsafe { bindings::try_wait_for_completion(raw) });
+        // SAFETY: The initialized pinned storage and access conditions above still hold.
+        assert_eq!(unsafe { owned.done.get().read() }, u32::MAX);
+        // SAFETY: Exactly the quiescent counter update performed by C's inline
+        // reinit_completion; the pinned queue is neither moved nor reset.
+        // The initialized storage remains exclusively accessed by this task.
+        unsafe { owned.done.get().write(0) };
+        // SAFETY: The initialized pinned storage and access conditions above still hold.
+        assert!(unsafe { !bindings::try_wait_for_completion(raw) });
+        // SAFETY: The initialized pinned storage and access conditions above still hold.
+        unsafe { bindings::complete(raw) };
+        // SAFETY: The initialized pinned storage and access conditions above still hold.
+        assert!(unsafe { bindings::try_wait_for_completion(raw) });
+        // SAFETY: The initialized pinned storage and access conditions above still hold.
+        assert_eq!(unsafe { owned.done.get().read() }, 0);
         // No producer or queued waiter exists when the allocation is freed.
         Ok(())
     }
@@ -236,11 +248,11 @@ mod tests {
         // worker's wait has returned before it signals finished, so its stack
         // waiter is gone. These nonblocking calls retain no pointer. A lingering
         // callback epilogue owns a separate Arc and no longer accesses event.
-        unsafe {
-            bindings::complete(state.event.as_raw());
-            assert!(bindings::try_wait_for_completion(state.event.as_raw()));
-            assert!(!bindings::try_wait_for_completion(state.event.as_raw()));
-        }
+        unsafe { bindings::complete(state.event.as_raw()) };
+        // SAFETY: The initialized pinned storage and access conditions above still hold.
+        assert!(unsafe { bindings::try_wait_for_completion(state.event.as_raw()) });
+        // SAFETY: The initialized pinned storage and access conditions above still hold.
+        assert!(unsafe { !bindings::try_wait_for_completion(state.event.as_raw()) });
         Ok(())
     }
 }

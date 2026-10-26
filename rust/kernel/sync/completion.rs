@@ -122,10 +122,9 @@ mod contract_tests {
         let completion = KBox::pin_init(Completion::new(), GFP_KERNEL)?;
         // SAFETY: Initialization pins valid C completion storage. This test is
         // its only user; both C calls are nonblocking and retain no pointer.
-        unsafe {
-            assert!(!bindings::completion_done(completion.as_raw()));
-            assert!(!bindings::try_wait_for_completion(completion.as_raw()));
-        }
+        assert!(unsafe { !bindings::completion_done(completion.as_raw()) });
+        // SAFETY: The initialized pinned storage and access conditions above still hold.
+        assert!(unsafe { !bindings::try_wait_for_completion(completion.as_raw()) });
         Ok(())
     }
 
@@ -134,16 +133,21 @@ mod contract_tests {
         let completion = KBox::pin_init(Completion::new(), GFP_KERNEL)?;
         // SAFETY: The initialized, pinned completion outlives these synchronous
         // C calls; no other task accesses it and no waiter is enrolled.
-        unsafe {
-            bindings::complete(completion.as_raw());
-            bindings::complete(completion.as_raw());
-            assert!(bindings::completion_done(completion.as_raw()));
-            assert!(bindings::try_wait_for_completion(completion.as_raw()));
-            assert!(bindings::completion_done(completion.as_raw()));
-            assert!(bindings::try_wait_for_completion(completion.as_raw()));
-            assert!(!bindings::try_wait_for_completion(completion.as_raw()));
-            assert!(!bindings::completion_done(completion.as_raw()));
-        }
+        unsafe { bindings::complete(completion.as_raw()) };
+        // SAFETY: The initialized pinned storage and access conditions above still hold.
+        unsafe { bindings::complete(completion.as_raw()) };
+        // SAFETY: The initialized pinned storage and access conditions above still hold.
+        assert!(unsafe { bindings::completion_done(completion.as_raw()) });
+        // SAFETY: The initialized pinned storage and access conditions above still hold.
+        assert!(unsafe { bindings::try_wait_for_completion(completion.as_raw()) });
+        // SAFETY: The initialized pinned storage and access conditions above still hold.
+        assert!(unsafe { bindings::completion_done(completion.as_raw()) });
+        // SAFETY: The initialized pinned storage and access conditions above still hold.
+        assert!(unsafe { bindings::try_wait_for_completion(completion.as_raw()) });
+        // SAFETY: The initialized pinned storage and access conditions above still hold.
+        assert!(unsafe { !bindings::try_wait_for_completion(completion.as_raw()) });
+        // SAFETY: The initialized pinned storage and access conditions above still hold.
+        assert!(unsafe { !bindings::completion_done(completion.as_raw()) });
         Ok(())
     }
 
@@ -155,21 +159,28 @@ mod contract_tests {
         // operation returns before the next starts; no producer or waiter can
         // overlap reset. Writing just `done` matches inline reinit_completion,
         // without moving/reinitializing the self-referential wait queue.
-        unsafe {
-            assert!(bindings::try_wait_for_completion(completion.as_raw()));
-            assert!(bindings::try_wait_for_completion(completion.as_raw()));
-            assert_eq!(
-                bindings::wait_for_completion_timeout(completion.as_raw(), 0),
-                1
-            );
-            assert!(bindings::completion_done(completion.as_raw()));
-            core::ptr::addr_of_mut!((*completion.as_raw()).done).write(0);
-            assert!(!bindings::completion_done(completion.as_raw()));
-            assert!(!bindings::try_wait_for_completion(completion.as_raw()));
-            bindings::complete(completion.as_raw());
-            assert!(bindings::try_wait_for_completion(completion.as_raw()));
-            assert!(!bindings::try_wait_for_completion(completion.as_raw()));
-        }
+        assert!(unsafe { bindings::try_wait_for_completion(completion.as_raw()) });
+        // SAFETY: The initialized pinned storage and access conditions above still hold.
+        assert!(unsafe { bindings::try_wait_for_completion(completion.as_raw()) });
+        // SAFETY: The initialized pinned storage and access conditions above still hold.
+        assert_eq!(
+            unsafe { bindings::wait_for_completion_timeout(completion.as_raw(), 0) },
+            1
+        );
+        // SAFETY: The initialized pinned storage and access conditions above still hold.
+        assert!(unsafe { bindings::completion_done(completion.as_raw()) });
+        // SAFETY: The initialized pinned storage and access conditions above still hold.
+        unsafe { core::ptr::addr_of_mut!((*completion.as_raw()).done).write(0) };
+        // SAFETY: The initialized pinned storage and access conditions above still hold.
+        assert!(unsafe { !bindings::completion_done(completion.as_raw()) });
+        // SAFETY: The initialized pinned storage and access conditions above still hold.
+        assert!(unsafe { !bindings::try_wait_for_completion(completion.as_raw()) });
+        // SAFETY: The initialized pinned storage and access conditions above still hold.
+        unsafe { bindings::complete(completion.as_raw()) };
+        // SAFETY: The initialized pinned storage and access conditions above still hold.
+        assert!(unsafe { bindings::try_wait_for_completion(completion.as_raw()) });
+        // SAFETY: The initialized pinned storage and access conditions above still hold.
+        assert!(unsafe { !bindings::try_wait_for_completion(completion.as_raw()) });
         Ok(())
     }
 
@@ -180,22 +191,24 @@ mod contract_tests {
         // initialized pinned completion lives through each C call. Zero timeout
         // cannot leave a pending wait; C unlinks its stack waiter before return.
         // No worker or asynchronous callback can access this storage afterward.
-        unsafe {
-            assert_eq!(
-                bindings::wait_for_completion_timeout(completion.as_raw(), 0),
-                0
-            );
-            bindings::complete(completion.as_raw());
-            assert_eq!(
-                bindings::wait_for_completion_timeout(completion.as_raw(), 0),
-                1
-            );
-            assert_eq!(
-                bindings::wait_for_completion_timeout(completion.as_raw(), 0),
-                0
-            );
-            assert!(!bindings::try_wait_for_completion(completion.as_raw()));
-        }
+        assert_eq!(
+            unsafe { bindings::wait_for_completion_timeout(completion.as_raw(), 0) },
+            0
+        );
+        // SAFETY: The initialized pinned storage and access conditions above still hold.
+        unsafe { bindings::complete(completion.as_raw()) };
+        // SAFETY: The initialized pinned storage and access conditions above still hold.
+        assert_eq!(
+            unsafe { bindings::wait_for_completion_timeout(completion.as_raw(), 0) },
+            1
+        );
+        // SAFETY: The initialized pinned storage and access conditions above still hold.
+        assert_eq!(
+            unsafe { bindings::wait_for_completion_timeout(completion.as_raw(), 0) },
+            0
+        );
+        // SAFETY: The initialized pinned storage and access conditions above still hold.
+        assert!(unsafe { !bindings::try_wait_for_completion(completion.as_raw()) });
         Ok(())
     }
 
@@ -206,17 +219,20 @@ mod contract_tests {
         // valid counter state directly to avoid billions of calls. There is no
         // concurrent access to `done`; the wait queue remains initialized and
         // empty. C calls return before the raw read or storage destruction.
-        unsafe {
-            core::ptr::addr_of_mut!((*completion.as_raw()).done).write(u32::MAX - 1);
-            bindings::complete(completion.as_raw());
-            bindings::complete(completion.as_raw());
-            assert!(bindings::try_wait_for_completion(completion.as_raw()));
-            assert!(bindings::try_wait_for_completion(completion.as_raw()));
-            assert_eq!(
-                core::ptr::addr_of!((*completion.as_raw()).done).read(),
-                u32::MAX
-            );
-        }
+        unsafe { core::ptr::addr_of_mut!((*completion.as_raw()).done).write(u32::MAX - 1) };
+        // SAFETY: The initialized pinned storage and access conditions above still hold.
+        unsafe { bindings::complete(completion.as_raw()) };
+        // SAFETY: The initialized pinned storage and access conditions above still hold.
+        unsafe { bindings::complete(completion.as_raw()) };
+        // SAFETY: The initialized pinned storage and access conditions above still hold.
+        assert!(unsafe { bindings::try_wait_for_completion(completion.as_raw()) });
+        // SAFETY: The initialized pinned storage and access conditions above still hold.
+        assert!(unsafe { bindings::try_wait_for_completion(completion.as_raw()) });
+        // SAFETY: The initialized pinned storage and access conditions above still hold.
+        assert_eq!(
+            unsafe { core::ptr::addr_of!((*completion.as_raw()).done).read() },
+            u32::MAX
+        );
         Ok(())
     }
 }
