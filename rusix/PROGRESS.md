@@ -153,3 +153,14 @@ constructor policy.
 
 All 52 archive, selection, guest-gate and fault-gate host cases pass.
 Logs and exact inputs: `linux-out/constructor-archive-propagation-host-001/linux-task-faults`.
+
+### Task constructor pointer-ABI diagnostic fix
+
+Historical task source `0af2d8b944b2` passes all five C userspace cases and
+postchecks. Its Rust build emitted 36 `improper_ctypes` warnings for GNU empty
+`sched_statistics` nested in `task_struct`, then was stopped (137); no Rust
+guest ran. `linux-out/task-construction-warnings-evidence` retains these results.
+This branch inherits the exact reviewed task declaration annotation from
+`eec5ae3ecd7b`: a local pointer-only FFI lint exception, with no policy, layout,
+configuration or global warning-gate change. These historical results do not
+verify this branch's kernel; fresh build and runtime checks remain pending.
