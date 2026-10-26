@@ -19,11 +19,29 @@ disabled. See [ADR 0002](docs/adr/0002.md), [BRD design](docs/BRD.md), and
 Implemented candidate: approximately 1,200 lines of Rust across BRD driver/store
 and bio/disk abstractions, plus conditional xarray insertion and synchronous NOIO
 scope. Nine new in-kernel tests cover store lifetime, insertion ownership, NOIO
-nesting and parameters. Compilation and runtime validation of this candidate are
-pending; source review is complete, including cross-agent ownership review.
+nesting and parameters. Targeted compilation passes in the pinned container after correcting a queue-field
+width, cleanup captures, and encoding nonzero minor spacing. Runtime validation
+is pending; source review includes independent ownership review.
 
 LTS local KUnit attempt `linux-out/lts-kunit-001` built and booted: 46 passed,
 one intentionally disabled upstream demonstration test skipped. The strict gate
 correctly rejected the run. Isolate the required math suites with the existing
-KUnit suite filter without changing upstream tests or accepting skips. The fresh
-C BRD six-case baseline is building in `linux-out/lts-brd-c-001`.
+KUnit suite filter without changing upstream tests or accepting skips. The filtered replay passed all 24 required math cases. The fresh C BRD
+baseline passed all six cases in `linux-out/lts-brd-c-001`.
+[Recorded LTS evidence](docs/evidence/lts-baseline/manifest.json) keeps both the
+unfiltered failure and passing scoped replay.
+
+Candidate `f1bf14f5c` is frozen in a separate worktree for compilation. The early
+[completion experiment](experiments/completion/README.md) identifies C layout,
+IRQ, cancellation and scheduler obligations; five host ownership-model tests pass.
+It is groundwork for the post-BRD kernel spike, not kernel-runtime evidence.
+
+The first full Rust BRD build uses `aa6da498a` in `linux-out/lts-brd-rust-001`.
+Targeted compile attempts (including failures and an eliminated objtool warning)
+are retained in `linux-out/lts-brd-rust-dev/logs/attempts.json`.
+
+The ordinary ext4 fixture has a static Rust PID1 and pinned Debian utilities.
+Its image builds with an exact package inventory, and Rust 1.85.1 produces a
+static x86_64 init. Six ordered filesystem cases and a strict runner are ready;
+guest execution remains pending. The separate BRD ownership KUnit profile has
+nine required cases; its acceptance-gate regression tests pass, kernel run pending.

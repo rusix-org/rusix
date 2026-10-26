@@ -9,12 +9,12 @@ if [[ ${1:-} == --profile ]]; then
     shift 2
 fi
 case "$profile" in
-    kunit|brd|brd-rust|server) ;;
-    *) echo 'Profile must be kunit, brd, brd-rust or server.' >&2; exit 2 ;;
+    kunit|brd|brd-rust|brd-kunit|brd-ext4-c|brd-ext4-rust|server) ;;
+    *) echo 'Profile must be kunit, brd, brd-rust, brd-kunit, brd-ext4-c, brd-ext4-rust or server.' >&2; exit 2 ;;
 esac
 config="$RUSIX_PROJECT/configs/x86_64-$profile.config"
 if [[ $# != 1 || ! "$1" =~ ^[a-zA-Z0-9_-]+$ ]]; then
-    echo 'Usage: bash rusix/scripts/build-kernel.sh [--profile kunit|brd|brd-rust|server] BUILD_NAME' >&2
+    echo 'Usage: bash rusix/scripts/build-kernel.sh [--profile kunit|brd|brd-rust|brd-kunit|brd-ext4-c|brd-ext4-rust|server] BUILD_NAME' >&2
     exit 2
 fi
 name=$1
@@ -69,7 +69,7 @@ if [[ $status != 0 ]]; then
     tail -40 "$evidence/build.log" >&2
     exit "$status"
 fi
-if [[ "$profile" == brd ]]; then
+if [[ "$profile" == brd || "$profile" == brd-ext4-c ]]; then
     # This profile currently establishes the unchanged C driver baseline.
     git -C "$RUSIX_SOURCE" diff --exit-code \
         2926d88bb7fc4608fd942453d929c39e4e5ec006 -- drivers/block/brd.c \
@@ -91,7 +91,7 @@ if [[ "$profile" == brd ]]; then
         sha256sum "$RUSIX_SOURCE/drivers/block/brd.c" "$out/drivers/block/brd.o"
     } > "$evidence/selection.log"
 fi
-if [[ "$profile" == brd-rust ]]; then
+if [[ "$profile" == brd-rust || "$profile" == brd-kunit || "$profile" == brd-ext4-rust ]]; then
     git -C "$RUSIX_SOURCE" diff --exit-code \
         2926d88bb7fc4608fd942453d929c39e4e5ec006 -- drivers/block/brd.c \
         > "$evidence/brd-reference.diff"

@@ -1,0 +1,18 @@
+{
+  "source_revision": "bb84c91162ac2cba49d98f690ed069cece1f84dc",
+  "implementation": "brd-c",
+  "scope": "C BRD userspace block contract; not Rust BRD or complete Phase 1",
+  "sources": {
+    "rusix/tests/brd-contract/probe.c": "07e87cb39a03314737389877bc6360d90a8e088d706fcbb2d9664a2bae5834ab",
+    "rusix/scripts/test-brd-vm.py": "984c1bfa2e28bb99784fb50bb275a67e10ce9a0db3b77cb9a541823c5b11e227",
+    "rusix/scripts/rusix_paths.py": "15158c8c33e303341ef523c8317da73fb3f008908b8bfa53611d13bc87c94cae",
+    "rusix/scripts/with-local-tools.sh": "b47051d02fd2eb024dedc91f4a0c2cf071529d018a8ae246678bbb568069ffd0",
+    "rusix/scripts/repo-paths.sh": "c1456d937aa223d2b6d9bcd914238ef49cdd4974419df0ff7b2e20bbf542cfc7"
+  },
+  "artifacts": {
+    "/out/builds/brd-vm-ci-brd/bzImage": "7e33f541291fe547680b5cda298a7f5abbf15c657c41073523aedec432b1a583",
+    "/out/builds/brd-vm-ci-brd/init": "64ded8d0bf3dcb9b2cd5616a88498ccbaa37b12bf6e524fb63e778057d92a4a4",
+    "/out/builds/brd-vm-ci-brd/initramfs.cpio": "d66359172ae093fab64a4612c7759cae1252397bee8ff8d061b0280f854c29e2"
+  },
+  "config_sha256": "4f649b6a445e9f70eaa9cf9b9094154f80c587700529942e5900f3a5e2aa7644"
+}

@@ -1,0 +1,12 @@
+{
+  "scope": "image build, locked package inventory, static guest init compilation only; VM execution pending",
+  "init_sha256": "2d1b15f14ec99b3cb9f8d2e14f387b1725b70ca478318b73e7659cffdb12cfc2",
+  "sha256": {
+    "base-image-id.txt": "4fa0dc77d9271d09e8b83e114b9f527a9394f63e7c281506c63948e3feaa2b39",
+    "locked-image-id.txt": "6e8bf4e568c9bd0809bea944afb49f09c2647d954e520a2226b03ec688353545",
+    "locked-build.log": "18a26ef937f4e7dd34ececd97fee4b533377138978f540df25fb96d68ae8e5af",
+    "rustc-version.txt": "6661789050175828fe81cbba4e3bd5817751f51884bb3f5baaa7919bc01caa88",
+    "init-elf.log": "e2e81524b30acd1907d2427e9786211ceb0c024e8e627231816400c90f2e1d7c",
+    "packages.lock": "30a6ea7af0307248c70192e2ec793e655084c4f65a788a5d6c367412ab9e39e7"
+  }
+}

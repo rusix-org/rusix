@@ -4,13 +4,13 @@
 set -euo pipefail
 source "$(dirname -- "${BASH_SOURCE[0]}")/../scripts/repo-paths.sh"
 if [[ $# != 3 ]]; then
-    echo 'Usage: bash rusix/ci/run-container.sh IMAGE OUTPUT_DIRECTORY kunit|brd|brd-rust|server' >&2
+    echo 'Usage: bash rusix/ci/run-container.sh IMAGE OUTPUT_DIRECTORY kunit|brd|brd-rust|brd-kunit|brd-ext4-c|brd-ext4-rust|server' >&2
     exit 2
 fi
 image=$1
 output=$(realpath -m -- "$2")
 profile=$3
-case "$profile" in kunit|brd|brd-rust|server) ;; *) echo 'Profile must be kunit, brd, brd-rust or server.' >&2; exit 2 ;; esac
+case "$profile" in kunit|brd|brd-rust|brd-kunit|brd-ext4-c|brd-ext4-rust|server) ;; *) echo 'Profile must be kunit, brd, brd-rust, brd-kunit, brd-ext4-c, brd-ext4-rust or server.' >&2; exit 2 ;; esac
 case "$output/" in
     "$RUSIX_SOURCE/"*) echo 'Container output must be outside the source checkout.' >&2; exit 2 ;;
 esac
@@ -51,5 +51,5 @@ docker run --rm --network none --cap-drop ALL --security-opt no-new-privileges \
     --mount "type=bind,src=$RUSIX_SOURCE,dst=/src,readonly" \
     --mount "type=bind,src=$output,dst=/out" \
     --env RUSIX_OUTPUT_ROOT=/out --env RUSIX_TOOLS_ROOT=/opt/no-local-overrides \
-    --env "RUSIX_QEMU_ACCEL=$accel" --workdir /src \
+    --env "RUSIX_QEMU_ACCEL=$accel" --env "RUSIX_EXT4_IMAGE_ID=$image_id" --workdir /src \
     "$image_id" bash rusix/ci/run.sh "$profile"

@@ -317,7 +317,7 @@ unsafe impl<T: ForeignOwnable + Send> Send for XArray<T> {}
 // `Send`.
 unsafe impl<T: ForeignOwnable + Send> Sync for XArray<T> {}
 
-#[macros::kunit_tests(rust_xarray_insert)]
+#[macros::kunit_tests(rusix_xarray_insert)]
 mod insert_tests {
     use super::*;
     use crate::{

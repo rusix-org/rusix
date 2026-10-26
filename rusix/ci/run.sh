@@ -5,8 +5,8 @@ set -euo pipefail
 source "$(dirname -- "${BASH_SOURCE[0]}")/../scripts/repo-paths.sh"
 profile=${1:-}
 case "$profile" in
-    kunit|brd|brd-rust|server) ;;
-    *) echo 'Usage: bash rusix/ci/run.sh kunit|brd|brd-rust|server' >&2; exit 2 ;;
+    kunit|brd|brd-rust|brd-kunit|brd-ext4-c|brd-ext4-rust|server) ;;
+    *) echo 'Usage: bash rusix/ci/run.sh kunit|brd|brd-rust|brd-kunit|brd-ext4-c|brd-ext4-rust|server' >&2; exit 2 ;;
 esac
 mkdir -p "$RUSIX_OUTPUT_ROOT/logs" "$RUSIX_OUTPUT_ROOT/tmp"
 export TMPDIR="$RUSIX_OUTPUT_ROOT/tmp"
@@ -36,6 +36,9 @@ bash "$RUSIX_PROJECT/scripts/build-kernel.sh" --profile "$profile" "ci-$profile"
 if [[ "$profile" == kunit ]]; then
     bash "$RUSIX_PROJECT/scripts/boot-kunit.sh" \
         "$RUSIX_OUTPUT_ROOT/builds/ci-kunit" ci-kunit
+elif [[ "$profile" == brd-kunit ]]; then
+    bash "$RUSIX_PROJECT/scripts/boot-kunit.sh" --brd \
+        "$RUSIX_OUTPUT_ROOT/builds/ci-brd-kunit" ci-brd-kunit
 elif [[ "$profile" == brd || "$profile" == brd-rust ]]; then
     shopt -s nullglob
     evidence=("$RUSIX_OUTPUT_ROOT"/logs/ci-$profile-build.*)
@@ -43,6 +46,14 @@ elif [[ "$profile" == brd || "$profile" == brd-rust ]]; then
         echo 'Expected one BRD build evidence directory in a fresh output.' >&2; exit 1;
     }
     python3 "$RUSIX_PROJECT/scripts/test-brd-vm.py" \
+        "$RUSIX_OUTPUT_ROOT/builds/ci-$profile" "ci-$profile" --build-evidence "${evidence[0]}"
+elif [[ "$profile" == brd-ext4-c || "$profile" == brd-ext4-rust ]]; then
+    shopt -s nullglob
+    evidence=("$RUSIX_OUTPUT_ROOT"/logs/ci-$profile-build.*)
+    [[ ${#evidence[@]} == 1 ]] || {
+        echo "Expected one ext4 build evidence directory." >&2; exit 1;
+    }
+    python3 "$RUSIX_PROJECT/scripts/test-brd-ext4-vm.py" \
         "$RUSIX_OUTPUT_ROOT/builds/ci-$profile" "ci-$profile" --build-evidence "${evidence[0]}"
 else
     shopt -s nullglob

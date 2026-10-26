@@ -36,7 +36,7 @@ behavioral departures require recorded decisions; do not weaken tests silently.
 
 ## Sequence and limitations
 
-Finish the baseline/container/CI work, establish C workloads, review reusable
+Finish the baseline/container/local verification work, establish C workloads, review reusable
 upstream abstractions, implement Rust BRD and run paired tests, then complete the
 1b matrix and budgets. Immediately after BRD, start the executable core ownership
 spike in [ROADMAP.md](ROADMAP.md), rather than an indefinite sequence of drivers.

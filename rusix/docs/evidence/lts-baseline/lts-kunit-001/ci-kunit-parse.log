@@ -1,0 +1,69 @@
+[04:27:35] ============================================================
+[04:27:35] ================ rust_allocator (1 subtest) ================
+[04:27:35] [PASSED] test_alignment
+[04:27:35] ================= [PASSED] rust_allocator ==================
+[04:27:35] ================== rust_kvec (1 subtest) ===================
+[04:27:35] [PASSED] test_kvec_retain
+[04:27:35] ==================== [PASSED] rust_kvec ====================
+[04:27:35] ============= rust_kernel_bitmap (6 subtests) ==============
+[04:27:35] [PASSED] bitmap_borrow
+[04:27:35] [PASSED] bitmap_copy
+[04:27:35] [PASSED] bitmap_vec_new
+[04:27:35] [PASSED] bitmap_set_clear_find
+[04:27:35] [PASSED] owned_bitmap_out_of_bounds
+[04:27:35] [PASSED] bitmap_copy_and_extend
+[04:27:35] =============== [PASSED] rust_kernel_bitmap ================
+[04:27:35] ============== rust_kernel_kunit (3 subtests) ==============
+[04:27:35] [PASSED] rust_test_kunit_example_test
+[04:27:35] [PASSED] rust_test_kunit_in_kunit_test
+[04:27:35] [SKIPPED] rust_test_kunit_always_disabled_test
+[04:27:35] ================ [PASSED] rust_kernel_kunit ================
+[04:27:35] =============== rust_kernel_str (8 subtests) ===============
+[04:27:35] [PASSED] test_cstr_to_str
+[04:27:35] [PASSED] test_cstr_to_str_invalid_utf8
+[04:27:35] [PASSED] test_cstr_as_str_unchecked
+[04:27:35] [PASSED] test_cstr_display
+[04:27:35] [PASSED] test_cstr_display_all_bytes
+[04:27:35] [PASSED] test_cstr_debug
+[04:27:35] [PASSED] test_bstr_display
+[04:27:35] [PASSED] test_bstr_debug
+[04:27:35] ================= [PASSED] rust_kernel_str =================
+[04:27:35] ================ rust_atomics (4 subtests) =================
+[04:27:35] [PASSED] atomic_basic_tests
+[04:27:35] [PASSED] atomic_xchg_tests
+[04:27:35] [PASSED] atomic_cmpxchg_tests
+[04:27:35] [PASSED] atomic_arithmetic_tests
+[04:27:35] ================== [PASSED] rust_atomics ===================
+[04:27:35] ================ math-int_sqrt (1 subtest) =================
+[04:27:35] ====================== int_sqrt_test  ======================
+[04:27:35] [PASSED] edge case: square root of 0
+[04:27:35] [PASSED] perfect square: square root of 1
+[04:27:35] [PASSED] non-perfect square: square root of 2
+[04:27:35] [PASSED] non-perfect square: square root of 3
+[04:27:35] [PASSED] perfect square: square root of 4
+[04:27:35] [PASSED] non-perfect square: square root of 5
+[04:27:35] [PASSED] non-perfect square: square root of 6
+[04:27:35] [PASSED] non-perfect square: square root of 7
+[04:27:35] [PASSED] non-perfect square: square root of 8
+[04:27:35] [PASSED] perfect square: square root of 9
+[04:27:35] [PASSED] non-perfect square: square root of 15 (N-1 from 16)
+[04:27:35] [PASSED] perfect square: square root of 16
+[04:27:35] [PASSED] non-perfect square: square root of 17 (N+1 from 16)
+[04:27:35] [PASSED] non-perfect square: square root of 80 (N-1 from 81)
+[04:27:35] [PASSED] perfect square: square root of 81
+[04:27:35] [PASSED] non-perfect square: square root of 82 (N+1 from 81)
+[04:27:35] [PASSED] non-perfect square: square root of 255 (N-1 from 256)
+[04:27:35] [PASSED] perfect square: square root of 256
+[04:27:35] [PASSED] non-perfect square: square root of 257 (N+1 from 256)
+[04:27:35] [PASSED] large input: square root of 2147483648
+[04:27:35] [PASSED] edge case: ULONG_MAX for 32-bit
+[04:27:35] ================== [PASSED] int_sqrt_test ==================
+[04:27:35] ================== [PASSED] math-int_sqrt ==================
+[04:27:35] ======== rusix-int-sqrt-compatibility (3 subtests) =========
+[04:27:35] [PASSED] int_sqrt_small_domain
+[04:27:35] [PASSED] int_sqrt_boundaries
+[04:27:35] [PASSED] int_sqrt_differential
+[04:27:35] ========== [PASSED] rusix-int-sqrt-compatibility ===========
+[04:27:35] ============================================================
+[04:27:35] Testing complete. Ran 47 tests: passed: 46, skipped: 1
+[04:27:35] Test results stored in /out/logs/ci-kunit-kunit.json
