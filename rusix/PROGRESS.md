@@ -184,3 +184,15 @@ after review of its typed aggregate pointers and `c_int`/`c_ulong` values, inclu
 four declarations carrying `task_struct` pointers. This is an audited consequence
 of the observed task diagnostic, not a claim of MM compilation. MM release's
 extern block is unchanged; no blanket suppression was added.
+
+### MM-release callback selection correction
+
+Inspection of the previously built task-construction C object reproduced a
+selection-check failure: the callback address uses a section relocation plus
+offset, rather than a named function relocation. The release verifier now binds
+that offset to the actual callback's ELF section index, value and executable
+range. Prefix/interior addresses, ambiguous symbols and unsupported instructions
+are rejected. Eight focused host tests pass, and the same retained object passes
+with pinned LLVM 19; no release candidate kernel or guest was run. Evidence:
+`linux-out/mm-release-callback-fix-host-001` and
+`linux-out/mm-release-callback-pinned-001`. Kernel implementation is unchanged.

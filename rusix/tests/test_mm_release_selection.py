@@ -63,6 +63,28 @@ class Selection(unittest.TestCase):
             with self.assertRaises(ValueError):m.registration(bad,name,True)
         m.registration(address.replace(name,'mmput_async_fn'),'mmput_async_fn',False)
 
+    def test_section_relative_callback_exact_elf_identity(self):
+        import copy
+        name='mmput_async_fn'
+        metadata=[{'FileSummary':{'Format':'elf64-x86-64','Arch':'x86_64'},
+          'Sections':[{'Section':{'Index':2,'Name':{'Name':'.text'},'Type':{'Value':1},'Flags':{'Value':6},'Size':0x2000}}],
+          'Symbols':[{'Symbol':{'Name':{'Name':name},'Type':{'Value':2},'Size':12,'Value':0x1550,'Section':{'Value':2}}},
+                     {'Symbol':{'Name':{'Name':'.text'},'Type':{'Value':3},'Size':0,'Value':0,'Section':{'Value':2}}}]}]
+        absolute='000014a0 <mmput_async>:\n 150b: movq $0, 0x840(%r14)\n 1512: R_X86_64_32S .text+0x1550\n'
+        m.registration(absolute,name,False,metadata)
+        m.registration(absolute.replace('32S .text+0x1550','64 .text+0x1550'),name,False,metadata)
+        m.registration(absolute.replace('movq $0, 0x840(%r14)','leaq 0(%rip), %rsi').replace('32S .text+0x1550','PC32 .text+0x154c'),name,False,metadata)
+        for bad in (absolute.replace('1550','1540'),absolute.replace('1550','1551'),absolute.replace('.text+','.other+'),absolute.replace('32S','PC32'),absolute.replace('32S','PLT32'),absolute.replace('movq','callq'),absolute.replace('$0','%rax'),absolute.replace('32S .text+0x1550','PC32 .text+0x154c'),absolute+absolute.split('\n',1)[1]):
+            with self.assertRaises(ValueError):m.registration(bad,name,False,metadata)
+        for change in ('wrong_index','duplicate_symbol','duplicate_section','nonexec','nonsized'):
+            bad=copy.deepcopy(metadata)
+            if change=='wrong_index':bad[0]['Symbols'][0]['Symbol']['Section']['Value']=3
+            if change=='duplicate_symbol':bad[0]['Symbols'].append(copy.deepcopy(bad[0]['Symbols'][1]))
+            if change=='duplicate_section':bad[0]['Sections'].append(copy.deepcopy(bad[0]['Sections'][0]))
+            if change=='nonexec':bad[0]['Sections'][0]['Section']['Flags']['Value']=2
+            if change=='nonsized':bad[0]['Symbols'][0]['Symbol']['Size']=0
+            with self.assertRaises(ValueError):m.registration(absolute,name,False,bad)
+
     def test_archive_and_input_identity(self):
         base='fork.o\ntask_construction_rust.o\nmm_construction_rust.o\nmm_release_test.o\n'
         m.archive_members(base,False);m.archive_members(base+'mm_release_rust.o\n',True)
