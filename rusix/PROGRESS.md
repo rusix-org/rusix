@@ -93,3 +93,8 @@ and all twelve host gate suites pass; the metadata verifier also passed checks
 against historical C-generated ELF and rejected five deliberate mutations.
 [Contract and gates](experiments/brd-parameters/README.md); kernel verification
 is pending and does not inherit results from the normalization-only change.
+
+The first parameter-owner build at `2048c42d9096` stopped before VM tests: the
+generated setup field is `str_`, and three address-of expressions emitted
+unnecessary-unsafe warnings. [Failure evidence](docs/evidence/brd-parameter-owner-initial/manifest.json)
+retains the actual binding and diagnostics. Source corrections await a fresh run.

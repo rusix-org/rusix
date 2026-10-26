@@ -1,0 +1,78 @@
+make: Entering directory '/src'
+make[1]: Entering directory '/out/builds/ci-completion-rust'
+  SYNC    include/config/auto.conf
+  GEN     Makefile
+  GEN     Makefile
+  DESCEND objtool
+  CALL    /src/scripts/checksyscalls.sh
+  INSTALL libsubcmd_headers
+  BINDGEN rust/bindings/bindings_generated.rs
+  BINDGEN rust/bindings/bindings_helpers_generated.rs
+  BINDGEN rust/bindings/builtin_init_generated.rs
+  CC      rust/helpers/helpers.o
+  EXPORTS rust/exports_helpers_generated.h
+  RUSTC L rust/bindings.o
+  EXPORTS rust/exports_bindings_generated.h
+  RUSTC L rust/kernel.o
+  EXPORTS rust/exports_kernel_generated.h
+  GEN     usr/initramfs_data.cpio
+  COPY    usr/initramfs_inc_data
+  AS      usr/initramfs_data.o
+  UPD     init/utsversion-tmp.h
+  CC      init/version.o
+  AR      usr/built-in.a
+  AR      init/built-in.a
+  CC      kernel/sched/build_utility.o
+  RUSTC     kernel/sched/completion_rust.o
+  RUSTC     kernel/sched/swait_rust.o
+  RUSTC     kernel/sched/wait_rust.o
+  RUSTC     kernel/sched/wait_bit_rust.o
+  CC      rust/exports.o
+  AR      rust/built-in.a
+  CC      kernel/sched/wait_owner_test.o
+  AR      kernel/sched/built-in.a
+  AR      kernel/built-in.a
+  RUSTC     drivers/block/brd_rust.o
+error[E0560]: struct `obs_kernel_param` has no field named `str`
+   --> /src/drivers/block/brd_rust/params.rs:125:5
+    |
+125 |     str: LEGACY_NAME.as_ptr().cast(),
+    |     ^^^ unknown field
+    |
+help: a field with a similar name exists
+    |
+125 |     str_: LEGACY_NAME.as_ptr().cast(),
+    |     ~~~~
+
+warning: unnecessary `unsafe` block
+  --> /src/drivers/block/brd_rust/params.rs:51:14
+   |
+51 |         ops: unsafe { addr_of!(bindings::param_ops_int) },
+   |              ^^^^^^ unnecessary `unsafe` block
+   |
+   = note: `#[warn(unused_unsafe)]` on by default
+
+warning: unnecessary `unsafe` block
+  --> /src/drivers/block/brd_rust/params.rs:63:14
+   |
+63 |         ops: unsafe { addr_of!(bindings::param_ops_ulong) },
+   |              ^^^^^^ unnecessary `unsafe` block
+
+warning: unnecessary `unsafe` block
+  --> /src/drivers/block/brd_rust/params.rs:75:14
+   |
+75 |         ops: unsafe { addr_of!(bindings::param_ops_int) },
+   |              ^^^^^^ unnecessary `unsafe` block
+
+error: aborting due to 1 previous error; 3 warnings emitted
+
+For more information about this error, try `rustc --explain E0560`.
+make[5]: *** [/src/scripts/Makefile.build:354: drivers/block/brd_rust.o] Error 1
+make[4]: *** [/src/scripts/Makefile.build:544: drivers/block] Error 2
+make[4]: *** Waiting for unfinished jobs....
+make[3]: *** [/src/scripts/Makefile.build:544: drivers] Error 2
+make[2]: *** [/src/Makefile:2050: .] Error 2
+make[1]: *** [/src/Makefile:248: __sub-make] Error 2
+make[1]: Leaving directory '/out/builds/ci-completion-rust'
+make: *** [Makefile:248: __sub-make] Error 2
+make: Leaving directory '/src'

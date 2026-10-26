@@ -1,0 +1,41 @@
+Build evidence: /out/logs/ci-completion-rust-build.WyIRtTxy
+125 |     str: LEGACY_NAME.as_ptr().cast(),
+    |     ^^^ unknown field
+    |
+help: a field with a similar name exists
+    |
+125 |     str_: LEGACY_NAME.as_ptr().cast(),
+    |     ~~~~
+
+warning: unnecessary `unsafe` block
+  --> /src/drivers/block/brd_rust/params.rs:51:14
+   |
+51 |         ops: unsafe { addr_of!(bindings::param_ops_int) },
+   |              ^^^^^^ unnecessary `unsafe` block
+   |
+   = note: `#[warn(unused_unsafe)]` on by default
+
+warning: unnecessary `unsafe` block
+  --> /src/drivers/block/brd_rust/params.rs:63:14
+   |
+63 |         ops: unsafe { addr_of!(bindings::param_ops_ulong) },
+   |              ^^^^^^ unnecessary `unsafe` block
+
+warning: unnecessary `unsafe` block
+  --> /src/drivers/block/brd_rust/params.rs:75:14
+   |
+75 |         ops: unsafe { addr_of!(bindings::param_ops_int) },
+   |              ^^^^^^ unnecessary `unsafe` block
+
+error: aborting due to 1 previous error; 3 warnings emitted
+
+For more information about this error, try `rustc --explain E0560`.
+make[5]: *** [/src/scripts/Makefile.build:354: drivers/block/brd_rust.o] Error 1
+make[4]: *** [/src/scripts/Makefile.build:544: drivers/block] Error 2
+make[4]: *** Waiting for unfinished jobs....
+make[3]: *** [/src/scripts/Makefile.build:544: drivers] Error 2
+make[2]: *** [/src/Makefile:2050: .] Error 2
+make[1]: *** [/src/Makefile:248: __sub-make] Error 2
+make[1]: Leaving directory '/out/builds/ci-completion-rust'
+make: *** [Makefile:248: __sub-make] Error 2
+make: Leaving directory '/src'

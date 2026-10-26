@@ -47,8 +47,8 @@ static PARAMETERS: [Parameter; 3] = [
     Parameter(bindings::kernel_param {
         name: c"brd.rd_nr".as_ptr().cast(),
         mod_: null_mut(),
-        // SAFETY: existing permanent C operations, matched to c_int storage.
-        ops: unsafe { addr_of!(bindings::param_ops_int) },
+        // Existing permanent C operations, matched to c_int storage.
+        ops: addr_of!(bindings::param_ops_int),
         perm: 0o444,
         level: -1,
         flags: 0,
@@ -59,8 +59,8 @@ static PARAMETERS: [Parameter; 3] = [
     Parameter(bindings::kernel_param {
         name: c"brd.rd_size".as_ptr().cast(),
         mod_: null_mut(),
-        // SAFETY: existing permanent C operations, matched to c_ulong storage.
-        ops: unsafe { addr_of!(bindings::param_ops_ulong) },
+        // Existing permanent C operations, matched to c_ulong storage.
+        ops: addr_of!(bindings::param_ops_ulong),
         perm: 0o444,
         level: -1,
         flags: 0,
@@ -71,8 +71,8 @@ static PARAMETERS: [Parameter; 3] = [
     Parameter(bindings::kernel_param {
         name: c"brd.max_part".as_ptr().cast(),
         mod_: null_mut(),
-        // SAFETY: existing permanent C operations, matched to c_int storage.
-        ops: unsafe { addr_of!(bindings::param_ops_int) },
+        // Existing permanent C operations, matched to c_int storage.
+        ops: addr_of!(bindings::param_ops_int),
         perm: 0o444,
         level: -1,
         flags: 0,
@@ -122,7 +122,7 @@ unsafe impl Sync for Setup {}
 #[used]
 #[unsafe(link_section = ".init.setup")]
 static LEGACY_SETUP: Setup = Setup(Opaque::new(bindings::builtin_init::obs_kernel_param {
-    str: LEGACY_NAME.as_ptr().cast(),
+    str_: LEGACY_NAME.as_ptr().cast(),
     setup_func: Some(super::rusix_brd_legacy_size),
     early: 0,
 }));
