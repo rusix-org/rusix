@@ -3,10 +3,13 @@
 ## Objective and current milestone
 
 Fork Linux, rewrite its kernel in Rust, then migrate remaining OS components.
-**Active; not complete.** M0 has a Rust-enabled x86_64 VM boot. M1 (integer square
-root replacement) passes host and x86_64 VM comparisons from clean committed
-revisions. Module/export testing and other architecture verification remain
-outstanding. Review evidence: `docs/VERIFICATION.md`. Full scope: `docs/ROADMAP.md`.
+**Active; not complete. Phase 0 bootstrap is published; Phase 1 is not complete.**
+Historical bootstrap checkpoints M0/M1 cover the Rust-enabled boot and first
+integer-square-root replacement, with passing host/VM comparisons. They do not
+constitute the Phase 1 migration base requested by Aaron. The exact next-phase
+target is `docs/PHASE1.md`; the published-code audit is `docs/AUDIT-PHASE0.md`.
+Module/export and broader verification remain outstanding. Current evidence:
+`docs/VERIFICATION.md`. Full scope: `docs/ROADMAP.md`.
 
 **Accepted architectural direction:** Linux-compatible external behavior,
 Rust-native internals, incremental replacement toward complete Rust subsystems.
@@ -91,10 +94,16 @@ all executing C as unfinished migration work. See `docs/ARCHITECTURE.md` (decisi
 
 ## Next actions
 
-1. Verify non-Rust fallback and module/export/CRC behavior using recorded builds.
-2. Test 32-bit kernel targets and CFI/LTO configurations; add relevant workload
-   and performance checks without weakening the preserved upstream tests.
-3. Continue the subsystem inventory/migration; most kernel implementation is C.
+1. Make the tracked repository canonical and relocatable; remove mandatory
+   parent-workspace mirroring, then supply a pinned independent build environment.
+2. Establish project CI and bind expected implementation/source/configuration to
+   tested images. Retain existing proof; do not accept passing C tests as Rust proof.
+3. Establish the BRD C contract/workload baseline and review bio/non-MQ and page
+   ownership design before the complete Rust driver implementation.
+4. Incorporate prepared module/export/CRC checks into the declared Phase 1 matrix,
+   followed by its lifecycle, failure, architecture and performance gates.
+5. Continue broader subsystem migration after proving this coherent layer; most
+   kernel implementation is still C. Do not substitute more disconnected helpers.
 
 ## Session log
 
@@ -169,3 +178,20 @@ The temporary verification worktree is removed after archiving its logs/results;
 its image/config remain under `artifacts/publication-check/`. Broader rewrite
 work remains incomplete. The unpublished module runner prepared in the outer
 workspace still needs independent review and actual VM execution.
+
+### 2026-10-25 — Published-code audit and Phase 1 definition
+
+Aaron asked for the exact codebase state expected after Phase 1 of a well-funded
+Linux/Rust fork. Audited the public revision with two independent read-only agents.
+The square-root replacement and evidence are worth retaining, but are Phase 0:
+60 Rust implementation lines plus nine C export-shim lines do not exercise
+stateful kernel ownership, lifecycle, or useful userspace workloads.
+
+Documented material gaps: parent-workspace mirroring, host-dependent tools, no
+project CI, no ordinary userspace workload, selection/provenance not enforced by
+the automated boot gate, narrow unsafe/architecture coverage, and an unexercised
+upstream integration policy. No new defect invalidating the recorded arithmetic
+results was identified. The proposed engineering slice is a complete Rust BRD
+driver, with explicit bio/non-MQ/page-lifetime work and measurable exit gates.
+`docs/PHASE1.md` defines the desired codebase; no BRD code or Phase 1 success is
+claimed. This changes the work priority, not the full rewrite objective.

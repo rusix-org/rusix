@@ -7,7 +7,8 @@ term goal of migrating the remaining operating-system components to Rust.
 behavior at migration boundaries, then replace internal C interfaces as related
 components become complete Rust subsystems.
 
-This is early development, not a production kernel or a completed rewrite. The
+This is **Phase 0 integration bootstrap**, not completed Phase 1 or a production
+kernel. The
 first integer-square-root replacement has passed recorded C/Rust x86_64 kernel
 comparisons. Most of the kernel remains C; module, architecture, workload, and
 performance coverage is still being developed. Read the evidence and limitations
@@ -16,6 +17,8 @@ before drawing compatibility conclusions.
 - [Project entry point and setup](rusix/README.md)
 - [Accepted architecture decision](rusix/docs/ARCHITECTURE.md)
 - [Full roadmap](rusix/docs/ROADMAP.md)
+- [Published bootstrap audit](rusix/docs/AUDIT-PHASE0.md)
+- [Exact Phase 1 target and exit gates](rusix/docs/PHASE1.md)
 - [Progress and outstanding work](rusix/PROGRESS.md)
 - [Migration contracts](rusix/docs/MIGRATIONS.md)
 - [Verification evidence](rusix/docs/VERIFICATION.md)

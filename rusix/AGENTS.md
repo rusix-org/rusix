@@ -14,6 +14,12 @@ inside Rust. Work toward complete Rust subsystems and remove obsolete adapters.
 Retained upstream C references are allowed; executing C remains tracked migration
 work. Changes to these commitments require an explicit superseding decision.
 
+The published helper is Phase 0 bootstrap. `docs/PHASE1.md` defines the next
+engineering target and mandatory exit gates; do not label helper accumulation or
+tooling alone Phase 1 completion. Prioritize a canonical repository, reproducible
+environment, automated provenance/selection checks, and the selected complete
+stateful component. `docs/AUDIT-PHASE0.md` records deficiencies to address.
+
 Aaron's global instructions continue to apply. The requested Linux/Rust rewrite
 authorizes work on this project's kernel; it does not authorize changes to the
 host kernel, unrelated backends, services, homelab, or production systems.

@@ -48,10 +48,22 @@ by itself to validate the full x86_64 input domain.
 Current evidence: see `VERIFICATION.md` for clean committed C/Rust comparison,
 32-bit host checks, retained C, and remaining kernel/module/configuration gates.
 
-## Planned cluster: gcd, lcm, lcm_not_zero
+## Phase 1 component: RAM-backed block driver
 
-Status: source investigation only; no replacement implemented. This is a coherent
-next cluster because `lib/math/lcm.c` calls `gcd`, and block queue geometry uses
+Status: contract/API investigation only; no Rust BRD replacement implemented.
+See `PHASE1.md` for the complete target, behavior inventory and exit gates.
+Reference: `drivers/block/brd.c`, `include/linux/bio.h`, `include/linux/blkdev.h`,
+and the existing Rust block/page/xarray APIs. The bio-based C driver cannot be
+treated as a drop-in user of the existing Rust blk-mq disk abstraction. Upstream
+`rnull` does not store data and is not evidence of BRD parity. The first code work
+requires C baseline tests plus an ownership/concurrency design, not a renamed
+sample driver.
+
+## Deferred cluster: gcd, lcm, lcm_not_zero
+
+Status: source investigation only; no replacement implemented. Deferred behind
+the Phase 1 foundation/BRD target rather than used to pad the migration count.
+This remains a coherent cluster because `lib/math/lcm.c` calls `gcd`, and block queue geometry uses
 both. A single Rust unit could preserve the three C entry points while making
 their internal arithmetic calls Rust-to-Rust. This advances the accepted
 architecture without creating an unused general-purpose math framework.

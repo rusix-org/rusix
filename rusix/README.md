@@ -2,7 +2,7 @@
 
 rusix is an experimental Linux fork pursuing an incremental rewrite of the kernel
 in Rust, followed by migration of the remaining operating-system components.
-It is at the foundation/first-helper stage. It is not ready for installation on
+It is at **Phase 0: integration bootstrap**. It is not ready for installation on
 physical hardware, and no claim of full feature parity is made.
 
 The actual kernel repository is `linux/`, branch `rusix/main`, based on upstream
@@ -20,6 +20,12 @@ Start with [PROGRESS.md](PROGRESS.md) for current evidence and unfinished work,
 [AGENTS.md](AGENTS.md) for contribution/agent requirements, and
 [docs/ROADMAP.md](docs/ROADMAP.md) for the full scope. Migration contracts live
 in [docs/MIGRATIONS.md](docs/MIGRATIONS.md).
+
+[The Phase 0 audit](docs/AUDIT-PHASE0.md) assesses the code actually published.
+[The Phase 1 contract](docs/PHASE1.md) defines the next target: a reproducible,
+repository-native migration base plus a complete Rust RAM-backed block driver
+exercised through ordinary Linux userspace. None of its full exit gates is yet
+claimed complete.
 
 The accepted direction is [architecture decision 0001](docs/ARCHITECTURE.md):
 Linux-compatible externally, Rust-native internally, migrating incrementally

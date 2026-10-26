@@ -10,14 +10,18 @@ Linux-compatible external behavior; use Rust-native internal designs and migrate
 incrementally toward complete subsystems. Required C interfaces are transitional
 boundaries, not a permanent architecture constraint.
 
-## M0 — Reproducible upstream foundation
+The published helper is **Phase 0 bootstrap**, not Phase 1 completion. Historical
+M0/M1 labels below are bootstrap checkpoints. The exact next-phase target is in
+[PHASE1.md](PHASE1.md); current deficiencies are in [AUDIT-PHASE0.md](AUDIT-PHASE0.md).
+
+## Phase 0 checkpoint M0 — Reproducible upstream foundation
 
 Obtain and pin upstream Linux, retain licensing/history, create a rusix branch,
 and record toolchain requirements. Establish a small x86_64 configuration with
 Rust enabled, build it, and boot it in an isolated VM with captured console logs.
 Success requires repeatable commands, exact revision/config, and observed boot.
 
-## M1 — First actual C-to-Rust kernel replacement
+## Phase 0 checkpoint M1 — First actual C-to-Rust kernel replacement
 
 Choose a bounded existing kernel implementation after inspecting its callers and
 build rules. Specify the preserved semantics and replace the active implementation
@@ -26,7 +30,14 @@ kernel, and exercise the implementation in a VM. Record remaining C/FFI costs.
 First migration: integer square root; see `MIGRATIONS.md` and `VERIFICATION.md`
 for actual evidence and outstanding gates.
 
-## M2 — Repeatable subsystem migration
+## Phase 1 — Migration base and complete Rust RAM-backed block driver
+
+Deliver a self-contained checkout, pinned reproducible environment, continuous
+parity checks, and a complete Rust BRD implementation exercised by ordinary Linux
+userspace. All `PHASE1.md` gates must pass. The existing stateless helper and
+KUnit-only boot do not satisfy this phase.
+
+## Phase 2 — Repeatable subsystem migration
 
 Inventory C and assembly by subsystem and dependencies. Migrate foundational
 helpers and drivers, then memory management, scheduling, synchronization, VFS,
@@ -37,7 +48,7 @@ Track removed C execution paths, not just Rust line counts.
 Each migration should advance a coherent subsystem. Once related components are
 Rust, replace unnecessary internal C interfaces with Rust-native abstractions.
 
-## M3 — Rust kernel completeness and compatibility
+## Phase 3 — Rust kernel completeness and compatibility
 
 Audit every retained C implementation and assembly boundary. Demonstrate boot,
 userspace ABI compatibility, filesystem/network behavior, concurrency correctness,
@@ -47,7 +58,7 @@ work. Upstream C retained solely as uncompiled reference material is allowed.
 Define unavoidable assembly boundaries with Aaron rather than silently treating
 an architecture shim as fully Rust.
 
-## M4 — Remaining OS components
+## Phase 4 — Remaining OS components
 
 Inventory the chosen userspace/distribution: init, device management, libc/runtime,
 utilities, shell, networking services, package/build tooling, and other included
