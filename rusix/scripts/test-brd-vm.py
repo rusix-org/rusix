@@ -3,6 +3,7 @@
 """Run the C BRD contract probe only inside a bounded x86_64 QEMU guest."""
 import argparse
 import hashlib
+import importlib.util
 import json
 import os
 from pathlib import Path
@@ -14,6 +15,13 @@ import subprocess
 import sys
 
 from rusix_paths import resolve_paths
+
+_rcu_spec = importlib.util.spec_from_file_location("brd_rcu_selection", Path(__file__).with_name("verify-rcu-list-selection.py"))
+rcu_selection = importlib.util.module_from_spec(_rcu_spec)
+_rcu_spec.loader.exec_module(rcu_selection)
+CORE_PROFILES = {"core-ext4-c": "c", "core-ext4-rust": "rust",
+                 "server": "rust", "server-c": "c",
+                 **{profile: "rust" for profile in rcu_selection.PRODUCTION_PROFILES}}
 
 CASES = ("geometry", "sparse_read", "crossing_write", "discard_edges",
          "concurrent_insert", "accounting")
@@ -53,7 +61,8 @@ def validate_selection(profile, selection, config, core_selection=None):
                       "brd-fixed-c": "brd-c-parameter-fix",
                       "brd-ext4-fixed-c": "brd-c-parameter-fix",
                       "brd-ext4-c": "brd-c", "brd-ext4-rust": "brd-rust",
-                      "core-ext4-c": "brd-rust", "core-ext4-rust": "brd-rust"}.get(profile)
+                      "core-ext4-c": "brd-rust", "core-ext4-rust": "brd-rust",
+                      "rcu-list-ext4-c": "brd-rust", "rcu-list-ext4-rust": "brd-rust"}.get(profile)
     if implementation is None:
         raise ValueError("A BRD or ext4 build profile is required")
     if selection != f"implementation={implementation}":
@@ -69,10 +78,47 @@ def validate_selection(profile, selection, config, core_selection=None):
     return implementation
 
 
+def validate_rcu_evidence(profile, config, evidence):
+    """Bind production guests to the independently selected RCU policy object."""
+    if profile not in rcu_selection.PRODUCTION_PROFILES:
+        return
+    rcu_selection.check_config(profile, rcu_selection.config_values(config))
+    expected = rcu_selection.check_objects(profile, evidence)
+    if json.loads((evidence / "rcu-list-selection.json").read_text()) != expected:
+        raise ValueError("RCU selection proof differs from object/linked inventory")
+    if (evidence / "rcu-list-reference.diff").read_bytes():
+        raise ValueError("RCU C reference changed")
+    rows = (evidence / "rcu-list-inputs.sha256").read_text().splitlines()
+    paths = []
+    for row in rows:
+        match = re.fullmatch(r"[0-9a-f]{64} [ *](/.+)", row)
+        if not match:
+            raise ValueError("Malformed RCU input hash record")
+        paths.append(Path(match[1]))
+    objects = [path for path in paths if path.as_posix().endswith("/kernel/rcu/" + expected["object"])]
+    if len(objects) != 1:
+        raise ValueError("RCU defining object missing or duplicated in hashed inputs")
+    source = Path(__file__).resolve().parents[2]
+    build = objects[0].parents[2]
+    required = {source / relative for relative in (
+        "kernel/rcu/rcu_segcblist.c", "kernel/rcu/rcu_segcblist_rust.rs",
+        "kernel/rcu/rcu_segcblist.h", "include/linux/rcu_segcblist.h",
+        "rust/helpers/rcu_list.c", "rust/helpers/rcu_list_test.c",
+        "kernel/rcu/rcu_list_test.c", "kernel/rcu/Kconfig", "kernel/rcu/Makefile",
+        "rust/bindings/bindings_helper.h", "rusix/scripts/verify-rcu-list-selection.py")}
+    required.update((objects[0], build / "rust/bindings/bindings_generated.rs"))
+    required.add(evidence / "config-input" if profile.startswith("rcu-list-server-") else
+                 source / f"rusix/configs/x86_64-{profile}.config")
+    if {path.resolve() for path in paths} != {path.resolve() for path in required}:
+        raise ValueError("Incomplete or unexpected RCU input provenance inventory")
+    check_hashes(evidence / "rcu-list-inputs.sha256", paths)
+
+
+
 def validate_core_selection(profile, config, selection):
     """Require the declared core implementation as well as the BRD selection."""
-    expected = {"core-ext4-c": "c", "core-ext4-rust": "rust",
-                "server": "rust", "server-c": "c"}.get(profile)
+    expected = CORE_PROFILES.get(profile)
+    rcu_selection.check_config(profile, rcu_selection.config_values(config))
     if expected is None:
         return None
     settings = set(config.splitlines())
@@ -176,7 +222,8 @@ def run(args, paths, evidence):
     implementation = validate_selection(
         profile, first_line(build_evidence / "selection.log"), config.read_text(),
         first_line(build_evidence / "completion-selection.log")
-        if profile.startswith("core-ext4-") else None)
+        if profile in CORE_PROFILES else None)
+    validate_rcu_evidence(profile, config.read_text(), build_evidence)
     check_hashes(build_evidence / "build.sha256", [kernel, config])
     if (build_evidence / "config").read_bytes() != config.read_bytes():
         raise ValueError("Resolved configuration differs from build evidence")
@@ -210,7 +257,7 @@ def run(args, paths, evidence):
         raise ValueError("Probe must be a static x86_64 ELF without an interpreter")
     initramfs = artifacts / "initramfs.cpio"
     initramfs.write_bytes(make_initramfs(init.read_bytes()))
-    source_files = [probe, Path(__file__).resolve(), paths.project / "scripts/rusix_paths.py",
+    source_files = [Path(rcu_selection.__file__), probe, Path(__file__).resolve(), paths.project / "scripts/rusix_paths.py",
                     paths.project / "scripts/with-local-tools.sh",
                     paths.project / "scripts/repo-paths.sh"]
     metadata = {

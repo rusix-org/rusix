@@ -111,3 +111,15 @@ strict gates require 86 combined or ten isolated RCU cases. Fourteen host gate
 scripts pass; kernel compilation and C/Rust VM parity remain unexecuted.
 The [contract](experiments/rcu-lists/README.md) records shared C access/order
 primitives and the subsequent storage-ownership work.
+
+### RCU-list production integration tooling (development)
+
+Added explicit ext4/server C/Rust RCU-list profiles with Rust BRD/core on both
+sides and fixtures disabled, production selection checks, guest proof validation,
+and exact ancestry/change-boundary verification for retaining older KUnit evidence
+under its original source identity. Kernel policy, KUnit fixtures and existing
+configuration fragments are unchanged. See the [migration record](experiments/rcu-lists/README.md#production-integration-profiles).
+Host regressions and independent source review are the current verification
+scope; these new profiles have not been built or booted. Next freeze the reviewed
+tooling revision, run serial paired integration guests and refresh the declared
+server language inventory before considering promotion.

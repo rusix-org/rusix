@@ -79,3 +79,30 @@ Next replace direct C inline/trace access with explicit operation boundaries,
 then migrate callback-batch ownership/invocation and per-CPU RCU state. Grace-
 period coordination, C storage, header-inline execution and primitive adapters
 remain part of the full kernel rewrite.
+
+## Production integration profiles
+
+`rcu-list-ext4-c` and `rcu-list-ext4-rust` keep Rust BRD and the Rust wait/core
+policy on both sides, disable KUnit/RCU fixtures, and change only the RCU-list
+selector. Each runs the block contract,29 parameter variants, partition probe
+and ext4/wake/locked consumers (32 guest boots). `rcu-list-server-c` and
+`rcu-list-server-rust` derive from the declared server fragment, preserve its
+Rust BRD/core choices, and change the same RCU selector. They run twelve
+filesystem/wake/locked consumers and same-build language measurement. Existing
+server/core comparison profiles retain their original meaning.
+
+These are verification profiles, not a changed server default. Production
+selection rejects fixture objects and requires all25 definitions in the selected
+object and linked kernel; guest runners revalidate the retained proof and input
+hashes before launching. Host profile tests do not establish runtime compatibility.
+
+When only the reviewed integration tooling changes after a KUnit run,
+`verify-rcu-list-continuity.py --source CHECKOUT --baseline KUNIT_COMMIT
+--candidate INTEGRATION_COMMIT` checks ancestry and an exact changed-file allowlist,
+including unchanged kernel/fixture sources and existing KUnit profiles/gates.
+Optional `--evidence DEBUG_MANIFEST --evidence PLAIN_MANIFEST` also rechecks those
+archives. Original KUnit evidence remains attributed to its original revision;
+new integration runs must identify their own clean source/config/scripts. The
+continuity record does not assert byte-identical images or substitute for review
+of changed build/routing scripts. A kernel, fixture or existing-profile change
+fails this boundary and requires fresh affected verification.

@@ -29,7 +29,8 @@ CASES = ("discovery", "geometry", "translation", "boundaries", "independent_disk
 def validate_selection(profile, selection, config, core_selection=None):
     mapped = {"brd-fixed-c": "brd-fixed-c", "brd-ext4-fixed-c": "brd-fixed-c", "brd": "brd", "brd-rust": "brd-rust",
               "brd-ext4-c": "brd", "brd-ext4-rust": "brd-rust",
-              "core-ext4-c": "core-ext4-c", "core-ext4-rust": "core-ext4-rust"}.get(profile)
+              "core-ext4-c": "core-ext4-c", "core-ext4-rust": "core-ext4-rust",
+              "rcu-list-ext4-c": "rcu-list-ext4-c", "rcu-list-ext4-rust": "rcu-list-ext4-rust"}.get(profile)
     if mapped is None:
         raise ValueError("A C or Rust BRD contract/ext4 profile is required")
     implementation = common.validate_selection(mapped, selection, config, core_selection)
@@ -95,7 +96,8 @@ def run(args, paths, evidence):
     implementation = validate_selection(
         profile, first_line(build_evidence / "selection.log"), config.read_text(),
         first_line(build_evidence / "completion-selection.log")
-        if profile.startswith("core-ext4-") else None)
+        if profile in common.CORE_PROFILES else None)
+    common.validate_rcu_evidence(profile, config.read_text(), build_evidence)
     check_hashes(build_evidence / "build.sha256", [kernel, config])
     if (build_evidence / "config").read_bytes() != config.read_bytes():
         raise ValueError("Resolved configuration differs from build evidence")
@@ -130,7 +132,7 @@ def run(args, paths, evidence):
         raise ValueError("Probe must be a static x86_64 ELF without an interpreter")
     initramfs = artifacts / "initramfs.cpio"
     initramfs.write_bytes(make_initramfs(init.read_bytes()))
-    source_files = [probe, Path(__file__).resolve(), paths.project / "scripts/rusix_paths.py",
+    source_files = [Path(common.rcu_selection.__file__), probe, Path(__file__).resolve(), paths.project / "scripts/rusix_paths.py",
                     paths.project / "scripts/test-brd-vm.py",
                     paths.project / "scripts/with-local-tools.sh",
                     paths.project / "scripts/repo-paths.sh"]

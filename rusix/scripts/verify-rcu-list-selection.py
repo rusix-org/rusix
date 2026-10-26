@@ -10,7 +10,11 @@ import re
 PROFILES = {
     'rcu-list-c': False, 'rcu-list-rust': True,
     'rcu-list-plain-c': False, 'rcu-list-plain-rust': True,
+    'rcu-list-ext4-c': False, 'rcu-list-ext4-rust': True,
+    'rcu-list-server-c': False, 'rcu-list-server-rust': True,
 }
+PRODUCTION_PROFILES = frozenset(('rcu-list-ext4-c', 'rcu-list-ext4-rust',
+                                 'rcu-list-server-c', 'rcu-list-server-rust'))
 SYMBOLS = (
     'rcu_cblist_init', 'rcu_cblist_enqueue', 'rcu_cblist_flush_enqueue',
     'rcu_cblist_dequeue', 'rcu_segcblist_get_seglen',
@@ -46,11 +50,16 @@ def check_config(profile, config):
         if rust or fixture:
             raise ValueError('RCU migration selected outside explicit RCU profiles')
         return
-    if rust != PROFILES[profile] or not fixture:
+    expected_fixture = profile not in PRODUCTION_PROFILES
+    if rust != PROFILES[profile] or fixture != expected_fixture:
         raise ValueError('RCU policy/test selector does not match profile')
-    for name in ('RUST', 'X86_64', 'SMP', 'TREE_RCU', 'TREE_SRCU',
+    if (config.get('CONFIG_KUNIT', 'n') == 'y') != expected_fixture:
+        raise ValueError('KUnit selection does not match profile')
+    if expected_fixture and config.get('CONFIG_TREE_SRCU') != 'y':
+        raise ValueError('RCU fixtures require TREE_SRCU')
+    for name in ('RUST', 'X86_64', 'SMP', 'TREE_RCU',
                  'RCU_NEED_SEGCBLIST', 'RUSIX_COMPLETION_RUST',
-                 'RUSIX_BRD_RUST', 'BLK_DEV_RAM', 'KUNIT'):
+                 'RUSIX_BRD_RUST', 'BLK_DEV_RAM'):
         if config.get('CONFIG_' + name) != 'y':
             raise ValueError(f'missing required setting: {name}')
     for name in ('MODULES', 'RCU_NOCB_CPU', 'RUSIX_BRD_C_PARAMETER_FIX'):
@@ -79,8 +88,9 @@ def check_objects(profile, evidence):
               if Path(entry).name in ('rcu_segcblist.o', 'rcu_segcblist_rust.o')]
     if actual != [selected]:
         raise ValueError(f'RCU archive selection mismatch: {actual}')
-    if sum(Path(entry).name == 'rcu_list_test.o' for entry in entries) != 1:
-        raise ValueError('expected exactly one RCU fixture object')
+    expected_fixture = 0 if profile in PRODUCTION_PROFILES else 1
+    if sum(Path(entry).name == 'rcu_list_test.o' for entry in entries) != expected_fixture:
+        raise ValueError('RCU fixture object count does not match profile')
     for name in ('rcu-object-symbols.txt', 'rcu-kernel-symbols.txt'):
         check_symbols((evidence / name).read_text())
     return {'implementation': 'rust' if PROFILES[profile] else 'c',

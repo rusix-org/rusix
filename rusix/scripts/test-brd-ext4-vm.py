@@ -59,7 +59,8 @@ def accept_console(console, qemu_exit):
 def validate_selection(profile, selection, config, core_selection=None):
     expected = {"brd-ext4-fixed-c": "brd-c-parameter-fix", "brd-ext4-c": "brd-c", "brd-ext4-rust": "brd-rust",
                 "core-ext4-c": "brd-rust", "core-ext4-rust": "brd-rust",
-                "server": "brd-rust", "server-c": "brd-rust"}.get(profile)
+                "server": "brd-rust", "server-c": "brd-rust",
+                **{p: "brd-rust" for p in _common.rcu_selection.PRODUCTION_PROFILES}}.get(profile)
     if expected is None or selection != f"implementation={expected}":
         raise ValueError("Ext4 build profile and BRD selection proof must agree")
     settings = set(config.splitlines())
@@ -235,7 +236,8 @@ def run(args, paths, evidence):
     implementation = validate_selection(profile, first_line(proof / "selection.log"),
                                         config.read_text(),
                                         first_line(proof / "completion-selection.log")
-                                        if profile.startswith("core-ext4-") or profile in server_target.PROFILES else None)
+                                        if profile in _common.CORE_PROFILES else None)
+    _common.validate_rcu_evidence(profile, config.read_text(), proof)
     if profile in server_target.PROFILES:
         server_target.verify(paths.project / "configs/x86_64-server.config", profile, proof, config)
     check_hashes(proof / "build.sha256", [kernel, config])
@@ -283,7 +285,7 @@ def run(args, paths, evidence):
     archive.write_bytes(rootfs.archive())
     (evidence / "rootfs-files.json").write_text(json.dumps(rootfs.sources, indent=2, sort_keys=True) + "\n")
     (evidence / "rootfs-elf.json").write_text(json.dumps(rootfs.elf_records, indent=2, sort_keys=True) + "\n")
-    sources = [Path(__file__).resolve(), Path(_common.__file__), Path(server_target.__file__),
+    sources = [Path(_common.rcu_selection.__file__), Path(__file__).resolve(), Path(_common.__file__), Path(server_target.__file__),
                paths.project / "scripts/rusix_paths.py"]
     sources += [path for path in fixture.iterdir() if path.is_file()]
     metadata = {"source_revision": revision, "implementation": implementation, "profile": profile,

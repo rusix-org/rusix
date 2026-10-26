@@ -9,15 +9,15 @@ if [[ ${1:-} == --profile ]]; then
     shift 2
 fi
 case "$profile" in
-    kunit|brd|brd-fixed-c|brd-rust|brd-kunit|brd-ext4-c|brd-ext4-fixed-c|brd-ext4-rust|core-ext4-c|core-ext4-rust|completion-c|completion-rust|completion-plain-c|completion-plain-rust|rcu-list-c|rcu-list-rust|rcu-list-plain-c|rcu-list-plain-rust|server|server-c) ;;
-    *) echo 'Profile must be kunit, brd, brd-fixed-c, brd-rust, brd-kunit, brd-ext4-c, brd-ext4-fixed-c, brd-ext4-rust, core-ext4-c, core-ext4-rust, completion-c, completion-rust, completion-plain-c, completion-plain-rust, rcu-list-c, rcu-list-rust, rcu-list-plain-c, rcu-list-plain-rust, server or server-c.' >&2; exit 2 ;;
+    kunit|brd|brd-fixed-c|brd-rust|brd-kunit|brd-ext4-c|brd-ext4-fixed-c|brd-ext4-rust|core-ext4-c|core-ext4-rust|completion-c|completion-rust|completion-plain-c|completion-plain-rust|rcu-list-c|rcu-list-rust|rcu-list-plain-c|rcu-list-plain-rust|rcu-list-ext4-c|rcu-list-ext4-rust|rcu-list-server-c|rcu-list-server-rust|server|server-c) ;;
+    *) echo 'Profile must be kunit, brd, brd-fixed-c, brd-rust, brd-kunit, brd-ext4-c, brd-ext4-fixed-c, brd-ext4-rust, core-ext4-c, core-ext4-rust, completion-c, completion-rust, completion-plain-c, completion-plain-rust, rcu-list-c, rcu-list-rust, rcu-list-plain-c, rcu-list-plain-rust, rcu-list-ext4-c, rcu-list-ext4-rust, rcu-list-server-c, rcu-list-server-rust, server or server-c.' >&2; exit 2 ;;
 esac
 config="$RUSIX_PROJECT/configs/x86_64-$profile.config"
-if [[ "$profile" == server-c ]]; then
+if [[ "$profile" == server-c || "$profile" == rcu-list-server-* ]]; then
     config="$RUSIX_PROJECT/configs/x86_64-server.config"
 fi
 if [[ $# != 1 || ! "$1" =~ ^[a-zA-Z0-9_-]+$ ]]; then
-    echo 'Usage: bash rusix/scripts/build-kernel.sh [--profile kunit|brd|brd-fixed-c|brd-rust|brd-kunit|brd-ext4-c|brd-ext4-fixed-c|brd-ext4-rust|core-ext4-c|core-ext4-rust|completion-c|completion-rust|completion-plain-c|completion-plain-rust|rcu-list-c|rcu-list-rust|rcu-list-plain-c|rcu-list-plain-rust|server|server-c] BUILD_NAME' >&2
+    echo 'Usage: bash rusix/scripts/build-kernel.sh [--profile kunit|brd|brd-fixed-c|brd-rust|brd-kunit|brd-ext4-c|brd-ext4-fixed-c|brd-ext4-rust|core-ext4-c|core-ext4-rust|completion-c|completion-rust|completion-plain-c|completion-plain-rust|rcu-list-c|rcu-list-rust|rcu-list-plain-c|rcu-list-plain-rust|rcu-list-ext4-c|rcu-list-ext4-rust|rcu-list-server-c|rcu-list-server-rust|server|server-c] BUILD_NAME' >&2
     exit 2
 fi
 name=$1
@@ -36,7 +36,7 @@ flock -n 9 || { echo "Build already active in $out" >&2; exit 1; }
 evidence=$(mktemp -d "$RUSIX_OUTPUT_ROOT/logs/$name-build.XXXXXXXX")
 echo "Build evidence: $evidence"
 printf '%s\n' "$profile" > "$evidence/profile.txt"
-if [[ "$profile" == server || "$profile" == server-c ]]; then
+if [[ "$profile" == server || "$profile" == server-c || "$profile" == rcu-list-server-* ]]; then
     python3 "$RUSIX_PROJECT/scripts/server_target.py" materialize \
         --source "$config" --profile "$profile" --evidence "$evidence"
     config="$evidence/config-input"
@@ -76,7 +76,7 @@ fi
 python3 "$RUSIX_PROJECT/scripts/verify-rcu-list-selection.py" config \
     --profile "$profile" --config "$out/.config"
 cp "$out/.config" "$evidence/config"
-if [[ "$profile" == server || "$profile" == server-c ]]; then
+if [[ "$profile" == server || "$profile" == server-c || "$profile" == rcu-list-server-* ]]; then
     python3 "$RUSIX_PROJECT/scripts/server_target.py" verify \
         --source "$RUSIX_PROJECT/configs/x86_64-server.config" --profile "$profile" \
         --evidence "$evidence" --resolved "$out/.config"
@@ -159,7 +159,7 @@ PYBRDCOMMAND
         fi
     } > "$evidence/selection.log"
 fi
-if [[ "$profile" == brd-rust || "$profile" == brd-kunit || "$profile" == brd-ext4-rust || "$profile" == core-ext4-c || "$profile" == core-ext4-rust || "$profile" == completion-c || "$profile" == completion-rust || "$profile" == completion-plain-c || "$profile" == completion-plain-rust || "$profile" == rcu-list-* || "$profile" == server || "$profile" == server-c ]]; then
+if [[ "$profile" == brd-rust || "$profile" == brd-kunit || "$profile" == brd-ext4-rust || "$profile" == core-ext4-c || "$profile" == core-ext4-rust || "$profile" == completion-c || "$profile" == completion-rust || "$profile" == completion-plain-c || "$profile" == completion-plain-rust || "$profile" == rcu-list-* || "$profile" == server || "$profile" == server-c || "$profile" == rcu-list-server-* ]]; then
     git -C "$RUSIX_SOURCE" diff --exit-code \
         2926d88bb7fc4608fd942453d929c39e4e5ec006 -- drivers/block/brd.c \
         > "$evidence/brd-reference.diff"
@@ -226,7 +226,7 @@ if [[ "$profile" == rcu-list-* ]]; then
         "$RUSIX_SOURCE/kernel/rcu/Kconfig" "$RUSIX_SOURCE/kernel/rcu/Makefile" \
         "$RUSIX_SOURCE/rust/bindings/bindings_helper.h" \
         "$out/rust/bindings/bindings_generated.rs" \
-        "$RUSIX_PROJECT/configs/x86_64-$profile.config" \
+        "$config" \
         "$RUSIX_PROJECT/scripts/verify-rcu-list-selection.py" \
         > "$evidence/rcu-list-inputs.sha256"
 fi

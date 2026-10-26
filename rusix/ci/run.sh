@@ -5,8 +5,8 @@ set -euo pipefail
 source "$(dirname -- "${BASH_SOURCE[0]}")/../scripts/repo-paths.sh"
 profile=${1:-}
 case "$profile" in
-    kunit|brd|brd-fixed-c|brd-rust|brd-kunit|brd-ext4-c|brd-ext4-fixed-c|brd-ext4-rust|core-ext4-c|core-ext4-rust|completion-c|completion-rust|completion-plain-c|completion-plain-rust|rcu-list-c|rcu-list-rust|rcu-list-plain-c|rcu-list-plain-rust|server|server-c) ;;
-    *) echo 'Usage: bash rusix/ci/run.sh kunit|brd|brd-fixed-c|brd-rust|brd-kunit|brd-ext4-c|brd-ext4-fixed-c|brd-ext4-rust|core-ext4-c|core-ext4-rust|completion-c|completion-rust|completion-plain-c|completion-plain-rust|rcu-list-c|rcu-list-rust|rcu-list-plain-c|rcu-list-plain-rust|server|server-c' >&2; exit 2 ;;
+    kunit|brd|brd-fixed-c|brd-rust|brd-kunit|brd-ext4-c|brd-ext4-fixed-c|brd-ext4-rust|core-ext4-c|core-ext4-rust|completion-c|completion-rust|completion-plain-c|completion-plain-rust|rcu-list-c|rcu-list-rust|rcu-list-plain-c|rcu-list-plain-rust|rcu-list-ext4-c|rcu-list-ext4-rust|rcu-list-server-c|rcu-list-server-rust|server|server-c) ;;
+    *) echo 'Usage: bash rusix/ci/run.sh kunit|brd|brd-fixed-c|brd-rust|brd-kunit|brd-ext4-c|brd-ext4-fixed-c|brd-ext4-rust|core-ext4-c|core-ext4-rust|completion-c|completion-rust|completion-plain-c|completion-plain-rust|rcu-list-c|rcu-list-rust|rcu-list-plain-c|rcu-list-plain-rust|rcu-list-ext4-c|rcu-list-ext4-rust|rcu-list-server-c|rcu-list-server-rust|server|server-c' >&2; exit 2 ;;
 esac
 mkdir -p "$RUSIX_OUTPUT_ROOT/logs" "$RUSIX_OUTPUT_ROOT/tmp"
 export TMPDIR="$RUSIX_OUTPUT_ROOT/tmp"
@@ -44,7 +44,7 @@ bash "$RUSIX_PROJECT/scripts/build-kernel.sh" --profile "$profile" "ci-$profile"
 if [[ "$profile" == kunit ]]; then
     bash "$RUSIX_PROJECT/scripts/boot-kunit.sh" \
         "$RUSIX_OUTPUT_ROOT/builds/ci-kunit" ci-kunit
-elif [[ "$profile" == rcu-list-* ]]; then
+elif [[ "$profile" == rcu-list-c || "$profile" == rcu-list-rust || "$profile" == rcu-list-plain-c || "$profile" == rcu-list-plain-rust ]]; then
     bash "$RUSIX_PROJECT/scripts/boot-kunit.sh" --rcu-combined \
         "$RUSIX_OUTPUT_ROOT/builds/ci-$profile" "ci-$profile"
     bash "$RUSIX_PROJECT/scripts/boot-kunit.sh" --completion \
@@ -68,7 +68,7 @@ elif [[ "$profile" == brd || "$profile" == brd-fixed-c || "$profile" == brd-rust
         "$RUSIX_OUTPUT_ROOT/builds/ci-$profile" "ci-$profile" --build-evidence "${evidence[0]}"
     python3 "$RUSIX_PROJECT/scripts/test-brd-partitions-vm.py" \
         "$RUSIX_OUTPUT_ROOT/builds/ci-$profile" "ci-$profile" --build-evidence "${evidence[0]}"
-elif [[ "$profile" == brd-ext4-c || "$profile" == brd-ext4-fixed-c || "$profile" == brd-ext4-rust || "$profile" == core-ext4-c || "$profile" == core-ext4-rust ]]; then
+elif [[ "$profile" == brd-ext4-c || "$profile" == brd-ext4-fixed-c || "$profile" == brd-ext4-rust || "$profile" == core-ext4-c || "$profile" == core-ext4-rust || "$profile" == rcu-list-ext4-c || "$profile" == rcu-list-ext4-rust ]]; then
     shopt -s nullglob
     evidence=("$RUSIX_OUTPUT_ROOT"/logs/ci-$profile-build.*)
     [[ ${#evidence[@]} == 1 ]] || {

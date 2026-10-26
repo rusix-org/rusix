@@ -8,7 +8,10 @@ from pathlib import Path
 import re
 
 CORE = "CONFIG_RUSIX_COMPLETION_RUST"
-PROFILES = {"server": "y", "server-c": "n"}
+RCU = "CONFIG_RUSIX_RCU_LIST_RUST"
+PROFILES = {"server": "y", "server-c": "n",
+            "rcu-list-server-c": "y", "rcu-list-server-rust": "y"}
+RCU_PROFILES = {"rcu-list-server-c": "n", "rcu-list-server-rust": "y"}
 
 
 def settings(text):
@@ -34,6 +37,15 @@ def derive(source, profile):
     for name, value in required.items():
         if values.get(name) != value:
             raise ValueError(f"Declared server must explicitly request {name}={value}")
+    if profile in RCU_PROFILES:
+        # An explicit experimental derivation; leave the declared source intact.
+        if values.get(RCU, 'n') != 'n' or values.get('CONFIG_RUSIX_RCU_LIST_TEST', 'n') != 'n':
+            raise ValueError('Declared server already changes the experimental RCU axis')
+        lines = [line for line in source.splitlines() if not re.match(
+            r'^(?:# )?CONFIG_RUSIX_RCU_LIST_(?:RUST|TEST)(?:=| is not set)', line)]
+        lines += [f'{RCU}=y' if RCU_PROFILES[profile] == 'y' else f'# {RCU} is not set',
+                  '# CONFIG_RUSIX_RCU_LIST_TEST is not set']
+        return '\n'.join(lines) + '\n'
     if profile == "server":
         return source
     return re.sub(rf"^{CORE}=y$", f"# {CORE} is not set", source, count=1, flags=re.MULTILINE)
@@ -64,7 +76,8 @@ def identity(source_path, source, profile, generated):
             "source_fragment_sha256": sha(source.encode()),
             "config_input_sha256": sha(generated.encode()),
             "derivation_script_sha256": sha(Path(__file__).read_bytes()),
-            "override": {} if profile == "server" else {CORE: "n"}}
+            "override": ({RCU: RCU_PROFILES[profile]} if profile in RCU_PROFILES else
+                         {} if profile == "server" else {CORE: "n"})}
 
 
 def materialize(source_path, profile, evidence):
@@ -91,14 +104,16 @@ def verify(source_path, profile, evidence, resolved):
     validate_resolved(source, profile, resolved.read_text())
 
 
-def compare(source, rust, c):
-    validate_resolved(source, "server", rust)
-    validate_resolved(source, "server-c", c)
+def compare(source, rust, c, axis="core"):
+    if axis not in ("core", "rcu-list"):
+        raise ValueError("Unknown comparison axis")
+    validate_resolved(source, "server" if axis == "core" else "rcu-list-server-rust", rust)
+    validate_resolved(source, "server-c" if axis == "core" else "rcu-list-server-c", c)
     left, right = settings(rust), settings(c)
     changes = {name: [left.get(name, "n"), right.get(name, "n")]
                for name in left.keys() | right.keys()
                if left.get(name, "n") != right.get(name, "n")}
-    if changes != {CORE: ["y", "n"]}:
+    if changes != {CORE if axis == "core" else RCU: ["y", "n"]}:
         raise ValueError(f"Server pair differs beyond core selection: {changes}")
     return {"status": "PASS", "resolved_config_differences": changes,
             "rust_config_sha256": sha(rust.encode()), "c_config_sha256": sha(c.encode())}
@@ -118,13 +133,14 @@ def main():
     cmd.add_argument("--source", type=Path, required=True)
     cmd.add_argument("--rust", type=Path, required=True)
     cmd.add_argument("--c", type=Path, required=True)
+    cmd.add_argument("--axis", choices=("core", "rcu-list"), default="core")
     args = parser.parse_args()
     if args.command == "materialize":
         materialize(args.source, args.profile, args.evidence)
     elif args.command == "verify":
         verify(args.source, args.profile, args.evidence, args.resolved)
     else:
-        print(json.dumps(compare(args.source.read_text(), args.rust.read_text(), args.c.read_text()), indent=2))
+        print(json.dumps(compare(args.source.read_text(), args.rust.read_text(), args.c.read_text(), args.axis), indent=2))
 
 
 if __name__ == "__main__":
