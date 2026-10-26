@@ -36,7 +36,7 @@ git diff --check
 Recorded builds require clean committed source; use fresh outputs and VM labels,
 retaining failed attempts. Never run guest probes or load experimental modules on
 the host. The [BRD fixture](tests/brd-contract/README.md) documents its exact scope.
-Current engineering-baseline results do not verify the pending 6.18.58 transition.
+Current engineering-baseline results do not verify the 6.18.58 baseline; use the separately recorded LTS results.
 
 ## Review
 

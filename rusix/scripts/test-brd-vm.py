@@ -186,7 +186,7 @@ def run(args, paths, evidence):
     }
     (evidence / "inputs.json").write_text(json.dumps(metadata, indent=2) + "\n")
     command = wrapper + ["timeout", "--kill-after=5s", "180s", "qemu-system-x86_64",
-                         "-accel", accel, "-cpu", "qemu64" if accel == "kvm" else "max",
+                         "-machine", "q35", "-accel", accel, "-cpu", "qemu64" if accel == "kvm" else "max",
                          "-m", "512M", "-smp", "2"]
     firmware = paths.tools / "usr/share/qemu"
     if (firmware / "qboot.rom").is_file():

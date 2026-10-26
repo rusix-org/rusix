@@ -1,8 +1,7 @@
 # SPDX-License-Identifier: GPL-2.0-only
-# Exact locally built toolchain image. It carries dated, signed snapshot sources.
-# Before building, verify the local base image ID is
-# sha256:0e0cfd724bde5c2a81cee61210c2a14a66ea72f679e1308125825e0463c67937.
-# The tag is a local reference; record the inspected base ID with build evidence.
+# Build the local base using the pinned ci/Dockerfile and package lock first.
+# Record its inspected image identity for each build; IDs can differ across
+# builders even when the pinned inputs and package inventory match.
 ARG TOOLCHAIN_IMAGE=rusix-toolchain:trixie-20261025
 FROM ${TOOLCHAIN_IMAGE}
 RUN apt-get update \

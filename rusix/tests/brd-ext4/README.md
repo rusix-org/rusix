@@ -110,3 +110,15 @@ Only QEMU receives the guest archive: no host mounts, device-node creation,
 formatting or fixture execution occurs. The runner requires the fixture's
 package inventory to match installed packages. Its host-only regression suite
 is `python3 rusix/tests/test_brd_ext4_gate.py`; all 17 checks currently pass.
+
+For a local rebuild, select the inspected base explicitly:
+
+```sh
+base_id=$(docker image inspect --format '{{.Id}}' rusix-toolchain:trixie-20261025)
+docker tag "$base_id" rusix-toolchain:ext4-base
+docker build --pull=false --build-arg TOOLCHAIN_IMAGE=rusix-toolchain:ext4-base \
+  -t rusix-ext4:trixie-20261025 -f rusix/tests/brd-ext4/Dockerfile rusix/tests/brd-ext4
+```
+
+Record `base_id` with the build log; `run-container.sh` records the actual final
+image ID and runs that inspected identity. No preexisting laptop image is needed.

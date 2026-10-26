@@ -153,10 +153,10 @@ review even though this project's long-term direction is governed by ADR 0002.
 
 ## Remaining verification
 
-Before calling this a migrated driver, add paired C/Rust coverage for allocation
-injection and deterministic NOWAIT errors, overlapping I/O/discard lifetimes,
-capacity edges, parameters/partitions and on-demand creation, memory pressure,
-initialization failure, busy removal and repeated module load/use/unload. Use
+Finish parameter/partition and on-demand parity before Phase 1a closure.
+Phase 1b adds paired allocation injection and deterministic NOWAIT errors,
+overlapping I/O/discard lifetimes, memory pressure, initialization failure,
+busy removal and repeated module load/use/unload. Use
 supported memory instrumentation and lockdep with demonstrated coverage.
 
 The ordinary userspace/ext4 workload, built-in/module x86_64 and arm64 matrix,

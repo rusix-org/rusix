@@ -274,7 +274,7 @@ def run(args, paths, evidence):
                 "artifacts": {str(path): digest(path) for path in (image, init, archive)}}
     (evidence / "inputs.json").write_text(json.dumps(metadata, indent=2, sort_keys=True) + "\n")
     command = ["/usr/bin/timeout", "--kill-after=5s", "240s", "/usr/bin/qemu-system-x86_64",
-               "-accel", accel, "-cpu", "qemu64" if accel == "kvm" else "max",
+               "-machine", "q35", "-accel", accel, "-cpu", "qemu64" if accel == "kvm" else "max",
                "-m", "512M", "-smp", "2", "-display", "none", "-serial", "stdio",
                "-monitor", "none", "-nic", "none", "-no-reboot", "-kernel", str(image),
                "-initrd", str(archive), "-append", "console=ttyS0 rdinit=/init rusix.brd_ext4=1 "

@@ -79,7 +79,7 @@ fi
 # without relaxing either acceptance gate or modifying upstream tests.
 # With system packages only, let QEMU find its own firmware at its default path.
 command=(bash "$RUSIX_PROJECT/scripts/with-local-tools.sh" timeout --kill-after=5s 180s
-    qemu-system-x86_64 -accel "$accel" -cpu "$cpu" -m 512M -smp "$cpus"
+    qemu-system-x86_64 -machine q35 -accel "$accel" -cpu "$cpu" -m 512M -smp "$cpus"
     "${firmware[@]}"
     -display none -serial stdio -monitor none -nic none -no-reboot
     -kernel "$build/arch/x86/boot/bzImage"
