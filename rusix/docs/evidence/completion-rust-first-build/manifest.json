@@ -1,0 +1,21 @@
+{
+  "status": "FAIL",
+  "reason": "core::ffi::c_ulong is u64 on this target, but pinned kernel bindgen uses kernel::ffi::c_ulong (usize); saved IRQ flag field mismatched both helper signatures. Corrected by using kernel FFI type without casts.",
+  "source": "9d1c1ca5dd2a837a7690f032be0c696bb10832ac",
+  "sha256": {
+    "ci-completion-rust-build.7QDt71TK/build.exit": "53c234e5e8472b6ac51c1ae1cab3fe06fad053beb8ebfd8977b010655bfdd3c3",
+    "ci-completion-rust-build.7QDt71TK/build.log": "3edb2d9a629fde93fd0cca10c345df07352dbcf5af68da7addd1907c04f24279",
+    "ci-completion-rust-build.7QDt71TK/config": "d985693b6557fdf5c97de36d8ab76094cb93ad0107cc7c6f7bcee26370c27b9a",
+    "ci-completion-rust-build.7QDt71TK/config.log": "2be3944eba05fe51930b07bdcd255ec4d59c7fa0f0a8b984d1adac4f3580051e",
+    "ci-completion-rust-build.7QDt71TK/environment.log": "dcd65cb372a473b5c022eafb8b2eb423d7dda52bc83172cf82f5e696c55e5af7",
+    "ci-completion-rust-build.7QDt71TK/profile.txt": "a1d7e97d3bad415f82af827dd277b86da8f481b287b63ee156f620201af0432c",
+    "ci-inputs.log": "088e0c479359c4dc9a724e32ffbd4c4acbbebd4e7f9a3dec1d23c1d2fc63c82f",
+    "ci.exit": "53c234e5e8472b6ac51c1ae1cab3fe06fad053beb8ebfd8977b010655bfdd3c3",
+    "container-acceleration.txt": "3b691b22d6a04e2c63061f30b8d26048dc13d891ab7a9633a212a327b25c72fc",
+    "container-image-id.txt": "4fa0dc77d9271d09e8b83e114b9f527a9394f63e7c281506c63948e3feaa2b39",
+    "host-native.log": "5947862b22c3d6ec6beb115ae9d7178bac6fbe96095b9083066b33f39e005506",
+    "packages.lock": "9ef7ec5334805f1896c6990c60937d2244f71982b9a06b8a6248f352f8e9cf19",
+    "preflight.log": "522bfec88879b99be12257c198c7a766083b39d8973342c36615e9b29e9d1d7c",
+    "toolchain.log": "c6f34500a39cbbff3c2a10d9f85c76a7399e918c72c166fe90da89178e1db5bf"
+  }
+}
