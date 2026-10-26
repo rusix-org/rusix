@@ -113,6 +113,11 @@ handoff to C `copy_process`. The original C body is preserved. Source review,
 formatting and 15 host gate scripts (166 cases) pass. The five-case userspace
 probe and Rust PID1 compile as static binaries in the pinned container; neither
 was executed. Matching C/Rust profiles, actual dispatch/linked selection proof
-and the bounded guest runner are ready for kernel verification. No candidate
-kernel has been compiled or booted. Attributable allocation-failure tests remain
-required. [Contract and remaining C boundaries](experiments/task-construction/README.md).
+and the bounded guest runner are ready for kernel verification. The first C kernel compiled at `8fd3defabb84`, then archive verification
+failed before boot because LLVM lists expanded thin-member paths but extracts
+stored relative names. The 69-record failure and linked artifact hashes remain
+in `linux-out/task-construction-initial-evidence`. The checker now validates
+exact thin-member identity and compares extracted bytes; six real-archiver
+regressions and ten selection cases pass. No candidate guest has run, and the
+Rust kernel was not built. Fresh paired verification and attributable
+allocation-failure tests remain required. [Contract and remaining C boundaries](experiments/task-construction/README.md).
