@@ -32,16 +32,29 @@ a 5 GiB memory limit. All generated output is written to the supplied disk path.
 The wrapper also mounts external Git metadata read-only for linked worktrees.
 
 Each profile runs toolchain preflight, native C/Rust differential checks, and
-all `rusix/tests/test_*.py` regressions before building its kernel and performing
-the profile-specific checks below.
-`server` builds the declared x86_64 target and measures the linked ELF by
-compilation-unit language, archiving vmlinux, its link map, configuration, and
-machine-readable results. This build-only job does not establish server runtime
-or filesystem correctness. `kunit` executes the existing kernel suite. `brd`
-executes the C driver's six
-userspace contract cases. This is not a Rust BRD implementation or a complete
-filesystem/rootfs test. The existing i686 host test is not part of this initial
-container matrix; its target runtime is not installed here.
+all `rusix/tests/test_*.py` regressions before building one kernel:
+
+| Profile | Checks using that kernel |
+| --- | --- |
+| `kunit` | 21 upstream square-root cases and three compatibility cases |
+| `brd` / `brd-rust` | Six block contract cases, six parameter/on-demand boots and five partition cases against C / Rust BRD |
+| `brd-ext4-c` / `brd-ext4-rust` | The same block and parameter checks, plus six ordinary-userspace ext4 cases; requires the [fixture image](../tests/brd-ext4/README.md) with e2fsprogs |
+| `brd-kunit` | Nine required BRD ownership/policy cases, then a separate boot requiring five C completion behavior cases, one Rust-owned layout spike and two bounded worker cases |
+| `server` | Build and linked-ELF language measurement; archives vmlinux, map, config and JSON, without runtime or filesystem verification |
+
+Choose any listed profile as the final `run-container.sh` argument, with a fresh
+output directory. The wrapper records the image ID; the ext4 runner also binds
+its staged ordinary utilities to that image. The i686 host test is separate
+because this container does not include its target runtime.
+
+VM runners explicitly select QEMU `q35`. BRD configurations enable ACPI and PCI
+support for firmware enumeration and two CPUs. `CONFIG_BLOCK_LEGACY_AUTOLOAD=y`
+enables the pinned block layer's registered-major probe path: opening an absent
+RAM disk must invoke BRD's callback even though BRD itself is builtin. It is
+required for the on-demand contract, not evidence of tested module loading.
+The current q35/configuration validation is ongoing; these execution paths are
+not a claim that the latest runs passed. CPU-dependency and ACPI diagnostics
+reject results rather than being suppressed.
 
 ## Pins and provenance
 
@@ -77,18 +90,8 @@ workflow uploads logs and relevant kernel/initramfs binaries on success or failu
 with 30-day retention. Durable milestone summaries remain necessary after expiry.
 
 To update the environment, deliberately change the base digest and snapshot,
-resolve/review the new package inventory, and rerun all three profiles. Do not bypass
+resolve/review the new package inventory, and revalidate affected profiles locally. Do not bypass
 an inventory or tool-version assertion to obtain a passing build.
-
-Additional local profiles on the LTS integration branch:
-
-- `brd-rust`: the unchanged six-case block probe against selected Rust BRD.
-- `brd-kunit`: nine required store, insertion, allocation-scope and parameter tests.
-- `brd-ext4-c` / `brd-ext4-rust`: the same ordinary-userspace ext4 workload;
-  use the [fixture image](../tests/brd-ext4/README.md) containing e2fsprogs.
-
-`run-container.sh` records the inspected image ID and passes it to the ext4
-runner. These profiles are local execution paths; they do not enable hosted jobs.
 
 The disabled hosted definition has one explicitly selected profile per manual
 dispatch, defaulting to `brd-rust`; there is no automatic multi-job matrix.

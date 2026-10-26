@@ -21,7 +21,7 @@ commands (replace `BUILD` and `EVIDENCE` with those absolute paths):
 ```bash
 set +e
 bash rusix/scripts/with-local-tools.sh timeout --kill-after=5s 180s \
-  qemu-system-x86_64 -accel tcg -cpu max -m 512M -smp 2 \
+  qemu-system-x86_64 -machine q35 -accel tcg -cpu max -m 512M -smp 2 \
   -display none -serial stdio -monitor none -nic none -no-reboot \
   -kernel BUILD/arch/x86/boot/bzImage \
   -append 'console=ttyS0 kunit.enable=1 kunit.autorun=1 kunit.filter_glob=rusix_* kunit_shutdown=reboot panic=-1' \
