@@ -1,7 +1,7 @@
 # rusix progress
 
 **Phase 1a: C and Rust BRD pass the x86_64 block and ordinary-userspace ext4
-contracts on the initial i440fx fixture.** Most of the kernel remains C. The integration branch
+contracts on the declared q35 VM.** Most of the kernel remains C. The integration branch
 `rusix/lts-6.18` uses signed Linux 6.18.58 (`2926d88bb7fc`); published main
 remains on its previously verified source pending transition checks. Hosted CI
 is disabled; all current tests run locally.
@@ -14,10 +14,10 @@ provisional invalid-parameter exception. No subsystem divergence point is declar
 | Check | Result and evidence |
 | --- | --- |
 | LTS provenance and math | Signed tag verified; 24 required math cases pass. An initial unfiltered run correctly failed on an intentionally skipped upstream demonstration test. [Evidence](docs/evidence/lts-baseline/manifest.json). |
-| C/Rust BRD block contract | Six cases pass on each implementation. Identical probe ELF/tool image; configurations differ only by Rust selection. [Comparison](docs/evidence/brd-rust-initial/comparison.json). |
+| C/Rust storage parity | Both pass block6, ordinary ext4 userspace6, six parameter variants and partition5, including clipped reads/writes. Same source, image and four byte-identical guest fixtures; resolved configs differ only by BRD selection. [q35 evidence](docs/evidence/brd-q35/manifest.json). |
 | Rust selection | Full kernel at `aa6da498a` links Rust submission and excludes C BRD submission. [Evidence](docs/evidence/brd-rust-initial/manifest.json). |
 | Ownership and policy | Nine in-kernel tests pass, zero skips: insertion ownership, discard lifetime/accounting, NOIO nesting and parameters. [Evidence](docs/evidence/brd-ownership/manifest.json). |
-| Ordinary userspace/ext4 | Pinned fixture image, static Rust supervisor, ordinary Debian utilities, deterministic staging and strict gate implemented. C and Rust each pass all six filesystem cases using an identical initramfs and source commit. [Paired evidence](docs/evidence/brd-ext4/manifest.json). [Fixture](tests/brd-ext4/README.md), [tool evidence](docs/evidence/ext4-fixture/manifest.json). |
+| Ordinary userspace | Pinned Debian shell/coreutils/e2fsprogs perform mkfs, buffered/direct I/O, fsync, rename/unlink, remount verification and offline fsck. [Fixture](tests/brd-ext4/README.md), [tool provenance](docs/evidence/ext4-fixture/manifest.json). |
 | Early core scouting | Five original-C behavior tests and one Rust-owned/C-visible layout test pass in the kernel. [Kernel evidence](docs/evidence/completion-kernel/manifest.json). Five host ownership-model tests also pass. [Experiment](experiments/completion/README.md). |
 
 Last completed LTS x86_64 server measurement at `57820ea1ec`: executable
@@ -28,26 +28,20 @@ infrastructure and is not a completion percentage; it establishes build/link
 composition, not server runtime. The newly enabled legacy block-autoload option
 requires an updated measurement.
 
-Current validation: at `22f1000b28`, C passes q35 block/ext4, all six
-parameter variants and partition I/O. Rust passes q35 block/ext4 and the default
-parameter boot; its next boot was rejected when shutdown printk split a serial
-marker. The guest now drains the console before reboot; paired replays are
-running at `13f851e005`, also adding clipped partition-write coverage. Earlier
-q35 failures preserve the missing PCI/autoload findings (`lts-ext4-c-002`),
-an overbroad diagnostic matcher (`lts-ext4-c-003`), and serial interleaving
-(`lts-ext4-rust-004`). A later C replay exposed interleaving during device
-autoload too; fixtures now emit markers as single kernel log records. The
-[failed-attempt archive](docs/evidence/q35-bringup/manifest.json) retains those
-findings. No failed run is promoted to a pass.
+Latest storage comparison: `9d1c1ca5dd`, local `lts-ext4-c-006` and
+`lts-ext4-rust-006`, nine q35 boots per implementation. Prior configuration,
+diagnostic-matcher and serial-interleaving failures remain in the
+[bringup archive](docs/evidence/q35-bringup/manifest.json). Guest markers now
+use atomic kernel log records; acceptance still requires exact ordered cases.
 
-The first production core slice is implemented but unverified: opt-in Rust
-`complete()`, disabled by default, retains the C layout and raw-lock/wakeup
-boundaries. Local `completion-c` / `completion-rust` profiles require linked
-selection evidence and nine core cases, including bounded worker handoff,
-concurrent token consumption and timeout cleanup. Independent agent review found
-no blocker; compilation/runtime and IRQ-context coverage remain pending.
+Opt-in Rust `complete()` is implemented and independently agent-reviewed, with
+C layout/raw-lock/wakeup boundaries retained and default selection off. The
+expanded C baseline passes all nine completion cases and nine BRD cases on q35
+at the same source (`lts-completion-c-003`), with no compiler/objtool diagnostics.
+The Rust-selected full kernel is building; linked selection and runtime results
+remain pending. IRQ-context coverage and broader integration remain unverified.
 
-Next: finish paired q35 storage probes, execute paired core tests, update the
+Next: finish paired core tests, update the
 server measurement and review Phase 1a gaps before publishing the baseline
 transition. arm64, module lifetime, expanded fault/concurrency stress and
 performance budgets remain Phase 1b.
