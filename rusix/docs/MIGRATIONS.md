@@ -1,6 +1,6 @@
 # Kernel migration inventory
 
-## int_sqrt — implemented; clean comparison and broader verification in progress
+## int_sqrt — active on Rust builds; x86_64 comparison verified
 
 Baseline: `21a7f44fd0765fcc5194130b28767786eba1d1e7`.
 Sources: `lib/math/int_sqrt.c`, `include/linux/math.h`,
@@ -35,3 +35,6 @@ Verification gates:
 
 The initial upstream KUnit table has 21 inputs, all <= 2^32-1, so it is not enough
 by itself to validate the full x86_64 input domain.
+
+Current evidence: see `VERIFICATION.md` for clean committed C/Rust comparison,
+32-bit host checks, retained C, and remaining kernel/module/configuration gates.

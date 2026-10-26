@@ -1,0 +1,3 @@
+# Preserve captured bytes and hashes, including console CRLF and command spacing.
+# Formatting checks still apply normally to all project source and prose.
+** -text -whitespace

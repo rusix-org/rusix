@@ -1,0 +1,8 @@
+Traceback (most recent call last):
+  File "/home/aaron/code/rusix/scripts/test-int-sqrt-host.py", line 59, in <module>
+    subprocess.run([*test_runner, str(out / "tests")], check=True)
+    ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.14/subprocess.py", line 578, in run
+    raise CalledProcessError(retcode, process.args,
+                             output=stdout, stderr=stderr)
+subprocess.CalledProcessError: Command '['/home/aaron/code/rusix/.tools/root/usr/lib32/ld-linux.so.2', '--library-path', '/home/aaron/code/rusix/.tools/root/usr/lib32', '/home/aaron/code/rusix/builds/int-sqrt-host-i686/tests']' died with <Signals.SIGSYS: 31>.

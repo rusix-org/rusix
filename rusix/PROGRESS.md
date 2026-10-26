@@ -4,9 +4,9 @@
 
 Fork Linux, rewrite its kernel in Rust, then migrate remaining OS components.
 **Active; not complete.** M0 has a Rust-enabled x86_64 VM boot. M1 (integer square
-root replacement) has passed initial host and VM checks; clean-commit evidence,
-module/export testing and other architecture verification
-are being completed or remain outstanding. Full scope: `docs/ROADMAP.md`.
+root replacement) passes host and x86_64 VM comparisons from clean committed
+revisions. Module/export testing and other architecture verification remain
+outstanding. Review evidence: `docs/VERIFICATION.md`. Full scope: `docs/ROADMAP.md`.
 
 ## Baseline and workspace
 
@@ -27,8 +27,8 @@ are being completed or remain outstanding. Full scope: `docs/ROADMAP.md`.
 - Strong project instructions, full-scope roadmap, contributor entry point,
   migration contracts, local tool setup, configuration, build and VM scripts.
 - Rust translation of native `int_sqrt` and the separate 32-bit `int_sqrt64` ABI;
-  metadata-only C export shim. Rust selection was exercised experimentally;
-  Kbuild is temporarily back on C for a clean committed comparison baseline.
+  metadata-only C export shim. CONFIG_RUST now selects the Rust implementation;
+  non-Rust configurations retain the original C fallback.
 - Original upstream square-root suite remains unchanged. Separate KUnit tests
   compare original C behavior and independent mathematical bounds, including
   full-width boundaries. Host tests compile the actual pinned C source.
@@ -58,8 +58,10 @@ are being completed or remain outstanding. Full scope: `docs/ROADMAP.md`.
 - Acceptance-gate regression tests: 9 pass, including missing/skipped cases.
 - Added C test passes kernel checkpatch (0 errors/warnings). Rust formatting and
   Git whitespace checks pass.
-- These first VM runs used an evolving tree; repeat from committed revisions is
-  required for the final review evidence. Images/configs saved under `artifacts/`.
+- Clean committed comparison repeated successfully: C `b46d927d0` and Rust
+  `e87d0bc14` both pass 26/26 VM tests and the strict acceptance gate with identical
+  configurations. Source differs only in Kbuild selection. Raw evidence and hashes
+  are archived under `docs/evidence/int-sqrt/`; images/configs are in `artifacts/`.
 - No userspace boot, module loading/export-runtime test, 32-bit kernel boot,
   other architecture/hardware test, performance benchmark, or full parity claim.
 
@@ -77,9 +79,9 @@ are being completed or remain outstanding. Full scope: `docs/ROADMAP.md`.
 
 ## Next actions
 
-1. Commit reproducible C comparison baseline, build/boot it, then commit Rust
-   selection and repeat with identical config; archive source IDs and raw evidence.
-2. Verify non-Rust fallback and module/export behavior; test 32-bit kernel targets.
+1. Verify non-Rust fallback and module/export/CRC behavior using recorded builds.
+2. Test 32-bit kernel targets and CFI/LTO configurations; add relevant workload
+   and performance checks without weakening the preserved upstream tests.
 3. Continue the subsystem inventory/migration; most kernel implementation is C.
 
 ## Session log
@@ -92,4 +94,6 @@ Rust-enabled Linux baseline. Added integer-square-root Rust translation and
 separate parity tests; original upstream tests are unchanged. Initial C and Rust
 VM comparisons pass. Aaron emphasized external scrutiny and authorized parallel
 agents; independent reviews identified and corrected verification weaknesses.
-32-bit host validation now passes; clean committed comparison is current work.
+32-bit host validation and clean committed C/Rust VM comparisons now pass.
+Independent final source review found no additional build-selection or export
+policy defect; module runtime/CRC and other architecture gates remain open.

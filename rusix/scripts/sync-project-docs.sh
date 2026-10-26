@@ -15,3 +15,7 @@ cp "$root/docs/"*.lock "$root/linux/rusix/docs/"
 cp "$root/configs/"*.config "$root/linux/rusix/configs/"
 cp "$root/tests/"*.rs "$root/linux/rusix/tests/"
 cp "$root/tests/"*.py "$root/linux/rusix/tests/"
+if [[ -d "$root/docs/evidence" ]]; then
+    mkdir -p "$root/linux/rusix/docs/evidence"
+    cp -R "$root/docs/evidence/." "$root/linux/rusix/docs/evidence/"
+fi

@@ -1,0 +1,44 @@
+error: linking with `cc` failed: exit status: 1
+  |
+  = note:  "cc" "-m32" "/home/aaron/code/rusix/builds/int-sqrt-host-i686/rustcnRRa60/symbols.o" "<2 object files omitted>" "-Wl,--as-needed" "-Wl,-Bstatic" "<sysroot>/lib/rustlib/i686-unknown-linux-gnu/lib/{libtest-*,libgetopts-*,librustc_std_workspace_std-*,libstd-*,libpanic_unwind-*,libobject-*,libmemchr-*,libaddr2line-*,libgimli-*,libcfg_if-*,librustc_demangle-*,libstd_detect-*,libhashbrown-*,librustc_std_workspace_alloc-*,libminiz_oxide-*,libadler2-*,libunwind-*,liblibc-*,librustc_std_workspace_core-*,liballoc-*,libcore-*,libcompiler_builtins-*}.rlib" "-Wl,-Bdynamic" "-lgcc_s" "-lutil" "-lrt" "-lpthread" "-lm" "-ldl" "-lc" "-L" "/home/aaron/code/rusix/builds/int-sqrt-host-i686/rustcnRRa60/raw-dylibs" "-B<sysroot>/lib/rustlib/x86_64-unknown-linux-gnu/bin/gcc-ld" "-fuse-ld=lld" "-Wl,--eh-frame-hdr" "-Wl,-z,noexecstack" "-L" "<sysroot>/lib/rustlib/i686-unknown-linux-gnu/lib" "-o" "/home/aaron/code/rusix/builds/int-sqrt-host-i686/tests" "-Wl,--gc-sections" "-pie" "-Wl,-z,relro,-z,now" "-Wl,-O1" "-nodefaultlibs" "/home/aaron/code/rusix/builds/int-sqrt-host-i686/reference.o"
+  = note: some arguments are omitted. use `--verbose` to show all linker arguments
+  = note: rust-lld: error: /usr/lib/gcc/x86_64-pc-linux-gnu/16/32/crtbeginS.o is incompatible with elf64-x86-64
+          rust-lld: error: /home/aaron/code/rusix/builds/int-sqrt-host-i686/rustcnRRa60/symbols.o is incompatible with elf64-x86-64
+          rust-lld: error: /home/aaron/code/rusix/builds/int-sqrt-host-i686/tests.int_sqrt_host.edefa2a8e516b924-cgu.0.rcgu.o is incompatible with elf64-x86-64
+          rust-lld: error: /home/aaron/code/rusix/builds/int-sqrt-host-i686/tests.6r2gj5sdxi1tcn9xvhjlwg81j.rcgu.o is incompatible with elf64-x86-64
+          rust-lld: error: /home/aaron/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/i686-unknown-linux-gnu/lib/libtest-fda1c320ecc0c1c6.rlib(lib.rmeta) is incompatible with elf64-x86-64
+          rust-lld: error: /home/aaron/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/i686-unknown-linux-gnu/lib/libtest-fda1c320ecc0c1c6.rlib(lib.rmeta-link) is incompatible with elf64-x86-64
+          rust-lld: error: /home/aaron/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/i686-unknown-linux-gnu/lib/libtest-fda1c320ecc0c1c6.rlib(test-fda1c320ecc0c1c6.test.b8c21e0864dd8fad-cgu.0.rcgu.o) is incompatible with elf64-x86-64
+          rust-lld: error: /home/aaron/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/i686-unknown-linux-gnu/lib/libgetopts-e0334d1ed4f7650b.rlib(lib.rmeta) is incompatible with elf64-x86-64
+          rust-lld: error: /home/aaron/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/i686-unknown-linux-gnu/lib/libgetopts-e0334d1ed4f7650b.rlib(lib.rmeta-link) is incompatible with elf64-x86-64
+          rust-lld: error: /home/aaron/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/i686-unknown-linux-gnu/lib/libgetopts-e0334d1ed4f7650b.rlib(getopts-e0334d1ed4f7650b.getopts.55b54efd470f1268-cgu.0.rcgu.o) is incompatible with elf64-x86-64
+          rust-lld: error: /home/aaron/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/i686-unknown-linux-gnu/lib/librustc_std_workspace_std-f666ce9731a8f2b5.rlib(lib.rmeta) is incompatible with elf64-x86-64
+          rust-lld: error: /home/aaron/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/i686-unknown-linux-gnu/lib/librustc_std_workspace_std-f666ce9731a8f2b5.rlib(lib.rmeta-link) is incompatible with elf64-x86-64
+          rust-lld: error: /home/aaron/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/i686-unknown-linux-gnu/lib/librustc_std_workspace_std-f666ce9731a8f2b5.rlib(rustc_std_workspace_std-f666ce9731a8f2b5.rustc_std_workspace_std.80b864ceeeffbe99-cgu.0.rcgu.o) is incompatible with elf64-x86-64
+          rust-lld: error: /home/aaron/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/i686-unknown-linux-gnu/lib/libstd-1798c09a5aeb71f1.rlib(lib.rmeta) is incompatible with elf64-x86-64
+          rust-lld: error: /home/aaron/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/i686-unknown-linux-gnu/lib/libstd-1798c09a5aeb71f1.rlib(lib.rmeta-link) is incompatible with elf64-x86-64
+          rust-lld: error: /home/aaron/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/i686-unknown-linux-gnu/lib/libstd-1798c09a5aeb71f1.rlib(std-1798c09a5aeb71f1.std.227f52b04fcf30a9-cgu.0.rcgu.o) is incompatible with elf64-x86-64
+          rust-lld: error: /home/aaron/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/i686-unknown-linux-gnu/lib/libpanic_unwind-b2a472603d6f0351.rlib(lib.rmeta) is incompatible with elf64-x86-64
+          rust-lld: error: /home/aaron/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/i686-unknown-linux-gnu/lib/libpanic_unwind-b2a472603d6f0351.rlib(lib.rmeta-link) is incompatible with elf64-x86-64
+          rust-lld: error: /home/aaron/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/i686-unknown-linux-gnu/lib/libpanic_unwind-b2a472603d6f0351.rlib(panic_unwind-b2a472603d6f0351.panic_unwind.8ea8d0c923e9a547-cgu.0.rcgu.o) is incompatible with elf64-x86-64
+          rust-lld: error: /home/aaron/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/lib/rustlib/i686-unknown-linux-gnu/lib/libobject-8d539f1e4f814f9f.rlib(lib.rmeta) is incompatible with elf64-x86-64
+          rust-lld: error: too many errors emitted, stopping now (use --error-limit=0 to see all errors)
+          collect2: error: ld returned 1 exit status
+          
+
+error: aborting due to 1 previous error
+
+Traceback (most recent call last):
+  File "/home/aaron/code/rusix/scripts/test-int-sqrt-host.py", line 40, in <module>
+    subprocess.run(["rustc", *rust_target, "--edition=2021", "--test", "-Copt-level=2",
+    ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                    "-Coverflow-checks=yes", str(root / "tests/int_sqrt_host.rs"),
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                    "-C", f"link-arg={out / 'reference.o'}", "-o", str(out / "tests")],
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                   check=True)
+                   ^^^^^^^^^^^
+  File "/usr/lib/python3.14/subprocess.py", line 578, in run
+    raise CalledProcessError(retcode, process.args,
+                             output=stdout, stderr=stderr)
+subprocess.CalledProcessError: Command '['rustc', '--target', 'i686-unknown-linux-gnu', '--edition=2021', '--test', '-Copt-level=2', '-Coverflow-checks=yes', '/home/aaron/code/rusix/tests/int_sqrt_host.rs', '-C', 'link-arg=/home/aaron/code/rusix/builds/int-sqrt-host-i686/reference.o', '-o', '/home/aaron/code/rusix/builds/int-sqrt-host-i686/tests']' returned non-zero exit status 1.
