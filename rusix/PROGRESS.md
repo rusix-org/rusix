@@ -1,7 +1,7 @@
 # rusix progress
 
 **Rust BRD passes the x86_64 block and ordinary-userspace ext4 contracts;
-opt-in Rust completion signaling and blocking waits pass paired core tests.**
+opt-in Rust completion entry points pass paired core and signal tests.**
 Most of the kernel remains C. Linux 6.18.58 (`2926d88bb7fc`) is the behavioral
 baseline. Hosted CI remains disabled; current verification runs locally.
 
@@ -15,7 +15,7 @@ divergence point is declared. [ADR 0002](docs/adr/0002.md) owns the target and
 | LTS provenance/math | Signed tag verified; all 24 required math cases pass on q35, zero skips. [Math](docs/evidence/math-q35/manifest.json), [provenance](docs/evidence/lts-baseline/manifest.json). |
 | Storage parity | At `9d1c1ca5dd`, C/Rust each pass block6, ext4 userspace6, six parameter variants and partition5, including clipped reads/writes. Four byte-identical guest fixtures; configs differ only by BRD selection. [Evidence](docs/evidence/brd-q35/manifest.json). |
 | Ordinary userspace | Pinned Debian shell/coreutils/e2fsprogs perform mkfs, buffered/direct I/O, fsync, rename/unlink, remount verification and offline fsck. [Fixture](tests/brd-ext4/README.md). |
-| Core migration | At `db842fffa766`, C/Rust each pass 16 core cases plus nine BRD cases, then 16 isolated core cases on q35/KVM SMP2. Three signaling and nine wait entry points link exclusively; wait addresses remain in scheduler text. Zero skips and no compiler/objtool diagnostics. [Evidence](docs/evidence/completion-wait/manifest.json). |
+| Core migration | At `afaedde2732b`, C/Rust each pass 21 core cases plus nine BRD cases, then 21 isolated core cases on q35/KVM SMP2. All fourteen completion entry points link exclusively; wait addresses remain in scheduler text. Zero skips and no compiler/objtool diagnostics. [Evidence](docs/evidence/completion-status/manifest.json). |
 
 Implemented Rust includes approximately 1,200 lines across BRD/store and bio/disk
 interfaces, conditional xarray insertion/NOIO scope, and completion signaling
@@ -34,9 +34,9 @@ or server runtime result. That target selects Rust BRD and C completion.
 
 Remaining Phase 1a work includes the provisional BRD invalid-parameter exception,
 parameter adapters and review gates; [BRD.md](docs/BRD.md) owns those details.
-For core work, next verify dedicated-thread signal handling, then migrate
-try-wait/status operations together after the counter-access audit. IRQ/debug
-instrumentation, deadline races, selected-core ext4 integration, queue ownership
+For core work, next verify ordinary-userspace ext4 with Rust completions, then
+move queue policy into Rust while preserving list/scheduler contracts. IRQ/debug
+instrumentation, untimed signal paths, deadline races, queue ownership
 and scheduler integration remain unfinished. arm64, modules, expanded fault stress
 and performance budgets remain Phase 1b.
 
@@ -48,15 +48,9 @@ serial-diagnostic failures. Raw logs/binaries live in `linux-out/<run>`;
 committed manifests record source/config/tool identities. See the
 [verification index](docs/VERIFICATION.md) for historical evidence.
 
-Current working slice: Rust now supplies the remaining `try_wait_for_completion`
-and `completion_done` entry points, preserving their lockless checks and locked
-synchronization. Four dedicated-thread signal cases and a competing-consumer
-case bring the strict core inventory to 21. Signal tests verify pending/enrolled
-interruption, token precedence and nonfatal-signal timeout behavior. Paired
-build/runtime verification is pending; the 16-case archive predates this slice.
-
-The first status/signal comparison at `9018753694a5` stopped in the new
-consumer test: its explicit spawn-failure branch needed `AllocError` converted
-to the kernel `Error`. The cleanup broadcast is preserved and the conversion
-is fixed. Failed logs remain in `linux-out/lts-completion-status-c-001`;
-no runtime result was produced for that source.
+The latest pair verifies pending/enrolled interruption on dedicated threads,
+token precedence over pending signals, killable waits ignoring nonfatal signals,
+and competing try-wait consumers. A first test-only allocation-error conversion
+failure is retained in the [status evidence](docs/evidence/completion-status/manifest.json).
+Current integration work adds local ext4 profiles with Rust BRD in both kernels
+and only the completion implementation changed; runtime verification is pending.

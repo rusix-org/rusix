@@ -27,12 +27,13 @@ CASES = ("parameters", "initial_devices", "on_demand", "independent_io", "capaci
 HIGH_POSITIVE_CASES = ("parameters", "major_registered", "initial_devices", "open_enxio", "final_devices")
 
 
-def validate_selection(profile, selection, config):
+def validate_selection(profile, selection, config, core_selection=None):
     mapped = {"brd": "brd", "brd-rust": "brd-rust",
-              "brd-ext4-c": "brd", "brd-ext4-rust": "brd-rust"}.get(profile)
+              "brd-ext4-c": "brd", "brd-ext4-rust": "brd-rust",
+              "core-ext4-c": "core-ext4-c", "core-ext4-rust": "core-ext4-rust"}.get(profile)
     if mapped is None:
         raise ValueError("A C or Rust BRD contract/ext4 profile is required")
-    implementation = common.validate_selection(mapped, selection, config)
+    implementation = common.validate_selection(mapped, selection, config, core_selection)
     for name in ("SYSFS", "BLOCK_LEGACY_AUTOLOAD"):
         if f"CONFIG_{name}=y" not in config.splitlines():
             raise ValueError(f"Parameter contract requires CONFIG_{name}=y")
@@ -120,7 +121,9 @@ def run(args, paths, evidence):
         raise ValueError("Source was dirty after the kernel build")
     profile = (build_evidence / "profile.txt").read_text().strip()
     implementation = validate_selection(
-        profile, first_line(build_evidence / "selection.log"), config.read_text())
+        profile, first_line(build_evidence / "selection.log"), config.read_text(),
+        first_line(build_evidence / "completion-selection.log")
+        if profile.startswith("core-ext4-") else None)
     check_hashes(build_evidence / "build.sha256", [kernel, config])
     if (build_evidence / "config").read_bytes() != config.read_bytes():
         raise ValueError("Resolved configuration differs from build evidence")
@@ -160,7 +163,7 @@ def run(args, paths, evidence):
                     paths.project / "scripts/with-local-tools.sh",
                     paths.project / "scripts/repo-paths.sh"]
     metadata = {
-        "source_revision": revision, "implementation": implementation,
+        "source_revision": revision, "implementation": implementation, "profile": profile,
         "scope": "Six boot variants of BRD parameter/on-demand device contract",
         "sources": {str(p.relative_to(paths.source)): digest(p) for p in source_files},
         "artifacts": {str(p): digest(p) for p in (image, init, initramfs)},

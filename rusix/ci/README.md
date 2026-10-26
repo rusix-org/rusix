@@ -40,7 +40,8 @@ all `rusix/tests/test_*.py` regressions before building one kernel:
 | `brd` / `brd-rust` | Six block contract cases, six parameter/on-demand boots and five partition cases against C / Rust BRD |
 | `brd-ext4-c` / `brd-ext4-rust` | The same block and parameter checks, plus six ordinary-userspace ext4 cases; requires the [fixture image](../tests/brd-ext4/README.md) with e2fsprogs |
 | `brd-kunit` | Nine required BRD ownership/policy cases, then a separate boot requiring the current [completion contract inventory](../experiments/completion/README.md) |
-| `completion-c` / `completion-rust` | The same BRD/core tests, paired with original C / opt-in Rust completion signaling; archive/object/symbol evidence verifies selection |
+| `completion-c` / `completion-rust` | The same BRD/core tests, paired with original C / opt-in Rust completion entry points; archive/object/symbol evidence verifies selection |
+| `core-ext4-c` / `core-ext4-rust` | Ordinary ext4 userspace, block, parameter and partition suite with Rust BRD in both; only C / Rust completion selection differs. Requires the fixture image above and explicit core symbol proof. |
 | `server` | Build and linked-ELF language measurement; archives vmlinux, map, config and JSON, without runtime or filesystem verification |
 
 Choose any listed profile as the final `run-container.sh` argument, with a fresh

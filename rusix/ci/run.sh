@@ -5,8 +5,8 @@ set -euo pipefail
 source "$(dirname -- "${BASH_SOURCE[0]}")/../scripts/repo-paths.sh"
 profile=${1:-}
 case "$profile" in
-    kunit|brd|brd-rust|brd-kunit|brd-ext4-c|brd-ext4-rust|completion-c|completion-rust|server) ;;
-    *) echo 'Usage: bash rusix/ci/run.sh kunit|brd|brd-rust|brd-kunit|brd-ext4-c|brd-ext4-rust|completion-c|completion-rust|server' >&2; exit 2 ;;
+    kunit|brd|brd-rust|brd-kunit|brd-ext4-c|brd-ext4-rust|core-ext4-c|core-ext4-rust|completion-c|completion-rust|server) ;;
+    *) echo 'Usage: bash rusix/ci/run.sh kunit|brd|brd-rust|brd-kunit|brd-ext4-c|brd-ext4-rust|core-ext4-c|core-ext4-rust|completion-c|completion-rust|server' >&2; exit 2 ;;
 esac
 mkdir -p "$RUSIX_OUTPUT_ROOT/logs" "$RUSIX_OUTPUT_ROOT/tmp"
 export TMPDIR="$RUSIX_OUTPUT_ROOT/tmp"
@@ -53,7 +53,7 @@ elif [[ "$profile" == brd || "$profile" == brd-rust ]]; then
         "$RUSIX_OUTPUT_ROOT/builds/ci-$profile" "ci-$profile" --build-evidence "${evidence[0]}"
     python3 "$RUSIX_PROJECT/scripts/test-brd-partitions-vm.py" \
         "$RUSIX_OUTPUT_ROOT/builds/ci-$profile" "ci-$profile" --build-evidence "${evidence[0]}"
-elif [[ "$profile" == brd-ext4-c || "$profile" == brd-ext4-rust ]]; then
+elif [[ "$profile" == brd-ext4-c || "$profile" == brd-ext4-rust || "$profile" == core-ext4-c || "$profile" == core-ext4-rust ]]; then
     shopt -s nullglob
     evidence=("$RUSIX_OUTPUT_ROOT"/logs/ci-$profile-build.*)
     [[ ${#evidence[@]} == 1 ]] || {

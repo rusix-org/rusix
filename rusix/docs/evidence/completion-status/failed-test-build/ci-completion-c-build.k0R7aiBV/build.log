@@ -1,0 +1,48 @@
+make: Entering directory '/src'
+make[1]: Entering directory '/out/builds/ci-completion-c'
+  SYNC    include/config/auto.conf
+  GEN     Makefile
+  GEN     Makefile
+  DESCEND objtool
+  CALL    /src/scripts/checksyscalls.sh
+  INSTALL libsubcmd_headers
+  BINDGEN rust/bindings/bindings_helpers_generated.rs
+  CC      rust/helpers/helpers.o
+  EXPORTS rust/exports_helpers_generated.h
+  RUSTC L rust/bindings.o
+  EXPORTS rust/exports_bindings_generated.h
+  RUSTC L rust/kernel.o
+error[E0308]: mismatched types
+   --> /src/rust/kernel/sync/completion/layout_tests.rs:365:28
+    |
+365 |                 return Err(error);
+    |                        --- ^^^^^ expected `Error`, found `AllocError`
+    |                        |
+    |                        arguments to this enum variant are incorrect
+    |
+help: the type constructed contains `alloc::AllocError` due to the type of the argument passed
+   --> /src/rust/kernel/sync/completion/layout_tests.rs:365:24
+    |
+365 |                 return Err(error);
+    |                        ^^^^-----^
+    |                            |
+    |                            this argument influences the type of `Err`
+note: tuple variant defined here
+   --> /usr/lib/rustlib/src/rust/library/core/src/result.rs:537:5
+    |
+537 |     Err(#[stable(feature = "rust1", since = "1.0.0")] E),
+    |     ^^^
+help: call `Into::into` on this expression to convert `alloc::AllocError` into `error::Error`
+    |
+365 |                 return Err(error.into());
+    |                                 +++++++
+
+error: aborting due to 1 previous error
+
+For more information about this error, try `rustc --explain E0308`.
+make[3]: *** [/src/rust/Makefile:569: rust/kernel.o] Error 1
+make[2]: *** [/src/Makefile:1316: prepare] Error 2
+make[1]: *** [/src/Makefile:248: __sub-make] Error 2
+make[1]: Leaving directory '/out/builds/ci-completion-c'
+make: *** [Makefile:248: __sub-make] Error 2
+make: Leaving directory '/src'

@@ -16,6 +16,27 @@ spec.loader.exec_module(runner)
 
 
 class ParameterTests(unittest.TestCase):
+    def test_core_profiles_require_completion_config_and_symbol_proof(self):
+        for suffix in ("c", "rust"):
+            profile = f"core-ext4-{suffix}"
+            setting = ("CONFIG_RUSIX_COMPLETION_RUST=y" if suffix == "rust" else
+                       "# CONFIG_RUSIX_COMPLETION_RUST is not set")
+            config = (self.config + "CONFIG_RUSIX_BRD_RUST=y\n") + "\n# CONFIG_MODULES is not set\n" + setting
+            proof = f"implementation=completion-{suffix}"
+            self.assertEqual(runner.validate_selection(profile, "implementation=brd-rust",
+                                                       config, proof), "brd-rust")
+            for wrong in (None, "", "implementation=completion-" + ("c" if suffix == "rust" else "rust")):
+                with self.subTest(profile=profile, proof=wrong):
+                    with self.assertRaises(ValueError):
+                        runner.validate_selection(profile, "implementation=brd-rust", config, wrong)
+            for wrong_config in (config.replace(setting, ""), config + "\nCONFIG_MODULES=y",
+                                 config.replace("# CONFIG_MODULES is not set", ""),
+                                 config + "\n" + setting):
+                with self.assertRaises(ValueError):
+                    runner.validate_selection(profile, "implementation=brd-rust", wrong_config, proof)
+            with self.assertRaises(ValueError):
+                runner.validate_selection(profile, "implementation=brd-c", config, proof)
+
     def setUp(self):
         self.lines = ["RUSIX_BRD_PARAMETERS_START"]
         self.lines += [f"RUSIX_BRD_PARAMETERS_PASS {case}" for case in runner.CASES]

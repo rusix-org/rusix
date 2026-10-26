@@ -49,8 +49,9 @@ def accept_console(console, qemu_exit):
     return {"status": "PASS", "cases": list(CASES), "qemu_exit": qemu_exit}
 
 
-def validate_selection(profile, selection, config):
-    expected = {"brd-ext4-c": "brd-c", "brd-ext4-rust": "brd-rust"}.get(profile)
+def validate_selection(profile, selection, config, core_selection=None):
+    expected = {"brd-ext4-c": "brd-c", "brd-ext4-rust": "brd-rust",
+                "core-ext4-c": "brd-rust", "core-ext4-rust": "brd-rust"}.get(profile)
     if expected is None or selection != f"implementation={expected}":
         raise ValueError("Ext4 build profile and BRD selection proof must agree")
     settings = set(config.splitlines())
@@ -61,6 +62,7 @@ def validate_selection(profile, selection, config):
         raise ValueError("Resolved configuration contradicts BRD selection")
     if "CONFIG_KUNIT=y" in settings:
         raise ValueError("Ext4 guests must disable KUnit")
+    _common.validate_core_selection(profile, config, core_selection)
     return expected
 
 
@@ -219,8 +221,11 @@ def run(args, paths, evidence):
         raise ValueError("Kernel source revision mismatch")
     if (proof / "source-after.status").read_bytes():
         raise ValueError("Kernel source changed during build")
-    implementation = validate_selection(first_line(proof / "profile.txt"),
-                                        first_line(proof / "selection.log"), config.read_text())
+    profile = first_line(proof / "profile.txt")
+    implementation = validate_selection(profile, first_line(proof / "selection.log"),
+                                        config.read_text(),
+                                        first_line(proof / "completion-selection.log")
+                                        if profile.startswith("core-ext4-") else None)
     check_hashes(proof / "build.sha256", [kernel, config])
     if config.read_bytes() != (proof / "config").read_bytes():
         raise ValueError("Resolved configuration differs from build evidence")
@@ -268,7 +273,7 @@ def run(args, paths, evidence):
     (evidence / "rootfs-elf.json").write_text(json.dumps(rootfs.elf_records, indent=2, sort_keys=True) + "\n")
     sources = [Path(__file__).resolve(), Path(_common.__file__), paths.project / "scripts/rusix_paths.py"]
     sources += [path for path in fixture.iterdir() if path.is_file()]
-    metadata = {"source_revision": revision, "implementation": implementation,
+    metadata = {"source_revision": revision, "implementation": implementation, "profile": profile,
                 "container_image": image_id, "config_sha256": digest(config),
                 "sources": {str(path.relative_to(paths.source)): digest(path) for path in sources},
                 "artifacts": {str(path): digest(path) for path in (image, init, archive)}}

@@ -1,0 +1,50 @@
+[12:16:25] ============================================================
+[12:16:25] =============== rusix_noio_scope (1 subtest) ===============
+[12:16:25] [PASSED] nested_scopes_restore_task_policy_on_error
+[12:16:25] ================ [PASSED] rusix_noio_scope =================
+[12:16:25] ========== rusix_completion_contract (5 subtests) ==========
+[12:16:25] [PASSED] initial_state_has_no_token
+[12:16:25] [PASSED] presignals_are_consumed_once_each
+[12:16:25] [PASSED] broadcast_persists_until_quiescent_reset
+[12:16:25] [PASSED] zero_timeout_reports_completion_and_consumes_token
+[12:16:25] [PASSED] signal_saturates_instead_of_wrapping
+[12:16:25] ============ [PASSED] rusix_completion_contract ============
+[12:16:25] =========== rusix_completion_layout (8 subtests) ===========
+[12:16:25] [PASSED] c_operations_share_pinned_rust_owned_storage
+[12:16:25] [PASSED] current_cpu_signal_counts_and_saturates
+[12:16:25] [PASSED] worker_handoff_observes_published_value
+[12:16:25] [PASSED] current_cpu_signal_wakes_enrolled_worker
+[12:16:25] [PASSED] two_workers_consume_exactly_two_tokens
+[12:16:25] [PASSED] competing_try_waiters_consume_one_token
+[12:16:25] [PASSED] broadcast_serves_two_workers_and_late_waiters
+[12:16:25] [PASSED] timed_out_worker_unlinks_before_late_signal
+[12:16:25] ============= [PASSED] rusix_completion_layout =============
+[12:16:25] ============ rusix_completion_wait (4 subtests) ============
+[12:16:25] [PASSED] all_wait_entries_consume_presignaled_token
+[12:16:25] [PASSED] all_wait_entries_preserve_broadcast_sentinel
+[12:16:25] [PASSED] all_timed_entries_distinguish_zero_timeout_states
+[12:16:25] [PASSED] all_timed_entries_unlink_after_positive_timeout
+[12:16:25] ============== [PASSED] rusix_completion_wait ==============
+[12:16:25] =========== rusix_completion_signal (4 subtests) ===========
+[12:16:25] [PASSED] pending_signals_interrupt_timed_waits
+[12:16:25] [PASSED] enrolled_waits_wake_for_signals
+[12:16:25] [PASSED] presignaled_token_wins_over_pending_signal
+[12:16:25] [PASSED] killable_wait_ignores_nonfatal_pending_signal
+[12:16:25] ============= [PASSED] rusix_completion_signal =============
+[12:16:25] ============= rusix_xarray_insert (2 subtests) =============
+[12:16:25] [PASSED] occupied_insert_returns_owner_without_replacing
+[12:16:25] [PASSED] array_drop_releases_inserted_owner
+[12:16:25] =============== [PASSED] rusix_xarray_insert ===============
+[12:16:25] =============== rusix_brd_store (3 subtests) ===============
+[12:16:25] [PASSED] lookup_and_repeated_insert_preserve_page
+[12:16:25] [PASSED] discard_keeps_inflight_page_alive_and_reinsert_is_independent
+[12:16:25] [PASSED] discard_excludes_end_and_is_idempotent
+[12:16:25] ================= [PASSED] rusix_brd_store =================
+[12:16:25] ============== rusix_brd_policy (3 subtests) ===============
+[12:16:25] [PASSED] minor_count_preserves_defined_normalization
+[12:16:25] [PASSED] invalid_minor_normalization_is_rejected
+[12:16:25] [PASSED] legacy_size_retains_prefix_and_wrapping_semantics
+[12:16:25] ================ [PASSED] rusix_brd_policy =================
+[12:16:25] ============================================================
+[12:16:25] Testing complete. Ran 30 tests: passed: 30
+[12:16:25] Test results stored in /out/logs/ci-completion-rust-kunit.json

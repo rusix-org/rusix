@@ -36,10 +36,11 @@ def accept_console(console, qemu_exit):
     return {"status": "PASS", "cases": list(CASES), "qemu_exit": qemu_exit}
 
 
-def validate_selection(profile, selection, config):
+def validate_selection(profile, selection, config, core_selection=None):
     """Bind the requested implementation to its build proof and resolved config."""
     implementation = {"brd": "brd-c", "brd-rust": "brd-rust",
-                      "brd-ext4-c": "brd-c", "brd-ext4-rust": "brd-rust"}.get(profile)
+                      "brd-ext4-c": "brd-c", "brd-ext4-rust": "brd-rust",
+                      "core-ext4-c": "brd-rust", "core-ext4-rust": "brd-rust"}.get(profile)
     if implementation is None:
         raise ValueError("A BRD or ext4 build profile is required")
     if selection != f"implementation={implementation}":
@@ -52,7 +53,26 @@ def validate_selection(profile, selection, config):
             raise ValueError(f"Missing required CONFIG_{name}=y")
     if "CONFIG_KUNIT=y" in settings:
         raise ValueError("BRD profile must disable KUnit to isolate contract execution")
+    validate_core_selection(profile, config, core_selection)
     return implementation
+
+
+def validate_core_selection(profile, config, selection):
+    """Require the declared core implementation as well as the BRD selection."""
+    expected = {"core-ext4-c": "c", "core-ext4-rust": "rust"}.get(profile)
+    if expected is None:
+        return None
+    settings = set(config.splitlines())
+    setting = ("CONFIG_RUSIX_COMPLETION_RUST=y" if expected == "rust" else
+               "# CONFIG_RUSIX_COMPLETION_RUST is not set")
+    selected = [line for line in config.splitlines()
+                if line.startswith("CONFIG_RUSIX_COMPLETION_RUST=") or
+                line == "# CONFIG_RUSIX_COMPLETION_RUST is not set"]
+    if selected != [setting] or "# CONFIG_MODULES is not set" not in settings or "CONFIG_MODULES=y" in settings:
+        raise ValueError("Core integration requires matching builtin completion selection")
+    if selection != f"implementation=completion-{expected}":
+        raise ValueError("Core integration requires matching completion symbol proof")
+    return f"completion-{expected}"
 
 
 def first_line(path):
@@ -141,7 +161,9 @@ def run(args, paths, evidence):
         raise ValueError("Source was dirty after the kernel build")
     profile = (build_evidence / "profile.txt").read_text().strip()
     implementation = validate_selection(
-        profile, first_line(build_evidence / "selection.log"), config.read_text())
+        profile, first_line(build_evidence / "selection.log"), config.read_text(),
+        first_line(build_evidence / "completion-selection.log")
+        if profile.startswith("core-ext4-") else None)
     check_hashes(build_evidence / "build.sha256", [kernel, config])
     if (build_evidence / "config").read_bytes() != config.read_bytes():
         raise ValueError("Resolved configuration differs from build evidence")
@@ -179,7 +201,7 @@ def run(args, paths, evidence):
                     paths.project / "scripts/with-local-tools.sh",
                     paths.project / "scripts/repo-paths.sh"]
     metadata = {
-        "source_revision": revision, "implementation": implementation,
+        "source_revision": revision, "implementation": implementation, "profile": profile,
         "scope": "Six-case userspace block contract",
         "sources": {str(p.relative_to(paths.source)): digest(p) for p in source_files},
         "artifacts": {str(p): digest(p) for p in (image, init, initramfs)},

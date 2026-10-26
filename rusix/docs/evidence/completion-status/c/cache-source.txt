@@ -1,0 +1,2 @@
+/home/aaron/code/rusix/linux-out/lts-completion-status-c-001/builds
+Copied cache preserving symlinks; original retained. Source/config rechecked.

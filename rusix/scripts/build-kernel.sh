@@ -9,12 +9,12 @@ if [[ ${1:-} == --profile ]]; then
     shift 2
 fi
 case "$profile" in
-    kunit|brd|brd-rust|brd-kunit|brd-ext4-c|brd-ext4-rust|completion-c|completion-rust|server) ;;
-    *) echo 'Profile must be kunit, brd, brd-rust, brd-kunit, brd-ext4-c, brd-ext4-rust, completion-c, completion-rust or server.' >&2; exit 2 ;;
+    kunit|brd|brd-rust|brd-kunit|brd-ext4-c|brd-ext4-rust|core-ext4-c|core-ext4-rust|completion-c|completion-rust|server) ;;
+    *) echo 'Profile must be kunit, brd, brd-rust, brd-kunit, brd-ext4-c, brd-ext4-rust, core-ext4-c, core-ext4-rust, completion-c, completion-rust or server.' >&2; exit 2 ;;
 esac
 config="$RUSIX_PROJECT/configs/x86_64-$profile.config"
 if [[ $# != 1 || ! "$1" =~ ^[a-zA-Z0-9_-]+$ ]]; then
-    echo 'Usage: bash rusix/scripts/build-kernel.sh [--profile kunit|brd|brd-rust|brd-kunit|brd-ext4-c|brd-ext4-rust|completion-c|completion-rust|server] BUILD_NAME' >&2
+    echo 'Usage: bash rusix/scripts/build-kernel.sh [--profile kunit|brd|brd-rust|brd-kunit|brd-ext4-c|brd-ext4-rust|core-ext4-c|core-ext4-rust|completion-c|completion-rust|server] BUILD_NAME' >&2
     exit 2
 fi
 name=$1
@@ -94,7 +94,7 @@ if [[ "$profile" == brd || "$profile" == brd-ext4-c ]]; then
         sha256sum "$RUSIX_SOURCE/drivers/block/brd.c" "$out/drivers/block/brd.o"
     } > "$evidence/selection.log"
 fi
-if [[ "$profile" == brd-rust || "$profile" == brd-kunit || "$profile" == brd-ext4-rust || "$profile" == completion-c || "$profile" == completion-rust || "$profile" == server ]]; then
+if [[ "$profile" == brd-rust || "$profile" == brd-kunit || "$profile" == brd-ext4-rust || "$profile" == core-ext4-c || "$profile" == core-ext4-rust || "$profile" == completion-c || "$profile" == completion-rust || "$profile" == server ]]; then
     git -C "$RUSIX_SOURCE" diff --exit-code \
         2926d88bb7fc4608fd942453d929c39e4e5ec006 -- drivers/block/brd.c \
         > "$evidence/brd-reference.diff"
