@@ -150,8 +150,98 @@ fn write_sector(file: &File, offset: u64, value: u8) -> io::Result<()> {
     )
 }
 
+fn high_positive(cmdline: &str) -> io::Result<()> {
+    check(
+        expected(cmdline, "rd_nr")? == 0,
+        "high-positive requires rd_nr=0",
+    )?;
+    check(
+        expected(cmdline, "rd_size")? == 4096,
+        "high-positive requires 4096 KiB",
+    )?;
+    let expected_max: Vec<_> = cmdline
+        .split_ascii_whitespace()
+        .filter_map(|word| word.strip_prefix("rusix.expect_max_part="))
+        .collect();
+    check(
+        expected_max == ["-2147483648"],
+        "wrong high-positive expectation",
+    )?;
+    check(
+        sys_number("/sys/module/brd/parameters/rd_nr")? == 0,
+        "rd_nr mismatch",
+    )?;
+    check(
+        sys_number("/sys/module/brd/parameters/rd_size")? == 4096,
+        "rd_size mismatch",
+    )?;
+    let normalized: i32 = fs::read_to_string("/sys/module/brd/parameters/max_part")?
+        .trim()
+        .parse()
+        .map_err(io::Error::other)?;
+    check(normalized == i32::MIN, "signed normalization mismatch")?;
+    println!("RUSIX_BRD_PARAMETERS_PASS parameters");
+    let listing = fs::read_to_string("/proc/devices")?;
+    let block = listing
+        .split_once("Block devices:\n")
+        .ok_or_else(|| io::Error::other("missing block major inventory"))?
+        .1;
+    check(
+        block
+            .lines()
+            .filter(|line| line.split_ascii_whitespace().collect::<Vec<_>>() == ["1", "ramdisk"])
+            .count()
+            == 1,
+        "RAM disk major not registered",
+    )?;
+    println!("RUSIX_BRD_PARAMETERS_PASS major_registered");
+    check(devices()?.is_empty(), "high-positive precreated a disk")?;
+    println!("RUSIX_BRD_PARAMETERS_PASS initial_devices");
+    // SAFETY: The caller has verified PID1 and the exact VM authorization;
+    // this is a guest-only block node with Linux major1/minor0 encoding.
+    if unsafe { mknod(c"/dev/ram0".as_ptr(), 0o60600, 256) } != 0 {
+        return Err(io::Error::last_os_error());
+    }
+    let node = fs::metadata("/dev/ram0")?;
+    check(
+        node.file_type().is_block_device() && node.rdev() == 256,
+        "wrong ram0 node",
+    )?;
+    let error = OpenOptions::new()
+        .read(true)
+        .write(true)
+        .open("/dev/ram0")
+        .err()
+        .ok_or_else(|| io::Error::other("high-positive open succeeded"))?;
+    check(
+        error.raw_os_error() == Some(6),
+        "high-positive open did not return ENXIO",
+    )?;
+    println!("RUSIX_BRD_PARAMETERS_PASS open_enxio");
+    check(
+        devices()?.is_empty(),
+        "failed creation left a published disk",
+    )?;
+    println!("RUSIX_BRD_PARAMETERS_PASS final_devices");
+    // Never mount or read debugfs here: the pinned C allocation-error path can
+    // leave a count file pointing to its freed brd_device. Observe only sysfs,
+    // major registration and one failed open, then reboot the isolated guest.
+    Ok(())
+}
+
 fn run(cmdline: &str) -> io::Result<()> {
     mount_fs(c"sysfs", c"/sys")?;
+    let modes: Vec<_> = cmdline
+        .split_ascii_whitespace()
+        .filter_map(|word| word.strip_prefix("rusix.parameters_mode="))
+        .collect();
+    if modes == ["high_positive"] {
+        return high_positive(cmdline);
+    }
+    check(
+        modes == ["normal"],
+        "missing or invalid parameter test mode",
+    )?;
     let count = expected(cmdline, "rd_nr")?;
     let size = expected(cmdline, "rd_size")?;
     let spacing = expected(cmdline, "max_part")?;

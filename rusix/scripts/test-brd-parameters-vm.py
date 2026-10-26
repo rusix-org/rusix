@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-2.0-only
-"""Run a static BRD parameter fixture in five fresh, bounded VM boots."""
+"""Run a static BRD parameter fixture in six fresh, bounded VM boots."""
 import argparse
 import importlib.util
 import json
@@ -24,6 +24,7 @@ check_hashes = common.check_hashes
 source_state = common.source_state
 first_line = common.first_line
 CASES = ("parameters", "initial_devices", "on_demand", "independent_io", "capacity")
+HIGH_POSITIVE_CASES = ("parameters", "major_registered", "initial_devices", "open_enxio", "final_devices")
 
 
 def validate_selection(profile, selection, config):
@@ -38,18 +39,21 @@ def validate_selection(profile, selection, config):
     return implementation
 
 
-def accept_console(console, qemu_exit):
+def accept_console(console, qemu_exit, mode="normal"):
+    if mode not in ("normal", "high_positive"):
+        raise ValueError("Unknown parameter case inventory")
+    cases = CASES if mode == "normal" else HIGH_POSITIVE_CASES
     if qemu_exit != 0:
         raise ValueError(f"QEMU failed or timed out: exit {qemu_exit}")
     if re.search(r"(?i:\b(?:warning|BUG)\b)|Oops:|Kernel panic|CPU feature dependency check failure|ACPI (?:BIOS )?(?:Error|Exception|Warning)|ACPI: Unable to load|Buffer I/O error|I/O error, dev", console):
         raise ValueError("Kernel diagnostic in parameter guest")
     expected = ["RUSIX_BRD_PARAMETERS_START"]
-    expected += [f"RUSIX_BRD_PARAMETERS_PASS {case}" for case in CASES]
+    expected += [f"RUSIX_BRD_PARAMETERS_PASS {case}" for case in cases]
     expected += ["RUSIX_BRD_PARAMETERS_SUCCESS cases=5"]
     markers = [line for line in console.splitlines() if "RUSIX_BRD_PARAMETERS_" in line]
     if markers != expected:
         raise ValueError(f"Parameter inventory/order mismatch: {markers!r}")
-    return {"status": "PASS", "cases": list(CASES), "qemu_exit": qemu_exit}
+    return {"status": "PASS", "cases": list(cases), "qemu_exit": qemu_exit}
 
 
 def variants(config):
@@ -71,12 +75,16 @@ def variants(config):
          "options": ["brd.rd_nr=1", "brd.rd_size=4096", "brd.max_part=257"]},
         {"name": "legacy_octal", "rd_nr": 1, "rd_size": 4096, "max_part": 1,
          "options": ["brd.rd_nr=1", "ramdisk_size=010000", "brd.max_part=1"]},
+        {"name": "spacing_high_positive", "mode": "high_positive", "rd_nr": 0,
+         "rd_size": 4096, "max_part": -2147483648,
+         "options": ["brd.rd_nr=0", "brd.rd_size=4096", "brd.max_part=1073741824"]},
     ]
 
 
 def command_line(variant):
     tokens = ["console=ttyS0", "rdinit=/init", "rusix.brd_parameters=1",
               "panic=-1", "kunit.enable=0"] + variant["options"]
+    tokens.append(f"rusix.parameters_mode={variant.get('mode', 'normal')}")
     tokens += [f"rusix.expect_{name}={variant[name]}" for name in ("rd_nr", "rd_size", "max_part")]
     return " ".join(tokens)
 
@@ -152,7 +160,7 @@ def run(args, paths, evidence):
                     paths.project / "scripts/repo-paths.sh"]
     metadata = {
         "source_revision": revision, "implementation": implementation,
-        "scope": "Five boot variants of BRD parameter/on-demand device contract",
+        "scope": "Six boot variants of BRD parameter/on-demand device contract",
         "sources": {str(p.relative_to(paths.source)): digest(p) for p in source_files},
         "artifacts": {str(p): digest(p) for p in (image, init, initramfs)},
         "config_sha256": digest(config),
@@ -183,7 +191,7 @@ def run(args, paths, evidence):
         (attempt / "qemu.exit").write_text(f"{guest.returncode}\n")
         try:
             result = accept_console((attempt / "console.log").read_text(errors="replace"),
-                                    guest.returncode)
+                                    guest.returncode, variant.get("mode", "normal"))
         except ValueError as error:
             (attempt / "result.json").write_text(json.dumps({
                 "status": "FAIL", "variant": variant["name"],

@@ -184,7 +184,16 @@ userspace pages cannot safely become ordinary Rust references. No helper impleme
 BRD request policy or sparse-store ownership. Removing these boundaries requires
 migration of their owning core abstractions.
 
-Negative/overflowing `max_part` inputs currently return EINVAL to avoid unsafe
-normalization states. This is a provisional invalid-input exception requiring
-baseline investigation and contract review, not a claim of full parameter parity.
+On the declared 64-bit targets, positive `max_part` inputs from 2^30 through
+INT_MAX preserve the pinned narrowing to INT_MIN, signed clamp comparison,
+parameter sysfs value and major registration. Their unsigned probe divisor is
+0x80000000; disk creation rejects the minor count, and opening ram0 returns
+ENXIO. The paired high-positive guest case checks these defined observations; its
+runtime verification is pending.
+Negative inputs instead narrow to zero in C, producing a zero divisor in its
+on-demand probe. Rust retains an initialization-time EINVAL guard for this
+undefined-behavior boundary. That guard also changes pre-fault initialization
+observations; this narrow exception remains disclosed rather than being called
+full negative-parameter parity. Values outside the `int` parser range continue
+to use the shared C parameter parser's existing rejection behavior.
 Built-in operation is the only selectable mode until module lifetime is audited.

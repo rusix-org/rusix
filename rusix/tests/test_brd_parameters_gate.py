@@ -79,7 +79,7 @@ class ParameterTests(unittest.TestCase):
 
     def test_five_boot_inputs_and_expected_normalization(self):
         variants = runner.variants(self.config)
-        self.assertEqual([(v["name"], v["rd_nr"], v["rd_size"], v["max_part"]) for v in variants],
+        self.assertEqual([(v["name"], v["rd_nr"], v["rd_size"], v["max_part"]) for v in variants[:5]],
                          [("defaults", 1, 65536, 1), ("on_demand", 0, 4096, 1),
                           ("spacing_roundup", 1, 4096, 4), ("spacing_clamp", 1, 4096, 256),
                           ("legacy_octal", 1, 4096, 1)])
@@ -93,6 +93,41 @@ class ParameterTests(unittest.TestCase):
             self.assertIn("rusix.brd_parameters=1", cmd)
             for field in ("rd_nr", "rd_size", "max_part"):
                 self.assertEqual(sum(t.startswith(f"rusix.expect_{field}=") for t in cmd), 1)
+
+    def test_high_positive_boot_input_and_signed_expectation(self):
+        variants = runner.variants(self.config)
+        self.assertEqual(len(variants), 6)
+        variant = variants[-1]
+        self.assertEqual((variant["name"], variant["rd_nr"], variant["max_part"]),
+                         ("spacing_high_positive", 0, -2147483648))
+        command = runner.command_line(variant).split()
+        for token in ("brd.rd_nr=0", "brd.max_part=1073741824",
+                      "rusix.expect_max_part=-2147483648", "rusix.parameters_mode=high_positive"):
+            self.assertIn(token, command)
+        self.assertEqual(sum(t.startswith("rusix.parameters_mode=") for t in command), 1)
+
+    def test_high_positive_inventory_is_separate_and_strict(self):
+        lines = ["RUSIX_BRD_PARAMETERS_START"]
+        lines += [f"RUSIX_BRD_PARAMETERS_PASS {case}" for case in runner.HIGH_POSITIVE_CASES]
+        lines += ["RUSIX_BRD_PARAMETERS_SUCCESS cases=5"]
+        result = runner.accept_console("\n".join(lines), 0, "high_positive")
+        self.assertEqual(result["cases"], list(runner.HIGH_POSITIVE_CASES))
+        for index in range(len(lines)):
+            for altered in (lines[:index] + lines[index + 1:],
+                            lines[:index] + [lines[index]] + lines[index:]):
+                with self.subTest(index=index, altered=altered):
+                    with self.assertRaises(ValueError):
+                        runner.accept_console("\n".join(altered), 0, "high_positive")
+        for console, status, mode in ((self.lines, 0, "high_positive"),
+                                      (lines, 0, "normal"), (lines, 0, "unknown"),
+                                      (lines, 124, "high_positive"),
+                                      (list(reversed(lines)), 0, "high_positive"),
+                                      (lines + ["RUSIX_BRD_PARAMETERS_FAIL open"], 0, "high_positive"),
+                                      (lines + ["RUSIX_BRD_PARAMETERS_SKIP open"], 0, "high_positive"),
+                                      (lines + ["WARNING: kernel"], 0, "high_positive")):
+            with self.subTest(status=status, mode=mode):
+                with self.assertRaises(ValueError):
+                    runner.accept_console("\n".join(console), status, mode)
 
     def test_bad_default_config_rejected(self):
         for config in ("", self.config + "CONFIG_BLK_DEV_RAM_COUNT=2\n",

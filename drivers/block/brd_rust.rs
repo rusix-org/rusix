@@ -98,13 +98,18 @@ fn normalize_minors(requested: c_int) -> Result<u32> {
         let bits = u32::BITS - (value as u32).leading_zeros();
         value = (1u64 << bits) as c_int;
     }
-    // The C implementation can truncate invalid signed parameters to zero or
-    // negative values, then divide by zero in probe. Do not introduce a Rust
-    // panic or publish disks with invalid minor counts for those inputs.
-    if value <= 0 {
+    // On the declared 64-bit targets, negative inputs narrow 1UL << 32 to
+    // zero. The C probe would subsequently divide by zero; retain a guard at
+    // that undefined-behavior boundary rather than introducing a Rust panic.
+    if value == 0 {
         return Err(EINVAL);
     }
-    if value as u32 > MAX_PARTITIONS {
+    // Positive inputs >= 2^30 narrow 1UL << 31 to INT_MIN. C's comparison
+    // here is signed, so they must NOT be clamped or rejected at initialization.
+    // Preserve their bit pattern: parameter sysfs reads INT_MIN, major 1 remains
+    // registered, and the probe's unsigned divisor is 0x80000000. Disk creation
+    // rejects that out-of-range minor count, so opens fail with ENXIO.
+    if value > MAX_PARTITIONS as c_int {
         pr_info!("max_part can't exceed {}, resetting it\n", MAX_PARTITIONS);
         value = MAX_PARTITIONS as c_int;
     }
@@ -438,6 +443,9 @@ mod tests {
             (257, 256),
             (1 << 20, 256),
             ((1 << 30) - 1, 256),
+            (1 << 30, 1u32 << 31),
+            ((1 << 30) + 1, 1u32 << 31),
+            (c_int::MAX, 1u32 << 31),
         ] {
             assert_eq!(normalize_minors(input), Ok(expected));
         }
@@ -445,10 +453,10 @@ mod tests {
 
     #[test]
     fn invalid_minor_normalization_is_rejected() {
-        // Provisional invalid-input exception: the C normalizer's int narrowing
-        // yields nonpositive divisors here. Full parity claims exclude these
-        // inputs pending contract review; do not turn them into Rust panics.
-        for input in [-1, c_int::MIN, 1 << 30, c_int::MAX] {
+        // Negative inputs normalize to zero on the declared 64-bit targets;
+        // C's on-demand path then has undefined division-by-zero behavior.
+        // This guard does not reject the defined high-positive normalization.
+        for input in [-1, -2, c_int::MIN] {
             assert_eq!(normalize_minors(input), Err(EINVAL));
         }
     }
