@@ -111,8 +111,8 @@ impl Completion {
     }
 }
 
-// Contract tests execute the original C completion implementation. They do not
-// establish a Rust implementation or cover scheduler wakeup/cancellation races.
+// These contract tests run against the selected C or Rust completion entry points.
+// The separate layout suite covers bounded worker handoff and queue cleanup.
 #[macros::kunit_tests(rusix_completion_contract)]
 mod contract_tests {
     use super::*;

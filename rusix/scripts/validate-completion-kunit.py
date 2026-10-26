@@ -24,7 +24,9 @@ SUITES = {
     ),
     "rusix_completion_layout": (
         "c_operations_share_pinned_rust_owned_storage",
+        "current_cpu_signal_counts_and_saturates",
         "worker_handoff_observes_published_value",
+        "current_cpu_signal_wakes_enrolled_worker",
         "two_workers_consume_exactly_two_tokens",
         "broadcast_serves_two_workers_and_late_waiters",
         "timed_out_worker_unlinks_before_late_signal",

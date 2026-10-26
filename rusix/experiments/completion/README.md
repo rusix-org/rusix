@@ -23,7 +23,7 @@ No Rust reference covers the containing concurrently mutable C object. Raw field
 projection and scoped atomic access preserve the existing storage/alias boundary;
 callers must keep initialized, pinned storage alive until the final lock release.
 
-C still owns initialization/reset, `complete_on_current_cpu`,
+C still owns initialization/reset,
 try-wait/status operations, all blocking/timed/interruptible wait loops, swait
 queues, scheduler wakeups, and task/timer/signal integration. Raw-spin and lockdep macro helpers, plus LKMM atomic helpers, remain C.
 Replace those boundaries only with reviewed Rust scheduler/locking/atomic
@@ -37,11 +37,14 @@ stack callback lifetime, while `__kthread_create_on_node` requires ownership
 handoff or a second wait after interruption. A timeout alone never permits freeing
 callback storage. `completion_done` is not proof of producer/waiter quiescence.
 
-## Kernel verification: ten current cases
+## Kernel verification
 
 Select `kunit.filter_glob=rusix_completion_*`. The strict current inventory is
-five `rusix_completion_contract` cases plus five `rusix_completion_layout` cases:
+five `rusix_completion_contract` cases plus seven `rusix_completion_layout` cases.
+The two current-CPU cases are implemented with local build/runtime validation
+pending; the archived broadcast source passed the prior ten-case inventory:
 
+- Current-CPU signal counting/saturation and an observed enrolled-worker wakeup.
 - Initial empty state, pre-signal consumption, persistent broadcast/reset,
   zero-timeout return/consumption, and saturation.
 - `c_operations_share_pinned_rust_owned_storage`: `repr(C)` size/alignment/offset
@@ -85,7 +88,11 @@ rustc --edition=2021 --test -D warnings rusix/experiments/completion/model.rs \
 ../lts-integration-out/experiments/completion/model-test
 ```
 
-Next: migrate `complete_on_current_cpu`, then the common wait engine and its
+Current-CPU signaling now uses the shared Rust counting path and a private
+immutable C `int` initialized from `WF_CURRENT_CPU`; this four-byte data bridge
+keeps the scheduler macro authoritative until Rust owns that boundary.
+
+Next: verify current-CPU signaling, then migrate the common wait engine and its
 entry points, followed by `try_wait_for_completion` and `completion_done`.
 Remove concurrent unmarked C counter writes before introducing lockless Rust
 atomic references; the existing locked proof cannot justify those references.

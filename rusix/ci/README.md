@@ -39,8 +39,8 @@ all `rusix/tests/test_*.py` regressions before building one kernel:
 | `kunit` | 21 upstream square-root cases and three compatibility cases |
 | `brd` / `brd-rust` | Six block contract cases, six parameter/on-demand boots and five partition cases against C / Rust BRD |
 | `brd-ext4-c` / `brd-ext4-rust` | The same block and parameter checks, plus six ordinary-userspace ext4 cases; requires the [fixture image](../tests/brd-ext4/README.md) with e2fsprogs |
-| `brd-kunit` | Nine required BRD ownership/policy cases, then a separate boot requiring five C completion behavior cases, one Rust-owned layout spike and three bounded worker cases |
-| `completion-c` / `completion-rust` | The same BRD/core tests, paired with original C / opt-in Rust `complete()`; archive/object/symbol evidence verifies selection |
+| `brd-kunit` | Nine required BRD ownership/policy cases, then a separate boot requiring the current [completion contract inventory](../experiments/completion/README.md) |
+| `completion-c` / `completion-rust` | The same BRD/core tests, paired with original C / opt-in Rust completion signaling; archive/object/symbol evidence verifies selection |
 | `server` | Build and linked-ELF language measurement; archives vmlinux, map, config and JSON, without runtime or filesystem verification |
 
 Choose any listed profile as the final `run-container.sh` argument, with a fresh
@@ -53,8 +53,7 @@ support for firmware enumeration and two CPUs. `CONFIG_BLOCK_LEGACY_AUTOLOAD=y`
 enables the pinned block layer's registered-major probe path: opening an absent
 RAM disk must invoke BRD's callback even though BRD itself is builtin. It is
 required for the on-demand contract, not evidence of tested module loading.
-The current q35/configuration validation is ongoing; these execution paths are
-not a claim that the latest runs passed. CPU-dependency and ACPI diagnostics
+See [PROGRESS.md](../PROGRESS.md) for verified configurations and runs. CPU-dependency and ACPI diagnostics
 reject results rather than being suppressed.
 
 ## Pins and provenance

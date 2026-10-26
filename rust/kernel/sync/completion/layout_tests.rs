@@ -113,6 +113,53 @@ mod tests {
         Ok(())
     }
 
+    #[test]
+    fn current_cpu_signal_counts_and_saturates() -> Result {
+        let owned = KBox::pin_init(Layout::new(), GFP_KERNEL)?;
+        let raw = (&*owned as *const Layout)
+            .cast_mut()
+            .cast::<bindings::completion>();
+        // SAFETY: The initialized completion has pinned, interior-mutable
+        // storage. Only this task accesses it, and these operations retain no
+        // pointer. No producer, waiter or callback can race counter inspection.
+        unsafe {
+            bindings::complete_on_current_cpu(raw);
+            bindings::complete_on_current_cpu(raw);
+        }
+        // SAFETY: The same exclusive-access and initialized-storage invariants hold.
+        let count = unsafe { owned.done.get().read() };
+        assert_eq!(count, 2);
+        // SAFETY: These nonblocking calls borrow the same live pinned storage.
+        let first = unsafe { bindings::try_wait_for_completion(raw) };
+        // SAFETY: The same storage/access conditions still hold.
+        let second = unsafe { bindings::try_wait_for_completion(raw) };
+        // SAFETY: The same storage/access conditions still hold.
+        let third = unsafe { bindings::try_wait_for_completion(raw) };
+        assert!(first);
+        assert!(second);
+        assert!(!third);
+        // SAFETY: The queue is empty and no other task can access this object.
+        // Seed the boundary without billions of calls; this quiescent write
+        // neither moves nor reinitializes the pinned queue.
+        unsafe { owned.done.get().write(u32::MAX - 1) };
+        // SAFETY: The completion remains initialized, pinned and exclusively
+        // accessed. Neither call retains its pointer or releases its storage.
+        unsafe {
+            bindings::complete_on_current_cpu(raw);
+            bindings::complete_on_current_cpu(raw);
+        }
+        // SAFETY: Quiescent observation of this task's own initialized counter.
+        let saturated = unsafe { owned.done.get().read() };
+        assert_eq!(saturated, u32::MAX);
+        // SAFETY: Live initialized pinned storage; the call retains no pointer.
+        let consumed = unsafe { bindings::try_wait_for_completion(raw) };
+        assert!(consumed);
+        // SAFETY: No concurrent accesses or retained pointers exist.
+        let after_wait = unsafe { owned.done.get().read() };
+        assert_eq!(after_wait, u32::MAX);
+        Ok(())
+    }
+
     // Use the existing upstream wrapper for concurrent tests. The exploratory
     // Layout deliberately remains !Send/!Sync and is never shared with workers.
     #[pin_data]
@@ -184,6 +231,62 @@ mod tests {
     }
 
     #[test]
+    fn current_cpu_signal_wakes_enrolled_worker() -> Result {
+        use crate::sync::{atomic::Relaxed, Arc};
+
+        let state = Arc::pin_init(Handoff::new(), GFP_KERNEL)?;
+        let started = crate::time::Instant::<crate::time::Monotonic>::now();
+        let worker = state.clone();
+        crate::workqueue::system_unbound().try_spawn(GFP_KERNEL, move || {
+            let value = if wait_bounded(&worker.event, 10000) {
+                worker.value.load(Relaxed)
+            } else {
+                0
+            };
+            worker.value.store(value.wrapping_add(1), Relaxed);
+            worker.finished.complete_all();
+            // The callback retains its own Arc through return, even if the
+            // observer times out. No KUnit context or test stack is borrowed.
+        })?;
+        let mut enrolled = false;
+        for _ in 0..100 {
+            // SAFETY: Our Arc pins the initialized event through this call.
+            // The read-only helper serializes queue inspection with waiters
+            // using the event's raw lock, and never retains a pointer.
+            let count = unsafe { bindings::completion_waiter_count(state.event.as_raw()) };
+            if count == 1 {
+                enrolled = true;
+                break;
+            }
+            crate::time::delay::fsleep(crate::time::Delta::from_millis(10));
+        }
+        // Publish after observing actual enrollment. Signal even when enrollment
+        // failed so any delayed worker can leave without waiting for its timeout.
+        state.value.store(0x1234, Relaxed);
+        // SAFETY: Initialized event storage stays pinned and alive in the
+        // producer/worker Arcs; this IRQ-safe operation retains no pointer.
+        unsafe { bindings::complete_on_current_cpu(state.event.as_raw()) };
+        // Expire well before the worker's timeout: noticing the token only when
+        // that timeout expires cannot substitute for a missing scheduler wakeup.
+        let finished = wait_bounded(&state.finished, 1000);
+        // Bound elapsed time from before any worker could start its ten-second
+        // wait. Iteration counts and short observer waits alone would allow a
+        // delayed producer to mistake timeout-driven progress for a wakeup.
+        let elapsed = started.elapsed().as_millis();
+        assert!(elapsed < 5000);
+        assert!(enrolled);
+        assert!(finished);
+        assert_eq!(state.value.load(Relaxed), 0x1235);
+        // SAFETY: Our Arc retains initialized pinned storage. The worker no
+        // longer accesses event after signaling finished; this call is nonblocking.
+        let leftover = unsafe { bindings::try_wait_for_completion(state.event.as_raw()) };
+        assert!(!leftover);
+        // WF_CURRENT_CPU is a scheduler hint, not a guaranteed CPU placement;
+        // this case verifies queued wakeup, publication and single consumption.
+        Ok(())
+    }
+
+    #[test]
     fn two_workers_consume_exactly_two_tokens() -> Result {
         use crate::sync::{atomic::Relaxed, Arc};
 
@@ -235,6 +338,7 @@ mod tests {
         let event = Arc::pin_init(super::super::Completion::new(), GFP_KERNEL)?;
         let first = Arc::pin_init(Handoff::new(), GFP_KERNEL)?;
         let second = Arc::pin_init(Handoff::new(), GFP_KERNEL)?;
+        let started = crate::time::Instant::<crate::time::Monotonic>::now();
         for state in [&first, &second] {
             let worker = state.clone();
             let worker_event = event.clone();
@@ -270,6 +374,11 @@ mod tests {
         event.complete_all();
         let finished_first = wait_bounded(&first.finished, 1000);
         let finished_second = wait_bounded(&second.finished, 1000);
+        // Bound elapsed time from before any worker could start its ten-second
+        // wait. Iteration counts and short observer waits alone would allow a
+        // delayed producer to mistake timeout-driven progress for a wakeup.
+        let elapsed = started.elapsed().as_millis();
+        assert!(elapsed < 5000);
         assert!(enrolled);
         assert!(finished_first);
         assert!(finished_second);

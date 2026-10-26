@@ -38,5 +38,5 @@ obj-y += fair.o
 obj-y += build_policy.o
 obj-y += build_utility.o
 
-# Keep C wait/wakeup infrastructure; select only the complete() entry point.
+# Keep C wait/wakeup infrastructure; select Rust completion signaling.
 obj-$(CONFIG_RUSIX_COMPLETION_RUST) += completion_rust.o

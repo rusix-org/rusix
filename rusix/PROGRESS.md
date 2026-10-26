@@ -53,3 +53,9 @@ See [ADR 0002](docs/adr/0002.md) and [delivery gates](docs/PHASE1.md).
 Full local logs and binaries live under `linux-out/<run>`; committed manifests
 record source/config/tool identities and retained failures. Historical results
 remain attributed to their commits in the [verification index](docs/VERIFICATION.md).
+
+Current working slice: Rust `complete_on_current_cpu()` shares the counting
+signal implementation and reads the pinned scheduler flag from immutable C data.
+Two new tests cover counting/saturation and an observed queued-worker wakeup;
+local build/runtime verification is pending. The required core inventory is now
+12 cases. Prior ten-case results above remain attributed to their tested source.

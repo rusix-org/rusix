@@ -41,19 +41,9 @@ and upstream rnull are not substitutes for the bio-based stateful BRD contract.
 
 ## Completion: opt-in partial core migration
 
-[`complete()`](../../kernel/sched/completion_rust.rs) has an opt-in Rust
-translation (`0e7d592fed`, default off, x86_64). Local `completion-c`/`completion-rust`
-profiles pass all nine completion cases on each implementation, also alongside
-nine BRD ownership cases, on q35. Linked object/symbol checks verify selection.
-[Paired evidence](evidence/completion-paired/manifest.json) records source and
-remaining coverage gaps. C still owns layout/init/reset, other
-completion operations, wait loops, raw locks, swait and scheduler integration.
-The scoped kernel LKMM atomic counter shares the existing raw lock with C writers;
-no Rust reference covers the enclosing mutable C object.
-
+The opt-in [Rust signaling implementation](../../kernel/sched/completion_rust.rs)
+preserves C-visible storage while moving completion policy into Rust.
 The [ownership experiment](../experiments/completion/README.md) owns the contract,
-remaining dependencies and current nine-case inventory: five behavior cases,
-one layout case and three worker cases. Historical six-case i440fx evidence does
-not cover those workers or Rust selection. No completed subsystem or divergence
-point is claimed. GCD/LCM remain deferred; [the roadmap](ROADMAP.md) prioritizes
-this ownership/wait-wakeup boundary after BRD.
+current test inventory, evidence and remaining dependencies. Selection remains
+default-off on x86_64; no subsystem divergence point is declared. GCD/LCM remain
+deferred; [the roadmap](ROADMAP.md) prioritizes this core boundary after BRD.

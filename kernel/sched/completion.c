@@ -18,6 +18,10 @@
 #include <linux/completion.h>
 #include "sched.h"
 
+#ifdef CONFIG_RUSIX_COMPLETION_RUST
+/* Private scheduler flag bridge; remove when the Rust scheduler owns it. */
+const int rusix_completion_wf_current_cpu = WF_CURRENT_CPU;
+#else
 static void complete_with_flags(struct completion *x, int wake_flags)
 {
 	unsigned long flags;
@@ -34,6 +38,7 @@ void complete_on_current_cpu(struct completion *x)
 {
 	return complete_with_flags(x, WF_CURRENT_CPU);
 }
+#endif
 
 /**
  * complete: - signals a single thread waiting on this completion
