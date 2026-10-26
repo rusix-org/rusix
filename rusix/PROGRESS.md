@@ -196,3 +196,12 @@ are rejected. Eight focused host tests pass, and the same retained object passes
 with pinned LLVM 19; no release candidate kernel or guest was run. Evidence:
 `linux-out/mm-release-callback-fix-host-001` and
 `linux-out/mm-release-callback-pinned-001`. Kernel implementation is unchanged.
+
+### MM-release initial compile failure
+
+At `fc7317e89885`, the C-side build stopped with an undeclared `mt_empty` call
+in the release test fixture. The pinned API is `mtree_empty`, which observes
+the root cleared by `__mt_destroy`. Corrected that fixture name only; kernel
+policy is unchanged. Session 50219 exited 2 before any VM or Rust-side build.
+`linux-out/mm-release-initial-evidence` retains 70 text records and 505 partial
+artifact hashes; it contains no completed kernel claim. A fresh retry is pending.
