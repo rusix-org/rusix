@@ -221,6 +221,44 @@ rm -- "$evidence/swait-symbols.tmp" "$evidence/swait-current.txt"
     fi
 } > "$evidence/swait-selection.log"
 
+# The selected wake slice shares the completion option but has its own object.
+if [[ "$completion_impl" == rust ]]; then
+    wake_object="$out/kernel/sched/wait_rust.o"
+    grep -E '(^|/)wait_rust\.o$' "$evidence/scheduler-archive.txt" \
+        > "$evidence/wake-objects.txt"
+else
+    wake_object="$out/kernel/sched/build_utility.o"
+    if grep -Eq '(^|/)wait_rust\.o$' "$evidence/scheduler-archive.txt"; then
+        echo 'Rust wake object linked in C selection.' >&2; exit 1;
+    fi
+    grep -E '(^|/)build_utility\.o$' "$evidence/scheduler-archive.txt" \
+        > "$evidence/wake-objects.txt"
+fi
+for item in "$wake_object" "$out/vmlinux"; do
+    bash "$RUSIX_PROJECT/scripts/with-local-tools.sh" llvm-nm --defined-only "$item" \
+        > "$evidence/wake-symbols.tmp"
+    printf '%s\n' "$item" >> "$evidence/wake-symbols.txt"
+    for symbol in __wake_up __wake_up_on_current_cpu __wake_up_locked __wake_up_locked_key \
+        __wake_up_sync_key __wake_up_locked_sync_key __wake_up_sync; do
+        awk -v symbol="$symbol" '$2 == "T" && $3 == symbol { print }' \
+            "$evidence/wake-symbols.tmp" > "$evidence/wake-current.txt"
+        [[ $(wc -l < "$evidence/wake-current.txt") == 1 ]] || {
+            echo "Expected one global $symbol definition in $item" >&2; exit 1;
+        }
+        cat "$evidence/wake-current.txt" >> "$evidence/wake-symbols.txt"
+    done
+done
+rm -- "$evidence/wake-symbols.tmp" "$evidence/wake-current.txt"
+{
+    printf 'implementation=wake-%s\n' "$completion_impl"
+    cat "$evidence/wake-objects.txt" "$evidence/wake-symbols.txt"
+    sha256sum "$RUSIX_SOURCE/kernel/sched/wait.c" "$wake_object"
+    if [[ "$completion_impl" == rust ]]; then
+        sha256sum "$RUSIX_SOURCE/kernel/sched/wait_rust.rs" \
+            "$RUSIX_SOURCE/rust/helpers/wait_policy.c"
+    fi
+} > "$evidence/wake-selection.log"
+
 git -C "$RUSIX_SOURCE" status --porcelain > "$evidence/source-after.status"
 git -C "$RUSIX_SOURCE" rev-parse HEAD > "$evidence/source-after.commit"
 if [[ -s "$evidence/source-after.status" || $(cat "$evidence/source-after.commit") != "$source_commit" ]]; then

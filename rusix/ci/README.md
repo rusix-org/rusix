@@ -42,7 +42,7 @@ all `rusix/tests/test_*.py` regressions before building one kernel:
 | `brd-kunit` | Nine required BRD ownership/policy cases, then a separate boot requiring the current [completion contract inventory](../experiments/completion/README.md) |
 | `completion-c` / `completion-rust` | The same BRD/core tests, paired with original C / opt-in Rust completion entry points; archive/object/symbol evidence verifies selection; BUG, lockdep/raw-lock nesting, atomic-sleep and list validation enabled |
 | `completion-plain-c` / `completion-plain-rust` | Same required BRD/core inventory without lockdep, debug raw locks or list instrumentation; BUG remains enabled. Local profiles exercise configuration-dependent ABI and initialization. |
-| `core-ext4-c` / `core-ext4-rust` | Ordinary ext4 userspace, block, parameter and partition suite with Rust BRD in both; only C / Rust completion selection differs. Requires the fixture image above and explicit core symbol proof. |
+| `core-ext4-c` / `core-ext4-rust` | Ordinary ext4 userspace plus four pipe/poll/epoll/eventfd cases, block, parameter and partition suite with Rust BRD in both; only C / Rust completion selection differs. Requires the fixture image above and explicit core symbol proof. |
 | `server` | Build and linked-ELF language measurement; archives vmlinux, map, config and JSON, without runtime or filesystem verification |
 
 Choose any listed profile as the final `run-container.sh` argument, with a fresh

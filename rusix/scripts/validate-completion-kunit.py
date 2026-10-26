@@ -15,6 +15,13 @@ spec.loader.exec_module(common)
 
 # Independent of live Rust source so removing a test does not weaken this gate.
 SUITES = {
+    "rusix_completion_wake": (
+        "exclusive_budget_uses_callback_success_not_return_magnitude",
+        "exclusive_accounting_uses_flags_from_before_callback",
+        "callbacks_can_retire_current_for_each_return_path",
+        "all_wrappers_forward_arguments_and_preserve_irq_context",
+        "null_sync_wrappers_preserve_irq_context",
+    ),
     "rusix_completion_swait": (
         "initializer_preserves_caller_class_links_and_irq_state",
         "empty_wake_preserves_initialized_queue",

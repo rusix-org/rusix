@@ -22536,6 +22536,8 @@ F:	drivers/block/brd_rust/
 F:	kernel/sched/completion_rust.rs
 F:	kernel/sched/completion_rust/
 F:	kernel/sched/swait_rust.rs
+F:	kernel/sched/wait_rust.rs
+F:	kernel/sched/wait_test.c
 F:	lib/math/int_sqrt_exports.c
 F:	lib/math/int_sqrt_rust.rs
 F:	rusix/
@@ -22546,6 +22548,8 @@ F:	rust/helpers/completion_test.c
 F:	rust/helpers/raw_spinlock.c
 F:	rust/helpers/swait.c
 F:	rust/helpers/swait_test.c
+F:	rust/helpers/wait_policy.c
+F:	rust/helpers/wait_policy_test.c
 F:	rust/kernel/block/bio.rs
 F:	rust/kernel/block/bio_disk.rs
 F:	rust/kernel/sync/completion/

@@ -31,7 +31,7 @@ class CompletionGateTests(unittest.TestCase):
             gate.validate(result)
 
     def test_exact_inventory_passes(self):
-        self.assertEqual(gate.validate(self.result), 30)
+        self.assertEqual(gate.validate(self.result), 35)
 
     def test_every_omitted_case_rejected(self):
         for suite_index, group in enumerate(self.result["sub_groups"]):

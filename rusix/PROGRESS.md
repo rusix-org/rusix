@@ -31,10 +31,11 @@ linker/padding **2,107,049**, unknown **0**.
 migration, includes inherited Rust infrastructure, and is neither a completion
 percentage nor server runtime evidence. That target selects Rust BRD/C completion.
 
-Next migrate generic wait.c callback traversal and wake wrappers, then reduce
-C lock/list/scheduler dependencies. Reviewed implementation and synthetic-test
-drafts remain outside Git at `linux-out/wait-policy-draft` and
-`linux-out/wait-policy-tests-draft`; they are unbuilt and unverified.
+Working branch `rusix/wait-wake-policy` adds seven Rust generic wake wrappers
+and shared callback traversal. Five cases bring the required core inventory to 35;
+four new guest consumer cases exercise pipe/poll/epoll/eventfd. Build/runtime
+verification is pending. [Wake migration contract](experiments/wait/README.md)
+owns the callback-lifetime, flag-access boundaries and remaining coverage.
 Forced diagnostic failures, detached-batch races, untimed signal paths, deadline
 races and broader IRQ coverage remain open. arm64, modules, expanded fault stress
 and performance budgets remain Phase 1b. Phase 1a still needs the provisional BRD

@@ -7,6 +7,12 @@
 #include "sched.h"
 #include <linux/wait_bit.h>
 
+#ifdef CONFIG_RUSIX_COMPLETION_RUST
+/* Private scheduler flags; remove when Rust owns the scheduler constants. */
+const int rusix_wait_wf_sync = WF_SYNC;
+const int rusix_wait_wf_current_cpu = WF_CURRENT_CPU;
+#endif
+
 void __init_waitqueue_head(struct wait_queue_head *wq_head, const char *name, struct lock_class_key *key)
 {
 	spin_lock_init(&wq_head->lock);
@@ -90,6 +96,7 @@ EXPORT_SYMBOL(remove_wait_queue);
  * started to run but is not in state TASK_RUNNING. try_to_wake_up() returns
  * zero in this (rare) case, and we handle it by continuing to scan the queue.
  */
+#ifndef CONFIG_RUSIX_COMPLETION_RUST
 static int __wake_up_common(struct wait_queue_head *wq_head, unsigned int mode,
 			int nr_exclusive, int wake_flags, void *key)
 {
@@ -115,7 +122,9 @@ static int __wake_up_common(struct wait_queue_head *wq_head, unsigned int mode,
 
 	return nr_exclusive;
 }
+#endif
 
+#ifndef CONFIG_RUSIX_COMPLETION_RUST
 static int __wake_up_common_lock(struct wait_queue_head *wq_head, unsigned int mode,
 			int nr_exclusive, int wake_flags, void *key)
 {
@@ -129,6 +138,7 @@ static int __wake_up_common_lock(struct wait_queue_head *wq_head, unsigned int m
 
 	return nr_exclusive - remaining;
 }
+#endif
 
 /**
  * __wake_up - wake up threads blocked on a waitqueue.
@@ -141,31 +151,39 @@ static int __wake_up_common_lock(struct wait_queue_head *wq_head, unsigned int m
  * before accessing the task state.  Returns the number of exclusive
  * tasks that were awaken.
  */
+#ifndef CONFIG_RUSIX_COMPLETION_RUST
 int __wake_up(struct wait_queue_head *wq_head, unsigned int mode,
 	      int nr_exclusive, void *key)
 {
 	return __wake_up_common_lock(wq_head, mode, nr_exclusive, 0, key);
 }
+#endif
 EXPORT_SYMBOL(__wake_up);
 
+#ifndef CONFIG_RUSIX_COMPLETION_RUST
 void __wake_up_on_current_cpu(struct wait_queue_head *wq_head, unsigned int mode, void *key)
 {
 	__wake_up_common_lock(wq_head, mode, 1, WF_CURRENT_CPU, key);
 }
+#endif
 
 /*
  * Same as __wake_up but called with the spinlock in wait_queue_head_t held.
  */
+#ifndef CONFIG_RUSIX_COMPLETION_RUST
 void __wake_up_locked(struct wait_queue_head *wq_head, unsigned int mode, int nr)
 {
 	__wake_up_common(wq_head, mode, nr, 0, NULL);
 }
+#endif
 EXPORT_SYMBOL_GPL(__wake_up_locked);
 
+#ifndef CONFIG_RUSIX_COMPLETION_RUST
 void __wake_up_locked_key(struct wait_queue_head *wq_head, unsigned int mode, void *key)
 {
 	__wake_up_common(wq_head, mode, 1, 0, key);
 }
+#endif
 EXPORT_SYMBOL_GPL(__wake_up_locked_key);
 
 /**
@@ -184,6 +202,7 @@ EXPORT_SYMBOL_GPL(__wake_up_locked_key);
  * If this function wakes up a task, it executes a full memory barrier before
  * accessing the task state.
  */
+#ifndef CONFIG_RUSIX_COMPLETION_RUST
 void __wake_up_sync_key(struct wait_queue_head *wq_head, unsigned int mode,
 			void *key)
 {
@@ -192,6 +211,7 @@ void __wake_up_sync_key(struct wait_queue_head *wq_head, unsigned int mode,
 
 	__wake_up_common_lock(wq_head, mode, 1, WF_SYNC, key);
 }
+#endif
 EXPORT_SYMBOL_GPL(__wake_up_sync_key);
 
 /**
@@ -210,20 +230,24 @@ EXPORT_SYMBOL_GPL(__wake_up_sync_key);
  * If this function wakes up a task, it executes a full memory barrier before
  * accessing the task state.
  */
+#ifndef CONFIG_RUSIX_COMPLETION_RUST
 void __wake_up_locked_sync_key(struct wait_queue_head *wq_head,
 			       unsigned int mode, void *key)
 {
         __wake_up_common(wq_head, mode, 1, WF_SYNC, key);
 }
+#endif
 EXPORT_SYMBOL_GPL(__wake_up_locked_sync_key);
 
 /*
  * __wake_up_sync - see __wake_up_sync_key()
  */
+#ifndef CONFIG_RUSIX_COMPLETION_RUST
 void __wake_up_sync(struct wait_queue_head *wq_head, unsigned int mode)
 {
 	__wake_up_sync_key(wq_head, mode, NULL);
 }
+#endif
 EXPORT_SYMBOL_GPL(__wake_up_sync);	/* For internal use only */
 
 void __wake_up_pollfree(struct wait_queue_head *wq_head)

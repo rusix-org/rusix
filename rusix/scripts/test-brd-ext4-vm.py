@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-2.0-only
-"""Stage pinned ordinary utilities and run ext4 only in a bounded QEMU guest."""
+"""Stage pinned ordinary utilities and run ext4 and wake consumers only in a bounded QEMU guest."""
 import argparse
 import hashlib
 import importlib.util
@@ -28,8 +28,9 @@ source_state = _common.source_state
 first_line = _common.first_line
 
 CASES = ("mkfs", "initial_write", "remount_read", "mutate", "final_read", "fsck")
+WAKE_CASES = ("pipe_poll", "epoll_pipe_eventfd", "epoll_oneshot_rearm", "epoll_del_close")
 REQUIRED_CONFIG = ("64BIT", "BLOCK", "BLK_DEV_RAM", "EXT4_FS", "PROC_FS", "SMP",
-                   "FUTEX", "MULTIUSER", "BINFMT_ELF", "BINFMT_SCRIPT",
+                   "FUTEX", "MULTIUSER", "BINFMT_ELF", "BINFMT_SCRIPT", "EPOLL", "EVENTFD",
                    "BLK_DEV_INITRD", "SERIAL_8250_CONSOLE")
 TOOLS = ("mount", "umount", "blockdev", "cat", "cp", "chmod", "ln", "truncate",
          "dd", "sync", "sha256sum", "stat", "cmp", "mv", "rm")
@@ -42,11 +43,13 @@ def accept_console(console, qemu_exit):
     if re.search(r"(?i:\bwarning\b)|\bBUG\b|Oops:|Kernel panic|CPU feature dependency check failure|ACPI (?:BIOS )?(?:Error|Exception|Warning)|ACPI: Unable to load|EXT4-fs error|Buffer I/O error|I/O error, dev", console):
         raise ValueError("Kernel warning, oops, BUG, or panic in console")
     expected = ["RUSIX_EXT4_START"] + [f"RUSIX_EXT4_PASS {case}" for case in CASES]
+    expected += [f"RUSIX_WAKE_PASS {case}" for case in WAKE_CASES]
     expected += ["RUSIX_EXT4_SUCCESS cases=6"]
-    markers = [line for line in console.splitlines() if "RUSIX_EXT4_" in line]
+    markers = [line for line in console.splitlines() if "RUSIX_EXT4_" in line or "RUSIX_WAKE_" in line]
     if markers != expected:
-        raise ValueError(f"Ext4 inventory/order mismatch: {markers!r}")
-    return {"status": "PASS", "cases": list(CASES), "qemu_exit": qemu_exit}
+        raise ValueError(f"Ext4/wake inventory/order mismatch: {markers!r}")
+    return {"status": "PASS", "cases": list(CASES), "wake_cases": list(WAKE_CASES),
+            "qemu_exit": qemu_exit}
 
 
 def validate_selection(profile, selection, config, core_selection=None):
@@ -298,7 +301,7 @@ def run(args, paths, evidence):
             raise ValueError(f"Artifact changed: {path}")
     result["implementation"] = implementation
     (evidence / "result.json").write_text(json.dumps(result, indent=2) + "\n")
-    print(f"Ext4 {implementation}: six cases passed; evidence {evidence}")
+    print(f"Ext4 {implementation}: six ext4 and four wake cases passed; evidence {evidence}")
 
 
 def main():

@@ -124,3 +124,13 @@ docker build --pull=false --build-arg TOOLCHAIN_IMAGE=rusix-toolchain:ext4-base 
 
 Record `base_id` with the build log; `run-container.sh` records the actual final
 image ID and runs that inspected identity. No preexisting laptop image is needed.
+
+## Generic wake consumers
+
+The guarded PID1 now runs `wake_probe.rs` after the filesystem workload. Four
+additional required markers cover pipe poll, pipe/eventfd epoll delivery, one-shot
+rearming, and DEL/close with a surviving registration. All descriptors are
+nonblocking, waits finite, and x86_64 packed epoll fields accessed unaligned.
+These new cases await paired verification; historical six-case ext4 results
+above do not certify them. The runner records `wake_cases` separately and hashes
+the module with all other fixture inputs. Never execute the fixture on the host.

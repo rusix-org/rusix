@@ -10,6 +10,8 @@ use std::{
     time::Duration,
 };
 
+mod wake_probe;
+
 const TOKEN: &str = "rusix.brd_ext4=1";
 const PAYLOAD_BYTES: usize = 1_048_576;
 
@@ -113,6 +115,7 @@ fn main() {
     env::remove_var("LD_PRELOAD");
     if let Err(error) = marker("RUSIX_EXT4_START")
         .and_then(|()| run())
+        .and_then(|()| wake_probe::run())
         .and_then(|()| marker("RUSIX_EXT4_SUCCESS cases=6"))
     {
         eprintln!("RUSIX_EXT4_FAIL init {error}");

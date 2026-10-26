@@ -19,6 +19,7 @@ spec.loader.exec_module(runner)
 class GateTests(unittest.TestCase):
     def setUp(self):
         self.lines = ["RUSIX_EXT4_START"] + [f"RUSIX_EXT4_PASS {case}" for case in runner.CASES]
+        self.lines += [f"RUSIX_WAKE_PASS {case}" for case in runner.WAKE_CASES]
         self.lines += ["RUSIX_EXT4_SUCCESS cases=6"]
 
     def test_informational_pci_bug_reporting_hint_is_not_a_fault(self):
@@ -41,6 +42,31 @@ class GateTests(unittest.TestCase):
     def test_exact_inventory(self):
         result = runner.accept_console("Linux boot\r\n" + "\r\n".join(self.lines) + "\r\nreboot\r\n", 0)
         self.assertEqual(result["cases"], list(runner.CASES))
+        self.assertEqual(result["wake_cases"], list(runner.WAKE_CASES))
+        self.assertEqual(len(result["cases"]), 6)
+        self.assertEqual(len(result["wake_cases"]), 4)
+
+    def test_ext4_only_and_wake_only_are_incomplete(self):
+        self.rejected([line for line in self.lines if "RUSIX_WAKE_" not in line])
+        self.rejected([line for line in self.lines if "RUSIX_WAKE_" in line])
+
+    def test_every_adjacent_swap_or_prefixed_marker_rejected(self):
+        for index in range(len(self.lines) - 1):
+            with self.subTest(swap=index):
+                changed = self.lines.copy()
+                changed[index], changed[index + 1] = changed[index + 1], changed[index]
+                self.rejected(changed)
+        for index in range(len(self.lines)):
+            with self.subTest(prefix=index):
+                changed = self.lines.copy()
+                changed[index] = "interleaved " + changed[index]
+                self.rejected(changed)
+
+    def test_literal_wake_inventory(self):
+        # Independent of the runner constants: silently dropping or renaming
+        # an expected userspace probe must not weaken this gate.
+        self.assertEqual(runner.WAKE_CASES, (
+            "pipe_poll", "epoll_pipe_eventfd", "epoll_oneshot_rearm", "epoll_del_close"))
 
     def test_every_missing_or_duplicate_marker(self):
         for index in range(len(self.lines)):
@@ -55,6 +81,8 @@ class GateTests(unittest.TestCase):
 
     def test_fail_skip_unknown_and_kernel_fault_after_success(self):
         for extra in ("RUSIX_EXT4_FAIL reboot", "RUSIX_EXT4_SKIP fsck", "RUSIX_EXT4_PASS unknown",
+                      "RUSIX_WAKE_FAIL pipe_poll", "RUSIX_WAKE_SKIP epoll_del_close",
+                      "RUSIX_WAKE_PASS unknown", "RUSIX_WAKE_UNKNOWN",
                       "WARNING: CPU: 0", "BUG: page", "Oops: bad", "Kernel panic",
                       "CPU feature dependency check failure", "ACPI Error: AE_BAD_PARAMETER",
                       "ACPI BIOS Error: missing handler", "EXT4-fs warning (device ram0)",

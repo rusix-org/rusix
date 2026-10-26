@@ -248,3 +248,6 @@ mod signal_tests;
 
 #[cfg(CONFIG_KUNIT = "y")]
 mod swait_tests;
+
+#[cfg(CONFIG_KUNIT = "y")]
+mod wake_tests;
