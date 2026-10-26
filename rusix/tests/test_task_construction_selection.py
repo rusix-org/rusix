@@ -3,6 +3,7 @@
 import importlib.util
 from pathlib import Path
 import sys
+import subprocess
 import unittest
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -24,7 +25,10 @@ def command_record():
 
 class Selection(unittest.TestCase):
     def test_original_full_file_reconstruction(self):
-        text = (ROOT/'kernel/fork.c').read_text()
+        text = subprocess.check_output(['git', '-C', str(ROOT), 'show',
+            '8fd3defabb841083192cd1d9c4eb1cde83027579:kernel/fork.c'], text=True)
+        with self.assertRaises(ValueError):
+            m.original_policy((ROOT/'kernel/fork.c').read_text())
         m.original_policy(text)
         for changed in (text+'\n', text.replace('return rusix_dup_task_struct(orig, node);', 'node++; return rusix_dup_task_struct(orig, node);'),
                         text.replace('tsk->splice_pipe = NULL;', 'tsk->splice_pipe = orig->splice_pipe;'),

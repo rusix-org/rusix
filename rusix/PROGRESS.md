@@ -123,7 +123,13 @@ This separate branch adds Rust sequencing for complete `mm_alloc` and shared
 `mm_init`, including inherited flags and six allocation rollback stages. The
 original C bodies and export placement are preserved. Root and independent
 source review, literal source reconstruction, formatting and diff checks pass.
-This code has not been compiled or booted; selection proof, paired consumers
-and attributable allocation-failure tests remain required. Early boot and
+The source now includes matching C/Rust MM profiles (Rust task construction
+on both), strict source/preprocessor/linked-object selection gates and five
+userspace cases covering COW, parent unmap, repeated exec and MDWE inheritance.
+Independent fixture review and 40 host gate cases pass; fixture sources are
+recorded before compilation and checked again afterward. Local input hashes
+and logs are in `linux-out/mm-construction-host-001`. Neither the MM kernel
+nor its guest fixtures have been compiled or booted. Actual linked selection,
+paired VM behavior and attributable allocation failures remain unverified. Early boot and
 PGD/per-CPU counter observers prohibit exclusive whole-mm references.
 [Ownership contract and remaining C](experiments/mm-construction/README.md).
