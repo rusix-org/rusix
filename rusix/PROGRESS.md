@@ -24,20 +24,19 @@ locking/lifetime contracts, test inventory and remaining C boundaries. Selection
 remains default-off and builtin-only; known incompatible counter-access drivers
 are excluded.
 
-Server promotion tooling is implemented on `rusix/server-core`: canonical
-server selects Rust core, `server-c` derives the C comparison, and both profiles
-run ext4/wake consumers before measuring the same build. Eight host gate tests
-cover derivation/provenance and rejection paths; target builds, paired VM runs
-and refreshed measurements are pending. [Local commands](ci/README.md).
-The disabled manual workflow's existing server choice now selects the ext4
-fixture image; no hosted workflow was enabled, dispatched or tested.
+The declared x86_64 server now selects the verified Rust core. At
+`8aafe7d962dd`, it and the derived C-core comparison each pass six ext4 and four
+pipe/poll/epoll/eventfd cases on q35/KVM SMP2. Resolved configs differ only by
+core selection; fixtures, container and VM parameters match. Both complete
+without compiler/objtool diagnostics. [Evidence](docs/evidence/server-core/manifest.json).
 
-Declared x86_64 server measurement at `7effedcbb1bf`: executable C
-**5,753,281 bytes**, Rust **145,083**, assembly **45,104**, generated **28**,
-linker/padding **2,107,049**, unknown **0**.
-[Measurement](docs/evidence/lts-target/manifest.json). This predates the core
-migration, includes inherited Rust infrastructure, and is neither a completion
-percentage nor server runtime evidence. That target selects Rust BRD/C completion.
+Same-build executable contributions for the Rust-core server: C **5,747,302
+bytes**, Rust **151,896**, assembly **45,104**, generated **28**, linker/padding
+**2,107,047**, unknown **0**. Against its C-core comparison, C decreases by
+6,107 bytes and Rust increases by 6,813. This includes inherited Rust support;
+linked bytes are not a completion percentage. Networking is configured but not
+runtime-tested here; ext4 runs on BRD, not virtio block. [Local commands](ci/README.md)
+reproduce the target and its derived comparison; hosted execution stays disabled.
 
 Nine new bit-wait cases verify error/acquisition precedence, matching, shared
 production deadline arithmetic, real blocked bit clear and exclusive owners,
@@ -45,8 +44,8 @@ signal/expiry cleanup and all three stack wrappers. Eight bit-wait scheduler
 entry points retain their section placement. The first compile failure is
 retained; kernel C-long aliases corrected the shared arithmetic types.
 
-Next promote the verified Rust core into the declared server target and migrate
-locked interruptible waits. The [bit-wait record](experiments/wait-bit/README.md)
+Next migrate locked interruptible waits, then transfer bit-wait table ownership
+into Rust. The [bit-wait record](experiments/wait-bit/README.md)
 and [generic wait record](experiments/wait/README.md) own their contracts.
 Standalone untimed bit_wait/io scheduling, stop/park, repeated latch races,
 socket/futex consumer integration and POLLFREE races remain unverified.

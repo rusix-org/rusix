@@ -1,0 +1,5 @@
+{
+  "source": "/home/aaron/code/rusix/linux-out/lts-server-003/builds/ci-server",
+  "source_revision": "7effedcbb1bf0e2a2add285a56bb1e6c269ed784",
+  "scope": "Kernel-only cache from prior declared server build; all guest fixtures rebuilt, new clean source and exact target validated."
+}

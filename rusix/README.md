@@ -13,6 +13,7 @@ tests. All fourteen completion.c and ten swait.c entry points have opt-in Rust
 implementations, alongside twenty-one generic wait and ten bit-wait entries.
 Paired C/Rust tests cover
 core behavior and blocked worker handoffs, ordinary ext4 and pipe/poll/epoll/eventfd consumers.
+The declared x86_64 server selects this Rust core and passes matched local userspace tests.
 [PROGRESS.md](PROGRESS.md) links exact source/configuration evidence and remaining
 gates, including BRD parameter behavior and the C queue/scheduler dependencies.
 

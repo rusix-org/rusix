@@ -1,0 +1,473 @@
+{
+  "archive_script_sha256": "990b84746c3c644d6cc588586f08a45ae573bcdb8682690b82f6a19f51dd7571",
+  "comparison": {
+    "c": {
+      "build": {
+        "bzImage_sha256": "2c65e6e89be358a64c3a9c88e287242cd231bc694acde266c80c31ae4322c12e",
+        "config_sha256": "3ba80afb1dd3aa8a98271c280b198ebc64623fc733fd1af90cc268cee29de674",
+        "evidence": "/out/logs/ci-server-c-build.N43iL9cy",
+        "map_sha256": "3dd63ab296dceb5a9b50237b7a7f3c4cca2f6551031a00345d75179369c640a6",
+        "source_revision": "8aafe7d962dd77f8be21d798098a3c09db9e155f",
+        "vmlinux_sha256": "2b1fa9c8cf6827ad087bf710069318d313f09d1f54b1fe29e31a0083dfbb9b85"
+      },
+      "executable": {
+        "bytes": {
+          "assembly": 45104,
+          "c": 5753409,
+          "generated": 28,
+          "padding_or_linker_script": 2107049,
+          "rust": 145083,
+          "unknown": 0
+        },
+        "percent": {
+          "assembly": 0.560251,
+          "c": 71.464945,
+          "generated": 0.000348,
+          "padding_or_linker_script": 26.172334,
+          "rust": 1.802123,
+          "unknown": 0.0
+        },
+        "total_bytes": 8050673
+      },
+      "profile": "server-c",
+      "raw_build_log_sha256": "e70f8bd5e82203d7c04c593123f632484deb8dedd6f2c3cab99f2203066cdae0",
+      "raw_logs": "/home/aaron/code/rusix/linux-out/lts-server-core-c-001/logs",
+      "result": {
+        "cases": [
+          "mkfs",
+          "initial_write",
+          "remount_read",
+          "mutate",
+          "final_read",
+          "fsck"
+        ],
+        "implementation": "brd-rust",
+        "qemu_exit": 0,
+        "status": "PASS",
+        "wake_cases": [
+          "pipe_poll",
+          "epoll_pipe_eventfd",
+          "epoll_oneshot_rearm",
+          "epoll_del_close"
+        ]
+      }
+    },
+    "rust": {
+      "build": {
+        "bzImage_sha256": "7a9b5c3321c9b3d5538b05585013d67f15d3d8fa1563035fbbe47384f89726c7",
+        "config_sha256": "e8cee23bd5c24281a674ed9b2391c1c717103ddb615c59349cd737939544d928",
+        "evidence": "/out/logs/ci-server-build.QuaYt8yc",
+        "map_sha256": "d08cd444b6305fa29f5a593b1b4ec8f21a566e3e807177667d23e4e34b75d389",
+        "source_revision": "8aafe7d962dd77f8be21d798098a3c09db9e155f",
+        "vmlinux_sha256": "1a47fa02a5a51a3c1d9feb7b33b03ed4a5baaec581dcd5bc166ae4bba9cda6e4"
+      },
+      "executable": {
+        "bytes": {
+          "assembly": 45104,
+          "c": 5747302,
+          "generated": 28,
+          "padding_or_linker_script": 2107047,
+          "rust": 151896,
+          "unknown": 0
+        },
+        "percent": {
+          "assembly": 0.560202,
+          "c": 71.382845,
+          "generated": 0.000348,
+          "padding_or_linker_script": 26.17002,
+          "rust": 1.886584,
+          "unknown": 0.0
+        },
+        "total_bytes": 8051377
+      },
+      "profile": "server",
+      "raw_build_log_sha256": "992b8bfaa8032820a663ef6954caf4e2813f91ff0133bfd3655c1bc5357fd1a7",
+      "raw_logs": "/home/aaron/code/rusix/linux-out/lts-server-core-rust-001/logs",
+      "result": {
+        "cases": [
+          "mkfs",
+          "initial_write",
+          "remount_read",
+          "mutate",
+          "final_read",
+          "fsck"
+        ],
+        "implementation": "brd-rust",
+        "qemu_exit": 0,
+        "status": "PASS",
+        "wake_cases": [
+          "pipe_poll",
+          "epoll_pipe_eventfd",
+          "epoll_oneshot_rearm",
+          "epoll_del_close"
+        ]
+      }
+    }
+  },
+  "identical_fixture_and_vm": {
+    "fixture_rustc": "c83055917220fd33844f4118a5a9bc8cd7ecf9761ce5f6fbc3edb8b1bc93db12",
+    "image": "sha256:c02eb3929889b3f0cc035d57a02c844e0c74c71d24fbda1311249faeb8257f63",
+    "init_sha256": "578e9bb89984112f8184e31039a9e873544db6bba68af3c69c117cbcded6d5e3",
+    "initramfs_sha256": "e82952f93ae532c61fa5298e0ac86f41b7c83504854f8a2d2833dd9cdbafe1e7",
+    "qemu_version": "d5e1ae8dd845009e27fe1cab4612650fd6a774c76bff3d06e929069de043f7f5",
+    "rootfs": {
+      "bin/sh": {
+        "mode": "0o755",
+        "sha256": "a6f559e00b69a4aa4d8cb607be18d9386c5aee55c509e2c075549dcf00e00fc7"
+      },
+      "etc/mke2fs.conf": {
+        "mode": "0o644",
+        "sha256": "c998d64f9b58c2235186f8ee75ba602d1fdb2991d94695fd687ab0e8096b6727"
+      },
+      "expected/FINAL.sha256": {
+        "mode": "0o644",
+        "sha256": "4badf6874d8f5bcb531eeebbd70b8814c5c54a8c87247f79f1266975da3e7f0f"
+      },
+      "expected/SHA256SUMS": {
+        "mode": "0o644",
+        "sha256": "b8fe76c42a436aa12c3efa253976561559c1bc9432c1a38343ac94ad0cb0de8b"
+      },
+      "ext4-workload.sh": {
+        "mode": "0o644",
+        "sha256": "adab6c2e7c100bdadfad61f39d94687a7c30953e71c4eb04bd3ef5bb3e9cec38"
+      },
+      "init": {
+        "mode": "0o755",
+        "sha256": "578e9bb89984112f8184e31039a9e873544db6bba68af3c69c117cbcded6d5e3"
+      },
+      "lib/x86_64-linux-gnu/libacl.so.1": {
+        "mode": "0o755",
+        "sha256": "3c03774961231d8485a4dba36ec359a95939a84719799c58cd26173e44bbde90"
+      },
+      "lib/x86_64-linux-gnu/libattr.so.1": {
+        "mode": "0o755",
+        "sha256": "126e29f16f4a6da5cad9a0d9cf1cc817089ee41645a8581d19691a1b9a581172"
+      },
+      "lib/x86_64-linux-gnu/libblkid.so.1": {
+        "mode": "0o755",
+        "sha256": "116b712c143ac68bb59f6d8e32ed8e05e0772c730a9ba55ec544dd28916af58c"
+      },
+      "lib/x86_64-linux-gnu/libc.so.6": {
+        "mode": "0o755",
+        "sha256": "9792e3cbb541c8f44c7acf5f14f4022ea62998ecc787d326bed4d8b6547dfd92"
+      },
+      "lib/x86_64-linux-gnu/libcom_err.so.2": {
+        "mode": "0o755",
+        "sha256": "dc4828400674492839b630c001db424cd38e5cecfcf46dbf705a637647e04bea"
+      },
+      "lib/x86_64-linux-gnu/libcrypto.so.3": {
+        "mode": "0o755",
+        "sha256": "8ae56f0a9481280a68c19f59809cd242a07a91ad7142944d21a878221992244b"
+      },
+      "lib/x86_64-linux-gnu/libe2p.so.2": {
+        "mode": "0o755",
+        "sha256": "e436d442d0453c844163c2a5e62b67891d1ceacf19560d4d38bb3444d8099c90"
+      },
+      "lib/x86_64-linux-gnu/libext2fs.so.2": {
+        "mode": "0o755",
+        "sha256": "fa8293e8dfd3a3a5f699e769c60d39a723c5e9ed192e91bd3840765efd162c95"
+      },
+      "lib/x86_64-linux-gnu/libmount.so.1": {
+        "mode": "0o755",
+        "sha256": "1654d2cf948e3608cc0d38340807d4ddac1114315a3a77f7b274c4c859cb2181"
+      },
+      "lib/x86_64-linux-gnu/libpcre2-8.so.0": {
+        "mode": "0o755",
+        "sha256": "92e9b4167f9bbc237ca8f5526d82ee99ec9f8dbd0270ef1dd0ab24e2217f48e3"
+      },
+      "lib/x86_64-linux-gnu/libselinux.so.1": {
+        "mode": "0o755",
+        "sha256": "5cb5293b4e7590463b94f7b23152d54807a6a2ccaf8cac9e343908c6692c086c"
+      },
+      "lib/x86_64-linux-gnu/libuuid.so.1": {
+        "mode": "0o755",
+        "sha256": "632fd43a9d8d6f3496833b7e62e7840f397163373dddf8b8eb0b2b7f36593117"
+      },
+      "lib/x86_64-linux-gnu/libz.so.1": {
+        "mode": "0o755",
+        "sha256": "85590dd58edf5445e18bc7193e5ebc01ac5841f1ae187e97705a662e90c6421e"
+      },
+      "lib/x86_64-linux-gnu/libzstd.so.1": {
+        "mode": "0o755",
+        "sha256": "27f07c9a49c2c956bcfb64cd4712976586a66facbf15fc7f09bc37413b5f2b21"
+      },
+      "lib64/ld-linux-x86-64.so.2": {
+        "mode": "0o755",
+        "sha256": "c8438e4fde1934e61c88311633f00949ff645d5c04cdb8671fa3d78164d2f307"
+      },
+      "usr/bin/blockdev": {
+        "mode": "0o755",
+        "sha256": "9e13e7d55a6fe313fa98f66a411f64cf04b82354932328df91acfd9d620c666a"
+      },
+      "usr/bin/cat": {
+        "mode": "0o755",
+        "sha256": "8a5c20c3400a4058a487cd806111cc5138ef4d0fbc6714ff67c9432e38c2705a"
+      },
+      "usr/bin/chmod": {
+        "mode": "0o755",
+        "sha256": "7e37f672db75ae783260e7565d26218d25cebbc5a6d61118284c9719d246a90e"
+      },
+      "usr/bin/cmp": {
+        "mode": "0o755",
+        "sha256": "751322036db972a763a66a5564b857707db53efedb6c96d12b19138bf0ec1b58"
+      },
+      "usr/bin/cp": {
+        "mode": "0o755",
+        "sha256": "5a3a8808bab81a67c6ac578670f5608595f1569948d4dc7d7d604c1d08d596d9"
+      },
+      "usr/bin/dd": {
+        "mode": "0o755",
+        "sha256": "77df5e24d6c8bb5e1736d1e21eb5b25699ba5215a797ee029fcf234a637c1619"
+      },
+      "usr/bin/ln": {
+        "mode": "0o755",
+        "sha256": "75bef899117adf42c64c2f15fee640755d18d4632ae0794578d268a74cc7af8b"
+      },
+      "usr/bin/mount": {
+        "mode": "0o755",
+        "sha256": "2f36342bd2fef42343c4fa4a2a396a7f56c7c8f4ddcbd31c43205c62e152e6d4"
+      },
+      "usr/bin/mv": {
+        "mode": "0o755",
+        "sha256": "7db4661c6397fe5fd5ba6837692aa5adb7dce1efc656369d7b08dfd6ece525a0"
+      },
+      "usr/bin/rm": {
+        "mode": "0o755",
+        "sha256": "c959a237e7b95d229eea44764b2246fcb61a95dc679a10ad0cc97ad84c2316c1"
+      },
+      "usr/bin/sha256sum": {
+        "mode": "0o755",
+        "sha256": "89f8c1d1ba3c76138f3771e1a91e2796ade6180b1c1e4258c04698ff32787c97"
+      },
+      "usr/bin/stat": {
+        "mode": "0o755",
+        "sha256": "128754b37ab743a539d889a91441c440f9b52df77f4e008b345ff221ce1daeaa"
+      },
+      "usr/bin/sync": {
+        "mode": "0o755",
+        "sha256": "cbf7bb37ba1849b687c87d4fd3195312bc1bd8aa6221e70b22f8a5c5cf57a105"
+      },
+      "usr/bin/truncate": {
+        "mode": "0o755",
+        "sha256": "8d940e9982bdd4b553a72ff6a4abceac9f4ec51d8d168ef115fda9e01bb3f59a"
+      },
+      "usr/bin/umount": {
+        "mode": "0o755",
+        "sha256": "3f3046ef1cdc5134eb0b7ac586c6fea3bcea22aa6614830a14e274f3905b6cd5"
+      },
+      "usr/sbin/e2fsck": {
+        "mode": "0o755",
+        "sha256": "be1f2c99e0dc73640cffb549da5f3f4b15da0f89e7334c6730feb69eff784571"
+      },
+      "usr/sbin/mkfs.ext4": {
+        "mode": "0o755",
+        "sha256": "14d64b707e37214aff4568470bb4d908232370684c7eff05465d78116c2c9c67"
+      }
+    },
+    "rootfs_packages": "30a6ea7af0307248c70192e2ec793e655084c4f65a788a5d6c367412ab9e39e7",
+    "sources": {
+      "rusix/scripts/rusix_paths.py": "15158c8c33e303341ef523c8317da73fb3f008908b8bfa53611d13bc87c94cae",
+      "rusix/scripts/server_target.py": "357f1680a766deee25a75f56470f1a6223a9429326efd2089efc7ac5ee484eed",
+      "rusix/scripts/test-brd-ext4-vm.py": "88d458268b91d6781251867901853193b91310cc75237536f686f6574c5aea88",
+      "rusix/scripts/test-brd-vm.py": "48c0b871d979eb2ca6e035b05569f50d1bd318c4fb6b8672b5a86f1942679329",
+      "rusix/tests/brd-ext4/Dockerfile": "16c3dc63cd956f56ef494dff04ec66beb5d246928f0cb04ba4b578376cf5dd02",
+      "rusix/tests/brd-ext4/FINAL.sha256": "4badf6874d8f5bcb531eeebbd70b8814c5c54a8c87247f79f1266975da3e7f0f",
+      "rusix/tests/brd-ext4/README.md": "fdb1a20d8e86ec2a3c476d1044aeb15e5bf219cb32d207f87ce8f313b347dc94",
+      "rusix/tests/brd-ext4/SHA256SUMS": "b8fe76c42a436aa12c3efa253976561559c1bc9432c1a38343ac94ad0cb0de8b",
+      "rusix/tests/brd-ext4/ext4-packages.lock": "30a6ea7af0307248c70192e2ec793e655084c4f65a788a5d6c367412ab9e39e7",
+      "rusix/tests/brd-ext4/init.rs": "098b69ff1d0063fff1587b9aec3443f681f2eaa9f8f2399348e7b39ad3f1a9d3",
+      "rusix/tests/brd-ext4/wake_probe.rs": "ac58dbab4f7cf708c3009df22f90e1856e0d5bd7198005e313361d7eac917890",
+      "rusix/tests/brd-ext4/workload.sh": "adab6c2e7c100bdadfad61f39d94687a7c30953e71c4eb04bd3ef5bb3e9cec38"
+    },
+    "toolchain": "c6f34500a39cbbff3c2a10d9f85c76a7399e918c72c166fe90da89178e1db5bf",
+    "toolchain_packages": "9ef7ec5334805f1896c6990c60937d2244f71982b9a06b8a6248f352f8e9cf19",
+    "vm_command": [
+      "/usr/bin/timeout",
+      "--kill-after=5s",
+      "240s",
+      "/usr/bin/qemu-system-x86_64",
+      "-machine",
+      "q35",
+      "-accel",
+      "kvm",
+      "-cpu",
+      "qemu64",
+      "-m",
+      "512M",
+      "-smp",
+      "2",
+      "-display",
+      "none",
+      "-serial",
+      "stdio",
+      "-monitor",
+      "none",
+      "-nic",
+      "none",
+      "-no-reboot",
+      "-kernel",
+      "<kernel>",
+      "-initrd",
+      "<initrd>",
+      "-append",
+      "console=ttyS0 rdinit=/init rusix.brd_ext4=1 brd.rd_nr=1 brd.rd_size=65536 brd.max_part=1 panic=-1 kunit.enable=0 printk.time=0 printk.devkmsg=on loglevel=7"
+    ]
+  },
+  "limitations": [
+    "Executable bytes are retained compilation-unit attribution, not rewrite completion, safety or feature coverage.",
+    "No arm64, networking workload, performance, exhaustive races or untimed bit-wait action proof.",
+    "Full raw build logs remain in original output directories; archive omits duplicate kernel-build trees and build.log."
+  ],
+  "resolved_configuration_comparison": {
+    "c_config_sha256": "3ba80afb1dd3aa8a98271c280b198ebc64623fc733fd1af90cc268cee29de674",
+    "resolved_config_differences": {
+      "CONFIG_RUSIX_COMPLETION_RUST": [
+        "y",
+        "n"
+      ]
+    },
+    "rust_config_sha256": "e8cee23bd5c24281a674ed9b2391c1c717103ddb615c59349cd737939544d928",
+    "status": "PASS"
+  },
+  "scope": "Exact declared x86_64 server target; Rust BRD both, C/Rust core comparison. Six ext4 and four wake consumers per kernel; KUnit disabled.",
+  "sha256": {
+    "c/cache-provenance.json": "4c0dbf90874ceb9f5e9e5ceccf84d124b738e7d3bff8011a47adcd4f0dfb8f79",
+    "c/ci-inputs.log": "76a95b6c34482ce25badddd5916e2636553c4ced7032e9520831ce6f11b4a176",
+    "c/ci-server-c-build.N43iL9cy/block-archive.txt": "0357af1fa7325e82c134ed13d265fff048c8751a9017c17f3895a3ae108b8072",
+    "c/ci-server-c-build.N43iL9cy/brd-objects.txt": "55169a007cb9bd8c0a47843490894dfe780e85c9b6d48e70afa18397ccc03037",
+    "c/ci-server-c-build.N43iL9cy/brd-reference.diff": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "c/ci-server-c-build.N43iL9cy/brd-symbols.txt": "dd6003de48efabbefc32eb79777623d026773693bd86ff32c5e1f9cabc8a821d",
+    "c/ci-server-c-build.N43iL9cy/build.exit": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+    "c/ci-server-c-build.N43iL9cy/build.sha256": "d1c0632b32ccda8b04475d61b83bb1b6d769789ccd2fd4cfba83fba32327b810",
+    "c/ci-server-c-build.N43iL9cy/completion-objects.txt": "890c728fafa4dbe36f108fc43a258d6b916439c0bcd3fa8dd4cfc72c40673b73",
+    "c/ci-server-c-build.N43iL9cy/completion-selection.log": "8f9671aedcb26cad7e750ed2d49b01d787bdecd5f92200fea30b5cc032ba0adc",
+    "c/ci-server-c-build.N43iL9cy/completion-symbols.txt": "4f8b3b1e497148a5f7bc789e2d85388ffbfe31825b9bfd458ac3d23e9747106f",
+    "c/ci-server-c-build.N43iL9cy/completion-wait-sections.txt": "8f78b55a786c10180b3fe1ad0099fbab06a2f4b0cb5ac72be2d934fd0715ac06",
+    "c/ci-server-c-build.N43iL9cy/config": "3ba80afb1dd3aa8a98271c280b198ebc64623fc733fd1af90cc268cee29de674",
+    "c/ci-server-c-build.N43iL9cy/config-input": "108043047912cc72f865e627d78858699974b293477f228ef4d61b69846be502",
+    "c/ci-server-c-build.N43iL9cy/config-input.json": "2bde6a26b3b4f61ec230bbf17ecd95b3deebf24af5671c6bbb31c61e0e216e1f",
+    "c/ci-server-c-build.N43iL9cy/config-template": "5b37adb3792b56926ef687dd7392b3916dbb8b77a30e50c2b2664373988098d6",
+    "c/ci-server-c-build.N43iL9cy/config.log": "67701d5dc7e7a4de7ec332f4a9c694ee614c7ff20a43af148ec93e3b26ee6dc1",
+    "c/ci-server-c-build.N43iL9cy/environment.log": "4ca2dcd0b2e8cad0a13a5f8f9fb3baf7dc948bbc8c4a1ef50b6bca1698a2d61c",
+    "c/ci-server-c-build.N43iL9cy/profile.txt": "a069c1b78dc3735e4bf240077d0e4ae91b70ff5406bac21fe0149f53f719c227",
+    "c/ci-server-c-build.N43iL9cy/scheduler-archive.txt": "9306896915e26f7382d5c4d8c32acda630b93c50b8932a7c8e2d4bdde2ea3e93",
+    "c/ci-server-c-build.N43iL9cy/selection.log": "197d82782e2e650dcc59c3b23a3f7a4fcf5022a407fcd3b3f78ea43ee410bad0",
+    "c/ci-server-c-build.N43iL9cy/source-after.commit": "98e33d593ac5774a4e99bc52f23f25d052cc967fbe88187885d4bebcc7ba9785",
+    "c/ci-server-c-build.N43iL9cy/source-after.status": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "c/ci-server-c-build.N43iL9cy/swait-objects.txt": "890c728fafa4dbe36f108fc43a258d6b916439c0bcd3fa8dd4cfc72c40673b73",
+    "c/ci-server-c-build.N43iL9cy/swait-selection.log": "6ab3a75afd7da47633d584a25111bfa33157e77f675506cea20f1361397d7583",
+    "c/ci-server-c-build.N43iL9cy/swait-symbols.txt": "82518e553a81c06ca7523910cceac93ae39f791355454f05bd9028861fa89538",
+    "c/ci-server-c-build.N43iL9cy/wait-bit-object-sections.txt": "e7ec75654a80c25b18dd369062a9f303b5eda4ce1f6b5ef7549a35c347890074",
+    "c/ci-server-c-build.N43iL9cy/wait-bit-objects.txt": "890c728fafa4dbe36f108fc43a258d6b916439c0bcd3fa8dd4cfc72c40673b73",
+    "c/ci-server-c-build.N43iL9cy/wait-bit-scheduler-sections.txt": "c43582dfb973bb0bfdfbc8e03b7892cc68e0cd67d206a733ce055ef11ce1d831",
+    "c/ci-server-c-build.N43iL9cy/wait-bit-selection.log": "f4fc4cdc67167b7691b9116bde5a28926c85d59a84ae19b06045d5f1e7ccab93",
+    "c/ci-server-c-build.N43iL9cy/wait-bit-symbols.txt": "31c76a96e22e93574e9a6b5d1706e4bb261005643683405a16aa1587bc78e1ed",
+    "c/ci-server-c-build.N43iL9cy/wake-objects.txt": "890c728fafa4dbe36f108fc43a258d6b916439c0bcd3fa8dd4cfc72c40673b73",
+    "c/ci-server-c-build.N43iL9cy/wake-selection.log": "c03697a558369a882c74fb0ff62abc4cbf03e43158e1aebf45ef90ab3334b427",
+    "c/ci-server-c-build.N43iL9cy/wake-symbols.txt": "c57538a2a7d72ff3e1c58bf45915faa8055b18e32e0d036e6634428d87b190b8",
+    "c/ci-server-c-ext4.run/command.sh": "7d47a2ae4f57929a534dc76c051d38506aa31a45c7affce7c017eb986c0d7fc7",
+    "c/ci-server-c-ext4.run/compile-command.sh": "2167b4ff877b9b86dad0e622e42bcabd638ee6db1dfbfb4f614df630d5ddb237",
+    "c/ci-server-c-ext4.run/compile.exit": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+    "c/ci-server-c-ext4.run/compile.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "c/ci-server-c-ext4.run/console.log": "b93a5261f9e9225d4d973120b22d1846d22567ce623998c0ae9b1d33d344edb4",
+    "c/ci-server-c-ext4.run/container-image-id.txt": "6e8bf4e568c9bd0809bea944afb49f09c2647d954e520a2226b03ec688353545",
+    "c/ci-server-c-ext4.run/init-elf.log": "e33623fcaf20ae7e07cdf50c0b0b8089796d482febff6d5ed1a21626d834fe3f",
+    "c/ci-server-c-ext4.run/inputs.json": "2a2df9c38e5386066db379f48e7013d39d8f09a02e88a51acde06b321472df71",
+    "c/ci-server-c-ext4.run/qemu-version.log": "d5e1ae8dd845009e27fe1cab4612650fd6a774c76bff3d06e929069de043f7f5",
+    "c/ci-server-c-ext4.run/qemu.exit": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+    "c/ci-server-c-ext4.run/result.json": "c02dcf216d6dcc5a4d9d9c81f5e1616eb2be86e08c1afa2268822ecfc7567f7e",
+    "c/ci-server-c-ext4.run/rootfs-elf.json": "96fa50521983e09f84167d08ffeb42390e1cf42389a286ad8da8bd891b4cfcac",
+    "c/ci-server-c-ext4.run/rootfs-files.json": "710ba7b6241a02a8e1e3efd8c91a8b0bd6f95b726d8ed8c24bc0fef590f85caa",
+    "c/ci-server-c-ext4.run/rootfs-packages.lock": "30a6ea7af0307248c70192e2ec793e655084c4f65a788a5d6c367412ab9e39e7",
+    "c/ci-server-c-ext4.run/runner.exit": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+    "c/ci-server-c-ext4.run/rustc-version.log": "c83055917220fd33844f4118a5a9bc8cd7ecf9761ce5f6fbc3edb8b1bc93db12",
+    "c/ci.exit": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+    "c/container-image-id.txt": "6e8bf4e568c9bd0809bea944afb49f09c2647d954e520a2226b03ec688353545",
+    "c/host-native.log": "5947862b22c3d6ec6beb115ae9d7178bac6fbe96095b9083066b33f39e005506",
+    "c/languages.json": "fe4e88709c06be801f40b3d3f0296e23868fef2b6616d9cc1544427d16cf4457",
+    "c/packages.lock": "9ef7ec5334805f1896c6990c60937d2244f71982b9a06b8a6248f352f8e9cf19",
+    "c/preflight.log": "522bfec88879b99be12257c198c7a766083b39d8973342c36615e9b29e9d1d7c",
+    "c/test_brd_ext4_gate.log": "0b487dd197331c02512202319dd6e3bcc9b246f43271f82cc2097443075db78f",
+    "c/test_brd_gate.log": "2b390ad0ecc0187ae4c9907c4b66fcd5cf984adc11b10becfdaa3a91cfef8ccd",
+    "c/test_brd_kunit_gate.log": "ddbc5bf15c26bf2c15a86c04aa1c4eb9dbb31a4d245c800b95a5282be426a476",
+    "c/test_brd_parameters_gate.log": "d41f3c846ddc49b0edee5f0cc7d1f92afb009ffd88a2bdac06fe9b8c1e024766",
+    "c/test_brd_partitions_gate.log": "4c3b3b2f85f7f81206f2731efca1a5c61f58b2f6c54d820b4003b988757b84ec",
+    "c/test_completion_kunit_gate.log": "c0a234441cecc9937a09c7cbc31cee2a9774cd3f1dce8048b17104e7e417c7f1",
+    "c/test_kernel_languages.log": "811eabda5dc298da232b3c7953fbe433089645edff6f53063d91016c4136c0a2",
+    "c/test_kunit_gate.log": "d9d734ee1c2de67b748aeef1c4126433aa438ad8375ca953916f12b1df11414d",
+    "c/test_repo_paths.log": "20cbe5a3474a6f0c4cc7579e7aef9e8b9e48e1eee5175d5aa7f76747b5d9ad66",
+    "c/test_server_target.log": "3d05864adaa7a067c6dd8f488b76741afad7cdf90e6cdbe6566339424de57b0f",
+    "c/toolchain.log": "c6f34500a39cbbff3c2a10d9f85c76a7399e918c72c166fe90da89178e1db5bf",
+    "rust/cache-provenance.json": "4c0dbf90874ceb9f5e9e5ceccf84d124b738e7d3bff8011a47adcd4f0dfb8f79",
+    "rust/ci-inputs.log": "ee9de64d4a6f76e5118bcfc1fcd01c6bb5344ed1131f09438e00c53a1c0ac5d3",
+    "rust/ci-server-build.QuaYt8yc/block-archive.txt": "e52b9f5f631904a0faf1f4446f250149cd1e67ca67a9caa3fb265767bfb61de3",
+    "rust/ci-server-build.QuaYt8yc/brd-objects.txt": "4d4364ab2b28d56a6c1b38e7297117875b249a317258dd6727fcaca60e58d9ba",
+    "rust/ci-server-build.QuaYt8yc/brd-reference.diff": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "rust/ci-server-build.QuaYt8yc/brd-symbols.txt": "13a7ef9f2d4baf9027452f3de0f5e2b941a1346eaeb715145e960eae6b497f48",
+    "rust/ci-server-build.QuaYt8yc/build.exit": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+    "rust/ci-server-build.QuaYt8yc/build.sha256": "44a6e0aea01db1d0f98b563ead5b468eecc1909b5ac48bf3e23a19a838ca9c67",
+    "rust/ci-server-build.QuaYt8yc/completion-objects.txt": "b3cb5664a5d9ab3f2224c297c0e8359c4e0e31c776f69158f1f43dd949551c0b",
+    "rust/ci-server-build.QuaYt8yc/completion-selection.log": "83a2ead7f6b42c7c393a2908439ebc2151e37e8d8726208cb3731541c9433113",
+    "rust/ci-server-build.QuaYt8yc/completion-symbols.txt": "711c7056850a17a28410eb462ff3b546d85ee13b5617f3262704c6670b8cb327",
+    "rust/ci-server-build.QuaYt8yc/completion-wait-sections.txt": "8d22526fb680d14b561f731914839a073d9390295b7a4b39ed4e1ff24a31a300",
+    "rust/ci-server-build.QuaYt8yc/config": "e8cee23bd5c24281a674ed9b2391c1c717103ddb615c59349cd737939544d928",
+    "rust/ci-server-build.QuaYt8yc/config-input": "5b37adb3792b56926ef687dd7392b3916dbb8b77a30e50c2b2664373988098d6",
+    "rust/ci-server-build.QuaYt8yc/config-input.json": "764870dc82623b83c42c296ddd7bbb3c533beb8c3d5e2594e2c38af65249f125",
+    "rust/ci-server-build.QuaYt8yc/config-template": "5b37adb3792b56926ef687dd7392b3916dbb8b77a30e50c2b2664373988098d6",
+    "rust/ci-server-build.QuaYt8yc/config.log": "2ecf80c4a5bcda9a221e34a2ed386b017b1a0a575436b6615f4c2d012a2b73f5",
+    "rust/ci-server-build.QuaYt8yc/environment.log": "4ca2dcd0b2e8cad0a13a5f8f9fb3baf7dc948bbc8c4a1ef50b6bca1698a2d61c",
+    "rust/ci-server-build.QuaYt8yc/profile.txt": "4ad28e4a6461bd64b920f72f86c0d16edc544c4a1f26060518ebb900025d496a",
+    "rust/ci-server-build.QuaYt8yc/scheduler-archive.txt": "4403434b7e83f75fc5a424956711a1c4c19fcc265b9a4ca9791ad1f3e8895a8b",
+    "rust/ci-server-build.QuaYt8yc/selection.log": "e7e1d11586f4a17535047e194f18eb5f4b15b3120d6b45070752cf89ce826ee3",
+    "rust/ci-server-build.QuaYt8yc/source-after.commit": "98e33d593ac5774a4e99bc52f23f25d052cc967fbe88187885d4bebcc7ba9785",
+    "rust/ci-server-build.QuaYt8yc/source-after.status": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "rust/ci-server-build.QuaYt8yc/swait-objects.txt": "025b9431d6ff46f4e1a5406c69eee852365f2998cba33e0fd008d3b2b280cd77",
+    "rust/ci-server-build.QuaYt8yc/swait-selection.log": "da58940a3edf0d24a26b13ec5ff3737d7770ee4a3acdc52be71188f7edd9aaba",
+    "rust/ci-server-build.QuaYt8yc/swait-symbols.txt": "9aee283addf1dd92ec1dd08bd25c6091984335ffbb29a590bc1c37be5fd48bc7",
+    "rust/ci-server-build.QuaYt8yc/wait-bit-c-symbols.txt": "479ed8349648fdb0aed5b2490dbcf6f20ed318c305939f0daa8cab91518dc440",
+    "rust/ci-server-build.QuaYt8yc/wait-bit-object-sections.txt": "fcae6d6b2db70396fb81ad22cf90b909cdb992bfb31b64bd441116b0f5f18876",
+    "rust/ci-server-build.QuaYt8yc/wait-bit-objects.txt": "b5a5bef86ee0a9f1a26f710868da2ec1958273d93b39267b612bbe625c2e3105",
+    "rust/ci-server-build.QuaYt8yc/wait-bit-scheduler-sections.txt": "b5cbed1360ebe6aa7554579100bcac7598bd03f59d652b595023fe3081c9eed3",
+    "rust/ci-server-build.QuaYt8yc/wait-bit-selection.log": "36b04df7b61e4f7ed1290f06e9c623f094767c43e8a3e44f1b8a28a613404950",
+    "rust/ci-server-build.QuaYt8yc/wait-bit-symbols.txt": "8f77db3645dab8c20f8f67575ec21e9cd512e7feb11e1073f473d52fc7bf506b",
+    "rust/ci-server-build.QuaYt8yc/wake-objects.txt": "68983f81e7807e2eb156744f206c4ed4981fe73c6cce39543e92834fd765063d",
+    "rust/ci-server-build.QuaYt8yc/wake-selection.log": "dac2a8747f04ffc70aff4ed56e1cd179db71404d0a9d4956d094ad136c05004b",
+    "rust/ci-server-build.QuaYt8yc/wake-symbols.txt": "2aa5f977bee4539de70ca0a6c8b28ca42938ef21673350a676cc53840b2563ed",
+    "rust/ci-server-ext4.run/command.sh": "29a74e09e17196ca3a34a41559632d705d3db9326f5143e9a9342835a04324a1",
+    "rust/ci-server-ext4.run/compile-command.sh": "f0c06a79b4c586ea70fdceca6eb2e749e02bfce8b2817ea067fcd8624c424f3f",
+    "rust/ci-server-ext4.run/compile.exit": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+    "rust/ci-server-ext4.run/compile.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "rust/ci-server-ext4.run/console.log": "af6f4f4648713b9ed08adfe1245c80c6e09b271c2d516f75b11978e38d44f2f1",
+    "rust/ci-server-ext4.run/container-image-id.txt": "6e8bf4e568c9bd0809bea944afb49f09c2647d954e520a2226b03ec688353545",
+    "rust/ci-server-ext4.run/init-elf.log": "e33623fcaf20ae7e07cdf50c0b0b8089796d482febff6d5ed1a21626d834fe3f",
+    "rust/ci-server-ext4.run/inputs.json": "ec29db2c30eb54a5e2318b05d2c1c1c34a4f81dcab3f0d9482afaeeb8f98fd66",
+    "rust/ci-server-ext4.run/qemu-version.log": "d5e1ae8dd845009e27fe1cab4612650fd6a774c76bff3d06e929069de043f7f5",
+    "rust/ci-server-ext4.run/qemu.exit": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+    "rust/ci-server-ext4.run/result.json": "c02dcf216d6dcc5a4d9d9c81f5e1616eb2be86e08c1afa2268822ecfc7567f7e",
+    "rust/ci-server-ext4.run/rootfs-elf.json": "ec32c45db1484666ffcdb0fbf740a2f629d529e942ad08a23bae58f120825055",
+    "rust/ci-server-ext4.run/rootfs-files.json": "b7d06061d96c23df85b7fe584953623eab1c1e54a096996418f62b849ebe3148",
+    "rust/ci-server-ext4.run/rootfs-packages.lock": "30a6ea7af0307248c70192e2ec793e655084c4f65a788a5d6c367412ab9e39e7",
+    "rust/ci-server-ext4.run/runner.exit": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+    "rust/ci-server-ext4.run/rustc-version.log": "c83055917220fd33844f4118a5a9bc8cd7ecf9761ce5f6fbc3edb8b1bc93db12",
+    "rust/ci.exit": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+    "rust/container-image-id.txt": "6e8bf4e568c9bd0809bea944afb49f09c2647d954e520a2226b03ec688353545",
+    "rust/host-native.log": "5947862b22c3d6ec6beb115ae9d7178bac6fbe96095b9083066b33f39e005506",
+    "rust/languages.json": "e8bce1c1937dc70523debab373e1c44da2f033aad7dab21cae21591289e39f3b",
+    "rust/packages.lock": "9ef7ec5334805f1896c6990c60937d2244f71982b9a06b8a6248f352f8e9cf19",
+    "rust/preflight.log": "522bfec88879b99be12257c198c7a766083b39d8973342c36615e9b29e9d1d7c",
+    "rust/test_brd_ext4_gate.log": "93ac8fc9821a401cb9f2b020d7075ad8227f3e662d499adb9f716d19e6afd2f8",
+    "rust/test_brd_gate.log": "2b390ad0ecc0187ae4c9907c4b66fcd5cf984adc11b10becfdaa3a91cfef8ccd",
+    "rust/test_brd_kunit_gate.log": "ddbc5bf15c26bf2c15a86c04aa1c4eb9dbb31a4d245c800b95a5282be426a476",
+    "rust/test_brd_parameters_gate.log": "d41f3c846ddc49b0edee5f0cc7d1f92afb009ffd88a2bdac06fe9b8c1e024766",
+    "rust/test_brd_partitions_gate.log": "4c3b3b2f85f7f81206f2731efca1a5c61f58b2f6c54d820b4003b988757b84ec",
+    "rust/test_completion_kunit_gate.log": "b16c2d37f8720077a281358023a1ae49c385415ecb8a4149a4a55f0a91241625",
+    "rust/test_kernel_languages.log": "811eabda5dc298da232b3c7953fbe433089645edff6f53063d91016c4136c0a2",
+    "rust/test_kunit_gate.log": "d9d734ee1c2de67b748aeef1c4126433aa438ad8375ca953916f12b1df11414d",
+    "rust/test_repo_paths.log": "a51974fbcdac0b040f464d3f1bbcfa0223209dae74e2dff3e587d1479cdb24aa",
+    "rust/test_server_target.log": "fdb64f76ee3faf48d76ab43bbb2a2d0a9d4cc51971bf0df9590990e31971669c",
+    "rust/toolchain.log": "c6f34500a39cbbff3c2a10d9f85c76a7399e918c72c166fe90da89178e1db5bf"
+  },
+  "source": "8aafe7d962dd77f8be21d798098a3c09db9e155f",
+  "source_checkout": "/home/aaron/code/rusix/linux-server-core",
+  "status": "PASS"
+}

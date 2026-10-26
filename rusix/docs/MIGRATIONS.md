@@ -48,5 +48,7 @@ current test inventory, evidence and remaining dependencies. The
 [generic wait record](../experiments/wait/README.md) covers shared enrollment,
 prepare/finish and wake-callback policy; the [bit-wait record](../experiments/wait-bit/README.md)
 covers bit acquisition and stack-waiter ownership. Selection remains
-default-off on x86_64; no subsystem divergence point is declared. GCD/LCM remain
+default-off in Kconfig and enabled by the declared x86_64 server target, with
+[matched target evidence](evidence/server-core/manifest.json). No subsystem
+divergence point is declared. GCD/LCM remain
 deferred; [the roadmap](ROADMAP.md) prioritizes this core boundary after BRD.

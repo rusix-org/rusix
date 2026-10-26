@@ -1,0 +1,192 @@
+{
+  "bin/sh": {
+    "mode": "0o755",
+    "sha256": "a6f559e00b69a4aa4d8cb607be18d9386c5aee55c509e2c075549dcf00e00fc7",
+    "source": "/usr/bin/dash"
+  },
+  "etc/mke2fs.conf": {
+    "mode": "0o644",
+    "sha256": "c998d64f9b58c2235186f8ee75ba602d1fdb2991d94695fd687ab0e8096b6727",
+    "source": "/etc/mke2fs.conf"
+  },
+  "expected/FINAL.sha256": {
+    "mode": "0o644",
+    "sha256": "4badf6874d8f5bcb531eeebbd70b8814c5c54a8c87247f79f1266975da3e7f0f",
+    "source": "/src/rusix/tests/brd-ext4/FINAL.sha256"
+  },
+  "expected/SHA256SUMS": {
+    "mode": "0o644",
+    "sha256": "b8fe76c42a436aa12c3efa253976561559c1bc9432c1a38343ac94ad0cb0de8b",
+    "source": "/src/rusix/tests/brd-ext4/SHA256SUMS"
+  },
+  "ext4-workload.sh": {
+    "mode": "0o644",
+    "sha256": "adab6c2e7c100bdadfad61f39d94687a7c30953e71c4eb04bd3ef5bb3e9cec38",
+    "source": "/src/rusix/tests/brd-ext4/workload.sh"
+  },
+  "init": {
+    "mode": "0o755",
+    "sha256": "578e9bb89984112f8184e31039a9e873544db6bba68af3c69c117cbcded6d5e3",
+    "source": "/out/builds/ext4-vm-ci-server/init"
+  },
+  "lib/x86_64-linux-gnu/libacl.so.1": {
+    "mode": "0o755",
+    "sha256": "3c03774961231d8485a4dba36ec359a95939a84719799c58cd26173e44bbde90",
+    "source": "/usr/lib/x86_64-linux-gnu/libacl.so.1.1.2302"
+  },
+  "lib/x86_64-linux-gnu/libattr.so.1": {
+    "mode": "0o755",
+    "sha256": "126e29f16f4a6da5cad9a0d9cf1cc817089ee41645a8581d19691a1b9a581172",
+    "source": "/usr/lib/x86_64-linux-gnu/libattr.so.1.1.2502"
+  },
+  "lib/x86_64-linux-gnu/libblkid.so.1": {
+    "mode": "0o755",
+    "sha256": "116b712c143ac68bb59f6d8e32ed8e05e0772c730a9ba55ec544dd28916af58c",
+    "source": "/usr/lib/x86_64-linux-gnu/libblkid.so.1.1.0"
+  },
+  "lib/x86_64-linux-gnu/libc.so.6": {
+    "mode": "0o755",
+    "sha256": "9792e3cbb541c8f44c7acf5f14f4022ea62998ecc787d326bed4d8b6547dfd92",
+    "source": "/usr/lib/x86_64-linux-gnu/libc.so.6"
+  },
+  "lib/x86_64-linux-gnu/libcom_err.so.2": {
+    "mode": "0o755",
+    "sha256": "dc4828400674492839b630c001db424cd38e5cecfcf46dbf705a637647e04bea",
+    "source": "/usr/lib/x86_64-linux-gnu/libcom_err.so.2.1"
+  },
+  "lib/x86_64-linux-gnu/libcrypto.so.3": {
+    "mode": "0o755",
+    "sha256": "8ae56f0a9481280a68c19f59809cd242a07a91ad7142944d21a878221992244b",
+    "source": "/usr/lib/x86_64-linux-gnu/libcrypto.so.3"
+  },
+  "lib/x86_64-linux-gnu/libe2p.so.2": {
+    "mode": "0o755",
+    "sha256": "e436d442d0453c844163c2a5e62b67891d1ceacf19560d4d38bb3444d8099c90",
+    "source": "/usr/lib/x86_64-linux-gnu/libe2p.so.2.3"
+  },
+  "lib/x86_64-linux-gnu/libext2fs.so.2": {
+    "mode": "0o755",
+    "sha256": "fa8293e8dfd3a3a5f699e769c60d39a723c5e9ed192e91bd3840765efd162c95",
+    "source": "/usr/lib/x86_64-linux-gnu/libext2fs.so.2.4"
+  },
+  "lib/x86_64-linux-gnu/libmount.so.1": {
+    "mode": "0o755",
+    "sha256": "1654d2cf948e3608cc0d38340807d4ddac1114315a3a77f7b274c4c859cb2181",
+    "source": "/usr/lib/x86_64-linux-gnu/libmount.so.1.1.0"
+  },
+  "lib/x86_64-linux-gnu/libpcre2-8.so.0": {
+    "mode": "0o755",
+    "sha256": "92e9b4167f9bbc237ca8f5526d82ee99ec9f8dbd0270ef1dd0ab24e2217f48e3",
+    "source": "/usr/lib/x86_64-linux-gnu/libpcre2-8.so.0.14.0"
+  },
+  "lib/x86_64-linux-gnu/libselinux.so.1": {
+    "mode": "0o755",
+    "sha256": "5cb5293b4e7590463b94f7b23152d54807a6a2ccaf8cac9e343908c6692c086c",
+    "source": "/usr/lib/x86_64-linux-gnu/libselinux.so.1"
+  },
+  "lib/x86_64-linux-gnu/libuuid.so.1": {
+    "mode": "0o755",
+    "sha256": "632fd43a9d8d6f3496833b7e62e7840f397163373dddf8b8eb0b2b7f36593117",
+    "source": "/usr/lib/x86_64-linux-gnu/libuuid.so.1.3.0"
+  },
+  "lib/x86_64-linux-gnu/libz.so.1": {
+    "mode": "0o755",
+    "sha256": "85590dd58edf5445e18bc7193e5ebc01ac5841f1ae187e97705a662e90c6421e",
+    "source": "/usr/lib/x86_64-linux-gnu/libz.so.1.3.1"
+  },
+  "lib/x86_64-linux-gnu/libzstd.so.1": {
+    "mode": "0o755",
+    "sha256": "27f07c9a49c2c956bcfb64cd4712976586a66facbf15fc7f09bc37413b5f2b21",
+    "source": "/usr/lib/x86_64-linux-gnu/libzstd.so.1.5.7"
+  },
+  "lib64/ld-linux-x86-64.so.2": {
+    "mode": "0o755",
+    "sha256": "c8438e4fde1934e61c88311633f00949ff645d5c04cdb8671fa3d78164d2f307",
+    "source": "/usr/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2"
+  },
+  "usr/bin/blockdev": {
+    "mode": "0o755",
+    "sha256": "9e13e7d55a6fe313fa98f66a411f64cf04b82354932328df91acfd9d620c666a",
+    "source": "/usr/sbin/blockdev"
+  },
+  "usr/bin/cat": {
+    "mode": "0o755",
+    "sha256": "8a5c20c3400a4058a487cd806111cc5138ef4d0fbc6714ff67c9432e38c2705a",
+    "source": "/usr/bin/cat"
+  },
+  "usr/bin/chmod": {
+    "mode": "0o755",
+    "sha256": "7e37f672db75ae783260e7565d26218d25cebbc5a6d61118284c9719d246a90e",
+    "source": "/usr/bin/chmod"
+  },
+  "usr/bin/cmp": {
+    "mode": "0o755",
+    "sha256": "751322036db972a763a66a5564b857707db53efedb6c96d12b19138bf0ec1b58",
+    "source": "/usr/bin/cmp"
+  },
+  "usr/bin/cp": {
+    "mode": "0o755",
+    "sha256": "5a3a8808bab81a67c6ac578670f5608595f1569948d4dc7d7d604c1d08d596d9",
+    "source": "/usr/bin/cp"
+  },
+  "usr/bin/dd": {
+    "mode": "0o755",
+    "sha256": "77df5e24d6c8bb5e1736d1e21eb5b25699ba5215a797ee029fcf234a637c1619",
+    "source": "/usr/bin/dd"
+  },
+  "usr/bin/ln": {
+    "mode": "0o755",
+    "sha256": "75bef899117adf42c64c2f15fee640755d18d4632ae0794578d268a74cc7af8b",
+    "source": "/usr/bin/ln"
+  },
+  "usr/bin/mount": {
+    "mode": "0o755",
+    "sha256": "2f36342bd2fef42343c4fa4a2a396a7f56c7c8f4ddcbd31c43205c62e152e6d4",
+    "source": "/usr/bin/mount"
+  },
+  "usr/bin/mv": {
+    "mode": "0o755",
+    "sha256": "7db4661c6397fe5fd5ba6837692aa5adb7dce1efc656369d7b08dfd6ece525a0",
+    "source": "/usr/bin/mv"
+  },
+  "usr/bin/rm": {
+    "mode": "0o755",
+    "sha256": "c959a237e7b95d229eea44764b2246fcb61a95dc679a10ad0cc97ad84c2316c1",
+    "source": "/usr/bin/rm"
+  },
+  "usr/bin/sha256sum": {
+    "mode": "0o755",
+    "sha256": "89f8c1d1ba3c76138f3771e1a91e2796ade6180b1c1e4258c04698ff32787c97",
+    "source": "/usr/bin/sha256sum"
+  },
+  "usr/bin/stat": {
+    "mode": "0o755",
+    "sha256": "128754b37ab743a539d889a91441c440f9b52df77f4e008b345ff221ce1daeaa",
+    "source": "/usr/bin/stat"
+  },
+  "usr/bin/sync": {
+    "mode": "0o755",
+    "sha256": "cbf7bb37ba1849b687c87d4fd3195312bc1bd8aa6221e70b22f8a5c5cf57a105",
+    "source": "/usr/bin/sync"
+  },
+  "usr/bin/truncate": {
+    "mode": "0o755",
+    "sha256": "8d940e9982bdd4b553a72ff6a4abceac9f4ec51d8d168ef115fda9e01bb3f59a",
+    "source": "/usr/bin/truncate"
+  },
+  "usr/bin/umount": {
+    "mode": "0o755",
+    "sha256": "3f3046ef1cdc5134eb0b7ac586c6fea3bcea22aa6614830a14e274f3905b6cd5",
+    "source": "/usr/bin/umount"
+  },
+  "usr/sbin/e2fsck": {
+    "mode": "0o755",
+    "sha256": "be1f2c99e0dc73640cffb549da5f3f4b15da0f89e7334c6730feb69eff784571",
+    "source": "/usr/sbin/e2fsck"
+  },
+  "usr/sbin/mkfs.ext4": {
+    "mode": "0o755",
+    "sha256": "14d64b707e37214aff4568470bb4d908232370684c7eff05465d78116c2c9c67",
+    "source": "/usr/sbin/mke2fs"
+  }
+}
