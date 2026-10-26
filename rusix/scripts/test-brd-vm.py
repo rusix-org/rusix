@@ -59,7 +59,8 @@ def validate_selection(profile, selection, config, core_selection=None):
 
 def validate_core_selection(profile, config, selection):
     """Require the declared core implementation as well as the BRD selection."""
-    expected = {"core-ext4-c": "c", "core-ext4-rust": "rust"}.get(profile)
+    expected = {"core-ext4-c": "c", "core-ext4-rust": "rust",
+                "server": "rust", "server-c": "c"}.get(profile)
     if expected is None:
         return None
     settings = set(config.splitlines())

@@ -17,7 +17,6 @@ fresh output directory outside the source tree:
 docker build --platform linux/amd64 -t rusix-toolchain:trixie-20261025 rusix/ci
 bash rusix/ci/run-container.sh rusix-toolchain:trixie-20261025 ../rusix-ci-kunit kunit
 bash rusix/ci/run-container.sh rusix-toolchain:trixie-20261025 ../rusix-ci-brd brd
-bash rusix/ci/run-container.sh rusix-toolchain:trixie-20261025 ../rusix-ci-server server
 ```
 
 The wrapper selects KVM only if `/dev/kvm` is accessible, otherwise TCG. Set
@@ -43,7 +42,34 @@ all `rusix/tests/test_*.py` regressions before building one kernel:
 | `completion-c` / `completion-rust` | The same BRD/core tests, paired with original C / opt-in Rust completion entry points; archive/object/symbol evidence verifies selection; BUG, lockdep/raw-lock nesting, atomic-sleep and list validation enabled |
 | `completion-plain-c` / `completion-plain-rust` | Same required BRD/core inventory without lockdep, debug raw locks or list instrumentation; BUG remains enabled. Local profiles exercise configuration-dependent ABI and initialization. |
 | `core-ext4-c` / `core-ext4-rust` | Ordinary ext4 userspace plus four pipe/poll/epoll/eventfd cases, block, parameter and partition suite with Rust BRD in both; only C / Rust completion selection differs. Requires the fixture image above and explicit core symbol proof. |
-| `server` | Build and linked-ELF language measurement; archives vmlinux, map, config and JSON, without runtime or filesystem verification |
+| `server` / `server-c` | Declared server with Rust / C core, Rust BRD in both: six ext4 and four wake cases, then linked-ELF language measurement. Requires the ext4 fixture image. DEBUG_FS and KUnit remain disabled. |
+
+The canonical `x86_64-server.config` selects the migrated Rust core. `server-c`
+is derived by changing only that option; each build archives `config-template`,
+`config-input` and `config-input.json` with their hashes. The ext4 runner verifies
+the derivation and all requested target settings before boot. The server profiles
+keep debugfs disabled, so the separate block/accounting suite remains on its
+existing profiles. Server runtime currently uses two vCPUs and no NIC; enabled
+networking/virtio drivers are not transport compatibility evidence.
+
+After building the [pinned ext4 fixture image](../tests/brd-ext4/README.md), run
+both profiles serially from the same clean revision and inspected image:
+
+```bash
+bash rusix/ci/run-container.sh rusix-ext4:trixie-20261025 ../rusix-ci-server-c server-c
+bash rusix/ci/run-container.sh rusix-ext4:trixie-20261025 ../rusix-ci-server server
+python3 rusix/scripts/server_target.py compare \
+  --source rusix/configs/x86_64-server.config \
+  --rust ../rusix-ci-server/builds/ci-server/.config \
+  --c ../rusix-ci-server-c/builds/ci-server-c/.config \
+  > ../rusix-ci-server/logs/server-pair-config.json
+```
+
+A matched-pair claim requires that comparison to pass, both `ci.exit` values to
+be zero, and matching guest init/initramfs hashes, source revision, container ID
+and VM parameters in the run evidence. Record those checks with both
+`logs/languages.json` files; separate successful runs alone do not prove parity.
+Measurement uses the exact tested build's recorded config, vmlinux and map.
 
 Choose any listed profile as the final `run-container.sh` argument, with a fresh
 output directory. The wrapper records the image ID; the ext4 runner also binds

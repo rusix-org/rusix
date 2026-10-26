@@ -48,7 +48,7 @@ jobs:
             -t rusix-toolchain:ci rusix/ci 2>&1 \
             | tee "$RUSIX_CI_OUTPUT/logs/container-build.log"
       - name: Build pinned ext4 utility image
-        if: startsWith(inputs.profile, 'brd-ext4-')
+        if: startsWith(inputs.profile, 'brd-ext4-') || inputs.profile == 'server'
         shell: bash
         run: |
           set -o pipefail
@@ -60,7 +60,7 @@ jobs:
         run: |
           set -o pipefail
           case "$RUSIX_CI_PROFILE" in
-            brd-ext4-*) image=rusix-ext4:ci ;;
+            brd-ext4-*|server) image=rusix-ext4:ci ;;
             *) image=rusix-toolchain:ci ;;
           esac
           bash rusix/ci/run-container.sh "$image" \

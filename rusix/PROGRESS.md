@@ -24,6 +24,14 @@ locking/lifetime contracts, test inventory and remaining C boundaries. Selection
 remains default-off and builtin-only; known incompatible counter-access drivers
 are excluded.
 
+Server promotion tooling is implemented on `rusix/server-core`: canonical
+server selects Rust core, `server-c` derives the C comparison, and both profiles
+run ext4/wake consumers before measuring the same build. Eight host gate tests
+cover derivation/provenance and rejection paths; target builds, paired VM runs
+and refreshed measurements are pending. [Local commands](ci/README.md).
+The disabled manual workflow's existing server choice now selects the ext4
+fixture image; no hosted workflow was enabled, dispatched or tested.
+
 Declared x86_64 server measurement at `7effedcbb1bf`: executable C
 **5,753,281 bytes**, Rust **145,083**, assembly **45,104**, generated **28**,
 linker/padding **2,107,049**, unknown **0**.

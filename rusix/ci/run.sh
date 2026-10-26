@@ -5,8 +5,8 @@ set -euo pipefail
 source "$(dirname -- "${BASH_SOURCE[0]}")/../scripts/repo-paths.sh"
 profile=${1:-}
 case "$profile" in
-    kunit|brd|brd-rust|brd-kunit|brd-ext4-c|brd-ext4-rust|core-ext4-c|core-ext4-rust|completion-c|completion-rust|completion-plain-c|completion-plain-rust|server) ;;
-    *) echo 'Usage: bash rusix/ci/run.sh kunit|brd|brd-rust|brd-kunit|brd-ext4-c|brd-ext4-rust|core-ext4-c|core-ext4-rust|completion-c|completion-rust|completion-plain-c|completion-plain-rust|server' >&2; exit 2 ;;
+    kunit|brd|brd-rust|brd-kunit|brd-ext4-c|brd-ext4-rust|core-ext4-c|core-ext4-rust|completion-c|completion-rust|completion-plain-c|completion-plain-rust|server|server-c) ;;
+    *) echo 'Usage: bash rusix/ci/run.sh kunit|brd|brd-rust|brd-kunit|brd-ext4-c|brd-ext4-rust|core-ext4-c|core-ext4-rust|completion-c|completion-rust|completion-plain-c|completion-plain-rust|server|server-c' >&2; exit 2 ;;
 esac
 mkdir -p "$RUSIX_OUTPUT_ROOT/logs" "$RUSIX_OUTPUT_ROOT/tmp"
 export TMPDIR="$RUSIX_OUTPUT_ROOT/tmp"
@@ -69,13 +69,17 @@ elif [[ "$profile" == brd-ext4-c || "$profile" == brd-ext4-rust || "$profile" ==
         "$RUSIX_OUTPUT_ROOT/builds/ci-$profile" "ci-$profile" --build-evidence "${evidence[0]}"
 else
     shopt -s nullglob
-    evidence=("$RUSIX_OUTPUT_ROOT"/logs/ci-server-build.*)
+    evidence=("$RUSIX_OUTPUT_ROOT"/logs/ci-$profile-build.*)
     [[ ${#evidence[@]} == 1 ]] || {
         echo 'Expected one server build evidence directory in a fresh output.' >&2; exit 1;
     }
+    # Exact declared target has DEBUG_FS=n: run ext4/wake consumers directly,
+    # keeping the separate block/accounting profile's debugfs gate intact.
+    python3 "$RUSIX_PROJECT/scripts/test-brd-ext4-vm.py" \
+        "$RUSIX_OUTPUT_ROOT/builds/ci-$profile" "ci-$profile" --build-evidence "${evidence[0]}"
     python3 "$RUSIX_PROJECT/scripts/measure-kernel-languages.py" \
-        "$RUSIX_OUTPUT_ROOT/builds/ci-server" --build-evidence "${evidence[0]}" \
-        --map "$RUSIX_OUTPUT_ROOT/builds/ci-server/vmlinux.map" \
-        --vmlinux "$RUSIX_OUTPUT_ROOT/builds/ci-server/vmlinux" \
+        "$RUSIX_OUTPUT_ROOT/builds/ci-$profile" --build-evidence "${evidence[0]}" \
+        --map "$RUSIX_OUTPUT_ROOT/builds/ci-$profile/vmlinux.map" \
+        --vmlinux "$RUSIX_OUTPUT_ROOT/builds/ci-$profile/vmlinux" \
         --output "$RUSIX_OUTPUT_ROOT/logs/languages.json"
 fi

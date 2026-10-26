@@ -16,6 +16,7 @@ import sys
 
 sys.dont_write_bytecode = True
 from rusix_paths import resolve_paths
+import server_target
 
 # Share hash/provenance and newc primitives with the existing six-case runner;
 # its guest workload and acceptance gate are not changed or reused as ext4 proof.
@@ -54,7 +55,8 @@ def accept_console(console, qemu_exit):
 
 def validate_selection(profile, selection, config, core_selection=None):
     expected = {"brd-ext4-c": "brd-c", "brd-ext4-rust": "brd-rust",
-                "core-ext4-c": "brd-rust", "core-ext4-rust": "brd-rust"}.get(profile)
+                "core-ext4-c": "brd-rust", "core-ext4-rust": "brd-rust",
+                "server": "brd-rust", "server-c": "brd-rust"}.get(profile)
     if expected is None or selection != f"implementation={expected}":
         raise ValueError("Ext4 build profile and BRD selection proof must agree")
     settings = set(config.splitlines())
@@ -66,6 +68,9 @@ def validate_selection(profile, selection, config, core_selection=None):
     if "CONFIG_KUNIT=y" in settings:
         raise ValueError("Ext4 guests must disable KUnit")
     _common.validate_core_selection(profile, config, core_selection)
+    if profile in server_target.PROFILES:
+        source = Path(__file__).resolve().parents[1] / "configs/x86_64-server.config"
+        server_target.validate_resolved(source.read_text(), profile, config)
     return expected
 
 
@@ -228,7 +233,9 @@ def run(args, paths, evidence):
     implementation = validate_selection(profile, first_line(proof / "selection.log"),
                                         config.read_text(),
                                         first_line(proof / "completion-selection.log")
-                                        if profile.startswith("core-ext4-") else None)
+                                        if profile.startswith("core-ext4-") or profile in server_target.PROFILES else None)
+    if profile in server_target.PROFILES:
+        server_target.verify(paths.project / "configs/x86_64-server.config", profile, proof, config)
     check_hashes(proof / "build.sha256", [kernel, config])
     if config.read_bytes() != (proof / "config").read_bytes():
         raise ValueError("Resolved configuration differs from build evidence")
@@ -274,7 +281,8 @@ def run(args, paths, evidence):
     archive.write_bytes(rootfs.archive())
     (evidence / "rootfs-files.json").write_text(json.dumps(rootfs.sources, indent=2, sort_keys=True) + "\n")
     (evidence / "rootfs-elf.json").write_text(json.dumps(rootfs.elf_records, indent=2, sort_keys=True) + "\n")
-    sources = [Path(__file__).resolve(), Path(_common.__file__), paths.project / "scripts/rusix_paths.py"]
+    sources = [Path(__file__).resolve(), Path(_common.__file__), Path(server_target.__file__),
+               paths.project / "scripts/rusix_paths.py"]
     sources += [path for path in fixture.iterdir() if path.is_file()]
     metadata = {"source_revision": revision, "implementation": implementation, "profile": profile,
                 "container_image": image_id, "config_sha256": digest(config),
