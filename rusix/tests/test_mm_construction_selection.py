@@ -3,6 +3,7 @@
 import importlib.util
 from pathlib import Path
 import sys
+import subprocess
 import unittest
 ROOT=Path(__file__).resolve().parents[2]
 sys.path.insert(0,str(ROOT/'rusix/scripts'))
@@ -19,7 +20,8 @@ MM_RELOC=' 20: callq 0\n 21: R_X86_64_PLT32 rusix_mm_init-0x4\n'
 
 class Selection(unittest.TestCase):
     def test_full_fork_two_insertions(self):
-        text=(ROOT/'kernel/fork.c').read_text();m.original_policy(text)
+        text=subprocess.check_output(['git','show','0fd31f0fde1744335d3c745185b99b7e8966a6a3:kernel/fork.c'],cwd=ROOT,text=True);m.original_policy(text)
+        with self.assertRaises(ValueError):m.original_policy((ROOT/'kernel/fork.c').read_text())
         for bad in (text+'\n',text.replace('return rusix_mm_init(mm, p, user_ns);','mm++; return rusix_mm_init(mm, p, user_ns);'),
                     text.replace('mm->user_ns = get_user_ns(user_ns);','mm->user_ns = user_ns;'),
                     text.replace('return rusix_dup_task_struct(orig, node);','return NULL;'),

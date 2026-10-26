@@ -85,3 +85,7 @@
 #endif
 #include "workqueue.c"
 #include "xarray.c"
+
+#ifdef CONFIG_RUSIX_MM_RELEASE_TEST
+#include "mm_release_test.c"
+#endif

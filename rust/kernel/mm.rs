@@ -295,3 +295,6 @@ impl Drop for VmaReadGuard<'_> {
         unsafe { bindings::vma_end_read(self.vma.as_ptr()) };
     }
 }
+
+#[cfg(CONFIG_RUSIX_MM_RELEASE_TEST)]
+mod release_tests;

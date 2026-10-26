@@ -24,6 +24,17 @@ case "${1:-}" in
         cpus=2
         shift
         ;;
+    --mm-release|--mm-release-combined)
+        mode=mm-release
+        filter=rusix_mm_release
+        gate=validate-mm-release-kunit.py
+        if [[ "$1" == --mm-release-combined ]]; then
+            mode=mm-release-combined; filter='rusix_*'; baseline=(--combined)
+        fi
+        required=(KUNIT RUST SMP RUSIX_BRD_RUST RUSIX_MM_CONSTRUCTION_RUST RUSIX_MM_RELEASE_TEST SERIAL_8250_CONSOLE)
+        cpus=2
+        shift
+        ;;
     --brd)
         mode=brd
         filter='rusix_*'
@@ -34,7 +45,7 @@ case "${1:-}" in
         ;;
 esac
 if [[ $# != 2 || ! "$2" =~ ^[a-zA-Z0-9_-]+$ ]]; then
-    echo 'Usage: bash rusix/scripts/boot-kunit.sh [--baseline|--brd|--completion] BUILD_DIRECTORY EVIDENCE_LABEL' >&2
+    echo 'Usage: bash rusix/scripts/boot-kunit.sh [--baseline|--brd|--completion|--mm-release|--mm-release-combined] BUILD_DIRECTORY EVIDENCE_LABEL' >&2
     exit 2
 fi
 build=$(cd -- "$1" && pwd)
@@ -65,8 +76,11 @@ fi
 printf '%s\n' "$mode" > "$run/mode.txt"
 sha256sum "$RUSIX_PROJECT/scripts/boot-kunit.sh" "$RUSIX_PROJECT/scripts/$gate" \
     > "$run/scripts.sha256"
-if [[ "$mode" == completion ]]; then
+if [[ "$mode" == completion || "$mode" == mm-release* ]]; then
     sha256sum "$RUSIX_PROJECT/scripts/validate-brd-kunit.py" >> "$run/scripts.sha256"
+fi
+if [[ "$mode" == mm-release* ]]; then
+    sha256sum "$RUSIX_PROJECT/scripts/validate-completion-kunit.py" >> "$run/scripts.sha256"
 fi
 sha256sum "$build/arch/x86/boot/bzImage" "$build/.config" > "$RUSIX_OUTPUT_ROOT/logs/$label-inputs.sha256"
 firmware=()

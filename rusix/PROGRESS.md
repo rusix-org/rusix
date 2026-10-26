@@ -141,8 +141,14 @@ distinct; asynchronous callers retain workqueue deferral and the original atomic
 barriers. Original C bodies reconstruct byte-for-byte. Root and independent
 source reviews, formatting and diff checks pass; exact inputs are recorded in
 `linux-out/mm-release-source-001`. No release kernel has been compiled or booted.
-Next add paired selection proofs and focused reference/async cleanup coverage,
-after validating the preceding constructor candidates.
+Paired profiles and source/preprocessor/object/callback selection gates are
+implemented. Four real-MM KUnit cases cover nonfinal users, retained storage,
+atomic-context asynchronous release and fresh exec-style storage drop. Root
+and independent reviews pass; 20 host scripts (203 cases), formatting and shell
+checks pass with exact inputs in `linux-out/mm-release-tooling-host-002`.
+Required runtime gates are 80 combined, 67 core and four release cases. All
+release kernel builds and VM runs remain pending; unsupported callback relocation
+forms fail closed until reviewed against actual compiled objects.
 [Release contract and remaining C](experiments/mm-release/README.md).
 
 ### Constructor verification tooling update
@@ -156,7 +162,8 @@ result. The reviewed archive payload/path fix from `0af2d8b944b2` is inherited
 here, including real thin/regular archive regression tests; it does not change
 constructor policy.
 
-45 of 46 archive, selection and guest-gate host cases pass. The original MM
-full-fork reconstruction test rejects the additional release-policy insertion;
-that failure is retained and the construction-only gate has not been widened.
+The earlier 45/46 host run retained the construction-only gate
+rejection of release additions. A separate release gate now reconstructs all
+three migrations while preserving the strict historical constructor gate; the
+203-case run above passes.
 Logs and exact inputs: `linux-out/constructor-archive-propagation-host-001/linux-mm-release`.

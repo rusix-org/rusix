@@ -2250,3 +2250,11 @@ config RUSIX_MM_RELEASE_RUST
 	  primitives remain C, as do inline mmgrab/mmget/mmdrop operations.
 	  No exclusive whole-MM references or Rust-owned layout are introduced.
 	  Leave disabled for the preserved original C release implementation.
+
+config RUSIX_MM_RELEASE_TEST
+	bool "Rusix MM release lifecycle KUnit fixtures"
+	depends on KUNIT=y && RUST && RUSIX_MM_CONSTRUCTION_RUST
+	default n
+	help
+	  Run real MM reference and mapping release cases in retained workers.
+	  Enable for both C and Rust release comparison kernels only.
