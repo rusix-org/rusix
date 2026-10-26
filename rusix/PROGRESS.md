@@ -23,7 +23,7 @@ provisional invalid-parameter exception. No subsystem divergence point is declar
 Last completed LTS x86_64 server measurement at `57820ea1ec`: executable
 C **5,753,137 bytes**, Rust **145,083**, assembly **45,104**, generated **28**,
 linker/padding **2,107,065**, unknown **0**. Raw report:
-`linux-out/lts-server-002/logs/languages.json`. This includes inherited Rust
+[archived measurement](docs/evidence/lts-server-initial/manifest.json). This includes inherited Rust
 infrastructure and is not a completion percentage; it establishes build/link
 composition, not server runtime. The newly enabled legacy block-autoload option
 requires an updated measurement.
