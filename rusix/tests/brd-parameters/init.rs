@@ -22,6 +22,7 @@ unsafe extern "C" {
     ) -> c_int;
     fn mknod(path: *const c_char, mode: c_uint, device: c_ulong) -> c_int;
     fn ioctl(fd: c_int, request: c_ulong, ...) -> c_int;
+    fn tcdrain(fd: i32) -> i32;
     fn sync();
     fn reboot(command: c_int) -> c_int;
 }
@@ -354,6 +355,16 @@ fn main() {
     }
     let _ = io::stdout().flush();
     let _ = io::stderr().flush();
+    // SAFETY: Authorized guest PID1 inherited the live console descriptors.
+    // Flush only drains Rust buffering; tcdrain also waits for the serial TX
+    // queue before shutdown printk messages can interleave with test markers.
+    if unsafe { tcdrain(1) } != 0 || unsafe { tcdrain(2) } != 0 {
+        eprintln!(
+            "RUSIX_BRD_PARAMETERS_FAIL console drain {}",
+            io::Error::last_os_error()
+        );
+        process::exit(2);
+    }
     // SAFETY: Only authorized guest PID1 reaches sync/reboot; no pointer args.
     unsafe {
         sync();

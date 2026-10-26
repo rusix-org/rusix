@@ -14,6 +14,7 @@ const TOKEN: &str = "rusix.brd_ext4=1";
 const PAYLOAD_BYTES: usize = 1_048_576;
 
 unsafe extern "C" {
+    fn tcdrain(fd: i32) -> i32;
     fn sync();
     fn reboot(command: i32) -> i32;
 }
@@ -102,6 +103,16 @@ fn main() {
     }
     let _ = io::stdout().flush();
     let _ = io::stderr().flush();
+    // SAFETY: Authorized guest PID1 inherited the live console descriptors.
+    // Flush only drains Rust buffering; tcdrain also waits for the serial TX
+    // queue before shutdown printk messages can interleave with test markers.
+    if unsafe { tcdrain(1) } != 0 || unsafe { tcdrain(2) } != 0 {
+        eprintln!(
+            "RUSIX_EXT4_FAIL console drain {}",
+            io::Error::last_os_error()
+        );
+        process::exit(2);
+    }
     // SAFETY: We are the authorized VM's PID 1. These libc functions take no
     // pointers; RB_AUTOBOOT is Linux's restart command. No host path reaches it.
     unsafe {
