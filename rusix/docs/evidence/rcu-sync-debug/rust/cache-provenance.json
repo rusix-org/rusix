@@ -1,0 +1,90 @@
+{
+  "status": "PREPARED_NOT_RUN",
+  "target_source": "9f7564691c7039a1f42bdb09dba75612456d26f1",
+  "target_profile": "rcu-sync-rust",
+  "seed_output": "/home/aaron/code/rusix/linux-out/lts-rcu-list-debug-rust-001",
+  "seed_source": "c4e7efcf22b659bab2d82f2d9892cf2215aea58f",
+  "seed_terminal_status": {
+    "container.exit": "0",
+    "ci.exit": "0",
+    "build.exit": "0"
+  },
+  "copied_artifact_sha256": {
+    "builds/ci-rcu-sync-rust/.config": "c98c9c5c9b498bcd72142de9ea9563002d659298575486d1d58c874e9cc76dda",
+    "builds/ci-rcu-sync-rust/arch/x86/boot/bzImage": "07f91ab90d1dab853fde49927baa7eb062093516f171b25e99f7d64a952adbf9",
+    "builds/ci-rcu-sync-rust/vmlinux": "0f2681f45aa40e68d445e0edfb0c98f346e4f6e2d51a52c172ea22e4e75112f3",
+    "builds/ci-rcu-sync-rust/vmlinux.map": "85a84ae4ab3a9dc2491015475c318d98c8c037965e02f3b180cfeedc75c1ff8b"
+  },
+  "source_delta_invalidation": {
+    "source_delta": [
+      "M\tkernel/rcu/Kconfig",
+      "M\tkernel/rcu/Makefile",
+      "A\tkernel/rcu/rcu_sync_test.c",
+      "A\tkernel/rcu/sync_rust.rs",
+      "M\trusix/PROGRESS.md",
+      "M\trusix/ci/run-container.sh",
+      "M\trusix/ci/run.sh",
+      "A\trusix/configs/x86_64-rcu-sync-c.config",
+      "A\trusix/configs/x86_64-rcu-sync-plain-c.config",
+      "A\trusix/configs/x86_64-rcu-sync-plain-rust.config",
+      "A\trusix/configs/x86_64-rcu-sync-rust.config",
+      "A\trusix/experiments/rcu-sync/README.md",
+      "M\trusix/scripts/boot-kunit.sh",
+      "M\trusix/scripts/build-kernel.sh",
+      "A\trusix/scripts/validate-rcu-sync-kunit.py",
+      "M\trusix/scripts/verify-rcu-list-selection.py",
+      "A\trusix/scripts/verify-rcu-sync-selection.py",
+      "A\trusix/tests/test_rcu_sync_kunit_gate.py",
+      "A\trusix/tests/test_rcu_sync_selection.py",
+      "M\trust/bindings/bindings_helper.h",
+      "M\trust/helpers/helpers.c",
+      "A\trust/helpers/rcu_sync.c",
+      "A\trust/helpers/rcu_sync_test.c",
+      "M\trust/kernel/sync/rcu.rs",
+      "A\trust/kernel/sync/rcu/sync_tests.rs"
+    ],
+    "removed": {
+      "rust/helpers/helpers.o": {
+        "sha256": "df1cf456acb5243254d508e0546adaf080326aa9ac94bdebb2a80b8139077afa",
+        "mtime_ns": 1793043860247654320
+      },
+      "rust/helpers/.helpers.o.cmd": {
+        "sha256": "2cbbe1989bebdd39ec29e0a676402c019472c2a0347efe3adabe291ec8dca3ec",
+        "mtime_ns": 1793043860262654334
+      },
+      "rust/kernel.o": {
+        "sha256": "404e419d708a437b5e766dfe0127ae3a561fcab78e51e7f82e0cd7e7846bd92e",
+        "mtime_ns": 1793043896375688014
+      },
+      "rust/.kernel.o.cmd": {
+        "sha256": "355294ffeaa47f3743636a2574419632b40ec1a7e16f64f07c9ce3f71094fd79",
+        "mtime_ns": 1793043896382688020
+      },
+      "rust/bindings/bindings_generated.rs": {
+        "sha256": "07e1eb24ec578d12985592882e0cafbbf6bfb27d0bbd3f5e6a0f39b90103de32",
+        "mtime_ns": 1793043856114650460
+      },
+      "rust/bindings/.bindings_generated.rs.cmd": {
+        "sha256": "94d3aa35f66ad046dc939b6c97bf55ab38780972b4d3fc459d6895cafb9c7016",
+        "mtime_ns": 1793043856131650476
+      },
+      "rust/bindings/bindings_helpers_generated.rs": {
+        "sha256": "cf50a3662d356a84e107a6e8425bc4d9ded7a666cf57644c6d8314c488f4ee37",
+        "mtime_ns": 1793043858237652443
+      },
+      "rust/bindings/.bindings_helpers_generated.rs.cmd": {
+        "sha256": "749736b4d7d808983b00db8aa9722d1645d28ede436e6c9a49e7228e62aa49ac",
+        "mtime_ns": 1793043858247652452
+      },
+      "rust/bindings/builtin_init_generated.rs": {
+        "sha256": "4974026f49a4c94cd4b8f9dd620f7d08bc823ae6d0e233f5e860c4536b7444e4",
+        "mtime_ns": 1793043858416652610
+      },
+      "rust/bindings/.builtin_init_generated.rs.cmd": {
+        "sha256": "590145296813b71037afca88d6e3e717717128af808fae04687b4b570ee8d424",
+        "mtime_ns": 1793043858425186002
+      }
+    },
+    "reason": "Candidate modified sources predate seed objects; force helper/bindgen/kernel regeneration without touching source"
+  }
+}

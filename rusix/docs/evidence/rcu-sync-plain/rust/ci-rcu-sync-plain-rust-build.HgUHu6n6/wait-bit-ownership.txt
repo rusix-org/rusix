@@ -1,0 +1,3 @@
+/out/builds/ci-rcu-sync-plain-rust/kernel/sched/wait_bit_rust.o: table=_RNvCsh9aDLyLKkIG_13wait_bit_rust14BIT_WAIT_TABLE section=.data..cacheline_aligned address=0 size=6144 alignment=64 head-size=24; init=0 section=.init.text
+/out/builds/ci-rcu-sync-plain-rust/vmlinux: table=_RNvCsh9aDLyLKkIG_13wait_bit_rust14BIT_WAIT_TABLE section=.data address=ffffffff81807180 size=6144 alignment=64 head-size=24; init=ffffffff819f1120 section=.init.text
+LOCKDEP=n: no storage or distinct identity required for empty key type

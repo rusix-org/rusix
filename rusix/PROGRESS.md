@@ -106,15 +106,22 @@ on a generated field name and three unnecessary-unsafe warnings. The corrected
 [Retained failure](docs/evidence/brd-parameter-owner-initial/manifest.json).
 
 RCU callback-list policy translates all 25 definitions on `rusix/rcu-callback-lists`.
-Ten new cases cover literal list transitions and real RCU/SRCU consumers; the
-strict gates require 86 combined or ten isolated RCU cases. Fourteen host gate
-scripts pass; kernel compilation and C/Rust VM parity remain unexecuted.
+At `c4e7efcf22b6`, C/Rust debug and plain pairs pass 86 combined, 67 core and
+ten isolated list cases, including real RCU/SRCU consumers. These prerequisite
+archives are identified in the sync evidence below; integration remains separate.
 The [contract](experiments/rcu-lists/README.md) records shared C access/order
 primitives and the subsequent storage-ownership work.
 
-RCU sync now implements its five-state protocol and wait loop on
-`rusix/rcu-sync-policy`, with five differential fixtures connecting callbacks to
-per-CPU semaphore consumers. Independent source review and sixteen host gate
-scripts pass; kernel compilation and runtime parity remain pending. The
-[contract](experiments/rcu-sync/README.md) records lifetime, ordering and the
-91 combined/67 core/ten list/five sync gates.
+At historical source `9f7564691c70`, RCU sync's four external functions, private
+callback and wait loop pass local C/Rust debug and plain KUnit pairs. Each kernel
+passes 91 combined, 67 isolated core, ten list and five sync cases, with exact
+linked-definition and configuration comparison proofs. Rust BRD/core/list remain
+selected on both sides. [Debug evidence](docs/evidence/rcu-sync-debug/manifest.json)
+and [plain evidence](docs/evidence/rcu-sync-plain/manifest.json) retain the original
+source identity; later documentation commits are not tested kernel revisions.
+
+The [contract](experiments/rcu-sync/README.md) records lifetime, ordering and
+executing C boundaries. Ordinary-userspace/server integration, arm64, broader
+contention, freeze/thaw, CPU-hotplug and performance coverage remain pending.
+Next verify per-CPU semaphore/rcuwait policy before transferring an embedded
+owner; no RCU divergence or complete subsystem ownership is declared.

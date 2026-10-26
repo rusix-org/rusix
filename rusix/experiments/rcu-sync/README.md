@@ -1,7 +1,12 @@
 # RCU sync state machine
 
-Status: implementation and five fixtures passed source review; sixteen host
-gate scripts pass. Kernel compilation and runtime parity remain unexecuted.
+Status: historical source `9f7564691c70` passes local C/Rust debug and plain
+KUnit pairs: each kernel passes 91 combined, 67 isolated core, ten list and five
+sync cases. Linked selection and matching configuration proofs are retained in
+[debug](../../docs/evidence/rcu-sync-debug/manifest.json) and
+[plain](../../docs/evidence/rcu-sync-plain/manifest.json) archives (252 records
+each). Both sides keep Rust BRD/core/list. These results belong to that kernel
+source, not to subsequent documentation commits.
 Reference: Linux 6.18.58 `kernel/rcu/sync.c`, retained unchanged. This slice
 translates its four external functions, private callback and wait loop. It
 follows [callback-list policy](../rcu-lists/README.md); neither slice replaces
@@ -48,9 +53,9 @@ call the barrier.
 
 ## Verification and next ownership step
 
-Require paired C/Rust state and real-consumer tests before promotion: first and
-nested enter, partial/last exit, outstanding-callback reuse, replay, destruction,
-a held reader across CPUs, and per-CPU semaphore writer handoff. Controllers
+The verified five fixtures cover first and nested enter, partial/last exit,
+outstanding-callback reuse, replay, destruction, a held reader across CPUs and
+per-CPU semaphore writer handoff. Controllers
 must have bounded observations; workers, tasks and callback allocations survive
 timeouts. Do not invoke a synthetic callback concurrently with a queued head.
 The real replay case drains the original callback and its successor before
@@ -63,7 +68,10 @@ unwind Rust destructors.
 Keep linked-definition selection, exact test inventories and existing storage
 gates. Dedicated profiles require 91 combined cases, plus isolated controls for
 67 core, ten callback-list and five sync cases. The list-only filter names its
-exact suite so the new sync suite cannot accidentally enter that isolated run. Unsupported stress and architecture claims require separate evidence.
+exact suite so the new sync suite cannot accidentally enter that isolated run.
+Ordinary-userspace/server integration, arm64, broader contention, freeze/thaw,
+CPU-hotplug and performance results remain pending. These bounded KUnit cases
+establish neither exhaustive races nor full RCU ownership.
 
 Next migrate per-CPU semaphore/rcuwait policy and counter primitives as a coherent
 unit, then one real embedded owner. That step must encode reader context, writer

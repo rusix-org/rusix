@@ -1,0 +1,54 @@
+implementation=wake-rust
+/out/builds/ci-rcu-sync-rust/kernel/sched/wait_rust.o
+/out/builds/ci-rcu-sync-rust/kernel/sched/wait_rust.o
+00000000000006a0 T __init_waitqueue_head
+0000000000000470 T add_wait_queue
+0000000000000500 T add_wait_queue_exclusive
+0000000000000550 T add_wait_queue_priority
+00000000000005e0 T add_wait_queue_priority_exclusive
+0000000000000670 T remove_wait_queue
+0000000000000010 T __wake_up
+00000000000000d0 T __wake_up_on_current_cpu
+0000000000000170 T __wake_up_locked
+00000000000001f0 T __wake_up_locked_key
+0000000000000270 T __wake_up_sync_key
+0000000000000330 T __wake_up_locked_sync_key
+00000000000003b0 T __wake_up_sync
+00000000000006e0 T prepare_to_wait
+0000000000000780 T prepare_to_wait_exclusive
+0000000000000810 T prepare_to_wait_event
+00000000000008e0 T finish_wait
+0000000000000930 T autoremove_wake_function
+0000000000000950 T wait_woken
+00000000000009a0 T woken_wake_function
+00000000000009e0 T woken_wake_bit_function
+0000000000000ab0 T do_wait_intr
+0000000000000ac0 T do_wait_intr_irq
+/out/builds/ci-rcu-sync-rust/vmlinux
+ffffffff812ad6d0 T __init_waitqueue_head
+ffffffff812ad4a0 T add_wait_queue
+ffffffff812ad530 T add_wait_queue_exclusive
+ffffffff812ad580 T add_wait_queue_priority
+ffffffff812ad610 T add_wait_queue_priority_exclusive
+ffffffff812ad6a0 T remove_wait_queue
+ffffffff812ad040 T __wake_up
+ffffffff812ad100 T __wake_up_on_current_cpu
+ffffffff812ad1a0 T __wake_up_locked
+ffffffff812ad220 T __wake_up_locked_key
+ffffffff812ad2a0 T __wake_up_sync_key
+ffffffff812ad360 T __wake_up_locked_sync_key
+ffffffff812ad3e0 T __wake_up_sync
+ffffffff812ad710 T prepare_to_wait
+ffffffff812ad7b0 T prepare_to_wait_exclusive
+ffffffff812ad840 T prepare_to_wait_event
+ffffffff812ad910 T finish_wait
+ffffffff812ad960 T autoremove_wake_function
+ffffffff812ad980 T wait_woken
+ffffffff812ad9d0 T woken_wake_function
+ffffffff812ada10 T woken_wake_bit_function
+ffffffff812adae0 T do_wait_intr
+ffffffff812adaf0 T do_wait_intr_irq
+c38f3ead80c6cc024362bba353e07126ad3280144519a77ec2a365d1200c5fcc  /src/kernel/sched/wait.c
+4f63790664697717f71a61bbecc95fcc0b4ec61d3a13f049bf695d1620e846e4  /out/builds/ci-rcu-sync-rust/kernel/sched/wait_rust.o
+675a248d822de8c5de8d75ed938167cc66fa2cbbfd13fceeef3d7fa672b6c191  /src/kernel/sched/wait_rust.rs
+9565478edefd688071f48e889b70a5e5c01d908fb9de0a850d6f8ddb806ace83  /src/rust/helpers/wait_policy.c

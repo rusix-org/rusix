@@ -1,0 +1,62 @@
+{
+    "name": "KUnit Test Group",
+    "sub_groups": [
+        {
+            "name": "rusix_rcu_sync",
+            "sub_groups": [],
+            "test_cases": [
+                {
+                    "name": "initializer_and_nested_public_protocol",
+                    "status": "PASS"
+                },
+                {
+                    "name": "held_reader_blocks_first_and_queued_enter",
+                    "status": "PASS"
+                },
+                {
+                    "name": "exit_reuse_replay_and_worker_destructor",
+                    "status": "PASS"
+                },
+                {
+                    "name": "synthetic_callback_state_transitions",
+                    "status": "PASS"
+                },
+                {
+                    "name": "percpu_rwsem_reader_writer_handoff",
+                    "status": "PASS"
+                }
+            ],
+            "misc": {
+                "tests": 5,
+                "passed": 5,
+                "failed": 0,
+                "crashed": 0,
+                "skipped": 0,
+                "errors": 0
+            },
+            "arch": "",
+            "defconfig": "",
+            "build_environment": "",
+            "lab_name": null,
+            "kernel": null,
+            "job": null,
+            "git_branch": "kselftest"
+        }
+    ],
+    "test_cases": [],
+    "misc": {
+        "tests": 5,
+        "passed": 5,
+        "failed": 0,
+        "crashed": 0,
+        "skipped": 0,
+        "errors": 0
+    },
+    "arch": "",
+    "defconfig": "",
+    "build_environment": "",
+    "lab_name": null,
+    "kernel": null,
+    "job": null,
+    "git_branch": "kselftest"
+}

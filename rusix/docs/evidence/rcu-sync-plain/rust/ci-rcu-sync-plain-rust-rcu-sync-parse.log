@@ -1,0 +1,11 @@
+[21:06:04] ============================================================
+[21:06:04] =============== rusix_rcu_sync (5 subtests) ================
+[21:06:04] [PASSED] initializer_and_nested_public_protocol
+[21:06:04] [PASSED] held_reader_blocks_first_and_queued_enter
+[21:06:04] [PASSED] exit_reuse_replay_and_worker_destructor
+[21:06:04] [PASSED] synthetic_callback_state_transitions
+[21:06:04] [PASSED] percpu_rwsem_reader_writer_handoff
+[21:06:04] ================= [PASSED] rusix_rcu_sync ==================
+[21:06:04] ============================================================
+[21:06:04] Testing complete. Ran 5 tests: passed: 5
+[21:06:04] Test results stored in /out/logs/ci-rcu-sync-plain-rust-rcu-sync-kunit.json

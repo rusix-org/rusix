@@ -1,0 +1,12 @@
+{
+  "implementation": "rust",
+  "object": "sync_rust.o",
+  "definitions": [
+    "rcu_sync_init",
+    "rcu_sync_enter",
+    "rcu_sync_exit",
+    "rcu_sync_dtor"
+  ],
+  "callback": "_RNvCsjmYyIT9rDlo_9sync_rust13rcu_sync_func",
+  "scope": "Archive/object/linked selection only; no runtime assertion"
+}

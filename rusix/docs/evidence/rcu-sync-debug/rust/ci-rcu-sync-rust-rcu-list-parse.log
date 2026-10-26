@@ -1,0 +1,16 @@
+[20:52:19] ============================================================
+[20:52:19] =============== rusix_rcu_list (10 subtests) ===============
+[20:52:19] [PASSED] simple_fifo_and_both_flush_forms_preserve_tail_identity
+[20:52:19] [PASSED] init_flags_gp_sentinels_empty_queries_and_count_updates
+[20:52:19] [PASSED] four_segments_advance_compacts_and_accelerate_merges
+[20:52:19] [PASSED] done_extraction_partial_reinsertion_keeps_detached_accounting
+[20:52:19] [PASSED] pending_transfer_retains_source_descriptor_and_separate_count
+[20:52:19] [PASSED] entrain_empty_head_with_positive_count_joins_done
+[20:52:19] [PASSED] merge_under_cpu_lock_prepends_done_restarts_pending
+[20:52:19] [PASSED] modular_gp_equality_wrap_and_half_range_ordering
+[20:52:19] [PASSED] real_call_rcu_two_cpu_payloads_complete_before_barrier_return
+[20:52:19] [PASSED] real_srcu_reader_blocks_callback_until_release_and_barrier
+[20:52:19] ================= [PASSED] rusix_rcu_list ==================
+[20:52:19] ============================================================
+[20:52:19] Testing complete. Ran 10 tests: passed: 10
+[20:52:19] Test results stored in /out/logs/ci-rcu-sync-rust-rcu-list-kunit.json

@@ -1,0 +1,5 @@
+0000000000000040 t _RNvCsjmYyIT9rDlo_9sync_rust13rcu_sync_func
+00000000000002e0 T rcu_sync_dtor
+0000000000000110 T rcu_sync_enter
+0000000000000220 T rcu_sync_exit
+0000000000000000 T rcu_sync_init

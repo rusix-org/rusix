@@ -1,0 +1,1 @@
+/out/builds/ci-rcu-sync-plain-rust/kernel/sched/wait_rust.o

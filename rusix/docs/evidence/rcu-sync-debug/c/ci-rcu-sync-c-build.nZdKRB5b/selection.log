@@ -1,0 +1,51 @@
+implementation=brd-rust
+/out/builds/ci-rcu-sync-c/drivers/block/brd_rust.o
+ffffffff8157d420 T <brd_rust::Device as kernel::block::bio_disk::Operations>::submit
+{
+  "status": "PASS",
+  "scope": "ELF ownership/metadata, not runtime behavior",
+  "objects": [
+    {
+      "file": "/out/builds/ci-rcu-sync-c/drivers/block/brd_rust.o",
+      "parameter_names": [
+        "brd.max_part",
+        "brd.rd_nr",
+        "brd.rd_size"
+      ],
+      "scalar_symbols": [
+        "rusix_brd_rd_nr",
+        "rd_size",
+        "rusix_brd_max_part"
+      ],
+      "legacy_setup_count": 1,
+      "modinfo": "verified"
+    },
+    {
+      "file": "/out/builds/ci-rcu-sync-c/vmlinux",
+      "parameter_names": [
+        "brd.max_part",
+        "brd.rd_nr",
+        "brd.rd_size"
+      ],
+      "scalar_symbols": [
+        "rusix_brd_rd_nr",
+        "rd_size",
+        "rusix_brd_max_part"
+      ],
+      "legacy_setup_count": 1,
+      "modinfo": "discarded by final linker"
+    }
+  ]
+}
+be612a5e64e7ec456da49d406afff68a52ad8f61178f23d7a26d136fb6e5dd12  /src/drivers/block/brd_rust.rs
+cae39a89754ba8eae43b5e952152a105e00d10116052a0a8facfd571ec2d7c0e  /src/drivers/block/brd_rust/store.rs
+62a5f8d13ce027cc3039d3d8b98dea53c5c07db0275f98f72deff51255841647  /src/drivers/block/brd_rust/params.rs
+673da0ecb2400ea5e3939707511e5447da121ed7a87e029f0875aa3e0caa2335  /src/rust/bindings/builtin_init_helper.h
+ee25c240657a04ae9406bedd626fe5973f0371c9b8d2cfb65432355b3ecce869  /src/rust/bindings/lib.rs
+c4d1e26c7f0c58de023d02ceb9d60f3e1ec25986a8302ae1d9f0e877638d4d7d  /src/rust/Makefile
+aac92a77ea4cea06f9cf1e79d869b7aa06cb752c0b73d437898ca40d33112488  /src/rusix/scripts/verify-brd-parameter-owner.py
+3e54ad9ce0f81cf07b8f18d2cc507261cfdef0fcb943d354a1b72daf826c758c  /src/rusix/scripts/measure-kernel-languages.py
+4974026f49a4c94cd4b8f9dd620f7d08bc823ae6d0e233f5e860c4536b7444e4  /out/builds/ci-rcu-sync-c/rust/bindings/builtin_init_generated.rs
+590145296813b71037afca88d6e3e717717128af808fae04687b4b570ee8d424  /out/builds/ci-rcu-sync-c/rust/bindings/.builtin_init_generated.rs.cmd
+0e69b2fdfa8f1ec37c7e0b9deddf0e4ef1a791342c0a76afe0aa8a6ceff49b8f  /out/builds/ci-rcu-sync-c/rust/bindings/bindings_generated.rs
+bf0841510c7e9596ae6aafac885d0bcbdc3331a191a75809802541c2fe4855ad  /out/builds/ci-rcu-sync-c/drivers/block/brd_rust.o
