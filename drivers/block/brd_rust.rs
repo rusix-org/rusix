@@ -4,6 +4,7 @@
 
 //! RAM-backed bio block driver, retaining the pinned Linux BRD device contract.
 
+use core::num::NonZeroU32;
 use kernel::{
     bindings,
     block::{
@@ -67,7 +68,7 @@ impl Drop for ParameterGuard {
 struct Parameters {
     preallocate: c_int,
     capacity_sectors: u64,
-    minors: u32,
+    minors: NonZeroU32,
 }
 
 impl Parameters {
@@ -77,10 +78,10 @@ impl Parameters {
         // lock. Parameters are read-only after initialization (mode 0444).
         let (preallocate, size, requested) =
             unsafe { (rusix_brd_rd_nr, rd_size, rusix_brd_max_part) };
-        let minors = normalize_minors(requested)?;
+        let minors = NonZeroU32::new(normalize_minors(requested)?).ok_or(EINVAL)?;
         // SAFETY: The parameter lock excludes sysfs readers during this
         // initialization-time update; later driver accesses use this snapshot.
-        unsafe { rusix_brd_max_part = minors as c_int };
+        unsafe { rusix_brd_max_part = minors.get() as c_int };
         Ok(Self {
             preallocate,
             // The C expression multiplies unsigned long before converting to
@@ -323,8 +324,8 @@ impl Registry {
             device.clone(),
             DiskConfig {
                 major: RAMDISK_MAJOR,
-                first_minor: number.wrapping_mul(self.parameters.minors),
-                minors: self.parameters.minors,
+                first_minor: number.wrapping_mul(self.parameters.minors.get()),
+                minors: self.parameters.minors.get(),
                 capacity_sectors: self.parameters.capacity_sectors,
                 physical_block_size: PAGE_SIZE as u32,
                 discard_granularity: PAGE_SIZE as u32,
@@ -369,7 +370,7 @@ unsafe extern "C" fn probe(device: bindings::dev_t) {
     let registry = REGISTRY.lock().clone();
     if let Some(registry) = registry {
         let minor = device & MINOR_MASK;
-        let number = minor / registry.parameters.minors;
+        let number = minor / registry.parameters.minors.get();
         // Like the C probe callback, allocation failures are observed by the
         // caller as failure to instantiate the device, not returned via this ABI.
         let _ = registry.register(number);
