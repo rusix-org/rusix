@@ -72,4 +72,20 @@ class Gate(unittest.TestCase):
   self.assertEqual(c.replace('# CONFIG_RUSIX_TASK_CONSTRUCTION_RUST is not set','CONFIG_RUSIX_TASK_CONSTRUCTION_RUST=y'),r)
   self.assertIn('CONFIG_DEBUG_FS=y',c)
   self.assertIn('# CONFIG_DEBUG_FS is not set',(root/'x86_64-server.config').read_text())
+class DisassemblyHeading(unittest.TestCase):
+ def test_exact_recorded_to_host_remap(self):
+  old='/out/build/vmlinux';new='/host/output/build/vmlinux'
+  text='\n'+old+':\tfile format elf64-x86-64\n\nDisassembly of section .text:\n\n1000 <copy_process>:\n1000: nop\n'
+  actual=text.replace(old,new,1)
+  self.assertTrue(m.disassembly_matches(text,actual,old,new))
+  self.assertTrue(m.disassembly_matches(text,text,old,old))
+  for changed in (actual.replace('nop','retq'), actual.replace('elf64-x86-64','elf32-i386'), actual.replace('copy_process','other'), actual+'\n'):
+   self.assertFalse(m.disassembly_matches(text,changed,old,new))
+ def test_missing_wrong_duplicate_and_moved_headings(self):
+  old='/out/build/vmlinux';new='/host/output/build/vmlinux'
+  text='\n'+old+':\tfile format elf64-x86-64\n\n1000: nop\n'
+  actual=text.replace(old,new,1)
+  for bad in (actual.replace(new,'/wrong/vmlinux'), actual+new+':\tfile format elf64-x86-64\n', actual+'/wrong/vmlinux:\tfile format elf64-x86-64\n', actual.lstrip('\n'), '\n'+actual):
+   with self.assertRaises(ValueError):m.disassembly_matches(text,bad,old,new)
+  with self.assertRaises(ValueError):m.disassembly_matches(text.replace(old,'/wrong'),actual,old,new)
 if __name__=='__main__':unittest.main()

@@ -164,3 +164,21 @@ This branch inherits the exact reviewed task declaration annotation from
 `eec5ae3ecd7b`: a local pointer-only FFI lint exception, with no policy, layout,
 configuration or global warning-gate change. These historical results do not
 verify this branch's kernel; fresh build and runtime checks remain pending.
+
+### Diagnostic profile and ELF remapping correction
+
+Pinned `allnoconfig` resolution reproduced the missing FTRACE dependency: both
+old fragments resolved KPROBE_EVENTS=n. Both corrected fragments retain every
+requested setting, including FTRACE, KRETPROBES and ORC unwinding, and differ
+only by the task-construction selector. Commands, inputs and four resolved
+configs are retained in `linux-out/task-fault-config-001`; this is configuration
+evidence, not a diagnostic kernel build.
+
+Calibration now permits only the exact ELF filename heading to follow an
+explicit path remap; file format, instruction text and all artifact hashes remain
+checked. Wrong, duplicate or moved headings are rejected. All 54 focused archive,
+selection, ordinary guest, fault trace and pipeline host cases pass. Diagnostic
+postchecks are prepared to use the same pinned LLVM image as the build, avoiding
+host LLVM format drift. Paired fault-kernel builds and runtime attribution remain
+pending. Separately, historical task source `eec5ae3ecd7b` passed both five-case
+ordinary VM runs; that result does not certify these diagnostic configurations.

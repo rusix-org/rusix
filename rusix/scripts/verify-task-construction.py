@@ -18,7 +18,8 @@ PROFILES = {'task-construction-c': False, 'task-construction-rust': True,
 FAULT_PROFILES = frozenset(('task-construction-fault-c', 'task-construction-fault-rust'))
 FAULT_REQUIRED = ('FAULT_INJECTION', 'FAILSLAB', 'FAIL_PAGE_ALLOC',
                   'FAULT_INJECTION_DEBUG_FS', 'FAULT_INJECTION_STACKTRACE_FILTER',
-                  'STACKTRACE', 'KPROBES', 'KPROBE_EVENTS', 'TRACING',
+                  'STACKTRACE', 'FTRACE', 'KPROBES', 'KRETPROBES', 'UNWINDER_ORC',
+                  'KPROBE_EVENTS', 'TRACING',
                   'KALLSYMS', 'KALLSYMS_ALL', 'DEBUG_FS')
 EXCLUDED = ('MODULES', 'PREEMPT_RT', 'VMAP_STACK', 'SHADOW_CALL_STACK', 'KASAN',
             'KMSAN', 'KCSAN', 'MEM_ALLOC_PROFILING', 'KUNIT', 'DEBUG_FS')

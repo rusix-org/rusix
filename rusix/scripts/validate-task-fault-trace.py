@@ -162,6 +162,24 @@ def callsite_proof(symbols, disassembly, calibration):
     return True
 
 
+def disassembly_matches(recorded, actual, recorded_path, actual_path):
+    """Allow only the ELF filename heading to follow a verified path remap."""
+    def bound_heading(text, filename):
+        filename = str(filename)
+        need(filename and not any(c in filename for c in '\r\n'),
+             'Invalid disassembly filename')
+        lines = text.splitlines(keepends=True)
+        prefix = filename + ':\tfile format '
+        need(len(lines) >= 2 and lines[0] == '\n' and lines[1].startswith(prefix),
+             'Missing or wrong disassembly filename heading')
+        need(sum('\tfile format ' in line for line in lines) == 1,
+             'Duplicate disassembly file heading')
+        # Preserve format, whitespace, newlines and the entire instruction body.
+        # Only the exact expected filename bytes at the fixed heading are omitted.
+        return lines[0] + lines[1][len(filename):] + ''.join(lines[2:])
+    return bound_heading(recorded, recorded_path) == bound_heading(actual, actual_path)
+
+
 def load_reviewed_calibration(path, remap=lambda p: p):
     def unique(pairs):
         result={}
@@ -196,7 +214,10 @@ def load_reviewed_calibration(path, remap=lambda p: p):
         return r.stdout
     symbols=checked(['llvm-nm','-S','--defined-only',str(inputs['vmlinux'])]).decode()
     disassembly=checked(['llvm-objdump','-d','--no-show-raw-insn',str(inputs['vmlinux'])]).decode()
-    need(symbols==inputs['symbols'].read_text() and disassembly==inputs['disassembly'].read_text(),'Supplied symbols/disassembly differ from actual ELF')
+    need(symbols==inputs['symbols'].read_text() and disassembly_matches(
+        inputs['disassembly'].read_text(), disassembly,
+        packet['inputs']['vmlinux']['path'], inputs['vmlinux']),
+        'Supplied symbols/disassembly differ from actual ELF')
     with tempfile.TemporaryDirectory(prefix='task-fault-notes-', dir=path.parent) as tmp:
         notes=Path(tmp)/'notes'
         checked(['llvm-objcopy','--dump-section',f'.notes={notes}',str(inputs['vmlinux']),str(Path(tmp)/'copy.elf')])

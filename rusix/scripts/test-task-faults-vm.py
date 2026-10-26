@@ -34,7 +34,8 @@ REQUIRED_CONFIG = ('64BIT', 'PROC_FS', 'SMP', 'MULTIUSER', 'BINFMT_ELF',
                    'BLK_DEV_INITRD', 'SERIAL_8250_CONSOLE', 'DEBUG_FS', 'SYSFS',
                    'FAULT_INJECTION', 'FAILSLAB', 'FAIL_PAGE_ALLOC',
                    'FAULT_INJECTION_DEBUG_FS', 'FAULT_INJECTION_STACKTRACE_FILTER',
-                   'STACKTRACE', 'KPROBES', 'KPROBE_EVENTS', 'TRACING', 'KALLSYMS')
+                   'STACKTRACE', 'FTRACE', 'KPROBES', 'KRETPROBES', 'UNWINDER_ORC',
+                   'KPROBE_EVENTS', 'TRACING', 'KALLSYMS')
 LABELS = ['calibration','slab-1'] + [f'stack-{n}' for n in range(1,17)]
 FORMATS = ['page_decision','slab_decision','pages_result','kmem_kmem_cache_alloc',
            'kmem_kmem_cache_free','sched_sched_process_fork']

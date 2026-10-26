@@ -1,6 +1,6 @@
 # Constructor allocation-failure candidate
 
-**Uncompiled and unexecuted.** The paired diagnostic pipeline is implemented,
+**Diagnostic kernel and runtime attribution remain unverified.** The paired diagnostic pipeline is implemented,
 but has no accepted runtime failure coverage. The existing production transaction at policy base
 `8fd3defabb841083192cd1d9c4eb1cde83027579` is unchanged. Separate
 `x86_64-task-construction-fault-{c,rust}.config` fragments add diagnostic-only
@@ -113,7 +113,9 @@ only the constructor selector differing in resolved configs. Retain original
 build and fixture output paths until this check finishes. When C and Rust ran in
 separate containers mounted at `/out`, pass `--c-output-root C_HOST_OUTPUT
 --rust-output-root RUST_HOST_OUTPUT --source-root CHECKOUT` to the comparator,
-using the pinned LLVM tools through `with-local-tools.sh`. Only `/out` and `/src`
+using the exact pinned build container for postchecks. Host LLVM may produce
+different disassembly text. Only the expected ELF filename heading follows the
+explicit path remap; file format and instructions must remain identical. Only `/out` and `/src`
 are remapped; all artifact hashes are still verified. The pair gate also requires
 identical compiled init/controller/worker binaries, exact QEMU arguments and both
 resolved diagnostic configs. Calibration and initramfs bytes appropriately differ.
