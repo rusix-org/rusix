@@ -54,3 +54,9 @@ synchronization. Four dedicated-thread signal cases and a competing-consumer
 case bring the strict core inventory to 21. Signal tests verify pending/enrolled
 interruption, token precedence and nonfatal-signal timeout behavior. Paired
 build/runtime verification is pending; the 16-case archive predates this slice.
+
+The first status/signal comparison at `9018753694a5` stopped in the new
+consumer test: its explicit spawn-failure branch needed `AllocError` converted
+to the kernel `Error`. The cleanup broadcast is preserved and the conversion
+is fixed. Failed logs remain in `linux-out/lts-completion-status-c-001`;
+no runtime result was produced for that source.

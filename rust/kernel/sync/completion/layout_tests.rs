@@ -362,7 +362,7 @@ mod tests {
                 // Release any already-created worker before returning. Its own
                 // Arcs protect any callback that continues after this test exits.
                 start.complete_all();
-                return Err(error);
+                return Err(error.into());
             }
         }
         let mut enrolled = false;
