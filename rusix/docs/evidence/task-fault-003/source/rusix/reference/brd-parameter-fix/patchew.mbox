@@ -1,0 +1,152 @@
+From nobody Mon Oct 26 16:29:24 2026
+Received: from mail-qk1-f176.google.com (mail-qk1-f176.google.com
+ [209.85.222.176])
+	(using TLSv1.2 with cipher ECDHE-RSA-AES128-GCM-SHA256 (128/128 bits))
+	(No client certificate requested)
+	by smtp.subspace.kernel.org (Postfix) with ESMTPS id 43EC72D063E
+	for <linux-kernel@vger.kernel.org>; Tue,  9 Jun 2026 00:01:21 +0000 (UTC)
+Authentication-Results: smtp.subspace.kernel.org;
+ arc=none smtp.client-ip=209.85.222.176
+ARC-Seal: i=1; a=rsa-sha256; d=subspace.kernel.org; s=arc-20240116;
+	t=1780963282; cv=none;
+ b=InxCewF4xn3MLNafYHogyElDmT3us1G9JxAz4Z1oNzcxrhGFvbTKPE8bHcKYauCVyFm13OJ+/T4Rqj66hiPtlIkYhWz6nzZcjM2rRH8ILps3UaSd6mLtM5mRugwvsrLFprh7i8uxstqZOaywPYX7qcma+EmdLv77x87Fq8lFqZQ=
+ARC-Message-Signature: i=1; a=rsa-sha256; d=subspace.kernel.org;
+	s=arc-20240116; t=1780963282; c=relaxed/simple;
+	bh=XGfoAuoy6Fbz2QGxOiWMtS47obzjiWDB0rco1Qp6Un0=;
+	h=From:To:Cc:Subject:Date:Message-ID:MIME-Version;
+ b=UlQKv7UDrenwHkTjlkWlR+lowrCWoInQtLs9tJYwEPmWP78pAXVVFacf8HKeA6bqAhMj/SZfKGSYvaoLVzQpZ7zG53jH5kY1BrfeZ9mOGfsZuYZp23Yyt0cPPfn6hH5h42W8e7U5A5UHw/rRMUBx6FrhCczy6NwsQ8h3Tv+E2jM=
+ARC-Authentication-Results: i=1; smtp.subspace.kernel.org;
+ dmarc=pass (p=reject dis=none) header.from=trailofbits.com;
+ spf=pass smtp.mailfrom=trailofbits.com;
+ dkim=pass (2048-bit key) header.d=trailofbits.com header.i=@trailofbits.com
+ header.b=B+aSK/GS; arc=none smtp.client-ip=209.85.222.176
+Authentication-Results: smtp.subspace.kernel.org;
+ dmarc=pass (p=reject dis=none) header.from=trailofbits.com
+Authentication-Results: smtp.subspace.kernel.org;
+ spf=pass smtp.mailfrom=trailofbits.com
+Authentication-Results: smtp.subspace.kernel.org;
+	dkim=pass (2048-bit key) header.d=trailofbits.com header.i=@trailofbits.com
+ header.b="B+aSK/GS"
+Received: by mail-qk1-f176.google.com with SMTP id
+ af79cd13be357-91578122305so811784485a.0
+        for <linux-kernel@vger.kernel.org>;
+ Mon, 08 Jun 2026 17:01:21 -0700 (PDT)
+DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed;
+        d=trailofbits.com; s=google; t=1780963280; x=1781568080;
+ darn=vger.kernel.org;
+        h=content-transfer-encoding:mime-version:message-id:date:subject:cc
+         :to:from:from:to:cc:subject:date:message-id:reply-to;
+        bh=IZO5D5jxI24Y187hxcbLYFi5BP46QFssvcuE2eZAoKk=;
+        b=B+aSK/GSnkNnLruWJpwHCcJt6/nf5/DTMRJhxDiFeH/eWCJwJWQXWUPunHwbtUayAO
+         xEQ1h7oGpFqbWDLgARroW1nq2RR7MyhdtyiiAE25rO4iFbekeYCWBYrhRUGjpvw8IJOc
+         u9wydzlxDwP1PbufjKkApnOts/nIlXqpVOIdBYYi/lBpRjJmt/xXU9gXeRg+bhe26qTw
+         yBvAWFnl1pPY4GLZYJt65GJ2L8cp0a/zp4f1NVciA/Zehu5tPHNF+TRrt0/MhJsj0fbR
+         znzzpCq/ysJkSAQeXvUB99YxYZ9ARryMY/8y9DTljz57BvEd61BalXOR2ihwkwsJ/tXT
+         8OTw==
+X-Google-DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed;
+        d=1e100.net; s=20251104; t=1780963280; x=1781568080;
+        h=content-transfer-encoding:mime-version:message-id:date:subject:cc
+         :to:from:x-gm-gg:x-gm-message-state:from:to:cc:subject:date
+         :message-id:reply-to;
+        bh=IZO5D5jxI24Y187hxcbLYFi5BP46QFssvcuE2eZAoKk=;
+        b=PSObhsgqpLVF9qQDA9eqtwAw1od/42kZRgc0FKwAJ7bwle19z9TLHwcZC3lfzFDJpx
+         1DrbEuxNVW2rHUl4M8SbQtNGbifqmxMXcvWQ9oYyQO81P25w8vszlsCUkJ7i5lxMGtra
+         UzRlaDb9q7HokeghUAKFO/Oz8R06Z17dM1JRQ2s2yb/6SQOieNd8aBZU9crnJj+6yZHp
+         Cc2E/6ruuiOOGlT2gpGszpn8FYibfXuE3Q+zDRPCc1Xs1TCpzY9PAat24O7gis6wWxzM
+         8yV/UZAhcmhoBLpEE++mXB/lZW3j/HtwLRJLjlRfmQO11Oa/v0mPLEXO2/xj8jOvIcpo
+         0pBg==
+X-Forwarded-Encrypted: i=1;
+ AFNElJ9ymBlHCVi//fAu6+UBwuJbSlFAfc/u1pmkfi8QAfnJyNiW+HJePv/XBxafFohRzRk6hl2+FXlX8tnESlc=@vger.kernel.org
+X-Gm-Message-State: AOJu0YxtHbJZNxqyZNdiVzwPFjnojq3MUMQCEfuXokR8vVKyMBnqhzGa
+	RcOvX2Lds/ev9v6Z+NLZuPHTvJWYsnxom7RHXx9yk5EumYUzZdwaHxmkCzLPbg6pGxY=
+X-Gm-Gg: Acq92OFGwVA3Mp5x22az4hKknbrnudvwXPwxUPJ9KRuoV7RqbZ7EIzJX6J8XEMCA455
+	Csy2ZYWrifLQt7PMZrpwICR0zesYYS9FJ9USYteTxs5mq2NzOhHMAcmQ1RBFCFP9U/Bb8aRAGyq
+	fVMj4ZUjCwU4cR4xWx2IQCgY+GqkgE5LT+j9wXOg5m54WSDF5/tuuDTuw4Pi/NrliGyqEbjoUrb
+	Ck2qYBU5s5j2otDNmReTFvfuVnNuml+HhJubF3zp2BTH47jykBIxywNr3C1OVp5nngWatWAdAy3
+	6v++tvK5uX5+xdtYHga6mGo5kuHaYRhnWEa9BwzRV9b/72DhLkbOjdz4kqtOeHdgQ5UgIpgmsLr
+	zoFeUsWxXEchxmIdngpHacaTDfKc4BlTpyGJWr3f2izATDioxx2tqtRW48hvUzMSiWMmiK6wmIL
+	scaFFeac/seiy3g7rQia7BmzRGBjBWc/v6wOzHIA==
+X-Received: by 2002:a05:620a:414f:b0:914:b012:fca6 with SMTP id
+ af79cd13be357-915a9c72067mr2999222385a.14.1780963256865;
+        Mon, 08 Jun 2026 17:00:56 -0700 (PDT)
+Received: from localhost ([161.35.96.86])
+        by smtp.gmail.com with UTF8SMTPSA id
+ af79cd13be357-9158a37c4e6sm1887052785a.26.2026.06.08.17.00.55
+        (version=TLS1_3 cipher=TLS_AES_128_GCM_SHA256 bits=128/128);
+        Mon, 08 Jun 2026 17:00:55 -0700 (PDT)
+From: Samuel Moelius <sam.moelius@trailofbits.com>
+To: Jens Axboe <axboe@kernel.dk>
+Cc: Samuel Moelius <sam.moelius@trailofbits.com>,
+	linux-block@vger.kernel.org (open list:BLOCK LAYER),
+	linux-kernel@vger.kernel.org (open list)
+Subject: [PATCH] brd: normalize non-positive max_part before rounding it up
+Date: Mon,  8 Jun 2026 23:59:33 +0000
+Message-ID: 
+ <20260608235932.1233876.a0685c37c761.brd-negative-max-part-zero-minors@trailofbits.com>
+X-Mailer: git-send-email 2.43.0
+Precedence: bulk
+X-Mailing-List: linux-kernel@vger.kernel.org
+List-Id: <linux-kernel.vger.kernel.org>
+List-Subscribe: <mailto:linux-kernel+subscribe@vger.kernel.org>
+List-Unsubscribe: <mailto:linux-kernel+unsubscribe@vger.kernel.org>
+MIME-Version: 1.0
+Content-Transfer-Encoding: quoted-printable
+Content-Type: text/plain; charset="utf-8"
+
+`max_part` is an `int` module parameter, but brd only resets zero before
+rounding non-divisor values with `1UL << fls(max_part)`.
+
+A negative value such as -1 passes the initial zero check.  The modulo
+test then reaches the roundup, where `fls(-1)` yields 32.  On 64-bit
+builds that produces 4294967296, which is then assigned back to `int
+max_part` as zero.  `brd_alloc()` passes that zero value to
+`disk->minors`, and block core warns and rejects the disk.
+
+Normalize non-positive values to the existing one-partition fallback
+before the modulo/roundup, and apply the existing `DISK_MAX_PARTS` clamp
+before the roundup so it only operates on representable, in-range
+values.
+
+Assisted-by: Codex:gpt-5.5-cyber-preview
+Signed-off-by: Samuel Moelius <sam.moelius@trailofbits.com>
+---
+ drivers/block/brd.c | 13 +++++++------
+ 1 file changed, 7 insertions(+), 6 deletions(-)
+
+diff --git a/drivers/block/brd.c b/drivers/block/brd.c
+index 00cc8122068f..ed9567f74579 100644
+--- a/drivers/block/brd.c
++++ b/drivers/block/brd.c
+@@ -371,9 +371,15 @@ static void brd_cleanup(void)
+=20
+ static inline void brd_check_and_reset_par(void)
+ {
+-	if (unlikely(!max_part))
++	if (unlikely(max_part <=3D 0))
+ 		max_part =3D 1;
+=20
++	if (max_part > DISK_MAX_PARTS) {
++		pr_info("brd: max_part can't be larger than %d, reset max_part =3D %d.\n=
+",
++			DISK_MAX_PARTS, DISK_MAX_PARTS);
++		max_part =3D DISK_MAX_PARTS;
++	}
++
+ 	/*
+ 	 * make sure 'max_part' can be divided exactly by (1U << MINORBITS),
+ 	 * otherwise, it is possiable to get same dev_t when adding partitions.
+@@ -381,11 +387,6 @@ static inline void brd_check_and_reset_par(void)
+ 	if ((1U << MINORBITS) % max_part !=3D 0)
+ 		max_part =3D 1UL << fls(max_part);
+=20
+-	if (max_part > DISK_MAX_PARTS) {
+-		pr_info("brd: max_part can't be larger than %d, reset max_part =3D %d.\n=
+",
+-			DISK_MAX_PARTS, DISK_MAX_PARTS);
+-		max_part =3D DISK_MAX_PARTS;
+-	}
+ }
+=20
+ static int __init brd_init(void)
+--=20
+2.43.0

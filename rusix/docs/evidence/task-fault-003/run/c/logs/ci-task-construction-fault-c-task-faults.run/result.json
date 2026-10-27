@@ -1,0 +1,120 @@
+{
+  "status": "PASS",
+  "scope": "Diagnostic guest allocation-failure attribution with successful control and cleanup",
+  "runtime_frames": {
+    "slab_frame": "dup_task_struct+0x2b/0x1a0",
+    "stack_frame": "dup_task_struct+0x73/0x1a0"
+  },
+  "attempts": [
+    {
+      "label": "calibration",
+      "classification": "uninjected-control",
+      "pid": 44
+    },
+    {
+      "label": "slab-1",
+      "classification": "task-slab-failure",
+      "pid": 48,
+      "nth": 1
+    },
+    {
+      "label": "stack-1",
+      "classification": "stack-page-failure",
+      "pid": 51,
+      "nth": 1
+    },
+    {
+      "label": "stack-2",
+      "classification": "not-injected",
+      "pid": 54,
+      "nth": 2
+    },
+    {
+      "label": "stack-3",
+      "classification": "not-injected",
+      "pid": 58,
+      "nth": 3
+    },
+    {
+      "label": "stack-4",
+      "classification": "not-injected",
+      "pid": 62,
+      "nth": 4
+    },
+    {
+      "label": "stack-5",
+      "classification": "not-injected",
+      "pid": 66,
+      "nth": 5
+    },
+    {
+      "label": "stack-6",
+      "classification": "not-injected",
+      "pid": 70,
+      "nth": 6
+    },
+    {
+      "label": "stack-7",
+      "classification": "not-injected",
+      "pid": 74,
+      "nth": 7
+    },
+    {
+      "label": "stack-8",
+      "classification": "not-injected",
+      "pid": 78,
+      "nth": 8
+    },
+    {
+      "label": "stack-9",
+      "classification": "not-injected",
+      "pid": 82,
+      "nth": 9
+    },
+    {
+      "label": "stack-10",
+      "classification": "not-injected",
+      "pid": 86,
+      "nth": 10
+    },
+    {
+      "label": "stack-11",
+      "classification": "not-injected",
+      "pid": 90,
+      "nth": 11
+    },
+    {
+      "label": "stack-12",
+      "classification": "not-injected",
+      "pid": 94,
+      "nth": 12
+    },
+    {
+      "label": "stack-13",
+      "classification": "not-injected",
+      "pid": 98,
+      "nth": 13
+    },
+    {
+      "label": "stack-14",
+      "classification": "not-injected",
+      "pid": 102,
+      "nth": 14
+    },
+    {
+      "label": "stack-15",
+      "classification": "not-injected",
+      "pid": 106,
+      "nth": 15
+    },
+    {
+      "label": "stack-16",
+      "classification": "not-injected",
+      "pid": 110,
+      "nth": 16
+    }
+  ],
+  "qemu_exit": 0,
+  "implementation": "c",
+  "source_revision": "0fd8196feea002fcfa2f058e3e2caa8b4d4009b4"
+}

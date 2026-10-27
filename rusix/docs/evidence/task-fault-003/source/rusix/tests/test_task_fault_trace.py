@@ -1,0 +1,145 @@
+#!/usr/bin/env python3
+# SPDX-License-Identifier: GPL-2.0-only
+"""Synthetic parser regressions only; no guest or allocator faults executed."""
+import importlib.util
+from pathlib import Path
+import unittest
+S=Path(__file__).resolve().parents[1]/'scripts/validate-task-fault-trace.py'
+spec=importlib.util.spec_from_file_location('fault_gate',S);m=importlib.util.module_from_spec(spec);spec.loader.exec_module(m)
+CAL={'slab_frame':'copy_process+0x15/0x100','stack_frame':'copy_process+0x25/0x100'}
+STATS=['overrun: 0\ncommit overrun: 0\ndropped events: 0\n']*2
+PROBES='page_decision 10 0\nslab_decision 20 0\npages_result 10 0\n'
+def row(body):return f' worker-123 [001] .... 1.000000: {body}\n'
+def interval(body):return row('tracing_mark_write: ARM')+body+row('tracing_mark_write: DISARM')
+def stack(frame):return row('<stack trace>')+' => '+frame+'\n'
+def slab():return interval(row('slab_decision: result=-12')+stack(CAL['slab_frame'])+row('kmem_cache_alloc: ptr=0000000000000000 name=task_struct'))
+def pages(frame=None):return interval(row('kmem_cache_alloc: ptr=0000000000000abc name=task_struct')+row('page_decision: order=2 injected=1')+stack(frame or CAL['stack_frame'])+row('pages_result: order=2 result=0x0')+row('kmem_cache_free: ptr=0000000000000abc name=task_struct'))
+WORK='RESULT pid=123 nth=1 ret=-1 errno=12 remaining=0 child_status=0 retry_status=0'
+def check(trace,worker=WORK):return m.classify(worker,trace,CAL,STATS,PROBES)
+class Gate(unittest.TestCase):
+ def test_two_attributed_sites(self):
+  self.assertEqual(check(slab())['classification'],'task-slab-failure')
+  self.assertEqual(check(pages())['classification'],'stack-page-failure')
+ def test_other_failure_not_stack_coverage(self):
+  self.assertEqual(check(pages('slab_refill+0x5/0x20'))['classification'],'other-page-failure')
+ def test_site_and_rollback_identity(self):
+  for text in [slab().replace(CAL['slab_frame'],'elsewhere+0x5/0x20'),pages().replace('kmem_cache_free: ptr=0000000000000abc','kmem_cache_free: ptr=0000000000000def'),pages().replace('result=0x0','result=0xabc'),pages().replace('order=2','order=1'),pages().replace('0000000000000abc','(ptrval)')]:
+   with self.assertRaises(ValueError):check(text)
+ def test_strict_loss_and_misses(self):
+  for stats,probes in [(STATS[:1]+['overrun: 1\ncommit overrun: 0\ndropped events: 0\n'],PROBES),(STATS,PROBES.replace('10 0','10 1')),(['']*2,PROBES),(STATS,PROBES+'page_decision 0 0\n')]:
+   with self.assertRaises(ValueError):m.classify(WORK,slab(),CAL,stats,probes)
+ def test_markers_and_actor(self):
+  for text in [slab().replace('tracing_mark_write: ARM','other: ARM'),slab()+row('tracing_mark_write: ARM'),slab().replace('worker-123','worker-124'),slab().replace(' => '+CAL['slab_frame']+'\n','')]:
+   with self.assertRaises(ValueError):check(text)
+ def test_syscall_and_retry(self):
+  for w in [WORK.replace('errno=12','errno=11'),WORK.replace('retry_status=0','retry_status=-1'),WORK.replace('remaining=0','remaining=1'),WORK+' extra']:
+   with self.assertRaises(ValueError):check(slab(),w)
+ def test_child_publication_rejected(self):
+  with self.assertRaises(ValueError):check(slab().replace(row('tracing_mark_write: DISARM'),row('sched_process_fork: child_pid=124')+row('tracing_mark_write: DISARM')))
+ def test_calibration_requires_real_success_stacks(self):
+  worker=WORK.replace('nth=1 ret=-1 errno=12','nth=0 ret=124 errno=0')
+  trace=interval(row('slab_decision: result=0')+stack(CAL['slab_frame'])+row('page_decision: order=2 injected=0')+stack(CAL['stack_frame']))
+  self.assertEqual(check(trace,worker)['classification'],'uninjected-control')
+  with self.assertRaises(ValueError):check(interval(''),worker)
+  for bad in [trace.replace('result=0','result=-1'),trace.replace('injected=0','injected=2')]:
+   with self.assertRaises(ValueError):check(bad,worker)
+ def test_slab_order(self):
+  bad=interval(row('kmem_cache_alloc: ptr=0000000000000000 name=task_struct')+row('slab_decision: result=-12')+stack(CAL['slab_frame']))
+  with self.assertRaises(ValueError):check(bad)
+ def test_attempt_identity(self):
+  seen=set();m.attempt_identity('slab-1',WORK,seen)
+  with self.assertRaises(ValueError):m.attempt_identity('stack-1',WORK,seen)
+  with self.assertRaises(ValueError):m.attempt_identity('stack-2',WORK,set())
+  with self.assertRaises(ValueError):m.attempt_identity('calibration',WORK,set())
+ def test_linked_return_pc(self):
+  symbols='00001000 00000100 t copy_process\n00002000 00000100 T kmem_cache_alloc_node_noprof\n00003000 00000100 T __alloc_pages_noprof\n'
+  disasm='1000: nop\n1010: callq 0x2000 <kmem_cache_alloc_node_noprof>\n1015: movq %rax, %rbx\n1020: callq 0x3000 <__alloc_pages_noprof>\n1025: movq %rax, %rbx\n'
+  cal=CAL|{'range_symbol':'copy_process','range_start':'0x1000','range_end':'0x1100'}
+  self.assertTrue(m.callsite_proof(symbols,disasm,cal))
+  for bad in [cal|{'slab_frame':'copy_process+0x14/0x100'},cal|{'range_end':'0x1200'},cal|{'stack_frame':'copy_process+0x25/0x200'}]:
+   with self.assertRaises(ValueError):m.callsite_proof(symbols,disasm,bad)
+  with self.assertRaises(ValueError):m.callsite_proof(symbols,disasm.replace('callq','jmpq'),cal)
+ def test_rejects_unrelated_and_ambiguous_allocator_owner(self):
+  symbols='00001000 00000100 t copy_process\n00002000 00000100 t unrelated\n00003000 00000100 T kmem_cache_alloc_node_noprof\n00004000 00000100 T __alloc_pages_noprof\n'
+  disasm='1000: nop\n1010: callq 0x3000 <kmem_cache_alloc_node_noprof>\n1015: nop\n1020: callq 0x4000 <__alloc_pages_noprof>\n1025: nop\n2010: callq 0x4000 <__alloc_pages_noprof>\n2015: nop\n'
+  cal=CAL|{'range_symbol':'copy_process','range_start':'0x1000','range_end':'0x1100'}
+  with self.assertRaises(ValueError):m.callsite_proof(symbols,disasm,cal|{'stack_frame':'unrelated+0x15/0x100'})
+  with self.assertRaises(ValueError):m.callsite_proof(symbols,disasm+'1030: callq 0x4000 <__alloc_pages_noprof>\n1035: nop\n',cal)
+ def test_unrelated_duplicate_names_do_not_reject_real_sites(self):
+  symbols='00001000 00000100 t copy_process\n00002000 00000100 T kmem_cache_alloc_node_noprof\n00003000 00000100 T __alloc_pages_noprof\n'
+  text='1010: callq 0x2000 <kmem_cache_alloc_node_noprof>\n1015: nop\n1020: callq 0x3000 <__alloc_pages_noprof>\n1025: nop\n'
+  cal=CAL|{'range_symbol':'copy_process','range_start':'0x1000','range_end':'0x1100'}
+  duplicates='00004000 00000000 t .Ltmp0\n00005000 00000000 t .Ltmp0\n00006000 00000020 t local_helper\n00007000 00000020 t local_helper\n'
+  self.assertTrue(m.callsite_proof(symbols+duplicates,text,cal))
+  for extra in ['00004000 00000100 t copy_process\n','00002000 00000100 T kmem_cache_alloc_node_noprof\n','00004000 00000100 T __alloc_pages_noprof\n']:
+   with self.assertRaises(ValueError):m.callsite_proof(symbols+extra,text,cal)
+  for bad in [text.replace('0x2000','0x2001'),text.replace('0x3000','0x4000'),text.replace('0x2000','*%rax'),text.replace('callq','jmpq')]:
+   with self.assertRaises(ValueError):m.callsite_proof(symbols,bad,cal)
+  with self.assertRaises(ValueError):m.callsite_proof(symbols.replace('00003000 00000100','00003000 00000000'),text,cal)
+ def test_rust_tail_adapter_requires_unique_exact_allocator_target(self):
+  symbols='00001000 00000100 t copy_process\n00002000 00000100 T rusix_dup_task_struct\n00003000 00000020 T rusix_task_alloc\n00004000 00000100 T rusix_task_alloc_stack\n00005000 00000100 T kmem_cache_alloc_node_noprof\n00006000 00000100 T __alloc_pages_noprof\n'
+  text='2010: callq 0x3000 <rusix_task_alloc>\n2015: nop\n3000: jmpq 0x5000 <kmem_cache_alloc_node_noprof>\n4010: callq 0x6000 <__alloc_pages_noprof>\n4015: nop\n'
+  cal=CAL|dict(implementation='rust',range_symbol='copy_process',range_start='0x1000',range_end='0x1100',slab_frame='rusix_dup_task_struct+0x15/0x100',stack_frame='rusix_task_alloc_stack+0x15/0x100')
+  self.assertTrue(m.callsite_proof(symbols,text,cal))
+  for extra in ['00007000 00000100 T rusix_dup_task_struct\n','00007000 00000020 T rusix_task_alloc\n','00007000 00000100 T kmem_cache_alloc_node_noprof\n']:
+   with self.assertRaises(ValueError):m.callsite_proof(symbols+extra,text,cal)
+  for bad in [text.replace('0x5000','0x5001'),text.replace('jmpq','callq'),text+'3005: callq 0x6000 <__alloc_pages_noprof>\n']:
+   with self.assertRaises(ValueError):m.callsite_proof(symbols,bad,cal)
+ def test_pair_profiles_only_selector(self):
+  root=Path(__file__).resolve().parents[1]/'configs'
+  c=(root/'x86_64-task-construction-fault-c.config').read_text()
+  r=(root/'x86_64-task-construction-fault-rust.config').read_text()
+  self.assertEqual(c.replace('# CONFIG_RUSIX_TASK_CONSTRUCTION_RUST is not set','CONFIG_RUSIX_TASK_CONSTRUCTION_RUST=y'),r)
+  self.assertIn('CONFIG_DEBUG_FS=y',c)
+  self.assertIn('# CONFIG_DEBUG_FS is not set',(root/'x86_64-server.config').read_text())
+class DisassemblyHeading(unittest.TestCase):
+ def test_exact_recorded_to_host_remap(self):
+  old='/out/build/vmlinux';new='/host/output/build/vmlinux'
+  text='\n'+old+':\tfile format elf64-x86-64\n\nDisassembly of section .text:\n\n1000 <copy_process>:\n1000: nop\n'
+  actual=text.replace(old,new,1)
+  self.assertTrue(m.disassembly_matches(text,actual,old,new))
+  self.assertTrue(m.disassembly_matches(text,text,old,old))
+  for changed in (actual.replace('nop','retq'), actual.replace('elf64-x86-64','elf32-i386'), actual.replace('copy_process','other'), actual+'\n'):
+   self.assertFalse(m.disassembly_matches(text,changed,old,new))
+ def test_missing_wrong_duplicate_and_moved_headings(self):
+  old='/out/build/vmlinux';new='/host/output/build/vmlinux'
+  text='\n'+old+':\tfile format elf64-x86-64\n\n1000: nop\n'
+  actual=text.replace(old,new,1)
+  for bad in (actual.replace(new,'/wrong/vmlinux'), actual+new+':\tfile format elf64-x86-64\n', actual+'/wrong/vmlinux:\tfile format elf64-x86-64\n', actual.lstrip('\n'), '\n'+actual):
+   with self.assertRaises(ValueError):m.disassembly_matches(text,bad,old,new)
+  with self.assertRaises(ValueError):m.disassembly_matches(text.replace(old,'/wrong'),actual,old,new)
+class BoundedListing(unittest.TestCase):
+ def test_heading_compare_streams_and_checks_last_byte(self):
+  class Listing(str):
+   def splitlines(self, *args, **kwargs):
+    raise AssertionError('Whole listing split is forbidden')
+  body='1000: nop\n' * 200000
+  left=Listing('\n/old:\tfile format elf64-x86-64\n'+body)
+  right=Listing('\n/new:\tfile format elf64-x86-64\n'+body)
+  self.assertTrue(m.disassembly_matches(left,right,'/old','/new'))
+  self.assertFalse(m.disassembly_matches(left,right[:-1]+'X','/old','/new'))
+
+ def test_symbol_offset_marker_and_strict_boundary(self):
+  self.assertEqual(check(pages().replace('tracing_mark_write:', 'tracing_mark_write+0x97/0x200:'))['classification'],'stack-page-failure')
+  for suffix in ['+0x200/0x200', '+0x1/0x0', '+1/200', '+0x97/0x200junk']:
+   with self.assertRaises(ValueError):check(pages().replace('tracing_mark_write:', 'tracing_mark_write'+suffix+':'))
+  with self.assertRaises(ValueError):check(pages()+row('tracing_mark_write+0x1/0x20: ARM'))
+ def test_placeholder_rejected_even_uninjected(self):
+  worker=WORK.replace('ret=-1 errno=12 remaining=0','ret=124 errno=0 remaining=1')
+  with self.assertRaises(ValueError):check(pages().replace('0000000000000abc','(____ptrval____)'),worker)
+ def test_runtime_extent_is_separate_from_elf_size(self):
+  symbols='00001000 00000100 t copy_process\n'
+  cal=CAL|{'range_symbol':'copy_process','range_start':'0x1000'}
+  raw=b'0000000000000000 A absolute_zero\n0000000000000000 D percpu_zero\n0000000000001000 t copy_process\n0000000000001000 T alias\n0000000000001120 D next_core\n0000000000000010 t bpf_prog\t[bpf]\n0000000000000008 t kprobe_slot\t[__builtin__kprobes]\n'
+  frames=m.runtime_frames(raw,cal,symbols)
+  self.assertEqual(frames,{'slab_frame':'copy_process+0x15/0x120','stack_frame':'copy_process+0x25/0x120'})
+  self.assertEqual(cal['slab_frame'],'copy_process+0x15/0x100')
+  trace=pages().replace('/0x100','/0x120')
+  self.assertEqual(m.classify(WORK,trace,cal,STATS,PROBES,frames)['classification'],'stack-page-failure')
+  self.assertEqual(m.classify(WORK,trace,cal,STATS,PROBES)['classification'],'other-page-failure')
+  bads=[raw[:-1],raw.replace(b'0000000000001000 t copy_process',b'0000000000001001 t copy_process'),raw.replace(b't copy_process',b'D copy_process'),raw+b'0000000000001200 t core_after_modules\n',raw.replace(b'0000000000001120 D next_core\n',b''),raw.replace(b'0000000000001120',b'0000000000001080'),raw.replace(b'T alias',b'T copy_process'),raw.replace(b'0000000000001000 t copy_process\n0000000000001000 T alias',b'0000000000001000 T alias\n0000000000001000 t copy_process')]
+  for bad in bads:
+   with self.subTest(raw=bad):
+    with self.assertRaises(ValueError):m.runtime_frames(bad,cal,symbols)
+  with self.assertRaises(ValueError):m.runtime_frames(raw,cal,symbols+symbols)
+if __name__=='__main__':unittest.main()

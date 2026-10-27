@@ -1,0 +1,87 @@
+// SPDX-License-Identifier: GPL-2.0
+/*
+ * Non-trivial C macros cannot be used in Rust. Similarly, inlined C functions
+ * cannot be called either. This file explicitly creates functions ("helpers")
+ * that wrap those so that they can be called from Rust.
+ *
+ * Sorted alphabetically.
+ */
+
+#include "alloc_scope.c"
+#include "atomic.c"
+#include "auxiliary.c"
+#include "barrier.c"
+#include "binder.c"
+#include "bio.c"
+#include "bitmap.c"
+#include "bitops.c"
+#include "blk.c"
+#include "bug.c"
+#include "build_assert.c"
+#include "build_bug.c"
+#include "clk.c"
+#include "completion.c"
+#ifdef CONFIG_KUNIT
+#include "completion_signal_test.c"
+#include "completion_test.c"
+#endif
+#include "cpu.c"
+#include "cpufreq.c"
+#include "cpumask.c"
+#include "cred.c"
+#include "device.c"
+#include "dma.c"
+#include "drm.c"
+#include "err.c"
+#include "irq.c"
+#include "fs.c"
+#include "io.c"
+#include "jump_label.c"
+#include "kunit.c"
+#include "maple_tree.c"
+#include "mm.c"
+#include "mutex.c"
+#include "of.c"
+#include "page.c"
+#include "pci.c"
+#include "pid_namespace.c"
+#include "platform.c"
+#include "poll.c"
+#include "processor.c"
+#include "property.c"
+#ifdef CONFIG_RUSIX_COMPLETION_RUST
+#include "raw_spinlock.c"
+#endif
+#include "rbtree.c"
+#include "rcu.c"
+#include "refcount.c"
+#include "regulator.c"
+#include "scatterlist.c"
+#include "security.c"
+#include "signal.c"
+#include "slab.c"
+#include "spinlock.c"
+#ifdef CONFIG_RUSIX_COMPLETION_RUST
+#include "swait.c"
+#endif
+#ifdef CONFIG_KUNIT
+#include "swait_test.c"
+#endif
+#include "sync.c"
+#include "task.c"
+#include "time.c"
+#include "uaccess.c"
+#include "vmalloc.c"
+#include "wait.c"
+#ifdef CONFIG_RUSIX_COMPLETION_RUST
+#include "wait_bit_policy.c"
+#include "wait_policy.c"
+#endif
+#ifdef CONFIG_KUNIT
+#include "wait_bit_test.c"
+#include "wait_policy_test.c"
+#include "wait_locked_test.c"
+#include "wait_owner_test.c"
+#endif
+#include "workqueue.c"
+#include "xarray.c"

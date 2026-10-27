@@ -1,0 +1,67 @@
+{
+  "artifacts": {
+    "/out/builds/task-faults-vm-ci-task-construction-fault-c/bzImage": "1dc6563e87e66b3f34ef4312bb62eaff6f32c2726d0f085fab9b2185418856ac",
+    "/out/builds/task-faults-vm-ci-task-construction-fault-c/controller": "72decf8ded0a02e089f40779be1cbb4a19d381178f67f7b36b72e3349201eb93",
+    "/out/builds/task-faults-vm-ci-task-construction-fault-c/init": "489ba55ab7ddb6994c8829d3989770a02cc9cd5ab94303af1f6513f724a6aeef",
+    "/out/builds/task-faults-vm-ci-task-construction-fault-c/initramfs.cpio": "97ec3d1a6840aaac721889910fffbe48c3a58a9aa52d1e621078ce009db67ec6",
+    "/out/builds/task-faults-vm-ci-task-construction-fault-c/worker": "172b1576c9a6bdd4b40755fa4da6d930d3b512950f5024f05aa58d473b6c64ca"
+  },
+  "config_sha256": "5812e4fe0926dfcd7956a6bd07d6356459a3a38945515e334f303becf808a978",
+  "container_image": "sha256:c02eb3929889b3f0cc035d57a02c844e0c74c71d24fbda1311249faeb8257f63",
+  "implementation": "c",
+  "profile": "task-construction-fault-c",
+  "selection": {
+    "archive_member_sha256": {
+      "/out/builds/ci-task-construction-fault-c/kernel/fork.o": "78672d58f122ed45318f7fdd114233f91061f6b819cad4b6dff5e8c6cb79c2b2"
+    },
+    "implementation": "c",
+    "input_sha256": {
+      "/out/builds/ci-task-construction-fault-c/.config": "5812e4fe0926dfcd7956a6bd07d6356459a3a38945515e334f303becf808a978",
+      "/out/builds/ci-task-construction-fault-c/include/generated/autoconf.h": "1465d802a4be7d093ac89fe92ec8cb1292747cb9c2027d514f74ec369d68cc16",
+      "/out/builds/ci-task-construction-fault-c/kernel/.fork.o.cmd": "b012a127cc2f658997ab1a5b38532e351cc9d1dd6b80fc8969efdaf5a479cdc4",
+      "/out/builds/ci-task-construction-fault-c/kernel/built-in.a": "8a6fa54d350920dddb974244befc8753931b32f045ad7f491ac1f47c5c173ca9",
+      "/out/builds/ci-task-construction-fault-c/kernel/fork.i": "65d995dcbbd7a7fa42a8d0f97649ec2316ac201557bb7461b8b0045bc52ff0fd",
+      "/out/builds/ci-task-construction-fault-c/kernel/fork.o": "78672d58f122ed45318f7fdd114233f91061f6b819cad4b6dff5e8c6cb79c2b2",
+      "/out/builds/ci-task-construction-fault-c/vmlinux": "ab709c84ad912fa1f511f5b8b9729d571e41e6831f96cea4f7ff4b5a00d82cbf",
+      "/src/include/linux/compiler-version.h": "71b523f4f5ae572c6cee7fb2d62617ef900f3024619b1a61c8d9e758dfa002c8",
+      "/src/include/linux/compiler_types.h": "28bbd658a20cf4b72eb0759f2ff095a8cd317f719d8aa94c9298d6d0e2e77268",
+      "/src/include/linux/kconfig.h": "1b51cc51b6e4beb9b249853e0a0774f63679599f9a27b9e9fb8cc26ca14265f1",
+      "/src/kernel/fork.c": "d1c1e5ec0dde6c9bbd090adf837d44daceee27359556e10fc3bb586b8609283c",
+      "/src/kernel/task_construction_impl.h": "0a258e4e1368b612a020436aa90eb0c77f22ee58b4ab2fb31a195827eefac05d",
+      "/src/kernel/task_construction_rust.rs": "9513777b2f18b54fa5deab75caecffd18dcbe677df6e9458ebd65dd8da299a08",
+      "/src/rusix/configs/x86_64-server.config": "5b37adb3792b56926ef687dd7392b3916dbb8b77a30e50c2b2664373988098d6",
+      "/src/rusix/scripts/preprocess-task-construction.py": "3f6f3ba4cf0da1c0fff2a4c34c3a1e1106fa480e92ae2e73d500131b92612a90",
+      "/src/rusix/scripts/repo-paths.sh": "c1456d937aa223d2b6d9bcd914238ef49cdd4974419df0ff7b2e20bbf542cfc7",
+      "/src/rusix/scripts/saved_clang_command.py": "764e866c68a8943c3d3f680065c0c2d0a112f33f4be6b0828a21410a9823d37d",
+      "/src/rusix/scripts/verify-task-construction.py": "04628b3400f6bf1d813e7810e5aab90a06d2a75f3eec6bf9a14dc0c340951929",
+      "/src/rusix/scripts/with-local-tools.sh": "b47051d02fd2eb024dedc91f4a0c2cf071529d018a8ae246678bbb568069ffd0"
+    },
+    "scope": "Source/preprocessing/object/linked selection only; no fixture or runtime claim",
+    "status": "PASS"
+  },
+  "source_revision": "0fd8196feea002fcfa2f058e3e2caa8b4d4009b4",
+  "source_root": "/src",
+  "sources": {
+    "kernel/kallsyms.c": "b2a722be9e997d862fd76d2d8f23ff03233a644fab079a8f299af8d8f48f1b4e",
+    "lib/vsprintf.c": "e0df0da3bd37c9e31def88d4228945769fe5910f62b6acd2e7df9cba1cccde28",
+    "rusix/scripts/compare-task-fault-runs.py": "e16dc6b80b096bf4162375c89cad6d367b29fa55e8a39880ff2e2548f7e98ebf",
+    "rusix/scripts/generate-task-fault-calibration.py": "af0d6f38f68df3b0c13d6ade0aa531de532adf9e01b2d4841e6b156c535db8b6",
+    "rusix/scripts/preprocess-task-construction.py": "3f6f3ba4cf0da1c0fff2a4c34c3a1e1106fa480e92ae2e73d500131b92612a90",
+    "rusix/scripts/rusix_paths.py": "15158c8c33e303341ef523c8317da73fb3f008908b8bfa53611d13bc87c94cae",
+    "rusix/scripts/saved_clang_command.py": "764e866c68a8943c3d3f680065c0c2d0a112f33f4be6b0828a21410a9823d37d",
+    "rusix/scripts/server_target.py": "357f1680a766deee25a75f56470f1a6223a9429326efd2089efc7ac5ee484eed",
+    "rusix/scripts/test-brd-ext4-vm.py": "88763b1373acc90f26859bc84b570291ee7fef97482b79107e1078cbe6e97947",
+    "rusix/scripts/test-brd-vm.py": "3487a725c1b62a1d4546da84120717a94f86a74fb475577a7582f3e47b53530d",
+    "rusix/scripts/test-task-faults-vm.py": "75cb96103f84c748100f3a6ef0e315e8b416304aa8fa6507a55505e40eea4964",
+    "rusix/scripts/validate-task-fault-trace.py": "964c5b630d2b73c7a71ba0ffdd41d418ea50c86a86e7872ae87e9db7325f0ffb",
+    "rusix/scripts/verify-task-construction.py": "04628b3400f6bf1d813e7810e5aab90a06d2a75f3eec6bf9a14dc0c340951929",
+    "rusix/scripts/with-local-tools.sh": "b47051d02fd2eb024dedc91f4a0c2cf071529d018a8ae246678bbb568069ffd0",
+    "rusix/tests/brd-ext4/ext4-packages.lock": "30a6ea7af0307248c70192e2ec793e655084c4f65a788a5d6c367412ab9e39e7",
+    "rusix/tests/task-construction-faults/README.md": "0f14f2ce25088824e2b18a4ec2ae10653fb9aeeb7d01b4ed965a23bd8dcdc6b3",
+    "rusix/tests/task-construction-faults/control_io.rs": "2fcba62fab13b783f8c0352abcd585689eef91aa4c6a6b9fc9dfbdb32a4c8e3d",
+    "rusix/tests/task-construction-faults/controller.rs": "7763926d62f06e601daa6f5826b28b00241199f94fe5747075f0136e176af4d6",
+    "rusix/tests/task-construction-faults/guard.rs": "41cdbf75be8a994cd6261b5e80c289a3e68847a848deb68ac43c9d16c0bb158a",
+    "rusix/tests/task-construction-faults/init.rs": "41333fe7335f158c1948fa66e1dff2f9ff275924a17600e83303b30925e82068",
+    "rusix/tests/task-construction-faults/worker.c": "5d4f1cd7298d3f9760164435e8d7b0bb2addfbac886e9cf9b5b5bc143b9f8068"
+  }
+}

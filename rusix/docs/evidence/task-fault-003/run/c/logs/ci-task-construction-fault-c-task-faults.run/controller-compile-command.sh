@@ -1,0 +1,1 @@
+/usr/bin/rustc --edition 2021 --target x86_64-unknown-linux-gnu -C target-feature=+crt-static -C panic=abort -C opt-level=2 /src/rusix/tests/task-construction-faults/controller.rs -o /out/builds/task-faults-vm-ci-task-construction-fault-c/controller

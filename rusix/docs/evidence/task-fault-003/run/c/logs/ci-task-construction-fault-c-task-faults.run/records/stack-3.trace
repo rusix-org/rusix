@@ -1,0 +1,236 @@
+# tracer: nop
+#
+# entries-in-buffer/entries-written: 224/224   #P:2
+#
+#                                _-----=> irqs-off/BH-disabled
+#                               / _----=> need-resched
+#                              | / _---=> hardirq/softirq
+#                              || / _--=> preempt-depth
+#                              ||| / _-=> migrate-disable
+#                              |||| /     delay
+#           TASK-PID     CPU#  |||||  TIMESTAMP  FUNCTION
+#              | |         |   |||||     |         |
+    fault-worker-58      [001] ...1.   175.099943: tracing_mark_write+0x97/0x200: ARM
+    fault-worker-58      [001] ...1.   175.099953: slab_decision: (kmem_cache_alloc_node_noprof+0x61/0x3b0 <- should_failslab) result=0
+    fault-worker-58      [001] ...1.   175.099956: kmem_cache_alloc: call_site=dup_task_struct+0x2b/0x1a0 ptr=ffff888003a02c80 name=task_struct bytes_req=5696 bytes_alloc=5696 gfp_flags=GFP_KERNEL node=-1 accounted=false
+    fault-worker-58      [001] ...1.   175.099966: page_decision: (prepare_alloc_pages+0x100/0x1a0 <- should_fail_alloc_page) order=2 injected=0
+    fault-worker-58      [001] ...1.   175.099969: pages_result: (dup_task_struct+0x73/0x1a0 <- __alloc_pages_noprof) order=2 result=0xffffea00000e8200
+    fault-worker-58      [001] ...1.   175.099976: slab_decision: (kmem_cache_alloc_noprof+0x58/0x3a0 <- should_failslab) result=0
+    fault-worker-58      [001] ...1.   175.099977: kmem_cache_alloc: call_site=prepare_creds+0x1d/0xf0 ptr=ffff88800085f300 name=cred bytes_req=136 bytes_alloc=192 gfp_flags=GFP_KERNEL node=-1 accounted=false
+    fault-worker-58      [001] ...1.   175.099981: slab_decision: (kmem_cache_alloc_noprof+0x58/0x3a0 <- should_failslab) result=0
+    fault-worker-58      [001] ...1.   175.099981: kmem_cache_alloc: call_site=dup_fd+0x25/0x390 ptr=ffff888000811380 name=files_cache bytes_req=832 bytes_alloc=832 gfp_flags=GFP_KERNEL node=-1 accounted=false
+    fault-worker-58      [001] ...1.   175.099985: slab_decision: (kmem_cache_alloc_noprof+0x58/0x3a0 <- should_failslab) result=0
+    fault-worker-58      [001] ...1.   175.099985: kmem_cache_alloc: call_site=copy_fs_struct+0x19/0x110 ptr=ffff888000314540 name=fs_cache bytes_req=168 bytes_alloc=192 gfp_flags=GFP_KERNEL node=-1 accounted=false
+    fault-worker-58      [001] ...1.   175.099987: slab_decision: (kmem_cache_alloc_noprof+0x58/0x3a0 <- should_failslab) result=0
+    fault-worker-58      [001] ...1.   175.099987: kmem_cache_alloc: call_site=copy_sighand+0x2b/0xf0 ptr=ffff888000b81a40 name=sighand_cache bytes_req=2200 bytes_alloc=2240 gfp_flags=GFP_KERNEL node=-1 accounted=false
+    fault-worker-58      [001] ...1.   175.099989: slab_decision: (kmem_cache_alloc_noprof+0x58/0x3a0 <- should_failslab) result=0
+    fault-worker-58      [001] ...1.   175.099990: kmem_cache_alloc: call_site=copy_signal+0x27/0x250 ptr=ffff888000b88b00 name=signal_cache bytes_req=1408 bytes_alloc=1408 gfp_flags=GFP_KERNEL|__GFP_ZERO node=-1 accounted=false
+    fault-worker-58      [001] ...1.   175.099992: slab_decision: (kmem_cache_alloc_noprof+0x58/0x3a0 <- should_failslab) result=0
+    fault-worker-58      [001] ...1.   175.099992: kmem_cache_alloc: call_site=copy_mm+0x7e/0x160 ptr=ffff88800380c600 name=mm_struct bytes_req=2184 bytes_alloc=2240 gfp_flags=GFP_KERNEL node=-1 accounted=false
+    fault-worker-58      [001] ...1.   175.099995: page_decision: (prepare_alloc_pages+0x100/0x1a0 <- should_fail_alloc_page) order=0 injected=0
+    fault-worker-58      [001] ...1.   175.099996: pages_result: (pgd_alloc+0x3a/0x200 <- __alloc_pages_noprof) order=0 result=0xffffea00000e59c0
+    fault-worker-58      [001] ...1.   175.100007: slab_decision: (kmem_cache_alloc_noprof+0x58/0x3a0 <- should_failslab) result=0
+    fault-worker-58      [001] ...1.   175.100010: kmem_cache_alloc: call_site=mas_dup_build+0x62/0x450 ptr=ffff888000867400 name=maple_node bytes_req=256 bytes_alloc=256 gfp_flags=GFP_KERNEL node=-1 accounted=false
+    fault-worker-58      [001] ...1.   175.100013: slab_decision: (kmem_cache_alloc_noprof+0x58/0x3a0 <- should_failslab) result=0
+    fault-worker-58      [001] ...1.   175.100013: kmem_cache_alloc: call_site=vm_area_dup+0x17/0x150 ptr=ffff888003911000 name=vm_area_struct bytes_req=256 bytes_alloc=256 gfp_flags=GFP_KERNEL node=-1 accounted=false
+    fault-worker-58      [001] ...1.   175.100017: slab_decision: (kmem_cache_alloc_noprof+0x58/0x3a0 <- should_failslab) result=0
+    fault-worker-58      [001] ...1.   175.100018: kmem_cache_alloc: call_site=vm_area_dup+0x17/0x150 ptr=ffff888000865200 name=vm_area_struct bytes_req=256 bytes_alloc=256 gfp_flags=GFP_KERNEL node=-1 accounted=false
+    fault-worker-58      [001] ...1.   175.100021: slab_decision: (kmem_cache_alloc_noprof+0x58/0x3a0 <- should_failslab) result=0
+    fault-worker-58      [001] ...1.   175.100022: kmem_cache_alloc: call_site=vm_area_dup+0x17/0x150 ptr=ffff888003835000 name=vm_area_struct bytes_req=256 bytes_alloc=256 gfp_flags=GFP_KERNEL node=-1 accounted=false
+    fault-worker-58      [001] ...1.   175.100024: slab_decision: (kmem_cache_alloc_noprof+0x58/0x3a0 <- should_failslab) result=0
+    fault-worker-58      [001] ...1.   175.100025: kmem_cache_alloc: call_site=vm_area_dup+0x17/0x150 ptr=ffff888000882200 name=vm_area_struct bytes_req=256 bytes_alloc=256 gfp_flags=GFP_KERNEL node=-1 accounted=false
+    fault-worker-58      [001] ...1.   175.100026: slab_decision: (kmem_cache_alloc_noprof+0x58/0x3a0 <- should_failslab) result=0
+    fault-worker-58      [001] ...1.   175.100026: kmem_cache_alloc: call_site=anon_vma_clone+0x5f/0x1d0 ptr=ffff888000861cc0 name=anon_vma_chain bytes_req=64 bytes_alloc=64 gfp_flags=GFP_NOWAIT node=-1 accounted=false
+    fault-worker-58      [001] ...1.   175.100028: slab_decision: (kmem_cache_alloc_noprof+0x58/0x3a0 <- should_failslab) result=0
+    fault-worker-58      [001] ...1.   175.100028: kmem_cache_alloc: call_site=anon_vma_fork+0x52/0x170 ptr=ffff888000862870 name=anon_vma bytes_req=208 bytes_alloc=216 gfp_flags=GFP_KERNEL node=-1 accounted=false
+    fault-worker-58      [001] ...1.   175.100029: slab_decision: (kmem_cache_alloc_noprof+0x58/0x3a0 <- should_failslab) result=0
+    fault-worker-58      [001] ...1.   175.100029: kmem_cache_alloc: call_site=anon_vma_fork+0x99/0x170 ptr=ffff888000861c80 name=anon_vma_chain bytes_req=64 bytes_alloc=64 gfp_flags=GFP_KERNEL node=-1 accounted=false
+    fault-worker-58      [001] ...1.   175.100031: page_decision: (prepare_alloc_pages+0x100/0x1a0 <- should_fail_alloc_page) order=0 injected=0
+    fault-worker-58      [001] ...1.   175.100032: pages_result: (__pud_alloc+0x35/0x230 <- __alloc_pages_noprof) order=0 result=0xffffea00000e44c0
+    fault-worker-58      [001] ...1.   175.100034: page_decision: (prepare_alloc_pages+0x100/0x1a0 <- should_fail_alloc_page) order=0 injected=0
+    fault-worker-58      [001] ...1.   175.100035: pages_result: (__pmd_alloc+0x32/0x290 <- __alloc_pages_noprof) order=0 result=0xffffea00000e7f00
+    fault-worker-58      [001] ...1.   175.100035: slab_decision: (kmem_cache_alloc_noprof+0x58/0x3a0 <- should_failslab) result=0
+    fault-worker-58      [001] ...1.   175.100036: kmem_cache_alloc: call_site=__pmd_alloc+0x5d/0x290 ptr=ffff88800086aec0 name=page->ptl bytes_req=64 bytes_alloc=64 gfp_flags=GFP_KERNEL node=-1 accounted=false
+    fault-worker-58      [001] ...1.   175.100038: page_decision: (prepare_alloc_pages+0x100/0x1a0 <- should_fail_alloc_page) order=0 injected=0
+    fault-worker-58      [001] ...1.   175.100039: pages_result: (pte_alloc_one+0x1b/0xf0 <- __alloc_pages_noprof) order=0 result=0xffffea0000022040
+    fault-worker-58      [001] ...1.   175.100040: slab_decision: (kmem_cache_alloc_noprof+0x58/0x3a0 <- should_failslab) result=0
+    fault-worker-58      [001] ...1.   175.100040: kmem_cache_alloc: call_site=ptlock_alloc+0x15/0x30 ptr=ffff88800086af00 name=page->ptl bytes_req=64 bytes_alloc=64 gfp_flags=GFP_KERNEL node=-1 accounted=false
+    fault-worker-58      [001] ...1.   175.100043: slab_decision: (kmem_cache_alloc_noprof+0x58/0x3a0 <- should_failslab) result=0
+    fault-worker-58      [001] ...1.   175.100044: kmem_cache_alloc: call_site=vm_area_dup+0x17/0x150 ptr=ffff888000882300 name=vm_area_struct bytes_req=256 bytes_alloc=256 gfp_flags=GFP_KERNEL node=-1 accounted=false
+    fault-worker-58      [001] ...1.   175.100044: slab_decision: (kmem_cache_alloc_noprof+0x58/0x3a0 <- should_failslab) result=0
+    fault-worker-58      [001] ...1.   175.100044: kmem_cache_alloc: call_site=anon_vma_clone+0x5f/0x1d0 ptr=ffff888000861c40 name=anon_vma_chain bytes_req=64 bytes_alloc=64 gfp_flags=GFP_NOWAIT node=-1 accounted=false
+    fault-worker-58      [001] ...1.   175.100045: slab_decision: (kmem_cache_alloc_noprof+0x58/0x3a0 <- should_failslab) result=0
+    fault-worker-58      [001] ...1.   175.100045: kmem_cache_alloc: call_site=anon_vma_fork+0x52/0x170 ptr=ffff888000862798 name=anon_vma bytes_req=208 bytes_alloc=216 gfp_flags=GFP_KERNEL node=-1 accounted=false
+    fault-worker-58      [001] ...1.   175.100046: slab_decision: (kmem_cache_alloc_noprof+0x58/0x3a0 <- should_failslab) result=0
+    fault-worker-58      [001] ...1.   175.100046: kmem_cache_alloc: call_site=anon_vma_fork+0x99/0x170 ptr=ffff888000861c00 name=anon_vma_chain bytes_req=64 bytes_alloc=64 gfp_flags=GFP_KERNEL node=-1 accounted=false
+    fault-worker-58      [001] ...1.   175.100048: slab_decision: (kmem_cache_alloc_noprof+0x58/0x3a0 <- should_failslab) result=0
+    fault-worker-58      [001] ...1.   175.100049: kmem_cache_alloc: call_site=vm_area_dup+0x17/0x150 ptr=ffff888000882400 name=vm_area_struct bytes_req=256 bytes_alloc=256 gfp_flags=GFP_KERNEL node=-1 accounted=false
+    fault-worker-58      [001] ...1.   175.100049: slab_decision: (kmem_cache_alloc_noprof+0x58/0x3a0 <- should_failslab) result=0
+    fault-worker-58      [001] ...1.   175.100049: kmem_cache_alloc: call_site=anon_vma_clone+0x5f/0x1d0 ptr=ffff888000861bc0 name=anon_vma_chain bytes_req=64 bytes_alloc=64 gfp_flags=GFP_NOWAIT node=-1 accounted=false
+    fault-worker-58      [001] ...1.   175.100050: slab_decision: (kmem_cache_alloc_noprof+0x58/0x3a0 <- should_failslab) result=0
+    fault-worker-58      [001] ...1.   175.100051: kmem_cache_alloc: call_site=anon_vma_fork+0x52/0x170 ptr=ffff888000862a20 name=anon_vma bytes_req=208 bytes_alloc=216 gfp_flags=GFP_KERNEL node=-1 accounted=false
+    fault-worker-58      [001] ...1.   175.100052: slab_decision: (kmem_cache_alloc_noprof+0x58/0x3a0 <- should_failslab) result=0
+    fault-worker-58      [001] ...1.   175.100052: kmem_cache_alloc: call_site=anon_vma_fork+0x99/0x170 ptr=ffff888000861b80 name=anon_vma_chain bytes_req=64 bytes_alloc=64 gfp_flags=GFP_KERNEL node=-1 accounted=false
+    fault-worker-58      [001] ...1.   175.100054: slab_decision: (kmem_cache_alloc_noprof+0x58/0x3a0 <- should_failslab) result=0
+    fault-worker-58      [001] ...1.   175.100054: kmem_cache_alloc: call_site=vm_area_dup+0x17/0x150 ptr=ffff888000882500 name=vm_area_struct bytes_req=256 bytes_alloc=256 gfp_flags=GFP_KERNEL node=-1 accounted=false
+    fault-worker-58      [001] ...1.   175.100055: slab_decision: (kmem_cache_alloc_noprof+0x58/0x3a0 <- should_failslab) result=0
+    fault-worker-58      [001] ...1.   175.100055: kmem_cache_alloc: call_site=anon_vma_clone+0x5f/0x1d0 ptr=ffff888000861b40 name=anon_vma_chain bytes_req=64 bytes_alloc=64 gfp_flags=GFP_NOWAIT node=-1 accounted=false
+    fault-worker-58      [001] ...1.   175.100056: slab_decision: (kmem_cache_alloc_noprof+0x58/0x3a0 <- should_failslab) result=0
+    fault-worker-58      [001] ...1.   175.100056: kmem_cache_alloc: call_site=anon_vma_fork+0x52/0x170 ptr=ffff888000862e58 name=anon_vma bytes_req=208 bytes_alloc=216 gfp_flags=GFP_KERNEL node=-1 accounted=false
+    fault-worker-58      [001] ...1.   175.100056: slab_decision: (kmem_cache_alloc_noprof+0x58/0x3a0 <- should_failslab) result=0
+    fault-worker-58      [001] ...1.   175.100057: kmem_cache_alloc: call_site=anon_vma_fork+0x99/0x170 ptr=ffff888000861b00 name=anon_vma_chain bytes_req=64 bytes_alloc=64 gfp_flags=GFP_KERNEL node=-1 accounted=false
+    fault-worker-58      [001] ...1.   175.100058: page_decision: (prepare_alloc_pages+0x100/0x1a0 <- should_fail_alloc_page) order=0 injected=0
+    fault-worker-58      [001] ...1.   175.100059: pages_result: (pte_alloc_one+0x1b/0xf0 <- __alloc_pages_noprof) order=0 result=0xffffea000002b1c0
+    fault-worker-58      [001] ...1.   175.100060: slab_decision: (kmem_cache_alloc_noprof+0x58/0x3a0 <- should_failslab) result=0
+    fault-worker-58      [001] ...1.   175.100060: kmem_cache_alloc: call_site=ptlock_alloc+0x15/0x30 ptr=ffff88800086abc0 name=page->ptl bytes_req=64 bytes_alloc=64 gfp_flags=GFP_KERNEL node=-1 accounted=false
+    fault-worker-58      [001] ...1.   175.100062: slab_decision: (kmem_cache_alloc_noprof+0x58/0x3a0 <- should_failslab) result=0
+    fault-worker-58      [001] ...1.   175.100062: kmem_cache_alloc: call_site=vm_area_dup+0x17/0x150 ptr=ffff888000882600 name=vm_area_struct bytes_req=256 bytes_alloc=256 gfp_flags=GFP_KERNEL node=-1 accounted=false
+    fault-worker-58      [001] ...1.   175.100063: page_decision: (prepare_alloc_pages+0x100/0x1a0 <- should_fail_alloc_page) order=0 injected=0
+    fault-worker-58      [001] ...1.   175.100065: pages_result: (__pud_alloc+0x35/0x230 <- __alloc_pages_noprof) order=0 result=0xffffea000002b300
+    fault-worker-58      [001] ...1.   175.100068: page_decision: (prepare_alloc_pages+0x100/0x1a0 <- should_fail_alloc_page) order=0 injected=0
+    fault-worker-58      [001] ...1.   175.100069: pages_result: (__pmd_alloc+0x32/0x290 <- __alloc_pages_noprof) order=0 result=0xffffea000002b3c0
+    fault-worker-58      [001] ...1.   175.100070: slab_decision: (kmem_cache_alloc_noprof+0x58/0x3a0 <- should_failslab) result=0
+    fault-worker-58      [001] ...1.   175.100070: kmem_cache_alloc: call_site=__pmd_alloc+0x5d/0x290 ptr=ffff88800086ac00 name=page->ptl bytes_req=64 bytes_alloc=64 gfp_flags=GFP_KERNEL node=-1 accounted=false
+    fault-worker-58      [001] ...1.   175.100072: page_decision: (prepare_alloc_pages+0x100/0x1a0 <- should_fail_alloc_page) order=0 injected=0
+    fault-worker-58      [001] ...1.   175.100073: pages_result: (pte_alloc_one+0x1b/0xf0 <- __alloc_pages_noprof) order=0 result=0xffffea00000e7f40
+    fault-worker-58      [001] ...1.   175.100073: slab_decision: (kmem_cache_alloc_noprof+0x58/0x3a0 <- should_failslab) result=0
+    fault-worker-58      [001] ...1.   175.100074: kmem_cache_alloc: call_site=ptlock_alloc+0x15/0x30 ptr=ffff88800086ad00 name=page->ptl bytes_req=64 bytes_alloc=64 gfp_flags=GFP_KERNEL node=-1 accounted=false
+    fault-worker-58      [001] ...1.   175.100076: slab_decision: (kmem_cache_alloc_noprof+0x58/0x3a0 <- should_failslab) result=0
+    fault-worker-58      [001] ...1.   175.100076: kmem_cache_alloc: call_site=vm_area_dup+0x17/0x150 ptr=ffff888003912300 name=vm_area_struct bytes_req=256 bytes_alloc=256 gfp_flags=GFP_KERNEL node=-1 accounted=false
+    fault-worker-58      [001] ...1.   175.100078: slab_decision: (kmem_cache_alloc_noprof+0x58/0x3a0 <- should_failslab) result=0
+    fault-worker-58      [001] ...1.   175.100078: kmem_cache_alloc: call_site=vm_area_dup+0x17/0x150 ptr=ffff888003912200 name=vm_area_struct bytes_req=256 bytes_alloc=256 gfp_flags=GFP_KERNEL node=-1 accounted=false
+    fault-worker-58      [001] ...1.   175.100079: slab_decision: (kmem_cache_alloc_noprof+0x58/0x3a0 <- should_failslab) result=0
+    fault-worker-58      [001] ...1.   175.100079: kmem_cache_alloc: call_site=vm_area_dup+0x17/0x150 ptr=ffff888000882900 name=vm_area_struct bytes_req=256 bytes_alloc=256 gfp_flags=GFP_KERNEL node=-1 accounted=false
+    fault-worker-58      [001] ...1.   175.100080: slab_decision: (kmem_cache_alloc_noprof+0x58/0x3a0 <- should_failslab) result=0
+    fault-worker-58      [001] ...1.   175.100080: kmem_cache_alloc: call_site=anon_vma_clone+0x5f/0x1d0 ptr=ffff888000861ac0 name=anon_vma_chain bytes_req=64 bytes_alloc=64 gfp_flags=GFP_NOWAIT node=-1 accounted=false
+    fault-worker-58      [001] ...1.   175.100081: slab_decision: (kmem_cache_alloc_noprof+0x58/0x3a0 <- should_failslab) result=0
+    fault-worker-58      [001] ...1.   175.100081: kmem_cache_alloc: call_site=anon_vma_fork+0x52/0x170 ptr=ffff888000862bd0 name=anon_vma bytes_req=208 bytes_alloc=216 gfp_flags=GFP_KERNEL node=-1 accounted=false
+    fault-worker-58      [001] ...1.   175.100082: slab_decision: (kmem_cache_alloc_noprof+0x58/0x3a0 <- should_failslab) result=0
+    fault-worker-58      [001] ...1.   175.100082: kmem_cache_alloc: call_site=anon_vma_fork+0x99/0x170 ptr=ffff888000861200 name=anon_vma_chain bytes_req=64 bytes_alloc=64 gfp_flags=GFP_KERNEL node=-1 accounted=false
+    fault-worker-58      [001] ...1.   175.100083: page_decision: (prepare_alloc_pages+0x100/0x1a0 <- should_fail_alloc_page) order=0 injected=0
+    fault-worker-58      [001] ...1.   175.100084: pages_result: (__pud_alloc+0x35/0x230 <- __alloc_pages_noprof) order=0 result=0xffffea00000ebc40
+    fault-worker-58      [001] ...1.   175.100085: page_decision: (prepare_alloc_pages+0x100/0x1a0 <- should_fail_alloc_page) order=0 injected=0
+    fault-worker-58      [001] ...1.   175.100086: pages_result: (__pmd_alloc+0x32/0x290 <- __alloc_pages_noprof) order=0 result=0xffffea00000e41c0
+    fault-worker-58      [001] ...1.   175.100087: slab_decision: (kmem_cache_alloc_noprof+0x58/0x3a0 <- should_failslab) result=0
+    fault-worker-58      [001] ...1.   175.100087: kmem_cache_alloc: call_site=__pmd_alloc+0x5d/0x290 ptr=ffff88800086ad40 name=page->ptl bytes_req=64 bytes_alloc=64 gfp_flags=GFP_KERNEL node=-1 accounted=false
+    fault-worker-58      [001] ...1.   175.100088: page_decision: (prepare_alloc_pages+0x100/0x1a0 <- should_fail_alloc_page) order=0 injected=0
+    fault-worker-58      [001] ...1.   175.100089: pages_result: (pte_alloc_one+0x1b/0xf0 <- __alloc_pages_noprof) order=0 result=0xffffea00000e4700
+    fault-worker-58      [001] ...1.   175.100090: slab_decision: (kmem_cache_alloc_noprof+0x58/0x3a0 <- should_failslab) result=0
+    fault-worker-58      [001] ...1.   175.100090: kmem_cache_alloc: call_site=ptlock_alloc+0x15/0x30 ptr=ffff88800086ac40 name=page->ptl bytes_req=64 bytes_alloc=64 gfp_flags=GFP_KERNEL node=-1 accounted=false
+    fault-worker-58      [001] ...1.   175.100096: slab_decision: (kmem_cache_alloc_noprof+0x58/0x3a0 <- should_failslab) result=0
+    fault-worker-58      [001] ...1.   175.100096: kmem_cache_alloc: call_site=alloc_pid+0x41/0x510 ptr=ffff8880008608c0 name=pid bytes_req=272 bytes_alloc=320 gfp_flags=GFP_KERNEL node=-1 accounted=false
+    fault-worker-58      [001] ...1.   175.100137: sched_process_fork: comm=fault-worker pid=58 child_comm=fault-worker child_pid=60
+    fault-worker-58      [001] ...1.   175.100168: page_decision: (prepare_alloc_pages+0x100/0x1a0 <- should_fail_alloc_page) order=0 injected=0
+    fault-worker-58      [001] ...1.   175.100179: tracing_mark_write+0x97/0x200: DISARM
+    fault-worker-58      [001] d..2.   175.105387: kmem_cache_free: call_site=release_task+0x616/0x7b0 ptr=ffff888000b81a40 name=sighand_cache
+    fault-worker-58      [001] ...1.   175.105399: slab_decision: (kmem_cache_alloc_node_noprof+0x61/0x3b0 <- should_failslab) result=0
+    fault-worker-58      [001] ...1.   175.105400: kmem_cache_alloc: call_site=dup_task_struct+0x2b/0x1a0 ptr=ffff888003a01640 name=task_struct bytes_req=5696 bytes_alloc=5696 gfp_flags=GFP_KERNEL node=-1 accounted=false
+    fault-worker-58      [001] ...1.   175.105406: page_decision: (prepare_alloc_pages+0x100/0x1a0 <- should_fail_alloc_page) order=2 injected=0
+    fault-worker-58      [001] ...1.   175.105409: pages_result: (dup_task_struct+0x73/0x1a0 <- __alloc_pages_noprof) order=2 result=0xffffea0000020300
+    fault-worker-58      [001] ...1.   175.105416: slab_decision: (kmem_cache_alloc_noprof+0x58/0x3a0 <- should_failslab) result=0
+    fault-worker-58      [001] ...1.   175.105417: kmem_cache_alloc: call_site=prepare_creds+0x1d/0xf0 ptr=ffff88800085f480 name=cred bytes_req=136 bytes_alloc=192 gfp_flags=GFP_KERNEL node=-1 accounted=false
+    fault-worker-58      [001] ...1.   175.105421: slab_decision: (kmem_cache_alloc_noprof+0x58/0x3a0 <- should_failslab) result=0
+    fault-worker-58      [001] ...1.   175.105421: kmem_cache_alloc: call_site=dup_fd+0x25/0x390 ptr=ffff8880008116c0 name=files_cache bytes_req=832 bytes_alloc=832 gfp_flags=GFP_KERNEL node=-1 accounted=false
+    fault-worker-58      [001] ...1.   175.105423: slab_decision: (kmem_cache_alloc_noprof+0x58/0x3a0 <- should_failslab) result=0
+    fault-worker-58      [001] ...1.   175.105424: kmem_cache_alloc: call_site=copy_fs_struct+0x19/0x110 ptr=ffff888000314600 name=fs_cache bytes_req=168 bytes_alloc=192 gfp_flags=GFP_KERNEL node=-1 accounted=false
+    fault-worker-58      [001] ...1.   175.105426: slab_decision: (kmem_cache_alloc_noprof+0x58/0x3a0 <- should_failslab) result=0
+    fault-worker-58      [001] ...1.   175.105427: kmem_cache_alloc: call_site=copy_sighand+0x2b/0xf0 ptr=ffff888000b81a40 name=sighand_cache bytes_req=2200 bytes_alloc=2240 gfp_flags=GFP_KERNEL node=-1 accounted=false
+    fault-worker-58      [001] ...1.   175.105428: slab_decision: (kmem_cache_alloc_noprof+0x58/0x3a0 <- should_failslab) result=0
+    fault-worker-58      [001] ...1.   175.105429: kmem_cache_alloc: call_site=copy_signal+0x27/0x250 ptr=ffff888000b89b80 name=signal_cache bytes_req=1408 bytes_alloc=1408 gfp_flags=GFP_KERNEL|__GFP_ZERO node=-1 accounted=false
+    fault-worker-58      [001] ...1.   175.105430: slab_decision: (kmem_cache_alloc_noprof+0x58/0x3a0 <- should_failslab) result=0
+    fault-worker-58      [001] ...1.   175.105431: kmem_cache_alloc: call_site=copy_mm+0x7e/0x160 ptr=ffff88800380cec0 name=mm_struct bytes_req=2184 bytes_alloc=2240 gfp_flags=GFP_KERNEL node=-1 accounted=false
+    fault-worker-58      [001] ...1.   175.105433: page_decision: (prepare_alloc_pages+0x100/0x1a0 <- should_fail_alloc_page) order=0 injected=0
+    fault-worker-58      [001] ...1.   175.105434: pages_result: (pgd_alloc+0x3a/0x200 <- __alloc_pages_noprof) order=0 result=0xffffea00000e3d80
+    fault-worker-58      [001] ...1.   175.105445: slab_decision: (kmem_cache_alloc_noprof+0x58/0x3a0 <- should_failslab) result=0
+    fault-worker-58      [001] ...1.   175.105445: kmem_cache_alloc: call_site=mas_dup_build+0x62/0x450 ptr=ffff888000867500 name=maple_node bytes_req=256 bytes_alloc=256 gfp_flags=GFP_KERNEL node=-1 accounted=false
+    fault-worker-58      [001] ...1.   175.105447: slab_decision: (kmem_cache_alloc_noprof+0x58/0x3a0 <- should_failslab) result=0
+    fault-worker-58      [001] ...1.   175.105448: kmem_cache_alloc: call_site=vm_area_dup+0x17/0x150 ptr=ffff888000882a00 name=vm_area_struct bytes_req=256 bytes_alloc=256 gfp_flags=GFP_KERNEL node=-1 accounted=false
+    fault-worker-58      [001] ...1.   175.105452: slab_decision: (kmem_cache_alloc_noprof+0x58/0x3a0 <- should_failslab) result=0
+    fault-worker-58      [001] ...1.   175.105453: kmem_cache_alloc: call_site=vm_area_dup+0x17/0x150 ptr=ffff888000882b00 name=vm_area_struct bytes_req=256 bytes_alloc=256 gfp_flags=GFP_KERNEL node=-1 accounted=false
+    fault-worker-58      [001] ...1.   175.105453: slab_decision: (kmem_cache_alloc_noprof+0x58/0x3a0 <- should_failslab) result=0
+    fault-worker-58      [001] ...1.   175.105454: kmem_cache_alloc: call_site=vm_area_dup+0x17/0x150 ptr=ffff888000882c00 name=vm_area_struct bytes_req=256 bytes_alloc=256 gfp_flags=GFP_KERNEL node=-1 accounted=false
+    fault-worker-58      [001] ...1.   175.105456: slab_decision: (kmem_cache_alloc_noprof+0x58/0x3a0 <- should_failslab) result=0
+    fault-worker-58      [001] ...1.   175.105456: kmem_cache_alloc: call_site=vm_area_dup+0x17/0x150 ptr=ffff888000882d00 name=vm_area_struct bytes_req=256 bytes_alloc=256 gfp_flags=GFP_KERNEL node=-1 accounted=false
+    fault-worker-58      [001] ...1.   175.105457: slab_decision: (kmem_cache_alloc_noprof+0x58/0x3a0 <- should_failslab) result=0
+    fault-worker-58      [001] ...1.   175.105457: kmem_cache_alloc: call_site=anon_vma_clone+0x5f/0x1d0 ptr=ffff888000861a80 name=anon_vma_chain bytes_req=64 bytes_alloc=64 gfp_flags=GFP_NOWAIT node=-1 accounted=false
+    fault-worker-58      [001] ...1.   175.105459: slab_decision: (kmem_cache_alloc_noprof+0x58/0x3a0 <- should_failslab) result=0
+    fault-worker-58      [001] ...1.   175.105459: kmem_cache_alloc: call_site=anon_vma_fork+0x52/0x170 ptr=ffff8880008625e8 name=anon_vma bytes_req=208 bytes_alloc=216 gfp_flags=GFP_KERNEL node=-1 accounted=false
+    fault-worker-58      [001] ...1.   175.105460: slab_decision: (kmem_cache_alloc_noprof+0x58/0x3a0 <- should_failslab) result=0
+    fault-worker-58      [001] ...1.   175.105460: kmem_cache_alloc: call_site=anon_vma_fork+0x99/0x170 ptr=ffff888000861a40 name=anon_vma_chain bytes_req=64 bytes_alloc=64 gfp_flags=GFP_KERNEL node=-1 accounted=false
+    fault-worker-58      [001] ...1.   175.105462: page_decision: (prepare_alloc_pages+0x100/0x1a0 <- should_fail_alloc_page) order=0 injected=0
+    fault-worker-58      [001] ...1.   175.105463: pages_result: (__pud_alloc+0x35/0x230 <- __alloc_pages_noprof) order=0 result=0xffffea00000e4000
+    fault-worker-58      [001] ...1.   175.105465: page_decision: (prepare_alloc_pages+0x100/0x1a0 <- should_fail_alloc_page) order=0 injected=0
+    fault-worker-58      [001] ...1.   175.105466: pages_result: (__pmd_alloc+0x32/0x290 <- __alloc_pages_noprof) order=0 result=0xffffea00000e4780
+    fault-worker-58      [001] ...1.   175.105467: slab_decision: (kmem_cache_alloc_noprof+0x58/0x3a0 <- should_failslab) result=0
+    fault-worker-58      [001] ...1.   175.105467: kmem_cache_alloc: call_site=__pmd_alloc+0x5d/0x290 ptr=ffff88800086acc0 name=page->ptl bytes_req=64 bytes_alloc=64 gfp_flags=GFP_KERNEL node=-1 accounted=false
+    fault-worker-58      [001] ...1.   175.105469: page_decision: (prepare_alloc_pages+0x100/0x1a0 <- should_fail_alloc_page) order=0 injected=0
+    fault-worker-58      [001] ...1.   175.105470: pages_result: (pte_alloc_one+0x1b/0xf0 <- __alloc_pages_noprof) order=0 result=0xffffea00000e47c0
+    fault-worker-58      [001] ...1.   175.105470: slab_decision: (kmem_cache_alloc_noprof+0x58/0x3a0 <- should_failslab) result=0
+    fault-worker-58      [001] ...1.   175.105471: kmem_cache_alloc: call_site=ptlock_alloc+0x15/0x30 ptr=ffff88800086ac80 name=page->ptl bytes_req=64 bytes_alloc=64 gfp_flags=GFP_KERNEL node=-1 accounted=false
+    fault-worker-58      [001] ...1.   175.105474: slab_decision: (kmem_cache_alloc_noprof+0x58/0x3a0 <- should_failslab) result=0
+    fault-worker-58      [001] ...1.   175.105475: kmem_cache_alloc: call_site=vm_area_dup+0x17/0x150 ptr=ffff888000882e00 name=vm_area_struct bytes_req=256 bytes_alloc=256 gfp_flags=GFP_KERNEL node=-1 accounted=false
+    fault-worker-58      [001] ...1.   175.105475: slab_decision: (kmem_cache_alloc_noprof+0x58/0x3a0 <- should_failslab) result=0
+    fault-worker-58      [001] ...1.   175.105475: kmem_cache_alloc: call_site=anon_vma_clone+0x5f/0x1d0 ptr=ffff888000861a00 name=anon_vma_chain bytes_req=64 bytes_alloc=64 gfp_flags=GFP_NOWAIT node=-1 accounted=false
+    fault-worker-58      [001] ...1.   175.105476: slab_decision: (kmem_cache_alloc_noprof+0x58/0x3a0 <- should_failslab) result=0
+    fault-worker-58      [001] ...1.   175.105476: kmem_cache_alloc: call_site=anon_vma_fork+0x52/0x170 ptr=ffff888000862d80 name=anon_vma bytes_req=208 bytes_alloc=216 gfp_flags=GFP_KERNEL node=-1 accounted=false
+    fault-worker-58      [001] ...1.   175.105477: slab_decision: (kmem_cache_alloc_noprof+0x58/0x3a0 <- should_failslab) result=0
+    fault-worker-58      [001] ...1.   175.105477: kmem_cache_alloc: call_site=anon_vma_fork+0x99/0x170 ptr=ffff8880008619c0 name=anon_vma_chain bytes_req=64 bytes_alloc=64 gfp_flags=GFP_KERNEL node=-1 accounted=false
+    fault-worker-58      [001] ...1.   175.105479: slab_decision: (kmem_cache_alloc_noprof+0x58/0x3a0 <- should_failslab) result=0
+    fault-worker-58      [001] ...1.   175.105479: kmem_cache_alloc: call_site=vm_area_dup+0x17/0x150 ptr=ffff888000882f00 name=vm_area_struct bytes_req=256 bytes_alloc=256 gfp_flags=GFP_KERNEL node=-1 accounted=false
+    fault-worker-58      [001] ...1.   175.105480: slab_decision: (kmem_cache_alloc_noprof+0x58/0x3a0 <- should_failslab) result=0
+    fault-worker-58      [001] ...1.   175.105480: kmem_cache_alloc: call_site=anon_vma_clone+0x5f/0x1d0 ptr=ffff888000861980 name=anon_vma_chain bytes_req=64 bytes_alloc=64 gfp_flags=GFP_NOWAIT node=-1 accounted=false
+    fault-worker-58      [001] ...1.   175.105481: slab_decision: (kmem_cache_alloc_noprof+0x58/0x3a0 <- should_failslab) result=0
+    fault-worker-58      [001] ...1.   175.105481: kmem_cache_alloc: call_site=anon_vma_fork+0x52/0x170 ptr=ffff888000862ca8 name=anon_vma bytes_req=208 bytes_alloc=216 gfp_flags=GFP_KERNEL node=-1 accounted=false
+    fault-worker-58      [001] ...1.   175.105482: slab_decision: (kmem_cache_alloc_noprof+0x58/0x3a0 <- should_failslab) result=0
+    fault-worker-58      [001] ...1.   175.105482: kmem_cache_alloc: call_site=anon_vma_fork+0x99/0x170 ptr=ffff888000861940 name=anon_vma_chain bytes_req=64 bytes_alloc=64 gfp_flags=GFP_KERNEL node=-1 accounted=false
+    fault-worker-58      [001] ...1.   175.105484: slab_decision: (kmem_cache_alloc_noprof+0x58/0x3a0 <- should_failslab) result=0
+    fault-worker-58      [001] ...1.   175.105484: kmem_cache_alloc: call_site=vm_area_dup+0x17/0x150 ptr=ffff888003912000 name=vm_area_struct bytes_req=256 bytes_alloc=256 gfp_flags=GFP_KERNEL node=-1 accounted=false
+    fault-worker-58      [001] ...1.   175.105484: slab_decision: (kmem_cache_alloc_noprof+0x58/0x3a0 <- should_failslab) result=0
+    fault-worker-58      [001] ...1.   175.105485: kmem_cache_alloc: call_site=anon_vma_clone+0x5f/0x1d0 ptr=ffff888000861900 name=anon_vma_chain bytes_req=64 bytes_alloc=64 gfp_flags=GFP_NOWAIT node=-1 accounted=false
+    fault-worker-58      [001] ...1.   175.105486: slab_decision: (kmem_cache_alloc_noprof+0x58/0x3a0 <- should_failslab) result=0
+    fault-worker-58      [001] ...1.   175.105486: kmem_cache_alloc: call_site=anon_vma_fork+0x52/0x170 ptr=ffff888000862bd0 name=anon_vma bytes_req=208 bytes_alloc=216 gfp_flags=GFP_KERNEL node=-1 accounted=false
+    fault-worker-58      [001] ...1.   175.105487: slab_decision: (kmem_cache_alloc_noprof+0x58/0x3a0 <- should_failslab) result=0
+    fault-worker-58      [001] ...1.   175.105487: kmem_cache_alloc: call_site=anon_vma_fork+0x99/0x170 ptr=ffff8880008618c0 name=anon_vma_chain bytes_req=64 bytes_alloc=64 gfp_flags=GFP_KERNEL node=-1 accounted=false
+    fault-worker-58      [001] ...1.   175.105489: page_decision: (prepare_alloc_pages+0x100/0x1a0 <- should_fail_alloc_page) order=0 injected=0
+    fault-worker-58      [001] ...1.   175.105489: pages_result: (pte_alloc_one+0x1b/0xf0 <- __alloc_pages_noprof) order=0 result=0xffffea00000e7f80
+    fault-worker-58      [001] ...1.   175.105490: slab_decision: (kmem_cache_alloc_noprof+0x58/0x3a0 <- should_failslab) result=0
+    fault-worker-58      [001] ...1.   175.105490: kmem_cache_alloc: call_site=ptlock_alloc+0x15/0x30 ptr=ffff88800086aa80 name=page->ptl bytes_req=64 bytes_alloc=64 gfp_flags=GFP_KERNEL node=-1 accounted=false
+    fault-worker-58      [001] ...1.   175.105492: slab_decision: (kmem_cache_alloc_noprof+0x58/0x3a0 <- should_failslab) result=0
+    fault-worker-58      [001] ...1.   175.105493: kmem_cache_alloc: call_site=vm_area_dup+0x17/0x150 ptr=ffff888000864a00 name=vm_area_struct bytes_req=256 bytes_alloc=256 gfp_flags=GFP_KERNEL node=-1 accounted=false
+    fault-worker-58      [001] ...1.   175.105494: page_decision: (prepare_alloc_pages+0x100/0x1a0 <- should_fail_alloc_page) order=0 injected=0
+    fault-worker-58      [001] ...1.   175.105494: pages_result: (__pud_alloc+0x35/0x230 <- __alloc_pages_noprof) order=0 result=0xffffea00000e7fc0
+    fault-worker-58      [001] ...1.   175.105496: page_decision: (prepare_alloc_pages+0x100/0x1a0 <- should_fail_alloc_page) order=0 injected=0
+    fault-worker-58      [001] ...1.   175.105497: pages_result: (__pmd_alloc+0x32/0x290 <- __alloc_pages_noprof) order=0 result=0xffffea00000e4080
+    fault-worker-58      [001] ...1.   175.105497: slab_decision: (kmem_cache_alloc_noprof+0x58/0x3a0 <- should_failslab) result=0
+    fault-worker-58      [001] ...1.   175.105498: kmem_cache_alloc: call_site=__pmd_alloc+0x5d/0x290 ptr=ffff88800086ad80 name=page->ptl bytes_req=64 bytes_alloc=64 gfp_flags=GFP_KERNEL node=-1 accounted=false
+    fault-worker-58      [001] ...1.   175.105499: page_decision: (prepare_alloc_pages+0x100/0x1a0 <- should_fail_alloc_page) order=0 injected=0
+    fault-worker-58      [001] ...1.   175.105499: pages_result: (pte_alloc_one+0x1b/0xf0 <- __alloc_pages_noprof) order=0 result=0xffffea00000e40c0
+    fault-worker-58      [001] ...1.   175.105500: slab_decision: (kmem_cache_alloc_noprof+0x58/0x3a0 <- should_failslab) result=0
+    fault-worker-58      [001] ...1.   175.105500: kmem_cache_alloc: call_site=ptlock_alloc+0x15/0x30 ptr=ffff88800086aa40 name=page->ptl bytes_req=64 bytes_alloc=64 gfp_flags=GFP_KERNEL node=-1 accounted=false
+    fault-worker-58      [001] ...1.   175.105502: slab_decision: (kmem_cache_alloc_noprof+0x58/0x3a0 <- should_failslab) result=0
+    fault-worker-58      [001] ...1.   175.105502: kmem_cache_alloc: call_site=vm_area_dup+0x17/0x150 ptr=ffff888000864b00 name=vm_area_struct bytes_req=256 bytes_alloc=256 gfp_flags=GFP_KERNEL node=-1 accounted=false
+    fault-worker-58      [001] ...1.   175.105504: slab_decision: (kmem_cache_alloc_noprof+0x58/0x3a0 <- should_failslab) result=0
+    fault-worker-58      [001] ...1.   175.105504: kmem_cache_alloc: call_site=vm_area_dup+0x17/0x150 ptr=ffff888003912c00 name=vm_area_struct bytes_req=256 bytes_alloc=256 gfp_flags=GFP_KERNEL node=-1 accounted=false
+    fault-worker-58      [001] ...1.   175.105505: slab_decision: (kmem_cache_alloc_noprof+0x58/0x3a0 <- should_failslab) result=0
+    fault-worker-58      [001] ...1.   175.105505: kmem_cache_alloc: call_site=vm_area_dup+0x17/0x150 ptr=ffff888003912400 name=vm_area_struct bytes_req=256 bytes_alloc=256 gfp_flags=GFP_KERNEL node=-1 accounted=false
+    fault-worker-58      [001] ...1.   175.105506: slab_decision: (kmem_cache_alloc_noprof+0x58/0x3a0 <- should_failslab) result=0
+    fault-worker-58      [001] ...1.   175.105506: kmem_cache_alloc: call_site=anon_vma_clone+0x5f/0x1d0 ptr=ffff888000861880 name=anon_vma_chain bytes_req=64 bytes_alloc=64 gfp_flags=GFP_NOWAIT node=-1 accounted=false
+    fault-worker-58      [001] ...1.   175.105507: slab_decision: (kmem_cache_alloc_noprof+0x58/0x3a0 <- should_failslab) result=0
+    fault-worker-58      [001] ...1.   175.105507: kmem_cache_alloc: call_site=anon_vma_fork+0x52/0x170 ptr=ffff888000862e58 name=anon_vma bytes_req=208 bytes_alloc=216 gfp_flags=GFP_KERNEL node=-1 accounted=false
+    fault-worker-58      [001] ...1.   175.105509: slab_decision: (kmem_cache_alloc_noprof+0x58/0x3a0 <- should_failslab) result=0
+    fault-worker-58      [001] ...1.   175.105510: kmem_cache_alloc: call_site=anon_vma_fork+0x99/0x170 ptr=ffff888000861840 name=anon_vma_chain bytes_req=64 bytes_alloc=64 gfp_flags=GFP_KERNEL node=-1 accounted=false
+    fault-worker-58      [001] ...1.   175.105511: page_decision: (prepare_alloc_pages+0x100/0x1a0 <- should_fail_alloc_page) order=0 injected=0
+    fault-worker-58      [001] ...1.   175.105512: pages_result: (__pud_alloc+0x35/0x230 <- __alloc_pages_noprof) order=0 result=0xffffea00000e4100
+    fault-worker-58      [001] ...1.   175.105513: page_decision: (prepare_alloc_pages+0x100/0x1a0 <- should_fail_alloc_page) order=0 injected=0
+    fault-worker-58      [001] ...1.   175.105514: pages_result: (__pmd_alloc+0x32/0x290 <- __alloc_pages_noprof) order=0 result=0xffffea00000e4140
+    fault-worker-58      [001] ...1.   175.105514: slab_decision: (kmem_cache_alloc_noprof+0x58/0x3a0 <- should_failslab) result=0
+    fault-worker-58      [001] ...1.   175.105514: kmem_cache_alloc: call_site=__pmd_alloc+0x5d/0x290 ptr=ffff88800086ab00 name=page->ptl bytes_req=64 bytes_alloc=64 gfp_flags=GFP_KERNEL node=-1 accounted=false
+    fault-worker-58      [001] ...1.   175.105515: page_decision: (prepare_alloc_pages+0x100/0x1a0 <- should_fail_alloc_page) order=0 injected=0
+    fault-worker-58      [001] ...1.   175.105516: pages_result: (pte_alloc_one+0x1b/0xf0 <- __alloc_pages_noprof) order=0 result=0xffffea00000ea100
+    fault-worker-58      [001] ...1.   175.105517: slab_decision: (kmem_cache_alloc_noprof+0x58/0x3a0 <- should_failslab) result=0
+    fault-worker-58      [001] ...1.   175.105517: kmem_cache_alloc: call_site=ptlock_alloc+0x15/0x30 ptr=ffff88800086aa00 name=page->ptl bytes_req=64 bytes_alloc=64 gfp_flags=GFP_KERNEL node=-1 accounted=false
+    fault-worker-58      [001] ...1.   175.105522: slab_decision: (kmem_cache_alloc_noprof+0x58/0x3a0 <- should_failslab) result=0
+    fault-worker-58      [001] ...1.   175.105522: kmem_cache_alloc: call_site=alloc_pid+0x41/0x510 ptr=ffff888000860780 name=pid bytes_req=272 bytes_alloc=320 gfp_flags=GFP_KERNEL node=-1 accounted=false
+    fault-worker-58      [001] ...1.   175.105561: sched_process_fork: comm=fault-worker pid=58 child_comm=fault-worker child_pid=61
+    fault-worker-58      [001] ...1.   175.105585: page_decision: (prepare_alloc_pages+0x100/0x1a0 <- should_fail_alloc_page) order=0 injected=0
+    fault-worker-58      [001] d..2.   175.110815: kmem_cache_free: call_site=release_task+0x616/0x7b0 ptr=ffff888000b81a40 name=sighand_cache

@@ -9,32 +9,23 @@ verification runs locally. No subsystem divergence point is declared.
 Public development lives on `rusix/main`. [ADR 0002](docs/adr/0002.md) owns the
 target; [Phase 1](docs/PHASE1.md) owns delivery gates.
 
-Task-fault diagnostic attempt `001` at `8acd1a79a9cd` built the C kernel,
-then stopped before VM launch: actual-ELF calibration found zero attributable
-callsite pairs. Rust was not started; no fault captures or runtime result exist.
-[Failure evidence](docs/evidence/task-fault-initial/manifest.json) preserves
-183 text records (large disassembly compressed losslessly), 1,768 retained
-binary artifact hashes and the frozen source. Calibration tooling requires
-review and a fresh attempt; this is not a constructor failure result.
-
-Task-fault attempt `002` at `362835315fb5` built the C kernel and completed
-actual-ELF calibration. The guest emitted all 18 attempt captures, then cleanup
-reported `EINVAL` and PID1 reported failure; the strict terminal inventory gate
-rejected the run. Rust was not started. [Failure evidence](docs/evidence/task-fault-capture-failure/manifest.json)
-preserves the console, calibration, source/cache provenance and original failure
-continuity (307 records, 1,964 retained artifact hashes). No fault-classification
-PASS is claimed; cleanup must be corrected and verification repeated.
-
-The next harness candidate uses single-write tracing commands, explicit guest
-pointer-printing authorization and a separately verified runtime kallsyms
-extent record; sym-offset ARM/DISARM markers are accepted only with valid
-bounds. ELF function-size and return-PC proofs remain unchanged. Focused
-synthetic host regressions pass (38 Python cases and three isolated Rust helper
-cases in the pinned image). All three guest fixtures at `417c6a750112`
-compile without diagnostics and pass static x86_64 ELF checks; none was executed.
-[Harness evidence](docs/evidence/task-fault-harness-fix/manifest.json) records
-these separate checks. A fresh C/Rust diagnostic VM run is still required. Original attempt `002` captures are retained
-unchanged. See the [fixture contract](tests/task-construction-faults/README.md).
+Task-fault attempt `003` at `0fd8196feea0` passes the complete local C/Rust
+diagnostic matrix and pinned postchecks. Each side records 18 attempts: one
+successful uninjected control, one attributable task-slab allocation failure,
+one attributable order-2 stack failure, and 15 uninjected sweep controls.
+Both failures return ENOMEM; the stack failure matches task allocation/free
+identity, and disarmed retries succeed. Actual linked ELF/return PCs, runtime
+kallsyms, kernel notes, all 98 captures per side and fixture/tool identities are
+bound to the running kernels; configs differ only by the constructor selector.
+[Verified evidence](docs/evidence/task-fault-003/manifest.json) retains 970 text
+records (22 losslessly compressed), raw binary hashes and exact source snapshots.
+This verifies those two constructor failure paths in diagnostic x86_64 profiles,
+not general allocation failure or complete task/MM behavior. Earlier
+[calibration failure](docs/evidence/task-fault-initial/manifest.json),
+[cleanup failure](docs/evidence/task-fault-capture-failure/manifest.json) and
+[compile-only checks](docs/evidence/task-fault-harness-fix/manifest.json) remain
+separately attributed. The [fixture contract](tests/task-construction-faults/README.md)
+records the attribution and cleanup requirements.
 
 | Check | Verified result |
 | --- | --- |

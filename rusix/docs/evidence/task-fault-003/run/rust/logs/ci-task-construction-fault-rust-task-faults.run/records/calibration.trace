@@ -1,0 +1,2212 @@
+# tracer: nop
+#
+# entries-in-buffer/entries-written: 334/334   #P:2
+#
+#                                _-----=> irqs-off/BH-disabled
+#                               / _----=> need-resched
+#                              | / _---=> hardirq/softirq
+#                              || / _--=> preempt-depth
+#                              ||| / _-=> migrate-disable
+#                              |||| /     delay
+#           TASK-PID     CPU#  |||||  TIMESTAMP  FUNCTION
+#              | |         |   |||||     |         |
+    fault-worker-43      [000] ...1.   153.957385: tracing_mark_write+0x97/0x200: ARM
+    fault-worker-43      [000] ...1.   153.957427: slab_decision: (kmem_cache_alloc_node_noprof+0x61/0x3b0 <- should_failslab) result=0
+    fault-worker-43      [000] ...1.   153.957436: <stack trace>
+ => event_triggers_post_call+0x30/0x90
+ => kretprobe_trace_func+0x73/0x290
+ => kretprobe_dispatcher+0x44/0x70
+ => kretprobe_rethook_handler+0x3a/0x60
+ => rethook_trampoline_handler+0xb5/0x180
+ => arch_rethook_trampoline_callback+0x34/0x50
+ => arch_rethook_trampoline+0x2c/0x60
+ => kmem_cache_alloc_node_noprof+0x61/0x3b0
+ => rusix_dup_task_struct+0x22/0x160
+ => copy_process+0x176/0x11c0
+ => kernel_clone+0xf2/0x330
+ => __x64_sys_fork+0x3a/0x70
+ => do_syscall_64+0x6a/0x260
+ => entry_SYSCALL_64_after_hwframe+0x76/0x7e
+    fault-worker-43      [000] ...1.   153.957438: kmem_cache_alloc: call_site=rusix_dup_task_struct+0x22/0x160 ptr=ffff888000b342c0 name=task_struct bytes_req=5696 bytes_alloc=5696 gfp_flags=GFP_KERNEL node=-1 accounted=false
+    fault-worker-43      [000] ...1.   153.957464: page_decision: (prepare_alloc_pages+0x100/0x1a0 <- should_fail_alloc_page) order=2 injected=0
+    fault-worker-43      [000] ...1.   153.957471: <stack trace>
+ => event_triggers_post_call+0x30/0x90
+ => kretprobe_trace_func+0x73/0x290
+ => kretprobe_dispatcher+0x44/0x70
+ => kretprobe_rethook_handler+0x3a/0x60
+ => rethook_trampoline_handler+0xb5/0x180
+ => arch_rethook_trampoline_callback+0x34/0x50
+ => arch_rethook_trampoline+0x2c/0x60
+ => prepare_alloc_pages+0x100/0x1a0
+ => __alloc_frozen_pages_noprof+0xa3/0x1f0
+ => __alloc_pages_noprof+0x5/0x20
+ => rusix_task_alloc_stack+0x21/0x50
+ => rusix_dup_task_struct+0x43/0x160
+ => copy_process+0x176/0x11c0
+ => kernel_clone+0xf2/0x330
+ => __x64_sys_fork+0x3a/0x70
+ => do_syscall_64+0x6a/0x260
+ => entry_SYSCALL_64_after_hwframe+0x76/0x7e
+    fault-worker-43      [000] ...1.   153.957503: pages_result: (rusix_task_alloc_stack+0x21/0x50 <- __alloc_pages_noprof) order=2 result=0xffffea000002d200
+    fault-worker-43      [000] ...1.   153.957513: slab_decision: (kmem_cache_alloc_noprof+0x58/0x3a0 <- should_failslab) result=0
+    fault-worker-43      [000] ...1.   153.957518: <stack trace>
+ => event_triggers_post_call+0x30/0x90
+ => kretprobe_trace_func+0x73/0x290
+ => kretprobe_dispatcher+0x44/0x70
+ => kretprobe_rethook_handler+0x3a/0x60
+ => rethook_trampoline_handler+0xb5/0x180
+ => arch_rethook_trampoline_callback+0x34/0x50
+ => arch_rethook_trampoline+0x2c/0x60
+ => kmem_cache_alloc_noprof+0x58/0x3a0
+ => prepare_creds+0x1d/0xf0
+ => copy_creds+0x1d/0x360
+ => copy_process+0x376/0x11c0
+ => kernel_clone+0xf2/0x330
+ => __x64_sys_fork+0x3a/0x70
+ => do_syscall_64+0x6a/0x260
+ => entry_SYSCALL_64_after_hwframe+0x76/0x7e
+    fault-worker-43      [000] ...1.   153.957519: kmem_cache_alloc: call_site=prepare_creds+0x1d/0xf0 ptr=ffff8880009fb240 name=cred bytes_req=136 bytes_alloc=192 gfp_flags=GFP_KERNEL node=-1 accounted=false
+    fault-worker-43      [000] ...1.   153.957524: slab_decision: (kmem_cache_alloc_noprof+0x58/0x3a0 <- should_failslab) result=0
+    fault-worker-43      [000] ...1.   153.957529: <stack trace>
+ => event_triggers_post_call+0x30/0x90
+ => kretprobe_trace_func+0x73/0x290
+ => kretprobe_dispatcher+0x44/0x70
+ => kretprobe_rethook_handler+0x3a/0x60
+ => rethook_trampoline_handler+0xb5/0x180
+ => arch_rethook_trampoline_callback+0x34/0x50
+ => arch_rethook_trampoline+0x2c/0x60
+ => kmem_cache_alloc_noprof+0x58/0x3a0
+ => dup_fd+0x25/0x390
+ => copy_files+0x41/0x70
+ => copy_process+0x6e3/0x11c0
+ => kernel_clone+0xf2/0x330
+ => __x64_sys_fork+0x3a/0x70
+ => do_syscall_64+0x6a/0x260
+ => entry_SYSCALL_64_after_hwframe+0x76/0x7e
+    fault-worker-43      [000] ...1.   153.957530: kmem_cache_alloc: call_site=dup_fd+0x25/0x390 ptr=ffff8880002309c0 name=files_cache bytes_req=832 bytes_alloc=832 gfp_flags=GFP_KERNEL node=-1 accounted=false
+    fault-worker-43      [000] ...1.   153.957534: slab_decision: (kmem_cache_alloc_noprof+0x58/0x3a0 <- should_failslab) result=0
+    fault-worker-43      [000] ...1.   153.957539: <stack trace>
+ => event_triggers_post_call+0x30/0x90
+ => kretprobe_trace_func+0x73/0x290
+ => kretprobe_dispatcher+0x44/0x70
+ => kretprobe_rethook_handler+0x3a/0x60
+ => rethook_trampoline_handler+0xb5/0x180
+ => arch_rethook_trampoline_callback+0x34/0x50
+ => arch_rethook_trampoline+0x2c/0x60
+ => kmem_cache_alloc_noprof+0x58/0x3a0
+ => copy_fs_struct+0x19/0x110
+ => copy_fs+0x26/0x80
+ => copy_process+0x6f9/0x11c0
+ => kernel_clone+0xf2/0x330
+ => __x64_sys_fork+0x3a/0x70
+ => do_syscall_64+0x6a/0x260
+ => entry_SYSCALL_64_after_hwframe+0x76/0x7e
+    fault-worker-43      [000] ...1.   153.957539: kmem_cache_alloc: call_site=copy_fs_struct+0x19/0x110 ptr=ffff888000201180 name=fs_cache bytes_req=168 bytes_alloc=192 gfp_flags=GFP_KERNEL node=-1 accounted=false
+    fault-worker-43      [000] ...1.   153.957542: slab_decision: (kmem_cache_alloc_noprof+0x58/0x3a0 <- should_failslab) result=0
+    fault-worker-43      [000] ...1.   153.957546: <stack trace>
+ => event_triggers_post_call+0x30/0x90
+ => kretprobe_trace_func+0x73/0x290
+ => kretprobe_dispatcher+0x44/0x70
+ => kretprobe_rethook_handler+0x3a/0x60
+ => rethook_trampoline_handler+0xb5/0x180
+ => arch_rethook_trampoline_callback+0x34/0x50
+ => arch_rethook_trampoline+0x2c/0x60
+ => kmem_cache_alloc_noprof+0x58/0x3a0
+ => copy_sighand+0x2b/0xf0
+ => copy_process+0x70f/0x11c0
+ => kernel_clone+0xf2/0x330
+ => __x64_sys_fork+0x3a/0x70
+ => do_syscall_64+0x6a/0x260
+ => entry_SYSCALL_64_after_hwframe+0x76/0x7e
+    fault-worker-43      [000] ...1.   153.957547: kmem_cache_alloc: call_site=copy_sighand+0x2b/0xf0 ptr=ffff888000bc08c0 name=sighand_cache bytes_req=2200 bytes_alloc=2240 gfp_flags=GFP_KERNEL node=-1 accounted=false
+    fault-worker-43      [000] ...1.   153.957549: slab_decision: (kmem_cache_alloc_noprof+0x58/0x3a0 <- should_failslab) result=0
+    fault-worker-43      [000] ...1.   153.957553: <stack trace>
+ => event_triggers_post_call+0x30/0x90
+ => kretprobe_trace_func+0x73/0x290
+ => kretprobe_dispatcher+0x44/0x70
+ => kretprobe_rethook_handler+0x3a/0x60
+ => rethook_trampoline_handler+0xb5/0x180
+ => arch_rethook_trampoline_callback+0x34/0x50
+ => arch_rethook_trampoline+0x2c/0x60
+ => kmem_cache_alloc_noprof+0x58/0x3a0
+ => copy_signal+0x27/0x250
+ => copy_process+0x725/0x11c0
+ => kernel_clone+0xf2/0x330
+ => __x64_sys_fork+0x3a/0x70
+ => do_syscall_64+0x6a/0x260
+ => entry_SYSCALL_64_after_hwframe+0x76/0x7e
+    fault-worker-43      [000] ...1.   153.957558: kmem_cache_alloc: call_site=copy_signal+0x27/0x250 ptr=ffff8880002eee00 name=signal_cache bytes_req=1408 bytes_alloc=1408 gfp_flags=GFP_KERNEL|__GFP_ZERO node=-1 accounted=false
+    fault-worker-43      [000] ...1.   153.957561: slab_decision: (kmem_cache_alloc_noprof+0x58/0x3a0 <- should_failslab) result=0
+    fault-worker-43      [000] ...1.   153.957565: <stack trace>
+ => event_triggers_post_call+0x30/0x90
+ => kretprobe_trace_func+0x73/0x290
+ => kretprobe_dispatcher+0x44/0x70
+ => kretprobe_rethook_handler+0x3a/0x60
+ => rethook_trampoline_handler+0xb5/0x180
+ => arch_rethook_trampoline_callback+0x34/0x50
+ => arch_rethook_trampoline+0x2c/0x60
+ => kmem_cache_alloc_noprof+0x58/0x3a0
+ => copy_mm+0x7e/0x160
+ => copy_process+0x73b/0x11c0
+ => kernel_clone+0xf2/0x330
+ => __x64_sys_fork+0x3a/0x70
+ => do_syscall_64+0x6a/0x260
+ => entry_SYSCALL_64_after_hwframe+0x76/0x7e
+    fault-worker-43      [000] ...1.   153.957566: kmem_cache_alloc: call_site=copy_mm+0x7e/0x160 ptr=ffff888000151a40 name=mm_struct bytes_req=2184 bytes_alloc=2240 gfp_flags=GFP_KERNEL node=-1 accounted=false
+    fault-worker-43      [000] ...1.   153.957574: page_decision: (prepare_alloc_pages+0x100/0x1a0 <- should_fail_alloc_page) order=0 injected=0
+    fault-worker-43      [000] ...1.   153.957580: <stack trace>
+ => event_triggers_post_call+0x30/0x90
+ => kretprobe_trace_func+0x73/0x290
+ => kretprobe_dispatcher+0x44/0x70
+ => kretprobe_rethook_handler+0x3a/0x60
+ => rethook_trampoline_handler+0xb5/0x180
+ => arch_rethook_trampoline_callback+0x34/0x50
+ => arch_rethook_trampoline+0x2c/0x60
+ => prepare_alloc_pages+0x100/0x1a0
+ => __alloc_frozen_pages_noprof+0xa3/0x1f0
+ => __alloc_pages_noprof+0x5/0x20
+ => pgd_alloc+0x3a/0x200
+ => mm_init+0x227/0x310
+ => copy_mm+0x9e/0x160
+ => copy_process+0x73b/0x11c0
+ => kernel_clone+0xf2/0x330
+ => __x64_sys_fork+0x3a/0x70
+ => do_syscall_64+0x6a/0x260
+ => entry_SYSCALL_64_after_hwframe+0x76/0x7e
+    fault-worker-43      [000] ...1.   153.957581: pages_result: (pgd_alloc+0x3a/0x200 <- __alloc_pages_noprof) order=0 result=0xffffea0000119500
+    fault-worker-43      [000] ...1.   153.957622: slab_decision: (kmem_cache_alloc_noprof+0x58/0x3a0 <- should_failslab) result=0
+    fault-worker-43      [000] ...1.   153.957629: <stack trace>
+ => event_triggers_post_call+0x30/0x90
+ => kretprobe_trace_func+0x73/0x290
+ => kretprobe_dispatcher+0x44/0x70
+ => kretprobe_rethook_handler+0x3a/0x60
+ => rethook_trampoline_handler+0xb5/0x180
+ => arch_rethook_trampoline_callback+0x34/0x50
+ => arch_rethook_trampoline+0x2c/0x60
+ => kmem_cache_alloc_noprof+0x58/0x3a0
+ => mas_dup_build+0x62/0x450
+ => __mt_dup+0x106/0x170
+ => dup_mmap+0x16e/0x7c0
+ => copy_mm+0xae/0x160
+ => copy_process+0x73b/0x11c0
+ => kernel_clone+0xf2/0x330
+ => __x64_sys_fork+0x3a/0x70
+ => do_syscall_64+0x6a/0x260
+ => entry_SYSCALL_64_after_hwframe+0x76/0x7e
+    fault-worker-43      [000] ...1.   153.957630: kmem_cache_alloc: call_site=mas_dup_build+0x62/0x450 ptr=ffff888000b9c800 name=maple_node bytes_req=256 bytes_alloc=256 gfp_flags=GFP_KERNEL node=-1 accounted=false
+    fault-worker-43      [000] ...1.   153.957638: slab_decision: (kmem_cache_alloc_noprof+0x58/0x3a0 <- should_failslab) result=0
+    fault-worker-43      [000] ...1.   153.957644: <stack trace>
+ => event_triggers_post_call+0x30/0x90
+ => kretprobe_trace_func+0x73/0x290
+ => kretprobe_dispatcher+0x44/0x70
+ => kretprobe_rethook_handler+0x3a/0x60
+ => rethook_trampoline_handler+0xb5/0x180
+ => arch_rethook_trampoline_callback+0x34/0x50
+ => arch_rethook_trampoline+0x2c/0x60
+ => kmem_cache_alloc_noprof+0x58/0x3a0
+ => vm_area_dup+0x17/0x150
+ => dup_mmap+0x351/0x7c0
+ => copy_mm+0xae/0x160
+ => copy_process+0x73b/0x11c0
+ => kernel_clone+0xf2/0x330
+ => __x64_sys_fork+0x3a/0x70
+ => do_syscall_64+0x6a/0x260
+ => entry_SYSCALL_64_after_hwframe+0x76/0x7e
+    fault-worker-43      [000] ...1.   153.957645: kmem_cache_alloc: call_site=vm_area_dup+0x17/0x150 ptr=ffff888000ac4700 name=vm_area_struct bytes_req=256 bytes_alloc=256 gfp_flags=GFP_KERNEL node=-1 accounted=false
+    fault-worker-43      [000] ...1.   153.957653: slab_decision: (kmem_cache_alloc_noprof+0x58/0x3a0 <- should_failslab) result=0
+    fault-worker-43      [000] ...1.   153.957659: <stack trace>
+ => event_triggers_post_call+0x30/0x90
+ => kretprobe_trace_func+0x73/0x290
+ => kretprobe_dispatcher+0x44/0x70
+ => kretprobe_rethook_handler+0x3a/0x60
+ => rethook_trampoline_handler+0xb5/0x180
+ => arch_rethook_trampoline_callback+0x34/0x50
+ => arch_rethook_trampoline+0x2c/0x60
+ => kmem_cache_alloc_noprof+0x58/0x3a0
+ => vm_area_dup+0x17/0x150
+ => dup_mmap+0x351/0x7c0
+ => copy_mm+0xae/0x160
+ => copy_process+0x73b/0x11c0
+ => kernel_clone+0xf2/0x330
+ => __x64_sys_fork+0x3a/0x70
+ => do_syscall_64+0x6a/0x260
+ => entry_SYSCALL_64_after_hwframe+0x76/0x7e
+    fault-worker-43      [000] ...1.   153.957659: kmem_cache_alloc: call_site=vm_area_dup+0x17/0x150 ptr=ffff888000ac4600 name=vm_area_struct bytes_req=256 bytes_alloc=256 gfp_flags=GFP_KERNEL node=-1 accounted=false
+    fault-worker-43      [000] ...1.   153.957662: slab_decision: (kmem_cache_alloc_noprof+0x58/0x3a0 <- should_failslab) result=0
+    fault-worker-43      [000] ...1.   153.957667: <stack trace>
+ => event_triggers_post_call+0x30/0x90
+ => kretprobe_trace_func+0x73/0x290
+ => kretprobe_dispatcher+0x44/0x70
+ => kretprobe_rethook_handler+0x3a/0x60
+ => rethook_trampoline_handler+0xb5/0x180
+ => arch_rethook_trampoline_callback+0x34/0x50
+ => arch_rethook_trampoline+0x2c/0x60
+ => kmem_cache_alloc_noprof+0x58/0x3a0
+ => vm_area_dup+0x17/0x150
+ => dup_mmap+0x351/0x7c0
+ => copy_mm+0xae/0x160
+ => copy_process+0x73b/0x11c0
+ => kernel_clone+0xf2/0x330
+ => __x64_sys_fork+0x3a/0x70
+ => do_syscall_64+0x6a/0x260
+ => entry_SYSCALL_64_after_hwframe+0x76/0x7e
+    fault-worker-43      [000] ...1.   153.957668: kmem_cache_alloc: call_site=vm_area_dup+0x17/0x150 ptr=ffff888000ac4500 name=vm_area_struct bytes_req=256 bytes_alloc=256 gfp_flags=GFP_KERNEL node=-1 accounted=false
+    fault-worker-43      [000] ...1.   153.957670: slab_decision: (kmem_cache_alloc_noprof+0x58/0x3a0 <- should_failslab) result=0
+    fault-worker-43      [000] ...1.   153.957676: <stack trace>
+ => event_triggers_post_call+0x30/0x90
+ => kretprobe_trace_func+0x73/0x290
+ => kretprobe_dispatcher+0x44/0x70
+ => kretprobe_rethook_handler+0x3a/0x60
+ => rethook_trampoline_handler+0xb5/0x180
+ => arch_rethook_trampoline_callback+0x34/0x50
+ => arch_rethook_trampoline+0x2c/0x60
+ => kmem_cache_alloc_noprof+0x58/0x3a0
+ => vm_area_dup+0x17/0x150
+ => dup_mmap+0x351/0x7c0
+ => copy_mm+0xae/0x160
+ => copy_process+0x73b/0x11c0
+ => kernel_clone+0xf2/0x330
+ => __x64_sys_fork+0x3a/0x70
+ => do_syscall_64+0x6a/0x260
+ => entry_SYSCALL_64_after_hwframe+0x76/0x7e
+    fault-worker-43      [000] ...1.   153.957676: kmem_cache_alloc: call_site=vm_area_dup+0x17/0x150 ptr=ffff888000ac4400 name=vm_area_struct bytes_req=256 bytes_alloc=256 gfp_flags=GFP_KERNEL node=-1 accounted=false
+    fault-worker-43      [000] ...1.   153.957677: slab_decision: (kmem_cache_alloc_noprof+0x58/0x3a0 <- should_failslab) result=0
+    fault-worker-43      [000] ...1.   153.957683: <stack trace>
+ => event_triggers_post_call+0x30/0x90
+ => kretprobe_trace_func+0x73/0x290
+ => kretprobe_dispatcher+0x44/0x70
+ => kretprobe_rethook_handler+0x3a/0x60
+ => rethook_trampoline_handler+0xb5/0x180
+ => arch_rethook_trampoline_callback+0x34/0x50
+ => arch_rethook_trampoline+0x2c/0x60
+ => kmem_cache_alloc_noprof+0x58/0x3a0
+ => anon_vma_clone+0x5f/0x1d0
+ => anon_vma_fork+0x23/0x170
+ => dup_mmap+0x372/0x7c0
+ => copy_mm+0xae/0x160
+ => copy_process+0x73b/0x11c0
+ => kernel_clone+0xf2/0x330
+ => __x64_sys_fork+0x3a/0x70
+ => do_syscall_64+0x6a/0x260
+ => entry_SYSCALL_64_after_hwframe+0x76/0x7e
+    fault-worker-43      [000] ...1.   153.957684: kmem_cache_alloc: call_site=anon_vma_clone+0x5f/0x1d0 ptr=ffff8880009fd2c0 name=anon_vma_chain bytes_req=64 bytes_alloc=64 gfp_flags=GFP_NOWAIT node=-1 accounted=false
+    fault-worker-43      [000] ...1.   153.957694: slab_decision: (kmem_cache_alloc_noprof+0x58/0x3a0 <- should_failslab) result=0
+    fault-worker-43      [000] ...1.   153.957699: <stack trace>
+ => event_triggers_post_call+0x30/0x90
+ => kretprobe_trace_func+0x73/0x290
+ => kretprobe_dispatcher+0x44/0x70
+ => kretprobe_rethook_handler+0x3a/0x60
+ => rethook_trampoline_handler+0xb5/0x180
+ => arch_rethook_trampoline_callback+0x34/0x50
+ => arch_rethook_trampoline+0x2c/0x60
+ => kmem_cache_alloc_noprof+0x58/0x3a0
+ => anon_vma_fork+0x52/0x170
+ => dup_mmap+0x372/0x7c0
+ => copy_mm+0xae/0x160
+ => copy_process+0x73b/0x11c0
+ => kernel_clone+0xf2/0x330
+ => __x64_sys_fork+0x3a/0x70
+ => do_syscall_64+0x6a/0x260
+ => entry_SYSCALL_64_after_hwframe+0x76/0x7e
+    fault-worker-43      [000] ...1.   153.957700: kmem_cache_alloc: call_site=anon_vma_fork+0x52/0x170 ptr=ffff8880009fc798 name=anon_vma bytes_req=208 bytes_alloc=216 gfp_flags=GFP_KERNEL node=-1 accounted=false
+    fault-worker-43      [000] ...1.   153.957701: slab_decision: (kmem_cache_alloc_noprof+0x58/0x3a0 <- should_failslab) result=0
+    fault-worker-43      [000] ...1.   153.957707: <stack trace>
+ => event_triggers_post_call+0x30/0x90
+ => kretprobe_trace_func+0x73/0x290
+ => kretprobe_dispatcher+0x44/0x70
+ => kretprobe_rethook_handler+0x3a/0x60
+ => rethook_trampoline_handler+0xb5/0x180
+ => arch_rethook_trampoline_callback+0x34/0x50
+ => arch_rethook_trampoline+0x2c/0x60
+ => kmem_cache_alloc_noprof+0x58/0x3a0
+ => anon_vma_fork+0x99/0x170
+ => dup_mmap+0x372/0x7c0
+ => copy_mm+0xae/0x160
+ => copy_process+0x73b/0x11c0
+ => kernel_clone+0xf2/0x330
+ => __x64_sys_fork+0x3a/0x70
+ => do_syscall_64+0x6a/0x260
+ => entry_SYSCALL_64_after_hwframe+0x76/0x7e
+    fault-worker-43      [000] ...1.   153.957707: kmem_cache_alloc: call_site=anon_vma_fork+0x99/0x170 ptr=ffff8880009fd300 name=anon_vma_chain bytes_req=64 bytes_alloc=64 gfp_flags=GFP_KERNEL node=-1 accounted=false
+    fault-worker-43      [000] ...1.   153.957711: page_decision: (prepare_alloc_pages+0x100/0x1a0 <- should_fail_alloc_page) order=0 injected=0
+    fault-worker-43      [000] ...1.   153.957717: <stack trace>
+ => event_triggers_post_call+0x30/0x90
+ => kretprobe_trace_func+0x73/0x290
+ => kretprobe_dispatcher+0x44/0x70
+ => kretprobe_rethook_handler+0x3a/0x60
+ => rethook_trampoline_handler+0xb5/0x180
+ => arch_rethook_trampoline_callback+0x34/0x50
+ => arch_rethook_trampoline+0x2c/0x60
+ => prepare_alloc_pages+0x100/0x1a0
+ => __alloc_frozen_pages_noprof+0xa3/0x1f0
+ => __alloc_pages_noprof+0x5/0x20
+ => __pud_alloc+0x35/0x230
+ => copy_page_range+0x1660/0x1760
+ => dup_mmap+0x4d0/0x7c0
+ => copy_mm+0xae/0x160
+ => copy_process+0x73b/0x11c0
+ => kernel_clone+0xf2/0x330
+ => __x64_sys_fork+0x3a/0x70
+ => do_syscall_64+0x6a/0x260
+ => entry_SYSCALL_64_after_hwframe+0x76/0x7e
+    fault-worker-43      [000] ...1.   153.957719: pages_result: (__pud_alloc+0x35/0x230 <- __alloc_pages_noprof) order=0 result=0xffffea0000119600
+    fault-worker-43      [000] ...1.   153.957725: page_decision: (prepare_alloc_pages+0x100/0x1a0 <- should_fail_alloc_page) order=0 injected=0
+    fault-worker-43      [000] ...1.   153.957731: <stack trace>
+ => event_triggers_post_call+0x30/0x90
+ => kretprobe_trace_func+0x73/0x290
+ => kretprobe_dispatcher+0x44/0x70
+ => kretprobe_rethook_handler+0x3a/0x60
+ => rethook_trampoline_handler+0xb5/0x180
+ => arch_rethook_trampoline_callback+0x34/0x50
+ => arch_rethook_trampoline+0x2c/0x60
+ => prepare_alloc_pages+0x100/0x1a0
+ => __alloc_frozen_pages_noprof+0xa3/0x1f0
+ => __alloc_pages_noprof+0x5/0x20
+ => __pmd_alloc+0x32/0x290
+ => copy_page_range+0x15c8/0x1760
+ => dup_mmap+0x4d0/0x7c0
+ => copy_mm+0xae/0x160
+ => copy_process+0x73b/0x11c0
+ => kernel_clone+0xf2/0x330
+ => __x64_sys_fork+0x3a/0x70
+ => do_syscall_64+0x6a/0x260
+ => entry_SYSCALL_64_after_hwframe+0x76/0x7e
+    fault-worker-43      [000] ...1.   153.957732: pages_result: (__pmd_alloc+0x32/0x290 <- __alloc_pages_noprof) order=0 result=0xffffea00001195c0
+    fault-worker-43      [000] ...1.   153.957733: slab_decision: (kmem_cache_alloc_noprof+0x58/0x3a0 <- should_failslab) result=0
+    fault-worker-43      [000] ...1.   153.957739: <stack trace>
+ => event_triggers_post_call+0x30/0x90
+ => kretprobe_trace_func+0x73/0x290
+ => kretprobe_dispatcher+0x44/0x70
+ => kretprobe_rethook_handler+0x3a/0x60
+ => rethook_trampoline_handler+0xb5/0x180
+ => arch_rethook_trampoline_callback+0x34/0x50
+ => arch_rethook_trampoline+0x2c/0x60
+ => kmem_cache_alloc_noprof+0x58/0x3a0
+ => __pmd_alloc+0x5d/0x290
+ => copy_page_range+0x15c8/0x1760
+ => dup_mmap+0x4d0/0x7c0
+ => copy_mm+0xae/0x160
+ => copy_process+0x73b/0x11c0
+ => kernel_clone+0xf2/0x330
+ => __x64_sys_fork+0x3a/0x70
+ => do_syscall_64+0x6a/0x260
+ => entry_SYSCALL_64_after_hwframe+0x76/0x7e
+    fault-worker-43      [000] ...1.   153.957740: kmem_cache_alloc: call_site=__pmd_alloc+0x5d/0x290 ptr=ffff888000158080 name=page->ptl bytes_req=64 bytes_alloc=64 gfp_flags=GFP_KERNEL node=-1 accounted=false
+    fault-worker-43      [000] ...1.   153.957747: page_decision: (prepare_alloc_pages+0x100/0x1a0 <- should_fail_alloc_page) order=0 injected=0
+    fault-worker-43      [000] ...1.   153.957753: <stack trace>
+ => event_triggers_post_call+0x30/0x90
+ => kretprobe_trace_func+0x73/0x290
+ => kretprobe_dispatcher+0x44/0x70
+ => kretprobe_rethook_handler+0x3a/0x60
+ => rethook_trampoline_handler+0xb5/0x180
+ => arch_rethook_trampoline_callback+0x34/0x50
+ => arch_rethook_trampoline+0x2c/0x60
+ => prepare_alloc_pages+0x100/0x1a0
+ => __alloc_frozen_pages_noprof+0xa3/0x1f0
+ => __alloc_pages_noprof+0x5/0x20
+ => pte_alloc_one+0x1b/0xf0
+ => __pte_alloc+0x15/0x160
+ => copy_page_range+0x144d/0x1760
+ => dup_mmap+0x4d0/0x7c0
+ => copy_mm+0xae/0x160
+ => copy_process+0x73b/0x11c0
+ => kernel_clone+0xf2/0x330
+ => __x64_sys_fork+0x3a/0x70
+ => do_syscall_64+0x6a/0x260
+ => entry_SYSCALL_64_after_hwframe+0x76/0x7e
+    fault-worker-43      [000] ...1.   153.957755: pages_result: (pte_alloc_one+0x1b/0xf0 <- __alloc_pages_noprof) order=0 result=0xffffea0000119300
+    fault-worker-43      [000] ...1.   153.957756: slab_decision: (kmem_cache_alloc_noprof+0x58/0x3a0 <- should_failslab) result=0
+    fault-worker-43      [000] ...1.   153.957762: <stack trace>
+ => event_triggers_post_call+0x30/0x90
+ => kretprobe_trace_func+0x73/0x290
+ => kretprobe_dispatcher+0x44/0x70
+ => kretprobe_rethook_handler+0x3a/0x60
+ => rethook_trampoline_handler+0xb5/0x180
+ => arch_rethook_trampoline_callback+0x34/0x50
+ => arch_rethook_trampoline+0x2c/0x60
+ => kmem_cache_alloc_noprof+0x58/0x3a0
+ => ptlock_alloc+0x15/0x30
+ => pte_alloc_one+0x38/0xf0
+ => __pte_alloc+0x15/0x160
+ => copy_page_range+0x144d/0x1760
+ => dup_mmap+0x4d0/0x7c0
+ => copy_mm+0xae/0x160
+ => copy_process+0x73b/0x11c0
+ => kernel_clone+0xf2/0x330
+ => __x64_sys_fork+0x3a/0x70
+ => do_syscall_64+0x6a/0x260
+ => entry_SYSCALL_64_after_hwframe+0x76/0x7e
+    fault-worker-43      [000] ...1.   153.957762: kmem_cache_alloc: call_site=ptlock_alloc+0x15/0x30 ptr=ffff8880001580c0 name=page->ptl bytes_req=64 bytes_alloc=64 gfp_flags=GFP_KERNEL node=-1 accounted=false
+    fault-worker-43      [000] ...1.   153.957779: slab_decision: (kmem_cache_alloc_noprof+0x58/0x3a0 <- should_failslab) result=0
+    fault-worker-43      [000] ...1.   153.957784: <stack trace>
+ => event_triggers_post_call+0x30/0x90
+ => kretprobe_trace_func+0x73/0x290
+ => kretprobe_dispatcher+0x44/0x70
+ => kretprobe_rethook_handler+0x3a/0x60
+ => rethook_trampoline_handler+0xb5/0x180
+ => arch_rethook_trampoline_callback+0x34/0x50
+ => arch_rethook_trampoline+0x2c/0x60
+ => kmem_cache_alloc_noprof+0x58/0x3a0
+ => vm_area_dup+0x17/0x150
+ => dup_mmap+0x351/0x7c0
+ => copy_mm+0xae/0x160
+ => copy_process+0x73b/0x11c0
+ => kernel_clone+0xf2/0x330
+ => __x64_sys_fork+0x3a/0x70
+ => do_syscall_64+0x6a/0x260
+ => entry_SYSCALL_64_after_hwframe+0x76/0x7e
+    fault-worker-43      [000] ...1.   153.957785: kmem_cache_alloc: call_site=vm_area_dup+0x17/0x150 ptr=ffff888000ac4300 name=vm_area_struct bytes_req=256 bytes_alloc=256 gfp_flags=GFP_KERNEL node=-1 accounted=false
+    fault-worker-43      [000] ...1.   153.957786: slab_decision: (kmem_cache_alloc_noprof+0x58/0x3a0 <- should_failslab) result=0
+    fault-worker-43      [000] ...1.   153.957791: <stack trace>
+ => event_triggers_post_call+0x30/0x90
+ => kretprobe_trace_func+0x73/0x290
+ => kretprobe_dispatcher+0x44/0x70
+ => kretprobe_rethook_handler+0x3a/0x60
+ => rethook_trampoline_handler+0xb5/0x180
+ => arch_rethook_trampoline_callback+0x34/0x50
+ => arch_rethook_trampoline+0x2c/0x60
+ => kmem_cache_alloc_noprof+0x58/0x3a0
+ => anon_vma_clone+0x5f/0x1d0
+ => anon_vma_fork+0x23/0x170
+ => dup_mmap+0x372/0x7c0
+ => copy_mm+0xae/0x160
+ => copy_process+0x73b/0x11c0
+ => kernel_clone+0xf2/0x330
+ => __x64_sys_fork+0x3a/0x70
+ => do_syscall_64+0x6a/0x260
+ => entry_SYSCALL_64_after_hwframe+0x76/0x7e
+    fault-worker-43      [000] ...1.   153.957791: kmem_cache_alloc: call_site=anon_vma_clone+0x5f/0x1d0 ptr=ffff8880009fd340 name=anon_vma_chain bytes_req=64 bytes_alloc=64 gfp_flags=GFP_NOWAIT node=-1 accounted=false
+    fault-worker-43      [000] ...1.   153.957793: slab_decision: (kmem_cache_alloc_noprof+0x58/0x3a0 <- should_failslab) result=0
+    fault-worker-43      [000] ...1.   153.957798: <stack trace>
+ => event_triggers_post_call+0x30/0x90
+ => kretprobe_trace_func+0x73/0x290
+ => kretprobe_dispatcher+0x44/0x70
+ => kretprobe_rethook_handler+0x3a/0x60
+ => rethook_trampoline_handler+0xb5/0x180
+ => arch_rethook_trampoline_callback+0x34/0x50
+ => arch_rethook_trampoline+0x2c/0x60
+ => kmem_cache_alloc_noprof+0x58/0x3a0
+ => anon_vma_fork+0x52/0x170
+ => dup_mmap+0x372/0x7c0
+ => copy_mm+0xae/0x160
+ => copy_process+0x73b/0x11c0
+ => kernel_clone+0xf2/0x330
+ => __x64_sys_fork+0x3a/0x70
+ => do_syscall_64+0x6a/0x260
+ => entry_SYSCALL_64_after_hwframe+0x76/0x7e
+    fault-worker-43      [000] ...1.   153.957798: kmem_cache_alloc: call_site=anon_vma_fork+0x52/0x170 ptr=ffff8880009fc870 name=anon_vma bytes_req=208 bytes_alloc=216 gfp_flags=GFP_KERNEL node=-1 accounted=false
+    fault-worker-43      [000] ...1.   153.957799: slab_decision: (kmem_cache_alloc_noprof+0x58/0x3a0 <- should_failslab) result=0
+    fault-worker-43      [000] ...1.   153.957805: <stack trace>
+ => event_triggers_post_call+0x30/0x90
+ => kretprobe_trace_func+0x73/0x290
+ => kretprobe_dispatcher+0x44/0x70
+ => kretprobe_rethook_handler+0x3a/0x60
+ => rethook_trampoline_handler+0xb5/0x180
+ => arch_rethook_trampoline_callback+0x34/0x50
+ => arch_rethook_trampoline+0x2c/0x60
+ => kmem_cache_alloc_noprof+0x58/0x3a0
+ => anon_vma_fork+0x99/0x170
+ => dup_mmap+0x372/0x7c0
+ => copy_mm+0xae/0x160
+ => copy_process+0x73b/0x11c0
+ => kernel_clone+0xf2/0x330
+ => __x64_sys_fork+0x3a/0x70
+ => do_syscall_64+0x6a/0x260
+ => entry_SYSCALL_64_after_hwframe+0x76/0x7e
+    fault-worker-43      [000] ...1.   153.957805: kmem_cache_alloc: call_site=anon_vma_fork+0x99/0x170 ptr=ffff8880009fd380 name=anon_vma_chain bytes_req=64 bytes_alloc=64 gfp_flags=GFP_KERNEL node=-1 accounted=false
+    fault-worker-43      [000] ...1.   153.957809: slab_decision: (kmem_cache_alloc_noprof+0x58/0x3a0 <- should_failslab) result=0
+    fault-worker-43      [000] ...1.   153.957814: <stack trace>
+ => event_triggers_post_call+0x30/0x90
+ => kretprobe_trace_func+0x73/0x290
+ => kretprobe_dispatcher+0x44/0x70
+ => kretprobe_rethook_handler+0x3a/0x60
+ => rethook_trampoline_handler+0xb5/0x180
+ => arch_rethook_trampoline_callback+0x34/0x50
+ => arch_rethook_trampoline+0x2c/0x60
+ => kmem_cache_alloc_noprof+0x58/0x3a0
+ => vm_area_dup+0x17/0x150
+ => dup_mmap+0x351/0x7c0
+ => copy_mm+0xae/0x160
+ => copy_process+0x73b/0x11c0
+ => kernel_clone+0xf2/0x330
+ => __x64_sys_fork+0x3a/0x70
+ => do_syscall_64+0x6a/0x260
+ => entry_SYSCALL_64_after_hwframe+0x76/0x7e
+    fault-worker-43      [000] ...1.   153.957815: kmem_cache_alloc: call_site=vm_area_dup+0x17/0x150 ptr=ffff888000ac4200 name=vm_area_struct bytes_req=256 bytes_alloc=256 gfp_flags=GFP_KERNEL node=-1 accounted=false
+    fault-worker-43      [000] ...1.   153.957816: slab_decision: (kmem_cache_alloc_noprof+0x58/0x3a0 <- should_failslab) result=0
+    fault-worker-43      [000] ...1.   153.957821: <stack trace>
+ => event_triggers_post_call+0x30/0x90
+ => kretprobe_trace_func+0x73/0x290
+ => kretprobe_dispatcher+0x44/0x70
+ => kretprobe_rethook_handler+0x3a/0x60
+ => rethook_trampoline_handler+0xb5/0x180
+ => arch_rethook_trampoline_callback+0x34/0x50
+ => arch_rethook_trampoline+0x2c/0x60
+ => kmem_cache_alloc_noprof+0x58/0x3a0
+ => anon_vma_clone+0x5f/0x1d0
+ => anon_vma_fork+0x23/0x170
+ => dup_mmap+0x372/0x7c0
+ => copy_mm+0xae/0x160
+ => copy_process+0x73b/0x11c0
+ => kernel_clone+0xf2/0x330
+ => __x64_sys_fork+0x3a/0x70
+ => do_syscall_64+0x6a/0x260
+ => entry_SYSCALL_64_after_hwframe+0x76/0x7e
+    fault-worker-43      [000] ...1.   153.957822: kmem_cache_alloc: call_site=anon_vma_clone+0x5f/0x1d0 ptr=ffff8880009fd3c0 name=anon_vma_chain bytes_req=64 bytes_alloc=64 gfp_flags=GFP_NOWAIT node=-1 accounted=false
+    fault-worker-43      [000] ...1.   153.957823: slab_decision: (kmem_cache_alloc_noprof+0x58/0x3a0 <- should_failslab) result=0
+    fault-worker-43      [000] ...1.   153.957828: <stack trace>
+ => event_triggers_post_call+0x30/0x90
+ => kretprobe_trace_func+0x73/0x290
+ => kretprobe_dispatcher+0x44/0x70
+ => kretprobe_rethook_handler+0x3a/0x60
+ => rethook_trampoline_handler+0xb5/0x180
+ => arch_rethook_trampoline_callback+0x34/0x50
+ => arch_rethook_trampoline+0x2c/0x60
+ => kmem_cache_alloc_noprof+0x58/0x3a0
+ => anon_vma_fork+0x52/0x170
+ => dup_mmap+0x372/0x7c0
+ => copy_mm+0xae/0x160
+ => copy_process+0x73b/0x11c0
+ => kernel_clone+0xf2/0x330
+ => __x64_sys_fork+0x3a/0x70
+ => do_syscall_64+0x6a/0x260
+ => entry_SYSCALL_64_after_hwframe+0x76/0x7e
+    fault-worker-43      [000] ...1.   153.957829: kmem_cache_alloc: call_site=anon_vma_fork+0x52/0x170 ptr=ffff8880009fc948 name=anon_vma bytes_req=208 bytes_alloc=216 gfp_flags=GFP_KERNEL node=-1 accounted=false
+    fault-worker-43      [000] ...1.   153.957830: slab_decision: (kmem_cache_alloc_noprof+0x58/0x3a0 <- should_failslab) result=0
+    fault-worker-43      [000] ...1.   153.957835: <stack trace>
+ => event_triggers_post_call+0x30/0x90
+ => kretprobe_trace_func+0x73/0x290
+ => kretprobe_dispatcher+0x44/0x70
+ => kretprobe_rethook_handler+0x3a/0x60
+ => rethook_trampoline_handler+0xb5/0x180
+ => arch_rethook_trampoline_callback+0x34/0x50
+ => arch_rethook_trampoline+0x2c/0x60
+ => kmem_cache_alloc_noprof+0x58/0x3a0
+ => anon_vma_fork+0x99/0x170
+ => dup_mmap+0x372/0x7c0
+ => copy_mm+0xae/0x160
+ => copy_process+0x73b/0x11c0
+ => kernel_clone+0xf2/0x330
+ => __x64_sys_fork+0x3a/0x70
+ => do_syscall_64+0x6a/0x260
+ => entry_SYSCALL_64_after_hwframe+0x76/0x7e
+    fault-worker-43      [000] ...1.   153.957835: kmem_cache_alloc: call_site=anon_vma_fork+0x99/0x170 ptr=ffff8880009fd400 name=anon_vma_chain bytes_req=64 bytes_alloc=64 gfp_flags=GFP_KERNEL node=-1 accounted=false
+    fault-worker-43      [000] ...1.   153.957838: slab_decision: (kmem_cache_alloc_noprof+0x58/0x3a0 <- should_failslab) result=0
+    fault-worker-43      [000] ...1.   153.957844: <stack trace>
+ => event_triggers_post_call+0x30/0x90
+ => kretprobe_trace_func+0x73/0x290
+ => kretprobe_dispatcher+0x44/0x70
+ => kretprobe_rethook_handler+0x3a/0x60
+ => rethook_trampoline_handler+0xb5/0x180
+ => arch_rethook_trampoline_callback+0x34/0x50
+ => arch_rethook_trampoline+0x2c/0x60
+ => kmem_cache_alloc_noprof+0x58/0x3a0
+ => vm_area_dup+0x17/0x150
+ => dup_mmap+0x351/0x7c0
+ => copy_mm+0xae/0x160
+ => copy_process+0x73b/0x11c0
+ => kernel_clone+0xf2/0x330
+ => __x64_sys_fork+0x3a/0x70
+ => do_syscall_64+0x6a/0x260
+ => entry_SYSCALL_64_after_hwframe+0x76/0x7e
+    fault-worker-43      [000] ...1.   153.957844: kmem_cache_alloc: call_site=vm_area_dup+0x17/0x150 ptr=ffff888000ac4100 name=vm_area_struct bytes_req=256 bytes_alloc=256 gfp_flags=GFP_KERNEL node=-1 accounted=false
+    fault-worker-43      [000] ...1.   153.957845: slab_decision: (kmem_cache_alloc_noprof+0x58/0x3a0 <- should_failslab) result=0
+    fault-worker-43      [000] ...1.   153.957851: <stack trace>
+ => event_triggers_post_call+0x30/0x90
+ => kretprobe_trace_func+0x73/0x290
+ => kretprobe_dispatcher+0x44/0x70
+ => kretprobe_rethook_handler+0x3a/0x60
+ => rethook_trampoline_handler+0xb5/0x180
+ => arch_rethook_trampoline_callback+0x34/0x50
+ => arch_rethook_trampoline+0x2c/0x60
+ => kmem_cache_alloc_noprof+0x58/0x3a0
+ => anon_vma_clone+0x5f/0x1d0
+ => anon_vma_fork+0x23/0x170
+ => dup_mmap+0x372/0x7c0
+ => copy_mm+0xae/0x160
+ => copy_process+0x73b/0x11c0
+ => kernel_clone+0xf2/0x330
+ => __x64_sys_fork+0x3a/0x70
+ => do_syscall_64+0x6a/0x260
+ => entry_SYSCALL_64_after_hwframe+0x76/0x7e
+    fault-worker-43      [000] ...1.   153.957851: kmem_cache_alloc: call_site=anon_vma_clone+0x5f/0x1d0 ptr=ffff8880009fd440 name=anon_vma_chain bytes_req=64 bytes_alloc=64 gfp_flags=GFP_NOWAIT node=-1 accounted=false
+    fault-worker-43      [000] ...1.   153.957853: slab_decision: (kmem_cache_alloc_noprof+0x58/0x3a0 <- should_failslab) result=0
+    fault-worker-43      [000] ...1.   153.957858: <stack trace>
+ => event_triggers_post_call+0x30/0x90
+ => kretprobe_trace_func+0x73/0x290
+ => kretprobe_dispatcher+0x44/0x70
+ => kretprobe_rethook_handler+0x3a/0x60
+ => rethook_trampoline_handler+0xb5/0x180
+ => arch_rethook_trampoline_callback+0x34/0x50
+ => arch_rethook_trampoline+0x2c/0x60
+ => kmem_cache_alloc_noprof+0x58/0x3a0
+ => anon_vma_fork+0x52/0x170
+ => dup_mmap+0x372/0x7c0
+ => copy_mm+0xae/0x160
+ => copy_process+0x73b/0x11c0
+ => kernel_clone+0xf2/0x330
+ => __x64_sys_fork+0x3a/0x70
+ => do_syscall_64+0x6a/0x260
+ => entry_SYSCALL_64_after_hwframe+0x76/0x7e
+    fault-worker-43      [000] ...1.   153.957858: kmem_cache_alloc: call_site=anon_vma_fork+0x52/0x170 ptr=ffff8880009fca20 name=anon_vma bytes_req=208 bytes_alloc=216 gfp_flags=GFP_KERNEL node=-1 accounted=false
+    fault-worker-43      [000] ...1.   153.957859: slab_decision: (kmem_cache_alloc_noprof+0x58/0x3a0 <- should_failslab) result=0
+    fault-worker-43      [000] ...1.   153.957864: <stack trace>
+ => event_triggers_post_call+0x30/0x90
+ => kretprobe_trace_func+0x73/0x290
+ => kretprobe_dispatcher+0x44/0x70
+ => kretprobe_rethook_handler+0x3a/0x60
+ => rethook_trampoline_handler+0xb5/0x180
+ => arch_rethook_trampoline_callback+0x34/0x50
+ => arch_rethook_trampoline+0x2c/0x60
+ => kmem_cache_alloc_noprof+0x58/0x3a0
+ => anon_vma_fork+0x99/0x170
+ => dup_mmap+0x372/0x7c0
+ => copy_mm+0xae/0x160
+ => copy_process+0x73b/0x11c0
+ => kernel_clone+0xf2/0x330
+ => __x64_sys_fork+0x3a/0x70
+ => do_syscall_64+0x6a/0x260
+ => entry_SYSCALL_64_after_hwframe+0x76/0x7e
+    fault-worker-43      [000] ...1.   153.957865: kmem_cache_alloc: call_site=anon_vma_fork+0x99/0x170 ptr=ffff8880009fd480 name=anon_vma_chain bytes_req=64 bytes_alloc=64 gfp_flags=GFP_KERNEL node=-1 accounted=false
+    fault-worker-43      [000] ...1.   153.957867: page_decision: (prepare_alloc_pages+0x100/0x1a0 <- should_fail_alloc_page) order=0 injected=0
+    fault-worker-43      [000] ...1.   153.957873: <stack trace>
+ => event_triggers_post_call+0x30/0x90
+ => kretprobe_trace_func+0x73/0x290
+ => kretprobe_dispatcher+0x44/0x70
+ => kretprobe_rethook_handler+0x3a/0x60
+ => rethook_trampoline_handler+0xb5/0x180
+ => arch_rethook_trampoline_callback+0x34/0x50
+ => arch_rethook_trampoline+0x2c/0x60
+ => prepare_alloc_pages+0x100/0x1a0
+ => __alloc_frozen_pages_noprof+0xa3/0x1f0
+ => __alloc_pages_noprof+0x5/0x20
+ => pte_alloc_one+0x1b/0xf0
+ => __pte_alloc+0x15/0x160
+ => copy_page_range+0x144d/0x1760
+ => dup_mmap+0x4d0/0x7c0
+ => copy_mm+0xae/0x160
+ => copy_process+0x73b/0x11c0
+ => kernel_clone+0xf2/0x330
+ => __x64_sys_fork+0x3a/0x70
+ => do_syscall_64+0x6a/0x260
+ => entry_SYSCALL_64_after_hwframe+0x76/0x7e
+    fault-worker-43      [000] ...1.   153.957875: pages_result: (pte_alloc_one+0x1b/0xf0 <- __alloc_pages_noprof) order=0 result=0xffffea00001192c0
+    fault-worker-43      [000] ...1.   153.957876: slab_decision: (kmem_cache_alloc_noprof+0x58/0x3a0 <- should_failslab) result=0
+    fault-worker-43      [000] ...1.   153.957882: <stack trace>
+ => event_triggers_post_call+0x30/0x90
+ => kretprobe_trace_func+0x73/0x290
+ => kretprobe_dispatcher+0x44/0x70
+ => kretprobe_rethook_handler+0x3a/0x60
+ => rethook_trampoline_handler+0xb5/0x180
+ => arch_rethook_trampoline_callback+0x34/0x50
+ => arch_rethook_trampoline+0x2c/0x60
+ => kmem_cache_alloc_noprof+0x58/0x3a0
+ => ptlock_alloc+0x15/0x30
+ => pte_alloc_one+0x38/0xf0
+ => __pte_alloc+0x15/0x160
+ => copy_page_range+0x144d/0x1760
+ => dup_mmap+0x4d0/0x7c0
+ => copy_mm+0xae/0x160
+ => copy_process+0x73b/0x11c0
+ => kernel_clone+0xf2/0x330
+ => __x64_sys_fork+0x3a/0x70
+ => do_syscall_64+0x6a/0x260
+ => entry_SYSCALL_64_after_hwframe+0x76/0x7e
+    fault-worker-43      [000] ...1.   153.957882: kmem_cache_alloc: call_site=ptlock_alloc+0x15/0x30 ptr=ffff888000158480 name=page->ptl bytes_req=64 bytes_alloc=64 gfp_flags=GFP_KERNEL node=-1 accounted=false
+    fault-worker-43      [000] ...1.   153.957886: slab_decision: (kmem_cache_alloc_noprof+0x58/0x3a0 <- should_failslab) result=0
+    fault-worker-43      [000] ...1.   153.957891: <stack trace>
+ => event_triggers_post_call+0x30/0x90
+ => kretprobe_trace_func+0x73/0x290
+ => kretprobe_dispatcher+0x44/0x70
+ => kretprobe_rethook_handler+0x3a/0x60
+ => rethook_trampoline_handler+0xb5/0x180
+ => arch_rethook_trampoline_callback+0x34/0x50
+ => arch_rethook_trampoline+0x2c/0x60
+ => kmem_cache_alloc_noprof+0x58/0x3a0
+ => vm_area_dup+0x17/0x150
+ => dup_mmap+0x351/0x7c0
+ => copy_mm+0xae/0x160
+ => copy_process+0x73b/0x11c0
+ => kernel_clone+0xf2/0x330
+ => __x64_sys_fork+0x3a/0x70
+ => do_syscall_64+0x6a/0x260
+ => entry_SYSCALL_64_after_hwframe+0x76/0x7e
+    fault-worker-43      [000] ...1.   153.957892: kmem_cache_alloc: call_site=vm_area_dup+0x17/0x150 ptr=ffff888000ac4000 name=vm_area_struct bytes_req=256 bytes_alloc=256 gfp_flags=GFP_KERNEL node=-1 accounted=false
+    fault-worker-43      [000] ...1.   153.957894: page_decision: (prepare_alloc_pages+0x100/0x1a0 <- should_fail_alloc_page) order=0 injected=0
+    fault-worker-43      [000] ...1.   153.957900: <stack trace>
+ => event_triggers_post_call+0x30/0x90
+ => kretprobe_trace_func+0x73/0x290
+ => kretprobe_dispatcher+0x44/0x70
+ => kretprobe_rethook_handler+0x3a/0x60
+ => rethook_trampoline_handler+0xb5/0x180
+ => arch_rethook_trampoline_callback+0x34/0x50
+ => arch_rethook_trampoline+0x2c/0x60
+ => prepare_alloc_pages+0x100/0x1a0
+ => __alloc_frozen_pages_noprof+0xa3/0x1f0
+ => __alloc_pages_noprof+0x5/0x20
+ => __pud_alloc+0x35/0x230
+ => copy_page_range+0x1660/0x1760
+ => dup_mmap+0x4d0/0x7c0
+ => copy_mm+0xae/0x160
+ => copy_process+0x73b/0x11c0
+ => kernel_clone+0xf2/0x330
+ => __x64_sys_fork+0x3a/0x70
+ => do_syscall_64+0x6a/0x260
+ => entry_SYSCALL_64_after_hwframe+0x76/0x7e
+    fault-worker-43      [000] ...1.   153.957901: pages_result: (__pud_alloc+0x35/0x230 <- __alloc_pages_noprof) order=0 result=0xffffea0000119280
+    fault-worker-43      [000] ...1.   153.957903: page_decision: (prepare_alloc_pages+0x100/0x1a0 <- should_fail_alloc_page) order=0 injected=0
+    fault-worker-43      [000] ...1.   153.957909: <stack trace>
+ => event_triggers_post_call+0x30/0x90
+ => kretprobe_trace_func+0x73/0x290
+ => kretprobe_dispatcher+0x44/0x70
+ => kretprobe_rethook_handler+0x3a/0x60
+ => rethook_trampoline_handler+0xb5/0x180
+ => arch_rethook_trampoline_callback+0x34/0x50
+ => arch_rethook_trampoline+0x2c/0x60
+ => prepare_alloc_pages+0x100/0x1a0
+ => __alloc_frozen_pages_noprof+0xa3/0x1f0
+ => __alloc_pages_noprof+0x5/0x20
+ => __pmd_alloc+0x32/0x290
+ => copy_page_range+0x15c8/0x1760
+ => dup_mmap+0x4d0/0x7c0
+ => copy_mm+0xae/0x160
+ => copy_process+0x73b/0x11c0
+ => kernel_clone+0xf2/0x330
+ => __x64_sys_fork+0x3a/0x70
+ => do_syscall_64+0x6a/0x260
+ => entry_SYSCALL_64_after_hwframe+0x76/0x7e
+    fault-worker-43      [000] ...1.   153.957910: pages_result: (__pmd_alloc+0x32/0x290 <- __alloc_pages_noprof) order=0 result=0xffffea0000119240
+    fault-worker-43      [000] ...1.   153.957911: slab_decision: (kmem_cache_alloc_noprof+0x58/0x3a0 <- should_failslab) result=0
+    fault-worker-43      [000] ...1.   153.957917: <stack trace>
+ => event_triggers_post_call+0x30/0x90
+ => kretprobe_trace_func+0x73/0x290
+ => kretprobe_dispatcher+0x44/0x70
+ => kretprobe_rethook_handler+0x3a/0x60
+ => rethook_trampoline_handler+0xb5/0x180
+ => arch_rethook_trampoline_callback+0x34/0x50
+ => arch_rethook_trampoline+0x2c/0x60
+ => kmem_cache_alloc_noprof+0x58/0x3a0
+ => __pmd_alloc+0x5d/0x290
+ => copy_page_range+0x15c8/0x1760
+ => dup_mmap+0x4d0/0x7c0
+ => copy_mm+0xae/0x160
+ => copy_process+0x73b/0x11c0
+ => kernel_clone+0xf2/0x330
+ => __x64_sys_fork+0x3a/0x70
+ => do_syscall_64+0x6a/0x260
+ => entry_SYSCALL_64_after_hwframe+0x76/0x7e
+    fault-worker-43      [000] ...1.   153.957917: kmem_cache_alloc: call_site=__pmd_alloc+0x5d/0x290 ptr=ffff8880001584c0 name=page->ptl bytes_req=64 bytes_alloc=64 gfp_flags=GFP_KERNEL node=-1 accounted=false
+    fault-worker-43      [000] ...1.   153.957919: page_decision: (prepare_alloc_pages+0x100/0x1a0 <- should_fail_alloc_page) order=0 injected=0
+    fault-worker-43      [000] ...1.   153.957926: <stack trace>
+ => event_triggers_post_call+0x30/0x90
+ => kretprobe_trace_func+0x73/0x290
+ => kretprobe_dispatcher+0x44/0x70
+ => kretprobe_rethook_handler+0x3a/0x60
+ => rethook_trampoline_handler+0xb5/0x180
+ => arch_rethook_trampoline_callback+0x34/0x50
+ => arch_rethook_trampoline+0x2c/0x60
+ => prepare_alloc_pages+0x100/0x1a0
+ => __alloc_frozen_pages_noprof+0xa3/0x1f0
+ => __alloc_pages_noprof+0x5/0x20
+ => pte_alloc_one+0x1b/0xf0
+ => __pte_alloc+0x15/0x160
+ => copy_page_range+0x144d/0x1760
+ => dup_mmap+0x4d0/0x7c0
+ => copy_mm+0xae/0x160
+ => copy_process+0x73b/0x11c0
+ => kernel_clone+0xf2/0x330
+ => __x64_sys_fork+0x3a/0x70
+ => do_syscall_64+0x6a/0x260
+ => entry_SYSCALL_64_after_hwframe+0x76/0x7e
+    fault-worker-43      [000] ...1.   153.957927: pages_result: (pte_alloc_one+0x1b/0xf0 <- __alloc_pages_noprof) order=0 result=0xffffea0000119200
+    fault-worker-43      [000] ...1.   153.957928: slab_decision: (kmem_cache_alloc_noprof+0x58/0x3a0 <- should_failslab) result=0
+    fault-worker-43      [000] ...1.   153.957934: <stack trace>
+ => event_triggers_post_call+0x30/0x90
+ => kretprobe_trace_func+0x73/0x290
+ => kretprobe_dispatcher+0x44/0x70
+ => kretprobe_rethook_handler+0x3a/0x60
+ => rethook_trampoline_handler+0xb5/0x180
+ => arch_rethook_trampoline_callback+0x34/0x50
+ => arch_rethook_trampoline+0x2c/0x60
+ => kmem_cache_alloc_noprof+0x58/0x3a0
+ => ptlock_alloc+0x15/0x30
+ => pte_alloc_one+0x38/0xf0
+ => __pte_alloc+0x15/0x160
+ => copy_page_range+0x144d/0x1760
+ => dup_mmap+0x4d0/0x7c0
+ => copy_mm+0xae/0x160
+ => copy_process+0x73b/0x11c0
+ => kernel_clone+0xf2/0x330
+ => __x64_sys_fork+0x3a/0x70
+ => do_syscall_64+0x6a/0x260
+ => entry_SYSCALL_64_after_hwframe+0x76/0x7e
+    fault-worker-43      [000] ...1.   153.957935: kmem_cache_alloc: call_site=ptlock_alloc+0x15/0x30 ptr=ffff888000158500 name=page->ptl bytes_req=64 bytes_alloc=64 gfp_flags=GFP_KERNEL node=-1 accounted=false
+    fault-worker-43      [000] ...1.   153.957937: slab_decision: (kmem_cache_alloc_noprof+0x58/0x3a0 <- should_failslab) result=0
+    fault-worker-43      [000] ...1.   153.957943: <stack trace>
+ => event_triggers_post_call+0x30/0x90
+ => kretprobe_trace_func+0x73/0x290
+ => kretprobe_dispatcher+0x44/0x70
+ => kretprobe_rethook_handler+0x3a/0x60
+ => rethook_trampoline_handler+0xb5/0x180
+ => arch_rethook_trampoline_callback+0x34/0x50
+ => arch_rethook_trampoline+0x2c/0x60
+ => kmem_cache_alloc_noprof+0x58/0x3a0
+ => vm_area_dup+0x17/0x150
+ => dup_mmap+0x351/0x7c0
+ => copy_mm+0xae/0x160
+ => copy_process+0x73b/0x11c0
+ => kernel_clone+0xf2/0x330
+ => __x64_sys_fork+0x3a/0x70
+ => do_syscall_64+0x6a/0x260
+ => entry_SYSCALL_64_after_hwframe+0x76/0x7e
+    fault-worker-43      [000] ...1.   153.957959: page_decision: (prepare_alloc_pages+0x100/0x1a0 <- should_fail_alloc_page) order=0 injected=0
+    fault-worker-43      [000] ...1.   153.957966: <stack trace>
+ => event_triggers_post_call+0x30/0x90
+ => kretprobe_trace_func+0x73/0x290
+ => kretprobe_dispatcher+0x44/0x70
+ => kretprobe_rethook_handler+0x3a/0x60
+ => rethook_trampoline_handler+0xb5/0x180
+ => arch_rethook_trampoline_callback+0x34/0x50
+ => arch_rethook_trampoline+0x2c/0x60
+ => prepare_alloc_pages+0x100/0x1a0
+ => __alloc_frozen_pages_noprof+0xa3/0x1f0
+ => new_slab+0xbf/0x260
+ => ___slab_alloc+0x5ec/0xae0
+ => __kmem_cache_alloc_bulk+0x17d/0x3b0
+ => __pcs_replace_empty_main+0x21d/0x410
+ => kmem_cache_alloc_noprof+0x31c/0x3a0
+ => vm_area_dup+0x17/0x150
+ => dup_mmap+0x351/0x7c0
+ => copy_mm+0xae/0x160
+ => copy_process+0x73b/0x11c0
+ => kernel_clone+0xf2/0x330
+ => __x64_sys_fork+0x3a/0x70
+ => do_syscall_64+0x6a/0x260
+ => entry_SYSCALL_64_after_hwframe+0x76/0x7e
+    fault-worker-43      [000] ...1.   153.957969: page_decision: (prepare_alloc_pages+0x100/0x1a0 <- should_fail_alloc_page) order=0 injected=0
+    fault-worker-43      [000] ...1.   153.957976: <stack trace>
+ => event_triggers_post_call+0x30/0x90
+ => kretprobe_trace_func+0x73/0x290
+ => kretprobe_dispatcher+0x44/0x70
+ => kretprobe_rethook_handler+0x3a/0x60
+ => rethook_trampoline_handler+0xb5/0x180
+ => arch_rethook_trampoline_callback+0x34/0x50
+ => arch_rethook_trampoline+0x2c/0x60
+ => prepare_alloc_pages+0x100/0x1a0
+ => __alloc_frozen_pages_noprof+0xa3/0x1f0
+ => new_slab+0xbf/0x260
+ => ___slab_alloc+0x5ec/0xae0
+ => __kmem_cache_alloc_bulk+0x17d/0x3b0
+ => __pcs_replace_empty_main+0x21d/0x410
+ => kmem_cache_alloc_noprof+0x31c/0x3a0
+ => vm_area_dup+0x17/0x150
+ => dup_mmap+0x351/0x7c0
+ => copy_mm+0xae/0x160
+ => copy_process+0x73b/0x11c0
+ => kernel_clone+0xf2/0x330
+ => __x64_sys_fork+0x3a/0x70
+ => do_syscall_64+0x6a/0x260
+ => entry_SYSCALL_64_after_hwframe+0x76/0x7e
+    fault-worker-43      [000] ...1.   153.957982: kmem_cache_alloc: call_site=vm_area_dup+0x17/0x150 ptr=ffff888004646f00 name=vm_area_struct bytes_req=256 bytes_alloc=256 gfp_flags=GFP_KERNEL node=-1 accounted=false
+    fault-worker-43      [000] ...1.   153.957984: slab_decision: (kmem_cache_alloc_noprof+0x58/0x3a0 <- should_failslab) result=0
+    fault-worker-43      [000] ...1.   153.957990: <stack trace>
+ => event_triggers_post_call+0x30/0x90
+ => kretprobe_trace_func+0x73/0x290
+ => kretprobe_dispatcher+0x44/0x70
+ => kretprobe_rethook_handler+0x3a/0x60
+ => rethook_trampoline_handler+0xb5/0x180
+ => arch_rethook_trampoline_callback+0x34/0x50
+ => arch_rethook_trampoline+0x2c/0x60
+ => kmem_cache_alloc_noprof+0x58/0x3a0
+ => vm_area_dup+0x17/0x150
+ => dup_mmap+0x351/0x7c0
+ => copy_mm+0xae/0x160
+ => copy_process+0x73b/0x11c0
+ => kernel_clone+0xf2/0x330
+ => __x64_sys_fork+0x3a/0x70
+ => do_syscall_64+0x6a/0x260
+ => entry_SYSCALL_64_after_hwframe+0x76/0x7e
+    fault-worker-43      [000] ...1.   153.957990: kmem_cache_alloc: call_site=vm_area_dup+0x17/0x150 ptr=ffff888004646e00 name=vm_area_struct bytes_req=256 bytes_alloc=256 gfp_flags=GFP_KERNEL node=-1 accounted=false
+    fault-worker-43      [000] ...1.   153.957992: slab_decision: (kmem_cache_alloc_noprof+0x58/0x3a0 <- should_failslab) result=0
+    fault-worker-43      [000] ...1.   153.957998: <stack trace>
+ => event_triggers_post_call+0x30/0x90
+ => kretprobe_trace_func+0x73/0x290
+ => kretprobe_dispatcher+0x44/0x70
+ => kretprobe_rethook_handler+0x3a/0x60
+ => rethook_trampoline_handler+0xb5/0x180
+ => arch_rethook_trampoline_callback+0x34/0x50
+ => arch_rethook_trampoline+0x2c/0x60
+ => kmem_cache_alloc_noprof+0x58/0x3a0
+ => vm_area_dup+0x17/0x150
+ => dup_mmap+0x351/0x7c0
+ => copy_mm+0xae/0x160
+ => copy_process+0x73b/0x11c0
+ => kernel_clone+0xf2/0x330
+ => __x64_sys_fork+0x3a/0x70
+ => do_syscall_64+0x6a/0x260
+ => entry_SYSCALL_64_after_hwframe+0x76/0x7e
+    fault-worker-43      [000] ...1.   153.957998: kmem_cache_alloc: call_site=vm_area_dup+0x17/0x150 ptr=ffff888004646d00 name=vm_area_struct bytes_req=256 bytes_alloc=256 gfp_flags=GFP_KERNEL node=-1 accounted=false
+    fault-worker-43      [000] ...1.   153.957999: slab_decision: (kmem_cache_alloc_noprof+0x58/0x3a0 <- should_failslab) result=0
+    fault-worker-43      [000] ...1.   153.958004: <stack trace>
+ => event_triggers_post_call+0x30/0x90
+ => kretprobe_trace_func+0x73/0x290
+ => kretprobe_dispatcher+0x44/0x70
+ => kretprobe_rethook_handler+0x3a/0x60
+ => rethook_trampoline_handler+0xb5/0x180
+ => arch_rethook_trampoline_callback+0x34/0x50
+ => arch_rethook_trampoline+0x2c/0x60
+ => kmem_cache_alloc_noprof+0x58/0x3a0
+ => anon_vma_clone+0x5f/0x1d0
+ => anon_vma_fork+0x23/0x170
+ => dup_mmap+0x372/0x7c0
+ => copy_mm+0xae/0x160
+ => copy_process+0x73b/0x11c0
+ => kernel_clone+0xf2/0x330
+ => __x64_sys_fork+0x3a/0x70
+ => do_syscall_64+0x6a/0x260
+ => entry_SYSCALL_64_after_hwframe+0x76/0x7e
+    fault-worker-43      [000] ...1.   153.958005: kmem_cache_alloc: call_site=anon_vma_clone+0x5f/0x1d0 ptr=ffff8880009fd4c0 name=anon_vma_chain bytes_req=64 bytes_alloc=64 gfp_flags=GFP_NOWAIT node=-1 accounted=false
+    fault-worker-43      [000] ...1.   153.958006: slab_decision: (kmem_cache_alloc_noprof+0x58/0x3a0 <- should_failslab) result=0
+    fault-worker-43      [000] ...1.   153.958011: <stack trace>
+ => event_triggers_post_call+0x30/0x90
+ => kretprobe_trace_func+0x73/0x290
+ => kretprobe_dispatcher+0x44/0x70
+ => kretprobe_rethook_handler+0x3a/0x60
+ => rethook_trampoline_handler+0xb5/0x180
+ => arch_rethook_trampoline_callback+0x34/0x50
+ => arch_rethook_trampoline+0x2c/0x60
+ => kmem_cache_alloc_noprof+0x58/0x3a0
+ => anon_vma_fork+0x52/0x170
+ => dup_mmap+0x372/0x7c0
+ => copy_mm+0xae/0x160
+ => copy_process+0x73b/0x11c0
+ => kernel_clone+0xf2/0x330
+ => __x64_sys_fork+0x3a/0x70
+ => do_syscall_64+0x6a/0x260
+ => entry_SYSCALL_64_after_hwframe+0x76/0x7e
+    fault-worker-43      [000] ...1.   153.958012: kmem_cache_alloc: call_site=anon_vma_fork+0x52/0x170 ptr=ffff8880009fcaf8 name=anon_vma bytes_req=208 bytes_alloc=216 gfp_flags=GFP_KERNEL node=-1 accounted=false
+    fault-worker-43      [000] ...1.   153.958013: slab_decision: (kmem_cache_alloc_noprof+0x58/0x3a0 <- should_failslab) result=0
+    fault-worker-43      [000] ...1.   153.958018: <stack trace>
+ => event_triggers_post_call+0x30/0x90
+ => kretprobe_trace_func+0x73/0x290
+ => kretprobe_dispatcher+0x44/0x70
+ => kretprobe_rethook_handler+0x3a/0x60
+ => rethook_trampoline_handler+0xb5/0x180
+ => arch_rethook_trampoline_callback+0x34/0x50
+ => arch_rethook_trampoline+0x2c/0x60
+ => kmem_cache_alloc_noprof+0x58/0x3a0
+ => anon_vma_fork+0x99/0x170
+ => dup_mmap+0x372/0x7c0
+ => copy_mm+0xae/0x160
+ => copy_process+0x73b/0x11c0
+ => kernel_clone+0xf2/0x330
+ => __x64_sys_fork+0x3a/0x70
+ => do_syscall_64+0x6a/0x260
+ => entry_SYSCALL_64_after_hwframe+0x76/0x7e
+    fault-worker-43      [000] ...1.   153.958018: kmem_cache_alloc: call_site=anon_vma_fork+0x99/0x170 ptr=ffff8880009fd500 name=anon_vma_chain bytes_req=64 bytes_alloc=64 gfp_flags=GFP_KERNEL node=-1 accounted=false
+    fault-worker-43      [000] ...1.   153.958021: page_decision: (prepare_alloc_pages+0x100/0x1a0 <- should_fail_alloc_page) order=0 injected=0
+    fault-worker-43      [000] ...1.   153.958027: <stack trace>
+ => event_triggers_post_call+0x30/0x90
+ => kretprobe_trace_func+0x73/0x290
+ => kretprobe_dispatcher+0x44/0x70
+ => kretprobe_rethook_handler+0x3a/0x60
+ => rethook_trampoline_handler+0xb5/0x180
+ => arch_rethook_trampoline_callback+0x34/0x50
+ => arch_rethook_trampoline+0x2c/0x60
+ => prepare_alloc_pages+0x100/0x1a0
+ => __alloc_frozen_pages_noprof+0xa3/0x1f0
+ => __alloc_pages_noprof+0x5/0x20
+ => __pmd_alloc+0x32/0x290
+ => copy_page_range+0x15c8/0x1760
+ => dup_mmap+0x4d0/0x7c0
+ => copy_mm+0xae/0x160
+ => copy_process+0x73b/0x11c0
+ => kernel_clone+0xf2/0x330
+ => __x64_sys_fork+0x3a/0x70
+ => do_syscall_64+0x6a/0x260
+ => entry_SYSCALL_64_after_hwframe+0x76/0x7e
+    fault-worker-43      [000] ...1.   153.958028: pages_result: (__pmd_alloc+0x32/0x290 <- __alloc_pages_noprof) order=0 result=0xffffea0000119140
+    fault-worker-43      [000] ...1.   153.958029: slab_decision: (kmem_cache_alloc_noprof+0x58/0x3a0 <- should_failslab) result=0
+    fault-worker-43      [000] ...1.   153.958049: <stack trace>
+ => event_triggers_post_call+0x30/0x90
+ => kretprobe_trace_func+0x73/0x290
+ => kretprobe_dispatcher+0x44/0x70
+ => kretprobe_rethook_handler+0x3a/0x60
+ => rethook_trampoline_handler+0xb5/0x180
+ => arch_rethook_trampoline_callback+0x34/0x50
+ => arch_rethook_trampoline+0x2c/0x60
+ => kmem_cache_alloc_noprof+0x58/0x3a0
+ => __pmd_alloc+0x5d/0x290
+ => copy_page_range+0x15c8/0x1760
+ => dup_mmap+0x4d0/0x7c0
+ => copy_mm+0xae/0x160
+ => copy_process+0x73b/0x11c0
+ => kernel_clone+0xf2/0x330
+ => __x64_sys_fork+0x3a/0x70
+ => do_syscall_64+0x6a/0x260
+ => entry_SYSCALL_64_after_hwframe+0x76/0x7e
+    fault-worker-43      [000] ...1.   153.958050: kmem_cache_alloc: call_site=__pmd_alloc+0x5d/0x290 ptr=ffff888000158540 name=page->ptl bytes_req=64 bytes_alloc=64 gfp_flags=GFP_KERNEL node=-1 accounted=false
+    fault-worker-43      [000] ...1.   153.958052: page_decision: (prepare_alloc_pages+0x100/0x1a0 <- should_fail_alloc_page) order=0 injected=0
+    fault-worker-43      [000] ...1.   153.958059: <stack trace>
+ => event_triggers_post_call+0x30/0x90
+ => kretprobe_trace_func+0x73/0x290
+ => kretprobe_dispatcher+0x44/0x70
+ => kretprobe_rethook_handler+0x3a/0x60
+ => rethook_trampoline_handler+0xb5/0x180
+ => arch_rethook_trampoline_callback+0x34/0x50
+ => arch_rethook_trampoline+0x2c/0x60
+ => prepare_alloc_pages+0x100/0x1a0
+ => __alloc_frozen_pages_noprof+0xa3/0x1f0
+ => __alloc_pages_noprof+0x5/0x20
+ => pte_alloc_one+0x1b/0xf0
+ => __pte_alloc+0x15/0x160
+ => copy_page_range+0x144d/0x1760
+ => dup_mmap+0x4d0/0x7c0
+ => copy_mm+0xae/0x160
+ => copy_process+0x73b/0x11c0
+ => kernel_clone+0xf2/0x330
+ => __x64_sys_fork+0x3a/0x70
+ => do_syscall_64+0x6a/0x260
+ => entry_SYSCALL_64_after_hwframe+0x76/0x7e
+    fault-worker-43      [000] ...1.   153.958060: pages_result: (pte_alloc_one+0x1b/0xf0 <- __alloc_pages_noprof) order=0 result=0xffffea0000119100
+    fault-worker-43      [000] ...1.   153.958061: slab_decision: (kmem_cache_alloc_noprof+0x58/0x3a0 <- should_failslab) result=0
+    fault-worker-43      [000] ...1.   153.958067: <stack trace>
+ => event_triggers_post_call+0x30/0x90
+ => kretprobe_trace_func+0x73/0x290
+ => kretprobe_dispatcher+0x44/0x70
+ => kretprobe_rethook_handler+0x3a/0x60
+ => rethook_trampoline_handler+0xb5/0x180
+ => arch_rethook_trampoline_callback+0x34/0x50
+ => arch_rethook_trampoline+0x2c/0x60
+ => kmem_cache_alloc_noprof+0x58/0x3a0
+ => ptlock_alloc+0x15/0x30
+ => pte_alloc_one+0x38/0xf0
+ => __pte_alloc+0x15/0x160
+ => copy_page_range+0x144d/0x1760
+ => dup_mmap+0x4d0/0x7c0
+ => copy_mm+0xae/0x160
+ => copy_process+0x73b/0x11c0
+ => kernel_clone+0xf2/0x330
+ => __x64_sys_fork+0x3a/0x70
+ => do_syscall_64+0x6a/0x260
+ => entry_SYSCALL_64_after_hwframe+0x76/0x7e
+    fault-worker-43      [000] ...1.   153.958068: kmem_cache_alloc: call_site=ptlock_alloc+0x15/0x30 ptr=ffff888000158580 name=page->ptl bytes_req=64 bytes_alloc=64 gfp_flags=GFP_KERNEL node=-1 accounted=false
+    fault-worker-43      [000] ...1.   153.958074: slab_decision: (kmem_cache_alloc_noprof+0x58/0x3a0 <- should_failslab) result=0
+    fault-worker-43      [000] ...1.   153.958079: <stack trace>
+ => event_triggers_post_call+0x30/0x90
+ => kretprobe_trace_func+0x73/0x290
+ => kretprobe_dispatcher+0x44/0x70
+ => kretprobe_rethook_handler+0x3a/0x60
+ => rethook_trampoline_handler+0xb5/0x180
+ => arch_rethook_trampoline_callback+0x34/0x50
+ => arch_rethook_trampoline+0x2c/0x60
+ => kmem_cache_alloc_noprof+0x58/0x3a0
+ => alloc_pid+0x41/0x510
+ => copy_process+0x7c3/0x11c0
+ => kernel_clone+0xf2/0x330
+ => __x64_sys_fork+0x3a/0x70
+ => do_syscall_64+0x6a/0x260
+ => entry_SYSCALL_64_after_hwframe+0x76/0x7e
+    fault-worker-43      [000] ...1.   153.958079: kmem_cache_alloc: call_site=alloc_pid+0x41/0x510 ptr=ffff888000393780 name=pid bytes_req=272 bytes_alloc=320 gfp_flags=GFP_KERNEL node=-1 accounted=false
+    fault-worker-43      [000] ...1.   153.958113: sched_process_fork: comm=fault-worker pid=43 child_comm=fault-worker child_pid=45
+    fault-worker-43      [000] ...1.   153.958128: page_decision: (prepare_alloc_pages+0x100/0x1a0 <- should_fail_alloc_page) order=0 injected=0
+    fault-worker-43      [000] ...1.   153.958131: <stack trace>
+ => event_triggers_post_call+0x30/0x90
+ => kretprobe_trace_func+0x73/0x290
+ => kretprobe_dispatcher+0x44/0x70
+ => kretprobe_rethook_handler+0x3a/0x60
+ => rethook_trampoline_handler+0xb5/0x180
+ => arch_rethook_trampoline_callback+0x34/0x50
+ => arch_rethook_trampoline+0x2c/0x60
+ => prepare_alloc_pages+0x100/0x1a0
+ => __alloc_frozen_pages_noprof+0xa3/0x1f0
+ => __folio_alloc_noprof+0xb/0x20
+ => handle_mm_fault+0x1aa7/0x2470
+ => do_user_addr_fault+0x1bf/0x5c0
+ => exc_page_fault+0x69/0xc0
+ => asm_exc_page_fault+0x22/0x30
+    fault-worker-43      [000] ...1.   153.958140: tracing_mark_write+0x97/0x200: DISARM
+    fault-worker-43      [000] ...1.   153.958143: page_decision: (prepare_alloc_pages+0x100/0x1a0 <- should_fail_alloc_page) order=0 injected=0
+    fault-worker-43      [000] ...1.   153.958145: <stack trace>
+ => event_triggers_post_call+0x30/0x90
+ => kretprobe_trace_func+0x73/0x290
+ => kretprobe_dispatcher+0x44/0x70
+ => kretprobe_rethook_handler+0x3a/0x60
+ => rethook_trampoline_handler+0xb5/0x180
+ => arch_rethook_trampoline_callback+0x34/0x50
+ => arch_rethook_trampoline+0x2c/0x60
+ => prepare_alloc_pages+0x100/0x1a0
+ => __alloc_frozen_pages_noprof+0xa3/0x1f0
+ => __folio_alloc_noprof+0xb/0x20
+ => handle_mm_fault+0x1aa7/0x2470
+ => do_user_addr_fault+0x1bf/0x5c0
+ => exc_page_fault+0x69/0xc0
+ => asm_exc_page_fault+0x22/0x30
+    fault-worker-43      [000] d..2.   153.963525: kmem_cache_free: call_site=release_task+0x616/0x7b0 ptr=ffff888000bc08c0 name=sighand_cache
+    fault-worker-43      [000] ...1.   153.963542: slab_decision: (kmem_cache_alloc_node_noprof+0x61/0x3b0 <- should_failslab) result=0
+    fault-worker-43      [000] ...1.   153.963551: <stack trace>
+ => event_triggers_post_call+0x30/0x90
+ => kretprobe_trace_func+0x73/0x290
+ => kretprobe_dispatcher+0x44/0x70
+ => kretprobe_rethook_handler+0x3a/0x60
+ => rethook_trampoline_handler+0xb5/0x180
+ => arch_rethook_trampoline_callback+0x34/0x50
+ => arch_rethook_trampoline+0x2c/0x60
+ => kmem_cache_alloc_node_noprof+0x61/0x3b0
+ => rusix_dup_task_struct+0x22/0x160
+ => copy_process+0x176/0x11c0
+ => kernel_clone+0xf2/0x330
+ => __x64_sys_fork+0x3a/0x70
+ => do_syscall_64+0x6a/0x260
+ => entry_SYSCALL_64_after_hwframe+0x76/0x7e
+    fault-worker-43      [000] ...1.   153.963553: kmem_cache_alloc: call_site=rusix_dup_task_struct+0x22/0x160 ptr=ffff888000b35900 name=task_struct bytes_req=5696 bytes_alloc=5696 gfp_flags=GFP_KERNEL node=-1 accounted=false
+    fault-worker-43      [000] ...1.   153.963560: page_decision: (prepare_alloc_pages+0x100/0x1a0 <- should_fail_alloc_page) order=2 injected=0
+    fault-worker-43      [000] ...1.   153.963566: <stack trace>
+ => event_triggers_post_call+0x30/0x90
+ => kretprobe_trace_func+0x73/0x290
+ => kretprobe_dispatcher+0x44/0x70
+ => kretprobe_rethook_handler+0x3a/0x60
+ => rethook_trampoline_handler+0xb5/0x180
+ => arch_rethook_trampoline_callback+0x34/0x50
+ => arch_rethook_trampoline+0x2c/0x60
+ => prepare_alloc_pages+0x100/0x1a0
+ => __alloc_frozen_pages_noprof+0xa3/0x1f0
+ => __alloc_pages_noprof+0x5/0x20
+ => rusix_task_alloc_stack+0x21/0x50
+ => rusix_dup_task_struct+0x43/0x160
+ => copy_process+0x176/0x11c0
+ => kernel_clone+0xf2/0x330
+ => __x64_sys_fork+0x3a/0x70
+ => do_syscall_64+0x6a/0x260
+ => entry_SYSCALL_64_after_hwframe+0x76/0x7e
+    fault-worker-43      [000] ...1.   153.963610: pages_result: (rusix_task_alloc_stack+0x21/0x50 <- __alloc_pages_noprof) order=2 result=0xffffea000002d300
+    fault-worker-43      [000] ...1.   153.963618: slab_decision: (kmem_cache_alloc_noprof+0x58/0x3a0 <- should_failslab) result=0
+    fault-worker-43      [000] ...1.   153.963624: <stack trace>
+ => event_triggers_post_call+0x30/0x90
+ => kretprobe_trace_func+0x73/0x290
+ => kretprobe_dispatcher+0x44/0x70
+ => kretprobe_rethook_handler+0x3a/0x60
+ => rethook_trampoline_handler+0xb5/0x180
+ => arch_rethook_trampoline_callback+0x34/0x50
+ => arch_rethook_trampoline+0x2c/0x60
+ => kmem_cache_alloc_noprof+0x58/0x3a0
+ => prepare_creds+0x1d/0xf0
+ => copy_creds+0x1d/0x360
+ => copy_process+0x376/0x11c0
+ => kernel_clone+0xf2/0x330
+ => __x64_sys_fork+0x3a/0x70
+ => do_syscall_64+0x6a/0x260
+ => entry_SYSCALL_64_after_hwframe+0x76/0x7e
+    fault-worker-43      [000] ...1.   153.963624: kmem_cache_alloc: call_site=prepare_creds+0x1d/0xf0 ptr=ffff8880009fb300 name=cred bytes_req=136 bytes_alloc=192 gfp_flags=GFP_KERNEL node=-1 accounted=false
+    fault-worker-43      [000] ...1.   153.963629: slab_decision: (kmem_cache_alloc_noprof+0x58/0x3a0 <- should_failslab) result=0
+    fault-worker-43      [000] ...1.   153.963634: <stack trace>
+ => event_triggers_post_call+0x30/0x90
+ => kretprobe_trace_func+0x73/0x290
+ => kretprobe_dispatcher+0x44/0x70
+ => kretprobe_rethook_handler+0x3a/0x60
+ => rethook_trampoline_handler+0xb5/0x180
+ => arch_rethook_trampoline_callback+0x34/0x50
+ => arch_rethook_trampoline+0x2c/0x60
+ => kmem_cache_alloc_noprof+0x58/0x3a0
+ => dup_fd+0x25/0x390
+ => copy_files+0x41/0x70
+ => copy_process+0x6e3/0x11c0
+ => kernel_clone+0xf2/0x330
+ => __x64_sys_fork+0x3a/0x70
+ => do_syscall_64+0x6a/0x260
+ => entry_SYSCALL_64_after_hwframe+0x76/0x7e
+    fault-worker-43      [000] ...1.   153.963635: kmem_cache_alloc: call_site=dup_fd+0x25/0x390 ptr=ffff888000230d00 name=files_cache bytes_req=832 bytes_alloc=832 gfp_flags=GFP_KERNEL node=-1 accounted=false
+    fault-worker-43      [000] ...1.   153.963642: slab_decision: (kmem_cache_alloc_noprof+0x58/0x3a0 <- should_failslab) result=0
+    fault-worker-43      [000] ...1.   153.963646: <stack trace>
+ => event_triggers_post_call+0x30/0x90
+ => kretprobe_trace_func+0x73/0x290
+ => kretprobe_dispatcher+0x44/0x70
+ => kretprobe_rethook_handler+0x3a/0x60
+ => rethook_trampoline_handler+0xb5/0x180
+ => arch_rethook_trampoline_callback+0x34/0x50
+ => arch_rethook_trampoline+0x2c/0x60
+ => kmem_cache_alloc_noprof+0x58/0x3a0
+ => copy_fs_struct+0x19/0x110
+ => copy_fs+0x26/0x80
+ => copy_process+0x6f9/0x11c0
+ => kernel_clone+0xf2/0x330
+ => __x64_sys_fork+0x3a/0x70
+ => do_syscall_64+0x6a/0x260
+ => entry_SYSCALL_64_after_hwframe+0x76/0x7e
+    fault-worker-43      [000] ...1.   153.963648: kmem_cache_alloc: call_site=copy_fs_struct+0x19/0x110 ptr=ffff888000201240 name=fs_cache bytes_req=168 bytes_alloc=192 gfp_flags=GFP_KERNEL node=-1 accounted=false
+    fault-worker-43      [000] ...1.   153.963650: slab_decision: (kmem_cache_alloc_noprof+0x58/0x3a0 <- should_failslab) result=0
+    fault-worker-43      [000] ...1.   153.963655: <stack trace>
+ => event_triggers_post_call+0x30/0x90
+ => kretprobe_trace_func+0x73/0x290
+ => kretprobe_dispatcher+0x44/0x70
+ => kretprobe_rethook_handler+0x3a/0x60
+ => rethook_trampoline_handler+0xb5/0x180
+ => arch_rethook_trampoline_callback+0x34/0x50
+ => arch_rethook_trampoline+0x2c/0x60
+ => kmem_cache_alloc_noprof+0x58/0x3a0
+ => copy_sighand+0x2b/0xf0
+ => copy_process+0x70f/0x11c0
+ => kernel_clone+0xf2/0x330
+ => __x64_sys_fork+0x3a/0x70
+ => do_syscall_64+0x6a/0x260
+ => entry_SYSCALL_64_after_hwframe+0x76/0x7e
+    fault-worker-43      [000] ...1.   153.963655: kmem_cache_alloc: call_site=copy_sighand+0x2b/0xf0 ptr=ffff888000bc08c0 name=sighand_cache bytes_req=2200 bytes_alloc=2240 gfp_flags=GFP_KERNEL node=-1 accounted=false
+    fault-worker-43      [000] ...1.   153.963657: slab_decision: (kmem_cache_alloc_noprof+0x58/0x3a0 <- should_failslab) result=0
+    fault-worker-43      [000] ...1.   153.963661: <stack trace>
+ => event_triggers_post_call+0x30/0x90
+ => kretprobe_trace_func+0x73/0x290
+ => kretprobe_dispatcher+0x44/0x70
+ => kretprobe_rethook_handler+0x3a/0x60
+ => rethook_trampoline_handler+0xb5/0x180
+ => arch_rethook_trampoline_callback+0x34/0x50
+ => arch_rethook_trampoline+0x2c/0x60
+ => kmem_cache_alloc_noprof+0x58/0x3a0
+ => copy_signal+0x27/0x250
+ => copy_process+0x725/0x11c0
+ => kernel_clone+0xf2/0x330
+ => __x64_sys_fork+0x3a/0x70
+ => do_syscall_64+0x6a/0x260
+ => entry_SYSCALL_64_after_hwframe+0x76/0x7e
+    fault-worker-43      [000] ...1.   153.963662: kmem_cache_alloc: call_site=copy_signal+0x27/0x250 ptr=ffff8880002ef380 name=signal_cache bytes_req=1408 bytes_alloc=1408 gfp_flags=GFP_KERNEL|__GFP_ZERO node=-1 accounted=false
+    fault-worker-43      [000] ...1.   153.963664: slab_decision: (kmem_cache_alloc_noprof+0x58/0x3a0 <- should_failslab) result=0
+    fault-worker-43      [000] ...1.   153.963668: <stack trace>
+ => event_triggers_post_call+0x30/0x90
+ => kretprobe_trace_func+0x73/0x290
+ => kretprobe_dispatcher+0x44/0x70
+ => kretprobe_rethook_handler+0x3a/0x60
+ => rethook_trampoline_handler+0xb5/0x180
+ => arch_rethook_trampoline_callback+0x34/0x50
+ => arch_rethook_trampoline+0x2c/0x60
+ => kmem_cache_alloc_noprof+0x58/0x3a0
+ => copy_mm+0x7e/0x160
+ => copy_process+0x73b/0x11c0
+ => kernel_clone+0xf2/0x330
+ => __x64_sys_fork+0x3a/0x70
+ => do_syscall_64+0x6a/0x260
+ => entry_SYSCALL_64_after_hwframe+0x76/0x7e
+    fault-worker-43      [000] ...1.   153.963669: kmem_cache_alloc: call_site=copy_mm+0x7e/0x160 ptr=ffff888000152300 name=mm_struct bytes_req=2184 bytes_alloc=2240 gfp_flags=GFP_KERNEL node=-1 accounted=false
+    fault-worker-43      [000] ...1.   153.963672: page_decision: (prepare_alloc_pages+0x100/0x1a0 <- should_fail_alloc_page) order=0 injected=0
+    fault-worker-43      [000] ...1.   153.963677: <stack trace>
+ => event_triggers_post_call+0x30/0x90
+ => kretprobe_trace_func+0x73/0x290
+ => kretprobe_dispatcher+0x44/0x70
+ => kretprobe_rethook_handler+0x3a/0x60
+ => rethook_trampoline_handler+0xb5/0x180
+ => arch_rethook_trampoline_callback+0x34/0x50
+ => arch_rethook_trampoline+0x2c/0x60
+ => prepare_alloc_pages+0x100/0x1a0
+ => __alloc_frozen_pages_noprof+0xa3/0x1f0
+ => __alloc_pages_noprof+0x5/0x20
+ => pgd_alloc+0x3a/0x200
+ => mm_init+0x227/0x310
+ => copy_mm+0x9e/0x160
+ => copy_process+0x73b/0x11c0
+ => kernel_clone+0xf2/0x330
+ => __x64_sys_fork+0x3a/0x70
+ => do_syscall_64+0x6a/0x260
+ => entry_SYSCALL_64_after_hwframe+0x76/0x7e
+    fault-worker-43      [000] ...1.   153.963679: pages_result: (pgd_alloc+0x3a/0x200 <- __alloc_pages_noprof) order=0 result=0xffffea00001190c0
+    fault-worker-43      [000] ...1.   153.963690: slab_decision: (kmem_cache_alloc_noprof+0x58/0x3a0 <- should_failslab) result=0
+    fault-worker-43      [000] ...1.   153.963696: <stack trace>
+ => event_triggers_post_call+0x30/0x90
+ => kretprobe_trace_func+0x73/0x290
+ => kretprobe_dispatcher+0x44/0x70
+ => kretprobe_rethook_handler+0x3a/0x60
+ => rethook_trampoline_handler+0xb5/0x180
+ => arch_rethook_trampoline_callback+0x34/0x50
+ => arch_rethook_trampoline+0x2c/0x60
+ => kmem_cache_alloc_noprof+0x58/0x3a0
+ => mas_dup_build+0x62/0x450
+ => __mt_dup+0x106/0x170
+ => dup_mmap+0x16e/0x7c0
+ => copy_mm+0xae/0x160
+ => copy_process+0x73b/0x11c0
+ => kernel_clone+0xf2/0x330
+ => __x64_sys_fork+0x3a/0x70
+ => do_syscall_64+0x6a/0x260
+ => entry_SYSCALL_64_after_hwframe+0x76/0x7e
+    fault-worker-43      [000] ...1.   153.963697: kmem_cache_alloc: call_site=mas_dup_build+0x62/0x450 ptr=ffff888000b9c700 name=maple_node bytes_req=256 bytes_alloc=256 gfp_flags=GFP_KERNEL node=-1 accounted=false
+    fault-worker-43      [000] ...1.   153.963700: slab_decision: (kmem_cache_alloc_noprof+0x58/0x3a0 <- should_failslab) result=0
+    fault-worker-43      [000] ...1.   153.963706: <stack trace>
+ => event_triggers_post_call+0x30/0x90
+ => kretprobe_trace_func+0x73/0x290
+ => kretprobe_dispatcher+0x44/0x70
+ => kretprobe_rethook_handler+0x3a/0x60
+ => rethook_trampoline_handler+0xb5/0x180
+ => arch_rethook_trampoline_callback+0x34/0x50
+ => arch_rethook_trampoline+0x2c/0x60
+ => kmem_cache_alloc_noprof+0x58/0x3a0
+ => vm_area_dup+0x17/0x150
+ => dup_mmap+0x351/0x7c0
+ => copy_mm+0xae/0x160
+ => copy_process+0x73b/0x11c0
+ => kernel_clone+0xf2/0x330
+ => __x64_sys_fork+0x3a/0x70
+ => do_syscall_64+0x6a/0x260
+ => entry_SYSCALL_64_after_hwframe+0x76/0x7e
+    fault-worker-43      [000] ...1.   153.963706: kmem_cache_alloc: call_site=vm_area_dup+0x17/0x150 ptr=ffff888004646c00 name=vm_area_struct bytes_req=256 bytes_alloc=256 gfp_flags=GFP_KERNEL node=-1 accounted=false
+    fault-worker-43      [000] ...1.   153.963711: slab_decision: (kmem_cache_alloc_noprof+0x58/0x3a0 <- should_failslab) result=0
+    fault-worker-43      [000] ...1.   153.963716: <stack trace>
+ => event_triggers_post_call+0x30/0x90
+ => kretprobe_trace_func+0x73/0x290
+ => kretprobe_dispatcher+0x44/0x70
+ => kretprobe_rethook_handler+0x3a/0x60
+ => rethook_trampoline_handler+0xb5/0x180
+ => arch_rethook_trampoline_callback+0x34/0x50
+ => arch_rethook_trampoline+0x2c/0x60
+ => kmem_cache_alloc_noprof+0x58/0x3a0
+ => vm_area_dup+0x17/0x150
+ => dup_mmap+0x351/0x7c0
+ => copy_mm+0xae/0x160
+ => copy_process+0x73b/0x11c0
+ => kernel_clone+0xf2/0x330
+ => __x64_sys_fork+0x3a/0x70
+ => do_syscall_64+0x6a/0x260
+ => entry_SYSCALL_64_after_hwframe+0x76/0x7e
+    fault-worker-43      [000] ...1.   153.963716: kmem_cache_alloc: call_site=vm_area_dup+0x17/0x150 ptr=ffff888004646b00 name=vm_area_struct bytes_req=256 bytes_alloc=256 gfp_flags=GFP_KERNEL node=-1 accounted=false
+    fault-worker-43      [000] ...1.   153.963718: slab_decision: (kmem_cache_alloc_noprof+0x58/0x3a0 <- should_failslab) result=0
+    fault-worker-43      [000] ...1.   153.963723: <stack trace>
+ => event_triggers_post_call+0x30/0x90
+ => kretprobe_trace_func+0x73/0x290
+ => kretprobe_dispatcher+0x44/0x70
+ => kretprobe_rethook_handler+0x3a/0x60
+ => rethook_trampoline_handler+0xb5/0x180
+ => arch_rethook_trampoline_callback+0x34/0x50
+ => arch_rethook_trampoline+0x2c/0x60
+ => kmem_cache_alloc_noprof+0x58/0x3a0
+ => vm_area_dup+0x17/0x150
+ => dup_mmap+0x351/0x7c0
+ => copy_mm+0xae/0x160
+ => copy_process+0x73b/0x11c0
+ => kernel_clone+0xf2/0x330
+ => __x64_sys_fork+0x3a/0x70
+ => do_syscall_64+0x6a/0x260
+ => entry_SYSCALL_64_after_hwframe+0x76/0x7e
+    fault-worker-43      [000] ...1.   153.963724: kmem_cache_alloc: call_site=vm_area_dup+0x17/0x150 ptr=ffff888004646a00 name=vm_area_struct bytes_req=256 bytes_alloc=256 gfp_flags=GFP_KERNEL node=-1 accounted=false
+    fault-worker-43      [000] ...1.   153.963726: slab_decision: (kmem_cache_alloc_noprof+0x58/0x3a0 <- should_failslab) result=0
+    fault-worker-43      [000] ...1.   153.963731: <stack trace>
+ => event_triggers_post_call+0x30/0x90
+ => kretprobe_trace_func+0x73/0x290
+ => kretprobe_dispatcher+0x44/0x70
+ => kretprobe_rethook_handler+0x3a/0x60
+ => rethook_trampoline_handler+0xb5/0x180
+ => arch_rethook_trampoline_callback+0x34/0x50
+ => arch_rethook_trampoline+0x2c/0x60
+ => kmem_cache_alloc_noprof+0x58/0x3a0
+ => vm_area_dup+0x17/0x150
+ => dup_mmap+0x351/0x7c0
+ => copy_mm+0xae/0x160
+ => copy_process+0x73b/0x11c0
+ => kernel_clone+0xf2/0x330
+ => __x64_sys_fork+0x3a/0x70
+ => do_syscall_64+0x6a/0x260
+ => entry_SYSCALL_64_after_hwframe+0x76/0x7e
+    fault-worker-43      [000] ...1.   153.963732: kmem_cache_alloc: call_site=vm_area_dup+0x17/0x150 ptr=ffff888004646900 name=vm_area_struct bytes_req=256 bytes_alloc=256 gfp_flags=GFP_KERNEL node=-1 accounted=false
+    fault-worker-43      [000] ...1.   153.963733: slab_decision: (kmem_cache_alloc_noprof+0x58/0x3a0 <- should_failslab) result=0
+    fault-worker-43      [000] ...1.   153.963738: <stack trace>
+ => event_triggers_post_call+0x30/0x90
+ => kretprobe_trace_func+0x73/0x290
+ => kretprobe_dispatcher+0x44/0x70
+ => kretprobe_rethook_handler+0x3a/0x60
+ => rethook_trampoline_handler+0xb5/0x180
+ => arch_rethook_trampoline_callback+0x34/0x50
+ => arch_rethook_trampoline+0x2c/0x60
+ => kmem_cache_alloc_noprof+0x58/0x3a0
+ => anon_vma_clone+0x5f/0x1d0
+ => anon_vma_fork+0x23/0x170
+ => dup_mmap+0x372/0x7c0
+ => copy_mm+0xae/0x160
+ => copy_process+0x73b/0x11c0
+ => kernel_clone+0xf2/0x330
+ => __x64_sys_fork+0x3a/0x70
+ => do_syscall_64+0x6a/0x260
+ => entry_SYSCALL_64_after_hwframe+0x76/0x7e
+    fault-worker-43      [000] ...1.   153.963739: kmem_cache_alloc: call_site=anon_vma_clone+0x5f/0x1d0 ptr=ffff8880009fd540 name=anon_vma_chain bytes_req=64 bytes_alloc=64 gfp_flags=GFP_NOWAIT node=-1 accounted=false
+    fault-worker-43      [000] ...1.   153.963741: slab_decision: (kmem_cache_alloc_noprof+0x58/0x3a0 <- should_failslab) result=0
+    fault-worker-43      [000] ...1.   153.963746: <stack trace>
+ => event_triggers_post_call+0x30/0x90
+ => kretprobe_trace_func+0x73/0x290
+ => kretprobe_dispatcher+0x44/0x70
+ => kretprobe_rethook_handler+0x3a/0x60
+ => rethook_trampoline_handler+0xb5/0x180
+ => arch_rethook_trampoline_callback+0x34/0x50
+ => arch_rethook_trampoline+0x2c/0x60
+ => kmem_cache_alloc_noprof+0x58/0x3a0
+ => anon_vma_fork+0x52/0x170
+ => dup_mmap+0x372/0x7c0
+ => copy_mm+0xae/0x160
+ => copy_process+0x73b/0x11c0
+ => kernel_clone+0xf2/0x330
+ => __x64_sys_fork+0x3a/0x70
+ => do_syscall_64+0x6a/0x260
+ => entry_SYSCALL_64_after_hwframe+0x76/0x7e
+    fault-worker-43      [000] ...1.   153.963746: kmem_cache_alloc: call_site=anon_vma_fork+0x52/0x170 ptr=ffff8880009fcbd0 name=anon_vma bytes_req=208 bytes_alloc=216 gfp_flags=GFP_KERNEL node=-1 accounted=false
+    fault-worker-43      [000] ...1.   153.963747: slab_decision: (kmem_cache_alloc_noprof+0x58/0x3a0 <- should_failslab) result=0
+    fault-worker-43      [000] ...1.   153.963752: <stack trace>
+ => event_triggers_post_call+0x30/0x90
+ => kretprobe_trace_func+0x73/0x290
+ => kretprobe_dispatcher+0x44/0x70
+ => kretprobe_rethook_handler+0x3a/0x60
+ => rethook_trampoline_handler+0xb5/0x180
+ => arch_rethook_trampoline_callback+0x34/0x50
+ => arch_rethook_trampoline+0x2c/0x60
+ => kmem_cache_alloc_noprof+0x58/0x3a0
+ => anon_vma_fork+0x99/0x170
+ => dup_mmap+0x372/0x7c0
+ => copy_mm+0xae/0x160
+ => copy_process+0x73b/0x11c0
+ => kernel_clone+0xf2/0x330
+ => __x64_sys_fork+0x3a/0x70
+ => do_syscall_64+0x6a/0x260
+ => entry_SYSCALL_64_after_hwframe+0x76/0x7e
+    fault-worker-43      [000] ...1.   153.963752: kmem_cache_alloc: call_site=anon_vma_fork+0x99/0x170 ptr=ffff8880009fd580 name=anon_vma_chain bytes_req=64 bytes_alloc=64 gfp_flags=GFP_KERNEL node=-1 accounted=false
+    fault-worker-43      [000] ...1.   153.963755: page_decision: (prepare_alloc_pages+0x100/0x1a0 <- should_fail_alloc_page) order=0 injected=0
+    fault-worker-43      [000] ...1.   153.963761: <stack trace>
+ => event_triggers_post_call+0x30/0x90
+ => kretprobe_trace_func+0x73/0x290
+ => kretprobe_dispatcher+0x44/0x70
+ => kretprobe_rethook_handler+0x3a/0x60
+ => rethook_trampoline_handler+0xb5/0x180
+ => arch_rethook_trampoline_callback+0x34/0x50
+ => arch_rethook_trampoline+0x2c/0x60
+ => prepare_alloc_pages+0x100/0x1a0
+ => __alloc_frozen_pages_noprof+0xa3/0x1f0
+ => __alloc_pages_noprof+0x5/0x20
+ => __pud_alloc+0x35/0x230
+ => copy_page_range+0x1660/0x1760
+ => dup_mmap+0x4d0/0x7c0
+ => copy_mm+0xae/0x160
+ => copy_process+0x73b/0x11c0
+ => kernel_clone+0xf2/0x330
+ => __x64_sys_fork+0x3a/0x70
+ => do_syscall_64+0x6a/0x260
+ => entry_SYSCALL_64_after_hwframe+0x76/0x7e
+    fault-worker-43      [000] ...1.   153.963762: pages_result: (__pud_alloc+0x35/0x230 <- __alloc_pages_noprof) order=0 result=0xffffea0000119080
+    fault-worker-43      [000] ...1.   153.963765: page_decision: (prepare_alloc_pages+0x100/0x1a0 <- should_fail_alloc_page) order=0 injected=0
+    fault-worker-43      [000] ...1.   153.963771: <stack trace>
+ => event_triggers_post_call+0x30/0x90
+ => kretprobe_trace_func+0x73/0x290
+ => kretprobe_dispatcher+0x44/0x70
+ => kretprobe_rethook_handler+0x3a/0x60
+ => rethook_trampoline_handler+0xb5/0x180
+ => arch_rethook_trampoline_callback+0x34/0x50
+ => arch_rethook_trampoline+0x2c/0x60
+ => prepare_alloc_pages+0x100/0x1a0
+ => __alloc_frozen_pages_noprof+0xa3/0x1f0
+ => __alloc_pages_noprof+0x5/0x20
+ => __pmd_alloc+0x32/0x290
+ => copy_page_range+0x15c8/0x1760
+ => dup_mmap+0x4d0/0x7c0
+ => copy_mm+0xae/0x160
+ => copy_process+0x73b/0x11c0
+ => kernel_clone+0xf2/0x330
+ => __x64_sys_fork+0x3a/0x70
+ => do_syscall_64+0x6a/0x260
+ => entry_SYSCALL_64_after_hwframe+0x76/0x7e
+    fault-worker-43      [000] ...1.   153.963786: pages_result: (__pmd_alloc+0x32/0x290 <- __alloc_pages_noprof) order=0 result=0xffffea0000118740
+    fault-worker-43      [000] ...1.   153.963787: slab_decision: (kmem_cache_alloc_noprof+0x58/0x3a0 <- should_failslab) result=0
+    fault-worker-43      [000] ...1.   153.963792: <stack trace>
+ => event_triggers_post_call+0x30/0x90
+ => kretprobe_trace_func+0x73/0x290
+ => kretprobe_dispatcher+0x44/0x70
+ => kretprobe_rethook_handler+0x3a/0x60
+ => rethook_trampoline_handler+0xb5/0x180
+ => arch_rethook_trampoline_callback+0x34/0x50
+ => arch_rethook_trampoline+0x2c/0x60
+ => kmem_cache_alloc_noprof+0x58/0x3a0
+ => __pmd_alloc+0x5d/0x290
+ => copy_page_range+0x15c8/0x1760
+ => dup_mmap+0x4d0/0x7c0
+ => copy_mm+0xae/0x160
+ => copy_process+0x73b/0x11c0
+ => kernel_clone+0xf2/0x330
+ => __x64_sys_fork+0x3a/0x70
+ => do_syscall_64+0x6a/0x260
+ => entry_SYSCALL_64_after_hwframe+0x76/0x7e
+    fault-worker-43      [000] ...1.   153.963793: kmem_cache_alloc: call_site=__pmd_alloc+0x5d/0x290 ptr=ffff8880001585c0 name=page->ptl bytes_req=64 bytes_alloc=64 gfp_flags=GFP_KERNEL node=-1 accounted=false
+    fault-worker-43      [000] ...1.   153.963795: page_decision: (prepare_alloc_pages+0x100/0x1a0 <- should_fail_alloc_page) order=0 injected=0
+    fault-worker-43      [000] ...1.   153.963801: <stack trace>
+ => event_triggers_post_call+0x30/0x90
+ => kretprobe_trace_func+0x73/0x290
+ => kretprobe_dispatcher+0x44/0x70
+ => kretprobe_rethook_handler+0x3a/0x60
+ => rethook_trampoline_handler+0xb5/0x180
+ => arch_rethook_trampoline_callback+0x34/0x50
+ => arch_rethook_trampoline+0x2c/0x60
+ => prepare_alloc_pages+0x100/0x1a0
+ => __alloc_frozen_pages_noprof+0xa3/0x1f0
+ => __alloc_pages_noprof+0x5/0x20
+ => pte_alloc_one+0x1b/0xf0
+ => __pte_alloc+0x15/0x160
+ => copy_page_range+0x144d/0x1760
+ => dup_mmap+0x4d0/0x7c0
+ => copy_mm+0xae/0x160
+ => copy_process+0x73b/0x11c0
+ => kernel_clone+0xf2/0x330
+ => __x64_sys_fork+0x3a/0x70
+ => do_syscall_64+0x6a/0x260
+ => entry_SYSCALL_64_after_hwframe+0x76/0x7e
+    fault-worker-43      [000] ...1.   153.963803: pages_result: (pte_alloc_one+0x1b/0xf0 <- __alloc_pages_noprof) order=0 result=0xffffea0000027e00
+    fault-worker-43      [000] ...1.   153.963804: slab_decision: (kmem_cache_alloc_noprof+0x58/0x3a0 <- should_failslab) result=0
+    fault-worker-43      [000] ...1.   153.963809: <stack trace>
+ => event_triggers_post_call+0x30/0x90
+ => kretprobe_trace_func+0x73/0x290
+ => kretprobe_dispatcher+0x44/0x70
+ => kretprobe_rethook_handler+0x3a/0x60
+ => rethook_trampoline_handler+0xb5/0x180
+ => arch_rethook_trampoline_callback+0x34/0x50
+ => arch_rethook_trampoline+0x2c/0x60
+ => kmem_cache_alloc_noprof+0x58/0x3a0
+ => ptlock_alloc+0x15/0x30
+ => pte_alloc_one+0x38/0xf0
+ => __pte_alloc+0x15/0x160
+ => copy_page_range+0x144d/0x1760
+ => dup_mmap+0x4d0/0x7c0
+ => copy_mm+0xae/0x160
+ => copy_process+0x73b/0x11c0
+ => kernel_clone+0xf2/0x330
+ => __x64_sys_fork+0x3a/0x70
+ => do_syscall_64+0x6a/0x260
+ => entry_SYSCALL_64_after_hwframe+0x76/0x7e
+    fault-worker-43      [000] ...1.   153.963810: kmem_cache_alloc: call_site=ptlock_alloc+0x15/0x30 ptr=ffff888000158600 name=page->ptl bytes_req=64 bytes_alloc=64 gfp_flags=GFP_KERNEL node=-1 accounted=false
+    fault-worker-43      [000] ...1.   153.963815: slab_decision: (kmem_cache_alloc_noprof+0x58/0x3a0 <- should_failslab) result=0
+    fault-worker-43      [000] ...1.   153.963820: <stack trace>
+ => event_triggers_post_call+0x30/0x90
+ => kretprobe_trace_func+0x73/0x290
+ => kretprobe_dispatcher+0x44/0x70
+ => kretprobe_rethook_handler+0x3a/0x60
+ => rethook_trampoline_handler+0xb5/0x180
+ => arch_rethook_trampoline_callback+0x34/0x50
+ => arch_rethook_trampoline+0x2c/0x60
+ => kmem_cache_alloc_noprof+0x58/0x3a0
+ => vm_area_dup+0x17/0x150
+ => dup_mmap+0x351/0x7c0
+ => copy_mm+0xae/0x160
+ => copy_process+0x73b/0x11c0
+ => kernel_clone+0xf2/0x330
+ => __x64_sys_fork+0x3a/0x70
+ => do_syscall_64+0x6a/0x260
+ => entry_SYSCALL_64_after_hwframe+0x76/0x7e
+    fault-worker-43      [000] ...1.   153.963820: kmem_cache_alloc: call_site=vm_area_dup+0x17/0x150 ptr=ffff888004646800 name=vm_area_struct bytes_req=256 bytes_alloc=256 gfp_flags=GFP_KERNEL node=-1 accounted=false
+    fault-worker-43      [000] ...1.   153.963821: slab_decision: (kmem_cache_alloc_noprof+0x58/0x3a0 <- should_failslab) result=0
+    fault-worker-43      [000] ...1.   153.963826: <stack trace>
+ => event_triggers_post_call+0x30/0x90
+ => kretprobe_trace_func+0x73/0x290
+ => kretprobe_dispatcher+0x44/0x70
+ => kretprobe_rethook_handler+0x3a/0x60
+ => rethook_trampoline_handler+0xb5/0x180
+ => arch_rethook_trampoline_callback+0x34/0x50
+ => arch_rethook_trampoline+0x2c/0x60
+ => kmem_cache_alloc_noprof+0x58/0x3a0
+ => anon_vma_clone+0x5f/0x1d0
+ => anon_vma_fork+0x23/0x170
+ => dup_mmap+0x372/0x7c0
+ => copy_mm+0xae/0x160
+ => copy_process+0x73b/0x11c0
+ => kernel_clone+0xf2/0x330
+ => __x64_sys_fork+0x3a/0x70
+ => do_syscall_64+0x6a/0x260
+ => entry_SYSCALL_64_after_hwframe+0x76/0x7e
+    fault-worker-43      [000] ...1.   153.963826: kmem_cache_alloc: call_site=anon_vma_clone+0x5f/0x1d0 ptr=ffff8880009fd5c0 name=anon_vma_chain bytes_req=64 bytes_alloc=64 gfp_flags=GFP_NOWAIT node=-1 accounted=false
+    fault-worker-43      [000] ...1.   153.963828: slab_decision: (kmem_cache_alloc_noprof+0x58/0x3a0 <- should_failslab) result=0
+    fault-worker-43      [000] ...1.   153.963833: <stack trace>
+ => event_triggers_post_call+0x30/0x90
+ => kretprobe_trace_func+0x73/0x290
+ => kretprobe_dispatcher+0x44/0x70
+ => kretprobe_rethook_handler+0x3a/0x60
+ => rethook_trampoline_handler+0xb5/0x180
+ => arch_rethook_trampoline_callback+0x34/0x50
+ => arch_rethook_trampoline+0x2c/0x60
+ => kmem_cache_alloc_noprof+0x58/0x3a0
+ => anon_vma_fork+0x52/0x170
+ => dup_mmap+0x372/0x7c0
+ => copy_mm+0xae/0x160
+ => copy_process+0x73b/0x11c0
+ => kernel_clone+0xf2/0x330
+ => __x64_sys_fork+0x3a/0x70
+ => do_syscall_64+0x6a/0x260
+ => entry_SYSCALL_64_after_hwframe+0x76/0x7e
+    fault-worker-43      [000] ...1.   153.963833: kmem_cache_alloc: call_site=anon_vma_fork+0x52/0x170 ptr=ffff8880009fcca8 name=anon_vma bytes_req=208 bytes_alloc=216 gfp_flags=GFP_KERNEL node=-1 accounted=false
+    fault-worker-43      [000] ...1.   153.963834: slab_decision: (kmem_cache_alloc_noprof+0x58/0x3a0 <- should_failslab) result=0
+    fault-worker-43      [000] ...1.   153.963839: <stack trace>
+ => event_triggers_post_call+0x30/0x90
+ => kretprobe_trace_func+0x73/0x290
+ => kretprobe_dispatcher+0x44/0x70
+ => kretprobe_rethook_handler+0x3a/0x60
+ => rethook_trampoline_handler+0xb5/0x180
+ => arch_rethook_trampoline_callback+0x34/0x50
+ => arch_rethook_trampoline+0x2c/0x60
+ => kmem_cache_alloc_noprof+0x58/0x3a0
+ => anon_vma_fork+0x99/0x170
+ => dup_mmap+0x372/0x7c0
+ => copy_mm+0xae/0x160
+ => copy_process+0x73b/0x11c0
+ => kernel_clone+0xf2/0x330
+ => __x64_sys_fork+0x3a/0x70
+ => do_syscall_64+0x6a/0x260
+ => entry_SYSCALL_64_after_hwframe+0x76/0x7e
+    fault-worker-43      [000] ...1.   153.963839: kmem_cache_alloc: call_site=anon_vma_fork+0x99/0x170 ptr=ffff8880009fd600 name=anon_vma_chain bytes_req=64 bytes_alloc=64 gfp_flags=GFP_KERNEL node=-1 accounted=false
+    fault-worker-43      [000] ...1.   153.963842: slab_decision: (kmem_cache_alloc_noprof+0x58/0x3a0 <- should_failslab) result=0
+    fault-worker-43      [000] ...1.   153.963847: <stack trace>
+ => event_triggers_post_call+0x30/0x90
+ => kretprobe_trace_func+0x73/0x290
+ => kretprobe_dispatcher+0x44/0x70
+ => kretprobe_rethook_handler+0x3a/0x60
+ => rethook_trampoline_handler+0xb5/0x180
+ => arch_rethook_trampoline_callback+0x34/0x50
+ => arch_rethook_trampoline+0x2c/0x60
+ => kmem_cache_alloc_noprof+0x58/0x3a0
+ => vm_area_dup+0x17/0x150
+ => dup_mmap+0x351/0x7c0
+ => copy_mm+0xae/0x160
+ => copy_process+0x73b/0x11c0
+ => kernel_clone+0xf2/0x330
+ => __x64_sys_fork+0x3a/0x70
+ => do_syscall_64+0x6a/0x260
+ => entry_SYSCALL_64_after_hwframe+0x76/0x7e
+    fault-worker-43      [000] ...1.   153.963847: kmem_cache_alloc: call_site=vm_area_dup+0x17/0x150 ptr=ffff888004646700 name=vm_area_struct bytes_req=256 bytes_alloc=256 gfp_flags=GFP_KERNEL node=-1 accounted=false
+    fault-worker-43      [000] ...1.   153.963848: slab_decision: (kmem_cache_alloc_noprof+0x58/0x3a0 <- should_failslab) result=0
+    fault-worker-43      [000] ...1.   153.963853: <stack trace>
+ => event_triggers_post_call+0x30/0x90
+ => kretprobe_trace_func+0x73/0x290
+ => kretprobe_dispatcher+0x44/0x70
+ => kretprobe_rethook_handler+0x3a/0x60
+ => rethook_trampoline_handler+0xb5/0x180
+ => arch_rethook_trampoline_callback+0x34/0x50
+ => arch_rethook_trampoline+0x2c/0x60
+ => kmem_cache_alloc_noprof+0x58/0x3a0
+ => anon_vma_clone+0x5f/0x1d0
+ => anon_vma_fork+0x23/0x170
+ => dup_mmap+0x372/0x7c0
+ => copy_mm+0xae/0x160
+ => copy_process+0x73b/0x11c0
+ => kernel_clone+0xf2/0x330
+ => __x64_sys_fork+0x3a/0x70
+ => do_syscall_64+0x6a/0x260
+ => entry_SYSCALL_64_after_hwframe+0x76/0x7e
+    fault-worker-43      [000] ...1.   153.963854: kmem_cache_alloc: call_site=anon_vma_clone+0x5f/0x1d0 ptr=ffff8880009fd640 name=anon_vma_chain bytes_req=64 bytes_alloc=64 gfp_flags=GFP_NOWAIT node=-1 accounted=false
+    fault-worker-43      [000] ...1.   153.963855: slab_decision: (kmem_cache_alloc_noprof+0x58/0x3a0 <- should_failslab) result=0
+    fault-worker-43      [000] ...1.   153.963860: <stack trace>
+ => event_triggers_post_call+0x30/0x90
+ => kretprobe_trace_func+0x73/0x290
+ => kretprobe_dispatcher+0x44/0x70
+ => kretprobe_rethook_handler+0x3a/0x60
+ => rethook_trampoline_handler+0xb5/0x180
+ => arch_rethook_trampoline_callback+0x34/0x50
+ => arch_rethook_trampoline+0x2c/0x60
+ => kmem_cache_alloc_noprof+0x58/0x3a0
+ => anon_vma_fork+0x52/0x170
+ => dup_mmap+0x372/0x7c0
+ => copy_mm+0xae/0x160
+ => copy_process+0x73b/0x11c0
+ => kernel_clone+0xf2/0x330
+ => __x64_sys_fork+0x3a/0x70
+ => do_syscall_64+0x6a/0x260
+ => entry_SYSCALL_64_after_hwframe+0x76/0x7e
+    fault-worker-43      [000] ...1.   153.963860: kmem_cache_alloc: call_site=anon_vma_fork+0x52/0x170 ptr=ffff8880009fcd80 name=anon_vma bytes_req=208 bytes_alloc=216 gfp_flags=GFP_KERNEL node=-1 accounted=false
+    fault-worker-43      [000] ...1.   153.963861: slab_decision: (kmem_cache_alloc_noprof+0x58/0x3a0 <- should_failslab) result=0
+    fault-worker-43      [000] ...1.   153.963866: <stack trace>
+ => event_triggers_post_call+0x30/0x90
+ => kretprobe_trace_func+0x73/0x290
+ => kretprobe_dispatcher+0x44/0x70
+ => kretprobe_rethook_handler+0x3a/0x60
+ => rethook_trampoline_handler+0xb5/0x180
+ => arch_rethook_trampoline_callback+0x34/0x50
+ => arch_rethook_trampoline+0x2c/0x60
+ => kmem_cache_alloc_noprof+0x58/0x3a0
+ => anon_vma_fork+0x99/0x170
+ => dup_mmap+0x372/0x7c0
+ => copy_mm+0xae/0x160
+ => copy_process+0x73b/0x11c0
+ => kernel_clone+0xf2/0x330
+ => __x64_sys_fork+0x3a/0x70
+ => do_syscall_64+0x6a/0x260
+ => entry_SYSCALL_64_after_hwframe+0x76/0x7e
+    fault-worker-43      [000] ...1.   153.963866: kmem_cache_alloc: call_site=anon_vma_fork+0x99/0x170 ptr=ffff8880009fd680 name=anon_vma_chain bytes_req=64 bytes_alloc=64 gfp_flags=GFP_KERNEL node=-1 accounted=false
+    fault-worker-43      [000] ...1.   153.963869: slab_decision: (kmem_cache_alloc_noprof+0x58/0x3a0 <- should_failslab) result=0
+    fault-worker-43      [000] ...1.   153.963874: <stack trace>
+ => event_triggers_post_call+0x30/0x90
+ => kretprobe_trace_func+0x73/0x290
+ => kretprobe_dispatcher+0x44/0x70
+ => kretprobe_rethook_handler+0x3a/0x60
+ => rethook_trampoline_handler+0xb5/0x180
+ => arch_rethook_trampoline_callback+0x34/0x50
+ => arch_rethook_trampoline+0x2c/0x60
+ => kmem_cache_alloc_noprof+0x58/0x3a0
+ => vm_area_dup+0x17/0x150
+ => dup_mmap+0x351/0x7c0
+ => copy_mm+0xae/0x160
+ => copy_process+0x73b/0x11c0
+ => kernel_clone+0xf2/0x330
+ => __x64_sys_fork+0x3a/0x70
+ => do_syscall_64+0x6a/0x260
+ => entry_SYSCALL_64_after_hwframe+0x76/0x7e
+    fault-worker-43      [000] ...1.   153.963874: kmem_cache_alloc: call_site=vm_area_dup+0x17/0x150 ptr=ffff888004646600 name=vm_area_struct bytes_req=256 bytes_alloc=256 gfp_flags=GFP_KERNEL node=-1 accounted=false
+    fault-worker-43      [000] ...1.   153.963875: slab_decision: (kmem_cache_alloc_noprof+0x58/0x3a0 <- should_failslab) result=0
+    fault-worker-43      [000] ...1.   153.963880: <stack trace>
+ => event_triggers_post_call+0x30/0x90
+ => kretprobe_trace_func+0x73/0x290
+ => kretprobe_dispatcher+0x44/0x70
+ => kretprobe_rethook_handler+0x3a/0x60
+ => rethook_trampoline_handler+0xb5/0x180
+ => arch_rethook_trampoline_callback+0x34/0x50
+ => arch_rethook_trampoline+0x2c/0x60
+ => kmem_cache_alloc_noprof+0x58/0x3a0
+ => anon_vma_clone+0x5f/0x1d0
+ => anon_vma_fork+0x23/0x170
+ => dup_mmap+0x372/0x7c0
+ => copy_mm+0xae/0x160
+ => copy_process+0x73b/0x11c0
+ => kernel_clone+0xf2/0x330
+ => __x64_sys_fork+0x3a/0x70
+ => do_syscall_64+0x6a/0x260
+ => entry_SYSCALL_64_after_hwframe+0x76/0x7e
+    fault-worker-43      [000] ...1.   153.963880: kmem_cache_alloc: call_site=anon_vma_clone+0x5f/0x1d0 ptr=ffff8880009fd6c0 name=anon_vma_chain bytes_req=64 bytes_alloc=64 gfp_flags=GFP_NOWAIT node=-1 accounted=false
+    fault-worker-43      [000] ...1.   153.963882: slab_decision: (kmem_cache_alloc_noprof+0x58/0x3a0 <- should_failslab) result=0
+    fault-worker-43      [000] ...1.   153.963886: <stack trace>
+ => event_triggers_post_call+0x30/0x90
+ => kretprobe_trace_func+0x73/0x290
+ => kretprobe_dispatcher+0x44/0x70
+ => kretprobe_rethook_handler+0x3a/0x60
+ => rethook_trampoline_handler+0xb5/0x180
+ => arch_rethook_trampoline_callback+0x34/0x50
+ => arch_rethook_trampoline+0x2c/0x60
+ => kmem_cache_alloc_noprof+0x58/0x3a0
+ => anon_vma_fork+0x52/0x170
+ => dup_mmap+0x372/0x7c0
+ => copy_mm+0xae/0x160
+ => copy_process+0x73b/0x11c0
+ => kernel_clone+0xf2/0x330
+ => __x64_sys_fork+0x3a/0x70
+ => do_syscall_64+0x6a/0x260
+ => entry_SYSCALL_64_after_hwframe+0x76/0x7e
+    fault-worker-43      [000] ...1.   153.963887: kmem_cache_alloc: call_site=anon_vma_fork+0x52/0x170 ptr=ffff8880009fce58 name=anon_vma bytes_req=208 bytes_alloc=216 gfp_flags=GFP_KERNEL node=-1 accounted=false
+    fault-worker-43      [000] ...1.   153.963888: slab_decision: (kmem_cache_alloc_noprof+0x58/0x3a0 <- should_failslab) result=0
+    fault-worker-43      [000] ...1.   153.963892: <stack trace>
+ => event_triggers_post_call+0x30/0x90
+ => kretprobe_trace_func+0x73/0x290
+ => kretprobe_dispatcher+0x44/0x70
+ => kretprobe_rethook_handler+0x3a/0x60
+ => rethook_trampoline_handler+0xb5/0x180
+ => arch_rethook_trampoline_callback+0x34/0x50
+ => arch_rethook_trampoline+0x2c/0x60
+ => kmem_cache_alloc_noprof+0x58/0x3a0
+ => anon_vma_fork+0x99/0x170
+ => dup_mmap+0x372/0x7c0
+ => copy_mm+0xae/0x160
+ => copy_process+0x73b/0x11c0
+ => kernel_clone+0xf2/0x330
+ => __x64_sys_fork+0x3a/0x70
+ => do_syscall_64+0x6a/0x260
+ => entry_SYSCALL_64_after_hwframe+0x76/0x7e
+    fault-worker-43      [000] ...1.   153.963893: kmem_cache_alloc: call_site=anon_vma_fork+0x99/0x170 ptr=ffff8880009fd700 name=anon_vma_chain bytes_req=64 bytes_alloc=64 gfp_flags=GFP_KERNEL node=-1 accounted=false
+    fault-worker-43      [000] ...1.   153.963895: page_decision: (prepare_alloc_pages+0x100/0x1a0 <- should_fail_alloc_page) order=0 injected=0
+    fault-worker-43      [000] ...1.   153.963901: <stack trace>
+ => event_triggers_post_call+0x30/0x90
+ => kretprobe_trace_func+0x73/0x290
+ => kretprobe_dispatcher+0x44/0x70
+ => kretprobe_rethook_handler+0x3a/0x60
+ => rethook_trampoline_handler+0xb5/0x180
+ => arch_rethook_trampoline_callback+0x34/0x50
+ => arch_rethook_trampoline+0x2c/0x60
+ => prepare_alloc_pages+0x100/0x1a0
+ => __alloc_frozen_pages_noprof+0xa3/0x1f0
+ => __alloc_pages_noprof+0x5/0x20
+ => pte_alloc_one+0x1b/0xf0
+ => __pte_alloc+0x15/0x160
+ => copy_page_range+0x144d/0x1760
+ => dup_mmap+0x4d0/0x7c0
+ => copy_mm+0xae/0x160
+ => copy_process+0x73b/0x11c0
+ => kernel_clone+0xf2/0x330
+ => __x64_sys_fork+0x3a/0x70
+ => do_syscall_64+0x6a/0x260
+ => entry_SYSCALL_64_after_hwframe+0x76/0x7e
+    fault-worker-43      [000] ...1.   153.963910: pages_result: (pte_alloc_one+0x1b/0xf0 <- __alloc_pages_noprof) order=0 result=0xffffea000002ec80
+    fault-worker-43      [000] ...1.   153.963911: slab_decision: (kmem_cache_alloc_noprof+0x58/0x3a0 <- should_failslab) result=0
+    fault-worker-43      [000] ...1.   153.963917: <stack trace>
+ => event_triggers_post_call+0x30/0x90
+ => kretprobe_trace_func+0x73/0x290
+ => kretprobe_dispatcher+0x44/0x70
+ => kretprobe_rethook_handler+0x3a/0x60
+ => rethook_trampoline_handler+0xb5/0x180
+ => arch_rethook_trampoline_callback+0x34/0x50
+ => arch_rethook_trampoline+0x2c/0x60
+ => kmem_cache_alloc_noprof+0x58/0x3a0
+ => ptlock_alloc+0x15/0x30
+ => pte_alloc_one+0x38/0xf0
+ => __pte_alloc+0x15/0x160
+ => copy_page_range+0x144d/0x1760
+ => dup_mmap+0x4d0/0x7c0
+ => copy_mm+0xae/0x160
+ => copy_process+0x73b/0x11c0
+ => kernel_clone+0xf2/0x330
+ => __x64_sys_fork+0x3a/0x70
+ => do_syscall_64+0x6a/0x260
+ => entry_SYSCALL_64_after_hwframe+0x76/0x7e
+    fault-worker-43      [000] ...1.   153.963917: kmem_cache_alloc: call_site=ptlock_alloc+0x15/0x30 ptr=ffff888000158640 name=page->ptl bytes_req=64 bytes_alloc=64 gfp_flags=GFP_KERNEL node=-1 accounted=false
+    fault-worker-43      [000] ...1.   153.963920: slab_decision: (kmem_cache_alloc_noprof+0x58/0x3a0 <- should_failslab) result=0
+    fault-worker-43      [000] ...1.   153.963925: <stack trace>
+ => event_triggers_post_call+0x30/0x90
+ => kretprobe_trace_func+0x73/0x290
+ => kretprobe_dispatcher+0x44/0x70
+ => kretprobe_rethook_handler+0x3a/0x60
+ => rethook_trampoline_handler+0xb5/0x180
+ => arch_rethook_trampoline_callback+0x34/0x50
+ => arch_rethook_trampoline+0x2c/0x60
+ => kmem_cache_alloc_noprof+0x58/0x3a0
+ => vm_area_dup+0x17/0x150
+ => dup_mmap+0x351/0x7c0
+ => copy_mm+0xae/0x160
+ => copy_process+0x73b/0x11c0
+ => kernel_clone+0xf2/0x330
+ => __x64_sys_fork+0x3a/0x70
+ => do_syscall_64+0x6a/0x260
+ => entry_SYSCALL_64_after_hwframe+0x76/0x7e
+    fault-worker-43      [000] ...1.   153.963926: kmem_cache_alloc: call_site=vm_area_dup+0x17/0x150 ptr=ffff888004646500 name=vm_area_struct bytes_req=256 bytes_alloc=256 gfp_flags=GFP_KERNEL node=-1 accounted=false
+    fault-worker-43      [000] ...1.   153.963928: page_decision: (prepare_alloc_pages+0x100/0x1a0 <- should_fail_alloc_page) order=0 injected=0
+    fault-worker-43      [000] ...1.   153.963933: <stack trace>
+ => event_triggers_post_call+0x30/0x90
+ => kretprobe_trace_func+0x73/0x290
+ => kretprobe_dispatcher+0x44/0x70
+ => kretprobe_rethook_handler+0x3a/0x60
+ => rethook_trampoline_handler+0xb5/0x180
+ => arch_rethook_trampoline_callback+0x34/0x50
+ => arch_rethook_trampoline+0x2c/0x60
+ => prepare_alloc_pages+0x100/0x1a0
+ => __alloc_frozen_pages_noprof+0xa3/0x1f0
+ => __alloc_pages_noprof+0x5/0x20
+ => __pud_alloc+0x35/0x230
+ => copy_page_range+0x1660/0x1760
+ => dup_mmap+0x4d0/0x7c0
+ => copy_mm+0xae/0x160
+ => copy_process+0x73b/0x11c0
+ => kernel_clone+0xf2/0x330
+ => __x64_sys_fork+0x3a/0x70
+ => do_syscall_64+0x6a/0x260
+ => entry_SYSCALL_64_after_hwframe+0x76/0x7e
+    fault-worker-43      [000] ...1.   153.963934: pages_result: (__pud_alloc+0x35/0x230 <- __alloc_pages_noprof) order=0 result=0xffffea000002ed40
+    fault-worker-43      [000] ...1.   153.963936: page_decision: (prepare_alloc_pages+0x100/0x1a0 <- should_fail_alloc_page) order=0 injected=0
+    fault-worker-43      [000] ...1.   153.963942: <stack trace>
+ => event_triggers_post_call+0x30/0x90
+ => kretprobe_trace_func+0x73/0x290
+ => kretprobe_dispatcher+0x44/0x70
+ => kretprobe_rethook_handler+0x3a/0x60
+ => rethook_trampoline_handler+0xb5/0x180
+ => arch_rethook_trampoline_callback+0x34/0x50
+ => arch_rethook_trampoline+0x2c/0x60
+ => prepare_alloc_pages+0x100/0x1a0
+ => __alloc_frozen_pages_noprof+0xa3/0x1f0
+ => __alloc_pages_noprof+0x5/0x20
+ => __pmd_alloc+0x32/0x290
+ => copy_page_range+0x15c8/0x1760
+ => dup_mmap+0x4d0/0x7c0
+ => copy_mm+0xae/0x160
+ => copy_process+0x73b/0x11c0
+ => kernel_clone+0xf2/0x330
+ => __x64_sys_fork+0x3a/0x70
+ => do_syscall_64+0x6a/0x260
+ => entry_SYSCALL_64_after_hwframe+0x76/0x7e
+    fault-worker-43      [000] ...1.   153.963955: pages_result: (__pmd_alloc+0x32/0x290 <- __alloc_pages_noprof) order=0 result=0xffffea000011b1c0
+    fault-worker-43      [000] ...1.   153.963956: slab_decision: (kmem_cache_alloc_noprof+0x58/0x3a0 <- should_failslab) result=0
+    fault-worker-43      [000] ...1.   153.963963: <stack trace>
+ => event_triggers_post_call+0x30/0x90
+ => kretprobe_trace_func+0x73/0x290
+ => kretprobe_dispatcher+0x44/0x70
+ => kretprobe_rethook_handler+0x3a/0x60
+ => rethook_trampoline_handler+0xb5/0x180
+ => arch_rethook_trampoline_callback+0x34/0x50
+ => arch_rethook_trampoline+0x2c/0x60
+ => kmem_cache_alloc_noprof+0x58/0x3a0
+ => __pmd_alloc+0x5d/0x290
+ => copy_page_range+0x15c8/0x1760
+ => dup_mmap+0x4d0/0x7c0
+ => copy_mm+0xae/0x160
+ => copy_process+0x73b/0x11c0
+ => kernel_clone+0xf2/0x330
+ => __x64_sys_fork+0x3a/0x70
+ => do_syscall_64+0x6a/0x260
+ => entry_SYSCALL_64_after_hwframe+0x76/0x7e
+    fault-worker-43      [000] ...1.   153.963963: kmem_cache_alloc: call_site=__pmd_alloc+0x5d/0x290 ptr=ffff888000158680 name=page->ptl bytes_req=64 bytes_alloc=64 gfp_flags=GFP_KERNEL node=-1 accounted=false
+    fault-worker-43      [000] ...1.   153.963966: page_decision: (prepare_alloc_pages+0x100/0x1a0 <- should_fail_alloc_page) order=0 injected=0
+    fault-worker-43      [000] ...1.   153.963974: <stack trace>
+ => event_triggers_post_call+0x30/0x90
+ => kretprobe_trace_func+0x73/0x290
+ => kretprobe_dispatcher+0x44/0x70
+ => kretprobe_rethook_handler+0x3a/0x60
+ => rethook_trampoline_handler+0xb5/0x180
+ => arch_rethook_trampoline_callback+0x34/0x50
+ => arch_rethook_trampoline+0x2c/0x60
+ => prepare_alloc_pages+0x100/0x1a0
+ => __alloc_frozen_pages_noprof+0xa3/0x1f0
+ => __alloc_pages_noprof+0x5/0x20
+ => pte_alloc_one+0x1b/0xf0
+ => __pte_alloc+0x15/0x160
+ => copy_page_range+0x144d/0x1760
+ => dup_mmap+0x4d0/0x7c0
+ => copy_mm+0xae/0x160
+ => copy_process+0x73b/0x11c0
+ => kernel_clone+0xf2/0x330
+ => __x64_sys_fork+0x3a/0x70
+ => do_syscall_64+0x6a/0x260
+ => entry_SYSCALL_64_after_hwframe+0x76/0x7e
+    fault-worker-43      [000] ...1.   153.963976: pages_result: (pte_alloc_one+0x1b/0xf0 <- __alloc_pages_noprof) order=0 result=0xffffea000002f480
+    fault-worker-43      [000] ...1.   153.963977: slab_decision: (kmem_cache_alloc_noprof+0x58/0x3a0 <- should_failslab) result=0
+    fault-worker-43      [000] ...1.   153.963987: <stack trace>
+ => event_triggers_post_call+0x30/0x90
+ => kretprobe_trace_func+0x73/0x290
+ => kretprobe_dispatcher+0x44/0x70
+ => kretprobe_rethook_handler+0x3a/0x60
+ => rethook_trampoline_handler+0xb5/0x180
+ => arch_rethook_trampoline_callback+0x34/0x50
+ => arch_rethook_trampoline+0x2c/0x60
+ => kmem_cache_alloc_noprof+0x58/0x3a0
+ => ptlock_alloc+0x15/0x30
+ => pte_alloc_one+0x38/0xf0
+ => __pte_alloc+0x15/0x160
+ => copy_page_range+0x144d/0x1760
+ => dup_mmap+0x4d0/0x7c0
+ => copy_mm+0xae/0x160
+ => copy_process+0x73b/0x11c0
+ => kernel_clone+0xf2/0x330
+ => __x64_sys_fork+0x3a/0x70
+ => do_syscall_64+0x6a/0x260
+ => entry_SYSCALL_64_after_hwframe+0x76/0x7e
+    fault-worker-43      [000] ...1.   153.963989: kmem_cache_alloc: call_site=ptlock_alloc+0x15/0x30 ptr=ffff8880001586c0 name=page->ptl bytes_req=64 bytes_alloc=64 gfp_flags=GFP_KERNEL node=-1 accounted=false
+    fault-worker-43      [000] ...1.   153.963996: slab_decision: (kmem_cache_alloc_noprof+0x58/0x3a0 <- should_failslab) result=0
+    fault-worker-43      [000] ...1.   153.964003: <stack trace>
+ => event_triggers_post_call+0x30/0x90
+ => kretprobe_trace_func+0x73/0x290
+ => kretprobe_dispatcher+0x44/0x70
+ => kretprobe_rethook_handler+0x3a/0x60
+ => rethook_trampoline_handler+0xb5/0x180
+ => arch_rethook_trampoline_callback+0x34/0x50
+ => arch_rethook_trampoline+0x2c/0x60
+ => kmem_cache_alloc_noprof+0x58/0x3a0
+ => vm_area_dup+0x17/0x150
+ => dup_mmap+0x351/0x7c0
+ => copy_mm+0xae/0x160
+ => copy_process+0x73b/0x11c0
+ => kernel_clone+0xf2/0x330
+ => __x64_sys_fork+0x3a/0x70
+ => do_syscall_64+0x6a/0x260
+ => entry_SYSCALL_64_after_hwframe+0x76/0x7e
+    fault-worker-43      [000] ...1.   153.964004: kmem_cache_alloc: call_site=vm_area_dup+0x17/0x150 ptr=ffff888004646400 name=vm_area_struct bytes_req=256 bytes_alloc=256 gfp_flags=GFP_KERNEL node=-1 accounted=false
+    fault-worker-43      [000] ...1.   153.964008: slab_decision: (kmem_cache_alloc_noprof+0x58/0x3a0 <- should_failslab) result=0
+    fault-worker-43      [000] ...1.   153.964015: <stack trace>
+ => event_triggers_post_call+0x30/0x90
+ => kretprobe_trace_func+0x73/0x290
+ => kretprobe_dispatcher+0x44/0x70
+ => kretprobe_rethook_handler+0x3a/0x60
+ => rethook_trampoline_handler+0xb5/0x180
+ => arch_rethook_trampoline_callback+0x34/0x50
+ => arch_rethook_trampoline+0x2c/0x60
+ => kmem_cache_alloc_noprof+0x58/0x3a0
+ => vm_area_dup+0x17/0x150
+ => dup_mmap+0x351/0x7c0
+ => copy_mm+0xae/0x160
+ => copy_process+0x73b/0x11c0
+ => kernel_clone+0xf2/0x330
+ => __x64_sys_fork+0x3a/0x70
+ => do_syscall_64+0x6a/0x260
+ => entry_SYSCALL_64_after_hwframe+0x76/0x7e
+    fault-worker-43      [000] ...1.   153.964016: kmem_cache_alloc: call_site=vm_area_dup+0x17/0x150 ptr=ffff888004646300 name=vm_area_struct bytes_req=256 bytes_alloc=256 gfp_flags=GFP_KERNEL node=-1 accounted=false
+    fault-worker-43      [000] ...1.   153.964018: slab_decision: (kmem_cache_alloc_noprof+0x58/0x3a0 <- should_failslab) result=0
+    fault-worker-43      [000] ...1.   153.964024: <stack trace>
+ => event_triggers_post_call+0x30/0x90
+ => kretprobe_trace_func+0x73/0x290
+ => kretprobe_dispatcher+0x44/0x70
+ => kretprobe_rethook_handler+0x3a/0x60
+ => rethook_trampoline_handler+0xb5/0x180
+ => arch_rethook_trampoline_callback+0x34/0x50
+ => arch_rethook_trampoline+0x2c/0x60
+ => kmem_cache_alloc_noprof+0x58/0x3a0
+ => vm_area_dup+0x17/0x150
+ => dup_mmap+0x351/0x7c0
+ => copy_mm+0xae/0x160
+ => copy_process+0x73b/0x11c0
+ => kernel_clone+0xf2/0x330
+ => __x64_sys_fork+0x3a/0x70
+ => do_syscall_64+0x6a/0x260
+ => entry_SYSCALL_64_after_hwframe+0x76/0x7e
+    fault-worker-43      [000] ...1.   153.964024: kmem_cache_alloc: call_site=vm_area_dup+0x17/0x150 ptr=ffff888004646200 name=vm_area_struct bytes_req=256 bytes_alloc=256 gfp_flags=GFP_KERNEL node=-1 accounted=false
+    fault-worker-43      [000] ...1.   153.964026: slab_decision: (kmem_cache_alloc_noprof+0x58/0x3a0 <- should_failslab) result=0
+    fault-worker-43      [000] ...1.   153.964032: <stack trace>
+ => event_triggers_post_call+0x30/0x90
+ => kretprobe_trace_func+0x73/0x290
+ => kretprobe_dispatcher+0x44/0x70
+ => kretprobe_rethook_handler+0x3a/0x60
+ => rethook_trampoline_handler+0xb5/0x180
+ => arch_rethook_trampoline_callback+0x34/0x50
+ => arch_rethook_trampoline+0x2c/0x60
+ => kmem_cache_alloc_noprof+0x58/0x3a0
+ => anon_vma_clone+0x5f/0x1d0
+ => anon_vma_fork+0x23/0x170
+ => dup_mmap+0x372/0x7c0
+ => copy_mm+0xae/0x160
+ => copy_process+0x73b/0x11c0
+ => kernel_clone+0xf2/0x330
+ => __x64_sys_fork+0x3a/0x70
+ => do_syscall_64+0x6a/0x260
+ => entry_SYSCALL_64_after_hwframe+0x76/0x7e
+    fault-worker-43      [000] ...1.   153.964033: kmem_cache_alloc: call_site=anon_vma_clone+0x5f/0x1d0 ptr=ffff8880009fd740 name=anon_vma_chain bytes_req=64 bytes_alloc=64 gfp_flags=GFP_NOWAIT node=-1 accounted=false
+    fault-worker-43      [000] ...1.   153.964035: slab_decision: (kmem_cache_alloc_noprof+0x58/0x3a0 <- should_failslab) result=0
+    fault-worker-43      [000] ...1.   153.964042: <stack trace>
+ => event_triggers_post_call+0x30/0x90
+ => kretprobe_trace_func+0x73/0x290
+ => kretprobe_dispatcher+0x44/0x70
+ => kretprobe_rethook_handler+0x3a/0x60
+ => rethook_trampoline_handler+0xb5/0x180
+ => arch_rethook_trampoline_callback+0x34/0x50
+ => arch_rethook_trampoline+0x2c/0x60
+ => kmem_cache_alloc_noprof+0x58/0x3a0
+ => anon_vma_fork+0x52/0x170
+ => dup_mmap+0x372/0x7c0
+ => copy_mm+0xae/0x160
+ => copy_process+0x73b/0x11c0
+ => kernel_clone+0xf2/0x330
+ => __x64_sys_fork+0x3a/0x70
+ => do_syscall_64+0x6a/0x260
+ => entry_SYSCALL_64_after_hwframe+0x76/0x7e
+    fault-worker-43      [000] ...1.   153.964043: kmem_cache_alloc: call_site=anon_vma_fork+0x52/0x170 ptr=ffff8880009fcaf8 name=anon_vma bytes_req=208 bytes_alloc=216 gfp_flags=GFP_KERNEL node=-1 accounted=false
+    fault-worker-43      [000] ...1.   153.964044: slab_decision: (kmem_cache_alloc_noprof+0x58/0x3a0 <- should_failslab) result=0
+    fault-worker-43      [000] ...1.   153.964070: <stack trace>
+ => event_triggers_post_call+0x30/0x90
+ => kretprobe_trace_func+0x73/0x290
+ => kretprobe_dispatcher+0x44/0x70
+ => kretprobe_rethook_handler+0x3a/0x60
+ => rethook_trampoline_handler+0xb5/0x180
+ => arch_rethook_trampoline_callback+0x34/0x50
+ => arch_rethook_trampoline+0x2c/0x60
+ => kmem_cache_alloc_noprof+0x58/0x3a0
+ => anon_vma_fork+0x99/0x170
+ => dup_mmap+0x372/0x7c0
+ => copy_mm+0xae/0x160
+ => copy_process+0x73b/0x11c0
+ => kernel_clone+0xf2/0x330
+ => __x64_sys_fork+0x3a/0x70
+ => do_syscall_64+0x6a/0x260
+ => entry_SYSCALL_64_after_hwframe+0x76/0x7e
+    fault-worker-43      [000] ...1.   153.964070: kmem_cache_alloc: call_site=anon_vma_fork+0x99/0x170 ptr=ffff8880009fd780 name=anon_vma_chain bytes_req=64 bytes_alloc=64 gfp_flags=GFP_KERNEL node=-1 accounted=false
+    fault-worker-43      [000] ...1.   153.964073: page_decision: (prepare_alloc_pages+0x100/0x1a0 <- should_fail_alloc_page) order=0 injected=0
+    fault-worker-43      [000] ...1.   153.964077: <stack trace>
+ => event_triggers_post_call+0x30/0x90
+ => kretprobe_trace_func+0x73/0x290
+ => kretprobe_dispatcher+0x44/0x70
+ => kretprobe_rethook_handler+0x3a/0x60
+ => rethook_trampoline_handler+0xb5/0x180
+ => arch_rethook_trampoline_callback+0x34/0x50
+ => arch_rethook_trampoline+0x2c/0x60
+ => prepare_alloc_pages+0x100/0x1a0
+ => __alloc_frozen_pages_noprof+0xa3/0x1f0
+ => __alloc_pages_noprof+0x5/0x20
+ => __pmd_alloc+0x32/0x290
+ => copy_page_range+0x15c8/0x1760
+ => dup_mmap+0x4d0/0x7c0
+ => copy_mm+0xae/0x160
+ => copy_process+0x73b/0x11c0
+ => kernel_clone+0xf2/0x330
+ => __x64_sys_fork+0x3a/0x70
+ => do_syscall_64+0x6a/0x260
+ => entry_SYSCALL_64_after_hwframe+0x76/0x7e
+    fault-worker-43      [000] ...1.   153.964078: pages_result: (__pmd_alloc+0x32/0x290 <- __alloc_pages_noprof) order=0 result=0xffffea0000113580
+    fault-worker-43      [000] ...1.   153.964079: slab_decision: (kmem_cache_alloc_noprof+0x58/0x3a0 <- should_failslab) result=0
+    fault-worker-43      [000] ...1.   153.964082: <stack trace>
+ => event_triggers_post_call+0x30/0x90
+ => kretprobe_trace_func+0x73/0x290
+ => kretprobe_dispatcher+0x44/0x70
+ => kretprobe_rethook_handler+0x3a/0x60
+ => rethook_trampoline_handler+0xb5/0x180
+ => arch_rethook_trampoline_callback+0x34/0x50
+ => arch_rethook_trampoline+0x2c/0x60
+ => kmem_cache_alloc_noprof+0x58/0x3a0
+ => __pmd_alloc+0x5d/0x290
+ => copy_page_range+0x15c8/0x1760
+ => dup_mmap+0x4d0/0x7c0
+ => copy_mm+0xae/0x160
+ => copy_process+0x73b/0x11c0
+ => kernel_clone+0xf2/0x330
+ => __x64_sys_fork+0x3a/0x70
+ => do_syscall_64+0x6a/0x260
+ => entry_SYSCALL_64_after_hwframe+0x76/0x7e
+    fault-worker-43      [000] ...1.   153.964082: kmem_cache_alloc: call_site=__pmd_alloc+0x5d/0x290 ptr=ffff888000158700 name=page->ptl bytes_req=64 bytes_alloc=64 gfp_flags=GFP_KERNEL node=-1 accounted=false
+    fault-worker-43      [000] ...1.   153.964083: page_decision: (prepare_alloc_pages+0x100/0x1a0 <- should_fail_alloc_page) order=0 injected=0
+    fault-worker-43      [000] ...1.   153.964086: <stack trace>
+ => event_triggers_post_call+0x30/0x90
+ => kretprobe_trace_func+0x73/0x290
+ => kretprobe_dispatcher+0x44/0x70
+ => kretprobe_rethook_handler+0x3a/0x60
+ => rethook_trampoline_handler+0xb5/0x180
+ => arch_rethook_trampoline_callback+0x34/0x50
+ => arch_rethook_trampoline+0x2c/0x60
+ => prepare_alloc_pages+0x100/0x1a0
+ => __alloc_frozen_pages_noprof+0xa3/0x1f0
+ => __alloc_pages_noprof+0x5/0x20
+ => pte_alloc_one+0x1b/0xf0
+ => __pte_alloc+0x15/0x160
+ => copy_page_range+0x144d/0x1760
+ => dup_mmap+0x4d0/0x7c0
+ => copy_mm+0xae/0x160
+ => copy_process+0x73b/0x11c0
+ => kernel_clone+0xf2/0x330
+ => __x64_sys_fork+0x3a/0x70
+ => do_syscall_64+0x6a/0x260
+ => entry_SYSCALL_64_after_hwframe+0x76/0x7e
+    fault-worker-43      [000] ...1.   153.964087: pages_result: (pte_alloc_one+0x1b/0xf0 <- __alloc_pages_noprof) order=0 result=0xffffea0000113b80
+    fault-worker-43      [000] ...1.   153.964087: slab_decision: (kmem_cache_alloc_noprof+0x58/0x3a0 <- should_failslab) result=0
+    fault-worker-43      [000] ...1.   153.964090: <stack trace>
+ => event_triggers_post_call+0x30/0x90
+ => kretprobe_trace_func+0x73/0x290
+ => kretprobe_dispatcher+0x44/0x70
+ => kretprobe_rethook_handler+0x3a/0x60
+ => rethook_trampoline_handler+0xb5/0x180
+ => arch_rethook_trampoline_callback+0x34/0x50
+ => arch_rethook_trampoline+0x2c/0x60
+ => kmem_cache_alloc_noprof+0x58/0x3a0
+ => ptlock_alloc+0x15/0x30
+ => pte_alloc_one+0x38/0xf0
+ => __pte_alloc+0x15/0x160
+ => copy_page_range+0x144d/0x1760
+ => dup_mmap+0x4d0/0x7c0
+ => copy_mm+0xae/0x160
+ => copy_process+0x73b/0x11c0
+ => kernel_clone+0xf2/0x330
+ => __x64_sys_fork+0x3a/0x70
+ => do_syscall_64+0x6a/0x260
+ => entry_SYSCALL_64_after_hwframe+0x76/0x7e
+    fault-worker-43      [000] ...1.   153.964090: kmem_cache_alloc: call_site=ptlock_alloc+0x15/0x30 ptr=ffff888000158740 name=page->ptl bytes_req=64 bytes_alloc=64 gfp_flags=GFP_KERNEL node=-1 accounted=false
+    fault-worker-43      [000] ...1.   153.964094: slab_decision: (kmem_cache_alloc_noprof+0x58/0x3a0 <- should_failslab) result=0
+    fault-worker-43      [000] ...1.   153.964096: <stack trace>
+ => event_triggers_post_call+0x30/0x90
+ => kretprobe_trace_func+0x73/0x290
+ => kretprobe_dispatcher+0x44/0x70
+ => kretprobe_rethook_handler+0x3a/0x60
+ => rethook_trampoline_handler+0xb5/0x180
+ => arch_rethook_trampoline_callback+0x34/0x50
+ => arch_rethook_trampoline+0x2c/0x60
+ => kmem_cache_alloc_noprof+0x58/0x3a0
+ => alloc_pid+0x41/0x510
+ => copy_process+0x7c3/0x11c0
+ => kernel_clone+0xf2/0x330
+ => __x64_sys_fork+0x3a/0x70
+ => do_syscall_64+0x6a/0x260
+ => entry_SYSCALL_64_after_hwframe+0x76/0x7e
+    fault-worker-43      [000] ...1.   153.964096: kmem_cache_alloc: call_site=alloc_pid+0x41/0x510 ptr=ffff8880003938c0 name=pid bytes_req=272 bytes_alloc=320 gfp_flags=GFP_KERNEL node=-1 accounted=false
+    fault-worker-43      [000] ...1.   153.964126: sched_process_fork: comm=fault-worker pid=43 child_comm=fault-worker child_pid=46
+    fault-worker-43      [000] ...1.   153.964151: page_decision: (prepare_alloc_pages+0x100/0x1a0 <- should_fail_alloc_page) order=0 injected=0
+    fault-worker-43      [000] ...1.   153.964153: <stack trace>
+ => event_triggers_post_call+0x30/0x90
+ => kretprobe_trace_func+0x73/0x290
+ => kretprobe_dispatcher+0x44/0x70
+ => kretprobe_rethook_handler+0x3a/0x60
+ => rethook_trampoline_handler+0xb5/0x180
+ => arch_rethook_trampoline_callback+0x34/0x50
+ => arch_rethook_trampoline+0x2c/0x60
+ => prepare_alloc_pages+0x100/0x1a0
+ => __alloc_frozen_pages_noprof+0xa3/0x1f0
+ => __folio_alloc_noprof+0xb/0x20
+ => handle_mm_fault+0x1aa7/0x2470
+ => do_user_addr_fault+0x1bf/0x5c0
+ => exc_page_fault+0x69/0xc0
+ => asm_exc_page_fault+0x22/0x30
+    fault-worker-43      [000] d..2.   153.969389: kmem_cache_free: call_site=release_task+0x616/0x7b0 ptr=ffff888000bc08c0 name=sighand_cache

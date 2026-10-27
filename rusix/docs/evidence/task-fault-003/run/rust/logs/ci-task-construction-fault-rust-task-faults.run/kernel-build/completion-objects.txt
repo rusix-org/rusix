@@ -1,0 +1,1 @@
+/out/builds/ci-task-construction-fault-rust/kernel/sched/completion_rust.o

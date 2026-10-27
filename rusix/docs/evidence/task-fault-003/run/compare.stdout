@@ -1,0 +1,6 @@
+{
+  "status": "PASS",
+  "scope": "Matched diagnostic constructor allocation-failure pair",
+  "source_revision": "0fd8196feea002fcfa2f058e3e2caa8b4d4009b4",
+  "attempts_per_side": 18
+}

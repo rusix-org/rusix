@@ -1,0 +1,1 @@
+bash /src/rusix/scripts/with-local-tools.sh python3 /src/rusix/scripts/verify-task-construction.py objects --profile task-construction-fault-c --source /src --build /out/builds/ci-task-construction-fault-c --evidence /out/logs/ci-task-construction-fault-c-task-faults.run/kernel-build

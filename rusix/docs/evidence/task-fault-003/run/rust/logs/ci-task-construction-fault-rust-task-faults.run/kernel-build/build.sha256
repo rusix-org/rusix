@@ -1,0 +1,4 @@
+6225a21462299964e1baf0591d082223eb69552b09271ca9fe3ddad88f8d830d  /out/builds/ci-task-construction-fault-rust/.config
+be0135eb0d60ec694243bdbea0bcb5bbde4ae80a531828d0055f3521dbf58f98  /out/builds/ci-task-construction-fault-rust/arch/x86/boot/bzImage
+0382f075d5181adfe23899cdea7bf4f213b8a7405f36535c042fe23b209c50fe  /out/builds/ci-task-construction-fault-rust/vmlinux
+53a42f82e1e2299142be051a120288f94e9f54a6e04e59e55fe6866e08dfc161  /out/builds/ci-task-construction-fault-rust/vmlinux.map

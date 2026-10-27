@@ -1,0 +1,30 @@
+{
+  "policy_base": "8fd3defabb841083192cd1d9c4eb1cde83027579",
+  "build_source": "0fd8196feea002fcfa2f058e3e2caa8b4d4009b4",
+  "inputs": {
+    "vmlinux": {
+      "path": "/out/builds/ci-task-construction-fault-rust/vmlinux",
+      "sha256": "0382f075d5181adfe23899cdea7bf4f213b8a7405f36535c042fe23b209c50fe"
+    },
+    "config": {
+      "path": "/out/builds/ci-task-construction-fault-rust/.config",
+      "sha256": "6225a21462299964e1baf0591d082223eb69552b09271ca9fe3ddad88f8d830d"
+    },
+    "symbols": {
+      "path": "/out/logs/ci-task-construction-fault-rust-task-faults.run/calibration/symbols",
+      "sha256": "e74642739b48c57a17e1ac0593393dd656c6c0780bae8214ae3676163abf876f"
+    },
+    "disassembly": {
+      "path": "/out/logs/ci-task-construction-fault-rust-task-faults.run/calibration/disassembly",
+      "sha256": "4e59eeabc14697a881ee33567f9be39291c7aa7f2ee275f23f7262dc28ed02ea"
+    },
+    "notes": {
+      "path": "/out/logs/ci-task-construction-fault-rust-task-faults.run/calibration/notes",
+      "sha256": "9086d354c6c0cb9bf0c17a22f8593adbe644c38dea40e9ecb4b8ef7c52699051"
+    },
+    "calibration.tsv": {
+      "path": "/out/logs/ci-task-construction-fault-rust-task-faults.run/calibration/calibration.tsv",
+      "sha256": "4c5c8f15646a6ec5b8eccc0b1b7bd66c18c0655fdf13c47daaf2bc3acad76e6b"
+    }
+  }
+}

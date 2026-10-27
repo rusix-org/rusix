@@ -1,0 +1,9 @@
+{
+  "status": "PASS",
+  "source": "0fd8196feea002fcfa2f058e3e2caa8b4d4009b4",
+  "different_settings": [
+    "CONFIG_RUSIX_TASK_CONSTRUCTION_RUST"
+  ],
+  "attempts_per_side": 18,
+  "scope": "Diagnostic slab/stack allocation-failure attribution; no general failure coverage"
+}
