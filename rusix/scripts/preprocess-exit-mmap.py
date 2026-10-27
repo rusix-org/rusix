@@ -25,9 +25,9 @@ def command(text, output):
     return saved_command(text, output, unit='mm/vma')
 
 
-def inputs(build, source):
+def inputs(build, source, *, source_extension=extension.ID):
     paths=copy.inputs(build,source)+dup.inputs(build,source)+vma.inputs(build,source)
-    paths+=extension.paths(source,extension.ID)+[
+    paths+=extension.paths(source,source_extension)+[
         build/'mm/.vma.o.cmd',build/'mm/vma.o',source/'mm/vma.h',source/'mm/vma_internal.h',
         source/'include/asm-generic/tlb.h',source/'include/linux/mmu_notifier.h',
         source/'include/linux/mman.h',source/'include/linux/oom.h',source/'include/linux/mm_inline.h',
@@ -37,15 +37,15 @@ def inputs(build, source):
     return list(dict.fromkeys(paths))
 
 
-def record(build, source):
-    return dict(input_sha256={str(p):digest(p) for p in inputs(build,source)},
+def record(build, source, *, source_extension=extension.ID):
+    return dict(input_sha256={str(p):digest(p) for p in inputs(build,source,source_extension=source_extension)},
         argv=command((build/'mm/.vma.o.cmd').read_text(),build/'mm/vma.i'),cwd=str(build),
         output=str(build/'mm/vma.i'),preprocessed_sha256=digest(build/'mm/vma.i'),
         prerequisite_outputs={str(build/name):digest(build/name) for name in
                               ('kernel/fork.i','mm/mmap.i','mm/vma_init.i')})
 
 
-def main():
+def main(*, source_extension=extension.ID):
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--build',type=Path,required=True);parser.add_argument('--evidence',type=Path,required=True)
     args=parser.parse_args();build=args.build.resolve();source=Path('/src');evidence=args.evidence.resolve()
@@ -53,16 +53,16 @@ def main():
     for name in ('kernel/fork.i','mm/mmap.i','mm/vma_init.i','mm/vma.i'):
         if (build/name).exists():raise ValueError('Refusing stale preprocessor output: '+name)
     evidence.mkdir(parents=True,exist_ok=True)
-    extension.validate(source,extension.ID)
-    before={str(p):digest(p) for p in inputs(build,source)}
+    extension.validate(source,source_extension)
+    before={str(p):digest(p) for p in inputs(build,source,source_extension=source_extension)}
     with (evidence/'exit-mmap-preprocess.log').open('x') as log:
         for script in ('preprocess-mm-copy.py','preprocess-dup-mmap.py','preprocess-vma-lifecycle.py'):
             subprocess.run(['python3','-B',str(source/'rusix/scripts'/script),'--build',str(build),'--evidence',str(evidence)],check=True,stdout=log,stderr=subprocess.STDOUT)
         argv=command((build/'mm/.vma.o.cmd').read_text(),build/'mm/vma.i')
         result=subprocess.run(['bash','/src/rusix/scripts/with-local-tools.sh']+argv,cwd=build,stdout=log,stderr=subprocess.STDOUT)
     (evidence/'exit-mmap-preprocess.exit').write_text(str(result.returncode)+'\n');result.check_returncode()
-    actual=record(build,source)
-    extension.require_unchanged(inputs(build,source),before)
+    actual=record(build,source,source_extension=source_extension)
+    extension.require_unchanged(inputs(build,source,source_extension=source_extension),before)
     (evidence/'exit-mmap-preprocess.json').write_text(json.dumps(actual,indent=2,sort_keys=True)+'\n')
 
 

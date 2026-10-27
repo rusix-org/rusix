@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: GPL-2.0-only
 """Exact opt-in restoration of the three reviewed teardown selectors."""
 import hashlib
+import copy_vma_source as copy_extension
 ID = 'exit-mmap-v1'
 START = '#ifdef CONFIG_RUSIX_EXIT_MMAP_RUST\n'
 END = '#endif /* CONFIG_RUSIX_EXIT_MMAP_RUST */\n'
@@ -9,11 +10,11 @@ REGIONS = {'mm/mmap.c': ('#include "exit_mmap_impl.h"\nextern void rusix_exit_mm
 
 EXTRA = ('mm/mmap.c','mm/vma.c','mm/internal.h','mm/exit_mmap_impl.h',
          'mm/remove_vma_impl.h','mm/exit_mmap_rust.rs',
-         'rusix/scripts/exit_mmap_source.py','rusix/scripts/verify-exit-mmap.py')
+         'rusix/scripts/exit_mmap_source.py','rusix/scripts/copy_vma_source.py','rusix/scripts/verify-exit-mmap.py')
 
 def paths(source, extension):
-    if extension != ID: raise ValueError('Unknown source extension')
-    return [source/name for name in EXTRA]
+    if extension not in (ID, copy_extension.ID): raise ValueError('Unknown source extension')
+    return [source/name for name in EXTRA + (copy_extension.EXTRA if extension == copy_extension.ID else ())]
 
 def restore(name, text):
     if name not in REGIONS: raise ValueError('Unreviewed source region')
@@ -33,9 +34,12 @@ def validate(source, extension):
     raw, restored, hashes = {}, {}, {}
     for name in REGIONS:
         data=(source/name).read_bytes(); raw[name]=hashlib.sha256(data).hexdigest()
-        restored[name]=restore(name,data.decode())
+        text=data.decode()
+        if extension == copy_extension.ID and name == 'mm/vma.c':
+            text=copy_extension.restore(text)
+        restored[name]=restore(name,text)
         hashes[name]=hashlib.sha256(restored[name].encode()).hexdigest()
-    return restored, dict(extension=ID,raw_sha256=raw,restored_sha256=hashes)
+    return restored, dict(extension=extension,raw_sha256=raw,restored_sha256=hashes)
 
 
 def require_unchanged(paths, before):

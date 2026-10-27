@@ -7,6 +7,17 @@ opt-in Rust implementations; twenty-three generic wait and seventeen bit-wait en
 verification runs locally. No subsystem divergence point is declared.
 
 VMA copy/publication is a new source-only candidate on `rusix/mm-copy-vma`.
+Paired local profile inputs and build/local-CI routing are being prepared; their only
+requested difference is the copy selector, with Rust teardown enabled in both.
+Shell syntax passes; review caught and fixed a premature configuration check.
+Three routing regressions now cover fresh-build ordering and the sole selector
+axis. The initial 35-suite host run passed on 120 stable inputs, before these
+review fixes. The final host rerun passes all 36 suites on 121 stable inputs,
+including shallow-checkout portability fixes. Resolved Kconfig and actual builds
+remain pending. [Host evidence](docs/evidence/copy-vma-tooling/manifest.json)
+retains both runs and the independently reviewed final source.
+The runner has passed source review for two bounded boots: nine ordinary consumers and
+five unchanged upstream DONTUNMAP cases. Hosted Actions remain disabled.
 Rust owns complete copy/merge selection, staged rollback, publication and both
 file-link lock contexts; native C contexts and typed primitives retain layout
 and subsystem operations. Original C bodies are preserved. Formatting and exact

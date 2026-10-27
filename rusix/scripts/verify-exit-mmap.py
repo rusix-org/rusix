@@ -31,8 +31,8 @@ CONTEXT=('structmmu_gathertlb;structvma_iteratorvmi={.mas={.tree=&(mm)->mm_mt,'
 CLOSE='if(vma->vm_ops&&vma->vm_ops->close){vma->vm_ops->close(vma);vma->vm_ops=&vma_dummy_vm_ops;}'
 
 
-def source_policy(source):
-    restored,proof=extension.validate(source,extension.ID)
+def source_policy(source, *, source_extension=extension.ID):
+    restored,proof=extension.validate(source,source_extension)
     upstream=vma.dup.original_policy(restored['mm/mmap.c'])
     proof['upstream_mmap_sha256']=extension.hashlib.sha256(upstream.encode()).hexdigest()
     return proof
@@ -55,7 +55,9 @@ def compare(c,rust):
     return sorted(changes)
 
 
-def check_preprocessed(mmap_text,vma_text,rust):
+def check_preprocessed(mmap_text,vma_text,rust, *, source_extension=extension.ID, copy_rust=False):
+    if source_extension not in (extension.ID, extension.copy_extension.ID) or (copy_rust and source_extension != extension.copy_extension.ID):
+        raise ValueError("Unknown close-consumer extension")
     for text in (mmap_text,vma_text):
         if vma.bodies(text,'vma_close')!=(['rusix_vma_close(vma);'] if rust else [CLOSE]):
             raise ValueError('Wrong common close policy')
@@ -90,7 +92,7 @@ def check_preprocessed(mmap_text,vma_text,rust):
             if any(vma.bodies(text,name) for name in ('rusix_exit_gather','rusix_remove_ops','rusix_remove_close')):
                 raise ValueError('Unexpected selected primitive in C mode')
     # These independent close-only callers must still select the shared bridge.
-    for name in ('vms_clean_up_area','copy_vma'):
+    for name in (('vms_clean_up_area',) if copy_rust else ('vms_clean_up_area','copy_vma')):
         bodies=vma.bodies(vma_text,name)
         if len(bodies)!=1 or 'vma_close(' not in bodies[0]:raise ValueError('Missing actual close consumer '+name)
 
@@ -131,8 +133,8 @@ def callback_transfer(text):
     executable_calls(body,'rusix_remove_ops');executable_calls(body,'rusix_remove_close');executable_calls(body,'rusix_remove_dummy')
 
 
-def input_paths(build,source,rust, *, kunit=False):
-    paths=vma.input_paths(build,source,True,source_extension=extension.ID)+preprocessor.inputs(build,source)+[
+def input_paths(build,source,rust, *, kunit=False, source_extension=extension.ID):
+    paths=vma.input_paths(build,source,True,source_extension=source_extension)+preprocessor.inputs(build,source,source_extension=source_extension)+[
         build/'mm/vma.i',source/'init/Kconfig',source/'mm/Makefile',
         source/'rusix/scripts/verify-exit-mmap.py',source/f'rusix/configs/x86_64-exit-mmap-{"kunit-" if kunit else ""}{"rust" if rust else "c"}.config']
     if rust:paths.append(build/'mm/exit_mmap_rust.o')
@@ -143,20 +145,21 @@ def input_paths(build,source,rust, *, kunit=False):
     return list(dict.fromkeys(paths))
 
 
-def verify(args):
+def verify(args, *, source_extension=extension.ID):
     source,build,evidence=args.source.resolve(),args.build.resolve(),args.evidence.resolve();rust=PROFILES[args.profile]
     check_config(args.profile,config_values((build/'.config').read_text()),config_values((source/'rusix/configs/x86_64-server.config').read_text()))
-    proof=source_policy(source)
+    proof=source_policy(source,source_extension=source_extension)
     context=TEST_CONTEXT if args.profile in KUNIT_PROFILES else None
-    paths=input_paths(build,source,rust,kunit=context is not None);before={str(p):digest(p) for p in paths}
-    actual=preprocessor.record(build,source)
+    paths=input_paths(build,source,rust,kunit=context is not None,source_extension=source_extension);before={str(p):digest(p) for p in paths}
+    actual=preprocessor.record(build,source,source_extension=source_extension)
     if json.loads((evidence/'exit-mmap-preprocess.json').read_text())!=actual:raise ValueError('Four-unit preprocessing provenance changed')
     if (evidence/'exit-mmap-preprocess.exit').read_text().strip()!='0' or re.search('warning:|error:',(evidence/'exit-mmap-preprocess.log').read_text(),re.I):raise ValueError('Teardown preprocessing failure/diagnostic')
-    inherited=vma.verify(argparse.Namespace(source=source,build=build,evidence=evidence,profile='vma-lifecycle-rust'),source_extension=extension.ID,test_context=context)
+    inherited=vma.verify(argparse.Namespace(source=source,build=build,evidence=evidence,profile='vma-lifecycle-rust'),source_extension=source_extension,test_context=context)
     if inherited['test_context']!=context or inherited['status']!='PASS' or inherited['implementation']!='rust':raise ValueError('Inherited VMA proof failed')
     if inherited['dup_mmap_selection']['source_extension']['raw_sha256']!=proof['raw_sha256']:raise ValueError('Delegated source identity mismatch')
     (evidence/'exit-mmap-vma-selection.json').write_text(json.dumps(inherited,indent=2,sort_keys=True)+'\n')
-    check_preprocessed((build/'mm/mmap.i').read_text(),(build/'mm/vma.i').read_text(),rust)
+    copy_rust = source_extension == extension.copy_extension.ID and config_values((build/'.config').read_text()).get('CONFIG_RUSIX_COPY_VMA_RUST') == 'y'
+    check_preprocessed((build/'mm/mmap.i').read_text(),(build/'mm/vma.i').read_text(),rust,source_extension=source_extension,copy_rust=copy_rust)
     def run(name,argv):
         result=subprocess.run(argv,check=True,capture_output=True,text=True)
         if result.stderr:raise ValueError('Object inspection diagnostics: '+result.stderr)
@@ -188,8 +191,8 @@ def verify(args):
         constant_values=vma.dup.check_constants(build/'mm/mmap.o',build/'vmlinux',tables['mmap'],tables['linked'],expected={'rusix_exit_account':1<<20})
         vma.call_from(dis['mmap'],'exit_mmap','rusix_exit_mmap')
         # The original vma.c consumers cannot silently retain an inlined C close.
-        if executable_calls(dis['vma'],'rusix_vma_close')<2:raise ValueError('Missing independent close consumers')
-        executable_calls(vma.dis_body(dis['vma'],'copy_vma'),'rusix_vma_close')
+        if executable_calls(dis['vma'],'rusix_vma_close')<(1 if copy_rust else 2):raise ValueError('Missing independent close consumers')
+        if not copy_rust:executable_calls(vma.dis_body(dis['vma'],'copy_vma'),'rusix_vma_close')
         callback_transfer(dis['exit_mmap_rust'])
         for helper in helpers:executable_calls(dis['exit_mmap_rust'],helper)
         executable_calls(dis['exit_mmap_rust'],'vm_area_free')

@@ -28,22 +28,35 @@ def selected_text():
 
 
 class ExitSelection(unittest.TestCase):
+    def setUp(self):
+        # Exercise the original exact scope on its immutable source; the new
+        # copy-VMA test separately requires this default gate to reject HEAD.
+        tmp=tempfile.TemporaryDirectory();self.addCleanup(tmp.cleanup)
+        self.historical=Path(tmp.name);(self.historical/'mm').mkdir()
+        for name in ext.REGIONS:
+            text=(ROOT/name).read_text()
+            if name=='mm/vma.c':
+                text=ext.copy_extension.restore(text)
+                self.assertEqual(ext.hashlib.sha256(text.encode()).hexdigest(),
+                    '1dd5a0bbb2ae056796b0a12e506159c8af841cf38b0cb77f72a4b7d37c30950d')
+            (self.historical/name).write_text(text)
+
     def test_actual_three_file_and_upstream_restoration(self):
-        proof=gate.source_policy(ROOT)
+        proof=gate.source_policy(self.historical)
         self.assertEqual(len(proof['raw_sha256']),3)
         self.assertEqual(proof['upstream_mmap_sha256'],gate.vma.dup.PINNED_MMAP_SHA256)
         with self.assertRaises(ValueError):gate.vma.dup.original_policy((ROOT/'mm/mmap.c').read_text())
 
     def test_each_file_guards_shim_and_unrelated_mutation_rejected(self):
         for name,(shim,_) in ext.REGIONS.items():
-            text=(ROOT/name).read_text()
+            text=(self.historical/name).read_text()
             for bad in (text+'\n',text+ext.END,text.replace(ext.START,ext.START+'/* changed */\n'),text.replace(shim,'#else\n'),text.replace(ext.END,'')):
                 with self.subTest(name=name),self.assertRaises(ValueError):ext.restore(name,bad)
 
     def test_delegation_validates_all_files_and_identifier(self):
         with tempfile.TemporaryDirectory() as tmp:
             root=Path(tmp);(root/'mm').mkdir()
-            for name in ext.REGIONS:(root/name).write_text((ROOT/name).read_text())
+            for name in ext.REGIONS:(root/name).write_text((self.historical/name).read_text())
             ext.validate(root,ext.ID)
             for bad in (None,'exit-mmap-v2',lambda _:True):
                 with self.assertRaises(ValueError):ext.validate(root,bad)
@@ -79,7 +92,7 @@ class ExitSelection(unittest.TestCase):
         with self.assertRaises(ValueError):gate.check_preprocessed(mmap,vma,False)
 
     def test_c_policy_landmarks_with_native_macro_expansion(self):
-        restored,_=ext.validate(ROOT,ext.ID)
+        restored,_=ext.validate(self.historical,ext.ID)
         header=restored['mm/internal.h']
         mmap=(restored['mm/mmap.c']+header).replace('MMF_OOM_SKIP','21')
         vma=restored['mm/vma.c']+header

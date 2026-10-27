@@ -5,8 +5,8 @@ set -euo pipefail
 source "$(dirname -- "${BASH_SOURCE[0]}")/../scripts/repo-paths.sh"
 profile=${1:-}
 case "$profile" in
-    kunit|brd|brd-fixed-c|brd-rust|brd-kunit|brd-ext4-c|brd-ext4-fixed-c|brd-ext4-rust|core-ext4-c|core-ext4-rust|completion-c|completion-rust|completion-plain-c|completion-plain-rust|server|server-c|task-construction-c|task-construction-rust|mm-construction-c|mm-construction-rust|mm-release-c|mm-release-rust|mm-copy-c|mm-copy-rust|mm-dup-mmap-c|mm-dup-mmap-rust|vma-lifecycle-c|vma-lifecycle-rust|exit-mmap-c|exit-mmap-rust|exit-mmap-kunit-c|exit-mmap-kunit-rust) ;;
-    *) echo 'Usage: bash rusix/ci/run.sh kunit|brd|brd-fixed-c|brd-rust|brd-kunit|brd-ext4-c|brd-ext4-fixed-c|brd-ext4-rust|core-ext4-c|core-ext4-rust|completion-c|completion-rust|completion-plain-c|completion-plain-rust|server|server-c|task-construction-c|task-construction-rust|mm-construction-c|mm-construction-rust|mm-release-c|mm-release-rust|mm-copy-c|mm-copy-rust|mm-dup-mmap-c|mm-dup-mmap-rust|vma-lifecycle-c|vma-lifecycle-rust|exit-mmap-c|exit-mmap-rust|exit-mmap-kunit-c|exit-mmap-kunit-rust' >&2; exit 2 ;;
+    kunit|brd|brd-fixed-c|brd-rust|brd-kunit|brd-ext4-c|brd-ext4-fixed-c|brd-ext4-rust|core-ext4-c|core-ext4-rust|completion-c|completion-rust|completion-plain-c|completion-plain-rust|server|server-c|task-construction-c|task-construction-rust|mm-construction-c|mm-construction-rust|mm-release-c|mm-release-rust|mm-copy-c|mm-copy-rust|mm-dup-mmap-c|mm-dup-mmap-rust|vma-lifecycle-c|vma-lifecycle-rust|exit-mmap-c|exit-mmap-rust|exit-mmap-kunit-c|exit-mmap-kunit-rust|copy-vma-c|copy-vma-rust) ;;
+    *) echo 'Usage: bash rusix/ci/run.sh kunit|brd|brd-fixed-c|brd-rust|brd-kunit|brd-ext4-c|brd-ext4-fixed-c|brd-ext4-rust|core-ext4-c|core-ext4-rust|completion-c|completion-rust|completion-plain-c|completion-plain-rust|server|server-c|task-construction-c|task-construction-rust|mm-construction-c|mm-construction-rust|mm-release-c|mm-release-rust|mm-copy-c|mm-copy-rust|mm-dup-mmap-c|mm-dup-mmap-rust|vma-lifecycle-c|vma-lifecycle-rust|exit-mmap-c|exit-mmap-rust|exit-mmap-kunit-c|exit-mmap-kunit-rust|copy-vma-c|copy-vma-rust' >&2; exit 2 ;;
 esac
 mkdir -p "$RUSIX_OUTPUT_ROOT/logs" "$RUSIX_OUTPUT_ROOT/tmp"
 export TMPDIR="$RUSIX_OUTPUT_ROOT/tmp"
@@ -126,6 +126,14 @@ elif [[ "$profile" == vma-lifecycle-c || "$profile" == vma-lifecycle-rust ]]; th
         echo 'Expected one VMA lifecycle build evidence directory.' >&2; exit 1;
     }
     python3 "$RUSIX_PROJECT/scripts/test-vma-lifecycle-vm.py" \
+        "$RUSIX_OUTPUT_ROOT/builds/ci-$profile" "ci-$profile" --build-evidence "${evidence[0]}"
+elif [[ "$profile" == copy-vma-c || "$profile" == copy-vma-rust ]]; then
+    shopt -s nullglob
+    evidence=("$RUSIX_OUTPUT_ROOT"/logs/ci-$profile-build.*)
+    [[ ${#evidence[@]} == 1 ]] || {
+        echo 'Expected one VMA copy build evidence directory.' >&2; exit 1;
+    }
+    python3 "$RUSIX_PROJECT/scripts/run-copy-vma.py" \
         "$RUSIX_OUTPUT_ROOT/builds/ci-$profile" "ci-$profile" --build-evidence "${evidence[0]}"
 elif [[ "$profile" == exit-mmap-c || "$profile" == exit-mmap-rust ]]; then
     shopt -s nullglob

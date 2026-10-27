@@ -1,0 +1,38 @@
+{
+  "status": "READ_ONLY_SOURCE_REVIEW_NO_REMAINING_BLOCKER",
+  "base": "4caef614ac171fe04d5cbc6c189dc16f1abfb2c1",
+  "sha256": {
+    "rusix/scripts/copy_vma_source.py": "3009204feef19566b547be22764528de2cb8045ced78429bbf68826f86f7fddb",
+    "rusix/scripts/verify-copy-vma.py": "f6582adac8fb7b7ac661e940475bcd25d897a422a15f7639e59d057056d5332c",
+    "rusix/scripts/preprocess-copy-vma.py": "efa639c971b43b46c0c87ba3aba827b09fad922ad9cd0a4930ad9cae45a43245",
+    "rusix/scripts/exit_mmap_source.py": "c0029ef700c947cffa7bda6dbfda25edea2f40f456309be24fb5b4980f502f9d",
+    "rusix/scripts/verify-exit-mmap.py": "c24a67ead68a4432c76c2d267e25fa1409f5affb42cd109ea9f80ef2bffce05e",
+    "rusix/scripts/preprocess-exit-mmap.py": "3969f703c8751ebf33a7e271451cff37ce40d59483d4843ada0e02661f8859d8",
+    "rusix/scripts/run-copy-vma.py": "6ca2bceb45aeccdc09a840a10e1093f6718b2330640c5d5751e0922dbd4c0663",
+    "rusix/scripts/build-kernel.sh": "0d062b54d29b34e41f1f23ab0d306deaecc33626b5f955d6ee36359a0bcef796",
+    "rusix/ci/run.sh": "287ff2c4c16cb3afabdfdda9a5903b61b3cd255e9cb9dfacc8a4a2bb8356de9c",
+    "rusix/tests/test_copy_vma_selection.py": "3f406f16a3853eaca6aa7d0d00becf9fd91d169010f1386877db65d84f57077a",
+    "rusix/tests/test_exit_mmap_selection.py": "5b86fc863786b7e3df2c5aa8576d13447ef5c3fc432998dc8ba2f5cd965bb38e",
+    "rusix/tests/test_copy_vma_routing.py": "25a1eb33da9359e9ffbe574244d6a0df6a013df9e0c10a7d62ccd6f0e516310c",
+    "rusix/tests/test_run_copy_vma.py": "9a742e790ae8da2b60f4e18c678c812ba619f637b620c26e68cd3fda576f1902",
+    "rusix/configs/x86_64-copy-vma-c.config": "893a1008593eb0d3d2d82667ed6eac220e0d1e1bffa27d43ad34d496b91180a5",
+    "rusix/configs/x86_64-copy-vma-rust.config": "d20315fd601082ec5c2d27e603283246ab0de499f20ac75c6952670addd1dbf5"
+  },
+  "fixed_findings": [
+    "Fresh build config-before ran before allnoconfig; root moved after resolved config copy and added ordering regression.",
+    "New/legacy host fixtures required ancestor git object; impl replaced with exact four-shim restoration and fixed original digest, retaining default current-source rejection."
+  ],
+  "review": [
+    "Explicit copy-vma-v1 delegation restores exact four new guards then exact three teardown files; old default rejects current extra guards. Raw hashes remain actual source.",
+    "Four compiler units and twelve original preprocess files copied for actual object reinspection; no stale preprocessed bypass introduced.",
+    "Native final-address contexts, locked caller ordering and moved close consumer checked against selected preprocess/actual object. Helper global owners/archivepayloads and callback executable transfer checked.",
+    "Two constants have explicit 4-byte .rodata contract and canonical12/0xfffffff4 values; legacy8-byte checks unchanged.",
+    "Both profiles require inherited Rust task/MM/copy/dup/VMA/teardown and sole copy-selector pair axis; ordinary KUnit off.",
+    "Runner checks pristine native source+header, actual build/selection identities, source snapshots before both compiles and after; two sequential bounded512MiB/SMP2 boots use different tokens and exact9/5 inventories.",
+    "Fixture init/probe/cpio/image and prerequisite hashes retained and rechecked; no recursive historical evidence snapshot."
+  ],
+  "limits": [
+    "Review of source/host-test design only; no new test execution, compiler, object generation or VM run by reviewer.",
+    "Actual preprocessing spelling/emitted relocation/CFI and kernel runtime remain pending."
+  ]
+}
