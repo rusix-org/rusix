@@ -1,0 +1,58 @@
+{
+  "base": "3a61f8200275b561b5fcf3689874b4fbf2c941b0",
+  "kernel_config_selection_gate_changes": false,
+  "native_fixture_init_gate_manifest_changes": false,
+  "baseline": "2926d88bb7fc4608fd942453d929c39e4e5ec006",
+  "native_files": {
+    "tools/testing/selftests/mm/merge.c": {
+      "sha256": "1440e2a03a5762b99cf1b8eadf5142f09edce03f97fbf79a4ce8d66b8d027fe9",
+      "blob": "cd0e6cc06a0251666aadaf5c20486b7aad3eb8ce"
+    },
+    "tools/testing/selftests/mm/vm_util.c": {
+      "sha256": "deb1b174a096157aeecff619499c2cf3e13d17e20f4879624372fad18107be82",
+      "blob": "e33cda301dada08afcb3c1e47894c5eb18c5fd58"
+    },
+    "tools/testing/selftests/mm/vm_util.h": {
+      "sha256": "e8da9d9b4a4b12e3385ab4b2e72d96138c8ee708bb99fd718e9c919568b6c0de",
+      "blob": "26c30fdc02415991a909b4d933070e89c1a8112d"
+    },
+    "tools/testing/selftests/mm/thp_settings.c": {
+      "sha256": "e025b29b2dd2e428f79410dec060619684bbd2ee494b8c8a1c9cdf6f2b7a06d9",
+      "blob": "574bd0f8ae48000103b5fa4691ee081d41f799a4"
+    },
+    "tools/testing/selftests/mm/thp_settings.h": {
+      "sha256": "c3c5917bb1a25e6fb89a1eaff5bbddd35d6d3dc064ff8b81b77d4ee482f2be26",
+      "blob": "76eeb712e5f10f1de4017efe16401074a2725bd3"
+    },
+    "tools/testing/selftests/kselftest.h": {
+      "sha256": "9e94dcf7b0b156d601c9bea7fe8bffb075a84e4e4ea93da5aac0df9a1bb86cf9",
+      "blob": "afbcf8412ae5bd9c43cc2f11fbbd81d434755303"
+    },
+    "tools/testing/selftests/kselftest_harness.h": {
+      "sha256": "40df341bd418db858c5161da64ef4999c93adfdd45315a4c940e19813abe23e1",
+      "blob": "be7f0ecab77049686ed225fba155087e5dfc7a59"
+    }
+  },
+  "native_cases": [
+    "merge.mprotect_unfaulted_left",
+    "merge.mprotect_unfaulted_right",
+    "merge.mprotect_unfaulted_both",
+    "merge.mprotect_faulted_left_unfaulted_right",
+    "merge.mprotect_unfaulted_left_faulted_right"
+  ],
+  "native_filter_argv": [
+    "-r",
+    "merge.mprotect_unfaulted_left",
+    "-r",
+    "merge.mprotect_unfaulted_right",
+    "-r",
+    "merge.mprotect_unfaulted_both",
+    "-r",
+    "merge.mprotect_faulted_left_unfaulted_right",
+    "-r",
+    "merge.mprotect_unfaulted_left_faulted_right"
+  ],
+  "new_runner_scope": "Two future fresh boots per C/Rust kernel, nine ordinary plus five native cases; host tooling verification only",
+  "ancestor_acceptance": "Required before reviewed future kernel/runtime launch; not performed here",
+  "executed": "40 host suites/433 cases, shell syntax; no guest compiler/container/kernel/VM"
+}

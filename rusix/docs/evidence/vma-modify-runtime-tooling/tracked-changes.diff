@@ -1,0 +1,101 @@
+diff --git i/rusix/ci/run-container.sh w/rusix/ci/run-container.sh
+index 4c2a077bbb..36072ecaae 100644
+--- i/rusix/ci/run-container.sh
++++ w/rusix/ci/run-container.sh
+@@ -4,13 +4,13 @@
+ set -euo pipefail
+ source "$(dirname -- "${BASH_SOURCE[0]}")/../scripts/repo-paths.sh"
+ if [[ $# != 3 ]]; then
+-    echo 'Usage: bash rusix/ci/run-container.sh IMAGE OUTPUT_DIRECTORY kunit|brd|brd-fixed-c|brd-rust|brd-kunit|brd-ext4-c|brd-ext4-fixed-c|brd-ext4-rust|core-ext4-c|core-ext4-rust|completion-c|completion-rust|completion-plain-c|completion-plain-rust|server|server-c|task-construction-c|task-construction-rust|mm-construction-c|mm-construction-rust|mm-release-c|mm-release-rust|mm-copy-c|mm-copy-rust|mm-dup-mmap-c|mm-dup-mmap-rust|vma-lifecycle-c|vma-lifecycle-rust|exit-mmap-c|exit-mmap-rust|exit-mmap-kunit-c|exit-mmap-kunit-rust' >&2
++    echo 'Usage: bash rusix/ci/run-container.sh IMAGE OUTPUT_DIRECTORY kunit|brd|brd-fixed-c|brd-rust|brd-kunit|brd-ext4-c|brd-ext4-fixed-c|brd-ext4-rust|core-ext4-c|core-ext4-rust|completion-c|completion-rust|completion-plain-c|completion-plain-rust|server|server-c|task-construction-c|task-construction-rust|mm-construction-c|mm-construction-rust|mm-release-c|mm-release-rust|mm-copy-c|mm-copy-rust|mm-dup-mmap-c|mm-dup-mmap-rust|vma-lifecycle-c|vma-lifecycle-rust|exit-mmap-c|exit-mmap-rust|exit-mmap-kunit-c|exit-mmap-kunit-rust|vma-modify-c|vma-modify-rust' >&2
+     exit 2
+ fi
+ image=$1
+ output=$(realpath -m -- "$2")
+ profile=$3
+-case "$profile" in kunit|brd|brd-fixed-c|brd-rust|brd-kunit|brd-ext4-c|brd-ext4-fixed-c|brd-ext4-rust|core-ext4-c|core-ext4-rust|completion-c|completion-rust|completion-plain-c|completion-plain-rust|server|server-c|task-construction-c|task-construction-rust|mm-construction-c|mm-construction-rust|mm-release-c|mm-release-rust|mm-copy-c|mm-copy-rust|mm-dup-mmap-c|mm-dup-mmap-rust|vma-lifecycle-c|vma-lifecycle-rust|exit-mmap-c|exit-mmap-rust|exit-mmap-kunit-c|exit-mmap-kunit-rust) ;; *) echo 'Profile must be kunit, brd, brd-fixed-c, brd-rust, brd-kunit, brd-ext4-c, brd-ext4-fixed-c, brd-ext4-rust, core-ext4-c, core-ext4-rust, completion-c, completion-rust, completion-plain-c, completion-plain-rust, server, server-c, task-construction-c, task-construction-rust, mm-construction-c, mm-construction-rust, mm-release-c, mm-release-rust, mm-copy-c, mm-copy-rust, mm-dup-mmap-c, mm-dup-mmap-rust, vma-lifecycle-c, vma-lifecycle-rust, exit-mmap-c, exit-mmap-rust, exit-mmap-kunit-c or exit-mmap-kunit-rust.' >&2; exit 2 ;; esac
++case "$profile" in kunit|brd|brd-fixed-c|brd-rust|brd-kunit|brd-ext4-c|brd-ext4-fixed-c|brd-ext4-rust|core-ext4-c|core-ext4-rust|completion-c|completion-rust|completion-plain-c|completion-plain-rust|server|server-c|task-construction-c|task-construction-rust|mm-construction-c|mm-construction-rust|mm-release-c|mm-release-rust|mm-copy-c|mm-copy-rust|mm-dup-mmap-c|mm-dup-mmap-rust|vma-lifecycle-c|vma-lifecycle-rust|exit-mmap-c|exit-mmap-rust|exit-mmap-kunit-c|exit-mmap-kunit-rust|vma-modify-c|vma-modify-rust) ;; *) echo 'Profile must be kunit, brd, brd-fixed-c, brd-rust, brd-kunit, brd-ext4-c, brd-ext4-fixed-c, brd-ext4-rust, core-ext4-c, core-ext4-rust, completion-c, completion-rust, completion-plain-c, completion-plain-rust, server, server-c, task-construction-c, task-construction-rust, mm-construction-c, mm-construction-rust, mm-release-c, mm-release-rust, mm-copy-c, mm-copy-rust, mm-dup-mmap-c, mm-dup-mmap-rust, vma-lifecycle-c, vma-lifecycle-rust, exit-mmap-c, exit-mmap-rust, exit-mmap-kunit-c, exit-mmap-kunit-rust, vma-modify-c or vma-modify-rust.' >&2; exit 2 ;; esac
+ case "$output/" in
+     "$RUSIX_SOURCE/"*) echo 'Container output must be outside the source checkout.' >&2; exit 2 ;;
+ esac
+diff --git i/rusix/ci/run.sh w/rusix/ci/run.sh
+index d35a61b2af..531a751f47 100644
+--- i/rusix/ci/run.sh
++++ w/rusix/ci/run.sh
+@@ -5,8 +5,8 @@ set -euo pipefail
+ source "$(dirname -- "${BASH_SOURCE[0]}")/../scripts/repo-paths.sh"
+ profile=${1:-}
+ case "$profile" in
+-    kunit|brd|brd-fixed-c|brd-rust|brd-kunit|brd-ext4-c|brd-ext4-fixed-c|brd-ext4-rust|core-ext4-c|core-ext4-rust|completion-c|completion-rust|completion-plain-c|completion-plain-rust|server|server-c|task-construction-c|task-construction-rust|mm-construction-c|mm-construction-rust|mm-release-c|mm-release-rust|mm-copy-c|mm-copy-rust|mm-dup-mmap-c|mm-dup-mmap-rust|vma-lifecycle-c|vma-lifecycle-rust|exit-mmap-c|exit-mmap-rust|exit-mmap-kunit-c|exit-mmap-kunit-rust|copy-vma-c|copy-vma-rust) ;;
+-    *) echo 'Usage: bash rusix/ci/run.sh kunit|brd|brd-fixed-c|brd-rust|brd-kunit|brd-ext4-c|brd-ext4-fixed-c|brd-ext4-rust|core-ext4-c|core-ext4-rust|completion-c|completion-rust|completion-plain-c|completion-plain-rust|server|server-c|task-construction-c|task-construction-rust|mm-construction-c|mm-construction-rust|mm-release-c|mm-release-rust|mm-copy-c|mm-copy-rust|mm-dup-mmap-c|mm-dup-mmap-rust|vma-lifecycle-c|vma-lifecycle-rust|exit-mmap-c|exit-mmap-rust|exit-mmap-kunit-c|exit-mmap-kunit-rust|copy-vma-c|copy-vma-rust' >&2; exit 2 ;;
++    kunit|brd|brd-fixed-c|brd-rust|brd-kunit|brd-ext4-c|brd-ext4-fixed-c|brd-ext4-rust|core-ext4-c|core-ext4-rust|completion-c|completion-rust|completion-plain-c|completion-plain-rust|server|server-c|task-construction-c|task-construction-rust|mm-construction-c|mm-construction-rust|mm-release-c|mm-release-rust|mm-copy-c|mm-copy-rust|mm-dup-mmap-c|mm-dup-mmap-rust|vma-lifecycle-c|vma-lifecycle-rust|exit-mmap-c|exit-mmap-rust|exit-mmap-kunit-c|exit-mmap-kunit-rust|copy-vma-c|copy-vma-rust|vma-modify-c|vma-modify-rust) ;;
++    *) echo 'Usage: bash rusix/ci/run.sh kunit|brd|brd-fixed-c|brd-rust|brd-kunit|brd-ext4-c|brd-ext4-fixed-c|brd-ext4-rust|core-ext4-c|core-ext4-rust|completion-c|completion-rust|completion-plain-c|completion-plain-rust|server|server-c|task-construction-c|task-construction-rust|mm-construction-c|mm-construction-rust|mm-release-c|mm-release-rust|mm-copy-c|mm-copy-rust|mm-dup-mmap-c|mm-dup-mmap-rust|vma-lifecycle-c|vma-lifecycle-rust|exit-mmap-c|exit-mmap-rust|exit-mmap-kunit-c|exit-mmap-kunit-rust|copy-vma-c|copy-vma-rust|vma-modify-c|vma-modify-rust' >&2; exit 2 ;;
+ esac
+ mkdir -p "$RUSIX_OUTPUT_ROOT/logs" "$RUSIX_OUTPUT_ROOT/tmp"
+ export TMPDIR="$RUSIX_OUTPUT_ROOT/tmp"
+@@ -127,6 +127,14 @@ elif [[ "$profile" == vma-lifecycle-c || "$profile" == vma-lifecycle-rust ]]; th
+     }
+     python3 "$RUSIX_PROJECT/scripts/test-vma-lifecycle-vm.py" \
+         "$RUSIX_OUTPUT_ROOT/builds/ci-$profile" "ci-$profile" --build-evidence "${evidence[0]}"
++elif [[ "$profile" == vma-modify-c || "$profile" == vma-modify-rust ]]; then
++    shopt -s nullglob
++    evidence=("$RUSIX_OUTPUT_ROOT"/logs/ci-$profile-build.*)
++    [[ ${#evidence[@]} == 1 ]] || {
++        echo 'Expected one VMA modification build evidence directory.' >&2; exit 1;
++    }
++    python3 "$RUSIX_PROJECT/scripts/test-vma-lifecycle-vm.py" --vma-modify \
++        "$RUSIX_OUTPUT_ROOT/builds/ci-$profile" "ci-$profile" --build-evidence "${evidence[0]}"
+ elif [[ "$profile" == copy-vma-c || "$profile" == copy-vma-rust ]]; then
+     shopt -s nullglob
+     evidence=("$RUSIX_OUTPUT_ROOT"/logs/ci-$profile-build.*)
+diff --git i/rusix/scripts/test-vma-lifecycle-vm.py w/rusix/scripts/test-vma-lifecycle-vm.py
+index 7f55f5dda6..5db3493806 100644
+--- i/rusix/scripts/test-vma-lifecycle-vm.py
++++ w/rusix/scripts/test-vma-lifecycle-vm.py
+@@ -193,6 +193,10 @@ def run(args, paths, evidence):
+ 
+ 
+ def main():
++    if sys.argv[1:2] == ['--vma-modify']:
++        # Explicit new runner/context; historical lifecycle profiles stay strict.
++        sys.argv.pop(1)
++        return load('vma_modify_runtime', 'run-vma-modify.py').main()
+     parser = argparse.ArgumentParser(description=__doc__)
+     parser.add_argument('build', type=Path)
+     parser.add_argument('label')
+diff --git i/rusix/tests/test_vma_modify_selection.py w/rusix/tests/test_vma_modify_selection.py
+index c643f3370c..a0cb665065 100644
+--- i/rusix/tests/test_vma_modify_selection.py
++++ w/rusix/tests/test_vma_modify_selection.py
+@@ -115,6 +115,6 @@ class Selection(unittest.TestCase):
+         proof=text.index('> "$evidence/vma-modify-selection.json"')
+         self.assertLess(configure,before);self.assertLess(before,build)
+         self.assertLess(build,after);self.assertLess(after,preprocess);self.assertLess(preprocess,proof)
+-        self.assertNotIn('vma-modify-c', (ROOT/'rusix/ci/run.sh').read_text())
++        self.assertIn('test-vma-lifecycle-vm.py\" --vma-modify', (ROOT/'rusix/ci/run.sh').read_text())
+ 
+ if __name__=='__main__':unittest.main()
+diff --git i/rusix/tests/vma-modify/README.md w/rusix/tests/vma-modify/README.md
+index c2196b0f03..7f525333ed 100644
+--- i/rusix/tests/vma-modify/README.md
++++ w/rusix/tests/vma-modify/README.md
+@@ -21,3 +21,19 @@ update leaves the compiled init and native test inputs unchanged. Actual console
+ acceptance, linked policy selection and C/Rust VM execution remain pending.
+ These five success cases do not certify allocation rollback, callback counts,
+ optional configuration paths or complete MM behavior.
++
++The real local runtime pipeline is `scripts/run-vma-modify.py`, also selected
++explicitly through `test-vma-lifecycle-vm.py --vma-modify`. After ancestor
++acceptance and launch review, `vma-modify-c` and `vma-modify-rust` run two fresh
++boots each: nine existing VMA consumers followed by these five unchanged native
++filters. Before each boot, the actual modification selection gate must match the
++complete build proof and its saved nested records; historical profiles are not
++relabelled. Local CI and container routing now invoke this pipeline.
++
++Native compilation uses three unchanged translation units and checks all seven
++baseline identities. It hashes the actual 187 native/system dependencies before
++compilation, requires matching emitted dependency files afterward, and records
++packages, Rust libraries and static linker inputs. Static x86-64 init/probe files
++remain mode 0644 on the host and are executable only inside the guest initramfs.
++Each VM is bounded to 512 MiB, two CPUs and 180 seconds. The real runner has not
++been executed: host parser/routing tests do not establish kernel or guest parity.

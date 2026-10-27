@@ -115,6 +115,6 @@ class Selection(unittest.TestCase):
         proof=text.index('> "$evidence/vma-modify-selection.json"')
         self.assertLess(configure,before);self.assertLess(before,build)
         self.assertLess(build,after);self.assertLess(after,preprocess);self.assertLess(preprocess,proof)
-        self.assertNotIn('vma-modify-c', (ROOT/'rusix/ci/run.sh').read_text())
+        self.assertIn('test-vma-lifecycle-vm.py\" --vma-modify', (ROOT/'rusix/ci/run.sh').read_text())
 
 if __name__=='__main__':unittest.main()

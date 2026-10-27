@@ -193,6 +193,10 @@ def run(args, paths, evidence):
 
 
 def main():
+    if sys.argv[1:2] == ['--vma-modify']:
+        # Explicit new runner/context; historical lifecycle profiles stay strict.
+        sys.argv.pop(1)
+        return load('vma_modify_runtime', 'run-vma-modify.py').main()
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('build', type=Path)
     parser.add_argument('label')

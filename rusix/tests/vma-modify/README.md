@@ -21,3 +21,19 @@ update leaves the compiled init and native test inputs unchanged. Actual console
 acceptance, linked policy selection and C/Rust VM execution remain pending.
 These five success cases do not certify allocation rollback, callback counts,
 optional configuration paths or complete MM behavior.
+
+The real local runtime pipeline is `scripts/run-vma-modify.py`, also selected
+explicitly through `test-vma-lifecycle-vm.py --vma-modify`. After ancestor
+acceptance and launch review, `vma-modify-c` and `vma-modify-rust` run two fresh
+boots each: nine existing VMA consumers followed by these five unchanged native
+filters. Before each boot, the actual modification selection gate must match the
+complete build proof and its saved nested records; historical profiles are not
+relabelled. Local CI and container routing now invoke this pipeline.
+
+Native compilation uses three unchanged translation units and checks all seven
+baseline identities. It hashes the actual 187 native/system dependencies before
+compilation, requires matching emitted dependency files afterward, and records
+packages, Rust libraries and static linker inputs. Static x86-64 init/probe files
+remain mode 0644 on the host and are executable only inside the guest initramfs.
+Each VM is bounded to 512 MiB, two CPUs and 180 seconds. The real runner has not
+been executed: host parser/routing tests do not establish kernel or guest parity.

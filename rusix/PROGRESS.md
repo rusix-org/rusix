@@ -1,5 +1,16 @@
 # rusix progress
 
+The real VMA-modification runtime pipeline now implements two boots per kernel:
+nine existing ordinary VMA cases and five unchanged native merge filters, with
+actual modification selection reinspection before each boot. Explicit local CI
+routing preserves historical runner profiles. Native compilation records seven
+baseline identities, 187 header dependencies, packages, static link/Rust library
+inputs and non-executable host artifacts. Runtime kernel/ELF/VM verification has
+not been performed; ancestor acceptance and reviewed launch remain prerequisites.
+All 40 host suites (433 cases) and shell syntax checks pass on 4,150 stable
+inputs. [Runtime tooling evidence](docs/evidence/vma-modify-runtime-tooling/manifest.json)
+records the current code and host scope; it contains no guest result.
+
 VMA range modification and splitting now have a default-off Rust source
 translation, including the shared prepare/complete protocol used by C merge/shrink
 callers: eleven native policies, with byte-preserved C alternatives. The source
