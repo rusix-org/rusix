@@ -1,0 +1,11 @@
+{
+  "enabled": true,
+  "draft_sha256": {
+    "check.py": "739eb01643f0dfc4b6aefd27a2a9e69c4097107a524b3ec3d2210283e27f417d",
+    "boots.py": "8f8a9384c71f6f9c491f148553a621df514d6e1e07f79bc80019476ba618eaa8",
+    "run.sh": "fa860ef3f0de209e3ca9de7a35ae12e7e14685f580e8fd59d9edf1822201a753",
+    "README.md": "b566938131f5dcf98a7d76b7ad6f10b90572500482e64519f6dccd99ea549837",
+    "inputs.json": "ee192362a1e59397ef82e5eb4609a56c2bc6dafd9ef1320747f3dff8658a31d9"
+  },
+  "root_review": "Root and independent runtime review PASS: two retained C boots only; actualfullgate prerequisites, timeout cleanup and unconditional terminal host hashes; no rebuild"
+}

@@ -7,13 +7,16 @@ unchanged. All 32 host suites (338 cases) pass on 4,034 stable inputs.
 [Fix evidence](docs/evidence/exit-mmap-fixture-gate-fix/manifest.json) retains both
 host stages, the failed first reinspection and successful second reinspection.
 
-Retained KUnit C reinspection now passes the complete nested object/archive/linked
-and three-case fixture registration/payload checks, with separately attributed
-checker code and unchanged original artifacts. No KUnit VM ran. The original
-matrix remains failed; a fresh paired ordinary/KUnit retry at the reviewed fix
-commit is required before downstream acceptance. The separate PFN checker has
-the same old sentinel assumption and must remain disabled until reviewed
-propagation. The fresh retry launcher is prepared but disabled pending commit.
+The retained original C teardown kernel now passes real KUnit boots: all 79
+required combined cases and all three isolated teardown cases. The complete
+nested object/archive/linked and fixture proof passed first using separately
+attributed checker code at `13e0ddc71a57`; the kernel itself remains built from
+`0ff7a933c198`. All 5,469 pinned inputs remain unchanged; actual container limits
+were two CPUs/2 GiB, with no OOM. [Retained C runtime evidence](docs/evidence/exit-mmap-retained-c-kunit/manifest.json)
+contains consoles, parser/gate results, commands, resources and before/after checks.
+The original matrix remains failed. This is no rebuild or Rust teardown KUnit
+result; a fresh paired ordinary/KUnit retry is required for full matrix acceptance.
+The separate PFN checker remains disabled pending reviewed propagation.
 
 The inherited lifecycle verifier now accepts the observed private-cache `.0`
 suffix and proves the canonical refcount constant's four-byte storage/value.

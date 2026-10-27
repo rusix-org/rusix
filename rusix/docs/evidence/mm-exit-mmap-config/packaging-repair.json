@@ -1,0 +1,88 @@
+{
+  "scope": "Restore seven previously ignored records promised by the unchanged config evidence manifest; kernel/configuration/test inputs unchanged",
+  "manifest_sha256": "9d4f11d40683a9f405cf7a83a44665fb167b081b3ced6660b08819d39e912d06",
+  "previous_refs": {
+    "fix13": "13e0ddc71a57d7576e9cc6f34603bd96d5bbfa08",
+    "original0ff": "0ff7a933c198dda0c3e2c0005e4bb97db3867acc"
+  },
+  "records": [
+    {
+      "relative_path": "rusix/docs/evidence/mm-exit-mmap-config/records/archive-inputs.json.gz",
+      "expected_sha256": "a5d677f312b243bd6c3faeff64caec79a5472db236535378f2d4a3da46dba822",
+      "actual_original_sha256": "a5d677f312b243bd6c3faeff64caec79a5472db236535378f2d4a3da46dba822",
+      "actual_original_bytes": 5050156,
+      "git_blob_present": {
+        "fix13": false,
+        "original0ff": false
+      },
+      "classification": "untracked-ignored"
+    },
+    {
+      "relative_path": "rusix/docs/evidence/mm-exit-mmap-config/records/builds/exit-mmap-c/.config",
+      "expected_sha256": "0b711b1f01ea73803bed676553229971ff93114c8d22097dcc09d9e804651219",
+      "actual_original_sha256": "0b711b1f01ea73803bed676553229971ff93114c8d22097dcc09d9e804651219",
+      "actual_original_bytes": 57411,
+      "git_blob_present": {
+        "fix13": false,
+        "original0ff": false
+      },
+      "classification": "untracked-ignored"
+    },
+    {
+      "relative_path": "rusix/docs/evidence/mm-exit-mmap-config/records/builds/exit-mmap-kunit-c/.config",
+      "expected_sha256": "5e18987c49a18815d8969f258555bc15ad3525610915386efd189f05ed132a97",
+      "actual_original_sha256": "5e18987c49a18815d8969f258555bc15ad3525610915386efd189f05ed132a97",
+      "actual_original_bytes": 61017,
+      "git_blob_present": {
+        "fix13": false,
+        "original0ff": false
+      },
+      "classification": "untracked-ignored"
+    },
+    {
+      "relative_path": "rusix/docs/evidence/mm-exit-mmap-config/records/builds/exit-mmap-kunit-rust/.config",
+      "expected_sha256": "2709cdf41603ed3083bd241ce39a913431cbe40687c2c6827e1cb578b89544d9",
+      "actual_original_sha256": "2709cdf41603ed3083bd241ce39a913431cbe40687c2c6827e1cb578b89544d9",
+      "actual_original_bytes": 61006,
+      "git_blob_present": {
+        "fix13": false,
+        "original0ff": false
+      },
+      "classification": "untracked-ignored"
+    },
+    {
+      "relative_path": "rusix/docs/evidence/mm-exit-mmap-config/records/builds/exit-mmap-rust/.config",
+      "expected_sha256": "0328fd2e3ffe9f3dc902d610b6700286b295e35eb157bd0450d1386d91ce45fd",
+      "actual_original_sha256": "0328fd2e3ffe9f3dc902d610b6700286b295e35eb157bd0450d1386d91ce45fd",
+      "actual_original_bytes": 57400,
+      "git_blob_present": {
+        "fix13": false,
+        "original0ff": false
+      },
+      "classification": "untracked-ignored"
+    },
+    {
+      "relative_path": "rusix/docs/evidence/mm-exit-mmap-config/records/builds/inputs-after.json.gz",
+      "expected_sha256": "38009443f607e43acf8c2945b7923f10d2bc2497cf7482fc54f541680ca2c341",
+      "actual_original_sha256": "38009443f607e43acf8c2945b7923f10d2bc2497cf7482fc54f541680ca2c341",
+      "actual_original_bytes": 4555272,
+      "git_blob_present": {
+        "fix13": false,
+        "original0ff": false
+      },
+      "classification": "untracked-ignored"
+    },
+    {
+      "relative_path": "rusix/docs/evidence/mm-exit-mmap-config/records/builds/inputs-before.json.gz",
+      "expected_sha256": "38009443f607e43acf8c2945b7923f10d2bc2497cf7482fc54f541680ca2c341",
+      "actual_original_sha256": "38009443f607e43acf8c2945b7923f10d2bc2497cf7482fc54f541680ca2c341",
+      "actual_original_bytes": 4555272,
+      "git_blob_present": {
+        "fix13": false,
+        "original0ff": false
+      },
+      "classification": "untracked-ignored"
+    }
+  ],
+  "validation": "Original retained bytes match every promised SHA-256; restored only absent untracked paths; all52 archive records rehashed"
+}

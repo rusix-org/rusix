@@ -1,0 +1,6 @@
+{
+  "status": "PASS",
+  "source": "0ff7a933c198dda0c3e2c0005e4bb97db3867acc",
+  "attribution": "Original retained C teardown kernel; separately corrected object verifier; initial matrix remains failed",
+  "pinned_files": 5469
+}

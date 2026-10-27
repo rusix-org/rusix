@@ -1,0 +1,366 @@
+{
+  "audit": "All5469 pins/inventories rehashed, strict original JSON gates independently rerun (host parser only), actual Docker limits checked. No VM/compiler invoked by archiver.",
+  "checker_commit": "13e0ddc71a57d7576e9cc6f34603bd96d5bbfa08",
+  "files": {
+    "README.md": "13bbacf6499fba357641ec28180c89ba11b0e1107982a8e0cfdfd1b3126f1f65",
+    "archive-script.py": "615c008376c39fdca9b0cb628b39f9eec226b2c1f27eeae0b24e389fe6754b96",
+    "launcher/README.md": "b566938131f5dcf98a7d76b7ad6f10b90572500482e64519f6dccd99ea549837",
+    "launcher/boots.py": "8f8a9384c71f6f9c491f148553a621df514d6e1e07f79bc80019476ba618eaa8",
+    "launcher/check.py": "739eb01643f0dfc4b6aefd27a2a9e69c4097107a524b3ec3d2210283e27f417d",
+    "launcher/inputs.json": "ee192362a1e59397ef82e5eb4609a56c2bc6dafd9ef1320747f3dff8658a31d9",
+    "launcher/ready.json": "b8d8de7b33a2f1c51fbccc7026ff2b8ef43a5317746743b550d434098e1f6a8b",
+    "launcher/run.sh": "fa860ef3f0de209e3ca9de7a35ae12e7e14685f580e8fd59d9edf1822201a753",
+    "records/boots.exit": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+    "records/boots.json": "3cd03dda9547ad131aade1f852357c8349c95bcca9e84db695b275f1297b647c",
+    "records/container-inspect-before-stop.json": "80c5b9e6efcaf577460430ad522ee0f4532a5be866d06a7fd4a96ca9e47d66f9",
+    "records/container-inspect-before-stop.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "records/container-inspect.exit": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+    "records/container-inspect.json": "80c5b9e6efcaf577460430ad522ee0f4532a5be866d06a7fd4a96ca9e47d66f9",
+    "records/container-inspect.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "records/container-terminal.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "records/container.cid": "9982f3a85ab8afdfc20da6ea0a81ddce0ab32c2aaf30843b3688c895035565f5",
+    "records/container.exit": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+    "records/container.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "records/host-after-check.exit": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+    "records/host-after-check.json": "c6f8d537161109d9599f62672045e39e13b8bd403d48df65cab242aa20db0e31",
+    "records/host-after-check.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "records/launcher.exit": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+    "records/launcher.sha256": "44b24aeef773654a54253c35b775dc648570d6c26f269ec3a0a723f988044b3c",
+    "records/logs/retained-c-combined-boot.run/command.sh": "1e451f456a86ebb8372db8a6415b3f9d1ec319e23a434ed3ebca5ae3e67a10c8",
+    "records/logs/retained-c-combined-boot.run/inputs-after.log": "dcf027f1c136614b2bd36e1b764b04f649440e20f02e2d02a4f32a8b45ffda09",
+    "records/logs/retained-c-combined-boot.run/mode.txt": "db3dfcc7ec048158a0069c68280649bafc2f52ef610002bf3dc4a93c5063cc4c",
+    "records/logs/retained-c-combined-boot.run/qemu-version.txt": "d5e1ae8dd845009e27fe1cab4612650fd6a774c76bff3d06e929069de043f7f5",
+    "records/logs/retained-c-combined-boot.run/scripts.sha256": "6839593545fd3e47c2fd5f01991d64016db456d4ff89396ff95b9dfa23ba6617",
+    "records/logs/retained-c-combined-console.log": "3641cb56436346831e3110f43dfcae9a1eb711cbbf9f7639be5e3a2823627606",
+    "records/logs/retained-c-combined-gate.exit": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+    "records/logs/retained-c-combined-gate.log": "5cc773f62d8e3badd92f8451c6e83496c53bf7bc4ed42b8fbb06906b2a4fced3",
+    "records/logs/retained-c-combined-inputs.sha256": "af126ea0d17891ff6e3d29e4a6b5d7d7e4558eb1776c9c9cefbb416c310aa8a6",
+    "records/logs/retained-c-combined-kunit.json": "a38d65f15821f5dd4a4d437fa38f2caec351800546dabab6709b40178848031e",
+    "records/logs/retained-c-combined-parse.exit": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+    "records/logs/retained-c-combined-parse.log": "19c34e1d3b0ed35c1e7508c5becd34e080a3466f9555bbcc0df2ddb00554f836",
+    "records/logs/retained-c-combined-qemu.exit": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+    "records/logs/retained-c-isolated-boot.run/command.sh": "c53f7a2c59c56bd63567f7e9c8a59d32e2257a13766357feb1b9545588fcbaac",
+    "records/logs/retained-c-isolated-boot.run/inputs-after.log": "dcf027f1c136614b2bd36e1b764b04f649440e20f02e2d02a4f32a8b45ffda09",
+    "records/logs/retained-c-isolated-boot.run/mode.txt": "758080269478e23ec0222f7e17fe2569dae9dc37a4fbc36b64cda814bbae7940",
+    "records/logs/retained-c-isolated-boot.run/qemu-version.txt": "d5e1ae8dd845009e27fe1cab4612650fd6a774c76bff3d06e929069de043f7f5",
+    "records/logs/retained-c-isolated-boot.run/scripts.sha256": "6839593545fd3e47c2fd5f01991d64016db456d4ff89396ff95b9dfa23ba6617",
+    "records/logs/retained-c-isolated-console.log": "8402b240fdc0ce5e2252a856a32f73133eea1b8e5c1428a6f5339be261b1b17d",
+    "records/logs/retained-c-isolated-gate.exit": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+    "records/logs/retained-c-isolated-gate.log": "766e6de28b2fd1613b51b9c6fdbe1d1c3e8e5ec43f4015306f8f96a15df9214d",
+    "records/logs/retained-c-isolated-inputs.sha256": "af126ea0d17891ff6e3d29e4a6b5d7d7e4558eb1776c9c9cefbb416c310aa8a6",
+    "records/logs/retained-c-isolated-kunit.json": "c6f05b0f877f775b85b98748b9885427d3001602b938f081ec951be1a5f721d0",
+    "records/logs/retained-c-isolated-parse.exit": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+    "records/logs/retained-c-isolated-parse.log": "80a03084d9a7e35aa5fda255a6053755f3ae40cde97ee7abc130747cee703461",
+    "records/logs/retained-c-isolated-qemu.exit": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+    "records/prerequisite-after.json": "c6f8d537161109d9599f62672045e39e13b8bd403d48df65cab242aa20db0e31",
+    "records/prerequisite-before.json": "c6f8d537161109d9599f62672045e39e13b8bd403d48df65cab242aa20db0e31",
+    "records/retained-c-combined-argv.json": "2a575538e2ade49db5dfcc24ff1fa50436dc4fd1143fb680bbe7488046e2d620",
+    "records/retained-c-combined-runner.exit": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+    "records/retained-c-combined-runner.log": "c3048571c6b87375e1dc36fd376bbb3aedfe487af8937a84ba5fa754b81cdc07",
+    "records/retained-c-isolated-argv.json": "e7f5209595d95e9dc666907cf4e2cdf2661560b329ae7ad6cd1f4174ca4c6db2",
+    "records/retained-c-isolated-runner.exit": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+    "records/retained-c-isolated-runner.log": "e49f6531f22f3eae26542d3d3c15ed799ae2386f87dd248a03339a06ed976cae"
+  },
+  "immutable_input_count": 5469,
+  "prior_evidence": {
+    "rusix/docs/evidence/exit-mmap-fixture-gate-fix/manifest.json": {
+      "commit": "13e0ddc71a57d7576e9cc6f34603bd96d5bbfa08",
+      "sha256": "97a4c2885fd0fbd5292223185c207b85333b7c1c91cffb9ea52d274576bc7ba6"
+    },
+    "rusix/docs/evidence/mm-exit-mmap-initial/manifest.json": {
+      "commit": "2c5cb433fda90480d492261a38222922f3d02cc5",
+      "sha256": "60d2753a4bcb395cf6d6bba5b41a1495eb17bce3e293a85dbaf63ab7f428ffd2"
+    }
+  },
+  "raw_input_sha256": {
+    "/home/aaron/code/rusix/linux-out/archive-exit-mmap-retained-c-kunit.py": {
+      "bytes": 4162,
+      "mode": 420,
+      "sha256": "615c008376c39fdca9b0cb628b39f9eec226b2c1f27eeae0b24e389fe6754b96"
+    },
+    "/home/aaron/code/rusix/linux-out/exit-mmap-retained-c-kunit-001/boots.exit": {
+      "bytes": 2,
+      "mode": 420,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    "/home/aaron/code/rusix/linux-out/exit-mmap-retained-c-kunit-001/boots.json": {
+      "bytes": 184,
+      "mode": 420,
+      "sha256": "3cd03dda9547ad131aade1f852357c8349c95bcca9e84db695b275f1297b647c"
+    },
+    "/home/aaron/code/rusix/linux-out/exit-mmap-retained-c-kunit-001/container-inspect-before-stop.json": {
+      "bytes": 12220,
+      "mode": 420,
+      "sha256": "80c5b9e6efcaf577460430ad522ee0f4532a5be866d06a7fd4a96ca9e47d66f9"
+    },
+    "/home/aaron/code/rusix/linux-out/exit-mmap-retained-c-kunit-001/container-inspect-before-stop.stderr": {
+      "bytes": 0,
+      "mode": 420,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "/home/aaron/code/rusix/linux-out/exit-mmap-retained-c-kunit-001/container-inspect.exit": {
+      "bytes": 2,
+      "mode": 420,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    "/home/aaron/code/rusix/linux-out/exit-mmap-retained-c-kunit-001/container-inspect.json": {
+      "bytes": 12220,
+      "mode": 420,
+      "sha256": "80c5b9e6efcaf577460430ad522ee0f4532a5be866d06a7fd4a96ca9e47d66f9"
+    },
+    "/home/aaron/code/rusix/linux-out/exit-mmap-retained-c-kunit-001/container-inspect.stderr": {
+      "bytes": 0,
+      "mode": 420,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "/home/aaron/code/rusix/linux-out/exit-mmap-retained-c-kunit-001/container-terminal.log": {
+      "bytes": 0,
+      "mode": 420,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "/home/aaron/code/rusix/linux-out/exit-mmap-retained-c-kunit-001/container.cid": {
+      "bytes": 64,
+      "mode": 420,
+      "sha256": "9982f3a85ab8afdfc20da6ea0a81ddce0ab32c2aaf30843b3688c895035565f5"
+    },
+    "/home/aaron/code/rusix/linux-out/exit-mmap-retained-c-kunit-001/container.exit": {
+      "bytes": 2,
+      "mode": 420,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    "/home/aaron/code/rusix/linux-out/exit-mmap-retained-c-kunit-001/container.log": {
+      "bytes": 0,
+      "mode": 420,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "/home/aaron/code/rusix/linux-out/exit-mmap-retained-c-kunit-001/host-after-check.exit": {
+      "bytes": 2,
+      "mode": 420,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    "/home/aaron/code/rusix/linux-out/exit-mmap-retained-c-kunit-001/host-after-check.json": {
+      "bytes": 228,
+      "mode": 420,
+      "sha256": "c6f8d537161109d9599f62672045e39e13b8bd403d48df65cab242aa20db0e31"
+    },
+    "/home/aaron/code/rusix/linux-out/exit-mmap-retained-c-kunit-001/host-after-check.stderr": {
+      "bytes": 0,
+      "mode": 420,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "/home/aaron/code/rusix/linux-out/exit-mmap-retained-c-kunit-001/launcher.exit": {
+      "bytes": 2,
+      "mode": 420,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    "/home/aaron/code/rusix/linux-out/exit-mmap-retained-c-kunit-001/launcher.sha256": {
+      "bytes": 850,
+      "mode": 420,
+      "sha256": "44b24aeef773654a54253c35b775dc648570d6c26f269ec3a0a723f988044b3c"
+    },
+    "/home/aaron/code/rusix/linux-out/exit-mmap-retained-c-kunit-001/logs/retained-c-combined-boot.run/command.sh": {
+      "bytes": 489,
+      "mode": 420,
+      "sha256": "1e451f456a86ebb8372db8a6415b3f9d1ec319e23a434ed3ebca5ae3e67a10c8"
+    },
+    "/home/aaron/code/rusix/linux-out/exit-mmap-retained-c-kunit-001/logs/retained-c-combined-boot.run/inputs-after.log": {
+      "bytes": 236,
+      "mode": 420,
+      "sha256": "dcf027f1c136614b2bd36e1b764b04f649440e20f02e2d02a4f32a8b45ffda09"
+    },
+    "/home/aaron/code/rusix/linux-out/exit-mmap-retained-c-kunit-001/logs/retained-c-combined-boot.run/mode.txt": {
+      "bytes": 19,
+      "mode": 420,
+      "sha256": "db3dfcc7ec048158a0069c68280649bafc2f52ef610002bf3dc4a93c5063cc4c"
+    },
+    "/home/aaron/code/rusix/linux-out/exit-mmap-retained-c-kunit-001/logs/retained-c-combined-boot.run/qemu-version.txt": {
+      "bytes": 134,
+      "mode": 420,
+      "sha256": "d5e1ae8dd845009e27fe1cab4612650fd6a774c76bff3d06e929069de043f7f5"
+    },
+    "/home/aaron/code/rusix/linux-out/exit-mmap-retained-c-kunit-001/logs/retained-c-combined-boot.run/scripts.sha256": {
+      "bytes": 581,
+      "mode": 420,
+      "sha256": "6839593545fd3e47c2fd5f01991d64016db456d4ff89396ff95b9dfa23ba6617"
+    },
+    "/home/aaron/code/rusix/linux-out/exit-mmap-retained-c-kunit-001/logs/retained-c-combined-console.log": {
+      "bytes": 26940,
+      "mode": 420,
+      "sha256": "3641cb56436346831e3110f43dfcae9a1eb711cbbf9f7639be5e3a2823627606"
+    },
+    "/home/aaron/code/rusix/linux-out/exit-mmap-retained-c-kunit-001/logs/retained-c-combined-gate.exit": {
+      "bytes": 2,
+      "mode": 420,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    "/home/aaron/code/rusix/linux-out/exit-mmap-retained-c-kunit-001/logs/retained-c-combined-gate.log": {
+      "bytes": 70,
+      "mode": 420,
+      "sha256": "5cc773f62d8e3badd92f8451c6e83496c53bf7bc4ed42b8fbb06906b2a4fced3"
+    },
+    "/home/aaron/code/rusix/linux-out/exit-mmap-retained-c-kunit-001/logs/retained-c-combined-inputs.sha256": {
+      "bytes": 360,
+      "mode": 420,
+      "sha256": "af126ea0d17891ff6e3d29e4a6b5d7d7e4558eb1776c9c9cefbb416c310aa8a6"
+    },
+    "/home/aaron/code/rusix/linux-out/exit-mmap-retained-c-kunit-001/logs/retained-c-combined-kunit.json": {
+      "bytes": 21417,
+      "mode": 420,
+      "sha256": "a38d65f15821f5dd4a4d437fa38f2caec351800546dabab6709b40178848031e"
+    },
+    "/home/aaron/code/rusix/linux-out/exit-mmap-retained-c-kunit-001/logs/retained-c-combined-parse.exit": {
+      "bytes": 2,
+      "mode": 420,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    "/home/aaron/code/rusix/linux-out/exit-mmap-retained-c-kunit-001/logs/retained-c-combined-parse.log": {
+      "bytes": 7973,
+      "mode": 420,
+      "sha256": "19c34e1d3b0ed35c1e7508c5becd34e080a3466f9555bbcc0df2ddb00554f836"
+    },
+    "/home/aaron/code/rusix/linux-out/exit-mmap-retained-c-kunit-001/logs/retained-c-combined-qemu.exit": {
+      "bytes": 2,
+      "mode": 420,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    "/home/aaron/code/rusix/linux-out/exit-mmap-retained-c-kunit-001/logs/retained-c-isolated-boot.run/command.sh": {
+      "bytes": 496,
+      "mode": 420,
+      "sha256": "c53f7a2c59c56bd63567f7e9c8a59d32e2257a13766357feb1b9545588fcbaac"
+    },
+    "/home/aaron/code/rusix/linux-out/exit-mmap-retained-c-kunit-001/logs/retained-c-isolated-boot.run/inputs-after.log": {
+      "bytes": 236,
+      "mode": 420,
+      "sha256": "dcf027f1c136614b2bd36e1b764b04f649440e20f02e2d02a4f32a8b45ffda09"
+    },
+    "/home/aaron/code/rusix/linux-out/exit-mmap-retained-c-kunit-001/logs/retained-c-isolated-boot.run/mode.txt": {
+      "bytes": 10,
+      "mode": 420,
+      "sha256": "758080269478e23ec0222f7e17fe2569dae9dc37a4fbc36b64cda814bbae7940"
+    },
+    "/home/aaron/code/rusix/linux-out/exit-mmap-retained-c-kunit-001/logs/retained-c-isolated-boot.run/qemu-version.txt": {
+      "bytes": 134,
+      "mode": 420,
+      "sha256": "d5e1ae8dd845009e27fe1cab4612650fd6a774c76bff3d06e929069de043f7f5"
+    },
+    "/home/aaron/code/rusix/linux-out/exit-mmap-retained-c-kunit-001/logs/retained-c-isolated-boot.run/scripts.sha256": {
+      "bytes": 581,
+      "mode": 420,
+      "sha256": "6839593545fd3e47c2fd5f01991d64016db456d4ff89396ff95b9dfa23ba6617"
+    },
+    "/home/aaron/code/rusix/linux-out/exit-mmap-retained-c-kunit-001/logs/retained-c-isolated-console.log": {
+      "bytes": 13856,
+      "mode": 420,
+      "sha256": "8402b240fdc0ce5e2252a856a32f73133eea1b8e5c1428a6f5339be261b1b17d"
+    },
+    "/home/aaron/code/rusix/linux-out/exit-mmap-retained-c-kunit-001/logs/retained-c-isolated-gate.exit": {
+      "bytes": 2,
+      "mode": 420,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    "/home/aaron/code/rusix/linux-out/exit-mmap-retained-c-kunit-001/logs/retained-c-isolated-gate.log": {
+      "bytes": 69,
+      "mode": 420,
+      "sha256": "766e6de28b2fd1613b51b9c6fdbe1d1c3e8e5ec43f4015306f8f96a15df9214d"
+    },
+    "/home/aaron/code/rusix/linux-out/exit-mmap-retained-c-kunit-001/logs/retained-c-isolated-inputs.sha256": {
+      "bytes": 360,
+      "mode": 420,
+      "sha256": "af126ea0d17891ff6e3d29e4a6b5d7d7e4558eb1776c9c9cefbb416c310aa8a6"
+    },
+    "/home/aaron/code/rusix/linux-out/exit-mmap-retained-c-kunit-001/logs/retained-c-isolated-kunit.json": {
+      "bytes": 1362,
+      "mode": 420,
+      "sha256": "c6f05b0f877f775b85b98748b9885427d3001602b938f081ec951be1a5f721d0"
+    },
+    "/home/aaron/code/rusix/linux-out/exit-mmap-retained-c-kunit-001/logs/retained-c-isolated-parse.exit": {
+      "bytes": 2,
+      "mode": 420,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    "/home/aaron/code/rusix/linux-out/exit-mmap-retained-c-kunit-001/logs/retained-c-isolated-parse.log": {
+      "bytes": 642,
+      "mode": 420,
+      "sha256": "80a03084d9a7e35aa5fda255a6053755f3ae40cde97ee7abc130747cee703461"
+    },
+    "/home/aaron/code/rusix/linux-out/exit-mmap-retained-c-kunit-001/logs/retained-c-isolated-qemu.exit": {
+      "bytes": 2,
+      "mode": 420,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    "/home/aaron/code/rusix/linux-out/exit-mmap-retained-c-kunit-001/prerequisite-after.json": {
+      "bytes": 228,
+      "mode": 420,
+      "sha256": "c6f8d537161109d9599f62672045e39e13b8bd403d48df65cab242aa20db0e31"
+    },
+    "/home/aaron/code/rusix/linux-out/exit-mmap-retained-c-kunit-001/prerequisite-before.json": {
+      "bytes": 228,
+      "mode": 420,
+      "sha256": "c6f8d537161109d9599f62672045e39e13b8bd403d48df65cab242aa20db0e31"
+    },
+    "/home/aaron/code/rusix/linux-out/exit-mmap-retained-c-kunit-001/retained-c-combined-argv.json": {
+      "bytes": 231,
+      "mode": 420,
+      "sha256": "2a575538e2ade49db5dfcc24ff1fa50436dc4fd1143fb680bbe7488046e2d620"
+    },
+    "/home/aaron/code/rusix/linux-out/exit-mmap-retained-c-kunit-001/retained-c-combined-runner.exit": {
+      "bytes": 2,
+      "mode": 420,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    "/home/aaron/code/rusix/linux-out/exit-mmap-retained-c-kunit-001/retained-c-combined-runner.log": {
+      "bytes": 8043,
+      "mode": 420,
+      "sha256": "c3048571c6b87375e1dc36fd376bbb3aedfe487af8937a84ba5fa754b81cdc07"
+    },
+    "/home/aaron/code/rusix/linux-out/exit-mmap-retained-c-kunit-001/retained-c-isolated-argv.json": {
+      "bytes": 222,
+      "mode": 420,
+      "sha256": "e7f5209595d95e9dc666907cf4e2cdf2661560b329ae7ad6cd1f4174ca4c6db2"
+    },
+    "/home/aaron/code/rusix/linux-out/exit-mmap-retained-c-kunit-001/retained-c-isolated-runner.exit": {
+      "bytes": 2,
+      "mode": 420,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    "/home/aaron/code/rusix/linux-out/exit-mmap-retained-c-kunit-001/retained-c-isolated-runner.log": {
+      "bytes": 711,
+      "mode": 420,
+      "sha256": "e49f6531f22f3eae26542d3d3c15ed799ae2386f87dd248a03339a06ed976cae"
+    },
+    "/home/aaron/code/rusix/linux-out/exit-mmap-retained-c-kunit-draft/README.md": {
+      "bytes": 1347,
+      "mode": 420,
+      "sha256": "b566938131f5dcf98a7d76b7ad6f10b90572500482e64519f6dccd99ea549837"
+    },
+    "/home/aaron/code/rusix/linux-out/exit-mmap-retained-c-kunit-draft/boots.py": {
+      "bytes": 1147,
+      "mode": 420,
+      "sha256": "8f8a9384c71f6f9c491f148553a621df514d6e1e07f79bc80019476ba618eaa8"
+    },
+    "/home/aaron/code/rusix/linux-out/exit-mmap-retained-c-kunit-draft/check.py": {
+      "bytes": 3619,
+      "mode": 420,
+      "sha256": "739eb01643f0dfc4b6aefd27a2a9e69c4097107a524b3ec3d2210283e27f417d"
+    },
+    "/home/aaron/code/rusix/linux-out/exit-mmap-retained-c-kunit-draft/inputs.json": {
+      "bytes": 1381209,
+      "mode": 420,
+      "sha256": "ee192362a1e59397ef82e5eb4609a56c2bc6dafd9ef1320747f3dff8658a31d9"
+    },
+    "/home/aaron/code/rusix/linux-out/exit-mmap-retained-c-kunit-draft/ready.json": {
+      "bytes": 654,
+      "mode": 420,
+      "sha256": "b8d8de7b33a2f1c51fbccc7026ff2b8ef43a5317746743b550d434098e1f6a8b"
+    },
+    "/home/aaron/code/rusix/linux-out/exit-mmap-retained-c-kunit-draft/run.sh": {
+      "bytes": 4097,
+      "mode": 420,
+      "sha256": "fa860ef3f0de209e3ca9de7a35ae12e7e14685f580e8fd59d9edf1822201a753"
+    }
+  },
+  "scope": "Retained original C teardown kernel: strict79 combined and3 isolated KUnit cases passed. No rebuild, no Rust teardown KUnit execution, no complete paired-matrix acceptance. Original matrix remains failed.",
+  "source": "0ff7a933c198dda0c3e2c0005e4bb97db3867acc",
+  "special_artifacts": {},
+  "status": "PASS"
+}

@@ -1,0 +1,54 @@
+{
+    "name": "KUnit Test Group",
+    "sub_groups": [
+        {
+            "name": "rusix_exit_mmap",
+            "sub_groups": [],
+            "test_cases": [
+                {
+                    "name": "empty_final_users_retains_storage",
+                    "status": "PASS"
+                },
+                {
+                    "name": "mapped_final_users_closes_before_file_put",
+                    "status": "PASS"
+                },
+                {
+                    "name": "fixed_replace_close_dummy_reset",
+                    "status": "PASS"
+                }
+            ],
+            "misc": {
+                "tests": 3,
+                "passed": 3,
+                "failed": 0,
+                "crashed": 0,
+                "skipped": 0,
+                "errors": 0
+            },
+            "arch": "",
+            "defconfig": "",
+            "build_environment": "",
+            "lab_name": null,
+            "kernel": null,
+            "job": null,
+            "git_branch": "kselftest"
+        }
+    ],
+    "test_cases": [],
+    "misc": {
+        "tests": 3,
+        "passed": 3,
+        "failed": 0,
+        "crashed": 0,
+        "skipped": 0,
+        "errors": 0
+    },
+    "arch": "",
+    "defconfig": "",
+    "build_environment": "",
+    "lab_name": null,
+    "kernel": null,
+    "job": null,
+    "git_branch": "kselftest"
+}

@@ -1,0 +1,10 @@
+[04:20:03] ============================================================
+[04:20:03] =============== rusix_exit_mmap (3 subtests) ===============
+[04:20:03] [PASSED] empty_final_users_retains_storage
+[04:20:03] [PASSED] mapped_final_users_closes_before_file_put
+[04:20:03] [PASSED] fixed_replace_close_dummy_reset
+[04:20:03] ================= [PASSED] rusix_exit_mmap =================
+[04:20:03] ============================================================
+[04:20:03] Testing complete. Ran 3 tests: passed: 3
+[04:20:03] Test results stored in /home/aaron/code/rusix/linux-out/exit-mmap-retained-c-kunit-001/logs/retained-c-isolated-kunit.json
+mapping teardown KUnit acceptance passed: 3 required cases, all PASS

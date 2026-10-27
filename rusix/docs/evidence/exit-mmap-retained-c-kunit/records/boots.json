@@ -1,0 +1,12 @@
+[
+  {
+    "mode": "--exit-mmap-combined",
+    "label": "retained-c-combined",
+    "exit": 0
+  },
+  {
+    "mode": "--exit-mmap",
+    "label": "retained-c-isolated",
+    "exit": 0
+  }
+]
