@@ -1,0 +1,1 @@
+Initial source-only 10-case exit gate suite: 9 passed, one fixture setup error. Synthetic resolved config omitted derived CONFIG_PER_VMA_LOCK=y; checker correctly rejected it. Added required derived setting to host test fixture, without relaxing gate. No compiler/build/VM execution.

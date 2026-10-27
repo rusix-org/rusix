@@ -17,6 +17,7 @@ def load(name,filename):
 
 copy=load('dup_copy','verify-mm-copy.py')
 preprocessor=load('dup_preprocessor','preprocess-dup-mmap.py')
+elf_reader=load('dup_elf','verify-brd-parameter-owner.py')
 digest,config_values=copy.digest,copy.config_values
 PROFILES={'mm-dup-mmap-c':False,'mm-dup-mmap-rust':True}
 SELECTOR='CONFIG_RUSIX_DUP_MMAP_RUST'
@@ -119,22 +120,75 @@ def archive_members(text,rust):
     if any('dup_mmap' in n and n!='dup_mmap_rust.o' for n in names):raise ValueError('Alternate duplication object')
 
 
-def input_paths(build,source,rust):
+# Canonical pinned x86_64 vm_flags_t constants, independently checked against
+# actual object and linked storage; these are not inferred from nm letters.
+CONSTANTS = {'rusix_dup_dontcopy': 1 << 17, 'rusix_dup_account': 1 << 20,
+             'rusix_dup_wipeonfork': 1 << 25}
+
+
+def constant_storage(elf, nm, *, linked, expected=CONSTANTS):
+    if elf.relocatable == linked:
+        raise ValueError('Wrong constant ELF object kind')
+    result = {}
+    for name, expected_value in expected.items():
+        rows = [r.split() for r in nm.splitlines() if r.split() and r.split()[-1] == name]
+        # Uppercase ensures global binding. Final .rodata may acquire SHF_WRITE
+        # from merged input sections and consequently be reported as D by nm.
+        allowed = {'R', 'D'} if linked else {'R'}
+        if len(rows) != 1 or len(rows[0]) != 3 or rows[0][1] not in allowed:
+            raise ValueError('Missing/ambiguous/non-global canonical constant: '+name)
+        symbol = elf.symbol(name)
+        index, offset = elf.location(symbol)
+        section = elf.headers[index]
+        if (symbol['kind'] != 1 or symbol['size'] != 8 or
+                int(rows[0][0],16) != symbol['address'] or symbol['address'] % 8 or
+                elf.names[index] != '.rodata' or section[1] != 1 or
+                not section[2] & 2 or section[2] & 4 or
+                (not linked and section[2] & 1) or
+                offset < 0 or offset + 8 > section[5]):
+            raise ValueError('Wrong canonical constant storage: '+name)
+        value = int.from_bytes(elf.section_data(index)[offset:offset+8], 'little')
+        if value != expected_value:
+            raise ValueError('Wrong canonical constant value: '+name)
+        result[name] = value
+    return result
+
+
+def check_constants(object_path, kernel_path, object_symbols, kernel_symbols, *, expected=CONSTANTS):
+    obj = constant_storage(elf_reader.Elf(object_path, indexed_sections=True), object_symbols, linked=False, expected=expected)
+    linked = constant_storage(elf_reader.Elf(kernel_path, indexed_sections=True), kernel_symbols, linked=True, expected=expected)
+    if obj != linked:
+        raise ValueError('Object/linked constant values differ')
+    return linked
+
+
+def input_paths(build,source,rust, *, source_extension=None):
     # Ancestor objects/headers/scripts are bound even though their policy does
     # not vary in this pair. Preserve order while deduplicating shared inputs.
     paths=copy.input_paths(build,source,True)+preprocessor.inputs(build,source)+[
         build/'mm/mmap.i',build/'mm/built-in.a',source/'mm/Makefile',
         source/'rusix/scripts/verify-dup-mmap.py',
+        source/'rusix/scripts/verify-brd-parameter-owner.py',
+        source/'rusix/scripts/measure-kernel-languages.py',
         source/f'rusix/configs/x86_64-mm-dup-mmap-{"rust" if rust else "c"}.config']
     if rust:paths.append(build/'mm/dup_mmap_rust.o')
+    if source_extension is not None:
+        extension = load('exit_source_inputs', 'exit_mmap_source.py')
+        paths += extension.paths(source, source_extension)
     return list(dict.fromkeys(paths))
 
 
-def verify(args):
+def verify(args, *, source_extension=None):
     source,build,evidence=args.source.resolve(),args.build.resolve(),args.evidence.resolve();rust=PROFILES[args.profile]
     check_config(args.profile,config_values((build/'.config').read_text()),config_values((source/'rusix/configs/x86_64-server.config').read_text()))
-    original_policy((source/'mm/mmap.c').read_text())
-    paths=input_paths(build,source,rust);before={str(p):digest(p) for p in paths}
+    source_proof = None
+    if source_extension is None:
+        original_policy((source/'mm/mmap.c').read_text())
+    else:
+        extension = load('exit_source_check', 'exit_mmap_source.py')
+        restored, source_proof = extension.validate(source, source_extension)
+        original_policy(restored['mm/mmap.c'])
+    paths=input_paths(build,source,rust,source_extension=source_extension);before={str(p):digest(p) for p in paths}
     # The inherited copy profile describes its actual Rust selector, not this
     # new public profile name. It rechecks the real fork.i and actual objects.
     inherited=copy.verify(argparse.Namespace(source=source,build=build,evidence=evidence,profile='mm-copy-rust'))
@@ -159,17 +213,17 @@ def verify(args):
         definitions(symbols[name],name=='mmap',name=='dup_mmap_rust')
     linked=run('dup-mmap-kernel-symbols.txt',['llvm-nm','--defined-only',str(build/'vmlinux')]);definitions(linked,True,rust)
     check_relocations(run('dup-mmap-disassembly.txt',['llvm-objdump','-dr',str(build/'mm/mmap.o')]),rust)
+    constants = {}
     if rust:
         helpers=set(re.findall(r'fn (rusix_dup_[a-z_]+)\(', (source/'mm/dup_mmap_rust.rs').read_text()))-{BRIDGE}
-        constants=('rusix_dup_dontcopy','rusix_dup_account','rusix_dup_wipeonfork')
-        for helper in sorted(helpers|set(constants)):
+        for helper in sorted(helpers):
             for table in (symbols['mmap'],linked):
                 rows=[r.split() for r in table.splitlines() if r.split() and r.split()[-1]==helper]
-                expected='R' if helper in constants else 'T'
-                if len(rows)!=1 or len(rows[0])!=3 or rows[0][1]!=expected:raise ValueError('Missing/wrong canonical primitive: '+helper)
+                if len(rows)!=1 or len(rows[0])!=3 or rows[0][1]!='T':raise ValueError('Missing/wrong canonical primitive: '+helper)
+        constants = check_constants(build/'mm/mmap.o', build/'vmlinux', symbols['mmap'], linked)
     if before!={str(p):digest(p) for p in paths}:raise ValueError('Verification inputs changed')
     return dict(status='PASS',implementation='rust' if rust else 'c',input_sha256=before,archive_member_sha256=hashes,
-                mm_copy_selection=inherited,scope='Original C, actual preprocessing and linked selection; no runtime claim')
+                source_extension=source_proof,constant_values=constants,mm_copy_selection=inherited,scope='Original C, actual preprocessing and linked selection; no runtime claim')
 
 
 def main():

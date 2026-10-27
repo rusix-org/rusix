@@ -10,9 +10,13 @@ Mapping teardown is a source-only candidate on `rusix/mm-exit-mmap`: Rust now
 owns complete `exit_mmap`, `remove_vma` and common close policy, with native C
 primitives retaining shared accesses and page-table/TLB/resource operations.
 The original C policies are preserved. Formatting and exact source restoration
-are checked; compilation, selection proofs and paired success/failure/lifetime
-gates remain pending. Existing dup_mmap whole-file gates need an exact composable
-extension before this branch can be built through the verification pipeline.
+are checked; compilation, actual linked-selection proofs and paired
+success/failure/lifetime gates remain pending. Exact source-restoration delegation,
+four-unit preprocessing and selection tooling are implemented; all 308 cases
+across 29 host suites pass with stable input hashes. The initial host-fixture
+setup failure and exact tested snapshots are retained in
+[tooling evidence](docs/evidence/mm-exit-mmap-tooling/manifest.json). This covers
+host tooling, not the separate native teardown fixture under development.
 [Boundary and remaining work](experiments/mm-exit-mmap/README.md).
 
 VMA lifecycle is an opt-in candidate on `rusix/vma-lifecycle`: Rust owns the

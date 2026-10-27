@@ -1,0 +1,773 @@
+{
+  "cases": 308,
+  "excluded_scope": [
+    "mm/exit_mmap_test.c",
+    "init/Kconfig",
+    "mm/Makefile",
+    "native teardown fixture implementation or execution"
+  ],
+  "files": {
+    "archive.py": {
+      "bytes": 2713,
+      "original": "/home/aaron/code/rusix/linux-out/archive-mm-exit-mmap-tooling.py",
+      "sha256": "a7793fac2a10f5b950d33b6da3fa19ed8f2caa95fcca28d1fd0891dbc4657c5d"
+    },
+    "host-002/diff-check.log": {
+      "bytes": 0,
+      "original": "/home/aaron/code/rusix/linux-out/mm-exit-mmap-tooling-host-002/diff-check.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "host-002/result.json": {
+      "bytes": 25651,
+      "original": "/home/aaron/code/rusix/linux-out/mm-exit-mmap-tooling-host-002/result.json",
+      "sha256": "1189ab3f1446bea5259b0ecf909cf89781d0d384c0f63847e8a69ac5f91996dc"
+    },
+    "host-002/test_brd_ext4_gate.log": {
+      "bytes": 125,
+      "original": "/home/aaron/code/rusix/linux-out/mm-exit-mmap-tooling-host-002/test_brd_ext4_gate.log",
+      "sha256": "473c6d30ed868640c6e7a4f94593f5cdb6107a7f5776101318861ccab070ba80"
+    },
+    "host-002/test_brd_fixed_parameters_gate.log": {
+      "bytes": 106,
+      "original": "/home/aaron/code/rusix/linux-out/mm-exit-mmap-tooling-host-002/test_brd_fixed_parameters_gate.log",
+      "sha256": "c6352adff70a6982c739a1cd77bbb43d2425eefd2dc2112b92b0ceebf2a6ca31"
+    },
+    "host-002/test_brd_gate.log": {
+      "bytes": 120,
+      "original": "/home/aaron/code/rusix/linux-out/mm-exit-mmap-tooling-host-002/test_brd_gate.log",
+      "sha256": "d5557644f94799de88d5d3e1ec5519779a563f8d5e3635a321aad5a9ce276076"
+    },
+    "host-002/test_brd_kunit_gate.log": {
+      "bytes": 111,
+      "original": "/home/aaron/code/rusix/linux-out/mm-exit-mmap-tooling-host-002/test_brd_kunit_gate.log",
+      "sha256": "ddbc5bf15c26bf2c15a86c04aa1c4eb9dbb31a4d245c800b95a5282be426a476"
+    },
+    "host-002/test_brd_owner_elf.log": {
+      "bytes": 101,
+      "original": "/home/aaron/code/rusix/linux-out/mm-exit-mmap-tooling-host-002/test_brd_owner_elf.log",
+      "sha256": "199ba496f288116d36c62f29346d4fbf0bd75745a1c893abfcbdaa4c6d5b1033"
+    },
+    "host-002/test_brd_parameter_oracle.log": {
+      "bytes": 104,
+      "original": "/home/aaron/code/rusix/linux-out/mm-exit-mmap-tooling-host-002/test_brd_parameter_oracle.log",
+      "sha256": "8bd051889ec4f29c1f4016a4bd4000a3a768644ce3ade016b821bceb0a38b237"
+    },
+    "host-002/test_brd_parameters_gate.log": {
+      "bytes": 112,
+      "original": "/home/aaron/code/rusix/linux-out/mm-exit-mmap-tooling-host-002/test_brd_parameters_gate.log",
+      "sha256": "46c74e95e49409273cff5b0d474bb3f780e57977a4af5da2071b99cd4731838f"
+    },
+    "host-002/test_brd_partitions_gate.log": {
+      "bytes": 111,
+      "original": "/home/aaron/code/rusix/linux-out/mm-exit-mmap-tooling-host-002/test_brd_partitions_gate.log",
+      "sha256": "3af354abd6afd2f4f662a367159a8b8107385935ded6c8a2b929734becedb43c"
+    },
+    "host-002/test_completion_kunit_gate.log": {
+      "bytes": 109,
+      "original": "/home/aaron/code/rusix/linux-out/mm-exit-mmap-tooling-host-002/test_completion_kunit_gate.log",
+      "sha256": "fe2a4d391c48bdc7e95df1f7d0137c7a495cf650b3bbe4052b6f0cbe2cbe84fb"
+    },
+    "host-002/test_constructor_archive.log": {
+      "bytes": 104,
+      "original": "/home/aaron/code/rusix/linux-out/mm-exit-mmap-tooling-host-002/test_constructor_archive.log",
+      "sha256": "929636b37b79b2b515a0e731a3a95931e151dd70a99459bbd34d53f9261c9fa1"
+    },
+    "host-002/test_dup_mmap_gate.log": {
+      "bytes": 111,
+      "original": "/home/aaron/code/rusix/linux-out/mm-exit-mmap-tooling-host-002/test_dup_mmap_gate.log",
+      "sha256": "7c4ce78e536c0c2cdb85730c9c8381839f365b3a2b9d77c5cc9eaede9427b0df"
+    },
+    "host-002/test_dup_mmap_selection.log": {
+      "bytes": 113,
+      "original": "/home/aaron/code/rusix/linux-out/mm-exit-mmap-tooling-host-002/test_dup_mmap_selection.log",
+      "sha256": "c9811dcd7d51683ba5e61910b5aa26e91e8766a287b6a6f52a04bac8ac9f3a3d"
+    },
+    "host-002/test_exit_mmap_gate.log": {
+      "bytes": 113,
+      "original": "/home/aaron/code/rusix/linux-out/mm-exit-mmap-tooling-host-002/test_exit_mmap_gate.log",
+      "sha256": "f196bef0973ff999dcbcf679ca035393cbb4be84e582dd7f9d09005e1f656ac4"
+    },
+    "host-002/test_exit_mmap_selection.log": {
+      "bytes": 111,
+      "original": "/home/aaron/code/rusix/linux-out/mm-exit-mmap-tooling-host-002/test_exit_mmap_selection.log",
+      "sha256": "b7732693096164ab8f6ea4dd9ae8c5833d32ac76459b570066af840490804c34"
+    },
+    "host-002/test_kernel_languages.log": {
+      "bytes": 109,
+      "original": "/home/aaron/code/rusix/linux-out/mm-exit-mmap-tooling-host-002/test_kernel_languages.log",
+      "sha256": "c0a234441cecc9937a09c7cbc31cee2a9774cd3f1dce8048b17104e7e417c7f1"
+    },
+    "host-002/test_kunit_gate.log": {
+      "bytes": 107,
+      "original": "/home/aaron/code/rusix/linux-out/mm-exit-mmap-tooling-host-002/test_kunit_gate.log",
+      "sha256": "d9d734ee1c2de67b748aeef1c4126433aa438ad8375ca953916f12b1df11414d"
+    },
+    "host-002/test_mm_construction_gate.log": {
+      "bytes": 111,
+      "original": "/home/aaron/code/rusix/linux-out/mm-exit-mmap-tooling-host-002/test_mm_construction_gate.log",
+      "sha256": "4e9583fbd8b7dfd17b1b52f963bca5e078ab351e78d6c9726b2c05ff184c10db"
+    },
+    "host-002/test_mm_construction_selection.log": {
+      "bytes": 105,
+      "original": "/home/aaron/code/rusix/linux-out/mm-exit-mmap-tooling-host-002/test_mm_construction_selection.log",
+      "sha256": "3cd02e884955c8b49b809ce57755ae46aacba4d9ef1382b84e081568bb3f04a5"
+    },
+    "host-002/test_mm_copy_gate.log": {
+      "bytes": 111,
+      "original": "/home/aaron/code/rusix/linux-out/mm-exit-mmap-tooling-host-002/test_mm_copy_gate.log",
+      "sha256": "4e9583fbd8b7dfd17b1b52f963bca5e078ab351e78d6c9726b2c05ff184c10db"
+    },
+    "host-002/test_mm_copy_selection.log": {
+      "bytes": 112,
+      "original": "/home/aaron/code/rusix/linux-out/mm-exit-mmap-tooling-host-002/test_mm_copy_selection.log",
+      "sha256": "f1f13abad0113a87f764e7a23cb3bd05ed2b3921bcfde1d822ab688df8c43004"
+    },
+    "host-002/test_mm_release_kunit_gate.log": {
+      "bytes": 103,
+      "original": "/home/aaron/code/rusix/linux-out/mm-exit-mmap-tooling-host-002/test_mm_release_kunit_gate.log",
+      "sha256": "d03ce458f2a6cd2b4f27522f3aacad03ce1872c028853507c3ad02ca621bdcad"
+    },
+    "host-002/test_mm_release_selection.log": {
+      "bytes": 106,
+      "original": "/home/aaron/code/rusix/linux-out/mm-exit-mmap-tooling-host-002/test_mm_release_selection.log",
+      "sha256": "713972b30bbbb93930114261a846150033bb4ae557443bb0167e5db8710ff990"
+    },
+    "host-002/test_repo_paths.log": {
+      "bytes": 162,
+      "original": "/home/aaron/code/rusix/linux-out/mm-exit-mmap-tooling-host-002/test_repo_paths.log",
+      "sha256": "da981cf3d0f0fb771f39f9acc305c81a5704d5bc9c48678ac88bab93b8e2f703"
+    },
+    "host-002/test_saved_clang_command.log": {
+      "bytes": 103,
+      "original": "/home/aaron/code/rusix/linux-out/mm-exit-mmap-tooling-host-002/test_saved_clang_command.log",
+      "sha256": "2d014bb427120fb1a5014d7499096989061fd0fdf40acb471c2e2667de60e71e"
+    },
+    "host-002/test_server_target.log": {
+      "bytes": 107,
+      "original": "/home/aaron/code/rusix/linux-out/mm-exit-mmap-tooling-host-002/test_server_target.log",
+      "sha256": "9a6edf8ef37706071598674e7255ea7542fa59703e7d9d8e750067baebe400c4"
+    },
+    "host-002/test_task_construction_gate.log": {
+      "bytes": 110,
+      "original": "/home/aaron/code/rusix/linux-out/mm-exit-mmap-tooling-host-002/test_task_construction_gate.log",
+      "sha256": "770a5a7cfd5ed30408387c611037fc3fb16dc0c5873dba409dd6aae6c67d7bb1"
+    },
+    "host-002/test_task_construction_selection.log": {
+      "bytes": 109,
+      "original": "/home/aaron/code/rusix/linux-out/mm-exit-mmap-tooling-host-002/test_task_construction_selection.log",
+      "sha256": "b16c2d37f8720077a281358023a1ae49c385415ecb8a4149a4a55f0a91241625"
+    },
+    "host-002/test_vma_lifecycle_gate.log": {
+      "bytes": 112,
+      "original": "/home/aaron/code/rusix/linux-out/mm-exit-mmap-tooling-host-002/test_vma_lifecycle_gate.log",
+      "sha256": "acfb09536560388410092c5cee079b9ee896afa337322fef4582c0abab99ae18"
+    },
+    "host-002/test_vma_lifecycle_selection.log": {
+      "bytes": 107,
+      "original": "/home/aaron/code/rusix/linux-out/mm-exit-mmap-tooling-host-002/test_vma_lifecycle_selection.log",
+      "sha256": "203e8d11dc9529763cb172c4d4acdffe3b67db7d123ed6f2223ef9c377a8923b"
+    },
+    "initial-fixture-failure.txt": {
+      "bytes": 284,
+      "original": "/home/aaron/code/rusix/linux-out/mm-exit-mmap-tooling-host-001/initial-failure.txt",
+      "sha256": "d0d9091b4b60c8b2f26280ab1c0c2a67b84a4bff24de9a3d51aa5596285ca30f"
+    },
+    "inputs/rusix/configs/arm64-server.config": {
+      "bytes": 2779,
+      "original": "/home/aaron/code/rusix/linux-mm-exit-mmap/rusix/configs/arm64-server.config",
+      "sha256": "9303acaa14b7613e1bf315301bc3e71802bd2f90dd964358ec2e19fd14cf1bed"
+    },
+    "inputs/rusix/configs/x86_64-brd-ext4-c.config": {
+      "bytes": 922,
+      "original": "/home/aaron/code/rusix/linux-mm-exit-mmap/rusix/configs/x86_64-brd-ext4-c.config",
+      "sha256": "ce27496ec72603dec23948420dca8fe8d33558cd82879e3df5411ca47b083f48"
+    },
+    "inputs/rusix/configs/x86_64-brd-ext4-fixed-c.config": {
+      "bytes": 1025,
+      "original": "/home/aaron/code/rusix/linux-mm-exit-mmap/rusix/configs/x86_64-brd-ext4-fixed-c.config",
+      "sha256": "40b2e097951561982371425903ff41020fa55134aef2fe523cca69642d58e898"
+    },
+    "inputs/rusix/configs/x86_64-brd-ext4-rust.config": {
+      "bytes": 949,
+      "original": "/home/aaron/code/rusix/linux-mm-exit-mmap/rusix/configs/x86_64-brd-ext4-rust.config",
+      "sha256": "cdf214922662cacbb2db4283bf1e2907c9ffb3f6a709423f4c9f71cd83dfc963"
+    },
+    "inputs/rusix/configs/x86_64-brd-fixed-c.config": {
+      "bytes": 753,
+      "original": "/home/aaron/code/rusix/linux-mm-exit-mmap/rusix/configs/x86_64-brd-fixed-c.config",
+      "sha256": "4d0e5dbbac20032ab750cdca4fea44d61f52813bf879db1fc2e72beda5c247ca"
+    },
+    "inputs/rusix/configs/x86_64-brd-kunit.config": {
+      "bytes": 790,
+      "original": "/home/aaron/code/rusix/linux-mm-exit-mmap/rusix/configs/x86_64-brd-kunit.config",
+      "sha256": "59a27d79e988bb845ea150d1f784bbe5a8690dfb2c7169a3ade1153eb18b7e08"
+    },
+    "inputs/rusix/configs/x86_64-brd-rust.config": {
+      "bytes": 678,
+      "original": "/home/aaron/code/rusix/linux-mm-exit-mmap/rusix/configs/x86_64-brd-rust.config",
+      "sha256": "178ef7a0e9cfb750934ddd6122a4a73a92fced4734fd157b39b3df7c8464e9e1"
+    },
+    "inputs/rusix/configs/x86_64-brd.config": {
+      "bytes": 650,
+      "original": "/home/aaron/code/rusix/linux-mm-exit-mmap/rusix/configs/x86_64-brd.config",
+      "sha256": "afd92038fc59110b55e8e28fa733d90563b16e4a6bfb455978e49e1acca2020d"
+    },
+    "inputs/rusix/configs/x86_64-completion-c.config": {
+      "bytes": 1101,
+      "original": "/home/aaron/code/rusix/linux-mm-exit-mmap/rusix/configs/x86_64-completion-c.config",
+      "sha256": "837057940ff7af63203de780abe3392aff3ec1454fce36c4c79e278d20759d36"
+    },
+    "inputs/rusix/configs/x86_64-completion-plain-c.config": {
+      "bytes": 1331,
+      "original": "/home/aaron/code/rusix/linux-mm-exit-mmap/rusix/configs/x86_64-completion-plain-c.config",
+      "sha256": "d1f4b7af2c8675e84e9c5bffaa502ccc813a438c58ebec5d4a9277bad8e783a4"
+    },
+    "inputs/rusix/configs/x86_64-completion-plain-rust.config": {
+      "bytes": 1320,
+      "original": "/home/aaron/code/rusix/linux-mm-exit-mmap/rusix/configs/x86_64-completion-plain-rust.config",
+      "sha256": "416daa3c27f609978d2e8d79dcc455d92f42416c35d1823d856d71960453fd2f"
+    },
+    "inputs/rusix/configs/x86_64-completion-rust.config": {
+      "bytes": 1090,
+      "original": "/home/aaron/code/rusix/linux-mm-exit-mmap/rusix/configs/x86_64-completion-rust.config",
+      "sha256": "39b1072ee1faf6413b4802b67ee4597892f36178c197f16c42cbe1620e3b8de0"
+    },
+    "inputs/rusix/configs/x86_64-core-ext4-c.config": {
+      "bytes": 1022,
+      "original": "/home/aaron/code/rusix/linux-mm-exit-mmap/rusix/configs/x86_64-core-ext4-c.config",
+      "sha256": "28c105f2a15c8960a3535cdf1ec5952d90fc327c7de08ca6bb6569c27bee08c2"
+    },
+    "inputs/rusix/configs/x86_64-core-ext4-rust.config": {
+      "bytes": 1011,
+      "original": "/home/aaron/code/rusix/linux-mm-exit-mmap/rusix/configs/x86_64-core-ext4-rust.config",
+      "sha256": "6e61e7e3dfc1df92ec820b2b50e00ffffcc3b9492ea76257eb5e8c64444cd4f5"
+    },
+    "inputs/rusix/configs/x86_64-exit-mmap-c.config": {
+      "bytes": 4435,
+      "original": "/home/aaron/code/rusix/linux-mm-exit-mmap/rusix/configs/x86_64-exit-mmap-c.config",
+      "sha256": "a6b79d9d4ec75873196c522339e53d33c2f6e2f91edf80b611738125df041049"
+    },
+    "inputs/rusix/configs/x86_64-exit-mmap-rust.config": {
+      "bytes": 4424,
+      "original": "/home/aaron/code/rusix/linux-mm-exit-mmap/rusix/configs/x86_64-exit-mmap-rust.config",
+      "sha256": "2687b56c358c6ae7775452a9d8d1608cf8a36f99ab8d86e6fa47c8332b2d8c2d"
+    },
+    "inputs/rusix/configs/x86_64-kunit.config": {
+      "bytes": 288,
+      "original": "/home/aaron/code/rusix/linux-mm-exit-mmap/rusix/configs/x86_64-kunit.config",
+      "sha256": "753114f417dd93112bfb556f38a96fdcd59834428d6236a7034f38094408c25f"
+    },
+    "inputs/rusix/configs/x86_64-mm-construction-c.config": {
+      "bytes": 4277,
+      "original": "/home/aaron/code/rusix/linux-mm-exit-mmap/rusix/configs/x86_64-mm-construction-c.config",
+      "sha256": "aba42b7c70b256912cfdcefd6125ad14dbd9cc294a8440f99f29b4a294297e51"
+    },
+    "inputs/rusix/configs/x86_64-mm-construction-rust.config": {
+      "bytes": 4266,
+      "original": "/home/aaron/code/rusix/linux-mm-exit-mmap/rusix/configs/x86_64-mm-construction-rust.config",
+      "sha256": "19704fe3a9fe16f2a74e34ed2fc80cf8a6db6700bfe79772946ceb5954f6cb58"
+    },
+    "inputs/rusix/configs/x86_64-mm-copy-c.config": {
+      "bytes": 4330,
+      "original": "/home/aaron/code/rusix/linux-mm-exit-mmap/rusix/configs/x86_64-mm-copy-c.config",
+      "sha256": "fa13eb74a7182f5ade13faff5e43ed736223a0faed2109f350f14aa1b71ca7bd"
+    },
+    "inputs/rusix/configs/x86_64-mm-copy-rust.config": {
+      "bytes": 4319,
+      "original": "/home/aaron/code/rusix/linux-mm-exit-mmap/rusix/configs/x86_64-mm-copy-rust.config",
+      "sha256": "501f5c211b24947aa0c5097618b59d071bbc6b70e56d6395704b9d9ce85d1ae6"
+    },
+    "inputs/rusix/configs/x86_64-mm-dup-mmap-c.config": {
+      "bytes": 4368,
+      "original": "/home/aaron/code/rusix/linux-mm-exit-mmap/rusix/configs/x86_64-mm-dup-mmap-c.config",
+      "sha256": "cb5a6714cb7d93595a068c4530006d941d23c44b4f25939ea93a99bfa4a25eb9"
+    },
+    "inputs/rusix/configs/x86_64-mm-dup-mmap-rust.config": {
+      "bytes": 4357,
+      "original": "/home/aaron/code/rusix/linux-mm-exit-mmap/rusix/configs/x86_64-mm-dup-mmap-rust.config",
+      "sha256": "a85f4c30cdccad441fd5010b80dcafff187a836aee24a1dd065057bc0092317b"
+    },
+    "inputs/rusix/configs/x86_64-mm-release-c.config": {
+      "bytes": 4499,
+      "original": "/home/aaron/code/rusix/linux-mm-exit-mmap/rusix/configs/x86_64-mm-release-c.config",
+      "sha256": "2fbf7e7a41cb364d200af5037a3785ca5b876f4a253dfe4e3b775c4b9eff8642"
+    },
+    "inputs/rusix/configs/x86_64-mm-release-rust.config": {
+      "bytes": 4488,
+      "original": "/home/aaron/code/rusix/linux-mm-exit-mmap/rusix/configs/x86_64-mm-release-rust.config",
+      "sha256": "953dace162d66d1741d01a910a4e02ef1429ee05ff50a1175d4c1551ba68c979"
+    },
+    "inputs/rusix/configs/x86_64-server.config": {
+      "bytes": 3318,
+      "original": "/home/aaron/code/rusix/linux-mm-exit-mmap/rusix/configs/x86_64-server.config",
+      "sha256": "5b37adb3792b56926ef687dd7392b3916dbb8b77a30e50c2b2664373988098d6"
+    },
+    "inputs/rusix/configs/x86_64-task-construction-c.config": {
+      "bytes": 3862,
+      "original": "/home/aaron/code/rusix/linux-mm-exit-mmap/rusix/configs/x86_64-task-construction-c.config",
+      "sha256": "841d905724eae9220a5122a92b9fbd4a1a77c09a8e1f9cd6980fd5b95324d6fa"
+    },
+    "inputs/rusix/configs/x86_64-task-construction-rust.config": {
+      "bytes": 3851,
+      "original": "/home/aaron/code/rusix/linux-mm-exit-mmap/rusix/configs/x86_64-task-construction-rust.config",
+      "sha256": "f156f09bff9ae6016c1f723cfc3e2f3ca5200b99ee3c3eceeda2fa3b916c4428"
+    },
+    "inputs/rusix/configs/x86_64-vma-lifecycle-c.config": {
+      "bytes": 4401,
+      "original": "/home/aaron/code/rusix/linux-mm-exit-mmap/rusix/configs/x86_64-vma-lifecycle-c.config",
+      "sha256": "031144e174a102c376ba09604df40a330af0a4160eba12e6e930178ea69294da"
+    },
+    "inputs/rusix/configs/x86_64-vma-lifecycle-rust.config": {
+      "bytes": 4390,
+      "original": "/home/aaron/code/rusix/linux-mm-exit-mmap/rusix/configs/x86_64-vma-lifecycle-rust.config",
+      "sha256": "ca868464439e16783850769aca31a812f1e290a3d5e5ca73f73549a146070887"
+    },
+    "inputs/rusix/scripts/exit_mmap_source.py": {
+      "bytes": 2630,
+      "original": "/home/aaron/code/rusix/linux-mm-exit-mmap/rusix/scripts/exit_mmap_source.py",
+      "sha256": "a18c8d9020d84a70cec4968974f3550e350fc24dc401cb370ba002460de8e1fa"
+    },
+    "inputs/rusix/scripts/generate-brd-parameter-oracle.py": {
+      "bytes": 7004,
+      "original": "/home/aaron/code/rusix/linux-mm-exit-mmap/rusix/scripts/generate-brd-parameter-oracle.py",
+      "sha256": "6487f5eed9be849a23867fed24938647fe7d40a95364829f7dff3d1b1d39ce7b"
+    },
+    "inputs/rusix/scripts/install-local-tools.py": {
+      "bytes": 1371,
+      "original": "/home/aaron/code/rusix/linux-mm-exit-mmap/rusix/scripts/install-local-tools.py",
+      "sha256": "d05ca967e4d2f68cbeca2022bebef02fe6b810c809fb0d5fce58339145af6539"
+    },
+    "inputs/rusix/scripts/measure-kernel-languages.py": {
+      "bytes": 16728,
+      "original": "/home/aaron/code/rusix/linux-mm-exit-mmap/rusix/scripts/measure-kernel-languages.py",
+      "sha256": "3e70bf372871535b116ff8c6a7548df71e78ced19d2ab43f65dd7e022897ac90"
+    },
+    "inputs/rusix/scripts/preprocess-dup-mmap.py": {
+      "bytes": 2594,
+      "original": "/home/aaron/code/rusix/linux-mm-exit-mmap/rusix/scripts/preprocess-dup-mmap.py",
+      "sha256": "80b2600fdddd6b2da2206e4346cabcca3634fd1618e9d2b23549743ff374462f"
+    },
+    "inputs/rusix/scripts/preprocess-exit-mmap.py": {
+      "bytes": 3566,
+      "original": "/home/aaron/code/rusix/linux-mm-exit-mmap/rusix/scripts/preprocess-exit-mmap.py",
+      "sha256": "e7f9de92b57022182272c29e325c1785305cd5e9ff0e5d746221aca2ecb744e1"
+    },
+    "inputs/rusix/scripts/preprocess-mm-construction.py": {
+      "bytes": 2385,
+      "original": "/home/aaron/code/rusix/linux-mm-exit-mmap/rusix/scripts/preprocess-mm-construction.py",
+      "sha256": "b7d27d065bdd044c93aedbfd614fc985d35bde710af8af5affca880f3dc894d3"
+    },
+    "inputs/rusix/scripts/preprocess-mm-copy.py": {
+      "bytes": 2326,
+      "original": "/home/aaron/code/rusix/linux-mm-exit-mmap/rusix/scripts/preprocess-mm-copy.py",
+      "sha256": "e8422fde2a5a77175234a406ce51841923f2831eae3042bebb1406f5812558ab"
+    },
+    "inputs/rusix/scripts/preprocess-mm-release.py": {
+      "bytes": 2346,
+      "original": "/home/aaron/code/rusix/linux-mm-exit-mmap/rusix/scripts/preprocess-mm-release.py",
+      "sha256": "76d7dbdb004f7bd02efac4e9822512f083f9a5881c84f75345b757c87637c4cb"
+    },
+    "inputs/rusix/scripts/preprocess-task-construction.py": {
+      "bytes": 2482,
+      "original": "/home/aaron/code/rusix/linux-mm-exit-mmap/rusix/scripts/preprocess-task-construction.py",
+      "sha256": "3f6f3ba4cf0da1c0fff2a4c34c3a1e1106fa480e92ae2e73d500131b92612a90"
+    },
+    "inputs/rusix/scripts/preprocess-vma-lifecycle.py": {
+      "bytes": 2874,
+      "original": "/home/aaron/code/rusix/linux-mm-exit-mmap/rusix/scripts/preprocess-vma-lifecycle.py",
+      "sha256": "3653256d92c3d3328bb4db5b2129dbcaf4ddbed03707cc97dd5394b99bbdae95"
+    },
+    "inputs/rusix/scripts/rusix_paths.py": {
+      "bytes": 1221,
+      "original": "/home/aaron/code/rusix/linux-mm-exit-mmap/rusix/scripts/rusix_paths.py",
+      "sha256": "15158c8c33e303341ef523c8317da73fb3f008908b8bfa53611d13bc87c94cae"
+    },
+    "inputs/rusix/scripts/saved_clang_command.py": {
+      "bytes": 6911,
+      "original": "/home/aaron/code/rusix/linux-mm-exit-mmap/rusix/scripts/saved_clang_command.py",
+      "sha256": "ea66b65b6fd4009f1a82f7540f5b3ada23738795df30740ef7a9ae5f237ae443"
+    },
+    "inputs/rusix/scripts/server_target.py": {
+      "bytes": 5722,
+      "original": "/home/aaron/code/rusix/linux-mm-exit-mmap/rusix/scripts/server_target.py",
+      "sha256": "357f1680a766deee25a75f56470f1a6223a9429326efd2089efc7ac5ee484eed"
+    },
+    "inputs/rusix/scripts/test-brd-ext4-vm.py": {
+      "bytes": 18062,
+      "original": "/home/aaron/code/rusix/linux-mm-exit-mmap/rusix/scripts/test-brd-ext4-vm.py",
+      "sha256": "88763b1373acc90f26859bc84b570291ee7fef97482b79107e1078cbe6e97947"
+    },
+    "inputs/rusix/scripts/test-brd-fixed-parameters-vm.py": {
+      "bytes": 13609,
+      "original": "/home/aaron/code/rusix/linux-mm-exit-mmap/rusix/scripts/test-brd-fixed-parameters-vm.py",
+      "sha256": "9af3826f789814894502099abb7ccc00ff659be9ba23a3ccb581757446b2a640"
+    },
+    "inputs/rusix/scripts/test-brd-parameters-vm.py": {
+      "bytes": 12804,
+      "original": "/home/aaron/code/rusix/linux-mm-exit-mmap/rusix/scripts/test-brd-parameters-vm.py",
+      "sha256": "54778013eed3ba9c34ea277b962da5824bfbaa6d45c270a96e65fc1a810d0caf"
+    },
+    "inputs/rusix/scripts/test-brd-partitions-vm.py": {
+      "bytes": 11157,
+      "original": "/home/aaron/code/rusix/linux-mm-exit-mmap/rusix/scripts/test-brd-partitions-vm.py",
+      "sha256": "e3334093c69ac1eb18e6b4594800473612507e2f10853d05962f04d8a0d09a27"
+    },
+    "inputs/rusix/scripts/test-brd-vm.py": {
+      "bytes": 13841,
+      "original": "/home/aaron/code/rusix/linux-mm-exit-mmap/rusix/scripts/test-brd-vm.py",
+      "sha256": "3487a725c1b62a1d4546da84120717a94f86a74fb475577a7582f3e47b53530d"
+    },
+    "inputs/rusix/scripts/test-exit-mmap-vm.py": {
+      "bytes": 12797,
+      "original": "/home/aaron/code/rusix/linux-mm-exit-mmap/rusix/scripts/test-exit-mmap-vm.py",
+      "sha256": "c0645ff554a70652a8ab5bef6d99ebfdbff5e6d2b81f49c0f91a9c47f2a7e75c"
+    },
+    "inputs/rusix/scripts/test-int-sqrt-host.py": {
+      "bytes": 3317,
+      "original": "/home/aaron/code/rusix/linux-mm-exit-mmap/rusix/scripts/test-int-sqrt-host.py",
+      "sha256": "629db840233036f4045f77aa0736a6d3d0bb2d69a1d06680a384ad4835ba47e6"
+    },
+    "inputs/rusix/scripts/test-mm-construction-vm.py": {
+      "bytes": 11320,
+      "original": "/home/aaron/code/rusix/linux-mm-exit-mmap/rusix/scripts/test-mm-construction-vm.py",
+      "sha256": "f7c518cf2e7ec65119f0026bdb216bf58233cb0e9cd86c47ef113ca75f478096"
+    },
+    "inputs/rusix/scripts/test-mm-copy-vm.py": {
+      "bytes": 11413,
+      "original": "/home/aaron/code/rusix/linux-mm-exit-mmap/rusix/scripts/test-mm-copy-vm.py",
+      "sha256": "91c9b7bb39bc77f5126c3266680fc380b3498e7be4160b86d34979339b6775ff"
+    },
+    "inputs/rusix/scripts/test-mm-dup-mmap-vm.py": {
+      "bytes": 12194,
+      "original": "/home/aaron/code/rusix/linux-mm-exit-mmap/rusix/scripts/test-mm-dup-mmap-vm.py",
+      "sha256": "41a73ff19660d215d35d31d185bc03dda4fe0af7c7ce8a7ae32677a5bea7083a"
+    },
+    "inputs/rusix/scripts/test-task-construction-vm.py": {
+      "bytes": 11876,
+      "original": "/home/aaron/code/rusix/linux-mm-exit-mmap/rusix/scripts/test-task-construction-vm.py",
+      "sha256": "edf7fe487d6996d143afc6e845a6fe8d4d09165f45d270dfb2e49edb653a04f1"
+    },
+    "inputs/rusix/scripts/test-vma-lifecycle-vm.py": {
+      "bytes": 12457,
+      "original": "/home/aaron/code/rusix/linux-mm-exit-mmap/rusix/scripts/test-vma-lifecycle-vm.py",
+      "sha256": "ff7cbc979f6d868d2ce448a6a493f38c59eb1224df2321cfd1cd388c491e1519"
+    },
+    "inputs/rusix/scripts/validate-brd-kunit.py": {
+      "bytes": 3595,
+      "original": "/home/aaron/code/rusix/linux-mm-exit-mmap/rusix/scripts/validate-brd-kunit.py",
+      "sha256": "1350025c9c9abda4e287e6cda85140639ccbc660ffcaecdab7a0634ec0fc24cb"
+    },
+    "inputs/rusix/scripts/validate-completion-kunit.py": {
+      "bytes": 5618,
+      "original": "/home/aaron/code/rusix/linux-mm-exit-mmap/rusix/scripts/validate-completion-kunit.py",
+      "sha256": "0467f463f2bbfd05d7fcec46123dccd869ced22b86c4a8d6f9a71acd705ecdef"
+    },
+    "inputs/rusix/scripts/validate-kunit-results.py": {
+      "bytes": 3886,
+      "original": "/home/aaron/code/rusix/linux-mm-exit-mmap/rusix/scripts/validate-kunit-results.py",
+      "sha256": "f9d4836e338b4d874e5020261287c2b7bd5746f481d952842505385c91bb7b2c"
+    },
+    "inputs/rusix/scripts/validate-mm-release-kunit.py": {
+      "bytes": 1981,
+      "original": "/home/aaron/code/rusix/linux-mm-exit-mmap/rusix/scripts/validate-mm-release-kunit.py",
+      "sha256": "d6a7dcbbd298cb8c16810f1594251e9b5c5a2c7b5f98c2358836b578d30a8259"
+    },
+    "inputs/rusix/scripts/verify-brd-parameter-owner.py": {
+      "bytes": 13416,
+      "original": "/home/aaron/code/rusix/linux-mm-exit-mmap/rusix/scripts/verify-brd-parameter-owner.py",
+      "sha256": "55bd06cd7b6910ab6c1b6404f1c97d30ce383c7f4abd593f1d949d20d7a41790"
+    },
+    "inputs/rusix/scripts/verify-dup-mmap.py": {
+      "bytes": 14379,
+      "original": "/home/aaron/code/rusix/linux-mm-exit-mmap/rusix/scripts/verify-dup-mmap.py",
+      "sha256": "857e527e9a18d5e3dd6f71fa97d07f4b5ba28276589070d5f7c6949f56a3e79a"
+    },
+    "inputs/rusix/scripts/verify-exit-mmap.py": {
+      "bytes": 13458,
+      "original": "/home/aaron/code/rusix/linux-mm-exit-mmap/rusix/scripts/verify-exit-mmap.py",
+      "sha256": "aa59dd4e17e5cc30e0451bb5bf9dc63fa884cfc5928577b8a35ff2245aebafdd"
+    },
+    "inputs/rusix/scripts/verify-mm-construction.py": {
+      "bytes": 11944,
+      "original": "/home/aaron/code/rusix/linux-mm-exit-mmap/rusix/scripts/verify-mm-construction.py",
+      "sha256": "1d1b912b20b66049f2f87cdbfb4076692c2a7bda3d6e85b23a88363c0438ab96"
+    },
+    "inputs/rusix/scripts/verify-mm-copy.py": {
+      "bytes": 15801,
+      "original": "/home/aaron/code/rusix/linux-mm-exit-mmap/rusix/scripts/verify-mm-copy.py",
+      "sha256": "25484b00722a24c1499b4ee439091b5de9ddc536706087deb5b322bf3fc3f1df"
+    },
+    "inputs/rusix/scripts/verify-mm-release.py": {
+      "bytes": 17106,
+      "original": "/home/aaron/code/rusix/linux-mm-exit-mmap/rusix/scripts/verify-mm-release.py",
+      "sha256": "d052ce469d9ab3a7305cb4ee196be20a00bc56349f54b604570306a1b617c547"
+    },
+    "inputs/rusix/scripts/verify-task-construction.py": {
+      "bytes": 12454,
+      "original": "/home/aaron/code/rusix/linux-mm-exit-mmap/rusix/scripts/verify-task-construction.py",
+      "sha256": "d0e6ed1c8e41a2de44da68328f660210da9ce88771aed86a505b3e246c3eb0f8"
+    },
+    "inputs/rusix/scripts/verify-vma-lifecycle.py": {
+      "bytes": 18900,
+      "original": "/home/aaron/code/rusix/linux-mm-exit-mmap/rusix/scripts/verify-vma-lifecycle.py",
+      "sha256": "e2884f6d50637e9ac5a966fb397129bfc07834ad5848e2cc29907ae644880303"
+    },
+    "inputs/rusix/tests/fixtures/exit-mmap/legacy-mmap.c": {
+      "bytes": 50842,
+      "original": "/home/aaron/code/rusix/linux-mm-exit-mmap/rusix/tests/fixtures/exit-mmap/legacy-mmap.c",
+      "sha256": "302d70f436d72da9ebb999eaca9f748d607136b707748d0861eef297da78e05b"
+    },
+    "inputs/rusix/tests/test_brd_ext4_gate.py": {
+      "bytes": 14757,
+      "original": "/home/aaron/code/rusix/linux-mm-exit-mmap/rusix/tests/test_brd_ext4_gate.py",
+      "sha256": "8ef39937c7bb8295bd8f0a592f6f82e796991120307d9f2f093e931c212cde90"
+    },
+    "inputs/rusix/tests/test_brd_fixed_parameters_gate.py": {
+      "bytes": 8666,
+      "original": "/home/aaron/code/rusix/linux-mm-exit-mmap/rusix/tests/test_brd_fixed_parameters_gate.py",
+      "sha256": "9729c02727b8d3c9115b3b9240fac32d22b0e1a06050678bc5db7858d798f5f4"
+    },
+    "inputs/rusix/tests/test_brd_gate.py": {
+      "bytes": 10615,
+      "original": "/home/aaron/code/rusix/linux-mm-exit-mmap/rusix/tests/test_brd_gate.py",
+      "sha256": "a919f2d3bc6a0c6c3affe7211795a94fafba2836b242f3b8c70a4014148a86cc"
+    },
+    "inputs/rusix/tests/test_brd_kunit_gate.py": {
+      "bytes": 4029,
+      "original": "/home/aaron/code/rusix/linux-mm-exit-mmap/rusix/tests/test_brd_kunit_gate.py",
+      "sha256": "004ff3cccbd5954dcce4fa5db2d091a71bd53f299de2d98b0a76d0a60f43acd1"
+    },
+    "inputs/rusix/tests/test_brd_owner_elf.py": {
+      "bytes": 4131,
+      "original": "/home/aaron/code/rusix/linux-mm-exit-mmap/rusix/tests/test_brd_owner_elf.py",
+      "sha256": "3522755ff5c1c6cdbb29e54fe81d5d407a38c83fabd2a92290515e0baaf706cf"
+    },
+    "inputs/rusix/tests/test_brd_parameter_oracle.py": {
+      "bytes": 4647,
+      "original": "/home/aaron/code/rusix/linux-mm-exit-mmap/rusix/tests/test_brd_parameter_oracle.py",
+      "sha256": "c4c2eb1f6ab11b4666fa0b7b6f650fa1d755ad61fd076a98b201e43b5bd9c1f1"
+    },
+    "inputs/rusix/tests/test_brd_parameters_gate.py": {
+      "bytes": 9464,
+      "original": "/home/aaron/code/rusix/linux-mm-exit-mmap/rusix/tests/test_brd_parameters_gate.py",
+      "sha256": "48b2bc23486a0b29246a03c2e8d425231d8dc1760e6c6e74172238328fd776f7"
+    },
+    "inputs/rusix/tests/test_brd_partitions_gate.py": {
+      "bytes": 8542,
+      "original": "/home/aaron/code/rusix/linux-mm-exit-mmap/rusix/tests/test_brd_partitions_gate.py",
+      "sha256": "21d5e8ad547563c8268ce766d21e61e2bfc65e07b948a8c6da8f00a101203d12"
+    },
+    "inputs/rusix/tests/test_completion_kunit_gate.py": {
+      "bytes": 3559,
+      "original": "/home/aaron/code/rusix/linux-mm-exit-mmap/rusix/tests/test_completion_kunit_gate.py",
+      "sha256": "7e8a1074d0c1ac0aa336a56e56850edece5d9c9108fd5fbc266fb996590554e9"
+    },
+    "inputs/rusix/tests/test_constructor_archive.py": {
+      "bytes": 2566,
+      "original": "/home/aaron/code/rusix/linux-mm-exit-mmap/rusix/tests/test_constructor_archive.py",
+      "sha256": "c6a16e4b9e697724ae39243be85dcb41f1d3374d2ee481fcaba92e8750f8a312"
+    },
+    "inputs/rusix/tests/test_dup_mmap_gate.py": {
+      "bytes": 7424,
+      "original": "/home/aaron/code/rusix/linux-mm-exit-mmap/rusix/tests/test_dup_mmap_gate.py",
+      "sha256": "300d64d6db0bab1a6defea2efe91672e5aa59bca5d262a4ffdf60c7c30c007d1"
+    },
+    "inputs/rusix/tests/test_dup_mmap_selection.py": {
+      "bytes": 10327,
+      "original": "/home/aaron/code/rusix/linux-mm-exit-mmap/rusix/tests/test_dup_mmap_selection.py",
+      "sha256": "97fc19f3c552aba413776fb95483c0cc3356bff17267fc5deae35c82beac187d"
+    },
+    "inputs/rusix/tests/test_exit_mmap_gate.py": {
+      "bytes": 9460,
+      "original": "/home/aaron/code/rusix/linux-mm-exit-mmap/rusix/tests/test_exit_mmap_gate.py",
+      "sha256": "d54986aae72104468a96432b6d10318e43ab8c9316b125c6884da1971f1ff13b"
+    },
+    "inputs/rusix/tests/test_exit_mmap_selection.py": {
+      "bytes": 8440,
+      "original": "/home/aaron/code/rusix/linux-mm-exit-mmap/rusix/tests/test_exit_mmap_selection.py",
+      "sha256": "c9bba24cebdfb950597d79ece111baaa1e3a307439514f453e895c8a02a473f1"
+    },
+    "inputs/rusix/tests/test_kernel_languages.py": {
+      "bytes": 12457,
+      "original": "/home/aaron/code/rusix/linux-mm-exit-mmap/rusix/tests/test_kernel_languages.py",
+      "sha256": "420707346d9ffa0a7824b50adc336da58acf7ee3d415032515a8d1b1dcc59a80"
+    },
+    "inputs/rusix/tests/test_kunit_gate.py": {
+      "bytes": 2973,
+      "original": "/home/aaron/code/rusix/linux-mm-exit-mmap/rusix/tests/test_kunit_gate.py",
+      "sha256": "55ce1b42629cc6cf393ae0749f975118967f632113444e9741cff282b42b07ba"
+    },
+    "inputs/rusix/tests/test_mm_construction_gate.py": {
+      "bytes": 6985,
+      "original": "/home/aaron/code/rusix/linux-mm-exit-mmap/rusix/tests/test_mm_construction_gate.py",
+      "sha256": "c8393512c1f2accab70bdbbe8a6b66fc3b445ea432427729cd85fb4fdab36806"
+    },
+    "inputs/rusix/tests/test_mm_construction_selection.py": {
+      "bytes": 6285,
+      "original": "/home/aaron/code/rusix/linux-mm-exit-mmap/rusix/tests/test_mm_construction_selection.py",
+      "sha256": "f55c7caa83269f087ea4bfccbae526920313db0fedfec24e08e02fb787f4661b"
+    },
+    "inputs/rusix/tests/test_mm_copy_gate.py": {
+      "bytes": 6964,
+      "original": "/home/aaron/code/rusix/linux-mm-exit-mmap/rusix/tests/test_mm_copy_gate.py",
+      "sha256": "165493b7272bec6476b83f3ea97f8bb935da0f732140ae5b32e150e5dd76fd04"
+    },
+    "inputs/rusix/tests/test_mm_copy_selection.py": {
+      "bytes": 7407,
+      "original": "/home/aaron/code/rusix/linux-mm-exit-mmap/rusix/tests/test_mm_copy_selection.py",
+      "sha256": "f86802ccc21338588699ffe6bd173dd4ca758933175bf7439355b1c8b75b4be2"
+    },
+    "inputs/rusix/tests/test_mm_release_kunit_gate.py": {
+      "bytes": 3267,
+      "original": "/home/aaron/code/rusix/linux-mm-exit-mmap/rusix/tests/test_mm_release_kunit_gate.py",
+      "sha256": "c14abb1c4cb3d31f1afe09e3e7fa468ace417cb3dadccb07ecc4eb53f1cb213b"
+    },
+    "inputs/rusix/tests/test_mm_release_selection.py": {
+      "bytes": 7752,
+      "original": "/home/aaron/code/rusix/linux-mm-exit-mmap/rusix/tests/test_mm_release_selection.py",
+      "sha256": "9a0055bacc30e78a5472ec60c3baa924fe94256fdcb42409481bb48f41d3587f"
+    },
+    "inputs/rusix/tests/test_repo_paths.py": {
+      "bytes": 4446,
+      "original": "/home/aaron/code/rusix/linux-mm-exit-mmap/rusix/tests/test_repo_paths.py",
+      "sha256": "f3deda0bb4015064f6e96ba2dd7086fef9010d1bca535b72da2b78850a6109c7"
+    },
+    "inputs/rusix/tests/test_saved_clang_command.py": {
+      "bytes": 4235,
+      "original": "/home/aaron/code/rusix/linux-mm-exit-mmap/rusix/tests/test_saved_clang_command.py",
+      "sha256": "8b82b0be64797f2f129dee87c03a06a7fd90cd892e24f2fed5080049a9749c31"
+    },
+    "inputs/rusix/tests/test_server_target.py": {
+      "bytes": 7035,
+      "original": "/home/aaron/code/rusix/linux-mm-exit-mmap/rusix/tests/test_server_target.py",
+      "sha256": "c9e0abf431865a3ebf3464e15721ab129fd343a90d054fa0c15ce4fb67441192"
+    },
+    "inputs/rusix/tests/test_task_construction_gate.py": {
+      "bytes": 6334,
+      "original": "/home/aaron/code/rusix/linux-mm-exit-mmap/rusix/tests/test_task_construction_gate.py",
+      "sha256": "a3d8713341c97dc76aa325454ec6032b04030e88d40f1a31770819dcffdeefed"
+    },
+    "inputs/rusix/tests/test_task_construction_selection.py": {
+      "bytes": 7039,
+      "original": "/home/aaron/code/rusix/linux-mm-exit-mmap/rusix/tests/test_task_construction_selection.py",
+      "sha256": "b062651097caa6d5f8433f2f37538bf152a68550bbbdd9b0b07768bb514179f2"
+    },
+    "inputs/rusix/tests/test_vma_lifecycle_gate.py": {
+      "bytes": 8735,
+      "original": "/home/aaron/code/rusix/linux-mm-exit-mmap/rusix/tests/test_vma_lifecycle_gate.py",
+      "sha256": "3c4a2886af0d68d0744a8800a66532f0e4444a8b4db51b33957a6770e51e7643"
+    },
+    "inputs/rusix/tests/test_vma_lifecycle_selection.py": {
+      "bytes": 8276,
+      "original": "/home/aaron/code/rusix/linux-mm-exit-mmap/rusix/tests/test_vma_lifecycle_selection.py",
+      "sha256": "30cb2b8642551eb6569361d20495623087ddf5683423534aa79205d6d7fed40c"
+    }
+  },
+  "initial_fixture_setup_failure_retained": true,
+  "input_sha256": {
+    "rusix/configs/arm64-server.config": "9303acaa14b7613e1bf315301bc3e71802bd2f90dd964358ec2e19fd14cf1bed",
+    "rusix/configs/x86_64-brd-ext4-c.config": "ce27496ec72603dec23948420dca8fe8d33558cd82879e3df5411ca47b083f48",
+    "rusix/configs/x86_64-brd-ext4-fixed-c.config": "40b2e097951561982371425903ff41020fa55134aef2fe523cca69642d58e898",
+    "rusix/configs/x86_64-brd-ext4-rust.config": "cdf214922662cacbb2db4283bf1e2907c9ffb3f6a709423f4c9f71cd83dfc963",
+    "rusix/configs/x86_64-brd-fixed-c.config": "4d0e5dbbac20032ab750cdca4fea44d61f52813bf879db1fc2e72beda5c247ca",
+    "rusix/configs/x86_64-brd-kunit.config": "59a27d79e988bb845ea150d1f784bbe5a8690dfb2c7169a3ade1153eb18b7e08",
+    "rusix/configs/x86_64-brd-rust.config": "178ef7a0e9cfb750934ddd6122a4a73a92fced4734fd157b39b3df7c8464e9e1",
+    "rusix/configs/x86_64-brd.config": "afd92038fc59110b55e8e28fa733d90563b16e4a6bfb455978e49e1acca2020d",
+    "rusix/configs/x86_64-completion-c.config": "837057940ff7af63203de780abe3392aff3ec1454fce36c4c79e278d20759d36",
+    "rusix/configs/x86_64-completion-plain-c.config": "d1f4b7af2c8675e84e9c5bffaa502ccc813a438c58ebec5d4a9277bad8e783a4",
+    "rusix/configs/x86_64-completion-plain-rust.config": "416daa3c27f609978d2e8d79dcc455d92f42416c35d1823d856d71960453fd2f",
+    "rusix/configs/x86_64-completion-rust.config": "39b1072ee1faf6413b4802b67ee4597892f36178c197f16c42cbe1620e3b8de0",
+    "rusix/configs/x86_64-core-ext4-c.config": "28c105f2a15c8960a3535cdf1ec5952d90fc327c7de08ca6bb6569c27bee08c2",
+    "rusix/configs/x86_64-core-ext4-rust.config": "6e61e7e3dfc1df92ec820b2b50e00ffffcc3b9492ea76257eb5e8c64444cd4f5",
+    "rusix/configs/x86_64-exit-mmap-c.config": "a6b79d9d4ec75873196c522339e53d33c2f6e2f91edf80b611738125df041049",
+    "rusix/configs/x86_64-exit-mmap-rust.config": "2687b56c358c6ae7775452a9d8d1608cf8a36f99ab8d86e6fa47c8332b2d8c2d",
+    "rusix/configs/x86_64-kunit.config": "753114f417dd93112bfb556f38a96fdcd59834428d6236a7034f38094408c25f",
+    "rusix/configs/x86_64-mm-construction-c.config": "aba42b7c70b256912cfdcefd6125ad14dbd9cc294a8440f99f29b4a294297e51",
+    "rusix/configs/x86_64-mm-construction-rust.config": "19704fe3a9fe16f2a74e34ed2fc80cf8a6db6700bfe79772946ceb5954f6cb58",
+    "rusix/configs/x86_64-mm-copy-c.config": "fa13eb74a7182f5ade13faff5e43ed736223a0faed2109f350f14aa1b71ca7bd",
+    "rusix/configs/x86_64-mm-copy-rust.config": "501f5c211b24947aa0c5097618b59d071bbc6b70e56d6395704b9d9ce85d1ae6",
+    "rusix/configs/x86_64-mm-dup-mmap-c.config": "cb5a6714cb7d93595a068c4530006d941d23c44b4f25939ea93a99bfa4a25eb9",
+    "rusix/configs/x86_64-mm-dup-mmap-rust.config": "a85f4c30cdccad441fd5010b80dcafff187a836aee24a1dd065057bc0092317b",
+    "rusix/configs/x86_64-mm-release-c.config": "2fbf7e7a41cb364d200af5037a3785ca5b876f4a253dfe4e3b775c4b9eff8642",
+    "rusix/configs/x86_64-mm-release-rust.config": "953dace162d66d1741d01a910a4e02ef1429ee05ff50a1175d4c1551ba68c979",
+    "rusix/configs/x86_64-server.config": "5b37adb3792b56926ef687dd7392b3916dbb8b77a30e50c2b2664373988098d6",
+    "rusix/configs/x86_64-task-construction-c.config": "841d905724eae9220a5122a92b9fbd4a1a77c09a8e1f9cd6980fd5b95324d6fa",
+    "rusix/configs/x86_64-task-construction-rust.config": "f156f09bff9ae6016c1f723cfc3e2f3ca5200b99ee3c3eceeda2fa3b916c4428",
+    "rusix/configs/x86_64-vma-lifecycle-c.config": "031144e174a102c376ba09604df40a330af0a4160eba12e6e930178ea69294da",
+    "rusix/configs/x86_64-vma-lifecycle-rust.config": "ca868464439e16783850769aca31a812f1e290a3d5e5ca73f73549a146070887",
+    "rusix/scripts/exit_mmap_source.py": "a18c8d9020d84a70cec4968974f3550e350fc24dc401cb370ba002460de8e1fa",
+    "rusix/scripts/generate-brd-parameter-oracle.py": "6487f5eed9be849a23867fed24938647fe7d40a95364829f7dff3d1b1d39ce7b",
+    "rusix/scripts/install-local-tools.py": "d05ca967e4d2f68cbeca2022bebef02fe6b810c809fb0d5fce58339145af6539",
+    "rusix/scripts/measure-kernel-languages.py": "3e70bf372871535b116ff8c6a7548df71e78ced19d2ab43f65dd7e022897ac90",
+    "rusix/scripts/preprocess-dup-mmap.py": "80b2600fdddd6b2da2206e4346cabcca3634fd1618e9d2b23549743ff374462f",
+    "rusix/scripts/preprocess-exit-mmap.py": "e7f9de92b57022182272c29e325c1785305cd5e9ff0e5d746221aca2ecb744e1",
+    "rusix/scripts/preprocess-mm-construction.py": "b7d27d065bdd044c93aedbfd614fc985d35bde710af8af5affca880f3dc894d3",
+    "rusix/scripts/preprocess-mm-copy.py": "e8422fde2a5a77175234a406ce51841923f2831eae3042bebb1406f5812558ab",
+    "rusix/scripts/preprocess-mm-release.py": "76d7dbdb004f7bd02efac4e9822512f083f9a5881c84f75345b757c87637c4cb",
+    "rusix/scripts/preprocess-task-construction.py": "3f6f3ba4cf0da1c0fff2a4c34c3a1e1106fa480e92ae2e73d500131b92612a90",
+    "rusix/scripts/preprocess-vma-lifecycle.py": "3653256d92c3d3328bb4db5b2129dbcaf4ddbed03707cc97dd5394b99bbdae95",
+    "rusix/scripts/rusix_paths.py": "15158c8c33e303341ef523c8317da73fb3f008908b8bfa53611d13bc87c94cae",
+    "rusix/scripts/saved_clang_command.py": "ea66b65b6fd4009f1a82f7540f5b3ada23738795df30740ef7a9ae5f237ae443",
+    "rusix/scripts/server_target.py": "357f1680a766deee25a75f56470f1a6223a9429326efd2089efc7ac5ee484eed",
+    "rusix/scripts/test-brd-ext4-vm.py": "88763b1373acc90f26859bc84b570291ee7fef97482b79107e1078cbe6e97947",
+    "rusix/scripts/test-brd-fixed-parameters-vm.py": "9af3826f789814894502099abb7ccc00ff659be9ba23a3ccb581757446b2a640",
+    "rusix/scripts/test-brd-parameters-vm.py": "54778013eed3ba9c34ea277b962da5824bfbaa6d45c270a96e65fc1a810d0caf",
+    "rusix/scripts/test-brd-partitions-vm.py": "e3334093c69ac1eb18e6b4594800473612507e2f10853d05962f04d8a0d09a27",
+    "rusix/scripts/test-brd-vm.py": "3487a725c1b62a1d4546da84120717a94f86a74fb475577a7582f3e47b53530d",
+    "rusix/scripts/test-exit-mmap-vm.py": "c0645ff554a70652a8ab5bef6d99ebfdbff5e6d2b81f49c0f91a9c47f2a7e75c",
+    "rusix/scripts/test-int-sqrt-host.py": "629db840233036f4045f77aa0736a6d3d0bb2d69a1d06680a384ad4835ba47e6",
+    "rusix/scripts/test-mm-construction-vm.py": "f7c518cf2e7ec65119f0026bdb216bf58233cb0e9cd86c47ef113ca75f478096",
+    "rusix/scripts/test-mm-copy-vm.py": "91c9b7bb39bc77f5126c3266680fc380b3498e7be4160b86d34979339b6775ff",
+    "rusix/scripts/test-mm-dup-mmap-vm.py": "41a73ff19660d215d35d31d185bc03dda4fe0af7c7ce8a7ae32677a5bea7083a",
+    "rusix/scripts/test-task-construction-vm.py": "edf7fe487d6996d143afc6e845a6fe8d4d09165f45d270dfb2e49edb653a04f1",
+    "rusix/scripts/test-vma-lifecycle-vm.py": "ff7cbc979f6d868d2ce448a6a493f38c59eb1224df2321cfd1cd388c491e1519",
+    "rusix/scripts/validate-brd-kunit.py": "1350025c9c9abda4e287e6cda85140639ccbc660ffcaecdab7a0634ec0fc24cb",
+    "rusix/scripts/validate-completion-kunit.py": "0467f463f2bbfd05d7fcec46123dccd869ced22b86c4a8d6f9a71acd705ecdef",
+    "rusix/scripts/validate-kunit-results.py": "f9d4836e338b4d874e5020261287c2b7bd5746f481d952842505385c91bb7b2c",
+    "rusix/scripts/validate-mm-release-kunit.py": "d6a7dcbbd298cb8c16810f1594251e9b5c5a2c7b5f98c2358836b578d30a8259",
+    "rusix/scripts/verify-brd-parameter-owner.py": "55bd06cd7b6910ab6c1b6404f1c97d30ce383c7f4abd593f1d949d20d7a41790",
+    "rusix/scripts/verify-dup-mmap.py": "857e527e9a18d5e3dd6f71fa97d07f4b5ba28276589070d5f7c6949f56a3e79a",
+    "rusix/scripts/verify-exit-mmap.py": "aa59dd4e17e5cc30e0451bb5bf9dc63fa884cfc5928577b8a35ff2245aebafdd",
+    "rusix/scripts/verify-mm-construction.py": "1d1b912b20b66049f2f87cdbfb4076692c2a7bda3d6e85b23a88363c0438ab96",
+    "rusix/scripts/verify-mm-copy.py": "25484b00722a24c1499b4ee439091b5de9ddc536706087deb5b322bf3fc3f1df",
+    "rusix/scripts/verify-mm-release.py": "d052ce469d9ab3a7305cb4ee196be20a00bc56349f54b604570306a1b617c547",
+    "rusix/scripts/verify-task-construction.py": "d0e6ed1c8e41a2de44da68328f660210da9ce88771aed86a505b3e246c3eb0f8",
+    "rusix/scripts/verify-vma-lifecycle.py": "e2884f6d50637e9ac5a966fb397129bfc07834ad5848e2cc29907ae644880303",
+    "rusix/tests/fixtures/exit-mmap/legacy-mmap.c": "302d70f436d72da9ebb999eaca9f748d607136b707748d0861eef297da78e05b",
+    "rusix/tests/test_brd_ext4_gate.py": "8ef39937c7bb8295bd8f0a592f6f82e796991120307d9f2f093e931c212cde90",
+    "rusix/tests/test_brd_fixed_parameters_gate.py": "9729c02727b8d3c9115b3b9240fac32d22b0e1a06050678bc5db7858d798f5f4",
+    "rusix/tests/test_brd_gate.py": "a919f2d3bc6a0c6c3affe7211795a94fafba2836b242f3b8c70a4014148a86cc",
+    "rusix/tests/test_brd_kunit_gate.py": "004ff3cccbd5954dcce4fa5db2d091a71bd53f299de2d98b0a76d0a60f43acd1",
+    "rusix/tests/test_brd_owner_elf.py": "3522755ff5c1c6cdbb29e54fe81d5d407a38c83fabd2a92290515e0baaf706cf",
+    "rusix/tests/test_brd_parameter_oracle.py": "c4c2eb1f6ab11b4666fa0b7b6f650fa1d755ad61fd076a98b201e43b5bd9c1f1",
+    "rusix/tests/test_brd_parameters_gate.py": "48b2bc23486a0b29246a03c2e8d425231d8dc1760e6c6e74172238328fd776f7",
+    "rusix/tests/test_brd_partitions_gate.py": "21d5e8ad547563c8268ce766d21e61e2bfc65e07b948a8c6da8f00a101203d12",
+    "rusix/tests/test_completion_kunit_gate.py": "7e8a1074d0c1ac0aa336a56e56850edece5d9c9108fd5fbc266fb996590554e9",
+    "rusix/tests/test_constructor_archive.py": "c6a16e4b9e697724ae39243be85dcb41f1d3374d2ee481fcaba92e8750f8a312",
+    "rusix/tests/test_dup_mmap_gate.py": "300d64d6db0bab1a6defea2efe91672e5aa59bca5d262a4ffdf60c7c30c007d1",
+    "rusix/tests/test_dup_mmap_selection.py": "97fc19f3c552aba413776fb95483c0cc3356bff17267fc5deae35c82beac187d",
+    "rusix/tests/test_exit_mmap_gate.py": "d54986aae72104468a96432b6d10318e43ab8c9316b125c6884da1971f1ff13b",
+    "rusix/tests/test_exit_mmap_selection.py": "c9bba24cebdfb950597d79ece111baaa1e3a307439514f453e895c8a02a473f1",
+    "rusix/tests/test_kernel_languages.py": "420707346d9ffa0a7824b50adc336da58acf7ee3d415032515a8d1b1dcc59a80",
+    "rusix/tests/test_kunit_gate.py": "55ce1b42629cc6cf393ae0749f975118967f632113444e9741cff282b42b07ba",
+    "rusix/tests/test_mm_construction_gate.py": "c8393512c1f2accab70bdbbe8a6b66fc3b445ea432427729cd85fb4fdab36806",
+    "rusix/tests/test_mm_construction_selection.py": "f55c7caa83269f087ea4bfccbae526920313db0fedfec24e08e02fb787f4661b",
+    "rusix/tests/test_mm_copy_gate.py": "165493b7272bec6476b83f3ea97f8bb935da0f732140ae5b32e150e5dd76fd04",
+    "rusix/tests/test_mm_copy_selection.py": "f86802ccc21338588699ffe6bd173dd4ca758933175bf7439355b1c8b75b4be2",
+    "rusix/tests/test_mm_release_kunit_gate.py": "c14abb1c4cb3d31f1afe09e3e7fa468ace417cb3dadccb07ecc4eb53f1cb213b",
+    "rusix/tests/test_mm_release_selection.py": "9a0055bacc30e78a5472ec60c3baa924fe94256fdcb42409481bb48f41d3587f",
+    "rusix/tests/test_repo_paths.py": "f3deda0bb4015064f6e96ba2dd7086fef9010d1bca535b72da2b78850a6109c7",
+    "rusix/tests/test_saved_clang_command.py": "8b82b0be64797f2f129dee87c03a06a7fd90cd892e24f2fed5080049a9749c31",
+    "rusix/tests/test_server_target.py": "c9e0abf431865a3ebf3464e15721ab129fd343a90d054fa0c15ce4fb67441192",
+    "rusix/tests/test_task_construction_gate.py": "a3d8713341c97dc76aa325454ec6032b04030e88d40f1a31770819dcffdeefed",
+    "rusix/tests/test_task_construction_selection.py": "b062651097caa6d5f8433f2f37538bf152a68550bbbdd9b0b07768bb514179f2",
+    "rusix/tests/test_vma_lifecycle_gate.py": "3c4a2886af0d68d0744a8800a66532f0e4444a8b4db51b33957a6770e51e7643",
+    "rusix/tests/test_vma_lifecycle_selection.py": "30cb2b8642551eb6569361d20495623087ddf5683423534aa79205d6d7fed40c"
+  },
+  "inputs_stable": true,
+  "production_base": "14bc4e7ebc2ac339dbf1ed962f4e59aa8ba16fb4",
+  "scope": "Host tooling regression evidence only: 29 suites / 308 cases. No candidate compilation, kernel build or VM execution.",
+  "status": "PASS",
+  "suites": 29,
+  "tooling_snapshot": "Uncommitted input hashes in host-002/result.json, not attributed to production_base as tested tooling."
+}

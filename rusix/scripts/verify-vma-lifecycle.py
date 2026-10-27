@@ -239,22 +239,25 @@ def archive_members(text, rust):
         raise ValueError('Alternate VMA object')
 
 
-def input_paths(build, source, rust):
-    paths = dup.input_paths(build, source, True) + preprocessor.inputs(build, source) + [
+def input_paths(build, source, rust, *, source_extension=None):
+    paths = dup.input_paths(build, source, True, source_extension=source_extension) + preprocessor.inputs(build, source) + [
         build/'mm/vma_init.i', source/'rusix/scripts/verify-vma-lifecycle.py',
         source/f'rusix/configs/x86_64-vma-lifecycle-{"rust" if rust else "c"}.config']
     if rust:
         paths.append(build/'mm/vma_lifecycle_rust.o')
+    if source_extension is not None:
+        extension = load('exit_source_inputs', 'exit_mmap_source.py')
+        paths += extension.paths(source, source_extension)
     return list(dict.fromkeys(paths))
 
 
-def verify(args):
+def verify(args, *, source_extension=None):
     source, build, evidence = args.source.resolve(), args.build.resolve(), args.evidence.resolve()
     rust = PROFILES[args.profile]
     check_config(args.profile, config_values((build/'.config').read_text()), config_values((source/'rusix/configs/x86_64-server.config').read_text()))
     original_policy((source/'mm/vma_init.c').read_text())
-    paths = input_paths(build, source, rust); before = {str(p): digest(p) for p in paths}
-    inherited = dup.verify(argparse.Namespace(source=source, build=build, evidence=evidence, profile='mm-dup-mmap-rust'))
+    paths = input_paths(build, source, rust, source_extension=source_extension); before = {str(p): digest(p) for p in paths}
+    inherited = dup.verify(argparse.Namespace(source=source, build=build, evidence=evidence, profile='mm-dup-mmap-rust'), source_extension=source_extension)
     if inherited['status'] != 'PASS' or inherited['implementation'] != 'rust':
         raise ValueError('Inherited Rust mapping selection failed')
     (evidence/'vma-lifecycle-dup-selection.json').write_text(json.dumps(inherited, indent=2, sort_keys=True)+'\n')
