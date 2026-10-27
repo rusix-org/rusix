@@ -1,0 +1,18 @@
+{
+  "status": "SOURCE_AND_RETAINED_COMPILE_REVIEW_NO_BLOCKER",
+  "source": "4caef614ac171fe04d5cbc6c189dc16f1abfb2c1",
+  "archive_manifest_sha256": "2e22b4e56d8bd2334124cfc4b91d66a6c8be01675513e63cd90f4e19993ffc41",
+  "archive_records_rehashed": 39,
+  "binary_artifacts_rehashed": 2,
+  "conclusions": [
+    "PID1/exact unique cmdline authorization precedes launch; proc mount is after PID1 check.",
+    "Direct child process group, WNOWAIT observation reserves leader PID until group kill then sole-waiter reap. No SIGCHLD auto-reap or intervening wait consumes leader.",
+    "Deadline checked before EINTR retry; nonblocking waitid/read-only siginfo x86_64 layout matches 128-byte 8-aligned storage and pid at16.",
+    "Child wait after SIGKILL can block under broken kernel; external VM deadline is explicitly required. Native test itself creates no descendant processes on success.",
+    "Exact bounded five-case native TAP/plan/totals and wrapper sequence reject silent unsupported shmem case, skips, duplicate/missing tests and diagnostics.",
+    "Current executable fixture sources equal compiled snapshots; pristine upstream C/header bytes equal baseline. Retained binary hashes and mode0644 verified; no execution."
+  ],
+  "remaining": [
+    "Real VM/kernel selection/runtime still pending; no source-only proof of DONTUNMAP kernel behavior."
+  ]
+}
