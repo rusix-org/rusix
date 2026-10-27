@@ -39,6 +39,8 @@ class Selection(unittest.TestCase):
         for name in g.exit.extension.REGIONS:
             text=(ROOT/name).read_text()
             if name=='mm/vma.c':
+                import vma_merge_source
+                text=vma_merge_source.restore(text,source_context=vma_merge_source.ID)
                 text=vma_modify_source.restore(text,source_context=vma_modify_source.ID)
             (self.historical/name).write_text(text)
 

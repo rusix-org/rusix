@@ -5,6 +5,7 @@ import importlib.util
 from pathlib import Path
 import sys
 import unittest
+import tempfile
 from unittest.mock import patch
 
 sys.dont_write_bytecode=True
@@ -16,7 +17,16 @@ gate=importlib.util.module_from_spec(spec);spec.loader.exec_module(gate)
 
 class Selection(unittest.TestCase):
     def test_actual_source_extension_restores_ancestors(self):
-        record=gate.copy.source_policy(ROOT,source_context=gate.extension.ID)
+        # Fold source only for this historical host fixture, never an actual .i.
+        import vma_merge_source
+        with tempfile.TemporaryDirectory(prefix='historical-modify-selection-') as temp:
+            historical=Path(temp)
+            for name in (*gate.copy.exit_mmap_source.REGIONS,*gate.extension.REVIEWED):
+                dest=historical/name;dest.parent.mkdir(parents=True,exist_ok=True)
+                text=(ROOT/name).read_text()
+                if name=='mm/vma.c':text=vma_merge_source.restore(text,source_context=vma_merge_source.ID)
+                dest.write_text(text)
+            record=gate.copy.source_policy(historical,source_context=gate.extension.ID)
         self.assertEqual(record['extension'],gate.extension.ID)
         with self.assertRaises(ValueError):gate.copy.source_policy(ROOT)
         with self.assertRaises(ValueError):gate.copy.source_policy(ROOT,source_context='unknown')

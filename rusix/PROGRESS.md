@@ -1,5 +1,10 @@
 # rusix progress
 
+Paused work in progress: the source/config scaffold passed fifteen host tests
+and independent review. Actual preprocessing/ELF extensions are incomplete and
+unreviewed; broader regressions and all compiler/runtime gates remain pending.
+Propagate the reviewed copy-VMA namespace fix at d158a6f894bf before building.
+
 VMA merge/expand/shrink now has a dependent, default-off Rust source candidate:
 seventeen complete policies, including eligibility, anon duplication, commit and
 rollback; six native entry wrappers retain canonical stack storage. Original C

@@ -8,6 +8,7 @@ from pathlib import Path
 import re
 import subprocess
 import vma_modify_source as extension
+import vma_merge_source as merge_extension
 
 def load(name, file):
     spec = importlib.util.spec_from_file_location(name, Path(__file__).with_name(file))
@@ -58,12 +59,17 @@ def compact(text):
     text = re.sub(r'/\*.*?\*/|//[^\n]*', '', text, flags=re.S)
     return re.sub(r'\s+', '', text)
 
-def check_preprocessed(text, rust, header):
+def check_preprocessed(text, rust, header, *, source_context=extension.ID, merge_rust=False):
+    if source_context not in (extension.ID, merge_extension.ID) or (merge_rust and (source_context != merge_extension.ID or not rust)):
+        raise ValueError("Invalid explicit merge/modify context")
     # Check actual compiler output. Never replace it with a fabricated native
     # prepare body to make the inherited gate accept the new implementation.
-    copy.check_preprocessed(text, True, source_context=extension.ID, modify_rust=rust)
+    copy.check_preprocessed(text, True, source_context=source_context, modify_rust=rust, merge_rust=merge_rust)
     if rust:
         for name, expected in SHIMS.items():
+            if merge_rust and name in merge_extension.PREP:
+                if bodies(text, name): raise ValueError("Redundant C prepare wrapper: "+name)
+                continue
             if bodies(text, name) != [expected]:
                 raise ValueError('Changed actual native context/dispatch: '+name)
         for name in ('split_vma', 'vma_modify'):
@@ -97,6 +103,10 @@ def check_preprocessed(text, rust, header):
     for name, required in {'commit_merge': ('init_multi_vma_prep(', 'vma_prepare(', 'vma_complete('),
                            'vma_shrink': ('init_vma_prep(', 'vma_prepare(', 'vma_complete(')}.items():
         found = bodies(text, name)
+        if merge_rust:
+            if name == 'commit_merge' and found: raise ValueError('Native commit remains selected')
+            # Exact shrink stack wrapper is consumed by the outer merge proof.
+            continue
         if len(found) != 1 or any(token not in found[0] for token in required):
             raise ValueError('Native merge/shrink dispatch changed: '+name)
 
@@ -136,31 +146,38 @@ def callback_transfers(text):
     for getter in ('rusix_modify_may_split', 'rusix_copy_open'):
         copy.exit.executable_calls(body, getter)
 
-def input_paths(build, source, rust):
-    paths = copy.input_paths(build, source, True, source_context=extension.ID) + preprocessor.inputs(build, source)
+def input_paths(build, source, rust, *, source_context=extension.ID):
+    paths = copy.input_paths(build, source, True, source_context=source_context) + preprocessor.inputs(build, source, source_context=source_context)
     paths += [source/f'rusix/configs/x86_64-vma-modify-{"rust" if rust else "c"}.config',
               source/'init/Kconfig', source/'mm/Makefile', source/'rusix/scripts/build-kernel.sh']
     if rust:
         paths += [build/'mm/vma_modify_rust.o', build/'mm/.vma_modify_rust.o.cmd']
     return list(dict.fromkeys(paths))
 
-def verify(args):
+def verify(args, *, source_context=extension.ID):
+    if source_context not in (extension.ID, merge_extension.ID):
+        raise ValueError("Unknown modifier source context")
     source, build, evidence = args.source.resolve(), args.build.resolve(), args.evidence.resolve()
     rust = PROFILES[args.profile]
     check_config(args.profile, config_values((build/'.config').read_text()),
                  config_values((source/'rusix/configs/x86_64-server.config').read_text()))
-    source_proof = extension.source_policy(source, source_context=extension.ID)
-    paths = input_paths(build, source, rust)
+    merge_rust = source_context == merge_extension.ID and config_values((build/'.config').read_text()).get(merge_extension.SELECTOR) == 'y'
+    if source_context == merge_extension.ID:
+        if not rust: raise ValueError('Merge context requires Rust modification')
+        source_proof = merge_extension.source_policy(source, source_context=source_context)
+    else:
+        source_proof = extension.source_policy(source, source_context=source_context)
+    paths = input_paths(build, source, rust, source_context=source_context)
     before = {str(p):digest(p) for p in paths}
     inherited = copy.verify(argparse.Namespace(source=source, build=build, evidence=evidence,
-                                               profile='copy-vma-rust'), source_context=extension.ID)
-    if inherited['status'] != 'PASS' or inherited['implementation'] != 'rust' or inherited['source_extension']['extension'] != extension.ID:
+                                               profile='copy-vma-rust'), source_context=source_context)
+    if inherited['status'] != 'PASS' or inherited['implementation'] != 'rust' or inherited['source_extension']['extension'] != source_context:
         raise ValueError('Inherited copy context differs')
-    obligation = ['vma-modify-rust-prepare-lock-before-file-link'] if rust else []
-    if inherited.get('source_context') != extension.ID or inherited.get('outer_obligations') != obligation:
+    obligation = (['vma-merge-rust-direct-prepare-protocol', 'vma-modify-rust-prepare-lock-before-file-link'] if merge_rust else (['vma-modify-rust-prepare-lock-before-file-link'] if rust else []))
+    if inherited.get('source_context') != source_context or inherited.get('outer_obligations') != obligation:
         raise ValueError('Inherited proof did not declare exact outer obligation')
     (evidence/'vma-modify-copy-selection.json').write_text(json.dumps(inherited, indent=2, sort_keys=True)+'\n')
-    check_preprocessed((build/'mm/vma.i').read_text(), rust, (source/'mm/vma_modify.h').read_text())
+    check_preprocessed((build/'mm/vma.i').read_text(), rust, (source/'mm/vma_modify.h').read_text(), source_context=source_context, merge_rust=merge_rust)
     def run(name, argv):
         result = subprocess.run(argv, check=True, capture_output=True, text=True)
         if result.stderr:
@@ -190,16 +207,18 @@ def verify(args):
         for name in WRAPPERS:
             copy.exit.vma.call_from(dis['vma'], name, 'rusix_'+name)
         for name in ('rusix_init_multi_vma_prep','rusix_init_vma_prep','rusix_vma_prepare','rusix_vma_complete','rusix_split_vma_inner'):
-            copy.exit.executable_calls(dis['vma'], name)
+            if not merge_rust or name == 'rusix_split_vma_inner':
+                copy.exit.executable_calls(dis['vma'], name)
         prepare_calls(dis['vma_modify_rust'])
         callback_transfers(dis['vma_modify_rust'])
         for primitive in extension.PRIMITIVES:
             copy.exit.executable_calls(dis['vma_modify_rust'], primitive)
     copy.exit_mmap_source.require_unchanged(paths, before)
-    return dict(status='PASS', implementation='rust' if rust else 'c', source_context=extension.ID,
+    return dict(status='PASS', implementation='rust' if rust else 'c', source_context=source_context,
+                outer_obligations=['vma-merge-rust-direct-prepare-protocol'] if merge_rust else [],
                 source=source_proof, input_sha256=before, archive_member_sha256=payloads,
                 policy_inventory=list(extension.NATIVE), primitive_inventory=list(extension.PRIMITIVES),
-                consumed_outer_obligations=obligation, copy_vma_selection=inherited,
+                consumed_outer_obligations=['vma-modify-rust-prepare-lock-before-file-link'] if rust else [], copy_vma_selection=inherited,
                 scope='Actual source/preprocessing/archive/object/linked ownership; no runtime proof')
 
 def main():

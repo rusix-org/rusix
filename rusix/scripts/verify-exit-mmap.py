@@ -56,7 +56,7 @@ def compare(c,rust):
 
 
 def check_preprocessed(mmap_text,vma_text,rust, *, source_extension=extension.ID, copy_rust=False):
-    if source_extension not in (extension.ID, extension.copy_extension.ID, extension.MODIFY_ID) or (copy_rust and source_extension not in (extension.copy_extension.ID, extension.MODIFY_ID)):
+    if source_extension not in (extension.ID, extension.copy_extension.ID, extension.MODIFY_ID, extension.MERGE_ID) or (copy_rust and source_extension not in (extension.copy_extension.ID, extension.MODIFY_ID, extension.MERGE_ID)):
         raise ValueError("Unknown close-consumer extension")
     for text in (mmap_text,vma_text):
         if vma.bodies(text,'vma_close')!=(['rusix_vma_close(vma);'] if rust else [CLOSE]):
@@ -162,7 +162,7 @@ def verify(args, *, source_extension=extension.ID):
     if inherited['test_context']!=context or inherited['status']!='PASS' or inherited['implementation']!='rust':raise ValueError('Inherited VMA proof failed')
     if inherited['dup_mmap_selection']['source_extension']['raw_sha256']!=proof['raw_sha256']:raise ValueError('Delegated source identity mismatch')
     (evidence/'exit-mmap-vma-selection.json').write_text(json.dumps(inherited,indent=2,sort_keys=True)+'\n')
-    copy_rust = source_extension in (extension.copy_extension.ID, extension.MODIFY_ID) and config_values((build/'.config').read_text()).get('CONFIG_RUSIX_COPY_VMA_RUST') == 'y'
+    copy_rust = source_extension in (extension.copy_extension.ID, extension.MODIFY_ID, extension.MERGE_ID) and config_values((build/'.config').read_text()).get('CONFIG_RUSIX_COPY_VMA_RUST') == 'y'
     check_preprocessed((build/'mm/mmap.i').read_text(),(build/'mm/vma.i').read_text(),rust,source_extension=source_extension,copy_rust=copy_rust)
     def run(name,argv):
         result=subprocess.run(argv,check=True,capture_output=True,text=True)

@@ -8,11 +8,11 @@ spec = importlib.util.spec_from_file_location('modify_pre_exit', Path(__file__).
 exit_pre = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(exit_pre)
 
-def inputs(build, source):
-    return exit_pre.inputs(build, source, source_extension=vma_modify_source.ID)
+def inputs(build, source, *, source_context=vma_modify_source.ID):
+    return exit_pre.inputs(build, source, source_extension=source_context)
 
-def record(build, source):
-    return exit_pre.record(build, source, source_extension=vma_modify_source.ID)
+def record(build, source, *, source_context=vma_modify_source.ID):
+    return exit_pre.record(build, source, source_extension=source_context)
 
 if __name__ == '__main__':
     exit_pre.main(source_extension=vma_modify_source.ID)

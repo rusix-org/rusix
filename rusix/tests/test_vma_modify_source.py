@@ -16,6 +16,31 @@ gate = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(gate)
 
 
+# Historical source-only fixtures, never actual preprocessor evidence. Keep the
+# original modifier gate strict while testing its original exact source context.
+ORIGINAL_ROOT = ROOT
+_historical = None
+
+def setUpModule():
+    global ROOT, _historical
+    import vma_merge_source
+    _historical = tempfile.TemporaryDirectory(prefix='historical-modify-')
+    ROOT = Path(_historical.name)
+    names = ('mm/vma.c', *gate.REVIEWED,
+             'rusix/configs/x86_64-server.config', 'rusix/configs/x86_64-copy-vma-rust.config',
+             'rusix/configs/x86_64-vma-modify-c.config', 'rusix/configs/x86_64-vma-modify-rust.config')
+    for name in names:
+        dest=ROOT/name; dest.parent.mkdir(parents=True,exist_ok=True)
+        data=(ORIGINAL_ROOT/name).read_text()
+        if name=='mm/vma.c':data=vma_merge_source.restore(data,source_context=vma_merge_source.ID)
+        dest.write_text(data)
+
+def tearDownModule():
+    global ROOT
+    if _historical is not None:_historical.cleanup()
+    ROOT=ORIGINAL_ROOT
+
+
 class Source(unittest.TestCase):
     @classmethod
     def setUpClass(cls):

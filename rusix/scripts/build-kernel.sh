@@ -9,15 +9,15 @@ if [[ ${1:-} == --profile ]]; then
     shift 2
 fi
 case "$profile" in
-    kunit|brd|brd-fixed-c|brd-rust|brd-kunit|brd-ext4-c|brd-ext4-fixed-c|brd-ext4-rust|core-ext4-c|core-ext4-rust|completion-c|completion-rust|completion-plain-c|completion-plain-rust|server|server-c|task-construction-c|task-construction-rust|mm-construction-c|mm-construction-rust|mm-release-c|mm-release-rust|mm-copy-c|mm-copy-rust|mm-dup-mmap-c|mm-dup-mmap-rust|vma-lifecycle-c|vma-lifecycle-rust|exit-mmap-c|exit-mmap-rust|exit-mmap-kunit-c|exit-mmap-kunit-rust|copy-vma-c|copy-vma-rust|vma-modify-c|vma-modify-rust) ;;
-    *) echo 'Profile must be kunit, brd, brd-fixed-c, brd-rust, brd-kunit, brd-ext4-c, brd-ext4-fixed-c, brd-ext4-rust, core-ext4-c, core-ext4-rust, completion-c, completion-rust, completion-plain-c, completion-plain-rust, server, server-c, task-construction-c, task-construction-rust, mm-construction-c, mm-construction-rust, mm-release-c, mm-release-rust, mm-copy-c, mm-copy-rust, mm-dup-mmap-c, mm-dup-mmap-rust, vma-lifecycle-c, vma-lifecycle-rust, exit-mmap-c, exit-mmap-rust, exit-mmap-kunit-c, exit-mmap-kunit-rust, copy-vma-c, copy-vma-rust, vma-modify-c or vma-modify-rust.' >&2; exit 2 ;;
+    kunit|brd|brd-fixed-c|brd-rust|brd-kunit|brd-ext4-c|brd-ext4-fixed-c|brd-ext4-rust|core-ext4-c|core-ext4-rust|completion-c|completion-rust|completion-plain-c|completion-plain-rust|server|server-c|task-construction-c|task-construction-rust|mm-construction-c|mm-construction-rust|mm-release-c|mm-release-rust|mm-copy-c|mm-copy-rust|mm-dup-mmap-c|mm-dup-mmap-rust|vma-lifecycle-c|vma-lifecycle-rust|exit-mmap-c|exit-mmap-rust|exit-mmap-kunit-c|exit-mmap-kunit-rust|copy-vma-c|copy-vma-rust|vma-modify-c|vma-modify-rust|vma-merge-c|vma-merge-rust) ;;
+    *) echo 'Profile must be kunit, brd, brd-fixed-c, brd-rust, brd-kunit, brd-ext4-c, brd-ext4-fixed-c, brd-ext4-rust, core-ext4-c, core-ext4-rust, completion-c, completion-rust, completion-plain-c, completion-plain-rust, server, server-c, task-construction-c, task-construction-rust, mm-construction-c, mm-construction-rust, mm-release-c, mm-release-rust, mm-copy-c, mm-copy-rust, mm-dup-mmap-c, mm-dup-mmap-rust, vma-lifecycle-c, vma-lifecycle-rust, exit-mmap-c, exit-mmap-rust, exit-mmap-kunit-c, exit-mmap-kunit-rust, copy-vma-c, copy-vma-rust, vma-modify-c, vma-modify-rust, vma-merge-c or vma-merge-rust.' >&2; exit 2 ;;
 esac
 config="$RUSIX_PROJECT/configs/x86_64-$profile.config"
 if [[ "$profile" == server-c ]]; then
     config="$RUSIX_PROJECT/configs/x86_64-server.config"
 fi
 if [[ $# != 1 || ! "$1" =~ ^[a-zA-Z0-9_-]+$ ]]; then
-    echo 'Usage: bash rusix/scripts/build-kernel.sh [--profile kunit|brd|brd-fixed-c|brd-rust|brd-kunit|brd-ext4-c|brd-ext4-fixed-c|brd-ext4-rust|core-ext4-c|core-ext4-rust|completion-c|completion-rust|completion-plain-c|completion-plain-rust|server|server-c|task-construction-c|task-construction-rust|mm-construction-c|mm-construction-rust|mm-release-c|mm-release-rust|mm-copy-c|mm-copy-rust|mm-dup-mmap-c|mm-dup-mmap-rust|vma-lifecycle-c|vma-lifecycle-rust|exit-mmap-c|exit-mmap-rust|exit-mmap-kunit-c|exit-mmap-kunit-rust|copy-vma-c|copy-vma-rust|vma-modify-c|vma-modify-rust] BUILD_NAME' >&2
+    echo 'Usage: bash rusix/scripts/build-kernel.sh [--profile kunit|brd|brd-fixed-c|brd-rust|brd-kunit|brd-ext4-c|brd-ext4-fixed-c|brd-ext4-rust|core-ext4-c|core-ext4-rust|completion-c|completion-rust|completion-plain-c|completion-plain-rust|server|server-c|task-construction-c|task-construction-rust|mm-construction-c|mm-construction-rust|mm-release-c|mm-release-rust|mm-copy-c|mm-copy-rust|mm-dup-mmap-c|mm-dup-mmap-rust|vma-lifecycle-c|vma-lifecycle-rust|exit-mmap-c|exit-mmap-rust|exit-mmap-kunit-c|exit-mmap-kunit-rust|copy-vma-c|copy-vma-rust|vma-modify-c|vma-modify-rust|vma-merge-c|vma-merge-rust] BUILD_NAME' >&2
     exit 2
 fi
 name=$1
@@ -88,6 +88,11 @@ if [[ "$profile" == vma-modify-c || "$profile" == vma-modify-rust ]]; then
     python3 "$RUSIX_PROJECT/scripts/verify-vma-modify.py" config \
         --profile "$profile" --config "$out/.config" --source "$RUSIX_SOURCE" \
         > "$evidence/vma-modify-config-before.json"
+fi
+if [[ "$profile" == vma-merge-c || "$profile" == vma-merge-rust ]]; then
+    python3 "$RUSIX_PROJECT/scripts/verify-vma-merge.py" config \
+        --profile "$profile" --config "$out/.config" --source "$RUSIX_SOURCE" \
+        > "$evidence/vma-merge-config-before.json"
 fi
 if [[ "$profile" == copy-vma-c || "$profile" == copy-vma-rust ]]; then
     python3 "$RUSIX_PROJECT/scripts/verify-copy-vma.py" config \
@@ -212,7 +217,7 @@ PYBRDCOMMAND
         fi
     } > "$evidence/selection.log"
 fi
-if [[ "$profile" == brd-rust || "$profile" == brd-kunit || "$profile" == brd-ext4-rust || "$profile" == core-ext4-c || "$profile" == core-ext4-rust || "$profile" == completion-c || "$profile" == completion-rust || "$profile" == completion-plain-c || "$profile" == completion-plain-rust || "$profile" == server || "$profile" == server-c || "$profile" == task-construction-c || "$profile" == task-construction-rust || "$profile" == mm-construction-c || "$profile" == mm-construction-rust || "$profile" == mm-release-c || "$profile" == mm-release-rust || "$profile" == mm-copy-c || "$profile" == mm-copy-rust || "$profile" == mm-dup-mmap-c || "$profile" == mm-dup-mmap-rust || "$profile" == vma-lifecycle-c || "$profile" == vma-lifecycle-rust || "$profile" == exit-mmap-c || "$profile" == exit-mmap-rust || "$profile" == exit-mmap-kunit-c || "$profile" == exit-mmap-kunit-rust || "$profile" == copy-vma-c || "$profile" == copy-vma-rust || "$profile" == vma-modify-c || "$profile" == vma-modify-rust ]]; then
+if [[ "$profile" == brd-rust || "$profile" == brd-kunit || "$profile" == brd-ext4-rust || "$profile" == core-ext4-c || "$profile" == core-ext4-rust || "$profile" == completion-c || "$profile" == completion-rust || "$profile" == completion-plain-c || "$profile" == completion-plain-rust || "$profile" == server || "$profile" == server-c || "$profile" == task-construction-c || "$profile" == task-construction-rust || "$profile" == mm-construction-c || "$profile" == mm-construction-rust || "$profile" == mm-release-c || "$profile" == mm-release-rust || "$profile" == mm-copy-c || "$profile" == mm-copy-rust || "$profile" == mm-dup-mmap-c || "$profile" == mm-dup-mmap-rust || "$profile" == vma-lifecycle-c || "$profile" == vma-lifecycle-rust || "$profile" == exit-mmap-c || "$profile" == exit-mmap-rust || "$profile" == exit-mmap-kunit-c || "$profile" == exit-mmap-kunit-rust || "$profile" == copy-vma-c || "$profile" == copy-vma-rust || "$profile" == vma-modify-c || "$profile" == vma-modify-rust || "$profile" == vma-merge-c || "$profile" == vma-merge-rust ]]; then
     git -C "$RUSIX_SOURCE" diff --exit-code \
         2926d88bb7fc4608fd942453d929c39e4e5ec006 -- drivers/block/brd.c \
         > "$evidence/brd-reference.diff"
@@ -702,6 +707,17 @@ if [[ "$profile" == vma-modify-c || "$profile" == vma-modify-rust ]]; then
         "$RUSIX_PROJECT/scripts/verify-vma-modify.py" objects \
         --profile "$profile" --source "$RUSIX_SOURCE" --build "$out" \
         --evidence "$evidence" > "$evidence/vma-modify-selection.json"
+fi
+if [[ "$profile" == vma-merge-c || "$profile" == vma-merge-rust ]]; then
+    python3 "$RUSIX_PROJECT/scripts/verify-vma-merge.py" config \
+        --profile "$profile" --config "$out/.config" --source "$RUSIX_SOURCE" \
+        > "$evidence/vma-merge-config-after.json"
+    python3 "$RUSIX_PROJECT/scripts/preprocess-vma-merge.py" \
+        --build "$out" --evidence "$evidence"
+    bash "$RUSIX_PROJECT/scripts/with-local-tools.sh" python3 \
+        "$RUSIX_PROJECT/scripts/verify-vma-merge.py" objects \
+        --profile "$profile" --source "$RUSIX_SOURCE" --build "$out" \
+        --evidence "$evidence" > "$evidence/vma-merge-selection.json"
 fi
 if [[ "$profile" == copy-vma-c || "$profile" == copy-vma-rust ]]; then
     python3 "$RUSIX_PROJECT/scripts/verify-copy-vma.py" config \

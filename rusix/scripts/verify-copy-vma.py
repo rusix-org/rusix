@@ -39,7 +39,7 @@ def source_policy(source, *, source_context=None):
 
 def context_extension(context):
     if context is None:return extension.ID
-    if context != exit_mmap_source.MODIFY_ID:raise ValueError('Unknown copy source context')
+    if context not in (exit_mmap_source.MODIFY_ID, exit_mmap_source.MERGE_ID):raise ValueError('Unknown copy source context')
     return context
 
 
@@ -74,16 +74,19 @@ def bodies(text,name):
     return result
 
 
-def check_preprocessed(text,rust, *, source_context=None, modify_rust=False):
+def check_preprocessed(text,rust, *, source_context=None, modify_rust=False, merge_rust=False):
     context_extension(source_context)
-    if modify_rust and source_context != exit_mmap_source.MODIFY_ID:
+    if modify_rust and source_context not in (exit_mmap_source.MODIFY_ID, exit_mmap_source.MERGE_ID):
         raise ValueError("Modify selection requires explicit context")
     # This caller already holds the mapping lock: selected wrapper must not add
     # another lock. Exact whole-source restoration binds the surrounding policy.
     prepare=bodies(text,'vma_prepare')
     lock='i_mmap_lock_write(vp->mapping);'
     call='__vma_link_file(vp->insert,vp->insert->vm_file->f_mapping);'
-    if modify_rust:
+    if merge_rust:
+        if source_context != exit_mmap_source.MERGE_ID or not modify_rust or not rust or prepare:
+            raise ValueError('Merge Rust requires absent C prepare and explicit parent context')
+    elif modify_rust:
         if not rust or prepare!=['rusix_vma_prepare(vp);']:
             raise ValueError('Wrong selected native prepare forwarder')
     elif len(prepare)!=1 or prepare[0].count(call)!=1 or lock not in prepare[0] or prepare[0].index(lock)>prepare[0].index(call):
@@ -169,8 +172,9 @@ def verify(args, *, source_context=None):
     inherited=exit.verify(argparse.Namespace(source=source,build=build,evidence=evidence,profile='exit-mmap-rust'),source_extension=context_extension(source_context))
     if inherited['status']!='PASS' or inherited['implementation']!='rust' or inherited['source_extension']!=proof:raise ValueError('Inherited proof mismatch')
     (evidence/'copy-vma-exit-selection.json').write_text(json.dumps(inherited,indent=2,sort_keys=True)+'\n')
-    modify_rust = source_context == exit_mmap_source.MODIFY_ID and config_values((build/'.config').read_text()).get('CONFIG_RUSIX_VMA_MODIFY_RUST') == 'y'
-    check_preprocessed((build/'mm/vma.i').read_text(),rust,source_context=source_context,modify_rust=modify_rust)
+    modify_rust = source_context in (exit_mmap_source.MODIFY_ID, exit_mmap_source.MERGE_ID) and config_values((build/'.config').read_text()).get('CONFIG_RUSIX_VMA_MODIFY_RUST') == 'y'
+    merge_rust = source_context == exit_mmap_source.MERGE_ID and config_values((build/'.config').read_text()).get('CONFIG_RUSIX_VMA_MERGE_RUST') == 'y'
+    check_preprocessed((build/'mm/vma.i').read_text(),rust,source_context=source_context,modify_rust=modify_rust,merge_rust=merge_rust)
     def run(name,argv):
         r=subprocess.run(argv,check=True,capture_output=True,text=True)
         if r.stderr:raise ValueError('Object inspection diagnostics: '+r.stderr)
@@ -195,7 +199,7 @@ def verify(args, *, source_context=None):
         for caller,callee in (('copy_vma','rusix_copy_vma'),('vma_link','rusix_vma_link')):exit.vma.call_from(dis['vma'],caller,callee)
         if not modify_rust:
             exit.executable_calls(dis['vma'],'rusix_vma_link_file_locked')
-        else:
+        elif not merge_rust:
             # The outer modify gate proves this call in the actual Rust prepare.
             exit.executable_calls(dis['vma'],'rusix_vma_prepare')
         # The moved close consumer is proved in its actual new defining object.
@@ -219,7 +223,7 @@ def verify(args, *, source_context=None):
                   scope='Actual source/preprocessing/object/linked ownership; no runtime claim')
     if source_context is not None:
         result['source_context'] = source_context
-        result['outer_obligations'] = (['vma-modify-rust-prepare-lock-before-file-link'] if modify_rust else [])
+        result['outer_obligations'] = (['vma-merge-rust-direct-prepare-protocol', 'vma-modify-rust-prepare-lock-before-file-link'] if merge_rust else (['vma-modify-rust-prepare-lock-before-file-link'] if modify_rust else []))
         if modify_rust:
             result['scope'] = 'Inherited copy ownership only; Rust prepare/file-link relation requires outer VMA-modify proof; no runtime claim'
     return result

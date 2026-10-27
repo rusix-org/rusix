@@ -4,6 +4,10 @@
 import hashlib
 import copy_vma_source as copy_extension
 ID = 'exit-mmap-v1'
+MERGE_ID = 'vma-merge-v1'
+MERGE_EXTRA = ('mm/vma_merge.h', 'mm/vma_merge_impl.h', 'mm/vma_merge_rust.rs',
+               'rusix/scripts/vma_merge_source.py', 'rusix/scripts/verify-vma-merge.py',
+               'rusix/scripts/preprocess-vma-merge.py')
 MODIFY_ID = 'vma-modify-v1'
 MODIFY_EXTRA = ('mm/vma_modify.h', 'mm/vma_modify_impl.h', 'mm/vma_modify_rust.rs',
                 'rusix/scripts/vma_modify_source.py', 'rusix/scripts/verify-vma-modify.py',
@@ -17,8 +21,8 @@ EXTRA = ('mm/mmap.c','mm/vma.c','mm/internal.h','mm/exit_mmap_impl.h',
          'rusix/scripts/exit_mmap_source.py','rusix/scripts/copy_vma_source.py','rusix/scripts/verify-exit-mmap.py')
 
 def paths(source, extension):
-    if extension not in (ID, copy_extension.ID, MODIFY_ID): raise ValueError('Unknown source extension')
-    return [source/name for name in EXTRA + (copy_extension.EXTRA if extension in (copy_extension.ID, MODIFY_ID) else ()) + (MODIFY_EXTRA if extension == MODIFY_ID else ())]
+    if extension not in (ID, copy_extension.ID, MODIFY_ID, MERGE_ID): raise ValueError('Unknown source extension')
+    return [source/name for name in EXTRA + (copy_extension.EXTRA if extension in (copy_extension.ID, MODIFY_ID, MERGE_ID) else ()) + (MODIFY_EXTRA if extension in (MODIFY_ID, MERGE_ID) else ()) + (MERGE_EXTRA if extension == MERGE_ID else ())]
 
 def restore(name, text):
     if name not in REGIONS: raise ValueError('Unreviewed source region')
@@ -39,11 +43,16 @@ def validate(source, extension):
     for name in REGIONS:
         data=(source/name).read_bytes(); raw[name]=hashlib.sha256(data).hexdigest()
         text=data.decode()
-        if extension == MODIFY_ID and name == 'mm/vma.c':
+        if extension == MERGE_ID and name == 'mm/vma.c':
+            import vma_merge_source
+            vma_merge_source.source_policy(source, source_context=extension)
+            text=vma_merge_source.restore(text, source_context=extension)
+        if extension in (MODIFY_ID, MERGE_ID) and name == 'mm/vma.c':
             import vma_modify_source
-            vma_modify_source.source_policy(source, source_context=extension)
-            text=vma_modify_source.restore(text, source_context=extension)
-        if extension in (copy_extension.ID, MODIFY_ID) and name == 'mm/vma.c':
+            if extension == MODIFY_ID:
+                vma_modify_source.source_policy(source, source_context=extension)
+            text=vma_modify_source.restore(text, source_context=MODIFY_ID)
+        if extension in (copy_extension.ID, MODIFY_ID, MERGE_ID) and name == 'mm/vma.c':
             text=copy_extension.restore(text)
         restored[name]=restore(name,text)
         hashes[name]=hashlib.sha256(restored[name].encode()).hexdigest()

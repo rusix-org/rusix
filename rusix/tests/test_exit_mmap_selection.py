@@ -37,6 +37,8 @@ class ExitSelection(unittest.TestCase):
             text=(ROOT/name).read_text()
             if name=='mm/vma.c':
                 import vma_modify_source
+                import vma_merge_source
+                text=vma_merge_source.restore(text,source_context=vma_merge_source.ID)
                 text=vma_modify_source.restore(text,source_context=vma_modify_source.ID)
                 text=ext.copy_extension.restore(text)
                 self.assertEqual(ext.hashlib.sha256(text.encode()).hexdigest(),
