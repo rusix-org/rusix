@@ -25,13 +25,15 @@ source, configuration, raw-result hashes and remaining C dependencies.
 | [task-construction-faults](https://github.com/rusix-org/rusix/tree/rusix/task-construction-faults/rusix) | Attributed task-slab and stack-allocation failures, cleanup and successful disarmed retries; other attempted sites were not injected. |
 | [mm-dup-mmap](https://github.com/rusix-org/rusix/tree/rusix/mm-dup-mmap/rusix) | Seven paired sharing/COW, DONTFORK, WIPEONFORK and file-mapping lifetime cases. |
 | [vma-lifecycle-verified](https://github.com/rusix-org/rusix/tree/rusix/vma-lifecycle-verified/rusix) | At `e0632d2729`, nine paired cases add mprotect split/restore and fixed mremap file lifetime; evidence checkpoint `20297e1416`. |
+| [mm-exit-mmap-verified](https://github.com/rusix-org/rusix/tree/rusix/mm-exit-mmap-verified/rusix) | At `8b6ab83827`, four fresh kernels pass nine ordinary cases and 79 combined plus three isolated teardown KUnit cases on each C/Rust side. |
 | [rcu-sync-policy](https://github.com/rusix-org/rusix/tree/rusix/rcu-sync-policy/rusix) | Paired debug/plain sync-policy KUnit fixtures. |
 | [rcu-batch](https://github.com/rusix-org/rusix/tree/rusix/rcu-batch/rusix) | Paired debug/plain batch-policy KUnit fixtures. |
 
-Next milestone: verify address-space teardown, mapping-copy and VMA
-split/modification policies, then integrate the verified chain with ordinary
+Next milestone: verify mapping-copy and VMA split/modification policies, then
+integrate the verified chain with ordinary
 userspace regression coverage. The lifecycle retry passed both C and Rust
-with matching fixtures and its sole intended selection difference. Teardown, mapping-copy and PFN
+with matching fixtures and its sole intended selection difference. Teardown also
+passes its fresh ordinary/KUnit matrix; mapping-copy, split/modification and PFN
 ownership candidates remain local pending their build/runtime gates. Allocation
 rollback coverage and broader concurrency validation remain open. Hosted CI stays
 disabled; all verification runs locally.
