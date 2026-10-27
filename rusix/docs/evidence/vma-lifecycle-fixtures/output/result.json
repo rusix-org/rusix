@@ -1,0 +1,81 @@
+{
+  "status": "PASS",
+  "scope": "Pinned static guest compilation only; binaries never executed",
+  "source": "620b34e0c9181b1563fb2a7ba80766616afeb73b",
+  "image": "sha256:c02eb3929889b3f0cc035d57a02c844e0c74c71d24fbda1311249faeb8257f63",
+  "commands": {
+    "rustc-version": [
+      "/usr/bin/rustc",
+      "--version"
+    ],
+    "gcc-version": [
+      "/usr/bin/gcc",
+      "--version"
+    ],
+    "readelf-version": [
+      "/usr/bin/readelf",
+      "--version"
+    ],
+    "objdump-version": [
+      "/usr/bin/objdump",
+      "--version"
+    ],
+    "init-compile": [
+      "/usr/bin/rustc",
+      "--edition",
+      "2021",
+      "--target",
+      "x86_64-unknown-linux-gnu",
+      "-C",
+      "target-feature=+crt-static",
+      "-C",
+      "panic=abort",
+      "-C",
+      "opt-level=2",
+      "/src/rusix/tests/vma-lifecycle/init.rs",
+      "-o",
+      "/out/init"
+    ],
+    "probe-compile": [
+      "/usr/bin/gcc",
+      "-std=gnu11",
+      "-O2",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "-static",
+      "/src/rusix/tests/vma-lifecycle/probe.c",
+      "-o",
+      "/out/probe"
+    ],
+    "init-elf": [
+      "/usr/bin/readelf",
+      "-h",
+      "-l",
+      "-d",
+      "/out/init"
+    ],
+    "probe-elf": [
+      "/usr/bin/readelf",
+      "-h",
+      "-l",
+      "-d",
+      "/out/probe"
+    ],
+    "child-disassembly": [
+      "/usr/bin/objdump",
+      "-d",
+      "--disassemble=shared_child",
+      "/out/probe"
+    ]
+  },
+  "sources": {
+    "/src/rusix/tests/vma-lifecycle/init.rs": "bd1886ccd6012bdb2557925013844d2095dfa33a4bbc62a085346707d5ea9d79",
+    "/src/rusix/tests/vma-lifecycle/probe.c": "c0178f0f93b6268848bc54645de25c4b5e7f190e8fe4ae118df4f05c92c5b595",
+    "/src/rusix/tests/vma-lifecycle/README.md": "4ca8758778f65a6e05e9de0f239ec80032f81e33e7b7a47ace5b96677ac13d3c"
+  },
+  "artifacts": {
+    "init": "3fbbd3b7820a0d2990a9e813d427ba079b07d3e56c182a315a780b65d0f3ec7d",
+    "probe": "3186ae8f7c9e8a4ce917643c1a68dcd867eeac47ea8aa9dea48acfd99702b45a"
+  }
+}

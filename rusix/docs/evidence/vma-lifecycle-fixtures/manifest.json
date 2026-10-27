@@ -1,0 +1,36 @@
+{
+  "status": "PASS",
+  "source": "620b34e0c9181b1563fb2a7ba80766616afeb73b",
+  "image": "sha256:c02eb3929889b3f0cc035d57a02c844e0c74c71d24fbda1311249faeb8257f63",
+  "scope": "Pinned static guest compilation and ELF inspection only; binaries never executed; no kernel build or runtime result",
+  "files": {
+    "check.py": "0448b657e7c7bf9010a90d2aae06574d0997a6fe9a438fa446c5af08a00d59ed",
+    "source.json": "c0cdaae70fb0664c16ef86952cb3688d92dfdc50ac693a1229b3537e9c206637",
+    "container.log": "33b2ec4c93310f97a931ca1c11689ad0a0172058923710532f2c38b898165b03",
+    "container.exit": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+    "output/child-disassembly.exit": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+    "output/child-disassembly.log": "d6dc1c4e0af56bd68402a8faaebc1839034c4ab11eac77ea2231ef1a69a5c734",
+    "output/gcc-version.exit": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+    "output/gcc-version.log": "4dc9a4e32fd9e06d42fb307688c59d6d889f0ff90ce034cbefed21b0d451fd81",
+    "output/init-compile.exit": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+    "output/init-compile.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "output/init-elf.exit": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+    "output/init-elf.log": "d69802d253d2d740cbdd136b6c5d6ba673b5b7a5b2e86750243cdb0b84d80d29",
+    "output/objdump-version.exit": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+    "output/objdump-version.log": "aff897e4c6a85eef803f6dc0ed4a813e66726aa1ca6f3afc23280f1d655f32da",
+    "output/probe-compile.exit": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+    "output/probe-compile.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "output/probe-elf.exit": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+    "output/probe-elf.log": "3b8d1f6362b2ac3a084e96dcc2b30a8dc2d73347a913678ccbe0a86843de5735",
+    "output/readelf-version.exit": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+    "output/readelf-version.log": "a87e30813b76f838a61852bc2943afbe4a26ba28a4b2728efb9481b50f02aff8",
+    "output/result.json": "4b149f52de6d3223b64ed21fb25d89835e90d50172013eb74d906acf4712984a",
+    "output/rustc-version.exit": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+    "output/rustc-version.log": "6661789050175828fe81cbba4e3bd5817751f51884bb3f5baaa7919bc01caa88"
+  },
+  "raw_artifacts": {
+    "/home/aaron/code/rusix/linux-out/vma-fixture-compile-001/output/init": "3fbbd3b7820a0d2990a9e813d427ba079b07d3e56c182a315a780b65d0f3ec7d",
+    "/home/aaron/code/rusix/linux-out/vma-fixture-compile-001/output/probe": "3186ae8f7c9e8a4ce917643c1a68dcd867eeac47ea8aa9dea48acfd99702b45a"
+  },
+  "child_inspection": "shared_child has raw syscalls, no calls or TLS segment access; no guest execution"
+}

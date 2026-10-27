@@ -1,0 +1,5 @@
+{
+  "commit": "620b34e0c9181b1563fb2a7ba80766616afeb73b",
+  "archive_sha256": "b0e30e8012270317f01ff3da245443bf44eb0fb86508b79e1add3aed79c6aed0",
+  "scope": "Static fixture compilation only; never execute guest binaries"
+}
