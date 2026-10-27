@@ -1,0 +1,135 @@
+
+/home/aaron/code/rusix/linux-out/dup-mmap-verification-002/rust/builds/ci-mm-dup-mmap-rust/kernel/mm_copy_rust.o:	file format elf64-x86-64
+
+Disassembly of section .text:
+
+0000000000000000 <__pfx_rusix_copy_mm>:
+       0: 90                           	nop
+       1: 90                           	nop
+       2: 90                           	nop
+       3: 90                           	nop
+       4: 90                           	nop
+       5: 90                           	nop
+       6: 90                           	nop
+       7: 90                           	nop
+       8: 90                           	nop
+       9: 90                           	nop
+       a: 90                           	nop
+       b: 90                           	nop
+       c: 90                           	nop
+       d: 90                           	nop
+       e: 90                           	nop
+       f: 90                           	nop
+
+0000000000000010 <rusix_copy_mm>:
+      10: 41 57                        	pushq	%r15
+      12: 41 56                        	pushq	%r14
+      14: 41 54                        	pushq	%r12
+      16: 53                           	pushq	%rbx
+      17: 50                           	pushq	%rax
+      18: 49 89 f6                     	movq	%rsi, %r14
+      1b: 49 89 fc                     	movq	%rdi, %r12
+      1e: 48 89 f7                     	movq	%rsi, %rdi
+      21: e8 00 00 00 00               	callq	0x26 <rusix_copy_mm+0x16>
+		0000000000000022:  R_X86_64_PLT32	rusix_mm_copy_task_counters-0x4
+      26: 31 db                        	xorl	%ebx, %ebx
+      28: 4c 89 f7                     	movq	%r14, %rdi
+      2b: 31 f6                        	xorl	%esi, %esi
+      2d: e8 00 00 00 00               	callq	0x32 <rusix_copy_mm+0x22>
+		000000000000002e:  R_X86_64_PLT32	rusix_mm_copy_task_mm-0x4
+      32: e8 00 00 00 00               	callq	0x37 <rusix_copy_mm+0x27>
+		0000000000000033:  R_X86_64_PLT32	rusix_mm_current_mm-0x4
+      37: 48 85 c0                     	testq	%rax, %rax
+      3a: 0f 84 9c 00 00 00            	je	0xdc <rusix_copy_mm+0xcc>
+      40: 4c 85 25 00 00 00 00         	testq	%r12, (%rip)            # 0x47 <rusix_copy_mm+0x37>
+		0000000000000043:  R_X86_64_PC32	rusix_mm_copy_clone_vm-0x4
+      47: 74 20                        	je	0x69 <rusix_copy_mm+0x59>
+      49: 49 89 c7                     	movq	%rax, %r15
+      4c: 48 89 c7                     	movq	%rax, %rdi
+      4f: e8 00 00 00 00               	callq	0x54 <rusix_copy_mm+0x44>
+		0000000000000050:  R_X86_64_PLT32	rusix_mm_copy_users_get-0x4
+      54: 4c 89 f7                     	movq	%r14, %rdi
+      57: 4c 89 fe                     	movq	%r15, %rsi
+      5a: e8 00 00 00 00               	callq	0x5f <rusix_copy_mm+0x4f>
+		000000000000005b:  R_X86_64_PLT32	rusix_mm_copy_task_mm-0x4
+      5f: 4c 89 f7                     	movq	%r14, %rdi
+      62: e8 00 00 00 00               	callq	0x67 <rusix_copy_mm+0x57>
+		0000000000000063:  R_X86_64_PLT32	rusix_mm_copy_cid_fork-0x4
+      67: eb 73                        	jmp	0xdc <rusix_copy_mm+0xcc>
+      69: e8 00 00 00 00               	callq	0x6e <rusix_copy_mm+0x5e>
+		000000000000006a:  R_X86_64_PLT32	rusix_mm_current_mm-0x4
+      6e: 49 89 c4                     	movq	%rax, %r12
+      71: e8 00 00 00 00               	callq	0x76 <rusix_copy_mm+0x66>
+		0000000000000072:  R_X86_64_PLT32	rusix_mm_slab_alloc-0x4
+      76: 48 85 c0                     	testq	%rax, %rax
+      79: 74 5c                        	je	0xd7 <rusix_copy_mm+0xc7>
+      7b: 49 89 c7                     	movq	%rax, %r15
+      7e: 48 89 c7                     	movq	%rax, %rdi
+      81: 4c 89 e6                     	movq	%r12, %rsi
+      84: e8 00 00 00 00               	callq	0x89 <rusix_copy_mm+0x79>
+		0000000000000085:  R_X86_64_PLT32	rusix_mm_copy_descriptor-0x4
+      89: 4c 89 ff                     	movq	%r15, %rdi
+      8c: e8 00 00 00 00               	callq	0x91 <rusix_copy_mm+0x81>
+		000000000000008d:  R_X86_64_PLT32	rusix_mm_copy_user_ns-0x4
+      91: 4c 89 ff                     	movq	%r15, %rdi
+      94: 4c 89 f6                     	movq	%r14, %rsi
+      97: 48 89 c2                     	movq	%rax, %rdx
+      9a: e8 00 00 00 00               	callq	0x9f <rusix_copy_mm+0x8f>
+		000000000000009b:  R_X86_64_PLT32	rusix_mm_init-0x4
+      9f: 48 85 c0                     	testq	%rax, %rax
+      a2: 74 33                        	je	0xd7 <rusix_copy_mm+0xc7>
+      a4: e8 00 00 00 00               	callq	0xa9 <rusix_copy_mm+0x99>
+		00000000000000a5:  R_X86_64_PLT32	rusix_mm_copy_uprobe_start-0x4
+      a9: 4c 89 ff                     	movq	%r15, %rdi
+      ac: 4c 89 e6                     	movq	%r12, %rsi
+      af: e8 00 00 00 00               	callq	0xb4 <rusix_copy_mm+0xa4>
+		00000000000000b0:  R_X86_64_PLT32	rusix_mm_copy_mappings-0x4
+      b4: 85 c0                        	testl	%eax, %eax
+      b6: 74 36                        	je	0xee <rusix_copy_mm+0xde>
+      b8: 4c 89 ff                     	movq	%r15, %rdi
+      bb: e8 00 00 00 00               	callq	0xc0 <rusix_copy_mm+0xb0>
+		00000000000000bc:  R_X86_64_PLT32	rusix_mm_copy_binfmt_clear-0x4
+      c0: 4c 89 ff                     	movq	%r15, %rdi
+      c3: 31 f6                        	xorl	%esi, %esi
+      c5: e8 00 00 00 00               	callq	0xca <rusix_copy_mm+0xba>
+		00000000000000c6:  R_X86_64_PLT32	rusix_mm_owner_init-0x4
+      ca: 4c 89 ff                     	movq	%r15, %rdi
+      cd: e8 00 00 00 00               	callq	0xd2 <rusix_copy_mm+0xc2>
+		00000000000000ce:  R_X86_64_PLT32	mmput-0x4
+      d2: e8 00 00 00 00               	callq	0xd7 <rusix_copy_mm+0xc7>
+		00000000000000d3:  R_X86_64_PLT32	rusix_mm_copy_uprobe_end-0x4
+      d7: bb f4 ff ff ff               	movl	$0xfffffff4, %ebx       # imm = 0xFFFFFFF4
+      dc: 89 d8                        	movl	%ebx, %eax
+      de: 48 83 c4 08                  	addq	$0x8, %rsp
+      e2: 5b                           	popq	%rbx
+      e3: 41 5c                        	popq	%r12
+      e5: 41 5e                        	popq	%r14
+      e7: 41 5f                        	popq	%r15
+      e9: e9 00 00 00 00               	jmp	0xee <rusix_copy_mm+0xde>
+		00000000000000ea:  R_X86_64_PLT32	__x86_return_thunk-0x4
+      ee: e8 00 00 00 00               	callq	0xf3 <rusix_copy_mm+0xe3>
+		00000000000000ef:  R_X86_64_PLT32	rusix_mm_copy_uprobe_end-0x4
+      f3: 4c 89 ff                     	movq	%r15, %rdi
+      f6: e8 00 00 00 00               	callq	0xfb <rusix_copy_mm+0xeb>
+		00000000000000f7:  R_X86_64_PLT32	rusix_mm_copy_hiwater-0x4
+      fb: 4c 89 ff                     	movq	%r15, %rdi
+      fe: e8 00 00 00 00               	callq	0x103 <rusix_copy_mm+0xf3>
+		00000000000000ff:  R_X86_64_PLT32	rusix_mm_release_has_binfmt-0x4
+     103: 84 c0                        	testb	%al, %al
+     105: 0f 84 49 ff ff ff            	je	0x54 <rusix_copy_mm+0x44>
+     10b: 4c 89 ff                     	movq	%r15, %rdi
+     10e: e8 00 00 00 00               	callq	0x113 <rusix_copy_mm+0x103>
+		000000000000010f:  R_X86_64_PLT32	rusix_mm_copy_binfmt_get-0x4
+     113: 84 c0                        	testb	%al, %al
+     115: 0f 85 39 ff ff ff            	jne	0x54 <rusix_copy_mm+0x44>
+     11b: 4c 89 ff                     	movq	%r15, %rdi
+     11e: e8 00 00 00 00               	callq	0x123 <rusix_copy_mm+0x113>
+		000000000000011f:  R_X86_64_PLT32	rusix_mm_copy_binfmt_clear-0x4
+     123: 4c 89 ff                     	movq	%r15, %rdi
+     126: 31 f6                        	xorl	%esi, %esi
+     128: e8 00 00 00 00               	callq	0x12d <rusix_copy_mm+0x11d>
+		0000000000000129:  R_X86_64_PLT32	rusix_mm_owner_init-0x4
+     12d: 4c 89 ff                     	movq	%r15, %rdi
+     130: e8 00 00 00 00               	callq	0x135 <rusix_copy_mm+0x125>
+		0000000000000131:  R_X86_64_PLT32	mmput-0x4
+     135: eb a0                        	jmp	0xd7 <rusix_copy_mm+0xc7>

@@ -9,10 +9,19 @@ verification runs locally. No subsystem divergence point is declared.
 Public development lives on `rusix/main`. [ADR 0002](docs/adr/0002.md) owns the
 target; [Phase 1](docs/PHASE1.md) owns delivery gates.
 
+Dup-mmap retry `002` at `9606fda0e4af` passes all seven ordinary userspace
+cases on both C and Rust: shared-MM clone/exec, private fork COW, DONTFORK,
+WIPEONFORK across two generations, and private/shared file-mapping lifetime.
+The resolved pair differs only by `RUSIX_DUP_MMAP_RUST`; guest binaries,
+initramfs and tools match. Both builds and pinned-image selection/postchecks
+pass without compiler diagnostics. [Retry evidence](docs/evidence/dup-mmap-002/manifest.json)
+retains 538 text records and 9,017 raw artifact hashes. This establishes these
+success-path consumers, not allocation-failure rollback or full MM completion.
+
 Dup-mmap attempt `001` at `9cf27ef36d1d` passed all seven C ordinary guest
 cases and its pinned-image postcheck. The Rust kernel built, but selection
 verification rejected the emitted symbol kind of `rusix_dup_account` before
-its VM launch. No paired runtime parity is claimed. [Failure evidence](docs/evidence/dup-mmap-initial/manifest.json)
+its VM launch. That attempt did not establish paired runtime parity. [Failure evidence](docs/evidence/dup-mmap-initial/manifest.json)
 preserves 364 records and 9,013 retained artifact hashes, including both builds,
 actual emitted disassembly, fixture/tool identities and the full error.
 
@@ -24,7 +33,7 @@ cases pass. A pinned-container full selection recheck passes against the retaine
 [Fix evidence](docs/evidence/dup-mmap-constant-fix/manifest.json) preserves exact
 verifier snapshots, commands and results (53 records and ten retained binary
 hashes). This recheck did not rebuild or boot a kernel; the original matrix
-remains failed and a fresh paired runtime attempt is still required.
+remains failed; the separate successful retry is recorded above.
 
 | Check | Verified result |
 | --- | --- |

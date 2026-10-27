@@ -1,0 +1,1 @@
+bash /src/rusix/scripts/with-local-tools.sh python3 /src/rusix/scripts/verify-dup-mmap.py objects --profile mm-dup-mmap-rust --source /src --build /out/builds/ci-mm-dup-mmap-rust --evidence /out/logs/ci-mm-dup-mmap-rust-mm-dup-mmap.run/kernel-build

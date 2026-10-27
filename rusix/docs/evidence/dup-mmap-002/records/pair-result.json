@@ -1,0 +1,17 @@
+{
+  "status": "PASS",
+  "source": "9606fda0e4af8e3b81528ec936b80658ee5e521d",
+  "different_settings": [
+    "CONFIG_RUSIX_DUP_MMAP_RUST"
+  ],
+  "cases": [
+    "shared_clone_write_and_exit",
+    "shared_clone_exec_detaches_mm",
+    "private_fork_cow",
+    "dontfork_omits_only_advised_range",
+    "wipeonfork_clears_child_and_grandchild",
+    "private_file_mapping_cow_and_lifetime",
+    "shared_file_mapping_survives_parent_unmap"
+  ],
+  "scope": "Seven ordinary sharing/COW/VMA inheritance/file-lifetime consumers; no allocation-failure coverage"
+}

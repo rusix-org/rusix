@@ -1,0 +1,246 @@
+
+/home/aaron/code/rusix/linux-out/dup-mmap-verification-002/c/builds/ci-mm-dup-mmap-c/kernel/mm_release_rust.o:	file format elf64-x86-64
+
+Disassembly of section .text:
+
+0000000000000000 <__pfx__RNvCs2rqvQjmHPBm_15mm_release_rust13release_users>:
+       0: 90                           	nop
+       1: 90                           	nop
+       2: 90                           	nop
+       3: 90                           	nop
+       4: 90                           	nop
+       5: 90                           	nop
+       6: 90                           	nop
+       7: 90                           	nop
+       8: 90                           	nop
+       9: 90                           	nop
+       a: 90                           	nop
+       b: 90                           	nop
+       c: 90                           	nop
+       d: 90                           	nop
+       e: 90                           	nop
+       f: 90                           	nop
+
+0000000000000010 <_RNvCs2rqvQjmHPBm_15mm_release_rust13release_users>:
+      10: 53                           	pushq	%rbx
+      11: 48 89 fb                     	movq	%rdi, %rbx
+      14: e8 00 00 00 00               	callq	0x19 <_RNvCs2rqvQjmHPBm_15mm_release_rust13release_users+0x9>
+		0000000000000015:  R_X86_64_PLT32	rusix_mm_release_users_check-0x4
+      19: 48 89 df                     	movq	%rbx, %rdi
+      1c: e8 00 00 00 00               	callq	0x21 <_RNvCs2rqvQjmHPBm_15mm_release_rust13release_users+0x11>
+		000000000000001d:  R_X86_64_PLT32	rusix_mm_release_uprobes-0x4
+      21: 48 89 df                     	movq	%rbx, %rdi
+      24: e8 00 00 00 00               	callq	0x29 <_RNvCs2rqvQjmHPBm_15mm_release_rust13release_users+0x19>
+		0000000000000025:  R_X86_64_PLT32	rusix_mm_release_aio-0x4
+      29: 48 89 df                     	movq	%rbx, %rdi
+      2c: e8 00 00 00 00               	callq	0x31 <_RNvCs2rqvQjmHPBm_15mm_release_rust13release_users+0x21>
+		000000000000002d:  R_X86_64_PLT32	rusix_mm_release_ksm-0x4
+      31: 48 89 df                     	movq	%rbx, %rdi
+      34: e8 00 00 00 00               	callq	0x39 <_RNvCs2rqvQjmHPBm_15mm_release_rust13release_users+0x29>
+		0000000000000035:  R_X86_64_PLT32	rusix_mm_release_khugepaged-0x4
+      39: 48 89 df                     	movq	%rbx, %rdi
+      3c: e8 00 00 00 00               	callq	0x41 <_RNvCs2rqvQjmHPBm_15mm_release_rust13release_users+0x31>
+		000000000000003d:  R_X86_64_PLT32	rusix_mm_release_mappings-0x4
+      41: 48 89 df                     	movq	%rbx, %rdi
+      44: e8 00 00 00 00               	callq	0x49 <_RNvCs2rqvQjmHPBm_15mm_release_rust13release_users+0x39>
+		0000000000000045:  R_X86_64_PLT32	rusix_mm_release_huge_zero-0x4
+      49: 48 89 df                     	movq	%rbx, %rdi
+      4c: e8 00 00 00 00               	callq	0x51 <_RNvCs2rqvQjmHPBm_15mm_release_rust13release_users+0x41>
+		000000000000004d:  R_X86_64_PLT32	rusix_mm_release_exe-0x4
+      51: 48 89 df                     	movq	%rbx, %rdi
+      54: e8 00 00 00 00               	callq	0x59 <_RNvCs2rqvQjmHPBm_15mm_release_rust13release_users+0x49>
+		0000000000000055:  R_X86_64_PLT32	rusix_mm_release_list_empty-0x4
+      59: 84 c0                        	testb	%al, %al
+      5b: 75 12                        	jne	0x6f <_RNvCs2rqvQjmHPBm_15mm_release_rust13release_users+0x5f>
+      5d: e8 00 00 00 00               	callq	0x62 <_RNvCs2rqvQjmHPBm_15mm_release_rust13release_users+0x52>
+		000000000000005e:  R_X86_64_PLT32	rusix_mm_release_list_lock-0x4
+      62: 48 89 df                     	movq	%rbx, %rdi
+      65: e8 00 00 00 00               	callq	0x6a <_RNvCs2rqvQjmHPBm_15mm_release_rust13release_users+0x5a>
+		0000000000000066:  R_X86_64_PLT32	rusix_mm_release_list_del-0x4
+      6a: e8 00 00 00 00               	callq	0x6f <_RNvCs2rqvQjmHPBm_15mm_release_rust13release_users+0x5f>
+		000000000000006b:  R_X86_64_PLT32	rusix_mm_release_list_unlock-0x4
+      6f: 48 89 df                     	movq	%rbx, %rdi
+      72: e8 00 00 00 00               	callq	0x77 <_RNvCs2rqvQjmHPBm_15mm_release_rust13release_users+0x67>
+		0000000000000073:  R_X86_64_PLT32	rusix_mm_release_has_binfmt-0x4
+      77: 84 c0                        	testb	%al, %al
+      79: 74 08                        	je	0x83 <_RNvCs2rqvQjmHPBm_15mm_release_rust13release_users+0x73>
+      7b: 48 89 df                     	movq	%rbx, %rdi
+      7e: e8 00 00 00 00               	callq	0x83 <_RNvCs2rqvQjmHPBm_15mm_release_rust13release_users+0x73>
+		000000000000007f:  R_X86_64_PLT32	rusix_mm_release_binfmt_put-0x4
+      83: 48 89 df                     	movq	%rbx, %rdi
+      86: e8 00 00 00 00               	callq	0x8b <_RNvCs2rqvQjmHPBm_15mm_release_rust13release_users+0x7b>
+		0000000000000087:  R_X86_64_PLT32	rusix_mm_release_lru-0x4
+      8b: 48 89 df                     	movq	%rbx, %rdi
+      8e: e8 00 00 00 00               	callq	0x93 <_RNvCs2rqvQjmHPBm_15mm_release_rust13release_users+0x83>
+		000000000000008f:  R_X86_64_PLT32	rusix_mm_futex_free-0x4
+      93: 48 89 df                     	movq	%rbx, %rdi
+      96: 5b                           	popq	%rbx
+      97: e9 00 00 00 00               	jmp	0x9c <_RNvCs2rqvQjmHPBm_15mm_release_rust13release_users+0x8c>
+		0000000000000098:  R_X86_64_PLT32	rusix_mm_release_count_drop-0x4
+      9c: 0f 1f 40 00                  	nopl	(%rax)
+
+00000000000000a0 <__pfx_mmput>:
+      a0: 90                           	nop
+      a1: 90                           	nop
+      a2: 90                           	nop
+      a3: 90                           	nop
+      a4: 90                           	nop
+      a5: 90                           	nop
+      a6: 90                           	nop
+      a7: 90                           	nop
+      a8: 90                           	nop
+      a9: 90                           	nop
+      aa: 90                           	nop
+      ab: 90                           	nop
+      ac: 90                           	nop
+      ad: 90                           	nop
+      ae: 90                           	nop
+      af: 90                           	nop
+
+00000000000000b0 <mmput>:
+      b0: 53                           	pushq	%rbx
+      b1: 48 89 fb                     	movq	%rdi, %rbx
+      b4: e8 00 00 00 00               	callq	0xb9 <mmput+0x9>
+		00000000000000b5:  R_X86_64_PLT32	rusix_mm_release_might_sleep-0x4
+      b9: 48 89 df                     	movq	%rbx, %rdi
+      bc: e8 00 00 00 00               	callq	0xc1 <mmput+0x11>
+		00000000000000bd:  R_X86_64_PLT32	rusix_mm_release_users_dec-0x4
+      c1: 84 c0                        	testb	%al, %al
+      c3: 74 09                        	je	0xce <mmput+0x1e>
+      c5: 48 89 df                     	movq	%rbx, %rdi
+      c8: 5b                           	popq	%rbx
+      c9: e9 42 ff ff ff               	jmp	0x10 <_RNvCs2rqvQjmHPBm_15mm_release_rust13release_users>
+      ce: 5b                           	popq	%rbx
+      cf: e9 00 00 00 00               	jmp	0xd4 <mmput+0x24>
+		00000000000000d0:  R_X86_64_PLT32	__x86_return_thunk-0x4
+      d4: 66 66 66 2e 0f 1f 84 00 00 00 00 00  	nopw	%cs:(%rax,%rax)
+
+00000000000000e0 <__pfx__RNvCs2rqvQjmHPBm_15mm_release_rust14mmput_async_fn>:
+      e0: 90                           	nop
+      e1: 90                           	nop
+      e2: 90                           	nop
+      e3: 90                           	nop
+      e4: 90                           	nop
+      e5: 90                           	nop
+      e6: 90                           	nop
+      e7: 90                           	nop
+      e8: 90                           	nop
+      e9: 90                           	nop
+      ea: 90                           	nop
+      eb: 90                           	nop
+      ec: 90                           	nop
+      ed: 90                           	nop
+      ee: 90                           	nop
+      ef: 90                           	nop
+
+00000000000000f0 <_RNvCs2rqvQjmHPBm_15mm_release_rust14mmput_async_fn>:
+      f0: 50                           	pushq	%rax
+      f1: e8 00 00 00 00               	callq	0xf6 <_RNvCs2rqvQjmHPBm_15mm_release_rust14mmput_async_fn+0x6>
+		00000000000000f2:  R_X86_64_PLT32	rusix_mm_release_work_mm-0x4
+      f6: 48 89 c7                     	movq	%rax, %rdi
+      f9: 58                           	popq	%rax
+      fa: e9 11 ff ff ff               	jmp	0x10 <_RNvCs2rqvQjmHPBm_15mm_release_rust13release_users>
+      ff: 90                           	nop
+
+0000000000000100 <__pfx_mmput_async>:
+     100: 90                           	nop
+     101: 90                           	nop
+     102: 90                           	nop
+     103: 90                           	nop
+     104: 90                           	nop
+     105: 90                           	nop
+     106: 90                           	nop
+     107: 90                           	nop
+     108: 90                           	nop
+     109: 90                           	nop
+     10a: 90                           	nop
+     10b: 90                           	nop
+     10c: 90                           	nop
+     10d: 90                           	nop
+     10e: 90                           	nop
+     10f: 90                           	nop
+
+0000000000000110 <mmput_async>:
+     110: 53                           	pushq	%rbx
+     111: 48 89 fb                     	movq	%rdi, %rbx
+     114: e8 00 00 00 00               	callq	0x119 <mmput_async+0x9>
+		0000000000000115:  R_X86_64_PLT32	rusix_mm_release_users_dec-0x4
+     119: 84 c0                        	testb	%al, %al
+     11b: 74 18                        	je	0x135 <mmput_async+0x25>
+     11d: 48 89 df                     	movq	%rbx, %rdi
+     120: 48 c7 c6 00 00 00 00         	movq	$0x0, %rsi
+		0000000000000123:  R_X86_64_32S	.text+0xf0
+     127: e8 00 00 00 00               	callq	0x12c <mmput_async+0x1c>
+		0000000000000128:  R_X86_64_PLT32	rusix_mm_release_work_init-0x4
+     12c: 48 89 df                     	movq	%rbx, %rdi
+     12f: 5b                           	popq	%rbx
+     130: e9 00 00 00 00               	jmp	0x135 <mmput_async+0x25>
+		0000000000000131:  R_X86_64_PLT32	rusix_mm_release_work_queue-0x4
+     135: 5b                           	popq	%rbx
+     136: e9 00 00 00 00               	jmp	0x13b <mmput_async+0x2b>
+		0000000000000137:  R_X86_64_PLT32	__x86_return_thunk-0x4
+     13b: 0f 1f 44 00 00               	nopl	(%rax,%rax)
+
+0000000000000140 <__pfx___mmdrop>:
+     140: 90                           	nop
+     141: 90                           	nop
+     142: 90                           	nop
+     143: 90                           	nop
+     144: 90                           	nop
+     145: 90                           	nop
+     146: 90                           	nop
+     147: 90                           	nop
+     148: 90                           	nop
+     149: 90                           	nop
+     14a: 90                           	nop
+     14b: 90                           	nop
+     14c: 90                           	nop
+     14d: 90                           	nop
+     14e: 90                           	nop
+     14f: 90                           	nop
+
+0000000000000150 <__mmdrop>:
+     150: 53                           	pushq	%rbx
+     151: 48 89 fb                     	movq	%rdi, %rbx
+     154: e8 00 00 00 00               	callq	0x159 <__mmdrop+0x9>
+		0000000000000155:  R_X86_64_PLT32	rusix_mm_release_init_check-0x4
+     159: 48 89 df                     	movq	%rbx, %rdi
+     15c: e8 00 00 00 00               	callq	0x161 <__mmdrop+0x11>
+		000000000000015d:  R_X86_64_PLT32	rusix_mm_release_current_check-0x4
+     161: 48 89 df                     	movq	%rbx, %rdi
+     164: e8 00 00 00 00               	callq	0x169 <__mmdrop+0x19>
+		0000000000000165:  R_X86_64_PLT32	rusix_mm_release_lazy_tlbs-0x4
+     169: 48 89 df                     	movq	%rbx, %rdi
+     16c: e8 00 00 00 00               	callq	0x171 <__mmdrop+0x21>
+		000000000000016d:  R_X86_64_PLT32	rusix_mm_release_active_check-0x4
+     171: 48 89 df                     	movq	%rbx, %rdi
+     174: e8 00 00 00 00               	callq	0x179 <__mmdrop+0x29>
+		0000000000000175:  R_X86_64_PLT32	rusix_mm_pgd_free-0x4
+     179: 48 89 df                     	movq	%rbx, %rdi
+     17c: e8 00 00 00 00               	callq	0x181 <__mmdrop+0x31>
+		000000000000017d:  R_X86_64_PLT32	rusix_mm_id_free-0x4
+     181: 48 89 df                     	movq	%rbx, %rdi
+     184: e8 00 00 00 00               	callq	0x189 <__mmdrop+0x39>
+		0000000000000185:  R_X86_64_PLT32	rusix_mm_context_destroy-0x4
+     189: 48 89 df                     	movq	%rbx, %rdi
+     18c: e8 00 00 00 00               	callq	0x191 <__mmdrop+0x41>
+		000000000000018d:  R_X86_64_PLT32	rusix_mm_release_notifiers-0x4
+     191: 48 89 df                     	movq	%rbx, %rdi
+     194: e8 00 00 00 00               	callq	0x199 <__mmdrop+0x49>
+		0000000000000195:  R_X86_64_PLT32	rusix_mm_release_check-0x4
+     199: 48 89 df                     	movq	%rbx, %rdi
+     19c: e8 00 00 00 00               	callq	0x1a1 <__mmdrop+0x51>
+		000000000000019d:  R_X86_64_PLT32	rusix_mm_release_user_ns-0x4
+     1a1: 48 89 df                     	movq	%rbx, %rdi
+     1a4: e8 00 00 00 00               	callq	0x1a9 <__mmdrop+0x59>
+		00000000000001a5:  R_X86_64_PLT32	rusix_mm_release_pasid-0x4
+     1a9: 48 89 df                     	movq	%rbx, %rdi
+     1ac: e8 00 00 00 00               	callq	0x1b1 <__mmdrop+0x61>
+		00000000000001ad:  R_X86_64_PLT32	rusix_mm_cid_destroy-0x4
+     1b1: 48 89 df                     	movq	%rbx, %rdi
+     1b4: e8 00 00 00 00               	callq	0x1b9 <__mmdrop+0x69>
+		00000000000001b5:  R_X86_64_PLT32	rusix_mm_release_rss-0x4
+     1b9: 48 89 df                     	movq	%rbx, %rdi
+     1bc: 5b                           	popq	%rbx
+     1bd: e9 00 00 00 00               	jmp	0x1c2 <__mmdrop+0x72>
+		00000000000001be:  R_X86_64_PLT32	rusix_mm_slab_free-0x4
