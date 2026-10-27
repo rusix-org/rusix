@@ -1,0 +1,53 @@
+dup_mmap local verification draft — not launch ready
+
+Frozen source: linux-mm-dup-mmap at
+9cf27ef36d1d58cb65bd866d9f046ed2e56b045a.
+REVIEWED_LAUNCH_READY remains False. Root must review and explicitly enable
+before invoking run.sh. Do not run alongside the active release matrix.
+
+This prepares fresh, serial C then Rust builds in
+linux-out/dup-mmap-verification-001/{c,rust}; no cache seeds or copied fixtures.
+The build image is pinned to
+sha256:c02eb3929889b3f0cc035d57a02c844e0c74c71d24fbda1311249faeb8257f63.
+Each build container is limited to two CPUs, 5 GiB and four hours; each guest
+uses KVM/q35, two CPUs, 512 MiB and a 180-second timeout. The shared matrix
+flock, active-container check, exclusive output creation and owned CID cleanup
+prevent overlapping or accidentally reused execution. Failures remain in place.
+
+Preflight requires the exact clean commit. Launcher and source hashes are
+recorded and rechecked. Each side must pass the literal ordered seven-case
+inventory plus terminal success; diagnostics, missing/extra/duplicate cases,
+wrong config, failed exits and changed binaries or inputs reject the run.
+The pair differs only by RUSIX_DUP_MMAP_RUST and must share guest binaries,
+source inputs, compiler/package identities and VM settings. Both sides retain
+Rust task construction, MM construction, release and copy implementations.
+
+Postchecks run in the same pinned image with LLVM 19, never host LLVM. They
+validate the original saved fork.i and mmap.i preprocessing records against
+actual source, object, config, compiler-command and output hashes before
+creating separate exclusive reinspection directories. Actual archive/object/
+linked-symbol proofs are regenerated there. Only input_sha256 and
+archive_member_sha256 path keys are remapped, recursively for the nested
+mm_copy_selection proof, and only between the exact source/output mounts.
+Original build evidence is not rewritten. All other proof fields remain exact.
+
+Case order:
+  shared_clone_write_and_exit
+  shared_clone_exec_detaches_mm
+  private_fork_cow
+  dontfork_omits_only_advised_range
+  wipeonfork_clears_child_and_grandchild
+  private_file_mapping_cow_and_lifetime
+  shared_file_mapping_survives_parent_unmap
+
+Parent-reported static fixture compilation and its independent audit are prior,
+separate evidence. This draft has not built or booted any kernel. Even a future
+passing matrix establishes these seven ordinary consumers and selected code,
+not allocation-failure rollback coverage, vm_ops->open coverage, leak freedom
+or full MM compatibility. Runtime partial-allocation failure remains required
+separate work. No host guest-binary execution is permitted.
+
+After review and explicit enablement, root may run:
+  bash linux-out/dup-mmap-verification-draft/run.sh
+Do not invoke check-results.py manually on live/incomplete output. Its pinned
+postchecks intentionally refuse reused evidence directories.

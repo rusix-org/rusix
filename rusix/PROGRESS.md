@@ -9,6 +9,14 @@ verification runs locally. No subsystem divergence point is declared.
 Public development lives on `rusix/main`. [ADR 0002](docs/adr/0002.md) owns the
 target; [Phase 1](docs/PHASE1.md) owns delivery gates.
 
+Dup-mmap attempt `001` at `9cf27ef36d1d` passed all seven C ordinary guest
+cases and its pinned-image postcheck. The Rust kernel built, but selection
+verification rejected the emitted symbol kind of `rusix_dup_account` before
+its VM launch. No paired runtime parity is claimed. [Failure evidence](docs/evidence/dup-mmap-initial/manifest.json)
+preserves 364 records and 9,013 retained artifact hashes, including both builds,
+actual emitted disassembly, fixture/tool identities and the full error. Review
+the constant ownership proof, then repeat with a fresh recorded attempt.
+
 | Check | Verified result |
 | --- | --- |
 | LTS provenance/math | Signed tag verified; all 24 required math cases pass on q35, zero skips. [Math](docs/evidence/math-q35/manifest.json), [provenance](docs/evidence/lts-baseline/manifest.json). |

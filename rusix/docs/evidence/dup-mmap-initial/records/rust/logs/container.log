@@ -1,0 +1,12 @@
+Build evidence: /out/logs/ci-mm-dup-mmap-rust-build.FQvBQmNo
+Traceback (most recent call last):
+  File "/src/rusix/scripts/verify-dup-mmap.py", line 191, in <module>
+    if __name__=='__main__':main()
+                            ~~~~^^
+  File "/src/rusix/scripts/verify-dup-mmap.py", line 183, in main
+    if args.action=='objects':result=verify(args)
+                                     ~~~~~~^^^^^^
+  File "/src/rusix/scripts/verify-dup-mmap.py", line 169, in verify
+    if len(rows)!=1 or len(rows[0])!=3 or rows[0][1]!=expected:raise ValueError('Missing/wrong canonical primitive: '+helper)
+                                                               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+ValueError: Missing/wrong canonical primitive: rusix_dup_account
