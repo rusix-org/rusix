@@ -112,6 +112,34 @@ def classify(worker, trace, calibration, stats, probes):
     return {'classification':'stack-page-failure','pid':pid,'nth':nth}
 
 
+def instruction_rows(text):
+    """Yield actual instruction rows without materializing the whole ELF listing."""
+    for match in re.finditer(r'^[ \t]*([0-9a-f]+):[ \t]+([^\r\n]+)$', text, re.M):
+        yield int(match[1], 16), match[2]
+
+
+def instruction_pairs(text):
+    previous = None
+    for row in instruction_rows(text):
+        if previous is not None:
+            yield previous, row
+        previous = row
+
+
+def frame_owner(name, implementation, key):
+    if implementation == 'rust':
+        return name in ({'rusix_dup_task_struct','rusix_task_alloc'} if key == 'slab_frame' else {'rusix_task_alloc_stack'})
+    return re.fullmatch(r'(?:copy_process|dup_task_struct|alloc_task_struct_node|alloc_thread_stack_node)(?:\.(?:isra|constprop)\.\d+)?', name) is not None
+
+
+def file_digest(path):
+    digest = hashlib.sha256()
+    with path.open('rb') as stream:
+        for chunk in iter(lambda: stream.read(1024 * 1024), b''):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
 def callsite_proof(symbols, disassembly, calibration):
     """Bind exact stack PCs to real call instructions, not supplied frame labels."""
     symbol_rows = {}
@@ -125,15 +153,27 @@ def callsite_proof(symbols, disassembly, calibration):
         rows = symbol_rows.get(name, [])
         need(len(rows) == 1 and rows[0][1] > 0, 'Missing/ambiguous relevant code symbol: '+name)
         return rows[0]
-    instructions = []
-    for line in disassembly.splitlines():
-        m = re.match(r'^\s*([0-9a-f]+):\s+(.+)$',line)
-        if m: instructions.append((int(m[1],16),m[2]))
     range_name = calibration['range_symbol']
     need(range_name in symbol_rows, 'Missing constructor caller range')
     start,size = unique_symbol(range_name)
     need(int(calibration['range_start'],0)==start and int(calibration['range_end'],0)==start+size, 'Required range does not match actual symbol extent')
     need(re.fullmatch(r'copy_process(?:\.(?:isra|constprop)\.\d+)?',range_name), 'Expected copy_process lifetime context')
+    # Retain only bounded constructor/adapter instructions. Adjacency is taken
+    # from the complete stream, never from a filtered list of instructions.
+    frames = []
+    for key in ('slab_frame', 'stack_frame'):
+        frame = re.fullmatch(r'([A-Za-z0-9_.$]+)\+0x([0-9a-f]+)/0x([0-9a-f]+)', calibration[key])
+        need(frame and frame_owner(frame[1], calibration.get('implementation','c'), key), 'Frame outside constructor allocation chain')
+        base, extent = unique_symbol(frame[1])
+        need(int(frame[3],16) == extent and int(frame[2],16) < extent, 'Wrong frame extent')
+        frames.append((base, extent, base + int(frame[2],16)))
+    intervals = [(base, extent) for base, extent, _ in frames]
+    if 'rusix_task_alloc' in symbol_rows:
+        intervals.extend(symbol_rows['rusix_task_alloc'])
+    instructions = [row for row in instruction_rows(disassembly)
+                    if any(base <= row[0] < base + extent for base, extent in intervals)]
+    pcs = {pc for _, _, pc in frames}
+    adjacent = [pair for pair in instruction_pairs(disassembly) if pair[1][0] in pcs]
     for key, allowed in [('slab_frame',{'kmem_cache_alloc_node_noprof'}), ('stack_frame',{'__alloc_pages_noprof','__alloc_frozen_pages_noprof'})]:
         m=re.fullmatch(r'([A-Za-z0-9_.$]+)\+0x([0-9a-f]+)/0x([0-9a-f]+)',calibration[key])
         need(m and m[1] in symbol_rows,'Unknown frame symbol')
@@ -145,12 +185,12 @@ def callsite_proof(symbols, disassembly, calibration):
         base,size=unique_symbol(m[1]); offset=int(m[2],16)
         need(int(m[3],16)==size and 0<=offset<size,'Wrong frame extent')
         pc=base+offset
-        candidates=[(ins,next_ins) for ins,next_ins in zip(instructions,instructions[1:]) if next_ins[0]==pc]
+        candidates=[(ins,next_ins) for ins,next_ins in adjacent if next_ins[0]==pc]
         need(len(candidates)==1,'Frame PC outside disassembled instructions')
         (address,text),(next_address,_)=candidates[0]
         # This ordinary trace instance prints saved return PCs unchanged.
         # Require the address immediately after a real call instruction.
-        need(pc==next_address and re.match(r'callq?\s',text),'Frame is not an allocation call return PC')
+        need(base <= address < pc == next_address < base + size and re.match(r'callq?\s',text),'Frame is not an allocation call return PC')
         target=re.search(r'<([^>]+)>',text)
         need(target,'Unresolved call target')
         callee=target[1]
@@ -179,16 +219,20 @@ def disassembly_matches(recorded, actual, recorded_path, actual_path):
         filename = str(filename)
         need(filename and not any(c in filename for c in '\r\n'),
              'Invalid disassembly filename')
-        lines = text.splitlines(keepends=True)
-        prefix = filename + ':\tfile format '
-        need(len(lines) >= 2 and lines[0] == '\n' and lines[1].startswith(prefix),
-             'Missing or wrong disassembly filename heading')
-        need(sum('\tfile format ' in line for line in lines) == 1,
-             'Duplicate disassembly file heading')
-        # Preserve format, whitespace, newlines and the entire instruction body.
-        # Only the exact expected filename bytes at the fixed heading are omitted.
-        return lines[0] + lines[1][len(filename):] + ''.join(lines[2:])
-    return bound_heading(recorded, recorded_path) == bound_heading(actual, actual_path)
+        prefix = '\n' + filename + ':\tfile format '
+        need(text.startswith(prefix), 'Missing or wrong disassembly filename heading')
+        need(text.count('\tfile format ') == 1, 'Duplicate disassembly file heading')
+        return 1 + len(filename)
+    left = bound_heading(recorded, recorded_path)
+    right = bound_heading(actual, actual_path)
+    if len(recorded) - left != len(actual) - right:
+        return False
+    # Exact character comparison in bounded chunks: no full-body split/join or
+    # copied normalized listing. Only the verified filename prefix is omitted.
+    for offset in range(0, len(recorded) - left, 1024 * 1024):
+        if recorded[left+offset:left+offset+1024*1024] != actual[right+offset:right+offset+1024*1024]:
+            return False
+    return True
 
 
 def load_reviewed_calibration(path, remap=lambda p: p):
@@ -208,7 +252,7 @@ def load_reviewed_calibration(path, remap=lambda p: p):
         p = Path(item['path'])
         if not p.is_absolute(): p = path.parent / p
         p = remap(p)
-        need(hashlib.sha256(p.read_bytes()).hexdigest() == item['sha256'], 'Calibration input changed')
+        need(file_digest(p) == item['sha256'], 'Calibration input changed')
         inputs[key]=p
     rows=[line.split('\t') for line in inputs['calibration.tsv'].read_text().splitlines()]
     need(all(len(r)==2 for r in rows) and len({r[0] for r in rows})==len(rows),'Malformed calibration TSV')
@@ -235,7 +279,7 @@ def load_reviewed_calibration(path, remap=lambda p: p):
         need(notes.read_bytes()==inputs['notes'].read_bytes() and notes.read_bytes().hex()==cal['notes_hex'],'Kernel notes mismatch')
     callsite_proof(symbols,disassembly,cal)
     for key,item in packet['inputs'].items():
-        need(hashlib.sha256(inputs[key].read_bytes()).hexdigest()==item['sha256'],'Calibration inputs changed during verification')
+        need(file_digest(inputs[key])==item['sha256'],'Calibration inputs changed during verification')
     return cal,packet['inputs']['calibration.tsv']['sha256']
 
 

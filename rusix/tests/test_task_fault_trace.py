@@ -108,4 +108,15 @@ class DisassemblyHeading(unittest.TestCase):
   for bad in (actual.replace(new,'/wrong/vmlinux'), actual+new+':\tfile format elf64-x86-64\n', actual+'/wrong/vmlinux:\tfile format elf64-x86-64\n', actual.lstrip('\n'), '\n'+actual):
    with self.assertRaises(ValueError):m.disassembly_matches(text,bad,old,new)
   with self.assertRaises(ValueError):m.disassembly_matches(text.replace(old,'/wrong'),actual,old,new)
+class BoundedListing(unittest.TestCase):
+ def test_heading_compare_streams_and_checks_last_byte(self):
+  class Listing(str):
+   def splitlines(self, *args, **kwargs):
+    raise AssertionError('Whole listing split is forbidden')
+  body='1000: nop\n' * 200000
+  left=Listing('\n/old:\tfile format elf64-x86-64\n'+body)
+  right=Listing('\n/new:\tfile format elf64-x86-64\n'+body)
+  self.assertTrue(m.disassembly_matches(left,right,'/old','/new'))
+  self.assertFalse(m.disassembly_matches(left,right[:-1]+'X','/old','/new'))
+
 if __name__=='__main__':unittest.main()

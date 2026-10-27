@@ -27,6 +27,18 @@ class Pipeline(unittest.TestCase):
   for text in [DISASM.replace('callq','jmpq'),DISASM+'1030: callq 0x3000 <__alloc_pages_noprof>\n1035: nop\n']:
    with self.assertRaises(ValueError):m.generator.discover(SYMBOLS,text,'c')
   with self.assertRaises(ValueError):m.generator.discover(SYMBOLS,DISASM,'rust')
+ def test_discovery_streams_listing_and_excludes_other_owners(self):
+  class Listing(str):
+   def splitlines(self, *args, **kwargs):
+    raise AssertionError('Whole disassembly split is forbidden')
+  symbols=SYMBOLS+'00005000 00000100 t unrelated\n'
+  text=Listing(DISASM+'5010: callq 0x2000 <kmem_cache_alloc_node_noprof>\n5015: nop\n5020: callq 0x3000 <__alloc_pages_noprof>\n5025: nop\n')
+  self.assertEqual(m.generator.discover(symbols,text,'c')['slab_frame'],'copy_process+0x15/0x100')
+ def test_adjacency_is_not_reconstructed_from_owner_filtered_rows(self):
+  # A foreign instruction between call and proposed return must invalidate
+  # attribution, even though it lies outside the retained owner extent.
+  text=DISASM.replace('1015: nop','5000: nop\n1015: nop')
+  with self.assertRaises(ValueError):m.generator.discover(SYMBOLS,text,'c')
  def test_exact_capture(self):
   self.assertEqual(set(m.decode_console(console(),0)),set(m.ARTIFACTS))
  def test_all_artifact_omissions_duplicates_and_order(self):

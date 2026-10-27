@@ -25,13 +25,13 @@ def discover(symbols, disassembly, implementation):
     ranges = [(a,s,n) for a,s,n in owners if re.fullmatch(r'copy_process(?:\.(?:isra|constprop)\.\d+)?', n)]
     gate.need(len(ranges) == 1, 'Ambiguous/missing copy_process range')
     start, size, name = ranges[0]
-    instructions = []
-    for line in disassembly.splitlines():
-        match = re.match(r'^\s*([0-9a-f]+):\s+(.+)$', line)
-        if match:
-            instructions.append((int(match[1],16), match[2]))
+    # Only these owners can satisfy the existing attribution policy. Exclude
+    # unrelated kernel allocators before constructing candidate pairs.
+    owners = [(base,extent,owner) for base,extent,owner in owners
+              if any(gate.frame_owner(owner, implementation, key)
+                     for key in ('slab_frame','stack_frame'))]
     frames = {'slab_frame':set(), 'stack_frame':set()}
-    for (address, ins), (next_address, _) in zip(instructions, instructions[1:]):
+    for (address, ins), (next_address, _) in gate.instruction_pairs(disassembly):
         if not re.match(r'callq?\s', ins):
             continue
         for key, targets in [('slab_frame', ('kmem_cache_alloc_node_noprof','rusix_task_alloc')),
@@ -39,7 +39,7 @@ def discover(symbols, disassembly, implementation):
             if not any(f'<{target}>' in ins for target in targets):
                 continue
             for base, extent, owner in owners:
-                if base <= address < next_address < base + extent:
+                if gate.frame_owner(owner, implementation, key) and base <= address < next_address < base + extent:
                     frames[key].add(f'{owner}+0x{next_address-base:x}/0x{extent:x}')
     accepted = []
     for slab in sorted(frames['slab_frame']):
@@ -63,7 +63,7 @@ def generate(vmlinux, config, revision, implementation, output):
         result = subprocess.run(argv, capture_output=True, check=True)
         gate.need(not result.stderr, 'ELF tool diagnostics')
         return result.stdout
-    before = {str(p):hashlib.sha256(p.read_bytes()).hexdigest() for p in (vmlinux,config)}
+    before = {str(p):gate.file_digest(p) for p in (vmlinux,config)}
     symbols = checked(['llvm-nm','-S','--defined-only',str(vmlinux)])
     disassembly = checked(['llvm-objdump','-d','--no-show-raw-insn',str(vmlinux)])
     (output/'symbols').write_bytes(symbols)
@@ -73,12 +73,13 @@ def generate(vmlinux, config, revision, implementation, output):
     cal = dict(schema='1',policy_base=gate.SOURCE,build_source=revision,
                notes_hex=(output/'notes').read_bytes().hex(),
                **discover(symbols.decode(),disassembly.decode(),implementation))
+    del symbols, disassembly
     (output/'calibration.tsv').write_text(''.join(f'{k}\t{v}\n' for k,v in sorted(cal.items())))
     inputs = {'vmlinux':vmlinux.resolve(),'config':config.resolve(),
               **{name:(output/name).resolve() for name in ('symbols','disassembly','notes','calibration.tsv')}}
-    packet = dict(policy_base=gate.SOURCE,build_source=revision,inputs={name:dict(path=str(p),sha256=hashlib.sha256(p.read_bytes()).hexdigest()) for name,p in inputs.items()})
+    packet = dict(policy_base=gate.SOURCE,build_source=revision,inputs={name:dict(path=str(p),sha256=gate.file_digest(p)) for name,p in inputs.items()})
     (output/'packet.json').write_text(json.dumps(packet,indent=2)+'\n')
-    gate.need(before == {str(p):hashlib.sha256(p.read_bytes()).hexdigest() for p in (vmlinux,config)},'Build inputs changed during discovery')
+    gate.need(before == {str(p):gate.file_digest(p) for p in (vmlinux,config)},'Build inputs changed during discovery')
     # Reuse the independent packet validation path; guest success traces are
     # intentionally not prerequisites here, but are mandatory after execution.
     gate.load_reviewed_calibration(output/'packet.json')
