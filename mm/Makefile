@@ -148,3 +148,5 @@ obj-$(CONFIG_TMPFS_QUOTA) += shmem_quota.o
 obj-$(CONFIG_PT_RECLAIM) += pt_reclaim.o
 
 obj-$(CONFIG_RUSIX_DUP_MMAP_RUST) += dup_mmap_rust.o
+
+obj-$(CONFIG_RUSIX_VMA_LIFECYCLE_RUST) += vma_lifecycle_rust.o

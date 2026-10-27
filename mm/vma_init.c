@@ -8,6 +8,16 @@
 #include "vma_internal.h"
 #include "vma.h"
 
+#ifdef CONFIG_RUSIX_VMA_LIFECYCLE_RUST
+#include "vma_lifecycle_impl.h"
+extern void rusix_vma_state_init(void);
+
+/* Keep canonical init attributes and the existing boot call site. */
+void __init vma_state_init(void)
+{
+	rusix_vma_state_init();
+}
+#else
 /* SLAB cache for vm_area_struct structures */
 static struct kmem_cache *vm_area_cachep;
 
@@ -150,3 +160,4 @@ void vm_area_free(struct vm_area_struct *vma)
 	vma_pfnmap_track_ctx_release(vma);
 	kmem_cache_free(vm_area_cachep, vma);
 }
+#endif /* CONFIG_RUSIX_VMA_LIFECYCLE_RUST */

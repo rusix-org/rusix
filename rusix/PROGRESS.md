@@ -6,6 +6,16 @@ opt-in Rust implementations; twenty-three generic wait and seventeen bit-wait en
 (`2926d88bb7fc`) is the behavioral baseline. Hosted CI remains disabled;
 verification runs locally. No subsystem divergence point is declared.
 
+VMA lifecycle development is a source-only candidate on `rusix/vma-lifecycle`:
+Rust owns cache-pointer storage and full fresh/dup/free policy with explicit PFN
+reference rollback; canonical C primitives retain shared-field and resource
+operations. It is **uncompiled and unverified**. The upstream 16-case C baseline
+runner is prepared but unrun; MM-copy/dup_mmap runtime remains pending. Task-fault
+verification session 55395 was active when this candidate was prepared, with no
+success inferred. Next: independent source review, baseline execution, then
+paired linked-selection and lifetime/ordinary-consumer gates. See the
+[VMA lifecycle contract](experiments/vma-lifecycle/README.md).
+
 Public development lives on `rusix/main`. [ADR 0002](docs/adr/0002.md) owns the
 target; [Phase 1](docs/PHASE1.md) owns delivery gates.
 

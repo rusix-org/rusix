@@ -2280,3 +2280,16 @@ config RUSIX_DUP_MMAP_RUST
 	  final-address stack iterator/list context; typed C primitives retain
 	  foreign fields, maple storage and architecture/subsystem operations.
 	  Original C remains the default comparison implementation.
+
+config RUSIX_VMA_LIFECYCLE_RUST
+	bool "Rusix Rust VMA descriptor lifecycle"
+	depends on RUSIX_DUP_MMAP_RUST && PER_VMA_LOCK
+	depends on !NUMA && !NUMA_BALANCING
+	default n
+	help
+	  Select Rust ownership of the VMA slab cache pointer and allocation,
+	  selective duplication, PFN-reference and detached-free sequencing.
+	  Inherits the builtin x86_64 MM stack restrictions. Foreign field,
+	  slab, lockdep, refcount and optional name operations remain C.
+	  No exclusive VMA references or descriptor layout change is introduced.
+	  Leave disabled for the preserved original C implementation.
