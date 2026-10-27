@@ -1,29 +1,26 @@
 # rusix progress
 
-The teardown verifier now requires exactly one fixture archive member only in
-its explicit KUnit context and validates the canonical Rust case terminator
-(NORMAL speed 3, otherwise zero bytes, no relocations). Production source is
-unchanged. All 32 host suites (338 cases) pass on 4,034 stable inputs.
-[Fix evidence](docs/evidence/exit-mmap-fixture-gate-fix/manifest.json) retains both
-host stages, the failed first reinspection and successful second reinspection.
+Mapping-teardown matrix 002 passes at frozen source `8b6ab8382784`: four fresh
+kernels and six boots, with nine ordinary lifecycle cases on each C/Rust side,
+79 required combined KUnit cases and three isolated teardown cases on each side.
+Both pairs differ only by `CONFIG_RUSIX_EXIT_MMAP_RUST`. Actual emitted/linked
+selection, strict raw-console parsing, all four per-profile postchecks, pair
+postcheck and prerequisite/source before-after checks pass.
+[Paired teardown evidence](docs/evidence/mm-exit-mmap-verified/manifest.json).
 
-The retained original C teardown kernel now passes real KUnit boots: all 79
-required combined cases and all three isolated teardown cases. The complete
-nested object/archive/linked and fixture proof passed first using separately
-attributed checker code at `13e0ddc71a57`; the kernel itself remains built from
-`0ff7a933c198`. All 5,469 pinned inputs remain unchanged; actual container limits
-were two CPUs/2 GiB, with no OOM. [Retained C runtime evidence](docs/evidence/exit-mmap-retained-c-kunit/manifest.json)
-contains consoles, parser/gate results, commands, resources and before/after checks.
-The original matrix remains failed. This is no rebuild or Rust teardown KUnit
-result; a fresh paired ordinary/KUnit retry is required for full matrix acceptance.
-The separate PFN checker remains disabled pending reviewed propagation.
+This evidence checkpoint changes no production code. Rust owns `exit_mmap`,
+`remove_vma` and shared close policy; C still owns shared layouts, synchronization,
+page-table/TLB operations and resource primitives. Broader failure/concurrency
+coverage and whole-MM replacement remain unfinished. Next: require this accepted
+teardown result before the copy-VMA successor matrix.
 
-The inherited lifecycle verifier now accepts the observed private-cache `.0`
-suffix and proves the canonical refcount constant's four-byte storage/value.
-This carries the reviewed fix from `e0632d2729` without changing kernel code.
-All 32 host suites (333 cases) pass on unchanged inputs.
-[Regression evidence](docs/evidence/lifecycle-verifier-fix/manifest.json) references
-the original fix proof; candidate kernel/guest verification remains pending.
+The initial failed matrix and the two verifier reinspection attempts remain
+preserved through [fix evidence](docs/evidence/exit-mmap-fixture-gate-fix/manifest.json).
+The [retained C baseline](docs/evidence/exit-mmap-retained-c-kunit/manifest.json)
+keeps its original `0ff7a933` kernel versus corrected `13e0ddc7` checker attribution.
+Four compressed historical tooling records are restored from canonical
+`3c6761286385`, matching their existing manifest hashes; the tested source stays
+frozen. [Packaging repair](docs/evidence/mm-exit-mmap-kunit-tooling/git-record-repair.json).
 
 **Rust BRD passes x86_64 block and ordinary-userspace ext4 contracts;
 all fourteen completion entry points and all ten swait.c entry points have verified
@@ -31,12 +28,12 @@ opt-in Rust implementations; twenty-three generic wait and seventeen bit-wait en
 (`2926d88bb7fc`) is the behavioral baseline. Hosted CI remains disabled;
 verification runs locally. No subsystem divergence point is declared.
 
-Mapping teardown is a source-only candidate on `rusix/mm-exit-mmap`: Rust now
+Mapping teardown is an opt-in implementation on `rusix/mm-exit-mmap`: Rust now
 owns complete `exit_mmap`, `remove_vma` and common close policy, with native C
 primitives retaining shared accesses and page-table/TLB/resource operations.
 The original C policies are preserved. Formatting and exact source restoration
-are checked; compilation, actual linked-selection proofs and paired
-success/failure/lifetime gates remain pending. Exact source-restoration delegation,
+are checked; compilation, linked selection and the paired cases above now pass.
+Broader failure/concurrency gates remain pending. Exact source-restoration delegation,
 four-unit preprocessing and selection tooling are implemented; all 308 cases
 across 29 host suites pass with stable input hashes. The initial host-fixture
 setup failure and exact tested snapshots are retained in
@@ -46,14 +43,14 @@ has three source-reviewed cases: empty retained-MM teardown, close-before-file
 release, and real MAP_FIXED dummy-hook reset. Mapped modes allow native lazy-TLB
 references while retaining exact users/tree/callback invariants; timeout paths
 retain necessary resources. Seven inventory host regressions pass. Its isolated
-three/combined 79 requirements remain uncompiled and unexecuted; leading-sentinel
+three/combined 79 requirements now pass on both C/Rust sides; leading-sentinel
 and attributable allocation-failure coverage are still missing.
 Separate KUnit profile routing and archive/registration-pointer checks now pass
 331 cases across 32 host suites on 164 stable inputs.
 [Routing evidence](docs/evidence/mm-exit-mmap-kunit-tooling/manifest.json) retains
 the earlier 329-case snapshot and helper-extraction failure, plus the successful
 pinned LLVM19 check of historical archive bytes. Resolved Kconfig and actual
-fixture linkage/runtime remain pending.
+fixture linkage/runtime are covered by matrix 002 above.
 [Boundary and remaining work](experiments/mm-exit-mmap/README.md).
 
 At `8ec785568045`, pinned-image Kconfig resolution passes for all four ordinary

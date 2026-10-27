@@ -1,0 +1,261 @@
+
+/home/aaron/code/rusix/linux-out/mm-exit-mmap-verification-002/kunit-rust/builds/ci-exit-mmap-kunit-rust/mm/exit_mmap_rust.o:	file format elf64-x86-64
+
+Disassembly of section .text:
+
+0000000000000000 <__pfx_rusix_vma_close>:
+       0: 90                           	nop
+       1: 90                           	nop
+       2: 90                           	nop
+       3: 90                           	nop
+       4: 90                           	nop
+       5: 90                           	nop
+       6: 90                           	nop
+       7: 90                           	nop
+       8: 90                           	nop
+       9: 90                           	nop
+       a: 90                           	nop
+       b: 90                           	nop
+       c: 90                           	nop
+       d: 90                           	nop
+       e: 90                           	nop
+       f: 90                           	nop
+
+0000000000000010 <rusix_vma_close>:
+      10: 53                           	pushq	%rbx
+      11: 48 89 fb                     	movq	%rdi, %rbx
+      14: e8 00 00 00 00               	callq	0x19 <rusix_vma_close+0x9>
+		0000000000000015:  R_X86_64_PLT32	rusix_remove_ops-0x4
+      19: 48 85 c0                     	testq	%rax, %rax
+      1c: 74 21                        	je	0x3f <rusix_vma_close+0x2f>
+      1e: 48 89 c7                     	movq	%rax, %rdi
+      21: e8 00 00 00 00               	callq	0x26 <rusix_vma_close+0x16>
+		0000000000000022:  R_X86_64_PLT32	rusix_remove_close-0x4
+      26: 48 85 c0                     	testq	%rax, %rax
+      29: 74 14                        	je	0x3f <rusix_vma_close+0x2f>
+      2b: 48 89 df                     	movq	%rbx, %rdi
+      2e: 49 89 c3                     	movq	%rax, %r11
+      31: e8 00 00 00 00               	callq	0x36 <rusix_vma_close+0x26>
+		0000000000000032:  R_X86_64_PLT32	__x86_indirect_thunk_r11-0x4
+      36: 48 89 df                     	movq	%rbx, %rdi
+      39: 5b                           	popq	%rbx
+      3a: e9 00 00 00 00               	jmp	0x3f <rusix_vma_close+0x2f>
+		000000000000003b:  R_X86_64_PLT32	rusix_remove_dummy-0x4
+      3f: 5b                           	popq	%rbx
+      40: e9 00 00 00 00               	jmp	0x45 <rusix_vma_close+0x35>
+		0000000000000041:  R_X86_64_PLT32	__x86_return_thunk-0x4
+      45: 66 66 2e 0f 1f 84 00 00 00 00 00     	nopw	%cs:(%rax,%rax)
+
+0000000000000050 <__pfx_remove_vma>:
+      50: 90                           	nop
+      51: 90                           	nop
+      52: 90                           	nop
+      53: 90                           	nop
+      54: 90                           	nop
+      55: 90                           	nop
+      56: 90                           	nop
+      57: 90                           	nop
+      58: 90                           	nop
+      59: 90                           	nop
+      5a: 90                           	nop
+      5b: 90                           	nop
+      5c: 90                           	nop
+      5d: 90                           	nop
+      5e: 90                           	nop
+      5f: 90                           	nop
+
+0000000000000060 <remove_vma>:
+      60: 53                           	pushq	%rbx
+      61: 48 89 fb                     	movq	%rdi, %rbx
+      64: e8 00 00 00 00               	callq	0x69 <remove_vma+0x9>
+		0000000000000065:  R_X86_64_PLT32	rusix_remove_might_sleep-0x4
+      69: 48 89 df                     	movq	%rbx, %rdi
+      6c: e8 00 00 00 00               	callq	0x71 <remove_vma+0x11>
+		000000000000006d:  R_X86_64_PLT32	rusix_remove_ops-0x4
+      71: 48 85 c0                     	testq	%rax, %rax
+      74: 74 20                        	je	0x96 <remove_vma+0x36>
+      76: 48 89 c7                     	movq	%rax, %rdi
+      79: e8 00 00 00 00               	callq	0x7e <remove_vma+0x1e>
+		000000000000007a:  R_X86_64_PLT32	rusix_remove_close-0x4
+      7e: 48 85 c0                     	testq	%rax, %rax
+      81: 74 13                        	je	0x96 <remove_vma+0x36>
+      83: 48 89 df                     	movq	%rbx, %rdi
+      86: 49 89 c3                     	movq	%rax, %r11
+      89: e8 00 00 00 00               	callq	0x8e <remove_vma+0x2e>
+		000000000000008a:  R_X86_64_PLT32	__x86_indirect_thunk_r11-0x4
+      8e: 48 89 df                     	movq	%rbx, %rdi
+      91: e8 00 00 00 00               	callq	0x96 <remove_vma+0x36>
+		0000000000000092:  R_X86_64_PLT32	rusix_remove_dummy-0x4
+      96: 48 89 df                     	movq	%rbx, %rdi
+      99: e8 00 00 00 00               	callq	0x9e <remove_vma+0x3e>
+		000000000000009a:  R_X86_64_PLT32	rusix_remove_file-0x4
+      9e: 48 85 c0                     	testq	%rax, %rax
+      a1: 74 08                        	je	0xab <remove_vma+0x4b>
+      a3: 48 89 c7                     	movq	%rax, %rdi
+      a6: e8 00 00 00 00               	callq	0xab <remove_vma+0x4b>
+		00000000000000a7:  R_X86_64_PLT32	rusix_remove_fput-0x4
+      ab: 48 89 df                     	movq	%rbx, %rdi
+      ae: e8 00 00 00 00               	callq	0xb3 <remove_vma+0x53>
+		00000000000000af:  R_X86_64_PLT32	rusix_remove_policy-0x4
+      b3: 48 89 df                     	movq	%rbx, %rdi
+      b6: 5b                           	popq	%rbx
+      b7: e9 00 00 00 00               	jmp	0xbc <remove_vma+0x5c>
+		00000000000000b8:  R_X86_64_PLT32	vm_area_free-0x4
+      bc: 0f 1f 40 00                  	nopl	(%rax)
+
+00000000000000c0 <__pfx_rusix_exit_mmap>:
+      c0: 90                           	nop
+      c1: 90                           	nop
+      c2: 90                           	nop
+      c3: 90                           	nop
+      c4: 90                           	nop
+      c5: 90                           	nop
+      c6: 90                           	nop
+      c7: 90                           	nop
+      c8: 90                           	nop
+      c9: 90                           	nop
+      ca: 90                           	nop
+      cb: 90                           	nop
+      cc: 90                           	nop
+      cd: 90                           	nop
+      ce: 90                           	nop
+      cf: 90                           	nop
+
+00000000000000d0 <rusix_exit_mmap>:
+      d0: 41 57                        	pushq	%r15
+      d2: 41 56                        	pushq	%r14
+      d4: 41 55                        	pushq	%r13
+      d6: 41 54                        	pushq	%r12
+      d8: 53                           	pushq	%rbx
+      d9: 49 89 f6                     	movq	%rsi, %r14
+      dc: 48 89 fb                     	movq	%rdi, %rbx
+      df: e8 00 00 00 00               	callq	0xe4 <rusix_exit_mmap+0x14>
+		00000000000000e0:  R_X86_64_PLT32	rusix_exit_notifier-0x4
+      e4: 48 89 df                     	movq	%rbx, %rdi
+      e7: e8 00 00 00 00               	callq	0xec <rusix_exit_mmap+0x1c>
+		00000000000000e8:  R_X86_64_PLT32	rusix_exit_read_lock-0x4
+      ec: 48 89 df                     	movq	%rbx, %rdi
+      ef: e8 00 00 00 00               	callq	0xf4 <rusix_exit_mmap+0x24>
+		00000000000000f0:  R_X86_64_PLT32	rusix_exit_arch-0x4
+      f4: 4c 89 f7                     	movq	%r14, %rdi
+      f7: e8 00 00 00 00               	callq	0xfc <rusix_exit_mmap+0x2c>
+		00000000000000f8:  R_X86_64_PLT32	rusix_exit_next-0x4
+      fc: 48 85 c0                     	testq	%rax, %rax
+      ff: 74 0f                        	je	0x110 <rusix_exit_mmap+0x40>
+     101: 49 89 c7                     	movq	%rax, %r15
+     104: 48 89 c7                     	movq	%rax, %rdi
+     107: e8 00 00 00 00               	callq	0x10c <rusix_exit_mmap+0x3c>
+		0000000000000108:  R_X86_64_PLT32	rusix_exit_is_zero-0x4
+     10c: 84 c0                        	testb	%al, %al
+     10e: 74 18                        	je	0x128 <rusix_exit_mmap+0x58>
+     110: 48 89 df                     	movq	%rbx, %rdi
+     113: e8 00 00 00 00               	callq	0x118 <rusix_exit_mmap+0x48>
+		0000000000000114:  R_X86_64_PLT32	rusix_exit_read_unlock-0x4
+     118: 48 89 df                     	movq	%rbx, %rdi
+     11b: e8 00 00 00 00               	callq	0x120 <rusix_exit_mmap+0x50>
+		000000000000011c:  R_X86_64_PLT32	rusix_exit_write_lock-0x4
+     120: 45 31 e4                     	xorl	%r12d, %r12d
+     123: e9 fa 00 00 00               	jmp	0x222 <rusix_exit_mmap+0x152>
+     128: 48 89 df                     	movq	%rbx, %rdi
+     12b: e8 00 00 00 00               	callq	0x130 <rusix_exit_mmap+0x60>
+		000000000000012c:  R_X86_64_PLT32	rusix_exit_cache-0x4
+     130: 4c 89 f7                     	movq	%r14, %rdi
+     133: 48 89 de                     	movq	%rbx, %rsi
+     136: e8 00 00 00 00               	callq	0x13b <rusix_exit_mmap+0x6b>
+		0000000000000137:  R_X86_64_PLT32	rusix_exit_gather-0x4
+     13b: 4c 89 f7                     	movq	%r14, %rdi
+     13e: 4c 89 fe                     	movq	%r15, %rsi
+     141: e8 00 00 00 00               	callq	0x146 <rusix_exit_mmap+0x76>
+		0000000000000142:  R_X86_64_PLT32	rusix_exit_unmap-0x4
+     146: 48 89 df                     	movq	%rbx, %rdi
+     149: e8 00 00 00 00               	callq	0x14e <rusix_exit_mmap+0x7e>
+		000000000000014a:  R_X86_64_PLT32	rusix_exit_read_unlock-0x4
+     14e: 48 89 df                     	movq	%rbx, %rdi
+     151: e8 00 00 00 00               	callq	0x156 <rusix_exit_mmap+0x86>
+		0000000000000152:  R_X86_64_PLT32	rusix_exit_oom_skip-0x4
+     156: 48 89 df                     	movq	%rbx, %rdi
+     159: e8 00 00 00 00               	callq	0x15e <rusix_exit_mmap+0x8e>
+		000000000000015a:  R_X86_64_PLT32	rusix_exit_write_lock-0x4
+     15e: 48 89 df                     	movq	%rbx, %rdi
+     161: e8 00 00 00 00               	callq	0x166 <rusix_exit_mmap+0x96>
+		0000000000000162:  R_X86_64_PLT32	rusix_exit_clear_rcu-0x4
+     166: 4c 89 ff                     	movq	%r15, %rdi
+     169: e8 00 00 00 00               	callq	0x16e <rusix_exit_mmap+0x9e>
+		000000000000016a:  R_X86_64_PLT32	rusix_exit_end-0x4
+     16e: 4c 89 f7                     	movq	%r14, %rdi
+     171: 48 89 c6                     	movq	%rax, %rsi
+     174: e8 00 00 00 00               	callq	0x179 <rusix_exit_mmap+0xa9>
+		0000000000000175:  R_X86_64_PLT32	rusix_exit_iter_set-0x4
+     179: 4c 89 f7                     	movq	%r14, %rdi
+     17c: 4c 89 fe                     	movq	%r15, %rsi
+     17f: e8 00 00 00 00               	callq	0x184 <rusix_exit_mmap+0xb4>
+		0000000000000180:  R_X86_64_PLT32	rusix_exit_free_pgtables-0x4
+     184: 4c 89 f7                     	movq	%r14, %rdi
+     187: e8 00 00 00 00               	callq	0x18c <rusix_exit_mmap+0xbc>
+		0000000000000188:  R_X86_64_PLT32	rusix_exit_finish-0x4
+     18c: 4c 89 ff                     	movq	%r15, %rdi
+     18f: e8 00 00 00 00               	callq	0x194 <rusix_exit_mmap+0xc4>
+		0000000000000190:  R_X86_64_PLT32	rusix_exit_end-0x4
+     194: 4c 89 f7                     	movq	%r14, %rdi
+     197: 48 89 c6                     	movq	%rax, %rsi
+     19a: e8 00 00 00 00               	callq	0x19f <rusix_exit_mmap+0xcf>
+		000000000000019b:  R_X86_64_PLT32	rusix_exit_iter_set-0x4
+     19f: b9 01 00 00 00               	movl	$0x1, %ecx
+     1a4: 45 31 e4                     	xorl	%r12d, %r12d
+     1a7: 66 0f 1f 84 00 00 00 00 00   	nopw	(%rax,%rax)
+     1b0: 41 89 cd                     	movl	%ecx, %r13d
+     1b3: 4c 89 ff                     	movq	%r15, %rdi
+     1b6: e8 00 00 00 00               	callq	0x1bb <rusix_exit_mmap+0xeb>
+		00000000000001b7:  R_X86_64_PLT32	rusix_exit_flags-0x4
+     1bb: 48 85 05 00 00 00 00         	testq	%rax, (%rip)            # 0x1c2 <rusix_exit_mmap+0xf2>
+		00000000000001be:  R_X86_64_PC32	rusix_exit_account-0x4
+     1c2: 74 0b                        	je	0x1cf <rusix_exit_mmap+0xff>
+     1c4: 4c 89 ff                     	movq	%r15, %rdi
+     1c7: e8 00 00 00 00               	callq	0x1cc <rusix_exit_mmap+0xfc>
+		00000000000001c8:  R_X86_64_PLT32	rusix_exit_pages-0x4
+     1cc: 49 01 c4                     	addq	%rax, %r12
+     1cf: 4c 89 ff                     	movq	%r15, %rdi
+     1d2: e8 00 00 00 00               	callq	0x1d7 <rusix_exit_mmap+0x107>
+		00000000000001d3:  R_X86_64_PLT32	rusix_exit_detach-0x4
+     1d7: 4c 89 ff                     	movq	%r15, %rdi
+     1da: e8 00 00 00 00               	callq	0x1df <rusix_exit_mmap+0x10f>
+		00000000000001db:  R_X86_64_PLT32	remove_vma-0x4
+     1df: e8 00 00 00 00               	callq	0x1e4 <rusix_exit_mmap+0x114>
+		00000000000001e0:  R_X86_64_PLT32	rusix_exit_resched-0x4
+     1e4: 4c 89 f7                     	movq	%r14, %rdi
+     1e7: e8 00 00 00 00               	callq	0x1ec <rusix_exit_mmap+0x11c>
+		00000000000001e8:  R_X86_64_PLT32	rusix_exit_next-0x4
+     1ec: 48 85 c0                     	testq	%rax, %rax
+     1ef: 74 13                        	je	0x204 <rusix_exit_mmap+0x134>
+     1f1: 49 89 c7                     	movq	%rax, %r15
+     1f4: 48 89 c7                     	movq	%rax, %rdi
+     1f7: e8 00 00 00 00               	callq	0x1fc <rusix_exit_mmap+0x12c>
+		00000000000001f8:  R_X86_64_PLT32	rusix_exit_is_zero-0x4
+     1fc: 41 8d 4d 01                  	leal	0x1(%r13), %ecx
+     200: 84 c0                        	testb	%al, %al
+     202: 74 ac                        	je	0x1b0 <rusix_exit_mmap+0xe0>
+     204: 48 89 df                     	movq	%rbx, %rdi
+     207: e8 00 00 00 00               	callq	0x20c <rusix_exit_mmap+0x13c>
+		0000000000000208:  R_X86_64_PLT32	rusix_exit_map_count-0x4
+     20c: 31 ff                        	xorl	%edi, %edi
+     20e: 44 39 e8                     	cmpl	%r13d, %eax
+     211: 40 0f 95 c7                  	setne	%dil
+     215: e8 00 00 00 00               	callq	0x21a <rusix_exit_mmap+0x14a>
+		0000000000000216:  R_X86_64_PLT32	rusix_exit_count_bug-0x4
+     21a: 48 89 df                     	movq	%rbx, %rdi
+     21d: e8 00 00 00 00               	callq	0x222 <rusix_exit_mmap+0x152>
+		000000000000021e:  R_X86_64_PLT32	rusix_exit_trace-0x4
+     222: 48 89 df                     	movq	%rbx, %rdi
+     225: e8 00 00 00 00               	callq	0x22a <rusix_exit_mmap+0x15a>
+		0000000000000226:  R_X86_64_PLT32	rusix_exit_destroy-0x4
+     22a: 48 89 df                     	movq	%rbx, %rdi
+     22d: e8 00 00 00 00               	callq	0x232 <rusix_exit_mmap+0x162>
+		000000000000022e:  R_X86_64_PLT32	rusix_exit_write_unlock-0x4
+     232: 4c 89 e7                     	movq	%r12, %rdi
+     235: 5b                           	popq	%rbx
+     236: 41 5c                        	popq	%r12
+     238: 41 5d                        	popq	%r13
+     23a: 41 5e                        	popq	%r14
+     23c: 41 5f                        	popq	%r15
+     23e: e9 00 00 00 00               	jmp	0x243 <rusix_exit_mmap+0x173>
+		000000000000023f:  R_X86_64_PLT32	rusix_exit_unaccount-0x4

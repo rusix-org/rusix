@@ -1,0 +1,9 @@
+[05:12:31] ============================================================
+[05:12:31] =============== rusix_exit_mmap (3 subtests) ===============
+[05:12:31] [PASSED] empty_final_users_retains_storage
+[05:12:31] [PASSED] mapped_final_users_closes_before_file_put
+[05:12:31] [PASSED] fixed_replace_close_dummy_reset
+[05:12:31] ================= [PASSED] rusix_exit_mmap =================
+[05:12:31] ============================================================
+[05:12:31] Testing complete. Ran 3 tests: passed: 3
+[05:12:31] Test results stored in /out/logs/ci-exit-mmap-kunit-c-exit-mmap-kunit.json

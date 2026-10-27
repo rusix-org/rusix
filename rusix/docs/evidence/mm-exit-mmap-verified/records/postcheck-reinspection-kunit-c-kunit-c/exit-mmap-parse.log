@@ -1,0 +1,9 @@
+[05:12:50] ============================================================
+[05:12:50] =============== rusix_exit_mmap (3 subtests) ===============
+[05:12:50] [PASSED] empty_final_users_retains_storage
+[05:12:50] [PASSED] mapped_final_users_closes_before_file_put
+[05:12:50] [PASSED] fixed_replace_close_dummy_reset
+[05:12:50] ================= [PASSED] rusix_exit_mmap =================
+[05:12:50] ============================================================
+[05:12:50] Testing complete. Ran 3 tests: passed: 3
+[05:12:50] Test results stored in /home/aaron/code/rusix/linux-out/mm-exit-mmap-verification-002/postcheck-reinspection-kunit-c-kunit-c/exit-mmap-reparsed.json

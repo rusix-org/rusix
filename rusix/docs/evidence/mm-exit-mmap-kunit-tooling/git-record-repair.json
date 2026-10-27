@@ -1,0 +1,23 @@
+{
+  "canonical_commit": "3c676128638531f4c5455831a1f0f8d937ce9b6d",
+  "files": {
+    "rusix/docs/evidence/mm-exit-mmap-kunit-tooling/final-inputs/include/kunit/test.h.gz": {
+      "bytes": 11417,
+      "sha256": "708a88f14276cda75c3965ca8c202d540fed4861f4a4307440aa8867597ceaa4"
+    },
+    "rusix/docs/evidence/mm-exit-mmap-kunit-tooling/final-inputs/init/Kconfig.gz": {
+      "bytes": 25617,
+      "sha256": "977dcf93d3b3e49d13e2e64421ad4970d25505f84639b26b07ec06c8ba82c85e"
+    },
+    "rusix/docs/evidence/mm-exit-mmap-kunit-tooling/final-inputs/rusix/scripts/build-kernel.sh.gz": {
+      "bytes": 7885,
+      "sha256": "5f12c7ca82cc462b9e69f805fcf2cbbb47efa4b3ee69b095ab80a59f2538178f"
+    },
+    "rusix/docs/evidence/mm-exit-mmap-kunit-tooling/final-inputs/rusix/tests/fixtures/exit-mmap/legacy-mmap.c.gz": {
+      "bytes": 15474,
+      "sha256": "d891813b9de7f3f585f29579ff1fb2a4232ee27f1319fb327cdf8f96448a5148"
+    }
+  },
+  "scope": "Restore four promised compressed records only; no source/runtime/evidence schema change",
+  "tested_source": "8b6ab8382784f5873e416d5bdadae62b4565bb2d"
+}

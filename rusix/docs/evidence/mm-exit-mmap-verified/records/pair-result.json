@@ -1,0 +1,16 @@
+{
+  "status": "PASS",
+  "source": "8b6ab8382784f5873e416d5bdadae62b4565bb2d",
+  "pair_differences": {
+    "ordinary": [
+      "CONFIG_RUSIX_EXIT_MMAP_RUST"
+    ],
+    "kunit": [
+      "CONFIG_RUSIX_EXIT_MMAP_RUST"
+    ]
+  },
+  "ordinary_cases_per_side": 9,
+  "kunit_combined": 79,
+  "kunit_isolated": 3,
+  "scope": "Paired mapping teardown consumers and three native lifecycle cases; no general failure/whole-MM claim"
+}

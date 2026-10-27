@@ -1,0 +1,57 @@
+implementation=wait-bit-rust
+/out/builds/ci-exit-mmap-rust/kernel/sched/wait_bit_rust.o
+/out/builds/ci-exit-mmap-rust/kernel/sched/wait_bit_rust.o
+0000000000000010 T __var_wake_key
+0000000000000040 T wake_bit_function
+0000000000000010 T __wait_on_bit
+00000000000000b0 T __wait_on_bit_lock
+0000000000000160 T bit_wait
+00000000000001a0 T bit_wait_io
+00000000000001e0 T bit_wait_timeout
+00000000000003e0 T out_of_line_wait_on_bit
+0000000000000410 T out_of_line_wait_on_bit_timeout
+0000000000000440 T out_of_line_wait_on_bit_lock
+0000000000000010 T wait_bit_init
+00000000000000b0 T bit_waitqueue
+00000000000000f0 T __var_waitqueue
+0000000000000130 T __wake_up_bit
+0000000000000190 T wake_up_bit
+0000000000000250 T init_wait_var_entry
+00000000000002a0 T wake_up_var
+/out/builds/ci-exit-mmap-rust/vmlinux
+ffffffff812d08f0 T __var_wake_key
+ffffffff812d0920 T wake_bit_function
+ffffffff8189e680 T __wait_on_bit
+ffffffff8189e720 T __wait_on_bit_lock
+ffffffff8189e7d0 T bit_wait
+ffffffff8189e810 T bit_wait_io
+ffffffff8189e850 T bit_wait_timeout
+ffffffff8189ea50 T out_of_line_wait_on_bit
+ffffffff8189ea80 T out_of_line_wait_on_bit_timeout
+ffffffff8189eab0 T out_of_line_wait_on_bit_lock
+ffffffff8218ecc0 T wait_bit_init
+ffffffff812d0990 T bit_waitqueue
+ffffffff812d09d0 T __var_waitqueue
+ffffffff812d0a10 T __wake_up_bit
+ffffffff812d0a70 T wake_up_bit
+ffffffff812d0b30 T init_wait_var_entry
+ffffffff812d0b80 T wake_up_var
+__wait_on_bit object=.sched.text address=ffffffff8189e680 sched-range=[ffffffff8189d410,ffffffff818a7b5a)
+__wait_on_bit_lock object=.sched.text address=ffffffff8189e720 sched-range=[ffffffff8189d410,ffffffff818a7b5a)
+bit_wait object=.sched.text address=ffffffff8189e7d0 sched-range=[ffffffff8189d410,ffffffff818a7b5a)
+bit_wait_io object=.sched.text address=ffffffff8189e810 sched-range=[ffffffff8189d410,ffffffff818a7b5a)
+bit_wait_timeout object=.sched.text address=ffffffff8189e850 sched-range=[ffffffff8189d410,ffffffff818a7b5a)
+out_of_line_wait_on_bit object=.sched.text address=ffffffff8189ea50 sched-range=[ffffffff8189d410,ffffffff818a7b5a)
+out_of_line_wait_on_bit_timeout object=.sched.text address=ffffffff8189ea80 sched-range=[ffffffff8189d410,ffffffff818a7b5a)
+out_of_line_wait_on_bit_lock object=.sched.text address=ffffffff8189eab0 sched-range=[ffffffff8189d410,ffffffff818a7b5a)
+/out/builds/ci-exit-mmap-rust/kernel/sched/wait_bit_rust.o: table=_RNvCsh9aDLyLKkIG_13wait_bit_rust14BIT_WAIT_TABLE section=.data..cacheline_aligned address=0 size=20480 alignment=64 head-size=80; init=10 section=.init.text
+/out/builds/ci-exit-mmap-rust/kernel/sched/wait_bit_rust.o: key=_RNvCsh9aDLyLKkIG_13wait_bit_rust14BIT_WAIT_CLASS section=.bss address=0 size=16
+/out/builds/ci-exit-mmap-rust/vmlinux: table=_RNvCsh9aDLyLKkIG_13wait_bit_rust14BIT_WAIT_TABLE section=.data address=ffffffff81e07180 size=20480 alignment=64 head-size=80; init=ffffffff8218ecc0 section=.init.text
+/out/builds/ci-exit-mmap-rust/vmlinux: key=_RNvCsh9aDLyLKkIG_13wait_bit_rust14BIT_WAIT_CLASS section=.bss address=ffffffff822f0ac0 size=16
+a6f8e9df1d28cbd396a2e844350cb7d8f1f6294f08989c3077d71e5bc753fbd9  /src/kernel/sched/wait_bit.c
+68d092d76a4465082134ebdb58f4334805e77a460dcf9408e223345e73135913  /out/builds/ci-exit-mmap-rust/kernel/sched/wait_bit_rust.o
+3e05118a66a15b284eafa7ae47fb46ac8438c2f0fc0e1add9b67713fd5b49eda  /src/kernel/sched/wait_bit_rust.rs
+50b1347b6b913908d0d387facc6c0cf8147dcde3a5fb5a44cdd729e4713ebe8b  /src/kernel/sched/wait_bit_rust/time.rs
+e6b8373e598d262398a7e9cddc6536bc956f4e2574d0c3d4031a5fe5a5231840  /src/rust/helpers/wait_bit_policy.c
+a51c631aac56f5930ce5a8f97d7578230b0d561a425f816c5f1740ae742f6f18  /src/include/linux/rusix_wait_bit_types.h
+a03d754bcbd488c025c766f6ddef6f7429fd19de9efa614b7a70382b4020bfff  /out/builds/ci-exit-mmap-rust/rust/bindings/bindings_generated.rs

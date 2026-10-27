@@ -1,0 +1,88 @@
+
+/out/builds/ci-exit-mmap-c/kernel/sched/wait_bit_rust.o:	file format elf64-x86-64
+
+SYMBOL TABLE:
+0000000000000000 l    df *ABS*	0000000000000000 wait_bit_rust.c7bb87e3388ee2a4-cgu.0
+0000000000000000 l    d  .text	0000000000000000 .text
+0000000000000000 l       .text	0000000000000000 .Ltmp0
+0000000000000030 l       .text	0000000000000000 .Ltmp1
+0000000000000000 l    d  .sched.text	0000000000000000 .sched.text
+0000000000000000 l       .sched.text	0000000000000000 .Ltmp2
+00000000000000a0 l       .sched.text	0000000000000000 .Ltmp3
+0000000000000150 l       .sched.text	0000000000000000 .Ltmp4
+0000000000000190 l       .sched.text	0000000000000000 .Ltmp5
+00000000000001d0 l       .sched.text	0000000000000000 .Ltmp6
+0000000000000240 l     F .sched.text	000000000000018d _RNvCsh9aDLyLKkIG_13wait_bit_rust15with_bit_waiter
+0000000000000230 l       .sched.text	0000000000000000 .Ltmp7
+0000000000000000 l     O .data..cacheline_aligned	0000000000005000 _RNvCsh9aDLyLKkIG_13wait_bit_rust14BIT_WAIT_TABLE
+00000000000003d0 l       .sched.text	0000000000000000 .Ltmp8
+0000000000000400 l       .sched.text	0000000000000000 .Ltmp9
+0000000000000430 l       .sched.text	0000000000000000 .Ltmp10
+0000000000000000 l    d  .init.text	0000000000000000 .init.text
+0000000000000000 l       .init.text	0000000000000000 .Ltmp11
+0000000000000000 l     O .bss	0000000000000010 _RNvCsh9aDLyLKkIG_13wait_bit_rust14BIT_WAIT_CLASS
+00000000000000a0 l       .text	0000000000000000 .Ltmp12
+00000000000000e0 l       .text	0000000000000000 .Ltmp13
+0000000000000120 l       .text	0000000000000000 .Ltmp14
+0000000000000180 l       .text	0000000000000000 .Ltmp15
+0000000000000220 l     F .text	000000000000001c _RNvCsh9aDLyLKkIG_13wait_bit_rust17var_wake_function
+0000000000000210 l       .text	0000000000000000 .Ltmp16
+0000000000000240 l       .text	0000000000000000 .Ltmp17
+0000000000000290 l       .text	0000000000000000 .Ltmp18
+0000000000000000 l    d  .data..cacheline_aligned	0000000000000000 .data..cacheline_aligned
+0000000000000000 l    d  .bss	0000000000000000 .bss
+0000000000000000 l    d  .rodata	0000000000000000 .rodata
+0000000000000210 l     F .text	0000000000000010 __pfx__RNvCsh9aDLyLKkIG_13wait_bit_rust17var_wake_function
+0000000000000230 l     F .sched.text	0000000000000010 __pfx__RNvCsh9aDLyLKkIG_13wait_bit_rust15with_bit_waiter
+0000000000000040 g     F .text	000000000000005a wake_bit_function
+0000000000000000         *UND*	0000000000000000 rust_helper_wait_bit_test
+0000000000000000         *UND*	0000000000000000 autoremove_wake_function
+0000000000000010 g     F .sched.text	0000000000000082 __wait_on_bit
+0000000000000000         *UND*	0000000000000000 prepare_to_wait
+0000000000000000         *UND*	0000000000000000 __x86_indirect_thunk_r11
+0000000000000000         *UND*	0000000000000000 rust_helper_wait_bit_test_acquire
+0000000000000000         *UND*	0000000000000000 finish_wait
+00000000000000b0 g     F .sched.text	000000000000009b __wait_on_bit_lock
+0000000000000000         *UND*	0000000000000000 prepare_to_wait_exclusive
+0000000000000000         *UND*	0000000000000000 rust_helper_wait_bit_test_and_set
+0000000000000160 g     F .sched.text	000000000000002b bit_wait
+0000000000000000         *UND*	0000000000000000 schedule
+0000000000000000         *UND*	0000000000000000 rust_helper_get_current
+0000000000000000         *UND*	0000000000000000 rust_helper_signal_pending_state
+00000000000001a0 g     F .sched.text	000000000000002b bit_wait_io
+0000000000000000         *UND*	0000000000000000 io_schedule
+00000000000001e0 g     F .sched.text	000000000000004f bit_wait_timeout
+0000000000000000         *UND*	0000000000000000 rust_helper_wait_bit_jiffies
+0000000000000000         *UND*	0000000000000000 schedule_timeout
+00000000000003e0 g     F .sched.text	0000000000000016 out_of_line_wait_on_bit
+0000000000000410 g     F .sched.text	000000000000001c out_of_line_wait_on_bit_timeout
+0000000000000440 g     F .sched.text	0000000000000016 out_of_line_wait_on_bit_lock
+0000000000000010 g     F .init.text	000000000000003d wait_bit_init
+0000000000000000         *UND*	0000000000000000 __init_waitqueue_head
+00000000000000b0 g     F .text	000000000000002f bit_waitqueue
+00000000000000f0 g     F .text	0000000000000025 __var_waitqueue
+0000000000000130 g     F .text	0000000000000048 __wake_up_bit
+0000000000000000         *UND*	0000000000000000 rust_helper_swait_list_empty
+0000000000000000         *UND*	0000000000000000 __wake_up
+0000000000000190 g     F .text	0000000000000073 wake_up_bit
+0000000000000250 g     F .text	000000000000003c init_wait_var_entry
+00000000000002a0 g     F .text	000000000000006d wake_up_var
+0000000000000000 g     F .text	0000000000000010 __pfx___var_wake_key
+0000000000000030 g     F .text	0000000000000010 __pfx_wake_bit_function
+00000000000000a0 g     F .text	0000000000000010 __pfx_bit_waitqueue
+00000000000000e0 g     F .text	0000000000000010 __pfx___var_waitqueue
+0000000000000120 g     F .text	0000000000000010 __pfx___wake_up_bit
+0000000000000180 g     F .text	0000000000000010 __pfx_wake_up_bit
+0000000000000010 g     F .text	000000000000001b __var_wake_key
+0000000000000240 g     F .text	0000000000000010 __pfx_init_wait_var_entry
+0000000000000290 g     F .text	0000000000000010 __pfx_wake_up_var
+0000000000000000 g     F .sched.text	0000000000000010 __pfx___wait_on_bit
+00000000000000a0 g     F .sched.text	0000000000000010 __pfx___wait_on_bit_lock
+0000000000000150 g     F .sched.text	0000000000000010 __pfx_bit_wait
+0000000000000190 g     F .sched.text	0000000000000010 __pfx_bit_wait_io
+00000000000001d0 g     F .sched.text	0000000000000010 __pfx_bit_wait_timeout
+0000000000000000         *UND*	0000000000000000 __x86_return_thunk
+00000000000003d0 g     F .sched.text	0000000000000010 __pfx_out_of_line_wait_on_bit
+0000000000000400 g     F .sched.text	0000000000000010 __pfx_out_of_line_wait_on_bit_timeout
+0000000000000430 g     F .sched.text	0000000000000010 __pfx_out_of_line_wait_on_bit_lock
+0000000000000000 g     F .init.text	0000000000000010 __pfx_wait_bit_init

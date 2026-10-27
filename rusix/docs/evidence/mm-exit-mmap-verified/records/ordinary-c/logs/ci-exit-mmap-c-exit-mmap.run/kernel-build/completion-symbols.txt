@@ -1,0 +1,30 @@
+/out/builds/ci-exit-mmap-c/kernel/sched/completion_rust.o
+0000000000000050 T complete
+0000000000000120 T complete_all
+00000000000000b0 T complete_on_current_cpu
+0000000000000180 T try_wait_for_completion
+0000000000000200 T completion_done
+0000000000000150 T wait_for_completion
+0000000000000180 T wait_for_completion_timeout
+00000000000001b0 T wait_for_completion_io
+00000000000001e0 T wait_for_completion_io_timeout
+0000000000000210 T wait_for_completion_interruptible
+0000000000000260 T wait_for_completion_interruptible_timeout
+0000000000000290 T wait_for_completion_killable
+0000000000000330 T wait_for_completion_killable_timeout
+00000000000002e0 T wait_for_completion_state
+/out/builds/ci-exit-mmap-c/vmlinux
+ffffffff812cf5c0 T complete
+ffffffff812cf690 T complete_all
+ffffffff812cf620 T complete_on_current_cpu
+ffffffff812cf6f0 T try_wait_for_completion
+ffffffff812cf770 T completion_done
+ffffffff8189e090 T wait_for_completion
+ffffffff8189e0c0 T wait_for_completion_timeout
+ffffffff8189e0f0 T wait_for_completion_io
+ffffffff8189e120 T wait_for_completion_io_timeout
+ffffffff8189e150 T wait_for_completion_interruptible
+ffffffff8189e1a0 T wait_for_completion_interruptible_timeout
+ffffffff8189e1d0 T wait_for_completion_killable
+ffffffff8189e270 T wait_for_completion_killable_timeout
+ffffffff8189e220 T wait_for_completion_state

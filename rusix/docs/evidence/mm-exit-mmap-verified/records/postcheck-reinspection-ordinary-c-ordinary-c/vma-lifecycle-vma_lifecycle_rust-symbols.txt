@@ -1,0 +1,13 @@
+0000000000000000 t .Ltmp0
+0000000000000000 t .Ltmp1
+0000000000000070 t .Ltmp2
+00000000000001e0 t .Ltmp3
+0000000000000000 b _RNvCs9a2lGAoVDsO_18vma_lifecycle_rust13VM_AREA_CACHE.0
+0000000000000000 T __pfx_rusix_vma_state_init
+0000000000000000 T __pfx_vm_area_alloc
+0000000000000070 T __pfx_vm_area_dup
+00000000000001e0 T __pfx_vm_area_free
+0000000000000010 T rusix_vma_state_init
+0000000000000010 T vm_area_alloc
+0000000000000080 T vm_area_dup
+00000000000001f0 T vm_area_free

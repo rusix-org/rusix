@@ -1,0 +1,4 @@
+0b711b1f01ea73803bed676553229971ff93114c8d22097dcc09d9e804651219  /out/builds/ci-exit-mmap-c/.config
+ec2383137d9e81f41491eccc183023b699b4e22fcc2b60d14d6b27d6718db292  /out/builds/ci-exit-mmap-c/arch/x86/boot/bzImage
+59917768bf3499e85038cd1f245efb7ef32f40cf3c766f6d94262f5b617f2e4e  /out/builds/ci-exit-mmap-c/vmlinux
+b03ac01328603a659e8bbe1c2aa7ff9f5c732afb5851b1b892985f39975b8ccf  /out/builds/ci-exit-mmap-c/vmlinux.map

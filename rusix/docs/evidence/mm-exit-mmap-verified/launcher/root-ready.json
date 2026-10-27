@@ -1,0 +1,21 @@
+{
+  "enabled": true,
+  "source": "8b6ab8382784f5873e416d5bdadae62b4565bb2d",
+  "requires": "Independent and root review accepted; source/config/lifecycle/retained-C prerequisites mandatory",
+  "files_sha256": {
+    "README.md": "0255ed57c70afadf508e7fbc53662ec35f56e655759654e1f18357ab21efff77",
+    "check-results.py": "ab3ac8d2dda1f13b5c082ef67781d214a93fc5dd265d039c559a73a62f99960b",
+    "config-prerequisite-review.json": "2e4b12035747125c5c2fd23e082a3134717ad8b778efaac4994928d16b3fe7f2",
+    "disabled-check.json": "5ade41493e6e412e59ee12d84a46e116347699518f9d842de8c20fc253cb0cb7",
+    "initial-preflight-failure.json": "312cc1c944cf0d694fa6b305c03c092ee2302de1ac69ba341d6b3a70b006a713",
+    "lifecycle-prerequisite-review.json": "768ec1a57e1f76c9c02acd8ce7eac40d7534c585e7ba85af931f8a56180d59c9",
+    "lifecycle-prerequisite.py": "3fe8446b33cdfc449acdb7f26a447c3429ad3fb46c80ff285b10fb482a55113b",
+    "preflight.py": "261672eb5d462c861e6f4488e1f3a8bbd539973006a09d186037d56fc395b64f",
+    "retained-c-prerequisite-review.json": "398c34f950977c89a033795e725b46e8c175e3d229c94df2821113d1083b0448",
+    "retained-c-prerequisite.py": "17e34d4e24e332754be593631b44acf1585d857ad32b8a656376f8598ce2c27a",
+    "retained-c-records.json": "8afc88b89b5407ff081d4b5d80d84aaa1ab87c405c4839f7360c7662a035e717",
+    "run.sh": "d55b1ae0c1e93574cac6f9922c8378382a89d232cdec6a274d30618c131820ca",
+    "source-continuity.json": "38e655ba411be2a7699ac18fe99861b15a535dc96bc16c7e10a43ba1a258736e",
+    "source-review.json": "2941be3a1d8668f13841358e875a4521fc659c665ba6bf2e1991882b0ca57366"
+  }
+}

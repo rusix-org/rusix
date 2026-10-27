@@ -1,0 +1,283 @@
+
+/home/aaron/code/rusix/linux-out/mm-exit-mmap-verification-002/kunit-rust/builds/ci-exit-mmap-kunit-rust/mm/vma_lifecycle_rust.o:	file format elf64-x86-64
+
+Disassembly of section .text:
+
+0000000000000000 <__pfx_vm_area_alloc>:
+       0: 90                           	nop
+       1: 90                           	nop
+       2: 90                           	nop
+       3: 90                           	nop
+       4: 90                           	nop
+       5: 90                           	nop
+       6: 90                           	nop
+       7: 90                           	nop
+       8: 90                           	nop
+       9: 90                           	nop
+       a: 90                           	nop
+       b: 90                           	nop
+       c: 90                           	nop
+       d: 90                           	nop
+       e: 90                           	nop
+       f: 90                           	nop
+
+0000000000000010 <vm_area_alloc>:
+      10: 41 56                        	pushq	%r14
+      12: 53                           	pushq	%rbx
+      13: 50                           	pushq	%rax
+      14: 49 89 fe                     	movq	%rdi, %r14
+      17: 48 8b 3d 00 00 00 00         	movq	(%rip), %rdi            # 0x1e <vm_area_alloc+0xe>
+		000000000000001a:  R_X86_64_PC32	.bss-0x4
+      1e: e8 00 00 00 00               	callq	0x23 <vm_area_alloc+0x13>
+		000000000000001f:  R_X86_64_PLT32	rusix_vma_alloc-0x4
+      23: 48 89 c3                     	movq	%rax, %rbx
+      26: 48 85 c0                     	testq	%rax, %rax
+      29: 74 2d                        	je	0x58 <vm_area_alloc+0x48>
+      2b: 48 89 df                     	movq	%rbx, %rdi
+      2e: e8 00 00 00 00               	callq	0x33 <vm_area_alloc+0x23>
+		000000000000002f:  R_X86_64_PLT32	rusix_vma_zero-0x4
+      33: 48 89 df                     	movq	%rbx, %rdi
+      36: 4c 89 f6                     	movq	%r14, %rsi
+      39: e8 00 00 00 00               	callq	0x3e <vm_area_alloc+0x2e>
+		000000000000003a:  R_X86_64_PLT32	rusix_vma_set_mm-0x4
+      3e: 48 89 df                     	movq	%rbx, %rdi
+      41: e8 00 00 00 00               	callq	0x46 <vm_area_alloc+0x36>
+		0000000000000042:  R_X86_64_PLT32	rusix_vma_dummy_ops-0x4
+      46: 48 89 df                     	movq	%rbx, %rdi
+      49: e8 00 00 00 00               	callq	0x4e <vm_area_alloc+0x3e>
+		000000000000004a:  R_X86_64_PLT32	rusix_vma_list_init-0x4
+      4e: 48 89 df                     	movq	%rbx, %rdi
+      51: 31 f6                        	xorl	%esi, %esi
+      53: e8 00 00 00 00               	callq	0x58 <vm_area_alloc+0x48>
+		0000000000000054:  R_X86_64_PLT32	rusix_vma_lock_init-0x4
+      58: 48 89 d8                     	movq	%rbx, %rax
+      5b: 48 83 c4 08                  	addq	$0x8, %rsp
+      5f: 5b                           	popq	%rbx
+      60: 41 5e                        	popq	%r14
+      62: e9 00 00 00 00               	jmp	0x67 <vm_area_alloc+0x57>
+		0000000000000063:  R_X86_64_PLT32	__x86_return_thunk-0x4
+      67: 66 0f 1f 84 00 00 00 00 00   	nopw	(%rax,%rax)
+
+0000000000000070 <__pfx_vm_area_dup>:
+      70: 90                           	nop
+      71: 90                           	nop
+      72: 90                           	nop
+      73: 90                           	nop
+      74: 90                           	nop
+      75: 90                           	nop
+      76: 90                           	nop
+      77: 90                           	nop
+      78: 90                           	nop
+      79: 90                           	nop
+      7a: 90                           	nop
+      7b: 90                           	nop
+      7c: 90                           	nop
+      7d: 90                           	nop
+      7e: 90                           	nop
+      7f: 90                           	nop
+
+0000000000000080 <vm_area_dup>:
+      80: 41 57                        	pushq	%r15
+      82: 41 56                        	pushq	%r14
+      84: 53                           	pushq	%rbx
+      85: 49 89 fe                     	movq	%rdi, %r14
+      88: 48 8b 3d 00 00 00 00         	movq	(%rip), %rdi            # 0x8f <vm_area_dup+0xf>
+		000000000000008b:  R_X86_64_PC32	.bss-0x4
+      8f: e8 00 00 00 00               	callq	0x94 <vm_area_dup+0x14>
+		0000000000000090:  R_X86_64_PLT32	rusix_vma_alloc-0x4
+      94: 48 85 c0                     	testq	%rax, %rax
+      97: 0f 84 2c 01 00 00            	je	0x1c9 <vm_area_dup+0x149>
+      9d: 48 89 c3                     	movq	%rax, %rbx
+      a0: 4c 89 f7                     	movq	%r14, %rdi
+      a3: e8 00 00 00 00               	callq	0xa8 <vm_area_dup+0x28>
+		00000000000000a4:  R_X86_64_PLT32	rusix_vma_assert_flags-0x4
+      a8: 4c 89 f7                     	movq	%r14, %rdi
+      ab: e8 00 00 00 00               	callq	0xb0 <vm_area_dup+0x30>
+		00000000000000ac:  R_X86_64_PLT32	rusix_vma_assert_file-0x4
+      b0: 4c 89 f7                     	movq	%r14, %rdi
+      b3: 48 89 de                     	movq	%rbx, %rsi
+      b6: e8 00 00 00 00               	callq	0xbb <vm_area_dup+0x3b>
+		00000000000000b7:  R_X86_64_PLT32	rusix_vma_copy_vm_mm-0x4
+      bb: 4c 89 f7                     	movq	%r14, %rdi
+      be: 48 89 de                     	movq	%rbx, %rsi
+      c1: e8 00 00 00 00               	callq	0xc6 <vm_area_dup+0x46>
+		00000000000000c2:  R_X86_64_PLT32	rusix_vma_copy_vm_ops-0x4
+      c6: 4c 89 f7                     	movq	%r14, %rdi
+      c9: 48 89 de                     	movq	%rbx, %rsi
+      cc: e8 00 00 00 00               	callq	0xd1 <vm_area_dup+0x51>
+		00000000000000cd:  R_X86_64_PLT32	rusix_vma_copy_vm_start-0x4
+      d1: 4c 89 f7                     	movq	%r14, %rdi
+      d4: 48 89 de                     	movq	%rbx, %rsi
+      d7: e8 00 00 00 00               	callq	0xdc <vm_area_dup+0x5c>
+		00000000000000d8:  R_X86_64_PLT32	rusix_vma_copy_vm_end-0x4
+      dc: 4c 89 f7                     	movq	%r14, %rdi
+      df: 48 89 de                     	movq	%rbx, %rsi
+      e2: e8 00 00 00 00               	callq	0xe7 <vm_area_dup+0x67>
+		00000000000000e3:  R_X86_64_PLT32	rusix_vma_copy_anon_vma-0x4
+      e7: 4c 89 f7                     	movq	%r14, %rdi
+      ea: 48 89 de                     	movq	%rbx, %rsi
+      ed: e8 00 00 00 00               	callq	0xf2 <vm_area_dup+0x72>
+		00000000000000ee:  R_X86_64_PLT32	rusix_vma_copy_vm_pgoff-0x4
+      f2: 4c 89 f7                     	movq	%r14, %rdi
+      f5: 48 89 de                     	movq	%rbx, %rsi
+      f8: e8 00 00 00 00               	callq	0xfd <vm_area_dup+0x7d>
+		00000000000000f9:  R_X86_64_PLT32	rusix_vma_copy_vm_file-0x4
+      fd: 4c 89 f7                     	movq	%r14, %rdi
+     100: 48 89 de                     	movq	%rbx, %rsi
+     103: e8 00 00 00 00               	callq	0x108 <vm_area_dup+0x88>
+		0000000000000104:  R_X86_64_PLT32	rusix_vma_copy_vm_private_data-0x4
+     108: 4c 89 f7                     	movq	%r14, %rdi
+     10b: 48 89 de                     	movq	%rbx, %rsi
+     10e: e8 00 00 00 00               	callq	0x113 <vm_area_dup+0x93>
+		000000000000010f:  R_X86_64_PLT32	rusix_vma_copy_flags-0x4
+     113: 4c 89 f7                     	movq	%r14, %rdi
+     116: 48 89 de                     	movq	%rbx, %rsi
+     119: e8 00 00 00 00               	callq	0x11e <vm_area_dup+0x9e>
+		000000000000011a:  R_X86_64_PLT32	rusix_vma_copy_prot-0x4
+     11e: 4c 89 f7                     	movq	%r14, %rdi
+     121: 48 89 de                     	movq	%rbx, %rsi
+     124: e8 00 00 00 00               	callq	0x129 <vm_area_dup+0xa9>
+		0000000000000125:  R_X86_64_PLT32	rusix_vma_copy_shared-0x4
+     129: 4c 89 f7                     	movq	%r14, %rdi
+     12c: 48 89 de                     	movq	%rbx, %rsi
+     12f: e8 00 00 00 00               	callq	0x134 <vm_area_dup+0xb4>
+		0000000000000130:  R_X86_64_PLT32	rusix_vma_copy_userfault-0x4
+     134: 4c 89 f7                     	movq	%r14, %rdi
+     137: 48 89 de                     	movq	%rbx, %rsi
+     13a: e8 00 00 00 00               	callq	0x13f <vm_area_dup+0xbf>
+		000000000000013b:  R_X86_64_PLT32	rusix_vma_copy_name-0x4
+     13f: 4c 89 f7                     	movq	%r14, %rdi
+     142: 48 89 de                     	movq	%rbx, %rsi
+     145: e8 00 00 00 00               	callq	0x14a <vm_area_dup+0xca>
+		0000000000000146:  R_X86_64_PLT32	rusix_vma_copy_swap-0x4
+     14a: 4c 89 f7                     	movq	%r14, %rdi
+     14d: 48 89 de                     	movq	%rbx, %rsi
+     150: e8 00 00 00 00               	callq	0x155 <vm_area_dup+0xd5>
+		0000000000000151:  R_X86_64_PLT32	rusix_vma_copy_policy-0x4
+     155: 48 89 df                     	movq	%rbx, %rdi
+     158: e8 00 00 00 00               	callq	0x15d <vm_area_dup+0xdd>
+		0000000000000159:  R_X86_64_PLT32	rusix_vma_pfn_clear-0x4
+     15d: 4c 89 f7                     	movq	%r14, %rdi
+     160: e8 00 00 00 00               	callq	0x165 <vm_area_dup+0xe5>
+		0000000000000161:  R_X86_64_PLT32	rusix_vma_pfn_get-0x4
+     165: 48 85 c0                     	testq	%rax, %rax
+     168: 74 26                        	je	0x190 <vm_area_dup+0x110>
+     16a: 49 89 c7                     	movq	%rax, %r15
+     16d: 48 89 c7                     	movq	%rax, %rdi
+     170: e8 00 00 00 00               	callq	0x175 <vm_area_dup+0xf5>
+		0000000000000171:  R_X86_64_PLT32	rusix_vma_pfn_count-0x4
+     175: 3b 05 00 00 00 00            	cmpl	(%rip), %eax            # 0x17b <vm_area_dup+0xfb>
+		0000000000000177:  R_X86_64_PC32	rusix_vma_refcount_max-0x4
+     17b: 73 3d                        	jae	0x1ba <vm_area_dup+0x13a>
+     17d: 4c 89 ff                     	movq	%r15, %rdi
+     180: e8 00 00 00 00               	callq	0x185 <vm_area_dup+0x105>
+		0000000000000181:  R_X86_64_PLT32	rusix_vma_pfn_acquire-0x4
+     185: 48 89 df                     	movq	%rbx, %rdi
+     188: 4c 89 fe                     	movq	%r15, %rsi
+     18b: e8 00 00 00 00               	callq	0x190 <vm_area_dup+0x110>
+		000000000000018c:  R_X86_64_PLT32	rusix_vma_pfn_set-0x4
+     190: 48 89 df                     	movq	%rbx, %rdi
+     193: be 01 00 00 00               	movl	$0x1, %esi
+     198: e8 00 00 00 00               	callq	0x19d <vm_area_dup+0x11d>
+		0000000000000199:  R_X86_64_PLT32	rusix_vma_lock_init-0x4
+     19d: 48 89 df                     	movq	%rbx, %rdi
+     1a0: e8 00 00 00 00               	callq	0x1a5 <vm_area_dup+0x125>
+		00000000000001a1:  R_X86_64_PLT32	rusix_vma_list_init-0x4
+     1a5: 48 89 df                     	movq	%rbx, %rdi
+     1a8: e8 00 00 00 00               	callq	0x1ad <vm_area_dup+0x12d>
+		00000000000001a9:  R_X86_64_PLT32	rusix_vma_numa_init-0x4
+     1ad: 4c 89 f7                     	movq	%r14, %rdi
+     1b0: 48 89 de                     	movq	%rbx, %rsi
+     1b3: e8 00 00 00 00               	callq	0x1b8 <vm_area_dup+0x138>
+		00000000000001b4:  R_X86_64_PLT32	rusix_vma_name_dup-0x4
+     1b8: eb 11                        	jmp	0x1cb <vm_area_dup+0x14b>
+     1ba: 48 8b 3d 00 00 00 00         	movq	(%rip), %rdi            # 0x1c1 <vm_area_dup+0x141>
+		00000000000001bd:  R_X86_64_PC32	.bss-0x4
+     1c1: 48 89 de                     	movq	%rbx, %rsi
+     1c4: e8 00 00 00 00               	callq	0x1c9 <vm_area_dup+0x149>
+		00000000000001c5:  R_X86_64_PLT32	rusix_vma_slab_free-0x4
+     1c9: 31 db                        	xorl	%ebx, %ebx
+     1cb: 48 89 d8                     	movq	%rbx, %rax
+     1ce: 5b                           	popq	%rbx
+     1cf: 41 5e                        	popq	%r14
+     1d1: 41 5f                        	popq	%r15
+     1d3: e9 00 00 00 00               	jmp	0x1d8 <vm_area_dup+0x158>
+		00000000000001d4:  R_X86_64_PLT32	__x86_return_thunk-0x4
+     1d8: 0f 1f 84 00 00 00 00 00      	nopl	(%rax,%rax)
+
+00000000000001e0 <__pfx_vm_area_free>:
+     1e0: 90                           	nop
+     1e1: 90                           	nop
+     1e2: 90                           	nop
+     1e3: 90                           	nop
+     1e4: 90                           	nop
+     1e5: 90                           	nop
+     1e6: 90                           	nop
+     1e7: 90                           	nop
+     1e8: 90                           	nop
+     1e9: 90                           	nop
+     1ea: 90                           	nop
+     1eb: 90                           	nop
+     1ec: 90                           	nop
+     1ed: 90                           	nop
+     1ee: 90                           	nop
+     1ef: 90                           	nop
+
+00000000000001f0 <vm_area_free>:
+     1f0: 53                           	pushq	%rbx
+     1f1: 48 89 fb                     	movq	%rdi, %rbx
+     1f4: e8 00 00 00 00               	callq	0x1f9 <vm_area_free+0x9>
+		00000000000001f5:  R_X86_64_PLT32	rusix_vma_assert_detached-0x4
+     1f9: 48 89 df                     	movq	%rbx, %rdi
+     1fc: e8 00 00 00 00               	callq	0x201 <vm_area_free+0x11>
+		00000000000001fd:  R_X86_64_PLT32	rusix_vma_numa_free-0x4
+     201: 48 89 df                     	movq	%rbx, %rdi
+     204: e8 00 00 00 00               	callq	0x209 <vm_area_free+0x19>
+		0000000000000205:  R_X86_64_PLT32	rusix_vma_name_free-0x4
+     209: 48 89 df                     	movq	%rbx, %rdi
+     20c: e8 00 00 00 00               	callq	0x211 <vm_area_free+0x21>
+		000000000000020d:  R_X86_64_PLT32	rusix_vma_pfn_get-0x4
+     211: 48 85 c0                     	testq	%rax, %rax
+     214: 74 10                        	je	0x226 <vm_area_free+0x36>
+     216: 48 89 c7                     	movq	%rax, %rdi
+     219: e8 00 00 00 00               	callq	0x21e <vm_area_free+0x2e>
+		000000000000021a:  R_X86_64_PLT32	rusix_vma_pfn_put-0x4
+     21e: 48 89 df                     	movq	%rbx, %rdi
+     221: e8 00 00 00 00               	callq	0x226 <vm_area_free+0x36>
+		0000000000000222:  R_X86_64_PLT32	rusix_vma_pfn_clear-0x4
+     226: 48 8b 3d 00 00 00 00         	movq	(%rip), %rdi            # 0x22d <vm_area_free+0x3d>
+		0000000000000229:  R_X86_64_PC32	.bss-0x4
+     22d: 48 89 de                     	movq	%rbx, %rsi
+     230: 5b                           	popq	%rbx
+     231: e9 00 00 00 00               	jmp	0x236 <vm_area_free+0x46>
+		0000000000000232:  R_X86_64_PLT32	rusix_vma_slab_free-0x4
+
+Disassembly of section .init.text:
+
+0000000000000000 <__pfx_rusix_vma_state_init>:
+       0: 90                           	nop
+       1: 90                           	nop
+       2: 90                           	nop
+       3: 90                           	nop
+       4: 90                           	nop
+       5: 90                           	nop
+       6: 90                           	nop
+       7: 90                           	nop
+       8: 90                           	nop
+       9: 90                           	nop
+       a: 90                           	nop
+       b: 90                           	nop
+       c: 90                           	nop
+       d: 90                           	nop
+       e: 90                           	nop
+       f: 90                           	nop
+
+0000000000000010 <rusix_vma_state_init>:
+      10: 50                           	pushq	%rax
+      11: e8 00 00 00 00               	callq	0x16 <rusix_vma_state_init+0x6>
+		0000000000000012:  R_X86_64_PLT32	rusix_vma_cache_create-0x4
+      16: 48 89 05 00 00 00 00         	movq	%rax, (%rip)            # 0x1d <rusix_vma_state_init+0xd>
+		0000000000000019:  R_X86_64_PC32	.bss-0x4
+      1d: 58                           	popq	%rax
+      1e: e9 00 00 00 00               	jmp	0x23 <rusix_vma_state_init+0x13>
+		000000000000001f:  R_X86_64_PLT32	__x86_return_thunk-0x4

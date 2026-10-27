@@ -1,0 +1,7 @@
+{
+  "status": "FAILED",
+  "scope": "Read-only source preflight",
+  "reason": "Historical config archive gzip records are ignored and absent from new worktree; original frozen checkout retains them.",
+  "missing": "rusix/docs/evidence/mm-exit-mmap-config/records/archive-inputs.json.gz",
+  "correction": "Reference historical config/lifecycle archives in original frozen checkout read-only, preserving pinned manifest and every record hash; no evidence copied."
+}

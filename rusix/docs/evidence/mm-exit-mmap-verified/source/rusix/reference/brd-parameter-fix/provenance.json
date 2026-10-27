@@ -1,0 +1,30 @@
+{
+  "sources": [
+    {
+      "file": "patchew.mbox",
+      "sha256": "4bd9f3caf3aa8dcb221365f610afceb5c66fa4e8e28a32f4a695317236a28ae0",
+      "from": "Samuel Moelius <sam.moelius@trailofbits.com>",
+      "date": "Mon, 08 Jun 2026 23:59:33 +0000",
+      "subject": "[PATCH] brd: normalize non-positive max_part before rounding it up",
+      "message_id": "<20260608235932.1233876.a0685c37c761.brd-negative-max-part-zero-minors@trailofbits.com>",
+      "encoding": "quoted-printable",
+      "decoded_body_sha256": "101b0d0bdd3bb1841c116e8cfbf8a502e28a4eb2fdd968a672fa4aee0a1def20"
+    },
+    {
+      "file": "mirror.raw",
+      "sha256": "723495a7ead0507304c7f73f201c8d91ebd77fbb887d48618e96ac30cefda8d3",
+      "from": "Samuel Moelius <sam.moelius@trailofbits.com>",
+      "date": "Mon, 08 Jun 2026 23:59:33 +0000",
+      "subject": "[PATCH] brd: normalize non-positive max_part before rounding it up",
+      "message_id": "<20260608235932.1233876.a0685c37c761.brd-negative-max-part-zero-minors@trailofbits.com>",
+      "encoding": "8bit",
+      "decoded_body_sha256": "2eaaae854b483a5bcdb42674277a78e3cd409315d7337cfc0bbc680aba7d4be9"
+    }
+  ],
+  "patch_sha256": "d1ffbd05ff8ec9fb9ab39a48feca8e9c65131a567725e22812ccd4c17b78ebb0",
+  "pinned_source_commit": "2926d88bb7fc4608fd942453d929c39e4e5ec006",
+  "pinned_brd_sha256": "f3f113666045b1c76f97bec85a1bd519d1c1c633f2e6fdf20ce0c3e927fca685",
+  "mirror_patch_agreement": true,
+  "merge_status": "not verified; mailing-list proposal only",
+  "cryptographic_email_authentication": "not independently verified"
+}

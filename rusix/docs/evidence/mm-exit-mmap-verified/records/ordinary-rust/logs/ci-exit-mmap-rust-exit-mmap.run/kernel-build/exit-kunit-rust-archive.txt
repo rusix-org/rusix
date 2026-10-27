@@ -1,0 +1,9 @@
+/out/builds/ci-exit-mmap-rust/rust/core.o
+/out/builds/ci-exit-mmap-rust/rust/compiler_builtins.o
+/out/builds/ci-exit-mmap-rust/rust/ffi.o
+/out/builds/ci-exit-mmap-rust/rust/helpers/helpers.o
+/out/builds/ci-exit-mmap-rust/rust/bindings.o
+/out/builds/ci-exit-mmap-rust/rust/pin_init.o
+/out/builds/ci-exit-mmap-rust/rust/kernel.o
+/out/builds/ci-exit-mmap-rust/rust/uapi.o
+/out/builds/ci-exit-mmap-rust/rust/exports.o

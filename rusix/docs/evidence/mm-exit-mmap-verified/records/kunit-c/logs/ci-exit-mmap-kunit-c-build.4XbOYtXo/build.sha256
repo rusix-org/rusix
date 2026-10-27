@@ -1,0 +1,4 @@
+5e18987c49a18815d8969f258555bc15ad3525610915386efd189f05ed132a97  /out/builds/ci-exit-mmap-kunit-c/.config
+442109dea4698627cc7c32d7c8b6d73b7cd2f37d1e1d7213ae76afe12a3488f0  /out/builds/ci-exit-mmap-kunit-c/arch/x86/boot/bzImage
+991678c1eaddf723b90c17a53a276f8a66def163a3e04f4242e37d32b22856e6  /out/builds/ci-exit-mmap-kunit-c/vmlinux
+d3d1a61a6a504131eef9ae43f8b6889ff2f6b67ea513d660b64dc894195f9539  /out/builds/ci-exit-mmap-kunit-c/vmlinux.map

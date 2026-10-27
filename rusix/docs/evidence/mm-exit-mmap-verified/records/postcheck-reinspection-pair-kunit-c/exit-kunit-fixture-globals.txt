@@ -1,0 +1,8 @@
+0000000000000000 T __pfx_rusix_exit_test_put
+0000000000000560 T __pfx_rusix_exit_test_result
+0000000000000090 T __pfx_rusix_exit_test_start
+0000000000000520 T __pfx_rusix_exit_test_wait
+0000000000000010 T rusix_exit_test_put
+0000000000000570 T rusix_exit_test_result
+00000000000000a0 T rusix_exit_test_start
+0000000000000530 T rusix_exit_test_wait

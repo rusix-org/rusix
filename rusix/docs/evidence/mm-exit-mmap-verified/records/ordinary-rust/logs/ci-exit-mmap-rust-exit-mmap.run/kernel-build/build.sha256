@@ -1,0 +1,4 @@
+0328fd2e3ffe9f3dc902d610b6700286b295e35eb157bd0450d1386d91ce45fd  /out/builds/ci-exit-mmap-rust/.config
+23ed8d97b46ee18eb7d00e62f4ab3005b86341c07008d7bb83e8b280731985e6  /out/builds/ci-exit-mmap-rust/arch/x86/boot/bzImage
+0aab8f7fa49b3c97523c4d56e6c343317d998822caf645b74c40430cd1c6a7b6  /out/builds/ci-exit-mmap-rust/vmlinux
+8b9f46065a4c83aa1e7430900160782a3875f64ab37de1bb17a7e4c9c63c3835  /out/builds/ci-exit-mmap-rust/vmlinux.map

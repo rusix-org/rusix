@@ -1,0 +1,9 @@
+/home/aaron/code/rusix/linux-out/mm-exit-mmap-verification-002/ordinary-c/builds/ci-exit-mmap-c/rust/core.o
+/home/aaron/code/rusix/linux-out/mm-exit-mmap-verification-002/ordinary-c/builds/ci-exit-mmap-c/rust/compiler_builtins.o
+/home/aaron/code/rusix/linux-out/mm-exit-mmap-verification-002/ordinary-c/builds/ci-exit-mmap-c/rust/ffi.o
+/home/aaron/code/rusix/linux-out/mm-exit-mmap-verification-002/ordinary-c/builds/ci-exit-mmap-c/rust/helpers/helpers.o
+/home/aaron/code/rusix/linux-out/mm-exit-mmap-verification-002/ordinary-c/builds/ci-exit-mmap-c/rust/bindings.o
+/home/aaron/code/rusix/linux-out/mm-exit-mmap-verification-002/ordinary-c/builds/ci-exit-mmap-c/rust/pin_init.o
+/home/aaron/code/rusix/linux-out/mm-exit-mmap-verification-002/ordinary-c/builds/ci-exit-mmap-c/rust/kernel.o
+/home/aaron/code/rusix/linux-out/mm-exit-mmap-verification-002/ordinary-c/builds/ci-exit-mmap-c/rust/uapi.o
+/home/aaron/code/rusix/linux-out/mm-exit-mmap-verification-002/ordinary-c/builds/ci-exit-mmap-c/rust/exports.o

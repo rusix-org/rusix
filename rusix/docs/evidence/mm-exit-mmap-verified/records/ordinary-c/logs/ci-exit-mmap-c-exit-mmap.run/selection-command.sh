@@ -1,0 +1,1 @@
+bash /src/rusix/scripts/with-local-tools.sh python3 /src/rusix/scripts/verify-exit-mmap.py objects --profile exit-mmap-c --source /src --build /out/builds/ci-exit-mmap-c --evidence /out/logs/ci-exit-mmap-c-exit-mmap.run/kernel-build

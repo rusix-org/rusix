@@ -1,0 +1,6 @@
+{
+  "exit": 1,
+  "stdout": "",
+  "stderr": "Traceback (most recent call last):\n  File \"/home/aaron/code/rusix/linux-out/mm-exit-mmap-verification-retry-draft/preflight.py\", line 161, in <module>\n    if __name__ == '__main__': main()\n                               ~~~~^^\n  File \"/home/aaron/code/rusix/linux-out/mm-exit-mmap-verification-retry-draft/preflight.py\", line 153, in main\n    if not REVIEWED_LAUNCH_READY or not json.loads((DRAFT/'root-ready.json').read_text())['enabled']: raise ValueError('Root launch/source review pending')\n                                                                                                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nValueError: Root launch/source review pending\n",
+  "scope": "Expected fail-closed refusal; no launch"
+}

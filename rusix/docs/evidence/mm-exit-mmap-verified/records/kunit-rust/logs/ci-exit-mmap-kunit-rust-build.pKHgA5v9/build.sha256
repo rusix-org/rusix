@@ -1,0 +1,4 @@
+2709cdf41603ed3083bd241ce39a913431cbe40687c2c6827e1cb578b89544d9  /out/builds/ci-exit-mmap-kunit-rust/.config
+17d75fc701dabf2b2ce47fd2636f9df4c3d2681ce840097387dfe713d3f0d8c2  /out/builds/ci-exit-mmap-kunit-rust/arch/x86/boot/bzImage
+b094434dcf40bfeedff9de7cc33eded2223c3e473c2343827ce08376b30fa6b1  /out/builds/ci-exit-mmap-kunit-rust/vmlinux
+dd15268fde751265520277313ea8e1fc252e75f2de548fd5a169fddddde3f526  /out/builds/ci-exit-mmap-kunit-rust/vmlinux.map

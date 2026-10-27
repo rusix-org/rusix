@@ -1,0 +1,8 @@
+/out/builds/ci-exit-mmap-c/kernel/sched/core.o
+/out/builds/ci-exit-mmap-c/kernel/sched/fair.o
+/out/builds/ci-exit-mmap-c/kernel/sched/build_policy.o
+/out/builds/ci-exit-mmap-c/kernel/sched/build_utility.o
+/out/builds/ci-exit-mmap-c/kernel/sched/completion_rust.o
+/out/builds/ci-exit-mmap-c/kernel/sched/swait_rust.o
+/out/builds/ci-exit-mmap-c/kernel/sched/wait_rust.o
+/out/builds/ci-exit-mmap-c/kernel/sched/wait_bit_rust.o

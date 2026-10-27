@@ -1,0 +1,1 @@
+/usr/bin/rustc --edition 2021 --target x86_64-unknown-linux-gnu -C target-feature=+crt-static -C panic=abort -C opt-level=2 /src/rusix/tests/vma-lifecycle/init.rs -o /out/builds/exit-mmap-vm-ci-exit-mmap-rust/init

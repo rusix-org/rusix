@@ -1,0 +1,12 @@
+/out/builds/ci-exit-mmap-kunit-rust/kernel/sched/core.o
+/out/builds/ci-exit-mmap-kunit-rust/kernel/sched/fair.o
+/out/builds/ci-exit-mmap-kunit-rust/kernel/sched/build_policy.o
+/out/builds/ci-exit-mmap-kunit-rust/kernel/sched/build_utility.o
+/out/builds/ci-exit-mmap-kunit-rust/kernel/sched/completion_rust.o
+/out/builds/ci-exit-mmap-kunit-rust/kernel/sched/swait_rust.o
+/out/builds/ci-exit-mmap-kunit-rust/kernel/sched/wait_rust.o
+/out/builds/ci-exit-mmap-kunit-rust/kernel/sched/wait_bit_rust.o
+/out/builds/ci-exit-mmap-kunit-rust/kernel/sched/wait_test.o
+/out/builds/ci-exit-mmap-kunit-rust/kernel/sched/wait_bit_test.o
+/out/builds/ci-exit-mmap-kunit-rust/kernel/sched/wait_locked_test.o
+/out/builds/ci-exit-mmap-kunit-rust/kernel/sched/wait_owner_test.o
