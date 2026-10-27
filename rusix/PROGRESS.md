@@ -1,5 +1,14 @@
 # rusix progress
 
+The copy-VMA successor now carries the reviewed fixture archive-context and
+canonical Rust KUnit sentinel corrections from `13e0ddc71a57`, without changing
+production source, configurations or copy-VMA extension/delegation rules.
+All 36 host suites (378 cases) pass on 1,323 stable source/tool inputs. The
+original `99fd3dd96ac0` checkpoint stays frozen in its existing worktree.
+This is verifier propagation only; candidate kernel compilation, actual linked
+selection and paired guest verification remain pending. The successor matrix
+must require accepted teardown evidence before those gates can run.
+
 The inherited lifecycle verifier now accepts the observed private-cache `.0`
 suffix and proves the canonical refcount constant's four-byte storage/value.
 This carries the reviewed fix from `e0632d2729` without changing kernel code.

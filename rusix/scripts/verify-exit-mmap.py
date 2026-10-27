@@ -104,11 +104,15 @@ def definitions(text,expected):
             raise ValueError('Wrong teardown definition '+name)
 
 
-def archive_members(text,rust):
+def archive_members(text,rust, *, test_context=None):
+    if test_context not in (None,TEST_CONTEXT):raise ValueError('Unknown teardown archive test context')
     names=[Path(n).name for n in text.splitlines()]
-    for name,count in (('mmap.o',1),('vma.o',1),('exit_mmap_rust.o',int(rust))):
+    fixture=test_context==TEST_CONTEXT
+    for name,count in (('mmap.o',1),('vma.o',1),('exit_mmap_rust.o',int(rust)),
+                       ('exit_mmap_test.o',int(fixture))):
         if names.count(name)!=count:raise ValueError('Wrong teardown archive ownership')
-    if any('exit_mmap' in n and n!='exit_mmap_rust.o' for n in names):raise ValueError('Unexpected teardown object')
+    allowed={'exit_mmap_rust.o'} | ({'exit_mmap_test.o'} if fixture else set())
+    if any('exit_mmap' in n and n not in allowed for n in names):raise ValueError('Unexpected teardown object')
 
 
 def executable_calls(text,target):
@@ -164,7 +168,7 @@ def verify(args, *, source_extension=extension.ID):
         result=subprocess.run(argv,check=True,capture_output=True,text=True)
         if result.stderr:raise ValueError('Object inspection diagnostics: '+result.stderr)
         (evidence/name).write_text(result.stdout);return result.stdout
-    archive=build/'mm/built-in.a';members=run('exit-mmap-archive.txt',['llvm-ar','t',str(archive)]);archive_members(members,rust)
+    archive=build/'mm/built-in.a';members=run('exit-mmap-archive.txt',['llvm-ar','t',str(archive)]);archive_members(members,rust,test_context=context)
     tables,metadata,dis,hashes={},{},{},{}
     expected={'mmap':{'exit_mmap'},'vma':set() if rust else {'remove_vma'}}
     if rust:expected['exit_mmap_rust']={'rusix_exit_mmap','rusix_vma_close','remove_vma'}
