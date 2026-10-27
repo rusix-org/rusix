@@ -1,0 +1,14 @@
+{
+  "baseline": "2926d88bb7fc4608fd942453d929c39e4e5ec006",
+  "files": {
+    "tools/testing/selftests/mm/mremap_dontunmap.c": {
+      "sha256": "9796ea11348a2f40b8875655901163fe6ede92444c0c7d37b49430c765656c14",
+      "git_blob": "1d75084b9ca56ba0b3101b295a3f7338eca48c6f"
+    },
+    "tools/testing/selftests/kselftest.h": {
+      "sha256": "9e94dcf7b0b156d601c9bea7fe8bffb075a84e4e4ea93da5aac0df9a1bb86cf9",
+      "git_blob": "afbcf8412ae5bd9c43cc2f11fbbd81d434755303"
+    }
+  },
+  "scope": "Unchanged upstream source and kselftest header; not compiled or executed"
+}

@@ -16,6 +16,18 @@ No guest binary was executed; candidate kernel and VM verification remain pendin
 [source evidence](docs/evidence/vma-modify-source/manifest.json),
 [compile evidence](docs/evidence/vma-modify-fixtures/manifest.json).
 
+The verification tooling now has explicit `vma-modify-v1` source context, four
+actual compiler-unit provenance checks, nested object/archive/linked ownership
+checks and paired build-only profiles. Independent pre-fix review passed 39 host
+suites / 416 cases; after the approved teardown archive/sentinel correction,
+39 suites / 421 cases pass with 4,157 unchanged inputs. Historical verifier
+contexts remain strict, and CI still rejects the new profiles until their runtime
+runner is ready. [Tooling evidence](docs/evidence/vma-modify-tooling/manifest.json).
+The inherited correction is referenced at `13e0ddc71a57`; its retained teardown
+KUnit C ELF reinspection is separate evidence, not a VMA-modify build or VM pass.
+No production policy changed in this tooling checkpoint. Actual configuration,
+compiled selection and paired runtime gates remain pending.
+
 The inherited lifecycle verifier now accepts the observed private-cache `.0`
 suffix and proves the canonical refcount constant's four-byte storage/value.
 This carries the reviewed fix from `e0632d2729` without changing kernel code.

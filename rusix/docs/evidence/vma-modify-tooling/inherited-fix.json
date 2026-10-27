@@ -1,0 +1,12 @@
+{
+  "commit": "13e0ddc71a57d7576e9cc6f34603bd96d5bbfa08",
+  "path": "rusix/docs/evidence/exit-mmap-fixture-gate-fix/manifest.json",
+  "sha256": "97a4c2885fd0fbd5292223185c207b85333b7c1c91cffb9ea52d274576bc7ba6",
+  "compiled_kernel_source": "0ff7a933c198dda0c3e2c0005e4bb97db3867acc",
+  "scope": "Verifier-only fixes and retained KUnit C actual-object reinspection; no KUnit VM execution, original matrix failed, fresh retry required",
+  "prior_failure": {
+    "commit": "2c5cb433fda90480d492261a38222922f3d02cc5",
+    "path": "rusix/docs/evidence/mm-exit-mmap-initial/manifest.json",
+    "sha256": "60d2753a4bcb395cf6d6bba5b41a1495eb17bce3e293a85dbaf63ab7f428ffd2"
+  }
+}

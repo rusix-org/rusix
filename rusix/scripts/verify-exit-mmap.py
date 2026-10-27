@@ -56,7 +56,7 @@ def compare(c,rust):
 
 
 def check_preprocessed(mmap_text,vma_text,rust, *, source_extension=extension.ID, copy_rust=False):
-    if source_extension not in (extension.ID, extension.copy_extension.ID) or (copy_rust and source_extension != extension.copy_extension.ID):
+    if source_extension not in (extension.ID, extension.copy_extension.ID, extension.MODIFY_ID) or (copy_rust and source_extension not in (extension.copy_extension.ID, extension.MODIFY_ID)):
         raise ValueError("Unknown close-consumer extension")
     for text in (mmap_text,vma_text):
         if vma.bodies(text,'vma_close')!=(['rusix_vma_close(vma);'] if rust else [CLOSE]):
@@ -104,11 +104,15 @@ def definitions(text,expected):
             raise ValueError('Wrong teardown definition '+name)
 
 
-def archive_members(text,rust):
+def archive_members(text,rust, *, test_context=None):
+    if test_context not in (None,TEST_CONTEXT):raise ValueError('Unknown teardown archive test context')
     names=[Path(n).name for n in text.splitlines()]
-    for name,count in (('mmap.o',1),('vma.o',1),('exit_mmap_rust.o',int(rust))):
+    fixture=test_context==TEST_CONTEXT
+    for name,count in (('mmap.o',1),('vma.o',1),('exit_mmap_rust.o',int(rust)),
+                       ('exit_mmap_test.o',int(fixture))):
         if names.count(name)!=count:raise ValueError('Wrong teardown archive ownership')
-    if any('exit_mmap' in n and n!='exit_mmap_rust.o' for n in names):raise ValueError('Unexpected teardown object')
+    allowed={'exit_mmap_rust.o'} | ({'exit_mmap_test.o'} if fixture else set())
+    if any('exit_mmap' in n and n not in allowed for n in names):raise ValueError('Unexpected teardown object')
 
 
 def executable_calls(text,target):
@@ -158,13 +162,13 @@ def verify(args, *, source_extension=extension.ID):
     if inherited['test_context']!=context or inherited['status']!='PASS' or inherited['implementation']!='rust':raise ValueError('Inherited VMA proof failed')
     if inherited['dup_mmap_selection']['source_extension']['raw_sha256']!=proof['raw_sha256']:raise ValueError('Delegated source identity mismatch')
     (evidence/'exit-mmap-vma-selection.json').write_text(json.dumps(inherited,indent=2,sort_keys=True)+'\n')
-    copy_rust = source_extension == extension.copy_extension.ID and config_values((build/'.config').read_text()).get('CONFIG_RUSIX_COPY_VMA_RUST') == 'y'
+    copy_rust = source_extension in (extension.copy_extension.ID, extension.MODIFY_ID) and config_values((build/'.config').read_text()).get('CONFIG_RUSIX_COPY_VMA_RUST') == 'y'
     check_preprocessed((build/'mm/mmap.i').read_text(),(build/'mm/vma.i').read_text(),rust,source_extension=source_extension,copy_rust=copy_rust)
     def run(name,argv):
         result=subprocess.run(argv,check=True,capture_output=True,text=True)
         if result.stderr:raise ValueError('Object inspection diagnostics: '+result.stderr)
         (evidence/name).write_text(result.stdout);return result.stdout
-    archive=build/'mm/built-in.a';members=run('exit-mmap-archive.txt',['llvm-ar','t',str(archive)]);archive_members(members,rust)
+    archive=build/'mm/built-in.a';members=run('exit-mmap-archive.txt',['llvm-ar','t',str(archive)]);archive_members(members,rust,test_context=context)
     tables,metadata,dis,hashes={},{},{},{}
     expected={'mmap':{'exit_mmap'},'vma':set() if rust else {'remove_vma'}}
     if rust:expected['exit_mmap_rust']={'rusix_exit_mmap','rusix_vma_close','remove_vma'}

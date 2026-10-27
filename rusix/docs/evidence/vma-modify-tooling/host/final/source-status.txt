@@ -1,0 +1,15 @@
+M rusix/scripts/build-kernel.sh
+ M rusix/scripts/exit_kunit_elf.py
+ M rusix/scripts/exit_mmap_source.py
+ M rusix/scripts/verify-copy-vma.py
+ M rusix/scripts/verify-exit-mmap.py
+ M rusix/tests/test_copy_vma_selection.py
+ M rusix/tests/test_exit_kunit_elf.py
+ M rusix/tests/test_exit_mmap_selection.py
+?? rusix/configs/x86_64-vma-modify-c.config
+?? rusix/configs/x86_64-vma-modify-rust.config
+?? rusix/scripts/preprocess-vma-modify.py
+?? rusix/scripts/verify-vma-modify.py
+?? rusix/scripts/vma_modify_source.py
+?? rusix/tests/test_vma_modify_selection.py
+?? rusix/tests/test_vma_modify_source.py

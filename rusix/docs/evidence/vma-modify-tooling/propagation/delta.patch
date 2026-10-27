@@ -1,0 +1,150 @@
+--- before/rusix/scripts/verify-exit-mmap.py
++++ after/rusix/scripts/verify-exit-mmap.py
+@@ -104,11 +104,15 @@
+             raise ValueError('Wrong teardown definition '+name)
+ 
+ 
+-def archive_members(text,rust):
++def archive_members(text,rust, *, test_context=None):
++    if test_context not in (None,TEST_CONTEXT):raise ValueError('Unknown teardown archive test context')
+     names=[Path(n).name for n in text.splitlines()]
+-    for name,count in (('mmap.o',1),('vma.o',1),('exit_mmap_rust.o',int(rust))):
++    fixture=test_context==TEST_CONTEXT
++    for name,count in (('mmap.o',1),('vma.o',1),('exit_mmap_rust.o',int(rust)),
++                       ('exit_mmap_test.o',int(fixture))):
+         if names.count(name)!=count:raise ValueError('Wrong teardown archive ownership')
+-    if any('exit_mmap' in n and n!='exit_mmap_rust.o' for n in names):raise ValueError('Unexpected teardown object')
++    allowed={'exit_mmap_rust.o'} | ({'exit_mmap_test.o'} if fixture else set())
++    if any('exit_mmap' in n and n not in allowed for n in names):raise ValueError('Unexpected teardown object')
+ 
+ 
+ def executable_calls(text,target):
+@@ -164,7 +168,7 @@
+         result=subprocess.run(argv,check=True,capture_output=True,text=True)
+         if result.stderr:raise ValueError('Object inspection diagnostics: '+result.stderr)
+         (evidence/name).write_text(result.stdout);return result.stdout
+-    archive=build/'mm/built-in.a';members=run('exit-mmap-archive.txt',['llvm-ar','t',str(archive)]);archive_members(members,rust)
++    archive=build/'mm/built-in.a';members=run('exit-mmap-archive.txt',['llvm-ar','t',str(archive)]);archive_members(members,rust,test_context=context)
+     tables,metadata,dis,hashes={},{},{},{}
+     expected={'mmap':{'exit_mmap'},'vma':set() if rust else {'remove_vma'}}
+     if rust:expected['exit_mmap_rust']={'rusix_exit_mmap','rusix_vma_close','remove_vma'}
+--- before/rusix/scripts/exit_kunit_elf.py
++++ after/rusix/scripts/exit_kunit_elf.py
+@@ -30,13 +30,32 @@
+     clean=re.sub(r'/\*.*?\*/','',rows[0],flags=re.S)
+     return hashlib.sha256(re.sub(r'\s+','',clean).encode()).hexdigest()
+ LAYOUT = {'kunit_attributes': ('3f587fe76dd592563a26856337d50c214d387e293f52e09b53f47d194189b2ed', '5a862560d724dbbe864ef36d835b3a32f257a8ccd790b04cd67ad6f498b1a16c'), 'kunit_case': ('e50f48ec1edfbe52e95a7d5ae0a26f867c843c3e07f518480fd819a24b3fa095', '0cf687061290336a4fad39667d7946fb199f1220cccff0dfd35f4e510567c747'), 'kunit_suite': ('000634891e6272fed8dab58ffd036f1432f82100907b1224eb22f90020652aad', '8c9f79432a652ce51d495f1e02559fb66657e2f8b7bfe1bb4a3ead3b25fd8b43')}
++# The pinned Rust constructor uses NORMAL speed (3), not a zeroed C record.
++# x86_64: attr.speed at 24, status at 48; all pointers/padding remain zero.
++CASE_TERMINATOR = bytes(24) + (3).to_bytes(4, 'little') + bytes(44)
++NULL_CONSTRUCTOR_SHA256 = '865b6759fe2a62a0157764c778ee945816fd033da589d2f38bb83f5b8290cdbd'
++def sentinel_contract(header, generated, constructor):
++    enums = {
++        'kunit_status': 'KUNIT_SUCCESS,KUNIT_FAILURE,KUNIT_SKIPPED,',
++        'kunit_speed': 'KUNIT_SPEED_UNSET,KUNIT_SPEED_VERY_SLOW,KUNIT_SPEED_SLOW,KUNIT_SPEED_NORMAL,KUNIT_SPEED_MAX=KUNIT_SPEED_NORMAL,',
++    }
++    for name, expected in enums.items():
++        bodies=re.findall(r'^enum '+name+r'\s*\{(.*?)^\};',header,re.M|re.S)
++        need(len(bodies)==1 and re.sub(r'\s+','',bodies[0])==expected,'Unknown canonical enum '+name)
++        need(len(re.findall(r'^pub type '+name+r' = ffi::c_uint;$',generated,re.M))==1,'Unknown enum width '+name)
++    for name, kind, value in (('kunit_speed_KUNIT_SPEED_NORMAL','kunit_speed',3),
++                              ('kunit_status_KUNIT_SUCCESS','kunit_status',0)):
++        declarations=re.findall(r'^pub const '+name+r': ([^;]+);$',generated,re.M)
++        need(declarations==[kind+' = '+str(value)],'Unknown generated sentinel value '+name)
++    bodies=re.findall(r'^pub const fn kunit_case_null\(\) -> kernel::bindings::kunit_case \{.*?^\}',constructor,re.M|re.S)
++    need(len(bodies)==1 and hashlib.sha256(re.sub(r'\s+','',bodies[0]).encode()).hexdigest()==NULL_CONSTRUCTOR_SHA256,'Changed canonical Rust case terminator constructor')
++
+ def layout(source, build):
+     header=(source/'include/kunit/test.h').read_text()
+     generated=(build/'rust/bindings/bindings_generated.rs').read_text()
+     for name,(c,rust) in LAYOUT.items():
+         need(signature(header,name)==c and signature(generated,name,True)==rust,'Unsupported KUnit layout '+name)
+-    for enum in ('kunit_status','kunit_speed'):
+-        need(re.search(r'pub type '+enum+r' = ffi::c_uint;',generated),'Unknown enum width')
++    sentinel_contract(header,generated,(source/'rust/kernel/kunit.rs').read_text())
+ 
+ def offset(loc, n):
+     need(isinstance(loc,tuple),'Pointer must resolve to defined storage')
+@@ -87,7 +106,7 @@
+         for n in (16,32,40):need(elf.pointer(offset(record,n)) is None,'Unexpected parameter callback')
+     need(len(set(functions))==3,'Duplicate case executable target')
+     final=offset(cases,3*72)
+-    need(elf.section_data(final[0])[final[1]:final[1]+72]==bytes(72),'Missing zero case terminator')
++    need(elf.section_data(final[0])[final[1]:final[1]+72]==CASE_TERMINATOR,'Missing canonical Rust case terminator')
+     need(not any(offset(final,n) in elf.relocations for n in range(72)),'Relocated terminator')
+     return functions
+ 
+--- before/rusix/tests/test_exit_mmap_selection.py
++++ after/rusix/tests/test_exit_mmap_selection.py
+@@ -113,6 +113,29 @@
+         for text in ('mmap.o\nvma.o\n','mmap.o\nvma.o\nexit_mmap_rust.o\nexit_mmap_other.o\n','mmap.o\nvma.o\nvma.o\nexit_mmap_rust.o\n'):
+             with self.assertRaises(ValueError):gate.archive_members(text,True)
+ 
++    def test_kunit_archive_requires_exact_fixture_in_explicit_context(self):
++        for rust in (False,True):
++            ordinary='mmap.o\nvma.o\n'+('exit_mmap_rust.o\n' if rust else '')
++            fixture=ordinary+'exit_mmap_test.o\n'
++            with self.subTest(rust=rust):
++                gate.archive_members(ordinary,rust)
++                gate.archive_members(fixture,rust,test_context=gate.TEST_CONTEXT)
++                with self.assertRaises(ValueError):gate.archive_members(fixture,rust)
++                for bad in (ordinary,fixture+'exit_mmap_test.o\n',fixture+'exit_mmap_other.o\n',
++                            fixture+'exit_mmap_test_extra.o\n',fixture+'exit_mmap_rust.o\n',
++                            fixture.replace('mmap.o\n','mmap.o\nmmap.o\n',1)):
++                    with self.assertRaises(ValueError):
++                        gate.archive_members(bad,rust,test_context=gate.TEST_CONTEXT)
++                if rust:
++                    with self.assertRaises(ValueError):
++                        gate.archive_members(fixture.replace('exit_mmap_rust.o\n',''),rust,test_context=gate.TEST_CONTEXT)
++
++    def test_archive_unknown_context_rejected_with_or_without_fixture(self):
++        for context in ('', 'exit-mmap-kunit-v2', 'vma-modify-v1', True):
++            for text in ('mmap.o\nvma.o\n','mmap.o\nvma.o\nexit_mmap_test.o\n'):
++                with self.subTest(context=context),self.assertRaises(ValueError):
++                    gate.archive_members(text,False,test_context=context)
++
+     def test_callback_transfer_not_data_reference_or_unsupported_target(self):
+         body='0000 <rusix_vma_close>:\n'
+         for name in ('rusix_remove_ops','rusix_remove_close','rusix_remove_dummy'):
+--- before/rusix/tests/test_exit_kunit_elf.py
++++ after/rusix/tests/test_exit_kunit_elf.py
+@@ -12,6 +12,7 @@
+ class Model:
+  def __init__(self):
+   self.relocatable=True;self.names=['','.kunit_test_suites','.data','.text'];self.headers=[(0,)*10,(0,1,2,0,0,8),(0,1,3,0,0,2048),(0,1,6,0,0,256)];self.data=bytearray(2048);self.data[:len(m.SUITE)]=m.SUITE.encode();self.ptr={(1,0):(2,0),(2,288):(2,600)};self.symbols=[];self.relocations={}
++  self.data[816:888]=m.CASE_TERMINATOR
+   for i,name in enumerate(m.CASES):
+    pos=1000+i*150;self.data[pos:pos+len(name)]=name.encode();self.ptr[(2,600+i*72)]=(3,i*32);self.ptr[(2,608+i*72)]=(2,pos)
+    self.symbols.append(dict(name='kernel_exit_tests_kunit_rust_wrapper_'+name,kind=2,size=24,section=3,address=i*32))
+@@ -39,6 +40,31 @@
+   for mutate in (lambda e:e.data.__setitem__(816,1),lambda e:e.ptr.update({(2,616):(3,0)}),lambda e:e.relocations.update({(2,816):'bad'})):
+    e=Model();mutate(e)
+    with self.assertRaises(ValueError):m.registration(e,True)
++ def test_canonical_sentinel_rejects_zero_speed_status_pointer_and_padding(self):
++  for offset,value in ((24,0),(24,2),(48,1),(0,1),(8,1),(16,1),(28,1),(32,1),(40,1),(56,1),(64,1),(71,1)):
++   e=Model();e.data[816+offset]=value
++   with self.subTest(offset=offset,value=value),self.assertRaises(ValueError):m.registration(e,True)
++  e=Model();e.data[816:888]=bytes(72)
++  with self.assertRaises(ValueError):m.registration(e,True)
++ def test_sentinel_relocations_and_truncation(self):
++  for offset in (0,24,48,71):
++   e=Model();e.relocations[(2,816+offset)]='bad'
++   with self.assertRaises(ValueError):m.registration(e,True)
++  e=Model();e.data=e.data[:887]
++  with self.assertRaises(ValueError):m.registration(e,True)
++ def test_pinned_enum_and_constructor_contract(self):
++  root=S.parents[1];header=(root/'include/kunit/test.h').read_text();constructor=(root/'rust/kernel/kunit.rs').read_text()
++  generated='pub type kunit_status = ffi::c_uint;\npub type kunit_speed = ffi::c_uint;\npub const kunit_status_KUNIT_SUCCESS: kunit_status = 0;\npub const kunit_speed_KUNIT_SPEED_NORMAL: kunit_speed = 3;\n'
++  m.sentinel_contract(header,generated,constructor)
++  for h,g,c in ((header.replace('KUNIT_SUCCESS,','KUNIT_SUCCESS = 1,'),generated,constructor),
++                (header.replace('KUNIT_SPEED_NORMAL,','KUNIT_SPEED_NORMAL = 4,'),generated,constructor),
++                (header,generated.replace('= 3;','= 0;'),constructor),
++                (header,generated.replace('= 0;','= 1;'),constructor),
++                (header,generated.replace('ffi::c_uint','ffi::c_ulong'),constructor),
++                (header,generated,constructor.replace('speed: kernel::bindings::kunit_speed_KUNIT_SPEED_NORMAL','speed: 0')),
++                (header,generated,constructor.replace('status: kernel::bindings::kunit_status_KUNIT_SUCCESS','status: 1')),
++                (header,generated,constructor.replace('run_case: None','run_case: Some(callback)'))):
++   with self.assertRaises(ValueError):m.sentinel_contract(h,g,c)
+  def test_global_definitions(self):
+   text='\n'.join('0000 T '+n for n in m.ENTRIES);m.global_definitions(text,m.ENTRIES,True)
+   for bad in (text.replace(' T ',' D ',1),text+'\n0000 T '+m.ENTRIES[0],text.split('\n',1)[1]):

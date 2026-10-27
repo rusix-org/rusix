@@ -11,6 +11,7 @@ def load(name,path):
     s=importlib.util.spec_from_file_location(name,path);m=importlib.util.module_from_spec(s);s.loader.exec_module(m);return m
 g=load('copy_vma_gate',ROOT/'rusix/scripts/verify-copy-vma.py')
 e=g.extension
+import vma_modify_source
 oldtests=load('old_constants',ROOT/'rusix/tests/test_dup_mmap_selection.py')
 
 class Elf32(oldtests.ModelElf):
@@ -30,18 +31,30 @@ def selected():
     return text
 
 class Selection(unittest.TestCase):
+    def setUp(self):
+        # Only modeled historical source tests fold the reviewed extension.
+        # Actual .i evidence is never projected or synthesized by the verifier.
+        tmp=tempfile.TemporaryDirectory();self.addCleanup(tmp.cleanup)
+        self.historical=Path(tmp.name);(self.historical/'mm').mkdir()
+        for name in g.exit.extension.REGIONS:
+            text=(ROOT/name).read_text()
+            if name=='mm/vma.c':
+                text=vma_modify_source.restore(text,source_context=vma_modify_source.ID)
+            (self.historical/name).write_text(text)
+
     def test_exact_source_and_ancestral_restoration(self):
-        source=(ROOT/'mm/vma.c').read_text();restored=e.restore(source)
+        source=(self.historical/'mm/vma.c').read_text();restored=e.restore(source)
         self.assertEqual(g.exit.extension.hashlib.sha256(restored.encode()).hexdigest(),
                          '1dd5a0bbb2ae056796b0a12e506159c8af841cf38b0cb77f72a4b7d37c30950d')
-        proof=g.source_policy(ROOT)
+        proof=g.source_policy(self.historical)
+        with self.assertRaises(ValueError):g.source_policy(ROOT)
         self.assertEqual(proof['extension'],e.ID)
         self.assertEqual(proof['upstream_mmap_sha256'],g.exit.vma.dup.PINNED_MMAP_SHA256)
         with self.assertRaises(ValueError):g.exit.source_policy(ROOT)
         with self.assertRaises(ValueError):g.exit.extension.validate(ROOT,'unknown-copy-extension')
 
     def test_each_guard_shim_original_unrelated_mutation_rejected(self):
-        text=(ROOT/'mm/vma.c').read_text()
+        text=(self.historical/'mm/vma.c').read_text()
         mutations=[text+'\n',text+e.END,text.replace(e.END,'',1)]
         for shim in e.SHIMS:mutations += [text.replace(shim,shim.replace('#else','/*change*/\n#else'),1)]
         mutations += [text.replace('mm->map_count++;','mm->map_count += 2;',1),text.replace('return NULL;', 'return (void *)1;',1)]
@@ -51,7 +64,7 @@ class Selection(unittest.TestCase):
     def test_extension_validates_all_ancestor_files(self):
         with tempfile.TemporaryDirectory() as tmp:
             root=Path(tmp);(root/'mm').mkdir()
-            for name in g.exit.extension.REGIONS:(root/name).write_text((ROOT/name).read_text())
+            for name in g.exit.extension.REGIONS:(root/name).write_text((self.historical/name).read_text())
             g.source_policy(root)
             (root/'mm/internal.h').write_text((root/'mm/internal.h').read_text()+'\n')
             with self.assertRaises(ValueError):g.source_policy(root)
@@ -66,7 +79,7 @@ class Selection(unittest.TestCase):
         with self.assertRaises(ValueError):g.check_preprocessed(text,False)
 
     def test_c_oracle_policies_and_selected_primitive_rejection(self):
-        text=e.restore((ROOT/'mm/vma.c').read_text());g.check_preprocessed(text,False)
+        text=e.restore((self.historical/'mm/vma.c').read_text());g.check_preprocessed(text,False)
         for bad in (text.replace('mm->map_count++;',''),text.replace('unlink_anon_vmas(new_vma);',''),
                     text+'void rusix_copy_merge(void){}',text.replace('*vmap = vma = new_vma;','')):
             with self.assertRaises(ValueError):g.check_preprocessed(bad,False)

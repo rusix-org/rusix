@@ -1,0 +1,8 @@
+{
+  "status": "PASS",
+  "source_head": "966869b130e8d453b00dc24224e4ff59a415379a",
+  "scripts": 39,
+  "cases": 416,
+  "scope": "Host source/model regressions only; after-run hashes recorded, not a claimed pre/post interval",
+  "input_manifest_sha256": "890d4a1439301c13ca36f02399455e426bc2f7efe82e705f6a4f42f2f11d29e2"
+}

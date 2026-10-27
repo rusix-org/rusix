@@ -1,0 +1,453 @@
+diff --git i/rusix/scripts/build-kernel.sh w/rusix/scripts/build-kernel.sh
+index 39b4d1d26f..20d5990c19 100644
+--- i/rusix/scripts/build-kernel.sh
++++ w/rusix/scripts/build-kernel.sh
+@@ -9,15 +9,15 @@ if [[ ${1:-} == --profile ]]; then
+     shift 2
+ fi
+ case "$profile" in
+-    kunit|brd|brd-fixed-c|brd-rust|brd-kunit|brd-ext4-c|brd-ext4-fixed-c|brd-ext4-rust|core-ext4-c|core-ext4-rust|completion-c|completion-rust|completion-plain-c|completion-plain-rust|server|server-c|task-construction-c|task-construction-rust|mm-construction-c|mm-construction-rust|mm-release-c|mm-release-rust|mm-copy-c|mm-copy-rust|mm-dup-mmap-c|mm-dup-mmap-rust|vma-lifecycle-c|vma-lifecycle-rust|exit-mmap-c|exit-mmap-rust|exit-mmap-kunit-c|exit-mmap-kunit-rust|copy-vma-c|copy-vma-rust) ;;
+-    *) echo 'Profile must be kunit, brd, brd-fixed-c, brd-rust, brd-kunit, brd-ext4-c, brd-ext4-fixed-c, brd-ext4-rust, core-ext4-c, core-ext4-rust, completion-c, completion-rust, completion-plain-c, completion-plain-rust, server, server-c, task-construction-c, task-construction-rust, mm-construction-c, mm-construction-rust, mm-release-c, mm-release-rust, mm-copy-c, mm-copy-rust, mm-dup-mmap-c, mm-dup-mmap-rust, vma-lifecycle-c, vma-lifecycle-rust, exit-mmap-c, exit-mmap-rust, exit-mmap-kunit-c, exit-mmap-kunit-rust, copy-vma-c or copy-vma-rust.' >&2; exit 2 ;;
++    kunit|brd|brd-fixed-c|brd-rust|brd-kunit|brd-ext4-c|brd-ext4-fixed-c|brd-ext4-rust|core-ext4-c|core-ext4-rust|completion-c|completion-rust|completion-plain-c|completion-plain-rust|server|server-c|task-construction-c|task-construction-rust|mm-construction-c|mm-construction-rust|mm-release-c|mm-release-rust|mm-copy-c|mm-copy-rust|mm-dup-mmap-c|mm-dup-mmap-rust|vma-lifecycle-c|vma-lifecycle-rust|exit-mmap-c|exit-mmap-rust|exit-mmap-kunit-c|exit-mmap-kunit-rust|copy-vma-c|copy-vma-rust|vma-modify-c|vma-modify-rust) ;;
++    *) echo 'Profile must be kunit, brd, brd-fixed-c, brd-rust, brd-kunit, brd-ext4-c, brd-ext4-fixed-c, brd-ext4-rust, core-ext4-c, core-ext4-rust, completion-c, completion-rust, completion-plain-c, completion-plain-rust, server, server-c, task-construction-c, task-construction-rust, mm-construction-c, mm-construction-rust, mm-release-c, mm-release-rust, mm-copy-c, mm-copy-rust, mm-dup-mmap-c, mm-dup-mmap-rust, vma-lifecycle-c, vma-lifecycle-rust, exit-mmap-c, exit-mmap-rust, exit-mmap-kunit-c, exit-mmap-kunit-rust, copy-vma-c, copy-vma-rust, vma-modify-c or vma-modify-rust.' >&2; exit 2 ;;
+ esac
+ config="$RUSIX_PROJECT/configs/x86_64-$profile.config"
+ if [[ "$profile" == server-c ]]; then
+     config="$RUSIX_PROJECT/configs/x86_64-server.config"
+ fi
+ if [[ $# != 1 || ! "$1" =~ ^[a-zA-Z0-9_-]+$ ]]; then
+-    echo 'Usage: bash rusix/scripts/build-kernel.sh [--profile kunit|brd|brd-fixed-c|brd-rust|brd-kunit|brd-ext4-c|brd-ext4-fixed-c|brd-ext4-rust|core-ext4-c|core-ext4-rust|completion-c|completion-rust|completion-plain-c|completion-plain-rust|server|server-c|task-construction-c|task-construction-rust|mm-construction-c|mm-construction-rust|mm-release-c|mm-release-rust|mm-copy-c|mm-copy-rust|mm-dup-mmap-c|mm-dup-mmap-rust|vma-lifecycle-c|vma-lifecycle-rust|exit-mmap-c|exit-mmap-rust|exit-mmap-kunit-c|exit-mmap-kunit-rust|copy-vma-c|copy-vma-rust] BUILD_NAME' >&2
++    echo 'Usage: bash rusix/scripts/build-kernel.sh [--profile kunit|brd|brd-fixed-c|brd-rust|brd-kunit|brd-ext4-c|brd-ext4-fixed-c|brd-ext4-rust|core-ext4-c|core-ext4-rust|completion-c|completion-rust|completion-plain-c|completion-plain-rust|server|server-c|task-construction-c|task-construction-rust|mm-construction-c|mm-construction-rust|mm-release-c|mm-release-rust|mm-copy-c|mm-copy-rust|mm-dup-mmap-c|mm-dup-mmap-rust|vma-lifecycle-c|vma-lifecycle-rust|exit-mmap-c|exit-mmap-rust|exit-mmap-kunit-c|exit-mmap-kunit-rust|copy-vma-c|copy-vma-rust|vma-modify-c|vma-modify-rust] BUILD_NAME' >&2
+     exit 2
+ fi
+ name=$1
+@@ -84,6 +84,11 @@ if [[ "$profile" != exit-mmap-kunit-c && "$profile" != exit-mmap-kunit-rust ]] &
+     exit 1
+ fi
+ cp "$out/.config" "$evidence/config"
++if [[ "$profile" == vma-modify-c || "$profile" == vma-modify-rust ]]; then
++    python3 "$RUSIX_PROJECT/scripts/verify-vma-modify.py" config \
++        --profile "$profile" --config "$out/.config" --source "$RUSIX_SOURCE" \
++        > "$evidence/vma-modify-config-before.json"
++fi
+ if [[ "$profile" == copy-vma-c || "$profile" == copy-vma-rust ]]; then
+     python3 "$RUSIX_PROJECT/scripts/verify-copy-vma.py" config \
+         --profile "$profile" --config "$out/.config" --source "$RUSIX_SOURCE" \
+@@ -207,7 +212,7 @@ PYBRDCOMMAND
+         fi
+     } > "$evidence/selection.log"
+ fi
+-if [[ "$profile" == brd-rust || "$profile" == brd-kunit || "$profile" == brd-ext4-rust || "$profile" == core-ext4-c || "$profile" == core-ext4-rust || "$profile" == completion-c || "$profile" == completion-rust || "$profile" == completion-plain-c || "$profile" == completion-plain-rust || "$profile" == server || "$profile" == server-c || "$profile" == task-construction-c || "$profile" == task-construction-rust || "$profile" == mm-construction-c || "$profile" == mm-construction-rust || "$profile" == mm-release-c || "$profile" == mm-release-rust || "$profile" == mm-copy-c || "$profile" == mm-copy-rust || "$profile" == mm-dup-mmap-c || "$profile" == mm-dup-mmap-rust || "$profile" == vma-lifecycle-c || "$profile" == vma-lifecycle-rust || "$profile" == exit-mmap-c || "$profile" == exit-mmap-rust || "$profile" == exit-mmap-kunit-c || "$profile" == exit-mmap-kunit-rust || "$profile" == copy-vma-c || "$profile" == copy-vma-rust ]]; then
++if [[ "$profile" == brd-rust || "$profile" == brd-kunit || "$profile" == brd-ext4-rust || "$profile" == core-ext4-c || "$profile" == core-ext4-rust || "$profile" == completion-c || "$profile" == completion-rust || "$profile" == completion-plain-c || "$profile" == completion-plain-rust || "$profile" == server || "$profile" == server-c || "$profile" == task-construction-c || "$profile" == task-construction-rust || "$profile" == mm-construction-c || "$profile" == mm-construction-rust || "$profile" == mm-release-c || "$profile" == mm-release-rust || "$profile" == mm-copy-c || "$profile" == mm-copy-rust || "$profile" == mm-dup-mmap-c || "$profile" == mm-dup-mmap-rust || "$profile" == vma-lifecycle-c || "$profile" == vma-lifecycle-rust || "$profile" == exit-mmap-c || "$profile" == exit-mmap-rust || "$profile" == exit-mmap-kunit-c || "$profile" == exit-mmap-kunit-rust || "$profile" == copy-vma-c || "$profile" == copy-vma-rust || "$profile" == vma-modify-c || "$profile" == vma-modify-rust ]]; then
+     git -C "$RUSIX_SOURCE" diff --exit-code \
+         2926d88bb7fc4608fd942453d929c39e4e5ec006 -- drivers/block/brd.c \
+         > "$evidence/brd-reference.diff"
+@@ -687,6 +692,17 @@ if [[ "$profile" == exit-mmap-c || "$profile" == exit-mmap-rust || "$profile" ==
+         --evidence "$evidence" > "$evidence/exit-mmap-selection.json"
+ fi
+ 
++if [[ "$profile" == vma-modify-c || "$profile" == vma-modify-rust ]]; then
++    python3 "$RUSIX_PROJECT/scripts/verify-vma-modify.py" config \
++        --profile "$profile" --config "$out/.config" --source "$RUSIX_SOURCE" \
++        > "$evidence/vma-modify-config-after.json"
++    python3 "$RUSIX_PROJECT/scripts/preprocess-vma-modify.py" \
++        --build "$out" --evidence "$evidence"
++    bash "$RUSIX_PROJECT/scripts/with-local-tools.sh" python3 \
++        "$RUSIX_PROJECT/scripts/verify-vma-modify.py" objects \
++        --profile "$profile" --source "$RUSIX_SOURCE" --build "$out" \
++        --evidence "$evidence" > "$evidence/vma-modify-selection.json"
++fi
+ if [[ "$profile" == copy-vma-c || "$profile" == copy-vma-rust ]]; then
+     python3 "$RUSIX_PROJECT/scripts/verify-copy-vma.py" config \
+         --profile "$profile" --config "$out/.config" --source "$RUSIX_SOURCE" \
+diff --git i/rusix/scripts/exit_kunit_elf.py w/rusix/scripts/exit_kunit_elf.py
+index e1644be6ae..eb426a3962 100644
+--- i/rusix/scripts/exit_kunit_elf.py
++++ w/rusix/scripts/exit_kunit_elf.py
+@@ -30,13 +30,32 @@ def signature(text, name, rust=False):
+     clean=re.sub(r'/\*.*?\*/','',rows[0],flags=re.S)
+     return hashlib.sha256(re.sub(r'\s+','',clean).encode()).hexdigest()
+ LAYOUT = {'kunit_attributes': ('3f587fe76dd592563a26856337d50c214d387e293f52e09b53f47d194189b2ed', '5a862560d724dbbe864ef36d835b3a32f257a8ccd790b04cd67ad6f498b1a16c'), 'kunit_case': ('e50f48ec1edfbe52e95a7d5ae0a26f867c843c3e07f518480fd819a24b3fa095', '0cf687061290336a4fad39667d7946fb199f1220cccff0dfd35f4e510567c747'), 'kunit_suite': ('000634891e6272fed8dab58ffd036f1432f82100907b1224eb22f90020652aad', '8c9f79432a652ce51d495f1e02559fb66657e2f8b7bfe1bb4a3ead3b25fd8b43')}
++# The pinned Rust constructor uses NORMAL speed (3), not a zeroed C record.
++# x86_64: attr.speed at 24, status at 48; all pointers/padding remain zero.
++CASE_TERMINATOR = bytes(24) + (3).to_bytes(4, 'little') + bytes(44)
++NULL_CONSTRUCTOR_SHA256 = '865b6759fe2a62a0157764c778ee945816fd033da589d2f38bb83f5b8290cdbd'
++def sentinel_contract(header, generated, constructor):
++    enums = {
++        'kunit_status': 'KUNIT_SUCCESS,KUNIT_FAILURE,KUNIT_SKIPPED,',
++        'kunit_speed': 'KUNIT_SPEED_UNSET,KUNIT_SPEED_VERY_SLOW,KUNIT_SPEED_SLOW,KUNIT_SPEED_NORMAL,KUNIT_SPEED_MAX=KUNIT_SPEED_NORMAL,',
++    }
++    for name, expected in enums.items():
++        bodies=re.findall(r'^enum '+name+r'\s*\{(.*?)^\};',header,re.M|re.S)
++        need(len(bodies)==1 and re.sub(r'\s+','',bodies[0])==expected,'Unknown canonical enum '+name)
++        need(len(re.findall(r'^pub type '+name+r' = ffi::c_uint;$',generated,re.M))==1,'Unknown enum width '+name)
++    for name, kind, value in (('kunit_speed_KUNIT_SPEED_NORMAL','kunit_speed',3),
++                              ('kunit_status_KUNIT_SUCCESS','kunit_status',0)):
++        declarations=re.findall(r'^pub const '+name+r': ([^;]+);$',generated,re.M)
++        need(declarations==[kind+' = '+str(value)],'Unknown generated sentinel value '+name)
++    bodies=re.findall(r'^pub const fn kunit_case_null\(\) -> kernel::bindings::kunit_case \{.*?^\}',constructor,re.M|re.S)
++    need(len(bodies)==1 and hashlib.sha256(re.sub(r'\s+','',bodies[0]).encode()).hexdigest()==NULL_CONSTRUCTOR_SHA256,'Changed canonical Rust case terminator constructor')
++
+ def layout(source, build):
+     header=(source/'include/kunit/test.h').read_text()
+     generated=(build/'rust/bindings/bindings_generated.rs').read_text()
+     for name,(c,rust) in LAYOUT.items():
+         need(signature(header,name)==c and signature(generated,name,True)==rust,'Unsupported KUnit layout '+name)
+-    for enum in ('kunit_status','kunit_speed'):
+-        need(re.search(r'pub type '+enum+r' = ffi::c_uint;',generated),'Unknown enum width')
++    sentinel_contract(header,generated,(source/'rust/kernel/kunit.rs').read_text())
+ 
+ def offset(loc, n):
+     need(isinstance(loc,tuple),'Pointer must resolve to defined storage')
+@@ -87,7 +106,7 @@ def registration(elf, enabled):
+         for n in (16,32,40):need(elf.pointer(offset(record,n)) is None,'Unexpected parameter callback')
+     need(len(set(functions))==3,'Duplicate case executable target')
+     final=offset(cases,3*72)
+-    need(elf.section_data(final[0])[final[1]:final[1]+72]==bytes(72),'Missing zero case terminator')
++    need(elf.section_data(final[0])[final[1]:final[1]+72]==CASE_TERMINATOR,'Missing canonical Rust case terminator')
+     need(not any(offset(final,n) in elf.relocations for n in range(72)),'Relocated terminator')
+     return functions
+ 
+diff --git i/rusix/scripts/exit_mmap_source.py w/rusix/scripts/exit_mmap_source.py
+index 67746c3ec9..b24a7c034c 100644
+--- i/rusix/scripts/exit_mmap_source.py
++++ w/rusix/scripts/exit_mmap_source.py
+@@ -4,6 +4,10 @@
+ import hashlib
+ import copy_vma_source as copy_extension
+ ID = 'exit-mmap-v1'
++MODIFY_ID = 'vma-modify-v1'
++MODIFY_EXTRA = ('mm/vma_modify.h', 'mm/vma_modify_impl.h', 'mm/vma_modify_rust.rs',
++                'rusix/scripts/vma_modify_source.py', 'rusix/scripts/verify-vma-modify.py',
++                'rusix/scripts/preprocess-vma-modify.py')
+ START = '#ifdef CONFIG_RUSIX_EXIT_MMAP_RUST\n'
+ END = '#endif /* CONFIG_RUSIX_EXIT_MMAP_RUST */\n'
+ REGIONS = {'mm/mmap.c': ('#include "exit_mmap_impl.h"\nextern void rusix_exit_mmap(struct mm_struct *mm, struct rusix_exit_context *ctx);\nvoid exit_mmap(struct mm_struct *mm)\n{\n\tstruct mmu_gather tlb;\n\tVMA_ITERATOR(vmi, mm, 0);\n\tstruct rusix_exit_context ctx = { .vmi = &vmi, .tlb = &tlb };\n\n\trusix_exit_mmap(mm, &ctx);\n}\n#else\n', '302d70f436d72da9ebb999eaca9f748d607136b707748d0861eef297da78e05b'), 'mm/vma.c': ('#include "remove_vma_impl.h"\n#else\n', '7f77e1d0dfaa9afa9e6bb553393b5943da5f7470e6659f2742bec85238c4c252'), 'mm/internal.h': ('void rusix_vma_close(struct vm_area_struct *vma);\nstatic inline void vma_close(struct vm_area_struct *vma)\n{\n\trusix_vma_close(vma);\n}\n#else\n', 'bd74d6ddc2d55d8f5f9c3654e2e9ab80a2551189bc42f30cdcbe58767754d4f2')}
+@@ -13,8 +17,8 @@ EXTRA = ('mm/mmap.c','mm/vma.c','mm/internal.h','mm/exit_mmap_impl.h',
+          'rusix/scripts/exit_mmap_source.py','rusix/scripts/copy_vma_source.py','rusix/scripts/verify-exit-mmap.py')
+ 
+ def paths(source, extension):
+-    if extension not in (ID, copy_extension.ID): raise ValueError('Unknown source extension')
+-    return [source/name for name in EXTRA + (copy_extension.EXTRA if extension == copy_extension.ID else ())]
++    if extension not in (ID, copy_extension.ID, MODIFY_ID): raise ValueError('Unknown source extension')
++    return [source/name for name in EXTRA + (copy_extension.EXTRA if extension in (copy_extension.ID, MODIFY_ID) else ()) + (MODIFY_EXTRA if extension == MODIFY_ID else ())]
+ 
+ def restore(name, text):
+     if name not in REGIONS: raise ValueError('Unreviewed source region')
+@@ -35,7 +39,11 @@ def validate(source, extension):
+     for name in REGIONS:
+         data=(source/name).read_bytes(); raw[name]=hashlib.sha256(data).hexdigest()
+         text=data.decode()
+-        if extension == copy_extension.ID and name == 'mm/vma.c':
++        if extension == MODIFY_ID and name == 'mm/vma.c':
++            import vma_modify_source
++            vma_modify_source.source_policy(source, source_context=extension)
++            text=vma_modify_source.restore(text, source_context=extension)
++        if extension in (copy_extension.ID, MODIFY_ID) and name == 'mm/vma.c':
+             text=copy_extension.restore(text)
+         restored[name]=restore(name,text)
+         hashes[name]=hashlib.sha256(restored[name].encode()).hexdigest()
+diff --git i/rusix/scripts/verify-copy-vma.py w/rusix/scripts/verify-copy-vma.py
+index 264091a080..d107d7d59c 100644
+--- i/rusix/scripts/verify-copy-vma.py
++++ w/rusix/scripts/verify-copy-vma.py
+@@ -33,8 +33,14 @@ COPY=('structvm_area_struct*vma=*vmap;unsignedlongvma_start=vma->vm_start;struct
+       'returnrusix_copy_vma(&ctx,vmap,addr,len,pgoff,need_rmap_locks,keep_source);')
+ 
+ 
+-def source_policy(source):
+-    return exit.source_policy(source,source_extension=extension.ID)
++def source_policy(source, *, source_context=None):
++    selected=context_extension(source_context)
++    return exit.source_policy(source,source_extension=selected)
++
++def context_extension(context):
++    if context is None:return extension.ID
++    if context != exit_mmap_source.MODIFY_ID:raise ValueError('Unknown copy source context')
++    return context
+ 
+ 
+ def check_config(profile,values,target):
+@@ -68,13 +74,19 @@ def bodies(text,name):
+     return result
+ 
+ 
+-def check_preprocessed(text,rust):
++def check_preprocessed(text,rust, *, source_context=None, modify_rust=False):
++    context_extension(source_context)
++    if modify_rust and source_context != exit_mmap_source.MODIFY_ID:
++        raise ValueError("Modify selection requires explicit context")
+     # This caller already holds the mapping lock: selected wrapper must not add
+     # another lock. Exact whole-source restoration binds the surrounding policy.
+     prepare=bodies(text,'vma_prepare')
+     lock='i_mmap_lock_write(vp->mapping);'
+     call='__vma_link_file(vp->insert,vp->insert->vm_file->f_mapping);'
+-    if len(prepare)!=1 or prepare[0].count(call)!=1 or lock not in prepare[0] or prepare[0].index(lock)>prepare[0].index(call):
++    if modify_rust:
++        if not rust or prepare!=['rusix_vma_prepare(vp);']:
++            raise ValueError('Wrong selected native prepare forwarder')
++    elif len(prepare)!=1 or prepare[0].count(call)!=1 or lock not in prepare[0] or prepare[0].index(lock)>prepare[0].index(call):
+         raise ValueError('Missing native already-locked file-link caller')
+     if rust:
+         for name,body in {'copy_vma':COPY,'vma_link':LINK,'__vma_link_file':'rusix_vma_link_file_locked(vma,mapping);'}.items():
+@@ -142,21 +154,23 @@ def open_transfer(text):
+     exit.executable_calls(body,'rusix_copy_open')
+ 
+ 
+-def input_paths(build,source,rust):
+-    paths=exit.input_paths(build,source,True,source_extension=extension.ID)+preprocessor.inputs(build,source)
++def input_paths(build,source,rust, *, source_context=None):
++    selected=context_extension(source_context)
++    paths=exit.input_paths(build,source,True,source_extension=selected)+preprocessor.exit_pre.inputs(build,source,source_extension=selected)
+     paths += [source/f'rusix/configs/x86_64-copy-vma-{"rust" if rust else "c"}.config']
+     if rust:paths += [build/'mm/copy_vma_rust.o',build/'mm/.copy_vma_rust.o.cmd']
+     return list(dict.fromkeys(paths))
+ 
+ 
+-def verify(args):
++def verify(args, *, source_context=None):
+     source,build,evidence=args.source.resolve(),args.build.resolve(),args.evidence.resolve();rust=PROFILES[args.profile]
+     check_config(args.profile,config_values((build/'.config').read_text()),config_values((source/'rusix/configs/x86_64-server.config').read_text()))
+-    proof=source_policy(source);paths=input_paths(build,source,rust);before={str(p):digest(p) for p in paths}
+-    inherited=exit.verify(argparse.Namespace(source=source,build=build,evidence=evidence,profile='exit-mmap-rust'),source_extension=extension.ID)
++    proof=source_policy(source,source_context=source_context);paths=input_paths(build,source,rust,source_context=source_context);before={str(p):digest(p) for p in paths}
++    inherited=exit.verify(argparse.Namespace(source=source,build=build,evidence=evidence,profile='exit-mmap-rust'),source_extension=context_extension(source_context))
+     if inherited['status']!='PASS' or inherited['implementation']!='rust' or inherited['source_extension']!=proof:raise ValueError('Inherited proof mismatch')
+     (evidence/'copy-vma-exit-selection.json').write_text(json.dumps(inherited,indent=2,sort_keys=True)+'\n')
+-    check_preprocessed((build/'mm/vma.i').read_text(),rust)
++    modify_rust = source_context == exit_mmap_source.MODIFY_ID and config_values((build/'.config').read_text()).get('CONFIG_RUSIX_VMA_MODIFY_RUST') == 'y'
++    check_preprocessed((build/'mm/vma.i').read_text(),rust,source_context=source_context,modify_rust=modify_rust)
+     def run(name,argv):
+         r=subprocess.run(argv,check=True,capture_output=True,text=True)
+         if r.stderr:raise ValueError('Object inspection diagnostics: '+r.stderr)
+@@ -179,7 +193,11 @@ def verify(args):
+     constants={}
+     if rust:
+         for caller,callee in (('copy_vma','rusix_copy_vma'),('vma_link','rusix_vma_link')):exit.vma.call_from(dis['vma'],caller,callee)
+-        exit.executable_calls(dis['vma'],'rusix_vma_link_file_locked')
++        if not modify_rust:
++            exit.executable_calls(dis['vma'],'rusix_vma_link_file_locked')
++        else:
++            # The outer modify gate proves this call in the actual Rust prepare.
++            exit.executable_calls(dis['vma'],'rusix_vma_prepare')
+         # The moved close consumer is proved in its actual new defining object.
+         exit.executable_calls(exit.vma.dis_body(dis['copy_vma_rust'],'rusix_copy_vma'),'rusix_vma_close')
+         open_transfer(dis['copy_vma_rust'])
+@@ -196,9 +214,15 @@ def verify(args):
+         for table in tables.values():
+             if any(row.split() and row.split()[-1] in CONSTANTS for row in table.splitlines()):raise ValueError('Selected constants in C mode')
+     exit_mmap_source.require_unchanged(paths,before)
+-    return dict(status='PASS',implementation='rust' if rust else 'c',source_extension=proof,input_sha256=before,
+-                archive_member_sha256=payloads,constant_values=constants,exit_mmap_selection=inherited,
+-                scope='Actual source/preprocessing/object/linked ownership; no runtime claim')
++    result = dict(status='PASS',implementation='rust' if rust else 'c',source_extension=proof,input_sha256=before,
++                  archive_member_sha256=payloads,constant_values=constants,exit_mmap_selection=inherited,
++                  scope='Actual source/preprocessing/object/linked ownership; no runtime claim')
++    if source_context is not None:
++        result['source_context'] = source_context
++        result['outer_obligations'] = (['vma-modify-rust-prepare-lock-before-file-link'] if modify_rust else [])
++        if modify_rust:
++            result['scope'] = 'Inherited copy ownership only; Rust prepare/file-link relation requires outer VMA-modify proof; no runtime claim'
++    return result
+ 
+ 
+ def main():
+diff --git i/rusix/scripts/verify-exit-mmap.py w/rusix/scripts/verify-exit-mmap.py
+index de175dca32..d7f92b186a 100644
+--- i/rusix/scripts/verify-exit-mmap.py
++++ w/rusix/scripts/verify-exit-mmap.py
+@@ -56,7 +56,7 @@ def compare(c,rust):
+ 
+ 
+ def check_preprocessed(mmap_text,vma_text,rust, *, source_extension=extension.ID, copy_rust=False):
+-    if source_extension not in (extension.ID, extension.copy_extension.ID) or (copy_rust and source_extension != extension.copy_extension.ID):
++    if source_extension not in (extension.ID, extension.copy_extension.ID, extension.MODIFY_ID) or (copy_rust and source_extension not in (extension.copy_extension.ID, extension.MODIFY_ID)):
+         raise ValueError("Unknown close-consumer extension")
+     for text in (mmap_text,vma_text):
+         if vma.bodies(text,'vma_close')!=(['rusix_vma_close(vma);'] if rust else [CLOSE]):
+@@ -104,11 +104,15 @@ def definitions(text,expected):
+             raise ValueError('Wrong teardown definition '+name)
+ 
+ 
+-def archive_members(text,rust):
++def archive_members(text,rust, *, test_context=None):
++    if test_context not in (None,TEST_CONTEXT):raise ValueError('Unknown teardown archive test context')
+     names=[Path(n).name for n in text.splitlines()]
+-    for name,count in (('mmap.o',1),('vma.o',1),('exit_mmap_rust.o',int(rust))):
++    fixture=test_context==TEST_CONTEXT
++    for name,count in (('mmap.o',1),('vma.o',1),('exit_mmap_rust.o',int(rust)),
++                       ('exit_mmap_test.o',int(fixture))):
+         if names.count(name)!=count:raise ValueError('Wrong teardown archive ownership')
+-    if any('exit_mmap' in n and n!='exit_mmap_rust.o' for n in names):raise ValueError('Unexpected teardown object')
++    allowed={'exit_mmap_rust.o'} | ({'exit_mmap_test.o'} if fixture else set())
++    if any('exit_mmap' in n and n not in allowed for n in names):raise ValueError('Unexpected teardown object')
+ 
+ 
+ def executable_calls(text,target):
+@@ -158,13 +162,13 @@ def verify(args, *, source_extension=extension.ID):
+     if inherited['test_context']!=context or inherited['status']!='PASS' or inherited['implementation']!='rust':raise ValueError('Inherited VMA proof failed')
+     if inherited['dup_mmap_selection']['source_extension']['raw_sha256']!=proof['raw_sha256']:raise ValueError('Delegated source identity mismatch')
+     (evidence/'exit-mmap-vma-selection.json').write_text(json.dumps(inherited,indent=2,sort_keys=True)+'\n')
+-    copy_rust = source_extension == extension.copy_extension.ID and config_values((build/'.config').read_text()).get('CONFIG_RUSIX_COPY_VMA_RUST') == 'y'
++    copy_rust = source_extension in (extension.copy_extension.ID, extension.MODIFY_ID) and config_values((build/'.config').read_text()).get('CONFIG_RUSIX_COPY_VMA_RUST') == 'y'
+     check_preprocessed((build/'mm/mmap.i').read_text(),(build/'mm/vma.i').read_text(),rust,source_extension=source_extension,copy_rust=copy_rust)
+     def run(name,argv):
+         result=subprocess.run(argv,check=True,capture_output=True,text=True)
+         if result.stderr:raise ValueError('Object inspection diagnostics: '+result.stderr)
+         (evidence/name).write_text(result.stdout);return result.stdout
+-    archive=build/'mm/built-in.a';members=run('exit-mmap-archive.txt',['llvm-ar','t',str(archive)]);archive_members(members,rust)
++    archive=build/'mm/built-in.a';members=run('exit-mmap-archive.txt',['llvm-ar','t',str(archive)]);archive_members(members,rust,test_context=context)
+     tables,metadata,dis,hashes={},{},{},{}
+     expected={'mmap':{'exit_mmap'},'vma':set() if rust else {'remove_vma'}}
+     if rust:expected['exit_mmap_rust']={'rusix_exit_mmap','rusix_vma_close','remove_vma'}
+diff --git i/rusix/tests/test_copy_vma_selection.py w/rusix/tests/test_copy_vma_selection.py
+index df0cb092f2..dfed60ba8d 100644
+--- i/rusix/tests/test_copy_vma_selection.py
++++ w/rusix/tests/test_copy_vma_selection.py
+@@ -11,6 +11,7 @@ def load(name,path):
+     s=importlib.util.spec_from_file_location(name,path);m=importlib.util.module_from_spec(s);s.loader.exec_module(m);return m
+ g=load('copy_vma_gate',ROOT/'rusix/scripts/verify-copy-vma.py')
+ e=g.extension
++import vma_modify_source
+ oldtests=load('old_constants',ROOT/'rusix/tests/test_dup_mmap_selection.py')
+ 
+ class Elf32(oldtests.ModelElf):
+@@ -30,18 +31,30 @@ def selected():
+     return text
+ 
+ class Selection(unittest.TestCase):
++    def setUp(self):
++        # Only modeled historical source tests fold the reviewed extension.
++        # Actual .i evidence is never projected or synthesized by the verifier.
++        tmp=tempfile.TemporaryDirectory();self.addCleanup(tmp.cleanup)
++        self.historical=Path(tmp.name);(self.historical/'mm').mkdir()
++        for name in g.exit.extension.REGIONS:
++            text=(ROOT/name).read_text()
++            if name=='mm/vma.c':
++                text=vma_modify_source.restore(text,source_context=vma_modify_source.ID)
++            (self.historical/name).write_text(text)
++
+     def test_exact_source_and_ancestral_restoration(self):
+-        source=(ROOT/'mm/vma.c').read_text();restored=e.restore(source)
++        source=(self.historical/'mm/vma.c').read_text();restored=e.restore(source)
+         self.assertEqual(g.exit.extension.hashlib.sha256(restored.encode()).hexdigest(),
+                          '1dd5a0bbb2ae056796b0a12e506159c8af841cf38b0cb77f72a4b7d37c30950d')
+-        proof=g.source_policy(ROOT)
++        proof=g.source_policy(self.historical)
++        with self.assertRaises(ValueError):g.source_policy(ROOT)
+         self.assertEqual(proof['extension'],e.ID)
+         self.assertEqual(proof['upstream_mmap_sha256'],g.exit.vma.dup.PINNED_MMAP_SHA256)
+         with self.assertRaises(ValueError):g.exit.source_policy(ROOT)
+         with self.assertRaises(ValueError):g.exit.extension.validate(ROOT,'unknown-copy-extension')
+ 
+     def test_each_guard_shim_original_unrelated_mutation_rejected(self):
+-        text=(ROOT/'mm/vma.c').read_text()
++        text=(self.historical/'mm/vma.c').read_text()
+         mutations=[text+'\n',text+e.END,text.replace(e.END,'',1)]
+         for shim in e.SHIMS:mutations += [text.replace(shim,shim.replace('#else','/*change*/\n#else'),1)]
+         mutations += [text.replace('mm->map_count++;','mm->map_count += 2;',1),text.replace('return NULL;', 'return (void *)1;',1)]
+@@ -51,7 +64,7 @@ class Selection(unittest.TestCase):
+     def test_extension_validates_all_ancestor_files(self):
+         with tempfile.TemporaryDirectory() as tmp:
+             root=Path(tmp);(root/'mm').mkdir()
+-            for name in g.exit.extension.REGIONS:(root/name).write_text((ROOT/name).read_text())
++            for name in g.exit.extension.REGIONS:(root/name).write_text((self.historical/name).read_text())
+             g.source_policy(root)
+             (root/'mm/internal.h').write_text((root/'mm/internal.h').read_text()+'\n')
+             with self.assertRaises(ValueError):g.source_policy(root)
+@@ -66,7 +79,7 @@ class Selection(unittest.TestCase):
+         with self.assertRaises(ValueError):g.check_preprocessed(text,False)
+ 
+     def test_c_oracle_policies_and_selected_primitive_rejection(self):
+-        text=e.restore((ROOT/'mm/vma.c').read_text());g.check_preprocessed(text,False)
++        text=e.restore((self.historical/'mm/vma.c').read_text());g.check_preprocessed(text,False)
+         for bad in (text.replace('mm->map_count++;',''),text.replace('unlink_anon_vmas(new_vma);',''),
+                     text+'void rusix_copy_merge(void){}',text.replace('*vmap = vma = new_vma;','')):
+             with self.assertRaises(ValueError):g.check_preprocessed(bad,False)
+diff --git i/rusix/tests/test_exit_kunit_elf.py w/rusix/tests/test_exit_kunit_elf.py
+index d3111396f9..84624d9aa7 100644
+--- i/rusix/tests/test_exit_kunit_elf.py
++++ w/rusix/tests/test_exit_kunit_elf.py
+@@ -12,6 +12,7 @@ spec=importlib.util.spec_from_file_location('exitelf',S/'exit_kunit_elf.py');m=i
+ class Model:
+  def __init__(self):
+   self.relocatable=True;self.names=['','.kunit_test_suites','.data','.text'];self.headers=[(0,)*10,(0,1,2,0,0,8),(0,1,3,0,0,2048),(0,1,6,0,0,256)];self.data=bytearray(2048);self.data[:len(m.SUITE)]=m.SUITE.encode();self.ptr={(1,0):(2,0),(2,288):(2,600)};self.symbols=[];self.relocations={}
++  self.data[816:888]=m.CASE_TERMINATOR
+   for i,name in enumerate(m.CASES):
+    pos=1000+i*150;self.data[pos:pos+len(name)]=name.encode();self.ptr[(2,600+i*72)]=(3,i*32);self.ptr[(2,608+i*72)]=(2,pos)
+    self.symbols.append(dict(name='kernel_exit_tests_kunit_rust_wrapper_'+name,kind=2,size=24,section=3,address=i*32))
+@@ -39,6 +40,31 @@ class Tests(unittest.TestCase):
+   for mutate in (lambda e:e.data.__setitem__(816,1),lambda e:e.ptr.update({(2,616):(3,0)}),lambda e:e.relocations.update({(2,816):'bad'})):
+    e=Model();mutate(e)
+    with self.assertRaises(ValueError):m.registration(e,True)
++ def test_canonical_sentinel_rejects_zero_speed_status_pointer_and_padding(self):
++  for offset,value in ((24,0),(24,2),(48,1),(0,1),(8,1),(16,1),(28,1),(32,1),(40,1),(56,1),(64,1),(71,1)):
++   e=Model();e.data[816+offset]=value
++   with self.subTest(offset=offset,value=value),self.assertRaises(ValueError):m.registration(e,True)
++  e=Model();e.data[816:888]=bytes(72)
++  with self.assertRaises(ValueError):m.registration(e,True)
++ def test_sentinel_relocations_and_truncation(self):
++  for offset in (0,24,48,71):
++   e=Model();e.relocations[(2,816+offset)]='bad'
++   with self.assertRaises(ValueError):m.registration(e,True)
++  e=Model();e.data=e.data[:887]
++  with self.assertRaises(ValueError):m.registration(e,True)
++ def test_pinned_enum_and_constructor_contract(self):
++  root=S.parents[1];header=(root/'include/kunit/test.h').read_text();constructor=(root/'rust/kernel/kunit.rs').read_text()
++  generated='pub type kunit_status = ffi::c_uint;\npub type kunit_speed = ffi::c_uint;\npub const kunit_status_KUNIT_SUCCESS: kunit_status = 0;\npub const kunit_speed_KUNIT_SPEED_NORMAL: kunit_speed = 3;\n'
++  m.sentinel_contract(header,generated,constructor)
++  for h,g,c in ((header.replace('KUNIT_SUCCESS,','KUNIT_SUCCESS = 1,'),generated,constructor),
++                (header.replace('KUNIT_SPEED_NORMAL,','KUNIT_SPEED_NORMAL = 4,'),generated,constructor),
++                (header,generated.replace('= 3;','= 0;'),constructor),
++                (header,generated.replace('= 0;','= 1;'),constructor),
++                (header,generated.replace('ffi::c_uint','ffi::c_ulong'),constructor),
++                (header,generated,constructor.replace('speed: kernel::bindings::kunit_speed_KUNIT_SPEED_NORMAL','speed: 0')),
++                (header,generated,constructor.replace('status: kernel::bindings::kunit_status_KUNIT_SUCCESS','status: 1')),
++                (header,generated,constructor.replace('run_case: None','run_case: Some(callback)'))):
++   with self.assertRaises(ValueError):m.sentinel_contract(h,g,c)
+  def test_global_definitions(self):
+   text='\n'.join('0000 T '+n for n in m.ENTRIES);m.global_definitions(text,m.ENTRIES,True)
+   for bad in (text.replace(' T ',' D ',1),text+'\n0000 T '+m.ENTRIES[0],text.split('\n',1)[1]):
+diff --git i/rusix/tests/test_exit_mmap_selection.py w/rusix/tests/test_exit_mmap_selection.py
+index 8c70ec197e..69b8d014d5 100644
+--- i/rusix/tests/test_exit_mmap_selection.py
++++ w/rusix/tests/test_exit_mmap_selection.py
+@@ -36,6 +36,8 @@ class ExitSelection(unittest.TestCase):
+         for name in ext.REGIONS:
+             text=(ROOT/name).read_text()
+             if name=='mm/vma.c':
++                import vma_modify_source
++                text=vma_modify_source.restore(text,source_context=vma_modify_source.ID)
+                 text=ext.copy_extension.restore(text)
+                 self.assertEqual(ext.hashlib.sha256(text.encode()).hexdigest(),
+                     '1dd5a0bbb2ae056796b0a12e506159c8af841cf38b0cb77f72a4b7d37c30950d')
+@@ -111,6 +113,29 @@ class ExitSelection(unittest.TestCase):
+         for text in ('mmap.o\nvma.o\n','mmap.o\nvma.o\nexit_mmap_rust.o\nexit_mmap_other.o\n','mmap.o\nvma.o\nvma.o\nexit_mmap_rust.o\n'):
+             with self.assertRaises(ValueError):gate.archive_members(text,True)
+ 
++    def test_kunit_archive_requires_exact_fixture_in_explicit_context(self):
++        for rust in (False,True):
++            ordinary='mmap.o\nvma.o\n'+('exit_mmap_rust.o\n' if rust else '')
++            fixture=ordinary+'exit_mmap_test.o\n'
++            with self.subTest(rust=rust):
++                gate.archive_members(ordinary,rust)
++                gate.archive_members(fixture,rust,test_context=gate.TEST_CONTEXT)
++                with self.assertRaises(ValueError):gate.archive_members(fixture,rust)
++                for bad in (ordinary,fixture+'exit_mmap_test.o\n',fixture+'exit_mmap_other.o\n',
++                            fixture+'exit_mmap_test_extra.o\n',fixture+'exit_mmap_rust.o\n',
++                            fixture.replace('mmap.o\n','mmap.o\nmmap.o\n',1)):
++                    with self.assertRaises(ValueError):
++                        gate.archive_members(bad,rust,test_context=gate.TEST_CONTEXT)
++                if rust:
++                    with self.assertRaises(ValueError):
++                        gate.archive_members(fixture.replace('exit_mmap_rust.o\n',''),rust,test_context=gate.TEST_CONTEXT)
++
++    def test_archive_unknown_context_rejected_with_or_without_fixture(self):
++        for context in ('', 'exit-mmap-kunit-v2', 'vma-modify-v1', True):
++            for text in ('mmap.o\nvma.o\n','mmap.o\nvma.o\nexit_mmap_test.o\n'):
++                with self.subTest(context=context),self.assertRaises(ValueError):
++                    gate.archive_members(text,False,test_context=context)
++
+     def test_callback_transfer_not_data_reference_or_unsupported_target(self):
+         body='0000 <rusix_vma_close>:\n'
+         for name in ('rusix_remove_ops','rusix_remove_close','rusix_remove_dummy'):

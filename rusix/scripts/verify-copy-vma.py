@@ -33,8 +33,14 @@ COPY=('structvm_area_struct*vma=*vmap;unsignedlongvma_start=vma->vm_start;struct
       'returnrusix_copy_vma(&ctx,vmap,addr,len,pgoff,need_rmap_locks,keep_source);')
 
 
-def source_policy(source):
-    return exit.source_policy(source,source_extension=extension.ID)
+def source_policy(source, *, source_context=None):
+    selected=context_extension(source_context)
+    return exit.source_policy(source,source_extension=selected)
+
+def context_extension(context):
+    if context is None:return extension.ID
+    if context != exit_mmap_source.MODIFY_ID:raise ValueError('Unknown copy source context')
+    return context
 
 
 def check_config(profile,values,target):
@@ -68,13 +74,19 @@ def bodies(text,name):
     return result
 
 
-def check_preprocessed(text,rust):
+def check_preprocessed(text,rust, *, source_context=None, modify_rust=False):
+    context_extension(source_context)
+    if modify_rust and source_context != exit_mmap_source.MODIFY_ID:
+        raise ValueError("Modify selection requires explicit context")
     # This caller already holds the mapping lock: selected wrapper must not add
     # another lock. Exact whole-source restoration binds the surrounding policy.
     prepare=bodies(text,'vma_prepare')
     lock='i_mmap_lock_write(vp->mapping);'
     call='__vma_link_file(vp->insert,vp->insert->vm_file->f_mapping);'
-    if len(prepare)!=1 or prepare[0].count(call)!=1 or lock not in prepare[0] or prepare[0].index(lock)>prepare[0].index(call):
+    if modify_rust:
+        if not rust or prepare!=['rusix_vma_prepare(vp);']:
+            raise ValueError('Wrong selected native prepare forwarder')
+    elif len(prepare)!=1 or prepare[0].count(call)!=1 or lock not in prepare[0] or prepare[0].index(lock)>prepare[0].index(call):
         raise ValueError('Missing native already-locked file-link caller')
     if rust:
         for name,body in {'copy_vma':COPY,'vma_link':LINK,'__vma_link_file':'rusix_vma_link_file_locked(vma,mapping);'}.items():
@@ -142,21 +154,23 @@ def open_transfer(text):
     exit.executable_calls(body,'rusix_copy_open')
 
 
-def input_paths(build,source,rust):
-    paths=exit.input_paths(build,source,True,source_extension=extension.ID)+preprocessor.inputs(build,source)
+def input_paths(build,source,rust, *, source_context=None):
+    selected=context_extension(source_context)
+    paths=exit.input_paths(build,source,True,source_extension=selected)+preprocessor.exit_pre.inputs(build,source,source_extension=selected)
     paths += [source/f'rusix/configs/x86_64-copy-vma-{"rust" if rust else "c"}.config']
     if rust:paths += [build/'mm/copy_vma_rust.o',build/'mm/.copy_vma_rust.o.cmd']
     return list(dict.fromkeys(paths))
 
 
-def verify(args):
+def verify(args, *, source_context=None):
     source,build,evidence=args.source.resolve(),args.build.resolve(),args.evidence.resolve();rust=PROFILES[args.profile]
     check_config(args.profile,config_values((build/'.config').read_text()),config_values((source/'rusix/configs/x86_64-server.config').read_text()))
-    proof=source_policy(source);paths=input_paths(build,source,rust);before={str(p):digest(p) for p in paths}
-    inherited=exit.verify(argparse.Namespace(source=source,build=build,evidence=evidence,profile='exit-mmap-rust'),source_extension=extension.ID)
+    proof=source_policy(source,source_context=source_context);paths=input_paths(build,source,rust,source_context=source_context);before={str(p):digest(p) for p in paths}
+    inherited=exit.verify(argparse.Namespace(source=source,build=build,evidence=evidence,profile='exit-mmap-rust'),source_extension=context_extension(source_context))
     if inherited['status']!='PASS' or inherited['implementation']!='rust' or inherited['source_extension']!=proof:raise ValueError('Inherited proof mismatch')
     (evidence/'copy-vma-exit-selection.json').write_text(json.dumps(inherited,indent=2,sort_keys=True)+'\n')
-    check_preprocessed((build/'mm/vma.i').read_text(),rust)
+    modify_rust = source_context == exit_mmap_source.MODIFY_ID and config_values((build/'.config').read_text()).get('CONFIG_RUSIX_VMA_MODIFY_RUST') == 'y'
+    check_preprocessed((build/'mm/vma.i').read_text(),rust,source_context=source_context,modify_rust=modify_rust)
     def run(name,argv):
         r=subprocess.run(argv,check=True,capture_output=True,text=True)
         if r.stderr:raise ValueError('Object inspection diagnostics: '+r.stderr)
@@ -179,7 +193,11 @@ def verify(args):
     constants={}
     if rust:
         for caller,callee in (('copy_vma','rusix_copy_vma'),('vma_link','rusix_vma_link')):exit.vma.call_from(dis['vma'],caller,callee)
-        exit.executable_calls(dis['vma'],'rusix_vma_link_file_locked')
+        if not modify_rust:
+            exit.executable_calls(dis['vma'],'rusix_vma_link_file_locked')
+        else:
+            # The outer modify gate proves this call in the actual Rust prepare.
+            exit.executable_calls(dis['vma'],'rusix_vma_prepare')
         # The moved close consumer is proved in its actual new defining object.
         exit.executable_calls(exit.vma.dis_body(dis['copy_vma_rust'],'rusix_copy_vma'),'rusix_vma_close')
         open_transfer(dis['copy_vma_rust'])
@@ -196,9 +214,15 @@ def verify(args):
         for table in tables.values():
             if any(row.split() and row.split()[-1] in CONSTANTS for row in table.splitlines()):raise ValueError('Selected constants in C mode')
     exit_mmap_source.require_unchanged(paths,before)
-    return dict(status='PASS',implementation='rust' if rust else 'c',source_extension=proof,input_sha256=before,
-                archive_member_sha256=payloads,constant_values=constants,exit_mmap_selection=inherited,
-                scope='Actual source/preprocessing/object/linked ownership; no runtime claim')
+    result = dict(status='PASS',implementation='rust' if rust else 'c',source_extension=proof,input_sha256=before,
+                  archive_member_sha256=payloads,constant_values=constants,exit_mmap_selection=inherited,
+                  scope='Actual source/preprocessing/object/linked ownership; no runtime claim')
+    if source_context is not None:
+        result['source_context'] = source_context
+        result['outer_obligations'] = (['vma-modify-rust-prepare-lock-before-file-link'] if modify_rust else [])
+        if modify_rust:
+            result['scope'] = 'Inherited copy ownership only; Rust prepare/file-link relation requires outer VMA-modify proof; no runtime claim'
+    return result
 
 
 def main():

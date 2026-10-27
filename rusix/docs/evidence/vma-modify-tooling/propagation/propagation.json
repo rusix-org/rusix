@@ -1,0 +1,36 @@
+{
+  "status": "APPLIED_APPROVED_TARGETED_PROPAGATION",
+  "fix_commit": "13e0ddc71a57d7576e9cc6f34603bd96d5bbfa08",
+  "fix_manifest_path": "rusix/docs/evidence/exit-mmap-fixture-gate-fix/manifest.json",
+  "fix_manifest_sha256": "97a4c2885fd0fbd5292223185c207b85333b7c1c91cffb9ea52d274576bc7ba6",
+  "source_base": "966869b130e8d453b00dc24224e4ff59a415379a",
+  "before_sha256": {
+    "rusix/scripts/verify-exit-mmap.py": "a99732606ec89b80d9471c98ddfbd5e4e09cdd93f3bc15e56c8f63e923a3a6a9",
+    "rusix/scripts/exit_kunit_elf.py": "8c9af63c87bd4549b751242c8685ac55108bcf39cca84e2cb7eeef0afe8ac84a",
+    "rusix/tests/test_exit_mmap_selection.py": "eae9f5d4992acb7939d26551eed17a17c39d5791308729e8b65a98733a176ddf",
+    "rusix/tests/test_exit_kunit_elf.py": "2940242e135866ceefc5c61c2b494a1bcd599addd1cc9db58a8fb578dc6c9e60"
+  },
+  "after_sha256": {
+    "rusix/scripts/verify-exit-mmap.py": "49630a365cfd3e0dbf726e965ad37214852fac926d75b6cd655d1aff67f92380",
+    "rusix/scripts/exit_kunit_elf.py": "3cdff5246d9320e0f1fad6373e701ca1a93f46b67b21325604f70033ad4c8527",
+    "rusix/tests/test_exit_mmap_selection.py": "0a7ed80d0a0de1d0bb0589e638e000d13812c29f2046eeb6f69ed909bbd9d03f",
+    "rusix/tests/test_exit_kunit_elf.py": "8b9042bf802a4328a7090f7e9b2c78b5e129e26c400c5fb80bf2734b5e134c7f"
+  },
+  "ast_equivalent_to_approved_fix": {
+    "rusix/scripts/verify-exit-mmap.py:archive_members": "2d87a9db1827e08285e662aaadfe6e52939d0d9165d613ca73ca6c39ae802b41",
+    "rusix/scripts/exit_kunit_elf.py:sentinel_contract": "ffc8a724fe8a2bf9a96fa8c13e03891ed41a34ea1b92fd1547bb2538b1fd4bd1",
+    "rusix/scripts/exit_kunit_elf.py:layout": "6e3c438cc5a9b424f08ba5ebf9d0d8d04fbafcf7ab5d6d2b8b6bb101f13b4240",
+    "rusix/scripts/exit_kunit_elf.py:registration": "b818e226904ade808d1bb3cb0580076bd02ae318c71c303dccbb9f979544a948",
+    "rusix/tests/test_exit_mmap_selection.py:test_kunit_archive_requires_exact_fixture_in_explicit_context": "1a72a872d48f19eb22ef62f7b9e796efd23f8d3de0b0cc4c36f2e197cdb5c452",
+    "rusix/tests/test_exit_mmap_selection.py:test_archive_unknown_context_rejected_with_or_without_fixture": "d17001fd98dcdb8574ff947c56702825cd7133630ca166d5631ed59359019530",
+    "rusix/tests/test_exit_kunit_elf.py:test_canonical_sentinel_rejects_zero_speed_status_pointer_and_padding": "55f97e9ae335f350192b07bd898b97b851f05780fdeca590dd008ae818ac1339",
+    "rusix/tests/test_exit_kunit_elf.py:test_sentinel_relocations_and_truncation": "fb5ecc432b1400f1382471e362a23457681072450685feede13c072193352da2",
+    "rusix/tests/test_exit_kunit_elf.py:test_pinned_enum_and_constructor_contract": "0d2c9e5392a6cfee705d0a07713307b0a4ec777d0b8cfd7ea92c5456edccb3fe"
+  },
+  "full_file_equal_to_fix": [
+    "rusix/scripts/exit_kunit_elf.py",
+    "rusix/tests/test_exit_kunit_elf.py"
+  ],
+  "validated_call": "archive_members(members, rust, test_context=context)",
+  "scope": "Approved tooling-only propagation; retained teardown ELF proof stays attributed to its original kernel; no new VMA-modify execution"
+}

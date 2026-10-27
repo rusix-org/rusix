@@ -1,0 +1,15 @@
+{
+  "rusix/scripts/build-kernel.sh": "8aa667db329d509d5ee77cf102af05815cad6272c81a6cb36486606de3c20a79",
+  "rusix/scripts/exit_mmap_source.py": "beeadc363903b63b877a0bf477b6536136348a82ec7503f4c51e4e4f6279e292",
+  "rusix/scripts/verify-copy-vma.py": "7de3ffd8e8be5f7e38857a960ab9fb6c3a0934bc5cc24558a155ff256f109b7b",
+  "rusix/scripts/verify-exit-mmap.py": "a99732606ec89b80d9471c98ddfbd5e4e09cdd93f3bc15e56c8f63e923a3a6a9",
+  "rusix/tests/test_copy_vma_selection.py": "99367ff86eabe0341a22a3e2aeb692b7ae199c507d5df3fa60221a9344cc0e1d",
+  "rusix/tests/test_exit_mmap_selection.py": "eae9f5d4992acb7939d26551eed17a17c39d5791308729e8b65a98733a176ddf",
+  "rusix/configs/x86_64-vma-modify-c.config": "545fbf5eca23fab6ca95c76b8011fb563a159d11070687dcfc8fdacec5d4f534",
+  "rusix/configs/x86_64-vma-modify-rust.config": "9da2976403d2d3f6a9a6bbdf8ae5f0b25c0a9217bd9bccf2dfc0c25aaf73fcbf",
+  "rusix/scripts/preprocess-vma-modify.py": "d16bc58b904603196478295bcfe0906926c45d745ce2d30ca10fb79567f4125a",
+  "rusix/scripts/verify-vma-modify.py": "e7e38c18f2ae7934168c73022bf99c1d75a6b66e8198c22a05d3c7008a8cbfa3",
+  "rusix/scripts/vma_modify_source.py": "c7b5f7c883bd92216775fc93d9f4bbbcad9f5b3b131169fbf81c462d1b8ef47c",
+  "rusix/tests/test_vma_modify_selection.py": "dc808f2131f5ab4fbb2fc3712a5d8a516dd3150d29a2b629513e9acfb5a336f0",
+  "rusix/tests/test_vma_modify_source.py": "c1ccd9ac8ad657d1115af9c263147589af978dd2f6d9d71c30afe1ba7fb926ca"
+}
