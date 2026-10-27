@@ -1,0 +1,3 @@
+0000000000000000 t .Ltmp0
+0000000000000000 T __pfx_rusix_dup_task_struct
+0000000000000010 T rusix_dup_task_struct

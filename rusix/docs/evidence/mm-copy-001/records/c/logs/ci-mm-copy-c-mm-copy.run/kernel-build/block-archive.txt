@@ -1,0 +1,2 @@
+/out/builds/ci-mm-copy-c/drivers/block/brd_rust.o
+/out/builds/ci-mm-copy-c/drivers/block/virtio_blk.o

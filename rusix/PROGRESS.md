@@ -9,6 +9,14 @@ verification runs locally. No subsystem divergence point is declared.
 Public development lives on `rusix/main`. [ADR 0002](docs/adr/0002.md) owns the
 target; [Phase 1](docs/PHASE1.md) owns delivery gates.
 
+MM-copy pair `001` at `32e7c3e7b0ae` passes all three ordinary guest cases
+on both C and Rust: shared-MM write/exit, shared-MM exec detachment and private
+fork COW. Resolved configs differ only by `CONFIG_RUSIX_MM_COPY_RUST`; guest
+fixtures match. Pinned-image preprocessing/linked-selection and pair postchecks
+pass. [Evidence](docs/evidence/mm-copy-001/manifest.json) preserves 452 records
+and 9,009 retained artifact hashes. This verifies these consumers, not allocation
+failure/rollback coverage or complete MM compatibility.
+
 | Check | Verified result |
 | --- | --- |
 | LTS provenance/math | Signed tag verified; all 24 required math cases pass on q35, zero skips. [Math](docs/evidence/math-q35/manifest.json), [provenance](docs/evidence/lts-baseline/manifest.json). |
@@ -185,47 +193,19 @@ four declarations carrying `task_struct` pointers. This is an audited consequenc
 of the observed task diagnostic, not a claim of MM compilation. MM release's
 extern block is unchanged; no blanket suppression was added.
 
-### Fork MM copy candidate
+### Fork MM copy
 
-This branch adds default-off Rust `dup_mm`/`copy_mm` sequencing and rollback,
-requiring the existing Rust MM construction/release options. Shared-MM users
-references, null-MM kernel-thread handling and partial-duplication cleanup retain
-the original ordering, including uprobe unlock asymmetry. C mapping duplication
-and typed foreign/subsystem operations remain explicit unfinished dependencies.
-Original C restoration, formatting and source checks are recorded in
-`linux-out/mm-copy-source-001`; no MM-copy kernel has been compiled or booted.
-Next establish actual linked selection and paired copy/share/failure coverage.
-[Ownership and remaining C](experiments/mm-copy/README.md).
+The default-off Rust `dup_mm`/`copy_mm` implementation passes the paired ordinary
+consumers recorded above. It preserves shared-MM users references, null-MM
+kernel-thread handling and staged cleanup, including uprobe unlock asymmetry.
+Null-MM and allocation-failure paths still need direct runtime coverage.
+C mapping duplication and typed foreign/subsystem operations remain unfinished
+rewrite work. [Ownership contract](experiments/mm-copy/README.md).
 
-MM-copy preprocessing and object/linked proof tooling is implemented, including
-archive payload hashes and callback section metadata, but has not inspected a
-compiled MM-copy kernel. Twelve copy-selection and eight historical release
-gate tests pass; the historical release checker still rejects the additional
-copy insertion. Shared-MM guest fixtures and independent source review are complete; compilation
-and VM execution remain pending.
-Separately, source `00c4ef1c1903` passed all five C/Rust MM-construction VM cases;
-its 307-record evidence archive and 25 raw artifact hashes passed independent
-audit. That ancestor result does not verify this MM-copy candidate.
-
-The candidate now includes exact C/Rust build routing and three guarded ordinary
-consumers: true CLONE_VM write/exit, CLONE_VM followed by exec detachment, and
-private-fork COW. The shared child uses a separate guarded stack and raw syscalls;
-parent storage is reclaimed only after reap. Root and independent review cover
-the source/proof/fixture contracts. All 22 host scripts (229 cases) pass with
-unchanged inputs in `linux-out/mm-copy-host-001`. These checks do not establish
-compiled or runtime behavior. The branch also inherits the reviewed release
-callback-ELF proof fix and the pinned `mtree_empty` fixture correction.
-
-At source `b5bb24438c365a8279dee6b33095853377c3ba55`, the MM-copy PID1 and
-probe compiled as static x86-64 ELFs in the pinned image with no diagnostics.
-Root and independent inspection bound source/binary hashes and verified the
-shared child's emitted code contains inline syscalls, without libc/helper calls
-or TLS accesses. Both binaries remain non-executable files on the host.
-[Compile evidence](docs/evidence/mm-copy-fixtures/manifest.json) records this
-limited result; neither binary nor the MM-copy kernel has been run.
-
-The inherited MM-release extern block now includes the reviewed pointer-only
-FFI annotation from `cfc899021ac6`. It responds to 33 actual nested GNU-empty-type
-warnings in the release build at `42318e69e5f2`; the kernel policy is unchanged.
-That run passed C80/67/4 but no Rust VM. This candidate still requires its own
-clean kernel build and paired VM tests.
+The three consumers use a separate guarded clone stack and raw-syscall shared
+child, with parent storage retained until reap. Actual preprocessing, archive
+payload and linked-symbol proofs establish selection in both tested kernels.
+All 22 host scripts (229 cases) passed before the paired run; the original
+[static fixture evidence](docs/evidence/mm-copy-fixtures/manifest.json) remains
+at its own source identity. The pointer-only FFI annotation and canonical
+`mtree_empty` fixture correction are included in the successful builds.

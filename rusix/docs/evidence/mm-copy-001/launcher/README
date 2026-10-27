@@ -1,0 +1,41 @@
+MM-copy serial local verification DRAFT — launch review pending
+
+Source linux-mm-copy: 32e7c3e7b0ae825b84416b260098c2d98cd45865.
+The earlier static fixture compilation remains attributed to b5bb24438c;
+it is not runtime evidence for this checkpoint. Source must remain clean.
+
+No cache seeds: create fresh output mm-copy-verification-001/{c,rust} only
+at launch. No copies, Docker runs, kernels or guests were started preparing
+this draft. REVIEWED_LAUNCH_READY=False blocks run.sh's first preflight.
+Parent must review these scripts and explicitly enable that flag before launch.
+Read-only identity check: python3 -B preflight.py (no Docker invocation).
+
+run.sh acquires the common .wait-owner-remaining.lock, rejects active kernel
+containers, verifies the immutable c02eb392... fixture image, and exclusively
+creates the run directory. Serial C then Rust builds use two CPUs/5 GiB and
+4-hour external bounds. Each guest uses q35/KVM, 512 MiB, two CPUs, no network,
+and a 180-second bound. Owned CID cleanup handles interruption; matrix.exit
+records the terminal launcher result. No GitHub Actions.
+
+Each side must pass the exact three ordered consumers:
+shared_clone_write_and_exit, shared_clone_exec_detaches_mm, private_fork_cow.
+Postchecks enforce console/result/terminal status, warning-free build and guest
+logs, exact source/config/script/fixture identities, literal VM command and
+matched fixture binaries/tool versions/image. Both retain Rust task construction,
+MM construction/release and BRD/core; only MM_COPY_RUST may differ.
+
+Postchecks run in the same c02 image without KVM, with pinned LLVM19 and exact
+/opt/rusix package/tool records matching the builds. They rehash original proof
+inputs, validate the recorded container preprocessing command, then rerun the
+actual archive/object/linked selection verifier into a NEW reinspection directory.
+That second record uses explicit host-remapped paths; original evidence remains
+unchanged. Only verified /src and per-side /out identities are translated back
+for exact comparison to the saved selection proof. No compiler/preprocessor or
+guest is executed in these postchecks. The original source-preservation,
+preprocessed selected-policy, callback registration and inherited ABI checks
+remain active. Reinspection and tool outputs are exclusive fresh files; failed
+postchecks require review, not overwriting or rerunning in-place.
+
+Preparation checks: Python AST and shell syntax; clean exact source identity.
+Actual runtime acceptance is pending. These three ordinary consumers do not
+cover allocation-failure rollback, kernel-thread NULL-MM or full MM ownership.

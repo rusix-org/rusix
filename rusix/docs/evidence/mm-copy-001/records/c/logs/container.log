@@ -1,0 +1,3 @@
+Build evidence: /out/logs/ci-mm-copy-c-build.5N3JGuy2
+Built /out/builds/ci-mm-copy-c/arch/x86/boot/bzImage
+MM copy c: three cases passed; evidence /out/logs/ci-mm-copy-c-mm-copy.run

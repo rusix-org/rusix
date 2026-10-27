@@ -1,0 +1,4 @@
+f457e07206b0ce27aebc24741cd0c8683dad36ed4d746d2a3f65a7f7fa6f6434  /out/builds/ci-mm-copy-c/.config
+6955110bbb553f63cf4e84d884af1f494851e3fc394bc04e86c3813eec3e869e  /out/builds/ci-mm-copy-c/arch/x86/boot/bzImage
+e4dcfa8cf89299e4a7049d6f714bd47b8c0b23c2a44d7e522aaa3ff9db0367b5  /out/builds/ci-mm-copy-c/vmlinux
+a5a65353904fa9ccd59e20d8b1bc639a6fc4fd91f15c0c54ab2d6cf93aaa274f  /out/builds/ci-mm-copy-c/vmlinux.map

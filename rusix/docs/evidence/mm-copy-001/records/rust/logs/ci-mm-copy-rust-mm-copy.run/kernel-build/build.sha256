@@ -1,0 +1,4 @@
+60c5cd173dc6bc73fc207a469c0486b7b472109160727e2bd0efa13547ddcd98  /out/builds/ci-mm-copy-rust/.config
+1b0f9f61fcdc57864f2b84cee734a6bd7a017daf9eedbc64a51b86cb40af6fdc  /out/builds/ci-mm-copy-rust/arch/x86/boot/bzImage
+d17237326f4c7c4fa7c64a9274bcdf9e23400028e2c195ff8327b28aec2703e3  /out/builds/ci-mm-copy-rust/vmlinux
+7f67415290a60b89426d34baba5cc8694a89adfd2c37b988bce0d08136f4aa0f  /out/builds/ci-mm-copy-rust/vmlinux.map

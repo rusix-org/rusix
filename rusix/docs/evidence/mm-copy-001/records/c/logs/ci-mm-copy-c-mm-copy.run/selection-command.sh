@@ -1,0 +1,1 @@
+bash /src/rusix/scripts/with-local-tools.sh python3 /src/rusix/scripts/verify-mm-copy.py objects --profile mm-copy-c --source /src --build /out/builds/ci-mm-copy-c --evidence /out/logs/ci-mm-copy-c-mm-copy.run/kernel-build
