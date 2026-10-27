@@ -1,8 +1,11 @@
 # Publication record
 
 The public [rusix-org/rusix](https://github.com/rusix-org/rusix) repository is a
-GitHub-recognized fork of `torvalds/linux`. Publish only to `origin`, branch
-`rusix/main`; `upstream` is the Linux reference. Retain Linux history, licensing
+GitHub-recognized fork of `torvalds/linux`. Publish only to `origin`; `upstream` is the Linux reference.
+`rusix/main` holds integrated checkpoints. Verified `rusix/*` topic branches may
+be published with their exact evidence and remaining integration gates recorded
+in [PROGRESS.md](../PROGRESS.md). Publishing a topic branch does not promote it
+into the declared server configuration. Retain Linux history, licensing
 and attribution. Hosted CI activation follows the [local-only policy](../ci/README.md).
 
 The first source push was verified on 2026-10-25 at

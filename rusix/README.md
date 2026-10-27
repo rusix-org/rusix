@@ -33,7 +33,7 @@ results retain their original source identities. Hosted CI is disabled and manua
 - [Toolchain](docs/TOOLCHAIN.md) and [agent instructions](AGENTS.md)
 - [Publication record](docs/PUBLICATION.md) and [development assistance](docs/ASSISTANCE.md)
 
-Development uses `rusix/*` topic branches; verified work is published on `rusix/main` in
+Development uses `rusix/*` topic branches; integrated work is published on `rusix/main` in
 [rusix-org/rusix](https://github.com/rusix-org/rusix). Edit tracked files directly;
 no parent workspace or document synchronization is required. Experimental kernels
 and probes run in isolated VMs, not on the host.

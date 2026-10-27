@@ -10,6 +10,33 @@ verification runs locally. No subsystem divergence point is declared.
 Public development lives on `rusix/main`. [ADR 0002](docs/adr/0002.md) owns the
 target; [Phase 1](docs/PHASE1.md) owns delivery gates.
 
+## Task and memory-management checkpoints
+
+The following topic branches retain independently tested slices beyond the
+integrated `rusix/main` kernel. Each branch's progress record links its exact
+source, configuration, raw-result hashes and remaining C dependencies.
+
+| Topic branch | Verified scope |
+| --- | --- |
+| [task-construction](https://github.com/rusix-org/rusix/tree/rusix/task-construction/rusix) | Five paired fork/exec/vfork/affinity/seccomp userspace cases. |
+| [mm-construction](https://github.com/rusix-org/rusix/tree/rusix/mm-construction/rusix) | Five paired anonymous-COW, unmap, fork/exec and MDWE cases. |
+| [mm-release](https://github.com/rusix-org/rusix/tree/rusix/mm-release/rusix) | Paired 80 combined, 67 core and four release-lifecycle KUnit cases. |
+| [mm-copy](https://github.com/rusix-org/rusix/tree/rusix/mm-copy/rusix) | Paired shared-MM clone, exec detachment and private-fork COW cases. |
+| [task-construction-faults](https://github.com/rusix-org/rusix/tree/rusix/task-construction-faults/rusix) | Attributed task-slab and stack-allocation failures, cleanup and successful disarmed retries; other attempted sites were not injected. |
+| [mm-dup-mmap](https://github.com/rusix-org/rusix/tree/rusix/mm-dup-mmap/rusix) | Seven paired sharing/COW, DONTFORK, WIPEONFORK and file-mapping lifetime cases. |
+| [rcu-sync-policy](https://github.com/rusix-org/rusix/tree/rusix/rcu-sync-policy/rusix) | Paired debug/plain sync-policy KUnit fixtures. |
+| [rcu-batch](https://github.com/rusix-org/rusix/tree/rusix/rcu-batch/rusix) | Paired debug/plain batch-policy KUnit fixtures. |
+
+Next milestone: verify the implemented Rust VMA lifecycle, address-space teardown
+and mapping-copy policies, then integrate the verified chain with ordinary
+userspace regression coverage. The current lifecycle retry has passed its C
+baseline; Rust runtime verification is pending. Teardown, mapping-copy and PFN
+ownership candidates remain local pending their build/runtime gates. Allocation
+rollback coverage and broader concurrency validation remain open. Hosted CI stays
+disabled; all verification runs locally.
+
+## Integrated kernel evidence
+
 | Check | Verified result |
 | --- | --- |
 | LTS provenance/math | Signed tag verified; all 24 required math cases pass on q35, zero skips. [Math](docs/evidence/math-q35/manifest.json), [provenance](docs/evidence/lts-baseline/manifest.json). |
