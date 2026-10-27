@@ -81,11 +81,86 @@ class Selection(unittest.TestCase):
         build=Path('/out/builds/x');source=Path('/src');paths=gate.input_paths(build,source,True)
         self.assertEqual(len(paths),len(set(paths)))
         for path in gate.copy.input_paths(build,source,True):self.assertIn(path,paths)
-        for name in ('mm/mmap.c','mm/dup_mmap_impl.h','mm/dup_mmap_rust.rs','mm/Makefile','include/linux/maple_tree.h','rusix/scripts/preprocess-dup-mmap.py','rusix/scripts/saved_clang_command.py'):
+        for name in ('mm/mmap.c','mm/dup_mmap_impl.h','mm/dup_mmap_rust.rs','mm/Makefile','include/linux/maple_tree.h','rusix/scripts/preprocess-dup-mmap.py','rusix/scripts/saved_clang_command.py','rusix/scripts/verify-brd-parameter-owner.py','rusix/scripts/measure-kernel-languages.py'):
             self.assertIn(source/name,paths)
         for name in ('mm/.mmap.o.cmd','mm/mmap.o','mm/mmap.i','mm/built-in.a','mm/dup_mmap_rust.o','include/generated/autoconf.h'):
             self.assertIn(build/name,paths)
         self.assertNotIn(build/'mm/dup_mmap_rust.o',gate.input_paths(build,source,False))
+
+
+class ModelElf:
+    """Semantic storage oracle; actual ELF parser also exercised on retained run."""
+    def __init__(self, linked=False):
+        self.relocatable = not linked
+        self.base = 0x1000 if linked else 0
+        self.names = ['', '.rodata']
+        self.headers = [None, [0,1,0x33 if linked else 2,self.base,0,24,0,0,8,0]]
+        self.data = b''.join(n.to_bytes(8,'little') for n in gate.CONSTANTS.values())
+        self.symbols = [dict(name=n,kind=1,size=8,section=1,address=self.base+i*8)
+                        for i,n in enumerate(gate.CONSTANTS)]
+    def symbol(self, name):
+        rows=[s for s in self.symbols if s['name']==name]
+        if len(rows)!=1:raise ValueError('Duplicate/missing symbol')
+        return rows[0]
+    def location(self, symbol):return symbol['section'],symbol['address']-self.base
+    def section_data(self, index):return self.data
+    def nm(self, letter=None):
+        return ''.join(f"{s['address']:016x} {letter or ('R' if self.relocatable else 'D')} {s['name']}\n" for s in self.symbols)
+
+
+class Constants(unittest.TestCase):
+    def test_object_and_linked_rodata_d_class(self):
+        for linked in (False,True):
+            elf=ModelElf(linked)
+            self.assertEqual(gate.constant_storage(elf,elf.nm(),linked=linked),gate.CONSTANTS)
+        elf=ModelElf(True)
+        self.assertEqual(gate.constant_storage(elf,elf.nm('R'),linked=True),gate.CONSTANTS)
+
+    def test_explicit_other_constant_inventory_without_global_mutation(self):
+        expected={'rusix_exit_account':1 << 20}
+        original=gate.CONSTANTS.copy()
+        for linked in (False,True):
+            elf=ModelElf(linked)
+            elf.symbols=[dict(name='rusix_exit_account',kind=1,size=8,section=1,address=elf.base)]
+            elf.data=(1 << 20).to_bytes(8,'little');elf.headers[1][5]=8
+            self.assertEqual(gate.constant_storage(elf,elf.nm(),linked=linked,expected=expected),expected)
+            with self.assertRaises(ValueError):gate.constant_storage(elf,elf.nm(),linked=linked)
+        self.assertEqual(gate.CONSTANTS,original)
+
+    def test_wrong_section_type_size_flags_and_bounds(self):
+        mutations=[lambda e:setattr(e,'names',['','.data']),
+                   lambda e:e.symbols[0].update(kind=2),
+                   lambda e:e.symbols[0].update(size=4),
+                   lambda e:e.symbols[0].update(address=e.base+1),
+                   lambda e:e.headers[1].__setitem__(1,8),
+                   lambda e:e.headers[1].__setitem__(2,0),
+                   lambda e:e.headers[1].__setitem__(2,6),
+                   lambda e:e.headers[1].__setitem__(5,4)]
+        for linked in (False,True):
+            for mutation in mutations:
+                elf=ModelElf(linked);mutation(elf)
+                with self.assertRaises(ValueError):gate.constant_storage(elf,elf.nm(),linked=linked)
+        elf=ModelElf();elf.headers[1][2]=3
+        with self.assertRaises(ValueError):gate.constant_storage(elf,elf.nm(),linked=False)
+
+    def test_wrong_values_and_duplicate_symbols(self):
+        for linked in (False,True):
+            elf=ModelElf(linked);elf.data=b'\0'*24
+            with self.assertRaises(ValueError):gate.constant_storage(elf,elf.nm(),linked=linked)
+            elf=ModelElf(linked);nm=elf.nm();elf.symbols.append(elf.symbols[0].copy())
+            with self.assertRaises(ValueError):gate.constant_storage(elf,nm,linked=linked)
+            elf=ModelElf(linked)
+            with self.assertRaises(ValueError):gate.constant_storage(elf,elf.nm()+elf.nm(),linked=linked)
+
+    def test_global_binding_and_nm_address_are_required(self):
+        for linked in (False,True):
+            elf=ModelElf(linked)
+            for letter in ('r','d','T','B'):
+                with self.assertRaises(ValueError):gate.constant_storage(elf,elf.nm(letter),linked=linked)
+            with self.assertRaises(ValueError):gate.constant_storage(elf,elf.nm().replace(f'{elf.base:016x}',f'{elf.base+8:016x}',1),linked=linked)
+        elf=ModelElf()
+        with self.assertRaises(ValueError):gate.constant_storage(elf,elf.nm('D'),linked=False)
+        with self.assertRaises(ValueError):gate.constant_storage(elf,elf.nm(),linked=True)
 
 
 if __name__=='__main__':unittest.main()

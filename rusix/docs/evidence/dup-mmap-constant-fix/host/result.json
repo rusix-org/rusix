@@ -1,0 +1,35 @@
+{
+  "constant_values": {
+    "rusix_dup_account": 1048576,
+    "rusix_dup_dontcopy": 131072,
+    "rusix_dup_wipeonfork": 33554432
+  },
+  "fix_input_sha256": {
+    "rusix/scripts/measure-kernel-languages.py": "3e70bf372871535b116ff8c6a7548df71e78ced19d2ab43f65dd7e022897ac90",
+    "rusix/scripts/verify-brd-parameter-owner.py": "55bd06cd7b6910ab6c1b6404f1c97d30ce383c7f4abd593f1d949d20d7a41790",
+    "rusix/scripts/verify-dup-mmap.py": "ec9d1e9f8d526e2b4df35097af064becfac7fbe6cb93e9424ba45b41f1942cd5",
+    "rusix/tests/test_dup_mmap_selection.py": "e31bbb4152f4f0ce6c7ecd960413bac23d9d124f59667f9ce92845c03c1c3bf6"
+  },
+  "logs_sha256": {
+    "result-before-parameter.json": "bbadc60906b20ae1be046c6ada5a913d882970ae83bf609e8ceb04cf96f7eb48",
+    "test_brd_owner_elf.py.exit": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+    "test_brd_owner_elf.py.log": "199ba496f288116d36c62f29346d4fbf0bd75745a1c893abfcbdaa4c6d5b1033",
+    "test_constructor_archive.py.exit": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+    "test_constructor_archive.py.log": "87245808eeb32a5b7e94a9e9b58b38336813d4f62263b057dfc74ca6992a3a79",
+    "test_dup_mmap_selection.py.before-parameter.log": "26f599755db571bd9b1e025f21092acc4379cafd3617fe7b8b69ba0155bf7fdf",
+    "test_dup_mmap_selection.py.exit": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+    "test_dup_mmap_selection.py.log": "2688e3aac5879831defab5e5f231a6f331e395be82e99f6caef62e863a873ffe",
+    "test_kernel_languages.py.exit": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+    "test_kernel_languages.py.log": "d4be35de3d82250986690334669c4d88ae35b2993f723c16c8c675d6299bc32e"
+  },
+  "retained_input_sha256": {
+    "/home/aaron/code/rusix/linux-out/dup-mmap-verification-001/rust/builds/ci-mm-dup-mmap-rust/mm/mmap.o": "1aac23e69fecf4e396f4c34c964ead4afeda0805dc267349c7c162fb78fef987",
+    "/home/aaron/code/rusix/linux-out/dup-mmap-verification-001/rust/builds/ci-mm-dup-mmap-rust/vmlinux": "526f5b3824bb13ecdd7036411c5a713557330146a45311fad74a71e50ab21f17",
+    "/home/aaron/code/rusix/linux-out/dup-mmap-verification-001/rust/logs/ci-mm-dup-mmap-rust-build.FQvBQmNo/dup-mmap-kernel-symbols.txt": "446e7df28f831df6d28565ac02c9cd14deb62968ed59c22701f228a136e0e0eb",
+    "/home/aaron/code/rusix/linux-out/dup-mmap-verification-001/rust/logs/ci-mm-dup-mmap-rust-build.FQvBQmNo/dup-mmap-mmap-symbols.txt": "ccea4797c97efe10d9a7267d60e91f569f1c613189811507b23c0412345d539a"
+  },
+  "retained_source": "9cf27ef36d1d58cb65bd866d9f046ed2e56b045a",
+  "scope": "Host semantic regressions and actual retained mmap.o/vmlinux constant storage only; failed matrix remains failed; no new kernel/VM or full selection rerun",
+  "selection_cases": 14,
+  "status": "PASS"
+}

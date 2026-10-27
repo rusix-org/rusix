@@ -1,0 +1,263 @@
+[
+    {
+        "Id": "27e448b4ff8809987099b3da5cea08cce3ad39a2a2267a0dfcaa1bd62c165d6c",
+        "Created": "2026-10-27T01:07:08.065901042Z",
+        "Path": "bash",
+        "Args": [
+            "-c",
+            "set -euo pipefail\nfor tool in llvm-nm llvm-objdump llvm-ar llvm-readobj; do \"$tool\" --version > \"/evidence/$tool-version.log\"; done\npython3 -B /src/rusix/scripts/verify-dup-mmap.py objects --profile mm-dup-mmap-rust --source /src --build /out/builds/ci-mm-dup-mmap-rust --evidence /evidence > /evidence/dup-mmap-selection.json\n"
+        ],
+        "State": {
+            "Status": "exited",
+            "Running": false,
+            "Paused": false,
+            "Restarting": false,
+            "OOMKilled": false,
+            "Dead": false,
+            "Pid": 0,
+            "ExitCode": 0,
+            "Error": "",
+            "StartedAt": "2026-10-27T01:07:08.533191798Z",
+            "FinishedAt": "2026-10-27T01:07:16.871817527Z"
+        },
+        "Image": "sha256:c02eb3929889b3f0cc035d57a02c844e0c74c71d24fbda1311249faeb8257f63",
+        "ResolvConfPath": "/var/lib/docker/containers/27e448b4ff8809987099b3da5cea08cce3ad39a2a2267a0dfcaa1bd62c165d6c/resolv.conf",
+        "HostnamePath": "/var/lib/docker/containers/27e448b4ff8809987099b3da5cea08cce3ad39a2a2267a0dfcaa1bd62c165d6c/hostname",
+        "HostsPath": "/var/lib/docker/containers/27e448b4ff8809987099b3da5cea08cce3ad39a2a2267a0dfcaa1bd62c165d6c/hosts",
+        "LogPath": "/var/lib/docker/containers/27e448b4ff8809987099b3da5cea08cce3ad39a2a2267a0dfcaa1bd62c165d6c/27e448b4ff8809987099b3da5cea08cce3ad39a2a2267a0dfcaa1bd62c165d6c-json.log",
+        "Name": "/intelligent_hypatia",
+        "RestartCount": 0,
+        "Driver": "overlayfs",
+        "Platform": "linux",
+        "MountLabel": "",
+        "ProcessLabel": "",
+        "AppArmorProfile": "",
+        "ExecIDs": null,
+        "HostConfig": {
+            "Binds": null,
+            "ContainerIDFile": "/home/aaron/code/rusix/linux-out/dup-mmap-constant-selection-001/container.cid",
+            "LogConfig": {
+                "Type": "json-file",
+                "Config": {
+                    "max-file": "5",
+                    "max-size": "10m"
+                }
+            },
+            "NetworkMode": "none",
+            "PortBindings": {},
+            "RestartPolicy": {
+                "Name": "no",
+                "MaximumRetryCount": 0
+            },
+            "AutoRemove": false,
+            "VolumeDriver": "",
+            "VolumesFrom": null,
+            "ConsoleSize": [
+                0,
+                0
+            ],
+            "CapAdd": null,
+            "CapDrop": [
+                "ALL"
+            ],
+            "CgroupnsMode": "private",
+            "Dns": null,
+            "DnsOptions": [],
+            "DnsSearch": [],
+            "ExtraHosts": null,
+            "GroupAdd": null,
+            "IpcMode": "private",
+            "Cgroup": "",
+            "Links": null,
+            "OomScoreAdj": 0,
+            "PidMode": "",
+            "Privileged": false,
+            "PublishAllPorts": false,
+            "ReadonlyRootfs": true,
+            "SecurityOpt": [
+                "no-new-privileges"
+            ],
+            "UTSMode": "",
+            "UsernsMode": "",
+            "ShmSize": 67108864,
+            "Runtime": "runc",
+            "Isolation": "",
+            "CpuShares": 0,
+            "Memory": 2147483648,
+            "NanoCpus": 1000000000,
+            "CgroupParent": "",
+            "BlkioWeight": 0,
+            "BlkioWeightDevice": [],
+            "BlkioDeviceReadBps": [],
+            "BlkioDeviceWriteBps": [],
+            "BlkioDeviceReadIOps": [],
+            "BlkioDeviceWriteIOps": [],
+            "CpuPeriod": 0,
+            "CpuQuota": 0,
+            "CpuRealtimePeriod": 0,
+            "CpuRealtimeRuntime": 0,
+            "CpusetCpus": "",
+            "CpusetMems": "",
+            "Devices": [],
+            "DeviceCgroupRules": null,
+            "DeviceRequests": null,
+            "MemoryReservation": 0,
+            "MemorySwap": 2147483648,
+            "MemorySwappiness": null,
+            "OomKillDisable": null,
+            "PidsLimit": 128,
+            "Ulimits": null,
+            "CpuCount": 0,
+            "CpuPercent": 0,
+            "IOMaximumIOps": 0,
+            "IOMaximumBandwidth": 0,
+            "Mounts": [
+                {
+                    "Type": "bind",
+                    "Source": "/home/aaron/code/rusix/linux-mm-dup-mmap",
+                    "Target": "/src",
+                    "ReadOnly": true
+                },
+                {
+                    "Type": "bind",
+                    "Source": "/home/aaron/code/rusix/linux-out/dup-mmap-verification-001/rust",
+                    "Target": "/out",
+                    "ReadOnly": true
+                },
+                {
+                    "Type": "bind",
+                    "Source": "/home/aaron/code/rusix/linux-out/dup-mmap-constant-selection-001/evidence",
+                    "Target": "/evidence"
+                },
+                {
+                    "Type": "bind",
+                    "Source": "/home/aaron/code/rusix/linux-out/dup-mmap-constant-selection-001/tmp",
+                    "Target": "/tmp"
+                }
+            ],
+            "MaskedPaths": [
+                "/proc/acpi",
+                "/proc/asound",
+                "/proc/interrupts",
+                "/proc/kcore",
+                "/proc/keys",
+                "/proc/latency_stats",
+                "/proc/sched_debug",
+                "/proc/scsi",
+                "/proc/timer_list",
+                "/proc/timer_stats",
+                "/sys/devices/virtual/powercap",
+                "/sys/firmware"
+            ],
+            "ReadonlyPaths": [
+                "/proc/bus",
+                "/proc/fs",
+                "/proc/irq",
+                "/proc/sys",
+                "/proc/sysrq-trigger"
+            ]
+        },
+        "Storage": {
+            "RootFS": {
+                "Snapshot": {
+                    "Name": "overlayfs"
+                }
+            }
+        },
+        "Mounts": [
+            {
+                "Type": "bind",
+                "Source": "/home/aaron/code/rusix/linux-out/dup-mmap-constant-selection-001/evidence",
+                "Destination": "/evidence",
+                "Mode": "",
+                "RW": true,
+                "Propagation": "rprivate"
+            },
+            {
+                "Type": "bind",
+                "Source": "/home/aaron/code/rusix/linux-out/dup-mmap-verification-001/rust",
+                "Destination": "/out",
+                "Mode": "",
+                "RW": false,
+                "Propagation": "rprivate"
+            },
+            {
+                "Type": "bind",
+                "Source": "/home/aaron/code/rusix/linux-mm-dup-mmap",
+                "Destination": "/src",
+                "Mode": "",
+                "RW": false,
+                "Propagation": "rprivate"
+            },
+            {
+                "Type": "bind",
+                "Source": "/home/aaron/code/rusix/linux-out/dup-mmap-constant-selection-001/tmp",
+                "Destination": "/tmp",
+                "Mode": "",
+                "RW": true,
+                "Propagation": "rprivate"
+            }
+        ],
+        "Config": {
+            "Hostname": "27e448b4ff88",
+            "Domainname": "",
+            "User": "1000:1000",
+            "AttachStdin": false,
+            "AttachStdout": true,
+            "AttachStderr": true,
+            "Tty": false,
+            "OpenStdin": false,
+            "StdinOnce": false,
+            "Env": [
+                "PYTHONDONTWRITEBYTECODE=1",
+                "PATH=/usr/lib/llvm-19/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+                "LIBCLANG_PATH=/usr/lib/llvm-19/lib",
+                "LC_ALL=C",
+                "GIT_OPTIONAL_LOCKS=0"
+            ],
+            "Cmd": [
+                "bash",
+                "-c",
+                "set -euo pipefail\nfor tool in llvm-nm llvm-objdump llvm-ar llvm-readobj; do \"$tool\" --version > \"/evidence/$tool-version.log\"; done\npython3 -B /src/rusix/scripts/verify-dup-mmap.py objects --profile mm-dup-mmap-rust --source /src --build /out/builds/ci-mm-dup-mmap-rust --evidence /evidence > /evidence/dup-mmap-selection.json\n"
+            ],
+            "Image": "sha256:c02eb3929889b3f0cc035d57a02c844e0c74c71d24fbda1311249faeb8257f63",
+            "Volumes": null,
+            "WorkingDir": "/src",
+            "Entrypoint": null,
+            "Labels": {}
+        },
+        "NetworkSettings": {
+            "SandboxID": "",
+            "SandboxKey": "",
+            "Ports": {},
+            "Networks": {
+                "none": {
+                    "IPAMConfig": null,
+                    "Links": null,
+                    "Aliases": null,
+                    "DriverOpts": null,
+                    "GwPriority": 0,
+                    "NetworkID": "8233b529d2059c07122e48a591d0f612950367d17b760c4dca5fd32bcf807140",
+                    "EndpointID": "",
+                    "Gateway": "",
+                    "IPAddress": "",
+                    "MacAddress": "",
+                    "IPPrefixLen": 0,
+                    "IPv6Gateway": "",
+                    "GlobalIPv6Address": "",
+                    "GlobalIPv6PrefixLen": 0,
+                    "DNSNames": null
+                }
+            }
+        },
+        "ImageManifestDescriptor": {
+            "mediaType": "application/vnd.oci.image.manifest.v1+json",
+            "digest": "sha256:423ec719c430004334c2c78f74a9501c4d1b5784accd182faf26046eb7446ba8",
+            "size": 1994,
+            "platform": {
+                "architecture": "amd64",
+                "os": "linux"
+            }
+        }
+    }
+]

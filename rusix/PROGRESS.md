@@ -14,8 +14,17 @@ cases and its pinned-image postcheck. The Rust kernel built, but selection
 verification rejected the emitted symbol kind of `rusix_dup_account` before
 its VM launch. No paired runtime parity is claimed. [Failure evidence](docs/evidence/dup-mmap-initial/manifest.json)
 preserves 364 records and 9,013 retained artifact hashes, including both builds,
-actual emitted disassembly, fixture/tool identities and the full error. Review
-the constant ownership proof, then repeat with a fresh recorded attempt.
+actual emitted disassembly, fixture/tool identities and the full error.
+
+The verifier fix on `105d6b4eadd` now checks each constant's actual ELF object
+and linked `.rodata` storage, type, size, global binding and canonical value;
+it no longer assumes linked `.rodata` must have nm type `R`. All 33 focused host
+cases pass. A pinned-container full selection recheck passes against the retained
+`9cf27ef36d1d` Rust kernel, including inherited MM-copy proof and 67 input hashes.
+[Fix evidence](docs/evidence/dup-mmap-constant-fix/manifest.json) preserves exact
+verifier snapshots, commands and results (53 records and ten retained binary
+hashes). This recheck did not rebuild or boot a kernel; the original matrix
+remains failed and a fresh paired runtime attempt is still required.
 
 | Check | Verified result |
 | --- | --- |
