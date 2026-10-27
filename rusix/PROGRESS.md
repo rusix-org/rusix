@@ -27,6 +27,10 @@ not general allocation failure or complete task/MM behavior. Earlier
 separately attributed. The [fixture contract](tests/task-construction-faults/README.md)
 records the attribution and cleanup requirements.
 
+Publication audit recovered 30 manifest-listed evidence files omitted by inherited
+Git ignore rules. All 970 successful-run records and 538 historical records
+match their recorded hashes; kernel sources and recorded test results are unchanged.
+
 | Check | Verified result |
 | --- | --- |
 | LTS provenance/math | Signed tag verified; all 24 required math cases pass on q35, zero skips. [Math](docs/evidence/math-q35/manifest.json), [provenance](docs/evidence/lts-baseline/manifest.json). |
