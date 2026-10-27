@@ -1,0 +1,14 @@
+{
+  "source_head": "247da0572e899f8c9e721e1c605a4c5f298bc7ef",
+  "source_status": " M init/Kconfig\n M mm/Makefile\n M mm/vma.c\n M rusix/PROGRESS.md\n?? mm/copy_vma_impl.h\n?? mm/copy_vma_rust.rs\n?? rusix/experiments/mm-copy-vma/\n?? rusix/tests/copy-vma/\n?? rusix/tests/test_copy_vma_gate.py\n",
+  "scope": "Uncommitted fixture snapshot; upstream native source pinned separately; compile only, never execute",
+  "sha256": {
+    "rusix/tests/copy-vma/init.rs": "7b65d4d7489569b571357b1dbce09adcc5cf02008084cb6dc9f7e86796e001a2",
+    "rusix/tests/copy-vma/gate.py": "40607b687be49807f1c6679702d96fbea2be61dbc173c4fa8e40166ac8ed4f8a",
+    "rusix/tests/copy-vma/README.md": "c649e92d1ccaedcad076f510dc1d168cd03cb2bba6fbb0528eb3ec1ddb4a34ad",
+    "rusix/tests/copy-vma/upstream.json": "83ee40675e050041f3e7b339cb3d2aae420f3bd8789ab47248e460d2d5e15962",
+    "rusix/tests/test_copy_vma_gate.py": "cb245f1c3b884900b78fcd9234dcff741945564dbc62515b66c9488d2584ff4f",
+    "tools/testing/selftests/mm/mremap_dontunmap.c": "9796ea11348a2f40b8875655901163fe6ede92444c0c7d37b49430c765656c14",
+    "tools/testing/selftests/kselftest.h": "9e94dcf7b0b156d601c9bea7fe8bffb075a84e4e4ea93da5aac0df9a1bb86cf9"
+  }
+}

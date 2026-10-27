@@ -1,0 +1,1 @@
+["/usr/bin/gcc", "-std=gnu11", "-O2", "-Wall", "-Wunreachable-code", "-U_FORTIFY_SOURCE", "-Werror", "-static", "/source/tools/testing/selftests/mm/mremap_dontunmap.c", "-o", "/out/artifacts/probe"]

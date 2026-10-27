@@ -1,0 +1,62 @@
+{
+  "baseline": "2926d88bb7fc4608fd942453d929c39e4e5ec006",
+  "files": {
+    "archive-script.py": "cb2e2314d7fb4ff0deeeb75f281fcb2334d601fee6fea42ceccac0e05eaf0a16",
+    "records/compile.py": "a628a12a73717ab80008b2f8446680a799da7ea72efba2596fe667201658aa60",
+    "records/container-inspect.json": "8f228cc3aa5f68df5a5c5eb1ed4ede3533a1e58c75535b506b44577078ce9a44",
+    "records/container.cid": "1d5cda42746ba1b126e370c3d484e789475ea4f5deae85752b984c86a393a6a4",
+    "records/container.exit": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+    "records/container.log": "a28014591cd28babc262657a4db38646bde3c3d30684fbfd27980c1de1c56708",
+    "records/evidence/gcc-version.log": "4dc9a4e32fd9e06d42fb307688c59d6d889f0ff90ce034cbefed21b0d451fd81",
+    "records/evidence/gcc-version.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "records/evidence/init-command.json": "c75e3ade55780f26892e499d72b096e3e605d8f895484c1d186f05df0f341312",
+    "records/evidence/init-compile.exit": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+    "records/evidence/init-compile.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "records/evidence/init-readelf-command.json": "9709866d6725fcbbca6b2ac4b67b3353f02ffb4943254c96830232e36cf67e0e",
+    "records/evidence/init-readelf.exit": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+    "records/evidence/init-readelf.log": "da442de32e2a8c27090ee8b86b2f49c8f2be881c973e48d05bcdbcc60e5e6cd0",
+    "records/evidence/init-readelf.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "records/evidence/probe-command.json": "aeb20213722b0b438f11176ed3694e57edceffa31f52cbce9f7988b9482139e3",
+    "records/evidence/probe-compile.exit": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+    "records/evidence/probe-compile.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "records/evidence/probe-readelf-command.json": "bdf7a162c8ea125ecd642104f1e31da2b6d217f55731da0296b2e217f2192248",
+    "records/evidence/probe-readelf.exit": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+    "records/evidence/probe-readelf.log": "394896a06ab75365ffa8b5989b6eae363cd8f449fc3e9caf84845cf6478ea534",
+    "records/evidence/probe-readelf.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "records/evidence/readelf-version.log": "a87e30813b76f838a61852bc2943afbe4a26ba28a4b2728efb9481b50f02aff8",
+    "records/evidence/readelf-version.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "records/evidence/rustc-version.log": "c83055917220fd33844f4118a5a9bc8cd7ecf9761ce5f6fbc3edb8b1bc93db12",
+    "records/evidence/rustc-version.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "records/host-tests.log": "19ce4c3fe936ba5a289b545d890b7ffce48ced29d4b7b20a8c6b10a871321dd4",
+    "records/image-inspect.json": "39728fec30ff851d3183a84ad01eb426d101a88fc7337bac3801b4a8a37b65e3",
+    "records/inputs-after.json": "330d014efec5d8ee42257228ddd6b02d8b8807f6c26fec955560adc63797db1b",
+    "records/inputs.json": "a32ff4475353b21a8027dd5e042e81c85c8b81e6b35db4861582cca4666f6bf2",
+    "records/result.json": "ae15c72166354b145e19c5ff90d2fcfa97d4aa9d4c7be116ced35224a0d803e7",
+    "records/run.sh": "234eee851cba21a734d9bfe32359b1cb86de4762e30c77ef17750a892f87e510",
+    "records/source/rusix/tests/copy-vma/README.md": "c649e92d1ccaedcad076f510dc1d168cd03cb2bba6fbb0528eb3ec1ddb4a34ad",
+    "records/source/rusix/tests/copy-vma/gate.py": "40607b687be49807f1c6679702d96fbea2be61dbc173c4fa8e40166ac8ed4f8a",
+    "records/source/rusix/tests/copy-vma/init.rs": "7b65d4d7489569b571357b1dbce09adcc5cf02008084cb6dc9f7e86796e001a2",
+    "records/source/rusix/tests/copy-vma/upstream.json": "83ee40675e050041f3e7b339cb3d2aae420f3bd8789ab47248e460d2d5e15962",
+    "records/source/rusix/tests/test_copy_vma_gate.py": "cb245f1c3b884900b78fcd9234dcff741945564dbc62515b66c9488d2584ff4f",
+    "records/source/tools/testing/selftests/kselftest.h": "9e94dcf7b0b156d601c9bea7fe8bffb075a84e4e4ea93da5aac0df9a1bb86cf9",
+    "records/source/tools/testing/selftests/mm/mremap_dontunmap.c": "9796ea11348a2f40b8875655901163fe6ede92444c0c7d37b49430c765656c14"
+  },
+  "fixture_state": "Uncommitted fixture snapshot, exact hashes in records/inputs.json",
+  "image": "sha256:c02eb3929889b3f0cc035d57a02c844e0c74c71d24fbda1311249faeb8257f63",
+  "raw_result_sha256": "ae15c72166354b145e19c5ff90d2fcfa97d4aa9d4c7be116ced35224a0d803e7",
+  "retained_binary_sha256": {
+    "/home/aaron/code/rusix/linux-out/copy-vma-fixtures-001/artifacts/init": {
+      "bytes": 12596488,
+      "mode": "0644",
+      "sha256": "3d331e923f71f218b7c358bc67ecb81af9922220b6b0b2cf65b94d314414065d"
+    },
+    "/home/aaron/code/rusix/linux-out/copy-vma-fixtures-001/artifacts/probe": {
+      "bytes": 779224,
+      "mode": "0644",
+      "sha256": "e253cb09435fd43108552e81ef8286fabc0bb6e2c937973bdf360e515a27c010"
+    }
+  },
+  "scope": "13 synthetic parser tests; static compilation and ELF inspection of PID1 and unchanged upstream five-case test. Neither guest binary executed; no kernel build, VM, rollback or Rust-selection evidence.",
+  "source_head": "247da0572e899f8c9e721e1c605a4c5f298bc7ef",
+  "status": "PASS"
+}

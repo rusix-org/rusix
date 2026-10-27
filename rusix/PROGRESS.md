@@ -14,6 +14,9 @@ source restoration pass; compilation, emitted selection and paired runtime/
 failure evidence are pending. [Contract](experiments/mm-copy-vma/README.md).
 Independent source review and root rehash/restoration checks are retained in
 [source evidence](docs/evidence/mm-copy-vma-source/manifest.json).
+The unchanged upstream five-case DONTUNMAP probe and its Rust guest supervisor
+compile as static x86-64 binaries; 13 host parser tests pass. Neither guest
+binary has been executed. [Fixture evidence](docs/evidence/copy-vma-fixtures/manifest.json).
 
 Mapping teardown is a source-only candidate on `rusix/mm-exit-mmap`: Rust now
 owns complete `exit_mmap`, `remove_vma` and common close policy, with native C
