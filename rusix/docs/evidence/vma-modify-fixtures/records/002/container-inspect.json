@@ -1,0 +1,291 @@
+[
+    {
+        "Id": "d11006e67565478e71d0d5793f377e40c778b8ec985bfd00a090f005d550b5e9",
+        "Created": "2026-10-27T03:37:19.231484722Z",
+        "Path": "python3",
+        "Args": [
+            "-B",
+            "/compile.py"
+        ],
+        "State": {
+            "Status": "exited",
+            "Running": false,
+            "Paused": false,
+            "Restarting": false,
+            "OOMKilled": false,
+            "Dead": false,
+            "Pid": 0,
+            "ExitCode": 0,
+            "Error": "",
+            "StartedAt": "2026-10-27T03:37:19.407867159Z",
+            "FinishedAt": "2026-10-27T03:37:22.448955027Z"
+        },
+        "Image": "sha256:c02eb3929889b3f0cc035d57a02c844e0c74c71d24fbda1311249faeb8257f63",
+        "ResolvConfPath": "/var/lib/docker/containers/d11006e67565478e71d0d5793f377e40c778b8ec985bfd00a090f005d550b5e9/resolv.conf",
+        "HostnamePath": "/var/lib/docker/containers/d11006e67565478e71d0d5793f377e40c778b8ec985bfd00a090f005d550b5e9/hostname",
+        "HostsPath": "/var/lib/docker/containers/d11006e67565478e71d0d5793f377e40c778b8ec985bfd00a090f005d550b5e9/hosts",
+        "LogPath": "/var/lib/docker/containers/d11006e67565478e71d0d5793f377e40c778b8ec985bfd00a090f005d550b5e9/d11006e67565478e71d0d5793f377e40c778b8ec985bfd00a090f005d550b5e9-json.log",
+        "Name": "/hopeful_ritchie",
+        "RestartCount": 0,
+        "Driver": "overlayfs",
+        "Platform": "linux",
+        "MountLabel": "",
+        "ProcessLabel": "",
+        "AppArmorProfile": "",
+        "ExecIDs": null,
+        "HostConfig": {
+            "Binds": null,
+            "ContainerIDFile": "/home/aaron/code/rusix/linux-out/vma-modify-fixtures-compile-002/container.cid",
+            "LogConfig": {
+                "Type": "json-file",
+                "Config": {
+                    "max-file": "5",
+                    "max-size": "10m"
+                }
+            },
+            "NetworkMode": "none",
+            "PortBindings": {},
+            "RestartPolicy": {
+                "Name": "no",
+                "MaximumRetryCount": 0
+            },
+            "AutoRemove": false,
+            "VolumeDriver": "",
+            "VolumesFrom": null,
+            "ConsoleSize": [
+                0,
+                0
+            ],
+            "CapAdd": null,
+            "CapDrop": [
+                "ALL"
+            ],
+            "CgroupnsMode": "private",
+            "Dns": null,
+            "DnsOptions": [],
+            "DnsSearch": [],
+            "ExtraHosts": null,
+            "GroupAdd": null,
+            "IpcMode": "private",
+            "Cgroup": "",
+            "Links": null,
+            "OomScoreAdj": 0,
+            "PidMode": "",
+            "Privileged": false,
+            "PublishAllPorts": false,
+            "ReadonlyRootfs": true,
+            "SecurityOpt": [
+                "no-new-privileges"
+            ],
+            "UTSMode": "",
+            "UsernsMode": "",
+            "ShmSize": 67108864,
+            "Runtime": "runc",
+            "Isolation": "",
+            "CpuShares": 0,
+            "Memory": 1073741824,
+            "NanoCpus": 1000000000,
+            "CgroupParent": "",
+            "BlkioWeight": 0,
+            "BlkioWeightDevice": [],
+            "BlkioDeviceReadBps": [],
+            "BlkioDeviceWriteBps": [],
+            "BlkioDeviceReadIOps": [],
+            "BlkioDeviceWriteIOps": [],
+            "CpuPeriod": 0,
+            "CpuQuota": 0,
+            "CpuRealtimePeriod": 0,
+            "CpuRealtimeRuntime": 0,
+            "CpusetCpus": "",
+            "CpusetMems": "",
+            "Devices": [],
+            "DeviceCgroupRules": null,
+            "DeviceRequests": null,
+            "MemoryReservation": 0,
+            "MemorySwap": 1073741824,
+            "MemorySwappiness": null,
+            "OomKillDisable": null,
+            "PidsLimit": 128,
+            "Ulimits": null,
+            "CpuCount": 0,
+            "CpuPercent": 0,
+            "IOMaximumIOps": 0,
+            "IOMaximumBandwidth": 0,
+            "Mounts": [
+                {
+                    "Type": "bind",
+                    "Source": "/home/aaron/code/rusix/linux-mm-copy-vma",
+                    "Target": "/source",
+                    "ReadOnly": true
+                },
+                {
+                    "Type": "bind",
+                    "Source": "/home/aaron/code/rusix/linux-out/vma-modify-fixtures-compile-002/fixture",
+                    "Target": "/fixture",
+                    "ReadOnly": true
+                },
+                {
+                    "Type": "bind",
+                    "Source": "/home/aaron/code/rusix/linux-out/vma-modify-fixtures-compile-final-draft/compile.py",
+                    "Target": "/compile.py",
+                    "ReadOnly": true
+                },
+                {
+                    "Type": "bind",
+                    "Source": "/home/aaron/code/rusix/linux-out/vma-modify-fixtures-compile-002/evidence",
+                    "Target": "/out/evidence"
+                },
+                {
+                    "Type": "bind",
+                    "Source": "/home/aaron/code/rusix/linux-out/vma-modify-fixtures-compile-002/artifacts",
+                    "Target": "/out/artifacts"
+                },
+                {
+                    "Type": "bind",
+                    "Source": "/home/aaron/code/rusix/linux-out/vma-modify-fixtures-compile-002/tmp",
+                    "Target": "/out/tmp"
+                }
+            ],
+            "MaskedPaths": [
+                "/proc/acpi",
+                "/proc/asound",
+                "/proc/interrupts",
+                "/proc/kcore",
+                "/proc/keys",
+                "/proc/latency_stats",
+                "/proc/sched_debug",
+                "/proc/scsi",
+                "/proc/timer_list",
+                "/proc/timer_stats",
+                "/sys/devices/virtual/powercap",
+                "/sys/firmware"
+            ],
+            "ReadonlyPaths": [
+                "/proc/bus",
+                "/proc/fs",
+                "/proc/irq",
+                "/proc/sys",
+                "/proc/sysrq-trigger"
+            ]
+        },
+        "Storage": {
+            "RootFS": {
+                "Snapshot": {
+                    "Name": "overlayfs"
+                }
+            }
+        },
+        "Mounts": [
+            {
+                "Type": "bind",
+                "Source": "/home/aaron/code/rusix/linux-out/vma-modify-fixtures-compile-final-draft/compile.py",
+                "Destination": "/compile.py",
+                "Mode": "",
+                "RW": false,
+                "Propagation": "rprivate"
+            },
+            {
+                "Type": "bind",
+                "Source": "/home/aaron/code/rusix/linux-out/vma-modify-fixtures-compile-002/fixture",
+                "Destination": "/fixture",
+                "Mode": "",
+                "RW": false,
+                "Propagation": "rprivate"
+            },
+            {
+                "Type": "bind",
+                "Source": "/home/aaron/code/rusix/linux-mm-copy-vma",
+                "Destination": "/source",
+                "Mode": "",
+                "RW": false,
+                "Propagation": "rprivate"
+            },
+            {
+                "Type": "bind",
+                "Source": "/home/aaron/code/rusix/linux-out/vma-modify-fixtures-compile-002/artifacts",
+                "Destination": "/out/artifacts",
+                "Mode": "",
+                "RW": true,
+                "Propagation": "rprivate"
+            },
+            {
+                "Type": "bind",
+                "Source": "/home/aaron/code/rusix/linux-out/vma-modify-fixtures-compile-002/evidence",
+                "Destination": "/out/evidence",
+                "Mode": "",
+                "RW": true,
+                "Propagation": "rprivate"
+            },
+            {
+                "Type": "bind",
+                "Source": "/home/aaron/code/rusix/linux-out/vma-modify-fixtures-compile-002/tmp",
+                "Destination": "/out/tmp",
+                "Mode": "",
+                "RW": true,
+                "Propagation": "rprivate"
+            }
+        ],
+        "Config": {
+            "Hostname": "d11006e67565",
+            "Domainname": "",
+            "User": "1000:1000",
+            "AttachStdin": false,
+            "AttachStdout": true,
+            "AttachStderr": true,
+            "Tty": false,
+            "OpenStdin": false,
+            "StdinOnce": false,
+            "Env": [
+                "TMPDIR=/out/tmp",
+                "PATH=/usr/lib/llvm-19/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+                "LIBCLANG_PATH=/usr/lib/llvm-19/lib",
+                "LC_ALL=C",
+                "PYTHONDONTWRITEBYTECODE=1",
+                "GIT_OPTIONAL_LOCKS=0"
+            ],
+            "Cmd": [
+                "python3",
+                "-B",
+                "/compile.py"
+            ],
+            "Image": "sha256:c02eb3929889b3f0cc035d57a02c844e0c74c71d24fbda1311249faeb8257f63",
+            "Volumes": null,
+            "WorkingDir": "/src",
+            "Entrypoint": null,
+            "Labels": {}
+        },
+        "NetworkSettings": {
+            "SandboxID": "",
+            "SandboxKey": "",
+            "Ports": {},
+            "Networks": {
+                "none": {
+                    "IPAMConfig": null,
+                    "Links": null,
+                    "Aliases": null,
+                    "DriverOpts": null,
+                    "GwPriority": 0,
+                    "NetworkID": "8233b529d2059c07122e48a591d0f612950367d17b760c4dca5fd32bcf807140",
+                    "EndpointID": "",
+                    "Gateway": "",
+                    "IPAddress": "",
+                    "MacAddress": "",
+                    "IPPrefixLen": 0,
+                    "IPv6Gateway": "",
+                    "GlobalIPv6Address": "",
+                    "GlobalIPv6PrefixLen": 0,
+                    "DNSNames": null
+                }
+            }
+        },
+        "ImageManifestDescriptor": {
+            "mediaType": "application/vnd.oci.image.manifest.v1+json",
+            "digest": "sha256:423ec719c430004334c2c78f74a9501c4d1b5784accd182faf26046eb7446ba8",
+            "size": 1994,
+            "platform": {
+                "architecture": "amd64",
+                "os": "linux"
+            }
+        }
+    }
+]

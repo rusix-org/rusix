@@ -1,0 +1,197 @@
+{
+  "baseline": "2926d88bb7fc4608fd942453d929c39e4e5ec006",
+  "recommended_functions": {
+    "__split_vma": {
+      "body_identical_to_baseline": true,
+      "body_lines": 86,
+      "body_sha256": "285638594e8e366162abbfe0481ce81a82b1a39effe738548562e305801cac2f",
+      "current_body_line": 510
+    },
+    "init_multi_vma_prep": {
+      "body_identical_to_baseline": true,
+      "body_lines": 36,
+      "body_sha256": "257b44d63f54aabb25d8f659fcd7d6937a2739ce339343d5b55dbc3d0b732f61",
+      "current_body_line": 138
+    },
+    "init_vma_prep": {
+      "body_identical_to_baseline": true,
+      "body_lines": 3,
+      "body_sha256": "c880d6adb75b05d5e23d0ac9b6f7ea91f337e34485c23a1ac1430721d4b922e4",
+      "current_body_line": 417
+    },
+    "split_vma": {
+      "body_identical_to_baseline": true,
+      "body_lines": 6,
+      "body_sha256": "fca584f86596e23fd7d700c24ae958c5a2c4865df75c93f2efae522c47756ec1",
+      "current_body_line": 603
+    },
+    "vma_complete": {
+      "body_identical_to_baseline": true,
+      "body_lines": 70,
+      "body_sha256": "a35d3f55081d68daebf864c7137c25fd878369de2477827457a89c742a8787d0",
+      "current_body_line": 340
+    },
+    "vma_modify": {
+      "body_identical_to_baseline": true,
+      "body_lines": 38,
+      "body_sha256": "8437b9e1c0db5aa13c351614c4dedad6fed5c54584b4ef58b334a64dc463676b",
+      "current_body_line": 1657
+    },
+    "vma_modify_flags": {
+      "body_identical_to_baseline": true,
+      "body_lines": 20,
+      "body_sha256": "d7f213324d1036133d8e48c2248cd6bf297f54c1d8c9bfc12967a2cdbc2fa582",
+      "current_body_line": 1700
+    },
+    "vma_modify_flags_uffd": {
+      "body_identical_to_baseline": true,
+      "body_lines": 10,
+      "body_sha256": "268062a1719b289ce96eb3ee6c4ce74bba33ed8a153ac5e917ba38a9caa554a8",
+      "current_body_line": 1749
+    },
+    "vma_modify_name": {
+      "body_identical_to_baseline": true,
+      "body_lines": 7,
+      "body_sha256": "fbf9f0aa3cfbd03c1d20dabe66364b00fdbde16fa99c2c7112277a7793f55884",
+      "current_body_line": 1725
+    },
+    "vma_modify_policy": {
+      "body_identical_to_baseline": true,
+      "body_lines": 7,
+      "body_sha256": "9554e747aa3ebc21dac21d3d463751189a18de49f6ecdb170f28fadafb9ca500",
+      "current_body_line": 1737
+    },
+    "vma_prepare": {
+      "body_identical_to_baseline": true,
+      "body_lines": 37,
+      "body_sha256": "0643409fb7ccab871e43f34511d367ff03c4e4957d2437d60feaec21566accd6",
+      "current_body_line": 292
+    }
+  },
+  "resolved_config_reference": {
+    "path": "/home/aaron/code/rusix/linux-out/copy-vma-config-001/builds/copy-vma-rust/.config",
+    "settings": {
+      "ANON_VMA_NAME": "n",
+      "HUGETLB_PAGE": "n",
+      "KSM": "n",
+      "NUMA": "n",
+      "PROC_PAGE_MONITOR": "n",
+      "PROVE_LOCKING": "y",
+      "TRANSPARENT_HUGEPAGE": "n",
+      "USERFAULTFD": "n"
+    },
+    "sha256": "efa3c8c8e90a192c98c5c11feb49ec389ee8805732e91e705cc87ff1d1344194"
+  },
+  "scope": "Read-only source/caller/test scout; no implementation, compiler, configuration, VM or new runtime claim",
+  "source": "99fd3dd96ac0b6131c34501dff9626e95b063037",
+  "source_files": {
+    "fs/proc/task_mmu.c": {
+      "baseline_sha256": "cc30856ff9e0bbb0937a274b2bd4229e4f218280374045d0c75cd4789cf0ee6c",
+      "current_sha256": "cc30856ff9e0bbb0937a274b2bd4229e4f218280374045d0c75cd4789cf0ee6c",
+      "identical_to_baseline": true
+    },
+    "mm/copy_vma_impl.h": {
+      "baseline_present": false,
+      "current_sha256": "79b37a878340e22f5ff7bf62379788c0853dceba957e22b769ec8c2e71a35878"
+    },
+    "mm/copy_vma_rust.rs": {
+      "baseline_present": false,
+      "current_sha256": "74a256d128dafcec9e2f7d40b478e177d3985d171bef6bfb6c0f7486f71b3a9a"
+    },
+    "mm/madvise.c": {
+      "baseline_sha256": "82c29fb65e03123d6398d0745f42334fa3bd9058028f5c82cf4b298cc3faf35a",
+      "current_sha256": "82c29fb65e03123d6398d0745f42334fa3bd9058028f5c82cf4b298cc3faf35a",
+      "identical_to_baseline": true
+    },
+    "mm/mempolicy.c": {
+      "baseline_sha256": "350cd1df1d045f54174dbcf5a195d6456778099950190c2c63776e6d979f9e7f",
+      "current_sha256": "350cd1df1d045f54174dbcf5a195d6456778099950190c2c63776e6d979f9e7f",
+      "identical_to_baseline": true
+    },
+    "mm/mlock.c": {
+      "baseline_sha256": "81ff31300a7cff3a947c317c12a66c5f5b53ed86f280e299916ee6cd6d97831e",
+      "current_sha256": "81ff31300a7cff3a947c317c12a66c5f5b53ed86f280e299916ee6cd6d97831e",
+      "identical_to_baseline": true
+    },
+    "mm/mprotect.c": {
+      "baseline_sha256": "8dd60148bdd87fcd102924be058fb1c6291c570a82d9da9c9df1a5000747dad5",
+      "current_sha256": "8dd60148bdd87fcd102924be058fb1c6291c570a82d9da9c9df1a5000747dad5",
+      "identical_to_baseline": true
+    },
+    "mm/mremap.c": {
+      "baseline_sha256": "bd3446814c286c9fef46ce2ffbd98626fda6d5c4cc58a4823d3fee3c4e434d51",
+      "current_sha256": "bd3446814c286c9fef46ce2ffbd98626fda6d5c4cc58a4823d3fee3c4e434d51",
+      "identical_to_baseline": true
+    },
+    "mm/userfaultfd.c": {
+      "baseline_sha256": "a0d534b7951cb23f75ce5dd486e8fa9aa58714cc673f492fed22e4a4527c8382",
+      "current_sha256": "a0d534b7951cb23f75ce5dd486e8fa9aa58714cc673f492fed22e4a4527c8382",
+      "identical_to_baseline": true
+    },
+    "mm/vma.c": {
+      "baseline_sha256": "7f77e1d0dfaa9afa9e6bb553393b5943da5f7470e6659f2742bec85238c4c252",
+      "current_sha256": "ae07770c413cf47155e342b58a8ad5706ac7e69d190c0732ae208e98cf7f3abc",
+      "identical_to_baseline": false
+    },
+    "mm/vma.h": {
+      "baseline_sha256": "dff7de90dce0344abdfb322b8ffac27e89c223d2358ca6672f35288a70ecf546",
+      "current_sha256": "dff7de90dce0344abdfb322b8ffac27e89c223d2358ca6672f35288a70ecf546",
+      "identical_to_baseline": true
+    },
+    "mm/vma_internal.h": {
+      "baseline_sha256": "313e35ec114adb436bc7ae11d7496b8d8990b45c9d08e43fa4aa645220e297c2",
+      "current_sha256": "313e35ec114adb436bc7ae11d7496b8d8990b45c9d08e43fa4aa645220e297c2",
+      "identical_to_baseline": true
+    },
+    "rusix/configs/x86_64-copy-vma-rust.config": {
+      "baseline_present": false,
+      "current_sha256": "d20315fd601082ec5c2d27e603283246ab0de499f20ac75c6952670addd1dbf5"
+    },
+    "tools/testing/selftests/mm/merge.c": {
+      "baseline_sha256": "1440e2a03a5762b99cf1b8eadf5142f09edce03f97fbf79a4ce8d66b8d027fe9",
+      "current_sha256": "1440e2a03a5762b99cf1b8eadf5142f09edce03f97fbf79a4ce8d66b8d027fe9",
+      "identical_to_baseline": true
+    },
+    "tools/testing/selftests/mm/mlock2-tests.c": {
+      "baseline_sha256": "3e03425dff67ad0cca687817dbce5202da4d5d4ce077fa4e6f7d0716863820d7",
+      "current_sha256": "3e03425dff67ad0cca687817dbce5202da4d5d4ce077fa4e6f7d0716863820d7",
+      "identical_to_baseline": true
+    },
+    "tools/testing/selftests/mm/mremap_dontunmap.c": {
+      "baseline_sha256": "9796ea11348a2f40b8875655901163fe6ede92444c0c7d37b49430c765656c14",
+      "current_sha256": "9796ea11348a2f40b8875655901163fe6ede92444c0c7d37b49430c765656c14",
+      "identical_to_baseline": true
+    },
+    "tools/testing/selftests/mm/mremap_test.c": {
+      "baseline_sha256": "1de622da1c740646f11bd0e0b7c3b4174f5719c61844bffadfa7841c6661f937",
+      "current_sha256": "1de622da1c740646f11bd0e0b7c3b4174f5719c61844bffadfa7841c6661f937",
+      "identical_to_baseline": true
+    },
+    "tools/testing/selftests/mm/vm_util.c": {
+      "baseline_sha256": "deb1b174a096157aeecff619499c2cf3e13d17e20f4879624372fad18107be82",
+      "current_sha256": "deb1b174a096157aeecff619499c2cf3e13d17e20f4879624372fad18107be82",
+      "identical_to_baseline": true
+    },
+    "tools/testing/selftests/mm/vm_util.h": {
+      "baseline_sha256": "e8da9d9b4a4b12e3385ab4b2e72d96138c8ee708bb99fd718e9c919568b6c0de",
+      "current_sha256": "e8da9d9b4a4b12e3385ab4b2e72d96138c8ee708bb99fd718e9c919568b6c0de",
+      "identical_to_baseline": true
+    },
+    "tools/testing/vma/Makefile": {
+      "baseline_sha256": "eef3cbbc8623b9a04da7d41eb01fe3e0eaf5a649b3825a050def400aba581887",
+      "current_sha256": "eef3cbbc8623b9a04da7d41eb01fe3e0eaf5a649b3825a050def400aba581887",
+      "identical_to_baseline": true
+    },
+    "tools/testing/vma/vma.c": {
+      "baseline_sha256": "1e6b839a701de0992de5c324bc7b208115b023b110e40a844c9a07e12d21af8c",
+      "current_sha256": "1e6b839a701de0992de5c324bc7b208115b023b110e40a844c9a07e12d21af8c",
+      "identical_to_baseline": true
+    },
+    "tools/testing/vma/vma_internal.h": {
+      "baseline_sha256": "b7f124817de99750dd21f0173682d4094154aa4e4a59791e842d6805d3aca304",
+      "current_sha256": "b7f124817de99750dd21f0173682d4094154aa4e4a59791e842d6805d3aca304",
+      "identical_to_baseline": true
+    }
+  },
+  "status": "SCOUT_ONLY_NOT_IMPLEMENTED"
+}

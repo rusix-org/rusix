@@ -1,0 +1,9 @@
+{
+  "status": "FORMAT_ONLY",
+  "changed_fixture": "rusix/tests/vma-modify/init.rs",
+  "changed_lines": 5,
+  "before_sha256": "6e5e6ebdcdd749d3cc8094862a5a69184231a27135ec802ddbc6bb981279e48b",
+  "after_sha256": "e2abab7222eaa9174fe06e5ff5aea99aa1da02d618cb2c76eb656eaa34a698d4",
+  "exact_transformation": "Split each of five paired .arg calls onto separate identically indented lines; all other bytes equal",
+  "unified_diff": "--- 001/init.rs\n+++ 002/init.rs\n@@ -57,11 +57,16 @@\n     println!(\"RUSIX_VMA_MODIFY_BEGIN\");\n     io::stdout().flush()?;\n     let mut child = Command::new(\"/probe\")\n-        .arg(\"-r\").arg(\"merge.mprotect_unfaulted_left\")\n-        .arg(\"-r\").arg(\"merge.mprotect_unfaulted_right\")\n-        .arg(\"-r\").arg(\"merge.mprotect_unfaulted_both\")\n-        .arg(\"-r\").arg(\"merge.mprotect_faulted_left_unfaulted_right\")\n-        .arg(\"-r\").arg(\"merge.mprotect_unfaulted_left_faulted_right\")\n+        .arg(\"-r\")\n+        .arg(\"merge.mprotect_unfaulted_left\")\n+        .arg(\"-r\")\n+        .arg(\"merge.mprotect_unfaulted_right\")\n+        .arg(\"-r\")\n+        .arg(\"merge.mprotect_unfaulted_both\")\n+        .arg(\"-r\")\n+        .arg(\"merge.mprotect_faulted_left_unfaulted_right\")\n+        .arg(\"-r\")\n+        .arg(\"merge.mprotect_unfaulted_left_faulted_right\")\n         .env_clear()\n         .env(\"LC_ALL\", \"C\")\n         .env(\"PATH\", \"/\")\n"
+}

@@ -1,0 +1,27 @@
+{
+  "status": "PASS",
+  "native_source": "99fd3dd96ac0b6131c34501dff9626e95b063037",
+  "baseline": "2926d88bb7fc4608fd942453d929c39e4e5ec006",
+  "fixture_sha256": {
+    "rusix/tests/vma-modify/init.rs": "6e5e6ebdcdd749d3cc8094862a5a69184231a27135ec802ddbc6bb981279e48b",
+    "rusix/tests/vma-modify/gate.py": "132a6433ec37912730489f139a2ad789558cd74b527638c4aae0998d808b7e42",
+    "rusix/tests/vma-modify/upstream.json": "333ee99707ece0b0a1c362afadb9198331ec7806120fd573578d77bd900bce2f",
+    "rusix/tests/vma-modify/README.md": "ab9f4624e6fa4e93ae56f67bc07d3ba6dffd24654a41e49c503fd3adf185637e",
+    "rusix/tests/test_vma_modify_native_gate.py": "de84de8f283220ba23e007259009d52213c05a382dcbb4a689807fc7a304d2b9"
+  },
+  "artifacts": {
+    "init": {
+      "sha256": "73c6bde42a22558b5d7d373d10e4cdcbdd63a92c8cb998228f1618ce0ae92407",
+      "bytes": 12596640,
+      "mode": "0o644",
+      "executed": false
+    },
+    "probe": {
+      "sha256": "21feef91d71bf3b791abe423307cce58f00e5e3643ac8a141456352f7ac44971",
+      "bytes": 1030664,
+      "mode": "0o644",
+      "executed": false
+    }
+  },
+  "scope": "Static compilation and readelf inspection only; neither binary executed; no kernel or VM"
+}

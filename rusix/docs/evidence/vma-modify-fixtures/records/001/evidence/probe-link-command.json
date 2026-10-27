@@ -1,0 +1,1 @@
+["/usr/bin/gcc", "-static", "/out/artifacts/merge.o", "/out/artifacts/vm_util.o", "/out/artifacts/thp_settings.o", "-lrt", "-lpthread", "-lm", "-Wl,-t", "-o", "/out/artifacts/probe"]

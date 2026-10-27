@@ -22545,6 +22545,7 @@ F:	kernel/sched/wait_rust.rs
 F:	kernel/sched/wait_test.c
 F:	lib/math/int_sqrt_exports.c
 F:	lib/math/int_sqrt_rust.rs
+F:	mm/vma_modify*
 F:	rusix/
 F:	rust/helpers/alloc_scope.c
 F:	rust/helpers/bio.c

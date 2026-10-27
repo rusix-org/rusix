@@ -1,5 +1,21 @@
 # rusix progress
 
+VMA range modification and splitting now have a default-off Rust source
+translation, including the shared prepare/complete protocol used by C merge/shrink
+callers: eleven native policies, with byte-preserved C alternatives. The source
+restoration, formatting and independent source review pass; configuration,
+compiled selection and paired runtime verification are pending. This adds no
+runtime-parity claim. [Contract and remaining C](experiments/vma-modify/README.md).
+
+The guest fixture binds seven unchanged baseline inputs and explicitly selects
+five native `merge.c` mprotect tests. Its guarded Rust PID1 and strict harness
+parser have source review; sixteen synthetic parser cases pass. Final formatted
+fixture compilation passes in pinned run `002`, with pre-format run `001` retained.
+No guest binary was executed; candidate kernel and VM verification remain pending.
+[Fixture contract](tests/vma-modify/README.md),
+[source evidence](docs/evidence/vma-modify-source/manifest.json),
+[compile evidence](docs/evidence/vma-modify-fixtures/manifest.json).
+
 The inherited lifecycle verifier now accepts the observed private-cache `.0`
 suffix and proves the canonical refcount constant's four-byte storage/value.
 This carries the reviewed fix from `e0632d2729` without changing kernel code.

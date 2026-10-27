@@ -1,0 +1,30 @@
+{
+  "status": "SOURCE_CHECKS_PASS_NOT_COMPILED",
+  "source_base": "99fd3dd96ac0b6131c34501dff9626e95b063037",
+  "native_vma_sha256": "ae07770c413cf47155e342b58a8ad5706ac7e69d190c0732ae208e98cf7f3abc",
+  "native_body_alternatives": 11,
+  "native_primitives": 70,
+  "rust_abi_entries": [
+    "rusix_init_multi_vma_prep",
+    "rusix_init_vma_prep",
+    "rusix_vma_prepare",
+    "rusix_vma_complete",
+    "rusix_split_vma_inner",
+    "split_vma",
+    "rusix_vma_modify_flags",
+    "rusix_vma_modify_name",
+    "rusix_vma_modify_policy",
+    "rusix_vma_modify_flags_uffd"
+  ],
+  "private_rust_policy": "modify",
+  "candidate_sha256": {
+    "MAINTAINERS": "3c9bd6ba0cd811ac468faffb30e97c9fda4f7cdbe7166d8de4bc2dc33d4ae735",
+    "mm/vma.c": "2d551b10a78e5a79b4b0418f13c0ccdad16e1f71c160f6a7dd3e45915bfff410",
+    "mm/vma_modify.h": "81b024ee9733eeed8725337ee6f90c4eaec1ef40755ae70f7ebe51c4bd97eded",
+    "mm/vma_modify_impl.h": "0989a5bdd3ba3c8fe51834090170d2860d610d4414fbce195e06b03fa552a36f",
+    "mm/vma_modify_rust.rs": "8768c8db03c53a20ad0e07819b236005923b1b82d1a8d5893f05fe92feaa6b10",
+    "init/Kconfig": "d6431a8d74e1bbab5015d6fc1a2ba9bc01d14db43d12e16507baefcb059288f9",
+    "mm/Makefile": "b3fdc4fff6ba1374894f7b09f2f378e042794ad67906af5fa29d789bdd7efe5b"
+  },
+  "scope": "Exact eleven-guard C restoration, helper declaration/name inventory, callback-close omission, formatting whitespace; no compiler/object/runtime acceptance"
+}

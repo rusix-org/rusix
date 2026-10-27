@@ -1,0 +1,36 @@
+{
+  "status": "SOURCE_REVIEW_NO_BLOCKER",
+  "base": "99fd3dd96ac0b6131c34501dff9626e95b063037",
+  "pinned_baseline": "2926d88bb7fc4608fd942453d929c39e4e5ec006",
+  "exact_vma_c_restoration_sha256": "ae07770c413cf47155e342b58a8ad5706ac7e69d190c0732ae208e98cf7f3abc",
+  "guarded_policy_regions": 11,
+  "eleven_function_identity_to_pinned": {
+    "init_multi_vma_prep": "949de3dfa734db3e76c5fe269a0db52945ffb1bfb597870446063c25d2384b92",
+    "init_vma_prep": "d46eeeec8c66def709be1b7879324a435af866c28b5d4f65db504c3ec8237854",
+    "vma_prepare": "2eb976bddfe4f86ae1098e00e474dd82bd9db2b66c230133a3b161401a712bdb",
+    "vma_complete": "1cfecbbc569f81842c60fa3ac9f415192442c124c98dd5894d31635107172b57",
+    "__split_vma": "d21495a5ea87f8a136e838862cb39dce75e6637646228e49a4fd68fa01199655",
+    "split_vma": "8552381bd415ae3d91999b267222ef0f947efb7625da2f01b597e12b69af01ea",
+    "vma_modify": "18e38c6b9c49aad3b0cfc2296670ea7acee429b9290513ec2e7cfcd9a3849919",
+    "vma_modify_flags": "3b8207b3cdccc447ca636341eb8d20819776e7a4686e1c17f4ba958c5db94155",
+    "vma_modify_name": "ce6c9952d913a75eb837b0b58ff2a81bd69e4ffd9ba6ee9b8bae73c2b76cc982",
+    "vma_modify_policy": "a08314dcef274d8fdcdc6699dce78d29bf8835d424306305e619cbacd9a2a187",
+    "vma_modify_flags_uffd": "970e7873b1359d1d7b4871ecfbcb1f0bc088c465d00c5660f1670f4d47427c9f"
+  },
+  "source_sha256": {
+    "mm/vma.c": "2d551b10a78e5a79b4b0418f13c0ccdad16e1f71c160f6a7dd3e45915bfff410",
+    "mm/vma_modify.h": "81b024ee9733eeed8725337ee6f90c4eaec1ef40755ae70f7ebe51c4bd97eded",
+    "mm/vma_modify_impl.h": "0989a5bdd3ba3c8fe51834090170d2860d610d4414fbce195e06b03fa552a36f",
+    "mm/vma_modify_rust.rs": "8768c8db03c53a20ad0e07819b236005923b1b82d1a8d5893f05fe92feaa6b10",
+    "init/Kconfig": "d6431a8d74e1bbab5015d6fc1a2ba9bc01d14db43d12e16507baefcb059288f9",
+    "mm/Makefile": "b3fdc4fff6ba1374894f7b09f2f378e042794ad67906af5fa29d789bdd7efe5b",
+    "mm/vma.h": "dff7de90dce0344abdfb322b8ffac27e89c223d2358ca6672f35288a70ecf546",
+    "mm/vma_internal.h": "313e35ec114adb436bc7ae11d7496b8d8990b45c9d08e43fa4aa645220e297c2",
+    "mm/copy_vma_impl.h": "79b37a878340e22f5ff7bf62379788c0853dceba957e22b769ec8c2e71a35878",
+    "mm/remove_vma_impl.h": "1107725338468ba4799a5781c3a832acf82bec04e52721302b445b701f597057",
+    "mm/rmap.c": "f3590608969cb022cc0e38d2011d56c12e2ed8b87d535417f9cd49460fb61fca",
+    "include/linux/mm_types.h": "11daa54c05e2222d13cd629fe0774266a7ed4cb6bd4f7039506f01d71065b0e1",
+    "rust/Makefile": "c4d1e26c7f0c58de023d02ceb9d60f3e1ec25986a8302ae1d9f0e877638d4d7d"
+  },
+  "scope": "Read-only independent source review. No compiler, actual ELF, Kconfig resolution, guest, concurrency or failure-injection execution."
+}

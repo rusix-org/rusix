@@ -1,0 +1,46 @@
+{
+  "native-restoration": [
+    "python3",
+    "-B",
+    "/home/aaron/code/rusix/linux-out/mm-next-policy-scout-001/review-source.py"
+  ],
+  "rustfmt-production": [
+    "rustfmt",
+    "--edition",
+    "2021",
+    "--check",
+    "mm/vma_modify_rust.rs"
+  ],
+  "rustfmt-fixture": [
+    "rustfmt",
+    "--edition",
+    "2021",
+    "--check",
+    "rusix/tests/vma-modify/init.rs"
+  ],
+  "diff-check": [
+    "git",
+    "diff",
+    "--check"
+  ],
+  "fixture-host-parser": [
+    "python3",
+    "-B",
+    "rusix/tests/test_vma_modify_native_gate.py"
+  ],
+  "format-tool-version": [
+    "rustfmt",
+    "--version"
+  ],
+  "python-version": [
+    "python3",
+    "--version"
+  ],
+  "checkpatch": [
+    "perl",
+    "scripts/checkpatch.pl",
+    "--no-tree",
+    "--terse",
+    "/home/aaron/code/rusix/linux-out/vma-modify-source-checks-002/production.patch"
+  ]
+}

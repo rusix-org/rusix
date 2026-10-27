@@ -1,0 +1,1 @@
+["/usr/bin/gcc", "-std=gnu11", "-O2", "-Wall", "-Wunreachable-code", "-U_FORTIFY_SOURCE", "-Werror", "-MD", "-MF", "/out/evidence/thp_settings.d", "-MT", "/out/artifacts/thp_settings.o", "-c", "/source/tools/testing/selftests/mm/thp_settings.c", "-o", "/out/artifacts/thp_settings.o"]

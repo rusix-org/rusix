@@ -1,0 +1,1 @@
+["/usr/bin/dpkg-query", "-W", "-f=${binary:Package}\t${Version}\n"]

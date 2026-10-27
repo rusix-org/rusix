@@ -1,0 +1,1 @@
+["/usr/bin/rustc", "--edition", "2021", "--target", "x86_64-unknown-linux-gnu", "-C", "target-feature=+crt-static", "-C", "panic=abort", "-C", "opt-level=2", "/fixture/rusix/tests/vma-modify/init.rs", "-o", "/out/artifacts/init"]

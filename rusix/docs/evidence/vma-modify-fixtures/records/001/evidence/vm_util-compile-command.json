@@ -1,0 +1,1 @@
+["/usr/bin/gcc", "-std=gnu11", "-O2", "-Wall", "-Wunreachable-code", "-U_FORTIFY_SOURCE", "-Werror", "-MD", "-MF", "/out/evidence/vm_util.d", "-MT", "/out/artifacts/vm_util.o", "-c", "/source/tools/testing/selftests/mm/vm_util.c", "-o", "/out/artifacts/vm_util.o"]

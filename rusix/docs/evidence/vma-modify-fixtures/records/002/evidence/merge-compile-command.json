@@ -1,0 +1,1 @@
+["/usr/bin/gcc", "-std=gnu11", "-O2", "-Wall", "-Wunreachable-code", "-U_FORTIFY_SOURCE", "-Werror", "-MD", "-MF", "/out/evidence/merge.d", "-MT", "/out/artifacts/merge.o", "-c", "/source/tools/testing/selftests/mm/merge.c", "-o", "/out/artifacts/merge.o"]

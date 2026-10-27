@@ -2317,6 +2317,18 @@ config RUSIX_COPY_VMA_RUST
 	  Inherits the builtin x86_64 MM target exclusions. No layout or
 	  behavior change; disable to retain the original C implementations.
 
+config RUSIX_VMA_MODIFY_RUST
+	bool "Rusix Rust VMA range modification and split policy"
+	depends on RUSIX_COPY_VMA_RUST && RUST && MMU
+	default n
+	help
+	  Select complete Rust range-modification, split and shared VMA
+	  prepare/complete transactions, including the native merge/shrink
+	  callers of that protocol. Canonical stack contexts and individual
+	  field, maple, rmap, resource and lock operations remain native C.
+	  Inherits the builtin x86_64 MM restrictions. Original C bodies
+	  remain byte-preserved when disabled; no behavior change is intended.
+
 config RUSIX_EXIT_MMAP_TEST
 	bool "Rusix native mapping teardown test fixture"
 	depends on KUNIT=y && RUST && RUSIX_VMA_LIFECYCLE_RUST

@@ -7,6 +7,10 @@
 #include "vma_internal.h"
 #include "vma.h"
 
+#ifdef CONFIG_RUSIX_VMA_MODIFY_RUST
+#include "vma_modify.h"
+#endif
+
 struct mmap_state {
 	struct mm_struct *mm;
 	struct vma_iterator *vmi;
@@ -132,6 +136,14 @@ static bool is_mergeable_anon_vma(struct vma_merge_struct *vmg, bool merge_next)
  * @vmg: The merge state that will be used to determine adjustment and VMA
  *       removal.
  */
+#ifdef CONFIG_RUSIX_VMA_MODIFY_RUST
+static void init_multi_vma_prep(struct vma_prepare *vp,
+				struct vm_area_struct *vma,
+				struct vma_merge_struct *vmg)
+{
+	rusix_init_multi_vma_prep(vp, vma, vmg);
+}
+#else
 static void init_multi_vma_prep(struct vma_prepare *vp,
 				struct vm_area_struct *vma,
 				struct vma_merge_struct *vmg)
@@ -171,6 +183,7 @@ static void init_multi_vma_prep(struct vma_prepare *vp,
 	if (vmg && vmg->skip_vma_uprobe)
 		vp->skip_vma_uprobe = true;
 }
+#endif /* CONFIG_RUSIX_VMA_MODIFY_RUST */
 
 /*
  * Return true if we can merge this (vm_flags,anon_vma,file,vm_pgoff)
@@ -288,6 +301,12 @@ anon_vma_interval_tree_post_update_vma(struct vm_area_struct *vma)
  * vma_prepare() - Helper function for handling locking VMAs prior to altering
  * @vp: The initialized vma_prepare struct
  */
+#ifdef CONFIG_RUSIX_VMA_MODIFY_RUST
+static void vma_prepare(struct vma_prepare *vp)
+{
+	rusix_vma_prepare(vp);
+}
+#else
 static void vma_prepare(struct vma_prepare *vp)
 {
 	if (vp->file) {
@@ -326,6 +345,7 @@ static void vma_prepare(struct vma_prepare *vp)
 	}
 
 }
+#endif /* CONFIG_RUSIX_VMA_MODIFY_RUST */
 
 /*
  * vma_complete- Helper function for handling the unlocking after altering VMAs,
@@ -335,6 +355,13 @@ static void vma_prepare(struct vma_prepare *vp)
  * @vmi: The vma iterator
  * @mm: The mm_struct
  */
+#ifdef CONFIG_RUSIX_VMA_MODIFY_RUST
+static void vma_complete(struct vma_prepare *vp, struct vma_iterator *vmi,
+			 struct mm_struct *mm)
+{
+	rusix_vma_complete(vp, vmi, mm);
+}
+#else
 static void vma_complete(struct vma_prepare *vp, struct vma_iterator *vmi,
 			 struct mm_struct *mm)
 {
@@ -407,16 +434,24 @@ again:
 	if (vp->insert && vp->file)
 		uprobe_mmap(vp->insert);
 }
+#endif /* CONFIG_RUSIX_VMA_MODIFY_RUST */
 
 /*
  * init_vma_prep() - Initializer wrapper for vma_prepare struct
  * @vp: The vma_prepare struct
  * @vma: The vma that will be altered once locked
  */
+#ifdef CONFIG_RUSIX_VMA_MODIFY_RUST
+static void init_vma_prep(struct vma_prepare *vp, struct vm_area_struct *vma)
+{
+	rusix_init_vma_prep(vp, vma);
+}
+#else
 static void init_vma_prep(struct vma_prepare *vp, struct vm_area_struct *vma)
 {
 	init_multi_vma_prep(vp, vma, NULL);
 }
+#endif /* CONFIG_RUSIX_VMA_MODIFY_RUST */
 
 /*
  * Can the proposed VMA be merged with the left (previous) VMA taking into
@@ -504,6 +539,16 @@ void unmap_region(struct ma_state *mas, struct vm_area_struct *vma,
  * has already been checked or doesn't make sense to fail.
  * VMA Iterator will point to the original VMA.
  */
+#ifdef CONFIG_RUSIX_VMA_MODIFY_RUST
+static __must_check int
+__split_vma(struct vma_iterator *vmi, struct vm_area_struct *vma,
+	    unsigned long addr, int new_below)
+{
+	struct vma_prepare vp;
+
+	return rusix_split_vma_inner(vmi, vma, addr, new_below, &vp);
+}
+#else
 static __must_check int
 __split_vma(struct vma_iterator *vmi, struct vm_area_struct *vma,
 	    unsigned long addr, int new_below)
@@ -593,11 +638,13 @@ out_free_vma:
 	vm_area_free(new);
 	return err;
 }
+#endif /* CONFIG_RUSIX_VMA_MODIFY_RUST */
 
 /*
  * Split a vma into two pieces at address 'addr', a new vma is allocated
  * either for the first part or the tail.
  */
+#ifndef CONFIG_RUSIX_VMA_MODIFY_RUST
 int split_vma(struct vma_iterator *vmi, struct vm_area_struct *vma,
 	      unsigned long addr, int new_below)
 {
@@ -606,6 +653,7 @@ int split_vma(struct vma_iterator *vmi, struct vm_area_struct *vma,
 
 	return __split_vma(vmi, vma, addr, new_below);
 }
+#endif /* CONFIG_RUSIX_VMA_MODIFY_RUST */
 
 /*
  * dup_anon_vma() - Helper function to duplicate anon_vma on VMA merge in the
@@ -1653,6 +1701,7 @@ int do_vmi_munmap(struct vma_iterator *vmi, struct mm_struct *mm,
  * The function returns either the merged VMA, the original VMA if a split was
  * required instead, or an error if the split failed.
  */
+#ifndef CONFIG_RUSIX_VMA_MODIFY_RUST
 static struct vm_area_struct *vma_modify(struct vma_merge_struct *vmg)
 {
 	struct vm_area_struct *vma = vmg->middle;
@@ -1692,7 +1741,19 @@ static struct vm_area_struct *vma_modify(struct vma_merge_struct *vmg)
 
 	return vma;
 }
+#endif /* CONFIG_RUSIX_VMA_MODIFY_RUST */
 
+#ifdef CONFIG_RUSIX_VMA_MODIFY_RUST
+struct vm_area_struct *vma_modify_flags(struct vma_iterator *vmi,
+		struct vm_area_struct *prev, struct vm_area_struct *vma,
+		unsigned long start, unsigned long end,
+		vm_flags_t *vm_flags_ptr)
+{
+	VMG_VMA_STATE(vmg, vmi, prev, vma, start, end);
+
+	return rusix_vma_modify_flags(&vmg, vm_flags_ptr);
+}
+#else
 struct vm_area_struct *vma_modify_flags(struct vma_iterator *vmi,
 		struct vm_area_struct *prev, struct vm_area_struct *vma,
 		unsigned long start, unsigned long end,
@@ -1717,7 +1778,19 @@ struct vm_area_struct *vma_modify_flags(struct vma_iterator *vmi,
 		*vm_flags_ptr = ret->vm_flags;
 	return ret;
 }
+#endif /* CONFIG_RUSIX_VMA_MODIFY_RUST */
 
+#ifdef CONFIG_RUSIX_VMA_MODIFY_RUST
+struct vm_area_struct *vma_modify_name(struct vma_iterator *vmi,
+		struct vm_area_struct *prev, struct vm_area_struct *vma,
+		unsigned long start, unsigned long end,
+		struct anon_vma_name *new_name)
+{
+	VMG_VMA_STATE(vmg, vmi, prev, vma, start, end);
+
+	return rusix_vma_modify_name(&vmg, new_name);
+}
+#else
 struct vm_area_struct *vma_modify_name(struct vma_iterator *vmi,
 		struct vm_area_struct *prev, struct vm_area_struct *vma,
 		unsigned long start, unsigned long end,
@@ -1729,7 +1802,19 @@ struct vm_area_struct *vma_modify_name(struct vma_iterator *vmi,
 
 	return vma_modify(&vmg);
 }
+#endif /* CONFIG_RUSIX_VMA_MODIFY_RUST */
 
+#ifdef CONFIG_RUSIX_VMA_MODIFY_RUST
+struct vm_area_struct *vma_modify_policy(struct vma_iterator *vmi,
+		struct vm_area_struct *prev, struct vm_area_struct *vma,
+		unsigned long start, unsigned long end,
+		struct mempolicy *new_pol)
+{
+	VMG_VMA_STATE(vmg, vmi, prev, vma, start, end);
+
+	return rusix_vma_modify_policy(&vmg, new_pol);
+}
+#else
 struct vm_area_struct *vma_modify_policy(struct vma_iterator *vmi,
 		struct vm_area_struct *prev, struct vm_area_struct *vma,
 		unsigned long start, unsigned long end,
@@ -1741,7 +1826,21 @@ struct vm_area_struct *vma_modify_policy(struct vma_iterator *vmi,
 
 	return vma_modify(&vmg);
 }
+#endif /* CONFIG_RUSIX_VMA_MODIFY_RUST */
 
+#ifdef CONFIG_RUSIX_VMA_MODIFY_RUST
+struct vm_area_struct *vma_modify_flags_uffd(struct vma_iterator *vmi,
+		struct vm_area_struct *prev, struct vm_area_struct *vma,
+		unsigned long start, unsigned long end,
+		vm_flags_t vm_flags,
+		struct vm_userfaultfd_ctx new_ctx, bool give_up_on_oom)
+{
+	VMG_VMA_STATE(vmg, vmi, prev, vma, start, end);
+
+	return rusix_vma_modify_flags_uffd(&vmg, vm_flags, &new_ctx,
+					  give_up_on_oom);
+}
+#else
 struct vm_area_struct *vma_modify_flags_uffd(struct vma_iterator *vmi,
 		struct vm_area_struct *prev, struct vm_area_struct *vma,
 		unsigned long start, unsigned long end, vm_flags_t vm_flags,
@@ -1756,6 +1855,7 @@ struct vm_area_struct *vma_modify_flags_uffd(struct vma_iterator *vmi,
 
 	return vma_modify(&vmg);
 }
+#endif /* CONFIG_RUSIX_VMA_MODIFY_RUST */
 
 /*
  * Expand vma by delta bytes, potentially merging with an immediately adjacent
@@ -3319,3 +3419,7 @@ int insert_vm_struct(struct mm_struct *mm, struct vm_area_struct *vma)
 
 	return 0;
 }
+
+#ifdef CONFIG_RUSIX_VMA_MODIFY_RUST
+#include "vma_modify_impl.h"
+#endif
