@@ -8,7 +8,7 @@ use std::{
     time::Duration,
 };
 
-const TOKEN: &str = "rusix.task_faults=1";
+mod guard;
 unsafe extern "C" {
     fn mount(
         source: *const u8,
@@ -37,12 +37,7 @@ fn run() -> io::Result<()> {
     {
         return Err(io::Error::last_os_error());
     }
-    if fs::read_to_string("/proc/cmdline")?
-        .split_whitespace()
-        .filter(|s| *s == TOKEN)
-        .count()
-        != 1
-    {
+    if !guard::authorized(&fs::read_to_string("/proc/cmdline")?) {
         return Err(io::Error::other(
             "missing or repeated guest authorization token",
         ));
@@ -95,8 +90,7 @@ fn main() {
     // Mounting proc is the sole operation before checking the cmdline token.
     // If authorization fails, never reboot an accidentally invoked container.
     let result = run();
-    let authorized = fs::read_to_string("/proc/cmdline")
-        .is_ok_and(|s| s.split_whitespace().filter(|word| *word == TOKEN).count() == 1);
+    let authorized = fs::read_to_string("/proc/cmdline").is_ok_and(|s| guard::authorized(&s));
     if let Err(error) = result {
         eprintln!("RUSIX_TASK_FAULT_INIT_FAIL init: {error}");
     }

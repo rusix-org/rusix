@@ -3,13 +3,15 @@
 use std::{
     collections::BTreeMap,
     fs,
-    io::{self, BufRead, Write},
+    io::{self, BufRead, Read, Write},
     path::{Path, PathBuf},
     process::{Command, Stdio},
     sync::mpsc,
     thread,
     time::{Duration, Instant},
 };
+mod control_io;
+mod guard;
 const TRACE: &str = "/sys/kernel/tracing/instances/rusix_task_faults";
 const DEBUG: &str = "/sys/kernel/debug";
 unsafe extern "C" {
@@ -28,7 +30,23 @@ fn emit(name: &str, bytes: &[u8]) {
     println!("RUSIX_TASK_FAULT_ARTIFACT {name} {}", hex(bytes));
 }
 fn put(path: impl AsRef<Path>, value: impl AsRef<[u8]>) -> io::Result<()> {
-    fs::write(path, value)
+    let path = path.as_ref();
+    let context = format!("write {}", path.display());
+    let mut file = fs::OpenOptions::new()
+        .write(true)
+        .truncate(true)
+        .open(path)
+        .map_err(|e| io::Error::new(e.kind(), format!("{context}: {e}")))?;
+    control_io::command(&mut file, value.as_ref(), &context)
+}
+fn trace_command(operation: &str, text: &str) -> io::Result<()> {
+    let path = "/sys/kernel/tracing/kprobe_events";
+    let context = format!("{operation} {path}");
+    let mut file = fs::OpenOptions::new()
+        .append(true)
+        .open(path)
+        .map_err(|e| io::Error::new(e.kind(), format!("{context}: {e}")))?;
+    control_io::command(&mut file, text.as_bytes(), &context)
 }
 fn load_calibration() -> io::Result<BTreeMap<String, String>> {
     let raw = fs::read_to_string("/calibration.tsv")?;
@@ -73,7 +91,16 @@ fn load_calibration() -> io::Result<BTreeMap<String, String>> {
     if start == 0 || end <= start || end - start > 1048576 {
         return Err(fail("invalid required range"));
     }
-    let symbols = fs::read_to_string("/proc/kallsyms")?;
+    // Read through EOF, with one extra byte to detect oversized input.
+    let mut symbols = String::new();
+    fs::File::open("/proc/kallsyms")?
+        .take(16 * 1024 * 1024 + 1)
+        .read_to_string(&mut symbols)?;
+    if symbols.len() > 16 * 1024 * 1024 || !symbols.ends_with('\n') {
+        return Err(fail(
+            "runtime kallsyms exceeds bound or lacks final newline",
+        ));
+    }
     let found: Vec<_> = symbols
         .lines()
         .filter_map(|l| {
@@ -96,6 +123,7 @@ fn load_calibration() -> io::Result<BTreeMap<String, String>> {
     // Exact end address and allocation-return-PC attribution must be reviewed
     // against actual linked disassembly before supplying this packet.
     emit("calibration.tsv", raw.as_bytes());
+    emit("runtime-kallsyms", symbols.as_bytes());
     Ok(map)
 }
 fn equivalent(a: &str, b: &str) -> bool {
@@ -123,7 +151,7 @@ impl Restore {
         }
         put(path, value)?;
         if !equivalent(&fs::read_to_string(path)?, value) {
-            return Err(fail("knob readback mismatch"));
+            return Err(fail(&format!("knob readback mismatch: {}", path.display())));
         }
         Ok(())
     }
@@ -134,7 +162,7 @@ impl Restore {
                 if equivalent(&fs::read_to_string(&p)?, &String::from_utf8_lossy(&v)) {
                     Ok(())
                 } else {
-                    Err(fail("restore readback mismatch"))
+                    Err(fail(&format!("restore readback mismatch: {}", p.display())))
                 }
             }) {
                 error = Some(e);
@@ -165,10 +193,7 @@ impl Events {
             fs::remove_dir(TRACE)?;
         }
         while let Some(name) = self.names.last() {
-            let mut f = fs::OpenOptions::new()
-                .append(true)
-                .open("/sys/kernel/tracing/kprobe_events")?;
-            writeln!(f, "-:rusix_fail/{name}")?;
+            trace_command("delete probe", &format!("-:rusix_fail/{name}\n"))?;
             self.names.pop();
         }
         Ok(())
@@ -323,11 +348,7 @@ fn run() -> io::Result<()> {
     // SAFETY: getppid takes no pointers and only reads process identity.
     if unsafe { getppid() } != 1
         || fs::read_to_string("/proc/1/comm")? != "rusix-faultinit\n"
-        || fs::read_to_string("/proc/cmdline")?
-            .split_whitespace()
-            .filter(|x| *x == "rusix.task_faults=1")
-            .count()
-            != 1
+        || !guard::authorized(&fs::read_to_string("/proc/cmdline")?)
     {
         return Err(fail("guest guard"));
     }
@@ -381,7 +402,7 @@ fn run() -> io::Result<()> {
     fs::create_dir(TRACE)?;
     let mut events = Events { names: Vec::new() };
     for (name,definition) in [("page_decision","r32:rusix_fail/page_decision should_fail_alloc_page order=$arg2:u32 injected=$retval:u8"),("slab_decision","r32:rusix_fail/slab_decision should_failslab result=$retval:s32"),("pages_result","r32:rusix_fail/pages_result __alloc_pages_noprof order=$arg2:u32 result=$retval:x64")] {
-        let mut f=fs::OpenOptions::new().append(true).open("/sys/kernel/tracing/kprobe_events")?;writeln!(f,"{definition}")?;events.names.push(name);
+        trace_command("create probe", &format!("{definition}\n"))?;events.names.push(name);
         emit(&format!("{name}.format"),&fs::read(format!("{TRACE}/events/rusix_fail/{name}/format"))?);
         put(format!("{TRACE}/events/rusix_fail/{name}/enable"),"1")?;
     }

@@ -25,13 +25,17 @@ static int read_file(const char *path, char *buf, size_t len)
 static int guard(void)
 {
 	char buf[8192], name[32], *word, *save;
-	int count = 0;
+	int count = 0, pointers = 0;
 	if (read_file("/proc/1/comm", name, sizeof(name)) ||
 	    strcmp(name, "rusix-faultinit\n") ||
 	    read_file("/proc/cmdline", buf, sizeof(buf))) return -1;
-	for (word = strtok_r(buf, " \n\t", &save); word; word = strtok_r(NULL, " \n\t", &save))
+	for (word = strtok_r(buf, " \n\t", &save); word; word = strtok_r(NULL, " \n\t", &save)) {
 		if (!strcmp(word, "rusix.task_faults=1")) count++;
-	return count == 1 ? 0 : -1;
+		if (!strcmp(word, "no_hash_pointers")) pointers++;
+		if (!strncmp(word, "hash_pointers=", 14) ||
+		    !strncmp(word, "no_hash_pointers=", 17)) return -1;
+	}
+	return count == 1 && pointers == 1 ? 0 : -1;
 }
 static long long now_ms(void)
 {

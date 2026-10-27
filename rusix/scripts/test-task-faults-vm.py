@@ -30,6 +30,7 @@ selection = load('task_selection', 'verify-task-construction.py')
 generator = load('task_fault_generator', 'generate-task-fault-calibration.py')
 fault_gate = generator.gate
 TOKEN = 'rusix.task_faults=1'
+POINTER_BANNER = '**********************************************************\n**   NOTICE NOTICE NOTICE NOTICE NOTICE NOTICE NOTICE   **\n**                                                      **\n** This system shows unhashed kernel memory addresses   **\n** via the console, logs, and other interfaces. This    **\n** might reduce the security of your system.            **\n**                                                      **\n** If you see this message and you are not debugging    **\n** the kernel, report this immediately to your system   **\n** administrator!                                       **\n**                                                      **\n** Use hash_pointers=always to force this mode off      **\n**                                                      **\n**   NOTICE NOTICE NOTICE NOTICE NOTICE NOTICE NOTICE   **\n**********************************************************\n'
 REQUIRED_CONFIG = ('64BIT', 'PROC_FS', 'SMP', 'MULTIUSER', 'BINFMT_ELF',
                    'BLK_DEV_INITRD', 'SERIAL_8250_CONSOLE', 'DEBUG_FS', 'SYSFS',
                    'FAULT_INJECTION', 'FAILSLAB', 'FAIL_PAGE_ALLOC',
@@ -39,7 +40,7 @@ REQUIRED_CONFIG = ('64BIT', 'PROC_FS', 'SMP', 'MULTIUSER', 'BINFMT_ELF',
 LABELS = ['calibration','slab-1'] + [f'stack-{n}' for n in range(1,17)]
 FORMATS = ['page_decision','slab_decision','pages_result','kmem_kmem_cache_alloc',
            'kmem_kmem_cache_free','sched_sched_process_fork']
-ARTIFACTS = ['calibration.tsv'] + [f'{n}.format' for n in FORMATS] + [
+ARTIFACTS = ['calibration.tsv', 'runtime-kallsyms'] + [f'{n}.format' for n in FORMATS] + [
     f'{label}.{ext}' for label in LABELS for ext in ('worker','trace','probes','cpu0','cpu1')]
 
 
@@ -48,6 +49,8 @@ def decode_console(console, qemu_exit):
         raise ValueError(f'QEMU failed or timed out: {qemu_exit}')
     if re.search(r'(?i:\bwarning\b)|\bBUG\b|Oops:|Kernel panic|CPU feature dependency check failure|ACPI (?:BIOS )?(?:Error|Exception|Warning)|ACPI: Unable to load', console):
         raise ValueError('Kernel diagnostics in guest console')
+    if console.count(POINTER_BANNER) != 1 or console.count('This system shows unhashed kernel memory addresses') != 1:
+        raise ValueError('Missing/duplicate/changed native pointer banner')
     lines = [line for line in console.splitlines() if 'RUSIX_TASK_FAULT_' in line]
     expected = len(ARTIFACTS)
     if len(lines) != expected+2 or lines[-2:] != ['RUSIX_TASK_FAULT_CAPTURE_COMPLETE','RUSIX_TASK_FAULT_INIT_COMPLETE']:
@@ -55,22 +58,31 @@ def decode_console(console, qemu_exit):
     result={}
     for name,line in zip(ARTIFACTS,lines[:-2]):
         match=re.fullmatch(r'RUSIX_TASK_FAULT_ARTIFACT ([a-z0-9_.-]+) ([0-9a-f]*)',line)
-        if not match or match[1] != name or len(match[2]) % 2 or len(match[2]) > 4*1024*1024:
+        if not match or match[1] != name or len(match[2]) % 2 or len(match[2]) > (2*fault_gate.RUNTIME_LIMIT if name == 'runtime-kallsyms' else 4*1024*1024):
             raise ValueError('Artifact inventory/order/encoding/size differs')
         result[name]=bytes.fromhex(match[2])
     return result
 
 
-def attribute(records, cal):
+def attribute(records, cal, frames):
     attempts=[]; seen=set()
     for label in LABELS:
         get=lambda ext:records[f'{label}.{ext}'].decode()
         fault_gate.attempt_identity(label,get('worker'),seen)
-        attempts.append(dict(label=label,**fault_gate.classify(get('worker'),get('trace'),cal,[get('cpu0'),get('cpu1')],get('probes'))))
+        attempts.append(dict(label=label,**fault_gate.classify(get('worker'),get('trace'),cal,[get('cpu0'),get('cpu1')],get('probes'),frames)))
     fault_gate.need(attempts[0]['classification']=='uninjected-control','Missing actual successful allocation calibration')
     fault_gate.need(attempts[1]['classification']=='task-slab-failure','Missing task allocation failure')
     fault_gate.need(any(r['classification']=='stack-page-failure' for r in attempts[2:]),'No attributable stack failure')
     return attempts
+
+
+def check_banner_source(source):
+    text = (source/'lib/vsprintf.c').read_text()
+    start = text.index('\tpr_warn("**********************************************************')
+    end = text.index('\n}',start)
+    actual = ''.join(json.loads('"'+v+'"') for v in re.findall(r'pr_warn\("(.*)"\);',text[start:end]))
+    if actual != POINTER_BANNER:
+        raise ValueError('Native pointer banner differs from pinned source')
 
 
 def validate_config(profile, config, target):
@@ -104,7 +116,7 @@ def qemu_command(image, archive):
                '-machine', 'q35', '-accel', 'kvm', '-cpu', 'qemu64', '-m', '512M', '-smp', '2',
                '-display', 'none', '-serial', 'stdio', '-monitor', 'none', '-nic', 'none', '-no-reboot',
                '-kernel', str(image), '-initrd', str(archive), '-append',
-               f'console=ttyS0 rdinit=/init {TOKEN} nokaslr panic=-1 kunit.enable=0 printk.time=0 loglevel=7']
+               f'console=ttyS0 rdinit=/init {TOKEN} no_hash_pointers nokaslr panic=-1 kunit.enable=0 printk.time=0 loglevel=7']
 
 
 def compile_guest(name, command, artifact, evidence):
@@ -173,6 +185,8 @@ def run(args, paths, evidence):
                paths.project / 'scripts/preprocess-task-construction.py',
                paths.project / 'scripts/with-local-tools.sh',
                paths.project / 'tests/brd-ext4/ext4-packages.lock'}
+    check_banner_source(paths.source)
+    sources.update({paths.source/'lib/vsprintf.c', paths.source/'kernel/kallsyms.c'})
     sources.update(path for path in fixture.iterdir() if path.is_file())
     source_hashes={str(path.relative_to(paths.source)): common.digest(path) for path in sorted(sources)}
     init, controller, worker = artifacts/'init', artifacts/'controller', artifacts/'worker'
@@ -216,8 +230,9 @@ def run(args, paths, evidence):
         raise ValueError('Running guest calibration differs')
     verified,_=fault_gate.load_reviewed_calibration(calibration_dir/'packet.json')
     if verified != cal: raise ValueError('Calibration changed')
+    frames=fault_gate.runtime_packet_frames(records['runtime-kallsyms'],cal,calibration_dir/'packet.json')
     result=dict(status='PASS',scope='Diagnostic guest allocation-failure attribution with successful control and cleanup',
-                attempts=attribute(records,cal),qemu_exit=guest.returncode)
+                runtime_frames=frames,attempts=attribute(records,cal,frames),qemu_exit=guest.returncode)
 
     if common.source_state(paths.source) != revision:
         raise ValueError('Source changed during verification')

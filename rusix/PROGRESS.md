@@ -25,6 +25,15 @@ preserves the console, calibration, source/cache provenance and original failure
 continuity (307 records, 1,964 retained artifact hashes). No fault-classification
 PASS is claimed; cleanup must be corrected and verification repeated.
 
+The next harness candidate uses single-write tracing commands, explicit guest
+pointer-printing authorization and a separately verified runtime kallsyms
+extent record; sym-offset ARM/DISARM markers are accepted only with valid
+bounds. ELF function-size and return-PC proofs remain unchanged. Focused
+synthetic host regressions pass (38 Python cases and three isolated Rust helper
+cases in the pinned image); static guest compilation and a fresh C/Rust
+diagnostic run are still required. Original attempt `002` captures are retained
+unchanged. See the [fixture contract](tests/task-construction-faults/README.md).
+
 | Check | Verified result |
 | --- | --- |
 | LTS provenance/math | Signed tag verified; all 24 required math cases pass on q35, zero skips. [Math](docs/evidence/math-q35/manifest.json), [provenance](docs/evidence/lts-baseline/manifest.json). |

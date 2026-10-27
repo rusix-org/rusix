@@ -45,13 +45,16 @@ def verify(path, implementation, remap=lambda p:p):
     need(set(artifacts)=={'bzImage','init','controller','worker','initramfs.cpio'},'Guest artifact inventory differs')
     expected=vm.qemu_command(artifacts['bzImage'],artifacts['initramfs.cpio'])
     need(shlex.split((path/'command.sh').read_text())==expected,'QEMU arguments differ from bounded diagnostic contract')
+    vm.check_banner_source(remap(Path(inputs['source_root'])))
     records=vm.decode_console((path/'console.log').read_text(),int((path/'qemu.exit').read_text()))
     cal,sha=vm.fault_gate.load_reviewed_calibration(path/'calibration/packet.json',remap)
     need(cal['build_source']==inputs['source_revision'],'Calibration source mismatch')
     need(hashlib.sha256(records['calibration.tsv']).hexdigest()==sha,'Guest calibration mismatch')
     for name,data in records.items():
         need(data==(path/'records'/name).read_bytes(),'Decoded capture changed')
-    need(vm.attribute(records,cal)==result['attempts'],'Attribution result changed')
+    frames=vm.fault_gate.runtime_packet_frames(records['runtime-kallsyms'],cal,path/'calibration/packet.json',remap)
+    need(frames==result['runtime_frames'],'Runtime symbol binding changed')
+    need(vm.attribute(records,cal,frames)==result['attempts'],'Attribution result changed')
     binaries={name:inputs['artifacts'][str(artifacts[name])] for name in ('init','controller','worker')}
     return inputs,result,binaries
 

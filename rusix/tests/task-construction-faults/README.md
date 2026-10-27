@@ -9,7 +9,7 @@ their original gates.
 
 `controller.rs` is intended for the pinned static Rust toolchain; `worker.c` for
 static x86_64 GCC. Neither may run on the host. The guarded `init.rs` mounts proc, sysfs, debugfs and tracefs, sets
-comm `rusix-faultinit`, then directly spawns the controller. Exact cmdline token `rusix.task_faults=1` is required. Controller
+comm `rusix-faultinit`, then directly spawns the controller. Exact cmdline tokens `rusix.task_faults=1` and `no_hash_pointers` are required; conflicting pointer-hashing options are rejected. This changes only the disposable guest. Controller
 requires parent PID1; worker separately checks token/name. Worker path is
 `/fault-worker`; the reviewed calibration packet's TSV is `/calibration.tsv`.
 Python is host-only: no Python guest/rootfs is introduced.
@@ -38,7 +38,9 @@ times and task-filter. Slab case selects only task_struct and disables page
 capability with min-order UINT_MAX. Page sweep deselects every slab cache and
 uses order>=2, with a required compiled copy_process stack range. All changed
 knobs are read back and restored; owned tracing is explicitly removed before
-capture completion. The controller captures one uninjected control, slab nth1,
+capture completion. Each control command is preformatted and submitted by one
+write; short writes fail without replaying a partial command. Errors include
+operation/path context. The controller captures one uninjected control, slab nth1,
 and page nth1..16. Unsupported/merged slab flags, missing symbols, failed
 readbacks or partial setup fail closed. No live stack cache is flushed.
 
@@ -50,6 +52,14 @@ guest attempt must independently demonstrate both selected callsite frames. TSV 
 schema=1, policy_base, build_source (the future fault commit), implementation,
 notes_hex, range_symbol, range_start, range_end, slab_frame and stack_frame.
 Fields are tab separated. Source base and actual build source are distinct.
+After matching kernel notes, the guest captures complete `/proc/kallsyms` through
+EOF, with a 16 MiB bound, as `runtime-kallsyms`. The host separately binds
+unique selected text names and addresses to the verified ELF, then derives the
+printed extent from the next distinct core address, preserving first-alias
+selection. Appended module/BPF/kprobe inventories do not participate in core
+ordering. This does not replace ELF `st_size` or allocation return-PC checks.
+The exact native unhashed-pointer banner is required and bound to the recorded
+`lib/vsprintf.c`; pointer placeholders remain failures.
 The guest matches complete running `/sys/kernel/notes` bytes and the live
 required-range symbol address. Range end and callsite attribution are subsequently
 checked against actual linked ELF by the host, not trusted from these strings.

@@ -12,7 +12,7 @@ m=importlib.util.module_from_spec(spec);spec.loader.exec_module(m)
 SYMBOLS='00001000 00000100 t copy_process\n00002000 00000100 T kmem_cache_alloc_node_noprof\n00003000 00000100 T __alloc_pages_noprof\n'
 DISASM='1000: nop\n1010: callq 0x2000 <kmem_cache_alloc_node_noprof>\n1015: nop\n1020: callq 0x3000 <__alloc_pages_noprof>\n1025: nop\n'
 def console():
- return '\n'.join([f'RUSIX_TASK_FAULT_ARTIFACT {name} 78' for name in m.ARTIFACTS]+['RUSIX_TASK_FAULT_CAPTURE_COMPLETE','RUSIX_TASK_FAULT_INIT_COMPLETE'])
+ return m.POINTER_BANNER+'\n'.join([f'RUSIX_TASK_FAULT_ARTIFACT {name} 78' for name in m.ARTIFACTS]+['RUSIX_TASK_FAULT_CAPTURE_COMPLETE','RUSIX_TASK_FAULT_INIT_COMPLETE'])
 class Pipeline(unittest.TestCase):
  def test_discover_actual_return_sites(self):
   c=m.generator.discover(SYMBOLS,DISASM,'c')
@@ -42,12 +42,12 @@ class Pipeline(unittest.TestCase):
  def test_exact_capture(self):
   self.assertEqual(set(m.decode_console(console(),0)),set(m.ARTIFACTS))
  def test_all_artifact_omissions_duplicates_and_order(self):
-  rows=console().splitlines()
+  rows=console()[len(m.POINTER_BANNER):].splitlines()
   for i in range(len(m.ARTIFACTS)):
    for bad in [rows[:i]+rows[i+1:],rows[:i]+[rows[i]]+rows[i:]]:
-    with self.assertRaises(ValueError):m.decode_console('\n'.join(bad),0)
+    with self.assertRaises(ValueError):m.decode_console(m.POINTER_BANNER+'\n'.join(bad),0)
   rows[0],rows[1]=rows[1],rows[0]
-  with self.assertRaises(ValueError):m.decode_console('\n'.join(rows),0)
+  with self.assertRaises(ValueError):m.decode_console(m.POINTER_BANNER+'\n'.join(rows),0)
  def test_no_cleanup_failure_status_or_warning(self):
   for bad in [console().replace('RUSIX_TASK_FAULT_CAPTURE_COMPLETE','RUSIX_TASK_FAULT_CAPTURE_FAIL x'),console().replace('RUSIX_TASK_FAULT_INIT_COMPLETE',''),console()+'\nWARNING: bad']:
    with self.assertRaises(ValueError):m.decode_console(bad,0)
@@ -85,4 +85,21 @@ class Pipeline(unittest.TestCase):
   data=m.make_initramfs(b'INIT',b'CONTROLLER',b'WORKER',b'CALIBRATION')
   for name in [b'fault-controller',b'fault-worker',b'calibration.tsv',b'dev/console']:
    self.assertIn(name,data)
+ def test_native_banner_exact_and_source_bound(self):
+  m.check_banner_source(S.parents[1])
+  for bad in [console().replace(m.POINTER_BANNER,''),m.POINTER_BANNER+console(),console().replace('might reduce','might alter')]:
+   with self.assertRaises(ValueError):m.decode_console(bad,0)
+ def test_guest_pointer_mode_is_explicit(self):
+  args=m.qemu_command(Path('/image'),Path('/ramfs'))[-1].split()
+  self.assertEqual(args.count('no_hash_pointers'),1)
+  self.assertFalse(any(x.startswith('hash_pointers=') for x in args))
+  fixture=S.parent/'tests/task-construction-faults'
+  for file in ['init.rs','controller.rs']:
+   self.assertIn('guard::authorized', (fixture/file).read_text())
+  self.assertIn('pointers == 1', (fixture/'worker.c').read_text())
+ def test_snapshot_has_separate_transport_bound(self):
+  self.assertEqual(m.ARTIFACTS[:2],['calibration.tsv','runtime-kallsyms'])
+  text=console().replace('runtime-kallsyms 78','runtime-kallsyms '+'78'*(2*1024*1024+1))
+  self.assertEqual(len(m.decode_console(text,0)['runtime-kallsyms']),2*1024*1024+1)
+  with self.assertRaises(ValueError):m.decode_console(console().replace('calibration.tsv 78','calibration.tsv '+'78'*(2*1024*1024+1)),0)
 if __name__=='__main__':unittest.main()

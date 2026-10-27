@@ -119,4 +119,27 @@ class BoundedListing(unittest.TestCase):
   self.assertTrue(m.disassembly_matches(left,right,'/old','/new'))
   self.assertFalse(m.disassembly_matches(left,right[:-1]+'X','/old','/new'))
 
+ def test_symbol_offset_marker_and_strict_boundary(self):
+  self.assertEqual(check(pages().replace('tracing_mark_write:', 'tracing_mark_write+0x97/0x200:'))['classification'],'stack-page-failure')
+  for suffix in ['+0x200/0x200', '+0x1/0x0', '+1/200', '+0x97/0x200junk']:
+   with self.assertRaises(ValueError):check(pages().replace('tracing_mark_write:', 'tracing_mark_write'+suffix+':'))
+  with self.assertRaises(ValueError):check(pages()+row('tracing_mark_write+0x1/0x20: ARM'))
+ def test_placeholder_rejected_even_uninjected(self):
+  worker=WORK.replace('ret=-1 errno=12 remaining=0','ret=124 errno=0 remaining=1')
+  with self.assertRaises(ValueError):check(pages().replace('0000000000000abc','(____ptrval____)'),worker)
+ def test_runtime_extent_is_separate_from_elf_size(self):
+  symbols='00001000 00000100 t copy_process\n'
+  cal=CAL|{'range_symbol':'copy_process','range_start':'0x1000'}
+  raw=b'0000000000000000 A absolute_zero\n0000000000000000 D percpu_zero\n0000000000001000 t copy_process\n0000000000001000 T alias\n0000000000001120 D next_core\n0000000000000010 t bpf_prog\t[bpf]\n0000000000000008 t kprobe_slot\t[__builtin__kprobes]\n'
+  frames=m.runtime_frames(raw,cal,symbols)
+  self.assertEqual(frames,{'slab_frame':'copy_process+0x15/0x120','stack_frame':'copy_process+0x25/0x120'})
+  self.assertEqual(cal['slab_frame'],'copy_process+0x15/0x100')
+  trace=pages().replace('/0x100','/0x120')
+  self.assertEqual(m.classify(WORK,trace,cal,STATS,PROBES,frames)['classification'],'stack-page-failure')
+  self.assertEqual(m.classify(WORK,trace,cal,STATS,PROBES)['classification'],'other-page-failure')
+  bads=[raw[:-1],raw.replace(b'0000000000001000 t copy_process',b'0000000000001001 t copy_process'),raw.replace(b't copy_process',b'D copy_process'),raw+b'0000000000001200 t core_after_modules\n',raw.replace(b'0000000000001120 D next_core\n',b''),raw.replace(b'0000000000001120',b'0000000000001080'),raw.replace(b'T alias',b'T copy_process'),raw.replace(b'0000000000001000 t copy_process\n0000000000001000 T alias',b'0000000000001000 T alias\n0000000000001000 t copy_process')]
+  for bad in bads:
+   with self.subTest(raw=bad):
+    with self.assertRaises(ValueError):m.runtime_frames(bad,cal,symbols)
+  with self.assertRaises(ValueError):m.runtime_frames(raw,cal,symbols+symbols)
 if __name__=='__main__':unittest.main()

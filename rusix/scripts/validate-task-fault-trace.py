@@ -29,6 +29,81 @@ def zero(value):
     return value in ('(nil)', '(null)') or re.fullmatch(r'(?:0x)?0+', value) is not None
 
 
+RUNTIME_LIMIT = 16 * 1024 * 1024
+FRAME = re.compile(r'([A-Za-z0-9_.$]+)\+0x([0-9a-f]+)/0x([0-9a-f]+)')
+
+
+def runtime_frames(raw, calibration, symbols):
+    """Bind trace extents separately; never replace ELF st_size/return-PC proof.
+
+    kallsyms.c get_symbol_pos uses the first alias and next distinct core
+    address, including non-text symbols. update_iter appends separately labelled
+    module/ftrace/BPF/kprobe inventories; their addresses need not be sorted.
+    The guarded guest reads this bounded snapshot through EOF after notes match.
+    """
+    need(0 < len(raw) <= RUNTIME_LIMIT and raw.endswith(b'\n'), 'Incomplete/oversized runtime kallsyms')
+    core = []; names = {}; appended = False
+    for line in raw.decode('ascii').splitlines():
+        row = re.fullmatch(r'([0-9a-f]{16}) ([A-Za-z?]) ([^\s]+)(?:\t\[([^\s\[\]]+)\])?', line)
+        need(row, 'Malformed runtime kallsyms row')
+        address, kind, name, module = row.groups(); address = int(address,16)
+        names.setdefault(name, []).append((address,kind,module))
+        if module is not None:
+            appended = True
+            continue
+        need(not appended, 'Core symbol after appended kallsyms inventory')
+        need(not core or address >= core[-1][0], 'Unordered core kallsyms')
+        core.append((address,kind,name))
+    need(core, 'Missing core kallsyms')
+    elf = {}
+    for line in symbols.splitlines():
+        row = re.fullmatch(r'([0-9a-f]+) ([0-9a-f]+) [Tt] (\S+)', line.strip())
+        if row: elf.setdefault(row[3], []).append((int(row[1],16),int(row[2],16)))
+    # Also retain the caller-range address check made in the running guest.
+    name = calibration['range_symbol']
+    need(len(names.get(name, [])) == 1, 'Ambiguous runtime caller range')
+    base, kind, module = names[name][0]
+    need(base == int(calibration['range_start'],0) > 0 and kind in 'Tt' and module is None,
+         'Runtime caller range differs from linked kernel')
+    result = {}
+    for key in ('slab_frame','stack_frame'):
+        frame = FRAME.fullmatch(calibration[key]); need(frame, 'Malformed ELF frame')
+        name, offset, extent = frame.groups(); offset=int(offset,16); extent=int(extent,16)
+        need(len(elf.get(name,[])) == 1, 'Ambiguous linked frame symbol')
+        base, size = elf[name][0]
+        need(size == extent and 0 < offset < size, 'ELF frame extent/PC differs')
+        need(len(names.get(name,[])) == 1 and names[name][0][0] == base > 0
+             and names[name][0][1] in 'Tt' and names[name][0][2] is None,
+             'Runtime frame owner differs from linked kernel')
+        aliases = [row for row in core if row[0] == base]
+        need(aliases and aliases[0][2] == name, 'Runtime printed owner is a different first alias')
+        boundary = next((row[0] for row in core if row[0] > base), None)
+        need(boundary is not None and boundary >= base + size, 'Missing/overlapping runtime symbol boundary')
+        result[key] = f'{name}+0x{offset:x}/0x{boundary-base:x}'
+    return result
+
+
+def runtime_packet_frames(raw, calibration, packet_path, remap=lambda p: p):
+    # load_reviewed_calibration must already have verified this packet and all
+    # actual ELF inputs. Rehash the consumed symbol input again around the read.
+    packet = json.loads(packet_path.read_text())
+    item = packet['inputs']['symbols']; path = Path(item['path'])
+    if not path.is_absolute(): path = packet_path.parent/path
+    path = remap(path)
+    need(file_digest(path) == item['sha256'], 'Runtime symbol ELF input changed')
+    result = runtime_frames(raw,calibration,path.read_text())
+    need(file_digest(path) == item['sha256'], 'Runtime symbol ELF input changed')
+    return result
+
+
+def marker(body):
+    match = re.fullmatch(r'tracing_mark_write(?:\+0x([0-9a-f]+)/0x([0-9a-f]+))?: (ARM|DISARM)', body)
+    if match is None: return None
+    if match[1] is not None:
+        need(int(match[1],16) < int(match[2],16), 'Invalid tracing marker symbol offset')
+    return match[3]
+
+
 def events(text, pid):
     rows = []
     for line in text.splitlines():
@@ -41,11 +116,13 @@ def events(text, pid):
         match = HEADER.fullmatch(line)
         need(match, 'Unrecognized trace record: ' + line)
         owner, cpu, body = match.groups()
+        if body.startswith('tracing_mark_write'):
+            need(marker(body) is not None, 'Unrecognized tracing marker')
         # Stack triggers must carry the same actor/context as the actual decision.
         need(int(owner) == pid, 'Unexpected trace actor')
         rows.append(dict(cpu=cpu, body=body, frames=[]))
-    arm = [i for i,r in enumerate(rows) if r['body'] == 'tracing_mark_write: ARM']
-    end = [i for i,r in enumerate(rows) if r['body'] == 'tracing_mark_write: DISARM']
+    arm = [i for i,r in enumerate(rows) if marker(r['body']) == 'ARM']
+    end = [i for i,r in enumerate(rows) if marker(r['body']) == 'DISARM']
     need(len(arm) == len(end) == 1 and arm[0] < end[0], 'Missing/duplicate/reordered armed interval')
     return rows[arm[0]+1:end[0]]
 
@@ -66,7 +143,9 @@ def no_loss(stats, probes):
     need(found == {'page_decision','slab_decision','pages_result'}, 'Probe inventory differs')
 
 
-def classify(worker, trace, calibration, stats, probes):
+def classify(worker, trace, calibration, stats, probes, frames=None):
+    frames = calibration if frames is None else frames
+    need(not re.search(r"\([^\s()]*ptrval[^\s()]*\)", trace), "Unavailable hashed pointer in trace")
     match = RESULT.fullmatch(worker.strip())
     need(match, 'Malformed worker result')
     pid,nth,ret,error,remaining,child,retry = map(int, match.groups())
@@ -78,7 +157,7 @@ def classify(worker, trace, calibration, stats, probes):
                  (r['body'].startswith('slab_decision:') and field(r['body'],'result') == '-12')]
     if nth == 0:
         need(ret > 0 and not decisions, 'Calibration fork failed or injected')
-        for kind, frame, value in [('slab_decision:',calibration['slab_frame'],'result'), ('page_decision:',calibration['stack_frame'],'injected')]:
+        for kind, frame, value in [('slab_decision:',frames['slab_frame'],'result'), ('page_decision:',frames['stack_frame'],'injected')]:
             need(any(r['body'].startswith(kind) and field(r['body'],value)=='0' and i+1<len(rows) and rows[i+1]['body']=='<stack trace>' and rows[i+1]['cpu']==r['cpu'] and frame in rows[i+1]['frames'] for i,r in enumerate(rows)), 'Missing successful allocation stack calibration')
         return {'classification':'uninjected-control','pid':pid}
     if remaining:
@@ -93,13 +172,13 @@ def classify(worker, trace, calibration, stats, probes):
     allocations = [r['body'] for r in rows if r['body'].startswith('kmem_cache_alloc:') and field(r['body'],'name') == 'task_struct']
     frees = [r['body'] for r in rows if r['body'].startswith('kmem_cache_free:') and field(r['body'],'name') == 'task_struct']
     if decision['body'].startswith('slab_decision:'):
-        need(calibration['slab_frame'] in stack['frames'], 'Slab failure not at calibrated constructor callsite')
+        need(frames['slab_frame'] in stack['frames'], 'Slab failure not at calibrated constructor callsite')
         need(len(allocations) == 1 and zero(field(allocations[0],'ptr')) and not frees, 'Slab failure acquired/freed unexpected task')
         alloc_index = next(i for i,r in enumerate(rows) if r['body'] == allocations[0])
         need(index + 1 < alloc_index, 'Wrong slab decision/stack/NULL allocation order')
         return {'classification':'task-slab-failure','pid':pid,'nth':nth}
     need(field(decision['body'],'order') == '2', 'Wrong allocation order')
-    if calibration['stack_frame'] not in stack['frames']:
+    if frames['stack_frame'] not in stack['frames']:
         # Keep unsuccessful sweep attribution honest; do not call every ENOMEM a stack hit.
         return {'classification':'other-page-failure','pid':pid,'nth':nth}
     need(len(allocations) == len(frees) == 1, 'Need one task allocation and matching rollback free')
@@ -299,11 +378,12 @@ def main():
     ap.add_argument('--calibration',type=Path,required=True)
     args=ap.parse_args();cal,cal_sha=load_reviewed_calibration(args.calibration)
     need(hashlib.sha256((args.records/'calibration.tsv').read_bytes()).hexdigest()==cal_sha,'Guest used different calibration')
+    frames=runtime_packet_frames((args.records/'runtime-kallsyms').read_bytes(),cal,args.calibration)
     result=[];seen=set()
     for label in ['calibration','slab-1']+[f'stack-{n}' for n in range(1,17)]:
         get=lambda ext:(args.records/f'{label}.{ext}').read_text()
         attempt_identity(label,get('worker'),seen)
-        result.append(dict(label=label,**classify(get('worker'),get('trace'),cal,[get('cpu0'),get('cpu1')],get('probes'))))
+        result.append(dict(label=label,**classify(get('worker'),get('trace'),cal,[get('cpu0'),get('cpu1')],get('probes'),frames)))
     need(result[0]['classification']=='uninjected-control','Missing uninjected control')
     need(result[1]['classification']=='task-slab-failure','Missing targeted slab failure')
     need(any(r['classification']=='stack-page-failure' for r in result[2:]),'No attributable stack failure in bounded sweep')
