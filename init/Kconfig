@@ -2305,3 +2305,14 @@ config RUSIX_EXIT_MMAP_RUST
 	  notifier, maple, file and policy operations. Inherits the builtin
 	  x86_64 target restrictions without changing hotplug support.
 	  Leave disabled for the byte-preserved original C policies.
+
+config RUSIX_EXIT_MMAP_TEST
+	bool "Rusix native mapping teardown test fixture"
+	depends on KUNIT=y && RUST && RUSIX_VMA_LIFECYCLE_RUST
+	default n
+	help
+	  Build private-worker native MM/file teardown fixtures for paired C/Rust
+	  exit_mmap tests. The fixture uses retained MM and file references and
+	  real MAP_FIXED replacement, with no global fault injection. It is
+	  independent of the Rust teardown selector so both sides use the same
+	  tests. Leave disabled outside the dedicated verification profiles.

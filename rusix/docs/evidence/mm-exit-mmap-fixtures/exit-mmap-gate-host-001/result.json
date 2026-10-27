@@ -1,0 +1,21 @@
+{
+  "combined_cases": 79,
+  "input_sha256": {
+    "init/Kconfig": "4cc5dc8673ff5695d93c5e4b34af7a5f76a9d99b09abaecab2442e430127ac78",
+    "mm/Makefile": "0e761b54bc1c11b74c75bfc62f36f6c35b5ef2cae9f08870661301880c4f1eed",
+    "mm/exit_mmap_test.c": "3b55c0225f2b71f1a1a2c6f1a04f9ffcba33f44e272b7b23729ac7e09bd90e66",
+    "rusix/scripts/validate-brd-kunit.py": "1350025c9c9abda4e287e6cda85140639ccbc660ffcaecdab7a0634ec0fc24cb",
+    "rusix/scripts/validate-completion-kunit.py": "0467f463f2bbfd05d7fcec46123dccd869ced22b86c4a8d6f9a71acd705ecdef",
+    "rusix/scripts/validate-exit-mmap-kunit.py": "d3e620a2f7682e32a0281862578cdaf0c78cd4b307699666eec0fb78736a20ee",
+    "rusix/tests/test_exit_mmap_kunit_gate.py": "682465697d04a5bd1bd49cc658d8fbd9d53164f835a84ddea8ad08791ef2063f",
+    "rust/helpers/exit_mmap_test.c": "23b442d5f988f371f452f059589ae54d044a2ad6fd56ae6fb2bd8ac73c3a38a1",
+    "rust/helpers/helpers.c": "1c89c77ca57744f0603dddad9dd0a9e85d364f6b52368cad26e555569a368daf",
+    "rust/kernel/mm.rs": "70d6779e845c36b523f5fcbc1092162275ed161380bc8f65e7fc4811565f21f6",
+    "rust/kernel/mm/exit_tests.rs": "df56e19f736c184f114d3bc700eea7b6ac3de162a847e6f8e623b4fde78bdf06"
+  },
+  "isolated_cases": 3,
+  "scope": "7 synthetic KUnit gate regressions, with literal source inventory; source-level fixture lifetime review only, no builds/VM",
+  "source_base": "feac2f68920bbac441ffed7cd2ba5df2197fda0d",
+  "status": "PASS",
+  "tests_log_sha256": "0d6653413f55f7cf64dbfab59b6b29c640ade8e63585414ab2a44a0892a5ed0a"
+}

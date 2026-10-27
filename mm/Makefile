@@ -152,3 +152,5 @@ obj-$(CONFIG_RUSIX_DUP_MMAP_RUST) += dup_mmap_rust.o
 obj-$(CONFIG_RUSIX_VMA_LIFECYCLE_RUST) += vma_lifecycle_rust.o
 
 obj-$(CONFIG_RUSIX_EXIT_MMAP_RUST) += exit_mmap_rust.o
+
+obj-$(CONFIG_RUSIX_EXIT_MMAP_TEST) += exit_mmap_test.o

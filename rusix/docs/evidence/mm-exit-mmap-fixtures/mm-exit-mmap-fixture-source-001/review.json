@@ -1,0 +1,24 @@
+{
+  "status": "SOURCE_REVIEWED_UNCOMPILED",
+  "base": "feac2f68920bbac441ffed7cd2ba5df2197fda0d",
+  "files": {
+    "mm/exit_mmap_test.c": "3b55c0225f2b71f1a1a2c6f1a04f9ffcba33f44e272b7b23729ac7e09bd90e66",
+    "init/Kconfig": "4cc5dc8673ff5695d93c5e4b34af7a5f76a9d99b09abaecab2442e430127ac78",
+    "mm/Makefile": "0e761b54bc1c11b74c75bfc62f36f6c35b5ef2cae9f08870661301880c4f1eed",
+    "rust/helpers/exit_mmap_test.c": "23b442d5f988f371f452f059589ae54d044a2ad6fd56ae6fb2bd8ac73c3a38a1",
+    "rust/helpers/helpers.c": "1c89c77ca57744f0603dddad9dd0a9e85d364f6b52368cad26e555569a368daf",
+    "rust/kernel/mm.rs": "70d6779e845c36b523f5fcbc1092162275ed161380bc8f65e7fc4811565f21f6",
+    "rust/kernel/mm/exit_tests.rs": "df56e19f736c184f114d3bc700eea7b6ac3de162a847e6f8e623b4fde78bdf06",
+    "rusix/scripts/validate-exit-mmap-kunit.py": "d3e620a2f7682e32a0281862578cdaf0c78cd4b307699666eec0fb78736a20ee",
+    "rusix/tests/test_exit_mmap_kunit_gate.py": "682465697d04a5bd1bd49cc658d8fbd9d53164f835a84ddea8ad08791ef2063f"
+  },
+  "suite": "rusix_exit_mmap",
+  "cases": [
+    "empty_final_users_retains_storage",
+    "mapped_final_users_closes_before_file_put",
+    "fixed_replace_close_dummy_reset"
+  ],
+  "host_gate_cases_passed": 7,
+  "scope": "Source review, formatting and synthetic strict inventory checks only; no compilation or VM execution; docs excluded",
+  "review": "Parent and independent agent review reported no remaining source blocker after native lazy-TLB count correction"
+}

@@ -298,3 +298,6 @@ impl Drop for VmaReadGuard<'_> {
 
 #[cfg(CONFIG_RUSIX_MM_RELEASE_TEST)]
 mod release_tests;
+
+#[cfg(CONFIG_RUSIX_EXIT_MMAP_TEST)]
+mod exit_tests;

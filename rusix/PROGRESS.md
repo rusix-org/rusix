@@ -16,7 +16,13 @@ four-unit preprocessing and selection tooling are implemented; all 308 cases
 across 29 host suites pass with stable input hashes. The initial host-fixture
 setup failure and exact tested snapshots are retained in
 [tooling evidence](docs/evidence/mm-exit-mmap-tooling/manifest.json). This covers
-host tooling, not the separate native teardown fixture under development.
+host tooling, not kernel execution. The separate native teardown fixture now
+has three source-reviewed cases: empty retained-MM teardown, close-before-file
+release, and real MAP_FIXED dummy-hook reset. Mapped modes allow native lazy-TLB
+references while retaining exact users/tree/callback invariants; timeout paths
+retain necessary resources. Seven inventory host regressions pass. Its isolated
+three/combined 79 requirements remain uncompiled and unexecuted; leading-sentinel
+and attributable allocation-failure coverage are still missing.
 [Boundary and remaining work](experiments/mm-exit-mmap/README.md).
 
 VMA lifecycle is an opt-in candidate on `rusix/vma-lifecycle`: Rust owns the
@@ -300,3 +306,7 @@ source/binary hashes, non-executable host modes and the shared child's emitted
 code (inline syscalls, no helper calls or TLS access). The
 [compile evidence](docs/evidence/dup-mmap-fixtures/manifest.json) contains 20 text
 records. No guest binary or mapping-duplication candidate kernel was executed.
+
+Teardown fixture source review and seven synthetic acceptance-gate tests are
+recorded in [fixture evidence](docs/evidence/mm-exit-mmap-fixtures/manifest.json).
+Compilation and the 3/79-case VM gates remain pending.

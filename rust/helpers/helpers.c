@@ -89,3 +89,7 @@
 #ifdef CONFIG_RUSIX_MM_RELEASE_TEST
 #include "mm_release_test.c"
 #endif
+
+#ifdef CONFIG_RUSIX_EXIT_MMAP_TEST
+#include "exit_mmap_test.c"
+#endif
