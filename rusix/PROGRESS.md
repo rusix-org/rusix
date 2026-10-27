@@ -9,6 +9,14 @@ verification runs locally. No subsystem divergence point is declared.
 Public development lives on `rusix/main`. [ADR 0002](docs/adr/0002.md) owns the
 target; [Phase 1](docs/PHASE1.md) owns delivery gates.
 
+Task-fault diagnostic attempt `001` at `8acd1a79a9cd` built the C kernel,
+then stopped before VM launch: actual-ELF calibration found zero attributable
+callsite pairs. Rust was not started; no fault captures or runtime result exist.
+[Failure evidence](docs/evidence/task-fault-initial/manifest.json) preserves
+183 text records (large disassembly compressed losslessly), 1,768 retained
+binary artifact hashes and the frozen source. Calibration tooling requires
+review and a fresh attempt; this is not a constructor failure result.
+
 | Check | Verified result |
 | --- | --- |
 | LTS provenance/math | Signed tag verified; all 24 required math cases pass on q35, zero skips. [Math](docs/evidence/math-q35/manifest.json), [provenance](docs/evidence/lts-baseline/manifest.json). |

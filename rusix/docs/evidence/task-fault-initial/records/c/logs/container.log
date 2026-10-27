@@ -1,0 +1,3 @@
+Build evidence: /out/logs/ci-task-construction-fault-c-build.oCGE0xAH
+Built /out/builds/ci-task-construction-fault-c/arch/x86/boot/bzImage
+Task fault verification failed: Expected one attributable callsite pair, found 0; compiled form requires review; evidence /out/logs/ci-task-construction-fault-c-task-faults.run
