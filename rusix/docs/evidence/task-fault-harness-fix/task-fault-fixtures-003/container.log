@@ -1,0 +1,3 @@
+init: compile and static ELF inspection PASS; never executed
+controller: compile and static ELF inspection PASS; never executed
+worker: compile and static ELF inspection PASS; never executed

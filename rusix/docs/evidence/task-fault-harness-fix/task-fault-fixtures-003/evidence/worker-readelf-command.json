@@ -1,0 +1,1 @@
+["/usr/bin/readelf", "-h", "-l", "-d", "--wide", "/out/artifacts/worker"]

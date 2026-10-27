@@ -30,8 +30,10 @@ pointer-printing authorization and a separately verified runtime kallsyms
 extent record; sym-offset ARM/DISARM markers are accepted only with valid
 bounds. ELF function-size and return-PC proofs remain unchanged. Focused
 synthetic host regressions pass (38 Python cases and three isolated Rust helper
-cases in the pinned image); static guest compilation and a fresh C/Rust
-diagnostic run are still required. Original attempt `002` captures are retained
+cases in the pinned image). All three guest fixtures at `417c6a750112`
+compile without diagnostics and pass static x86_64 ELF checks; none was executed.
+[Harness evidence](docs/evidence/task-fault-harness-fix/manifest.json) records
+these separate checks. A fresh C/Rust diagnostic VM run is still required. Original attempt `002` captures are retained
 unchanged. See the [fixture contract](tests/task-construction-faults/README.md).
 
 | Check | Verified result |

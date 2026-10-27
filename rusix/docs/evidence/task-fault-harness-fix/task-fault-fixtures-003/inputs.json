@@ -1,0 +1,13 @@
+{
+  "source": "417c6a7501121afdee0738877cfeb0dee10f52b6",
+  "archive_sha256": "58ca62eeea4e995db2eaa17727aa1a6412544399f998e8096667670ab1cf5ace",
+  "files": {
+    "rusix/scripts/test-task-faults-vm.py": "75cb96103f84c748100f3a6ef0e315e8b416304aa8fa6507a55505e40eea4964",
+    "rusix/tests/task-construction-faults/README.md": "0f14f2ce25088824e2b18a4ec2ae10653fb9aeeb7d01b4ed965a23bd8dcdc6b3",
+    "rusix/tests/task-construction-faults/control_io.rs": "2fcba62fab13b783f8c0352abcd585689eef91aa4c6a6b9fc9dfbdb32a4c8e3d",
+    "rusix/tests/task-construction-faults/controller.rs": "7763926d62f06e601daa6f5826b28b00241199f94fe5747075f0136e176af4d6",
+    "rusix/tests/task-construction-faults/guard.rs": "41cdbf75be8a994cd6261b5e80c289a3e68847a848deb68ac43c9d16c0bb158a",
+    "rusix/tests/task-construction-faults/init.rs": "41333fe7335f158c1948fa66e1dff2f9ff275924a17600e83303b30925e82068",
+    "rusix/tests/task-construction-faults/worker.c": "5d4f1cd7298d3f9760164435e8d7b0bb2addfbac886e9cf9b5b5bc143b9f8068"
+  }
+}

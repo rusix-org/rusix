@@ -1,0 +1,31 @@
+{
+  "artifacts": {
+    "control-io-unit": "5502f806890d33afdfad3c016e6dcc0783efc5bd1173e06279dfe9e46fbd9fc6",
+    "guard-unit": "27652b51fc703b42d3c20c8cc943165d74de0f050713de93a89f96a8538be4d6",
+    "helper-inputs.json": "f17c898ba5fcf09b16477a2214dd63d3e8efa24fa340a82cc40c960cbd199a6a",
+    "helper.log": "a36b93dbb5c0b84917af85d856e56ac5600789e1c7b0125abb8d4d83ad8a0704",
+    "run-helpers.sh": "20c03fbfd24844f857893be010b14169930d5b0bf01d2e714f50b0f819ff1de8",
+    "rustc-version.log": "c83055917220fd33844f4118a5a9bc8cd7ecf9761ce5f6fbc3edb8b1bc93db12"
+  },
+  "callsite_proof_unchanged_sha256": "aad8e3b0574797624795cc9e3caf249988a4eef3f307a4602ef60d846a72c2f9",
+  "helper_exit": 0,
+  "image": "sha256:c02eb3929889b3f0cc035d57a02c844e0c74c71d24fbda1311249faeb8257f63",
+  "input_sha256": {
+    "rusix/PROGRESS.md": "1d5f00f248072fea5770959a61dd3f40d7277b953feda3360fcb629758218c61",
+    "rusix/scripts/compare-task-fault-runs.py": "e16dc6b80b096bf4162375c89cad6d367b29fa55e8a39880ff2e2548f7e98ebf",
+    "rusix/scripts/test-task-faults-vm.py": "75cb96103f84c748100f3a6ef0e315e8b416304aa8fa6507a55505e40eea4964",
+    "rusix/scripts/validate-task-fault-trace.py": "964c5b630d2b73c7a71ba0ffdd41d418ea50c86a86e7872ae87e9db7325f0ffb",
+    "rusix/tests/task-construction-faults/README.md": "0f14f2ce25088824e2b18a4ec2ae10653fb9aeeb7d01b4ed965a23bd8dcdc6b3",
+    "rusix/tests/task-construction-faults/control_io.rs": "2fcba62fab13b783f8c0352abcd585689eef91aa4c6a6b9fc9dfbdb32a4c8e3d",
+    "rusix/tests/task-construction-faults/controller.rs": "7763926d62f06e601daa6f5826b28b00241199f94fe5747075f0136e176af4d6",
+    "rusix/tests/task-construction-faults/guard.rs": "41cdbf75be8a994cd6261b5e80c289a3e68847a848deb68ac43c9d16c0bb158a",
+    "rusix/tests/task-construction-faults/init.rs": "41333fe7335f158c1948fa66e1dff2f9ff275924a17600e83303b30925e82068",
+    "rusix/tests/task-construction-faults/worker.c": "5d4f1cd7298d3f9760164435e8d7b0bb2addfbac886e9cf9b5b5bc143b9f8068",
+    "rusix/tests/test_task_fault_pipeline.py": "cf01df0823c5718f360a2a18f7d15fef3b8dd4a0693356b8ef97bd287384ef48",
+    "rusix/tests/test_task_fault_trace.py": "d3464d0957ce6800c602822234d6c88f940b57f18b8c09d9f8a23491f2052770"
+  },
+  "scope": "38 synthetic Python cases and 3 pure Rust helper unit tests only; no guest program compiled or executed, no kernel build or VM",
+  "source_base": "5014d9bb4869053bd6d059b48ae5075ee5eb4bdf",
+  "source_dirty_expected": true,
+  "status": "PASS"
+}
