@@ -1,0 +1,1 @@
+{"status": "PASS", "scope": "Actual checker import, two fragment policy checks, foreign-profile negative and exact new dependency inclusion; no Kconfig/build/container execution"}

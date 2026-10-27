@@ -1,0 +1,17 @@
+{
+  "ARCH": null,
+  "CC": null,
+  "CROSS_COMPILE": null,
+  "HOSTCC": null,
+  "HOSTCFLAGS": null,
+  "HOSTLDFLAGS": null,
+  "KCONFIG_ALLCONFIG": null,
+  "KCONFIG_CONFIG": null,
+  "LLVM": null,
+  "LLVM_IAS": null,
+  "MAKEFLAGS": null,
+  "MFLAGS": null,
+  "PATH": "/usr/lib/llvm-19/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+  "RUSIX_CONFIG_SOURCE": "344b3b272c4e94ac5f7d337baa47dbd244bef191",
+  "TMPDIR": "/scratch"
+}

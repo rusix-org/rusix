@@ -1,0 +1,7 @@
+{
+  "status": "REVIEW_BLOCKER",
+  "found_by": "root source review",
+  "issue": "Checker imported verify-exit-mmap.py but passed copy-vma profiles",
+  "container_execution": false,
+  "preservation": "Original checker reconstructed byte-identically and checked against original prepared SHA256 before archiving"
+}

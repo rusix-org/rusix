@@ -1,0 +1,6 @@
+{
+  "status": "PASS",
+  "source": "344b3b272c4e94ac5f7d337baa47dbd244bef191",
+  "scope": "Resolved config requested values, sole selector axis, saved input hashes and actual container limits/exit; no candidate kernel compile",
+  "source_inputs": 91529
+}

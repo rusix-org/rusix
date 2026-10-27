@@ -1,0 +1,14 @@
+{
+  "status": "PREPARED_NOT_RUN",
+  "source": "344b3b272c4e94ac5f7d337baa47dbd244bef191",
+  "ready": false,
+  "checks": "Shell/Python syntax and read-only archive path enumeration only",
+  "archive_path_count": 68,
+  "input_sha256": {
+    "archive-inputs.py": "bbb33cdd8502acf033ef5903480d71a5684c482f3a3f61ded630be790e2249f9",
+    "check.py": "023776ecfc06392c65f137b56cb99a0cade2aa2966989656d98f6e3eac28a394",
+    "run.sh": "5101d63ab62b8afc4b4cd3916ff5664def8c135fe4d447931334c89946693cc4",
+    "snapshot.py": "71124b75a855f94a26ce45c85b54d1fd439463543d6bf7ead83429708452e4d4",
+    "README.md": "693401ca7a234a3b366fcd1a63102fe4f6d4d2a98cab998ddac6fc580b2d46c4"
+  }
+}

@@ -1,5 +1,15 @@
 # rusix progress
 
+At `344b3b272c4e`, both ordinary copy-VMA profiles pass pinned-image Kconfig
+resolution. Every requested setting survives; the pair differs only by
+`CONFIG_RUSIX_COPY_VMA_RUST`, with MEMFD_CREATE enabled and KUnit/native kernel
+fixtures disabled. [Configuration evidence](docs/evidence/copy-vma-config/manifest.json)
+binds the exact archived source, modes, before/after inputs, tools, commands and
+1 CPU/1 GiB container limits. Prior evidence is referenced rather than copied;
+generated dependencies and host binaries remain raw on disk with exhaustive
+hashes. This verifies configuration only, not candidate kernel compilation,
+linked Rust ownership or the two planned guest boots per side.
+
 **Rust BRD passes x86_64 block and ordinary-userspace ext4 contracts;
 all fourteen completion entry points and all ten swait.c entry points have verified
 opt-in Rust implementations; twenty-three generic wait and seventeen bit-wait entries pass parity, with the shared wait table owned by Rust.** Most of the kernel remains C. Linux 6.18.58
@@ -7,14 +17,14 @@ opt-in Rust implementations; twenty-three generic wait and seventeen bit-wait en
 verification runs locally. No subsystem divergence point is declared.
 
 VMA copy/publication is a new source-only candidate on `rusix/mm-copy-vma`.
-Paired local profile inputs and build/local-CI routing are being prepared; their only
+Paired local profile inputs and build/local-CI routing are implemented; their only
 requested difference is the copy selector, with Rust teardown enabled in both.
 Shell syntax passes; review caught and fixed a premature configuration check.
 Three routing regressions now cover fresh-build ordering and the sole selector
 axis. The initial 35-suite host run passed on 120 stable inputs, before these
 review fixes. The final host rerun passes all 36 suites on 121 stable inputs,
-including shallow-checkout portability fixes. Resolved Kconfig and actual builds
-remain pending. [Host evidence](docs/evidence/copy-vma-tooling/manifest.json)
+including shallow-checkout portability fixes. Resolved Kconfig now passes as
+recorded above; actual candidate kernel builds remain pending. [Host evidence](docs/evidence/copy-vma-tooling/manifest.json)
 retains both runs and the independently reviewed final source.
 The runner has passed source review for two bounded boots: nine ordinary consumers and
 five unchanged upstream DONTUNMAP cases. Hosted Actions remain disabled.
