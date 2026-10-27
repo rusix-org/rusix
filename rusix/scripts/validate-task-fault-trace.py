@@ -118,15 +118,20 @@ def callsite_proof(symbols, disassembly, calibration):
     for line in symbols.splitlines():
         m = re.fullmatch(r'([0-9a-f]+) ([0-9a-f]+) [Tt] (\S+)', line.strip())
         if m:
-            need(m[3] not in symbol_rows, 'Duplicate code symbol')
-            symbol_rows[m[3]] = (int(m[1],16),int(m[2],16))
+            symbol_rows.setdefault(m[3], []).append((int(m[1],16),int(m[2],16)))
+    def unique_symbol(name):
+        # Linked kernels legitimately repeat TU-local names and zero-sized
+        # assembler labels. Never choose an arbitrary row for a relevant name.
+        rows = symbol_rows.get(name, [])
+        need(len(rows) == 1 and rows[0][1] > 0, 'Missing/ambiguous relevant code symbol: '+name)
+        return rows[0]
     instructions = []
     for line in disassembly.splitlines():
         m = re.match(r'^\s*([0-9a-f]+):\s+(.+)$',line)
         if m: instructions.append((int(m[1],16),m[2]))
     range_name = calibration['range_symbol']
     need(range_name in symbol_rows, 'Missing constructor caller range')
-    start,size = symbol_rows[range_name]
+    start,size = unique_symbol(range_name)
     need(int(calibration['range_start'],0)==start and int(calibration['range_end'],0)==start+size, 'Required range does not match actual symbol extent')
     need(re.fullmatch(r'copy_process(?:\.(?:isra|constprop)\.\d+)?',range_name), 'Expected copy_process lifetime context')
     for key, allowed in [('slab_frame',{'kmem_cache_alloc_node_noprof'}), ('stack_frame',{'__alloc_pages_noprof','__alloc_frozen_pages_noprof'})]:
@@ -137,7 +142,7 @@ def callsite_proof(symbols, disassembly, calibration):
             need(m[1] in owners,'Frame is outside Rust constructor adapters')
         else:
             need(re.fullmatch(r'(?:copy_process|dup_task_struct|alloc_task_struct_node|alloc_thread_stack_node)(?:\.(?:isra|constprop)\.\d+)?',m[1]),'Frame is outside C constructor allocation chain')
-        base,size=symbol_rows[m[1]]; offset=int(m[2],16)
+        base,size=unique_symbol(m[1]); offset=int(m[2],16)
         need(int(m[3],16)==size and 0<=offset<size,'Wrong frame extent')
         pc=base+offset
         candidates=[(ins,next_ins) for ins,next_ins in zip(instructions,instructions[1:]) if next_ins[0]==pc]
@@ -149,14 +154,20 @@ def callsite_proof(symbols, disassembly, calibration):
         target=re.search(r'<([^>]+)>',text)
         need(target,'Unresolved call target')
         callee=target[1]
+        callee_base,_=unique_symbol(callee)
+        direct=re.fullmatch(r'callq?\s+(?:0x)?([0-9a-f]+)\s+<'+re.escape(callee)+r'>',text.strip())
+        need(direct and int(direct[1],16)==callee_base,'Call address differs from unique target symbol')
         targets=allowed | ({'rusix_task_alloc'} if key=='slab_frame' else set())
         qualifying=[t for a,t in instructions if base<=a<base+size and re.match(r'callq?\s',t) and any(re.search(r'<'+re.escape(name)+r'>',t) for name in targets)]
         need(len(qualifying)==1,'Ambiguous allocator sites in constructor owner; require reviewed argument/source mapping')
         if key=='slab_frame' and callee=='rusix_task_alloc':
             need(callee in symbol_rows,'Missing allocator adapter')
-            ab,sz=symbol_rows[callee]
+            ab,sz=unique_symbol(callee)
             branches=[t for a,t in instructions if ab<=a<ab+sz and re.match(r'(?:callq?|jmpq?)\s',t)]
-            need(len(branches)==1 and re.match(r'jmpq?\s',branches[0]) and re.search(r'<kmem_cache_alloc_node_noprof>',branches[0]),'Adapter is not the exact allocator tail jump')
+            need(len(branches)==1,'Adapter has ambiguous branches')
+            allocator,_=unique_symbol('kmem_cache_alloc_node_noprof')
+            tail=re.fullmatch(r'jmpq?\s+(?:0x)?([0-9a-f]+)\s+<kmem_cache_alloc_node_noprof>',branches[0].strip())
+            need(tail and int(tail[1],16)==allocator,'Adapter is not the exact allocator tail jump')
         else:
             need(callee in allowed,'Frame call is not the required allocator')
     return True

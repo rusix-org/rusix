@@ -52,7 +52,7 @@ class Gate(unittest.TestCase):
   with self.assertRaises(ValueError):m.attempt_identity('stack-2',WORK,set())
   with self.assertRaises(ValueError):m.attempt_identity('calibration',WORK,set())
  def test_linked_return_pc(self):
-  symbols='00001000 00000100 t copy_process\n'
+  symbols='00001000 00000100 t copy_process\n00002000 00000100 T kmem_cache_alloc_node_noprof\n00003000 00000100 T __alloc_pages_noprof\n'
   disasm='1000: nop\n1010: callq 0x2000 <kmem_cache_alloc_node_noprof>\n1015: movq %rax, %rbx\n1020: callq 0x3000 <__alloc_pages_noprof>\n1025: movq %rax, %rbx\n'
   cal=CAL|{'range_symbol':'copy_process','range_start':'0x1000','range_end':'0x1100'}
   self.assertTrue(m.callsite_proof(symbols,disasm,cal))
@@ -60,11 +60,31 @@ class Gate(unittest.TestCase):
    with self.assertRaises(ValueError):m.callsite_proof(symbols,disasm,bad)
   with self.assertRaises(ValueError):m.callsite_proof(symbols,disasm.replace('callq','jmpq'),cal)
  def test_rejects_unrelated_and_ambiguous_allocator_owner(self):
-  symbols='00001000 00000100 t copy_process\n00002000 00000100 t unrelated\n'
+  symbols='00001000 00000100 t copy_process\n00002000 00000100 t unrelated\n00003000 00000100 T kmem_cache_alloc_node_noprof\n00004000 00000100 T __alloc_pages_noprof\n'
   disasm='1000: nop\n1010: callq 0x3000 <kmem_cache_alloc_node_noprof>\n1015: nop\n1020: callq 0x4000 <__alloc_pages_noprof>\n1025: nop\n2010: callq 0x4000 <__alloc_pages_noprof>\n2015: nop\n'
   cal=CAL|{'range_symbol':'copy_process','range_start':'0x1000','range_end':'0x1100'}
   with self.assertRaises(ValueError):m.callsite_proof(symbols,disasm,cal|{'stack_frame':'unrelated+0x15/0x100'})
   with self.assertRaises(ValueError):m.callsite_proof(symbols,disasm+'1030: callq 0x4000 <__alloc_pages_noprof>\n1035: nop\n',cal)
+ def test_unrelated_duplicate_names_do_not_reject_real_sites(self):
+  symbols='00001000 00000100 t copy_process\n00002000 00000100 T kmem_cache_alloc_node_noprof\n00003000 00000100 T __alloc_pages_noprof\n'
+  text='1010: callq 0x2000 <kmem_cache_alloc_node_noprof>\n1015: nop\n1020: callq 0x3000 <__alloc_pages_noprof>\n1025: nop\n'
+  cal=CAL|{'range_symbol':'copy_process','range_start':'0x1000','range_end':'0x1100'}
+  duplicates='00004000 00000000 t .Ltmp0\n00005000 00000000 t .Ltmp0\n00006000 00000020 t local_helper\n00007000 00000020 t local_helper\n'
+  self.assertTrue(m.callsite_proof(symbols+duplicates,text,cal))
+  for extra in ['00004000 00000100 t copy_process\n','00002000 00000100 T kmem_cache_alloc_node_noprof\n','00004000 00000100 T __alloc_pages_noprof\n']:
+   with self.assertRaises(ValueError):m.callsite_proof(symbols+extra,text,cal)
+  for bad in [text.replace('0x2000','0x2001'),text.replace('0x3000','0x4000'),text.replace('0x2000','*%rax'),text.replace('callq','jmpq')]:
+   with self.assertRaises(ValueError):m.callsite_proof(symbols,bad,cal)
+  with self.assertRaises(ValueError):m.callsite_proof(symbols.replace('00003000 00000100','00003000 00000000'),text,cal)
+ def test_rust_tail_adapter_requires_unique_exact_allocator_target(self):
+  symbols='00001000 00000100 t copy_process\n00002000 00000100 T rusix_dup_task_struct\n00003000 00000020 T rusix_task_alloc\n00004000 00000100 T rusix_task_alloc_stack\n00005000 00000100 T kmem_cache_alloc_node_noprof\n00006000 00000100 T __alloc_pages_noprof\n'
+  text='2010: callq 0x3000 <rusix_task_alloc>\n2015: nop\n3000: jmpq 0x5000 <kmem_cache_alloc_node_noprof>\n4010: callq 0x6000 <__alloc_pages_noprof>\n4015: nop\n'
+  cal=CAL|dict(implementation='rust',range_symbol='copy_process',range_start='0x1000',range_end='0x1100',slab_frame='rusix_dup_task_struct+0x15/0x100',stack_frame='rusix_task_alloc_stack+0x15/0x100')
+  self.assertTrue(m.callsite_proof(symbols,text,cal))
+  for extra in ['00007000 00000100 T rusix_dup_task_struct\n','00007000 00000020 T rusix_task_alloc\n','00007000 00000100 T kmem_cache_alloc_node_noprof\n']:
+   with self.assertRaises(ValueError):m.callsite_proof(symbols+extra,text,cal)
+  for bad in [text.replace('0x5000','0x5001'),text.replace('jmpq','callq'),text+'3005: callq 0x6000 <__alloc_pages_noprof>\n']:
+   with self.assertRaises(ValueError):m.callsite_proof(symbols,bad,cal)
  def test_pair_profiles_only_selector(self):
   root=Path(__file__).resolve().parents[1]/'configs'
   c=(root/'x86_64-task-construction-fault-c.config').read_text()

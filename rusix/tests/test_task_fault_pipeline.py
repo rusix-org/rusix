@@ -9,7 +9,7 @@ S=Path(__file__).resolve().parents[1]/'scripts'
 sys.path.insert(0,str(S))
 spec=importlib.util.spec_from_file_location('fault_vm',S/'test-task-faults-vm.py')
 m=importlib.util.module_from_spec(spec);spec.loader.exec_module(m)
-SYMBOLS='00001000 00000100 t copy_process\n'
+SYMBOLS='00001000 00000100 t copy_process\n00002000 00000100 T kmem_cache_alloc_node_noprof\n00003000 00000100 T __alloc_pages_noprof\n'
 DISASM='1000: nop\n1010: callq 0x2000 <kmem_cache_alloc_node_noprof>\n1015: nop\n1020: callq 0x3000 <__alloc_pages_noprof>\n1025: nop\n'
 def console():
  return '\n'.join([f'RUSIX_TASK_FAULT_ARTIFACT {name} 78' for name in m.ARTIFACTS]+['RUSIX_TASK_FAULT_CAPTURE_COMPLETE','RUSIX_TASK_FAULT_INIT_COMPLETE'])
@@ -18,6 +18,11 @@ class Pipeline(unittest.TestCase):
   c=m.generator.discover(SYMBOLS,DISASM,'c')
   self.assertEqual(c['slab_frame'],'copy_process+0x15/0x100')
   self.assertEqual(c['stack_frame'],'copy_process+0x25/0x100')
+ def test_discovery_ignores_unrelated_local_duplicates_only(self):
+  symbols=SYMBOLS+'00004000 00000000 t .Ltmp0\n00005000 00000000 t .Ltmp0\n'
+  self.assertEqual(m.generator.discover(symbols,DISASM,'c')['stack_frame'],'copy_process+0x25/0x100')
+  for extra in ['00004000 00000100 t copy_process\n','00004000 00000100 T __alloc_pages_noprof\n']:
+   with self.assertRaises(ValueError):m.generator.discover(symbols+extra,DISASM,'c')
  def test_discovery_rejects_missing_ambiguous_unrelated(self):
   for text in [DISASM.replace('callq','jmpq'),DISASM+'1030: callq 0x3000 <__alloc_pages_noprof>\n1035: nop\n']:
    with self.assertRaises(ValueError):m.generator.discover(SYMBOLS,text,'c')
