@@ -1,0 +1,7 @@
+{
+  "path": "/home/aaron/code/rusix/linux-out/copy-vma-verification-001/c/logs/ci-copy-vma-c-copy-vma.run/result.json",
+  "sha256": "d992797fe5c571dd6199cad5614f887d93a2628d324f7be673d0bc44f56dd408",
+  "cases": 14,
+  "ordinary": 9,
+  "native": 5
+}

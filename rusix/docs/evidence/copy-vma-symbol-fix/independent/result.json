@@ -1,0 +1,13 @@
+{
+  "status": "PASS",
+  "base": "4d145044e0f27cdd51d0eca427c41fc77c402bef",
+  "stable_inputs": 54,
+  "source_delta": "exact global accessor token replacement only in two production files; inherited export unchanged",
+  "raw_hashes": {
+    "/home/aaron/code/rusix/linux-out/copy-vma-verification-001/rust/logs/ci-copy-vma-rust-build.9xYWbCqT/build.log": "62783bbde5d5b3e568f5848070a408ffcbc13d8b564f0de1444b6223f2042ad5",
+    "/home/aaron/code/rusix/linux-out/copy-vma-verification-001/matrix.exit": "53c234e5e8472b6ac51c1ae1cab3fe06fad053beb8ebfd8977b010655bfdd3c3",
+    "/home/aaron/code/rusix/linux-out/copy-vma-verification-001/rust/logs/container.exit": "53c234e5e8472b6ac51c1ae1cab3fe06fad053beb8ebfd8977b010655bfdd3c3",
+    "/home/aaron/code/rusix/linux-out/copy-vma-verification-001/c/logs/postchecks.json": "52e34818433d359071af4d8b98325c291cc3d8f78eb23e67556b0783f1f6bf41"
+  },
+  "scope": "source and host review; original actual link failure preserved; no new link/ELF/VM result"
+}

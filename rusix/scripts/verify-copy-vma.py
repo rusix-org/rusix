@@ -34,7 +34,26 @@ COPY=('structvm_area_struct*vma=*vmap;unsignedlongvma_start=vma->vm_start;struct
 
 
 def source_policy(source):
+    primitive_namespace(source)
     return exit.source_policy(source,source_extension=extension.ID)
+
+
+def primitive_namespace(source):
+    """The MM-copy policy and VMA-copy accessors coexist in every Rust lane."""
+    source=Path(source)
+    rust=(source/'mm/copy_vma_rust.rs').read_text()
+    ancestor=(source/'kernel/mm_copy_rust.rs').read_text()
+    helpers=set(re.findall(r'^\s+fn (rusix_(?:copy|link)_[a-z_]+)\(',rust,re.M))
+    exports=set(re.findall(r'^pub unsafe extern "C" fn (rusix_[a-z_]+)\(',ancestor,re.M))
+    if exports!={'rusix_copy_mm'} or not helpers or helpers & exports:
+        raise ValueError('Copy VMA primitive collides with inherited MM-copy export')
+    if 'rusix_copy_vma_mm' not in helpers:
+        raise ValueError('Missing VMA-specific MM accessor')
+    header=(source/'mm/copy_vma_impl.h').read_text()
+    if bodies(header,'rusix_copy_vma_mm')!=['return((structrusix_copy_vma_context*)opaque)->mm;']:
+        raise ValueError('Wrong VMA-specific MM accessor')
+    if bodies(header,'rusix_copy_mm'):
+        raise ValueError('Inherited MM-copy policy name used by a VMA accessor')
 
 
 def check_config(profile,values,target):
@@ -57,7 +76,7 @@ def bodies(text,name):
     # Anchor at a C declaration, not an if (vma_link(...)) { call site.
     text=re.sub(r'^#.*$', '', text, flags=re.M)
     text=re.sub(r'/\*.*?\*/|//[^\n]*', '', text, flags=re.S)
-    pattern=r'^[ \t]*(?:static\s+)?(?:inline\s+)?(?:struct\s+vm_area_struct\s*\*|unsigned\s+long|pgoff_t|rusix_vma_open_fn|void|int)\s*'+re.escape(name)+r'\s*\([^;{}]*\)\s*\{'
+    pattern=r'^[ \t]*(?:static\s+)?(?:inline\s+)?(?:struct\s+(?:vm_area_struct|mm_struct)\s*\*|unsigned\s+long|pgoff_t|rusix_vma_open_fn|void|int)\s*'+re.escape(name)+r'\s*\([^;{}]*\)\s*\{'
     result=[]
     for match in re.finditer(pattern,text,re.M):
         start=pos=match.end();depth=1
@@ -82,14 +101,15 @@ def check_preprocessed(text,rust):
         if bodies(text,'vma_link_file'):raise ValueError('Original file link remains selected')
         compact=re.sub(r'\s+','',text)
         if 'typedefvoid(*rusix_vma_open_fn)(structvm_area_struct*vma);' not in compact:raise ValueError('Changed open callback ABI')
-        for name,body in {'rusix_copy_open':'returnops->open;', 'rusix_copy_start':'returnvma->vm_start;',
+        for name,body in {'rusix_copy_vma_mm':'return((structrusix_copy_vma_context*)opaque)->mm;',
+                          'rusix_copy_open':'returnops->open;', 'rusix_copy_start':'returnvma->vm_start;',
                           'rusix_copy_end':'returnvma->vm_end;', 'rusix_copy_pgoff':'returnvma->vm_pgoff;',
                           'rusix_link_set_count':'mm->map_count=count;'}.items():
             if bodies(text,name)!=[body]:raise ValueError('Wrong canonical field primitive '+name)
     else:
         for name in ('copy_vma','vma_link','vma_link_file','__vma_link_file'):
             if len(bodies(text,name))!=1:raise ValueError('Missing original policy '+name)
-        for name in ('rusix_copy_open','rusix_copy_merge','rusix_link_prealloc'):
+        for name in ('rusix_copy_vma_mm','rusix_copy_open','rusix_copy_merge','rusix_link_prealloc'):
             if bodies(text,name):raise ValueError('Rust primitive selected in C mode')
         tokens={'copy_vma':('vma_merge_copied_range(&vmg);','*vmap=vma=new_vma;',
                             '*need_rmap_locks=(new_vma->vm_pgoff<=vma->vm_pgoff);',

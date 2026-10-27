@@ -1,0 +1,18 @@
+  LD      vmlinux.o
+ld.lld: error: duplicate symbol: rusix_copy_mm
+>>> defined at mm_copy_rust.391c59c91960624a-cgu.0
+>>>            kernel/mm_copy_rust.o:(rusix_copy_mm) in archive vmlinux.a
+>>> defined at vma.c
+>>>            mm/vma.o:(.text+0x2A10) in archive vmlinux.a
+
+ld.lld: error: duplicate symbol: __pfx_rusix_copy_mm
+>>> defined at mm_copy_rust.391c59c91960624a-cgu.0
+>>>            kernel/mm_copy_rust.o:(__pfx_rusix_copy_mm) in archive vmlinux.a
+>>> defined at vma.c
+>>>            mm/vma.o:(.text+0x2A00) in archive vmlinux.a
+make[3]: *** [/src/scripts/Makefile.vmlinux_o:72: vmlinux.o] Error 1
+make[2]: *** [/src/Makefile:1253: vmlinux_o] Error 2
+make[1]: *** [/src/Makefile:248: __sub-make] Error 2
+make[1]: Leaving directory '/out/builds/ci-copy-vma-rust'
+make: *** [Makefile:248: __sub-make] Error 2
+make: Leaving directory '/src'

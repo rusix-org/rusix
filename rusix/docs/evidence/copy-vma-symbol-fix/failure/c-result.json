@@ -1,0 +1,64 @@
+{
+  "artifacts": {
+    "/out/builds/copy-vma-vm-ci-copy-vma-c/bzImage": "299723e6fb34b3ea419571756ec5bab48743a4c7ec08e6a21405396c6b031d43",
+    "/out/builds/copy-vma-vm-ci-copy-vma-c/native/init": "3d331e923f71f218b7c358bc67ecb81af9922220b6b0b2cf65b94d314414065d",
+    "/out/builds/copy-vma-vm-ci-copy-vma-c/native/initramfs.cpio": "5ee22718bc6b647a8ad55c0c84248e2b04db2a83afeb834ba09f85338ba8fdf9",
+    "/out/builds/copy-vma-vm-ci-copy-vma-c/native/probe": "e253cb09435fd43108552e81ef8286fabc0bb6e2c937973bdf360e515a27c010",
+    "/out/builds/copy-vma-vm-ci-copy-vma-c/ordinary/init": "3fbbd3b7820a0d2990a9e813d427ba079b07d3e56c182a315a780b65d0f3ec7d",
+    "/out/builds/copy-vma-vm-ci-copy-vma-c/ordinary/initramfs.cpio": "50393b811a3366cc5423f8ad0ac33c5f00901cf581e0481b9c48aff84c1336b3",
+    "/out/builds/copy-vma-vm-ci-copy-vma-c/ordinary/probe": "3186ae8f7c9e8a4ce917643c1a68dcd867eeac47ea8aa9dea48acfd99702b45a"
+  },
+  "boots": 2,
+  "cases": 14,
+  "implementation": "c",
+  "native_cases": [
+    "mremap_dontunmap_simple",
+    "mremap_dontunmap_simple_shmem",
+    "mremap_dontunmap_simple_fixed",
+    "mremap_dontunmap_partial_mapping",
+    "mremap_dontunmap_partial_mapping_overwrite"
+  ],
+  "ordinary_cases": [
+    "shared_clone_write_and_exit",
+    "shared_clone_exec_detaches_mm",
+    "private_fork_cow",
+    "dontfork_omits_only_advised_range",
+    "wipeonfork_clears_child_and_grandchild",
+    "private_file_mapping_cow_and_lifetime",
+    "shared_file_mapping_survives_parent_unmap",
+    "mprotect_middle_split_and_restore",
+    "fixed_mremap_preserves_unlinked_file_mapping"
+  ],
+  "results": {
+    "native": {
+      "cases": [
+        "mremap_dontunmap_simple",
+        "mremap_dontunmap_simple_shmem",
+        "mremap_dontunmap_simple_fixed",
+        "mremap_dontunmap_partial_mapping",
+        "mremap_dontunmap_partial_mapping_overwrite"
+      ],
+      "count": 5,
+      "qemu_exit": 0,
+      "scope": "Native upstream MREMAP_DONTUNMAP success cases only",
+      "status": "PASS"
+    },
+    "ordinary": {
+      "cases": [
+        "shared_clone_write_and_exit",
+        "shared_clone_exec_detaches_mm",
+        "private_fork_cow",
+        "dontfork_omits_only_advised_range",
+        "wipeonfork_clears_child_and_grandchild",
+        "private_file_mapping_cow_and_lifetime",
+        "shared_file_mapping_survives_parent_unmap",
+        "mprotect_middle_split_and_restore",
+        "fixed_mremap_preserves_unlinked_file_mapping"
+      ],
+      "qemu_exit": 0,
+      "status": "PASS"
+    }
+  },
+  "source_revision": "4d145044e0f27cdd51d0eca427c41fc77c402bef",
+  "status": "PASS"
+}

@@ -1,5 +1,11 @@
 # rusix progress
 
+Copy-VMA run 001 passed C nine ordinary plus five native cases, then failed
+Rust linking on a private-accessor name collision. The accessor rename and
+namespace regression checks pass 36 host suites (380 cases) and independent
+source review. The fix is not rebuilt; no Rust copy-VMA guest ran.
+[Pause evidence](docs/evidence/copy-vma-symbol-fix/manifest.json).
+
 The copy-VMA successor now carries the reviewed fixture archive-context and
 canonical Rust KUnit sentinel corrections from `13e0ddc71a57`, without changing
 production source, configurations or copy-VMA extension/delegation rules.

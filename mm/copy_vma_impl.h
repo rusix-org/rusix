@@ -22,7 +22,7 @@ extern const int rusix_copy_enomem;
 const unsigned int rusix_copy_page_shift = PAGE_SHIFT;
 const int rusix_copy_enomem = -ENOMEM;
 struct vm_area_struct *rusix_copy_source(void *opaque);
-struct mm_struct *rusix_copy_mm(void *opaque);
+struct mm_struct *rusix_copy_vma_mm(void *opaque);
 unsigned long rusix_copy_source_start(void *opaque);
 unsigned long rusix_copy_start(struct vm_area_struct *vma);
 unsigned long rusix_copy_end(struct vm_area_struct *vma);
@@ -67,7 +67,7 @@ struct vm_area_struct *rusix_copy_source(void *opaque)
 	return ((struct rusix_copy_vma_context *)opaque)->source;
 }
 
-struct mm_struct *rusix_copy_mm(void *opaque)
+struct mm_struct *rusix_copy_vma_mm(void *opaque)
 {
 	return ((struct rusix_copy_vma_context *)opaque)->mm;
 }

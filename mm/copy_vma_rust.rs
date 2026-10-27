@@ -15,7 +15,7 @@ unsafe extern "C" {
     static rusix_copy_page_shift: c_uint;
     static rusix_copy_enomem: c_int;
     fn rusix_copy_source(opaque: *mut c_void) -> *mut vm_area_struct;
-    fn rusix_copy_mm(opaque: *mut c_void) -> *mut mm_struct;
+    fn rusix_copy_vma_mm(opaque: *mut c_void) -> *mut mm_struct;
     fn rusix_copy_source_start(opaque: *mut c_void) -> c_ulong;
     fn rusix_copy_start(vma: *mut vm_area_struct) -> c_ulong;
     fn rusix_copy_end(vma: *mut vm_area_struct) -> c_ulong;
@@ -155,7 +155,7 @@ pub unsafe extern "C" fn rusix_copy_vma(
     // Rollback releases acquired resources only, never borrowed copied pointers.
     unsafe {
         let mut vma = rusix_copy_source(ctx);
-        let mm = rusix_copy_mm(ctx);
+        let mm = rusix_copy_vma_mm(ctx);
         let saved_start = rusix_copy_source_start(ctx);
         let end = addr.wrapping_add(len);
         let mut faulted = true;

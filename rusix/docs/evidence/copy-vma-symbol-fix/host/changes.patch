@@ -1,0 +1,174 @@
+diff --git i/mm/copy_vma_impl.h w/mm/copy_vma_impl.h
+index 3f957acb67..90bade2061 100644
+--- i/mm/copy_vma_impl.h
++++ w/mm/copy_vma_impl.h
+@@ -22,7 +22,7 @@ extern const int rusix_copy_enomem;
+ const unsigned int rusix_copy_page_shift = PAGE_SHIFT;
+ const int rusix_copy_enomem = -ENOMEM;
+ struct vm_area_struct *rusix_copy_source(void *opaque);
+-struct mm_struct *rusix_copy_mm(void *opaque);
++struct mm_struct *rusix_copy_vma_mm(void *opaque);
+ unsigned long rusix_copy_source_start(void *opaque);
+ unsigned long rusix_copy_start(struct vm_area_struct *vma);
+ unsigned long rusix_copy_end(struct vm_area_struct *vma);
+@@ -67,7 +67,7 @@ struct vm_area_struct *rusix_copy_source(void *opaque)
+ 	return ((struct rusix_copy_vma_context *)opaque)->source;
+ }
+ 
+-struct mm_struct *rusix_copy_mm(void *opaque)
++struct mm_struct *rusix_copy_vma_mm(void *opaque)
+ {
+ 	return ((struct rusix_copy_vma_context *)opaque)->mm;
+ }
+diff --git i/mm/copy_vma_rust.rs w/mm/copy_vma_rust.rs
+index fda8baaa86..1d109f3aff 100644
+--- i/mm/copy_vma_rust.rs
++++ w/mm/copy_vma_rust.rs
+@@ -15,7 +15,7 @@
+     static rusix_copy_page_shift: c_uint;
+     static rusix_copy_enomem: c_int;
+     fn rusix_copy_source(opaque: *mut c_void) -> *mut vm_area_struct;
+-    fn rusix_copy_mm(opaque: *mut c_void) -> *mut mm_struct;
++    fn rusix_copy_vma_mm(opaque: *mut c_void) -> *mut mm_struct;
+     fn rusix_copy_source_start(opaque: *mut c_void) -> c_ulong;
+     fn rusix_copy_start(vma: *mut vm_area_struct) -> c_ulong;
+     fn rusix_copy_end(vma: *mut vm_area_struct) -> c_ulong;
+@@ -155,7 +155,7 @@
+     // Rollback releases acquired resources only, never borrowed copied pointers.
+     unsafe {
+         let mut vma = rusix_copy_source(ctx);
+-        let mm = rusix_copy_mm(ctx);
++        let mm = rusix_copy_vma_mm(ctx);
+         let saved_start = rusix_copy_source_start(ctx);
+         let end = addr.wrapping_add(len);
+         let mut faulted = true;
+diff --git i/rusix/scripts/verify-copy-vma.py w/rusix/scripts/verify-copy-vma.py
+index 264091a080..86690d6a9a 100644
+--- i/rusix/scripts/verify-copy-vma.py
++++ w/rusix/scripts/verify-copy-vma.py
+@@ -34,9 +34,28 @@ COPY=('structvm_area_struct*vma=*vmap;unsignedlongvma_start=vma->vm_start;struct
+ 
+ 
+ def source_policy(source):
++    primitive_namespace(source)
+     return exit.source_policy(source,source_extension=extension.ID)
+ 
+ 
++def primitive_namespace(source):
++    """The MM-copy policy and VMA-copy accessors coexist in every Rust lane."""
++    source=Path(source)
++    rust=(source/'mm/copy_vma_rust.rs').read_text()
++    ancestor=(source/'kernel/mm_copy_rust.rs').read_text()
++    helpers=set(re.findall(r'^\s+fn (rusix_(?:copy|link)_[a-z_]+)\(',rust,re.M))
++    exports=set(re.findall(r'^pub unsafe extern "C" fn (rusix_[a-z_]+)\(',ancestor,re.M))
++    if exports!={'rusix_copy_mm'} or not helpers or helpers & exports:
++        raise ValueError('Copy VMA primitive collides with inherited MM-copy export')
++    if 'rusix_copy_vma_mm' not in helpers:
++        raise ValueError('Missing VMA-specific MM accessor')
++    header=(source/'mm/copy_vma_impl.h').read_text()
++    if bodies(header,'rusix_copy_vma_mm')!=['return((structrusix_copy_vma_context*)opaque)->mm;']:
++        raise ValueError('Wrong VMA-specific MM accessor')
++    if bodies(header,'rusix_copy_mm'):
++        raise ValueError('Inherited MM-copy policy name used by a VMA accessor')
++
++
+ def check_config(profile,values,target):
+     if profile not in PROFILES:raise ValueError('Unknown copy VMA profile')
+     exit.check_config('exit-mmap-rust',values,target)
+@@ -57,7 +76,7 @@ def bodies(text,name):
+     # Anchor at a C declaration, not an if (vma_link(...)) { call site.
+     text=re.sub(r'^#.*$', '', text, flags=re.M)
+     text=re.sub(r'/\*.*?\*/|//[^\n]*', '', text, flags=re.S)
+-    pattern=r'^[ \t]*(?:static\s+)?(?:inline\s+)?(?:struct\s+vm_area_struct\s*\*|unsigned\s+long|pgoff_t|rusix_vma_open_fn|void|int)\s*'+re.escape(name)+r'\s*\([^;{}]*\)\s*\{'
++    pattern=r'^[ \t]*(?:static\s+)?(?:inline\s+)?(?:struct\s+(?:vm_area_struct|mm_struct)\s*\*|unsigned\s+long|pgoff_t|rusix_vma_open_fn|void|int)\s*'+re.escape(name)+r'\s*\([^;{}]*\)\s*\{'
+     result=[]
+     for match in re.finditer(pattern,text,re.M):
+         start=pos=match.end();depth=1
+@@ -82,14 +101,15 @@ def check_preprocessed(text,rust):
+         if bodies(text,'vma_link_file'):raise ValueError('Original file link remains selected')
+         compact=re.sub(r'\s+','',text)
+         if 'typedefvoid(*rusix_vma_open_fn)(structvm_area_struct*vma);' not in compact:raise ValueError('Changed open callback ABI')
+-        for name,body in {'rusix_copy_open':'returnops->open;', 'rusix_copy_start':'returnvma->vm_start;',
++        for name,body in {'rusix_copy_vma_mm':'return((structrusix_copy_vma_context*)opaque)->mm;',
++                          'rusix_copy_open':'returnops->open;', 'rusix_copy_start':'returnvma->vm_start;',
+                           'rusix_copy_end':'returnvma->vm_end;', 'rusix_copy_pgoff':'returnvma->vm_pgoff;',
+                           'rusix_link_set_count':'mm->map_count=count;'}.items():
+             if bodies(text,name)!=[body]:raise ValueError('Wrong canonical field primitive '+name)
+     else:
+         for name in ('copy_vma','vma_link','vma_link_file','__vma_link_file'):
+             if len(bodies(text,name))!=1:raise ValueError('Missing original policy '+name)
+-        for name in ('rusix_copy_open','rusix_copy_merge','rusix_link_prealloc'):
++        for name in ('rusix_copy_vma_mm','rusix_copy_open','rusix_copy_merge','rusix_link_prealloc'):
+             if bodies(text,name):raise ValueError('Rust primitive selected in C mode')
+         tokens={'copy_vma':('vma_merge_copied_range(&vmg);','*vmap=vma=new_vma;',
+                             '*need_rmap_locks=(new_vma->vm_pgoff<=vma->vm_pgoff);',
+diff --git i/rusix/tests/test_copy_vma_selection.py w/rusix/tests/test_copy_vma_selection.py
+index df0cb092f2..8d71de7b40 100644
+--- i/rusix/tests/test_copy_vma_selection.py
++++ w/rusix/tests/test_copy_vma_selection.py
+@@ -24,7 +24,8 @@ def selected():
+     text='static void vma_prepare(void){i_mmap_lock_write(vp->mapping);__vma_link_file(vp->insert,vp->insert->vm_file->f_mapping);}'+'\nvoid copy_vma(void){'+g.COPY+'}\nvoid vma_link(void){'+g.LINK+'}\n'
+     text+='void __vma_link_file(void){rusix_vma_link_file_locked(vma,mapping);}\n'
+     text+='typedef void (*rusix_vma_open_fn)(struct vm_area_struct *vma);\n'
+-    for name,body in {'rusix_copy_open':'returnops->open;', 'rusix_copy_start':'returnvma->vm_start;',
++    for name,body in {'rusix_copy_vma_mm':'return((structrusix_copy_vma_context*)opaque)->mm;',
++                      'rusix_copy_open':'returnops->open;', 'rusix_copy_start':'returnvma->vm_start;',
+                       'rusix_copy_end':'returnvma->vm_end;', 'rusix_copy_pgoff':'returnvma->vm_pgoff;',
+                       'rusix_link_set_count':'mm->map_count=count;'}.items():text+='void '+name+'(void){'+body+'}\n'
+     return text
+@@ -52,16 +53,45 @@ class Selection(unittest.TestCase):
+         with tempfile.TemporaryDirectory() as tmp:
+             root=Path(tmp);(root/'mm').mkdir()
+             for name in g.exit.extension.REGIONS:(root/name).write_text((ROOT/name).read_text())
++            for name in ('mm/copy_vma_rust.rs','mm/copy_vma_impl.h','kernel/mm_copy_rust.rs'):
++                (root/name).parent.mkdir(parents=True,exist_ok=True)
++                (root/name).write_text((ROOT/name).read_text())
+             g.source_policy(root)
+             (root/'mm/internal.h').write_text((root/'mm/internal.h').read_text()+'\n')
+             with self.assertRaises(ValueError):g.source_policy(root)
+ 
++    def test_vma_mm_accessor_keeps_inherited_policy_namespace(self):
++        g.primitive_namespace(ROOT)
++        self.assertEqual(g.bodies((ROOT/'mm/copy_vma_impl.h').read_text(),'rusix_copy_vma_mm'),
++                         ['return((structrusix_copy_vma_context*)opaque)->mm;'])
++        self.assertIn('fn rusix_copy_mm(', (ROOT/'kernel/mm_copy_rust.rs').read_text())
++
++    def test_link_failure_namespace_and_wrong_accessor_regressions(self):
++        names=('mm/copy_vma_rust.rs','mm/copy_vma_impl.h','kernel/mm_copy_rust.rs')
++        original={name:(ROOT/name).read_text() for name in names}
++        changes=(
++            {'mm/copy_vma_rust.rs':original['mm/copy_vma_rust.rs'].replace('rusix_copy_vma_mm','rusix_copy_mm'),
++             'mm/copy_vma_impl.h':original['mm/copy_vma_impl.h'].replace('rusix_copy_vma_mm','rusix_copy_mm')},
++            {'kernel/mm_copy_rust.rs':original['kernel/mm_copy_rust.rs'].replace('rusix_copy_mm','rusix_copy_vma_mm')},
++            {'mm/copy_vma_impl.h':original['mm/copy_vma_impl.h'].replace('opaque)->mm;', 'opaque)->source;',1)},
++        )
++        with tempfile.TemporaryDirectory() as tmp:
++            root=Path(tmp)
++            for change in changes:
++                for name in names:
++                    (root/name).parent.mkdir(parents=True,exist_ok=True)
++                    (root/name).write_text(change.get(name,original[name]))
++                with self.subTest(change=list(change)),self.assertRaises(ValueError):
++                    g.primitive_namespace(root)
++
+     def test_exact_context_dispatch_and_no_old_policy(self):
+         text=selected();g.check_preprocessed(text,True)
+         for bad in (text.replace('.vmi=&vmi','.vmi=0'),text.replace('.policy=((void*)0)','.policy=borrowed'),
+                     text.replace('.source_start=vma_start','.source_start=0'),text.replace('keep_source);','false);'),
+                     text+'void vma_link_file(void){}',text+'void copy_vma(void){}',
+-                    text.replace('returnops->open;','return0;'),text.replace('(*rusix_vma_open_fn)','(*wrong)'),text.replace('i_mmap_lock_write(vp->mapping);','')):
++                    text.replace('returnops->open;','return0;'),text.replace('(*rusix_vma_open_fn)','(*wrong)'),
++                    text.replace('rusix_copy_vma_mm','rusix_copy_mm'),text.replace('opaque)->mm;','opaque)->source;'),
++                    text.replace('i_mmap_lock_write(vp->mapping);','')):
+             with self.assertRaises(ValueError):g.check_preprocessed(bad,True)
+         with self.assertRaises(ValueError):g.check_preprocessed(text,False)
+ 
+@@ -82,7 +112,7 @@ class Selection(unittest.TestCase):
+     def test_inputs_bind_four_commands_new_headers_and_imports(self):
+         b=Path('/out/builds/a');s=Path('/src');paths=g.input_paths(b,s,True)
+         self.assertEqual(len(paths),len(set(paths)))
+-        for item in ('mm/copy_vma_impl.h','mm/copy_vma_rust.rs','rusix/scripts/copy_vma_source.py','rusix/scripts/verify-copy-vma.py','rusix/scripts/preprocess-copy-vma.py','rusix/scripts/verify-brd-parameter-owner.py','rusix/scripts/measure-kernel-languages.py'):
++        for item in ('mm/copy_vma_impl.h','mm/copy_vma_rust.rs','kernel/mm_copy_rust.rs','rusix/scripts/copy_vma_source.py','rusix/scripts/verify-copy-vma.py','rusix/scripts/preprocess-copy-vma.py','rusix/scripts/verify-brd-parameter-owner.py','rusix/scripts/measure-kernel-languages.py'):
+             self.assertIn(s/item,paths)
+         for unit in ('kernel/fork','mm/mmap','mm/vma_init','mm/vma'):
+             d,n=unit.split('/');self.assertIn(b/f'{d}/.{n}.o.cmd',paths)

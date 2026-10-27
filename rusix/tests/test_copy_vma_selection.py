@@ -24,7 +24,8 @@ def selected():
     text='static void vma_prepare(void){i_mmap_lock_write(vp->mapping);__vma_link_file(vp->insert,vp->insert->vm_file->f_mapping);}'+'\nvoid copy_vma(void){'+g.COPY+'}\nvoid vma_link(void){'+g.LINK+'}\n'
     text+='void __vma_link_file(void){rusix_vma_link_file_locked(vma,mapping);}\n'
     text+='typedef void (*rusix_vma_open_fn)(struct vm_area_struct *vma);\n'
-    for name,body in {'rusix_copy_open':'returnops->open;', 'rusix_copy_start':'returnvma->vm_start;',
+    for name,body in {'rusix_copy_vma_mm':'return((structrusix_copy_vma_context*)opaque)->mm;',
+                      'rusix_copy_open':'returnops->open;', 'rusix_copy_start':'returnvma->vm_start;',
                       'rusix_copy_end':'returnvma->vm_end;', 'rusix_copy_pgoff':'returnvma->vm_pgoff;',
                       'rusix_link_set_count':'mm->map_count=count;'}.items():text+='void '+name+'(void){'+body+'}\n'
     return text
@@ -52,16 +53,45 @@ class Selection(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root=Path(tmp);(root/'mm').mkdir()
             for name in g.exit.extension.REGIONS:(root/name).write_text((ROOT/name).read_text())
+            for name in ('mm/copy_vma_rust.rs','mm/copy_vma_impl.h','kernel/mm_copy_rust.rs'):
+                (root/name).parent.mkdir(parents=True,exist_ok=True)
+                (root/name).write_text((ROOT/name).read_text())
             g.source_policy(root)
             (root/'mm/internal.h').write_text((root/'mm/internal.h').read_text()+'\n')
             with self.assertRaises(ValueError):g.source_policy(root)
+
+    def test_vma_mm_accessor_keeps_inherited_policy_namespace(self):
+        g.primitive_namespace(ROOT)
+        self.assertEqual(g.bodies((ROOT/'mm/copy_vma_impl.h').read_text(),'rusix_copy_vma_mm'),
+                         ['return((structrusix_copy_vma_context*)opaque)->mm;'])
+        self.assertIn('fn rusix_copy_mm(', (ROOT/'kernel/mm_copy_rust.rs').read_text())
+
+    def test_link_failure_namespace_and_wrong_accessor_regressions(self):
+        names=('mm/copy_vma_rust.rs','mm/copy_vma_impl.h','kernel/mm_copy_rust.rs')
+        original={name:(ROOT/name).read_text() for name in names}
+        changes=(
+            {'mm/copy_vma_rust.rs':original['mm/copy_vma_rust.rs'].replace('rusix_copy_vma_mm','rusix_copy_mm'),
+             'mm/copy_vma_impl.h':original['mm/copy_vma_impl.h'].replace('rusix_copy_vma_mm','rusix_copy_mm')},
+            {'kernel/mm_copy_rust.rs':original['kernel/mm_copy_rust.rs'].replace('rusix_copy_mm','rusix_copy_vma_mm')},
+            {'mm/copy_vma_impl.h':original['mm/copy_vma_impl.h'].replace('opaque)->mm;', 'opaque)->source;',1)},
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            root=Path(tmp)
+            for change in changes:
+                for name in names:
+                    (root/name).parent.mkdir(parents=True,exist_ok=True)
+                    (root/name).write_text(change.get(name,original[name]))
+                with self.subTest(change=list(change)),self.assertRaises(ValueError):
+                    g.primitive_namespace(root)
 
     def test_exact_context_dispatch_and_no_old_policy(self):
         text=selected();g.check_preprocessed(text,True)
         for bad in (text.replace('.vmi=&vmi','.vmi=0'),text.replace('.policy=((void*)0)','.policy=borrowed'),
                     text.replace('.source_start=vma_start','.source_start=0'),text.replace('keep_source);','false);'),
                     text+'void vma_link_file(void){}',text+'void copy_vma(void){}',
-                    text.replace('returnops->open;','return0;'),text.replace('(*rusix_vma_open_fn)','(*wrong)'),text.replace('i_mmap_lock_write(vp->mapping);','')):
+                    text.replace('returnops->open;','return0;'),text.replace('(*rusix_vma_open_fn)','(*wrong)'),
+                    text.replace('rusix_copy_vma_mm','rusix_copy_mm'),text.replace('opaque)->mm;','opaque)->source;'),
+                    text.replace('i_mmap_lock_write(vp->mapping);','')):
             with self.assertRaises(ValueError):g.check_preprocessed(bad,True)
         with self.assertRaises(ValueError):g.check_preprocessed(text,False)
 
@@ -82,7 +112,7 @@ class Selection(unittest.TestCase):
     def test_inputs_bind_four_commands_new_headers_and_imports(self):
         b=Path('/out/builds/a');s=Path('/src');paths=g.input_paths(b,s,True)
         self.assertEqual(len(paths),len(set(paths)))
-        for item in ('mm/copy_vma_impl.h','mm/copy_vma_rust.rs','rusix/scripts/copy_vma_source.py','rusix/scripts/verify-copy-vma.py','rusix/scripts/preprocess-copy-vma.py','rusix/scripts/verify-brd-parameter-owner.py','rusix/scripts/measure-kernel-languages.py'):
+        for item in ('mm/copy_vma_impl.h','mm/copy_vma_rust.rs','kernel/mm_copy_rust.rs','rusix/scripts/copy_vma_source.py','rusix/scripts/verify-copy-vma.py','rusix/scripts/preprocess-copy-vma.py','rusix/scripts/verify-brd-parameter-owner.py','rusix/scripts/measure-kernel-languages.py'):
             self.assertIn(s/item,paths)
         for unit in ('kernel/fork','mm/mmap','mm/vma_init','mm/vma'):
             d,n=unit.split('/');self.assertIn(b/f'{d}/.{n}.o.cmd',paths)

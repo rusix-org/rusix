@@ -1,0 +1,196 @@
+{
+  "status": "PASS",
+  "base": "4d145044e0f27cdd51d0eca427c41fc77c402bef",
+  "changed": [
+    "mm/copy_vma_impl.h",
+    "mm/copy_vma_rust.rs",
+    "rusix/scripts/verify-copy-vma.py",
+    "rusix/tests/test_copy_vma_selection.py"
+  ],
+  "suites": 36,
+  "cases": 380,
+  "stable_inputs": 1323,
+  "results": [
+    {
+      "test": "rusix/tests/test_brd_ext4_gate.py",
+      "exit": 0,
+      "cases": 26
+    },
+    {
+      "test": "rusix/tests/test_brd_fixed_parameters_gate.py",
+      "exit": 0,
+      "cases": 8
+    },
+    {
+      "test": "rusix/tests/test_brd_gate.py",
+      "exit": 0,
+      "cases": 21
+    },
+    {
+      "test": "rusix/tests/test_brd_kunit_gate.py",
+      "exit": 0,
+      "cases": 12
+    },
+    {
+      "test": "rusix/tests/test_brd_owner_elf.py",
+      "exit": 0,
+      "cases": 3
+    },
+    {
+      "test": "rusix/tests/test_brd_parameter_oracle.py",
+      "exit": 0,
+      "cases": 6
+    },
+    {
+      "test": "rusix/tests/test_brd_parameters_gate.py",
+      "exit": 0,
+      "cases": 13
+    },
+    {
+      "test": "rusix/tests/test_brd_partitions_gate.py",
+      "exit": 0,
+      "cases": 12
+    },
+    {
+      "test": "rusix/tests/test_completion_kunit_gate.py",
+      "exit": 0,
+      "cases": 10
+    },
+    {
+      "test": "rusix/tests/test_constructor_archive.py",
+      "exit": 0,
+      "cases": 6
+    },
+    {
+      "test": "rusix/tests/test_copy_vma_gate.py",
+      "exit": 0,
+      "cases": 13
+    },
+    {
+      "test": "rusix/tests/test_copy_vma_routing.py",
+      "exit": 0,
+      "cases": 3
+    },
+    {
+      "test": "rusix/tests/test_copy_vma_selection.py",
+      "exit": 0,
+      "cases": 14
+    },
+    {
+      "test": "rusix/tests/test_dup_mmap_gate.py",
+      "exit": 0,
+      "cases": 12
+    },
+    {
+      "test": "rusix/tests/test_dup_mmap_selection.py",
+      "exit": 0,
+      "cases": 14
+    },
+    {
+      "test": "rusix/tests/test_exit_kunit_elf.py",
+      "exit": 0,
+      "cases": 11
+    },
+    {
+      "test": "rusix/tests/test_exit_mmap_gate.py",
+      "exit": 0,
+      "cases": 14
+    },
+    {
+      "test": "rusix/tests/test_exit_mmap_kunit_gate.py",
+      "exit": 0,
+      "cases": 7
+    },
+    {
+      "test": "rusix/tests/test_exit_mmap_kunit_routing.py",
+      "exit": 0,
+      "cases": 8
+    },
+    {
+      "test": "rusix/tests/test_exit_mmap_selection.py",
+      "exit": 0,
+      "cases": 14
+    },
+    {
+      "test": "rusix/tests/test_kernel_languages.py",
+      "exit": 0,
+      "cases": 10
+    },
+    {
+      "test": "rusix/tests/test_kunit_gate.py",
+      "exit": 0,
+      "cases": 9
+    },
+    {
+      "test": "rusix/tests/test_mm_construction_gate.py",
+      "exit": 0,
+      "cases": 12
+    },
+    {
+      "test": "rusix/tests/test_mm_construction_selection.py",
+      "exit": 0,
+      "cases": 7
+    },
+    {
+      "test": "rusix/tests/test_mm_copy_gate.py",
+      "exit": 0,
+      "cases": 12
+    },
+    {
+      "test": "rusix/tests/test_mm_copy_selection.py",
+      "exit": 0,
+      "cases": 13
+    },
+    {
+      "test": "rusix/tests/test_mm_release_kunit_gate.py",
+      "exit": 0,
+      "cases": 5
+    },
+    {
+      "test": "rusix/tests/test_mm_release_selection.py",
+      "exit": 0,
+      "cases": 8
+    },
+    {
+      "test": "rusix/tests/test_repo_paths.py",
+      "exit": 0,
+      "cases": 6
+    },
+    {
+      "test": "rusix/tests/test_run_copy_vma.py",
+      "exit": 0,
+      "cases": 12
+    },
+    {
+      "test": "rusix/tests/test_saved_clang_command.py",
+      "exit": 0,
+      "cases": 5
+    },
+    {
+      "test": "rusix/tests/test_server_target.py",
+      "exit": 0,
+      "cases": 9
+    },
+    {
+      "test": "rusix/tests/test_task_construction_gate.py",
+      "exit": 0,
+      "cases": 11
+    },
+    {
+      "test": "rusix/tests/test_task_construction_selection.py",
+      "exit": 0,
+      "cases": 10
+    },
+    {
+      "test": "rusix/tests/test_vma_lifecycle_gate.py",
+      "exit": 0,
+      "cases": 13
+    },
+    {
+      "test": "rusix/tests/test_vma_lifecycle_selection.py",
+      "exit": 0,
+      "cases": 11
+    }
+  ],
+  "scope": "Host source/namespace/selection regressions; no compiler, linked kernel or guest execution"
+}
