@@ -184,6 +184,13 @@ static inline int mmap_file(struct file *file, struct vm_area_struct *vma)
  * it in an inconsistent state which makes the use of any hooks suspect, clear
  * them down by installing dummy empty hooks.
  */
+#ifdef CONFIG_RUSIX_EXIT_MMAP_RUST
+void rusix_vma_close(struct vm_area_struct *vma);
+static inline void vma_close(struct vm_area_struct *vma)
+{
+	rusix_vma_close(vma);
+}
+#else
 static inline void vma_close(struct vm_area_struct *vma)
 {
 	if (vma->vm_ops && vma->vm_ops->close) {
@@ -196,6 +203,7 @@ static inline void vma_close(struct vm_area_struct *vma)
 		vma->vm_ops = &vma_dummy_vm_ops;
 	}
 }
+#endif /* CONFIG_RUSIX_EXIT_MMAP_RUST */
 
 #ifdef CONFIG_MMU
 

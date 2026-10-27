@@ -1251,6 +1251,18 @@ limits_failed:
 EXPORT_SYMBOL(vm_brk_flags);
 
 /* Release all mmaps. */
+#ifdef CONFIG_RUSIX_EXIT_MMAP_RUST
+#include "exit_mmap_impl.h"
+extern void rusix_exit_mmap(struct mm_struct *mm, struct rusix_exit_context *ctx);
+void exit_mmap(struct mm_struct *mm)
+{
+	struct mmu_gather tlb;
+	VMA_ITERATOR(vmi, mm, 0);
+	struct rusix_exit_context ctx = { .vmi = &vmi, .tlb = &tlb };
+
+	rusix_exit_mmap(mm, &ctx);
+}
+#else
 void exit_mmap(struct mm_struct *mm)
 {
 	struct mmu_gather tlb;
@@ -1316,6 +1328,7 @@ destroy:
 	mmap_write_unlock(mm);
 	vm_unacct_memory(nr_accounted);
 }
+#endif /* CONFIG_RUSIX_EXIT_MMAP_RUST */
 
 /*
  * Return true if the calling process may expand its vm space by the passed

@@ -453,6 +453,9 @@ static bool can_vma_merge_right(struct vma_merge_struct *vmg,
 /*
  * Close a vm structure and free it.
  */
+#ifdef CONFIG_RUSIX_EXIT_MMAP_RUST
+#include "remove_vma_impl.h"
+#else
 void remove_vma(struct vm_area_struct *vma)
 {
 	might_sleep();
@@ -462,6 +465,7 @@ void remove_vma(struct vm_area_struct *vma)
 	mpol_put(vma_policy(vma));
 	vm_area_free(vma);
 }
+#endif /* CONFIG_RUSIX_EXIT_MMAP_RUST */
 
 /*
  * Get rid of page table information in the indicated region.

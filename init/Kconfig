@@ -2293,3 +2293,15 @@ config RUSIX_VMA_LIFECYCLE_RUST
 	  slab, lockdep, refcount and optional name operations remain C.
 	  No exclusive VMA references or descriptor layout change is introduced.
 	  Leave disabled for the preserved original C implementation.
+
+config RUSIX_EXIT_MMAP_RUST
+	bool "Rusix Rust mapping teardown transaction"
+	depends on RUSIX_VMA_LIFECYCLE_RUST && MMU
+	default n
+	help
+	  Select Rust exit_mmap, remove_vma and common VMA close policy.
+	  The C entry retains final-address iterator and TLB-gather storage;
+	  typed C primitives retain native locking, shared accesses, page-table,
+	  notifier, maple, file and policy operations. Inherits the builtin
+	  x86_64 target restrictions without changing hotplug support.
+	  Leave disabled for the byte-preserved original C policies.

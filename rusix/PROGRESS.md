@@ -6,6 +6,15 @@ opt-in Rust implementations; twenty-three generic wait and seventeen bit-wait en
 (`2926d88bb7fc`) is the behavioral baseline. Hosted CI remains disabled;
 verification runs locally. No subsystem divergence point is declared.
 
+Mapping teardown is a source-only candidate on `rusix/mm-exit-mmap`: Rust now
+owns complete `exit_mmap`, `remove_vma` and common close policy, with native C
+primitives retaining shared accesses and page-table/TLB/resource operations.
+The original C policies are preserved. Formatting and exact source restoration
+are checked; compilation, selection proofs and paired success/failure/lifetime
+gates remain pending. Existing dup_mmap whole-file gates need an exact composable
+extension before this branch can be built through the verification pipeline.
+[Boundary and remaining work](experiments/mm-exit-mmap/README.md).
+
 VMA lifecycle is an opt-in candidate on `rusix/vma-lifecycle`: Rust owns the
 cache pointer and fresh/dup/free policy, including PFN-reference rollback.
 Canonical C primitives retain shared-field and resource operations. Production
