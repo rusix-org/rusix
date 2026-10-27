@@ -7,6 +7,9 @@ now pass paired KUnit and userspace/server integration checks.** Most of the ker
 (`2926d88bb7fc`) is the behavioral baseline. Hosted CI remains disabled;
 verification runs locally. No subsystem divergence point is declared.
 
+Work is paused at user request. The [checkpoint and resume steps](docs/checkpoints/pause-2026-10-26.md)
+record saved development branches and the failed copy-VMA link. Hosted CI stays disabled.
+
 Public development lives on `rusix/main`. [ADR 0002](docs/adr/0002.md) owns the
 target; [Phase 1](docs/PHASE1.md) owns delivery gates.
 

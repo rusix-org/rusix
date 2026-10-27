@@ -1,0 +1,32 @@
+{
+  "status": "Paused at user request",
+  "snapshot_prefix": "rusix/checkpoint-2026-10-26/",
+  "scope": "Five active workstreams only; unfinished and uncompiled drafts are WIP, not acceptance or main promotion. Other historical topic heads stay local or on their existing published refs.",
+  "branches": [
+    {
+      "local_branch": "rusix/copy-vma-symbol-fix",
+      "commit": "d158a6f894bfad4dfc46664865ae41921724fb31",
+      "checkpoint_branch": "rusix/checkpoint-2026-10-26/copy-vma-symbol-fix"
+    },
+    {
+      "local_branch": "rusix/mm-vma-merge",
+      "commit": "7b2d7dc500f4b0586b8d53bb631a2abae6d0e2e3",
+      "checkpoint_branch": "rusix/checkpoint-2026-10-26/mm-vma-merge"
+    },
+    {
+      "local_branch": "rusix/mm-vma-merge-tests",
+      "commit": "e195c6222fcf48919a941b1748f710284e6ba239",
+      "checkpoint_branch": "rusix/checkpoint-2026-10-26/mm-vma-merge-tests"
+    },
+    {
+      "local_branch": "rusix/mm-vma-merge-tooling",
+      "commit": "bd688d81ab1c046112c665b6ec17a9182a98ea72",
+      "checkpoint_branch": "rusix/checkpoint-2026-10-26/mm-vma-merge-tooling"
+    },
+    {
+      "local_branch": "rusix/mm-vma-merge-userspace",
+      "commit": "a05ed7077b51327c50a15cc2d2ac27c2eb37fcc0",
+      "checkpoint_branch": "rusix/checkpoint-2026-10-26/mm-vma-merge-userspace"
+    }
+  ]
+}
