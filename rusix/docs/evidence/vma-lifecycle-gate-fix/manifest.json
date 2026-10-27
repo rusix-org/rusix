@@ -1,0 +1,580 @@
+{
+  "actual_selection_input_sha256": {
+    "/out/builds/ci-vma-lifecycle-rust/.config": "372b150fe8992e728b28856cefa2be912e04f8505ba4f7c492b61be9ed41977a",
+    "/out/builds/ci-vma-lifecycle-rust/include/generated/autoconf.h": "74e7d7ae14405915026a48b6c39a77ef3b25cf6aa5da96ca2628cb5bef9bdcdd",
+    "/out/builds/ci-vma-lifecycle-rust/kernel/.fork.o.cmd": "fff406f1746bd6ce4f926a90d11e2bc4e0ffdbb78596960b82d5e191e195078b",
+    "/out/builds/ci-vma-lifecycle-rust/kernel/built-in.a": "18c927fb98549e36fcf1ed92ba82ebd69dba9d0fafef5c86797959b8d478973f",
+    "/out/builds/ci-vma-lifecycle-rust/kernel/fork.i": "e90b0fca88ba04b3d3834814a705dec7bcdf46f930a089688401d972a16661f5",
+    "/out/builds/ci-vma-lifecycle-rust/kernel/fork.o": "968caaa8d0255aa1dc45de558314e34745e29b452f6962ba0966d07d51914bae",
+    "/out/builds/ci-vma-lifecycle-rust/kernel/mm_construction_rust.o": "49cc0da9a1117bd6a660e9007f5fe6d348b3199d5a6f1261068062fa201c43e9",
+    "/out/builds/ci-vma-lifecycle-rust/kernel/mm_copy_rust.o": "a6cc01ccff579d903aafbbc9c59f24bcb554369d61104578149badd986ecbd91",
+    "/out/builds/ci-vma-lifecycle-rust/kernel/mm_release_rust.o": "b2979153b948c507924d2ba4bf2a8fa86f3e9966a04fae99ea870aec5d9a06d1",
+    "/out/builds/ci-vma-lifecycle-rust/kernel/task_construction_rust.o": "a530ae440ca079d36d4df92146049f89a3ee781dbbf9252a37edc15ce064bdc5",
+    "/out/builds/ci-vma-lifecycle-rust/mm/.mmap.o.cmd": "68326bd77702b4a34d1212562cfcadac6e96ef27c2dd4ebc8ccf47c7e6204e87",
+    "/out/builds/ci-vma-lifecycle-rust/mm/.vma_init.o.cmd": "4b8151a5e12d0e1f9afe1f1b3902baa48d4f206ced996ee8ffd559177dc240d1",
+    "/out/builds/ci-vma-lifecycle-rust/mm/built-in.a": "1a69c32fccf8eb34b8bb7e5bcc71adfdb543ba3d774964866ebc8fd5e46779a3",
+    "/out/builds/ci-vma-lifecycle-rust/mm/dup_mmap_rust.o": "3587ed6336ab2f5ef0c8b4559497834cdea75ec209f00ce0e457aca58a910fd3",
+    "/out/builds/ci-vma-lifecycle-rust/mm/mmap.i": "e1ad9a6885ccdbdd3cb96a9bd79b4be63fdab4788242939d5ac27686851bbb59",
+    "/out/builds/ci-vma-lifecycle-rust/mm/mmap.o": "1aac23e69fecf4e396f4c34c964ead4afeda0805dc267349c7c162fb78fef987",
+    "/out/builds/ci-vma-lifecycle-rust/mm/vma_init.i": "6519bd32713f7a006434e21491336c948a528018989d9fb710348cac5b051815",
+    "/out/builds/ci-vma-lifecycle-rust/mm/vma_init.o": "0e490966e959d65c54557a62c0b7b2527f86a1ede46a3c6248154b23bdbbf9de",
+    "/out/builds/ci-vma-lifecycle-rust/mm/vma_lifecycle_rust.o": "4c97a2a1958edc936eae7d6590b30822371924ca9023ddcd634750a67829ec80",
+    "/out/builds/ci-vma-lifecycle-rust/vmlinux": "7b3d96f4b0df37719c7c5040ffdb1253d59e805dbc0c2d6b6490f2087b98da40",
+    "/src/arch/x86/include/asm/mmu_context.h": "4e657b97c1ebdbd5d9dd3ee14d5502ef80a5607268d6778922487b894d71681a",
+    "/src/include/linux/compiler-version.h": "71b523f4f5ae572c6cee7fb2d62617ef900f3024619b1a61c8d9e758dfa002c8",
+    "/src/include/linux/compiler_types.h": "28bbd658a20cf4b72eb0759f2ff095a8cd317f719d8aa94c9298d6d0e2e77268",
+    "/src/include/linux/kconfig.h": "1b51cc51b6e4beb9b249853e0a0774f63679599f9a27b9e9fb8cc26ca14265f1",
+    "/src/include/linux/kref.h": "a77b706c7a47d837edbb0432c674fb840627bbe507887f9c5e88cc7191cb9f20",
+    "/src/include/linux/list.h": "21a72dc77fa7bfef0d4452e3e52026f2cd272c6f73ba404254b70f03ed1e4cd4",
+    "/src/include/linux/maple_tree.h": "c890e4c6de96872ea5d5a697d010157a607b5aca145dbc7821db79d99d769bda",
+    "/src/include/linux/mempolicy.h": "30f5333b10154940dbce654a980bc31f1f82f13f589c29e4a124b033a8b29b39",
+    "/src/include/linux/mm.h": "6071f59d696d6456d75be33cda2fe79823f1579333a7be00d9b50bccafcc72e4",
+    "/src/include/linux/mm_inline.h": "84acb85651aec5ee04659741094e3555adbdf36ef058e2c1d6c4e6cba81f5bb3",
+    "/src/include/linux/mm_types.h": "11daa54c05e2222d13cd629fe0774266a7ed4cb6bd4f7039506f01d71065b0e1",
+    "/src/include/linux/mmap_lock.h": "bca50c974db5be77e743406fde7af97f15db1e40e07f27dcde39039bf2cef3b7",
+    "/src/include/linux/refcount.h": "138348cedf2dd2ee4bb5defb880c575db997dab0561abdd805534d83750dca80",
+    "/src/include/linux/sched/mm.h": "d6146e280957c672e4168c8f332967c75a9f1890b9d4fcc505715f0218f8d4ae",
+    "/src/include/linux/sched/task.h": "852788879f7ff0cbfad5393d47bbcc03405145de442b54febd96978028c458fd",
+    "/src/include/linux/slab.h": "d3a7999286cbba4e0bb51db023dd5926ce13a355a574e4bbe86d638e6183fed1",
+    "/src/include/linux/stddef.h": "c82111d604529fc0543048f99c4aad5276ac1afcc4427cc6c7c5d33798ca60a0",
+    "/src/include/linux/userfaultfd_k.h": "4832e0d84587a8295ece421310c90eb8d986b5322b0091289b71350bd7f6aee8",
+    "/src/include/linux/workqueue.h": "7acbe4a5a005128962c216e1c1edc64c5e21e58d56373dc1f38710c685c5b519",
+    "/src/include/uapi/linux/sched.h": "2081b07cee6adab443e4ba320d0ccb13db4c97bed64f3eefafbfde2f25c833a4",
+    "/src/init/Kconfig": "ba0878ac856ce7a8e46f54441c85e7a3272c0fca684a557d0accc098f43b52b3",
+    "/src/kernel/Makefile": "5ac0557f9aa16262a91961ed52ca4e9a41ffa71d83b8669dc6d85f1071fc7b23",
+    "/src/kernel/fork.c": "93daeb71edec170f88512fedc7b33c67037ec7b29c11ed34fee17fd1fe9fb73c",
+    "/src/kernel/mm_construction_impl.h": "4b74f000e0c1205ca8c26bd59ee4d452315675c60e18099431fbdc19a2d6ef4a",
+    "/src/kernel/mm_construction_rust.rs": "d68e29136f5e48a2a91ece0457b4e6d941dd6ee789f47d2aec1999060d9836a6",
+    "/src/kernel/mm_copy_impl.h": "3b72b21c7ec3aefaf4e8eefda63f445ebe93a495e694d6e45ac0c76f1c906ded",
+    "/src/kernel/mm_copy_rust.rs": "9a3628ee6a6180ab8f2eedf3d0bc4a6cd3a53f57957544934c4242da0c15eeff",
+    "/src/kernel/mm_release_impl.h": "90b08fe8acbe8b4da19865706fc59e2f41d1ccbef7c19b1446d090d63470b2d9",
+    "/src/kernel/mm_release_rust.rs": "b56668d7cce66c4c6419efa4c1229826df7bc3162ad1a14cb02281b798c4a18f",
+    "/src/kernel/task_construction_impl.h": "0a258e4e1368b612a020436aa90eb0c77f22ee58b4ab2fb31a195827eefac05d",
+    "/src/kernel/task_construction_rust.rs": "9513777b2f18b54fa5deab75caecffd18dcbe677df6e9458ebd65dd8da299a08",
+    "/src/mm/Makefile": "5dd536aa9e0d373637f68f1f1471f87b65e27f88ccea9a8d6de926e3efde5876",
+    "/src/mm/dup_mmap_impl.h": "c6419e0194e353c40d6ec43f0990d217cd1d019ccc2c2b5137b2907f15799a12",
+    "/src/mm/dup_mmap_rust.rs": "1aa2d0a999eed2afe5752cfc516edda9d8cd3092ab4182b8bbbabd334ffb562b",
+    "/src/mm/internal.h": "bd74d6ddc2d55d8f5f9c3654e2e9ab80a2551189bc42f30cdcbe58767754d4f2",
+    "/src/mm/mmap.c": "302d70f436d72da9ebb999eaca9f748d607136b707748d0861eef297da78e05b",
+    "/src/mm/vma.h": "dff7de90dce0344abdfb322b8ffac27e89c223d2358ca6672f35288a70ecf546",
+    "/src/mm/vma_init.c": "b9c24766376e79725aee56de3f2ba8bfe25ea916635cca11486a223e5f3b4631",
+    "/src/mm/vma_internal.h": "313e35ec114adb436bc7ae11d7496b8d8990b45c9d08e43fa4aa645220e297c2",
+    "/src/mm/vma_lifecycle_impl.h": "98ff50708cef03001510697632b72855e5c959da57e6b1fe503356c9c855c02e",
+    "/src/mm/vma_lifecycle_rust.rs": "45a30de33b70e940b919efdc6f11d4161e18e3e9773dcf689afff19761432f7d",
+    "/src/rusix/ci/run-container.sh": "7a3b462c00994eb00194edc17346e0371a271c985433e0844ae8d7322c8d1c36",
+    "/src/rusix/ci/run.sh": "86c816d5b8cd8fbbdf55edfb1c6c37df3066d06195ea128c13aceeaf5bce6c46",
+    "/src/rusix/configs/x86_64-mm-copy-rust.config": "501f5c211b24947aa0c5097618b59d071bbc6b70e56d6395704b9d9ce85d1ae6",
+    "/src/rusix/configs/x86_64-mm-dup-mmap-rust.config": "a85f4c30cdccad441fd5010b80dcafff187a836aee24a1dd065057bc0092317b",
+    "/src/rusix/configs/x86_64-server.config": "5b37adb3792b56926ef687dd7392b3916dbb8b77a30e50c2b2664373988098d6",
+    "/src/rusix/configs/x86_64-vma-lifecycle-rust.config": "ca868464439e16783850769aca31a812f1e290a3d5e5ca73f73549a146070887",
+    "/src/rusix/scripts/build-kernel.sh": "7bcc921320356dcc0dc70c40dd9a5353e969b669ac4631dead0f187228c4091e",
+    "/src/rusix/scripts/measure-kernel-languages.py": "3e70bf372871535b116ff8c6a7548df71e78ced19d2ab43f65dd7e022897ac90",
+    "/src/rusix/scripts/preprocess-dup-mmap.py": "80b2600fdddd6b2da2206e4346cabcca3634fd1618e9d2b23549743ff374462f",
+    "/src/rusix/scripts/preprocess-mm-construction.py": "b7d27d065bdd044c93aedbfd614fc985d35bde710af8af5affca880f3dc894d3",
+    "/src/rusix/scripts/preprocess-mm-copy.py": "e8422fde2a5a77175234a406ce51841923f2831eae3042bebb1406f5812558ab",
+    "/src/rusix/scripts/preprocess-mm-release.py": "76d7dbdb004f7bd02efac4e9822512f083f9a5881c84f75345b757c87637c4cb",
+    "/src/rusix/scripts/preprocess-task-construction.py": "3f6f3ba4cf0da1c0fff2a4c34c3a1e1106fa480e92ae2e73d500131b92612a90",
+    "/src/rusix/scripts/preprocess-vma-lifecycle.py": "3653256d92c3d3328bb4db5b2129dbcaf4ddbed03707cc97dd5394b99bbdae95",
+    "/src/rusix/scripts/repo-paths.sh": "c1456d937aa223d2b6d9bcd914238ef49cdd4974419df0ff7b2e20bbf542cfc7",
+    "/src/rusix/scripts/saved_clang_command.py": "c3a2be1c06440cfb98ca2c7af2bf905ae5bcd66ed1b62f1d23337fc5fdb7fe96",
+    "/src/rusix/scripts/verify-brd-parameter-owner.py": "55bd06cd7b6910ab6c1b6404f1c97d30ce383c7f4abd593f1d949d20d7a41790",
+    "/src/rusix/scripts/verify-dup-mmap.py": "ec9d1e9f8d526e2b4df35097af064becfac7fbe6cb93e9424ba45b41f1942cd5",
+    "/src/rusix/scripts/verify-mm-construction.py": "1d1b912b20b66049f2f87cdbfb4076692c2a7bda3d6e85b23a88363c0438ab96",
+    "/src/rusix/scripts/verify-mm-copy.py": "25484b00722a24c1499b4ee439091b5de9ddc536706087deb5b322bf3fc3f1df",
+    "/src/rusix/scripts/verify-mm-release.py": "d052ce469d9ab3a7305cb4ee196be20a00bc56349f54b604570306a1b617c547",
+    "/src/rusix/scripts/verify-task-construction.py": "d0e6ed1c8e41a2de44da68328f660210da9ce88771aed86a505b3e246c3eb0f8",
+    "/src/rusix/scripts/verify-vma-lifecycle.py": "7ea11718329f3b1f65652f5fabcf0b67fe4e557fb72414e8b86b13e8ca0bbc91",
+    "/src/rusix/scripts/with-local-tools.sh": "b47051d02fd2eb024dedc91f4a0c2cf071529d018a8ae246678bbb568069ffd0"
+  },
+  "compiled_kernel_source": "74258332885b9c41b373e1456a2922933b6e2a5a",
+  "compressed_text": {
+    "records/reinspection/dup-mmap-kernel-symbols.txt.gz": {
+      "path": "/home/aaron/code/rusix/linux-out/vma-lifecycle-gate-fix-001/reinspection/dup-mmap-kernel-symbols.txt",
+      "raw_bytes": 4526232,
+      "raw_sha256": "9faf053cbe5d5c23bfc44c7f2eced5589ffe477b29149c74b29d9c40b9f5bb07"
+    },
+    "records/reinspection/mm-copy-kernel-symbols.txt.gz": {
+      "path": "/home/aaron/code/rusix/linux-out/vma-lifecycle-gate-fix-001/reinspection/mm-copy-kernel-symbols.txt",
+      "raw_bytes": 4526232,
+      "raw_sha256": "9faf053cbe5d5c23bfc44c7f2eced5589ffe477b29149c74b29d9c40b9f5bb07"
+    },
+    "records/reinspection/vma-lifecycle-linked-elf.json.gz": {
+      "path": "/home/aaron/code/rusix/linux-out/vma-lifecycle-gate-fix-001/reinspection/vma-lifecycle-linked-elf.json",
+      "raw_bytes": 26024405,
+      "raw_sha256": "163b994dc5b7c2b0161b193986cbd9d1d24f15a1866688e5ce34441502bd1280"
+    },
+    "records/reinspection/vma-lifecycle-linked-symbols.txt.gz": {
+      "path": "/home/aaron/code/rusix/linux-out/vma-lifecycle-gate-fix-001/reinspection/vma-lifecycle-linked-symbols.txt",
+      "raw_bytes": 4526232,
+      "raw_sha256": "9faf053cbe5d5c23bfc44c7f2eced5589ffe477b29149c74b29d9c40b9f5bb07"
+    }
+  },
+  "controller_session": 43808,
+  "files": {
+    "archive-script.py": "98977186e24eb39140b76d31864ab70b7d91a8c17a37312b21e7c117cb966ba6",
+    "host/tests.exit": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+    "host/tests.log": "1d83585b97486319bb9c2fff2996c7435fd78e26e63e611aae2ad6791d35db6b",
+    "records/actual-selection.exit": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+    "records/actual-selection.json": "6f01c8693f09e316219f5d46cbb45fa358709f1869fcc9998276b2d3f968a2ea",
+    "records/actual-selection.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "records/fix-source.json": "4d3304f0ec4fcb416f07d5206017f07f03e2e19a576e79c81b3bc0c4280aa09f",
+    "records/reinspection/dup-mmap-archive.txt": "74094b937d51cefe7897c9d8515c5a78371da9278fb5d683d85c21a4fc58f12e",
+    "records/reinspection/dup-mmap-disassembly.txt": "cba9c565d73fb9b3af7c3ec3474c34353b4471531160248acc9c0d1632acbd22",
+    "records/reinspection/dup-mmap-dup_mmap_rust-symbols.txt": "3b7f5465841ffcf2a99885432cfc078cc05dbcf4e19ec853849e6680ec0c0a78",
+    "records/reinspection/dup-mmap-kernel-symbols.txt.gz": "f41e5813f5d4c5135e29bf65c32003c168c028f8d2a44051a7c0d6b6df1990e1",
+    "records/reinspection/dup-mmap-mm-copy-selection.json": "53ae816356d74f959ab3422b136fdd032c77c29732c2b9b294942881bcb37372",
+    "records/reinspection/dup-mmap-mmap-symbols.txt": "ccea4797c97efe10d9a7267d60e91f569f1c613189811507b23c0412345d539a",
+    "records/reinspection/dup-mmap-preprocess.exit": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+    "records/reinspection/dup-mmap-preprocess.json": "7a489e4dba83d6de4634c0e3d66f0a09dacb969e22762bdbaacabc17e3d2bb64",
+    "records/reinspection/dup-mmap-preprocess.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "records/reinspection/mm-copy-archive.txt": "5c44149671b5631ba5c266a6105f90d74067aa8c239438cb739a1de5b34a877d",
+    "records/reinspection/mm-copy-fork-disassembly.txt": "f592310e2f72a1da1d530432af5a257f3000ff8f3c5688bb313e28eea2664876",
+    "records/reinspection/mm-copy-fork-symbols.txt": "c4e332bd4142df35d7a033f9cea7874ac0fd8e06317e93ec5ffe2021273962de",
+    "records/reinspection/mm-copy-kernel-symbols.txt.gz": "f41e5813f5d4c5135e29bf65c32003c168c028f8d2a44051a7c0d6b6df1990e1",
+    "records/reinspection/mm-copy-mm_construction_rust-symbols.txt": "df88389e0bf15b26dc19fce524556206aadc079f0e770c7923e25a6ef1693b85",
+    "records/reinspection/mm-copy-mm_copy_rust-symbols.txt": "cb078a6b5f28d066ed83f2bdab2a825dd8e47bed7e8a23fc8cb08bb71f2ad07a",
+    "records/reinspection/mm-copy-mm_release_rust-symbols.txt": "2c11063da3e2648b835a6cf3e4705e9b85d52fa88c039a5488af163210a59c02",
+    "records/reinspection/mm-copy-policy-disassembly.txt": "37b7458c7c8087207d98d91f273b39ca220a646cd2796ea7cae44ef45bb1b1ff",
+    "records/reinspection/mm-copy-preprocess.exit": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+    "records/reinspection/mm-copy-preprocess.json": "781439f558b9d52554ed880c9f54856c4e5dbbdfce44892723f6d6044ad59208",
+    "records/reinspection/mm-copy-preprocess.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "records/reinspection/mm-copy-release-disassembly.txt": "7b737a0250c289c34267d6c7be017daf75ccb774927c9098dbf7f2c01d730b46",
+    "records/reinspection/mm-copy-release-elf.json": "b703f65323e01318dbe365a56013a57f834026b75b2bf8ff0997a8297c3d3a01",
+    "records/reinspection/mm-copy-task_construction_rust-symbols.txt": "9d300070c7fe34826b46961a6f436c8aae87809806b2ca1f8eac06ce69220adf",
+    "records/reinspection/vma-lifecycle-archive.txt": "74094b937d51cefe7897c9d8515c5a78371da9278fb5d683d85c21a4fc58f12e",
+    "records/reinspection/vma-lifecycle-c-disassembly.txt": "2d7e2a12501342b78ed65830770599ee1077f6e5fd298b043f44b9e75fede0b2",
+    "records/reinspection/vma-lifecycle-dup-selection.json": "409e46fdde7d5fea31c0910186f8f96392caae1d719f6bd8591633fd8e529f46",
+    "records/reinspection/vma-lifecycle-linked-elf.json.gz": "7f2e2df6c16f93d7ad1677b348d9824f7cf31d1ad3accb0d6c7585c89d61e977",
+    "records/reinspection/vma-lifecycle-linked-symbols.txt.gz": "f41e5813f5d4c5135e29bf65c32003c168c028f8d2a44051a7c0d6b6df1990e1",
+    "records/reinspection/vma-lifecycle-owner-disassembly.txt": "c0a62fa002c0bcd055570f427c123171ffd61b55ab3cf2bf8686c4ef22c3f9a4",
+    "records/reinspection/vma-lifecycle-preprocess.exit": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+    "records/reinspection/vma-lifecycle-preprocess.json": "72baf98af7436c7c14f64affb1ac877d4612fe946fc71e9696cb499be9f0264a",
+    "records/reinspection/vma-lifecycle-preprocess.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "records/reinspection/vma-lifecycle-rust-disassembly.txt": "c0a62fa002c0bcd055570f427c123171ffd61b55ab3cf2bf8686c4ef22c3f9a4",
+    "records/reinspection/vma-lifecycle-vma_init-elf.json": "d1d62239b89bfcc1af0b89a43e174ecee5e61bca76c0d0e5d63817b075183e1f",
+    "records/reinspection/vma-lifecycle-vma_init-symbols.txt": "03839b04c24efe392c71cfacfc613d9f52aed463283d1d0df6f81896d009acd2",
+    "records/reinspection/vma-lifecycle-vma_lifecycle_rust-elf.json": "4713d0669ad5de383a33e53edf58673ff84775fe87240960aee3e4f7fc00587f",
+    "records/reinspection/vma-lifecycle-vma_lifecycle_rust-symbols.txt": "5b63780833eba77b5f079e3fa83b7a631e3eca8291c33ef191b403c463ca9b2c",
+    "records/run.sh": "6465442ecd55a2e89aa876b5e1d2b3cb1d800ee59553a98c5e80a02b6a0eac91",
+    "records/status.json": "7bb3df26f80a34f95523940d8f9473208fc8a14fbfbe00db2c130a66f2446794",
+    "review/fix-review.json": "8f8854996f0d97796d0f0543ecbaf90879b7a7c65cb5bf39ddd4d3a297573af0",
+    "review/refcount-constant.json": "92a1c211b17f2f95fe041fe0cd2f52f0ec4c7fd37bd216536d3fffcc7a55c8b3",
+    "review/review.json": "668af5c3fcb8e5ebee47d6e867d8dbaced2c86ac082b464794687706d7e53d99",
+    "source/rusix/scripts/verify-vma-lifecycle.py": "7ea11718329f3b1f65652f5fabcf0b67fe4e557fb72414e8b86b13e8ca0bbc91",
+    "source/rusix/tests/test_vma_lifecycle_selection.py": "b24aca2e1781c27aaa750383f293d75446ee8905a4198ee75854dc11095d89e6"
+  },
+  "host_command": [
+    "python3",
+    "-B",
+    "linux-vma-lifecycle/rusix/tests/test_vma_lifecycle_selection.py"
+  ],
+  "host_tests": 11,
+  "prior_failure_reference": {
+    "path": "/home/aaron/code/rusix/linux-out/vma-lifecycle-initial-evidence/manifest.json",
+    "sha256": "24c45050ab6fb499be36fd181053b5f1046cd6ad70920b7a1780fb816707ffd6",
+    "source": "74258332885b9c41b373e1456a2922933b6e2a5a",
+    "status": "FAIL"
+  },
+  "raw_input_sha256": {
+    "/home/aaron/code/rusix/linux-out/archive-vma-lifecycle-gate-fix.py": "98977186e24eb39140b76d31864ab70b7d91a8c17a37312b21e7c117cb966ba6",
+    "/home/aaron/code/rusix/linux-out/vma-lifecycle-cache-name-review-001/fix-review.json": "8f8854996f0d97796d0f0543ecbaf90879b7a7c65cb5bf39ddd4d3a297573af0",
+    "/home/aaron/code/rusix/linux-out/vma-lifecycle-cache-name-review-001/refcount-constant.json": "92a1c211b17f2f95fe041fe0cd2f52f0ec4c7fd37bd216536d3fffcc7a55c8b3",
+    "/home/aaron/code/rusix/linux-out/vma-lifecycle-cache-name-review-001/review.json": "668af5c3fcb8e5ebee47d6e867d8dbaced2c86ac082b464794687706d7e53d99",
+    "/home/aaron/code/rusix/linux-out/vma-lifecycle-gate-fix-001/actual-selection.exit": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+    "/home/aaron/code/rusix/linux-out/vma-lifecycle-gate-fix-001/actual-selection.json": "6f01c8693f09e316219f5d46cbb45fa358709f1869fcc9998276b2d3f968a2ea",
+    "/home/aaron/code/rusix/linux-out/vma-lifecycle-gate-fix-001/actual-selection.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "/home/aaron/code/rusix/linux-out/vma-lifecycle-gate-fix-001/fix-source.json": "4d3304f0ec4fcb416f07d5206017f07f03e2e19a576e79c81b3bc0c4280aa09f",
+    "/home/aaron/code/rusix/linux-out/vma-lifecycle-gate-fix-001/reinspection/dup-mmap-archive.txt": "74094b937d51cefe7897c9d8515c5a78371da9278fb5d683d85c21a4fc58f12e",
+    "/home/aaron/code/rusix/linux-out/vma-lifecycle-gate-fix-001/reinspection/dup-mmap-disassembly.txt": "cba9c565d73fb9b3af7c3ec3474c34353b4471531160248acc9c0d1632acbd22",
+    "/home/aaron/code/rusix/linux-out/vma-lifecycle-gate-fix-001/reinspection/dup-mmap-dup_mmap_rust-symbols.txt": "3b7f5465841ffcf2a99885432cfc078cc05dbcf4e19ec853849e6680ec0c0a78",
+    "/home/aaron/code/rusix/linux-out/vma-lifecycle-gate-fix-001/reinspection/dup-mmap-kernel-symbols.txt": "9faf053cbe5d5c23bfc44c7f2eced5589ffe477b29149c74b29d9c40b9f5bb07",
+    "/home/aaron/code/rusix/linux-out/vma-lifecycle-gate-fix-001/reinspection/dup-mmap-mm-copy-selection.json": "53ae816356d74f959ab3422b136fdd032c77c29732c2b9b294942881bcb37372",
+    "/home/aaron/code/rusix/linux-out/vma-lifecycle-gate-fix-001/reinspection/dup-mmap-mmap-symbols.txt": "ccea4797c97efe10d9a7267d60e91f569f1c613189811507b23c0412345d539a",
+    "/home/aaron/code/rusix/linux-out/vma-lifecycle-gate-fix-001/reinspection/dup-mmap-preprocess.exit": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+    "/home/aaron/code/rusix/linux-out/vma-lifecycle-gate-fix-001/reinspection/dup-mmap-preprocess.json": "7a489e4dba83d6de4634c0e3d66f0a09dacb969e22762bdbaacabc17e3d2bb64",
+    "/home/aaron/code/rusix/linux-out/vma-lifecycle-gate-fix-001/reinspection/dup-mmap-preprocess.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "/home/aaron/code/rusix/linux-out/vma-lifecycle-gate-fix-001/reinspection/mm-copy-archive.txt": "5c44149671b5631ba5c266a6105f90d74067aa8c239438cb739a1de5b34a877d",
+    "/home/aaron/code/rusix/linux-out/vma-lifecycle-gate-fix-001/reinspection/mm-copy-fork-disassembly.txt": "f592310e2f72a1da1d530432af5a257f3000ff8f3c5688bb313e28eea2664876",
+    "/home/aaron/code/rusix/linux-out/vma-lifecycle-gate-fix-001/reinspection/mm-copy-fork-symbols.txt": "c4e332bd4142df35d7a033f9cea7874ac0fd8e06317e93ec5ffe2021273962de",
+    "/home/aaron/code/rusix/linux-out/vma-lifecycle-gate-fix-001/reinspection/mm-copy-kernel-symbols.txt": "9faf053cbe5d5c23bfc44c7f2eced5589ffe477b29149c74b29d9c40b9f5bb07",
+    "/home/aaron/code/rusix/linux-out/vma-lifecycle-gate-fix-001/reinspection/mm-copy-mm_construction_rust-symbols.txt": "df88389e0bf15b26dc19fce524556206aadc079f0e770c7923e25a6ef1693b85",
+    "/home/aaron/code/rusix/linux-out/vma-lifecycle-gate-fix-001/reinspection/mm-copy-mm_copy_rust-symbols.txt": "cb078a6b5f28d066ed83f2bdab2a825dd8e47bed7e8a23fc8cb08bb71f2ad07a",
+    "/home/aaron/code/rusix/linux-out/vma-lifecycle-gate-fix-001/reinspection/mm-copy-mm_release_rust-symbols.txt": "2c11063da3e2648b835a6cf3e4705e9b85d52fa88c039a5488af163210a59c02",
+    "/home/aaron/code/rusix/linux-out/vma-lifecycle-gate-fix-001/reinspection/mm-copy-policy-disassembly.txt": "37b7458c7c8087207d98d91f273b39ca220a646cd2796ea7cae44ef45bb1b1ff",
+    "/home/aaron/code/rusix/linux-out/vma-lifecycle-gate-fix-001/reinspection/mm-copy-preprocess.exit": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+    "/home/aaron/code/rusix/linux-out/vma-lifecycle-gate-fix-001/reinspection/mm-copy-preprocess.json": "781439f558b9d52554ed880c9f54856c4e5dbbdfce44892723f6d6044ad59208",
+    "/home/aaron/code/rusix/linux-out/vma-lifecycle-gate-fix-001/reinspection/mm-copy-preprocess.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "/home/aaron/code/rusix/linux-out/vma-lifecycle-gate-fix-001/reinspection/mm-copy-release-disassembly.txt": "7b737a0250c289c34267d6c7be017daf75ccb774927c9098dbf7f2c01d730b46",
+    "/home/aaron/code/rusix/linux-out/vma-lifecycle-gate-fix-001/reinspection/mm-copy-release-elf.json": "b703f65323e01318dbe365a56013a57f834026b75b2bf8ff0997a8297c3d3a01",
+    "/home/aaron/code/rusix/linux-out/vma-lifecycle-gate-fix-001/reinspection/mm-copy-task_construction_rust-symbols.txt": "9d300070c7fe34826b46961a6f436c8aae87809806b2ca1f8eac06ce69220adf",
+    "/home/aaron/code/rusix/linux-out/vma-lifecycle-gate-fix-001/reinspection/vma-lifecycle-archive.txt": "74094b937d51cefe7897c9d8515c5a78371da9278fb5d683d85c21a4fc58f12e",
+    "/home/aaron/code/rusix/linux-out/vma-lifecycle-gate-fix-001/reinspection/vma-lifecycle-c-disassembly.txt": "2d7e2a12501342b78ed65830770599ee1077f6e5fd298b043f44b9e75fede0b2",
+    "/home/aaron/code/rusix/linux-out/vma-lifecycle-gate-fix-001/reinspection/vma-lifecycle-dup-selection.json": "409e46fdde7d5fea31c0910186f8f96392caae1d719f6bd8591633fd8e529f46",
+    "/home/aaron/code/rusix/linux-out/vma-lifecycle-gate-fix-001/reinspection/vma-lifecycle-linked-elf.json": "163b994dc5b7c2b0161b193986cbd9d1d24f15a1866688e5ce34441502bd1280",
+    "/home/aaron/code/rusix/linux-out/vma-lifecycle-gate-fix-001/reinspection/vma-lifecycle-linked-symbols.txt": "9faf053cbe5d5c23bfc44c7f2eced5589ffe477b29149c74b29d9c40b9f5bb07",
+    "/home/aaron/code/rusix/linux-out/vma-lifecycle-gate-fix-001/reinspection/vma-lifecycle-owner-disassembly.txt": "c0a62fa002c0bcd055570f427c123171ffd61b55ab3cf2bf8686c4ef22c3f9a4",
+    "/home/aaron/code/rusix/linux-out/vma-lifecycle-gate-fix-001/reinspection/vma-lifecycle-preprocess.exit": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+    "/home/aaron/code/rusix/linux-out/vma-lifecycle-gate-fix-001/reinspection/vma-lifecycle-preprocess.json": "72baf98af7436c7c14f64affb1ac877d4612fe946fc71e9696cb499be9f0264a",
+    "/home/aaron/code/rusix/linux-out/vma-lifecycle-gate-fix-001/reinspection/vma-lifecycle-preprocess.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "/home/aaron/code/rusix/linux-out/vma-lifecycle-gate-fix-001/reinspection/vma-lifecycle-rust-disassembly.txt": "c0a62fa002c0bcd055570f427c123171ffd61b55ab3cf2bf8686c4ef22c3f9a4",
+    "/home/aaron/code/rusix/linux-out/vma-lifecycle-gate-fix-001/reinspection/vma-lifecycle-vma_init-elf.json": "d1d62239b89bfcc1af0b89a43e174ecee5e61bca76c0d0e5d63817b075183e1f",
+    "/home/aaron/code/rusix/linux-out/vma-lifecycle-gate-fix-001/reinspection/vma-lifecycle-vma_init-symbols.txt": "03839b04c24efe392c71cfacfc613d9f52aed463283d1d0df6f81896d009acd2",
+    "/home/aaron/code/rusix/linux-out/vma-lifecycle-gate-fix-001/reinspection/vma-lifecycle-vma_lifecycle_rust-elf.json": "4713d0669ad5de383a33e53edf58673ff84775fe87240960aee3e4f7fc00587f",
+    "/home/aaron/code/rusix/linux-out/vma-lifecycle-gate-fix-001/reinspection/vma-lifecycle-vma_lifecycle_rust-symbols.txt": "5b63780833eba77b5f079e3fa83b7a631e3eca8291c33ef191b403c463ca9b2c",
+    "/home/aaron/code/rusix/linux-out/vma-lifecycle-gate-fix-001/run.sh": "6465442ecd55a2e89aa876b5e1d2b3cb1d800ee59553a98c5e80a02b6a0eac91",
+    "/home/aaron/code/rusix/linux-out/vma-lifecycle-gate-fix-001/status.json": "7bb3df26f80a34f95523940d8f9473208fc8a14fbfbe00db2c130a66f2446794",
+    "/home/aaron/code/rusix/linux-out/vma-lifecycle-gate-fix-host-001/tests.exit": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+    "/home/aaron/code/rusix/linux-out/vma-lifecycle-gate-fix-host-001/tests.log": "1d83585b97486319bb9c2fff2996c7435fd78e26e63e611aae2ad6791d35db6b",
+    "/home/aaron/code/rusix/linux-vma-lifecycle/rusix/scripts/verify-vma-lifecycle.py": "7ea11718329f3b1f65652f5fabcf0b67fe4e557fb72414e8b86b13e8ca0bbc91",
+    "/home/aaron/code/rusix/linux-vma-lifecycle/rusix/tests/test_vma_lifecycle_selection.py": "b24aca2e1781c27aaa750383f293d75446ee8905a4198ee75854dc11095d89e6"
+  },
+  "retained_inputs": {
+    "/home/aaron/code/rusix/linux-out/vma-lifecycle-verification-001/rust/builds/ci-vma-lifecycle-rust/.config": {
+      "bytes": 57370,
+      "sha256": "372b150fe8992e728b28856cefa2be912e04f8505ba4f7c492b61be9ed41977a"
+    },
+    "/home/aaron/code/rusix/linux-out/vma-lifecycle-verification-001/rust/builds/ci-vma-lifecycle-rust/include/generated/autoconf.h": {
+      "bytes": 26945,
+      "sha256": "74e7d7ae14405915026a48b6c39a77ef3b25cf6aa5da96ca2628cb5bef9bdcdd"
+    },
+    "/home/aaron/code/rusix/linux-out/vma-lifecycle-verification-001/rust/builds/ci-vma-lifecycle-rust/kernel/.fork.o.cmd": {
+      "bytes": 80488,
+      "sha256": "fff406f1746bd6ce4f926a90d11e2bc4e0ffdbb78596960b82d5e191e195078b"
+    },
+    "/home/aaron/code/rusix/linux-out/vma-lifecycle-verification-001/rust/builds/ci-vma-lifecycle-rust/kernel/built-in.a": {
+      "bytes": 12486,
+      "sha256": "18c927fb98549e36fcf1ed92ba82ebd69dba9d0fafef5c86797959b8d478973f"
+    },
+    "/home/aaron/code/rusix/linux-out/vma-lifecycle-verification-001/rust/builds/ci-vma-lifecycle-rust/kernel/fork.i": {
+      "bytes": 4978532,
+      "sha256": "e90b0fca88ba04b3d3834814a705dec7bcdf46f930a089688401d972a16661f5"
+    },
+    "/home/aaron/code/rusix/linux-out/vma-lifecycle-verification-001/rust/builds/ci-vma-lifecycle-rust/kernel/fork.o": {
+      "bytes": 181248,
+      "sha256": "968caaa8d0255aa1dc45de558314e34745e29b452f6962ba0966d07d51914bae"
+    },
+    "/home/aaron/code/rusix/linux-out/vma-lifecycle-verification-001/rust/builds/ci-vma-lifecycle-rust/kernel/mm_construction_rust.o": {
+      "bytes": 8200,
+      "sha256": "49cc0da9a1117bd6a660e9007f5fe6d348b3199d5a6f1261068062fa201c43e9"
+    },
+    "/home/aaron/code/rusix/linux-out/vma-lifecycle-verification-001/rust/builds/ci-vma-lifecycle-rust/kernel/mm_copy_rust.o": {
+      "bytes": 4632,
+      "sha256": "a6cc01ccff579d903aafbbc9c59f24bcb554369d61104578149badd986ecbd91"
+    },
+    "/home/aaron/code/rusix/linux-out/vma-lifecycle-verification-001/rust/builds/ci-vma-lifecycle-rust/kernel/mm_release_rust.o": {
+      "bytes": 7888,
+      "sha256": "b2979153b948c507924d2ba4bf2a8fa86f3e9966a04fae99ea870aec5d9a06d1"
+    },
+    "/home/aaron/code/rusix/linux-out/vma-lifecycle-verification-001/rust/builds/ci-vma-lifecycle-rust/kernel/task_construction_rust.o": {
+      "bytes": 5696,
+      "sha256": "a530ae440ca079d36d4df92146049f89a3ee781dbbf9252a37edc15ce064bdc5"
+    },
+    "/home/aaron/code/rusix/linux-out/vma-lifecycle-verification-001/rust/builds/ci-vma-lifecycle-rust/mm/.mmap.o.cmd": {
+      "bytes": 68296,
+      "sha256": "68326bd77702b4a34d1212562cfcadac6e96ef27c2dd4ebc8ccf47c7e6204e87"
+    },
+    "/home/aaron/code/rusix/linux-out/vma-lifecycle-verification-001/rust/builds/ci-vma-lifecycle-rust/mm/.vma_init.o.cmd": {
+      "bytes": 65538,
+      "sha256": "4b8151a5e12d0e1f9afe1f1b3902baa48d4f206ced996ee8ffd559177dc240d1"
+    },
+    "/home/aaron/code/rusix/linux-out/vma-lifecycle-verification-001/rust/builds/ci-vma-lifecycle-rust/mm/built-in.a": {
+      "bytes": 4546,
+      "sha256": "1a69c32fccf8eb34b8bb7e5bcc71adfdb543ba3d774964866ebc8fd5e46779a3"
+    },
+    "/home/aaron/code/rusix/linux-out/vma-lifecycle-verification-001/rust/builds/ci-vma-lifecycle-rust/mm/dup_mmap_rust.o": {
+      "bytes": 9936,
+      "sha256": "3587ed6336ab2f5ef0c8b4559497834cdea75ec209f00ce0e457aca58a910fd3"
+    },
+    "/home/aaron/code/rusix/linux-out/vma-lifecycle-verification-001/rust/builds/ci-vma-lifecycle-rust/mm/mmap.i": {
+      "bytes": 3912141,
+      "sha256": "e1ad9a6885ccdbdd3cb96a9bd79b4be63fdab4788242939d5ac27686851bbb59"
+    },
+    "/home/aaron/code/rusix/linux-out/vma-lifecycle-verification-001/rust/builds/ci-vma-lifecycle-rust/mm/mmap.o": {
+      "bytes": 113680,
+      "sha256": "1aac23e69fecf4e396f4c34c964ead4afeda0805dc267349c7c162fb78fef987"
+    },
+    "/home/aaron/code/rusix/linux-out/vma-lifecycle-verification-001/rust/builds/ci-vma-lifecycle-rust/mm/vma_init.i": {
+      "bytes": 3709770,
+      "sha256": "6519bd32713f7a006434e21491336c948a528018989d9fb710348cac5b051815"
+    },
+    "/home/aaron/code/rusix/linux-out/vma-lifecycle-verification-001/rust/builds/ci-vma-lifecycle-rust/mm/vma_init.o": {
+      "bytes": 20192,
+      "sha256": "0e490966e959d65c54557a62c0b7b2527f86a1ede46a3c6248154b23bdbbf9de"
+    },
+    "/home/aaron/code/rusix/linux-out/vma-lifecycle-verification-001/rust/builds/ci-vma-lifecycle-rust/mm/vma_lifecycle_rust.o": {
+      "bytes": 8376,
+      "sha256": "4c97a2a1958edc936eae7d6590b30822371924ca9023ddcd634750a67829ec80"
+    },
+    "/home/aaron/code/rusix/linux-out/vma-lifecycle-verification-001/rust/builds/ci-vma-lifecycle-rust/vmlinux": {
+      "bytes": 37603848,
+      "sha256": "7b3d96f4b0df37719c7c5040ffdb1253d59e805dbc0c2d6b6490f2087b98da40"
+    },
+    "/home/aaron/code/rusix/linux-vma-lifecycle/arch/x86/include/asm/mmu_context.h": {
+      "bytes": 7757,
+      "sha256": "4e657b97c1ebdbd5d9dd3ee14d5502ef80a5607268d6778922487b894d71681a"
+    },
+    "/home/aaron/code/rusix/linux-vma-lifecycle/include/linux/compiler-version.h": {
+      "bytes": 1457,
+      "sha256": "71b523f4f5ae572c6cee7fb2d62617ef900f3024619b1a61c8d9e758dfa002c8"
+    },
+    "/home/aaron/code/rusix/linux-vma-lifecycle/include/linux/compiler_types.h": {
+      "bytes": 21467,
+      "sha256": "28bbd658a20cf4b72eb0759f2ff095a8cd317f719d8aa94c9298d6d0e2e77268"
+    },
+    "/home/aaron/code/rusix/linux-vma-lifecycle/include/linux/kconfig.h": {
+      "bytes": 2691,
+      "sha256": "1b51cc51b6e4beb9b249853e0a0774f63679599f9a27b9e9fb8cc26ca14265f1"
+    },
+    "/home/aaron/code/rusix/linux-vma-lifecycle/include/linux/kref.h": {
+      "bytes": 3932,
+      "sha256": "a77b706c7a47d837edbb0432c674fb840627bbe507887f9c5e88cc7191cb9f20"
+    },
+    "/home/aaron/code/rusix/linux-vma-lifecycle/include/linux/list.h": {
+      "bytes": 37759,
+      "sha256": "21a72dc77fa7bfef0d4452e3e52026f2cd272c6f73ba404254b70f03ed1e4cd4"
+    },
+    "/home/aaron/code/rusix/linux-vma-lifecycle/include/linux/maple_tree.h": {
+      "bytes": 30148,
+      "sha256": "c890e4c6de96872ea5d5a697d010157a607b5aca145dbc7821db79d99d769bda"
+    },
+    "/home/aaron/code/rusix/linux-vma-lifecycle/include/linux/mempolicy.h": {
+      "bytes": 7570,
+      "sha256": "30f5333b10154940dbce654a980bc31f1f82f13f589c29e4a124b033a8b29b39"
+    },
+    "/home/aaron/code/rusix/linux-vma-lifecycle/include/linux/mm.h": {
+      "bytes": 138366,
+      "sha256": "6071f59d696d6456d75be33cda2fe79823f1579333a7be00d9b50bccafcc72e4"
+    },
+    "/home/aaron/code/rusix/linux-vma-lifecycle/include/linux/mm_inline.h": {
+      "bytes": 19064,
+      "sha256": "84acb85651aec5ee04659741094e3555adbdf36ef058e2c1d6c4e6cba81f5bb3"
+    },
+    "/home/aaron/code/rusix/linux-vma-lifecycle/include/linux/mm_types.h": {
+      "bytes": 59233,
+      "sha256": "11daa54c05e2222d13cd629fe0774266a7ed4cb6bd4f7039506f01d71065b0e1"
+    },
+    "/home/aaron/code/rusix/linux-vma-lifecycle/include/linux/mmap_lock.h": {
+      "bytes": 12322,
+      "sha256": "bca50c974db5be77e743406fde7af97f15db1e40e07f27dcde39039bf2cef3b7"
+    },
+    "/home/aaron/code/rusix/linux-vma-lifecycle/include/linux/refcount.h": {
+      "bytes": 16806,
+      "sha256": "138348cedf2dd2ee4bb5defb880c575db997dab0561abdd805534d83750dca80"
+    },
+    "/home/aaron/code/rusix/linux-vma-lifecycle/include/linux/sched/mm.h": {
+      "bytes": 17666,
+      "sha256": "d6146e280957c672e4168c8f332967c75a9f1890b9d4fcc505715f0218f8d4ae"
+    },
+    "/home/aaron/code/rusix/linux-vma-lifecycle/include/linux/sched/task.h": {
+      "bytes": 6548,
+      "sha256": "852788879f7ff0cbfad5393d47bbcc03405145de442b54febd96978028c458fd"
+    },
+    "/home/aaron/code/rusix/linux-vma-lifecycle/include/linux/slab.h": {
+      "bytes": 45580,
+      "sha256": "d3a7999286cbba4e0bb51db023dd5926ce13a355a574e4bbe86d638e6183fed1"
+    },
+    "/home/aaron/code/rusix/linux-vma-lifecycle/include/linux/stddef.h": {
+      "bytes": 4507,
+      "sha256": "c82111d604529fc0543048f99c4aad5276ac1afcc4427cc6c7c5d33798ca60a0"
+    },
+    "/home/aaron/code/rusix/linux-vma-lifecycle/include/linux/userfaultfd_k.h": {
+      "bytes": 13662,
+      "sha256": "4832e0d84587a8295ece421310c90eb8d986b5322b0091289b71350bd7f6aee8"
+    },
+    "/home/aaron/code/rusix/linux-vma-lifecycle/include/linux/workqueue.h": {
+      "bytes": 31644,
+      "sha256": "7acbe4a5a005128962c216e1c1edc64c5e21e58d56373dc1f38710c685c5b519"
+    },
+    "/home/aaron/code/rusix/linux-vma-lifecycle/include/uapi/linux/sched.h": {
+      "bytes": 6302,
+      "sha256": "2081b07cee6adab443e4ba320d0ccb13db4c97bed64f3eefafbfde2f25c833a4"
+    },
+    "/home/aaron/code/rusix/linux-vma-lifecycle/init/Kconfig": {
+      "bytes": 75287,
+      "sha256": "ba0878ac856ce7a8e46f54441c85e7a3272c0fca684a557d0accc098f43b52b3"
+    },
+    "/home/aaron/code/rusix/linux-vma-lifecycle/kernel/Makefile": {
+      "bytes": 7509,
+      "sha256": "5ac0557f9aa16262a91961ed52ca4e9a41ffa71d83b8669dc6d85f1071fc7b23"
+    },
+    "/home/aaron/code/rusix/linux-vma-lifecycle/kernel/fork.c": {
+      "bytes": 83130,
+      "sha256": "93daeb71edec170f88512fedc7b33c67037ec7b29c11ed34fee17fd1fe9fb73c"
+    },
+    "/home/aaron/code/rusix/linux-vma-lifecycle/kernel/mm_construction_impl.h": {
+      "bytes": 7084,
+      "sha256": "4b74f000e0c1205ca8c26bd59ee4d452315675c60e18099431fbdc19a2d6ef4a"
+    },
+    "/home/aaron/code/rusix/linux-vma-lifecycle/kernel/mm_construction_rust.rs": {
+      "bytes": 9070,
+      "sha256": "d68e29136f5e48a2a91ece0457b4e6d941dd6ee789f47d2aec1999060d9836a6"
+    },
+    "/home/aaron/code/rusix/linux-vma-lifecycle/kernel/mm_copy_impl.h": {
+      "bytes": 2394,
+      "sha256": "3b72b21c7ec3aefaf4e8eefda63f445ebe93a495e694d6e45ac0c76f1c906ded"
+    },
+    "/home/aaron/code/rusix/linux-vma-lifecycle/kernel/mm_copy_rust.rs": {
+      "bytes": 6033,
+      "sha256": "9a3628ee6a6180ab8f2eedf3d0bc4a6cd3a53f57957544934c4242da0c15eeff"
+    },
+    "/home/aaron/code/rusix/linux-vma-lifecycle/kernel/mm_release_impl.h": {
+      "bytes": 4541,
+      "sha256": "90b08fe8acbe8b4da19865706fc59e2f41d1ccbef7c19b1446d090d63470b2d9"
+    },
+    "/home/aaron/code/rusix/linux-vma-lifecycle/kernel/mm_release_rust.rs": {
+      "bytes": 8001,
+      "sha256": "b56668d7cce66c4c6419efa4c1229826df7bc3162ad1a14cb02281b798c4a18f"
+    },
+    "/home/aaron/code/rusix/linux-vma-lifecycle/kernel/task_construction_impl.h": {
+      "bytes": 5916,
+      "sha256": "0a258e4e1368b612a020436aa90eb0c77f22ee58b4ab2fb31a195827eefac05d"
+    },
+    "/home/aaron/code/rusix/linux-vma-lifecycle/kernel/task_construction_rust.rs": {
+      "bytes": 6273,
+      "sha256": "9513777b2f18b54fa5deab75caecffd18dcbe677df6e9458ebd65dd8da299a08"
+    },
+    "/home/aaron/code/rusix/linux-vma-lifecycle/mm/Makefile": {
+      "bytes": 5464,
+      "sha256": "5dd536aa9e0d373637f68f1f1471f87b65e27f88ccea9a8d6de926e3efde5876"
+    },
+    "/home/aaron/code/rusix/linux-vma-lifecycle/mm/dup_mmap_impl.h": {
+      "bytes": 9936,
+      "sha256": "c6419e0194e353c40d6ec43f0990d217cd1d019ccc2c2b5137b2907f15799a12"
+    },
+    "/home/aaron/code/rusix/linux-vma-lifecycle/mm/dup_mmap_rust.rs": {
+      "bytes": 11752,
+      "sha256": "1aa2d0a999eed2afe5752cfc516edda9d8cd3092ab4182b8bbbabd334ffb562b"
+    },
+    "/home/aaron/code/rusix/linux-vma-lifecycle/mm/internal.h": {
+      "bytes": 53007,
+      "sha256": "bd74d6ddc2d55d8f5f9c3654e2e9ab80a2551189bc42f30cdcbe58767754d4f2"
+    },
+    "/home/aaron/code/rusix/linux-vma-lifecycle/mm/mmap.c": {
+      "bytes": 50842,
+      "sha256": "302d70f436d72da9ebb999eaca9f748d607136b707748d0861eef297da78e05b"
+    },
+    "/home/aaron/code/rusix/linux-vma-lifecycle/mm/vma.h": {
+      "bytes": 20953,
+      "sha256": "dff7de90dce0344abdfb322b8ffac27e89c223d2358ca6672f35288a70ecf546"
+    },
+    "/home/aaron/code/rusix/linux-vma-lifecycle/mm/vma_init.c": {
+      "bytes": 4106,
+      "sha256": "b9c24766376e79725aee56de3f2ba8bfe25ea916635cca11486a223e5f3b4631"
+    },
+    "/home/aaron/code/rusix/linux-vma-lifecycle/mm/vma_internal.h": {
+      "bytes": 1344,
+      "sha256": "313e35ec114adb436bc7ae11d7496b8d8990b45c9d08e43fa4aa645220e297c2"
+    },
+    "/home/aaron/code/rusix/linux-vma-lifecycle/mm/vma_lifecycle_impl.h": {
+      "bytes": 7876,
+      "sha256": "98ff50708cef03001510697632b72855e5c959da57e6b1fe503356c9c855c02e"
+    },
+    "/home/aaron/code/rusix/linux-vma-lifecycle/mm/vma_lifecycle_rust.rs": {
+      "bytes": 9441,
+      "sha256": "45a30de33b70e940b919efdc6f11d4161e18e3e9773dcf689afff19761432f7d"
+    },
+    "/home/aaron/code/rusix/linux-vma-lifecycle/rusix/ci/run-container.sh": {
+      "bytes": 3714,
+      "sha256": "7a3b462c00994eb00194edc17346e0371a271c985433e0844ae8d7322c8d1c36"
+    },
+    "/home/aaron/code/rusix/linux-vma-lifecycle/rusix/ci/run.sh": {
+      "bytes": 8715,
+      "sha256": "86c816d5b8cd8fbbdf55edfb1c6c37df3066d06195ea128c13aceeaf5bce6c46"
+    },
+    "/home/aaron/code/rusix/linux-vma-lifecycle/rusix/configs/x86_64-mm-copy-rust.config": {
+      "bytes": 4319,
+      "sha256": "501f5c211b24947aa0c5097618b59d071bbc6b70e56d6395704b9d9ce85d1ae6"
+    },
+    "/home/aaron/code/rusix/linux-vma-lifecycle/rusix/configs/x86_64-mm-dup-mmap-rust.config": {
+      "bytes": 4357,
+      "sha256": "a85f4c30cdccad441fd5010b80dcafff187a836aee24a1dd065057bc0092317b"
+    },
+    "/home/aaron/code/rusix/linux-vma-lifecycle/rusix/configs/x86_64-server.config": {
+      "bytes": 3318,
+      "sha256": "5b37adb3792b56926ef687dd7392b3916dbb8b77a30e50c2b2664373988098d6"
+    },
+    "/home/aaron/code/rusix/linux-vma-lifecycle/rusix/configs/x86_64-vma-lifecycle-rust.config": {
+      "bytes": 4390,
+      "sha256": "ca868464439e16783850769aca31a812f1e290a3d5e5ca73f73549a146070887"
+    },
+    "/home/aaron/code/rusix/linux-vma-lifecycle/rusix/scripts/build-kernel.sh": {
+      "bytes": 37491,
+      "sha256": "7bcc921320356dcc0dc70c40dd9a5353e969b669ac4631dead0f187228c4091e"
+    },
+    "/home/aaron/code/rusix/linux-vma-lifecycle/rusix/scripts/measure-kernel-languages.py": {
+      "bytes": 16728,
+      "sha256": "3e70bf372871535b116ff8c6a7548df71e78ced19d2ab43f65dd7e022897ac90"
+    },
+    "/home/aaron/code/rusix/linux-vma-lifecycle/rusix/scripts/preprocess-dup-mmap.py": {
+      "bytes": 2594,
+      "sha256": "80b2600fdddd6b2da2206e4346cabcca3634fd1618e9d2b23549743ff374462f"
+    },
+    "/home/aaron/code/rusix/linux-vma-lifecycle/rusix/scripts/preprocess-mm-construction.py": {
+      "bytes": 2385,
+      "sha256": "b7d27d065bdd044c93aedbfd614fc985d35bde710af8af5affca880f3dc894d3"
+    },
+    "/home/aaron/code/rusix/linux-vma-lifecycle/rusix/scripts/preprocess-mm-copy.py": {
+      "bytes": 2326,
+      "sha256": "e8422fde2a5a77175234a406ce51841923f2831eae3042bebb1406f5812558ab"
+    },
+    "/home/aaron/code/rusix/linux-vma-lifecycle/rusix/scripts/preprocess-mm-release.py": {
+      "bytes": 2346,
+      "sha256": "76d7dbdb004f7bd02efac4e9822512f083f9a5881c84f75345b757c87637c4cb"
+    },
+    "/home/aaron/code/rusix/linux-vma-lifecycle/rusix/scripts/preprocess-task-construction.py": {
+      "bytes": 2482,
+      "sha256": "3f6f3ba4cf0da1c0fff2a4c34c3a1e1106fa480e92ae2e73d500131b92612a90"
+    },
+    "/home/aaron/code/rusix/linux-vma-lifecycle/rusix/scripts/preprocess-vma-lifecycle.py": {
+      "bytes": 2874,
+      "sha256": "3653256d92c3d3328bb4db5b2129dbcaf4ddbed03707cc97dd5394b99bbdae95"
+    },
+    "/home/aaron/code/rusix/linux-vma-lifecycle/rusix/scripts/repo-paths.sh": {
+      "bytes": 1070,
+      "sha256": "c1456d937aa223d2b6d9bcd914238ef49cdd4974419df0ff7b2e20bbf542cfc7"
+    },
+    "/home/aaron/code/rusix/linux-vma-lifecycle/rusix/scripts/saved_clang_command.py": {
+      "bytes": 6901,
+      "sha256": "c3a2be1c06440cfb98ca2c7af2bf905ae5bcd66ed1b62f1d23337fc5fdb7fe96"
+    },
+    "/home/aaron/code/rusix/linux-vma-lifecycle/rusix/scripts/verify-brd-parameter-owner.py": {
+      "bytes": 13416,
+      "sha256": "55bd06cd7b6910ab6c1b6404f1c97d30ce383c7f4abd593f1d949d20d7a41790"
+    },
+    "/home/aaron/code/rusix/linux-vma-lifecycle/rusix/scripts/verify-dup-mmap.py": {
+      "bytes": 13832,
+      "sha256": "ec9d1e9f8d526e2b4df35097af064becfac7fbe6cb93e9424ba45b41f1942cd5"
+    },
+    "/home/aaron/code/rusix/linux-vma-lifecycle/rusix/scripts/verify-mm-construction.py": {
+      "bytes": 11944,
+      "sha256": "1d1b912b20b66049f2f87cdbfb4076692c2a7bda3d6e85b23a88363c0438ab96"
+    },
+    "/home/aaron/code/rusix/linux-vma-lifecycle/rusix/scripts/verify-mm-copy.py": {
+      "bytes": 15801,
+      "sha256": "25484b00722a24c1499b4ee439091b5de9ddc536706087deb5b322bf3fc3f1df"
+    },
+    "/home/aaron/code/rusix/linux-vma-lifecycle/rusix/scripts/verify-mm-release.py": {
+      "bytes": 17106,
+      "sha256": "d052ce469d9ab3a7305cb4ee196be20a00bc56349f54b604570306a1b617c547"
+    },
+    "/home/aaron/code/rusix/linux-vma-lifecycle/rusix/scripts/verify-task-construction.py": {
+      "bytes": 12454,
+      "sha256": "d0e6ed1c8e41a2de44da68328f660210da9ce88771aed86a505b3e246c3eb0f8"
+    },
+    "/home/aaron/code/rusix/linux-vma-lifecycle/rusix/scripts/verify-vma-lifecycle.py": {
+      "bytes": 20034,
+      "sha256": "7ea11718329f3b1f65652f5fabcf0b67fe4e557fb72414e8b86b13e8ca0bbc91"
+    },
+    "/home/aaron/code/rusix/linux-vma-lifecycle/rusix/scripts/with-local-tools.sh": {
+      "bytes": 345,
+      "sha256": "b47051d02fd2eb024dedc91f4a0c2cf071529d018a8ae246678bbb568069ffd0"
+    }
+  },
+  "scope": "Full pinned command selection reinspection passes against retained Rust001 kernel;11 host negatives pass. No kernel rebuild or VM. Historical pending review/status records retained unchanged; this manifest records the later actual PASS. Original paired run remains failed. Resource settings are recorded by command; this --rm run retained no container-inspect record.",
+  "source_sha256": {
+    "rusix/scripts/verify-vma-lifecycle.py": "7ea11718329f3b1f65652f5fabcf0b67fe4e557fb72414e8b86b13e8ca0bbc91",
+    "rusix/tests/test_vma_lifecycle_selection.py": "b24aca2e1781c27aaa750383f293d75446ee8905a4198ee75854dc11095d89e6"
+  },
+  "status": "PASS",
+  "verifier_state": "Uncommitted two-file correction on compiled source ancestor"
+}

@@ -1,0 +1,60 @@
+Pending root review; REVIEWED_LAUNCH_READY=False. Upstream baseline and matrix lock required.
+No cache copies, kernel builds, containers or guest tests have been started.
+
+Frozen clean source: linux-vma-lifecycle at
+74258332885b9c41b373e1456a2922933b6e2a5a. Fresh output is
+linux-out/vma-lifecycle-verification-001. The pristine upstream C VMA baseline
+must finish successfully before this candidate kernel matrix is permitted.
+Its pass scope remains separate from the nine guest cases.
+
+C then Rust use canonical vma-lifecycle-c/rust profiles, differing only by
+CONFIG_RUSIX_VMA_LIFECYCLE_RUST. Both retain Rust task/MM construction, release,
+copy, dup_mmap, core waits and BRD. No allocation-failure claim is made.
+All source/tooling/config/guest inputs are hashed before and after, with exact
+compiled probe/init snapshots and identical guest artifacts across the pair.
+
+The launcher takes the shared heavy-work lock, uses pinned c02 image,
+2 CPUs/5 GiB (no extra swap), no network/capabilities, isolated writable output,
+and KVM guest limits 512 MiB/SMP2/180 seconds. Owned-CID traps preserve failures
+and signal status. Fresh output and exact clean source are mandatory.
+
+Postchecks run in the same pinned image, not host LLVM. Three ORIGINAL
+preprocessing records are verified against actual saved commands and hashes:
+kernel/fork, mm/mmap and mm/vma_init. Separate fresh reinspection directories
+hold explicitly remapped records. Original proof files are never overwritten.
+Actual ELF/archive verification is rerun; nested dup_mmap and MM-copy selection
+hash-map paths are recursively normalized for exact comparison with originals.
+Each inherited implementation, diagnostic log, source/config snapshot, linked
+artifact hash and exact nine-case QEMU template is checked. Pair checks compare
+resolved configs, guest binary inputs and compiler/package/image identities.
+
+Review/preparation checks only: shell syntax, Python syntax/import and read-only
+source identity preflight. An absent upstream baseline pass or pending parent
+review must fail --require-fresh; that is not an execution failure.
+
+Prerequisite provenance: preflight pins the reviewed upstream checker and input
+manifest hashes. The latter binds tooling provenance. Before this matrix starts,
+the pinned checker revalidates actual baseline output and exact saved acceptance,
+then captures all execution control/result records and baseline launcher hashes.
+Those future result hashes are not invented in advance. A host-only repeat after
+the matrix must produce identical prerequisite-after.json. source_record binds
+prerequisite-before.json by SHA256, including in pinned postchecks. Containers
+read only that captured record from the existing run mount, so they need no
+additional baseline/tree/tooling mounts. Baseline validation remains host-only
+and executes no test artifact.
+
+Root and independent review passed, including pinned upstream prerequisite
+provenance and exact triple preprocessing/nested selection comparisons. Readiness
+is enabled, but launch still requires a passing upstream C baseline and the
+shared build lock. The pristine upstream baseline passed16/16 with default sanitizers; no VMA
+candidate build or VM has executed.
+
+Constant-fix refresh: the prior reviewed 6a9 draft is preserved in
+linux-out/vma-lifecycle-verification-draft-before-constant-fix with exact hashes.
+Source742 adds the reviewed indexed-ELF native-constant proof. Postchecks require
+all three canonical values and both ELF reader dependencies in the nested and
+outer selection hashes, then rerun the actual proof in the pinned container.
+The guest runner's original explicit source inventory is unchanged; the new
+imports are bound through the selection inventories and clean-source checks.
+The original upstream checker, manifest and acceptance prerequisite are unchanged.
+Root must review and enable readiness before launch; this refresh launches nothing.

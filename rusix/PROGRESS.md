@@ -1,5 +1,14 @@
 # rusix progress
 
+The lifecycle verifier now has a narrow fix: accept only the observed
+optional `.0` private-cache suffix and prove the refcount constant as a four-byte
+canonical `.rodata` value in both object and linked ELF. Eleven host selection
+tests and targeted inspection of retained actual metadata/bytes pass. Full pinned
+selection reinspection now passes on the retained Rust kernel with no diagnostics;
+a fresh paired run remains pending. Production Rust is unchanged.
+[Fix evidence](docs/evidence/vma-lifecycle-gate-fix/manifest.json) separates the
+retained kernel from the corrected verifier and preserves the failed first run.
+
 **Rust BRD passes x86_64 block and ordinary-userspace ext4 contracts;
 all fourteen completion entry points and all ten swait.c entry points have verified
 opt-in Rust implementations; twenty-three generic wait and seventeen bit-wait entries pass parity, with the shared wait table owned by Rust.** Most of the kernel remains C. Linux 6.18.58
@@ -11,13 +20,23 @@ including final `.rodata` symbols reported as `D`. The [fix evidence](docs/evide
 passes against the retained mapping kernel `9cf27ef36d1d`; it does not certify
 this VMA candidate. Its paired launcher must be refreshed for the new source.
 
+At `74258332885b`, the first paired VMA lifecycle run ended with failure.
+Both C and Rust kernels built. The C kernel passed all nine ordinary guest cases
+and its pinned-image postcheck. Before the Rust guest could start, the selection
+verifier rejected the emitted private cache symbol ending in `.0`; Rust runtime
+and paired parity are therefore unverified. [Initial failure evidence](docs/evidence/vma-lifecycle-initial/manifest.json)
+preserves the exact source, raw logs, partial proofs, C results and retained build
+hashes. Next: correct the narrow emitted-symbol check with negative regressions,
+recheck the retained artifacts, and run a fresh pair before promotion.
+
 VMA lifecycle is an opt-in candidate on `rusix/vma-lifecycle`: Rust owns the
 cache pointer and fresh/dup/free policy, including PFN-reference rollback.
 Canonical C primitives retain shared-field and resource operations. Production
-and nine-case guest source reviews pass; the kernel candidate remains uncompiled
-and unverified. At `620b34e0c918`, the guest fixtures compiled cleanly as static
-x86-64 binaries; ELF and emitted shared-child inspection passed. They were never
-executed. [Fixture evidence](docs/evidence/vma-lifecycle-fixtures/manifest.json).
+and nine-case guest source reviews pass; candidate kernels now build, but the
+Rust selection gate and runtime remain unverified as recorded above. At
+`620b34e0c918`, the guest fixtures compiled cleanly as static
+x86-64 binaries; ELF and emitted shared-child inspection passed. That compile-only
+check did not execute them. [Fixture evidence](docs/evidence/vma-lifecycle-fixtures/manifest.json).
 Both local VMA profiles and their preprocessing/linked-selection gates are
 implemented. All 277 cases across 27 host scripts pass after correcting fresh
 configuration validation order. [Host evidence](docs/evidence/vma-lifecycle-host/manifest.json).

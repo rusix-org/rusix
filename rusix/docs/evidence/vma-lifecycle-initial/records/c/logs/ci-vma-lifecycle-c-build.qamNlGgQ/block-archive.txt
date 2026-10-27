@@ -1,0 +1,2 @@
+/out/builds/ci-vma-lifecycle-c/drivers/block/brd_rust.o
+/out/builds/ci-vma-lifecycle-c/drivers/block/virtio_blk.o

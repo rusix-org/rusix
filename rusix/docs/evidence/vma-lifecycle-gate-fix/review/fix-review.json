@@ -1,0 +1,17 @@
+{
+  "status": "INDEPENDENT_NARROW_FIX_REVIEW_NO_BLOCKER",
+  "inputs": {
+    "rusix/scripts/verify-vma-lifecycle.py": "7ea11718329f3b1f65652f5fabcf0b67fe4e557fb72414e8b86b13e8ca0bbc91",
+    "rusix/tests/test_vma_lifecycle_selection.py": "b24aca2e1781c27aaa750383f293d75446ee8905a4198ee75854dc11095d89e6"
+  },
+  "review": [
+    "Cache regex allows only optional exact .0 suffix and anchors VM_AREA_CACHE at end; rejects arbitrary compiler suffixes, duplicate owners. Existing local8-byte aligned permanentBSS and exact object-linkedidentity checks unchanged.",
+    "Refcount constant checks unique global Robject/RorDlinked, actual ELFkind/STT_OBJECT4/alignedaddress/exact.rodata/allocated/nonexec/objectreadonly/bounds and literal0x7fffffff bytes bothsides. Unrelated Ddata cannot satisfy.",
+    "Functionhelper Tbinding checks remain separate; actual inputhash closure already includes imported indexed ELF reader through duplication gate.",
+    "New hostcases cover observed name with/without .0, unknownsuffix/duplicates, canonical4byte storage and wrongsection/type/value/bounds/globalbinding/ELFkind negatives."
+  ],
+  "remaining": [
+    "Full pinned actual verifier followup still required; targeted cache/constant checks do not certify downstream actual access/callback/section checks or Rust runtime."
+  ],
+  "scope": "Read-only source/test review; no build, compiler, VM or new actual verifier execution."
+}

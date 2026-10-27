@@ -1,0 +1,13 @@
+Build evidence: /out/logs/ci-vma-lifecycle-rust-build.m1aAMY05
+Traceback (most recent call last):
+  File "/src/rusix/scripts/verify-vma-lifecycle.py", line 343, in <module>
+    if __name__ == '__main__': main()
+                               ~~~~^^
+  File "/src/rusix/scripts/verify-vma-lifecycle.py", line 335, in main
+    if args.action == 'objects': result = verify(args)
+                                          ~~~~~~^^^^^^
+  File "/src/rusix/scripts/verify-vma-lifecycle.py", line 291, in verify
+    cache = cache_owner(metadata[owner], rust)
+  File "/src/rusix/scripts/verify-vma-lifecycle.py", line 168, in cache_owner
+    raise ValueError('Wrong Rust cache symbol')
+ValueError: Wrong Rust cache symbol

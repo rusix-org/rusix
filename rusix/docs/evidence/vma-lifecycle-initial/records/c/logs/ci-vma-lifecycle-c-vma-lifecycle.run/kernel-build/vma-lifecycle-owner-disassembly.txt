@@ -1,0 +1,329 @@
+
+/out/builds/ci-vma-lifecycle-c/mm/vma_init.o:	file format elf64-x86-64
+
+Disassembly of section .text:
+
+0000000000000000 <__pfx_vm_area_alloc>:
+       0: 90                           	nop
+       1: 90                           	nop
+       2: 90                           	nop
+       3: 90                           	nop
+       4: 90                           	nop
+       5: 90                           	nop
+       6: 90                           	nop
+       7: 90                           	nop
+       8: 90                           	nop
+       9: 90                           	nop
+       a: 90                           	nop
+       b: 90                           	nop
+       c: 90                           	nop
+       d: 90                           	nop
+       e: 90                           	nop
+       f: 90                           	nop
+
+0000000000000010 <vm_area_alloc>:
+      10: 41 56                        	pushq	%r14
+      12: 53                           	pushq	%rbx
+      13: 48 89 fb                     	movq	%rdi, %rbx
+      16: 48 8b 3d 00 00 00 00         	movq	(%rip), %rdi            # 0x1d <vm_area_alloc+0xd>
+		0000000000000019:  R_X86_64_PC32	.bss-0x4
+      1d: be c0 0c 00 00               	movl	$0xcc0, %esi            # imm = 0xCC0
+      22: e8 00 00 00 00               	callq	0x27 <vm_area_alloc+0x17>
+		0000000000000023:  R_X86_64_PLT32	kmem_cache_alloc_noprof-0x4
+      27: 48 85 c0                     	testq	%rax, %rax
+      2a: 74 60                        	je	0x8c <vm_area_alloc+0x7c>
+      2c: ba 00 01 00 00               	movl	$0x100, %edx            # imm = 0x100
+      31: 48 89 c7                     	movq	%rax, %rdi
+      34: 31 f6                        	xorl	%esi, %esi
+      36: 49 89 c6                     	movq	%rax, %r14
+      39: e8 00 00 00 00               	callq	0x3e <vm_area_alloc+0x2e>
+		000000000000003a:  R_X86_64_PLT32	memset-0x4
+      3e: 49 89 5e 10                  	movq	%rbx, 0x10(%r14)
+      42: 49 c7 46 48 00 00 00 00      	movq	$0x0, 0x48(%r14)
+		0000000000000046:  R_X86_64_32S	vma_dummy_vm_ops
+      4a: 49 8d 46 30                  	leaq	0x30(%r14), %rax
+      4e: 49 89 46 30                  	movq	%rax, 0x30(%r14)
+      52: 49 89 46 38                  	movq	%rax, 0x38(%r14)
+      56: 4c 89 f7                     	movq	%r14, %rdi
+      59: 48 81 c7 88 00 00 00         	addq	$0x88, %rdi
+      60: 48 c7 c6 00 00 00 00         	movq	$0x0, %rsi
+		0000000000000063:  R_X86_64_32S	.rodata.str1.1+0xf
+      67: 48 c7 c2 00 00 00 00         	movq	$0x0, %rdx
+		000000000000006a:  R_X86_64_32S	.bss+0x8
+      6e: 31 c9                        	xorl	%ecx, %ecx
+      70: 45 31 c0                     	xorl	%r8d, %r8d
+      73: 45 31 c9                     	xorl	%r9d, %r9d
+      76: 6a 00                        	pushq	$0x0
+      78: e8 00 00 00 00               	callq	0x7d <vm_area_alloc+0x6d>
+		0000000000000079:  R_X86_64_PLT32	lockdep_init_map_type-0x4
+      7d: 4c 89 f0                     	movq	%r14, %rax
+      80: 48 83 c4 08                  	addq	$0x8, %rsp
+      84: 41 c7 46 28 ff ff ff ff      	movl	$0xffffffff, 0x28(%r14) # imm = 0xFFFFFFFF
+      8c: 5b                           	popq	%rbx
+      8d: 41 5e                        	popq	%r14
+      8f: 2e e9 00 00 00 00            	jmp	0x95 <vm_area_alloc+0x85>
+		0000000000000091:  R_X86_64_PLT32	__x86_return_thunk-0x4
+      95: 66 66 2e 0f 1f 84 00 00 00 00 00     	nopw	%cs:(%rax,%rax)
+
+00000000000000a0 <__pfx_vm_area_dup>:
+      a0: 90                           	nop
+      a1: 90                           	nop
+      a2: 90                           	nop
+      a3: 90                           	nop
+      a4: 90                           	nop
+      a5: 90                           	nop
+      a6: 90                           	nop
+      a7: 90                           	nop
+      a8: 90                           	nop
+      a9: 90                           	nop
+      aa: 90                           	nop
+      ab: 90                           	nop
+      ac: 90                           	nop
+      ad: 90                           	nop
+      ae: 90                           	nop
+      af: 90                           	nop
+
+00000000000000b0 <vm_area_dup>:
+      b0: 41 56                        	pushq	%r14
+      b2: 53                           	pushq	%rbx
+      b3: 48 89 fb                     	movq	%rdi, %rbx
+      b6: 48 8b 3d 00 00 00 00         	movq	(%rip), %rdi            # 0xbd <vm_area_dup+0xd>
+		00000000000000b9:  R_X86_64_PC32	.bss-0x4
+      bd: be c0 0c 00 00               	movl	$0xcc0, %esi            # imm = 0xCC0
+      c2: e8 00 00 00 00               	callq	0xc7 <vm_area_dup+0x17>
+		00000000000000c3:  R_X86_64_PLT32	kmem_cache_alloc_noprof-0x4
+      c7: 48 85 c0                     	testq	%rax, %rax
+      ca: 0f 84 1c 01 00 00            	je	0x1ec <vm_area_dup+0x13c>
+      d0: 48 8b 4b 10                  	movq	0x10(%rbx), %rcx
+      d4: 48 89 48 10                  	movq	%rcx, 0x10(%rax)
+      d8: 48 8b 4b 48                  	movq	0x48(%rbx), %rcx
+      dc: 48 89 48 48                  	movq	%rcx, 0x48(%rax)
+      e0: 48 8b 0b                     	movq	(%rbx), %rcx
+      e3: 48 89 08                     	movq	%rcx, (%rax)
+      e6: 48 8b 4b 08                  	movq	0x8(%rbx), %rcx
+      ea: 48 89 48 08                  	movq	%rcx, 0x8(%rax)
+      ee: 48 8b 4b 40                  	movq	0x40(%rbx), %rcx
+      f2: 48 89 48 40                  	movq	%rcx, 0x40(%rax)
+      f6: 48 8b 4b 50                  	movq	0x50(%rbx), %rcx
+      fa: 48 89 48 50                  	movq	%rcx, 0x50(%rax)
+      fe: 48 8b 4b 58                  	movq	0x58(%rbx), %rcx
+     102: 48 89 48 58                  	movq	%rcx, 0x58(%rax)
+     106: 48 8b 4b 60                  	movq	0x60(%rbx), %rcx
+     10a: 48 89 48 60                  	movq	%rcx, 0x60(%rax)
+     10e: 48 8b 4b 20                  	movq	0x20(%rbx), %rcx
+     112: 48 89 48 20                  	movq	%rcx, 0x20(%rax)
+     116: 48 8b 4b 18                  	movq	0x18(%rbx), %rcx
+     11a: 48 89 48 18                  	movq	%rcx, 0x18(%rax)
+     11e: 48 8b 8b c0 00 00 00         	movq	0xc0(%rbx), %rcx
+     125: 48 89 88 c0 00 00 00         	movq	%rcx, 0xc0(%rax)
+     12c: 48 8b 8b b0 00 00 00         	movq	0xb0(%rbx), %rcx
+     133: 48 8b 93 b8 00 00 00         	movq	0xb8(%rbx), %rdx
+     13a: 48 89 88 b0 00 00 00         	movq	%rcx, 0xb0(%rax)
+     141: 48 89 90 b8 00 00 00         	movq	%rdx, 0xb8(%rax)
+     148: 48 8b 8b c8 00 00 00         	movq	0xc8(%rbx), %rcx
+     14f: 48 89 88 c8 00 00 00         	movq	%rcx, 0xc8(%rax)
+     156: 48 c7 80 d0 00 00 00 00 00 00 00     	movq	$0x0, 0xd0(%rax)
+     161: 48 8b 9b d0 00 00 00         	movq	0xd0(%rbx), %rbx
+     168: 48 85 db                     	testq	%rbx, %rbx
+     16b: 75 50                        	jne	0x1bd <vm_area_dup+0x10d>
+     16d: 48 8d b8 88 00 00 00         	leaq	0x88(%rax), %rdi
+     174: 48 c7 c6 00 00 00 00         	movq	$0x0, %rsi
+		0000000000000177:  R_X86_64_32S	.rodata.str1.1+0xf
+     17b: 48 c7 c2 00 00 00 00         	movq	$0x0, %rdx
+		000000000000017e:  R_X86_64_32S	.bss+0x8
+     182: 31 c9                        	xorl	%ecx, %ecx
+     184: 45 31 c0                     	xorl	%r8d, %r8d
+     187: 45 31 c9                     	xorl	%r9d, %r9d
+     18a: 6a 00                        	pushq	$0x0
+     18c: 48 89 c3                     	movq	%rax, %rbx
+     18f: e8 00 00 00 00               	callq	0x194 <vm_area_dup+0xe4>
+		0000000000000190:  R_X86_64_PLT32	lockdep_init_map_type-0x4
+     194: 48 89 d8                     	movq	%rbx, %rax
+     197: 48 83 c4 08                  	addq	$0x8, %rsp
+     19b: c7 83 80 00 00 00 00 00 00 00	movl	$0x0, 0x80(%rbx)
+     1a5: c7 43 28 ff ff ff ff         	movl	$0xffffffff, 0x28(%rbx) # imm = 0xFFFFFFFF
+     1ac: 48 89 d9                     	movq	%rbx, %rcx
+     1af: 48 83 c1 30                  	addq	$0x30, %rcx
+     1b3: 48 89 4b 30                  	movq	%rcx, 0x30(%rbx)
+     1b7: 48 89 4b 38                  	movq	%rcx, 0x38(%rbx)
+     1bb: eb 31                        	jmp	0x1ee <vm_area_dup+0x13e>
+     1bd: 49 89 c6                     	movq	%rax, %r14
+     1c0: 8b 03                        	movl	(%rbx), %eax
+     1c2: 3d fe ff ff 7f               	cmpl	$0x7ffffffe, %eax       # imm = 0x7FFFFFFE
+     1c7: 77 14                        	ja	0x1dd <vm_area_dup+0x12d>
+     1c9: 48 89 df                     	movq	%rbx, %rdi
+     1cc: e8 8f 00 00 00               	callq	0x260 <kref_get>
+     1d1: 4c 89 f0                     	movq	%r14, %rax
+     1d4: 49 89 9e d0 00 00 00         	movq	%rbx, 0xd0(%r14)
+     1db: eb 90                        	jmp	0x16d <vm_area_dup+0xbd>
+     1dd: 48 8b 3d 00 00 00 00         	movq	(%rip), %rdi            # 0x1e4 <vm_area_dup+0x134>
+		00000000000001e0:  R_X86_64_PC32	.bss-0x4
+     1e4: 4c 89 f6                     	movq	%r14, %rsi
+     1e7: e8 00 00 00 00               	callq	0x1ec <vm_area_dup+0x13c>
+		00000000000001e8:  R_X86_64_PLT32	kmem_cache_free-0x4
+     1ec: 31 c0                        	xorl	%eax, %eax
+     1ee: 5b                           	popq	%rbx
+     1ef: 41 5e                        	popq	%r14
+     1f1: 2e e9 00 00 00 00            	jmp	0x1f7 <vm_area_dup+0x147>
+		00000000000001f3:  R_X86_64_PLT32	__x86_return_thunk-0x4
+     1f7: 66 0f 1f 84 00 00 00 00 00   	nopw	(%rax,%rax)
+
+0000000000000200 <__pfx_vm_area_free>:
+     200: 90                           	nop
+     201: 90                           	nop
+     202: 90                           	nop
+     203: 90                           	nop
+     204: 90                           	nop
+     205: 90                           	nop
+     206: 90                           	nop
+     207: 90                           	nop
+     208: 90                           	nop
+     209: 90                           	nop
+     20a: 90                           	nop
+     20b: 90                           	nop
+     20c: 90                           	nop
+     20d: 90                           	nop
+     20e: 90                           	nop
+     20f: 90                           	nop
+
+0000000000000210 <vm_area_free>:
+     210: 53                           	pushq	%rbx
+     211: 48 89 fb                     	movq	%rdi, %rbx
+     214: 83 bf 80 00 00 00 00         	cmpl	$0x0, 0x80(%rdi)
+     21b: 75 1c                        	jne	0x239 <vm_area_free+0x29>
+     21d: 48 8b bb d0 00 00 00         	movq	0xd0(%rbx), %rdi
+     224: 48 85 ff                     	testq	%rdi, %rdi
+     227: 75 14                        	jne	0x23d <vm_area_free+0x2d>
+     229: 48 8b 3d 00 00 00 00         	movq	(%rip), %rdi            # 0x230 <vm_area_free+0x20>
+		000000000000022c:  R_X86_64_PC32	.bss-0x4
+     230: 48 89 de                     	movq	%rbx, %rsi
+     233: 5b                           	popq	%rbx
+     234: e9 00 00 00 00               	jmp	0x239 <vm_area_free+0x29>
+		0000000000000235:  R_X86_64_PLT32	kmem_cache_free-0x4
+     239: 0f 0b                        	ud2
+     23b: eb e0                        	jmp	0x21d <vm_area_free+0xd>
+     23d: e8 5e 00 00 00               	callq	0x2a0 <kref_put>
+     242: 48 c7 83 d0 00 00 00 00 00 00 00     	movq	$0x0, 0xd0(%rbx)
+     24d: eb da                        	jmp	0x229 <vm_area_free+0x19>
+     24f: 90                           	nop
+
+0000000000000250 <__pfx_kref_get>:
+     250: 90                           	nop
+     251: 90                           	nop
+     252: 90                           	nop
+     253: 90                           	nop
+     254: 90                           	nop
+     255: 90                           	nop
+     256: 90                           	nop
+     257: 90                           	nop
+     258: 90                           	nop
+     259: 90                           	nop
+     25a: 90                           	nop
+     25b: 90                           	nop
+     25c: 90                           	nop
+     25d: 90                           	nop
+     25e: 90                           	nop
+     25f: 90                           	nop
+
+0000000000000260 <kref_get>:
+     260: be 01 00 00 00               	movl	$0x1, %esi
+     265: b8 01 00 00 00               	movl	$0x1, %eax
+     26a: f0                           	lock
+     26b: 0f c1 07                     	xaddl	%eax, (%rdi)
+     26e: 85 c0                        	testl	%eax, %eax
+     270: 74 11                        	je	0x283 <kref_get+0x23>
+     272: 8d 48 01                     	leal	0x1(%rax), %ecx
+     275: 09 c1                        	orl	%eax, %ecx
+     277: 0f 88 00 00 00 00            	js	0x27d <kref_get+0x1d>
+		0000000000000279:  R_X86_64_PLT32	refcount_warn_saturate-0x4
+     27d: 2e e9 00 00 00 00            	jmp	0x283 <kref_get+0x23>
+		000000000000027f:  R_X86_64_PLT32	__x86_return_thunk-0x4
+     283: be 02 00 00 00               	movl	$0x2, %esi
+     288: e9 00 00 00 00               	jmp	0x28d <kref_get+0x2d>
+		0000000000000289:  R_X86_64_PLT32	refcount_warn_saturate-0x4
+     28d: 0f 1f 00                     	nopl	(%rax)
+
+0000000000000290 <__pfx_kref_put>:
+     290: 90                           	nop
+     291: 90                           	nop
+     292: 90                           	nop
+     293: 90                           	nop
+     294: 90                           	nop
+     295: 90                           	nop
+     296: 90                           	nop
+     297: 90                           	nop
+     298: 90                           	nop
+     299: 90                           	nop
+     29a: 90                           	nop
+     29b: 90                           	nop
+     29c: 90                           	nop
+     29d: 90                           	nop
+     29e: 90                           	nop
+     29f: 90                           	nop
+
+00000000000002a0 <kref_put>:
+     2a0: b8 ff ff ff ff               	movl	$0xffffffff, %eax       # imm = 0xFFFFFFFF
+     2a5: f0                           	lock
+     2a6: 0f c1 07                     	xaddl	%eax, (%rdi)
+     2a9: 83 f8 01                     	cmpl	$0x1, %eax
+     2ac: 75 05                        	jne	0x2b3 <kref_put+0x13>
+     2ae: e9 00 00 00 00               	jmp	0x2b3 <kref_put+0x13>
+		00000000000002af:  R_X86_64_PLT32	pfnmap_track_ctx_release-0x4
+     2b3: 7c 06                        	jl	0x2bb <kref_put+0x1b>
+     2b5: 2e e9 00 00 00 00            	jmp	0x2bb <kref_put+0x1b>
+		00000000000002b7:  R_X86_64_PLT32	__x86_return_thunk-0x4
+     2bb: be 03 00 00 00               	movl	$0x3, %esi
+     2c0: e9 00 00 00 00               	jmp	0x2c5 <kref_put+0x25>
+		00000000000002c1:  R_X86_64_PLT32	refcount_warn_saturate-0x4
+
+Disassembly of section .init.text:
+
+0000000000000000 <__pfx_vma_state_init>:
+       0: 90                           	nop
+       1: 90                           	nop
+       2: 90                           	nop
+       3: 90                           	nop
+       4: 90                           	nop
+       5: 90                           	nop
+       6: 90                           	nop
+       7: 90                           	nop
+       8: 90                           	nop
+       9: 90                           	nop
+       a: 90                           	nop
+       b: 90                           	nop
+       c: 90                           	nop
+       d: 90                           	nop
+       e: 90                           	nop
+       f: 90                           	nop
+
+0000000000000010 <vma_state_init>:
+      10: 48 83 ec 30                  	subq	$0x30, %rsp
+      14: 65 48 8b 05 00 00 00 00      	movq	%gs:(%rip), %rax
+		0000000000000018:  R_X86_64_PC32	__ref_stack_chk_guard-0x4
+      1c: 48 89 44 24 28               	movq	%rax, 0x28(%rsp)
+      21: 31 c0                        	xorl	%eax, %eax
+      23: 48 89 e2                     	movq	%rsp, %rdx
+      26: 48 89 42 10                  	movq	%rax, 0x10(%rdx)
+      2a: 48 89 42 20                  	movq	%rax, 0x20(%rdx)
+      2e: 48 89 42 18                  	movq	%rax, 0x18(%rdx)
+      32: 48 89 42 08                  	movq	%rax, 0x8(%rdx)
+      36: 48 89 02                     	movq	%rax, (%rdx)
+      39: c6 42 10 01                  	movb	$0x1, 0x10(%rdx)
+      3d: c7 42 20 20 00 00 00         	movl	$0x20, 0x20(%rdx)
+      44: 48 c7 c7 00 00 00 00         	movq	$0x0, %rdi
+		0000000000000047:  R_X86_64_32S	.rodata.str1.1
+      4b: be 00 01 00 00               	movl	$0x100, %esi            # imm = 0x100
+      50: b9 10 03 00 00               	movl	$0x310, %ecx            # imm = 0x310
+      55: e8 00 00 00 00               	callq	0x5a <vma_state_init+0x4a>
+		0000000000000056:  R_X86_64_PLT32	__kmem_cache_create_args-0x4
+      5a: 48 89 05 00 00 00 00         	movq	%rax, (%rip)            # 0x61 <vma_state_init+0x51>
+		000000000000005d:  R_X86_64_PC32	.bss-0x4
+      61: 65 48 8b 05 00 00 00 00      	movq	%gs:(%rip), %rax
+		0000000000000065:  R_X86_64_PC32	__ref_stack_chk_guard-0x4
+      69: 48 3b 44 24 28               	cmpq	0x28(%rsp), %rax
+      6e: 75 0a                        	jne	0x7a <vma_state_init+0x6a>
+      70: 48 83 c4 30                  	addq	$0x30, %rsp
+      74: 2e e9 00 00 00 00            	jmp	0x7a <vma_state_init+0x6a>
+		0000000000000076:  R_X86_64_PLT32	__x86_return_thunk-0x4
+      7a: e8 00 00 00 00               	callq	0x7f <vma_state_init+0x6f>
+		000000000000007b:  R_X86_64_PLT32	__stack_chk_fail-0x4

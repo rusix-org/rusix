@@ -1,0 +1,133 @@
+{
+  "status": "REPRODUCED_VERIFIER_NAME_ASSUMPTION",
+  "source": "74258332885b9c41b373e1456a2922933b6e2a5a",
+  "input_sha256": {
+    "/home/aaron/code/rusix/linux-out/vma-lifecycle-verification-001/rust/logs/ci-vma-lifecycle-rust-build.m1aAMY05/vma-lifecycle-vma_lifecycle_rust-elf.json": "4713d0669ad5de383a33e53edf58673ff84775fe87240960aee3e4f7fc00587f",
+    "/home/aaron/code/rusix/linux-out/vma-lifecycle-verification-001/rust/logs/ci-vma-lifecycle-rust-build.m1aAMY05/vma-lifecycle-linked-elf.json": "163b994dc5b7c2b0161b193986cbd9d1d24f15a1866688e5ce34441502bd1280",
+    "/home/aaron/code/rusix/linux-out/vma-lifecycle-verification-001/rust/logs/ci-vma-lifecycle-rust-build.m1aAMY05/vma-lifecycle-vma_init-elf.json": "d1d62239b89bfcc1af0b89a43e174ecee5e61bca76c0d0e5d63817b075183e1f",
+    "/home/aaron/code/rusix/linux-vma-lifecycle/rusix/scripts/verify-vma-lifecycle.py": "7d9a9c72053315ef7e07c1e9411a22c863c03855a9a188a5347d6eaa45cb56c5",
+    "/home/aaron/code/rusix/linux-vma-lifecycle/mm/vma_lifecycle_rust.rs": "45a30de33b70e940b919efdc6f11d4161e18e3e9773dcf689afff19761432f7d",
+    "/home/aaron/code/rusix/linux-out/vma-lifecycle-verification-001/rust/builds/ci-vma-lifecycle-rust/mm/.vma_lifecycle_rust.o.cmd": "8a9f19813b2c410c6d55cec164c750f1d8ea7e5b89f89cc38d48041e4eef0c36",
+    "/home/aaron/code/rusix/linux-out/vma-lifecycle-verification-001/matrix.exit": "4355a46b19d348dc2f57c046f8ef63d4538ebb936000f3c9ee954a27460dd865"
+  },
+  "actual_cache_metadata": {
+    "vma_lifecycle_rust": {
+      "symbol": {
+        "Name": {
+          "Name": "_RNvCs9a2lGAoVDsO_18vma_lifecycle_rust13VM_AREA_CACHE.0",
+          "Value": 1038
+        },
+        "Value": 0,
+        "Size": 8,
+        "Binding": {
+          "Name": "Local",
+          "Value": 0
+        },
+        "Type": {
+          "Name": "Object",
+          "Value": 1
+        },
+        "Other": {
+          "Value": 0,
+          "Flags": []
+        },
+        "Section": {
+          "Name": ".bss",
+          "Value": 14
+        }
+      },
+      "section": {
+        "Index": 14,
+        "Name": {
+          "Name": ".bss",
+          "Value": 306
+        },
+        "Type": {
+          "Name": "SHT_NOBITS",
+          "Value": 8
+        },
+        "Flags": {
+          "Value": 3,
+          "Flags": [
+            {
+              "Name": "SHF_ALLOC",
+              "Value": 2
+            },
+            {
+              "Name": "SHF_WRITE",
+              "Value": 1
+            }
+          ]
+        },
+        "Address": 0,
+        "Offset": 3328,
+        "Size": 8,
+        "Link": 0,
+        "Info": 0,
+        "AddressAlignment": 8,
+        "EntrySize": 0
+      }
+    },
+    "linked": {
+      "symbol": {
+        "Name": {
+          "Name": "_RNvCs9a2lGAoVDsO_18vma_lifecycle_rust13VM_AREA_CACHE.0",
+          "Value": 1458895
+        },
+        "Value": 18446744071609821480,
+        "Size": 8,
+        "Binding": {
+          "Name": "Local",
+          "Value": 0
+        },
+        "Type": {
+          "Name": "Object",
+          "Value": 1
+        },
+        "Other": {
+          "Value": 0,
+          "Flags": []
+        },
+        "Section": {
+          "Name": ".bss",
+          "Value": 41
+        }
+      },
+      "section": {
+        "Index": 41,
+        "Name": {
+          "Name": ".bss",
+          "Value": 127
+        },
+        "Type": {
+          "Name": "SHT_NOBITS",
+          "Value": 8
+        },
+        "Flags": {
+          "Value": 3,
+          "Flags": [
+            {
+              "Name": "SHF_ALLOC",
+              "Value": 2
+            },
+            {
+              "Name": "SHF_WRITE",
+              "Value": 1
+            }
+          ]
+        },
+        "Address": 18446744071598649344,
+        "Offset": 21901312,
+        "Size": 11653120,
+        "Link": 0,
+        "Info": 0,
+        "AddressAlignment": 4096,
+        "EntrySize": 0
+      }
+    },
+    "vma_init": []
+  },
+  "finding": "Regex excludes observed .0 suffix. Unique8-byte local aligned permanentBSS cache object present in Rust object and linkedkernel; absent Cobject. Other cache storage predicates pass isolated metadata check changing only name suffix.",
+  "recommendation": "Accept only reviewed Rust v0 identity plus observed optional .0 suffix; preserve uniquecache/noCcache/exactlinkedname and all ELF/type/size/lifetime/access checks. Add actualmetadata regression and duplicate/wrongowner/unsupported suffix/interior/readonly/init failures.",
+  "scope": "Read-only retained metadata/source. Rust build completed but verifier failed before Rust guest; no paired runtime or full actual-selection PASS claim."
+}

@@ -1,0 +1,55 @@
+{
+  "status": "SECOND_VERIFIER_NAME_CLASS_ASSUMPTION_CONFIRMED",
+  "actual": {
+    "object": {
+      "symbol": {
+        "name": "rusix_vma_refcount_max",
+        "kind": 1,
+        "section": 86,
+        "address": 0,
+        "size": 4
+      },
+      "section_name": ".rodata",
+      "section_header": [
+        1184,
+        1,
+        2,
+        0,
+        6744,
+        4,
+        0,
+        0,
+        4,
+        0
+      ],
+      "value": 2147483647,
+      "elf_sha256": "0e490966e959d65c54557a62c0b7b2527f86a1ede46a3c6248154b23bdbbf9de"
+    },
+    "linked": {
+      "symbol": {
+        "name": "rusix_vma_refcount_max",
+        "kind": 1,
+        "section": 2,
+        "address": 18446744071589418284,
+        "size": 4
+      },
+      "section_name": ".rodata",
+      "section_header": [
+        500,
+        1,
+        51,
+        18446744071589330944,
+        12582912,
+        2602089,
+        0,
+        0,
+        4096,
+        0
+      ],
+      "value": 2147483647,
+      "elf_sha256": "7b3d96f4b0df37719c7c5040ffdb1253d59e805dbc0c2d6b6490f2087b98da40"
+    }
+  },
+  "finding": "Original gate requires nmR in both objects; linked canonical .rodata has flags0x33 and nmD. Actual exact4-byte global STT_OBJECT value0x7fffffff intact.",
+  "recommendation": "Separate strict4byte constant proof, retaining objectreadonly and linked exact.rodata allocated/nonexec/permanent bounds/alignment/name/global uniqueness/value equality. Do not simply permit arbitrary D data."
+}

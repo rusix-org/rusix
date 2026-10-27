@@ -1,0 +1,13 @@
+{
+  "status": "TARGETED_CHECKS_PASS",
+  "scope": "11host selection tests, actual saved ELF cache metadata and indexed constant bytes; no LLVM subprocess/build/VM",
+  "source_sha256": {
+    "rusix/scripts/verify-vma-lifecycle.py": "7ea11718329f3b1f65652f5fabcf0b67fe4e557fb72414e8b86b13e8ca0bbc91",
+    "rusix/tests/test_vma_lifecycle_selection.py": "b24aca2e1781c27aaa750383f293d75446ee8905a4198ee75854dc11095d89e6"
+  },
+  "pending": [
+    "independent fix review",
+    "full pinned actual verifier",
+    "fresh paired runtime"
+  ]
+}
