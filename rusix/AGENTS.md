@@ -55,6 +55,10 @@ results. Retain failures and unexplained warnings; never report unexecuted check
 or pending runs as passing. Separate engineering-baseline and LTS evidence;
 pinned inputs alone do not prove bit-identical reproduction.
 
+Archive current source, configuration, tools and results; reference prior evidence
+by its manifest and commit instead of recursively copying it. Keep generated dependency
+markers as exhaustive hashes, and retain the raw outputs on disk.
+
 Update `PROGRESS.md` after meaningful work and before ending: implemented work,
 verified scope, blockers and next actions, with links to evidence and migration
 records. Follow [licensing and authorship rules](CONTRIBUTING.md#licensing-and-authorship),

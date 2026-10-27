@@ -31,6 +31,15 @@ pinned LLVM19 check of historical archive bytes. Resolved Kconfig and actual
 fixture linkage/runtime remain pending.
 [Boundary and remaining work](experiments/mm-exit-mmap/README.md).
 
+At `8ec785568045`, pinned-image Kconfig resolution passes for all four ordinary
+and KUnit teardown profiles, retaining every requested setting. Each C/Rust
+pair differs only by the teardown selector; ordinary/KUnit differences are
+exactly the six declared test settings. Source archive, extracted bytes/modes,
+commands, container limits and before/after inputs were independently checked.
+[Configuration evidence](docs/evidence/mm-exit-mmap-config/manifest.json) records
+host configuration utilities only, not candidate kernel compilation, emitted
+fixture ownership or VM results.
+
 VMA lifecycle is an opt-in candidate on `rusix/vma-lifecycle`: Rust owns the
 cache pointer and fresh/dup/free policy, including PFN-reference rollback.
 Canonical C primitives retain shared-field and resource operations. Production

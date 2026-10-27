@@ -1,0 +1,18 @@
+{
+  "status": "PREPARED_DISABLED_NOT_RUN",
+  "source_checkpoint": null,
+  "profiles": [
+    "exit-mmap-c",
+    "exit-mmap-rust",
+    "exit-mmap-kunit-c",
+    "exit-mmap-kunit-rust"
+  ],
+  "review_required": true,
+  "syntax": "PASS",
+  "files": {
+    "README.md": "708993bbd7cdfaf67e1333f1dd118e4b77ffec50b8a01b17c16738a443f321e3",
+    "archive-inputs.py": "bbb33cdd8502acf033ef5903480d71a5684c482f3a3f61ded630be790e2249f9",
+    "check.py": "c29f823d7feebc2685844bb29815d2be7749f5596be48824211b97e71d0da1d4",
+    "run.sh": "6823671956184b8f71dc072defc8b0574f4245dbbcff9e8bc1f3c4576d0c2394"
+  }
+}

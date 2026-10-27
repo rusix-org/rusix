@@ -1,0 +1,279 @@
+[
+    {
+        "Id": "ba0399cd456a5d2473b029b3ad731ec7fc139c14270398180159ccdb1b5d66e7",
+        "Created": "2026-10-27T01:35:39.10012353Z",
+        "Path": "bash",
+        "Args": [
+            "-c",
+            "set -euo pipefail; dpkg-query -W > /out/packages.lock; clang --version > /out/clang-version.log; rustc --version --verbose > /out/rustc-version.log; bindgen --version > /out/bindgen-version.log; make --version > /out/make-version.log; python3 -B /check/check.py"
+        ],
+        "State": {
+            "Status": "exited",
+            "Running": false,
+            "Paused": false,
+            "Restarting": false,
+            "OOMKilled": false,
+            "Dead": false,
+            "Pid": 0,
+            "ExitCode": 0,
+            "Error": "",
+            "StartedAt": "2026-10-27T01:35:39.396033738Z",
+            "FinishedAt": "2026-10-27T01:36:52.988062938Z"
+        },
+        "Image": "sha256:c02eb3929889b3f0cc035d57a02c844e0c74c71d24fbda1311249faeb8257f63",
+        "ResolvConfPath": "/var/lib/docker/containers/ba0399cd456a5d2473b029b3ad731ec7fc139c14270398180159ccdb1b5d66e7/resolv.conf",
+        "HostnamePath": "/var/lib/docker/containers/ba0399cd456a5d2473b029b3ad731ec7fc139c14270398180159ccdb1b5d66e7/hostname",
+        "HostsPath": "/var/lib/docker/containers/ba0399cd456a5d2473b029b3ad731ec7fc139c14270398180159ccdb1b5d66e7/hosts",
+        "LogPath": "/var/lib/docker/containers/ba0399cd456a5d2473b029b3ad731ec7fc139c14270398180159ccdb1b5d66e7/ba0399cd456a5d2473b029b3ad731ec7fc139c14270398180159ccdb1b5d66e7-json.log",
+        "Name": "/funny_shtern",
+        "RestartCount": 0,
+        "Driver": "overlayfs",
+        "Platform": "linux",
+        "MountLabel": "",
+        "ProcessLabel": "",
+        "AppArmorProfile": "",
+        "ExecIDs": null,
+        "HostConfig": {
+            "Binds": null,
+            "ContainerIDFile": "/home/aaron/code/rusix/linux-out/mm-exit-mmap-config-001/container.cid",
+            "LogConfig": {
+                "Type": "json-file",
+                "Config": {
+                    "max-file": "5",
+                    "max-size": "10m"
+                }
+            },
+            "NetworkMode": "none",
+            "PortBindings": {},
+            "RestartPolicy": {
+                "Name": "no",
+                "MaximumRetryCount": 0
+            },
+            "AutoRemove": false,
+            "VolumeDriver": "",
+            "VolumesFrom": null,
+            "ConsoleSize": [
+                0,
+                0
+            ],
+            "CapAdd": null,
+            "CapDrop": [
+                "ALL"
+            ],
+            "CgroupnsMode": "private",
+            "Dns": null,
+            "DnsOptions": [],
+            "DnsSearch": [],
+            "ExtraHosts": null,
+            "GroupAdd": null,
+            "IpcMode": "private",
+            "Cgroup": "",
+            "Links": null,
+            "OomScoreAdj": 0,
+            "PidMode": "",
+            "Privileged": false,
+            "PublishAllPorts": false,
+            "ReadonlyRootfs": true,
+            "SecurityOpt": [
+                "no-new-privileges"
+            ],
+            "UTSMode": "",
+            "UsernsMode": "",
+            "ShmSize": 67108864,
+            "Runtime": "runc",
+            "Isolation": "",
+            "CpuShares": 0,
+            "Memory": 1073741824,
+            "NanoCpus": 1000000000,
+            "CgroupParent": "",
+            "BlkioWeight": 0,
+            "BlkioWeightDevice": [],
+            "BlkioDeviceReadBps": [],
+            "BlkioDeviceWriteBps": [],
+            "BlkioDeviceReadIOps": [],
+            "BlkioDeviceWriteIOps": [],
+            "CpuPeriod": 0,
+            "CpuQuota": 0,
+            "CpuRealtimePeriod": 0,
+            "CpuRealtimeRuntime": 0,
+            "CpusetCpus": "",
+            "CpusetMems": "",
+            "Devices": [],
+            "DeviceCgroupRules": null,
+            "DeviceRequests": null,
+            "MemoryReservation": 0,
+            "MemorySwap": 1073741824,
+            "MemorySwappiness": null,
+            "OomKillDisable": null,
+            "PidsLimit": null,
+            "Ulimits": null,
+            "CpuCount": 0,
+            "CpuPercent": 0,
+            "IOMaximumIOps": 0,
+            "IOMaximumBandwidth": 0,
+            "Mounts": [
+                {
+                    "Type": "bind",
+                    "Source": "/home/aaron/code/rusix/linux-out/mm-exit-mmap-config-001/source",
+                    "Target": "/src",
+                    "ReadOnly": true
+                },
+                {
+                    "Type": "bind",
+                    "Source": "/home/aaron/code/rusix/linux-out/mm-exit-mmap-config-draft",
+                    "Target": "/check",
+                    "ReadOnly": true
+                },
+                {
+                    "Type": "bind",
+                    "Source": "/home/aaron/code/rusix/linux-out/mm-exit-mmap-config-001/archive-inputs.json",
+                    "Target": "/archive-inputs.json",
+                    "ReadOnly": true
+                },
+                {
+                    "Type": "bind",
+                    "Source": "/home/aaron/code/rusix/linux-out/mm-exit-mmap-config-001/builds",
+                    "Target": "/out"
+                },
+                {
+                    "Type": "bind",
+                    "Source": "/home/aaron/code/rusix/linux-out/mm-exit-mmap-config-001/tmp",
+                    "Target": "/scratch"
+                }
+            ],
+            "MaskedPaths": [
+                "/proc/acpi",
+                "/proc/asound",
+                "/proc/interrupts",
+                "/proc/kcore",
+                "/proc/keys",
+                "/proc/latency_stats",
+                "/proc/sched_debug",
+                "/proc/scsi",
+                "/proc/timer_list",
+                "/proc/timer_stats",
+                "/sys/devices/virtual/powercap",
+                "/sys/firmware"
+            ],
+            "ReadonlyPaths": [
+                "/proc/bus",
+                "/proc/fs",
+                "/proc/irq",
+                "/proc/sys",
+                "/proc/sysrq-trigger"
+            ]
+        },
+        "Storage": {
+            "RootFS": {
+                "Snapshot": {
+                    "Name": "overlayfs"
+                }
+            }
+        },
+        "Mounts": [
+            {
+                "Type": "bind",
+                "Source": "/home/aaron/code/rusix/linux-out/mm-exit-mmap-config-001/archive-inputs.json",
+                "Destination": "/archive-inputs.json",
+                "Mode": "",
+                "RW": false,
+                "Propagation": "rprivate"
+            },
+            {
+                "Type": "bind",
+                "Source": "/home/aaron/code/rusix/linux-out/mm-exit-mmap-config-draft",
+                "Destination": "/check",
+                "Mode": "",
+                "RW": false,
+                "Propagation": "rprivate"
+            },
+            {
+                "Type": "bind",
+                "Source": "/home/aaron/code/rusix/linux-out/mm-exit-mmap-config-001/builds",
+                "Destination": "/out",
+                "Mode": "",
+                "RW": true,
+                "Propagation": "rprivate"
+            },
+            {
+                "Type": "bind",
+                "Source": "/home/aaron/code/rusix/linux-out/mm-exit-mmap-config-001/tmp",
+                "Destination": "/scratch",
+                "Mode": "",
+                "RW": true,
+                "Propagation": "rprivate"
+            },
+            {
+                "Type": "bind",
+                "Source": "/home/aaron/code/rusix/linux-out/mm-exit-mmap-config-001/source",
+                "Destination": "/src",
+                "Mode": "",
+                "RW": false,
+                "Propagation": "rprivate"
+            }
+        ],
+        "Config": {
+            "Hostname": "ba0399cd456a",
+            "Domainname": "",
+            "User": "1000:1000",
+            "AttachStdin": false,
+            "AttachStdout": true,
+            "AttachStderr": true,
+            "Tty": false,
+            "OpenStdin": false,
+            "StdinOnce": false,
+            "Env": [
+                "TMPDIR=/scratch",
+                "PYTHONDONTWRITEBYTECODE=1",
+                "RUSIX_CONFIG_SOURCE=8ec785568045a3cd2245e87d1854a7f5ab664ef3",
+                "PATH=/usr/lib/llvm-19/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+                "LIBCLANG_PATH=/usr/lib/llvm-19/lib",
+                "LC_ALL=C",
+                "GIT_OPTIONAL_LOCKS=0"
+            ],
+            "Cmd": [
+                "bash",
+                "-c",
+                "set -euo pipefail; dpkg-query -W > /out/packages.lock; clang --version > /out/clang-version.log; rustc --version --verbose > /out/rustc-version.log; bindgen --version > /out/bindgen-version.log; make --version > /out/make-version.log; python3 -B /check/check.py"
+            ],
+            "Image": "sha256:c02eb3929889b3f0cc035d57a02c844e0c74c71d24fbda1311249faeb8257f63",
+            "Volumes": null,
+            "WorkingDir": "/src",
+            "Entrypoint": null,
+            "Labels": {}
+        },
+        "NetworkSettings": {
+            "SandboxID": "",
+            "SandboxKey": "",
+            "Ports": {},
+            "Networks": {
+                "none": {
+                    "IPAMConfig": null,
+                    "Links": null,
+                    "Aliases": null,
+                    "DriverOpts": null,
+                    "GwPriority": 0,
+                    "NetworkID": "8233b529d2059c07122e48a591d0f612950367d17b760c4dca5fd32bcf807140",
+                    "EndpointID": "",
+                    "Gateway": "",
+                    "IPAddress": "",
+                    "MacAddress": "",
+                    "IPPrefixLen": 0,
+                    "IPv6Gateway": "",
+                    "GlobalIPv6Address": "",
+                    "GlobalIPv6PrefixLen": 0,
+                    "DNSNames": null
+                }
+            }
+        },
+        "ImageManifestDescriptor": {
+            "mediaType": "application/vnd.oci.image.manifest.v1+json",
+            "digest": "sha256:423ec719c430004334c2c78f74a9501c4d1b5784accd182faf26046eb7446ba8",
+            "size": 1994,
+            "platform": {
+                "architecture": "amd64",
+                "os": "linux"
+            }
+        }
+    }
+]
