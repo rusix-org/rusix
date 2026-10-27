@@ -16,6 +16,9 @@ executed. [Fixture evidence](docs/evidence/vma-lifecycle-fixtures/manifest.json)
 Both local VMA profiles and their preprocessing/linked-selection gates are
 implemented. All 277 cases across 27 host scripts pass after correcting fresh
 configuration validation order. [Host evidence](docs/evidence/vma-lifecycle-host/manifest.json).
+Pinned Kconfig resolution at `7b07b88aa88a` retains every requested setting;
+the resolved pair differs only by the VMA selector. [Configuration evidence](docs/evidence/vma-lifecycle-config/manifest.json)
+retains the initial scratch import failure and successful retry.
 The upstream 16-case C baseline is prepared but unrun. Next: baseline execution,
 paired selection and ordinary-consumer gates, followed by attributable failures
 and lifetime/concurrency checks. [Contract](experiments/vma-lifecycle/README.md).

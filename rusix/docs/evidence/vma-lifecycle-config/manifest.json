@@ -1,0 +1,27 @@
+{
+  "status": "PASS",
+  "source": "7b07b88aa88ad6d5fceb61c875768c08a6417caf",
+  "image": "sha256:c02eb3929889b3f0cc035d57a02c844e0c74c71d24fbda1311249faeb8257f63",
+  "scope": "Pinned actual Kconfig resolution only; no candidate kernel build or guest execution",
+  "different_settings": [
+    "CONFIG_RUSIX_VMA_LIFECYCLE_RUST"
+  ],
+  "prior_failure": "001 scratch checker missing Python script import path; failed before configuration; preserved",
+  "files": {
+    "vma-config-001/check.py": "be52b63df695c0106b556983669f0f709c312eb29bec6a70c3b45612ff5662cf",
+    "vma-config-001/container.log": "1c3e4677d6c7ac2fde653576dce36181402e0974b4e10f8fdfa786a9c1616a49",
+    "vma-config-001/container.cid": "929036ea57a06746084b816bbac7f147f2a07ba0f8f5e31690460985ca4dbe88",
+    "vma-config-001/container.exit": "4355a46b19d348dc2f57c046f8ef63d4538ebb936000f3c9ee954a27460dd865",
+    "vma-config-002/check.py": "f85d7813fabd080877fb8c71fe96f02d40bd7fa48533ed56b829f02ef884c6a0",
+    "vma-config-002/container.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "vma-config-002/container.cid": "1f73bd2540137fee3628be83b860b1386a9a20d2e51bc6ae1fdf97d79f5b66e0",
+    "vma-config-002/c.log": "ec6adc640a00394e3e71580fcbd3c0d00e5212ce048c0dfdd5a6ea1472676bc5",
+    "vma-config-002/c.exit": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+    "vma-config-002/rust.log": "bcdd0ace4718fb8cf913b410c86b019e56bd8791636740758d1eb55ac5ecfb39",
+    "vma-config-002/rust.exit": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+    "vma-config-002/result.json": "bb1d840c37caf3e4ec6a659339583affc0991fc5727cdb16c9e5fef14b0c6ced",
+    "vma-config-002/container.exit": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+    "vma-config-002/c/.config": "bc0c5c7767dc1c7197877459969acdf37c35ba45fdda81af756cf088de973f3d",
+    "vma-config-002/rust/.config": "372b150fe8992e728b28856cefa2be912e04f8505ba4f7c492b61be9ed41977a"
+  }
+}

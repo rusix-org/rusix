@@ -1,0 +1,39 @@
+{
+  "status": "PASS",
+  "source": "7b07b88aa88ad6d5fceb61c875768c08a6417caf",
+  "scope": "Actual Kconfig resolution only; no kernel compilation or guest execution",
+  "commands": {
+    "c": [
+      "make",
+      "-C",
+      "/src",
+      "O=/out/c",
+      "LLVM=1",
+      "KCONFIG_ALLCONFIG=/src/rusix/configs/x86_64-vma-lifecycle-c.config",
+      "allnoconfig"
+    ],
+    "rust": [
+      "make",
+      "-C",
+      "/src",
+      "O=/out/rust",
+      "LLVM=1",
+      "KCONFIG_ALLCONFIG=/src/rusix/configs/x86_64-vma-lifecycle-rust.config",
+      "allnoconfig"
+    ]
+  },
+  "input_sha256": {
+    "/src/init/Kconfig": "ba0878ac856ce7a8e46f54441c85e7a3272c0fca684a557d0accc098f43b52b3",
+    "/src/rusix/scripts/verify-vma-lifecycle.py": "7d9a9c72053315ef7e07c1e9411a22c863c03855a9a188a5347d6eaa45cb56c5",
+    "/src/rusix/configs/x86_64-server.config": "5b37adb3792b56926ef687dd7392b3916dbb8b77a30e50c2b2664373988098d6",
+    "/src/rusix/configs/x86_64-vma-lifecycle-c.config": "031144e174a102c376ba09604df40a330af0a4160eba12e6e930178ea69294da",
+    "/src/rusix/configs/x86_64-vma-lifecycle-rust.config": "ca868464439e16783850769aca31a812f1e290a3d5e5ca73f73549a146070887"
+  },
+  "config_sha256": {
+    "c": "bc0c5c7767dc1c7197877459969acdf37c35ba45fdda81af756cf088de973f3d",
+    "rust": "372b150fe8992e728b28856cefa2be912e04f8505ba4f7c492b61be9ed41977a"
+  },
+  "different_settings": [
+    "CONFIG_RUSIX_VMA_LIFECYCLE_RUST"
+  ]
+}

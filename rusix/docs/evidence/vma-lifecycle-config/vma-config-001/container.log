@@ -1,0 +1,42 @@
+Traceback (most recent call last):
+  File "/out/check.py", line 4, in <module>
+    spec=importlib.util.spec_from_file_location('gate',root/'rusix/scripts/verify-vma-lifecycle.py');g=importlib.util.module_from_spec(spec);spec.loader.exec_module(g)
+                                                                                                                                             ~~~~~~~~~~~~~~~~~~~~~~~^^^
+  File "<frozen importlib._bootstrap_external>", line 1026, in exec_module
+  File "<frozen importlib._bootstrap>", line 488, in _call_with_frames_removed
+  File "/src/rusix/scripts/verify-vma-lifecycle.py", line 20, in <module>
+    dup = load('vma_dup_gate', 'verify-dup-mmap.py')
+  File "/src/rusix/scripts/verify-vma-lifecycle.py", line 16, in load
+    spec.loader.exec_module(module)
+    ~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^
+  File "<frozen importlib._bootstrap_external>", line 1026, in exec_module
+  File "<frozen importlib._bootstrap>", line 488, in _call_with_frames_removed
+  File "/src/rusix/scripts/verify-dup-mmap.py", line 18, in <module>
+    copy=load('dup_copy','verify-mm-copy.py')
+  File "/src/rusix/scripts/verify-dup-mmap.py", line 15, in load
+    mod=importlib.util.module_from_spec(spec);spec.loader.exec_module(mod);return mod
+                                              ~~~~~~~~~~~~~~~~~~~~~~~^^^^^
+  File "<frozen importlib._bootstrap_external>", line 1026, in exec_module
+  File "<frozen importlib._bootstrap>", line 488, in _call_with_frames_removed
+  File "/src/rusix/scripts/verify-mm-copy.py", line 15, in <module>
+    spec.loader.exec_module(release)
+    ~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "<frozen importlib._bootstrap_external>", line 1026, in exec_module
+  File "<frozen importlib._bootstrap>", line 488, in _call_with_frames_removed
+  File "/src/rusix/scripts/verify-mm-release.py", line 19, in <module>
+    mm = load('release_constructor', 'verify-mm-construction.py')
+  File "/src/rusix/scripts/verify-mm-release.py", line 15, in load
+    module = importlib.util.module_from_spec(spec); spec.loader.exec_module(module)
+                                                    ~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^
+  File "<frozen importlib._bootstrap_external>", line 1026, in exec_module
+  File "<frozen importlib._bootstrap>", line 488, in _call_with_frames_removed
+  File "/src/rusix/scripts/verify-mm-construction.py", line 19, in <module>
+    task = load('mm_task_selection', 'verify-task-construction.py')
+  File "/src/rusix/scripts/verify-mm-construction.py", line 15, in load
+    module = importlib.util.module_from_spec(spec); spec.loader.exec_module(module)
+                                                    ~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^
+  File "<frozen importlib._bootstrap_external>", line 1026, in exec_module
+  File "<frozen importlib._bootstrap>", line 488, in _call_with_frames_removed
+  File "/src/rusix/scripts/verify-task-construction.py", line 11, in <module>
+    from saved_clang_command import command
+ModuleNotFoundError: No module named 'saved_clang_command'
