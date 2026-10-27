@@ -33,6 +33,12 @@ rustfmt --check lib/math/int_sqrt_rust.rs rusix/tests/int_sqrt_host.rs
 git diff --check
 ```
 
+Before publishing evidence, run the [Git completeness check](scripts/verify-evidence-git.py):
+`python3 rusix/scripts/verify-evidence-git.py --ref HEAD`. Repeat `--ref` to check
+several local commits. It verifies top-level manifests against committed blobs;
+untracked files and raw build outputs do not satisfy stored-record promises.
+
+
 Recorded builds require clean committed source; use fresh outputs and VM labels,
 retaining failed attempts. Never run guest probes or load experimental modules on
 the host. The [BRD fixture](tests/brd-contract/README.md) documents its exact scope.

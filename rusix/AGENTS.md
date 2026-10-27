@@ -55,6 +55,10 @@ results. Retain failures and unexplained warnings; never report unexecuted check
 or pending runs as passing. Separate engineering-baseline and LTS evidence;
 pinned inputs alone do not prove bit-identical reproduction.
 
+Stage every manifest-promised stored file, including exact ignored paths, and
+verify committed Git blob hashes before claiming an evidence archive is complete.
+Raw binary references remain hash-only records, not promises to commit binaries.
+
 Update `PROGRESS.md` after meaningful work and before ending: implemented work,
 verified scope, blockers and next actions, with links to evidence and migration
 records. Follow [licensing and authorship rules](CONTRIBUTING.md#licensing-and-authorship),

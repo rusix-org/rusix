@@ -28,13 +28,18 @@ source, configuration, raw-result hashes and remaining C dependencies.
 | [rcu-sync-policy](https://github.com/rusix-org/rusix/tree/rusix/rcu-sync-policy/rusix) | Paired debug/plain sync-policy KUnit fixtures. |
 | [rcu-batch](https://github.com/rusix-org/rusix/tree/rusix/rcu-batch/rusix) | Paired debug/plain batch-policy KUnit fixtures. |
 
-Next milestone: verify the implemented Rust VMA lifecycle, address-space teardown
-and mapping-copy policies, then integrate the verified chain with ordinary
+Next milestone: verify address-space teardown, mapping-copy and VMA
+split/modification policies, then integrate the verified chain with ordinary
 userspace regression coverage. The lifecycle retry passed both C and Rust
 with matching fixtures and its sole intended selection difference. Teardown, mapping-copy and PFN
 ownership candidates remain local pending their build/runtime gates. Allocation
 rollback coverage and broader concurrency validation remain open. Hosted CI stays
 disabled; all verification runs locally.
+
+The [stored-evidence check](scripts/verify-evidence-git.py) verifies publication
+manifests against committed Git blobs, including ignored configuration and
+compressed records. It checks archive completeness; runtime evidence retains
+its original source and test attribution.
 
 ## Integrated kernel evidence
 
