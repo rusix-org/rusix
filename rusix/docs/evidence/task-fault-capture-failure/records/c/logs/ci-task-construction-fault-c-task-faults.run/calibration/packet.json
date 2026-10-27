@@ -1,0 +1,30 @@
+{
+  "policy_base": "8fd3defabb841083192cd1d9c4eb1cde83027579",
+  "build_source": "362835315fb594e49374dc2b6d38aa5208769082",
+  "inputs": {
+    "vmlinux": {
+      "path": "/out/builds/ci-task-construction-fault-c/vmlinux",
+      "sha256": "4e46779051fe6526a2c55040bafa60bac6206956f1d952899bb31e42baa272e7"
+    },
+    "config": {
+      "path": "/out/builds/ci-task-construction-fault-c/.config",
+      "sha256": "5812e4fe0926dfcd7956a6bd07d6356459a3a38945515e334f303becf808a978"
+    },
+    "symbols": {
+      "path": "/out/logs/ci-task-construction-fault-c-task-faults.run/calibration/symbols",
+      "sha256": "763041710cc868e4b093be48551c98012803e7ef510d6ebacf64c15e127ece02"
+    },
+    "disassembly": {
+      "path": "/out/logs/ci-task-construction-fault-c-task-faults.run/calibration/disassembly",
+      "sha256": "e46c7d0c579d6a708f810e30122e93084ca327181033838646b66f53451d78c4"
+    },
+    "notes": {
+      "path": "/out/logs/ci-task-construction-fault-c-task-faults.run/calibration/notes",
+      "sha256": "4b8aa9e4f7dd1d3976ec471bcf94e91dfc1150bc2d5eefbc9ddf323b726610ed"
+    },
+    "calibration.tsv": {
+      "path": "/out/logs/ci-task-construction-fault-c-task-faults.run/calibration/calibration.tsv",
+      "sha256": "b360555c78b58a8896cac71a4007d684da675c5a5a0289590116aa9ea665b8dc"
+    }
+  }
+}

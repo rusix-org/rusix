@@ -17,6 +17,14 @@ callsite pairs. Rust was not started; no fault captures or runtime result exist.
 binary artifact hashes and the frozen source. Calibration tooling requires
 review and a fresh attempt; this is not a constructor failure result.
 
+Task-fault attempt `002` at `362835315fb5` built the C kernel and completed
+actual-ELF calibration. The guest emitted all 18 attempt captures, then cleanup
+reported `EINVAL` and PID1 reported failure; the strict terminal inventory gate
+rejected the run. Rust was not started. [Failure evidence](docs/evidence/task-fault-capture-failure/manifest.json)
+preserves the console, calibration, source/cache provenance and original failure
+continuity (307 records, 1,964 retained artifact hashes). No fault-classification
+PASS is claimed; cleanup must be corrected and verification repeated.
+
 | Check | Verified result |
 | --- | --- |
 | LTS provenance/math | Signed tag verified; all 24 required math cases pass on q35, zero skips. [Math](docs/evidence/math-q35/manifest.json), [provenance](docs/evidence/lts-baseline/manifest.json). |

@@ -1,0 +1,4 @@
+5812e4fe0926dfcd7956a6bd07d6356459a3a38945515e334f303becf808a978  /out/builds/ci-task-construction-fault-c/.config
+c058c2b5a13e17423c1b2e5e168811ce64779dd888276df0f4121b41bd3fa68c  /out/builds/ci-task-construction-fault-c/arch/x86/boot/bzImage
+4e46779051fe6526a2c55040bafa60bac6206956f1d952899bb31e42baa272e7  /out/builds/ci-task-construction-fault-c/vmlinux
+33f6563e793356c167347af3faea4e503cba33439268cc5bc93b06d26c6e594f  /out/builds/ci-task-construction-fault-c/vmlinux.map

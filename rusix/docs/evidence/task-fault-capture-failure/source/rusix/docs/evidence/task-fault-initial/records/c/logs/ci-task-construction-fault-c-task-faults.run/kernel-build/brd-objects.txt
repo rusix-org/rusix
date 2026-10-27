@@ -1,0 +1,1 @@
+/out/builds/ci-task-construction-fault-c/drivers/block/brd_rust.o

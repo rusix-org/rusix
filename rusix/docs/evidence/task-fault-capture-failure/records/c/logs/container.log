@@ -1,0 +1,3 @@
+Build evidence: /out/logs/ci-task-construction-fault-c-build.42Py2F0s
+Built /out/builds/ci-task-construction-fault-c/arch/x86/boot/bzImage
+Task fault verification failed: Capture/cleanup/init terminal inventory differs; evidence /out/logs/ci-task-construction-fault-c-task-faults.run
