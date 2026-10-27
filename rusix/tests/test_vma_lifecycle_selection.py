@@ -59,6 +59,47 @@ class Selection(unittest.TestCase):
         with self.assertRaises(ValueError): gate.cache_owner(metadata(), True)
         with self.assertRaises(ValueError): gate.cache_owner(metadata(), False, False)
 
+    def test_cache_observed_suffix_only(self):
+        name = '_RNvCs9a2lGAoVDsO_18vma_lifecycle_rust13VM_AREA_CACHE'
+        for accepted in (name, name+'.0'):
+            self.assertEqual(gate.cache_owner(metadata(name=accepted), True), accepted)
+        for suffix in ('.1', '.00', '.llvm.1', '.0.extra', '.cold', '.0\n'):
+            with self.subTest(suffix=suffix), self.assertRaises(ValueError):
+                gate.cache_owner(metadata(name=name+suffix), True)
+        duplicate = metadata(name=name+'.0')
+        duplicate[0]['Symbols'].append(metadata(name=name)[0]['Symbols'][0])
+        with self.assertRaises(ValueError):
+            gate.cache_owner(duplicate, True)
+
+    def test_refcount_constant_storage_and_value(self):
+        class Elf:
+            relocatable = True
+            names = ['.rodata']
+            headers = [[0, 1, 2, 0, 0, 4]]
+            data = (0x7fffffff).to_bytes(4, 'little')
+            sym = dict(kind=1, size=4, address=0)
+            offset = 0
+            def symbol(self, name): return self.sym
+            def location(self, sym): return 0, self.offset
+            def section_data(self, index): return self.data
+        nm = '00000000 R rusix_vma_refcount_max'
+        self.assertEqual(gate.refcount_constant(Elf(), nm, linked=False), 0x7fffffff)
+        linked = Elf(); linked.relocatable = False; linked.headers = [[0, 1, 0x33, 0, 0, 4]]
+        self.assertEqual(gate.refcount_constant(linked, nm.replace(' R ', ' D '), linked=True), 0x7fffffff)
+        for key, value in (('kind', 2), ('size', 8), ('address', 1)):
+            bad = Elf(); bad.sym = dict(Elf.sym, **{key: value})
+            with self.subTest(key=key), self.assertRaises(ValueError):
+                gate.refcount_constant(bad, nm, linked=False)
+        for change in ({'names':['.data']}, {'headers':[[0,1,6,0,0,4]]},
+                       {'headers':[[0,1,3,0,0,4]]}, {'headers':[[0,1,2,0,0,3]]},
+                       {'data':b'\xff'*4}, {'offset':-1}, {'relocatable':False}):
+            bad = Elf()
+            for key,value in change.items(): setattr(bad,key,value)
+            with self.subTest(change=change), self.assertRaises(ValueError):
+                gate.refcount_constant(bad, nm, linked=False)
+        for bad_nm in (nm.replace(' R ', ' D '), nm.replace(' R ', ' r '), nm+'\n'+nm):
+            with self.assertRaises(ValueError): gate.refcount_constant(Elf(), bad_nm, linked=False)
+
     def test_init_and_live_function_sections(self):
         live = metadata(name='vm_area_alloc', size=16, typ=2, section='.text.vm_area_alloc', section_type=1, flags=6, binding=1)
         gate.function_location(live, 'vm_area_alloc', False)

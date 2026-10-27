@@ -1,5 +1,12 @@
 # rusix progress
 
+The inherited lifecycle verifier now accepts the observed private-cache `.0`
+suffix and proves the canonical refcount constant's four-byte storage/value.
+This carries the reviewed fix from `e0632d2729` without changing kernel code.
+All 36 host suites (373 cases) pass on unchanged inputs.
+[Regression evidence](docs/evidence/lifecycle-verifier-fix/manifest.json) references
+the original fix proof; candidate kernel/guest verification remains pending.
+
 At `344b3b272c4e`, both ordinary copy-VMA profiles pass pinned-image Kconfig
 resolution. Every requested setting survives; the pair differs only by
 `CONFIG_RUSIX_COPY_VMA_RUST`, with MEMFD_CREATE enabled and KUnit/native kernel

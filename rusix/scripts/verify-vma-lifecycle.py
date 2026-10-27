@@ -164,7 +164,7 @@ def cache_owner(metadata, rust, present=True):
         return None
     name = caches[0]['Name']['Name']
     if rust:
-        if not re.fullmatch(r'_R[A-Za-z0-9_]+', name) or 'VM_AREA_CACHE' not in name:
+        if not re.fullmatch(r'_R[A-Za-z0-9_]*VM_AREA_CACHE(?:\.0)?', name) or 'VM_AREA_CACHE' not in name:
             raise ValueError('Wrong Rust cache symbol')
     elif name != 'vm_area_cachep':
         raise ValueError('Wrong C cache symbol')
@@ -175,6 +175,27 @@ def cache_owner(metadata, rust, present=True):
         raise ValueError('Cache is not permanent zeroed writable BSS')
     return name
 
+
+def refcount_constant(elf, nm, *, linked):
+    """Prove the canonical four-byte constant, including linked .rodata flags."""
+    name = 'rusix_vma_refcount_max'
+    if elf.relocatable == linked:
+        raise ValueError('Wrong refcount constant ELF kind')
+    rows = [r.split() for r in nm.splitlines() if r.split() and r.split()[-1] == name]
+    if len(rows) != 1 or len(rows[0]) != 3 or rows[0][1] not in ({'R', 'D'} if linked else {'R'}):
+        raise ValueError('Wrong refcount constant binding')
+    sym = elf.symbol(name)
+    index, offset = elf.location(sym)
+    sec = elf.headers[index]
+    if (sym['kind'] != 1 or sym['size'] != 4 or sym['address'] % 4 or
+        int(rows[0][0], 16) != sym['address'] or elf.names[index] != '.rodata' or
+        sec[1] != 1 or not sec[2] & 2 or sec[2] & 4 or
+        (not linked and sec[2] & 1) or offset < 0 or offset + 4 > sec[5]):
+        raise ValueError('Wrong refcount constant storage')
+    value = int.from_bytes(elf.section_data(index)[offset:offset+4], 'little')
+    if value != 0x7fffffff:
+        raise ValueError('Wrong canonical refcount maximum')
+    return value
 
 def definitions(text, expected):
     for name in (*PUBLIC, 'vma_state_init', BRIDGE):
@@ -313,12 +334,18 @@ def verify(args, *, source_extension=None, test_context=None):
         call_from(c_dis, 'vma_state_init', BRIDGE)
         call_from(r_dis, BRIDGE, 'rusix_vma_cache_create')
         helpers = set(re.findall(r'fn (rusix_vma_\w+)\(', (source/'mm/vma_lifecycle_rust.rs').read_text())) - {BRIDGE}
-        for helper in helpers | {'rusix_vma_refcount_max'}:
+        for helper in helpers:
             for table in (tables['vma_init'], tables['linked']):
                 rows = [r.split() for r in table.splitlines() if r.split() and r.split()[-1] == helper]
-                kind = 'R' if helper == 'rusix_vma_refcount_max' else 'T'
+                kind = 'T'
                 if len(rows) != 1 or len(rows[0]) != 3 or rows[0][1] != kind:
                     raise ValueError('Wrong canonical primitive binding: '+helper)
+    if rust:
+        elf = dup.elf_reader.Elf
+        object_max = refcount_constant(elf(build/'mm/vma_init.o', indexed_sections=True), tables['vma_init'], linked=False)
+        linked_max = refcount_constant(elf(build/'vmlinux', indexed_sections=True), tables['linked'], linked=True)
+        if object_max != linked_max:
+            raise ValueError('Linked refcount maximum differs')
     if before != {str(p): digest(p) for p in paths}:
         raise ValueError('Inputs changed during verification')
     return dict(test_context=test_context,status='PASS', implementation='rust' if rust else 'c', input_sha256=before,
