@@ -1,0 +1,48 @@
+[
+    {
+        "Architecture": "amd64",
+        "Config": {
+            "Cmd": [
+                "bash"
+            ],
+            "Env": [
+                "PATH=/usr/lib/llvm-19/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+                "LIBCLANG_PATH=/usr/lib/llvm-19/lib",
+                "LC_ALL=C",
+                "PYTHONDONTWRITEBYTECODE=1",
+                "GIT_OPTIONAL_LOCKS=0"
+            ],
+            "WorkingDir": "/src"
+        },
+        "Created": "2026-10-26T16:52:27.805728044-07:00",
+        "Descriptor": {
+            "digest": "sha256:3cb67848e1aad76fb1451ebd3b1952961ee9665f73620d4ca8a467aa5e5eb55e",
+            "mediaType": "application/vnd.oci.image.manifest.v1+json",
+            "size": 2469
+        },
+        "Id": "sha256:3cb67848e1aad76fb1451ebd3b1952961ee9665f73620d4ca8a467aa5e5eb55e",
+        "Metadata": {
+            "LastTagTime": "2026-10-26T23:52:27.884383325Z"
+        },
+        "Os": "linux",
+        "Parent": "sha256:c02eb3929889b3f0cc035d57a02c844e0c74c71d24fbda1311249faeb8257f63",
+        "RepoDigests": [],
+        "RepoTags": [],
+        "RootFS": {
+            "Layers": [
+                "sha256:a70f6272827f64e1427d048ced77491aab5d64ab95725e56920802ff391197d7",
+                "sha256:4ae46c29ebb51466112a28283f5b2adf231ed22a1329af5cb327cfdc44c32b66",
+                "sha256:75418acbece69a174954947110b5f09dfa808de78fa06be799ffa3ebc721c9ee",
+                "sha256:456cef640910fef1afdb69db8da268dc78ac39324d49a895dae7cd95a08ccfd6",
+                "sha256:5f70bf18a086007016e948b04aed3b82103a36bea41755b6cddfaf10ace3c6ef",
+                "sha256:ccfb01c11bed67d8cfa361381c27354f18f37eac2231c734bcdd3803a1a1828e",
+                "sha256:b6702f77d9ea6449bf4bf8a0916259375ca6ea99ea51621b5a067cd4e6eb8660",
+                "sha256:cbf2f9b04da9d29b70a84bf49a844122d66370b1871ec2de021d556ac1000961",
+                "sha256:5f70bf18a086007016e948b04aed3b82103a36bea41755b6cddfaf10ace3c6ef",
+                "sha256:bb16254dd2a862cc50f0fa6b9b8d2df9272547bef2f272b66c5737959d247ed0"
+            ],
+            "Type": "layers"
+        },
+        "Size": 2583945942
+    }
+]

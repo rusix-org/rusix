@@ -1,0 +1,111 @@
+{
+  "source": "2926d88bb7fc4608fd942453d929c39e4e5ec006",
+  "image": "sha256:3cb67848e1aad76fb1451ebd3b1952961ee9665f73620d4ca8a467aa5e5eb55e",
+  "cases": [
+    "simple_merge",
+    "simple_modify",
+    "simple_expand",
+    "simple_shrink",
+    "merge_new",
+    "vma_merge_special_flags",
+    "vma_merge_with_close",
+    "vma_merge_new_with_close",
+    "merge_existing",
+    "anon_vma_non_mergeable",
+    "dup_anon_vma",
+    "vmi_prealloc_fail",
+    "merge_extend",
+    "copy_vma",
+    "expand_only_mode",
+    "mmap_region_basic"
+  ],
+  "binary_sha256": "491248e6b910630b55c8dbf84c9fa09b4f25cc290a573b1e6da2e2b4b3eb5b38",
+  "generated_artifacts": {
+    "tools/testing/vma/radix-tree.c": {
+      "type": "file",
+      "sha256": "6a5899d7378de4d5b91e9c9c5f2078c8cb142c065fffc06a3418d0e31cc848ee",
+      "mode": 420
+    },
+    "tools/testing/vma/idr.c": {
+      "type": "file",
+      "sha256": "684b2f2f6076c9dd8feda8d6db01dacd25c4fb61ae2104149e373c465dfdb2d5",
+      "mode": 420
+    },
+    "tools/testing/vma/slab.o": {
+      "type": "file",
+      "sha256": "90f896cd7c2d7c94fc04d6fc766167a9f7bd6dc525d31ac37c9c7e1f4b44d0f9",
+      "mode": 420
+    },
+    "tools/testing/vma/find_bit.o": {
+      "type": "file",
+      "sha256": "b75d7ca161e2926d9711cda431102f1fbc33f8fd4e622474584df2a6604e5311",
+      "mode": 420
+    },
+    "tools/testing/vma/linux.o": {
+      "type": "file",
+      "sha256": "89ebf57b9296e8a1e010351823f95f32e0684e273cd0af5f6c3000948595949f",
+      "mode": 420
+    },
+    "tools/testing/vma/bitmap.o": {
+      "type": "file",
+      "sha256": "0e959d29dde1f982595903dac4ecc8f9f14d3048691fb4eec6dbceaa7d65fd46",
+      "mode": 420
+    },
+    "tools/testing/vma/hweight.o": {
+      "type": "file",
+      "sha256": "293280898e8ba6f859e2d18709ac713223fc2138280cfd6db310e4cd97485ada",
+      "mode": 420
+    },
+    "tools/testing/vma/vsprintf.o": {
+      "type": "file",
+      "sha256": "e63c18447259486a035603b44cbd667e0544d83fc012eb825439f089ed125cdf",
+      "mode": 420
+    },
+    "tools/testing/vma/vma.o": {
+      "type": "file",
+      "sha256": "07e384f872021e093a2cc7c946147c9a54200abb1cf480089bdc5512bf6c02f7",
+      "mode": 420
+    },
+    "tools/testing/vma/maple-shim.o": {
+      "type": "file",
+      "sha256": "9576f7d886c9ef16545b4206a5a280dbdad87dc6439e3d07c091fe1868d951ff",
+      "mode": 420
+    },
+    "tools/testing/vma/xarray-shared.o": {
+      "type": "file",
+      "sha256": "8f9a1f581ce1c9c3a759d77838eeb4aec2314642601ca8385ab474a3ffaf4744",
+      "mode": 420
+    },
+    "tools/testing/vma/idr.o": {
+      "type": "file",
+      "sha256": "23afb605dba71b028488a3b3ccf860411822802f919ac64b1496fea44a252d39",
+      "mode": 420
+    },
+    "tools/testing/vma/radix-tree.o": {
+      "type": "file",
+      "sha256": "269b10ed50669bcd3201f21724614d199f37b01a5cac89d097423f30e2d241af",
+      "mode": 420
+    },
+    "tools/testing/vma/vma": {
+      "type": "file",
+      "sha256": "491248e6b910630b55c8dbf84c9fa09b4f25cc290a573b1e6da2e2b4b3eb5b38",
+      "mode": 493
+    },
+    "tools/testing/vma/generated/bit-length.h": {
+      "type": "file",
+      "sha256": "22cb789fd5fccf0ad332add3be57ec8250651eaf821790cf814ec281f8734233",
+      "mode": 420
+    },
+    "tools/testing/vma/generated/map-shift.h": {
+      "type": "file",
+      "sha256": "cd9dd157fe1d2b8f15eba171eefbfc7fda7fc373a74b1cf52d08133af6a72547",
+      "mode": 420
+    },
+    "tools/testing/vma/generated/autoconf.h": {
+      "type": "file",
+      "sha256": "a8220c15c91874453f90a7da2c4774be1f36a734261d2f1de595a347b3a50cbc",
+      "mode": 420
+    }
+  },
+  "sanitizers": "Upstream ASan+UBSan flags and default runtime settings; no suppression"
+}

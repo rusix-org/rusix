@@ -1,0 +1,5 @@
+{
+  "status": "INPUT_PREPARATION_FAILED",
+  "cause": "Python tar data filter strips group/other write mode; source bytes unchanged, archive modes did not match extracted modes",
+  "scope": "No build/container/execution attempted"
+}

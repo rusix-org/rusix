@@ -1,0 +1,6 @@
+{
+  "status": "PASS",
+  "source": "2926d88bb7fc4608fd942453d929c39e4e5ec006",
+  "tests": 16,
+  "scope": "Pristine upstream C userspace VMA harness with ASan/UBSan; no Rust/kernel runtime proof"
+}

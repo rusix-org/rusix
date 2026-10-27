@@ -1,0 +1,21 @@
+{
+  "status": "PASS",
+  "scope": "tool installation only; no VMA tests run",
+  "base_image": "sha256:c02eb3929889b3f0cc035d57a02c844e0c74c71d24fbda1311249faeb8257f63",
+  "derived_image": "sha256:3cb67848e1aad76fb1451ebd3b1952961ee9665f73620d4ca8a467aa5e5eb55e",
+  "debian_snapshot": "20261025T000000Z",
+  "liburcu": "0.15.2-2",
+  "installation": "Recorded stopped-container commit; Dockerfile is a rebuild recipe, not the executed build mechanism",
+  "owned_container_removed": true,
+  "records": {
+    "Dockerfile": "5ca0e6423171f837d6984046c3a4a3ec4d09757af96aa932531beff6f27d3cc1",
+    "container-inspect.json": "7f55c118bc3ec8806bab831b28b6db52f646dc67259a3ff8c46184900646f34e",
+    "container.cid": "f1c69c0c9294c2e24d78a40f9d9cb75553f9a183f82db1cc1ee4d25c60dfbae4",
+    "image-id.txt": "f70b4f051a5cb41113b6ba72bb0dbc2ebdd5b80667a81375cc724a8651075789",
+    "image-inspect.json": "177a2906ffbf1fbe4e3e39eacf0f82b02581fcc0c86ad048999cc83c6bc32a74",
+    "install.log": "fe5ce7db2a2336833bdae61dcec5030c394689a7a61df785b21239a2d22cae83",
+    "install.sh": "7aec155bc9602c15af0e1518b5cbe204958d09bcc5a29333559a67d28cf1b717",
+    "liburcu-version.txt": "355a2e14f6a7f2cb387d9d3b75a3550980d020ee1d005b139b62290c1645068a",
+    "packages.lock": "fd3d065a39d8aad71de2800765687b9ba1abb771f569351a20901a98800e1bd4"
+  }
+}

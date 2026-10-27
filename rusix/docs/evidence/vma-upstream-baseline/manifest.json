@@ -1,0 +1,337 @@
+{
+  "all_compile_and_link_commands_use_asan_ubsan": true,
+  "cases": [
+    "simple_merge",
+    "simple_modify",
+    "simple_expand",
+    "simple_shrink",
+    "merge_new",
+    "vma_merge_special_flags",
+    "vma_merge_with_close",
+    "vma_merge_new_with_close",
+    "merge_existing",
+    "anon_vma_non_mergeable",
+    "dup_anon_vma",
+    "vmi_prealloc_fail",
+    "merge_extend",
+    "copy_vma",
+    "expand_only_mode",
+    "mmap_region_basic"
+  ],
+  "default_sanitizer_environment": true,
+  "files": {
+    "archive.py": {
+      "bytes": 3892,
+      "original": "/home/aaron/code/rusix/linux-out/archive-vma-upstream-baseline.py",
+      "sha256": "252189fd1aa9f07faa5e60f1a960af9b7da718cc1c2a4d8f52e91def21164a8e"
+    },
+    "execution/acceptance.json": {
+      "bytes": 196,
+      "original": "/home/aaron/code/rusix/linux-out/vma-upstream-baseline-001/execution/acceptance.json",
+      "sha256": "6fbb3c1e104559df987b66323af0bc8ed8cb5e821c2971184d7f3808074acc00"
+    },
+    "execution/build-command.sh": {
+      "bytes": 66,
+      "original": "/home/aaron/code/rusix/linux-out/vma-upstream-baseline-001/execution/build-command.sh",
+      "sha256": "d6dd2e399101fb033fd413b6f8b8dc24b209dc021d3e8cb116c3bf4d569d5d83"
+    },
+    "execution/build-environment.json": {
+      "bytes": 328,
+      "original": "/home/aaron/code/rusix/linux-out/vma-upstream-baseline-001/execution/build-environment.json",
+      "sha256": "86c3d3cf1f9d7863e9ce347f9e8f5b59130a6327cc651301a14bcf85dbe8f683"
+    },
+    "execution/build.exit": {
+      "bytes": 2,
+      "original": "/home/aaron/code/rusix/linux-out/vma-upstream-baseline-001/execution/build.exit",
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    "execution/build.log": {
+      "bytes": 2679,
+      "original": "/home/aaron/code/rusix/linux-out/vma-upstream-baseline-001/execution/build.log",
+      "sha256": "e8ec58df753569782f5a15e80ddbfabffead78f47996a8e6f6b97d59b188b2a2"
+    },
+    "execution/container.cid": {
+      "bytes": 64,
+      "original": "/home/aaron/code/rusix/linux-out/vma-upstream-baseline-001/execution/container.cid",
+      "sha256": "700936acd71c6cba07749a13d36624ee2e0b8bbefbc84652beb16f438956fb18"
+    },
+    "execution/container.exit": {
+      "bytes": 2,
+      "original": "/home/aaron/code/rusix/linux-out/vma-upstream-baseline-001/execution/container.exit",
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    "execution/container.log": {
+      "bytes": 0,
+      "original": "/home/aaron/code/rusix/linux-out/vma-upstream-baseline-001/execution/container.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "execution/gcc-version.log": {
+      "bytes": 232,
+      "original": "/home/aaron/code/rusix/linux-out/vma-upstream-baseline-001/execution/gcc-version.log",
+      "sha256": "4dc9a4e32fd9e06d42fb307688c59d6d889f0ff90ce034cbefed21b0d451fd81"
+    },
+    "execution/image-id.txt": {
+      "bytes": 72,
+      "original": "/home/aaron/code/rusix/linux-out/vma-upstream-baseline-001/execution/image-id.txt",
+      "sha256": "f70b4f051a5cb41113b6ba72bb0dbc2ebdd5b80667a81375cc724a8651075789"
+    },
+    "execution/inputs-after.json": {
+      "bytes": 52,
+      "original": "/home/aaron/code/rusix/linux-out/vma-upstream-baseline-001/execution/inputs-after.json",
+      "sha256": "04f472e1428d31776089d0713598a464d11980faed64cf5a03d5d30fed2c70f6"
+    },
+    "execution/inputs-before.json": {
+      "bytes": 52,
+      "original": "/home/aaron/code/rusix/linux-out/vma-upstream-baseline-001/execution/inputs-before.json",
+      "sha256": "04f472e1428d31776089d0713598a464d11980faed64cf5a03d5d30fed2c70f6"
+    },
+    "execution/launcher-after.log": {
+      "bytes": 307,
+      "original": "/home/aaron/code/rusix/linux-out/vma-upstream-baseline-001/execution/launcher-after.log",
+      "sha256": "b8d11e88ad3156fe6ca97c8724a2581149f2c9f28d4a50bc7eca13a8b990d5e2"
+    },
+    "execution/launcher.exit": {
+      "bytes": 2,
+      "original": "/home/aaron/code/rusix/linux-out/vma-upstream-baseline-001/execution/launcher.exit",
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    "execution/launcher.sha256": {
+      "bytes": 555,
+      "original": "/home/aaron/code/rusix/linux-out/vma-upstream-baseline-001/execution/launcher.sha256",
+      "sha256": "c974c8a8f227847bdd91c91b18448fa5f8f00805373bc7626b86819741b37118"
+    },
+    "execution/liburcu-version.log": {
+      "bytes": 7,
+      "original": "/home/aaron/code/rusix/linux-out/vma-upstream-baseline-001/execution/liburcu-version.log",
+      "sha256": "355a2e14f6a7f2cb387d9d3b75a3550980d020ee1d005b139b62290c1645068a"
+    },
+    "execution/make-version.log": {
+      "bytes": 300,
+      "original": "/home/aaron/code/rusix/linux-out/vma-upstream-baseline-001/execution/make-version.log",
+      "sha256": "cb84250d994234272d0a465014ce2931be76e9e0cb114b9bffa078c3c211e8eb"
+    },
+    "execution/packages.lock": {
+      "bytes": 7649,
+      "original": "/home/aaron/code/rusix/linux-out/vma-upstream-baseline-001/execution/packages.lock",
+      "sha256": "fd3d065a39d8aad71de2800765687b9ba1abb771f569351a20901a98800e1bd4"
+    },
+    "execution/result.json": {
+      "bytes": 3628,
+      "original": "/home/aaron/code/rusix/linux-out/vma-upstream-baseline-001/execution/result.json",
+      "sha256": "788deaa8c28b1775971851c8a0978923c9a029e0ec899baefd52a0553150015f"
+    },
+    "execution/test-command.sh": {
+      "bytes": 53,
+      "original": "/home/aaron/code/rusix/linux-out/vma-upstream-baseline-001/execution/test-command.sh",
+      "sha256": "4ad9c1d2c177e48319c839b4ad2bc492a9c1c585dd77eef9a84fc4fc0b9dfff4"
+    },
+    "execution/test.exit": {
+      "bytes": 2,
+      "original": "/home/aaron/code/rusix/linux-out/vma-upstream-baseline-001/execution/test.exit",
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    "execution/test.stderr": {
+      "bytes": 0,
+      "original": "/home/aaron/code/rusix/linux-out/vma-upstream-baseline-001/execution/test.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "execution/test.stdout": {
+      "bytes": 35,
+      "original": "/home/aaron/code/rusix/linux-out/vma-upstream-baseline-001/execution/test.stdout",
+      "sha256": "f9516b51bf70764756ac6e527c0f239094dd9311122051dcdf96325b669fab81"
+    },
+    "inputs/manifest.json": {
+      "bytes": 1327883,
+      "original": "/home/aaron/code/rusix/linux-out/vma-upstream-baseline-001/inputs/manifest.json",
+      "sha256": "951c7bd0d8c0faab72e8c0f3d714b41ca1131a5dbb6481bb9e8a727bfadff0a3"
+    },
+    "launcher/README.md": {
+      "bytes": 3022,
+      "original": "/home/aaron/code/rusix/linux-out/vma-upstream-baseline-draft/README.md",
+      "sha256": "4810146223a0e41ae6466a3fece72c1537198dd7bb26ca8fd519539abfd514ed"
+    },
+    "launcher/check.py": {
+      "bytes": 5176,
+      "original": "/home/aaron/code/rusix/linux-out/vma-upstream-baseline-draft/check.py",
+      "sha256": "b9b606422b9f13ba87ef07fe24dc6140ea332c8e08cc8523b102f84d6d6c7e7c"
+    },
+    "launcher/container.py": {
+      "bytes": 2285,
+      "original": "/home/aaron/code/rusix/linux-out/vma-upstream-baseline-draft/container.py",
+      "sha256": "f7b4acfd2027e0292faa192d3bd988c141abfb6f0a1ed07fbcf6640da55bb3c5"
+    },
+    "launcher/prepare-inputs.py": {
+      "bytes": 4294,
+      "original": "/home/aaron/code/rusix/linux-out/vma-upstream-baseline-draft/prepare-inputs.py",
+      "sha256": "fffa79dc0713346b014096073b79772d14fab3e852a14695ad3369223311c026"
+    },
+    "launcher/review-inputs.sha256": {
+      "bytes": 577,
+      "original": "/home/aaron/code/rusix/linux-out/vma-upstream-baseline-draft/review-inputs.sha256",
+      "sha256": "66f398e6dcb6433e999143fdb022e33435142baf33df67ceab40855494242d47"
+    },
+    "launcher/run.sh": {
+      "bytes": 2366,
+      "original": "/home/aaron/code/rusix/linux-out/vma-upstream-baseline-draft/run.sh",
+      "sha256": "9270056ee871cacbe3dd7992bb152e6f42caef4eab186a809df5a20f29b4e5df"
+    },
+    "preparation-failure.json": {
+      "bytes": 232,
+      "original": "/home/aaron/code/rusix/linux-out/vma-upstream-baseline-001/preparation-failure.json",
+      "sha256": "e6698256a60135e2352fb462057655ca7a05ff2f0f5ddb322719027dcd9bd516"
+    },
+    "source/mm/vma_init.c": {
+      "bytes": 3811,
+      "original": "/home/aaron/code/rusix/linux-out/vma-upstream-baseline-001/inputs/tree/mm/vma_init.c",
+      "sha256": "9c6d4934701675a88d159de3b5e40790fa8605fabfdcec1d869327ecf480254c"
+    },
+    "source/tools/testing/shared/shared.mk": {
+      "bytes": 2315,
+      "original": "/home/aaron/code/rusix/linux-out/vma-upstream-baseline-001/inputs/tree/tools/testing/shared/shared.mk",
+      "sha256": "e1f8b66cac4b6ae4c062070e5ad237407984a6abd4043f927890b9692ccc3f13"
+    },
+    "source/tools/testing/vma/Makefile": {
+      "bytes": 455,
+      "original": "/home/aaron/code/rusix/linux-out/vma-upstream-baseline-001/inputs/tree/tools/testing/vma/Makefile",
+      "sha256": "eef3cbbc8623b9a04da7d41eb01fe3e0eaf5a649b3825a050def400aba581887"
+    },
+    "source/tools/testing/vma/vma.c": {
+      "bytes": 45523,
+      "original": "/home/aaron/code/rusix/linux-out/vma-upstream-baseline-001/inputs/tree/tools/testing/vma/vma.c",
+      "sha256": "1e6b839a701de0992de5c324bc7b208115b023b110e40a844c9a07e12d21af8c"
+    },
+    "tooling/Dockerfile": {
+      "bytes": 222,
+      "original": "/home/aaron/code/rusix/linux-out/vma-tooling-001/Dockerfile",
+      "sha256": "5ca0e6423171f837d6984046c3a4a3ec4d09757af96aa932531beff6f27d3cc1"
+    },
+    "tooling/container-inspect.json": {
+      "bytes": 7559,
+      "original": "/home/aaron/code/rusix/linux-out/vma-tooling-001/container-inspect.json",
+      "sha256": "7f55c118bc3ec8806bab831b28b6db52f646dc67259a3ff8c46184900646f34e"
+    },
+    "tooling/container.cid": {
+      "bytes": 64,
+      "original": "/home/aaron/code/rusix/linux-out/vma-tooling-001/container.cid",
+      "sha256": "f1c69c0c9294c2e24d78a40f9d9cb75553f9a183f82db1cc1ee4d25c60dfbae4"
+    },
+    "tooling/image-id.txt": {
+      "bytes": 72,
+      "original": "/home/aaron/code/rusix/linux-out/vma-tooling-001/image-id.txt",
+      "sha256": "f70b4f051a5cb41113b6ba72bb0dbc2ebdd5b80667a81375cc724a8651075789"
+    },
+    "tooling/image-inspect.json": {
+      "bytes": 2150,
+      "original": "/home/aaron/code/rusix/linux-out/vma-tooling-001/image-inspect.json",
+      "sha256": "177a2906ffbf1fbe4e3e39eacf0f82b02581fcc0c86ad048999cc83c6bc32a74"
+    },
+    "tooling/install.log": {
+      "bytes": 2227,
+      "original": "/home/aaron/code/rusix/linux-out/vma-tooling-001/install.log",
+      "sha256": "fe5ce7db2a2336833bdae61dcec5030c394689a7a61df785b21239a2d22cae83"
+    },
+    "tooling/install.sh": {
+      "bytes": 330,
+      "original": "/home/aaron/code/rusix/linux-out/vma-tooling-001/install.sh",
+      "sha256": "7aec155bc9602c15af0e1518b5cbe204958d09bcc5a29333559a67d28cf1b717"
+    },
+    "tooling/liburcu-version.txt": {
+      "bytes": 7,
+      "original": "/home/aaron/code/rusix/linux-out/vma-tooling-001/liburcu-version.txt",
+      "sha256": "355a2e14f6a7f2cb387d9d3b75a3550980d020ee1d005b139b62290c1645068a"
+    },
+    "tooling/packages.lock": {
+      "bytes": 7649,
+      "original": "/home/aaron/code/rusix/linux-out/vma-tooling-001/packages.lock",
+      "sha256": "fd3d065a39d8aad71de2800765687b9ba1abb771f569351a20901a98800e1bd4"
+    },
+    "tooling/result.json": {
+      "bytes": 1316,
+      "original": "/home/aaron/code/rusix/linux-out/vma-tooling-001/result.json",
+      "sha256": "a6a8573e52fac2298ef770bb438a72a4738e6604435672d2d351917f645ea04e"
+    }
+  },
+  "generated_artifacts_revalidated": true,
+  "image": "sha256:3cb67848e1aad76fb1451ebd3b1952961ee9665f73620d4ca8a467aa5e5eb55e",
+  "original_source_inputs": 7748,
+  "preparation_failure_retained": true,
+  "raw_artifacts": {
+    "execution/tree/tools/testing/vma/bitmap.o": {
+      "bytes": 49368,
+      "sha256": "0e959d29dde1f982595903dac4ecc8f9f14d3048691fb4eec6dbceaa7d65fd46"
+    },
+    "execution/tree/tools/testing/vma/find_bit.o": {
+      "bytes": 30440,
+      "sha256": "b75d7ca161e2926d9711cda431102f1fbc33f8fd4e622474584df2a6604e5311"
+    },
+    "execution/tree/tools/testing/vma/generated/autoconf.h": {
+      "bytes": 54,
+      "sha256": "a8220c15c91874453f90a7da2c4774be1f36a734261d2f1de595a347b3a50cbc"
+    },
+    "execution/tree/tools/testing/vma/generated/bit-length.h": {
+      "bytes": 58,
+      "sha256": "22cb789fd5fccf0ad332add3be57ec8250651eaf821790cf814ec281f8734233"
+    },
+    "execution/tree/tools/testing/vma/generated/map-shift.h": {
+      "bytes": 25,
+      "sha256": "cd9dd157fe1d2b8f15eba171eefbfc7fda7fc373a74b1cf52d08133af6a72547"
+    },
+    "execution/tree/tools/testing/vma/hweight.o": {
+      "bytes": 5984,
+      "sha256": "293280898e8ba6f859e2d18709ac713223fc2138280cfd6db310e4cd97485ada"
+    },
+    "execution/tree/tools/testing/vma/idr.c": {
+      "bytes": 19518,
+      "sha256": "684b2f2f6076c9dd8feda8d6db01dacd25c4fb61ae2104149e373c465dfdb2d5"
+    },
+    "execution/tree/tools/testing/vma/idr.o": {
+      "bytes": 159112,
+      "sha256": "23afb605dba71b028488a3b3ccf860411822802f919ac64b1496fea44a252d39"
+    },
+    "execution/tree/tools/testing/vma/linux.o": {
+      "bytes": 173184,
+      "sha256": "89ebf57b9296e8a1e010351823f95f32e0684e273cd0af5f6c3000948595949f"
+    },
+    "execution/tree/tools/testing/vma/maple-shim.o": {
+      "bytes": 2537400,
+      "sha256": "9576f7d886c9ef16545b4206a5a280dbdad87dc6439e3d07c091fe1868d951ff"
+    },
+    "execution/tree/tools/testing/vma/radix-tree.c": {
+      "bytes": 43673,
+      "sha256": "6a5899d7378de4d5b91e9c9c5f2078c8cb142c065fffc06a3418d0e31cc848ee"
+    },
+    "execution/tree/tools/testing/vma/radix-tree.o": {
+      "bytes": 303048,
+      "sha256": "269b10ed50669bcd3201f21724614d199f37b01a5cac89d097423f30e2d241af"
+    },
+    "execution/tree/tools/testing/vma/slab.o": {
+      "bytes": 14936,
+      "sha256": "90f896cd7c2d7c94fc04d6fc766167a9f7bd6dc525d31ac37c9c7e1f4b44d0f9"
+    },
+    "execution/tree/tools/testing/vma/vma": {
+      "bytes": 3872656,
+      "sha256": "491248e6b910630b55c8dbf84c9fa09b4f25cc290a573b1e6da2e2b4b3eb5b38"
+    },
+    "execution/tree/tools/testing/vma/vma.o": {
+      "bytes": 1689440,
+      "sha256": "07e384f872021e093a2cc7c946147c9a54200abb1cf480089bdc5512bf6c02f7"
+    },
+    "execution/tree/tools/testing/vma/vsprintf.o": {
+      "bytes": 17152,
+      "sha256": "e63c18447259486a035603b44cbd667e0544d83fc012eb825439f089ed125cdf"
+    },
+    "execution/tree/tools/testing/vma/xarray-shared.o": {
+      "bytes": 715992,
+      "sha256": "8f9a1f581ce1c9c3a759d77838eeb4aec2314642601ca8385ab474a3ffaf4744"
+    },
+    "inputs/upstream.tar": {
+      "bytes": 63549440,
+      "sha256": "1ef026291698e8b48ab76925830e4ca4b093dd084375d4cfee8f4426cb590147"
+    }
+  },
+  "scope": "Pristine upstream C userspace VMA harness with ASan/UBSan; no Rust/kernel runtime proof",
+  "source": "2926d88bb7fc4608fd942453d929c39e4e5ec006",
+  "source_inputs_unchanged_before_after": true,
+  "status": "PASS",
+  "tests": 16
+}

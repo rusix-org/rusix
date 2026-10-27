@@ -19,9 +19,12 @@ configuration validation order. [Host evidence](docs/evidence/vma-lifecycle-host
 Pinned Kconfig resolution at `7b07b88aa88a` retains every requested setting;
 the resolved pair differs only by the VMA selector. [Configuration evidence](docs/evidence/vma-lifecycle-config/manifest.json)
 retains the initial scratch import failure and successful retry.
-The upstream 16-case C baseline is prepared but unrun. Next: baseline execution,
-paired selection and ordinary-consumer gates, followed by attributable failures
-and lifetime/concurrency checks. [Contract](experiments/vma-lifecycle/README.md).
+The pristine Linux `2926d88bb7fc` userspace VMA harness passes all 16 upstream
+cases with default ASan/UBSan settings and no diagnostics. All 7,748 source
+inputs and generated artifacts were rechecked; this is C harness evidence, not
+Rust or kernel runtime coverage. [Baseline evidence](docs/evidence/vma-upstream-baseline/manifest.json).
+Next: paired selection and ordinary-consumer gates, followed by attributable
+failures and lifetime/concurrency checks. [Contract](experiments/vma-lifecycle/README.md).
 
 Public development lives on `rusix/main`. [ADR 0002](docs/adr/0002.md) owns the
 target; [Phase 1](docs/PHASE1.md) owns delivery gates.

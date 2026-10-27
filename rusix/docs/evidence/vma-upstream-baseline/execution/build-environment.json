@@ -1,0 +1,18 @@
+{
+  "CFLAGS": null,
+  "CPPFLAGS": null,
+  "LDFLAGS": null,
+  "EXTRA_CFLAGS": null,
+  "MAKEFLAGS": null,
+  "MFLAGS": null,
+  "SHIFT": null,
+  "LONG_BIT": null,
+  "BUILD": null,
+  "CC": null,
+  "CXX": null,
+  "LD_LIBRARY_PATH": null,
+  "ASAN_OPTIONS": null,
+  "UBSAN_OPTIONS": null,
+  "LSAN_OPTIONS": null,
+  "LD_PRELOAD": null
+}
