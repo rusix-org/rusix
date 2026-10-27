@@ -1,0 +1,18 @@
+{
+  "status": "PASS",
+  "scope": "Host regressions and retained disassembly parser only",
+  "tests": {
+    "test_task_fault_trace": 17,
+    "test_task_fault_pipeline": 12
+  },
+  "source_inputs": {
+    "linux-task-faults/rusix/scripts/validate-task-fault-trace.py": "9ed96211b918706763549f2804f93985936bb586bd0d02e9c895fd9e9f88435d",
+    "linux-task-faults/rusix/tests/test_task_fault_trace.py": "e7becf91f02fe747d04b6d68a1fbce37f5a22ee8a22fddb187ab90ca5d8899ea",
+    "linux-task-faults/rusix/tests/test_task_fault_pipeline.py": "e727e1d8a1da271f583e0579622c540bec2e222602adaca69f996653a4bfd4b2"
+  },
+  "files": {
+    "trace-tests.log": "707d17a2ecf45983575cc9d2d20fe00349a2d6d7cf4702da14f6835a9115eaa6",
+    "pipeline-tests.log": "8c473dbe1cfb4f536d4b34789274e2f9c1a6803703cd2705197255e3a2c2ee13",
+    "actual-retained-proof.json": "e5347792716b37275658e8537143e40e1ac822be867b2f73c31bf882a818f898"
+  }
+}

@@ -1,0 +1,13 @@
+{
+  "calibration": {
+    "implementation": "c",
+    "range_symbol": "copy_process",
+    "range_start": "0xffffffff812643d0",
+    "range_end": "0xffffffff8126558e",
+    "slab_frame": "dup_task_struct+0x2b/0x198",
+    "stack_frame": "dup_task_struct+0x73/0x198"
+  },
+  "elapsed_seconds": 17.81257871899288,
+  "max_rss_kib": 346476,
+  "scope": "Host retained actual disassembly discovery only; no ELF regeneration/container/VM"
+}

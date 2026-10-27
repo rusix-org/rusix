@@ -1,0 +1,42 @@
+{
+  "status": "PASS",
+  "scope": "Verifier-only corrections; retained C kernel calibration and ELF reinspection pass; no guest/fault execution",
+  "kernel_source": "8acd1a79a9cde4064f8b7ad3f967b48c52b60770",
+  "verifier_source": "c59986edf69556715bd1094521c8d8d1a49ebaab",
+  "image": "sha256:c02eb3929889b3f0cc035d57a02c844e0c74c71d24fbda1311249faeb8257f63",
+  "host_tests": 32,
+  "pinned_session": 54044,
+  "pinned_exit": 0,
+  "memory_limit_bytes": 2147483648,
+  "files": {
+    "symbol-fix/trace-tests.log": "707d17a2ecf45983575cc9d2d20fe00349a2d6d7cf4702da14f6835a9115eaa6",
+    "symbol-fix/pipeline-tests.log": "8c473dbe1cfb4f536d4b34789274e2f9c1a6803703cd2705197255e3a2c2ee13",
+    "symbol-fix/actual-retained-proof.json": "e5347792716b37275658e8537143e40e1ac822be867b2f73c31bf882a818f898",
+    "symbol-fix/manifest.json": "7ad9020c92621a39bd4d647e3c735c421926748bd678257c31a311d019be9e6d",
+    "memory-fix/actual-result.json": "cdcac0dee640c9f694db6018b00138ca68bf2ffd1d6dac78b8c34f5cdafcdb2d",
+    "memory-fix/resources.log": "c19346e7488391646cf6ac33debb14c53c500caf16f3701390cfcdabbd644557",
+    "memory-fix/trace-tests.log": "3a66af0080e75b337de5e23ea0ef2bd20487e15b70e4bb8bee04314b84afbb9a",
+    "memory-fix/pipeline-tests.log": "487ac2994d6793e4f22e25e9e10782029e499578d5aa345f163b58090be1dfb0",
+    "memory-fix/manifest.json": "6fb4a18ee67c33a9a9f085b2af43c6cb5475a67e66a806f6ab293ccf187832b2",
+    "pinned-oom/verifier-source.txt": "82b56d1536c4cec6e2d8a54114f8d7b43df464b22ffaaccdcb255c4443a8ddcd",
+    "pinned-oom/container.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "pinned-oom/container.cid": "73a8c0b6b12e5ce9b96f78332a2f210771c549b7841be73d007a1bc882c19a40",
+    "pinned-oom/container.exit": "e3b9c2844b5a5c2677b3a2279db2ec8487491dd9a23d6b22fac153391b3bb63c",
+    "pinned-oom/docker-events.jsonl": "512637201122213b819887b62f77e65afa9a32b2dc1a3e885c27d7797655a38a",
+    "pinned-pass/verifier-source.txt": "de7b2797069a786dcae80a00d885d2cf077851bdc1d2a4f8f962356858eb3a56",
+    "pinned-pass/container.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "pinned-pass/container.cid": "aea6f8364712ac1481335cec6f3c6a00f06b32059487b32cf3bc51ffa28b41fb",
+    "pinned-pass/container.exit": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+    "pinned-pass/calibration/calibration.tsv": "be7614799d03b178f7ecfe1d83854fcb9304a15dc71a4660d3bcb4502873ab09",
+    "pinned-pass/calibration/packet.json": "f4b8c52ec1b1f7ff094b21af3ea96a36a9b70259cc372b6253a545afcc90416c"
+  },
+  "raw_artifact_sha256": {
+    "/home/aaron/code/rusix/linux-out/task-fault-verification-001/c/builds/ci-task-construction-fault-c/vmlinux": "c3f3728411d3c1a2cb0c54b092f96c7356160432108e9062579b962f03396e09",
+    "/home/aaron/code/rusix/linux-out/task-fault-verification-001/c/builds/ci-task-construction-fault-c/.config": "5812e4fe0926dfcd7956a6bd07d6356459a3a38945515e334f303becf808a978",
+    "/home/aaron/code/rusix/linux-out/task-fault-calibration-pinned-002/calibration/symbols": "763041710cc868e4b093be48551c98012803e7ef510d6ebacf64c15e127ece02",
+    "/home/aaron/code/rusix/linux-out/task-fault-calibration-pinned-002/calibration/disassembly": "d1162215e9a58d835f645f23fe2afe9db47357f2ed032304fb65059653a93001",
+    "/home/aaron/code/rusix/linux-out/task-fault-calibration-pinned-002/calibration/notes": "15fba421daed8fb481e1e3d5e97c7110a74e0030f6a526118ec9b6ddf3da0d95",
+    "/home/aaron/code/rusix/linux-out/task-fault-calibration-pinned-002/calibration/calibration.tsv": "be7614799d03b178f7ecfe1d83854fcb9304a15dc71a4660d3bcb4502873ab09"
+  },
+  "prior_oom": "pinned-oom/docker-events.jsonl records137/OOM with previousparser"
+}

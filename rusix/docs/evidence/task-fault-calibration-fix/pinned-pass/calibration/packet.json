@@ -1,0 +1,30 @@
+{
+  "policy_base": "8fd3defabb841083192cd1d9c4eb1cde83027579",
+  "build_source": "8acd1a79a9cde4064f8b7ad3f967b48c52b60770",
+  "inputs": {
+    "vmlinux": {
+      "path": "/build/vmlinux",
+      "sha256": "c3f3728411d3c1a2cb0c54b092f96c7356160432108e9062579b962f03396e09"
+    },
+    "config": {
+      "path": "/build/.config",
+      "sha256": "5812e4fe0926dfcd7956a6bd07d6356459a3a38945515e334f303becf808a978"
+    },
+    "symbols": {
+      "path": "/out/calibration/symbols",
+      "sha256": "763041710cc868e4b093be48551c98012803e7ef510d6ebacf64c15e127ece02"
+    },
+    "disassembly": {
+      "path": "/out/calibration/disassembly",
+      "sha256": "d1162215e9a58d835f645f23fe2afe9db47357f2ed032304fb65059653a93001"
+    },
+    "notes": {
+      "path": "/out/calibration/notes",
+      "sha256": "15fba421daed8fb481e1e3d5e97c7110a74e0030f6a526118ec9b6ddf3da0d95"
+    },
+    "calibration.tsv": {
+      "path": "/out/calibration/calibration.tsv",
+      "sha256": "be7614799d03b178f7ecfe1d83854fcb9304a15dc71a4660d3bcb4502873ab09"
+    }
+  }
+}

@@ -190,3 +190,12 @@ postchecks are prepared to use the same pinned LLVM image as the build, avoiding
 host LLVM format drift. Paired fault-kernel builds and runtime attribution remain
 pending. Separately, historical task source `eec5ae3ecd7b` passed both five-case
 ordinary VM runs; that result does not certify these diagnostic configurations.
+
+The calibration corrections at `c59986edf695` scope symbol uniqueness to the
+actual constructor/callees, check numeric call targets, and parse instruction
+pairs without storing the complete kernel listing. All 32 focused host tests
+pass. The complete generator and independent ELF recheck pass against the
+retained C kernel with pinned tools under the same 2 GiB limit that killed the
+previous parser. [Fix evidence](docs/evidence/task-fault-calibration-fix/manifest.json)
+preserves both attempts. This verifies calibration only; a fresh paired fault
+matrix remains required. No guest or allocation-failure coverage is claimed.

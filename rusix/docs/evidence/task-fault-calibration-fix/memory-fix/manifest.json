@@ -1,0 +1,16 @@
+{
+  "status": "HOST_CHECKS_PASS",
+  "scope": "18 trace and 14 pipeline synthetic regressions plus actual retained C disassembly discovery only; pinned full generator retry pending",
+  "source_inputs": {
+    "rusix/scripts/generate-task-fault-calibration.py": "af0d6f38f68df3b0c13d6ade0aa531de532adf9e01b2d4841e6b156c535db8b6",
+    "rusix/scripts/validate-task-fault-trace.py": "c0bcda68527353e28749975aef70e9f5f51ee148a4f5f78652c8ac597b931068",
+    "rusix/tests/test_task_fault_trace.py": "46cdb3fa9e8bfa3bfca17cceda97869a536d0c6bacc4baea1434b7f13045c4d8",
+    "rusix/tests/test_task_fault_pipeline.py": "876563a97c0448456b1093c1f5a99374a434fe66ee86dba9bff8c2cec0ded15d"
+  },
+  "evidence": {
+    "actual-result.json": "cdcac0dee640c9f694db6018b00138ca68bf2ffd1d6dac78b8c34f5cdafcdb2d",
+    "resources.log": "c19346e7488391646cf6ac33debb14c53c500caf16f3701390cfcdabbd644557",
+    "trace-tests.log": "3a66af0080e75b337de5e23ea0ef2bd20487e15b70e4bb8bee04314b84afbb9a",
+    "pipeline-tests.log": "487ac2994d6793e4f22e25e9e10782029e499578d5aa345f163b58090be1dfb0"
+  }
+}
