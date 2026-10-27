@@ -9,15 +9,15 @@ if [[ ${1:-} == --profile ]]; then
     shift 2
 fi
 case "$profile" in
-    kunit|brd|brd-fixed-c|brd-rust|brd-kunit|brd-ext4-c|brd-ext4-fixed-c|brd-ext4-rust|core-ext4-c|core-ext4-rust|completion-c|completion-rust|completion-plain-c|completion-plain-rust|server|server-c|task-construction-c|task-construction-rust|mm-construction-c|mm-construction-rust|mm-release-c|mm-release-rust|mm-copy-c|mm-copy-rust|mm-dup-mmap-c|mm-dup-mmap-rust) ;;
-    *) echo 'Profile must be kunit, brd, brd-fixed-c, brd-rust, brd-kunit, brd-ext4-c, brd-ext4-fixed-c, brd-ext4-rust, core-ext4-c, core-ext4-rust, completion-c, completion-rust, completion-plain-c, completion-plain-rust, server, server-c, task-construction-c, task-construction-rust, mm-construction-c, mm-construction-rust, mm-release-c, mm-release-rust, mm-copy-c, mm-copy-rust, mm-dup-mmap-c or mm-dup-mmap-rust.' >&2; exit 2 ;;
+    kunit|brd|brd-fixed-c|brd-rust|brd-kunit|brd-ext4-c|brd-ext4-fixed-c|brd-ext4-rust|core-ext4-c|core-ext4-rust|completion-c|completion-rust|completion-plain-c|completion-plain-rust|server|server-c|task-construction-c|task-construction-rust|mm-construction-c|mm-construction-rust|mm-release-c|mm-release-rust|mm-copy-c|mm-copy-rust|mm-dup-mmap-c|mm-dup-mmap-rust|vma-lifecycle-c|vma-lifecycle-rust) ;;
+    *) echo 'Profile must be kunit, brd, brd-fixed-c, brd-rust, brd-kunit, brd-ext4-c, brd-ext4-fixed-c, brd-ext4-rust, core-ext4-c, core-ext4-rust, completion-c, completion-rust, completion-plain-c, completion-plain-rust, server, server-c, task-construction-c, task-construction-rust, mm-construction-c, mm-construction-rust, mm-release-c, mm-release-rust, mm-copy-c, mm-copy-rust, mm-dup-mmap-c, mm-dup-mmap-rust, vma-lifecycle-c or vma-lifecycle-rust.' >&2; exit 2 ;;
 esac
 config="$RUSIX_PROJECT/configs/x86_64-$profile.config"
 if [[ "$profile" == server-c ]]; then
     config="$RUSIX_PROJECT/configs/x86_64-server.config"
 fi
 if [[ $# != 1 || ! "$1" =~ ^[a-zA-Z0-9_-]+$ ]]; then
-    echo 'Usage: bash rusix/scripts/build-kernel.sh [--profile kunit|brd|brd-fixed-c|brd-rust|brd-kunit|brd-ext4-c|brd-ext4-fixed-c|brd-ext4-rust|core-ext4-c|core-ext4-rust|completion-c|completion-rust|completion-plain-c|completion-plain-rust|server|server-c|task-construction-c|task-construction-rust|mm-construction-c|mm-construction-rust|mm-release-c|mm-release-rust|mm-copy-c|mm-copy-rust|mm-dup-mmap-c|mm-dup-mmap-rust] BUILD_NAME' >&2
+    echo 'Usage: bash rusix/scripts/build-kernel.sh [--profile kunit|brd|brd-fixed-c|brd-rust|brd-kunit|brd-ext4-c|brd-ext4-fixed-c|brd-ext4-rust|core-ext4-c|core-ext4-rust|completion-c|completion-rust|completion-plain-c|completion-plain-rust|server|server-c|task-construction-c|task-construction-rust|mm-construction-c|mm-construction-rust|mm-release-c|mm-release-rust|mm-copy-c|mm-copy-rust|mm-dup-mmap-c|mm-dup-mmap-rust|vma-lifecycle-c|vma-lifecycle-rust] BUILD_NAME' >&2
     exit 2
 fi
 name=$1
@@ -104,6 +104,11 @@ if [[ "$profile" == mm-dup-mmap-c || "$profile" == mm-dup-mmap-rust ]]; then
         --profile "$profile" --config "$out/.config" --source "$RUSIX_SOURCE" \
         > "$evidence/dup-mmap-config-before.json"
 fi
+if [[ "$profile" == vma-lifecycle-c || "$profile" == vma-lifecycle-rust ]]; then
+    python3 "$RUSIX_PROJECT/scripts/verify-vma-lifecycle.py" config \
+        --profile "$profile" --config "$out/.config" --source "$RUSIX_SOURCE" \
+        > "$evidence/vma-lifecycle-config-before.json"
+fi
 if [[ "$profile" == server || "$profile" == server-c ]]; then
     python3 "$RUSIX_PROJECT/scripts/server_target.py" verify \
         --source "$RUSIX_PROJECT/configs/x86_64-server.config" --profile "$profile" \
@@ -187,7 +192,7 @@ PYBRDCOMMAND
         fi
     } > "$evidence/selection.log"
 fi
-if [[ "$profile" == brd-rust || "$profile" == brd-kunit || "$profile" == brd-ext4-rust || "$profile" == core-ext4-c || "$profile" == core-ext4-rust || "$profile" == completion-c || "$profile" == completion-rust || "$profile" == completion-plain-c || "$profile" == completion-plain-rust || "$profile" == server || "$profile" == server-c || "$profile" == task-construction-c || "$profile" == task-construction-rust || "$profile" == mm-construction-c || "$profile" == mm-construction-rust || "$profile" == mm-release-c || "$profile" == mm-release-rust || "$profile" == mm-copy-c || "$profile" == mm-copy-rust || "$profile" == mm-dup-mmap-c || "$profile" == mm-dup-mmap-rust ]]; then
+if [[ "$profile" == brd-rust || "$profile" == brd-kunit || "$profile" == brd-ext4-rust || "$profile" == core-ext4-c || "$profile" == core-ext4-rust || "$profile" == completion-c || "$profile" == completion-rust || "$profile" == completion-plain-c || "$profile" == completion-plain-rust || "$profile" == server || "$profile" == server-c || "$profile" == task-construction-c || "$profile" == task-construction-rust || "$profile" == mm-construction-c || "$profile" == mm-construction-rust || "$profile" == mm-release-c || "$profile" == mm-release-rust || "$profile" == mm-copy-c || "$profile" == mm-copy-rust || "$profile" == mm-dup-mmap-c || "$profile" == mm-dup-mmap-rust || "$profile" == vma-lifecycle-c || "$profile" == vma-lifecycle-rust ]]; then
     git -C "$RUSIX_SOURCE" diff --exit-code \
         2926d88bb7fc4608fd942453d929c39e4e5ec006 -- drivers/block/brd.c \
         > "$evidence/brd-reference.diff"
@@ -635,6 +640,23 @@ if [[ "$profile" == mm-dup-mmap-c || "$profile" == mm-dup-mmap-rust ]]; then
         "$RUSIX_PROJECT/scripts/verify-dup-mmap.py" objects \
         --profile "$profile" --source "$RUSIX_SOURCE" --build "$out" \
         --evidence "$evidence" > "$evidence/dup-mmap-selection.json"
+fi
+
+if [[ "$profile" == vma-lifecycle-c || "$profile" == vma-lifecycle-rust ]]; then
+    python3 "$RUSIX_PROJECT/scripts/verify-vma-lifecycle.py" config \
+        --profile "$profile" --config "$out/.config" --source "$RUSIX_SOURCE" \
+        > "$evidence/vma-lifecycle-config-after.json"
+    # Preserve three independently derived compiler/preprocessor records.
+    python3 "$RUSIX_PROJECT/scripts/preprocess-mm-copy.py" \
+        --build "$out" --evidence "$evidence"
+    python3 "$RUSIX_PROJECT/scripts/preprocess-dup-mmap.py" \
+        --build "$out" --evidence "$evidence"
+    python3 "$RUSIX_PROJECT/scripts/preprocess-vma-lifecycle.py" \
+        --build "$out" --evidence "$evidence"
+    bash "$RUSIX_PROJECT/scripts/with-local-tools.sh" python3 \
+        "$RUSIX_PROJECT/scripts/verify-vma-lifecycle.py" objects \
+        --profile "$profile" --source "$RUSIX_SOURCE" --build "$out" \
+        --evidence "$evidence" > "$evidence/vma-lifecycle-selection.json"
 fi
 
 git -C "$RUSIX_SOURCE" status --porcelain > "$evidence/source-after.status"

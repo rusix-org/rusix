@@ -13,6 +13,9 @@ and nine-case guest source reviews pass; the kernel candidate remains uncompiled
 and unverified. At `620b34e0c918`, the guest fixtures compiled cleanly as static
 x86-64 binaries; ELF and emitted shared-child inspection passed. They were never
 executed. [Fixture evidence](docs/evidence/vma-lifecycle-fixtures/manifest.json).
+Both local VMA profiles and their preprocessing/linked-selection gates are
+implemented. All 277 cases across 27 host scripts pass after correcting fresh
+configuration validation order. [Host evidence](docs/evidence/vma-lifecycle-host/manifest.json).
 The upstream 16-case C baseline is prepared but unrun. Next: baseline execution,
 paired selection and ordinary-consumer gates, followed by attributable failures
 and lifetime/concurrency checks. [Contract](experiments/vma-lifecycle/README.md).

@@ -23,7 +23,7 @@ HARDENED_OBJTOOL = ('./tools/objtool/objtool', '--hacks=jump_label', '--hacks=no
 
 
 def command(text, output, unit='kernel/fork'):
-    if unit not in ('kernel/fork', 'mm/mmap'):
+    if unit not in ('kernel/fork', 'mm/mmap', 'mm/vma_init'):
         raise ValueError('Unreviewed translation unit')
     directory, basename = unit.split('/')
     object_name = unit + '.o'

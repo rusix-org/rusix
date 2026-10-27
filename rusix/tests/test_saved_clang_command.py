@@ -56,6 +56,22 @@ class TranslationUnit(unittest.TestCase):
                 parser.command(mmap_record().replace('clang ', 'clang '+extra+' ', 1),
                                Path('/out/mmap.i'), 'mm/mmap')
 
+    def test_explicit_vma_init_unit(self):
+        text = mmap_record().replace('mm/mmap', 'mm/vma_init').replace('mm/.mmap', 'mm/.vma_init').replace('"mmap"', '"vma_init"').replace('kmod_mmap', 'kmod_vma_init')
+        argv = parser.command(text, Path('/out/vma_init.i'), 'mm/vma_init')
+        self.assertIn('/src/mm/vma_init.c', argv)
+        self.assertEqual(argv[-3:], ['-E', '-o', '/out/vma_init.i'])
+        for old, new in (('/src/mm/vma_init.c', '/src/mm/mmap.c'),
+                         ('-o mm/vma_init.o', '-o mm/mmap.o'),
+                         ('-Wp,-MMD,mm/.vma_init.o.d', '-Wp,-MMD,mm/.mmap.o.d'),
+                         ('kmod_vma_init', 'kmod_mmap'),
+                         ('--uaccess mm/vma_init.o', '--uaccess mm/mmap.o')):
+            with self.subTest(old=old), self.assertRaises(ValueError):
+                parser.command(text.replace(old, new), Path('/out/vma_init.i'), 'mm/vma_init')
+        for unit in ('mm/mmap', 'kernel/fork', 'mm/vma'):
+            with self.assertRaises(ValueError):
+                parser.command(text, Path('/out/vma_init.i'), unit)
+
     def test_unit_does_not_follow_untrusted_record(self):
         with self.assertRaises(ValueError):
             parser.command(mmap_record(), Path('/out/fork.i'))
