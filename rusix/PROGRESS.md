@@ -6,6 +6,15 @@ opt-in Rust implementations; twenty-three generic wait and seventeen bit-wait en
 (`2926d88bb7fc`) is the behavioral baseline. Hosted CI remains disabled;
 verification runs locally. No subsystem divergence point is declared.
 
+VMA copy/publication is a new source-only candidate on `rusix/mm-copy-vma`.
+Rust owns complete copy/merge selection, staged rollback, publication and both
+file-link lock contexts; native C contexts and typed primitives retain layout
+and subsystem operations. Original C bodies are preserved. Formatting and exact
+source restoration pass; compilation, emitted selection and paired runtime/
+failure evidence are pending. [Contract](experiments/mm-copy-vma/README.md).
+Independent source review and root rehash/restoration checks are retained in
+[source evidence](docs/evidence/mm-copy-vma-source/manifest.json).
+
 Mapping teardown is a source-only candidate on `rusix/mm-exit-mmap`: Rust now
 owns complete `exit_mmap`, `remove_vma` and common close policy, with native C
 primitives retaining shared accesses and page-table/TLB/resource operations.

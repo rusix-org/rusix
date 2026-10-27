@@ -1,0 +1,12 @@
+{
+  "status": "PASS_SOURCE_ONLY",
+  "inputs_rehashed": 10,
+  "restored_guards": 4,
+  "base": "247da0572e899f8c9e721e1c605a4c5f298bc7ef",
+  "not_run": [
+    "kernel compilation",
+    "linked selection",
+    "VM runtime",
+    "failure injection"
+  ]
+}

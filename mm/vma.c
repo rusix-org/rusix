@@ -217,6 +217,15 @@ static bool can_vma_merge_after(struct vma_merge_struct *vmg)
 	return false;
 }
 
+#ifdef CONFIG_RUSIX_COPY_VMA_RUST
+extern void rusix_vma_link_file_locked(struct vm_area_struct *vma,
+				     struct address_space *mapping);
+static void __vma_link_file(struct vm_area_struct *vma,
+			    struct address_space *mapping)
+{
+	rusix_vma_link_file_locked(vma, mapping);
+}
+#else
 static void __vma_link_file(struct vm_area_struct *vma,
 			    struct address_space *mapping)
 {
@@ -227,6 +236,7 @@ static void __vma_link_file(struct vm_area_struct *vma,
 	vma_interval_tree_insert(vma, &mapping->i_mmap);
 	flush_dcache_mmap_unlock(mapping);
 }
+#endif /* CONFIG_RUSIX_COPY_VMA_RUST */
 
 /*
  * Requires inode->i_mapping->i_mmap_rwsem
@@ -1821,6 +1831,9 @@ void unlink_file_vma(struct vm_area_struct *vma)
 	}
 }
 
+#ifdef CONFIG_RUSIX_COPY_VMA_RUST
+#include "copy_vma_impl.h"
+#else
 void vma_link_file(struct vm_area_struct *vma)
 {
 	struct file *file = vma->vm_file;
@@ -1833,7 +1846,16 @@ void vma_link_file(struct vm_area_struct *vma)
 		i_mmap_unlock_write(mapping);
 	}
 }
+#endif /* CONFIG_RUSIX_COPY_VMA_RUST */
 
+#ifdef CONFIG_RUSIX_COPY_VMA_RUST
+int vma_link(struct mm_struct *mm, struct vm_area_struct *vma)
+{
+	VMA_ITERATOR(vmi, mm, 0);
+
+	return rusix_vma_link(mm, vma, &vmi);
+}
+#else
 int vma_link(struct mm_struct *mm, struct vm_area_struct *vma)
 {
 	VMA_ITERATOR(vmi, mm, 0);
@@ -1849,11 +1871,31 @@ int vma_link(struct mm_struct *mm, struct vm_area_struct *vma)
 	validate_mm(mm);
 	return 0;
 }
+#endif /* CONFIG_RUSIX_COPY_VMA_RUST */
 
 /*
  * Copy the vma structure to a new location in the same mm,
  * prior to moving page table entries, to effect an mremap move.
  */
+#ifdef CONFIG_RUSIX_COPY_VMA_RUST
+struct vm_area_struct *copy_vma(struct vm_area_struct **vmap,
+	unsigned long addr, unsigned long len, pgoff_t pgoff,
+	bool *need_rmap_locks, bool keep_source)
+{
+	struct vm_area_struct *vma = *vmap;
+	unsigned long vma_start = vma->vm_start;
+	struct mm_struct *mm = vma->vm_mm;
+	VMA_ITERATOR(vmi, mm, addr);
+	VMG_VMA_STATE(vmg, &vmi, NULL, vma, addr, addr + len);
+	struct rusix_copy_vma_context ctx = {
+		.vmi = &vmi, .vmg = &vmg, .source = vma,
+		.mm = mm, .source_start = vma_start,
+	};
+
+	return rusix_copy_vma(&ctx, vmap, addr, len, pgoff,
+			      need_rmap_locks, keep_source);
+}
+#else
 struct vm_area_struct *copy_vma(struct vm_area_struct **vmap,
 	unsigned long addr, unsigned long len, pgoff_t pgoff,
 	bool *need_rmap_locks, bool keep_source)
@@ -1962,6 +2004,7 @@ out_free_vma:
 out:
 	return NULL;
 }
+#endif /* CONFIG_RUSIX_COPY_VMA_RUST */
 
 /*
  * Rough compatibility check to quickly see if it's even worth looking

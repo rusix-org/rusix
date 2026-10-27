@@ -1,0 +1,27 @@
+{
+  "status": "SOURCE_ONLY_CHECKS_PASS",
+  "base": "247da0572e899f8c9e721e1c605a4c5f298bc7ef",
+  "restoration": {
+    "guards": 4,
+    "restored_sha256": "1dd5a0bbb2ae056796b0a12e506159c8af841cf38b0cb77f72a4b7d37c30950d",
+    "exact_base_vma_c": true
+  },
+  "checks": [
+    "rustfmt --edition 2021 mm/copy_vma_rust.rs",
+    "git diff --check",
+    "literal four-guard restoration"
+  ],
+  "sha256": {
+    "mm/vma.c": "ae07770c413cf47155e342b58a8ad5706ac7e69d190c0732ae208e98cf7f3abc",
+    "mm/copy_vma_impl.h": "79b37a878340e22f5ff7bf62379788c0853dceba957e22b769ec8c2e71a35878",
+    "mm/copy_vma_rust.rs": "74a256d128dafcec9e2f7d40b478e177d3985d171bef6bfb6c0f7486f71b3a9a",
+    "mm/Makefile": "bbe9b5328dbf2e321267f6d06c3967b0e01648ff9a56ea2cc695fd92722e6cd7",
+    "init/Kconfig": "c7fae20366616b7e8102ea540faa29d12c5337cfbbab54399703a07b5efb4bf9"
+  },
+  "not_run": [
+    "kernel compilation",
+    "linked selection",
+    "VM runtime",
+    "failure injection"
+  ]
+}

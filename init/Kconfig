@@ -2306,6 +2306,17 @@ config RUSIX_EXIT_MMAP_RUST
 	  x86_64 target restrictions without changing hotplug support.
 	  Leave disabled for the byte-preserved original C policies.
 
+config RUSIX_COPY_VMA_RUST
+	bool "Rusix Rust VMA copy and publication policy"
+	depends on RUSIX_EXIT_MMAP_RUST
+	default n
+	help
+	  Select complete Rust copy_vma, vma_link and file-link policies.
+	  Native C entries retain final-address iterator/merge stack contexts;
+	  C primitives retain field accesses, maple/merge, rmap and resources.
+	  Inherits the builtin x86_64 MM target exclusions. No layout or
+	  behavior change; disable to retain the original C implementations.
+
 config RUSIX_EXIT_MMAP_TEST
 	bool "Rusix native mapping teardown test fixture"
 	depends on KUNIT=y && RUST && RUSIX_VMA_LIFECYCLE_RUST

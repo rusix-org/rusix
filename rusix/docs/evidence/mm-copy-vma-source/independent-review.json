@@ -1,0 +1,34 @@
+{
+  "status": "INDEPENDENT_SOURCE_REVIEW_NO_BLOCKER",
+  "base": "247da0572e899f8c9e721e1c605a4c5f298bc7ef",
+  "restoration": {
+    "guards": 4,
+    "exact_base": true,
+    "sha256": "1dd5a0bbb2ae056796b0a12e506159c8af841cf38b0cb77f72a4b7d37c30950d"
+  },
+  "inputs": {
+    "mm/vma.c": "ae07770c413cf47155e342b58a8ad5706ac7e69d190c0732ae208e98cf7f3abc",
+    "mm/copy_vma_impl.h": "79b37a878340e22f5ff7bf62379788c0853dceba957e22b769ec8c2e71a35878",
+    "mm/copy_vma_rust.rs": "74a256d128dafcec9e2f7d40b478e177d3985d171bef6bfb6c0f7486f71b3a9a",
+    "mm/Makefile": "bbe9b5328dbf2e321267f6d06c3967b0e01648ff9a56ea2cc695fd92722e6cd7",
+    "init/Kconfig": "c7fae20366616b7e8102ea540faa29d12c5337cfbbab54399703a07b5efb4bf9",
+    "mm/remove_vma_impl.h": "1107725338468ba4799a5781c3a832acf82bec04e52721302b445b701f597057",
+    "mm/exit_mmap_rust.rs": "68a54b00f6dfa4438d1fa967a2d733bd8a1ba48fa286e39015bf6bd10f7a091a",
+    "mm/vma.h": "dff7de90dce0344abdfb322b8ffac27e89c223d2358ca6672f35288a70ecf546",
+    "mm/mremap.c": "bd3446814c286c9fef46ce2ffbd98626fda6d5c4cc58a4823d3fee3c4e434d51",
+    "mm/rmap.c": "f3590608969cb022cc0e38d2011d56c12e2ed8b87d535417f9cd49460fb61fca"
+  },
+  "review": [
+    "Four policies compared against original bodies, including source invalidation/rebind before pgoff reads and output writes only on success.",
+    "C bridge retains final-address native iterator/VMG/context through synchronous Rust call; no Rust references/overlays to shared descriptors.",
+    "Exact unsigned range/pgoff behavior, short-circuit anonymous checks, skip-uprobe, DONTUNMAP self-neighbor suppression and merge-NULL duplication fallback preserved.",
+    "Staged failure cleanup preserves policy/anon/file/open/link acquisition ordering. Native anon-clone partial rollback not duplicated; close precedes fresh file and policy reads.",
+    "Locked file-link entry never reacquires mapping lock; ordinary file-link retains file-derived mapping lock and canonical dcache/interval ordering.",
+    "Preallocation precedes VMA publication; map_count wrapping increment agrees kernel signed-overflow compilation contract.",
+    "All 40 new typed primitive prototypes/definitions compared with Rust declarations; native bool, pgoff_t unsigned long and nullable void(VMA*) callback match restricted x86 target. Two constants preserve PAGE_SHIFT and negative ENOMEM. Required teardown dependency provides reused helpers."
+  ],
+  "limits": [
+    "Source-only: actual compilation, CFI/emitted callback ABI, selected object/linked ownership and paired runtime/error gates pending.",
+    "Retained native merge/maple/rmap/resource primitives remain executing C. Arbitrary callback file remapping is not a new safety guarantee; original native lock/lifetime preconditions remain."
+  ]
+}
