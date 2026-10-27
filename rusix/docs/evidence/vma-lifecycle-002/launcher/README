@@ -1,0 +1,21 @@
+# VMA lifecycle retry
+
+Frozen source: e0632d27293ba2e5b2eff3bc8baec405d8d4a233 in linux-vma-lifecycle.
+Fresh output: linux-out/vma-lifecycle-verification-002. Readiness remains disabled
+until final root review; the first run stays preserved under verification-001.
+
+First run: both kernels built, C passed nine guest cases and pinned postchecks;
+Rust selection stopped before guest execution. The corrected cache-name and
+constant-storage checks pass the full pinned verifier on retained Rust artifacts.
+This retry requires fresh paired builds and nine guest cases per side.
+
+The unchanged pristine upstream16-case prerequisite is rechecked before/after.
+Shared heavy-work lock; fresh C then Rust, pinned c02 image,2CPUs/5GiB per build,
+no network/capabilities, KVM512MiB/SMP2/180seconds. Serial verifier postchecks use
+1CPU/2GiB, matching the successful retained-artifact reinspection budget.
+Original three compiler/preprocess records remain intact; new remapped records
+and exact nested object/linked proofs are checked in separate directories.
+Source/config/fixtures/tool identities and pair equality gates remain unchanged.
+
+Earlier draft provenance remains at vma-lifecycle-verification-draft and
+vma-lifecycle-verification-draft-before-constant-fix. No prior result is relabeled.

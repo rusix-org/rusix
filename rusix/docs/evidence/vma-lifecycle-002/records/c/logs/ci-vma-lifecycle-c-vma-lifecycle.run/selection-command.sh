@@ -1,0 +1,1 @@
+bash /src/rusix/scripts/with-local-tools.sh python3 /src/rusix/scripts/verify-vma-lifecycle.py objects --profile vma-lifecycle-c --source /src --build /out/builds/ci-vma-lifecycle-c --evidence /out/logs/ci-vma-lifecycle-c-vma-lifecycle.run/kernel-build

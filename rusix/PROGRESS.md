@@ -1,13 +1,22 @@
 # rusix progress
 
-The lifecycle verifier now has a narrow fix: accept only the observed
-optional `.0` private-cache suffix and prove the refcount constant as a four-byte
-canonical `.rodata` value in both object and linked ELF. Eleven host selection
-tests and targeted inspection of retained actual metadata/bytes pass. Full pinned
-selection reinspection now passes on the retained Rust kernel with no diagnostics;
-a fresh paired run remains pending. Production Rust is unchanged.
-[Fix evidence](docs/evidence/vma-lifecycle-gate-fix/manifest.json) separates the
-retained kernel from the corrected verifier and preserves the failed first run.
+VMA lifecycle retry `002` at `e0632d27293b` passes all nine ordinary-userspace
+cases on both C and Rust: shared-MM clone/exec, private fork COW, DONTFORK,
+WIPEONFORK across generations, private/shared file lifetime, middle-range
+mprotect split/restore, and fixed mremap of an unlinked file mapping.
+Both fresh kernels and pinned-image selection/postchecks pass without diagnostics;
+the pair differs only by `RUSIX_VMA_LIFECYCLE_RUST`, with identical guest binaries
+and tools. [Runtime evidence](docs/evidence/vma-lifecycle-002/manifest.json)
+retains 662 records and 9,025 raw artifact hashes. This verifies these consumers,
+not allocation-failure rollback, PFN-reference boundary tests, concurrency stress
+or full MM completion. Next verify the implemented Rust mapping teardown and
+copy-VMA transactions, then the PFN ownership fixtures.
+
+The lifecycle verifier accepts only the observed optional `.0` private-cache
+suffix and verifies the canonical four-byte refcount constant in object and
+linked ELF storage. Eleven host selection tests and retained actual-kernel
+reinspection passed before the fresh runtime retry. [Fix evidence](docs/evidence/vma-lifecycle-gate-fix/manifest.json)
+keeps the corrected verifier separate from the earlier kernel and failure.
 
 **Rust BRD passes x86_64 block and ordinary-userspace ext4 contracts;
 all fourteen completion entry points and all ten swait.c entry points have verified
@@ -17,23 +26,22 @@ verification runs locally. No subsystem divergence point is declared.
 
 The inherited mapping verifier now checks constant ELF storage and values,
 including final `.rodata` symbols reported as `D`. The [fix evidence](docs/evidence/dup-mmap-constant-fix/manifest.json)
-passes against the retained mapping kernel `9cf27ef36d1d`; it does not certify
-this VMA candidate. Its paired launcher must be refreshed for the new source.
+passed against the retained mapping kernel `9cf27ef36d1d`. The fresh VMA retry
+above separately verifies the inherited selection on its own kernel artifacts.
 
 At `74258332885b`, the first paired VMA lifecycle run ended with failure.
 Both C and Rust kernels built. The C kernel passed all nine ordinary guest cases
 and its pinned-image postcheck. Before the Rust guest could start, the selection
 verifier rejected the emitted private cache symbol ending in `.0`; Rust runtime
-and paired parity are therefore unverified. [Initial failure evidence](docs/evidence/vma-lifecycle-initial/manifest.json)
+and paired parity were unverified in that attempt. [Initial failure evidence](docs/evidence/vma-lifecycle-initial/manifest.json)
 preserves the exact source, raw logs, partial proofs, C results and retained build
-hashes. Next: correct the narrow emitted-symbol check with negative regressions,
-recheck the retained artifacts, and run a fresh pair before promotion.
+hashes. Its failure remains recorded independently of successful retry `002`.
 
 VMA lifecycle is an opt-in candidate on `rusix/vma-lifecycle`: Rust owns the
 cache pointer and fresh/dup/free policy, including PFN-reference rollback.
 Canonical C primitives retain shared-field and resource operations. Production
-and nine-case guest source reviews pass; candidate kernels now build, but the
-Rust selection gate and runtime remain unverified as recorded above. At
+and nine-case guest source reviews pass; linked selection and the ordinary
+consumer pair now pass at the retry source above. At
 `620b34e0c918`, the guest fixtures compiled cleanly as static
 x86-64 binaries; ELF and emitted shared-child inspection passed. That compile-only
 check did not execute them. [Fixture evidence](docs/evidence/vma-lifecycle-fixtures/manifest.json).
@@ -47,8 +55,7 @@ The pristine Linux `2926d88bb7fc` userspace VMA harness passes all 16 upstream
 cases with default ASan/UBSan settings and no diagnostics. All 7,748 source
 inputs and generated artifacts were rechecked; this is C harness evidence, not
 Rust or kernel runtime coverage. [Baseline evidence](docs/evidence/vma-upstream-baseline/manifest.json).
-Next: paired selection and ordinary-consumer gates, followed by attributable
-failures and lifetime/concurrency checks. [Contract](experiments/vma-lifecycle/README.md).
+Attributable failures and expanded lifetime/concurrency checks remain open. [Contract](experiments/vma-lifecycle/README.md).
 
 Public development lives on `rusix/main`. [ADR 0002](docs/adr/0002.md) owns the
 target; [Phase 1](docs/PHASE1.md) owns delivery gates.

@@ -1,0 +1,17 @@
+{
+  "status": "PASS",
+  "cases": [
+    "shared_clone_write_and_exit",
+    "shared_clone_exec_detaches_mm",
+    "private_fork_cow",
+    "dontfork_omits_only_advised_range",
+    "wipeonfork_clears_child_and_grandchild",
+    "private_file_mapping_cow_and_lifetime",
+    "shared_file_mapping_survives_parent_unmap",
+    "mprotect_middle_split_and_restore",
+    "fixed_mremap_preserves_unlinked_file_mapping"
+  ],
+  "qemu_exit": 0,
+  "implementation": "rust",
+  "source_revision": "e0632d27293ba2e5b2eff3bc8baec405d8d4a233"
+}

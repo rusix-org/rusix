@@ -1,0 +1,6 @@
+0000000000000000 t .Ltmp0
+0000000000000040 t .Ltmp1
+0000000000000010 t _RNvCs1abx6B0wc0h_13dup_mmap_rust18allocation_failure
+0000000000000000 t __pfx__RNvCs1abx6B0wc0h_13dup_mmap_rust18allocation_failure
+0000000000000040 T __pfx_rusix_dup_mmap
+0000000000000050 T rusix_dup_mmap

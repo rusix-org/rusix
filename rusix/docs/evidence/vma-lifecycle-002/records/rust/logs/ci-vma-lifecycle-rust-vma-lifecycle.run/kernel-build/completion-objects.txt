@@ -1,0 +1,1 @@
+/out/builds/ci-vma-lifecycle-rust/kernel/sched/completion_rust.o
