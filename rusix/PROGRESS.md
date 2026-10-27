@@ -1,5 +1,20 @@
 # rusix progress
 
+The teardown verifier now requires exactly one fixture archive member only in
+its explicit KUnit context and validates the canonical Rust case terminator
+(NORMAL speed 3, otherwise zero bytes, no relocations). Production source is
+unchanged. All 32 host suites (338 cases) pass on 4,034 stable inputs.
+[Fix evidence](docs/evidence/exit-mmap-fixture-gate-fix/manifest.json) retains both
+host stages, the failed first reinspection and successful second reinspection.
+
+Retained KUnit C reinspection now passes the complete nested object/archive/linked
+and three-case fixture registration/payload checks, with separately attributed
+checker code and unchanged original artifacts. No KUnit VM ran. The original
+matrix remains failed; a fresh paired ordinary/KUnit retry at the reviewed fix
+commit is required before downstream acceptance. The separate PFN checker has
+the same old sentinel assumption and must remain disabled until reviewed
+propagation. The fresh retry launcher is prepared but disabled pending commit.
+
 The inherited lifecycle verifier now accepts the observed private-cache `.0`
 suffix and proves the canonical refcount constant's four-byte storage/value.
 This carries the reviewed fix from `e0632d2729` without changing kernel code.

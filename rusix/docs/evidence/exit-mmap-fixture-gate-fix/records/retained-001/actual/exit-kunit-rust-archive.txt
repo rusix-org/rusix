@@ -1,0 +1,9 @@
+/home/aaron/code/rusix/linux-out/mm-exit-mmap-verification-001/kunit-c/builds/ci-exit-mmap-kunit-c/rust/core.o
+/home/aaron/code/rusix/linux-out/mm-exit-mmap-verification-001/kunit-c/builds/ci-exit-mmap-kunit-c/rust/compiler_builtins.o
+/home/aaron/code/rusix/linux-out/mm-exit-mmap-verification-001/kunit-c/builds/ci-exit-mmap-kunit-c/rust/ffi.o
+/home/aaron/code/rusix/linux-out/mm-exit-mmap-verification-001/kunit-c/builds/ci-exit-mmap-kunit-c/rust/helpers/helpers.o
+/home/aaron/code/rusix/linux-out/mm-exit-mmap-verification-001/kunit-c/builds/ci-exit-mmap-kunit-c/rust/bindings.o
+/home/aaron/code/rusix/linux-out/mm-exit-mmap-verification-001/kunit-c/builds/ci-exit-mmap-kunit-c/rust/pin_init.o
+/home/aaron/code/rusix/linux-out/mm-exit-mmap-verification-001/kunit-c/builds/ci-exit-mmap-kunit-c/rust/kernel.o
+/home/aaron/code/rusix/linux-out/mm-exit-mmap-verification-001/kunit-c/builds/ci-exit-mmap-kunit-c/rust/uapi.o
+/home/aaron/code/rusix/linux-out/mm-exit-mmap-verification-001/kunit-c/builds/ci-exit-mmap-kunit-c/rust/exports.o

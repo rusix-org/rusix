@@ -1,0 +1,10 @@
+{
+  "enabled": true,
+  "draft_sha256": {
+    "reinspect.py": "4716d312a15df7d9651d4c63568cd5b6c31fe8eab9b5042ebd604f549e0c6fbe",
+    "run.sh": "3b92c34edc4540184167b1dec8bc920d81a3886ba9842d238531de1d1e0933e4",
+    "inputs.json": "83ee6acb33f4695f656066090de2dfc5935bb98e58792d7110c1ec5aedda5c28",
+    "README.md": "0a268e754a348f520a8f4a91a7f5701f3534fd0275a4f61fe235eb0bbe6055cd"
+  },
+  "root_review": "Accepted narrow archive context fix and readonly full retained-object verification; independent review PASS; no VM/compiler"
+}

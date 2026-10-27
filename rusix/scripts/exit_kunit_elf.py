@@ -30,13 +30,32 @@ def signature(text, name, rust=False):
     clean=re.sub(r'/\*.*?\*/','',rows[0],flags=re.S)
     return hashlib.sha256(re.sub(r'\s+','',clean).encode()).hexdigest()
 LAYOUT = {'kunit_attributes': ('3f587fe76dd592563a26856337d50c214d387e293f52e09b53f47d194189b2ed', '5a862560d724dbbe864ef36d835b3a32f257a8ccd790b04cd67ad6f498b1a16c'), 'kunit_case': ('e50f48ec1edfbe52e95a7d5ae0a26f867c843c3e07f518480fd819a24b3fa095', '0cf687061290336a4fad39667d7946fb199f1220cccff0dfd35f4e510567c747'), 'kunit_suite': ('000634891e6272fed8dab58ffd036f1432f82100907b1224eb22f90020652aad', '8c9f79432a652ce51d495f1e02559fb66657e2f8b7bfe1bb4a3ead3b25fd8b43')}
+# The pinned Rust constructor uses NORMAL speed (3), not a zeroed C record.
+# x86_64: attr.speed at 24, status at 48; all pointers/padding remain zero.
+CASE_TERMINATOR = bytes(24) + (3).to_bytes(4, 'little') + bytes(44)
+NULL_CONSTRUCTOR_SHA256 = '865b6759fe2a62a0157764c778ee945816fd033da589d2f38bb83f5b8290cdbd'
+def sentinel_contract(header, generated, constructor):
+    enums = {
+        'kunit_status': 'KUNIT_SUCCESS,KUNIT_FAILURE,KUNIT_SKIPPED,',
+        'kunit_speed': 'KUNIT_SPEED_UNSET,KUNIT_SPEED_VERY_SLOW,KUNIT_SPEED_SLOW,KUNIT_SPEED_NORMAL,KUNIT_SPEED_MAX=KUNIT_SPEED_NORMAL,',
+    }
+    for name, expected in enums.items():
+        bodies=re.findall(r'^enum '+name+r'\s*\{(.*?)^\};',header,re.M|re.S)
+        need(len(bodies)==1 and re.sub(r'\s+','',bodies[0])==expected,'Unknown canonical enum '+name)
+        need(len(re.findall(r'^pub type '+name+r' = ffi::c_uint;$',generated,re.M))==1,'Unknown enum width '+name)
+    for name, kind, value in (('kunit_speed_KUNIT_SPEED_NORMAL','kunit_speed',3),
+                              ('kunit_status_KUNIT_SUCCESS','kunit_status',0)):
+        declarations=re.findall(r'^pub const '+name+r': ([^;]+);$',generated,re.M)
+        need(declarations==[kind+' = '+str(value)],'Unknown generated sentinel value '+name)
+    bodies=re.findall(r'^pub const fn kunit_case_null\(\) -> kernel::bindings::kunit_case \{.*?^\}',constructor,re.M|re.S)
+    need(len(bodies)==1 and hashlib.sha256(re.sub(r'\s+','',bodies[0]).encode()).hexdigest()==NULL_CONSTRUCTOR_SHA256,'Changed canonical Rust case terminator constructor')
+
 def layout(source, build):
     header=(source/'include/kunit/test.h').read_text()
     generated=(build/'rust/bindings/bindings_generated.rs').read_text()
     for name,(c,rust) in LAYOUT.items():
         need(signature(header,name)==c and signature(generated,name,True)==rust,'Unsupported KUnit layout '+name)
-    for enum in ('kunit_status','kunit_speed'):
-        need(re.search(r'pub type '+enum+r' = ffi::c_uint;',generated),'Unknown enum width')
+    sentinel_contract(header,generated,(source/'rust/kernel/kunit.rs').read_text())
 
 def offset(loc, n):
     need(isinstance(loc,tuple),'Pointer must resolve to defined storage')
@@ -87,7 +106,7 @@ def registration(elf, enabled):
         for n in (16,32,40):need(elf.pointer(offset(record,n)) is None,'Unexpected parameter callback')
     need(len(set(functions))==3,'Duplicate case executable target')
     final=offset(cases,3*72)
-    need(elf.section_data(final[0])[final[1]:final[1]+72]==bytes(72),'Missing zero case terminator')
+    need(elf.section_data(final[0])[final[1]:final[1]+72]==CASE_TERMINATOR,'Missing canonical Rust case terminator')
     need(not any(offset(final,n) in elf.relocations for n in range(72)),'Relocated terminator')
     return functions
 

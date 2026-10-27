@@ -98,6 +98,29 @@ class ExitSelection(unittest.TestCase):
         for text in ('mmap.o\nvma.o\n','mmap.o\nvma.o\nexit_mmap_rust.o\nexit_mmap_other.o\n','mmap.o\nvma.o\nvma.o\nexit_mmap_rust.o\n'):
             with self.assertRaises(ValueError):gate.archive_members(text,True)
 
+    def test_kunit_archive_requires_exact_fixture_in_explicit_context(self):
+        for rust in (False,True):
+            ordinary='mmap.o\nvma.o\n'+('exit_mmap_rust.o\n' if rust else '')
+            fixture=ordinary+'exit_mmap_test.o\n'
+            with self.subTest(rust=rust):
+                gate.archive_members(ordinary,rust)
+                gate.archive_members(fixture,rust,test_context=gate.TEST_CONTEXT)
+                with self.assertRaises(ValueError):gate.archive_members(fixture,rust)
+                for bad in (ordinary,fixture+'exit_mmap_test.o\n',fixture+'exit_mmap_other.o\n',
+                            fixture+'exit_mmap_test_extra.o\n',fixture+'exit_mmap_rust.o\n',
+                            fixture.replace('mmap.o\n','mmap.o\nmmap.o\n',1)):
+                    with self.assertRaises(ValueError):
+                        gate.archive_members(bad,rust,test_context=gate.TEST_CONTEXT)
+                if rust:
+                    with self.assertRaises(ValueError):
+                        gate.archive_members(fixture.replace('exit_mmap_rust.o\n',''),rust,test_context=gate.TEST_CONTEXT)
+
+    def test_archive_unknown_context_rejected_with_or_without_fixture(self):
+        for context in ('', 'exit-mmap-kunit-v2', 'vma-modify-v1', True):
+            for text in ('mmap.o\nvma.o\n','mmap.o\nvma.o\nexit_mmap_test.o\n'):
+                with self.subTest(context=context),self.assertRaises(ValueError):
+                    gate.archive_members(text,False,test_context=context)
+
     def test_callback_transfer_not_data_reference_or_unsupported_target(self):
         body='0000 <rusix_vma_close>:\n'
         for name in ('rusix_remove_ops','rusix_remove_close','rusix_remove_dummy'):

@@ -1,0 +1,18 @@
+Traceback (most recent call last):
+  File "/home/aaron/code/rusix/linux-out/exit-mmap-fixture-gate-reinspection-draft/reinspect.py", line 88, in <module>
+    if __name__=='__main__':main()
+                            ~~~~^^
+  File "/home/aaron/code/rusix/linux-out/exit-mmap-fixture-gate-reinspection-draft/reinspect.py", line 67, in main
+    actual=selection.verify(SimpleNamespace(source=SOURCE,build=BUILD,evidence=evidence,profile='exit-mmap-kunit-c'))
+  File "/home/aaron/code/rusix/linux-mm-exit-mmap-fix/rusix/scripts/verify-exit-mmap.py", line 204, in verify
+    fixture_proof=kunit_elf.verify(build,evidence,context is not None,source=source)
+  File "/home/aaron/code/rusix/linux-mm-exit-mmap-fix/rusix/scripts/exit_kunit_elf.py", line 171, in verify
+    graphs=[registration(elf,enabled) for elf in objects]
+            ~~~~~~~~~~~~^^^^^^^^^^^^^
+  File "/home/aaron/code/rusix/linux-mm-exit-mmap-fix/rusix/scripts/exit_kunit_elf.py", line 90, in registration
+    need(elf.section_data(final[0])[final[1]:final[1]+72]==bytes(72),'Missing zero case terminator')
+    ~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/aaron/code/rusix/linux-mm-exit-mmap-fix/rusix/scripts/exit_kunit_elf.py", line 25, in need
+    if not value:raise ValueError(message)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^
+ValueError: Missing zero case terminator

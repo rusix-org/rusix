@@ -1,0 +1,30 @@
+{
+  "status": "DIAGNOSED",
+  "records": {
+    "object": {
+      "path": "/home/aaron/code/rusix/linux-out/mm-exit-mmap-verification-001/kunit-c/builds/ci-exit-mmap-kunit-c/rust/kernel.o",
+      "sentinel_nonzero_bytes": [
+        [
+          24,
+          3
+        ]
+      ],
+      "sentinel_run_case": null,
+      "sentinel_relocations": [],
+      "sentinel_hex": "000000000000000000000000000000000000000000000000030000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+    },
+    "linked": {
+      "path": "/home/aaron/code/rusix/linux-out/mm-exit-mmap-verification-001/kunit-c/builds/ci-exit-mmap-kunit-c/vmlinux",
+      "sentinel_nonzero_bytes": [
+        [
+          24,
+          3
+        ]
+      ],
+      "sentinel_run_case": null,
+      "sentinel_relocations": [],
+      "sentinel_hex": "000000000000000000000000000000000000000000000000030000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+    }
+  },
+  "evidence": "Pinned Rust kunit_case_null initializes attr.speed to KUNIT_SPEED_NORMAL; actual bindgen constant is3 at case offset24, statusSUCCESS0. No ELF writes or LLVM invocation."
+}

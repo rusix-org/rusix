@@ -1,0 +1,294 @@
+[
+    {
+        "Id": "7781db8a48df762abebbe453426841d4825863ecef214f03f1ec98f3e69b47b2",
+        "Created": "2026-10-27T04:02:42.471301005Z",
+        "Path": "python3",
+        "Args": [
+            "-B",
+            "/home/aaron/code/rusix/linux-out/exit-mmap-fixture-gate-reinspection-draft/reinspect.py"
+        ],
+        "State": {
+            "Status": "exited",
+            "Running": false,
+            "Paused": false,
+            "Restarting": false,
+            "OOMKilled": false,
+            "Dead": false,
+            "Pid": 0,
+            "ExitCode": 1,
+            "Error": "",
+            "StartedAt": "2026-10-27T04:02:42.786200318Z",
+            "FinishedAt": "2026-10-27T04:03:01.143597669Z"
+        },
+        "Image": "sha256:c02eb3929889b3f0cc035d57a02c844e0c74c71d24fbda1311249faeb8257f63",
+        "ResolvConfPath": "/var/lib/docker/containers/7781db8a48df762abebbe453426841d4825863ecef214f03f1ec98f3e69b47b2/resolv.conf",
+        "HostnamePath": "/var/lib/docker/containers/7781db8a48df762abebbe453426841d4825863ecef214f03f1ec98f3e69b47b2/hostname",
+        "HostsPath": "/var/lib/docker/containers/7781db8a48df762abebbe453426841d4825863ecef214f03f1ec98f3e69b47b2/hosts",
+        "LogPath": "/var/lib/docker/containers/7781db8a48df762abebbe453426841d4825863ecef214f03f1ec98f3e69b47b2/7781db8a48df762abebbe453426841d4825863ecef214f03f1ec98f3e69b47b2-json.log",
+        "Name": "/sad_curran",
+        "RestartCount": 0,
+        "Driver": "overlayfs",
+        "Platform": "linux",
+        "MountLabel": "",
+        "ProcessLabel": "",
+        "AppArmorProfile": "",
+        "ExecIDs": null,
+        "HostConfig": {
+            "Binds": null,
+            "ContainerIDFile": "/home/aaron/code/rusix/linux-out/exit-mmap-fixture-gate-reinspection-001/container.cid",
+            "LogConfig": {
+                "Type": "json-file",
+                "Config": {
+                    "max-file": "5",
+                    "max-size": "10m"
+                }
+            },
+            "NetworkMode": "none",
+            "PortBindings": {},
+            "RestartPolicy": {
+                "Name": "no",
+                "MaximumRetryCount": 0
+            },
+            "AutoRemove": false,
+            "VolumeDriver": "",
+            "VolumesFrom": null,
+            "ConsoleSize": [
+                0,
+                0
+            ],
+            "CapAdd": null,
+            "CapDrop": [
+                "ALL"
+            ],
+            "CgroupnsMode": "private",
+            "Dns": null,
+            "DnsOptions": [],
+            "DnsSearch": [],
+            "ExtraHosts": null,
+            "GroupAdd": null,
+            "IpcMode": "private",
+            "Cgroup": "",
+            "Links": null,
+            "OomScoreAdj": 0,
+            "PidMode": "",
+            "Privileged": false,
+            "PublishAllPorts": false,
+            "ReadonlyRootfs": true,
+            "SecurityOpt": [
+                "no-new-privileges"
+            ],
+            "UTSMode": "",
+            "UsernsMode": "",
+            "ShmSize": 67108864,
+            "Runtime": "runc",
+            "Isolation": "",
+            "CpuShares": 0,
+            "Memory": 2147483648,
+            "NanoCpus": 1000000000,
+            "CgroupParent": "",
+            "BlkioWeight": 0,
+            "BlkioWeightDevice": [],
+            "BlkioDeviceReadBps": [],
+            "BlkioDeviceWriteBps": [],
+            "BlkioDeviceReadIOps": [],
+            "BlkioDeviceWriteIOps": [],
+            "CpuPeriod": 0,
+            "CpuQuota": 0,
+            "CpuRealtimePeriod": 0,
+            "CpuRealtimeRuntime": 0,
+            "CpusetCpus": "",
+            "CpusetMems": "",
+            "Devices": [],
+            "DeviceCgroupRules": null,
+            "DeviceRequests": null,
+            "MemoryReservation": 0,
+            "MemorySwap": 2147483648,
+            "MemorySwappiness": null,
+            "OomKillDisable": null,
+            "PidsLimit": 128,
+            "Ulimits": null,
+            "CpuCount": 0,
+            "CpuPercent": 0,
+            "IOMaximumIOps": 0,
+            "IOMaximumBandwidth": 0,
+            "Mounts": [
+                {
+                    "Type": "bind",
+                    "Source": "/home/aaron/code/rusix/linux/.git",
+                    "Target": "/home/aaron/code/rusix/linux/.git",
+                    "ReadOnly": true
+                },
+                {
+                    "Type": "bind",
+                    "Source": "/home/aaron/code/rusix/linux-mm-exit-mmap",
+                    "Target": "/home/aaron/code/rusix/linux-mm-exit-mmap",
+                    "ReadOnly": true
+                },
+                {
+                    "Type": "bind",
+                    "Source": "/home/aaron/code/rusix/linux-mm-exit-mmap-fix",
+                    "Target": "/home/aaron/code/rusix/linux-mm-exit-mmap-fix",
+                    "ReadOnly": true
+                },
+                {
+                    "Type": "bind",
+                    "Source": "/home/aaron/code/rusix/linux-out/mm-exit-mmap-verification-001/kunit-c",
+                    "Target": "/home/aaron/code/rusix/linux-out/mm-exit-mmap-verification-001/kunit-c",
+                    "ReadOnly": true
+                },
+                {
+                    "Type": "bind",
+                    "Source": "/home/aaron/code/rusix/linux-out/exit-mmap-fixture-gate-reinspection-draft",
+                    "Target": "/home/aaron/code/rusix/linux-out/exit-mmap-fixture-gate-reinspection-draft",
+                    "ReadOnly": true
+                },
+                {
+                    "Type": "bind",
+                    "Source": "/home/aaron/code/rusix/linux-out/exit-mmap-fixture-gate-reinspection-001",
+                    "Target": "/home/aaron/code/rusix/linux-out/exit-mmap-fixture-gate-reinspection-001"
+                }
+            ],
+            "MaskedPaths": [
+                "/proc/acpi",
+                "/proc/asound",
+                "/proc/interrupts",
+                "/proc/kcore",
+                "/proc/keys",
+                "/proc/latency_stats",
+                "/proc/sched_debug",
+                "/proc/scsi",
+                "/proc/timer_list",
+                "/proc/timer_stats",
+                "/sys/devices/virtual/powercap",
+                "/sys/firmware"
+            ],
+            "ReadonlyPaths": [
+                "/proc/bus",
+                "/proc/fs",
+                "/proc/irq",
+                "/proc/sys",
+                "/proc/sysrq-trigger"
+            ]
+        },
+        "Storage": {
+            "RootFS": {
+                "Snapshot": {
+                    "Name": "overlayfs"
+                }
+            }
+        },
+        "Mounts": [
+            {
+                "Type": "bind",
+                "Source": "/home/aaron/code/rusix/linux-mm-exit-mmap",
+                "Destination": "/home/aaron/code/rusix/linux-mm-exit-mmap",
+                "Mode": "",
+                "RW": false,
+                "Propagation": "rprivate"
+            },
+            {
+                "Type": "bind",
+                "Source": "/home/aaron/code/rusix/linux-mm-exit-mmap-fix",
+                "Destination": "/home/aaron/code/rusix/linux-mm-exit-mmap-fix",
+                "Mode": "",
+                "RW": false,
+                "Propagation": "rprivate"
+            },
+            {
+                "Type": "bind",
+                "Source": "/home/aaron/code/rusix/linux-out/exit-mmap-fixture-gate-reinspection-001",
+                "Destination": "/home/aaron/code/rusix/linux-out/exit-mmap-fixture-gate-reinspection-001",
+                "Mode": "",
+                "RW": true,
+                "Propagation": "rprivate"
+            },
+            {
+                "Type": "bind",
+                "Source": "/home/aaron/code/rusix/linux-out/exit-mmap-fixture-gate-reinspection-draft",
+                "Destination": "/home/aaron/code/rusix/linux-out/exit-mmap-fixture-gate-reinspection-draft",
+                "Mode": "",
+                "RW": false,
+                "Propagation": "rprivate"
+            },
+            {
+                "Type": "bind",
+                "Source": "/home/aaron/code/rusix/linux/.git",
+                "Destination": "/home/aaron/code/rusix/linux/.git",
+                "Mode": "",
+                "RW": false,
+                "Propagation": "rprivate"
+            },
+            {
+                "Type": "bind",
+                "Source": "/home/aaron/code/rusix/linux-out/mm-exit-mmap-verification-001/kunit-c",
+                "Destination": "/home/aaron/code/rusix/linux-out/mm-exit-mmap-verification-001/kunit-c",
+                "Mode": "",
+                "RW": false,
+                "Propagation": "rprivate"
+            }
+        ],
+        "Config": {
+            "Hostname": "7781db8a48df",
+            "Domainname": "",
+            "User": "1000:1000",
+            "AttachStdin": false,
+            "AttachStdout": true,
+            "AttachStderr": true,
+            "Tty": false,
+            "OpenStdin": false,
+            "StdinOnce": false,
+            "Env": [
+                "TMPDIR=/home/aaron/code/rusix/linux-out/exit-mmap-fixture-gate-reinspection-001/tmp",
+                "PYTHONDONTWRITEBYTECODE=1",
+                "RUSIX_PINNED_POSTCHECK_IMAGE=sha256:c02eb3929889b3f0cc035d57a02c844e0c74c71d24fbda1311249faeb8257f63",
+                "PATH=/usr/lib/llvm-19/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+                "LIBCLANG_PATH=/usr/lib/llvm-19/lib",
+                "LC_ALL=C",
+                "GIT_OPTIONAL_LOCKS=0"
+            ],
+            "Cmd": [
+                "python3",
+                "-B",
+                "/home/aaron/code/rusix/linux-out/exit-mmap-fixture-gate-reinspection-draft/reinspect.py"
+            ],
+            "Image": "sha256:c02eb3929889b3f0cc035d57a02c844e0c74c71d24fbda1311249faeb8257f63",
+            "Volumes": null,
+            "WorkingDir": "/home/aaron/code/rusix/linux-mm-exit-mmap",
+            "Entrypoint": null,
+            "Labels": {}
+        },
+        "NetworkSettings": {
+            "SandboxID": "",
+            "SandboxKey": "",
+            "Ports": {},
+            "Networks": {
+                "none": {
+                    "IPAMConfig": null,
+                    "Links": null,
+                    "Aliases": null,
+                    "DriverOpts": null,
+                    "GwPriority": 0,
+                    "NetworkID": "8233b529d2059c07122e48a591d0f612950367d17b760c4dca5fd32bcf807140",
+                    "EndpointID": "",
+                    "Gateway": "",
+                    "IPAddress": "",
+                    "MacAddress": "",
+                    "IPPrefixLen": 0,
+                    "IPv6Gateway": "",
+                    "GlobalIPv6Address": "",
+                    "GlobalIPv6PrefixLen": 0,
+                    "DNSNames": null
+                }
+            }
+        },
+        "ImageManifestDescriptor": {
+            "mediaType": "application/vnd.oci.image.manifest.v1+json",
+            "digest": "sha256:423ec719c430004334c2c78f74a9501c4d1b5784accd182faf26046eb7446ba8",
+            "size": 1994,
+            "platform": {
+                "architecture": "amd64",
+                "os": "linux"
+            }
+        }
+    }
+]

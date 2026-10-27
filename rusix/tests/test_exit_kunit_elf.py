@@ -12,6 +12,7 @@ spec=importlib.util.spec_from_file_location('exitelf',S/'exit_kunit_elf.py');m=i
 class Model:
  def __init__(self):
   self.relocatable=True;self.names=['','.kunit_test_suites','.data','.text'];self.headers=[(0,)*10,(0,1,2,0,0,8),(0,1,3,0,0,2048),(0,1,6,0,0,256)];self.data=bytearray(2048);self.data[:len(m.SUITE)]=m.SUITE.encode();self.ptr={(1,0):(2,0),(2,288):(2,600)};self.symbols=[];self.relocations={}
+  self.data[816:888]=m.CASE_TERMINATOR
   for i,name in enumerate(m.CASES):
    pos=1000+i*150;self.data[pos:pos+len(name)]=name.encode();self.ptr[(2,600+i*72)]=(3,i*32);self.ptr[(2,608+i*72)]=(2,pos)
    self.symbols.append(dict(name='kernel_exit_tests_kunit_rust_wrapper_'+name,kind=2,size=24,section=3,address=i*32))
@@ -39,6 +40,31 @@ class Tests(unittest.TestCase):
   for mutate in (lambda e:e.data.__setitem__(816,1),lambda e:e.ptr.update({(2,616):(3,0)}),lambda e:e.relocations.update({(2,816):'bad'})):
    e=Model();mutate(e)
    with self.assertRaises(ValueError):m.registration(e,True)
+ def test_canonical_sentinel_rejects_zero_speed_status_pointer_and_padding(self):
+  for offset,value in ((24,0),(24,2),(48,1),(0,1),(8,1),(16,1),(28,1),(32,1),(40,1),(56,1),(64,1),(71,1)):
+   e=Model();e.data[816+offset]=value
+   with self.subTest(offset=offset,value=value),self.assertRaises(ValueError):m.registration(e,True)
+  e=Model();e.data[816:888]=bytes(72)
+  with self.assertRaises(ValueError):m.registration(e,True)
+ def test_sentinel_relocations_and_truncation(self):
+  for offset in (0,24,48,71):
+   e=Model();e.relocations[(2,816+offset)]='bad'
+   with self.assertRaises(ValueError):m.registration(e,True)
+  e=Model();e.data=e.data[:887]
+  with self.assertRaises(ValueError):m.registration(e,True)
+ def test_pinned_enum_and_constructor_contract(self):
+  root=S.parents[1];header=(root/'include/kunit/test.h').read_text();constructor=(root/'rust/kernel/kunit.rs').read_text()
+  generated='pub type kunit_status = ffi::c_uint;\npub type kunit_speed = ffi::c_uint;\npub const kunit_status_KUNIT_SUCCESS: kunit_status = 0;\npub const kunit_speed_KUNIT_SPEED_NORMAL: kunit_speed = 3;\n'
+  m.sentinel_contract(header,generated,constructor)
+  for h,g,c in ((header.replace('KUNIT_SUCCESS,','KUNIT_SUCCESS = 1,'),generated,constructor),
+                (header.replace('KUNIT_SPEED_NORMAL,','KUNIT_SPEED_NORMAL = 4,'),generated,constructor),
+                (header,generated.replace('= 3;','= 0;'),constructor),
+                (header,generated.replace('= 0;','= 1;'),constructor),
+                (header,generated.replace('ffi::c_uint','ffi::c_ulong'),constructor),
+                (header,generated,constructor.replace('speed: kernel::bindings::kunit_speed_KUNIT_SPEED_NORMAL','speed: 0')),
+                (header,generated,constructor.replace('status: kernel::bindings::kunit_status_KUNIT_SUCCESS','status: 1')),
+                (header,generated,constructor.replace('run_case: None','run_case: Some(callback)'))):
+   with self.assertRaises(ValueError):m.sentinel_contract(h,g,c)
  def test_global_definitions(self):
   text='\n'.join('0000 T '+n for n in m.ENTRIES);m.global_definitions(text,m.ENTRIES,True)
   for bad in (text.replace(' T ',' D ',1),text+'\n0000 T '+m.ENTRIES[0],text.split('\n',1)[1]):

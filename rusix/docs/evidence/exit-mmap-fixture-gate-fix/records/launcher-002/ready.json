@@ -1,0 +1,10 @@
+{
+  "enabled": true,
+  "draft_sha256": {
+    "reinspect.py": "199cfc42878a8bf5c7025bfe1484799b53c1bbb111b79584de932cd7f9238202",
+    "run.sh": "b6fa6f4170280093dff5f8f37f0364303c2b044b0ff22926612d113d4803b032",
+    "inputs.json": "0dfeec93fff983813a41d8320ccbd872d3ea894e0e1a7f4f072cb8aad2082382",
+    "README.md": "1f272444fc62cfd829502e5cbecd3f1e7dd247da7812dcde943e63e856301de5"
+  },
+  "root_review": "Root/independent acceptance: exact native Rust terminator representation, unchanged zero/relocation checks elsewhere; read-only actual fullgate, no build/VM"
+}
