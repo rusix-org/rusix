@@ -1,0 +1,33 @@
+{
+  "base": "f70b5bc41e8f31e93dd4fb04e4559dced57de0c0",
+  "pinned_native_reference": "2926d88bb7fc4608fd942453d929c39e4e5ec006",
+  "source_sha256": {
+    "MAINTAINERS": "4bd175abe24dd19253e001064db889041e684739d98775e12310b4bf8e59a784",
+    "init/Kconfig": "6c51589c9054d65bb3613bdeb6da4fc5524172df238dbdd35aaa5cb0b3dced33",
+    "mm/Makefile": "7ab318f36307a9e5a4f8ddc188b7ba5979b5c826fe4146eae447bfc3ce4f6b94",
+    "mm/vma.c": "03370ea1bb2e5d49ee499e4104038f22211e4d442312acb15a7c7f98acffc933",
+    "mm/vma_merge.h": "304ca575e56aa94e1be104c14724e921f97c9710884a530a737954d6ebe4377c",
+    "mm/vma_merge_impl.h": "191ef7fd0058c9dc9f13b71ff2db0438d545ff2491fb2359e990a5cb62603cd3",
+    "mm/vma_merge_rust.rs": "01f77b0980f892e5c16bbfcfbc8603669ba762be0dbe22e670780cb22b4dca43",
+    "rusix/PROGRESS.md": "af948524cfc8c0c3e03613e36d5795d2eda951fd84381d2c9a57ae318cd6fb02",
+    "rusix/experiments/vma-merge/README.md": "dc350ea2580588c4c4ddcfbe3a7584ce59760917c98d9010bba1d1c6c5d64209"
+  },
+  "reviewed_source_sha256": {
+    "MAINTAINERS": "4bd175abe24dd19253e001064db889041e684739d98775e12310b4bf8e59a784",
+    "init/Kconfig": "6c51589c9054d65bb3613bdeb6da4fc5524172df238dbdd35aaa5cb0b3dced33",
+    "mm/Makefile": "7ab318f36307a9e5a4f8ddc188b7ba5979b5c826fe4146eae447bfc3ce4f6b94",
+    "mm/vma.c": "03370ea1bb2e5d49ee499e4104038f22211e4d442312acb15a7c7f98acffc933",
+    "mm/vma_merge.h": "304ca575e56aa94e1be104c14724e921f97c9710884a530a737954d6ebe4377c",
+    "mm/vma_merge_impl.h": "597502ffd70315fc88e1ec07c13eb4c5f10cf8e525cecdb00ccf37ff3de70079",
+    "mm/vma_merge_rust.rs": "01f77b0980f892e5c16bbfcfbc8603669ba762be0dbe22e670780cb22b4dca43",
+    "rusix/PROGRESS.md": "c6aa41ab6705f8b0fa0001084c6b53402d862d80dde8f67076e84d911e2e429c",
+    "rusix/experiments/vma-merge/README.md": "dc350ea2580588c4c4ddcfbe3a7584ce59760917c98d9010bba1d1c6c5d64209"
+  },
+  "only_postreview_delta": "PROGRESS review status/archive link and removal of one trailing blank line from mm/vma_merge_impl.h; Rust and all function bodies unchanged",
+  "scout_reference": {
+    "path": "/home/aaron/code/rusix/linux-out/mm-after-modify-scout-001",
+    "manifest_sha256": "3d3e24c961d0451e9cdd84cbebba739e7c45e45a1e398376d681682928d72136",
+    "source": "f70b5bc41e8f31e93dd4fb04e4559dced57de0c0"
+  },
+  "scope": "Source-only; no configuration, compiler/typecheck, actual ELF selection or VM result."
+}

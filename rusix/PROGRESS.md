@@ -1,5 +1,16 @@
 # rusix progress
 
+VMA merge/expand/shrink now has a dependent, default-off Rust source candidate:
+seventeen complete policies, including eligibility, anon duplication, commit and
+rollback; six native entry wrappers retain canonical stack storage. Original C
+bodies are byte-preserved. Existing Rust prepare/complete transactions are reused.
+Textual restoration and Rust formatting pass; configuration, compilation, actual
+linked selection and VM parity remain unverified, including the modification
+prerequisite. [Contract and exact native-operation inventory](experiments/vma-merge/README.md).
+Independent source/unsafe review passes; [source evidence](docs/evidence/vma-merge-source/manifest.json)
+binds the candidate and restoration checks. Next: explicit verification tooling and
+paired gates after ancestor acceptance; fault fixtures require separate review.
+
 The real VMA-modification runtime pipeline now implements two boots per kernel:
 nine existing ordinary VMA cases and five unchanged native merge filters, with
 actual modification selection reinspection before each boot. Explicit local CI

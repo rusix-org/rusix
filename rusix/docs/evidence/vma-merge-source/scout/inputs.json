@@ -1,0 +1,23 @@
+{
+  "source": "f70b5bc41e8f31e93dd4fb04e4559dced57de0c0",
+  "sha256": {
+    "mm/vma.c": "2d551b10a78e5a79b4b0418f13c0ccdad16e1f71c160f6a7dd3e45915bfff410",
+    "mm/vma.h": "dff7de90dce0344abdfb322b8ffac27e89c223d2358ca6672f35288a70ecf546",
+    "mm/vma_internal.h": "313e35ec114adb436bc7ae11d7496b8d8990b45c9d08e43fa4aa645220e297c2",
+    "mm/vma_exec.c": "669100ae65b7f1f019024880456bb1f3921e6a84d47aced1b5d02cf0bd7f6da6",
+    "mm/mremap.c": "bd3446814c286c9fef46ce2ffbd98626fda6d5c4cc58a4823d3fee3c4e434d51",
+    "mm/mprotect.c": "8dd60148bdd87fcd102924be058fb1c6291c570a82d9da9c9df1a5000747dad5",
+    "mm/madvise.c": "82c29fb65e03123d6398d0745f42334fa3bd9058028f5c82cf4b298cc3faf35a",
+    "mm/mempolicy.c": "350cd1df1d045f54174dbcf5a195d6456778099950190c2c63776e6d979f9e7f",
+    "mm/userfaultfd.c": "a0d534b7951cb23f75ce5dd486e8fa9aa58714cc673f492fed22e4a4527c8382",
+    "mm/rmap.c": "f3590608969cb022cc0e38d2011d56c12e2ed8b87d535417f9cd49460fb61fca",
+    "mm/vma_modify_rust.rs": "8768c8db03c53a20ad0e07819b236005923b1b82d1a8d5893f05fe92feaa6b10",
+    "mm/vma_modify_impl.h": "0989a5bdd3ba3c8fe51834090170d2860d610d4414fbce195e06b03fa552a36f",
+    "mm/copy_vma_impl.h": "79b37a878340e22f5ff7bf62379788c0853dceba957e22b769ec8c2e71a35878",
+    "tools/testing/vma/vma.c": "1e6b839a701de0992de5c324bc7b208115b023b110e40a844c9a07e12d21af8c",
+    "tools/testing/selftests/mm/merge.c": "1440e2a03a5762b99cf1b8eadf5142f09edce03f97fbf79a4ce8d66b8d027fe9",
+    "rusix/experiments/vma-modify/README.md": "99fff2acaf496414b63f3c23c391113169d5e94be75c7bcf2456acfbf4f13571",
+    "rusix/docs/adr/0002.md": "8a0e81ee2ac21f4989659916d621b83b523b1901b2a59e73ff898ea8a2cff088",
+    "rusix/PROGRESS.md": "1d542a874c34cb715ec0d70d5ae20b1c5eb10f7ecb51f5be0827d67cd456aa54"
+  }
+}

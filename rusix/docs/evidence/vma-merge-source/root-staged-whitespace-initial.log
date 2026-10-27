@@ -1,0 +1,2 @@
+git diff --cached --check exited 2
+mm/vma_merge_impl.h:218: new blank line at EOF.

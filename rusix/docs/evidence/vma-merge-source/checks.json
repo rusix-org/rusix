@@ -1,0 +1,34 @@
+[
+  {
+    "argv": [
+      "rustfmt",
+      "--check",
+      "--edition",
+      "2021",
+      "mm/vma_merge_rust.rs"
+    ],
+    "cwd": "/home/aaron/code/rusix/linux-mm-vma-merge",
+    "exit": 0
+  },
+  {
+    "argv": [
+      "git",
+      "diff",
+      "--check"
+    ],
+    "cwd": "/home/aaron/code/rusix/linux-mm-vma-merge",
+    "exit": 0
+  },
+  {
+    "argv": [
+      "perl",
+      "scripts/checkpatch.pl",
+      "--no-tree",
+      "--file",
+      "mm/vma_merge.h",
+      "mm/vma_merge_impl.h"
+    ],
+    "cwd": "/home/aaron/code/rusix/linux-mm-vma-merge",
+    "exit": 0
+  }
+]

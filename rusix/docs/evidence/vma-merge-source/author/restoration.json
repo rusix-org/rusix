@@ -1,0 +1,25 @@
+{
+  "status": "PASS",
+  "source": "f70b5bc41e8f31e93dd4fb04e4559dced57de0c0",
+  "restored_mm_vma_sha256": "2d551b10a78e5a79b4b0418f13c0ccdad16e1f71c160f6a7dd3e45915bfff410",
+  "exact_functions": {
+    "vma_is_fork_child": "ce852d998dddc123957cc7104f00f49abdd234e91d637806c3254594e89e5395",
+    "is_mergeable_vma": "5e5ad37b9ab68a61d0aa942e4d371999bea9c7952c30d57fab43a482017ba903",
+    "is_mergeable_anon_vma": "00be8a723b0c37c685b64f99b0ed5ce09042dd5dee46950d72655379c7fd684d",
+    "can_vma_merge_before": "9752f923ed5411ce6731216db8a9ee8d6bbcb0802d9c9d2024b05fc436ab2ccd",
+    "can_vma_merge_after": "1fb3ed469edb4c6c2c0ac1370e39c5b7cd72a9927ac97eac3f4e53d6bd20e636",
+    "can_vma_merge_left": "f7af785d5791c5e5184175db4fee26ec053608527a4e621c9172d59361edc0fc",
+    "can_vma_merge_right": "3bac069c7537b004ae140c9f5e6a8d83953661f729cdba185168ab22acbb3c2d",
+    "dup_anon_vma": "9358815eb8ec49e752a1ee57490396fd10b702a5f27208553838e01f43a87f25",
+    "vmg_adjust_set_range": "f1910099983cc58eee7c0684fb49c7b90cf3f524bc5a7db62b98152cc40147af",
+    "commit_merge": "c95b58cd70702126e7c29d2fc271ac0eb15e6869bd53aebd01abe9044708d267",
+    "can_merge_remove_vma": "0280b4f93a84f81e4590063909fd2866e6be2eaad6668aca995029f9dd7109f3",
+    "vma_merge_existing_range": "7b89536dd35ea973e12bd38b9f9c830865c05152b39b5ab29d34d239e8152689",
+    "vma_merge_new_range": "0480ec0f9776b544672ccd9ddee082451bb144e43b7a1a5edf812ef6486abb6d",
+    "vma_merge_copied_range": "0d72b53595744ea71ae23e34d99fbb2f64ae9546c7d8902b3948c7de413beda3",
+    "vma_expand": "5e4889f2d22241b43a6861d9eae65d5f94b0df409afedfde36c0ca4548656ad6",
+    "vma_shrink": "5e88204daca442d32b2cf56a3667ba6a834a3b9dc8e3e06e1b3dc373a9bc0c78",
+    "vma_merge_extend": "7936990027981b71bbc2218f9003c099a0a1ee965a4800c208d47d33f5839d37"
+  },
+  "scope": "textual restoration only; no preprocessing or compilation"
+}

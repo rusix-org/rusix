@@ -2329,6 +2329,17 @@ config RUSIX_VMA_MODIFY_RUST
 	  Inherits the builtin x86_64 MM restrictions. Original C bodies
 	  remain byte-preserved when disabled; no behavior change is intended.
 
+config RUSIX_VMA_MERGE_RUST
+	bool "Rusix Rust VMA merge, expand and shrink policy"
+	depends on RUSIX_VMA_MODIFY_RUST && RUST && MMU
+	default n
+	help
+	  Select complete Rust merge eligibility, existing/new/copied range
+	  transactions and expansion/shrink policy. Inherits the builtin x86_64
+	  MM restrictions. Canonical native contexts and maple/rmap/locking
+	  primitives remain transitional dependencies. Original C policies are
+	  retained when disabled. This is a dependent, unverified candidate.
+
 config RUSIX_EXIT_MMAP_TEST
 	bool "Rusix native mapping teardown test fixture"
 	depends on KUNIT=y && RUST && RUSIX_VMA_LIFECYCLE_RUST

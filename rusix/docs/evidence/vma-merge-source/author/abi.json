@@ -1,0 +1,1154 @@
+{
+  "new": [
+    [
+      "mm",
+      "rusix_merge_mm",
+      "struct mm_struct *",
+      [
+        [
+          "void *",
+          "g"
+        ]
+      ],
+      "return ((struct vma_merge_struct *)g)->mm;"
+    ],
+    [
+      "prev",
+      "rusix_merge_prev",
+      "struct vm_area_struct *",
+      [
+        [
+          "void *",
+          "g"
+        ]
+      ],
+      "return ((struct vma_merge_struct *)g)->prev;"
+    ],
+    [
+      "set_middle",
+      "rusix_merge_set_middle",
+      "void",
+      [
+        [
+          "void *",
+          "g"
+        ],
+        [
+          "struct vm_area_struct *",
+          "value"
+        ]
+      ],
+      "((struct vma_merge_struct *)g)->middle = value;"
+    ],
+    [
+      "set_next",
+      "rusix_merge_set_next",
+      "void",
+      [
+        [
+          "void *",
+          "g"
+        ],
+        [
+          "struct vm_area_struct *",
+          "value"
+        ]
+      ],
+      "((struct vma_merge_struct *)g)->next = value;"
+    ],
+    [
+      "target",
+      "rusix_merge_target",
+      "struct vm_area_struct *",
+      [
+        [
+          "void *",
+          "g"
+        ]
+      ],
+      "return ((struct vma_merge_struct *)g)->target;"
+    ],
+    [
+      "set_target",
+      "rusix_merge_set_target",
+      "void",
+      [
+        [
+          "void *",
+          "g"
+        ],
+        [
+          "struct vm_area_struct *",
+          "value"
+        ]
+      ],
+      "((struct vma_merge_struct *)g)->target = value;"
+    ],
+    [
+      "copied_from",
+      "rusix_merge_copied_from",
+      "struct vm_area_struct *",
+      [
+        [
+          "void *",
+          "g"
+        ]
+      ],
+      "return ((struct vma_merge_struct *)g)->copied_from;"
+    ],
+    [
+      "set_copied_from",
+      "rusix_merge_set_copied_from",
+      "void",
+      [
+        [
+          "void *",
+          "g"
+        ],
+        [
+          "struct vm_area_struct *",
+          "value"
+        ]
+      ],
+      "((struct vma_merge_struct *)g)->copied_from = value;"
+    ],
+    [
+      "set_start",
+      "rusix_merge_set_start",
+      "void",
+      [
+        [
+          "void *",
+          "g"
+        ],
+        [
+          "unsigned long",
+          "value"
+        ]
+      ],
+      "((struct vma_merge_struct *)g)->start = value;"
+    ],
+    [
+      "set_end",
+      "rusix_merge_set_end",
+      "void",
+      [
+        [
+          "void *",
+          "g"
+        ],
+        [
+          "unsigned long",
+          "value"
+        ]
+      ],
+      "((struct vma_merge_struct *)g)->end = value;"
+    ],
+    [
+      "pgoff",
+      "rusix_merge_pgoff",
+      "pgoff_t",
+      [
+        [
+          "void *",
+          "g"
+        ]
+      ],
+      "return ((struct vma_merge_struct *)g)->pgoff;"
+    ],
+    [
+      "set_pgoff",
+      "rusix_merge_set_pgoff",
+      "void",
+      [
+        [
+          "void *",
+          "g"
+        ],
+        [
+          "pgoff_t",
+          "value"
+        ]
+      ],
+      "((struct vma_merge_struct *)g)->pgoff = value;"
+    ],
+    [
+      "vm_flags",
+      "rusix_merge_vm_flags",
+      "vm_flags_t",
+      [
+        [
+          "void *",
+          "g"
+        ]
+      ],
+      "return ((struct vma_merge_struct *)g)->vm_flags;"
+    ],
+    [
+      "anon_vma",
+      "rusix_merge_anon_vma",
+      "struct anon_vma *",
+      [
+        [
+          "void *",
+          "g"
+        ]
+      ],
+      "return ((struct vma_merge_struct *)g)->anon_vma;"
+    ],
+    [
+      "file",
+      "rusix_merge_file",
+      "struct file *",
+      [
+        [
+          "void *",
+          "g"
+        ]
+      ],
+      "return ((struct vma_merge_struct *)g)->file;"
+    ],
+    [
+      "just_expand",
+      "rusix_merge_just_expand",
+      "bool",
+      [
+        [
+          "void *",
+          "g"
+        ]
+      ],
+      "return ((struct vma_merge_struct *)g)->just_expand;"
+    ],
+    [
+      "set_adjust_middle_start",
+      "rusix_merge_set_adjust_middle_start",
+      "void",
+      [
+        [
+          "void *",
+          "g"
+        ],
+        [
+          "bool",
+          "value"
+        ]
+      ],
+      "((struct vma_merge_struct *)g)->__adjust_middle_start = value;"
+    ],
+    [
+      "set_adjust_next_start",
+      "rusix_merge_set_adjust_next_start",
+      "void",
+      [
+        [
+          "void *",
+          "g"
+        ],
+        [
+          "bool",
+          "value"
+        ]
+      ],
+      "((struct vma_merge_struct *)g)->__adjust_next_start = value;"
+    ],
+    [
+      "set_remove_middle",
+      "rusix_merge_set_remove_middle",
+      "void",
+      [
+        [
+          "void *",
+          "g"
+        ],
+        [
+          "bool",
+          "value"
+        ]
+      ],
+      "((struct vma_merge_struct *)g)->__remove_middle = value;"
+    ],
+    [
+      "set_remove_next",
+      "rusix_merge_set_remove_next",
+      "void",
+      [
+        [
+          "void *",
+          "g"
+        ],
+        [
+          "bool",
+          "value"
+        ]
+      ],
+      "((struct vma_merge_struct *)g)->__remove_next = value;"
+    ],
+    [
+      "set_state",
+      "rusix_merge_set_state",
+      "void",
+      [
+        [
+          "void *",
+          "g"
+        ],
+        [
+          "int",
+          "state"
+        ]
+      ],
+      "((struct vma_merge_struct *)g)->state = state;"
+    ],
+    [
+      "singular",
+      "rusix_merge_singular",
+      "bool",
+      [
+        [
+          "struct vm_area_struct *",
+          "v"
+        ]
+      ],
+      "return list_is_singular(&v->anon_vma_chain);"
+    ],
+    [
+      "policy_equal",
+      "rusix_merge_policy_equal",
+      "bool",
+      [
+        [
+          "void *",
+          "g"
+        ],
+        [
+          "struct vm_area_struct *",
+          "v"
+        ]
+      ],
+      "return mpol_equal(((struct vma_merge_struct *)g)->policy, vma_policy(v));"
+    ],
+    [
+      "uffd_equal",
+      "rusix_merge_uffd_equal",
+      "bool",
+      [
+        [
+          "void *",
+          "g"
+        ],
+        [
+          "struct vm_area_struct *",
+          "v"
+        ]
+      ],
+      "return is_mergeable_vm_userfaultfd_ctx(v, ((struct vma_merge_struct *)g)->uffd_ctx);"
+    ],
+    [
+      "name_equal",
+      "rusix_merge_name_equal",
+      "bool",
+      [
+        [
+          "void *",
+          "g"
+        ],
+        [
+          "struct vm_area_struct *",
+          "v"
+        ]
+      ],
+      "return anon_vma_name_eq(anon_vma_name(v), ((struct vma_merge_struct *)g)->anon_name);"
+    ],
+    [
+      "set_anon",
+      "rusix_merge_set_anon",
+      "void",
+      [
+        [
+          "struct vm_area_struct *",
+          "v"
+        ],
+        [
+          "struct anon_vma *",
+          "anon"
+        ]
+      ],
+      "v->anon_vma = anon;"
+    ],
+    [
+      "assert_mm",
+      "rusix_merge_assert_mm",
+      "void",
+      [
+        [
+          "struct mm_struct *",
+          "mm"
+        ]
+      ],
+      "mmap_assert_write_locked(mm);"
+    ],
+    [
+      "assert_vma",
+      "rusix_merge_assert_vma",
+      "void",
+      [
+        [
+          "struct vm_area_struct *",
+          "v"
+        ]
+      ],
+      "vma_assert_write_locked(v);"
+    ],
+    [
+      "warn",
+      "rusix_merge_warn",
+      "void",
+      [
+        [
+          "bool",
+          "condition"
+        ]
+      ],
+      "VM_WARN_ON(condition);"
+    ],
+    [
+      "warn_range",
+      "rusix_merge_warn_range",
+      "void",
+      [
+        [
+          "bool",
+          "condition"
+        ]
+      ],
+      "WARN_ON(condition);"
+    ],
+    [
+      "warn_vmg",
+      "rusix_merge_warn_vmg",
+      "void",
+      [
+        [
+          "bool",
+          "condition"
+        ],
+        [
+          "void *",
+          "g"
+        ]
+      ],
+      "VM_WARN_ON_VMG(condition, (struct vma_merge_struct *)g);"
+    ],
+    [
+      "iter_addr",
+      "rusix_merge_iter_addr",
+      "unsigned long",
+      [
+        [
+          "void *",
+          "i"
+        ]
+      ],
+      "return vma_iter_addr((struct vma_iterator *)i);"
+    ],
+    [
+      "iter_next_range",
+      "rusix_merge_iter_next_range",
+      "struct vm_area_struct *",
+      [
+        [
+          "void *",
+          "i"
+        ]
+      ],
+      "return vma_iter_next_range((struct vma_iterator *)i);"
+    ],
+    [
+      "iter_prev_range",
+      "rusix_merge_iter_prev_range",
+      "void",
+      [
+        [
+          "void *",
+          "i"
+        ]
+      ],
+      "vma_iter_prev_range((struct vma_iterator *)i);"
+    ],
+    [
+      "iter_set",
+      "rusix_merge_iter_set",
+      "void",
+      [
+        [
+          "void *",
+          "i"
+        ],
+        [
+          "unsigned long",
+          "start"
+        ]
+      ],
+      "vma_iter_set((struct vma_iterator *)i, start);"
+    ],
+    [
+      "iter_load",
+      "rusix_merge_iter_load",
+      "void",
+      [
+        [
+          "void *",
+          "i"
+        ]
+      ],
+      "vma_iter_load((struct vma_iterator *)i);"
+    ],
+    [
+      "iter_store",
+      "rusix_merge_iter_store",
+      "void",
+      [
+        [
+          "void *",
+          "i"
+        ],
+        [
+          "struct vm_area_struct *",
+          "v"
+        ]
+      ],
+      "vma_iter_store_overwrite((struct vma_iterator *)i, v);"
+    ],
+    [
+      "iter_clear",
+      "rusix_merge_iter_clear",
+      "void",
+      [
+        [
+          "void *",
+          "i"
+        ]
+      ],
+      "vma_iter_clear((struct vma_iterator *)i);"
+    ],
+    [
+      "iter_next_rewind",
+      "rusix_merge_iter_next_rewind",
+      "struct vm_area_struct *",
+      [
+        [
+          "void *",
+          "i"
+        ]
+      ],
+      "return vma_iter_next_rewind((struct vma_iterator *)i, NULL);"
+    ],
+    [
+      "adjust_huge",
+      "rusix_merge_adjust_huge",
+      "void",
+      [
+        [
+          "struct vm_area_struct *",
+          "v"
+        ],
+        [
+          "unsigned long",
+          "start"
+        ],
+        [
+          "unsigned long",
+          "end"
+        ],
+        [
+          "struct vm_area_struct *",
+          "adjust"
+        ]
+      ],
+      "vma_adjust_trans_huge(v, start, end, adjust);"
+    ],
+    [
+      "flags_set",
+      "rusix_merge_flags_set",
+      "void",
+      [
+        [
+          "struct vm_area_struct *",
+          "v"
+        ],
+        [
+          "vm_flags_t",
+          "flags"
+        ]
+      ],
+      "vm_flags_set(v, flags);"
+    ],
+    [
+      "khugepaged",
+      "rusix_merge_khugepaged",
+      "void",
+      [
+        [
+          "struct vm_area_struct *",
+          "v"
+        ],
+        [
+          "vm_flags_t",
+          "flags"
+        ]
+      ],
+      "khugepaged_enter_vma(v, flags);"
+    ]
+  ],
+  "reused": [
+    [
+      "vmi",
+      "rusix_modify_vmi",
+      "void *",
+      [
+        [
+          "void *",
+          "g"
+        ]
+      ],
+      null
+    ],
+    [
+      "middle",
+      "rusix_modify_middle",
+      "struct vm_area_struct *",
+      [
+        [
+          "void *",
+          "g"
+        ]
+      ],
+      null
+    ],
+    [
+      "next",
+      "rusix_modify_next",
+      "struct vm_area_struct *",
+      [
+        [
+          "void *",
+          "g"
+        ]
+      ],
+      null
+    ],
+    [
+      "start",
+      "rusix_modify_start",
+      "unsigned long",
+      [
+        [
+          "void *",
+          "g"
+        ]
+      ],
+      null
+    ],
+    [
+      "end",
+      "rusix_modify_end",
+      "unsigned long",
+      [
+        [
+          "void *",
+          "g"
+        ]
+      ],
+      null
+    ],
+    [
+      "give_up_on_oom",
+      "rusix_modify_give_up_on_oom",
+      "bool",
+      [
+        [
+          "void *",
+          "g"
+        ]
+      ],
+      null
+    ],
+    [
+      "adjust_middle_start",
+      "rusix_modify_adjust_middle_start",
+      "bool",
+      [
+        [
+          "void *",
+          "g"
+        ]
+      ],
+      null
+    ],
+    [
+      "adjust_next_start",
+      "rusix_modify_adjust_next_start",
+      "bool",
+      [
+        [
+          "void *",
+          "g"
+        ]
+      ],
+      null
+    ],
+    [
+      "remove_middle",
+      "rusix_modify_remove_middle",
+      "bool",
+      [
+        [
+          "void *",
+          "g"
+        ]
+      ],
+      null
+    ],
+    [
+      "remove_next",
+      "rusix_modify_remove_next",
+      "bool",
+      [
+        [
+          "void *",
+          "g"
+        ]
+      ],
+      null
+    ],
+    [
+      "vstart",
+      "rusix_copy_start",
+      "unsigned long",
+      [
+        [
+          "struct vm_area_struct *",
+          "v"
+        ]
+      ],
+      null
+    ],
+    [
+      "vend",
+      "rusix_copy_end",
+      "unsigned long",
+      [
+        [
+          "struct vm_area_struct *",
+          "v"
+        ]
+      ],
+      null
+    ],
+    [
+      "vpgoff",
+      "rusix_copy_pgoff",
+      "pgoff_t",
+      [
+        [
+          "struct vm_area_struct *",
+          "v"
+        ]
+      ],
+      null
+    ],
+    [
+      "anon",
+      "rusix_copy_anon",
+      "struct anon_vma *",
+      [
+        [
+          "struct vm_area_struct *",
+          "v"
+        ]
+      ],
+      null
+    ],
+    [
+      "flags",
+      "rusix_modify_flags",
+      "vm_flags_t",
+      [
+        [
+          "struct vm_area_struct *",
+          "v"
+        ]
+      ],
+      null
+    ],
+    [
+      "vfile",
+      "rusix_remove_file",
+      "struct file *",
+      [
+        [
+          "struct vm_area_struct *",
+          "v"
+        ]
+      ],
+      null
+    ],
+    [
+      "ops",
+      "rusix_remove_ops",
+      "const struct vm_operations_struct *",
+      [
+        [
+          "struct vm_area_struct *",
+          "v"
+        ]
+      ],
+      null
+    ],
+    [
+      "clone_anon",
+      "rusix_copy_clone_anon",
+      "int",
+      [
+        [
+          "struct vm_area_struct *",
+          "v"
+        ],
+        [
+          "struct vm_area_struct *",
+          "src"
+        ]
+      ],
+      null
+    ],
+    [
+      "unlink_anon",
+      "rusix_copy_unlink_anon",
+      "void",
+      [
+        [
+          "struct vm_area_struct *",
+          "v"
+        ]
+      ],
+      null
+    ],
+    [
+      "set_range",
+      "rusix_copy_set_range",
+      "void",
+      [
+        [
+          "struct vm_area_struct *",
+          "v"
+        ],
+        [
+          "unsigned long",
+          "start"
+        ],
+        [
+          "unsigned long",
+          "end"
+        ],
+        [
+          "pgoff_t",
+          "offset"
+        ]
+      ],
+      null
+    ],
+    [
+      "config",
+      "rusix_link_config",
+      "void",
+      [
+        [
+          "void *",
+          "i"
+        ],
+        [
+          "unsigned long",
+          "start"
+        ],
+        [
+          "unsigned long",
+          "end"
+        ]
+      ],
+      null
+    ],
+    [
+      "prealloc",
+      "rusix_link_prealloc",
+      "int",
+      [
+        [
+          "void *",
+          "i"
+        ],
+        [
+          "struct vm_area_struct *",
+          "v"
+        ]
+      ],
+      null
+    ],
+    [
+      "start_write",
+      "rusix_link_start_write",
+      "void",
+      [
+        [
+          "struct vm_area_struct *",
+          "v"
+        ]
+      ],
+      null
+    ],
+    [
+      "prev_iter",
+      "rusix_modify_prev",
+      "void",
+      [
+        [
+          "void *",
+          "i"
+        ]
+      ],
+      null
+    ],
+    [
+      "vmm",
+      "rusix_modify_mm",
+      "struct mm_struct *",
+      [
+        [
+          "struct vm_area_struct *",
+          "v"
+        ]
+      ],
+      null
+    ],
+    [
+      "validate",
+      "rusix_link_validate",
+      "void",
+      [
+        [
+          "struct mm_struct *",
+          "mm"
+        ]
+      ],
+      null
+    ],
+    [
+      "init_prep",
+      "rusix_init_multi_vma_prep",
+      "void",
+      [
+        [
+          "void *",
+          "prep"
+        ],
+        [
+          "struct vm_area_struct *",
+          "v"
+        ],
+        [
+          "void *",
+          "g"
+        ]
+      ],
+      null
+    ],
+    [
+      "init_single_prep",
+      "rusix_init_vma_prep",
+      "void",
+      [
+        [
+          "void *",
+          "prep"
+        ],
+        [
+          "struct vm_area_struct *",
+          "v"
+        ]
+      ],
+      null
+    ],
+    [
+      "prepare",
+      "rusix_vma_prepare",
+      "void",
+      [
+        [
+          "void *",
+          "prep"
+        ]
+      ],
+      null
+    ],
+    [
+      "complete",
+      "rusix_vma_complete",
+      "void",
+      [
+        [
+          "void *",
+          "prep"
+        ],
+        [
+          "void *",
+          "i"
+        ],
+        [
+          "struct mm_struct *",
+          "mm"
+        ]
+      ],
+      null
+    ],
+    [
+      "close",
+      "rusix_remove_close",
+      "CLOSE",
+      [
+        [
+          "const struct vm_operations_struct *",
+          "ops"
+        ]
+      ],
+      null
+    ]
+  ],
+  "constants": {
+    "sticky": [
+      "vm_flags_t",
+      "VM_STICKY"
+    ],
+    "special": [
+      "vm_flags_t",
+      "VM_SPECIAL"
+    ],
+    "ignore": [
+      "vm_flags_t",
+      "VM_IGNORE_MERGE"
+    ],
+    "nomerge": [
+      "int",
+      "VMA_MERGE_NOMERGE"
+    ],
+    "success": [
+      "int",
+      "VMA_MERGE_SUCCESS"
+    ],
+    "nomem": [
+      "int",
+      "VMA_MERGE_ERROR_NOMEM"
+    ]
+  },
+  "exports": [
+    [
+      "rusix_merge_existing",
+      "struct vm_area_struct *",
+      [
+        [
+          "void *",
+          "g"
+        ],
+        [
+          "void *",
+          "prep"
+        ]
+      ]
+    ],
+    [
+      "rusix_merge_new",
+      "struct vm_area_struct *",
+      [
+        [
+          "void *",
+          "g"
+        ],
+        [
+          "void *",
+          "prep"
+        ]
+      ]
+    ],
+    [
+      "rusix_merge_copied",
+      "struct vm_area_struct *",
+      [
+        [
+          "void *",
+          "g"
+        ],
+        [
+          "void *",
+          "prep"
+        ]
+      ]
+    ],
+    [
+      "rusix_merge_expand",
+      "int",
+      [
+        [
+          "void *",
+          "g"
+        ],
+        [
+          "void *",
+          "prep"
+        ]
+      ]
+    ],
+    [
+      "rusix_merge_extend",
+      "struct vm_area_struct *",
+      [
+        [
+          "void *",
+          "g"
+        ],
+        [
+          "void *",
+          "prep"
+        ]
+      ]
+    ],
+    [
+      "rusix_merge_shrink",
+      "int",
+      [
+        [
+          "void *",
+          "i"
+        ],
+        [
+          "struct vm_area_struct *",
+          "v"
+        ],
+        [
+          "unsigned long",
+          "start"
+        ],
+        [
+          "unsigned long",
+          "end"
+        ],
+        [
+          "pgoff_t",
+          "pgoff"
+        ],
+        [
+          "void *",
+          "prep"
+        ]
+      ]
+    ]
+  ]
+}

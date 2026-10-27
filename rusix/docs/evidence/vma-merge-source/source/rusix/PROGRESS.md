@@ -1,0 +1,419 @@
+# rusix progress
+
+VMA merge/expand/shrink now has a dependent, default-off Rust source candidate:
+seventeen complete policies, including eligibility, anon duplication, commit and
+rollback; six native entry wrappers retain canonical stack storage. Original C
+bodies are byte-preserved. Existing Rust prepare/complete transactions are reused.
+Textual restoration and Rust formatting pass; configuration, compilation, actual
+linked selection and VM parity remain unverified, including the modification
+prerequisite. [Contract and exact native-operation inventory](experiments/vma-merge/README.md).
+Independent source/unsafe review passes; [source evidence](docs/evidence/vma-merge-source/manifest.json)
+binds the candidate and restoration checks. Next: explicit verification tooling and
+paired gates after ancestor acceptance; fault fixtures require separate review.
+
+The real VMA-modification runtime pipeline now implements two boots per kernel:
+nine existing ordinary VMA cases and five unchanged native merge filters, with
+actual modification selection reinspection before each boot. Explicit local CI
+routing preserves historical runner profiles. Native compilation records seven
+baseline identities, 187 header dependencies, packages, static link/Rust library
+inputs and non-executable host artifacts. Runtime kernel/ELF/VM verification has
+not been performed; ancestor acceptance and reviewed launch remain prerequisites.
+All 40 host suites (433 cases) and shell syntax checks pass on 4,150 stable
+inputs. [Runtime tooling evidence](docs/evidence/vma-modify-runtime-tooling/manifest.json)
+records the current code and host scope; it contains no guest result.
+
+VMA range modification and splitting now have a default-off Rust source
+translation, including the shared prepare/complete protocol used by C merge/shrink
+callers: eleven native policies, with byte-preserved C alternatives. The source
+restoration, formatting and independent source review pass; configuration,
+compiled selection and paired runtime verification are pending. This adds no
+runtime-parity claim. [Contract and remaining C](experiments/vma-modify/README.md).
+
+The guest fixture binds seven unchanged baseline inputs and explicitly selects
+five native `merge.c` mprotect tests. Its guarded Rust PID1 and strict harness
+parser have source review; sixteen synthetic parser cases pass. Final formatted
+fixture compilation passes in pinned run `002`, with pre-format run `001` retained.
+No guest binary was executed; candidate kernel and VM verification remain pending.
+[Fixture contract](tests/vma-modify/README.md),
+[source evidence](docs/evidence/vma-modify-source/manifest.json),
+[compile evidence](docs/evidence/vma-modify-fixtures/manifest.json).
+
+The verification tooling now has explicit `vma-modify-v1` source context, four
+actual compiler-unit provenance checks, nested object/archive/linked ownership
+checks and paired build-only profiles. Independent pre-fix review passed 39 host
+suites / 416 cases; after the approved teardown archive/sentinel correction,
+39 suites / 421 cases pass with 4,157 unchanged inputs. Historical verifier
+contexts remain strict, and CI still rejects the new profiles until their runtime
+runner is ready. [Tooling evidence](docs/evidence/vma-modify-tooling/manifest.json).
+The inherited correction is referenced at `13e0ddc71a57`; its retained teardown
+KUnit C ELF reinspection is separate evidence, not a VMA-modify build or VM pass.
+No production policy changed in this tooling checkpoint. Actual configuration,
+compiled selection and paired runtime gates remain pending.
+
+The inherited lifecycle verifier now accepts the observed private-cache `.0`
+suffix and proves the canonical refcount constant's four-byte storage/value.
+This carries the reviewed fix from `e0632d2729` without changing kernel code.
+All 36 host suites (373 cases) pass on unchanged inputs.
+[Regression evidence](docs/evidence/lifecycle-verifier-fix/manifest.json) references
+the original fix proof; candidate kernel/guest verification remains pending.
+
+At `344b3b272c4e`, both ordinary copy-VMA profiles pass pinned-image Kconfig
+resolution. Every requested setting survives; the pair differs only by
+`CONFIG_RUSIX_COPY_VMA_RUST`, with MEMFD_CREATE enabled and KUnit/native kernel
+fixtures disabled. [Configuration evidence](docs/evidence/copy-vma-config/manifest.json)
+binds the exact archived source, modes, before/after inputs, tools, commands and
+1 CPU/1 GiB container limits. Prior evidence is referenced rather than copied;
+generated dependencies and host binaries remain raw on disk with exhaustive
+hashes. This verifies configuration only, not candidate kernel compilation,
+linked Rust ownership or the two planned guest boots per side.
+
+**Rust BRD passes x86_64 block and ordinary-userspace ext4 contracts;
+all fourteen completion entry points and all ten swait.c entry points have verified
+opt-in Rust implementations; twenty-three generic wait and seventeen bit-wait entries pass parity, with the shared wait table owned by Rust.** Most of the kernel remains C. Linux 6.18.58
+(`2926d88bb7fc`) is the behavioral baseline. Hosted CI remains disabled;
+verification runs locally. No subsystem divergence point is declared.
+
+VMA copy/publication is a new source-only candidate on `rusix/mm-copy-vma`.
+Paired local profile inputs and build/local-CI routing are implemented; their only
+requested difference is the copy selector, with Rust teardown enabled in both.
+Shell syntax passes; review caught and fixed a premature configuration check.
+Three routing regressions now cover fresh-build ordering and the sole selector
+axis. The initial 35-suite host run passed on 120 stable inputs, before these
+review fixes. The final host rerun passes all 36 suites on 121 stable inputs,
+including shallow-checkout portability fixes. Resolved Kconfig now passes as
+recorded above; actual candidate kernel builds remain pending. [Host evidence](docs/evidence/copy-vma-tooling/manifest.json)
+retains both runs and the independently reviewed final source.
+The runner has passed source review for two bounded boots: nine ordinary consumers and
+five unchanged upstream DONTUNMAP cases. Hosted Actions remain disabled.
+Rust owns complete copy/merge selection, staged rollback, publication and both
+file-link lock contexts; native C contexts and typed primitives retain layout
+and subsystem operations. Original C bodies are preserved. Formatting and exact
+source restoration pass; compilation, emitted selection and paired runtime/
+failure evidence are pending. [Contract](experiments/mm-copy-vma/README.md).
+Independent source review and root rehash/restoration checks are retained in
+[source evidence](docs/evidence/mm-copy-vma-source/manifest.json).
+The unchanged upstream five-case DONTUNMAP probe and its Rust guest supervisor
+compile as static x86-64 binaries; 13 host parser tests pass. Neither guest
+binary has been executed. Independent review of PID retention, cleanup deadlines
+and strict upstream TAP acceptance found no blocker; its exact compile-evidence
+manifest is bound in [fixture review](docs/evidence/mm-copy-vma-source/fixture-review.json). [Fixture evidence](docs/evidence/copy-vma-fixtures/manifest.json).
+
+Mapping teardown is a source-only candidate on `rusix/mm-exit-mmap`: Rust now
+owns complete `exit_mmap`, `remove_vma` and common close policy, with native C
+primitives retaining shared accesses and page-table/TLB/resource operations.
+The original C policies are preserved. Formatting and exact source restoration
+are checked; compilation, actual linked-selection proofs and paired
+success/failure/lifetime gates remain pending. Exact source-restoration delegation,
+four-unit preprocessing and selection tooling are implemented; all 308 cases
+across 29 host suites pass with stable input hashes. The initial host-fixture
+setup failure and exact tested snapshots are retained in
+[tooling evidence](docs/evidence/mm-exit-mmap-tooling/manifest.json). This covers
+host tooling, not kernel execution. The separate native teardown fixture now
+has three source-reviewed cases: empty retained-MM teardown, close-before-file
+release, and real MAP_FIXED dummy-hook reset. Mapped modes allow native lazy-TLB
+references while retaining exact users/tree/callback invariants; timeout paths
+retain necessary resources. Seven inventory host regressions pass. Its isolated
+three/combined 79 requirements remain uncompiled and unexecuted; leading-sentinel
+and attributable allocation-failure coverage are still missing.
+Separate KUnit profile routing and archive/registration-pointer checks now pass
+331 cases across 32 host suites on 164 stable inputs.
+[Routing evidence](docs/evidence/mm-exit-mmap-kunit-tooling/manifest.json) retains
+the earlier 329-case snapshot and helper-extraction failure, plus the successful
+pinned LLVM19 check of historical archive bytes. Resolved Kconfig and actual
+fixture linkage/runtime remain pending.
+[Boundary and remaining work](experiments/mm-exit-mmap/README.md).
+
+At `8ec785568045`, pinned-image Kconfig resolution passes for all four ordinary
+and KUnit teardown profiles, retaining every requested setting. Each C/Rust
+pair differs only by the teardown selector; ordinary/KUnit differences are
+exactly the six declared test settings. Source archive, extracted bytes/modes,
+commands, container limits and before/after inputs were independently checked.
+[Configuration evidence](docs/evidence/mm-exit-mmap-config/manifest.json) records
+host configuration utilities only, not candidate kernel compilation, emitted
+fixture ownership or VM results.
+
+VMA lifecycle is an opt-in candidate on `rusix/vma-lifecycle`: Rust owns the
+cache pointer and fresh/dup/free policy, including PFN-reference rollback.
+Canonical C primitives retain shared-field and resource operations. Production
+and nine-case guest source reviews pass; the kernel candidate remains uncompiled
+and unverified. At `620b34e0c918`, the guest fixtures compiled cleanly as static
+x86-64 binaries; ELF and emitted shared-child inspection passed. They were never
+executed. [Fixture evidence](docs/evidence/vma-lifecycle-fixtures/manifest.json).
+Both local VMA profiles and their preprocessing/linked-selection gates are
+implemented. All 277 cases across 27 host scripts pass after correcting fresh
+configuration validation order. [Host evidence](docs/evidence/vma-lifecycle-host/manifest.json).
+Pinned Kconfig resolution at `7b07b88aa88a` retains every requested setting;
+the resolved pair differs only by the VMA selector. [Configuration evidence](docs/evidence/vma-lifecycle-config/manifest.json)
+retains the initial scratch import failure and successful retry.
+The pristine Linux `2926d88bb7fc` userspace VMA harness passes all 16 upstream
+cases with default ASan/UBSan settings and no diagnostics. All 7,748 source
+inputs and generated artifacts were rechecked; this is C harness evidence, not
+Rust or kernel runtime coverage. [Baseline evidence](docs/evidence/vma-upstream-baseline/manifest.json).
+Next: paired selection and ordinary-consumer gates, followed by attributable
+failures and lifetime/concurrency checks. [Contract](experiments/vma-lifecycle/README.md).
+
+Public development lives on `rusix/main`. [ADR 0002](docs/adr/0002.md) owns the
+target; [Phase 1](docs/PHASE1.md) owns delivery gates.
+
+| Check | Verified result |
+| --- | --- |
+| LTS provenance/math | Signed tag verified; all 24 required math cases pass on q35, zero skips. [Math](docs/evidence/math-q35/manifest.json), [provenance](docs/evidence/lts-baseline/manifest.json). |
+| Storage parity | At `9d1c1ca5dd`, C/Rust BRD each pass block6, ext4 userspace6, six parameter variants and partition5. Four identical guest fixtures; configs differ only by BRD selection. [Evidence](docs/evidence/brd-q35/manifest.json). |
+| Core and wait-table ownership | At `ae62f42b6f58`, C/Rust debug and plain pairs each pass 76 combined (67 core + nine BRD), then 67 isolated core on q35/KVM SMP2. All 14 completion, 10 swait, 23 generic wait and 17 bit-wait definitions link exclusively. Table placement/alignment and init lifetime are checked. Zero skips or compiler/objtool diagnostics. [Debug](docs/evidence/wait-owner-debug/manifest.json), [plain](docs/evidence/wait-owner-plain/manifest.json). |
+| Ordinary-userspace integration | Same source, Rust BRD in both; only core selection differs. Both pass 29 boots: 26 approved parameter variants, block, ext4/consumers and partitions. The ext4 run covers six filesystem, four poll/epoll and two blocking eventfd/timerfd read cases. Identical fixtures; no compiler diagnostics. [Evidence](docs/evidence/wait-owner-ext4/manifest.json). |
+
+Rust implements BRD/store and bio/disk interfaces, conditional xarray insertion,
+NOIO scope, completion/swait policy and generic wait initialization, enrollment,
+prepare/finish, removal, callback traversal, WOKEN handshake, locked interruptible
+iterations, bit-wait policy and the permanent bit/variable wait table.
+The [core migration record](experiments/completion/README.md) owns storage,
+locking/lifetime contracts, test inventory and remaining C boundaries. Selection
+remains default-off and builtin-only; known incompatible counter-access drivers
+are excluded.
+
+The declared x86_64 server selects the verified Rust core. At `ae62f42b6f58`,
+it and the derived C-core comparison each pass six ext4, four poll/epoll and two
+blocking eventfd/timerfd read cases on q35/KVM SMP2. Resolved configs differ only
+by core selection; fixtures, container and VM parameters match. Both complete
+without compiler/objtool diagnostics. [Evidence](docs/evidence/wait-owner-server/manifest.json).
+
+Same-build executable contributions for the Rust-core server: C **5,746,278
+bytes**, Rust **152,850**, assembly **45,104**, generated **28**, linker/padding
+**2,107,053**, unknown **0**; total **8,051,313**. Its C-core comparison contains
+C **5,753,409** and Rust **145,115**, total **8,050,737**, also zero unknown bytes.
+C decreases by 7,131 bytes and Rust increases by 7,735. This includes inherited
+Rust support; linked bytes are not a completion percentage. Networking is
+configured but not runtime-tested here; ext4 runs on BRD, not virtio block.
+[Local commands](ci/README.md) reproduce the target and derived comparison;
+hosted execution stays disabled.
+
+The two locked interruptible iterations now pass four dedicated-worker cases
+and the blocking userspace consumers above. A process-context watchdog preserves
+the ordinary-lock IRQ contract; sampled blocked-state evidence does not prove
+all wake races. [Migration contract](experiments/wait-locked/README.md).
+
+[ADR 0003](docs/adr/0003.md)'s selected BRD correction is verified at
+`ff6ac4a5d732`: nonpositive max_part becomes 1 and values above 256 clamp before
+rounding. The separately selected generated patched-C oracle and Rust BRD each
+pass 29 boots: 26 parameter variants, block, ext4/consumer integration and
+partitions. Identical fixtures exercise preallocated and on-demand disks,
+geometry and I/O. The same source passes 70 combined KUnit cases (nine BRD +
+61 core), then 61 isolated core cases. [Evidence](docs/evidence/brd-parameter-fix/manifest.json).
+The imported patch is an upstream proposal; acceptance/merge is unverified.
+Pristine Linux C and historical evidence remain intact.
+
+At `a39d03eb165b`, Rust also owns the three BRD parameter scalars, parameter
+records, module information and legacy setup metadata. The BRD-specific C
+adapter object and lock wrappers are unlinked. Fixed C and Rust each pass
+32 boots: 29 parameter variants (including duplicate assignments), block,
+ext4/consumer integration and partitions. Exact sysfs names/modes and numeric
+getters are checked. The same source passes 76 combined and 67 isolated core
+cases, with object and linked-kernel metadata proofs.
+[Evidence](docs/evidence/brd-parameter-owner/manifest.json).
+A separate SYSFS=n kernel retains debug/core settings, removes parameter-lock
+calls from BRD, and passes ownership checks plus the same 76/67 KUnit cases.
+[Supplemental evidence](docs/evidence/brd-parameter-owner-nosysfs/manifest.json).
+Generic parameter parsers/getters, mutexes and block/page services remain C.
+
+The [wait-table ownership record](experiments/wait-owner/README.md) covers the
+new storage boundary and six collision/constructor tests. Next verify the
+implemented RCU callback-list and sync policy translations; their development
+branches have no kernel/runtime verification yet.
+The [bit-wait record](experiments/wait-bit/README.md) and
+[generic wait record](experiments/wait/README.md) own their contracts.
+Standalone untimed bit_wait/io scheduling, stop/park, repeated latch races,
+socket/futex consumer integration and POLLFREE races remain unverified.
+Forced diagnostic failures, detached-batch races, untimed signal paths, deadline
+races and broader IRQ coverage remain open. arm64, modules, expanded fault stress
+and performance budgets remain Phase 1b. The [BRD review](docs/BRD.md) records
+the scoped lifecycle and unsafe-boundary disposition; Phase 1a has no declared
+subsystem divergence point yet.
+
+Failures are retained, including the [bit-wait FFI type mismatch](docs/evidence/wait-bit/manifest.json),
+the [wake pointer-conversion compile error](docs/evidence/wait-wake/manifest.json),
+the [plain-profile configuration refusal](docs/evidence/swait-init/manifest.json)
+(EXPERT forces DEBUG_KERNEL; corrected before compilation), [wait bringup](docs/evidence/completion-wait-initial/manifest.json),
+[status test compilation](docs/evidence/completion-status/manifest.json),
+[q35 bringup](docs/evidence/q35-bringup/manifest.json) and the initial
+[swait/ext4 fixture staging refusal](docs/evidence/swait-ext4/manifest.json).
+Raw logs/binaries remain in `linux-out/<run>`; manifests record source/config/tool
+identities and hashes. [Verification index](docs/VERIFICATION.md) preserves earlier
+milestones without attributing their results to newer source.
+
+The first ownership build at `c962147e88f1` was stopped before VM execution on a
+test-helper objtool warning. [Evidence](docs/evidence/wait-owner-initial/manifest.json)
+retains that failure. KUnit-scoped assertions and checked arithmetic removed the
+warning in all eight completed builds at `ae62f42b6f58`. Signal traps now preserve
+cancellation failure; a local probe verified exit statuses 0, 7, 143 and 130.
+
+The initial parameter-owner build at `2048c42d9096` failed before VM execution
+on a generated field name and three unnecessary-unsafe warnings. The corrected
+`a39d03eb165b` builds have no compiler/objtool diagnostics.
+[Retained failure](docs/evidence/brd-parameter-owner-initial/manifest.json).
+
+### Task construction candidate
+
+This separate branch translates the complete private `dup_task_struct` sequence
+into Rust: task/stack acquisition, staged rollback, ordered initialization and
+handoff to C `copy_process`. The original C body is preserved. Source review,
+formatting and 15 host gate scripts (166 cases) pass. The five-case userspace
+probe and Rust PID1 compile as static binaries in the pinned container; neither
+was executed. Matching C/Rust profiles, actual dispatch/linked selection proof
+and the bounded guest runner are ready for kernel verification. No candidate
+kernel has been compiled or booted. Attributable allocation-failure tests remain
+required. [Contract and remaining C boundaries](experiments/task-construction/README.md).
+
+### Address-space construction candidate
+
+This separate branch adds Rust sequencing for complete `mm_alloc` and shared
+`mm_init`, including inherited flags and six allocation rollback stages. The
+original C bodies and export placement are preserved. Root and independent
+source review, literal source reconstruction, formatting and diff checks pass.
+The source now includes matching C/Rust MM profiles (Rust task construction
+on both), strict source/preprocessor/linked-object selection gates and five
+userspace cases covering COW, parent unmap, repeated exec and MDWE inheritance.
+Independent fixture review and 40 host gate cases pass; fixture sources are
+recorded before compilation and checked again afterward. Local input hashes
+and logs are in `linux-out/mm-construction-host-001`. The MM kernel has not been compiled or booted; guest compilation is recorded below. Actual linked selection,
+paired VM behavior and attributable allocation failures remain unverified. Early boot and
+PGD/per-CPU counter observers prohibit exclusive whole-mm references.
+[Ownership contract and remaining C](experiments/mm-construction/README.md).
+
+### Address-space release candidate
+
+This separate branch translates `mmput`, `mmput_async`, their shared final-user
+sequence and `__mmdrop` into Rust. The final-user and final-storage stages remain
+distinct; asynchronous callers retain workqueue deferral and the original atomic
+barriers. Original C bodies reconstruct byte-for-byte. Root and independent
+source reviews, formatting and diff checks pass; exact inputs are recorded in
+`linux-out/mm-release-source-001`. No release kernel has been compiled or booted.
+Paired profiles and source/preprocessor/object/callback selection gates are
+implemented. Four real-MM KUnit cases cover nonfinal users, retained storage,
+atomic-context asynchronous release and fresh exec-style storage drop. Root
+and independent reviews pass; 20 host scripts (203 cases), formatting and shell
+checks pass with exact inputs in `linux-out/mm-release-tooling-host-002`.
+Required runtime gates are 80 combined, 67 core and four release cases. All
+release kernel builds and VM runs remain pending; unsupported callback relocation
+forms fail closed until reviewed against actual compiled objects.
+[Release contract and remaining C](experiments/mm-release/README.md).
+
+### Constructor verification tooling update
+
+Pinned static fixture compilation passed for all five binaries: fault init,
+controller and worker at `15c7e563fa4b`, and MM init and probe at `0fd31f0fde17`.
+`linux-out/constructor-fixtures-compile-002` records compiler commands, static
+ELF checks and source identities; the earlier compile failure remains in `001`.
+No fixture was executed and this establishes no kernel, VM or fault-calibration
+result. The reviewed archive payload/path fix from `0af2d8b944b2` is inherited
+here, including real thin/regular archive regression tests; it does not change
+constructor policy.
+
+The earlier 45/46 host run retained the construction-only gate
+rejection of release additions. A separate release gate now reconstructs all
+three migrations while preserving the strict historical constructor gate; the
+203-case run above passes.
+Logs and exact inputs: `linux-out/constructor-archive-propagation-host-001/linux-mm-release`.
+
+### Task constructor pointer-ABI diagnostic fix
+
+Historical task source `0af2d8b944b2` passes all five C userspace cases and
+postchecks. Its Rust build emitted 36 `improper_ctypes` warnings for GNU empty
+`sched_statistics` nested in `task_struct`, then was stopped (137); no Rust
+guest ran. `linux-out/task-construction-warnings-evidence` retains these results.
+This branch inherits the exact reviewed task declaration annotation from
+`eec5ae3ecd7b`: a local pointer-only FFI lint exception, with no policy, layout,
+configuration or global warning-gate change. These historical results do not
+verify this branch's kernel; fresh build and runtime checks remain pending.
+
+The MM constructor's manual extern block has the same narrowly scoped exception
+after review of its typed aggregate pointers and `c_int`/`c_ulong` values, including
+four declarations carrying `task_struct` pointers. This is an audited consequence
+of the observed task diagnostic, not a claim of MM compilation. MM release's
+extern block is unchanged; no blanket suppression was added.
+
+### Fork MM copy candidate
+
+This branch adds default-off Rust `dup_mm`/`copy_mm` sequencing and rollback,
+requiring the existing Rust MM construction/release options. Shared-MM users
+references, null-MM kernel-thread handling and partial-duplication cleanup retain
+the original ordering, including uprobe unlock asymmetry. C mapping duplication
+and typed foreign/subsystem operations remain explicit unfinished dependencies.
+Original C restoration, formatting and source checks are recorded in
+`linux-out/mm-copy-source-001`; no MM-copy kernel has been compiled or booted.
+Next establish actual linked selection and paired copy/share/failure coverage.
+[Ownership and remaining C](experiments/mm-copy/README.md).
+
+MM-copy preprocessing and object/linked proof tooling is implemented, including
+archive payload hashes and callback section metadata, but has not inspected a
+compiled MM-copy kernel. Twelve copy-selection and eight historical release
+gate tests pass; the historical release checker still rejects the additional
+copy insertion. Shared-MM guest fixtures and independent source review are complete; compilation
+and VM execution remain pending.
+Separately, source `00c4ef1c1903` passed all five C/Rust MM-construction VM cases;
+its 307-record evidence archive and 25 raw artifact hashes passed independent
+audit. That ancestor result does not verify this MM-copy candidate.
+
+The candidate now includes exact C/Rust build routing and three guarded ordinary
+consumers: true CLONE_VM write/exit, CLONE_VM followed by exec detachment, and
+private-fork COW. The shared child uses a separate guarded stack and raw syscalls;
+parent storage is reclaimed only after reap. Root and independent review cover
+the source/proof/fixture contracts. All 22 host scripts (229 cases) pass with
+unchanged inputs in `linux-out/mm-copy-host-001`. These checks do not establish
+compiled or runtime behavior. The branch also inherits the reviewed release
+callback-ELF proof fix and the pinned `mtree_empty` fixture correction.
+
+At source `b5bb24438c365a8279dee6b33095853377c3ba55`, the MM-copy PID1 and
+probe compiled as static x86-64 ELFs in the pinned image with no diagnostics.
+Root and independent inspection bound source/binary hashes and verified the
+shared child's emitted code contains inline syscalls, without libc/helper calls
+or TLS accesses. Both binaries remain non-executable files on the host.
+[Compile evidence](docs/evidence/mm-copy-fixtures/manifest.json) records this
+limited result; neither binary nor the MM-copy kernel has been run.
+
+### Mapping duplication candidate
+
+This branch adds default-off Rust policy for the complete MMU `dup_mmap`
+transaction, including lock sequencing, per-VMA resource stages, publication and
+partial-map failure markers. A canonical C stack wrapper adds no allocation;
+foreign layout and individual subsystem primitives remain explicit unfinished C.
+Source restoration and formatting checks are recorded in
+`linux-out/mm-dup-mmap-source-001`. No kernel compilation or VM verification has
+run for this slice. Next establish compiled selection and paired mapping/failure
+coverage. [Contract and remaining C](experiments/dup-mmap/README.md).
+
+Root and independent production review found no policy/ABI/lifetime discrepancy;
+removing only the selector wrapper restores the baseline `mm/mmap.c` byte-for-byte.
+The strict saved-Clang parser now explicitly supports `mm/mmap` as well as
+`kernel/fork`. Four new rejection tests and ten existing parser/selection cases
+pass; actual retained pinned compiler records parse correctly, with the fork
+argv unchanged (`linux-out/mm-mmap-command-host-001`). No compiler was invoked
+by that check. Seven-case mapping fixtures are being prepared separately;
+ordinary consumers will not certify partial-allocation rollback.
+
+### Mapping duplication verification pipeline
+
+The candidate now has paired profiles, both fork and mmap preprocessing, actual
+archive/object/linked selection proofs, local build routing and seven guarded
+userspace consumers. Root and independent source review cover production, proof
+and fixture contracts. All 25 host scripts (254 cases) pass with unchanged inputs
+in `linux-out/dup-mmap-host-001`. The initramfs supplies a private `/work` mount
+point; tests cover DONTFORK, WIPEONFORK through two generations, file mappings and
+the existing shared-MM/exec/COW cases. No candidate kernel or guest has run.
+
+The release build at `42318e69e5f2` established a nested GNU empty-type lint
+through `mm_struct` pointers. This branch carries its reviewed pointer-only
+extern annotation and the same narrowly scoped declaration annotation for the
+new mapping policy: aggregate values cross only as raw pointers, while scalars
+retain C types. Rust policy and global warning gates are unchanged. Actual clean
+compilation remains required, as does attributable partial-allocation rollback.
+
+At `e758dac059466f4db1552913a94be1a94a618546`, both seven-case guest binaries
+compiled cleanly as static x86-64 ELFs. Root and independent audits checked
+source/binary hashes, non-executable host modes and the shared child's emitted
+code (inline syscalls, no helper calls or TLS access). The
+[compile evidence](docs/evidence/dup-mmap-fixtures/manifest.json) contains 20 text
+records. No guest binary or mapping-duplication candidate kernel was executed.
+
+Teardown fixture source review and seven synthetic acceptance-gate tests are
+recorded in [fixture evidence](docs/evidence/mm-exit-mmap-fixtures/manifest.json).
+Compilation and the 3/79-case VM gates remain pending.

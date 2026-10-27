@@ -1,0 +1,29 @@
+---------------------------------
+linux-mm-vma-merge/mm/vma_merge.h
+---------------------------------
+WARNING: Missing or malformed SPDX-License-Identifier tag in line 1
+#1: FILE: linux-mm-vma-merge/mm/vma_merge.h:1:
++/*SPDX-License-Identifier: GPL-2.0-or-later */
+
+total: 0 errors, 1 warnings, 59 lines checked
+
+NOTE: For some of the reported defects, checkpatch may be able to
+      mechanically convert to the typical style using --fix or --fix-inplace.
+
+linux-mm-vma-merge/mm/vma_merge.h has style problems, please review.
+--------------------------------------
+linux-mm-vma-merge/mm/vma_merge_impl.h
+--------------------------------------
+WARNING: Missing or malformed SPDX-License-Identifier tag in line 1
+#1: FILE: linux-mm-vma-merge/mm/vma_merge_impl.h:1:
++/*SPDX-License-Identifier: GPL-2.0-or-later */
+
+total: 0 errors, 1 warnings, 218 lines checked
+
+NOTE: For some of the reported defects, checkpatch may be able to
+      mechanically convert to the typical style using --fix or --fix-inplace.
+
+linux-mm-vma-merge/mm/vma_merge_impl.h has style problems, please review.
+
+NOTE: If any of the errors are false positives, please report
+      them to the maintainer, see CHECKPATCH in MAINTAINERS.

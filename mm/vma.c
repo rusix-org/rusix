@@ -7,6 +7,10 @@
 #include "vma_internal.h"
 #include "vma.h"
 
+#ifdef CONFIG_RUSIX_VMA_MERGE_RUST
+#include "vma_merge.h"
+#endif
+
 #ifdef CONFIG_RUSIX_VMA_MODIFY_RUST
 #include "vma_modify.h"
 #endif
@@ -70,6 +74,7 @@ struct mmap_state {
 	}
 
 /* Was this VMA ever forked from a parent, i.e. maybe contains CoW mappings? */
+#ifndef CONFIG_RUSIX_VMA_MERGE_RUST
 static bool vma_is_fork_child(struct vm_area_struct *vma)
 {
 	/*
@@ -79,7 +84,9 @@ static bool vma_is_fork_child(struct vm_area_struct *vma)
 	 */
 	return vma && vma->anon_vma && !list_is_singular(&vma->anon_vma_chain);
 }
+#endif /* CONFIG_RUSIX_VMA_MERGE_RUST */
 
+#ifndef CONFIG_RUSIX_VMA_MERGE_RUST
 static inline bool is_mergeable_vma(struct vma_merge_struct *vmg, bool merge_next)
 {
 	struct vm_area_struct *vma = merge_next ? vmg->next : vmg->prev;
@@ -96,7 +103,9 @@ static inline bool is_mergeable_vma(struct vma_merge_struct *vmg, bool merge_nex
 		return false;
 	return true;
 }
+#endif /* CONFIG_RUSIX_VMA_MERGE_RUST */
 
+#ifndef CONFIG_RUSIX_VMA_MERGE_RUST
 static bool is_mergeable_anon_vma(struct vma_merge_struct *vmg, bool merge_next)
 {
 	struct vm_area_struct *tgt = merge_next ? vmg->next : vmg->prev;
@@ -128,6 +137,7 @@ static bool is_mergeable_anon_vma(struct vma_merge_struct *vmg, bool merge_next)
 	/* Case 3 - the anon_vma's are already shared. */
 	return src_anon == tgt_anon;
 }
+#endif /* CONFIG_RUSIX_VMA_MERGE_RUST */
 
 /*
  * init_multi_vma_prep() - Initializer for struct vma_prepare
@@ -137,12 +147,14 @@ static bool is_mergeable_anon_vma(struct vma_merge_struct *vmg, bool merge_next)
  *       removal.
  */
 #ifdef CONFIG_RUSIX_VMA_MODIFY_RUST
+#ifndef CONFIG_RUSIX_VMA_MERGE_RUST
 static void init_multi_vma_prep(struct vma_prepare *vp,
 				struct vm_area_struct *vma,
 				struct vma_merge_struct *vmg)
 {
 	rusix_init_multi_vma_prep(vp, vma, vmg);
 }
+#endif /* CONFIG_RUSIX_VMA_MERGE_RUST */
 #else
 static void init_multi_vma_prep(struct vma_prepare *vp,
 				struct vm_area_struct *vma,
@@ -198,6 +210,7 @@ static void init_multi_vma_prep(struct vma_prepare *vp,
  *
  * We assume the vma may be removed as part of the merge.
  */
+#ifndef CONFIG_RUSIX_VMA_MERGE_RUST
 static bool can_vma_merge_before(struct vma_merge_struct *vmg)
 {
 	pgoff_t pglen = PHYS_PFN(vmg->end - vmg->start);
@@ -210,6 +223,7 @@ static bool can_vma_merge_before(struct vma_merge_struct *vmg)
 
 	return false;
 }
+#endif /* CONFIG_RUSIX_VMA_MERGE_RUST */
 
 /*
  * Return true if we can merge this (vm_flags,anon_vma,file,vm_pgoff)
@@ -220,6 +234,7 @@ static bool can_vma_merge_before(struct vma_merge_struct *vmg)
  *
  * We assume that vma is not removed as part of the merge.
  */
+#ifndef CONFIG_RUSIX_VMA_MERGE_RUST
 static bool can_vma_merge_after(struct vma_merge_struct *vmg)
 {
 	if (is_mergeable_vma(vmg, /* merge_next = */ false) &&
@@ -229,6 +244,7 @@ static bool can_vma_merge_after(struct vma_merge_struct *vmg)
 	}
 	return false;
 }
+#endif /* CONFIG_RUSIX_VMA_MERGE_RUST */
 
 #ifdef CONFIG_RUSIX_COPY_VMA_RUST
 extern void rusix_vma_link_file_locked(struct vm_area_struct *vma,
@@ -302,10 +318,12 @@ anon_vma_interval_tree_post_update_vma(struct vm_area_struct *vma)
  * @vp: The initialized vma_prepare struct
  */
 #ifdef CONFIG_RUSIX_VMA_MODIFY_RUST
+#ifndef CONFIG_RUSIX_VMA_MERGE_RUST
 static void vma_prepare(struct vma_prepare *vp)
 {
 	rusix_vma_prepare(vp);
 }
+#endif /* CONFIG_RUSIX_VMA_MERGE_RUST */
 #else
 static void vma_prepare(struct vma_prepare *vp)
 {
@@ -356,11 +374,13 @@ static void vma_prepare(struct vma_prepare *vp)
  * @mm: The mm_struct
  */
 #ifdef CONFIG_RUSIX_VMA_MODIFY_RUST
+#ifndef CONFIG_RUSIX_VMA_MERGE_RUST
 static void vma_complete(struct vma_prepare *vp, struct vma_iterator *vmi,
 			 struct mm_struct *mm)
 {
 	rusix_vma_complete(vp, vmi, mm);
 }
+#endif /* CONFIG_RUSIX_VMA_MERGE_RUST */
 #else
 static void vma_complete(struct vma_prepare *vp, struct vma_iterator *vmi,
 			 struct mm_struct *mm)
@@ -442,10 +462,12 @@ again:
  * @vma: The vma that will be altered once locked
  */
 #ifdef CONFIG_RUSIX_VMA_MODIFY_RUST
+#ifndef CONFIG_RUSIX_VMA_MERGE_RUST
 static void init_vma_prep(struct vma_prepare *vp, struct vm_area_struct *vma)
 {
 	rusix_init_vma_prep(vp, vma);
 }
+#endif /* CONFIG_RUSIX_VMA_MERGE_RUST */
 #else
 static void init_vma_prep(struct vma_prepare *vp, struct vm_area_struct *vma)
 {
@@ -457,12 +479,14 @@ static void init_vma_prep(struct vma_prepare *vp, struct vm_area_struct *vma)
  * Can the proposed VMA be merged with the left (previous) VMA taking into
  * account the start position of the proposed range.
  */
+#ifndef CONFIG_RUSIX_VMA_MERGE_RUST
 static bool can_vma_merge_left(struct vma_merge_struct *vmg)
 
 {
 	return vmg->prev && vmg->prev->vm_end == vmg->start &&
 		can_vma_merge_after(vmg);
 }
+#endif /* CONFIG_RUSIX_VMA_MERGE_RUST */
 
 /*
  * Can the proposed VMA be merged with the right (next) VMA taking into
@@ -471,6 +495,7 @@ static bool can_vma_merge_left(struct vma_merge_struct *vmg)
  * In addition, if we can merge with the left VMA, ensure that left and right
  * anon_vma's are also compatible.
  */
+#ifndef CONFIG_RUSIX_VMA_MERGE_RUST
 static bool can_vma_merge_right(struct vma_merge_struct *vmg,
 				bool can_merge_left)
 {
@@ -494,6 +519,7 @@ static bool can_vma_merge_right(struct vma_merge_struct *vmg,
 	return !prev->anon_vma || !next->anon_vma ||
 		prev->anon_vma == next->anon_vma;
 }
+#endif /* CONFIG_RUSIX_VMA_MERGE_RUST */
 
 /*
  * Close a vm structure and free it.
@@ -665,6 +691,7 @@ int split_vma(struct vma_iterator *vmi, struct vm_area_struct *vma,
  *
  * Returns: 0 on success.
  */
+#ifndef CONFIG_RUSIX_VMA_MERGE_RUST
 static int dup_anon_vma(struct vm_area_struct *dst,
 			struct vm_area_struct *src, struct vm_area_struct **dup)
 {
@@ -696,6 +723,7 @@ static int dup_anon_vma(struct vm_area_struct *dst,
 
 	return 0;
 }
+#endif /* CONFIG_RUSIX_VMA_MERGE_RUST */
 
 #ifdef CONFIG_DEBUG_VM_MAPLE_TREE
 void validate_mm(struct mm_struct *mm)
@@ -758,6 +786,7 @@ void validate_mm(struct mm_struct *mm)
  * for the middle or next VMA, we calculate what the range of the newly adjusted
  * VMA ought to be, and set the VMA's range accordingly.
  */
+#ifndef CONFIG_RUSIX_VMA_MERGE_RUST
 static void vmg_adjust_set_range(struct vma_merge_struct *vmg)
 {
 	struct vm_area_struct *adjust;
@@ -775,6 +804,7 @@ static void vmg_adjust_set_range(struct vma_merge_struct *vmg)
 
 	vma_set_range(adjust, vmg->end, adjust->vm_end, pgoff);
 }
+#endif /* CONFIG_RUSIX_VMA_MERGE_RUST */
 
 /*
  * Actually perform the VMA merge operation.
@@ -784,6 +814,7 @@ static void vmg_adjust_set_range(struct vma_merge_struct *vmg)
  *
  * Returns 0 on success, or an error value on failure.
  */
+#ifndef CONFIG_RUSIX_VMA_MERGE_RUST
 static int commit_merge(struct vma_merge_struct *vmg)
 {
 	struct vm_area_struct *vma;
@@ -825,12 +856,15 @@ static int commit_merge(struct vma_merge_struct *vmg)
 
 	return 0;
 }
+#endif /* CONFIG_RUSIX_VMA_MERGE_RUST */
 
 /* We can only remove VMAs when merging if they do not have a close hook. */
+#ifndef CONFIG_RUSIX_VMA_MERGE_RUST
 static bool can_merge_remove_vma(struct vm_area_struct *vma)
 {
 	return !vma->vm_ops || !vma->vm_ops->close;
 }
+#endif /* CONFIG_RUSIX_VMA_MERGE_RUST */
 
 /*
  * vma_merge_existing_range - Attempt to merge VMAs based on a VMA having its
@@ -861,6 +895,14 @@ static bool can_merge_remove_vma(struct vm_area_struct *vma)
  * - The caller must hold a WRITE lock on the mm_struct->mmap_lock.
  * - vmi must be positioned within [@vmg->middle->vm_start, @vmg->middle->vm_end).
  */
+#ifdef CONFIG_RUSIX_VMA_MERGE_RUST
+static __must_check struct vm_area_struct *vma_merge_existing_range(
+		struct vma_merge_struct *vmg)
+{
+	struct vma_prepare prep;
+	return rusix_merge_existing(vmg, &prep);
+}
+#else
 static __must_check struct vm_area_struct *vma_merge_existing_range(
 		struct vma_merge_struct *vmg)
 {
@@ -1057,6 +1099,7 @@ abort:
 		vmg->state = VMA_MERGE_ERROR_NOMEM;
 	return NULL;
 }
+#endif /* CONFIG_RUSIX_VMA_MERGE_RUST */
 
 /*
  * vma_merge_new_range - Attempt to merge a new VMA into address space
@@ -1102,6 +1145,13 @@ abort:
  * - The caller must have specified the next vma in @vmg->next.
  * - The caller must have positioned the vmi at or before the gap.
  */
+#ifdef CONFIG_RUSIX_VMA_MERGE_RUST
+struct vm_area_struct *vma_merge_new_range(struct vma_merge_struct *vmg)
+{
+	struct vma_prepare prep;
+	return rusix_merge_new(vmg, &prep);
+}
+#else
 struct vm_area_struct *vma_merge_new_range(struct vma_merge_struct *vmg)
 {
 	struct vm_area_struct *prev = vmg->prev;
@@ -1163,6 +1213,7 @@ struct vm_area_struct *vma_merge_new_range(struct vma_merge_struct *vmg)
 
 	return NULL;
 }
+#endif /* CONFIG_RUSIX_VMA_MERGE_RUST */
 
 /*
  * vma_merge_copied_range - Attempt to merge a VMA that is being copied by
@@ -1181,6 +1232,13 @@ struct vm_area_struct *vma_merge_new_range(struct vma_merge_struct *vmg)
  * ASSUMPTIONS: Same as vma_merge_new_range(), except vmg->middle must contain
  *              the copied-from VMA.
  */
+#ifdef CONFIG_RUSIX_VMA_MERGE_RUST
+static struct vm_area_struct *vma_merge_copied_range(struct vma_merge_struct *vmg)
+{
+	struct vma_prepare prep;
+	return rusix_merge_copied(vmg, &prep);
+}
+#else
 static struct vm_area_struct *vma_merge_copied_range(struct vma_merge_struct *vmg)
 {
 	/* We must have a copied-from VMA. */
@@ -1190,6 +1248,7 @@ static struct vm_area_struct *vma_merge_copied_range(struct vma_merge_struct *vm
 	vmg->middle = NULL;
 	return vma_merge_new_range(vmg);
 }
+#endif /* CONFIG_RUSIX_VMA_MERGE_RUST */
 
 /*
  * vma_expand - Expand an existing VMA
@@ -1207,6 +1266,13 @@ static struct vm_area_struct *vma_merge_copied_range(struct vma_merge_struct *vm
  * - The caller must hold a WRITE lock on the mm_struct->mmap_lock.
  * - The caller must have set @vmg->target and @vmg->next.
  */
+#ifdef CONFIG_RUSIX_VMA_MERGE_RUST
+int vma_expand(struct vma_merge_struct *vmg)
+{
+	struct vma_prepare prep;
+	return rusix_merge_expand(vmg, &prep);
+}
+#else
 int vma_expand(struct vma_merge_struct *vmg)
 {
 	struct vm_area_struct *anon_dup = NULL;
@@ -1276,6 +1342,7 @@ nomem:
 		vmg->state = VMA_MERGE_ERROR_NOMEM;
 	return -ENOMEM;
 }
+#endif /* CONFIG_RUSIX_VMA_MERGE_RUST */
 
 /*
  * vma_shrink() - Reduce an existing VMAs memory area
@@ -1286,6 +1353,14 @@ nomem:
  *
  * Returns: 0 on success, -ENOMEM otherwise
  */
+#ifdef CONFIG_RUSIX_VMA_MERGE_RUST
+int vma_shrink(struct vma_iterator *vmi, struct vm_area_struct *vma,
+	       unsigned long start, unsigned long end, pgoff_t pgoff)
+{
+	struct vma_prepare prep;
+	return rusix_merge_shrink(vmi, vma, start, end, pgoff, &prep);
+}
+#else
 int vma_shrink(struct vma_iterator *vmi, struct vm_area_struct *vma,
 	       unsigned long start, unsigned long end, pgoff_t pgoff)
 {
@@ -1313,6 +1388,7 @@ int vma_shrink(struct vma_iterator *vmi, struct vm_area_struct *vma,
 	validate_mm(vma->vm_mm);
 	return 0;
 }
+#endif /* CONFIG_RUSIX_VMA_MERGE_RUST */
 
 static inline void vms_clear_ptes(struct vma_munmap_struct *vms,
 		    struct ma_state *mas_detach, bool mm_wr_locked)
@@ -1861,6 +1937,16 @@ struct vm_area_struct *vma_modify_flags_uffd(struct vma_iterator *vmi,
  * Expand vma by delta bytes, potentially merging with an immediately adjacent
  * VMA with identical properties.
  */
+#ifdef CONFIG_RUSIX_VMA_MERGE_RUST
+struct vm_area_struct *vma_merge_extend(struct vma_iterator *vmi,
+					struct vm_area_struct *vma,
+					unsigned long delta)
+{
+	VMG_VMA_STATE(vmg, vmi, vma, vma, vma->vm_end, vma->vm_end + delta);
+	struct vma_prepare prep;
+	return rusix_merge_extend(&vmg, &prep);
+}
+#else
 struct vm_area_struct *vma_merge_extend(struct vma_iterator *vmi,
 					struct vm_area_struct *vma,
 					unsigned long delta)
@@ -1872,6 +1958,7 @@ struct vm_area_struct *vma_merge_extend(struct vma_iterator *vmi,
 
 	return vma_merge_new_range(&vmg);
 }
+#endif /* CONFIG_RUSIX_VMA_MERGE_RUST */
 
 void unlink_file_vma_batch_init(struct unlink_vma_file_batch *vb)
 {
@@ -3422,4 +3509,8 @@ int insert_vm_struct(struct mm_struct *mm, struct vm_area_struct *vma)
 
 #ifdef CONFIG_RUSIX_VMA_MODIFY_RUST
 #include "vma_modify_impl.h"
+#endif
+
+#ifdef CONFIG_RUSIX_VMA_MERGE_RUST
+#include "vma_merge_impl.h"
 #endif

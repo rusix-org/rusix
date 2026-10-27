@@ -156,3 +156,5 @@ obj-$(CONFIG_RUSIX_COPY_VMA_RUST) += copy_vma_rust.o
 obj-$(CONFIG_RUSIX_VMA_MODIFY_RUST) += vma_modify_rust.o
 
 obj-$(CONFIG_RUSIX_EXIT_MMAP_TEST) += exit_mmap_test.o
+
+obj-$(CONFIG_RUSIX_VMA_MERGE_RUST) += vma_merge_rust.o
