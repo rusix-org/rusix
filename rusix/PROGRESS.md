@@ -1,5 +1,12 @@
 # rusix progress
 
+The inherited lifecycle verifier now accepts the observed private-cache `.0`
+suffix and proves the canonical refcount constant's four-byte storage/value.
+This carries the reviewed fix from `e0632d2729` without changing kernel code.
+All 32 host suites (333 cases) pass on unchanged inputs.
+[Regression evidence](docs/evidence/lifecycle-verifier-fix/manifest.json) references
+the original fix proof; candidate kernel/guest verification remains pending.
+
 **Rust BRD passes x86_64 block and ordinary-userspace ext4 contracts;
 all fourteen completion entry points and all ten swait.c entry points have verified
 opt-in Rust implementations; twenty-three generic wait and seventeen bit-wait entries pass parity, with the shared wait table owned by Rust.** Most of the kernel remains C. Linux 6.18.58
