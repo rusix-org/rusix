@@ -24,13 +24,14 @@ source, configuration, raw-result hashes and remaining C dependencies.
 | [mm-copy](https://github.com/rusix-org/rusix/tree/rusix/mm-copy/rusix) | Paired shared-MM clone, exec detachment and private-fork COW cases. |
 | [task-construction-faults](https://github.com/rusix-org/rusix/tree/rusix/task-construction-faults/rusix) | Attributed task-slab and stack-allocation failures, cleanup and successful disarmed retries; other attempted sites were not injected. |
 | [mm-dup-mmap](https://github.com/rusix-org/rusix/tree/rusix/mm-dup-mmap/rusix) | Seven paired sharing/COW, DONTFORK, WIPEONFORK and file-mapping lifetime cases. |
+| [vma-lifecycle-verified](https://github.com/rusix-org/rusix/tree/rusix/vma-lifecycle-verified/rusix) | At `e0632d2729`, nine paired cases add mprotect split/restore and fixed mremap file lifetime; evidence checkpoint `20297e1416`. |
 | [rcu-sync-policy](https://github.com/rusix-org/rusix/tree/rusix/rcu-sync-policy/rusix) | Paired debug/plain sync-policy KUnit fixtures. |
 | [rcu-batch](https://github.com/rusix-org/rusix/tree/rusix/rcu-batch/rusix) | Paired debug/plain batch-policy KUnit fixtures. |
 
 Next milestone: verify the implemented Rust VMA lifecycle, address-space teardown
 and mapping-copy policies, then integrate the verified chain with ordinary
-userspace regression coverage. The current lifecycle retry has passed its C
-baseline; Rust runtime verification is pending. Teardown, mapping-copy and PFN
+userspace regression coverage. The lifecycle retry passed both C and Rust
+with matching fixtures and its sole intended selection difference. Teardown, mapping-copy and PFN
 ownership candidates remain local pending their build/runtime gates. Allocation
 rollback coverage and broader concurrency validation remain open. Hosted CI stays
 disabled; all verification runs locally.
