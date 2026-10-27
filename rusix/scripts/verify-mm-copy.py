@@ -45,12 +45,38 @@ def original_policy(text):
     return restored
 
 
-def check_config(profile, values, target):
+TEST_CONTEXT = 'exit-mmap-kunit-v1'
+
+
+def policy_config(values, test_context=None):
+    """Project only KUNIT for inherited policy constraints, never ELF inputs."""
+    if test_context is None:
+        if values.get('CONFIG_RUSIX_EXIT_MMAP_TEST', 'n') != 'n':
+            raise ValueError('Teardown fixture requires explicit KUnit context')
+        return values
+    if test_context != TEST_CONTEXT:
+        raise ValueError('Unknown constructor test context')
+    for name in ('KUNIT', 'KUNIT_DEFAULT_ENABLED', 'KUNIT_AUTORUN_ENABLED',
+                 'RUNTIME_TESTING_MENU', 'RUSIX_EXIT_MMAP_TEST', 'RUST', 'SMP',
+                 'RUSIX_BRD_RUST', 'BLK_DEV_RAM'):
+        if values.get('CONFIG_'+name) != 'y':
+            raise ValueError('Missing teardown KUnit requirement: '+name)
+    if values.get('CONFIG_KUNIT_DEFAULT_TIMEOUT') != '300':
+        raise ValueError('Wrong teardown KUnit timeout')
+    for name,value in values.items():
+        if name.startswith('CONFIG_RUSIX_') and name.endswith('_TEST') and name != 'CONFIG_RUSIX_EXIT_MMAP_TEST' and value != 'n':
+            raise ValueError('Unrelated fixture in teardown KUnit context: '+name)
+    # Only the legacy policy constraints see this copy. Actual .config bytes,
+    # preprocessing records and object/linked evidence always use the original.
+    return values | {'CONFIG_KUNIT':'n'}
+
+
+def check_config(profile, values, target, *, test_context=None):
     if profile not in PROFILES:
         raise ValueError('Unknown MM-copy profile')
-    # Ordinary userspace profiles inherit construction constraints. The release
-    # KUnit profile has a different purpose and is not normalized into this one.
-    release.mm.check_config('mm-construction-rust', values, target)
+    # Ordinary calls remain strict; only the validated explicit teardown test
+    # context projects KUNIT for inherited production policy constraints.
+    release.mm.check_config('mm-construction-rust', policy_config(values, test_context), target)
     if values.get(release.SELECTOR) != 'y':
         raise ValueError('MM copy requires Rust MM release on both sides')
     if values.get('CONFIG_RUSIX_MM_RELEASE_TEST', 'n') != 'n':
@@ -170,9 +196,9 @@ def input_paths(build,source,rust):
     return paths
 
 
-def verify(args):
+def verify(args, *, test_context=None):
     source,build,evidence=args.source.resolve(),args.build.resolve(),args.evidence.resolve();rust=PROFILES[args.profile]
-    check_config(args.profile,config_values((build/'.config').read_text()),config_values((source/'rusix/configs/x86_64-server.config').read_text()))
+    check_config(args.profile,config_values((build/'.config').read_text()),config_values((source/'rusix/configs/x86_64-server.config').read_text()), test_context=test_context)
     original_policy((source/'kernel/fork.c').read_text())
     output=build/'kernel/fork.i'
     record=dict(argv=preprocessor.command((build/'kernel/.fork.o.cmd').read_text(),output),cwd=str(build),
@@ -228,7 +254,7 @@ def verify(args):
             rows=[row.split() for row in table.splitlines() if row.split() and row.split()[-1]==helper]
             if len(rows)!=1 or len(rows[0])!=3 or rows[0][1]!='T':raise ValueError('Missing typed primitive: '+helper)
     if before!={str(p):digest(p) for p in paths}:raise ValueError('Verification inputs changed')
-    return dict(status='PASS',implementation='rust' if rust else 'c',input_sha256=before,
+    return dict(test_context=test_context,status='PASS',implementation='rust' if rust else 'c',input_sha256=before,
                 archive_member_sha256=member_hashes,task_implementation='rust',mm_construction_implementation='rust',
                 mm_release_implementation='rust',release_callback=cb,
                 scope='Original source, actual preprocessing, archive/object/linked selection; no runtime claim')

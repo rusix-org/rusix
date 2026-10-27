@@ -23,6 +23,12 @@ references while retaining exact users/tree/callback invariants; timeout paths
 retain necessary resources. Seven inventory host regressions pass. Its isolated
 three/combined 79 requirements remain uncompiled and unexecuted; leading-sentinel
 and attributable allocation-failure coverage are still missing.
+Separate KUnit profile routing and archive/registration-pointer checks now pass
+331 cases across 32 host suites on 164 stable inputs.
+[Routing evidence](docs/evidence/mm-exit-mmap-kunit-tooling/manifest.json) retains
+the earlier 329-case snapshot and helper-extraction failure, plus the successful
+pinned LLVM19 check of historical archive bytes. Resolved Kconfig and actual
+fixture linkage/runtime remain pending.
 [Boundary and remaining work](experiments/mm-exit-mmap/README.md).
 
 VMA lifecycle is an opt-in candidate on `rusix/vma-lifecycle`: Rust owns the

@@ -51,10 +51,10 @@ def original_policy(text):
     return restored
 
 
-def check_config(profile, values, target):
+def check_config(profile, values, target, *, test_context=None):
     if profile not in PROFILES:
         raise ValueError('Unknown VMA lifecycle profile')
-    dup.check_config('mm-dup-mmap-rust', values, target)
+    dup.check_config('mm-dup-mmap-rust', values, target, test_context=test_context)
     if values.get(SELECTOR) != ('y' if PROFILES[profile] else 'n'):
         raise ValueError('Wrong explicit VMA selection')
     if values.get('CONFIG_PER_VMA_LOCK') != 'y':
@@ -251,14 +251,14 @@ def input_paths(build, source, rust, *, source_extension=None):
     return list(dict.fromkeys(paths))
 
 
-def verify(args, *, source_extension=None):
+def verify(args, *, source_extension=None, test_context=None):
     source, build, evidence = args.source.resolve(), args.build.resolve(), args.evidence.resolve()
     rust = PROFILES[args.profile]
-    check_config(args.profile, config_values((build/'.config').read_text()), config_values((source/'rusix/configs/x86_64-server.config').read_text()))
+    check_config(args.profile, config_values((build/'.config').read_text()), config_values((source/'rusix/configs/x86_64-server.config').read_text()), test_context=test_context)
     original_policy((source/'mm/vma_init.c').read_text())
     paths = input_paths(build, source, rust, source_extension=source_extension); before = {str(p): digest(p) for p in paths}
-    inherited = dup.verify(argparse.Namespace(source=source, build=build, evidence=evidence, profile='mm-dup-mmap-rust'), source_extension=source_extension)
-    if inherited['status'] != 'PASS' or inherited['implementation'] != 'rust':
+    inherited = dup.verify(argparse.Namespace(source=source, build=build, evidence=evidence, profile='mm-dup-mmap-rust'), source_extension=source_extension, test_context=test_context)
+    if inherited['test_context'] != test_context or inherited['status'] != 'PASS' or inherited['implementation'] != 'rust':
         raise ValueError('Inherited Rust mapping selection failed')
     (evidence/'vma-lifecycle-dup-selection.json').write_text(json.dumps(inherited, indent=2, sort_keys=True)+'\n')
     output = build/'mm/vma_init.i'
@@ -321,7 +321,7 @@ def verify(args, *, source_extension=None):
                     raise ValueError('Wrong canonical primitive binding: '+helper)
     if before != {str(p): digest(p) for p in paths}:
         raise ValueError('Inputs changed during verification')
-    return dict(status='PASS', implementation='rust' if rust else 'c', input_sha256=before,
+    return dict(test_context=test_context,status='PASS', implementation='rust' if rust else 'c', input_sha256=before,
                 archive_member_sha256=hashes, cache_symbol=cache, dup_mmap_selection=inherited,
                 scope='Original source, actual preprocessing, linked entry/cache ownership and lifetime; no runtime claim')
 

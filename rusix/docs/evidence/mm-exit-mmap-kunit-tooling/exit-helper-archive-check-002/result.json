@@ -1,0 +1,10 @@
+{
+  "status": "PASS",
+  "scope": "Retained historical archive nested helpers payload only; no new fixture registration proof",
+  "inputs": {
+    "/artifacts/built-in.a": "6b8e0d0338d6d8059b318ee7b85b5469770d747c8f87f118687755d30f916bb7",
+    "/artifacts/helpers/helpers.o": "3aff561203b55b9060b6af36df6307f379010d8014f6ce617ec952cf03f80c3a"
+  },
+  "payload_sha256": "3aff561203b55b9060b6af36df6307f379010d8014f6ce617ec952cf03f80c3a",
+  "llvm_ar": "Debian LLVM version 19.1.7\n  Optimized build.\n"
+}

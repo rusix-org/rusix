@@ -35,6 +35,20 @@ case "${1:-}" in
         cpus=2
         shift
         ;;
+    --exit-mmap|--exit-mmap-combined)
+        mode=exit-mmap
+        filter=rusix_exit_mmap
+        gate=validate-exit-mmap-kunit.py
+        if [[ "$1" == --exit-mmap-combined ]]; then
+            mode=exit-mmap-combined; filter='rusix_*'; baseline=(--combined)
+        fi
+        required=(KUNIT KUNIT_DEFAULT_ENABLED KUNIT_AUTORUN_ENABLED RUNTIME_TESTING_MENU RUST SMP
+                  RUSIX_EXIT_MMAP_TEST RUSIX_BRD_RUST BLK_DEV_RAM RUSIX_COMPLETION_RUST
+                  RUSIX_TASK_CONSTRUCTION_RUST RUSIX_MM_CONSTRUCTION_RUST RUSIX_MM_RELEASE_RUST
+                  RUSIX_MM_COPY_RUST RUSIX_DUP_MMAP_RUST RUSIX_VMA_LIFECYCLE_RUST SERIAL_8250_CONSOLE)
+        cpus=2
+        shift
+        ;;
     --brd)
         mode=brd
         filter='rusix_*'
@@ -45,7 +59,7 @@ case "${1:-}" in
         ;;
 esac
 if [[ $# != 2 || ! "$2" =~ ^[a-zA-Z0-9_-]+$ ]]; then
-    echo 'Usage: bash rusix/scripts/boot-kunit.sh [--baseline|--brd|--completion|--mm-release|--mm-release-combined] BUILD_DIRECTORY EVIDENCE_LABEL' >&2
+    echo 'Usage: bash rusix/scripts/boot-kunit.sh [--baseline|--brd|--completion|--mm-release|--mm-release-combined|--exit-mmap|--exit-mmap-combined] BUILD_DIRECTORY EVIDENCE_LABEL' >&2
     exit 2
 fi
 build=$(cd -- "$1" && pwd)
@@ -59,6 +73,14 @@ for setting in "${required[@]}"; do
         exit 1
     fi
 done
+if [[ "$mode" == exit-mmap* ]]; then
+    grep -qx 'CONFIG_KUNIT_DEFAULT_TIMEOUT=300' "$build/.config" || {
+        echo 'Teardown KUnit default timeout differs.' >&2; exit 1;
+    }
+    if grep -E '^CONFIG_RUSIX_.*_TEST=y$' "$build/.config" | grep -vx 'CONFIG_RUSIX_EXIT_MMAP_TEST=y'; then
+        echo 'Unrelated fixture enabled in teardown KUnit boot.' >&2; exit 1
+    fi
+fi
 # A label identifies one immutable boot attempt. Reject previous partial results
 # too; otherwise a failed retry could leave a previous successful JSON alongside
 # its new failure log. mkdir reserves the label atomically across script callers.
@@ -76,10 +98,10 @@ fi
 printf '%s\n' "$mode" > "$run/mode.txt"
 sha256sum "$RUSIX_PROJECT/scripts/boot-kunit.sh" "$RUSIX_PROJECT/scripts/$gate" \
     > "$run/scripts.sha256"
-if [[ "$mode" == completion || "$mode" == mm-release* ]]; then
+if [[ "$mode" == completion || "$mode" == mm-release* || "$mode" == exit-mmap* ]]; then
     sha256sum "$RUSIX_PROJECT/scripts/validate-brd-kunit.py" >> "$run/scripts.sha256"
 fi
-if [[ "$mode" == mm-release* ]]; then
+if [[ "$mode" == mm-release* || "$mode" == exit-mmap* ]]; then
     sha256sum "$RUSIX_PROJECT/scripts/validate-completion-kunit.py" >> "$run/scripts.sha256"
 fi
 sha256sum "$build/arch/x86/boot/bzImage" "$build/.config" > "$RUSIX_OUTPUT_ROOT/logs/$label-inputs.sha256"

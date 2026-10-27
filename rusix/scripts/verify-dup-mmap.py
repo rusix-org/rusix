@@ -52,9 +52,9 @@ def original_policy(text):
     return restored
 
 
-def check_config(profile,values,target):
+def check_config(profile,values,target, *, test_context=None):
     if profile not in PROFILES:raise ValueError('Unknown duplication profile')
-    copy.check_config('mm-copy-rust',values,target)
+    copy.check_config('mm-copy-rust',values,target,test_context=test_context)
     if values.get(SELECTOR)!=('y' if PROFILES[profile] else 'n'):raise ValueError('Wrong explicit duplication selection')
 
 
@@ -178,9 +178,9 @@ def input_paths(build,source,rust, *, source_extension=None):
     return list(dict.fromkeys(paths))
 
 
-def verify(args, *, source_extension=None):
+def verify(args, *, source_extension=None, test_context=None):
     source,build,evidence=args.source.resolve(),args.build.resolve(),args.evidence.resolve();rust=PROFILES[args.profile]
-    check_config(args.profile,config_values((build/'.config').read_text()),config_values((source/'rusix/configs/x86_64-server.config').read_text()))
+    check_config(args.profile,config_values((build/'.config').read_text()),config_values((source/'rusix/configs/x86_64-server.config').read_text()),test_context=test_context)
     source_proof = None
     if source_extension is None:
         original_policy((source/'mm/mmap.c').read_text())
@@ -191,8 +191,8 @@ def verify(args, *, source_extension=None):
     paths=input_paths(build,source,rust,source_extension=source_extension);before={str(p):digest(p) for p in paths}
     # The inherited copy profile describes its actual Rust selector, not this
     # new public profile name. It rechecks the real fork.i and actual objects.
-    inherited=copy.verify(argparse.Namespace(source=source,build=build,evidence=evidence,profile='mm-copy-rust'))
-    if inherited['status']!='PASS' or inherited['implementation']!='rust':raise ValueError('Inherited MM copy selection failed')
+    inherited=copy.verify(argparse.Namespace(source=source,build=build,evidence=evidence,profile='mm-copy-rust'),test_context=test_context)
+    if inherited['test_context']!=test_context or inherited['status']!='PASS' or inherited['implementation']!='rust':raise ValueError('Inherited MM copy selection failed')
     (evidence/'dup-mmap-mm-copy-selection.json').write_text(json.dumps(inherited,indent=2,sort_keys=True)+'\n')
     output=build/'mm/mmap.i'
     record=dict(argv=preprocessor.command((build/'mm/.mmap.o.cmd').read_text(),output),cwd=str(build),
@@ -222,7 +222,7 @@ def verify(args, *, source_extension=None):
                 if len(rows)!=1 or len(rows[0])!=3 or rows[0][1]!='T':raise ValueError('Missing/wrong canonical primitive: '+helper)
         constants = check_constants(build/'mm/mmap.o', build/'vmlinux', symbols['mmap'], linked)
     if before!={str(p):digest(p) for p in paths}:raise ValueError('Verification inputs changed')
-    return dict(status='PASS',implementation='rust' if rust else 'c',input_sha256=before,archive_member_sha256=hashes,
+    return dict(test_context=test_context,status='PASS',implementation='rust' if rust else 'c',input_sha256=before,archive_member_sha256=hashes,
                 source_extension=source_proof,constant_values=constants,mm_copy_selection=inherited,scope='Original C, actual preprocessing and linked selection; no runtime claim')
 
 

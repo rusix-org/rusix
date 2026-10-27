@@ -1,0 +1,18 @@
+{
+  "status": "PASS",
+  "scope": "Pinned LLVM19 historical nested archive extraction only; new teardown fixture remains uncompiled",
+  "source_files": {
+    "linux-mm-exit-mmap/rusix/scripts/exit_kunit_elf.py": "8c9af63c87bd4549b751242c8685ac55108bcf39cca84e2cb7eeef0afe8ac84a",
+    "linux-mm-exit-mmap/rusix/tests/test_exit_kunit_elf.py": "2940242e135866ceefc5c61c2b494a1bcd599addd1cc9db58a8fb578dc6c9e60"
+  },
+  "records": {
+    "check.py": "7e8be1d5ff8ce6c497113f3f39e091a19cbba613a2bd0d0c1c9288c0ab06adff",
+    "run.sh": "86fb5bad5edfeecf6c0e006c6b7dddd59c26fdb624870f4010c1afd5c5e0344e",
+    "image.txt": "6e8bf4e568c9bd0809bea944afb49f09c2647d954e520a2226b03ec688353545",
+    "result.json": "fe0b65feaf908d822a6b3abca9085734cbe38603020da5fde9b6edfaa519ab6a",
+    "stderr.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "container.cid": "4cef1e4241006f82cbf0c8cc9e96214334659a894750b482ac4c681f964a0d27",
+    "launcher.exit": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+  },
+  "prior_attempt": "../exit-helper-archive-check-001: Docker socket sandbox permission rejection, no container started"
+}

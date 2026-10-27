@@ -17,9 +17,13 @@ def load(name, filename):
 
 vma=load('exit_vma_gate','verify-vma-lifecycle.py')
 preprocessor=load('exit_preprocessor','preprocess-exit-mmap.py')
+kunit_elf=load('exit_kunit_ownership','exit_kunit_elf.py')
 digest,config_values=vma.digest,vma.config_values
 SELECTOR='CONFIG_RUSIX_EXIT_MMAP_RUST'
-PROFILES={'exit-mmap-c':False,'exit-mmap-rust':True}
+PROFILES={'exit-mmap-c':False,'exit-mmap-rust':True,
+          'exit-mmap-kunit-c':False,'exit-mmap-kunit-rust':True}
+KUNIT_PROFILES={'exit-mmap-kunit-c','exit-mmap-kunit-rust'}
+TEST_CONTEXT=vma.dup.copy.TEST_CONTEXT
 PUBLIC=('exit_mmap','remove_vma','rusix_exit_mmap','rusix_vma_close')
 CONTEXT=('structmmu_gathertlb;structvma_iteratorvmi={.mas={.tree=&(mm)->mm_mt,'
          '.index=0,.node=((void*)0),.status=ma_start,},};'
@@ -36,7 +40,8 @@ def source_policy(source):
 
 def check_config(profile,values,target):
     if profile not in PROFILES:raise ValueError('Unknown teardown profile')
-    vma.check_config('vma-lifecycle-rust',values,target)
+    context=TEST_CONTEXT if profile in KUNIT_PROFILES else None
+    vma.check_config('vma-lifecycle-rust',values,target,test_context=context)
     if values.get(SELECTOR)!=('y' if PROFILES[profile] else 'n'):raise ValueError('Wrong explicit teardown selector')
 
 
@@ -126,11 +131,15 @@ def callback_transfer(text):
     executable_calls(body,'rusix_remove_ops');executable_calls(body,'rusix_remove_close');executable_calls(body,'rusix_remove_dummy')
 
 
-def input_paths(build,source,rust):
+def input_paths(build,source,rust, *, kunit=False):
     paths=vma.input_paths(build,source,True,source_extension=extension.ID)+preprocessor.inputs(build,source)+[
         build/'mm/vma.i',source/'init/Kconfig',source/'mm/Makefile',
-        source/'rusix/scripts/verify-exit-mmap.py',source/f'rusix/configs/x86_64-exit-mmap-{"rust" if rust else "c"}.config']
+        source/'rusix/scripts/verify-exit-mmap.py',source/f'rusix/configs/x86_64-exit-mmap-{"kunit-" if kunit else ""}{"rust" if rust else "c"}.config']
     if rust:paths.append(build/'mm/exit_mmap_rust.o')
+    paths += kunit_elf.input_paths(build,source,kunit)
+    if kunit:
+        paths += [source/'rusix/scripts/boot-kunit.sh',source/'rusix/scripts/validate-exit-mmap-kunit.py',
+                  source/'rusix/scripts/validate-completion-kunit.py',source/'rusix/scripts/validate-brd-kunit.py']
     return list(dict.fromkeys(paths))
 
 
@@ -138,12 +147,13 @@ def verify(args):
     source,build,evidence=args.source.resolve(),args.build.resolve(),args.evidence.resolve();rust=PROFILES[args.profile]
     check_config(args.profile,config_values((build/'.config').read_text()),config_values((source/'rusix/configs/x86_64-server.config').read_text()))
     proof=source_policy(source)
-    paths=input_paths(build,source,rust);before={str(p):digest(p) for p in paths}
+    context=TEST_CONTEXT if args.profile in KUNIT_PROFILES else None
+    paths=input_paths(build,source,rust,kunit=context is not None);before={str(p):digest(p) for p in paths}
     actual=preprocessor.record(build,source)
     if json.loads((evidence/'exit-mmap-preprocess.json').read_text())!=actual:raise ValueError('Four-unit preprocessing provenance changed')
     if (evidence/'exit-mmap-preprocess.exit').read_text().strip()!='0' or re.search('warning:|error:',(evidence/'exit-mmap-preprocess.log').read_text(),re.I):raise ValueError('Teardown preprocessing failure/diagnostic')
-    inherited=vma.verify(argparse.Namespace(source=source,build=build,evidence=evidence,profile='vma-lifecycle-rust'),source_extension=extension.ID)
-    if inherited['status']!='PASS' or inherited['implementation']!='rust':raise ValueError('Inherited VMA proof failed')
+    inherited=vma.verify(argparse.Namespace(source=source,build=build,evidence=evidence,profile='vma-lifecycle-rust'),source_extension=extension.ID,test_context=context)
+    if inherited['test_context']!=context or inherited['status']!='PASS' or inherited['implementation']!='rust':raise ValueError('Inherited VMA proof failed')
     if inherited['dup_mmap_selection']['source_extension']['raw_sha256']!=proof['raw_sha256']:raise ValueError('Delegated source identity mismatch')
     (evidence/'exit-mmap-vma-selection.json').write_text(json.dumps(inherited,indent=2,sort_keys=True)+'\n')
     check_preprocessed((build/'mm/mmap.i').read_text(),(build/'mm/vma.i').read_text(),rust)
@@ -187,7 +197,9 @@ def verify(args):
         for table in (tables['mmap'],tables['linked']):
             if any(row.split() and row.split()[-1]=='rusix_exit_account' for row in table.splitlines()):raise ValueError('Rust account primitive in C mode')
     extension.require_unchanged(paths,before)
-    return dict(status='PASS',implementation='rust' if rust else 'c',source_extension=proof,input_sha256=before,
+    fixture_proof=kunit_elf.verify(build,evidence,context is not None,source=source)
+    extension.require_unchanged(paths,before)
+    return dict(fixture_selection=fixture_proof,test_context=context,status='PASS',implementation='rust' if rust else 'c',source_extension=proof,input_sha256=before,
                 archive_member_sha256=hashes,constant_values=constant_values,vma_lifecycle_selection=inherited,
                 scope='Exact source restoration, actual four-unit preprocessing and emitted selection; no runtime claim')
 
@@ -205,7 +217,7 @@ def main():
     elif args.action=='source':result=dict(status='PASS',scope='Source restoration only',source_extension=source_policy(args.source))
     elif args.action=='compare':result=compare(config_values(args.c.read_text()),config_values(args.rust.read_text()))
     else:
-        check_config(args.profile,config_values(args.config.read_text()),config_values((args.source/'rusix/configs/x86_64-server.config').read_text()));result=dict(status='PASS',scope='Config only')
+        check_config(args.profile,config_values(args.config.read_text()),config_values((args.source/'rusix/configs/x86_64-server.config').read_text()));result=dict(status='PASS',scope='Config only',test_context=TEST_CONTEXT if args.profile in KUNIT_PROFILES else None)
     print(json.dumps(result,indent=2,sort_keys=True))
 
 

@@ -64,6 +64,8 @@ def accept_console(console, qemu_exit):
 
 
 def validate_config(profile, config, target):
+    if profile not in ('exit-mmap-c', 'exit-mmap-rust'):
+        raise ValueError('Ordinary guest runner requires an ordinary teardown profile')
     values = selection.config_values(config)
     selection.check_config(profile, values, selection.config_values(target))
     for name in REQUIRED_CONFIG:
