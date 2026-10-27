@@ -1,5 +1,10 @@
 # rusix progress
 
+Paused work in progress: guest Rust mapping/concurrency consumers and parser
+checks are saved as an unfinished draft. Source/unsafe review, static compilation
+and all guest execution remain pending. Never execute the guest init or probe on
+the host or in a container; inherited kernel candidates still need their gates.
+
 VMA merge/expand/shrink now has a dependent, default-off Rust source candidate:
 seventeen complete policies, including eligibility, anon duplication, commit and
 rollback; six native entry wrappers retain canonical stack storage. Original C

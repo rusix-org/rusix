@@ -1,0 +1,39 @@
+{
+  "baseline": "2926d88bb7fc4608fd942453d929c39e4e5ec006",
+  "files": {
+    "arch/x86/entry/syscalls/syscall_64.tbl": {
+      "blob": "ced2a1deecd7ce082b786a8e7a7b094f6b74904c",
+      "sha256": "ae37c49896f869681c077b14a4722b7ea3909c1906de31a2e273eacdd496102b"
+    },
+    "fs/proc/task_mmu.c": {
+      "blob": "5c3d966b70f26148d13e9e6e4a8e281a7ad66833",
+      "sha256": "cc30856ff9e0bbb0937a274b2bd4229e4f218280374045d0c75cd4789cf0ee6c"
+    },
+    "include/uapi/asm-generic/ioctl.h": {
+      "blob": "e3290a5824c901a43c0332e0d7e06dbda6428f9d",
+      "sha256": "8629514cdd724a7100fc6eea84d93db5fbc3285431a1631a77c7f8006b70bce0"
+    },
+    "include/uapi/linux/fs.h": {
+      "blob": "beb4c2d1e41cb1bb3f97ea626eeefb7bfb1b777c",
+      "sha256": "bf3363a0a2afe6165311e9827958d89d9ecbe101a79782a3b4bd76699841d263"
+    },
+    "include/uapi/linux/mman.h": {
+      "blob": "e89d00528f2fb4de695e7fc163b3f7aadc53f72f",
+      "sha256": "52171ae3d85576f1f1bbc9cb1c7b77888fd8e4e44b71ab23a95e11bec4e460c8"
+    },
+    "mm/mprotect.c": {
+      "blob": "fa818cd582018aa3f7bc1b9178cd48c28c69ea26",
+      "sha256": "8dd60148bdd87fcd102924be058fb1c6291c570a82d9da9c9df1a5000747dad5"
+    },
+    "mm/mremap.c": {
+      "blob": "f0e63d3b3c14803afe1ef184de78beb1e8fa1f75",
+      "sha256": "bd3446814c286c9fef46ce2ffbd98626fda6d5c4cc58a4823d3fee3c4e434d51"
+    }
+  },
+  "procmap_query": {
+    "layout": "public userspace UAPI, not an internal kernel structure",
+    "request": "0xc0686611",
+    "size": 104
+  },
+  "scope": "Source-bound API/syscall behavior only; no runtime evidence"
+}
