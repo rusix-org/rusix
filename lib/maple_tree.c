@@ -53,6 +53,10 @@
  */
 
 
+#ifdef CONFIG_RUSIX_VMA_MERGE_TEST
+#include <linux/rusix_vma_merge_test.h>
+#endif
+
 #include <linux/maple_tree.h>
 #include <linux/xarray.h>
 #include <linux/types.h>
@@ -1099,6 +1103,10 @@ static inline void mas_alloc_nodes(struct ma_state *mas, gfp_t gfp)
 {
 	if (!mas->node_request)
 		return;
+#ifdef CONFIG_RUSIX_VMA_MERGE_TEST
+	if (rusix_merge_test_maple_fail(mas))
+		goto error;
+#endif
 
 	if (mas->node_request == 1) {
 		if (mas->sheaf)
@@ -5188,6 +5196,9 @@ EXPORT_SYMBOL_GPL(mas_store_prealloc);
 int mas_preallocate(struct ma_state *mas, void *entry, gfp_t gfp)
 {
 	MA_WR_STATE(wr_mas, mas, entry);
+#ifdef CONFIG_RUSIX_VMA_MERGE_TEST
+	rusix_merge_test_maple_begin(mas);
+#endif
 
 	mas_wr_prealloc_setup(&wr_mas);
 	mas->store_type = mas_wr_store_type(&wr_mas);
@@ -5203,11 +5214,17 @@ int mas_preallocate(struct ma_state *mas, void *entry, gfp_t gfp)
 		mas->node_request = 0;
 		mas_destroy(mas);
 		mas_reset(mas);
+#ifdef CONFIG_RUSIX_VMA_MERGE_TEST
+		rusix_merge_test_maple_end(mas, ret);
+#endif
 		return ret;
 	}
 
 set_flag:
 	mas->mas_flags |= MA_STATE_PREALLOC;
+#ifdef CONFIG_RUSIX_VMA_MERGE_TEST
+	rusix_merge_test_maple_end(mas, 0);
+#endif
 	return 0;
 }
 EXPORT_SYMBOL_GPL(mas_preallocate);

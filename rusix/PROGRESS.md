@@ -1,5 +1,20 @@
 # rusix progress
 
+Paused work in progress: eighteen native merge/failure cases and scoped allocator
+hooks are saved for review. Source restoration/style checks passed; independent
+implementation review, C-first injection reachability, compilation and VM gates
+remain pending. The inherited copy-VMA namespace fix at d158a6f894bf must be
+propagated before building this dependent candidate.
+
+Eighteen real native merge KUnit cases are now a dependent source-only fixture:
+private worker/MM/file objects, exact predeclared topology/accounting, scoped
+anon-chain/maple allocation failure sites and close-hook lifetime checks. Native
+test-off source restoration and literal case routing pass; no compiler, kernel
+or VM execution has occurred. [Fixture scope and limits](tests/vma-merge/README.md).
+Next: independent lifetime/fault-hook review before compilation, then separate
+actual-selection and paired runtime gates after ancestor acceptance. No existing
+profile is treated as accepting this new fixture.
+
 VMA merge/expand/shrink now has a dependent, default-off Rust source candidate:
 seventeen complete policies, including eligibility, anon duplication, commit and
 rollback; six native entry wrappers retain canonical stack storage. Original C

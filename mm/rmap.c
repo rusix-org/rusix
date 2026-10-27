@@ -52,6 +52,10 @@
  *         folio_lock
  */
 
+#ifdef CONFIG_RUSIX_VMA_MERGE_TEST
+#include <linux/rusix_vma_merge_test.h>
+#endif
+
 #include <linux/mm.h>
 #include <linux/sched/mm.h>
 #include <linux/sched/task.h>
@@ -285,13 +289,27 @@ int anon_vma_clone(struct vm_area_struct *dst, struct vm_area_struct *src)
 	struct anon_vma_chain *avc, *pavc;
 	struct anon_vma *root = NULL;
 
+#ifdef CONFIG_RUSIX_VMA_MERGE_TEST
+	rusix_merge_test_clone_begin(dst, src);
+#endif
+
 	list_for_each_entry_reverse(pavc, &src->anon_vma_chain, same_vma) {
 		struct anon_vma *anon_vma;
 
+#ifdef CONFIG_RUSIX_VMA_MERGE_TEST
+		if (rusix_merge_test_clone_fail(dst, src, GFP_NOWAIT))
+			avc = NULL;
+		else
+#endif
 		avc = anon_vma_chain_alloc(GFP_NOWAIT);
 		if (unlikely(!avc)) {
 			unlock_anon_vma_root(root);
 			root = NULL;
+#ifdef CONFIG_RUSIX_VMA_MERGE_TEST
+			if (rusix_merge_test_clone_fail(dst, src, GFP_KERNEL))
+				avc = NULL;
+			else
+#endif
 			avc = anon_vma_chain_alloc(GFP_KERNEL);
 			if (!avc)
 				goto enomem_failure;
@@ -316,6 +334,9 @@ int anon_vma_clone(struct vm_area_struct *dst, struct vm_area_struct *src)
 	if (dst->anon_vma)
 		dst->anon_vma->num_active_vmas++;
 	unlock_anon_vma_root(root);
+#ifdef CONFIG_RUSIX_VMA_MERGE_TEST
+	rusix_merge_test_clone_end(dst, src, 0);
+#endif
 	return 0;
 
  enomem_failure:
@@ -327,6 +348,9 @@ int anon_vma_clone(struct vm_area_struct *dst, struct vm_area_struct *src)
 	 */
 	dst->anon_vma = NULL;
 	unlink_anon_vmas(dst);
+#ifdef CONFIG_RUSIX_VMA_MERGE_TEST
+	rusix_merge_test_clone_end(dst, src, -ENOMEM);
+#endif
 	return -ENOMEM;
 }
 

@@ -2340,6 +2340,16 @@ config RUSIX_VMA_MERGE_RUST
 	  primitives remain transitional dependencies. Original C policies are
 	  retained when disabled. This is a dependent, unverified candidate.
 
+config RUSIX_VMA_MERGE_TEST
+	bool "Rusix private native VMA merge KUnit fixture"
+	depends on KUNIT=y && RUSIX_VMA_MODIFY_RUST
+	default n
+	help
+	  Build private-worker real MM/VMA merge tests, with task/address-scoped
+	  anon-chain and maple allocation failure sites and lifetime checks.
+	  Independent of the merge selector for matched native C/Rust tests.
+	  Fault sites and observations are absent when disabled.
+
 config RUSIX_EXIT_MMAP_TEST
 	bool "Rusix native mapping teardown test fixture"
 	depends on KUNIT=y && RUST && RUSIX_VMA_LIFECYCLE_RUST

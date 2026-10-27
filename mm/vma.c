@@ -3514,3 +3514,7 @@ int insert_vm_struct(struct mm_struct *mm, struct vm_area_struct *vma)
 #ifdef CONFIG_RUSIX_VMA_MERGE_RUST
 #include "vma_merge_impl.h"
 #endif
+
+#ifdef CONFIG_RUSIX_VMA_MERGE_TEST
+#include "vma_merge_test_impl.h"
+#endif

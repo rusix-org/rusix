@@ -1,0 +1,26 @@
+{
+  "suite": "rusix_vma_merge",
+  "cases": [
+    "existing_clone_fail_report",
+    "existing_clone_fail_silent",
+    "existing_prealloc_fail_report",
+    "existing_prealloc_fail_silent",
+    "new_prealloc_fail_report",
+    "new_prealloc_fail_silent",
+    "expand_clone_fail",
+    "expand_prealloc_fail_report",
+    "expand_prealloc_fail_silent",
+    "shrink_prealloc_fail",
+    "existing_middle_close_refusal",
+    "existing_next_close_reduction",
+    "existing_both_success",
+    "new_next_close_reduction",
+    "existing_success_control",
+    "new_success_control",
+    "expand_success_control",
+    "shrink_success_control"
+  ],
+  "case_count": 18,
+  "scope": "Source-only real native fixture; no compiler or execution result",
+  "base": "7b2d7dc500f4b0586b8d53bb631a2abae6d0e2e3"
+}
