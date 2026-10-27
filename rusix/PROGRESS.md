@@ -6,6 +6,11 @@ opt-in Rust implementations; twenty-three generic wait and seventeen bit-wait en
 (`2926d88bb7fc`) is the behavioral baseline. Hosted CI remains disabled;
 verification runs locally. No subsystem divergence point is declared.
 
+The inherited mapping verifier now checks constant ELF storage and values,
+including final `.rodata` symbols reported as `D`. The [fix evidence](docs/evidence/dup-mmap-constant-fix/manifest.json)
+passes against the retained mapping kernel `9cf27ef36d1d`; it does not certify
+this VMA candidate. Its paired launcher must be refreshed for the new source.
+
 VMA lifecycle is an opt-in candidate on `rusix/vma-lifecycle`: Rust owns the
 cache pointer and fresh/dup/free policy, including PFN-reference rollback.
 Canonical C primitives retain shared-field and resource operations. Production
